@@ -1,0 +1,4 @@
+# 船的 .vxk：從雕刻作品匯出（python -I src/admin.py cache／import／reimport），不入版控；指紋在 src/config/vxk_lock.json
+VoxelKit/_cache/
+__pycache__/
+*.pyc

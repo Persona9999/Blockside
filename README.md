@@ -53,8 +53,10 @@ last_updated: 2026-10-15
 
 ## 🔧 給好奇的人
 
-- 這個 repo **只放成品** `index.html`；原始碼、設定、建置都在 ArtGallery 的 `HtmlGames/_build/ame_constitution_broadside/`（`python -I admin.py build`）。⛔ 不要在這裡直接改 `index.html`。
-- 船是雕刻區的作品匯出的 `.vxk`，內嵌在網頁裡；同一份模型（例如同一門砲）幾艘船只存一次，所以六艘船擠得進幾 MB。
-- 部署：push 到 `main` ⇒ GitHub Actions（`.github/workflows/pages.yml`）原樣上傳到 Pages。
+- 原始碼在 `src/`（`template.html`、`js/`、`config/game.json`、`admin.py`、工具）；成品 `index.html` 由 `python -I src/admin.py build` 產生 —— ⛔ 不要直接改 `index.html`。開發說明：[`src/README.md`](src/README.md)。
+- 設定後台：雙擊 `admin.cmd`（＝ `python -I src/admin.py serve --open`，只聽本機）。
+- 船是雕刻區的作品匯出的 `.vxk`（`VoxelKit/_cache/`，不入版控；換機器 ⇒ `python -I src/admin.py cache` 從作品重新匯出、跟指紋比），內嵌在網頁裡；同一份模型（例如同一門砲）幾艘船只存一次，所以六艘船擠得進幾 MB。
+- 2026-10-15 以前在 ArtGallery 開發（`HtmlGames/_build/ame_constitution_broadside/`，歷史還在那邊的 git log）。
+- 部署：push 到 `main` ⇒ GitHub Actions（`.github/workflows/pages.yml`）上傳到 Pages。
 
 製作：ame（遊戲）× basecamp、summit、gura（船）× Tim
