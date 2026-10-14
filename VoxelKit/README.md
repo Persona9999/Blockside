@@ -1,6 +1,6 @@
 # VoxelKit —— 雕刻作品進 HTML 展品
 
-把一件雕刻作品（含關聯、繩、帆）變成可以內嵌在單一 HTML 裡、瀏覽器能畫也能改的格子。影片（`HtmlVideos/`）與遊戲（`HtmlGames/`）共用。
+把一件雕刻作品（含關聯、繩、帆）變成可以內嵌在單一 HTML 裡、瀏覽器能畫也能改的格子。這一份是 2026-10-15 從 ArtGallery/VoxelKit（853b4e7）複製給 Blockside 用的；ArtGallery 的影片（`HtmlVideos/`）用的是那邊那一份。
 
 | 檔 | 做什麼 |
 |---|---|

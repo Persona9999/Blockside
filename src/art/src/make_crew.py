@@ -15,7 +15,7 @@ from PIL import Image, ImageDraw
 from scipy import ndimage
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-RAW = os.path.normpath(os.path.join(HERE, '..', '..', '..', '..', '..', 'RawImages'))
+RAW = os.path.normpath(os.path.join(HERE, '..', '..', '..', '..', 'ArtGallery', 'RawImages'))   # Blockside 與 ArtGallery 同在 Valhalla 底下（2026-10-15 搬家前是往上五層）
 CW, CH = 96, 192
 H_PX = 164                       # 站著的人在格子裡的高度（格高 192 的 85%）
 # 列：（立繪, 身高倍率, 道具）

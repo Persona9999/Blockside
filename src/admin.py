@@ -23,7 +23,7 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 HERE = os.path.dirname(os.path.abspath(__file__))
 CFG_P = os.path.join(HERE, 'config', 'game.json')
 TPL = os.path.join(HERE, 'template.html')
-OUT = os.path.normpath(os.path.join(HERE, '..', 'index.html'))   # 成品、後台頁收在遊戲自己的資料夾（HtmlGames/ 只放展品卡 .md）
+OUT = os.path.normpath(os.path.join(HERE, '..', 'index.html'))   # 成品在 Blockside 根目錄（GitHub Pages 發的就是這一份）
 PAGE = os.path.normpath(os.path.join(HERE, '..', 'admin.html'))
 VKD = os.path.normpath(os.path.join(HERE, '..', 'VoxelKit'))   # Blockside 自己帶一份 VoxelKit（2026-10-15 從 ArtGallery/VoxelKit 複製，853b4e7）
 CACHE = os.path.join(VKD, '_cache')
