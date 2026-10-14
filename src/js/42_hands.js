@@ -397,6 +397,7 @@ function navRefresh(sh) {
     L.broken = L.ra < 0 || L.rb < 0 || L.steps.some(function (p) { return !g.get(p[0], p[1], p[2]); });
     if (L.broken && !was) ev.push('梯子 ' + L.name + ' 斷了');
   });
+  if (sh.med) medComps(sh);                                            // 醫療艙：走不走得到床跟著重算（44_medic.js）
   NV.refreshN = (NV.refreshN || 0) + 1; NV.refreshMs = (NV.refreshMs || 0) + performance.now() - t0;
   ev.forEach(function (e) { NV.log.push({ t: +SIMT.toFixed(1), e: e }); });
 }

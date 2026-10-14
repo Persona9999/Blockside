@@ -32,8 +32,28 @@ function medInit(sh) {
     rooms.push(o); r.med = o;
   });
   NV.ladders.forEach(function (L) { L.q = 0; });                        // handRoute 會記排隊人數；這裡只是試走
+  if (rooms.length) medComps(sh);
   if (rooms.length) sh.med = { rooms: rooms, back: F.back === undefined ? 1 : F.back, smin: F.staff || 1, sper: F.staffPer || 3, carried: 0, healed: 0, out: 0, t: SIMT, open: true };
 }
+/** 走得到的範圍：「層:區域」照沒斷的梯子連成幾群 ⇒ NV.comp[層:區域] ＝ 群號。開戰時、每次尋路刷新後（梯子斷了、甲板被打成幾塊）重算；
+ *  只走區域與梯子（幾十個點），不找格子上的路。medNeeds 照它判傷員走不走得到床 ⇒ 走不到就不派人去扛（以前扛起來才發現，白跑一趟；TASK-0572）。 */
+function medComps(sh) {
+  var NV = sh.nav, C = {}, n = 0;
+  NV.levels.forEach(function (L, lv) {
+    L.N.regs.forEach(function (s, r) {
+      if ((lv + ':' + r) in C) return;
+      var q = [lv + ':' + r]; C[q[0]] = n;
+      for (var i = 0; i < q.length; i++) {
+        var u = q[i].split(':'), ul = +u[0], ur = +u[1];
+        NV.ladders.forEach(function (Ld) { if (Ld.broken) return; var v = Ld.lo === ul && Ld.ra === ur ? Ld.hi + ':' + Ld.rb : Ld.hi === ul && Ld.rb === ur ? Ld.lo + ':' + Ld.ra : null; if (v && !(v in C)) { C[v] = n; q.push(v); } });
+      }
+      n++;
+    });
+  });
+  NV.comp = C;
+}
+/** 那張床現在在哪一群（床旁的走路點被打掉 ⇒ undefined：誰都走不到）。 */
+function medComp(NV, m) { var r = NV.levels[m.med.lv].N.reg[m.med.cell]; return r >= 0 ? NV.comp[m.med.lv + ':' + r] : undefined; }
 /** 傷員的床位與扛他的人放掉（死了、落水、被放下、床被打壞）。 */
 function medRelease(c) {
   if (c.medBed && c.medBed.med && c.medBed.med.who === c) c.medBed.med.who = null;
@@ -102,9 +122,13 @@ function medNeeds(sh, need) {
     if (c.medNo) { c.medOk = false; return; }                            // 扛起來才發現走不到床（另一塊）⇒ 不再派人，照舊 12 秒
     var lv = lvAt(sh, c.pos), ci = lv >= 0 && NV.reach.indexOf(lv) >= 0 ? navSnap(NV.levels[lv].N, c.pos, 4) : -1;
     c.medOk = ci >= 0;                                                   // 桅頂、落在走路格外的 ⇒ 搬不到 ⇒ 照舊 12 秒抬下去
-    if (ci < 0 || !free.length) return;
-    var bi = 0, bd = 1e9;
-    free.forEach(function (m, i) { var d = Math.abs(m.c[0] - c.pos[0]) + 150 * Math.abs(m.med.lv - lv); if (d < bd) { bd = d; bi = i; } });
+    if (ci < 0) return;
+    var cw = NV.comp[lv + ':' + NV.levels[lv].N.reg[ci]];
+    if (cw === undefined || !M.rooms.some(function (o) { return o.beds.some(function (m) { return m.alive && medComp(NV, m) === cw; }); })) { c.medOk = false; return; }   // 傷員那一群一張活著的床都沒有（梯子斷了、甲板打成兩塊）⇒ 不派人去扛，照舊 12 秒
+    if (!free.length) return;                                            // 走得到的床都有人 ⇒ 等
+    var bi = -1, bd = 1e9;
+    free.forEach(function (m, i) { if (medComp(NV, m) !== cw) return; var d = Math.abs(m.c[0] - c.pos[0]) + 150 * Math.abs(m.med.lv - lv); if (d < bd) { bd = d; bi = i; } });
+    if (bi < 0) return;
     need.push({ kind: 'carry', key: '', lv: lv, n: 1, x: c.pos[0], cell: ci, who: c, bed: free.splice(bi, 1)[0], pri: 1 });
   });
 }
