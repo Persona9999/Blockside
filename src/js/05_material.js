@@ -45,6 +45,21 @@ function hullMaterials(T, info) {
   T.voxT0 = T.matPlain ? base.count * VOX_T : 0;
   if (!T.matPlain) for (i = 0; i < n; i++) T.voxT0 += T.matN[i] * T.matT[i];
   if (T.matBad.length) console.warn('材質表沒有：' + T.matBad.join('、') + ' ⇒ 照全船預設 ' + T.mat0 + '（' + T.name + '）');
+  // 平滑渲染（TASK-0616 第二段）：檔頭 render（關聯的 meta render，同一個段落格式）⇒ T.smG（smooth 那幾格 ＝ 1；VoxelKit 的方塊網格化跳過它們，15_smooth.js 另外畫成平滑面）
+  var rh = T.h.render, si = rh && rh.ids ? rh.ids.indexOf('smooth') + 1 : 0;
+  T.smG = null; T.smN = 0;
+  if (si && rh.runs && rh.runs.length) {
+    var SG = new VK.Grid(T.h.size), sx2 = T.h.size[0], sy2 = T.h.size[1], at2 = 0, R2 = rh.runs;
+    for (var k2 = 0; k2 + 2 < R2.length; k2 += 3) {
+      var s2 = at2 + R2[k2], c2 = R2[k2 + 1];
+      if (R2[k2 + 2] === si) {
+        var z2 = Math.floor(s2 / (sx2 * sy2)), q2 = s2 - z2 * sx2 * sy2, y2 = Math.floor(q2 / sx2), x2 = q2 - y2 * sx2;
+        for (var j2 = 0; j2 < c2; j2++) { if (base.get(x2, y2, z2)) { SG.set(x2, y2, z2, 1); T.smN++; } if (++x2 === sx2) { x2 = 0; if (++y2 === sy2) { y2 = 0; z2++; } } }
+      }
+      at2 = s2 + c2;
+    }
+    if (T.smN) { T.smG = SG; base.sm = SG; }
+  }
 }
 /** 那一格的硬度倍率（打掉之後照樣查得到：材質層不跟著改）。 */
 function matK(sh, x, y, z) { var T = sh.T; return T.matG ? T.matK[T.matG.get(x, y, z)] : T.matK[0]; }

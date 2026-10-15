@@ -81,7 +81,12 @@ function shipCheck(id) {
     float0.forEach(function (f) { add('error', '繩', f, '開場那一刻就浮空', '繩端綁到實心或 model: 路徑（造船規格 §6）'); });
     var noMeta = sh.sails.filter(function (s) { return !s.meta || !s.meta.kind; }).map(function (s) { return s.name; });
     if (noMeta.length) add('warn', '帆', noMeta.join('、'), '沒有 meta ⇒ 照名字判斷（帆的種類、旗、收帆順序）', 'work sub=meta part=sail（造船規格 §9.1）');
-    if (!sh.masts.length) add('warn', '桅', '—', '找不到桅（帆桁 meta mast）', '帆桁 meta mast=fore｜main｜mizzen');
+    var ownSails = sh.sails.filter(function (s) { return !(s.meta && s.meta.team); }).length;   // 陣營旗不算
+    if (!sh.masts.length && ownSails) add('warn', '桅', '—', '有帆、找不到桅（帆桁 meta mast）', '帆桁 meta mast=fore｜main｜mizzen');   // 沒有帆的蒸汽船（維吉尼亞號）本來就沒有桅
+    if (!ownSails && !(+sh.cfg.base > 0)) add('warn', '動力', '—', '沒有帆、也沒有額外動力 ⇒ 船不會動', '設定檔 ships[].cfg.base（額外動力，節）');
+    // ── 煙囪（meta kind=funnel、固定點 smoke；78_funnel.js）──
+    R.info.funnels = funnelsOf(T).length;
+    funnelsOf(T).forEach(function (f) { if (!f.pt) add('warn', '煙囪', f.name, '沒有固定點 smoke ⇒ 從外框頂面的中心冒煙', '煙囪子作品登記固定點 smoke（煙囪口的中心；造船規格 §9）'); });
     if (!sh.mags.length) add('warn', '彈藥庫', '—', '沒有 kind=magazine ⇒ 不會殉爆、送藥手照預設取用點', '彈藥庫的關聯 meta kind=magazine, powder_lb（造船規格 §8）');
     R.issues.sort(function (a, b) { return (a.lv === 'error' ? 0 : 1) - (b.lv === 'error' ? 0 : 1); });
     done();

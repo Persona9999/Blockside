@@ -83,7 +83,8 @@ function step() {
   for (i = 0; i < FLY.length; i++) if (!stepFly(FLY[i], DT)) FLY.splice(i--, 1);
   if (PF) pfLap('pieces');
   if (SLOW_VIS) stepWater(DT, 'ship');                             // 殉爆慢動作中：只給人看的照畫面的時間走（73_slowmo.js），這裡只生船邊的水花
-  else { stepDebris(DT); if (PF) pfLap('debris'); stepPts(DT); if (PF) pfLap('pts'); stepWater(DT); }
+  else { stepDebris(DT); if (PF) pfLap('debris'); funnelSmoke(DT); stepPts(DT);   // funnelSmoke：煙囪排煙（78_funnel.js；自己的亂數，不改戰局）
+    if (PF) pfLap('pts'); stepWater(DT); }
   if (PF) pfLap('water');                       // 船邊水花（13_water.js；只給人看、自己的亂數）
   if (PHYS) { var pt0 = performance.now(); SHIPS.forEach(function (sh) { if (sh.sink < 40) physStep(sh); }); clothContactsRun(); PHYS_MS = PHYS_MS * 0.98 + (performance.now() - pt0) * 0.02; }   // 讀數只看、不回寫模擬
   if (PF) pfLap('phys');

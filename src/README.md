@@ -49,6 +49,10 @@ python -I admin.py shipcheck --id phoenix    # 不給 --id ＝ 每一艘
 - 用在：打到的那一格 ⇒ 洞的大小（實心彈 ×硬度^−0.25、爆裂彈 ×硬度^−0.3、鏈彈撕開的寬度）；每打掉一格的消耗 × 那一格的材質倍率（砲彈穿過去慢多少）；殉爆斷船照全船預設；重量照每種材質（浮多高、壓艙物預設、配置頁的排水量）。配置頁最上面多一行「材質」。
 - 量過（測試船：憲法號的格子，水線上 3 m 兩舷最外 2 格標 iron、水線下最外 1 格標 copper_sheath，scratchpad 注入檔頭；`__game.shot(i, x, z, side, gun)` 從船外打同一點）：24 磅長砲打水線上 18 點，鐵甲被打掉的格 ＝ 橡木的 **21%**（673 vs 3,212）；鐵甲倍率改成 1 對照 ⇒ 106%（2,831 vs 2,660）。材質層載入 53 ms（13 萬格非預設；段落跨空格的版本要 1,039 ms ⇒ 改成只併相連的格）；重數非預設還剩幾格 1.5 ms、只在格數變了才數（每半秒）。
 - 反向對照：七艘都沒有材質層、全船預設橡木 ⇒ `?demo=120&dump=1&seed=3`（cf5acc2b）、`&ship=falcon,stormkaap`（6e051f72）、`?demo=150&dump=1&seed=2&cas=1`（dc7d77e4）跟改之前逐位元組相同。
+- **維吉尼亞號**（`virginia`，ame 2026-10-15）：第一艘有鐵甲（iron 137,889 格：砲廓、駕駛塔、煙囪、撞角、機艙）＋包銅皮（134,159 格）＋平滑渲染（99,571 格、30 區、建 313 ms）的船。沒有帆 ⇒ 只靠額外動力 5.5 節（cfg.base）、靈活 0.4；砲種表多三種：9 吋 Dahlgren（`9d`）、6.4 吋 Brooke（`64b`）、7 吋 Brooke（`7b`）＋每發傷害 dmg9d／dmg64b／dmg7b。
+  - 鐵甲硬度倍率 ×16（Tim：「反映漢普頓錨地海戰」—— 木殼巡防艦的舷砲幾乎打不穿）：?demo=180 seed 3 對憲法號，挨 147 發只掉 12,015 格（同一場憲法號對憲法號挨 289 發掉 13–14 萬格）。
+  - ⚠ 已知：自己開砲很少（180 秒 12 發），Tim 實測砲會被打爛、減員嚴重 —— 另外開單查（戰鬥報表）。
+  - 錨照固定點 ring 找撐住它的那一格（吊錨木；`10_ship.js`）：⛔ 往下找 ⇒ 掛在舷外、底下是海 ⇒ 開局就掉。
 
 匯出走 senate（`senate cmd sculpture --arg op=export --arg format=vxk --arg include=rig,models,parts,meta`，TASK-0518）；`.vxk` 不入版控（`../VoxelKit/_cache/`）。
 
@@ -89,6 +93,7 @@ python -I admin.py cache --all    # 每艘都比 ＝ 比對來源：雕刻作品
 | `12_effects.js` | 碎屑（每格一顆小方塊；自己的亂數 `rndD`）與粒子（煙、水花、火光）；照物理分級少生（`DEB_ACC`／`PT_ACC` 節拍）；`PT_MUTE`（船邊水花開著時原本的水花照樣抽亂數、不放） |
 | `13_water.js` | 船邊水花（TASK-0524）：水滴 `WS`、貼著浪的白沫 `WF`、船身水線一圈 `wpRing`、每步 `stepWater`／`wpShip`、砲彈落水 `wpSplash`、碎木 `wpDrop`、擦撞 `wpBump`、艙內的水往外流 `wpPour`、自己的亂數 `rndW`；白沫的著色器 `P.foam`（`wpGL`／`wpDrawFoam`） |
 | `14_rain.js` | 3D 雨滴（畫質的「雨滴（3D）」「雨滴水花」）：鏡頭前方圓柱裡的雨絲 `RD`、每格畫面 `stepRain`、打到海面與船的水花 `RS`（`rdPushSplash`）、雨絲的著色器 `P.drop`（`rdGL`／`rdDraw`）、自己的亂數 `rndR` |
+| `15_smooth.js` | 平滑渲染（TASK-0616）：關聯 meta render=smooth 的格（`T.smG`）畫成平滑面 —— surface nets（格角往表面拉＋周圍同一面平均、夾回格角 ±0.5；跟一般格相鄰的格角釘住 ⇒ 不露縫），一區 64³ 一份網格（P.tri／P.dtri 畫：陰影、剖面、點光源都有）；被打掉 ⇒ ±2 格碰得到的區重建（每格畫面最多 `SM_FRAME` 區）。VoxelKit 的方塊網格化跳過這幾格（`grid.sm`） |
 | `20_shatter.js` | 拆格：砲彈打碎船殼 |
 | `21_gunnery.js` | 開砲、齊射、射界、砲彈飛行與命中、模型扣血與被打飛（命中照網格的佔用格 `inMesh`）、斷繩撕帆、帆掉下來 |
 | `22_pieces.js` | 斷開的那一團：倒下、壓到人、落水；斷成兩截的半截船（翹起來、沉下去，上面的砲跟著走） |
@@ -118,6 +123,7 @@ python -I admin.py cache --all    # 每艘都比 ＝ 比對來源：雕刻作品
 | `75_shipcheck.js` | 匯入檢查（`?shipcheck=<id>`；`admin.py shipcheck` 讀它寫的 JSON 出報告） |
 | `76_anchor.js` | 拋錨（雙錨、左右錨、拖錨、起錨）與鐵鍊（質點鍊、碰自己的船殼與海底、畫成鏈環） |
 | `77_colours.js` | 陣營旗（長旗＋戰鬥旗，藍方藍旗、紅方紅旗；布料，跟帆同一套）：桅頂 `mastTrucks`、自動掛 `autoFlags`、載入時生旗 `teamFlagsSetup`、貼圖挑藍紅 `sailRect`、旗桿 `poleBuf`／`drawColours` |
+| `78_funnel.js` | 煙囪排煙：meta kind=funnel 的關聯或模型、固定點 smoke（沒有 ⇒ 外框頂面中心）；額外動力在出力 ⇒ 濃、停車 ⇒ 淡，煙囪口附近的格子剩不到一半 ⇒ 不冒；自己一組亂數（`rndFn`，⛔ 不叫 rndF：33_flood.js 已經有，同名會蓋掉 ⇒ 進水的亂數跟著變、戰局全變） |
 | `90_main.js` | 主迴圈、`?debug=1` 的 `window.__game`（含 `?demo=&dump=1`）、載入 |
 
 - ⛔ 新的頂層名字先搜一遍有沒有撞名（同一個作用域：以前船員的 `kill` 蓋掉碎屑的 `kill`）。

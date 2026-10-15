@@ -120,6 +120,7 @@
     this.tab = new Array(this.nx * this.ny * this.nz).fill(null);
     this.own = new Uint8Array(this.tab.length);    // 1 ＝ 這份 Grid 自己的（可以直接寫）
     this.count = 0;
+    this.sm = null;                                // 平滑渲染的旗標網格（呼叫端給；meshChunk 不出那些格的方塊面）
   }
   Grid.fromModel = function (model) {
     var g = new Grid(model.header.size);
@@ -130,7 +131,7 @@
   /** 共用同一份資料的另一份網格（之後各改各的）。 */
   Grid.prototype.share = function () {
     var g = new Grid([this.sx, this.sy, this.sz]);
-    g.tab = this.tab.slice(); g.count = this.count;
+    g.tab = this.tab.slice(); g.count = this.count; g.sm = this.sm;   // sm：平滑渲染的旗標（不會變 ⇒ 共用同一份）
     return g;
   };
   Grid.prototype.ci = function (cx, cy, cz) { return cx + this.nx * (cy + this.ny * cz); };
@@ -166,7 +167,7 @@
   }
 
   // ───────────────────────── 網格化（區塊內同色面合併） ─────────────────────────
-  var pad = new Uint8Array(PAD * PAD * PAD), mask = new Int16Array(CH * CH);
+  var pad = new Uint8Array(PAD * PAD * PAD), spad = new Uint8Array(PAD * PAD * PAD), mask = new Int16Array(CH * CH);
   // 軸 a 的面：u、v 取讓 (u, v, a) 成右手系的兩軸
   var UAX = [1, 2, 0], VAX = [2, 0, 1], P = [0, 0, 0];
   /** 一個區塊的四邊形 ⇒ Uint16Array（每頂點 x,y,z,packed；每四邊形 4 頂點）。空 ⇒ null。 */
@@ -179,6 +180,12 @@
     for (z = 0; z < CH; z++) for (y = 0; y < CH; y++) {
       var src = (y << 4) | (z << 8), dst = 1 + (y + 1) * PAD + (z + 1) * PAD2;
       for (x = 0; x < CH; x++) pad[dst + x] = c[src + x];
+    }
+    // 平滑渲染的格（grid.sm：同尺寸的旗標網格，非 0 ＝ 這一格由呼叫端另外畫成平滑面）：自己不出方塊面，但照樣擋住旁邊格子的面（⇒ 兩種接在一起不露縫）
+    var sc = grid.sm ? grid.sm.tab[grid.ci(cx, cy, cz)] : null;
+    if (sc) for (z = 0; z < CH; z++) for (y = 0; y < CH; y++) {
+      var ss = (y << 4) | (z << 8), sd = 1 + (y + 1) * PAD + (z + 1) * PAD2;
+      for (x = 0; x < CH; x++) spad[sd + x] = sc[ss + x];
     }
     for (var a = 0; a < 3; a++) for (var s = -1; s <= CH; s += CH + 1) for (var p = -1; p <= CH; p++) for (var q = -1; q <= CH; q++) {
       var lx, ly, lz;
@@ -193,7 +200,7 @@
         for (var d = 0; d < CH; d++) {
           var any = false, row0 = B + d * sa;
           for (var v = 0; v < CH; v++) for (var u = 0, pi = row0 + v * sv; u < CH; u++, pi += su) {
-            var col = pad[pi], m = (col && !pad[pi + off]) ? col : 0;
+            var col = pad[pi], m = (col && !pad[pi + off] && !(sc && spad[pi])) ? col : 0;
             mask[u + v * CH] = m; if (m) any = true;
           }
           if (!any) continue;

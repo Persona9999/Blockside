@@ -28,6 +28,9 @@
     "dmg6": [10, 300, 40],
     "dmg3c": [10, 300, 30],
     "dmgtr": [10, 300, 70],
+    "dmg9d": [10, 300, 200],
+    "dmg64b": [10, 300, 190],
+    "dmg7b": [10, 300, 240],
     "box": [1, 8, 2],
     "carry": [1, 6, 1],
     "wind": [0.25, 3, 1],
@@ -84,6 +87,42 @@
       "mass": 4.5,
       "burst": 16,
       "burstGap": 0.06
+    },
+    "dahl9": {
+      "code": "9d",
+      "name": "9 吋 Dahlgren 滑膛砲",
+      "short": "9 吋 Dahlgren",
+      "V": 150,
+      "reload": 1.5,
+      "big": false,
+      "hole": 1.4,
+      "crew": 8,
+      "min": 5,
+      "mass": 4.2
+    },
+    "brooke64": {
+      "code": "64b",
+      "name": "6.4 吋 Brooke 線膛砲",
+      "short": "6.4 吋 Brooke",
+      "V": 168,
+      "reload": 1.5,
+      "big": false,
+      "hole": 1.2,
+      "crew": 7,
+      "min": 4,
+      "mass": 4.1
+    },
+    "brooke7": {
+      "code": "7b",
+      "name": "7 吋 Brooke 線膛砲",
+      "short": "7 吋 Brooke",
+      "V": 170,
+      "reload": 1.8,
+      "big": false,
+      "hole": 1.3,
+      "crew": 8,
+      "min": 5,
+      "mass": 6.6
     }
   },
   "geo0": {"spar": null, "marines": [160, 220], "center": 140, "aim": 90, "aimZ": [40, 320], "deckAim": [84, 104], "rigAim": [150, 300]},
@@ -95,7 +134,7 @@
       "oak": {"name": "橡木", "kind": "wood", "density": 0.7, "hard": 1, "flammable": 0.5},
       "pine": {"name": "松木", "kind": "wood", "density": 0.5, "hard": 0.7, "flammable": 0.8},
       "teak": {"name": "柚木", "kind": "wood", "density": 0.65, "hard": 1.1, "flammable": 0.3},
-      "iron": {"name": "鐵甲", "kind": "metal", "density": 7.8, "hard": 8, "flammable": 0},
+      "iron": {"name": "鐵甲", "kind": "metal", "density": 7.8, "hard": 16, "flammable": 0},
       "copper_sheath": {"name": "銅皮（包在木殼外）", "kind": "metal", "density": 0.8, "hard": 1.1, "flammable": 0}
     }
   },
@@ -210,6 +249,24 @@
       "vxk": "phoenix.vxk",
       "work": "kiara-phoenix-01m-assembly",
       "geo": {"marines": [50, 100], "center": 75, "aim": 72, "aimZ": [20, 300], "deckAim": [60, 86], "rigAim": [135, 300]}
+    },
+    {
+      "id": "virginia",
+      "el": "ship-virginia",
+      "name": "維吉尼亞號",
+      "vxk": "virginia.vxk",
+      "work": "ame-virginia-01m-assembly",
+      "cfg": {"base": 5.5, "agile": 0.4},
+      "geo": {"spar": [100, 102], "marines": [250, 200], "center": 85, "aim": 75, "aimZ": [40, 150], "deckAim": [74, 90], "rigAim": [100, 145]},
+      "crew": {
+        "marines": 6,
+        "top": 0,
+        "guns": {"brooke64": 6}
+      },
+      "flags": [
+        {"kind": "ensign", "at": [300, 90, 140], "pole": 1.0}
+      ],
+      "names": ["維吉尼亞號"]
     }
   ],
   "furniture": {
