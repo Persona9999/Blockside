@@ -16,6 +16,7 @@ function reset() {
   if (MODE !== LAST_MODE) { setAutoFire(MODE === 'eve'); LAST_MODE = MODE; }   // 自動開砲：換了模式才套預設（觀戰開、其他關），同一個模式重開保留（Tim 2026-10-12）
   SHIPS.forEach(function (sh) { stepShip(sh, 0); survey(sh); });
   pickCaptains();                                                    // 砲長（51_captain.js）
+  obsReset();                                                        // 觀察模式（透視、剖面、隱藏甲板；72_floodui.js）：繼續後會留著 ⇒ 新開一局才收
   CAM.mode = 0; CAM.follow = null; CAM.trMe = CAM.trYaw = null; CAM.pan = [0, 0]; CAM.see = null; CAM.dist = DIST * 1.05 + 40; CAM.tgt = [0, 8, 0]; CAM.yaw = 2.2; CAM.pitch = 0.22; CAM.snap = true;
   if (!CAMQ) {                                                         // 預設：看我艦（鎖定我艦、拖曳自己轉），開局那一刻擺在我艦背對敵艦那一側 ⇒ 朝敵艦看（Tim 2026-10-15；以前是「我艦→敵艦」一直跟著兩艘的連線轉）
     var cm = SHIPS[PLAYER_I], cf = cm && foeOf(cm), a0 = cm && cf ? Math.atan2(cf.center[2] - cm.center[2], cf.center[0] - cm.center[0]) : 0;

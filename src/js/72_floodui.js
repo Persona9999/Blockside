@@ -1,6 +1,6 @@
 // ───────────────────────── 停格與進水細節頁（Tim 2026-10-13） ─────────────────────────
 // P ＝「停格」（以前叫暫停；停住模擬、照樣能轉鏡頭）：上方出現一條「⏸ 停格中　進水：📊 圖表（I）🔍 透視（X）　▶ 繼續（P）」。設定、說明打開時不出現（它們自己會暫停）。
-// 進水細節分兩個開關（Tim 2026-10-13：不然圖表會擋住 3D）——只在停格時打得開，繼續就都收起：
+// 進水細節分兩個開關（Tim 2026-10-13：不然圖表會擋住 3D）——只在停格時打得開；繼續 ⇒ 圖表收起、透視（與剖面、甲板）留著（2026-10-15）：
 //   📊 圖表（FLX，I）：數字與剖面的面板，右上 ✕ 也能關；🔍 透視（FLX3，X）：3D 裡的艙內水面與破口隔著船殼看得到，
 //   而且船附近的海面與白沫不畫（Tim 2026-10-13：會影響觀察）⇒ 看得到水線下的船殼與破口。
 //   兩艘各一段：數字（積水、破口（水下幾個）、進出水、抽水、下沉、傾斜、水的重心、粒子與水格）＋ 側視、俯視的剖面（艙內的水、破口、外面的水面、設計水線）。
@@ -11,7 +11,7 @@ var FLX = false, FLX3 = false;
 function frzShow() {
   var on = RUNNING && PAUSED && !GSET.open && !HELP.open;
   $('frz').classList.toggle('on', on); $('msg').style.visibility = on ? 'hidden' : '';   // 停格條跟上方廣播同一個位置（⛔ 不藏 ⇒ 廣播的字透過半透明的條）
-  if (!on) { if (FLX) floodClose(); FLX3 = false; CUTV.half = false; CUTV.deck = 0; }   // 剖面、隱藏甲板也跟著收（74_cutaway.js）
+  if (!on && FLX) floodClose();                                       // 繼續 ⇒ 只收 📊 圖表；🔍 透視、✂ 剖面、☰ 甲板保持（Tim 2026-10-15：「停格中可以切換的觀察模式，是否能在按下繼續後保持（這樣可以在遊戲中維持觀察狀態），除了圖表」）—— 要關 ⇒ 停格再按一次；新開一局 ⇒ obsReset（70_flow.js）
   $('frzFlood').classList.toggle('on', FLX); $('frzX').classList.toggle('on', FLX3);
   $('frzCut').classList.toggle('on', CUTV.half); $('frzDeck').classList.toggle('on', CUTV.deck > 0); $('frzDeck').textContent = deckLabel();
 }
@@ -20,6 +20,8 @@ function xrBox(T) {
   if (!T.xrB) { var hb = 0; for (var x = T.wl0; x <= T.wl1; x++) hb = Math.max(hb, T.hullHB[T.zw * T.hullTW + x] || 0); T.xrB = [(T.wl0 + T.wl1) / 2, T.cy, (T.wl1 - T.wl0) / 2, hb]; }
   return T.xrB;
 }
+/** 新開一局：觀察模式全部收（透視、剖面、隱藏甲板、圖表）。 */
+function obsReset() { if (FLX) floodClose(); FLX3 = false; CUTV.half = false; CUTV.deck = 0; }
 function xrayToggle() { if (!RUNNING || !PAUSED) return; FLX3 = !FLX3; frzShow(); }   // 按了就更新按鈕（⛔ 只靠每一格的 frzShow ⇒ 分頁在背景時按鈕不動）
 function floodOpen() { if (!RUNNING || !PAUSED) return; FLX = true; $('floodp').classList.add('on'); floodPanel(); frzShow(); }
 function floodClose() { FLX = false; $('floodp').classList.remove('on'); $('frzFlood').classList.remove('on'); }

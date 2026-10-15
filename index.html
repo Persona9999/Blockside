@@ -98,8 +98,8 @@
   .gr .grd{ display:inline-block; text-align:left; line-height:1.25; }   /* 砲列：每層砲甲板一行、上下疊（61_hud.js gunRow） */
   .g-full{ color:#8fe388; } .g-short{ color:#f2c14e; } .g-none{ color:#7d838c; } .g-dead{ color:#e0574a; } .g-wet{ color:#7fc8ff; }
   .ico.g-full{ box-shadow:inset 0 -2px 0 #8fe388; } .ico.g-short{ box-shadow:inset 0 -2px 0 #f2c14e; } .ico.g-none{ box-shadow:inset 0 -2px 0 #7d838c; } .ico.g-dead{ box-shadow:inset 0 -2px 0 #e0574a; }
-  #msg{ width:100%; font-size:14px; font-weight:700; text-align:center; line-height:1.45; }   /* 廣播：兩邊面板中間那一欄，一則一行、最多 5 行、各自淡掉（⛔ 寬到蓋住兩邊面板） */
-  #msg div{ margin:1px 0 3px; transition:opacity .4s; } #msg div:last-child{ font-size:16px; }
+  #msg{ width:100%; font-size:7px; font-weight:700; text-align:center; line-height:1.45; }   /* 廣播：兩邊面板中間那一欄，一則一行、最多 5 行、各自淡掉（⛔ 寬到蓋住兩邊面板） */
+  #msg div{ margin:0 0 1.5px; transition:opacity .4s; } #msg div:last-child{ font-size:8px; }   /* 0.5 倍（Tim 2026-10-15：「跳訊息字（水手傷亡資訊等）大小可以改成 0.5 倍」；以前 14／16 px） */
   #tip{ left:12px; bottom:12px; color:var(--dim); font-size:12px; }
   /* 遊戲內的設定面板（⚙ 設定、Esc）：打開時暫停；重新開始、回主選單、畫質與物理的三四檔、帆繩物理、鏡頭跟船、靜音、FPS（Tim 2026-10-13：手機下方列省空間） */
   #gset{ left:50%; top:50%; transform:translate(-50%,-50%); display:none; text-align:center; padding:14px 16px; width:min(92vw,460px); box-sizing:border-box; pointer-events:auto; z-index:6; }   /* ⛔ 只給 max-width：left:50% ⇒ 最多只有半個螢幕寬、每一列都折行 */
@@ -127,7 +127,7 @@
     #topC{ width:calc(100vw - 96px); } #info{ font-size:11px; padding:5px 8px; } #info h3{ font-size:12px; } #info .pcols{ gap:2px 8px; } #info .pc{ flex-basis:110px; } #info .legend{ display:none; } #irow{ gap:4px; }   /* 手機：砲位圖窄（船頭朝上），跟卡片並排 */   /* 砲列在窄的卡片裡換行（⛔ 不換 ⇒ 伸到右邊的按鈕底下） */
     #navc{ width:68px; height:68px; } #modeT{ font-size:12px; }
     #ctl{ flex:1; padding:0; } #ctl.panel, #keys, #ammo{ gap:2px; } #guns .gr{ white-space:normal; word-break:break-all; } #tip{ display:none; }   /* 砲列在窄面板裡換行 */
-    #msg{ font-size:13px; } #msg div:last-child{ font-size:15px; }   /* 廣播：跟資訊同一欄（頂端中間，兩邊艦隊按鈕之間） */
+    #msg{ font-size:6.5px; } #msg div:last-child{ font-size:7.5px; }   /* 廣播：跟資訊同一欄（頂端中間，兩邊艦隊按鈕之間） */
     .hud h3 .disp{ display:block; margin-left:0; } }                                     /* 排水量換到船名下一行（⛔ 同一行 ⇒ 面板縮半之後「現在 …」被切掉） */
   /* 手機橫拿（矮）：面板與控制列都縮 */
   @media (max-height:520px) and (min-width:761px){
@@ -8706,6 +8706,7 @@ function reset() {
   if (MODE !== LAST_MODE) { setAutoFire(MODE === 'eve'); LAST_MODE = MODE; }   // 自動開砲：換了模式才套預設（觀戰開、其他關），同一個模式重開保留（Tim 2026-10-12）
   SHIPS.forEach(function (sh) { stepShip(sh, 0); survey(sh); });
   pickCaptains();                                                    // 砲長（51_captain.js）
+  obsReset();                                                        // 觀察模式（透視、剖面、隱藏甲板；72_floodui.js）：繼續後會留著 ⇒ 新開一局才收
   CAM.mode = 0; CAM.follow = null; CAM.trMe = CAM.trYaw = null; CAM.pan = [0, 0]; CAM.see = null; CAM.dist = DIST * 1.05 + 40; CAM.tgt = [0, 8, 0]; CAM.yaw = 2.2; CAM.pitch = 0.22; CAM.snap = true;
   if (!CAMQ) {                                                         // 預設：看我艦（鎖定我艦、拖曳自己轉），開局那一刻擺在我艦背對敵艦那一側 ⇒ 朝敵艦看（Tim 2026-10-15；以前是「我艦→敵艦」一直跟著兩艘的連線轉）
     var cm = SHIPS[PLAYER_I], cf = cm && foeOf(cm), a0 = cm && cf ? Math.atan2(cf.center[2] - cm.center[2], cf.center[0] - cm.center[0]) : 0;
@@ -9430,7 +9431,7 @@ $('endR').onclick = function () { RUNNING = false; $('end').className = ''; $('c
 // ── js/72_floodui.js ──
 // ───────────────────────── 停格與進水細節頁（Tim 2026-10-13） ─────────────────────────
 // P ＝「停格」（以前叫暫停；停住模擬、照樣能轉鏡頭）：上方出現一條「⏸ 停格中　進水：📊 圖表（I）🔍 透視（X）　▶ 繼續（P）」。設定、說明打開時不出現（它們自己會暫停）。
-// 進水細節分兩個開關（Tim 2026-10-13：不然圖表會擋住 3D）——只在停格時打得開，繼續就都收起：
+// 進水細節分兩個開關（Tim 2026-10-13：不然圖表會擋住 3D）——只在停格時打得開；繼續 ⇒ 圖表收起、透視（與剖面、甲板）留著（2026-10-15）：
 //   📊 圖表（FLX，I）：數字與剖面的面板，右上 ✕ 也能關；🔍 透視（FLX3，X）：3D 裡的艙內水面與破口隔著船殼看得到，
 //   而且船附近的海面與白沫不畫（Tim 2026-10-13：會影響觀察）⇒ 看得到水線下的船殼與破口。
 //   兩艘各一段：數字（積水、破口（水下幾個）、進出水、抽水、下沉、傾斜、水的重心、粒子與水格）＋ 側視、俯視的剖面（艙內的水、破口、外面的水面、設計水線）。
@@ -9441,7 +9442,7 @@ var FLX = false, FLX3 = false;
 function frzShow() {
   var on = RUNNING && PAUSED && !GSET.open && !HELP.open;
   $('frz').classList.toggle('on', on); $('msg').style.visibility = on ? 'hidden' : '';   // 停格條跟上方廣播同一個位置（⛔ 不藏 ⇒ 廣播的字透過半透明的條）
-  if (!on) { if (FLX) floodClose(); FLX3 = false; CUTV.half = false; CUTV.deck = 0; }   // 剖面、隱藏甲板也跟著收（74_cutaway.js）
+  if (!on && FLX) floodClose();                                       // 繼續 ⇒ 只收 📊 圖表；🔍 透視、✂ 剖面、☰ 甲板保持（Tim 2026-10-15：「停格中可以切換的觀察模式，是否能在按下繼續後保持（這樣可以在遊戲中維持觀察狀態），除了圖表」）—— 要關 ⇒ 停格再按一次；新開一局 ⇒ obsReset（70_flow.js）
   $('frzFlood').classList.toggle('on', FLX); $('frzX').classList.toggle('on', FLX3);
   $('frzCut').classList.toggle('on', CUTV.half); $('frzDeck').classList.toggle('on', CUTV.deck > 0); $('frzDeck').textContent = deckLabel();
 }
@@ -9450,6 +9451,8 @@ function xrBox(T) {
   if (!T.xrB) { var hb = 0; for (var x = T.wl0; x <= T.wl1; x++) hb = Math.max(hb, T.hullHB[T.zw * T.hullTW + x] || 0); T.xrB = [(T.wl0 + T.wl1) / 2, T.cy, (T.wl1 - T.wl0) / 2, hb]; }
   return T.xrB;
 }
+/** 新開一局：觀察模式全部收（透視、剖面、隱藏甲板、圖表）。 */
+function obsReset() { if (FLX) floodClose(); FLX3 = false; CUTV.half = false; CUTV.deck = 0; }
 function xrayToggle() { if (!RUNNING || !PAUSED) return; FLX3 = !FLX3; frzShow(); }   // 按了就更新按鈕（⛔ 只靠每一格的 frzShow ⇒ 分頁在背景時按鈕不動）
 function floodOpen() { if (!RUNNING || !PAUSED) return; FLX = true; $('floodp').classList.add('on'); floodPanel(); frzShow(); }
 function floodClose() { FLX = false; $('floodp').classList.remove('on'); $('frzFlood').classList.remove('on'); }
