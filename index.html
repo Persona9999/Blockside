@@ -4711,6 +4711,7 @@ function stepShip(sh, dt) {
   manning(sh);
   for (var i = 0; i < sh.guns.length; i++) {
     var g = sh.guns[i]; if (!(g.reload > 0)) continue;
+    if (g.needCart && !sh.mags.length && gunRate(g) > 0) g.needCart = false;   // 這艘一間彈藥庫都沒有（作品漏標；夜燈號 2026-10-15）⇒ 不等送藥手（⛔ 等 ⇒ 每門打完開局藥箱那 2 發就永遠在等，整舷一排 △）；彈藥庫被打掉的照舊要等
     if (g.needCart) { if (g.box > 0 && gunRate(g) > 0) { g.box--; g.needCart = false; } else continue; }   // 裝填要一份火藥與彈藥：藥箱空了 ⇒ 等送藥手（不倒數）
     g.reload -= dt * gunRate(g);                                    // 人少裝填慢、沒人不裝填
   }
