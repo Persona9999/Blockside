@@ -468,8 +468,13 @@ function physStep(sh) {
       clothInit(c); c.hidden = false; c.loose = true;
     }
     c.late = false;
-    if (s.furled && !s.dead) { c.hidden = true; return; }
-    if (c.hidden || !c.p) { var keep = c.p && c.torn ? { brk: c.brk, bbrk: c.bbrk, tv: c.tv } : null; clothInit(c); c.hidden = false; if (keep) { c.brk = keep.brk; c.bbrk = keep.bbrk; c.tv = keep.tv; c.torn = true; } }   // 收帆再張：形狀重來、破洞留著
+    if (s.furled && !s.dead) {                                       // 收帆：物理開著 ⇒ 先演一段收上去（畫面上往帆桁／綁邊收攏，FURL_IN 秒）再藏；判斷照舊立刻算收起來（s.furled：航速、命中、鏈彈）
+      if (c.hidden || !c.p || c.loose) { c.hidden = true; c.furlF = null; return; }
+      c.furlF = (c.furlF === null || c.furlF === undefined ? 1 : c.furlF) - DT / FURL_IN;
+      if (c.furlF <= 0) { c.hidden = true; c.furlF = null; sh.rigDirty = true; return; }   // rigDirty：它的繩跟著藏（11_rig_gpu.js buildRig）
+    } else if (c.furlF !== null && c.furlF !== undefined && !c.hidden) { c.furlF += DT / FURL_OUT; if (c.furlF >= 1) c.furlF = null; }   // 張帆（或收到一半又張）：從帆桁放下來
+    var reopen = c.hidden === true && !s.furled;                       // 收著 ⇒ 張開（⛔ 開局那一次 c.hidden 是 undefined ⇒ 不演）
+    if (c.hidden || !c.p) { var keep = c.p && c.torn ? { brk: c.brk, bbrk: c.bbrk, tv: c.tv } : null; clothInit(c); c.hidden = false; if (keep) { c.brk = keep.brk; c.bbrk = keep.bbrk; c.tv = keep.tv; c.torn = true; } if (reopen) { c.furlF = 0; sh.rigDirty = true; } }   // 收帆再張：形狀重來、破洞留著；從收攏的樣子放下來（furlF 0 → 1）
     if (chk || c.npin < 0) clothPins(sh, s, c);
     yardPins(sh, c);
     c.ev = evk;
@@ -508,6 +513,21 @@ function setPhys(on) {
 // corrections are transferred to the coarse degrees of freedom, excluding pins.
 // These caches contain geometry only; destroyed body cells/models are checked live.
 var CLOTH_CONTACT_MARGIN = 0.12;
+// 收帆、張帆的演出（Tim 2026-10-15：「開啟帆繩物理時，收帆放帆是否可以多一小段演出（不影響判斷）」）：只改畫出來的樣子（11_rig_gpu.js sailBuf → furlDraw）。
+//   c.furlF ＝ 張開了幾成（1 張開、0 收攏；null ＝ 沒在演）；收帆 FURL_IN 秒、張帆 FURL_OUT 秒。物理照常走、判斷照 s.furled 立刻生效。
+var FURL_IN = 1.2, FURL_OUT = 1.6;
+/** 畫面上收攏：每個細格點往它的「收攏點」（模板 T.gath：最近的綁在帆桁上的點；沒有帆桁 ⇒ 最近的綁點）靠過去，f ＝ 張開幾成（緩動）。 */
+function furlDraw(c, P, f) {
+  var T = c.T, g = T.gath;
+  if (!g) {                                                           // 第一次用到才算（模板共用；用設計那一刻的形狀找最近的）
+    var pins = [], yard = []; for (var i = 0; i < T.n; i++) if (T.hk[i]) { pins.push(i); if (T.hk[i] === 4) yard.push(i); }
+    var src = yard.length ? yard : pins; g = T.gath = new Int32Array(T.n).fill(-1);
+    if (src.length) for (i = 0; i < T.n; i++) { var bd = 1e18; for (var j = 0; j < src.length; j++) { var q = src[j], dx = T.p0[i * 3] - T.p0[q * 3], dy = T.p0[i * 3 + 1] - T.p0[q * 3 + 1], dz = T.p0[i * 3 + 2] - T.p0[q * 3 + 2], d = dx * dx + dy * dy + dz * dz; if (d < bd) { bd = d; g[i] = q; } } }
+  }
+  var e = f * f * (3 - 2 * f), k = 0.04 + 0.96 * e;                     // 收到底留 4%（一捲布，不是一條線）
+  for (i = 0; i < T.n; i++) { var a = g[i]; if (a < 0 || a === i) continue; for (var ax = 0; ax < 3; ax++) P[i * 3 + ax] = P[a * 3 + ax] + (P[i * 3 + ax] - P[a * 3 + ax]) * k; }
+  return P;
+}
 // 效能（ame 2026-10-15，Tim：「接手效能，在她的碰撞做法上加篩選和降頻」；碰撞的做法本身照 Sirius 的）：
 //   · 開關：物理設定「帆的碰撞」（09_phx.js），預設關、帆與繩「高」才算；關 ⇒ 一行都不跑。
 //   · 排隊＋時間預算：布走的那一步才排（physStep），全部的船走完再解；最久沒解的先解。平均每步最多花 CC_MS 毫秒：

@@ -1,8 +1,13 @@
 // ───────────────────────── 繩與帆的 GPU 緩衝 ─────────────────────────
 function buildRig(owner) {          // 還綁著的繩（靜態，照雕刻作品的形狀）；帆在 sailBuf、垂下來的繩在 looseBuf
-  var L = [];
-  owner.ropes.forEach(function (r) {
-    if (r.dead) return;
+  var L = [], hide = {};
+  (owner.sails || []).forEach(function (s, k) {                       // 收起來的帆，它自己的繩（s.lines：sheet、tack…）不畫（Tim 2026-10-15：收帆後會浮空）；物理開著 ⇒ 收攏演完、帆真的藏起來才藏。只是不畫：判斷照舊
+    if (!s.furled || s.dead || !s.lines) return; var c = owner.cl && owner.cl[k];
+    if (PHYS && c && c.p && !c.hidden) return;
+    s.lines.forEach(function (j) { hide[j] = 1; });
+  });
+  owner.ropes.forEach(function (r, j) {
+    if (r.dead || hide[j]) return;
     for (var j = 0; j + 5 < r.pts.length; j += 3) L.push(r.pts[j], r.pts[j + 1], r.pts[j + 2], r.col[0], r.col[1], r.col[2], r.pts[j + 3], r.pts[j + 4], r.pts[j + 5], r.col[0], r.col[1], r.col[2]);
   });
   owner.lines = upload(owner.lines, new Float32Array(L), 6, [[0, 3, 0], [2, 3, 3]]);
@@ -34,7 +39,8 @@ function sailBuf(ow) {
   }
   (ow.cl || []).forEach(function (c, k) {
     if (isShip) { var s = ow.sails[k]; if (PHYS ? (!c.p || c.hidden || c.gone) : (s.dead || s.furled)) return; }
-    put((PHYS || !isShip) && c.p ? clothFine(c, SBP) : c.T.p0, c.T.n, c.T.tris, c.T.col, c.torn ? c.tv : null, c.T.vcol, c.T.uv, A && c.T.ti !== undefined ? sailRect(ow, A, c.T.ti) : null);
+    put((PHYS || !isShip) && c.p ? (isShip && c.furlF !== null && c.furlF !== undefined ? furlDraw(c, clothFine(c, SBP), c.furlF) : clothFine(c, SBP)) : c.T.p0,   // furlDraw：收帆張帆的演出（30_rig_physics.js）
+        c.T.n, c.T.tris, c.T.col, c.torn ? c.tv : null, c.T.vcol, c.T.uv, A && c.T.ti !== undefined ? sailRect(ow, A, c.T.ti) : null);
   });
   if (F) F.forEach(function (f) { put(f.p, f.n, f.T.sim.tris, f.col, null, null, f.uv, A && f.uv && f.ti !== undefined ? sailRect(ow, A, f.ti) : null); });   // 布片：有貼圖的帆撕下來的照原處的圖（34_shreds.js shredCut 記 uv）
   function put(p, n, tr, col, tv, vc, uv, r) {                            // tv：藏起來的細格點（撕開的洞）；vc：每個頂點的顏色（沒有貼圖集時的退路，30_rig_physics.js texColors）；uv＋r：貼圖集的那一格
