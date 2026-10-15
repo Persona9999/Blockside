@@ -127,6 +127,7 @@ function sbMake(o, box) {
 function sbIcon(k, emo) { return HUD_ART ? '<span class="ico" style="background-position:' + (k * 100 / 7).toFixed(3) + '% 0"></span>' : '<i>' + emo + '</i>'; }
 /** 開砲的圖示（Tim 2026-10-15：「開砲改用目前船資訊上的砲數 emoji 符號，齊射用三個該符號表示」「自動開砲可以改為自動符號＋開砲符號」）：
  *  跟艦隊圓鈕砲數同一個（sbIcon(3)：有 HUD 美術 ⇒ 那一格圖、沒有 ⇒ 💥）；美術是載入後才有的 ⇒ 每次 HUD 看一次（字串一樣就不動）。 */
+var HUD_OUTARC = false;                                                  // 瞄準點在射界外（gunHud 記、羅盤上方那一行寫）
 function hudIcons() {
   var g = sbIcon(3, '💥'), L = [['fireK', '<b>F</b>', g], ['volleyK', '<b>空白</b>', g + g + g], ['autoF', '<b>G</b>', '🤖' + g]];
   L.forEach(function (q) { var el = $(q[0]), h = q[1] + '<i class="em">' + q[2] + '</i>'; if (el && el.innerHTML !== h) el.innerHTML = h; });
@@ -262,7 +263,7 @@ function gunDir(g) { if (g.type === 'chase') return g.ax[0] >= 0 ? 'bow' : 'ster
 /** 我艦的砲（Tim 2026-10-14）：沒有字、沒有底板（符號描黑邊直接壓在畫面上）。
  *  側舷砲貼著羅盤左右兩邊往外長（#gunsL 左舷、#gunsR 右舷；船頭那門靠羅盤、每層砲甲板一行、最上層在上；那一舷有砲對得到目標 ⇒ 靠羅盤那一側一條金線）；
  *  船頭砲在羅盤上面（#gunsB）、船尾砲在羅盤下面（#gunsA）—— 跟羅盤裡船頭朝上的船同一個方向；左舷的在左、對得到 ⇒ 靠羅盤那一側一條金線；沒有就藏起來。
- *  下方面板原本那一格（#guns）只剩「⚠ 射界外」。 */
+ *  「⚠ 射界外」改到羅盤上方那一行（Tim 2026-10-15：「射界外提示不要放在下方面板內，都改到羅盤上方的資訊」）⇒ 這裡只記 HUD_OUTARC，下方面板那一格（#guns）一律藏起來。 */
 function gunHud(me) {
   var foe = foeOf(me), w = handAim(me) ? aimPoint(me) : foe && foe.center;
   ['P', 'S'].forEach(function (side) {
@@ -279,9 +280,7 @@ function gunHud(me) {
     box.style.display = L.length ? '' : 'none'; box.classList.toggle('on', !!on);
   });
   var aw = aimPoint(me), bears = anyBears(me, aw, 'S') || anyBears(me, aw, 'P');
-  var s = bears || !handAim(me) ? '' : '<b style="color:#ff9a7a">⚠ 射界外</b>', gb = $('guns');
-  if (gb.innerHTML !== s) gb.innerHTML = s;
-  gb.style.display = s ? '' : 'none';
+  HUD_OUTARC = !bears && handAim(me); var gb = $('guns'); if (gb.style.display !== 'none') gb.style.display = 'none';
 }
 /** 補給一行：送藥手還能動的／全部、等火藥的砲幾門、取用點還剩幾桶。 */
 function supplyText(sh) {
@@ -433,7 +432,8 @@ function hud(dt) {
   var cn = CAM.mode === 3 && CAM.see && SHIPS.indexOf(CAM.see) >= 0 ? '看' + CAM.see.name : CAM_NAMES[CAM.mode];   // 「🎥 看這艘」⇒ 寫那一艘的名字
   // 圖示（Tim 2026-10-15：「瞄準、鏡頭的文字顯示也改成 Icon，然後那邊是否可以額外顯示航速、船體 %、進水 %（一樣用 Icon）」）：第二行 ⛵ 航速（節，倒車 −）、🚢 船體 %（還剩幾成格子）、💧 進水 %（floodPct，跟面板、艦隊圓鈕同一支）
   var hp = me.grid.count / me.orig, kn = me.spd * 1.944, fp = floodPct(me);
-  var mt = $('modeT'), ms = '🎯 <b>' + (!handAim(me) ? '砲長' : (AUTOFIRE ? '手動一舷・' : '') + AIM_NAME[me.pMode || 'free']) + '</b>　🎥 <b>' + cn + '</b><br>' +
+  var mt = $('modeT'), ms = '🎯 <b>' + (!handAim(me) ? '砲長' : (AUTOFIRE ? '手動一舷・' : '') + AIM_NAME[me.pMode || 'free']) + '</b>　🎥 <b>' + cn + '</b>' +
+    (HUD_OUTARC ? '　<b style="color:#ff9a7a">⚠ 射界外</b>' : '') + '<br>' +
     '⛵ <b>' + (kn < -0.05 ? '−' + (-kn).toFixed(1) : Math.max(0, kn).toFixed(1)) + '</b> 節　🚢 <b>' + (hp >= 0.9995 ? '100' : (hp * 100).toFixed(1)) + '%</b>　💧 <b>' + (me.sunk ? '沉沒' : Math.round(fp * 100) + '%') + '</b>';
   if (mt && mt.innerHTML !== ms) mt.innerHTML = ms;
   var t = DEBUG ? '格：' + SHIPS.map(function (s) { return s.grid.count; }).join('／') + '　四邊形：' + SHIPS.map(function (s) { return s.rs.quads(); }).join('／') + '　碎片 ' + D.n + '　粒子 ' + PT.n + '　脫落 ' + PIECES.length + (PHYS ? '　物理 ' + PHYS_MS.toFixed(2) + ' ms/步、垂繩 ' + SHIPS.map(function (s) { return s.loose.length; }).join('／') : '') + '　' + FPS.toFixed(0) + ' fps' : '';

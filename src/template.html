@@ -61,6 +61,11 @@
   #botC{ left:50%; bottom:12px; transform:translateX(-50%); display:flex; flex-direction:column; align-items:center; gap:6px; width:max-content; max-width:calc(100vw - 24px); }   /* ⛔ 不寫 width ⇒ left:50% 的絕對定位只剩半個畫面寬，主面板被兩組大圓鈕擠成一條 */
   #ctl{ text-align:center; min-width:0; box-sizing:border-box; }
   #ctl b{ color:var(--gold); }
+  /* 一整排（Tim 2026-10-15：「射界外搬走之後，下方面板可以改成一整排按鈕攤在下面」）：沒有底框，🎥 ⏸ ⚙ 🤖☸ ＋ 彈種 ⚫ 💣 ⛓️ 一列；每顆自己帶深色半透明底（壓在海上看得清楚） */
+  #ctl.panel{ display:flex; align-items:center; justify-content:center; flex-wrap:nowrap; gap:4px; background:none; border:none; box-shadow:none; padding:0; }
+  #keys, #ammo{ display:flex; align-items:center; flex-wrap:nowrap; gap:3px; } #keys .hint{ display:none; } #guns{ display:none; }
+  #ctl .kb, #ctl .chip, #ammo span{ margin:0; padding:3px 8px; border-radius:8px; background:rgba(14,18,24,.72); border:1px solid rgba(255,255,255,.3); color:#eee; font-size:13px; line-height:1.3; box-shadow:0 1px 4px rgba(0,0,0,.5); }
+  #ctl .chip.on{ color:#111; background:#9fc7ff; border-color:#9fc7ff; } #ammo span.on{ color:#111; background:var(--gold); border-color:var(--gold); } #ammo span.on b{ color:#4a3500; }
   #ammo span{ display:inline-block; margin:0 4px; padding:1px 8px; border-radius:10px; border:1px solid rgba(255,255,255,.2); color:var(--dim); }
   #ammo span.on{ color:#111; background:var(--gold); border-color:var(--gold); }
   #ammo span, .chip, .kb{ pointer-events:auto; cursor:pointer; user-select:none; -webkit-user-select:none; touch-action:manipulation; }
@@ -212,7 +217,7 @@
   <div id="ctlRow"><div id="helmL" class="helm"><span class="kb hb" data-k="a" data-hold="1" title="左舵（A，按住）"><b>A</b><i class="em">⬅️</i></span><span class="kb hb" data-k="s" data-hold="1" title="收帆（S）"><b>S</b><i class="em">⛵⬇</i></span><span class="kb hb" data-k="w" data-hold="1" title="加帆（W）"><b>W</b><i class="em">⛵⬆</i></span><span class="kb hb" data-k="6" id="ancAll" title="雙錨（6）：兩邊都沒拋 ⇒ 一起拋；一邊在水裡 ⇒ 拋另一邊；兩邊都在水裡 ⇒ 起錨"><b>6</b><i class="em">⚓⚓</i></span><span class="kb hb" data-k="7" id="ancP" title="左錨（7）"><b>7</b><i class="em">◀⚓</i></span></div><div id="ctl" class="panel">
     <div id="keys"><span class="hint">點敵艦瞄準</span><span class="kb" data-k="c" title="鏡頭（C）"><b>C</b> 🎥</span><span class="kb" data-k="p" id="pauseK" title="停格（P）"><b>P</b> ⏸</span><span class="kb" id="setB" title="設定（O）"><b>O</b> ⚙</span>　<span class="chip" id="sailT" title="自動操舵：亮 ＝ 自動（4）、暗 ＝ 手動（5）—— 點一下切換">🤖☸</span></div>
     <div id="guns"></div>
-    <div id="ammo"><span data-a="0"><b>1</b> 實心彈</span><span data-a="1"><b>2</b> 爆裂彈</span><span data-a="2"><b>3</b> 鏈彈</span></div>
+    <div id="ammo"><span data-a="0" title="實心彈（1）"><b>1</b>⚫</span><span data-a="1" title="爆裂彈（2）"><b>2</b>💣</span><span data-a="2" title="鏈彈（3）"><b>3</b>⛓️</span></div>
   </div><div id="helmR" class="helm"><span class="kb hb" data-k="8" id="ancS" title="右錨（8）"><b>8</b><i class="em">⚓▶</i></span><span class="kb hb" data-k="g" id="autoF" title="自動開砲（G）"><b>G</b><i class="em">🤖💥</i></span><span class="kb hb" data-k="f" id="fireK" title="開一門（F）"><b>F</b><i class="em">💥</i></span><span class="kb hb" data-k=" " id="volleyK" title="齊射（空白鍵）"><b>空白</b><i class="em">💥💥💥</i></span><span class="kb hb" data-k="d" data-hold="1" title="右舵（D，按住）"><b>D</b><i class="em">➡️</i></span></div></div></div>
   <div id="tip" class="hud"></div>
   <div id="slowB" class="hud"></div>
