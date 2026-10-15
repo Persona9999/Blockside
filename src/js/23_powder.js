@@ -46,18 +46,18 @@ function ignite(sh, m, delay) {
 function stepPowder() {
   for (var i = 0; i < BOOMS.length; i++) { var e = BOOMS[i]; if (e.t > SIMT) continue; BOOMS.splice(i--, 1); kegBoom(e.sh, e.m); }
   for (i = 0; i < SELFB.length; i++) { e = SELFB[i]; if (e.t > SIMT) continue; SELFB.splice(i--, 1); selfBoom(e.sh, e.mag); }
-  SHIPS.forEach(function (sh) { if (sh.selfSink && SIMT >= sh.selfSink) { sh.selfSink = 0; if (!sh.sinkingFinal && !sh.sunk) { sh.sinkingFinal = true; note(sh, '自爆：船開始沉了'); } } });   // 自爆的保底（下面）
 }
 // 自爆（遊戲內設定的按鈕；Tim 2026-10-13：相當於重開，但先看煙花）：我艦還在的彈藥庫由小到大一間一間引爆（間隔 SELF_GAP 之間隨機，最大那間最後 ⇒ 通常船斷開；
 //   每間的威力照細節設定的「威力浮動」，每次都不一樣），
 //   照殉爆走（慢動作與特寫照設定）：炸斷了 ⇒ 照斷船沉；沒斷 ⇒ 照破洞進水（粒子模式看得到水灌進來）、水夠了照常開始沉。
 //   ⛔ 以前每炸一間就直接標 sinkingFinal ⇒ 進水不再算（32_hull.js：開始沉之後不算水）⇒ 船照公式往下沉、艙裡一滴水都沒有（Tim 2026-10-15：「自爆好像不會進水，可以走正常殉爆流程嗎」）。
-//   保底：最後一間炸完 SELF_SINK 秒還沒開始沉（洞都在水線上、殉爆威力調小）⇒ 才標開始沉（進水倍率 0 ⇒ 不沉，跟斷船一樣）。結算寫「自爆」，之後照常重新開始。
-var SELF_GAP = [0.6, 1.8], SELFB = [], SELF_SINK = 20;
+//   不一定會沉（Tim 2026-10-15：「自爆也不一定會沉」）：⛔ 以前最後一間炸完 20 秒還沒開始沉 ⇒ 硬標開始沉；現在照物理（斷了照斷船沉、沒斷看進水）。
+//   自爆只記時間點 sh.selfAt（Tim：「自爆標記一個Flag(紀錄時間點)」）；算降旗（出局 ⇒ 換友艦、候補）；結算時 SELF_WIN 秒內沉的算「自爆沉沒」（61_hud.js shipFate）。
+var SELF_GAP = [0.6, 1.8], SELFB = [];
 function canSelfDestruct() { var sh = SHIPS[PLAYER_I]; return !!(RUNNING && sh && !sh.sunk && !sh.selfD && sh.mags.some(function (m) { return !m.gone; })); }
 function selfDestruct() {
   if (!canSelfDestruct()) return false;
-  var sh = SHIPS[PLAYER_I]; sh.selfD = true;
+  var sh = SHIPS[PLAYER_I]; sh.selfD = true; sh.selfAt = SIMT;
   var t = SIMT;
   sh.mags.filter(function (m) { return !m.gone; }).sort(function (a, b) { return a.lb - b.lb; }).forEach(function (m, k) { if (k) t += rr(SELF_GAP[0], SELF_GAP[1]); SELFB.push({ t: t, sh: sh, mag: m }); });
   note(sh, '<b style="color:#ff9a7a">自爆！</b>', true);
@@ -66,7 +66,6 @@ function selfDestruct() {
 function selfBoom(sh, mag) {
   magBoom(sh, mag);
   sh.struck = true; sh.fate = '自爆' + (sh.broken ? '（船斷成兩截）' : '');   // 開始沉照殉爆的流程（magBoom：斷了才標）＋破洞進水
-  if (!SELFB.some(function (e) { return e.sh === sh; })) sh.selfSink = SIMT + SELF_SINK;   // 最後一間 ⇒ 保底計時
 }
 /** 一桶炸了：小爆炸＋連鎖。 */
 function kegBoom(sh, m) {
@@ -89,7 +88,7 @@ function kegBoom(sh, m) {
 /** 整間彈藥庫殉爆。 */
 function magBoom(sh, mag) {
   if (mag.gone || sh.sink > 40) return;
-  mag.gone = true; mag.lit = true;
+  mag.gone = true; mag.lit = true; sh.boomAt = SIMT;                   // boomAt：結算等它定了才跳（61_hud.js shipSettled）
   mag.kegs.forEach(function (m) { m.alive = false; m.lit = true; });
   BOOMS = BOOMS.filter(function (e) { return e.m.mag !== mag; });
   var f = blastRoll(), k = blastK() * Math.cbrt(f), R = MAG_R * Math.pow(mag.lb / MAG_LB, 1 / 3) * k, c = mag.blast, w = M4.pt(sh.M, c[0], c[1], c[2]);
@@ -135,7 +134,7 @@ function blastNear(src, w, R, f) {
       damageModel(o, m, mul(norm(sub(cw, w)), 300 * (1 - d / (R * 1.3)) + 80), 5000);
     });
     var job = crater(o, c, R); if (!job.ch.length) continue;
-    job.w = w; job.src = src; BLASTS.push(job); blastStep(job);
+    job.w = w; job.src = src; o.boomAt = SIMT; BLASTS.push(job); blastStep(job);
   }
 }
 /** 每一步（step() 的殉爆排程之後）：還沒挖完的彈坑接著挖。 */

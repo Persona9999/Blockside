@@ -3977,18 +3977,18 @@ function ignite(sh, m, delay) {
 function stepPowder() {
   for (var i = 0; i < BOOMS.length; i++) { var e = BOOMS[i]; if (e.t > SIMT) continue; BOOMS.splice(i--, 1); kegBoom(e.sh, e.m); }
   for (i = 0; i < SELFB.length; i++) { e = SELFB[i]; if (e.t > SIMT) continue; SELFB.splice(i--, 1); selfBoom(e.sh, e.mag); }
-  SHIPS.forEach(function (sh) { if (sh.selfSink && SIMT >= sh.selfSink) { sh.selfSink = 0; if (!sh.sinkingFinal && !sh.sunk) { sh.sinkingFinal = true; note(sh, '自爆：船開始沉了'); } } });   // 自爆的保底（下面）
 }
 // 自爆（遊戲內設定的按鈕；Tim 2026-10-13：相當於重開，但先看煙花）：我艦還在的彈藥庫由小到大一間一間引爆（間隔 SELF_GAP 之間隨機，最大那間最後 ⇒ 通常船斷開；
 //   每間的威力照細節設定的「威力浮動」，每次都不一樣），
 //   照殉爆走（慢動作與特寫照設定）：炸斷了 ⇒ 照斷船沉；沒斷 ⇒ 照破洞進水（粒子模式看得到水灌進來）、水夠了照常開始沉。
 //   ⛔ 以前每炸一間就直接標 sinkingFinal ⇒ 進水不再算（32_hull.js：開始沉之後不算水）⇒ 船照公式往下沉、艙裡一滴水都沒有（Tim 2026-10-15：「自爆好像不會進水，可以走正常殉爆流程嗎」）。
-//   保底：最後一間炸完 SELF_SINK 秒還沒開始沉（洞都在水線上、殉爆威力調小）⇒ 才標開始沉（進水倍率 0 ⇒ 不沉，跟斷船一樣）。結算寫「自爆」，之後照常重新開始。
-var SELF_GAP = [0.6, 1.8], SELFB = [], SELF_SINK = 20;
+//   不一定會沉（Tim 2026-10-15：「自爆也不一定會沉」）：⛔ 以前最後一間炸完 20 秒還沒開始沉 ⇒ 硬標開始沉；現在照物理（斷了照斷船沉、沒斷看進水）。
+//   自爆只記時間點 sh.selfAt（Tim：「自爆標記一個Flag(紀錄時間點)」）；算降旗（出局 ⇒ 換友艦、候補）；結算時 SELF_WIN 秒內沉的算「自爆沉沒」（61_hud.js shipFate）。
+var SELF_GAP = [0.6, 1.8], SELFB = [];
 function canSelfDestruct() { var sh = SHIPS[PLAYER_I]; return !!(RUNNING && sh && !sh.sunk && !sh.selfD && sh.mags.some(function (m) { return !m.gone; })); }
 function selfDestruct() {
   if (!canSelfDestruct()) return false;
-  var sh = SHIPS[PLAYER_I]; sh.selfD = true;
+  var sh = SHIPS[PLAYER_I]; sh.selfD = true; sh.selfAt = SIMT;
   var t = SIMT;
   sh.mags.filter(function (m) { return !m.gone; }).sort(function (a, b) { return a.lb - b.lb; }).forEach(function (m, k) { if (k) t += rr(SELF_GAP[0], SELF_GAP[1]); SELFB.push({ t: t, sh: sh, mag: m }); });
   note(sh, '<b style="color:#ff9a7a">自爆！</b>', true);
@@ -3997,7 +3997,6 @@ function selfDestruct() {
 function selfBoom(sh, mag) {
   magBoom(sh, mag);
   sh.struck = true; sh.fate = '自爆' + (sh.broken ? '（船斷成兩截）' : '');   // 開始沉照殉爆的流程（magBoom：斷了才標）＋破洞進水
-  if (!SELFB.some(function (e) { return e.sh === sh; })) sh.selfSink = SIMT + SELF_SINK;   // 最後一間 ⇒ 保底計時
 }
 /** 一桶炸了：小爆炸＋連鎖。 */
 function kegBoom(sh, m) {
@@ -4020,7 +4019,7 @@ function kegBoom(sh, m) {
 /** 整間彈藥庫殉爆。 */
 function magBoom(sh, mag) {
   if (mag.gone || sh.sink > 40) return;
-  mag.gone = true; mag.lit = true;
+  mag.gone = true; mag.lit = true; sh.boomAt = SIMT;                   // boomAt：結算等它定了才跳（61_hud.js shipSettled）
   mag.kegs.forEach(function (m) { m.alive = false; m.lit = true; });
   BOOMS = BOOMS.filter(function (e) { return e.m.mag !== mag; });
   var f = blastRoll(), k = blastK() * Math.cbrt(f), R = MAG_R * Math.pow(mag.lb / MAG_LB, 1 / 3) * k, c = mag.blast, w = M4.pt(sh.M, c[0], c[1], c[2]);
@@ -4066,7 +4065,7 @@ function blastNear(src, w, R, f) {
       damageModel(o, m, mul(norm(sub(cw, w)), 300 * (1 - d / (R * 1.3)) + 80), 5000);
     });
     var job = crater(o, c, R); if (!job.ch.length) continue;
-    job.w = w; job.src = src; BLASTS.push(job); blastStep(job);
+    job.w = w; job.src = src; o.boomAt = SIMT; BLASTS.push(job); blastStep(job);
   }
 }
 /** 每一步（step() 的殉爆排程之後）：還沒挖完的彈坑接著挖。 */
@@ -5743,7 +5742,7 @@ function stepShip(sh, dt) {
                                                                               // 上限 0.25 m/s：彈藥庫殉爆打掉三十幾萬格 ⇒ 不設上限兩秒就沉完，看不到船斷開
     if (sh.sink > 4.2 && !sh.sinkingFinal && fk > 0) { sh.sinkingFinal = true; note(sh, '進水太多，開始沉了'); }
     if (sh.sinkingFinal) { sh.sinkV += 0.06 * fk * dt; sh.sink += sh.sinkV * dt; }
-    if (sh.sink > 9) { sh.sunk = true; note(sh, '沉沒', true); }
+    if (sh.sink > 9) { sh.sunk = true; sh.sunkAt = SIMT; note(sh, '沉沒', true); }   // sunkAt：結算判自爆沉沒（61_hud.js shipFate）
   } else { sh.sinkV = Math.min(sh.sinkV + 0.05 * dt, 1.2); sh.sink += sh.sinkV * dt; }
   // 傾斜：破洞那一舷往下（格座標 +y ＝ 船體 +Z（右舷）；繞 +X 轉正角時 +Z 那邊下沉）；粒子模式照水的重心（33_flood.js floodTilt）
   var tl = fl ? floodTilt(sh, fl) : null;
@@ -9518,37 +9517,59 @@ function floodLine(sh) {
   if (a >= 0.05) p.push('🕳 <b>' + a.toFixed(1) + '</b> m² 破口');
   return p.length ? '<br>' + p.join('　') : '';
 }
-// 結算畫面照模擬時間延後跳（暫停時不會跳出來；殉爆的慢動作中跟著變慢）（Tim：先看完精彩畫面 —— 殉爆的火球、斷成兩截）：
-//   輸的那艘已經沉了 ⇒ 再等 END_SINK 秒；已經開始沉（殉爆斷船、進水太多）⇒ 等它沉下去（sunk）再等 END_SINK 秒，最多等 END_MAX 秒（END_WAIT）；
-//   降旗、全員倒下（沒在沉）⇒ END_OTHER 秒。Tim 2026-10-13：讓玩家欣賞完沉船 ⇒ 沉了 2.5 → 5 秒、開始沉的等它沉下去（以前一律 5.5 秒，斷船的那艘沉到一半就被結算蓋住）。
-//   只管什麼時候亮出結算畫面：OVER、結算的文字照舊在分出勝負那一步定 ⇒ 戰局讀數不變。
-var END_AT = 0, END_SINK = 5, END_OTHER = 5.5, END_MAX = 40, END_WAIT = null;
+// ───────────────────────── 結算判定（Tim 2026-10-15：「把整個結算判定規範化」） ─────────────────────────
+// 三步，各管一件事：
+//   ① 出局（模擬裡，每艘）：isOut（52_fleet.js）＝ 沉了（sunk）、開始沉（sinkingFinal：進水太多、殉爆斷船）或降旗（struck：strikeCheck 的規則、全員倒下、自爆）。
+//      出局 ⇒ 換船（playerHandoff）、候補進場（reinforce）。⛔ 自爆不另外判：算降旗，照這一條走（Tim：「自爆不直接判輸 根據規則繼續換下一台候補(除非沒有船了)」）。
+//   ② 分出勝負（checkEnd，每一步）：一方全部出局、候補也沒了（teamDown）⇒ 那一方輸、OVER（先看敵方 ⇒ 同一步兩邊都倒算贏，跟以前一樣）。
+//   ③ 跳結算（照模擬時間：暫停不跳、殉爆慢動作跟著慢）：輸的那一方每艘都「定了」才開始倒數 ——
+//      沒定 ＝ 還沒沉、而且（正在沉；或彈藥庫還在炸、彈坑還在挖；或殉爆後 END_SETTLE 秒內：水還在灌、可能開始沉）；最多等 END_MAX 秒。
+//      定了 ⇒ 有沉的再 END_SINK 秒、都沒沉 END_OTHER 秒 ⇒ 跳（Tim 2026-10-13：讓玩家看完沉船；2026-10-15：自爆的結算等判定沉沒才跳、跟沉沒同一個時間點，但自爆不一定會沉）。
+//      結算的文字在跳的那一刻才組（shipFate）：船怎麼收場要等定了才知道。
+//   每艘的收場只在 shipFate 判：沉了 ⇒ 自爆後 SELF_WIN 秒內沉的「自爆沉沒」（Tim：「自爆標記一個Flag(紀錄時間點) 結算沉船時如果有該Flag且間隔不到1分鐘 算自爆沉」）、
+//      殉爆斷船的「殉爆斷船沉沒」、其他「沉沒」；沒沉 ⇒ 出局那一刻記的那一句（sh.fate：降旗（…）、全員倒下、自爆…），開始沉的再加「沉沒中」。
+//   只管結算畫面的時機與文字：OVER 在 ② 那一步定 ⇒ 戰局讀數不變；?demo、沙盒不跑。
+var END_AT = 0, END_SINK = 5, END_OTHER = 5.5, END_MAX = 40, END_SETTLE = 10, END_WAIT = null, SELF_WIN = 60;
+/** 這艘怎麼收場（結算畫面的那一句）。sh.selfAt：按自爆的模擬時間（23_powder.js selfDestruct）；sh.sunkAt：沉沒的那一刻（32_hull.js）。 */
+function shipFate(sh) {
+  if (sh.sunk) return sh.selfAt !== undefined && sh.sunkAt - sh.selfAt < SELF_WIN ? '自爆沉沒' : sh.broken ? '殉爆斷船沉沒' : '沉沒';
+  if (sh.sinkingFinal) return (sh.fate ? sh.fate + '、' : '') + '沉沒中';
+  return sh.fate || '出局';
+}
+/** 這艘的收場定了沒（③）：沉了 ⇒ 定了；正在沉、彈藥庫還在炸（SELFB、BLASTS）、殉爆後 END_SETTLE 秒內（sh.boomAt，23_powder.js magBoom、blastNear）⇒ 還沒。 */
+function shipSettled(sh) {
+  if (sh.sunk) return true;
+  if (sh.sinkingFinal) return false;
+  if (SELFB.some(function (e) { return e.sh === sh; }) || BLASTS.some(function (j) { return j.sh === sh; })) return false;
+  return sh.boomAt === undefined || SIMT - sh.boomAt >= END_SETTLE;
+}
 function checkEnd() {
   if (MODE === 'sandbox' || DEMO >= 0) return;
-  if (OVER) {
-    if (END_WAIT && (END_WAIT.sunk || SIMT >= END_AT)) { END_AT = Math.min(END_AT, SIMT + END_SINK); END_WAIT = null; }
-    if (END_AT && !END_WAIT && SIMT >= END_AT) { END_AT = 0; $('end').className = 'on'; }
+  if (OVER) {                                                         // ③：等輸的那一方定了 ⇒ 倒數 ⇒ 跳
+    var W = END_WAIT; if (!W) return;
+    if (!W.at) { if (SIMT < W.limit && !W.lose.every(shipSettled)) return; W.at = SIMT + (W.lose.some(function (o) { return o.sunk; }) ? END_SINK : END_OTHER); }
+    if (SIMT >= W.at) { END_WAIT = null; END_AT = 0; endShow(W); }
     return;
   }
-  // 照陣營（TASK-0537）：敵方每艘都沉了或降旗 ⇒ 勝；我方每艘都是 ⇒ 敗。一對一 ⇒ 跟以前同一句、同一個判定順序。
-  var me = SHIPS[PLAYER_I], mt = playerTeam(), ft = foeTeam(), mine = teamShips(mt), foes = teamShips(ft), txt = null, lose = null;
-  function fate(sh) { return sh.sunk ? '沉沒' : sh.fate; }
-  function who(L, one) { return L.length === 1 ? one + fate(L[0]) : one.replace('艦', '方') + ' ' + L.length + ' 艘全數' + (L.every(function (o) { return o.sunk; }) ? '沉沒' : '沉沒或降旗'); }
-  if (foes.length && teamDown(ft)) { txt = '勝利！' + who(foes, '敵艦'); lose = foes; }
-  // 自爆（23_powder.js selfDestruct）不直接判輸（Tim 2026-10-15：「自爆不直接判輸 根據規則繼續換下一台候補(除非沒有船了)」）：自爆的那艘算降旗（isOut）⇒ 照規則換友艦（playerHandoff）、候補進場（reinforce）；
-  //   我方全倒、候補也沒了才結算 ⇒ 最後那艘是自爆的（一對一 ＝ 第一間炸的那一刻，跟以前一樣）⇒ 寫自爆。
-  else if (teamDown(mt)) { txt = me.selfD ? '自爆！我艦引爆了彈藥庫' + (mine.length > 1 ? '（我方 ' + mine.length + ' 艘全數沉沒或降旗）' : '') : '敗北……' + who(mine, '我艦'); lose = mine; }
-  if (!txt) return;
+  var mt = playerTeam(), ft = foeTeam(), win = teamShips(ft).length > 0 && teamDown(ft);   // ②
+  if (!win && !teamDown(mt)) return;
   OVER = true;
+  END_WAIT = { win: win, mt: mt, ft: ft, lose: teamShips(win ? ft : mt), limit: SIMT + END_MAX, at: 0 };
+  END_AT = END_WAIT.limit;                                            // ≠ 0 ⇒ 50_sim.js 每一步照樣呼叫 checkEnd；重開／回選單時歸零（70_flow.js、71_input.js）
+}
+/** 亮出結算畫面：文字照現在每艘的收場組（一艘 ⇒ 那一句；多艘 ⇒ 全數沉沒（或沉沒或降旗）＋各種收場幾艘）。 */
+function endShow(W) {
+  var me = SHIPS[PLAYER_I], mine = teamShips(W.mt), foes = teamShips(W.ft);
+  function who(L, one) {
+    if (L.length === 1) return one + shipFate(L[0]);
+    var c = {}; L.forEach(function (o) { var f = shipFate(o); c[f] = (c[f] || 0) + 1; });
+    return one.replace('艦', '方') + ' ' + L.length + ' 艘全數' + (L.every(function (o) { return o.sunk; }) ? '沉沒' : '沉沒或降旗') + '（' + Object.keys(c).map(function (f) { return f + ' ' + c[f]; }).join('、') + '）';
+  }
   function sum(L, k) { return L.reduce(function (a, o) { return a + o[k]; }, 0); }
-  $('endT').textContent = txt;
+  $('endT').textContent = W.win ? '勝利！' + who(foes, '敵艦') : '敗北……' + who(mine, '我艦');
   $('endS').innerHTML = '打掉的格數：我' + (mine.length > 1 ? '方 ' : '艦 ') + sum(mine, 'lost').toLocaleString() + '　敵' + (foes.length > 1 ? '方 ' : '艦 ') + sum(foes, 'lost').toLocaleString() + '<br>開火／命中：' + me.fired + '／' + me.hits + '　經過 ' + SIMT.toFixed(0) + ' 秒' +
     '<br><span style="color:var(--dim)">' + strikeText() + '</span>';
-  lose = lose || mine;                                              // 重開／回選單時 END_AT、END_WAIT 歸零（⛔ 不歸零 ⇒ 結束後幾秒內按重新開始，新的一局會跳出結算）
-  var sinking = lose.filter(function (o) { return o.sinkingFinal && !o.sunk; })[0];   // 輸的那邊還有在沉的 ⇒ 等它沉下去
-  if (sinking) { END_WAIT = sinking; END_AT = SIMT + END_MAX; }
-  else if (lose.some(function (o) { return o.sunk; })) END_AT = SIMT + END_SINK;
-  else END_AT = SIMT + END_OTHER;
+  $('end').className = 'on';
 }
 // ── js/68_guncfg.js ──
 // ───────────────────────── 砲的設定（主選單「砲的設定…」；Tim 2026-10-14：單獨一頁設定每種砲的參數 —— 速射砲一次六發、砲的基礎重量、基礎傷害…） ─────────────────────────
