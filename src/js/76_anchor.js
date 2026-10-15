@@ -59,6 +59,16 @@ function anchorWeighAll(sh) {
 function anchorAny(sh, st) { var A = sh.anc; return !!A && (A.P.st === st || A.S.st === st); }
 /** 6（拋錨／起錨同一顆）按下去是起錨嗎：拋錨模式、或有錨在水裡（下沉中、咬著）。 */
 function anchorWet(sh) { return (SAIL === 'off' && sh.i === PLAYER_I) || anchorAny(sh, 'drop') || anchorAny(sh, 'down'); }
+/** 6 這一下要做什麼（Tim 2026-10-15：「已經有一邊拋錨時，按下拋錨仍然是拋另一邊錨；兩邊都拋錨時才是起錨」）：
+ *  'both' 兩邊都沒在水裡 ⇒ 拋雙錨（拋錨模式）；'other' 一邊在水裡、另一邊還拋得了 ⇒ 拋另一邊（k ＝ 哪一邊）；'weigh' 其他（兩邊都在水裡、或另一邊打壞了）⇒ 起錨。 */
+function anchor6(sh) {
+  var A = anchorsOf(sh), wet = ['P', 'S'].filter(function (k) { return A[k].st === 'drop' || A[k].st === 'down'; });
+  var free = ['P', 'S'].filter(function (k) { return A[k].st === 'up' && !A[k].broken && anchorAlive(sh, A[k]); });
+  if (SAIL === 'off' && sh.i === PLAYER_I) return { act: 'weigh' };
+  if (!wet.length) return { act: anchorAny(sh, 'weigh') ? 'weigh' : 'both' };
+  if (wet.length === 1 && free.length) return { act: 'other', k: free[0] };
+  return { act: 'weigh' };
+}
 /** 有錨咬著（down／weigh）⇒ 船不再靠帆走（target 0）。 */
 function anchorHeld(sh) { return anchorAny(sh, 'down') || anchorAny(sh, 'weigh'); }
 /** 每一步（sail() 走完位置之後）：沉到底、起完、打壞斷鍊；咬著的錨把錨鏈孔拉回鍊長以內、船身繞錨鏈孔轉。回傳有沒有拉緊。 */
@@ -106,7 +116,7 @@ function anchorStep(sh, dt, px0, pz0) {
 function anchorChips(me) {
   if (!me) return;
   var A = anchorsOf(me), w = anchorWet(me), b6 = $('ancAll');
-  if (b6) { b6.classList.toggle('on', w); var l6 = w ? '⚓⬆' : anchorAny(me, 'weigh') ? '⚓⏳' : '⚓', s6 = b6.querySelector('i'); if (s6 && s6.textContent !== l6) s6.textContent = l6; }   // 圖示（Tim 2026-10-15）：⚓ 拋、⚓⬆ 起錨、⚓⏳ 起錨中
+  if (b6) { var a6 = anchor6(me).act; b6.classList.toggle('on', w); var l6 = a6 === 'weigh' && w ? '⚓⚓⬆' : a6 === 'weigh' ? '⚓⚓⏳' : '⚓⚓', s6 = b6.querySelector('i'); if (s6 && s6.textContent !== l6) s6.textContent = l6; }   // 圖示（Tim 2026-10-15：兩個錨 ＝ 兩邊一起下）：⚓⚓ 拋（一邊在水裡 ⇒ 亮、按了拋另一邊）、⚓⚓⬆ 按了起錨、⚓⚓⏳ 起錨中
   ['P', 'S'].forEach(function (k) {
     var a = A[k], el = $('anc' + k); if (!el) return;
     if (!a.broken && a.st === 'up' && !anchorAlive(me, a)) a.broken = true;
