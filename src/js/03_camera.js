@@ -11,11 +11,26 @@ function camShip() {
 function camPan(sh) { if (!sh || (!CAM.pan[0] && !CAM.pan[1])) return [0, 0, 0]; var F = fwd(sh.yaw); return [F[0] * CAM.pan[0] - F[2] * CAM.pan[1], 0, F[2] * CAM.pan[0] + F[0] * CAM.pan[1]]; }
 var CAM_NAMES = ['自由鏡頭', '追砲彈', '看敵艦', '看我艦', '我艦→敵艦'];
 var CAM_ORDER = [4, 0, 1, 2, 3];                 // C 鍵循環的順序：我艦→敵艦 → 自由 → 追砲彈 → 看敵艦 → 看我艦（開局預設，朝敵艦；70_flow.js）
+// 畫面內插（Tim 2026-10-15：「60 fps 可是畫面一直抖動（鏡頭跟隨我艦）」）：模擬固定一步 DT，畫面每一格累積的時間有零頭 ⇒ 有的格跑 0 步、有的跑 2 步
+//   （120 Hz 的手機 ⇒ 一格動一格不動），船一頓一頓地跳，鏡頭又是平滑跟著 ⇒ 船在畫面上抖。
+//   ⇒ 鏡頭、畫、HUD 這一段（90_main.js frame）把每艘的矩陣、反矩陣、船心、航向換成「上一步 → 這一步」照 a ＝ 累積到下一步的比例內插的，畫完換回來。
+//   ⛔ 只是畫面：模擬照舊用自己的（換回來之後才走下一步）。慢一步（最多 1／60 秒）是內插的代價。?lerp=0 ⇒ 不內插（對照）。
+var LERP_ON = Q.get('lerp') !== '0';
+function renderLerp(on, a) {
+  SHIPS.forEach(function (sh) {
+    if (!on) { if (sh.Ms) { sh.M = sh.Ms; sh.inv = sh.Is; sh.center = sh.Cs; sh.yaw = sh.Ys; sh.Ms = null; } return; }
+    if (!LERP_ON || !sh.Mp || !(a < 1)) return;
+    var M = new Float32Array(16), P = sh.Mp, N = sh.M, dy = Math.atan2(Math.sin(sh.yaw - sh.yawP), Math.cos(sh.yaw - sh.yawP));
+    for (var i = 0; i < 16; i++) M[i] = P[i] + (N[i] - P[i]) * a;     // 一步之間轉得很少 ⇒ 逐格內插就夠（不重新正交化）
+    sh.Ms = N; sh.Is = sh.inv; sh.Cs = sh.center; sh.Ys = sh.yaw;
+    sh.M = M; sh.inv = M4.inv(M); sh.yaw = sh.yawP + dy * a; sh.center = shipCenter(sh);
+  });
+}
 function camUpdate(dt) {
   // 我艦→敵艦（預設，mode 4）：注視點 ＝ 我艦中心（略高），鏡頭在我艦背對敵艦的那一側 ⇒ 畫面中間是我艦、敵艦在它後方；
   // 兩艘繞著彼此轉時鏡頭跟著轉。拖曳改的是相對這條視線的角度（aoff）與俯仰，滾輪改遠近。沒有敵艦 ⇒ 看船頭方向。
   if (CAM.mode === 4 && SHIPS.length) {
-    var m4 = SHIPS[PLAYER_I], f4 = foeOf(m4), c4 = m4.center || shipCenter(m4), fc = f4 && (f4.center || shipCenter(f4));
+    var m4 = SHIPS[PLAYER_I], f4 = foeOf(m4), c4 = shipCenter(m4), fc = f4 && shipCenter(f4);   // 照現在（內插過）的矩陣算（⛔ .center 是模擬那一步存的）
     var a4 = fc && Math.hypot(fc[0] - c4[0], fc[2] - c4[2]) > 1 ? Math.atan2(fc[2] - c4[2], fc[0] - c4[0]) : Math.atan2(-Math.sin(m4.yaw), Math.cos(m4.yaw));
     var o4 = camPan(m4), y4 = a4 + Math.PI + CAM.aoff, t4 = [c4[0] + o4[0], c4[1] + 4, c4[2] + o4[2]];
     var e4 = [t4[0] + Math.cos(y4) * Math.cos(CAM.pitch) * CAM.dist, t4[1] + Math.sin(CAM.pitch) * CAM.dist, t4[2] + Math.sin(y4) * Math.cos(CAM.pitch) * CAM.dist];
@@ -30,7 +45,7 @@ function camUpdate(dt) {
   // ⛔ 跟兩艘的中點：兩艘繞著中點轉圈 ⇒ 中點幾乎不動，看起來像沒在跟。
   // 角度慣例：鏡頭 yaw 是 (x, z) 平面上 atan2(z, x)；船頭方向的這個角 ＝ −sh.yaw ⇒ 船 yaw 增 Δ，鏡頭 yaw 減 Δ。
   if (SHIPS.length >= 2 && CAM.track) {
-    var me = SHIPS[PLAYER_I], mc = me.center || shipCenter(me);
+    var me = SHIPS[PLAYER_I], mc = shipCenter(me);
     if (CAM.trMe) {
       var d0 = -(me.yaw - CAM.trMe.yaw), c0 = Math.cos(d0), s0 = Math.sin(d0), ox = CAM.tgt[0] - CAM.trMe.c[0], oz = CAM.tgt[2] - CAM.trMe.c[2];
       CAM.tgt[0] = mc[0] + ox * c0 - oz * s0; CAM.tgt[2] = mc[2] + ox * s0 + oz * c0;

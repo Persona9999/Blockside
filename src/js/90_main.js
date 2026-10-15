@@ -19,7 +19,9 @@ function frame(ts, noRaf) {                                         // noRaf：_
   if (PF) pfLap('rain');
   remesh(RM_BUDGET);                                                  // 重網格化，每格有預算（60_render.js）
   if (PF) pfLap('flush');
-  camUpdate(dt); render(); if (PF) pfLap('render'); hud(dt); frzShow(); slowShow();                        // 停格條（72_floodui.js）
+  renderLerp(true, RUNNING ? acc / DT : 1);                           // 畫面內插（03_camera.js）：鏡頭、畫、HUD 用兩步之間的位置，畫完換回模擬的
+  camUpdate(dt); render(); if (PF) pfLap('render'); hud(dt); frzShow(); slowShow();
+  renderLerp(false);                        // 停格條（72_floodui.js）
   if (PF) { pfLap('hud'); pfEnd(f0, RUNNING && !PAUSED ? n : 0); }
   if (GFX_FPS && (fpsT -= dt) <= 0) { fpsT = 0.5; $('fps').textContent = 'FPS ' + Math.round(FPS) + '　畫質 ' + GFX_NAME[gfxLevel()] + '　' + CAM.w + '×' + CAM.h + (RT && RT.s ? '　MSAA ' + RT.s + '×' : ''); }   // 畫質設定頁的「顯示 FPS」
   if (!noRaf) requestAnimationFrame(frame);
