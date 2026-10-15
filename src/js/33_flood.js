@@ -165,13 +165,14 @@ function flTick(sh, fl, dtc) {
       var dv = FL_C * ar * Math.sqrt(2 * G * d) * fk * dtc; inQ += dv;
       fl.hAcc[h] += dv;
       var sp = Math.sqrt(2 * G * d) / S;                                        // 噴進來的速度（格／秒）
-      while (fl.hAcc[h] >= L.vj) {
+      for (var nJ = 0; fl.hAcc[h] >= L.vj && nJ < ACC_CAP * 16; nJ++) {  // 防呆：一步最多 4096 份（≈ 80 m³ 以上才會碰到；00_core.js accFix）
         fl.hAcc[h] -= L.vj;
         if (J.n < L.jn) {
           var jo = J.n * 3; J.p[jo] = fl.hX[h] + rgF(-0.4, 0.4) * c; J.p[jo + 1] = fl.hYi[h] + s; J.p[jo + 2] = fl.hZ[h] + rgF(-0.4, 0.4) * c;
           J.v[jo] = rgF(-0.25, 0.25) * sp; J.v[jo + 1] = s * rgF(0.5, 1.0) * sp; J.v[jo + 2] = rgF(-0.1, 0.25) * sp; J.vol[J.n] = L.vj; J.life[J.n] = 3; J.n++;
         } else if (ci >= 0) flDeposit(fl, ci, L.vj);
       }
+      accFix(fl.hAcc, h, L.vj, '進水');
     } else if (d < -0.001 && ci >= 0) {
       var ov = Math.min(FL_C * ar * Math.sqrt(2 * G * -d) * fk * dtc, A[ci]); A[ci] -= ov; outQ += ov;
       if (PHX.water && ov > 0.01) wpPour(P, M4.dir(M, 0, -s, 0), ov / dtc);    // 往外流：只給人看（13_water.js，自己的亂數）

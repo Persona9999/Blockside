@@ -30,6 +30,15 @@ function rr(a, b) { return a + (b - a) * rnd(); }
 function gauss() { var u = rnd() || 1e-9, v = rnd(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(6.2831853 * v); }
 function hash3(x, y, z) { var h = (Math.imul(x, 374761393) + Math.imul(y, 668265263) + Math.imul(z, 1274126177)) | 0; h = Math.imul(h ^ (h >>> 13), 1103515245); return ((h ^ (h >>> 16)) >>> 0) / 4294967296; }
 function clamp(v, a, b) { return v < a ? a : v > b ? b : v; }
+// 累加迴圈的防呆（Tim 2026-10-15：「累加迴圈 & 其他類似邏輯是否可以加防呆（要有上限）」）：「累加到 1 就生一個」那種迴圈一次最多 ACC_CAP 次；
+//   之後累加值還 ≥ 1 或壞掉（NaN／無窮大）⇒ 歸零、主控台警告（同一個地方前 3 次）。沒超過上限 ⇒ 跟以前一模一樣（同樣的次數、同樣的減法）。
+//   ⛔ 以前：除錯時把船一步搬 450 m ⇒ 水花的累加值上億、while 一直生 ⇒ 分頁卡死；位置變成無窮大 ⇒ 永遠出不來。
+var ACC_CAP = 256, ACC_OVER = {};
+function accFix(o, k, unit, tag) {
+  if (o[k] < (unit || 1)) return;
+  ACC_OVER[tag] = (ACC_OVER[tag] || 0) + 1; if (ACC_OVER[tag] <= 3) console.warn('累加超過上限（' + tag + '）：' + o[k] + ' ⇒ 歸零');
+  o[k] = 0;
+}
 
 // ───────────────────────── 常數 ─────────────────────────
 // 同時在場最多幾艘船（TASK-0537；Tim 2026-10-13：上限 4 ⇒ 8）—— 設定後台調（TASK-0542：config/game.json 的 limits）。

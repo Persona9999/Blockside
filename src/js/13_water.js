@@ -103,46 +103,51 @@ function wpShip(sh, dt, L) {
     var vn = vx * nx + vz * nz, push = Math.max(0, vn - 0.35), slam = Math.max(0, vs - vy - 0.3), bw = vn > 0.2 ? 0.3 + 1.2 * (vn - 0.2) : 0;
     if (!(push > 0 || slam > 0 || bw > 0)) continue;
     acc[q] += (push * push * 2.5 + slam * slam * 25) * L.k * ds * dt; WP_SRC = push * push * 2.5 > slam * slam * 25 ? 'push' : 'slam';
-    while (acc[q] >= 1) {                                                         // 水滴：往外、往上，帶一點船的速度
+    for (var nA = 0; acc[q] >= 1 && nA < ACC_CAP; nA++) {                        // 水滴：往外、往上，帶一點船的速度（ACC_CAP：防呆，00_core.js accFix）
       acc[q] -= 1;
       var up = rgW(0.4, 1.1) * (push * 1.3 + slam * 1.7) + 0.3, out = rgW(0.3, 0.9) * vn + rgW(0, 0.6) * slam, cv = rgW(0.3, 0.7);
       var so = rgW(0.8, 1.5);                                                   // 生在船殼外飄的外面（⛔ 貼著水線 ⇒ 從上面看被船頭外飄的船殼蓋住）
       wsAdd(P[0] + nx * so + gsW() * 0.3, h + 0.05, P[2] + nz * so + gsW() * 0.3, nx * out + vx * cv + gsW() * 0.3, up, nz * out + vz * cv + gsW() * 0.3,
         rgW(0.9, 1.6), rgW(0.18, 0.4) * (1 + 0.4 * push), 0.6);
     }
+    accFix(acc, q, 1, '水花');
     acc[q + WP_RING * 2] += (bw + slam * 2.0) * L.k * ds * dt;
-    while (acc[q + WP_RING * 2] >= 1) {                                           // 白沫：船頭兩道往外散的線
+    for (var nB = 0; acc[q + WP_RING * 2] >= 1 && nB < ACC_CAP; nB++) {                                           // 白沫：船頭兩道往外散的線
       acc[q + WP_RING * 2] -= 1;
       var fo = rgW(0.8, 2.2);
       wfAdd(P[0] + nx * fo, P[2] + nz * fo, nx * Math.max(vn, 0) * 0.6 + vx * 0.15 + gsW() * 0.12, nz * Math.max(vn, 0) * 0.6 + vz * 0.15 + gsW() * 0.12, rgW(10, 18), rgW(0.5, 0.9), rgW(1.6, 2.8), rgW(0.65, 0.9), 0);
     }
+    accFix(acc, q + WP_RING * 2, 1, '船頭白沫');
   }
   // 船尾：照航速翻白沫（一片一片會轉）、冒一點水滴
   var sp = Math.abs(sh.spd), k2 = WP_RING * 4; WP_SRC = 'stern';
   if (sp > 0.3 && !sh.sunk) {
     acc[k2] += sp * 2.0 * L.k * dt;
-    while (acc[k2] >= 1) {
+    for (var nC = 0; acc[k2] >= 1 && nC < ACC_CAP; nC++) {
       acc[k2] -= 1;
       var sx = T.wl0 + rgW(2, 14), sy = T.cy + gsW() * T.bowHalf * 0.3, S0 = M4.pt(M, sx, sy, zc);
       wfAdd(S0[0], S0[2], gsW() * 0.35, gsW() * 0.35, rgW(18, 30), rgW(0.9, 1.6), rgW(2.6, 4.4), rgW(0.5, 0.75), gsW() * 0.6);
     }
+    accFix(acc, k2, 1, '船尾白沫');
     acc[k2 + 1] += sp * 3 * L.k * dt;
-    while (acc[k2 + 1] >= 1) {
+    for (var nD = 0; acc[k2 + 1] >= 1 && nD < ACC_CAP; nD++) {
       acc[k2 + 1] -= 1;
       var B = M4.pt(M, T.wl0 + rgW(1, 8), T.cy + gsW() * T.bowHalf * 0.25, zc), hb = seaH(B[0], B[2], SIMT);
       wsAdd(B[0], hb + 0.05, B[2], gsW() * 0.4, rgW(0.5, 1.6), gsW() * 0.4, rgW(0.8, 1.4), rgW(0.2, 0.35), 0.5);
     }
+    accFix(acc, k2 + 1, 1, '船尾水滴');
   }
   // 沉的時候：船殼一圈冒氣、翻大片白沫（往下壓的拍浪由上面那一圈照垂直速度算）
   if (sh.sinkingFinal && sh.sink < 30) {
     WP_SRC = 'sink';
     acc[k2 + 2] += (2 + sh.sinkV * 6) * L.k * dt;
-    while (acc[k2 + 2] >= 1) {
+    for (var nE = 0; acc[k2 + 2] >= 1 && nE < ACC_CAP; nE++) {
       acc[k2 + 2] -= 1;
       var g = (rndW() * WP_RING * 2) | 0, gr = g * 4, C = M4.pt(M, R[gr] - R[gr + 2] * rgW(2, 40), R[gr + 1] - R[gr + 3] * rgW(2, 40), zc), hc = seaH(C[0], C[2], SIMT);
       for (var b = 0; b < 14 * L.k; b++) wsAdd(C[0] + gsW() * 0.6, hc + 0.05, C[2] + gsW() * 0.6, gsW() * 0.8, rgW(1.5, 5), gsW() * 0.8, rgW(0.8, 1.8), rgW(0.25, 0.5), 0.6);
       wfAdd(C[0], C[2], gsW() * 0.4, gsW() * 0.4, rgW(14, 24), rgW(1.5, 2.5), rgW(4, 7), 0.75, gsW() * 0.4);
     }
+    accFix(acc, k2 + 2, 1, '沉船冒氣');
   }
 }
 /** 砲彈、碎片、落水的人（12_effects.js splash）：一圈冠狀的水滴、大的再一柱往上衝、落點一圈白沫。 */
@@ -175,12 +180,13 @@ function wpBump(pa, pb, A, B) {
   var rel = Math.hypot(A.vel[0] - B.vel[0], A.vel[2] - B.vel[2]), tx = pb[2] - pa[2], tz = pa[0] - pb[0], tl = Math.hypot(tx, tz) || 1, mx = (pa[0] + pb[0]) / 2, mz = (pa[2] + pb[2]) / 2;
   tx /= tl; tz /= tl; WP_SRC = 'bump';
   A.wpBumpAcc = (A.wpBumpAcc || 0) + (40 + 60 * rel) * L.k * DT;
-  while (A.wpBumpAcc >= 1) {
+  for (var nF = 0; A.wpBumpAcc >= 1 && nF < ACC_CAP; nF++) {
     A.wpBumpAcc -= 1;
     var s = gsW() * 4, x = mx + tx * s, z = mz + tz * s, h = seaH(x, z, SIMT), side = rndW() < 0.5 ? -1 : 1, o = rgW(1, 3) * (0.5 + rel);
     wsAdd(x, h + 0.05, z, (pa[0] - pb[0]) / 14 * side * o + gsW() * 0.5, rgW(2, 6) * (0.6 + 0.5 * rel), (pa[2] - pb[2]) / 14 * side * o + gsW() * 0.5, rgW(1.2, 2.2), rgW(0.2, 0.4), 0.7);
     if (rndW() < 0.2) wfAdd(x, z, gsW() * 0.4, gsW() * 0.4, rgW(10, 16), 1.0, 3.0, 0.7, gsW() * 0.5);
   }
+  accFix(A, 'wpBumpAcc', 1, '擦撞水花');
 }
 
 // ── 畫：白沫是貼著浪的一片（5×5 頂點、每個頂點照 seaHs 起伏，跟海面網格同一個間距）；水滴跟粒子一起畫（點精靈，60_render.js） ──

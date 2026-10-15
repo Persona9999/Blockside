@@ -153,17 +153,17 @@ function reassign(sh) {
         if (!cur.get(g)) return;                                           // 已經被別門借光
         var pool = men.filter(function (c) { return c.gun !== g && short(c); });
         if (cur.get(g) + pool.length < g.crewMin) return;                  // 借不夠 ⇒ 這門是借出去的那一方
-        while (cur.get(g) < g.crewMin) move(nearest(pool, g), g);
+        for (var nm = 0; cur.get(g) < g.crewMin && pool.length && nm < 64; nm++) move(nearest(pool, g), g);   // 防呆：上限 64、借光了就停（上一行已經先數過夠不夠）
         kept.add(g);
       });
     men.forEach(function (c) { if (c.gun && !kept.has(c.gun)) { cur.set(c.gun, cur.get(c.gun) - 1); leaveGun(c); } });
     var free = men.filter(function (c) { return !c.gun; });
     gs.forEach(function (g) {
       if (kept.has(g) || free.length < g.crewMin) return;
-      while (cur.get(g) < g.crewMin) move(nearest(free, g), g);
+      for (var nf = 0; cur.get(g) < g.crewMin && free.length && nf < 64; nf++) move(nearest(free, g), g);
       kept.add(g);
     });
-    kept.forEach(function (g) { while (cur.get(g) < g.crewFull && free.length) move(nearest(free, g), g); });
+    kept.forEach(function (g) { for (var nk = 0; cur.get(g) < g.crewFull && free.length && nk < 64; nk++) move(nearest(free, g), g); });
   });
 }
 function gunDeck(g) { return g.deck; }                  // 那門砲在哪一層（10_ship.js gunDecks）
