@@ -5,6 +5,7 @@
 function fireGun(sh, g, target, ammo) {
   if (sh.struck || !g.alive || g.reload > 0 || gunRate(g) <= 0) return false;      // 砲要有人操作；降旗了就不開（排在齊射裡還沒開的也一樣）
   if (!bears(sh, g, target)) return false;                            // 目標不在這門砲的砲門射界 ⇒ 不開（呼叫端先用 gunTarget 挑好這門打得到的點）
+  if (g.mt && mountBusy(g)) return false;                              // 迴旋砲換砲門的途中不能開（TASK-0626）
   var GS = GUNS[g.type], r = fireShot(sh, g, target, ammo, g.muzs ? g.muzs[0] : g.muz);
   g.reload = sh.reloadT * GS.reload * rr(0.9, 1.1); g.firedAt = SIMT; sh.fired++;
   g.needCart = true;                                                // 下一發要從砲旁的藥箱拿一份火藥與彈藥（沒有 ⇒ 等送藥手，23_powder.js）
@@ -33,7 +34,7 @@ function fireShot(sh, g, target, ammo, muz) {
   var v2 = V * V, disc = v2 * v2 - G * (G * d * d + 2 * dy * v2);
   var el = disc < 0 ? 0.26 : Math.atan((v2 - Math.sqrt(disc)) / (G * d));
   var az = Math.atan2(dz, dx), saz = Math.atan2(side[2], side[0]), da = Math.atan2(Math.sin(az - saz), Math.cos(az - saz));
-  da = clamp(da, -0.45, 0.45); az = saz + da;                      // 砲門只容得下 ±26°
+  var cn = g.cone || 0.45; da = clamp(da, -cn, cn); az = saz + da;   // 砲門只容得下 ±26°（砲塔照砲管 cone，TASK-0626）
   var spread = handAim(sh) && !sh.autoNow ? 0.0045 : sh.aiSpread || 0.008;   // 玩家自己瞄的那幾發（含自動開砲時的手動那一舷）；sh.autoNow ＝ 這一發是電腦開的（50_sim.js 另一舷那一輪）
   if (!sh.crew.some(function (c) { return c.role === ROLE.OFFICER && able(c); })) spread *= 1.7;   // 軍官全倒 ⇒ 沒人指揮，瞄得散
   spread *= [0.7, 0.75, 0.85, 1][sh.sailSet];                       // 帆收得越多，船越穩
@@ -98,8 +99,58 @@ function gunAxis(sh, g) {
 function bears(sh, g, w) {
   var m = M4.pt(sh.M, g.muz[0], g.muz[1], g.muz[2]), ax = gunAxis(sh, g);
   var a = Math.atan2(w[2] - m[2], w[0] - m[0]) - Math.atan2(ax[2], ax[0]);
-  return Math.abs(Math.atan2(Math.sin(a), Math.cos(a))) < 0.45;
+  return Math.abs(Math.atan2(Math.sin(a), Math.cos(a))) < (g.cone || 0.45);   // g.cone：砲塔的砲管射界（gunMountInit）；一般的砲沒有 ⇒ 砲門 ±26°
 }
+// ───────────────────────── 砲的迴旋與砲塔（TASK-0626；Tim 2026-10-15：「有辦法讓炮能迴旋嗎(之後可以支援砲塔)」「一般炮預設固定就好(效能&避免穿模考量)」）─────────────────────────
+// 照砲模型的 meta（沒有 ⇒ 固定、一行都不多算）：
+//   mount=pivot、ports=0,45,-45（度，相對模型原本的砲軸；左正右負照格座標 +y）：只在這幾個方向之間換（維吉尼亞號船頭船尾的 7 吋砲：3 個砲門一門砲）。
+//     目標落在別的砲門那一邊 ⇒ 轉過去；轉的時候不能開、到了才開；只停在作者標的角度 ⇒ 不穿模。rate 度／秒（預設 12）。
+//   mount=turret、arc=-150,150（度）、rate（預設 20）：在 arc 裡連續轉（之後的砲塔）；砲管射界 cone（度，預設 4）⇒ 要真的對準才開。
+//   轉的中心：模型固定點 pivot（砲塔用）＞ meta pivot（從砲尾沿砲軸量幾格，負 ＝ 往後；維吉尼亞號 −9.5 ＝ 砲廓圓頭的圓心，三個砲門都從那裡放射）＞ 外框中心。
+//   runin（格，預設 0）：換砲門前先沿砲軸往後拉這麼多、轉完再推出去（史料：先把砲拉進來才換）—— 維吉尼亞號 6：停在三個砲門上網格落進實心 0 格，轉到 22° 不拉會穿進砲廓牆 48／124 個頂點，拉 4／5 格就 0。
+//   跟著轉的：模型（m.rot／m.piv，帆桁那一套；拉進來 m.gsl）、砲軸、砲口、砲班的站位與站在上面的人、放藥箱的位置。⛔ 模型的外框（被打中、碰撞）不轉。
+function gunMountInit(sh, g) {
+  var m = g.model, mt = m.meta || {}, kind = mt.mount;
+  if (kind !== 'pivot' && kind !== 'turret') return;
+  var D = Math.PI / 180, br = m.pts.breech || g.muz, c = m.pts.pivot ? m.pts.pivot.slice() : isFinite(+mt.pivot) ? [br[0] + g.ax[0] * +mt.pivot, br[1] + g.ax[1] * +mt.pivot, m.bb[2]] : [(m.bb[0] + m.bb[3]) / 2, (m.bb[1] + m.bb[4]) / 2, m.bb[2]];
+  function list(s, d) { var a = String(s === undefined ? d : s).split(',').map(function (v) { return +v * D; }).filter(isFinite); return a.length ? a : String(d).split(',').map(function (v) { return +v * D; }); }
+  g.mt = { kind: kind, c: c, ax0: g.ax.slice(), muz0: g.muz.slice(), muzs0: g.muzs ? g.muzs.map(function (q) { return q.slice(); }) : null, yaw: 0, yawT: 0,
+    ports: kind === 'pivot' ? list(mt.ports, '0') : null, runin: +mt.runin > 0 ? +mt.runin : 0, sl: 0, arc: kind === 'turret' ? list(mt.arc, '-180,180') : null, rate: (+mt.rate > 0 ? +mt.rate : kind === 'pivot' ? 12 : 20) * D };
+  if (kind === 'turret') g.cone = (+mt.cone > 0 ? +mt.cone : 4) * D;
+  m.piv = c; m.rot = 0;
+  (sh.mounts = sh.mounts || []).push(g);
+}
+/** 格座標 p 繞 c 轉 a（跟 modelLocal 同一個 rotM ⇒ 砲口、站位跟畫出來的模型轉得一樣）。 */
+function mountRot(p, c, a) { var d = M4.dir(rotM([0, 0, 1], a), p[0] - c[0], p[1] - c[1], 0); return [c[0] + d[0], c[1] + d[1], p[2]]; }
+/** 每一步（50_sim.js，在開砲之前）：有迴旋的砲照瞄準點挑方向、照轉速轉；轉了 ⇒ 砲軸、砲口、站位、人跟著轉。 */
+function mountStep(sh, dt) {
+  var G = sh.mounts; if (!G || sh.sunk || sh.struck) return;
+  var tgt = aimPoint(sh), foe = aimShip(sh), L = tgt ? toLocal(sh, tgt) : foe && foe.M ? toLocal(sh, M4.pt(foe.M, foe.T.cx, foe.T.cy, foe.T.zw)) : null;
+  G.forEach(function (g) {
+    var M = g.mt; if (!g.alive || !L) return;
+    var rel = Math.atan2(L[1] - M.c[1], L[0] - M.c[0]) - Math.atan2(M.ax0[1], M.ax0[0]); rel = Math.atan2(Math.sin(rel), Math.cos(rel));
+    if (M.ports) {                                                    // 換砲門：挑離目標最近的那個；差不到 0.1 rad 不換（⛔ 目標在兩個砲門中間 ⇒ 來回換）
+      var best = M.yawT, bd = Math.abs(Math.atan2(Math.sin(rel - M.yawT), Math.cos(rel - M.yawT)));
+      M.ports.forEach(function (p) { var d = Math.abs(Math.atan2(Math.sin(rel - p), Math.cos(rel - p))); if (d < bd - 0.1) { bd = d; best = p; } });
+      M.yawT = best;
+    } else M.yawT = clamp(rel, M.arc[0], M.arc[M.arc.length - 1]);
+    var d = M.yawT - M.yaw, m = g.model, sl0 = M.sl;
+    if (Math.abs(d) < 1e-6 && !M.sl) return;
+    if (Math.abs(d) >= 1e-6 && M.sl < M.runin) { M.sl = Math.min(M.runin, M.sl + MOUNT_RUN * dt); d = 0; }   // 先拉進來
+    else if (Math.abs(d) < 1e-6) M.sl = Math.max(0, M.sl - MOUNT_RUN * dt);   // 到了 ⇒ 推出去
+    var st = clamp(d, -M.rate * dt, M.rate * dt), a0 = M.yaw; M.yaw += st; if (Math.abs(M.yawT - M.yaw) < 1e-6) M.yaw = M.yawT;
+    var da = M.yaw - a0; m.rot = M.yaw;
+    if (M.sl !== sl0) m.gsl = M.sl ? [-M.ax0[0] * M.sl, -M.ax0[1] * M.sl] : null;
+    var ax = M4.dir(rotM([0, 0, 1], M.yaw), M.ax0[0], M.ax0[1], 0); g.ax = [ax[0], ax[1]];
+    var back = function (q) { return [q[0] - M.ax0[0] * M.sl, q[1] - M.ax0[1] * M.sl, q[2]]; };
+    g.muz = mountRot(back(M.muz0), M.c, M.yaw); if (M.muzs0) g.muzs = M.muzs0.map(function (q) { return mountRot(back(q), M.c, M.yaw); });
+    if (g.drop) g.drop = mountRot(g.drop, M.c, da);
+    (g.spots || []).forEach(function (s) { s.at = mountRot(s.at, M.c, da); var c = s.who; if (c && c.gun === g && !c.walk && c.st === 0) { c.pos = mountRot(c.pos, M.c, da); if (c.home) c.home = mountRot(c.home, M.c, da); } });
+  });
+}
+/** 迴旋砲還在轉（換砲門的途中）⇒ 不能開；砲塔邊轉邊開（照 cone 判對不對得到）。 */
+var MOUNT_RUN = 4;                                                       // 拉進來／推出去的速度（格／秒 ⇒ 0.4 m／秒）
+function mountBusy(g) { return !!(g.mt && g.mt.ports && (Math.abs(g.mt.yaw - g.mt.yawT) > 1e-6 || g.mt.sl > 0)); }
 /** 這門砲打哪裡（每一門自己判定）：對得到 w ⇒ w；對不到 ⇒ 敵艦船身上（水線上那一段的中線、跟 w 同高，取 13 點）
  *  這門砲射界內、離 w 最近的那一點；整艘都在射界外 ⇒ null。⇒ 瞄準點在射界外，只要還有機會打中敵艦就開。 */
 function gunTarget(sh, g, w) {
@@ -219,7 +270,8 @@ function modelLocal(m) {
   if (m.sw) { var q = m.spv; return M4.mul(M4.mul(M4.mul(trans(q[0], q[1], q[2]), rotM(m.sax, m.sw)), trans(-q[0], -q[1], -q[2])), trans(m.origin[0], m.origin[1], m.origin[2])); }   // 掛著擺的（小艇；30_rig_physics.js swingHangs）
   if (!m.rot || !m.piv) return trans(m.origin[0], m.origin[1], m.origin[2]);
   var p = m.piv;
-  return M4.mul(M4.mul(M4.mul(trans(p[0], p[1], p[2]), rotM([0, 0, 1], m.rot)), trans(-p[0], -p[1], -p[2])), trans(m.origin[0], m.origin[1], m.origin[2]));
+  var o = m.gsl ? [m.origin[0] + m.gsl[0], m.origin[1] + m.gsl[1], m.origin[2]] : m.origin;   // gsl：迴旋砲換砲門時往後拉（TASK-0626 mountStep）
+  return M4.mul(M4.mul(M4.mul(trans(p[0], p[1], p[2]), rotM([0, 0, 1], m.rot)), trans(-p[0], -p[1], -p[2])), trans(o[0], o[1], o[2]));
 }
 /** 格座標 L 在不在這個模型的網格裡（佔用格，外擴一格 ≈ 砲彈半徑）。⛔ 只看外框：長砲的外框 1.3 × 3.1 m，空的角落也算 ⇒ 砲甲板一半的彈都打得到砲。 */
 function inMesh(o, L) {

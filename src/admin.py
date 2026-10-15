@@ -663,6 +663,7 @@ def act_shipcheck(ids=None):
               '| %s | %s 門缺 %s 人 | %s | %s | %s | %s | %s | %s | %s | %s | %s | %s | %s |' % (I['guns'], I['gunShort']['guns'], I['gunShort']['people'], I['crew'], I['models'], I['ropes'], '%s%s' % (I['sails'], '（＋陣營旗 %d）' % I['teamFlags'] if I.get('teamFlags') else ''), I['masts'], '%s（取用點 %s）' % (I['mags'], I.get('stations', '—')), len(I['decks']), I['ladders'], I['rooms'], I.get('anchors', '—'), I['zw']), '',
               '材質（TASK-0616）：' + (I.get('materials') or '—'), '',
               '火藥（送藥手：取用點 → 砲尾藥箱）：' + (I.get('powder') or '—'), '',
+              '迴旋砲／砲塔（meta mount；沒標 ＝ 固定）：' + (I.get('mounts') or '—'), '',
               '**✗ %d　⚠ %d**' % (ne, nw), '']
         for lv, title in (('error', '## ✗ 錯誤'), ('warn', '## ⚠ 警告')):
             ks = [k for k in groups if k[0] == lv]
