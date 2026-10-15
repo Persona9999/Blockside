@@ -93,8 +93,9 @@ function sail(sh, dt) {
   var UP = sh.cfg.upwind || 1, dU = UP === 1 || deg <= 90 ? deg : 90 + (deg - 90) / UP;   // 逆風性能：迎風那一半的角度壓縮（1.25 ⇒ 風從船頭 52.5° 才開始失速、45° 跑得像 36° 的船…）；1 ⇒ 一位元都不動
   sh.sailFrac = sh.sails.reduce(function (a, s) { return a + (s.dead || s.furled ? 0 : s.area * s.hp / s.hpMax); }, 0) / sh.sailArea0;   // 被打中還沒掉的帆：照剩下的血量算推力
   sh.pos = pointName(deg);
-  var stop = SAIL === 'off', manual = SAIL === 'manual' && sh.i === PLAYER_I;
-  if (stop && !sh.ancMode && !sh.struck && !sh.sunk) { sh.ancMode = true; anchorToggle(sh, 'P', true); anchorToggle(sh, 'S', true); }   // 6 拋錨（雙錨，每艘；76_anchor.js）
+  // 拋錨模式（6）只管我艦：SAIL 是玩家的航行模式（全域），sail() 每艘都跑 ⇒ 不限 PLAYER_I 的話，友艦、敵艦也跟著拋雙錨、停在原地（Tim 2026-10-15「應該只控制我艦」）。
+  var stop = SAIL === 'off' && sh.i === PLAYER_I, manual = SAIL === 'manual' && sh.i === PLAYER_I;
+  if (stop && !sh.ancMode && !sh.struck && !sh.sunk) { sh.ancMode = true; anchorToggle(sh, 'P', true); anchorToggle(sh, 'S', true); }   // 6 拋錨（雙錨，我艦；76_anchor.js）
   else if (!stop && sh.ancMode) { sh.ancMode = false; anchorToggle(sh, 'P', false); anchorToggle(sh, 'S', false); }   // 切回 4／5 ⇒ 起錨
   var held = !!sh.anc && anchorHeld(sh);                              // 有錨咬著 ⇒ 不靠帆走、可以原地繞錨轉
   if (sh.i === PLAYER_I && !sh.sunk) sailHold(sh);

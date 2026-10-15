@@ -94,11 +94,11 @@ function doKey(k, repeat) {
   else if (k === 'h' || k === '?') helpToggle();
   else if (k === 'r') { gsetClose(); helpClose(); RUNNING = false; END_AT = 0; END_WAIT = null; $('cover').style.display = ''; $('end').className = ''; }
   else if (k === '4') sailToggle();   // 4 一顆切換 自動 ⇄ 手動（Tim 2026-10-15：「改成單鍵，4 就好，不用 4/5」；手動也可以直接打舵 A／D）；錨在水裡 ⇒ 先起錨（7／8 拋的也一起）
-  else if (k === '6' && me && !me.sunk) {                              // 拋錨／起錨同一顆（Tim 2026-10-15；76_anchor.js anchor6）：兩邊都沒拋 ⇒ 雙錨（拋錨模式、每艘）；一邊在水裡 ⇒ 拋另一邊；兩邊都在水裡 ⇒ 起錨
+  else if (k === '6' && me && !me.sunk) {                              // 拋錨／起錨同一顆（Tim 2026-10-15；76_anchor.js anchor6）：兩邊都沒拋 ⇒ 雙錨（拋錨模式、只有我艦）；一邊在水裡 ⇒ 拋另一邊；兩邊都在水裡 ⇒ 起錨
     var a6 = anchor6(me);
     if (a6.act === 'both') setSailMode('off');
     else if (a6.act === 'other') { var am = anchorToggle(me, a6.k, true); if (am) note(me, am + '（兩邊都拋了，再按一次起錨）'); }
-    else { if (SAIL === 'off') setSailMode('manual'); var nw = anchorWeighAll(me); note(me, nw ? '起錨（' + nw + '）—— 8 秒收好' : '錨都收著'); }   // 拋錨模式 ⇒ 換手動、每艘的雙錨跟著收
+    else { if (SAIL === 'off') setSailMode('manual'); var nw = anchorWeighAll(me); note(me, nw ? '起錨（' + nw + '）—— 8 秒收好' : '錨都收著'); }   // 拋錨模式 ⇒ 換手動、我艦的雙錨跟著收
   }
   else if ((k === '7' || k === '8') && RUNNING && me && !me.sunk) { var am = anchorToggle(me, k === '7' ? 'P' : 'S'); if (am) note(me, am + (/^拋/.test(am) ? '（帶著速度只拋一側 ⇒ 繞錨急轉；再按一次起錨）' : '')); }   // 左右錨（76_anchor.js）   // 航行（TASK-0567，Tim 2026-10-14：不用 Tab 循環，三個鍵直接切）
   else if (k === 'o') gsetToggle();                                    // 設定（Esc 也可以）
@@ -134,7 +134,7 @@ document.addEventListener('touchend', function (e) {
     ['pointerup', 'pointercancel', 'lostpointercapture'].forEach(function (ev) { b.addEventListener(ev, function () { b.classList.remove('down'); keyUp(k); }); });
   } else b.addEventListener('click', function (e) { e.preventDefault(); doKey(k, false); });
 });
-/** 航行模式（選單與遊戲中同一個）：auto 兩艘自動、manual 我艦手動、off 每艘拋雙錨（76_anchor.js；Tim 2026-10-15：停船改叫拋錨）。 */
+/** 航行模式（選單與遊戲中同一個）：auto 兩艘自動、manual 我艦手動、off 我艦拋雙錨（只管我艦；31_sailing.js sail）（76_anchor.js；Tim 2026-10-15：停船改叫拋錨）。 */
 var SAIL_NAMES = { auto: '自動航行', manual: '手動操舵（A／D 打舵）', off: '拋錨（雙錨；A／D 繞錨轉）' };
 function setSailMode(m) {
   SAIL = m; KEYS.l = KEYS.r = false;
