@@ -79,11 +79,12 @@ function smBuild(T, g, rk, reuse) {
     r = { srf: n > 0 && n < 8, pin: pin, o: ne ? [ox / ne, oy / ne, oz / ne] : [0, 0, 0], g: [gx, gy, gz] };
     info.set(k, r); return r;
   }
-  var vidx = new Map(), V = [], F = [];                                  // V：每個頂點 [X, Y, Z, r, g, b, 面數]；F：每個面 4 個頂點編號
-  function vert(X, Y, Z, col) {
+  var vidx = new Map(), V = [], F = [], MG = T.matG, MM = T.matM, MR = T.matR;   // V：每個頂點 [X, Y, Z, r, g, b, 面數, 金屬度, 粗糙度]；F：每個面 4 個頂點編號
+  function vert(X, Y, Z, col, mi) {
     var k = key(X, Y, Z), i = vidx.get(k);
-    if (i === undefined) { i = V.length; vidx.set(k, i); V.push([X, Y, Z, 0, 0, 0, 0]); }
+    if (i === undefined) { i = V.length; vidx.set(k, i); V.push([X, Y, Z, 0, 0, 0, 0, 0, 0]); }
     var v = V[i]; v[3] += ((col >> 5) & 7) / 7; v[4] += ((col >> 2) & 7) / 7; v[5] += (col & 3) / 3; v[6]++;
+    if (MM) { v[7] += MM[mi]; v[8] += MR[mi]; }
     return i;
   }
   var CORN = [[0, 0], [1, 0], [1, 1], [0, 1]], P = [0, 0, 0];
@@ -92,6 +93,7 @@ function smBuild(T, g, rk, reuse) {
     for (var li = 0; li < 4096; li++) {
       if (!ch[li]) continue;
       var x = cx * 16 + (li & 15), y = cy * 16 + ((li >> 4) & 15), z = cz * 16 + (li >> 8), col = g.get(x, y, z); if (!col) continue;
+      var mi = MG ? MG.get(x, y, z) : 0;                                  // 這一格的材質（05_material.js；沒寫 ⇒ 0 ＝ 全船預設）
       for (var ax = 0; ax < 3; ax++) for (var sg = -1; sg <= 1; sg += 2) {
         P[0] = x; P[1] = y; P[2] = z; P[ax] += sg;
         if (g.get(P[0], P[1], P[2])) continue;                            // 旁邊有格 ⇒ 不是表面
@@ -99,7 +101,7 @@ function smBuild(T, g, rk, reuse) {
         for (var e = 0; e < 4; e++) {
           var cc = CORN[sg > 0 ? e : 3 - e], L = [x, y, z];
           L[ax] += sg > 0 ? 1 : 0; L[ua] += cc[0]; L[va] += cc[1];
-          q.push(vert(L[0], L[1], L[2], col));
+          q.push(vert(L[0], L[1], L[2], col, mi));
         }
         F.push(q);
       }
@@ -107,7 +109,7 @@ function smBuild(T, g, rk, reuse) {
   }
   if (!F.length) { if (reuse) smFree(reuse); return null; }
   // 頂點位置與法線：① 自己的偏移 ② 周圍同一面的格角平均 ⇒ 夾回格角 ±0.5；釘住的 ＝ 格角本身
-  var buf = new Float32Array(V.length * 9);
+  var buf = new Float32Array(V.length * 11);
   for (var i = 0; i < V.length; i++) {
     var v = V[i], X = v[0], Y = v[1], Z = v[2], me = corner(X, Y, Z), px = X, py = Y, pz = Z, nxv = 0, nyv = 0, nzv = 0;
     var sx = 0, sy = 0, sz = 0, sn = 0;
@@ -123,14 +125,14 @@ function smBuild(T, g, rk, reuse) {
       px = X + clamp((1 - f) * me.o[0] + f * sx / sn, -0.5, 0.5); py = Y + clamp((1 - f) * me.o[1] + f * sy / sn, -0.5, 0.5); pz = Z + clamp((1 - f) * me.o[2] + f * sz / sn, -0.5, 0.5);
     }
     var nl = Math.hypot(nxv, nyv, nzv) || 1;
-    buf.set([px, py, pz, nxv / nl, nyv / nl, nzv / nl, v[3] / v[6], v[4] / v[6], v[5] / v[6]], i * 9);
+    buf.set([px, py, pz, nxv / nl, nyv / nl, nzv / nl, v[3] / v[6], v[4] / v[6], v[5] / v[6], v[7] / v[6], v[6] && MM ? v[8] / v[6] : 0.5], i * 11);
   }
   var idx = new Uint32Array(F.length * 6);
   for (var j = 0; j < F.length; j++) { var Q = F[j]; idx.set([Q[0], Q[1], Q[2], Q[0], Q[2], Q[3]], j * 6); }
   var m = reuse || { vao: gl.createVertexArray(), vb: gl.createBuffer(), ib: gl.createBuffer(), n: 0, own: true };
   if (!reuse) {
     gl.bindVertexArray(m.vao); gl.bindBuffer(gl.ARRAY_BUFFER, m.vb);
-    [[0, 0], [1, 3], [2, 6]].forEach(function (a) { gl.enableVertexAttribArray(a[0]); gl.vertexAttribPointer(a[0], 3, gl.FLOAT, false, 36, a[1] * 4); });
+    [[0, 0, 3], [1, 3, 3], [2, 6, 3], [3, 9, 2]].forEach(function (a) { gl.enableVertexAttribArray(a[0]); gl.vertexAttribPointer(a[0], a[2], gl.FLOAT, false, 44, a[1] * 4); });   // 3：金屬度、粗糙度（P.tri 的 aM；TASK-0627）
     gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, m.ib); gl.bindVertexArray(null);
   }
   gl.bindBuffer(gl.ARRAY_BUFFER, m.vb); gl.bufferData(gl.ARRAY_BUFFER, buf, gl.DYNAMIC_DRAW);

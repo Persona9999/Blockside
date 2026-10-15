@@ -61,11 +61,15 @@ function programs() {
     ' vec3 col=b*(mix(uGround,uSky,n.y*0.5+0.5)*0.62+vec3(1.0,0.96,0.88)*max(dot(n,uSun),0.0)*0.78);\n' +
     ' col*=uLum; if(vW.y<seaH(vW.xz)) col=mix(col,vec3(0.04,0.18,0.22),0.6); float fd=length(vW-uEye); o=vec4(mix(col,uFog,1.0-exp(-fd*uFogD)),1.0); }\n');
   P.tri = VK.compile(gl,
-    '#version 300 es\nlayout(location=0) in vec3 aP; layout(location=1) in vec3 aN; layout(location=2) in vec3 aC; uniform mat4 uModel,uVP; out vec3 vN; out vec3 vW; out vec3 vC;\n' +
-    'void main(){ vec4 w=uModel*vec4(aP,1.0); vW=w.xyz; vN=mat3(uModel)*aN; vC=aC; gl_Position=uVP*w; }\n',
-    '#version 300 es\nprecision highp float;\n' + SEA_GLSL + SHADOW_GLSL + CUT_GLSL + LAMP_GLSL + 'in vec3 vN; in vec3 vW; in vec3 vC; uniform vec3 uSun,uEye,uFog,uSky,uGround; uniform float uFogD,uLit,uGlow; uniform mat4 uCutInv; out vec4 o;\n' +
+    '#version 300 es\nlayout(location=0) in vec3 aP; layout(location=1) in vec3 aN; layout(location=2) in vec3 aC; layout(location=3) in vec2 aM; uniform mat4 uModel,uVP; out vec3 vN; out vec3 vW; out vec3 vC; out vec2 vM;\n' +
+    'void main(){ vec4 w=uModel*vec4(aP,1.0); vW=w.xyz; vN=mat3(uModel)*aN; vC=aC; vM=aM; gl_Position=uVP*w; }\n',
+    '#version 300 es\nprecision highp float;\n' + SEA_GLSL + SHADOW_GLSL + CUT_GLSL + LAMP_GLSL + 'in vec3 vN; in vec3 vW; in vec3 vC; in vec2 vM; uniform vec3 uSun,uEye,uFog,uSky,uGround; uniform float uFogD,uLit,uGlow; uniform mat4 uCutInv; out vec4 o;\n' +
     'void main(){ if(vW.y<uClip) discard; if(uCut.w>0.5 && cutOut((uCutInv*vec4(vW,1.0)).xyz)) discard; vec3 n=normalize(vN); float sd=dot(n,uSun), d=abs(sd); vec3 col=vC;\n' +
-    ' if(uLit>0.5){ d*=shadowK(vW,(sd<0.0?-n:n)*(3.0-2.0*d)); col=vC*(mix(uGround,uSky,0.6)*0.65+vec3(1.0,0.96,0.88)*d*0.7); }\n' +
+    ' if(uLit>0.5){ float sk=shadowK(vW,(sd<0.0?-n:n)*(3.0-2.0*d)); d*=sk; col=vC*(mix(uGround,uSky,0.6)*0.65+vec3(1.0,0.96,0.88)*d*0.7);\n' +
+    // 金屬（TASK-0627；材質表 metal／rough ⇒ 平滑渲染的頂點帶 vM）：天空／海面的反射（菲涅耳：斜看更亮）＋太陽的鏡面高光（照陰影）；vM.x 0 ⇒ 跟以前一樣
+    '  if(vM.x>0.001){ vec3 v=normalize(uEye-vW), r=reflect(-v,n); float ro=clamp(vM.y,0.05,1.0), fr=0.04+0.96*pow(1.0-abs(dot(n,v)),5.0);\n' +
+    '   vec3 env=mix(uFog*0.5,mix(uFog,uSky,0.55)*1.2,smoothstep(-0.2,0.35,r.y)); vec3 sp=vec3(1.0,0.96,0.88)*pow(max(dot(n,normalize(uSun+v)),0.0),mix(120.0,6.0,ro))*step(0.0,sd)*sk*(2.0-1.5*ro);\n' +
+    '   col=mix(col,col*0.35+env*mix(vec3(0.85),vC,0.4)*(0.5+0.5*fr),vM.x*(0.85-0.5*ro))+sp*vM.x; } }\n' +
     ' if(uLN>0) col+=vC*lampK(vW,n);\n' +                                 // 點光源
     // 燈籠（meta kind=lantern；drawModels 設 uGlow）：只有琥珀色的燈罩發光（色 245 ＝ 1, .71, .33）—— 金框（248，藍 0）、暗紅（128）照常受光
     ' if(uGlow>0.0) col=mix(col,vC*1.2+vec3(0.3,0.14,0.0),uGlow*step(0.9,vC.r)*step(0.2,vC.b)*step(vC.b,0.5));\n' +

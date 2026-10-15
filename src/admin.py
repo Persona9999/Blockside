@@ -157,6 +157,7 @@ MAT_ID = r'[a-z][a-z0-9_]{0,31}'                                                
 MAT_KINDS = ('wood', 'metal', 'other')                                               # 材質的分類（後台分組、之後燃燒照它）
 MAT_NUMS = (('density', 0.05, 25, '比重（一格 0.1 m ＝ 1 公升 ⇒ 每格幾 kg；橡木 0.7）'), ('hard', 0.05, 50, '硬度倍率（乘在船隻設定的船殼硬度上；橡木 1）'),
             ('flammable', 0, 1, '易燃性（0 ＝ 不會燒、1 ＝ 一點就著；燃燒還沒做，先記著）'))
+MAT_OPT = (('metal', 0, 1, '金屬度（選填；0 ＝ 不反光、1 ＝ 金屬：太陽高光＋天空反射；TASK-0627）'), ('rough', 0, 1, '粗糙度（選填；0 ＝ 鏡面、1 ＝ 很霧；沒寫 ＝ 0.5）'))
 CREW = {'officers': (0, 8, True), 'helm': (0, 4, True), 'marines': (0, 60, True), 'marineGap': (5, 200, True),
         'top': (0, 8, True), 'monkeys': (0, 2, True), 'handsK': (0, 4, False)}
 CREW_SHIP = {'hands': (0, 120, True)}          # 只在每艘船寫（TASK-0570 船隻配置頁的預設）：預備水手人數；沒寫 ＝ lim.hands × handsK
@@ -374,8 +375,11 @@ def validate(cfg, prev=None):
             for f, lo, hi, what in MAT_NUMS:
                 if not (isnum(m.get(f)) and lo <= m[f] <= hi):
                     err(p + '.' + f, '%s：%s～%s' % (what, lo, hi))
+            for f, lo, hi, what in MAT_OPT:
+                if f in m and not (isnum(m[f]) and lo <= m[f] <= hi):
+                    err(p + '.' + f, '%s：%s～%s' % (what, lo, hi))
             for f in m:
-                if f not in ('name', 'kind') and f not in [x[0] for x in MAT_NUMS]:
+                if f not in ('name', 'kind') and f not in [x[0] for x in MAT_NUMS + MAT_OPT]:
                     err(p + '.' + f, '不認得的鍵')
         if MT.get('default') not in MIDS:
             err('materials.default', '要是材質表裡的一種（沒寫材質的船、子作品都用它）')

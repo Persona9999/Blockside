@@ -22,9 +22,9 @@ function hullMaterials(T, info) {
   T.matIds = [T.mat0]; T.matG = null; T.matBad = [];
   if (info.material && !MATS[info.material]) T.matBad.push(info.material + '（全船預設）');
   var n = 1 + (h && h.ids ? h.ids.length : 0), XYZ = [];
-  T.matK = new Float64Array(n); T.matT = new Float64Array(n); T.matN = new Float64Array(n);
+  T.matK = new Float64Array(n); T.matT = new Float64Array(n); T.matN = new Float64Array(n); T.matM = new Float32Array(n); T.matR = new Float32Array(n);   // matM／matR：金屬度、粗糙度（TASK-0627；平滑渲染照它反光）
   if (h && h.ids) h.ids.forEach(function (id) { if (!MATS[id]) T.matBad.push(id); T.matIds.push(id); });
-  T.matIds.forEach(function (id, i) { var m = matInfo(id); T.matK[i] = m.hard; T.matT[i] = matVoxT(m); XYZ.push([]); });
+  T.matIds.forEach(function (id, i) { var m = matInfo(id); T.matK[i] = m.hard; T.matT[i] = matVoxT(m); T.matM[i] = +m.metal || 0; T.matR[i] = isFinite(+m.rough) && m.rough !== undefined ? +m.rough : 0.5; XYZ.push([]); });
   if (h && h.ids && h.runs && h.runs.length) {                            // 段落：[跟上一段結尾差幾、長度、索引]，一段 ＝ 線性索引相連的格（senate 匯出；⛔ 不跨空格 ⇒ 只走有格的地方）
     var G = new VK.Grid(T.h.size), sx = T.h.size[0], sy = T.h.size[1], at = 0, R = h.runs;
     for (var k = 0; k + 2 < R.length; k += 3) {

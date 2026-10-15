@@ -89,7 +89,7 @@ td.k { font-family: ui-monospace, Consolas, monospace; font-size: 12px; color: v
     <p class="note">每一格的材質決定它多難打穿、多重（TASK-0616）。跨船共用：雕刻作品的關聯 meta 只寫材質 ID（<code>material=iron</code>），參數都在這裡。沒寫材質的船 ＝ 下面每艘船的「全船預設材質」，那一格也空著 ＝ 這裡的預設。
       ID 英文小寫（改了 ID 舊船就認不到 ⇒ 要換就新增一種）。比重：一格 0.1 m ＝ 1 公升 ⇒ 每格幾 kg（橡木 0.7 ＝ 以前統一的重量）。硬度倍率乘在船隻設定的船殼硬度上（洞多大、砲彈穿過去慢多少）。易燃性 0–1 先記著（燃燒還沒做）。</p>
     <div class="grid" id="matDef"></div>
-    <div class="tbl"><table id="mats"><thead><tr><th>ID</th><th>名字</th><th>分類</th><th>比重</th><th>硬度倍率</th><th>易燃性</th><th>用在</th><th></th></tr></thead><tbody></tbody></table></div>
+    <div class="tbl"><table id="mats"><thead><tr><th>ID</th><th>名字</th><th>分類</th><th>比重</th><th>硬度倍率</th><th>易燃性</th><th>金屬度</th><th>粗糙度</th><th>用在</th><th></th></tr></thead><tbody></tbody></table></div>
     <div class="row" style="margin-top:8px"><input id="mNew" placeholder="新材質 ID（英文小寫，例 elm、steel）" style="min-width:240px"><button id="bMat">新增材質</button></div></section>
 
   <section><h2>船員配置（每艘船的預設）</h2>
@@ -237,7 +237,7 @@ td.k { font-family: ui-monospace, Consolas, monospace; font-size: 12px; color: v
       rm.onclick = function () { if (!confirm('刪掉材質「' + C.materials.list[k].name + '（' + k + '）」？')) return; delete C.materials.list[k]; touch(); render(); };
       var nm = txt(P.concat('name')); nm.style.width = '140px';
       tb.appendChild(el('tr', {}, [el('td', { 'class': 'k', text: k }), el('td', {}, [nm]), el('td', {}, [sel(P.concat('kind'), MAT_KINDS)]),
-        el('td', {}, [num(P.concat('density'))]), el('td', {}, [num(P.concat('hard'))]), el('td', {}, [num(P.concat('flammable'))]), el('td', { text: u.join('、') || '—' }), el('td', {}, [rm])]));
+        el('td', {}, [num(P.concat('density'))]), el('td', {}, [num(P.concat('hard'))]), el('td', {}, [num(P.concat('flammable'))]), el('td', {}, [num(P.concat('metal'), { opt: true, ph: '0', title: '金屬度 0–1（選填）：金屬有太陽高光與天空反射（平滑渲染的面）' })]), el('td', {}, [num(P.concat('rough'), { opt: true, ph: '0.5', title: '粗糙度 0–1（選填）：0 鏡面、1 很霧' })]), el('td', { text: u.join('、') || '—' }), el('td', {}, [rm])]));
     });
   }
   $('bMat').onclick = function () {

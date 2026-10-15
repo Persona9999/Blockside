@@ -198,6 +198,7 @@ function drawHulls(prog, near) {                                       // near(c
   PIECES.forEach(function (pc) { if (near && !near(pc)) return; gl.uniformMatrix4fv(prog.u.uModel, false, pc.M); pc.rs.draw(); });
 }
 function drawModels(prog, near) {
+  gl.vertexAttrib2f(3, 0, 0.5);                                         // P.tri 的 aM（金屬度、粗糙度；TASK-0627）：模型的 VAO 沒開這個屬性 ⇒ 讀這個常數 ⇒ 不反光（平滑渲染的 VAO 自己帶）
   SHIPS.forEach(function (sh) {
     if (sh.sink > 40 || (near && !near(sh))) return;
     cutSet(prog, sh);
