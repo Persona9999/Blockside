@@ -190,6 +190,7 @@
       "name": "三叉戟號",
       "vxk": "tridente.vxk",
       "work": "gura-tridente-01m-assembly",
+      "cfg": {"speed": 1.0, "agile": 1.0, "upwind": 0.8, "hard": 4},
       "geo": {"marines": [50, 260], "center": 195, "aim": 110, "aimZ": [45, 560], "deckAim": [92, 160], "rigAim": [200, 650]}
     },
     {
