@@ -18,8 +18,9 @@ var PHX_ITEMS = [
   { k: 'fx', name: '煙與水花', opt: ['40%', '65%', '85%', '100%'] },
   { k: 'water', name: '船邊水花', opt: ['關（原本的）', '低', '中', '高'] },
   { k: 'flood', name: '進水', opt: ['公式', '粒子 粗', '粒子 中', '粒子 細'] },
+  { k: 'sinkflood', name: '沉船進水', opt: ['關（照公式沉）', '開（水照樣灌進去）'] },   // 斷成兩截、開始沉的船照樣算水給人看（33_flood.js floodVis；Tim 2026-10-15：會耗效能就做成開關 —— 量過每艘沉的那 20 秒左右約 2 ms／步）；只改畫面與讀數
   { k: 'sailhit', name: '帆的碰撞', opt: ['關', '開（帆與繩「高」才算）'] }];   // 張開的帆碰到桅、帆桁、繩、船殼就推開（TASK-0603，30_rig_physics.js clothContacts）；Tim 2026-10-15：做成選項、預設關、只有物理全開（帆與繩高）才開 ⇒ 四檔都是關
-var PHX_PRESET = { full: { rig: 3, rigfar: 1, debris: 3, fx: 3, water: 3, flood: 3, sailhit: 0 }, high: { rig: 2, rigfar: 1, debris: 2, fx: 2, water: 2, flood: 2, sailhit: 0 }, mid: { rig: 1, rigfar: 2, debris: 1, fx: 1, water: 1, flood: 1, sailhit: 0 }, low: { rig: 0, rigfar: 2, debris: 0, fx: 0, water: 0, flood: 0, sailhit: 0 } };   // rigfar：全開也是遠方半速（150 m 外看不出差別）
+var PHX_PRESET = { full: { rig: 3, rigfar: 1, debris: 3, fx: 3, water: 3, flood: 3, sinkflood: 1, sailhit: 0 }, high: { rig: 2, rigfar: 1, debris: 2, fx: 2, water: 2, flood: 2, sinkflood: 1, sailhit: 0 }, mid: { rig: 1, rigfar: 2, debris: 1, fx: 1, water: 1, flood: 1, sinkflood: 0, sailhit: 0 }, low: { rig: 0, rigfar: 2, debris: 0, fx: 0, water: 0, flood: 0, sinkflood: 0, sailhit: 0 } };   // rigfar：全開也是遠方半速（150 m 外看不出差別）
 var PHX_NAME = { full: '全開', high: '高', mid: '中', low: '低', custom: '自訂' }, PHX_DEFAULT = CFG.menu.phx;   // 預設檔：config/game.json 的 menu.phx
 // 帆與繩每一檔：it 布與繩的迭代次數、every 帆幾步走一次（2 ＝ 30 Hz，4 ＝ 15 Hz；一半的帆錯開一步）、loose 垂下來的繩最多幾條、shred 帆的布片每艘最多幾片（34_shreds.js）。高 ＝ 原本的。
 var RIG_LV = [null, { it: 2, every: 4, loose: 150, shred: 40 }, { it: 3, every: 2, loose: 300, shred: 80 }, { it: 4, every: 2, loose: 500, shred: 150 }];

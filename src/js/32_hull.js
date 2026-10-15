@@ -46,6 +46,7 @@ function stepShip(sh, dt) {
   var fk = sh.broken ? Math.max(sh.cfg.flood, 0.6) : sh.cfg.flood;                       // 斷成兩截 ⇒ 一定沉（進水速度 0 也沉）
   var fl = sh.fl && !sh.broken ? sh.fl : null;                                   // 粒子模式（33_flood.js）：進水、下沉、傾斜照艙內的水；斷成兩截照舊用公式（一定沉）
   if (fl && !sh.sinkingFinal && !sh.sunk) floodStep(sh, fl, dt);                 // 開始沉之後不再算水（船要下去了；⛔ 照算 ⇒ 沉掉的船積到 8 萬噸、白耗 CPU）
+  else if (sh.fl && PHX.sinkflood && (sh.broken || sh.sinkingFinal) && !sh.sunk) floodVis(sh, sh.fl, dt);   // 斷成兩截、開始沉 ⇒ 水照樣灌進去給人看（33_flood.js floodVis：只改畫面與讀數；沉完就停）
   if (!sh.sunk) {
     if (fl) { if (!sh.sinkingFinal) sh.sink += (floodSinkT(sh, fl) - sh.sink) * Math.min(1, dt / FL_TAU); }   // 照艙內的水該多吃水多少，慢慢跟過去
     else sh.sink = Math.max(0, sh.sink + Math.min(Q * 1.1e-5 - 0.004, 0.25) * fk * dt);   // 進水與抽水一起照滑桿縮放（⛔ 只縮進水 ⇒ 調慢之後抽水永遠贏、永遠不沉）；

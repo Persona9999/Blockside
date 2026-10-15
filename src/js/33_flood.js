@@ -123,6 +123,18 @@ function flDeposit(fl, i, v) {
   for (var t = 0; t < 4 && i >= 0 && i < fl.F.N; t++, i += NXY) if (fl.cap[i] > 0.02) { fl.A[i] += v; flAct(fl, i); return; }
   fl.lost = (fl.lost || 0) + v;
 }
+/** 斷成兩截、開始沉的船（Tim 2026-10-15：「斷成兩截、開始沉的船也繼續算進水給人看（只改畫面與讀數，沉的速度照舊），沉完就停」）：
+ *  照樣跑 floodStep（水灌進去、讀數有積水與破口），但 ——
+ *  · 下沉照舊（32_hull.js：開始沉之後照公式、不看水）；傾斜照「開始沉那一刻」的水（fl.keep，floodTilt 讀它）⇒ 船的動作一位元都不變；
+ *  · 亂數用這艘自己的一串（fl.rsV）⇒ 不動到全場共用的 rsF，別艘的進水照舊；
+ *  · 沉沒（sh.sunk）就不再跑（⛔ 以前照算 ⇒ 沉掉的船積到 8 萬噸、白耗 CPU）。 */
+function floodVis(sh, fl, dt) {
+  if (!fl.keep) fl.keep = { vol: fl.vol, comX: fl.comX, comY: fl.comY };
+  var r = rsF; rsF = fl.rsV === undefined ? (SEED ^ RSF0 ^ Math.imul(0x9E3779B9, sh.i + 1)) : fl.rsV;
+  var t0 = DEBUG ? performance.now() : 0; floodStep(sh, fl, dt); if (DEBUG) { FL_VISMS += performance.now() - t0; FL_VISN++; }
+  fl.rsV = rsF; rsF = r; fl.vis = true;
+}
+var FL_VISMS = 0, FL_VISN = 0;
 /** 每一步（32_hull.js stepShip，粒子模式）：粒子飛、每 ev 步算一次水格（破口進出水、往下往旁邊流、抽水、讀數）。 */
 function floodStep(sh, fl, dt) {
   if (!(dt > 0)) return;
@@ -225,8 +237,9 @@ function floodSinkT(sh, fl) {
 }
 /** 水的重心 ⇒ 橫傾、縱傾的目標（rad；正負跟公式一樣：水在格 +y 那一舷 ⇒ 正 ⇒ 那一舷（右舷）往下；水在船頭 ⇒ 負 ⇒ 船頭往下）。 */
 function floodTilt(sh, fl) {
-  var W = fl.vol * RHO_W, D = (sh.mass0 || shipT(sh)) + W, lim = sh.sinkingFinal ? 0.55 : 0.21;
-  return [clamp(Math.atan(W * fl.comY / (D * FL_GM)), -lim, lim), -clamp(Math.atan(W * fl.comX / (D * FL_GML)), -0.07, 0.07)];
+  var k = fl.keep || fl;                                              // 開始沉之後照那一刻的水（floodVis 留的 keep）⇒ 水照樣灌給人看，船怎麼斜跟以前一模一樣
+  var W = k.vol * RHO_W, D = (sh.mass0 || shipT(sh)) + W, lim = sh.sinkingFinal ? 0.55 : 0.21;
+  return [clamp(Math.atan(W * k.comY / (D * FL_GM)), -lim, lim), -clamp(Math.atan(W * k.comX / (D * FL_GML)), -0.07, 0.07)];
 }
 
 // ── 畫：艙內的水面（每一格水柱的頂，四個角照同一個世界高度擺 ⇒ 船傾斜時水面還是平的）；噴進來的粒子跟點精靈一起畫 ──
@@ -285,7 +298,7 @@ function flDraw() {
   if (!P.pool || FL_HIDE) return;                                           // FL_HIDE：對照用（__game.flood(i, { hide: true })）
   var any = false;
   SHIPS.forEach(function (sh) {
-    var fl = sh.fl; if (!fl || !fl.actN || sh.broken || sh.sinkingFinal || sh.sunk) return;
+    var fl = sh.fl; if (!fl || !fl.actN || ((sh.broken || sh.sinkingFinal) && !fl.vis) || sh.sunk) return;   // 沉船的水照畫（floodVis）
     var me = flMesh(sh, fl); if (!me.n) return;
     if (!any) { any = true; gl.useProgram(P.pool.prog); setCommon(P.pool); gl.uniform1f(P.pool.u.uX, FLX3 ? 1 : 0); gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA); gl.depthMask(false); gl.disable(gl.CULL_FACE); if (FLX3) gl.disable(gl.DEPTH_TEST); }   // 停格的「🔍 透視」開著 ⇒ 隔著船殼看得到（72_floodui.js）
     gl.uniformMatrix4fv(P.pool.u.uModel, false, sh.M); gl.bindVertexArray(me.vao); gl.drawArrays(gl.TRIANGLES, 0, me.n);
@@ -296,7 +309,7 @@ function flDraw() {
 function flPushJets(pushPt) {
   var b = 0.55 + 0.45 * WX.sun, col = [0.72 * b, 0.84 * b, 0.9 * b];
   SHIPS.forEach(function (sh) {
-    var fl = sh.fl; if (!fl || !fl.J.n || sh.broken || sh.sinkingFinal || sh.sunk) return;
+    var fl = sh.fl; if (!fl || !fl.J.n || ((sh.broken || sh.sinkingFinal) && !fl.vis) || sh.sunk) return;
     var J = fl.J, M = sh.M;
     for (var i = 0; i < J.n; i++) { var o = i * 3; pushPt(M4.pt(M, J.p[o], J.p[o + 1], J.p[o + 2]), 0.12 + 0.6 * Math.cbrt(J.vol[i]), col, 0.75, -1); }
   });

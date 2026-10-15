@@ -1988,8 +1988,9 @@ var PHX_ITEMS = [
   { k: 'fx', name: '煙與水花', opt: ['40%', '65%', '85%', '100%'] },
   { k: 'water', name: '船邊水花', opt: ['關（原本的）', '低', '中', '高'] },
   { k: 'flood', name: '進水', opt: ['公式', '粒子 粗', '粒子 中', '粒子 細'] },
+  { k: 'sinkflood', name: '沉船進水', opt: ['關（照公式沉）', '開（水照樣灌進去）'] },   // 斷成兩截、開始沉的船照樣算水給人看（33_flood.js floodVis；Tim 2026-10-15：會耗效能就做成開關 —— 量過每艘沉的那 20 秒左右約 2 ms／步）；只改畫面與讀數
   { k: 'sailhit', name: '帆的碰撞', opt: ['關', '開（帆與繩「高」才算）'] }];   // 張開的帆碰到桅、帆桁、繩、船殼就推開（TASK-0603，30_rig_physics.js clothContacts）；Tim 2026-10-15：做成選項、預設關、只有物理全開（帆與繩高）才開 ⇒ 四檔都是關
-var PHX_PRESET = { full: { rig: 3, rigfar: 1, debris: 3, fx: 3, water: 3, flood: 3, sailhit: 0 }, high: { rig: 2, rigfar: 1, debris: 2, fx: 2, water: 2, flood: 2, sailhit: 0 }, mid: { rig: 1, rigfar: 2, debris: 1, fx: 1, water: 1, flood: 1, sailhit: 0 }, low: { rig: 0, rigfar: 2, debris: 0, fx: 0, water: 0, flood: 0, sailhit: 0 } };   // rigfar：全開也是遠方半速（150 m 外看不出差別）
+var PHX_PRESET = { full: { rig: 3, rigfar: 1, debris: 3, fx: 3, water: 3, flood: 3, sinkflood: 1, sailhit: 0 }, high: { rig: 2, rigfar: 1, debris: 2, fx: 2, water: 2, flood: 2, sinkflood: 1, sailhit: 0 }, mid: { rig: 1, rigfar: 2, debris: 1, fx: 1, water: 1, flood: 1, sinkflood: 0, sailhit: 0 }, low: { rig: 0, rigfar: 2, debris: 0, fx: 0, water: 0, flood: 0, sinkflood: 0, sailhit: 0 } };   // rigfar：全開也是遠方半速（150 m 外看不出差別）
 var PHX_NAME = { full: '全開', high: '高', mid: '中', low: '低', custom: '自訂' }, PHX_DEFAULT = CFG.menu.phx;   // 預設檔：config/game.json 的 menu.phx
 // 帆與繩每一檔：it 布與繩的迭代次數、every 帆幾步走一次（2 ＝ 30 Hz，4 ＝ 15 Hz；一半的帆錯開一步）、loose 垂下來的繩最多幾條、shred 帆的布片每艘最多幾片（34_shreds.js）。高 ＝ 原本的。
 var RIG_LV = [null, { it: 2, every: 4, loose: 150, shred: 40 }, { it: 3, every: 2, loose: 300, shred: 80 }, { it: 4, every: 2, loose: 500, shred: 150 }];
@@ -5059,6 +5060,7 @@ function stepShip(sh, dt) {
   var fk = sh.broken ? Math.max(sh.cfg.flood, 0.6) : sh.cfg.flood;                       // 斷成兩截 ⇒ 一定沉（進水速度 0 也沉）
   var fl = sh.fl && !sh.broken ? sh.fl : null;                                   // 粒子模式（33_flood.js）：進水、下沉、傾斜照艙內的水；斷成兩截照舊用公式（一定沉）
   if (fl && !sh.sinkingFinal && !sh.sunk) floodStep(sh, fl, dt);                 // 開始沉之後不再算水（船要下去了；⛔ 照算 ⇒ 沉掉的船積到 8 萬噸、白耗 CPU）
+  else if (sh.fl && PHX.sinkflood && (sh.broken || sh.sinkingFinal) && !sh.sunk) floodVis(sh, sh.fl, dt);   // 斷成兩截、開始沉 ⇒ 水照樣灌進去給人看（33_flood.js floodVis：只改畫面與讀數；沉完就停）
   if (!sh.sunk) {
     if (fl) { if (!sh.sinkingFinal) sh.sink += (floodSinkT(sh, fl) - sh.sink) * Math.min(1, dt / FL_TAU); }   // 照艙內的水該多吃水多少，慢慢跟過去
     else sh.sink = Math.max(0, sh.sink + Math.min(Q * 1.1e-5 - 0.004, 0.25) * fk * dt);   // 進水與抽水一起照滑桿縮放（⛔ 只縮進水 ⇒ 調慢之後抽水永遠贏、永遠不沉）；
@@ -5281,6 +5283,18 @@ function flDeposit(fl, i, v) {
   for (var t = 0; t < 4 && i >= 0 && i < fl.F.N; t++, i += NXY) if (fl.cap[i] > 0.02) { fl.A[i] += v; flAct(fl, i); return; }
   fl.lost = (fl.lost || 0) + v;
 }
+/** 斷成兩截、開始沉的船（Tim 2026-10-15：「斷成兩截、開始沉的船也繼續算進水給人看（只改畫面與讀數，沉的速度照舊），沉完就停」）：
+ *  照樣跑 floodStep（水灌進去、讀數有積水與破口），但 ——
+ *  · 下沉照舊（32_hull.js：開始沉之後照公式、不看水）；傾斜照「開始沉那一刻」的水（fl.keep，floodTilt 讀它）⇒ 船的動作一位元都不變；
+ *  · 亂數用這艘自己的一串（fl.rsV）⇒ 不動到全場共用的 rsF，別艘的進水照舊；
+ *  · 沉沒（sh.sunk）就不再跑（⛔ 以前照算 ⇒ 沉掉的船積到 8 萬噸、白耗 CPU）。 */
+function floodVis(sh, fl, dt) {
+  if (!fl.keep) fl.keep = { vol: fl.vol, comX: fl.comX, comY: fl.comY };
+  var r = rsF; rsF = fl.rsV === undefined ? (SEED ^ RSF0 ^ Math.imul(0x9E3779B9, sh.i + 1)) : fl.rsV;
+  var t0 = DEBUG ? performance.now() : 0; floodStep(sh, fl, dt); if (DEBUG) { FL_VISMS += performance.now() - t0; FL_VISN++; }
+  fl.rsV = rsF; rsF = r; fl.vis = true;
+}
+var FL_VISMS = 0, FL_VISN = 0;
 /** 每一步（32_hull.js stepShip，粒子模式）：粒子飛、每 ev 步算一次水格（破口進出水、往下往旁邊流、抽水、讀數）。 */
 function floodStep(sh, fl, dt) {
   if (!(dt > 0)) return;
@@ -5383,8 +5397,9 @@ function floodSinkT(sh, fl) {
 }
 /** 水的重心 ⇒ 橫傾、縱傾的目標（rad；正負跟公式一樣：水在格 +y 那一舷 ⇒ 正 ⇒ 那一舷（右舷）往下；水在船頭 ⇒ 負 ⇒ 船頭往下）。 */
 function floodTilt(sh, fl) {
-  var W = fl.vol * RHO_W, D = (sh.mass0 || shipT(sh)) + W, lim = sh.sinkingFinal ? 0.55 : 0.21;
-  return [clamp(Math.atan(W * fl.comY / (D * FL_GM)), -lim, lim), -clamp(Math.atan(W * fl.comX / (D * FL_GML)), -0.07, 0.07)];
+  var k = fl.keep || fl;                                              // 開始沉之後照那一刻的水（floodVis 留的 keep）⇒ 水照樣灌給人看，船怎麼斜跟以前一模一樣
+  var W = k.vol * RHO_W, D = (sh.mass0 || shipT(sh)) + W, lim = sh.sinkingFinal ? 0.55 : 0.21;
+  return [clamp(Math.atan(W * k.comY / (D * FL_GM)), -lim, lim), -clamp(Math.atan(W * k.comX / (D * FL_GML)), -0.07, 0.07)];
 }
 
 // ── 畫：艙內的水面（每一格水柱的頂，四個角照同一個世界高度擺 ⇒ 船傾斜時水面還是平的）；噴進來的粒子跟點精靈一起畫 ──
@@ -5443,7 +5458,7 @@ function flDraw() {
   if (!P.pool || FL_HIDE) return;                                           // FL_HIDE：對照用（__game.flood(i, { hide: true })）
   var any = false;
   SHIPS.forEach(function (sh) {
-    var fl = sh.fl; if (!fl || !fl.actN || sh.broken || sh.sinkingFinal || sh.sunk) return;
+    var fl = sh.fl; if (!fl || !fl.actN || ((sh.broken || sh.sinkingFinal) && !fl.vis) || sh.sunk) return;   // 沉船的水照畫（floodVis）
     var me = flMesh(sh, fl); if (!me.n) return;
     if (!any) { any = true; gl.useProgram(P.pool.prog); setCommon(P.pool); gl.uniform1f(P.pool.u.uX, FLX3 ? 1 : 0); gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA); gl.depthMask(false); gl.disable(gl.CULL_FACE); if (FLX3) gl.disable(gl.DEPTH_TEST); }   // 停格的「🔍 透視」開著 ⇒ 隔著船殼看得到（72_floodui.js）
     gl.uniformMatrix4fv(P.pool.u.uModel, false, sh.M); gl.bindVertexArray(me.vao); gl.drawArrays(gl.TRIANGLES, 0, me.n);
@@ -5454,7 +5469,7 @@ function flDraw() {
 function flPushJets(pushPt) {
   var b = 0.55 + 0.45 * WX.sun, col = [0.72 * b, 0.84 * b, 0.9 * b];
   SHIPS.forEach(function (sh) {
-    var fl = sh.fl; if (!fl || !fl.J.n || sh.broken || sh.sinkingFinal || sh.sunk) return;
+    var fl = sh.fl; if (!fl || !fl.J.n || ((sh.broken || sh.sinkingFinal) && !fl.vis) || sh.sunk) return;
     var J = fl.J, M = sh.M;
     for (var i = 0; i < J.n; i++) { var o = i * 3; pushPt(M4.pt(M, J.p[o], J.p[o + 1], J.p[o + 2]), 0.12 + 0.6 * Math.cbrt(J.vol[i]), col, 0.75, -1); }
   });
@@ -8361,7 +8376,7 @@ function panel(sh, title) {
   var m0 = sh.mass0 || shipT(sh), disp = Math.round(m0), now = Math.round(m0 - massLost(sh));   // 兩個都取到 1 噸（⛔ 開戰時的取到 10 噸 ⇒ 第一格「2,150・現在 2,154」，現在比開戰還重）
   // 橫向兩欄（TASK-0564，Tim 2026-10-14：佔畫面中間 ⇒ 儘量橫鋪、別往下壓）：左 ＝ 船體、進水、航行；右 ＝ 砲長、船員、砲、開火。砲一門一門的狀態在底下的砲位圖（gmapDraw）。
   return '<h3>' + title + '<span class="disp">排水量 ' + disp.toLocaleString() + ' 噸・現在 ' + now.toLocaleString() + ' 噸</span>' + (sh.fate && !sh.sunk ? '　<span style="color:var(--gold)">' + sh.fate + '</span>' : '') + '</h3><div class="pcols"><div class="pc">船體 ' + (hull * 100).toFixed(1) + '%（打掉 ' + sh.lost.toLocaleString() + ' 格）<div class="bar"><i style="width:' + (hull * 100).toFixed(1) + '%"></i></div>' +
-    '進水 ' + (sh.sunk ? '沉沒' : (fl * 100).toFixed(0) + '%') + (sh.fl && !sh.broken ? '（艙內積水 ' + Math.round(sh.fl.vol * RHO_W).toLocaleString() + ' 噸・破口 ' + sh.fl.area.toFixed(1) + ' m²）' : '（水線下破洞 ' + (sh.inflow || 0).toLocaleString() + ' 格）') + (sh.lift > 0.05 ? '　浮高 ' + sh.lift.toFixed(1) + ' m' : sh.lift < -0.05 ? '　吃水深 ' + (-sh.lift).toFixed(1) + ' m' : '') + '<div class="bar water"><i style="width:' + (fl * 100).toFixed(0) + '%"></i></div>' +
+    '進水 ' + (sh.sunk ? '沉沒' : (fl * 100).toFixed(0) + '%') + (sh.fl && (!sh.broken || sh.fl.vis) ? '（艙內積水 ' + Math.round(sh.fl.vol * RHO_W).toLocaleString() + ' 噸・破口 ' + sh.fl.area.toFixed(1) + ' m²）' : '（水線下破洞 ' + (sh.inflow || 0).toLocaleString() + ' 格）') + (sh.lift > 0.05 ? '　浮高 ' + sh.lift.toFixed(1) + ' m' : sh.lift < -0.05 ? '　吃水深 ' + (-sh.lift).toFixed(1) + ' m' : '') + '<div class="bar water"><i style="width:' + (fl * 100).toFixed(0) + '%"></i></div>' +
     (sh.spd < -0.05 ? '倒車 ' + (-sh.spd * 1.944).toFixed(1) : '航速 ' + (sh.spd * 1.944).toFixed(1)) + ' 節（' + sh.pos + '）　' + (sh.thr === null || sh.thr === undefined ? '' : '動力 ' + (sh.thr > 0 ? '前進' : sh.thr < 0 ? '倒車' : '停') + '　') + sailSetName(sh) + ' ' + Math.round(sh.sailFrac * 100) + '%<br>' +
     ((SAIL === 'off' ? '拋錨' : sh.manual ? '手動操舵' : '自動操舵') + (sh.anc ? '　' + anchorText(sh) : '') + '　舵 ' + (sh.rudder > 0.05 ? '左 ' + Math.round(sh.rudder * 100) + '%' : sh.rudder < -0.05 ? '右 ' + Math.round(-sh.rudder * 100) + '%' : '正')) + '<br>' + navText(sh) + '</div><div class="pc">' +
     capText(sh) + '<br>' +
@@ -10811,7 +10826,7 @@ if (DEBUG) window.__game = {
   },
   /** 帆的碰撞（TASK-0603）只數不推：每艘每面張著的帆，第一輪找到幾個接觸（三角形 × 碰到的船殼格／模型面／繩段）＝ 這一刻還穿著多少；量完把帆放回原樣。 */
   ccCount: function () { var keep = CC_PASS; CC_PASS = [1, 1]; var out = SHIPS.map(function (sh) { var n = 0, lk = 0, sails = 0; (sh.cl || []).forEach(function (c, k) { if (!c || sh.sails[k].furled || !c.p || c.hidden || c.gone || !c.T.mi) return; var p = Float32Array.from(c.p), q = Float32Array.from(c.q), w = c.contactWarm, cur = c.ccCur; c.ccCur = 0; clothContacts(sh, c); n += c.contactStats ? c.contactStats.first : 0; lk += c.contactStats ? c.contactStats.unsatisfiedPins : 0; sails++; c.p.set(p); c.q.set(q); c.contactWarm = w; c.ccCur = cur; }); return { hull: sh.T.id, sails: sails, contacts: n, locked: lk }; }); CC_PASS = keep; return out; },
-  prof: function (reset) { var r = { cloth: +PROF.cloth.toFixed(1), rope: +PROF.rope.toFixed(1), shred: +PROF.shred.toFixed(1), buf: +PROF.buf.toFixed(1), cc: +PROF.cc.toFixed(1), ccN: PROF.ccN, ccHit: PROF.ccHit, ccQ: PROF.ccQ, ccMax: +PROF.ccMax.toFixed(1), perStep: +PHYS_MS.toFixed(3) }; if (reset) PROF = { cloth: 0, rope: 0, shred: 0, buf: 0, cc: 0, ccN: 0, ccHit: 0, ccQ: 0, ccMax: 0, ccGeo: 0 }; return r; },   // cc／ccN／ccHit：帆的碰撞（TASK-0603）
+  prof: function (reset) { var r = { cloth: +PROF.cloth.toFixed(1), rope: +PROF.rope.toFixed(1), shred: +PROF.shred.toFixed(1), buf: +PROF.buf.toFixed(1), cc: +PROF.cc.toFixed(1), ccN: PROF.ccN, ccHit: PROF.ccHit, ccQ: PROF.ccQ, ccMax: +PROF.ccMax.toFixed(1), flVis: FL_VISN ? +(FL_VISMS / FL_VISN).toFixed(3) : 0, flVisN: FL_VISN, perStep: +PHYS_MS.toFixed(3) }; if (reset) PROF = { cloth: 0, rope: 0, shred: 0, buf: 0, cc: 0, ccN: 0, ccHit: 0, ccQ: 0, ccMax: 0, ccGeo: 0 }; return r; },   // cc／ccN／ccHit：帆的碰撞（TASK-0603）
   /** 帆與繩的讀數：每面帆最鼓的那一點離雕刻作品形狀多遠（格）、還綁著幾個點、垂下來的繩幾條。 */
   cloth: function (i) {
     var sh = SHIPS[i || 0];
