@@ -124,7 +124,7 @@
     #botC{ --gc:9px; } .gside{ max-width:calc(50vw - 48px); } .helm{ gap:5px; } #helmL{ flex-direction:column-reverse; } #helmR{ flex-direction:column; } #ctlRow{ gap:2px; width:100%; }
     .kb.hb{ width:46px; height:46px; font-size:10px; } .kb.hb b{ font-size:9px; } .kb.hb .em{ font-size:12px; letter-spacing:-1.5px; } .kb.hb .em .ico{ width:11px; height:11px; }
     .sbn{ font-size:8px; line-height:10px; } .sbn .ico{ width:8px; height:8px; } .sbn i{ font-size:7px; } .sbn.l{ left:-5px; } .sbn.r{ right:-5px; } .fleet .sb{ margin-bottom:10px; }   /* 圓鈕 38 px：兩個數字往外擠一點才不會碰在一起 */ #shipCardC{ width:120px; height:120px; } #shipCardT{ font-size:13px; }
-    #botC{ bottom:6px; width:calc(100vw - 6px); max-width:none; gap:4px; } #topC{ top:6px; }   /* 面板撐滿兩組大圓鈕之間（Tim：⛔ 留太寬 ⇒ 按鈕被擠得換行） */ .sb{ width:38px; height:38px; } .sbres{ font-size:10px; padding:1px 5px; }
+    #botC{ bottom:16px; width:calc(100vw - 22px); max-width:none; gap:4px; }   /* 兩側與底下的大圓鈕往內 8 px、往上 10 px（Tim 2026-10-15：iPhone 只在很角落連點兩下會放大 ⇒ 離開螢幕圓角與系統手勢區；⛔ 以前 bottom 6、寬 100vw − 6） */ #topC{ top:6px; }   /* 面板撐滿兩組大圓鈕之間（Tim：⛔ 留太寬 ⇒ 按鈕被擠得換行） */ .sb{ width:38px; height:38px; } .sbres{ font-size:10px; padding:1px 5px; }
     #topC{ width:calc(100vw - 96px); } #info{ font-size:11px; padding:5px 8px; } #info h3{ font-size:12px; } #info .pcols{ gap:2px 8px; } #info .pc{ flex-basis:110px; } #info .legend{ display:none; } #irow{ gap:4px; }   /* 手機：砲位圖窄（船頭朝上），跟卡片並排 */   /* 砲列在窄的卡片裡換行（⛔ 不換 ⇒ 伸到右邊的按鈕底下） */
     #navc{ width:68px; height:68px; } #modeT{ font-size:12px; }
     #ctl{ flex:1; padding:0; } #ctl.panel, #keys, #ammo{ gap:2px; } #guns .gr{ white-space:normal; word-break:break-all; } #tip{ display:none; }   /* 砲列在窄面板裡換行 */
@@ -251,7 +251,7 @@
     <div><kbd data-k="b">B</kbd> 帆與繩的物理：開 ＝ 帆被相對風吹鼓（轉向、頂風會往另一邊鼓），斷掉的繩與帆垂下來擺、帆被打穿的那塊布撕成碎片飄下來；關 ＝ 靜態（下方也點得到）。主選單的「物理效果」分全開／高／中／低，細項在「物理設定…」（帆與繩、碎木、煙與水花、船邊水花）</div>
     <div><kbd data-k="4">4</kbd> 航行：自動 ⇄ 手動切換（錨在水裡 ⇒ 先起錨；A／D 打舵也會換成手動）　<kbd data-k="6">6</kbd> 拋錨／起錨（雙錨，A／D 繞錨轉；再按一次起錨）　<kbd data-k="7">7</kbd> <kbd data-k="8">8</kbd> 左錨／右錨（帶著速度只拋一側 ⇒ 繞錨急轉；再按一次起錨；錨打壞了就不能拋）（下方也點得到）　<kbd data-k="o">O</kbd> 設定（Esc 也可以）　<kbd data-k="v">V</kbd> 鏡頭跟船／固定</div>
     <div><kbd>⚙</kbd> 下方「⚙ 設定」或 <kbd>Esc</kbd>：暫停並打開設定 —— 繼續、重新開始、回主選單、自爆（我艦的彈藥庫由小到大一間一間引爆、船斷開沉下去 —— 相當於重開，先看煙花）、說明（H）、畫質與物理效果的檔位、帆繩物理、鏡頭跟船、靜音、顯示 FPS、全螢幕（手機用；電腦直接按 F11 也行，Esc 退出）、彈藥庫殉爆時的慢動作與特寫鏡頭（各自開關）</div>
-    <div><kbd data-k="a" data-hold="1">A</kbd><kbd data-k="d" data-hold="1">D</kbd> 打舵（按住；一碰就換手動）　<kbd data-k="w">W</kbd><kbd data-k="s">S</kbd> 帆裝：全收／收帆／戰鬥帆／滿帆（帆收得越多越慢、越穩；收起來的帆打不壞，除非桅斷了）；有額外動力的船（風暴角號）手動時是油門：<b>按住 W 前進、按住 S 倒車</b>（跟帆分開；沒按住 ⇒ 只靠帆；倒退時舵反過來）</div>
+    <div><kbd data-k="a" data-hold="1">A</kbd><kbd data-k="d" data-hold="1">D</kbd> 打舵（按住；一碰就換手動）　<kbd data-k="w">W</kbd><kbd data-k="s">S</kbd> 帆裝：全收／收帆／戰鬥帆／滿帆（點一下切一級、按住 1 秒後每 0.5 秒再切一級；羅盤上方航速後面寫現在哪一段；帆收得越多越慢、越穩；收起來的帆打不壞，除非桅斷了）；有額外動力的船（風暴角號）兩頭各多一段：<b>滿帆再按 W ＝ 全速前進</b>（額外動力開）、<b>全收再按 S ＝ 倒車</b>（中間那幾段只靠帆；倒退時舵反過來）</div>
     <div><kbd>羅</kbd> 左下：羅盤跟著鏡頭轉（北 ＝ 參考方向），中間是我艦、藍箭頭是風從哪吹來、紅點是敵艦、金色扇形是兩舷的射界（對得到時亮）</div>
     <div><kbd>砲</kbd> 砲列：● 裝填好 ◌ 裝填中 △ 等火藥與彈藥 ○ 開不了 ✕ 毀 <span class="g-wet">≈ 砲口泡在水裡（不能裝填、不能開）</span>；<span class="g-full">綠 滿編</span>、<span class="g-short">黃 人數不足（照開、較慢）</span>、<span class="g-none">灰 少於最少人數</span>、<span class="g-dead">紅 毀</span></div>
     <div><kbd>舷</kbd> 兩舷各有砲班、各自開火：齊射時對得到瞄準點的砲才開（砲門 ±26°）；▶ ＝ 那一舷對得到</div>
@@ -372,7 +372,7 @@
       <div class="row slide"><label for="speed">航速</label><input type="range" id="speed" step="0.05"><span id="speedV"></span></div>
       <div class="row slide"><label for="agile">靈活性</label><input type="range" id="agile" step="0.05"><span id="agileV"></span></div>
       <div class="row slide"><label for="upwind">逆風</label><input type="range" id="upwind" step="0.05" aria-label="逆風性能"><span id="upwindV"></span></div>
-      <div class="row slide"><label for="base">基底航速</label><input type="range" id="base" step="0.5" aria-label="額外動力的基底航速（節）：不看風向與帆"><span id="baseV"></span></div>
+      <div class="row slide"><label for="base">額外動力</label><input type="range" id="base" step="0.5" aria-label="額外動力（節）：不看風向與帆"><span id="baseV"></span></div>
       <div class="row"><button id="shipR">這一型回到預設</button><button id="shipE">匯出…</button><button id="shipI">匯入…</button><input type="file" id="shipF" accept=".json,application/json" style="display:none"></div>
       <div class="row"><button id="shipX">返回</button></div>
       </div>

@@ -124,7 +124,7 @@
     #botC{ --gc:9px; } .gside{ max-width:calc(50vw - 48px); } .helm{ gap:5px; } #helmL{ flex-direction:column-reverse; } #helmR{ flex-direction:column; } #ctlRow{ gap:2px; width:100%; }
     .kb.hb{ width:46px; height:46px; font-size:10px; } .kb.hb b{ font-size:9px; } .kb.hb .em{ font-size:12px; letter-spacing:-1.5px; } .kb.hb .em .ico{ width:11px; height:11px; }
     .sbn{ font-size:8px; line-height:10px; } .sbn .ico{ width:8px; height:8px; } .sbn i{ font-size:7px; } .sbn.l{ left:-5px; } .sbn.r{ right:-5px; } .fleet .sb{ margin-bottom:10px; }   /* 圓鈕 38 px：兩個數字往外擠一點才不會碰在一起 */ #shipCardC{ width:120px; height:120px; } #shipCardT{ font-size:13px; }
-    #botC{ bottom:6px; width:calc(100vw - 6px); max-width:none; gap:4px; } #topC{ top:6px; }   /* 面板撐滿兩組大圓鈕之間（Tim：⛔ 留太寬 ⇒ 按鈕被擠得換行） */ .sb{ width:38px; height:38px; } .sbres{ font-size:10px; padding:1px 5px; }
+    #botC{ bottom:16px; width:calc(100vw - 22px); max-width:none; gap:4px; }   /* 兩側與底下的大圓鈕往內 8 px、往上 10 px（Tim 2026-10-15：iPhone 只在很角落連點兩下會放大 ⇒ 離開螢幕圓角與系統手勢區；⛔ 以前 bottom 6、寬 100vw − 6） */ #topC{ top:6px; }   /* 面板撐滿兩組大圓鈕之間（Tim：⛔ 留太寬 ⇒ 按鈕被擠得換行） */ .sb{ width:38px; height:38px; } .sbres{ font-size:10px; padding:1px 5px; }
     #topC{ width:calc(100vw - 96px); } #info{ font-size:11px; padding:5px 8px; } #info h3{ font-size:12px; } #info .pcols{ gap:2px 8px; } #info .pc{ flex-basis:110px; } #info .legend{ display:none; } #irow{ gap:4px; }   /* 手機：砲位圖窄（船頭朝上），跟卡片並排 */   /* 砲列在窄的卡片裡換行（⛔ 不換 ⇒ 伸到右邊的按鈕底下） */
     #navc{ width:68px; height:68px; } #modeT{ font-size:12px; }
     #ctl{ flex:1; padding:0; } #ctl.panel, #keys, #ammo{ gap:2px; } #guns .gr{ white-space:normal; word-break:break-all; } #tip{ display:none; }   /* 砲列在窄面板裡換行 */
@@ -251,7 +251,7 @@
     <div><kbd data-k="b">B</kbd> 帆與繩的物理：開 ＝ 帆被相對風吹鼓（轉向、頂風會往另一邊鼓），斷掉的繩與帆垂下來擺、帆被打穿的那塊布撕成碎片飄下來；關 ＝ 靜態（下方也點得到）。主選單的「物理效果」分全開／高／中／低，細項在「物理設定…」（帆與繩、碎木、煙與水花、船邊水花）</div>
     <div><kbd data-k="4">4</kbd> 航行：自動 ⇄ 手動切換（錨在水裡 ⇒ 先起錨；A／D 打舵也會換成手動）　<kbd data-k="6">6</kbd> 拋錨／起錨（雙錨，A／D 繞錨轉；再按一次起錨）　<kbd data-k="7">7</kbd> <kbd data-k="8">8</kbd> 左錨／右錨（帶著速度只拋一側 ⇒ 繞錨急轉；再按一次起錨；錨打壞了就不能拋）（下方也點得到）　<kbd data-k="o">O</kbd> 設定（Esc 也可以）　<kbd data-k="v">V</kbd> 鏡頭跟船／固定</div>
     <div><kbd>⚙</kbd> 下方「⚙ 設定」或 <kbd>Esc</kbd>：暫停並打開設定 —— 繼續、重新開始、回主選單、自爆（我艦的彈藥庫由小到大一間一間引爆、船斷開沉下去 —— 相當於重開，先看煙花）、說明（H）、畫質與物理效果的檔位、帆繩物理、鏡頭跟船、靜音、顯示 FPS、全螢幕（手機用；電腦直接按 F11 也行，Esc 退出）、彈藥庫殉爆時的慢動作與特寫鏡頭（各自開關）</div>
-    <div><kbd data-k="a" data-hold="1">A</kbd><kbd data-k="d" data-hold="1">D</kbd> 打舵（按住；一碰就換手動）　<kbd data-k="w">W</kbd><kbd data-k="s">S</kbd> 帆裝：全收／收帆／戰鬥帆／滿帆（帆收得越多越慢、越穩；收起來的帆打不壞，除非桅斷了）；有額外動力的船（風暴角號）手動時是油門：<b>按住 W 前進、按住 S 倒車</b>（跟帆分開；沒按住 ⇒ 只靠帆；倒退時舵反過來）</div>
+    <div><kbd data-k="a" data-hold="1">A</kbd><kbd data-k="d" data-hold="1">D</kbd> 打舵（按住；一碰就換手動）　<kbd data-k="w">W</kbd><kbd data-k="s">S</kbd> 帆裝：全收／收帆／戰鬥帆／滿帆（點一下切一級、按住 1 秒後每 0.5 秒再切一級；羅盤上方航速後面寫現在哪一段；帆收得越多越慢、越穩；收起來的帆打不壞，除非桅斷了）；有額外動力的船（風暴角號）兩頭各多一段：<b>滿帆再按 W ＝ 全速前進</b>（額外動力開）、<b>全收再按 S ＝ 倒車</b>（中間那幾段只靠帆；倒退時舵反過來）</div>
     <div><kbd>羅</kbd> 左下：羅盤跟著鏡頭轉（北 ＝ 參考方向），中間是我艦、藍箭頭是風從哪吹來、紅點是敵艦、金色扇形是兩舷的射界（對得到時亮）</div>
     <div><kbd>砲</kbd> 砲列：● 裝填好 ◌ 裝填中 △ 等火藥與彈藥 ○ 開不了 ✕ 毀 <span class="g-wet">≈ 砲口泡在水裡（不能裝填、不能開）</span>；<span class="g-full">綠 滿編</span>、<span class="g-short">黃 人數不足（照開、較慢）</span>、<span class="g-none">灰 少於最少人數</span>、<span class="g-dead">紅 毀</span></div>
     <div><kbd>舷</kbd> 兩舷各有砲班、各自開火：齊射時對得到瞄準點的砲才開（砲門 ±26°）；▶ ＝ 那一舷對得到</div>
@@ -372,7 +372,7 @@
       <div class="row slide"><label for="speed">航速</label><input type="range" id="speed" step="0.05"><span id="speedV"></span></div>
       <div class="row slide"><label for="agile">靈活性</label><input type="range" id="agile" step="0.05"><span id="agileV"></span></div>
       <div class="row slide"><label for="upwind">逆風</label><input type="range" id="upwind" step="0.05" aria-label="逆風性能"><span id="upwindV"></span></div>
-      <div class="row slide"><label for="base">基底航速</label><input type="range" id="base" step="0.5" aria-label="額外動力的基底航速（節）：不看風向與帆"><span id="baseV"></span></div>
+      <div class="row slide"><label for="base">額外動力</label><input type="range" id="base" step="0.5" aria-label="額外動力（節）：不看風向與帆"><span id="baseV"></span></div>
       <div class="row"><button id="shipR">這一型回到預設</button><button id="shipE">匯出…</button><button id="shipI">匯入…</button><input type="file" id="shipF" accept=".json,application/json" style="display:none"></div>
       <div class="row"><button id="shipX">返回</button></div>
       </div>
@@ -1420,7 +1420,7 @@ function playK(k) { return PLAY === 'fun' ? FUN[k] : 1; }
 //   speed 航速倍率（乘在 VMAX 上）；agile 靈活性倍率（乘在最大轉向率上；跟航速倍率分開 —— 轉向率用的是除掉倍率的航速）。玩法選娛樂 ⇒ 兩個再乘娛樂加成（playK）
 //   upwind 逆風性能（31_sailing.js）：風從船頭那一半（迎風、頂風）的角度照它壓縮 ⇒ 同一個角度跑得快、吃風更近（失速晚開始）、越接近頂風轉得越快（最多 ×它）；1 ＝ 照舊
 // 起始值 ＝ 網址參數（?hard= …，套到每一型）或 LIM 的預設；壓艙物網址沒給 ⇒ 存檔裡那一型的（同一份船才算，69_prefs.js）⇒ 那一型的 ballast0（船型載好才知道）。
-//   base  基底航速（節；31_sailing.js；Tim 2026-10-14：風暴角號是幽靈船、之後的蒸汽船）：額外動力帶來的航速 —— 不管風向、風速、掛幾面帆都有，
+//   base  額外動力（節；畫面上 Tim 2026-10-15 改名，以前叫基底航速；31_sailing.js；Tim 2026-10-14：風暴角號是幽靈船、之後的蒸汽船）：額外動力帶來的航速 —— 不管風向、風速、掛幾面帆都有，
 //         跟帆的航速脫鉤（不乘 speed、玩法加成、天氣）；實際航速 ＝ √(帆的航速² ＋ 它²)：兩種動力的推力相加（蒸汽帆船；阻力 ∝ 速度²、各自單獨能跑到的航速就是那份推力 ⇒ 推力相加 ＝ 平方相加）。0 ＝ 沒有 ⇒ 照舊
 var SHIP_KEYS = ['hard', 'flood', 'ballast', 'gunw', 'speed', 'agile', 'upwind', 'base'], SHIP_CFG = {};
 // 船型自己的預設（沒列的 ＝ LIM 的預設）。Tim 2026-10-13：憲法號要比餘燼號快、靈活 ⇒ 憲法號照舊 1（巡防艦），
@@ -1487,7 +1487,7 @@ var LAST_MODE = null;                                // 上一場的模式（自
 var LIM_DIST = CFG.dist;                              // config/game.json 的 dist：[下限, 上限, 預設]
 var MODE = CFG.menu.mode, DIST = Q.has('dist') && isFinite(+Q.get('dist')) ? clamp(Math.round(+Q.get('dist')), LIM_DIST[0], LIM_DIST[1]) : LIM_DIST[2], SIMT = 0, RUNNING = false, PAUSED = false, OVER = false, AMMO_I = 0;
 var SAIL = Q.has('sail') ? (Q.get('sail') === 'off' ? 'off' : Q.get('sail') === 'manual' ? 'manual' : 'auto') : CFG.menu.sail;   // 航行：auto ＝ 兩艘自動、manual ＝ 我艦手動、off ＝ 停船；沒給 ⇒ menu.sail
-var KEYS = { l: false, r: false, f: null, b: null };  // 手動操舵：按住的舵鍵；f／b ＝ 加帆（W）／收帆（S）按下那一刻的 SIMT（按住 ⇒ 額外動力的油門 前進／倒車，31_sailing.js；放開 ⇒ null）
+var KEYS = { l: false, r: false, sw: null };  // 手動操舵：按住的舵鍵（額外動力以前是按住 W／S 的油門，Tim 2026-10-15 改成帆段兩頭的「全速前進／倒車」⇒ 31_sailing.js sailStep）；sw ＝ 按住加帆／收帆（{ d: ±1, n: 下一次再切的 SIMT }；sailHold）
 // 殉爆的慢動作與特寫（73_slowmo.js）：on／cam 是設定；ts 現在的時間倍率。SLOW_VIS：這一格畫面裡只給人看的效果改由 frame 走（step() 讀它決定要不要跳過）
 var PSLOW = { on: Q.get('pslow') === '1', ts: 1, ms: 0, budget: qnum('pslowb', LIM.pslowb) };   // 物理減速（73_slowmo.js；Tim 2026-10-14：預設關）：ts ＝ 現在的倍率、ms ＝ 一步模擬平均幾毫秒、budget ＝ 門檻（模擬最多佔真實時間幾成）
 var SLOW = { on: Q.get('slowmo') !== '0', cam: Q.get('slowcam') !== '0', ts: 1, t: 0, min: 1, hold: 0, active: false, camSave: null, camT: 0, camMode: 0, kicks: 0 }, SLOW_VIS = false;
@@ -2030,7 +2030,7 @@ function makeShip(i, team, yaw, pz, T, px) {                          // T：船
     guns: [], ropes: [], sails: [], rigDirty: true, lines: null, tris: null, masts: [], aim: null, reloadT: MODE === 'sandbox' && i === PLAYER_I ? RELOAD_SANDBOX : RELOAD,
     fired: 0, hits: 0, salvo: 0, aiWait: rr(1, 3), sunk: false, struck: false, fate: '', silentT: -1, gunsAlive: 0, mastsUp: T.masts.length, sinkingFinal: false,
     spd: 0, spd0: true, yawRate: 0, vel: [0, 0, 0], wakeT: 0, sailFrac: 1, pos: '',
-    side: 'S', manual: false, rudder: 0, sailSet: 3, bumpT: 0
+    side: 'S', manual: false, rudder: 0, sailSet: 3, power: 1, bumpT: 0
   };
   // 模型（砲、火藥桶、舵輪）：整個是一塊剛體 —— 被打到扣血，歸零整個飛出去（火藥桶 ⇒ 殉爆，見 23_powder.js），⛔ 不拆格。
   // 種類照 basecamp 給的 meta（TASK-0517）：{kind:'gun', gun:'24l'|'32c'|'18chase'}、{kind:'powder', powder_lb}；舵輪沒有 meta ⇒ 照名字。
@@ -4523,16 +4523,29 @@ function isFlag(s) { var m = s.meta; if (m && m.kind) return m.kind === 'flag'; 
 /** 降旗：降船尾旗（meta `flag=ensign`；沒有 meta ⇒ 名字叫 ensign 的那面）。 */
 function strikeColors(sh) { sh.sails.forEach(function (s) { if (s.flag && (s.meta && s.meta.kind ? s.meta.flag === 'ensign' || s.meta.team : s.name === 'ensign')) { s.furled = true; s.struck = true; } }); sh.rigDirty = true; }
 function applySailSet(sh) { sh.sails.forEach(function (s) { s.furled = s.flag ? !!s.struck : !setHas(s, sh.sailSet); }); sh.rigDirty = true; }
+/** 有額外動力的船（cfg.base > 0；Tim 2026-10-15：「滿帆之上還有全速前進（這時才啟用額外動力），降帆到底後還有倒車，取代按住才給」）：
+ *  帆段兩頭各多一段 —— 倒車（帆全收＋額外動力往後推）＜ 全收 … 滿帆 ＜ 全速前進（滿帆＋額外動力往前推）。sh.power：1 全速前進、0 只靠帆、−1 倒車；
+ *  sh.sailSet 照舊 0–3（全速前進 ＝ 3、倒車 ＝ 0）⇒ 散佈、帆、讀數都不用改。開局 power 1（跟以前一樣額外動力一直開著；電腦的船不換帆 ⇒ 一直是 1）。 */
+function sailLevel(sh) { var B = sh.cfg.base > 0; return B && sh.power > 0 ? 4 : B && sh.power < 0 ? -1 : sh.sailSet; }
+function sailSetName(sh) { var L = sailLevel(sh); return L === 4 ? '全速前進' : L === -1 ? '倒車' : SAILSETS[L]; }
+function sailStep(sh, d) {
+  var B = sh.cfg.base > 0, L = sailLevel(sh), n = clamp(L + d, B ? -1 : 0, B ? 4 : SAILSETS.length - 1); if (n === L) return;
+  if (B) sh.power = n === 4 ? 1 : n === -1 ? -1 : 0;
+  var k = clamp(n, 0, SAILSETS.length - 1); if (k !== sh.sailSet) { sh.sailSet = k; applySailSet(sh); }
+  note(sh, '帆裝：' + sailSetName(sh) + (n === 4 ? '（滿帆＋額外動力）' : n === -1 ? '（帆全收、額外動力往後推）' : ''));
+}
+/** 按住加帆／收帆（Tim 2026-10-15：「長按超過一定時間（例如一秒）就逐級往上加，減帆也一樣，點一下才是只切一級」）：按下切一級（71_input.js），
+ *  按住 SAIL_HOLD 秒後每 SAIL_REP 秒再切一級，到頭就停；放開（keyUp）⇒ KEYS.sw ＝ null。用 SIMT ⇒ 停格時不會自己跑。 */
+var SAIL_HOLD = 1, SAIL_REP = 0.5;
+function sailHold(sh) { var w = KEYS.sw; if (w && SIMT >= w.n) { sailStep(sh, w.d); w.n = SIMT + SAIL_REP; } }
 function setSails(sh, k) {
   k = clamp(k, 0, SAILSETS.length - 1); if (k === sh.sailSet) return;
   sh.sailSet = k; applySailSet(sh); note(sh, '帆裝：' + SAILSETS[k]);
 }
 function sideGuns(sh, side) { return sh.guns.filter(function (g) { return g.alive && gunRate(g) > 0 && g.side === side; }).length; }   // 這一舷開得動的砲
-// 額外動力的油門（Tim 2026-10-14：持續按住收帆 ＝ 往後推的動力；往前也是按住才有 ＝ 油門，獨立於帆之外）：我艦 cfg.base > 0、手動操舵時
-//   按住 W／加帆鈕 ASTERN_HOLD 秒以上 ⇒ 往前推、按住 S／收帆鈕 ⇒ 往後推、都沒按（或兩個一起按）⇒ 不推，只靠帆。點一下照舊是加帆／收帆。
-//   帆照樣往前推 ⇒ 淨推力 ＝ 帆² ± 基底²，航速 ＝ ±√|淨|（帆全收＋倒車 ⇒ 倒退基底那麼快）。自動航行中按住 ⇒ 換手動（跟 A／D 一樣）；倒退時舵效反過來（像倒車）。
-//   自動航行、電腦的船 ⇒ 一直往前推（跟以前一樣）；停船（6）照舊停。
-var ASTERN_HOLD = 0.4;
+// 額外動力（cfg.base > 0）照帆段開關（sailStep；Tim 2026-10-15 取代以前的「按住 W／S ＝ 油門」）：全速前進 ⇒ 往前推、倒車 ⇒ 往後推、中間那幾段 ⇒ 只靠帆。
+//   帆照樣往前推 ⇒ 淨推力 ＝ 帆² ± 額外動力²，航速 ＝ ±√|淨|（倒車：帆全收 ⇒ 倒退額外動力那麼快）；倒退時舵效反過來（像倒車）。
+//   自動航行、手動都一樣照帆段；電腦的船不換帆 ⇒ 一直是全速前進（跟以前一樣）；停船（6）照舊停。
 function sail(sh, dt) {
   var F = fwd(sh.yaw), W = norm(WIND), deg = Math.acos(clamp(dot(F, W), -1, 1)) * 57.2958;
   var UP = sh.cfg.upwind || 1, dU = UP === 1 || deg <= 90 ? deg : 90 + (deg - 90) / UP;   // 逆風性能：迎風那一半的角度壓縮（1.25 ⇒ 風從船頭 52.5° 才開始失速、45° 跑得像 36° 的船…）；1 ⇒ 一位元都不動
@@ -4542,17 +4555,16 @@ function sail(sh, dt) {
   if (stop && !sh.ancMode && !sh.struck && !sh.sunk) { sh.ancMode = true; anchorToggle(sh, 'P', true); anchorToggle(sh, 'S', true); }   // 6 拋錨（雙錨，每艘；76_anchor.js）
   else if (!stop && sh.ancMode) { sh.ancMode = false; anchorToggle(sh, 'P', false); anchorToggle(sh, 'S', false); }   // 切回 4／5 ⇒ 起錨
   var held = !!sh.anc && anchorHeld(sh);                              // 有錨咬著 ⇒ 不靠帆走、可以原地繞錨轉
-  var BK = sh.cfg.base || 0, ME = BK > 0 && !stop && sh.i === PLAYER_I && !sh.struck && !sh.sunk;
-  var kF = ME && KEYS.f !== null && SIMT - KEYS.f >= ASTERN_HOLD, kB = ME && KEYS.b !== null && SIMT - KEYS.b >= ASTERN_HOLD;   // 按住 W／S
-  if ((kF || kB) && !manual) { setSailMode('manual'); manual = true; }
-  var THR = manual && BK > 0 ? (kF === kB ? 0 : kF ? 1 : -1) : 1;   // 油門：手動 ⇒ 按住才有；自動、電腦的船 ⇒ 1
+  if (sh.i === PLAYER_I && !sh.sunk) sailHold(sh);
+  var BK = sh.cfg.base || 0;
+  var THR = BK > 0 ? sh.power : 1;                                  // 額外動力：照帆段（全速前進 1、倒車 −1、其他 0；sailStep）
   sh.thr = BK > 0 ? THR : null;
   sh.manual = manual;
   var SPK = sh.cfg.speed * playK('speed') * WX.speed;                 // 航速倍率（船隻設定 × 玩法的加成 × 天氣：暴風雨風大 ×1.15）
   var nogo = manual && !stop && !sh.sunk ? STALL_K * playK('stall') * clamp((NOGO_DEG - (180 - dU)) / (NOGO_DEG - NOGO_FULL), 0, 1) : 0;   // 頂風失速的程度
   sh.irons = nogo;
   var target = sh.sunk || stop || held ? 0 : VMAX * SPK * Math.sqrt(WIND_SPD) * sh.sailFrac * polar(dU) * (1 - nogo) * (1 - clamp(sh.sink / 9, 0, 0.8)) * (sh.struck ? 0.15 : 1) * (sh.throttle || 1);   // throttle：讓開友艦砲線時放慢（52_fleet.js lineClear；平常 1）
-  if (BK > 0 && !sh.sunk && !stop && !held && THR) { var vb = BK / 1.9438 * (1 - clamp(sh.sink / 9, 0, 0.8)) * (sh.struck ? 0.15 : 1) * (sh.throttle || 1); var NT = target * target + THR * vb * vb; target = NT >= 0 ? Math.sqrt(NT) : -Math.sqrt(-NT); }   // 基底航速（節 ⇒ m/s）：額外動力，推力跟帆相加 ⇒ √(帆² ＋ 基底²)；倒車 ⇒ 帆² − 基底²（負 ＝ 往後）；手動沒按住 ⇒ 只有帆；進水、降旗、讓砲線照樣慢
+  if (BK > 0 && !sh.sunk && !stop && !held && THR) { var vb = BK / 1.9438 * (1 - clamp(sh.sink / 9, 0, 0.8)) * (sh.struck ? 0.15 : 1) * (sh.throttle || 1); var NT = target * target + THR * vb * vb; target = NT >= 0 ? Math.sqrt(NT) : -Math.sqrt(-NT); }   // 額外動力（節 ⇒ m/s）：推力跟帆相加 ⇒ √(帆² ＋ 額外²)；倒車 ⇒ 帆² − 額外²（負 ＝ 往後；倒車時帆全收）；全速前進以外的帆段 ⇒ 只有帆；進水、降旗、讓砲線照樣慢
   if (sh.spd0) { sh.spd = target; sh.spd0 = false; }                    // 開局就在走
   sh.spd += (target - sh.spd) * Math.min(1, dt / (stop || sh.throttle < 1 ? 6 : 20));     // 停船：收帆、轉進風裡，6 秒內停下
   // 舵
@@ -7993,7 +8005,7 @@ function panel(sh, title) {
   // 橫向兩欄（TASK-0564，Tim 2026-10-14：佔畫面中間 ⇒ 儘量橫鋪、別往下壓）：左 ＝ 船體、進水、航行；右 ＝ 砲長、船員、砲、開火。砲一門一門的狀態在底下的砲位圖（gmapDraw）。
   return '<h3>' + title + '<span class="disp">排水量 ' + disp.toLocaleString() + ' 噸・現在 ' + now.toLocaleString() + ' 噸</span>' + (sh.fate && !sh.sunk ? '　<span style="color:var(--gold)">' + sh.fate + '</span>' : '') + '</h3><div class="pcols"><div class="pc">船體 ' + (hull * 100).toFixed(1) + '%（打掉 ' + sh.lost.toLocaleString() + ' 格）<div class="bar"><i style="width:' + (hull * 100).toFixed(1) + '%"></i></div>' +
     '進水 ' + (sh.sunk ? '沉沒' : (fl * 100).toFixed(0) + '%') + (sh.fl && !sh.broken ? '（艙內積水 ' + Math.round(sh.fl.vol * RHO_W).toLocaleString() + ' 噸・破口 ' + sh.fl.area.toFixed(1) + ' m²）' : '（水線下破洞 ' + (sh.inflow || 0).toLocaleString() + ' 格）') + (sh.lift > 0.05 ? '　浮高 ' + sh.lift.toFixed(1) + ' m' : sh.lift < -0.05 ? '　吃水深 ' + (-sh.lift).toFixed(1) + ' m' : '') + '<div class="bar water"><i style="width:' + (fl * 100).toFixed(0) + '%"></i></div>' +
-    (sh.spd < -0.05 ? '倒車 ' + (-sh.spd * 1.944).toFixed(1) : '航速 ' + (sh.spd * 1.944).toFixed(1)) + ' 節（' + sh.pos + '）　' + (sh.thr === null || sh.thr === undefined ? '' : '動力 ' + (sh.thr > 0 ? '前進' : sh.thr < 0 ? '倒車' : '停') + '　') + SAILSETS[sh.sailSet] + ' ' + Math.round(sh.sailFrac * 100) + '%<br>' +
+    (sh.spd < -0.05 ? '倒車 ' + (-sh.spd * 1.944).toFixed(1) : '航速 ' + (sh.spd * 1.944).toFixed(1)) + ' 節（' + sh.pos + '）　' + (sh.thr === null || sh.thr === undefined ? '' : '動力 ' + (sh.thr > 0 ? '前進' : sh.thr < 0 ? '倒車' : '停') + '　') + sailSetName(sh) + ' ' + Math.round(sh.sailFrac * 100) + '%<br>' +
     ((SAIL === 'off' ? '拋錨' : sh.manual ? '手動操舵' : '自動操舵') + (sh.anc ? '　' + anchorText(sh) : '') + '　舵 ' + (sh.rudder > 0.05 ? '左 ' + Math.round(sh.rudder * 100) + '%' : sh.rudder < -0.05 ? '右 ' + Math.round(-sh.rudder * 100) + '%' : '正')) + '<br>' + navText(sh) + '</div><div class="pc">' +
     capText(sh) + '<br>' +
     '船員 ' + (sh.able || 0) + '/' + sh.crew0 + '（傷 ' + sh.wounded + '　亡 ' + sh.dead + '）' + handsText(sh) + medText(sh) + swimText(sh) + '　' + supplyText(sh) + '<br>' +
@@ -8340,7 +8352,7 @@ function hud(dt) {
   var kn = me.spd * 1.944;
   var mt = $('modeT'), ms = '🎯 <b>' + (!handAim(me) ? '砲長' : (AUTOFIRE ? '手動一舷・' : '') + AIM_NAME[me.pMode || 'free']) + '</b>　🎥 <b>' + cn + '</b>' +
     (HUD_OUTARC ? '　<b style="color:#ff9a7a">⚠ 射界外</b>' : '') + '<br>' +
-    '⛵ <b>' + (kn < -0.05 ? '−' + (-kn).toFixed(1) : Math.max(0, kn).toFixed(1)) + '</b> 節';   // 船體、進水改成羅盤外圈的兩圈（drawNav）
+    '⛵ <b>' + (kn < -0.05 ? '−' + (-kn).toFixed(1) : Math.max(0, kn).toFixed(1)) + '</b> 節　' + sailSetName(me);   // 船體、進水改成羅盤外圈的兩圈（drawNav）；後面接帆裝（Tim 2026-10-15「羅盤上方航速資訊可以顯示當前帆狀態」：全收…滿帆，有額外動力的船多倒車、全速前進）
   if (mt && mt.innerHTML !== ms) mt.innerHTML = ms;
   var t = DEBUG ? '格：' + SHIPS.map(function (s) { return s.grid.count; }).join('／') + '　四邊形：' + SHIPS.map(function (s) { return s.rs.quads(); }).join('／') + '　碎片 ' + D.n + '　粒子 ' + PT.n + '　脫落 ' + PIECES.length + (PHYS ? '　物理 ' + PHYS_MS.toFixed(2) + ' ms/步、垂繩 ' + SHIPS.map(function (s) { return s.loose.length; }).join('／') : '') + '　' + FPS.toFixed(0) + ' fps' : '';
   $('tip').textContent = t;
@@ -8808,7 +8820,6 @@ window.addEventListener('keydown', function (e) {
   if (k === 'escape') { e.preventDefault(); if (HELP.open) helpClose(); else if (FLX) floodClose(); else if (FLX3) xrayToggle(); else gsetToggle(); return; }   // 遊戲內的設定面板
   if (k === ' ' || k === 'a' || k === 'd' || k === 'w' || k === 's' || k.indexOf('arrow') === 0) e.preventDefault();
   kbLit(k, true);
-  if (!e.repeat) astHold(k);
   doKey(k, e.repeat);
 });
 /** 鍵盤按著的時候，畫面上對應的按鈕也亮成按下的顏色（Tim 2026-10-14；跟手指按住同一個 .down）；方向鍵照 A／D／W／S 的按鈕。 */
@@ -8848,14 +8859,12 @@ function doKey(k, repeat) {
   else if (k === 'b') setPhys(!PHYS);
   else if (k === 'n') { gsetClose(); helpClose(); start(); }                                        // 重新開始：同樣的模式、距離、滑桿，不用打完
   else if (k === 'w' || k === 's' || k === 'arrowup' || k === 'arrowdown') {     // 帆裝
-    if (!repeat) setSails(me, me.sailSet + (k === 'w' || k === 'arrowup' ? 1 : -1));
+    if (!repeat) { var sd = k === 'w' || k === 'arrowup' ? 1 : -1; sailStep(me, sd); KEYS.sw = { d: sd, n: SIMT + SAIL_HOLD }; }   // 按住 ⇒ 1 秒後逐級再切（31_sailing.js sailHold）   // 有額外動力的船：滿帆再加 ⇒ 全速前進、全收再收 ⇒ 倒車（31_sailing.js）
   }
 }
-function keyUp(k) { if (k === 'a' || k === 'arrowleft') KEYS.l = false; if (k === 'd' || k === 'arrowright') KEYS.r = false; if (k === 's' || k === 'arrowdown') KEYS.b = null; if (k === 'w' || k === 'arrowup') KEYS.f = null; }
-/** 加帆（W）／收帆（S）按下：記下那一刻（按住 ASTERN_HOLD 秒 ⇒ 有額外動力的船油門 前進／倒車，31_sailing.js）。只從鍵盤與按住型按鈕記（⛔ 說明裡點一下的 kbd 收不到放開）。 */
-function astHold(k) { if (k === 's' || k === 'arrowdown') KEYS.b = SIMT; if (k === 'w' || k === 'arrowup') KEYS.f = SIMT; }
+function keyUp(k) { if (k === 'a' || k === 'arrowleft') KEYS.l = false; if (k === 'd' || k === 'arrowright') KEYS.r = false; if (KEYS.sw && (k === 'w' || k === 'arrowup' ? 1 : k === 's' || k === 'arrowdown' ? -1 : 0) === KEYS.sw.d) KEYS.sw = null; }
 window.addEventListener('keyup', function (e) { var k = e.key.toLowerCase(); if (e.code === 'Space') k = ' '; kbLit(k, false); keyUp(k); });
-window.addEventListener('blur', function () { KEYS.l = KEYS.r = false; KEYS.f = KEYS.b = null; [].forEach.call(document.querySelectorAll('.kb.down'), function (b) { b.classList.remove('down'); }); });   // 切走視窗 ⇒ 收不到 keyup，按下的顏色一起清掉
+window.addEventListener('blur', function () { KEYS.l = KEYS.r = false; KEYS.sw = null; [].forEach.call(document.querySelectorAll('.kb.down'), function (b) { b.classList.remove('down'); }); });   // 切走視窗 ⇒ 收不到 keyup，按下的顏色一起清掉
 // iPhone 連點兩下放大（Tim 2026-10-15：「連點角落兩下還是會放大，按控帆按鈕太快就觸發」—— 根上的 touch-action:manipulation iOS 不一定照做）：
 // 兩次手指放開相隔 < 350 ms ⇒ 取消第二次的預設動作（＝雙擊縮放）。取消之後瀏覽器不會補 click ⇒ 一般按鈕自己補一個；
 // 按住型（data-hold：舵、帆）走 pointer 事件不受影響；輸入框照舊（要能點兩下選字）；遊戲畫面本來就是 touch-action:none（自己處理手勢、不補 click）。
@@ -8870,7 +8879,7 @@ document.addEventListener('touchend', function (e) {
 [].forEach.call(document.querySelectorAll('[data-k]'), function (b) {
   var k = b.dataset.k;
   if (b.dataset.hold) {
-    b.addEventListener('pointerdown', function (e) { e.preventDefault(); b.classList.add('down'); astHold(k); doKey(k, false); try { b.setPointerCapture(e.pointerId); } catch (x) { } });   // 手指滑出按鈕也算按著，放開才鬆舵
+    b.addEventListener('pointerdown', function (e) { e.preventDefault(); b.classList.add('down'); doKey(k, false); try { b.setPointerCapture(e.pointerId); } catch (x) { } });   // 手指滑出按鈕也算按著，放開才鬆舵
     ['pointerup', 'pointercancel', 'lostpointercapture'].forEach(function (ev) { b.addEventListener(ev, function () { b.classList.remove('down'); keyUp(k); }); });
   } else b.addEventListener('click', function (e) { e.preventDefault(); doKey(k, false); });
 });
@@ -9000,7 +9009,7 @@ function sliders() {
     el.innerHTML = '<div class="h">' + h.name + '</div>' +
       '排水量 <b>' + Math.round(T.disp).toLocaleString() + '</b> 噸<span class="n">（設計水線）</span><br>' +
       '航速 順風 <b>' + Math.hypot(kn * polar(0), +c.base || 0).toFixed(1) + '</b>・側順風 <b>' + Math.hypot(kn, +c.base || 0).toFixed(1) + '</b>（最快）・逆風 <b>' + Math.hypot(kn * polar(dz), +c.base || 0).toFixed(1) + '</b> 節<br>' +
-      (c.base ? '基底航速 <b>' + (+c.base).toFixed(1) + '</b> 節<span class="n">（額外動力，推力跟帆相加 ⇒ 上面三格 ＝ √(帆² ＋ 基底²)：不看風向與帆，頂風、收帆也走得動；手動操舵時按住 W 才往前推、按住 S 倒車）</span><br>' : '') +
+      (c.base ? '額外動力 <b>' + (+c.base).toFixed(1) + '</b> 節<span class="n">（推力跟帆相加 ⇒ 上面三格 ＝ √(帆² ＋ 額外動力²)：不看風向與帆，頂風、收帆也走得動；帆段滿帆再加 ＝ 全速前進（開）、全收再收 ＝ 倒車）</span><br>' : '') +
       '<span class="n">標準風、滿帆；逆風 ＝ 離風 ' + Math.round(stall) + '° 時（再頂就開始失速）' + (PLAY === 'fun' ? '；含娛樂玩法的加成' : '') + '</span><br>' +
       '砲 <b>' + hc.n + '</b> 門<span class="n">（' + gl + '）</span><br>' +
       '船員 約 <b>' + crewTotal(shipCrew(CFG_ID), hc) + '</b> 人<span class="n">（含預備水手 ' + shipCrew(CFG_ID).hands + '）</span><br>' +
@@ -9215,7 +9224,7 @@ function sliders() {
     var fun = PLAY === 'fun' ? '（娛樂：' : '（', SPE = SPEEDK * playK('speed'), AGE = AGILK * playK('agile');   // 娛樂 ⇒ 括號裡寫乘過加成的實際值
     $('speedV').textContent = SPEEDK.toFixed(2) + '×' + fun + '最快約 ' + (VMAX * SPE * 1.944).toFixed(0) + ' 節）';
     $('agileV').textContent = AGILK.toFixed(2) + '×' + fun + '滿帆側風約 ' + ((0.012 + 0.016 * VMAX * 0.92) * AGE * 57.3).toFixed(1) + '°/秒）';
-    var BKV = K.base || 0; $('baseV').textContent = BKV ? BKV.toFixed(1) + ' 節（額外動力，推力跟帆相加：實際 ＝ √(帆² ＋ 基底²)；不看風向、風速、帆，頂風、收帆也走得動；手動操舵時是油門：按住 W 前進、按住 S 倒車）' : '0（沒有：照帆與風走）';
+    var BKV = K.base || 0; $('baseV').textContent = BKV ? BKV.toFixed(1) + ' 節（推力跟帆相加：實際 ＝ √(帆² ＋ 額外動力²)；不看風向、風速、帆，頂風、收帆也走得動；帆段滿帆再加 ＝ 全速前進才開、全收再收 ＝ 倒車）' : '0（沒有：照帆與風走）';
     var UPK = K.upwind; $('upwindV').textContent = UPK.toFixed(2) + '×（' + (UPK === 1 ? '照舊：' : '') + '風從船頭 ' + (90 - (90 - NOGO_DEG) * UPK).toFixed(0) + '° 開始失速、' + (90 - (90 - NOGO_FULL) * UPK).toFixed(0) + '° 全失速（手動操舵）；近迎風轉向最多 ×' + UPK.toFixed(2) + '）';
     var SK = STALL_K * playK('stall'), WA = WAVES.reduce(function (a, w) { return a + w.a; }, 0) * SEA_K;   // WA：幾道浪疊在一起最高的那一下（振幅）
     $('seaV').textContent = SEA_K <= 0 ? '0（平靜）' : SEA_K.toFixed(2) + '×（浪高最多約 ' + (WA * 2).toFixed(1) + ' m，主浪週期 ' + (2 * Math.PI / WAVES[0].w).toFixed(1) + ' 秒）';
@@ -9255,7 +9264,7 @@ function sliders() {
   sp.oninput = function () { C().speed = +sp.value; show(); };
   ag.oninput = function () { C().agile = +ag.value; show(); };
   uw.oninput = function () { C().upwind = +uw.value; show(); };
-  $('base').oninput = function () { C().base = +$('base').value; show(); };   // 基底航速（31_sailing.js）
+  $('base').oninput = function () { C().base = +$('base').value; show(); };   // 額外動力（31_sailing.js；設定鍵照舊叫 base）
   h.oninput = function () { C().hard = Math.round(LIM.hard[0] * Math.exp(h.value * hk) * 10) / 10; show(); };
   c.oninput = function () { STRIKE.cas = c.value / 100; show(); };
   gh.oninput = function () { GUN_HP = Math.round(+gh.value); show(); };

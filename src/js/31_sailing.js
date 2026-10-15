@@ -65,16 +65,29 @@ function isFlag(s) { var m = s.meta; if (m && m.kind) return m.kind === 'flag'; 
 /** 降旗：降船尾旗（meta `flag=ensign`；沒有 meta ⇒ 名字叫 ensign 的那面）。 */
 function strikeColors(sh) { sh.sails.forEach(function (s) { if (s.flag && (s.meta && s.meta.kind ? s.meta.flag === 'ensign' || s.meta.team : s.name === 'ensign')) { s.furled = true; s.struck = true; } }); sh.rigDirty = true; }
 function applySailSet(sh) { sh.sails.forEach(function (s) { s.furled = s.flag ? !!s.struck : !setHas(s, sh.sailSet); }); sh.rigDirty = true; }
+/** 有額外動力的船（cfg.base > 0；Tim 2026-10-15：「滿帆之上還有全速前進（這時才啟用額外動力），降帆到底後還有倒車，取代按住才給」）：
+ *  帆段兩頭各多一段 —— 倒車（帆全收＋額外動力往後推）＜ 全收 … 滿帆 ＜ 全速前進（滿帆＋額外動力往前推）。sh.power：1 全速前進、0 只靠帆、−1 倒車；
+ *  sh.sailSet 照舊 0–3（全速前進 ＝ 3、倒車 ＝ 0）⇒ 散佈、帆、讀數都不用改。開局 power 1（跟以前一樣額外動力一直開著；電腦的船不換帆 ⇒ 一直是 1）。 */
+function sailLevel(sh) { var B = sh.cfg.base > 0; return B && sh.power > 0 ? 4 : B && sh.power < 0 ? -1 : sh.sailSet; }
+function sailSetName(sh) { var L = sailLevel(sh); return L === 4 ? '全速前進' : L === -1 ? '倒車' : SAILSETS[L]; }
+function sailStep(sh, d) {
+  var B = sh.cfg.base > 0, L = sailLevel(sh), n = clamp(L + d, B ? -1 : 0, B ? 4 : SAILSETS.length - 1); if (n === L) return;
+  if (B) sh.power = n === 4 ? 1 : n === -1 ? -1 : 0;
+  var k = clamp(n, 0, SAILSETS.length - 1); if (k !== sh.sailSet) { sh.sailSet = k; applySailSet(sh); }
+  note(sh, '帆裝：' + sailSetName(sh) + (n === 4 ? '（滿帆＋額外動力）' : n === -1 ? '（帆全收、額外動力往後推）' : ''));
+}
+/** 按住加帆／收帆（Tim 2026-10-15：「長按超過一定時間（例如一秒）就逐級往上加，減帆也一樣，點一下才是只切一級」）：按下切一級（71_input.js），
+ *  按住 SAIL_HOLD 秒後每 SAIL_REP 秒再切一級，到頭就停；放開（keyUp）⇒ KEYS.sw ＝ null。用 SIMT ⇒ 停格時不會自己跑。 */
+var SAIL_HOLD = 1, SAIL_REP = 0.5;
+function sailHold(sh) { var w = KEYS.sw; if (w && SIMT >= w.n) { sailStep(sh, w.d); w.n = SIMT + SAIL_REP; } }
 function setSails(sh, k) {
   k = clamp(k, 0, SAILSETS.length - 1); if (k === sh.sailSet) return;
   sh.sailSet = k; applySailSet(sh); note(sh, '帆裝：' + SAILSETS[k]);
 }
 function sideGuns(sh, side) { return sh.guns.filter(function (g) { return g.alive && gunRate(g) > 0 && g.side === side; }).length; }   // 這一舷開得動的砲
-// 額外動力的油門（Tim 2026-10-14：持續按住收帆 ＝ 往後推的動力；往前也是按住才有 ＝ 油門，獨立於帆之外）：我艦 cfg.base > 0、手動操舵時
-//   按住 W／加帆鈕 ASTERN_HOLD 秒以上 ⇒ 往前推、按住 S／收帆鈕 ⇒ 往後推、都沒按（或兩個一起按）⇒ 不推，只靠帆。點一下照舊是加帆／收帆。
-//   帆照樣往前推 ⇒ 淨推力 ＝ 帆² ± 基底²，航速 ＝ ±√|淨|（帆全收＋倒車 ⇒ 倒退基底那麼快）。自動航行中按住 ⇒ 換手動（跟 A／D 一樣）；倒退時舵效反過來（像倒車）。
-//   自動航行、電腦的船 ⇒ 一直往前推（跟以前一樣）；停船（6）照舊停。
-var ASTERN_HOLD = 0.4;
+// 額外動力（cfg.base > 0）照帆段開關（sailStep；Tim 2026-10-15 取代以前的「按住 W／S ＝ 油門」）：全速前進 ⇒ 往前推、倒車 ⇒ 往後推、中間那幾段 ⇒ 只靠帆。
+//   帆照樣往前推 ⇒ 淨推力 ＝ 帆² ± 額外動力²，航速 ＝ ±√|淨|（倒車：帆全收 ⇒ 倒退額外動力那麼快）；倒退時舵效反過來（像倒車）。
+//   自動航行、手動都一樣照帆段；電腦的船不換帆 ⇒ 一直是全速前進（跟以前一樣）；停船（6）照舊停。
 function sail(sh, dt) {
   var F = fwd(sh.yaw), W = norm(WIND), deg = Math.acos(clamp(dot(F, W), -1, 1)) * 57.2958;
   var UP = sh.cfg.upwind || 1, dU = UP === 1 || deg <= 90 ? deg : 90 + (deg - 90) / UP;   // 逆風性能：迎風那一半的角度壓縮（1.25 ⇒ 風從船頭 52.5° 才開始失速、45° 跑得像 36° 的船…）；1 ⇒ 一位元都不動
@@ -84,17 +97,16 @@ function sail(sh, dt) {
   if (stop && !sh.ancMode && !sh.struck && !sh.sunk) { sh.ancMode = true; anchorToggle(sh, 'P', true); anchorToggle(sh, 'S', true); }   // 6 拋錨（雙錨，每艘；76_anchor.js）
   else if (!stop && sh.ancMode) { sh.ancMode = false; anchorToggle(sh, 'P', false); anchorToggle(sh, 'S', false); }   // 切回 4／5 ⇒ 起錨
   var held = !!sh.anc && anchorHeld(sh);                              // 有錨咬著 ⇒ 不靠帆走、可以原地繞錨轉
-  var BK = sh.cfg.base || 0, ME = BK > 0 && !stop && sh.i === PLAYER_I && !sh.struck && !sh.sunk;
-  var kF = ME && KEYS.f !== null && SIMT - KEYS.f >= ASTERN_HOLD, kB = ME && KEYS.b !== null && SIMT - KEYS.b >= ASTERN_HOLD;   // 按住 W／S
-  if ((kF || kB) && !manual) { setSailMode('manual'); manual = true; }
-  var THR = manual && BK > 0 ? (kF === kB ? 0 : kF ? 1 : -1) : 1;   // 油門：手動 ⇒ 按住才有；自動、電腦的船 ⇒ 1
+  if (sh.i === PLAYER_I && !sh.sunk) sailHold(sh);
+  var BK = sh.cfg.base || 0;
+  var THR = BK > 0 ? sh.power : 1;                                  // 額外動力：照帆段（全速前進 1、倒車 −1、其他 0；sailStep）
   sh.thr = BK > 0 ? THR : null;
   sh.manual = manual;
   var SPK = sh.cfg.speed * playK('speed') * WX.speed;                 // 航速倍率（船隻設定 × 玩法的加成 × 天氣：暴風雨風大 ×1.15）
   var nogo = manual && !stop && !sh.sunk ? STALL_K * playK('stall') * clamp((NOGO_DEG - (180 - dU)) / (NOGO_DEG - NOGO_FULL), 0, 1) : 0;   // 頂風失速的程度
   sh.irons = nogo;
   var target = sh.sunk || stop || held ? 0 : VMAX * SPK * Math.sqrt(WIND_SPD) * sh.sailFrac * polar(dU) * (1 - nogo) * (1 - clamp(sh.sink / 9, 0, 0.8)) * (sh.struck ? 0.15 : 1) * (sh.throttle || 1);   // throttle：讓開友艦砲線時放慢（52_fleet.js lineClear；平常 1）
-  if (BK > 0 && !sh.sunk && !stop && !held && THR) { var vb = BK / 1.9438 * (1 - clamp(sh.sink / 9, 0, 0.8)) * (sh.struck ? 0.15 : 1) * (sh.throttle || 1); var NT = target * target + THR * vb * vb; target = NT >= 0 ? Math.sqrt(NT) : -Math.sqrt(-NT); }   // 基底航速（節 ⇒ m/s）：額外動力，推力跟帆相加 ⇒ √(帆² ＋ 基底²)；倒車 ⇒ 帆² − 基底²（負 ＝ 往後）；手動沒按住 ⇒ 只有帆；進水、降旗、讓砲線照樣慢
+  if (BK > 0 && !sh.sunk && !stop && !held && THR) { var vb = BK / 1.9438 * (1 - clamp(sh.sink / 9, 0, 0.8)) * (sh.struck ? 0.15 : 1) * (sh.throttle || 1); var NT = target * target + THR * vb * vb; target = NT >= 0 ? Math.sqrt(NT) : -Math.sqrt(-NT); }   // 額外動力（節 ⇒ m/s）：推力跟帆相加 ⇒ √(帆² ＋ 額外²)；倒車 ⇒ 帆² − 額外²（負 ＝ 往後；倒車時帆全收）；全速前進以外的帆段 ⇒ 只有帆；進水、降旗、讓砲線照樣慢
   if (sh.spd0) { sh.spd = target; sh.spd0 = false; }                    // 開局就在走
   sh.spd += (target - sh.spd) * Math.min(1, dt / (stop || sh.throttle < 1 ? 6 : 20));     // 停船：收帆、轉進風裡，6 秒內停下
   // 舵
