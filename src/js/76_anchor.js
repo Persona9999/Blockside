@@ -106,12 +106,12 @@ function anchorStep(sh, dt, px0, pz0) {
 function anchorChips(me) {
   if (!me) return;
   var A = anchorsOf(me), w = anchorWet(me), b6 = $('ancAll');
-  if (b6) { b6.classList.toggle('on', w); var l6 = w ? '起錨' : anchorAny(me, 'weigh') ? '起錨中' : '拋錨', s6 = b6.querySelector('i'); if (s6 && s6.textContent !== l6) s6.textContent = l6; }
+  if (b6) { b6.classList.toggle('on', w); var l6 = w ? '⚓⬆' : anchorAny(me, 'weigh') ? '⚓⏳' : '⚓', s6 = b6.querySelector('i'); if (s6 && s6.textContent !== l6) s6.textContent = l6; }   // 圖示（Tim 2026-10-15）：⚓ 拋、⚓⬆ 起錨、⚓⏳ 起錨中
   ['P', 'S'].forEach(function (k) {
     var a = A[k], el = $('anc' + k); if (!el) return;
     if (!a.broken && a.st === 'up' && !anchorAlive(me, a)) a.broken = true;
     el.classList.toggle('on', a.st === 'drop' || a.st === 'down'); el.classList.toggle('dis', a.broken);
-    var lb = a.broken ? '錨壞了' : a.st === 'drop' || a.st === 'down' ? '起' + (k === 'P' ? '左錨' : '右錨') : a.st === 'weigh' ? '起錨中' : (k === 'P' ? '左錨' : '右錨');   // 在水裡 ⇒ 按了是起錨
+    var an = k === 'P' ? '◀⚓' : '⚓▶', lb = an + (a.broken ? '✖' : a.st === 'drop' || a.st === 'down' ? '⬆' : a.st === 'weigh' ? '⏳' : '');   // 圖示：◀⚓ 左錨／⚓▶ 右錨，後面接 ⬆ 在水裡（按了起錨）、⏳ 起錨中、✖ 錨壞了
     var sp = el.querySelector('i'); if (sp && sp.textContent !== lb) sp.textContent = lb;
   });
 }

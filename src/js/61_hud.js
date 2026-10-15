@@ -125,6 +125,12 @@ function sbMake(o, box) {
 }
 /** 圓鈕兩側的數字：左下 還能動的船員、右下 還在的砲（像素圖示：HUD 美術的「船員」「裝填好」；沒有美術 ⇒ emoji）。 */
 function sbIcon(k, emo) { return HUD_ART ? '<span class="ico" style="background-position:' + (k * 100 / 7).toFixed(3) + '% 0"></span>' : '<i>' + emo + '</i>'; }
+/** 開砲的圖示（Tim 2026-10-15：「開砲改用目前船資訊上的砲數 emoji 符號，齊射用三個該符號表示」「自動開砲可以改為自動符號＋開砲符號」）：
+ *  跟艦隊圓鈕砲數同一個（sbIcon(3)：有 HUD 美術 ⇒ 那一格圖、沒有 ⇒ 💥）；美術是載入後才有的 ⇒ 每次 HUD 看一次（字串一樣就不動）。 */
+function hudIcons() {
+  var g = sbIcon(3, '💥'), L = [['fireK', '<b>F</b>', g], ['volleyK', '<b>空白</b>', g + g + g], ['autoF', '<b>G</b>', '🤖' + g]];
+  L.forEach(function (q) { var el = $(q[0]), h = q[1] + '<i class="em">' + q[2] + '</i>'; if (el && el.innerHTML !== h) el.innerHTML = h; });
+}
 function sbNums(b, o) {
   var cr = 0, gn = 0; o.crew.forEach(function (c) { if (able(c)) cr++; }); o.guns.forEach(function (g) { if (g.alive && !g.wet) gn++; });   // 泡水的不算（Tim 2026-10-14：只算還能用的）
   var k = cr + '/' + gn + (HUD_ART ? 'a' : ''); if (k === b.nk) return; b.nk = k;
@@ -421,7 +427,7 @@ function hud(dt) {
   gunHud(me);                                                                   // 我艦的砲：兩舷貼左右兩邊、追擊砲與射界外警告在下方面板
   anchorChips(me);                                                              // 左右錨的按鈕：咬著亮、打壞灰掉（76_anchor.js）
   botFit();
-  pauseLabel();
+  pauseLabel(); sailLabel(); hudIcons();
   [].forEach.call(document.querySelectorAll('#ammo span'), function (s) { s.className = +s.dataset.a === AMMO_I ? 'on' : ''; });
   // 瞄準模式＋鏡頭名稱：羅盤上方空心字（Tim 2026-10-14）；鏡頭名稱要常駐（Tim：拿掉之後看不出現在是哪個鏡頭）
   var cn = CAM.mode === 3 && CAM.see && SHIPS.indexOf(CAM.see) >= 0 ? '看' + CAM.see.name : CAM_NAMES[CAM.mode];   // 「🎥 看這艘」⇒ 寫那一艘的名字

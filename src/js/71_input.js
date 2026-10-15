@@ -126,7 +126,7 @@ window.addEventListener('blur', function () { KEYS.l = KEYS.r = false; KEYS.f = 
 var SAIL_NAMES = { auto: '自動航行', manual: '手動操舵（A／D 打舵）', off: '拋錨（雙錨；A／D 繞錨轉）' };
 function setSailMode(m) {
   SAIL = m; KEYS.l = KEYS.r = false;
-  [].forEach.call(document.querySelectorAll('[data-s]'), function (x) { x.classList.toggle('on', x.dataset.s === SAIL); });
+  [].forEach.call(document.querySelectorAll('[data-s]'), function (x) { x.classList.toggle('on', x.dataset.s === SAIL); }); sailLabel();
   if (RUNNING && SHIPS.length) note(SHIPS[PLAYER_I], SAIL_NAMES[m] + '（4 自動／5 手動／6 拋錨、再按一次起錨）');
 }
 /** 自由鏡頭跟不跟著兩艘的中點走（預設跟；鏡頭「看敵艦／看我艦」本來就跟著那一艘）。 */
@@ -140,7 +140,9 @@ function setAutoFire(on) {
   AUTOFIRE = on; $('autoF').classList.toggle('on', on); if (SHIPS[PLAYER_I]) SHIPS[PLAYER_I].hand = false;   // 切換 ⇒ 手動瞄準那一舷也收掉
   if (RUNNING && SHIPS.length) note(SHIPS[PLAYER_I], on ? '自動開砲' : '自己開砲（點敵艦瞄準、空白鍵齊射）');
 }
-[].forEach.call(document.querySelectorAll('#keys [data-s]'), function (b) { b.onclick = function () { if (RUNNING && SHIPS[PLAYER_I] && SHIPS[PLAYER_I].anc) anchorWeighAll(SHIPS[PLAYER_I]); setSailMode(b.dataset.s); }; });   // 自動開砲（G）、拋錨（6）是下方的大圓鈕（data-k）
+$('sailT').onclick = function () { if (RUNNING && SHIPS[PLAYER_I] && SHIPS[PLAYER_I].anc) anchorWeighAll(SHIPS[PLAYER_I]); setSailMode(SAIL === 'auto' ? 'manual' : 'auto'); };   // ☸ 一顆切換（Tim 2026-10-15）：自動 ⇄ 手動；拋錨中 ⇒ 起錨、換自動。自動開砲（G）、拋錨（6）是下方的大圓鈕（data-k）
+/** ☸ 航行那一顆：🤖 自動、✋ 手動、⚓ 拋錨模式。 */
+function sailLabel() { var b = $('sailT'), s = '☸' + (SAIL === 'auto' ? '🤖' : SAIL === 'manual' ? '✋' : '⚓'); if (b && b.textContent !== s) b.textContent = s; }
 $('camT').onclick = function () { setCamTrack(!CAM.track); };
 $('physT').onclick = function () { setPhys(!PHYS); };
 $('restartB').onclick = function () { if (RUNNING) { gsetClose(); helpClose(); start(); } };

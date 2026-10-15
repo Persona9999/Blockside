@@ -56,6 +56,7 @@
   #ctlRow{ display:flex; align-items:flex-end; justify-content:center; gap:8px; max-width:100%; }
   .kb.hb{ width:64px; height:64px; margin:0; padding:0; border-radius:50%; display:flex; flex-direction:column; align-items:center; justify-content:center; line-height:1.25; font-size:12px;
     background:rgba(14,18,24,.78); border:1px solid rgba(255,255,255,.32); box-shadow:0 2px 7px rgba(0,0,0,.6); }
+  .kb.hb .em{ font-size:17px; line-height:1.1; letter-spacing:-1px; white-space:nowrap; } .kb.hb .em .ico{ width:16px; height:16px; } #sailT{ font-size:15px; padding:1px 8px; }   /* 圖示（Tim 2026-10-15：舵、帆、錨、開砲、航行都改 emoji；砲用艦隊圓鈕砲數那個符號 sbIcon(3)）*/
   .kb.hb b{ font-size:11px; } .kb.hb i{ font-style:normal; } .kb.hb.on{ color:#111; background:rgba(159,199,255,.92); border-color:#9fc7ff; } .kb.hb.on b{ color:#4a3500; } .kb.hb.dis{ opacity:.45; }   /* 拋錨、左右錨、自動開砲：亮著 ＝ 開（錨在水裡）、灰 ＝ 錨打壞了 */
   #botC{ left:50%; bottom:12px; transform:translateX(-50%); display:flex; flex-direction:column; align-items:center; gap:6px; width:max-content; max-width:calc(100vw - 24px); }   /* ⛔ 不寫 width ⇒ left:50% 的絕對定位只剩半個畫面寬，主面板被兩組大圓鈕擠成一條 */
   #ctl{ text-align:center; min-width:0; box-sizing:border-box; }
@@ -120,7 +121,7 @@
   @media (max-width:760px){
     .fleet{ top:6px; gap:4px; max-height:calc(100vh - 175px); } #fleetL{ left:5px; } #fleetR{ right:5px; }
     #botC{ --gc:9px; } .gside{ max-width:calc(50vw - 48px); } .helm{ gap:5px; } #helmL{ flex-direction:column-reverse; } #helmR{ flex-direction:column; } #ctlRow{ gap:2px; width:100%; }
-    .kb.hb{ width:46px; height:46px; font-size:10px; } .kb.hb b{ font-size:9px; }
+    .kb.hb{ width:46px; height:46px; font-size:10px; } .kb.hb b{ font-size:9px; } .kb.hb .em{ font-size:12px; letter-spacing:-1.5px; } .kb.hb .em .ico{ width:11px; height:11px; }
     .sbn{ font-size:8px; line-height:10px; } .sbn .ico{ width:8px; height:8px; } .sbn i{ font-size:7px; } .sbn.l{ left:-5px; } .sbn.r{ right:-5px; } .fleet .sb{ margin-bottom:10px; }   /* 圓鈕 38 px：兩個數字往外擠一點才不會碰在一起 */ #shipCardC{ width:120px; height:120px; } #shipCardT{ font-size:13px; }
     #botC{ bottom:6px; width:calc(100vw - 6px); max-width:none; gap:4px; } #topC{ top:6px; }   /* 面板撐滿兩組大圓鈕之間（Tim：⛔ 留太寬 ⇒ 按鈕被擠得換行） */ .sb{ width:38px; height:38px; } .sbres{ font-size:10px; padding:1px 5px; }
     #topC{ width:calc(100vw - 96px); } #info{ font-size:11px; padding:5px 8px; } #info h3{ font-size:12px; } #info .pcols{ gap:2px 8px; } #info .pc{ flex-basis:110px; } #info .legend{ display:none; } #irow{ gap:4px; }   /* 手機：砲位圖窄（船頭朝上），跟卡片並排 */   /* 砲列在窄的卡片裡換行（⛔ 不換 ⇒ 伸到右邊的按鈕底下） */
@@ -208,11 +209,11 @@
   <div id="fleetR" class="hud fleet"></div>
   <div id="topC" class="hud"><div id="fps" class="hud"></div><div id="irow"><div id="info" class="panel"></div><canvas id="gmap"></canvas></div><div id="msg"></div></div>
   <div id="botC" class="hud"><div id="navBox"><div id="modeT"></div><div id="gunsB" class="gend"></div><div id="nav" class="panel"><canvas id="navc"></canvas><div id="navt"></div><div id="gunsL" class="gside"></div><div id="gunsR" class="gside"></div></div><div id="gunsA" class="gend"></div></div>
-  <div id="ctlRow"><div id="helmL" class="helm"><span class="kb hb" data-k="a" data-hold="1"><b>A</b>◀ 左舵</span><span class="kb hb" data-k="s" data-hold="1"><b>S</b>收帆</span><span class="kb hb" data-k="w" data-hold="1"><b>W</b>加帆</span><span class="kb hb" data-k="6" id="ancAll"><b>6</b><i>拋錨</i></span><span class="kb hb" data-k="7" id="ancP"><b>7</b><i>左錨</i></span></div><div id="ctl" class="panel">
-    <div id="keys"><span class="hint">點敵艦瞄準</span><span class="kb" data-k="c" title="鏡頭（C）"><b>C</b> 🎥</span><span class="kb" data-k="p" id="pauseK" title="停格（P）"><b>P</b> ⏸</span><span class="kb" id="setB" title="設定（O）"><b>O</b> ⚙</span>　<span class="chip" data-s="auto"><b>4</b> 自動</span><span class="chip" data-s="manual"><b>5</b> 手動</span></div>
+  <div id="ctlRow"><div id="helmL" class="helm"><span class="kb hb" data-k="a" data-hold="1" title="左舵（A，按住）"><b>A</b><i class="em">⬅️</i></span><span class="kb hb" data-k="s" data-hold="1" title="收帆（S）"><b>S</b><i class="em">⛵⬇</i></span><span class="kb hb" data-k="w" data-hold="1" title="加帆（W）"><b>W</b><i class="em">⛵⬆</i></span><span class="kb hb" data-k="6" id="ancAll" title="拋錨／起錨（6）"><b>6</b><i class="em">⚓</i></span><span class="kb hb" data-k="7" id="ancP" title="左錨（7）"><b>7</b><i class="em">◀⚓</i></span></div><div id="ctl" class="panel">
+    <div id="keys"><span class="hint">點敵艦瞄準</span><span class="kb" data-k="c" title="鏡頭（C）"><b>C</b> 🎥</span><span class="kb" data-k="p" id="pauseK" title="停格（P）"><b>P</b> ⏸</span><span class="kb" id="setB" title="設定（O）"><b>O</b> ⚙</span>　<span class="chip" id="sailT" title="航行：🤖 自動（4）／✋ 手動（5）—— 點一下切換">☸🤖</span></div>
     <div id="guns"></div>
     <div id="ammo"><span data-a="0"><b>1</b> 實心彈</span><span data-a="1"><b>2</b> 爆裂彈</span><span data-a="2"><b>3</b> 鏈彈</span></div>
-  </div><div id="helmR" class="helm"><span class="kb hb" data-k="8" id="ancS"><b>8</b><i>右錨</i></span><span class="kb hb" data-k="g" id="autoF"><b>G</b>自動<br>開砲</span><span class="kb hb" data-k="f"><b>F</b>單門</span><span class="kb hb" data-k=" "><b>空白</b>齊射</span><span class="kb hb" data-k="d" data-hold="1"><b>D</b>右舵 ▶</span></div></div></div>
+  </div><div id="helmR" class="helm"><span class="kb hb" data-k="8" id="ancS" title="右錨（8）"><b>8</b><i class="em">⚓▶</i></span><span class="kb hb" data-k="g" id="autoF" title="自動開砲（G）"><b>G</b><i class="em">🤖💥</i></span><span class="kb hb" data-k="f" id="fireK" title="開一門（F）"><b>F</b><i class="em">💥</i></span><span class="kb hb" data-k=" " id="volleyK" title="齊射（空白鍵）"><b>空白</b><i class="em">💥💥💥</i></span><span class="kb hb" data-k="d" data-hold="1" title="右舵（D，按住）"><b>D</b><i class="em">➡️</i></span></div></div></div>
   <div id="tip" class="hud"></div>
   <div id="slowB" class="hud"></div>
   <div id="frz" class="hud panel"><span class="fzG"><span class="fz">⏸ 停格中</span><span class="chip" id="frzGo">▶ 繼續（P）</span></span><span class="fzG"><span class="fzL">進水</span><span class="chip" id="frzFlood">📊 圖表（I）</span><span class="chip" id="frzX">🔍 透視（X）</span></span><span class="fzG"><span class="fzL">船</span><span class="chip" id="frzCut">✂ 剖面（Z）</span><span class="chip" id="frzDeck">☰ 甲板（L）</span></span></div>
@@ -8010,6 +8011,12 @@ function sbMake(o, box) {
 }
 /** 圓鈕兩側的數字：左下 還能動的船員、右下 還在的砲（像素圖示：HUD 美術的「船員」「裝填好」；沒有美術 ⇒ emoji）。 */
 function sbIcon(k, emo) { return HUD_ART ? '<span class="ico" style="background-position:' + (k * 100 / 7).toFixed(3) + '% 0"></span>' : '<i>' + emo + '</i>'; }
+/** 開砲的圖示（Tim 2026-10-15：「開砲改用目前船資訊上的砲數 emoji 符號，齊射用三個該符號表示」「自動開砲可以改為自動符號＋開砲符號」）：
+ *  跟艦隊圓鈕砲數同一個（sbIcon(3)：有 HUD 美術 ⇒ 那一格圖、沒有 ⇒ 💥）；美術是載入後才有的 ⇒ 每次 HUD 看一次（字串一樣就不動）。 */
+function hudIcons() {
+  var g = sbIcon(3, '💥'), L = [['fireK', '<b>F</b>', g], ['volleyK', '<b>空白</b>', g + g + g], ['autoF', '<b>G</b>', '🤖' + g]];
+  L.forEach(function (q) { var el = $(q[0]), h = q[1] + '<i class="em">' + q[2] + '</i>'; if (el && el.innerHTML !== h) el.innerHTML = h; });
+}
 function sbNums(b, o) {
   var cr = 0, gn = 0; o.crew.forEach(function (c) { if (able(c)) cr++; }); o.guns.forEach(function (g) { if (g.alive && !g.wet) gn++; });   // 泡水的不算（Tim 2026-10-14：只算還能用的）
   var k = cr + '/' + gn + (HUD_ART ? 'a' : ''); if (k === b.nk) return; b.nk = k;
@@ -8306,7 +8313,7 @@ function hud(dt) {
   gunHud(me);                                                                   // 我艦的砲：兩舷貼左右兩邊、追擊砲與射界外警告在下方面板
   anchorChips(me);                                                              // 左右錨的按鈕：咬著亮、打壞灰掉（76_anchor.js）
   botFit();
-  pauseLabel();
+  pauseLabel(); sailLabel(); hudIcons();
   [].forEach.call(document.querySelectorAll('#ammo span'), function (s) { s.className = +s.dataset.a === AMMO_I ? 'on' : ''; });
   // 瞄準模式＋鏡頭名稱：羅盤上方空心字（Tim 2026-10-14）；鏡頭名稱要常駐（Tim：拿掉之後看不出現在是哪個鏡頭）
   var cn = CAM.mode === 3 && CAM.see && SHIPS.indexOf(CAM.see) >= 0 ? '看' + CAM.see.name : CAM_NAMES[CAM.mode];   // 「🎥 看這艘」⇒ 寫那一艘的名字
@@ -8835,7 +8842,7 @@ window.addEventListener('blur', function () { KEYS.l = KEYS.r = false; KEYS.f = 
 var SAIL_NAMES = { auto: '自動航行', manual: '手動操舵（A／D 打舵）', off: '拋錨（雙錨；A／D 繞錨轉）' };
 function setSailMode(m) {
   SAIL = m; KEYS.l = KEYS.r = false;
-  [].forEach.call(document.querySelectorAll('[data-s]'), function (x) { x.classList.toggle('on', x.dataset.s === SAIL); });
+  [].forEach.call(document.querySelectorAll('[data-s]'), function (x) { x.classList.toggle('on', x.dataset.s === SAIL); }); sailLabel();
   if (RUNNING && SHIPS.length) note(SHIPS[PLAYER_I], SAIL_NAMES[m] + '（4 自動／5 手動／6 拋錨、再按一次起錨）');
 }
 /** 自由鏡頭跟不跟著兩艘的中點走（預設跟；鏡頭「看敵艦／看我艦」本來就跟著那一艘）。 */
@@ -8849,7 +8856,9 @@ function setAutoFire(on) {
   AUTOFIRE = on; $('autoF').classList.toggle('on', on); if (SHIPS[PLAYER_I]) SHIPS[PLAYER_I].hand = false;   // 切換 ⇒ 手動瞄準那一舷也收掉
   if (RUNNING && SHIPS.length) note(SHIPS[PLAYER_I], on ? '自動開砲' : '自己開砲（點敵艦瞄準、空白鍵齊射）');
 }
-[].forEach.call(document.querySelectorAll('#keys [data-s]'), function (b) { b.onclick = function () { if (RUNNING && SHIPS[PLAYER_I] && SHIPS[PLAYER_I].anc) anchorWeighAll(SHIPS[PLAYER_I]); setSailMode(b.dataset.s); }; });   // 自動開砲（G）、拋錨（6）是下方的大圓鈕（data-k）
+$('sailT').onclick = function () { if (RUNNING && SHIPS[PLAYER_I] && SHIPS[PLAYER_I].anc) anchorWeighAll(SHIPS[PLAYER_I]); setSailMode(SAIL === 'auto' ? 'manual' : 'auto'); };   // ☸ 一顆切換（Tim 2026-10-15）：自動 ⇄ 手動；拋錨中 ⇒ 起錨、換自動。自動開砲（G）、拋錨（6）是下方的大圓鈕（data-k）
+/** ☸ 航行那一顆：🤖 自動、✋ 手動、⚓ 拋錨模式。 */
+function sailLabel() { var b = $('sailT'), s = '☸' + (SAIL === 'auto' ? '🤖' : SAIL === 'manual' ? '✋' : '⚓'); if (b && b.textContent !== s) b.textContent = s; }
 $('camT').onclick = function () { setCamTrack(!CAM.track); };
 $('physT').onclick = function () { setPhys(!PHYS); };
 $('restartB').onclick = function () { if (RUNNING) { gsetClose(); helpClose(); start(); } };
@@ -9888,12 +9897,12 @@ function anchorStep(sh, dt, px0, pz0) {
 function anchorChips(me) {
   if (!me) return;
   var A = anchorsOf(me), w = anchorWet(me), b6 = $('ancAll');
-  if (b6) { b6.classList.toggle('on', w); var l6 = w ? '起錨' : anchorAny(me, 'weigh') ? '起錨中' : '拋錨', s6 = b6.querySelector('i'); if (s6 && s6.textContent !== l6) s6.textContent = l6; }
+  if (b6) { b6.classList.toggle('on', w); var l6 = w ? '⚓⬆' : anchorAny(me, 'weigh') ? '⚓⏳' : '⚓', s6 = b6.querySelector('i'); if (s6 && s6.textContent !== l6) s6.textContent = l6; }   // 圖示（Tim 2026-10-15）：⚓ 拋、⚓⬆ 起錨、⚓⏳ 起錨中
   ['P', 'S'].forEach(function (k) {
     var a = A[k], el = $('anc' + k); if (!el) return;
     if (!a.broken && a.st === 'up' && !anchorAlive(me, a)) a.broken = true;
     el.classList.toggle('on', a.st === 'drop' || a.st === 'down'); el.classList.toggle('dis', a.broken);
-    var lb = a.broken ? '錨壞了' : a.st === 'drop' || a.st === 'down' ? '起' + (k === 'P' ? '左錨' : '右錨') : a.st === 'weigh' ? '起錨中' : (k === 'P' ? '左錨' : '右錨');   // 在水裡 ⇒ 按了是起錨
+    var an = k === 'P' ? '◀⚓' : '⚓▶', lb = an + (a.broken ? '✖' : a.st === 'drop' || a.st === 'down' ? '⬆' : a.st === 'weigh' ? '⏳' : '');   // 圖示：◀⚓ 左錨／⚓▶ 右錨，後面接 ⬆ 在水裡（按了起錨）、⏳ 起錨中、✖ 錨壞了
     var sp = el.querySelector('i'); if (sp && sp.textContent !== lb) sp.textContent = lb;
   });
 }
