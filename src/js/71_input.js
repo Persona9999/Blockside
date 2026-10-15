@@ -141,8 +141,8 @@ function setAutoFire(on) {
   if (RUNNING && SHIPS.length) note(SHIPS[PLAYER_I], on ? '自動開砲' : '自己開砲（點敵艦瞄準、空白鍵齊射）');
 }
 $('sailT').onclick = function () { if (RUNNING && SHIPS[PLAYER_I] && SHIPS[PLAYER_I].anc) anchorWeighAll(SHIPS[PLAYER_I]); setSailMode(SAIL === 'auto' ? 'manual' : 'auto'); };   // ☸ 一顆切換（Tim 2026-10-15）：自動 ⇄ 手動；拋錨中 ⇒ 起錨、換自動。自動開砲（G）、拋錨（6）是下方的大圓鈕（data-k）
-/** ☸ 航行那一顆：🤖 自動、✋ 手動、⚓ 拋錨模式。 */
-function sailLabel() { var b = $('sailT'), s = '☸' + (SAIL === 'auto' ? '🤖' : SAIL === 'manual' ? '✋' : '⚓'); if (b && b.textContent !== s) b.textContent = s; }
+/** 🤖☸ 自動操舵那一顆（Tim 2026-10-15：「開啟時常亮（參考自動開砲），不換 Icon」）：圖示固定，自動 ⇒ 亮（on）；手動、拋錨模式 ⇒ 暗。 */
+function sailLabel() { var b = $('sailT'); if (b) b.classList.toggle('on', SAIL === 'auto'); }
 $('camT').onclick = function () { setCamTrack(!CAM.track); };
 $('physT').onclick = function () { setPhys(!PHYS); };
 $('restartB').onclick = function () { if (RUNNING) { gsetClose(); helpClose(); start(); } };
