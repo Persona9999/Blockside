@@ -245,7 +245,7 @@ function floodTilt(sh, fl) {
 // ── 畫：艙內的水面（每一格水柱的頂，四個角照同一個世界高度擺 ⇒ 船傾斜時水面還是平的）；噴進來的粒子跟點精靈一起畫 ──
 function flGL() {
   P.pool = VK.compile(gl,
-    '#version 300 es\nlayout(location=0) in vec4 aP; uniform mat4 uModel,uVP; out vec3 vW; out float vF; void main(){ vec4 w=uModel*vec4(aP.xyz,1.0); vW=w.xyz; vF=aP.w; gl_Position=uVP*w; }\n',
+    '#version 300 es\nlayout(location=0) in vec4 aP; layout(location=1) in float aZ0; uniform mat4 uModel,uVP; uniform float uMix; out vec3 vW; out float vF; void main(){ vec4 w=uModel*vec4(aP.xy,mix(aZ0,aP.z,uMix),1.0); vW=w.xyz; vF=aP.w; gl_Position=uVP*w; }\n',
     '#version 300 es\nprecision highp float; in vec3 vW; in float vF; uniform vec3 uEye,uSun,uFog,uSky; uniform float uFogD,uSeaT,uX; out vec4 o;\n' + SHADOW_GLSL +
     'void main(){ vec2 r=vec2(sin(vW.x*3.1+uSeaT*2.3)+sin(vW.z*4.3-uSeaT*1.7),cos(vW.z*2.7-uSeaT*1.9)+cos(vW.x*3.7+uSeaT*2.1))*0.03; vec3 n=normalize(vec3(r.x,1.0,r.y));\n' +
     ' vec3 v=normalize(uEye-vW); float fr=0.04+0.96*pow(1.0-max(dot(n,v),0.0),5.0), sk=shadowK(vW,n);\n' +
@@ -253,11 +253,19 @@ function flGL() {
     ' if(uX>0.5) c=mix(c,vec3(0.2,0.6,0.95),0.45);\n' +
     ' float fd=length(vW-uEye); o=vec4(mix(c,uFog,1.0-exp(-fd*uFogD)),uX>0.5?0.62:0.78); }\n');
 }
-/** 艙內水面的網格（格座標，每個頂點帶「裝了幾成」）：水格有算過才重做。 */
+/** 艙內水面的網格（格座標，每個頂點 [x, y, z, 裝了幾成, 上一格的 z]）：水格有算過、而且離上次重做過了 FL_MESH_MS 才重做（關鍵格）。
+ *  Tim 2026-10-15：「水的網格更新(顯示變動)不用完全跟模擬同步」「水網格是否可以加入類似骨架的概念去微調(中間變化用內插)」「更新頻率可以更低」——
+ *    模擬照算；畫面每 FL_MESH_MS 毫秒（真實時間）做一格關鍵格，兩格之間著色器照 uMix 從上一格的高度內插過去（⛔ 每次水格算完就重做 ⇒ 粗檔每 4 步、細檔每 2 步重建一次）。
+ *    拓撲（哪幾格、每格切成哪幾片）跟上一格一樣 ⇒ 從畫面上現在的高度接著內插（水面慢慢升降）；不一樣（新的格進水、水退了）⇒ 直接換。
+ *  代價：畫面的水比模擬晚最多一格；兩格之間船晃動，水面跟著船斜一下（網格在船的座標裡）。 */
+var FL_MESH_MS = 500;
 function flMesh(sh, fl) {
   var F = fl.F, c = F.c, NX = F.NX, NY = F.NY, NXY = NX * NY, A = fl.A, cap = fl.cap, M = sh.M, Vc = Math.pow(c * S, 3), hc = c * S;
-  var me = fl.mesh || (fl.mesh = { vao: gl.createVertexArray(), vb: gl.createBuffer(), buf: new Float32Array(6 * 4 * 512), n: 0, cap: 0, gen: -1 });
-  if (me.gen === fl.gen) return me;
+  var me = fl.mesh || (fl.mesh = { vao: gl.createVertexArray(), vb: gl.createBuffer(), buf: new Float32Array(6 * 5 * 512), old: new Float32Array(6 * 5 * 512), sig: [], n: 0, cap: 0, gen: -1, tw: -1e9 });
+  var now = performance.now();
+  if (me.gen === fl.gen || (me.n && now - me.tw < FL_MESH_MS)) return me;   // 還沒有網格（剛開始進水）⇒ 馬上做
+  var mix0 = me.n ? flMix(me) : 1, oldN = me.n, oldSig = me.sig, tmp = me.old; me.old = me.buf; me.buf = tmp.length >= me.old.length ? tmp : new Float32Array(me.old.length); me.sig = [];   // 舊的那一格留著（接著內插用）
+  me.tw = now;
   var h0 = M[1] * (F.X0 + 0.5 * c) + M[5] * (F.Y0 + 0.5 * c) + M[13], q = 0, t, i, u;
   // 先找每一根水柱最上面那一格水面的世界高度（同一根有兩層水 ⇒ 只記上面那層）；四個角取周圍水柱的平均 ⇒ 水面連成一片，⛔ 一格一個高度 ⇒ 像一階一階的方塊
   var CH = me.ch && me.ch.length === NX * NY ? me.ch : (me.ch = new Float32Array(NX * NY)), CZ = me.cz && me.cz.length === NX * NY ? me.cz : (me.cz = new Int16Array(NX * NY));
@@ -277,22 +285,51 @@ function flMesh(sh, fl) {
     }
     return n ? s / n : hw;
   }
+  // 每格切成 KS × KS 小片（約 2 格見方；Tim 2026-10-15：「進水顯示是否能嘗試跟鄰近的水表面合併成柔和曲面」）：高度照四個角（已跟鄰格平均）雙線性內插 ⇒ 相鄰的水面連成平順的一片；
+  //   每一小片照中心那一點在不在兩舷船殼之間（flType 的 yM／yP，那個高度那一欄）⇒ 不在就不畫（Tim：「船殼外部也能進水」—— ⛔ 整格畫一塊 ⇒ 靠船殼那幾格的正方形伸出船外，最多 c − 1 格）。
+  var KS = Math.max(1, Math.round(c / 2)), sc = c / KS, nxv = F.nxv, YP = F.yP, YM = F.yM, ZT = F.zTop, TRI6 = [0, 1, 2, 0, 2, 3];
+  function bil(H, u, v) { return (H[0] * (1 - u) + H[1] * u) * (1 - v) + (H[3] * (1 - u) + H[2] * u) * v; }
+  var INS = new Uint8Array(KS * KS);
+  /** 格座標 (x, y)、水面世界高度 hw 那一點在不在兩舷船殼之間（那個高度那一欄）。 */
+  function flInside(x, y, hw) {
+    var z = Math.floor(clamp((hw - (M[1] * x + M[5] * y + M[13])) / M[9], 0, ZT - 1)), X = Math.floor(x), Y = Math.floor(y), kk = z * nxv + X - F.X0;
+    return X >= F.X0 && X - F.X0 < nxv && YP[kk] >= 0 && Y > YM[kk] && Y < YP[kk] ? 1 : 0;
+  }
   for (t = 0; t < tops.length; t += 2) {
     i = tops[t]; var hw0 = tops[t + 1], jx = i % NX, jy = ((i / NX) | 0) % NY, jz = (i / NXY) | 0, f = Math.min(1, A[i] / (cap[i] * Vc));
     var x0 = F.X0 + jx * c, y0 = F.Y0 + jy * c, zl = jz * c - 0.5 * c, zh = jz * c + 1.5 * c;
-    var cs = [[x0, y0, corner(jx, jy, jz, hw0)], [x0 + c, y0, corner(jx + 1, jy, jz, hw0)], [x0 + c, y0 + c, corner(jx + 1, jy + 1, jz, hw0)], [x0, y0 + c, corner(jx, jy + 1, jz, hw0)]];
-    if ((q + 6) * 4 > me.buf.length) { var nb = new Float32Array(me.buf.length * 2); nb.set(me.buf); me.buf = nb; }
-    [0, 1, 2, 0, 2, 3].forEach(function (e) {
-      var p = cs[e], z = clamp((p[2] - (M[1] * p[0] + M[5] * p[1] + M[13])) / M[9], zl, zh);   // 同一個世界高度 ⇒ 船傾斜時水面還是平的
-      me.buf[q * 4] = p[0]; me.buf[q * 4 + 1] = p[1]; me.buf[q * 4 + 2] = z; me.buf[q * 4 + 3] = f; q++;
-    });
+    var H = [corner(jx, jy, jz, hw0), corner(jx + 1, jy, jz, hw0), corner(jx + 1, jy + 1, jz, hw0), corner(jx, jy + 1, jz, hw0)];
+    if ((q + 6 * KS * KS) * 5 > me.buf.length) { var nb = new Float32Array(Math.max(me.buf.length * 2, (q + 6 * KS * KS) * 10)); nb.set(me.buf); me.buf = nb; }
+    var inn = 0; for (var a = 0; a < KS; a++) for (var b = 0; b < KS; b++) if ((INS[a * KS + b] = flInside(x0 + (a + 0.5) * sc, y0 + (b + 0.5) * sc, bil(H, (a + 0.5) / KS, (b + 0.5) / KS)))) inn++;
+    if (!inn) continue;
+    var G = inn === KS * KS ? Math.min(2, KS) : KS, gs = c / G;               // 整格都在船殼裡 ⇒ 2 × 2 就夠（⛔ 每格都細切 ⇒ 粗檔維吉尼亞號 4,226 → 99,070 個三角形，每次進水更新都重建）；碰到船殼的那幾格才細切、丟掉外面的
+    for (a = 0; a < G; a++) for (b = 0; b < G; b++) {
+      if (G === KS && !INS[a * KS + b]) continue;                             // 這一片在船殼外（或那一欄沒有船殼）
+      var u0 = a / G, u1 = (a + 1) / G, v0 = b / G, v1 = (b + 1) / G; me.sig.push(i * 64 + G * 8 + a * 4 + b);   // sig：拓撲（哪一格、切幾片、第幾片）
+      var cs = [[x0 + a * gs, y0 + b * gs, bil(H, u0, v0)], [x0 + (a + 1) * gs, y0 + b * gs, bil(H, u1, v0)], [x0 + (a + 1) * gs, y0 + (b + 1) * gs, bil(H, u1, v1)], [x0 + a * gs, y0 + (b + 1) * gs, bil(H, u0, v1)]];
+      for (var e6 = 0; e6 < 6; e6++) {
+        var p = cs[TRI6[e6]], z = clamp((p[2] - (M[1] * p[0] + M[5] * p[1] + M[13])) / M[9], zl, zh);   // 同一個世界高度 ⇒ 船傾斜時水面還是平的
+        me.buf[q * 5] = p[0]; me.buf[q * 5 + 1] = p[1]; me.buf[q * 5 + 2] = z; me.buf[q * 5 + 3] = f; me.buf[q * 5 + 4] = z; q++;
+      }
+    }
+  }
+  // 骨架內插（逐片）：這一片上一格也有（同一格、同樣切法、同一片 ⇒ 6 個頂點的 x、y 跟順序都一樣）⇒ 起點 ＝ 它畫面上現在的高度（上一格的起點、終點照 mix0 內插）；
+  //   上一格沒有（新進水的格、切法變了）⇒ 起點 ＝ 終點（直接出現）。⛔ 整份網格一樣才接 ⇒ 還在進水時每一格都有新的格進來 ⇒ 一次都接不上（量過 9 次重做 0 次）
+  var OM = new Map(), O = me.old, Bf = me.buf, same = 0;
+  for (var s = 0; s < oldSig.length; s++) OM.set(oldSig[s], s);
+  for (var s2 = 0; s2 < me.sig.length; s2++) {
+    var ko = OM.get(me.sig[s2]); if (ko === undefined || (ko + 1) * 6 > oldN) continue;
+    same++;
+    for (var v = 0; v < 6; v++) { var vo = (ko * 6 + v) * 5, vn = (s2 * 6 + v) * 5; Bf[vn + 4] = O[vo + 4] + (O[vo + 2] - O[vo + 4]) * mix0; }
   }
   gl.bindVertexArray(me.vao); gl.bindBuffer(gl.ARRAY_BUFFER, me.vb);
-  if (q * 4 > me.cap) { me.cap = me.buf.length; gl.bufferData(gl.ARRAY_BUFFER, me.cap * 4, gl.DYNAMIC_DRAW); gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 4, gl.FLOAT, false, 16, 0); }
-  if (q) gl.bufferSubData(gl.ARRAY_BUFFER, 0, me.buf, 0, q * 4);
+  if (q * 5 > me.cap) { me.cap = me.buf.length; gl.bufferData(gl.ARRAY_BUFFER, me.cap * 4, gl.DYNAMIC_DRAW); gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 4, gl.FLOAT, false, 20, 0); gl.enableVertexAttribArray(1); gl.vertexAttribPointer(1, 1, gl.FLOAT, false, 20, 16); }
+  if (q) gl.bufferSubData(gl.ARRAY_BUFFER, 0, me.buf, 0, q * 5);
   gl.bindVertexArray(null);
-  me.n = q; me.gen = fl.gen; return me;
+  me.n = q; me.gen = fl.gen; me.same = same; me.quads = me.sig.length; return me;   // same：這一次接著內插的片數
 }
+/** 這一格內插到哪（0 ＝ 上一格的高度、1 ＝ 這一格的）。 */
+function flMix(me) { return clamp((performance.now() - me.tw) / FL_MESH_MS, 0, 1); }
 /** 畫艙內的水面（海與白沫之後；開始沉、斷了就不畫 —— 那時候海已經畫進船艙）。 */
 function flDraw() {
   if (!P.pool || FL_HIDE) return;                                           // FL_HIDE：對照用（__game.flood(i, { hide: true })）
@@ -301,7 +338,7 @@ function flDraw() {
     var fl = sh.fl; if (!fl || !fl.actN || ((sh.broken || sh.sinkingFinal) && !fl.vis) || sh.sunk) return;   // 沉船的水照畫（floodVis）
     var me = flMesh(sh, fl); if (!me.n) return;
     if (!any) { any = true; gl.useProgram(P.pool.prog); setCommon(P.pool); gl.uniform1f(P.pool.u.uX, FLX3 ? 1 : 0); gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA); gl.depthMask(false); gl.disable(gl.CULL_FACE); if (FLX3) gl.disable(gl.DEPTH_TEST); }   // 停格的「🔍 透視」開著 ⇒ 隔著船殼看得到（72_floodui.js）
-    gl.uniformMatrix4fv(P.pool.u.uModel, false, sh.M); gl.bindVertexArray(me.vao); gl.drawArrays(gl.TRIANGLES, 0, me.n);
+    gl.uniformMatrix4fv(P.pool.u.uModel, false, sh.M); gl.uniform1f(P.pool.u.uMix, flMix(me)); gl.bindVertexArray(me.vao); gl.drawArrays(gl.TRIANGLES, 0, me.n);
   });
   if (any) { gl.depthMask(true); gl.enable(gl.DEPTH_TEST); }
 }
