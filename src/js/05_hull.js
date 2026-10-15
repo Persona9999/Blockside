@@ -52,7 +52,7 @@ function gunCrew(cw, type) { var n = cw.guns && cw.guns[type]; return n === unde
 // 艦名（TASK-0552；Tim 2026-10-14：參考歷史同級艦）：ships[].names ＝ 那一型的艦名池（第一個 ＝ 原名；沒給 ⇒ 只有原名），同一場照編成的順序發（52_fleet.js fleetNames）；
 //   池子用完拿公共池 names_pub，再用完 ⇒ 原名＋序號。憲法號：同級的 44 砲巡防艦（合眾國號、總統號），再來是照它們的設計造的 44 砲巡防艦；公共池：同時代美國海軍的巡防艦。
 //   餘燼號、夜隼號是 basecamp、summit 的船：她們給艦名池之前只有原名。
-var HULL_KNOWN = CFG.ships.map(function (s) { var h = { id: s.id, el: s.el, name: s.name, geo: s.geo, crew: s.crew, rooms: s.rooms, lamps: s.lamps, flags: s.flags, names: s.names && s.names.length ? s.names : [s.name] }; if (s.zw0) h.zw0 = s.zw0; return h; });
+var HULL_KNOWN = CFG.ships.map(function (s) { var h = { id: s.id, el: s.el, name: s.name, geo: s.geo, crew: s.crew, rooms: s.rooms, lamps: s.lamps, flags: s.flags, names: s.names && s.names.length ? s.names : [s.name] }; if (s.zw0) h.zw0 = s.zw0; if (s.material) h.material = s.material; return h; });   // material：全船預設材質（05_material.js）
 var SHIP_NAMES_PUB = CFG.names_pub || [];
 var HULL_LIST = HULL_KNOWN.filter(function (h) { return !!document.getElementById(h.el); });
 var HULL_DEF = (HULL_LIST[0] || HULL_KNOWN[0]).id;                      // 預設的船：清單裡第一艘有內嵌資料的
@@ -111,7 +111,7 @@ function buildHull(info, model, t0, C) {
   T.ms = {};                                                               // 每一段花多久（毫秒；讀數 window.__vxk.ms）
   function tm(k, f) { var a = performance.now(); f(); T.ms[k] = +(performance.now() - a).toFixed(1); }
   var steps = [
-    ['格子', function () { tm('grid', function () { T.base = VK.Grid.fromModel(model); }); tm('verify', function () { T.chk = VK.verify(T.base, h); }); }],   // 格子不存快取：照解出來的比 checksum
+    ['格子', function () { tm('grid', function () { T.base = VK.Grid.fromModel(model); }); tm('verify', function () { T.chk = VK.verify(T.base, h); }); tm('material', function () { hullMaterials(T, info); }); }],   // 材質（05_material.js）：每格的材質索引   // 格子不存快取：照解出來的比 checksum
     ['模型網格', function () { tm('meshes', function () { buildMeshes(T, C && C.models); }); }],
     ['水線與浮力', function () {
       tm('waterline', function () { waterline(T); }); tm('hullTex', function () { hullTex(T, C && C.hb); }); tm('navImg', function () { navImg(T); sideImg(T); });
@@ -121,7 +121,7 @@ function buildHull(info, model, t0, C) {
     ['桅與帆', function () {
       tm('masts', function () { findMasts(T); }); tm('cloth', function () { teamFlagsSetup(T, info); clothSetup(T, C); });   // 陣營旗（77_colours.js）：合成的帆接在作品的帆後面
       var mt = 12 * KEG_T; (T.rig.models || []).forEach(function (m) { mt += modelT({ kind: modelKind(m) }, 1); });   // 模型的重量（砲照實、取用點 12 桶）
-      T.ballast0 = Math.max(0, Math.round((T.disp - T.base.count * VOX_T - mt) / 25) * 25);   // 剛好浮在設計水線的壓艙物（滑桿一格 25 噸）
+      T.ballast0 = Math.max(0, Math.round((T.disp - T.voxT0 - mt) / 25) * 25);   // 剛好浮在設計水線的壓艙物（滑桿一格 25 噸）
     }]
   ];
   var p = Promise.resolve();

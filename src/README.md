@@ -43,6 +43,13 @@ python -I admin.py shipcheck --id phoenix    # 不給 --id ＝ 每一艘
 ✗ 錯誤 ＝ 遊戲裡壞掉（開場就掉的模型、開場浮空的繩、斷的梯子、砲種代碼不認得…）；⚠ 警告 ＝ 能動但走退路或預設（照名字認、憲法號的水線與 geo、甲板沒 meta、砲班站不滿…）。
 反向對照：2026-10-15 重配之前的三叉戟號跑出「14 門缺 24 人」（跟 gura 在遊戲裡量的一樣），每一門都寫了同一層同一舷最近的砲隔幾 m。
 
+
+**材質**（TASK-0616；Tim 2026-10-15）：材質表在設定檔 `materials`（`default` ＋ `list`：每種 `name`、`kind`（wood／metal／other）、`density` 比重（一格 1 公升 ⇒ 每格幾 kg；橡木 0.7 ＝ 以前統一的重量）、`hard` 硬度倍率（乘在船隻設定的船殼硬度上）、`flammable` 易燃性 0–1（燃燒還沒做，先記著））；ID 英文小寫、跨船共用，後台「材質表」可以加、改、刪（還有船用到的不給刪）。
+- 每一格的材質：全船預設 ＝ `ships[].material`（後台每艘船「全船預設材質」；沒寫 ⇒ `materials.default`）；雕刻作品的**關聯** meta `material=<ID>` 蓋過它（巢狀照最近的那一層；造船規格 §9.5）⇒ senate 匯出時寫進 .vxk 檔頭 `materials`（照線性索引 x＋sx·(y＋sy·z) 相連、同材質的格一段 `[跟上一段結尾差幾, 長度, 索引]`；沒有關聯寫 ⇒ 沒有這個鍵、檔案跟以前一樣）。成品壓縮不動檔頭這一格。
+- 用在：打到的那一格 ⇒ 洞的大小（實心彈 ×硬度^−0.25、爆裂彈 ×硬度^−0.3、鏈彈撕開的寬度）；每打掉一格的消耗 × 那一格的材質倍率（砲彈穿過去慢多少）；殉爆斷船照全船預設；重量照每種材質（浮多高、壓艙物預設、配置頁的排水量）。配置頁最上面多一行「材質」。
+- 量過（測試船：憲法號的格子，水線上 3 m 兩舷最外 2 格標 iron、水線下最外 1 格標 copper_sheath，scratchpad 注入檔頭；`__game.shot(i, x, z, side, gun)` 從船外打同一點）：24 磅長砲打水線上 18 點，鐵甲被打掉的格 ＝ 橡木的 **21%**（673 vs 3,212）；鐵甲倍率改成 1 對照 ⇒ 106%（2,831 vs 2,660）。材質層載入 53 ms（13 萬格非預設；段落跨空格的版本要 1,039 ms ⇒ 改成只併相連的格）；重數非預設還剩幾格 1.5 ms、只在格數變了才數（每半秒）。
+- 反向對照：七艘都沒有材質層、全船預設橡木 ⇒ `?demo=120&dump=1&seed=3`（cf5acc2b）、`&ship=falcon,stormkaap`（6e051f72）、`?demo=150&dump=1&seed=2&cas=1`（dc7d77e4）跟改之前逐位元組相同。
+
 匯出走 senate（`senate cmd sculpture --arg op=export --arg format=vxk --arg include=rig,models,parts,meta`，TASK-0518）；`.vxk` 不入版控（`../VoxelKit/_cache/`）。
 
 **換一台機器／`_cache` 是空的**（TASK-0586，Tim：「.vxk 不進版控，但換機器要知道需要更新（比對來源）」）：
@@ -71,6 +78,7 @@ python -I admin.py cache --all    # 每艘都比 ＝ 比對來源：雕刻作品
 | `03_camera.js` | 鏡頭（自由／追砲彈／看敵艦／看我艦、跟船）；追砲彈挑哪一顆（`pickBall`／`ballPredict`） |
 | `04_state.js` | 全域狀態與選單設定：`LIM`（滑桿上下限，`CFG.lim`）、硬度／進水／壓艙物／砲的重量／航速／靈活性、砲・帆・船員・火藥桶的血量、每發傷害 `DMG`、彈種倍率 `AMMO_K`、殉爆威力、降旗規則、模式、`PHYS` |
 | `05_hull.js` | 船型（一種船一份，兩艘同型共用）：`HULL_LIST`（選單列得出來的船）、`loadHull`（選到才解碼、網格化）、`FLEET_SET`（艦隊編成：我方、敵方的船型）、設計水線 `hullZW`（meta `kind=ship, waterline_z`，沒有 ⇒ 63） |
+| `05_material.js` | 材質（TASK-0616）：材質表 `MATS`（`CFG.materials`）、船型的材質層（`hullMaterials`：全船預設 `T.mat0`＋ .vxk 檔頭 `materials` 的段落 ⇒ `T.matG` 每格的索引）、打到那一格的硬度 `hardAt`（船殼硬度 × 材質倍率）、每格的消耗 `matK`、格子的重量 `T.voxT0`／`voxLostT`；沒有材質層、全船比重 0.7 ⇒ 走以前那一條（`T.matPlain`，戰局逐位元組相同） |
 | `06_cache.js` | 船型快取（IndexedDB）：`cacheGet`／`cachePut`、快取鍵（`.vxk` 原文與頁面 JS 的雜湊） |
 | `07_gfx.js` | 畫質設定：`GFX`（陰影／反射／折射／海面細緻度／解析度／反鋸齒）、低中高三檔 `GFX_PRESET`、`gfxLevel`（對不上 ⇒ 自訂）、網址參數 |
 | `08_sea.js` | 海浪：`WAVES`（四道浪）、水面高度 `seaH`、著色器用的同一組 `SEA_GLSL`、船跟著浪起伏與搖晃 `stepWaves` |

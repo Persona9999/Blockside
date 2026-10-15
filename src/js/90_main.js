@@ -104,6 +104,17 @@ if (DEBUG) window.__game = {
       comX: +fl.comX.toFixed(2), comY: +fl.comY.toFixed(2), sinkT: +fl.sinkT.toFixed(3), sink: +sh.sink.toFixed(3), roll: +sh.rollA.toFixed(4), pitch: +sh.pitchA.toFixed(4), dirty: fl.dirty.length + fl.hdirty.length };
   },
   /** 量進水用：第 i 艘在格 (x, z) 那一舷（side 0 ＝ 格 +y、1 ＝ −y）的船殼打一個半徑 r 格的洞（從最外那一格往艙內打穿）。回打掉幾格。 */
+  // 除錯（TASK-0616）：從船外對著格座標 (x, z) 那一欄水平射一發（side 同 hole：真 ＝ 從 y 小的那一舷），只跑這一顆砲彈（船不動）⇒ 打掉幾格、穿多深、出來剩多快（木頭／鐵甲打同一點比）
+  shot: function (i, x, z, side, gun, ammo) {
+    var sh = SHIPS[i || 0], B = sh.T.base, s = side ? 1 : -1, y0 = -1, y, GS = GUNS[gun || '24l'] || GUNS[Object.keys(GUNS)[0]];
+    if (side) { for (y = 0; y < sh.T.cy; y++) if (sh.grid.get(x, y, z)) { y0 = y; break; } } else { for (y = B.sy - 1; y > sh.T.cy; y--) if (sh.grid.get(x, y, z)) { y0 = y; break; } }
+    if (y0 < 0) return null;
+    var p = M4.pt(sh.M, x + 0.5, y0 - s * 30, z + 0.5), q = M4.pt(sh.M, x + 0.5, y0, z + 0.5), d = norm(sub(q, p)), n0 = sh.grid.count, mat = sh.T.matIds[sh.T.matG ? sh.T.matG.get(x, y0, z) : 0];
+    var b = { p: p, v: add(mul(d, GS.V), sh.vel), owner: SHIPS.length > 1 ? 1 - (i || 0) : 0, ammo: ammo || 0, trav: 0, alive: true, age: 0, bounced: false, big: GS.big, hole: GS.hole, dmg: 0 }, deep = 0, k;
+    for (k = 0; k < 600 && b.alive; k++) { stepBall(b, DT / 4); var L = toLocal(sh, b.p); if (b.alive && L[1] >= 0 && L[1] < B.sy) deep = Math.max(deep, s * (L[1] - y0)); }
+    sh.rs.flush();
+    return { mat: mat, skin: y0, removed: n0 - sh.grid.count, deep: +(deep * S).toFixed(2), out: b.alive ? +len(b.v).toFixed(0) : 0, V: GS.V };
+  },
   hole: function (i, x, z, side, r) {
     var sh = SHIPS[i || 0], B = sh.T.base, y0 = -1, y, s = side ? 1 : -1, n = 0; r = r || 4;
     if (side) { for (y = 0; y < sh.T.cy; y++) if (B.get(x, y, z)) { y0 = y; break; } } else { for (y = B.sy - 1; y > sh.T.cy; y--) if (B.get(x, y, z)) { y0 = y; break; } }

@@ -89,6 +89,16 @@
   "geo0": {"spar": null, "marines": [160, 220], "center": 140, "aim": 90, "aimZ": [40, 320], "deckAim": [84, 104], "rigAim": [150, 300]},
   "crew0": {"officers": 4, "helm": 2, "marines": 12, "marineGap": 37, "top": 4, "monkeys": 1, "handsK": 1},
   "names_pub": ["星座號", "國會號", "切薩皮克號", "埃塞克斯號", "波士頓號", "紐約號", "費城號", "亞當斯號", "坎伯蘭號", "薩凡納號", "聖勞倫斯號", "拉里坦號"],
+  "materials": {
+    "default": "oak",
+    "list": {
+      "oak": {"name": "橡木", "kind": "wood", "density": 0.7, "hard": 1, "flammable": 0.5},
+      "pine": {"name": "松木", "kind": "wood", "density": 0.5, "hard": 0.7, "flammable": 0.8},
+      "teak": {"name": "柚木", "kind": "wood", "density": 0.65, "hard": 1.1, "flammable": 0.3},
+      "iron": {"name": "鐵甲", "kind": "metal", "density": 7.8, "hard": 8, "flammable": 0},
+      "copper_sheath": {"name": "銅皮（包在木殼外）", "kind": "metal", "density": 0.8, "hard": 1.1, "flammable": 0}
+    }
+  },
   "ships": [
     {
       "id": "constitution",

@@ -264,7 +264,9 @@ function sliders() {
       '<span class="n">標準風、滿帆；逆風 ＝ 離風 ' + Math.round(stall) + '° 時（再頂就開始失速）' + (PLAY === 'fun' ? '；含娛樂玩法的加成' : '') + '</span><br>' +
       '砲 <b>' + hc.n + '</b> 門<span class="n">（' + gl + '）</span><br>' +
       '船員 約 <b>' + crewTotal(shipCrew(CFG_ID), hc) + '</b> 人<span class="n">（含預備水手 ' + shipCrew(CFG_ID).hands + '）</span><br>' +
-      '靈活 <b>×' + (+c.agile).toFixed(2) + '</b>・船殼硬度 <b>' + (+c.hard).toFixed(1) + '</b>・桅 <b>' + hc.masts + '</b> 根';
+      '靈活 <b>×' + (+c.agile).toFixed(2) + '</b>・船殼硬度 <b>' + (+c.hard).toFixed(1) + '</b>・桅 <b>' + hc.masts + '</b> 根<br>' +
+      '材質 ' + matSummary(T).map(function (m) { return '<b>' + m.name + '</b>' + (T.matIds.length > 1 ? ' ' + Math.round(m.voxels / T.base.count * 100) + '%' : '') + (m.hard !== 1 ? '（硬度 ×' + m.hard + '）' : ''); }).join('・') +
+      '<span class="n">（格子 ' + Math.round(T.voxT0).toLocaleString() + ' 噸）</span>';   // TASK-0616：全船預設＋關聯 meta material（05_material.js）
   }
   function rankList(n) { var r = OFFICER_RANKS.slice(0, n); if (n > OFFICER_RANKS.length) r.push('見習軍官 ' + (n - OFFICER_RANKS.length)); return r.join('、'); }
   // 艙房（船隻配置頁；TASK-0568）：這一型標好的空艙房一間一列 —— 房間類型（放不下必要件的那個選項不能選、寫出原因）、擺了什麼、buff；
@@ -483,7 +485,7 @@ function sliders() {
     $('funspeedV').textContent = FUN.speed.toFixed(2) + '×'; $('funagileV').textContent = FUN.agile.toFixed(2) + '×'; $('funstallV').textContent = FUN.stall.toFixed(2) + '×';
     $('funpowderV').textContent = FUN.powder.toFixed(2) + '×' + (powderNever() ? '（火藥拉滿：不會爆）' : '（火藥血量 ' + POWDER_HP + ' ⇒ ' + Math.round(POWDER_HP * FUN.powder) + '）');
     $('floodV').textContent = FLOOD === 0 ? '0×（不會沉）' : FLOOD.toFixed(2) + '×' + (FLOOD < 0.5 ? '（慢）' : FLOOD < 1.2 ? '' : '（快）');
-    var HT = HULLT[CFG_ID], m0 = (HT ? HT.base.count * VOX_T : 0) + modelMassT(HT, GUNW_K) + BALLAST_T, l0 = liftFor(HT, HT ? HT.disp - m0 : 0), lx = liftFor(HT, HT ? HT.disp - m0 + 70 : 0);   // 照我艦的船型   // 開戰時浮在哪；例子：再打掉 10 萬格（70 噸）
+    var HT = HULLT[CFG_ID], m0 = (HT ? HT.voxT0 : 0) + modelMassT(HT, GUNW_K) + BALLAST_T, l0 = liftFor(HT, HT ? HT.disp - m0 : 0), lx = liftFor(HT, HT ? HT.disp - m0 + 70 : 0);   // 照我艦的船型   // 開戰時浮在哪；例子：再打掉 10 萬格（70 噸）
     var gm = 0, kinds = {}; if (HT) (HT.rig.models || []).forEach(function (m) { var k = modelKind(m); if (GUNS[k]) { gm += GUNS[k].mass * GUNW_K; kinds[k] = 1; } });
     $('gunwV').textContent = GUNW_K.toFixed(2) + '×（' + Object.keys(GUNS).filter(function (k) { return !HT || kinds[k]; }).map(function (k) { return GUNS[k].name + ' ' + (GUNS[k].mass * GUNW_K).toFixed(1) + ' 噸'; }).join('、') + (gm ? '；全部 ' + Math.round(gm) + ' 噸' : '') + '）';
     $('ballastV').textContent = BALLAST_T + ' 噸' + (l0 === null ? '' : '（' + HT.name + ' ' + Math.round(m0).toLocaleString() + ' 噸 ⇒ ' + (Math.abs(l0) < 0.05 ? '剛好在設計水線' : l0 > 0 ? '浮高 ' + l0.toFixed(1) + ' m' : '吃水深 ' + (-l0).toFixed(1) + ' m') + '；打掉 10 萬格再浮 ' + (lx - l0).toFixed(2) + ' m）');

@@ -50,6 +50,9 @@ function shipCheck(id) {
       else if (!a.m) add('warn', '錨', k === 'P' ? '左舷' : '右舷', '這一舷找不到錨（沒有 meta kind=anchor 的模型、也沒有名字有「錨」的關聯）⇒ 從船頭附近拋、鍊尾畫簡單的錨', '放共用錨元件（造船規格 §9 anchor）');
       if (!a.hw) add('warn', '錨鏈孔', '船殼', '沒有固定點 hawse-' + k + ' ⇒ 鐵鍊從錨那一點出來、船繞錨那一點被拴住', '船殼登記 hawse-P／S（造船規格 §9 anchor）');
     });
+    // ── 材質（TASK-0616）：全船預設＋關聯 meta material；材質表沒有的 ID ⇒ 照全船預設 ──
+    R.info.materials = matSummary(T).map(function (m) { return (m.def ? '全船預設 ' : '') + m.name + '（' + m.id + '）' + m.voxels.toLocaleString('en') + ' 格、' + m.t + ' 噸'; }).join('；');
+    T.matBad.forEach(function (id) { add('warn', '材質', id, '材質表沒有這個 ID ⇒ 照全船預設 ' + T.mat0, '後台的材質表加這一種，或把關聯 meta material 改成材質表有的 ID（造船規格 §9.5）'); });
     sh.guns.forEach(function (g) { if (!g.alive) add('error', '開場就掉', g.name, '砲開場 ' + SC_SECS + ' 秒內就沒了', '砲腳下要有甲板'); });
     // ── 砲班站位（三叉戟號船頭：砲靠太近、站位互佔 ⇒ 站不滿；Tim 2026-10-15）──
     var shortN = 0, shortG = 0;

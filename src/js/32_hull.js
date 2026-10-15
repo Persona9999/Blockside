@@ -1,6 +1,6 @@
 // ───────────────────────── 進水、傾斜、沉沒、減重上浮 ─────────────────────────
 // 減重上浮（Tim 2026-10-12：打爛的船變輕、浮起來 ⇒ 彈藥庫有機會露出水面被打到）：
-//   船的重量 ＝ 格（每格 0.7 kg，木頭）＋ 砲（砲種表：24 磅長砲 2.5 噸、32 磅長砲 2.9、carronade 0.9、追擊砲 2.1，乘船隻設定「砲的重量」）＋ 火藥桶（50 kg）
+//   船的重量 ＝ 格（每格照材質：橡木 0.7 kg，鐵甲 7.8 kg…；05_material.js）＋ 砲（砲種表：24 磅長砲 2.5 噸、32 磅長砲 2.9、carronade 0.9、追擊砲 2.1，乘船隻設定「砲的重量」）＋ 火藥桶（50 kg）
 //   ＋ 壓艙物（細節設定；不會被打掉的重量：壓艙鐵與石、水、糧、彈丸…）。
 //   浮在哪 ＝ 排水剛好等於重量的那一層（HYD：原本船殼每一層的體積，每個 x 照最外兩格之間的寬，從設計水線往下、往上積）：
 //   設計水線（ZW）以下 ＝ 2,156 噸（史料約 2,200）⇒ 比它輕就浮高、重就吃水深。預設壓艙物 1,075 噸 ⇒ 開戰時剛好在設計水線；
@@ -23,10 +23,10 @@ function hydrostatics(T) {
 }
 function modelT(m, gunw) { return m.kind === 'powder' ? KEG_T : (GUNS[m.kind] ? GUNS[m.kind].mass : 0) * gunw; }   // 模型的重量（砲乘船隻設定的倍率）
 /** 開戰時的重量（噸）：格 ＋ 模型 ＋ 壓艙物。 */
-function shipT(sh) { var t = sh.orig * VOX_T + sh.cfg.ballast; sh.models.forEach(function (m) { t += modelT(m, sh.cfg.gunw); }); return t; }
+function shipT(sh) { var t = (sh.T.matPlain ? sh.orig * VOX_T : sh.T.voxT0) + sh.cfg.ballast; sh.models.forEach(function (m) { t += modelT(m, sh.cfg.gunw); }); return t; }
 /** 少掉的重量（噸）：格（被打掉、跟著斷開的一團走）＋ 不在船上的模型（飛掉、炸掉、跟著斷開的一團走）。帆桁不算。 */
 function massLost(sh) {
-  var t = (sh.orig - sh.grid.count) * VOX_T;
+  var t = voxLostT(sh);                                                   // 每格照材質（05_material.js；全是預設比重 0.7 ⇒ 少幾格 × VOX_T）
   sh.models.forEach(function (m) { if (!m.alive || m.moved) t += modelT(m, sh.cfg.gunw); });
   return t;
 }

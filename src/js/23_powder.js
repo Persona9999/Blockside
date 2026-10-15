@@ -106,7 +106,7 @@ function magBoom(sh, mag) {
     damageModel(sh, o, mul(norm(sub(cw, w)), 300 * (1 - d / (R * 1.3)) + 80), 5000);
   });
   // 斷船（橫切那一刀等彈坑挖完：blastStep）
-  var brk = R >= BREAK_R * Math.pow(sh.cfg.hard / 2, 0.15);
+  var brk = R >= BREAK_R * Math.pow(hard0(sh) / 2, 0.15);   // 硬度 ＝ 船殼硬度 × 全船預設材質（05_material.js）
   sh.struck = sh.struck || brk; sh.broken = sh.broken || brk;
   if (brk) { sh.fate = '殉爆（船斷成兩截）'; sh.sinkingFinal = true; }
   mag.R = R; mag.f = f; mag.removed = 0; mag.broke = brk;

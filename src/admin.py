@@ -132,6 +132,10 @@ def act_relock(sid):
 MENU = {'play': ('fun', 'real'), 'mode': ('pve', 'eve', 'sandbox'), 'sail': ('auto', 'manual', 'off'),
         'gfx': ('low', 'mid', 'high'), 'phx': ('full', 'high', 'mid', 'low')}
 SHIP_CFG_KEYS = ('hard', 'flood', 'gunw', 'speed', 'agile', 'upwind', 'base')          # 每艘船的船隻設定（壓艙物照船算，不在這裡）
+MAT_ID = r'[a-z][a-z0-9_]{0,31}'                                                      # 材質 ID（TASK-0616）：雕刻作品關聯的 meta material 照它認
+MAT_KINDS = ('wood', 'metal', 'other')                                               # 材質的分類（後台分組、之後燃燒照它）
+MAT_NUMS = (('density', 0.05, 25, '比重（一格 0.1 m ＝ 1 公升 ⇒ 每格幾 kg；橡木 0.7）'), ('hard', 0.05, 50, '硬度倍率（乘在船隻設定的船殼硬度上；橡木 1）'),
+            ('flammable', 0, 1, '易燃性（0 ＝ 不會燒、1 ＝ 一點就著；燃燒還沒做，先記著）'))
 CREW = {'officers': (0, 8, True), 'helm': (0, 4, True), 'marines': (0, 60, True), 'marineGap': (5, 200, True),
         'top': (0, 8, True), 'monkeys': (0, 2, True), 'handsK': (0, 4, False)}
 CREW_SHIP = {'hands': (0, 120, True)}          # 只在每艘船寫（TASK-0570 船隻配置頁的預設）：預備水手人數；沒寫 ＝ lim.hands × handsK
@@ -329,6 +333,31 @@ def validate(cfg, prev=None):
                     err('%s.items[%d]' % (q, j), '{ it: 物品, x, y: 0～399 的整數, r: 0 或 1 }')
                 elif RT[v['type']].get('items') and it['it'] not in RT[v['type']]['items']:
                     err('%s.items[%d]' % (q, j), '%s 不能擺在 %s' % (it['it'], v['type']))
+    MT = cfg.get('materials')                            # 材質表（TASK-0616）：{ default: ID, list: { ID: { name, kind, density, hard, flammable } } }；ID 英文小寫，雕刻那側關聯 meta material 寫它
+    MIDS = set()
+    if not (isinstance(MT, dict) and isinstance(MT.get('list'), dict) and MT['list']):
+        err('materials', '要是 { default: 材質 ID, list: { ID: 參數 } }，list 至少一種')
+    else:
+        for k, m in MT['list'].items():
+            p = 'materials.list.' + k
+            if not re.fullmatch(MAT_ID, k):
+                err(p, '材質 ID：小寫英文開頭、只有小寫英文數字底線（雕刻作品的 meta material 照它認）')
+            MIDS.add(k)
+            if not isinstance(m, dict):
+                err(p, '要是物件')
+                continue
+            if not (isinstance(m.get('name'), str) and m['name'].strip()):
+                err(p + '.name', '要有顯示名')
+            if m.get('kind') not in MAT_KINDS:
+                err(p + '.kind', '要是 ' + '／'.join(MAT_KINDS) + ' 其中一個（分類）')
+            for f, lo, hi, what in MAT_NUMS:
+                if not (isnum(m.get(f)) and lo <= m[f] <= hi):
+                    err(p + '.' + f, '%s：%s～%s' % (what, lo, hi))
+            for f in m:
+                if f not in ('name', 'kind') and f not in [x[0] for x in MAT_NUMS]:
+                    err(p + '.' + f, '不認得的鍵')
+        if MT.get('default') not in MIDS:
+            err('materials.default', '要是材質表裡的一種（沒寫材質的船、子作品都用它）')
     S = cfg.get('ships')
     if not (isinstance(S, list) and S):
         err('ships', '至少要有一艘')
@@ -356,6 +385,8 @@ def validate(cfg, prev=None):
             err(p + '.vxk', '_cache 裡的檔名（xxx.vxk）')
         if not isinstance(s.get('work', ''), str):
             err(p + '.work', '雕刻作品 ID（字串）')
+        if 'material' in s and s['material'] not in MIDS:
+            err(p + '.material', '全船預設材質要是材質表裡的一種（%s）；沒寫 ＝ materials.default' % '、'.join(sorted(MIDS)))
         if 'zw0' in s and not (isint(s['zw0']) and s['zw0'] > 0):
             err(p + '.zw0', '正整數（作品沒有水線 meta 時的設計水線）')
         for k, v in (s.get('cfg') or {}).items():
@@ -461,7 +492,7 @@ def vxk_info(path):
     rig = h.get('rig') or {}
     return {'voxels': h.get('voxels'), 'checksum': h.get('checksum'), 'size': h.get('size'), 'meters_per_voxel': h.get('meters_per_voxel'),
             'ropes': len(rig.get('ropes') or []), 'sails': len(rig.get('sails') or []), 'models': len(rig.get('models') or []),
-            'parts': len(h.get('parts') or []), 'work': h.get('work'), 'exported_at': h.get('exported_at'),
+            'parts': len(h.get('parts') or []), 'work': h.get('work'), 'exported_at': h.get('exported_at'), 'materials': (h.get('materials') or {}).get('ids') or [],
             'bytes': len(raw), 'sha256': hashlib.sha256(raw).hexdigest()[:12]}
 
 
@@ -607,6 +638,7 @@ def act_shipcheck(ids=None):
               '> ✗ 錯誤 ＝ 遊戲裡壞掉；⚠ 警告 ＝ 能動，但照退路或預設跑。修法裡的「造船規格」＝ `senate cmd doc --arg op=show --arg name=Sculpture_Shipbuilding`。', '',
               '| 砲 | 站不滿的砲 | 船員 | 模型 | 繩 | 帆 | 桅 | 彈藥庫 | 甲板 | 梯子 | 艙房 | 錨 | 水線 z |', '|---|---|---|---|---|---|---|---|---|---|---|---|---|',
               '| %s | %s 門缺 %s 人 | %s | %s | %s | %s | %s | %s | %s | %s | %s | %s | %s |' % (I['guns'], I['gunShort']['guns'], I['gunShort']['people'], I['crew'], I['models'], I['ropes'], '%s%s' % (I['sails'], '（＋陣營旗 %d）' % I['teamFlags'] if I.get('teamFlags') else ''), I['masts'], I['mags'], len(I['decks']), I['ladders'], I['rooms'], I.get('anchors', '—'), I['zw']), '',
+              '材質（TASK-0616）：' + (I.get('materials') or '—'), '',
               '**✗ %d　⚠ %d**' % (ne, nw), '']
         for lv, title in (('error', '## ✗ 錯誤'), ('warn', '## ⚠ 警告')):
             ks = [k for k in groups if k[0] == lv]
@@ -1071,6 +1103,8 @@ def serve(port, do_open=False):
     hosts = {'127.0.0.1:%d' % port, 'localhost:%d' % port}
 
     class H(BaseHTTPRequestHandler):
+        timeout = 10                                 # 一次只服務一個連線（Exclusive）⇒ 瀏覽器預先開好、不送請求的連線（Chrome preconnect）會把整個後台卡住；閒置 10 秒就放掉
+
         def log_message(self, fmt, *a):
             sys.stderr.write('  %s %s\n' % (self.command, self.path))
 

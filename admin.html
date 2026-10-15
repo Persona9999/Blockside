@@ -85,6 +85,13 @@ td.k { font-family: ui-monospace, Consolas, monospace; font-size: 12px; color: v
     <p class="note">代號（code）是雕刻作品裡 meta gun 的值，改了舊船就認不到砲。砲班滿編最多 8（砲旁只有 8 個站位）。每發傷害在上面的滑桿（dmg…）。</p>
     <div class="tbl"><table id="guns"><thead><tr><th>種類</th><th>代號</th><th>名字</th><th>簡稱</th><th>初速 m/s</th><th>裝填倍率</th><th>大彈</th><th>洞倍率</th><th>砲班滿編</th><th>最少</th><th>重量 噸</th><th>連發（發）</th><th>連發間隔 秒</th></tr></thead><tbody></tbody></table></div></section>
 
+  <section><h2>材質表</h2>
+    <p class="note">每一格的材質決定它多難打穿、多重（TASK-0616）。跨船共用：雕刻作品的關聯 meta 只寫材質 ID（<code>material=iron</code>），參數都在這裡。沒寫材質的船 ＝ 下面每艘船的「全船預設材質」，那一格也空著 ＝ 這裡的預設。
+      ID 英文小寫（改了 ID 舊船就認不到 ⇒ 要換就新增一種）。比重：一格 0.1 m ＝ 1 公升 ⇒ 每格幾 kg（橡木 0.7 ＝ 以前統一的重量）。硬度倍率乘在船隻設定的船殼硬度上（洞多大、砲彈穿過去慢多少）。易燃性 0–1 先記著（燃燒還沒做）。</p>
+    <div class="grid" id="matDef"></div>
+    <div class="tbl"><table id="mats"><thead><tr><th>ID</th><th>名字</th><th>分類</th><th>比重</th><th>硬度倍率</th><th>易燃性</th><th>用在</th><th></th></tr></thead><tbody></tbody></table></div>
+    <div class="row" style="margin-top:8px"><input id="mNew" placeholder="新材質 ID（英文小寫，例 elm、steel）" style="min-width:240px"><button id="bMat">新增材質</button></div></section>
+
   <section><h2>船員配置（每艘船的預設）</h2>
     <p class="note">每艘船可以在下面另外寫，空白 ＝ 用這裡的。砲手人數照砲種表；預備水手的人數 ＝ 細節設定的「預備水手」× 倍率。</p>
     <div class="grid" id="crew0"></div></section>
@@ -122,7 +129,8 @@ td.k { font-family: ui-monospace, Consolas, monospace; font-size: 12px; color: v
     ['top', '每根桅的桅頂水手', 1], ['monkeys', '送藥手（每對砲幾個：0–2，0 ＝ 沒有）', 1], ['handsK', '預備水手倍率', 0]];
   var GEO = [['spar', '露天甲板站人高度 z0–z1（空白 ＝ 照 carronade 推）', 2], ['marines', '陸戰隊範圍：離船尾、離船頭（格）', 2], ['center', '船的中心高度（鏡頭）', 1], ['aim', '沒有目標時瞄的高度', 1],
     ['aimZ', '瞄準高度範圍', 2], ['deckAim', '砲長「砲甲板」瞄的高度', 2], ['rigAim', '砲長「桅」瞄的高度', 2]];
-  var SHIP_CFG = [['speed', '航速'], ['agile', '靈活'], ['upwind', '逆風'], ['base', '基底航速'], ['hard', '硬度'], ['flood', '進水'], ['gunw', '砲重']];
+  var SHIP_CFG = [['speed', '航速'], ['agile', '靈活'], ['upwind', '逆風'], ['base', '額外動力'], ['hard', '硬度'], ['flood', '進水'], ['gunw', '砲重']];
+  var MAT_KINDS = [['wood', '木頭'], ['metal', '金屬'], ['other', '其他']], MAT_ID = /^[a-z][a-z0-9_]{0,31}$/;   // 材質（TASK-0616；admin.py MAT_KINDS／MAT_ID 同一份規則）
   var GUNF = [['code', 's'], ['name', 's'], ['short', 's'], ['V', 'n'], ['reload', 'n'], ['big', 'b'], ['hole', 'o'], ['crew', 'n'], ['min', 'n'], ['mass', 'n'], ['burst', 'o'], ['burstGap', 'g']];   // burst／burstGap：連發（一份彈藥打幾發、每發隔幾秒；空白 ＝ 1 發）
 
   var S = null, C = null, C0 = null, dirty = false, busy = false;
@@ -205,6 +213,7 @@ td.k { font-family: ui-monospace, Consolas, monospace; font-size: 12px; color: v
         return el('td', {}, [w]);
       }))));
     });
+    renderMats();
     var CW = $('crew0'); CW.innerHTML = '';
     CREW.forEach(function (r) { CW.appendChild(fld(r[1], [num(['crew0', r[0]])])); });
     var GE = $('geo0'); GE.innerHTML = '';
@@ -212,6 +221,32 @@ td.k { font-family: ui-monospace, Consolas, monospace; font-size: 12px; color: v
     renderShips();
     status();
   }
+  /** 材質表：哪幾艘船用到（全船預設、或 .vxk 的關聯 meta material）⇒ 「用在」那一欄；用到的不給刪。 */
+  function matUse(id) {
+    var u = [];
+    C.ships.forEach(function (s) { var d = (s.material || C.materials.default) === id, v = ((S.ships[s.id] || {}).materials || []).indexOf(id) >= 0; if (d || v) u.push(s.name + (d ? '（全船）' : '（部分）')); });
+    return u;
+  }
+  function renderMats() {
+    var D = $('matDef'); D.innerHTML = '';
+    D.appendChild(fld('預設材質（沒寫材質的船）', [sel(['materials', 'default'], Object.keys(C.materials.list).map(function (k) { return [k, C.materials.list[k].name + '（' + k + '）']; }))]));
+    var tb = $('mats').tBodies[0]; tb.innerHTML = '';
+    Object.keys(C.materials.list).forEach(function (k) {
+      var P = ['materials', 'list', k], u = matUse(k), rm = el('button', { text: '刪掉' });
+      rm.disabled = u.length > 0 || k === C.materials.default; if (rm.disabled) rm.title = '還在用（預設、或船用到）';
+      rm.onclick = function () { if (!confirm('刪掉材質「' + C.materials.list[k].name + '（' + k + '）」？')) return; delete C.materials.list[k]; touch(); render(); };
+      var nm = txt(P.concat('name')); nm.style.width = '140px';
+      tb.appendChild(el('tr', {}, [el('td', { 'class': 'k', text: k }), el('td', {}, [nm]), el('td', {}, [sel(P.concat('kind'), MAT_KINDS)]),
+        el('td', {}, [num(P.concat('density'))]), el('td', {}, [num(P.concat('hard'))]), el('td', {}, [num(P.concat('flammable'))]), el('td', { text: u.join('、') || '—' }), el('td', {}, [rm])]));
+    });
+  }
+  $('bMat').onclick = function () {
+    var id = $('mNew').value.trim();
+    if (!MAT_ID.test(id)) return say(['材質 ID：小寫英文開頭、只有小寫英文數字底線（例 elm、steel、wood_pine）'], true);
+    if (C.materials.list[id]) return say(['已經有 ' + id], true);
+    C.materials.list[id] = { name: id, kind: 'other', density: 0.7, hard: 1, flammable: 0 };
+    $('mNew').value = ''; touch(); render(); say(['✓ 加了 ' + id + '（名字、分類、數字照實改；儲存並重建之後遊戲才吃得到）']);
+  };
   function fmtInfo(i) {
     if (!i) return '⚠ VoxelKit/_cache 裡沒有這艘的 .vxk（重建會失敗）⇒ 重新匯入';
     return i.voxels.toLocaleString() + ' 格 · checksum ' + i.checksum + ' · ' + i.size.join('×') + ' · 繩 ' + i.ropes + ' 帆 ' + i.sails + ' 模型 ' + i.models + ' · 匯出 ' + i.exported_at + ' · ' + (i.bytes / 1e6).toFixed(2) + ' MB';
@@ -233,6 +268,12 @@ td.k { font-family: ui-monospace, Consolas, monospace; font-size: 12px; color: v
       g1.appendChild(fld('名字', [nm]));
       var wk = txt(P.concat('work')); wk.style.width = '220px'; g1.appendChild(fld('雕刻作品', [wk]));
       g1.appendChild(fld('設計水線 z（作品沒有水線 meta 時）', [num(P.concat('zw0'), { opt: true, ph: '63' })]));
+      var ms = sel(P.concat('material'), [['', '（預設：' + (C.materials.list[C.materials.default] || {}).name + '）']].concat(Object.keys(C.materials.list).map(function (k) { return [k, C.materials.list[k].name + '（' + k + '）']; })));
+      if (!s.material) ms.value = '';
+      ms.addEventListener('change', function () { if (!ms.value) delete C.ships[i].material; touch(); renderMats(); });
+      g1.appendChild(fld('全船預設材質（子作品可以在雕刻那側用 meta material 換）', [ms]));
+      var vm = (S.ships[s.id] || {}).materials || [];
+      if (vm.length) g1.appendChild(fld('子作品的材質（.vxk）', [el('span', { text: vm.map(function (k) { return C.materials.list[k] ? C.materials.list[k].name + '（' + k + '）' : '⚠ ' + k + '（材質表沒有 ⇒ 照全船預設）'; }).join('、') })]));
       card.appendChild(g1);
       card.appendChild(el('h4', { text: '船隻設定（空白 ＝ 滑桿預設）' }));
       var g2 = el('div', { 'class': 'grid' });

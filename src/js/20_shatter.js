@@ -19,7 +19,7 @@ function shatter(sh, c, dirL, R, velW, debrisCap, grainK) {
     var x = cx + dx, y = cy + dy, z = cz + dz, d = Math.sqrt(dx * dx * grainK + dy * dy + dz * dz);
     if (d > R * (0.6 + 0.62 * hash3(x, y, z))) continue;
     var col = removeVoxel(sh, x, y, z, true);
-    if (col) { cost += HARD[col] || 1; n++; removed.push(x, y, z, col); }
+    if (col) { cost += (HARD[col] || 1) * matK(sh, x, y, z); n++; removed.push(x, y, z, col); }   // 每格的消耗 × 那一格的材質（05_material.js）
   }
   // 順紋裂開：外緣挑幾點，沿船長方向把同色的那一條撕掉
   for (var k = 0; k < 3 && n > 8; k++) {
@@ -27,7 +27,7 @@ function shatter(sh, c, dirL, R, velW, debrisCap, grainK) {
     for (var dyy = 0; dyy < 5 && !base; dyy++) { ry = cy + [0, 1, -1, 2, -2][dyy]; base = sh.grid.get(rx, ry, rzz); }
     if (!base) continue;
     var dirx = Math.cos(a) < 0 ? -1 : 1, L = (rr(3, 11)) | 0;
-    for (var t = 0; t < L; t++) { var xx = rx + dirx * t; if (sh.grid.get(xx, ry, rzz) !== base) break; var cc = removeVoxel(sh, xx, ry, rzz, true); if (cc) { removed.push(xx, ry, rzz, cc); cost += 1; n++; } }
+    for (var t = 0; t < L; t++) { var xx = rx + dirx * t; if (sh.grid.get(xx, ry, rzz) !== base) break; var cc = removeVoxel(sh, xx, ry, rzz, true); if (cc) { removed.push(xx, ry, rzz, cc); cost += matK(sh, xx, ry, rzz); n++; } }
   }
   // 碎屑
   var keep = removed.length / 4, pr = Math.min(1, debrisCap / Math.max(1, keep)), sp = len(velW), vd = norm(velW);
