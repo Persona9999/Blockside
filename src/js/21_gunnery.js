@@ -263,7 +263,13 @@ function blowModel(sh, m, vel, drop) {
   sh.guns.forEach(function (g) { if (g.model === m) g.alive = false; });
   sh.ropes.forEach(function (r) { if (!r.dead && r.mods && r.mods.indexOf(m.k) >= 0) { r.dead = true; sh.rigDirty = true; } });
   if (!drop && m.kind !== 'powder') {
-    hurt(sh, m.c, 7, 15, null, '砲被打飛', 140);
+    // 砲班跟著受傷（TASK-0568；Tim 2026-10-15）：那門砲的砲班另外算一次，3.5 m 內照距離遞減（0.7 m 內全吃）；其他人照舊 1.5 m。
+    //   砲班從第一次排掉（⛔ 不排 ⇒ 站得近的被算兩次）。細節設定關掉（GUN_CREW_HURT）⇒ 完全照舊。
+    var gc = GUN_CREW_HURT ? sh.crew.filter(function (c) { return c.st <= 1 && c.gun && c.gun.model === m; }) : [];
+    if (gc.length) {
+      hurt(sh, m.c, 7, 15, null, '砲被打飛', 140, sh.crew.filter(function (c) { return gc.indexOf(c) < 0; }));
+      sh.gunCrewHit = (sh.gunCrewHit || 0) + hurt(sh, m.c, 7, 35, null, '砲被打飛', 140, gc);
+    } else hurt(sh, m.c, 7, 15, null, '砲被打飛', 140);
     flash(c0, vd, 10, false);
     for (var i = 0; i < 14; i++) spawnPt(c0, add(mul(vd, rr(3, 12)), [gauss() * 4, rr(1, 6), gauss() * 4]), rr(0.2, 0.5), [1, 0.85, 0.5], 1, 0.25, 0.1, G, 0.5, 3);
     sfx('crack', c0, 1.3);

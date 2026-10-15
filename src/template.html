@@ -414,7 +414,9 @@
       <div class="row slide"><label for="drown">溺水時間</label><input type="range" id="drown" step="5" aria-label="落水的人撐多久會溺水（秒）"><span id="drownV"></span></div>
       <div class="row slide"><label for="heal">治療時間</label><input type="range" id="heal" step="5" aria-label="醫療艙治好一個傷員要幾秒（0 ＝ 關）"><span id="healV"></span></div>
       <div class="row slide"><label for="navre">尋路更新</label><input type="range" id="navre" step="0.5" aria-label="尋路動態更新：每幾秒看一次甲板與梯子有沒有被打壞（0 ＝ 關）"><span id="navreV"></span></div>
-      <div class="row note">歸零陣亡；掉到一半以下受傷倒下；一半以上照常作戰（只閃紅）。火槍一發 40～125。</div>
+      <div class="row checks"><label><input type="checkbox" id="gcrew"> 砲被打飛，砲班跟著受傷</label></div>
+      <div class="row note">歸零陣亡；掉到一半以下受傷倒下；一半以上照常作戰（只閃紅）。火槍一發 40～125。
+        砲被打飛：旁邊 1.5 m 內的人照距離受傷；勾了 ⇒ 那門砲的砲班另外算，3.5 m 內照距離遞減（0.7 m 內全吃）。網址 ?gcrew=0 ＝ 不勾。</div>
       <h3>補給（火藥與彈藥）</h3>
       <div class="row slide"><label for="box">砲旁藥箱</label><input type="range" id="box" step="1" aria-label="砲旁藥箱放幾份"><span id="boxV"></span></div>
       <div class="row slide"><label for="carry">一次搬</label><input type="range" id="carry" step="1" aria-label="送藥手一次搬幾份"><span id="carryV"></span></div>
