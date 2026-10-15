@@ -99,7 +99,7 @@ function panel(sh, title) {
   // 橫向兩欄（TASK-0564，Tim 2026-10-14：佔畫面中間 ⇒ 儘量橫鋪、別往下壓）：左 ＝ 船體、進水、航行；右 ＝ 砲長、船員、砲、開火。砲一門一門的狀態在底下的砲位圖（gmapDraw）。
   return '<h3>' + title + '<span class="disp">排水量 ' + disp.toLocaleString() + ' 噸・現在 ' + now.toLocaleString() + ' 噸</span>' + (sh.fate && !sh.sunk ? '　<span style="color:var(--gold)">' + sh.fate + '</span>' : '') + '</h3><div class="pcols"><div class="pc">船體 ' + (hull * 100).toFixed(1) + '%（打掉 ' + sh.lost.toLocaleString() + ' 格）<div class="bar"><i style="width:' + (hull * 100).toFixed(1) + '%"></i></div>' +
     '進水 ' + (sh.sunk ? '沉沒' : (fl * 100).toFixed(0) + '%') + (sh.fl && (!sh.broken || sh.fl.vis) ? '（艙內積水 ' + Math.round(sh.fl.vol * RHO_W).toLocaleString() + ' 噸・破口 ' + sh.fl.area.toFixed(1) + ' m²）' : '（水線下破洞 ' + (sh.inflow || 0).toLocaleString() + ' 格）') + (sh.lift > 0.05 ? '　浮高 ' + sh.lift.toFixed(1) + ' m' : sh.lift < -0.05 ? '　吃水深 ' + (-sh.lift).toFixed(1) + ' m' : '') + '<div class="bar water"><i style="width:' + (fl * 100).toFixed(0) + '%"></i></div>' +
-    (sh.spd < -0.05 ? '倒車 ' + (-sh.spd * 1.944).toFixed(1) : '航速 ' + (sh.spd * 1.944).toFixed(1)) + ' 節（' + sh.pos + '）　' + (sh.thr === null || sh.thr === undefined ? '' : '動力 ' + (sh.thr > 0 ? '前進' : sh.thr < 0 ? '倒車' : '停') + '　') + sailSetName(sh) + ' ' + Math.round(sh.sailFrac * 100) + '%<br>' +
+    (sh.spd < -0.05 ? '倒車 ' + (-sh.spd * 1.944).toFixed(1) : '航速 ' + (sh.spd * 1.944).toFixed(1)) + ' 節（' + sh.pos + '）　' + (driveText(sh) ? driveText(sh) + '　' : '') + (hasSails(sh) ? sailSetName(sh) + ' ' + Math.round(sh.sailFrac * 100) + '%' : '') + '<br>' +
     ((sh.ancMode ? '拋錨' : sh.manual ? '手動操舵' : '自動操舵') + (sh.anc ? '　' + anchorText(sh) : '') + '　舵 ' + (sh.rudder > 0.05 ? '左 ' + Math.round(sh.rudder * 100) + '%' : sh.rudder < -0.05 ? '右 ' + Math.round(-sh.rudder * 100) + '%' : '正')) + '<br>' + navText(sh) + '</div><div class="pc">' +
     capText(sh) + '<br>' +
     '船員 ' + (sh.able || 0) + '/' + sh.crew0 + '（傷 ' + sh.wounded + '　亡 ' + sh.dead + '）' + handsText(sh) + medText(sh) + swimText(sh) + '　' + supplyText(sh) + '<br>' +
@@ -111,6 +111,7 @@ function panel(sh, title) {
 //   外圈 ＝ 船體（金）、內圈 ＝ 進水（水藍），中間 ＝ 那一型的側面投影（05_hull.js sideImg；我方船頭朝右、敵方朝左 ⇒ 都朝畫面中間）與艦名；
 //   ★ ＝ 我艦；沉沒、下沉、降旗寫在圖上、整顆變暗。按鈕的畫布只在讀數變了才重畫（key）。
 // 點一顆 ⇒ 中間展開那一艘的詳細資訊（panel，同時最多一艘）；點同一顆或點資訊本身 ⇒ 收回。預設全折疊、每一場開局全折疊（fleetReset，70_flow.js reset）。
+var HUD_SAILS = null;   // 收帆、加帆兩顆按鈕現在顯不顯示（換船才重設）
 var INFO_SH = null, SB_EL = {}, SUNK_HIDE = 60;   // SUNK_HIDE：沉了幾秒（模擬時間）之後上方的圓鈕收掉（Tim 2026-10-14：補船之後那一欄才不會越排越長）
 // 點資訊或旁邊的砲位圖任何地方 ⇒ 收回。用 pointerdown：⛔ click 要按下、放開都落在同一個元素 —— 卡片每 6 格整個重畫（innerHTML），按下到放開之間剛好重畫 ⇒ click 不觸發（Tim：收起有時沒反應）
 ['info', 'gmap'].forEach(function (id) { $(id).addEventListener('pointerdown', function (e) { e.preventDefault(); if (e.target.closest && e.target.closest('[data-see]')) { camSee(INFO_SH); return; } if (e.target.closest && e.target.closest('[data-take]')) { playerTakeShip(INFO_SH); fleetHud(SHIPS[PLAYER_I]); return; } INFO_SH = null; fleetHud(SHIPS[PLAYER_I]); }); });
@@ -448,6 +449,7 @@ function hud(dt) {
   anchorChips(me);                                                              // 左右錨的按鈕：咬著亮、打壞灰掉（76_anchor.js）
   botFit();
   pauseLabel(); sailLabel(); hudIcons();
+  var hs = hasSails(me); if (HUD_SAILS !== hs) { HUD_SAILS = hs; [].forEach.call(document.querySelectorAll('#helmL [data-k="w"], #helmL [data-k="s"]'), function (b) { b.style.display = hs ? '' : 'none'; }); }   // 沒有帆的船（維吉尼亞號）⇒ 收帆、加帆不顯示（TASK-0630）
   ammoLabel();
   // 瞄準模式＋鏡頭名稱：羅盤上方空心字（Tim 2026-10-14）；鏡頭名稱要常駐（Tim：拿掉之後看不出現在是哪個鏡頭）
   var cn = CAM.mode === 3 && CAM.see && SHIPS.indexOf(CAM.see) >= 0 ? '看' + CAM.see.name : CAM_NAMES[CAM.mode];   // 「🎥 看這艘」⇒ 寫那一艘的名字
@@ -455,7 +457,8 @@ function hud(dt) {
   var kn = me.spd * 1.944;
   var mt = $('modeT'), ms = '🎯 <b>' + (!handAim(me) ? '砲長' : (AUTOFIRE ? '手動一舷・' : '') + AIM_NAME[me.pMode || 'free']) + '</b>　🎥 <b>' + cn + '</b>' +
     (HUD_OUTARC ? '　<b style="color:#ff9a7a">⚠ 射界外</b>' : '') + '<br>' +
-    '⛵ <b>' + (kn < -0.05 ? '−' + (-kn).toFixed(1) : Math.max(0, kn).toFixed(1)) + '</b> 節　' + sailSetName(me) + ' ' + Math.round(me.sailFrac * 100) + '%' +   // 帆 %（Tim 2026-10-15）：張著、還在的帆面積 × 血量（sailFrac，航速照它算）
+    '⛵ <b>' + (kn < -0.05 ? '−' + (-kn).toFixed(1) : Math.max(0, kn).toFixed(1)) + '</b> 節' + (hasSails(me) ? '　' + sailSetName(me) + ' ' + Math.round(me.sailFrac * 100) + '%' : '') + (me.cfg.base > 0 ? '　⚙ ' + TELE_NAME[me.tele] : '') +   // 兩套控制（TASK-0630）：有帆才寫帆段、有額外動力才寫俥鐘
+       // 帆 %（Tim 2026-10-15）：張著、還在的帆面積 × 血量（sailFrac，航速照它算）
     (RUNNING && SIM_SPEED !== 1 ? '　<b style="color:#9fd8ff">⏱ 模擬 ×' + (SIM_SPEED < 1 ? SIM_SPEED.toFixed(2) : SIM_SPEED.toFixed(1)) + '</b>' : '') +   // 設定的模擬速度（73_slowmo.js simSpeedSet）
     (RUNNING && PSLOW.on && PSLOW.ts < PSLOW_SHOW && !(SLOW.active && SLOW.ts < 0.98) ? '　<b style="color:#ffd27a">🐢 物理減速 ×' + PSLOW.ts.toFixed(2) + '</b>' : '');   // 物理減速的提示（Tim 2026-10-15：搬到航速這一行；73_slowmo.js）—— 殉爆的慢動作照舊在畫面中間   // 船體、進水改成羅盤外圈的兩圈（drawNav）；後面接帆裝（Tim 2026-10-15「羅盤上方航速資訊可以顯示當前帆狀態」：全收…滿帆，有額外動力的船多倒車、全速前進）
   ms += floodLine(me);
@@ -463,6 +466,7 @@ function hud(dt) {
   var t = dbgOn() ? '格：' + SHIPS.map(function (s) { return s.grid.count; }).join('／') + '　四邊形：' + SHIPS.map(function (s) { return s.rs.quads(); }).join('／') + '　碎片 ' + D.n + '　粒子 ' + PT.n + '　脫落 ' + PIECES.length + (PHYS ? '　物理 ' + PHYS_MS.toFixed(2) + ' ms/步、垂繩 ' + SHIPS.map(function (s) { return s.loose.length; }).join('／') : '') + '　' + FPS.toFixed(0) + ' fps' : '';
   $('tip').textContent = t;
   drawNav(me);
+  teleDraw(me);                                                                  // 俥鐘（羅盤右側；31_drive.js）
 }
 /** 羅盤上方第三行：💧 艙內積水（噸）、🕳 破口（m²）—— Tim 2026-10-15：「羅盤上方資訊額外多一個積水、破口資訊」「假如沒有破口或積水則隱藏」。
  *  數字跟詳細資訊那一行同一份（sh.fl.vol × RHO_W、sh.fl.area；粒子模式才有）；兩個都沒有 ⇒ 整行不出現（沒有空行）、只有一個 ⇒ 只寫那一個。

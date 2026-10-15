@@ -71,7 +71,10 @@ function dbgOn() { return DEBUG || DBG_SET; }
 var GUN_CREW_HURT = Q.get('gcrew') !== '0';                          // 砲被打飛 ⇒ 那門砲的砲班跟著受傷（21_gunnery.js blowModel；TASK-0568，預設開；?gcrew=0 ＝ 照舊）
 var DROWN_T = Math.round(qnum('drown', LIM.drown));                // 落水求生：浮上水面、往自己的船游，撐這麼久（× 0.6～1.2）就溺水（43_swim.js）
 var SEA_K = qnum('sea', LIM.sea);                                   // 浪的大小（08_sea.js；物理與畫面共用）
-var WIND_CAP = qnum('windcap', LIM.windcap);                       // 推帆的風速上限（m/s；30_rig_physics.js physStep）：Tim 2026-10-15「暴風雨中變形有點太誇張」⇒ 風壓×陣風×暴風雨×風速 乘完再夾
+var WIND_CAP = qnum('windcap', LIM.windcap);
+// 動力的手感（TASK-0630；細節設定「動力」；Tim 2026-10-15：「迴轉半徑我之後再調手感(可以有參數調整)」）：預設都是 1 ＝ 校準好的樣子（31_drive.js）。
+//   DRV_INERTIA 加速慣性：實際質量的倍率（2 ⇒ 加減速慢一倍）；DRV_TURN 迴轉慣性：轉向率追舵的時間（1 ＝ 以前的 2 秒）；DRV_TQ 帆的力矩：受損不平衡時船自己偏多少（0 ＝ 不偏）。
+var DRV_INERTIA = qnum('inertia', LIM.inertia), DRV_TURN = qnum('turninert', LIM.turninert), DRV_TQ = qnum('sailtq', LIM.sailtq);                       // 推帆的風速上限（m/s；30_rig_physics.js physStep）：Tim 2026-10-15「暴風雨中變形有點太誇張」⇒ 風壓×陣風×暴風雨×風速 乘完再夾
 var WIND_K = qnum('wind', LIM.wind);                                // 帆的風壓倍率（只管物理開著時帆被吹成什麼樣子；不改航速）
 function powderNever() { return POWDER_HP >= LIM.powderhp[1]; }      // 拉滿 ＝ 不會爆：兩種玩法都是（娛樂的倍率不管它）
 function powderHP() { return Math.round(POWDER_HP * playK('powder')); }   // 實際的火藥血量：娛樂再乘 FUN.powder（預設 675 ⇒ 300）

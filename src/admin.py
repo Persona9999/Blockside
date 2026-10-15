@@ -357,6 +357,21 @@ def validate(cfg, prev=None):
                     err('%s.items[%d]' % (q, j), '{ it: 物品, x, y: 0～399 的整數, r: 0 或 1 }')
                 elif RT[v['type']].get('items') and it['it'] not in RT[v['type']]['items']:
                     err('%s.items[%d]' % (q, j), '%s 不能擺在 %s' % (it['it'], v['type']))
+    DV = cfg.get('drive')                                # 動力（TASK-0630，31_drive.js）：kDrag 水阻係數、side 帆的側向力、tele 俥鐘每一格的航速比例、teleNames 名字
+    if DV is not None:
+        if not isinstance(DV, dict):
+            err('drive', '要是物件')
+        else:
+            if 'kDrag' in DV and not (isnum(DV['kDrag']) and DV['kDrag'] > 0):
+                err('drive.kDrag', '正數（水阻係數：k ＝ kDrag × 排水量^⅔）')
+            if 'side' in DV and not (isnum(DV['side']) and 0 <= DV['side'] <= 3):
+                err('drive.side', '0～3（帆的側向力 ＝ 推力 × side × |sin 相對風向|）')
+            T = DV.get('tele')
+            if T is not None and not (isinstance(T, list) and len(T) >= 2 and all(isnum(x) and -1 <= x <= 1 for x in T) and 1 in T):
+                err('drive.tele', '俥鐘每一格的航速比例：−1～1 的數字清單，要有 1（全速前進）')
+            N = DV.get('teleNames')
+            if N is not None and not (isinstance(N, list) and isinstance(T, list) and len(N) == len(T) and all(isinstance(x, str) and x for x in N)):
+                err('drive.teleNames', '跟 tele 一樣多個名字')
     MT = cfg.get('materials')                            # 材質表（TASK-0616）：{ default: ID, list: { ID: { name, kind, density, hard, flammable } } }；ID 英文小寫，雕刻那側關聯 meta material 寫它
     MIDS = set()
     if not (isinstance(MT, dict) and isinstance(MT.get('list'), dict) and MT['list']):
@@ -416,6 +431,8 @@ def validate(cfg, prev=None):
             err(p + '.material', '全船預設材質要是材質表裡的一種（%s）；沒寫 ＝ materials.default' % '、'.join(sorted(MIDS)))
         if 'zw0' in s and not (isint(s['zw0']) and s['zw0'] > 0):
             err(p + '.zw0', '正整數（作品沒有水線 meta 時的設計水線）')
+        if 'drive' in s and s['drive'] not in ('steam', 'magic'):
+            err(p + '.drive', '額外動力的種類：steam（蒸汽機，預設）或 magic（魔法／幽靈船）；沒有額外動力（cfg.base）就不用寫')
         if 'author' in s and not (isinstance(s['author'], str) and s['author'].strip()):
             err(p + '.author', '建造者（雕刻作品的作者；匯入時從 .vxk 檔頭 owner 記，沒有就不寫這個鍵）')
         for k, v in (s.get('cfg') or {}).items():

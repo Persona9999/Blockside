@@ -105,6 +105,7 @@ function doKey(k, repeat) {
   else if (k === 'a' || k === 'd' || k === 'arrowleft' || k === 'arrowright') {   // 打舵：自動中一碰就換手動
     if (SAIL === 'auto') setSailMode('manual'); KEYS[k === 'a' || k === 'arrowleft' ? 'l' : 'r'] = true;   // 拋錨（6）中 ⇒ 不換模式、繞錨原地轉
   }
+  else if ((k === 'e' || k === 't') && RUNNING && me && !me.sunk) teleStep(me, k === 'e' ? -1 : 1);   // 俥鐘（31_drive.js；Tim：「也要支援快捷鍵操作」）：E 往前撥、T 往後撥；沒有額外動力的船不動
   else if (k === 'v') setCamTrack(!CAM.track);
   else if (k === 'g') setAutoFire(!AUTOFIRE);
   else if (k === 'b') setPhys(!PHYS);
@@ -220,7 +221,7 @@ function sliders() {
   var st = $('stall'), fs = $('funspeed'), fa = $('funagile'), fl = $('funstall'), fp = $('funpowder'), se = $('sea');   // 頂風失速、娛樂加成、浪
   [[se, 'sea'], [st, 'stall'], [fs, 'funspeed'], [fa, 'funagile'], [fl, 'funstall'], [fp, 'funpowder']].forEach(function (e) { e[0].min = LIM[e[1]][0]; e[0].max = LIM[e[1]][1]; });
   dr.min = LIM.drown[0]; dr.max = LIM.drown[1];
-  bx.min = LIM.box[0]; bx.max = LIM.box[1]; cy.min = LIM.carry[0]; cy.max = LIM.carry[1]; wk.min = LIM.wind[0]; wk.max = LIM.wind[1]; wc.min = LIM.windcap[0]; wc.max = LIM.windcap[1];
+  bx.min = LIM.box[0]; bx.max = LIM.box[1]; cy.min = LIM.carry[0]; cy.max = LIM.carry[1]; wk.min = LIM.wind[0]; wk.max = LIM.wind[1]; wc.min = LIM.windcap[0]; wc.max = LIM.windcap[1]; ['inertia', 'turninert', 'sailtq'].forEach(function (k) { $(k).min = LIM[k][0]; $(k).max = LIM[k][1]; });   // 動力的手感（31_drive.js）
   // 硬度跨 40 倍 ⇒ 對數刻度：滑桿 0..1 ↔ 硬度 LIM 下限 × (上限／下限)^v
   var hk = Math.log(LIM.hard[1] / LIM.hard[0]);
   lf.min = LIM.ballast[0]; lf.max = LIM.ballast[1]; gw.min = LIM.gunw[0]; gw.max = LIM.gunw[1];
@@ -466,7 +467,7 @@ function sliders() {
     var k = C(); $('cfgShip').value = CFG_ID;
     lf.value = k.ballast !== undefined ? k.ballast : LIM.ballast[2]; f.value = k.flood; h.value = Math.log(k.hard / LIM.hard[0]) / hk; c.value = STRIKE.cas * 100; sp.value = k.speed; ag.value = k.agile; uw.value = k.upwind; $('base').value = k.base || 0;
     gh.value = GUN_HP; gw.value = k.gunw; sl.value = SAIL_HP; ph.value = POWDER_HP; bl.value = BLAST_K; bv.value = Math.round(BLAST_V * 100); ch.value = CREW_HP;
-    bx.value = BOX_N; cy.value = CARRY_N; wk.value = WIND_K; wc.value = WIND_CAP; dr.value = DROWN_T; $('navre').value = NAV_RE; $('heal').value = HEAL_T; $('gcrew').checked = GUN_CREW_HURT; $('dbg').checked = DBG_SET;
+    bx.value = BOX_N; cy.value = CARRY_N; wk.value = WIND_K; wc.value = WIND_CAP; $('inertia').value = DRV_INERTIA; $('turninert').value = DRV_TURN; $('sailtq').value = DRV_TQ; dr.value = DROWN_T; $('navre').value = NAV_RE; $('heal').value = HEAL_T; $('gcrew').checked = GUN_CREW_HURT; $('dbg').checked = DBG_SET;
     se.value = SEA_K; st.value = STALL_K; fs.value = FUN.speed; fa.value = FUN.agile; fl.value = FUN.stall; fp.value = FUN.powder;
     for (var r = 0; r < 3; r++) for (var k = 0; k < 3; k++) am(r, k).value = AMMO_K[r][k];
     ['guns', 'masts', 'officers'].forEach(function (k) { $('st-' + k).checked = STRIKE[k]; });
@@ -504,6 +505,7 @@ function sliders() {
     $('navreV').textContent = NAV_RE > 0 ? '每 ' + NAV_RE + ' 秒（這段時間裡有甲板、梯子被打壞才重算那幾層：打成兩塊不通 ⇒ 分開找路、梯子斷了 ⇒ 改走別座）' : '關（走路格照開戰時的船：甲板打穿了照樣走過去）';
     $('drownV').textContent = DROWN_T ? '約 ' + DROWN_T + ' 秒（浮上水面、往自己的船游，爬回來當預備水手；受傷的減半）' : '0（關：落水當場算陣亡、淹到的跟著船沉）';
     $('windcapV').textContent = WIND_CAP + ' m/s（暴風雨陣風最大約 ' + Math.round(WIND_SAIL * WIND_K * (1 + GUST[0] + GUST[1] + GUST[2]) * 2.2 * 1.5) + ' m/s ⇒ ' + (WIND_SAIL * WIND_K * (1 + GUST[0] + GUST[1] + GUST[2]) * 2.2 * 1.5 > WIND_CAP ? '會被夾住' : '不會碰到') + '）';
+    $('inertiaV').textContent = DRV_INERTIA.toFixed(2) + '×（質量的倍率：加減速' + (DRV_INERTIA > 1.01 ? '慢 ' + DRV_INERTIA.toFixed(2) + ' 倍' : DRV_INERTIA < 0.99 ? '快 ' + (1 / DRV_INERTIA).toFixed(2) + ' 倍' : '照校準') + '）'; $('turninertV').textContent = DRV_TURN.toFixed(2) + '×（轉向追舵 ' + (2 * DRV_TURN).toFixed(1) + ' 秒）'; $('sailtqV').textContent = DRV_TQ.toFixed(2) + '×' + (DRV_TQ === 0 ? '（受損不偏）' : '');
     $('windV').textContent = WIND_K.toFixed(2) + '×（帆上的風約 ' + (WIND_SAIL * WIND_K).toFixed(0) + ' m/s，陣風 ±' + Math.round(GUST[0] * 100) + '%）';
     $('carryV').textContent = CARRY_N + ' 份' + (CARRY_N > BOX_N ? '（比藥箱多 ⇒ 一趟送好幾門）' : '');
     $('casV').textContent = STRIKE.cas >= 1 ? '100%（全員倒下才停）' : Math.round(STRIKE.cas * 100) + '%';
@@ -542,7 +544,8 @@ function sliders() {
   se.oninput = function () { SEA_K = +se.value; show(); };
   fs.oninput = function () { FUN.speed = +fs.value; show(); }; fa.oninput = function () { FUN.agile = +fa.value; show(); }; fl.oninput = function () { FUN.stall = +fl.value; show(); }; fp.oninput = function () { FUN.powder = +fp.value; show(); };
   wk.oninput = function () { WIND_K = +wk.value; show(); };
-  wc.oninput = function () { WIND_CAP = +wc.value; show(); };          // 物理是每一步讀 ⇒ 遊戲中也能調（只管畫面）
+  wc.oninput = function () { WIND_CAP = +wc.value; show(); };
+  $('inertia').oninput = function () { DRV_INERTIA = +$('inertia').value; show(); }; $('turninert').oninput = function () { DRV_TURN = +$('turninert').value; show(); }; $('sailtq').oninput = function () { DRV_TQ = +$('sailtq').value; show(); };   // 每一步讀 ⇒ 遊戲中也能調          // 物理是每一步讀 ⇒ 遊戲中也能調（只管畫面）
   for (var r = 0; r < 3; r++) for (var k = 0; k < 3; k++) (function (r, k) {
     var el = am(r, k);
     el.oninput = function () { var v = parseFloat(el.value); if (isFinite(v)) { AMMO_K[r][k] = clamp(Math.round(v), AMMO_LIM[0], AMMO_LIM[1]); show(); } };
@@ -600,7 +603,7 @@ function sliders() {
   $('detR').onclick = function () {                    // 重設預設值：LIM 的第三格、降旗全不勾
     // 船隻配置頁（每一型的船員與性能）不跟著重設：那一頁有自己的「這一型回到預設」（TASK-0570：編起來很花時間）
     GUN_HP = LIM.gunhp[2]; SAIL_HP = LIM.sailhp[2]; POWDER_HP = LIM.powderhp[2]; BLAST_K = LIM.blast[2]; BLAST_V = LIM.blastv[2]; CREW_HP = LIM.crewhp[2];
-    BOX_N = LIM.box[2]; CARRY_N = LIM.carry[2]; WIND_K = LIM.wind[2]; WIND_CAP = LIM.windcap[2]; HANDS = LIM.hands[2]; DROWN_T = LIM.drown[2]; NAV_RE = LIM.navre[2]; HEAL_T = LIM.heal[2]; GUN_CREW_HURT = true; DBG_SET = false;
+    BOX_N = LIM.box[2]; CARRY_N = LIM.carry[2]; WIND_K = LIM.wind[2]; WIND_CAP = LIM.windcap[2]; DRV_INERTIA = LIM.inertia[2]; DRV_TURN = LIM.turninert[2]; DRV_TQ = LIM.sailtq[2]; HANDS = LIM.hands[2]; DROWN_T = LIM.drown[2]; NAV_RE = LIM.navre[2]; HEAL_T = LIM.heal[2]; GUN_CREW_HURT = true; DBG_SET = false;
     AMMO_K = AMMO_K0.map(function (r) { return r.slice(); });
     SEA_K = LIM.sea[2]; STALL_K = LIM.stall[2]; FUN.speed = LIM.funspeed[2]; FUN.agile = LIM.funagile[2]; FUN.stall = LIM.funstall[2]; FUN.powder = LIM.funpowder[2];
     STRIKE.cas = LIM.cas[2]; STRIKE.guns = STRIKE.masts = STRIKE.officers = false; CAP_SET = ['random', 'random'];

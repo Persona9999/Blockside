@@ -47,7 +47,8 @@ if (DEBUG) window.__game = {
   menuFleet: function (F) { if (F) { FLEET_SET = fleetTrim(F.map(function (L) { return L.slice(); })); fleetUI(); pickShip(); } return { set: FLEET_SET, spec: fleetSpec(), html: [$('fleet0').innerHTML.length, $('fleet1').innerHTML.length] }; },
   run: function (sec) { var n = Math.round(sec / DT); for (var i = 0; i < n; i++) { step(); if (i % 30 === 29) remesh(Infinity); } remesh(Infinity); camUpdate(1); render(); hud(1); PF.cur = {}; return this.stats(); },   // PF.cur：快轉的不算進下一格畫面
   fire: function (ammo, aim) { var me = SHIPS[PLAYER_I]; if (aim) setAim(me, aim); return broadside(me, ammo || 0); },
-  take: function (i) { return playerTakeShip(SHIPS[i]); },          // 改操控第 i 艘（52_fleet.js；敵艦要 Debug 模式）
+  take: function (i) { return playerTakeShip(SHIPS[i]); },
+  drive: function (i, o) { var sh = SHIPS[i || 0]; if (o && 'tele' in o) teleSet(sh, o.tele); if (o && 'power' in o) sh.power = o.power; return driveInfo(sh); },   // 動力（31_drive.js）：每個動力源的完好度、推力、力矩；{ tele: 格 } 撥俥鐘          // 改操控第 i 艘（52_fleet.js；敵艦要 Debug 模式）
   one: function (ammo, aim) { var me = SHIPS[PLAYER_I]; if (aim) setAim(me, aim); fireOne(me, ammo || 0); return BALLS.length; },
   ships: function () { return SHIPS; }, balls: function () { return BALLS; }, pieces: function () { return PIECES; },
   /** 船隻碰撞（31_sailing.js collide）：shipHit() ⇒ 檔位、HIT_PROF、每個船型的取樣數與算了幾 ms；shipHit(i, j, lv) ⇒ 照第 i、j 艘現在的位置（先重算矩陣）量那一檔：
