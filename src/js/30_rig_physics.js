@@ -454,6 +454,7 @@ function rigFarM(sh) {
 }
 function physStep(sh) {
   var W = norm(WIND), ws = WIND_SAIL * WIND_K * (1 + GUST[0] * Math.sin(SIMT * 0.9 + sh.phase) + GUST[1] * Math.sin(SIMT * 2.7 + 1.3) + GUST[2] * Math.sin(SIMT * 6.1 + sh.phase * 2)) * WX.wind * WIND_SPD;   // 陣風（不用亂數）；天氣：暴風雨 ×2.2；風速會變（08_weather.js）
+  ws = Math.min(ws, WIND_CAP);                                         // 上限（細節設定「風速上限」，預設 30 m/s；Tim 2026-10-15：暴風雨裡帆被吹成螺旋、「上限可以比這個變形幅度稍微小一點就好」⇒ 只夾暴風雨陣風的峰值（沒有上限時可到 50 m/s）；晴天峰值約 23、暴風雨平常約 23 都碰不到）
   var wl = M4.dir(sh.inv, W[0] * ws - sh.vel[0], W[1] * ws - sh.vel[1], W[2] * ws - sh.vel[2]), gv = M4.dir(sh.inv, 0, -G, 0);
   var si = Math.round(SIMT / DT), chk = si % 6 === 0, i, ev = rigLv().every, m = sh.rigM = rigFarM(sh), evk = ev * Math.max(1, Math.min(m, Math.floor(RIG_FAR_HC / (ev * DT) + 1e-6)));   // evk：布幾步走一次（遠方放大）
   var ccOn = PHX.sailhit > 0 && PHX.rig >= 3;                       // 帆的碰撞（09_phx.js；Tim 2026-10-15：選項、預設關、帆與繩「高」才算）
@@ -462,6 +463,7 @@ function physStep(sh) {
   for (i = 0; i < sh.ropes.length; i++) { var r = sh.ropes[i]; if (r.dead && !r.lz) { r.lz = true; if (!r.moved) spawnLoose(sh, r); } }
   sh.sails.forEach(function (s, k) {
     var c = sh.cl[k];
+    var seen = c.seen; c.seen = true;
     if (c.gone) return;
     if (s.dead && !c.loose) {                                         // 物理打開之前就掉了的（late）⇒ 現在才垂下來；收著的時候掉的 ⇒ 不畫
       if (!c.late || s.furled) { c.gone = true; return; }
@@ -473,7 +475,7 @@ function physStep(sh) {
       c.furlF = (c.furlF === null || c.furlF === undefined ? 1 : c.furlF) - DT / FURL_IN;
       if (c.furlF <= 0) { c.hidden = true; c.furlF = null; sh.rigDirty = true; return; }   // rigDirty：它的繩跟著藏（11_rig_gpu.js buildRig）
     } else if (c.furlF !== null && c.furlF !== undefined && !c.hidden) { c.furlF += DT / FURL_OUT; if (c.furlF >= 1) c.furlF = null; }   // 張帆（或收到一半又張）：從帆桁放下來
-    var reopen = c.hidden === true && !s.furled;                       // 收著 ⇒ 張開（⛔ 開局那一次 c.hidden 是 undefined ⇒ 不演）
+    var reopen = seen && c.hidden === true && !s.furled;               // 開局初次啟用不是重新張帆；makeShip 確實以 hidden:true 建立
     if (c.hidden || !c.p) { var keep = c.p && c.torn ? { brk: c.brk, bbrk: c.bbrk, tv: c.tv } : null; clothInit(c); c.hidden = false; if (keep) { c.brk = keep.brk; c.bbrk = keep.bbrk; c.tv = keep.tv; c.torn = true; } if (reopen) { c.furlF = 0; sh.rigDirty = true; } }   // 收帆再張：形狀重來、破洞留著；從收攏的樣子放下來（furlF 0 → 1）
     if (chk || c.npin < 0) clothPins(sh, s, c);
     yardPins(sh, c);
@@ -523,9 +525,23 @@ function furlDraw(c, P, f) {
     var pins = [], yard = []; for (var i = 0; i < T.n; i++) if (T.hk[i]) { pins.push(i); if (T.hk[i] === 4) yard.push(i); }
     var src = yard.length ? yard : pins; g = T.gath = new Int32Array(T.n).fill(-1);
     if (src.length) for (i = 0; i < T.n; i++) { var bd = 1e18; for (var j = 0; j < src.length; j++) { var q = src[j], dx = T.p0[i * 3] - T.p0[q * 3], dy = T.p0[i * 3 + 1] - T.p0[q * 3 + 1], dz = T.p0[i * 3 + 2] - T.p0[q * 3 + 2], d = dx * dx + dy * dy + dz * dz; if (d < bd) { bd = d; g[i] = q; } } }
+    // Keep the first material row at its full distance from the fastening.
+    // Shrinking every row into the yard's centre buries the furled cloth in wood.
+    var source = new Set(src), floor = T.gathFloor = new Float32Array(T.n);
+    for (var ti = 0; ti < T.tris.length; ti += 3) for (var e = 0; e < 3; e++) {
+      var a = T.tris[ti + e], b = T.tris[ti + (e + 1) % 3];
+      if (source.has(a) === source.has(b)) continue;
+      var free = source.has(a) ? b : a, target = g[free]; if (target < 0) continue;
+      floor[target] = Math.max(floor[target], Math.hypot(T.p0[free * 3] - T.p0[target * 3], T.p0[free * 3 + 1] - T.p0[target * 3 + 1], T.p0[free * 3 + 2] - T.p0[target * 3 + 2]));
+    }
   }
   var e = f * f * (3 - 2 * f), k = 0.04 + 0.96 * e;                     // 收到底留 4%（一捲布，不是一條線）
-  for (i = 0; i < T.n; i++) { var a = g[i]; if (a < 0 || a === i) continue; for (var ax = 0; ax < 3; ax++) P[i * 3 + ax] = P[a * 3 + ax] + (P[i * 3 + ax] - P[a * 3 + ax]) * k; }
+  for (i = 0; i < T.n; i++) {
+    var a = g[i]; if (a < 0 || a === i || T.hk[i]) continue; // Rendering must preserve every authored fastening, including rope/body pins.
+    var rest = Math.hypot(T.p0[i * 3] - T.p0[a * 3], T.p0[i * 3 + 1] - T.p0[a * 3 + 1], T.p0[i * 3 + 2] - T.p0[a * 3 + 2]);
+    var fraction = Math.max(k, Math.min(1, (T.gathFloor && T.gathFloor[a] || 0) / (rest || 1)));
+    for (var ax = 0; ax < 3; ax++) P[i * 3 + ax] = P[a * 3 + ax] + (P[i * 3 + ax] - P[a * 3 + ax]) * fraction;
+  }
   return P;
 }
 // 效能（ame 2026-10-15，Tim：「接手效能，在她的碰撞做法上加篩選和降頻」；碰撞的做法本身照 Sirius 的）：
@@ -731,7 +747,8 @@ function ccRopeMount(c, ids, v, record, a, b) {
   var T = c.T, r = record.r, radius = record.radius, extent = 2 * radius + CLOTH_CONTACT_MARGIN;
   for (var j = 0; j < 3; j++) {
     var id = ids[j], own = T.hk[id] === 2 && T.hv[id] === record.index;
-    if (!own && (!sailRope(r, T.name) || Math.min(len(sub(v[j], a)), len(sub(v[j], b))) > extent)) continue;
+    var shared = T.hk[id] === 4 && (r.ya === T.hv[id] || r.yb === T.hv[id]) && Math.min(len(sub(v[j], a)), len(sub(v[j], b))) <= radius + CLOTH_CONTACT_MARGIN;
+    if (!own && !shared) continue;
     if (!c.pin[id]) continue;
     var contained = true;
     for (var axis = 0; axis < 3 && contained; axis++) for (var sign = -1; sign <= 1 && contained; sign += 2) {
@@ -742,16 +759,133 @@ function ccRopeMount(c, ids, v, record, a, b) {
   }
   return false;
 }
-function ccAttachment(c, ids, hit, owner, v) {
-  // Only the actual fixed edge may enter its own mounting solid. A neighbouring
-  // free triangle is not exempt merely because one of its vertices is pinned.
-  var T = c.T, closest = Infinity;
-  for (var j = 0; j < 3; j++) { var k = (j + 1) % 3, a = ids[j], b = ids[k]; if (!T.hk[a] || !T.hk[b]) continue;
-    var owns = owner < 0 ? T.hk[a] === 1 || T.hk[b] === 1 : T.hk[a] === 4 && T.hv[a] === owner && T.hk[b] === 4 && T.hv[b] === owner;
-    if (!owns) continue;
-    closest = Math.min(closest, Math.sqrt(segDist2(hit.p, v[j][0], v[j][1], v[j][2], v[k][0], v[k][1], v[k][2])));
+// Whole contact sets, rather than a sampled witness, must fit the fastening.
+// Rows carry position plus triangle barycentrics through every clipping plane.
+function ccClipRows(poly, distance) {
+  var out = [];
+  for (var i = 0; i < poly.length; i++) {
+    var a = poly[i], b = poly[(i + 1) % poly.length], da = distance(a), db = distance(b);
+    if (da >= 0) out.push(a);
+    if ((da >= 0) !== (db >= 0)) out.push(a.map(function (x, k) { return x + (b[k] - x) * da / (da - db); }));
   }
-  return closest <= 0.8;
+  return out;
+}
+function ccBoxPolygon(v, cell, inset) {
+  inset = inset || 0;
+  var poly = v.map(function (p, i) { return p.concat([+(i === 0), +(i === 1), +(i === 2)]); });
+  for (var a = 0; a < 3; a++) {
+    poly = ccClipRows(poly, function (p) { return p[a] - cell[a] - inset; });
+    poly = ccClipRows(poly, function (p) { return cell[a] + 1 - inset - p[a]; });
+  }
+  return poly;
+}
+function ccSeams(sh, c) {
+  var T = c.T; if (T.ccSeams) return T.ccSeams;
+  var edges = new Map(), seams = [];
+  for (var i = 0; i < T.tris.length; i += 3) for (var j = 0; j < 3; j++) {
+    var a = T.tris[i + j], b = T.tris[i + (j + 1) % 3], key = Math.min(a, b) + ':' + Math.max(a, b), e = edges.get(key);
+    if (e) e.count++; else edges.set(key, { a: a, b: b, count: 1 });
+  }
+  edges.forEach(function (e) {
+    if (e.count !== 1 || T.hk[e.a] !== 4 || T.hk[e.b] !== 4 || T.hv[e.a] !== T.hv[e.b]) return;
+    var owner = T.hv[e.a], md = sh.T.rig.models[owner], mesh = sh.T.rig.meshes[md.mesh];
+    var ma = Array.from(T.p0.slice(e.a * 3, e.a * 3 + 3)), mb = Array.from(T.p0.slice(e.b * 3, e.b * 3 + 3));
+    var a = sub(ma, md.origin), b = sub(mb, md.origin), d = sub(b, a), length = len(d); if (length < 1e-7) return;
+    var axis = mul(d, 1 / length), radius = 0;
+    for (var f = 0; f < mesh.tris.length; f += 3) {
+      var poly = [0, 1, 2].map(function (j) { var k = mesh.tris[f + j] * 3; return mesh.verts.slice(k, k + 3); });
+      poly = ccClipRows(poly, function (p) { return dot(sub(p, a), axis); });
+      poly = ccClipRows(poly, function (p) { return length - dot(sub(p, a), axis); });
+      poly.forEach(function (p) { var q = sub(p, a); radius = Math.max(radius, len(sub(q, mul(axis, dot(q, axis))))); });
+    }
+    if (radius > 1e-7) seams.push({ owner: owner, ia: e.a, ib: e.b, a: a, b: b, ma: ma, mb: mb, radius: radius });
+  });
+  return (T.ccSeams = seams);
+}
+function ccSegmentDistance(p, a, b) { return Math.sqrt(segDist2(p, a[0], a[1], a[2], b[0], b[1], b[2])); }
+function ccModelContactSet(v, local, model, faces, tree) {
+  var points = []; points.complete = true;
+  function addPoint(p, w) { points.push(M4.pt(model.matrix, p[0], p[1], p[2]).concat(w)); }
+  for (var j = 0; j < 3; j++) if (ccInside(local[j], tree)) { var w = [0, 0, 0]; w[j] = 1; addPoint(local[j], w); }
+  faces.forEach(function (face) {
+    var faceNormal = norm(cross(sub(face.p[1], face.p[0]), sub(face.p[2], face.p[0])));
+    if (local.every(function (p) { return Math.abs(dot(sub(p, face.p[0]), faceNormal)) < 1e-4; })) points.complete = false;
+    for (var e = 0; e < 3; e++) {
+      var hit = ccSegmentTri(local[e], local[(e + 1) % 3], face.p);
+      if (hit) { var w = [0, 0, 0]; w[e] = 1 - hit.t; w[(e + 1) % 3] = hit.t; addPoint(hit.p, w); }
+      hit = ccSegmentTri(face.p[e], face.p[(e + 1) % 3], local);
+      if (hit) addPoint(hit.p, hit.w);
+    }
+  });
+  // The convex hull of these complete intersection vertices overbounds every
+  // positive-area component. Both fastening tests below are convex bounds.
+  return points;
+}
+function ccLocalSeam(sh, c, ids, poly, owner) {
+  if (!poly.length || poly.complete === false) return false;
+  var T = c.T, material = poly.map(function (p) { var q = [0, 0, 0]; for (var j = 0; j < 3; j++) for (var a = 0; a < 3; a++) q[a] += T.p0[ids[j] * 3 + a] * p[j + 3]; return q; });
+  var seams = ccSeams(sh, c), tol = 1e-4;
+  for (var i = 0; i < seams.length; i++) {
+    var seam = seams[i]; if (seam.owner !== owner || !c.pin[seam.ia] || !c.pin[seam.ib]) continue;
+    if (material.some(function (p) { return ccSegmentDistance(p, seam.ma, seam.mb) > seam.radius + tol; })) continue;
+    var md = sh.models[owner], inverse = M4.inv(modelLocal(md));
+    if (poly.every(function (p) { return ccSegmentDistance(M4.pt(inverse, p[0], p[1], p[2]), seam.a, seam.b) <= seam.radius + tol; })) return true;
+  }
+  return false;
+}
+function ccPolygonArea(poly) {
+  var area = 0;
+  for (var i = 1; i + 1 < poly.length; i++) area += len(cross(sub(poly[i], poly[0]), sub(poly[i + 1], poly[0]))) / 2;
+  return area;
+}
+function ccYardBodyJoint(sh, geo, owner) {
+  // A touching cell is a fastening only in the finite six-connected component
+  // containing this yard's actual pivot. A remote decorative collision fails.
+  var md = sh.models[owner], si = Math.round(SIMT / DT);
+  if (!sh.ccJoints || sh.ccJoints.si !== si) sh.ccJoints = { si: si, owners: new Map() };
+  var cache = sh.ccJoints.owners; if (cache.has(owner)) return cache.get(owner);
+  var component = new Set(); cache.set(owner, component);
+  if (!md || !md.alive || md.kind !== 'yard' || !md.piv) return component;
+  var matrix = modelLocal(md), inverse = M4.inv(matrix), tree = ccMesh(geo, md.mesh);
+  function intersects(cell) {
+    if (!sh.grid.get(cell[0], cell[1], cell[2])) return false;
+    var center = M4.pt(inverse, cell[0] + .5, cell[1] + .5, cell[2] + .5);
+    if (ccInside(center, tree)) return true;
+    var corners = [];
+    for (var k = 0; k < 8; k++) corners.push(M4.pt(inverse, cell[0] + (k & 1 ? 1 : 0), cell[1] + (k & 2 ? 1 : 0), cell[2] + (k & 4 ? 1 : 0)));
+    var faces = []; ccQuery(tree, ccBox(corners), 0, faces);
+    return faces.some(function (face) {
+      var world = face.p.map(function (p) { return M4.pt(matrix, p[0], p[1], p[2]); });
+      return ccPolygonArea(ccBoxPolygon(world, cell, 1e-7)) > 1e-10;
+    });
+  }
+  var seed = md.piv.map(Math.floor); if (!intersects(seed)) return component;
+  var queue = [seed], seen = new Set();
+  for (var head = 0; head < queue.length; head++) {
+    var cell = queue[head], key = cell.join(','); if (seen.has(key)) continue; seen.add(key);
+    if (!intersects(cell)) continue;
+    component.add(key);
+    if (component.size > 4096) { component.clear(); break; } // fail closed on an unexpected large component
+    for (var axis = 0; axis < 3; axis++) for (var sign = -1; sign <= 1; sign += 2) { var next = cell.slice(); next[axis] += sign; queue.push(next); }
+  }
+  return component;
+}
+function ccBodyMount(sh, c, ids, poly, cell, geo) {
+  if (!poly.length) return false;
+  var T = c.T, packed = VK.pack(cell[0], cell[1], cell[2]), tol = 1e-4;
+  for (var i = 0; i < T.n; i++) if (T.hk[i] === 1 && T.hv[i] === packed && c.pin[i]) {
+    var point = Array.from(T.p0.slice(i * 3, i * 3 + 3));
+    if (poly.every(function (p) {
+      var material = [0, 0, 0]; for (var j = 0; j < 3; j++) for (var a = 0; a < 3; a++) material[a] += T.p0[ids[j] * 3 + a] * p[j + 3];
+      return len(sub(p, point)) <= Math.sqrt(3) + tol && len(sub(material, point)) <= Math.sqrt(3) + tol;
+    })) return true;
+  }
+  var seams = ccSeams(sh, c), tested = new Set();
+  for (var i = 0; i < seams.length; i++) {
+    var owner = seams[i].owner; if (tested.has(owner)) continue; tested.add(owner);
+    if (ccLocalSeam(sh, c, ids, poly, owner) && ccYardBodyJoint(sh, geo, owner).has(cell.join(','))) return true;
+  }
+  return false;
 }
 function clothContacts(sh, c, deadline) {   // deadline：performance.now() 到這個時間就先停、記下做到哪個三角形（c.ccCur），下次接著做；回傳這一面掃完了沒
   if (!c.p || c.hidden || c.gone || !c.T.mi) return;
@@ -786,12 +920,17 @@ function clothContacts(sh, c, deadline) {   // deadline：performance.now() 到�
       for (var bi = 0; bi < cells.length; bi++) { var b = cells[bi].b;
         for (var x = Math.max(b[0], Math.floor(box[0])); x < Math.min(b[3], Math.ceil(box[3] + 1e-7)); x++) for (var y = Math.max(b[1], Math.floor(box[1])); y < Math.min(b[4], Math.ceil(box[4] + 1e-7)); y++) for (var z = Math.max(b[2], Math.floor(box[2])); z < Math.min(b[5], Math.ceil(box[5] + 1e-7)); z++) {
           if (!sh.grid.get(x, y, z)) continue; var hit = ccTriangleBox(v, [x, y, z, x + 1, y + 1, z + 1]); if (!hit) continue;
+          if (ccBodyMount(sh, c, ids, ccBoxPolygon(v, [x, y, z]), [x, y, z], geo)) continue;
           var plane = ccBodyPlane(sh.grid, v, [x, y, z]);
           contacts++; if (plane && ccSeparate(c, ids, v, plane.normal, plane.limit)) moved = true; else locked++;
         }
       }
       for (var mk = 0; mk < models.length; mk++) { var model = models[mk]; if (!ccOverlap(box, model.box, CLOTH_CONTACT_MARGIN)) continue;
         var local = v.map(function (p) { return M4.pt(model.inverse, p[0], p[1], p[2]); }), localBox = ccBox(local), faces = []; ccQuery(ccMesh(geo, model.m.mesh), localBox, CLOTH_CONTACT_MARGIN, faces);
+        if (ccSeams(sh, c).some(function (s) { return s.owner === model.m.k; })) {
+          var contactSet = ccModelContactSet(v, local, model, faces, ccMesh(geo, model.m.mesh));
+          if (ccLocalSeam(sh, c, ids, contactSet, model.m.k)) continue;
+        }
         var center = mul(add(add(local[0], local[1]), local[2]), 1 / 3);
         if (ccInside(center, ccMesh(geo, model.m.mesh))) {
           var near = ccNearest(center, ccMesh(geo, model.m.mesh)), direction = norm(sub(near.p, center));

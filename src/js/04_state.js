@@ -66,6 +66,7 @@ var NAV_RE = qnum('navre', LIM.navre);                              // 尋路動
 var GUN_CREW_HURT = Q.get('gcrew') !== '0';                          // 砲被打飛 ⇒ 那門砲的砲班跟著受傷（21_gunnery.js blowModel；TASK-0568，預設開；?gcrew=0 ＝ 照舊）
 var DROWN_T = Math.round(qnum('drown', LIM.drown));                // 落水求生：浮上水面、往自己的船游，撐這麼久（× 0.6～1.2）就溺水（43_swim.js）
 var SEA_K = qnum('sea', LIM.sea);                                   // 浪的大小（08_sea.js；物理與畫面共用）
+var WIND_CAP = qnum('windcap', LIM.windcap);                       // 推帆的風速上限（m/s；30_rig_physics.js physStep）：Tim 2026-10-15「暴風雨中變形有點太誇張」⇒ 風壓×陣風×暴風雨×風速 乘完再夾
 var WIND_K = qnum('wind', LIM.wind);                                // 帆的風壓倍率（只管物理開著時帆被吹成什麼樣子；不改航速）
 function powderNever() { return POWDER_HP >= LIM.powderhp[1]; }      // 拉滿 ＝ 不會爆：兩種玩法都是（娛樂的倍率不管它）
 function powderHP() { return Math.round(POWDER_HP * playK('powder')); }   // 實際的火藥血量：娛樂再乘 FUN.powder（預設 675 ⇒ 300）

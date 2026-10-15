@@ -422,6 +422,8 @@
       <div class="row note">歸零才掉；還沒掉的帆照剩下的血量算推力（物理開著會看到破洞）。收起來的帆打不壞。</div>
       <div class="row slide"><label for="wind">風壓</label><input type="range" id="wind" step="0.05" aria-label="帆的風壓"><span id="windV"></span></div>
       <div class="row note">帆與繩的物理開著時，帆被吹鼓的力道與陣風（帆桁也會跟著風轉）；只管畫面，不改航速。</div>
+      <div class="row slide"><label for="windcap">風速上限</label><input type="range" id="windcap" step="1" aria-label="帆上的風速上限"><span id="windcapV"></span></div>
+      <div class="row note">風壓 × 陣風 × 天氣（暴風雨 ×2.2）× 當下風速 乘完之後最多這麼大 ⇒ 暴風雨裡帆不會被吹得太誇張；只管畫面。</div>
       <h3>船員</h3>
       <div class="row slide"><label for="crewhp">血量</label><input type="range" id="crewhp" step="10" aria-label="船員的血量"><span id="crewhpV"></span></div>
       <div class="row slide"><label for="drown">溺水時間</label><input type="range" id="drown" step="5" aria-label="落水的人撐多久會溺水（秒）"><span id="drownV"></span></div>
@@ -478,6 +480,7 @@
 <script type="application/x-vxk" id="ship-phoenix" src="../VoxelKit/_cache/phoenix.vxk"></script>
 <script type="application/x-vxk" id="ship-virginia" src="../VoxelKit/_cache/virginia.vxk"></script>
 <script type="application/x-vxk" id="ship-cosecha" src="../VoxelKit/_cache/cosecha.vxk"></script>
+<script type="application/x-vxk" id="ship-napoleon" src="../VoxelKit/_cache/napoleon.vxk"></script>
 <!-- ships 結束 -->
 <!-- 設定檔（TASK-0542）：各項設定的初始值與船隻清單；js/00_config.js 讀成 CFG。設定後台：python -I admin.py serve -->
 <script type="application/x-asset" id="game-config" src="config/game.json"></script>
