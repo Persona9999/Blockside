@@ -52,13 +52,14 @@ function shipCheck(id) {
     if (DC) DC.B.forEach(function (c) { if (c.b.funnel && !funnelsOf(T).some(function (f) { return f.name === c.b.funnel; })) add('warn', '鍋爐', c.b.name, 'meta funnel=' + c.b.funnel + ' 找不到這條煙囪 ⇒ 鍋爐壞了也不會停煙', 'funnel 寫煙囪關聯的路徑（一字不差）'); });
     // ── 錨（TASK-0601）：模型錨（meta kind=anchor）＋錨環 ring、船殼的錨鏈孔 hawse-P／S（造船規格 §9 anchor）──
     var AN = anchorsOf(sh);
-    R.info.anchors = (AN.single ? '單錨（' + (AN.single === 'P' ? '左' : '右') + '舷；左右錨按鈕不顯示、6 只拋這一個）：' : '') + ['P', 'S'].filter(function (k) { return !AN[k].none; }).map(function (k) { var a = AN[k]; return (k === 'P' ? '左' : '右') + (a.m ? '模型' + (a.m.pts.ring ? '＋ring' : '') : a.part ? '格子' : '無') + (a.hw ? '＋hawse' : ''); }).join('、');
+    if (AN.noAnchor) add('warn', '錨', '整艘', '找不到錨（沒有 meta kind=anchor 的模型、也沒有名字有「錨」的關聯）⇒ 不能拋錨：6／7／8 變成停船', '要能拋錨 ⇒ 放共用錨元件（造船規格 §9 anchor）');
+    R.info.anchors = AN.noAnchor ? '沒有錨（6／7／8 ＝ 停船）' : (AN.single ? '單錨（' + (AN.single === 'P' ? '左' : '右') + '舷；左右錨按鈕不顯示、6 只拋這一個）：' : '') + ['P', 'S'].filter(function (k) { return !AN[k].none; }).map(function (k) { var a = AN[k]; return (k === 'P' ? '左' : '右') + (a.m ? '模型' + (a.m.pts.ring ? '＋ring' : '') : a.part ? '格子' : '無') + (a.hw ? '＋hawse' : ''); }).join('、');
     ['P', 'S'].forEach(function (k) {
       var a = AN[k];
       if (a.none) return;                                               // 單錨的船：另一舷本來就沒有（TASK-0635；不補、不報）
       if (a.m && !a.m.pts.ring) add('warn', '錨', a.m.path, '模型錨沒有固定點 ring ⇒ 鐵鍊接在模型頂的中心', '錨子作品登記 ring（造船規格 §9 anchor；共用錨元件已經有）');
       else if (a.part) add('warn', '錨', a.part.path, '錨是關聯（格子）、不是模型 ⇒ 拋下去時船上那團格子不動、鍊尾另外畫一個簡單的錨', '換成共用錨元件（外部模型、meta kind=anchor）');
-      else if (!a.m) add('warn', '錨', k === 'P' ? '左舷' : '右舷', '整艘船都找不到錨（沒有 meta kind=anchor 的模型、也沒有名字有「錨」的關聯）⇒ 兩舷從船頭附近拋、鍊尾畫簡單的錨', '放共用錨元件（造船規格 §9 anchor）');
+      else if (!a.m) add('warn', '錨', k === 'P' ? '左舷' : '右舷', '這一舷的錨沒有模型、也不是關聯（不該走到這裡：單錨與沒有錨都在上面處理了）', '放共用錨元件（造船規格 §9 anchor）');
       if (!a.hw) add('warn', '錨鏈孔', '船殼', '沒有固定點 hawse-' + k + ' ⇒ 鐵鍊從錨那一點出來、船繞錨那一點被拴住', '船殼登記 hawse-P／S（造船規格 §9 anchor）');
     });
     // ── 材質（TASK-0616）：全船預設＋關聯 meta material；材質表沒有的 ID ⇒ 照全船預設 ──

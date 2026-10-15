@@ -10675,6 +10675,7 @@ function doKey(k, repeat) {
   else if (k === 'h' || k === '?') helpToggle();
   else if (k === 'r') { gsetClose(); helpClose(); RUNNING = false; END_AT = 0; END_WAIT = null; $('cover').style.display = ''; $('end').className = ''; }
   else if (k === '4') sailToggle();   // 4 一顆切換 自動 ⇄ 手動（Tim 2026-10-15：「改成單鍵，4 就好，不用 4/5」；手動也可以直接打舵 A／D）；錨在水裡 ⇒ 先起錨（7／8 拋的也一起）
+  else if ((k === '6' || k === '7' || k === '8') && me && !me.sunk && anchorsOf(me).noAnchor) setSailMode(SAIL === 'off' ? 'manual' : 'off');   // 整艘沒有錨（TASK-0635）：6／7／8 都是停船 ⇄ 手動
   else if (k === '6' && me && !me.sunk) {                              // 拋錨／起錨同一顆（Tim 2026-10-15；76_anchor.js anchor6）：兩邊都沒拋 ⇒ 雙錨（拋錨模式、只有我艦）；一邊在水裡 ⇒ 拋另一邊；兩邊都在水裡 ⇒ 起錨
     var a6 = anchor6(me);
     if (a6.act === 'both') setSailMode('off');
@@ -10721,7 +10722,8 @@ var SAIL_NAMES = { auto: '自動航行', manual: '手動操舵（A／D 打舵）
 function setSailMode(m) {
   SAIL = m; KEYS.l = KEYS.r = false;
   [].forEach.call(document.querySelectorAll('[data-s]'), function (x) { x.classList.toggle('on', x.dataset.s === SAIL); }); sailLabel();
-  if (RUNNING && SHIPS.length) note(SHIPS[PLAYER_I], (m === 'off' && anchorsOf(SHIPS[PLAYER_I]).single ? '拋錨（單錨；A／D 繞錨轉）' : SAIL_NAMES[m]) + '（4 自動／手動切換、6 拋錨、再按一次起錨）');   // 單錨的船（TASK-0635）
+  var noA = RUNNING && SHIPS.length && anchorsOf(SHIPS[PLAYER_I]).noAnchor;
+  if (RUNNING && SHIPS.length) note(SHIPS[PLAYER_I], (m === 'off' && noA ? '停船（這艘沒有錨：帆與引擎不出力、船慢慢停下）' : m === 'off' && anchorsOf(SHIPS[PLAYER_I]).single ? '拋錨（單錨；A／D 繞錨轉）' : SAIL_NAMES[m]) + (noA ? '（4 自動／手動切換、6 停船、再按一次開船）' : '（4 自動／手動切換、6 拋錨、再按一次起錨）'));   // 單錨的船（TASK-0635）
 }
 /** 自由鏡頭跟不跟著兩艘的中點走（預設跟；鏡頭「看敵艦／看我艦」本來就跟著那一艘）。 */
 function setCamTrack(on) {
@@ -11684,13 +11686,14 @@ function shipCheck(id) {
     if (DC) DC.B.forEach(function (c) { if (c.b.funnel && !funnelsOf(T).some(function (f) { return f.name === c.b.funnel; })) add('warn', '鍋爐', c.b.name, 'meta funnel=' + c.b.funnel + ' 找不到這條煙囪 ⇒ 鍋爐壞了也不會停煙', 'funnel 寫煙囪關聯的路徑（一字不差）'); });
     // ── 錨（TASK-0601）：模型錨（meta kind=anchor）＋錨環 ring、船殼的錨鏈孔 hawse-P／S（造船規格 §9 anchor）──
     var AN = anchorsOf(sh);
-    R.info.anchors = (AN.single ? '單錨（' + (AN.single === 'P' ? '左' : '右') + '舷；左右錨按鈕不顯示、6 只拋這一個）：' : '') + ['P', 'S'].filter(function (k) { return !AN[k].none; }).map(function (k) { var a = AN[k]; return (k === 'P' ? '左' : '右') + (a.m ? '模型' + (a.m.pts.ring ? '＋ring' : '') : a.part ? '格子' : '無') + (a.hw ? '＋hawse' : ''); }).join('、');
+    if (AN.noAnchor) add('warn', '錨', '整艘', '找不到錨（沒有 meta kind=anchor 的模型、也沒有名字有「錨」的關聯）⇒ 不能拋錨：6／7／8 變成停船', '要能拋錨 ⇒ 放共用錨元件（造船規格 §9 anchor）');
+    R.info.anchors = AN.noAnchor ? '沒有錨（6／7／8 ＝ 停船）' : (AN.single ? '單錨（' + (AN.single === 'P' ? '左' : '右') + '舷；左右錨按鈕不顯示、6 只拋這一個）：' : '') + ['P', 'S'].filter(function (k) { return !AN[k].none; }).map(function (k) { var a = AN[k]; return (k === 'P' ? '左' : '右') + (a.m ? '模型' + (a.m.pts.ring ? '＋ring' : '') : a.part ? '格子' : '無') + (a.hw ? '＋hawse' : ''); }).join('、');
     ['P', 'S'].forEach(function (k) {
       var a = AN[k];
       if (a.none) return;                                               // 單錨的船：另一舷本來就沒有（TASK-0635；不補、不報）
       if (a.m && !a.m.pts.ring) add('warn', '錨', a.m.path, '模型錨沒有固定點 ring ⇒ 鐵鍊接在模型頂的中心', '錨子作品登記 ring（造船規格 §9 anchor；共用錨元件已經有）');
       else if (a.part) add('warn', '錨', a.part.path, '錨是關聯（格子）、不是模型 ⇒ 拋下去時船上那團格子不動、鍊尾另外畫一個簡單的錨', '換成共用錨元件（外部模型、meta kind=anchor）');
-      else if (!a.m) add('warn', '錨', k === 'P' ? '左舷' : '右舷', '整艘船都找不到錨（沒有 meta kind=anchor 的模型、也沒有名字有「錨」的關聯）⇒ 兩舷從船頭附近拋、鍊尾畫簡單的錨', '放共用錨元件（造船規格 §9 anchor）');
+      else if (!a.m) add('warn', '錨', k === 'P' ? '左舷' : '右舷', '這一舷的錨沒有模型、也不是關聯（不該走到這裡：單錨與沒有錨都在上面處理了）', '放共用錨元件（造船規格 §9 anchor）');
       if (!a.hw) add('warn', '錨鏈孔', '船殼', '沒有固定點 hawse-' + k + ' ⇒ 鐵鍊從錨那一點出來、船繞錨那一點被拴住', '船殼登記 hawse-P／S（造船規格 §9 anchor）');
     });
     // ── 材質（TASK-0616）：全船預設＋關聯 meta material；材質表沒有的 ID ⇒ 照全船預設 ──
@@ -11783,7 +11786,9 @@ function shipCheck(id) {
 // 單錨的船（TASK-0635；Tim 2026-10-16：「只有一個錨的情況下 會自動補上另一邊的錨 且會歪掉」「只有單錨時 隱藏左右錨 只保留拋錨操作」）：
 //   兩舷只找到一個真的錨（模型或關聯）⇒ 另一舷標 none（不補、拋不了），A.single ＝ 有錨的那一舷；左右錨（7／8）的按鈕藏起來、按鍵不理，6 只拋這一個。
 //   ⛔ 以前另一舷照船頭的預設點補一個（水線上 25 格、bowHalf 寬）⇒ 莫尼特號那個補出來的左錨在水線上 2.5 m、中線往左 2 m 的半空，鐵鍊從空中垂下去。
-//   兩舷都找不到 ⇒ 照舊兩舷都補（船頭兩側、打不壞）。錨剛好在中線（外框中心 y ＝ T.cy）⇒ 算右舷（以前兩舷都不算 ⇒ 兩舷都補）。
+//   錨剛好在中線（外框中心 y ＝ T.cy）⇒ 算右舷（以前兩舷都不算 ⇒ 兩舷都補）。
+//   整艘都沒有錨（夜隼號、風暴角號；Tim 2026-10-16：「不隱藏按鈕」「功能變成停船」）⇒ 兩舷都 none、A.noAnchor：6／7／8 照樣顯示（圖示 🛑），
+//   按哪一顆都是切換停船（SAIL 'off'：帆與引擎不出力、船慢慢停下（時間常數 6 秒）、舵放正；31_sailing.js）⇄ 手動。⛔ 以前兩舷照船頭的預設點補兩個、打不壞。
 var ANC_DEPTH = 20, ANC_CHAIN = 36, ANC_REACH = Math.sqrt(ANC_CHAIN * ANC_CHAIN - ANC_DEPTH * ANC_DEPTH), ANC_FALL = 4, ANC_WEIGH = 8, ANC_DRAG = 8, ANC_DRAGX = 2.5, ANC_PIVOT = 0.06, ANC_YAWMAX = 0.5, ANC_HAUL = 1;   // 公尺、秒、rad/s、m/s
 /** 這艘的兩個錨（第一次要用才建）：錨鏈孔的格座標、是哪個部件（模型／關聯／沒有）。 */
 function anchorsOf(sh) {
@@ -11806,6 +11811,7 @@ function anchorsOf(sh) {
   });
   var real = ['P', 'S'].filter(function (k) { return out[k].m || out[k].part; });
   if (real.length === 1) { out[real[0] === 'P' ? 'S' : 'P'].none = true; out.single = real[0]; }   // 單錨：另一舷不補（TASK-0635）
+  else if (!real.length) { out.P.none = out.S.none = true; out.noAnchor = true; }                  // 整艘沒有錨：6／7／8 變成停船
   return (sh.anc = out);
 }
 function anchorAlive(sh, a) {
@@ -11904,6 +11910,15 @@ function anchorStep(sh, dt, px0, pz0) {
 function anchorChips(me) {
   if (!me) return;
   var A = anchorsOf(me), w = anchorWet(me), b6 = $('ancAll');
+  if (A.noAnchor) {                                                     // 整艘沒有錨：三顆都是停船（🛑；停著 ⇒ 亮）
+    var st = SAIL === 'off';
+    [b6, $('ancP'), $('ancS')].forEach(function (el) {
+      if (!el) return; if (el.style.display) el.style.display = '';
+      el.classList.toggle('on', st); el.classList.remove('dis');
+      var sp = el.querySelector('i'); if (sp && sp.textContent !== '🛑') sp.textContent = '🛑';
+    });
+    return;
+  }
   var aa = A.single ? '⚓' : '⚓⚓';                                       // 單錨：6 的圖示一個錨（TASK-0635）
   if (b6) { var a6 = anchor6(me).act; b6.classList.toggle('on', w); var l6 = a6 === 'weigh' && w ? aa + '⬆' : a6 === 'weigh' ? aa + '⏳' : aa, s6 = b6.querySelector('i'); if (s6 && s6.textContent !== l6) s6.textContent = l6; }   // 圖示（Tim 2026-10-15：兩個錨 ＝ 兩邊一起下）：⚓⚓ 拋（一邊在水裡 ⇒ 亮、按了拋另一邊）、⚓⚓⬆ 按了起錨、⚓⚓⏳ 起錨中
   ['P', 'S'].forEach(function (k) {

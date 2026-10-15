@@ -95,6 +95,7 @@ function doKey(k, repeat) {
   else if (k === 'h' || k === '?') helpToggle();
   else if (k === 'r') { gsetClose(); helpClose(); RUNNING = false; END_AT = 0; END_WAIT = null; $('cover').style.display = ''; $('end').className = ''; }
   else if (k === '4') sailToggle();   // 4 一顆切換 自動 ⇄ 手動（Tim 2026-10-15：「改成單鍵，4 就好，不用 4/5」；手動也可以直接打舵 A／D）；錨在水裡 ⇒ 先起錨（7／8 拋的也一起）
+  else if ((k === '6' || k === '7' || k === '8') && me && !me.sunk && anchorsOf(me).noAnchor) setSailMode(SAIL === 'off' ? 'manual' : 'off');   // 整艘沒有錨（TASK-0635）：6／7／8 都是停船 ⇄ 手動
   else if (k === '6' && me && !me.sunk) {                              // 拋錨／起錨同一顆（Tim 2026-10-15；76_anchor.js anchor6）：兩邊都沒拋 ⇒ 雙錨（拋錨模式、只有我艦）；一邊在水裡 ⇒ 拋另一邊；兩邊都在水裡 ⇒ 起錨
     var a6 = anchor6(me);
     if (a6.act === 'both') setSailMode('off');
@@ -141,7 +142,8 @@ var SAIL_NAMES = { auto: '自動航行', manual: '手動操舵（A／D 打舵）
 function setSailMode(m) {
   SAIL = m; KEYS.l = KEYS.r = false;
   [].forEach.call(document.querySelectorAll('[data-s]'), function (x) { x.classList.toggle('on', x.dataset.s === SAIL); }); sailLabel();
-  if (RUNNING && SHIPS.length) note(SHIPS[PLAYER_I], (m === 'off' && anchorsOf(SHIPS[PLAYER_I]).single ? '拋錨（單錨；A／D 繞錨轉）' : SAIL_NAMES[m]) + '（4 自動／手動切換、6 拋錨、再按一次起錨）');   // 單錨的船（TASK-0635）
+  var noA = RUNNING && SHIPS.length && anchorsOf(SHIPS[PLAYER_I]).noAnchor;
+  if (RUNNING && SHIPS.length) note(SHIPS[PLAYER_I], (m === 'off' && noA ? '停船（這艘沒有錨：帆與引擎不出力、船慢慢停下）' : m === 'off' && anchorsOf(SHIPS[PLAYER_I]).single ? '拋錨（單錨；A／D 繞錨轉）' : SAIL_NAMES[m]) + (noA ? '（4 自動／手動切換、6 停船、再按一次開船）' : '（4 自動／手動切換、6 拋錨、再按一次起錨）'));   // 單錨的船（TASK-0635）
 }
 /** 自由鏡頭跟不跟著兩艘的中點走（預設跟；鏡頭「看敵艦／看我艦」本來就跟著那一艘）。 */
 function setCamTrack(on) {

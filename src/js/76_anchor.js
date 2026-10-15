@@ -10,7 +10,9 @@
 // 單錨的船（TASK-0635；Tim 2026-10-16：「只有一個錨的情況下 會自動補上另一邊的錨 且會歪掉」「只有單錨時 隱藏左右錨 只保留拋錨操作」）：
 //   兩舷只找到一個真的錨（模型或關聯）⇒ 另一舷標 none（不補、拋不了），A.single ＝ 有錨的那一舷；左右錨（7／8）的按鈕藏起來、按鍵不理，6 只拋這一個。
 //   ⛔ 以前另一舷照船頭的預設點補一個（水線上 25 格、bowHalf 寬）⇒ 莫尼特號那個補出來的左錨在水線上 2.5 m、中線往左 2 m 的半空，鐵鍊從空中垂下去。
-//   兩舷都找不到 ⇒ 照舊兩舷都補（船頭兩側、打不壞）。錨剛好在中線（外框中心 y ＝ T.cy）⇒ 算右舷（以前兩舷都不算 ⇒ 兩舷都補）。
+//   錨剛好在中線（外框中心 y ＝ T.cy）⇒ 算右舷（以前兩舷都不算 ⇒ 兩舷都補）。
+//   整艘都沒有錨（夜隼號、風暴角號；Tim 2026-10-16：「不隱藏按鈕」「功能變成停船」）⇒ 兩舷都 none、A.noAnchor：6／7／8 照樣顯示（圖示 🛑），
+//   按哪一顆都是切換停船（SAIL 'off'：帆與引擎不出力、船慢慢停下（時間常數 6 秒）、舵放正；31_sailing.js）⇄ 手動。⛔ 以前兩舷照船頭的預設點補兩個、打不壞。
 var ANC_DEPTH = 20, ANC_CHAIN = 36, ANC_REACH = Math.sqrt(ANC_CHAIN * ANC_CHAIN - ANC_DEPTH * ANC_DEPTH), ANC_FALL = 4, ANC_WEIGH = 8, ANC_DRAG = 8, ANC_DRAGX = 2.5, ANC_PIVOT = 0.06, ANC_YAWMAX = 0.5, ANC_HAUL = 1;   // 公尺、秒、rad/s、m/s
 /** 這艘的兩個錨（第一次要用才建）：錨鏈孔的格座標、是哪個部件（模型／關聯／沒有）。 */
 function anchorsOf(sh) {
@@ -33,6 +35,7 @@ function anchorsOf(sh) {
   });
   var real = ['P', 'S'].filter(function (k) { return out[k].m || out[k].part; });
   if (real.length === 1) { out[real[0] === 'P' ? 'S' : 'P'].none = true; out.single = real[0]; }   // 單錨：另一舷不補（TASK-0635）
+  else if (!real.length) { out.P.none = out.S.none = true; out.noAnchor = true; }                  // 整艘沒有錨：6／7／8 變成停船
   return (sh.anc = out);
 }
 function anchorAlive(sh, a) {
@@ -131,6 +134,15 @@ function anchorStep(sh, dt, px0, pz0) {
 function anchorChips(me) {
   if (!me) return;
   var A = anchorsOf(me), w = anchorWet(me), b6 = $('ancAll');
+  if (A.noAnchor) {                                                     // 整艘沒有錨：三顆都是停船（🛑；停著 ⇒ 亮）
+    var st = SAIL === 'off';
+    [b6, $('ancP'), $('ancS')].forEach(function (el) {
+      if (!el) return; if (el.style.display) el.style.display = '';
+      el.classList.toggle('on', st); el.classList.remove('dis');
+      var sp = el.querySelector('i'); if (sp && sp.textContent !== '🛑') sp.textContent = '🛑';
+    });
+    return;
+  }
   var aa = A.single ? '⚓' : '⚓⚓';                                       // 單錨：6 的圖示一個錨（TASK-0635）
   if (b6) { var a6 = anchor6(me).act; b6.classList.toggle('on', w); var l6 = a6 === 'weigh' && w ? aa + '⬆' : a6 === 'weigh' ? aa + '⏳' : aa, s6 = b6.querySelector('i'); if (s6 && s6.textContent !== l6) s6.textContent = l6; }   // 圖示（Tim 2026-10-15：兩個錨 ＝ 兩邊一起下）：⚓⚓ 拋（一邊在水裡 ⇒ 亮、按了拋另一邊）、⚓⚓⬆ 按了起錨、⚓⚓⏳ 起錨中
   ['P', 'S'].forEach(function (k) {
