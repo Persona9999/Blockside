@@ -5,9 +5,9 @@
 //   落底的點 ＝ 放開那一刻錨鏈孔正下方（海面上的 x、z，海底在水線下 ANC_DEPTH）；鍊長 ANC_CHAIN ⇒ 錨鏈孔離錨的水平距離最多 ANC_REACH。
 // 約束（down／weigh）：錨鏈孔超過 ANC_REACH ⇒ 拉回圓周上；船身當剛體繞錨鏈孔轉（船心照動量走、船頭被拴住 ⇒ 往前的動量變成轉向）：
 //   帶著速度只拋一側 ⇒ 鍊子一拉緊，船頭被拴在那一側、船尾甩出去 ＝ 急轉；兩側都拋 ⇒ 停住，A／D 原地慢慢轉（ANC_PIVOT）、電腦照舊轉舷側對敵。
-//   拉緊的時候每秒掉 1／ANC_DRAG 的速度（鍊子拖著）。錨被打壞（模型沒了、關聯的格少了一半）⇒ 那一側斷鍊、船放開，不能再拋。
+//   拉緊的時候每秒掉 1／ANC_DRAG 的速度（鍊子拖著）；鍊子要船轉得比 ANC_YAWMAX 快 ⇒ 錨在海底被拖著走（船只轉到上限、每秒掉 1／ANC_DRAGX）。錨被打壞（模型沒了、關聯的格少了一半）⇒ 那一側斷鍊、船放開，不能再拋。
 // ⛔ 不抽 rnd()；沒拋錨的船一位元都不動（sh.anc 只有拋過才建）。
-var ANC_DEPTH = 20, ANC_CHAIN = 36, ANC_REACH = Math.sqrt(ANC_CHAIN * ANC_CHAIN - ANC_DEPTH * ANC_DEPTH), ANC_FALL = 4, ANC_WEIGH = 8, ANC_DRAG = 8, ANC_PIVOT = 0.06;   // 公尺、秒、rad/s
+var ANC_DEPTH = 20, ANC_CHAIN = 36, ANC_REACH = Math.sqrt(ANC_CHAIN * ANC_CHAIN - ANC_DEPTH * ANC_DEPTH), ANC_FALL = 4, ANC_WEIGH = 8, ANC_DRAG = 8, ANC_DRAGX = 2.5, ANC_PIVOT = 0.06, ANC_YAWMAX = 0.5;   // 公尺、秒、rad/s
 /** 這艘的兩個錨（第一次要用才建）：錨鏈孔的格座標、是哪個部件（模型／關聯／沒有）。 */
 function anchorsOf(sh) {
   if (sh.anc) return sh.anc;
@@ -58,12 +58,14 @@ function anchorWeighAll(sh) {
   return ['P', 'S'].filter(function (k) { return anchorToggle(sh, k, false); }).map(function (k) { return k === 'P' ? '左錨' : '右錨'; }).join('、');
 }
 function anchorAny(sh, st) { var A = sh.anc; return !!A && (A.P.st === st || A.S.st === st); }
+/** 6（拋錨／起錨同一顆）按下去是起錨嗎：拋錨模式、或有錨在水裡（下沉中、咬著）。 */
+function anchorWet(sh) { return (SAIL === 'off' && sh.i === PLAYER_I) || anchorAny(sh, 'drop') || anchorAny(sh, 'down'); }
 /** 有錨咬著（down／weigh）⇒ 船不再靠帆走（target 0）。 */
 function anchorHeld(sh) { return anchorAny(sh, 'down') || anchorAny(sh, 'weigh'); }
 /** 每一步（sail() 走完位置之後）：沉到底、起完、打壞斷鍊；咬著的錨把錨鏈孔拉回鍊長以內、船身繞錨鏈孔轉。回傳有沒有拉緊。 */
 function anchorStep(sh, dt, px0, pz0) {
   var A = sh.anc; if (!A) return false;
-  var taut = false;
+  var taut = false, drag = false, tot = sh.yawRate * dt, lim = Math.max(ANC_YAWMAX * dt, Math.abs(tot));   // tot：這一步航向總共變多少（sail() 照轉動慣性已經轉了 yawRate·dt）—— 上限算總的，⛔ 只限約束那一段 ⇒ 慣性再加一次，15 m/s 轉到 44°/s
   ['P', 'S'].forEach(function (k) {
     var a = A[k], nm = k === 'P' ? '左錨' : '右錨';
     if (a.st === 'up') return;
@@ -77,22 +79,34 @@ function anchorStep(sh, dt, px0, pz0) {
     taut = true;
     var Hn = [a.A[0] + dx / d * r, a.A[1] + dz / d * r];                // 錨鏈孔拉回圓周上
     var lx = S * (a.hx - sh.T.cx), lz = S * (a.hy - sh.T.cy), L = Math.hypot(lx, lz);
-    var thW = Math.atan2(H[1] - sh.pz, H[0] - sh.px), thN = Math.atan2(Hn[1] - sh.pz, Hn[0] - sh.px);   // 船心 → 錨鏈孔 的方向：現在、拉回之後
-    var dA = Math.atan2(Math.sin(thN - thW), Math.cos(thN - thW));
-    sh.yaw -= dA;                                                       // 世界的角度 ＝ 船身座標的角度 − yaw ⇒ 方向轉了 dA ＝ yaw 少 dA
+    var thW = Math.atan2(H[1] - sh.pz, H[0] - sh.px);                   // 船心 → 錨鏈孔 的方向：現在；turn(P) ＝ 錨鏈孔拉到 P 的話這個方向轉多少
+    function turn(P) { var t = Math.atan2(P[1] - sh.pz, P[0] - sh.px) - thW; return Math.atan2(Math.sin(t), Math.cos(t)); }
+    var dA = turn(Hn);
+    if (Math.abs(tot - dA) > lim) {                                     // 拉得太猛（高速、或下沉那幾秒已經跑出鍊長）⇒ 錨在海底被拖著走：船只轉到上限，剩下那一段由錨過來補
+      var lo = 0, hi = 1;                                               //   ⛔ 以前整段一步拉回 ⇒ 9 m/s 拋單錨，落底那一步航向跳 271°（Tim 2026-10-15「高船速時會發生很誇張的旋轉」）
+      for (var it = 0; it < 12; it++) { var mid = (lo + hi) / 2; if (Math.abs(tot - turn([H[0] + (Hn[0] - H[0]) * mid, H[1] + (Hn[1] - H[1]) * mid])) <= lim) lo = mid; else hi = mid; }
+      Hn = [H[0] + (Hn[0] - H[0]) * lo, H[1] + (Hn[1] - H[1]) * lo]; dA = turn(Hn);
+      var ex = Hn[0] - a.A[0], ez = Hn[1] - a.A[1], el = Math.hypot(ex, ez);
+      a.A = [Hn[0] - ex / el * r, Hn[1] - ez / el * r]; a.slip = (a.slip || 0) + el - r; drag = true;   // 錨沿著鍊子的方向被拖過來，錨鏈孔剛好在鍊長上
+    }
+    var thN = thW + dA;
+    sh.yaw -= dA;                                                      // 世界的角度 ＝ 船身座標的角度 − yaw ⇒ 方向轉了 dA ＝ yaw 少 dA
     sh.px = Hn[0] - L * Math.cos(thN); sh.pz = Hn[1] - L * Math.sin(thN);   // 船心沿著那條線、離錨鏈孔還是原本的距離（剛體）
-    sh.yawRate = -dA / dt;
+    tot -= dA;
   });
   if (taut) {                                                           // 動量留著、只被鍊子拖慢（⛔ 用船心被拉回後的位移重算速度 ⇒ 錨在正後方時速度一步歸零，船停死、一度都不轉）
-    sh.spd *= Math.max(0, 1 - dt / ANC_DRAG);                           //   ⇒ 下一步照舊往前走，約束再把那一段位移轉成旋轉：偏得越多轉得越快 ＝ 船尾甩出去
+    sh.yawRate = clamp(tot / dt, -ANC_YAWMAX, ANC_YAWMAX);              //   轉動慣性 ＝ 這一步實際轉的（夾在上限內）
+    sh.spd *= Math.max(0, 1 - dt / (drag ? ANC_DRAGX : ANC_DRAG));     //   ⇒ 下一步照舊往前走，約束再把那一段位移轉成旋轉：偏得越多轉得越快 ＝ 船尾甩出去；錨被拖著 ⇒ 掉得快
     sh.vel = mul(fwd(sh.yaw), sh.spd);
   }
   return taut;
 }
-/** 下方 7／8 的按鈕：咬著或下沉中 ⇒ 亮（on）、打壞 ⇒ 灰掉（dis，按了只會說拋不了）。每次 HUD 更新看一次（收著時被打掉也要灰）。 */
+/** 下方 6／7／8 的大圓鈕：咬著或下沉中 ⇒ 亮（on）、打壞 ⇒ 灰掉（dis，按了只會說拋不了）。每次 HUD 更新看一次（收著時被打掉也要灰）。
+ *  6 ＝ 拋錨／起錨同一顆：有錨在水裡 ⇒ 亮、寫「起錨」；正在收 ⇒「起錨中」。 */
 function anchorChips(me) {
   if (!me) return;
-  var A = anchorsOf(me);
+  var A = anchorsOf(me), w = anchorWet(me), b6 = $('ancAll');
+  if (b6) { b6.classList.toggle('on', w); var l6 = w ? '起錨' : anchorAny(me, 'weigh') ? '起錨中' : '拋錨', s6 = b6.querySelector('i'); if (s6 && s6.textContent !== l6) s6.textContent = l6; }
   ['P', 'S'].forEach(function (k) {
     var a = A[k], el = $('anc' + k); if (!el) return;
     if (!a.broken && a.st === 'up' && !anchorAlive(me, a)) a.broken = true;

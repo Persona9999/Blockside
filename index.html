@@ -50,12 +50,13 @@
   .bar i{ display:block; height:100%; background:var(--gold); }
   .bar.water i{ background:#4fb3d9; }
   /* 下方（TASK-0567，Tim 2026-10-14；電腦與手機同一種排法）：左下 ＝ 帆與左舵（左舵最左、收帆、加帆）；右下 ＝ 開砲與右舵（單門、齊射、右舵最右）；
-     中間一欄 ＝ 羅盤＋面板：由上到下 ＝ 瞄準／鏡頭／停格／設定、砲列、彈種、航行與自動開砲（設定那一列跟彈種、航行隔著砲列 ⇒ 不會誤觸）。手機只是縮小、兩組改成直的（左舵、右舵在最下面靠角落）。 */
+     左右再往裡各兩顆（Tim 2026-10-15：為了對稱）：左 ＝ 6 拋錨／起錨、7 左錨（最裡）；右 ＝ 8 右錨（最裡）、G 自動開砲。
+     中間一欄 ＝ 羅盤＋面板：由上到下 ＝ 瞄準／鏡頭／停格／設定＋航行 4／5（航行併進設定列）、砲列、彈種（設定那一列跟彈種隔著砲列 ⇒ 不會誤觸）。手機只是縮小、兩組改成直的（左舵、右舵在最下面靠角落）。 */
   .helm{ display:flex; gap:8px; pointer-events:auto; flex:none; position:relative; z-index:2; }   /* 帆與舵（左）、開砲與舵（右）兩組大圓鈕：貼著中間的主面板（#ctlRow；Tim 2026-10-14：⛔ 以前貼畫面兩邊） */
   #ctlRow{ display:flex; align-items:flex-end; justify-content:center; gap:8px; max-width:100%; }
   .kb.hb{ width:64px; height:64px; margin:0; padding:0; border-radius:50%; display:flex; flex-direction:column; align-items:center; justify-content:center; line-height:1.25; font-size:12px;
     background:rgba(14,18,24,.78); border:1px solid rgba(255,255,255,.32); box-shadow:0 2px 7px rgba(0,0,0,.6); }
-  .kb.hb b{ font-size:11px; }
+  .kb.hb b{ font-size:11px; } .kb.hb i{ font-style:normal; } .kb.hb.on{ color:#111; background:rgba(159,199,255,.92); border-color:#9fc7ff; } .kb.hb.on b{ color:#4a3500; } .kb.hb.dis{ opacity:.45; }   /* 拋錨、左右錨、自動開砲：亮著 ＝ 開（錨在水裡）、灰 ＝ 錨打壞了 */
   #botC{ left:50%; bottom:12px; transform:translateX(-50%); display:flex; flex-direction:column; align-items:center; gap:6px; width:max-content; max-width:calc(100vw - 24px); }   /* ⛔ 不寫 width ⇒ left:50% 的絕對定位只剩半個畫面寬，主面板被兩組大圓鈕擠成一條 */
   #ctl{ text-align:center; min-width:0; box-sizing:border-box; }
   #ctl b{ color:var(--gold); }
@@ -104,7 +105,7 @@
   #gset.on{ display:block; }
   #gsetBg{ position:absolute; inset:0; display:none; background:rgba(0,0,0,.25); z-index:5; } #gsetBg.on{ display:block; }   /* 面板外點一下就關（蓋住整個畫面，含下方的 ⚙ 設定；Tim 2026-10-13） */ #gset .gsT{ font-size:16px; color:var(--gold); margin-bottom:6px; } #gset .note{ color:var(--dim); font-size:12px; }
   #gset .gsR{ margin:9px 0; display:flex; flex-wrap:wrap; justify-content:center; align-items:center; gap:5px; } #gset .gsL{ color:var(--dim); font-size:13px; margin-right:2px; }
-  #gset .chip{ font-size:14px; padding:4px 12px; margin:0; } #gset .chip.big{ font-size:15px; padding:6px 16px; } #gset .chip.dis, #hudctl .chip.dis{ opacity:.45; } #hudctl .chip i{ font-style:normal; } #gset #boomB{ color:#ff9a7a; border-color:rgba(255,120,90,.55); }   /* dis：這個頁面不給全螢幕 */
+  #gset .chip{ font-size:14px; padding:4px 12px; margin:0; } #gset .chip.big{ font-size:15px; padding:6px 16px; } #gset .chip.dis{ opacity:.45; } #gset #boomB{ color:#ff9a7a; border-color:rgba(255,120,90,.55); }   /* dis：這個頁面不給全螢幕 */
   #fps{ position:static; margin-bottom:3px; font:12px Consolas,monospace; color:#bfe9ff; text-shadow:0 0 3px #000, 0 0 3px #000; display:none; z-index:5; }
   #fps.on{ display:block; }
   #slowB{ left:50%; bottom:150px; transform:translateX(-50%); font-size:15px; font-weight:700; color:#ffd27a; letter-spacing:2px; text-shadow:0 0 4px #000, 0 0 4px #000; display:none; }   /* 殉爆的慢動作（73_slowmo.js）：放在下方操作列上面（⛔ 上方 ⇒ 殉爆那一刻廣播一次好幾則，疊在一起） */
@@ -207,12 +208,11 @@
   <div id="fleetR" class="hud fleet"></div>
   <div id="topC" class="hud"><div id="fps" class="hud"></div><div id="irow"><div id="info" class="panel"></div><canvas id="gmap"></canvas></div><div id="msg"></div></div>
   <div id="botC" class="hud"><div id="navBox"><div id="modeT"></div><div id="gunsB" class="gend"></div><div id="nav" class="panel"><canvas id="navc"></canvas><div id="navt"></div><div id="gunsL" class="gside"></div><div id="gunsR" class="gside"></div></div><div id="gunsA" class="gend"></div></div>
-  <div id="ctlRow"><div id="helmL" class="helm"><span class="kb hb" data-k="a" data-hold="1"><b>A</b>◀ 左舵</span><span class="kb hb" data-k="s" data-hold="1"><b>S</b>收帆</span><span class="kb hb" data-k="w" data-hold="1"><b>W</b>加帆</span></div><div id="ctl" class="panel">
-    <div id="keys"><span class="hint">點敵艦瞄準</span><span class="kb" data-k="q" id="aimk"><b>Q</b> 瞄準</span><span class="kb" data-k="c"><b>C</b> 鏡頭</span><span class="kb" data-k="p" id="pauseK"><b>P</b> 停格</span><span class="kb" id="setB"><b>O</b> 設定</span></div>
+  <div id="ctlRow"><div id="helmL" class="helm"><span class="kb hb" data-k="a" data-hold="1"><b>A</b>◀ 左舵</span><span class="kb hb" data-k="s" data-hold="1"><b>S</b>收帆</span><span class="kb hb" data-k="w" data-hold="1"><b>W</b>加帆</span><span class="kb hb" data-k="6" id="ancAll"><b>6</b><i>拋錨</i></span><span class="kb hb" data-k="7" id="ancP"><b>7</b><i>左錨</i></span></div><div id="ctl" class="panel">
+    <div id="keys"><span class="hint">點敵艦瞄準</span><span class="kb" data-k="q" id="aimk"><b>Q</b> 瞄準</span><span class="kb" data-k="c"><b>C</b> 鏡頭</span><span class="kb" data-k="p" id="pauseK"><b>P</b> 停格</span><span class="kb" id="setB"><b>O</b> 設定</span>　<span class="chip" data-s="auto"><b>4</b> 自動</span><span class="chip" data-s="manual"><b>5</b> 手動</span></div>
     <div id="guns"></div>
     <div id="ammo"><span data-a="0"><b>1</b> 實心彈</span><span data-a="1"><b>2</b> 爆裂彈</span><span data-a="2"><b>3</b> 鏈彈</span></div>
-    <div id="hudctl">航行 <span class="chip" data-s="auto"><b>4</b> 自動</span><span class="chip" data-s="manual"><b>5</b> 手動</span><span class="chip" data-s="off"><b>6</b> 拋錨</span><span class="chip" data-k="7" id="ancP"><b>7</b> <i>左錨</i></span><span class="chip" data-k="8" id="ancS"><b>8</b> <i>右錨</i></span><span class="chip" data-k="9" id="ancW"><b>9</b> 起錨</span>　<span class="chip" id="autoF"><b>G</b> 自動開砲</span></div>
-  </div><div id="helmR" class="helm"><span class="kb hb" data-k="f"><b>F</b>單門</span><span class="kb hb" data-k=" "><b>空白</b>齊射</span><span class="kb hb" data-k="d" data-hold="1"><b>D</b>右舵 ▶</span></div></div></div>
+  </div><div id="helmR" class="helm"><span class="kb hb" data-k="8" id="ancS"><b>8</b><i>右錨</i></span><span class="kb hb" data-k="g" id="autoF"><b>G</b>自動<br>開砲</span><span class="kb hb" data-k="f"><b>F</b>單門</span><span class="kb hb" data-k=" "><b>空白</b>齊射</span><span class="kb hb" data-k="d" data-hold="1"><b>D</b>右舵 ▶</span></div></div></div>
   <div id="tip" class="hud"></div>
   <div id="slowB" class="hud"></div>
   <div id="frz" class="hud panel"><span class="fzG"><span class="fz">⏸ 停格中</span><span class="chip" id="frzGo">▶ 繼續（P）</span></span><span class="fzG"><span class="fzL">進水</span><span class="chip" id="frzFlood">📊 圖表（I）</span><span class="chip" id="frzX">🔍 透視（X）</span></span><span class="fzG"><span class="fzL">船</span><span class="chip" id="frzCut">✂ 剖面（Z）</span><span class="chip" id="frzDeck">☰ 甲板（L）</span></span></div>
@@ -241,7 +241,7 @@
     <div><kbd>帆</kbd> 預設自動航行：讓對方保持在開火那一舷、繞著彼此轉；航速看帆還剩多少與風向（頂風最慢）</div>
     <div><kbd data-k="g">G</kbd> 自動開砲：電腦替我艦瞄準、開火（觀戰預設開；關掉就自己打）</div>
     <div><kbd data-k="b">B</kbd> 帆與繩的物理：開 ＝ 帆被相對風吹鼓（轉向、頂風會往另一邊鼓），斷掉的繩與帆垂下來擺、帆被打穿的那塊布撕成碎片飄下來；關 ＝ 靜態（下方也點得到）。主選單的「物理效果」分全開／高／中／低，細項在「物理設定…」（帆與繩、碎木、煙與水花、船邊水花）</div>
-    <div><kbd data-k="4">4</kbd> <kbd data-k="5">5</kbd> <kbd data-k="6">6</kbd> 航行：自動／手動／拋錨（雙錨，A／D 繞錨轉）　<kbd data-k="7">7</kbd> <kbd data-k="8">8</kbd> 左錨／右錨（帶著速度只拋一側 ⇒ 繞錨急轉；再按一次起錨；錨打壞了就不能拋）　<kbd data-k="9">9</kbd> 起錨（兩邊；按 4／5 開船也會先起錨）（下方也點得到）　<kbd data-k="o">O</kbd> 設定（Esc 也可以）　<kbd data-k="v">V</kbd> 鏡頭跟船／固定</div>
+    <div><kbd data-k="4">4</kbd> <kbd data-k="5">5</kbd> 航行：自動／手動（錨在水裡 ⇒ 先起錨）　<kbd data-k="6">6</kbd> 拋錨／起錨（雙錨，A／D 繞錨轉；再按一次起錨）　<kbd data-k="7">7</kbd> <kbd data-k="8">8</kbd> 左錨／右錨（帶著速度只拋一側 ⇒ 繞錨急轉；再按一次起錨；錨打壞了就不能拋）（下方也點得到）　<kbd data-k="o">O</kbd> 設定（Esc 也可以）　<kbd data-k="v">V</kbd> 鏡頭跟船／固定</div>
     <div><kbd>⚙</kbd> 下方「⚙ 設定」或 <kbd>Esc</kbd>：暫停並打開設定 —— 繼續、重新開始、回主選單、自爆（我艦的彈藥庫由小到大一間一間引爆、船斷開沉下去 —— 相當於重開，先看煙花）、說明（H）、畫質與物理效果的檔位、帆繩物理、鏡頭跟船、靜音、顯示 FPS、全螢幕（手機用；電腦直接按 F11 也行，Esc 退出）、彈藥庫殉爆時的慢動作與特寫鏡頭（各自開關）</div>
     <div><kbd data-k="a" data-hold="1">A</kbd><kbd data-k="d" data-hold="1">D</kbd> 打舵（按住；一碰就換手動）　<kbd data-k="w">W</kbd><kbd data-k="s">S</kbd> 帆裝：全收／收帆／戰鬥帆／滿帆（帆收得越多越慢、越穩；收起來的帆打不壞，除非桅斷了）；有額外動力的船（風暴角號）手動時是油門：<b>按住 W 前進、按住 S 倒車</b>（跟帆分開；沒按住 ⇒ 只靠帆；倒退時舵反過來）</div>
     <div><kbd>羅</kbd> 左下：羅盤跟著鏡頭轉（北 ＝ 參考方向），中間是我艦、藍箭頭是風從哪吹來、紅點是敵艦、金色扇形是兩舷的射界（對得到時亮）</div>
@@ -8713,8 +8713,8 @@ function doKey(k, repeat) {
   else if (k === 'm') { muted = !muted; gsetShow(); }
   else if (k === 'h' || k === '?') helpToggle();
   else if (k === 'r') { gsetClose(); helpClose(); RUNNING = false; END_AT = 0; END_WAIT = null; $('cover').style.display = ''; $('end').className = ''; }
-  else if (k === '4' || k === '5' || k === '6') { if (k !== '6' && RUNNING && me && me.anc) anchorWeighAll(me); setSailMode(['auto', 'manual', 'off'][+k - 4]); }   // 4／5 開船 ⇒ 先起錨（7／8 拋的也一起；Tim 2026-10-15：要可以起錨）
-  else if (k === '9' && RUNNING && me && !me.sunk) { if (SAIL === 'off') setSailMode('manual'); var nw = anchorWeighAll(me); note(me, nw ? '起錨（' + nw + '）—— 8 秒收好' : '錨都收著'); }   // 起錨（兩邊）
+  else if (k === '4' || k === '5') { if (RUNNING && me && me.anc) anchorWeighAll(me); setSailMode(k === '4' ? 'auto' : 'manual'); }   // 4／5 開船 ⇒ 先起錨（7／8 拋的也一起；Tim 2026-10-15：要可以起錨）
+  else if (k === '6' && me && !me.sunk) { if (anchorWet(me)) { if (SAIL === 'off') setSailMode('manual'); var nw = anchorWeighAll(me); note(me, '起錨（' + nw + '）—— 8 秒收好'); } else setSailMode('off'); }   // 拋錨／起錨同一顆（Tim 2026-10-15）：有錨在水裡（或在拋錨模式）⇒ 起錨（兩邊；拋錨模式 ⇒ 換手動、每艘的雙錨跟著收）
   else if ((k === '7' || k === '8') && RUNNING && me && !me.sunk) { var am = anchorToggle(me, k === '7' ? 'P' : 'S'); if (am) note(me, am + (/^拋/.test(am) ? '（帶著速度只拋一側 ⇒ 繞錨急轉；再按一次起錨）' : '')); }   // 左右錨（76_anchor.js）   // 航行（TASK-0567，Tim 2026-10-14：不用 Tab 循環，三個鍵直接切）
   else if (k === 'o') gsetToggle();                                    // 設定（Esc 也可以）
   else if (k === 'a' || k === 'd' || k === 'arrowleft' || k === 'arrowright') {   // 打舵：自動中一碰就換手動
@@ -8746,7 +8746,7 @@ var SAIL_NAMES = { auto: '自動航行', manual: '手動操舵（A／D 打舵）
 function setSailMode(m) {
   SAIL = m; KEYS.l = KEYS.r = false;
   [].forEach.call(document.querySelectorAll('[data-s]'), function (x) { x.classList.toggle('on', x.dataset.s === SAIL); });
-  if (RUNNING && SHIPS.length) note(SHIPS[PLAYER_I], SAIL_NAMES[m] + '（4 自動／5 手動／6 拋錨）');
+  if (RUNNING && SHIPS.length) note(SHIPS[PLAYER_I], SAIL_NAMES[m] + '（4 自動／5 手動／6 拋錨、再按一次起錨）');
 }
 /** 自由鏡頭跟不跟著兩艘的中點走（預設跟；鏡頭「看敵艦／看我艦」本來就跟著那一艘）。 */
 function setCamTrack(on) {
@@ -8759,8 +8759,7 @@ function setAutoFire(on) {
   AUTOFIRE = on; $('autoF').classList.toggle('on', on); if (SHIPS[PLAYER_I]) SHIPS[PLAYER_I].hand = false;   // 切換 ⇒ 手動瞄準那一舷也收掉
   if (RUNNING && SHIPS.length) note(SHIPS[PLAYER_I], on ? '自動開砲' : '自己開砲（點敵艦瞄準、空白鍵齊射）');
 }
-[].forEach.call(document.querySelectorAll('#hudctl [data-s]'), function (b) { b.onclick = function () { setSailMode(b.dataset.s); }; });
-$('autoF').onclick = function () { setAutoFire(!AUTOFIRE); };
+[].forEach.call(document.querySelectorAll('#keys [data-s]'), function (b) { b.onclick = function () { if (RUNNING && SHIPS[PLAYER_I] && SHIPS[PLAYER_I].anc) anchorWeighAll(SHIPS[PLAYER_I]); setSailMode(b.dataset.s); }; });   // 自動開砲（G）、拋錨（6）是下方的大圓鈕（data-k）
 $('camT').onclick = function () { setCamTrack(!CAM.track); };
 $('physT').onclick = function () { setPhys(!PHYS); };
 $('restartB').onclick = function () { if (RUNNING) { gsetClose(); helpClose(); start(); } };
@@ -9698,9 +9697,9 @@ function shipCheck(id) {
 //   落底的點 ＝ 放開那一刻錨鏈孔正下方（海面上的 x、z，海底在水線下 ANC_DEPTH）；鍊長 ANC_CHAIN ⇒ 錨鏈孔離錨的水平距離最多 ANC_REACH。
 // 約束（down／weigh）：錨鏈孔超過 ANC_REACH ⇒ 拉回圓周上；船身當剛體繞錨鏈孔轉（船心照動量走、船頭被拴住 ⇒ 往前的動量變成轉向）：
 //   帶著速度只拋一側 ⇒ 鍊子一拉緊，船頭被拴在那一側、船尾甩出去 ＝ 急轉；兩側都拋 ⇒ 停住，A／D 原地慢慢轉（ANC_PIVOT）、電腦照舊轉舷側對敵。
-//   拉緊的時候每秒掉 1／ANC_DRAG 的速度（鍊子拖著）。錨被打壞（模型沒了、關聯的格少了一半）⇒ 那一側斷鍊、船放開，不能再拋。
+//   拉緊的時候每秒掉 1／ANC_DRAG 的速度（鍊子拖著）；鍊子要船轉得比 ANC_YAWMAX 快 ⇒ 錨在海底被拖著走（船只轉到上限、每秒掉 1／ANC_DRAGX）。錨被打壞（模型沒了、關聯的格少了一半）⇒ 那一側斷鍊、船放開，不能再拋。
 // ⛔ 不抽 rnd()；沒拋錨的船一位元都不動（sh.anc 只有拋過才建）。
-var ANC_DEPTH = 20, ANC_CHAIN = 36, ANC_REACH = Math.sqrt(ANC_CHAIN * ANC_CHAIN - ANC_DEPTH * ANC_DEPTH), ANC_FALL = 4, ANC_WEIGH = 8, ANC_DRAG = 8, ANC_PIVOT = 0.06;   // 公尺、秒、rad/s
+var ANC_DEPTH = 20, ANC_CHAIN = 36, ANC_REACH = Math.sqrt(ANC_CHAIN * ANC_CHAIN - ANC_DEPTH * ANC_DEPTH), ANC_FALL = 4, ANC_WEIGH = 8, ANC_DRAG = 8, ANC_DRAGX = 2.5, ANC_PIVOT = 0.06, ANC_YAWMAX = 0.5;   // 公尺、秒、rad/s
 /** 這艘的兩個錨（第一次要用才建）：錨鏈孔的格座標、是哪個部件（模型／關聯／沒有）。 */
 function anchorsOf(sh) {
   if (sh.anc) return sh.anc;
@@ -9751,12 +9750,14 @@ function anchorWeighAll(sh) {
   return ['P', 'S'].filter(function (k) { return anchorToggle(sh, k, false); }).map(function (k) { return k === 'P' ? '左錨' : '右錨'; }).join('、');
 }
 function anchorAny(sh, st) { var A = sh.anc; return !!A && (A.P.st === st || A.S.st === st); }
+/** 6（拋錨／起錨同一顆）按下去是起錨嗎：拋錨模式、或有錨在水裡（下沉中、咬著）。 */
+function anchorWet(sh) { return (SAIL === 'off' && sh.i === PLAYER_I) || anchorAny(sh, 'drop') || anchorAny(sh, 'down'); }
 /** 有錨咬著（down／weigh）⇒ 船不再靠帆走（target 0）。 */
 function anchorHeld(sh) { return anchorAny(sh, 'down') || anchorAny(sh, 'weigh'); }
 /** 每一步（sail() 走完位置之後）：沉到底、起完、打壞斷鍊；咬著的錨把錨鏈孔拉回鍊長以內、船身繞錨鏈孔轉。回傳有沒有拉緊。 */
 function anchorStep(sh, dt, px0, pz0) {
   var A = sh.anc; if (!A) return false;
-  var taut = false;
+  var taut = false, drag = false, tot = sh.yawRate * dt, lim = Math.max(ANC_YAWMAX * dt, Math.abs(tot));   // tot：這一步航向總共變多少（sail() 照轉動慣性已經轉了 yawRate·dt）—— 上限算總的，⛔ 只限約束那一段 ⇒ 慣性再加一次，15 m/s 轉到 44°/s
   ['P', 'S'].forEach(function (k) {
     var a = A[k], nm = k === 'P' ? '左錨' : '右錨';
     if (a.st === 'up') return;
@@ -9770,22 +9771,34 @@ function anchorStep(sh, dt, px0, pz0) {
     taut = true;
     var Hn = [a.A[0] + dx / d * r, a.A[1] + dz / d * r];                // 錨鏈孔拉回圓周上
     var lx = S * (a.hx - sh.T.cx), lz = S * (a.hy - sh.T.cy), L = Math.hypot(lx, lz);
-    var thW = Math.atan2(H[1] - sh.pz, H[0] - sh.px), thN = Math.atan2(Hn[1] - sh.pz, Hn[0] - sh.px);   // 船心 → 錨鏈孔 的方向：現在、拉回之後
-    var dA = Math.atan2(Math.sin(thN - thW), Math.cos(thN - thW));
-    sh.yaw -= dA;                                                       // 世界的角度 ＝ 船身座標的角度 − yaw ⇒ 方向轉了 dA ＝ yaw 少 dA
+    var thW = Math.atan2(H[1] - sh.pz, H[0] - sh.px);                   // 船心 → 錨鏈孔 的方向：現在；turn(P) ＝ 錨鏈孔拉到 P 的話這個方向轉多少
+    function turn(P) { var t = Math.atan2(P[1] - sh.pz, P[0] - sh.px) - thW; return Math.atan2(Math.sin(t), Math.cos(t)); }
+    var dA = turn(Hn);
+    if (Math.abs(tot - dA) > lim) {                                     // 拉得太猛（高速、或下沉那幾秒已經跑出鍊長）⇒ 錨在海底被拖著走：船只轉到上限，剩下那一段由錨過來補
+      var lo = 0, hi = 1;                                               //   ⛔ 以前整段一步拉回 ⇒ 9 m/s 拋單錨，落底那一步航向跳 271°（Tim 2026-10-15「高船速時會發生很誇張的旋轉」）
+      for (var it = 0; it < 12; it++) { var mid = (lo + hi) / 2; if (Math.abs(tot - turn([H[0] + (Hn[0] - H[0]) * mid, H[1] + (Hn[1] - H[1]) * mid])) <= lim) lo = mid; else hi = mid; }
+      Hn = [H[0] + (Hn[0] - H[0]) * lo, H[1] + (Hn[1] - H[1]) * lo]; dA = turn(Hn);
+      var ex = Hn[0] - a.A[0], ez = Hn[1] - a.A[1], el = Math.hypot(ex, ez);
+      a.A = [Hn[0] - ex / el * r, Hn[1] - ez / el * r]; a.slip = (a.slip || 0) + el - r; drag = true;   // 錨沿著鍊子的方向被拖過來，錨鏈孔剛好在鍊長上
+    }
+    var thN = thW + dA;
+    sh.yaw -= dA;                                                      // 世界的角度 ＝ 船身座標的角度 − yaw ⇒ 方向轉了 dA ＝ yaw 少 dA
     sh.px = Hn[0] - L * Math.cos(thN); sh.pz = Hn[1] - L * Math.sin(thN);   // 船心沿著那條線、離錨鏈孔還是原本的距離（剛體）
-    sh.yawRate = -dA / dt;
+    tot -= dA;
   });
   if (taut) {                                                           // 動量留著、只被鍊子拖慢（⛔ 用船心被拉回後的位移重算速度 ⇒ 錨在正後方時速度一步歸零，船停死、一度都不轉）
-    sh.spd *= Math.max(0, 1 - dt / ANC_DRAG);                           //   ⇒ 下一步照舊往前走，約束再把那一段位移轉成旋轉：偏得越多轉得越快 ＝ 船尾甩出去
+    sh.yawRate = clamp(tot / dt, -ANC_YAWMAX, ANC_YAWMAX);              //   轉動慣性 ＝ 這一步實際轉的（夾在上限內）
+    sh.spd *= Math.max(0, 1 - dt / (drag ? ANC_DRAGX : ANC_DRAG));     //   ⇒ 下一步照舊往前走，約束再把那一段位移轉成旋轉：偏得越多轉得越快 ＝ 船尾甩出去；錨被拖著 ⇒ 掉得快
     sh.vel = mul(fwd(sh.yaw), sh.spd);
   }
   return taut;
 }
-/** 下方 7／8 的按鈕：咬著或下沉中 ⇒ 亮（on）、打壞 ⇒ 灰掉（dis，按了只會說拋不了）。每次 HUD 更新看一次（收著時被打掉也要灰）。 */
+/** 下方 6／7／8 的大圓鈕：咬著或下沉中 ⇒ 亮（on）、打壞 ⇒ 灰掉（dis，按了只會說拋不了）。每次 HUD 更新看一次（收著時被打掉也要灰）。
+ *  6 ＝ 拋錨／起錨同一顆：有錨在水裡 ⇒ 亮、寫「起錨」；正在收 ⇒「起錨中」。 */
 function anchorChips(me) {
   if (!me) return;
-  var A = anchorsOf(me);
+  var A = anchorsOf(me), w = anchorWet(me), b6 = $('ancAll');
+  if (b6) { b6.classList.toggle('on', w); var l6 = w ? '起錨' : anchorAny(me, 'weigh') ? '起錨中' : '拋錨', s6 = b6.querySelector('i'); if (s6 && s6.textContent !== l6) s6.textContent = l6; }
   ['P', 'S'].forEach(function (k) {
     var a = A[k], el = $('anc' + k); if (!el) return;
     if (!a.broken && a.st === 'up' && !anchorAlive(me, a)) a.broken = true;
