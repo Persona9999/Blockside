@@ -141,6 +141,18 @@ function sbNums(b, o) {
   b.nl.innerHTML = sbIcon(0, '👤') + cr; b.nr.innerHTML = sbIcon(3, '💥') + gn;
   b.nl.title = '船員還能動的 ' + cr + ' 人'; b.nr.title = '還能用的砲 ' + gn + ' 門（沒被打掉、沒泡水）';
 }
+/** 圓鈕裡的船（艦隊圓鈕 sbDraw、船隻配置頁 badgeDraw 共用；Tim 2026-10-15：「把船的水線貼到背景的水面上（現在飄在空中）」「水可以是半透明蓋在船水線下」）：
+ *  側面投影的設計水線（05_hull.js sideImg 的 im.wl）對齊背景漸層的海平線 horizon；縮放取「寬不超過 maxW」跟「水線以上不超出 top」較小的那個；
+ *  再拿同一條天海漸層、SEA_VEIL 不透明度蓋在海平線以下 ⇒ 背景的海不變色、船身水線以下染成水色。clipR ＝ 圓心那一圈的半徑；flip ⇒ 船頭朝左（敵方）。 */
+var SEA_STOP = 0.625, SEA_VEIL = 0.6;   // 天海漸層的交界（色標 0.62／0.63 的中間）、水蓋在船上的不透明度
+function sideDraw(g, im, R, clipR, horizon, maxW, top, flip, sky) {
+  if (!im) return;
+  var wl = im.wl != null ? im.wl : im.height, k = Math.min(maxW / im.width, wl > 0 ? (horizon - top) / wl : 1e9), iw = im.width * k, ih = im.height * k;
+  g.save(); g.beginPath(); g.arc(R, R, clipR, 0, 6.2832); g.clip();
+  g.save(); g.translate(R, horizon - wl * k); if (flip) g.scale(-1, 1); g.imageSmoothingEnabled = true; g.drawImage(im, -iw / 2, 0, iw, ih); g.restore();
+  g.globalAlpha *= SEA_VEIL; g.fillStyle = sky; g.fillRect(R - clipR, horizon, clipR * 2, R + clipR - horizon);
+  g.restore();
+}
 /** 船隻配置頁最上面那個大圓鈕（跟艦隊圓鈕同一種畫法：天與海、側面投影、艦名；沒有圓環）。 */
 function badgeDraw(cv, T, name) {
   var dpr = window.devicePixelRatio || 1, W = Math.round((cv.clientWidth || 150) * dpr); if (!W) return;
@@ -149,9 +161,7 @@ function badgeDraw(cv, T, name) {
   var sky = g.createLinearGradient(0, R * 0.2, 0, R * 1.8); sky.addColorStop(0, '#6f8aa3'); sky.addColorStop(0.62, '#a9bccb'); sky.addColorStop(0.63, '#3e6680'); sky.addColorStop(1, '#2a4a60');
   g.fillStyle = sky; g.beginPath(); g.arc(R, R, R * 0.86, 0, 6.2832); g.fill();
   g.lineWidth = Math.max(2, 2 * dpr); g.strokeStyle = '#e8c26a'; g.beginPath(); g.arc(R, R, R - 2 * dpr, 0, 6.2832); g.stroke();
-  var im = T && T.sideImg;
-  if (im) { var bw = R * 1.5, bh = R * 1.15, k = Math.min(bw / im.width, bh / im.height), iw = im.width * k, ih = im.height * k;
-    g.save(); g.beginPath(); g.arc(R, R, R * 0.86, 0, 6.2832); g.clip(); g.imageSmoothingEnabled = true; g.drawImage(im, R - iw / 2, R * 1.12 - ih, iw, ih); g.restore(); }
+  sideDraw(g, T && T.sideImg, R, R * 0.86, R * 0.2 + R * 1.6 * SEA_STOP, R * 1.5, R * 0.2, false, sky);
   g.textAlign = 'center'; g.textBaseline = 'middle'; g.shadowColor = '#000'; g.shadowBlur = 4 * dpr; g.fillStyle = '#fff';
   g.font = 'bold ' + Math.round(R * 0.2) + 'px "Noto Sans TC","Microsoft JhengHei",sans-serif'; g.fillText(name, R, R * 1.4, R * 1.3);
 }
@@ -175,12 +185,7 @@ function sbDraw(b, o, flip) {
   ring(R * 0.86, R * 0.13, hull, '#e8c26a');                                                                  // 外圈：船體
   ring(R * 0.69, R * 0.11, fl, fl >= 0.7 ? '#ff7a6a' : '#4fb3ff');                                            // 內圈：進水（七成以上轉紅）
   g.globalAlpha = st ? 0.4 : 1;
-  var im = o.T.sideImg;
-  if (im) {
-    var bw = R * 1.12, bh = R * 0.9, k = Math.min(bw / im.width, bh / im.height), iw = im.width * k, ih = im.height * k;
-    g.save(); g.beginPath(); g.arc(R, R, R * 0.62, 0, 6.2832); g.clip();
-    g.translate(R, R * 1.06 - ih); if (flip) g.scale(-1, 1); g.imageSmoothingEnabled = true; g.drawImage(im, -iw / 2, 0, iw, ih); g.restore();
-  }
+  sideDraw(g, o.T.sideImg, R, R * 0.62, R * 0.3 + R * 1.4 * SEA_STOP, R * 1.12, R * 0.38, flip, sky);
   g.textAlign = 'center'; g.textBaseline = 'middle'; g.shadowColor = '#000'; g.shadowBlur = 3 * dpr;
   g.fillStyle = '#fff'; g.font = 'bold ' + Math.round(R * 0.27) + 'px "Noto Sans TC","Microsoft JhengHei",sans-serif'; g.fillText(o.name, R, R * 1.28, R * 1.1);
   g.globalAlpha = 1;

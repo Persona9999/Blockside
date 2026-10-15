@@ -177,6 +177,7 @@ function sideImg(T) {
     for (var j = 0; j < t.length; j += 3) { g.beginPath(); for (var q = 0; q < 3; q++) { var a = t[j + q] * 3, px = P3[a] / C, pz = H - P3[a + 2] / C; if (q) g.lineTo(px, pz); else g.moveTo(px, pz); } g.fill(); }
   });
   g.drawImage(hc, 0, 0);
+  cv.wl = isFinite(T.zw) ? clamp(H - T.zw / C - y0, 0, cv.height) : cv.height;   // 設計水線在圖裡第幾個像素（由上往下）：圓鈕照它把船的水線貼在畫的海平面上（61_hud.js sideDraw；Tim 2026-10-15：船飄在空中）
   T.sideImg = cv;
 }
 /** 設計水線（格的 z）：組裝件或關聯的 meta `kind=ship, waterline_z`（跟 basecamp 提議中）；沒有 ⇒ ZW0（憲法號 63）。 */
