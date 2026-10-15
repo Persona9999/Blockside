@@ -13,14 +13,14 @@ function anchorsOf(sh) {
   if (sh.anc) return sh.anc;
   var T = sh.T, out = {};
   ['P', 'S'].forEach(function (k) {
-    var sg = k === 'S' ? 1 : -1, a = { side: k, st: 'up', A: null, t: 0, m: null, part: null, hx: T.wl1 - 12, hy: T.cy + sg * Math.max(4, T.bowHalf - 2), broken: false };
+    var sg = k === 'S' ? 1 : -1, a = { side: k, st: 'up', A: null, t: 0, m: null, part: null, hx: T.wl1 - 12, hy: T.cy + sg * Math.max(4, T.bowHalf - 2), hz: T.zw + 25, broken: false };   // hz：鐵鍊從哪個高度出來（畫用）
     var m = sh.models.filter(function (q) { return q.meta && q.meta.kind === 'anchor' && (q.c[1] - T.cy) * sg > 0; })[0];
     var p = !m && (T.h.parts || []).filter(function (q) { return /錨/.test(q.path || '') && q.box && ((q.box[1] + q.box[4]) / 2 - T.cy) * sg > 0; })[0];
-    if (m) { a.m = m; a.hx = m.c[0]; a.hy = m.c[1]; }
+    if (m) { a.m = m; a.hx = m.c[0]; a.hy = m.c[1]; a.hz = m.bb[5]; }
     else if (p) {                                                        // 關聯（格子）：開局記下它的格（每 4 格取 1），之後少了一半 ⇒ 打壞
       var b = p.box, cells = [];
       for (var x = b[0]; x <= b[3]; x += 2) for (var y = b[1]; y <= b[4]; y += 2) for (var z = b[2]; z <= b[5]; z += 1) if (T.base.get(x, y, z)) cells.push(x, y, z);
-      a.part = { path: p.path, cells: cells }; a.hx = (b[0] + b[3]) / 2; a.hy = (b[1] + b[4]) / 2;
+      a.part = { path: p.path, cells: cells }; a.hx = (b[0] + b[3]) / 2; a.hy = (b[1] + b[4]) / 2; a.hz = b[5];
     }
     out[k] = a;
   });
@@ -51,6 +51,11 @@ function anchorToggle(sh, k, want) {
   }
   if (a.st === 'drop' || a.st === 'down') { a.st = 'weigh'; a.t0 = SIMT; a.t = SIMT + ANC_WEIGH; return '起' + nm; }
   return '';
+}
+/** 起錨：還在水裡的（drop／down）都開始收；回傳收了哪幾個（給廣播）。 */
+function anchorWeighAll(sh) {
+  var A = sh.anc; if (!A) return '';
+  return ['P', 'S'].filter(function (k) { return anchorToggle(sh, k, false); }).map(function (k) { return k === 'P' ? '左錨' : '右錨'; }).join('、');
 }
 function anchorAny(sh, st) { var A = sh.anc; return !!A && (A.P.st === st || A.S.st === st); }
 /** 有錨咬著（down／weigh）⇒ 船不再靠帆走（target 0）。 */
@@ -92,7 +97,30 @@ function anchorChips(me) {
     var a = A[k], el = $('anc' + k); if (!el) return;
     if (!a.broken && a.st === 'up' && !anchorAlive(me, a)) a.broken = true;
     el.classList.toggle('on', a.st === 'drop' || a.st === 'down'); el.classList.toggle('dis', a.broken);
+    var lb = a.broken ? '錨壞了' : a.st === 'drop' || a.st === 'down' ? '起' + (k === 'P' ? '左錨' : '右錨') : a.st === 'weigh' ? '起錨中' : (k === 'P' ? '左錨' : '右錨');   // 在水裡 ⇒ 按了是起錨
+    var sp = el.querySelector('i'); if (sp && sp.textContent !== lb) sp.textContent = lb;
   });
+}
+/** 鐵鍊（畫用，每一格畫面重做；物理與碰撞在 TASK-0601 下一段）：錨鏈孔 → 錨（海底，水線下 ANC_DEPTH）的一條二次曲線，船身格座標（跟繩同一套 uModel）。
+ *  鬆 ⇒ 從錨鏈孔幾乎直直垂到海底、再沿海底拉到錨；拉緊（水平距離接近 ANC_REACH）⇒ 繃成直線。下沉中 ⇒ 錨往下的深度照時間；起錨中 ⇒ 鍊子跟著收短。
+ *  一節深一節淺交錯 ⇒ 看起來是一節一節的鏈環。 */
+var CHAIN_N = 48, CHAIN_C = [[0.2, 0.2, 0.22], [0.38, 0.37, 0.36]];
+function chainBuf(sh) {
+  var A = sh.anc, L = [];
+  if (A) ['P', 'S'].forEach(function (k) {
+    var a = A[k]; if (!a.A || a.st === 'up') return;
+    var dep = a.st === 'drop' ? ANC_DEPTH * clamp(1 - (a.t - SIMT) / ANC_FALL, 0.05, 1) : ANC_DEPTH, ax = a.A[0], az = a.A[1];
+    if (a.st === 'weigh') { var f = clamp((a.t - SIMT) / ANC_WEIGH, 0, 1), H = hawseXZ(sh, a, sh.px, sh.pz, sh.yaw); ax = H[0] + (ax - H[0]) * f; az = H[1] + (az - H[1]) * f; dep *= Math.max(f, 0.05); }   // 起錨：錨被拉近、拉上來
+    var e = toLocal(sh, [ax, seaH(ax, az, SIMT) - dep, az]), h = [a.hx, a.hy, a.hz];
+    var dx = e[0] - h[0], dy = e[1] - h[1], tt = clamp(Math.hypot(dx, dy) * S / ANC_REACH, 0, 1), w = tt * tt;
+    var c = [h[0] + dx * (0.08 + 0.42 * w), h[1] + dy * (0.08 + 0.42 * w), e[2] + (h[2] - e[2]) * 0.5 * w];   // 控制點：鬆 ⇒ 錨鏈孔正下方的海底附近；拉緊 ⇒ 中點
+    var p0 = h;
+    for (var i = 1; i <= CHAIN_N; i++) {
+      var t = i / CHAIN_N, u = 1 - t, p = [u * u * h[0] + 2 * u * t * c[0] + t * t * e[0], u * u * h[1] + 2 * u * t * c[1] + t * t * e[1], u * u * h[2] + 2 * u * t * c[2] + t * t * e[2]], col = CHAIN_C[i & 1];
+      L.push(p0[0], p0[1], p0[2], col[0], col[1], col[2], p[0], p[1], p[2], col[0], col[1], col[2]); p0 = p;
+    }
+  });
+  sh.chain = upload(sh.chain, new Float32Array(L), 6, [[0, 3, 0], [2, 3, 3]]);
 }
 /** HUD 一段：兩個錨的狀態。 */
 function anchorText(sh) {

@@ -104,7 +104,7 @@
   #gset.on{ display:block; }
   #gsetBg{ position:absolute; inset:0; display:none; background:rgba(0,0,0,.25); z-index:5; } #gsetBg.on{ display:block; }   /* 面板外點一下就關（蓋住整個畫面，含下方的 ⚙ 設定；Tim 2026-10-13） */ #gset .gsT{ font-size:16px; color:var(--gold); margin-bottom:6px; } #gset .note{ color:var(--dim); font-size:12px; }
   #gset .gsR{ margin:9px 0; display:flex; flex-wrap:wrap; justify-content:center; align-items:center; gap:5px; } #gset .gsL{ color:var(--dim); font-size:13px; margin-right:2px; }
-  #gset .chip{ font-size:14px; padding:4px 12px; margin:0; } #gset .chip.big{ font-size:15px; padding:6px 16px; } #gset .chip.dis, #hudctl .chip.dis{ opacity:.45; } #gset #boomB{ color:#ff9a7a; border-color:rgba(255,120,90,.55); }   /* dis：這個頁面不給全螢幕 */
+  #gset .chip{ font-size:14px; padding:4px 12px; margin:0; } #gset .chip.big{ font-size:15px; padding:6px 16px; } #gset .chip.dis, #hudctl .chip.dis{ opacity:.45; } #hudctl .chip i{ font-style:normal; } #gset #boomB{ color:#ff9a7a; border-color:rgba(255,120,90,.55); }   /* dis：這個頁面不給全螢幕 */
   #fps{ position:static; margin-bottom:3px; font:12px Consolas,monospace; color:#bfe9ff; text-shadow:0 0 3px #000, 0 0 3px #000; display:none; z-index:5; }
   #fps.on{ display:block; }
   #slowB{ left:50%; bottom:150px; transform:translateX(-50%); font-size:15px; font-weight:700; color:#ffd27a; letter-spacing:2px; text-shadow:0 0 4px #000, 0 0 4px #000; display:none; }   /* 殉爆的慢動作（73_slowmo.js）：放在下方操作列上面（⛔ 上方 ⇒ 殉爆那一刻廣播一次好幾則，疊在一起） */
@@ -211,7 +211,7 @@
     <div id="keys"><span class="hint">點敵艦瞄準</span><span class="kb" data-k="q" id="aimk"><b>Q</b> 瞄準</span><span class="kb" data-k="c"><b>C</b> 鏡頭</span><span class="kb" data-k="p" id="pauseK"><b>P</b> 停格</span><span class="kb" id="setB"><b>O</b> 設定</span></div>
     <div id="guns"></div>
     <div id="ammo"><span data-a="0"><b>1</b> 實心彈</span><span data-a="1"><b>2</b> 爆裂彈</span><span data-a="2"><b>3</b> 鏈彈</span></div>
-    <div id="hudctl">航行 <span class="chip" data-s="auto"><b>4</b> 自動</span><span class="chip" data-s="manual"><b>5</b> 手動</span><span class="chip" data-s="off"><b>6</b> 拋錨</span><span class="chip" data-k="7" id="ancP"><b>7</b> 左錨</span><span class="chip" data-k="8" id="ancS"><b>8</b> 右錨</span>　<span class="chip" id="autoF"><b>G</b> 自動開砲</span></div>
+    <div id="hudctl">航行 <span class="chip" data-s="auto"><b>4</b> 自動</span><span class="chip" data-s="manual"><b>5</b> 手動</span><span class="chip" data-s="off"><b>6</b> 拋錨</span><span class="chip" data-k="7" id="ancP"><b>7</b> <i>左錨</i></span><span class="chip" data-k="8" id="ancS"><b>8</b> <i>右錨</i></span><span class="chip" data-k="9" id="ancW"><b>9</b> 起錨</span>　<span class="chip" id="autoF"><b>G</b> 自動開砲</span></div>
   </div><div id="helmR" class="helm"><span class="kb hb" data-k="f"><b>F</b>單門</span><span class="kb hb" data-k=" "><b>空白</b>齊射</span><span class="kb hb" data-k="d" data-hold="1"><b>D</b>右舵 ▶</span></div></div></div>
   <div id="tip" class="hud"></div>
   <div id="slowB" class="hud"></div>
@@ -241,7 +241,7 @@
     <div><kbd>帆</kbd> 預設自動航行：讓對方保持在開火那一舷、繞著彼此轉；航速看帆還剩多少與風向（頂風最慢）</div>
     <div><kbd data-k="g">G</kbd> 自動開砲：電腦替我艦瞄準、開火（觀戰預設開；關掉就自己打）</div>
     <div><kbd data-k="b">B</kbd> 帆與繩的物理：開 ＝ 帆被相對風吹鼓（轉向、頂風會往另一邊鼓），斷掉的繩與帆垂下來擺、帆被打穿的那塊布撕成碎片飄下來；關 ＝ 靜態（下方也點得到）。主選單的「物理效果」分全開／高／中／低，細項在「物理設定…」（帆與繩、碎木、煙與水花、船邊水花）</div>
-    <div><kbd data-k="4">4</kbd> <kbd data-k="5">5</kbd> <kbd data-k="6">6</kbd> 航行：自動／手動／拋錨（雙錨，A／D 繞錨轉）　<kbd data-k="7">7</kbd> <kbd data-k="8">8</kbd> 左錨／右錨（帶著速度只拋一側 ⇒ 繞錨急轉；再按一次起錨；錨打壞了就不能拋）（下方也點得到）　<kbd data-k="o">O</kbd> 設定（Esc 也可以）　<kbd data-k="v">V</kbd> 鏡頭跟船／固定</div>
+    <div><kbd data-k="4">4</kbd> <kbd data-k="5">5</kbd> <kbd data-k="6">6</kbd> 航行：自動／手動／拋錨（雙錨，A／D 繞錨轉）　<kbd data-k="7">7</kbd> <kbd data-k="8">8</kbd> 左錨／右錨（帶著速度只拋一側 ⇒ 繞錨急轉；再按一次起錨；錨打壞了就不能拋）　<kbd data-k="9">9</kbd> 起錨（兩邊；按 4／5 開船也會先起錨）（下方也點得到）　<kbd data-k="o">O</kbd> 設定（Esc 也可以）　<kbd data-k="v">V</kbd> 鏡頭跟船／固定</div>
     <div><kbd>⚙</kbd> 下方「⚙ 設定」或 <kbd>Esc</kbd>：暫停並打開設定 —— 繼續、重新開始、回主選單、自爆（我艦的彈藥庫由小到大一間一間引爆、船斷開沉下去 —— 相當於重開，先看煙花）、說明（H）、畫質與物理效果的檔位、帆繩物理、鏡頭跟船、靜音、顯示 FPS、全螢幕（手機用；電腦直接按 F11 也行，Esc 退出）、彈藥庫殉爆時的慢動作與特寫鏡頭（各自開關）</div>
     <div><kbd data-k="a" data-hold="1">A</kbd><kbd data-k="d" data-hold="1">D</kbd> 打舵（按住；一碰就換手動）　<kbd data-k="w">W</kbd><kbd data-k="s">S</kbd> 帆裝：全收／收帆／戰鬥帆／滿帆（帆收得越多越慢、越穩；收起來的帆打不壞，除非桅斷了）；有額外動力的船（風暴角號）手動時是油門：<b>按住 W 前進、按住 S 倒車</b>（跟帆分開；沒按住 ⇒ 只靠帆；倒退時舵反過來）</div>
     <div><kbd>羅</kbd> 左下：羅盤跟著鏡頭轉（北 ＝ 參考方向），中間是我艦、藍箭頭是風從哪吹來、紅點是敵艦、金色扇形是兩舷的射界（對得到時亮）</div>
@@ -7491,6 +7491,7 @@ function prepRig() {
     var tb = DEBUG ? performance.now() : 0;
     if (dirty || (PHYS && ow.crew)) sailBuf(ow);                     // 物理開著：船上的帆每一格重做；斷開的那一團是靜態的
     if (PHYS && ow.crew) looseBuf(ow);
+    if (ow.anc) chainBuf(ow);                                         // 鐵鍊（76_anchor.js；跟帆繩物理開關無關）
     if (DEBUG) PROF.buf += performance.now() - tb;
   });
 }
@@ -7722,6 +7723,7 @@ function render() {
     cutSet(P.tri, ow); gl.uniformMatrix4fv(P.tri.u.uModel, false, ow.M);
     if (ow.lines && ow.lines.n) { gl.bindVertexArray(ow.lines.vao); gl.drawArrays(gl.LINES, 0, ow.lines.n); }
     if (PHYS && ow.ll && ow.ll.n) { gl.bindVertexArray(ow.ll.vao); gl.drawArrays(gl.LINES, 0, ow.ll.n); }
+    if (ow.chain && ow.chain.n) { gl.bindVertexArray(ow.chain.vao); gl.drawArrays(gl.LINES, 0, ow.chain.n); }
     if (ROOMS_DBG && ow.rooms && ow.rooms.length) { if (!ow.roomLines) roomLines(ow); gl.disable(gl.DEPTH_TEST); gl.bindVertexArray(ow.roomLines.vao); gl.drawArrays(gl.LINES, 0, ow.roomLines.n); gl.enable(gl.DEPTH_TEST); }   // 空艙房的外框（?rooms=1；穿過船殼看得到）
   });
   gl.frontFace(gl.CW); gl.useProgram(P.sail.prog); setCommon(P.sail); drawSails(P.sail); gl.frontFace(gl.CCW);
@@ -8711,7 +8713,8 @@ function doKey(k, repeat) {
   else if (k === 'm') { muted = !muted; gsetShow(); }
   else if (k === 'h' || k === '?') helpToggle();
   else if (k === 'r') { gsetClose(); helpClose(); RUNNING = false; END_AT = 0; END_WAIT = null; $('cover').style.display = ''; $('end').className = ''; }
-  else if (k === '4' || k === '5' || k === '6') setSailMode(['auto', 'manual', 'off'][+k - 4]);
+  else if (k === '4' || k === '5' || k === '6') { if (k !== '6' && RUNNING && me && me.anc) anchorWeighAll(me); setSailMode(['auto', 'manual', 'off'][+k - 4]); }   // 4／5 開船 ⇒ 先起錨（7／8 拋的也一起；Tim 2026-10-15：要可以起錨）
+  else if (k === '9' && RUNNING && me && !me.sunk) { if (SAIL === 'off') setSailMode('manual'); var nw = anchorWeighAll(me); note(me, nw ? '起錨（' + nw + '）—— 8 秒收好' : '錨都收著'); }   // 起錨（兩邊）
   else if ((k === '7' || k === '8') && RUNNING && me && !me.sunk) { var am = anchorToggle(me, k === '7' ? 'P' : 'S'); if (am) note(me, am + (/^拋/.test(am) ? '（帶著速度只拋一側 ⇒ 繞錨急轉；再按一次起錨）' : '')); }   // 左右錨（76_anchor.js）   // 航行（TASK-0567，Tim 2026-10-14：不用 Tab 循環，三個鍵直接切）
   else if (k === 'o') gsetToggle();                                    // 設定（Esc 也可以）
   else if (k === 'a' || k === 'd' || k === 'arrowleft' || k === 'arrowright') {   // 打舵：自動中一碰就換手動
@@ -9703,14 +9706,14 @@ function anchorsOf(sh) {
   if (sh.anc) return sh.anc;
   var T = sh.T, out = {};
   ['P', 'S'].forEach(function (k) {
-    var sg = k === 'S' ? 1 : -1, a = { side: k, st: 'up', A: null, t: 0, m: null, part: null, hx: T.wl1 - 12, hy: T.cy + sg * Math.max(4, T.bowHalf - 2), broken: false };
+    var sg = k === 'S' ? 1 : -1, a = { side: k, st: 'up', A: null, t: 0, m: null, part: null, hx: T.wl1 - 12, hy: T.cy + sg * Math.max(4, T.bowHalf - 2), hz: T.zw + 25, broken: false };   // hz：鐵鍊從哪個高度出來（畫用）
     var m = sh.models.filter(function (q) { return q.meta && q.meta.kind === 'anchor' && (q.c[1] - T.cy) * sg > 0; })[0];
     var p = !m && (T.h.parts || []).filter(function (q) { return /錨/.test(q.path || '') && q.box && ((q.box[1] + q.box[4]) / 2 - T.cy) * sg > 0; })[0];
-    if (m) { a.m = m; a.hx = m.c[0]; a.hy = m.c[1]; }
+    if (m) { a.m = m; a.hx = m.c[0]; a.hy = m.c[1]; a.hz = m.bb[5]; }
     else if (p) {                                                        // 關聯（格子）：開局記下它的格（每 4 格取 1），之後少了一半 ⇒ 打壞
       var b = p.box, cells = [];
       for (var x = b[0]; x <= b[3]; x += 2) for (var y = b[1]; y <= b[4]; y += 2) for (var z = b[2]; z <= b[5]; z += 1) if (T.base.get(x, y, z)) cells.push(x, y, z);
-      a.part = { path: p.path, cells: cells }; a.hx = (b[0] + b[3]) / 2; a.hy = (b[1] + b[4]) / 2;
+      a.part = { path: p.path, cells: cells }; a.hx = (b[0] + b[3]) / 2; a.hy = (b[1] + b[4]) / 2; a.hz = b[5];
     }
     out[k] = a;
   });
@@ -9741,6 +9744,11 @@ function anchorToggle(sh, k, want) {
   }
   if (a.st === 'drop' || a.st === 'down') { a.st = 'weigh'; a.t0 = SIMT; a.t = SIMT + ANC_WEIGH; return '起' + nm; }
   return '';
+}
+/** 起錨：還在水裡的（drop／down）都開始收；回傳收了哪幾個（給廣播）。 */
+function anchorWeighAll(sh) {
+  var A = sh.anc; if (!A) return '';
+  return ['P', 'S'].filter(function (k) { return anchorToggle(sh, k, false); }).map(function (k) { return k === 'P' ? '左錨' : '右錨'; }).join('、');
 }
 function anchorAny(sh, st) { var A = sh.anc; return !!A && (A.P.st === st || A.S.st === st); }
 /** 有錨咬著（down／weigh）⇒ 船不再靠帆走（target 0）。 */
@@ -9782,7 +9790,30 @@ function anchorChips(me) {
     var a = A[k], el = $('anc' + k); if (!el) return;
     if (!a.broken && a.st === 'up' && !anchorAlive(me, a)) a.broken = true;
     el.classList.toggle('on', a.st === 'drop' || a.st === 'down'); el.classList.toggle('dis', a.broken);
+    var lb = a.broken ? '錨壞了' : a.st === 'drop' || a.st === 'down' ? '起' + (k === 'P' ? '左錨' : '右錨') : a.st === 'weigh' ? '起錨中' : (k === 'P' ? '左錨' : '右錨');   // 在水裡 ⇒ 按了是起錨
+    var sp = el.querySelector('i'); if (sp && sp.textContent !== lb) sp.textContent = lb;
   });
+}
+/** 鐵鍊（畫用，每一格畫面重做；物理與碰撞在 TASK-0601 下一段）：錨鏈孔 → 錨（海底，水線下 ANC_DEPTH）的一條二次曲線，船身格座標（跟繩同一套 uModel）。
+ *  鬆 ⇒ 從錨鏈孔幾乎直直垂到海底、再沿海底拉到錨；拉緊（水平距離接近 ANC_REACH）⇒ 繃成直線。下沉中 ⇒ 錨往下的深度照時間；起錨中 ⇒ 鍊子跟著收短。
+ *  一節深一節淺交錯 ⇒ 看起來是一節一節的鏈環。 */
+var CHAIN_N = 48, CHAIN_C = [[0.2, 0.2, 0.22], [0.38, 0.37, 0.36]];
+function chainBuf(sh) {
+  var A = sh.anc, L = [];
+  if (A) ['P', 'S'].forEach(function (k) {
+    var a = A[k]; if (!a.A || a.st === 'up') return;
+    var dep = a.st === 'drop' ? ANC_DEPTH * clamp(1 - (a.t - SIMT) / ANC_FALL, 0.05, 1) : ANC_DEPTH, ax = a.A[0], az = a.A[1];
+    if (a.st === 'weigh') { var f = clamp((a.t - SIMT) / ANC_WEIGH, 0, 1), H = hawseXZ(sh, a, sh.px, sh.pz, sh.yaw); ax = H[0] + (ax - H[0]) * f; az = H[1] + (az - H[1]) * f; dep *= Math.max(f, 0.05); }   // 起錨：錨被拉近、拉上來
+    var e = toLocal(sh, [ax, seaH(ax, az, SIMT) - dep, az]), h = [a.hx, a.hy, a.hz];
+    var dx = e[0] - h[0], dy = e[1] - h[1], tt = clamp(Math.hypot(dx, dy) * S / ANC_REACH, 0, 1), w = tt * tt;
+    var c = [h[0] + dx * (0.08 + 0.42 * w), h[1] + dy * (0.08 + 0.42 * w), e[2] + (h[2] - e[2]) * 0.5 * w];   // 控制點：鬆 ⇒ 錨鏈孔正下方的海底附近；拉緊 ⇒ 中點
+    var p0 = h;
+    for (var i = 1; i <= CHAIN_N; i++) {
+      var t = i / CHAIN_N, u = 1 - t, p = [u * u * h[0] + 2 * u * t * c[0] + t * t * e[0], u * u * h[1] + 2 * u * t * c[1] + t * t * e[1], u * u * h[2] + 2 * u * t * c[2] + t * t * e[2]], col = CHAIN_C[i & 1];
+      L.push(p0[0], p0[1], p0[2], col[0], col[1], col[2], p[0], p[1], p[2], col[0], col[1], col[2]); p0 = p;
+    }
+  });
+  sh.chain = upload(sh.chain, new Float32Array(L), 6, [[0, 3, 0], [2, 3, 3]]);
 }
 /** HUD 一段：兩個錨的狀態。 */
 function anchorText(sh) {

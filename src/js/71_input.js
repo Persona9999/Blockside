@@ -94,7 +94,8 @@ function doKey(k, repeat) {
   else if (k === 'm') { muted = !muted; gsetShow(); }
   else if (k === 'h' || k === '?') helpToggle();
   else if (k === 'r') { gsetClose(); helpClose(); RUNNING = false; END_AT = 0; END_WAIT = null; $('cover').style.display = ''; $('end').className = ''; }
-  else if (k === '4' || k === '5' || k === '6') setSailMode(['auto', 'manual', 'off'][+k - 4]);
+  else if (k === '4' || k === '5' || k === '6') { if (k !== '6' && RUNNING && me && me.anc) anchorWeighAll(me); setSailMode(['auto', 'manual', 'off'][+k - 4]); }   // 4／5 開船 ⇒ 先起錨（7／8 拋的也一起；Tim 2026-10-15：要可以起錨）
+  else if (k === '9' && RUNNING && me && !me.sunk) { if (SAIL === 'off') setSailMode('manual'); var nw = anchorWeighAll(me); note(me, nw ? '起錨（' + nw + '）—— 8 秒收好' : '錨都收著'); }   // 起錨（兩邊）
   else if ((k === '7' || k === '8') && RUNNING && me && !me.sunk) { var am = anchorToggle(me, k === '7' ? 'P' : 'S'); if (am) note(me, am + (/^拋/.test(am) ? '（帶著速度只拋一側 ⇒ 繞錨急轉；再按一次起錨）' : '')); }   // 左右錨（76_anchor.js）   // 航行（TASK-0567，Tim 2026-10-14：不用 Tab 循環，三個鍵直接切）
   else if (k === 'o') gsetToggle();                                    // 設定（Esc 也可以）
   else if (k === 'a' || k === 'd' || k === 'arrowleft' || k === 'arrowright') {   // 打舵：自動中一碰就換手動
