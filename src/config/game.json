@@ -189,7 +189,8 @@
       "vxk": "tridente.vxk",
       "work": "gura-tridente-01m-assembly",
       "geo": {"marines": [50, 260], "center": 195, "aim": 110, "aimZ": [45, 560], "deckAim": [92, 160], "rigAim": [200, 650]}
-    }
+    },
+    {"id": "phoenix", "el": "ship-phoenix", "name": "炎羽號", "vxk": "phoenix.vxk", "work": "kiara-phoenix-01m-assembly"}
   ],
   "furniture": {
     "bed": {"name": "病床", "type": "medical", "size": [19, 8, 6], "hp": 100, "hold": 1},
