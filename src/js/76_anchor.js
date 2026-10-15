@@ -16,12 +16,15 @@ function anchorsOf(sh) {
     var sg = k === 'S' ? 1 : -1, a = { side: k, st: 'up', A: null, t: 0, m: null, part: null, hx: T.wl1 - 12, hy: T.cy + sg * Math.max(4, T.bowHalf - 2), hz: T.zw + 25, broken: false };   // hz：鐵鍊從哪個高度出來（畫用）
     var m = sh.models.filter(function (q) { return q.meta && q.meta.kind === 'anchor' && (q.c[1] - T.cy) * sg > 0; })[0];
     var p = !m && (T.h.parts || []).filter(function (q) { return /錨/.test(q.path || '') && q.box && ((q.box[1] + q.box[4]) / 2 - T.cy) * sg > 0; })[0];
-    if (m) { a.m = m; a.hx = m.c[0]; a.hy = m.c[1]; a.hz = m.bb[5]; }
+    if (m) { a.m = m; var rg = m.pts && m.pts.ring; if (rg) { a.hx = rg[0]; a.hy = rg[1]; a.hz = rg[2]; } else { a.hx = m.c[0]; a.hy = m.c[1]; a.hz = m.bb[5]; } }   // 錨環 ring（造船規格 §9 anchor）：鐵鍊綁的地方；沒有 ⇒ 模型頂的中心
     else if (p) {                                                        // 關聯（格子）：開局記下它的格（每 4 格取 1），之後少了一半 ⇒ 打壞
       var b = p.box, cells = [];
       for (var x = b[0]; x <= b[3]; x += 2) for (var y = b[1]; y <= b[4]; y += 2) for (var z = b[2]; z <= b[5]; z += 1) if (T.base.get(x, y, z)) cells.push(x, y, z);
       a.part = { path: p.path, cells: cells }; a.hx = (b[0] + b[3]) / 2; a.hy = (b[1] + b[4]) / 2; a.hz = b[5];
     }
+    a.rx = a.hx; a.ry = a.hy; a.rz = a.hz;                              // 錨這一端（ring）：鐵鍊接在這裡、模型錨照它搬到鍊子尾巴
+    var hw = null; (T.h.parts || []).some(function (q) { return (hw = q.points && q.points['hawse-' + k]); });
+    if (hw) { a.hx = hw[0]; a.hy = hw[1]; a.hz = hw[2]; a.hw = true; }   // 錨鏈孔 hawse-P／S（船殼固定點，各船登記）：鐵鍊從這裡出來、船繞這一點被拴住；沒登記 ⇒ 跟以前一樣用錨那一點
     out[k] = a;
   });
   return (sh.anc = out);
@@ -44,8 +47,8 @@ function anchorToggle(sh, k, want) {
   if (want) {
     if (a.st !== 'up') return '';
     if (!anchorAlive(sh, a)) { a.broken = true; return nm + '打壞了，拋不了'; }
-    var h = hawseXZ(sh, a, sh.px, sh.pz, sh.yaw);
-    a.A = h; a.st = 'drop'; a.t = SIMT + ANC_FALL;
+    var h = hawseXZ(sh, a, sh.px, sh.pz, sh.yaw), R = a.hw ? M4.pt(sh.M, a.rx, a.ry, a.rz) : null;
+    a.A = R ? [R[0], R[2]] : h; a.y0 = R ? R[1] : null; a.st = 'drop'; a.t = SIMT + ANC_FALL;   // 有錨鏈孔 ⇒ 錨從自己掛的地方（ring，吊錨架）直直落下去，鍊子從錨鏈孔放出；沒有 ⇒ 照舊從錨鏈孔正下方
     return '拋' + nm;
   }
   if (a.st === 'drop' || a.st === 'down') { a.st = 'weigh'; a.t0 = SIMT; a.t = SIMT + ANC_WEIGH; return '起' + nm; }
@@ -161,7 +164,7 @@ function chainSolve(sh, a, c, dt) {
   if (!c.lost) {
     W = M4.pt(sh.M, a.hx, a.hy, a.hz);
     if (a.st === 'drop') {
-      var f = clamp(1 - (a.t - SIMT) / ANC_FALL, 0, 1); E = [a.A[0], W[1] + (sb - W[1]) * Math.pow(f, 1.6), a.A[1]]; c.pay = Math.max(ANC_CHAIN * f, Math.hypot(E[0] - W[0], E[1] - W[1], E[2] - W[2]));
+      var f = clamp(1 - (a.t - SIMT) / ANC_FALL, 0, 1); var y0 = a.y0 === null || a.y0 === undefined ? W[1] : a.y0; E = [a.A[0], y0 + (sb - y0) * Math.pow(f, 1.6), a.A[1]]; c.pay = Math.max(ANC_CHAIN * f, Math.hypot(E[0] - W[0], E[1] - W[1], E[2] - W[2]));
       if (!c.splash && E[1] <= seaH(E[0], E[2], SIMT)) { c.splash = true; splash(E, false); }   // 錨入水那一刻（抽亂數 ⇒ 只有拋了錨的局）
     }
     else if (a.st === 'down') { E = [a.A[0], sb, a.A[1]]; c.pay = Math.max(ANC_CHAIN, Math.hypot(E[0] - W[0], E[1] - W[1], E[2] - W[2])); }
@@ -209,7 +212,7 @@ function chainStep(sh, dt) {
     if (a.st === 'up') { a.ch = null; if (a.m) a.m.ancD = null; return; }
     var c = a.ch || (a.ch = chainNew(sh, a));
     chainSolve(sh, a, c, dt);
-    if (a.m) { var e = M4.pt(sh.inv, c.p[CHAIN_SEG * 3], c.p[CHAIN_SEG * 3 + 1], c.p[CHAIN_SEG * 3 + 2]); a.m.ancD = [e[0] - a.hx, e[1] - a.hy, e[2] - a.hz]; }   // 模型錨（炎羽號）：整個搬到鍊子那一端畫（60_render.js drawModels；錨環 ring 還沒有 ⇒ 用模型頂的中心）
+    if (a.m) { var e = M4.pt(sh.inv, c.p[CHAIN_SEG * 3], c.p[CHAIN_SEG * 3 + 1], c.p[CHAIN_SEG * 3 + 2]); a.m.ancD = [e[0] - a.rx, e[1] - a.ry, e[2] - a.rz]; }   // 模型錨：整個搬到鍊子那一端畫、ring 落在鍊尾（60_render.js drawModels；沒有 ring ⇒ 模型頂的中心）
   });
   if (sh.chLost) for (var i = 0; i < sh.chLost.length; i++) { var c2 = sh.chLost[i]; if (SIMT > c2.t) { sh.chLost.splice(i--, 1); continue; } chainSolve(sh, null, c2, dt); }
   CH_PROF.ms += performance.now() - t0; CH_PROF.steps++;
