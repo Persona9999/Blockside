@@ -169,7 +169,7 @@ function medText(sh) {
 function medInfo(sh) {
   var M = sh.med, skipped = (sh.medSkip || []).slice();
   if (!M) return skipped.length ? { skipped: skipped } : null;
-  return { carried: M.carried, healed: M.healed, out: M.out, open: M.open, rooms: M.rooms.map(function (o) {
+  return { carried: M.carried, healed: M.healed, out: M.out, drowned: sh.bedDrowned || 0, open: M.open, rooms: M.rooms.map(function (o) {
     return { name: o.room.name, lv: o.lv, beds: o.beds.length, far: o.far, alive: o.beds.filter(function (m) { return m.alive; }).length, inBed: o.beds.filter(function (m) { return m.med.who && m.med.who.inBed; }).length, coming: o.beds.filter(function (m) { return m.med.who && !m.med.who.inBed; }).length, staff: o.have + '/' + o.need };
   }), skipped: skipped, waiting: sh.crew.filter(function (c) { return c.st === 1 && !c.medBed && c.medOk !== false; }).length, carrying: sh.crew.filter(function (c) { return c.st === 1 && c.carriedBy; }).length, noRoute: sh.crew.filter(function (c) { return c.medNo; }).length };
 }

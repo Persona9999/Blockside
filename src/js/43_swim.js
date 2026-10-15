@@ -31,14 +31,24 @@ function drownCheck(sh) {
   var open = sh.sinkingFinal || sh.sunk || sh.broken, low = sh.decks.length ? sh.decks[0].zr[0] : -1e9, fl = sh.fl;
   sh.crew.forEach(function (c) {
     if (c.st > 1) return;
-    var h = M4.pt(sh.M, c.pos[0], c.pos[1], c.pos[2] + SWIM_HEAD);
+    var bed = c.st === 1 && c.inBed && c.medBed, hz = bed ? BED_FACE : SWIM_HEAD;   // 躺在病床上 ⇒ 看躺著的臉（床面往上 BED_FACE），不看站著的頭頂
+    var h = M4.pt(sh.M, c.pos[0], c.pos[1], c.pos[2] + hz);
     if (h[1] >= seaH(h[0], h[2], SIMT)) { c.wetN = 0; return; }
-    if (open || c.pos[2] >= low) { if ((c.wetN = (c.wetN || 0) + 1) >= 2) toSwim(sh, c, M4.pt(sh.M, c.pos[0], c.pos[1], c.pos[2])); return; }   // 砲甲板以上有砲門 ⇒ 通海
-    var i = fl ? flCell(fl.F, c.pos[0], c.pos[1], c.pos[2] + SWIM_HEAD) : -1;   // 住艙以下：艙內那一格的水滿了九成（公式模式看不到艙內的水 ⇒ 不管）
+    if (open || c.pos[2] >= low) { if ((c.wetN = (c.wetN || 0) + 1) >= 2) { if (bed) bedDrown(sh, c); else toSwim(sh, c, M4.pt(sh.M, c.pos[0], c.pos[1], c.pos[2])); } return; }   // 砲甲板以上有砲門 ⇒ 通海
+    var i = fl ? flCell(fl.F, c.pos[0], c.pos[1], c.pos[2] + hz) : -1;   // 住艙以下：艙內那一格的水滿了九成（公式模式看不到艙內的水 ⇒ 不管）
     if (!(i >= 0 && fl.cap[i] > 0.02 && fl.A[i] >= 0.9 * fl.cap[i] * Math.pow(fl.F.c * S, 3))) { c.wetN = 0; return; }
     if ((c.wetN = (c.wetN || 0) + 1) < 2) return;
-    if (c.role === ROLE.HAND && sh.nav) evacuate(sh, c); else toSwim(sh, c, M4.pt(sh.M, c.pos[0], c.pos[1], c.pos[2]));
+    if (bed) bedDrown(sh, c);
+    else if (c.role === ROLE.HAND && sh.nav) evacuate(sh, c); else toSwim(sh, c, M4.pt(sh.M, c.pos[0], c.pos[1], c.pos[2]));
   });
+}
+/** 病床上的傷員跟著床淹（TASK-0568；Tim 2026-10-14）：水淹過床面 ⇒ 在床上溺水（算陣亡，原因「溺水」）—— 不先搬走、不往上躲、不穿過船殼浮出去游。
+ *  床空出來（medTick 收回）；床還在、水退了照樣能再躺人。 */
+var BED_FACE = 3;                                                        // 躺著的臉離床面幾格（0.3 m）
+function bedDrown(sh, c) {
+  medRelease(c); c.wetN = 0;
+  killCrew(sh, c, '溺水');
+  sh.bedDrowned = (sh.bedDrowned || 0) + 1;
 }
 /** 艙內淹過頭的預備水手：往上一層（梯子）躲；淹了的那一層不再去（走得到的層拿掉它），待命的是那一層 ⇒ 改成上一層。在爬、在去補位的照走（補位一定往上）。 */
 function evacuate(sh, c) {
