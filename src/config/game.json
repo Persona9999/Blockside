@@ -267,6 +267,16 @@
         {"kind": "ensign", "at": [300, 90, 140], "pole": 1.0}
       ],
       "names": ["維吉尼亞號"]
+    },
+    {
+      "id": "cosecha",
+      "el": "ship-cosecha",
+      "name": "收穫號",
+      "vxk": "cosecha.vxk",
+      "work": "calli-cosecha-01m-assembly",
+      "geo": {"spar": [86, 121], "marines": [120, 90], "center": 90, "aim": 70, "aimZ": [30, 330], "deckAim": [74, 97], "rigAim": [140, 330]},
+      "crew": {"marines": 6, "top": 1},
+      "names": ["收穫號"]
     }
   ],
   "furniture": {
