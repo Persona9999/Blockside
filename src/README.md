@@ -102,7 +102,7 @@ python -I admin.py cache --all    # 每艘都比 ＝ 比對來源：雕刻作品
 | `00_config.js` | 讀內嵌的設定檔（`#game-config` ⇒ `CFG`）；讀不到 ⇒ 停在載入畫面寫原因（不照某一份舊值跑） |
 | `00_core.js` | 網址參數（`?demo`／`?seed`／`?debug`…）、有種子的亂數、常數、向量與矩陣小工具 |
 | `01_gl.js` | WebGL 環境、著色器（體素、碎屑、模型、帆 `P.sail`（有貼圖 ⇒ 片段照貼圖取色、透明的 discard）、粒子、海、天、陰影圖用的只寫深度 `P.dvox`／`P.dtri`／帆的 `P.dsail`（洞不投影子））、收陰影的 `SHADOW_GLSL`、共用 uniform（`setCommon`，`PASS` 換掉這一趟的 VP／鏡頭／裁切） |
-| `02_audio.js` | 音效（按下開始後才建） |
+| `02_audio.js` | 音效（按下開始後才建）；master 後面一個限制器（DynamicsCompressor −14 dB、比 20）＋同時發聲上限（同一種 60 ms 內 3 個、全部 24 個還在響）⇒ 爆炸再密也不削波（Tim 2026-10-15：「目前爆炸太頻繁會爆音」；兩舷齊射 4 輪＋殉爆：輸出峰值 1.672 → 0.683、≥ 1 的樣本 194 → 0） |
 | `03_camera.js` | 鏡頭（自由／追砲彈／看敵艦／看我艦、跟船）；追砲彈挑哪一顆（`pickBall`／`ballPredict`） |
 | `04_state.js` | 全域狀態與選單設定：`LIM`（滑桿上下限，`CFG.lim`）、硬度／進水／壓艙物／砲的重量／航速／靈活性、砲・帆・船員・火藥桶的血量、每發傷害 `DMG`、彈種倍率 `AMMO_K`、殉爆威力、降旗規則、模式、`PHYS` |
 | `05_hull.js` | 船型（一種船一份，兩艘同型共用）：`HULL_LIST`（選單列得出來的船）、`loadHull`（選到才解碼、網格化）、`FLEET_SET`（艦隊編成：我方、敵方的船型）、設計水線 `hullZW`（meta `kind=ship, waterline_z`，沒有 ⇒ 63） |
