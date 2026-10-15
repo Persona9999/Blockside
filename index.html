@@ -3640,11 +3640,14 @@ function ignite(sh, m, delay) {
 function stepPowder() {
   for (var i = 0; i < BOOMS.length; i++) { var e = BOOMS[i]; if (e.t > SIMT) continue; BOOMS.splice(i--, 1); kegBoom(e.sh, e.m); }
   for (i = 0; i < SELFB.length; i++) { e = SELFB[i]; if (e.t > SIMT) continue; SELFB.splice(i--, 1); selfBoom(e.sh, e.mag); }
+  SHIPS.forEach(function (sh) { if (sh.selfSink && SIMT >= sh.selfSink) { sh.selfSink = 0; if (!sh.sinkingFinal && !sh.sunk) { sh.sinkingFinal = true; note(sh, '自爆：船開始沉了'); } } });   // 自爆的保底（下面）
 }
 // 自爆（遊戲內設定的按鈕；Tim 2026-10-13：相當於重開，但先看煙花）：我艦還在的彈藥庫由小到大一間一間引爆（間隔 SELF_GAP 之間隨機，最大那間最後 ⇒ 通常船斷開；
 //   每間的威力照細節設定的「威力浮動」，每次都不一樣），
-//   照殉爆走（慢動作與特寫照設定）；炸不斷（殉爆威力調小）也一定開始沉（進水倍率 0 ⇒ 不沉，跟斷船一樣）。結算寫「自爆」，之後照常重新開始。
-var SELF_GAP = [0.6, 1.8], SELFB = [];
+//   照殉爆走（慢動作與特寫照設定）：炸斷了 ⇒ 照斷船沉；沒斷 ⇒ 照破洞進水（粒子模式看得到水灌進來）、水夠了照常開始沉。
+//   ⛔ 以前每炸一間就直接標 sinkingFinal ⇒ 進水不再算（32_hull.js：開始沉之後不算水）⇒ 船照公式往下沉、艙裡一滴水都沒有（Tim 2026-10-15：「自爆好像不會進水，可以走正常殉爆流程嗎」）。
+//   保底：最後一間炸完 SELF_SINK 秒還沒開始沉（洞都在水線上、殉爆威力調小）⇒ 才標開始沉（進水倍率 0 ⇒ 不沉，跟斷船一樣）。結算寫「自爆」，之後照常重新開始。
+var SELF_GAP = [0.6, 1.8], SELFB = [], SELF_SINK = 20;
 function canSelfDestruct() { var sh = SHIPS[PLAYER_I]; return !!(RUNNING && sh && !sh.sunk && !sh.selfD && sh.mags.some(function (m) { return !m.gone; })); }
 function selfDestruct() {
   if (!canSelfDestruct()) return false;
@@ -3656,7 +3659,8 @@ function selfDestruct() {
 }
 function selfBoom(sh, mag) {
   magBoom(sh, mag);
-  sh.struck = true; sh.sinkingFinal = true; sh.fate = '自爆' + (sh.broken ? '（船斷成兩截）' : '');
+  sh.struck = true; sh.fate = '自爆' + (sh.broken ? '（船斷成兩截）' : '');   // 開始沉照殉爆的流程（magBoom：斷了才標）＋破洞進水
+  if (!SELFB.some(function (e) { return e.sh === sh; })) sh.selfSink = SIMT + SELF_SINK;   // 最後一間 ⇒ 保底計時
 }
 /** 一桶炸了：小爆炸＋連鎖。 */
 function kegBoom(sh, m) {
