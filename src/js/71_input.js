@@ -466,7 +466,7 @@ function sliders() {
     var k = C(); $('cfgShip').value = CFG_ID;
     lf.value = k.ballast !== undefined ? k.ballast : LIM.ballast[2]; f.value = k.flood; h.value = Math.log(k.hard / LIM.hard[0]) / hk; c.value = STRIKE.cas * 100; sp.value = k.speed; ag.value = k.agile; uw.value = k.upwind; $('base').value = k.base || 0;
     gh.value = GUN_HP; gw.value = k.gunw; sl.value = SAIL_HP; ph.value = POWDER_HP; bl.value = BLAST_K; bv.value = Math.round(BLAST_V * 100); ch.value = CREW_HP;
-    bx.value = BOX_N; cy.value = CARRY_N; wk.value = WIND_K; wc.value = WIND_CAP; dr.value = DROWN_T; $('navre').value = NAV_RE; $('heal').value = HEAL_T; $('gcrew').checked = GUN_CREW_HURT;
+    bx.value = BOX_N; cy.value = CARRY_N; wk.value = WIND_K; wc.value = WIND_CAP; dr.value = DROWN_T; $('navre').value = NAV_RE; $('heal').value = HEAL_T; $('gcrew').checked = GUN_CREW_HURT; $('dbg').checked = DBG_SET;
     se.value = SEA_K; st.value = STALL_K; fs.value = FUN.speed; fa.value = FUN.agile; fl.value = FUN.stall; fp.value = FUN.powder;
     for (var r = 0; r < 3; r++) for (var k = 0; k < 3; k++) am(r, k).value = AMMO_K[r][k];
     ['guns', 'masts', 'officers'].forEach(function (k) { $('st-' + k).checked = STRIKE[k]; });
@@ -536,7 +536,8 @@ function sliders() {
   nr.oninput = function () { NAV_RE = +nr.value; show(); };
   var hl = $('heal'); hl.min = LIM.heal[0]; hl.max = LIM.heal[1];          // 醫療艙的治療時間（TASK-0568）
   hl.oninput = function () { HEAL_T = Math.round(+hl.value); show(); };
-  $('gcrew').onchange = function () { GUN_CREW_HURT = $('gcrew').checked; show(); };   // 砲被打飛 ⇒ 砲班跟著受傷（TASK-0568）
+  $('gcrew').onchange = function () { GUN_CREW_HURT = $('gcrew').checked; show(); };
+  $('dbg').onchange = function () { DBG_SET = $('dbg').checked; show(); };   // Debug 模式（04_state.js dbgOn）：遊戲中也生效   // 砲被打飛 ⇒ 砲班跟著受傷（TASK-0568）
   st.oninput = function () { STALL_K = +st.value; show(); };
   se.oninput = function () { SEA_K = +se.value; show(); };
   fs.oninput = function () { FUN.speed = +fs.value; show(); }; fa.oninput = function () { FUN.agile = +fa.value; show(); }; fl.oninput = function () { FUN.stall = +fl.value; show(); }; fp.oninput = function () { FUN.powder = +fp.value; show(); };
@@ -598,7 +599,7 @@ function sliders() {
   $('detR').onclick = function () {                    // 重設預設值：LIM 的第三格、降旗全不勾
     // 船隻配置頁（每一型的船員與性能）不跟著重設：那一頁有自己的「這一型回到預設」（TASK-0570：編起來很花時間）
     GUN_HP = LIM.gunhp[2]; SAIL_HP = LIM.sailhp[2]; POWDER_HP = LIM.powderhp[2]; BLAST_K = LIM.blast[2]; BLAST_V = LIM.blastv[2]; CREW_HP = LIM.crewhp[2];
-    BOX_N = LIM.box[2]; CARRY_N = LIM.carry[2]; WIND_K = LIM.wind[2]; WIND_CAP = LIM.windcap[2]; HANDS = LIM.hands[2]; DROWN_T = LIM.drown[2]; NAV_RE = LIM.navre[2]; HEAL_T = LIM.heal[2]; GUN_CREW_HURT = true;
+    BOX_N = LIM.box[2]; CARRY_N = LIM.carry[2]; WIND_K = LIM.wind[2]; WIND_CAP = LIM.windcap[2]; HANDS = LIM.hands[2]; DROWN_T = LIM.drown[2]; NAV_RE = LIM.navre[2]; HEAL_T = LIM.heal[2]; GUN_CREW_HURT = true; DBG_SET = false;
     AMMO_K = AMMO_K0.map(function (r) { return r.slice(); });
     SEA_K = LIM.sea[2]; STALL_K = LIM.stall[2]; FUN.speed = LIM.funspeed[2]; FUN.agile = LIM.funagile[2]; FUN.stall = LIM.funstall[2]; FUN.powder = LIM.funpowder[2];
     STRIKE.cas = LIM.cas[2]; STRIKE.guns = STRIKE.masts = STRIKE.officers = false; CAP_SET = ['random', 'random'];

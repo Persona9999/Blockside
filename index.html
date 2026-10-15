@@ -280,6 +280,7 @@
     <div class="gsR"><span class="gsL">瞄準</span><span class="chip" data-k="q" id="aimk">🎯 換瞄準模式（Q）</span><span class="note">自由 → 水線 → 砲甲板 → 帆具 → 甲板人員 → 彈藥庫（現在的寫在羅盤上面）</span></div>
     <div class="gsR"><span class="chip" id="physT"><b>B</b> 帆繩物理</span><span class="chip" id="camT"><b>V</b> 鏡頭跟船</span><span class="chip" id="muteT"><b>M</b> 靜音</span><span class="chip" id="fpsT">顯示 FPS</span><span class="chip" id="fullT"><b>F11</b> 全螢幕</span><span class="note" id="gsFull"></span></div>
     <div class="gsR"><span class="gsL">彈藥庫殉爆</span><span class="chip" id="slowT">慢動作</span><span class="chip" id="slowCamT">特寫鏡頭</span></div>
+    <div class="gsR"><span class="gsL">模擬速度</span><input type="range" id="simSpd" min="-1301" max="903" step="1" value="0" aria-label="模擬速度"><b id="simSpdV" style="min-width:3.6em">×1</b><span class="chip" id="simSpd1">1×</span></div>
     <div class="gsR"><span class="gsL">物理減速</span><span class="chip" id="pslowT">計算量大時放慢</span></div>
     <div class="note">畫質與物理的細項在主選單的「畫質設定…」「物理設定…」；血量、傷害、浪、天氣在開戰前設定；物理效果裡的「進水」（公式／粒子）下一場生效</div>
   </div>
@@ -461,6 +462,9 @@
       <div class="row slide"><label for="cas">死傷降旗</label><input type="range" id="cas" step="5"><span id="casV"></span></div>
       <div class="row checks"><label><input type="checkbox" id="st-guns"> 砲全啞 10 秒</label><label><input type="checkbox" id="st-masts"> 桅全倒且死傷 ≥ 33%</label><label><input type="checkbox" id="st-officers"> 軍官全倒且死傷 ≥ 25%</label></div>
       <div class="row" id="strikeV"></div>
+      <h3>Debug</h3>
+      <div class="row checks"><label><input type="checkbox" id="dbg"> Debug 模式</label></div>
+      <div class="row note">查問題用：詳細資訊的「⚓ 改操控這艘」敵艦也有（換過去就是那一方）、羅盤下面多一行除錯資訊（格數、四邊形、碎片、物理 ms、FPS）。網址 ?dbg=1 ＝ 勾；?debug=1 也算開。</div>
       <div class="row"><button id="detR">重設預設值</button><button id="detX" class="on">返回</button></div>
     </div>
   </div>
@@ -1477,6 +1481,10 @@ var BOX_N = Math.round(qnum('box', LIM.box)), CARRY_N = Math.round(qnum('carry',
 var HANDS = Math.round(qnum('hands', LIM.hands));                  // 預備水手：缺人手時補位（42_hands.js）
 var HEAL_T = Math.round(qnum('heal', LIM.heal));                  // 醫療艙：治好一個傷員要幾秒（滿人手、沒有 buff；0 ＝ 關 ⇒ 傷員照舊 12 秒抬下去；44_medic.js）
 var NAV_RE = qnum('navre', LIM.navre);                              // 尋路動態更新：每幾秒看一次有沒有甲板、梯子被打壞（0 ＝ 關；42_hands.js navRefresh；TASK-0572）
+// Debug 模式（Tim 2026-10-15：「在細節設定加上Debug模式 之後用來Debug(可以加特殊功能 & 顯示額外資訊 我來幫忙查問題)」）：細節設定的勾選（存檔）、網址 ?dbg=1；?debug=1 也算開。
+//   開著 ⇒ 詳細資訊的「⚓ 改操控這艘」敵艦也有（52_fleet.js canTake）、羅盤下面那一行除錯資訊（格數、四邊形、碎片、FPS…，61_hud.js）。之後的除錯功能都掛在 dbgOn() 底下。⛔ __game 與逐幀計時照舊只看 ?debug=1（載入時就定）。
+var DBG_SET = Q.get('dbg') === '1';
+function dbgOn() { return DEBUG || DBG_SET; }
 var GUN_CREW_HURT = Q.get('gcrew') !== '0';                          // 砲被打飛 ⇒ 那門砲的砲班跟著受傷（21_gunnery.js blowModel；TASK-0568，預設開；?gcrew=0 ＝ 照舊）
 var DROWN_T = Math.round(qnum('drown', LIM.drown));                // 落水求生：浮上水面、往自己的船游，撐這麼久（× 0.6～1.2）就溺水（43_swim.js）
 var SEA_K = qnum('sea', LIM.sea);                                   // 浪的大小（08_sea.js；物理與畫面共用）
@@ -1512,6 +1520,8 @@ var SAIL = Q.has('sail') ? (Q.get('sail') === 'off' ? 'off' : Q.get('sail') === 
 var KEYS = { l: false, r: false, sw: null };  // 手動操舵：按住的舵鍵（額外動力以前是按住 W／S 的油門，Tim 2026-10-15 改成帆段兩頭的「全速前進／倒車」⇒ 31_sailing.js sailStep）；sw ＝ 按住加帆／收帆（{ d: ±1, n: 下一次再切的 SIMT }；sailHold）
 // 殉爆的慢動作與特寫（73_slowmo.js）：on／cam 是設定；ts 現在的時間倍率。SLOW_VIS：這一格畫面裡只給人看的效果改由 frame 走（step() 讀它決定要不要跳過）
 var PSLOW = { on: Q.get('pslow') === '1', ts: 1, ms: 0, budget: qnum('pslowb', LIM.pslowb) };   // 物理減速（73_slowmo.js；Tim 2026-10-14：預設關）：ts ＝ 現在的倍率、ms ＝ 一步模擬平均幾毫秒、budget ＝ 門檻（模擬最多佔真實時間幾成）
+// 模擬速度（Tim 2026-10-15：「設定選單 是否可以加個Slider調整模擬速度」「最低0.05好了(0相當於暫停)」）：0.05–8 倍，設定（O）的滑桿；只是每格畫面累積的時間 × 它（90_main.js frame），模擬一步照舊 DT ⇒ 戰局逐字不變。
+var SIM_SPEED = 1, SIM_SPEED_MIN = 0.05, SIM_SPEED_MAX = 8;
 var SLOW = { on: Q.get('slowmo') !== '0', cam: Q.get('slowcam') !== '0', ts: 1, t: 0, min: 1, hold: 0, active: false, camSave: null, camT: 0, camMode: 0, kicks: 0 }, SLOW_VIS = false;
 var AUTOFIRE = false;                                  // 自動開砲：電腦替我艦瞄準、開火（觀戰 ＝ 一般戰鬥＋自動開砲預設開；G 切換）
 var PHYS = Q.get('phys') !== '0';                      // 帆與繩的物理（選單勾選、B 鍵、下方按鈕；?phys=0 關）：關 ＝ 靜態，跟以前一樣
@@ -8290,11 +8300,26 @@ function playerHandoff() {
   function m(o) { return o.mass0 || shipT(o); }
   L.sort(function (a, b) { return m(b) - m(a) || Math.hypot(a.px - me.px, a.pz - me.pz) - Math.hypot(b.px - me.px, b.pz - me.pz); });
   var nw = L[0];
+  playerTake(nw, '改操控 ' + nw.name + teamTag(nw) + '（' + me.name + (me.struck && !me.sunk && !me.sinkingFinal ? '降旗了' : '沉了') + '）');
+  return nw;
+}
+/** 玩家改操控 nw（自動換船 playerHandoff、詳細資訊的「⚓ 改操控這艘」都走這裡）：原本那艘交給電腦（瞄準回自由），nw 接玩家的瞄準模式（AIM_P）；沙盒的快速裝填跟過去。 */
+function playerTake(nw, msg) {
+  var me = SHIPS[PLAYER_I];
   me.pMode = 'free'; me.hand = false; PLAYER_I = nw.i; nw.pMode = AIM_P; nw.hand = false;
   if (MODE === 'sandbox') { nw.reloadT = RELOAD_SANDBOX; me.reloadT = RELOAD; }
   KEYS.l = KEYS.r = false; CAM.trMe = CAM.trYaw = null;
-  note(nw, '改操控 ' + nw.name + teamTag(nw) + '（' + me.name + (me.struck && !me.sunk && !me.sinkingFinal ? '降旗了' : '沉了') + '）', true);
-  return nw;
+  note(nw, msg, true);
+}
+/** 改操控 o 可不可以（詳細資訊的「⚓ 改操控這艘」、__game.take 都問它；Tim 2026-10-15：「假如是我方船艦 看著這艘按鈕旁 可以多一個切換控制這艘船」「切換控制可以直接抽成通用API(甚至可以開放切換到敵艦(Debug模式)」）：
+ *  還在打、這一局還沒結束、不是我艦；友艦 ⇒ 可以；敵艦 ⇒ 只有 Debug 模式（dbgOn，04_state.js）—— 換過去就是那一方（我方、敵方照 PLAYER_I 那艘的 team 算）。 */
+function canTake(o) { var me = SHIPS[PLAYER_I]; return !!(o && me && !OVER && o !== me && !isOut(o) && (o.team === me.team || dbgOn())); }
+function playerTakeShip(o) {
+  if (!canTake(o)) return false;
+  var me = SHIPS[PLAYER_I];
+  playerTake(o, '改操控 ' + o.name + teamTag(o) + '（原本是 ' + me.name + '，交給電腦' + (o.team !== me.team ? '；Debug：換到另一方' : '') + '）');
+  if (CAM.see === o) CAM.see = null;                                    // 正在「🎥 看著」它 ⇒ 改成看我艦那一種（就是它）
+  return true;
 }
 function spawnFleet(spec) {
   var sp = fieldSplit(fleetNames(spec)); spec = sp.field; RESERVE = sp.reserve; REINF = { last: null, outQ: [] };
@@ -9092,7 +9117,7 @@ function panel(sh, title) {
 // 點一顆 ⇒ 中間展開那一艘的詳細資訊（panel，同時最多一艘）；點同一顆或點資訊本身 ⇒ 收回。預設全折疊、每一場開局全折疊（fleetReset，70_flow.js reset）。
 var INFO_SH = null, SB_EL = {}, SUNK_HIDE = 60;   // SUNK_HIDE：沉了幾秒（模擬時間）之後上方的圓鈕收掉（Tim 2026-10-14：補船之後那一欄才不會越排越長）
 // 點資訊或旁邊的砲位圖任何地方 ⇒ 收回。用 pointerdown：⛔ click 要按下、放開都落在同一個元素 —— 卡片每 6 格整個重畫（innerHTML），按下到放開之間剛好重畫 ⇒ click 不觸發（Tim：收起有時沒反應）
-['info', 'gmap'].forEach(function (id) { $(id).addEventListener('pointerdown', function (e) { e.preventDefault(); if (e.target.closest && e.target.closest('[data-see]')) { camSee(INFO_SH); return; } INFO_SH = null; fleetHud(SHIPS[PLAYER_I]); }); });
+['info', 'gmap'].forEach(function (id) { $(id).addEventListener('pointerdown', function (e) { e.preventDefault(); if (e.target.closest && e.target.closest('[data-see]')) { camSee(INFO_SH); return; } if (e.target.closest && e.target.closest('[data-take]')) { playerTakeShip(INFO_SH); fleetHud(SHIPS[PLAYER_I]); return; } INFO_SH = null; fleetHud(SHIPS[PLAYER_I]); }); });
 // 按羅盤 ＝ 按艦隊的我艦圓鈕（Tim 2026-10-15：「遊戲下方的羅盤是否可以改成可以按，效果跟按下我艦一樣顯示詳細資訊」）：開／收我艦的詳細資訊。
 //   pointerdown（同上：羅盤每 6 格重畫，click 可能落空）；只綁在羅盤的畫布 ⇒ 兩舷的砲（#gunsL／#gunsR，pointer-events:none）、鏡頭拖曳（遊戲畫布）都不受影響。
 $('navc').addEventListener('pointerdown', function (e) { e.preventDefault(); e.stopPropagation(); var me = SHIPS[PLAYER_I]; if (!me) return; INFO_SH = INFO_SH === me ? null : me; fleetHud(me); });
@@ -9190,7 +9215,7 @@ function fleetHud(me) {
     var who = o.i === PLAYER_I ? '我艦' : o.team === pt ? (many && o === fs ? '我方旗艦' : '友艦') : (many && o === fs ? '敵方旗艦' : '敵艦');
     var title = who + ' ' + o.name + (o.name !== o.T.name ? '<span class="cls">（' + o.T.name + '型）</span>' : '') + teamTag(o);
     var seeing = CAM.mode === 3 && (CAM.see === o || (!CAM.see && o.i === PLAYER_I));
-    el.innerHTML = panel(o, title).replace('<h3>', '<h3><span class="fold">▲ 收起</span><span class="fold see' + (seeing ? ' on' : '') + '" data-see="1">🎥 ' + (seeing ? '看著這艘' : '看這艘') + '</span>');   // 放在標題最前面再靠右浮動（⛔ 放最後 ⇒ 窄的時候浮到排水量那一行、壓到右欄）
+    el.innerHTML = panel(o, title).replace('<h3>', '<h3><span class="fold">▲ 收起</span><span class="fold see' + (seeing ? ' on' : '') + '" data-see="1">🎥 ' + (seeing ? '看著這艘' : '看這艘') + '</span>' + (canTake(o) ? '<span class="fold take" data-take="1">⚓ 改操控這艘</span>' : ''));   // 友艦才有（52_fleet.js playerTakeShip）   // 放在標題最前面再靠右浮動（⛔ 放最後 ⇒ 窄的時候浮到排水量那一行、壓到右欄）
     el.style.display = 'block'; el.style.borderLeftColor = teamIdx(o) === 0 ? 'var(--blue)' : 'var(--red)';
     gmapDraw(o);
   }
@@ -9430,10 +9455,11 @@ function hud(dt) {
   var mt = $('modeT'), ms = '🎯 <b>' + (!handAim(me) ? '砲長' : (AUTOFIRE ? '手動一舷・' : '') + AIM_NAME[me.pMode || 'free']) + '</b>　🎥 <b>' + cn + '</b>' +
     (HUD_OUTARC ? '　<b style="color:#ff9a7a">⚠ 射界外</b>' : '') + '<br>' +
     '⛵ <b>' + (kn < -0.05 ? '−' + (-kn).toFixed(1) : Math.max(0, kn).toFixed(1)) + '</b> 節　' + sailSetName(me) + ' ' + Math.round(me.sailFrac * 100) + '%' +   // 帆 %（Tim 2026-10-15）：張著、還在的帆面積 × 血量（sailFrac，航速照它算）
+    (RUNNING && SIM_SPEED !== 1 ? '　<b style="color:#9fd8ff">⏱ 模擬 ×' + (SIM_SPEED < 1 ? SIM_SPEED.toFixed(2) : SIM_SPEED.toFixed(1)) + '</b>' : '') +   // 設定的模擬速度（73_slowmo.js simSpeedSet）
     (RUNNING && PSLOW.on && PSLOW.ts < PSLOW_SHOW && !(SLOW.active && SLOW.ts < 0.98) ? '　<b style="color:#ffd27a">🐢 物理減速 ×' + PSLOW.ts.toFixed(2) + '</b>' : '');   // 物理減速的提示（Tim 2026-10-15：搬到航速這一行；73_slowmo.js）—— 殉爆的慢動作照舊在畫面中間   // 船體、進水改成羅盤外圈的兩圈（drawNav）；後面接帆裝（Tim 2026-10-15「羅盤上方航速資訊可以顯示當前帆狀態」：全收…滿帆，有額外動力的船多倒車、全速前進）
   ms += floodLine(me);
   if (mt && mt.innerHTML !== ms) mt.innerHTML = ms;
-  var t = DEBUG ? '格：' + SHIPS.map(function (s) { return s.grid.count; }).join('／') + '　四邊形：' + SHIPS.map(function (s) { return s.rs.quads(); }).join('／') + '　碎片 ' + D.n + '　粒子 ' + PT.n + '　脫落 ' + PIECES.length + (PHYS ? '　物理 ' + PHYS_MS.toFixed(2) + ' ms/步、垂繩 ' + SHIPS.map(function (s) { return s.loose.length; }).join('／') : '') + '　' + FPS.toFixed(0) + ' fps' : '';
+  var t = dbgOn() ? '格：' + SHIPS.map(function (s) { return s.grid.count; }).join('／') + '　四邊形：' + SHIPS.map(function (s) { return s.rs.quads(); }).join('／') + '　碎片 ' + D.n + '　粒子 ' + PT.n + '　脫落 ' + PIECES.length + (PHYS ? '　物理 ' + PHYS_MS.toFixed(2) + ' ms/步、垂繩 ' + SHIPS.map(function (s) { return s.loose.length; }).join('／') : '') + '　' + FPS.toFixed(0) + ' fps' : '';
   $('tip').textContent = t;
   drawNav(me);
 }
@@ -9598,7 +9624,7 @@ function gunShow() {
 var PREFS_KEY = 'ame_constitution_broadside.prefs', PREFS_VER = 1;
 var PREF_Q = ['wdir', 'wspd', 'ship', 'blue', 'red', 'hard', 'flood', 'ballast', 'gunw', 'speed', 'agile', 'upwind', 'base', 'gunhp', 'sailhp', 'crewhp', 'powderhp', 'blast', 'blastv', 'dmg24', 'dmg32l', 'dmg32', 'dmg18', 'dmg12', 'dmg18l', 'dmg6', 'dmg3c', 'dmgtr',
   'box', 'carry', 'hands', 'drown', 'heal', 'wind', 'windcap', 'ammo', 'strike', 'cap', 'phys', 'sail', 'play', 'stall', 'funspeed', 'funagile', 'funstall', 'funpowder', 'sea',
-  'gfx', 'g_shadow', 'g_refl', 'g_refr', 'g_sea', 'g_res', 'g_aa', 'phx', 'p_rig', 'p_rigfar', 'p_debris', 'p_fx', 'weather', 'g_rain', 'g_drops', 'g_dropspl', 'g_shships', 'g_masks', 'dist', 'field', 'reinf', 'cmd', 'blue', 'red', 'slowmo', 'slowcam', 'roomfn', 'navre', 'gcrew', 'smoke', 'pslow', 'pslowb', 'debcap'];          // 會蓋過存檔的網址參數（04_state.js、05_hull.js 讀的那些）
+  'gfx', 'g_shadow', 'g_refl', 'g_refr', 'g_sea', 'g_res', 'g_aa', 'phx', 'p_rig', 'p_rigfar', 'p_debris', 'p_fx', 'weather', 'g_rain', 'g_drops', 'g_dropspl', 'g_shships', 'g_masks', 'dist', 'field', 'reinf', 'cmd', 'blue', 'red', 'slowmo', 'dbg', 'slowcam', 'roomfn', 'navre', 'gcrew', 'smoke', 'pslow', 'pslowb', 'debcap'];          // 會蓋過存檔的網址參數（04_state.js、05_hull.js 讀的那些）
 var DMG_Q = { long: 'dmg24', long32: 'dmg32l', carr: 'dmg32', chase: 'dmg18', long4: 'dmg4', long12: 'dmg12', long18: 'dmg18l', long6: 'dmg6', chase3: 'dmg3c', trident: 'dmgtr', dahl9: 'dmg9d', brooke64: 'dmg64b', brooke7: 'dmg7b' };
 var PREFS = { read: DEMO < 0 && Q.get('prefs') !== '0' && !Q.has('admin') && !Q.has('shipcheck'), write: false, state: '', last: '' };   // ?admin=rooms（設定後台嵌的那一份）、?shipcheck（匯入檢查）⇒ 不讀不存
 PREFS.write = PREFS.read && !PREF_Q.some(function (k) { return Q.has(k); });
@@ -9629,7 +9655,8 @@ function prefsSnap() {
   if (STRIKE.cas !== LIM.cas[2] || STRIKE.guns || STRIKE.masts || STRIKE.officers) o.strike = { cas: STRIKE.cas, guns: STRIKE.guns, masts: STRIKE.masts, officers: STRIKE.officers };
   if (CAP_SET.some(function (k) { return k !== 'random'; })) o.cap = CAP_SET.slice();
   var gd = GFX_PRESET[GFX_DEFAULT]; if (GFX_ITEMS.some(function (it) { return GFX[it.k] !== gd[it.k]; })) { o.gfx = {}; GFX_ITEMS.forEach(function (it) { o.gfx[it.k] = GFX[it.k]; }); }   // 畫質（07_gfx.js）：跟預設不一樣 ⇒ 整組存
-  put('gcrew', GUN_CREW_HURT, true);                                  // 砲被打飛 ⇒ 砲班跟著受傷（21_gunnery.js）
+  put('gcrew', GUN_CREW_HURT, true);
+  put('dbg', DBG_SET, false);                                         // Debug 模式（04_state.js dbgOn）                                  // 砲被打飛 ⇒ 砲班跟著受傷（21_gunnery.js）
   put('fps', GFX_FPS, false); put('slow', SLOW.on, true); put('pslow', PSLOW.on, false); put('pslowb', PSLOW.budget, LIM.pslowb[2]); put('slowcam', SLOW.cam, true);   // 殉爆的慢動作與特寫（73_slowmo.js）
   var xd = PHX_PRESET[PHX_DEFAULT]; if (PHX_ITEMS.some(function (it) { return PHX[it.k] !== xd[it.k]; })) { o.phx = {}; PHX_ITEMS.forEach(function (it) { o.phx[it.k] = PHX[it.k]; }); }   // 物理效果（09_phx.js）：跟預設不一樣 ⇒ 整組存
   put('ammo', AMMO_I, 0); put('mode', MODE, CFG.menu.mode); put('sail', SAIL, CFG.menu.sail); put('dist', DIST, LIM_DIST[2]); put('field', FIELD_N, MAX_SHIPS); put('reinf', REINF_MODE, 'prop'); if (CMD_SIDE.blue !== 'pair' || CMD_SIDE.red !== 'pair') o.cmd = [CMD_SIDE.blue, CMD_SIDE.red];
@@ -9688,6 +9715,7 @@ function prefsApply(p) {
   if (p.gfx && typeof p.gfx === 'object' && !Q.has('gfx')) GFX_ITEMS.forEach(function (it) { var x = num(p.gfx[it.k], [0, it.opt.length - 1], true); if (x !== undefined && !Q.has('g_' + it.k)) GFX[it.k] = x; });
   if (typeof p.fps === 'boolean') GFX_FPS = p.fps;
   if (typeof p.gcrew === 'boolean' && !Q.has('gcrew')) GUN_CREW_HURT = p.gcrew;
+  if (typeof p.dbg === 'boolean' && !Q.has('dbg')) DBG_SET = p.dbg;
   if (typeof p.slow === 'boolean' && !Q.has('slowmo')) SLOW.on = p.slow;
   if (typeof p.pslow === 'boolean' && !Q.has('pslow')) PSLOW.on = p.pslow;   // 物理減速（73_slowmo.js）
   set('pslowb', p.pslowb, LIM.pslowb, false, function (x) { PSLOW.budget = Math.round(x * 100) / 100; });
@@ -10305,7 +10333,7 @@ function sliders() {
     var k = C(); $('cfgShip').value = CFG_ID;
     lf.value = k.ballast !== undefined ? k.ballast : LIM.ballast[2]; f.value = k.flood; h.value = Math.log(k.hard / LIM.hard[0]) / hk; c.value = STRIKE.cas * 100; sp.value = k.speed; ag.value = k.agile; uw.value = k.upwind; $('base').value = k.base || 0;
     gh.value = GUN_HP; gw.value = k.gunw; sl.value = SAIL_HP; ph.value = POWDER_HP; bl.value = BLAST_K; bv.value = Math.round(BLAST_V * 100); ch.value = CREW_HP;
-    bx.value = BOX_N; cy.value = CARRY_N; wk.value = WIND_K; wc.value = WIND_CAP; dr.value = DROWN_T; $('navre').value = NAV_RE; $('heal').value = HEAL_T; $('gcrew').checked = GUN_CREW_HURT;
+    bx.value = BOX_N; cy.value = CARRY_N; wk.value = WIND_K; wc.value = WIND_CAP; dr.value = DROWN_T; $('navre').value = NAV_RE; $('heal').value = HEAL_T; $('gcrew').checked = GUN_CREW_HURT; $('dbg').checked = DBG_SET;
     se.value = SEA_K; st.value = STALL_K; fs.value = FUN.speed; fa.value = FUN.agile; fl.value = FUN.stall; fp.value = FUN.powder;
     for (var r = 0; r < 3; r++) for (var k = 0; k < 3; k++) am(r, k).value = AMMO_K[r][k];
     ['guns', 'masts', 'officers'].forEach(function (k) { $('st-' + k).checked = STRIKE[k]; });
@@ -10375,7 +10403,8 @@ function sliders() {
   nr.oninput = function () { NAV_RE = +nr.value; show(); };
   var hl = $('heal'); hl.min = LIM.heal[0]; hl.max = LIM.heal[1];          // 醫療艙的治療時間（TASK-0568）
   hl.oninput = function () { HEAL_T = Math.round(+hl.value); show(); };
-  $('gcrew').onchange = function () { GUN_CREW_HURT = $('gcrew').checked; show(); };   // 砲被打飛 ⇒ 砲班跟著受傷（TASK-0568）
+  $('gcrew').onchange = function () { GUN_CREW_HURT = $('gcrew').checked; show(); };
+  $('dbg').onchange = function () { DBG_SET = $('dbg').checked; show(); };   // Debug 模式（04_state.js dbgOn）：遊戲中也生效   // 砲被打飛 ⇒ 砲班跟著受傷（TASK-0568）
   st.oninput = function () { STALL_K = +st.value; show(); };
   se.oninput = function () { SEA_K = +se.value; show(); };
   fs.oninput = function () { FUN.speed = +fs.value; show(); }; fa.oninput = function () { FUN.agile = +fa.value; show(); }; fl.oninput = function () { FUN.stall = +fl.value; show(); }; fp.oninput = function () { FUN.powder = +fp.value; show(); };
@@ -10437,7 +10466,7 @@ function sliders() {
   $('detR').onclick = function () {                    // 重設預設值：LIM 的第三格、降旗全不勾
     // 船隻配置頁（每一型的船員與性能）不跟著重設：那一頁有自己的「這一型回到預設」（TASK-0570：編起來很花時間）
     GUN_HP = LIM.gunhp[2]; SAIL_HP = LIM.sailhp[2]; POWDER_HP = LIM.powderhp[2]; BLAST_K = LIM.blast[2]; BLAST_V = LIM.blastv[2]; CREW_HP = LIM.crewhp[2];
-    BOX_N = LIM.box[2]; CARRY_N = LIM.carry[2]; WIND_K = LIM.wind[2]; WIND_CAP = LIM.windcap[2]; HANDS = LIM.hands[2]; DROWN_T = LIM.drown[2]; NAV_RE = LIM.navre[2]; HEAL_T = LIM.heal[2]; GUN_CREW_HURT = true;
+    BOX_N = LIM.box[2]; CARRY_N = LIM.carry[2]; WIND_K = LIM.wind[2]; WIND_CAP = LIM.windcap[2]; HANDS = LIM.hands[2]; DROWN_T = LIM.drown[2]; NAV_RE = LIM.navre[2]; HEAL_T = LIM.heal[2]; GUN_CREW_HURT = true; DBG_SET = false;
     AMMO_K = AMMO_K0.map(function (r) { return r.slice(); });
     SEA_K = LIM.sea[2]; STALL_K = LIM.stall[2]; FUN.speed = LIM.funspeed[2]; FUN.agile = LIM.funagile[2]; FUN.stall = LIM.funstall[2]; FUN.powder = LIM.funpowder[2];
     STRIKE.cas = LIM.cas[2]; STRIKE.guns = STRIKE.masts = STRIKE.officers = false; CAP_SET = ['random', 'random'];
@@ -10729,6 +10758,15 @@ function slowShow() {
 $('slowT').onclick = function () { SLOW.on = !SLOW.on; if (!SLOW.on) { SLOW.active = false; SLOW.ts = 1; } gsetShow(); };
 $('slowCamT').onclick = function () { SLOW.cam = !SLOW.cam; gsetShow(); };
 $('pslowT').onclick = pslowToggle;
+// 模擬速度的滑桿（設定 O）：對數刻度 10^(值／1000) ⇒ 0.05–8 倍、中間 0 ＝ 1 倍；1× 回到正常。0 倍 ＝ 暫停（P），所以最低 0.05（Tim）。
+function simSpeedSet(x) {
+  SIM_SPEED = clamp(x, SIM_SPEED_MIN, SIM_SPEED_MAX); if (Math.abs(SIM_SPEED - 1) < 0.02) SIM_SPEED = 1;
+  $('simSpd').value = Math.round(Math.log10(SIM_SPEED) * 1000); $('simSpdV').textContent = '×' + (SIM_SPEED < 1 ? SIM_SPEED.toFixed(2) : SIM_SPEED.toFixed(SIM_SPEED < 10 ? 1 : 0));
+  $('simSpd1').classList.toggle('on', SIM_SPEED === 1);
+}
+$('simSpd').oninput = function () { simSpeedSet(Math.pow(10, +$('simSpd').value / 1000)); };
+$('simSpd1').onclick = function () { simSpeedSet(1); };
+simSpeedSet(1);
 // ── js/74_cutaway.js ──
 // ───────────────────────── 剖面與隱藏甲板（停格的選項；Tim 2026-10-13） ─────────────────────────
 // 停格條多兩個：✂ 剖面（Z）＝ 船剖成兩半、拿掉靠鏡頭那一半（鏡頭繞過中線就換邊）；☰ 甲板（L）＝ 由上往下一層一層拿掉，
@@ -11447,11 +11485,13 @@ function frame(ts, noRaf) {                                         // noRaf：_
   var dt = last ? Math.min(0.1, (ts - last) / 1000) : DT; last = ts;
   FPS = FPS * 0.95 + (1 / Math.max(dt, 1e-3)) * 0.05;
   if (RUNNING && !PAUSED) {
-    var sk = Math.min(slowTick(dt), pslowTick(dt)); SLOW_VIS = sk < 1;   // 殉爆的慢動作、物理減速（73_slowmo.js）：模擬一步照舊 DT，只是每格累積的時間 × 倍率（取比較慢的）
+    var sk = Math.min(slowTick(dt), pslowTick(dt)) * SIM_SPEED; SLOW_VIS = sk < 1;   // × SIM_SPEED：設定的模擬速度（< 1 ⇒ 碎木、煙、水花照慢動作那一套照畫面的時間走，不會一頓一頓）
+      // 殉爆的慢動作、物理減速（73_slowmo.js）：模擬一步照舊 DT，只是每格累積的時間 × 倍率（取比較慢的）
     acc += dt * sk; var n = 0, st0 = performance.now();
-    while (acc >= DT && n < 4) { step(); acc -= DT; n++; }
+    var nMax = SIM_SPEED > 1 ? Math.ceil(4 * SIM_SPEED) : 4;            // 一格畫面最多走幾步：快轉（> 1 倍）照倍率放寬，不然 60 FPS 時最多 4 倍
+    while (acc >= DT && n < nMax) { step(); acc -= DT; n++; }
     if (n) pslowMeasure((performance.now() - st0) / n);                // 一步平均幾毫秒（物理減速照它算）
-    if (n === 4) acc = 0;
+    if (n === nMax) acc = 0;
     if (SLOW_VIS) { if (PF) PF.t = performance.now(); slowVisStep(dt * sk); if (PF) pfLap('slowvis'); }
     SLOW_VIS = false;                                                 // 快轉（__game.run）不經過這裡 ⇒ 照常在 step() 走
   }
@@ -11487,6 +11527,7 @@ if (DEBUG) window.__game = {
   menuFleet: function (F) { if (F) { FLEET_SET = fleetTrim(F.map(function (L) { return L.slice(); })); fleetUI(); pickShip(); } return { set: FLEET_SET, spec: fleetSpec(), html: [$('fleet0').innerHTML.length, $('fleet1').innerHTML.length] }; },
   run: function (sec) { var n = Math.round(sec / DT); for (var i = 0; i < n; i++) { step(); if (i % 30 === 29) remesh(Infinity); } remesh(Infinity); camUpdate(1); render(); hud(1); PF.cur = {}; return this.stats(); },   // PF.cur：快轉的不算進下一格畫面
   fire: function (ammo, aim) { var me = SHIPS[PLAYER_I]; if (aim) setAim(me, aim); return broadside(me, ammo || 0); },
+  take: function (i) { return playerTakeShip(SHIPS[i]); },          // 改操控第 i 艘（52_fleet.js；敵艦要 Debug 模式）
   one: function (ammo, aim) { var me = SHIPS[PLAYER_I]; if (aim) setAim(me, aim); fireOne(me, ammo || 0); return BALLS.length; },
   ships: function () { return SHIPS; }, balls: function () { return BALLS; }, pieces: function () { return PIECES; },
   /** 船隻碰撞（31_sailing.js collide）：shipHit() ⇒ 檔位、HIT_PROF、每個船型的取樣數與算了幾 ms；shipHit(i, j, lv) ⇒ 照第 i、j 艘現在的位置（先重算矩陣）量那一檔：

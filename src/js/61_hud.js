@@ -113,7 +113,7 @@ function panel(sh, title) {
 // 點一顆 ⇒ 中間展開那一艘的詳細資訊（panel，同時最多一艘）；點同一顆或點資訊本身 ⇒ 收回。預設全折疊、每一場開局全折疊（fleetReset，70_flow.js reset）。
 var INFO_SH = null, SB_EL = {}, SUNK_HIDE = 60;   // SUNK_HIDE：沉了幾秒（模擬時間）之後上方的圓鈕收掉（Tim 2026-10-14：補船之後那一欄才不會越排越長）
 // 點資訊或旁邊的砲位圖任何地方 ⇒ 收回。用 pointerdown：⛔ click 要按下、放開都落在同一個元素 —— 卡片每 6 格整個重畫（innerHTML），按下到放開之間剛好重畫 ⇒ click 不觸發（Tim：收起有時沒反應）
-['info', 'gmap'].forEach(function (id) { $(id).addEventListener('pointerdown', function (e) { e.preventDefault(); if (e.target.closest && e.target.closest('[data-see]')) { camSee(INFO_SH); return; } INFO_SH = null; fleetHud(SHIPS[PLAYER_I]); }); });
+['info', 'gmap'].forEach(function (id) { $(id).addEventListener('pointerdown', function (e) { e.preventDefault(); if (e.target.closest && e.target.closest('[data-see]')) { camSee(INFO_SH); return; } if (e.target.closest && e.target.closest('[data-take]')) { playerTakeShip(INFO_SH); fleetHud(SHIPS[PLAYER_I]); return; } INFO_SH = null; fleetHud(SHIPS[PLAYER_I]); }); });
 // 按羅盤 ＝ 按艦隊的我艦圓鈕（Tim 2026-10-15：「遊戲下方的羅盤是否可以改成可以按，效果跟按下我艦一樣顯示詳細資訊」）：開／收我艦的詳細資訊。
 //   pointerdown（同上：羅盤每 6 格重畫，click 可能落空）；只綁在羅盤的畫布 ⇒ 兩舷的砲（#gunsL／#gunsR，pointer-events:none）、鏡頭拖曳（遊戲畫布）都不受影響。
 $('navc').addEventListener('pointerdown', function (e) { e.preventDefault(); e.stopPropagation(); var me = SHIPS[PLAYER_I]; if (!me) return; INFO_SH = INFO_SH === me ? null : me; fleetHud(me); });
@@ -211,7 +211,7 @@ function fleetHud(me) {
     var who = o.i === PLAYER_I ? '我艦' : o.team === pt ? (many && o === fs ? '我方旗艦' : '友艦') : (many && o === fs ? '敵方旗艦' : '敵艦');
     var title = who + ' ' + o.name + (o.name !== o.T.name ? '<span class="cls">（' + o.T.name + '型）</span>' : '') + teamTag(o);
     var seeing = CAM.mode === 3 && (CAM.see === o || (!CAM.see && o.i === PLAYER_I));
-    el.innerHTML = panel(o, title).replace('<h3>', '<h3><span class="fold">▲ 收起</span><span class="fold see' + (seeing ? ' on' : '') + '" data-see="1">🎥 ' + (seeing ? '看著這艘' : '看這艘') + '</span>');   // 放在標題最前面再靠右浮動（⛔ 放最後 ⇒ 窄的時候浮到排水量那一行、壓到右欄）
+    el.innerHTML = panel(o, title).replace('<h3>', '<h3><span class="fold">▲ 收起</span><span class="fold see' + (seeing ? ' on' : '') + '" data-see="1">🎥 ' + (seeing ? '看著這艘' : '看這艘') + '</span>' + (canTake(o) ? '<span class="fold take" data-take="1">⚓ 改操控這艘</span>' : ''));   // 友艦才有（52_fleet.js playerTakeShip）   // 放在標題最前面再靠右浮動（⛔ 放最後 ⇒ 窄的時候浮到排水量那一行、壓到右欄）
     el.style.display = 'block'; el.style.borderLeftColor = teamIdx(o) === 0 ? 'var(--blue)' : 'var(--red)';
     gmapDraw(o);
   }
@@ -451,10 +451,11 @@ function hud(dt) {
   var mt = $('modeT'), ms = '🎯 <b>' + (!handAim(me) ? '砲長' : (AUTOFIRE ? '手動一舷・' : '') + AIM_NAME[me.pMode || 'free']) + '</b>　🎥 <b>' + cn + '</b>' +
     (HUD_OUTARC ? '　<b style="color:#ff9a7a">⚠ 射界外</b>' : '') + '<br>' +
     '⛵ <b>' + (kn < -0.05 ? '−' + (-kn).toFixed(1) : Math.max(0, kn).toFixed(1)) + '</b> 節　' + sailSetName(me) + ' ' + Math.round(me.sailFrac * 100) + '%' +   // 帆 %（Tim 2026-10-15）：張著、還在的帆面積 × 血量（sailFrac，航速照它算）
+    (RUNNING && SIM_SPEED !== 1 ? '　<b style="color:#9fd8ff">⏱ 模擬 ×' + (SIM_SPEED < 1 ? SIM_SPEED.toFixed(2) : SIM_SPEED.toFixed(1)) + '</b>' : '') +   // 設定的模擬速度（73_slowmo.js simSpeedSet）
     (RUNNING && PSLOW.on && PSLOW.ts < PSLOW_SHOW && !(SLOW.active && SLOW.ts < 0.98) ? '　<b style="color:#ffd27a">🐢 物理減速 ×' + PSLOW.ts.toFixed(2) + '</b>' : '');   // 物理減速的提示（Tim 2026-10-15：搬到航速這一行；73_slowmo.js）—— 殉爆的慢動作照舊在畫面中間   // 船體、進水改成羅盤外圈的兩圈（drawNav）；後面接帆裝（Tim 2026-10-15「羅盤上方航速資訊可以顯示當前帆狀態」：全收…滿帆，有額外動力的船多倒車、全速前進）
   ms += floodLine(me);
   if (mt && mt.innerHTML !== ms) mt.innerHTML = ms;
-  var t = DEBUG ? '格：' + SHIPS.map(function (s) { return s.grid.count; }).join('／') + '　四邊形：' + SHIPS.map(function (s) { return s.rs.quads(); }).join('／') + '　碎片 ' + D.n + '　粒子 ' + PT.n + '　脫落 ' + PIECES.length + (PHYS ? '　物理 ' + PHYS_MS.toFixed(2) + ' ms/步、垂繩 ' + SHIPS.map(function (s) { return s.loose.length; }).join('／') : '') + '　' + FPS.toFixed(0) + ' fps' : '';
+  var t = dbgOn() ? '格：' + SHIPS.map(function (s) { return s.grid.count; }).join('／') + '　四邊形：' + SHIPS.map(function (s) { return s.rs.quads(); }).join('／') + '　碎片 ' + D.n + '　粒子 ' + PT.n + '　脫落 ' + PIECES.length + (PHYS ? '　物理 ' + PHYS_MS.toFixed(2) + ' ms/步、垂繩 ' + SHIPS.map(function (s) { return s.loose.length; }).join('／') : '') + '　' + FPS.toFixed(0) + ' fps' : '';
   $('tip').textContent = t;
   drawNav(me);
 }

@@ -63,6 +63,10 @@ var BOX_N = Math.round(qnum('box', LIM.box)), CARRY_N = Math.round(qnum('carry',
 var HANDS = Math.round(qnum('hands', LIM.hands));                  // 預備水手：缺人手時補位（42_hands.js）
 var HEAL_T = Math.round(qnum('heal', LIM.heal));                  // 醫療艙：治好一個傷員要幾秒（滿人手、沒有 buff；0 ＝ 關 ⇒ 傷員照舊 12 秒抬下去；44_medic.js）
 var NAV_RE = qnum('navre', LIM.navre);                              // 尋路動態更新：每幾秒看一次有沒有甲板、梯子被打壞（0 ＝ 關；42_hands.js navRefresh；TASK-0572）
+// Debug 模式（Tim 2026-10-15：「在細節設定加上Debug模式 之後用來Debug(可以加特殊功能 & 顯示額外資訊 我來幫忙查問題)」）：細節設定的勾選（存檔）、網址 ?dbg=1；?debug=1 也算開。
+//   開著 ⇒ 詳細資訊的「⚓ 改操控這艘」敵艦也有（52_fleet.js canTake）、羅盤下面那一行除錯資訊（格數、四邊形、碎片、FPS…，61_hud.js）。之後的除錯功能都掛在 dbgOn() 底下。⛔ __game 與逐幀計時照舊只看 ?debug=1（載入時就定）。
+var DBG_SET = Q.get('dbg') === '1';
+function dbgOn() { return DEBUG || DBG_SET; }
 var GUN_CREW_HURT = Q.get('gcrew') !== '0';                          // 砲被打飛 ⇒ 那門砲的砲班跟著受傷（21_gunnery.js blowModel；TASK-0568，預設開；?gcrew=0 ＝ 照舊）
 var DROWN_T = Math.round(qnum('drown', LIM.drown));                // 落水求生：浮上水面、往自己的船游，撐這麼久（× 0.6～1.2）就溺水（43_swim.js）
 var SEA_K = qnum('sea', LIM.sea);                                   // 浪的大小（08_sea.js；物理與畫面共用）
@@ -98,6 +102,8 @@ var SAIL = Q.has('sail') ? (Q.get('sail') === 'off' ? 'off' : Q.get('sail') === 
 var KEYS = { l: false, r: false, sw: null };  // 手動操舵：按住的舵鍵（額外動力以前是按住 W／S 的油門，Tim 2026-10-15 改成帆段兩頭的「全速前進／倒車」⇒ 31_sailing.js sailStep）；sw ＝ 按住加帆／收帆（{ d: ±1, n: 下一次再切的 SIMT }；sailHold）
 // 殉爆的慢動作與特寫（73_slowmo.js）：on／cam 是設定；ts 現在的時間倍率。SLOW_VIS：這一格畫面裡只給人看的效果改由 frame 走（step() 讀它決定要不要跳過）
 var PSLOW = { on: Q.get('pslow') === '1', ts: 1, ms: 0, budget: qnum('pslowb', LIM.pslowb) };   // 物理減速（73_slowmo.js；Tim 2026-10-14：預設關）：ts ＝ 現在的倍率、ms ＝ 一步模擬平均幾毫秒、budget ＝ 門檻（模擬最多佔真實時間幾成）
+// 模擬速度（Tim 2026-10-15：「設定選單 是否可以加個Slider調整模擬速度」「最低0.05好了(0相當於暫停)」）：0.05–8 倍，設定（O）的滑桿；只是每格畫面累積的時間 × 它（90_main.js frame），模擬一步照舊 DT ⇒ 戰局逐字不變。
+var SIM_SPEED = 1, SIM_SPEED_MIN = 0.05, SIM_SPEED_MAX = 8;
 var SLOW = { on: Q.get('slowmo') !== '0', cam: Q.get('slowcam') !== '0', ts: 1, t: 0, min: 1, hold: 0, active: false, camSave: null, camT: 0, camMode: 0, kicks: 0 }, SLOW_VIS = false;
 var AUTOFIRE = false;                                  // 自動開砲：電腦替我艦瞄準、開火（觀戰 ＝ 一般戰鬥＋自動開砲預設開；G 切換）
 var PHYS = Q.get('phys') !== '0';                      // 帆與繩的物理（選單勾選、B 鍵、下方按鈕；?phys=0 關）：關 ＝ 靜態，跟以前一樣

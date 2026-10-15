@@ -5,11 +5,13 @@ function frame(ts, noRaf) {                                         // noRaf：_
   var dt = last ? Math.min(0.1, (ts - last) / 1000) : DT; last = ts;
   FPS = FPS * 0.95 + (1 / Math.max(dt, 1e-3)) * 0.05;
   if (RUNNING && !PAUSED) {
-    var sk = Math.min(slowTick(dt), pslowTick(dt)); SLOW_VIS = sk < 1;   // 殉爆的慢動作、物理減速（73_slowmo.js）：模擬一步照舊 DT，只是每格累積的時間 × 倍率（取比較慢的）
+    var sk = Math.min(slowTick(dt), pslowTick(dt)) * SIM_SPEED; SLOW_VIS = sk < 1;   // × SIM_SPEED：設定的模擬速度（< 1 ⇒ 碎木、煙、水花照慢動作那一套照畫面的時間走，不會一頓一頓）
+      // 殉爆的慢動作、物理減速（73_slowmo.js）：模擬一步照舊 DT，只是每格累積的時間 × 倍率（取比較慢的）
     acc += dt * sk; var n = 0, st0 = performance.now();
-    while (acc >= DT && n < 4) { step(); acc -= DT; n++; }
+    var nMax = SIM_SPEED > 1 ? Math.ceil(4 * SIM_SPEED) : 4;            // 一格畫面最多走幾步：快轉（> 1 倍）照倍率放寬，不然 60 FPS 時最多 4 倍
+    while (acc >= DT && n < nMax) { step(); acc -= DT; n++; }
     if (n) pslowMeasure((performance.now() - st0) / n);                // 一步平均幾毫秒（物理減速照它算）
-    if (n === 4) acc = 0;
+    if (n === nMax) acc = 0;
     if (SLOW_VIS) { if (PF) PF.t = performance.now(); slowVisStep(dt * sk); if (PF) pfLap('slowvis'); }
     SLOW_VIS = false;                                                 // 快轉（__game.run）不經過這裡 ⇒ 照常在 step() 走
   }
@@ -45,6 +47,7 @@ if (DEBUG) window.__game = {
   menuFleet: function (F) { if (F) { FLEET_SET = fleetTrim(F.map(function (L) { return L.slice(); })); fleetUI(); pickShip(); } return { set: FLEET_SET, spec: fleetSpec(), html: [$('fleet0').innerHTML.length, $('fleet1').innerHTML.length] }; },
   run: function (sec) { var n = Math.round(sec / DT); for (var i = 0; i < n; i++) { step(); if (i % 30 === 29) remesh(Infinity); } remesh(Infinity); camUpdate(1); render(); hud(1); PF.cur = {}; return this.stats(); },   // PF.cur：快轉的不算進下一格畫面
   fire: function (ammo, aim) { var me = SHIPS[PLAYER_I]; if (aim) setAim(me, aim); return broadside(me, ammo || 0); },
+  take: function (i) { return playerTakeShip(SHIPS[i]); },          // 改操控第 i 艘（52_fleet.js；敵艦要 Debug 模式）
   one: function (ammo, aim) { var me = SHIPS[PLAYER_I]; if (aim) setAim(me, aim); fireOne(me, ammo || 0); return BALLS.length; },
   ships: function () { return SHIPS; }, balls: function () { return BALLS; }, pieces: function () { return PIECES; },
   /** 船隻碰撞（31_sailing.js collide）：shipHit() ⇒ 檔位、HIT_PROF、每個船型的取樣數與算了幾 ms；shipHit(i, j, lv) ⇒ 照第 i、j 艘現在的位置（先重算矩陣）量那一檔：

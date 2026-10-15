@@ -175,11 +175,26 @@ function playerHandoff() {
   function m(o) { return o.mass0 || shipT(o); }
   L.sort(function (a, b) { return m(b) - m(a) || Math.hypot(a.px - me.px, a.pz - me.pz) - Math.hypot(b.px - me.px, b.pz - me.pz); });
   var nw = L[0];
+  playerTake(nw, '改操控 ' + nw.name + teamTag(nw) + '（' + me.name + (me.struck && !me.sunk && !me.sinkingFinal ? '降旗了' : '沉了') + '）');
+  return nw;
+}
+/** 玩家改操控 nw（自動換船 playerHandoff、詳細資訊的「⚓ 改操控這艘」都走這裡）：原本那艘交給電腦（瞄準回自由），nw 接玩家的瞄準模式（AIM_P）；沙盒的快速裝填跟過去。 */
+function playerTake(nw, msg) {
+  var me = SHIPS[PLAYER_I];
   me.pMode = 'free'; me.hand = false; PLAYER_I = nw.i; nw.pMode = AIM_P; nw.hand = false;
   if (MODE === 'sandbox') { nw.reloadT = RELOAD_SANDBOX; me.reloadT = RELOAD; }
   KEYS.l = KEYS.r = false; CAM.trMe = CAM.trYaw = null;
-  note(nw, '改操控 ' + nw.name + teamTag(nw) + '（' + me.name + (me.struck && !me.sunk && !me.sinkingFinal ? '降旗了' : '沉了') + '）', true);
-  return nw;
+  note(nw, msg, true);
+}
+/** 改操控 o 可不可以（詳細資訊的「⚓ 改操控這艘」、__game.take 都問它；Tim 2026-10-15：「假如是我方船艦 看著這艘按鈕旁 可以多一個切換控制這艘船」「切換控制可以直接抽成通用API(甚至可以開放切換到敵艦(Debug模式)」）：
+ *  還在打、這一局還沒結束、不是我艦；友艦 ⇒ 可以；敵艦 ⇒ 只有 Debug 模式（dbgOn，04_state.js）—— 換過去就是那一方（我方、敵方照 PLAYER_I 那艘的 team 算）。 */
+function canTake(o) { var me = SHIPS[PLAYER_I]; return !!(o && me && !OVER && o !== me && !isOut(o) && (o.team === me.team || dbgOn())); }
+function playerTakeShip(o) {
+  if (!canTake(o)) return false;
+  var me = SHIPS[PLAYER_I];
+  playerTake(o, '改操控 ' + o.name + teamTag(o) + '（原本是 ' + me.name + '，交給電腦' + (o.team !== me.team ? '；Debug：換到另一方' : '') + '）');
+  if (CAM.see === o) CAM.see = null;                                    // 正在「🎥 看著」它 ⇒ 改成看我艦那一種（就是它）
+  return true;
 }
 function spawnFleet(spec) {
   var sp = fieldSplit(fleetNames(spec)); spec = sp.field; RESERVE = sp.reserve; REINF = { last: null, outQ: [] };

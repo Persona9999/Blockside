@@ -73,3 +73,12 @@ function slowShow() {
 $('slowT').onclick = function () { SLOW.on = !SLOW.on; if (!SLOW.on) { SLOW.active = false; SLOW.ts = 1; } gsetShow(); };
 $('slowCamT').onclick = function () { SLOW.cam = !SLOW.cam; gsetShow(); };
 $('pslowT').onclick = pslowToggle;
+// 模擬速度的滑桿（設定 O）：對數刻度 10^(值／1000) ⇒ 0.05–8 倍、中間 0 ＝ 1 倍；1× 回到正常。0 倍 ＝ 暫停（P），所以最低 0.05（Tim）。
+function simSpeedSet(x) {
+  SIM_SPEED = clamp(x, SIM_SPEED_MIN, SIM_SPEED_MAX); if (Math.abs(SIM_SPEED - 1) < 0.02) SIM_SPEED = 1;
+  $('simSpd').value = Math.round(Math.log10(SIM_SPEED) * 1000); $('simSpdV').textContent = '×' + (SIM_SPEED < 1 ? SIM_SPEED.toFixed(2) : SIM_SPEED.toFixed(SIM_SPEED < 10 ? 1 : 0));
+  $('simSpd1').classList.toggle('on', SIM_SPEED === 1);
+}
+$('simSpd').oninput = function () { simSpeedSet(Math.pow(10, +$('simSpd').value / 1000)); };
+$('simSpd1').onclick = function () { simSpeedSet(1); };
+simSpeedSet(1);

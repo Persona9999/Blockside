@@ -280,6 +280,7 @@
     <div class="gsR"><span class="gsL">瞄準</span><span class="chip" data-k="q" id="aimk">🎯 換瞄準模式（Q）</span><span class="note">自由 → 水線 → 砲甲板 → 帆具 → 甲板人員 → 彈藥庫（現在的寫在羅盤上面）</span></div>
     <div class="gsR"><span class="chip" id="physT"><b>B</b> 帆繩物理</span><span class="chip" id="camT"><b>V</b> 鏡頭跟船</span><span class="chip" id="muteT"><b>M</b> 靜音</span><span class="chip" id="fpsT">顯示 FPS</span><span class="chip" id="fullT"><b>F11</b> 全螢幕</span><span class="note" id="gsFull"></span></div>
     <div class="gsR"><span class="gsL">彈藥庫殉爆</span><span class="chip" id="slowT">慢動作</span><span class="chip" id="slowCamT">特寫鏡頭</span></div>
+    <div class="gsR"><span class="gsL">模擬速度</span><input type="range" id="simSpd" min="-1301" max="903" step="1" value="0" aria-label="模擬速度"><b id="simSpdV" style="min-width:3.6em">×1</b><span class="chip" id="simSpd1">1×</span></div>
     <div class="gsR"><span class="gsL">物理減速</span><span class="chip" id="pslowT">計算量大時放慢</span></div>
     <div class="note">畫質與物理的細項在主選單的「畫質設定…」「物理設定…」；血量、傷害、浪、天氣在開戰前設定；物理效果裡的「進水」（公式／粒子）下一場生效</div>
   </div>
@@ -461,6 +462,9 @@
       <div class="row slide"><label for="cas">死傷降旗</label><input type="range" id="cas" step="5"><span id="casV"></span></div>
       <div class="row checks"><label><input type="checkbox" id="st-guns"> 砲全啞 10 秒</label><label><input type="checkbox" id="st-masts"> 桅全倒且死傷 ≥ 33%</label><label><input type="checkbox" id="st-officers"> 軍官全倒且死傷 ≥ 25%</label></div>
       <div class="row" id="strikeV"></div>
+      <h3>Debug</h3>
+      <div class="row checks"><label><input type="checkbox" id="dbg"> Debug 模式</label></div>
+      <div class="row note">查問題用：詳細資訊的「⚓ 改操控這艘」敵艦也有（換過去就是那一方）、羅盤下面多一行除錯資訊（格數、四邊形、碎片、物理 ms、FPS）。網址 ?dbg=1 ＝ 勾；?debug=1 也算開。</div>
       <div class="row"><button id="detR">重設預設值</button><button id="detX" class="on">返回</button></div>
     </div>
   </div>
