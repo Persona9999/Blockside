@@ -466,7 +466,7 @@ function hud(dt) {
   var t = dbgOn() ? '格：' + SHIPS.map(function (s) { return s.grid.count; }).join('／') + '　四邊形：' + SHIPS.map(function (s) { return s.rs.quads(); }).join('／') + '　碎片 ' + D.n + '　粒子 ' + PT.n + '　脫落 ' + PIECES.length + (PHYS ? '　物理 ' + PHYS_MS.toFixed(2) + ' ms/步、垂繩 ' + SHIPS.map(function (s) { return s.loose.length; }).join('／') : '') + '　' + FPS.toFixed(0) + ' fps' : '';
   $('tip').textContent = t;
   drawNav(me);
-  teleDraw(me);                                                                  // 俥鐘（羅盤右側；31_drive.js）
+  teleDraw(me);                                                                  // 俥鐘（橫版左下角、直版左邊那一欄按鈕上方；31_drive.js teleDraw／teleFit）
 }
 /** 羅盤上方第三行：💧 艙內積水（噸）、🕳 破口（m²）—— Tim 2026-10-15：「羅盤上方資訊額外多一個積水、破口資訊」「假如沒有破口或積水則隱藏」。
  *  數字跟詳細資訊那一行同一份（sh.fl.vol × RHO_W、sh.fl.area；粒子模式才有）；兩個都沒有 ⇒ 整行不出現（沒有空行）、只有一個 ⇒ 只寫那一個。

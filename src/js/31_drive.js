@@ -17,8 +17,8 @@
 //   以「完好時的配置」當平衡點（這一段帆都在時的面積中心、所有螺旋槳都在時的推力中心）⇒ 只有受損的不平衡才轉船：
 //   前面的帆被打掉 ⇒ 帆的中心往後 ⇒ 船尾被推往下風 ⇒ 船頭往上風偏（迎風偏轉）；雙螺旋槳打掉一邊 ⇒ 往壞的那一邊偏。
 //   大小 ＝ 「吃掉幾成舵效」：(力矩 ÷ (總推力 × 水線長／4)) × 最大轉向率 × 細節設定「帆的力矩」（夾 ±1.5 倍）；舵照舊可以修回來。
-// 俥鐘（額外動力的控制；Tim：「拆成兩套」「額外動力…模擬俥鐘的介面(用點陣圖)」「放在羅盤右側」「也要支援快捷鍵操作」）：drive.tele 9 格（航速的比例：前進全速…停俥…後退全速）；
-//   E ＝ 往前撥一格、T ＝ 往後撥一格；點或拖羅盤右邊的俥鐘。推力 ＝ 比例² × 全推力（航速 ∝ 比例）。電腦的船一直全速前進（跟以前一樣）。
+// 俥鐘（額外動力的控制；Tim：「拆成兩套」「額外動力…模擬俥鐘的介面(用點陣圖)」「放在羅盤右側」→ 2026-10-16 改「左側按鈕上方」「橫版的話 就放在左下角吧」「也要支援快捷鍵操作」）：drive.tele 9 格（航速的比例：前進全速…停俥…後退全速）；
+//   E ＝ 往前撥一格、T ＝ 往後撥一格；點或拖俥鐘（橫版在畫面左下角、直版在左邊那一欄大圓鈕上方）。推力 ＝ 比例² × 全推力（航速 ∝ 比例）。電腦的船一直全速前進（跟以前一樣）。
 // 不抽 rnd()、不讀畫面的設定 ⇒ 同一個種子、同一份設定照樣逐字重現（但戰局跟改之前不一樣：加減速、受損的偏轉都變了）。
 // ⏳ 第二版（TASK-0630 驗收）：繩帆物理開著時用布上的風壓算帆的推力（各檔一個乘數）、物件重量預先算好、螺旋槳照輸出轉、風洞沙盒。
 var DRIVE_CFG = CFG.drive || {};
@@ -167,13 +167,31 @@ function driveText(sh) {
   var nm = D.kind === 'magic' ? '魔力' : '引擎';
   return '⚙ ' + TELE_NAME[sh.tele] + '（' + nm + ' ' + Math.round(D.cap * 100) + '%' + (D.cap < 0.98 && Math.abs(D.want || 0) > D.cap + 0.005 ? '・給不足' : '') + '）';
 }
-// ── 俥鐘（羅盤右側；canvas 點陣圖：先畫在低解析度的格子上、放大不平滑 ⇒ 像素風；字照正常解析度蓋上去） ──
-var TELE_W = 44, TELE_H = 150, TELE_PX = 2;                              // 畫面上的寬高（CSS px）；點陣的一格 ＝ 2 px
-function teleY(i) { return 14 + (TELE_H - 28) * i / (TELE.length - 1); }  // 第 i 格的高度（CSS px）
+// ── 俥鐘（#teleBox：上 E、下 T 兩顆鍵帽夾著 canvas 點陣圖；先畫在低解析度的格子上、放大不平滑 ⇒ 像素風；字照正常解析度蓋上去） ──
+// 位置（Tim 2026-10-16：「俥鐘 可以先放到左側按鈕上方 然後可以稍微縮小一些 並且在上下顯示快捷鍵」「橫版的話 就放在左下角吧」）：
+//   橫版 ⇒ 畫面左下角（CSS #teleBox；除錯那一行 #tip 上面）；直版手機（≤ 760 px，左邊那組大圓鈕是直的一欄）⇒ 貼在那一欄的正上方（teleFit 每格照按鈕的位置擺）。
+var TELE_W = 34, TELE_H = 112, TELE_PX = 2;                              // 畫面上的寬高（CSS px）；點陣的一格 ＝ 2 px
+var TELE_NARROW = window.matchMedia ? window.matchMedia('(max-width:760px)') : null;
+function teleY(i) { return 10 + (TELE_H - 20) * i / (TELE.length - 1); }  // 第 i 格的高度（CSS px）
+/** 直版：貼在左邊那一欄大圓鈕（#helmL）的正上方、置中；橫版：左下角（CSS），下面那排大圓鈕（#ctlRow）伸到左邊、會碰到 ⇒ 抬到那排上面（⛔ 800 px 寬時那排鋪滿整個寬度，俥鐘被 A 蓋住）。 */
+function teleFit(box) {
+  var L = '', B = '', r;
+  if (TELE_NARROW && TELE_NARROW.matches) {
+    var h = $('helmL'); if (!h) return;
+    r = h.getBoundingClientRect(); L = Math.round(r.left + (r.width - box.offsetWidth) / 2) + 'px'; B = Math.round(window.innerHeight - r.top + 6) + 'px';
+  } else {
+    var row = $('ctlRow'); r = row && row.getBoundingClientRect();
+    if (r && r.width && r.left < 12 + (box.offsetWidth || 40) + 8) B = Math.round(window.innerHeight - r.top + 6) + 'px';
+  }
+  if (box.style.left !== L || box.style.bottom !== B) { box.style.left = L; box.style.bottom = B; }
+}
 function teleDraw(sh) {
-  var c2 = $('telc'); if (!c2) return;
-  var show = !!(sh && sh.cfg && sh.cfg.base > 0);
-  if (c2.style.display !== (show ? '' : 'none')) { c2.style.display = show ? '' : 'none'; $('nav').classList.toggle('tele', show); }
+  var c2 = $('telc'), box = $('teleBox'); if (!c2 || !box) return;
+  var show = !!(sh && sh.cfg && sh.cfg.base > 0) && RUNNING;
+  if (box.style.display !== (show ? '' : 'none')) box.style.display = show ? '' : 'none';
+  if (show) teleFit(box);
+  var ob = $('obsB');                                                     // 觀察模式那一行（meadow 7e1f879，72_floodui.js；也在左下角）：俥鐘在 ⇒ 挪到俥鐘右邊、不在 ⇒ 照她的 CSS
+  if (ob) { var oL = show ? Math.round(box.getBoundingClientRect().right + 8) + 'px' : ''; if (ob.style.left !== oL) ob.style.left = oL; }
   if (!show) return;
   var dpr = Math.min(window.devicePixelRatio || 1, 2), W = TELE_W, H = TELE_H;
   if (c2.width !== W * dpr || c2.height !== H * dpr) { c2.width = W * dpr; c2.height = H * dpr; }
@@ -190,18 +208,17 @@ function teleDraw(sh) {
   q.fillRect(3, ys(stopI) - 1, lw - 6, 2);
   // 撥桿：黃銅的把手在現在那一格
   var cur = sh.tele, py = ys(cur), lit = performance.now() - (sh.teleT || -1e9) < 250;
-  q.fillStyle = '#3b2a0c'; q.fillRect(lw - 9, 3, 2, lh - 6);
-  q.fillStyle = lit ? '#fff1a8' : '#e2b13c'; q.fillRect(lw - 13, py - 2, 10, 5);
-  q.fillStyle = '#7a5a18'; q.fillRect(lw - 13, py + 2, 10, 1);
+  q.fillStyle = '#3b2a0c'; q.fillRect(lw - 6, 3, 2, lh - 6);             // 撥桿的槽（右邊）
+  q.fillStyle = lit ? '#fff1a8' : '#e2b13c'; q.fillRect(lw - 9, py - 2, 7, 4);
+  q.fillStyle = '#7a5a18'; q.fillRect(lw - 9, py + 2, 7, 1);
   var g = c2.getContext('2d'); g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, c2.width, c2.height);
   g.imageSmoothingEnabled = false; g.drawImage(lo, 0, 0, c2.width, c2.height);
   g.setTransform(dpr, 0, 0, dpr, 0, 0);
-  g.font = 'bold 9px sans-serif'; g.textBaseline = 'middle'; g.textAlign = 'left';
+  g.font = 'bold 8px sans-serif'; g.textBaseline = 'middle'; g.textAlign = 'left';
   var LB = ['全', '半', '慢', '微', '停', '微', '慢', '半', '全'];
-  for (i = 0; i < TELE.length; i++) { g.fillStyle = i === cur ? '#000' : i > stopI ? '#fff' : '#3a2a10'; g.fillText(TELE.length === 9 ? LB[i] : (Math.round(Math.abs(TELE[i]) * 100) + ''), 9, teleY(i)); }
-  g.fillStyle = '#3a2a10'; g.font = 'bold 8px sans-serif'; g.fillText('進', 22, 9); g.fillStyle = '#fff'; g.fillText('退', 22, H - 8);
+  for (i = 0; i < TELE.length; i++) { g.fillStyle = i === cur ? '#000' : i > stopI ? '#fff' : '#3a2a10'; g.fillText(TELE.length === 9 ? LB[i] : (Math.round(Math.abs(TELE[i]) * 100) + ''), 7, teleY(i)); }
   var D = sh.drive;
-  if (D && D.cap < 0.98) { g.fillStyle = 'rgba(0,0,0,.55)'; var cy = teleY(stopI), up = (cy - teleY(0)) * (1 - Math.sqrt(D.cap)); g.fillRect(4, teleY(0) - 6, 3, up + 1); g.fillRect(4, teleY(TELE.length - 1) + 6 - up, 3, up); }   // 給不出的那幾格（受損）：左邊一條暗的
+  if (D && D.cap < 0.98) { g.fillStyle = 'rgba(0,0,0,.55)'; var cy = teleY(stopI), up = (cy - teleY(0)) * (1 - Math.sqrt(D.cap)); g.fillRect(3, teleY(0) - 5, 3, up + 1); g.fillRect(3, teleY(TELE.length - 1) + 5 - up, 3, up); }   // 給不出的那幾格（受損）：左邊一條暗的
 }
 /** 點或拖俥鐘：照按到的高度挑最近的那一格。 */
 (function () {
