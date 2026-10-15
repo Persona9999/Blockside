@@ -5823,7 +5823,7 @@ function flType(T, c) {
     if (yM[k] < ylo) ylo = yM[k]; if (yP[k] > yhi) yhi = yP[k];
   }
   var NX = Math.ceil(nxv / c), NY = Math.ceil((yhi - ylo + 1) / c), NZ = Math.ceil(zTop / c), N = NX * NY * NZ;
-  var F = { c: c, X0: x0, Y0: ylo, NX: NX, NY: NY, NZ: NZ, N: N, nxv: nxv, zTop: zTop, yP: yP, yM: yM, cap: new Float32Array(N), pd: new Float32Array(N), op: new Float32Array(N * c) };   // op：每格每一層空著幾格（只給畫水面用：水照層疊上去，flLevel）
+  var F = { c: c, X0: x0, Y0: ylo, NX: NX, NY: NY, NZ: NZ, N: N, nxv: nxv, zTop: zTop, yP: yP, yM: yM, cap: new Float32Array(N), pd: new Float32Array(N), op: new Float32Array(N * c), ol: new Float32Array(N * c) };   // op：每格每一層空著幾格（水照層疊上去：畫水面、flPd）；ol：那一層開著幾成（那一層沒有艙內 ⇒ −1）
   var intC = new Int32Array(N), solC = new Int32Array(N), intL = new Int32Array(N * c), solL = new Int32Array(N * c);
   for (z = 0; z < zTop; z++) for (x = x0; x <= x1; x++) {
     var kk = z * nxv + x - x0, a = yM[kk] + 1, b = yP[kk] - 1; if (yP[kk] < 0 || b < a) continue;
@@ -5841,7 +5841,7 @@ function flType(T, c) {
   for (var i = 0; i < N; i++) {
     F.cap[i] = (intC[i] - solC[i]) / (c * c * c);
     var p = 1, any = false;
-    for (var l = 0; l < c; l++) { var il = intL[i * c + l]; F.op[i * c + l] = il - solL[i * c + l]; if (il > 0) { any = true; p = Math.min(p, (il - solL[i * c + l]) / il); } }
+    for (var l = 0; l < c; l++) { var il = intL[i * c + l]; F.op[i * c + l] = il - solL[i * c + l]; F.ol[i * c + l] = il > 0 ? (il - solL[i * c + l]) / il : -1; if (il > 0) { any = true; p = Math.min(p, (il - solL[i * c + l]) / il); } }
     F.pd[i] = any ? p : 0;
   }
   return K[c] = F;
@@ -5850,7 +5850,7 @@ function flType(T, c) {
 function flNew(sh) {
   var L = FL_LV[FLOOD_LV]; if (!L) return null;
   var F = flType(sh.T, L.c), N = F.N, H = 2 * F.NX * F.NZ;
-  return { L: L, F: F, cap: F.cap.slice(), pd: F.pd.slice(), op: F.op.slice(), A: new Float32Array(N), on: new Uint8Array(N), act: new Int32Array(4096), actN: 0, dmark: new Uint8Array(N), dirty: [],
+  return { L: L, F: F, cap: F.cap.slice(), pd: F.pd.slice(), op: F.op.slice(), ol: F.ol.slice(), A: new Float32Array(N), on: new Uint8Array(N), act: new Int32Array(4096), actN: 0, dmark: new Uint8Array(N), dirty: [],
     hA: new Float32Array(H), hX: new Float32Array(H), hY: new Float32Array(H), hZ: new Float32Array(H), hYi: new Float32Array(H), hAcc: new Float32Array(H), hmark: new Uint8Array(H), hon: new Uint8Array(H), hdirty: [], holes: [],
     J: { n: 0, p: new Float32Array(L.jn * 3), v: new Float32Array(L.jn * 3), vol: new Float32Array(L.jn), life: new Float32Array(L.jn) },
     vol: 0, area: 0, open: 0, inQ: 0, outQ: 0, inTot: 0, outTot: 0, pumped: 0, comX: 0, comY: 0, sinkT: 0, step: 0, gen: 0, mesh: null };
@@ -5875,14 +5875,14 @@ function floodTouch(sh, x, y, z) {
 function flCellRedo(sh, fl, i) {
   var F = fl.F, c = F.c, ix = i % F.NX, iy = ((i / F.NX) | 0) % F.NY, iz = (i / (F.NX * F.NY)) | 0, Gd = sh.grid, it = 0, st = 0, p = 1, any = false;
   for (var l = 0; l < c; l++) {
-    var z = iz * c + l, il = 0, sl = 0; fl.op[i * c + l] = 0; if (z >= F.zTop) continue;
+    var z = iz * c + l, il = 0, sl = 0; fl.op[i * c + l] = 0; fl.ol[i * c + l] = -1; if (z >= F.zTop) continue;
     for (var dx = 0; dx < c; dx++) {
       var x = F.X0 + ix * c + dx; if (x - F.X0 >= F.nxv) break;
       var k = z * F.nxv + x - F.X0; if (F.yP[k] < 0) continue;
       var a = Math.max(F.yM[k] + 1, F.Y0 + iy * c), b = Math.min(F.yP[k] - 1, F.Y0 + iy * c + c - 1);
       for (var y = a; y <= b; y++) { il++; if (Gd.get(x, y, z)) sl++; }
     }
-    fl.op[i * c + l] = il - sl; it += il; st += sl; if (il > 0) { any = true; p = Math.min(p, (il - sl) / il); }
+    fl.op[i * c + l] = il - sl; fl.ol[i * c + l] = il > 0 ? (il - sl) / il : -1; it += il; st += sl; if (il > 0) { any = true; p = Math.min(p, (il - sl) / il); }
   }
   fl.cap[i] = (it - st) / (c * c * c); fl.pd[i] = any ? p : 0;
 }
@@ -5897,6 +5897,14 @@ function flHoleRedo(sh, fl, h) {
   }
   fl.hA[h] = n * S * S;
   if (n) { fl.hX[h] = sx / n + 0.5; fl.hY[h] = sy / n + 0.5; fl.hZ[h] = sz / n + 0.5; fl.hYi[h] = si / n + 0.5; if (!fl.hon[h]) { fl.hon[h] = 1; fl.holes.push(h); } }
+}
+/** 第 i 格的水往下流得過去幾成：從這一格最下面那層往上、到水（W 格，照層疊）淹到的那一層為止，每層開著幾成取最小（Tim 2026-10-15：「水會跑到平頂上(且高出海平面) 應該要流下去才對」）。
+ *  ⛔ 以前（pd）整格每一層取最小 ⇒ 格子上半截有頂板、甲板 ⇒ 0 ⇒ 天花板底下那兩層的水永遠下不去（維吉尼亞號砲廓頂底下：船晃、下沉過之後留在高處，比海面還高）。
+ *  水上面的頂板不算；水底下（或水本身那一層）有甲板 ⇒ 照舊擋住。 */
+function flPd(fl, i, W) {
+  var c = fl.F.c, o = i * c, p = 1, any = false;
+  for (var l = 0; l < c; l++) { var f = fl.ol[o + l]; if (f < 0) continue; any = true; if (f < p) p = f; var n = fl.op[o + l]; if (n > 0) { if (W <= n) break; W -= n; } }
+  return any ? p : 0;
 }
 /** 艙內那一點 (x, y, z)（格座標）所在的水格；不在格子範圍 ⇒ −1。 */
 function flCell(F, x, y, z) {
@@ -5944,7 +5952,7 @@ function floodStep(sh, fl, dt) {
   flTick(sh, fl, dt * L.ev);
 }
 function flTick(sh, fl, dtc) {
-  var F = fl.F, L = fl.L, J = fl.J, c = F.c, NX = F.NX, NY = F.NY, NXY = NX * NY, N = F.N, A = fl.A, cap = fl.cap, pd = fl.pd, M = sh.M, Vc = Math.pow(c * S, 3), hc = c * S, fk = sh.cfg.flood / LIM.flood[2], i, k, m;   // 滑桿／預設：預設 ⇒ 物理的流量
+  var S3 = S * S * S, F = fl.F, L = fl.L, J = fl.J, c = F.c, NX = F.NX, NY = F.NY, NXY = NX * NY, N = F.N, A = fl.A, cap = fl.cap, pd = fl.pd, M = sh.M, Vc = Math.pow(c * S, 3), hc = c * S, fk = sh.cfg.flood / LIM.flood[2], i, k, m;   // 滑桿／預設：預設 ⇒ 物理的流量
   // 0. 被打壞的水格、破口（每次最多 dn 個 ⇒ 一發殉爆不會卡一下）
   for (k = 0; k < L.dn && fl.dirty.length; k++) { i = fl.dirty.shift(); fl.dmark[i] = 0; flCellRedo(sh, fl, i); }
   for (k = 0; k < L.dn && fl.hdirty.length; k++) { var hd = fl.hdirty.shift(); fl.hmark[hd] = 0; flHoleRedo(sh, fl, hd); }
@@ -5982,9 +5990,10 @@ function flTick(sh, fl, dtc) {
   var n0 = fl.actN, act = fl.act, dir = fl.gen & 1, t, j;
   for (t = 0; t < n0; t++) {
     i = act[t]; var a = A[i]; if (a <= 1e-7) continue;
-    if (i >= NXY && pd[i] > 0.02) { j = i - NXY; var room = cap[j] * Vc - A[j]; if (room > 0) { m = Math.min(a, room) * Math.min(1, pd[i] * 4); A[i] -= m; A[j] += m; flAct(fl, j); } }
+    var pdi = i >= NXY ? flPd(fl, i, a / S3) : 0;                          // 往下通幾成：只看水那一層以下（flPd）
+    if (pdi > 0.02) { j = i - NXY; var room = cap[j] * Vc - A[j]; if (room > 0) { m = Math.min(a, room) * Math.min(1, pdi * 4); A[i] -= m; A[j] += m; flAct(fl, j); } }
     var ex = A[i] - cap[i] * Vc;
-    if (ex > 1e-6 && i + NXY < N && cap[i + NXY] > 0.02 && pd[i + NXY] > 0.02) { A[i] -= ex; A[i + NXY] += ex; flAct(fl, i + NXY); }
+    if (ex > 1e-6 && i + NXY < N && cap[i + NXY] > 0.02 && flPd(fl, i + NXY, A[i + NXY] / S3) > 0.02) { A[i] -= ex; A[i + NXY] += ex; flAct(fl, i + NXY); }
   }
   for (t = 0; t < n0; t++) {
     i = act[dir ? n0 - 1 - t : t]; if (A[i] <= 1e-7 || !(cap[i] > 0.02) || A[i] / (cap[i] * Vc) < 0.03) continue;
