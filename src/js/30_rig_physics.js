@@ -535,7 +535,7 @@ function furlDraw(c, P, f) {
 //   · 整面篩：帆的外框碰不到船殼格、模型、繩 ⇒ 整面跳過；模型的矩陣與外框每艘每步算一次（ccModels），不是每面帆各算一次。
 //   · 繩：線段清單照 pts 那一份陣列建一次（帆桁轉了 pts 會換新陣列 ⇒ 重建；⛔ 以前每次都建一棵排序的樹）。
 //   · 輪數：第一次 CC_PASS[0]、之後每次 CC_PASS[1]（Sirius 原本 48／12；?ccpass=48,12 量正確性用）。
-var CC_Q = [], CC_MS = +(Q.get('ccms') || 1.5), CC_DEBT = 0, CC_WALK = 12, CC_REGION = 30;   // CC_WALK：船殼格往外找出口最多走幾格（1.2 m；帆只會穿進去幾格）
+var CC_Q = [], CC_MS = +(Q.get('ccms') || 1.5), CC_DEBT = 0, CC_WALK = 12, CC_REGION = 30, CC_STEP = +(Q.get('ccstep') || 1);   // CC_STEP：一次接觸修正最多把一個點推幾格   // CC_WALK：船殼格往外找出口最多走幾格（1.2 m；帆只會穿進去幾格）
 /** 這一步排到的帆，照最久沒解的先解，花到 CC_MS 毫秒為止（至少一面）。50_sim.js：全部的船 physStep 之後。 */
 function clothContactsRun() {
   if (!CC_Q.length) return;
@@ -666,7 +666,13 @@ function ccMove(c, ids, weights, delta, mount) {
   var magnitude = len(delta), maxWeight = 0; mass.forEach(function (w) { maxWeight = Math.max(maxWeight, w); });
   var scale = Math.min(1, (c.contactWarm ? 1 : 4) * denom / ((magnitude || 1) * maxWeight));
   var moved = false;
-  mass.forEach(function (w, node) { for (var a = 0; a < 3; a++) { var at = node * 3 + a, old = c.p[at], d = delta[a] * scale * w / denom;
+  mass.forEach(function (w, node) {
+    var dx = delta[0] * scale * w / denom, dy = delta[1] * scale * w / denom, dz = delta[2] * scale * w / denom, dl = Math.sqrt(dx * dx + dy * dy + dz * dz);
+    var room = CC_STEP - c.ccAcc[node]; if (room <= 1e-4) return;          // 這一次解（clothContacts 一次呼叫）每個點總共最多推 CC_STEP 格（ame：Tim「碰撞會有瞬間帆彈出一大段距離」——
+    if (dl > room) { var f = room / dl; dx *= f; dy *= f; dz *= f; dl = room; }   //   一個點一次被推出桅杆 10 格、又被相鄰的六個三角形各推一次 ⇒ 邊拉到 96 格（關碰撞最長 33）；推不完的下一次再推）
+    c.ccAcc[node] += dl;
+    var d3 = [dx, dy, dz];
+    for (var a = 0; a < 3; a++) { var at = node * 3 + a, old = c.p[at], d = d3[a];
     if (Math.abs(d) < 1e-5) continue; c.p[at] += d; var actual = c.p[at] - old;
     if (actual) { c.q[at] += actual; moved = true; }
   } }); return moved;
@@ -750,6 +756,7 @@ function ccAttachment(c, ids, hit, owner, v) {
 function clothContacts(sh, c, deadline) {   // deadline：performance.now() 到這個時間就先停、記下做到哪個三角形（c.ccCur），下次接著做；回傳這一面掃完了沒
   if (!c.p || c.hidden || c.gone || !c.T.mi) return;
   var T = c.T, geo = ccGeometry(sh), fine = c.contactFine || (c.contactFine = new Float32Array(T.n * 3)), contacts = 0, locked = 0;
+  if (!c.ccAcc || c.ccAcc.length !== c.p.length / 3) c.ccAcc = new Float32Array(c.p.length / 3); else c.ccAcc.fill(0);   // 每個點這一次推了多少（ccMove）
   clothFine(c, fine);
   var clothBox = ccBox(Array.from({ length: T.n }, function (_, i) { return Array.from(fine.slice(i * 3, i * 3 + 3)); }));
   var models = ccModels(sh, geo).filter(function (m) { return ccOverlap(clothBox, m.box, 3); });
