@@ -148,6 +148,10 @@ function clothTemplate(H, s) {                         // H：船型（帆的布
     var w = P(i), an = anchorNear(H, w[0], w[1], w[2], 6);
     if (an >= 0) { hk[i] = 1; hv[i] = an; } else { var rp = ropeNear(w, 16); if (rp >= 0) { hk[i] = 2; hv[i] = rp; } }
   }
+  // 掛在斜桁頂上的旗（三叉戟號的 ensign；Tim 2026-10-15：船尾旗飄在空中）：綁邊上面幾點靠在 gaff 上、下面幾點找不到靠的（3）⇒
+  //   gaff 追風轉了、旗留在作品的位置。旗有任何一點綁在帆桁上 ⇒ 整條綁邊都歸那根帆桁（跟著轉、帆桁沒了一起鬆開）；跟轉的 yk 在下面照 hv 給。
+  var flagYard = -1; if (isFlag(s)) for (i = 0; i < n; i++) if (hk[i] === 4) { flagYard = hv[i]; break; }
+  if (flagYard >= 0) for (i = 0; i < n; i++) if (hk[i] === 3) { hk[i] = 4; hv[i] = flagYard; }
   var own = []; H.rig.ropes.forEach(function (r, j2) { if (sailRope(r, s.name)) own.push(j2); });   // 帆自己的 sheet、tack（10_ship.js sailRope：照 meta，沒有才照名字）
   var clews = 0, clewYard = {};                          // 帆腳 → 跟哪根帆桁轉（-1 ＝ 不轉）
   corner.forEach(function (kc) {
@@ -178,6 +182,7 @@ function clothTemplate(H, s) {                         // H：船型（帆的布
     ys.forEach(function (y) { var d = segDist2(w, y.a[0], y.a[1], y.a[2], y.b[0], y.b[1], y.b[2]); if (d < bd) { bd = d; bi = y.k; } });
     sim.yk[ci] = bi;
   });
+  if (flagYard >= 0) cg.idx.forEach(function (f, ci) { if (sim.hk[ci] === 4) sim.yk[ci] = sim.hv[ci]; });   // 旗跟著它掛的帆桁轉（帆桁的 meta sail 是別面帆 ⇒ 上面的 ys 找不到它）
   var foot = -1; Object.keys(clewYard).forEach(function (q) { if (clewYard[q] >= 0) foot = clewYard[q]; });
   var vcol = texColors(s.texture, n);                   // 有貼圖（旗）⇒ 每個頂點照 UV 取貼圖的顏色；整面的顏色（布片、碎布）取平均
   return { name: s.name, col: vcol ? vcol.avg : s.color || [0.95, 0.92, 0.85], vcol: vcol ? vcol.c : null, uv: vcol ? Float32Array.from(s.texture.uv.slice(0, n * 2)) : null, n: n, p0: p0, tris: new Uint16Array(T), sim: sim, mi: cg.mi, mw: cg.mw, grid: cg.kind,
