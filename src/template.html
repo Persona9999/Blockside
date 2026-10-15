@@ -117,7 +117,7 @@
   #phxItems .row{ display:flex; align-items:center; justify-content:center; flex-wrap:wrap; gap:2px; font-size:14px; } #phxItems label{ width:6em; text-align:right; margin-right:6px; }
   #phxItems button{ font-size:13px; padding:4px 10px; margin:2px; }
   #nav{ padding:3px; border-radius:50%; }   /* 羅盤：只剩圓盤（TASK-0566；文字搬進詳細資訊 navText），在下方中間那一欄（TASK-0567） */ #navt{ display:none; }
-  #navc{ position:static; inset:auto; width:130px; height:130px; display:block; margin:0; cursor:default; }
+  #navc{ position:static; inset:auto; width:130px; height:130px; display:block; margin:0; cursor:pointer; pointer-events:auto; touch-action:manipulation; border-radius:50%; }   /* 羅盤可以按（Tim 2026-10-15）：跟按艦隊的我艦圓鈕一樣開／收詳細資訊 */
   /* 手機直拿：跟電腦同一種排法，只是縮小 —— 艦隊按鈕 38 px、左右兩組打舵開砲改成直的一欄、中間一欄窄一點 */
   @media (max-width:760px){
     .fleet{ top:6px; gap:4px; max-height:calc(100vh - 175px); } #fleetL{ left:5px; } #fleetR{ right:5px; }
