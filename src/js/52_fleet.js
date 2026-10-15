@@ -175,7 +175,7 @@ function playerHandoff() {
   function m(o) { return o.mass0 || shipT(o); }
   L.sort(function (a, b) { return m(b) - m(a) || Math.hypot(a.px - me.px, a.pz - me.pz) - Math.hypot(b.px - me.px, b.pz - me.pz); });
   var nw = L[0];
-  playerTake(nw, '改操控 ' + nw.name + teamTag(nw) + '（' + me.name + (me.struck && !me.sunk && !me.sinkingFinal ? '降旗了' : '沉了') + '）');
+  playerTake(nw, '改操控 ' + nw.name + teamTag(nw) + '（' + me.name + (me.selfD ? '自爆了' : me.struck && !me.sunk && !me.sinkingFinal ? '降旗了' : '沉了') + '）');
   return nw;
 }
 /** 玩家改操控 nw（自動換船 playerHandoff、詳細資訊的「⚓ 改操控這艘」都走這裡）：原本那艘交給電腦（瞄準回自由），nw 接玩家的瞄準模式（AIM_P）；沙盒的快速裝填跟過去。 */

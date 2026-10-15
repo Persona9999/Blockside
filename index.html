@@ -275,7 +275,7 @@
   <div id="gsetBg"></div>
   <div id="gset" class="hud panel">
     <div class="gsT">設定　<span class="note">遊戲暫停中（Esc、「繼續」或點面板外面回到戰鬥）</span></div>
-    <div class="gsR"><span class="chip big" id="gsGo">▶ 繼續</span><span class="chip big" id="restartB"><b>N</b> 重新開始</span><span class="chip big" id="menuB"><b>R</b> 回主選單</span><span class="chip big" id="boomB" title="引爆我艦的彈藥庫（相當於重開，先看煙花）">自爆</span><span class="chip big" id="helpB"><b>H</b> 說明</span></div>
+    <div class="gsR"><span class="chip big" id="gsGo">▶ 繼續</span><span class="chip big" id="restartB"><b>N</b> 重新開始</span><span class="chip big" id="menuB"><b>R</b> 回主選單</span><span class="chip big" id="boomB">💥</span><span class="chip big" id="helpB"><b>H</b> 說明</span></div>
     <div class="gsR"><span class="gsL">畫質</span><span class="chip" data-gg="low">低</span><span class="chip" data-gg="mid">中</span><span class="chip" data-gg="high">高</span><span class="note" id="gsGfx"></span></div>
     <div class="gsR"><span class="gsL">物理效果</span><span class="chip" data-gx="full">全開</span><span class="chip" data-gx="high">高</span><span class="chip" data-gx="mid">中</span><span class="chip" data-gx="low">低</span><span class="note" id="gsPhx"></span></div>
     <div class="gsR"><span class="gsL">瞄準</span><span class="chip" data-k="q" id="aimk">🎯 換瞄準模式（Q）</span><span class="note">自由 → 水線 → 砲甲板 → 帆具 → 甲板人員 → 彈藥庫（現在的寫在羅盤上面）</span></div>
@@ -8340,7 +8340,7 @@ function playerHandoff() {
   function m(o) { return o.mass0 || shipT(o); }
   L.sort(function (a, b) { return m(b) - m(a) || Math.hypot(a.px - me.px, a.pz - me.pz) - Math.hypot(b.px - me.px, b.pz - me.pz); });
   var nw = L[0];
-  playerTake(nw, '改操控 ' + nw.name + teamTag(nw) + '（' + me.name + (me.struck && !me.sunk && !me.sinkingFinal ? '降旗了' : '沉了') + '）');
+  playerTake(nw, '改操控 ' + nw.name + teamTag(nw) + '（' + me.name + (me.selfD ? '自爆了' : me.struck && !me.sunk && !me.sinkingFinal ? '降旗了' : '沉了') + '）');
   return nw;
 }
 /** 玩家改操控 nw（自動換船 playerHandoff、詳細資訊的「⚓ 改操控這艘」都走這裡）：原本那艘交給電腦（瞄準回自由），nw 接玩家的瞄準模式（AIM_P）；沙盒的快速裝填跟過去。 */
@@ -9535,8 +9535,9 @@ function checkEnd() {
   function fate(sh) { return sh.sunk ? '沉沒' : sh.fate; }
   function who(L, one) { return L.length === 1 ? one + fate(L[0]) : one.replace('艦', '方') + ' ' + L.length + ' 艘全數' + (L.every(function (o) { return o.sunk; }) ? '沉沒' : '沉沒或降旗'); }
   if (foes.length && teamDown(ft)) { txt = '勝利！' + who(foes, '敵艦'); lose = foes; }
-  else if (me.selfD) txt = '自爆！我艦引爆了彈藥庫';                      // 自爆（23_powder.js selfDestruct）：第一間炸的那一刻就結算（文字不等最後那間）
-  else if (teamDown(mt)) { txt = '敗北……' + who(mine, '我艦'); lose = mine; }
+  // 自爆（23_powder.js selfDestruct）不直接判輸（Tim 2026-10-15：「自爆不直接判輸 根據規則繼續換下一台候補(除非沒有船了)」）：自爆的那艘算降旗（isOut）⇒ 照規則換友艦（playerHandoff）、候補進場（reinforce）；
+  //   我方全倒、候補也沒了才結算 ⇒ 最後那艘是自爆的（一對一 ＝ 第一間炸的那一刻，跟以前一樣）⇒ 寫自爆。
+  else if (teamDown(mt)) { txt = me.selfD ? '自爆！我艦引爆了彈藥庫' + (mine.length > 1 ? '（我方 ' + mine.length + ' 艘全數沉沒或降旗）' : '') : '敗北……' + who(mine, '我艦'); lose = mine; }
   if (!txt) return;
   OVER = true;
   function sum(L, k) { return L.reduce(function (a, o) { return a + o[k]; }, 0); }

@@ -491,8 +491,9 @@ function checkEnd() {
   function fate(sh) { return sh.sunk ? '沉沒' : sh.fate; }
   function who(L, one) { return L.length === 1 ? one + fate(L[0]) : one.replace('艦', '方') + ' ' + L.length + ' 艘全數' + (L.every(function (o) { return o.sunk; }) ? '沉沒' : '沉沒或降旗'); }
   if (foes.length && teamDown(ft)) { txt = '勝利！' + who(foes, '敵艦'); lose = foes; }
-  else if (me.selfD) txt = '自爆！我艦引爆了彈藥庫';                      // 自爆（23_powder.js selfDestruct）：第一間炸的那一刻就結算（文字不等最後那間）
-  else if (teamDown(mt)) { txt = '敗北……' + who(mine, '我艦'); lose = mine; }
+  // 自爆（23_powder.js selfDestruct）不直接判輸（Tim 2026-10-15：「自爆不直接判輸 根據規則繼續換下一台候補(除非沒有船了)」）：自爆的那艘算降旗（isOut）⇒ 照規則換友艦（playerHandoff）、候補進場（reinforce）；
+  //   我方全倒、候補也沒了才結算 ⇒ 最後那艘是自爆的（一對一 ＝ 第一間炸的那一刻，跟以前一樣）⇒ 寫自爆。
+  else if (teamDown(mt)) { txt = me.selfD ? '自爆！我艦引爆了彈藥庫' + (mine.length > 1 ? '（我方 ' + mine.length + ' 艘全數沉沒或降旗）' : '') : '敗北……' + who(mine, '我艦'); lose = mine; }
   if (!txt) return;
   OVER = true;
   function sum(L, k) { return L.reduce(function (a, o) { return a + o[k]; }, 0); }
