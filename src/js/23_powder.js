@@ -23,8 +23,10 @@ function makeMags(sh) {
   return (sh.T.h.parts || []).filter(function (p) { return p.meta && p.meta.kind === 'magazine'; }).map(function (p) {
     var kegs = sh.models.filter(function (m) { return m.kind === 'powder' && m.path.indexOf(p.path + '/') === 0; });
     var lb = kegs.reduce(function (a, m) { return a + (+m.meta.powder_lb || 100); }, 0) || +p.meta.powder_lb || 0;
-    var bl = (p.points && p.points.blast) || [(p.box[0] + p.box[3]) / 2, (p.box[1] + p.box[4]) / 2, (p.box[2] + p.box[5]) / 2];
-    var mag = { name: p.path, pos: p.meta.pos || '', box: p.box, blast: bl, pts: p.points || {}, lb: lb, kegs: kegs, boomed: 0, gone: false, lit: false };   // pos：關聯 meta 的前／中／後（TASK-0539）
+    // 關聯的外框比整艘船還大 ＝ 子作品是整個框（收穫號、維吉尼亞號）⇒ 照庫裡的桶收緊（⛔ 照框 ⇒ 只有一間的船從框的兩端往外找取用點、全找到船外 ⇒ 一個取用點都沒有；電腦瞄彈藥庫的高度也跟著錯）
+    var B = sh.T.h.bbox, box = kegs.length && p.box[0] <= B[0] && p.box[3] >= B[3] ? kegs.reduce(function (b, m) { var q = m.bb; return [Math.min(b[0], q[0]), Math.min(b[1], q[1]), Math.min(b[2], q[2]), Math.max(b[3], q[3]), Math.max(b[4], q[4]), Math.max(b[5], q[5])]; }, [1e9, 1e9, 1e9, -1e9, -1e9, -1e9]) : p.box;
+    var bl = (p.points && p.points.blast) || [(box[0] + box[3]) / 2, (box[1] + box[4]) / 2, (box[2] + box[5]) / 2];
+    var mag = { name: p.path, pos: p.meta.pos || '', box: box, blast: bl, pts: p.points || {}, lb: lb, kegs: kegs, boomed: 0, gone: false, lit: false };   // pos：關聯 meta 的前／中／後（TASK-0539）
     kegs.forEach(function (m) { m.mag = mag; });
     return mag;
   });
@@ -189,7 +191,7 @@ function magTag(mag) { if (MAG_POS[mag.pos]) return MAG_POS[mag.pos]; return mag
  *  甲板也是一間房（36_rooms.js deckPlan；TASK-0568）：玩家在船隻配置頁擺過那一層 ⇒ 照擺的格子放（每一處 ＝ 三桶；彈藥庫 ＝ x 最近的那間）；沒擺過 ⇒ 照舊自己找（auto ＝ 只照舊找：hullDeckKit 用）。 */
 function makeStations(sh, auto) {
   var T = sh.T, BASE = T.base, CY = T.cy;
-  var keg = sh.mags.length && sh.mags[0].kegs[0]; if (!keg || !T.rig.meshes[keg.mesh]) return [];
+  var keg = sh.mags.reduce(function (a, m) { return a || m.kegs[0]; }, null); if (!keg || !T.rig.meshes[keg.mesh]) return [];   // 取用點的桶照哪一間的桶都行（⛔ 只看第一間 ⇒ 第一間沒桶整艘就沒有取用點）；都沒有桶 ⇒ 沒有取用點（匯入檢查報 ✗）
   var V = T.rig.meshes[keg.mesh].verts, mn = [1e9, 1e9, 1e9], mx = [-1e9, -1e9, -1e9], j, a;
   for (j = 0; j < V.length; j += 3) for (a = 0; a < 3; a++) { mn[a] = Math.min(mn[a], V[j + a]); mx[a] = Math.max(mx[a], V[j + a]); }
   var guns = sh.models.filter(function (m) { return GUNS[m.kind] || m.kind === 'wheel'; }), out = [];

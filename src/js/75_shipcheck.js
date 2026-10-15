@@ -87,7 +87,33 @@ function shipCheck(id) {
     // ── 煙囪（meta kind=funnel、固定點 smoke；78_funnel.js）──
     R.info.funnels = funnelsOf(T).length;
     funnelsOf(T).forEach(function (f) { if (!f.pt) add('warn', '煙囪', f.name, '沒有固定點 smoke ⇒ 從外框頂面的中心冒煙', '煙囪子作品登記固定點 smoke（煙囪口的中心；造船規格 §9）'); });
-    if (!sh.mags.length) add('warn', '彈藥庫', '—', '沒有 kind=magazine ⇒ 不會殉爆、送藥手照預設取用點', '彈藥庫的關聯 meta kind=magazine, powder_lb（造船規格 §8）');
+    // ── 彈藥庫與取用點（23_powder.js）：沒有桶 ⇒ 不擺取用點 ⇒ 送藥手沒地方拿、砲打完砲旁藥箱那幾發就永遠停（維吉尼亞號 2026-10-15：180 秒只開 12 發，Tim 先看到）──
+    var kegsAny = sh.mags.some(function (o) { return o.kegs.length; });
+    if (!sh.mags.length) add('error', '彈藥庫', '—', '沒有 kind=magazine ⇒ 沒有取用點：砲打完砲旁藥箱（' + BOX_N + ' 發）就停、也不會殉爆', '彈藥庫的關聯 meta kind=magazine, powder_lb ＋ 裡面的火藥桶模型（造船規格 §8）');
+    sh.mags.forEach(function (m) { if (!m.kegs.length) add('error', '彈藥庫', m.name, '裡面沒有火藥桶模型 ⇒ 這一間不會殉爆' + (kegsAny ? '' : '、整艘沒有取用點（砲打完藥箱就停）'), '彈藥庫子作品裡掛火藥桶模型 meta kind=powder, powder_lb（造船規格 §8）'); });
+    R.info.stations = sh.stations.length;
+    if (kegsAny) sh.decks.forEach(function (D) { if (!sh.stations.some(function (st) { return st.deck === D.key; })) add('error', '取用點', D.name, '這一層砲甲板找不到取用點（9×9 格平地、頭上 8 格空、不碰砲）⇒ 這一層的砲打完藥箱就停', '甲板留一塊空地，或在船隻配置頁擺取用點'); });
+    // ── 每門砲拿不拿得到火藥（Tim 2026-10-15：「檢查炮是否有可以到達的火藥桶」）：照送藥手的走法（23_powder.js stepMonkey）——
+    //   同一層的送藥手去同一層、x 最近的取用點（stationFor）拿，直直走到砲尾後面放藥箱的位置（g.drop；monkeyTo 不尋路）。
+    //   ✗ 那一層沒有取用點（上面那條已報 ⇒ 這裡不重報）／沒有送藥手／砲尾後面找不到放藥箱的位置 ⇒ 那門砲打完砲旁藥箱就停。
+    //   ⚠ 走路格上（預備水手的尋路，42_hands.js）取用點跟放藥箱的位置不連通 ⇒ 送藥手照直線穿過艙壁、艙口去送。
+    var pw = { n: 0, ok: 0, unk: 0, far: 0, farG: '' };
+    if (kegsAny && !(sh.cw.monkeys > 0)) add('warn', '火藥', '船員配置', '送藥手 0 ⇒ 每門砲打完砲旁藥箱（' + BOX_N + ' 發）就停', '船員配置的送藥手給 1 或 2');
+    if (kegsAny && sh.cw.monkeys > 0) sh.guns.forEach(function (g) {
+      var deck = gunDeck(g), nm = g.model.path || g.model.name, sts = sh.stations.filter(function (st) { return st.deck === deck && !st.mag.gone; });
+      pw.n++;
+      if (!sts.length) return;
+      if (!g.drop) { add('error', '火藥', nm, '砲尾後面找不到放藥箱的位置 ⇒ 送藥手不送這門、打完砲旁藥箱就停', '砲尾後面（往中線 0.7 m）留一塊站得住的地方'); return; }
+      if (!sh.crew.some(function (c) { return c.pm && c.deck === deck; })) { add('error', '火藥', nm, '這一層沒有送藥手（站不下）⇒ 打完砲旁藥箱就停', '那一層兩舷砲中間靠中線留站位'); return; }
+      var st = sts.reduce(function (a, b) { return Math.abs(b.at[0] - g.muz[0]) < Math.abs(a.at[0] - g.muz[0]) ? b : a; });
+      var d = Math.hypot(g.drop[0] - st.at[0], g.drop[1] - st.at[1]) * S;
+      if (d > pw.far) { pw.far = d; pw.farG = nm; }
+      var li = NV ? lvAt(sh, st.at) : -1, L = li >= 0 ? NV.levels[li] : null, N = L && L.N, a = N ? navSnap(N, st.at, 4) : -1, b = N ? navSnap(N, g.drop, 4) : -1;
+      if (!N || a < 0 || b < 0 || lvAt(sh, g.drop) !== li) { pw.unk++; return; }   // 走路格量不到（那一層沒有走路格、放藥箱的位置旁邊 4 點內沒有能走的點、兩點落在不同層）⇒ 判不了，只計數（⛔ 當成不連通 ⇒ 三叉戟號 spar 甲板 22 門誤報）
+      if (!navPath(N, a, b)) { add('warn', '火藥', nm, st.name + ' 跟砲尾放藥箱的位置在走路格上不連通 ⇒ 送藥手照直線穿過艙壁、艙口去送', '取用點跟砲之間留通道，或在船隻配置頁換取用點的位置'); return; }
+      pw.ok++;
+    });
+    R.info.powder = pw.n ? pw.ok + '／' + pw.n + ' 門走得到取用點' + (pw.unk ? '（' + pw.unk + ' 門走路格量不到、照直線走）' : '') + (pw.far ? '；最遠 ' + pw.far.toFixed(1) + ' m（' + pw.farG + '，送一趟來回約 ' + (2 * pw.far / (MONKEY_SP * S) + FILL_T).toFixed(1) + ' 秒）' : '') : '—';
     R.issues.sort(function (a, b) { return (a.lv === 'error' ? 0 : 1) - (b.lv === 'error' ? 0 : 1); });
     done();
   }).catch(function (e) { add('error', '載入', id, String(e && e.message || e), '—'); done(); });
