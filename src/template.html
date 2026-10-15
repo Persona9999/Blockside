@@ -114,6 +114,8 @@
   #fps.on{ display:block; }
   #slowB{ left:50%; bottom:150px; transform:translateX(-50%); font-size:15px; font-weight:700; color:#ffd27a; letter-spacing:2px; text-shadow:0 0 4px #000, 0 0 4px #000; display:none; }   /* 殉爆的慢動作（73_slowmo.js）：放在下方操作列上面（⛔ 上方 ⇒ 殉爆那一刻廣播一次好幾則，疊在一起） */
   #slowB.on{ display:block; }
+  #obsB{ left:14px; bottom:78px; font-size:13px; color:var(--gold); letter-spacing:1px; text-shadow:0 0 4px #000, 0 0 4px #000; white-space:nowrap; display:none; }   /* 沒停格時開著的觀察模式（透視、剖面、甲板；72_floodui.js obsText）：左下、操作列上面（⛔ 正中間 ⇒ 壓到羅盤） */
+  #obsB.on{ display:block; }
   #gfxItems .row{ display:flex; align-items:center; justify-content:center; flex-wrap:wrap; gap:2px; font-size:14px; } #gfxItems label{ width:6em; text-align:right; margin-right:6px; }
   #gfxItems button{ font-size:13px; padding:4px 10px; margin:2px; }
   #phxItems .row{ display:flex; align-items:center; justify-content:center; flex-wrap:wrap; gap:2px; font-size:14px; } #phxItems label{ width:6em; text-align:right; margin-right:6px; }
@@ -227,6 +229,7 @@
   </div><div id="helmR" class="helm"><span class="kb hb" data-k="8" id="ancS" title="右錨（8）"><b>8</b><i class="em">⚓▶</i></span><span class="kb hb" data-k="g" id="autoF" title="自動開砲（G）"><b>G</b><i class="em">🤖💥</i></span><span class="kb hb" data-k="f" id="fireK" title="開一門（F）"><b>F</b><i class="em">💥</i></span><span class="kb hb" data-k=" " id="volleyK" title="齊射（空白鍵）"><b>空白</b><i class="em">💥💥💥</i></span><span class="kb hb" data-k="d" data-hold="1" title="右舵（D，按住）"><b>D</b><i class="em">➡️</i></span></div></div></div>
   <div id="tip" class="hud"></div>
   <div id="slowB" class="hud"></div>
+  <div id="obsB" class="hud"></div>
   <div id="frz" class="hud panel"><span class="fzG"><span class="fz">⏸ 停格中</span><span class="chip" id="frzGo">▶ 繼續（P）</span></span><span class="fzG"><span class="fzL">進水</span><span class="chip" id="frzFlood">📊 圖表（I）</span><span class="chip" id="frzX">🔍 透視（X）</span></span><span class="fzG"><span class="fzL">船</span><span class="chip" id="frzCut">✂ 剖面（Z）</span><span class="chip" id="frzDeck">☰ 甲板（L）</span></span></div>
   <div id="floodp" class="hud panel">
     <div class="hT">進水圖表（停格中）<span class="hX" id="floodX">✕ 關閉</span></div>
@@ -256,7 +259,7 @@
     <div><kbd data-k="c">🎥 C</kbd> 鏡頭：看我艦（開局預設，朝向敵艦）→ 我艦→敵艦 → 自由 → 追砲彈 → 看敵艦　<kbd data-k="v">V</kbd> 鏡頭跟船／固定</div>
     <div><kbd data-k="q">🎯 Q</kbd> 瞄準模式（⚙ 設定裡也有）：自由（點敵艦）→ 水線 → 砲甲板 → 帆具 → 甲板人員 → 彈藥庫（瞄那個模式的中心點）；自動開砲時交給砲長</div>
     <div>彈種：<kbd data-k="1"><span class="ball"></span> 1</kbd> 實心彈：鑽得深，打水線讓船進水　<kbd data-k="2">💣 2</kbd> 爆裂彈：炸開大洞但不深，對砲傷害大　<kbd data-k="3">⛓️ 3</kbd> 鏈彈：橫掃一片，專打桅杆、繩與帆</div>
-    <div><kbd data-k="p">⏸ P</kbd> 停格：停住、照樣轉鏡頭；上方一條可以開 📊 圖表（I，進水）、🔍 透視（X）、✂ 剖面（Z：拿掉靠鏡頭那一半看艙內）、☰ 甲板（L：由上往下一層一層拿掉）—— 按繼續後 🔍 ✂ ☰ 保持（遊戲中照樣看得到），📊 收起</div>
+    <div><kbd data-k="p">⏸ P</kbd> 停格：停住、照樣轉鏡頭；上方一條可以開 📊 圖表（I，進水）、🔍 透視（X）、✂ 剖面（Z：拿掉靠鏡頭那一半看艙內）、☰ 甲板（L：由上往下一層一層拿掉）—— 按繼續後 🔍 ✂ ☰ 保持（遊戲中照樣看得到），📊 收起；X、Z、L 不停格也能直接按（開著的寫在下方）</div>
     <div><kbd data-k="o">⚙ O</kbd> 設定（暫停）：繼續、重新開始、回主選單、自爆（我艦的彈藥庫由小到大一間一間引爆 —— 相當於重開，先看煙花）、說明、瞄準模式、畫質與物理效果、帆繩物理（B）、鏡頭跟船、靜音（M）、FPS、全螢幕、殉爆的慢動作與特寫</div>
     <div><kbd data-k="n">N</kbd> 重新開始（同樣的設定）　<kbd data-k="r">R</kbd> 回選單　<kbd data-k="h">H</kbd> 說明（打開時暫停；點外面、✕ 或 Esc 關掉）</div>
     <div class="hH">船上的人與規則</div>

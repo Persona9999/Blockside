@@ -87,8 +87,8 @@ function doKey(k, repeat) {
   else if (k === 'c') { CAM.mode = CAM_ORDER[(CAM_ORDER.indexOf(CAM.mode) + 1) % CAM_ORDER.length]; CAM.follow = null; CAM.pan = [0, 0]; CAM.see = null; if (CAM.mode === 2 || CAM.mode === 3) { CAM.dist = 75; } else if (CAM.mode === 0) CAM.dist = DIST + 40; else if (CAM.mode === 4) { CAM.dist = 78; CAM.aoff = 0.35; } }
   else if (k === 'p') { PAUSED = !PAUSED; frzShow(); pauseLabel(); }                               // 停格（72_floodui.js：停格時上方一條、進水細節頁）
   else if (k === 'i') { if (PAUSED) floodToggle(); }                 // 停格時：進水圖表／透視（72_floodui.js）
-  else if (k === 'x') xrayToggle();
-  else if (k === 'z') cutToggle();                                    // 停格時：剖面、隱藏甲板（74_cutaway.js）
+  else if (k === 'x') xrayToggle();                                   // 觀察模式：透視（72_floodui.js）、剖面、隱藏甲板（74_cutaway.js）—— 不停格也能切換（Tim 2026-10-16）
+  else if (k === 'z') cutToggle();
   else if (k === 'l') deckCycle();
   else if (k === 'm') { muted = !muted; gsetShow(); }
   else if (k === 'h' || k === '?') helpToggle();

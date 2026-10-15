@@ -1,6 +1,7 @@
-// ───────────────────────── 剖面與隱藏甲板（停格的選項；Tim 2026-10-13） ─────────────────────────
+// ───────────────────────── 剖面與隱藏甲板（觀察模式；Tim 2026-10-13） ─────────────────────────
 // 停格條多兩個：✂ 剖面（Z）＝ 船剖成兩半、拿掉靠鏡頭那一半（鏡頭繞過中線就換邊）；☰ 甲板（L）＝ 由上往下一層一層拿掉，
-//   拿到只剩船底再按 ⇒ 全部回來（Loop）。兩個可以一起開。繼續（P）⇒ 都收起（跟透視一樣）。
+//   拿到只剩船底再按 ⇒ 全部回來（Loop）。兩個可以一起開。繼續（P）⇒ 都保持（跟透視一樣，2026-10-15）；
+//   Z、L 不停格也能按（Tim 2026-10-16）⇒ 廣播一行、開著的寫在下方觀察條（72_floodui.js obsNote／obsText）。
 // 甲板的切高照舷弧逐欄（x）量（deckCut）：船中段兩旁（中線 ±6、±14 格）站得住的高度出現得夠多 ⇒ 一層，再往船頭船尾一欄一欄跟著走（高低差 4 格內）；
 //   拿掉第 k 層 ＝ 那層的地板與底下的樑以上都不畫。最下面那層（船底）不拿。
 // 開著時：陰影關掉（拿掉的甲板不該再擋光：剖面圖要看得清楚）；剖面另外不畫船附近的海面與白沫（跟透視一樣，再往鏡頭那一側多拿 XR_CUT ⇒ 從側面看得到水線下）。
@@ -110,11 +111,12 @@ function cutHides(sh, c) {
   if (CUTV.deck > 0) { var D = deckCut(sh); if (D.n && p[2] >= D.rows[Math.min(CUTV.deck, D.n) - 1][clamp(Math.floor(p[0]), 0, D.W - 1)]) return true; }
   return false;
 }
-function cutToggle() { if (!RUNNING || !PAUSED) return; CUTV.half = !CUTV.half; frzShow(); }
+function cutToggle() { if (!RUNNING) return; CUTV.half = !CUTV.half; obsNote('✂ 剖面：' + (CUTV.half ? '開' : '關')); frzShow(); }
 /** 甲板：全部 → 拿掉最上面一層 → … → 只剩船底 → 全部（照我艦的層數）。 */
 function deckCycle() {
-  if (!RUNNING || !PAUSED || !SHIPS[PLAYER_I]) return;
-  var n = deckCut(SHIPS[PLAYER_I]).n; CUTV.deck = n ? (CUTV.deck + 1) % (n + 1) : 0; frzShow();
+  if (!RUNNING || !SHIPS[PLAYER_I]) return;
+  var n = deckCut(SHIPS[PLAYER_I]).n; CUTV.deck = n ? (CUTV.deck + 1) % (n + 1) : 0;
+  obsNote(CUTV.deck ? deckLabel().replace('（L）', '') : '☰ 甲板：全部回來'); frzShow();
 }
 /** 停格條上「甲板」那顆的字。 */
 function deckLabel() {

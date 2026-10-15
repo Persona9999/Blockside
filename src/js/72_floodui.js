@@ -1,6 +1,7 @@
 // ───────────────────────── 停格與進水細節頁（Tim 2026-10-13） ─────────────────────────
 // P ＝「停格」（以前叫暫停；停住模擬、照樣能轉鏡頭）：上方出現一條「⏸ 停格中　進水：📊 圖表（I）🔍 透視（X）　▶ 繼續（P）」。設定、說明打開時不出現（它們自己會暫停）。
-// 進水細節分兩個開關（Tim 2026-10-13：不然圖表會擋住 3D）——只在停格時打得開；繼續 ⇒ 圖表收起、透視（與剖面、甲板）留著（2026-10-15）：
+// 進水細節分兩個開關（Tim 2026-10-13：不然圖表會擋住 3D）—— 圖表只在停格時打得開；繼續 ⇒ 圖表收起、透視（與剖面、甲板）留著（2026-10-15）；
+//   透視（X）、剖面（Z）、甲板（L）不停格也能切換（Tim 2026-10-16）：沒停格時切換 ⇒ 上方廣播一行「透視：開／關」，開著的那幾個寫在下方的觀察條（#obsB）：
 //   📊 圖表（FLX，I）：數字與剖面的面板，右上 ✕ 也能關；🔍 透視（FLX3，X）：3D 裡的艙內水面與破口隔著船殼看得到，
 //   而且船附近的海面與白沫不畫（Tim 2026-10-13：會影響觀察）⇒ 看得到水線下的船殼與破口。
 //   兩艘各一段：數字（積水、破口（水下幾個）、進出水、抽水、下沉、傾斜、水的重心、粒子與水格）＋ 側視、俯視的剖面（艙內的水、破口、外面的水面、設計水線）。
@@ -14,7 +15,19 @@ function frzShow() {
   if (!on && FLX) floodClose();                                       // 繼續 ⇒ 只收 📊 圖表；🔍 透視、✂ 剖面、☰ 甲板保持（Tim 2026-10-15：「停格中可以切換的觀察模式，是否能在按下繼續後保持（這樣可以在遊戲中維持觀察狀態），除了圖表」）—— 要關 ⇒ 停格再按一次；新開一局 ⇒ obsReset（70_flow.js）
   $('frzFlood').classList.toggle('on', FLX); $('frzX').classList.toggle('on', FLX3);
   $('frzCut').classList.toggle('on', CUTV.half); $('frzDeck').classList.toggle('on', CUTV.deck > 0); $('frzDeck').textContent = deckLabel();
+  var ob = $('obsB'), t = RUNNING && !PAUSED ? obsText() : '';          // 沒停格、觀察模式開著 ⇒ 下方一條提醒（⛔ 停格時停格條已經寫了；設定、說明開著也是停格）
+  if (ob) { ob.classList.toggle('on', !!t); if (t && ob.textContent !== t) ob.textContent = t; }
 }
+/** 開著的觀察模式（透視、剖面、甲板）寫成一行；都沒開 ⇒ ''。 */
+function obsText() {
+  var a = [];
+  if (FLX3) a.push('🔍 透視（X）');
+  if (CUTV.half) a.push('✂ 剖面（Z）');
+  if (CUTV.deck > 0) a.push(deckLabel());
+  return a.join('　');
+}
+/** 沒停格時切換觀察模式 ⇒ 廣播一行（停格時停格條的按鈕就是回饋）。 */
+function obsNote(text) { if (!PAUSED && SHIPS[PLAYER_I]) note(SHIPS[PLAYER_I], text); }
 /** 船型 T 在格座標的 [中心 x, 中線 y, 半長, 半寬]（設計水線那一層；透視時拿掉附近海面用，01_gl.js nearShip）。 */
 function xrBox(T) {
   if (!T.xrB) { var hb = 0; for (var x = T.wl0; x <= T.wl1; x++) hb = Math.max(hb, T.hullHB[T.zw * T.hullTW + x] || 0); T.xrB = [(T.wl0 + T.wl1) / 2, T.cy, (T.wl1 - T.wl0) / 2, hb]; }
@@ -22,7 +35,7 @@ function xrBox(T) {
 }
 /** 新開一局：觀察模式全部收（透視、剖面、隱藏甲板、圖表）。 */
 function obsReset() { if (FLX) floodClose(); FLX3 = false; CUTV.half = false; CUTV.deck = 0; }
-function xrayToggle() { if (!RUNNING || !PAUSED) return; FLX3 = !FLX3; frzShow(); }   // 按了就更新按鈕（⛔ 只靠每一格的 frzShow ⇒ 分頁在背景時按鈕不動）
+function xrayToggle() { if (!RUNNING) return; FLX3 = !FLX3; obsNote('🔍 透視：' + (FLX3 ? '開' : '關')); frzShow(); }   // 按了就更新按鈕（⛔ 只靠每一格的 frzShow ⇒ 分頁在背景時按鈕不動）
 function floodOpen() { if (!RUNNING || !PAUSED) return; FLX = true; $('floodp').classList.add('on'); floodPanel(); frzShow(); }
 function floodClose() { FLX = false; $('floodp').classList.remove('on'); $('frzFlood').classList.remove('on'); }
 function floodToggle() { if (FLX) floodClose(); else floodOpen(); }
