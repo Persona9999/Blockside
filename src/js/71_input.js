@@ -94,7 +94,7 @@ function doKey(k, repeat) {
   else if (k === 'm') { muted = !muted; gsetShow(); }
   else if (k === 'h' || k === '?') helpToggle();
   else if (k === 'r') { gsetClose(); helpClose(); RUNNING = false; END_AT = 0; END_WAIT = null; $('cover').style.display = ''; $('end').className = ''; }
-  else if (k === '4' || k === '5') { if (RUNNING && me && me.anc) anchorWeighAll(me); setSailMode(k === '4' ? 'auto' : 'manual'); }   // 4／5 開船 ⇒ 先起錨（7／8 拋的也一起；Tim 2026-10-15：要可以起錨）
+  else if (k === '4') sailToggle();   // 4 一顆切換 自動 ⇄ 手動（Tim 2026-10-15：「改成單鍵，4 就好，不用 4/5」；手動也可以直接打舵 A／D）；錨在水裡 ⇒ 先起錨（7／8 拋的也一起）
   else if (k === '6' && me && !me.sunk) {                              // 拋錨／起錨同一顆（Tim 2026-10-15；76_anchor.js anchor6）：兩邊都沒拋 ⇒ 雙錨（拋錨模式、每艘）；一邊在水裡 ⇒ 拋另一邊；兩邊都在水裡 ⇒ 起錨
     var a6 = anchor6(me);
     if (a6.act === 'both') setSailMode('off');
@@ -119,6 +119,16 @@ function keyUp(k) { if (k === 'a' || k === 'arrowleft') KEYS.l = false; if (k ==
 function astHold(k) { if (k === 's' || k === 'arrowdown') KEYS.b = SIMT; if (k === 'w' || k === 'arrowup') KEYS.f = SIMT; }
 window.addEventListener('keyup', function (e) { var k = e.key.toLowerCase(); if (e.code === 'Space') k = ' '; kbLit(k, false); keyUp(k); });
 window.addEventListener('blur', function () { KEYS.l = KEYS.r = false; KEYS.f = KEYS.b = null; [].forEach.call(document.querySelectorAll('.kb.down'), function (b) { b.classList.remove('down'); }); });   // 切走視窗 ⇒ 收不到 keyup，按下的顏色一起清掉
+// iPhone 連點兩下放大（Tim 2026-10-15：「連點角落兩下還是會放大，按控帆按鈕太快就觸發」—— 根上的 touch-action:manipulation iOS 不一定照做）：
+// 兩次手指放開相隔 < 350 ms ⇒ 取消第二次的預設動作（＝雙擊縮放）。取消之後瀏覽器不會補 click ⇒ 一般按鈕自己補一個；
+// 按住型（data-hold：舵、帆）走 pointer 事件不受影響；輸入框照舊（要能點兩下選字）；遊戲畫面本來就是 touch-action:none（自己處理手勢、不補 click）。
+var TAP_T = -1e9;
+document.addEventListener('touchend', function (e) {
+  var now = e.timeStamp, dbl = now - TAP_T < 350, t = e.target; TAP_T = now;
+  if (!dbl || e.touches.length || !t || !t.closest || t === cv || t.closest('input, select, textarea')) return;
+  e.preventDefault();
+  if (!t.closest('[data-hold]')) { var c = e.changedTouches[0]; t.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window, clientX: c ? c.clientX : 0, clientY: c ? c.clientY : 0 })); }
+}, { passive: false });
 // 畫面上的按鍵提示（下方控制列 .kb、說明裡的 kbd[data-k]）：點 ＝ 按那個鍵；data-hold 的（打舵）按住才算
 [].forEach.call(document.querySelectorAll('[data-k]'), function (b) {
   var k = b.dataset.k;
@@ -132,7 +142,7 @@ var SAIL_NAMES = { auto: '自動航行', manual: '手動操舵（A／D 打舵）
 function setSailMode(m) {
   SAIL = m; KEYS.l = KEYS.r = false;
   [].forEach.call(document.querySelectorAll('[data-s]'), function (x) { x.classList.toggle('on', x.dataset.s === SAIL); }); sailLabel();
-  if (RUNNING && SHIPS.length) note(SHIPS[PLAYER_I], SAIL_NAMES[m] + '（4 自動／5 手動／6 拋錨、再按一次起錨）');
+  if (RUNNING && SHIPS.length) note(SHIPS[PLAYER_I], SAIL_NAMES[m] + '（4 自動／手動切換、6 拋錨、再按一次起錨）');
 }
 /** 自由鏡頭跟不跟著兩艘的中點走（預設跟；鏡頭「看敵艦／看我艦」本來就跟著那一艘）。 */
 function setCamTrack(on) {
@@ -145,7 +155,8 @@ function setAutoFire(on) {
   AUTOFIRE = on; $('autoF').classList.toggle('on', on); if (SHIPS[PLAYER_I]) SHIPS[PLAYER_I].hand = false;   // 切換 ⇒ 手動瞄準那一舷也收掉
   if (RUNNING && SHIPS.length) note(SHIPS[PLAYER_I], on ? '自動開砲' : '自己開砲（點敵艦瞄準、空白鍵齊射）');
 }
-$('sailT').onclick = function () { if (RUNNING && SHIPS[PLAYER_I] && SHIPS[PLAYER_I].anc) anchorWeighAll(SHIPS[PLAYER_I]); setSailMode(SAIL === 'auto' ? 'manual' : 'auto'); };   // ☸ 一顆切換（Tim 2026-10-15）：自動 ⇄ 手動；拋錨中 ⇒ 起錨、換自動。自動開砲（G）、拋錨（6）是下方的大圓鈕（data-k）
+function sailToggle() { if (RUNNING && SHIPS[PLAYER_I] && SHIPS[PLAYER_I].anc) anchorWeighAll(SHIPS[PLAYER_I]); setSailMode(SAIL === 'auto' ? 'manual' : 'auto'); }   // ☸ 一顆切換（Tim 2026-10-15）：自動 ⇄ 手動；拋錨中 ⇒ 起錨、換自動
+$('sailT').onclick = sailToggle;   // 鍵盤 4 同一顆。自動開砲（G）、拋錨（6）是下方的大圓鈕（data-k）
 /** 🤖☸ 自動操舵那一顆（Tim 2026-10-15：「開啟時常亮（參考自動開砲），不換 Icon」）：圖示固定，自動 ⇒ 亮（on）；手動、拋錨模式 ⇒ 暗。 */
 function sailLabel() { var b = $('sailT'); if (b) b.classList.toggle('on', SAIL === 'auto'); }
 $('camT').onclick = function () { setCamTrack(!CAM.track); };

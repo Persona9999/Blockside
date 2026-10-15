@@ -426,8 +426,8 @@ function navText(sh) {
 }
 /** P 那顆按鈕：停格中寫「繼續」、平常寫「停格」（Tim 2026-10-14）。 */
 function pauseLabel() { var b = $('pauseK'), s = '<b>P</b><i class="em">' + (PAUSED ? '▶' : '⏸') + '</i>'; if (b && b.innerHTML !== s) b.innerHTML = s; }   // 圖示（Tim 2026-10-15）：停格中 ⇒ ▶ 繼續
-/** 彈種那一顆（Tim 2026-10-15：「砲彈改成一個按鈕，切換所有支援的砲彈（顯示當前彈種圖示）」）：⚪ 實心彈（⛔ ⚫ 在深色圓鈕上看不見）、💣 爆裂彈、⛓️ 鏈彈；每一種砲三種都能打。 */
-var AMMO_ICON = ['⚪', '💣', '⛓️'], AMMO_TXT = ['實心彈', '爆裂彈', '鏈彈'];
+/** 彈種那一顆（Tim 2026-10-15：「砲彈改成一個按鈕，切換所有支援的砲彈（顯示當前彈種圖示）」）：鐵球 實心彈（CSS 畫的 .ball：灰色、左上高光、淡白邊；⛔ ⚫ 在深色圓鈕上看不見、⚪ 是白點不像砲彈 —— Tim 2026-10-15「顯示為一顆白色圓點，是否可以替換」）、💣 爆裂彈、⛓️ 鏈彈；每一種砲三種都能打。 */
+var AMMO_ICON = ['<span class="ball"></span>', '💣', '⛓️'], AMMO_TXT = ['實心彈', '爆裂彈', '鏈彈'];
 function ammoLabel() { var b = $('ammoB'); if (!b) return; var s = '<b>' + (AMMO_I + 1) + '</b><i class="em">' + AMMO_ICON[AMMO_I] + '</i>'; if (b.innerHTML !== s) { b.innerHTML = s; b.title = '彈種：' + AMMO_TXT[AMMO_I] + '（點一下換下一種；鍵盤 1 實心彈、2 爆裂彈、3 鏈彈）'; } }
 function hud(dt) {
   stepMsgs(dt);

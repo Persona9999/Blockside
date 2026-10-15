@@ -9,7 +9,7 @@
   html,body{ margin:0; height:100%; background:#0d1218; color:var(--ink); overflow:hidden;
     font-family:"Noto Sans TC","Microsoft JhengHei","PingFang TC",sans-serif;
     -webkit-user-select:none; user-select:none; -webkit-touch-callout:none; }   /* 手機長按不選字、不跳拷貝選單（Tim 2026-10-13）；右鍵／長按選單在 71_input.js 擋 */
-  html{ touch-action:manipulation; }   /* iPhone 點兩下不放大（Tim 2026-10-15）：touch-action 實際生效的是自己與所有祖先的交集 ⇒ 設在根上整頁都關掉雙擊縮放；捲動、雙指縮放照舊，遊戲畫面的 none 照舊 */
+  html{ touch-action:manipulation; }   /* iPhone 點兩下不放大（Tim 2026-10-15）：touch-action 實際生效的是自己與所有祖先的交集 ⇒ 設在根上整頁都關掉雙擊縮放；捲動、雙指縮放照舊，遊戲畫面的 none 照舊；⛔ iOS 不一定照做 ⇒ 71_input.js 另外擋第二下 touchend */
   input, textarea, select{ -webkit-user-select:text; user-select:text; -webkit-touch-callout:default; }   /* 彈種倍率表要能打字 */
   #stage{ position:fixed; inset:0; }
   canvas{ position:absolute; inset:0; width:100%; height:100%; display:block; cursor:crosshair; touch-action:none; }   /* 手機：拖曳 ＝ 轉鏡頭、雙指張合 ＝ 縮放、雙指一起拖 ＝ 平移（⛔ 不關 ⇒ 瀏覽器拿去捲頁面） */
@@ -56,6 +56,7 @@
   #ctlRow{ display:flex; align-items:flex-end; justify-content:center; gap:8px; max-width:100%; }
   .kb.hb{ width:64px; height:64px; margin:0; padding:0; border-radius:50%; display:flex; flex-direction:column; align-items:center; justify-content:center; line-height:1.25; font-size:12px;
     background:rgba(14,18,24,.78); border:1px solid rgba(255,255,255,.32); box-shadow:0 2px 7px rgba(0,0,0,.6); }
+  .ball{ display:inline-block; width:.95em; height:.95em; border-radius:50%; vertical-align:-.12em; background:radial-gradient(circle at 34% 30%, #e4e9ee 0, #8a939d 20%, #3a4048 58%, #15181c 100%); box-shadow:0 0 0 1px rgba(255,255,255,.4); }   /* 實心彈的鐵球（Tim 2026-10-15：白點換掉；CSS 畫 ⇒ 每支手機長一樣） */
   .kb.hb .em{ font-size:17px; line-height:1.1; letter-spacing:-1px; white-space:nowrap; } .kb.hb .em .ico{ width:16px; height:16px; }   /* 圖示（Tim 2026-10-15：舵、帆、錨、開砲、航行都改 emoji；砲用艦隊圓鈕砲數那個符號 sbIcon(3)）*/
   .kb.hb b{ font-size:11px; } .kb.hb i{ font-style:normal; } .kb.hb.on{ color:#111; background:rgba(159,199,255,.92); border-color:#9fc7ff; } .kb.hb.on b{ color:#4a3500; } .kb.hb.dis{ opacity:.45; }   /* 拋錨、左右錨、自動開砲：亮著 ＝ 開（錨在水裡）、灰 ＝ 錨打壞了 */
   #botC{ left:50%; bottom:12px; transform:translateX(-50%); display:flex; flex-direction:column; align-items:center; gap:6px; width:max-content; max-width:calc(100vw - 24px); }   /* ⛔ 不寫 width ⇒ left:50% 的絕對定位只剩半個畫面寬，主面板被兩組大圓鈕擠成一條 */
@@ -133,6 +134,12 @@
   @media (max-height:520px) and (min-width:761px){
     .sb{ width:50px; height:50px; } #fleetL{ max-height:calc(100vh - 170px); } #info{ transform:scale(.8); transform-origin:center top; }
     #botC{ transform:translateX(-50%) scale(.82); transform-origin:center bottom; } .kb.hb{ width:52px; height:52px; } #tip{ display:none; } }
+  /* 中等寬度（761–1100 px，平板、小筆電、手機橫拿）：一整排 15 顆 64 px ＋ 間距 8 ＝ 1072 px 放不下 ⇒ 圓鈕跟著畫面寬縮、間距 4（15 顆（各加 2 px 邊框）＋ 14 個間距 ＋ 左右各 12 ＋ 4 px 餘裕 ＝ 100vw；#keys 裡面也是間距 4）
+     ⛔ 2026-10-15 1024 寬實測：沒有這段 ⇒ ◀⚓ 蓋住 🎥、彈種鈕被 ⚓▶ 蓋住 */
+  @media (min-width:761px) and (max-width:1100px){ .kb.hb{ width:min(64px, calc((100vw - 114px) / 15)); height:min(64px, calc((100vw - 114px) / 15)); } .helm, #ctlRow, #ctl.panel, #keys{ gap:4px; } }
+  /* 手機橫拿（矮）：艦隊圓鈕改橫排、由外往內（Tim 2026-10-15：「不然會跟按鈕重疊」—— 直排往下長，撞到兩側直立的大圓鈕 ⚓▶ ◀⚓）；
+     我方從左邊往右、敵方從右邊往左；太多艘 ⇒ 往下換一排（每側最多三分之一個畫面寬） */
+  @media (orientation:landscape) and (max-height:520px){ .fleet{ flex-direction:row; flex-wrap:wrap; align-content:flex-start; max-height:none; max-width:34vw; } #fleetL{ max-height:none; } #fleetR{ flex-direction:row-reverse; flex-wrap:wrap; align-items:flex-start; } }
   #cover{ position:absolute; inset:0; display:flex; align-items:flex-start; justify-content:center; overflow-y:auto; background:radial-gradient(ellipse at 50% 40%, rgba(20,30,44,.80), rgba(5,8,12,.94)); }
   #cover .card{ max-width:680px; margin:auto; padding:22px 30px; text-align:center; }   /* margin:auto ⇒ 放得下就置中、放不下就從頂端開始捲（⛔ align-items:center 放不下會切掉上半） */
   #cover h1{ margin:0 0 4px; font-size:24px; letter-spacing:2px; }   /* Tim 2026-10-13：標題小一點（30 → 24；手機 24 → 19） */
@@ -209,10 +216,10 @@
   <div id="fleetR" class="hud fleet"></div>
   <div id="topC" class="hud"><div id="fps" class="hud"></div><div id="irow"><div id="info" class="panel"></div><canvas id="gmap"></canvas></div><div id="msg"></div></div>
   <div id="botC" class="hud"><div id="navBox"><div id="modeT"></div><div id="gunsB" class="gend"></div><div id="nav" class="panel"><canvas id="navc"></canvas><div id="navt"></div><div id="gunsL" class="gside"></div><div id="gunsR" class="gside"></div></div><div id="gunsA" class="gend"></div></div>
-  <div id="ctlRow"><div id="helmL" class="helm"><span class="kb hb" data-k="a" data-hold="1" title="左舵（A，按住）"><b>A</b><i class="em">⬅️</i></span><span class="kb hb" data-k="s" data-hold="1" title="收帆（S）"><b>S</b><i class="em">⛵⬇</i></span><span class="kb hb" data-k="w" data-hold="1" title="加帆（W）"><b>W</b><i class="em">⛵⬆</i></span><span class="kb hb" id="sailT" title="自動操舵：亮 ＝ 自動（4）、暗 ＝ 手動（5）—— 點一下切換"><b>4/5</b><i class="em">🤖☸</i></span><span class="kb hb" data-k="7" id="ancP" title="左錨（7）"><b>7</b><i class="em">◀⚓</i></span></div><div id="ctl" class="panel">
+  <div id="ctlRow"><div id="helmL" class="helm"><span class="kb hb" data-k="a" data-hold="1" title="左舵（A，按住）"><b>A</b><i class="em">⬅️</i></span><span class="kb hb" data-k="s" data-hold="1" title="收帆（S）"><b>S</b><i class="em">⛵⬇</i></span><span class="kb hb" data-k="w" data-hold="1" title="加帆（W）"><b>W</b><i class="em">⛵⬆</i></span><span class="kb hb" id="sailT" title="自動操舵（4）：亮 ＝ 自動、暗 ＝ 手動 —— 點一下切換"><b>4</b><i class="em">🤖☸</i></span><span class="kb hb" data-k="7" id="ancP" title="左錨（7）"><b>7</b><i class="em">◀⚓</i></span></div><div id="ctl" class="panel">
     <div id="keys"><span class="kb hb" data-k="c" title="鏡頭（C）"><b>C</b><i class="em">🎥</i></span><span class="kb hb" data-k="p" id="pauseK" title="停格（P）"><b>P</b><i class="em">⏸</i></span><span class="kb hb" id="setB" title="設定（O）"><b>O</b><i class="em">⚙</i></span><span class="kb hb" data-k="6" id="ancAll" title="雙錨（6）：兩邊都沒拋 ⇒ 一起拋；一邊在水裡 ⇒ 拋另一邊；兩邊都在水裡 ⇒ 起錨"><b>6</b><i class="em">⚓⚓</i></span></div>
     <div id="guns"></div>
-    <div id="ammo"><span class="kb hb" id="ammoB" title="彈種：點一下換下一種（鍵盤 1 實心彈、2 爆裂彈、3 鏈彈）"><b>1/2/3</b><i class="em">⚪</i></span></div>
+    <div id="ammo"><span class="kb hb" id="ammoB" title="彈種：點一下換下一種（鍵盤 1 實心彈、2 爆裂彈、3 鏈彈）"><b>1/2/3</b><i class="em"><span class="ball"></span></i></span></div>
   </div><div id="helmR" class="helm"><span class="kb hb" data-k="8" id="ancS" title="右錨（8）"><b>8</b><i class="em">⚓▶</i></span><span class="kb hb" data-k="g" id="autoF" title="自動開砲（G）"><b>G</b><i class="em">🤖💥</i></span><span class="kb hb" data-k="f" id="fireK" title="開一門（F）"><b>F</b><i class="em">💥</i></span><span class="kb hb" data-k=" " id="volleyK" title="齊射（空白鍵）"><b>空白</b><i class="em">💥💥💥</i></span><span class="kb hb" data-k="d" data-hold="1" title="右舵（D，按住）"><b>D</b><i class="em">➡️</i></span></div></div></div>
   <div id="tip" class="hud"></div>
   <div id="slowB" class="hud"></div>
@@ -242,7 +249,7 @@
     <div><kbd>帆</kbd> 預設自動航行：讓對方保持在開火那一舷、繞著彼此轉；航速看帆還剩多少與風向（頂風最慢）</div>
     <div><kbd data-k="g">G</kbd> 自動開砲：電腦替我艦瞄準、開火（觀戰預設開；關掉就自己打）</div>
     <div><kbd data-k="b">B</kbd> 帆與繩的物理：開 ＝ 帆被相對風吹鼓（轉向、頂風會往另一邊鼓），斷掉的繩與帆垂下來擺、帆被打穿的那塊布撕成碎片飄下來；關 ＝ 靜態（下方也點得到）。主選單的「物理效果」分全開／高／中／低，細項在「物理設定…」（帆與繩、碎木、煙與水花、船邊水花）</div>
-    <div><kbd data-k="4">4</kbd> <kbd data-k="5">5</kbd> 航行：自動／手動（錨在水裡 ⇒ 先起錨）　<kbd data-k="6">6</kbd> 拋錨／起錨（雙錨，A／D 繞錨轉；再按一次起錨）　<kbd data-k="7">7</kbd> <kbd data-k="8">8</kbd> 左錨／右錨（帶著速度只拋一側 ⇒ 繞錨急轉；再按一次起錨；錨打壞了就不能拋）（下方也點得到）　<kbd data-k="o">O</kbd> 設定（Esc 也可以）　<kbd data-k="v">V</kbd> 鏡頭跟船／固定</div>
+    <div><kbd data-k="4">4</kbd> 航行：自動 ⇄ 手動切換（錨在水裡 ⇒ 先起錨；A／D 打舵也會換成手動）　<kbd data-k="6">6</kbd> 拋錨／起錨（雙錨，A／D 繞錨轉；再按一次起錨）　<kbd data-k="7">7</kbd> <kbd data-k="8">8</kbd> 左錨／右錨（帶著速度只拋一側 ⇒ 繞錨急轉；再按一次起錨；錨打壞了就不能拋）（下方也點得到）　<kbd data-k="o">O</kbd> 設定（Esc 也可以）　<kbd data-k="v">V</kbd> 鏡頭跟船／固定</div>
     <div><kbd>⚙</kbd> 下方「⚙ 設定」或 <kbd>Esc</kbd>：暫停並打開設定 —— 繼續、重新開始、回主選單、自爆（我艦的彈藥庫由小到大一間一間引爆、船斷開沉下去 —— 相當於重開，先看煙花）、說明（H）、畫質與物理效果的檔位、帆繩物理、鏡頭跟船、靜音、顯示 FPS、全螢幕（手機用；電腦直接按 F11 也行，Esc 退出）、彈藥庫殉爆時的慢動作與特寫鏡頭（各自開關）</div>
     <div><kbd data-k="a" data-hold="1">A</kbd><kbd data-k="d" data-hold="1">D</kbd> 打舵（按住；一碰就換手動）　<kbd data-k="w">W</kbd><kbd data-k="s">S</kbd> 帆裝：全收／收帆／戰鬥帆／滿帆（帆收得越多越慢、越穩；收起來的帆打不壞，除非桅斷了）；有額外動力的船（風暴角號）手動時是油門：<b>按住 W 前進、按住 S 倒車</b>（跟帆分開；沒按住 ⇒ 只靠帆；倒退時舵反過來）</div>
     <div><kbd>羅</kbd> 左下：羅盤跟著鏡頭轉（北 ＝ 參考方向），中間是我艦、藍箭頭是風從哪吹來、紅點是敵艦、金色扇形是兩舷的射界（對得到時亮）</div>
