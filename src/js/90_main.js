@@ -197,7 +197,9 @@ if (DEBUG) window.__game = {
     if (reset) CH_PROF = { ms: 0, steps: 0 };
     return r;
   },
-  prof: function (reset) { var r = { cloth: +PROF.cloth.toFixed(1), rope: +PROF.rope.toFixed(1), shred: +PROF.shred.toFixed(1), buf: +PROF.buf.toFixed(1), perStep: +PHYS_MS.toFixed(3) }; if (reset) PROF = { cloth: 0, rope: 0, shred: 0, buf: 0 }; return r; },
+  /** 帆的碰撞（TASK-0603）只數不推：每艘每面張著的帆，第一輪找到幾個接觸（三角形 × 碰到的船殼格／模型面／繩段）＝ 這一刻還穿著多少；量完把帆放回原樣。 */
+  ccCount: function () { var keep = CC_PASS; CC_PASS = [1, 1]; var out = SHIPS.map(function (sh) { var n = 0, lk = 0, sails = 0; (sh.cl || []).forEach(function (c, k) { if (!c || sh.sails[k].furled || !c.p || c.hidden || c.gone || !c.T.mi) return; var p = Float32Array.from(c.p), q = Float32Array.from(c.q), w = c.contactWarm, cur = c.ccCur; c.ccCur = 0; clothContacts(sh, c); n += c.contactStats ? c.contactStats.first : 0; lk += c.contactStats ? c.contactStats.unsatisfiedPins : 0; sails++; c.p.set(p); c.q.set(q); c.contactWarm = w; c.ccCur = cur; }); return { hull: sh.T.id, sails: sails, contacts: n, locked: lk }; }); CC_PASS = keep; return out; },
+  prof: function (reset) { var r = { cloth: +PROF.cloth.toFixed(1), rope: +PROF.rope.toFixed(1), shred: +PROF.shred.toFixed(1), buf: +PROF.buf.toFixed(1), cc: +PROF.cc.toFixed(1), ccN: PROF.ccN, ccHit: PROF.ccHit, ccQ: PROF.ccQ, ccMax: +PROF.ccMax.toFixed(1), perStep: +PHYS_MS.toFixed(3) }; if (reset) PROF = { cloth: 0, rope: 0, shred: 0, buf: 0, cc: 0, ccN: 0, ccHit: 0, ccQ: 0, ccMax: 0, ccGeo: 0 }; return r; },   // cc／ccN／ccHit：帆的碰撞（TASK-0603）
   /** 帆與繩的讀數：每面帆最鼓的那一點離雕刻作品形狀多遠（格）、還綁著幾個點、垂下來的繩幾條。 */
   cloth: function (i) {
     var sh = SHIPS[i || 0];
@@ -271,9 +273,13 @@ yieldUI().then(function () {                                        // 先讓主
     if (phys && from > 0) setPhys(false);
     // ?dump=1：每半秒記每艘的最大橫傾、開始沉／沉沒／降旗的時間，跑完寫進頁面（#dump；無頭 Chrome --dump-dom 讀，量進水模式用）
     var rec = Q.get('dump') === '1' ? SHIPS.map(function () { return { maxList: 0, maxPre: 0, maxSinkPre: 0, final: null, sunk: null, struck: null }; }) : null, downAt = { blue: null, red: null };
+    var PFB = rec && Q.get('prof') === '1' ? { n: 0, ms: 0, max: 0 } : null;   // ?prof=1：物理那 6 秒每步花多久（step 整個）＋ PROF（帆的碰撞 TASK-0603 量效能用；不加這個參數 ⇒ dump 跟以前一樣）
     var RC = rec && Q.get('ropecheck') === '1' ? SHIPS.map(function (sh) { return { hull: sh.T.id, stat: ropeAuditStatic(sh), seen: {}, float: [] }; }) : null;   // 繩的檢查（ropecheck.py）
     for (var i = 0; i < steps; i++) {
-      if (phys && i === from && from > 0) setPhys(true); step(); if (i % 30 === 29) remesh(Infinity);
+      if (phys && i === from && from > 0) setPhys(true);
+      if (PFB && i === from) PROF = { cloth: 0, rope: 0, shred: 0, buf: 0, cc: 0, ccN: 0, ccHit: 0, ccQ: 0, ccMax: 0, ccGeo: 0 };
+      var tb0 = PFB && i >= from ? performance.now() : 0; step(); if (PFB && i >= from) { var tb1 = performance.now() - tb0; PFB.n++; PFB.ms += tb1; PFB.max = Math.max(PFB.max, tb1); }
+      if (i % 30 === 29) remesh(Infinity);
       if (rec && i % 30 === 29) SHIPS.forEach(function (sh, k) { var r = rec[k]; r.maxList = Math.max(r.maxList, Math.abs(sh.rollA)); if (!sh.sinkingFinal) { r.maxPre = Math.max(r.maxPre, Math.abs(sh.rollA)); r.maxSinkPre = Math.max(r.maxSinkPre, sh.sink); r.maxPctPre = Math.max(r.maxPctPre || 0, floodPct(sh)); } if (sh.sinkingFinal && r.final === null) r.final = +SIMT.toFixed(1); if (sh.sunk && r.sunk === null) r.sunk = +SIMT.toFixed(1); if (sh.struck && r.struck === null) r.struck = +SIMT.toFixed(1); });
       if (rec && i % 30 === 29) SHIPS.forEach(function (sh, k) { var r = rec[k]; if (!isOut(sh)) { r.modeT = r.modeT || {}; r.modeT[sh.aimMode || '-'] = (r.modeT[sh.aimMode || '-'] || 0) + 0.5; } });
       // 每 10 秒一筆：[秒, 帆 sailFrac, 倒桅, 打中幾發, 航速, 砲剩幾成, 人剩幾成, 離最近還在打的敵艦 m]（沙盒照這個校準）
@@ -287,6 +293,7 @@ yieldUI().then(function () {                                        // 先讓主
     if (RC) { var pre2 = document.createElement('pre'); pre2.id = 'ropecheck'; document.body.appendChild(pre2); pre2.textContent = JSON.stringify(RC.map(function (c) { return { hull: c.hull, stat: c.stat, float: c.float }; })); }
     if (rec) { var pre = document.createElement('pre'); pre.id = 'dump'; document.body.appendChild(pre);
       var CV = cmdView('blue').ships, pow = { blue: 0, red: 0 }; CV.forEach(function (v) { if (!v.out) pow[v.team] += cmdStrength(v); });
+      if (PFB) { var pre3 = document.createElement('pre'); pre3.id = 'prof'; document.body.appendChild(pre3); pre3.textContent = JSON.stringify({ steps: PFB.n, msStep: +(PFB.ms / Math.max(1, PFB.n)).toFixed(3), maxStep: +PFB.max.toFixed(2), cloth: +PROF.cloth.toFixed(1), cc: +PROF.cc.toFixed(1), ccN: PROF.ccN, ccHit: PROF.ccHit, ccQ: PROF.ccQ, ccMax: +PROF.ccMax.toFixed(2), ccGeo: +PROF.ccGeo.toFixed(1) }); }
       pre.textContent = JSON.stringify({ seed: SEED, t: +SIMT.toFixed(1), flood: FLOOD_LV, wind: { rot: +(WIND_ROT * 57.2958).toFixed(1), s0: +WIND_S0.toFixed(3) }, cmd: CMD_SIDE, down: downAt, pow: { blue: +pow.blue.toFixed(3), red: +pow.red.toFixed(3) }, ships: SHIPS.map(function (sh, k) { var r = rec[k];
         return Object.assign({ team: sh.team, str: CV[k].out ? 0 : +cmdStrength(CV[k]).toFixed(3), maxListDeg: +(r.maxList * 57.3).toFixed(1), maxPreDeg: +(r.maxPre * 57.3).toFixed(1), maxSinkPre: +r.maxSinkPre.toFixed(2), maxPctPre: Math.round((r.maxPctPre || 0) * 100), final: r.final, sunk: r.sunk, struck: r.struck, fate: sh.fate, lost: sh.lost, hits: sh.hits, dead: sh.dead, cart: sh.cartN || 0, magGone: sh.mags.filter(function (m) { return m.gone; }).length, mastsDown: sh.masts.filter(function (m) { return !m.up; }).length, sink: +sh.sink.toFixed(2), water: sh.fl ? Math.round(sh.fl.vol * RHO_W) : null, area: sh.fl ? +sh.fl.area.toFixed(1) : null, inflow: sh.inflow, sail: +sh.sailFrac.toFixed(3), fired: sh.fired, fireDn: sh.fireDn || 0, fireUp: sh.fireUp || 0, hitDn: sh.hitDn || 0, hitUp: sh.hitUp || 0, modeT: r.modeT || {}, tl: r.tl || [] }, sh.med ? { med: { carried: sh.med.carried, healed: sh.med.healed, out: sh.med.out } } : {},
           Q.get('cas') === '1' ? { cas: { wounds: sh.wounds, dead: sh.dead, gunCrewHit: sh.gunCrewHit || 0, causes: sh.causes } } : {}); }) }); }   // med：有醫療艙才有；cas：?cas=1 才有（傷亡與原因，量 TASK-0568 砲班受傷）—— 都沒有 ⇒ 跟以前逐字相同

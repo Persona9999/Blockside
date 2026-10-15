@@ -11,7 +11,7 @@ var GUST = [0.24, 0.12, 0.06], FLUTTER = 0.35, SLACK = 1.02;   // 陣風三個�
 var KW = 0.05;                // 風壓：加速度（格/秒²）＝ KW ×（相對風在法線上的分量）²
 var KD = 0.3, DAMP = 0.985;   // 繩的空氣阻力（1/秒）、每一步的速度保留
 var SEG = 6;                  // 布與繩的迭代次數、帆幾步走一次、垂繩上限照物理分級（09_phx.js rigLv：高 ＝ 4 次、隔一步（30 Hz）、500 條）
-var CACC = null, CCNT = null, PHYS_MS = 0, PROF = { cloth: 0, rope: 0, shred: 0, buf: 0 };
+var CACC = null, CCNT = null, PHYS_MS = 0, PROF = { cloth: 0, rope: 0, shred: 0, buf: 0, cc: 0, ccN: 0, ccHit: 0, ccQ: 0, ccMax: 0, ccGeo: 0 };   // cc：帆的碰撞花的 ms、ccN 跑了幾次、ccHit 每次第一輪找到的接觸（＝ 那一刻還穿著的；clothContacts）、ccQ 排了幾面（解不完的下一步再排）
 // 帆桁追風（物理開著才轉）：方帆桁讓帆的法線落在「相對風吹去的方向」與船頭的角平分線上，最多轉離正橫 40°（再多就頂到支索與 shroud）；
 //   gaff／boom（後桅縱帆）往下風擺，帆面跟船身的夾角 ＝ (180° − 相對風角)／2，8°–80°；頂風 ±25° 內不換邊（遲滯）。每秒最多轉 8°。
 //   帆的綁點、帆腳與綁在帆桁上的繩跟著轉（繩照弧長在兩端之間內插：一端綁甲板的 brace 就只有帆桁那一頭轉）。
@@ -165,7 +165,13 @@ function clothTemplate(H, s) {                         // H：船型（帆的布
   });
   var pins = 0; for (i = 0; i < n; i++) if (hk[i]) pins++;
   // 物理在粗格上算（規則格 ⇒ 隔一點取一點：25×25 → 13×13，約束少 4 倍）；畫的時候細格照權重從粗格內插回來
-  var cg = coarseOf(n, T), sim = meshCons(cg.idx.map(P), cg.tris);
+  var cg = coarseOf(n, T);
+  // Contact geometry must retain the authored fine surface at initialization.
+  // Coarsening moved interpolated vertices through thin masts before any wind.
+  cg = { idx: Array.from({ length: n }, function (_, i) { return i; }), tris: T,
+    mi: new Uint16Array(n * 4), mw: new Float32Array(n * 4), kind: 'contact-fine' };
+  for (i = 0; i < n; i++) { cg.mi[i * 4] = i; cg.mw[i * 4] = 1; }
+  var sim = meshCons(cg.idx.map(P), cg.tris);
   sim.fine = cg.idx; sim.hk = new Int8Array(cg.idx.length); sim.hv = new Int32Array(cg.idx.length);
   cg.idx.forEach(function (f, ci) { sim.hk[ci] = hk[f]; sim.hv[ci] = hv[f]; });
   // 跟著哪根帆桁轉：綁邊上的點 ＝ 這面帆的帆桁（meta sail）裡離這一點最近的那根（線段：方帆桁 arm-P–arm-S、gaff／boom pivot–end）；
@@ -309,6 +315,8 @@ function clothSetup(H, C) {                            // 船型 H 的布模板�
 }
 /** 張開的帆從雕刻作品那一刻的形狀開始（開局、收帆後再張、物理剛打開）。 */
 function clothInit(c) {
+  c.contactWarm = false;
+  c.contactSides = Object.create(null);
   var T = c.T.sim; c.p = Float32Array.from(T.p0); c.q = Float32Array.from(T.p0);
   c.pin = new Uint8Array(T.n); for (var i = 0; i < T.n; i++) c.pin[i] = T.hk[i] ? 1 : 0;
   c.brk = new Uint8Array(T.ea.length); c.bbrk = new Uint8Array(T.ba.length); c.tv = new Uint8Array(c.T.n); c.torn = false; c.loose = false; c.free = 0; c.gone = false; c.npin = -1;
@@ -448,6 +456,7 @@ function physStep(sh) {
   var W = norm(WIND), ws = WIND_SAIL * WIND_K * (1 + GUST[0] * Math.sin(SIMT * 0.9 + sh.phase) + GUST[1] * Math.sin(SIMT * 2.7 + 1.3) + GUST[2] * Math.sin(SIMT * 6.1 + sh.phase * 2)) * WX.wind * WIND_SPD;   // 陣風（不用亂數）；天氣：暴風雨 ×2.2；風速會變（08_weather.js）
   var wl = M4.dir(sh.inv, W[0] * ws - sh.vel[0], W[1] * ws - sh.vel[1], W[2] * ws - sh.vel[2]), gv = M4.dir(sh.inv, 0, -G, 0);
   var si = Math.round(SIMT / DT), chk = si % 6 === 0, i, ev = rigLv().every, m = sh.rigM = rigFarM(sh), evk = ev * Math.max(1, Math.min(m, Math.floor(RIG_FAR_HC / (ev * DT) + 1e-6)));   // evk：布幾步走一次（遠方放大）
+  var ccOn = PHX.sailhit > 0 && PHX.rig >= 3;                       // 帆的碰撞（09_phx.js；Tim 2026-10-15：選項、預設關、帆與繩「高」才算）
   if (sh.yards.length) { braceYards(sh, wl, DT); if (chk) yardRopes(sh); }
   if (sh.hangs) swingHangs(sh, gv);
   for (i = 0; i < sh.ropes.length; i++) { var r = sh.ropes[i]; if (r.dead && !r.lz) { r.lz = true; if (!r.moved) spawnLoose(sh, r); } }
@@ -465,6 +474,7 @@ function physStep(sh) {
     yardPins(sh, c);
     c.ev = evk;
     if ((si + k + sh.i + 1) % evk === 0) { var t0 = DEBUG ? performance.now() : 0; clothStep(sh, c, wl, gv); if (DEBUG) PROF.cloth += performance.now() - t0; }
+    if (ccOn && (si + k + sh.i + 1) % evk === 0 && c.p && !c.hidden && !c.gone) CC_Q.push({ sh: sh, c: c });   // 帆的碰撞（TASK-0603）：開了才排、跟布同一步；這一步全部的船走完才照時間預算解（clothContactsRun，50_sim.js）
     if (chk && c.loose && !c.npin) { c.free += 0.1; if (c.free > 12 || underWater(sh, c.p, 0) && underWater(sh, c.p, c.T.sim.n >> 1)) c.gone = true; }
   });
   for (i = 0; i < sh.loose.length; i++) {
@@ -492,5 +502,310 @@ function setPhys(on) {
     sh.rigDirty = true;
   });
   if (RUNNING && SHIPS.length) note(SHIPS[PLAYER_I], on ? '帆與繩的物理：開（帆被風吹鼓、斷掉的會垂下來）' : '帆與繩的物理：關（靜態）');
+}
+
+// TASK-0603: contacts are solved on the rendered fine triangles. Their barycentric
+// corrections are transferred to the coarse degrees of freedom, excluding pins.
+// These caches contain geometry only; destroyed body cells/models are checked live.
+var CLOTH_CONTACT_MARGIN = 0.12;
+// 效能（ame 2026-10-15，Tim：「接手效能，在她的碰撞做法上加篩選和降頻」；碰撞的做法本身照 Sirius 的）：
+//   · 開關：物理設定「帆的碰撞」（09_phx.js），預設關、帆與繩「高」才算；關 ⇒ 一行都不跑。
+//   · 排隊＋時間預算：布走的那一步才排（physStep），全部的船走完再解；最久沒解的先解。平均每步最多花 CC_MS 毫秒：
+//     一面帆解一次常常就超過（4–6 ms）⇒ 超出的記成欠的（CC_DEBT），之後幾步先還、不解 ⇒ 不會再一步幾百毫秒，也不會每步都多一面帆的時間。
+//   · 整面篩：帆的外框碰不到船殼格、模型、繩 ⇒ 整面跳過；模型的矩陣與外框每艘每步算一次（ccModels），不是每面帆各算一次。
+//   · 繩：線段清單照 pts 那一份陣列建一次（帆桁轉了 pts 會換新陣列 ⇒ 重建；⛔ 以前每次都建一棵排序的樹）。
+//   · 輪數：第一次 CC_PASS[0]、之後每次 CC_PASS[1]（Sirius 原本 48／12；?ccpass=48,12 量正確性用）。
+var CC_Q = [], CC_MS = +(Q.get('ccms') || 1.5), CC_DEBT = 0, CC_WALK = 12, CC_REGION = 30;   // CC_WALK：船殼格往外找出口最多走幾格（1.2 m；帆只會穿進去幾格）
+/** 這一步排到的帆，照最久沒解的先解，花到 CC_MS 毫秒為止（至少一面）。50_sim.js：全部的船 physStep 之後。 */
+function clothContactsRun() {
+  if (!CC_Q.length) return;
+  CC_DEBT = Math.max(0, CC_DEBT - CC_MS);
+  if (CC_DEBT > 0) { if (DEBUG) PROF.ccQ += CC_Q.length; CC_Q.length = 0; return; }   // 還在還之前超出的時間
+  CC_Q.forEach(function (q) { if (!q.sh.T.ccGeometry) { var tg = performance.now(); ccGeometry(q.sh); if (DEBUG) PROF.ccGeo += performance.now() - tg; } });   // 第一次才建（不算進時間預算）
+  var si = Math.round(SIMT / DT), t0 = performance.now(), n = 0;
+  CC_Q.sort(function (a, b) { return (a.c.ccLast === undefined ? -1 : a.c.ccLast) - (b.c.ccLast === undefined ? -1 : b.c.ccLast); });
+  for (var i = 0; i < CC_Q.length && performance.now() - t0 < CC_MS; i++) {
+    var q = CC_Q[i], t1 = DEBUG ? performance.now() : 0; clothContacts(q.sh, q.c, t0 + CC_MS); q.c.ccLast = si; n++;   // 輪流：解過（或切到一半）的排到後面；切到一半的下次從 c.ccCur 接著做（⛔ 不排到後面 ⇒ 同一面一直佔著，另一艘的帆輪不到）
+    if (DEBUG) PROF.ccMax = Math.max(PROF.ccMax, performance.now() - t1);
+    if (DEBUG) { PROF.ccN++; PROF.ccHit += q.c.contactStats ? q.c.contactStats.first : 0; }
+  }
+  var used = performance.now() - t0; CC_DEBT += Math.max(0, used - CC_MS);
+  if (DEBUG) { PROF.cc += used; PROF.ccQ += CC_Q.length; }
+  CC_Q.length = 0;
+}
+/** 這艘船每個還在的模型：矩陣、反矩陣、世界外框（每步算一次，幾面帆共用）。 */
+function ccModels(sh, geo) {
+  var si = Math.round(SIMT / DT); if (sh.ccMB && sh.ccMB.si === si) return sh.ccMB.list;
+  var list = [];
+  (sh.models || []).forEach(function (m) {
+    if (!m.alive || !geo.mb[m.mesh]) return;
+    var matrix = modelLocal(m), b = geo.mb[m.mesh], corners = [];
+    for (var k = 0; k < 8; k++) corners.push(M4.pt(matrix, b[k & 1 ? 3 : 0], b[k & 2 ? 4 : 1], b[k & 4 ? 5 : 2]));
+    list.push({ m: m, matrix: matrix, inverse: null, box: ccBox(corners) });   // 反矩陣碰得到才算（下面）
+  });
+  sh.ccMB = { si: si, list: list }; return list;
+}
+var CC_PASS = (Q.get('ccpass') || '6,1').split(',').map(Number);   // 第一次（剛張開）幾輪、之後每次幾輪；?ccpass=48,12 ＝ Sirius 原本的（量正確性用）
+function ccBox(points) {
+  var b = [Infinity, Infinity, Infinity, -Infinity, -Infinity, -Infinity];
+  points.forEach(function (p) { for (var a = 0; a < 3; a++) { b[a] = Math.min(b[a], p[a]); b[a + 3] = Math.max(b[a + 3], p[a]); } }); return b;
+}
+function ccOverlap(a, b, r) { for (var k = 0; k < 3; k++) if (a[k] > b[k + 3] + r || a[k + 3] < b[k] - r) return false; return true; }
+function ccTree(items) {
+  if (!items.length) return null;
+  var b = [Infinity, Infinity, Infinity, -Infinity, -Infinity, -Infinity];
+  items.forEach(function (o) { for (var a = 0; a < 3; a++) { b[a] = Math.min(b[a], o.b[a]); b[a + 3] = Math.max(b[a + 3], o.b[a + 3]); } });
+  if (items.length <= 8) return { b: b, items: items };
+  var axis = 0; for (var a = 1; a < 3; a++) if (b[a + 3] - b[a] > b[axis + 3] - b[axis]) axis = a;
+  items.sort(function (x, y) { return x.b[axis] + x.b[axis + 3] - y.b[axis] - y.b[axis + 3]; });
+  var mid = items.length >> 1; return { b: b, l: ccTree(items.slice(0, mid)), r: ccTree(items.slice(mid)) };
+}
+function ccQuery(tree, b, radius, out) {
+  if (!tree || !ccOverlap(tree.b, b, radius)) return;
+  if (tree.items) tree.items.forEach(function (o) { if (ccOverlap(o.b, b, radius)) out.push(o); });
+  else { ccQuery(tree.l, b, radius, out); ccQuery(tree.r, b, radius, out); }
+}
+function ccGeometry(sh) {
+  // ame：只收帆附近的船殼格（全部的帆在雕刻那一刻的外框、外擴 CC_REGION 格）；模型的三角形樹用到才建（ccMesh）。
+  //   ⛔ 以前一開始就走完整艘的格（約 140 萬）、替 180 個模型每個建一棵排序的樹 ⇒ 第一次 2.5 秒。
+  var H = sh.T; if (H.ccGeometry) return H.ccGeometry;
+  var R = [Infinity, Infinity, Infinity, -Infinity, -Infinity, -Infinity];
+  (H.cloth || []).forEach(function (t) { for (var i = 0; i < t.n; i++) for (var a = 0; a < 3; a++) { var w = t.p0[i * 3 + a]; if (w < R[a]) R[a] = w; if (w > R[a + 3]) R[a + 3] = w; } });
+  for (var a = 0; a < 3; a++) { R[a] -= CC_REGION; R[a + 3] += CC_REGION; }
+  var rows = new Map(), boxes = [];
+  H.base.each(function (x, y, z) { if (x < R[0] || x > R[3] || y < R[1] || y > R[4] || z < R[2] || z > R[5]) return; var key = x + H.base.sx * z, row = rows.get(key); if (!row) rows.set(key, row = { x: x, z: z, ys: [] }); row.ys.push(y); });
+  rows.forEach(function (row) {
+    row.ys.sort(function (a, b) { return a - b; }); var start = row.ys[0], end = start;
+    for (var j = 1; j <= row.ys.length; j++) { var y = row.ys[j]; if (y !== end + 1) { boxes.push({ b: [row.x, start, row.z, row.x + 1, end + 1, row.z + 1] }); start = y; } end = y; }
+  });
+  var mb = (H.rig.meshes || []).map(function (m) {           // 每個模型網格的外框（便宜；篩用）
+    if (!m.tris || !m.tris.length) return null;
+    var b = [Infinity, Infinity, Infinity, -Infinity, -Infinity, -Infinity];
+    for (var i = 0; i < m.verts.length; i += 3) for (var a2 = 0; a2 < 3; a2++) { var w = m.verts[i + a2]; if (w < b[a2]) b[a2] = w; if (w > b[a2 + 3]) b[a2 + 3] = w; }
+    return b;
+  });
+  return H.ccGeometry = { body: ccTree(boxes), mb: mb, meshes: [], H: H };
+}
+/** 第 k 個模型網格的三角形樹（用到才建、建了留著）。 */
+function ccMesh(geo, k) {
+  var t = geo.meshes[k]; if (t !== undefined) return t;
+  var m = geo.H.rig.meshes[k], ts = [], volume = 0;
+  for (var i = 0; i < m.tris.length; i += 3) { var p = []; for (var j = 0; j < 3; j++) { var v = m.tris[i + j] * 3; p.push([m.verts[v], m.verts[v + 1], m.verts[v + 2]]); } volume += dot(p[0], cross(p[1], p[2])); ts.push({ p: p, b: ccBox(p), id: i / 3 }); }
+  t = ccTree(ts); if (t) t.orientation = volume < 0 ? -1 : 1;
+  return (geo.meshes[k] = t);
+}
+function ccBary(p, v) {
+  var a = sub(v[1], v[0]), b = sub(v[2], v[0]), q = sub(p, v[0]), aa = dot(a, a), ab = dot(a, b), bb = dot(b, b), den = aa * bb - ab * ab;
+  if (Math.abs(den) < 1e-14) return [1 / 3, 1 / 3, 1 / 3];
+  var y = (bb * dot(q, a) - ab * dot(q, b)) / den, z = (aa * dot(q, b) - ab * dot(q, a)) / den; return [1 - y - z, y, z];
+}
+function ccClosest(p, v) {
+  var n = norm(cross(sub(v[1], v[0]), sub(v[2], v[0]))), q = sub(p, mul(n, dot(sub(p, v[0]), n))), w = ccBary(q, v);
+  if (w.every(function (x) { return x >= 0; })) return { p: q, w: w };
+  var best = null;
+  for (var i = 0; i < 3; i++) { var j = (i + 1) % 3, d = sub(v[j], v[i]), t = clamp(dot(sub(p, v[i]), d) / (dot(d, d) || 1), 0, 1), x = add(v[i], mul(d, t)), dd = dot(sub(x, p), sub(x, p)); if (!best || dd < best.d) { var b = [0, 0, 0]; b[i] = 1 - t; b[j] = t; best = { p: x, w: b, d: dd }; } } return best;
+}
+function ccSegmentTri(a, b, v) {
+  var d = sub(b, a), e = sub(v[1], v[0]), f = sub(v[2], v[0]), h = cross(d, f), det = dot(e, h); if (Math.abs(det) < 1e-10) return null;
+  var s = sub(a, v[0]), u = dot(s, h) / det, q = cross(s, e), w = dot(d, q) / det, t = dot(f, q) / det;
+  if (u < -1e-8 || w < -1e-8 || u + w > 1 + 1e-8 || t < 0 || t > 1) return null;
+  return { p: add(a, mul(d, t)), w: [1 - u - w, u, w], t: t };
+}
+function ccTriangleBox(v, b) {
+  var c = [(b[0] + b[3]) / 2, (b[1] + b[4]) / 2, (b[2] + b[5]) / 2], e = [(b[3] - b[0]) / 2, (b[4] - b[1]) / 2, (b[5] - b[2]) / 2], axes = [[1, 0, 0], [0, 1, 0], [0, 0, 1]], edges = [sub(v[1], v[0]), sub(v[2], v[1]), sub(v[0], v[2])];
+  axes.push(cross(edges[0], edges[1])); edges.forEach(function (d) { for (var a = 0; a < 3; a++) axes.push(cross(d, axes[a])); });
+  var best = Infinity, normal = null;
+  for (var i = 0; i < axes.length; i++) {
+    var length = len(axes[i]); if (length < 1e-10) continue; var n = mul(axes[i], 1 / length), p = v.map(function (x) { return dot(sub(x, c), n); }), lo = Math.min.apply(null, p), hi = Math.max.apply(null, p), r = e[0] * Math.abs(n[0]) + e[1] * Math.abs(n[1]) + e[2] * Math.abs(n[2]);
+    if (lo > r || hi < -r) return null;
+    var plus = r - lo, minus = hi + r, depth = Math.min(plus, minus); if (depth < best) { best = depth; normal = mul(n, plus < minus ? 1 : -1); }
+  }
+  var q = ccClosest(c, v); return { w: q.w, p: q.p, delta: mul(normal, best + CLOTH_CONTACT_MARGIN) };
+}
+function ccInside(p, tree) {
+  if (!tree || p.some(function (x, a) { return x <= tree.b[a] || x >= tree.b[a + 3]; })) return false;
+  var end = [tree.b[3] + 1, p[1] + .000013, p[2] + .000027], faces = [], hits = [];
+  ccQuery(tree, ccBox([p, end]), 0, faces);
+  faces.forEach(function (f) { var h = ccSegmentTri(p, end, f.p); if (h && h.t > 1e-7) hits.push(h.t); });
+  hits.sort(function (a, b) { return a - b; }); return hits.filter(function (t, i) { return !i || Math.abs(t - hits[i - 1]) > 1e-7; }).length % 2 === 1;
+}
+function ccNearest(p, tree) {
+  var best = null;
+  function visit(t) {
+    if (!t) return; var d = 0; for (var a = 0; a < 3; a++) d += Math.pow(Math.max(t.b[a] - p[a], 0, p[a] - t.b[a + 3]), 2);
+    if (best && d > best.d) return;
+    if (t.items) t.items.forEach(function (f) { var q = ccClosest(p, f.p), ds = dot(sub(q.p, p), sub(q.p, p)); if (!best || ds < best.d) best = { p: q.p, d: ds, face: f }; });
+    else { visit(t.l); visit(t.r); }
+  }
+  visit(tree); return best;
+}
+function ccMove(c, ids, weights, delta, mount) {
+  var T = c.T, mass = new Map(), denom = 0;
+  for (var j = 0; j < 3; j++) for (var k = 0; k < 4; k++) { var at = ids[j] * 4 + k, w = T.mw[at] * weights[j], node = T.mi[at]; if (!w || c.pin[node]) continue; mass.set(node, (mass.get(node) || 0) + w); }
+  mass.forEach(function (w) { denom += w * w; }); if (denom < 1e-12) return false;
+  var magnitude = len(delta), maxWeight = 0; mass.forEach(function (w) { maxWeight = Math.max(maxWeight, w); });
+  var scale = Math.min(1, (c.contactWarm ? 1 : 4) * denom / ((magnitude || 1) * maxWeight));
+  var moved = false;
+  mass.forEach(function (w, node) { for (var a = 0; a < 3; a++) { var at = node * 3 + a, old = c.p[at], d = delta[a] * scale * w / denom;
+    if (Math.abs(d) < 1e-5) continue; c.p[at] += d; var actual = c.p[at] - old;
+    if (actual) { c.q[at] += actual; moved = true; }
+  } }); return moved;
+}
+function ccSeparate(c, ids, v, normal, limit, mount) {
+  var moved = false;
+  for (var j = 0; j < 3; j++) {
+    var depth = limit - dot(v[j], normal); if (depth <= 1e-4) continue;
+    var w = [0, 0, 0]; w[j] = 1;
+    if (ccMove(c, ids, w, mul(normal, depth), mount !== false)) moved = true;
+  }
+  return moved;
+}
+function ccBodyPlane(grid, v, cell) {
+  var best = null;
+  for (var axis = 0; axis < 3; axis++) for (var sign = -1; sign <= 1; sign += 2) {
+    var q = cell.slice(), steps = 0;
+    while (grid.get(q[0], q[1], q[2]) && steps++ < CC_WALK) q[axis] += sign;   // 往這個方向走到空格（ame：256 ⇒ CC_WALK；帆穿進桅杆沿桅的方向一走就是 256 格 × 每格每個三角形每一輪 ⇒ 一面帆一次 12.7 秒）
+    if (steps >= CC_WALK) continue;
+    var normal = [0, 0, 0]; normal[axis] = sign;
+    var limit = (q[axis] + (sign < 0 ? 1 : 0)) * sign + CLOTH_CONTACT_MARGIN;
+    var depth = limit - Math.min.apply(null, v.map(function (p) { return dot(p, normal); }));
+    if (!best || depth < best.depth) best = { normal: normal, limit: limit, depth: depth };
+  }
+  return best;
+}
+function ccOnSegment(p, a, b) {
+  var d = sub(b, a), t = clamp(dot(sub(p, a), d) / (dot(d, d) || 1), 0, 1); return add(a, mul(d, t));
+}
+function ccPair(a, b, c, d) {
+  var u = sub(b, a), v = sub(d, c), w = sub(a, c), aa = dot(u, u), bb = dot(u, v), cc = dot(v, v), dd = dot(u, w), ee = dot(v, w), den = aa * cc - bb * bb;
+  var s = den > 1e-12 ? clamp((bb * ee - cc * dd) / den, 0, 1) : 0;
+  var t = cc > 1e-12 ? (bb * s + ee) / cc : 0;
+  if (t < 0) { t = 0; s = clamp(-dd / (aa || 1), 0, 1); }
+  else if (t > 1) { t = 1; s = clamp((bb - dd) / (aa || 1), 0, 1); }
+  var p = add(a, mul(u, s)), q = add(c, mul(v, t)); return { p: p, q: q, d: len(sub(p, q)) };
+}
+function ccCapsule(a, b, v) {
+  var crossHit = ccSegmentTri(a, b, v); if (crossHit) return { d: 0, p: crossHit.p, q: crossHit.p };
+  var best = null;
+  function take(p, q) { var d = len(sub(p, q)); if (!best || d < best.d) best = { d: d, p: p, q: q }; }
+  take(ccClosest(a, v).p, a); take(ccClosest(b, v).p, b);
+  for (var j = 0; j < 3; j++) { var pair = ccPair(v[j], v[(j + 1) % 3], a, b); take(pair.p, pair.q); }
+  return best;
+}
+function ccClip(poly, axis, bound, sign) {
+  var out = [];
+  for (var i = 0; i < poly.length; i++) {
+    var a = poly[i], b = poly[(i + 1) % poly.length], da = (a[axis] - bound) * sign, db = (b[axis] - bound) * sign;
+    if (da >= 0) out.push(a);
+    if ((da >= 0) !== (db >= 0)) out.push(add(a, mul(sub(b, a), da / (da - db))));
+  }
+  return out;
+}
+function ccRopeMount(c, ids, v, record, a, b) {
+  var T = c.T, r = record.r, radius = record.radius, extent = 2 * radius + CLOTH_CONTACT_MARGIN;
+  for (var j = 0; j < 3; j++) {
+    var id = ids[j], own = T.hk[id] === 2 && T.hv[id] === record.index;
+    if (!own && (!sailRope(r, T.name) || Math.min(len(sub(v[j], a)), len(sub(v[j], b))) > extent)) continue;
+    if (!c.pin[id]) continue;
+    var contained = true;
+    for (var axis = 0; axis < 3 && contained; axis++) for (var sign = -1; sign <= 1 && contained; sign += 2) {
+      var poly = ccClip(v, axis, v[j][axis] + sign * extent, sign);
+      for (var k = 1; k + 1 < poly.length; k++) if (ccCapsule(a, b, [poly[0], poly[k], poly[k + 1]]).d < radius - 1e-5) { contained = false; break; }
+    }
+    if (contained) return true;
+  }
+  return false;
+}
+function ccAttachment(c, ids, hit, owner, v) {
+  // Only the actual fixed edge may enter its own mounting solid. A neighbouring
+  // free triangle is not exempt merely because one of its vertices is pinned.
+  var T = c.T, closest = Infinity;
+  for (var j = 0; j < 3; j++) { var k = (j + 1) % 3, a = ids[j], b = ids[k]; if (!T.hk[a] || !T.hk[b]) continue;
+    var owns = owner < 0 ? T.hk[a] === 1 || T.hk[b] === 1 : T.hk[a] === 4 && T.hv[a] === owner && T.hk[b] === 4 && T.hv[b] === owner;
+    if (!owns) continue;
+    closest = Math.min(closest, Math.sqrt(segDist2(hit.p, v[j][0], v[j][1], v[j][2], v[k][0], v[k][1], v[k][2])));
+  }
+  return closest <= 0.8;
+}
+function clothContacts(sh, c, deadline) {   // deadline：performance.now() 到這個時間就先停、記下做到哪個三角形（c.ccCur），下次接著做；回傳這一面掃完了沒
+  if (!c.p || c.hidden || c.gone || !c.T.mi) return;
+  var T = c.T, geo = ccGeometry(sh), fine = c.contactFine || (c.contactFine = new Float32Array(T.n * 3)), contacts = 0, locked = 0;
+  clothFine(c, fine);
+  var clothBox = ccBox(Array.from({ length: T.n }, function (_, i) { return Array.from(fine.slice(i * 3, i * 3 + 3)); }));
+  var models = ccModels(sh, geo).filter(function (m) { return ccOverlap(clothBox, m.box, 3); });
+  models.forEach(function (m) { if (!m.inverse) m.inverse = M4.inv(m.matrix); });
+  var ropes = sh.ropes.map(function (r, i) { return { r: r, index: i, radius: sh.T.rig.ropes[i].radius || 0 }; }).filter(function (o) { var r = o.r; return !r.dead && ccOverlap(clothBox, r.bb || ccBox([r.pts.slice(0, 3), r.pts.slice(-3)]), 3); });
+  ropes.forEach(function (o) { var r = o.r; if (r.ccPts === r.pts) return;
+    var segs = []; for (var j = 0; j + 5 < r.pts.length; j += 3) { var a = [r.pts[j], r.pts[j + 1], r.pts[j + 2]], b = [r.pts[j + 3], r.pts[j + 4], r.pts[j + 5]]; segs.push({ a: a, end: b, b: ccBox([a, b]) }); }
+    r.ccSegs = segs; r.ccPts = r.pts;
+  });
+  var bodyNear = []; ccQuery(geo.body, clothBox, CLOTH_CONTACT_MARGIN, bodyNear);
+  if (!models.length && !ropes.length && !bodyNear.length) { c.contactStats = { contacts: 0, unsatisfiedPins: 0, first: 0 }; c.contactWarm = true; return; }   // 整面帆的外框碰不到任何東西 ⇒ 不用一個三角形一個三角形查
+  var clothCenter = [0, 0, 0]; for (var vi = 0; vi < T.n; vi++) for (var a = 0; a < 3; a++) clothCenter[a] += fine[vi * 3 + a] / T.n;
+  if (!T.mountNormal) {
+    var sum = [0, 0, 0];
+    for (var ti = 0; ti < T.tris.length; ti += 3) { var v = [T.tris[ti], T.tris[ti + 1], T.tris[ti + 2]].map(function (i) { return Array.from(T.p0.slice(i * 3, i * 3 + 3)); }); sum = add(sum, cross(sub(v[1], v[0]), sub(v[2], v[0]))); }
+    T.mountNormal = norm(sum);
+  }
+  var first = -1, cut = false, start = c.ccCur || 0;
+  for (var iteration = 0, passes = c.contactWarm ? CC_PASS[1] : CC_PASS[0]; iteration < passes; iteration++) {   // 輪數（ame：48／12 ⇒ CC_PASS；之後每一次跑仍然接著修 ⇒ 幾步內收斂）
+    clothFine(c, fine); var moved = false;
+    for (var ti = iteration ? 0 : start; ti < T.tris.length; ti += 3) {
+      if (deadline && (ti & 63) === 0 && performance.now() > deadline) { c.ccCur = ti; cut = true; break; }   // 時間到 ⇒ 先停（一面帆切成幾段做，一格不會頓）
+      var ids = [T.tris[ti], T.tris[ti + 1], T.tris[ti + 2]]; if (c.torn && ids.some(function (v) { return c.tv[v]; })) continue;
+      // Read the latest coarse state: neighbouring triangles share degrees of freedom.
+      var v = ids.map(function (q) { var p = [0, 0, 0]; for (var k = 0; k < 4; k++) { var at = q * 4 + k, n = T.mi[at] * 3, w = T.mw[at]; for (var a = 0; a < 3; a++) p[a] += c.p[n + a] * w; } return p; }), box = ccBox(v), cells = [];
+      if (bodyNear.length) ccQuery(geo.body, box, 0, cells);
+      for (var bi = 0; bi < cells.length; bi++) { var b = cells[bi].b;
+        for (var x = Math.max(b[0], Math.floor(box[0])); x < Math.min(b[3], Math.ceil(box[3] + 1e-7)); x++) for (var y = Math.max(b[1], Math.floor(box[1])); y < Math.min(b[4], Math.ceil(box[4] + 1e-7)); y++) for (var z = Math.max(b[2], Math.floor(box[2])); z < Math.min(b[5], Math.ceil(box[5] + 1e-7)); z++) {
+          if (!sh.grid.get(x, y, z)) continue; var hit = ccTriangleBox(v, [x, y, z, x + 1, y + 1, z + 1]); if (!hit) continue;
+          var plane = ccBodyPlane(sh.grid, v, [x, y, z]);
+          contacts++; if (plane && ccSeparate(c, ids, v, plane.normal, plane.limit)) moved = true; else locked++;
+        }
+      }
+      for (var mk = 0; mk < models.length; mk++) { var model = models[mk]; if (!ccOverlap(box, model.box, CLOTH_CONTACT_MARGIN)) continue;
+        var local = v.map(function (p) { return M4.pt(model.inverse, p[0], p[1], p[2]); }), localBox = ccBox(local), faces = []; ccQuery(ccMesh(geo, model.m.mesh), localBox, CLOTH_CONTACT_MARGIN, faces);
+        var center = mul(add(add(local[0], local[1]), local[2]), 1 / 3);
+        if (ccInside(center, ccMesh(geo, model.m.mesh))) {
+          var near = ccNearest(center, ccMesh(geo, model.m.mesh)), direction = norm(sub(near.p, center));
+          contacts++; if (ccMove(c, ids, [1 / 3, 1 / 3, 1 / 3], M4.dir(model.matrix,
+            direction[0] * (Math.sqrt(near.d) + CLOTH_CONTACT_MARGIN), direction[1] * (Math.sqrt(near.d) + CLOTH_CONTACT_MARGIN), direction[2] * (Math.sqrt(near.d) + CLOTH_CONTACT_MARGIN)), true)) moved = true; else locked++;
+          continue;
+        }
+        for (var fi = 0; fi < faces.length; fi++) { var face = faces[fi].p, crossing = null;
+          for (var edge = 0; edge < 3 && !crossing; edge++) { var h = ccSegmentTri(local[edge], local[(edge + 1) % 3], face); if (h) { var w = [0, 0, 0]; w[edge] = 1 - h.t; w[(edge + 1) % 3] = h.t; crossing = { p: h.p, w: w }; } }
+          for (var edge = 0; edge < 3 && !crossing; edge++) crossing = ccSegmentTri(face[edge], face[(edge + 1) % 3], local);
+          if (!crossing) continue;
+          var world = M4.pt(model.matrix, crossing.p[0], crossing.p[1], crossing.p[2]);
+          var normal = mul(norm(cross(sub(face[1], face[0]), sub(face[2], face[0]))), ccMesh(geo, model.m.mesh).orientation), depth = Math.max.apply(null, local.map(function (p) { return -dot(sub(p, face[0]), normal); })), delta = M4.dir(model.matrix, normal[0], normal[1], normal[2]);
+          contacts++; if (ccSeparate(c, ids, v, norm(delta), dot(world, norm(delta)) + CLOTH_CONTACT_MARGIN)) moved = true; else locked++;
+          break; // Recompute shared vertices before another face of the same solid.
+        }
+      }
+      for (var ri = 0; ri < ropes.length; ri++) { var rope = ropes[ri].r, radius = ropes[ri].radius + CLOTH_CONTACT_MARGIN; if (!ccOverlap(box, rope.bb || ccBox([rope.pts.slice(0, 3), rope.pts.slice(-3)]), radius)) continue;
+        var segments = rope.ccSegs.filter(function (q) { return ccOverlap(q.b, box, radius); });
+        for (var rj = 0; rj < segments.length; rj++) { var a = segments[rj].a, b = segments[rj].end, hit = ccCapsule(a, b, v); if (hit.d >= radius) continue;
+          if (ccRopeMount(c, ids, v, ropes[ri], a, b)) continue;
+          var d = norm(sub(b, a)), normal = sub(T.mountNormal, mul(d, dot(T.mountNormal, d)));
+          if (len(normal) < 1e-7) normal = cross(d, [0, 0, 1]);
+          var side = c.contactSides[rope.name];
+          if (!side) side = dot(sub(clothCenter, a), normal) < 0 ? -1 : 1;
+          for (var j = 0; j < 3; j++) if (c.pin[ids[j]] && len(sub(v[j], ccOnSegment(v[j], a, b))) < radius + 3) {
+            var signed = dot(sub(v[j], a), normal); if (Math.abs(signed) > radius) side = c.contactSides[rope.name] = signed < 0 ? -1 : 1;
+          }
+          normal = mul(normal, side);
+          normal = norm(normal);
+          contacts++; if (ccSeparate(c, ids, v, normal, dot(a, normal) + radius, false)) moved = true; else locked++;
+        }
+      }
+    }
+    if (first < 0) first = contacts;
+    if (cut) break;
+    c.ccCur = 0;
+    if (!moved) break;
+  }
+  c.contactStats = { contacts: contacts, unsatisfiedPins: locked, first: first < 0 ? 0 : first };
+  if (!cut) c.contactWarm = true;
+  return !cut;
 }
 

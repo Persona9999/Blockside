@@ -85,7 +85,7 @@ function step() {
   if (SLOW_VIS) stepWater(DT, 'ship');                             // 殉爆慢動作中：只給人看的照畫面的時間走（73_slowmo.js），這裡只生船邊的水花
   else { stepDebris(DT); if (PF) pfLap('debris'); stepPts(DT); if (PF) pfLap('pts'); stepWater(DT); }
   if (PF) pfLap('water');                       // 船邊水花（13_water.js；只給人看、自己的亂數）
-  if (PHYS) { var pt0 = performance.now(); SHIPS.forEach(function (sh) { if (sh.sink < 40) physStep(sh); }); PHYS_MS = PHYS_MS * 0.98 + (performance.now() - pt0) * 0.02; }   // 讀數只看、不回寫模擬
+  if (PHYS) { var pt0 = performance.now(); SHIPS.forEach(function (sh) { if (sh.sink < 40) physStep(sh); }); clothContactsRun(); PHYS_MS = PHYS_MS * 0.98 + (performance.now() - pt0) * 0.02; }   // 讀數只看、不回寫模擬
   if (PF) pfLap('phys');
   stepPowder();                                                    // 殉爆排程（23_powder.js）
   stepBlasts();                                                    // 還沒挖完的彈坑接著挖（23_powder.js）
