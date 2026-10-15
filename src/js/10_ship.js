@@ -17,7 +17,7 @@ function shipCenter(sh) { return M4.pt(sh.M, sh.T.cx, sh.T.cy, sh.T.geo.center);
 function toLocal(sh, p) { return M4.pt(sh.inv, p[0], p[1], p[2]); }
 
 function makeShip(i, team, yaw, pz, T, px) {                          // T：船型（05_hull.js）；px：編隊裡的前後位置（52_fleet.js spawnFleet；沒給 ＝ 0）
-  var grid = T.base.share(), rsSet = new VK.RegionSet(gl, grid, QIDX);
+  var grid = T.hullG.share(), rsSet = new VK.RegionSet(gl, grid, QIDX);   // T.hullG：船殼（砲帶的裝甲另外一份，24_armor.js armorShip；沒有裝甲 ＝ T.base）
   rsSet.shareFrom(T.pristine);
   var sh = {                                                            // cfg：船隻設定（開戰時那一型的值，04_state.js）
     T: T, cfg: cfgCopy(T.id), i: i, team: team, grid: grid, rs: rsSet, yaw: yaw, px: px || 0, pz: pz, sink: 0, sinkV: 0, lift: 0, liftT: 0, rollA: 0, pitchA: 0, rollV: 0, bob: 0,
@@ -49,7 +49,7 @@ function makeShip(i, team, yaw, pz, T, px) {                          // T：船
     var rg = (m.points || {}).ring;
     if (foot < 0 && hm.kind === 'anchor' && rg) foot = anchorNear(T, rg[0], rg[1], rg[2], 8);   // 錨（meta kind=anchor）：掛在吊錨木上 ⇒「腳」是錨環 ring 旁的那一格（⛔ 往下找：掛在舷外、底下是海 ⇒ 開局就掉；維吉尼亞號 2026-10-15）
     var hang = false;
-    if (foot < 0) { var z0 = fz; while (fz > 0 && !T.base.get(cx, cy, fz)) fz--; if (z0 - fz <= 12 || kind !== 'model') foot = VK.pack(cx, cy, fz); else hang = true; }   // 腳下那一格甲板（被打掉 ⇒ 掉下去）
+    if (foot < 0) { var z0 = fz; while (fz > 0 && !T.hullG.get(cx, cy, fz)) fz--; if (z0 - fz <= 12 || kind !== 'model') foot = VK.pack(cx, cy, fz); else hang = true; }   // 腳下那一格甲板（被打掉 ⇒ 掉下去）
     // 掛著的（吊艇架上的小艇；Tim 2026-10-14：一開場就掉）：底下 1.2 m 內沒有甲板 ⇒ 掛在吊索上（下面 hangFalls 找；吊索全斷才掉）。
     //   ⛔ 照舊往下找 ⇒ 找到海底 z 0 ⇒ 第一次 survey 就掉。foot 暫時是正下方（找到吊索之後換成吊索上端的那一格 ⇒ 吊艇架被打斷帶走時跟著走）
     if (foot < 0) foot = VK.pack(cx, cy, fz);
@@ -69,6 +69,7 @@ function makeShip(i, team, yaw, pz, T, px) {                          // T：船
     sh.guns.push(m.gun = { name: m.name, type: m.kind, side: A.ax[1] >= 0 ? 'S' : 'P', model: m, ax: A.ax, muz: A.muz, muzs: A.muzs, alive: true, reload: rr(0, 1.2), box: BOX_N, needCart: false });   // box：砲旁藥箱裡的份數
   });
   sh.guns.forEach(function (g) { gunMountInit(sh, g); });            // 迴旋砲、砲塔（meta mount；21_gunnery.js）—— 沒標的砲不動
+  armorShip(sh);                                                        // 砲帶的裝甲（kind=armor；24_armor.js）跟著那門砲轉 —— 沒有 ⇒ 不做事
   sh.guns.sort(gunOrder);
   sh.decks = gunDecks(sh); sh.weatherDeck = sh.decks.length ? sh.decks[sh.decks.length - 1].key : null;   // 砲甲板（照砲的高度分層）；最上面那層 ＝ 露天
   sh.deckZ = {}; sh.decks.forEach(function (D) { sh.deckZ[D.key] = D.zr; });
@@ -362,10 +363,10 @@ function ropeBox(p) {
   for (var j = 0; j < p.length; j += 3) for (var a = 0; a < 3; a++) { if (p[j + a] < b[a]) b[a] = p[j + a]; if (p[j + a] > b[a + 3]) b[a + 3] = p[j + a]; }
   return b;
 }
-function anchorNear(T, x, y, z, r) {                 // 船型 T 的原始格子裡，(x, y, z) 附近 r 格內最近的實心格
+function anchorNear(T, x, y, z, r) {                 // 船型 T 的原始格子裡，(x, y, z) 附近 r 格內最近的實心格（船殼 T.hullG：錨照 sh.grid 查還在不在 ⇒ 不錨在會轉的裝甲上，24_armor.js）
   var bx = Math.floor(x), by = Math.floor(y), bz = Math.floor(z), best = -1, bd = 1e9;
   for (var dz = -r; dz <= r; dz++) for (var dy = -r; dy <= r; dy++) for (var dx = -r; dx <= r; dx++) {
-    if (!T.base.get(bx + dx, by + dy, bz + dz)) continue;
+    if (!T.hullG.get(bx + dx, by + dy, bz + dz)) continue;
     var d = dx * dx + dy * dy + dz * dz; if (d < bd) { bd = d; best = VK.pack(bx + dx, by + dy, bz + dz); }
   }
   return best;
@@ -388,7 +389,7 @@ function findMasts(T) {
     if (!L.length) return;
     var P = L[0].p, Lz = Math.floor(P[2]), ax = Math.round(P[0]), mx = ax, bn = 0;
     for (var x = ax - 45; x <= ax + 45; x++) { var c = countBox(T.base, x, CY - 4, Lz - 40, x, CY + 4, Lz - 10); if (c > bn) { bn = c; mx = x; } }
-    var z0 = Lz - 40, n = countBox(T.base, mx - 8, CY - 8, z0, mx + 8, CY + 8, z0 + 20);
+    var z0 = Lz - 40, n = countBox(T.hullG, mx - 8, CY - 8, z0, mx + 8, CY + 8, z0 + 20);   // orig 跟 survey 的 sh.grid 比 ⇒ 照船殼數（24_armor.js）
     if (n > 20) T.masts.push({ name: label[k] || k, x: mx, z0: z0, z1: z0 + 20, orig: n, z0top: Lz });
   });
 }
@@ -404,7 +405,7 @@ function findMastsOld(T) {  // 桅的 x 從帆的名字推（fore／main／mizze
     if (!acc[k]) return;
     var ax = Math.round(acc[k][0] / acc[k][1]), mx = ax, bn = 0, best = null;
     for (var x = ax - 45; x <= ax + 45; x++) { var c = countBox(T.base, x, CY - 4, 250, x, CY + 4, 290); if (c > bn) { bn = c; mx = x; } }   // 桅身：中線上一根直立的柱子
-    for (var z0 = 220; z0 <= 420 && !best; z0 += 20) { var n = countBox(T.base, mx - 8, CY - 8, z0, mx + 8, CY + 8, z0 + 20); if (n > 20) best = { z0: z0, n: n }; }
+    for (var z0 = 220; z0 <= 420 && !best; z0 += 20) { var n = countBox(T.hullG, mx - 8, CY - 8, z0, mx + 8, CY + 8, z0 + 20); if (n > 20) best = { z0: z0, n: n }; }
     if (best) T.masts.push({ name: label[k], x: mx, z0: best.z0, z1: best.z0 + 20, orig: best.n });
   });
 }

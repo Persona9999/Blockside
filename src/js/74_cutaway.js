@@ -93,9 +93,12 @@ function deckCutMeta(T) {
 }
 /** 剖哪一邊：鏡頭在中線的哪一邊就拿掉那一邊（+1 ＝ 格 +y）。 */
 function cutSide(sh) { return toLocal(sh, CAM.eye)[1] >= sh.T.cy ? 1 : -1; }
-/** 畫一艘船（或斷開的那幾團）之前：設好剖面的 uniform。不是兩艘船本身、或沒開 ⇒ 關。 */
+/** 畫一艘船（或斷開的那幾團）之前：設好剖面的 uniform。不是兩艘船本身、或沒開 ⇒ 關。
+ *  uCutL（船殼的著色器 voxFS）：畫的格子 → 船的格座標，這裡一律放回單位矩陣（砲帶的裝甲畫的時候才換，24_armor.js armDraw）。 */
+var CUT_ID = M4.ident();
 function cutSet(prog, ow) {
-  var u = prog.u; if (!u.uCut) return;
+  var u = prog.u; if (u.uCutL) gl.uniformMatrix4fv(u.uCutL, false, CUT_ID);
+  if (!u.uCut) return;
   if (!cutOn() || SHIPS.indexOf(ow) < 0) { gl.uniform4f(u.uCut, 0, 0, -1, 0); return; }
   var D = deckCut(ow);
   gl.uniform4f(u.uCut, ow.T.cy, CUTV.half ? cutSide(ow) : 0, CUTV.deck > 0 && D.n ? Math.min(CUTV.deck, D.n) - 1 : -1, 1);

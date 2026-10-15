@@ -22,8 +22,8 @@ function hydrostatics(T) {
   T.disp = HYD[0] * RHO_W;                                                        // 設計水線的排水量（噸）
 }
 function modelT(m, gunw) { return m.kind === 'powder' ? KEG_T : (GUNS[m.kind] ? GUNS[m.kind].mass : 0) * gunw; }   // 模型的重量（砲乘船隻設定的倍率）
-/** 開戰時的重量（噸）：格 ＋ 模型 ＋ 壓艙物。 */
-function shipT(sh) { var t = (sh.T.matPlain ? sh.orig * VOX_T : sh.T.voxT0) + sh.cfg.ballast; sh.models.forEach(function (m) { t += modelT(m, sh.cfg.gunw); }); return t; }
+/** 開戰時的重量（噸）：格 ＋ 模型 ＋ 壓艙物。砲帶的裝甲（24_armor.js）也是格：sh.orig 只算船殼 ⇒ 加 sh.armN0（有材質層 ⇒ T.voxT0 本來就含）。 */
+function shipT(sh) { var t = (sh.T.matPlain ? (sh.arm ? sh.orig + sh.armN0 : sh.orig) * VOX_T : sh.T.voxT0) + sh.cfg.ballast; sh.models.forEach(function (m) { t += modelT(m, sh.cfg.gunw); }); return t; }
 /** 少掉的重量（噸）：格（被打掉、跟著斷開的一團走）＋ 不在船上的模型（飛掉、炸掉、跟著斷開的一團走）。帆桁不算。 */
 function massLost(sh) {
   var t = voxLostT(sh);                                                   // 每格照材質（05_material.js；全是預設比重 0.7 ⇒ 少幾格 × VOX_T）

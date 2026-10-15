@@ -26,7 +26,7 @@ function makeMags(sh) {
     // 關聯的外框比整艘船還大 ＝ 子作品是整個框（收穫號、維吉尼亞號）⇒ 照庫裡的桶收緊（⛔ 照框 ⇒ 只有一間的船從框的兩端往外找取用點、全找到船外 ⇒ 一個取用點都沒有；電腦瞄彈藥庫的高度也跟著錯）
     var B = sh.T.h.bbox, box = kegs.length && p.box[0] <= B[0] && p.box[3] >= B[3] ? kegs.reduce(function (b, m) { var q = m.bb; return [Math.min(b[0], q[0]), Math.min(b[1], q[1]), Math.min(b[2], q[2]), Math.max(b[3], q[3]), Math.max(b[4], q[4]), Math.max(b[5], q[5])]; }, [1e9, 1e9, 1e9, -1e9, -1e9, -1e9]) : p.box;
     var bl = (p.points && p.points.blast) || [(box[0] + box[3]) / 2, (box[1] + box[4]) / 2, (box[2] + box[5]) / 2];
-    var mag = { name: p.path, pos: p.meta.pos || '', box: box, blast: bl, pts: p.points || {}, lb: lb, kegs: kegs, boomed: 0, gone: false, lit: false };   // pos：關聯 meta 的前／中／後（TASK-0539）
+    var mag = { name: p.path, pos: p.meta.pos || '', hoist: p.meta.hoist || '', box: box, blast: bl, pts: p.points || {}, lb: lb, kegs: kegs, boomed: 0, gone: false, lit: false };   // pos：關聯 meta 的前／中／後（TASK-0539）；hoist：火藥從哪座梯子的艙口吊上去（TASK-0632，makeStations）
     kegs.forEach(function (m) { m.mag = mag; });
     return mag;
   });
@@ -112,6 +112,7 @@ function magBoom(sh, mag) {
   if (brk) { sh.fate = '殉爆（船斷成兩截）'; sh.sinkingFinal = true; }
   mag.R = R; mag.f = f; mag.removed = 0; mag.broke = brk;
   var job = crater(sh, c, R); job.w = w; job.mag = mag; BLASTS.push(job);
+  if (sh.arm) armBlast(sh, c, R, w);                                   // 砲帶的裝甲（24_armor.js）：彈坑碰得到的那幾格這一步就打掉
   blastStep(job);                                                      // 爆心那幾塊這一步就挖（其他的 stepBlasts 接著挖）
   if (PHX.blastnb) blastNear(sh, w, R, f);                            // 旁邊的船（物理設定「殉爆波及」；碰得到才算）
 }
@@ -133,6 +134,7 @@ function blastNear(src, w, R, f) {
       var cw = M4.pt(o.M, m.c[0], m.c[1], m.c[2]);
       damageModel(o, m, mul(norm(sub(cw, w)), 300 * (1 - d / (R * 1.3)) + 80), 5000);
     });
+    if (o.arm) armBlast(o, c, R, w);                                   // 砲帶的裝甲（24_armor.js）
     var job = crater(o, c, R); if (!job.ch.length) continue;
     job.w = w; job.src = src; o.boomAt = SIMT; BLASTS.push(job); blastStep(job);
   }
@@ -246,6 +248,26 @@ function makeStations(sh, auto) {
     return [{ x: Math.round(mag.box[3]) + 16, dir: 1, tag: '前' }, { x: Math.round(mag.box[0]) - 16, dir: -1, tag: '後' }];
   }
   function nearMag(x) { var best = sh.mags[0], bd = 1e9; sh.mags.forEach(function (m) { var d = Math.abs(m.blast[0] - x); if (d < bd) { bd = d; best = m; } }); return best; }
+  function inGun(x, y, z) { return guns.some(function (m) { var b = m.bb; return x > b[0] - 2 && x < b[3] + 2 && y > b[1] - 2 && y < b[4] + 2 && z + 8 > b[2] && z - 3 < b[5]; }); }
+  // 從艙口吊上去（TASK-0632；Tim 2026-10-16：「我看火藥直接裸露在頂層甲板上 原船設計是如何搬運火藥的」）：彈藥庫關聯 meta hoist=<梯子的路徑>（例 梯子/turret）⇒
+  //   梯頭落在哪一層砲甲板，那一層的取用點就是這座梯子：桶擺在梯腳那一層（莫尼特號：住艙甲板，室內）、送藥手在梯頭（砲塔裡、艙口旁）取 ⇒ 火藥從艙口吊上來，⛔ 不擺在露天甲板；
+  //   那一層不再照彈藥庫找空地（找不到梯腳的空地或梯頭的站位 ⇒ 照舊找，匯入檢查看得到取用點在哪）。梯子隨時能走（Tim：「讓樓梯隨時都能通行」，砲塔不用轉到右舷對位）。
+  //   原船（Greene〈In the Monitor Turret〉）：彈藥庫在住艙甲板、中隔艙壁前的右舷；火藥經甲板與砲塔地板的艙口吊進砲塔。
+  var HO = sh.mags.filter(function (m) { return m.hoist; }).map(function (m) { var L = shipLadders(T).filter(function (l) { return l.name === m.hoist; })[0]; return L ? { mag: m, L: L } : null; }).filter(Boolean);
+  function hoistStation(D, h) {
+    var foot = h.L.pts[0], head = h.L.pts[h.L.pts.length - 1], spot = null, at = null, r, dx, dy;
+    for (r = 0; r <= 24 && !spot; r++) for (dy = -r; dy <= r && !spot; dy++) for (dx = -r; dx <= r && !spot; dx++) {   // 梯腳旁一塊 9×9 的空地（梯子的側板、踏板是實心 ⇒ 自己會避開）
+      if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue;
+      var x = Math.floor(foot[0]) + dx - 4, y = Math.floor(foot[1]) + dy - 4, z = standZ(BASE, x + 4, y + 4, foot[2] - 1, foot[2] + 1, 8);
+      if (z >= 0 && clear(x, y, z)) spot = [x, y, z];
+    }
+    for (r = 0; r <= 12 && !at; r++) for (dy = -r; dy <= r && !at; dy++) for (dx = -r; dx <= r && !at; dx++) {   // 梯頭旁站得住、不在砲裡的一格（艙口本身是空的 ⇒ 站在艙口邊）
+      if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue;
+      var x2 = Math.floor(head[0]) + dx, y2 = Math.floor(head[1]) + dy, z2 = standZ(BASE, x2, y2, head[2] - 1, head[2] + 1, 8);
+      if (z2 >= 0 && !inGun(x2, y2, z2)) at = [x2 + 0.5, y2 + 0.5, z2];
+    }
+    if (spot && at) build(D, h.mag, D.name + '取用點（' + h.L.name.split('/').pop() + ' 艙口）', spot, at);
+  }
   sh.decks.forEach(function (D) {
     var deck = D.key, zr = D.zr, pl = auto ? null : deckPlan(T.id, deckId(D));
     if (pl && pl.items) {                                               // 玩家擺的（驗過：格子、砲班的位置、地面）
@@ -253,13 +275,16 @@ function makeStations(sh, auto) {
       ok.forEach(function (q, k) { var x = G.x0 + q.x * ROOM_TILE, y = G.y0 + q.y * ROOM_TILE; build(D, nearMag(x), D.name + '取用點 ' + (k + 1), [x, y, G.zt[q.x + q.y * G.nx]]); });
       return;
     }
+    var n0 = out.length;
+    HO.forEach(function (h) { var hz = h.L.pts[h.L.pts.length - 1][2]; if (hz >= zr[0] - 2 && hz <= zr[1] + 2) hoistStation(D, h); });
+    if (out.length > n0) return;
     sh.mags.forEach(function (mag) { anchors(mag).forEach(function (A) {
       var spot = findSpot(A.x, A.dir, zr);
       if (spot) build(D, mag, D.name + A.tag + '取用點', spot);
     }); });
   });
   return out;
-  function build(D, mag, name, spot) {
+  function build(D, mag, name, spot, up) {                             // up：吊上來的取用點，送藥手取藥的那一格（梯頭）；桶照樣擺在 spot
       var deck = D.key;
       var st = { deck: deck, mag: mag, name: name, kegs: [], pos: [spot[0] + 4.5, spot[1] + 4.5, spot[2] + 3], flashT: -9 };
       [[0, 0], [5, 0], [0, 5]].forEach(function (o, i) {
@@ -268,12 +293,19 @@ function makeStations(sh, auto) {
           c: [(bb[0] + bb[3]) / 2, (bb[1] + bb[4]) / 2, (bb[2] + bb[5]) / 2], foot: VK.pack(org[0] + 2, org[1] + 2, org[2] - 1), alive: true };
         sh.models.push(m); st.kegs.push(m);
       });
+      if (up) {                                                         // 吊上來的：在梯頭取（站位 ＝ 梯頭旁站得住、不在砲裡的幾格）
+        st.at = up; st.hoist = true;
+        st.slots = [up].concat([[2, 0], [-2, 0], [0, 2], [0, -2], [2, 2], [-2, 2], [2, -2], [-2, -2]].map(function (o) {
+          var x = Math.floor(up[0] + o[0]), y = Math.floor(up[1] + o[1]), z = standZ(BASE, x, y, up[2] - 1, up[2] + 1, 8);
+          return z < 0 || inGun(x, y, z) ? null : [x + 0.5, y + 0.5, z];
+        }).filter(Boolean));
+        out.push(st); return;
+      }
       st.at = [spot[0] + 5.5, spot[1] + 5.5, spot[2]];                 // 送藥手站在三桶圍出來的那一角
       // 站位：那一角＋桶堆外圍幾格（站得住、不在砲裡）；同時好幾個人來拿 ⇒ 各站一格（⛔ 全站同一點 ⇒ 幾張人疊在一起、姿勢不同，看起來像一個人在抖）
       st.slots = [st.at].concat([[13, 5.5], [5.5, 13], [13, 13], [13, -2], [-2, 13], [5.5, -3], [-3, 5.5], [-3, -3]].map(function (o) {   // 齊射後同一個取用點最多 8 人在路上或在拿
         var x = Math.floor(spot[0] + o[0]), y = Math.floor(spot[1] + o[1]), z = standZ(BASE, x, y, spot[2] - 1, spot[2] + 1, 8);
-        if (z < 0 || guns.some(function (m) { var b = m.bb; return x > b[0] - 2 && x < b[3] + 2 && y > b[1] - 2 && y < b[4] + 2 && z + 8 > b[2] && z - 3 < b[5]; })) return null;
-        return [x + 0.5, y + 0.5, z];
+        return z < 0 || inGun(x, y, z) ? null : [x + 0.5, y + 0.5, z];
       }).filter(Boolean));
       out.push(st);
   }
@@ -286,8 +318,14 @@ function makeMonkeys(sh, crew, taken, add) {
     var gs = pairs[k], deck = gunDeck(gs[0]), zr = sh.deckZ[deck], x = Math.round(gs[0].muz[0]);
     gs.forEach(function (g) {
       var br = g.model.pts.breech || g.model.c, sg = g.side === 'P' ? -1 : 1;
-      g.drop = standNear(BASE, Math.floor(br[0]) + 3, Math.floor(br[1] - sg * 7), zr[0], zr[1], 12, {}) || (g.spots.length ? g.spots[g.spots.length - 1].at : null);
+      var foreAft = Math.abs(g.ax[0]) > Math.abs(g.ax[1]), ex = g.ax[0] > 0 ? 1 : -1;
+      var dropX = foreAft ? Math.floor(br[0] - ex * 7) : Math.floor(br[0]) + 3;
+      var dropY = foreAft ? Math.floor(br[1]) : Math.floor(br[1] - sg * 7);
+      g.drop = standNear(BASE, dropX, dropY, zr[0], zr[1], 12, {}) || (g.spots.length ? g.spots[g.spots.length - 1].at : null);
     });
+    // Fore/aft guns: the muzzle can be outside the deck. Spawn behind the breech.
+    if (Math.abs(gs[0].ax[0]) > Math.abs(gs[0].ax[1]) && gs[0].model.pts.breech)
+      x = Math.round(gs[0].model.pts.breech[0] - (gs[0].ax[0] > 0 ? 6 : -6));
     sh.pmWant += sh.cw.monkeys;                                      // 船員配置：每一對砲幾個（0 ＝ 沒有送藥手，砲旁的藥箱用完就停；2 ＝ 第二個站另一邊）
     for (var m = 0; m < sh.cw.monkeys; m++) {
       var at = standNear(BASE, x, CY + ((i + m) % 2 ? 9 : -9), zr[0], zr[1], 12, taken); if (!at) continue;

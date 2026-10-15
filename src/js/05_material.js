@@ -67,19 +67,20 @@ function matK(sh, x, y, z) { var T = sh.T; return T.matG ? T.matK[T.matG.get(x, 
 function hardAt(sh, L) { return sh.cfg.hard * matK(sh, L[0] | 0, L[1] | 0, L[2] | 0); }
 /** 全船預設材質的硬度（殉爆斷船這種整艘的判斷）。 */
 function hard0(sh) { return sh.cfg.hard * sh.T.matK[0]; }
-/** 格子少掉的重量（噸）：以前那一條 ＝ 少幾格 × VOX_T；有材質 ⇒ 每種材質還剩幾格（非預設的照座標數，格子只會少、不會多 ⇒ 只在格數變了才重數）。 */
+/** 格子少掉的重量（噸）：以前那一條 ＝ 少幾格 × VOX_T；有材質 ⇒ 每種材質還剩幾格（非預設的照座標數，格子只會少、不會多 ⇒ 只在格數變了才重數）。
+ *  砲帶的裝甲（24_armor.js）也是船上的格：還剩幾格 ＝ 船殼＋裝甲（裝甲的格座標就是材質層的座標）；sh.orig 只算船殼 ⇒ 原本幾格 ＝ sh.orig ＋ sh.armN0。沒有裝甲 ⇒ 跟以前同一條算式。 */
 function voxLostT(sh) {
-  var T = sh.T;
-  if (T.matPlain) return (sh.orig - sh.grid.count) * VOX_T;
-  if (sh.matLostAt === sh.grid.count) return sh.matLost;
+  var T = sh.T, n = sh.arm ? sh.grid.count + armCount(sh) : sh.grid.count, n0 = sh.arm ? sh.orig + sh.armN0 : sh.orig;
+  if (T.matPlain) return (n0 - n) * VOX_T;
+  if (sh.matLostAt === n) return sh.matLost;
   var t = 0, alive = 0;
   for (var i = 1; i < T.matIds.length; i++) {
     var P = T.matXYZ[i], a = 0;
-    for (var k = 0; k < P.length; k += 3) if (sh.grid.get(P[k], P[k + 1], P[k + 2])) a++;
+    for (var k = 0; k < P.length; k += 3) if (sh.grid.get(P[k], P[k + 1], P[k + 2]) || (sh.arm && armGet(sh, P[k], P[k + 1], P[k + 2]))) a++;
     t += (T.matN[i] - a) * T.matT[i]; alive += a;
   }
-  t += (T.matN[0] + (sh.orig - T.base.count) - (sh.grid.count - alive)) * T.matT[0];   // 預設材質：原本幾格 − 還剩（全部還剩 − 非預設還剩）；sh.orig ≠ 船型的格數（不該發生）⇒ 差額算在預設材質
-  sh.matLostAt = sh.grid.count; sh.matLost = t;
+  t += (T.matN[0] + (n0 - T.base.count) - (n - alive)) * T.matT[0];   // 預設材質：原本幾格 − 還剩（全部還剩 − 非預設還剩）；n0 ≠ 船型的格數（不該發生）⇒ 差額算在預設材質
+  sh.matLostAt = n; sh.matLost = t;
   return t;
 }
 /** 讀數（匯入檢查、主控台）：每種材質幾格、幾噸。 */

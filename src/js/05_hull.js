@@ -1,5 +1,5 @@
 // ───────────────────────── 船型（一種船一份；兩艘同型就共用） ─────────────────────────
-// 船型 T：內嵌的 .vxk（<script type="application/x-vxk" id="…">）解碼之後的一切 —— 格子（T.base）、合併過的網格（T.pristine）、
+// 船型 T：內嵌的 .vxk（<script type="application/x-vxk" id="…">）解碼之後的一切 —— 格子（T.base；拿掉砲帶的裝甲 ⇒ 船殼 T.hullG，24_armor.js）、合併過的網格（T.pristine）、
 //   繩與帆與模型（T.rig）、模型的網格（T.meshes）、桅（T.masts）、帆的布模板（T.cloth）、水線（T.wl0／wl1／bowHalf）、
 //   海面遮罩（T.hullHB）、浮力表（T.hyd／disp），以及從 header 來的中線、外框、設計水線（T.cx／cy／hx0／hx1／zw／sz）。
 // 每艘船 sh.T 指向它的船型；⛔ 船型是共用的、不能改（被打掉的格子在 sh.grid：Grid.share 寫的時候才複製那一塊）。
@@ -111,13 +111,13 @@ function buildHull(info, model, t0, C) {
   T.ms = {};                                                               // 每一段花多久（毫秒；讀數 window.__vxk.ms）
   function tm(k, f) { var a = performance.now(); f(); T.ms[k] = +(performance.now() - a).toFixed(1); }
   var steps = [
-    ['格子', function () { tm('grid', function () { T.base = VK.Grid.fromModel(model); }); tm('verify', function () { T.chk = VK.verify(T.base, h); }); tm('material', function () { hullMaterials(T, info); }); }],   // 材質（05_material.js）：每格的材質索引   // 格子不存快取：照解出來的比 checksum
+    ['格子', function () { tm('grid', function () { T.base = VK.Grid.fromModel(model); }); tm('verify', function () { T.chk = VK.verify(T.base, h); }); tm('material', function () { hullMaterials(T, info); }); tm('armor', function () { armorSetup(T); }); }],   // 材質（05_material.js）：每格的材質索引   // 格子不存快取：照解出來的比 checksum   // armorSetup：砲帶的裝甲拆出來（24_armor.js；T.hullG ＝ 船殼，T.base 照舊是整艘）
     ['模型網格', function () { tm('meshes', function () { buildMeshes(T, C && C.models); }); }],
     ['水線與浮力', function () {
       tm('waterline', function () { waterline(T); }); tm('hullTex', function () { hullTex(T, C && C.hb); }); tm('navImg', function () { navImg(T); sideImg(T); });
       tm('hydro', function () { if (C) { T.hyd = C.hyd; T.disp = C.disp; } else hydrostatics(T); });
     }],
-    ['船體網格', function () { tm('pristine', function () { T.pristine = new VK.RegionSet(gl, T.base, QIDX); if (C) meshesFromCache(T.pristine, C.mesh); else T.pristine.buildAll(); }); smoothSetup(T); }],   // smoothSetup：平滑渲染的那幾格（15_smooth.js；T.ms.smooth）
+    ['船體網格', function () { tm('pristine', function () { T.pristine = new VK.RegionSet(gl, T.hullG, QIDX); if (C) meshesFromCache(T.pristine, C.mesh); else T.pristine.buildAll(); }); smoothSetup(T); tm('armorMesh', function () { armorMesh(T); }); }],   // smoothSetup：平滑渲染的那幾格（15_smooth.js；T.ms.smooth）；合併網格照船殼 T.hullG（沒有裝甲 ＝ T.base），裝甲另建（24_armor.js armorMesh）
     ['桅與帆', function () {
       tm('masts', function () { findMasts(T); }); tm('cloth', function () { teamFlagsSetup(T, info); clothSetup(T, C); });   // 陣營旗（77_colours.js）：合成的帆接在作品的帆後面
       var mt = 12 * KEG_T; (T.rig.models || []).forEach(function (m) { mt += modelT({ kind: modelKind(m) }, 1); });   // 模型的重量（砲照實、取用點 12 桶）

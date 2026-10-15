@@ -21,14 +21,16 @@ function smoothSetup(T) {
   var G = T.smG, RK = T.smRK = new Set(), t0 = performance.now();
   for (var cz = 0; cz < G.nz; cz++) for (var cy = 0; cy < G.ny; cy++) for (var cx = 0; cx < G.nx; cx++) if (G.tab[G.ci(cx, cy, cz)]) RK.add(smRk(T, cx * 16, cy * 16, cz * 16));
   T.smP = new Map();
-  RK.forEach(function (rk) { var m = smBuild(T, T.base, rk, null); if (m) T.smP.set(rk, m); });
+  RK.forEach(function (rk) { var m = smBuild(T, T.hullG || T.base, rk, null); if (m) T.smP.set(rk, m); });   // T.hullG：船殼（砲帶的裝甲另外建，24_armor.js armorMesh）
   T.ms.smooth = +(performance.now() - t0).toFixed(1);
 }
 /** 一艘船開戰：共用船型那一份（被打到的區才各自重建）。 */
-function smoothShip(sh) {
-  var T = sh.T; sh.smR = null; sh.smD = null; if (!T.smP) return;
-  sh.smR = new Map(); sh.smD = new Set();
-  T.smP.forEach(function (m, rk) { sh.smR.set(rk, { vao: m.vao, vb: m.vb, ib: m.ib, n: m.n, own: false }); });
+function smoothShip(sh) { smShare(sh, sh.T.smP); }
+/** o（船，或砲帶的裝甲 24_armor.js）共用 P 那幾區的網格（P ＝ null ⇒ 沒有平滑面）。 */
+function smShare(o, P) {
+  o.smR = null; o.smD = null; if (!P) return;
+  o.smR = new Map(); o.smD = new Set();
+  P.forEach(function (m, rk) { o.smR.set(rk, { vao: m.vao, vb: m.vb, ib: m.ib, n: m.n, own: false }); });
 }
 /** 打掉 (x, y, z)：±2 格碰得到的、有平滑格的區排進重建。 */
 function smTouch(sh, x, y, z) {
@@ -44,21 +46,22 @@ function smFlush(sh, n) {
   sh.smD.forEach(function (rk) { if (done++ < n) list.push(rk); });
   list.forEach(function (rk) {
     sh.smD.delete(rk);
-    var old = sh.smR.get(rk), m = smBuild(sh.T, sh.grid, rk, old && old.own ? old : null);
+    var old = sh.smR.get(rk), m = smBuild(sh.T, sh.grid, rk, old && old.own ? old : null, sh.pin);   // pin：裝甲貼著的船殼（24_armor.js；船沒有）
     if (m) sh.smR.set(rk, m); else { if (old && old.own) smFree(old); sh.smR.delete(rk); }
   });
   return list.length;
 }
 function smFree(m) { gl.deleteBuffer(m.vb); gl.deleteBuffer(m.ib); gl.deleteVertexArray(m.vao); }
-/** 畫這艘的平滑面（drawModels 裡、cutSet 之後）。 */
-function smDraw(prog, sh) {
+/** 畫這艘的平滑面（drawModels 裡、cutSet 之後）。M ＝ 世界矩陣（沒給 ＝ sh.M；砲帶的裝甲給它轉過的那個，24_armor.js armSmDraw）。 */
+function smDraw(prog, sh, M) {
   if (!sh.smR || !sh.smR.size) return;
-  gl.uniformMatrix4fv(prog.u.uModel, false, sh.M);
+  gl.uniformMatrix4fv(prog.u.uModel, false, M || sh.M);
   if (prog.u.uGlow) gl.uniform1f(prog.u.uGlow, 0);
   sh.smR.forEach(function (m) { gl.bindVertexArray(m.vao); gl.drawElements(gl.TRIANGLES, m.n, gl.UNSIGNED_INT, 0); });
 }
-/** 一區的網格（g ＝ 現在的格子；reuse ＝ 這艘自己的舊緩衝，有就覆寫）⇒ { vao, vb, ib, n, own } 或 null（這一區沒有平滑面）。 */
-function smBuild(T, g, rk, reuse) {
+/** 一區的網格（g ＝ 現在的格子；reuse ＝ 這艘自己的舊緩衝，有就覆寫）⇒ { vao, vb, ib, n, own } 或 null（這一區沒有平滑面）。
+ *  pg（砲帶的裝甲，24_armor.js）：只用來釘格角的另一份格子（拆出來之前貼著的船殼）—— 碰到它的格角釘在格角上，它自己不出面、不算實心。 */
+function smBuild(T, g, rk, reuse, pg) {
   var SG = T.smG, nx = Math.ceil(T.h.size[0] / SM_R), ny = Math.ceil(T.h.size[1] / SM_R);
   var rx = rk % nx, ry = Math.floor(rk / nx) % ny, rz = Math.floor(rk / (nx * ny)), x0 = rx * SM_R, y0 = ry * SM_R, z0 = rz * SM_R;
   var SX = T.h.size[0] + 2, SXY = SX * (T.h.size[1] + 2);
@@ -69,7 +72,7 @@ function smBuild(T, g, rk, reuse) {
     var occ = [], pin = false, gx = 0, gy = 0, gz = 0, n = 0, i;
     for (i = 0; i < 8; i++) {
       var c = SM_C8[i], vx = X - 1 + c[0], vy = Y - 1 + c[1], vz = Z - 1 + c[2], s = g.get(vx, vy, vz) ? 1 : 0;
-      occ.push(s); if (s) { if (!SG.get(vx, vy, vz)) pin = true; gx += c[0] - 0.5; gy += c[1] - 0.5; gz += c[2] - 0.5; n++; }
+      occ.push(s); if (s) { if (!SG.get(vx, vy, vz)) pin = true; gx += c[0] - 0.5; gy += c[1] - 0.5; gz += c[2] - 0.5; n++; } else if (pg && pg.get(vx, vy, vz)) pin = true;
     }
     var ox = 0, oy = 0, oz = 0, ne = 0;
     for (i = 0; i < 12; i++) {

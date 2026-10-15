@@ -116,7 +116,7 @@
       "crew": 8,
       "min": 5,
       "mass": 14.5,
-      "hpK": 8,
+      "hpK": 16,
       "burst": 2,
       "burstGap": 1.2
     },
@@ -155,7 +155,7 @@
       "oak": {"name": "橡木", "kind": "wood", "density": 0.7, "hard": 1, "flammable": 0.5},
       "pine": {"name": "松木", "kind": "wood", "density": 0.5, "hard": 0.7, "flammable": 0.8},
       "teak": {"name": "柚木", "kind": "wood", "density": 0.65, "hard": 1.1, "flammable": 0.3},
-      "iron": {"name": "鐵甲", "kind": "metal", "density": 7.8, "hard": 16, "flammable": 0, "metal": 1, "rough": 0.35},
+      "iron": {"name": "鐵甲", "kind": "metal", "density": 7.8, "hard": 32, "flammable": 0, "metal": 1, "rough": 0.35},
       "copper_sheath": {"name": "銅皮（包在木殼外）", "kind": "metal", "density": 0.8, "hard": 1.1, "flammable": 0, "metal": 0.7, "rough": 0.55}
     }
   },

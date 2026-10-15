@@ -375,7 +375,7 @@ function navDirty(sh, x, y, z) {
   });
 }
 function navRefresh(sh) {
-  var NV = sh.nav, g = sh.grid, t0 = performance.now(), ev = [];
+  var NV = sh.nav, g = navG(sh), t0 = performance.now(), ev = [];       // navG：船殼＋砲帶的裝甲原本的位置（24_armor.js：開戰時的走路格照含裝甲的 T.base，重算也要照它；沒有裝甲 ＝ sh.grid）
   NV.reT = SIMT; NV.dirty = false;
   NV.levels.forEach(function (L, li) {
     var b = L.dirty; if (!b) return; L.dirty = null;

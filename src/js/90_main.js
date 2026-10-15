@@ -128,6 +128,31 @@ if (DEBUG) window.__game = {
     sh.rs.flush();
     return { mat: mat, skin: y0, removed: n0 - sh.grid.count, deep: +(deep * S).toFixed(2), out: b.alive ? +len(b.v).toFixed(0) : 0, V: GS.V };
   },
+  /** 砲帶的裝甲（TASK-0631；24_armor.js）：第 i 艘每一塊 —— 那門砲、現在轉了幾度、還剩幾格／原本幾格、砲口沿砲軸碰到裝甲幾格（armBlock；0 ＝ 在砲門裡）；船殼幾格、重量。沒有裝甲 ⇒ null。
+   *  o.yaw（度）⇒ 先把那門砲直接轉到那個角度（量測用：不照轉速；砲軸、砲口、模型、站位跟 mountStep 一樣轉，下一步 mountStep 照瞄準點接著轉）。
+   *  o.shot ＝ [方位（度；船的格座標繞轉軸，0 ＝ +x 船頭、90 ＝ +y 右舷）, 高 z, 砲種, 彈種] ⇒ 從 6 m 外水平朝轉軸射一發（船不動、只跑這一顆）：打掉幾格裝甲、船殼少幾格、出來剩多快。 */
+  armor: function (i, o) {
+    var sh = SHIPS[i || 0], D = Math.PI / 180, out = {}; if (!sh || !sh.arm) return null;
+    if (o && o.yaw !== undefined) sh.arm.forEach(function (a) {
+      var g = a.g, M = g && g.mt; if (!M) return;
+      var y = o.yaw * D, da = y - M.yaw, ax = M4.dir(rotM([0, 0, 1], y), M.ax0[0], M.ax0[1], 0);
+      M.yaw = M.yawT = y; g.model.rot = y; g.ax = [ax[0], ax[1]];
+      g.muz = mountRot(M.muz0, M.c, y); if (M.muzs0) g.muzs = M.muzs0.map(function (q) { return mountRot(q, M.c, y); });
+      if (g.drop) g.drop = mountRot(g.drop, M.c, da);
+      (g.spots || []).forEach(function (s) { s.at = mountRot(s.at, M.c, da); var c = s.who; if (c && c.gun === g && !c.walk && c.st === 0) { c.pos = mountRot(c.pos, M.c, da); if (c.home) c.home = mountRot(c.home, M.c, da); } });
+    });
+    if (o && o.shot) {
+      var a = sh.arm[0], b0 = a.A.bb, c = a.g ? a.g.mt.c : [(b0[0] + b0[3]) / 2, (b0[1] + b0[4]) / 2, b0[2]], ang = o.shot[0] * D, z = o.shot[1] + 0.5, GS = GUNS[o.shot[2] || '24l'] || GUNS[Object.keys(GUNS)[0]];
+      var p = M4.pt(sh.M, c[0] + Math.cos(ang) * 60, c[1] + Math.sin(ang) * 60, z), q = M4.pt(sh.M, c[0], c[1], z), d = norm(sub(q, p)), n0 = sh.grid.count, a0 = armCount(sh);
+      var b = { p: p, v: add(mul(d, GS.V), sh.vel), owner: SHIPS.length > 1 ? 1 - (i || 0) : 0, ammo: o.shot[3] || 0, trav: 0, alive: true, age: 0, bounced: false, big: GS.big, hole: GS.hole, dmg: 0 };
+      for (var k = 0; k < 600 && b.alive; k++) stepBall(b, DT / 4);
+      sh.rs.flush(); sh.arm.forEach(function (e) { e.rs.flush(); });
+      out.shot = { armRemoved: a0 - armCount(sh), hullRemoved: n0 - sh.grid.count, out: b.alive ? +len(b.v).toFixed(0) : 0, V: GS.V };
+    }
+    out.arm = sh.arm.map(function (a) { return { mount: a.A.mount, yaw: +(armYaw(a) / D).toFixed(2), n: a.grid.count, n0: a.A.n, lost: a.lost, blk: armBlock(a), gun: a.g ? a.g.alive : null, smooth: a.smR ? a.smR.size : 0 }; });
+    out.hull = sh.grid.count; out.orig = sh.orig; out.armN0 = sh.armN0; out.mass0 = +shipT(sh).toFixed(3); out.voxLost = +voxLostT(sh).toFixed(4); out.massLost = +massLost(sh).toFixed(4); out.lost = sh.lost;
+    return out;
+  },
   hole: function (i, x, z, side, r) {
     var sh = SHIPS[i || 0], B = sh.T.base, y0 = -1, y, s = side ? 1 : -1, n = 0; r = r || 4;
     if (side) { for (y = 0; y < sh.T.cy; y++) if (B.get(x, y, z)) { y0 = y; break; } } else { for (y = B.sy - 1; y > sh.T.cy; y--) if (B.get(x, y, z)) { y0 = y; break; } }
@@ -253,14 +278,14 @@ if (DEBUG) {
       var ka = Object.keys(a), kb = Object.keys(b); if (ka.length !== kb.length) return false;
       return ka.every(function (k) { return same(a[k], b[k]); });
     }
-    var g = T.base, r = { id: T.id, cached: T.cached, chunks: 0, chunkDiff: 0, quads: T.pristine.quads() };
+    var g = T.hullG, r = { id: T.id, cached: T.cached, chunks: 0, chunkDiff: 0, quads: T.pristine.quads() };   // 合併網格照船殼（砲帶的裝甲拆掉之後，24_armor.js）
     for (var cz = 0; cz < g.nz; cz++) for (var cy = 0; cy < g.ny; cy++) for (var cx = 0; cx < g.nx; cx++) {
       var i = g.ci(cx, cy, cz); if (g.tab[i] === null) continue;
       var m = VK.meshChunk(g, cx, cy, cz), c = T.pristine.meshes.get(i); r.chunks++;
       if (!(m ? c && same(m, c) : !c)) r.chunkDiff++;
     }
     r.hullMask = same(hullMask(T), T.hullHB);
-    var H = { base: g, zw: T.zw }; hydrostatics(H); r.hyd = same(H.hyd, T.hyd) && H.disp === T.disp;
+    var H = { base: T.base, zw: T.zw }; hydrostatics(H); r.hyd = same(H.hyd, T.hyd) && H.disp === T.disp;
     r.models = (T.rig.meshes || []).map(function (m, k) {
       var tri = meshTris(m), got = new Float32Array(tri.length); gl.bindBuffer(gl.ARRAY_BUFFER, T.meshes[k].vbo); gl.getBufferSubData(gl.ARRAY_BUFFER, 0, got);
       return same(tri, got) && same(meshOcc(m), T.meshes[k].occ);

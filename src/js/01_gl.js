@@ -187,6 +187,7 @@ function voxFS() {
   var s = VK.VOXEL_FS, a = 'out vec4 o;', b = 'if(vW.y<uWater){ float dd=clamp((uWater-vW.y)*0.12', c = 'float di=max(dot(n,uSun),0.0);', d = 'void main(){', e = 'vec3 c=base*(amb*0.62+vec3(1.0,0.96,0.88)*di*0.78);';
   if ([a, b, c, d, e].some(function (x) { return s.indexOf(x) < 0; })) { console.warn('VoxelKit 的體素著色器改過了：船殼不跟著浪著色、不收陰影、不吃點光源'); return s; }
   return s.replace(e, e + ' if(uLN>0) c+=base*lampK(vW,n); if(uVGN>0){ for(int i=0;i<' + VLAMP_N + ';i++){ if(i>=uVGN) break; if(abs(float(vC)-uVGC[i].w)<0.5 && distance(vL,uVG[i].xyz)<uVG[i].w) c=mix(c,base*0.35+uVGC[i].rgb*1.15,uVGK); } }').replace(a, SEA_GLSL + SHADOW_GLSL + CUT_GLSL + LAMP_GLSL + a).replace(b, 'float wy=uWater+seaH(vW.xz); if(uCut.w<0.5 && vW.y<wy){ float dd=clamp((wy-vW.y)*0.12')
-    .replace(c, 'float di=max(dot(n,uSun),0.0); if(di>0.0) di*=shadowK(vW,n*(3.0-2.0*di));').replace(d, d + ' if(vW.y<uClip) discard; if(cutOut(vL)) discard;');   // cutOut：剖面與隱藏甲板（vL ＝ 格座標）
+    .replace(c, 'float di=max(dot(n,uSun),0.0); if(di>0.0) di*=shadowK(vW,n*(3.0-2.0*di));').replace(d, d + ' if(vW.y<uClip) discard; if(cutOut((uCutL*vec4(vL,1.0)).xyz)) discard;')   // cutOut：剖面與隱藏甲板（vL ＝ 格座標）
+    .replace(a, 'uniform mat4 uCutL;\n' + a);   // uCutL：畫的那份格子 → 船的格座標（船殼 ＝ 單位矩陣，cutSet 設；砲帶的裝甲 ＝ 它轉過的那個，24_armor.js armDraw）⇒ 轉過的裝甲照船的座標切
 }
 

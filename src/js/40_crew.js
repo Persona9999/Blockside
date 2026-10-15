@@ -180,7 +180,7 @@ function goToGun(sh, c, g) {
     return countBox(sh.grid, x - 1, y - 1, s.at[2] - 1, x + 1, y + 1, s.at[2] - 1) > 0;
   })[0];
   var to = spot ? spot.at : null;
-  if (!to && g.spots && g.spots.length) { var a = g.spots[0].at; to = standNear(sh.grid, Math.floor(a[0]), Math.floor(a[1]), a[2] - 2, a[2] + 2, 14, {}); }
+  if (!to && g.spots && g.spots.length) { var a = g.spots[0].at; to = standNear(navG(sh), Math.floor(a[0]), Math.floor(a[1]), a[2] - 2, a[2] + 2, 14, {}); }   // navG：砲塔的裝甲照原位擋人（24_armor.js；沒有裝甲 ＝ sh.grid）
   if (!to) to = c.pos;
   if (spot) spot.who = c;
   c.walk = { to: to.slice(), sp: 18 };

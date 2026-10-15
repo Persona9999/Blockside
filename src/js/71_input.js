@@ -50,6 +50,7 @@ function pick(cx, cy) {
   SHIPS.forEach(function (o) {
     if (o === me || o.sunk) return;
     var oL = toLocal(o, p0), dL = M4.dir(o.inv, d[0], d[1], d[2]), h = VK.raycast(o.grid, oL, dL, 3000);
+    if (o.arm) { var ha = armRay(o, oL, dL, 3000); if (ha && (!h || ha.t < h.t)) h = ha; }   // 砲帶的裝甲（24_armor.js）也點得到（換回船的格座標）
     if (h && (!hit || h.t < hit.t)) { hit = h; on = o; }
   });
   // Tim 2026-10-14：「點海會取消瞄準；點在船身上（也可以瞄友軍，可以變色）就變成那一邊的砲手控」

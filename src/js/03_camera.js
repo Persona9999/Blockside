@@ -100,7 +100,7 @@ function ballPredictOn(b, foe) {
     var x = p[0] - fv[0] * t, y = p[1], z = p[2] - fv[2] * t, dx = x - c[0], dy = y - c[1], dz = z - c[2];   // 換到敵艦「現在」的座標（它照船速平移）
     if (dx * dx + dy * dy + dz * dz > foe.rad2) continue;
     var L = [M[0] * x + M[4] * y + M[8] * z + M[12], M[1] * x + M[5] * y + M[9] * z + M[13], M[2] * x + M[6] * y + M[10] * z + M[14]];
-    if (g.get(L[0] | 0, L[1] | 0, L[2] | 0) || hitModel(foe, L, b.ammo === 2 ? 10 : 1.5, null)) return t;
+    if (g.get(L[0] | 0, L[1] | 0, L[2] | 0) || hitModel(foe, L, b.ammo === 2 ? 10 : 1.5, null) || (foe.arm && armAt(foe, L))) return t;   // armAt：砲帶的裝甲（24_armor.js）
   }
   return null;
 }

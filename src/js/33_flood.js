@@ -22,10 +22,11 @@ var FL_C = 1.0, FL_PUMP = 0.3, FL_GM = 4, FL_GML = 60, FL_TAU = 2;
 var FL_HIDE = false, FLOOD_LV = 0, RSF0 = 0x3C6EF372, rsF = SEED ^ RSF0;
 function rndF() { rsF |= 0; rsF = rsF + 0x6D2B79F5 | 0; var t = Math.imul(rsF ^ rsF >>> 15, 1 | rsF); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }
 function rgF(a, b) { return a + (b - a) * rndF(); }
-/** 船型 T 的水格（邊長 c 格；第一次用到時算，掛在 T.flc[c]）：兩舷船殼最外那一格（yP／yM，每個 (x, z)）、每格能裝多少（cap：艙內空的比例）、往下通多少（pd：最密那一層開著的比例）。 */
+/** 船型 T 的水格（邊長 c 格；第一次用到時算，掛在 T.flc[c]）：兩舷船殼最外那一格（yP／yM，每個 (x, z)）、每格能裝多少（cap：艙內空的比例）、往下通多少（pd：最密那一層開著的比例）。
+ *  照船殼 T.hullG（砲帶的裝甲拆掉之後，24_armor.js；沒有裝甲 ＝ T.base）：⛔ 照含裝甲的 ⇒ 砲塔圓筒當成外殼，sh.grid 裡沒有它 ⇒ flHoleRedo 一量就是破口。 */
 function flType(T, c) {
   var K = T.flc || (T.flc = {}); if (K[c]) return K[c];
-  var B = T.base, zTop = Math.min(B.sz, T.zw + 46), x0 = Math.max(0, T.wl0 - 4), x1 = Math.min(B.sx - 1, T.wl1 + 4), cy = T.cy, TW = T.hullTW, HB = T.hullHB;
+  var B = T.hullG, zTop = Math.min(B.sz, T.zw + 46), x0 = Math.max(0, T.wl0 - 4), x1 = Math.min(B.sx - 1, T.wl1 + 4), cy = T.cy, TW = T.hullTW, HB = T.hullHB;
   var nxv = x1 - x0 + 1, yP = new Int16Array(nxv * zTop).fill(-1), yM = new Int16Array(nxv * zTop).fill(-1), ylo = 1e9, yhi = -1, x, y, z;
   for (z = 0; z < Math.min(zTop, T.hullTH); z++) for (x = x0; x <= x1; x++) {
     var hb = HB[z * TW + x]; if (!hb) continue;
@@ -101,7 +102,7 @@ function flCellRedo(sh, fl, i) {
 }
 /** 一塊破口重算：c × c 個船殼最外的點，每點從外往裡走，先碰到還在的格 ⇒ 不通；先走到原本是空的（艙內）⇒ 通。面積 ＝ 通的點數 × S²，記下中心與艙內那一側。 */
 function flHoleRedo(sh, fl, h) {
-  var F = fl.F, c = F.c, side = (h / (F.NX * F.NZ)) | 0, r = h % (F.NX * F.NZ), bx = (r / F.NZ) | 0, bz = r % F.NZ, Gd = sh.grid, B = sh.T.base, s = side ? 1 : -1;
+  var F = fl.F, c = F.c, side = (h / (F.NX * F.NZ)) | 0, r = h % (F.NX * F.NZ), bx = (r / F.NZ) | 0, bz = r % F.NZ, Gd = sh.grid, B = sh.T.hullG, s = side ? 1 : -1;
   var n = 0, sx = 0, sy = 0, sz = 0, si = 0;
   for (var dz = 0; dz < c; dz++) for (var dx = 0; dx < c; dx++) {
     var x = F.X0 + bx * c + dx, z = bz * c + dz; if (x - F.X0 >= F.nxv || z >= F.zTop) continue;

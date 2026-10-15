@@ -191,9 +191,10 @@ function remesh(budget) {
   PIECES.concat(SHIPS).forEach(function (o) { if (left > 0 && o.rs.dirty.size) left -= rsFlushSome(o.rs, left); });
   var sl = budget === Infinity ? Infinity : SM_FRAME;                    // 平滑面（15_smooth.js）：一區比一塊貴 ⇒ 另外算，每一格最多 SM_FRAME 區
   SHIPS.forEach(function (sh) { if (sl > 0 && sh.smD && sh.smD.size) sl -= smFlush(sh, sl); });
+  SHIPS.forEach(function (sh) { if (sh.arm) { var r = armRemesh(sh, left, sl); left = r[0]; sl = r[1]; } });   // 砲帶的裝甲（24_armor.js）：船殼排完才輪到
 }
 function drawHulls(prog, near) {                                       // near(c)：只畫靠近 c 的（陰影圖用；沒給 ⇒ 全畫）
-  SHIPS.forEach(function (sh) { if (sh.sink > 40 || (near && !near(sh))) return; cutSet(prog, sh); vlampSet(prog, sh); gl.uniformMatrix4fv(prog.u.uModel, false, sh.M); sh.rs.draw(); });   // cutSet：剖面與隱藏甲板（74_cutaway.js）
+  SHIPS.forEach(function (sh) { if (sh.sink > 40 || (near && !near(sh))) return; cutSet(prog, sh); vlampSet(prog, sh); gl.uniformMatrix4fv(prog.u.uModel, false, sh.M); sh.rs.draw(); if (sh.arm) armDraw(prog, sh); });   // cutSet：剖面與隱藏甲板（74_cutaway.js）；armDraw：砲帶的裝甲（24_armor.js，跟著砲轉）
   cutSet(prog, null); vlampSet(prog, null);
   PIECES.forEach(function (pc) { if (near && !near(pc)) return; gl.uniformMatrix4fv(prog.u.uModel, false, pc.M); pc.rs.draw(); });
 }
@@ -209,6 +210,7 @@ function drawModels(prog, near) {
       gl.bindVertexArray(me.vao); gl.drawArrays(gl.TRIANGLES, 0, me.n);
     });
     smDraw(prog, sh);                                                   // 平滑渲染的格（15_smooth.js）：跟模型同一支著色器（陰影、剖面、點光源都有）
+    if (sh.arm) armSmDraw(prog, sh);                                    // 砲帶的裝甲的平滑面（24_armor.js）
   });
   if (prog.u.uGlow) gl.uniform1f(prog.u.uGlow, 0);                     // 斷開的那一團、飛出去的模型：燈熄了
   cutSet(prog, null);

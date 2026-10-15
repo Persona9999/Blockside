@@ -156,7 +156,8 @@ python -I admin.py cache --all    # 每艘都比 ＝ 比對來源：雕刻作品
 | `20_shatter.js` | 拆格：砲彈打碎船殼 |
 | `21_gunnery.js` | 開砲、齊射、射界、砲彈飛行與命中、模型扣血與被打飛（命中照網格的佔用格 `inMesh`）、斷繩撕帆、帆掉下來 |
 | `22_pieces.js` | 斷開的那一團：倒下、壓到人、落水；斷成兩截的半截船（翹起來、沉下去，上面的砲跟著走） |
-| `23_powder.js` | 彈藥庫與火藥桶：血量、點燃、連鎖、整間殉爆（`crater` 排好區塊、`blastStep`／`stepBlasts` 分步挖）、斷船（`breakShip`，彈坑挖完才切） |
+| `23_powder.js` | 彈藥庫與火藥桶：血量、點燃、連鎖、整間殉爆（`crater` 排好區塊、`blastStep`／`stepBlasts` 分步挖）、斷船（`breakShip`，彈坑挖完才切）；取用點（`makeStations`）—— 彈藥庫關聯 meta `hoist=<梯子路徑>` ⇒ 那座梯子梯頭那一層的取用點改成「桶在梯腳、在梯頭取」（`hoistStation`；TASK-0632，莫尼特號的火藥從住艙甲板經砲塔艙口吊上來、不擺在露天甲板） |
+| `24_armor.js` | 砲帶的裝甲（TASK-0631）：關聯 meta `kind=armor`、`mount=<砲模型>` 的格從船殼拆出來（`armorSetup`：`T.armor`、船殼 `T.hullG`；`T.base` 照舊是整艘）、每艘一份跟著砲轉（`armorShip`、`armLocal`）、打中（`armAt`／`armRemove`，`shatter`／`slab` 帶 a）、殉爆 `armBlast`、畫（`armDraw`／`armSmDraw`）、走路格看的格子 `navG` |
 | `30_rig_physics.js` | 帆與繩的物理（可關）；帆的貼圖集 `sailAtlas`（一個船型一張，alpha 照 vxk 的 `alpha_min` 二值化；TASK-0579） |
 | `31_sailing.js` | 航行：航速、操舵、帆裝、航跡、擦撞（船隻碰撞四檔：龍骨線／水線輪廓／船殼格子＋八叉樹 `hitSamples`／`occPyr`；摩擦 `hitFriction`） |
 | `31_drive.js` | 動力（TASK-0630）：動力源清單（帆、蒸汽機、魔法）、推力 ＝ k·v²、水阻、實際質量（含進水）⇒ 加速度；受損降輸出；受損不平衡的偏航力矩；俥鐘（橫版左下角、直版左邊那一欄按鈕上方；E／T） |

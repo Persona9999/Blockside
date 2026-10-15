@@ -212,14 +212,15 @@ function stepBall(b, dt) {
       if (b.ammo === 2) cutRig(sh, L, 14, b, nb.ropes, nb.sails);
       else if ((s & 3) === 0) cutRig(sh, L, 3, b, nb.ropes, nb.sails);             // 實心與爆裂：細繩照斷、穿過帆會打洞（帆扣得少，見彈種倍率）
       if ((s & 3) === 1 && sh.i !== b.owner) hurt(sh, L, 4, 0, null, '砲彈', crewBase(b) * 2, nb.crew);      // 砲彈直接掠過：兩倍
-      if (!sh.grid.get(L[0] | 0, L[1] | 0, L[2] | 0)) {
+      var ah = sh.arm && !sh.grid.get(L[0] | 0, L[1] | 0, L[2] | 0) ? armAt(sh, L) : null;   // 砲帶的裝甲（24_armor.js）：船殼那一格是空的才看（兩邊不重疊）；沒有裝甲的船 ⇒ 一行都不多算
+      if (!ah && !sh.grid.get(L[0] | 0, L[1] | 0, L[2] | 0)) {
         if (b.ammo !== 2) continue;
         // 鏈彈：兩顆彈中間一條鏈、轉著飛，約 2.4 公尺寬 ⇒ 沿那條橫桿取樣，碰到哪裡就從哪裡咬下去
         var dL = norm(M4.dir(sh.inv, b.v[0], b.v[1], b.v[2])), sd = norm(cross(dL, [0, 0, 1])), hitL = null;
-        for (var q = -12; q <= 12 && !hitL; q += 3) { var Lq = [L[0] + sd[0] * q, L[1] + sd[1] * q, L[2]]; if (sh.grid.get(Lq[0] | 0, Lq[1] | 0, Lq[2] | 0)) hitL = Lq; }
+        for (var q = -12; q <= 12 && !hitL; q += 3) { var Lq = [L[0] + sd[0] * q, L[1] + sd[1] * q, L[2]]; if (sh.grid.get(Lq[0] | 0, Lq[1] | 0, Lq[2] | 0)) hitL = Lq; else if (sh.arm && (ah = armAt(sh, Lq))) hitL = Lq; }
         if (!hitL) continue;                                              // 橫掃是以彈心為中心 ⇒ 照彈心那一點咬
       }
-      impact(b, sh, L);
+      impact(b, sh, L, ah);
       if (!b.alive) return;
     }
   }
@@ -228,23 +229,24 @@ function stepBall(b, dt) {
 /** 讀數（TASK-0551）：順風打（砲線朝風吹去的方向 ⇒ 打的是自己的下風舷）／逆風打各開了幾發、中了幾發（sh.fireDn／fireUp、hitDn／hitUp）。 */
 function windShot(sh, b, dx, dz) { b.dn = dx * WIND[0] + dz * WIND[2] > 0; if (b.dn) sh.fireDn = (sh.fireDn || 0) + 1; else sh.fireUp = (sh.fireUp || 0) + 1; }
 function windHit(b) { var o = SHIPS[b.owner]; if (b.dn) o.hitDn = (o.hitDn || 0) + 1; else o.hitUp = (o.hitUp || 0) + 1; }
-function impact(b, sh, L) {
-  var dirL = norm(M4.dir(sh.inv, b.v[0], b.v[1], b.v[2])), sp = len(b.v), r, w = b.p.slice();
+/** ab：打到的是砲帶的裝甲（24_armor.js armAt）⇒ 拆格、硬度照它的格座標 Q（反轉 yaw；材質層的座標就是它原本的位置）；傷人、模型照船的座標 L。沒給 ＝ 船殼。 */
+function impact(b, sh, L, ab) {
+  var dirL = norm(M4.dir(sh.inv, b.v[0], b.v[1], b.v[2])), sp = len(b.v), r, w = b.p.slice(), Q = ab ? armIn(ab, L) : L, dQ = ab ? armIn(ab, dirL, true) : dirL;
   if (sh.i !== b.owner) { SHIPS[b.owner].hits += (b.hitOnce ? 0 : 1); if (!b.hitOnce) { ffHit(sh, b); windHit(b); } } b.hitOnce = true;
   if (b.ammo === 1) {                                                   // 爆裂彈：第一下就炸
-    r = shatter(sh, L, dirL, rr(10, 13) * Math.pow(hardAt(sh, L), -0.3), mul(b.v, 0.05), 650, 0.85);   // 硬度 ＝ 船殼硬度 × 打到那一格的材質（05_material.js）
+    r = shatter(sh, Q, dQ, rr(10, 13) * Math.pow(hardAt(sh, Q), -0.3), mul(b.v, 0.05), 650, 0.85, ab);   // 硬度 ＝ 船殼硬度 × 打到那一格的材質（05_material.js）
     explode(w, sh, r.n); blastModels(sh, L, 22, w, null, b.dmg); hurt(sh, L, 13, 30, null, '爆炸', crewBase(b)); b.alive = false; return;
   }
   if (b.ammo === 2) {                                                   // 鏈彈：橫著的一片
-    r = slab(sh, L, dirL, b);
+    r = slab(sh, Q, dQ, b, ab);
     b.v = mul(b.v, Math.max(0, 1 - r.cost * 0.004 * sh.cfg.hard));
     if (r.n) hurt(sh, L, 9, 16, dirL, '鏈彈', crewBase(b));
     if (len(b.v) < 30) { ballToDebris(b); }
     if (r.n > 30) { sfx('crack', w, 0.9); smoke(w, [0, 0.2, 0], 3, false); }
     return;
   }
-  var R = rr(3.4, 4.6) * (b.big ? 1.25 : b.hole || 1) * Math.pow(hardAt(sh, L), -0.25);   // 洞照打到那一格的材質（鐵甲洞小）；穿過去慢多少照每格的消耗（shatter 已乘材質）
-  r = shatter(sh, L, dirL, R, b.v, 260, 0.55);   // 實心彈：一口一口往裡鑽（carronade 的 32 磅彈洞大一點；越硬洞越小）
+  var R = rr(3.4, 4.6) * (b.big ? 1.25 : b.hole || 1) * Math.pow(hardAt(sh, Q), -0.25);   // 洞照打到那一格的材質（鐵甲洞小）；穿過去慢多少照每格的消耗（shatter 已乘材質）
+  r = shatter(sh, Q, dQ, R, b.v, 260, 0.55, ab);   // 實心彈：一口一口往裡鑽（carronade 的 32 磅彈洞大一點；越硬洞越小）
   if (r.n) hurt(sh, L, R * 1.1, R * 2.6, dirL, '碎木', crewBase(b));             // 碎木往前噴：船裡的人主要是被這個傷到的
   var nsp = sp - r.cost * 0.24 * sh.cfg.hard;
   if (r.n > 0) { sfx('crack', w, 0.6 + Math.min(1, r.n / 200)); if (r.n > 40) smoke(w, mul(norm(b.v), -0.3), 2, false); }
@@ -388,18 +390,19 @@ function meshTris(m) {
   return new Float32Array(T);
 }
 function ballToDebris(b) { spawnDebris(b.p, mul(b.v, 0.3), 36, 0.15, 20); b.alive = false; }
-function slab(sh, L, dirL, b) {
+function slab(sh, L, dirL, b, ab) {                                    // ab：砲帶的裝甲（L、dirL 是它的格座標；見 impact）⛔ 不叫 a：下面的迴圈用 a
   var side = norm(cross(dirL, [0, 0, 1])), cost = 0, n = 0, removed = [], hk = Math.pow(hardAt(sh, L) / 2, -0.25);   // 越硬撕開的那一片越窄（打到那一格的材質）
   for (var a = -13; a <= 13; a++) for (var h = -2; h <= 2; h++) for (var d = -2; d <= 2; d++) {
     if (Math.abs(a) > (10.5 + 2.5 * hash3(a, h, d + (L[2] | 0))) * hk) continue;
     var x = Math.floor(L[0] + side[0] * a + dirL[0] * d), y = Math.floor(L[1] + side[1] * a + dirL[1] * d), z = Math.floor(L[2] + h);
-    var c = removeVoxel(sh, x, y, z, true); if (c) { cost += (HARD[c] || 1) * 2.4 * matK(sh, x, y, z); n++; removed.push(x, y, z, c); }
+    var c = ab ? armRemove(sh, ab, x, y, z) : removeVoxel(sh, x, y, z, true); if (c) { cost += (HARD[c] || 1) * 2.4 * matK(sh, x, y, z); n++; removed.push(x, y, z, c); }
   }
+  var Mw = ab ? armM(ab) : sh.M;
   for (var j = 0; j < removed.length; j += 4) if (rnd() < 0.5) {
-    var w = M4.pt(sh.M, removed[j] + 0.5, removed[j + 1] + 0.5, removed[j + 2] + 0.5);
+    var w = M4.pt(Mw, removed[j] + 0.5, removed[j + 1] + 0.5, removed[j + 2] + 0.5);
     spawnDebris(w, add(add(mul(norm(b.v), rr(4, 20)), [gauss() * 3, rr(0, 4), gauss() * 3]), sh.vel), removed[j + 3], rr(0.05, 0.11), rr(6, 12));
   }
-  spawnPlates(sh, removed, norm(b.v), len(b.v), 12, 6);                 // 鏈彈撕下來的那一條：片狀的多一點
+  spawnPlates(sh, removed, norm(b.v), len(b.v), 12, 6, Mw);             // 鏈彈撕下來的那一條：片狀的多一點
   sh.impulse = add(sh.impulse, mul(norm(b.v), n * 2));
   return { cost: cost, n: n };
 }

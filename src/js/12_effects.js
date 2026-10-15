@@ -25,10 +25,10 @@ function spawnDebris(p, v, col, size, life, shape) {
 function rD(a, b) { return a + (b - a) * rndD(); }                     // 碎木自己的亂數（⛔ 不用 rr：那是戰局的 rnd()）
 /** 片狀的碎塊：從 removed（x, y, z, 色 一組四個，格座標）挑幾格當起點，往 vd（世界的單位向量）噴；數量照打掉的格數（每 per 格一片、最多 max 片）。
  *  只抽碎木自己的亂數 rndD ⇒ 戰局不變；物理分級少生照 spawnDebris。 */
-function spawnPlates(sh, removed, vd, sp, per, max) {
+function spawnPlates(sh, removed, vd, sp, per, max, M) {                 // M：removed 的格座標換到世界（沒給 ＝ sh.M；砲帶的裝甲給它轉過的那個，24_armor.js）
   var m = removed.length / 4, k = Math.min(max, Math.floor(m / per));
   for (var j = 0; j < k; j++) {
-    var q = ((rndD() * m) | 0) * 4, w = M4.pt(sh.M, removed[q] + 0.5, removed[q + 1] + 0.5, removed[q + 2] + 0.5);
+    var q = ((rndD() * m) | 0) * 4, w = M4.pt(M || sh.M, removed[q] + 0.5, removed[q + 1] + 0.5, removed[q + 2] + 0.5);
     var v = add(add(mul(vd, sp * rD(0.05, 0.25)), [rD(-4, 4), rD(1.5, 7), rD(-4, 4)]), sh.vel);
     spawnDebris(w, v, removed[q + 3], rD(0.12, 0.22), rD(10, 18), 1 + ((rndD() * 3) | 0));
   }
