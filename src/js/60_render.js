@@ -168,6 +168,7 @@ function prepRig() {
     if (dirty || (PHYS && ow.crew)) sailBuf(ow);                     // 物理開著：船上的帆每一格重做；斷開的那一團是靜態的
     if (PHYS && ow.crew) looseBuf(ow);
     if (ow.anc) chainBuf(ow);                                         // 鐵鍊（76_anchor.js；跟帆繩物理開關無關）
+    if (SHIPS.indexOf(ow) >= 0) { var tc = DEBUG ? performance.now() : 0; colourBuf(ow); if (DEBUG) { PROF.col = (PROF.col || 0) + performance.now() - tc; PROF.colN = (PROF.colN || 0) + 1; } }   // 陣營旗（77_colours.js；只是畫面）
     if (DEBUG) PROF.buf += performance.now() - tb;
   });
 }
@@ -330,7 +331,7 @@ function reflPass() {
   gl.enable(gl.DEPTH_TEST); gl.enable(gl.CULL_FACE);                   // 船的矩陣是鏡射（shipBaseMatrix）、反射的鏡頭又鏡射一次 ⇒ 兩次抵銷，繞序照常（CCW）
   gl.useProgram(P.vox.prog); setCommon(P.vox); drawHulls(P.vox);
   if (GFX.refl === 2) {
-    gl.disable(gl.CULL_FACE); gl.useProgram(P.tri.prog); setCommon(P.tri); gl.uniform1f(P.tri.u.uLit, 1); drawModels(P.tri);
+    gl.disable(gl.CULL_FACE); gl.useProgram(P.tri.prog); setCommon(P.tri); gl.uniform1f(P.tri.u.uLit, 1); drawModels(P.tri); drawColours(P.tri);
     gl.useProgram(P.sail.prog); setCommon(P.sail); drawSails(P.sail);
   }
   PASS.vp = null; PASS.eye = null; PASS.clip = -1e9; PASS.sh = 1;
@@ -392,7 +393,7 @@ function render() {
   drawCrew();
   // 模型、繩與帆
   gl.disable(gl.CULL_FACE); gl.useProgram(P.tri.prog); setCommon(P.tri);
-  gl.uniform1f(P.tri.u.uLit, 1); drawModels(P.tri);
+  gl.uniform1f(P.tri.u.uLit, 1); drawModels(P.tri); drawColours(P.tri);   // 陣營旗（77_colours.js）
   gl.uniform1f(P.tri.u.uLit, 0); gl.vertexAttrib3f(1, 0, 1, 0);
   SHIPS.concat(PIECES).forEach(function (ow) {
     if (ow.sink > 40) return;

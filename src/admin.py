@@ -369,6 +369,20 @@ def validate(cfg, prev=None):
             crew(s['crew'], p + '.crew', False)
         if 'rooms' in s:
             rooms(s['rooms'], p + '.rooms')
+        if 'flags' in s:   # 陣營旗（77_colours.js）：[{kind: pennant／ensign, mast: fore／main／mizzen} 或 {kind, at: [x, y, z] 格座標}]；沒寫 ⇒ 主桅長旗、其他桅頂戰鬥旗
+            L = s['flags']
+            if not (isinstance(L, list) and len(L) <= 8):
+                err(p + '.flags', '最多 8 面的清單')
+            else:
+                for j, q in enumerate(L):
+                    qp = '%s.flags[%d]' % (p, j)
+                    if not (isinstance(q, dict) and q.get('kind') in ('pennant', 'ensign')):
+                        err(qp + '.kind', 'pennant（長旗）或 ensign（戰鬥旗）')
+                    elif 'at' in q:
+                        if not (isinstance(q['at'], list) and len(q['at']) == 3 and all(isnum(v) for v in q['at'])):
+                            err(qp + '.at', '[x, y, z]（船的格座標，旗頭掛的點）')
+                    elif q.get('mast') not in ('fore', 'main', 'mizzen'):
+                        err(qp + '.mast', 'fore／main／mizzen（掛在那根桅頂），或改給 at')
         if 'lamps' in s:   # 船殼上的燈（格子做的；60_render.js vlampSet）：[{at: [x, y, z], r: 半徑幾格, color: 發光的格子 rgb332 代碼, rgb: [r, g, b] 光色 0～1}]，最多 4 盞
             L = s['lamps']
             if not (isinstance(L, list) and len(L) <= 4):
