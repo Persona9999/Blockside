@@ -249,7 +249,7 @@ function ropeEnd(r, e) {
   var src = r.pts0 || r.pts, n = src.length / 3, i = e ? n - 1 : 0, P = [src[i * 3], src[i * 3 + 1], src[i * 3 + 2]], an = e ? r.b : r.a, o;
   var yk = e ? r.yb : r.ya;
   if (yk >= 0) o = { k: 'yard', a: yk, P: P };
-  else if (an >= 0) o = { k: 'grid', a: an, d0: Math.hypot((an & 1023) + 0.5 - P[0], ((an >> 10) & 1023) + 0.5 - P[1], (an >> 20) + 0.5 - P[2]), P: P };
+  else if (an >= 0) o = { k: 'grid', a: an, d0: Math.hypot((an & 2047) + 0.5 - P[0], ((an >> 11) & 1023) + 0.5 - P[1], (an >> 21) + 0.5 - P[2]), P: P };
   else if ((e ? r.mb : r.ma) !== undefined) o = { k: 'model', a: e ? r.mb : r.ma, P: P };
   else if ((e ? r.pb : r.pa) !== undefined) o = { k: 'rope', a: e ? r.pb : r.pa, P: P };
   else o = { k: 'none', a: -1, P: P };

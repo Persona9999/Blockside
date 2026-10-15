@@ -315,12 +315,12 @@
     var NB = [[0, 0, 1], [1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, -1]];   // 往下最後推 ⇒ 最先彈出
     var stack = new Int32Array(1 << 16), list = [];
     for (var si = 0; si < seeds.length; si++) {
-      var s = seeds[si], sx = s & 1023, sy = (s >> 10) & 1023, sz = s >> 20;
+      var s = seeds[si], sx = s & 2047, sy = (s >> 11) & 1023, sz = s >> 21;
       if (!grid.get(sx, sy, sz) || getv(sx, sy, sz)) continue;
       var sp = 0, conn = false; list.length = 0;
       stack[sp++] = s; setv(sx, sy, sz, 2); list.push(s);
       outer: while (sp) {
-        var p = stack[--sp], x = p & 1023, y = (p >> 10) & 1023, z = p >> 20;
+        var p = stack[--sp], x = p & 2047, y = (p >> 11) & 1023, z = p >> 21;
         if (isAnchor(x, y, z)) { conn = true; break; }
         for (var k = 0; k < 6; k++) {
           var nx = x + NB[k][0], ny = y + NB[k][1], nz = z + NB[k][2];
@@ -329,13 +329,13 @@
           if (mv === 1) { conn = true; break outer; }
           if (mv) continue;
           setv(nx, ny, nz, 2);
-          var q = nx | (ny << 10) | (nz << 20);
+          var q = nx | (ny << 11) | (nz << 21);
           if (sp >= stack.length) { var ns = new Int32Array(stack.length * 2); ns.set(stack); stack = ns; }
           stack[sp++] = q; list.push(q);
         }
         if (list.length > budget) { conn = true; break; }
       }
-      for (var j = 0; j < list.length; j++) { var r = list[j]; setv(r & 1023, (r >> 10) & 1023, r >> 20, conn ? 1 : 3); }
+      for (var j = 0; j < list.length; j++) { var r = list[j]; setv(r & 2047, (r >> 11) & 1023, r >> 21, conn ? 1 : 3); }
       if (!conn) pieces.push(Int32Array.from(list));
     }
     return pieces;
@@ -472,6 +472,6 @@
     embeddedImage: embeddedImage, embeddedJSON: embeddedJSON,
     Grid: Grid, verify: verify, meshChunk: meshChunk, M4: M4, raycast: raycast, detached: detached,
     compile: compile, VOXEL_VS: VOXEL_VS, VOXEL_FS: VOXEL_FS, RegionSet: RegionSet, QuadIndex: QuadIndex,
-    pack: function (x, y, z) { return x | (y << 10) | (z << 20); }
+    pack: function (x, y, z) { return x | (y << 11) | (z << 21); },   // 格座標壓成一個整數：x 11 位元（0–2047）、y、z 各 10 位元（kotoko 2026-10-15：以前 x 只有 10 位元 ⇒ 拿破崙號 jib-boom 到 x 1098，殉爆斷船時那一段找不到、留在空中）
   };
 })(typeof window !== 'undefined' ? window : this);

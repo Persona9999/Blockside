@@ -10,17 +10,17 @@ function integrity(sh) {
 function spawnPiece(sh, pc) {
   var n = pc.length, i, x, y, z, c;
   if (n < 40) {                                               // 小碎塊直接變碎屑
-    for (i = 0; i < n; i++) { x = pc[i] & 1023; y = (pc[i] >> 10) & 1023; z = pc[i] >> 20; c = removeVoxel(sh, x, y, z, false);
+    for (i = 0; i < n; i++) { x = pc[i] & 2047; y = (pc[i] >> 11) & 1023; z = pc[i] >> 21; c = removeVoxel(sh, x, y, z, false);
       if (c) spawnDebris(M4.pt(sh.M, x + 0.5, y + 0.5, z + 0.5), add([gauss(), rr(-0.5, 1), gauss()], sh.vel), c, rr(0.06, 0.1), rr(8, 16)); }
     return;
   }
   var g = new VK.Grid([sh.T.base.sx, sh.T.base.sy, sh.T.base.sz]), sx = 0, sy = 0, sz = 0, minz = 1e9, set = new Set();
   for (i = 0; i < n; i++) {
-    x = pc[i] & 1023; y = (pc[i] >> 10) & 1023; z = pc[i] >> 20; c = removeVoxel(sh, x, y, z, false);
+    x = pc[i] & 2047; y = (pc[i] >> 11) & 1023; z = pc[i] >> 21; c = removeVoxel(sh, x, y, z, false);
     if (!c) continue; g.set(x, y, z, c); sx += x; sy += y; sz += z; if (z < minz) minz = z; set.add(pc[i]);
   }
   var px = 0, py = 0, pz = 0, pn = 0;
-  for (i = 0; i < n; i++) { z = pc[i] >> 20; if (z <= minz + 2) { px += (pc[i] & 1023); py += (pc[i] >> 10) & 1023; pz += z; pn++; } }
+  for (i = 0; i < n; i++) { z = pc[i] >> 21; if (z <= minz + 2) { px += (pc[i] & 2047); py += (pc[i] >> 11) & 1023; pz += z; pn++; } }
   var rs2 = new VK.RegionSet(gl, g, QIDX); rsAllDirty(rs2);                 // 網格分批建（60_render.js remesh；⛔ buildAll ⇒ 十萬格的半截船那一格卡上百 ms）
   var M0 = sh.M, c0 = M4.pt(M0, sx / n + 0.5, sy / n + 0.5, sz / n + 0.5), pivot = M4.pt(M0, px / pn + 0.5, py / pn + 0.5, pz / pn);
   var imp = sh.impulse; imp = [imp[0], 0, imp[2]]; if (len(imp) < 1e-6) imp = [rnd() - 0.5, 0, rnd() - 0.5];
