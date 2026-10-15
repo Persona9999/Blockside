@@ -8,7 +8,7 @@
 | 檔 | 做什麼 |
 |---|---|
 | `template.html` | 版面、HUD（下方的按鍵提示就是按鈕）、主選單（模式、航行、距離（滑桿）、帆繩物理、「船隻配置…」「細節設定…」與一行摘要）、船隻配置頁（每一型的船員與性能）與細節設定頁（砲與每發傷害、彈種倍率、帆、船員血量、火藥桶、航行、降旗）；引用 `../VoxelKit/voxelkit.js`、`js/*.js`（照順序、`data-bundle="game"`）、船的 `.vxk`（`ships 開始`／`ships 結束` 兩個記號中間那段由 `admin.py` 照設定檔改寫）、設定檔與 `art/` 的選用素材 |
-| `config/game.json` | **各項設定的初始值與船隻清單**（TASK-0542）：船數上限、主選單預設、滑桿的上下限與預設、開局距離、彈種倍率、砲種表、船型高度與船員配置的預設、每艘船（內嵌 id、名字、`.vxk`、雕刻作品、船隻設定、高度、船員）。內嵌進成品，`js/00_config.js` 讀成 `CFG`。⛔ 這些值在 js 裡沒有第二份 |
+| `config/game.json` | **各項設定的初始值與船隻清單**（TASK-0542）：船數上限、主選單預設、滑桿的上下限與預設、開局距離、彈種倍率、砲種表、船型高度與船員配置的預設、每艘船（內嵌 id、名字、`.vxk`、雕刻作品、建造者 `author`、船隻設定、高度、船員）。內嵌進成品，`js/00_config.js` 讀成 `CFG`。⛔ 這些值在 js 裡沒有第二份 |
 | `decks.py` | 量甲板的 meta（TASK-0572）：每一層甲板子作品單獨匯出 .vxk ⇒ 舷弧折線與厚度 ⇒ 印出要標在甲板關聯上的 meta（TSV，`work sub=meta file=` 直接用）。只讀 |
 | `ropecheck.py` | 繩的檢查（Tim 2026-10-14：破壞後浮空的纜線）：跑很多局無頭 Chrome（成品 `?demo=<秒>&dump=1&ropecheck=1`），每半秒記第一次浮空的繩（哪一端、原因），彙整成報告（作品本身每一端靠什麼、端點離錨 > 2 格的；打起來照原因分的浮空清單）。判斷在 `js/10_ship.js` ropesFloating；遊戲裡浮空的繩在 survey 就斷（`js/32_hull.js`）⇒ 報告應該是 0。只讀 |
 | `admin.py` | 設定檔的唯一寫入端：驗設定、改寫船標籤、建置、匯入新船、重新匯入、只同步 meta 與固定點（`metasync`：格子不動）；`serve` 開設定後台（根目錄的 `admin.html`）；`cache` 從雕刻作品重新匯出 `.vxk`、跟指紋比 |
@@ -35,6 +35,8 @@ python -I admin.py serve --open
 python -I admin.py import --work <雕刻作品 ID> --id <代號> --name <名字>
 # 重新匯入（作品長了）：印出跟上一版的格數、checksum、繩帆模型數與 vxk_compare.py 的內容對拍；只差匯出時間 ⇒ 不換
 python -I admin.py reimport --id constitution
+# 建造者（Tim 2026-10-15）：ships[].author ＝ .vxk 檔頭的 owner（senate 匯出時寫的雕刻作品作者）—— import／reimport 會自己記；以前匯入的船補一次（不重建）⇒ 船隻配置頁船卡、後台船隻卡顯示
+python -I admin.py authors
 # 匯入檢查（import／reimport／metasync 之後會自動跑）：缺 meta、砲班站不滿、開場就掉的 ⇒ ../reports/shipcheck_<代號>.md（不入版控）
 python -I admin.py shipcheck --id phoenix    # 不給 --id ＝ 每一艘
 ```

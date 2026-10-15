@@ -129,6 +129,27 @@ def act_relock(sid):
         raise Fail('_cache 沒有 ' + s['vxk'])
     return [lock_put(s['vxk'])]
 
+
+def act_authors():
+    """建造者（Tim 2026-10-15）：每艘船照 _cache 那份 .vxk 檔頭的 owner 記 ships[].author（匯入／重新匯入會自己記；這一支補以前匯入的船）。
+    只改不一樣的；檔頭沒有 owner ⇒ 不動、照實列出來。⛔ 不重建（改的只是設定檔，下一次建置才進成品）。"""
+    cfg = load()
+    log, n = [], 0
+    for s in cfg['ships']:
+        info = vxk_info(os.path.join(CACHE, s['vxk']))
+        own = (info or {}).get('owner')
+        if not own:
+            log.append('  ⚠ %s（%s）：%s' % (s['name'], s['id'], '_cache 沒有 ' + s['vxk'] if not info else '.vxk 檔頭沒有 owner ⇒ 不動'))
+        elif s.get('author') == own:
+            log.append('  ＝ %s（%s）：%s' % (s['name'], s['id'], own))
+        else:
+            log.append('  ✓ %s（%s）：%s → %s' % (s['name'], s['id'], s.get('author') or '（沒記）', own))
+            s['author'] = own
+            n += 1
+    if n:
+        save(cfg)
+    return ['建造者（ships[].author ← .vxk 檔頭 owner）：改了 %d 艘' % n] + log
+
 MENU = {'play': ('fun', 'real'), 'mode': ('pve', 'eve', 'sandbox'), 'sail': ('auto', 'manual', 'off'),
         'gfx': ('low', 'mid', 'high'), 'phx': ('full', 'high', 'mid', 'low')}
 SHIP_CFG_KEYS = ('hard', 'flood', 'gunw', 'speed', 'agile', 'upwind', 'base')          # 每艘船的船隻設定（壓艙物照船算，不在這裡）
@@ -389,6 +410,8 @@ def validate(cfg, prev=None):
             err(p + '.material', '全船預設材質要是材質表裡的一種（%s）；沒寫 ＝ materials.default' % '、'.join(sorted(MIDS)))
         if 'zw0' in s and not (isint(s['zw0']) and s['zw0'] > 0):
             err(p + '.zw0', '正整數（作品沒有水線 meta 時的設計水線）')
+        if 'author' in s and not (isinstance(s['author'], str) and s['author'].strip()):
+            err(p + '.author', '建造者（雕刻作品的作者；匯入時從 .vxk 檔頭 owner 記，沒有就不寫這個鍵）')
         for k, v in (s.get('cfg') or {}).items():
             if k not in SHIP_CFG_KEYS:
                 err(p + '.cfg.' + k, '不認得的鍵（%s）' % '、'.join(SHIP_CFG_KEYS))
@@ -484,7 +507,7 @@ def vxk_header(raw):
 
 
 def vxk_info(path):
-    """.vxk 的 header 讀數：格數、checksum、尺寸、繩帆模型數、作品 ID、匯出時間、檔案雜湊。"""
+    """.vxk 的 header 讀數：格數、checksum、尺寸、繩帆模型數、作品 ID、作者（owner：雕刻作品的作者 persona，senate 匯出時寫的）、匯出時間、檔案雜湊。"""
     if not os.path.exists(path):
         return None
     raw = open(path, 'rb').read()
@@ -492,7 +515,7 @@ def vxk_info(path):
     rig = h.get('rig') or {}
     return {'voxels': h.get('voxels'), 'checksum': h.get('checksum'), 'size': h.get('size'), 'meters_per_voxel': h.get('meters_per_voxel'),
             'ropes': len(rig.get('ropes') or []), 'sails': len(rig.get('sails') or []), 'models': len(rig.get('models') or []),
-            'parts': len(h.get('parts') or []), 'work': h.get('work'), 'exported_at': h.get('exported_at'), 'materials': (h.get('materials') or {}).get('ids') or [],
+            'parts': len(h.get('parts') or []), 'work': h.get('work'), 'owner': h.get('owner'), 'exported_at': h.get('exported_at'), 'materials': (h.get('materials') or {}).get('ids') or [],
             'bytes': len(raw), 'sha256': hashlib.sha256(raw).hexdigest()[:12]}
 
 
@@ -1017,6 +1040,11 @@ def act_import(work, sid, name, build=True):
         raise Fail(str(e))
     info = vxk_info(dest)
     log = ['✓ 匯出 %s ← %s' % (ship['vxk'], work)] + ['  %s：%s' % (n, info.get(k)) for k, n in DIFF_KEYS] + [lock_put(ship['vxk'])]
+    if info.get('owner'):                                # 建造者（Tim 2026-10-15）：.vxk 檔頭的 owner ＝ 雕刻作品的作者 ⇒ 船隻配置頁顯示
+        ship['author'] = info['owner']
+        log.append('  建造者：%s（.vxk 檔頭 owner）' % info['owner'])
+    else:
+        log.append('  ⚠ .vxk 檔頭沒有 owner ⇒ 不記建造者（船隻配置頁不顯示）')
     ref = vxk_info(os.path.join(CACHE, cfg['ships'][0]['vxk']))
     if ref and ref.get('meters_per_voxel') != info.get('meters_per_voxel'):
         log.append('⚠ 比例 %s 公尺／格，跟 %s 的 %s 不一樣 ⇒ 遊戲不會同時載這兩艘（模擬只吃同一個比例）' % (info.get('meters_per_voxel'), cfg['ships'][0]['name'], ref.get('meters_per_voxel')))
@@ -1062,8 +1090,15 @@ def act_reimport(sid, work=None, build=True):
     os.replace(tmp, dest)
     log.append('✓ 換上新的 .vxk（上一版留成 %s.prev）' % s['vxk'])
     log.append(lock_put(s['vxk']))
+    dirty = False
     if s.get('work') != work:
         s['work'] = work
+        dirty = True
+    if new.get('owner') and s.get('author') != new['owner']:   # 建造者跟著 .vxk 檔頭的 owner 走（換了作者的作品、或以前匯入時還沒記）
+        log.append('  建造者：%s → %s' % (s.get('author') or '（沒記）', new['owner']))
+        s['author'] = new['owner']
+        dirty = True
+    if dirty:
         save(cfg)
     if build:
         log += act_build()
@@ -1225,6 +1260,7 @@ def main():
     s.add_argument('--no-build', action='store_true')
     s = sp.add_parser('relock', help='指紋改成 _cache 現在那份')
     s.add_argument('--id', required=True)
+    sp.add_parser('authors', help='建造者：每艘船照 _cache 那份 .vxk 檔頭的 owner 記 ships[].author（補以前匯入的船；不重建）')
     s = sp.add_parser('reimport')
     s.add_argument('--id', required=True)
     s.add_argument('--work')
@@ -1252,6 +1288,8 @@ def main():
             log = ['✓ 重新排版 config/game.json']
         elif o.op == 'relock':
             log = act_relock(o.id)
+        elif o.op == 'authors':
+            log = act_authors()
         elif o.op == 'metasync':
             log = act_metasync(o.id, not o.no_build)
         elif o.op == 'import':
