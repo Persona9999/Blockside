@@ -114,6 +114,29 @@ function magBoom(sh, mag) {
   mag.R = R; mag.f = f; mag.removed = 0; mag.broke = brk;
   var job = crater(sh, c, R); job.w = w; job.mag = mag; BLASTS.push(job);
   blastStep(job);                                                      // 爆心那幾塊這一步就挖（其他的 stepBlasts 接著挖）
+  if (PHX.blastnb) blastNear(sh, w, R, f);                            // 旁邊的船（物理設定「殉爆波及」；碰得到才算）
+}
+/** 殉爆波及旁邊的船（Tim 2026-10-15：「目前殉爆有機會炸到旁邊的船嗎」「看對性能的影響 可以只在有可能炸到時進行判斷 性能優先」）：
+ *  同一顆爆炸球（世界座標 w、半徑 R 格）照自己這艘的那一套算在別艘上 —— 人（R × 0.85 內死、R × 1.4 內傷）、模型（R × 1.3 內扣血；火藥桶 ⇒ 可能連鎖殉爆）、彈坑（R，分幾步挖：BLASTS）。
+ *  先篩：那艘格子盒的外接球（中心＋半對角線）離爆心比 R × 1.4 還遠 ⇒ 整艘跳過（一行都不多算、不抽亂數 ⇒ 船沒靠近的戰局逐字不變）。
+ *  過了篩才換座標；彈坑只走碰得到球的區塊（crater），一塊都沒有 ⇒ 不排。斷船只算殉爆的那艘自己（別艘只挖洞，進水照破口算）。 */
+function blastNear(src, w, R, f) {
+  var reach = R * 1.4 * S;
+  for (var i = 0; i < SHIPS.length; i++) {
+    var o = SHIPS[i]; if (o === src || o.sunk || o.sink > 40) continue;
+    var B = o.T.base, cc = M4.pt(o.M, B.sx / 2, B.sy / 2, B.sz / 2), rb = 0.5 * S * Math.hypot(B.sx, B.sy, B.sz);
+    if (len(sub(cc, w)) > rb + reach) continue;
+    var c = toLocal(o, w);
+    hurt(o, c, R * 0.85, R * 1.4, null, '殉爆波及', 1500 * BLAST_K * f);
+    o.models.forEach(function (m) {
+      if (!m.alive) return;
+      var d = len(sub(m.c, c)); if (d > R * 1.3) return;
+      var cw = M4.pt(o.M, m.c[0], m.c[1], m.c[2]);
+      damageModel(o, m, mul(norm(sub(cw, w)), 300 * (1 - d / (R * 1.3)) + 80), 5000);
+    });
+    var job = crater(o, c, R); if (!job.ch.length) continue;
+    job.w = w; job.src = src; BLASTS.push(job); blastStep(job);
+  }
 }
 /** 每一步（step() 的殉爆排程之後）：還沒挖完的彈坑接著挖。 */
 function stepBlasts() {
@@ -137,9 +160,10 @@ function blastStep(J) {
     spawnDebris(p, add(add(mul(dir, rr(8, 40)), [0, rr(4, 22), 0]), sh.vel), sample[j + 3], rr(0.06, 0.16), rr(8, 16));
   }
   spawnPlates(sh, sample, [0, 1, 0], 30, 3, 40);                       // 殉爆：往上噴的木板
-  J.mag.removed = J.n;
+  if (J.mag) J.mag.removed = J.n;                                      // J.mag 沒有 ⇒ 被別艘的殉爆波及（blastNear）
   if (J.k < J.ch.length) return false;
   J.done = true;
+  if (!J.mag) { if (J.n) note(sh, '<b style="color:#ffb35a">被 ' + J.src.name + ' 的殉爆波及</b>（打掉 ' + J.n.toLocaleString() + ' 格）', true); return true; }
   if (J.mag.broke) breakShip(sh, c[0]);                                   // 彈坑挖完才切（下一步的連通判定把短的那半截變成斷開的一團）
   note(sh, '<b style="color:#ffb35a">' + magTag(J.mag) + '彈藥庫殉爆！</b>（' + J.mag.lb.toLocaleString() + ' 磅、半徑 ' + (R * S).toFixed(1) + ' m、打掉 ' + J.n.toLocaleString() + ' 格）' + (J.mag.broke ? '　船斷成兩截' : ''), true);
   return true;
