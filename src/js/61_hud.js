@@ -425,7 +425,10 @@ function navText(sh) {
     '傾斜 ' + Math.abs(roll).toFixed(1) + '°' + (Math.abs(roll) < 0.2 ? '' : roll < 0 ? '（左低）' : '（右低）') + '　縱傾 ' + pitch.toFixed(1) + '°';
 }
 /** P 那顆按鈕：停格中寫「繼續」、平常寫「停格」（Tim 2026-10-14）。 */
-function pauseLabel() { var b = $('pauseK'), s = '<b>P</b> ' + (PAUSED ? '▶' : '⏸'); if (b && b.innerHTML !== s) b.innerHTML = s; }   // 圖示（Tim 2026-10-15）：停格中 ⇒ ▶ 繼續
+function pauseLabel() { var b = $('pauseK'), s = '<b>P</b><i class="em">' + (PAUSED ? '▶' : '⏸') + '</i>'; if (b && b.innerHTML !== s) b.innerHTML = s; }   // 圖示（Tim 2026-10-15）：停格中 ⇒ ▶ 繼續
+/** 彈種那一顆（Tim 2026-10-15：「砲彈改成一個按鈕，切換所有支援的砲彈（顯示當前彈種圖示）」）：⚪ 實心彈（⛔ ⚫ 在深色圓鈕上看不見）、💣 爆裂彈、⛓️ 鏈彈；每一種砲三種都能打。 */
+var AMMO_ICON = ['⚪', '💣', '⛓️'], AMMO_TXT = ['實心彈', '爆裂彈', '鏈彈'];
+function ammoLabel() { var b = $('ammoB'); if (!b) return; var s = '<b>' + (AMMO_I + 1) + '</b><i class="em">' + AMMO_ICON[AMMO_I] + '</i>'; if (b.innerHTML !== s) { b.innerHTML = s; b.title = '彈種：' + AMMO_TXT[AMMO_I] + '（點一下換下一種；鍵盤 1 實心彈、2 爆裂彈、3 鏈彈）'; } }
 function hud(dt) {
   stepMsgs(dt);
   if (ROOMS_DBG) roomLabels();                                                   // 空艙房的名字（36_rooms.js；?rooms=1）：每一格跟著鏡頭
@@ -436,7 +439,7 @@ function hud(dt) {
   anchorChips(me);                                                              // 左右錨的按鈕：咬著亮、打壞灰掉（76_anchor.js）
   botFit();
   pauseLabel(); sailLabel(); hudIcons();
-  [].forEach.call(document.querySelectorAll('#ammo span'), function (s) { s.className = +s.dataset.a === AMMO_I ? 'on' : ''; });
+  ammoLabel();
   // 瞄準模式＋鏡頭名稱：羅盤上方空心字（Tim 2026-10-14）；鏡頭名稱要常駐（Tim：拿掉之後看不出現在是哪個鏡頭）
   var cn = CAM.mode === 3 && CAM.see && SHIPS.indexOf(CAM.see) >= 0 ? '看' + CAM.see.name : CAM_NAMES[CAM.mode];   // 「🎥 看這艘」⇒ 寫那一艘的名字
   // 圖示（Tim 2026-10-15：「瞄準、鏡頭的文字顯示也改成 Icon，然後那邊是否可以額外顯示航速、船體 %、進水 %（一樣用 Icon）」）：第二行 ⛵ 航速（節，倒車 −）；船體 %、進水 % 改成羅盤外圈的兩圈（drawNav；Tim：「這樣就不用文字顯示」）
