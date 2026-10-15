@@ -62,5 +62,6 @@ last_updated: 2026-10-15
 - 船是雕刻區的作品匯出的 `.vxk`（`VoxelKit/_cache/`，不入版控；換機器 ⇒ `python -I src/admin.py cache` 從作品重新匯出、跟指紋比），內嵌在網頁裡；同一份模型（例如同一門砲）幾艘船只存一次，所以六艘船擠得進幾 MB。
 - 2026-10-15 以前在 ArtGallery 開發（`HtmlGames/_build/ame_constitution_broadside/`，歷史還在那邊的 git log）。
 - 部署：push 到 `main` ⇒ GitHub Actions（`.github/workflows/pages.yml`）上傳到 Pages。
+- 遠端（Tim 2026-10-16）：**先 push 到 `private`**（`git push private main`；非推廣用的測試環境），要正式公開再 push 到 `origin`（會觸發上面的 Pages）；另有 `gitlab.com` 遠端。
 
 製作：ame（遊戲）× basecamp、summit、gura（船）× Tim
