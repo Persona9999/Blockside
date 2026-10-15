@@ -19,7 +19,8 @@ function shipCheck(id) {
     var float0 = ropesFloating(sh).map(function (f) { return f.name + '#' + f.end + '（' + f.why + '）'; });
     for (var i = 0, n = Math.round(SC_SECS / DT); i < n; i++) step();
     RUNNING = false;
-    R.info = { name: T.name, guns: sh.guns.length, crew: sh.crew.length, models: sh.models.length, ropes: sh.ropes.length, sails: sh.sails.length, masts: sh.masts.length, mags: sh.mags.length,
+    R.info = { name: T.name, guns: sh.guns.length, crew: sh.crew.length, models: sh.models.length, ropes: sh.ropes.length, sails: sh.sails.filter(function (s) { return !(s.meta && s.meta.team); }).length, teamFlags: sh.sails.filter(function (s) { return s.meta && s.meta.team; }).length,   // 作品的帆／遊戲加的陣營旗分開數（77_colours.js；⛔ 混在一起 ⇒ 夜燈號 vxk 12 面、報告寫 15，basecamp 2026-10-15 問）
+    masts: sh.masts.length, mags: sh.mags.length,
       decks: NV ? NV.levels.map(function (L) { return L.key + ' ' + L.name; }) : [], ladders: NV ? NV.ladders.length : 0, rooms: (sh.rooms || []).length, zw: T.zw, hits: SHIPS[1].hits + sh.hits };
     if (sh.hits || SHIPS[1].hits) add('warn', '量測', '—', '量的這 ' + SC_SECS + ' 秒裡有砲彈打中（hits ' + (sh.hits + SHIPS[1].hits) + '）⇒ 下面「站不滿」「掉了」可能有被打的', '照舊看，或重跑');
     // ── 船型：水線、geo ──
