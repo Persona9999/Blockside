@@ -37,6 +37,7 @@ var FURN = CFG.furniture || {}, ROOM_FN = CFG.rooms || {}, SHIP_ROOMS = {}, ROOM
 var ROOM_AISLE = 6;                                                     // 門口走道：格子的中心離門 0.6 m 以內 ⇒ 不能擺（⇒ 門口往裡一格、門的兩旁各多一格；⛔ 整格碰到就算 ⇒ 往裡兩格，1.5×2 m 的房間擺不下床）
 var ROOMFN_Q = Q.get('roomfn');                                        // 量的時候：?roomfn=medical ⇒ 每一型每一間都配這個類型、自動擺滿（蓋過存檔與設定檔）
 var ADMIN_ROOMS = Q.get('admin') === 'rooms';
+var ADMIN_DEF = Q.get('admin') === 'defaults';                      // 設定後台的「出廠預設值」：用細節設定頁編（71_input.js admDefUI）；跟 rooms 一樣不讀不存 localStorage
 /** 設定檔的預設 ⇒ { 房名: 擺法 }（格式跟存檔同一套：69_prefs.js roomPlanParse）。 */
 function roomPlanDefault(id) { var h = HULL_KNOWN.filter(function (x) { return x.id === id; })[0], d = {}; Object.keys((h && h.rooms) || {}).forEach(function (k) { var v = roomPlanParse(h.rooms[k]); if (v) d[k] = v; }); return d; }
 /** 後台模式：那一型現在的擺法寫成預設的格式（艙房：自動 ⇒ '類型'、自訂 ⇒ { type, items }；甲板只寫自訂的；空著的不寫）。 */

@@ -1120,6 +1120,35 @@ def act_state():
             'paths': {'config': CFG_P, 'out': OUT, 'cache': CACHE}}
 
 
+def act_defaults(lim):
+    """出廠預設值（Tim 2026-10-15：「用一樣的頁面去設定出廠預設值」）：遊戲的細節設定頁（/game?admin=defaults）送來 { 鍵: 值 } ⇒ 只改 lim[鍵] 的第三格（預設），上下限不動；照樣過 validate 才存。"""
+    if not isinstance(lim, dict) or not lim:
+        raise Fail('沒有要改的預設值')
+    prev = load()
+    new = json.loads(json.dumps(prev))
+    L, log, bad = new.get('lim') or {}, [], []
+    for k, v in lim.items():
+        if k not in L or not isnum(v):
+            bad.append(k)
+            continue
+        lo, hi, d = L[k][0], L[k][1], L[k][2]
+        if not (lo <= v <= hi):
+            bad.append('%s（%s 不在 %s～%s）' % (k, v, lo, hi))
+            continue
+        if v != d:
+            L[k][2] = v
+            log.append('  %s：%s → %s' % (k, d, v))
+    if bad:
+        raise Fail('這幾項不是滑桿的鍵或超出範圍，整批沒有存：' + '、'.join(bad))
+    if not log:
+        return ['（預設值都一樣，沒有存）']
+    E = validate(new, prev)
+    if E:
+        raise Fail('設定不合法，沒有存：\n' + '\n'.join('  ✗ ' + e for e in E))
+    save(new)
+    return ['✓ 出廠預設改了 %d 項（config/game.json lim；重建之後遊戲才吃得到）：' % len(log)] + log
+
+
 def act_save(new):
     prev = load()
     E = validate(new, prev)
@@ -1180,7 +1209,7 @@ def serve(port, do_open=False):
             path = self.path.split('?')[0]
             if path in ('/', '/index.html'):
                 return self.send(200, open(PAGE, 'rb').read(), 'text/html; charset=utf-8')
-            if path == '/game':                      # 後台嵌的甲板與艙房編輯器（成品 ?admin=rooms；要船型的格子 ⇒ 用建好的成品）
+            if path == '/game':                      # 後台嵌的甲板與艙房編輯器（成品 ?admin=rooms；要船型的格子 ⇒ 用建好的成品）；出廠預設值（?admin=defaults：細節設定頁）
                 if not os.path.exists(OUT):
                     return self.send(404, {'ok': False, 'log': ['還沒建置成品']})
                 return self.send(200, open(OUT, 'rb').read(), 'text/html; charset=utf-8')
@@ -1198,6 +1227,8 @@ def serve(port, do_open=False):
                 b = self.body()
                 if self.path == '/api/config':
                     log = act_save(b.get('config'))
+                elif self.path == '/api/defaults':
+                    log = act_defaults(b.get('lim'))
                 elif self.path == '/api/build':
                     log = act_build()
                 elif self.path == '/api/import':

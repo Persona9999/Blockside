@@ -30,6 +30,7 @@ python -I admin.py build --raw
 python -I admin.py verify
 # 設定後台（只聽本機）：http://127.0.0.1:8642/ —— 改設定、儲存並重建、匯入新船、重新匯入；--open 自動開瀏覽器，已經開著 ⇒ 只開頁面
 # 一鍵：雙擊 Blockside 根目錄的 admin.cmd（＝ serve --open；關掉那個視窗就停）
+# 出廠預設值：後台「滑桿」那一節的「用細節設定頁設出廠預設值…」⇒ 新分頁開遊戲的細節設定頁（/game?admin=defaults，69_prefs.js admDefUI；Tim 2026-10-15「用一樣的頁面去設定出廠預設值」）：值 ＝ 設定檔現在的預設；「存成出廠預設」⇒ 跟預設不一樣、是滑桿（lim 有那個鍵）的那幾項 ⇒ postMessage 給後台 ⇒ /api/defaults（act_defaults：只改 lim[鍵][2]、照樣 validate）；勾選、彈種倍率、砲長等列出來不存；後台那一頁有沒存的修改 ⇒ 擋下來。「重建」⇒ /api/build。⛔ 成品裡不能有 fetch（vxk_inline.py）⇒ 存檔、重建都經過開它的後台分頁（window.opener）。
 python -I admin.py serve --open
 # 匯入新船（雕刻作品 ⇒ _cache/<代號>.vxk ⇒ 登記進船隻清單 ⇒ 建置；比例要跟現有的船一樣）
 python -I admin.py import --work <雕刻作品 ID> --id <代號> --name <名字>

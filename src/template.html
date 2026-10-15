@@ -170,6 +170,7 @@
   body.roomEdOn #roomEd{ position:fixed; inset:8px; z-index:50; max-width:none; margin:0; overflow-y:auto; background:#141a22; border-color:rgba(255,255,255,.3); box-shadow:0 6px 30px rgba(0,0,0,.6); }   /* 打開 ⇒ 接近全螢幕（Tim 2026-10-14） */
   #cover #pgX{ position:fixed; top:10px; right:12px; z-index:40; display:none; margin:0; background:#e3c46a; color:#111; border-color:#e3c46a; box-shadow:0 2px 10px rgba(0,0,0,.6); } #cover #pgX.on{ display:block; }
   #roomEdX2{ display:none; } body.roomEdOn #roomEdX2{ display:block; position:sticky; top:0; float:right; z-index:2; background:#e3c46a; color:#111; border-color:#e3c46a; }   /* 編輯器浮層：右上角的完成（捲動時黏在上面） */
+  #detAdm{ display:none; } #detail.admin #detAdm{ display:block; color:#ffd27a; border:1px solid rgba(255,210,122,.5); border-radius:6px; padding:6px 10px; margin:6px 0; }   /* 出廠預設值（?admin=defaults） */
   #shipAdm{ display:none; } #shipp.admin #shipAdm{ display:block; color:#ffd27a; } #shipp.admin .nadm{ display:none; }   /* 設定後台嵌的那一份（?admin=rooms） */ #deckItems .rm{ display:flex; align-items:center; justify-content:center; flex-wrap:wrap; gap:4px 8px; font-size:13px; margin:5px 0; } #deckItems .rm label{ min-width:10em; text-align:right; } #deckItems .rm .rs{ color:var(--dim); font-size:12px; text-align:left; max-width:30em; } #deckItems button{ font-size:13px; padding:4px 10px; margin:2px; } #deckItems button.on{ color:#111; background:var(--gold); border-color:var(--gold); }
   #roomEd canvas{ position:static; display:block; margin:6px auto; touch-action:manipulation; cursor:crosshair; }   /* ⛔ 全域的 canvas 是 absolute（遊戲畫面）⇒ 編輯器的格子會飛到頁面外 */
   #cover table.ammo{ margin:4px auto; border-collapse:collapse; font-size:13px; }
@@ -396,6 +397,7 @@
     <!-- 細節設定（從主選單進）：滑桿的上下限與預設在 js/04_state.js 的 LIM（網址參數共用同一組） -->
     <div class="card panel" id="detail" style="display:none">
       <h2>細節設定</h2>
+      <div id="detAdm" class="row"><b>出廠預設值（設定後台）</b>：這一頁的值 ＝ 設定檔現在的預設；改好按「存成出廠預設」⇒ 寫進 config/game.json（只改各滑桿的預設，上下限不動），「重建」之後遊戲才吃得到。勾選、彈種倍率、砲長、降旗條件不是滑桿 ⇒ 不會存（會列出來）。<br><button id="detAdmS" class="on">💾 存成出廠預設</button><button id="detAdmB">🔨 重建</button><button id="detAdmX">↩ 回設定後台</button><div id="detAdmL" style="white-space:pre-wrap;text-align:left;font-size:12px"></div></div>
       <div class="sub">開戰前調好，下一場開始生效。網址參數吃同一組：?blue=我艦,友艦… ?red=敵艦,…（或 ?ship=我艦,敵艦） ?hard= ?flood= ?ballast= ?gunw= ?speed= ?agile= ?upwind= ?hands=（這八個套到每一型，在「船隻配置」）?gunhp= ?dmg24= ?dmg32l= ?dmg32= ?dmg18= ?dmg4= ?ammo=（九個數字）?sailhp= ?crewhp= ?box= ?carry= ?wind= ?powderhp= ?blast= ?cap= ?strike= ?play=fun／real ?stall= ?funspeed= ?funagile= ?funstall= ?funpowder= ?sea=</div>
       <h3>航行</h3>
       <div class="row slide"><label for="sea">浪</label><input type="range" id="sea" step="0.05" aria-label="浪的大小"><span id="seaV"></span></div>

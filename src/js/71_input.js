@@ -563,6 +563,7 @@ function sliders() {
   $('phxB').onclick = function () { page('phx'); };
   $('phxX').onclick = function () { page(''); };
   $('shipB').onclick = function () { page('ship'); loadHull(CFG_ID).then(function () { put(); show(); }); };   // 船隻配置：先載那一型（砲數、桅數、壓艙物的預設要船型）
+  if (ADMIN_DEF) admDefUI(page);                                 // 出廠預設值（?admin=defaults）：直接開細節設定頁
   if (ADMIN_ROOMS) { $('shipB').onclick(); try { window.parent.postMessage({ kind: 'cb-ready' }, location.origin); } catch (e) { /* 不是嵌在後台裡 */ } }
   $('shipX').onclick = function () { page(''); };
   $('gunB').onclick = function () { page('gun'); gunShow(); };   // 砲的設定（68_guncfg.js）
