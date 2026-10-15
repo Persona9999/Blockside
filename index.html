@@ -787,12 +787,12 @@
     var NB = [[0, 0, 1], [1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, -1]];   // 往下最後推 ⇒ 最先彈出
     var stack = new Int32Array(1 << 16), list = [];
     for (var si = 0; si < seeds.length; si++) {
-      var s = seeds[si], sx = s & 1023, sy = (s >> 10) & 1023, sz = s >> 20;
+      var s = seeds[si], sx = s & 2047, sy = (s >> 11) & 1023, sz = s >> 21;
       if (!grid.get(sx, sy, sz) || getv(sx, sy, sz)) continue;
       var sp = 0, conn = false; list.length = 0;
       stack[sp++] = s; setv(sx, sy, sz, 2); list.push(s);
       outer: while (sp) {
-        var p = stack[--sp], x = p & 1023, y = (p >> 10) & 1023, z = p >> 20;
+        var p = stack[--sp], x = p & 2047, y = (p >> 11) & 1023, z = p >> 21;
         if (isAnchor(x, y, z)) { conn = true; break; }
         for (var k = 0; k < 6; k++) {
           var nx = x + NB[k][0], ny = y + NB[k][1], nz = z + NB[k][2];
@@ -801,13 +801,13 @@
           if (mv === 1) { conn = true; break outer; }
           if (mv) continue;
           setv(nx, ny, nz, 2);
-          var q = nx | (ny << 10) | (nz << 20);
+          var q = nx | (ny << 11) | (nz << 21);
           if (sp >= stack.length) { var ns = new Int32Array(stack.length * 2); ns.set(stack); stack = ns; }
           stack[sp++] = q; list.push(q);
         }
         if (list.length > budget) { conn = true; break; }
       }
-      for (var j = 0; j < list.length; j++) { var r = list[j]; setv(r & 1023, (r >> 10) & 1023, r >> 20, conn ? 1 : 3); }
+      for (var j = 0; j < list.length; j++) { var r = list[j]; setv(r & 2047, (r >> 11) & 1023, r >> 21, conn ? 1 : 3); }
       if (!conn) pieces.push(Int32Array.from(list));
     }
     return pieces;
@@ -944,7 +944,7 @@
     embeddedImage: embeddedImage, embeddedJSON: embeddedJSON,
     Grid: Grid, verify: verify, meshChunk: meshChunk, M4: M4, raycast: raycast, detached: detached,
     compile: compile, VOXEL_VS: VOXEL_VS, VOXEL_FS: VOXEL_FS, RegionSet: RegionSet, QuadIndex: QuadIndex,
-    pack: function (x, y, z) { return x | (y << 10) | (z << 20); }
+    pack: function (x, y, z) { return x | (y << 11) | (z << 21); },   // 格座標壓成一個整數：x 11 位元（0–2047）、y、z 各 10 位元（kotoko 2026-10-15：以前 x 只有 10 位元 ⇒ 拿破崙號 jib-boom 到 x 1098，殉爆斷船時那一段找不到、留在空中）
   };
 })(typeof window !== 'undefined' ? window : this);
 
@@ -2369,7 +2369,7 @@ function ropeEnd(r, e) {
   var src = r.pts0 || r.pts, n = src.length / 3, i = e ? n - 1 : 0, P = [src[i * 3], src[i * 3 + 1], src[i * 3 + 2]], an = e ? r.b : r.a, o;
   var yk = e ? r.yb : r.ya;
   if (yk >= 0) o = { k: 'yard', a: yk, P: P };
-  else if (an >= 0) o = { k: 'grid', a: an, d0: Math.hypot((an & 1023) + 0.5 - P[0], ((an >> 10) & 1023) + 0.5 - P[1], (an >> 20) + 0.5 - P[2]), P: P };
+  else if (an >= 0) o = { k: 'grid', a: an, d0: Math.hypot((an & 2047) + 0.5 - P[0], ((an >> 11) & 1023) + 0.5 - P[1], (an >> 21) + 0.5 - P[2]), P: P };
   else if ((e ? r.mb : r.ma) !== undefined) o = { k: 'model', a: e ? r.mb : r.ma, P: P };
   else if ((e ? r.pb : r.pa) !== undefined) o = { k: 'rope', a: e ? r.pb : r.pa, P: P };
   else o = { k: 'none', a: -1, P: P };
@@ -3800,17 +3800,17 @@ function integrity(sh) {
 function spawnPiece(sh, pc) {
   var n = pc.length, i, x, y, z, c;
   if (n < 40) {                                               // 小碎塊直接變碎屑
-    for (i = 0; i < n; i++) { x = pc[i] & 1023; y = (pc[i] >> 10) & 1023; z = pc[i] >> 20; c = removeVoxel(sh, x, y, z, false);
+    for (i = 0; i < n; i++) { x = pc[i] & 2047; y = (pc[i] >> 11) & 1023; z = pc[i] >> 21; c = removeVoxel(sh, x, y, z, false);
       if (c) spawnDebris(M4.pt(sh.M, x + 0.5, y + 0.5, z + 0.5), add([gauss(), rr(-0.5, 1), gauss()], sh.vel), c, rr(0.06, 0.1), rr(8, 16)); }
     return;
   }
   var g = new VK.Grid([sh.T.base.sx, sh.T.base.sy, sh.T.base.sz]), sx = 0, sy = 0, sz = 0, minz = 1e9, set = new Set();
   for (i = 0; i < n; i++) {
-    x = pc[i] & 1023; y = (pc[i] >> 10) & 1023; z = pc[i] >> 20; c = removeVoxel(sh, x, y, z, false);
+    x = pc[i] & 2047; y = (pc[i] >> 11) & 1023; z = pc[i] >> 21; c = removeVoxel(sh, x, y, z, false);
     if (!c) continue; g.set(x, y, z, c); sx += x; sy += y; sz += z; if (z < minz) minz = z; set.add(pc[i]);
   }
   var px = 0, py = 0, pz = 0, pn = 0;
-  for (i = 0; i < n; i++) { z = pc[i] >> 20; if (z <= minz + 2) { px += (pc[i] & 1023); py += (pc[i] >> 10) & 1023; pz += z; pn++; } }
+  for (i = 0; i < n; i++) { z = pc[i] >> 21; if (z <= minz + 2) { px += (pc[i] & 2047); py += (pc[i] >> 11) & 1023; pz += z; pn++; } }
   var rs2 = new VK.RegionSet(gl, g, QIDX); rsAllDirty(rs2);                 // 網格分批建（60_render.js remesh；⛔ buildAll ⇒ 十萬格的半截船那一格卡上百 ms）
   var M0 = sh.M, c0 = M4.pt(M0, sx / n + 0.5, sy / n + 0.5, sz / n + 0.5), pivot = M4.pt(M0, px / pn + 0.5, py / pn + 0.5, pz / pn);
   var imp = sh.impulse; imp = [imp[0], 0, imp[2]]; if (len(imp) < 1e-6) imp = [rnd() - 0.5, 0, rnd() - 0.5];
@@ -5721,7 +5721,7 @@ function survey(sh) {               // 每半秒量一次：砲還在不在、�
   sh.models.forEach(function (m) {
     if (!m.alive) return;
     if (m.falls) { if (m.falls.every(function (j) { return sh.ropes[j].dead; })) blowModel(sh, m, [0, -1, 0], true); return; }   // 掛著的（小艇）：吊索全斷才掉（10_ship.js hangFalls）
-    var f = m.foot, x = f & 1023, y = (f >> 10) & 1023, z = f >> 20;
+    var f = m.foot, x = f & 2047, y = (f >> 11) & 1023, z = f >> 21;
     if (!countBox(sh.grid, x - 2, y - 2, z - 1, x + 2, y + 2, z)) blowModel(sh, m, [0, -1, 0], true);   // 腳下的甲板被打掉 ⇒ 掉下去
   });
   sh.guns.forEach(function (g) { if (g.alive) g.alive = g.model.alive; if (g.alive) alive++; });   // 砲都是模型：模型飛了（血量歸零、腳下甲板沒了）砲就沒了
@@ -5783,7 +5783,7 @@ function strikeText() {
   if (STRIKE.officers) r.push('軍官全倒且死傷 ≥ 25%');
   return r.length ? '任一條成立就降旗：' + r.join('／') : '不降旗：打到沉或全員倒下';
 }
-function gp(g, p) { return g.get(p & 1023, (p >> 10) & 1023, p >> 20); }
+function gp(g, p) { return g.get(p & 2047, (p >> 11) & 1023, p >> 21); }   // 格座標壓法見 VK.pack（x 11 位元）
 // ── js/33_flood.js ──
 // ───────────────────────── 進水：粒子模式（TASK-0525） ─────────────────────────
 // 兩種模式（Tim 2026-10-13）：物理效果的「進水」第 0 檔 ＝ 公式（32_hull.js：水線下破洞數 × √水深）；1–3 檔 ＝ 粒子（粗／中／細）。全開 ＝ 細。
@@ -10851,7 +10851,7 @@ function shipCheck(id) {
       if (m.kind === 'yard' && !m.piv) add('error', '帆桁', m.path, '沒有固定點 pivot ⇒ 找不到掛在哪根桅', '帆桁子作品登記 pivot（造船規格 §5）');
       var sn = m.name.replace(/^.*yard-/, ''), hasSail = sh.sails.some(function (s) { return s.name === sn; });   // 沒掛帆的帆桁（crossjack、spritsail 常見）不用寫 sail
       if (m.kind === 'yard' && ((!mt.sail && hasSail) || (!mt.mast && !/bowsprit|艏斜桅/.test(m.path)))) add('warn', '帆桁', m.path, '帆桁 meta 少了 ' + [!mt.sail && hasSail && 'sail（有一面帆叫 ' + sn + '）', !mt.mast && 'mast'].filter(Boolean).join('、') + ' ⇒ 照名字配帆／桅', '帆桁 meta sail=<帆名>、mast=<桅>（造船規格 §9.1）');
-      if (!m.alive && !GUNS[m.kind] && m.kind !== 'powder') add('error', '開場就掉', m.path, (mt.kind || m.kind) + ' 開場 ' + SC_SECS + ' 秒內就判成沒東西撐、掉了（腳 z ' + (m.foot >> 20) + '）', '把它接到實心上；掛著的（燈、舵）登記掛點固定點（bail、stock-top）');
+      if (!m.alive && !GUNS[m.kind] && m.kind !== 'powder') add('error', '開場就掉', m.path, (mt.kind || m.kind) + ' 開場 ' + SC_SECS + ' 秒內就判成沒東西撐、掉了（腳 z ' + (m.foot >> 21) + '）', '把它接到實心上；掛著的（燈、舵）登記掛點固定點（bail、stock-top）');
     });
     // ── 錨（TASK-0601）：模型錨（meta kind=anchor）＋錨環 ring、船殼的錨鏈孔 hawse-P／S（造船規格 §9 anchor）──
     var AN = anchorsOf(sh);
@@ -11460,7 +11460,7 @@ if (DEBUG) window.__game = {
   /** 繩的檢查（10_ship.js ropesFloating／ropeAuditStatic）：第 i 艘現在浮空的繩；static ⇒ 作品本身的讀數。 */
   ropes: function (i, stat) { var sh = SHIPS[i || 0]; return stat ? ropeAuditStatic(sh) : ropesFloating(sh); },
   hangs: function (i) { return SHIPS[i || 0].models.filter(function (m) { return m.hang; }).map(function (m) { return m.path + (m.sax ? ' 擺 ' + (m.sw * 57.3).toFixed(1) + '°（擺長 ' + (m.sL * S).toFixed(2) + ' m）' : '') + ' falls ' + (m.falls ? m.falls.map(function (j) { var r = SHIPS[i || 0].ropes[j]; return r.name + (r.dead ? '×' : ''); }).join(',') : '（沒有）') + (m.alive ? '' : ' 掉了'); }); },
-  lostModels: function (i) { return SHIPS[i || 0].models.filter(function (m) { return !m.alive && !GUNS[m.kind] && m.kind !== 'powder'; }).map(function (m) { return m.path + ' ' + (m.meta.kind || m.kind) + ' foot z ' + (m.foot >> 20); }); },
+  lostModels: function (i) { return SHIPS[i || 0].models.filter(function (m) { return !m.alive && !GUNS[m.kind] && m.kind !== 'powder'; }).map(function (m) { return m.path + ' ' + (m.meta.kind || m.kind) + ' foot z ' + (m.foot >> 21); }); },
   gunDirs: function (i) { return SHIPS[i || 0].guns.map(function (g) { return [g.name.split('/').pop(), g.type, g.ax.map(function (v) { return +v.toFixed(2); }), gunDir(g)]; }); },
   /** 艙房的擺法（TASK-0568；船型要先載好）：每一間的格子（nx×ny、門口走道幾格、站不住幾格）、type ⇒ 那個類型自動擺滿的結果、now ⇒ 現在照擺法擺上的；ms ＝ 全部算一次幾毫秒（不記）。 */
   roomPlans: function (id, type) {
