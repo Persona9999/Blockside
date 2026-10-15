@@ -244,7 +244,7 @@
     <div><kbd>⚓</kbd> 錨：⚓⚓（6）兩邊都沒拋 ⇒ 一起拋、停住，A／D 繞錨原地轉；一邊在水裡 ⇒ 拋另一邊；兩邊都在水裡 ⇒ 起錨。◀⚓（7）⚓▶（8）只拋一邊：帶著速度拋 ⇒ 繞錨急轉。後面接 ⬆ ＝ 在水裡（再按起錨）、⏳ 起錨中、✖ 打壞了（不能拋、鍊子斷了）；鐵鍊從錨鏈孔放出、沉到海底</div>
     <div class="hH">畫面上的資訊</div>
     <div><kbd>🧭</kbd> 羅盤（下方中間）：跟著鏡頭轉（N ＝ 北），中間是我艦、藍箭頭 ＝ 風從哪吹來、紅點 ＝ 敵艦、金色扇形 ＝ 兩舷的射界（對得到時亮）；外圈兩環：<span style="color:#e8c26a">金 ＝ 船體還剩多少</span>、<span style="color:#4fb3ff">藍 ＝ 進水</span>（七成以上轉紅；滑鼠停著看數字）</div>
-    <div><kbd>🎯</kbd> 羅盤上方：🎯 瞄準模式　🎥 鏡頭　⚠ 射界外（瞄準點對不到）；第二行 ⛵ 航速（節，倒車是 −）＋現在的帆段</div>
+    <div><kbd>🎯</kbd> 羅盤上方：🎯 瞄準模式　🎥 鏡頭　⚠ 射界外（瞄準點對不到）；第二行 ⛵ 航速（節，倒車是 −）＋現在的帆段與帆 %（張著、還在的帆 × 血量）；物理減速放慢時後面多一個 🐢 ×倍率</div>
     <div><kbd>砲</kbd> 羅盤兩旁是兩舷的砲（船頭、船尾砲在羅盤上下）：● 裝填好 ◌ 裝填中 △ 等火藥與彈藥 ○ 開不了 ✕ 毀 <span class="g-wet">≈ 砲口泡在水裡（不能裝填、不能開）</span>；<span class="g-full">綠 滿編</span>、<span class="g-short">黃 人數不足（照開、較慢）</span>、<span class="g-none">灰 少於最少人數</span>、<span class="g-dead">紅 毀</span>；底下的紅線 ＝ 那門砲剩下的血量</div>
     <div><kbd>艦</kbd> 上方兩角的艦隊圓鈕（我方左、敵方右；手機橫拿時橫排）：外圈金 ＝ 船體、內圈藍 ＝ 進水，👤 ＝ 還能動的船員、💥 ＝ 還能用的砲；點一下在中間展開那艘的詳細資訊與砲位圖，再點一下收起</div>
     <div><kbd>報</kbd> 上方廣播：砲被打飛（同一刻的併成一行）、傷亡（每 5 秒報一次陣亡與受傷人數；是 0 的不報）；船長、軍官、舵手倒下當下就報</div>
@@ -8698,7 +8698,8 @@ function hud(dt) {
   var kn = me.spd * 1.944;
   var mt = $('modeT'), ms = '🎯 <b>' + (!handAim(me) ? '砲長' : (AUTOFIRE ? '手動一舷・' : '') + AIM_NAME[me.pMode || 'free']) + '</b>　🎥 <b>' + cn + '</b>' +
     (HUD_OUTARC ? '　<b style="color:#ff9a7a">⚠ 射界外</b>' : '') + '<br>' +
-    '⛵ <b>' + (kn < -0.05 ? '−' + (-kn).toFixed(1) : Math.max(0, kn).toFixed(1)) + '</b> 節　' + sailSetName(me);   // 船體、進水改成羅盤外圈的兩圈（drawNav）；後面接帆裝（Tim 2026-10-15「羅盤上方航速資訊可以顯示當前帆狀態」：全收…滿帆，有額外動力的船多倒車、全速前進）
+    '⛵ <b>' + (kn < -0.05 ? '−' + (-kn).toFixed(1) : Math.max(0, kn).toFixed(1)) + '</b> 節　' + sailSetName(me) + ' ' + Math.round(me.sailFrac * 100) + '%' +   // 帆 %（Tim 2026-10-15）：張著、還在的帆面積 × 血量（sailFrac，航速照它算）
+    (RUNNING && PSLOW.on && PSLOW.ts < 0.98 && !(SLOW.active && SLOW.ts < 0.98) ? '　<b style="color:#ffd27a">🐢 物理減速 ×' + PSLOW.ts.toFixed(2) + '</b>' : '');   // 物理減速的提示（Tim 2026-10-15：搬到航速這一行；73_slowmo.js）—— 殉爆的慢動作照舊在畫面中間   // 船體、進水改成羅盤外圈的兩圈（drawNav）；後面接帆裝（Tim 2026-10-15「羅盤上方航速資訊可以顯示當前帆狀態」：全收…滿帆，有額外動力的船多倒車、全速前進）
   if (mt && mt.innerHTML !== ms) mt.innerHTML = ms;
   var t = DEBUG ? '格：' + SHIPS.map(function (s) { return s.grid.count; }).join('／') + '　四邊形：' + SHIPS.map(function (s) { return s.rs.quads(); }).join('／') + '　碎片 ' + D.n + '　粒子 ' + PT.n + '　脫落 ' + PIECES.length + (PHYS ? '　物理 ' + PHYS_MS.toFixed(2) + ' ms/步、垂繩 ' + SHIPS.map(function (s) { return s.loose.length; }).join('／') : '') + '　' + FPS.toFixed(0) + ' fps' : '';
   $('tip').textContent = t;
@@ -9971,11 +9972,11 @@ function pslowTick(dt) {
 function pslowToggle() { PSLOW.on = !PSLOW.on; if (!PSLOW.on) PSLOW.ts = 1; gsetShow(); if (typeof phxShow === 'function') phxShow(); }
 /** 慢動作中，只給人看的效果照畫面的時間走（step() 那邊跳過）。 */
 function slowVisStep(dt) { stepDebris(dt); stepPts(dt); stepWater(dt, 'fly'); }
-/** 慢動作的提示（畫面上方中間）：倍率 < 0.98 才顯示。 */
+/** 慢動作的提示（畫面中間）：倍率 < 0.98 才顯示。物理減速的提示在羅盤上方的航速那一行（61_hud.js；Tim 2026-10-15）。 */
 function slowShow() {
   var el = $('slowB'); if (!el) return;
-  var on = RUNNING && SLOW.active && SLOW.ts < 0.98, ph = RUNNING && !on && PSLOW.on && PSLOW.ts < 0.98;   // 殉爆的慢動作優先；不然物理減速
-  el.classList.toggle('on', on || ph); if (on) el.textContent = '慢動作 ×' + SLOW.ts.toFixed(2); else if (ph) el.textContent = '物理減速 ×' + PSLOW.ts.toFixed(2);
+  var on = RUNNING && SLOW.active && SLOW.ts < 0.98;                 // 殉爆的慢動作
+  el.classList.toggle('on', on); if (on) el.textContent = '慢動作 ×' + SLOW.ts.toFixed(2);
 }
 $('slowT').onclick = function () { SLOW.on = !SLOW.on; if (!SLOW.on) { SLOW.active = false; SLOW.ts = 1; } gsetShow(); };
 $('slowCamT').onclick = function () { SLOW.cam = !SLOW.cam; gsetShow(); };

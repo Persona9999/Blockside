@@ -64,11 +64,11 @@ function pslowTick(dt) {
 function pslowToggle() { PSLOW.on = !PSLOW.on; if (!PSLOW.on) PSLOW.ts = 1; gsetShow(); if (typeof phxShow === 'function') phxShow(); }
 /** 慢動作中，只給人看的效果照畫面的時間走（step() 那邊跳過）。 */
 function slowVisStep(dt) { stepDebris(dt); stepPts(dt); stepWater(dt, 'fly'); }
-/** 慢動作的提示（畫面上方中間）：倍率 < 0.98 才顯示。 */
+/** 慢動作的提示（畫面中間）：倍率 < 0.98 才顯示。物理減速的提示在羅盤上方的航速那一行（61_hud.js；Tim 2026-10-15）。 */
 function slowShow() {
   var el = $('slowB'); if (!el) return;
-  var on = RUNNING && SLOW.active && SLOW.ts < 0.98, ph = RUNNING && !on && PSLOW.on && PSLOW.ts < 0.98;   // 殉爆的慢動作優先；不然物理減速
-  el.classList.toggle('on', on || ph); if (on) el.textContent = '慢動作 ×' + SLOW.ts.toFixed(2); else if (ph) el.textContent = '物理減速 ×' + PSLOW.ts.toFixed(2);
+  var on = RUNNING && SLOW.active && SLOW.ts < 0.98;                 // 殉爆的慢動作
+  el.classList.toggle('on', on); if (on) el.textContent = '慢動作 ×' + SLOW.ts.toFixed(2);
 }
 $('slowT').onclick = function () { SLOW.on = !SLOW.on; if (!SLOW.on) { SLOW.active = false; SLOW.ts = 1; } gsetShow(); };
 $('slowCamT').onclick = function () { SLOW.cam = !SLOW.cam; gsetShow(); };
