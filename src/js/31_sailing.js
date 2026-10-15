@@ -168,23 +168,199 @@ function sail(sh, dt) {
   }
 }
 
-/** 兩艘的龍骨線（各取 7 點）最近不到 14 公尺 ⇒ 沿那個方向各推開一半、航速掉一點（⛔ 不推 ⇒ 手動開過去會穿船）。
- *  任兩艘都算（TASK-0537；照 SHIPS 的順序兩兩配對，一對一 ＝ 以前那一對）；龍骨線每艘只算一次。 */
+/** 船與船的碰撞（物理設定「船隻碰撞」PHX.shiphit、「船隻摩擦」PHX.shipfric；09_phx.js）。任兩艘都算（TASK-0537；照 SHIPS 的順序兩兩配對）。
+ *  ⛔ 會改戰局（船推到哪、航速掉多少）—— 跟進水的粒子模式一樣，開戰時照當時的檔位跑；不抽 rnd()。
+ *  · 低（原本）：兩艘的龍骨線（各取 7 點）最近不到 14 公尺 ⇒ 沿那個方向各推開一半（⛔ 不推 ⇒ 手動開過去會穿船）。
+ *    Tim 2026-10-15：兩艘明明還隔著一段水面就判成撞上（每艘等於一根半徑 7 m 的膠囊，船頭船尾是圓頭）⇒ 加下面三檔。
+ *  · 中：水線一帶的船殼輪廓（俯視：每一欄 x 的左右外緣）互相落進去才算。
+ *  · 高／全開：船殼格子 —— 每艘外表面的格（六個方向最外面那一層：船殼、桅、艏斜桅，甲板等內面不算），高每 3 格取一、全開每格；
+ *    A 的表面點換到 B 的格子座標落在實心裡（反過來也量）才算。打掉的格不算（照 sh.grid）。
+ *  撞上了 ⇒ 試幾個方向（中心連線、兩艘各自的橫向）各要推開多少才分得開（二分搜），取最少的那個方向各推一半 ⇒ 擦邊時只往側面推開、可以滑過去
+ *  （以前沿龍骨最近點連線推：錯開並排時那條線是斜的，等於前後也被擋住 ⇒ 黏住）。
+ *  · 摩擦（shipfric）：貼著的每一步，航速扣掉「航向裡頂著對方的那一份」× 係數（正面撞照樣停、擦邊幾乎不減）；原本 ＝ 不管方向每步 ×0.97。 */
+var SHIPHIT_LV = [null, { foot: 1 }, { stride: 3 }, { stride: 1 }];
+var SHIPFRIC_LV = [null, { n: 0.03, t: 0.01 }, { n: 0.02, t: 0.003 }, { n: 0.012, t: 0.0008 }];   // 每步扣的比例：n ＝ 正面頂著那一份、t ＝ 擦邊那一份；null ＝ 原本（不管方向 ×0.97）
+var HIT_BRUTE = false;                                                   // 除錯（__game.shipHit 第四個參數）：不走八叉樹的篩、每個點都量 ⇒ 對拍用
+var HIT_PROF = { n: 0, ms: 0, max: 0, pairs: 0, touch: 0, pts: 0, nodes: 0 };   // 讀數（__game.shipHit）：量了幾次、花多少 ms（最多一步幾 ms）、外框沒篩掉的配對、貼著幾次、真的換座標的點數、走過的八叉樹節點
 function collide() {
   if (SHIPS.length < 2) return;
-  function keel(sh) { var T = sh.T, r = []; for (var k = 0; k < 7; k++) r.push(M4.pt(sh.M, T.wl0 + 15 + (T.wl1 - T.wl0 - 30) * k / 6, T.cy, T.zw)); return r; }
-  var K = SHIPS.map(keel);
-  for (var i = 0; i < SHIPS.length; i++) for (var j = i + 1; j < SHIPS.length; j++) collidePair(SHIPS[i], SHIPS[j], K[i], K[j]);
+  var lv = SHIPHIT_LV[PHX.shiphit] || null;
+  if (!lv) {
+    var K = SHIPS.map(keelPts);
+    for (var i = 0; i < SHIPS.length; i++) for (var j = i + 1; j < SHIPS.length; j++) collidePair(SHIPS[i], SHIPS[j], K[i], K[j]);
+    return;
+  }
+  var t0 = performance.now();
+  for (var a = 0; a < SHIPS.length; a++) for (var b = a + 1; b < SHIPS.length; b++) collideFine(SHIPS[a], SHIPS[b], lv);
+  var ms = performance.now() - t0; HIT_PROF.n++; HIT_PROF.ms += ms; if (ms > HIT_PROF.max) HIT_PROF.max = ms;
 }
+function keelPts(sh) { var T = sh.T, r = []; for (var k = 0; k < 7; k++) r.push(M4.pt(sh.M, T.wl0 + 15 + (T.wl1 - T.wl0 - 30) * k / 6, T.cy, T.zw)); return r; }
 function collidePair(A, B, ka, kb) {
   var best = 1e9, pa = null, pb = null;
   ka.forEach(function (a) { kb.forEach(function (b) { var d = Math.hypot(a[0] - b[0], a[2] - b[2]); if (d < best) { best = d; pa = a; pb = b; } }); });
   if (best >= 14) return;
   var n = best > 1e-3 ? [(pa[0] - pb[0]) / best, 0, (pa[2] - pb[2]) / best] : [0, 0, 1], push = (14 - best) / 2;
   A.px += n[0] * push; A.pz += n[2] * push; B.px -= n[0] * push; B.pz -= n[2] * push;
-  A.spd *= 0.97; B.spd *= 0.97;
+  hitFriction(A, B, n);
   wpBump(pa, pb, A, B);                                                // 船邊水花（13_water.js；只給人看）
   if (SIMT - (A.bumpT || -9) > 5) { A.bumpT = SIMT; sfx('crack', pa, 1); note(SHIPS[PLAYER_I], '兩艘擦撞'); }
+}
+/** 摩擦：n ＝ 從 B 指向 A 的接觸法線（水平單位向量）。原本 ⇒ 兩艘都 ×0.97。 */
+function hitFriction(A, B, n) {
+  var F = SHIPFRIC_LV[PHX.shipfric];
+  if (!F) { A.spd *= 0.97; B.spd *= 0.97; return; }
+  [[A, -1], [B, 1]].forEach(function (q) {
+    var sh = q[0], f = fwd(sh.yaw), c = Math.max(0, q[1] * (f[0] * n[0] + f[2] * n[2]) * Math.sign(sh.spd || 1));   // 航向（倒車照反方向）裡往對方頂的那一份（0..1）
+    sh.spd *= 1 - (F.n * c + F.t * (1 - c));
+  });
+}
+/** 船型 T 的碰撞取樣（第一次用到才算、每個船型每一檔只算一次；HIT_PROF 記花了多久）：
+ *  foot ⇒ { f0, f1 }：水線下 1 m 到水線上 4 m 那一段，每一欄 x 的 y 最小／最大（沒有 ⇒ -1）＋ 外緣點（每 2 欄取一）；
+ *  stride k ⇒ Int16Array [x, y, z, …]：六個方向最外面那一格（俯視 (x,y) 的最高／最低、(x,z) 的兩舷、(y,z) 的船頭船尾），座標照 k 取一。 */
+function hitSamples(T, lv) {
+  var key = lv.foot ? 'foot' : 's' + lv.stride; T.hit = T.hit || {};
+  if (T.hit[key]) return T.hit[key];
+  var t0 = performance.now(), G = T.base, sx = G.sx, sy = G.sy, sz = G.sz, out;
+  if (lv.foot) {
+    var z0 = Math.max(0, Math.round(T.zw - 1 / S)), z1 = Math.min(sz - 1, Math.round(T.zw + 4 / S)), f0 = new Int16Array(sx).fill(-1), f1 = new Int16Array(sx).fill(-1), pts = [];
+    G.each(function (x, y, z) { if (z < z0 || z > z1) return; if (f0[x] < 0 || y < f0[x]) f0[x] = y; if (y > f1[x]) f1[x] = y; });
+    for (var x = 0; x < sx; x += 2) if (f0[x] >= 0) pts.push(x, f0[x], T.zw, x, f1[x], T.zw);
+    out = { f0: f0, f1: f1, pts: new Int16Array(pts) };
+  } else {
+    var k = lv.stride, NA = sx * sz, NB = sx * sy, NC = sy * sz;
+    var ylo = new Int16Array(NA).fill(-1), yhi = new Int16Array(NA).fill(-1), zlo = new Int16Array(NB).fill(-1), zhi = new Int16Array(NB).fill(-1), xlo = new Int16Array(NC).fill(-1), xhi = new Int16Array(NC).fill(-1);
+    G.each(function (x, y, z) {
+      var a = x + sx * z, b = x + sx * y, c = y + sy * z;
+      if (ylo[a] < 0 || y < ylo[a]) ylo[a] = y; if (y > yhi[a]) yhi[a] = y;
+      if (zlo[b] < 0 || z < zlo[b]) zlo[b] = z; if (z > zhi[b]) zhi[b] = z;
+      if (xlo[c] < 0 || x < xlo[c]) xlo[c] = x; if (x > xhi[c]) xhi[c] = x;
+    });
+    var seen = new Set(), P = [];
+    function add(x, y, z) { var h = x + 2048 * (y + 2048 * z); if (!seen.has(h)) { seen.add(h); P.push(x, y, z); } }
+    var i, j;
+    for (j = 0; j < sz; j += k) for (i = 0; i < sx; i += k) { var a2 = i + sx * j; if (ylo[a2] >= 0) { add(i, ylo[a2], j); add(i, yhi[a2], j); } }
+    for (j = 0; j < sy; j += k) for (i = 0; i < sx; i += k) { var b2 = i + sx * j; if (zlo[b2] >= 0) { add(i, j, zlo[b2]); add(i, j, zhi[b2]); } }
+    for (j = 0; j < sz; j += k) for (i = 0; i < sy; i += k) { var c2 = i + sy * j; if (xlo[c2] >= 0) { add(xlo[c2], i, j); add(xhi[c2], i, j); } }
+    // 八叉樹（Tim 2026-10-15）：點照 16³ 格塊分成葉子（點照葉子排好、各記 [a, b) 與外框），往上每 2×2×2 合成一個節點直到只剩一個根；
+    //   hitCount 從根往下：節點外框換到對方座標、落在對方的空區（occPyr）⇒ 整棵子樹跳過
+    var leafOf = function (u) { return (P[u] >> 4) + 128 * ((P[u + 1] >> 4) + 128 * (P[u + 2] >> 4)); };
+    var idx = []; for (i = 0; i < P.length; i += 3) idx.push(i);
+    idx.sort(function (u, v) { return leafOf(u) - leafOf(v) || u - v; });
+    var Q = new Int16Array(P.length), nodes = [];
+    idx.forEach(function (u, r) { Q[r * 3] = P[u]; Q[r * 3 + 1] = P[u + 1]; Q[r * 3 + 2] = P[u + 2]; });
+    for (var r0 = 0; r0 < Q.length;) {
+      var c0 = [Q[r0] >> 4, Q[r0 + 1] >> 4, Q[r0 + 2] >> 4], r1 = r0, lo = [1e9, 1e9, 1e9], hi = [-1, -1, -1];
+      while (r1 < Q.length && (Q[r1] >> 4) === c0[0] && (Q[r1 + 1] >> 4) === c0[1] && (Q[r1 + 2] >> 4) === c0[2]) { for (var c3 = 0; c3 < 3; c3++) { lo[c3] = Math.min(lo[c3], Q[r1 + c3]); hi[c3] = Math.max(hi[c3], Q[r1 + c3] + 1); } r1 += 3; }
+      nodes.push({ c: c0, a: r0, b: r1, lo: lo, hi: hi, kids: null }); r0 = r1;
+    }
+    var nLeaf = nodes.length, depth = 0;
+    while (nodes.length > 1) {                                             // 往上合：同一個父格（座標 >> 1）的收在一起
+      var par = new Map();
+      nodes.forEach(function (nd) {
+        var pc = [nd.c[0] >> 1, nd.c[1] >> 1, nd.c[2] >> 1], pk = pc[0] + 1024 * (pc[1] + 1024 * pc[2]), pn = par.get(pk);
+        if (!pn) { pn = { c: pc, lo: nd.lo.slice(), hi: nd.hi.slice(), kids: [] }; par.set(pk, pn); }
+        for (var c4 = 0; c4 < 3; c4++) { pn.lo[c4] = Math.min(pn.lo[c4], nd.lo[c4]); pn.hi[c4] = Math.max(pn.hi[c4], nd.hi[c4]); }
+        pn.kids.push(nd);
+      });
+      nodes = Array.from(par.values()); depth++;
+    }
+    out = { pts: Q, root: nodes[0], leaves: nLeaf, depth: depth };
+  }
+  out.ms = +(performance.now() - t0).toFixed(1); out.n = out.pts.length / 3;
+  return (T.hit[key] = out);
+}
+/** A 的取樣點換到 B 的格子座標落在實心裡的有幾個；s ＝ A 相對 B 往世界的 (sx, sz) 多移多少（m）。外框先篩：中心距離超過兩艘半長之和 ⇒ 0。 */
+function hitCount(A, B, lv, s, acc, any) {                              // any ⇒ 碰到第一個就停（只要知道還有沒有碰到：推開的二分搜）
+  var SA = hitSamples(A.T, lv), C = M4.mul(B.inv, A.M), I = B.inv, P = SA.pts, n = 0, GA = A.grid, GB = B.grid;
+  var ox = I[0] * s[0] + I[8] * s[2], oy = I[1] * s[0] + I[9] * s[2], oz = I[2] * s[0] + I[10] * s[2];   // 世界的位移換到 B 的格子座標（只有旋轉那一部分）
+  var m0 = C[0], m1 = C[1], m2 = C[2], m4 = C[4], m5 = C[5], m6 = C[6], m8 = C[8], m9 = C[9], m10 = C[10], t0 = C[12] + ox, t1 = C[13] + oy, t2 = C[14] + oz;
+  if (lv.foot) {
+    var SB = hitSamples(B.T, lv);
+    for (var q = 0; q < P.length; q += 3) {
+      var x = P[q] + 0.5, y = P[q + 1] + 0.5, z = P[q + 2] + 0.5;
+      var bx = Math.floor(m0 * x + m4 * y + m8 * z + t0), by = Math.floor(m1 * x + m5 * y + m9 * z + t1);
+      if (bx < 0 || bx >= SB.f0.length || SB.f0[bx] < 0 || by < SB.f0[bx] || by > SB.f1[bx]) continue;
+      n++; if (acc) acc.push(x, y, z); if (any) return n;
+    }
+    return n;
+  }
+  var OP = occPyr(B.T), lo = [0, 0, 0], hi = [0, 0, 0];
+  (function visit(K) {
+    lo[0] = lo[1] = lo[2] = 1e9; hi[0] = hi[1] = hi[2] = -1e9;
+    for (var cn = 0; cn < 8; cn++) {                                     // 節點外框八個角換到 B 的座標 ⇒ 落在 B 的空區就整棵子樹跳過
+      var cx = cn & 1 ? K.hi[0] : K.lo[0], cy = cn & 2 ? K.hi[1] : K.lo[1], cz = cn & 4 ? K.hi[2] : K.lo[2];
+      var qx = m0 * cx + m4 * cy + m8 * cz + t0, qy = m1 * cx + m5 * cy + m9 * cz + t1, qz = m2 * cx + m6 * cy + m10 * cz + t2;
+      if (qx < lo[0]) lo[0] = qx; if (qx > hi[0]) hi[0] = qx; if (qy < lo[1]) lo[1] = qy; if (qy > hi[1]) hi[1] = qy; if (qz < lo[2]) lo[2] = qz; if (qz > hi[2]) hi[2] = qz;
+    }
+    HIT_PROF.nodes++;
+    if (!HIT_BRUTE && !occAny(OP, lo, hi)) return;
+    if (K.kids) { for (var c = 0; c < K.kids.length && !(any && n); c++) visit(K.kids[c]); return; }
+    HIT_PROF.pts += (K.b - K.a) / 3;
+    for (var p = K.a; p < K.b; p += 3) {
+      var X = P[p], Y = P[p + 1], Z = P[p + 2];
+      if (!GA.get(X, Y, Z)) continue;                                    // 打掉的格不算
+      var x2 = X + 0.5, y2 = Y + 0.5, z2 = Z + 0.5;
+      if (GB.get(Math.floor(m0 * x2 + m4 * y2 + m8 * z2 + t0), Math.floor(m1 * x2 + m5 * y2 + m9 * z2 + t1), Math.floor(m2 * x2 + m6 * y2 + m10 * z2 + t2))) { n++; if (acc) acc.push(x2, y2, z2); if (any) return; }
+    }
+  })(SA.root);
+  return n;
+}
+/** 船型 T 的佔用金字塔（八叉樹的另一半）：第 0 層 ＝ 格子的 16³ 塊有沒有東西（T.base 的塊表，null ＝ 空），往上每 2×2×2 取 OR。
+ *  照開戰時的原始格子（打掉之後只會更空 ⇒ 篩得保守、不會漏）。 */
+function occPyr(T) {
+  if (T.occPyr) return T.occPyr;
+  var G = T.base, L = [{ nx: G.nx, ny: G.ny, nz: G.nz, a: new Uint8Array(G.nx * G.ny * G.nz) }];
+  for (var i = 0; i < G.tab.length; i++) L[0].a[i] = G.tab[i] ? 1 : 0;
+  while (L[L.length - 1].nx > 1 || L[L.length - 1].ny > 1 || L[L.length - 1].nz > 1) {
+    var c = L[L.length - 1], p = { nx: (c.nx + 1) >> 1, ny: (c.ny + 1) >> 1, nz: (c.nz + 1) >> 1 };
+    p.a = new Uint8Array(p.nx * p.ny * p.nz);
+    for (var z = 0; z < c.nz; z++) for (var y = 0; y < c.ny; y++) for (var x = 0; x < c.nx; x++) if (c.a[x + c.nx * (y + c.ny * z)]) p.a[(x >> 1) + p.nx * ((y >> 1) + p.ny * (z >> 1))] = 1;
+    L.push(p);
+  }
+  return (T.occPyr = L);
+}
+/** 格座標的外框 [lo, hi] 裡，B 的格子有沒有不是空的 16³ 塊（從金字塔頂往下找，只走有東西、又跟外框相交的那幾格）。 */
+function occAny(L, lo, hi) {
+  var c0 = [Math.floor(lo[0]) >> 4, Math.floor(lo[1]) >> 4, Math.floor(lo[2]) >> 4], c1 = [Math.floor(hi[0]) >> 4, Math.floor(hi[1]) >> 4, Math.floor(hi[2]) >> 4];
+  function go(lv, x, y, z) {
+    var c = L[lv];
+    if (x < 0 || y < 0 || z < 0 || x >= c.nx || y >= c.ny || z >= c.nz || !c.a[x + c.nx * (y + c.ny * z)]) return false;
+    var s = lv;                                                          // 這一格涵蓋第 0 層的 [x·2^s, (x+1)·2^s)
+    if ((x + 1 << s) - 1 < c0[0] || x << s > c1[0] || (y + 1 << s) - 1 < c0[1] || y << s > c1[1] || (z + 1 << s) - 1 < c0[2] || z << s > c1[2]) return false;
+    if (!lv) return true;
+    for (var k = 0; k < 8; k++) if (go(lv - 1, 2 * x + (k & 1), 2 * y + (k >> 1 & 1), 2 * z + (k >> 2 & 1))) return true;
+    return false;
+  }
+  return go(L.length - 1, 0, 0, 0);
+}
+/** 兩艘互相：A 往 d·dir 移、B 往 −d·dir 移（各一半 ⇒ 相對 d）之後還有沒有碰到（碰到第一個就停）。 */
+function hitBoth(A, B, lv, dir, d) { return hitCount(A, B, lv, [dir[0] * d, 0, dir[2] * d], null, true) || hitCount(B, A, lv, [-dir[0] * d, 0, -dir[2] * d], null, true); }
+function collideFine(A, B, lv) {
+  var LA = (A.T.hx1 - A.T.hx0) * S / 2, LB = (B.T.hx1 - B.T.hx0) * S / 2, cA = A.center || shipCenter(A), cB = B.center || shipCenter(B);
+  if (Math.hypot(cA[0] - cB[0], cA[2] - cB[2]) > LA + LB + 2) return;   // 外框先篩（含艏斜桅）
+  HIT_PROF.pairs++;
+  var acc = [], n0 = hitCount(A, B, lv, [0, 0, 0], acc, true) || hitCount(B, A, lv, [0, 0, 0], null, true);
+  if (!n0) return;
+  HIT_PROF.touch++;
+  // 候選方向（從 B 指向 A、水平單位向量）：中心連線、A 的橫向 ±、B 的橫向 ±
+  var cc = [cA[0] - cB[0], 0, cA[2] - cB[2]], cl = Math.hypot(cc[0], cc[2]) || 1, dirs = [[cc[0] / cl, 0, cc[2] / cl]];
+  [A, B].forEach(function (sh) { var y = M4.dir(sh.M, 0, 1, 0), l = Math.hypot(y[0], y[2]) || 1; dirs.push([y[0] / l, 0, y[2] / l], [-y[0] / l, 0, -y[2] / l]); });
+  var best = null;
+  dirs.forEach(function (dir) {
+    var hi = 0.5;
+    while (hi < 24 && hitBoth(A, B, lv, dir, hi)) hi *= 2;
+    if (hi >= 24 || (best && hi / 2 >= best.d)) return;                   // 這個方向推不開，或不可能比已經找到的少
+    var lo = 0;
+    for (var it = 0; it < 7; it++) { var mid = (lo + hi) / 2; if (hitBoth(A, B, lv, dir, mid)) lo = mid; else hi = mid; }
+    if (!best || hi < best.d) best = { d: hi, dir: dir };
+  });
+  if (!best) best = { d: 0.5, dir: dirs[0] };                            // 全都推不開（疊太深）⇒ 照中心連線慢慢推
+  var h = best.d / 2 + 0.01, n = best.dir;
+  A.px += n[0] * h; A.pz += n[2] * h; B.px -= n[0] * h; B.pz -= n[2] * h;
+  hitFriction(A, B, n);
+  var w = acc.length ? M4.pt(A.M, acc[0], acc[1], acc[2]) : [(cA[0] + cB[0]) / 2, cA[1], (cA[2] + cB[2]) / 2];   // 第一個接觸點（給水花、聲音；只有 B 的點落進 A ⇒ 兩艘中心的中點）
+  wpBump([w[0] + n[0] * 0.5, w[1], w[2] + n[2] * 0.5], [w[0] - n[0] * 0.5, w[1], w[2] - n[2] * 0.5], A, B);
+  if (SIMT - (A.bumpT || -9) > 5) { A.bumpT = SIMT; sfx('crack', w, 1); note(SHIPS[PLAYER_I], '兩艘擦撞'); }
 }
 /** 敵艦在哪一舷（給自動操舵用；有遲滯，不在正前／正後來回跳）。只影響操舵 —— 開火是每門砲各自看對不對得到。 */
 function chooseSide(sh) {

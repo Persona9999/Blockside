@@ -47,6 +47,15 @@ if (DEBUG) window.__game = {
   fire: function (ammo, aim) { var me = SHIPS[PLAYER_I]; if (aim) setAim(me, aim); return broadside(me, ammo || 0); },
   one: function (ammo, aim) { var me = SHIPS[PLAYER_I]; if (aim) setAim(me, aim); fireOne(me, ammo || 0); return BALLS.length; },
   ships: function () { return SHIPS; }, balls: function () { return BALLS; }, pieces: function () { return PIECES; },
+  /** 船隻碰撞（31_sailing.js collide）：shipHit() ⇒ 檔位、HIT_PROF、每個船型的取樣數與算了幾 ms；shipHit(i, j, lv) ⇒ 照第 i、j 艘現在的位置（先重算矩陣）量那一檔：
+   *  lv 0 ⇒ 龍骨線最近距離（m，< 14 ＝ 撞）；1–3 ⇒ 互相落進去的點數（0 ＝ 沒撞）。只量、不推。 */
+  shipHit: function (i, j, lv, brute) {
+    if (i === undefined) { var smp = {}; SHIPS.forEach(function (s) { if (s.T.hit) for (var k in s.T.hit) smp[s.T.id + '/' + k] = { n: s.T.hit[k].n, ms: s.T.hit[k].ms }; }); return { shiphit: PHX.shiphit, shipfric: PHX.shipfric, prof: Object.assign({}, HIT_PROF), samples: smp }; }
+    var A = SHIPS[i], B = SHIPS[j];
+    [A, B].forEach(function (s) { s.M = shipMatrix(s); s.inv = M4.inv(s.M); s.center = shipCenter(s); });
+    if (!lv) { var ka = keelPts(A), kb = keelPts(B), d = 1e9; ka.forEach(function (a) { kb.forEach(function (b) { d = Math.min(d, Math.hypot(a[0] - b[0], a[2] - b[2])); }); }); return +d.toFixed(3); }
+    var L = SHIPHIT_LV[lv]; HIT_BRUTE = !!brute; var r = hitCount(A, B, L, [0, 0, 0]) + hitCount(B, A, L, [0, 0, 0]); HIT_BRUTE = false; return r;
+  },
   dig: function (i, x, y, z, r) { var sh = SHIPS[i || 0], n = 0; for (var a = -r; a <= r; a++) for (var b = -r; b <= r; b++) for (var c = -r; c <= r; c++) if (a * a + b * b + c * c <= r * r && removeVoxel(sh, x + a, y + b, z + c, true)) n++; sh.rs.update && sh.rs.update(); return n; },   // 除錯：在格座標挖一個球（照 removeVoxel：尋路的髒區、進水照常記）
   ladders: function (i) { var H = SHIPS[i || 0].nav; return H ? H.ladders.map(function (L) { return { name: L.name, steps: L.steps, ia: navPos(H.levels[L.lo].N, L.ia), broken: L.broken }; }) : null; },
   /** 第 i 艘每一門砲：名字、砲種、砲軸（格座標水平、+x 船頭）、HUD 放哪（61_hud.js gunDir：bow 羅盤上、stern 羅盤下、side 兩舷貼邊）。 */
