@@ -32,7 +32,13 @@ python -I admin.py serve --open
 python -I admin.py import --work <雕刻作品 ID> --id <代號> --name <名字>
 # 重新匯入（作品長了）：印出跟上一版的格數、checksum、繩帆模型數與 vxk_compare.py 的內容對拍；只差匯出時間 ⇒ 不換
 python -I admin.py reimport --id constitution
+# 匯入檢查（import／reimport／metasync 之後會自動跑）：缺 meta、砲班站不滿、開場就掉的 ⇒ ../reports/shipcheck_<代號>.md（不入版控）
+python -I admin.py shipcheck --id phoenix    # 不給 --id ＝ 每一艘
 ```
+
+匯入檢查的規則在 `js/75_shipcheck.js`（成品帶 `?shipcheck=<代號>`：跟憲法號擺在最遠、固定步長跑 2 秒，結果寫進頁面）—— 遊戲自己知道缺了什麼會退回什麼，所以規則住在遊戲裡，admin.py 只用無頭 Chrome 跑、寫報告。
+✗ 錯誤 ＝ 遊戲裡壞掉（開場就掉的模型、開場浮空的繩、斷的梯子、砲種代碼不認得…）；⚠ 警告 ＝ 能動但走退路或預設（照名字認、憲法號的水線與 geo、甲板沒 meta、砲班站不滿…）。
+反向對照：2026-10-15 重配之前的三叉戟號跑出「14 門缺 24 人」（跟 gura 在遊戲裡量的一樣），每一門都寫了同一層同一舷最近的砲隔幾 m。
 
 匯出走 senate（`senate cmd sculpture --arg op=export --arg format=vxk --arg include=rig,models,parts,meta`，TASK-0518）；`.vxk` 不入版控（`../VoxelKit/_cache/`）。
 

@@ -255,6 +255,7 @@ yieldUI().then(function () {                                        // 先讓主
   loadArt().then(function (why) { line += '\n素材：' + why; say(line); window.__vxk.art = why; if (HUD_ART) hudArt(); });
   if (!chk.ok) { fail('船體資料跟封裝檔對不上，停下來（不畫半艘船）。\n' + line); return; }
   $('go').disabled = false; $('go').textContent = '開戰';
+  if (Q.has('shipcheck')) { shipCheck(Q.get('shipcheck')); return; }   // 匯入檢查（75_shipcheck.js；admin.py check 用無頭 Chrome 讀）
   if (DEMO >= 0) {                                             // 快轉：電腦對電腦、固定步長
     MODE = 'eve'; reset(); RUNNING = true;
     var steps = Math.round(DEMO / DT), phys = PHYS, from = Math.max(0, steps - 360);     // 帆與繩只畫最後那一格 ⇒ 物理只在最後 6 秒跑（不影響戰局）

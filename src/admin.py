@@ -531,6 +531,7 @@ def act_metasync(sid, build=True):
         log.append(lock_put(s['vxk']))
         if build:
             log += act_build()
+            log += act_shipcheck([sid])                  # meta 改了 ⇒ 順手檢查一次（只讀）
     return log
 
 
@@ -539,6 +540,71 @@ def act_check():
     if E:
         raise Fail('設定不合法：\n' + '\n'.join('  ✗ ' + e for e in E))
     return ['✓ config/game.json 合法（%d 艘船、%d 個滑桿、%d 種砲）' % (len(load()['ships']), len(load()['lim']), len(load()['guns']))]
+
+
+REPORTS = os.path.normpath(os.path.join(HERE, '..', 'reports'))   # 匯入檢查的報告（不入版控）
+CHROMES = [r'C:\Program Files\Google\Chrome\Application\chrome.exe', r'C:\Program Files (x86)\Google\Chrome\Application\chrome.exe']
+
+
+def act_shipcheck(ids=None):
+    """匯入檢查（Tim 2026-10-15：缺 meta、砲位擠到砲班站不滿 ⇒ 匯入時就報出來，方便修）。
+    規則住在遊戲裡（js/75_shipcheck.js，?shipcheck=<船>）：遊戲自己知道缺了什麼會退回什麼 ⇒ 這裡只用無頭 Chrome 跑成品、把結果寫成報告。
+    ids 不給 ⇒ 船隻清單每一艘。報告：reports/shipcheck_<船>.md（同樣的問題併成一筆、列出是哪些部件）。"""
+    import html as _html, shutil, tempfile
+    cfg = load()
+    ids = ids or [s['id'] for s in cfg['ships']]
+    chrome = next((c for c in CHROMES if os.path.exists(c)), None)
+    if not chrome:
+        return ['⚠ 匯入檢查沒跑：找不到 Chrome（' + '、'.join(CHROMES) + '）']
+    if not os.path.exists(OUT):
+        return ['⚠ 匯入檢查沒跑：還沒有成品（先 build）']
+    os.makedirs(REPORTS, exist_ok=True)
+    log = []
+    for sid in ids:
+        prof = tempfile.mkdtemp(prefix='shipcheck_')
+        try:
+            url = 'file:///' + OUT.replace('\\', '/') + '?shipcheck=' + sid
+            r = subprocess.run([chrome, '--headless=new', '--no-first-run', '--user-data-dir=' + prof, '--use-angle=swiftshader', '--enable-unsafe-swiftshader',
+                                '--virtual-time-budget=300000', '--dump-dom', url], capture_output=True, timeout=900)
+            ms = re.findall(r'<pre id="shipcheck">(.*?)</pre>', r.stdout.decode('utf-8', 'replace'), re.S)
+            R = json.loads(_html.unescape(ms[-1])) if ms else None   # 最後一個 ＝ 頁面寫出來的那個（⛔ 第一個可能是內嵌程式裡的字串）
+        except Exception as e:
+            R = None
+        finally:
+            shutil.rmtree(prof, ignore_errors=True)
+        if not R:
+            log.append('  ✗ %s：匯入檢查讀不到結果（無頭 Chrome 沒跑完）' % sid)
+            continue
+        groups = {}
+        for i in R['issues']:
+            k = (i['lv'], i['what'], i['msg'], i['fix'])
+            groups.setdefault(k, []).append(i['where'])
+        ne = sum(len(w) for k, w in groups.items() if k[0] == 'error')
+        nw = sum(len(w) for k, w in groups.items() if k[0] == 'warn')
+        I = R['info']
+        md = ['# 匯入檢查：%s（%s）' % (I.get('name', sid), sid), '',
+              '> `python -I admin.py shipcheck --id %s` 產生；規則在 `js/75_shipcheck.js`。開一場（跟憲法號隔最遠、打不到）跑 %s 秒量的。' % (sid, R['t']),
+              '> ✗ 錯誤 ＝ 遊戲裡壞掉；⚠ 警告 ＝ 能動，但照退路或預設跑。修法裡的「造船規格」＝ `senate cmd doc --arg op=show --arg name=Sculpture_Shipbuilding`。', '',
+              '| 砲 | 站不滿的砲 | 船員 | 模型 | 繩 | 帆 | 桅 | 彈藥庫 | 甲板 | 梯子 | 艙房 | 水線 z |', '|---|---|---|---|---|---|---|---|---|---|---|---|',
+              '| %s | %s 門缺 %s 人 | %s | %s | %s | %s | %s | %s | %s | %s | %s | %s |' % (I['guns'], I['gunShort']['guns'], I['gunShort']['people'], I['crew'], I['models'], I['ropes'], I['sails'], I['masts'], I['mags'], len(I['decks']), I['ladders'], I['rooms'], I['zw']), '',
+              '**✗ %d　⚠ %d**' % (ne, nw), '']
+        for lv, title in (('error', '## ✗ 錯誤'), ('warn', '## ⚠ 警告')):
+            ks = [k for k in groups if k[0] == lv]
+            if not ks:
+                continue
+            md += [title, '']
+            for k in ks:
+                w = groups[k]
+                md.append('- **%s**%s：%s' % (k[1], '（×%d）' % len(w) if len(w) > 1 else '', k[2]))
+                md.append('  - 哪裡：' + '、'.join('`%s`' % x for x in w))
+                md.append('  - 修法：' + k[3])
+            md.append('')
+        if not groups:
+            md += ['✓ 沒有發現問題', '']
+        path = os.path.join(REPORTS, 'shipcheck_%s.md' % sid)
+        open(path, 'w', encoding='utf-8').write('\n'.join(md))
+        log.append('  %s %s（%s）：✗ %d　⚠ %d ⇒ %s' % ('✗' if ne else '⚠' if nw else '✓', I.get('name', sid), sid, ne, nw, path))
+    return ['匯入檢查：'] + log
 
 
 def act_build(pack=True):   # pack：壓縮版（預設，TASK-0583）；False ＝ 原格式（build --raw）
@@ -804,6 +870,7 @@ def act_import(work, sid, name, build=True):
     log.append('✓ 登記進船隻清單：%s（%s）—— 航速、靈活、船員照預設，要調到後台的船隻設定' % (name, sid))
     if build:
         log += act_build()
+        log += act_shipcheck([sid])                      # 匯入檢查：缺 meta、砲班站不滿、開場就掉的（只讀）
     return log
 
 
@@ -845,6 +912,7 @@ def act_reimport(sid, work=None, build=True):
         save(cfg)
     if build:
         log += act_build()
+        log += act_shipcheck([sid])                      # 匯入檢查（只讀）
     return log
 
 
@@ -979,6 +1047,8 @@ def main():
     ap = argparse.ArgumentParser(description='《憲法號對轟》設定後台（TASK-0542）')
     sp = ap.add_subparsers(dest='op', required=True)
     sp.add_parser('check')
+    s = sp.add_parser('shipcheck', help='匯入檢查：缺 meta、砲班站不滿、開場就掉的 ⇒ reports/shipcheck_<船>.md（import／reimport／metasync 之後會自動跑）')
+    s.add_argument('--id', action='append', help='哪一艘（可以給好幾次）；不給 ＝ 每一艘')
     s = sp.add_parser('build')
     s.add_argument('--raw', action='store_true', help='原格式（不壓縮）；預設是壓縮版：模型網格收成一個池子（同一份只存一次、頂點去重＋差值），_cache 不動')
     sp.add_parser('verify', help='成品跟 _cache 原檔比（壓縮版照遊戲的讀法還原）')
@@ -1008,6 +1078,8 @@ def main():
             return serve(o.port, o.open)
         if o.op == 'check':
             log = act_check()
+        elif o.op == 'shipcheck':
+            log = act_shipcheck(o.id)
         elif o.op == 'build':
             log = act_build(not o.raw)
         elif o.op == 'verify':
