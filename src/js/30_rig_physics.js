@@ -152,9 +152,10 @@ function clothTemplate(H, s) {                         // H：船型（帆的布
   //   gaff 追風轉了、旗留在作品的位置。旗有任何一點綁在帆桁上 ⇒ 整條綁邊都歸那根帆桁（跟著轉、帆桁沒了一起鬆開）；跟轉的 yk 在下面照 hv 給。
   var flagYard = -1; if (isFlag(s)) for (i = 0; i < n; i++) if (hk[i] === 4) { flagYard = hv[i]; break; }
   if (flagYard >= 0) for (i = 0; i < n; i++) if (hk[i] === 3) { hk[i] = 4; hv[i] = flagYard; }
+  if (s.pins) { hk.fill(0); hv.fill(-1); s.pins.forEach(function (q) { hk[q] = s.pinK; hv[q] = s.pinV; }); }   // 明寫的綁邊（陣營旗：靠旗桿那一邊釘在桅頂那一格；⛔ 不照外緣直不直猜）
   var own = []; H.rig.ropes.forEach(function (r, j2) { if (sailRope(r, s.name)) own.push(j2); });   // 帆自己的 sheet、tack（10_ship.js sailRope：照 meta，沒有才照名字）
   var clews = 0, clewYard = {};                          // 帆腳 → 跟哪根帆桁轉（-1 ＝ 不轉）
-  corner.forEach(function (kc) {
+  if (!s.pins) corner.forEach(function (kc) {
     var q = loop[kc]; if (hk[q]) return;
     var w = P(q), best = -1, bd = 100, end = null;
     own.forEach(function (j2) { var pts = H.rig.ropes[j2].pts; [0, pts.length - 3].forEach(function (o) { var dx = pts[o] - w[0], dy = pts[o + 1] - w[1], dz = pts[o + 2] - w[2], d = dx * dx + dy * dy + dz * dz; if (d < bd) { bd = d; best = j2; end = [pts[o], pts[o + 1], pts[o + 2]]; } }); });
@@ -296,8 +297,9 @@ function coarseOf(n, T) {
 }
 function clothSetup(H, C) {                            // 船型 H 的布模板；暫存區（兩艘、各型共用）照目前最大的那一型配；C ＝ 快取的記錄（06_cache.js：rbox、cloth）
   H.rbox = C ? C.rbox : H.rig.ropes.map(function (r) { return ropeBox(r.pts); });
-  H.cloth = C ? C.cloth : H.rig.sails.map(function (s, k) { var t = clothTemplate(H, s); t.ti = k; return t; });   // ti：第幾面帆 ⇒ 貼圖集的哪一格（布片、斷開的那一團也認得）
-  H.sailAtlas = sailAtlas(H.rig.sails); H.sailTexGL = null;              // 貼圖集不進快取（照 vxk 現算；GL 貼圖第一次畫才建，11_rig_gpu.js sailTex）
+  var n0 = H.nSail0 === undefined ? H.rig.sails.length : H.nSail0;      // 作品自己的帆（快取只存這幾面）；後面是陣營旗（77_colours.js teamFlagsSetup，每次現算）
+  H.cloth = H.rig.sails.map(function (s, k) { if (C && k < n0 && C.cloth[k]) return C.cloth[k]; var t = clothTemplate(H, s); t.ti = k; return t; });   // ti：第幾面帆 ⇒ 貼圖集的哪一格（布片、斷開的那一團也認得）
+  H.sailAtlas = sailAtlas(H.rig.sails.concat(H.teamExtra || [])); H.sailTexGL = null;   // teamExtra：陣營旗紅方那份、替換作品旗的藍紅兩份（77_colours.js teamFlagsSetup；畫的時候 sailRect 挑）              // 貼圖集不進快取（照 vxk 現算；GL 貼圖第一次畫才建，11_rig_gpu.js sailTex）
   var mv = 1, mc = 1, sv = 0, si = 0;
   H.cloth.forEach(function (C) { mv = Math.max(mv, C.n); mc = Math.max(mc, C.sim.n); sv += C.n; si += C.tris.length; });
   if (!CACC || CACC.length < mc * 3) { CACC = new Float32Array(mc * 3); CCNT = new Uint8Array(mc); }

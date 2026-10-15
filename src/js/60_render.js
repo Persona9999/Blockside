@@ -168,7 +168,7 @@ function prepRig() {
     if (dirty || (PHYS && ow.crew)) sailBuf(ow);                     // 物理開著：船上的帆每一格重做；斷開的那一團是靜態的
     if (PHYS && ow.crew) looseBuf(ow);
     if (ow.anc) chainBuf(ow);                                         // 鐵鍊（76_anchor.js；跟帆繩物理開關無關）
-    if (SHIPS.indexOf(ow) >= 0) { var tc = DEBUG ? performance.now() : 0; colourBuf(ow); if (DEBUG) { PROF.col = (PROF.col || 0) + performance.now() - tc; PROF.colN = (PROF.colN || 0) + 1; } }   // 陣營旗（77_colours.js；只是畫面）
+    if (SHIPS.indexOf(ow) >= 0) poleBuf(ow);                          // 陣營旗的旗桿（77_colours.js；旗面是帆，上面 sailBuf 一起畫）
     if (DEBUG) PROF.buf += performance.now() - tb;
   });
 }

@@ -1591,7 +1591,7 @@ function buildHull(info, model, t0, C) {
     }],
     ['船體網格', function () { tm('pristine', function () { T.pristine = new VK.RegionSet(gl, T.base, QIDX); if (C) meshesFromCache(T.pristine, C.mesh); else T.pristine.buildAll(); }); }],
     ['桅與帆', function () {
-      tm('masts', function () { findMasts(T); }); tm('cloth', function () { clothSetup(T, C); });
+      tm('masts', function () { findMasts(T); }); tm('cloth', function () { teamFlagsSetup(T, info); clothSetup(T, C); });   // 陣營旗（77_colours.js）：合成的帆接在作品的帆後面
       var mt = 12 * KEG_T; (T.rig.models || []).forEach(function (m) { mt += modelT({ kind: modelKind(m) }, 1); });   // 模型的重量（砲照實、取用點 12 桶）
       T.ballast0 = Math.max(0, Math.round((T.disp - T.base.count * VOX_T - mt) / 25) * 25);   // 剛好浮在設計水線的壓艙物（滑桿一格 25 噸）
     }]
@@ -1717,7 +1717,7 @@ function cachePut(T, info) {
   var all = new Uint16Array(n), o = 0;
   for (var k = 0; k < idx.length; k += 2) { all.set(ms.get(idx[k]), o); o += idx[k + 1]; }
   var rec = { fmt: CACHE_FMT, vxk: st.vxk, code: st.code, voxels: T.h.voxels, checksum: T.h.checksum, at: Date.now(), nx: g.nx, ny: g.ny,
-    mesh: { all: all, idx: new Int32Array(idx) }, models: T.keep.models, hb: T.hullHB, hyd: T.hyd, disp: T.disp, rbox: T.rbox, cloth: T.cloth };
+    mesh: { all: all, idx: new Int32Array(idx) }, models: T.keep.models, hb: T.hullHB, hyd: T.hyd, disp: T.disp, rbox: T.rbox, cloth: T.nSail0 === undefined ? T.cloth : T.cloth.slice(0, T.nSail0) };   // 陣營旗的布不存（照設定檔每次現算）
   T.keep = null;
   cacheOpen().then(function (db) {
     if (!db) return;
@@ -2062,7 +2062,9 @@ function makeShip(i, team, yaw, pz, T, px) {                          // T：船
     var vz = -1e9, ax = 0, ay = 0, az = 0, k = 0, j;
     for (j = 2; j < s.verts.length; j += 3) vz = Math.max(vz, s.verts[j]);
     for (j = 0; j < s.verts.length; j += 3) if (s.verts[j + 2] > vz - 2) { ax += s.verts[j]; ay += s.verts[j + 1]; az += s.verts[j + 2]; k++; }
-    sh.sails.push(sailAnchors(sh, { verts: s.verts, tris: s.tris, col: s.color, name: s.name, meta: s.meta || null, bb: ropeBox(s.verts) }, [ax / k, ay / k, az / k]));
+    var sl = sailAnchors(sh, { verts: s.verts, tris: s.tris, col: s.color, name: s.name, meta: s.meta || null, bb: ropeBox(s.verts) }, [ax / k, ay / k, az / k]);
+    if (s.meta && s.meta.team) { sl.as = s.truckCell >= 0 ? [s.truckCell] : []; sl.par = []; sl.a = s.truckCell; }   // 陣營旗（77_colours.js）：靠桅頂那一格（旗桿頂離格子太遠，照上下緣找會找不到）
+    sh.sails.push(sl);
   });
   // 帆自己的繩（`<帆名>.sheet-S`、`.tack-P`…）：帆腳那一端綁在帆上 ⇒ 帆掉了或被帶走，它們跟著斷
   // （⛔ 只靠繩的依靠不夠：sheet 與 tack 互相掛著、另一端綁甲板，帆沒了也還浮在半空）
@@ -2417,9 +2419,9 @@ function sailBuf(ow) {
   }
   (ow.cl || []).forEach(function (c, k) {
     if (isShip) { var s = ow.sails[k]; if (PHYS ? (!c.p || c.hidden || c.gone) : (s.dead || s.furled)) return; }
-    put((PHYS || !isShip) && c.p ? clothFine(c, SBP) : c.T.p0, c.T.n, c.T.tris, c.T.col, c.torn ? c.tv : null, c.T.vcol, c.T.uv, A && c.T.ti !== undefined ? A.rect[c.T.ti] : null);
+    put((PHYS || !isShip) && c.p ? clothFine(c, SBP) : c.T.p0, c.T.n, c.T.tris, c.T.col, c.torn ? c.tv : null, c.T.vcol, c.T.uv, A && c.T.ti !== undefined ? sailRect(ow, A, c.T.ti) : null);
   });
-  if (F) F.forEach(function (f) { put(f.p, f.n, f.T.sim.tris, f.col, null, null, f.uv, A && f.uv && f.ti !== undefined ? A.rect[f.ti] : null); });   // 布片：有貼圖的帆撕下來的照原處的圖（34_shreds.js shredCut 記 uv）
+  if (F) F.forEach(function (f) { put(f.p, f.n, f.T.sim.tris, f.col, null, null, f.uv, A && f.uv && f.ti !== undefined ? sailRect(ow, A, f.ti) : null); });   // 布片：有貼圖的帆撕下來的照原處的圖（34_shreds.js shredCut 記 uv）
   function put(p, n, tr, col, tv, vc, uv, r) {                            // tv：藏起來的細格點（撕開的洞）；vc：每個頂點的顏色（沒有貼圖集時的退路，30_rig_physics.js texColors）；uv＋r：貼圖集的那一格
     var base = nv, j, i;
     SBN.fill(0, 0, n * 3);
@@ -3468,7 +3470,7 @@ function spawnPiece(sh, pc) {
   var M0 = sh.M, c0 = M4.pt(M0, sx / n + 0.5, sy / n + 0.5, sz / n + 0.5), pivot = M4.pt(M0, px / pn + 0.5, py / pn + 0.5, pz / pn);
   var imp = sh.impulse; imp = [imp[0], 0, imp[2]]; if (len(imp) < 1e-6) imp = [rnd() - 0.5, 0, rnd() - 0.5];
   var axis = norm(cross([0, 1, 0], norm(imp)));
-  var piece = { T: sh.T, grid: g, rs: rs2, M0: M0, c0: c0, c: c0.slice(), R: M4.ident(), v: [0, 0, 0], w: mul(axis, rr(0.18, 0.35)), pivot: pivot, n: n,
+  var piece = { T: sh.T, team: sh.team, grid: g, rs: rs2, M0: M0, c0: c0, c: c0.slice(), R: M4.ident(), v: [0, 0, 0], w: mul(axis, rr(0.18, 0.35)), pivot: pivot, n: n,
     hinge: c0[1] - pivot[1] > 2.5, t: 0, wet: false, ropes: [], cl: [], rigDirty: true, lines: null, mods: [] };
   if (sh.keel && n > 60000) {                                 // 斷成兩截的那半截船：不繞斷口倒 —— 帶著船速漂、斷口那頭往下、慢慢沉
     var fw = M4.dir(sh.M, 1, 0, 0), sideK = (sx / n) > sh.breakX ? 1 : -1;
@@ -4088,9 +4090,10 @@ function clothTemplate(H, s) {                         // H：船型（帆的布
   //   gaff 追風轉了、旗留在作品的位置。旗有任何一點綁在帆桁上 ⇒ 整條綁邊都歸那根帆桁（跟著轉、帆桁沒了一起鬆開）；跟轉的 yk 在下面照 hv 給。
   var flagYard = -1; if (isFlag(s)) for (i = 0; i < n; i++) if (hk[i] === 4) { flagYard = hv[i]; break; }
   if (flagYard >= 0) for (i = 0; i < n; i++) if (hk[i] === 3) { hk[i] = 4; hv[i] = flagYard; }
+  if (s.pins) { hk.fill(0); hv.fill(-1); s.pins.forEach(function (q) { hk[q] = s.pinK; hv[q] = s.pinV; }); }   // 明寫的綁邊（陣營旗：靠旗桿那一邊釘在桅頂那一格；⛔ 不照外緣直不直猜）
   var own = []; H.rig.ropes.forEach(function (r, j2) { if (sailRope(r, s.name)) own.push(j2); });   // 帆自己的 sheet、tack（10_ship.js sailRope：照 meta，沒有才照名字）
   var clews = 0, clewYard = {};                          // 帆腳 → 跟哪根帆桁轉（-1 ＝ 不轉）
-  corner.forEach(function (kc) {
+  if (!s.pins) corner.forEach(function (kc) {
     var q = loop[kc]; if (hk[q]) return;
     var w = P(q), best = -1, bd = 100, end = null;
     own.forEach(function (j2) { var pts = H.rig.ropes[j2].pts; [0, pts.length - 3].forEach(function (o) { var dx = pts[o] - w[0], dy = pts[o + 1] - w[1], dz = pts[o + 2] - w[2], d = dx * dx + dy * dy + dz * dz; if (d < bd) { bd = d; best = j2; end = [pts[o], pts[o + 1], pts[o + 2]]; } }); });
@@ -4232,8 +4235,9 @@ function coarseOf(n, T) {
 }
 function clothSetup(H, C) {                            // 船型 H 的布模板；暫存區（兩艘、各型共用）照目前最大的那一型配；C ＝ 快取的記錄（06_cache.js：rbox、cloth）
   H.rbox = C ? C.rbox : H.rig.ropes.map(function (r) { return ropeBox(r.pts); });
-  H.cloth = C ? C.cloth : H.rig.sails.map(function (s, k) { var t = clothTemplate(H, s); t.ti = k; return t; });   // ti：第幾面帆 ⇒ 貼圖集的哪一格（布片、斷開的那一團也認得）
-  H.sailAtlas = sailAtlas(H.rig.sails); H.sailTexGL = null;              // 貼圖集不進快取（照 vxk 現算；GL 貼圖第一次畫才建，11_rig_gpu.js sailTex）
+  var n0 = H.nSail0 === undefined ? H.rig.sails.length : H.nSail0;      // 作品自己的帆（快取只存這幾面）；後面是陣營旗（77_colours.js teamFlagsSetup，每次現算）
+  H.cloth = H.rig.sails.map(function (s, k) { if (C && k < n0 && C.cloth[k]) return C.cloth[k]; var t = clothTemplate(H, s); t.ti = k; return t; });   // ti：第幾面帆 ⇒ 貼圖集的哪一格（布片、斷開的那一團也認得）
+  H.sailAtlas = sailAtlas(H.rig.sails.concat(H.teamExtra || [])); H.sailTexGL = null;   // teamExtra：陣營旗紅方那份、替換作品旗的藍紅兩份（77_colours.js teamFlagsSetup；畫的時候 sailRect 挑）              // 貼圖集不進快取（照 vxk 現算；GL 貼圖第一次畫才建，11_rig_gpu.js sailTex）
   var mv = 1, mc = 1, sv = 0, si = 0;
   H.cloth.forEach(function (C) { mv = Math.max(mv, C.n); mc = Math.max(mc, C.sim.n); sv += C.n; si += C.tris.length; });
   if (!CACC || CACC.length < mc * 3) { CACC = new Float32Array(mc * 3); CCNT = new Uint8Array(mc); }
@@ -4493,7 +4497,7 @@ function setHas(s, k) {
 /** 旗：照 meta `kind=flag`（TASK-0539）；有 meta 但不是 flag ⇒ 不是；沒有 meta 的舊匯出照名字（ensign／pennant／flag 開頭）。 */
 function isFlag(s) { var m = s.meta; if (m && m.kind) return m.kind === 'flag'; return /^(ensign|pennant|flag)/.test(s.name); }
 /** 降旗：降船尾旗（meta `flag=ensign`；沒有 meta ⇒ 名字叫 ensign 的那面）。 */
-function strikeColors(sh) { sh.sails.forEach(function (s) { if (s.flag && (s.meta && s.meta.kind ? s.meta.flag === 'ensign' : s.name === 'ensign')) { s.furled = true; s.struck = true; } }); sh.rigDirty = true; }
+function strikeColors(sh) { sh.sails.forEach(function (s) { if (s.flag && (s.meta && s.meta.kind ? s.meta.flag === 'ensign' || s.meta.team : s.name === 'ensign')) { s.furled = true; s.struck = true; } }); sh.rigDirty = true; }
 function applySailSet(sh) { sh.sails.forEach(function (s) { s.furled = s.flag ? !!s.struck : !setHas(s, sh.sailSet); }); sh.rigDirty = true; }
 function setSails(sh, k) {
   k = clamp(k, 0, SAILSETS.length - 1); if (k === sh.sailSet) return;
@@ -4680,7 +4684,7 @@ function stepShip(sh, dt) {
   stepWaves(sh, dt);                                                            // 浪：起伏、縱搖、橫搖（08_sea.js；以前是兩條固定的正弦）
   sh.lift += (sh.liftT - sh.lift) * Math.min(1, dt / LIFT_TAU);                    // 減重上浮：慢慢浮上去（目標每半秒在 survey 量一次）
   sh.M = M4.mul(shipMatrix(sh), M4.ident()); sh.inv = M4.inv(sh.M);
-  sh.center = shipCenter(sh); sh.rad2 = 62 * 62;
+  sh.center = shipCenter(sh); sh.rad2 = Math.pow(Math.max(62, (sh.T.radFlags || 0) + 2), 2);   // 陣營旗在桅頂上方的旗桿上（77_colours.js）⇒ 62 m 搆不到（⛔ 以前一發都打不到）；沒有陣營旗 ⇒ 照舊 62
   manning(sh);
   for (var i = 0; i < sh.guns.length; i++) {
     var g = sh.guns[i]; if (!(g.reload > 0)) continue;
@@ -7554,7 +7558,7 @@ function prepRig() {
     if (dirty || (PHYS && ow.crew)) sailBuf(ow);                     // 物理開著：船上的帆每一格重做；斷開的那一團是靜態的
     if (PHYS && ow.crew) looseBuf(ow);
     if (ow.anc) chainBuf(ow);                                         // 鐵鍊（76_anchor.js；跟帆繩物理開關無關）
-    if (SHIPS.indexOf(ow) >= 0) { var tc = DEBUG ? performance.now() : 0; colourBuf(ow); if (DEBUG) { PROF.col = (PROF.col || 0) + performance.now() - tc; PROF.colN = (PROF.colN || 0) + 1; } }   // 陣營旗（77_colours.js；只是畫面）
+    if (SHIPS.indexOf(ow) >= 0) poleBuf(ow);                          // 陣營旗的旗桿（77_colours.js；旗面是帆，上面 sailBuf 一起畫）
     if (DEBUG) PROF.buf += performance.now() - tb;
   });
 }
@@ -10002,16 +10006,39 @@ function anchorText(sh) {
 // 史實（帆船時代）：船尾國旗（ensign）是主要的辨識，開火前一定要升真旗；主桅頂的長旗（commissioning pennant）＝ 現役軍艦；
 //   開戰時在好幾根桅頂多掛幾面旗（battle ensigns），一面被打掉還有別面。英國海軍分紅、白、藍三色艦隊旗（底色＋左上角聯合旗）。
 // Tim 拍板：長旗＋戰鬥旗、仿英國艦隊旗 ⇒ 藍方 ＝ 藍旗（Blue Ensign）、紅方 ＝ 紅旗（Red Ensign）；長旗靠旗桿那段白底紅十字（聖喬治十字）、尾巴是陣營色。作品自己的國旗照留。
-// 位置：設定檔 ships[].flags（[{ kind: 'pennant'|'ensign', mast: 'fore'|'main'|'mizzen' } 或 { kind, at: [x, y, z] 格座標 }]）；
-//   沒寫 ⇒ 主桅（沒有就最高那根）頂掛長旗、其他桅頂各掛一面戰鬥旗。桅頂 ＝ 那根桅最高的帆桁轉軸往上、沿中線找到的最高一格（桅會往後傾 ⇒ 跟著格子走）。
-// 畫面而已（⛔ 不碰模擬、不抽 rnd()）：每一格畫面照相對風（真風 − 船速，換到船身座標）往下風飄、一道一道的波（照時間，不用物理）；
-//   桅頂那一段格子被打掉（剩不到三成）⇒ 那面旗不畫；降旗 ⇒ 全收（史實的 strike colours）；沉了不畫。
+// Tim 2026-10-15（第二輪）：「旗子不要綁在原本有旗幟的地方（且直接套用布料）」「跟帆一樣，被打會破」「每艘船要手動定義掛旗的位置，由妳來掛上」
+//   「或是陣營旗是否可以直接往上再加一根旗桿」⇒
+//   · 位置：旗桿從桅頂往上，旗掛在旗桿頂 ⇒ 比作品原本掛在桅頂的旗高、不搶位置；Tim：「如果加旗桿，是否可以自動掛旗」⇒
+//     沒寫設定檔 ⇒ 自動：每根桅頂一根旗桿，主桅（沒有就最高那根）長旗、其他戰鬥旗；大小照桅頂離水面多高（60 m ＝ 1 倍，0.5–1.1）。
+//     要覆寫某艘 ⇒ 設定檔 ships[].flags ＝ [{ kind: 'pennant'|'ensign', at: [x, y, z] 桅頂那一格（格座標）, pole: 旗桿幾公尺, scale: 大小倍率 }]。
+//     替換作品原本的旗（Tim：「手動設定的話可以設定替換原有旗幟，例如憲法號原本就有美國國旗」）⇒ { kind, replace: '<旗的種類（meta flag）或名字>' }：
+//       先找 meta kind=flag、flag ＝ 那個種類的第一面（Tim：作品的旗標 meta、照 meta 認是哪一種），沒有才照名字；
+//       布料、位置、被打都照原本那面，只換貼圖（藍方藍旗、紅方紅旗；照原本那面的 uv —— 作品的旗沒有貼圖就換不了，主控台警告）。
+//     桅頂 mastTrucks ＝ 那根桅最高的帆桁轉軸往上、沿中線找到的最高一格（桅會往後傾 ⇒ x 跟著格子走）。
+//   · 旗面 ＝ 一面帆（合成的，teamFlagsSetup 在載入船型時接在 T.rig.sails 後面）⇒ 跟帆同一套：布料物理、被打扣血、撕破、布片、掉下去、降旗收起來。
+//     綁邊（靠旗桿那一邊）明寫釘在桅頂那一格（clothTemplate 的 s.pins；⛔ 不照外緣直不直猜 —— 旗桿頂離格子太遠，猜不到）；
+//     桅頂那一格沒了 ⇒ 旗掉（10_ship.js 的 sail.as ＝ 那一格）、旗桿不畫。
+//   · 藍、紅兩份貼圖都進貼圖集；船型是兩隊共用的 ⇒ 畫的時候照船的陣營挑那一格（sailRect）。
+// ⛔ 會改戰局：旗是帆 ⇒ 砲彈經過會打到、掉的時候抽亂數。?colours=0 ⇒ 不加旗（跟沒有陣營旗之前逐位元組相同）。
 var COL_FIELD = { blue: [0.1, 0.14, 0.42], red: [0.72, 0.1, 0.09] }, COL_W = [0.93, 0.92, 0.88], COL_R = [0.78, 0.08, 0.1], COL_UB = [0.1, 0.14, 0.42];
-var COL_SIZE = { ensign: [7, 3.6, 22, 11], pennant: [16, 0.7, 30, 4] };   // 長、寬（公尺）、沿飛的方向幾格、沿旗桿幾格
-var COL_ON = Q.get('colours') !== '0';                                   // ?colours=0 ⇒ 不畫（對照、量效能用）
-var COL_FAR = 350;                                                        // 離鏡頭幾公尺以外 ⇒ 旗 4 格畫面才重算一次（每艘每格約 0.4 ms）
-var COL_TRUE_WIND = 9;                                                     // 真風（m/s；旗飄的方向用 WIND 的方向、大小照這個 × 天氣，⛔ WIND 本身是煙飄的速度）
-/** 這一型的桅頂（格座標；載入後第一次要用才算）：{ fore: [x, y, z], … }。 */
+var COL_SIZE = { ensign: [7, 3.6, 14, 7, 64, 32], pennant: [16, 0.7, 24, 2, 128, 8] };   // 長、寬（公尺）、布料沿飛的方向幾格、沿旗桿幾格、貼圖寬高（px）
+var COL_ON = Q.get('colours') !== '0';                                   // ?colours=0 ⇒ 不加旗（對照用）
+var COL_POLE_W = 0.16, COL_POLE_C = [0.36, 0.27, 0.17];                   // 旗桿粗細（公尺）、顏色
+/** 旗面上 (u 沿飛的方向 0 旗桿 → 1 尾、v 沿旗桿 0 上 → 1 下) 的顏色。 */
+function colourAt(kind, team, u, v) {
+  var F = COL_FIELD[team] || COL_FIELD.blue;
+  if (kind === 'pennant') {                                              // 長旗：靠旗桿那一段白底紅十字（聖喬治），之後是陣營色
+    var hl = 0.07; if (u > hl) return F;
+    return Math.abs(u - hl / 2) < hl * 0.16 || Math.abs(v - 0.5) < 0.17 ? COL_R : COL_W;
+  }
+  if (u > 0.5 || v > 0.5) return F;                                      // 戰鬥旗：左上角四分之一是聯合旗（1801 年後：聖喬治＋聖安德魯＋聖派翠克，這裡畫成藍底、白斜十字、白邊紅十字）
+  var cu = u / 0.5, cv = v / 0.5, d1 = Math.abs(cu - cv), d2 = Math.abs(cu + cv - 1);
+  if (Math.abs(cu - 0.5) < 0.09 || Math.abs(cv - 0.5) < 0.12) return COL_R;
+  if (Math.abs(cu - 0.5) < 0.17 || Math.abs(cv - 0.5) < 0.22) return COL_W;
+  if (Math.min(d1, d2) < 0.11) return COL_W;
+  return COL_UB;
+}
+/** 這一型的桅頂（格座標）：{ fore: [x, y, z], … }。 */
 function mastTrucks(T) {
   if (T.trucks) return T.trucks;
   var top = {}, key = { '前桅': 'fore', '主桅': 'main', '後桅': 'mizzen' }, g = T.base, cy = Math.round(T.cy);
@@ -10029,80 +10056,87 @@ function mastTrucks(T) {
   });
   return (T.trucks = out);
 }
-/** 這艘的陣營旗（第一次要畫才建）：設定檔 flags 或預設（主桅長旗、其他桅頂戰鬥旗）。 */
-function colourSet(sh) {
-  if (sh.colours) return sh.colours;
-  var T = sh.T, tr = mastTrucks(T), info = HULL_KNOWN.filter(function (h) { return h.id === T.id; })[0] || {}, L = info.flags;
-  if (!L) {
-    var ks = Object.keys(tr), pm = tr.main ? 'main' : ks.sort(function (a, b) { return tr[b][2] - tr[a][2]; })[0];
-    L = ks.map(function (k) { return { kind: k === pm ? 'pennant' : 'ensign', mast: k }; });
-  }
-  sh.colours = L.map(function (f) {
-    var at = f.at || tr[f.mast]; if (!at) return null;
-    var o = { kind: f.kind, at: at, up: true };
-    o.orig = countBox(T.base, at[0] - 3, at[1] - 3, at[2] - 25, at[0] + 3, at[1] + 3, at[2]);   // 桅頂那一段（2.5 m）原本幾格；0 ⇒ 掛在空中（設定檔給的點）⇒ 一直在
-    return o;
-  }).filter(Boolean);
-  sh.colT = -1;
-  return sh.colours;
+/** 沒寫設定檔的船：每根桅頂一根旗桿（主桅長旗、其他戰鬥旗），大小照桅頂多高。 */
+function autoFlags(T) {
+  var tr = mastTrucks(T), ks = Object.keys(tr); if (!ks.length) return [];
+  var pm = tr.main ? 'main' : ks.slice().sort(function (a, b) { return tr[b][2] - tr[a][2]; })[0], hz = (tr[pm][2] - T.zw) * S, k = clamp(hz / 60, 0.5, 1.1);
+  return ks.map(function (m) { return { kind: m === pm ? 'pennant' : 'ensign', at: tr[m], pole: 4.5 * k, scale: k, mast: m }; });
 }
-/** 旗面上 (u 沿飛的方向 0 旗桿 → 1 尾、v 沿旗桿 0 上 → 1 下) 的顏色。 */
-function colourAt(kind, team, u, v) {
-  var F = COL_FIELD[team] || COL_FIELD.blue;
-  if (kind === 'pennant') {                                              // 長旗：靠旗桿那一段白底紅十字（聖喬治），之後是陣營色
-    var hl = 0.07; if (u > hl) return F;
-    return Math.abs(u - hl / 2) < hl * 0.16 || Math.abs(v - 0.5) < 0.17 ? COL_R : COL_W;
-  }
-  if (u > 0.5 || v > 0.5) return F;                                      // 戰鬥旗：左上角四分之一是聯合旗（1801 年後：聖喬治＋聖安德魯＋聖派翠克，這裡畫成藍底、白斜十字、白邊紅十字）
-  var cu = u / 0.5, cv = v / 0.5, d1 = Math.abs(cu - cv), d2 = Math.abs(cu + cv - 1);
-  if (Math.abs(cu - 0.5) < 0.09 || Math.abs(cv - 0.5) < 0.12) return COL_R;
-  if (Math.abs(cu - 0.5) < 0.17 || Math.abs(cv - 0.5) < 0.22) return COL_W;
-  if (Math.min(d1, d2) < 0.11) return COL_W;
-  return COL_UB;
+/** 一面旗的貼圖（跟 .vxk 帆的 texture 同一種格式：w×h 的 RGBA、base64）。 */
+function colourTex(kind, team, W, H) {
+  var b = '';
+  for (var y = 0; y < H; y++) for (var x = 0; x < W; x++) { var c = colourAt(kind, team, (x + 0.5) / W, (y + 0.5) / H); b += String.fromCharCode(Math.round(c[0] * 255), Math.round(c[1] * 255), Math.round(c[2] * 255), 255); }
+  return btoa(b);
 }
-/** 每一格畫面（60_render.js prepRig）：這艘的陣營旗三角形，船身格座標（跟帆、模型同一套 uModel）。 */
-function colourBuf(sh) {
-  var C = colourSet(sh), i, f;                                           // ⛔ 第一版每一格建上萬個小陣列（每個點、每個角各一個）；改成配好的 Float32Array、顏色只算一次
-  if (SIMT - sh.colT > 0.5 || sh.colT < 0) {                             // 半秒看一次桅頂還在不在（只是畫面）
-    sh.colT = SIMT;
-    C.forEach(function (f) { if (f.up && f.orig) f.up = countBox(sh.grid, f.at[0] - 3, f.at[1] - 3, f.at[2] - 25, f.at[0] + 3, f.at[1] + 3, f.at[2]) > f.orig * 0.3; });
-  }
-  var on = COL_ON && !sh.struck && !sh.sunk && sh.sink < 40, tot = 0;
-  if (on && sh.colBuf && sh.colBuf.n && Math.hypot(CAM.eye[0] - sh.px, CAM.eye[2] - sh.pz) > COL_FAR && (sh.colF = (sh.colF || 0) + 1) % 4) return;   // 遠的船 ⇒ 4 格畫面才重算一次（船身座標 ⇒ 舊的那份照樣跟著船走）
-  if (on) for (i = 0; i < C.length; i++) if (C[i].up) tot += COL_SIZE[C[i].kind][2] * COL_SIZE[C[i].kind][3] * 6;
-  var O = sh.colArr && sh.colArr.length === tot * 9 ? sh.colArr : (sh.colArr = new Float32Array(tot * 9)), k = 0;
-  if (on && tot) {
-    var Wn = norm(WIND), ws = COL_TRUE_WIND * WIND_SPD * WX.wind;
-    var wl = M4.dir(sh.inv, Wn[0] * ws - sh.vel[0], 0, Wn[2] * ws - sh.vel[2]), wh = Math.hypot(wl[0], wl[1]);   // 相對風（船身格座標：x 船頭、y 右舷、z 上）
-    var dx = wh > 1e-6 ? wl[0] / wh : -1, dy = wh > 1e-6 ? wl[1] / wh : 0, sp = wh * S, lift = clamp(sp / 6, 0.15, 1), om = SIMT * (4 + sp * 0.5);   // sp：相對風速（m/s）⇒ 風小旗垂下來
-    for (var fi = 0; fi < C.length; fi++) {
-      f = C[fi]; if (!f.up) continue;
-      var Z = COL_SIZE[f.kind], Lm = Z[0] / S, Hm = Z[1] / S, NU = Z[2], NV = Z[3], a = f.at, ph = fi * 1.7 + sh.i * 0.9, pen = f.kind === 'pennant', u, v;
-      var P = f.P || (f.P = new Float32Array((NU + 1) * (NV + 1) * 3)), Q = f.cq;
-      if (!Q || f.cqTeam !== sh.team) { Q = f.cq = new Float32Array(NU * NV * 3); f.cqTeam = sh.team; for (u = 0; u < NU; u++) for (v = 0; v < NV; v++) { var cc = colourAt(f.kind, sh.team, (u + 0.5) / NU, (v + 0.5) / NV), ci = (u * NV + v) * 3; Q[ci] = cc[0]; Q[ci + 1] = cc[1]; Q[ci + 2] = cc[2]; } }
-      for (u = 0, i = 0; u <= NU; u++) {
-        var uu = u / NU, w = pen ? 1 - 0.85 * uu : 1, fl = Lm * uu;       // 長旗越往尾巴越窄
-        var wave = Math.sin(uu * 7.5 - om + ph) * Hm * 0.35 * uu * (pen ? 2.2 : 1), drop = (1 - lift) * fl * 0.9 + (pen ? fl * 0.12 : 0);   // 風小 ⇒ 往下垂；長旗本來就有點垂
-        var bx = a[0] + dx * fl - dy * wave, by = a[1] + dy * fl + dx * wave, bz = a[2] + 4 - drop;   // 旗頭在桅頂上 0.4 m
-        for (v = 0; v <= NV; v++, i += 3) { P[i] = bx; P[i + 1] = by; P[i + 2] = bz - ((v / NV - 0.5) * w + 0.5) * Hm; }
-      }
-      for (u = 0; u < NU; u++) for (v = 0; v < NV; v++) {
-        var i00 = (u * (NV + 1) + v) * 3, i10 = i00 + (NV + 1) * 3, i01 = i00 + 3, i11 = i10 + 3;
-        var ax = P[i10] - P[i00], ay = P[i10 + 1] - P[i00 + 1], az = P[i10 + 2] - P[i00 + 2], cx = P[i01] - P[i00], cy = P[i01 + 1] - P[i00 + 1], cz = P[i01 + 2] - P[i00 + 2];
-        var nx = ay * cz - az * cy, ny = az * cx - ax * cz, nz = ax * cy - ay * cx, nl = Math.sqrt(nx * nx + ny * ny + nz * nz) || 1, q = (u * NV + v) * 3;
-        nx /= nl; ny /= nl; nz /= nl;
-        var cr = Q[q], cg = Q[q + 1], cb = Q[q + 2], cs = [i00, i10, i11, i00, i11, i01];
-        for (var j = 0; j < 6; j++) { var pi = cs[j]; O[k++] = P[pi]; O[k++] = P[pi + 1]; O[k++] = P[pi + 2]; O[k++] = nx; O[k++] = ny; O[k++] = nz; O[k++] = cr; O[k++] = cg; O[k++] = cb; }
-      }
+/** 載入船型時（05_hull.js「桅與帆」那一步、clothSetup 之前）：照設定檔的 flags 生旗（合成的帆，接在 T.rig.sails 後面）。
+ *  T.nSail0 ＝ 作品自己的帆有幾面（快取只存這幾面的布料，06_cache.js）；T.teamExtra ＝ 貼圖集排在帆後面的那幾份（陣營旗紅的那份、替換作品旗的藍紅兩份；clothSetup）、
+ *  T.teamTex[帆] ＝ { blue, red } 貼圖集的哪一格（sailRect）；T.poles ＝ 旗桿。 */
+function teamFlagsSetup(T, info) {
+  T.nSail0 = T.rig.sails.length; T.teamTex = {}; T.teamExtra = []; T.poles = [];
+  if (!COL_ON) return;
+  var defs = info && info.flags || autoFlags(T); if (!defs.length) return;
+  T.teamDefs = defs;
+  var add = [], red = [], repl = [];
+  defs.forEach(function (f, fi) {
+    if (f.replace) { repl.push(f); return; }
+    var Z = COL_SIZE[f.kind], k = f.scale || 1, Lm = Z[0] * k / S, Hm = Z[1] * k / S, NU = Z[2], NV = Z[3], a = f.at, top = a[2] + (f.pole || 4.5) / S;
+    var cell = anchorNear(T, a[0], a[1], a[2], 3), pen = f.kind === 'pennant', verts = [], uv = [], tris = [], pins = [], u, v;
+    for (u = 0; u <= NU; u++) for (v = 0; v <= NV; v++) {               // 往船尾飄（−x）、稍微下垂、一點起伏（物理關著時就是這個樣子）
+      var uu = u / NU, vv = v / NV, w = pen ? 1 - 0.85 * uu : 1;
+      verts.push(a[0] - 1 - Lm * uu, a[1] + Math.sin(uu * 5) * Hm * 0.08 * uu, top - ((vv - 0.5) * w + 0.5) * Hm - Lm * uu * uu * 0.08);
+      uv.push(uu, vv);
+      if (u === 0) pins.push(v);
     }
-  }
-  sh.colBuf = upload(sh.colBuf, O, 9, [[0, 3, 0], [1, 3, 3], [2, 3, 6]]);
+    for (u = 0; u < NU; u++) for (v = 0; v < NV; v++) { var p = u * (NV + 1) + v, q = p + NV + 1; tris.push(p, q, q + 1, p, q + 1, p + 1); }
+    var nm = 'team-' + f.kind + '-' + fi, col = COL_FIELD.blue;
+    red.push([T.nSail0 + add.length, { texture: { w: Z[4], h: Z[5], rgba: colourTex(f.kind, 'red', Z[4], Z[5]), uv: uv, alpha_min: 0 } }]);
+    add.push({ name: nm, verts: verts, tris: tris, color: col, meta: { kind: 'flag', flag: pen ? 'pennant' : 'battle', team: 1 }, pins: pins, pinK: cell >= 0 ? 1 : 3, pinV: cell, truckCell: cell,
+      texture: { w: Z[4], h: Z[5], rgba: colourTex(f.kind, 'blue', Z[4], Z[5]), uv: uv, alpha_min: 0 } });
+    T.poles.push({ at: a, top: top + 0.6, cell: cell });                 // 旗桿：桅頂 → 旗頭上面一點
+    for (var q = 0; q < verts.length; q += 3) T.radFlags = Math.max(T.radFlags || 0, Math.hypot(verts[q] - T.cx, verts[q + 1] - T.cy, verts[q + 2] - T.geo.center) * S);   // 離船心最遠多少（32_hull.js：砲彈離船心超過這個就不看這艘）
+  });
+  T.rig = Object.assign({}, T.rig, { sails: T.rig.sails.concat(add) });   // ⛔ 不改 header 那一份（hullCheck 之類的還要讀作品原本的帆）
+  var n = T.rig.sails.length;                                          // 貼圖集：帆（含合成的旗，藍的那份）之後接 teamExtra（clothSetup）
+  red.forEach(function (r) { T.teamTex[r[0]] = { blue: r[0], red: n + T.teamExtra.length }; T.teamExtra.push(r[1]); });
+  repl.forEach(function (f) {
+    var k = -1; T.rig.sails.forEach(function (s, j) { if (j < T.nSail0 && k < 0 && s.meta && s.meta.kind === 'flag' && s.meta.flag === f.replace) k = j; });   // 先照 meta 的種類（造船規格 §9：kind=flag、flag=ensign｜pennant｜jack…）
+    if (k < 0) T.rig.sails.forEach(function (s, j) { if (j < T.nSail0 && s.name === f.replace) k = j; });   // 沒有 meta 的舊匯出 ⇒ 照名字
+    var s = T.rig.sails[k], tx = s && s.texture;
+    if (!tx || !tx.uv) { console.warn('陣營旗：' + T.id + ' 換不了「' + f.replace + '」' + (s ? '（作品的旗沒有貼圖 uv）' : '（找不到這面旗）')); return; }
+    var Z = COL_SIZE[f.kind] || COL_SIZE.ensign, uv = tx.uv;
+    T.teamTex[k] = { blue: n + T.teamExtra.length, red: n + T.teamExtra.length + 1 };
+    T.teamExtra.push({ texture: { w: Z[4], h: Z[5], rgba: colourTex(f.kind, 'blue', Z[4], Z[5]), uv: uv, alpha_min: 0 } }, { texture: { w: Z[4], h: Z[5], rgba: colourTex(f.kind, 'red', Z[4], Z[5]), uv: uv, alpha_min: 0 } });
+  });
 }
-/** 畫（模型那一趟之後，同一支著色器、受光）：反射（畫質「高」）也畫。 */
+/** 貼圖集的那一格：陣營旗照船的陣營挑藍或紅那份（船型兩隊共用）；替換掉的作品旗也一樣。 */
+function sailRect(ow, A, ti) {
+  var T = ow.T, m = T && T.teamTex && T.teamTex[ti];
+  if (m) return A.rect[(ow.team || (ow.owner && ow.owner.team)) === 'red' ? m.red : m.blue];
+  return A.rect[ti];
+}
+/** 旗桿（每一格畫面；船身格座標）：桅頂那一格還在才畫。降旗旗桿照留（旗收了）。 */
+function poleBuf(sh) {
+  var P = sh.T.poles; if (!P || !P.length) return;
+  var key = P.map(function (p) { return p.cell < 0 || gp(sh.grid, p.cell) > 0 ? 1 : 0; }).join('') + (sh.sink > 40 ? 'x' : '');
+  if (sh.poleKey === key) return;
+  sh.poleKey = key;
+  var out = [], hw = COL_POLE_W / S / 2, c = COL_POLE_C;
+  P.forEach(function (p, i) {
+    if (key[i] !== '1') return;
+    var x = p.at[0], y = p.at[1], z0 = p.at[2], z1 = p.top;
+    [[1, 0], [0, 1], [-1, 0], [0, -1]].forEach(function (d) {          // 四面（方的細桿）
+      var nx = d[0], ny = d[1], ax = x + (nx ? nx * hw : -hw), ay = y + (ny ? ny * hw : hw), bx = x + (nx ? nx * hw : hw), by = y + (ny ? ny * hw : -hw);
+      if (ny) { ax = x + hw * ny; bx = x - hw * ny; ay = by = y + ny * hw; }
+      [[ax, ay, z0], [bx, by, z0], [bx, by, z1], [ax, ay, z0], [bx, by, z1], [ax, ay, z1]].forEach(function (q) { out.push(q[0], q[1], q[2], nx, ny, 0, c[0], c[1], c[2]); });
+    });
+  });
+  sh.poleB = upload(sh.poleB, new Float32Array(out), 9, [[0, 3, 0], [1, 3, 3], [2, 3, 6]]);
+}
+/** 畫旗桿（模型那一趟之後，同一支著色器、受光）：反射（畫質「高」）也畫。旗面是帆，照帆畫（11_rig_gpu.js sailBuf）。 */
 function drawColours(prog) {
   if (prog.u.uGlow) gl.uniform1f(prog.u.uGlow, 0);
   SHIPS.forEach(function (sh) {
-    var b = sh.colBuf; if (!b || !b.n || sh.sink > 40) return;
+    var b = sh.poleB; if (!b || !b.n || sh.sink > 40) return;
     cutSet(prog, sh); gl.uniformMatrix4fv(prog.u.uModel, false, sh.M);
     gl.bindVertexArray(b.vao); gl.drawArrays(gl.TRIANGLES, 0, b.n);
   });
@@ -10305,7 +10339,7 @@ if (DEBUG) window.__game = {
     if (reset) CH_PROF = { ms: 0, steps: 0 };
     return r;
   },
-  prof: function (reset) { var r = { cloth: +PROF.cloth.toFixed(1), rope: +PROF.rope.toFixed(1), shred: +PROF.shred.toFixed(1), buf: +PROF.buf.toFixed(1), col: +(PROF.col || 0).toFixed(2), colN: PROF.colN || 0, perStep: +PHYS_MS.toFixed(3) }; if (reset) PROF = { cloth: 0, rope: 0, shred: 0, buf: 0 }; return r; },
+  prof: function (reset) { var r = { cloth: +PROF.cloth.toFixed(1), rope: +PROF.rope.toFixed(1), shred: +PROF.shred.toFixed(1), buf: +PROF.buf.toFixed(1), perStep: +PHYS_MS.toFixed(3) }; if (reset) PROF = { cloth: 0, rope: 0, shred: 0, buf: 0 }; return r; },
   /** 帆與繩的讀數：每面帆最鼓的那一點離雕刻作品形狀多遠（格）、還綁著幾個點、垂下來的繩幾條。 */
   cloth: function (i) {
     var sh = SHIPS[i || 0];

@@ -369,20 +369,26 @@ def validate(cfg, prev=None):
             crew(s['crew'], p + '.crew', False)
         if 'rooms' in s:
             rooms(s['rooms'], p + '.rooms')
-        if 'flags' in s:   # 陣營旗（77_colours.js）：[{kind: pennant／ensign, mast: fore／main／mizzen} 或 {kind, at: [x, y, z] 格座標}]；沒寫 ⇒ 主桅長旗、其他桅頂戰鬥旗
+        if 'flags' in s:   # 陣營旗（77_colours.js）：[{kind: pennant／ensign, at: [x, y, z] 桅頂那一格, pole: 旗桿公尺, scale: 大小倍率} 或 {kind, replace: 作品裡那面旗的名字}]；沒寫 ⇒ 每根桅頂自動一根旗桿（主桅長旗、其他戰鬥旗）
             L = s['flags']
             if not (isinstance(L, list) and len(L) <= 8):
-                err(p + '.flags', '最多 8 面的清單')
+                err(p + '.flags', '最多 8 面的清單（空清單 ＝ 這艘不掛陣營旗）')
             else:
                 for j, q in enumerate(L):
                     qp = '%s.flags[%d]' % (p, j)
                     if not (isinstance(q, dict) and q.get('kind') in ('pennant', 'ensign')):
                         err(qp + '.kind', 'pennant（長旗）或 ensign（戰鬥旗）')
-                    elif 'at' in q:
-                        if not (isinstance(q['at'], list) and len(q['at']) == 3 and all(isnum(v) for v in q['at'])):
-                            err(qp + '.at', '[x, y, z]（船的格座標，旗頭掛的點）')
-                    elif q.get('mast') not in ('fore', 'main', 'mizzen'):
-                        err(qp + '.mast', 'fore／main／mizzen（掛在那根桅頂），或改給 at')
+                        continue
+                    if 'replace' in q:
+                        if not (isinstance(q['replace'], str) and q['replace'].strip()):
+                            err(qp + '.replace', '作品裡那面旗的名字（例：ensign）—— 布料照原本那面，只換成陣營旗的貼圖')
+                        continue
+                    if not (isinstance(q.get('at'), list) and len(q['at']) == 3 and all(isnum(v) for v in q['at'])):
+                        err(qp + '.at', '[x, y, z]（桅頂那一格的格座標，旗桿從這裡往上），或改給 replace')
+                    if 'pole' in q and not (isnum(q['pole']) and 0.5 <= q['pole'] <= 12):
+                        err(qp + '.pole', '旗桿長 0.5～12 公尺')
+                    if 'scale' in q and not (isnum(q['scale']) and 0.2 <= q['scale'] <= 3):
+                        err(qp + '.scale', '大小倍率 0.2～3')
         if 'lamps' in s:   # 船殼上的燈（格子做的；60_render.js vlampSet）：[{at: [x, y, z], r: 半徑幾格, color: 發光的格子 rgb332 代碼, rgb: [r, g, b] 光色 0～1}]，最多 4 盞
             L = s['lamps']
             if not (isinstance(L, list) and len(L) <= 4):
