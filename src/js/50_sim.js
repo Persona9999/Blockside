@@ -68,7 +68,7 @@ function step() {
   }
   SHIPS.forEach(burstStep);                                        // 連發剩下的那幾發（21_gunnery.js；burst ＝ 1 的砲什麼都不做）
   if (PF) pfLap('fire');
-  SHIPS.forEach(function (sh) { sail(sh, DT); stepShip(sh, DT); if (PF) pfLap('ship'); stepCrew(sh, DT); if (PF) pfLap('crew'); });
+  SHIPS.forEach(function (sh) { sail(sh, DT); stepShip(sh, DT); if (sh.anc) chainStep(sh, DT); if (PF) pfLap('ship'); stepCrew(sh, DT); if (PF) pfLap('crew'); });
   collide();
   SHIPS.forEach(function (sh) {                                    // 照 SHIPS 的順序（一對一：我艦先、敵艦後 ⇒ 跟以前同一個順序抽亂數）
     if (sh.i === PLAYER_I) { if (AUTOFIRE) ai(sh, DT); }            // 自動開砲：我艦也交給電腦瞄準開火

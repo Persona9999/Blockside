@@ -6830,7 +6830,7 @@ function step() {
   }
   SHIPS.forEach(burstStep);                                        // 連發剩下的那幾發（21_gunnery.js；burst ＝ 1 的砲什麼都不做）
   if (PF) pfLap('fire');
-  SHIPS.forEach(function (sh) { sail(sh, DT); stepShip(sh, DT); if (PF) pfLap('ship'); stepCrew(sh, DT); if (PF) pfLap('crew'); });
+  SHIPS.forEach(function (sh) { sail(sh, DT); stepShip(sh, DT); if (sh.anc) chainStep(sh, DT); if (PF) pfLap('ship'); stepCrew(sh, DT); if (PF) pfLap('crew'); });
   collide();
   SHIPS.forEach(function (sh) {                                    // 照 SHIPS 的順序（一對一：我艦先、敵艦後 ⇒ 跟以前同一個順序抽亂數）
     if (sh.i === PLAYER_I) { if (AUTOFIRE) ai(sh, DT); }            // 自動開砲：我艦也交給電腦瞄準開火
@@ -7524,7 +7524,7 @@ function drawModels(prog, near) {
     cutSet(prog, sh);
     sh.models.forEach(function (m) {
       var me = sh.T.meshes[m.mesh]; if (!m.alive || !me) return;
-      gl.uniformMatrix4fv(prog.u.uModel, false, M4.mul(sh.M, modelLocal(m)));
+      gl.uniformMatrix4fv(prog.u.uModel, false, M4.mul(sh.M, m.ancD ? M4.mul(trans(m.ancD[0], m.ancD[1], m.ancD[2]), modelLocal(m)) : modelLocal(m)));   // ancD：拋下去的模型錨，畫在鐵鍊那一端（76_anchor.js chainStep）
       if (prog.u.uGlow) gl.uniform1f(prog.u.uGlow, isLamp(m) ? lanternK(m) : 0);   // 取用點的火藥桶是後加的模型，沒有 meta
       gl.bindVertexArray(me.vao); gl.drawArrays(gl.TRIANGLES, 0, me.n);
     });
@@ -9698,7 +9698,7 @@ function shipCheck(id) {
 // 約束（down／weigh）：錨鏈孔超過 ANC_REACH ⇒ 拉回圓周上；船身當剛體繞錨鏈孔轉（船心照動量走、船頭被拴住 ⇒ 往前的動量變成轉向）：
 //   帶著速度只拋一側 ⇒ 鍊子一拉緊，船頭被拴在那一側、船尾甩出去 ＝ 急轉；兩側都拋 ⇒ 停住，A／D 原地慢慢轉（ANC_PIVOT）、電腦照舊轉舷側對敵。
 //   拉緊的時候每秒掉 1／ANC_DRAG 的速度（鍊子拖著）；鍊子要船轉得比 ANC_YAWMAX 快 ⇒ 錨在海底被拖著走（船只轉到上限、每秒掉 1／ANC_DRAGX）。錨被打壞（模型沒了、關聯的格少了一半）⇒ 那一側斷鍊、船放開，不能再拋。
-// ⛔ 不抽 rnd()；沒拋錨的船一位元都不動（sh.anc 只有拋過才建）。
+// ⛔ 戰局不抽 rnd()（只有錨入水的水花抽，見 chainSolve）；沒拋錨的船一位元都不動（sh.anc 只有拋過才建）。
 var ANC_DEPTH = 20, ANC_CHAIN = 36, ANC_REACH = Math.sqrt(ANC_CHAIN * ANC_CHAIN - ANC_DEPTH * ANC_DEPTH), ANC_FALL = 4, ANC_WEIGH = 8, ANC_DRAG = 8, ANC_DRAGX = 2.5, ANC_PIVOT = 0.06, ANC_YAWMAX = 0.5;   // 公尺、秒、rad/s
 /** 這艘的兩個錨（第一次要用才建）：錨鏈孔的格座標、是哪個部件（模型／關聯／沒有）。 */
 function anchorsOf(sh) {
@@ -9738,7 +9738,6 @@ function anchorToggle(sh, k, want) {
     if (!anchorAlive(sh, a)) { a.broken = true; return nm + '打壞了，拋不了'; }
     var h = hawseXZ(sh, a, sh.px, sh.pz, sh.yaw);
     a.A = h; a.st = 'drop'; a.t = SIMT + ANC_FALL;
-    if (typeof splash === 'function') splash([h[0], seaH(h[0], h[1], SIMT), h[1]], false);
     return '拋' + nm;
   }
   if (a.st === 'drop' || a.st === 'down') { a.st = 'weigh'; a.t0 = SIMT; a.t = SIMT + ANC_WEIGH; return '起' + nm; }
@@ -9761,7 +9760,7 @@ function anchorStep(sh, dt, px0, pz0) {
   ['P', 'S'].forEach(function (k) {
     var a = A[k], nm = k === 'P' ? '左錨' : '右錨';
     if (a.st === 'up') return;
-    if (!anchorAlive(sh, a)) { a.broken = true; a.st = 'up'; a.A = null; if (sh.i === PLAYER_I) note(sh, nm + '被打壞了，鍊子斷了'); return; }
+    if (!anchorAlive(sh, a)) { a.broken = true; a.st = 'up'; a.A = null; chainCut(sh, a); if (sh.i === PLAYER_I) note(sh, nm + '被打壞了，鍊子斷了'); return; }
     if (a.st === 'drop' && SIMT >= a.t) { a.st = 'down'; if (sh.i === PLAYER_I) note(sh, nm + '落底咬住了'); }
     if (a.st === 'weigh' && SIMT >= a.t) { a.st = 'up'; a.A = null; if (sh.i === PLAYER_I) note(sh, nm + '起好了'); return; }
     if (a.st !== 'down' && a.st !== 'weigh') return;
@@ -9787,7 +9786,8 @@ function anchorStep(sh, dt, px0, pz0) {
     tot -= dA;
   });
   if (taut) {                                                           // 動量留著、只被鍊子拖慢（⛔ 用船心被拉回後的位移重算速度 ⇒ 錨在正後方時速度一步歸零，船停死、一度都不轉）
-    sh.yawRate = clamp(tot / dt, -ANC_YAWMAX, ANC_YAWMAX);              //   轉動慣性 ＝ 這一步實際轉的（夾在上限內）
+    if (Math.abs(sh.spd) >= 0.6) sh.yawRate = clamp(tot / dt, -ANC_YAWMAX, ANC_YAWMAX);   //   轉動慣性 ＝ 這一步實際轉的（夾在上限內）；繞錨原地轉（< 0.6 m/s，31_sailing.js）⇒ 不改，照 A／D 給的
+    //   ⛔ 原地轉也改 ⇒ 雙錨兩條都繃著時約束每一步把 A／D 轉的抵銷回去、慣性歸零 ⇒ 按住 A 10 秒轉 0°（1267b53 的回歸，以前 27.6°）
     sh.spd *= Math.max(0, 1 - dt / (drag ? ANC_DRAGX : ANC_DRAG));     //   ⇒ 下一步照舊往前走，約束再把那一段位移轉成旋轉：偏得越多轉得越快 ＝ 船尾甩出去；錨被拖著 ⇒ 掉得快
     sh.vel = mul(fwd(sh.yaw), sh.spd);
   }
@@ -9807,24 +9807,124 @@ function anchorChips(me) {
     var sp = el.querySelector('i'); if (sp && sp.textContent !== lb) sp.textContent = lb;
   });
 }
-/** 鐵鍊（畫用，每一格畫面重做；物理與碰撞在 TASK-0601 下一段）：錨鏈孔 → 錨（海底，水線下 ANC_DEPTH）的一條二次曲線，船身格座標（跟繩同一套 uModel）。
- *  鬆 ⇒ 從錨鏈孔幾乎直直垂到海底、再沿海底拉到錨；拉緊（水平距離接近 ANC_REACH）⇒ 繃成直線。下沉中 ⇒ 錨往下的深度照時間；起錨中 ⇒ 鍊子跟著收短。
- *  一節深一節淺交錯 ⇒ 看起來是一節一節的鏈環。 */
-var CHAIN_N = 48, CHAIN_C = [[0.2, 0.2, 0.22], [0.38, 0.37, 0.36]];
-function chainBuf(sh) {
-  var A = sh.anc, L = [];
-  if (A) ['P', 'S'].forEach(function (k) {
-    var a = A[k]; if (!a.A || a.st === 'up') return;
-    var dep = a.st === 'drop' ? ANC_DEPTH * clamp(1 - (a.t - SIMT) / ANC_FALL, 0.05, 1) : ANC_DEPTH, ax = a.A[0], az = a.A[1];
-    if (a.st === 'weigh') { var f = clamp((a.t - SIMT) / ANC_WEIGH, 0, 1), H = hawseXZ(sh, a, sh.px, sh.pz, sh.yaw); ax = H[0] + (ax - H[0]) * f; az = H[1] + (az - H[1]) * f; dep *= Math.max(f, 0.05); }   // 起錨：錨被拉近、拉上來
-    var e = toLocal(sh, [ax, seaH(ax, az, SIMT) - dep, az]), h = [a.hx, a.hy, a.hz];
-    var dx = e[0] - h[0], dy = e[1] - h[1], tt = clamp(Math.hypot(dx, dy) * S / ANC_REACH, 0, 1), w = tt * tt;
-    var c = [h[0] + dx * (0.08 + 0.42 * w), h[1] + dy * (0.08 + 0.42 * w), e[2] + (h[2] - e[2]) * 0.5 * w];   // 控制點：鬆 ⇒ 錨鏈孔正下方的海底附近；拉緊 ⇒ 中點
-    var p0 = h;
-    for (var i = 1; i <= CHAIN_N; i++) {
-      var t = i / CHAIN_N, u = 1 - t, p = [u * u * h[0] + 2 * u * t * c[0] + t * t * e[0], u * u * h[1] + 2 * u * t * c[1] + t * t * e[1], u * u * h[2] + 2 * u * t * c[2] + t * t * e[2]], col = CHAIN_C[i & 1];
-      L.push(p0[0], p0[1], p0[2], col[0], col[1], col[2], p[0], p[1], p[2], col[0], col[1], col[2]); p0 = p;
+/** 鐵鍊（TASK-0601；Tim 2026-10-15：繩的變體 —— 比較重、跟船體碰撞）：每條 CHAIN_SEG 節的質點鍊（Verlet），世界座標、每一步跟著船走（50_sim.js：stepShip 更新完 sh.M 之後）。
+ *  ⛔ 只是畫面：不抽 rnd()、不回頭改船（戰局照 anchorStep 的鍊長約束）⇒ 拋不拋錨都不影響逐位元組。
+ *  兩端：錨鏈孔（船身格座標 hx、hy、hz ⇒ 每一步照 sh.M 釘住）；錨 ——
+ *    下沉中（drop）⇒ 從錨鏈孔落到海底（照時間，先慢後快）、鍊子跟著放出（放出長度 ＝ 鍊長 × 時間，追不上錨就照兩端的距離）；
+ *    咬著（down）⇒ 釘在海底的錨點（a.A；拖錨時跟著移）；起錨中（weigh）⇒ 鍊子照時間收短、錨放開（很重：約束時只動 CH_ANCW 份），先在海底被拖過來、再被吊起來。
+ *  物理：沒有風阻；水下（y < 0）浮力扣掉 1／7.8（鐵）、阻尼大（CH_DMPW）；約束 CHAIN_IT 次（幾乎不能伸長）；海底 y ＝ −ANC_DEPTH，碰到就停住（磨擦：水平速度留 30%）。
+ *  碰撞（只碰自己的船殼，Tim 拍板：不碰別艘）：每個質點、每一節的中點換到船身格座標查格；在格子裡 ⇒ 沿橫向（離中線的方向）推到最近的空格、速度吃掉七成。
+ *    錨鏈孔旁的前兩節不查（錨鏈孔就在錨那團格子上 ⇒ 一定在格子裡）。?chainhit=0 ⇒ 不推（只數穿進去幾節，對照用）。
+ *  斷鍊（錨被打壞）⇒ 那條鍊子兩端都放開、往下沉，CH_LOST 秒後拿掉（sh.chLost）。 */
+var CHAIN_SEG = 24, CHAIN_IT = 12, CH_DMPA = 0.995, CH_DMPW = 0.96, CH_GW = G * (1 - 1 / 7.8), CH_ANCW = 0.15, CH_LOST = 10;
+var CHAIN_HIT = Q.get('chainhit') !== '0', CH_PROF = { ms: 0, steps: 0 };
+var CHAIN_C = [[0.2, 0.2, 0.22], [0.38, 0.37, 0.36]], CH_LINKS = 3, CH_LINK_W = 0.14;   // 每一節幾環（1.5 m ⇒ 一環 0.5 m）、環的半寬（公尺）
+function chainNew(sh, a) {
+  var W = M4.pt(sh.M, a.hx, a.hy, a.hz), n = CHAIN_SEG + 1, p = new Float64Array(n * 3);
+  for (var i = 0; i < n; i++) { p[i * 3] = W[0]; p[i * 3 + 1] = W[1]; p[i * 3 + 2] = W[2]; }
+  return { p: p, q: Float64Array.from(p), pay: 0, pen: 0, penSum: 0, penMax: 0, steps: 0, lost: false, t: 0 };
+}
+/** 一個點在不在船殼裡（換到格座標查格）；推 ⇒ 沿橫向推到最近的空格，回傳推完的世界座標（推不出去 ⇒ null）。 */
+function chainHull(sh, x, y, z, push) {
+  var l = M4.pt(sh.inv, x, y, z), gx = Math.floor(l[0]), gy = Math.floor(l[1]), gz = Math.floor(l[2]), g = sh.grid;
+  if (!g.get(gx, gy, gz)) return false;
+  if (!push) return true;
+  var sg = l[1] >= sh.T.cy ? 1 : -1;
+  for (var s = 1; s <= 60; s++) if (!g.get(gx, gy + sg * s, gz)) return M4.pt(sh.M, l[0], gy + sg * s + 0.5, l[2]);
+  return true;
+}
+function chainSolve(sh, a, c, dt) {
+  var N = CHAIN_SEG, p = c.p, q = c.q, sb = -ANC_DEPTH, W = null, E = null, i, o, it;
+  if (!c.lost) {
+    W = M4.pt(sh.M, a.hx, a.hy, a.hz);
+    if (a.st === 'drop') {
+      var f = clamp(1 - (a.t - SIMT) / ANC_FALL, 0, 1); E = [a.A[0], W[1] + (sb - W[1]) * Math.pow(f, 1.6), a.A[1]]; c.pay = Math.max(ANC_CHAIN * f, Math.hypot(E[0] - W[0], E[1] - W[1], E[2] - W[2]));
+      if (!c.splash && E[1] <= seaH(E[0], E[2], SIMT)) { c.splash = true; splash(E, false); }   // 錨入水那一刻（抽亂數 ⇒ 只有拋了錨的局）
     }
+    else if (a.st === 'down') { E = [a.A[0], sb, a.A[1]]; c.pay = Math.max(ANC_CHAIN, Math.hypot(E[0] - W[0], E[1] - W[1], E[2] - W[2])); }
+    else c.pay = ANC_CHAIN * clamp((a.t - SIMT) / ANC_WEIGH, 0, 1);
+  }
+  var rest = Math.max(c.pay / N, 0.01), dt2 = dt * dt;
+  for (i = 0; i <= N; i++) {                                            // 走一步（釘住的兩端等一下直接放）
+    o = i * 3; var wet = p[o + 1] < 0, d = wet ? CH_DMPW : CH_DMPA;
+    var vx = (p[o] - q[o]) * d, vy = (p[o + 1] - q[o + 1]) * d, vz = (p[o + 2] - q[o + 2]) * d;
+    q[o] = p[o]; q[o + 1] = p[o + 1]; q[o + 2] = p[o + 2];
+    p[o] += vx; p[o + 1] += vy - (wet ? CH_GW : G) * dt2; p[o + 2] += vz;
+  }
+  function pin() { if (W) { p[0] = W[0]; p[1] = W[1]; p[2] = W[2]; } if (E) { o = N * 3; p[o] = E[0]; p[o + 1] = E[1]; p[o + 2] = E[2]; } }
+  pin();
+  for (it = 0; it < CHAIN_IT; it++) {
+    for (i = 0; i < N; i++) {
+      var wa = i === 0 && W ? 0 : 1, wb = i + 1 === N ? (E ? 0 : c.lost ? 1 : CH_ANCW) : 1; if (!(wa + wb)) continue;
+      var ia = i * 3, ib = ia + 3, dx = p[ib] - p[ia], dy = p[ib + 1] - p[ia + 1], dz = p[ib + 2] - p[ia + 2], l = Math.sqrt(dx * dx + dy * dy + dz * dz);
+      if (l < 1e-9) continue;
+      var k = (l - rest) / l / (wa + wb);
+      if (wa) { p[ia] += dx * k * wa; p[ia + 1] += dy * k * wa; p[ia + 2] += dz * k * wa; }
+      if (wb) { p[ib] -= dx * k * wb; p[ib + 1] -= dy * k * wb; p[ib + 2] -= dz * k * wb; }
+    }
+    pin();
+  }
+  var hit = 0, pen = 0;
+  for (i = W ? 2 : 0; i <= N; i++) {                                    // 船殼：質點與每一節的中點
+    o = i * 3;
+    if (p[o + 1] < sb) { p[o + 1] = sb; q[o] = p[o] - (p[o] - q[o]) * 0.3; q[o + 1] = sb; q[o + 2] = p[o + 2] - (p[o + 2] - q[o + 2]) * 0.3; }   // 海底：停住、水平留三成
+    var h = chainHull(sh, p[o], p[o + 1], p[o + 2], CHAIN_HIT && !(i === N && E));
+    if (h) { hit++; if (h !== true) { q[o] = h[0] - (p[o] - q[o]) * 0.3; q[o + 1] = h[1] - (p[o + 1] - q[o + 1]) * 0.3; q[o + 2] = h[2] - (p[o + 2] - q[o + 2]) * 0.3; p[o] = h[0]; p[o + 1] = h[1]; p[o + 2] = h[2]; } }
+    if (i === N) break;
+    var mx = (p[o] + p[o + 3]) / 2, my = (p[o + 1] + p[o + 4]) / 2, mz = (p[o + 2] + p[o + 5]) / 2, hm = chainHull(sh, mx, my, mz, CHAIN_HIT);
+    if (hm) { hit++; if (hm !== true) { var ex = hm[0] - mx, ey = hm[1] - my, ez = hm[2] - mz; [o, o + 3].forEach(function (j) { if ((j === 0 && W) || (j === N * 3 && E)) return; p[j] += ex; p[j + 1] += ey; p[j + 2] += ez; q[j] += ex; q[j + 1] += ey; q[j + 2] += ez; }); } }
+  }
+  pin();
+  for (i = W ? 2 : 0; i < N; i++) { o = i * 3; if (chainHull(sh, p[o + 3], p[o + 4], p[o + 5], false) || chainHull(sh, (p[o] + p[o + 3]) / 2, (p[o + 1] + p[o + 4]) / 2, (p[o + 2] + p[o + 5]) / 2, false)) pen++; }   // 推完還穿在船殼裡的節數（讀數）
+  c.hit = hit; c.pen = pen; c.penSum += pen; c.penMax = Math.max(c.penMax, pen); c.steps++;
+}
+/** 每一步（50_sim.js，stepShip 之後 ⇒ sh.M 是這一步的）：在水裡的錨各一條、斷掉的往下沉。 */
+function chainStep(sh, dt) {
+  var A = sh.anc, t0 = performance.now();
+  ['P', 'S'].forEach(function (k) {
+    var a = A[k];
+    if (a.st === 'up') { a.ch = null; if (a.m) a.m.ancD = null; return; }
+    var c = a.ch || (a.ch = chainNew(sh, a));
+    chainSolve(sh, a, c, dt);
+    if (a.m) { var e = M4.pt(sh.inv, c.p[CHAIN_SEG * 3], c.p[CHAIN_SEG * 3 + 1], c.p[CHAIN_SEG * 3 + 2]); a.m.ancD = [e[0] - a.hx, e[1] - a.hy, e[2] - a.hz]; }   // 模型錨（炎羽號）：整個搬到鍊子那一端畫（60_render.js drawModels；錨環 ring 還沒有 ⇒ 用模型頂的中心）
+  });
+  if (sh.chLost) for (var i = 0; i < sh.chLost.length; i++) { var c2 = sh.chLost[i]; if (SIMT > c2.t) { sh.chLost.splice(i--, 1); continue; } chainSolve(sh, null, c2, dt); }
+  CH_PROF.ms += performance.now() - t0; CH_PROF.steps++;
+}
+/** 錨被打壞 ⇒ 那條鍊子放開、沉下去。 */
+function chainCut(sh, a) {
+  if (!a.ch) return;
+  a.ch.lost = true; a.ch.t = SIMT + CH_LOST; (sh.chLost || (sh.chLost = [])).push(a.ch); a.ch = null;
+  if (a.m) a.m.ancD = null;
+}
+/** 畫（每一格畫面重做）：鍊子的質點換到船身格座標（跟繩同一套 uModel），每一節分三環（菱形、相鄰轉 90°、深淺交錯 ⇒ 近看是一環扣一環）；錨是關聯（格子）或找不到 ⇒ 鍊子那一端畫一個線條的錨（錨桿、兩爪、橫桿）。 */
+function chainBuf(sh) {
+  var A = sh.anc, L = [], C = [];
+  if (A) ['P', 'S'].forEach(function (k) { if (A[k].ch) C.push([A[k].ch, !A[k].m]); });
+  (sh.chLost || []).forEach(function (c) { C.push([c, false]); });
+  C.forEach(function (cc) {
+    var c = cc[0], p = c.p, N = CHAIN_SEG, P = [], i;
+    for (i = 0; i <= N; i++) P.push(M4.pt(sh.inv, p[i * 3], p[i * 3 + 1], p[i * 3 + 2]));
+    var hw = CH_LINK_W / S;                                             // 環的半寬（格）
+    for (i = 0; i < N; i++) {
+      var d = sub(P[i + 1], P[i]), dl = len(d); if (dl < 1e-6) continue;
+      d = mul(d, 1 / dl);
+      var n1 = Math.abs(d[2]) > 0.9 ? [1, 0, 0] : norm([d[1], -d[0], 0]), n2 = [d[1] * n1[2] - d[2] * n1[1], d[2] * n1[0] - d[0] * n1[2], d[0] * n1[1] - d[1] * n1[0]];   // 船身格座標：+z 是上
+      for (var j = 0; j < CH_LINKS; j++) {                              // 每一節 CH_LINKS 環：菱形（頭、一側、尾、另一側），相鄰兩環轉 90° 交錯、深淺交錯
+        var a = lerp3(P[i], P[i + 1], j / CH_LINKS), b = lerp3(P[i], P[i + 1], (j + 1) / CH_LINKS), m = lerp3(a, b, 0.5), k = i * CH_LINKS + j, u = k & 1 ? n2 : n1, col = CHAIN_C[k & 1];
+        var s1 = add(m, mul(u, hw)), s2 = add(m, mul(u, -hw));
+        [[a, s1], [s1, b], [b, s2], [s2, a]].forEach(function (e) { L.push(e[0][0], e[0][1], e[0][2], col[0], col[1], col[2], e[1][0], e[1][1], e[1][2], col[0], col[1], col[2]); });
+      }
+    }
+    if (!cc[1]) return;
+    var e = [p[N * 3], p[N * 3 + 1], p[N * 3 + 2]], dv = [e[0] - p[N * 3 - 3], e[1] - p[N * 3 - 2], e[2] - p[N * 3 - 1]], dl = Math.hypot(dv[0], dv[1], dv[2]);   // 錨：錨環在鍊子那一端，錨桿順著最後一節往外
+    dv = dl > 0.05 ? [dv[0] / dl, dv[1] / dl, dv[2] / dl] : [0, -1, 0];
+    var sd = Math.abs(dv[1]) > 0.9 ? [1, 0, 0] : norm([-dv[2], 0, dv[0]]), up = norm([dv[1] * sd[2] - dv[2] * sd[1], dv[2] * sd[0] - dv[0] * sd[2], dv[0] * sd[1] - dv[1] * sd[0]]);
+    function w(t, s, u) { return M4.pt(sh.inv, e[0] + dv[0] * t + sd[0] * s + up[0] * u, e[1] + dv[1] * t + sd[1] * s + up[1] * u, e[2] + dv[2] * t + sd[2] * s + up[2] * u); }
+    var ic = [0.16, 0.16, 0.18];
+    [[w(0, 0, 0), w(3.6, 0, 0)], [w(3.6, 0, 0), w(2.7, 1.3, 0)], [w(3.6, 0, 0), w(2.7, -1.3, 0)], [w(2.7, 1.3, 0), w(2.4, 1.6, 0)], [w(2.7, -1.3, 0), w(2.4, -1.6, 0)], [w(0.4, 0, 1.5), w(0.4, 0, -1.5)]].forEach(function (s) {
+      L.push(s[0][0], s[0][1], s[0][2], ic[0], ic[1], ic[2], s[1][0], s[1][1], s[1][2], ic[0], ic[1], ic[2]);
+    });
   });
   sh.chain = upload(sh.chain, new Float32Array(L), 6, [[0, 3, 0], [2, 3, 3]]);
 }
@@ -10025,6 +10125,13 @@ if (DEBUG) window.__game = {
   supply: function (i) { var sh = SHIPS[i]; var pm = sh.crew.filter(function (c) { return c.role === ROLE.POWDER; });
     return { monkeys: pm.length, able: pm.filter(able).length, states: pm.reduce(function (a, c) { var s = c.st ? 'down' : c.pm.st; a[s] = (a[s] || 0) + 1; return a; }, {}),
       boxes: sh.guns.map(function (g) { return g.alive ? g.box : '✕'; }).join(''), waiting: sh.guns.filter(function (g) { return g.alive && g.needCart && !(g.box > 0); }).length, noDrop: sh.guns.filter(function (g) { return !g.drop; }).length }; },
+  /** 鐵鍊（76_anchor.js）：第 i 艘每條鍊子的狀態、放出多長、這一步碰到船殼幾次（hit）、推完還穿在船殼裡幾節（pen 這一步／平均／最多；?chainhit=0 ⇒ 不推）、錨那一端的位置；ms ＝ 全部鍊子每一步平均幾毫秒。 */
+  chains: function (i, reset) {
+    var sh = SHIPS[i || 0], A = sh.anc, r = { ms: CH_PROF.steps ? +(CH_PROF.ms / CH_PROF.steps).toFixed(4) : 0, hit: CHAIN_HIT, lost: (sh.chLost || []).length };
+    if (A) ['P', 'S'].forEach(function (k) { var c = A[k].ch; r[k] = c ? { st: A[k].st, pay: +c.pay.toFixed(1), hit: c.hit, pen: c.pen, penAvg: +(c.penSum / Math.max(1, c.steps)).toFixed(2), penMax: c.penMax, end: [c.p[CHAIN_SEG * 3], c.p[CHAIN_SEG * 3 + 1], c.p[CHAIN_SEG * 3 + 2]].map(function (v) { return +v.toFixed(1); }), y: [].filter.call(c.p, function (v, j) { return j % 3 === 1; }).map(function (v) { return +v.toFixed(1); }) } : A[k].st; });
+    if (reset) CH_PROF = { ms: 0, steps: 0 };
+    return r;
+  },
   prof: function (reset) { var r = { cloth: +PROF.cloth.toFixed(1), rope: +PROF.rope.toFixed(1), shred: +PROF.shred.toFixed(1), buf: +PROF.buf.toFixed(1), perStep: +PHYS_MS.toFixed(3) }; if (reset) PROF = { cloth: 0, rope: 0, shred: 0, buf: 0 }; return r; },
   /** 帆與繩的讀數：每面帆最鼓的那一點離雕刻作品形狀多遠（格）、還綁著幾個點、垂下來的繩幾條。 */
   cloth: function (i) {

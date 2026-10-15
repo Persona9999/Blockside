@@ -188,6 +188,13 @@ if (DEBUG) window.__game = {
   supply: function (i) { var sh = SHIPS[i]; var pm = sh.crew.filter(function (c) { return c.role === ROLE.POWDER; });
     return { monkeys: pm.length, able: pm.filter(able).length, states: pm.reduce(function (a, c) { var s = c.st ? 'down' : c.pm.st; a[s] = (a[s] || 0) + 1; return a; }, {}),
       boxes: sh.guns.map(function (g) { return g.alive ? g.box : '✕'; }).join(''), waiting: sh.guns.filter(function (g) { return g.alive && g.needCart && !(g.box > 0); }).length, noDrop: sh.guns.filter(function (g) { return !g.drop; }).length }; },
+  /** 鐵鍊（76_anchor.js）：第 i 艘每條鍊子的狀態、放出多長、這一步碰到船殼幾次（hit）、推完還穿在船殼裡幾節（pen 這一步／平均／最多；?chainhit=0 ⇒ 不推）、錨那一端的位置；ms ＝ 全部鍊子每一步平均幾毫秒。 */
+  chains: function (i, reset) {
+    var sh = SHIPS[i || 0], A = sh.anc, r = { ms: CH_PROF.steps ? +(CH_PROF.ms / CH_PROF.steps).toFixed(4) : 0, hit: CHAIN_HIT, lost: (sh.chLost || []).length };
+    if (A) ['P', 'S'].forEach(function (k) { var c = A[k].ch; r[k] = c ? { st: A[k].st, pay: +c.pay.toFixed(1), hit: c.hit, pen: c.pen, penAvg: +(c.penSum / Math.max(1, c.steps)).toFixed(2), penMax: c.penMax, end: [c.p[CHAIN_SEG * 3], c.p[CHAIN_SEG * 3 + 1], c.p[CHAIN_SEG * 3 + 2]].map(function (v) { return +v.toFixed(1); }), y: [].filter.call(c.p, function (v, j) { return j % 3 === 1; }).map(function (v) { return +v.toFixed(1); }) } : A[k].st; });
+    if (reset) CH_PROF = { ms: 0, steps: 0 };
+    return r;
+  },
   prof: function (reset) { var r = { cloth: +PROF.cloth.toFixed(1), rope: +PROF.rope.toFixed(1), shred: +PROF.shred.toFixed(1), buf: +PROF.buf.toFixed(1), perStep: +PHYS_MS.toFixed(3) }; if (reset) PROF = { cloth: 0, rope: 0, shred: 0, buf: 0 }; return r; },
   /** 帆與繩的讀數：每面帆最鼓的那一點離雕刻作品形狀多遠（格）、還綁著幾個點、垂下來的繩幾條。 */
   cloth: function (i) {

@@ -200,7 +200,7 @@ function drawModels(prog, near) {
     cutSet(prog, sh);
     sh.models.forEach(function (m) {
       var me = sh.T.meshes[m.mesh]; if (!m.alive || !me) return;
-      gl.uniformMatrix4fv(prog.u.uModel, false, M4.mul(sh.M, modelLocal(m)));
+      gl.uniformMatrix4fv(prog.u.uModel, false, M4.mul(sh.M, m.ancD ? M4.mul(trans(m.ancD[0], m.ancD[1], m.ancD[2]), modelLocal(m)) : modelLocal(m)));   // ancD：拋下去的模型錨，畫在鐵鍊那一端（76_anchor.js chainStep）
       if (prog.u.uGlow) gl.uniform1f(prog.u.uGlow, isLamp(m) ? lanternK(m) : 0);   // 取用點的火藥桶是後加的模型，沒有 meta
       gl.bindVertexArray(me.vao); gl.drawArrays(gl.TRIANGLES, 0, me.n);
     });
