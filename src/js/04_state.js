@@ -69,7 +69,7 @@ var WIND_K = qnum('wind', LIM.wind);                                // 帆的風
 function powderNever() { return POWDER_HP >= LIM.powderhp[1]; }      // 拉滿 ＝ 不會爆：兩種玩法都是（娛樂的倍率不管它）
 function powderHP() { return Math.round(POWDER_HP * playK('powder')); }   // 實際的火藥血量：娛樂再乘 FUN.powder（預設 675 ⇒ 300）
 // 每發傷害（砲種）：砲彈開火時帶著 b.dmg
-var DMG = { long12: Math.round(qnum('dmg12', LIM.dmg12)), long6: Math.round(qnum('dmg6', LIM.dmg6)), chase3: Math.round(qnum('dmg3c', LIM.dmg3c)), trident: Math.round(qnum('dmgtr', LIM.dmgtr)), long: Math.round(qnum('dmg24', LIM.dmg24)), long32: Math.round(qnum('dmg32l', LIM.dmg32l)), carr: Math.round(qnum('dmg32', LIM.dmg32)), chase: Math.round(qnum('dmg18', LIM.dmg18)), long4: Math.round(qnum('dmg4', LIM.dmg4)) };
+var DMG = { long12: Math.round(qnum('dmg12', LIM.dmg12)), long18: Math.round(qnum('dmg18l', LIM.dmg18l)), long6: Math.round(qnum('dmg6', LIM.dmg6)), chase3: Math.round(qnum('dmg3c', LIM.dmg3c)), trident: Math.round(qnum('dmgtr', LIM.dmgtr)), long: Math.round(qnum('dmg24', LIM.dmg24)), long32: Math.round(qnum('dmg32l', LIM.dmg32l)), carr: Math.round(qnum('dmg32', LIM.dmg32)), chase: Math.round(qnum('dmg18', LIM.dmg18)), long4: Math.round(qnum('dmg4', LIM.dmg4)) };
 // 彈種倍率（%）：列 ＝ 實心／爆裂／鏈彈，欄 ＝ 對砲（模型：砲、舵輪、火藥桶）／對帆／對人。網址 ?ammo= 九個數字（照列）
 var AMMO_LIM = CFG.ammo.lim, AMMO_K0 = CFG.ammo.k;   // config/game.json 的 ammo（上下限、預設）。爆裂對人原訂 115：量過死亡平均 42（舊版 27）⇒ 100（35，傷亡合計 62 對舊版 65）
 var AMMO_K = AMMO_K0.map(function (r) { return r.slice(); });

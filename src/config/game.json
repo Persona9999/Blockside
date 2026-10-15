@@ -22,6 +22,7 @@
     "dmg32l": [10, 300, 130],
     "dmg32": [10, 300, 120],
     "dmg18": [10, 300, 70],
+    "dmg18l": [10, 300, 70],
     "dmg4": [10, 300, 35],
     "dmg12": [10, 300, 55],
     "dmg6": [10, 300, 40],
@@ -54,6 +55,7 @@
     "chase": {"code": "18chase", "name": "18 磅追擊砲", "short": "追擊砲", "V": 165, "reload": 1, "big": false, "crew": 3, "min": 2, "mass": 2.1},
     "long4": {"code": "4l", "name": "4 磅砲", "short": "4 磅砲", "V": 165, "reload": 0.6, "big": false, "hole": 0.6, "crew": 2, "min": 1, "mass": 0.5},
     "long12": {"code": "12l", "name": "12 磅長砲", "short": "12 磅長砲", "V": 170, "reload": 0.9, "big": false, "hole": 0.85, "crew": 4, "min": 2, "mass": 1.7},
+    "long18": {"code": "18l", "name": "18 磅長砲", "short": "18 磅長砲", "V": 172, "reload": 0.95, "big": false, "hole": 0.92, "crew": 5, "min": 3, "mass": 2.1},
     "long6": {"code": "6l", "name": "6 磅砲", "short": "6 磅砲", "V": 168, "reload": 0.75, "big": false, "hole": 0.7, "crew": 3, "min": 2, "mass": 1},
     "chase3": {
       "code": "3chase",
