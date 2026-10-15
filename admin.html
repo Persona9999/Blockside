@@ -263,7 +263,7 @@ td.k { font-family: ui-monospace, Consolas, monospace; font-size: 12px; color: v
       re.onclick = function () { if (!confirm('從雕刻作品 ' + s.work + ' 重新匯出「' + s.name + '」並重建？')) return; call('/api/reimport', { id: s.id, work: s.work }); };
       var nm = txt(P.concat('name')); nm.style.width = '140px';
       card.appendChild(el('h3', {}, [el('span', { 'class': 'sp', text: (i === 0 ? '★ ' : '') + s.name + '（' + s.id + '）' }), up, dn, rm, re]));
-      card.appendChild(el('div', { 'class': 'meta', text: '內嵌 #' + s.el + ' ← _cache/' + s.vxk + '　·　' + fmtInfo(S.ships[s.id]) }));
+      card.appendChild(el('div', { 'class': 'meta', text: '內嵌 #' + s.el + ' ← _cache/' + s.vxk + '　·　建造者 ' + (s.author || '（沒記 ⇒ admin.py authors）') + '　·　' + fmtInfo(S.ships[s.id]) }));
       var g1 = el('div', { 'class': 'grid' });
       g1.appendChild(fld('名字', [nm]));
       var wk = txt(P.concat('work')); wk.style.width = '220px'; g1.appendChild(fld('雕刻作品', [wk]));
