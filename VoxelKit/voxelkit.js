@@ -35,6 +35,7 @@
     var hn = dv.getUint32(4, true);
     var header = JSON.parse(new TextDecoder().decode(raw.subarray(8, 8 + hn)));
     var n = header.nchunks, p = 8 + hn;
+    if (header.mirror) return { header: header, chunks: unmirror(header, raw, dv, p) };
     if (raw.length !== p + n * 6 + n * CH3) throw new Error('VXK1 長度不對：' + raw.length + ' ≠ ' + (p + n * 6 + n * CH3));
     var keys = new Uint16Array(n * 3);
     for (var i = 0; i < n * 3; i++) keys[i] = dv.getUint16(p + i * 2, true);
@@ -42,6 +43,51 @@
     var chunks = [];
     for (i = 0; i < n; i++) chunks.push({ cx: keys[i * 3], cy: keys[i * 3 + 1], cz: keys[i * 3 + 2], data: raw.subarray(p + i * CH3, p + (i + 1) * CH3) });
     return { header: header, chunks: chunks };
+  }
+  /**
+   * 成品壓縮的格子鏡射＋diff（TASK-0602；Blockside admin.py grid_mirror_pack／grid_mirror_unpack 是同一個算法）：
+   * 格子那一段 ＝ 一半（2y ≤ s 的格，塊格式同原檔：mirror.nhalf 塊的鍵 ＋ 資料）＋ diff（線性索引 x＋sx·(y＋sy·z) 的差值 u32 ＋ 顏色 u8；顏色 0 ＝ 刪掉）。
+   * 還原：一半照放、2y < s 的格鏡到 s − y（出界的不放）、套 diff、照 (cx, cy, cz) 字典序排、全空的塊不留 ⇒ 跟原檔的塊一位元組不差（admin.py 寫出去前驗過）。
+   */
+  function unmirror(header, raw, dv, p) {
+    var M = header.mirror, s = M.s, nh = M.nhalf, nd = M.ndiff, sx = header.size[0], sy = header.size[1];
+    var nx = Math.ceil(sx / CH), ny = Math.ceil(sy / CH), tab = new Map(), i, li;
+    function chunk(x, y, z) {
+      var k = (x >> 4) + nx * ((y >> 4) + ny * (z >> 4)), c = tab.get(k);
+      if (!c) { c = new Uint8Array(CH3); tab.set(k, c); }
+      return c;
+    }
+    var hk = [];
+    for (i = 0; i < nh * 3; i++) hk.push(dv.getUint16(p + i * 2, true));
+    var q = p + nh * 6;
+    for (i = 0; i < nh; i++) {
+      var d = raw.subarray(q + i * CH3, q + (i + 1) * CH3), bx = hk[i * 3] * CH, by = hk[i * 3 + 1] * CH, bz = hk[i * 3 + 2] * CH;
+      for (li = 0; li < CH3; li++) {
+        var v = d[li]; if (!v) continue;
+        var x = bx + (li & 15), y = by + ((li >> 4) & 15), z = bz + (li >> 8);
+        chunk(x, y, z)[li] = v;
+        var ym = s - y;
+        if (2 * y < s && ym < sy) chunk(x, ym, z)[(x & 15) | ((ym & 15) << 4) | ((z & 15) << 8)] = v;
+      }
+    }
+    q += nh * CH3;
+    var at = 0;
+    for (i = 0; i < nd; i++) {
+      at += dv.getUint32(q + i * 4, true);
+      var cz = Math.floor(at / (sx * sy)), r = at - cz * sx * sy, cy = Math.floor(r / sx), cx = r - cy * sx;
+      chunk(cx, cy, cz)[(cx & 15) | ((cy & 15) << 4) | ((cz & 15) << 8)] = raw[q + nd * 4 + i];
+    }
+    if (q + nd * 5 !== raw.length) throw new Error('VXK1 鏡射段長度不對：' + raw.length + ' ≠ ' + (q + nd * 5));
+    var out = [];
+    tab.forEach(function (c, k) {
+      for (li = 0; li < CH3; li++) if (c[li]) break;
+      if (li === CH3) return;                                                // 全空（diff 刪光了）⇒ 原檔沒有這一塊
+      var cx = k % nx, cy = Math.floor(k / nx) % ny, cz = Math.floor(k / (nx * ny));
+      out.push({ cx: cx, cy: cy, cz: cz, data: c });
+    });
+    out.sort(function (a, b) { return a.cx - b.cx || a.cy - b.cy || a.cz - b.cz; });   // voxel_export.pack 的順序（np.unique 照 (cx, cy, cz) 字典序）
+    if (out.length !== header.nchunks) throw new Error('VXK1 鏡射還原出 ' + out.length + ' 塊，header 說 ' + header.nchunks + ' 塊');
+    return out;
   }
   function decode(u8) { return inflateRaw(u8).then(parse); }
   /** <script type="application/x-asset" id="…" data-mime="…">base64</script>（vxk_inline.py 填的）；空的（optional 素材沒交）⇒ null。 */

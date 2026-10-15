@@ -690,6 +690,93 @@ def mesh_unpack(e):
     return {'verts': V, 'tris': T, 'tmat': e['tmat'], 'mats': e['mats']}
 
 
+# ── 格子：左右鏡射＋diff（TASK-0602；Tim 2026-10-15「船體如果是左右對稱的 是否可以只存一半然後鏡射解壓縮」「不對稱部分如果很少 可以鏡射後 額外保存diff」）──
+# 量過（七艘前的六艘、壓縮後）：格子 852 KB → 一半＋diff 485 KB；不對稱的格 三叉戟號 67（名牌）、夜隼號 0、風暴角號 43,898（8 %，照樣划算）。
+# 格式（只在成品裡；_cache 的 .vxk 不動）：header.mirror ＝ {s, nhalf, ndiff}，鏡面 y ↔ s − y；格子那一段換成
+#   一半（2y ≤ s 的格，照 voxel_export.pack 的塊格式：nhalf 塊的鍵 u16×3 ＋ 4096 位元組）＋ diff（線性索引 x＋sx·(y＋sy·z) 的差值 u32 × ndiff ＋ 顏色 u8 × ndiff；顏色 0 ＝ 刪掉）。
+# 還原（voxelkit.js parse 同一個算法）：一半照放、2y < s 的格鏡到 s − y（出界的不放）、套 diff、照 (cx, cy, cz) 排序、全空的塊不留 ⇒ 跟原檔一位元組不差（pack_verify 比）。
+# 壓起來沒有比較小（例：對不上的太多）⇒ 不用，照原樣存。
+
+def _grid_cells(grid, nch):
+    import numpy as np
+    keys = np.frombuffer(grid, '<u2', nch * 3).reshape(-1, 3).astype(np.int64)
+    data = np.frombuffer(grid, np.uint8, nch * 4096, nch * 6).reshape(nch, 4096)
+    ci, li = np.nonzero(data)
+    return (keys[ci, 0] * 16 + (li & 15), keys[ci, 1] * 16 + ((li >> 4) & 15), keys[ci, 2] * 16 + (li >> 8), data[ci, li].astype(np.int64))
+
+
+def _grid_chunks(x, y, z, c):
+    """格 ⇒ 塊（跟 VoxelKit/voxel_export.pack 同一個排法：鍵照 (cx, cy, cz) 字典序）⇒ (塊數, 鍵與資料的位元組)。"""
+    import numpy as np
+    k = np.stack([x // 16, y // 16, z // 16], 1)
+    uk, inv = np.unique(k, axis=0, return_inverse=True)
+    inv = inv.reshape(-1)
+    data = np.zeros((len(uk), 4096), np.uint8)
+    data[inv, (x % 16) + 16 * (y % 16) + 256 * (z % 16)] = c
+    return len(uk), uk.astype('<u2').tobytes() + data.tobytes()
+
+
+def grid_mirror_pack(h, grid):
+    """一艘的格子那一段 ⇒ (mirror 欄, 新的格子那一段)；沒有比較小 ⇒ None。"""
+    import numpy as np
+    sx, sy, _ = h['size']
+    x, y, z, c = _grid_cells(grid, h['nchunks'])
+    if not len(x):
+        return None
+    lin = x + sx * (y + sy * z)
+    key = np.sort(lin * 256 + c)
+    best = None
+    for s in range(int(y.min() + y.max()) - 3, int(y.min() + y.max()) + 4):     # 鏡面：照「鏡過去顏色也一樣」的格最多的那一個
+        ym = s - y
+        ok = (ym >= 0) & (ym < sy)
+        same = int(np.isin((x + sx * (ym + sy * z)) * 256 + c, key)[ok].sum())
+        if best is None or same > best[1]:
+            best = (s, same)
+    s = best[0]
+    hf = 2 * y <= s
+    src = (2 * y < s) & (s - y < sy)
+    pred = np.sort((x[src] + sx * ((s - y[src]) + sy * z[src])) * 256 + c[src])     # 一半鏡過去「應該有」的格
+    far = np.sort(lin[~hf] * 256 + c[~hf])                                          # 另一半實際有的格
+    add = far[~np.isin(far, pred)]                                                  # 多出來或換色 ⇒ 照實際的顏色
+    dele = np.setdiff1d(pred // 256, far // 256)                                    # 鏡過去有、其實是空的 ⇒ 顏色 0
+    diff = np.concatenate([add, dele * 256])
+    diff = diff[np.argsort(diff // 256, kind='stable')]
+    di = diff // 256
+    nh, hb = _grid_chunks(x[hf], y[hf], z[hf], c[hf])
+    body = hb + np.diff(np.concatenate([[0], di])).astype('<u4').tobytes() + (diff % 256).astype(np.uint8).tobytes()
+    if len(_deflate(body)) >= len(_deflate(grid)):
+        return None
+    return {'s': int(s), 'nhalf': int(nh), 'ndiff': int(len(diff))}, body
+
+
+def grid_mirror_unpack(h, body):
+    """grid_mirror_pack 的反向（跟 voxelkit.js parse 的還原同一個算法；驗算用）⇒ 原本的格子那一段。"""
+    import numpy as np
+    M = h['mirror']
+    sx, sy, _ = h['size']
+    s, nh, nd = M['s'], M['nhalf'], M['ndiff']
+    x, y, z, c = _grid_cells(body, nh)
+    p = nh * 6 + nh * 4096
+    di = np.cumsum(np.frombuffer(body, '<u4', nd, p).astype(np.int64))
+    dc = np.frombuffer(body, np.uint8, nd, p + nd * 4).astype(np.int64)
+    src = (2 * y < s) & (s - y < sy)
+    cell = {}
+    lin = x + sx * (y + sy * z)
+    for a, b in zip(lin.tolist(), c.tolist()):
+        cell[a] = b
+    for a, b in zip((x[src] + sx * ((s - y[src]) + sy * z[src])).tolist(), c[src].tolist()):
+        cell[a] = b
+    for a, b in zip(di.tolist(), dc.tolist()):
+        if b:
+            cell[a] = b
+        else:
+            cell.pop(a, None)
+    L = np.fromiter(cell.keys(), np.int64, len(cell))
+    C = np.fromiter(cell.values(), np.int64, len(cell))
+    n, b = _grid_chunks(L % sx, (L // sx) % sy, L // (sx * sy), C)
+    return n, b
+
+
 def same_tris(a, b):
     """兩份網格的三角形一個一個比：每一角的座標、材質都一樣（頂點的編號可以不同）。"""
     if len(a['tris']) != len(b['tris']) or a['tmat'] != b['tmat'] or a['mats'] != b['mats']:
@@ -706,7 +793,7 @@ def pack_html(path):
     html = open(path, encoding='utf-8').read()
     if 'id="%s"' % POOL_EL in html:
         raise Fail('成品已經是壓縮模式（有 #%s）' % POOL_EL)
-    pool, where, log, keep = [], {}, [], 0
+    pool, where, log, keep, mirrors = [], {}, [], 0, []
     size0 = len(html.encode('utf-8'))
 
     def one(mt):
@@ -717,27 +804,34 @@ def pack_html(path):
         n = struct.unpack('<I', raw[4:8])[0]
         h = json.loads(raw[8:8 + n].decode('utf-8'))
         ms = (h.get('rig') or {}).get('meshes')
-        if not ms:
-            return mt.group(0)
-        out = []
-        for m in ms:
-            key = hashlib.sha1(json.dumps(m, separators=(',', ':')).encode()).hexdigest()
-            if key not in where:
-                e = mesh_pack(m)
-                if e is None or not same_tris(m, mesh_unpack(e)):
-                    where[key] = -1
+        if ms:
+            out = []
+            for m in ms:
+                key = hashlib.sha1(json.dumps(m, separators=(',', ':')).encode()).hexdigest()
+                if key not in where:
+                    e = mesh_pack(m)
+                    if e is None or not same_tris(m, mesh_unpack(e)):
+                        where[key] = -1
+                    else:
+                        where[key] = len(pool)
+                        pool.append(e)
+                if where[key] < 0:
+                    out.append(m)
+                    keep += 1
                 else:
-                    where[key] = len(pool)
-                    pool.append(e)
-            if where[key] < 0:
-                out.append(m)
-                keep += 1
-            else:
-                out.append({'pool': where[key]})
-        h['rig']['meshes'] = out
-        h['mesh_pool'] = POOL_EL
+                    out.append({'pool': where[key]})
+            h['rig']['meshes'] = out
+            h['mesh_pool'] = POOL_EL
+        grid = raw[8 + n:]
+        g0 = len(_deflate(grid))
+        mr = grid_mirror_pack(h, grid)                        # TASK-0602：格子鏡射＋diff（沒有比較小 ⇒ None，照原樣）
+        if mr:
+            h['mirror'], grid = mr
+        mirrors.append((re.search(r'id="([^"]+)"', mt.group(1)).group(1), h['mirror'] if mr else None, g0, len(_deflate(grid))))
+        if not ms and not mr:
+            return mt.group(0)
         hb = json.dumps(h, ensure_ascii=False, separators=(',', ':')).encode('utf-8')
-        b = base64.b64encode(_deflate(b'VXK1' + struct.pack('<I', len(hb)) + hb + raw[8 + n:])).decode('ascii')
+        b = base64.b64encode(_deflate(b'VXK1' + struct.pack('<I', len(hb)) + hb + grid)).decode('ascii')
         return mt.group(1) + b + mt.group(3)
 
     RX = r'(<script type="application/x-vxk" id="[^"]+">)([^<]*)(</script>)'
@@ -752,6 +846,8 @@ def pack_html(path):
     if E:
         raise Fail('壓縮版還原出來跟原檔對不上（成品沒寫）：\n' + '\n'.join('  ✗ ' + e for e in E[:12]))
     log.append('✓ 還原驗算：%d 艘、%d 份網格的三角形跟 _cache 原檔逐個相同，格子、繩、帆一位元組不差' % (k, nv))
+    for el, M, g0, g1 in mirrors:
+        log.append('  格子 %s：%s　%d KB → %d KB' % (el, ('鏡射 y ↔ %d − y、一半 %d 塊、diff %d 格' % (M['s'], M['nhalf'], M['ndiff'])) if M else '照原樣（鏡射沒有比較小）', g0 // 1024, g1 // 1024))
     open(path, 'w', encoding='utf-8', newline='').write(html2)
     size1 = len(html2.encode('utf-8'))
     log.append('✓ 壓縮模式：%d 艘、網格池 %d 份（%d KB）%s；成品 %.2f MB → %.2f MB（−%.0f%%）' % (
@@ -774,7 +870,13 @@ def pack_verify(html):
         b = zlib.decompress(open(os.path.join(CACHE, s['vxk']), 'rb').read(), -15)
         na, nb = struct.unpack('<I', a[4:8])[0], struct.unpack('<I', b[4:8])[0]
         ha, hb = json.loads(a[8:8 + na].decode('utf-8')), json.loads(b[8:8 + nb].decode('utf-8'))
-        if a[8 + na:] != b[8 + nb:]:
+        ga = a[8 + na:]
+        if ha.get('mirror'):                                    # TASK-0602：格子鏡射＋diff ⇒ 照遊戲的讀法（voxelkit.js parse）還原再比
+            nc, ga = grid_mirror_unpack(ha, ga)
+            ha.pop('mirror')
+            if nc != ha.get('nchunks'):
+                E.append('%s：鏡射還原出 %d 塊，header 說 %s 塊' % (s['id'], nc, ha.get('nchunks')))
+        if ga != b[8 + nb:]:
             E.append('%s：格子那一段跟原檔不一樣' % s['id'])
         ma, mb = (ha.get('rig') or {}).get('meshes') or [], (hb.get('rig') or {}).get('meshes') or []
         if ha.pop('mesh_pool', None):
