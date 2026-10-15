@@ -81,6 +81,9 @@ function sail(sh, dt) {
   sh.sailFrac = sh.sails.reduce(function (a, s) { return a + (s.dead || s.furled ? 0 : s.area * s.hp / s.hpMax); }, 0) / sh.sailArea0;   // 被打中還沒掉的帆：照剩下的血量算推力
   sh.pos = pointName(deg);
   var stop = SAIL === 'off', manual = SAIL === 'manual' && sh.i === PLAYER_I;
+  if (stop && !sh.ancMode && !sh.struck && !sh.sunk) { sh.ancMode = true; anchorToggle(sh, 'P', true); anchorToggle(sh, 'S', true); }   // 6 拋錨（雙錨，每艘；76_anchor.js）
+  else if (!stop && sh.ancMode) { sh.ancMode = false; anchorToggle(sh, 'P', false); anchorToggle(sh, 'S', false); }   // 切回 4／5 ⇒ 起錨
+  var held = !!sh.anc && anchorHeld(sh);                              // 有錨咬著 ⇒ 不靠帆走、可以原地繞錨轉
   var BK = sh.cfg.base || 0, ME = BK > 0 && !stop && sh.i === PLAYER_I && !sh.struck && !sh.sunk;
   var kF = ME && KEYS.f !== null && SIMT - KEYS.f >= ASTERN_HOLD, kB = ME && KEYS.b !== null && SIMT - KEYS.b >= ASTERN_HOLD;   // 按住 W／S
   if ((kF || kB) && !manual) { setSailMode('manual'); manual = true; }
@@ -90,8 +93,8 @@ function sail(sh, dt) {
   var SPK = sh.cfg.speed * playK('speed') * WX.speed;                 // 航速倍率（船隻設定 × 玩法的加成 × 天氣：暴風雨風大 ×1.15）
   var nogo = manual && !stop && !sh.sunk ? STALL_K * playK('stall') * clamp((NOGO_DEG - (180 - dU)) / (NOGO_DEG - NOGO_FULL), 0, 1) : 0;   // 頂風失速的程度
   sh.irons = nogo;
-  var target = sh.sunk || stop ? 0 : VMAX * SPK * Math.sqrt(WIND_SPD) * sh.sailFrac * polar(dU) * (1 - nogo) * (1 - clamp(sh.sink / 9, 0, 0.8)) * (sh.struck ? 0.15 : 1) * (sh.throttle || 1);   // throttle：讓開友艦砲線時放慢（52_fleet.js lineClear；平常 1）
-  if (BK > 0 && !sh.sunk && !stop && THR) { var vb = BK / 1.9438 * (1 - clamp(sh.sink / 9, 0, 0.8)) * (sh.struck ? 0.15 : 1) * (sh.throttle || 1); var NT = target * target + THR * vb * vb; target = NT >= 0 ? Math.sqrt(NT) : -Math.sqrt(-NT); }   // 基底航速（節 ⇒ m/s）：額外動力，推力跟帆相加 ⇒ √(帆² ＋ 基底²)；倒車 ⇒ 帆² − 基底²（負 ＝ 往後）；手動沒按住 ⇒ 只有帆；進水、降旗、讓砲線照樣慢
+  var target = sh.sunk || stop || held ? 0 : VMAX * SPK * Math.sqrt(WIND_SPD) * sh.sailFrac * polar(dU) * (1 - nogo) * (1 - clamp(sh.sink / 9, 0, 0.8)) * (sh.struck ? 0.15 : 1) * (sh.throttle || 1);   // throttle：讓開友艦砲線時放慢（52_fleet.js lineClear；平常 1）
+  if (BK > 0 && !sh.sunk && !stop && !held && THR) { var vb = BK / 1.9438 * (1 - clamp(sh.sink / 9, 0, 0.8)) * (sh.struck ? 0.15 : 1) * (sh.throttle || 1); var NT = target * target + THR * vb * vb; target = NT >= 0 ? Math.sqrt(NT) : -Math.sqrt(-NT); }   // 基底航速（節 ⇒ m/s）：額外動力，推力跟帆相加 ⇒ √(帆² ＋ 基底²)；倒車 ⇒ 帆² − 基底²（負 ＝ 往後）；手動沒按住 ⇒ 只有帆；進水、降旗、讓砲線照樣慢
   if (sh.spd0) { sh.spd = target; sh.spd0 = false; }                    // 開局就在走
   sh.spd += (target - sh.spd) * Math.min(1, dt / (stop || sh.throttle < 1 ? 6 : 20));     // 停船：收帆、轉進風裡，6 秒內停下
   // 舵
@@ -100,7 +103,14 @@ function sail(sh, dt) {
   var wheel = sh.models.some(function (m) { return m.kind === 'wheel' && m.alive; });
   var rud = sh.models.filter(function (m) { return m.kind === 'rudder'; }), rudK = rud.length && !rud.some(function (m) { return m.alive; }) ? 0.12 : 1;   // 舵是模型（夜隼號）而且被打掉了 ⇒ 只剩調帆轉向
   var rmax = (0.012 + 0.016 * Math.abs(sh.spd) / SPK) * (wheel ? 1 : 0.35) * rudK * (UP === 1 ? 1 : 1 + (UP - 1) * clamp((deg - 90) / 45, 0, 1)) * sh.cfg.agile * playK('agile') * WX.agile;   // 天氣：暴風雨浪大、舵難使 ×0.8。⛔ 用 sh.spd 直接算 ⇒ 調快航速連帶變得更會轉
-  if (stop) { sh.rudder = 0; rate = 0; }
+  if (held && Math.abs(sh.spd) < 0.6 && !sh.struck && !sh.sunk) {   // 錨咬著、船幾乎停了 ⇒ 繞錨原地轉：我艦照 A／D、電腦（或雙錨時的我艦沒按）轉舷側對敵
+    var pw = sh.i === PLAYER_I ? (KEYS.l ? 1 : 0) - (KEYS.r ? 1 : 0) : 0;
+    if (pw) rate = pw * ANC_PIVOT;
+    else if (sh.i !== PLAYER_I && foe) { var ps = sideGuns(sh, sh.side) || !sideGuns(sh, sh.side === 'S' ? 'P' : 'S') ? sh.side : sh.side === 'S' ? 'P' : 'S', pg = ps === 'P' ? 1 : -1, pdx = foe.px - sh.px, pdz = foe.pz - sh.pz, pd = Math.hypot(pdx, pdz) || 1;
+      var pe = (pg > 0 ? Math.atan2(-pdx / pd, -pdz / pd) : Math.atan2(pdx / pd, pdz / pd)) - sh.yaw; pe = Math.atan2(Math.sin(pe), Math.cos(pe)); rate = clamp(pe * 0.5, -ANC_PIVOT, ANC_PIVOT); }
+    sh.rudder = rate / ANC_PIVOT;
+  }
+  else if (stop) { sh.rudder = 0; rate = 0; }
   else if (manual && !sh.struck && !sh.sunk) {
     var want = (KEYS.l ? 1 : 0) - (KEYS.r ? 1 : 0);                    // 舵角正 ＝ yaw 變大 ＝ 畫面上左轉
     sh.rudder += clamp(want - sh.rudder, -1.5 * dt, 1.5 * dt);
@@ -130,7 +140,9 @@ function sail(sh, dt) {
   sh.yaw += sh.yawRate * dt;
   F = fwd(sh.yaw);
   sh.vel = mul(F, sh.spd);
+  var px0 = sh.px, pz0 = sh.pz;
   sh.px += sh.vel[0] * dt; sh.pz += sh.vel[2] * dt;
+  if (sh.anc) anchorStep(sh, dt, px0, pz0);                          // 錨咬著 ⇒ 錨鏈孔拉回鍊長以內、船繞錨鏈孔轉（76_anchor.js）
   // 航跡：船尾留一條白沫、船頭兩側推出的浪（點精靈，不撞任何東西）；船邊水花開著 ⇒ 換成 13_water.js 的（這裡照樣抽亂數、不放進去）
   if ((sh.wakeT -= dt) <= 0 && sh.spd > 0.4 && sh.sink < 6) {
     sh.wakeT = 0.12; PT_MUTE = PHX.water > 0;

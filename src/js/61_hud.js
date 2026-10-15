@@ -100,7 +100,7 @@ function panel(sh, title) {
   return '<h3>' + title + '<span class="disp">排水量 ' + disp.toLocaleString() + ' 噸・現在 ' + now.toLocaleString() + ' 噸</span>' + (sh.fate && !sh.sunk ? '　<span style="color:var(--gold)">' + sh.fate + '</span>' : '') + '</h3><div class="pcols"><div class="pc">船體 ' + (hull * 100).toFixed(1) + '%（打掉 ' + sh.lost.toLocaleString() + ' 格）<div class="bar"><i style="width:' + (hull * 100).toFixed(1) + '%"></i></div>' +
     '進水 ' + (sh.sunk ? '沉沒' : (fl * 100).toFixed(0) + '%') + (sh.fl && !sh.broken ? '（艙內積水 ' + Math.round(sh.fl.vol * RHO_W).toLocaleString() + ' 噸・破口 ' + sh.fl.area.toFixed(1) + ' m²）' : '（水線下破洞 ' + (sh.inflow || 0).toLocaleString() + ' 格）') + (sh.lift > 0.05 ? '　浮高 ' + sh.lift.toFixed(1) + ' m' : sh.lift < -0.05 ? '　吃水深 ' + (-sh.lift).toFixed(1) + ' m' : '') + '<div class="bar water"><i style="width:' + (fl * 100).toFixed(0) + '%"></i></div>' +
     (sh.spd < -0.05 ? '倒車 ' + (-sh.spd * 1.944).toFixed(1) : '航速 ' + (sh.spd * 1.944).toFixed(1)) + ' 節（' + sh.pos + '）　' + (sh.thr === null || sh.thr === undefined ? '' : '動力 ' + (sh.thr > 0 ? '前進' : sh.thr < 0 ? '倒車' : '停') + '　') + SAILSETS[sh.sailSet] + ' ' + Math.round(sh.sailFrac * 100) + '%<br>' +
-    ((SAIL === 'off' ? '停船' : sh.manual ? '手動操舵' : '自動操舵') + '　舵 ' + (sh.rudder > 0.05 ? '左 ' + Math.round(sh.rudder * 100) + '%' : sh.rudder < -0.05 ? '右 ' + Math.round(-sh.rudder * 100) + '%' : '正')) + '<br>' + navText(sh) + '</div><div class="pc">' +
+    ((SAIL === 'off' ? '拋錨' : sh.manual ? '手動操舵' : '自動操舵') + (sh.anc ? '　' + anchorText(sh) : '') + '　舵 ' + (sh.rudder > 0.05 ? '左 ' + Math.round(sh.rudder * 100) + '%' : sh.rudder < -0.05 ? '右 ' + Math.round(-sh.rudder * 100) + '%' : '正')) + '<br>' + navText(sh) + '</div><div class="pc">' +
     capText(sh) + '<br>' +
     '船員 ' + (sh.able || 0) + '/' + sh.crew0 + '（傷 ' + sh.wounded + '　亡 ' + sh.dead + '）' + handsText(sh) + medText(sh) + swimText(sh) + '　' + supplyText(sh) + '<br>' +
     '砲 有人 ' + (sh.gunsManned || 0) + '／還在 ' + sh.gunsAlive + '／' + sh.guns.length + '　' + m + '<br>開火 ' + sh.fired + '　命中 ' + sh.hits +
@@ -419,6 +419,7 @@ function hud(dt) {
   var me = SHIPS[PLAYER_I];
   fleetHud(me);                                                                  // 上方：每艘一個圓形按鈕＋中間一艘的詳細資訊（TASK-0552）
   gunHud(me);                                                                   // 我艦的砲：兩舷貼左右兩邊、追擊砲與射界外警告在下方面板
+  anchorChips(me);                                                              // 左右錨的按鈕：咬著亮、打壞灰掉（76_anchor.js）
   botFit();
   pauseLabel();
   [].forEach.call(document.querySelectorAll('#ammo span'), function (s) { s.className = +s.dataset.a === AMMO_I ? 'on' : ''; });
