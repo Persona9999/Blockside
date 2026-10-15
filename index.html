@@ -9832,13 +9832,13 @@ function shipCheck(id) {
 // ───────────────────────── 拋錨（TASK-0601；Tim 2026-10-15：停船改叫拋錨、要有戰局效果 —— 船停住、可以繞錨轉向；
 //   左右錨分開拋（錨被打壞就不能按）；只拋單邊做急轉（《黑帆》裡只拋一側錨，船繞錨甩過去）） ─────────────────────────
 // 每艘兩個錨（P 左舷、S 右舷），錨鏈孔 ＝ 錨掛著的地方（錨的模型或關聯的中心；這一型找不到錨 ⇒ 船頭兩側，打不壞）。
-//   狀態：up 收著 → drop 往下沉（ANC_FALL 秒）→ down 落底咬住 → weigh 起錨（ANC_WEIGH 秒，鍊子收短、把船拉向錨）→ up。
+//   狀態：up 收著 → drop 往下沉（ANC_FALL 秒）→ down 落底咬住 → weigh 起錨（ANC_WEIGH 秒，鍊子收短：船被平移拉近、每秒最多 ANC_HAUL，航向不動；不夠的由錨被拖過來）→ up。
 //   落底的點 ＝ 放開那一刻錨鏈孔正下方（海面上的 x、z，海底在水線下 ANC_DEPTH）；鍊長 ANC_CHAIN ⇒ 錨鏈孔離錨的水平距離最多 ANC_REACH。
-// 約束（down／weigh）：錨鏈孔超過 ANC_REACH ⇒ 拉回圓周上；船身當剛體繞錨鏈孔轉（船心照動量走、船頭被拴住 ⇒ 往前的動量變成轉向）：
+// 約束（down）：錨鏈孔超過 ANC_REACH ⇒ 拉回圓周上；船身當剛體繞錨鏈孔轉（船心照動量走、船頭被拴住 ⇒ 往前的動量變成轉向）：
 //   帶著速度只拋一側 ⇒ 鍊子一拉緊，船頭被拴在那一側、船尾甩出去 ＝ 急轉；兩側都拋 ⇒ 停住，A／D 原地慢慢轉（ANC_PIVOT）、電腦照舊轉舷側對敵。
 //   拉緊的時候每秒掉 1／ANC_DRAG 的速度（鍊子拖著）；鍊子要船轉得比 ANC_YAWMAX 快 ⇒ 錨在海底被拖著走（船只轉到上限、每秒掉 1／ANC_DRAGX）。錨被打壞（模型沒了、關聯的格少了一半）⇒ 那一側斷鍊、船放開，不能再拋。
 // ⛔ 戰局不抽 rnd()（只有錨入水的水花抽，見 chainSolve）；沒拋錨的船一位元都不動（sh.anc 只有拋過才建）。
-var ANC_DEPTH = 20, ANC_CHAIN = 36, ANC_REACH = Math.sqrt(ANC_CHAIN * ANC_CHAIN - ANC_DEPTH * ANC_DEPTH), ANC_FALL = 4, ANC_WEIGH = 8, ANC_DRAG = 8, ANC_DRAGX = 2.5, ANC_PIVOT = 0.06, ANC_YAWMAX = 0.5;   // 公尺、秒、rad/s
+var ANC_DEPTH = 20, ANC_CHAIN = 36, ANC_REACH = Math.sqrt(ANC_CHAIN * ANC_CHAIN - ANC_DEPTH * ANC_DEPTH), ANC_FALL = 4, ANC_WEIGH = 8, ANC_DRAG = 8, ANC_DRAGX = 2.5, ANC_PIVOT = 0.06, ANC_YAWMAX = 0.5, ANC_HAUL = 1;   // 公尺、秒、rad/s、m/s
 /** 這艘的兩個錨（第一次要用才建）：錨鏈孔的格座標、是哪個部件（模型／關聯／沒有）。 */
 function anchorsOf(sh) {
   if (sh.anc) return sh.anc;
@@ -9917,6 +9917,11 @@ function anchorStep(sh, dt, px0, pz0) {
     var H = hawseXZ(sh, a, sh.px, sh.pz, sh.yaw), dx = H[0] - a.A[0], dz = H[1] - a.A[1], d = Math.hypot(dx, dz);
     if (d <= r || d < 1e-6) return;
     taut = true;
+    if (a.st === 'weigh') {                                             // 起錨：船只被平移拉近（每秒最多 ANC_HAUL 公尺、航向不動），剩下的由錨在海底被拖向錨鏈孔補
+      var mv = Math.min(d - r, ANC_HAUL * dt), sl = d - r - mv;         //   ⛔ 以前跟咬著一樣用旋轉約束 ⇒ 鍊長收到 0、錨鏈孔被硬拉到錨正上方 ⇒ 單拋左錨轉好再起，8 秒船被轉 107°（Tim 2026-10-15「收錨過程中憑空給一股很大的轉向力」）
+      sh.px -= dx / d * mv; sh.pz -= dz / d * mv; a.A = [a.A[0] + dx / d * sl, a.A[1] + dz / d * sl];   //   雙錨一起起 ⇒ 兩條各拉一點、錨各自被拖，不會互相扯
+      return;
+    }
     var Hn = [a.A[0] + dx / d * r, a.A[1] + dz / d * r];                // 錨鏈孔拉回圓周上
     var lx = S * (a.hx - sh.T.cx), lz = S * (a.hy - sh.T.cy), L = Math.hypot(lx, lz);
     var thW = Math.atan2(H[1] - sh.pz, H[0] - sh.px);                   // 船心 → 錨鏈孔 的方向：現在；turn(P) ＝ 錨鏈孔拉到 P 的話這個方向轉多少
