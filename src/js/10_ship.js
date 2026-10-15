@@ -36,6 +36,11 @@ function makeShip(i, team, yaw, pz, T, px) {                          // T：船
     if (kind === 'yard' && pv) foot = anchorNear(T, pv[0], pv[1], pv[2], 8);   // 帆桁：「腳」是轉軸旁最近的那一格桅（桅斷了跟著走、被打掉就掉）；⛔ 往下找：艏斜桅下面是空的，spritsail 一開局就掉
     var st = (m.points || {})['stock-top'];
     if (kind === 'rudder' && st) foot = anchorNear(T, st[0], st[1], st[2], 8);   // 舵：掛在艉柱上 ⇒「腳」是舵頭旁的船尾（⛔ 往下找：舵底在 z 0，腳落到 z −1 ⇒ 開局就掉）
+    var hm = m.meta || {};
+    if (kind === 'rudder' && !st && isFinite(+hm.hinge_x) && isFinite(+hm.hinge_y) && isFinite(+hm.hinge_z)) {   // 沒有 stock-top、有鉸鏈 meta（炎羽號，2026-10-15 開局就掉）⇒ 沿鉸鏈軸走到舵頂那一高度找船尾
+      var az = +hm.axis_z || 1, t = (b[5] - +hm.hinge_z) / az;
+      foot = anchorNear(T, +hm.hinge_x + (+hm.axis_x || 0) * t, +hm.hinge_y + (+hm.axis_y || 0) * t, b[5], 8);
+    }
     var bl = (m.points || {}).bail;
     if (foot < 0 && bl) foot = anchorNear(T, bl[0], bl[1], bl[2], 8);   // 提著的燈（夜燈號船首像的提燈，固定點 bail ＝ 提環頂、手握的地方）：「腳」是手（⛔ 往下找：底下是海 ⇒ 開局就掉、燈不亮）
     var hang = false;
