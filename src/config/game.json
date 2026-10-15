@@ -31,6 +31,7 @@
     "dmg9d": [10, 300, 200],
     "dmg64b": [10, 300, 190],
     "dmg7b": [10, 300, 240],
+    "dmg11d": [10, 500, 330],
     "box": [1, 8, 2],
     "carry": [1, 6, 1],
     "wind": [0.25, 3, 1],
@@ -100,6 +101,21 @@
       "crew": 8,
       "min": 5,
       "mass": 4.2
+    },
+    "dahl11": {
+      "code": "11d",
+      "name": "XI 吋 Dahlgren 滑膛砲（雙聯砲塔）",
+      "short": "XI 吋 Dahlgren",
+      "V": 140,
+      "reload": 2.5,
+      "big": true,
+      "hole": 1.9,
+      "crew": 8,
+      "min": 5,
+      "mass": 14.5,
+      "hpK": 8,
+      "burst": 2,
+      "burstGap": 1.2
     },
     "brooke64": {
       "code": "64b",
@@ -298,6 +314,19 @@
       "geo": {"spar": [137, 145], "marines": [80, 240], "center": 185, "aim": 120, "aimZ": [56, 364], "deckAim": [100, 150], "rigAim": [190, 340]},
       "names": ["拿破崙號"],
       "author": "kotoko"
+    },
+    {
+      "id": "monitor",
+      "el": "ship-monitor",
+      "name": "莫尼特號",
+      "vxk": "monitor.vxk",
+      "work": "meadow-monitor-01m-assembly",
+      "cfg": {"base": 6, "agile": 0.6, "hard": 6},
+      "drive": "steam",
+      "geo": {"spar": [35, 38], "marines": [60, 60], "center": 40, "aim": 33, "aimZ": [5, 70], "deckAim": [35, 45], "rigAim": [35, 64]},
+      "crew": {"officers": 4, "helm": 1, "marines": 0, "top": 0, "monkeys": 1},
+      "names": ["莫尼特號"],
+      "author": "meadow"
     }
   ],
   "furniture": {

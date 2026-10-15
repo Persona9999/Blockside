@@ -274,6 +274,8 @@ def validate(cfg, prev=None):
             err(p + '.big', '要是 true／false')
         if 'hole' in g and not (isnum(g['hole']) and g['hole'] > 0):
             err(p + '.hole', '要是正數（沒寫 ＝ 1）')
+        if 'hpK' in g and not (isnum(g['hpK']) and 0.1 <= g['hpK'] <= 20):
+            err(p + '.hpK', '血量倍率：0.1～20（沒寫 ＝ 1；鐵甲砲塔這種整座的才調）')
         if 'burst' in g and not (isint(g['burst']) and 1 <= g['burst'] <= 20):
             err(p + '.burst', '連發：一份彈藥打幾發，1～20 的整數（沒寫 ＝ 1）')
         if 'burstGap' in g and not (isnum(g['burstGap']) and 0.02 <= g['burstGap'] <= 2):

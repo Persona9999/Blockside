@@ -51,7 +51,7 @@ function makeShip(i, team, yaw, pz, T, px) {                          // T：船
     // 掛著的（吊艇架上的小艇；Tim 2026-10-14：一開場就掉）：底下 1.2 m 內沒有甲板 ⇒ 掛在吊索上（下面 hangFalls 找；吊索全斷才掉）。
     //   ⛔ 照舊往下找 ⇒ 找到海底 z 0 ⇒ 第一次 survey 就掉。foot 暫時是正下方（找到吊索之後換成吊索上端的那一格 ⇒ 吊艇架被打斷帶走時跟著走）
     if (foot < 0) foot = VK.pack(cx, cy, fz);
-    var hpm = kind === 'powder' ? powderHP() : kind === 'wheel' ? Math.round(GUN_HP * 0.6) : kind === 'model' ? 1 : GUN_HP;   // 細節設定的血量；舵輪 6 成；帆桁、舵跟砲一樣
+    var hpm = kind === 'powder' ? powderHP() : kind === 'wheel' ? Math.round(GUN_HP * 0.6) : kind === 'model' ? 1 : Math.round(GUN_HP * (GUNS[kind] && GUNS[kind].hpK || 1));   // 細節設定的血量；舵輪 6 成；帆桁、舵跟砲一樣；砲種表的 hpK ＝ 血量倍率（莫尼特號的鐵甲砲塔 8；Tim 2026-10-15 匯入莫尼特號：一發就打飛不像史實）
     var mt = m.meta || {};
     return { T: T, k: k, name: m.name.split('/').pop(), path: m.name, kind: kind, hp: hpm, hpMax: hpm, mesh: m.mesh, origin: m.origin, bb: b, pts: m.points || {}, meta: mt,
       c: [(b[0] + b[3]) / 2, (b[1] + b[4]) / 2, (b[2] + b[5]) / 2], foot: foot, alive: true,
