@@ -8292,9 +8292,12 @@ function hud(dt) {
   botFit();
   pauseLabel();
   [].forEach.call(document.querySelectorAll('#ammo span'), function (s) { s.className = +s.dataset.a === AMMO_I ? 'on' : ''; });
-  // 瞄準模式＋鏡頭名稱：羅盤底下一行空心字（Tim 2026-10-14；Q 那顆按鈕只寫「瞄準」）；鏡頭名稱要常駐（Tim：拿掉之後看不出現在是哪個鏡頭）
+  // 瞄準模式＋鏡頭名稱：羅盤上方空心字（Tim 2026-10-14）；鏡頭名稱要常駐（Tim：拿掉之後看不出現在是哪個鏡頭）
   var cn = CAM.mode === 3 && CAM.see && SHIPS.indexOf(CAM.see) >= 0 ? '看' + CAM.see.name : CAM_NAMES[CAM.mode];   // 「🎥 看這艘」⇒ 寫那一艘的名字
-  var mt = $('modeT'), ms = '瞄準 <b>' + (!handAim(me) ? '砲長' : (AUTOFIRE ? '手動一舷・' : '') + AIM_NAME[me.pMode || 'free']) + '</b>　鏡頭 <b>' + cn + '</b>';
+  // 圖示（Tim 2026-10-15：「瞄準、鏡頭的文字顯示也改成 Icon，然後那邊是否可以額外顯示航速、船體 %、進水 %（一樣用 Icon）」）：第二行 ⛵ 航速（節，倒車 −）、🚢 船體 %（還剩幾成格子）、💧 進水 %（floodPct，跟面板、艦隊圓鈕同一支）
+  var hp = me.grid.count / me.orig, kn = me.spd * 1.944, fp = floodPct(me);
+  var mt = $('modeT'), ms = '🎯 <b>' + (!handAim(me) ? '砲長' : (AUTOFIRE ? '手動一舷・' : '') + AIM_NAME[me.pMode || 'free']) + '</b>　🎥 <b>' + cn + '</b><br>' +
+    '⛵ <b>' + (kn < -0.05 ? '−' + (-kn).toFixed(1) : Math.max(0, kn).toFixed(1)) + '</b> 節　🚢 <b>' + (hp >= 0.9995 ? '100' : (hp * 100).toFixed(1)) + '%</b>　💧 <b>' + (me.sunk ? '沉沒' : Math.round(fp * 100) + '%') + '</b>';
   if (mt && mt.innerHTML !== ms) mt.innerHTML = ms;
   var t = DEBUG ? '格：' + SHIPS.map(function (s) { return s.grid.count; }).join('／') + '　四邊形：' + SHIPS.map(function (s) { return s.rs.quads(); }).join('／') + '　碎片 ' + D.n + '　粒子 ' + PT.n + '　脫落 ' + PIECES.length + (PHYS ? '　物理 ' + PHYS_MS.toFixed(2) + ' ms/步、垂繩 ' + SHIPS.map(function (s) { return s.loose.length; }).join('／') : '') + '　' + FPS.toFixed(0) + ' fps' : '';
   $('tip').textContent = t;
