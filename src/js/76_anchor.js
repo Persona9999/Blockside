@@ -7,6 +7,10 @@
 //   帶著速度只拋一側 ⇒ 鍊子一拉緊，船頭被拴在那一側、船尾甩出去 ＝ 急轉；兩側都拋 ⇒ 停住，A／D 原地慢慢轉（ANC_PIVOT）、電腦照舊轉舷側對敵。
 //   拉緊的時候每秒掉 1／ANC_DRAG 的速度（鍊子拖著）；鍊子要船轉得比 ANC_YAWMAX 快 ⇒ 錨在海底被拖著走（船只轉到上限、每秒掉 1／ANC_DRAGX）。錨被打壞（模型沒了、關聯的格少了一半）⇒ 那一側斷鍊、船放開，不能再拋。
 // ⛔ 戰局不抽 rnd()（只有錨入水的水花抽，見 chainSolve）；沒拋錨的船一位元都不動（sh.anc 只有拋過才建）。
+// 單錨的船（TASK-0635；Tim 2026-10-16：「只有一個錨的情況下 會自動補上另一邊的錨 且會歪掉」「只有單錨時 隱藏左右錨 只保留拋錨操作」）：
+//   兩舷只找到一個真的錨（模型或關聯）⇒ 另一舷標 none（不補、拋不了），A.single ＝ 有錨的那一舷；左右錨（7／8）的按鈕藏起來、按鍵不理，6 只拋這一個。
+//   ⛔ 以前另一舷照船頭的預設點補一個（水線上 25 格、bowHalf 寬）⇒ 莫尼特號那個補出來的左錨在水線上 2.5 m、中線往左 2 m 的半空，鐵鍊從空中垂下去。
+//   兩舷都找不到 ⇒ 照舊兩舷都補（船頭兩側、打不壞）。錨剛好在中線（外框中心 y ＝ T.cy）⇒ 算右舷（以前兩舷都不算 ⇒ 兩舷都補）。
 var ANC_DEPTH = 20, ANC_CHAIN = 36, ANC_REACH = Math.sqrt(ANC_CHAIN * ANC_CHAIN - ANC_DEPTH * ANC_DEPTH), ANC_FALL = 4, ANC_WEIGH = 8, ANC_DRAG = 8, ANC_DRAGX = 2.5, ANC_PIVOT = 0.06, ANC_YAWMAX = 0.5, ANC_HAUL = 1;   // 公尺、秒、rad/s、m/s
 /** 這艘的兩個錨（第一次要用才建）：錨鏈孔的格座標、是哪個部件（模型／關聯／沒有）。 */
 function anchorsOf(sh) {
@@ -14,8 +18,8 @@ function anchorsOf(sh) {
   var T = sh.T, out = {};
   ['P', 'S'].forEach(function (k) {
     var sg = k === 'S' ? 1 : -1, a = { side: k, st: 'up', A: null, t: 0, m: null, part: null, hx: T.wl1 - 12, hy: T.cy + sg * Math.max(4, T.bowHalf - 2), hz: T.zw + 25, broken: false };   // hz：鐵鍊從哪個高度出來（畫用）
-    var m = sh.models.filter(function (q) { return q.meta && q.meta.kind === 'anchor' && (q.c[1] - T.cy) * sg > 0; })[0];
-    var p = !m && (T.h.parts || []).filter(function (q) { return /錨/.test(q.path || '') && q.box && ((q.box[1] + q.box[4]) / 2 - T.cy) * sg > 0; })[0];
+    var m = sh.models.filter(function (q) { return q.meta && q.meta.kind === 'anchor' && ((q.c[1] - T.cy) * sg > 0 || (k === 'S' && q.c[1] === T.cy)); })[0];   // 剛好在中線 ⇒ 算右舷
+    var p = !m && (T.h.parts || []).filter(function (q) { var y = (q.box ? (q.box[1] + q.box[4]) / 2 : 0) - T.cy; return /錨/.test(q.path || '') && q.box && (y * sg > 0 || (k === 'S' && y === 0)); })[0];
     if (m) { a.m = m; var rg = m.pts && m.pts.ring; if (rg) { a.hx = rg[0]; a.hy = rg[1]; a.hz = rg[2]; } else { a.hx = m.c[0]; a.hy = m.c[1]; a.hz = m.bb[5]; } }   // 錨環 ring（造船規格 §9 anchor）：鐵鍊綁的地方；沒有 ⇒ 模型頂的中心
     else if (p) {                                                        // 關聯（格子）：開局記下它的格（每 4 格取 1），之後少了一半 ⇒ 打壞
       var b = p.box, cells = [];
@@ -27,6 +31,8 @@ function anchorsOf(sh) {
     if (hw) { a.hx = hw[0]; a.hy = hw[1]; a.hz = hw[2]; a.hw = true; }   // 錨鏈孔 hawse-P／S（船殼固定點，各船登記）：鐵鍊從這裡出來、船繞這一點被拴住；沒登記 ⇒ 跟以前一樣用錨那一點
     out[k] = a;
   });
+  var real = ['P', 'S'].filter(function (k) { return out[k].m || out[k].part; });
+  if (real.length === 1) { out[real[0] === 'P' ? 'S' : 'P'].none = true; out.single = real[0]; }   // 單錨：另一舷不補（TASK-0635）
   return (sh.anc = out);
 }
 function anchorAlive(sh, a) {
@@ -42,7 +48,8 @@ function hawseXZ(sh, a, px, pz, yaw) {
 }
 /** 拋（up ⇒ drop）或起（drop／down ⇒ weigh）。回傳發生了什麼（給廣播）。 */
 function anchorToggle(sh, k, want) {
-  var A = anchorsOf(sh), a = A[k], nm = k === 'P' ? '左錨' : '右錨';
+  var A = anchorsOf(sh), a = A[k], nm = A.single ? '錨' : k === 'P' ? '左錨' : '右錨';
+  if (a.none) return '';                                                // 單錨的船：沒有錨的那一舷（TASK-0635）
   if (want === undefined) want = a.st === 'up';
   if (want) {
     if (a.st !== 'up') return '';
@@ -57,7 +64,7 @@ function anchorToggle(sh, k, want) {
 /** 起錨：還在水裡的（drop／down）都開始收；回傳收了哪幾個（給廣播）。 */
 function anchorWeighAll(sh) {
   var A = sh.anc; if (!A) return '';
-  return ['P', 'S'].filter(function (k) { return anchorToggle(sh, k, false); }).map(function (k) { return k === 'P' ? '左錨' : '右錨'; }).join('、');
+  return ['P', 'S'].filter(function (k) { return anchorToggle(sh, k, false); }).map(function (k) { return A.single ? '錨' : k === 'P' ? '左錨' : '右錨'; }).join('、');
 }
 function anchorAny(sh, st) { var A = sh.anc; return !!A && (A.P.st === st || A.S.st === st); }
 /** 6（拋錨／起錨同一顆）按下去是起錨嗎：拋錨模式、或有錨在水裡（下沉中、咬著）。 */
@@ -66,7 +73,7 @@ function anchorWet(sh) { return (SAIL === 'off' && sh.i === PLAYER_I) || anchorA
  *  'both' 兩邊都沒在水裡 ⇒ 拋雙錨（拋錨模式）；'other' 一邊在水裡、另一邊還拋得了 ⇒ 拋另一邊（k ＝ 哪一邊）；'weigh' 其他（兩邊都在水裡、或另一邊打壞了）⇒ 起錨。 */
 function anchor6(sh) {
   var A = anchorsOf(sh), wet = ['P', 'S'].filter(function (k) { return A[k].st === 'drop' || A[k].st === 'down'; });
-  var free = ['P', 'S'].filter(function (k) { return A[k].st === 'up' && !A[k].broken && anchorAlive(sh, A[k]); });
+  var free = ['P', 'S'].filter(function (k) { return A[k].st === 'up' && !A[k].none && !A[k].broken && anchorAlive(sh, A[k]); });
   if (SAIL === 'off' && sh.i === PLAYER_I) return { act: 'weigh' };
   if (!wet.length) return { act: anchorAny(sh, 'weigh') ? 'weigh' : 'both' };
   if (wet.length === 1 && free.length) return { act: 'other', k: free[0] };
@@ -79,7 +86,7 @@ function anchorStep(sh, dt, px0, pz0) {
   var A = sh.anc; if (!A) return false;
   var taut = false, drag = false, tot = sh.yawRate * dt, lim = Math.max(ANC_YAWMAX * dt, Math.abs(tot));   // tot：這一步航向總共變多少（sail() 照轉動慣性已經轉了 yawRate·dt）—— 上限算總的，⛔ 只限約束那一段 ⇒ 慣性再加一次，15 m/s 轉到 44°/s
   ['P', 'S'].forEach(function (k) {
-    var a = A[k], nm = k === 'P' ? '左錨' : '右錨';
+    var a = A[k], nm = A.single ? '錨' : k === 'P' ? '左錨' : '右錨';
     if (a.st === 'up') return;
     if (!anchorAlive(sh, a)) { a.broken = true; a.st = 'up'; a.A = null; chainCut(sh, a); if (sh.i === PLAYER_I) note(sh, nm + '被打壞了，鍊子斷了'); return; }
     if (a.st === 'drop' && SIMT >= a.t) { a.st = 'down'; if (sh.i === PLAYER_I) note(sh, nm + '落底咬住了'); }
@@ -124,9 +131,12 @@ function anchorStep(sh, dt, px0, pz0) {
 function anchorChips(me) {
   if (!me) return;
   var A = anchorsOf(me), w = anchorWet(me), b6 = $('ancAll');
-  if (b6) { var a6 = anchor6(me).act; b6.classList.toggle('on', w); var l6 = a6 === 'weigh' && w ? '⚓⚓⬆' : a6 === 'weigh' ? '⚓⚓⏳' : '⚓⚓', s6 = b6.querySelector('i'); if (s6 && s6.textContent !== l6) s6.textContent = l6; }   // 圖示（Tim 2026-10-15：兩個錨 ＝ 兩邊一起下）：⚓⚓ 拋（一邊在水裡 ⇒ 亮、按了拋另一邊）、⚓⚓⬆ 按了起錨、⚓⚓⏳ 起錨中
+  var aa = A.single ? '⚓' : '⚓⚓';                                       // 單錨：6 的圖示一個錨（TASK-0635）
+  if (b6) { var a6 = anchor6(me).act; b6.classList.toggle('on', w); var l6 = a6 === 'weigh' && w ? aa + '⬆' : a6 === 'weigh' ? aa + '⏳' : aa, s6 = b6.querySelector('i'); if (s6 && s6.textContent !== l6) s6.textContent = l6; }   // 圖示（Tim 2026-10-15：兩個錨 ＝ 兩邊一起下）：⚓⚓ 拋（一邊在水裡 ⇒ 亮、按了拋另一邊）、⚓⚓⬆ 按了起錨、⚓⚓⏳ 起錨中
   ['P', 'S'].forEach(function (k) {
     var a = A[k], el = $('anc' + k); if (!el) return;
+    var hid = A.single ? 'none' : ''; if (el.style.display !== hid) el.style.display = hid;   // 單錨：左右錨兩顆藏起來，只留 6（Tim：「只有單錨時 隱藏左右錨 只保留拋錨操作」）
+    if (A.single) return;
     if (!a.broken && a.st === 'up' && !anchorAlive(me, a)) a.broken = true;
     el.classList.toggle('on', a.st === 'drop' || a.st === 'down'); el.classList.toggle('dis', a.broken);
     var an = k === 'P' ? '◀⚓' : '⚓▶', lb = an + (a.broken ? '✖' : a.st === 'drop' || a.st === 'down' ? '⬆' : a.st === 'weigh' ? '⏳' : '');   // 圖示：◀⚓ 左錨／⚓▶ 右錨，後面接 ⬆ 在水裡（按了起錨）、⏳ 起錨中、✖ 錨壞了
@@ -258,5 +268,5 @@ function chainBuf(sh) {
 function anchorText(sh) {
   var A = sh.anc; if (!A) return '';
   var w = { up: '', drop: '下沉中', down: '咬住', weigh: '起錨中' };
-  return ['P', 'S'].map(function (k) { var a = A[k]; return a.broken ? (k === 'P' ? '左錨×' : '右錨×') : w[a.st] ? (k === 'P' ? '左錨' : '右錨') + w[a.st] : ''; }).filter(Boolean).join('　');
+  return ['P', 'S'].map(function (k) { var a = A[k], nm = A.single ? '錨' : k === 'P' ? '左錨' : '右錨'; return a.broken ? nm + '×' : w[a.st] ? nm + w[a.st] : ''; }).filter(Boolean).join('　');
 }

@@ -101,7 +101,7 @@ function doKey(k, repeat) {
     else if (a6.act === 'other') { var am = anchorToggle(me, a6.k, true); if (am) note(me, am + '（兩邊都拋了，再按一次起錨）'); }
     else { if (SAIL === 'off') setSailMode('manual'); var nw = anchorWeighAll(me); note(me, nw ? '起錨（' + nw + '）—— 8 秒收好' : '錨都收著'); }   // 拋錨模式 ⇒ 換手動、我艦的雙錨跟著收
   }
-  else if ((k === '7' || k === '8') && RUNNING && me && !me.sunk) { var am = anchorToggle(me, k === '7' ? 'P' : 'S'); if (am) note(me, am + (/^拋/.test(am) ? '（帶著速度只拋一側 ⇒ 繞錨急轉；再按一次起錨）' : '')); }   // 左右錨（76_anchor.js）   // 航行（TASK-0567，Tim 2026-10-14：不用 Tab 循環，三個鍵直接切）
+  else if ((k === '7' || k === '8') && RUNNING && me && !me.sunk && !anchorsOf(me).single) { var am = anchorToggle(me, k === '7' ? 'P' : 'S'); if (am) note(me, am + (/^拋/.test(am) ? '（帶著速度只拋一側 ⇒ 繞錨急轉；再按一次起錨）' : '')); }   // 左右錨（76_anchor.js）   // 航行（TASK-0567，Tim 2026-10-14：不用 Tab 循環，三個鍵直接切）
   else if (k === 'o') gsetToggle();                                    // 設定（Esc 也可以）
   else if (k === 'a' || k === 'd' || k === 'arrowleft' || k === 'arrowright') {   // 打舵：自動中一碰就換手動
     if (SAIL === 'auto') setSailMode('manual'); KEYS[k === 'a' || k === 'arrowleft' ? 'l' : 'r'] = true;   // 拋錨（6）中 ⇒ 不換模式、繞錨原地轉
@@ -141,7 +141,7 @@ var SAIL_NAMES = { auto: '自動航行', manual: '手動操舵（A／D 打舵）
 function setSailMode(m) {
   SAIL = m; KEYS.l = KEYS.r = false;
   [].forEach.call(document.querySelectorAll('[data-s]'), function (x) { x.classList.toggle('on', x.dataset.s === SAIL); }); sailLabel();
-  if (RUNNING && SHIPS.length) note(SHIPS[PLAYER_I], SAIL_NAMES[m] + '（4 自動／手動切換、6 拋錨、再按一次起錨）');
+  if (RUNNING && SHIPS.length) note(SHIPS[PLAYER_I], (m === 'off' && anchorsOf(SHIPS[PLAYER_I]).single ? '拋錨（單錨；A／D 繞錨轉）' : SAIL_NAMES[m]) + '（4 自動／手動切換、6 拋錨、再按一次起錨）');   // 單錨的船（TASK-0635）
 }
 /** 自由鏡頭跟不跟著兩艘的中點走（預設跟；鏡頭「看敵艦／看我艦」本來就跟著那一艘）。 */
 function setCamTrack(on) {

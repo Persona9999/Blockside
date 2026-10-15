@@ -182,7 +182,7 @@ python -I admin.py cache --all    # 每艘都比 ＝ 比對來源：雕刻作品
 | `72_floodui.js` | 停格條（`frzShow`）與進水細節頁（`floodPanel`：數字＋側視、俯視剖面 `fpDraw`；開著時 3D 的破口點 `flHoleMarks`、艙內水面透視） |
 | `74_cutaway.js` | 停格的剖面與隱藏甲板：`CUTV`、甲板切高 `deckCut`（照舷弧逐欄量、R32F 貼圖）、畫之前設 uniform `cutSet`、人藏不藏 `cutHides`、`cutToggle`／`deckCycle` |
 | `75_shipcheck.js` | 匯入檢查（`?shipcheck=<id>`；`admin.py shipcheck` 讀它寫的 JSON 出報告） |
-| `76_anchor.js` | 拋錨（雙錨、左右錨、拖錨、起錨）與鐵鍊（質點鍊、碰自己的船殼與海底、畫成鏈環） |
+| `76_anchor.js` | 拋錨（雙錨、左右錨、拖錨、起錨）與鐵鍊（質點鍊、碰自己的船殼與海底、畫成鏈環）；單錨的船（TASK-0635：只找到一個真的錨 ⇒ 另一舷不補、`A.single`；7／8 按鈕藏起來、按鍵不理，6 只拋這一個；整艘都沒有錨才兩舷照舊補） |
 | `77_colours.js` | 陣營旗（長旗＋戰鬥旗，藍方藍旗、紅方紅旗；布料，跟帆同一套）：桅頂 `mastTrucks`、自動掛 `autoFlags`、載入時生旗 `teamFlagsSetup`、貼圖挑藍紅 `sailRect`、旗桿 `poleBuf`／`drawColours` |
 | `78_funnel.js` | 煙囪排煙：meta kind=funnel 的關聯或模型、固定點 smoke（沒有 ⇒ 外框頂面中心）；額外動力在出力 ⇒ 濃、停車 ⇒ 淡，煙囪口附近的格子剩不到一半 ⇒ 不冒；主機全壞、通它的鍋爐全壞 ⇒ 不冒（31_drive.js fnOff）；自己一組亂數（`rndFn`，⛔ 不叫 rndF：33_flood.js 已經有，同名會蓋掉 ⇒ 進水的亂數跟著變、戰局全變） |
 | `90_main.js` | 主迴圈、`?debug=1` 的 `window.__game`（含 `?demo=&dump=1`）、載入 |
