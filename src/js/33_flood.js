@@ -36,7 +36,7 @@ function flType(T, c) {
     if (yM[k] < ylo) ylo = yM[k]; if (yP[k] > yhi) yhi = yP[k];
   }
   var NX = Math.ceil(nxv / c), NY = Math.ceil((yhi - ylo + 1) / c), NZ = Math.ceil(zTop / c), N = NX * NY * NZ;
-  var F = { c: c, X0: x0, Y0: ylo, NX: NX, NY: NY, NZ: NZ, N: N, nxv: nxv, zTop: zTop, yP: yP, yM: yM, cap: new Float32Array(N), pd: new Float32Array(N) };
+  var F = { c: c, X0: x0, Y0: ylo, NX: NX, NY: NY, NZ: NZ, N: N, nxv: nxv, zTop: zTop, yP: yP, yM: yM, cap: new Float32Array(N), pd: new Float32Array(N), op: new Float32Array(N * c) };   // op：每格每一層空著幾格（只給畫水面用：水照層疊上去，flLevel）
   var intC = new Int32Array(N), solC = new Int32Array(N), intL = new Int32Array(N * c), solL = new Int32Array(N * c);
   for (z = 0; z < zTop; z++) for (x = x0; x <= x1; x++) {
     var kk = z * nxv + x - x0, a = yM[kk] + 1, b = yP[kk] - 1; if (yP[kk] < 0 || b < a) continue;
@@ -54,7 +54,7 @@ function flType(T, c) {
   for (var i = 0; i < N; i++) {
     F.cap[i] = (intC[i] - solC[i]) / (c * c * c);
     var p = 1, any = false;
-    for (var l = 0; l < c; l++) { var il = intL[i * c + l]; if (il > 0) { any = true; p = Math.min(p, (il - solL[i * c + l]) / il); } }
+    for (var l = 0; l < c; l++) { var il = intL[i * c + l]; F.op[i * c + l] = il - solL[i * c + l]; if (il > 0) { any = true; p = Math.min(p, (il - solL[i * c + l]) / il); } }
     F.pd[i] = any ? p : 0;
   }
   return K[c] = F;
@@ -63,7 +63,7 @@ function flType(T, c) {
 function flNew(sh) {
   var L = FL_LV[FLOOD_LV]; if (!L) return null;
   var F = flType(sh.T, L.c), N = F.N, H = 2 * F.NX * F.NZ;
-  return { L: L, F: F, cap: F.cap.slice(), pd: F.pd.slice(), A: new Float32Array(N), on: new Uint8Array(N), act: new Int32Array(4096), actN: 0, dmark: new Uint8Array(N), dirty: [],
+  return { L: L, F: F, cap: F.cap.slice(), pd: F.pd.slice(), op: F.op.slice(), A: new Float32Array(N), on: new Uint8Array(N), act: new Int32Array(4096), actN: 0, dmark: new Uint8Array(N), dirty: [],
     hA: new Float32Array(H), hX: new Float32Array(H), hY: new Float32Array(H), hZ: new Float32Array(H), hYi: new Float32Array(H), hAcc: new Float32Array(H), hmark: new Uint8Array(H), hon: new Uint8Array(H), hdirty: [], holes: [],
     J: { n: 0, p: new Float32Array(L.jn * 3), v: new Float32Array(L.jn * 3), vol: new Float32Array(L.jn), life: new Float32Array(L.jn) },
     vol: 0, area: 0, open: 0, inQ: 0, outQ: 0, inTot: 0, outTot: 0, pumped: 0, comX: 0, comY: 0, sinkT: 0, step: 0, gen: 0, mesh: null };
@@ -88,14 +88,14 @@ function floodTouch(sh, x, y, z) {
 function flCellRedo(sh, fl, i) {
   var F = fl.F, c = F.c, ix = i % F.NX, iy = ((i / F.NX) | 0) % F.NY, iz = (i / (F.NX * F.NY)) | 0, Gd = sh.grid, it = 0, st = 0, p = 1, any = false;
   for (var l = 0; l < c; l++) {
-    var z = iz * c + l, il = 0, sl = 0; if (z >= F.zTop) break;
+    var z = iz * c + l, il = 0, sl = 0; fl.op[i * c + l] = 0; if (z >= F.zTop) continue;
     for (var dx = 0; dx < c; dx++) {
       var x = F.X0 + ix * c + dx; if (x - F.X0 >= F.nxv) break;
       var k = z * F.nxv + x - F.X0; if (F.yP[k] < 0) continue;
       var a = Math.max(F.yM[k] + 1, F.Y0 + iy * c), b = Math.min(F.yP[k] - 1, F.Y0 + iy * c + c - 1);
       for (var y = a; y <= b; y++) { il++; if (Gd.get(x, y, z)) sl++; }
     }
-    it += il; st += sl; if (il > 0) { any = true; p = Math.min(p, (il - sl) / il); }
+    fl.op[i * c + l] = il - sl; it += il; st += sl; if (il > 0) { any = true; p = Math.min(p, (il - sl) / il); }
   }
   fl.cap[i] = (it - st) / (c * c * c); fl.pd[i] = any ? p : 0;
 }
@@ -258,7 +258,7 @@ function flGL() {
  *    模擬照算；畫面每 FL_MESH_MS 毫秒（真實時間）做一格關鍵格，兩格之間著色器照 uMix 從上一格的高度內插過去（⛔ 每次水格算完就重做 ⇒ 粗檔每 4 步、細檔每 2 步重建一次）。
  *    拓撲（哪幾格、每格切成哪幾片）跟上一格一樣 ⇒ 從畫面上現在的高度接著內插（水面慢慢升降）；不一樣（新的格進水、水退了）⇒ 直接換。
  *  代價：畫面的水比模擬晚最多一格；兩格之間船晃動，水面跟著船斜一下（網格在船的座標裡）。 */
-var FL_MESH_MS = 500;
+var FL_MESH_MS = 500, FL_FLAT = 1;
 function flMesh(sh, fl) {
   var F = fl.F, c = F.c, NX = F.NX, NY = F.NY, NXY = NX * NY, A = fl.A, cap = fl.cap, M = sh.M, Vc = Math.pow(c * S, 3), hc = c * S;
   var me = fl.mesh || (fl.mesh = { vao: gl.createVertexArray(), vb: gl.createBuffer(), buf: new Float32Array(6 * 5 * 512), old: new Float32Array(6 * 5 * 512), sig: [], n: 0, cap: 0, gen: -1, tw: -1e9 });
@@ -267,24 +267,46 @@ function flMesh(sh, fl) {
   var mix0 = me.n ? flMix(me) : 1, oldN = me.n, oldSig = me.sig, tmp = me.old; me.old = me.buf; me.buf = tmp.length >= me.old.length ? tmp : new Float32Array(me.old.length); me.sig = [];   // 舊的那一格留著（接著內插用）
   me.tw = now;
   var h0 = M[1] * (F.X0 + 0.5 * c) + M[5] * (F.Y0 + 0.5 * c) + M[13], q = 0, t, i, u;
-  // 先找每一根水柱最上面那一格水面的世界高度（同一根有兩層水 ⇒ 只記上面那層）；四個角取周圍水柱的平均 ⇒ 水面連成一片，⛔ 一格一個高度 ⇒ 像一階一階的方塊
-  var CH = me.ch && me.ch.length === NX * NY ? me.ch : (me.ch = new Float32Array(NX * NY)), CZ = me.cz && me.cz.length === NX * NY ? me.cz : (me.cz = new Int16Array(NX * NY));
-  CZ.fill(-1); var tops = me.tops || (me.tops = []); tops.length = 0;
+  // 每一格水面（上面那一格沒水的）的世界高度：水照層疊上去（flLevel）⇒ ⛔ 照「裝了幾成 × 格高」⇒ 只有底下一層空著的格（船殼彎進來、甲板梁）裝滿了水面畫在整格的頂，浮在半空
+  var TI = me.ti && me.ti.length === F.N ? me.ti : (me.ti = new Int32Array(F.N).fill(-1)), tops = me.tops || (me.tops = []), S3 = S * S * S, op = fl.op;
+  for (t = 0; t < tops.length; t += 2) TI[tops[t]] = -1; tops.length = 0;
   for (t = 0; t < fl.actN; t++) {
     i = fl.act[t]; if (!(cap[i] > 0.02) || A[i] < 0.02 * cap[i] * Vc) continue;
     u = i + NXY; if (u < F.N && cap[u] > 0.02 && A[u] >= 0.02 * cap[u] * Vc) continue;          // 上面那一格也有水 ⇒ 不是水面
-    var ix = i % NX, iy = ((i / NX) | 0) % NY, iz = (i / NXY) | 0, col = iy * NX + ix;
-    var hw = h0 + ix * M[1] * c + iy * M[5] * c + iz * M[9] * c + Math.min(1, A[i] / (cap[i] * Vc)) * hc;
-    tops.push(i, hw); if (iz > CZ[col]) { CZ[col] = iz; CH[col] = hw; }
+    var ix = i % NX, iy = ((i / NX) | 0) % NY, iz = (i / NXY) | 0, W = A[i] / S3, hl = 0;
+    for (var l = 0; l < c && W > 1e-6; l++) { var o = op[i * c + l]; if (o <= 0) continue; if (W >= o) { W -= o; hl = l + 1; } else { hl = l + W / o; W = 0; } }   // 空著 0 格的那一層（甲板）水過不去也不停在那裡 ⇒ 跳過
+    if (W > 1e-6) hl = c;
+    var hw = M[1] * (F.X0 + (ix + 0.5) * c) + M[5] * (F.Y0 + (iy + 0.5) * c) + M[9] * (iz * c + hl) + M[13];
+    TI[i] = tops.length; tops.push(i, hw);
   }
-  function corner(ix, iy, iz, hw) {                                         // 角 (ix, iy) 周圍四根水柱裡、跟這一格差不到半格的水面平均
-    var s = 0, n = 0;
-    for (var a = ix - 1; a <= ix; a++) for (var b = iy - 1; b <= iy; b++) {
-      if (a < 0 || b < 0 || a >= NX || b >= NY) continue; var k = b * NX + a;
-      if (CZ[k] >= 0 && Math.abs(CZ[k] - iz) <= 1 && Math.abs(CH[k] - hw) < 0.6 * hc) { s += CH[k]; n++; }
+  // 連成一池（Tim 2026-10-15：「角度有平滑 但是沒有接起來」）：左右前後相鄰（同一層或差一層）、水面差不到半格 ⇒ 同一池。
+  //   同一池裡每個角只算一次（那個角周圍四格裡、這一池的水面平均）⇒ 相鄰兩格用的是同一個角 ⇒ 一定接得起來。
+  //   ⛔ 以前每一格自己算四個角（周圍水柱裡、跟「這一格」差不到半格的平均）⇒ 同一個角兩邊各算各的、高度不一樣 ⇒ 每一片都斜得平順，片跟片之間裂開。
+  var TN = tops.length / 2, par = new Int32Array(TN);
+  for (t = 0; t < TN; t++) par[t] = t;
+  function root(a) { while (par[a] !== a) a = par[a] = par[par[a]]; return a; }
+  for (t = 0; t < TN; t++) {
+    i = tops[t * 2]; var jx0 = i % NX, jy0 = ((i / NX) | 0) % NY;
+    for (var nb = 0; nb < 2; nb++) {
+      if (nb ? jy0 >= NY - 1 : jx0 >= NX - 1) continue;
+      for (var dzn = -1; dzn <= 1; dzn++) {
+        var jn = i + (nb ? NX : 1) + dzn * NXY; if (jn < 0 || jn >= F.N) continue;
+        var tj = TI[jn]; if (tj < 0 || Math.abs(tops[tj + 1] - tops[t * 2 + 1]) >= 0.5 * hc) continue;
+        var ra = root(t), rb = root(tj / 2); if (ra !== rb) par[ra] = rb;
+      }
     }
-    return n ? s / n : hw;
   }
+  var CS = new Map(), NC = (NX + 1) * (NY + 1);                           // 角 (ix, iy) × 池 ⇒ [水面加總, 幾格]
+  for (t = 0; t < TN; t++) {
+    i = tops[t * 2]; var r0 = root(t), qx = i % NX, qy = ((i / NX) | 0) % NY;
+    for (var cc = 0; cc < 4; cc++) {
+      var key = r0 * NC + (qy + (cc >> 1)) * (NX + 1) + qx + (cc & 1), e = CS.get(key);
+      if (e) { e[0] += tops[t * 2 + 1]; e[1]++; } else CS.set(key, [tops[t * 2 + 1], 1]);
+    }
+  }
+  var PS = new Float64Array(TN), PN = new Int32Array(TN);                 // 每一池的水面平均
+  for (t = 0; t < TN; t++) { var rp = root(t); PS[rp] += tops[t * 2 + 1]; PN[rp]++; }
+  function corner(r, ix, iy) { var e = CS.get(r * NC + iy * (NX + 1) + ix); return FL_FLAT * PS[r] / PN[r] + (1 - FL_FLAT) * e[0] / e[1]; }
   // 每格切成 KS × KS 小片（約 2 格見方；Tim 2026-10-15：「進水顯示是否能嘗試跟鄰近的水表面合併成柔和曲面」）：高度照四個角（已跟鄰格平均）雙線性內插 ⇒ 相鄰的水面連成平順的一片；
   //   每一小片照中心那一點在不在兩舷船殼之間（flType 的 yM／yP，那個高度那一欄）⇒ 不在就不畫（Tim：「船殼外部也能進水」—— ⛔ 整格畫一塊 ⇒ 靠船殼那幾格的正方形伸出船外，最多 c − 1 格）。
   var KS = Math.max(1, Math.round(c / 2)), sc = c / KS, nxv = F.nxv, YP = F.yP, YM = F.yM, ZT = F.zTop, TRI6 = [0, 1, 2, 0, 2, 3];
@@ -297,8 +319,8 @@ function flMesh(sh, fl) {
   }
   for (t = 0; t < tops.length; t += 2) {
     i = tops[t]; var hw0 = tops[t + 1], jx = i % NX, jy = ((i / NX) | 0) % NY, jz = (i / NXY) | 0, f = Math.min(1, A[i] / (cap[i] * Vc));
-    var x0 = F.X0 + jx * c, y0 = F.Y0 + jy * c, zl = jz * c - 0.5 * c, zh = jz * c + 1.5 * c;
-    var H = [corner(jx, jy, jz, hw0), corner(jx + 1, jy, jz, hw0), corner(jx + 1, jy + 1, jz, hw0), corner(jx, jy + 1, jz, hw0)];
+    var x0 = F.X0 + jx * c, y0 = F.Y0 + jy * c, zl = jz * c - c, zh = jz * c + 2 * c, rt = root(t / 2);   // zl／zh：只防呆（同一池相鄰的差不到半格 ⇒ 角落在這一格上下一格以內；夾到了才會裂）
+    var H = [corner(rt, jx, jy), corner(rt, jx + 1, jy), corner(rt, jx + 1, jy + 1), corner(rt, jx, jy + 1)];
     if ((q + 6 * KS * KS) * 5 > me.buf.length) { var nb = new Float32Array(Math.max(me.buf.length * 2, (q + 6 * KS * KS) * 10)); nb.set(me.buf); me.buf = nb; }
     var inn = 0; for (var a = 0; a < KS; a++) for (var b = 0; b < KS; b++) if ((INS[a * KS + b] = flInside(x0 + (a + 0.5) * sc, y0 + (b + 0.5) * sc, bil(H, (a + 0.5) / KS, (b + 0.5) / KS)))) inn++;
     if (!inn) continue;

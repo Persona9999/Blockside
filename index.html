@@ -117,7 +117,7 @@
   #phxItems .row{ display:flex; align-items:center; justify-content:center; flex-wrap:wrap; gap:2px; font-size:14px; } #phxItems label{ width:6em; text-align:right; margin-right:6px; }
   #phxItems button{ font-size:13px; padding:4px 10px; margin:2px; }
   #nav{ padding:3px; border-radius:50%; }   /* 羅盤：只剩圓盤（TASK-0566；文字搬進詳細資訊 navText），在下方中間那一欄（TASK-0567） */ #navt{ display:none; }
-  #navc{ position:static; inset:auto; width:130px; height:130px; display:block; margin:0; cursor:default; }
+  #navc{ position:static; inset:auto; width:130px; height:130px; display:block; margin:0; cursor:pointer; pointer-events:auto; touch-action:manipulation; border-radius:50%; }   /* 羅盤可以按（Tim 2026-10-15）：跟按艦隊的我艦圓鈕一樣開／收詳細資訊 */
   /* 手機直拿：跟電腦同一種排法，只是縮小 —— 艦隊按鈕 38 px、左右兩組打舵開砲改成直的一欄、中間一欄窄一點 */
   @media (max-width:760px){
     .fleet{ top:6px; gap:4px; max-height:calc(100vh - 175px); } #fleetL{ left:5px; } #fleetR{ right:5px; }
@@ -5823,7 +5823,7 @@ function flType(T, c) {
     if (yM[k] < ylo) ylo = yM[k]; if (yP[k] > yhi) yhi = yP[k];
   }
   var NX = Math.ceil(nxv / c), NY = Math.ceil((yhi - ylo + 1) / c), NZ = Math.ceil(zTop / c), N = NX * NY * NZ;
-  var F = { c: c, X0: x0, Y0: ylo, NX: NX, NY: NY, NZ: NZ, N: N, nxv: nxv, zTop: zTop, yP: yP, yM: yM, cap: new Float32Array(N), pd: new Float32Array(N) };
+  var F = { c: c, X0: x0, Y0: ylo, NX: NX, NY: NY, NZ: NZ, N: N, nxv: nxv, zTop: zTop, yP: yP, yM: yM, cap: new Float32Array(N), pd: new Float32Array(N), op: new Float32Array(N * c) };   // op：每格每一層空著幾格（只給畫水面用：水照層疊上去，flLevel）
   var intC = new Int32Array(N), solC = new Int32Array(N), intL = new Int32Array(N * c), solL = new Int32Array(N * c);
   for (z = 0; z < zTop; z++) for (x = x0; x <= x1; x++) {
     var kk = z * nxv + x - x0, a = yM[kk] + 1, b = yP[kk] - 1; if (yP[kk] < 0 || b < a) continue;
@@ -5841,7 +5841,7 @@ function flType(T, c) {
   for (var i = 0; i < N; i++) {
     F.cap[i] = (intC[i] - solC[i]) / (c * c * c);
     var p = 1, any = false;
-    for (var l = 0; l < c; l++) { var il = intL[i * c + l]; if (il > 0) { any = true; p = Math.min(p, (il - solL[i * c + l]) / il); } }
+    for (var l = 0; l < c; l++) { var il = intL[i * c + l]; F.op[i * c + l] = il - solL[i * c + l]; if (il > 0) { any = true; p = Math.min(p, (il - solL[i * c + l]) / il); } }
     F.pd[i] = any ? p : 0;
   }
   return K[c] = F;
@@ -5850,7 +5850,7 @@ function flType(T, c) {
 function flNew(sh) {
   var L = FL_LV[FLOOD_LV]; if (!L) return null;
   var F = flType(sh.T, L.c), N = F.N, H = 2 * F.NX * F.NZ;
-  return { L: L, F: F, cap: F.cap.slice(), pd: F.pd.slice(), A: new Float32Array(N), on: new Uint8Array(N), act: new Int32Array(4096), actN: 0, dmark: new Uint8Array(N), dirty: [],
+  return { L: L, F: F, cap: F.cap.slice(), pd: F.pd.slice(), op: F.op.slice(), A: new Float32Array(N), on: new Uint8Array(N), act: new Int32Array(4096), actN: 0, dmark: new Uint8Array(N), dirty: [],
     hA: new Float32Array(H), hX: new Float32Array(H), hY: new Float32Array(H), hZ: new Float32Array(H), hYi: new Float32Array(H), hAcc: new Float32Array(H), hmark: new Uint8Array(H), hon: new Uint8Array(H), hdirty: [], holes: [],
     J: { n: 0, p: new Float32Array(L.jn * 3), v: new Float32Array(L.jn * 3), vol: new Float32Array(L.jn), life: new Float32Array(L.jn) },
     vol: 0, area: 0, open: 0, inQ: 0, outQ: 0, inTot: 0, outTot: 0, pumped: 0, comX: 0, comY: 0, sinkT: 0, step: 0, gen: 0, mesh: null };
@@ -5875,14 +5875,14 @@ function floodTouch(sh, x, y, z) {
 function flCellRedo(sh, fl, i) {
   var F = fl.F, c = F.c, ix = i % F.NX, iy = ((i / F.NX) | 0) % F.NY, iz = (i / (F.NX * F.NY)) | 0, Gd = sh.grid, it = 0, st = 0, p = 1, any = false;
   for (var l = 0; l < c; l++) {
-    var z = iz * c + l, il = 0, sl = 0; if (z >= F.zTop) break;
+    var z = iz * c + l, il = 0, sl = 0; fl.op[i * c + l] = 0; if (z >= F.zTop) continue;
     for (var dx = 0; dx < c; dx++) {
       var x = F.X0 + ix * c + dx; if (x - F.X0 >= F.nxv) break;
       var k = z * F.nxv + x - F.X0; if (F.yP[k] < 0) continue;
       var a = Math.max(F.yM[k] + 1, F.Y0 + iy * c), b = Math.min(F.yP[k] - 1, F.Y0 + iy * c + c - 1);
       for (var y = a; y <= b; y++) { il++; if (Gd.get(x, y, z)) sl++; }
     }
-    it += il; st += sl; if (il > 0) { any = true; p = Math.min(p, (il - sl) / il); }
+    fl.op[i * c + l] = il - sl; it += il; st += sl; if (il > 0) { any = true; p = Math.min(p, (il - sl) / il); }
   }
   fl.cap[i] = (it - st) / (c * c * c); fl.pd[i] = any ? p : 0;
 }
@@ -6045,7 +6045,7 @@ function flGL() {
  *    模擬照算；畫面每 FL_MESH_MS 毫秒（真實時間）做一格關鍵格，兩格之間著色器照 uMix 從上一格的高度內插過去（⛔ 每次水格算完就重做 ⇒ 粗檔每 4 步、細檔每 2 步重建一次）。
  *    拓撲（哪幾格、每格切成哪幾片）跟上一格一樣 ⇒ 從畫面上現在的高度接著內插（水面慢慢升降）；不一樣（新的格進水、水退了）⇒ 直接換。
  *  代價：畫面的水比模擬晚最多一格；兩格之間船晃動，水面跟著船斜一下（網格在船的座標裡）。 */
-var FL_MESH_MS = 500;
+var FL_MESH_MS = 500, FL_FLAT = 1;
 function flMesh(sh, fl) {
   var F = fl.F, c = F.c, NX = F.NX, NY = F.NY, NXY = NX * NY, A = fl.A, cap = fl.cap, M = sh.M, Vc = Math.pow(c * S, 3), hc = c * S;
   var me = fl.mesh || (fl.mesh = { vao: gl.createVertexArray(), vb: gl.createBuffer(), buf: new Float32Array(6 * 5 * 512), old: new Float32Array(6 * 5 * 512), sig: [], n: 0, cap: 0, gen: -1, tw: -1e9 });
@@ -6054,24 +6054,46 @@ function flMesh(sh, fl) {
   var mix0 = me.n ? flMix(me) : 1, oldN = me.n, oldSig = me.sig, tmp = me.old; me.old = me.buf; me.buf = tmp.length >= me.old.length ? tmp : new Float32Array(me.old.length); me.sig = [];   // 舊的那一格留著（接著內插用）
   me.tw = now;
   var h0 = M[1] * (F.X0 + 0.5 * c) + M[5] * (F.Y0 + 0.5 * c) + M[13], q = 0, t, i, u;
-  // 先找每一根水柱最上面那一格水面的世界高度（同一根有兩層水 ⇒ 只記上面那層）；四個角取周圍水柱的平均 ⇒ 水面連成一片，⛔ 一格一個高度 ⇒ 像一階一階的方塊
-  var CH = me.ch && me.ch.length === NX * NY ? me.ch : (me.ch = new Float32Array(NX * NY)), CZ = me.cz && me.cz.length === NX * NY ? me.cz : (me.cz = new Int16Array(NX * NY));
-  CZ.fill(-1); var tops = me.tops || (me.tops = []); tops.length = 0;
+  // 每一格水面（上面那一格沒水的）的世界高度：水照層疊上去（flLevel）⇒ ⛔ 照「裝了幾成 × 格高」⇒ 只有底下一層空著的格（船殼彎進來、甲板梁）裝滿了水面畫在整格的頂，浮在半空
+  var TI = me.ti && me.ti.length === F.N ? me.ti : (me.ti = new Int32Array(F.N).fill(-1)), tops = me.tops || (me.tops = []), S3 = S * S * S, op = fl.op;
+  for (t = 0; t < tops.length; t += 2) TI[tops[t]] = -1; tops.length = 0;
   for (t = 0; t < fl.actN; t++) {
     i = fl.act[t]; if (!(cap[i] > 0.02) || A[i] < 0.02 * cap[i] * Vc) continue;
     u = i + NXY; if (u < F.N && cap[u] > 0.02 && A[u] >= 0.02 * cap[u] * Vc) continue;          // 上面那一格也有水 ⇒ 不是水面
-    var ix = i % NX, iy = ((i / NX) | 0) % NY, iz = (i / NXY) | 0, col = iy * NX + ix;
-    var hw = h0 + ix * M[1] * c + iy * M[5] * c + iz * M[9] * c + Math.min(1, A[i] / (cap[i] * Vc)) * hc;
-    tops.push(i, hw); if (iz > CZ[col]) { CZ[col] = iz; CH[col] = hw; }
+    var ix = i % NX, iy = ((i / NX) | 0) % NY, iz = (i / NXY) | 0, W = A[i] / S3, hl = 0;
+    for (var l = 0; l < c && W > 1e-6; l++) { var o = op[i * c + l]; if (o <= 0) continue; if (W >= o) { W -= o; hl = l + 1; } else { hl = l + W / o; W = 0; } }   // 空著 0 格的那一層（甲板）水過不去也不停在那裡 ⇒ 跳過
+    if (W > 1e-6) hl = c;
+    var hw = M[1] * (F.X0 + (ix + 0.5) * c) + M[5] * (F.Y0 + (iy + 0.5) * c) + M[9] * (iz * c + hl) + M[13];
+    TI[i] = tops.length; tops.push(i, hw);
   }
-  function corner(ix, iy, iz, hw) {                                         // 角 (ix, iy) 周圍四根水柱裡、跟這一格差不到半格的水面平均
-    var s = 0, n = 0;
-    for (var a = ix - 1; a <= ix; a++) for (var b = iy - 1; b <= iy; b++) {
-      if (a < 0 || b < 0 || a >= NX || b >= NY) continue; var k = b * NX + a;
-      if (CZ[k] >= 0 && Math.abs(CZ[k] - iz) <= 1 && Math.abs(CH[k] - hw) < 0.6 * hc) { s += CH[k]; n++; }
+  // 連成一池（Tim 2026-10-15：「角度有平滑 但是沒有接起來」）：左右前後相鄰（同一層或差一層）、水面差不到半格 ⇒ 同一池。
+  //   同一池裡每個角只算一次（那個角周圍四格裡、這一池的水面平均）⇒ 相鄰兩格用的是同一個角 ⇒ 一定接得起來。
+  //   ⛔ 以前每一格自己算四個角（周圍水柱裡、跟「這一格」差不到半格的平均）⇒ 同一個角兩邊各算各的、高度不一樣 ⇒ 每一片都斜得平順，片跟片之間裂開。
+  var TN = tops.length / 2, par = new Int32Array(TN);
+  for (t = 0; t < TN; t++) par[t] = t;
+  function root(a) { while (par[a] !== a) a = par[a] = par[par[a]]; return a; }
+  for (t = 0; t < TN; t++) {
+    i = tops[t * 2]; var jx0 = i % NX, jy0 = ((i / NX) | 0) % NY;
+    for (var nb = 0; nb < 2; nb++) {
+      if (nb ? jy0 >= NY - 1 : jx0 >= NX - 1) continue;
+      for (var dzn = -1; dzn <= 1; dzn++) {
+        var jn = i + (nb ? NX : 1) + dzn * NXY; if (jn < 0 || jn >= F.N) continue;
+        var tj = TI[jn]; if (tj < 0 || Math.abs(tops[tj + 1] - tops[t * 2 + 1]) >= 0.5 * hc) continue;
+        var ra = root(t), rb = root(tj / 2); if (ra !== rb) par[ra] = rb;
+      }
     }
-    return n ? s / n : hw;
   }
+  var CS = new Map(), NC = (NX + 1) * (NY + 1);                           // 角 (ix, iy) × 池 ⇒ [水面加總, 幾格]
+  for (t = 0; t < TN; t++) {
+    i = tops[t * 2]; var r0 = root(t), qx = i % NX, qy = ((i / NX) | 0) % NY;
+    for (var cc = 0; cc < 4; cc++) {
+      var key = r0 * NC + (qy + (cc >> 1)) * (NX + 1) + qx + (cc & 1), e = CS.get(key);
+      if (e) { e[0] += tops[t * 2 + 1]; e[1]++; } else CS.set(key, [tops[t * 2 + 1], 1]);
+    }
+  }
+  var PS = new Float64Array(TN), PN = new Int32Array(TN);                 // 每一池的水面平均
+  for (t = 0; t < TN; t++) { var rp = root(t); PS[rp] += tops[t * 2 + 1]; PN[rp]++; }
+  function corner(r, ix, iy) { var e = CS.get(r * NC + iy * (NX + 1) + ix); return FL_FLAT * PS[r] / PN[r] + (1 - FL_FLAT) * e[0] / e[1]; }
   // 每格切成 KS × KS 小片（約 2 格見方；Tim 2026-10-15：「進水顯示是否能嘗試跟鄰近的水表面合併成柔和曲面」）：高度照四個角（已跟鄰格平均）雙線性內插 ⇒ 相鄰的水面連成平順的一片；
   //   每一小片照中心那一點在不在兩舷船殼之間（flType 的 yM／yP，那個高度那一欄）⇒ 不在就不畫（Tim：「船殼外部也能進水」—— ⛔ 整格畫一塊 ⇒ 靠船殼那幾格的正方形伸出船外，最多 c − 1 格）。
   var KS = Math.max(1, Math.round(c / 2)), sc = c / KS, nxv = F.nxv, YP = F.yP, YM = F.yM, ZT = F.zTop, TRI6 = [0, 1, 2, 0, 2, 3];
@@ -6084,8 +6106,8 @@ function flMesh(sh, fl) {
   }
   for (t = 0; t < tops.length; t += 2) {
     i = tops[t]; var hw0 = tops[t + 1], jx = i % NX, jy = ((i / NX) | 0) % NY, jz = (i / NXY) | 0, f = Math.min(1, A[i] / (cap[i] * Vc));
-    var x0 = F.X0 + jx * c, y0 = F.Y0 + jy * c, zl = jz * c - 0.5 * c, zh = jz * c + 1.5 * c;
-    var H = [corner(jx, jy, jz, hw0), corner(jx + 1, jy, jz, hw0), corner(jx + 1, jy + 1, jz, hw0), corner(jx, jy + 1, jz, hw0)];
+    var x0 = F.X0 + jx * c, y0 = F.Y0 + jy * c, zl = jz * c - c, zh = jz * c + 2 * c, rt = root(t / 2);   // zl／zh：只防呆（同一池相鄰的差不到半格 ⇒ 角落在這一格上下一格以內；夾到了才會裂）
+    var H = [corner(rt, jx, jy), corner(rt, jx + 1, jy), corner(rt, jx + 1, jy + 1), corner(rt, jx, jy + 1)];
     if ((q + 6 * KS * KS) * 5 > me.buf.length) { var nb = new Float32Array(Math.max(me.buf.length * 2, (q + 6 * KS * KS) * 10)); nb.set(me.buf); me.buf = nb; }
     var inn = 0; for (var a = 0; a < KS; a++) for (var b = 0; b < KS; b++) if ((INS[a * KS + b] = flInside(x0 + (a + 0.5) * sc, y0 + (b + 0.5) * sc, bil(H, (a + 0.5) / KS, (b + 0.5) / KS)))) inn++;
     if (!inn) continue;
@@ -9062,6 +9084,9 @@ function panel(sh, title) {
 var INFO_SH = null, SB_EL = {}, SUNK_HIDE = 60;   // SUNK_HIDE：沉了幾秒（模擬時間）之後上方的圓鈕收掉（Tim 2026-10-14：補船之後那一欄才不會越排越長）
 // 點資訊或旁邊的砲位圖任何地方 ⇒ 收回。用 pointerdown：⛔ click 要按下、放開都落在同一個元素 —— 卡片每 6 格整個重畫（innerHTML），按下到放開之間剛好重畫 ⇒ click 不觸發（Tim：收起有時沒反應）
 ['info', 'gmap'].forEach(function (id) { $(id).addEventListener('pointerdown', function (e) { e.preventDefault(); if (e.target.closest && e.target.closest('[data-see]')) { camSee(INFO_SH); return; } INFO_SH = null; fleetHud(SHIPS[PLAYER_I]); }); });
+// 按羅盤 ＝ 按艦隊的我艦圓鈕（Tim 2026-10-15：「遊戲下方的羅盤是否可以改成可以按，效果跟按下我艦一樣顯示詳細資訊」）：開／收我艦的詳細資訊。
+//   pointerdown（同上：羅盤每 6 格重畫，click 可能落空）；只綁在羅盤的畫布 ⇒ 兩舷的砲（#gunsL／#gunsR，pointer-events:none）、鏡頭拖曳（遊戲畫布）都不受影響。
+$('navc').addEventListener('pointerdown', function (e) { e.preventDefault(); e.stopPropagation(); var me = SHIPS[PLAYER_I]; if (!me) return; INFO_SH = INFO_SH === me ? null : me; fleetHud(me); });
 /** 「🎥 看這艘」（詳細資訊的標題列；Tim 2026-10-14）：鏡頭換成看那一艘（看我艦那一種：跟著它、繞著它轉，拖曳、平移、縮放照舊）；資訊不收。按 C 換鏡頭 ⇒ 回到照常的循環。 */
 function camSee(o) { if (!o) return; CAM.mode = 3; CAM.follow = null; CAM.pan = [0, 0]; CAM.see = o.i === PLAYER_I ? null : o; CAM.dist = 75; CAM.trYaw = null; }
 function fleetReset() { INFO_SH = null; for (var k in SB_EL) SB_EL[k].el.remove(); SB_EL = {}; [].forEach.call(document.querySelectorAll('.sbres'), function (e) { e.remove(); }); }
@@ -9397,10 +9422,21 @@ function hud(dt) {
     (HUD_OUTARC ? '　<b style="color:#ff9a7a">⚠ 射界外</b>' : '') + '<br>' +
     '⛵ <b>' + (kn < -0.05 ? '−' + (-kn).toFixed(1) : Math.max(0, kn).toFixed(1)) + '</b> 節　' + sailSetName(me) + ' ' + Math.round(me.sailFrac * 100) + '%' +   // 帆 %（Tim 2026-10-15）：張著、還在的帆面積 × 血量（sailFrac，航速照它算）
     (RUNNING && PSLOW.on && PSLOW.ts < PSLOW_SHOW && !(SLOW.active && SLOW.ts < 0.98) ? '　<b style="color:#ffd27a">🐢 物理減速 ×' + PSLOW.ts.toFixed(2) + '</b>' : '');   // 物理減速的提示（Tim 2026-10-15：搬到航速這一行；73_slowmo.js）—— 殉爆的慢動作照舊在畫面中間   // 船體、進水改成羅盤外圈的兩圈（drawNav）；後面接帆裝（Tim 2026-10-15「羅盤上方航速資訊可以顯示當前帆狀態」：全收…滿帆，有額外動力的船多倒車、全速前進）
+  ms += floodLine(me);
   if (mt && mt.innerHTML !== ms) mt.innerHTML = ms;
   var t = DEBUG ? '格：' + SHIPS.map(function (s) { return s.grid.count; }).join('／') + '　四邊形：' + SHIPS.map(function (s) { return s.rs.quads(); }).join('／') + '　碎片 ' + D.n + '　粒子 ' + PT.n + '　脫落 ' + PIECES.length + (PHYS ? '　物理 ' + PHYS_MS.toFixed(2) + ' ms/步、垂繩 ' + SHIPS.map(function (s) { return s.loose.length; }).join('／') : '') + '　' + FPS.toFixed(0) + ' fps' : '';
   $('tip').textContent = t;
   drawNav(me);
+}
+/** 羅盤上方第三行：💧 艙內積水（噸）、🕳 破口（m²）—— Tim 2026-10-15：「羅盤上方資訊額外多一個積水、破口資訊」「假如沒有破口或積水則隱藏」。
+ *  數字跟詳細資訊那一行同一份（sh.fl.vol × RHO_W、sh.fl.area；粒子模式才有）；兩個都沒有 ⇒ 整行不出現（沒有空行）、只有一個 ⇒ 只寫那一個。
+ *  門檻：積水 < 1 噸、破口 < 0.05 m² 當作沒有（四捨五入會寫成 0）；沉了不寫（船卡已經寫沉沒）。 */
+function floodLine(sh) {
+  var f = sh && !sh.sunk && sh.fl; if (!f || (sh.broken && !f.vis)) return '';
+  var t = Math.round((f.vol || 0) * RHO_W), a = f.area || 0, p = [];
+  if (t >= 1) p.push('💧 <b>' + t.toLocaleString() + '</b> 噸積水');
+  if (a >= 0.05) p.push('🕳 <b>' + a.toFixed(1) + '</b> m² 破口');
+  return p.length ? '<br>' + p.join('　') : '';
 }
 // 結算畫面照模擬時間延後跳（暫停時不會跳出來；殉爆的慢動作中跟著變慢）（Tim：先看完精彩畫面 —— 殉爆的火球、斷成兩截）：
 //   輸的那艘已經沉了 ⇒ 再等 END_SINK 秒；已經開始沉（殉爆斷船、進水太多）⇒ 等它沉下去（sunk）再等 END_SINK 秒，最多等 END_MAX 秒（END_WAIT）；
