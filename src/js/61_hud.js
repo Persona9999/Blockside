@@ -411,7 +411,7 @@ function navText(sh) {
     '傾斜 ' + Math.abs(roll).toFixed(1) + '°' + (Math.abs(roll) < 0.2 ? '' : roll < 0 ? '（左低）' : '（右低）') + '　縱傾 ' + pitch.toFixed(1) + '°';
 }
 /** P 那顆按鈕：停格中寫「繼續」、平常寫「停格」（Tim 2026-10-14）。 */
-function pauseLabel() { var b = $('pauseK'), s = '<b>P</b> ' + (PAUSED ? '繼續' : '停格'); if (b && b.innerHTML !== s) b.innerHTML = s; }
+function pauseLabel() { var b = $('pauseK'), s = '<b>P</b> ' + (PAUSED ? '▶' : '⏸'); if (b && b.innerHTML !== s) b.innerHTML = s; }   // 圖示（Tim 2026-10-15）：停格中 ⇒ ▶ 繼續
 function hud(dt) {
   stepMsgs(dt);
   if (ROOMS_DBG) roomLabels();                                                   // 空艙房的名字（36_rooms.js；?rooms=1）：每一格跟著鏡頭
