@@ -44,6 +44,8 @@ function makeShip(i, team, yaw, pz, T, px) {                          // T：船
     }
     var bl = (m.points || {}).bail;
     if (foot < 0 && bl) foot = anchorNear(T, bl[0], bl[1], bl[2], 8);   // 提著的燈（夜燈號船首像的提燈，固定點 bail ＝ 提環頂、手握的地方）：「腳」是手（⛔ 往下找：底下是海 ⇒ 開局就掉、燈不亮）
+    var sfw = (m.points || {})['shaft-fwd'];
+    if (foot < 0 && hm.kind === 'propeller' && sfw) foot = anchorNear(T, sfw[0], sfw[1], sfw[2], 8);   // 螺旋槳（TASK-0628）：掛在軸接到船殼的那一格（shaft-fwd）旁 ⇒ 那一段被打斷就掉（⛔ 往下找：底下的 skeg 被打掉也掉、跟軸無關）
     var rg = (m.points || {}).ring;
     if (foot < 0 && hm.kind === 'anchor' && rg) foot = anchorNear(T, rg[0], rg[1], rg[2], 8);   // 錨（meta kind=anchor）：掛在吊錨木上 ⇒「腳」是錨環 ring 旁的那一格（⛔ 往下找：掛在舷外、底下是海 ⇒ 開局就掉；維吉尼亞號 2026-10-15）
     var hang = false;
@@ -202,6 +204,7 @@ function modelKind(m) {
   if (mt.kind === 'yard') return 'yard';                              // 帆桁（basecamp 階段三十三：15 根各一件模型，可以繞轉軸轉）
   if (mt.kind === 'wheel') return 'wheel';                            // 餘燼號的舵輪叫「舵輪」、有 meta（⛔ 只照名字 ⇒ 認不出來，船只剩舵柄滑車的 35% 轉向）
   if (mt.kind === 'rudder') return 'rudder';                          // 夜隼號的舵是模型（summit：方艉船掛在艉板外）；憲法號、餘燼號的舵是船殼的格子
+  if (mt.kind === 'propeller') return 'propeller';                    // 螺旋槳（TASK-0628／0630）：血量跟舵一樣（⛔ 一般模型 1 點 ⇒ 一發爆炸彈就把整艘的動力打掉）；照輸出轉（31_drive.js）
   return /carronade/.test(m.name) ? 'carr' : /chase/.test(m.name) ? 'chase' : /\/砲-[SP]\d+$/.test(m.name) ? 'long' : /wheel/.test(m.name) ? 'wheel' : 'model';
 }
 /** 模型照 x 分桶（每 16 格一桶，外框外擴 12 格登記）⇒ hitModel 只看砲彈所在那一桶（193 個模型 × 每顆砲彈每個小步全掃太貴）。

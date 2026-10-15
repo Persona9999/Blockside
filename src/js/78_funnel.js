@@ -2,6 +2,7 @@
 // 哪裡：雕刻作品裡煙囪的關聯（或外部模型）meta kind=funnel，固定點 smoke ＝ 排煙點（煙囪口的中心；造船規格 §9 kind 表）。
 //   沒有 smoke ⇒ 從那個部件外框頂面的中心冒（匯入檢查報 ⚠）。
 // 冒多少：額外動力在出力（全速前進、倒車：sh.power ≠ 0）⇒ 濃（每秒約 FN_ON 團）；停車（power 0）或沒有額外動力的船 ⇒ 淡（FN_IDLE）。
+//   主機全壞（31_drive.js driveSurvey：sh.drive.C.fnOff）⇒ 每根都不冒；通這根的鍋爐全壞 ⇒ 這根不冒；額外動力一成都出不來（cap 0）⇒ 淡。
 //   煙往上升、跟著風飄；煙囪口附近（排煙點水平 ±12 格、往下 6 格）的格子剩不到一半（煙囪被打斷）⇒ 不冒（每半秒數一次）；沉了、在沉 ⇒ 不冒。
 // ⛔ 只給人看：自己一組亂數（不抽 rnd()）⇒ 戰局跟沒有煙囪一樣。物理設定「煙與水花」照樣少生幾顆（spawnPt）。
 var FN_ON = 7, FN_IDLE = 1.5, RSFN0 = 0x2F6B1D4D, rsFn = SEED ^ RSFN0;
@@ -33,9 +34,11 @@ function funnelCount(G, p) {
 function funnelSmoke(dt) {
   SHIPS.forEach(function (sh) {
     var F = funnelsOf(sh.T); if (!F.length || sh.sunk || sh.sinkingFinal) return;
-    var on = (+sh.cfg.base || 0) > 0 && (sh.power || 0) !== 0, rate = (on ? FN_ON : FN_IDLE) * dt;
+    var D = sh.drive, off = D && D.C && D.C.fnOff;
+    var on = (+sh.cfg.base || 0) > 0 && (sh.power || 0) !== 0 && !(D && D.kind && D.cap <= 0), rate = (on ? FN_ON : FN_IDLE) * dt;
     var A = sh.fnAcc || (sh.fnAcc = F.map(function () { return 0; }));
     F.forEach(function (f, j) {
+      if (off && off[j]) return;
       if (!funnelUp(sh, f, j)) return;
       A[j] += rate;
       while (A[j] >= 1) {

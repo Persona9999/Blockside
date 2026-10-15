@@ -36,10 +36,20 @@ function shipCheck(id) {
       if (!mt.kind && m.kind === 'wheel') add('warn', '舵輪', m.path, '沒有 meta ⇒ 照名字認', 'meta kind=wheel');
       if (m.kind === 'rudder' && !m.pts['stock-top']) add(isFinite(+mt.hinge_x) ? 'warn' : 'error', '舵', m.path, isFinite(+mt.hinge_x) ? '沒有固定點 stock-top ⇒ 沿鉸鏈軸找船尾（退路）' : '沒有 stock-top、也沒有 hinge meta ⇒ 往下找、開局就掉', '舵子作品登記固定點 stock-top（舵頭；造船規格 §9）');
       if (m.kind === 'yard' && !m.piv) add('error', '帆桁', m.path, '沒有固定點 pivot ⇒ 找不到掛在哪根桅', '帆桁子作品登記 pivot（造船規格 §5）');
+      if (m.kind === 'propeller' && !m.pts.hub) add('warn', '螺旋槳', m.path, '沒有固定點 hub ⇒ 推力作用點、轉軸都用外框中心', '螺旋槳子作品登記 hub（轉軸中心；造船規格 §9 propeller）');
+      if (m.kind === 'propeller' && !(Math.abs(+mt.axis_x || 0) + Math.abs(+mt.axis_y || 0) + Math.abs(+mt.axis_z || 0) > 0)) add('warn', '螺旋槳', m.path, '沒有 meta axis_x／y／z ⇒ 照 +x（船頭方向）轉', 'meta axis_x=1, axis_y=0, axis_z=0（造船規格 §9 propeller）');
+      if (m.kind === 'propeller' && !m.pts['shaft-fwd']) add('warn', '螺旋槳', m.path, '沒有固定點 shaft-fwd ⇒ 掛在正下方的船殼上（底下被打掉才掉、軸斷了不掉）', '登記 shaft-fwd（軸往前接到船殼那一格）');
+      if (m.kind === 'propeller' && !(sh.cfg.base > 0)) add('warn', '螺旋槳', m.path, '設定檔沒有額外動力（cfg.base）⇒ 螺旋槳不會轉、船不靠它走', 'ships[].cfg.base 填史料航速（節）');
       var sn = m.name.replace(/^.*yard-/, ''), hasSail = sh.sails.some(function (s) { return s.name === sn; });   // 沒掛帆的帆桁（crossjack、spritsail 常見）不用寫 sail
       if (m.kind === 'yard' && ((!mt.sail && hasSail) || (!mt.mast && !/bowsprit|艏斜桅/.test(m.path)))) add('warn', '帆桁', m.path, '帆桁 meta 少了 ' + [!mt.sail && hasSail && 'sail（有一面帆叫 ' + sn + '）', !mt.mast && 'mast'].filter(Boolean).join('、') + ' ⇒ 照名字配帆／桅', '帆桁 meta sail=<帆名>、mast=<桅>（造船規格 §9.1）');
       if (!m.alive && !GUNS[m.kind] && m.kind !== 'powder') add('error', '開場就掉', m.path, (mt.kind || m.kind) + ' 開場 ' + SC_SECS + ' 秒內就判成沒東西撐、掉了（腳 z ' + (m.foot >> 21) + '）', '把它接到實心上；掛著的（燈、舵）登記掛點固定點（bail、stock-top）');
     });
+    // ── 動力（TASK-0630；造船規格 §9.6）：主機 → 軸 → 螺旋槳、鍋爐 ──
+    var DV = sh.drive, DC = DV && DV.C, DP = DV ? DV.P.filter(function (q) { return q.kind !== 'sail'; }) : [];
+    if (DV && DV.kind) R.info.drive = (DV.kind === 'magic' ? '魔法（作用點 ＝ 船）' : DP.map(function (q) { return (q.m ? '螺旋槳 ' + q.m.name : q.out) + ' ' + Math.round(q.w * 100) + '%'; }).join('、')) +
+      (DC ? '；主機 ' + DC.E.length + '、軸 ' + DC.SH.length + '、鍋爐 ' + DC.B.reduce(function (a, c) { return a + c.b.seats.length; }, 0) + ' 座' : '');
+    if (DC) DP.forEach(function (q) { if (DC.E.length && !(q.w > 0)) add('warn', '動力', q.m ? q.m.path : q.out, '沒有主機推這個輸出物件 ⇒ 不出力', '主機 meta propeller=<螺旋槳模型名>，或讓軸的 aft 靠近 hub（24 格內）、fwd 靠近主機 core'); });
+    if (DC) DC.B.forEach(function (c) { if (c.b.funnel && !funnelsOf(T).some(function (f) { return f.name === c.b.funnel; })) add('warn', '鍋爐', c.b.name, 'meta funnel=' + c.b.funnel + ' 找不到這條煙囪 ⇒ 鍋爐壞了也不會停煙', 'funnel 寫煙囪關聯的路徑（一字不差）'); });
     // ── 錨（TASK-0601）：模型錨（meta kind=anchor）＋錨環 ring、船殼的錨鏈孔 hawse-P／S（造船規格 §9 anchor）──
     var AN = anchorsOf(sh);
     R.info.anchors = ['P', 'S'].map(function (k) { var a = AN[k]; return (k === 'P' ? '左' : '右') + (a.m ? '模型' + (a.m.pts.ring ? '＋ring' : '') : a.part ? '格子' : '無') + (a.hw ? '＋hawse' : ''); }).join('、');
