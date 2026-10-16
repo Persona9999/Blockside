@@ -152,7 +152,7 @@ def act_authors():
 
 MENU = {'play': ('fun', 'real'), 'mode': ('pve', 'eve', 'sandbox'), 'sail': ('auto', 'manual', 'off'),
         'gfx': ('low', 'mid', 'high'), 'phx': ('full', 'high', 'mid', 'low')}
-SHIP_CFG_KEYS = ('hard', 'flood', 'gunw', 'speed', 'agile', 'upwind', 'base')          # 每艘船的船隻設定（壓艙物照船算，不在這裡）
+SHIP_CFG_KEYS = ('hard', 'flood', 'gunw', 'speed', 'agile', 'upwind', 'base', 'pump')          # 每艘船的船隻設定（壓艙物照船算，不在這裡）
 MAT_ID = r'[a-z][a-z0-9_]{0,31}'                                                      # 材質 ID（TASK-0616）：雕刻作品關聯的 meta material 照它認
 MAT_KINDS = ('wood', 'metal', 'other')                                               # 材質的分類（後台分組、之後燃燒照它）
 MAT_NUMS = (('density', 0.05, 25, '比重（一格 0.1 m ＝ 1 公升 ⇒ 每格幾 kg；橡木 0.7）'), ('hard', 0.05, 50, '硬度倍率（乘在船隻設定的船殼硬度上；橡木 1）'),

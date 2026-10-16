@@ -7,7 +7,7 @@
 //   · 流進來的水是粒子（每顆帶 vj m³）：從洞往艙內噴（初速 √(2g × 水頭差)），照重力在船的座標裡落下，碰到船體或水面就併進水格。粒子滿了 ⇒ 直接併進洞旁那一格。
 //   · 水格（每格 c 格見方，存水量 m³）：往下流（照那一格最密的那一層開著幾成：甲板擋、艙口與破洞讓水下去）；滿了往上擠；
 //     往旁邊流照水面的世界高度（船的矩陣，含傾斜與浪的搖晃）⇒ 船一傾斜，水往低的那一舷跑，再把船壓得更斜（自由液面）。
-//   · 抽水機：每秒從最低的那一層水抽掉 FL_PUMP ×（滑桿／預設）m³（約每分鐘 18 噸：四台鏈式抽水機全力抽）。
+//   · 抽水機：每秒從最低的那一層水抽掉 FL_PUMP × pumpK ×（滑桿／預設）m³（FL_PUMP 約每分鐘 18 噸：四台鏈式抽水機全力抽；pumpK ＝ 那一型的基礎抽水量 cfg.pump／18，TASK-0604）。
 //     ⛔ 照公式那邊的抽水換算（0.004 m/s × 水線面積 ≈ 每秒 0.84 m³）⇒ 比水線附近那幾個洞進得還快，戰鬥 420 秒艙裡一滴水都留不住（量過）。
 //   · 船：艙內的水 ＝ 加上去的重量 ⇒ 照浮力表（32_hull.js liftFor）算多吃水多少，sh.sink 照它慢慢跟過去（FL_TAU 秒）；
 //     水的重心偏哪一舷 ⇒ 往那邊傾斜（穩心高 FL_GM，見下）、偏船頭船尾 ⇒ 縱傾（FL_GML）；上限跟公式一樣（開始沉之前 0.21 rad、縱傾 0.07）。
@@ -146,6 +146,8 @@ function floodVis(sh, fl, dt) {
   fl.rsV = rsF; rsF = r; fl.vis = true;
 }
 var FL_VISMS = 0, FL_VISN = 0;
+/** 抽水的倍率（TASK-0604）：那一型的基礎抽水量（噸／分，cfg.pump）÷ PUMP_REF。⛔ 沒有 pump（舊存檔、外部傳進來的 cfg）⇒ 1（照以前）。 */
+function pumpK(sh) { var p = sh.cfg.pump; return p === undefined || !isFinite(p) ? 1 : p / PUMP_REF; }
 /** 每一步（32_hull.js stepShip，粒子模式）：粒子飛、每 ev 步算一次水格（破口進出水、往下往旁邊流、抽水、讀數）。 */
 function floodStep(sh, fl, dt) {
   if (!(dt > 0)) return;
@@ -225,7 +227,7 @@ function flTick(sh, fl, dtc) {
   }
   // 3. 抽水：從最低的那幾層抽（⛔ act 要重拿：上面 flAct 可能換過一條更長的陣列）
   act = fl.act;
-  var need = FL_PUMP * fk * dtc, lowz = 1e9;
+  var need = FL_PUMP * pumpK(sh) * fk * dtc, lowz = 1e9;
   for (t = 0; t < fl.actN; t++) if (A[act[t]] > 1e-7) lowz = Math.min(lowz, (act[t] / NXY) | 0);
   for (var zz = lowz; zz < lowz + 3 && need > 0 && lowz < 1e9; zz++) for (t = 0; t < fl.actN && need > 0; t++) {
     i = act[t]; if (((i / NXY) | 0) !== zz || A[i] <= 0) continue; m = Math.min(A[i], need); A[i] -= m; need -= m; fl.pumped += m;

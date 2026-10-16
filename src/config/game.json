@@ -12,6 +12,7 @@
     "agile": [0.25, 5, 2],
     "upwind": [0.5, 5, 1],
     "base": [0, 20, 0],
+    "pump": [0, 120, 18],
     "gunhp": [20, 500, 200],
     "sailhp": [20, 500, 150],
     "crewhp": [20, 300, 100],
@@ -170,6 +171,7 @@
   "ships": [
     {
       "id": "constitution",
+      "cfg": {"pump": 18},
       "el": "ship",
       "name": "憲法號",
       "names": ["憲法號", "合眾國號", "總統號", "爪哇號", "哥倫比亞號", "波多馬克號"],
@@ -204,7 +206,7 @@
       "vxk": "ember.vxk",
       "work": "basecamp-ember-01m-assembly",
       "zw0": 71,
-      "cfg": {"speed": 0.85, "agile": 0.7},
+      "cfg": {"pump": 23, "speed": 0.85, "agile": 0.7},
       "rooms": {
         "甲板-orlop/艙房/2": "medical",
         "甲板-orlop/艙房/3": "medical",
@@ -236,7 +238,7 @@
       "vxk": "falcon.vxk",
       "work": "summit-night-falcon-01m-assembly",
       "geo": {"spar": [28, 47], "marines": [100, 60], "center": 50, "aim": 30, "aimZ": [5, 270], "deckAim": [25, 40], "rigAim": [60, 240]},
-      "cfg": {"speed": 3, "agile": 5, "upwind": 3, "flood": 0.25},
+      "cfg": {"pump": 2, "speed": 3, "agile": 5, "upwind": 3, "flood": 0.25},
       "crew": {"handsK": 0.25},
       "rooms": {"甲板-主/艙房/1": "medical", "甲板-主/艙房/2": "medical"},
       "author": "summit"
@@ -249,7 +251,7 @@
       "work": "summit-stormkaap-01m-assembly",
       "geo": {"spar": [84, 118], "marines": [90, 110], "center": 110, "aim": 80, "aimZ": [30, 380], "deckAim": [66, 96], "rigAim": [150, 380]},
       "rooms": {"甲板-上/艙房/1": "medical", "甲板-上/艙房/2": "medical", "甲板-上/艙房/3": "medical"},
-      "cfg": {"base": 6},
+      "cfg": {"pump": 13, "base": 6},
       "drive": "magic",
       "lamps": [
         {"at": [98.5, 130.5, 168], "r": 6, "color": 158, "rgb": [0.35, 1, 0.55]},
@@ -265,7 +267,7 @@
       "vxk": "nightlamp.vxk",
       "work": "basecamp-nightlamp-01m-assembly",
       "geo": {"spar": [130, 146], "marines": [60, 330], "center": 160, "aim": 100, "aimZ": [35, 430], "deckAim": [103, 130], "rigAim": [170, 480]},
-      "cfg": {"speed": 3, "agile": 3, "upwind": 2},
+      "cfg": {"pump": 23, "speed": 3, "agile": 3, "upwind": 2},
       "author": "basecamp"
     },
     {
@@ -274,12 +276,13 @@
       "name": "三叉戟號",
       "vxk": "tridente.vxk",
       "work": "gura-tridente-01m-assembly",
-      "cfg": {"speed": 1, "agile": 1, "upwind": 0.8},
+      "cfg": {"pump": 31.5, "speed": 1, "agile": 1, "upwind": 0.8},
       "geo": {"marines": [50, 260], "center": 195, "aim": 110, "aimZ": [45, 560], "deckAim": [92, 160], "rigAim": [200, 650]},
       "author": "gura"
     },
     {
       "id": "phoenix",
+      "cfg": {"pump": 8},
       "el": "ship-phoenix",
       "name": "炎羽號",
       "vxk": "phoenix.vxk",
@@ -293,7 +296,7 @@
       "name": "維吉尼亞號",
       "vxk": "virginia.vxk",
       "work": "ame-virginia-01m-assembly",
-      "cfg": {"base": 5.5, "agile": 0.4},
+      "cfg": {"pump": 32, "base": 5.5, "agile": 0.4},
       "geo": {"spar": [100, 102], "marines": [250, 200], "center": 85, "aim": 75, "aimZ": [40, 150], "deckAim": [74, 90], "rigAim": [100, 145]},
       "crew": {
         "marines": 6,
@@ -308,6 +311,7 @@
     },
     {
       "id": "cosecha",
+      "cfg": {"pump": 11.5},
       "el": "ship-cosecha",
       "name": "收穫號",
       "vxk": "cosecha.vxk",
@@ -323,7 +327,7 @@
       "name": "拿破崙號",
       "vxk": "napoleon.vxk",
       "work": "kotoko-napoleon-01m-assembly",
-      "cfg": {"base": 12, "agile": 1.2},
+      "cfg": {"pump": 32, "base": 12, "agile": 1.2},
       "geo": {"spar": [137, 145], "marines": [80, 240], "center": 185, "aim": 120, "aimZ": [56, 364], "deckAim": [100, 150], "rigAim": [190, 340]},
       "names": ["拿破崙號"],
       "author": "kotoko"
@@ -334,7 +338,7 @@
       "name": "莫尼特號",
       "vxk": "monitor.vxk",
       "work": "meadow-monitor-01m-assembly",
-      "cfg": {"base": 6, "agile": 0.6},
+      "cfg": {"pump": 11, "base": 6, "agile": 0.6},
       "drive": "steam",
       "geo": {"spar": [35, 38], "marines": [60, 60], "center": 40, "aim": 33, "aimZ": [5, 70], "deckAim": [35, 45], "rigAim": [35, 64]},
       "crew": {"officers": 4, "helm": 1, "marines": 0, "top": 0, "monkeys": 1, "shelter": 1},
@@ -343,6 +347,7 @@
     },
     {
       "id": "tidegrave",
+      "cfg": {"pump": 15.5},
       "el": "ship-tidegrave",
       "name": "潮墓號",
       "vxk": "tidegrave.vxk",
