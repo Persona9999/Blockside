@@ -340,6 +340,13 @@ def validate(cfg, prev=None):
     geo(cfg.get('geo0'), 'geo0', True)
     crew(cfg.get('crew0'), 'crew0', True)
     FU, RT = cfg.get('furniture') or {}, cfg.get('rooms') or {}
+    for fid, f in FU.items():                            # 道具的數字（js/67_furncfg.js 調得到的那幾格；遊戲照它擺、算抽水、治療）
+        for k, lo, hi in (('tpm', 0, 120), ('crew', 1, 12), ('cap', 0, 300), ('hold', 1, 4), ('hp', 10, 1000)):
+            if isinstance(f, dict) and k in f and not (isnum(f[k]) and lo <= f[k] <= hi):
+                err('furniture.%s.%s' % (fid, k), '%s～%s 的數字' % (lo, hi))
+        hb = (f.get('buff') or {}).get('heal') if isinstance(f, dict) else None
+        if hb is not None and not (isnum(hb) and 0 <= hb <= 1):
+            err('furniture.%s.buff.heal' % fid, '0～1（治療速度加成）')
 
     def rooms(rm, p):
         # 甲板與艙房的預設（TASK-0568；遊戲 36_rooms.js）：{ 房名: '類型'（艙房自動擺滿）｜{ type, items: [{ it, x, y, r }] }（自訂；甲板 type=deck）}
@@ -1314,6 +1321,42 @@ def act_defaults(lim):
     return ['✓ 出廠預設改了 %d 項（config/game.json lim；重建之後遊戲才吃得到）：' % len(log)] + log
 
 
+FURN_KEYS = ('tpm', 'crew', 'cap', 'hold', 'hp', 'buff.heal')            # 道具設定頁（js/67_furncfg.js FURN_ITEMS）調得到的那幾格
+
+
+def act_furniture(furn):
+    """道具的出廠預設值（Tim 2026-10-16：「一樣是開發後台調預設 玩家後台套同一個UI」）：遊戲的道具設定頁（/game?admin=furn）送來 { 道具: { 鍵: 值 } }
+    ⇒ 改 furniture[道具][鍵]（buff.heal ＝ furniture[道具].buff.heal）；只認 FURN_KEYS、而且那一種本來就有那一格；照樣過 validate 才存。"""
+    if not isinstance(furn, dict) or not furn:
+        raise Fail('沒有要改的道具')
+    prev = load()
+    new = json.loads(json.dumps(prev))
+    FU, log, bad = new.get('furniture') or {}, [], []
+    for fid, kv in furn.items():
+        if fid not in FU or not isinstance(kv, dict):
+            bad.append(str(fid))
+            continue
+        for k, v in kv.items():
+            path = k.split('.')
+            box = FU[fid].get(path[0]) if len(path) > 1 else FU[fid]
+            leaf = path[-1]
+            if k not in FURN_KEYS or not isinstance(box, dict) or leaf not in box or not isnum(v) or v < 0:
+                bad.append('%s.%s' % (fid, k))
+                continue
+            if box[leaf] != v:
+                log.append('  %s（%s）%s：%s → %s' % (fid, FU[fid].get('name', ''), k, box[leaf], v))
+                box[leaf] = v
+    if bad:
+        raise Fail('這幾項不是道具設定調得到的格，整批沒有存：' + '、'.join(bad))
+    if not log:
+        return ['（道具的預設都一樣，沒有存）']
+    E = validate(new, prev)
+    if E:
+        raise Fail('設定不合法，沒有存：\n' + '\n'.join('  ✗ ' + e for e in E))
+    save(new)
+    return ['✓ 道具的出廠預設改了 %d 項（config/game.json furniture；重建之後遊戲才吃得到）：' % len(log)] + log
+
+
 def act_save(new):
     prev = load()
     E = validate(new, prev)
@@ -1394,6 +1437,8 @@ def serve(port, do_open=False):
                     log = act_save(b.get('config'))
                 elif self.path == '/api/defaults':
                     log = act_defaults(b.get('lim'))
+                elif self.path == '/api/furniture':
+                    log = act_furniture(b.get('furn'))
                 elif self.path == '/api/build':
                     log = act_build()
                 elif self.path == '/api/import':

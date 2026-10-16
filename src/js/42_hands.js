@@ -345,8 +345,8 @@ function callHands(sh) {
     var hh = function (c) { return c.helmHome || c.home; }, lvh = lvAt(sh, hh(hd[0]));
     if (NV.reach.indexOf(lvh) >= 0) for (var j = 0; j < hn; j++) need.push({ kind: 'helm', key: '', lv: lvh, n: 1, x: hh(hd[j])[0], spot: hh(hd[j]), pri: 1, who: hd[j] });
   }
-  medNeeds(sh, need);                                                  // 醫療艙的人手、等著被搬的傷員（44_medic.js）
-  pumpNeeds(sh, need);                                                 // 人力抽水機：艙裡有水才要人（45_pumps.js）
+  if (pumpUrgent(sh)) { pumpNeeds(sh, need); medNeeds(sh, need); }     // 積水多（45_pumps.js pumpUrgent）⇒ 抽水機排在醫療艙前面（同 pri 1、sort 不換相對順序）
+  else { medNeeds(sh, need); pumpNeeds(sh, need); }                    // 醫療艙的人手、等著被搬的傷員（44_medic.js）；人力抽水機：艙裡有水才要人（45_pumps.js）
   need.sort(function (a, b) { return a.pri - b.pri; });
   need.forEach(function (q) {
     for (var k = 0; k < q.n && idle.length; k++) {
