@@ -4,9 +4,16 @@
 // 玩家是一個另外的角色 FP.c ＝ { pos }（Tim 2026-10-16「希望改成變成一個另外的玩家角色 抓船員只是用來對齊座標」）：
 //   ⛔ 不在 sh.crew 裡 ⇒ 不會被打、不會被模擬拉走、survey 不判他掉下去；開的時候抓一個船員（船長 ＞ 軍官 ＞ 任何站著的人）只用來對齊起點。
 //   位置是船的格座標（pos：腳底那一格），跟著船搖。腳下的甲板被打掉 ⇒ 照重力落到下一層；下面都沒有（掉出船外）⇒ 退出。
-//   關閉碰撞（FP.noclip，設定裡的「穿牆」）：牆不擋，腳底照樣貼著甲板（上下 FP_UP／FP_DOWN 格內有地板就站上去、沒有就停在同一個高度），不墜落。
+//   碰撞三段（FP.mode，設定裡的「碰撞」；Tim 2026-10-16「可以開另一個模式(正常 穿牆 浮空) 浮空模式可以自由上下移動(額外操作按鍵)」）：
+//     0 正常：見下面「走」。
+//     1 穿牆：牆不擋 —— 身體在牆裡（腳底那一格往上 FP_HEAD 格有實心）⇒ 腳的高度不變、直接穿過去（⛔ 照 fpStand 找最近的地板 ⇒ 穿舷牆時站上欄杆頂，量過）；
+//            不在牆裡 ⇒ 上下台階（往上只跨 FP_NC_UP 0.3 m ⇒ 腳貼著這一層：欄杆、樓梯都照高度不變穿過去；換層用 E 爬梯子或浮空）。
+//            前面沒有地板也不在牆裡（船外、艙口）、或四個方向看出去碰不到船身（fpInside）⇒ 擋住（⛔ 停在同一個高度 ⇒ 走出舷牆懸在海上，量過）。不墜落。
+//     2 浮空：沒有重力、什麼都不擋；空白鍵／C（面板的 ⬆ ⬇）上下。切回正常／穿牆 ⇒ 從那裡照重力落到下面的地板；下面沒有（在船外）⇒ 回到開始浮空的地方。
 //   走：每一步照現在的格子（sh.grid，打掉的地板就站不住）用 standZ 找腳下 ⇒ 往上 FP_UP、往下 FP_DOWN 格內站得住、頭上 FP_HEAD 格空才走得過去；
-//   中心那一柱要站得住（⇒ 不從艙口掉下去）、身體半徑 FP_R 格的四個角只擋牆 ⇒ 不穿牆、走不出舷牆。⚠ 不擋模型（砲、桶）：模型不是格子。
+//   中心那一柱要站得住（⇒ 走路不會從艙口掉下去）、身體半徑 FP_R 格的四個角只擋牆 ⇒ 不穿牆、走不出舷牆。
+//   跳起來在半空（Tim 2026-10-16「有些空洞跳不下去」）⇒ 往下不限 FP_DOWN：下面一路找得到地板就過得去、照重力落下去；牆照腳現在的高度擋。
+//   ⚠ 不擋模型（砲、桶）：模型不是格子（Tim 2026-10-16「這個沒關係 不用碰撞」）。
 //   平滑（Tim 2026-10-16「需要更平滑的移動 以及可以跨越一定高低差(且不要抖動)」）：速度有加減速（FP_ACC／FP_DEC 秒）；
 //   腳底 c.pos[2] 照舊是整格（survey 判腳下要用），鏡頭的眼高 FP.ez 另外平滑地追（FP_EZ 秒）⇒ 跨台階、頭頂變低不會一格一格跳。
 //   梯子：照雕刻的固定點（42_hands.js shipLadders：foot／lo／hi／head），走到梯腳或梯頭旁邊 ⇒ E（或面板的 🪜）沿那條線爬。
@@ -14,7 +21,8 @@
 // 只在畫面這一層跑（frame，90_main.js）：⛔ 不抽 rnd()、不碰模擬的狀態 ⇒ 開不開第一人稱，戰局都逐位元組相同。
 //   停格、設定打開（PAUSED）時只能轉頭、不能走。
 // 自動退出：我艦沉了、換了一艘我艦（playerHandoff）、重新開始、回主選單、腳下一路都沒有地板。
-var FP = { on: false, noclip: false, sh: null, c: null, yaw: 0, pitch: 0, mv: { f: 0, b: 0, l: 0, r: 0, tl: 0, tr: 0, lu: 0, ld: 0 }, run: false, climb: null, near: null, lads: null, v: [0, 0], ez: null, jz: 0, jv: 0, joy: [0, 0], fol: null, folP: null, lookT: 0 };
+var FP = { on: false, mode: 0, sh: null, c: null, yaw: 0, pitch: 0, mv: { f: 0, b: 0, l: 0, r: 0, tl: 0, tr: 0, lu: 0, ld: 0, up: 0, dn: 0 }, run: false, climb: null, near: null, lads: null, v: [0, 0], vz: 0, ez: null, fz: 0, eo: 0, jz: 0, jv: 0, joy: [0, 0], fol: null, folP: null, lookT: 0, flyFrom: null };
+var FP_MODE = ['正常', '穿牆', '浮空'], FP_FLY_OUT = 200, FP_NC_EXIT = 2, FP_NC_UP = 3;   // 浮空時離船身最多 20 m；穿牆時從牆裡出來，前面的地板跟腳最多差 0.2 m；穿牆時跨得上 0.3 m（樓梯一階；⛔ 照正常的 0.6 m ⇒ 憲法號舷牆邊 0.2 m 木條＋0.4 m 欄杆蓋板一路踩上欄杆頂，量過）
 // 跟隨船員（Tim 2026-10-16「加一個 跟隨船員(把第一人稱鏡頭綁到附近船員上)」）：FP.fol ＝ 被跟的人 —— 鏡頭在他的眼睛、他照常做自己的工作（⛔ 不設 c.fp）、
 //   玩家只能轉頭；自己的角色停在原地。F 跟隨／回來、G 換下一個（照離自己由近到遠輪）；被跟的人落水、倒下 ⇒ 回到自己。
 // FP_R：身體半徑（格）—— Tim 2026-10-16「只要判定不會穿牆就好 身體碰撞窄一點(目前會下不了憲法號樓梯)」⇒ 1.5 → 0.6（6 cm：只擋牆，踏板之間擠得進去）
@@ -39,20 +47,51 @@ function fpSet(on) {
     if (!c) { if (sh) note(sh, '第一人稱：船上沒有站著的人'); fpUI(); return false; }
     if (c.art !== ART_CAPTAIN) note(sh, '第一人稱：船長不在 ⇒ 從' + (c.role === ROLE.OFFICER ? '軍官' : ROLE_NAME[c.role] || '船員') + '的位置開始');
     var d = CAM.look && CAM.eye ? M4.dir(sh.inv, CAM.look[0] - CAM.eye[0], CAM.look[1] - CAM.eye[1], CAM.look[2] - CAM.eye[2]) : [1, 0, 0];
-    FP.on = true; FP.sh = sh; FP.c = { pos: c.pos.slice() };            // 玩家自己的角色：只借那個船員的座標（⛔ 不操控他） FP.yaw = Math.atan2(d[1], d[0]) || 0; FP.pitch = 0; FP.climb = null; FP.lads = fpLadders(sh); FP.v = [0, 0]; FP.ez = null; FP.jz = FP.jv = 0;
-    note(sh, '第一人稱：左下搖桿或 WASD 走、Shift 跑、空白鍵跳、拖曳或方向鍵轉頭、E 爬梯子 —— 設定裡再按一次回到原本的鏡頭');
+    FP.on = true; FP.sh = sh; FP.c = { pos: c.pos.slice() };            // 玩家自己的角色：只借那個船員的座標（⛔ 不操控他）
+    FP.yaw = Math.atan2(d[1], d[0]) || 0; FP.pitch = 0; FP.climb = null; FP.lads = fpLadders(sh); FP.v = [0, 0]; FP.ez = null; FP.jz = FP.jv = 0;
+    FP.vz = 0; FP.flyFrom = FP.mode === 2 ? FP.c.pos.slice() : null;
+    note(sh, '第一人稱：左下搖桿或 WASD 走、Shift 跑、空白鍵跳、拖曳或方向鍵轉頭、E 爬梯子 —— 設定裡再按一次回到原本的鏡頭' + (FP.mode === 2 ? '（浮空：空白鍵上、C 下）' : ''));
   } else if (FP.on) {
     FP.on = false; FP.sh = FP.c = FP.climb = FP.near = FP.fol = null; CAM.snap = true;
   }
   fpStop(); fpUI(); return FP.on;
 }
-function fpStop() { var m = FP.mv; Object.keys(m).forEach(function (k) { m[k] = 0; }); FP.run = false; FP.joy = [0, 0]; FP.jz = FP.jv = 0; FP.v = [0, 0]; joyDraw(0, 0); }
+function fpStop() { var m = FP.mv; Object.keys(m).forEach(function (k) { m[k] = 0; }); FP.run = false; FP.joy = [0, 0]; FP.jz = FP.jv = 0; FP.v = [0, 0]; FP.vz = 0; joyDraw(0, 0); }
+/** 碰撞三段（設定裡的「碰撞」）：0 正常、1 穿牆、2 浮空。開著第一人稱時切：進浮空 ⇒ 記下從哪裡開始；離開浮空 ⇒ fpLand 落到下面的地板。 */
+function fpMode(m) {
+  if (m === FP.mode) return;
+  var was = FP.mode; FP.mode = m;
+  if (FP.on && FP.c) {
+    if (m === 2) { FP.c.pos[2] += FP.jz; FP.jz = FP.jv = 0; FP.vz = 0; FP.climb = null; FP.flyFrom = FP.c.pos.slice(); }
+    else if (was === 2) fpLand();
+    else if (m === 0) { FP.flyFrom = null; fpLand(); }                   // 穿牆 → 正常：人可能卡在牆裡、腳下沒地板 ⇒ 一樣往下找、找不到回船員旁邊（⛔ 不管 ⇒ 下一格 fpGround 直接退出，量過）
+  }
+  fpUI();
+}
+/** 浮空結束：從現在的位置往下找站得住的地板 ⇒ 照重力落下去（腳底換成那一層、FP.jz ＝ 離地多高）；
+ *  下面一路都沒有（在船外、海上）⇒ 回到開始浮空的地方（那裡也站不住 ⇒ 找它附近 12 格內最近的地板）。 */
+function fpLand() {
+  var c = FP.c, g = FP.sh.grid, x = Math.floor(c.pos[0]), y = Math.floor(c.pos[1]), z = Math.floor(c.pos[2]);
+  FP.vz = 0; FP.jv = 0;
+  for (var dz = 0; dz <= 160; dz++) {
+    var s = standZ(g, x, y, z - dz, z - dz, FP_HEAD);
+    if (s >= 0) { FP.jz = c.pos[2] - s; c.pos[2] = s; return; }
+  }
+  var cr = fpPick(FP.sh), L = [[FP.flyFrom, '開始浮空的地方'], [cr && cr.pos, '船員旁邊']];   // ⛔ 只回開始浮空的地方 ⇒ 從穿牆卡在牆裡的位置起飛時那裡站不住，直接退出（量過）
+  for (var q = 0; q < L.length; q++) {
+    var p = L[q][0], sz = -1; if (!p) continue;
+    for (var k = 0; k <= 12 && sz < 0; k++) sz = standZ(g, Math.floor(p[0]), Math.floor(p[1]), Math.floor(p[2]) - k, Math.floor(p[2]) + k, FP_HEAD);
+    if (sz >= 0) { c.pos = [p[0], p[1], sz]; FP.jz = 0; FP.ez = null; note(FP.sh, '第一人稱：下面沒有甲板 ⇒ 回到' + L[q][1]); return; }
+  }
+  var sh = FP.sh; fpSet(false); note(sh, '第一人稱結束：下面沒有甲板');
+}
 function fpUI() {
   $('stage').classList.toggle('fp', FP.on);
   $('fpT').classList.toggle('on', FP.on);
-  $('fpNoclipT').classList.toggle('on', FP.noclip);
+  [].forEach.call(document.querySelectorAll('#gset [data-fpm]'), function (b) { b.classList.toggle('on', +b.dataset.fpm === FP.mode); });
   $('fpUI').classList.toggle('fol', !!FP.fol);                         // 跟隨中：藏搖桿、跳、跑、爬梯子（template.html #fpUI.fol）
-  $('fpClimb').style.display = FP.on && FP.near && !FP.fol ? '' : 'none';
+  $('fpUI').classList.toggle('fly', FP.mode === 2);                    // 浮空：藏跳、爬梯子，換上 ⬆ ⬇（template.html #fpUI.fly）
+  $('fpClimb').style.display = FP.on && FP.near && !FP.fol && FP.mode !== 2 ? '' : 'none';
   var t = FP.fol ? '↩ 回來' : '👁 跟隨'; if ($('fpFol').textContent !== t) $('fpFol').textContent = t;
 }
 /** 鏡頭跟著誰：跟隨中 ⇒ 被跟的人，否則 ⇒ 自己。 */
@@ -74,10 +113,10 @@ function fpLadders(sh) {
     return { name: l.name, up: [P[0]].concat(mid, [P[P.length - 1]]) };
   });
 }
-/** 腳下：(x, y) 那一柱在 z 往下 FP_DOWN、往上 up（沒給 ＝ FP_UP）格內站得住的高度（離 z 最近的）；站不住 ⇒ −1。 */
-function fpStand(g, x, y, z, up) {
+/** 腳下：(x, y) 那一柱在 z 往下 down（沒給 ＝ FP_DOWN）、往上 up（沒給 ＝ FP_UP）格內站得住的高度（離 z 最近的）；站不住 ⇒ −1。 */
+function fpStand(g, x, y, z, up, down) {
   var best = -1;
-  for (var dz = -FP_DOWN; dz <= (up || FP_UP); dz++) {
+  for (var dz = -(down || FP_DOWN); dz <= (up || FP_UP); dz++) {
     var zz = z + dz; if (zz < 1) continue;
     var s = standZ(g, x, y, zz, zz, FP_HEAD);
     if (s >= 0 && (best < 0 || Math.abs(s - z) < Math.abs(best - z))) best = s;
@@ -86,36 +125,71 @@ function fpStand(g, x, y, z, up) {
 }
 /** 走到 (nx, ny)：中心那一柱要站得住（⇒ 不會從艙口掉下去）；身體四個角只擋牆（身高範圍裡有實心、又不是跨得上去的台階）——
  *  角懸在洞上可以（⛔ 四個角都要站得住 ⇒ 站在艙口邊的人連往後退都不行：量過，梯頭那一格旁邊就是地板和踏板之間的縫）。
- *  腳下 ＝ 中心那一柱的高度（⛔ 以前取四個角裡最高的 ⇒ 貼著邊走時角一下踩上一下踩空，腳底一格高一格低地跳 ＝ 抖）；不行 ⇒ null。 */
-function fpTry(g, z, nx, ny, thin, up) {
+ *  腳下 ＝ 中心那一柱的高度（⛔ 以前取四個角裡最高的 ⇒ 貼著邊走時角一下踩上一下踩空，腳底一格高一格低地跳 ＝ 抖）；不行 ⇒ null。
+ *  feet（在半空時給：腳現在的絕對高度）⇒ 往下不限 FP_DOWN（FP_FALL 格內有地板就過得去 ⇒ 跳得進洞）；中心與四個角在腳現在的高度、身高範圍裡有實心 ⇒ 牆。 */
+var FP_FALL = 160;                                                     // 半空往下找地板最多 16 m（比任何一艘船的甲板到底艙都深）
+function fpTry(g, z, nx, ny, thin, up, feet) {
   up = up || FP_UP;
-  var hi = fpStand(g, Math.floor(nx), Math.floor(ny), z, up);
+  var down = FP_DOWN, hi = fpStand(g, Math.floor(nx), Math.floor(ny), z, up);
   if (hi < 0) hi = fpFoot(g, z, nx, ny, up);                          // 中心那一柱是縫 ⇒ 看腳掌踩不踩得到旁邊（樓梯口圍欄與第一階之間那一格縫，量過）
+  if (hi < 0 && feet !== undefined) { down = FP_FALL; hi = fpStand(g, Math.floor(nx), Math.floor(ny), z, up, down); }   // 半空、旁邊也踩不到 ⇒ 是洞：往下找（⛔ 先找 FP_FALL ⇒ 一兩格的縫也掉得進去）
   if (hi < 0) return null;
+  if (feet !== undefined && !thin && fpBody(g, Math.floor(nx), Math.floor(ny), Math.max(hi, Math.floor(feet)))) return null;
   if (thin) return hi;                                                 // 卡住了（現在的位置四個角就撞牆）⇒ 只看中心那一柱，先走出來
   for (var i = 0; i < 4; i++) {
     var x = Math.floor(nx + (i & 1 ? FP_R : -FP_R)), y = Math.floor(ny + (i & 2 ? FP_R : -FP_R));
-    if (fpStand(g, x, y, z, up) >= 0) continue;
-    for (var h = 0; h < FP_HEAD; h++) if (g.get(x, y, hi + h)) return null;   // 牆：新地板上方、身高範圍裡有實心（那個角本身站得住 ⇒ 是台階，上面已經跳過）
+    if (feet !== undefined && fpBody(g, x, y, Math.max(hi, Math.floor(feet)))) return null;   // 半空：照腳現在的高度擋（⛔ 照新地板 ⇒ 落進艙口的途中橫著穿過上一層甲板）
+    if (fpStand(g, x, y, z, up, down) >= 0) continue;
+    if (fpBody(g, x, y, hi)) return null;                              // 牆：新地板上方、身高範圍裡有實心（那個角本身站得住 ⇒ 是台階，上面已經跳過）
   }
   return hi;
 }
+/** 穿牆時 (x, y)（腳底 z）在不在船裡：往船頭、船尾、左舷、右舷四個方向都碰得到實心（腳上 0.2 m 或 1.2 m 那一層，任一層碰到就算 ⇒ 砲門的洞不會讓人判成船外）。
+ *  ⛔ 只看腳下有沒有地板 ⇒ 船殼外板往外斜，穿出舷牆就沿著外板一階一階走下去（量過 106→93）。 */
+function fpInside(g, x, y, z, S) {
+  var D = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+  for (var k = 0; k < 4; k++) {
+    var hit = false;
+    for (var t = 1; !hit; t++) {
+      var xx = x + D[k][0] * t, yy = y + D[k][1] * t;
+      if (xx < 0 || yy < 0 || xx >= S[0] || yy >= S[1]) break;
+      hit = !!(g.get(xx, yy, z + 2) || g.get(xx, yy, z + 12));
+    }
+    if (!hit) return false;
+  }
+  return true;
+}
+/** (x, y) 那一柱在 z 往上 FP_HEAD 格（身高範圍）裡有沒有實心。 */
+function fpBody(g, x, y, z) { for (var h = 0; h < FP_HEAD; h++) if (g.get(x, y, z + h)) return true; return false; }
 /** 腳掌：中心那一柱站不住時，中心 ±FP_FOOT 格的八個點裡站得住、離現在腳底最近的高度（一兩格寬的縫跨得過去；艙口那種大洞照樣擋）；都不行 ⇒ −1。 */
 var FP_FOOT = 1.2;
-function fpFoot(g, z, nx, ny, up) {
+function fpFoot(g, z, nx, ny, up, down) {
   var best = -1;
   for (var i = -1; i <= 1; i++) for (var j = -1; j <= 1; j++) {
     if (!i && !j) continue;
-    var s = fpStand(g, Math.floor(nx + i * FP_FOOT), Math.floor(ny + j * FP_FOOT), z, up);
+    var s = fpStand(g, Math.floor(nx + i * FP_FOOT), Math.floor(ny + j * FP_FOOT), z, up, down);
     if (s >= 0 && (best < 0 || Math.abs(s - z) < Math.abs(best - z))) best = s;
   }
   return best;
 }
-/** 眼睛離腳底幾格：頭頂（那一柱往上第一個實心）低於 FP_EYE ＋ 1 ⇒ 壓到頭頂下一格。 */
-function fpEye(g, p) {
-  var x = Math.floor(p[0]), y = Math.floor(p[1]), z = Math.floor(p[2]);
-  for (var h = 1; h <= FP_EYE + 1; h++) if (g.get(x, y, z + h)) return Math.max(3, h - 1.2);
-  return FP_EYE;
+/** 眼睛離腳底幾格：身邊（±FP_EYE_R 格）與前面（照速度 FP_EYE_T 秒會走到的地方）走得過去的柱裡，最低的頭頂（往上第一個實心）
+ *  低於 FP_EYE ＋ FP_EYE_GAP ⇒ 壓到它下面 FP_EYE_GAP 格（低頭）。
+ *  ⛔ 只看腳下那一柱（以前）⇒ 梁在前一格時眼睛照樣 1.6 m，走過去的那一下鏡頭整個卡進梁裡；
+ *  量過（憲法號）：底艙梁底 1.4–1.5 m、下甲板 1.7 m、砲甲板 1.7–1.9 m，眼睛 1.6 m。
+ *  身高範圍裡就有實心的柱（牆、台階、箱子）走不過去 ⇒ 不算。 */
+var FP_EYE_R = 2, FP_EYE_T = 0.2, FP_EYE_GAP = 2;
+function fpCeil(g, x, y, z) { for (var h = 1; h <= FP_EYE + FP_EYE_GAP; h++) if (g.get(x, y, z + h)) return h; return 99; }
+function fpEye(g, p, v) {
+  var x = Math.floor(p[0]), y = Math.floor(p[1]), z = Math.floor(p[2]), m = fpCeil(g, x, y, z), h, i, j;
+  for (i = -FP_EYE_R; i <= FP_EYE_R; i++) for (j = -FP_EYE_R; j <= FP_EYE_R; j++) {
+    if ((i || j) && (h = fpCeil(g, x + i, y + j, z)) >= FP_HEAD && h < m) m = h;
+  }
+  var sp = v ? Math.hypot(v[0], v[1]) : 0, n = Math.min(8, Math.floor(sp * FP_EYE_T));
+  for (var k = FP_EYE_R + 1; k <= n; k++) {                            // 前面：沿速度方向一格一格看（走得越快看得越遠）
+    var ax = Math.floor(p[0] + v[0] / sp * k), ay = Math.floor(p[1] + v[1] / sp * k);
+    if ((h = fpCeil(g, ax, ay, z)) >= FP_HEAD && h < m) m = h;
+  }
+  return m < FP_EYE + FP_EYE_GAP ? Math.max(3, m - FP_EYE_GAP) : FP_EYE;
 }
 /** 每一格畫面（90_main.js frame，camUpdate 之前）：退出判斷、走、爬、看哪一座梯子在旁邊。 */
 function fpFrame(dt) {
@@ -152,16 +226,27 @@ function fpFrame(dt) {
   var tvx = (cy * f - sy * r) * top, tvy = (sy * f + cy * r) * top, kk = 1 - Math.exp(-dt / (n > 0.05 ? FP_ACC : FP_DEC));
   FP.v[0] += (tvx - FP.v[0]) * kk; FP.v[1] += (tvy - FP.v[1]) * kk;   // 加速、減速（⛔ 一按就全速、一放就急停 ⇒ 鏡頭一頓一頓）
   if (n <= 0.05 && Math.hypot(FP.v[0], FP.v[1]) < 0.2) FP.v[0] = FP.v[1] = 0;
-  var dx = FP.v[0] * dt, dy = FP.v[1] * dt, z = Math.floor(c.pos[2]), feet = c.pos[2] + FP.jz, nz = null;
-  if ((dx || dy) && FP.noclip) {                                       // 關閉碰撞：牆不擋；腳下上下 FP_UP／FP_DOWN 格內有地板就站上去，沒有 ⇒ 停在同一個高度（不墜落）
-    c.pos[0] += dx; c.pos[1] += dy;
-    var s0 = fpStand(g, Math.floor(c.pos[0]), Math.floor(c.pos[1]), z);
-    if (s0 >= 0 && s0 !== z) { c.pos[2] = s0; FP.jz = Math.max(0, feet - s0); }
+  var dx = FP.v[0] * dt, dy = FP.v[1] * dt, z = Math.floor(c.pos[2]), feet = c.pos[2] + FP.jz, nz = null, air = FP.jz > 0 || FP.jv > 0;
+  if (FP.mode === 2) {                                                 // 浮空：什麼都不擋、沒有重力；上下照 ⬆ ⬇（空白鍵／C），一樣有加減速
+    var tvz = (m.up - m.dn) * top * 0.7, kz = 1 - Math.exp(-dt / (m.up || m.dn ? FP_ACC : FP_DEC)), S = sh.T.h.size;
+    FP.vz += (tvz - FP.vz) * kz; if (!(m.up || m.dn) && Math.abs(FP.vz) < 0.2) FP.vz = 0;
+    c.pos[0] = clamp(c.pos[0] + dx, -FP_FLY_OUT, S[0] + FP_FLY_OUT); c.pos[1] = clamp(c.pos[1] + dy, -FP_FLY_OUT, S[1] + FP_FLY_OUT);   // 離船最多 FP_FLY_OUT 格（⛔ 不夾 ⇒ 飛到看不見船）
+    c.pos[2] = clamp(c.pos[2] + FP.vz * dt, 1, S[2] + FP_FLY_OUT);
+    FP.jz = FP.jv = 0; FP.near = null; fpEyeZ(dt); fpUI(); return;
+  }
+  if ((dx || dy) && FP.mode === 1) {                                   // 穿牆：身體在牆裡 ⇒ 高度不變直接穿；不在牆裡 ⇒ 照正常上下台階；前面沒有地板也不在牆裡 ⇒ 擋住
+    var px = Math.floor(c.pos[0] + dx), py = Math.floor(c.pos[1] + dy), s0 = fpStand(g, px, py, z, FP_NC_UP), inW = fpBody(g, Math.floor(c.pos[0]), Math.floor(c.pos[1]), z);
+    if (fpBody(g, px, py, z) && (inW || !(s0 > z))) s0 = z;            // 前面是牆：已經在牆裡、或那不是跨得上的台階 ⇒ 高度不變穿進去（⛔ 在牆裡也照台階往上 ⇒ 一格一格爬上欄杆頂）
+    else if (inW && Math.abs(s0 - z) > FP_NC_EXIT) s0 = -1;            // 從牆裡出來：前面的地板要跟腳差不多高（⛔ 照台階 ⇒ 穿出舷牆後沿著往外斜的船殼外板一階一階走下去，量過 106→93）
+    if (s0 < 0 && !inW && fpFoot(g, z, c.pos[0] + dx, c.pos[1] + dy) >= 0) s0 = z;   // 中心是縫、腳掌踩得到旁邊 ⇒ 照樣走（同 fpTry）
+    if (s0 >= 0 && (px !== Math.floor(c.pos[0]) || py !== Math.floor(c.pos[1])) && !fpInside(g, px, py, s0, sh.T.h.size)) s0 = -1;   // 船外 ⇒ 擋住
+    if (s0 >= 0) { c.pos[0] += dx; c.pos[1] += dy; if (s0 !== z) { c.pos[2] = s0; FP.jz = Math.max(0, feet - s0); } }
+    else FP.v[0] = FP.v[1] = 0;
   } else if (dx || dy) {
-    var up = FP_UP + Math.floor(FP.jz), thin = fpTry(g, z, c.pos[0], c.pos[1], false, up) === null;   // 跳起來的時候跨得更高（跳上箱子、舷梯）
-    if ((nz = fpTry(g, z, c.pos[0] + dx, c.pos[1] + dy, thin, up)) !== null) { c.pos[0] += dx; c.pos[1] += dy; }
-    else if (dx && (nz = fpTry(g, z, c.pos[0] + dx, c.pos[1], thin, up)) !== null) { c.pos[0] += dx; FP.v[1] = 0; }   // 貼著牆滑（撞牆的那個方向速度歸零）
-    else if (dy && (nz = fpTry(g, z, c.pos[0], c.pos[1] + dy, thin, up)) !== null) { c.pos[1] += dy; FP.v[0] = 0; }
+    var up = FP_UP + Math.floor(FP.jz), af = air ? feet : undefined, thin = fpTry(g, z, c.pos[0], c.pos[1], false, up) === null;   // 跳起來的時候跨得更高（跳上箱子、舷梯）、往下跳得進洞（af）
+    if ((nz = fpTry(g, z, c.pos[0] + dx, c.pos[1] + dy, thin, up, af)) !== null) { c.pos[0] += dx; c.pos[1] += dy; }
+    else if (dx && (nz = fpTry(g, z, c.pos[0] + dx, c.pos[1], thin, up, af)) !== null) { c.pos[0] += dx; FP.v[1] = 0; }   // 貼著牆滑（撞牆的那個方向速度歸零）
+    else if (dy && (nz = fpTry(g, z, c.pos[0], c.pos[1] + dy, thin, up, af)) !== null) { c.pos[1] += dy; FP.v[0] = 0; }
     else FP.v[0] = FP.v[1] = 0;
     if (nz !== null && nz !== z) { c.pos[2] = nz; FP.jz = Math.max(0, feet - nz); }   // 換了一層地板：腳的高度不跳 —— 往下 ⇒ 照重力落下去；往上 ⇒ 站上去（眼高平滑地追）
     c.face = Math.cos(FP.yaw) >= 0 ? 1 : -1;
@@ -171,12 +256,12 @@ function fpFrame(dt) {
     if (FP.jv > 0 && g.get(Math.floor(c.pos[0]), Math.floor(c.pos[1]), Math.floor(c.pos[2] + FP.jz + FP_HEAD))) FP.jv = 0;   // 頭頂撞到（跟站得住同一個身高）
     if (FP.jz <= 0) { FP.jz = 0; FP.jv = 0; }
   }
-  if (!FP.noclip && FP.jz <= 0 && FP.jv <= 0 && !fpGround(g, c)) return;   // 腳下的甲板被打掉了 ⇒ 落到下一層（或退出）
+  if (FP.mode === 0 && FP.jz <= 0 && FP.jv <= 0 && !fpGround(g, c)) return;   // 腳下的甲板被打掉了 ⇒ 落到下一層（或退出）；穿牆不墜落
   FP.near = FP.jz > 0 ? null : fpNear(c.pos);
   fpEyeZ(dt); fpUI();
 }
 /** 腳下還有沒有地板（站在地上、沒在跳時每一格看一次）：腳掌範圍（中心 ±FP_FOOT）底下有實心 ⇒ true。
- *  沒有（甲板被打掉）⇒ 往下找下一層站得住的、照重力落下去 ⇒ true；一路都沒有（掉出船外）⇒ 退出第一人稱 ⇒ false。 */
+ *  沒有（甲板被打掉）⇒ 往下找下一層站得住的、照重力落下去 ⇒ true；一路都沒有 ⇒ fpLand 回船員旁邊；連那裡都站不住才退出 ⇒ false。 */
 function fpGround(g, c) {
   var x = c.pos[0], y = c.pos[1], z = Math.floor(c.pos[2]);
   for (var i = -1; i <= 1; i++) for (var j = -1; j <= 1; j++) if (g.get(Math.floor(x + i * FP_FOOT), Math.floor(y + j * FP_FOOT), z - 1)) return true;
@@ -184,15 +269,24 @@ function fpGround(g, c) {
     var s = standZ(g, Math.floor(x), Math.floor(y), z - dz, z - dz, FP_HEAD);
     if (s >= 0) { c.pos[2] = s; FP.jz = z - s; FP.jv = 0; return true; }
   }
-  var sh = FP.sh; fpSet(false); note(sh, '第一人稱結束：腳下沒有地板了'); return false;
+  FP.flyFrom = null; fpLand(); return FP.on;                          // 一路都沒有 ⇒ 回船員旁邊（再沒有才退出）
 }
 /** 跳（空白鍵、面板的 ⤴）：站在地上才跳得起來；爬梯子、停格不行。 */
-function fpJump() { if (!FP.on || PAUSED || FP.fol || FP.climb || FP.jz > 0 || FP.jv > 0) return; FP.jv = Math.sqrt(2 * FP_G * FP_JUMP); }
+function fpJump() { if (!FP.on || PAUSED || FP.fol || FP.mode === 2 || FP.climb || FP.jz > 0 || FP.jv > 0) return; FP.jv = Math.sqrt(2 * FP_G * FP_JUMP); }
 /** 鏡頭的眼高（格，船的 z）：腳底絕對高度（c.pos[2] ＋ 跳起來的 FP.jz）＋ 眼高，平滑地追（FP_EZ 秒）⇒ 跨台階、頭頂變低不會一格一格跳。 */
+//   兩段分開追：腳底（FP.fz，台階、跳、落）照 FP_EZ；低頭（FP.eo，fpEye 給的眼高）低頭快、抬頭慢（FP_EZ_DN／FP_EZ_UP）——
+//   ⛔ 低頭抬頭一樣快 ⇒ 砲甲板一根梁一根梁地點頭（梁距約 1 m）；抬頭慢 ⇒ 梁之間不抬頭，走出梁區才慢慢站直。
+//   ⛔ 合成一個數一起追 ⇒ 上樓梯時眼睛跟著抬頭的慢速落後。
+var FP_EZ_DN = 0.04, FP_EZ_UP = 0.35;
 function fpEyeZ(dt) {
-  var c = fpWho(), jz = FP.fol ? 0 : FP.jz, want = c.pos[2] + jz + fpEye(FP.sh.grid, [c.pos[0], c.pos[1], c.pos[2] + jz]);
-  if (FP.ez === null || FP.climb || !(dt > 0)) FP.ez = want;           // 剛開、換人、爬梯子（本來就連續）⇒ 直接跟
-  else FP.ez += (want - FP.ez) * (1 - Math.exp(-dt / FP_EZ));
+  var c = fpWho(), jz = FP.fol ? 0 : FP.jz, fly = FP.mode === 2 && !FP.fol, base = c.pos[2] + jz;
+  var off = fly ? FP_EYE : fpEye(FP.sh.grid, [c.pos[0], c.pos[1], base], FP.fol ? null : FP.v);   // 浮空：眼睛固定在腳上 FP_EYE（穿過甲板時不跟著壓）
+  if (FP.ez === null || FP.climb || fly || !(dt > 0)) FP.fz = base, FP.eo = off;   // 剛開、換人、爬梯子、浮空（本來就連續）⇒ 直接跟
+  else {
+    FP.fz += (base - FP.fz) * (1 - Math.exp(-dt / FP_EZ));
+    FP.eo += (off - FP.eo) * (1 - Math.exp(-dt / (off < FP.eo ? FP_EZ_DN : FP_EZ_UP)));
+  }
+  FP.ez = FP.fz + FP.eo;
 }
 /** 旁邊有沒有梯腳（往上爬）或梯頭（往下爬）：水平 FP_REACH 格內、高度差 4 格內，取最近的那一個。 */
 function fpNear(p) {
@@ -210,9 +304,10 @@ var FP_NEAR = 12;                                                     // 1.2 m�
 function fpHide(sh, c) {
   if (c === fpWho()) return true;
   if (sh !== FP.sh || c.st === 4 || c.st === 5) return false;
-  var p = fpWho().pos;                                                 // 跟隨中：看的是被跟的人身邊（自己的身體在遠處 ⇒ 照畫） return Math.abs(c.pos[0] - p[0]) < FP_NEAR && Math.abs(c.pos[1] - p[1]) < FP_NEAR && Math.abs(c.pos[2] - p[2]) < 12;
+  var p = fpWho().pos;                                                 // 跟隨中：看的是被跟的人身邊（自己的身體在遠處 ⇒ 照畫）
+  return Math.abs(c.pos[0] - p[0]) < FP_NEAR && Math.abs(c.pos[1] - p[1]) < FP_NEAR && Math.abs(c.pos[2] - p[2]) < 12;
 }
-function fpClimbGo() { if (!FP.on || FP.fol || FP.climb || !FP.near || PAUSED) return; FP.climb = { pts: FP.near.pts, k: 0 }; }
+function fpClimbGo() { if (!FP.on || FP.fol || FP.mode === 2 || FP.climb || !FP.near || PAUSED) return; FP.climb = { pts: FP.near.pts, k: 0 }; }
 /** 鏡頭（03_camera.js camUpdate 開頭）：眼睛在船長頭上、照船的矩陣（內插過的）換到世界。 */
 function fpCam() {
   if (!FP.on) return false;
@@ -226,13 +321,14 @@ function fpCam() {
   return true;
 }
 /** 鍵盤（71_input.js keydown／keyup 先問這裡）：第一人稱的鍵吃掉 ⇒ true；其他照舊（P 停格、O／Esc 設定）。 */
-var FP_KEYS = { w: 'f', arrowup: 'lu', s: 'b', arrowdown: 'ld', a: 'l', d: 'r', arrowleft: 'tl', arrowright: 'tr', q: 'tl', e: null, ' ': null, shift: null, f: null, g: null };
+var FP_KEYS = { w: 'f', arrowup: 'lu', s: 'b', arrowdown: 'ld', a: 'l', d: 'r', arrowleft: 'tl', arrowright: 'tr', q: 'tl', e: null, ' ': null, c: null, shift: null, f: null, g: null };
 function fpKey(k, down) {
   if (!(k in FP_KEYS)) return false;
   if (k === 'shift') { FP.run = down && FP.on; return FP.on; }
   if (!FP.on) { if (!down && FP_KEYS[k]) FP.mv[FP_KEYS[k]] = 0; return false; }
   if (k === 'e') { if (down) fpClimbGo(); return true; }               // E 爬梯子
-  if (k === ' ') { if (down) fpJump(); return true; }                  // 空白鍵跳（Tim 2026-10-16）
+  if (k === ' ') { if (FP.mode === 2) FP.mv.up = down ? 1 : 0; else if (down) fpJump(); return true; }   // 空白鍵跳（Tim 2026-10-16）；浮空 ⇒ 往上
+  if (k === 'c') { FP.mv.dn = down && FP.mode === 2 ? 1 : 0; return true; }   // C：浮空 ⇒ 往下（第一人稱時不換鏡頭，鏡頭本來就不歸它管）
   if (k === 'f' || k === 'g') { if (down) fpFollow(k === 'g'); return true; }   // F 跟隨／回來、G 換下一個（第一人稱時 F 不開砲）
   FP.mv[FP_KEYS[k]] = down ? 1 : 0;
   return true;
@@ -241,7 +337,7 @@ function fpKey(k, down) {
 function fpLook(dx, dy) { FP.yaw += dx * 0.005; FP.pitch = clamp(FP.pitch - dy * 0.005, -1.35, 1.35); FP.lookT = performance.now(); }   // lookT：跟隨中 2 秒內不自動轉
 // 設定面板的開關、第一人稱的操作面板（按住才動：放開、移出、取消都停）
 $('fpT').onclick = function () { fpSet(!FP.on); gsetClose(); };
-$('fpNoclipT').onclick = function () { FP.noclip = !FP.noclip; fpUI(); };   // 關閉碰撞（Tim 2026-10-16「是否可以加上一個關閉碰撞Toggle(只保持腳底站在甲板上不墜落)」）：開關不關設定面板；跨場留著
+[].forEach.call(document.querySelectorAll('#gset [data-fpm]'), function (b) { b.onclick = function () { fpMode(+b.dataset.fpm); }; });   // 碰撞三段（正常／穿牆／浮空）：開關不關設定面板；跨場留著
 [].forEach.call(document.querySelectorAll('#fpUI [data-fp]'), function (b) {
   var k = b.dataset.fp;
   function on(e) { e.preventDefault(); FP.mv[k] = 1; b.classList.add('down'); }
