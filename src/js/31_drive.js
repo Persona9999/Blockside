@@ -311,7 +311,7 @@ function drvFunnelsOff(sh, C) {
 function teleStep(sh, d) { if (!sh || !(sh.cfg.base > 0)) return; teleSet(sh, sh.tele + d); }
 function teleSet(sh, i) {
   if (!sh || !(sh.cfg.base > 0)) return;
-  i = clamp(Math.round(i), 0, TELE.length - 1); if (i === sh.tele) return;
+  i = clamp(Math.round(i), 0, TELE.length - 1); sh.teleHand = true; if (i === sh.tele) return;   // teleHand：玩家自己撥了俥鐘 ⇒ 自動駕駛不再替他撥（54_helm.js helmGovern 自己撥時會還原）
   sh.tele = i; sh.power = TELE[i]; sh.teleT = performance.now();
   var D = sh.drive, cap = D ? D.cap : 1;
   note(sh, '俥鐘：' + TELE_NAME[i] + (cap < 0.98 && Math.abs(TELE[i]) > Math.sqrt(cap) + 0.005 ? '（' + (D.kind === 'magic' ? '魔力' : '引擎') + '只剩 ' + Math.round(cap * 100) + '% 推力）' : ''));

@@ -60,6 +60,9 @@ function rptHit(b, sh, what) {
   if (G) { G.hits++; G.on[w] = (G.on[w] || 0) + 1; }
   rt.taken++; rt.takenOn[w] = (rt.takenOn[w] || 0) + 1;
 }
+/** 艦長的決定（54_helm.js helmSay）：[秒, 種類, 理由]；一艘最多 RPT_HELM_MAX 筆（超過 ⇒ 丟最早的、記丟了幾筆）。只讀：不改戰局。 */
+var RPT_HELM_MAX = 400;
+function rptHelm(sh, kind, text) { if (!RPT) return; var r = rptShip(sh), L = r.helm || (r.helm = []); L.push([+SIMT.toFixed(1), kind, text]); if (L.length > RPT_HELM_MAX) { L.shift(); r.helmDrop = (r.helmDrop || 0) + 1; } }
 /** 整份報表（#dump、匯出、畫面都讀這一份）。最後一列補到現在。 */
 function rptData() {
   if (!RPT) return null;
@@ -69,7 +72,7 @@ function rptData() {
       return { i: sh.i, id: r.id, name: r.name, team: r.team, from: r.from, out: r.out, fate: sh.fate || null, crew0: r.crew0, fired: sh.fired, hits: sh.hits, taken: r.taken, takenOn: r.takenOn,
         wounds: sh.wounds, dead: sh.dead, causes: sh.causes || {}, armor: sh.armRes ? Object.assign({}, sh.armRes) : null,   // armor：打在鐵甲上的實心彈 穿／凹／彈、爆裂彈炸在外面幾發（TASK-0621）
         guns: r.guns.map(function (G) { return { name: G.name, type: G.type, side: G.side, shots: G.shots, hits: G.hits, on: G.on, goneAt: G.goneAt, st: G.st.map(function (v) { return +v.toFixed(1); }), bear: +G.bear.toFixed(1) }; }),
-        tl: tl };
+        tl: tl, helm: r.helm || [], helmDrop: r.helmDrop || 0 };   // helm：艦長的決定（rptHelm）
     }) };
 }
 /** 匯出：JSON 整份；CSV 一艘一段時間線（欄 ＝ ship,name,team ＋ RPT_COLS）。⛔ 成品不准 fetch ⇒ 用 Blob 下載。 */
@@ -109,7 +112,7 @@ function rptShow() {
     P = document.createElement('div'); P.id = 'rpt';
     P.style.cssText = 'position:absolute;inset:0;z-index:30;display:flex;align-items:flex-start;justify-content:center;overflow:auto;background:rgba(0,0,0,.55);padding:12px 0';
     P.innerHTML = '<div class="card panel" style="width:min(96vw,760px);padding:12px 14px;text-align:left;box-sizing:border-box;background:rgba(12,18,26,.95)"><h3 style="margin:0 0 6px">📊 戰鬥報表</h3>' +
-      '<div id="rptL" style="font-size:12px;margin-bottom:6px"></div><div id="rptC"></div><div id="rptT" style="font-size:12px;overflow-x:auto"></div>' +
+      '<div id="rptL" style="font-size:12px;margin-bottom:6px"></div><div id="rptC"></div><div id="rptT" style="font-size:12px;overflow-x:auto"></div><div id="rptH" style="font-size:12px;margin-top:8px"></div>' +
       '<div style="margin-top:8px"><button id="rptJ">匯出 JSON</button> <button id="rptV">匯出 CSV</button> <button id="rptX">關閉</button></div></div>';
     document.body.appendChild(P);
     $('rptJ').onclick = function () { rptSave('json'); }; $('rptV').onclick = function () { rptSave('csv'); }; $('rptX').onclick = function () { P.style.display = 'none'; };
@@ -138,6 +141,11 @@ function rptShow() {
         '</td><td ' + td + '>' + s.taken + '（' + on(s.takenOn) + '）' + (s.armor ? '<br>鐵甲：穿 ' + s.armor.pen + '／凹 ' + s.armor.dent + '／彈 ' + s.armor.rico + '／爆裂彈 ' + s.armor.shell : '') + '</td><td ' + td + '>' + s.wounds + '／' + s.dead + '／' + s.crew0 + '</td><td ' + td + '>' + gone.length + '／' + s.guns.length + (gone.length ? '（最早 ' + Math.min.apply(null, gone.map(function (G) { return G.goneAt; })) + ' 秒）' : '') +
         '</td><td ' + td + '>' + [0, 1, 2, 4, 5].map(function (j) { return pc(st[j], live); }).join('／') + '</td></tr>';
     }).join('') + '</table><div style="color:var(--dim);margin-top:4px">記報表 ' + d.cost.ticks + ' 次、共 ' + d.cost.ms + ' ms；砲的時間只算還在的砲、船出局前。</div>';
+  function esc(t) { return String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;'); }
+  $('rptH').innerHTML = '<b>🧭 艦長的決定</b>（時間、做了什麼、為什麼；換舷、拉開也會上方廣播）' + d.ships.map(function (s) {
+    return '<details style="margin-top:4px"><summary><span style="color:' + rptColor(d, s) + '">' + s.i + ' ' + esc(s.name) + '</span>　' + s.helm.length + ' 筆' + (s.helmDrop ? '（最早的 ' + s.helmDrop + ' 筆沒留）' : '') + '</summary>' +
+      '<div style="max-height:220px;overflow:auto;padding-left:8px">' + s.helm.map(function (h) { return '<div><span style="color:var(--dim)">' + h[0].toFixed(1) + ' 秒</span>　' + esc(h[2]) + '</div>'; }).join('') + '</div></details>';
+  }).join('');
 }
 (function () {                                                           // 結束畫面多一顆「📊 報表」（template 那一排按鈕的最前面）
   var c = $('endC'); if (!c || !RPT_ON) return;

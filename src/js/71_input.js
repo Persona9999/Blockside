@@ -146,6 +146,7 @@ document.addEventListener('touchend', function (e) {
 var SAIL_NAMES = { auto: '自動航行', manual: '手動操舵（A／D 打舵）', off: '拋錨（雙錨；A／D 繞錨轉）' };
 function setSailMode(m) {
   SAIL = m; KEYS.l = KEYS.r = false;
+  if (m === 'auto' && SHIPS[PLAYER_I]) SHIPS[PLAYER_I].sailHand = SHIPS[PLAYER_I].teleHand = false;   // 切回自動駕駛 ⇒ 帆、俥鐘也交回艦長（54_helm.js）
   [].forEach.call(document.querySelectorAll('[data-s]'), function (x) { x.classList.toggle('on', x.dataset.s === SAIL); }); sailLabel();
   var noA = RUNNING && SHIPS.length && anchorsOf(SHIPS[PLAYER_I]).noAnchor;
   if (RUNNING && SHIPS.length) note(SHIPS[PLAYER_I], (m === 'off' && noA ? '停船（這艘沒有錨：帆與引擎不出力、船慢慢停下）' : m === 'off' && anchorsOf(SHIPS[PLAYER_I]).single ? '拋錨（單錨；A／D 繞錨轉）' : SAIL_NAMES[m]) + (noA ? '（4 自動／手動切換、6 停船、再按一次開船）' : '（4 自動／手動切換、6 拋錨、再按一次起錨）'));   // 單錨的船（TASK-0635）

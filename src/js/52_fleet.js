@@ -238,8 +238,8 @@ function segSeg(a, b, c, d) {
 function friendKeels(sh) { return friendsOf(sh).map(keelLine); }
 function friendInLine(K, from, to) { for (var i = 0; i < K.length; i++) if (segSeg(from, to, K[i][0], K[i][1]).d < FF_CLEAR) return true; return false; }
 /** 讓船：要讓 ⇒ 回傳該走的航向；不用 ⇒ null。只看最危險（最近）的那一艘友船。 */
-function friendAvoid(sh) {
-  var fr = friendsOf(sh); if (!fr.length) return null;
+function friendAvoid(sh, L) {                                             // L：要讓的那幾艘（沒給 ＝ 友船；54_helm.js foeAvoid 給敵艦）
+  var fr = L || friendsOf(sh); if (!fr.length) return null;
   var me = keelLine(sh), best = null;
   fr.forEach(function (o) {
     var r = segSeg(me[0], me[1], keelLine(o)[0], keelLine(o)[1]), n = sub(r.q, r.p); n[1] = 0; n = norm(n);

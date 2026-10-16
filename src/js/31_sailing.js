@@ -72,6 +72,7 @@ function sailSetName(sh) { return SAILSETS[sh.sailSet]; }
 function hasSails(sh) { return sh.sailArea0 > 1; }                        // 有帆（不算旗）：sailArea0 沒有帆時是 1（10_ship.js）
 function sailStep(sh, d) {
   if (!hasSails(sh)) return;
+  sh.sailHand = true;                                                     // 玩家自己動了帆（W／S）⇒ 自動駕駛不再替他操帆，再切一次自動駕駛才收回（54_helm.js）
   var n = clamp(sh.sailSet + d, 0, SAILSETS.length - 1); if (n === sh.sailSet) return;
   sh.sailSet = n; applySailSet(sh);
   note(sh, '帆裝：' + sailSetName(sh));
@@ -112,6 +113,8 @@ function sail(sh, dt) {
                                                                       //   Tim 2026-10-16：「預設設定的船航速照舊，只有比預設快的加成（娛樂 ×1.4、夜隼號 ×3）才被視風限住」
   var vB = BK > 0 && !sh.sunk && !stop && !held ? BK / 1.9438 * dk : 0;   // 額外動力全速的航速（節 ⇒ m/s）；不吃航速倍率（跟以前一樣）
   driveStep(sh, dt, vS, vB, deg, stop || held);                       // 推力、水阻、實際質量 ⇒ 加速度 ⇒ sh.spd（31_drive.js）
+  if (!stop && !held && !sh.sunk && !sh.struck && (sh.i !== PLAYER_I || SAIL === 'auto')) { var thP = sh.throttle || 1; helmGovern(sh, vS / thP, vB / thP); }   // 航速調節：艦長的期望航速 ⇒ 帆裝、俥鐘（54_helm.js；vS、vB 扣掉上一步的放慢）
+  else sh.helmSpill = 1;
   // 舵
   sh.throttle = 1;                                                      // 油門每一步重設（戰列跟隨、讓開砲線要放慢才改；下一步的目標航速才用到）
   var foe = foeOf(sh), tY = sh.yaw, rate = 0;
@@ -137,19 +140,15 @@ function sail(sh, dt) {
       if (nogo > 0.5 && !(SIMT - (sh.ironsT || -99) < 20)) { sh.ironsT = SIMT; note(sh, '頂風失速：帆被吹回來了 —— 帶著速度轉過去，或往下風轉一圈'); }
     }
   } else {
-    if (!sh.struck && !sh.sunk && foe) {
-      // 這一舷的砲都開不了、另一舷還有 ⇒ 把另一舷轉向敵艦
-      var other = sh.side === 'S' ? 'P' : 'S', present = sideGuns(sh, sh.side) || !sideGuns(sh, other) ? sh.side : other, sg = present === 'P' ? 1 : -1;   // sg：敵艦要在畫面左邊（左舷 P）⇒ +1
-      var dx = foe.px - sh.px, dz = foe.pz - sh.pz, d = Math.hypot(dx, dz) || 1;
-      var R = aiRange();                                                 // 想保持的交戰距離：遠了往敵艦切（遠很多 ⇒ 最多切 1.2 rad，幾乎船頭對著開過去）、近了往外拉（最多 0.4）
-      tY = (sg > 0 ? Math.atan2(-dx / d, -dz / d) : Math.atan2(dx / d, dz / d)) + sg * clamp((d - R) / R * 1.5, -0.4, 1.2);   // 敵艦在那一舷正橫的航向 ＋ 距離修正
-    }
+    // 艦長（54_helm.js）：要哪一舷對敵（一舷火力不到另一舷一半 ⇒ 轉另一舷；⛔ 以前要一門都開不了才換）、航向（敵艦在那一舷正橫 ＋ 距離修正）、期望航速（下一步 helmGovern 換成帆裝與俥鐘）
+    if (!sh.struck && !sh.sunk && foe) { var hs = helmSteer(sh, foe); tY = hs.yaw; sh.wantV = hs.v; } else sh.wantV = null;
+    sh.throttle = sh.helmSpill || 1;                                     // 只靠帆的船：期望航速比夠用的那一段帆慢 ⇒ 放掉一點風（54_helm.js helmGovern）
     var od = ORDERS[sh.i], ld = od && od.mode === 'line' ? SHIPS[od.leader] : null;   // 戰列跟隨（指揮官，53_commander.js cmdHelmLine）：跟著前一艘的船尾
-    if (ld && !ld.sunk && !sh.struck && !sh.sunk) { var hl = cmdHelmLine({ x: sh.px, z: sh.pz, yaw: sh.yaw }, { x: ld.px, z: ld.pz, yaw: ld.yaw }); tY = hl.yaw; sh.throttle = hl.throttle; sh.station = hl.station; } else sh.station = null;
-    if (od && od.throttle !== undefined && !ld) sh.throttle = od.throttle;   // 指揮官給的油門（戰列的排頭等後面的跟上）
-    if (!sh.struck && !sh.sunk) { var av = friendAvoid(sh); if (av === null) av = lineClear(sh); if (av !== null) tY = av; }   // throttle 每一步重設（lineClear 要放慢才改）   // 讓友船 ＞ 讓開友艦的砲線（52_fleet.js；沒有友船 ⇒ null）
+    if (ld && !ld.sunk && !sh.struck && !sh.sunk) { var hl = cmdHelmLine({ x: sh.px, z: sh.pz, yaw: sh.yaw }, { x: ld.px, z: ld.pz, yaw: ld.yaw }); tY = hl.yaw; sh.throttle = hl.throttle; sh.station = hl.station; sh.wantV = Infinity; } else sh.station = null;   // 跟隨：帆照全速、快慢照跟隨的油門（跟以前一樣）
+    if (od && od.throttle !== undefined && !ld) sh.throttle = Math.min(sh.throttle, od.throttle);   // 指揮官給的油門（戰列的排頭等後面的跟上）
+    if (!sh.struck && !sh.sunk) { var av = friendAvoid(sh); if (av === null) av = foeAvoid(sh); if (av === null) av = lineClear(sh); if (av !== null) tY = av; }   // throttle 每一步重設（lineClear 要放慢才改）   // 讓友船 ＞ 讓敵艦（不撞，54_helm.js）＞ 讓開友艦的砲線（52_fleet.js；沒有友船 ⇒ null）
     var e = Math.atan2(Math.sin(tY - sh.yaw), Math.cos(tY - sh.yaw));
-    rate = clamp(e * 0.5, -rmax, rmax); sh.rudder = rmax > 0 ? rate / rmax : 0;
+    rate = clamp(e * 0.5, -rmax, rmax); sh.rudder = rmax > 0 ? rate / rmax * (sh.spd < 0 ? -1 : 1) : 0;   // 倒退 ⇒ 舵反著打（畫面上的舵角；轉向照要的轉）
   }
   if (!stop && !(held && Math.abs(sh.spd) < 0.6)) rate += driveYaw(sh, rmax);   // 受損的不平衡（前帆被打掉、一邊的螺旋槳沒了）⇒ 船自己偏（31_drive.js）；舵照舊修得回來
   sh.yawRate += (rate - sh.yawRate) * Math.min(1, dt / (2 * DRV_TURN));   // 迴轉慣性（細節設定「迴轉慣性」，預設 1 ＝ 以前的 2 秒）
