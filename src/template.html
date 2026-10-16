@@ -5,11 +5,11 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>憲法號對轟 (Constitution Broadside)</title>
 <style>
-  :root{ --ink:#f3ead8; --dim:#b9ae98; --gold:#e8c26a; --blue:#6f9bff; --red:#ff6f6f; --panel:rgba(14,18,24,.72); }
+  :root{ --modeFs:13px; --ink:#f3ead8; --dim:#b9ae98; --gold:#e8c26a; --blue:#6f9bff; --red:#ff6f6f; --panel:rgba(14,18,24,.72); }
   html,body{ margin:0; height:100%; background:#0d1218; color:var(--ink); overflow:hidden;
     font-family:"Noto Sans TC","Microsoft JhengHei","PingFang TC",sans-serif;
     -webkit-user-select:none; user-select:none; -webkit-touch-callout:none; }   /* 手機長按不選字、不跳拷貝選單（Tim 2026-10-13）；右鍵／長按選單在 71_input.js 擋 */
-  html{ touch-action:manipulation; }   /* iPhone 點兩下不放大（Tim 2026-10-15）：touch-action 實際生效的是自己與所有祖先的交集 ⇒ 設在根上整頁都關掉雙擊縮放；捲動、雙指縮放照舊，遊戲畫面的 none 照舊；⛔ iOS 不一定照做 ⇒ 71_input.js 另外擋第二下 touchend */
+  html{ touch-action:manipulation; -webkit-text-size-adjust:100%; text-size-adjust:100%; }   /* 手機瀏覽器不自動放大小字（iOS 的 text-size-adjust、Android Chrome 的 font boosting；Tim 2026-10-16）*/   /* iPhone 點兩下不放大（Tim 2026-10-15）：touch-action 實際生效的是自己與所有祖先的交集 ⇒ 設在根上整頁都關掉雙擊縮放；捲動、雙指縮放照舊，遊戲畫面的 none 照舊；⛔ iOS 不一定照做 ⇒ 71_input.js 另外擋第二下 touchend */
   input, textarea, select{ -webkit-user-select:text; user-select:text; -webkit-touch-callout:default; }   /* 彈種倍率表要能打字 */
   #stage{ position:fixed; inset:0; }
   canvas{ position:absolute; inset:0; width:100%; height:100%; display:block; cursor:crosshair; touch-action:none; }   /* 手機：拖曳 ＝ 轉鏡頭、雙指張合 ＝ 縮放、雙指一起拖 ＝ 平移（⛔ 不關 ⇒ 瀏覽器拿去捲頁面） */
@@ -69,7 +69,7 @@
   .kb{ display:inline-block; margin:3px 2px 0; padding:2px 8px; border-radius:6px; border:1px solid rgba(255,255,255,.26); background:rgba(255,255,255,.07); font-size:12px; }   /* 按鍵提示就是按鈕（手機也能點） */
   .kb b, .chip b{ color:var(--gold); } .chip.on b{ color:#4a3500; }
   .kb:active, .kb.down{ background:rgba(232,194,106,.38); }
-  #modeT{ font-size:13px; line-height:1.2; white-space:nowrap; color:#f2f2f2; margin:0;   /* 羅盤上方（有船頭砲 ⇒ 船頭砲上方）：瞄準模式＋鏡頭，空心字直接壓在海上（Tim 2026-10-14） */
+  #modeT{ font-size:var(--modeFs); line-height:1.2; white-space:nowrap; color:#f2f2f2; margin:0;   /* 羅盤上方（有船頭砲 ⇒ 船頭砲上方）：瞄準模式＋鏡頭，空心字直接壓在海上（Tim 2026-10-14） */
     text-shadow:-1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000, 0 -1px 0 #000, 0 1px 0 #000, -1px 0 0 #000, 1px 0 0 #000, 0 0 4px rgba(0,0,0,.8); }
   #modeT b{ color:var(--gold); font-weight:normal; }
   .chip{ display:inline-block; margin:2px 3px 0; padding:0 8px; border-radius:10px; border:1px solid rgba(255,255,255,.2); color:var(--dim); font-size:12px; }
@@ -102,8 +102,8 @@
   .gr .grd{ display:inline-block; text-align:left; line-height:1.25; }   /* 砲列：每層砲甲板一行、上下疊（61_hud.js gunRow） */
   .g-full{ color:#8fe388; } .g-short{ color:#f2c14e; } .g-none{ color:#7d838c; } .g-dead{ color:#e0574a; } .g-wet{ color:#7fc8ff; }
   .ico.g-full{ box-shadow:inset 0 -2px 0 #8fe388; } .ico.g-short{ box-shadow:inset 0 -2px 0 #f2c14e; } .ico.g-none{ box-shadow:inset 0 -2px 0 #7d838c; } .ico.g-dead{ box-shadow:inset 0 -2px 0 #e0574a; }
-  #msg{ width:100%; font-size:7px; font-weight:700; text-align:center; line-height:1.45; }   /* 廣播：兩邊面板中間那一欄，一則一行、最多 5 行、各自淡掉（⛔ 寬到蓋住兩邊面板） */
-  #msg div{ margin:0 0 1.5px; transition:opacity .4s; } #msg div:last-child{ font-size:8px; }   /* 0.5 倍（Tim 2026-10-15：「跳訊息字（水手傷亡資訊等）大小可以改成 0.5 倍」；以前 14／16 px） */
+  #msg{ width:100%; font-size:var(--modeFs); font-weight:700; text-align:center; line-height:1.45; }   /* 廣播：兩邊面板中間那一欄，一則一行、最多 5 行、各自淡掉（⛔ 寬到蓋住兩邊面板） */
+  #msg div{ margin:0 0 1.5px; transition:opacity .4s; }   /* 字的大小跟羅盤上方那行資訊（#modeT）一樣、跟著 --modeFs（Tim 2026-10-16；以前 7／8 px，最新那行大一號；更早 14／16 px）*/
   #tip{ left:12px; bottom:12px; color:var(--dim); font-size:12px; }
   /* 遊戲內的設定面板（⚙ 設定、Esc）：打開時暫停；重新開始、回主選單、畫質與物理的三四檔、帆繩物理、鏡頭跟船、靜音、FPS（Tim 2026-10-13：手機下方列省空間） */
   #gset{ left:50%; top:50%; transform:translate(-50%,-50%); display:none; text-align:center; padding:14px 16px; width:min(92vw,460px); box-sizing:border-box; pointer-events:auto; z-index:6; }   /* ⛔ 只給 max-width：left:50% ⇒ 最多只有半個螢幕寬、每一列都折行 */
@@ -131,9 +131,8 @@
     .sbn{ font-size:8px; line-height:10px; } .sbn .ico{ width:8px; height:8px; } .sbn i{ font-size:7px; } .sbn.l{ left:-5px; } .sbn.r{ right:-5px; } .fleet .sb{ margin-bottom:10px; }   /* 圓鈕 38 px：兩個數字往外擠一點才不會碰在一起 */ #shipCardC{ width:120px; height:120px; } #shipCardT{ font-size:13px; }
     #botC{ bottom:16px; width:calc(100vw - 22px); max-width:none; gap:4px; }   /* 兩側與底下的大圓鈕往內 8 px、往上 10 px（Tim 2026-10-15：iPhone 只在很角落連點兩下會放大 ⇒ 離開螢幕圓角與系統手勢區；⛔ 以前 bottom 6、寬 100vw − 6） */ #topC{ top:6px; }   /* 面板撐滿兩組大圓鈕之間（Tim：⛔ 留太寬 ⇒ 按鈕被擠得換行） */ .sb{ width:38px; height:38px; } .sbres{ font-size:10px; padding:1px 5px; }
     #topC{ width:calc(100vw - 96px); } #info{ font-size:11px; padding:5px 8px; } #info h3{ font-size:12px; } #info .pcols{ gap:2px 8px; } #info .pc{ flex-basis:110px; } #info .legend{ display:none; } #irow{ gap:4px; }   /* 手機：砲位圖窄（船頭朝上），跟卡片並排 */   /* 砲列在窄的卡片裡換行（⛔ 不換 ⇒ 伸到右邊的按鈕底下） */
-    #navc{ width:68px; height:68px; } #modeT{ font-size:12px; }
+    #navc{ width:68px; height:68px; } :root{ --modeFs:12px; }   /* 羅盤上方那行資訊與廣播（#modeT、#msg）*/
     #ctl{ flex:1; padding:0; } #ctl.panel, #keys, #ammo{ gap:2px; } #guns .gr{ white-space:normal; word-break:break-all; } #tip{ display:none; }   /* 砲列在窄面板裡換行 */
-    #msg{ font-size:6.5px; } #msg div:last-child{ font-size:7.5px; }   /* 廣播：跟資訊同一欄（頂端中間，兩邊艦隊按鈕之間） */
     .hud h3 .disp{ display:block; margin-left:0; } }                                     /* 排水量換到船名下一行（⛔ 同一行 ⇒ 面板縮半之後「現在 …」被切掉） */
   /* 手機橫拿（矮）：面板與控制列都縮 */
   @media (max-height:520px) and (min-width:761px){
