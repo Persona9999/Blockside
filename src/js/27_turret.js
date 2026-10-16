@@ -147,6 +147,7 @@ function turretStep(sh, dt, L) {
 /** 模型、砲照現在的角度擺好（turretStep、除錯的 __game.turret 設角度之後）。 */
 function turPose(sh) {
   sh.tur.forEach(function (N) { N.models.forEach(function (m) { m.c = ndOut(N, m.c0); }); });
+  (sh.mags || []).forEach(function (g) { if (g.tur >= 0) { g.blast0 = g.blast0 || g.blast.slice(); g.blast = ndOut(sh.tur[g.tur], g.blast0); } });   // 砲塔裡的彈藥箱：殉爆的爆心跟著轉（⛔ 照開局的位置 ⇒ 轉過之後在別的地方炸）
   sh.turG.forEach(turGunPose);
 }
 /** 一個節點這一步轉多少（砲塔：前方對準瞄準方位；自己會轉、掛在砲塔上的砲：照舊的 mountStep 一樣挑砲門／照 arc、fire 轉）。回：有沒有動。 */
