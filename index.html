@@ -280,7 +280,7 @@
   <div id="fpUI">
     <div id="bldBar"></div>
     <div id="fpJoy"><div id="fpKnob"></div></div>
-    <div id="fpAct"><span class="kb hb fpb" id="fpClimb" style="display:none" title="爬梯子（E）"><b>E</b><i class="em">🪜</i></span><span class="kb hb fpb" id="fpRun" title="跑（Shift）"><b>Shift</b><i class="em">🏃</i></span><span class="kb hb fpb" id="fpFol" title="跟隨身邊的船員（F）"><b>F</b><i class="em">👁</i></span><span class="kb hb fpb" id="fpNext" title="換下一個（G）"><b>G</b><i class="em">⏭</i></span><span class="kb hb fpb bldOnly" id="bldRot" title="轉 90°（R）"><b>R</b><i class="em">⟳</i></span><span class="kb hb fpb bldOnly" id="bldDel" title="拆（左鍵、X）"><b>X</b><i class="em">✖</i></span><span class="kb hb fpb bldOnly" id="bldPut" title="放（右鍵、V）"><b>V</b><i class="em">✔</i></span></div>
+    <div id="fpAct"><span class="kb hb fpb" id="fpClimb" style="display:none" title="爬梯子（E）"><b>E</b><i class="em">🪜</i></span><span class="kb hb fpb" id="fpRun" title="跑（Shift）"><b>Shift</b><i class="em">🏃</i></span><span class="kb hb fpb" id="fpFol" title="跟隨身邊的船員（F）"><b>F</b><i class="em">👁</i></span><span class="kb hb fpb" id="fpNext" title="換下一個（G）"><b>G</b><i class="em">⏭</i></span><span class="kb hb fpb bldOnly" id="bldMode" title="碰撞：一般（M 換：一般 → 穿牆 → 浮空）"><b>M</b><i class="em">🚶</i></span><span class="kb hb fpb bldOnly" id="bldRot" title="轉 90°（R）"><b>R</b><i class="em">⟳</i></span><span class="kb hb fpb bldOnly" id="bldDel" title="拆（左鍵、X）"><b>X</b><i class="em">✖</i></span><span class="kb hb fpb bldOnly" id="bldPut" title="放（右鍵、V）"><b>V</b><i class="em">✔</i></span></div>
     <div id="fpCross"></div>
     <div id="fpJoyR" title="轉頭（方向鍵、Q，或按住畫面拖曳）"><div id="fpKnobR"></div></div>
     <div id="fpVert" class="fpPad"><span style="grid-area:1/1" class="kb hb fpb" id="fpJump" title="跳（空白鍵）"><b>空白</b><i class="em">⤴</i></span><span style="grid-area:1/1" class="kb hb fpb fpFly" data-fp="up" title="往上（空白鍵）"><b>空白</b><i class="em">⬆</i></span><span style="grid-area:2/1" class="kb hb fpb fpFly" data-fp="dn" title="往下（C）"><b>C</b><i class="em">⬇</i></span></div>
@@ -343,7 +343,7 @@
     <div class="gsR"><span class="gsL">物理效果</span><span class="chip" data-gx="full">全開</span><span class="chip" data-gx="high">高</span><span class="chip" data-gx="mid">中</span><span class="chip" data-gx="low">低</span><span class="note" id="gsPhx"></span></div>
     <div class="gsR"><span class="gsL">瞄準</span><span class="chip" data-k="q" id="aimk">🎯 換瞄準模式（Q）</span><span class="note">自由 → 水線 → 砲甲板 → 帆具 → 甲板人員 → 彈藥庫（現在的寫在羅盤上面）</span></div>
     <div class="gsR"><span class="chip" id="physT"><b>B</b> 帆繩物理</span><span class="chip" id="camT"><b>V</b> 鏡頭跟船</span><span class="chip" id="muteT"><b>M</b> 靜音</span><span class="chip" id="fpsT">顯示 FPS</span><span class="chip" id="fullT"><b>F11</b> 全螢幕</span><span class="note" id="gsFull"></span></div>
-    <div class="gsR"><span class="gsL">視角</span><span class="chip" id="fpT">🧍 第一人稱</span><span class="chip on" id="fpLampT" title="第一人稱時自己帶一盞燈（艙裡比較亮）">🏮 提燈</span><span class="note">在我艦上走（左下搖桿或 WASD、右下搖桿／拖曳／方向鍵轉頭（電腦：點畫面用滑鼠轉頭，Esc 或按住 Alt 放開）、空白鍵跳、E 爬梯子、Shift 跑）；再按一次回到原本的鏡頭（TASK-0649）</span></div>
+    <div class="gsR"><span class="gsL">視角</span><span class="chip" id="fpT">🧍 第一人稱</span><span class="chip on" id="fpLampT" title="第一人稱時自己帶一盞燈（艙裡比較亮）">🏮 提燈</span><span class="chip" id="bldLinesT" title="建造模式：每一間艙房的外框（穿過牆畫）">📐 艙房外框</span><span class="note">在我艦上走（左下搖桿或 WASD、右下搖桿／拖曳／方向鍵轉頭（電腦：點畫面用滑鼠轉頭，Esc 或按住 Alt 放開）、空白鍵跳、E 爬梯子、Shift 跑）；再按一次回到原本的鏡頭（TASK-0649）</span></div>
     <div class="gsR"><span class="gsL">碰撞</span><span class="chip" data-fpm="0" title="牆擋人、會從甲板的破洞落下去">正常</span><span class="chip" data-fpm="1" title="牆不擋人，腳底照樣貼著甲板、不墜落；走不出船外">🚪 穿牆</span><span class="chip" data-fpm="2" title="沒有重力、什麼都不擋；空白鍵／C（面板的 ⬆ ⬇）上下">🕊 浮空</span><span class="note">第一人稱時的碰撞</span></div>
     <div class="gsR"><span class="gsL">彈藥庫殉爆</span><span class="chip" id="slowT">慢動作</span><span class="chip" id="slowCamT">特寫鏡頭</span></div>
     <div class="gsR"><span class="gsL">模擬速度</span><input type="range" id="simSpd" min="-1301" max="903" step="1" value="0" aria-label="模擬速度"><b id="simSpdV" style="min-width:3.6em">×1</b><span class="chip" id="simSpd1">1×</span></div>
@@ -10721,7 +10721,7 @@ function render() {
     if (PHYS && ow.ll && ow.ll.n) { gl.bindVertexArray(ow.ll.vao); gl.drawArrays(gl.LINES, 0, ow.ll.n); }
     if (ow.chain && ow.chain.n) { gl.bindVertexArray(ow.chain.vao); gl.drawArrays(gl.LINES, 0, ow.chain.n); }
     if (BLD.on && ow.bldLines && ow.bldLines.n) { gl.disable(gl.DEPTH_TEST); gl.bindVertexArray(ow.bldLines.vao); gl.drawArrays(gl.LINES, 0, ow.bldLines.n); gl.enable(gl.DEPTH_TEST); }   // 建造的預覽框（82_build.js bldLines；穿牆看得到）
-    if ((ROOMS_DBG || BLD.on) && ow.rooms && ow.rooms.length) { if (!ow.roomLines) roomLines(ow); gl.disable(gl.DEPTH_TEST); gl.bindVertexArray(ow.roomLines.vao); gl.drawArrays(gl.LINES, 0, ow.roomLines.n); gl.enable(gl.DEPTH_TEST); }   // 空艙房的外框（?rooms=1；穿過船殼看得到）
+    if ((ROOMS_DBG || (BLD.on && BLD.lines)) && ow.rooms && ow.rooms.length) { if (!ow.roomLines) roomLines(ow); gl.disable(gl.DEPTH_TEST); gl.bindVertexArray(ow.roomLines.vao); gl.drawArrays(gl.LINES, 0, ow.roomLines.n); gl.enable(gl.DEPTH_TEST); }   // 空艙房的外框（?rooms=1；穿過船殼看得到）
   });
   gl.frontFace(gl.CW); gl.useProgram(P.sail.prog); setCommon(P.sail); drawSails(P.sail); gl.frontFace(gl.CCW);
   // 折射（高）：畫海之前的場景複製到 RT.B（顏色＋深度），海的著色器讀它
@@ -11877,6 +11877,7 @@ function start() {
   var seenT = {}; SHIPS.forEach(function (sh) { if (!seenT[sh.T.id]) { seenT[sh.T.id] = 1; crewShortNote(sh); } });   // 船員站不下：每一型報一次
   if (MODE !== 'build') note(SHIPS[PLAYER_I], AUTOFIRE ? '自動開砲中（G 關掉就自己打）' : '點敵艦設瞄準點，空白鍵齊射（G 自動開砲）');
   bldEnter();                                                        // 建造（82_build.js）：進第一人稱、顯示建造介面；別的玩法 ⇒ 收起來
+  fpKeep();                                                          // 第一人稱（81_fps.js）：玩家開著 ⇒ 重新開始、下一場都維持
   if (WX.aim) note(SHIPS[PLAYER_I], '暴風雨：浪大、風強 —— 船晃得越兇砲越散，舵也難使');
 }
 // ── js/71_input.js ──
@@ -13959,8 +13960,8 @@ function labOpts() {
 // 只在畫面這一層跑（frame，90_main.js）：⛔ 不抽 rnd()、不碰模擬的狀態 ⇒ 開不開第一人稱，戰局都逐位元組相同。
 //   停格、設定打開（PAUSED）時只能轉頭、不能走。
 // 自動退出：我艦沉了、換了一艘我艦（playerHandoff）、重新開始、回主選單、腳下一路都沒有地板。
-var FP = { on: false, lamp: true, mode: 0, sh: null, c: null, yaw: 0, pitch: 0, mv: { f: 0, b: 0, l: 0, r: 0, tl: 0, tr: 0, lu: 0, ld: 0, up: 0, dn: 0 }, run: false, climb: null, near: null, lads: null, v: [0, 0], vz: 0, ez: null, fz: 0, eo: 0, jz: 0, jv: 0, joy: [0, 0], look: [0, 0], fol: null, folP: null, lookT: 0, flyFrom: null };
-var FP_MODE = ['正常', '穿牆', '浮空'], FP_FLY_OUT = 200, FP_NC_EXIT = 2, FP_NC_UP = 3;   // 浮空時離船身最多 20 m；穿牆時從牆裡出來，前面的地板跟腳最多差 0.2 m；穿牆時跨得上 0.3 m（樓梯一階；⛔ 照正常的 0.6 m ⇒ 憲法號舷牆邊 0.2 m 木條＋0.4 m 欄杆蓋板一路踩上欄杆頂，量過）
+var FP = { on: false, want: false, lamp: true, mode: 0, sh: null, c: null, yaw: 0, pitch: 0, mv: { f: 0, b: 0, l: 0, r: 0, tl: 0, tr: 0, lu: 0, ld: 0, up: 0, dn: 0 }, run: false, climb: null, near: null, lads: null, v: [0, 0], vz: 0, ez: null, fz: 0, eo: 0, jz: 0, jv: 0, joy: [0, 0], look: [0, 0], fol: null, folP: null, lookT: 0, flyFrom: null };
+var FP_MODE_EM = ['🚶', '🚪', '🕊'], FP_MODE = ['正常', '穿牆', '浮空'], FP_FLY_OUT = 200, FP_NC_EXIT = 2, FP_NC_UP = 3;   // 浮空時離船身最多 20 m；穿牆時從牆裡出來，前面的地板跟腳最多差 0.2 m；穿牆時跨得上 0.3 m（樓梯一階；⛔ 照正常的 0.6 m ⇒ 憲法號舷牆邊 0.2 m 木條＋0.4 m 欄杆蓋板一路踩上欄杆頂，量過）
 // 跟隨船員（Tim 2026-10-16「加一個 跟隨船員(把第一人稱鏡頭綁到附近船員上)」）：FP.fol ＝ 被跟的人 —— 鏡頭在他的眼睛、他照常做自己的工作（⛔ 不設 c.fp）、
 //   玩家只能轉頭；自己的角色停在原地。F 跟隨／回來、G 換下一個（照離自己由近到遠輪）；被跟的人落水、倒下 ⇒ 回到自己。
 // FP_R：身體半徑（格）—— Tim 2026-10-16「只要判定不會穿牆就好 身體碰撞窄一點(目前會下不了憲法號樓梯)」⇒ 1.5 → 0.6（6 cm：只擋牆，踏板之間擠得進去）
@@ -14028,7 +14029,9 @@ function fpUI() {
   $('fpT').classList.toggle('on', FP.on); $('fpLampT').classList.toggle('on', FP.lamp);
   [].forEach.call(document.querySelectorAll('#gset [data-fpm]'), function (b) { b.classList.toggle('on', +b.dataset.fpm === FP.mode); });
   $('fpUI').classList.toggle('fol', !!FP.fol);                         // 跟隨中：藏搖桿、跳、跑、爬梯子（template.html #fpUI.fol）
-  $('fpUI').classList.toggle('fly', FP.mode === 2);                    // 浮空：藏跳、爬梯子，換上 ⬆ ⬇（template.html #fpUI.fly）
+  $('fpUI').classList.toggle('fly', FP.mode === 2);
+  var bm = $('bldMode'), be = bm && bm.querySelector('.em'), bt = FP_MODE_EM[FP.mode];   // 建造模式那一顆（82_build.js）：照現在的碰撞換圖示
+  if (be && be.textContent !== bt) { be.textContent = bt; bm.title = '碰撞：' + FP_MODE[FP.mode] + '（M 換：一般 → 穿牆 → 浮空）'; }                    // 浮空：藏跳、爬梯子，換上 ⬆ ⬇（template.html #fpUI.fly）
   $('fpClimb').style.display = FP.on && FP.near && !FP.fol && FP.mode !== 2 ? '' : 'none';
   var t = FP.fol ? '↩' : '👁', fe = $('fpFol').querySelector('.em'); if (fe && fe.textContent !== t) { fe.textContent = t; $('fpFol').title = FP.fol ? '回到自己（F）' : '跟隨身邊的船員（F）'; }
 }
@@ -14304,7 +14307,12 @@ function fpKey(k, down) {
 /** 拖曳轉頭（71_input.js pointermove）：往右拖 ⇒ 往右看。 */
 function fpLook(dx, dy) { FP.yaw += dx * 0.005; FP.pitch = clamp(FP.pitch - dy * 0.005, -1.35, 1.35); FP.lookT = performance.now(); }   // lookT：跟隨中 2 秒內不自動轉
 // 設定面板的開關、第一人稱的操作面板（按住才動：放開、移出、取消都停）
-$('fpT').onclick = function () { fpSet(!FP.on); gsetClose(); };
+$('fpT').onclick = function () { fpSet(!FP.on); FP.want = FP.on; gsetClose(); };   // FP.want：玩家自己開的 ⇒ 重新開始、下一場開局都維持（fpKeep）
+/** 開局（70_flow.js start，reset 之後）：玩家開著第一人稱 ⇒ 回到第一人稱（Tim 2026-10-16「按下重新開始會變成非第一人稱模式(重新開始應該要維持在第一人稱)」；
+ *  ⛔ 不記 ⇒ reset 換了一艘我艦，fpFrame 看到 SHIPS[PLAYER_I] 不是原本那艘就退出）。被擊沉退出的那一場，下一場照樣回來。 */
+//   ⚠ reset 之後 FP.on 還是 true（下一格 fpFrame 才退出）⇒ 看的是「跟的是不是現在這艘我艦」，不是 FP.on。
+function fpKeep() { if (FP.want && RUNNING && !fpOnMine()) fpSet(true, true); }
+function fpOnMine() { return FP.on && FP.sh === SHIPS[PLAYER_I]; }
 $('fpLampT').onclick = function () { FP.lamp = !FP.lamp; fpUI(); };   // 提燈：開關不關設定面板；跨場留著
 // 滑鼠模式（Tim 2026-10-16「視角旋轉是否可以參考PC版minecraft … 點了滑鼠後會變成滑鼠模式」；查過：Minecraft Java 版抓住滑鼠一動就轉頭，Esc 放開並打開暫停選單，點回畫面再抓住）：
 //   ⛔ 31be9d3 那版的鎖定：Esc 只放開、什麼都沒打開 ⇒ Tim「要esc後才能跟ui互動」。這一版照 Minecraft：
@@ -14374,12 +14382,13 @@ var joyDrawR = joyBind($('fpJoyR'), $('fpKnobR'), function (x, y) { FP.look = [x
 //   · 對準：從眼睛沿視線在船的格子裡打一條射線（VK.raycast，最遠 BLD_REACH 格），打到的那一點往回退一點、往下找站得住的那一格 ＝ 地板；
 //     先看它在哪一間艙房的格子上（hullRooms／roomGrid：地板那一層、0.5 m 一格），再看哪一層砲甲板（hullDeckKit／deckGrid）⇒ 第幾格。
 //   · 放（右鍵、V、面板的 ✔）：物品擺在準心那一格的中間；能不能擺照 placeOk（擋門口、擋砲班、重疊、地面不平、圍住別的……）。空著的艙房放一張床 ⇒ 那一間變成醫療艙。
-//   · 拆（左鍵、X、面板的 ✖）：準心那一格上的那一件。轉（R、⟳）：90°。
+//   · 拆（左鍵、X、面板的 ✖）：準心那一格上的那一件。轉（R、⟳）：90°。碰撞（M、🚶／🚪／🕊）：一般 → 穿牆 → 浮空 循環（81_fps.js fpMode）。
 //   · 改完 ⇒ 寫進 SHIP_ROOMS、存檔、整艘照新擺法重建（reset：單艘約 0.1 秒，量過）⇒ 第一人稱留在原地、原本的朝向。
-//   · 預覽：對到的地方畫一個框（綠 ＝ 可以放、紅 ＝ 不行、橘 ＝ 要拆的那一件；60_render.js 跟 ?rooms=1 的艙房外框同一套線，穿牆看得到），每一間艙房的外框也畫出來。
+//   · 預覽：對到的地方畫一個框（綠 ＝ 可以放、紅 ＝ 不行、橘 ＝ 要拆的那一件；60_render.js 跟 ?rooms=1 的艙房外框同一套線，穿牆看得到）；
+//     每一間艙房的外框（穿牆）＝ 設定「視角」那一排的「📐 艙房外框」BLD.lines，預設關（Tim 2026-10-16「房間透視線要可以開關(預設關閉)」）。
 // 介面（template.html #bldUI，#stage.bld 才顯示）：下方快捷欄（1–9 選、照分類排）＋ 📦 目錄（B：分類分頁、每一樣的大小與用途）＋ 準心上方一行說明（對到哪裡、能不能放、為什麼）。
 // 只在畫面這一層跑（90_main.js frame）：⛔ 不抽 rnd()；別的玩法 BLD.on 是 false ⇒ 什麼都不做（戰局逐位元組相同）。
-var BLD = { on: false, it: null, r: 0, tgt: null, key: '', cat: 'all', open: false, msg: '', msgT: 0 };
+var BLD = { on: false, lines: false, it: null, r: 0, tgt: null, key: '', cat: 'all', open: false, msg: '', msgT: 0 };
 var BLD_REACH = 60;                                                  // 6 m 內的地板才擺得到
 var BLD_CAT = [
   { id: 'med', name: '醫療', em: '🏥', has: function (f) { return f.type === 'medical'; } },
@@ -14400,7 +14409,7 @@ function bldRoomName(r) { return (r.deck ? r.deck.name + ' ' : '') + r.name.spli
 /** 開局（70_flow.js start，reset 之後）：建造玩法 ⇒ 進第一人稱、顯示建造介面；別的玩法 ⇒ 收起來。 */
 function bldEnter() {
   BLD.on = MODE === 'build'; BLD.key = ''; BLD.open = false;
-  if (BLD.on) { if (!BLD.it) BLD.it = bldList()[0] || null; if (!FP.on) fpSet(true, true); note(SHIPS[PLAYER_I], '建造：準心對著甲板 —— 右鍵（或 ✔）放、左鍵（或 ✖）拆、R 轉 90°、1–9 選物品、B 目錄'); }
+  if (BLD.on) { if (!BLD.it) BLD.it = bldList()[0] || null; if (!fpOnMine()) fpSet(true, true); note(SHIPS[PLAYER_I], '建造：準心對著甲板 —— 右鍵（或 ✔）放、左鍵（或 ✖）拆、R 轉 90°、1–9 選物品、B 目錄'); }
   bldUI();
 }
 /** 每一格畫面（90_main.js frame，fpFrame 之後）：準心對到哪裡、預覽框、說明。 */
@@ -14537,6 +14546,7 @@ function bldKey(k, down) {
   if (k === 'b') { if (down) bldCatOpen(!BLD.open); return true; }
   if (k === 'x') { if (down) bldDo(true); return true; }
   if (k === 'v') { if (down) bldDo(false); return true; }
+  if (k === 'm') { if (down) fpMode((FP.mode + 1) % 3); return true; }   // 碰撞循環：一般 → 穿牆 → 浮空（Tim 2026-10-16「建造模式加一個按鈕 可以循環切換 一般 穿牆 浮空模式吧」）
   return false;
 }
 // 滑鼠（只在滑鼠模式＝抓住滑鼠時，跟 Minecraft 一樣）：左鍵拆、右鍵放。沒抓住時左鍵照舊是「抓住滑鼠」（81_fps.js）。
@@ -14547,7 +14557,9 @@ cv.addEventListener('mousedown', function (e) {
 $('bldPut').onclick = function () { bldDo(false); };
 $('bldDel').onclick = function () { bldDo(true); };
 $('bldRot').onclick = function () { BLD.r = 1 - BLD.r; bldUI(); };
+$('bldMode').onclick = function () { fpMode((FP.mode + 1) % 3); };
 $('bldCatX').onclick = function () { bldCatOpen(false); };
+$('bldLinesT').onclick = function () { BLD.lines = !BLD.lines; $('bldLinesT').classList.toggle('on', BLD.lines); };   // 艙房外框（Tim 2026-10-16「房間透視線要可以開關(預設關閉)」）：開關不關設定面板；跨場留著
 // ── js/90_main.js ──
 // ───────────────────────── 主迴圈 ─────────────────────────
 var last = 0, acc = 0, FPS = 60, fpsT = 0;

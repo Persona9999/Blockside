@@ -8,12 +8,13 @@
 //   · 對準：從眼睛沿視線在船的格子裡打一條射線（VK.raycast，最遠 BLD_REACH 格），打到的那一點往回退一點、往下找站得住的那一格 ＝ 地板；
 //     先看它在哪一間艙房的格子上（hullRooms／roomGrid：地板那一層、0.5 m 一格），再看哪一層砲甲板（hullDeckKit／deckGrid）⇒ 第幾格。
 //   · 放（右鍵、V、面板的 ✔）：物品擺在準心那一格的中間；能不能擺照 placeOk（擋門口、擋砲班、重疊、地面不平、圍住別的……）。空著的艙房放一張床 ⇒ 那一間變成醫療艙。
-//   · 拆（左鍵、X、面板的 ✖）：準心那一格上的那一件。轉（R、⟳）：90°。
+//   · 拆（左鍵、X、面板的 ✖）：準心那一格上的那一件。轉（R、⟳）：90°。碰撞（M、🚶／🚪／🕊）：一般 → 穿牆 → 浮空 循環（81_fps.js fpMode）。
 //   · 改完 ⇒ 寫進 SHIP_ROOMS、存檔、整艘照新擺法重建（reset：單艘約 0.1 秒，量過）⇒ 第一人稱留在原地、原本的朝向。
-//   · 預覽：對到的地方畫一個框（綠 ＝ 可以放、紅 ＝ 不行、橘 ＝ 要拆的那一件；60_render.js 跟 ?rooms=1 的艙房外框同一套線，穿牆看得到），每一間艙房的外框也畫出來。
+//   · 預覽：對到的地方畫一個框（綠 ＝ 可以放、紅 ＝ 不行、橘 ＝ 要拆的那一件；60_render.js 跟 ?rooms=1 的艙房外框同一套線，穿牆看得到）；
+//     每一間艙房的外框（穿牆）＝ 設定「視角」那一排的「📐 艙房外框」BLD.lines，預設關（Tim 2026-10-16「房間透視線要可以開關(預設關閉)」）。
 // 介面（template.html #bldUI，#stage.bld 才顯示）：下方快捷欄（1–9 選、照分類排）＋ 📦 目錄（B：分類分頁、每一樣的大小與用途）＋ 準心上方一行說明（對到哪裡、能不能放、為什麼）。
 // 只在畫面這一層跑（90_main.js frame）：⛔ 不抽 rnd()；別的玩法 BLD.on 是 false ⇒ 什麼都不做（戰局逐位元組相同）。
-var BLD = { on: false, it: null, r: 0, tgt: null, key: '', cat: 'all', open: false, msg: '', msgT: 0 };
+var BLD = { on: false, lines: false, it: null, r: 0, tgt: null, key: '', cat: 'all', open: false, msg: '', msgT: 0 };
 var BLD_REACH = 60;                                                  // 6 m 內的地板才擺得到
 var BLD_CAT = [
   { id: 'med', name: '醫療', em: '🏥', has: function (f) { return f.type === 'medical'; } },
@@ -34,7 +35,7 @@ function bldRoomName(r) { return (r.deck ? r.deck.name + ' ' : '') + r.name.spli
 /** 開局（70_flow.js start，reset 之後）：建造玩法 ⇒ 進第一人稱、顯示建造介面；別的玩法 ⇒ 收起來。 */
 function bldEnter() {
   BLD.on = MODE === 'build'; BLD.key = ''; BLD.open = false;
-  if (BLD.on) { if (!BLD.it) BLD.it = bldList()[0] || null; if (!FP.on) fpSet(true, true); note(SHIPS[PLAYER_I], '建造：準心對著甲板 —— 右鍵（或 ✔）放、左鍵（或 ✖）拆、R 轉 90°、1–9 選物品、B 目錄'); }
+  if (BLD.on) { if (!BLD.it) BLD.it = bldList()[0] || null; if (!fpOnMine()) fpSet(true, true); note(SHIPS[PLAYER_I], '建造：準心對著甲板 —— 右鍵（或 ✔）放、左鍵（或 ✖）拆、R 轉 90°、1–9 選物品、B 目錄'); }
   bldUI();
 }
 /** 每一格畫面（90_main.js frame，fpFrame 之後）：準心對到哪裡、預覽框、說明。 */
@@ -171,6 +172,7 @@ function bldKey(k, down) {
   if (k === 'b') { if (down) bldCatOpen(!BLD.open); return true; }
   if (k === 'x') { if (down) bldDo(true); return true; }
   if (k === 'v') { if (down) bldDo(false); return true; }
+  if (k === 'm') { if (down) fpMode((FP.mode + 1) % 3); return true; }   // 碰撞循環：一般 → 穿牆 → 浮空（Tim 2026-10-16「建造模式加一個按鈕 可以循環切換 一般 穿牆 浮空模式吧」）
   return false;
 }
 // 滑鼠（只在滑鼠模式＝抓住滑鼠時，跟 Minecraft 一樣）：左鍵拆、右鍵放。沒抓住時左鍵照舊是「抓住滑鼠」（81_fps.js）。
@@ -181,4 +183,6 @@ cv.addEventListener('mousedown', function (e) {
 $('bldPut').onclick = function () { bldDo(false); };
 $('bldDel').onclick = function () { bldDo(true); };
 $('bldRot').onclick = function () { BLD.r = 1 - BLD.r; bldUI(); };
+$('bldMode').onclick = function () { fpMode((FP.mode + 1) % 3); };
 $('bldCatX').onclick = function () { bldCatOpen(false); };
+$('bldLinesT').onclick = function () { BLD.lines = !BLD.lines; $('bldLinesT').classList.toggle('on', BLD.lines); };   // 艙房外框（Tim 2026-10-16「房間透視線要可以開關(預設關閉)」）：開關不關設定面板；跨場留著

@@ -21,8 +21,8 @@
 // 只在畫面這一層跑（frame，90_main.js）：⛔ 不抽 rnd()、不碰模擬的狀態 ⇒ 開不開第一人稱，戰局都逐位元組相同。
 //   停格、設定打開（PAUSED）時只能轉頭、不能走。
 // 自動退出：我艦沉了、換了一艘我艦（playerHandoff）、重新開始、回主選單、腳下一路都沒有地板。
-var FP = { on: false, lamp: true, mode: 0, sh: null, c: null, yaw: 0, pitch: 0, mv: { f: 0, b: 0, l: 0, r: 0, tl: 0, tr: 0, lu: 0, ld: 0, up: 0, dn: 0 }, run: false, climb: null, near: null, lads: null, v: [0, 0], vz: 0, ez: null, fz: 0, eo: 0, jz: 0, jv: 0, joy: [0, 0], look: [0, 0], fol: null, folP: null, lookT: 0, flyFrom: null };
-var FP_MODE = ['正常', '穿牆', '浮空'], FP_FLY_OUT = 200, FP_NC_EXIT = 2, FP_NC_UP = 3;   // 浮空時離船身最多 20 m；穿牆時從牆裡出來，前面的地板跟腳最多差 0.2 m；穿牆時跨得上 0.3 m（樓梯一階；⛔ 照正常的 0.6 m ⇒ 憲法號舷牆邊 0.2 m 木條＋0.4 m 欄杆蓋板一路踩上欄杆頂，量過）
+var FP = { on: false, want: false, lamp: true, mode: 0, sh: null, c: null, yaw: 0, pitch: 0, mv: { f: 0, b: 0, l: 0, r: 0, tl: 0, tr: 0, lu: 0, ld: 0, up: 0, dn: 0 }, run: false, climb: null, near: null, lads: null, v: [0, 0], vz: 0, ez: null, fz: 0, eo: 0, jz: 0, jv: 0, joy: [0, 0], look: [0, 0], fol: null, folP: null, lookT: 0, flyFrom: null };
+var FP_MODE_EM = ['🚶', '🚪', '🕊'], FP_MODE = ['正常', '穿牆', '浮空'], FP_FLY_OUT = 200, FP_NC_EXIT = 2, FP_NC_UP = 3;   // 浮空時離船身最多 20 m；穿牆時從牆裡出來，前面的地板跟腳最多差 0.2 m；穿牆時跨得上 0.3 m（樓梯一階；⛔ 照正常的 0.6 m ⇒ 憲法號舷牆邊 0.2 m 木條＋0.4 m 欄杆蓋板一路踩上欄杆頂，量過）
 // 跟隨船員（Tim 2026-10-16「加一個 跟隨船員(把第一人稱鏡頭綁到附近船員上)」）：FP.fol ＝ 被跟的人 —— 鏡頭在他的眼睛、他照常做自己的工作（⛔ 不設 c.fp）、
 //   玩家只能轉頭；自己的角色停在原地。F 跟隨／回來、G 換下一個（照離自己由近到遠輪）；被跟的人落水、倒下 ⇒ 回到自己。
 // FP_R：身體半徑（格）—— Tim 2026-10-16「只要判定不會穿牆就好 身體碰撞窄一點(目前會下不了憲法號樓梯)」⇒ 1.5 → 0.6（6 cm：只擋牆，踏板之間擠得進去）
@@ -90,7 +90,9 @@ function fpUI() {
   $('fpT').classList.toggle('on', FP.on); $('fpLampT').classList.toggle('on', FP.lamp);
   [].forEach.call(document.querySelectorAll('#gset [data-fpm]'), function (b) { b.classList.toggle('on', +b.dataset.fpm === FP.mode); });
   $('fpUI').classList.toggle('fol', !!FP.fol);                         // 跟隨中：藏搖桿、跳、跑、爬梯子（template.html #fpUI.fol）
-  $('fpUI').classList.toggle('fly', FP.mode === 2);                    // 浮空：藏跳、爬梯子，換上 ⬆ ⬇（template.html #fpUI.fly）
+  $('fpUI').classList.toggle('fly', FP.mode === 2);
+  var bm = $('bldMode'), be = bm && bm.querySelector('.em'), bt = FP_MODE_EM[FP.mode];   // 建造模式那一顆（82_build.js）：照現在的碰撞換圖示
+  if (be && be.textContent !== bt) { be.textContent = bt; bm.title = '碰撞：' + FP_MODE[FP.mode] + '（M 換：一般 → 穿牆 → 浮空）'; }                    // 浮空：藏跳、爬梯子，換上 ⬆ ⬇（template.html #fpUI.fly）
   $('fpClimb').style.display = FP.on && FP.near && !FP.fol && FP.mode !== 2 ? '' : 'none';
   var t = FP.fol ? '↩' : '👁', fe = $('fpFol').querySelector('.em'); if (fe && fe.textContent !== t) { fe.textContent = t; $('fpFol').title = FP.fol ? '回到自己（F）' : '跟隨身邊的船員（F）'; }
 }
@@ -366,7 +368,12 @@ function fpKey(k, down) {
 /** 拖曳轉頭（71_input.js pointermove）：往右拖 ⇒ 往右看。 */
 function fpLook(dx, dy) { FP.yaw += dx * 0.005; FP.pitch = clamp(FP.pitch - dy * 0.005, -1.35, 1.35); FP.lookT = performance.now(); }   // lookT：跟隨中 2 秒內不自動轉
 // 設定面板的開關、第一人稱的操作面板（按住才動：放開、移出、取消都停）
-$('fpT').onclick = function () { fpSet(!FP.on); gsetClose(); };
+$('fpT').onclick = function () { fpSet(!FP.on); FP.want = FP.on; gsetClose(); };   // FP.want：玩家自己開的 ⇒ 重新開始、下一場開局都維持（fpKeep）
+/** 開局（70_flow.js start，reset 之後）：玩家開著第一人稱 ⇒ 回到第一人稱（Tim 2026-10-16「按下重新開始會變成非第一人稱模式(重新開始應該要維持在第一人稱)」；
+ *  ⛔ 不記 ⇒ reset 換了一艘我艦，fpFrame 看到 SHIPS[PLAYER_I] 不是原本那艘就退出）。被擊沉退出的那一場，下一場照樣回來。 */
+//   ⚠ reset 之後 FP.on 還是 true（下一格 fpFrame 才退出）⇒ 看的是「跟的是不是現在這艘我艦」，不是 FP.on。
+function fpKeep() { if (FP.want && RUNNING && !fpOnMine()) fpSet(true, true); }
+function fpOnMine() { return FP.on && FP.sh === SHIPS[PLAYER_I]; }
 $('fpLampT').onclick = function () { FP.lamp = !FP.lamp; fpUI(); };   // 提燈：開關不關設定面板；跨場留著
 // 滑鼠模式（Tim 2026-10-16「視角旋轉是否可以參考PC版minecraft … 點了滑鼠後會變成滑鼠模式」；查過：Minecraft Java 版抓住滑鼠一動就轉頭，Esc 放開並打開暫停選單，點回畫面再抓住）：
 //   ⛔ 31be9d3 那版的鎖定：Esc 只放開、什麼都沒打開 ⇒ Tim「要esc後才能跟ui互動」。這一版照 Minecraft：
