@@ -192,17 +192,26 @@ function teleSet(sh, i) {
 /** 每一步（sail() 裡，算完舊公式的「單獨推動時的航速」之後）：推力、水阻、加速度 ⇒ sh.spd；力矩記在 D.tq（轉向率在 driveYaw，舵算完才知道 rmax）。
  *  vS：帆在這一段、全部完好時的航速（舊公式 target ÷ sailFrac 的那一份；0 ＝ 帆不出力）；vB：額外動力全速的航速（m/s；0 ＝ 沒有或不出力）；
  *  brake：錨咬著、拋錨 ⇒ 6 秒內停。 */
-/** 帆推不過風（TASK-0639；Tim 2026-10-16：「帆提供的速度要考慮到船目前的相對速度(不能跑的比風速快)」）：帆推力的倍率 0…1。
- *  u ＝ 船沿「風吹去的方向」的速度（sh.spd × cos 船頭與風吹去方向的夾角）；Vw ＝ 羅盤上的風速（windKnots ÷ 1.944，m/s）。
- *  u0 ＝ 帆單獨推得到的那一份（v × cos，最多 0.9 Vw）：u 不到 u0 ⇒ 推力照舊（帆單獨推的航速、加減速跟以前一樣）；
- *  超過 ⇒ ((Vw − u)／(Vw − u0))²（視風變小、推力照平方掉），u 追上 Vw ⇒ 0。迎風那一半、橫風、倒退 ⇒ 船不會往風吹去的方向追上風 ⇒ 照舊。
- *  ⛔ 以前推力只看「帆單獨推得到的航速」⇒ 加上蒸汽順風照樣推：拿破崙號滿帆＋全速前進、風 10–11 節 ⇒ 14.3 節。 */
+/** 帆的推力照視風（TASK-0639；Tim 2026-10-16：「帆提供的速度要考慮到船目前的相對速度(不能跑的比風速快)」→「加成是讓帆的推力加成(但推力應該是相對於風速的)」「推力改成照船上感受到的風（視風）算」）：
+ *  帆推力的倍率 0…1（乘在 k·v² 上；v ＝ 帆單獨推得到的航速，航速倍率照舊乘在裡面 ＝ 推力的加成）。
+ *  視風 A ＝ 真風（羅盤上的風速 Vw ＝ windKnots ÷ 1.944，往風吹去的方向）− 船速（往船頭）；α ＝ 視風從哪裡來、離船頭幾度（0 ＝ 正頂風、180 ＝ 正後方）。
+ *  倍率 ＝ (|A|／|A₀|)² × 吃得到風(α)／吃得到風(α₀)，夾在 0…1 ——
+ *    · A₀ ＝ 航速倍率 ＝ 船隻設定預設（LIM.speed，1.5）的船、在這個風向用帆單獨跑到的航速（sh.vS1，31_sailing.js）時的視風 ⇒ 預設設定的船（寫實玩法）跑到那個航速時倍率剛好 1（航速不變）；
+ *      比預設快的加成（娛樂 ×1.4、夜隼號的 3）才被視風限住（Tim 2026-10-16）。
+ *    · 吃得到風：視風從船頭 50° 以內來 ⇒ 0（帆桁最多轉 40°，30_rig_physics.js BRACE_MAX ⇒ 帆被吹回來）、75° 以外 ⇒ 1，中間平滑。
+ *  ⇒ 航速倍率高的船越跑越快 ⇒ 視風往船頭轉、順風時視風變小 ⇒ 推力掉 ⇒ 停在帆還吃得到風的航速；跑不贏風（帆看起來不會被反吹）。
+ *  基準點自己就吃不到風（往風裡開、POLAR 照舊給 0.25 的那一段；逆風性能 upwind 高的船更常落在這裡）⇒ 照舊，只是船速比基準快之後推力照 ((Vw − 船速)／(Vw − 基準))² 掉、追上風速 ⇒ 0：
+ *    頂風怎麼走照舊由頂風失速管，但光靠帆跑不贏風（⛔ 只照舊 ⇒ 夜隼號（逆風 ×3）離正頂風 60° 光靠帆 20.7 節、風 17.5 節）。
+ *  ⛔ 341bfec 只限「沿風那一份」⇒ 夜隼號（航速 ×3、娛樂 ×1.4）橫風、側順風光靠帆比風快，視風從船頭來、帆被反吹。 */
+var SAIL_AW0 = 50, SAIL_AW1 = 75;                                       // 視風離船頭幾度開始吃得到風、幾度吃滿（度）
+function sailCatch(a) { var t = clamp((a - SAIL_AW0) / (SAIL_AW1 - SAIL_AW0), 0, 1); return t * t * (3 - 2 * t); }
+function apparent(Vw, deg, v) { var r = deg / 57.2958, ax = Vw * Math.cos(r) - v, ay = Vw * Math.sin(r), l = Math.hypot(ax, ay); return [l, l > 1e-6 ? Math.acos(clamp(-ax / l, -1, 1)) * 57.2958 : 0]; }   // [視風大小, 從離船頭幾度來]
 function sailWindK(sh, v, deg) {
-  var c = Math.cos(deg / 57.2958); if (c <= 0) return 1;
-  var Vw = windKnots() / 1.944, u = sh.spd * c, u0 = Math.min(v * c, 0.9 * Vw);
-  if (u <= u0) return 1;
-  if (u >= Vw) return 0;
-  var r = (Vw - u) / (Vw - u0); return r * r;
+  var Vw = windKnots() / 1.944; if (!(Vw > 0)) return 0;
+  var R = apparent(Vw, deg, sh.vS1 || 0), c0 = sailCatch(R[1]);
+  if (c0 < 0.02 || R[0] < 1e-3) { var v1 = sh.vS1 || 0, s = sh.spd; if (s <= v1 || Vw - v1 < 0.1) return s < Vw ? 1 : 0; var r = (Vw - s) / (Vw - v1); return clamp(r * r, 0, 1) * (s < Vw ? 1 : 0); }
+  var A = apparent(Vw, deg, sh.spd), q = A[0] / R[0];
+  return clamp(q * q * sailCatch(A[1]) / c0, 0, 1);
 }
 function driveStep(sh, dt, vS, vB, deg, brake) {
   var D = sh.drive; if (!D) return;
