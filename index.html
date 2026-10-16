@@ -271,7 +271,7 @@
   <div id="ctlRow"><div id="helmL" class="helm"><span class="kb hb" data-k="a" data-hold="1" title="左舵（A，按住）"><b>A</b><i class="em">⬅️</i></span><span class="kb hb" data-k="s" data-hold="1" title="收帆（S）"><b>S</b><i class="em">⛵⬇</i></span><span class="kb hb" data-k="w" data-hold="1" title="加帆（W）"><b>W</b><i class="em">⛵⬆</i></span><span class="kb hb" id="sailT" title="自動操舵（4）：亮 ＝ 自動、暗 ＝ 手動 —— 點一下切換"><b>4</b><i class="em">🤖☸</i></span><span class="kb hb" data-k="7" id="ancP" title="左錨（7）"><b>7</b><i class="em">◀⚓</i></span></div><div id="ctl" class="panel">
     <div id="keys"><span class="kb hb" data-k="c" title="鏡頭（C）"><b>C</b><i class="em">🎥</i></span><span class="kb hb" data-k="p" id="pauseK" title="停格（P）"><b>P</b><i class="em">⏸</i></span><span class="kb hb" id="setB" title="設定（O）"><b>O</b><i class="em">⚙</i></span><span class="kb hb" data-k="6" id="ancAll" title="雙錨（6）：兩邊都沒拋 ⇒ 一起拋；一邊在水裡 ⇒ 拋另一邊；兩邊都在水裡 ⇒ 起錨"><b>6</b><i class="em">⚓⚓</i></span></div>
     <div id="guns"></div>
-    <div id="ammo"><span class="kb hb" id="ammoB" title="彈種：點一下換下一種（鍵盤 1 實心彈、2 爆裂彈、3 鏈彈）"><b>1/2/3</b><i class="em"><span class="ball"></span></i></span></div>
+    <div id="ammo"><span class="kb hb" id="ammoB" data-k="1" title="彈種：點一下或按 1 換下一種"><b>1</b><i class="em"><span class="ball"></span></i></span></div>
   </div><div id="helmR" class="helm"><span class="kb hb" data-k="8" id="ancS" title="右錨（8）"><b>8</b><i class="em">⚓▶</i></span><span class="kb hb" data-k="g" id="autoF" title="自動開砲（G）"><b>G</b><i class="em">🤖💥</i></span><span class="kb hb" data-k="f" id="fireK" title="開一門（F）"><b>F</b><i class="em">💥</i></span><span class="kb hb" data-k=" " id="volleyK" title="齊射（空白鍵）"><b>空白</b><i class="em">💥💥💥</i></span><span class="kb hb" data-k="d" data-hold="1" title="右舵（D，按住）"><b>D</b><i class="em">➡️</i></span></div></div></div>
   <!-- 第一人稱的操作面板（81_fps.js；#stage.fp 才顯示）：左下虛擬搖桿（移動；鍵盤 WASD 也行、不顯示按鍵）、右下轉頭（按住）；中間 跳、跑、爬梯子；拖曳畫面也能轉頭 -->
   <!-- 建造模式（82_build.js，TASK-0648；#stage.bld 才顯示）：準心下面一行說明、📦 目錄（分類分頁）；快捷欄在 #fpUI 裡 -->
@@ -316,7 +316,7 @@
     <div><kbd>左鍵</kbd> 點敵艦：設瞄準點（拖曳 ＝ 轉鏡頭；手機：點一下瞄準、拖曳轉鏡頭）　<kbd>右鍵</kbd> 拖曳：平移　<kbd>滾輪</kbd> 遠近（手機：雙指張合縮放、雙指一起拖平移）</div>
     <div><kbd data-k="c">🎥 C</kbd> 鏡頭：看我艦（開局預設，朝向敵艦）→ 我艦→敵艦 → 自由 → 追砲彈 → 看敵艦　<kbd data-k="v">V</kbd> 鏡頭跟船／固定</div>
     <div><kbd data-k="q">🎯 Q</kbd> 瞄準模式（⚙ 設定裡也有）：自由（點敵艦）→ 水線 → 砲甲板 → 帆具 → 甲板人員 → 彈藥庫（瞄那個模式的中心點）；自動開砲時交給砲長</div>
-    <div>彈種：<kbd data-k="1"><span class="ball"></span> 1</kbd> 實心彈：鑽得深，打水線讓船進水　<kbd data-k="2">💣 2</kbd> 爆裂彈：炸開大洞但不深，對砲傷害大　<kbd data-k="3">⛓️ 3</kbd> 鏈彈：橫掃一片，專打桅杆、繩與帆</div>
+    <div>彈種：<kbd data-k="1">1</kbd> 換下一種（輪流）—— <span class="ball"></span> 實心彈：鑽得深，打水線讓船進水　💣 爆裂彈：炸開大洞但不深，對砲傷害大　⛓️ 鏈彈：橫掃一片，專打桅杆、繩與帆</div>
     <div><kbd data-k="p">⏸ P</kbd> 停格：停住、照樣轉鏡頭；上方一條可以開 📊 圖表（I，進水）、🔍 透視（X）、✂ 剖面（Z：拿掉靠鏡頭那一半看艙內）、☰ 甲板（L：由上往下一層一層拿掉）—— 按繼續後 🔍 ✂ ☰ 保持（遊戲中照樣看得到），📊 收起；X、Z、L 不停格也能直接按（開著的寫在下方）</div>
     <div><kbd data-k="o">⚙ O</kbd> 設定（暫停）：繼續、重新開始、回主選單、自爆（我艦的彈藥庫由小到大一間一間引爆 —— 相當於重開，先看煙花）、說明、瞄準模式、畫質與物理效果、帆繩物理（B）、鏡頭跟船、靜音（M）、FPS、全螢幕、殉爆的慢動作與特寫</div>
     <div><kbd data-k="n">N</kbd> 重新開始（同樣的設定）　<kbd data-k="r">R</kbd> 回選單　<kbd data-k="h">H</kbd> 說明（打開時暫停；點外面、✕ 或 Esc 關掉）</div>
@@ -11741,7 +11741,14 @@ function pauseLabel() { var b = $('pauseK'), s = '<b>P</b><i class="em">' + (PAU
 /** 彈種那一顆（Tim 2026-10-15：「砲彈改成一個按鈕，切換所有支援的砲彈（顯示當前彈種圖示）」）：鐵球 實心彈（CSS 畫的 .ball：灰色、左上高光、淡白邊；⛔ ⚫ 在深色圓鈕上看不見、⚪ 是白點不像砲彈 —— Tim 2026-10-15「顯示為一顆白色圓點，是否可以替換」）、💣 爆裂彈、⛓️ 鏈彈；每一種砲三種都能打。 */
 var PSLOW_SHOW = 0.7;   // 物理減速放慢到 ×0.7 以下才在航速那一行顯示（Tim 2026-10-15：「高於 0.7 可以不顯示，目前頻繁閃爍」—— 以前 < 0.98 就顯示，倍率在 0.9 上下跳 ⇒ 一直閃）
 var AMMO_ICON = ['<span class="ball"></span>', '💣', '⛓️'], AMMO_TXT = ['實心彈', '爆裂彈', '鏈彈'];
-function ammoLabel() { var b = $('ammoB'); if (!b) return; var s = '<b>' + (AMMO_I + 1) + '</b><i class="em">' + AMMO_ICON[AMMO_I] + '</i>'; if (b.innerHTML !== s) { b.innerHTML = s; b.title = '彈種：' + AMMO_TXT[AMMO_I] + '（點一下換下一種；鍵盤 1 實心彈、2 爆裂彈、3 鏈彈）'; } }
+function ammoLabel() { var b = $('ammoB'); if (!b) return; var s = '<b>1</b><i class="em">' + AMMO_ICON[AMMO_I] + '</i>'; if (b.innerHTML !== s) { b.innerHTML = s; b.title = '彈種：' + AMMO_TXT[AMMO_I] + '（點一下或按 1 換下一種）'; } }   // 上面寫的是鍵（同其他圓鈕），不是第幾種
+/** 這艘船打得出哪幾種彈（AMMO 的序號，照輪流的順序）。Tim 2026-10-16：「目前彈種是固定的 不過可以保留擴充接口」⇒ 現在每艘都是全部；之後照船擴充（例 ships[].ammo）只改這裡。 */
+function ammoOf(sh) { return AMMO.map(function (_, i) { return i; }); }
+/** 換下一種彈（Tim 2026-10-16：「統一用一個鍵循環切換所有彈藥(不一定三種 之後可能根據船擴充)」）：鍵盤 1 與圓鈕共用；照我艦的 ammoOf 輪流，現在這一種不在清單裡 ⇒ 從第一種開始。 */
+function ammoNext() {
+  var L = ammoOf(SHIPS[PLAYER_I]); if (!L.length) return;
+  var i = L.indexOf(AMMO_I); AMMO_I = L[(i + 1) % L.length]; ammoLabel();
+}
 function hud(dt) {
   stepMsgs(dt);
   if (ROOMS_DBG) roomLabels();                                                   // 空艙房的名字（36_rooms.js；?rooms=1）：每一格跟著鏡頭
@@ -12474,7 +12481,7 @@ function doKey(k, repeat) {
   var me = SHIPS[PLAYER_I];
   if (k === ' ') { if (!PAUSED && !me.sunk) broadside(me, AMMO_I); }   // 降旗了 ⇒ broadside／fireOne 自己擋
   else if (k === 'f') { if (!PAUSED) fireOne(me, AMMO_I); }
-  else if (k === '1' || k === '2' || k === '3') AMMO_I = +k - 1;
+  else if (k === '1') ammoNext();                                     // 彈種：一個鍵輪流（61_hud.js ammoNext；以前 1／2／3 各一種）
   else if (k === 'q') { me.pMode = AIM_P = AIM_CYCLE[(AIM_CYCLE.indexOf(me.pMode || 'free') + 1) % AIM_CYCLE.length]; note(me, '瞄準：' + AIM_NAME[me.pMode] + (me.pMode === 'free' ? '（點敵艦設瞄準點）' : '')); }   // 瞄準模式（51_captain.js）
   else if (k === 'c') { CAM.mode = CAM_ORDER[(CAM_ORDER.indexOf(CAM.mode) + 1) % CAM_ORDER.length]; CAM.follow = null; CAM.pan = [0, 0]; CAM.see = null; if (CAM.mode === 2 || CAM.mode === 3) { CAM.dist = 75; } else if (CAM.mode === 0) CAM.dist = DIST + 40; else if (CAM.mode === 4) { CAM.dist = 78; CAM.aoff = 0.35; } }
   else if (k === 'p') { PAUSED = !PAUSED; frzShow(); pauseLabel(); }                               // 停格（72_floodui.js：停格時上方一條、進水細節頁）
@@ -12601,7 +12608,7 @@ $('fullT').onclick = fsToggle;
 [].forEach.call(document.querySelectorAll('#gset [data-gg]'), function (b) { b.onclick = function () { gfxSet(b.dataset.gg); gfxShow(); }; });
 [].forEach.call(document.querySelectorAll('#gset [data-gx]'), function (b) { b.onclick = function () { phxSet(b.dataset.gx); phxSync(); }; });
 $('endA').onclick = start;
-$('ammoB').onclick = function () { AMMO_I = (AMMO_I + 1) % 3; ammoLabel(); };   // 彈種一顆：點一下換下一種（實心 → 爆裂 → 鏈彈 → 實心）
+// 彈種一顆（#ammoB）：帶 data-k="1" ⇒ 點一下 ＝ 按 1（上面那段 [data-k] 的 click）⇒ ammoNext；⛔ 別再另外掛 onclick（會一次換兩種）
 [].forEach.call(document.querySelectorAll('#modes button'), function (b) { b.onclick = function () { MODE = b.dataset.m; [].forEach.call(document.querySelectorAll('#modes button'), function (x) { x.className = x === b ? 'on' : ''; }); }; });
 /** 選單：滑桿的上下限從 LIM 來；數值只在使用者動了那一條時才從滑桿讀回（⛔ 一開頭就讀回 ⇒ 網址給的 0.33 被 step 吃成 0.35）。
  *  船殼、砲、帆、火藥桶、航行、降旗的滑桿在「細節設定」那一頁（從主選單進）；主選單只留一行摘要（#detV）。 */
