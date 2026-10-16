@@ -21,7 +21,7 @@
 // 只在畫面這一層跑（frame，90_main.js）：⛔ 不抽 rnd()、不碰模擬的狀態 ⇒ 開不開第一人稱，戰局都逐位元組相同。
 //   停格、設定打開（PAUSED）時只能轉頭、不能走。
 // 自動退出：我艦沉了、換了一艘我艦（playerHandoff）、重新開始、回主選單、腳下一路都沒有地板。
-var FP = { on: false, mode: 0, sh: null, c: null, yaw: 0, pitch: 0, mv: { f: 0, b: 0, l: 0, r: 0, tl: 0, tr: 0, lu: 0, ld: 0, up: 0, dn: 0 }, run: false, climb: null, near: null, lads: null, v: [0, 0], vz: 0, ez: null, fz: 0, eo: 0, jz: 0, jv: 0, joy: [0, 0], fol: null, folP: null, lookT: 0, flyFrom: null };
+var FP = { on: false, lamp: true, mode: 0, sh: null, c: null, yaw: 0, pitch: 0, mv: { f: 0, b: 0, l: 0, r: 0, tl: 0, tr: 0, lu: 0, ld: 0, up: 0, dn: 0 }, run: false, climb: null, near: null, lads: null, v: [0, 0], vz: 0, ez: null, fz: 0, eo: 0, jz: 0, jv: 0, joy: [0, 0], fol: null, folP: null, lookT: 0, flyFrom: null };
 var FP_MODE = ['正常', '穿牆', '浮空'], FP_FLY_OUT = 200, FP_NC_EXIT = 2, FP_NC_UP = 3;   // 浮空時離船身最多 20 m；穿牆時從牆裡出來，前面的地板跟腳最多差 0.2 m；穿牆時跨得上 0.3 m（樓梯一階；⛔ 照正常的 0.6 m ⇒ 憲法號舷牆邊 0.2 m 木條＋0.4 m 欄杆蓋板一路踩上欄杆頂，量過）
 // 跟隨船員（Tim 2026-10-16「加一個 跟隨船員(把第一人稱鏡頭綁到附近船員上)」）：FP.fol ＝ 被跟的人 —— 鏡頭在他的眼睛、他照常做自己的工作（⛔ 不設 c.fp）、
 //   玩家只能轉頭；自己的角色停在原地。F 跟隨／回來、G 換下一個（照離自己由近到遠輪）；被跟的人落水、倒下 ⇒ 回到自己。
@@ -29,7 +29,7 @@ var FP_MODE = ['正常', '穿牆', '浮空'], FP_FLY_OUT = 200, FP_NC_EXIT = 2, 
 // FP_SP：走路（格／秒）—— Tim 2026-10-16「走路速度可以改成目前跑的速度」⇒ 14 → 28（2.8 m/s）；跑 ＝ ×FP_RUN（5.6 m/s）
 var FP_EYE = 16, FP_SP = 28, FP_RUN = 2, FP_TURN = 1.8, FP_R = 0.6, FP_CLIMB = 8, FP_REACH = 9, FP_FOV = 1.15;
 var FP_UP = 6, FP_DOWN = 8, FP_ACC = 0.12, FP_DEC = 0.08, FP_EZ = 0.09;   // 跨得上 0.6 m、踩得下 0.8 m（更深 ⇒ 擋住，不會從艙口掉下去）；加速／減速／眼高的時間常數（秒）
-var FP_G = 98, FP_JUMP = 5;                                           // 重力 9.8 m/s²（格／秒²）、跳 0.5 m
+var FP_G = 98, FP_JUMP = 10;                                          // 重力 9.8 m/s²（格／秒²）、跳 1.0 m（Tim 2026-10-16「跳躍高度改兩倍吧」：0.5 → 1.0 m）
 // FP_HEAD：站得住要頭上幾格空 —— Tim 2026-10-16「碰撞高度也可以低一些(目前下樓梯會撞頭卡住)」⇒ 船員的 NAV_HEAD 1.2 m → 0.7 m（彎腰過得去；眼高照 fpEye 壓低）
 var FP_HEAD = 7;
 function fpCaptain(sh) { return sh ? sh.crew.filter(function (c) { return c.art === ART_CAPTAIN && c.st === 0; })[0] || null : null; }
@@ -48,11 +48,11 @@ function fpSet(on) {
     if (c.art !== ART_CAPTAIN) note(sh, '第一人稱：船長不在 ⇒ 從' + (c.role === ROLE.OFFICER ? '軍官' : ROLE_NAME[c.role] || '船員') + '的位置開始');
     var d = CAM.look && CAM.eye ? M4.dir(sh.inv, CAM.look[0] - CAM.eye[0], CAM.look[1] - CAM.eye[1], CAM.look[2] - CAM.eye[2]) : [1, 0, 0];
     FP.on = true; FP.sh = sh; FP.c = { pos: c.pos.slice() };            // 玩家自己的角色：只借那個船員的座標（⛔ 不操控他）
-    FP.wasP = PAUSED; FP.yaw = Math.atan2(d[1], d[0]) || 0; FP.pitch = 0; FP.climb = null; FP.lads = fpLadders(sh); FP.v = [0, 0]; FP.ez = null; FP.jz = FP.jv = 0;
+    FP.yaw = Math.atan2(d[1], d[0]) || 0; FP.pitch = 0; FP.climb = null; FP.lads = fpLadders(sh); FP.v = [0, 0]; FP.ez = null; FP.jz = FP.jv = 0;
     FP.vz = 0; FP.flyFrom = FP.mode === 2 ? FP.c.pos.slice() : null;
-    note(sh, '第一人稱：左下搖桿或 WASD 走、Shift 跑、空白鍵跳、滑鼠（點畫面鎖定，Esc 放開）或拖曳轉頭、E 爬梯子 —— 設定裡再按一次回到原本的鏡頭' + (FP.mode === 2 ? '（浮空：空白鍵上、C 下）' : ''));
+    note(sh, '第一人稱：左下搖桿或 WASD 走、Shift 跑、空白鍵跳、拖曳或方向鍵轉頭、E 爬梯子 —— 設定裡再按一次回到原本的鏡頭' + (FP.mode === 2 ? '（浮空：空白鍵上、C 下）' : ''));
   } else if (FP.on) {
-    FP.on = false; FP.sh = FP.c = FP.climb = FP.near = FP.fol = null; CAM.snap = true; fpUnlock();
+    FP.on = false; FP.sh = FP.c = FP.climb = FP.near = FP.fol = null; CAM.snap = true;
   }
   fpStop(); fpUI(); return FP.on;
 }
@@ -87,15 +87,32 @@ function fpLand() {
 }
 function fpUI() {
   $('stage').classList.toggle('fp', FP.on);
-  $('fpT').classList.toggle('on', FP.on);
+  $('fpT').classList.toggle('on', FP.on); $('fpLampT').classList.toggle('on', FP.lamp);
   [].forEach.call(document.querySelectorAll('#gset [data-fpm]'), function (b) { b.classList.toggle('on', +b.dataset.fpm === FP.mode); });
   $('fpUI').classList.toggle('fol', !!FP.fol);                         // 跟隨中：藏搖桿、跳、跑、爬梯子（template.html #fpUI.fol）
   $('fpUI').classList.toggle('fly', FP.mode === 2);                    // 浮空：藏跳、爬梯子，換上 ⬆ ⬇（template.html #fpUI.fly）
   $('fpClimb').style.display = FP.on && FP.near && !FP.fol && FP.mode !== 2 ? '' : 'none';
-  var t = FP.fol ? '↩ 回來' : '👁 跟隨'; if ($('fpFol').textContent !== t) $('fpFol').textContent = t;
+  var t = FP.fol ? '↩' : '👁', fe = $('fpFol').querySelector('.em'); if (fe && fe.textContent !== t) { fe.textContent = t; $('fpFol').title = FP.fol ? '回到自己（F）' : '跟隨身邊的船員（F）'; }
 }
 /** 鏡頭跟著誰：跟隨中 ⇒ 被跟的人，否則 ⇒ 自己。 */
 function fpWho() { return FP.fol || FP.c; }
+/** 玩家自帶的燈（Tim 2026-10-16「是否可以讓玩家自帶點光源(艙內很暗)」；設定「視角」那一排的「🏮 提燈」，預設開）：
+ *  60_render.js lampsUpdate 每一格問一次 ⇒ 第一人稱開著（跟隨船員時在被跟的人那裡）就回一盞：眼睛往下 FP_LAMP_DY、暖色、照 FP_LAMP_R 公尺、亮度固定 FP_LAMP_I（⛔ 照天色 ⇒ 白天艙裡照樣暗）。
+ *  d −1 ⇒ 排在最前面，LAMP_N 盞的名額一定有它。只照船殼與模型（跟別的燈一樣不投影子、不照看板圖）；只給人看，不碰戰局。 */
+var FP_LAMP_R = 6, FP_LAMP_I = 0.75, FP_LAMP_DY = 0.35, FP_LAMP_RGB = [1, 0.8, 0.55];
+function fpLamp() {
+  if (!FP.on || !FP.lamp || !CAM.eye) return null;
+  return { w: [CAM.eye[0], CAM.eye[1] - FP_LAMP_DY, CAM.eye[2]], k: 1, I: FP_LAMP_I, R: FP_LAMP_R, rgb: FP_LAMP_RGB, d: -1 };
+}
+/** 誰正在這艘船上走動（Tim 2026-10-16「第一人稱模式 是否可以觸發一些船員判斷(是否有乾淨一點的作法) 有一些艙門設定是船員靠近會打開」）：
+ *  正在走、正在爬的船員（c.st ≤ 1）＋第一人稱的玩家角色（在這艘船上、有在動：走、爬、跳、浮空上下）。fn(pos)（格座標、腳底）回 true ⇒ 停、整支回 true。
+ *  ⛔ 只給畫面這一層的演出用（25_doors.js doorsAnim……）：模擬那一層（step 裡的 AI、站位、受傷）照舊只看 sh.crew ⇒ 開不開第一人稱戰局都逐位元組相同。
+ *  ⛔ 不把玩家塞進 sh.crew（第三版之前那樣 ⇒ 會被打倒、被模擬拉走）。 */
+function shPassers(sh, fn) {
+  for (var i = 0; i < sh.crew.length; i++) { var c = sh.crew[i]; if (c.st <= 1 && (c.walk || c.moving) && fn(c.pos)) return true; }
+  if (FP.on && FP.sh === sh && FP.c && (FP.climb || FP.jz > 0 || Math.hypot(FP.v[0], FP.v[1]) > 0.5 || Math.abs(FP.vz) > 0.5)) return !!fn(FP.c.pos);
+  return false;
+}
 /** 跟隨（F／👁）：沒在跟 ⇒ 跟離自己最近的那一個；在跟 ⇒ 回到自己。下一個（G／⏭）：照離自己由近到遠，換成現在這個的下一個。 */
 function fpFollow(next) {
   if (!FP.on) return;
@@ -213,7 +230,6 @@ function fpFrame(dt) {
   var m = FP.mv, g = sh.grid;
   FP.yaw += (m.tr - m.tl) * FP_TURN * dt; FP.pitch = clamp(FP.pitch + (m.lu - m.ld) * FP_TURN * 0.7 * dt, -1.35, 1.35);
   if (FP.fol && (sh.crew.indexOf(FP.fol) < 0 || FP.fol.st !== 0)) { FP.fol = null; FP.ez = null; note(sh, '第一人稱：跟的人倒下或落水了 —— 回到自己'); fpUI(); }
-  if (PAUSED && !FP.wasP) fpUnlock(); FP.wasP = PAUSED;                // 剛停格、剛打開設定 ⇒ 放開滑鼠（要按面板）；停格中再點畫面可以重新鎖
   if (PAUSED) { fpEyeZ(0); return; }                                   // 停格、設定打開：只能轉頭
   if (FP.fol) {                                                        // 跟隨中：自己的角色不動，只轉頭
     var q = FP.fol.pos, lp = FP.folP || q, mx = q[0] - lp[0], my = q[1] - lp[1]; FP.folP = q.slice();
@@ -348,15 +364,9 @@ function fpKey(k, down) {
 /** 拖曳轉頭（71_input.js pointermove）：往右拖 ⇒ 往右看。 */
 function fpLook(dx, dy) { FP.yaw += dx * 0.005; FP.pitch = clamp(FP.pitch - dy * 0.005, -1.35, 1.35); FP.lookT = performance.now(); }   // lookT：跟隨中 2 秒內不自動轉
 // 設定面板的開關、第一人稱的操作面板（按住才動：放開、移出、取消都停）
-$('fpT').onclick = function (e) { fpSet(!FP.on); gsetClose(); if (FP.on && e && e.pointerType === 'mouse') fpLock(); };   // 用滑鼠按的 ⇒ 一開就鎖（這一下點擊就是瀏覽器要的使用者動作）
-// 滑鼠轉頭（Tim 2026-10-16「第一人稱如果在PC上 讓視角直接跟著滑鼠轉吧」）：鎖住游標（Pointer Lock），滑鼠一動就轉頭、不用按住拖；Esc 放開（瀏覽器自己的）、點畫面再鎖。
-//   只認滑鼠（pointerType mouse）：觸控照舊拖曳轉頭。剛停格、剛打開設定、離開第一人稱 ⇒ 放開。鎖住時游標的 client 座標不動 ⇒ 71_input.js 的拖曳轉頭算出 0，不會轉兩次。
-var FP_MOUSE_K = 0.6;                                                 // 滑鼠一 px 轉 0.003 rad（拖曳的 0.6 倍：一直跟著轉，太快會暈）
-function fpLocked() { return document.pointerLockElement === cv; }
-function fpLock() { if (!fpLocked() && cv.requestPointerLock) { try { var r = cv.requestPointerLock(); if (r && r.catch) r.catch(function () { }); } catch (x) { } } }
-function fpUnlock() { if (fpLocked() && document.exitPointerLock) document.exitPointerLock(); }
-cv.addEventListener('pointerdown', function (e) { if (FP.on && e.pointerType === 'mouse' && e.button === 0) fpLock(); });
-document.addEventListener('mousemove', function (e) { if (FP.on && fpLocked()) fpLook((e.movementX || 0) * FP_MOUSE_K, (e.movementY || 0) * FP_MOUSE_K); });
+$('fpT').onclick = function () { fpSet(!FP.on); gsetClose(); };
+$('fpLampT').onclick = function () { FP.lamp = !FP.lamp; fpUI(); };   // 提燈：開關不關設定面板；跨場留著
+// ⛔ 電腦上滑鼠一動就轉頭（Pointer Lock，31be9d3 做過）：Tim 2026-10-16 實測「還是改回原本按住才能轉視角好了(否則要esc後才能跟ui互動)」⇒ 拿掉，照舊按住拖曳轉頭（71_input.js）。
 [].forEach.call(document.querySelectorAll('#gset [data-fpm]'), function (b) { b.onclick = function () { fpMode(+b.dataset.fpm); }; });   // 碰撞三段（正常／穿牆／浮空）：開關不關設定面板；跨場留著
 [].forEach.call(document.querySelectorAll('#fpUI [data-fp]'), function (b) {
   var k = b.dataset.fp;
