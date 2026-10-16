@@ -216,7 +216,22 @@
      HUD 全部藏起來，只留下方那一排的 ⏸ 與 ⚙（設定面板、說明照常打得開）；換上 #fpUI。⛔ hud() 照樣在跑（只是看不見）—— 行內的 display 用 !important 壓過 */
   #fpUI{ display:none; }
   #fpCross{ display:none; position:fixed; left:50%; top:50%; width:6px; height:6px; margin:-3px 0 0 -3px; border-radius:50%; background:rgba(255,255,255,.8); box-shadow:0 0 0 1px rgba(0,0,0,.45); pointer-events:none; }   /* 滑鼠模式（抓住滑鼠）時的準心 */
-  #stage.fpLock #fpCross{ display:block; }
+  #stage.fpLock #fpCross, #stage.bld #fpCross{ display:block; }
+  /* 建造模式（82_build.js，TASK-0648；Tim 2026-10-16「UI可以選取要擺放的物件(參考常見建造遊戲UI設計 可以給物件分類)」）：
+     快捷欄（下方一排圓鈕：上快捷鍵 1–9、下 emoji；分類之間空一點）＋ 📦 目錄（分類分頁、卡片）＋ 準心下面一行說明；放 ✔／拆 ✖／轉 ⟳ 在第一人稱那一排（建造時跟隨 F／G 收起來） */
+  #bldInfo, #bldBar{ display:none; }
+  #stage.bld #bldInfo{ display:block; position:absolute; left:50%; top:calc(50% + 16px); transform:translateX(-50%); padding:3px 10px; border-radius:8px; background:rgba(10,14,22,.6); color:#eee; font-size:13px; pointer-events:none; white-space:nowrap; max-width:calc(100vw - 32px); overflow:hidden; text-overflow:ellipsis; z-index:4; }
+  #stage.bld #bldBar{ display:flex; position:absolute; left:50%; transform:translateX(-50%); bottom:92px; gap:6px; pointer-events:none; }
+  #bldBar .bslot{ pointer-events:auto; background:rgba(10,14,22,.55); } #bldBar .bslot.gap{ margin-left:10px; } #bldBar .bslot.on{ background:rgba(159,199,255,.92); }   /* 選中（⛔ 只有上一條 ⇒ 深色底蓋過圓鈕的 .on，只剩邊框，截圖量過） */
+  #fpUI .bldOnly{ display:none !important; } #stage.bld #fpUI .bldOnly{ display:flex !important; } #stage.bld #fpFol, #stage.bld #fpNext{ display:none !important; }
+  #bldCat{ position:absolute; left:50%; top:42%; transform:translate(-50%,-50%); width:min(560px, calc(100vw - 32px)); max-height:66vh; overflow:auto; z-index:8; pointer-events:auto; }
+  #bldCatH{ display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; }
+  #bldTabs{ display:flex; flex-wrap:wrap; gap:6px; margin-bottom:10px; } #bldTabs button{ border-radius:14px; padding:4px 12px; }
+  #bldTabs button.on, .bcard.on{ background:#9fc7ff; color:#111; }
+  #bldGrid{ display:grid; grid-template-columns:repeat(auto-fill, minmax(118px, 1fr)); gap:8px; }
+  .bcard{ position:relative; display:flex; flex-direction:column; align-items:center; gap:2px; padding:10px 6px; border-radius:10px; }
+  .bcard .bem{ font-size:30px; line-height:1.1; } .bcard small{ font-size:11px; opacity:.8; text-align:center; } .bcard i{ position:absolute; left:7px; top:5px; font-style:normal; font-size:11px; color:var(--gold); }
+  @media (max-width: 640px){ #stage.bld #bldBar{ bottom:178px; gap:4px; } #bldBar .bslot{ width:40px; height:40px; } #bldBar .bslot.gap{ margin-left:6px; } }
   #stage.fp .hud:not(#botC):not(#gset):not(#help){ display:none !important; }
   #stage.fp #navBox, #stage.fp #helmL, #stage.fp #helmR, #stage.fp #guns, #stage.fp #ammo, #stage.fp #keys > :not(#pauseK):not(#setB){ display:none !important; }
   #stage.fp #fpUI{ display:block; position:absolute; left:0; right:0; bottom:calc(64px + env(safe-area-inset-bottom)); pointer-events:none; z-index:3; }
@@ -259,9 +274,13 @@
     <div id="ammo"><span class="kb hb" id="ammoB" title="彈種：點一下換下一種（鍵盤 1 實心彈、2 爆裂彈、3 鏈彈）"><b>1/2/3</b><i class="em"><span class="ball"></span></i></span></div>
   </div><div id="helmR" class="helm"><span class="kb hb" data-k="8" id="ancS" title="右錨（8）"><b>8</b><i class="em">⚓▶</i></span><span class="kb hb" data-k="g" id="autoF" title="自動開砲（G）"><b>G</b><i class="em">🤖💥</i></span><span class="kb hb" data-k="f" id="fireK" title="開一門（F）"><b>F</b><i class="em">💥</i></span><span class="kb hb" data-k=" " id="volleyK" title="齊射（空白鍵）"><b>空白</b><i class="em">💥💥💥</i></span><span class="kb hb" data-k="d" data-hold="1" title="右舵（D，按住）"><b>D</b><i class="em">➡️</i></span></div></div></div>
   <!-- 第一人稱的操作面板（81_fps.js；#stage.fp 才顯示）：左下虛擬搖桿（移動；鍵盤 WASD 也行、不顯示按鍵）、右下轉頭（按住）；中間 跳、跑、爬梯子；拖曳畫面也能轉頭 -->
+  <!-- 建造模式（82_build.js，TASK-0648；#stage.bld 才顯示）：準心下面一行說明、📦 目錄（分類分頁）；快捷欄在 #fpUI 裡 -->
+  <div id="bldInfo"></div>
+  <div id="bldCat" class="panel" style="display:none"><div id="bldCatH"><b>📦 目錄</b><span class="kb" id="bldCatX">✕ 關（B）</span></div><div id="bldTabs"></div><div id="bldGrid"></div></div>
   <div id="fpUI">
+    <div id="bldBar"></div>
     <div id="fpJoy"><div id="fpKnob"></div></div>
-    <div id="fpAct"><span class="kb hb fpb" id="fpClimb" style="display:none" title="爬梯子（E）"><b>E</b><i class="em">🪜</i></span><span class="kb hb fpb" id="fpRun" title="跑（Shift）"><b>Shift</b><i class="em">🏃</i></span><span class="kb hb fpb" id="fpFol" title="跟隨身邊的船員（F）"><b>F</b><i class="em">👁</i></span><span class="kb hb fpb" id="fpNext" title="換下一個（G）"><b>G</b><i class="em">⏭</i></span></div>
+    <div id="fpAct"><span class="kb hb fpb" id="fpClimb" style="display:none" title="爬梯子（E）"><b>E</b><i class="em">🪜</i></span><span class="kb hb fpb" id="fpRun" title="跑（Shift）"><b>Shift</b><i class="em">🏃</i></span><span class="kb hb fpb" id="fpFol" title="跟隨身邊的船員（F）"><b>F</b><i class="em">👁</i></span><span class="kb hb fpb" id="fpNext" title="換下一個（G）"><b>G</b><i class="em">⏭</i></span><span class="kb hb fpb bldOnly" id="bldRot" title="轉 90°（R）"><b>R</b><i class="em">⟳</i></span><span class="kb hb fpb bldOnly" id="bldDel" title="拆（左鍵、X）"><b>X</b><i class="em">✖</i></span><span class="kb hb fpb bldOnly" id="bldPut" title="放（右鍵、V）"><b>V</b><i class="em">✔</i></span></div>
     <div id="fpCross"></div>
     <div id="fpJoyR" title="轉頭（方向鍵、Q，或按住畫面拖曳）"><div id="fpKnobR"></div></div>
     <div id="fpVert" class="fpPad"><span style="grid-area:1/1" class="kb hb fpb" id="fpJump" title="跳（空白鍵）"><b>空白</b><i class="em">⤴</i></span><span style="grid-area:1/1" class="kb hb fpb fpFly" data-fp="up" title="往上（空白鍵）"><b>空白</b><i class="em">⬆</i></span><span style="grid-area:2/1" class="kb hb fpb fpFly" data-fp="dn" title="往下（C）"><b>C</b><i class="em">⬇</i></span></div>
@@ -337,7 +356,7 @@
     <div class="card panel">
       <h1>憲法號對轟</h1>
       <div class="row" id="modes">
-        <button data-m="pve" class="on">對戰電腦</button><button data-m="eve">觀戰（自動開砲）</button><button data-m="sandbox">沙盒（敵艦不還手）</button>
+        <button data-m="pve" class="on">對戰電腦</button><button data-m="eve">觀戰（自動開砲）</button><button data-m="sandbox">沙盒（敵艦不還手）</button><button data-m="build">🔨 建造</button>
       </div>
       <div class="row" id="plays">玩法
         <button data-p="fun" class="on">娛樂</button><button data-p="real">寫實</button>
@@ -625,6 +644,7 @@
 <script src="js/79_report.js" data-bundle="game"></script>
 <script src="js/80_lab.js" data-bundle="game"></script>
 <script src="js/81_fps.js" data-bundle="game"></script>
+<script src="js/82_build.js" data-bundle="game"></script>
 <script src="js/90_main.js" data-bundle="game"></script>
 </body>
 </html>

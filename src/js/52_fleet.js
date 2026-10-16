@@ -79,6 +79,7 @@ function fleetNames(spec) {
 }
 function fleetSpec() {
   if (FLEET_DBG) return FLEET_DBG;
+  if (MODE === 'build') return [{ team: 'blue', hull: FLEET_SET[0][0] }];   // 建造（82_build.js）：只有我方第一艘
   var b = FLEET_SET[0], r = FLEET_SET[1], L = [{ team: 'blue', hull: b[0] }, { team: 'red', hull: r[0] }];
   b.slice(1).forEach(function (h) { L.push({ team: 'blue', hull: h }); });
   r.slice(1).forEach(function (h) { L.push({ team: 'red', hull: h }); });

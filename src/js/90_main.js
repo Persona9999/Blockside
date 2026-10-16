@@ -23,7 +23,7 @@ function frame(ts, noRaf) {                                         // noRaf：_
   remesh(RM_BUDGET);                                                  // 重網格化，每格有預算（60_render.js）
   if (PF) pfLap('flush');
   renderLerp(true, RUNNING ? acc / DT : 1);                           // 畫面內插（03_camera.js）：鏡頭、畫、HUD 用兩步之間的位置，畫完換回模擬的
-  fpFrame(dt);                                                        // 第一人稱：走、爬、退出判斷（81_fps.js；沒開 ⇒ 什麼都不做）
+  fpFrame(dt); bldFrame();                                                        // 第一人稱：走、爬、退出判斷（81_fps.js；沒開 ⇒ 什麼都不做）
   camUpdate(dt); render(); if (PF) pfLap('render'); hud(dt); frzShow(); slowShow();
   renderLerp(false);                        // 停格條（72_floodui.js）
   if (PF) { pfLap('hud'); pfEnd(f0, RUNNING && !PAUSED ? n : 0); }

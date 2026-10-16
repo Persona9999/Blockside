@@ -274,6 +274,7 @@ function gunDir(g) { if (g.type === 'chase') return g.ax[0] >= 0 ? 'bow' : 'ster
  *  船頭砲在羅盤上面（#gunsB）、船尾砲在羅盤下面（#gunsA）—— 跟羅盤裡船頭朝上的船同一個方向；左舷的在左、對得到 ⇒ 靠羅盤那一側一條金線；沒有就藏起來。
  *  「⚠ 射界外」改到羅盤上方那一行（Tim 2026-10-15：「射界外提示不要放在下方面板內，都改到羅盤上方的資訊」）⇒ 這裡只記 HUD_OUTARC，下方面板那一格（#guns）一律藏起來。 */
 function gunHud(me) {
+  if (!foeOf(me) && !me.aim) { HUD_OUTARC = false; return; }        // 沒有敵艦也沒有瞄準點（建造模式，82_build.js）⇒ 不算（⛔ 照算 ⇒ aimPoint 拿 null 的敵艦，每一格例外）
   var foe = foeOf(me), w = handAim(me) ? aimPoint(me) : foe && foe.center;
   ['P', 'S'].forEach(function (side) {
     var rows = me.decks.map(function (D) { return me.guns.filter(function (x) { return x.deck === D.key && x.side === side && gunDir(x) === 'side'; }); }).filter(function (r) { return r.length; }).reverse();
@@ -505,7 +506,7 @@ function shipSettled(sh) {
   return sh.boomAt === undefined || SIMT - sh.boomAt >= END_SETTLE;
 }
 function checkEnd() {
-  if (MODE === 'sandbox' || DEMO >= 0) return;
+  if (MODE === 'sandbox' || MODE === 'build' || DEMO >= 0) return;   // 建造（82_build.js）：沒有敵艦、不判勝負
   if (OVER) {                                                         // ③：等輸的那一方定了 ⇒ 倒數 ⇒ 跳
     var W = END_WAIT; if (!W) return;
     if (!W.at) { if (SIMT < W.limit && !W.lose.every(shipSettled)) return; W.at = SIMT + (W.lose.some(function (o) { return o.sunk; }) ? END_SINK : END_OTHER); }

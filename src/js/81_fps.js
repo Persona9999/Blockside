@@ -41,16 +41,16 @@ function fpPick(sh) {
   return fpCaptain(sh) || sh.crew.filter(function (c) { return ok(c) && c.role === ROLE.OFFICER; })[0] || sh.crew.filter(ok)[0] || null;
 }
 /** 開／關。開：鏡頭現在朝哪裡看（水平方向）⇒ 船長就面向那裡（不會一開就轉一大圈）。 */
-function fpSet(on) {
+function fpSet(on, quiet) {                                           // quiet：建造模式重建時（82_build.js bldRebuild）不再報一次說明
   if (on) {
     var sh = RUNNING ? SHIPS[PLAYER_I] : null, c = sh && !sh.sunk ? fpPick(sh) : null;
     if (!c) { if (sh) note(sh, '第一人稱：船上沒有站著的人'); fpUI(); return false; }
-    if (c.art !== ART_CAPTAIN) note(sh, '第一人稱：船長不在 ⇒ 從' + (c.role === ROLE.OFFICER ? '軍官' : ROLE_NAME[c.role] || '船員') + '的位置開始');
+    if (c.art !== ART_CAPTAIN && !quiet) note(sh, '第一人稱：船長不在 ⇒ 從' + (c.role === ROLE.OFFICER ? '軍官' : ROLE_NAME[c.role] || '船員') + '的位置開始');
     var d = CAM.look && CAM.eye ? M4.dir(sh.inv, CAM.look[0] - CAM.eye[0], CAM.look[1] - CAM.eye[1], CAM.look[2] - CAM.eye[2]) : [1, 0, 0];
     FP.on = true; FP.sh = sh; FP.c = { pos: c.pos.slice() };            // 玩家自己的角色：只借那個船員的座標（⛔ 不操控他）
     FP.yaw = Math.atan2(d[1], d[0]) || 0; FP.pitch = 0; FP.climb = null; FP.lads = fpLadders(sh); FP.v = [0, 0]; FP.ez = null; FP.jz = FP.jv = 0;
     FP.vz = 0; FP.flyFrom = FP.mode === 2 ? FP.c.pos.slice() : null;
-    note(sh, '第一人稱：左下搖桿或 WASD 走、Shift 跑、空白鍵跳、右下搖桿／拖曳／方向鍵轉頭（電腦：點畫面用滑鼠轉頭，Esc 或按住 Alt 放開）、E 爬梯子 —— 設定裡再按一次回到原本的鏡頭' + (FP.mode === 2 ? '（浮空：空白鍵上、C 下）' : ''));
+    if (!quiet) note(sh, '第一人稱：左下搖桿或 WASD 走、Shift 跑、空白鍵跳、右下搖桿／拖曳／方向鍵轉頭（電腦：點畫面用滑鼠轉頭，Esc 或按住 Alt 放開）、E 爬梯子 —— 設定裡再按一次回到原本的鏡頭' + (FP.mode === 2 ? '（浮空：空白鍵上、C 下）' : ''));
   } else if (FP.on) {
     FP.on = false; FP.sh = FP.c = FP.climb = FP.near = FP.fol = null; CAM.snap = true; fpUnlock();
   }

@@ -143,7 +143,7 @@ function prefsApply(p) {
   set('ramv', p.ramv, LIM.ramv, false, function (x) { RAM.v0 = x; }); set('ramk', p.ramk, LIM.ramk, false, function (x) { RAM.k = x; }); set('rame', p.rame, LIM.rame, false, function (x) { RAM.e = x; }); set('ramside', p.ramside, LIM.ramside, false, function (x) { RAM.side = x; });
   if (typeof p.slowcam === 'boolean' && !Q.has('slowcam')) SLOW.cam = p.slowcam;
   if (!Q.has('sail') && (p.sail === 'auto' || p.sail === 'manual' || p.sail === 'off')) SAIL = p.sail;
-  if (p.mode === 'pve' || p.mode === 'eve' || p.mode === 'sandbox') MODE = p.mode;
+  if (p.mode === 'pve' || p.mode === 'eve' || p.mode === 'sandbox' || p.mode === 'build') MODE = p.mode;
   if (typeof p.auto === 'boolean') { AUTOFIRE = p.auto; LAST_MODE = MODE; }   // 存了自動開砲 ⇒ 開局不再照模式套預設（70_flow.js reset）
   if (!Q.has('field') && typeof p.field === 'number' && isFinite(p.field)) FIELD_N = clamp(Math.round(p.field), 2, MAX_SHIPS);   // 候補（52_fleet.js）
   if (!Q.has('reinf') && REINF_NAMES[p.reinf]) REINF_MODE = p.reinf;

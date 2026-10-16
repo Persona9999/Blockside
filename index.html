@@ -216,7 +216,22 @@
      HUD 全部藏起來，只留下方那一排的 ⏸ 與 ⚙（設定面板、說明照常打得開）；換上 #fpUI。⛔ hud() 照樣在跑（只是看不見）—— 行內的 display 用 !important 壓過 */
   #fpUI{ display:none; }
   #fpCross{ display:none; position:fixed; left:50%; top:50%; width:6px; height:6px; margin:-3px 0 0 -3px; border-radius:50%; background:rgba(255,255,255,.8); box-shadow:0 0 0 1px rgba(0,0,0,.45); pointer-events:none; }   /* 滑鼠模式（抓住滑鼠）時的準心 */
-  #stage.fpLock #fpCross{ display:block; }
+  #stage.fpLock #fpCross, #stage.bld #fpCross{ display:block; }
+  /* 建造模式（82_build.js，TASK-0648；Tim 2026-10-16「UI可以選取要擺放的物件(參考常見建造遊戲UI設計 可以給物件分類)」）：
+     快捷欄（下方一排圓鈕：上快捷鍵 1–9、下 emoji；分類之間空一點）＋ 📦 目錄（分類分頁、卡片）＋ 準心下面一行說明；放 ✔／拆 ✖／轉 ⟳ 在第一人稱那一排（建造時跟隨 F／G 收起來） */
+  #bldInfo, #bldBar{ display:none; }
+  #stage.bld #bldInfo{ display:block; position:absolute; left:50%; top:calc(50% + 16px); transform:translateX(-50%); padding:3px 10px; border-radius:8px; background:rgba(10,14,22,.6); color:#eee; font-size:13px; pointer-events:none; white-space:nowrap; max-width:calc(100vw - 32px); overflow:hidden; text-overflow:ellipsis; z-index:4; }
+  #stage.bld #bldBar{ display:flex; position:absolute; left:50%; transform:translateX(-50%); bottom:92px; gap:6px; pointer-events:none; }
+  #bldBar .bslot{ pointer-events:auto; background:rgba(10,14,22,.55); } #bldBar .bslot.gap{ margin-left:10px; } #bldBar .bslot.on{ background:rgba(159,199,255,.92); }   /* 選中（⛔ 只有上一條 ⇒ 深色底蓋過圓鈕的 .on，只剩邊框，截圖量過） */
+  #fpUI .bldOnly{ display:none !important; } #stage.bld #fpUI .bldOnly{ display:flex !important; } #stage.bld #fpFol, #stage.bld #fpNext{ display:none !important; }
+  #bldCat{ position:absolute; left:50%; top:42%; transform:translate(-50%,-50%); width:min(560px, calc(100vw - 32px)); max-height:66vh; overflow:auto; z-index:8; pointer-events:auto; }
+  #bldCatH{ display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; }
+  #bldTabs{ display:flex; flex-wrap:wrap; gap:6px; margin-bottom:10px; } #bldTabs button{ border-radius:14px; padding:4px 12px; }
+  #bldTabs button.on, .bcard.on{ background:#9fc7ff; color:#111; }
+  #bldGrid{ display:grid; grid-template-columns:repeat(auto-fill, minmax(118px, 1fr)); gap:8px; }
+  .bcard{ position:relative; display:flex; flex-direction:column; align-items:center; gap:2px; padding:10px 6px; border-radius:10px; }
+  .bcard .bem{ font-size:30px; line-height:1.1; } .bcard small{ font-size:11px; opacity:.8; text-align:center; } .bcard i{ position:absolute; left:7px; top:5px; font-style:normal; font-size:11px; color:var(--gold); }
+  @media (max-width: 640px){ #stage.bld #bldBar{ bottom:178px; gap:4px; } #bldBar .bslot{ width:40px; height:40px; } #bldBar .bslot.gap{ margin-left:6px; } }
   #stage.fp .hud:not(#botC):not(#gset):not(#help){ display:none !important; }
   #stage.fp #navBox, #stage.fp #helmL, #stage.fp #helmR, #stage.fp #guns, #stage.fp #ammo, #stage.fp #keys > :not(#pauseK):not(#setB){ display:none !important; }
   #stage.fp #fpUI{ display:block; position:absolute; left:0; right:0; bottom:calc(64px + env(safe-area-inset-bottom)); pointer-events:none; z-index:3; }
@@ -259,9 +274,13 @@
     <div id="ammo"><span class="kb hb" id="ammoB" title="彈種：點一下換下一種（鍵盤 1 實心彈、2 爆裂彈、3 鏈彈）"><b>1/2/3</b><i class="em"><span class="ball"></span></i></span></div>
   </div><div id="helmR" class="helm"><span class="kb hb" data-k="8" id="ancS" title="右錨（8）"><b>8</b><i class="em">⚓▶</i></span><span class="kb hb" data-k="g" id="autoF" title="自動開砲（G）"><b>G</b><i class="em">🤖💥</i></span><span class="kb hb" data-k="f" id="fireK" title="開一門（F）"><b>F</b><i class="em">💥</i></span><span class="kb hb" data-k=" " id="volleyK" title="齊射（空白鍵）"><b>空白</b><i class="em">💥💥💥</i></span><span class="kb hb" data-k="d" data-hold="1" title="右舵（D，按住）"><b>D</b><i class="em">➡️</i></span></div></div></div>
   <!-- 第一人稱的操作面板（81_fps.js；#stage.fp 才顯示）：左下虛擬搖桿（移動；鍵盤 WASD 也行、不顯示按鍵）、右下轉頭（按住）；中間 跳、跑、爬梯子；拖曳畫面也能轉頭 -->
+  <!-- 建造模式（82_build.js，TASK-0648；#stage.bld 才顯示）：準心下面一行說明、📦 目錄（分類分頁）；快捷欄在 #fpUI 裡 -->
+  <div id="bldInfo"></div>
+  <div id="bldCat" class="panel" style="display:none"><div id="bldCatH"><b>📦 目錄</b><span class="kb" id="bldCatX">✕ 關（B）</span></div><div id="bldTabs"></div><div id="bldGrid"></div></div>
   <div id="fpUI">
+    <div id="bldBar"></div>
     <div id="fpJoy"><div id="fpKnob"></div></div>
-    <div id="fpAct"><span class="kb hb fpb" id="fpClimb" style="display:none" title="爬梯子（E）"><b>E</b><i class="em">🪜</i></span><span class="kb hb fpb" id="fpRun" title="跑（Shift）"><b>Shift</b><i class="em">🏃</i></span><span class="kb hb fpb" id="fpFol" title="跟隨身邊的船員（F）"><b>F</b><i class="em">👁</i></span><span class="kb hb fpb" id="fpNext" title="換下一個（G）"><b>G</b><i class="em">⏭</i></span></div>
+    <div id="fpAct"><span class="kb hb fpb" id="fpClimb" style="display:none" title="爬梯子（E）"><b>E</b><i class="em">🪜</i></span><span class="kb hb fpb" id="fpRun" title="跑（Shift）"><b>Shift</b><i class="em">🏃</i></span><span class="kb hb fpb" id="fpFol" title="跟隨身邊的船員（F）"><b>F</b><i class="em">👁</i></span><span class="kb hb fpb" id="fpNext" title="換下一個（G）"><b>G</b><i class="em">⏭</i></span><span class="kb hb fpb bldOnly" id="bldRot" title="轉 90°（R）"><b>R</b><i class="em">⟳</i></span><span class="kb hb fpb bldOnly" id="bldDel" title="拆（左鍵、X）"><b>X</b><i class="em">✖</i></span><span class="kb hb fpb bldOnly" id="bldPut" title="放（右鍵、V）"><b>V</b><i class="em">✔</i></span></div>
     <div id="fpCross"></div>
     <div id="fpJoyR" title="轉頭（方向鍵、Q，或按住畫面拖曳）"><div id="fpKnobR"></div></div>
     <div id="fpVert" class="fpPad"><span style="grid-area:1/1" class="kb hb fpb" id="fpJump" title="跳（空白鍵）"><b>空白</b><i class="em">⤴</i></span><span style="grid-area:1/1" class="kb hb fpb fpFly" data-fp="up" title="往上（空白鍵）"><b>空白</b><i class="em">⬆</i></span><span style="grid-area:2/1" class="kb hb fpb fpFly" data-fp="dn" title="往下（C）"><b>C</b><i class="em">⬇</i></span></div>
@@ -337,7 +356,7 @@
     <div class="card panel">
       <h1>憲法號對轟</h1>
       <div class="row" id="modes">
-        <button data-m="pve" class="on">對戰電腦</button><button data-m="eve">觀戰（自動開砲）</button><button data-m="sandbox">沙盒（敵艦不還手）</button>
+        <button data-m="pve" class="on">對戰電腦</button><button data-m="eve">觀戰（自動開砲）</button><button data-m="sandbox">沙盒（敵艦不還手）</button><button data-m="build">🔨 建造</button>
       </div>
       <div class="row" id="plays">玩法
         <button data-p="fun" class="on">娛樂</button><button data-p="real">寫實</button>
@@ -6142,7 +6161,8 @@ function sail(sh, dt) {
   sh.sailFrac = sh.sails.reduce(function (a, s) { return a + (s.dead || s.furled ? 0 : s.area * s.hp / s.hpMax); }, 0) / sh.sailArea0;   // 被打中還沒掉的帆：照剩下的血量算推力
   sh.pos = pointName(deg);
   // 拋錨模式（6）只管我艦：SAIL 是玩家的航行模式（全域），sail() 每艘都跑 ⇒ 不限 PLAYER_I 的話，友艦、敵艦也跟著拋雙錨、停在原地（Tim 2026-10-15「應該只控制我艦」）。
-  var stop = SAIL === 'off' && sh.i === PLAYER_I, manual = SAIL === 'manual' && sh.i === PLAYER_I;
+  var stop = (SAIL === 'off' || MODE === 'build') && sh.i === PLAYER_I,   // 建造（82_build.js）：停在原地（跟拋錨模式同一條）
+      manual = SAIL === 'manual' && sh.i === PLAYER_I;
   if (stop && !sh.ancMode && !sh.struck && !sh.sunk) { sh.ancMode = true; anchorToggle(sh, 'P', true); anchorToggle(sh, 'S', true); }   // 6 拋錨（雙錨，我艦；76_anchor.js）
   else if (!stop && sh.ancMode) { sh.ancMode = false; anchorToggle(sh, 'P', false); anchorToggle(sh, 'S', false); }   // 切回 4／5 ⇒ 起錨
   var held = !!sh.anc && anchorHeld(sh);                              // 有錨咬著 ⇒ 不靠帆走、可以原地繞錨轉
@@ -9966,6 +9986,7 @@ function fleetNames(spec) {
 }
 function fleetSpec() {
   if (FLEET_DBG) return FLEET_DBG;
+  if (MODE === 'build') return [{ team: 'blue', hull: FLEET_SET[0][0] }];   // 建造（82_build.js）：只有我方第一艘
   var b = FLEET_SET[0], r = FLEET_SET[1], L = [{ team: 'blue', hull: b[0] }, { team: 'red', hull: r[0] }];
   b.slice(1).forEach(function (h) { L.push({ team: 'blue', hull: h }); });
   r.slice(1).forEach(function (h) { L.push({ team: 'red', hull: h }); });
@@ -10699,7 +10720,8 @@ function render() {
     if (ow.lines && ow.lines.n) { gl.bindVertexArray(ow.lines.vao); gl.drawArrays(gl.LINES, 0, ow.lines.n); }
     if (PHYS && ow.ll && ow.ll.n) { gl.bindVertexArray(ow.ll.vao); gl.drawArrays(gl.LINES, 0, ow.ll.n); }
     if (ow.chain && ow.chain.n) { gl.bindVertexArray(ow.chain.vao); gl.drawArrays(gl.LINES, 0, ow.chain.n); }
-    if (ROOMS_DBG && ow.rooms && ow.rooms.length) { if (!ow.roomLines) roomLines(ow); gl.disable(gl.DEPTH_TEST); gl.bindVertexArray(ow.roomLines.vao); gl.drawArrays(gl.LINES, 0, ow.roomLines.n); gl.enable(gl.DEPTH_TEST); }   // 空艙房的外框（?rooms=1；穿過船殼看得到）
+    if (BLD.on && ow.bldLines && ow.bldLines.n) { gl.disable(gl.DEPTH_TEST); gl.bindVertexArray(ow.bldLines.vao); gl.drawArrays(gl.LINES, 0, ow.bldLines.n); gl.enable(gl.DEPTH_TEST); }   // 建造的預覽框（82_build.js bldLines；穿牆看得到）
+    if ((ROOMS_DBG || BLD.on) && ow.rooms && ow.rooms.length) { if (!ow.roomLines) roomLines(ow); gl.disable(gl.DEPTH_TEST); gl.bindVertexArray(ow.roomLines.vao); gl.drawArrays(gl.LINES, 0, ow.roomLines.n); gl.enable(gl.DEPTH_TEST); }   // 空艙房的外框（?rooms=1；穿過船殼看得到）
   });
   gl.frontFace(gl.CW); gl.useProgram(P.sail.prog); setCommon(P.sail); drawSails(P.sail); gl.frontFace(gl.CCW);
   // 折射（高）：畫海之前的場景複製到 RT.B（顏色＋深度），海的著色器讀它
@@ -11051,6 +11073,7 @@ function gunDir(g) { if (g.type === 'chase') return g.ax[0] >= 0 ? 'bow' : 'ster
  *  船頭砲在羅盤上面（#gunsB）、船尾砲在羅盤下面（#gunsA）—— 跟羅盤裡船頭朝上的船同一個方向；左舷的在左、對得到 ⇒ 靠羅盤那一側一條金線；沒有就藏起來。
  *  「⚠ 射界外」改到羅盤上方那一行（Tim 2026-10-15：「射界外提示不要放在下方面板內，都改到羅盤上方的資訊」）⇒ 這裡只記 HUD_OUTARC，下方面板那一格（#guns）一律藏起來。 */
 function gunHud(me) {
+  if (!foeOf(me) && !me.aim) { HUD_OUTARC = false; return; }        // 沒有敵艦也沒有瞄準點（建造模式，82_build.js）⇒ 不算（⛔ 照算 ⇒ aimPoint 拿 null 的敵艦，每一格例外）
   var foe = foeOf(me), w = handAim(me) ? aimPoint(me) : foe && foe.center;
   ['P', 'S'].forEach(function (side) {
     var rows = me.decks.map(function (D) { return me.guns.filter(function (x) { return x.deck === D.key && x.side === side && gunDir(x) === 'side'; }); }).filter(function (r) { return r.length; }).reverse();
@@ -11282,7 +11305,7 @@ function shipSettled(sh) {
   return sh.boomAt === undefined || SIMT - sh.boomAt >= END_SETTLE;
 }
 function checkEnd() {
-  if (MODE === 'sandbox' || DEMO >= 0) return;
+  if (MODE === 'sandbox' || MODE === 'build' || DEMO >= 0) return;   // 建造（82_build.js）：沒有敵艦、不判勝負
   if (OVER) {                                                         // ③：等輸的那一方定了 ⇒ 倒數 ⇒ 跳
     var W = END_WAIT; if (!W) return;
     if (!W.at) { if (SIMT < W.limit && !W.lose.every(shipSettled)) return; W.at = SIMT + (W.lose.some(function (o) { return o.sunk; }) ? END_SINK : END_OTHER); }
@@ -11709,7 +11732,7 @@ function prefsApply(p) {
   set('ramv', p.ramv, LIM.ramv, false, function (x) { RAM.v0 = x; }); set('ramk', p.ramk, LIM.ramk, false, function (x) { RAM.k = x; }); set('rame', p.rame, LIM.rame, false, function (x) { RAM.e = x; }); set('ramside', p.ramside, LIM.ramside, false, function (x) { RAM.side = x; });
   if (typeof p.slowcam === 'boolean' && !Q.has('slowcam')) SLOW.cam = p.slowcam;
   if (!Q.has('sail') && (p.sail === 'auto' || p.sail === 'manual' || p.sail === 'off')) SAIL = p.sail;
-  if (p.mode === 'pve' || p.mode === 'eve' || p.mode === 'sandbox') MODE = p.mode;
+  if (p.mode === 'pve' || p.mode === 'eve' || p.mode === 'sandbox' || p.mode === 'build') MODE = p.mode;
   if (typeof p.auto === 'boolean') { AUTOFIRE = p.auto; LAST_MODE = MODE; }   // 存了自動開砲 ⇒ 開局不再照模式套預設（70_flow.js reset）
   if (!Q.has('field') && typeof p.field === 'number' && isFinite(p.field)) FIELD_N = clamp(Math.round(p.field), 2, MAX_SHIPS);   // 候補（52_fleet.js）
   if (!Q.has('reinf') && REINF_NAMES[p.reinf]) REINF_MODE = p.reinf;
@@ -11852,7 +11875,8 @@ function start() {
   if (document.activeElement && document.activeElement.blur) document.activeElement.blur();   // 不然空白鍵會再按一次「開戰」
   reset(); RUNNING = true;
   var seenT = {}; SHIPS.forEach(function (sh) { if (!seenT[sh.T.id]) { seenT[sh.T.id] = 1; crewShortNote(sh); } });   // 船員站不下：每一型報一次
-  note(SHIPS[PLAYER_I], AUTOFIRE ? '自動開砲中（G 關掉就自己打）' : '點敵艦設瞄準點，空白鍵齊射（G 自動開砲）');
+  if (MODE !== 'build') note(SHIPS[PLAYER_I], AUTOFIRE ? '自動開砲中（G 關掉就自己打）' : '點敵艦設瞄準點，空白鍵齊射（G 自動開砲）');
+  bldEnter();                                                        // 建造（82_build.js）：進第一人稱、顯示建造介面；別的玩法 ⇒ 收起來
   if (WX.aim) note(SHIPS[PLAYER_I], '暴風雨：浪大、風強 —— 船晃得越兇砲越散，舵也難使');
 }
 // ── js/71_input.js ──
@@ -11931,6 +11955,8 @@ window.addEventListener('keydown', function (e) {
   var k = e.key.toLowerCase(); if (e.code === 'Space') k = ' ';
   if (k === 'escape') { e.preventDefault(); if (FP.on && fpEscEaten()) return; if (HELP.open) helpClose(); else if (FLX) floodClose(); else if (FLX3) xrayToggle(); else gsetToggle(); return; }   // 遊戲內的設定面板
   if (FP.on && fpKey(k, true)) { e.preventDefault(); return; }       // 第一人稱：走、轉頭、爬梯子的鍵（81_fps.js）；P 停格、O 設定照舊
+  if (bldKey(k, true)) { e.preventDefault(); return; }               // 建造（82_build.js）：1–9、R、B、X、V
+  if (MODE === 'build' && k !== 'p' && k !== 'o' && k !== 'c') return;   // 建造：開砲、轉舵那些鍵不作用
   if (k === ' ' || k === 'a' || k === 'd' || k === 'w' || k === 's' || k.indexOf('arrow') === 0) e.preventDefault();
   kbLit(k, true);
   doKey(k, e.repeat);
@@ -11978,7 +12004,7 @@ function doKey(k, repeat) {
   }
 }
 function keyUp(k) { if (k === 'a' || k === 'arrowleft') KEYS.l = false; if (k === 'd' || k === 'arrowright') KEYS.r = false; if (KEYS.sw && (k === 'w' || k === 'arrowup' ? 1 : k === 's' || k === 'arrowdown' ? -1 : 0) === KEYS.sw.d) KEYS.sw = null; }
-window.addEventListener('keyup', function (e) { var k = e.key.toLowerCase(); if (e.code === 'Space') k = ' '; if (fpKey(k, false)) { e.preventDefault(); return; } kbLit(k, false); keyUp(k); });   // fpKey：第一人稱的鍵放開（沒開 ⇒ 只清掉自己按著的、照舊往下走）
+window.addEventListener('keyup', function (e) { var k = e.key.toLowerCase(); if (e.code === 'Space') k = ' '; if (fpKey(k, false)) { e.preventDefault(); return; } if (bldKey(k, false)) return; kbLit(k, false); keyUp(k); });   // fpKey：第一人稱的鍵放開（沒開 ⇒ 只清掉自己按著的、照舊往下走）
 window.addEventListener('blur', function () { KEYS.l = KEYS.r = false; KEYS.sw = null; [].forEach.call(document.querySelectorAll('.kb.down'), function (b) { b.classList.remove('down'); }); });   // 切走視窗 ⇒ 收不到 keyup，按下的顏色一起清掉
 // iPhone 連點兩下放大（Tim 2026-10-15：「連點角落兩下還是會放大，按控帆按鈕太快就觸發」—— 根上的 touch-action:manipulation iOS 不一定照做）：
 // 兩次手指放開相隔 < 350 ms ⇒ 取消第二次的預設動作（＝雙擊縮放）。取消之後瀏覽器不會補 click ⇒ 一般按鈕自己補一個；
@@ -13953,16 +13979,16 @@ function fpPick(sh) {
   return fpCaptain(sh) || sh.crew.filter(function (c) { return ok(c) && c.role === ROLE.OFFICER; })[0] || sh.crew.filter(ok)[0] || null;
 }
 /** 開／關。開：鏡頭現在朝哪裡看（水平方向）⇒ 船長就面向那裡（不會一開就轉一大圈）。 */
-function fpSet(on) {
+function fpSet(on, quiet) {                                           // quiet：建造模式重建時（82_build.js bldRebuild）不再報一次說明
   if (on) {
     var sh = RUNNING ? SHIPS[PLAYER_I] : null, c = sh && !sh.sunk ? fpPick(sh) : null;
     if (!c) { if (sh) note(sh, '第一人稱：船上沒有站著的人'); fpUI(); return false; }
-    if (c.art !== ART_CAPTAIN) note(sh, '第一人稱：船長不在 ⇒ 從' + (c.role === ROLE.OFFICER ? '軍官' : ROLE_NAME[c.role] || '船員') + '的位置開始');
+    if (c.art !== ART_CAPTAIN && !quiet) note(sh, '第一人稱：船長不在 ⇒ 從' + (c.role === ROLE.OFFICER ? '軍官' : ROLE_NAME[c.role] || '船員') + '的位置開始');
     var d = CAM.look && CAM.eye ? M4.dir(sh.inv, CAM.look[0] - CAM.eye[0], CAM.look[1] - CAM.eye[1], CAM.look[2] - CAM.eye[2]) : [1, 0, 0];
     FP.on = true; FP.sh = sh; FP.c = { pos: c.pos.slice() };            // 玩家自己的角色：只借那個船員的座標（⛔ 不操控他）
     FP.yaw = Math.atan2(d[1], d[0]) || 0; FP.pitch = 0; FP.climb = null; FP.lads = fpLadders(sh); FP.v = [0, 0]; FP.ez = null; FP.jz = FP.jv = 0;
     FP.vz = 0; FP.flyFrom = FP.mode === 2 ? FP.c.pos.slice() : null;
-    note(sh, '第一人稱：左下搖桿或 WASD 走、Shift 跑、空白鍵跳、右下搖桿／拖曳／方向鍵轉頭（電腦：點畫面用滑鼠轉頭，Esc 或按住 Alt 放開）、E 爬梯子 —— 設定裡再按一次回到原本的鏡頭' + (FP.mode === 2 ? '（浮空：空白鍵上、C 下）' : ''));
+    if (!quiet) note(sh, '第一人稱：左下搖桿或 WASD 走、Shift 跑、空白鍵跳、右下搖桿／拖曳／方向鍵轉頭（電腦：點畫面用滑鼠轉頭，Esc 或按住 Alt 放開）、E 爬梯子 —— 設定裡再按一次回到原本的鏡頭' + (FP.mode === 2 ? '（浮空：空白鍵上、C 下）' : ''));
   } else if (FP.on) {
     FP.on = false; FP.sh = FP.c = FP.climb = FP.near = FP.fol = null; CAM.snap = true; fpUnlock();
   }
@@ -14337,6 +14363,191 @@ function joyBind(pad, knob, set) {
 }
 var joyDraw = joyBind($('fpJoy'), $('fpKnob'), function (x, y) { FP.joy = [-y, x]; });
 var joyDrawR = joyBind($('fpJoyR'), $('fpKnobR'), function (x, y) { FP.look = [x, y]; if (x || y) FP.lookT = performance.now(); });   // lookT：跟隨中 2 秒內不自動轉
+// ── js/82_build.js ──
+// ───────────────────────── 建造模式（TASK-0648） ─────────────────────────
+// Tim 2026-10-16：「用第一人稱為基底 新增建造模式吧(玩法多一個建造 然後只會出我方第一艘船) 一進場就是第一人稱模式 UI可以選取要擺放的物件(參考常見建造遊戲UI設計 可以給物件分類)」；
+//   之前拍板：「這個介面預計之後會在遊戲中開放玩家使用」「差異在於 後台編輯的會是遊戲初始值」⇒ 跟艙房編輯器（71_input.js 船隻配置頁）同一份資料：
+//   SHIP_ROOMS[船型][房名] ＝ { type, items: [{ it, x, y, r }] }（36_rooms.js）—— 玩家存本機（69_prefs.js prefsSave），沒存 ⇒ 設定檔的預設（後台 ?admin=rooms 編的那一份）。
+// 玩法「🔨 建造」（MODE 'build'）：只生我方第一艘（52_fleet.js fleetSpec）、停在原地（31_sailing.js 跟拋錨模式同一條：stop）、不開戰（沒有敵艦；不判勝負 61_hud.js checkEnd）；
+//   一進場就是第一人稱（70_flow.js start ⇒ bldEnter）。開砲、轉舵那些鍵在建造時不作用（71_input.js keydown 只放 P、O、C 與第一人稱、建造的鍵）。
+// 擺放（第一期：物品 ＝ 設定檔 furniture 那幾樣；⛔ 雕刻作品本來的模型、格子方塊的拆和加還不做 —— 現有的資料都不支援）：
+//   · 對準：從眼睛沿視線在船的格子裡打一條射線（VK.raycast，最遠 BLD_REACH 格），打到的那一點往回退一點、往下找站得住的那一格 ＝ 地板；
+//     先看它在哪一間艙房的格子上（hullRooms／roomGrid：地板那一層、0.5 m 一格），再看哪一層砲甲板（hullDeckKit／deckGrid）⇒ 第幾格。
+//   · 放（右鍵、V、面板的 ✔）：物品擺在準心那一格的中間；能不能擺照 placeOk（擋門口、擋砲班、重疊、地面不平、圍住別的……）。空著的艙房放一張床 ⇒ 那一間變成醫療艙。
+//   · 拆（左鍵、X、面板的 ✖）：準心那一格上的那一件。轉（R、⟳）：90°。
+//   · 改完 ⇒ 寫進 SHIP_ROOMS、存檔、整艘照新擺法重建（reset：單艘約 0.1 秒，量過）⇒ 第一人稱留在原地、原本的朝向。
+//   · 預覽：對到的地方畫一個框（綠 ＝ 可以放、紅 ＝ 不行、橘 ＝ 要拆的那一件；60_render.js 跟 ?rooms=1 的艙房外框同一套線，穿牆看得到），每一間艙房的外框也畫出來。
+// 介面（template.html #bldUI，#stage.bld 才顯示）：下方快捷欄（1–9 選、照分類排）＋ 📦 目錄（B：分類分頁、每一樣的大小與用途）＋ 準心上方一行說明（對到哪裡、能不能放、為什麼）。
+// 只在畫面這一層跑（90_main.js frame）：⛔ 不抽 rnd()；別的玩法 BLD.on 是 false ⇒ 什麼都不做（戰局逐位元組相同）。
+var BLD = { on: false, it: null, r: 0, tgt: null, key: '', cat: 'all', open: false, msg: '', msgT: 0 };
+var BLD_REACH = 60;                                                  // 6 m 內的地板才擺得到
+var BLD_CAT = [
+  { id: 'med', name: '醫療', em: '🏥', has: function (f) { return f.type === 'medical'; } },
+  { id: 'pump', name: '抽水', em: '💧', has: function (f) { return f.role === 'pump'; } },
+  { id: 'powder', name: '火藥', em: '🧨', has: function (f) { return f.role === 'powder'; } },
+  { id: 'misc', name: '其他', em: '📦', has: function () { return true; } }
+];
+var BLD_EM = { bed: '🛏', table: '🩺', medkit: '💊', pump: '🚰', spump: '♨', keg: '🛢' };   // 設定檔沒有圖示 ⇒ 這裡給；沒列的 ⇒ 📦
+function bldEm(it) { return BLD_EM[it] || '📦'; }
+function bldCat(it) { var f = FURN[it]; for (var i = 0; i < BLD_CAT.length; i++) if (BLD_CAT[i].has(f)) return BLD_CAT[i].id; return 'misc'; }
+/** 快捷欄的順序：照分類（醫療 → 抽水 → 火藥 → 其他），同一類照設定檔的順序。 */
+function bldList() {
+  var ks = Object.keys(FURN);
+  return BLD_CAT.reduce(function (a, c) { return a.concat(ks.filter(function (k) { return bldCat(k) === c.id; })); }, []);
+}
+function bldNote(it) { var f = FURN[it], b = f.buff || {}; return f.role === 'powder' ? '取用點（一處三桶）' : f.role === 'pump' ? '抽水 ' + f.tpm + ' 噸／分' + (f.power === 'steam' ? '、靠鍋爐' : '') : f.hold ? '躺 ' + f.hold + ' 人' : b.heal ? '治療速度 +' + Math.round(b.heal * 100) + '%' : ''; }
+function bldRoomName(r) { return (r.deck ? r.deck.name + ' ' : '') + r.name.split('/').slice(-2).join(' ').replace('艙房-鏡像', '左').replace('艙房', '右'); }
+/** 開局（70_flow.js start，reset 之後）：建造玩法 ⇒ 進第一人稱、顯示建造介面；別的玩法 ⇒ 收起來。 */
+function bldEnter() {
+  BLD.on = MODE === 'build'; BLD.key = ''; BLD.open = false;
+  if (BLD.on) { if (!BLD.it) BLD.it = bldList()[0] || null; if (!FP.on) fpSet(true, true); note(SHIPS[PLAYER_I], '建造：準心對著甲板 —— 右鍵（或 ✔）放、左鍵（或 ✖）拆、R 轉 90°、1–9 選物品、B 目錄'); }
+  bldUI();
+}
+/** 每一格畫面（90_main.js frame，fpFrame 之後）：準心對到哪裡、預覽框、說明。 */
+function bldFrame() {
+  if (!BLD.on) return;
+  $('stage').classList.toggle('bld', BLD.on && FP.on);
+  var tg = FP.on && !FP.fol && FP.sh ? bldAim() : null, R = tg ? bldTry(tg, false) : null;
+  BLD.tgt = tg;
+  var key = tg ? [tg.name, tg.i, tg.j, tg.z, BLD.it, BLD.r, R.why, R.del ? R.del.x + ',' + R.del.y : ''].join('|') : '';
+  if (key !== BLD.key) { BLD.key = key; bldLines(tg, R); }
+  bldInfo(tg, R);
+}
+/** 準心對到的地板：{ kind:'room'|'deck'|null, name, label, G, i, j, z, … }；什麼都沒打到（看天空、太遠）⇒ null。 */
+function bldAim() {
+  var sh = FP.sh, g = sh.grid, c = FP.c, cp = Math.cos(FP.pitch);
+  var o = [c.pos[0], c.pos[1], FP.ez === null ? c.pos[2] + FP_EYE : FP.ez], d = [Math.cos(FP.yaw) * cp, Math.sin(FP.yaw) * cp, Math.sin(FP.pitch)];
+  var h = VK.raycast(g, o, d, BLD_REACH); if (!h) return null;
+  var t = Math.max(0, h.t - 0.3), x = Math.floor(o[0] + d[0] * t), y = Math.floor(o[1] + d[1] * t), z0 = Math.floor(o[2] + d[2] * t), z = -1;
+  for (var dz = 0; dz < 30 && z < 0; dz++) if (standZ(g, x, y, z0 - dz, z0 - dz, 1) >= 0) z = z0 - dz;   // 打到牆 ⇒ 往下找牆腳的地板
+  return z < 0 ? null : bldWhere(sh.T, x, y, z);
+}
+function bldWhere(T, x, y, z) {
+  var R = hullRooms(T), n, G, i, j;
+  for (n = 0; n < R.length; n++) {
+    G = roomGrid(T, R[n]); if (Math.abs(z - G.z) > 1) continue;
+    i = Math.floor((x - G.x0) / ROOM_TILE); j = Math.floor((y - G.y0) / ROOM_TILE);
+    if (i >= 0 && j >= 0 && i < G.nx && j < G.ny) return { kind: 'room', r: R[n], name: R[n].name, label: bldRoomName(R[n]), G: G, i: i, j: j, z: G.z, x: x, y: y };
+  }
+  var K = hullDeckKit(T).decks;
+  for (n = 0; n < K.length; n++) {
+    G = deckGrid(T, K[n]); i = Math.floor((x - G.x0) / ROOM_TILE); j = Math.floor((y - G.y0) / ROOM_TILE);
+    if (i < 0 || j < 0 || i >= G.nx || j >= G.ny) continue;
+    var zt = G.zt[i + j * G.nx]; if (zt < 0 || Math.abs(zt - z) > 2) continue;
+    return { kind: 'deck', D: K[n], name: K[n].id, label: K[n].name, G: G, i: i, j: j, z: zt, x: x, y: y };
+  }
+  return { kind: null, name: '', label: '', i: 0, j: 0, z: z, x: x, y: y };
+}
+/** 那一間（或那一層甲板）現在的擺法與實際擺上的物品：{ type, items }（type null ＝ 空著的艙房）。 */
+function bldPlan(tg) {
+  var T = FP.sh.T;
+  if (tg.kind === 'room') { var pl = roomPlan(T.id, tg.name); return { type: pl ? pl.type : null, items: roomItems(T, tg.r, pl).items }; }
+  return { type: 'deck', items: deckItems(T, tg.D, deckPlan(T.id, tg.name)).items };
+}
+function bldHit(items, i, j) { return items.filter(function (q) { var t = itemTiles(q.it, q.r); return i >= q.x && i < q.x + t[0] && j >= q.y && j < q.y + t[1]; })[0] || null; }
+/** 試著放（del ＝ 拆）：{ p（要放的那一件）, del（要拆的那一件）, type, cur（複製出來的現有清單）, why（不行的原因；'' ＝ 可以）}。 */
+function bldTry(tg, del) {
+  if (!tg.kind) return { why: '這裡不是艙房也不是砲甲板' };
+  var P = bldPlan(tg), cur = P.items.map(function (q) { return { it: q.it, x: q.x, y: q.y, r: q.r }; }), hit = bldHit(cur, tg.i, tg.j);
+  if (del) return hit ? { del: hit, cur: cur, type: P.type, why: '' } : { why: '這格沒有物品', cur: cur, type: P.type };
+  var f = FURN[BLD.it]; if (!f) return { why: '先在快捷欄選一樣物品', del: hit };
+  var type = P.type || (tg.kind === 'room' && f.type !== 'deck' ? f.type : null);
+  if (!type) return { why: f.name + '只能擺在砲甲板', del: hit };
+  var t = itemTiles(BLD.it, BLD.r), p = { it: BLD.it, x: tg.i - Math.floor((t[0] - 1) / 2), y: tg.j - Math.floor((t[1] - 1) / 2), r: BLD.r };
+  if (hit) return { p: p, type: type, cur: cur, del: hit, why: '這格已經有' + FURN[hit.it].name };
+  return { p: p, type: type, cur: cur, why: placeOk(tg.G, type, cur, p) };
+}
+/** 放／拆（滑鼠、鍵盤、面板都走這裡）。 */
+function bldDo(del) {
+  if (!BLD.on || !FP.on || PAUSED || !BLD.tgt) { if (BLD.on && FP.on && !BLD.tgt) bldMsg('準心沒對到甲板'); return; }
+  var tg = BLD.tgt, R = bldTry(tg, del), was = tg.kind === 'room' && !bldPlan(tg).type;   // 空著的艙房（改之前先看：⛔ 改完再看 ⇒ 已經有類型了）
+  if (del) { if (!R.del) { bldMsg(R.why); return; } R.cur.splice(R.cur.indexOf(R.del), 1); bldSet(tg, R.type, R.cur, '拿掉了' + FURN[R.del.it].name); }
+  else { if (R.why) { bldMsg('放不下：' + R.why); return; } R.cur.push(R.p); bldSet(tg, R.type, R.cur, '擺上' + FURN[R.p.it].name + (was ? '（這一間變成' + ROOM_FN[R.type].name + '）' : '')); }
+}
+function bldSet(tg, type, items, msg) {
+  var id = FP.sh.T.id; (SHIP_ROOMS[id] = SHIP_ROOMS[id] || {})[tg.name] = { type: type, items: items };
+  if (typeof prefsSave === 'function') prefsSave();
+  bldRebuild(); bldMsg(msg);
+}
+/** 照新擺法整艘重建（reset ⇒ 只生我方第一艘）⇒ 第一人稱回到原地、原本的朝向。 */
+function bldRebuild() {
+  var s = { pos: FP.c.pos.slice(), yaw: FP.yaw, pitch: FP.pitch };
+  reset(); fpSet(true, true);
+  if (FP.on) { FP.c.pos = s.pos; FP.yaw = s.yaw; FP.pitch = s.pitch; FP.ez = null; FP.jz = FP.jv = 0; FP.v = [0, 0]; }
+  BLD.key = '';
+}
+function bldMsg(t) { BLD.msg = t || ''; BLD.msgT = performance.now(); }
+/** 預覽框（船的格座標的線；60_render.js 畫）：要放的那一件的外框（綠／紅）、要拆的那一件（橘）、準心那一格（白）。 */
+function bldLines(tg, R) {
+  var sh = FP.sh; if (!sh) return;
+  var L = [];
+  function box(a, b, c) {
+    var P = []; for (var i = 0; i < 8; i++) P.push([i & 1 ? b[0] : a[0], i & 2 ? b[1] : a[1], i & 4 ? b[2] : a[2]]);
+    [[0, 1], [2, 3], [4, 5], [6, 7], [0, 2], [1, 3], [4, 6], [5, 7], [0, 4], [1, 5], [2, 6], [3, 7]].forEach(function (e) { L.push(P[e[0]][0], P[e[0]][1], P[e[0]][2], c[0], c[1], c[2], P[e[1]][0], P[e[1]][1], P[e[1]][2], c[0], c[1], c[2]); });
+  }
+  function itemBox(G, q, z, c) { var t = itemTiles(q.it, q.r), x0 = G.x0 + q.x * ROOM_TILE, y0 = G.y0 + q.y * ROOM_TILE; box([x0, y0, z + 0.05], [x0 + t[0] * ROOM_TILE, y0 + t[1] * ROOM_TILE, z + FURN[q.it].size[2]], c); }
+  if (tg && tg.kind) {
+    var x0 = tg.G.x0 + tg.i * ROOM_TILE, y0 = tg.G.y0 + tg.j * ROOM_TILE; box([x0, y0, tg.z + 0.05], [x0 + ROOM_TILE, y0 + ROOM_TILE, tg.z + 0.3], [1, 1, 1]);
+    if (R && R.del && (R.why || !R.p)) itemBox(tg.G, R.del, tg.z, [1, 0.55, 0.15]);
+    if (R && R.p) itemBox(tg.G, R.p, tg.z, R.why ? [1, 0.3, 0.25] : [0.45, 1, 0.5]);
+  }
+  sh.bldLines = upload(sh.bldLines, new Float32Array(L), 6, [[0, 3, 0], [2, 3, 3]]);
+}
+/** 準心上方一行：對到哪裡、能不能放；剛放／剛拆的訊息留 2.5 秒。 */
+function bldInfo(tg, R) {
+  var el = $('bldInfo'); if (!el) return;
+  var f = FURN[BLD.it], s;
+  if (BLD.msg && performance.now() - BLD.msgT < 2500) s = BLD.msg;
+  else if (!tg) s = '準心對著甲板';
+  else if (!tg.kind) s = R.why;
+  else s = tg.label + '：' + (R.why ? (R.del && !R.p ? '' : '放不下：') + R.why : '可以擺' + f.name) + (R.del ? '（左鍵拆' + FURN[R.del.it].name + '）' : '');
+  if (el.textContent !== s) el.textContent = s;
+}
+/** 介面：快捷欄（照分類、分類之間空一點）＋ 目錄。開局、選物品、轉向時重畫。 */
+function bldUI() {
+  var bar = $('bldBar'); if (!bar) return;
+  $('stage').classList.toggle('bld', BLD.on && FP.on);
+  var L = bldList(), last = '';
+  bar.innerHTML = L.map(function (it, n) {
+    var c = bldCat(it), gap = last && c !== last ? ' gap' : ''; last = c;
+    return '<span class="kb hb bslot' + gap + (it === BLD.it ? ' on' : '') + '" data-it="' + it + '" title="' + FURN[it].name + '（' + (n + 1) + '）' + bldNote(it) + '"><b>' + (n + 1) + '</b><i class="em">' + bldEm(it) + '</i></span>';
+  }).join('') + '<span class="kb hb bslot gap" id="bldCatB" title="目錄（B）"><b>B</b><i class="em">📦</i></span>';
+  [].forEach.call(bar.querySelectorAll('[data-it]'), function (b) { b.onclick = function () { BLD.it = b.dataset.it; bldUI(); }; });
+  $('bldCatB').onclick = function () { bldCatOpen(!BLD.open); };
+  $('bldRot').querySelector('.em').textContent = BLD.r ? '⟲' : '⟳';
+  var cat = $('bldCat'); cat.style.display = BLD.open && BLD.on ? '' : 'none';
+  if (!BLD.open) return;
+  var tabs = [{ id: 'all', name: '全部', em: '🗂' }].concat(BLD_CAT.filter(function (c) { return L.some(function (it) { return bldCat(it) === c.id; }); }));
+  $('bldTabs').innerHTML = tabs.map(function (c) { return '<button data-cat="' + c.id + '"' + (BLD.cat === c.id ? ' class="on"' : '') + '>' + c.em + ' ' + c.name + '</button>'; }).join('');
+  [].forEach.call($('bldTabs').querySelectorAll('button'), function (b) { b.onclick = function () { BLD.cat = b.dataset.cat; bldUI(); }; });
+  $('bldGrid').innerHTML = L.filter(function (it) { return BLD.cat === 'all' || bldCat(it) === BLD.cat; }).map(function (it) {
+    var f = FURN[it], n = L.indexOf(it) + 1;
+    return '<button class="bcard' + (it === BLD.it ? ' on' : '') + '" data-it="' + it + '"><span class="bem">' + bldEm(it) + '</span><b>' + f.name + '</b><small>' + (f.size[0] * S).toFixed(1) + '×' + (f.size[1] * S).toFixed(1) + ' m・' + (f.type === 'deck' ? '砲甲板' : (ROOM_FN[f.type] || {}).name || f.type) + '</small><small>' + bldNote(it) + '</small><i>' + n + '</i></button>';
+  }).join('');
+  [].forEach.call($('bldGrid').querySelectorAll('[data-it]'), function (b) { b.onclick = function () { BLD.it = b.dataset.it; bldCatOpen(false); }; });
+}
+/** 目錄開關：開 ⇒ 放開滑鼠（要點卡片；跟 Minecraft 開物品欄一樣，遊戲不停）。 */
+function bldCatOpen(on) { BLD.open = !!on; if (on) fpUnlock(); bldUI(); }
+/** 鍵盤（71_input.js keydown／keyup，第一人稱的鍵之後）：建造玩法吃掉 ⇒ true。 */
+function bldKey(k, down) {
+  if (!BLD.on) return false;
+  var L = bldList(), n = +k;
+  if (k.length === 1 && n >= 1 && n <= 9) { if (down && L[n - 1]) { BLD.it = L[n - 1]; bldUI(); } return true; }
+  if (k === 'r') { if (down) { BLD.r = 1 - BLD.r; bldUI(); } return true; }
+  if (k === 'b') { if (down) bldCatOpen(!BLD.open); return true; }
+  if (k === 'x') { if (down) bldDo(true); return true; }
+  if (k === 'v') { if (down) bldDo(false); return true; }
+  return false;
+}
+// 滑鼠（只在滑鼠模式＝抓住滑鼠時，跟 Minecraft 一樣）：左鍵拆、右鍵放。沒抓住時左鍵照舊是「抓住滑鼠」（81_fps.js）。
+cv.addEventListener('mousedown', function (e) {
+  if (!BLD.on || !FP.on || !fpLocked()) return;
+  if (e.button === 0) bldDo(true); else if (e.button === 2) bldDo(false);
+});
+$('bldPut').onclick = function () { bldDo(false); };
+$('bldDel').onclick = function () { bldDo(true); };
+$('bldRot').onclick = function () { BLD.r = 1 - BLD.r; bldUI(); };
+$('bldCatX').onclick = function () { bldCatOpen(false); };
 // ── js/90_main.js ──
 // ───────────────────────── 主迴圈 ─────────────────────────
 var last = 0, acc = 0, FPS = 60, fpsT = 0;
@@ -14363,7 +14574,7 @@ function frame(ts, noRaf) {                                         // noRaf：_
   remesh(RM_BUDGET);                                                  // 重網格化，每格有預算（60_render.js）
   if (PF) pfLap('flush');
   renderLerp(true, RUNNING ? acc / DT : 1);                           // 畫面內插（03_camera.js）：鏡頭、畫、HUD 用兩步之間的位置，畫完換回模擬的
-  fpFrame(dt);                                                        // 第一人稱：走、爬、退出判斷（81_fps.js；沒開 ⇒ 什麼都不做）
+  fpFrame(dt); bldFrame();                                                        // 第一人稱：走、爬、退出判斷（81_fps.js；沒開 ⇒ 什麼都不做）
   camUpdate(dt); render(); if (PF) pfLap('render'); hud(dt); frzShow(); slowShow();
   renderLerp(false);                        // 停格條（72_floodui.js）
   if (PF) { pfLap('hud'); pfEnd(f0, RUNNING && !PAUSED ? n : 0); }
