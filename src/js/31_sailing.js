@@ -276,6 +276,15 @@ function ramBite(sh, Q, n, e, other, du, E) {
   var t = massLost(sh) - t0; sh.rams[sh.rams.length - 1].t_lost = +t.toFixed(2);
   return t;
 }
+/** 開局（70_flow.js reset）先把這一場會用到的碰撞取樣建好：船隻碰撞那一檔、碰撞傷害開著再加全開那一份、格子檔的佔用金字塔。只是快取（不碰亂數、不改戰局）。
+ *  Tim 2026-10-16：「碰撞精度也是物理效果中就開滿(可以測試效能占用)」—— 量過：憲法號全開取樣 24.8 萬點 93.5 ms，以前在第一次碰到的那一步現場建（那一步 96 ms）。 */
+function hitWarm() {
+  var L = [SHIPHIT_LV[PHX.shiphit], PHX.shipdmg ? SHIPHIT_LV[3] : null], seen = {};
+  SHIPS.forEach(function (sh) {
+    if (seen[sh.T.id]) return; seen[sh.T.id] = 1;
+    L.forEach(function (lv) { if (!lv) return; hitSamples(sh.T, lv); if (!lv.foot) occPyr(sh.T); });
+  });
+}
 /** 船型 T 的碰撞取樣（第一次用到才算、每個船型每一檔只算一次；HIT_PROF 記花了多久）：
  *  foot ⇒ { f0, f1 }：水線下 1 m 到水線上 4 m 那一段，每一欄 x 的 y 最小／最大（沒有 ⇒ -1）＋ 外緣點（每 2 欄取一）；
  *  stride k ⇒ Int16Array [x, y, z, …]：六個方向最外面那一格（俯視 (x,y) 的最高／最低、(x,z) 的兩舷、(y,z) 的船頭船尾），座標照 k 取一。 */
