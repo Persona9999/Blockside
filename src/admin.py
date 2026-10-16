@@ -347,6 +347,15 @@ def validate(cfg, prev=None):
         hb = (f.get('buff') or {}).get('heal') if isinstance(f, dict) else None
         if hb is not None and not (isnum(hb) and 0 <= hb <= 1):
             err('furniture.%s.buff.heal' % fid, '0～1（治療速度加成）')
+    for kd, f in (cfg.get('drvparts') or {}).items():     # 動力件（TASK-0653；js/31_drive.js DRVP、67_furncfg.js DRV_ITEMS）
+        if kd not in DRV_KINDS or not isinstance(f, dict):
+            err('drvparts.%s' % kd, '種類只有 ' + '／'.join(DRV_KINDS))
+            continue
+        for k, lo, hi in (('lo', 0, 0.95), ('hi', 0.05, 1), ('wet', 0, 1), ('cell', 0, 1)):
+            if k in f and not (isnum(f[k]) and lo <= f[k] <= hi):
+                err('drvparts.%s.%s' % (kd, k), '%s～%s 的數字' % (lo, hi))
+        if isnum(f.get('lo')) and isnum(f.get('hi')) and not f['lo'] < f['hi']:
+            err('drvparts.%s' % kd, 'lo（剩幾成就沒力）要小於 hi（剩幾成還是全力）')
 
     def rooms(rm, p):
         # 甲板與艙房的預設（TASK-0568；遊戲 36_rooms.js）：{ 房名: '類型'（艙房自動擺滿）｜{ type, items: [{ it, x, y, r }] }（自訂；甲板 type=deck）}
@@ -1387,16 +1396,31 @@ def act_defaults(lim):
 
 
 FURN_KEYS = ('tpm', 'crew', 'cap', 'hold', 'hp', 'buff.heal')            # 道具設定頁（js/67_furncfg.js FURN_ITEMS）調得到的那幾格
+DRVP_KEYS = ('lo', 'hi', 'wet', 'cell')                                  # 同一頁的動力件（DRV_ITEMS ⇒ config drvparts）
 
 
-def act_furniture(furn):
+def act_furniture(furn, drv=None):
     """道具的出廠預設值（Tim 2026-10-16：「一樣是開發後台調預設 玩家後台套同一個UI」）：遊戲的道具設定頁（/game?admin=furn）送來 { 道具: { 鍵: 值 } }
-    ⇒ 改 furniture[道具][鍵]（buff.heal ＝ furniture[道具].buff.heal）；只認 FURN_KEYS、而且那一種本來就有那一格；照樣過 validate 才存。"""
-    if not isinstance(furn, dict) or not furn:
+    ⇒ 改 furniture[道具][鍵]（buff.heal ＝ furniture[道具].buff.heal）；只認 FURN_KEYS、而且那一種本來就有那一格；照樣過 validate 才存。
+    drv ＝ 同一頁的動力件 { 種類: { 鍵: 值 } } ⇒ 改 drvparts[種類][鍵]（只認 DRVP_KEYS、那一種本來就有那一格）。"""
+    furn, drv = furn or {}, drv or {}
+    if not isinstance(furn, dict) or not isinstance(drv, dict) or not (furn or drv):
         raise Fail('沒有要改的道具')
     prev = load()
     new = json.loads(json.dumps(prev))
     FU, log, bad = new.get('furniture') or {}, [], []
+    DP = new.get('drvparts') or {}
+    for kd, kv in drv.items():
+        if kd not in DP or not isinstance(kv, dict):
+            bad.append('drv:' + str(kd))
+            continue
+        for k, v in kv.items():
+            if k not in DRVP_KEYS or k not in DP[kd] or not isnum(v) or v < 0:
+                bad.append('drv:%s.%s' % (kd, k))
+                continue
+            if DP[kd][k] != v:
+                log.append('  %s（%s，動力件）%s：%s → %s' % (kd, DP[kd].get('name', ''), k, DP[kd][k], v))
+                DP[kd][k] = v
     for fid, kv in furn.items():
         if fid not in FU or not isinstance(kv, dict):
             bad.append(str(fid))
@@ -1419,7 +1443,7 @@ def act_furniture(furn):
     if E:
         raise Fail('設定不合法，沒有存：\n' + '\n'.join('  ✗ ' + e for e in E))
     save(new)
-    return ['✓ 道具的出廠預設改了 %d 項（config/game.json furniture；重建之後遊戲才吃得到）：' % len(log)] + log
+    return ['✓ 道具的出廠預設改了 %d 項（config/game.json furniture、drvparts；重建之後遊戲才吃得到）：' % len(log)] + log
 
 
 def act_save(new):
@@ -1503,7 +1527,7 @@ def serve(port, do_open=False):
                 elif self.path == '/api/defaults':
                     log = act_defaults(b.get('lim'))
                 elif self.path == '/api/furniture':
-                    log = act_furniture(b.get('furn'))
+                    log = act_furniture(b.get('furn'), b.get('drv'))
                 elif self.path == '/api/build':
                     log = act_build()
                 elif self.path == '/api/import':

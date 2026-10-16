@@ -382,6 +382,12 @@
     "spump": {"name": "蒸汽抽水機", "type": "deck", "size": [10, 6, 9], "hp": 160, "role": "pump", "power": "steam", "tpm": 15, "place": "center", "cap": 60},
     "keg": {"name": "火藥桶", "type": "deck", "size": [10, 10, 8], "role": "powder"}
   },
+  "drvparts": {
+    "engine": {"name": "主機", "lo": 0.4, "hi": 1},
+    "boiler": {"name": "鍋爐", "lo": 0.5, "hi": 0.8, "wet": 0.5},
+    "shaft": {"name": "螺旋槳軸", "cell": 0.15},
+    "steampipe": {"name": "蒸汽管", "cell": 0.15}
+  },
   "rooms": {
     "medical": {
       "name": "醫療艙",
