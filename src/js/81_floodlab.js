@@ -7,6 +7,7 @@
 //   ?debug=1 時 __game.floodLab(o) 同一套、回傳同一份。
 // 參數（網址同名）：holes（x:dz:side:r，以 ; 分隔：x ＝ 水線那一段船長的比例 0–1、dz ＝ 水線下幾格、side 0 ＝ 格 +y 那一舷、r ＝ 半徑幾格；不給 ⇒ 預設三個）、
 //   dur（秒，預設 60）、every（秒，預設 10）、fyaw、fpitch、fdist、fty（鏡頭；fty ＝ 注視點在船中心上面幾公尺，看底艙給負的；⛔ 不叫 dist／pitch：dist 是開局兩艘船的距離、pitch 是 ?cam=deck 的俯角 —— 撞名量過：dist=38 把另一艘擺到旁邊、進水整個不一樣）、cut（half ＝ 剖面、none；預設 half）、deck（拿掉幾層甲板，預設 0）、xray（1 ＝ 透視）、
+//   boom（殉爆開局，TASK-0662：彈藥庫編號，0 後、1 前、0,1 兩間；浮穩之後直接整間炸 ⇒ 沒另外給 holes 就不打預設的洞；每一筆多記 ex ＝ 艙內最高水面離海面幾公尺（flabEx），另有每秒一筆的 trace）、
 //   w（截圖寬，預設 480）、flat（1 ＝ 浪設 0）、focus（step ＝ 每一筆把鏡頭對準水面差最大的那條兩池交界；cell:x:y ＝ 固定對準那一欄最高的水面 —— 照 fpitch／fdist 拉近、鏡頭擺在往船中心那一側，fyaw 不用）。
 // ⛔ 只在 ?lab=flood 或 __game.floodLab 才跑；一般遊戲一行都不多算。
 // 鏡頭用自由鏡頭（CAM.mode 0：注視點 CAM.tgt、yaw／pitch／dist 照給的）。⛔ mode 4 是「我艦看向敵艦」：注視點固定在我艦中心上 4 m、yaw 照敵艦方向 ⇒ fyaw、對準都沒效（量過：focus 對準的點被蓋回船中心）。
@@ -67,7 +68,8 @@ function floodLab(o) {
   var out = { hull: sh.T.id, seed: SEED, lv: FLOOD_LV, c: sh.fl ? sh.fl.F.c : null, sea: SEA_K, o: { dur: o.dur, every: o.every, cut: o.cut, deck: o.deck, xray: !!o.xray }, holes: [], rows: [] };
   if (!sh.fl) { out.err = '進水是公式模式（物理效果的「進水」第 0 檔）⇒ 沒有艙內的水可畫；網址加 phx=mid／high／full'; SEA_K = seaK; return out; }
   var T = sh.T, x0 = T.wl0, x1 = T.wl1;
-  o.holes.forEach(function (hd) {
+  if (o.boom) o.boom.forEach(function (k) { var g = sh.mags[k]; if (g) magBoom(sh, g); out.holes.push({ boom: k, mag: g ? g.name : null }); });   // 殉爆開局（TASK-0662）：整間直接炸（同 __game.ignite(0, k, 'mag')）
+  (o.boom && !o.holesSet ? [] : o.holes).forEach(function (hd) {
     var x = Math.round(x0 + (x1 - x0) * hd[0]), sk = labSkin(sh, x, hd[2]);
     var z = sk ? sk.z - hd[1] : null, r = z === null ? null : labHole(sh, x, z, hd[2], hd[3]);
     out.holes.push({ x: x, z: z, side: hd[2], r: hd[3], removed: r ? r.removed : 0 });
@@ -77,10 +79,11 @@ function floodLab(o) {
   CAM.follow = null; CAM.mode = 0; CAM.yaw = o.yaw; CAM.pitch = o.pitch; if (o.dist > 0) CAM.dist = o.dist; else CAM.dist = Math.max(60, (x1 - x0) * S * 0.95);
   CUTV.half = o.cut === 'half'; CUTV.deck = o.deck | 0; FLX3 = !!o.xray;
   var snap0 = FL_SNAP, stat0 = FL_STAT; FL_SNAP = FL_STAT = true;
-  var n = Math.round(o.every / DT), steps = Math.max(1, Math.round(o.dur / o.every));
+  var n = Math.round(o.every / DT), steps = Math.max(1, Math.round(o.dur / o.every)), tn = Math.max(1, Math.round(1 / DT));
+  out.trace = [];                                                       // 每秒一筆：[t, 水 m³, 進 m³/s, 出 m³/s, 艙內最高水面 − 海面 m, 高出海面的水 m³, 下沉 m]（flabEx）
   for (var k = 0; k <= steps; k++) {
     var focusAt = null;
-    if (k) { for (i = 0; i < n; i++) { step(); if (i % 30 === 29) remesh(Infinity); } }
+    if (k) { for (i = 0; i < n; i++) { step(); if (i % 30 === 29) remesh(Infinity); if (i % tn === tn - 1) { var ex = flabEx(sh); out.trace.push([+SIMT.toFixed(1), +sh.fl.vol.toFixed(1), +sh.fl.inQ.toFixed(2), +sh.fl.outQ.toFixed(2), ex.max, ex.vol, +sh.sink.toFixed(2)]); } } }
     remesh(Infinity); CAM.snap = true; camUpdate(1); render();
     if (o.focus === 'step' && sh.fl.mesh && sh.fl.mesh.stat) {             // 對準水面差最大的那條兩池交界（高的那一邊），拉近再拍
       var E = sh.fl.mesh.stat.map.edge.filter(function (e) { return e[3] === 1 && e[4] > 0; }).sort(function (a, b) { return b[4] - a[4]; })[0];
@@ -98,7 +101,7 @@ function floodLab(o) {
       }
     }
     var me = sh.fl.mesh, st = me && me.stat ? me.stat : null, dh = st ? st.dh.slice().sort(function (a, b) { return a - b; }) : [];
-    out.rows.push({ t: +SIMT.toFixed(1), fl: flReadout(sh), focus: focusAt, cam: { eye: CAM.eye.map(function (v) { return +v.toFixed(2); }), look: (CAM.look || CAM.tgt).map(function (v) { return +v.toFixed(2); }) },
+    out.rows.push({ t: +SIMT.toFixed(1), fl: flReadout(sh), ex: flabEx(sh, true), ship: { broken: !!sh.broken, final: !!sh.sinkingFinal, sunk: !!sh.sunk }, focus: focusAt, cam: { eye: CAM.eye.map(function (v) { return +v.toFixed(2); }), look: (CAM.look || CAM.tgt).map(function (v) { return +v.toFixed(2); }) },
       mesh: me ? { tris: me.n / 3, quads: me.quads, ms: +(me.ms || 0).toFixed(2), falls: me.fn ? me.fn / 6 : 0, sides: me.sideN || 0, spill: me.fallN || 0, sideMax: me.sst ? +me.sst.max.toFixed(2) : 0, sideAt: me.sst ? me.sst.at : null, sideXo: me.sst ? me.sst.xo : 0, sideXf: me.sst ? me.sst.xf : 0, sideXoAt: me.sst && me.sst.xoAt ? me.sst.xoAt.slice(0, 8) : null, sideXn: me.sst ? me.sst.xn : 0, sideXoMax: me.sst ? me.sst.xoMax : 0, depBlit: FL_DEPBLIT } : null,
       seam: st ? { tops: st.tops, pools: st.pools, join: st.join, step: st.step, open: st.open, wall: st.wall, cutTops: st.cutTops, cutPieces: st.cutPieces, outTops: st.outTops,
         dhMed: dh.length ? +dh[dh.length >> 1].toFixed(2) : 0, dhMax: dh.length ? +dh[dh.length - 1].toFixed(2) : 0,
@@ -107,6 +110,29 @@ function floodLab(o) {
   }
   FL_SNAP = snap0; FL_STAT = stat0; SEA_K = seaK;
   return out;
+}
+
+/** 艙內水面高出海面多少（TASK-0662；Tim 2026-10-16 殉爆後艙內的水停在海面以上不退）：每一格有水的水格，水面（照 flTick head 同一套：格底 ＋ 裝了幾成 × 格高，裝超過一成照算 ⇒ 擠出來的也看得到）減那一點正上方的海面（seaH，照浪）。
+ *  回 { max 最高那格高出幾 m、at 那一格 [ix, iy, iz]、fill 那一格裝了幾成、n 高出 0.3 m 以上的格數、vol 高出海面的水 m³（每格只算海面以上那一截）、over 裝超過的格數、overV 裝超過的水 m³；room ⇒ 另外 roomBelow 海面以下還空著的 m³、roomWet 其中已經有水的格、nWetRoom 那幾格的格數 }。只讀。 */
+function flabEx(sh, room) {
+  var fl = sh.fl, F = fl.F, c = F.c, NX = F.NX, NXY = NX * F.NY, M = sh.M, Vc = Math.pow(c * S, 3), hc = c * S, r = { max: -99, at: null, fill: 0, n: 0, vol: 0, over: 0, overV: 0 };
+  var h0 = M[1] * (F.X0 + 0.5 * c) + M[5] * (F.Y0 + 0.5 * c) + M[13], dhx = M[1] * c, dhy = M[5] * c, dhz = M[9] * c;
+  for (var t = 0; t < fl.actN; t++) {
+    var i = fl.act[t], A = fl.A[i], cp = fl.cap[i]; if (!(A > 1e-4) || !(cp > 0.02)) continue;
+    var ix = i % NX, iy = ((i / NX) | 0) % F.NY, iz = (i / NXY) | 0, f = A / (cp * Vc), hb = h0 + ix * dhx + iy * dhy + iz * dhz, h = hb + f * hc;
+    var P = M4.pt(M, F.X0 + (ix + 0.5) * c, F.Y0 + (iy + 0.5) * c, iz * c), sea = seaH(P[0], P[2], SIMT), e = h - sea;
+    if (f > 1.001) { r.over++; r.overV += A - cp * Vc; }
+    if (e > r.max) { r.max = e; r.at = [ix, iy, iz]; r.fill = f; }
+    if (e > 0.3) r.n++;
+    if (e > 0) r.vol += A * Math.min(1, e / Math.max(1e-6, f * hc));
+  }
+  if (room) {                                                           // 海面以下還空著多少（每一格裝到海面那一點的高度為止）、其中已經有水的那幾格
+    var rb = 0, rbW = 0, nw = 0;
+    for (var i2 = 0; i2 < F.N; i2++) { var cp2 = fl.cap[i2]; if (!(cp2 > 0.02)) continue; var jx = i2 % NX, jy = ((i2 / NX) | 0) % F.NY, jz = (i2 / NXY) | 0, P2 = M4.pt(M, F.X0 + (jx + 0.5) * c, F.Y0 + (jy + 0.5) * c, jz * c), f2 = clamp((seaH(P2[0], P2[2], SIMT) - P2[1]) / hc, 0, 1), rr2 = f2 * cp2 * Vc - fl.A[i2]; if (rr2 <= 0) continue; rb += rr2; if (fl.A[i2] > 1e-4) { rbW += rr2; nw++; } }
+    r.roomBelow = +rb.toFixed(0); r.roomWet = +rbW.toFixed(0); r.nWetRoom = nw;
+  }
+  r.max = +r.max.toFixed(2); r.fill = +r.fill.toFixed(2); r.vol = +r.vol.toFixed(1); r.overV = +r.overV.toFixed(1);
+  return r;
 }
 
 /** 換個鏡頭再拍一張（__game.floodView；找報表的固定角度用）：o ＝ { yaw, pitch, dist, ty, cut: 'half'|'none', deck, xray, w }，沒給的照現在的。回 data URL。 */
@@ -122,6 +148,8 @@ function floodView(o) {
 /** 網址 ?lab=flood 的參數 ⇒ floodLab 的 o。 */
 function flLabOpts() {
   var o = {};
+  if (Q.has('boom')) o.boom = Q.get('boom').split(',').filter(function (w) { return w !== ''; }).map(Number);   // 殉爆開局：boom=0（後彈藥庫）、1（前）、0,1；有給 boom 又沒給 holes ⇒ 不另外打洞
+  if (Q.has('holes')) o.holesSet = true;
   if (Q.has('holes')) o.holes = Q.get('holes').split(';').filter(function (w) { return w; }).map(function (w) { return w.split(':').map(Number); });
   ['dur', 'every', 'deck', 'w'].forEach(function (k) { if (Q.has(k)) o[k] = +Q.get(k); });
   [['fyaw', 'yaw'], ['fpitch', 'pitch'], ['fdist', 'dist'], ['fty', 'ty']].forEach(function (kk) { if (Q.has(kk[0])) o[kk[1]] = +Q.get(kk[0]); });

@@ -159,14 +159,37 @@ function flReadout(sh) {
   var fl = sh.fl;
   var cells = 0; for (var t = 0; t < fl.actN; t++) if (fl.A[fl.act[t]] > 0) cells++;
   return { lv: FLOOD_LV, c: fl.F.c, grid: [fl.F.NX, fl.F.NY, fl.F.NZ], m3: +fl.vol.toFixed(3), t: +(fl.vol * RHO_W).toFixed(2), cells: cells, jets: fl.J.n, holes: fl.open, area: +fl.area.toFixed(3),
-    inQ: +fl.inQ.toFixed(3), outQ: +fl.outQ.toFixed(3), inTot: +fl.inTot.toFixed(2), outTot: +fl.outTot.toFixed(2), pumped: +fl.pumped.toFixed(2), lost: +(fl.lost || 0).toFixed(3),
+    inQ: +fl.inQ.toFixed(3), outQ: +fl.outQ.toFixed(3), inTot: +fl.inTot.toFixed(2), outTot: +fl.outTot.toFixed(2), pumped: +fl.pumped.toFixed(2), lost: +(fl.lost || 0).toFixed(3), back: +(fl.back || 0).toFixed(2),
     comX: +fl.comX.toFixed(2), comY: +fl.comY.toFixed(2), sinkT: +fl.sinkT.toFixed(3), sink: +sh.sink.toFixed(3), roll: +sh.rollA.toFixed(4), pitch: +sh.pitchA.toFixed(4), dirty: fl.dirty.length + fl.hdirty.length };
 }
-/** 水併進第 i 格（那一格裝不了水 ⇒ 往上找三格）。 */
-function flDeposit(fl, i, v) {
-  var NXY = fl.F.NX * fl.F.NY;
-  for (var t = 0; t < 4 && i >= 0 && i < fl.F.N; t++, i += NXY) if (fl.cap[i] > 0.02) { fl.A[i] += v; flAct(fl, i); return; }
-  fl.lost = (fl.lost || 0) + v;
+/** 水併進第 i 格（那一格裝不了水 ⇒ 往上找三格）—— 照容量放（TASK-0662）：
+ *  · 每一格最多裝到「外面的海面」那麼高（那一格正上方的 seaH，照浪）：從洞進來的水靠的是外面的水壓，不會比海面高；
+ *  · 那一格滿了 ⇒ 往上（上面那一格通得上去，同 flTick 滿了往上擠）一直到水面；被甲板擋住 ⇒ 旁邊四格（同一層）有空的；
+ *  · 四周都滿了 ⇒ 這份水進不來（回到海裡，fl.back；flTick 從進水量扣掉）。
+ *  ⛔ 以前不看滿了沒：粒子撞到滿的格就併進上一格（多半也是滿的）⇒ 殉爆（大破口、粒子一直撞進泡在水裡的格）t 9–24 倒進去的 8,005 m³ 有 99% 倒進滿的格，
+ *     又擠不上去（上面是甲板）⇒ 格子裝到容量的 30 倍、水面照裝了幾成算 ⇒ 艙內水面高出海面 28 m、16 秒就沉（Tim 2026-10-16：「破口在海平面上的部分 碰到模擬水把水吸上去?」；沙盒 ?lab=flood&boom=0 量的）。 */
+function flDeposit(sh, fl, i, v) {
+  var F = fl.F, c = F.c, NXY = F.NX * F.NY, N = F.N, A = fl.A, cap = fl.cap, Vc = Math.pow(c * S, 3), S3 = S * S * S, hc = c * S, M = sh.M, lim = 1, t, j, r, m;
+  function room(k) {                                                     // 第 k 格還裝得下多少（裝到海面為止）；lim ＝ 海面淹到這一格的幾成
+    var ix = k % F.NX, iy = ((k / F.NX) | 0) % F.NY, iz = (k / NXY) | 0, P = M4.pt(M, F.X0 + (ix + 0.5) * c, F.Y0 + (iy + 0.5) * c, iz * c);
+    lim = clamp((seaH(P[0], P[2], SIMT) - P[1]) / hc, 0, 1); return lim * cap[k] * Vc - A[k];
+  }
+  for (t = 0; t < 4 && i >= 0 && i < N && !(cap[i] > 0.02); t++) i += NXY;
+  if (!(i >= 0 && i < N && cap[i] > 0.02)) { fl.lost = (fl.lost || 0) + v; return; }
+  for (j = i, t = 0; v > 1e-9 && t < 32; t++) {
+    r = room(j); if (r > 0) { m = Math.min(v, r); A[j] += m; v -= m; flAct(fl, j); }
+    var u = j + NXY; if (v <= 1e-9 || lim < 1 || u >= N || !(cap[u] > 0.02) || !(flPd(fl, u, A[u] / S3) > 0.02)) break;   // 海面在這一格裡 ⇒ 再上去就比海面高
+    j = u;
+  }
+  if (v > 1e-9) {
+    var ix = j % F.NX, iy = ((j / F.NX) | 0) % F.NY;
+    for (var nb = 0; nb < 4 && v > 1e-9; nb++) {
+      var k = nb === 0 ? (ix > 0 ? j - 1 : -1) : nb === 1 ? (ix < F.NX - 1 ? j + 1 : -1) : nb === 2 ? (iy > 0 ? j - F.NX : -1) : (iy < F.NY - 1 ? j + F.NX : -1);
+      if (k < 0 || !(cap[k] > 0.02)) continue;
+      r = room(k); if (r > 0) { m = Math.min(v, r); A[k] += m; v -= m; flAct(fl, k); }
+    }
+  }
+  if (v > 1e-9) fl.back = (fl.back || 0) + v;
 }
 /** 斷成兩截、開始沉的船（Tim 2026-10-15：「斷成兩截、開始沉的船也繼續算進水給人看（只改畫面與讀數，沉的速度照舊），沉完就停」）：
  *  照樣跑 floodStep（水灌進去、讀數有積水與破口），但 ——
@@ -194,7 +217,7 @@ function floodStep(sh, fl, dt) {
     J.p[o] += J.v[o] * dt; J.p[o + 1] += J.v[o + 1] * dt; J.p[o + 2] += J.v[o + 2] * dt; J.life[i] -= dt;
     var c1 = flCell(F, J.p[o], J.p[o + 1], J.p[o + 2]);
     if (J.life[i] <= 0 || c1 < 0 || sh.grid.get(Math.floor(J.p[o]), Math.floor(J.p[o + 1]), Math.floor(J.p[o + 2])) || fl.A[c1] >= fl.cap[c1] * Vc * 0.95) {
-      flDeposit(fl, c0 >= 0 ? c0 : c1, J.vol[i]);
+      flDeposit(sh, fl, c0 >= 0 ? c0 : c1, J.vol[i]);
       var j = --J.n;
       if (i !== j) { J.p.copyWithin(o, j * 3, j * 3 + 3); J.v.copyWithin(o, j * 3, j * 3 + 3); J.vol[i] = J.vol[j]; J.life[i] = J.life[j]; }
       i--;
@@ -218,7 +241,9 @@ function flTick(sh, fl, dtc) {
     area += ar; open++;
     var side = (h / (NX * F.NZ)) | 0, s = side ? 1 : -1, P = M4.pt(M, fl.hX[h], fl.hY[h], fl.hZ[h]), hOut = seaH(P[0], P[2], SIMT);
     var ci = flCell(F, fl.hX[h], fl.hYi[h] + s * 0.5 * c, fl.hZ[h]), hIn = -1e9;
-    if (ci >= 0 && A[ci] > 1e-6) { var q = ci; while (q + NXY < N && A[q] >= cap[q] * Vc * 0.98 && A[q + NXY] > 1e-6) q += NXY; hIn = head(q); }
+    if (ci >= 0 && !(cap[ci] > 0.02)) { var ci2 = flCell(F, fl.hX[h], fl.hYi[h] + s * 1.5 * c, fl.hZ[h]); if (ci2 >= 0 && cap[ci2] > 0.02) ci = ci2; }   // 洞口那一格裝不了水（船殼占滿）⇒ 再往裡一格
+    // 艙內在洞那裡的水面：從洞口那一格往上，一格裝了九成以上、上面那一格也有水 ⇒ 再往上（⛔ 以前九成八：滿的格常常只有九成五〜九成七（粒子撞到九成五就算滿、旁邊流拉平）⇒ 停在深處、水頭差多算 6 m）
+    if (ci >= 0 && A[ci] > 1e-6) { var q = ci; while (q + NXY < N && A[q] >= cap[q] * Vc * 0.9 && A[q + NXY] > 1e-6) q += NXY; hIn = head(q); }
     var d = Math.max(hOut, P[1]) - Math.max(hIn, P[1]);
     if (d > 0.001) {
       var dv = FL_C * ar * Math.sqrt(2 * G * d) * fk * dtc; inQ += dv;
@@ -229,7 +254,7 @@ function flTick(sh, fl, dtc) {
         if (J.n < L.jn) {
           var jo = J.n * 3; J.p[jo] = fl.hX[h] + rgF(-0.4, 0.4) * c; J.p[jo + 1] = fl.hYi[h] + s; J.p[jo + 2] = fl.hZ[h] + rgF(-0.4, 0.4) * c;
           J.v[jo] = rgF(-0.25, 0.25) * sp; J.v[jo + 1] = s * rgF(0.5, 1.0) * sp; J.v[jo + 2] = rgF(-0.1, 0.25) * sp; J.vol[J.n] = L.vj; J.life[J.n] = 3; J.n++;
-        } else if (ci >= 0) flDeposit(fl, ci, L.vj);
+        } else if (ci >= 0) flDeposit(sh, fl, ci, L.vj);
       }
       accFix(fl.hAcc, h, L.vj, '進水');
     } else if (d < -0.001 && ci >= 0) {
@@ -238,6 +263,7 @@ function flTick(sh, fl, dtc) {
     }
   }
   if (fl.tops) { var dq = doorInflow(sh, fl, dtc, head); inQ += dq[0]; area += dq[1]; open += dq[2]; }   // 門沒了的開口（25_doors.js；沒有門的船沒有 fl.tops）
+  var bk = (fl.back || 0) - (fl.back0 || 0); fl.back0 = fl.back || 0; inQ = Math.max(0, inQ - bk);   // 進不來的（flDeposit 四周都滿了）不算進水 ⇒ 讀數是真的灌進來的量
   fl.inQ = inQ / dtc; fl.outQ = outQ / dtc; fl.inTot += inQ; fl.outTot += outQ; fl.area = area; fl.open = open;
   // 2. 水格：往下（照這一格往下通幾成）、滿了往上擠、往旁邊（照水面的世界高度；來回換方向走 ⇒ 不偏一邊）
   var n0 = fl.actN, act = fl.act, dir = fl.gen & 1, t, j;
@@ -256,6 +282,7 @@ function flTick(sh, fl, dtc) {
       if (j < 0 || !(cap[j] > 0.02)) continue;
       var dh = hi - head(j); if (dh <= 1e-4) continue;
       m = Math.min(0.5 * dh / hc * Math.min(cap[i], cap[j]) * Vc * 0.25, A[i] * 0.25);
+      m = Math.min(m, cap[j] * Vc - A[j]); if (!(m > 0)) continue;     // 不往滿的格流（⛔ 以前會：船一縱傾，兩格都滿、水面照格頂算 ⇒ 高的流進低的、擠上去 ⇒ 水沿著斜的天花板爬到海面以上）
       A[i] -= m; A[j] += m; flAct(fl, j); hi = head(i);
       fl.lq[i * 4 + nb] += m;                                            // lq：往旁邊流了多少（只記，水瀑用：flSides；⛔ 模擬不讀）
     }
