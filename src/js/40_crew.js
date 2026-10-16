@@ -302,7 +302,6 @@ function stepCrew(sh, dt) {
     if (c.st === 5) { stepSwim(sh, c, dt); return; }      // 在水裡（43_swim.js）
     if (c.st === 1) { if (!(sh.med && medHold(sh, c)) && c.t > 12) c.st = 3; return; }   // 傷者被抬下去；有醫療艙送得到 ⇒ 等預備水手搬、被扛著跟著走（44_medic.js）
     if (c.st !== 0) return;
-    if (c.fp) return;                                   // 第一人稱正在操控的人（81_fps.js）：位置照玩家，不走自己的工作（沒開第一人稱 ⇒ 沒有這個欄位）
     if (c.role === ROLE.HAND) { stepHand(sh, c, dt); return; }   // 預備水手：走路、爬梯子、補位（42_hands.js）
     if (c.walk) {
       var d = sub(c.walk.to, c.pos), l = Math.hypot(d[0], d[1]);
