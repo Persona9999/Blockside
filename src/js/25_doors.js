@@ -3,7 +3,7 @@
 //   開的方向：從 hinge-a 看向 hinge-b，右手定則正轉。第一個用的是莫尼特號主甲板的兩個艙蓋（meadow-monitor-01m-hatch，掛在前艙口、機艙艙口上）。
 // 三件事，各自分開：
 //   · 通道：門不擋人（40_crew.js CREW_BLOCK 不收 kind=door ⇒ 站位、走路格把它當沒有）—— 人照梯子、走路格走過去，門關著也照走。
-//   · 演出（只改畫面）：有人經過（走路、爬梯子）離門 1.5 m 內 ⇒ 開，人走了 1 秒 ⇒ 關（繞鉸鏈轉 m.sw，modelLocal 跟螺旋槳同一條路）。
+//   · 演出（只改畫面）：有人經過（走路、爬梯子；第一人稱的玩家也算，81_fps.js shPassers）離門 1.5 m 內 ⇒ 開，人走了 1 秒 ⇒ 關（繞鉸鏈轉 m.sw，modelLocal 跟螺旋槳同一條路）。
 //     在畫面那一格算（90_main.js frame，doorsAnim），⛔ 不在 step() 裡：戰局一個值都不讀它；畫質「門的開關演出」關掉 ⇒ 一直關著。
 //     被打飛那一刻擺回關著（21_gunnery.js blowModel）⇒ 飛出去的落水時間跟演出開關無關（落水的水花會抽戰局的亂數）。
 //   · 擋水：門底下那一片開口（門的外框正下方、甲板那一層原本就是空的格）平常不進水 —— 跟沒有門的開口一樣（遊戲只從砲彈打出的洞進水）。
@@ -32,11 +32,9 @@ function doorsAnim(dt) {
     if (!sh.doors) return;
     sh.doors.forEach(function (d) {
       var m = d.m; if (!m.alive || !d.a) return;
-      var near = false;
-      if (GFX.door) for (var i = 0; i < sh.crew.length && !near; i++) {
-        var c = sh.crew[i]; if (c.st > 1 || !(c.walk || c.moving)) continue;   // 經過 ＝ 正在走、正在爬（站著不動的不算）
-        near = Math.hypot(c.pos[0] - m.c[0], c.pos[1] - m.c[1]) < DOOR_R && Math.abs(c.pos[2] - d.zt) < DOOR_RZ;
-      }
+      var near = GFX.door && shPassers(sh, function (p) {                 // 經過 ＝ 正在走、正在爬（站著不動的不算）；第一人稱的玩家也算（81_fps.js shPassers）
+        return Math.hypot(p[0] - m.c[0], p[1] - m.c[1]) < DOOR_R && Math.abs(p[2] - d.zt) < DOOR_RZ;
+      });
       if (near) d.hold = DOOR_HOLD; else d.hold -= dt;
       d.t = GFX.door ? clamp(d.t + (d.hold > 0 ? 1 : -1) * DOOR_SP * dt, 0, 1) : 0;
       var e = d.t * d.t * (3 - 2 * d.t);                                  // 起步、停下都慢一點

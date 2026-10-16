@@ -246,12 +246,13 @@ function lampsUpdate() {
     sh.vlamps.forEach(function (V, j) { var w = M4.pt(sh.M, V.at[0], V.at[1], V.at[2]); L.push({ w: w, k: 0.9 + 0.1 * Math.sin(SIMT * 1.3 + j), rgb: V.rgb, d: (w[0] - E[0]) * (w[0] - E[0]) + (w[1] - E[1]) * (w[1] - E[1]) + (w[2] - E[2]) * (w[2] - E[2]) }); });
     sh.models.forEach(function (m) { if (!m.alive || !isLamp(m)) return; var q = lampAt(m), w = M4.pt(sh.M, q[0], q[1], q[2]); L.push({ w: w, k: lanternK(m), d: (w[0] - E[0]) * (w[0] - E[0]) + (w[1] - E[1]) * (w[1] - E[1]) + (w[2] - E[2]) * (w[2] - E[2]) }); });
   });
+  var pl = fpLamp(); if (pl) L.push(pl);                               // 第一人稱的玩家自帶一盞燈（81_fps.js fpLamp；d −1 ⇒ 排第一個，一定有名額）
   L.sort(function (a, b) { return a.d - b.d; });
   LAMPS.n = Math.min(LAMP_N, L.length);
   for (var i = 0; i < LAMPS.n; i++) {
-    var l = L[i], I = LAMP_I * l.k * (1.6 - WX.lum);
+    var l = L[i], I = l.I !== undefined ? l.I : LAMP_I * l.k * (1.6 - WX.lum);   // l.I：自己給亮度的燈（玩家的燈：艙裡白天也暗，不照天色）
     var cl = l.rgb || [1, 0.62, 0.25];                                 // 模型的燈 ＝ 暖橘；船殼上的燈照 config 的光色
-    LAMPS.p.set([l.w[0], l.w[1], l.w[2], LAMP_R], i * 4); LAMPS.c.set([cl[0] * I, cl[1] * I, cl[2] * I, 0], i * 4);
+    LAMPS.p.set([l.w[0], l.w[1], l.w[2], l.R || LAMP_R], i * 4); LAMPS.c.set([cl[0] * I, cl[1] * I, cl[2] * I, 0], i * 4);
   }
 }
 /** 燈籠／提燈：亮度 0.8–1 慢慢晃，照模擬時間與燈的編號（⛔ 不抽 rnd()：只給人看）；打飛了就熄。 */
