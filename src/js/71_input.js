@@ -668,19 +668,25 @@ function phxUI() {
   [].forEach.call(box.querySelectorAll('button[data-k]'), function (b) { b.onclick = function () { PHX[b.dataset.k] = +b.dataset.v; phxSync(); }; });
   [].forEach.call(box.querySelectorAll('button[data-pslow]'), function (b) { b.onclick = function () { if ((b.dataset.pslow === '1') !== PSLOW.on) pslowToggle(); }; });
   var pr = $('pslowR'); pr.oninput = function () { PSLOW.budget = Math.round(+pr.value * 100) / 100; phxShow(); };
-  RAM_UI.forEach(function (u) { var el = $('ram_' + u.k); el.oninput = function () { RAM[u.k] = Math.round(+el.value / u.st) * u.st; phxShow(); }; });
+  RAM_UI.forEach(function (u) { var el = $('ram_' + u.k); el.oninput = function () { RAM[u.k] = ramFrom(u, +el.value); phxShow(); }; });
   [].forEach.call(document.querySelectorAll('#phxs button[data-x], #phxPre button'), function (b) { b.onclick = function () { phxSet(b.dataset.x); phxSync(); }; });
   phxShow();
 }
 /** 碰撞傷害的數值（TASK-0652；Tim 2026-10-16：「數值可以開成設定頁面Slider嗎(開啟碰撞傷害後才顯示)」）：接在「碰撞傷害」那一列底下，開關關著 ⇒ 整塊藏起來（phxShow）。
- *  k ＝ RAM 的欄位、q ＝ 設定檔 lim 與網址的鍵、st ＝ 步長；txt ＝ 數值後面那一段說明。 */
+ *  k ＝ RAM 的欄位、q ＝ 設定檔 lim 與網址的鍵、st ＝ 步長；txt ＝ 數值後面那一段說明；log ⇒ 滑桿照對數走（傷害倍率 0.2–100：Tim 2026-10-16「傷害倍率上限可以調整到100x嗎」—— 線性的話 1 附近幾乎調不動），數值照大小取整（< 2 每 0.05、< 10 每 0.1、< 30 每 0.5、其他每 1）。 */
 var RAM_UI = [
   { k: 'v0', q: 'ramv', name: '撞擊門檻', st: 0.1, txt: function (x) { return x.toFixed(1) + ' m/s（約 ' + (x * 1.944).toFixed(1) + ' 節）：沿接觸方向接近得比這快才算撞擊'; } },
-  { k: 'k', q: 'ramk', name: '撞擊傷害倍率', st: 0.05, txt: function (x) { return '× ' + x.toFixed(2) + '：撞掉多少格（速度照物理，不跟著變）'; } },
+  { k: 'k', q: 'ramk', name: '撞擊傷害倍率', st: 0.01, log: true, txt: function (x) { return '× ' + (x < 10 ? x.toFixed(2) : x.toFixed(x < 30 ? 1 : 0)) + '：撞掉多少格（速度照物理，不跟著變）'; } },
   { k: 'e', q: 'rame', name: '彈力係數', st: 0.05, txt: function (x) { return x.toFixed(2) + (x ? '：撞完反彈（恢復係數；沿接觸方向彈回 ' + Math.round(x * 100) + '% 的接近速度、拿去撞壞的能量剩 ' + Math.round((1 - x * x) * 100) + '%）' : '：不反彈（完全非彈性，撞完一起走）'); } },   // Tim 2026-10-16：「是否可以有加彈力系數(撞擊後反彈)」
   { k: 'side', q: 'ramside', name: '側撞有效質量', st: 0.5, txt: function (x) { return '× ' + x.toFixed(1) + '：被側面撞的船沿接觸方向多難推動（水擋著橫向）；越大 ⇒ 撞人的那艘停得越乾脆'; } }];
+/** 滑桿的位置 ⇄ 數值（log 那一條照 log10）。 */
+function ramPos(u, x) { return u.log ? Math.log10(x) : x; }
+function ramFrom(u, v) {
+  var L = LIM[u.q]; if (!u.log) return clamp(Math.round(v / u.st) * u.st, L[0], L[1]);
+  var x = Math.pow(10, v), s = x < 2 ? 0.05 : x < 10 ? 0.1 : x < 30 ? 0.5 : 1; return clamp(Math.round(x / s) * s, L[0], L[1]);
+}
 function ramRows() {
-  return '<div id="ramBox">' + RAM_UI.map(function (u) { var L = LIM[u.q]; return '<div class="row slide"><label for="ram_' + u.k + '">' + u.name + '</label><input type="range" id="ram_' + u.k + '" min="' + L[0] + '" max="' + L[1] + '" step="' + u.st + '" aria-label="' + u.name + '"><span id="ram_' + u.k + 'V"></span></div>'; }).join('') + '</div>';
+  return '<div id="ramBox">' + RAM_UI.map(function (u) { var L = LIM[u.q]; return '<div class="row slide"><label for="ram_' + u.k + '">' + u.name + '</label><input type="range" id="ram_' + u.k + '" min="' + ramPos(u, L[0]) + '" max="' + ramPos(u, L[1]) + '" step="' + (u.log ? 'any' : u.st) + '" aria-label="' + u.name + '"><span id="ram_' + u.k + 'V"></span></div>'; }).join('') + '</div>';
 }
 function phxSync() { if ((PHX.rig > 0) !== PHYS) setPhys(PHX.rig > 0); phxShow(); }
 function phxShow() {
@@ -691,7 +697,7 @@ function phxShow() {
   [].forEach.call(document.querySelectorAll('#phxItems button[data-pslow]'), function (b) { b.className = (b.dataset.pslow === '1') === PSLOW.on ? 'on' : ''; });
   $('pslowR').value = PSLOW.budget; $('pslowV').textContent = '模擬最多佔 ' + Math.round(PSLOW.budget * 100) + '% 的時間' + (PSLOW.budget === LIM.pslowb[2] ? '（預設）' : '') + '：越低越早放慢、畫面越順' + (PSLOW.on ? '' : '（物理減速關著）');
   $('phxLv').textContent = '現在：' + PHX_NAME[lv];
-  if ($('ramBox')) { $('ramBox').style.display = PHX.shipdmg ? '' : 'none'; RAM_UI.forEach(function (u) { var x = RAM[u.k]; $('ram_' + u.k).value = x; $('ram_' + u.k + 'V').textContent = u.txt(x) + (Math.abs(x - LIM[u.q][2]) < 1e-9 ? '（預設）' : ''); }); }
+  if ($('ramBox')) { $('ramBox').style.display = PHX.shipdmg ? '' : 'none'; RAM_UI.forEach(function (u) { var x = RAM[u.k]; $('ram_' + u.k).value = ramPos(u, x); $('ram_' + u.k + 'V').textContent = u.txt(x) + (Math.abs(x - LIM[u.q][2]) < 1e-9 ? '（預設）' : ''); }); }
   if (typeof gsetShow === 'function') gsetShow();
 }
 /** 玩法：娛樂／寫實（04_state.js 的 PLAY）＋主選單按鈕的亮燈。航行每一步都讀（playK）；按鈕在主選單，沒開戰時才按得到。 */

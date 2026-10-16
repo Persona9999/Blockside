@@ -230,7 +230,7 @@ function hitFriction(A, B, n) {
 //     從撞點往船裡一口一口咬（shatter，半徑照能量 RAM_R），每一口照打掉的格扣能量（× PEN.wood × 船殼硬度倍率，跟砲彈打木頭同一套），最多 RAM_BITES 口；
 //     碎木傷人（hurt，原因「碰撞」）、撞點附近的模型扣血（砲、小艇…）。打穿水線下 ⇒ 照常進水（removeVoxel）。
 //   · 裝甲子模組不看（碰撞本來就只看船殼 sh.grid）。讀數：sh.rams（每一次：時間、對方、du、E、自己分到的、掉幾格、掉幾噸 t_lost）。廣播：每一次都報，撞掉幾噸。
-var RAM_R = [2, 7], RAM_BITES = 12;                                    // 門檻、傷害倍率、恢復係數、側撞有效質量倍數 ⇒ RAM（04_state.js；物理設定頁的滑桿，config lim.ramv／ramk／rame／ramside）
+var RAM_R = [2, 7], RAM_BITES = 12;   // 咬的半徑、口數上限 ⇒ 傷害倍率 > 1 時跟著 ∛倍率 放大（半徑最多 16 格、口數最多 60；ramBite）                                    // 門檻、傷害倍率、恢復係數、側撞有效質量倍數 ⇒ RAM（04_state.js；物理設定頁的滑桿，config lim.ramv／ramk／rame／ramside）
 function ramHit(A, B, n) {
   if (!PHX.shipdmg) return;
   var vA = A.vel || [0, 0, 0], vB = B.vel || [0, 0, 0], uA = vA[0] * n[0] + vA[2] * n[2], uB = vB[0] * n[0] + vB[2] * n[2], du = uB - uA;   // A 在 +n 那一側：A 往 −n、B 往 +n ⇒ 接近
@@ -263,8 +263,8 @@ function ramSpd(sh, dU, n, k, e) {
 }
 /** 一艘被撞：撞點 Q（格座標）、n ＝ 往這艘船裡的方向（世界、水平）、分到的能量 e（kJ）。回撞掉幾噸（massLost 前後的差：格照材質、連帶打飛的模型）。 */
 function ramBite(sh, Q, n, e, other, du, E) {
-  var dL = norm(M4.dir(sh.inv, n[0], 0, n[2])), R = clamp(1.6 + 0.5 * Math.cbrt(e / 50), RAM_R[0], RAM_R[1]), velW = mul(n, 20), left = e, lost = 0, P = Q.slice(), t0 = massLost(sh);
-  for (var k = 0; k < RAM_BITES && left > 0; k++) {
+  var dL = norm(M4.dir(sh.inv, n[0], 0, n[2])), gk = Math.cbrt(Math.max(1, RAM.k)), R = clamp(1.6 + 0.5 * Math.cbrt(e / 50), RAM_R[0], Math.min(16, RAM_R[1] * gk)), nb = Math.min(60, Math.round(RAM_BITES * gk)), velW = mul(n, 20), left = e, lost = 0, P = Q.slice(), t0 = massLost(sh);
+  for (var k = 0; k < nb && left > 0; k++) {
     var r = shatter(sh, P, dL, R, velW, 120, 0.55);
     left -= Math.max(r.cost * PEN.wood * sh.cfg.hard, PEN.wood * R);      // 咬到空的（艙裡）也照一口扣一點 ⇒ 一定會停
     lost += r.n; P = add(P, mul(dL, R));
