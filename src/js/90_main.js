@@ -131,7 +131,7 @@ if (DEBUG) window.__game = {
     for (k = 0; k < 600 && b.alive; k++) { stepBall(b, DT / 4); var L = toLocal(sh, b.p); if (b.alive && L[1] >= 0 && L[1] < B.sy) deep = Math.max(deep, s * (L[1] - y0)); }
     sh.rs.flush();
     var A1 = sh.armRes || {}, a0 = JSON.parse(A0), res = ['pen', 'dent', 'rico', 'shell'].filter(function (k2) { return (A1[k2] || 0) > (a0[k2] || 0); }).join('+') || null;
-    return { mat: mat, skin: y0, removed: n0 - sh.grid.count, deep: +(deep * S).toFixed(2), out: b.alive ? +len(b.v).toFixed(0) : 0, V: GS.V, res: res, dbg: b.dbg };
+    return { mat: mat, skin: y0, removed: n0 - sh.grid.count, deep: +(deep * S).toFixed(2), out: b.alive ? +len(b.v).toFixed(0) : 0, V: GS.V, res: res, uw: !!b.wet, dbg: b.dbg };
   },
   /** 砲帶的裝甲（TASK-0631；24_armor.js）：第 i 艘每一塊 —— 那門砲、現在轉了幾度、還剩幾格／原本幾格、砲口沿砲軸碰到裝甲幾格（armBlock；0 ＝ 在砲門裡）；船殼幾格、重量。沒有裝甲 ⇒ null。
    *  o.yaw（度）⇒ 先把那門砲直接轉到那個角度（量測用：不照轉速；砲軸、砲口、模型、站位跟 mountStep 一樣轉，下一步 mountStep 照瞄準點接著轉）。

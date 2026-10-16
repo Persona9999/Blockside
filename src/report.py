@@ -14,7 +14,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 OUT_HTML = os.path.normpath(os.path.join(HERE, '..', 'index.html'))
 CHROME = [r'C:\Program Files\Google\Chrome\Application\chrome.exe', r'C:\Program Files (x86)\Google\Chrome\Application\chrome.exe']
 ST = ['可開', '裝填', '沒人', '沒了', '等火藥', '泡水']                 # 跟 79_report.js RPT_ST 同一個順序
-ON = {'gun': '砲', 'model': '模型', 'armor': '裝甲', 'hull': '船殼', 'ff': '友艦'}
+ON = {'gun': '砲', 'model': '模型', 'armor': '裝甲', 'hull': '船殼', 'ff': '友艦', 'uw': '水下'}
 
 
 def run_one(chrome, page, q, budget):

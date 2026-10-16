@@ -10,7 +10,7 @@
 // 什麼時候存：每秒比一次（跟上次存的不一樣才寫）＋ 關頁、切到背景時。全部回到預設 ⇒ 刪掉那一筆。
 var PREFS_KEY = 'ame_constitution_broadside.prefs', PREFS_VER = 1;
 var PREF_Q = ['wdir', 'wspd', 'ship', 'blue', 'red', 'hard', 'flood', 'ballast', 'gunw', 'speed', 'agile', 'upwind', 'base', 'gunhp', 'sailhp', 'crewhp', 'powderhp', 'blast', 'blastv', 'dmg24', 'dmg32l', 'dmg32', 'dmg18', 'dmg12', 'dmg18l', 'dmg6', 'dmg3c', 'dmgtr',
-  'box', 'carry', 'hands', 'drown', 'heal', 'wind', 'windcap', 'inertia', 'turninert', 'sailtq', 'ammo', 'strike', 'cap', 'phys', 'sail', 'play', 'stall', 'funspeed', 'funagile', 'funstall', 'funpowder', 'sea',
+  'box', 'carry', 'hands', 'drown', 'heal', 'wind', 'windcap', 'inertia', 'turninert', 'sailtq', 'ammo', 'strike', 'cap', 'phys', 'sail', 'play', 'stall', 'funspeed', 'funagile', 'funstall', 'funpowder', 'funhard', 'sea',
   'gfx', 'g_shadow', 'g_refl', 'g_refr', 'g_sea', 'g_res', 'g_aa', 'phx', 'p_rig', 'p_rigfar', 'p_debris', 'p_fx', 'weather', 'g_rain', 'g_drops', 'g_dropspl', 'g_shships', 'g_masks', 'dist', 'field', 'reinf', 'cmd', 'blue', 'red', 'slowmo', 'dbg', 'slowcam', 'roomfn', 'navre', 'gcrew', 'smoke', 'pslow', 'pslowb', 'debcap'];          // 會蓋過存檔的網址參數（04_state.js、05_hull.js 讀的那些）
 var DMG_Q = { long: 'dmg24', long32: 'dmg32l', carr: 'dmg32', chase: 'dmg18', long4: 'dmg4', long12: 'dmg12', long18: 'dmg18l', long6: 'dmg6', chase3: 'dmg3c', trident: 'dmgtr', dahl9: 'dmg9d', brooke64: 'dmg64b', brooke7: 'dmg7b', dahl11: 'dmg11d' };
 var PREFS = { read: DEMO < 0 && Q.get('prefs') !== '0' && !Q.has('admin') && !Q.has('shipcheck'), write: false, state: '', last: '' };   // ?admin=rooms（設定後台嵌的那一份）、?shipcheck（匯入檢查）⇒ 不讀不存
@@ -51,6 +51,7 @@ function prefsSnap() {
   Object.keys(SHIP_CFG).forEach(function (id) {
     var c = SHIP_CFG[id], T = HULLT[id], d = {};
     SHIP_KEYS.forEach(function (k) { if (k !== 'ballast' && c[k] !== cfgBase(k, id)) d[k] = c[k]; });   // 跟那一型的預設比（HULL_CFG0）
+    if (d.hard !== undefined) d.hard1 = 1;                              // 硬度是倍率（1 ＝ 只看材質；2026-10-16 起）⇒ 讀的時候分得出舊存檔（舊的是 3 ＝ 預設的刻度）
     if (T && c.ballast !== undefined) { if (c.ballast !== T.ballast0) { d.ballast = c.ballast; d.chk = T.h.checksum; } }
     else if (PREF_BALLAST[id]) { d.ballast = PREF_BALLAST[id].v; d.chk = PREF_BALLAST[id].chk; }   // 這一場沒載那艘船 ⇒ 存檔裡的照留
     if (Object.keys(d).length) cfg[id] = d;
@@ -60,7 +61,7 @@ function prefsSnap() {
   var rm = roomsSnap(true); if (Object.keys(rm).length) o.rooms = rm;        // 艙房的擺法（TASK-0568）
   put('gunhp', GUN_HP, LIM.gunhp[2]); put('sailhp', SAIL_HP, LIM.sailhp[2]); put('crewhp', CREW_HP, LIM.crewhp[2]); put('powderhp', POWDER_HP, LIM.powderhp[2]);
   put('blast', BLAST_K, LIM.blast[2]); put('blastv', BLAST_V, LIM.blastv[2]); put('box', BOX_N, LIM.box[2]); put('carry', CARRY_N, LIM.carry[2]); put('hands', HANDS, LIM.hands[2]); put('drown', DROWN_T, LIM.drown[2]); put('heal', HEAL_T, LIM.heal[2]); put('navre', NAV_RE, LIM.navre[2]); put('smoke', SMOKE_K, SMOKE_LIM[2]); put('debcap', DEB_CAP, DEB_LIM[2]); put('wind', WIND_K, LIM.wind[2]); put('windcap', WIND_CAP, LIM.windcap[2]); put('inertia', DRV_INERTIA, LIM.inertia[2]); put('turninert', DRV_TURN, LIM.turninert[2]); put('sailtq', DRV_TQ, LIM.sailtq[2]);
-  put('weather', WX_ID, 'clear'); put('sea', SEA_K, LIM.sea[2]); put('play', PLAY, CFG.menu.play); put('stall', STALL_K, LIM.stall[2]); put('funspeed', FUN.speed, LIM.funspeed[2]); put('funagile', FUN.agile, LIM.funagile[2]); put('funstall', FUN.stall, LIM.funstall[2]); put('funpowder', FUN.powder, LIM.funpowder[2]);
+  put('weather', WX_ID, 'clear'); put('sea', SEA_K, LIM.sea[2]); put('play', PLAY, CFG.menu.play); put('stall', STALL_K, LIM.stall[2]); put('funspeed', FUN.speed, LIM.funspeed[2]); put('funagile', FUN.agile, LIM.funagile[2]); put('funstall', FUN.stall, LIM.funstall[2]); put('funpowder', FUN.powder, LIM.funpowder[2]); put('funhard', FUN.hard, LIM.funhard[2]);
   var dm = {}; Object.keys(DMG_Q).forEach(function (t) { if (DMG[t] !== LIM[DMG_Q[t]][2]) dm[t] = DMG[t]; });
   if (Object.keys(dm).length) o.dmg = dm;
   var gs = gunsSnap(); if (Object.keys(gs).length) o.guns = gs;          // 砲的設定（68_guncfg.js）：跟砲種表預設不一樣的
@@ -111,6 +112,7 @@ function prefsApply(p) {
   set('funagile', p.funagile, LIM.funagile, false, function (x) { FUN.agile = x; });
   set('funstall', p.funstall, LIM.funstall, false, function (x) { FUN.stall = x; });
   set('funpowder', p.funpowder, LIM.funpowder, false, function (x) { FUN.powder = x; });
+  set('funhard', p.funhard, LIM.funhard, false, function (x) { FUN.hard = x; });
   if (p.dmg && typeof p.dmg === 'object') Object.keys(DMG_Q).forEach(function (t) { set(DMG_Q[t], p.dmg[t], LIM[DMG_Q[t]], true, function (x) { DMG[t] = x; }); });
   if (p.guns && typeof p.guns === 'object') gunsApply(p.guns);
   if (!Q.has('ammo') && Array.isArray(p.ammoK)) p.ammoK.forEach(function (r, i) {
@@ -148,6 +150,7 @@ function shipsApply(p) {
   if (p.cfg && typeof p.cfg === 'object') Object.keys(p.cfg).forEach(function (id) {
     var d = p.cfg[id]; if (!hullInfo(id) || !d || typeof d !== 'object') return;
     var c = shipCfg(id);
+    if (d.hard !== undefined && !d.hard1) d = Object.assign({}, d, { hard: d.hard / 3 });   // 舊存檔的硬度（預設 3 的刻度）⇒ 換成倍率
     SHIP_KEYS.forEach(function (k) { if (k !== 'ballast' && !Q.has(k)) { var x = num(d[k], LIM[k]); if (x !== undefined) c[k] = x; } });
     var b = num(d.ballast, LIM.ballast, true), T = HULLT[id];
     if (b !== undefined && typeof d.chk === 'number' && !Q.has('ballast')) { PREF_BALLAST[id] = { v: b, chk: d.chk }; if (T && T.h.checksum === d.chk) c.ballast = b; }   // 船型載好、checksum 對得上才套（cfgDefault）

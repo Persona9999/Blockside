@@ -158,7 +158,7 @@ MAT_KINDS = ('wood', 'metal', 'other')                                          
 MAT_NUMS = (('density', 0.05, 25, '比重（一格 0.1 m ＝ 1 公升 ⇒ 每格幾 kg；橡木 0.7）'), ('hard', 0.05, 50, '硬度倍率（乘在船隻設定的船殼硬度上；橡木 1）'),
             ('flammable', 0, 1, '易燃性（0 ＝ 不會燒、1 ＝ 一點就著；燃燒還沒做，先記著）'))
 MAT_OPT = (('metal', 0, 1, '金屬度（選填；0 ＝ 不反光、1 ＝ 金屬：太陽高光＋天空反射；TASK-0627）'), ('rough', 0, 1, '粗糙度（選填；0 ＝ 鏡面、1 ＝ 很霧；沒寫 ＝ 0.5）'),
-           ('pen', 1, 5000, '擊穿門檻（選填；每格板厚要幾 kJ，船殼硬度 3 時；寫了 ⇒ 實心彈照能量與入射角判穿／凹／彈，TASK-0621）'))
+           ('pen', 1, 5000, '擊穿門檻（選填；每格板厚要幾 kJ，船殼硬度倍率 1 時；寫了 ⇒ 實心彈照能量與入射角判穿／凹／彈，TASK-0621）'))
 CREW = {'officers': (0, 8, True), 'helm': (0, 4, True), 'marines': (0, 60, True), 'marineGap': (5, 200, True),
         'top': (0, 8, True), 'monkeys': (0, 2, True), 'handsK': (0, 4, False), 'shelter': (0, 1, True)}   # shelter：船員避開露天甲板（TASK-0637；0／1）
 CREW_SHIP = {'hands': (0, 120, True)}          # 只在每艘船寫（TASK-0570 船隻配置頁的預設）：預備水手人數；沒寫 ＝ lim.hands × handsK
@@ -380,12 +380,13 @@ def validate(cfg, prev=None):
         err('pen', '要是物件')
     else:
         for f, lo, hi, what in (('lo', 0, 5, '擊穿機率曲線的下緣（比值低於它 ⇒ 0）'), ('hi', 0.1, 10, '上緣（比值高於它 ⇒ 必穿）'), ('k', 0.2, 10, '曲線的次方（越大 ⇒ 下緣附近越難）'),
-                                ('rico', 30, 89, '彈開的入射角（度，跟法線的夾角）'), ('wood', 0.05, 20, '打木頭每消耗一單位扣幾 kJ（船殼硬度 3）'), ('splinter', 1, 1000, '碎片傷人的基準能量（kJ）'),
-                                ('shellR', 1, 20, '爆裂彈的爆炸半徑（格；24 磅、船殼硬度 3 的橡木）'), ('shellHard', 0, 2, '爆炸半徑照硬度打折的次方'), ('ref', 0.1, 500, '沒寫彈重的砲當幾 kg')):
+                                ('rico', 30, 89, '彈開的入射角（度，跟法線的夾角）'), ('wood', 0.05, 20, '打木頭每消耗一單位扣幾 kJ（船殼硬度倍率 1）'), ('splinter', 1, 1000, '碎片傷人的基準能量（kJ）'),
+                                ('shellR', 1, 20, '爆裂彈的爆炸半徑（格；24 磅、船殼硬度倍率 1 的橡木）'), ('shellHard', 0, 2, '爆炸半徑照硬度打折的次方'), ('ref', 0.1, 500, '沒寫彈重的砲當幾 kg'),
+                                ('uwMin', 0, 500, '落水後繼續走的最小彈重（kg；TASK-0642）'), ('uwDrag', 0.001, 1, '水的阻力（每走 1 m 速度 × e^(−uwDrag／半徑)）')):
             if f in PN and not (isnum(PN[f]) and lo <= PN[f] <= hi):
                 err('pen.' + f, '%s：%s～%s' % (what, lo, hi))
         for f in PN:
-            if f not in ('lo', 'hi', 'k', 'rico', 'wood', 'splinter', 'shellR', 'shellHard', 'ref'):
+            if f not in ('lo', 'hi', 'k', 'rico', 'wood', 'splinter', 'shellR', 'shellHard', 'ref', 'uwMin', 'uwDrag'):
                 err('pen.' + f, '不認得的鍵')
         if isnum(PN.get('lo', 0.4)) and isnum(PN.get('hi', 1.3)) and PN.get('lo', 0.4) >= PN.get('hi', 1.3):
             err('pen.hi', '要大於 lo')

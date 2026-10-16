@@ -125,7 +125,7 @@ function rptShow() {
     rptChart(cv, d, c[0], c[1], c[2], c[3]);
   });
   function pc(a, b) { return b ? Math.round(a / b * 100) + '%' : '—'; }
-  function on(o) { var k = Object.keys(o); return k.length ? k.map(function (w) { return ({ gun: '砲', model: '模型', armor: '裝甲', hull: '船殼', ff: '友艦' })[w] + ' ' + o[w]; }).join('、') : '—'; }
+  function on(o) { var k = Object.keys(o); return k.length ? k.map(function (w) { return ({ gun: '砲', model: '模型', armor: '裝甲', hull: '船殼', ff: '友艦', uw: '水下' })[w] + ' ' + o[w]; }).join('、') : '—'; }
   var th = 'style="padding:2px 6px;border-bottom:1px solid rgba(255,255,255,.2);white-space:nowrap"', td = 'style="padding:2px 6px;white-space:nowrap"';
   $('rptT').innerHTML = '<table style="border-collapse:collapse;margin-top:6px"><tr>' + ['船', '開火', '命中', '命中率', '打中什麼', '被打中', '傷／亡', '砲沒了', '砲的時間（可開／裝填／沒人／等火藥／泡水）'].map(function (h) { return '<th ' + th + '>' + h + '</th>'; }).join('') + '</tr>' +
     d.ships.map(function (s) {

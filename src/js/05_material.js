@@ -65,10 +65,12 @@ function hullMaterials(T, info) {
 function matK(sh, x, y, z) { var T = sh.T; return T.matG ? T.matK[T.matG.get(x, y, z)] : T.matK[0]; }
 /** 那一格的材質參數（matInfo；砲帶的裝甲也照它：裝甲的格座標就是材質層的座標）。實心彈判擊穿用（21_gunnery.js impact：pen、kind）。 */
 function matAt(sh, x, y, z) { var T = sh.T; return matInfo(T.matIds[T.matG ? T.matG.get(x, y, z) : 0]); }
-/** 打到 L（格座標）的硬度 ＝ 船隻設定的船殼硬度 × 那一格的材質倍率。 */
-function hardAt(sh, L) { return sh.cfg.hard * matK(sh, L[0] | 0, L[1] | 0, L[2] | 0); }
+/** 船殼硬度的基準（Tim 2026-10-16：船隻設定的硬度改成倍率、1 ＝ 只看材質；以前的預設 3 搬到這裡 ⇒ 倍率 1 的船跟以前預設硬度的船一樣）。 */
+var HARD_BASE = 3;
+/** 打到 L（格座標）的硬度 ＝ 基準 × 船隻設定的硬度倍率（預設 1）× 那一格的材質倍率。 */
+function hardAt(sh, L) { return HARD_BASE * sh.cfg.hard * matK(sh, L[0] | 0, L[1] | 0, L[2] | 0); }
 /** 全船預設材質的硬度（殉爆斷船這種整艘的判斷）。 */
-function hard0(sh) { return sh.cfg.hard * sh.T.matK[0]; }
+function hard0(sh) { return HARD_BASE * sh.cfg.hard * sh.T.matK[0]; }
 /** 格子少掉的重量（噸）：以前那一條 ＝ 少幾格 × VOX_T；有材質 ⇒ 每種材質還剩幾格（非預設的照座標數，格子只會少、不會多 ⇒ 只在格數變了才重數）。
  *  砲帶的裝甲（24_armor.js）也是船上的格：還剩幾格 ＝ 船殼＋裝甲（裝甲的格座標就是材質層的座標）；sh.orig 只算船殼 ⇒ 原本幾格 ＝ sh.orig ＋ sh.armN0。沒有裝甲 ⇒ 跟以前同一條算式。 */
 function voxLostT(sh) {
