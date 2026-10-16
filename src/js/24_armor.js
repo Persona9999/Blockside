@@ -112,6 +112,40 @@ function armBetween(sh, a, b) {
   }
   return false;
 }
+// 砲口（TASK-0644；Tim 2026-10-16：「炮塔有開射擊口 很容易被打到炮」「判斷砲彈路徑 只打中炮口的可以減少對炮組傷害」）：
+//   砲彈先碰到帶裝甲的那門砲（21_gunnery.js stepBall：hitModel 比裝甲先看）⇒ 碰到的那一點在不在裝甲的內面外側（＝ 砲門裡、或伸出去的那一段）。
+//   內面 ＝ 從轉軸（g.mt.c）水平往外，每一層（z）每個方位（64 份）第一格裝甲的距離（armPolar：照開局的形狀，打掉不改；每個船型算一次）。
+//   砲門那個方位那一層是空的 ⇒ 看左右 4 份、再上下 3 層（砲門兩旁、上下的牆）；都沒有（那個方向本來就沒裝甲）⇒ 不算砲口。
+//   砲口 ⇒ damageModel／blowModel 傷人改從碰到的那一點算（隔著裝甲的照 hurt 的 armBetween 擋掉）、不引爆砲旁的藥箱、砲班另外吃的那一份 × pen.muzzle。
+var ARM_BINS = 64;
+function armPolar(a) {
+  var A = a.A; if (A.pol) return A.pol;
+  var c = a.g.mt.c, bb = A.bb, G = A.grid, pol = {};
+  for (var z = bb[2]; z <= bb[5]; z++) {
+    var row = null;
+    for (var y = bb[1]; y <= bb[4]; y++) for (var x = bb[0]; x <= bb[3]; x++) {
+      if (!G.get(x, y, z)) continue;
+      var dx = x + 0.5 - c[0], dy = y + 0.5 - c[1], d = Math.hypot(dx, dy), k = Math.floor((Math.atan2(dy, dx) + Math.PI) / (2 * Math.PI) * ARM_BINS) % ARM_BINS;
+      row = row || (pol[z] = new Float32Array(ARM_BINS).fill(Infinity));
+      if (d < row[k]) row[k] = d;
+    }
+  }
+  return (A.pol = pol);
+}
+/** 船的格座標 L 在 m 那門砲的裝甲內面外側？（沒有裝甲、那門砲沒帶裝甲 ⇒ false） */
+function armMuzzle(sh, m, L) {
+  for (var i = 0; i < sh.arm.length; i++) {
+    var a = sh.arm[i]; if (!a.g || a.g.model !== m) continue;
+    var pol = armPolar(a), c = a.g.mt.c, Q = armIn(a, L), dx = Q[0] - c[0], dy = Q[1] - c[1], d = Math.hypot(dx, dy);
+    var k = Math.floor((Math.atan2(dy, dx) + Math.PI) / (2 * Math.PI) * ARM_BINS) % ARM_BINS, z0 = Math.floor(Q[2]), rin = Infinity;
+    for (var dz = 0; dz <= 3 && rin === Infinity; dz++) for (var s = dz ? -1 : 1; s <= 1 && rin === Infinity; s += 2) {
+      var row = pol[z0 + s * dz]; if (!row) continue;
+      for (var j = 0; j <= 4; j++) { rin = Math.min(rin, row[(k + j) % ARM_BINS], row[(k - j + ARM_BINS) % ARM_BINS]); if (rin < Infinity) break; }
+    }
+    return rin < Infinity && d >= rin - 0.5;
+  }
+  return false;
+}
 /** 裝甲原本的位置 (x, y, z)（裝甲的格座標）還有沒有格（重量照材質層的座標數）。 */
 function armGet(sh, x, y, z) { for (var i = 0; i < sh.arm.length; i++) if (sh.arm[i].grid.get(x, y, z)) return 1; return 0; }
 function armCount(sh) { var n = 0; for (var i = 0; i < sh.arm.length; i++) n += sh.arm[i].grid.count; return n; }

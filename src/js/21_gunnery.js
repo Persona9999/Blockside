@@ -239,7 +239,7 @@ function stepBall(b, dt) {
       if (hm) {                                                          // 打到模型：扣血（每發傷害 × 彈種對砲倍率；歸零整個飛出去），砲彈被擋掉一大半
         if (sh.i !== b.owner && !b.hitOnce) { SHIPS[b.owner].hits++; ffHit(sh, b); windHit(b); rptHit(b, sh, hm.gun ? 'gun' : 'model'); b.hitOnce = true; }
         (b.hitM = b.hitM || []).push(hm);
-        damageModel(sh, hm, b.v, b.dmg * ammoK(b.ammo, VS_GUN));
+        damageModel(sh, hm, b.v, b.dmg * ammoK(b.ammo, VS_GUN), L);         // L：碰到的那一點（帶裝甲的砲 ⇒ 看是不是砲口，24_armor.js armMuzzle）
         if (b.ammo === 1) { var kM = PEN_SK * shellK(b); explode(b.p.slice(), sh, 0); blastModels(sh, L, 22 * kM, b.p, b.hitM, b.dmg); hurt(sh, L, 13 * kM, 30 * kM, null, '爆炸', crewBase(b)); b.alive = false; return; }   // 直接打中的那一門已經扣過，不再吃爆風；半徑照裝藥（TASK-0621）
         b.v = mul(b.v, b.ammo === 2 ? 0.5 : 0.55);
         if (len(b.v) < 30) { ballToDebris(b); return; }
@@ -279,7 +279,7 @@ function windHit(b) { var o = SHIPS[b.owner]; if (b.dn) o.hitDn = (o.hitDn || 0)
 //   落水（TASK-0642）：實心彈、彈重 ≥ uwMin（預設 20 kg：9 吋以上）照水的阻力繼續走（uwDrag 0.019 ＝ 3/8 × Cd 0.4 × 水／鐵的比重），打得到水線下的船殼；其他一落水就沒了（不多算）。
 //   爆裂彈：爆炸半徑 ＝ shellR × (彈重 ÷ ref)^⅓（裝藥 ∝ 彈重）×（硬度 ÷ HARD_BASE）^−shellHard；打在有 pen 的材質上 ⇒ 炸在外面：
 //     板子吃掉一格（半徑 − 1，剩不到 0.3 ⇒ 一格都不掉）、傷人與傷模型的半徑也照硬度打折。傷人、傷模型的半徑整體 × shellR／8.3（以前 24 磅打橡木平均 8.3 格）。
-var PEN = Object.assign({ lo: 0.4, hi: 1.3, k: 3, rico: 65, wood: 0.8, splinter: 50, shellR: 5.2, shellHard: 0.5, ref: 10.9, uwMin: 20, uwDrag: 0.019 }, CFG.pen || {});
+var PEN = Object.assign({ lo: 0.4, hi: 1.3, k: 3, rico: 65, wood: 0.8, splinter: 50, shellR: 5.2, shellHard: 0.5, ref: 10.9, uwMin: 20, uwDrag: 0.019, muzzle: 0.3 }, CFG.pen || {});
 var PEN_COS = Math.cos(PEN.rico * Math.PI / 180), PEN_SK = PEN.shellR / 8.3, PEN_STOP = 28;
 function shotM(b) { return b.m > 0 ? b.m : PEN.ref; }
 function shellK(b) { return Math.cbrt(shotM(b) / PEN.ref); }
@@ -404,7 +404,7 @@ function meshOcc(m) {
   return { nx: nx, ny: ny, nz: nz, a: o, fill: cnt / o.length };
 }
 /** 模型整個飛出去：剛體（拋出、翻滾、落水）；綁在它身上的砲與繩一起失效。drop ＝ 腳下甲板沒了，只是掉下去。 */
-function blowModel(sh, m, vel, drop) {
+function blowModel(sh, m, vel, drop, at) {
   if (!m.alive) return;
   m.alive = false;
   if (m.kind === 'door' || m.spinB) m.sw = 0;                           // 照參數轉的（26_spin.js）同一個理由：轉角只是畫面。門：開關只是演出（25_doors.js）⇒ 照關著的樣子飛出去（落水的水花抽戰局的亂數：⛔ 照開著的角度 ⇒ 演出開關會改戰局）
@@ -418,8 +418,12 @@ function blowModel(sh, m, vel, drop) {
   if (!drop && m.kind !== 'powder') {
     // 砲班跟著受傷（TASK-0568；Tim 2026-10-15）：那門砲的砲班另外算一次，3.5 m 內照距離遞減（0.7 m 內全吃）；其他人照舊 1.5 m。
     //   砲班從第一次排掉（⛔ 不排 ⇒ 站得近的被算兩次）。細節設定關掉（GUN_CREW_HURT）⇒ 完全照舊。
+    //   at（TASK-0644）：打中的是帶裝甲的砲的砲口 ⇒ 爆點與碎片從那一點算（隔著裝甲的擋掉）；砲班另外吃的那一份（砲被打離砲架撞到人）照砲的中心、× pen.muzzle。
     var gc = GUN_CREW_HURT ? sh.crew.filter(function (c) { return c.st <= 1 && c.gun && c.gun.model === m; }) : [];
-    if (gc.length) {
+    if (at) {
+      hurt(sh, at, 7, 15, null, '砲被打飛', 140);
+      if (gc.length) sh.gunCrewHit = (sh.gunCrewHit || 0) + hurt(sh, m.c, 7, 35, null, '砲被打飛', 140 * PEN.muzzle, gc);
+    } else if (gc.length) {
       hurt(sh, m.c, 7, 15, null, '砲被打飛', 140, sh.crew.filter(function (c) { return gc.indexOf(c) < 0; }));
       sh.gunCrewHit = (sh.gunCrewHit || 0) + hurt(sh, m.c, 7, 35, null, '砲被打飛', 140, gc);
     } else hurt(sh, m.c, 7, 15, null, '砲被打飛', 140);
@@ -433,16 +437,19 @@ function blowModel(sh, m, vel, drop) {
   else if (GUNS[m.kind]) newsGun(sh, m, drop);                    // 廣播（同一刻好幾門 ⇒ 併成一行，見 61_hud.js）
 }
 /** 模型被打中：扣血（細節設定的砲血量；舵輪 6 成），歸零才整個飛出去。還撐得住 ⇒ 火星、聲音、旁邊的人被碎片波及。
- *  火藥桶另走 powderHit（歸零殉爆；拉滿 ＝ 不會爆 ⇒ 不扣）。 */
-function damageModel(sh, m, vel, dmg) {
+ *  火藥桶另走 powderHit（歸零殉爆；拉滿 ＝ 不會爆 ⇒ 不扣）。
+ *  at：砲彈碰到的那一點（stepBall 才給；爆風、殉爆不給）⇒ 帶裝甲的砲被打中的是砲口（24_armor.js armMuzzle）：藥箱在裝甲裡面 ⇒ 不引爆；碎片從那一點算。 */
+function damageModel(sh, m, vel, dmg, at) {
   if (!m.alive || !(dmg > 0)) return;
   if (m.kind === 'powder') { powderHit(sh, m, dmg); return; }
-  if (m.gun) boxHit(sh, m.gun, dmg);                                    // 砲旁的藥箱（23_powder.js）
+  var muz = at && sh.arm && armMuzzle(sh, m, at) ? at : null;
+  if (muz) sh.muzzleHit = (sh.muzzleHit || 0) + 1;                      // 讀數：砲口被打中幾次
+  if (m.gun && !muz) boxHit(sh, m.gun, dmg);                            // 砲旁的藥箱（23_powder.js）
   m.hp -= dmg;
-  if (m.hp <= 0) { blowModel(sh, m, vel); return; }
+  if (m.hp <= 0) { blowModel(sh, m, vel, false, muz); return; }
   var c0 = M4.pt(sh.M, m.c[0], m.c[1], m.c[2]), vd = norm(vel);
   for (var i = 0; i < 8; i++) spawnPt(c0, add(mul(vd, rr(-6, -2)), [gauss() * 3, rr(1, 4), gauss() * 3]), rr(0.15, 0.35), [1, 0.8, 0.45], 1, 0.2, 0.08, G, 0.5, 3);
-  hurt(sh, m.c, 3, 8, null, '碎木', dmg * 0.7);
+  hurt(sh, muz || m.c, 3, 8, null, '碎木', dmg * 0.7);
   sfx('crack', c0, 0.8);
 }
 /** 爆炸：r 格內的模型往外飛。傷害 ＝ 每發傷害 × 爆裂彈對砲倍率 × (1 − 0.75·d／r)。skip：直接打中的那一門（已經扣過）。 */
