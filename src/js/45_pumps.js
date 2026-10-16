@@ -82,6 +82,7 @@ var PUMP_WET_IN = 0.5;
 function pumpSteamK(sh) {
   var D = sh.drive; if (!D || D.kind !== 'steam') return 0;
   var C = D.C; if (!C || !C.B.length) return 1;
+  if (C.cells) return C.steam;                                           // 動力件（31_drive.js drvPartsTick，TASK-0653）：全船的蒸汽（鍋爐剩幾成＋曲線、泡水熄火、蒸汽管）
   var on = 0, all = 0;
   C.B.forEach(function (c) { c.b.seats.forEach(function (p, j) { all++; if (c.ok[j] && !wetAt(sh, p, { sea: false, inner: PUMP_WET_IN })) on++; }); });
   return all ? on / all : 1;
