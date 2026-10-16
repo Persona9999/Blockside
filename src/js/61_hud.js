@@ -76,6 +76,15 @@ function capText(sh) {
 //   船被打輕、浮高了 ⇒ W100 跟著變大）。粒子模式 W ＝ 艙內的積水；公式模式沒有水量 ⇒ W ＝ 現在比原本多吃的水（下沉照浮力表換算）。
 //   ⇒ 兩種模式都是開始沉那一刻 100%。只是顯示：航速照舊用下沉 ÷ 9 m（31_sailing.js，模擬）。
 var SINK_FINAL = 4.2;
+/** 水線現在比開戰時高還是低（Tim 2026-10-16：「浮高資訊 是否可以用實際水線變化來計算(目前好像只考慮船體損失質量 不考慮進水)」）：
+ *  船的高度 ＝ 減重上浮 sh.lift − 進水下沉 sh.sink（10_ship.js shipMatrix 同一條；浪的起伏 bob 不算）⇒ 正 ＝ 浮高、負 ＝ 吃水深。
+ *  兩項都有 ⇒ 括號拆開（減重 ＋、進水 −）。以前只印 sh.lift ⇒ 積水上千噸還寫「浮高 0.1 m」。只是讀數，模擬不讀。 */
+function liftText(sh) {
+  var up = sh.lift || 0, dn = sh.sink || 0, net = up - dn;
+  var s = net > 0.05 ? '　浮高 ' + net.toFixed(1) + ' m' : net < -0.05 ? '　吃水深 ' + (-net).toFixed(1) + ' m' : '';
+  if (s && Math.abs(up) > 0.05 && dn > 0.05) s += '（減重 ' + (up >= 0 ? '+' : '−') + Math.abs(up).toFixed(1) + '・進水 −' + dn.toFixed(1) + '）';
+  return s;
+}
 /** 浮高 L 公尺（負 ＝ 吃水深）時比設計水線的排水輕幾噸（32_hull.js liftFor 的反函數）。 */
 function tonsAt(T, L) {
   var HYD = T.hyd, n = HYD.length - 1, z = T.zw - L / S;
@@ -98,7 +107,7 @@ function panel(sh, title) {
   var m0 = sh.mass0 || shipT(sh), disp = Math.round(m0), now = Math.round(m0 - massLost(sh));   // 兩個都取到 1 噸（⛔ 開戰時的取到 10 噸 ⇒ 第一格「2,150・現在 2,154」，現在比開戰還重）
   // 橫向兩欄（TASK-0564，Tim 2026-10-14：佔畫面中間 ⇒ 儘量橫鋪、別往下壓）：左 ＝ 船體、進水、航行；右 ＝ 砲長、船員、砲、開火。砲一門一門的狀態在底下的砲位圖（gmapDraw）。
   return '<h3>' + title + '<span class="disp">排水量 ' + disp.toLocaleString() + ' 噸・現在 ' + now.toLocaleString() + ' 噸</span>' + (sh.fate && !sh.sunk ? '　<span style="color:var(--gold)">' + sh.fate + '</span>' : '') + '</h3><div class="pcols"><div class="pc">船體 ' + (hull * 100).toFixed(1) + '%（打掉 ' + sh.lost.toLocaleString() + ' 格）<div class="bar"><i style="width:' + (hull * 100).toFixed(1) + '%"></i></div>' +
-    '進水 ' + (sh.sunk ? '沉沒' : (fl * 100).toFixed(0) + '%') + (sh.fl && (!sh.broken || sh.fl.vis) ? '（艙內積水 ' + Math.round(sh.fl.vol * RHO_W).toLocaleString() + ' 噸・破口 ' + sh.fl.area.toFixed(1) + ' m²）' : '（水線下破洞 ' + (sh.inflow || 0).toLocaleString() + ' 格）') + (sh.lift > 0.05 ? '　浮高 ' + sh.lift.toFixed(1) + ' m' : sh.lift < -0.05 ? '　吃水深 ' + (-sh.lift).toFixed(1) + ' m' : '') + '<div class="bar water"><i style="width:' + (fl * 100).toFixed(0) + '%"></i></div>' +
+    '進水 ' + (sh.sunk ? '沉沒' : (fl * 100).toFixed(0) + '%') + (sh.fl && (!sh.broken || sh.fl.vis) ? '（艙內積水 ' + Math.round(sh.fl.vol * RHO_W).toLocaleString() + ' 噸・破口 ' + sh.fl.area.toFixed(1) + ' m²）' : '（水線下破洞 ' + (sh.inflow || 0).toLocaleString() + ' 格）') + liftText(sh) + '<div class="bar water"><i style="width:' + (fl * 100).toFixed(0) + '%"></i></div>' +
     (sh.spd < -0.05 ? '倒車 ' + (-sh.spd * 1.944).toFixed(1) : '航速 ' + (sh.spd * 1.944).toFixed(1)) + ' 節（' + sh.pos + '）　' + (driveText(sh) ? driveText(sh) + '　' : '') + (hasSails(sh) ? sailSetName(sh) + ' ' + Math.round(sh.sailFrac * 100) + '%' : '') + '<br>' +
     ((sh.ancMode ? '拋錨' : sh.manual ? '手動操舵' : '自動操舵') + (sh.anc ? '　' + anchorText(sh) : '') + '　舵 ' + (sh.rudder > 0.05 ? '左 ' + Math.round(sh.rudder * 100) + '%' : sh.rudder < -0.05 ? '右 ' + Math.round(-sh.rudder * 100) + '%' : '正')) + '<br>' + navText(sh) + '</div><div class="pc">' +
     capText(sh) + '<br>' +
@@ -439,7 +448,14 @@ function pauseLabel() { var b = $('pauseK'), s = '<b>P</b><i class="em">' + (PAU
 /** 彈種那一顆（Tim 2026-10-15：「砲彈改成一個按鈕，切換所有支援的砲彈（顯示當前彈種圖示）」）：鐵球 實心彈（CSS 畫的 .ball：灰色、左上高光、淡白邊；⛔ ⚫ 在深色圓鈕上看不見、⚪ 是白點不像砲彈 —— Tim 2026-10-15「顯示為一顆白色圓點，是否可以替換」）、💣 爆裂彈、⛓️ 鏈彈；每一種砲三種都能打。 */
 var PSLOW_SHOW = 0.7;   // 物理減速放慢到 ×0.7 以下才在航速那一行顯示（Tim 2026-10-15：「高於 0.7 可以不顯示，目前頻繁閃爍」—— 以前 < 0.98 就顯示，倍率在 0.9 上下跳 ⇒ 一直閃）
 var AMMO_ICON = ['<span class="ball"></span>', '💣', '⛓️'], AMMO_TXT = ['實心彈', '爆裂彈', '鏈彈'];
-function ammoLabel() { var b = $('ammoB'); if (!b) return; var s = '<b>' + (AMMO_I + 1) + '</b><i class="em">' + AMMO_ICON[AMMO_I] + '</i>'; if (b.innerHTML !== s) { b.innerHTML = s; b.title = '彈種：' + AMMO_TXT[AMMO_I] + '（點一下換下一種；鍵盤 1 實心彈、2 爆裂彈、3 鏈彈）'; } }
+function ammoLabel() { var b = $('ammoB'); if (!b) return; var s = '<b>1</b><i class="em">' + AMMO_ICON[AMMO_I] + '</i>'; if (b.innerHTML !== s) { b.innerHTML = s; b.title = '彈種：' + AMMO_TXT[AMMO_I] + '（點一下或按 1 換下一種）'; } }   // 上面寫的是鍵（同其他圓鈕），不是第幾種
+/** 這艘船打得出哪幾種彈（AMMO 的序號，照輪流的順序）。Tim 2026-10-16：「目前彈種是固定的 不過可以保留擴充接口」⇒ 現在每艘都是全部；之後照船擴充（例 ships[].ammo）只改這裡。 */
+function ammoOf(sh) { return AMMO.map(function (_, i) { return i; }); }
+/** 換下一種彈（Tim 2026-10-16：「統一用一個鍵循環切換所有彈藥(不一定三種 之後可能根據船擴充)」）：鍵盤 1 與圓鈕共用；照我艦的 ammoOf 輪流，現在這一種不在清單裡 ⇒ 從第一種開始。 */
+function ammoNext() {
+  var L = ammoOf(SHIPS[PLAYER_I]); if (!L.length) return;
+  var i = L.indexOf(AMMO_I); AMMO_I = L[(i + 1) % L.length]; ammoLabel();
+}
 function hud(dt) {
   stepMsgs(dt);
   if (ROOMS_DBG) roomLabels();                                                   // 空艙房的名字（36_rooms.js；?rooms=1）：每一格跟著鏡頭

@@ -155,7 +155,7 @@ function mountRot(p, c, a) { var d = M4.dir(rotM([0, 0, 1], a), p[0] - c[0], p[1
 /** 每一步（50_sim.js，在開砲之前）：有迴旋的砲照瞄準點挑方向、照轉速轉；轉了 ⇒ 砲軸、砲口、站位、人跟著轉。 */
 function mountStep(sh, dt) {
   var G = sh.mounts; if ((!G && !sh.tur) || sh.sunk || sh.struck) return;
-  var tgt = aimPoint(sh), foe = aimShip(sh), L = tgt ? toLocal(sh, tgt) : foe && foe.M ? toLocal(sh, M4.pt(foe.M, foe.T.cx, foe.T.cy, foe.T.zw)) : null;
+  var tgt = foeOf(sh) ? aimPoint(sh) : null, foe = aimShip(sh), L = tgt ? toLocal(sh, tgt) : foe && foe.M ? toLocal(sh, M4.pt(foe.M, foe.T.cx, foe.T.cy, foe.T.zw)) : null;   // 沒有敵艦（建造模式、只有一艘的沙盒）⇒ 不問瞄準點（⛔ aimPoint 讀 foe.M ⇒ 有迴旋砲的船每一步例外）；砲照原本的方向
   if (sh.tur) turretStep(sh, dt, L);                                   // 砲塔層（27_turret.js）：砲塔、上面的砲（自己會轉、掛在砲塔上的也在那裡轉）
   if (G) G.forEach(function (g) {
     var M = g.mt; if (!g.alive || !L || M.up) return;
@@ -423,6 +423,7 @@ function blowModel(sh, m, vel, drop, at) {
     w: drop ? [gauss() * 0.4, 0, gauss() * 0.4] : [gauss() * 4, gauss() * 4, gauss() * 4] });
   sh.guns.forEach(function (g) { if (g.model === m) g.alive = false; });
   sh.ropes.forEach(function (r) { if (!r.dead && r.mods && r.mods.indexOf(m.k) >= 0) { r.dead = true; sh.rigDirty = true; } });
+  if (m.yk) sh.rigDirty = true;                                          // 帆桁飛了 ⇒ 收在它上面的那一捲不畫（30_rig_physics.js furlLost；只是畫面旗標，物理關著也要重做）
   if (!drop && m.kind !== 'powder') {
     // 砲班跟著受傷（TASK-0568；Tim 2026-10-15）：那門砲的砲班另外算一次，3.5 m 內照距離遞減（0.7 m 內全吃）；其他人照舊 1.5 m。
     //   砲班從第一次排掉（⛔ 不排 ⇒ 站得近的被算兩次）。細節設定關掉（GUN_CREW_HURT）⇒ 完全照舊。

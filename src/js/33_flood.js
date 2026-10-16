@@ -397,7 +397,13 @@ function flFalls(sh, fl, me, TI, tops) {
  *    模擬照算；畫面每 FL_MESH_MS 毫秒（真實時間）做一格關鍵格，兩格之間著色器照 uMix 從上一格的高度內插過去（⛔ 每次水格算完就重做 ⇒ 粗檔每 4 步、細檔每 2 步重建一次）。
  *    拓撲（哪幾格、每格切成哪幾片）跟上一格一樣 ⇒ 從畫面上現在的高度接著內插（水面慢慢升降）；不一樣（新的格進水、水退了）⇒ 直接換。
  *  代價：畫面的水比模擬晚最多一格；兩格之間船晃動，水面跟著船斜一下（網格在船的座標裡）。 */
-var FL_MESH_MS = 500, FL_FLAT = 1;
+var FL_MESH_MS = 500, FL_FLAT = 0;
+// 跨水體相連（TASK-0654 第二輪；Tim 2026-10-16：「兩片水之間有高低差 沒有瀑布遮擋」「應該要變成一整片水體mesh才對」「或是可以跨水體相連(mesh平滑過度)」）：
+//   FL_JOIN（公尺）：相鄰水面差在這以內 ⇒ 同一個水體（⛔ 以前差半格就分成兩池，各自一個平面 ⇒ 憲法號細檔破口邊 0.66–0.69 m 的落差中間露出一條地板）；甲板上下兩層差得比這遠，不會連起來。
+//   FL_FLAT 0：角高 ＝ 這一角四周、同一個水體的水面平均，再跟鄰角平均 FL_SMOOTH 次 ⇒ 落差變成連續的斜坡（同一個角兩邊共用，不會裂）；平的地方照舊是平的。
+//   FL_THIN：水格裝了幾成以上才畫水面（以前 0.02；太淺的照樣畫、交給深度吸光淡出 ⇒ 兩片水中間那條「薄水」帶也接得起來）。
+var FL_JOIN = 1.2, FL_SMOOTH = 1, FL_THIN = 0.002;
+if (Q.get('fljoin') === '0') { FL_FLAT = 1; FL_JOIN = -1; FL_SMOOTH = 0; FL_THIN = 0.02; }   // ?fljoin=0：舊的畫法（差半格就分池、每池一個平面）—— 前後對照用
 // 量測（TASK-0654；只給 81_floodlab.js 的進水報表，平常兩個都是 false ⇒ 一位元都不多算）：
 //   FL_SNAP ＝ 每次都重做、不內插（截圖跟那一刻的水對得上）；FL_STAT ＝ 每次重做順便分類接縫（me.stat）。
 var FL_SNAP = false, FL_STAT = false;
@@ -413,8 +419,8 @@ function flMesh(sh, fl) {
   var TI = me.ti && me.ti.length === F.N ? me.ti : (me.ti = new Int32Array(F.N).fill(-1)), tops = me.tops || (me.tops = []), S3 = S * S * S, op = fl.op;
   for (t = 0; t < tops.length; t += 2) TI[tops[t]] = -1; tops.length = 0;
   for (t = 0; t < fl.actN; t++) {
-    i = fl.act[t]; if (!(cap[i] > 0.02) || A[i] < 0.02 * cap[i] * Vc) { if (FL_STAT && A[i] > 1e-6) (me.thin || (me.thin = [])).push(i); continue; }   // thin：有水但太薄、沒畫（接縫地圖用）
-    u = i + NXY; if (u < F.N && cap[u] > 0.02 && A[u] >= 0.02 * cap[u] * Vc) continue;          // 上面那一格也有水 ⇒ 不是水面
+    i = fl.act[t]; if (!(cap[i] > 0.02) || A[i] < FL_THIN * cap[i] * Vc) { if (FL_STAT && A[i] > 1e-6) (me.thin || (me.thin = [])).push(i); continue; }   // thin：有水但太薄、沒畫（接縫地圖用）
+    u = i + NXY; if (u < F.N && cap[u] > 0.02 && A[u] >= FL_THIN * cap[u] * Vc) continue;          // 上面那一格也有水 ⇒ 不是水面
     var ix = i % NX, iy = ((i / NX) | 0) % NY, iz = (i / NXY) | 0, W = A[i] / S3, hl = 0;
     for (var l = 0; l < c && W > 1e-6; l++) { var o = op[i * c + l]; if (o <= 0) continue; if (W >= o) { W -= o; hl = l + 1; } else { hl = l + W / o; W = 0; } }   // 空著 0 格的那一層（甲板）水過不去也不停在那裡 ⇒ 跳過
     if (W > 1e-6) hl = c;
@@ -422,7 +428,7 @@ function flMesh(sh, fl) {
     TI[i] = tops.length; tops.push(i, hw);
   }
   flFalls(sh, fl, me, TI, tops);                                          // 往下流的水幕（跟水面同一格重做）
-  // 連成一池（Tim 2026-10-15：「角度有平滑 但是沒有接起來」）：左右前後相鄰（同一層或差一層）、水面差不到半格 ⇒ 同一池。
+  // 連成一池（Tim 2026-10-15：「角度有平滑 但是沒有接起來」）：左右前後相鄰（同一層或差一層）、水面差在 FL_JOIN 以內 ⇒ 同一池（水體；2026-10-16 以前是半格）。
   //   同一池裡每個角只算一次（那個角周圍四格裡、這一池的水面平均）⇒ 相鄰兩格用的是同一個角 ⇒ 一定接得起來。
   //   ⛔ 以前每一格自己算四個角（周圍水柱裡、跟「這一格」差不到半格的平均）⇒ 同一個角兩邊各算各的、高度不一樣 ⇒ 每一片都斜得平順，片跟片之間裂開。
   var TN = tops.length / 2, par = new Int32Array(TN);
@@ -434,7 +440,7 @@ function flMesh(sh, fl) {
       if (nb ? jy0 >= NY - 1 : jx0 >= NX - 1) continue;
       for (var dzn = -1; dzn <= 1; dzn++) {
         var jn = i + (nb ? NX : 1) + dzn * NXY; if (jn < 0 || jn >= F.N) continue;
-        var tj = TI[jn]; if (tj < 0 || Math.abs(tops[tj + 1] - tops[t * 2 + 1]) >= 0.5 * hc) continue;
+        var tj = TI[jn]; if (tj < 0 || Math.abs(tops[tj + 1] - tops[t * 2 + 1]) >= (FL_JOIN < 0 ? 0.5 * hc : FL_JOIN)) continue;
         var ra = root(t), rb = root(tj / 2); if (ra !== rb) par[ra] = rb;
       }
     }
@@ -449,7 +455,17 @@ function flMesh(sh, fl) {
   }
   var PS = new Float64Array(TN), PN = new Int32Array(TN);                 // 每一池的水面平均
   for (t = 0; t < TN; t++) { var rp = root(t); PS[rp] += tops[t * 2 + 1]; PN[rp]++; }
-  function corner(r, ix, iy) { var e = CS.get(r * NC + iy * (NX + 1) + ix); return FL_FLAT * PS[r] / PN[r] + (1 - FL_FLAT) * e[0] / e[1]; }
+  var CV = new Map(); CS.forEach(function (e, k) { CV.set(k, e[0] / e[1]); });
+  for (var it = 0; it < FL_SMOOTH; it++) {                                // 跟同一個水體的上下左右鄰角平均 ⇒ 落差攤到兩格寬
+    var CV2 = new Map();
+    CV.forEach(function (v, k) {
+      var cx0 = (k % NC) % (NX + 1), rr = (k / NC) | 0, sm = v, nn = 1, nk = [cx0 > 0 ? k - 1 : -1, cx0 < NX ? k + 1 : -1, k - (NX + 1), k + (NX + 1)];
+      for (var q2 = 0; q2 < 4; q2++) { if (nk[q2] < 0 || ((nk[q2] / NC) | 0) !== rr) continue; var w2 = CV.get(nk[q2]); if (w2 !== undefined) { sm += w2; nn++; } }
+      CV2.set(k, sm / nn);
+    });
+    CV = CV2;
+  }
+  function corner(r, ix, iy) { return FL_FLAT * PS[r] / PN[r] + (1 - FL_FLAT) * CV.get(r * NC + iy * (NX + 1) + ix); }
   var ST = FL_STAT ? flSeams(F, cap, TI, tops, root) : null;
   if (ST) { ST.thin = (me.thin || []).map(function (k) { return [k % NX, ((k / NX) | 0) % NY]; }); me.thin = null; }
   // 每格切成 KS × KS 小片（約 2 格見方；Tim 2026-10-15：「進水顯示是否能嘗試跟鄰近的水表面合併成柔和曲面」）：高度照四個角（已跟鄰格平均）雙線性內插 ⇒ 相鄰的水面連成平順的一片；
@@ -464,7 +480,7 @@ function flMesh(sh, fl) {
   }
   for (t = 0; t < tops.length; t += 2) {
     i = tops[t]; var hw0 = tops[t + 1], jx = i % NX, jy = ((i / NX) | 0) % NY, jz = (i / NXY) | 0, f = Math.min(1, A[i] / (cap[i] * Vc));
-    var x0 = F.X0 + jx * c, y0 = F.Y0 + jy * c, zl = jz * c - c, zh = jz * c + 2 * c, rt = root(t / 2);   // zl／zh：只防呆（同一池相鄰的差不到半格 ⇒ 角落在這一格上下一格以內；夾到了才會裂）
+    var x0 = F.X0 + jx * c, y0 = F.Y0 + jy * c, zl = jz * c - (FL_JOIN < 0 ? 1 : 3) * c, zh = jz * c + (FL_JOIN < 0 ? 2 : 4) * c, rt = root(t / 2);   // zl／zh：只防呆（同一個水體相鄰的差在 FL_JOIN 以內 ⇒ 細檔 1.2 m ≈ 2.4 格 ⇒ 角落在這一格下 3 格、上 4 格以內；夾到了才會裂）
     var H = [corner(rt, jx, jy), corner(rt, jx + 1, jy), corner(rt, jx + 1, jy + 1), corner(rt, jx, jy + 1)];
     if ((q + 6 * KS * KS) * 5 > me.buf.length) { var nb = new Float32Array(Math.max(me.buf.length * 2, (q + 6 * KS * KS) * 10)); nb.set(me.buf); me.buf = nb; }
     var inn = 0; for (var a = 0; a < KS; a++) for (var b = 0; b < KS; b++) if ((INS[a * KS + b] = flInside(x0 + (a + 0.5) * sc, y0 + (b + 0.5) * sc, bil(H, (a + 0.5) / KS, (b + 0.5) / KS)))) inn++;
@@ -512,7 +528,7 @@ function flSeams(F, cap, TI, tops, root) {
       if (jx < 0 || jy < 0 || jx >= NX || jy >= NY) { st.wall++; continue; }
       var j0 = iz * NXY + jy * NX + jx, tj = -1;
       for (var k = 0; k < 3 && tj < 0; k++) { var jz = iz + (k === 0 ? 0 : k === 1 ? -1 : 1); if (jz >= 0 && jz < F.NZ && TI[jz * NXY + jy * NX + jx] >= 0) tj = TI[jz * NXY + jy * NX + jx] / 2; }
-      if (tj >= 0) { if (root(tj) === r) st.join++; else { st.step++; st.dh.push(Math.abs(tops[tj * 2 + 1] - tops[t * 2 + 1])); st.map.edge.push([ix, iy, d, 1]); } }
+      if (tj >= 0) { if (root(tj) === r) st.join++; else { st.step++; st.dh.push(Math.abs(tops[tj * 2 + 1] - tops[t * 2 + 1])); st.map.edge.push([ix, iy, d, 1, tops[t * 2 + 1] - tops[tj * 2 + 1], tops[t * 2 + 1]]); } }   // 兩池交界：[ix, iy, 方向, 1, 這邊比鄰池高多少 m, 這邊的水面世界高度]
       else if (cap[j0] > 0.02) { st.open++; st.map.edge.push([ix, iy, d, 2]); } else st.wall++;
     }
   }

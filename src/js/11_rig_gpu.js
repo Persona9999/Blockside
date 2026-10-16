@@ -6,8 +6,9 @@ function buildRig(owner) {          // 還綁著的繩（靜態，照雕刻作�
     if (PHYS && c && c.p && !c.hidden) return;
     s.lines.forEach(function (j) { hide[j] = 1; });
   });
+  var tj = PHYS && owner.tJ, tc = PHYS && owner.tCut;                  // 跟著帆腳走的 sheet、tack（30_rig_physics.js tethOf）：looseBuf 每一格畫；tCut：帆腳被打掉、已經垂下來的（tethCut）
   owner.ropes.forEach(function (r, j) {
-    if (r.dead || hide[j]) return;
+    if (r.dead || hide[j] || tj && tj[j] || tc && tc[j]) return;
     for (var j = 0; j + 5 < r.pts.length; j += 3) L.push(r.pts[j], r.pts[j + 1], r.pts[j + 2], r.col[0], r.col[1], r.col[2], r.pts[j + 3], r.pts[j + 4], r.pts[j + 5], r.col[0], r.col[1], r.col[2]);
   });
   owner.lines = upload(owner.lines, new Float32Array(L), 6, [[0, 3, 0], [2, 3, 3]]);
@@ -37,11 +38,19 @@ function sailBuf(ow) {
     if (SBV.length < mv * SB_STRIDE) SBV = new Float32Array(Math.ceil(mv * 1.33) * SB_STRIDE);
     if (SBI.length < mi) SBI = new Uint32Array(Math.ceil(mi * 1.33));
   }
+  var td = [], tk = '';                                                  // 這一格跟著帆腳畫的繩（looseBuf）
   (ow.cl || []).forEach(function (c, k) {
-    if (isShip) { var s = ow.sails[k]; if (PHYS ? (!c.p || c.hidden || c.gone) : (s.dead || s.furled)) return; }
-    put((PHYS || !isShip) && c.p ? (isShip && c.furlF !== null && c.furlF !== undefined ? furlDraw(c, clothFine(c, SBP), c.furlF) : clothFine(c, SBP)) : c.T.p0,   // furlDraw：收帆張帆的演出（30_rig_physics.js）
-        c.T.n, c.T.tris, c.T.col, c.torn ? c.tv : null, c.T.vcol, c.T.uv, A && c.T.ti !== undefined ? sailRect(ow, A, c.T.ti) : null);
+    var P;
+    if (isShip) {
+      var s = ow.sails[k], keep = furlKeep(s) && (PHYS ? !c.gone && !c.loose && (!c.p || c.hidden) : true);   // 收好的帆留一捲（30_rig_physics.js furlBundle；只是畫）
+      if (!keep && (PHYS ? (!c.p || c.hidden || c.gone) : (s.dead || s.furled))) return;
+      if (keep) { P = furlBundle(ow, c, SBP); var lost = furlLost(ow, s, c); }   // lost：靠的帆桁、格不在了的那幾點不畫（30_rig_physics.js furlLost）
+    }
+    if (!P) P = (PHYS || !isShip) && c.p ? (isShip && c.furlF !== null && c.furlF !== undefined ? furlDraw(c, clothFine(c, SBP), c.furlF, ow) : clothFine(c, SBP)) : c.T.p0;   // furlDraw：收帆張帆的演出（30_rig_physics.js）
+    if (isShip && PHYS && c.tt && c.p && !c.hidden && !c.gone && !c.loose) c.tt.forEach(function (t) { if (ow.ropes[t.j].dead || ow.tCut && ow.tCut[t.j]) return; var o = t.i * 3; td.push({ t: t, x: P[o], y: P[o + 1], z: P[o + 2] }); tk += t.j + ','; });   // 畫出來的帆腳（收帆演出時也是）
+    put(P, c.T.n, c.T.tris, c.T.col, keep ? lost : c.torn ? c.tv : null, c.T.vcol, c.T.uv, A && c.T.ti !== undefined ? sailRect(ow, A, c.T.ti) : null);
   });
+  if (isShip) { ow.tDraw = td; if (tk !== (ow.tKey || '')) { ow.tKey = tk; ow.tJ = {}; td.forEach(function (d) { ow.tJ[d.t.j] = 1; }); ow.rigDirty = true; } }   // 換了哪幾條 ⇒ 下一格 buildRig 重做（不畫那幾條）
   if (F) F.forEach(function (f) { put(f.p, f.n, f.T.sim.tris, f.col, null, null, f.uv, A && f.uv && f.ti !== undefined ? sailRect(ow, A, f.ti) : null); });   // 布片：有貼圖的帆撕下來的照原處的圖（34_shreds.js shredCut 記 uv）
   function put(p, n, tr, col, tv, vc, uv, r) {                            // tv：藏起來的細格點（撕開的洞）；vc：每個頂點的顏色（沒有貼圖集時的退路，30_rig_physics.js texColors）；uv＋r：貼圖集的那一格
     var base = nv, j, i;
@@ -89,6 +98,14 @@ function looseBuf(sh) {
   sh.loose.forEach(function (o) {
     var p = o.p, c = o.col;
     for (var i = 0; i + 1 < o.n; i++) { var a = i * 3; L.push(p[a], p[a + 1], p[a + 2], c[0], c[1], c[2], p[a + 3], p[a + 4], p[a + 5], c[0], c[1], c[2]); }
+  });
+  (sh.tDraw || []).forEach(function (d) {                               // 跟著帆腳走的 sheet、tack（sailBuf 記的畫出來的帆腳）：靠帆腳那一端移到帆腳、另一端不動、中間照弧長內插
+    var t = d.t, r = sh.ropes[t.j], q = r.pts, c = r.col, e = t.ce * 3, mx = d.x - q[e], my = d.y - q[e + 1], mz = d.z - q[e + 2], m = q.length / 3, prev = null;
+    for (var k = 0; k < m; k++) {
+      var w = t.t[k], P = [q[k * 3] + mx * w, q[k * 3 + 1] + my * w, q[k * 3 + 2] + mz * w];
+      if (prev) L.push(prev[0], prev[1], prev[2], c[0], c[1], c[2], P[0], P[1], P[2], c[0], c[1], c[2]);
+      prev = P;
+    }
   });
   sh.ll = upload(sh.ll, new Float32Array(L), 6, [[0, 3, 0], [2, 3, 3]]);
 }

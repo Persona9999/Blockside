@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>憲法號對轟 (Constitution Broadside)</title>
+<title>Blockside（方舷）</title>
 <style>
   :root{ --modeFs:13px; --ink:#f3ead8; --dim:#b9ae98; --gold:#e8c26a; --blue:#6f9bff; --red:#ff6f6f; --panel:rgba(14,18,24,.72); }
   html,body{ margin:0; height:100%; background:#0d1218; color:var(--ink); overflow:hidden;
@@ -271,7 +271,7 @@
   <div id="ctlRow"><div id="helmL" class="helm"><span class="kb hb" data-k="a" data-hold="1" title="左舵（A，按住）"><b>A</b><i class="em">⬅️</i></span><span class="kb hb" data-k="s" data-hold="1" title="收帆（S）"><b>S</b><i class="em">⛵⬇</i></span><span class="kb hb" data-k="w" data-hold="1" title="加帆（W）"><b>W</b><i class="em">⛵⬆</i></span><span class="kb hb" id="sailT" title="自動操舵（4）：亮 ＝ 自動、暗 ＝ 手動 —— 點一下切換"><b>4</b><i class="em">🤖☸</i></span><span class="kb hb" data-k="7" id="ancP" title="左錨（7）"><b>7</b><i class="em">◀⚓</i></span></div><div id="ctl" class="panel">
     <div id="keys"><span class="kb hb" data-k="c" title="鏡頭（C）"><b>C</b><i class="em">🎥</i></span><span class="kb hb" data-k="p" id="pauseK" title="停格（P）"><b>P</b><i class="em">⏸</i></span><span class="kb hb" id="setB" title="設定（O）"><b>O</b><i class="em">⚙</i></span><span class="kb hb" data-k="6" id="ancAll" title="雙錨（6）：兩邊都沒拋 ⇒ 一起拋；一邊在水裡 ⇒ 拋另一邊；兩邊都在水裡 ⇒ 起錨"><b>6</b><i class="em">⚓⚓</i></span></div>
     <div id="guns"></div>
-    <div id="ammo"><span class="kb hb" id="ammoB" title="彈種：點一下換下一種（鍵盤 1 實心彈、2 爆裂彈、3 鏈彈）"><b>1/2/3</b><i class="em"><span class="ball"></span></i></span></div>
+    <div id="ammo"><span class="kb hb" id="ammoB" data-k="1" title="彈種：點一下或按 1 換下一種"><b>1</b><i class="em"><span class="ball"></span></i></span></div>
   </div><div id="helmR" class="helm"><span class="kb hb" data-k="8" id="ancS" title="右錨（8）"><b>8</b><i class="em">⚓▶</i></span><span class="kb hb" data-k="g" id="autoF" title="自動開砲（G）"><b>G</b><i class="em">🤖💥</i></span><span class="kb hb" data-k="f" id="fireK" title="開一門（F）"><b>F</b><i class="em">💥</i></span><span class="kb hb" data-k=" " id="volleyK" title="齊射（空白鍵）"><b>空白</b><i class="em">💥💥💥</i></span><span class="kb hb" data-k="d" data-hold="1" title="右舵（D，按住）"><b>D</b><i class="em">➡️</i></span></div></div></div>
   <!-- 第一人稱的操作面板（81_fps.js；#stage.fp 才顯示）：左下虛擬搖桿（移動；鍵盤 WASD 也行、不顯示按鍵）、右下轉頭（按住）；中間 跳、跑、爬梯子；拖曳畫面也能轉頭 -->
   <!-- 建造模式（82_build.js，TASK-0648；#stage.bld 才顯示）：準心下面一行說明、📦 目錄（分類分頁）；快捷欄在 #fpUI 裡 -->
@@ -316,7 +316,7 @@
     <div><kbd>左鍵</kbd> 點敵艦：設瞄準點（拖曳 ＝ 轉鏡頭；手機：點一下瞄準、拖曳轉鏡頭）　<kbd>右鍵</kbd> 拖曳：平移　<kbd>滾輪</kbd> 遠近（手機：雙指張合縮放、雙指一起拖平移）</div>
     <div><kbd data-k="c">🎥 C</kbd> 鏡頭：看我艦（開局預設，朝向敵艦）→ 我艦→敵艦 → 自由 → 追砲彈 → 看敵艦　<kbd data-k="v">V</kbd> 鏡頭跟船／固定</div>
     <div><kbd data-k="q">🎯 Q</kbd> 瞄準模式（⚙ 設定裡也有）：自由（點敵艦）→ 水線 → 砲甲板 → 帆具 → 甲板人員 → 彈藥庫（瞄那個模式的中心點）；自動開砲時交給砲長</div>
-    <div>彈種：<kbd data-k="1"><span class="ball"></span> 1</kbd> 實心彈：鑽得深，打水線讓船進水　<kbd data-k="2">💣 2</kbd> 爆裂彈：炸開大洞但不深，對砲傷害大　<kbd data-k="3">⛓️ 3</kbd> 鏈彈：橫掃一片，專打桅杆、繩與帆</div>
+    <div>彈種：<kbd data-k="1">1</kbd> 換下一種（輪流）—— <span class="ball"></span> 實心彈：鑽得深，打水線讓船進水　💣 爆裂彈：炸開大洞但不深，對砲傷害大　⛓️ 鏈彈：橫掃一片，專打桅杆、繩與帆</div>
     <div><kbd data-k="p">⏸ P</kbd> 停格：停住、照樣轉鏡頭；上方一條可以開 📊 圖表（I，進水）、🔍 透視（X）、✂ 剖面（Z：拿掉靠鏡頭那一半看艙內）、☰ 甲板（L：由上往下一層一層拿掉）—— 按繼續後 🔍 ✂ ☰ 保持（遊戲中照樣看得到），📊 收起；X、Z、L 不停格也能直接按（開著的寫在下方）</div>
     <div><kbd data-k="o">⚙ O</kbd> 設定（暫停）：繼續、重新開始、回主選單、自爆（我艦的彈藥庫由小到大一間一間引爆 —— 相當於重開，先看煙花）、說明、瞄準模式、畫質與物理效果、帆繩物理（B）、鏡頭跟船、靜音（M）、FPS、全螢幕、殉爆的慢動作與特寫</div>
     <div><kbd data-k="n">N</kbd> 重新開始（同樣的設定）　<kbd data-k="r">R</kbd> 回選單　<kbd data-k="h">H</kbd> 說明（打開時暫停；點外面、✕ 或 Esc 關掉）</div>
@@ -354,7 +354,7 @@
   <div id="cover">
     <button id="pgX" aria-label="返回主選單">返回</button><!-- 細節、畫質、物理、船隻配置頁：右上角固定的返回（Tim 2026-10-14：不用捲到底才按得到、不跟著捲） -->
     <div class="card panel">
-      <h1>憲法號對轟</h1>
+      <h1>Blockside</h1><!-- Tim 2026-10-16：「網頁中的遊戲名稱 可以改成Blockside了」（存檔鍵 ame_constitution_broadside、匯出檔名照舊 ⇒ 舊存檔照樣讀得到） -->
       <div class="row" id="modes">
         <button data-m="pve" class="on">對戰電腦</button><button data-m="eve">觀戰（自動開砲）</button><button data-m="sandbox">沙盒（敵艦不還手）</button><button data-m="build">🔨 建造</button>
       </div>
@@ -378,8 +378,8 @@
       <div class="row"><button id="shipB">船隻配置…</button><button id="gunB">砲的設定…</button><button id="furnB">道具設定…</button><button id="detB">細節設定…</button></div>
       <div class="row"><button class="go" id="go" disabled>載入中…</button></div>
       <!-- 說明與細節設定的摘要放在開戰鈕下面（Tim 2026-10-13：手機上開戰鈕被擠到畫面外、要捲才看得到） -->
-      <div class="sub">Constitution Broadside —— 兩艘 1:1 的憲法號（0.1 公尺一格）互轟，船殼一格一格被打碎、桅杆打得斷、破洞進水會沉。<br>
-        素材：basecamp 的雕刻作品《憲法號（組裝）》</div>
+      <div class="sub">Blockside（方舷）—— 雕刻作品做成的船，1:1（0.1 公尺一格）互轟：船殼一格一格被打碎、桅杆打得斷、破洞進水會沉。<br>
+        素材：雕刻作品（每一艘的作者在「船隻配置…」）</div>
       <div class="row" id="detV"></div>
       <div id="load"></div>
     </div>
@@ -2817,8 +2817,9 @@ function buildRig(owner) {          // 還綁著的繩（靜態，照雕刻作�
     if (PHYS && c && c.p && !c.hidden) return;
     s.lines.forEach(function (j) { hide[j] = 1; });
   });
+  var tj = PHYS && owner.tJ, tc = PHYS && owner.tCut;                  // 跟著帆腳走的 sheet、tack（30_rig_physics.js tethOf）：looseBuf 每一格畫；tCut：帆腳被打掉、已經垂下來的（tethCut）
   owner.ropes.forEach(function (r, j) {
-    if (r.dead || hide[j]) return;
+    if (r.dead || hide[j] || tj && tj[j] || tc && tc[j]) return;
     for (var j = 0; j + 5 < r.pts.length; j += 3) L.push(r.pts[j], r.pts[j + 1], r.pts[j + 2], r.col[0], r.col[1], r.col[2], r.pts[j + 3], r.pts[j + 4], r.pts[j + 5], r.col[0], r.col[1], r.col[2]);
   });
   owner.lines = upload(owner.lines, new Float32Array(L), 6, [[0, 3, 0], [2, 3, 3]]);
@@ -2848,11 +2849,19 @@ function sailBuf(ow) {
     if (SBV.length < mv * SB_STRIDE) SBV = new Float32Array(Math.ceil(mv * 1.33) * SB_STRIDE);
     if (SBI.length < mi) SBI = new Uint32Array(Math.ceil(mi * 1.33));
   }
+  var td = [], tk = '';                                                  // 這一格跟著帆腳畫的繩（looseBuf）
   (ow.cl || []).forEach(function (c, k) {
-    if (isShip) { var s = ow.sails[k]; if (PHYS ? (!c.p || c.hidden || c.gone) : (s.dead || s.furled)) return; }
-    put((PHYS || !isShip) && c.p ? (isShip && c.furlF !== null && c.furlF !== undefined ? furlDraw(c, clothFine(c, SBP), c.furlF) : clothFine(c, SBP)) : c.T.p0,   // furlDraw：收帆張帆的演出（30_rig_physics.js）
-        c.T.n, c.T.tris, c.T.col, c.torn ? c.tv : null, c.T.vcol, c.T.uv, A && c.T.ti !== undefined ? sailRect(ow, A, c.T.ti) : null);
+    var P;
+    if (isShip) {
+      var s = ow.sails[k], keep = furlKeep(s) && (PHYS ? !c.gone && !c.loose && (!c.p || c.hidden) : true);   // 收好的帆留一捲（30_rig_physics.js furlBundle；只是畫）
+      if (!keep && (PHYS ? (!c.p || c.hidden || c.gone) : (s.dead || s.furled))) return;
+      if (keep) { P = furlBundle(ow, c, SBP); var lost = furlLost(ow, s, c); }   // lost：靠的帆桁、格不在了的那幾點不畫（30_rig_physics.js furlLost）
+    }
+    if (!P) P = (PHYS || !isShip) && c.p ? (isShip && c.furlF !== null && c.furlF !== undefined ? furlDraw(c, clothFine(c, SBP), c.furlF, ow) : clothFine(c, SBP)) : c.T.p0;   // furlDraw：收帆張帆的演出（30_rig_physics.js）
+    if (isShip && PHYS && c.tt && c.p && !c.hidden && !c.gone && !c.loose) c.tt.forEach(function (t) { if (ow.ropes[t.j].dead || ow.tCut && ow.tCut[t.j]) return; var o = t.i * 3; td.push({ t: t, x: P[o], y: P[o + 1], z: P[o + 2] }); tk += t.j + ','; });   // 畫出來的帆腳（收帆演出時也是）
+    put(P, c.T.n, c.T.tris, c.T.col, keep ? lost : c.torn ? c.tv : null, c.T.vcol, c.T.uv, A && c.T.ti !== undefined ? sailRect(ow, A, c.T.ti) : null);
   });
+  if (isShip) { ow.tDraw = td; if (tk !== (ow.tKey || '')) { ow.tKey = tk; ow.tJ = {}; td.forEach(function (d) { ow.tJ[d.t.j] = 1; }); ow.rigDirty = true; } }   // 換了哪幾條 ⇒ 下一格 buildRig 重做（不畫那幾條）
   if (F) F.forEach(function (f) { put(f.p, f.n, f.T.sim.tris, f.col, null, null, f.uv, A && f.uv && f.ti !== undefined ? sailRect(ow, A, f.ti) : null); });   // 布片：有貼圖的帆撕下來的照原處的圖（34_shreds.js shredCut 記 uv）
   function put(p, n, tr, col, tv, vc, uv, r) {                            // tv：藏起來的細格點（撕開的洞）；vc：每個頂點的顏色（沒有貼圖集時的退路，30_rig_physics.js texColors）；uv＋r：貼圖集的那一格
     var base = nv, j, i;
@@ -2900,6 +2909,14 @@ function looseBuf(sh) {
   sh.loose.forEach(function (o) {
     var p = o.p, c = o.col;
     for (var i = 0; i + 1 < o.n; i++) { var a = i * 3; L.push(p[a], p[a + 1], p[a + 2], c[0], c[1], c[2], p[a + 3], p[a + 4], p[a + 5], c[0], c[1], c[2]); }
+  });
+  (sh.tDraw || []).forEach(function (d) {                               // 跟著帆腳走的 sheet、tack（sailBuf 記的畫出來的帆腳）：靠帆腳那一端移到帆腳、另一端不動、中間照弧長內插
+    var t = d.t, r = sh.ropes[t.j], q = r.pts, c = r.col, e = t.ce * 3, mx = d.x - q[e], my = d.y - q[e + 1], mz = d.z - q[e + 2], m = q.length / 3, prev = null;
+    for (var k = 0; k < m; k++) {
+      var w = t.t[k], P = [q[k * 3] + mx * w, q[k * 3 + 1] + my * w, q[k * 3 + 2] + mz * w];
+      if (prev) L.push(prev[0], prev[1], prev[2], c[0], c[1], c[2], P[0], P[1], P[2], c[0], c[1], c[2]);
+      prev = P;
+    }
   });
   sh.ll = upload(sh.ll, new Float32Array(L), 6, [[0, 3, 0], [2, 3, 3]]);
 }
@@ -3744,7 +3761,7 @@ function mountRot(p, c, a) { var d = M4.dir(rotM([0, 0, 1], a), p[0] - c[0], p[1
 /** 每一步（50_sim.js，在開砲之前）：有迴旋的砲照瞄準點挑方向、照轉速轉；轉了 ⇒ 砲軸、砲口、站位、人跟著轉。 */
 function mountStep(sh, dt) {
   var G = sh.mounts; if ((!G && !sh.tur) || sh.sunk || sh.struck) return;
-  var tgt = aimPoint(sh), foe = aimShip(sh), L = tgt ? toLocal(sh, tgt) : foe && foe.M ? toLocal(sh, M4.pt(foe.M, foe.T.cx, foe.T.cy, foe.T.zw)) : null;
+  var tgt = foeOf(sh) ? aimPoint(sh) : null, foe = aimShip(sh), L = tgt ? toLocal(sh, tgt) : foe && foe.M ? toLocal(sh, M4.pt(foe.M, foe.T.cx, foe.T.cy, foe.T.zw)) : null;   // 沒有敵艦（建造模式、只有一艘的沙盒）⇒ 不問瞄準點（⛔ aimPoint 讀 foe.M ⇒ 有迴旋砲的船每一步例外）；砲照原本的方向
   if (sh.tur) turretStep(sh, dt, L);                                   // 砲塔層（27_turret.js）：砲塔、上面的砲（自己會轉、掛在砲塔上的也在那裡轉）
   if (G) G.forEach(function (g) {
     var M = g.mt; if (!g.alive || !L || M.up) return;
@@ -4012,6 +4029,7 @@ function blowModel(sh, m, vel, drop, at) {
     w: drop ? [gauss() * 0.4, 0, gauss() * 0.4] : [gauss() * 4, gauss() * 4, gauss() * 4] });
   sh.guns.forEach(function (g) { if (g.model === m) g.alive = false; });
   sh.ropes.forEach(function (r) { if (!r.dead && r.mods && r.mods.indexOf(m.k) >= 0) { r.dead = true; sh.rigDirty = true; } });
+  if (m.yk) sh.rigDirty = true;                                          // 帆桁飛了 ⇒ 收在它上面的那一捲不畫（30_rig_physics.js furlLost；只是畫面旗標，物理關著也要重做）
   if (!drop && m.kind !== 'powder') {
     // 砲班跟著受傷（TASK-0568；Tim 2026-10-15）：那門砲的砲班另外算一次，3.5 m 內照距離遞減（0.7 m 內全吃）；其他人照舊 1.5 m。
     //   砲班從第一次排掉（⛔ 不排 ⇒ 站得近的被算兩次）。細節設定關掉（GUN_CREW_HURT）⇒ 完全照舊。
@@ -5966,7 +5984,7 @@ function clothStep(sh, c, wl, gv) {                    // c.kw：風壓倍率（
     for (x = 0; x < 3; x++) { var cur = p[o + x], vel = (cur - q[o + x]) * dmp; q[o + x] = cur; p[o + x] = cur + vel + (A[o + x] * kk + gv[x]) * dt2; }
     if (c.loose) hitGrid(sh.grid, p, q, o);
   }
-  for (var it = 0, itn = rigLv().it; it < itn; it++) { solve(T.ea, T.eb, T.rest, c.torn ? c.brk : null, p, pin, 1); if (it & 1) solve(T.ba, T.bb, T.brest, c.torn ? c.bbrk : null, p, pin, 0.5); }
+  for (var it = 0, itn = rigLv().it; it < itn; it++) { solve(T.ea, T.eb, T.rest, c.torn ? c.brk : null, p, pin, 1); if (it & 1) solve(T.ba, T.bb, T.brest, c.torn ? c.bbrk : null, p, pin, 0.5); if (c.tt) tethSolve(sh, c); }   // c.tt：帆腳被 sheet 拉住（tethOf）
 }
 /** 剛斷的繩 ⇒ 垂下來的繩：重新取樣（每段 ≤ SEG 格，原本的弧度與鬆緊照留），兩端各記著靠什麼；被打斷的從斷點分成兩段。 */
 function spawnLoose(sh, r) {
@@ -6057,7 +6075,7 @@ function physStep(sh) {
   var ccOn = PHX.sailhit > 0 && PHX.rig >= 3;                       // 帆的碰撞（09_phx.js；Tim 2026-10-15：選項、預設關、帆與繩「高」才算）
   if (sh.yards.length) { braceYards(sh, wl, DT); if (chk) yardRopes(sh); }
   if (sh.hangs) swingHangs(sh, gv);
-  for (i = 0; i < sh.ropes.length; i++) { var r = sh.ropes[i]; if (r.dead && !r.lz) { r.lz = true; if (!r.moved) spawnLoose(sh, r); } }
+  for (i = 0; i < sh.ropes.length; i++) { var r = sh.ropes[i]; if (r.dead && !r.lz) { r.lz = true; if (!r.moved && !(sh.tCut && sh.tCut[i])) spawnLoose(sh, r); } }   // tCut：帆腳被打掉時已經垂下來了（tethCut）⇒ 不生第二條
   sh.sails.forEach(function (s, k) {
     var c = sh.cl[k];
     var seen = c.seen; c.seen = true;
@@ -6074,6 +6092,9 @@ function physStep(sh) {
     } else if (c.furlF !== null && c.furlF !== undefined && !c.hidden) { c.furlF += DT / FURL_OUT; if (c.furlF >= 1) c.furlF = null; }   // 張帆（或收到一半又張）：從帆桁放下來
     var reopen = seen && c.hidden === true && !s.furled;               // 開局初次啟用不是重新張帆；makeShip 確實以 hidden:true 建立
     if (c.hidden || !c.p) { var keep = c.p && c.torn ? { brk: c.brk, bbrk: c.bbrk, tv: c.tv } : null; clothInit(c); c.hidden = false; if (keep) { c.brk = keep.brk; c.bbrk = keep.bbrk; c.tv = keep.tv; c.torn = true; } if (reopen) { c.furlF = 0; sh.rigDirty = true; } }   // 收帆再張：形狀重來、破洞留著；從收攏的樣子放下來（furlF 0 → 1）
+    if (c.tt === undefined) { var tl = tethOf(sh, s, c); c.tt = tl.length ? tl : null; }
+    if (c.tt) for (var ti = 0; ti < c.tt.length; ti++) c.pin[c.tt[ti].i] = 0;   // 帆腳不釘：交給布、被 sheet 拉住（clothInit 每次照 hk 釘回去 ⇒ 每一步放開）
+    if (c.tt && c.torn && chk && !c.loose) tethCut(sh, c);                // 帆腳那一塊被打掉 ⇒ 那幾條繩跟帆斷開、垂下來
     if (chk || c.npin < 0) clothPins(sh, s, c);
     yardPins(sh, c);
     c.ev = evk;
@@ -6099,7 +6120,7 @@ function setPhys(on) {
   if (on && !PHX.rig) PHX.rig = PHX_RIG_LAST; else if (!on && PHX.rig) { PHX_RIG_LAST = PHX.rig; PHX.rig = 0; }   // 物理分級的「帆與繩」跟著走（09_phx.js）
   $('physT').classList.toggle('on', on); if (typeof phxShow === 'function' && $('phxB')) phxShow();
   SHIPS.forEach(function (sh) {
-    sh.loose = []; sh.shreds = [];
+    sh.loose = []; sh.shreds = []; sh.tCut = {};
     if (!on) { (sh.yards || []).forEach(function (m) { m.rot = 0; }); if (sh.yRopes) yardRopes(sh, true); unswingHangs(sh); }   // 關 ⇒ 帆桁回到作品的角度、小艇不擺
     sh.ropes.forEach(function (r) { r.lz = !!(r.never || r.moved); });
     sh.cl.forEach(function (c, k) { c.p = null; c.hidden = true; c.loose = false; c.torn = false; c.gone = !!c.moved; c.late = sh.sails[k].dead; });
@@ -6115,31 +6136,129 @@ var CLOTH_CONTACT_MARGIN = 0.12;
 // 收帆、張帆的演出（Tim 2026-10-15：「開啟帆繩物理時，收帆放帆是否可以多一小段演出（不影響判斷）」）：只改畫出來的樣子（11_rig_gpu.js sailBuf → furlDraw）。
 //   c.furlF ＝ 張開了幾成（1 張開、0 收攏；null ＝ 沒在演）；收帆 FURL_IN 秒、張帆 FURL_OUT 秒。物理照常走、判斷照 s.furled 立刻生效。
 var FURL_IN = 1.2, FURL_OUT = 1.6;
-/** 畫面上收攏：每個細格點往它的「收攏點」（模板 T.gath：最近的綁在帆桁上的點；沒有帆桁 ⇒ 最近的綁點）靠過去，f ＝ 張開幾成（緩動）。 */
-function furlDraw(c, P, f) {
-  var T = c.T, g = T.gath;
-  if (!g) {                                                           // 第一次用到才算（模板共用；用設計那一刻的形狀找最近的）
-    var pins = [], yard = []; for (var i = 0; i < T.n; i++) if (T.hk[i]) { pins.push(i); if (T.hk[i] === 4) yard.push(i); }
-    var src = yard.length ? yard : pins; g = T.gath = new Int32Array(T.n).fill(-1);
-    if (src.length) for (i = 0; i < T.n; i++) { var bd = 1e18; for (var j = 0; j < src.length; j++) { var q = src[j], dx = T.p0[i * 3] - T.p0[q * 3], dy = T.p0[i * 3 + 1] - T.p0[q * 3 + 1], dz = T.p0[i * 3 + 2] - T.p0[q * 3 + 2], d = dx * dx + dy * dy + dz * dz; if (d < bd) { bd = d; g[i] = q; } } }
-    // Keep the first material row at its full distance from the fastening.
-    // Shrinking every row into the yard's centre buries the furled cloth in wood.
-    var source = new Set(src), floor = T.gathFloor = new Float32Array(T.n);
-    for (var ti = 0; ti < T.tris.length; ti += 3) for (var e = 0; e < 3; e++) {
-      var a = T.tris[ti + e], b = T.tris[ti + (e + 1) % 3];
-      if (source.has(a) === source.has(b)) continue;
-      var free = source.has(a) ? b : a, target = g[free]; if (target < 0) continue;
-      floor[target] = Math.max(floor[target], Math.hypot(T.p0[free * 3] - T.p0[target * 3], T.p0[free * 3 + 1] - T.p0[target * 3 + 1], T.p0[free * 3 + 2] - T.p0[target * 3 + 2]));
-    }
+/** 收攏點（模板共用；第一次用到才算，用設計那一刻的形狀找最近的）：T.fg[i] ＝ 細格點 i 往哪一個收攏點收，T.fgFloor 第一排留的距離，T.fmv ＝ 不是收攏點的綁點（跟著收）。
+ *  帆腳（T.clew：只綁在繩上、旁邊沒有別的綁點的那一點 ＝ sheet 綁的角）一定跟著收（實船的 clewline 把帆腳拉上帆桁）；下帆桁（boom）上的綁點也是（brail 把帆往桅、斜桁收）。
+ *  收攏點挑哪一組（Tim 2026-10-16 截圖：「新的收帆算法 無法收這面帆」—— spanker 收完還剩 84%）：照順序試 ① 帆桁 ② 帆桁＋綁在桅、船身上的那一條邊（hk 1／3、旁邊也是綁點）③ 每一個綁點，
+ *    挑收到底（f ＝ 0）面積最小的；後面的要小 5% 以上才換（一樣小就照前面的）。
+ *  ⛔ 以前固定 ①、其他綁點照原樣不動：spanker 前緣綁在桅上 ⇒ 從桅拉到兩根帆桁的三角形整片撐開（量到 13 艘裡 spanker 類 64–85%）；
+ *  ⛔ 固定 ③：側邊綁在繩上的方帆往側邊收（暴風角號 fore-course 62%、拿破崙號上層方帆 19–27%）。
+ *  ⛔ 舊的 T.gath 帆腳不收：收到底帆桁下面拉出兩條細長的三角形到帆腳（演完就藏所以看不出來；收好的帆留著一捲 ⇒ 看得到）。 */
+function furlGath(T, sh) {
+  if (T.fg) return T.fg;
+  var cl = T.clew = new Uint8Array(T.n), nb = new Uint8Array(T.n), bm = new Uint8Array(T.n), i;
+  for (var ti = 0; ti < T.tris.length; ti += 3) for (var e = 0; e < 3; e++) { var a = T.tris[ti + e], b = T.tris[ti + (e + 1) % 3]; if (T.hk[a] && T.hk[b]) { nb[a] = 1; nb[b] = 1; } }
+  for (i = 0; i < T.n; i++) if (T.hk[i] === 2 && !nb[i]) cl[i] = 1;
+  if (sh && sh.models) for (i = 0; i < T.n; i++) if (T.hk[i] === 4 && sh.models[T.hv[i]] && sh.models[T.hv[i]].yk === 'boom') bm[i] = 1;
+  var yard = [], edge = [], all = [];
+  for (i = 0; i < T.n; i++) { if (!T.hk[i] || cl[i] || bm[i]) continue; all.push(i); if (T.hk[i] === 4) yard.push(i); else if ((T.hk[i] === 1 || T.hk[i] === 3) && nb[i]) edge.push(i); }
+  var cands = []; if (yard.length) { cands.push(yard); if (edge.length) cands.push(yard.concat(edge)); } if (!cands.length || all.length > cands[cands.length - 1].length) cands.push(all);
+  var best = null; cands.forEach(function (S) { var r = furlTry(T, S); if (!best || r.area < best.area * 0.95) best = r; });
+  T.fgFloor = best.floor; T.fmv = best.mv; T.fgN = best.S.length;
+  return (T.fg = best.g);
+}
+/** 一組收攏點 S ⇒ 最近的收攏點 g、第一排留的距離 floor、跟著收的綁點 mv、收到底的面積。 */
+function furlTry(T, S) {
+  var n = T.n, g = new Int32Array(n).fill(-1), floor = new Float32Array(n), mv = new Uint8Array(n), src = new Set(S), i, j, p = T.p0;
+  if (S.length) for (i = 0; i < n; i++) { var bd = 1e18; for (j = 0; j < S.length; j++) { var q = S[j], dx = p[i * 3] - p[q * 3], dy = p[i * 3 + 1] - p[q * 3 + 1], dz = p[i * 3 + 2] - p[q * 3 + 2], d = dx * dx + dy * dy + dz * dz; if (d < bd) { bd = d; g[i] = q; } } }
+  for (i = 0; i < n; i++) if (T.hk[i] && !src.has(i)) mv[i] = 1;
+  // Keep the first material row at its full distance from the fastening.
+  // Shrinking every row into the yard's centre buries the furled cloth in wood.
+  for (var ti = 0; ti < T.tris.length; ti += 3) for (var e = 0; e < 3; e++) {
+    var a = T.tris[ti + e], b = T.tris[ti + (e + 1) % 3];
+    if (src.has(a) === src.has(b)) continue;
+    var free = src.has(a) ? b : a, target = g[free]; if (target < 0) continue;
+    floor[target] = Math.max(floor[target], Math.hypot(p[free * 3] - p[target * 3], p[free * 3 + 1] - p[target * 3 + 1], p[free * 3 + 2] - p[target * 3 + 2]));
   }
+  var P = Float32Array.from(p);
+  for (i = 0; i < n; i++) {
+    var t = g[i]; if (t < 0 || t === i || T.hk[i] && !mv[i]) continue;
+    var rest = Math.hypot(p[i * 3] - p[t * 3], p[i * 3 + 1] - p[t * 3 + 1], p[i * 3 + 2] - p[t * 3 + 2]), fr = Math.max(0.04, Math.min(1, floor[t] / (rest || 1)));
+    for (var x = 0; x < 3; x++) P[i * 3 + x] = P[t * 3 + x] + (p[i * 3 + x] - p[t * 3 + x]) * fr;
+  }
+  var A = 0; for (j = 0; j < T.tris.length; j += 3) { var u = T.tris[j] * 3, v = T.tris[j + 1] * 3, w = T.tris[j + 2] * 3, ux = P[v] - P[u], uy = P[v + 1] - P[u + 1], uz = P[v + 2] - P[u + 2], vx = P[w] - P[u], vy = P[w + 1] - P[u + 1], vz = P[w + 2] - P[u + 2]; A += Math.hypot(uy * vz - uz * vy, uz * vx - ux * vz, ux * vy - uy * vx); }
+  return { S: S, g: g, floor: floor, mv: mv, area: A };
+}
+/** 畫面上收攏：每個細格點往它的收攏點（furlGath）靠過去，f ＝ 張開幾成（緩動）。 */
+function furlDraw(c, P, f, sh) {
+  var T = c.T, g = furlGath(T, sh), mv = T.fmv, i;
   var e = f * f * (3 - 2 * f), k = 0.04 + 0.96 * e;                     // 收到底留 4%（一捲布，不是一條線）
   for (i = 0; i < T.n; i++) {
-    var a = g[i]; if (a < 0 || a === i || T.hk[i]) continue; // Rendering must preserve every authored fastening, including rope/body pins.
+    var a = g[i]; if (a < 0 || a === i || T.hk[i] && !mv[i]) continue; // Rendering must preserve every authored fastening, including rope/body pins.（帆腳、下帆桁除外，見 furlGath）
     var rest = Math.hypot(T.p0[i * 3] - T.p0[a * 3], T.p0[i * 3 + 1] - T.p0[a * 3 + 1], T.p0[i * 3 + 2] - T.p0[a * 3 + 2]);
-    var fraction = Math.max(k, Math.min(1, (T.gathFloor && T.gathFloor[a] || 0) / (rest || 1)));
+    var fraction = Math.max(k, Math.min(1, (T.fgFloor[a] || 0) / (rest || 1)));
     for (var ax = 0; ax < 3; ax++) P[i * 3 + ax] = P[a * 3 + ax] + (P[i * 3 + ax] - P[a * 3 + ax]) * fraction;
   }
   return P;
+}
+// 收好的帆留一捲（Tim 2026-10-16：「收帆完成後帆會完全消失 是否能保持在最後剩一點點帆的狀態(比較寫實) 但是實際上打不到帆布(物理跟原本完全收起來一樣)」）：
+//   只是畫：收到底那個樣子（furlDraw f ＝ 0）照設計的形狀算、跟著帆桁轉；判斷照舊 s.furled（航速、命中、鏈彈、帆的碰撞都當它不在）。物理關著也畫。
+//   ⛔ 旗不留（降旗 strikeColors 也是 furled）；掉了（s.dead）不留。
+function furlKeep(s) { return s.furled && !s.dead && !s.flag; }
+/** 收好的那一捲：out ＝ 細格位置（設計的形狀；綁點與往它收的點照那根帆桁現在轉了多少轉）。 */
+function furlBundle(sh, c, out) {
+  var T = c.T, g = furlGath(T, sh), yk = T.sim.yk, mv = T.fmv, rot = sh && yk && T.sim.n === T.n && sh.yards && sh.yards.some(function (m) { return m.rot; });
+  for (var i = 0; i < T.n; i++) {
+    var o = i * 3, y = rot ? (T.hk[i] && !mv[i] ? yk[i] : g[i] >= 0 ? yk[g[i]] : -1) : -1, m = y >= 0 ? sh.models[y] : null;
+    if (m && m.rot) { var w = rotZ([T.p0[o], T.p0[o + 1], T.p0[o + 2]], m.piv, m.rot); out[o] = w[0]; out[o + 1] = w[1]; out[o + 2] = w[2]; }
+    else { out[o] = T.p0[o]; out[o + 1] = T.p0[o + 1]; out[o + 2] = T.p0[o + 2]; }
+  }
+  return furlDraw(c, out, 0, sh);
+}
+/** 收好的那一捲哪幾點不畫（Tim 2026-10-16 截圖：「且會浮空」—— 收著的帆不會因為帆桁、桅被打掉而算掉了（32_hull.js：收著的帆不怕），那一捲照畫在原處）：
+ *  每一點往它的收攏點收（綁點自己 ＝ 自己）；那個綁點靠的東西（格、繩、帆桁）不在了 ⇒ 那一點不畫（碰到它的三角形不畫）。帆的破洞照舊不畫。null ＝ 全畫。 */
+function furlLost(sh, s, c) {
+  var T = c.T, g = furlGath(T, sh), mv = T.fmv, out = null, ok = {};
+  for (var i = 0; i < T.n; i++) {
+    var a = T.hk[i] && !mv[i] ? i : g[i], lost = c.torn && c.tv && c.tv[i];
+    if (!lost && a >= 0) { var key = T.hk[a] + ':' + T.hv[a]; if (!(key in ok)) ok[key] = holds(sh, s, T.hk[a], T.hv[a]); lost = !ok[key]; }
+    if (lost) (out || (out = new Uint8Array(T.n)))[i] = 1;
+  }
+  return out;
+}
+// 帆腳跟 sheet 連動（Tim 2026-10-16：「帆跟纜線綁在一起時 物理是否可以連動 目前好像是一起固定在空中的固定點」）：
+//   帆腳（furlGath 的 T.clew）不再釘在作品的位置：交給布的物理，只多一條「離 sheet 另一端（綁甲板、下一根帆桁）不超過作品那一刻的距離」⇒ 被風吹得動、被繩拉住。
+//   帆自己的每一條繩（s.lines：sheet、tack）端點在帆腳 1 m 內的都算（course 一角有 sheet 也有 tack ⇒ 兩條一起拉）。
+//   畫：那幾條繩靠帆腳那一端跟著畫出來的帆腳走（照弧長內插，另一端不動；looseBuf 畫、buildRig 不畫那幾條）。
+//   ⛔ 只管畫出來的樣子：繩的 r.pts 不動（打繩照作品的位置判 ⇒ 同一個種子開或關物理照樣走出同一局）。繩斷了 ⇒ 那一條不拉。
+var TETH_R = 10;
+/** 帆腳的繩（模板共用，第一次用到才算）：[{ i 帆腳, j 繩, ce 靠帆腳那一端（點的序號）, fe 另一端, L 最長距離, t 每一點從另一端算起的弧長比例 }]。 */
+function tethOf(sh, s, c) {
+  var T = c.T; if (T.teth !== undefined) return T.teth;
+  furlGath(T, sh); var list = [];
+  if (T.sim.n === T.n) for (var i = 0; i < T.n; i++) if (T.clew[i]) (s.lines || []).forEach(function (j) {
+    var q = sh.ropes[j].pts0 || sh.ropes[j].pts, m = q.length / 3; if (m < 2) return;
+    function d(k) { return Math.hypot(q[k * 3] - T.p0[i * 3], q[k * 3 + 1] - T.p0[i * 3 + 1], q[k * 3 + 2] - T.p0[i * 3 + 2]); }
+    var d0 = d(0), d1 = d(m - 1); if (Math.min(d0, d1) > TETH_R) return;
+    var ce = d0 <= d1 ? 0 : m - 1, fe = m - 1 - ce, t = new Float32Array(m), acc = new Float32Array(m), k;
+    for (k = 1; k < m; k++) { var a = fe ? m - 1 - k : k, b = fe ? a + 1 : a - 1; acc[k] = acc[k - 1] + Math.hypot(q[a * 3] - q[b * 3], q[a * 3 + 1] - q[b * 3 + 1], q[a * 3 + 2] - q[b * 3 + 2]); }   // acc[k]：從另一端走到第 k 點（照走的順序）
+    for (k = 0; k < m; k++) t[fe ? m - 1 - k : k] = acc[m - 1] > 0 ? acc[k] / acc[m - 1] : 1;
+    var es = []; for (k = 0; k < T.sim.ea.length; k++) if (T.sim.ea[k] === i || T.sim.eb[k] === i) es.push(k);   // es：帆腳的布邊（全斷 ⇒ 帆腳跟帆斷開，tethCut）
+    list.push({ i: i, j: j, ce: ce, fe: fe, L: d(fe), t: t, es: es });
+  });
+  return (T.teth = list);
+}
+// 帆腳那一塊布被打掉（Tim 2026-10-16 兩張截圖：「發現了繩索浮空」—— 量到：撕掉帆腳的那一塊 ⇒ 帆腳那一點藏起來、布邊全斷，
+//   還被 sheet 拉著一路往下掉（三角帆 18–23 m），繩畫到一個看不見的點上；以前帆腳釘著 ⇒ 繩頭停在作品那一點的空中）：
+//   ⇒ 那條繩跟帆斷開：不再拉、不再跟著帆腳畫，變成一條垂下來的繩（靠帆腳那一端放開、另一端照原本靠的東西；spawnLoose 的 offSail）。
+//   sh.tCut[j]：這艘船這條繩已經斷開了（只是畫：r.dead 不動；之後真的斷了不再生第二條；setPhys 清掉）。
+function tethCut(sh, c) {
+  for (var k = 0; k < c.tt.length; k++) {
+    var t = c.tt[k], r = sh.ropes[t.j]; if (r.dead || sh.tCut && sh.tCut[t.j]) continue;
+    var gone = !!c.tv[t.i]; if (!gone) { gone = true; for (var e = 0; e < t.es.length; e++) if (!c.brk[t.es[e]]) { gone = false; break; } }
+    if (!gone) continue;
+    (sh.tCut || (sh.tCut = {}))[t.j] = 1; sh.rigDirty = true;
+    var q = r.pts, ce = t.ce * 3;
+    spawnLoose(sh, { pts: q, a: r.a, ma: r.ma, pa: r.pa, b: r.b, mb: r.mb, pb: r.pb, col: r.col, offSail: { verts: [q[ce], q[ce + 1], q[ce + 2]] } });
+  }
+}
+/** 帆腳離繩的另一端超過 L ⇒ 拉回 L（另一端照繩現在的位置：綁在帆桁上的跟著帆桁轉）。clothStep 每一輪約束之後。 */
+function tethSolve(sh, c) {
+  var tt = c.tt, p = c.p;
+  for (var k = 0; k < tt.length; k++) {
+    var t = tt[k], r = sh.ropes[t.j]; if (r.dead || sh.tCut && sh.tCut[t.j]) continue;
+    var q = r.pts, f = t.fe * 3, o = t.i * 3, dx = p[o] - q[f], dy = p[o + 1] - q[f + 1], dz = p[o + 2] - q[f + 2], l = Math.sqrt(dx * dx + dy * dy + dz * dz);
+    if (l > t.L && l > 1e-9) { var s = t.L / l; p[o] = q[f] + dx * s; p[o + 1] = q[f + 1] + dy * s; p[o + 2] = q[f + 2] + dz * s; }
+  }
 }
 // 效能（ame 2026-10-15，Tim：「接手效能，在她的碰撞做法上加篩選和降頻」；碰撞的做法本身照 Sirius 的）：
 //   · 開關：物理設定「帆的碰撞」（09_phx.js），預設關、帆與繩「高」才算；關 ⇒ 一行都不跑。
@@ -8123,7 +8242,13 @@ function flFalls(sh, fl, me, TI, tops) {
  *    模擬照算；畫面每 FL_MESH_MS 毫秒（真實時間）做一格關鍵格，兩格之間著色器照 uMix 從上一格的高度內插過去（⛔ 每次水格算完就重做 ⇒ 粗檔每 4 步、細檔每 2 步重建一次）。
  *    拓撲（哪幾格、每格切成哪幾片）跟上一格一樣 ⇒ 從畫面上現在的高度接著內插（水面慢慢升降）；不一樣（新的格進水、水退了）⇒ 直接換。
  *  代價：畫面的水比模擬晚最多一格；兩格之間船晃動，水面跟著船斜一下（網格在船的座標裡）。 */
-var FL_MESH_MS = 500, FL_FLAT = 1;
+var FL_MESH_MS = 500, FL_FLAT = 0;
+// 跨水體相連（TASK-0654 第二輪；Tim 2026-10-16：「兩片水之間有高低差 沒有瀑布遮擋」「應該要變成一整片水體mesh才對」「或是可以跨水體相連(mesh平滑過度)」）：
+//   FL_JOIN（公尺）：相鄰水面差在這以內 ⇒ 同一個水體（⛔ 以前差半格就分成兩池，各自一個平面 ⇒ 憲法號細檔破口邊 0.66–0.69 m 的落差中間露出一條地板）；甲板上下兩層差得比這遠，不會連起來。
+//   FL_FLAT 0：角高 ＝ 這一角四周、同一個水體的水面平均，再跟鄰角平均 FL_SMOOTH 次 ⇒ 落差變成連續的斜坡（同一個角兩邊共用，不會裂）；平的地方照舊是平的。
+//   FL_THIN：水格裝了幾成以上才畫水面（以前 0.02；太淺的照樣畫、交給深度吸光淡出 ⇒ 兩片水中間那條「薄水」帶也接得起來）。
+var FL_JOIN = 1.2, FL_SMOOTH = 1, FL_THIN = 0.002;
+if (Q.get('fljoin') === '0') { FL_FLAT = 1; FL_JOIN = -1; FL_SMOOTH = 0; FL_THIN = 0.02; }   // ?fljoin=0：舊的畫法（差半格就分池、每池一個平面）—— 前後對照用
 // 量測（TASK-0654；只給 81_floodlab.js 的進水報表，平常兩個都是 false ⇒ 一位元都不多算）：
 //   FL_SNAP ＝ 每次都重做、不內插（截圖跟那一刻的水對得上）；FL_STAT ＝ 每次重做順便分類接縫（me.stat）。
 var FL_SNAP = false, FL_STAT = false;
@@ -8139,8 +8264,8 @@ function flMesh(sh, fl) {
   var TI = me.ti && me.ti.length === F.N ? me.ti : (me.ti = new Int32Array(F.N).fill(-1)), tops = me.tops || (me.tops = []), S3 = S * S * S, op = fl.op;
   for (t = 0; t < tops.length; t += 2) TI[tops[t]] = -1; tops.length = 0;
   for (t = 0; t < fl.actN; t++) {
-    i = fl.act[t]; if (!(cap[i] > 0.02) || A[i] < 0.02 * cap[i] * Vc) { if (FL_STAT && A[i] > 1e-6) (me.thin || (me.thin = [])).push(i); continue; }   // thin：有水但太薄、沒畫（接縫地圖用）
-    u = i + NXY; if (u < F.N && cap[u] > 0.02 && A[u] >= 0.02 * cap[u] * Vc) continue;          // 上面那一格也有水 ⇒ 不是水面
+    i = fl.act[t]; if (!(cap[i] > 0.02) || A[i] < FL_THIN * cap[i] * Vc) { if (FL_STAT && A[i] > 1e-6) (me.thin || (me.thin = [])).push(i); continue; }   // thin：有水但太薄、沒畫（接縫地圖用）
+    u = i + NXY; if (u < F.N && cap[u] > 0.02 && A[u] >= FL_THIN * cap[u] * Vc) continue;          // 上面那一格也有水 ⇒ 不是水面
     var ix = i % NX, iy = ((i / NX) | 0) % NY, iz = (i / NXY) | 0, W = A[i] / S3, hl = 0;
     for (var l = 0; l < c && W > 1e-6; l++) { var o = op[i * c + l]; if (o <= 0) continue; if (W >= o) { W -= o; hl = l + 1; } else { hl = l + W / o; W = 0; } }   // 空著 0 格的那一層（甲板）水過不去也不停在那裡 ⇒ 跳過
     if (W > 1e-6) hl = c;
@@ -8148,7 +8273,7 @@ function flMesh(sh, fl) {
     TI[i] = tops.length; tops.push(i, hw);
   }
   flFalls(sh, fl, me, TI, tops);                                          // 往下流的水幕（跟水面同一格重做）
-  // 連成一池（Tim 2026-10-15：「角度有平滑 但是沒有接起來」）：左右前後相鄰（同一層或差一層）、水面差不到半格 ⇒ 同一池。
+  // 連成一池（Tim 2026-10-15：「角度有平滑 但是沒有接起來」）：左右前後相鄰（同一層或差一層）、水面差在 FL_JOIN 以內 ⇒ 同一池（水體；2026-10-16 以前是半格）。
   //   同一池裡每個角只算一次（那個角周圍四格裡、這一池的水面平均）⇒ 相鄰兩格用的是同一個角 ⇒ 一定接得起來。
   //   ⛔ 以前每一格自己算四個角（周圍水柱裡、跟「這一格」差不到半格的平均）⇒ 同一個角兩邊各算各的、高度不一樣 ⇒ 每一片都斜得平順，片跟片之間裂開。
   var TN = tops.length / 2, par = new Int32Array(TN);
@@ -8160,7 +8285,7 @@ function flMesh(sh, fl) {
       if (nb ? jy0 >= NY - 1 : jx0 >= NX - 1) continue;
       for (var dzn = -1; dzn <= 1; dzn++) {
         var jn = i + (nb ? NX : 1) + dzn * NXY; if (jn < 0 || jn >= F.N) continue;
-        var tj = TI[jn]; if (tj < 0 || Math.abs(tops[tj + 1] - tops[t * 2 + 1]) >= 0.5 * hc) continue;
+        var tj = TI[jn]; if (tj < 0 || Math.abs(tops[tj + 1] - tops[t * 2 + 1]) >= (FL_JOIN < 0 ? 0.5 * hc : FL_JOIN)) continue;
         var ra = root(t), rb = root(tj / 2); if (ra !== rb) par[ra] = rb;
       }
     }
@@ -8175,7 +8300,17 @@ function flMesh(sh, fl) {
   }
   var PS = new Float64Array(TN), PN = new Int32Array(TN);                 // 每一池的水面平均
   for (t = 0; t < TN; t++) { var rp = root(t); PS[rp] += tops[t * 2 + 1]; PN[rp]++; }
-  function corner(r, ix, iy) { var e = CS.get(r * NC + iy * (NX + 1) + ix); return FL_FLAT * PS[r] / PN[r] + (1 - FL_FLAT) * e[0] / e[1]; }
+  var CV = new Map(); CS.forEach(function (e, k) { CV.set(k, e[0] / e[1]); });
+  for (var it = 0; it < FL_SMOOTH; it++) {                                // 跟同一個水體的上下左右鄰角平均 ⇒ 落差攤到兩格寬
+    var CV2 = new Map();
+    CV.forEach(function (v, k) {
+      var cx0 = (k % NC) % (NX + 1), rr = (k / NC) | 0, sm = v, nn = 1, nk = [cx0 > 0 ? k - 1 : -1, cx0 < NX ? k + 1 : -1, k - (NX + 1), k + (NX + 1)];
+      for (var q2 = 0; q2 < 4; q2++) { if (nk[q2] < 0 || ((nk[q2] / NC) | 0) !== rr) continue; var w2 = CV.get(nk[q2]); if (w2 !== undefined) { sm += w2; nn++; } }
+      CV2.set(k, sm / nn);
+    });
+    CV = CV2;
+  }
+  function corner(r, ix, iy) { return FL_FLAT * PS[r] / PN[r] + (1 - FL_FLAT) * CV.get(r * NC + iy * (NX + 1) + ix); }
   var ST = FL_STAT ? flSeams(F, cap, TI, tops, root) : null;
   if (ST) { ST.thin = (me.thin || []).map(function (k) { return [k % NX, ((k / NX) | 0) % NY]; }); me.thin = null; }
   // 每格切成 KS × KS 小片（約 2 格見方；Tim 2026-10-15：「進水顯示是否能嘗試跟鄰近的水表面合併成柔和曲面」）：高度照四個角（已跟鄰格平均）雙線性內插 ⇒ 相鄰的水面連成平順的一片；
@@ -8190,7 +8325,7 @@ function flMesh(sh, fl) {
   }
   for (t = 0; t < tops.length; t += 2) {
     i = tops[t]; var hw0 = tops[t + 1], jx = i % NX, jy = ((i / NX) | 0) % NY, jz = (i / NXY) | 0, f = Math.min(1, A[i] / (cap[i] * Vc));
-    var x0 = F.X0 + jx * c, y0 = F.Y0 + jy * c, zl = jz * c - c, zh = jz * c + 2 * c, rt = root(t / 2);   // zl／zh：只防呆（同一池相鄰的差不到半格 ⇒ 角落在這一格上下一格以內；夾到了才會裂）
+    var x0 = F.X0 + jx * c, y0 = F.Y0 + jy * c, zl = jz * c - (FL_JOIN < 0 ? 1 : 3) * c, zh = jz * c + (FL_JOIN < 0 ? 2 : 4) * c, rt = root(t / 2);   // zl／zh：只防呆（同一個水體相鄰的差在 FL_JOIN 以內 ⇒ 細檔 1.2 m ≈ 2.4 格 ⇒ 角落在這一格下 3 格、上 4 格以內；夾到了才會裂）
     var H = [corner(rt, jx, jy), corner(rt, jx + 1, jy), corner(rt, jx + 1, jy + 1), corner(rt, jx, jy + 1)];
     if ((q + 6 * KS * KS) * 5 > me.buf.length) { var nb = new Float32Array(Math.max(me.buf.length * 2, (q + 6 * KS * KS) * 10)); nb.set(me.buf); me.buf = nb; }
     var inn = 0; for (var a = 0; a < KS; a++) for (var b = 0; b < KS; b++) if ((INS[a * KS + b] = flInside(x0 + (a + 0.5) * sc, y0 + (b + 0.5) * sc, bil(H, (a + 0.5) / KS, (b + 0.5) / KS)))) inn++;
@@ -8238,7 +8373,7 @@ function flSeams(F, cap, TI, tops, root) {
       if (jx < 0 || jy < 0 || jx >= NX || jy >= NY) { st.wall++; continue; }
       var j0 = iz * NXY + jy * NX + jx, tj = -1;
       for (var k = 0; k < 3 && tj < 0; k++) { var jz = iz + (k === 0 ? 0 : k === 1 ? -1 : 1); if (jz >= 0 && jz < F.NZ && TI[jz * NXY + jy * NX + jx] >= 0) tj = TI[jz * NXY + jy * NX + jx] / 2; }
-      if (tj >= 0) { if (root(tj) === r) st.join++; else { st.step++; st.dh.push(Math.abs(tops[tj * 2 + 1] - tops[t * 2 + 1])); st.map.edge.push([ix, iy, d, 1]); } }
+      if (tj >= 0) { if (root(tj) === r) st.join++; else { st.step++; st.dh.push(Math.abs(tops[tj * 2 + 1] - tops[t * 2 + 1])); st.map.edge.push([ix, iy, d, 1, tops[t * 2 + 1] - tops[tj * 2 + 1], tops[t * 2 + 1]]); } }   // 兩池交界：[ix, iy, 方向, 1, 這邊比鄰池高多少 m, 這邊的水面世界高度]
       else if (cap[j0] > 0.02) { st.open++; st.map.edge.push([ix, iy, d, 2]); } else st.wall++;
     }
   }
@@ -11002,6 +11137,25 @@ function seaGrid(lv) {
 function hullTex(T, hb) {                              // hb ＝ 快取的那張（06_cache.js）
   T.hullTW = T.base.sx; T.hullTH = Math.min(256, T.base.sz);
   T.hullHB = hb || hullMask(T);                        // 存快取、對拍用（__game.hullCheck）
+  T.hullSea = hullSeaMask(T);                          // 海的著色器用的那一張（砲口、舷窗補起來）；模擬照舊讀 hullHB
+}
+/** 海面遮罩補縫（TASK-0654；Tim 2026-10-16：「炮口進水會變成一個很明顯的長條形」「我發現穿進來的好像是海面」）：
+ *  hullMask 是每個 (x, z) 最外那一格 ⇒ 砲口那幾層、砲口那幾欄沒有船殼 ⇒ 半寬掉到 0（量過：憲法號 z 88–108、112–126，例 x 185–187 上下都是 49、中間 0）
+ *  ⇒ 海的著色器當成船外，船一沉到砲口高，海面就沿著那幾欄整條橫穿進船艙。
+ *  這裡每一欄 x 沿 z 補縫：上下 HULL_FILL_M 公尺內都有船殼 ⇒ 取兩邊較小的那個半寬（缺口補起來，外形的上緣、下緣不往外長）。
+ *  ⛔ 只給海面遮罩（hullArr 上傳的貼圖）；進水模擬、游泳、碎帆照舊讀 T.hullHB（一位元不動 ⇒ 戰局不變）。 */
+var HULL_FILL_M = 1.5;
+function hullSeaMask(T) {
+  var TW = T.hullTW, TH = T.hullTH, hb = T.hullHB, R = Math.max(1, Math.ceil(HULL_FILL_M / S)), out = new Uint8Array(hb);
+  for (var x = 0; x < TW; x++) for (var z = 0; z < TH; z++) {
+    var dn = 0, up = 0;                                                  // z 下面、上面 R 格（不含 z）裡最大的半寬
+    for (var k = 1; k <= R; k++) {
+      if (z - k >= 0) { var a = hb[(z - k) * TW + x]; if (a > dn) dn = a; }
+      if (z + k < TH) { var b = hb[(z + k) * TW + x]; if (b > up) up = b; }
+    }
+    var f = Math.min(dn, up); if (f > out[z * TW + x]) out[z * TW + x] = f;
+  }
+  return out;
 }
 function hullMask(T) {
   var TW = T.base.sx, TH = Math.min(256, T.base.sz), CY = T.cy, hb = new Uint8Array(TW * TH);
@@ -11290,7 +11444,7 @@ function hullArr() {
   var t = HULLA.tex = gl.createTexture(); HULLA.key = key;
   gl.bindTexture(gl.TEXTURE_2D_ARRAY, t); gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
   gl.texImage3D(gl.TEXTURE_2D_ARRAY, 0, gl.R8, W, H, Math.max(1, Ts.length), 0, gl.RED, gl.UNSIGNED_BYTE, null);
-  Ts.forEach(function (T, k) { T.hullLayer = k; gl.texSubImage3D(gl.TEXTURE_2D_ARRAY, 0, 0, 0, k, T.hullTW, T.hullTH, 1, gl.RED, gl.UNSIGNED_BYTE, T.hullHB); });
+  Ts.forEach(function (T, k) { T.hullLayer = k; gl.texSubImage3D(gl.TEXTURE_2D_ARRAY, 0, 0, 0, k, T.hullTW, T.hullTH, 1, gl.RED, gl.UNSIGNED_BYTE, T.hullSea || T.hullHB); });   // 海面遮罩用補過縫的那張（hullSeaMask）
   [gl.TEXTURE_MIN_FILTER, gl.TEXTURE_MAG_FILTER].forEach(function (p) { gl.texParameteri(gl.TEXTURE_2D_ARRAY, p, gl.NEAREST); });
   [gl.TEXTURE_WRAP_S, gl.TEXTURE_WRAP_T].forEach(function (p) { gl.texParameteri(gl.TEXTURE_2D_ARRAY, p, gl.CLAMP_TO_EDGE); });
   gl.bindTexture(gl.TEXTURE_2D_ARRAY, null);
@@ -11528,6 +11682,15 @@ function capText(sh) {
 //   船被打輕、浮高了 ⇒ W100 跟著變大）。粒子模式 W ＝ 艙內的積水；公式模式沒有水量 ⇒ W ＝ 現在比原本多吃的水（下沉照浮力表換算）。
 //   ⇒ 兩種模式都是開始沉那一刻 100%。只是顯示：航速照舊用下沉 ÷ 9 m（31_sailing.js，模擬）。
 var SINK_FINAL = 4.2;
+/** 水線現在比開戰時高還是低（Tim 2026-10-16：「浮高資訊 是否可以用實際水線變化來計算(目前好像只考慮船體損失質量 不考慮進水)」）：
+ *  船的高度 ＝ 減重上浮 sh.lift − 進水下沉 sh.sink（10_ship.js shipMatrix 同一條；浪的起伏 bob 不算）⇒ 正 ＝ 浮高、負 ＝ 吃水深。
+ *  兩項都有 ⇒ 括號拆開（減重 ＋、進水 −）。以前只印 sh.lift ⇒ 積水上千噸還寫「浮高 0.1 m」。只是讀數，模擬不讀。 */
+function liftText(sh) {
+  var up = sh.lift || 0, dn = sh.sink || 0, net = up - dn;
+  var s = net > 0.05 ? '　浮高 ' + net.toFixed(1) + ' m' : net < -0.05 ? '　吃水深 ' + (-net).toFixed(1) + ' m' : '';
+  if (s && Math.abs(up) > 0.05 && dn > 0.05) s += '（減重 ' + (up >= 0 ? '+' : '−') + Math.abs(up).toFixed(1) + '・進水 −' + dn.toFixed(1) + '）';
+  return s;
+}
 /** 浮高 L 公尺（負 ＝ 吃水深）時比設計水線的排水輕幾噸（32_hull.js liftFor 的反函數）。 */
 function tonsAt(T, L) {
   var HYD = T.hyd, n = HYD.length - 1, z = T.zw - L / S;
@@ -11550,7 +11713,7 @@ function panel(sh, title) {
   var m0 = sh.mass0 || shipT(sh), disp = Math.round(m0), now = Math.round(m0 - massLost(sh));   // 兩個都取到 1 噸（⛔ 開戰時的取到 10 噸 ⇒ 第一格「2,150・現在 2,154」，現在比開戰還重）
   // 橫向兩欄（TASK-0564，Tim 2026-10-14：佔畫面中間 ⇒ 儘量橫鋪、別往下壓）：左 ＝ 船體、進水、航行；右 ＝ 砲長、船員、砲、開火。砲一門一門的狀態在底下的砲位圖（gmapDraw）。
   return '<h3>' + title + '<span class="disp">排水量 ' + disp.toLocaleString() + ' 噸・現在 ' + now.toLocaleString() + ' 噸</span>' + (sh.fate && !sh.sunk ? '　<span style="color:var(--gold)">' + sh.fate + '</span>' : '') + '</h3><div class="pcols"><div class="pc">船體 ' + (hull * 100).toFixed(1) + '%（打掉 ' + sh.lost.toLocaleString() + ' 格）<div class="bar"><i style="width:' + (hull * 100).toFixed(1) + '%"></i></div>' +
-    '進水 ' + (sh.sunk ? '沉沒' : (fl * 100).toFixed(0) + '%') + (sh.fl && (!sh.broken || sh.fl.vis) ? '（艙內積水 ' + Math.round(sh.fl.vol * RHO_W).toLocaleString() + ' 噸・破口 ' + sh.fl.area.toFixed(1) + ' m²）' : '（水線下破洞 ' + (sh.inflow || 0).toLocaleString() + ' 格）') + (sh.lift > 0.05 ? '　浮高 ' + sh.lift.toFixed(1) + ' m' : sh.lift < -0.05 ? '　吃水深 ' + (-sh.lift).toFixed(1) + ' m' : '') + '<div class="bar water"><i style="width:' + (fl * 100).toFixed(0) + '%"></i></div>' +
+    '進水 ' + (sh.sunk ? '沉沒' : (fl * 100).toFixed(0) + '%') + (sh.fl && (!sh.broken || sh.fl.vis) ? '（艙內積水 ' + Math.round(sh.fl.vol * RHO_W).toLocaleString() + ' 噸・破口 ' + sh.fl.area.toFixed(1) + ' m²）' : '（水線下破洞 ' + (sh.inflow || 0).toLocaleString() + ' 格）') + liftText(sh) + '<div class="bar water"><i style="width:' + (fl * 100).toFixed(0) + '%"></i></div>' +
     (sh.spd < -0.05 ? '倒車 ' + (-sh.spd * 1.944).toFixed(1) : '航速 ' + (sh.spd * 1.944).toFixed(1)) + ' 節（' + sh.pos + '）　' + (driveText(sh) ? driveText(sh) + '　' : '') + (hasSails(sh) ? sailSetName(sh) + ' ' + Math.round(sh.sailFrac * 100) + '%' : '') + '<br>' +
     ((sh.ancMode ? '拋錨' : sh.manual ? '手動操舵' : '自動操舵') + (sh.anc ? '　' + anchorText(sh) : '') + '　舵 ' + (sh.rudder > 0.05 ? '左 ' + Math.round(sh.rudder * 100) + '%' : sh.rudder < -0.05 ? '右 ' + Math.round(-sh.rudder * 100) + '%' : '正')) + '<br>' + navText(sh) + '</div><div class="pc">' +
     capText(sh) + '<br>' +
@@ -11891,7 +12054,14 @@ function pauseLabel() { var b = $('pauseK'), s = '<b>P</b><i class="em">' + (PAU
 /** 彈種那一顆（Tim 2026-10-15：「砲彈改成一個按鈕，切換所有支援的砲彈（顯示當前彈種圖示）」）：鐵球 實心彈（CSS 畫的 .ball：灰色、左上高光、淡白邊；⛔ ⚫ 在深色圓鈕上看不見、⚪ 是白點不像砲彈 —— Tim 2026-10-15「顯示為一顆白色圓點，是否可以替換」）、💣 爆裂彈、⛓️ 鏈彈；每一種砲三種都能打。 */
 var PSLOW_SHOW = 0.7;   // 物理減速放慢到 ×0.7 以下才在航速那一行顯示（Tim 2026-10-15：「高於 0.7 可以不顯示，目前頻繁閃爍」—— 以前 < 0.98 就顯示，倍率在 0.9 上下跳 ⇒ 一直閃）
 var AMMO_ICON = ['<span class="ball"></span>', '💣', '⛓️'], AMMO_TXT = ['實心彈', '爆裂彈', '鏈彈'];
-function ammoLabel() { var b = $('ammoB'); if (!b) return; var s = '<b>' + (AMMO_I + 1) + '</b><i class="em">' + AMMO_ICON[AMMO_I] + '</i>'; if (b.innerHTML !== s) { b.innerHTML = s; b.title = '彈種：' + AMMO_TXT[AMMO_I] + '（點一下換下一種；鍵盤 1 實心彈、2 爆裂彈、3 鏈彈）'; } }
+function ammoLabel() { var b = $('ammoB'); if (!b) return; var s = '<b>1</b><i class="em">' + AMMO_ICON[AMMO_I] + '</i>'; if (b.innerHTML !== s) { b.innerHTML = s; b.title = '彈種：' + AMMO_TXT[AMMO_I] + '（點一下或按 1 換下一種）'; } }   // 上面寫的是鍵（同其他圓鈕），不是第幾種
+/** 這艘船打得出哪幾種彈（AMMO 的序號，照輪流的順序）。Tim 2026-10-16：「目前彈種是固定的 不過可以保留擴充接口」⇒ 現在每艘都是全部；之後照船擴充（例 ships[].ammo）只改這裡。 */
+function ammoOf(sh) { return AMMO.map(function (_, i) { return i; }); }
+/** 換下一種彈（Tim 2026-10-16：「統一用一個鍵循環切換所有彈藥(不一定三種 之後可能根據船擴充)」）：鍵盤 1 與圓鈕共用；照我艦的 ammoOf 輪流，現在這一種不在清單裡 ⇒ 從第一種開始。 */
+function ammoNext() {
+  var L = ammoOf(SHIPS[PLAYER_I]); if (!L.length) return;
+  var i = L.indexOf(AMMO_I); AMMO_I = L[(i + 1) % L.length]; ammoLabel();
+}
 function hud(dt) {
   stepMsgs(dt);
   if (ROOMS_DBG) roomLabels();                                                   // 空艙房的名字（36_rooms.js；?rooms=1）：每一格跟著鏡頭
@@ -12624,7 +12794,7 @@ function doKey(k, repeat) {
   var me = SHIPS[PLAYER_I];
   if (k === ' ') { if (!PAUSED && !me.sunk) broadside(me, AMMO_I); }   // 降旗了 ⇒ broadside／fireOne 自己擋
   else if (k === 'f') { if (!PAUSED) fireOne(me, AMMO_I); }
-  else if (k === '1' || k === '2' || k === '3') AMMO_I = +k - 1;
+  else if (k === '1') ammoNext();                                     // 彈種：一個鍵輪流（61_hud.js ammoNext；以前 1／2／3 各一種）
   else if (k === 'q') { me.pMode = AIM_P = AIM_CYCLE[(AIM_CYCLE.indexOf(me.pMode || 'free') + 1) % AIM_CYCLE.length]; note(me, '瞄準：' + AIM_NAME[me.pMode] + (me.pMode === 'free' ? '（點敵艦設瞄準點）' : '')); }   // 瞄準模式（51_captain.js）
   else if (k === 'c') { CAM.mode = CAM_ORDER[(CAM_ORDER.indexOf(CAM.mode) + 1) % CAM_ORDER.length]; CAM.follow = null; CAM.pan = [0, 0]; CAM.see = null; if (CAM.mode === 2 || CAM.mode === 3) { CAM.dist = 75; } else if (CAM.mode === 0) CAM.dist = DIST + 40; else if (CAM.mode === 4) { CAM.dist = 78; CAM.aoff = 0.35; } }
   else if (k === 'p') { PAUSED = !PAUSED; frzShow(); pauseLabel(); }                               // 停格（72_floodui.js：停格時上方一條、進水細節頁）
@@ -12751,7 +12921,7 @@ $('fullT').onclick = fsToggle;
 [].forEach.call(document.querySelectorAll('#gset [data-gg]'), function (b) { b.onclick = function () { gfxSet(b.dataset.gg); gfxShow(); }; });
 [].forEach.call(document.querySelectorAll('#gset [data-gx]'), function (b) { b.onclick = function () { phxSet(b.dataset.gx); phxSync(); }; });
 $('endA').onclick = start;
-$('ammoB').onclick = function () { AMMO_I = (AMMO_I + 1) % 3; ammoLabel(); };   // 彈種一顆：點一下換下一種（實心 → 爆裂 → 鏈彈 → 實心）
+// 彈種一顆（#ammoB）：帶 data-k="1" ⇒ 點一下 ＝ 按 1（上面那段 [data-k] 的 click）⇒ ammoNext；⛔ 別再另外掛 onclick（會一次換兩種）
 [].forEach.call(document.querySelectorAll('#modes button'), function (b) { b.onclick = function () { MODE = b.dataset.m; [].forEach.call(document.querySelectorAll('#modes button'), function (x) { x.className = x === b ? 'on' : ''; }); }; });
 /** 選單：滑桿的上下限從 LIM 來；數值只在使用者動了那一條時才從滑桿讀回（⛔ 一開頭就讀回 ⇒ 網址給的 0.33 被 step 吃成 0.35）。
  *  船殼、砲、帆、火藥桶、航行、降旗的滑桿在「細節設定」那一頁（從主選單進）；主選單只留一行摘要（#detV）。 */
@@ -14615,8 +14785,9 @@ function labOpts() {
 //   ?debug=1 時 __game.floodLab(o) 同一套、回傳同一份。
 // 參數（網址同名）：holes（x:dz:side:r，以 ; 分隔：x ＝ 水線那一段船長的比例 0–1、dz ＝ 水線下幾格、side 0 ＝ 格 +y 那一舷、r ＝ 半徑幾格；不給 ⇒ 預設三個）、
 //   dur（秒，預設 60）、every（秒，預設 10）、fyaw、fpitch、fdist、fty（鏡頭；fty ＝ 注視點在船中心上面幾公尺，看底艙給負的；⛔ 不叫 dist／pitch：dist 是開局兩艘船的距離、pitch 是 ?cam=deck 的俯角 —— 撞名量過：dist=38 把另一艘擺到旁邊、進水整個不一樣）、cut（half ＝ 剖面、none；預設 half）、deck（拿掉幾層甲板，預設 0）、xray（1 ＝ 透視）、
-//   w（截圖寬，預設 480）、flat（1 ＝ 浪設 0）。
+//   w（截圖寬，預設 480）、flat（1 ＝ 浪設 0）、focus（step ＝ 每一筆把鏡頭對準水面差最大的那條兩池交界；cell:x:y ＝ 固定對準那一欄最高的水面 —— 照 fpitch／fdist 拉近、鏡頭擺在往船中心那一側，fyaw 不用）。
 // ⛔ 只在 ?lab=flood 或 __game.floodLab 才跑；一般遊戲一行都不多算。
+// 鏡頭用自由鏡頭（CAM.mode 0：注視點 CAM.tgt、yaw／pitch／dist 照給的）。⛔ mode 4 是「我艦看向敵艦」：注視點固定在我艦中心上 4 m、yaw 照敵艦方向 ⇒ fyaw、對準都沒效（量過：focus 對準的點被蓋回船中心）。
 // ⚠ 要帶 seed（flood_lab.py 沒給就補 seed=3）：沒帶 ⇒ 每次開都是隨機的一局，浮穩的姿勢、洞的位置、進水都不一樣（量過：同一組參數兩次 t 38 是 130／138 m³）；
 //   帶了 ⇒ 兩次逐位元相同（帆繩物理開關都一樣）。
 var FLAB_HOLES = [[0.35, 8, 0, 4], [0.55, 12, 1, 4], [0.7, 6, 0, 3]];
@@ -14680,16 +14851,32 @@ function floodLab(o) {
     out.holes.push({ x: x, z: z, side: hd[2], r: hd[3], removed: r ? r.removed : 0 });
   });
   // 鏡頭：對著船中、看艙內（剖面拿掉靠鏡頭那一半）
-  if (o.ty !== undefined) { var cc = shipCenter(sh); CAM.tgt = [cc[0], cc[1] + o.ty, cc[2]]; CAM.trMe = CAM.trYaw = null; }   // 注視點：船中心往上 ty 公尺（看底艙 ⇒ 負的）
-  CAM.follow = null; CAM.mode = 4; CAM.yaw = o.yaw; CAM.pitch = o.pitch; if (o.dist > 0) CAM.dist = o.dist; else CAM.dist = Math.max(60, (x1 - x0) * S * 0.95);
+  var cc = shipCenter(sh); CAM.tgt = [cc[0], cc[1] + (o.ty || 0), cc[2]]; CAM.trMe = CAM.trYaw = null;   // 注視點：船中心往上 ty 公尺（看底艙 ⇒ 負的）
+  CAM.follow = null; CAM.mode = 0; CAM.yaw = o.yaw; CAM.pitch = o.pitch; if (o.dist > 0) CAM.dist = o.dist; else CAM.dist = Math.max(60, (x1 - x0) * S * 0.95);
   CUTV.half = o.cut === 'half'; CUTV.deck = o.deck | 0; FLX3 = !!o.xray;
   var snap0 = FL_SNAP, stat0 = FL_STAT; FL_SNAP = FL_STAT = true;
   var n = Math.round(o.every / DT), steps = Math.max(1, Math.round(o.dur / o.every));
   for (var k = 0; k <= steps; k++) {
+    var focusAt = null;
     if (k) { for (i = 0; i < n; i++) { step(); if (i % 30 === 29) remesh(Infinity); } }
     remesh(Infinity); CAM.snap = true; camUpdate(1); render();
+    if (o.focus === 'step' && sh.fl.mesh && sh.fl.mesh.stat) {             // 對準水面差最大的那條兩池交界（高的那一邊），拉近再拍
+      var E = sh.fl.mesh.stat.map.edge.filter(function (e) { return e[3] === 1 && e[4] > 0; }).sort(function (a, b) { return b[4] - a[4]; })[0];
+      if (o.focusCell) {                                                  // focus=cell:x:y ⇒ 固定對準那一欄（改前改後同一個角度比）：那一欄最高的水面
+        var TT = sh.fl.mesh.stat.map.top.filter(function (q) { return q[0] === o.focusCell[0] && q[1] === o.focusCell[1]; }).sort(function (a, b) { return b[2] - a[2]; })[0];
+        var Fc = sh.fl.F, hcell = TT ? M4.pt(sh.M, Fc.X0 + (TT[0] + 0.5) * Fc.c, Fc.Y0 + (TT[1] + 0.5) * Fc.c, (TT[2] + 1) * Fc.c)[1] : null;
+        E = TT ? [TT[0], TT[1], -1, 1, 0, hcell] : null;
+      }
+      if (E) {
+        var F2 = sh.fl.F, M = sh.M, gx = F2.X0 + (E[0] + 0.5 + (E[2] === 0 ? -0.5 : E[2] === 1 ? 0.5 : 0)) * F2.c, gy = F2.Y0 + (E[1] + 0.5 + (E[2] === 2 ? -0.5 : E[2] === 3 ? 0.5 : 0)) * F2.c;
+        var gzz = (E[5] - (M[1] * gx + M[5] * gy + M[13])) / M[9], P = M4.pt(M, gx, gy, gzz);
+        var ccn = shipCenter(sh); CAM.yaw = Math.atan2(ccn[2] - P[2], ccn[0] - P[0]);   // 鏡頭擺在那一點往船中心那一側（從艙裡往船殼看）⇒ 對準時 fyaw 不用
+        CAM.tgt = [P[0], P[1] - E[4] * 0.5, P[2]]; CAM.trMe = CAM.trYaw = null; CAM.snap = true; camUpdate(1); render();
+        focusAt = { ix: E[0], iy: E[1], dir: E[2], dh: +E[4].toFixed(2) };
+      }
+    }
     var me = sh.fl.mesh, st = me && me.stat ? me.stat : null, dh = st ? st.dh.slice().sort(function (a, b) { return a - b; }) : [];
-    out.rows.push({ t: +SIMT.toFixed(1), fl: flReadout(sh),
+    out.rows.push({ t: +SIMT.toFixed(1), fl: flReadout(sh), focus: focusAt, cam: { eye: CAM.eye.map(function (v) { return +v.toFixed(2); }), look: (CAM.look || CAM.tgt).map(function (v) { return +v.toFixed(2); }) },
       mesh: me ? { tris: me.n / 3, quads: me.quads, ms: +(me.ms || 0).toFixed(2), falls: me.fn ? me.fn / 6 : 0, sides: me.sideN || 0, spill: me.fallN || 0, depBlit: FL_DEPBLIT } : null,
       seam: st ? { tops: st.tops, pools: st.pools, join: st.join, step: st.step, open: st.open, wall: st.wall, cutTops: st.cutTops, cutPieces: st.cutPieces, outTops: st.outTops,
         dhMed: dh.length ? +dh[dh.length >> 1].toFixed(2) : 0, dhMax: dh.length ? +dh[dh.length - 1].toFixed(2) : 0 } : null,
@@ -14703,7 +14890,7 @@ function floodLab(o) {
 function floodView(o) {
   o = o || {};
   if (o.ty !== undefined && SHIPS[0]) { var cc = shipCenter(SHIPS[0]); CAM.tgt = [cc[0], cc[1] + o.ty, cc[2]]; CAM.trMe = CAM.trYaw = null; }
-  CAM.follow = null; CAM.mode = 4; ['yaw', 'pitch', 'dist'].forEach(function (k) { if (o[k] !== undefined) CAM[k] = o[k]; });
+  CAM.follow = null; CAM.mode = 0; ['yaw', 'pitch', 'dist'].forEach(function (k) { if (o[k] !== undefined) CAM[k] = o[k]; });
   if (o.cut !== undefined) CUTV.half = o.cut === 'half'; if (o.deck !== undefined) CUTV.deck = o.deck | 0; if (o.xray !== undefined) FLX3 = !!o.xray;
   var snap0 = FL_SNAP; FL_SNAP = true; CAM.snap = true; camUpdate(1); render(); FL_SNAP = snap0;
   return flabShot(o.w || 480);
@@ -14716,6 +14903,7 @@ function flLabOpts() {
   ['dur', 'every', 'deck', 'w'].forEach(function (k) { if (Q.has(k)) o[k] = +Q.get(k); });
   [['fyaw', 'yaw'], ['fpitch', 'pitch'], ['fdist', 'dist'], ['fty', 'ty']].forEach(function (kk) { if (Q.has(kk[0])) o[kk[1]] = +Q.get(kk[0]); });
   if (Q.has('cut')) o.cut = Q.get('cut');
+  if (Q.has('focus')) { o.focus = Q.get('focus'); var fm = /^cell:(\d+):(\d+)$/.exec(o.focus); if (fm) { o.focus = 'step'; o.focusCell = [+fm[1], +fm[2]]; } }
   if (Q.get('xray') === '1') o.xray = true;
   if (Q.get('flat') === '1') o.flat = true;
   return o;
