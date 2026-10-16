@@ -27,6 +27,7 @@ function renderLerp(on, a) {
   });
 }
 function camUpdate(dt) {
+  if (FP.on && fpCam()) return;                                        // 第一人稱：鏡頭在船長的眼睛（81_fps.js）
   // 我艦→敵艦（預設，mode 4）：注視點 ＝ 我艦中心（略高），鏡頭在我艦背對敵艦的那一側 ⇒ 畫面中間是我艦、敵艦在它後方；
   // 兩艘繞著彼此轉時鏡頭跟著轉。拖曳改的是相對這條視線的角度（aoff）與俯仰，滾輪改遠近。沒有敵艦 ⇒ 看船頭方向。
   if (CAM.mode === 4 && SHIPS.length) {

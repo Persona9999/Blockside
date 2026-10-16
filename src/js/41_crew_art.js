@@ -236,6 +236,7 @@ function drawCrew() {
     var team = teamIdx(sh), faceW = M4.dir(sh.M, 0, 1, 0);
     sh.crew.forEach(function (c) {
       if (c.st === 3 || n >= BBMAX || (gone && c.st !== 5) || cutHides(sh, c)) return;             // cutHides：剖面、隱藏甲板拿掉的那一邊（74_cutaway.js）
+      if (FP.on && fpHide(sh, c)) return;                                                          // 第一人稱：自己、貼在臉前的人不畫（81_fps.js；⛔ 畫了 ⇒ 鏡頭在看板圖裡面）
       var art = c.art !== undefined && c.art < CREW_ROWS ? c.art : c.role;   // 船長那一列沒有 ⇒ 用職位那一列
       var w = c.st === 4 || c.st === 5 ? c.fw : M4.pt(sh.M, c.pos[0], c.pos[1], c.pos[2]), f = crewFrame(sh, c), row = art * 2 + team;
       var wt = c.walk ? c.walk.to : c.hand && c.moving ? c.hand.to : null;   // 要去的那一點（預備水手：照路走、爬梯子，42_hands.js）

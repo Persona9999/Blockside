@@ -23,6 +23,7 @@ function frame(ts, noRaf) {                                         // noRaf：_
   remesh(RM_BUDGET);                                                  // 重網格化，每格有預算（60_render.js）
   if (PF) pfLap('flush');
   renderLerp(true, RUNNING ? acc / DT : 1);                           // 畫面內插（03_camera.js）：鏡頭、畫、HUD 用兩步之間的位置，畫完換回模擬的
+  fpFrame(dt);                                                        // 第一人稱：走、爬、退出判斷（81_fps.js；沒開 ⇒ 什麼都不做）
   camUpdate(dt); render(); if (PF) pfLap('render'); hud(dt); frzShow(); slowShow();
   renderLerp(false);                        // 停格條（72_floodui.js）
   if (PF) { pfLap('hud'); pfEnd(f0, RUNNING && !PAUSED ? n : 0); }
@@ -89,6 +90,12 @@ if (DEBUG) window.__game = {
   med: function (i) { return medInfo(SHIPS[i || 0]); },   // 醫療艙（44_medic.js）：每一間的床、人手、搬下去、治好歸隊
   rooms: function (on) { if (on !== undefined) { ROOMS_DBG = !!on; if (!on) roomLabels(); } return roomsInfo(); },   // 空艙房（36_rooms.js）：讀數；給 true／false ⇒ 開關外框與名字
   shipsIO: { exp: function () { return shipsExport(); }, imp: function (o) { var n = shipsImport(o); SLIDERS_SHOW && SLIDERS_SHOW(); return n; }, crew: function (id) { return shipCrew(id); }, seen: function () { return CREW_SEEN; } },   // 船隻配置的匯出入（TASK-0570；量的時候不必真的下載檔案）
+  fp: function (on, to) { if (on !== undefined && on !== null) fpSet(!!on); if (to === 'lad' && FP.lads && FP.lads.length) to = FP.lads[0].up[0]; if (to && FP.c) { var sz = -1; for (var dz = 0; dz <= 12 && sz < 0; dz++) { sz = standZ(FP.sh.grid, Math.floor(to[0]), Math.floor(to[1]), to[2] - dz, to[2] + dz, NAV_HEAD); } if (sz >= 0) FP.c.pos = [to[0], to[1], sz]; } var c = FP.c; return { on: FP.on, paused: PAUSED, pos: c ? c.pos.map(function (v) { return +v.toFixed(2); }) : null, yaw: +FP.yaw.toFixed(3), pitch: +FP.pitch.toFixed(3), near: FP.near ? { name: FP.near.name, up: FP.near.up } : null, climb: FP.climb ? FP.climb.k : null, lads: (FP.lads || []).map(function (L) { return L.name + ' ' + L.up[0].join(',') + '→' + L.up[L.up.length - 1].join(','); }), mv: Object.assign({}, FP.mv) }; },   // 第一人稱（81_fps.js）：讀數；fp(1)／fp(0) 開關；fp(null, [x,y,z]｜'lad') 瞬移（'lad' ＝ 第一座梯子的梯腳；貼到 ±12 格內最近的地板，找不到就不移 —— ⛔ 懸空 ⇒ survey 判成掉下去、摔傷）—— 量的時候用
+  fpMap: function (r) {   // 第一人稱：船長周圍 ±r 格每一柱站不站得住（照 81_fps.js fpStand；. 站不住、數字 ＝ 腳底比現在高幾格、@ 自己）—— 量的時候用
+    if (!FP.on) return null; r = r || 10; var c = FP.c, g = FP.sh.grid, z = Math.floor(c.pos[2]), x0 = Math.floor(c.pos[0]), y0 = Math.floor(c.pos[1]), rows = [];
+    for (var y = y0 - r; y <= y0 + r; y++) { var s = ''; for (var x = x0 - r; x <= x0 + r; x++) { var h = fpStand(g, x, y, z); s += x === x0 && y === y0 ? '@' : h < 0 ? '.' : String.fromCharCode(48 + Math.max(0, Math.min(9, h - z + 4))); } rows.push(s); }
+    return rows;
+  },
   camera: function () { return { mode: CAM.mode, follow: CAM.follow ? { age: +CAM.follow.age.toFixed(2), owner: CAM.follow.owner, alive: CAM.follow.alive } : null, pick: CAM.pick || null, track: CAM.track, yaw: CAM.yaw, dist: CAM.dist, tgt: CAM.tgt.slice(), eye: CAM.eye.slice() }; },
   strike: function (o) { for (var k in o) STRIKE[k] = o[k]; return { rules: STRIKE, text: strikeText() }; },
   /** 量降旗用：第 i 艘還能動的人照順序倒下，直到死傷比例到 frac（role 給了只倒那個職位）；下一次 survey 才判降旗。 */

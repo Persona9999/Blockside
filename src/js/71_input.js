@@ -22,6 +22,7 @@ cv.addEventListener('pointerdown', function (e) {
 cv.addEventListener('pointermove', function (e) {
   if (PTRS.has(e.pointerId)) PTRS.set(e.pointerId, { x: e.clientX, y: e.clientY });
   if (PINCH && PTRS.size === 2) {
+    if (FP.on) return;                                                 // 第一人稱：兩指不縮放、不平移
     CAM.dist = clamp(PINCH.dist * PINCH.d / pinchD(), 12, 900);
     var m = pinchM();                                                  // 兩指中點移了 8 px 以上才開始平移（⛔ 不設門檻 ⇒ 只是張合時手指晃一下畫面也跟著跑）
     if (!PINCH.moved && Math.hypot(m.x - PINCH.x0, m.y - PINCH.y0) < 8) return;
@@ -32,16 +33,17 @@ cv.addEventListener('pointermove', function (e) {
   var dx = e.clientX - drag.x, dy = e.clientY - drag.y;
   if (!drag.moved && Math.hypot(dx, dy) < 5) return;
   drag.moved = true; drag.x = e.clientX; drag.y = e.clientY;
+  if (FP.on) { fpLook(dx, dy); return; }                             // 第一人稱：拖曳 ＝ 轉頭（81_fps.js）
   if (drag.b === 2) panBy(dx, dy);
   else { if (CAM.mode === 1) CAM.mode = 0; if (CAM.mode === 4) CAM.aoff += dx * 0.006; else CAM.yaw += dx * 0.006; CAM.pitch = clamp(CAM.pitch + dy * 0.005, 0.02, 1.45); }
 });
 function ptrEnd(e) { PTRS.delete(e.pointerId); if (PTRS.size < 2) PINCH = null; }
 cv.addEventListener('pointerup', function (e) {
-  if (drag && !drag.moved && drag.b === 0 && RUNNING && !PINCH) pick(e.clientX, e.clientY);
+  if (drag && !drag.moved && drag.b === 0 && RUNNING && !PINCH && !FP.on) pick(e.clientX, e.clientY);   // 第一人稱：點一下不瞄準
   drag = null; ptrEnd(e);
 });
 cv.addEventListener('pointercancel', function (e) { drag = null; ptrEnd(e); });
-cv.addEventListener('wheel', function (e) { e.preventDefault(); CAM.dist = clamp(CAM.dist * Math.pow(1.0015, e.deltaY), 12, 900); }, { passive: false });
+cv.addEventListener('wheel', function (e) { e.preventDefault(); if (FP.on) return; CAM.dist = clamp(CAM.dist * Math.pow(1.0015, e.deltaY), 12, 900); }, { passive: false });
 function pick(cx, cy) {
   var r = cv.getBoundingClientRect(), nx = (cx - r.left) / r.width * 2 - 1, ny = 1 - (cy - r.top) / r.height * 2;
   var a = M4.pt(CAM.inv, nx, ny, -1), bq = CAM.inv, w0 = bq[3] * nx + bq[7] * ny + bq[11] * -1 + bq[15], w1 = bq[3] * nx + bq[7] * ny + bq[11] + bq[15];
@@ -70,6 +72,7 @@ window.addEventListener('keydown', function (e) {
   if (!RUNNING) return;
   var k = e.key.toLowerCase(); if (e.code === 'Space') k = ' ';
   if (k === 'escape') { e.preventDefault(); if (HELP.open) helpClose(); else if (FLX) floodClose(); else if (FLX3) xrayToggle(); else gsetToggle(); return; }   // 遊戲內的設定面板
+  if (FP.on && fpKey(k, true)) { e.preventDefault(); return; }       // 第一人稱：走、轉頭、爬梯子的鍵（81_fps.js）；P 停格、O 設定照舊
   if (k === ' ' || k === 'a' || k === 'd' || k === 'w' || k === 's' || k.indexOf('arrow') === 0) e.preventDefault();
   kbLit(k, true);
   doKey(k, e.repeat);
@@ -117,7 +120,7 @@ function doKey(k, repeat) {
   }
 }
 function keyUp(k) { if (k === 'a' || k === 'arrowleft') KEYS.l = false; if (k === 'd' || k === 'arrowright') KEYS.r = false; if (KEYS.sw && (k === 'w' || k === 'arrowup' ? 1 : k === 's' || k === 'arrowdown' ? -1 : 0) === KEYS.sw.d) KEYS.sw = null; }
-window.addEventListener('keyup', function (e) { var k = e.key.toLowerCase(); if (e.code === 'Space') k = ' '; kbLit(k, false); keyUp(k); });
+window.addEventListener('keyup', function (e) { var k = e.key.toLowerCase(); if (e.code === 'Space') k = ' '; if (fpKey(k, false)) return; kbLit(k, false); keyUp(k); });   // fpKey：第一人稱的鍵放開（沒開 ⇒ 只清掉自己按著的、照舊往下走）
 window.addEventListener('blur', function () { KEYS.l = KEYS.r = false; KEYS.sw = null; [].forEach.call(document.querySelectorAll('.kb.down'), function (b) { b.classList.remove('down'); }); });   // 切走視窗 ⇒ 收不到 keyup，按下的顏色一起清掉
 // iPhone 連點兩下放大（Tim 2026-10-15：「連點角落兩下還是會放大，按控帆按鈕太快就觸發」—— 根上的 touch-action:manipulation iOS 不一定照做）：
 // 兩次手指放開相隔 < 350 ms ⇒ 取消第二次的預設動作（＝雙擊縮放）。取消之後瀏覽器不會補 click ⇒ 一般按鈕自己補一個；

@@ -211,6 +211,23 @@
   #end h2{ margin:0 0 8px; font-size:26px; }
   #end button{ font:inherit; margin:10px 6px 0; padding:6px 18px; border-radius:6px; border:1px solid rgba(255,255,255,.3); background:rgba(255,255,255,.08); color:var(--ink); cursor:pointer; }
   .still .hud, .still #cover, .still #help, .still #end{ display:none !important; }
+  /* 第一人稱（81_fps.js，TASK-0649；Tim 2026-10-16「下方操作面板隱藏 改為第一人稱用的操作面板」「只保留設定紐 暫停紐」）：
+     HUD 全部藏起來，只留下方那一排的 ⏸ 與 ⚙（設定面板、說明照常打得開）；換上 #fpUI。⛔ hud() 照樣在跑（只是看不見）—— 行內的 display 用 !important 壓過 */
+  #fpUI{ display:none; }
+  #stage.fp .hud:not(#botC):not(#gset):not(#help){ display:none !important; }
+  #stage.fp #navBox, #stage.fp #helmL, #stage.fp #helmR, #stage.fp #guns, #stage.fp #ammo, #stage.fp #keys > :not(#pauseK):not(#setB){ display:none !important; }
+  #stage.fp #fpUI{ display:block; position:absolute; left:0; right:0; bottom:calc(64px + env(safe-area-inset-bottom)); pointer-events:none; z-index:3; }
+  #fpUI .fpPad{ position:absolute; bottom:0; display:grid; grid-template-columns:repeat(3, 56px); grid-auto-rows:56px; gap:6px; }
+  #fpMove{ left:calc(14px + env(safe-area-inset-left)); } #fpLook{ right:calc(14px + env(safe-area-inset-right)); }
+  #fpUI .fpb{ pointer-events:auto; display:flex; align-items:center; justify-content:center; margin:0; padding:0; font-size:22px; border-radius:50%; background:rgba(10,14,22,.55); touch-action:none; }
+  #fpUI .fpb.down, #fpUI .fpb.on{ background:rgba(110,170,255,.45); }
+  #fpAct{ position:absolute; bottom:0; left:50%; transform:translateX(-50%); display:flex; gap:8px; }
+  #fpAct .fpb{ border-radius:28px; padding:0 16px; height:48px; font-size:16px; white-space:nowrap; }
+  @media (max-width: 640px){   /* 直式手機：兩組方向鈕縮一號，中間的 🪜 🏃 搬到方向鈕上方（⛔ 同一排 ⇒ 375 px 寬疊在一起，量過） */
+    #fpUI .fpPad{ grid-template-columns:repeat(3, 46px); grid-auto-rows:46px; gap:4px; }
+    #fpUI .fpb{ font-size:19px; }
+    #fpAct{ bottom:108px; } #fpAct .fpb{ height:42px; font-size:15px; padding:0 12px; }
+  }
   #err{ position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); max-width:80%; color:#ffb3a6; display:none; white-space:pre-wrap; }
 </style>
 </head>
@@ -228,6 +245,12 @@
     <div id="guns"></div>
     <div id="ammo"><span class="kb hb" id="ammoB" title="彈種：點一下換下一種（鍵盤 1 實心彈、2 爆裂彈、3 鏈彈）"><b>1/2/3</b><i class="em"><span class="ball"></span></i></span></div>
   </div><div id="helmR" class="helm"><span class="kb hb" data-k="8" id="ancS" title="右錨（8）"><b>8</b><i class="em">⚓▶</i></span><span class="kb hb" data-k="g" id="autoF" title="自動開砲（G）"><b>G</b><i class="em">🤖💥</i></span><span class="kb hb" data-k="f" id="fireK" title="開一門（F）"><b>F</b><i class="em">💥</i></span><span class="kb hb" data-k=" " id="volleyK" title="齊射（空白鍵）"><b>空白</b><i class="em">💥💥💥</i></span><span class="kb hb" data-k="d" data-hold="1" title="右舵（D，按住）"><b>D</b><i class="em">➡️</i></span></div></div></div>
+  <!-- 第一人稱的操作面板（81_fps.js；#stage.fp 才顯示）：左下移動（按住）、右下轉頭（按住）＋跑、爬梯子；拖曳畫面也能轉頭 -->
+  <div id="fpUI">
+    <div id="fpMove" class="fpPad"><span></span><span class="kb fpb" data-fp="f">▲</span><span></span><span class="kb fpb" data-fp="l">◀</span><span class="kb fpb" data-fp="b">▼</span><span class="kb fpb" data-fp="r">▶</span></div>
+    <div id="fpAct"><span class="kb fpb" id="fpClimb" style="display:none">🪜 爬梯子（E）</span><span class="kb fpb" id="fpRun">🏃 跑</span></div>
+    <div id="fpLook" class="fpPad"><span></span><span class="kb fpb" data-fp="lu">⤒</span><span></span><span class="kb fpb" data-fp="tl">⟲</span><span class="kb fpb" data-fp="ld">⤓</span><span class="kb fpb" data-fp="tr">⟳</span></div>
+  </div>
   <div id="tip" class="hud"></div>
   <div id="slowB" class="hud"></div>
   <div id="obsB" class="hud"></div>
@@ -286,6 +309,7 @@
     <div class="gsR"><span class="gsL">物理效果</span><span class="chip" data-gx="full">全開</span><span class="chip" data-gx="high">高</span><span class="chip" data-gx="mid">中</span><span class="chip" data-gx="low">低</span><span class="note" id="gsPhx"></span></div>
     <div class="gsR"><span class="gsL">瞄準</span><span class="chip" data-k="q" id="aimk">🎯 換瞄準模式（Q）</span><span class="note">自由 → 水線 → 砲甲板 → 帆具 → 甲板人員 → 彈藥庫（現在的寫在羅盤上面）</span></div>
     <div class="gsR"><span class="chip" id="physT"><b>B</b> 帆繩物理</span><span class="chip" id="camT"><b>V</b> 鏡頭跟船</span><span class="chip" id="muteT"><b>M</b> 靜音</span><span class="chip" id="fpsT">顯示 FPS</span><span class="chip" id="fullT"><b>F11</b> 全螢幕</span><span class="note" id="gsFull"></span></div>
+    <div class="gsR"><span class="gsL">視角</span><span class="chip" id="fpT">🧍 第一人稱</span><span class="note">操控我艦船長在船上走（WASD 或畫面上的方向鈕、拖曳或方向鍵轉頭、E 爬梯子、Shift 跑）；再按一次回到原本的鏡頭（TASK-0649）</span></div>
     <div class="gsR"><span class="gsL">彈藥庫殉爆</span><span class="chip" id="slowT">慢動作</span><span class="chip" id="slowCamT">特寫鏡頭</span></div>
     <div class="gsR"><span class="gsL">模擬速度</span><input type="range" id="simSpd" min="-1301" max="903" step="1" value="0" aria-label="模擬速度"><b id="simSpdV" style="min-width:3.6em">×1</b><span class="chip" id="simSpd1">1×</span></div>
     <div class="gsR"><span class="gsL">物理減速</span><span class="chip" id="pslowT">計算量大時放慢</span></div>
@@ -1353,6 +1377,7 @@ function renderLerp(on, a) {
   });
 }
 function camUpdate(dt) {
+  if (FP.on && fpCam()) return;                                        // 第一人稱：鏡頭在船長的眼睛（81_fps.js）
   // 我艦→敵艦（預設，mode 4）：注視點 ＝ 我艦中心（略高），鏡頭在我艦背對敵艦的那一側 ⇒ 畫面中間是我艦、敵艦在它後方；
   // 兩艘繞著彼此轉時鏡頭跟著轉。拖曳改的是相對這條視線的角度（aoff）與俯仰，滾輪改遠近。沒有敵艦 ⇒ 看船頭方向。
   if (CAM.mode === 4 && SHIPS.length) {
@@ -8241,6 +8266,7 @@ function drawCrew() {
     var team = teamIdx(sh), faceW = M4.dir(sh.M, 0, 1, 0);
     sh.crew.forEach(function (c) {
       if (c.st === 3 || n >= BBMAX || (gone && c.st !== 5) || cutHides(sh, c)) return;             // cutHides：剖面、隱藏甲板拿掉的那一邊（74_cutaway.js）
+      if (FP.on && fpHide(sh, c)) return;                                                          // 第一人稱：自己、貼在臉前的人不畫（81_fps.js；⛔ 畫了 ⇒ 鏡頭在看板圖裡面）
       var art = c.art !== undefined && c.art < CREW_ROWS ? c.art : c.role;   // 船長那一列沒有 ⇒ 用職位那一列
       var w = c.st === 4 || c.st === 5 ? c.fw : M4.pt(sh.M, c.pos[0], c.pos[1], c.pos[2]), f = crewFrame(sh, c), row = art * 2 + team;
       var wt = c.walk ? c.walk.to : c.hand && c.moving ? c.hand.to : null;   // 要去的那一點（預備水手：照路走、爬梯子，42_hands.js）
@@ -11053,6 +11079,7 @@ cv.addEventListener('pointerdown', function (e) {
 cv.addEventListener('pointermove', function (e) {
   if (PTRS.has(e.pointerId)) PTRS.set(e.pointerId, { x: e.clientX, y: e.clientY });
   if (PINCH && PTRS.size === 2) {
+    if (FP.on) return;                                                 // 第一人稱：兩指不縮放、不平移
     CAM.dist = clamp(PINCH.dist * PINCH.d / pinchD(), 12, 900);
     var m = pinchM();                                                  // 兩指中點移了 8 px 以上才開始平移（⛔ 不設門檻 ⇒ 只是張合時手指晃一下畫面也跟著跑）
     if (!PINCH.moved && Math.hypot(m.x - PINCH.x0, m.y - PINCH.y0) < 8) return;
@@ -11063,16 +11090,17 @@ cv.addEventListener('pointermove', function (e) {
   var dx = e.clientX - drag.x, dy = e.clientY - drag.y;
   if (!drag.moved && Math.hypot(dx, dy) < 5) return;
   drag.moved = true; drag.x = e.clientX; drag.y = e.clientY;
+  if (FP.on) { fpLook(dx, dy); return; }                             // 第一人稱：拖曳 ＝ 轉頭（81_fps.js）
   if (drag.b === 2) panBy(dx, dy);
   else { if (CAM.mode === 1) CAM.mode = 0; if (CAM.mode === 4) CAM.aoff += dx * 0.006; else CAM.yaw += dx * 0.006; CAM.pitch = clamp(CAM.pitch + dy * 0.005, 0.02, 1.45); }
 });
 function ptrEnd(e) { PTRS.delete(e.pointerId); if (PTRS.size < 2) PINCH = null; }
 cv.addEventListener('pointerup', function (e) {
-  if (drag && !drag.moved && drag.b === 0 && RUNNING && !PINCH) pick(e.clientX, e.clientY);
+  if (drag && !drag.moved && drag.b === 0 && RUNNING && !PINCH && !FP.on) pick(e.clientX, e.clientY);   // 第一人稱：點一下不瞄準
   drag = null; ptrEnd(e);
 });
 cv.addEventListener('pointercancel', function (e) { drag = null; ptrEnd(e); });
-cv.addEventListener('wheel', function (e) { e.preventDefault(); CAM.dist = clamp(CAM.dist * Math.pow(1.0015, e.deltaY), 12, 900); }, { passive: false });
+cv.addEventListener('wheel', function (e) { e.preventDefault(); if (FP.on) return; CAM.dist = clamp(CAM.dist * Math.pow(1.0015, e.deltaY), 12, 900); }, { passive: false });
 function pick(cx, cy) {
   var r = cv.getBoundingClientRect(), nx = (cx - r.left) / r.width * 2 - 1, ny = 1 - (cy - r.top) / r.height * 2;
   var a = M4.pt(CAM.inv, nx, ny, -1), bq = CAM.inv, w0 = bq[3] * nx + bq[7] * ny + bq[11] * -1 + bq[15], w1 = bq[3] * nx + bq[7] * ny + bq[11] + bq[15];
@@ -11101,6 +11129,7 @@ window.addEventListener('keydown', function (e) {
   if (!RUNNING) return;
   var k = e.key.toLowerCase(); if (e.code === 'Space') k = ' ';
   if (k === 'escape') { e.preventDefault(); if (HELP.open) helpClose(); else if (FLX) floodClose(); else if (FLX3) xrayToggle(); else gsetToggle(); return; }   // 遊戲內的設定面板
+  if (FP.on && fpKey(k, true)) { e.preventDefault(); return; }       // 第一人稱：走、轉頭、爬梯子的鍵（81_fps.js）；P 停格、O 設定照舊
   if (k === ' ' || k === 'a' || k === 'd' || k === 'w' || k === 's' || k.indexOf('arrow') === 0) e.preventDefault();
   kbLit(k, true);
   doKey(k, e.repeat);
@@ -11148,7 +11177,7 @@ function doKey(k, repeat) {
   }
 }
 function keyUp(k) { if (k === 'a' || k === 'arrowleft') KEYS.l = false; if (k === 'd' || k === 'arrowright') KEYS.r = false; if (KEYS.sw && (k === 'w' || k === 'arrowup' ? 1 : k === 's' || k === 'arrowdown' ? -1 : 0) === KEYS.sw.d) KEYS.sw = null; }
-window.addEventListener('keyup', function (e) { var k = e.key.toLowerCase(); if (e.code === 'Space') k = ' '; kbLit(k, false); keyUp(k); });
+window.addEventListener('keyup', function (e) { var k = e.key.toLowerCase(); if (e.code === 'Space') k = ' '; if (fpKey(k, false)) return; kbLit(k, false); keyUp(k); });   // fpKey：第一人稱的鍵放開（沒開 ⇒ 只清掉自己按著的、照舊往下走）
 window.addEventListener('blur', function () { KEYS.l = KEYS.r = false; KEYS.sw = null; [].forEach.call(document.querySelectorAll('.kb.down'), function (b) { b.classList.remove('down'); }); });   // 切走視窗 ⇒ 收不到 keyup，按下的顏色一起清掉
 // iPhone 連點兩下放大（Tim 2026-10-15：「連點角落兩下還是會放大，按控帆按鈕太快就觸發」—— 根上的 touch-action:manipulation iOS 不一定照做）：
 // 兩次手指放開相隔 < 350 ms ⇒ 取消第二次的預設動作（＝雙擊縮放）。取消之後瀏覽器不會補 click ⇒ 一般按鈕自己補一個；
@@ -13018,6 +13047,164 @@ function labOpts() {
   if (Q.get('flat') === '1') o.flat = true;
   return o;
 }
+// ── js/81_fps.js ──
+// ───────────────────────── 第一人稱（TASK-0649） ─────────────────────────
+// Tim 2026-10-16：「切換第一人稱模式功能(多一個Toggle按鈕 切換後就可以操控船長在船上自由移動)」「放在設定內」
+//   「第一人稱下 下方操作面板隱藏 改為第一人稱用的操作面板(要能移動 旋轉視角等)」「只保留設定紐 暫停紐」；之後的建造模式（TASK-0648）由這一套衍生。
+// 操控的是我艦的船長（每艘船第一個軍官，40_crew.js ART_CAPTAIN）：位置照舊是船的格座標（c.pos：腳底那一格），跟著船搖。
+//   走：每一步照現在的格子（sh.grid，打掉的地板就站不住）用 standZ 找腳下 ⇒ 上下 NAV_DZ 格內站得住、頭上 NAV_HEAD 格空才走得過去；
+//   身體半徑 FP_R 格（四個角都要站得住）⇒ 不穿牆、走不出舷牆、不會從艙口掉下去。⚠ 不擋模型（砲、桶）：模型不是格子。
+//   梯子：照雕刻的固定點（42_hands.js shipLadders：foot／lo／hi／head），走到梯腳或梯頭旁邊 ⇒ E（或面板的 🪜）沿那條線爬。
+//   看：鏡頭在眼睛（腳底往上 FP_EYE 格，頭頂低就壓低），yaw／pitch 是相對船的（船轉，視線跟著轉）；地平線照世界的上方（不跟著船橫搖）。
+// 只在畫面這一層跑（frame，90_main.js）：⛔ 不抽 rnd()、不碰模擬的狀態（除了船長自己的位置）⇒ 不開第一人稱時戰局逐位元組相同。
+//   停格、設定打開（PAUSED）時只能轉頭、不能走。
+// 自動退出：船長倒下、落水、死了、我艦沉了、換了一艘我艦（playerHandoff）、重新開始、回主選單。
+var FP = { on: false, sh: null, c: null, yaw: 0, pitch: 0, mv: { f: 0, b: 0, l: 0, r: 0, tl: 0, tr: 0, lu: 0, ld: 0 }, run: false, climb: null, near: null, lads: null };
+var FP_EYE = 16, FP_SP = 14, FP_RUN = 2, FP_TURN = 1.8, FP_R = 1.5, FP_CLIMB = 8, FP_REACH = 9, FP_FOV = 1.15;
+function fpCaptain(sh) { return sh ? sh.crew.filter(function (c) { return c.art === ART_CAPTAIN && c.st === 0; })[0] || null : null; }
+/** 開／關。開：鏡頭現在朝哪裡看（水平方向）⇒ 船長就面向那裡（不會一開就轉一大圈）。 */
+function fpSet(on) {
+  if (on) {
+    var sh = RUNNING ? SHIPS[PLAYER_I] : null, c = sh && !sh.sunk ? fpCaptain(sh) : null;
+    if (!c) { if (sh) note(sh, '第一人稱：船長不在崗位上（倒下、落水或陣亡）'); fpUI(); return false; }
+    var d = CAM.look && CAM.eye ? M4.dir(sh.inv, CAM.look[0] - CAM.eye[0], CAM.look[1] - CAM.eye[1], CAM.look[2] - CAM.eye[2]) : [1, 0, 0];
+    FP.on = true; FP.sh = sh; FP.c = c; FP.yaw = Math.atan2(d[1], d[0]) || 0; FP.pitch = 0; FP.climb = null; FP.lads = fpLadders(sh);
+    note(sh, '第一人稱：WASD 走、Shift 跑、拖曳或方向鍵轉頭、E 爬梯子 —— 設定裡再按一次回到原本的鏡頭');
+  } else if (FP.on) {
+    if (FP.c) FP.c.home = FP.c.pos.slice();                            // 站在哪就留在哪（⛔ 不走回原位）
+    FP.on = false; FP.sh = FP.c = FP.climb = FP.near = null; CAM.snap = true;
+  }
+  fpStop(); fpUI(); return FP.on;
+}
+function fpStop() { var m = FP.mv; Object.keys(m).forEach(function (k) { m[k] = 0; }); FP.run = false; }
+function fpUI() {
+  $('stage').classList.toggle('fp', FP.on);
+  $('fpT').classList.toggle('on', FP.on);
+  $('fpClimb').style.display = FP.on && FP.near ? '' : 'none';
+}
+/** 梯子：foot → lo → hi → head（格座標，z ＝ 腳踩的那一格）；lo、hi 抬 CLIMB_LIFT 格（同預備水手，42_hands.js：兩點連線會切過踏板前緣）。 */
+function fpLadders(sh) {
+  return shipLadders(sh.T).map(function (l) {
+    var P = l.pts, mid = P.slice(1, -1).map(function (q) { return [q[0], q[1], q[2] + CLIMB_LIFT]; });
+    return { name: l.name, up: [P[0]].concat(mid, [P[P.length - 1]]) };
+  });
+}
+/** 腳下：(x, y) 那一柱在 z 上下 NAV_DZ 格內站得住的高度（離 z 最近的）；站不住 ⇒ −1。 */
+function fpStand(g, x, y, z) {
+  var best = -1;
+  for (var dz = -NAV_DZ; dz <= NAV_DZ; dz++) {
+    var zz = z + dz; if (zz < 1) continue;
+    var s = standZ(g, x, y, zz, zz, NAV_HEAD);
+    if (s >= 0 && (best < 0 || Math.abs(s - z) < Math.abs(best - z))) best = s;
+  }
+  return best;
+}
+/** 走到 (nx, ny)：中心那一柱要站得住（⇒ 不會從艙口掉下去）；身體四個角只擋牆（身高範圍裡有實心、又不是跨得上去的台階）——
+ *  角懸在洞上可以（⛔ 四個角都要站得住 ⇒ 站在艙口邊的人連往後退都不行：量過，梯頭那一格旁邊就是地板和踏板之間的縫）。
+ *  腳下 ＝ 中心與四個角裡站得住的最高那一個（跨過門檻）；不行 ⇒ null。 */
+function fpTry(g, z, nx, ny, thin) {
+  var hi = fpStand(g, Math.floor(nx), Math.floor(ny), z);
+  if (hi < 0) return null;
+  if (thin) return hi;                                                 // 卡住了（現在的位置四個角就撞牆）⇒ 只看中心那一柱，先走出來
+  for (var i = 0; i < 4; i++) {
+    var x = Math.floor(nx + (i & 1 ? FP_R : -FP_R)), y = Math.floor(ny + (i & 2 ? FP_R : -FP_R)), s = fpStand(g, x, y, z);
+    if (s >= 0) { if (s > hi) hi = s; continue; }
+    for (var h = NAV_DZ + 1; h < NAV_HEAD; h++) if (g.get(x, y, z + h)) return null;   // 牆（台階以上、頭以下有實心）
+  }
+  return hi;
+}
+/** 眼睛離腳底幾格：頭頂（那一柱往上第一個實心）低於 FP_EYE ＋ 1 ⇒ 壓到頭頂下一格。 */
+function fpEye(g, p) {
+  var x = Math.floor(p[0]), y = Math.floor(p[1]), z = Math.floor(p[2]);
+  for (var h = 1; h <= FP_EYE + 1; h++) if (g.get(x, y, z + h)) return Math.max(3, h - 1.2);
+  return FP_EYE;
+}
+/** 每一格畫面（90_main.js frame，camUpdate 之前）：退出判斷、走、爬、看哪一座梯子在旁邊。 */
+function fpFrame(dt) {
+  if (!FP.on) return;
+  var sh = FP.sh, c = FP.c;
+  if (!RUNNING || SHIPS[PLAYER_I] !== sh || sh.sunk || sh.crew.indexOf(c) < 0 || c.st !== 0) {
+    var why = !RUNNING || SHIPS[PLAYER_I] !== sh ? '' : sh.sunk ? '我艦沉了' : c.st === 4 || c.st === 5 ? '船長落水' : '船長倒下';
+    var o = sh; fpSet(false); if (why && o) note(o, '第一人稱結束：' + why);
+    return;
+  }
+  var m = FP.mv, g = sh.grid;
+  FP.yaw += (m.tr - m.tl) * FP_TURN * dt; FP.pitch = clamp(FP.pitch + (m.lu - m.ld) * FP_TURN * 0.7 * dt, -1.35, 1.35);
+  if (PAUSED) return;                                                  // 停格、設定打開：只能轉頭
+  if (FP.climb) {                                                      // 爬：一段一段沿梯子的線走（三維）
+    var P = FP.climb.pts, to = P[FP.climb.k], d = sub(to, c.pos), l = len(d), s = FP_CLIMB * dt;
+    c.moving = true;                                                   // ⛔ 沒有 ⇒ survey（32_hull.js）看腳下 3×3 沒地板 ⇒ 判成掉下去（爬的時候人懸在梯子上）
+    if (l <= s) { c.pos = to.slice(); if (++FP.climb.k >= P.length) { FP.climb = null; c.home = c.pos.slice(); c.moving = false; } }
+    else c.pos = add(c.pos, mul(d, s / l));
+    FP.near = null; fpUI();
+    return;
+  }
+  var f = m.f - m.b, r = m.r - m.l;
+  if (f || r) {
+    var n = Math.hypot(f, r), sp = FP_SP * (FP.run ? FP_RUN : 1) * dt / n, cy = Math.cos(FP.yaw), sy = Math.sin(FP.yaw);
+    var dx = (cy * f - sy * r) * sp, dy = (sy * f + cy * r) * sp, z = Math.floor(c.pos[2]), nz;   // 右手邊 ＝ yaw + 90°（格的 +y ＝ 右舷）
+    var thin = fpTry(g, z, c.pos[0], c.pos[1]) === null;
+    if ((nz = fpTry(g, z, c.pos[0] + dx, c.pos[1] + dy, thin)) !== null) { c.pos[0] += dx; c.pos[1] += dy; c.pos[2] = nz; }
+    else if (dx && (nz = fpTry(g, z, c.pos[0] + dx, c.pos[1], thin)) !== null) { c.pos[0] += dx; c.pos[2] = nz; }   // 貼著牆滑
+    else if (dy && (nz = fpTry(g, z, c.pos[0], c.pos[1] + dy, thin)) !== null) { c.pos[1] += dy; c.pos[2] = nz; }
+    c.moving = true; c.face = Math.cos(FP.yaw) >= 0 ? 1 : -1;
+  } else c.moving = false;
+  FP.near = fpNear(c.pos);
+  fpUI();
+}
+/** 旁邊有沒有梯腳（往上爬）或梯頭（往下爬）：水平 FP_REACH 格內、高度差 4 格內，取最近的那一個。 */
+function fpNear(p) {
+  var best = null, bd = 1e9;
+  (FP.lads || []).forEach(function (L) {
+    [[L.up[0], L.up], [L.up[L.up.length - 1], L.up.slice().reverse()]].forEach(function (e) {
+      var q = e[0], dh = Math.hypot(q[0] - p[0], q[1] - p[1]);
+      if (dh < FP_REACH && Math.abs(q[2] - p[2]) <= 4 && dh < bd) { bd = dh; best = { pts: e[1], up: e[1] === L.up, name: L.name }; }
+    });
+  });
+  return best;
+}
+/** 畫船員（41_crew_art.js drawCrew）：自己不畫；同一艘船上、水平 FP_NEAR 格內、差不多同一層的人也不畫（看板圖 2.1 m 高，貼在臉前會蓋掉半個畫面）。 */
+var FP_NEAR = 8;
+function fpHide(sh, c) {
+  if (c === FP.c) return true;
+  if (sh !== FP.sh || c.st === 4 || c.st === 5) return false;
+  var p = FP.c.pos; return Math.abs(c.pos[0] - p[0]) < FP_NEAR && Math.abs(c.pos[1] - p[1]) < FP_NEAR && Math.abs(c.pos[2] - p[2]) < 12;
+}
+function fpClimbGo() { if (!FP.on || FP.climb || !FP.near || PAUSED) return; FP.climb = { pts: FP.near.pts, k: 0 }; }
+/** 鏡頭（03_camera.js camUpdate 開頭）：眼睛在船長頭上、照船的矩陣（內插過的）換到世界。 */
+function fpCam() {
+  if (!FP.on) return false;
+  var sh = FP.sh, c = FP.c, e = fpEye(sh.grid, c.pos);
+  var eye = M4.pt(sh.M, c.pos[0], c.pos[1], c.pos[2] + e);
+  var cp = Math.cos(FP.pitch), dir = norm(M4.dir(sh.M, Math.cos(FP.yaw) * cp, Math.sin(FP.yaw) * cp, Math.sin(FP.pitch)));
+  CAM.eye = eye; CAM.look = add(eye, dir);
+  var proj = M4.persp(FP_FOV, CAM.w / CAM.h, 0.05, 5000);            // 近裁切面 5 cm（⛔ 0.5 m ⇒ 艙裡身邊的牆被切掉）
+  CAM.vp = M4.mul(proj, M4.lookAt(CAM.eye, CAM.look, [0, 1, 0])); CAM.inv = M4.inv(CAM.vp);
+  return true;
+}
+/** 鍵盤（71_input.js keydown／keyup 先問這裡）：第一人稱的鍵吃掉 ⇒ true；其他照舊（P 停格、O／Esc 設定）。 */
+var FP_KEYS = { w: 'f', arrowup: 'lu', s: 'b', arrowdown: 'ld', a: 'l', d: 'r', arrowleft: 'tl', arrowright: 'tr', q: 'tl', e: null, ' ': null, shift: null };
+function fpKey(k, down) {
+  if (!(k in FP_KEYS)) return false;
+  if (k === 'shift') { FP.run = down && FP.on; return FP.on; }
+  if (!FP.on) { if (!down && FP_KEYS[k]) FP.mv[FP_KEYS[k]] = 0; return false; }
+  if (k === 'e' || k === ' ') { if (down) fpClimbGo(); return true; }
+  FP.mv[FP_KEYS[k]] = down ? 1 : 0;
+  return true;
+}
+/** 拖曳轉頭（71_input.js pointermove）：往右拖 ⇒ 往右看。 */
+function fpLook(dx, dy) { FP.yaw += dx * 0.005; FP.pitch = clamp(FP.pitch - dy * 0.005, -1.35, 1.35); }
+// 設定面板的開關、第一人稱的操作面板（按住才動：放開、移出、取消都停）
+$('fpT').onclick = function () { fpSet(!FP.on); gsetClose(); };
+[].forEach.call(document.querySelectorAll('#fpUI [data-fp]'), function (b) {
+  var k = b.dataset.fp;
+  function on(e) { e.preventDefault(); FP.mv[k] = 1; b.classList.add('down'); }
+  function off() { FP.mv[k] = 0; b.classList.remove('down'); }
+  b.addEventListener('pointerdown', on); b.addEventListener('pointerup', off); b.addEventListener('pointerleave', off); b.addEventListener('pointercancel', off);
+});
+$('fpRun').onclick = function () { FP.run = !FP.run; $('fpRun').classList.toggle('on', FP.run); };
+$('fpClimb').onclick = function () { fpClimbGo(); };
+window.addEventListener('blur', fpStop);
 // ── js/90_main.js ──
 // ───────────────────────── 主迴圈 ─────────────────────────
 var last = 0, acc = 0, FPS = 60, fpsT = 0;
@@ -13044,6 +13231,7 @@ function frame(ts, noRaf) {                                         // noRaf：_
   remesh(RM_BUDGET);                                                  // 重網格化，每格有預算（60_render.js）
   if (PF) pfLap('flush');
   renderLerp(true, RUNNING ? acc / DT : 1);                           // 畫面內插（03_camera.js）：鏡頭、畫、HUD 用兩步之間的位置，畫完換回模擬的
+  fpFrame(dt);                                                        // 第一人稱：走、爬、退出判斷（81_fps.js；沒開 ⇒ 什麼都不做）
   camUpdate(dt); render(); if (PF) pfLap('render'); hud(dt); frzShow(); slowShow();
   renderLerp(false);                        // 停格條（72_floodui.js）
   if (PF) { pfLap('hud'); pfEnd(f0, RUNNING && !PAUSED ? n : 0); }
@@ -13110,6 +13298,12 @@ if (DEBUG) window.__game = {
   med: function (i) { return medInfo(SHIPS[i || 0]); },   // 醫療艙（44_medic.js）：每一間的床、人手、搬下去、治好歸隊
   rooms: function (on) { if (on !== undefined) { ROOMS_DBG = !!on; if (!on) roomLabels(); } return roomsInfo(); },   // 空艙房（36_rooms.js）：讀數；給 true／false ⇒ 開關外框與名字
   shipsIO: { exp: function () { return shipsExport(); }, imp: function (o) { var n = shipsImport(o); SLIDERS_SHOW && SLIDERS_SHOW(); return n; }, crew: function (id) { return shipCrew(id); }, seen: function () { return CREW_SEEN; } },   // 船隻配置的匯出入（TASK-0570；量的時候不必真的下載檔案）
+  fp: function (on, to) { if (on !== undefined && on !== null) fpSet(!!on); if (to === 'lad' && FP.lads && FP.lads.length) to = FP.lads[0].up[0]; if (to && FP.c) { var sz = -1; for (var dz = 0; dz <= 12 && sz < 0; dz++) { sz = standZ(FP.sh.grid, Math.floor(to[0]), Math.floor(to[1]), to[2] - dz, to[2] + dz, NAV_HEAD); } if (sz >= 0) FP.c.pos = [to[0], to[1], sz]; } var c = FP.c; return { on: FP.on, paused: PAUSED, pos: c ? c.pos.map(function (v) { return +v.toFixed(2); }) : null, yaw: +FP.yaw.toFixed(3), pitch: +FP.pitch.toFixed(3), near: FP.near ? { name: FP.near.name, up: FP.near.up } : null, climb: FP.climb ? FP.climb.k : null, lads: (FP.lads || []).map(function (L) { return L.name + ' ' + L.up[0].join(',') + '→' + L.up[L.up.length - 1].join(','); }), mv: Object.assign({}, FP.mv) }; },   // 第一人稱（81_fps.js）：讀數；fp(1)／fp(0) 開關；fp(null, [x,y,z]｜'lad') 瞬移（'lad' ＝ 第一座梯子的梯腳；貼到 ±12 格內最近的地板，找不到就不移 —— ⛔ 懸空 ⇒ survey 判成掉下去、摔傷）—— 量的時候用
+  fpMap: function (r) {   // 第一人稱：船長周圍 ±r 格每一柱站不站得住（照 81_fps.js fpStand；. 站不住、數字 ＝ 腳底比現在高幾格、@ 自己）—— 量的時候用
+    if (!FP.on) return null; r = r || 10; var c = FP.c, g = FP.sh.grid, z = Math.floor(c.pos[2]), x0 = Math.floor(c.pos[0]), y0 = Math.floor(c.pos[1]), rows = [];
+    for (var y = y0 - r; y <= y0 + r; y++) { var s = ''; for (var x = x0 - r; x <= x0 + r; x++) { var h = fpStand(g, x, y, z); s += x === x0 && y === y0 ? '@' : h < 0 ? '.' : String.fromCharCode(48 + Math.max(0, Math.min(9, h - z + 4))); } rows.push(s); }
+    return rows;
+  },
   camera: function () { return { mode: CAM.mode, follow: CAM.follow ? { age: +CAM.follow.age.toFixed(2), owner: CAM.follow.owner, alive: CAM.follow.alive } : null, pick: CAM.pick || null, track: CAM.track, yaw: CAM.yaw, dist: CAM.dist, tgt: CAM.tgt.slice(), eye: CAM.eye.slice() }; },
   strike: function (o) { for (var k in o) STRIKE[k] = o[k]; return { rules: STRIKE, text: strikeText() }; },
   /** 量降旗用：第 i 艘還能動的人照順序倒下，直到死傷比例到 frac（role 給了只倒那個職位）；下一次 survey 才判降旗。 */

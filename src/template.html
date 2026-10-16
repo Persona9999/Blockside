@@ -211,6 +211,23 @@
   #end h2{ margin:0 0 8px; font-size:26px; }
   #end button{ font:inherit; margin:10px 6px 0; padding:6px 18px; border-radius:6px; border:1px solid rgba(255,255,255,.3); background:rgba(255,255,255,.08); color:var(--ink); cursor:pointer; }
   .still .hud, .still #cover, .still #help, .still #end{ display:none !important; }
+  /* 第一人稱（81_fps.js，TASK-0649；Tim 2026-10-16「下方操作面板隱藏 改為第一人稱用的操作面板」「只保留設定紐 暫停紐」）：
+     HUD 全部藏起來，只留下方那一排的 ⏸ 與 ⚙（設定面板、說明照常打得開）；換上 #fpUI。⛔ hud() 照樣在跑（只是看不見）—— 行內的 display 用 !important 壓過 */
+  #fpUI{ display:none; }
+  #stage.fp .hud:not(#botC):not(#gset):not(#help){ display:none !important; }
+  #stage.fp #navBox, #stage.fp #helmL, #stage.fp #helmR, #stage.fp #guns, #stage.fp #ammo, #stage.fp #keys > :not(#pauseK):not(#setB){ display:none !important; }
+  #stage.fp #fpUI{ display:block; position:absolute; left:0; right:0; bottom:calc(64px + env(safe-area-inset-bottom)); pointer-events:none; z-index:3; }
+  #fpUI .fpPad{ position:absolute; bottom:0; display:grid; grid-template-columns:repeat(3, 56px); grid-auto-rows:56px; gap:6px; }
+  #fpMove{ left:calc(14px + env(safe-area-inset-left)); } #fpLook{ right:calc(14px + env(safe-area-inset-right)); }
+  #fpUI .fpb{ pointer-events:auto; display:flex; align-items:center; justify-content:center; margin:0; padding:0; font-size:22px; border-radius:50%; background:rgba(10,14,22,.55); touch-action:none; }
+  #fpUI .fpb.down, #fpUI .fpb.on{ background:rgba(110,170,255,.45); }
+  #fpAct{ position:absolute; bottom:0; left:50%; transform:translateX(-50%); display:flex; gap:8px; }
+  #fpAct .fpb{ border-radius:28px; padding:0 16px; height:48px; font-size:16px; white-space:nowrap; }
+  @media (max-width: 640px){   /* 直式手機：兩組方向鈕縮一號，中間的 🪜 🏃 搬到方向鈕上方（⛔ 同一排 ⇒ 375 px 寬疊在一起，量過） */
+    #fpUI .fpPad{ grid-template-columns:repeat(3, 46px); grid-auto-rows:46px; gap:4px; }
+    #fpUI .fpb{ font-size:19px; }
+    #fpAct{ bottom:108px; } #fpAct .fpb{ height:42px; font-size:15px; padding:0 12px; }
+  }
   #err{ position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); max-width:80%; color:#ffb3a6; display:none; white-space:pre-wrap; }
 </style>
 </head>
@@ -228,6 +245,12 @@
     <div id="guns"></div>
     <div id="ammo"><span class="kb hb" id="ammoB" title="彈種：點一下換下一種（鍵盤 1 實心彈、2 爆裂彈、3 鏈彈）"><b>1/2/3</b><i class="em"><span class="ball"></span></i></span></div>
   </div><div id="helmR" class="helm"><span class="kb hb" data-k="8" id="ancS" title="右錨（8）"><b>8</b><i class="em">⚓▶</i></span><span class="kb hb" data-k="g" id="autoF" title="自動開砲（G）"><b>G</b><i class="em">🤖💥</i></span><span class="kb hb" data-k="f" id="fireK" title="開一門（F）"><b>F</b><i class="em">💥</i></span><span class="kb hb" data-k=" " id="volleyK" title="齊射（空白鍵）"><b>空白</b><i class="em">💥💥💥</i></span><span class="kb hb" data-k="d" data-hold="1" title="右舵（D，按住）"><b>D</b><i class="em">➡️</i></span></div></div></div>
+  <!-- 第一人稱的操作面板（81_fps.js；#stage.fp 才顯示）：左下移動（按住）、右下轉頭（按住）＋跑、爬梯子；拖曳畫面也能轉頭 -->
+  <div id="fpUI">
+    <div id="fpMove" class="fpPad"><span></span><span class="kb fpb" data-fp="f">▲</span><span></span><span class="kb fpb" data-fp="l">◀</span><span class="kb fpb" data-fp="b">▼</span><span class="kb fpb" data-fp="r">▶</span></div>
+    <div id="fpAct"><span class="kb fpb" id="fpClimb" style="display:none">🪜 爬梯子（E）</span><span class="kb fpb" id="fpRun">🏃 跑</span></div>
+    <div id="fpLook" class="fpPad"><span></span><span class="kb fpb" data-fp="lu">⤒</span><span></span><span class="kb fpb" data-fp="tl">⟲</span><span class="kb fpb" data-fp="ld">⤓</span><span class="kb fpb" data-fp="tr">⟳</span></div>
+  </div>
   <div id="tip" class="hud"></div>
   <div id="slowB" class="hud"></div>
   <div id="obsB" class="hud"></div>
@@ -286,6 +309,7 @@
     <div class="gsR"><span class="gsL">物理效果</span><span class="chip" data-gx="full">全開</span><span class="chip" data-gx="high">高</span><span class="chip" data-gx="mid">中</span><span class="chip" data-gx="low">低</span><span class="note" id="gsPhx"></span></div>
     <div class="gsR"><span class="gsL">瞄準</span><span class="chip" data-k="q" id="aimk">🎯 換瞄準模式（Q）</span><span class="note">自由 → 水線 → 砲甲板 → 帆具 → 甲板人員 → 彈藥庫（現在的寫在羅盤上面）</span></div>
     <div class="gsR"><span class="chip" id="physT"><b>B</b> 帆繩物理</span><span class="chip" id="camT"><b>V</b> 鏡頭跟船</span><span class="chip" id="muteT"><b>M</b> 靜音</span><span class="chip" id="fpsT">顯示 FPS</span><span class="chip" id="fullT"><b>F11</b> 全螢幕</span><span class="note" id="gsFull"></span></div>
+    <div class="gsR"><span class="gsL">視角</span><span class="chip" id="fpT">🧍 第一人稱</span><span class="note">操控我艦船長在船上走（WASD 或畫面上的方向鈕、拖曳或方向鍵轉頭、E 爬梯子、Shift 跑）；再按一次回到原本的鏡頭（TASK-0649）</span></div>
     <div class="gsR"><span class="gsL">彈藥庫殉爆</span><span class="chip" id="slowT">慢動作</span><span class="chip" id="slowCamT">特寫鏡頭</span></div>
     <div class="gsR"><span class="gsL">模擬速度</span><input type="range" id="simSpd" min="-1301" max="903" step="1" value="0" aria-label="模擬速度"><b id="simSpdV" style="min-width:3.6em">×1</b><span class="chip" id="simSpd1">1×</span></div>
     <div class="gsR"><span class="gsL">物理減速</span><span class="chip" id="pslowT">計算量大時放慢</span></div>
@@ -569,6 +593,7 @@
 <script src="js/78_funnel.js" data-bundle="game"></script>
 <script src="js/79_report.js" data-bundle="game"></script>
 <script src="js/80_lab.js" data-bundle="game"></script>
+<script src="js/81_fps.js" data-bundle="game"></script>
 <script src="js/90_main.js" data-bundle="game"></script>
 </body>
 </html>
