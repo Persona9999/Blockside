@@ -22,6 +22,12 @@
 #   ＋ 格子左右鏡射＋diff（TASK-0602）：每艘照 y 找鏡面（y ↔ s − y），只存一半＋diff（另一半多出來／換色的格、該是空的要刪的格），
 #     header.mirror ＝ {s, nhalf, ndiff}；遊戲在 VoxelKit/voxelkit.js parse（unmirror）還原，之後的程式看到的塊跟原檔一位元組不差。
 #     壓起來沒有比較小 ⇒ 那艘照原樣。七艘：格子 897 → 507 KB、成品 5.70 → 5.20 MB；解碼每艘多 0–33 ms（三叉戟號 30 → 63）。
+#   ＋ 改裝船存成跟原船的差（TASK-0657；Tim：「可以把一艘船當成子作品概念去做改裝船(減少資料量)」「只要記錄diff的部分(不過匯入時就要兩個一起匯入)」）：
+#     船隻清單 ships[].variant_of ＝ 原船的代號 ⇒ 格子那一段存成跟原船 _cache 原檔的差（多的、換色的、刪掉的格；線性索引差值 u32 ＋ 顏色 u8），header.variant ＝ {el, ndiff}；
+#     遊戲在 voxelkit.js decode（unvariant）先照原船自己的讀法解原船、再套差；比鏡射（或原樣）小才用。原船、改裝船的 x、y 尺寸要一樣（z 可以不同）。
+#     驗：原船要在清單裡、不成環（validate）；寫出去之前照遊戲的讀法還原、跟改裝船原檔一位元組不差（pack_verify）。原船重新匯入 ⇒ 下一次 build 照當下的兩份重算。
+#     船型快取的鍵把原船那一路的內嵌原文也算進去（06_cache.js：原船跟改裝船一起長了同樣的格 ⇒ 差不變、整艘變了）。
+#     讀數（2026-10-16，哨兵號 ← 莫尼特號）：格子 27 KB → 1 KB（差 10,664 格）；整艘內嵌 19 KB（莫尼特號 42 KB），剩下的大多是材質那一格（壓縮後 9.5 KB；還沒做成差）。
 #   匯入、重新匯入、同步 meta、後台「儲存並重建」都走這一條（預設壓縮）。
 python -I admin.py build
 # 原格式（不壓縮）
@@ -34,6 +40,8 @@ python -I admin.py verify
 python -I admin.py serve --open
 # 匯入新船（雕刻作品 ⇒ _cache/<代號>.vxk ⇒ 登記進船隻清單 ⇒ 建置；比例要跟現有的船一樣）
 python -I admin.py import --work <雕刻作品 ID> --id <代號> --name <名字>
+# 匯入改裝船（TASK-0657）：原船要先在清單裡；船隻設定（航速、動力、geo、船員…）照原船開始，名字、檔案、作者是自己的
+python -I admin.py import --work <改裝船的雕刻作品> --id <代號> --name <名字> --variant-of <原船的代號>
 # 重新匯入（作品長了）：印出跟上一版的格數、checksum、繩帆模型數與 vxk_compare.py 的內容對拍；只差匯出時間 ⇒ 不換
 python -I admin.py reimport --id constitution
 # 建造者（Tim 2026-10-15）：ships[].author ＝ .vxk 檔頭的 owner（senate 匯出時寫的雕刻作品作者）—— import／reimport 會自己記；以前匯入的船補一次（不重建）⇒ 船隻配置頁船卡、後台船隻卡顯示
@@ -157,7 +165,7 @@ python -I admin.py cache --all    # 每艘都比 ＝ 比對來源：雕刻作品
 | `02_audio.js` | 音效（按下開始後才建）；master 後面一個限制器（DynamicsCompressor −14 dB、比 20）＋同時發聲上限（同一種 60 ms 內 3 個、全部 24 個還在響）⇒ 爆炸再密也不削波（Tim 2026-10-15：「目前爆炸太頻繁會爆音」；兩舷齊射 4 輪＋殉爆：輸出峰值 1.672 → 0.683、≥ 1 的樣本 194 → 0） |
 | `03_camera.js` | 鏡頭（自由／追砲彈／看敵艦／看我艦、跟船）；追砲彈挑哪一顆（`pickBall`／`ballPredict`） |
 | `04_state.js` | 全域狀態與選單設定：`LIM`（滑桿上下限，`CFG.lim`）、硬度／進水／壓艙物／砲的重量／航速／靈活性、砲・帆・船員・火藥桶的血量、每發傷害 `DMG`、彈種倍率 `AMMO_K`、殉爆威力、降旗規則、模式、`PHYS` |
-| `05_hull.js` | 船型（一種船一份，兩艘同型共用）：`HULL_LIST`（選單列得出來的船）、`loadHull`（選到才解碼、網格化）、`FLEET_SET`（艦隊編成：我方、敵方的船型）、設計水線 `hullZW`（meta `kind=ship, waterline_z`，沒有 ⇒ 63） |
+| `05_hull.js` | 船型（一種船一份，兩艘同型共用）：`HULL_LIST`（選單列得出來的船）、`loadHull`（選到才解碼、網格化）、`FLEET_SET`（艦隊編成：我方、敵方的船型）、設計水線 `hullZW`（meta `kind=ship, waterline_z`，沒有 ⇒ 63）；改裝船的 meta 路徑（`metaRebase`，TASK-0657：原船整艘是一條關聯 `原船/…` ⇒ 原船裡互相指名的 mount、funnel、hoist… 照寫它的那一層往上找，補上前綴才對得上的才換；沒有巢狀的船一格都不換） |
 | `05_material.js` | 材質（TASK-0616）：材質表 `MATS`（`CFG.materials`）、船型的材質層（`hullMaterials`：全船預設 `T.mat0`＋ .vxk 檔頭 `materials` 的段落 ⇒ `T.matG` 每格的索引）、打到那一格的硬度 `hardAt`（船殼硬度 × 材質倍率）、每格的消耗 `matK`、格子的重量 `T.voxT0`／`voxLostT`；沒有材質層、全船比重 0.7 ⇒ 走以前那一條（`T.matPlain`，戰局逐位元組相同） |
 | `06_cache.js` | 船型快取（IndexedDB）：`cacheGet`／`cachePut`、快取鍵（`.vxk` 原文與頁面 JS 的雜湊） |
 | `07_gfx.js` | 畫質設定：`GFX`（陰影／反射／折射／海面細緻度／解析度／反鋸齒）、低中高三檔 `GFX_PRESET`、`gfxLevel`（對不上 ⇒ 自訂）、網址參數 |
@@ -173,7 +181,7 @@ python -I admin.py cache --all    # 每艘都比 ＝ 比對來源：雕刻作品
 | `20_shatter.js` | 拆格：砲彈打碎船殼 |
 | `21_gunnery.js` | 開砲、齊射、射界、砲彈飛行與命中、模型扣血與被打飛（命中照網格的佔用格 `inMesh`）、斷繩撕帆、帆掉下來；彈重與能量（砲種表 `shot`、設定檔 `pen`）：實心彈打木頭照能量扣、打有 `pen` 的材質（鐵甲）照入射角與板厚判彈開／凹痕／擊穿機率，爆裂彈半徑照彈重與硬度（TASK-0621） |
 | `22_pieces.js` | 斷開的那一團：倒下、壓到人、落水；斷成兩截的半截船（翹起來、沉下去，上面的砲跟著走） |
-| `23_powder.js` | 彈藥庫與火藥桶：血量、點燃、連鎖、整間殉爆（`crater` 排好區塊、`blastStep`／`stepBlasts` 分步挖）、斷船（`breakShip`，彈坑挖完才切）；取用點（`makeStations`）—— 彈藥庫關聯 meta `hoist=<梯子路徑>` ⇒ 那座梯子梯頭那一層的取用點改成「桶在梯腳、在梯頭取」（`hoistStation`；TASK-0632，莫尼特號的火藥從住艙甲板經砲塔艙口吊上來、不擺在露天甲板） |
+| `23_powder.js` | 彈藥庫與火藥桶：血量、點燃、連鎖、整間殉爆（`crater` 排好區塊、`blastStep`／`stepBlasts` 分步挖）、斷船（`breakShip`，彈坑挖完才切）；取用點（`makeStations`）—— 彈藥庫關聯 meta `hoist=<梯子路徑>` ⇒ 那座梯子梯頭那一層的取用點改成「桶在梯腳、在梯頭取」（`hoistStation`；TASK-0632，莫尼特號的火藥從住艙甲板經砲塔艙口吊上來、不擺在露天甲板）；同一層沒有 hoist 的彈藥庫照舊找空地（TASK-0658 哨兵號的備便彈藥櫃）；送藥手挑取用點 `stationPick`：x 最近、走路格不連通而同一層有連通的 ⇒ 挑連通的（匯入檢查用同一支） |
 | `24_armor.js` | 砲帶的裝甲（TASK-0631）：關聯 meta `kind=armor`、`mount=<砲模型>` 的格從船殼拆出來（`armorSetup`：`T.armor`、船殼 `T.hullG`；`T.base` 照舊是整艘）、每艘一份跟著砲轉（`armorShip`、`armLocal`）、打中（`armAt`／`armRemove`，`shatter`／`slab` 帶 a）、殉爆 `armBlast`、畫（`armDraw`／`armSmDraw`）、走路格看的格子 `navBase`／`navG`（＋會轉的裝甲掃過的那一圈 `armRing`／`armWall`，TASK-0655） |
 | `25_doors.js` | 門、艙蓋（TASK-0638）：模型 meta `kind=door`、固定點 `hinge-a`／`hinge-b`（`doorsShip`：鉸鏈、門正下方的開口格）；有人經過才開（`doorsAnim`，畫面那一格、畫質「門的開關演出」）；門沒了 ⇒ 開口變進水口（`doorsSurvey`：公式模式加進 `sh.flood`、粒子模式 `fl.tops` ⇒ `doorInflow`）；匯入檢查的讀數 `doorsSummary`。詳見下面「門、艙蓋」 |
 | `26_spin.js` | 照參數轉的子物件（TASK-0640）：模型 meta `spin`＝來源參數（`SPIN_SRC`：rudder／speed／rpm）、`spin_mode`（angle／rate）、`spin_k`、`spin_min`／`spin_max`（沒寫 ＝ 無上限）、`spin_lag`；轉軸 `spinAxis`（固定點 spin-a／spin-b ＞ meta spin_pivot_*＋spin_axis_* ＞ 舵的 hinge_*＋axis_* ＞ hub-aft／hub-fore ＞ hub＋axis_*）；`spinShip`（建船）、`spinStep`（模擬每一步，sail() 之後）、匯入檢查 `spinIssues`／`spinSummary`。詳見下面「照參數轉的子物件」 |

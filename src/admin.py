@@ -439,6 +439,22 @@ def validate(cfg, prev=None):
     if not (isinstance(S, list) and S):
         err('ships', '至少要有一艘')
         S = []
+    # 改裝船（TASK-0657）：原船要在清單裡（打包時格子存成跟它的差 ⇒ 兩艘要一起匯入）、不成環
+    byid = {s.get('id'): s for s in S if isinstance(s, dict)}
+    for s in S:
+        if not (isinstance(s, dict) and isinstance(s.get('variant_of'), str) and s['variant_of'] != s.get('id')):
+            continue
+        seen, cur = [s.get('id')], s
+        while isinstance(cur.get('variant_of'), str):
+            nxt = byid.get(cur['variant_of'])
+            if nxt is None:
+                err('ships[%s].variant_of' % s.get('id'), '原船 %s 不在船隻清單裡 ⇒ 先匯入原船（改裝船存成跟它的差，兩艘要一起在）' % cur['variant_of'])
+                break
+            if nxt.get('id') in seen:
+                err('ships[%s].variant_of' % s.get('id'), '原船成環：%s' % ' → '.join(seen + [nxt.get('id')]))
+                break
+            seen.append(nxt.get('id'))
+            cur = nxt
     ids, els = set(), set()
     for i, s in enumerate(S):
         p = 'ships[%d]' % i
@@ -470,6 +486,8 @@ def validate(cfg, prev=None):
             err(p + '.drive', '額外動力的種類：steam（蒸汽機，預設）或 magic（魔法／幽靈船）；沒有額外動力（cfg.base）就不用寫')
         if 'author' in s and not (isinstance(s['author'], str) and s['author'].strip()):
             err(p + '.author', '建造者（雕刻作品的作者；匯入時從 .vxk 檔頭 owner 記，沒有就不寫這個鍵）')
+        if 'variant_of' in s and not (isinstance(s['variant_of'], str) and s['variant_of'] != s.get('id')):
+            err(p + '.variant_of', '原船的 id（改裝船，TASK-0657；字串、不能是自己）')
         for k, v in (s.get('cfg') or {}).items():
             if k not in SHIP_CFG_KEYS:
                 err(p + '.cfg.' + k, '不認得的鍵（%s）' % '、'.join(SHIP_CFG_KEYS))
@@ -1061,6 +1079,59 @@ def grid_mirror_unpack(h, body):
     return n, b
 
 
+# ── 格子：改裝船存成跟原船的差（TASK-0657；Tim 2026-10-16「可以把一艘船當成子作品概念去做改裝船(減少資料量)」「只要記錄diff的部分(不過匯入時就要兩個一起匯入)」）──
+# 格式（只在成品裡；_cache 的 .vxk 不動）：header.variant ＝ {el: 原船的內嵌標籤, ndiff}；格子那一段 ＝ 跟原船 _cache 原檔的格子的差
+#   （線性索引 x＋sx·(y＋sy·z) 的差值 u32 × ndiff ＋ 顏色 u8 × ndiff；多的、換色的照改裝船的色，原船有、改裝船沒有的顏色 0）。
+# 還原（voxelkit.js unvariant 同一個算法）：原船照它自己的讀法還原 ⇒ 複製、套 diff、全空的塊不留、照 (cx, cy, cz) 排序 ⇒ 跟原檔一位元組不差（pack_verify 比）。
+# 原船、改裝船的 sx、sy 要一樣（線性索引才對得上；sz 可以不同）；壓起來沒有比較小 ⇒ 不用。原船重新匯入 ⇒ 下一次 build 照當下的兩份重算。
+
+def grid_variant_pack(h, grid, h0, grid0, el0):
+    """改裝船的格子那一段 ⇒ (variant 欄, 新的格子那一段)；x、y 尺寸跟原船不一樣 ⇒ None。"""
+    import numpy as np
+    sx, sy, _ = h['size']
+    if h0['size'][0] != sx or h0['size'][1] != sy:
+        return None
+    x, y, z, c = _grid_cells(grid, h['nchunks'])
+    x0, y0, z0, c0 = _grid_cells(grid0, h0['nchunks'])
+    lin, lin0 = x + sx * (y + sy * z), x0 + sx * (y0 + sy * z0)
+    k = lin * 256 + c
+    add = k[~np.isin(k, lin0 * 256 + c0)]                                           # 多出來或換色 ⇒ 照改裝船的顏色
+    dele = np.setdiff1d(lin0, lin)                                                   # 原船有、改裝船沒有 ⇒ 顏色 0
+    diff = np.concatenate([add, dele * 256])
+    diff = diff[np.argsort(diff // 256, kind='stable')]
+    di = diff // 256
+    body = np.diff(np.concatenate([[0], di])).astype('<u4').tobytes() + (diff % 256).astype(np.uint8).tobytes()
+    return {'el': el0, 'ndiff': int(len(diff))}, body
+
+
+def grid_variant_unpack(h, body, h0, grid0):
+    """grid_variant_pack 的反向（跟 voxelkit.js unvariant 同一個算法；驗算用）⇒ 原本的格子那一段（塊數, 位元組）。grid0 ＝ 原船還原好的格子那一段。"""
+    import numpy as np
+    sx, sy, _ = h['size']
+    nd = h['variant']['ndiff']
+    if len(body) != nd * 5:
+        raise Fail('改裝船段長度 %d ≠ %d' % (len(body), nd * 5))
+    di = np.cumsum(np.frombuffer(body, '<u4', nd, 0).astype(np.int64))
+    dc = np.frombuffer(body, np.uint8, nd, nd * 4).astype(np.int64)
+    x0, y0, z0, c0 = _grid_cells(grid0, h0['nchunks'])
+    cell = dict(zip((x0 + sx * (y0 + sy * z0)).tolist(), c0.tolist()))
+    for a, b in zip(di.tolist(), dc.tolist()):
+        if b:
+            cell[a] = b
+        else:
+            cell.pop(a, None)
+    L = np.fromiter(cell.keys(), np.int64, len(cell))
+    C = np.fromiter(cell.values(), np.int64, len(cell))
+    return _grid_chunks(L % sx, (L // sx) % sy, L // (sx * sy), C)
+
+
+def _cache_raw(s):
+    """一艘的 _cache 原檔 ⇒ (header, 格子那一段)。"""
+    b = zlib.decompress(open(os.path.join(CACHE, s['vxk']), 'rb').read(), -15)
+    n = struct.unpack('<I', b[4:8])[0]
+    return json.loads(b[8:8 + n].decode('utf-8')), b[8 + n:]
+
+
 def same_tris(a, b):
     """兩份網格的三角形一個一個比：每一角的座標、材質都一樣（頂點的編號可以不同）。"""
     if len(a['tris']) != len(b['tris']) or a['tmat'] != b['tmat'] or a['mats'] != b['mats']:
@@ -1079,6 +1150,8 @@ def pack_html(path):
         raise Fail('成品已經是壓縮模式（有 #%s）' % POOL_EL)
     pool, where, log, keep, mirrors = [], {}, [], 0, []
     size0 = len(html.encode('utf-8'))
+    ships = load()['ships']
+    byel, byid = {s['el']: s for s in ships}, {s['id']: s for s in ships}
 
     def one(mt):
         nonlocal keep
@@ -1108,11 +1181,23 @@ def pack_html(path):
             h['mesh_pool'] = POOL_EL
         grid = raw[8 + n:]
         g0 = len(_deflate(grid))
+        el = re.search(r'id="([^"]+)"', mt.group(1)).group(1)
         mr = grid_mirror_pack(h, grid)                        # TASK-0602：格子鏡射＋diff（沒有比較小 ⇒ None，照原樣）
-        if mr:
+        vr = None
+        sv = byel.get(el)
+        if sv and sv.get('variant_of') in byid:              # TASK-0657：改裝船 ⇒ 跟原船的差；比鏡射（或原樣）小才用
+            s0 = byid[sv['variant_of']]
+            h0, g0raw = _cache_raw(s0)
+            vr = grid_variant_pack(h, grid, h0, g0raw, s0['el'])
+            if vr and len(_deflate(vr[1])) >= len(_deflate(mr[1] if mr else grid)):
+                vr = None
+        if vr:
+            h['variant'], grid = vr
+            mr = None
+        elif mr:
             h['mirror'], grid = mr
-        mirrors.append((re.search(r'id="([^"]+)"', mt.group(1)).group(1), h['mirror'] if mr else None, g0, len(_deflate(grid))))
-        if not ms and not mr:
+        mirrors.append((el, h.get('mirror'), g0, len(_deflate(grid)), h.get('variant')))
+        if not ms and not mr and not vr:
             return mt.group(0)
         hb = json.dumps(h, ensure_ascii=False, separators=(',', ':')).encode('utf-8')
         b = base64.b64encode(_deflate(b'VXK1' + struct.pack('<I', len(hb)) + hb + grid)).decode('ascii')
@@ -1130,8 +1215,9 @@ def pack_html(path):
     if E:
         raise Fail('壓縮版還原出來跟原檔對不上（成品沒寫）：\n' + '\n'.join('  ✗ ' + e for e in E[:12]))
     log.append('✓ 還原驗算：%d 艘、%d 份網格的三角形跟 _cache 原檔逐個相同，格子、繩、帆一位元組不差' % (k, nv))
-    for el, M, g0, g1 in mirrors:
-        log.append('  格子 %s：%s　%d KB → %d KB' % (el, ('鏡射 y ↔ %d − y、一半 %d 塊、diff %d 格' % (M['s'], M['nhalf'], M['ndiff'])) if M else '照原樣（鏡射沒有比較小）', g0 // 1024, g1 // 1024))
+    for el, M, g0, g1, V in mirrors:
+        what = ('改裝船：跟原船 #%s 差 %d 格' % (V['el'], V['ndiff'])) if V else ('鏡射 y ↔ %d − y、一半 %d 塊、diff %d 格' % (M['s'], M['nhalf'], M['ndiff'])) if M else '照原樣（鏡射沒有比較小）'
+        log.append('  格子 %s：%s　%d KB → %d KB' % (el, what, g0 // 1024, g1 // 1024))
     open(path, 'w', encoding='utf-8', newline='').write(html2)
     size1 = len(html2.encode('utf-8'))
     log.append('✓ 壓縮模式：%d 艘、網格池 %d 份（%d KB）%s；成品 %.2f MB → %.2f MB（−%.0f%%）' % (
@@ -1155,6 +1241,16 @@ def pack_verify(html):
         na, nb = struct.unpack('<I', a[4:8])[0], struct.unpack('<I', b[4:8])[0]
         ha, hb = json.loads(a[8:8 + na].decode('utf-8')), json.loads(b[8:8 + nb].decode('utf-8'))
         ga = a[8 + na:]
+        if ha.get('variant'):                                   # TASK-0657：改裝船 ⇒ 原船的原檔＋差（原船自己的成品另外在它那一輪比）
+            s0 = next((x for x in load()['ships'] if x['el'] == ha['variant']['el']), None)
+            if s0 is None:
+                E.append('%s：改裝船的原船 #%s 不在船隻清單裡' % (s['id'], ha['variant']['el']))
+                continue
+            h0, g0raw = _cache_raw(s0)
+            nc, ga = grid_variant_unpack(ha, ga, h0, g0raw)
+            ha.pop('variant')
+            if nc != ha.get('nchunks'):
+                E.append('%s：改裝船還原出 %d 塊，header 說 %s 塊' % (s['id'], nc, ha.get('nchunks')))
         if ha.get('mirror'):                                    # TASK-0602：格子鏡射＋diff ⇒ 照遊戲的讀法（voxelkit.js parse）還原再比
             nc, ga = grid_mirror_unpack(ha, ga)
             ha.pop('mirror')
@@ -1241,7 +1337,7 @@ def act_cache(every=False):
     return log
 
 
-def act_import(work, sid, name, build=True):
+def act_import(work, sid, name, build=True, variant_of=None):
     cfg = load()
     work, sid, name = (work or '').strip(), (sid or '').strip(), (name or '').strip()
     if not work:
@@ -1249,6 +1345,13 @@ def act_import(work, sid, name, build=True):
     if any(s['id'] == sid for s in cfg['ships']):
         raise Fail('已經有代號 %s 的船 ⇒ 要換新版本用「重新匯入」' % sid)
     ship = {'id': sid, 'el': 'ship-' + sid.replace('_', '-'), 'name': name, 'vxk': sid + '.vxk', 'work': work}
+    if variant_of:                                             # 改裝船（TASK-0657）：原船要已經在清單裡（validate 擋）
+        ship['variant_of'] = variant_of.strip()
+        base = next((x for x in cfg['ships'] if x['id'] == ship['variant_of']), None)
+        if base:                                               # 船隻設定照原船開始（航速、動力、geo、船員配置…；名字、檔案、作者是自己的）
+            for k, v in base.items():
+                if k not in ('id', 'el', 'name', 'vxk', 'work', 'author', 'variant_of', 'names'):
+                    ship[k] = json.loads(json.dumps(v))
     E = validate(dict(cfg, ships=cfg['ships'] + [ship]))
     if E:
         raise Fail('\n'.join('✗ ' + e for e in E))
@@ -1590,6 +1693,7 @@ def main():
     s.add_argument('--work', required=True)
     s.add_argument('--id', required=True)
     s.add_argument('--name', required=True)
+    s.add_argument('--variant-of', help='改裝船：原船的代號（TASK-0657；成品裡格子存成跟原船的差，原船要先匯入）')
     s.add_argument('--no-build', action='store_true')
     s = sp.add_parser('metasync', help='只同步 meta 與固定點（格子不動）')
     s.add_argument('--id', required=True)
@@ -1629,7 +1733,7 @@ def main():
         elif o.op == 'metasync':
             log = act_metasync(o.id, not o.no_build)
         elif o.op == 'import':
-            log = act_import(o.work, o.id, o.name, not o.no_build)
+            log = act_import(o.work, o.id, o.name, not o.no_build, o.variant_of)
         else:
             log = act_reimport(o.id, o.work, not o.no_build)
     except Fail as e:

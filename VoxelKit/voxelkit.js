@@ -36,6 +36,7 @@
     var header = JSON.parse(new TextDecoder().decode(raw.subarray(8, 8 + hn)));
     var n = header.nchunks, p = 8 + hn;
     if (header.mirror) return { header: header, chunks: unmirror(header, raw, dv, p) };
+    if (header.variant) return { header: header, chunks: null, variantAt: { raw: raw, dv: dv, p: p } };   // 改裝船：格子是跟原船的差 ⇒ decode 解了原船再套（unvariant）
     if (raw.length !== p + n * 6 + n * CH3) throw new Error('VXK1 長度不對：' + raw.length + ' ≠ ' + (p + n * 6 + n * CH3));
     var keys = new Uint16Array(n * 3);
     for (var i = 0; i < n * 3; i++) keys[i] = dv.getUint16(p + i * 2, true);
@@ -89,7 +90,41 @@
     if (out.length !== header.nchunks) throw new Error('VXK1 鏡射還原出 ' + out.length + ' 塊，header 說 ' + header.nchunks + ' 塊');
     return out;
   }
-  function decode(u8) { return inflateRaw(u8).then(parse); }
+  /**
+   * 成品壓縮的改裝船（TASK-0657；Blockside admin.py grid_variant_pack／grid_variant_unpack 是同一個算法）：header.variant ＝ { el: 原船的內嵌標籤, ndiff }，
+   * 格子那一段 ＝ 跟原船（照它自己的讀法還原好的格子）的差：線性索引 x＋sx·(y＋sy·z) 的差值 u32 × ndiff ＋ 顏色 u8 × ndiff（顏色 0 ＝ 刪掉）。
+   * 原船的 sx、sy 跟改裝船一樣（admin.py 驗過；sz 可以不同）。還原：原船的塊複製一份、套 diff、全空的塊不留、照 (cx, cy, cz) 字典序 ⇒ 跟改裝船原檔的塊一位元組不差。
+   */
+  function unvariant(r, base) {
+    var header = r.header, V = header.variant, nd = V.ndiff, sx = header.size[0], sy = header.size[1], raw = r.variantAt.raw, dv = r.variantAt.dv, q = r.variantAt.p;
+    if (base.header.size[0] !== sx || base.header.size[1] !== sy) throw new Error('改裝船的原船 #' + V.el + ' 尺寸 ' + base.header.size + ' 跟改裝船 ' + header.size + ' 的 x、y 不一樣');
+    if (q + nd * 5 !== raw.length) throw new Error('VXK1 改裝船段長度不對：' + raw.length + ' ≠ ' + (q + nd * 5));
+    var nx = Math.ceil(sx / CH), ny = Math.ceil(sy / CH), tab = new Map(), i, li;
+    base.chunks.forEach(function (c) { tab.set(c.cx + nx * (c.cy + ny * c.cz), new Uint8Array(c.data)); });   // ⛔ 複製：原船的塊還要給原船用
+    var at = 0;
+    for (i = 0; i < nd; i++) {
+      at += dv.getUint32(q + i * 4, true);
+      var cz = Math.floor(at / (sx * sy)), rr = at - cz * sx * sy, cy = Math.floor(rr / sx), cx = rr - cy * sx;
+      var k = (cx >> 4) + nx * ((cy >> 4) + ny * (cz >> 4)), c = tab.get(k);
+      if (!c) { c = new Uint8Array(CH3); tab.set(k, c); }
+      c[(cx & 15) | ((cy & 15) << 4) | ((cz & 15) << 8)] = raw[q + nd * 4 + i];
+    }
+    var out = [];
+    tab.forEach(function (c, k) {
+      for (li = 0; li < CH3; li++) if (c[li]) break;
+      if (li === CH3) return;
+      out.push({ cx: k % nx, cy: Math.floor(k / nx) % ny, cz: Math.floor(k / (nx * ny)), data: c });
+    });
+    out.sort(function (a, b) { return a.cx - b.cx || a.cy - b.cy || a.cz - b.cz; });
+    if (out.length !== header.nchunks) throw new Error('VXK1 改裝船還原出 ' + out.length + ' 塊，header 說 ' + header.nchunks + ' 塊');
+    return { header: header, chunks: out };
+  }
+  function decode(u8) {
+    return inflateRaw(u8).then(parse).then(function (r) {
+      if (!r.variantAt) return r;
+      return loadEmbedded(r.header.variant.el).then(function (base) { return unvariant(r, base); });   // 原船照它自己的讀法（鏡射、再上一層的改裝船都行）
+    });
+  }
   /** <script type="application/x-asset" id="…" data-mime="…">base64</script>（vxk_inline.py 填的）；空的（optional 素材沒交）⇒ null。 */
   function embedded(id) {
     var el = document.getElementById(id); if (!el) return null;
