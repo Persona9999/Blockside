@@ -107,6 +107,8 @@ function sail(sh, dt) {
   sh.irons = nogo;
   var dk = (1 - clamp(sh.sink / 9, 0, 0.8)) * (sh.struck ? 0.15 : 1) * (sh.throttle || 1);   // 進水、降旗、讓砲線（52_fleet.js lineClear；平常 1）照樣慢
   var vS = sh.sunk || stop || held ? 0 : VMAX * SPK * Math.sqrt(WIND_SPD) * polar(dU) * (1 - nogo) * dk;   // 帆：這一段全都張著、完好時的航速（driveStep 再乘帆的比例 sailFrac 換成推力）
+  sh.vS1 = SPK > 0 ? vS / SPK * LIM.speed[2] : 0;                     // 視風的基準點（31_drive.js sailWindK，TASK-0639）：航速倍率 ＝ 船隻設定的預設（LIM.speed，1.5）的船這個風向的航速
+                                                                      //   Tim 2026-10-16：「預設設定的船航速照舊，只有比預設快的加成（娛樂 ×1.4、夜隼號 ×3）才被視風限住」
   var vB = BK > 0 && !sh.sunk && !stop && !held ? BK / 1.9438 * dk : 0;   // 額外動力全速的航速（節 ⇒ m/s）；不吃航速倍率（跟以前一樣）
   driveStep(sh, dt, vS, vB, deg, stop || held);                       // 推力、水阻、實際質量 ⇒ 加速度 ⇒ sh.spd（31_drive.js）
   // 舵
