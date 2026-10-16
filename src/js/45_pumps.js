@@ -4,6 +4,8 @@
 //   · 人力（鏈式抽水機，config furniture.pump，power hand）：吸水端在泵井（主桅腳旁、龍骨上方，艙底的水都流到那裡），泵管直直往上，
 //     在水線以上的甲板搖 ⇒ 只能擺在主桅前後 PUMP_WELL_X（3 m）、中線兩側 PUMP_WELL_Y（1.2 m）以內（36_rooms.js placeOk ← pumpPlaceWhy）；沒有桅的船照船身中段。
 //     要水手搖：艙裡有水（PUMP_WET 噸以上）才從預備水手派（點名時跟補位一起排，pri 1：交戰那一舷的砲班先補），水抽乾了放回去；
+//     積水多（排水量的 PUMP_URGENT：憲法號約 11 噸；Tim 2026-10-16：「積水多的時候抽水機優先於醫療艙派人」）⇒ 抽水機排在醫療艙前面，
+//     還缺人就把醫療艙值班的人（staff）叫過來；⛔ 正在扛傷員的（carry）不打斷 —— 打斷 ⇒ 傷員丟在半路。
 //     抽水量 ＝ tpm ×（到崗 ÷ crew，最多 1）。
 //   · 蒸汽（furniture.spump，power steam）：只有蒸汽船（額外動力 > 0、不是魔法）擺得了；擺在中線上（PUMP_WELL_Y 以內）；不用人，
 //     抽水量 ＝ tpm × 鍋爐還能供汽的比例（31_drive.js 每座鍋爐：被打壞 ⇒ 0；這裡另外看泡在艙內的水裡 ⇒ 0）—— 莫尼特號 1862 年就是水淹到鍋爐、蒸汽沒了、抽水機停了才沉的。
@@ -11,6 +13,7 @@
 //   · 兩種都一樣：被打壞（模型，跟砲同一套血量）⇒ 不抽；泡在水裡（腳下那一格在海面下、或艙內的水滿了一半）⇒ 不抽。
 //     同一種加總封頂 furniture[].cap（噸／分，全船）。
 // 沒擺抽水機 ⇒ sh.pumps ＝ null：不派人、不抽 rnd()、pumpK 照舊 ⇒ 戰局一位元不動。
+var PUMP_URGENT = 0.005;                                         // 積水佔設計排水量幾成算「多」（抽水機優先於醫療艙）
 var PUMP_WELL_X = 30, PUMP_WELL_Y = 12, PUMP_WET = 2;            // 格（一格 0.1 m）：主桅前後 3 m、中線兩側 1.2 m（物品的中心）；艙裡幾噸水才派人去搖
 /** 那一型的泵井在哪（格座標 x）：主桅 ＞ 桅的中間那根 ＞ 船身中段。 */
 function pumpWellX(T) {
@@ -83,6 +86,8 @@ function pumpSteamK(sh) {
   C.B.forEach(function (c) { c.b.seats.forEach(function (p, j) { all++; if (c.ok[j] && !wetAt(sh, p, { sea: false, inner: PUMP_WET_IN })) on++; }); });
   return all ? on / all : 1;
 }
+/** 積水多（抽水機優先於醫療艙）：有人力抽水機、艙裡的水 ≥ 設計排水量 × PUMP_URGENT（至少 PUMP_WET）。pumpTick 算、記在 sh.pumps.urgent。 */
+function pumpUrgent(sh) { return !!(sh.pumps && sh.pumps.urgent); }
 /** 艙裡有沒有水（要不要派人去搖）。 */
 function pumpWater(sh) { return shipWaterT(sh) >= PUMP_WET; }
 /** 每次點名（0.5 秒，32_hull.js survey，callHands 之前）：每台抽水機要幾個人、現在抽多少 ⇒ sh.pumps.x（全船另外加的噸／分，33_flood.js pumpK）。 */
@@ -104,6 +109,15 @@ function pumpTick(sh) {
     (sum[p.it] = sum[p.it] || { v: 0, cap: +p.f.cap > 0 ? +p.f.cap : Infinity }).v += p.tpm;
   });
   P.x = Object.keys(sum).reduce(function (a, k) { return a + Math.min(sum[k].v, sum[k].cap); }, 0);
+  var W = shipWaterT(sh);
+  P.urgent = P.list.some(function (p) { return p.need > 0; }) && W >= Math.max(PUMP_WET, PUMP_URGENT * (sh.T.disp || 0));
+  if (P.urgent) {                                                   // 還缺幾個人（派了、在路上的都算）⇒ 從醫療艙值班的人叫過來（還沒到的先叫）
+    var go = 0; sh.crew.forEach(function (c) { if (c.role === ROLE.HAND && able(c) && c.hand.job && c.hand.job.kind === 'pump') go++; });
+    var short = P.list.reduce(function (a, p) { return a + p.need; }, 0) - go;
+    if (short > 0) sh.crew.filter(function (c) { return c.role === ROLE.HAND && able(c) && c.hand.job && c.hand.job.kind === 'staff' && !c.hand.climb; })
+      .sort(function (a, b) { return (a.hand.job.at ? 1 : 0) - (b.hand.job.at ? 1 : 0); }).slice(0, short)
+      .forEach(function (c) { c.hand.job = null; c.hand.legs = []; c.hand.wait = 0; P.pulled = (P.pulled || 0) + 1; });
+  }
   P.sum = sum; P.t = SIMT;
 }
 /** 點名時（callHands，medNeeds 之後）：人力抽水機還缺的人 ⇒ 加進 need（cell ＝ 抽水機旁那一點）。 */
@@ -128,11 +142,11 @@ function pumpNow(sh) { return (sh.cfg.pump === undefined ? PUMP_REF : sh.cfg.pum
 function pumpText(sh) {
   var P = sh.pumps; if (!P) return '';
   var hn = 0, hh = 0, up = 0; P.list.forEach(function (p) { hn += p.need; hh += p.have; if (p.tpm > 0) up++; });
-  return '　抽水 ' + pumpNow(sh).toFixed(1) + ' 噸／分（抽水機 ' + up + '/' + P.list.length + ' 台在抽' + (hn ? '、人手 ' + hh + '/' + hn : '') + '）';
+  return '　抽水 ' + pumpNow(sh).toFixed(1) + ' 噸／分（抽水機 ' + up + '/' + P.list.length + ' 台在抽' + (hn ? '、人手 ' + hh + '/' + hn : '') + (P.urgent ? '、積水多：先派抽水機' : '') + '）';
 }
 /** 讀數（__game.pumps）：基礎、抽水機每台的狀態與原因；沒擺 ⇒ 只有基礎。 */
 function pumpInfo(sh) {
   var P = sh.pumps;
-  return { base: sh.cfg.pump, now: +pumpNow(sh).toFixed(2), water: +shipWaterT(sh).toFixed(1), steam: P && P.list.some(function (p) { return !p.hand; }) ? +pumpSteamK(sh).toFixed(2) : null,
+  return { base: sh.cfg.pump, now: +pumpNow(sh).toFixed(2), water: +shipWaterT(sh).toFixed(1), urgent: !!(P && P.urgent), pulled: P ? P.pulled || 0 : 0, steam: P && P.list.some(function (p) { return !p.hand; }) ? +pumpSteamK(sh).toFixed(2) : null,
     pumps: P ? P.list.map(function (p) { return { name: p.m.name, item: p.it, hand: p.hand, alive: p.m.alive, hp: p.m.hp, need: p.need, have: p.have, tpm: +p.tpm.toFixed(2), why: p.why }; }) : [] };
 }
