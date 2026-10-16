@@ -19,6 +19,7 @@ function frame(ts, noRaf) {                                         // noRaf：_
   if (PF) PF.t = performance.now();
   camFollow(dt);                                                      // 追砲彈（03_camera.js）
   if (!PAUSED && !STILL) stepRain(dt);                                // 3D 雨滴（14_rain.js）：照畫面的時間走；停格、縮圖不動
+  ambFrame();                                                         // 環境音：風、浪、暴風雨的雨（02_ambient.js；還沒有聲音 ⇒ 什麼都不做）
   if (PF) pfLap('rain');
   remesh(RM_BUDGET);                                                  // 重網格化，每格有預算（60_render.js）
   if (PF) pfLap('flush');
@@ -131,6 +132,10 @@ if (DEBUG) window.__game = {
   /** 沙盒進水報表（81_floodlab.js，TASK-0654）：o 同網址 ?lab=flood 的參數 ⇒ 每 every 秒一筆讀數＋接縫分類＋截圖。⛔ 會重開一局。 */
   floodLab: function (o) { return floodLab(o); },
   floodView: function (o) { return floodView(o); },                   // 換鏡頭再拍一張（81_floodlab.js）
+  /** 環境音試聽（02_ambient.js，TASK-0663）：q ＝ 'sec=10&cases=名字:w:sea:rain:hold;…' ⇒ Promise<[{ name, peak, rmsDb, wav }]>（src/tests/ambient_lab.py 經 DevTools 呼叫）。 */
+  ambLab: function (q) { return ambLab(new URLSearchParams(q || '')); },
+  /** 遊戲裡那一份環境音現在的值（還沒有聲音 ⇒ null）：風、浪、雨的音量、風的頻率、悶掉的低通、左右、在不在船艙裡。 */
+  amb: function () { if (!AMB) return null; var r = function (v) { return +v.toFixed(4); }; return { ctx: AC.state, rain: AMB.rain, wind: r(AMB.wg.gain.value), windHz: r(AMB.wbp.frequency.value), sea: r(AMB.vg.gain.value), rainG: AMB.rain ? r(AMB.rg.gain.value) : 0, muff: r(AMB.muff.frequency.value), pan: AMB.pan ? r(AMB.pan.pan.value) : 0, hold: AMB.hold0, p: ambParams() }; },
   shot: function (i, x, z, side, gun, ammo, ang) {
     var sh = SHIPS[i || 0], B = sh.T.base, s = side ? 1 : -1, y0 = -1, y, GS = GUNS[gun] || Object.keys(GUNS).map(function (k) { return GUNS[k]; }).filter(function (g) { return g.code === gun; })[0] || GUNS.long;
     if (side) { for (y = 0; y < sh.T.cy; y++) if (sh.grid.get(x, y, z)) { y0 = y; break; } } else { for (y = B.sy - 1; y > sh.T.cy; y--) if (sh.grid.get(x, y, z)) { y0 = y; break; } }
