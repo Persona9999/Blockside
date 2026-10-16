@@ -31,6 +31,8 @@ function anchorsOf(sh) {
     }
     a.rx = a.hx; a.ry = a.hy; a.rz = a.hz;                              // 錨這一端（ring）：鐵鍊接在這裡、模型錨照它搬到鍊子尾巴
     var hw = null; (T.h.parts || []).some(function (q) { return (hw = q.points && q.points['hawse-' + k]); });
+    var hm = !hw && a.m && typeof a.m.meta.hawse === 'string' ? a.m.meta.hawse.split(',').map(Number) : null;   // 船殼沒登記 ⇒ 錨自己的 meta hawse（"x,y,z"；TASK-0601：固定點只有作者能登記、meta 誰都能標）
+    if (!hw && hm && hm.length === 3 && hm.every(isFinite)) hw = hm;
     if (hw) { a.hx = hw[0]; a.hy = hw[1]; a.hz = hw[2]; a.hw = true; }   // 錨鏈孔 hawse-P／S（船殼固定點，各船登記）：鐵鍊從這裡出來、船繞這一點被拴住；沒登記 ⇒ 跟以前一樣用錨那一點
     out[k] = a;
   });
@@ -38,6 +40,49 @@ function anchorsOf(sh) {
   if (real.length === 1) { out[real[0] === 'P' ? 'S' : 'P'].none = true; out.single = real[0]; }   // 單錨：另一舷不補（TASK-0635）
   else if (!real.length) { out.P.none = out.S.none = true; out.noAnchor = true; }                  // 整艘沒有錨：6／7／8 變成停船
   return (sh.anc = out);
+}
+/** 錨的關聯拆成模型錨（TASK-0601；Tim 2026-10-16：「有些船(憲法號) 會出現拋錨後船體上還有錨 … 直接改meta 因為這是遊戲內功能 不影響雕刻作品本身」）。
+ *  憲法號、餘燼號、三叉戟號的錨是關聯：格子跟船殼攤平成一份 ⇒ 拋下去只能在鍊尾另外畫一個簡單的錨，船上那團格子不動。
+ *  關聯標 meta kind=anchor ⇒ admin.py（anchor_cells）把來源作品的格子照外框與 mirror 換好、寫進檔頭 parts[].cells（base64，每格 x、y、z 各一位元組，相對外框的最小角）；
+ *  這裡（05_hull.js 格子那一步、armorSetup 之後）照它把那幾格從船殼拿掉（T.hullG；T.base 照舊整艘 ⇒ 浮力、站位不變，同裝甲），
+ *  外露的面做成一份模型網格、接在 T.rig.meshes／T.rig.models 後面 ⇒ 之後跟模型錨走同一條路：拋下去整隻搬到鍊尾（ancD）、被打照模型扣血、打飛、腳是 ring 旁的格。
+ *  ⛔ 船上那幾格不在（少了 2% 以上）⇒ 不拆、照舊是船殼（T.ancBad，匯入檢查報）。 */
+function anchorParts(T) {
+  T.ancBad = [];
+  (T.h.parts || []).forEach(function (p) {
+    var mt = p.meta || {}; if (mt.kind !== 'anchor') return;
+    function bad(msg, fix) { T.ancBad.push({ lv: 'warn', where: p.path, msg: msg, fix: fix }); }
+    if (!p.cells || !p.box) { bad('錨的關聯（meta kind=anchor）檔頭沒有 cells ⇒ 照舊是船殼（拋下去船上那團格子不動）', 'python -I admin.py metasync --id ' + T.id + '（會從來源作品補 cells）'); return; }
+    var bin = atob(p.cells), n = bin.length / 3 | 0, b = p.box, X0 = Math.floor(b[0]), Y0 = Math.floor(b[1]), Z0 = Math.floor(b[2]);
+    var nx = Math.floor(b[3]) - X0 + 1, ny = Math.floor(b[4]) - Y0 + 1, nz = Math.floor(b[5]) - Z0 + 1, occ = new Uint8Array(nx * ny * nz), C = [], miss = 0, i;
+    for (i = 0; i < n; i++) {
+      var cx = bin.charCodeAt(3 * i), cy = bin.charCodeAt(3 * i + 1), cz = bin.charCodeAt(3 * i + 2), c = T.base.get(X0 + cx, Y0 + cy, Z0 + cz);
+      if (!c || cx >= nx || cy >= ny || cz >= nz) { miss++; continue; }
+      occ[cx + nx * (cy + ny * cz)] = 1; C.push(cx, cy, cz, c);
+    }
+    if (!C.length || miss > n * 0.02) { bad('cells 跟船上的格對不上（' + miss + '／' + n + ' 格不在）⇒ 照舊是船殼', '作品改過 ⇒ python -I admin.py reimport --id ' + T.id); return; }
+    if (T.hullG === T.base) T.hullG = T.base.share();                   // 共用 T.base 的資料，拆的那幾塊才複製（同 armorSetup）
+    var verts = [], tris = [], tmat = [], mats = [], mi = {}, lo = [1e9, 1e9, 1e9], hi = [-1, -1, -1];
+    var F = [[1, 0, 0, [1, 0, 0], [1, 1, 0], [1, 1, 1], [1, 0, 1]], [-1, 0, 0, [0, 0, 0], [0, 0, 1], [0, 1, 1], [0, 1, 0]], [0, 1, 0, [0, 1, 0], [0, 1, 1], [1, 1, 1], [1, 1, 0]],
+             [0, -1, 0, [0, 0, 0], [1, 0, 0], [1, 0, 1], [0, 0, 1]], [0, 0, 1, [0, 0, 1], [1, 0, 1], [1, 1, 1], [0, 1, 1]], [0, 0, -1, [0, 0, 0], [0, 1, 0], [1, 1, 0], [1, 0, 0]]];   // 六個面：法線、四個角（從外面看逆時針 ⇒ 右手法線朝外）
+    function inA(x, y, z) { return x >= 0 && y >= 0 && z >= 0 && x < nx && y < ny && z < nz && occ[x + nx * (y + ny * z)] === 1; }
+    for (i = 0; i < C.length; i += 4) {
+      var x = C[i], y = C[i + 1], z = C[i + 2], col = C[i + 3];
+      T.hullG.set(X0 + x, Y0 + y, Z0 + z, 0);
+      if (mi[col] === undefined) { var rgb = VK.rgb332(col); mi[col] = mats.length; mats.push([+(rgb[0] / 255).toFixed(4), +(rgb[1] / 255).toFixed(4), +(rgb[2] / 255).toFixed(4)]); }
+      lo = [Math.min(lo[0], x), Math.min(lo[1], y), Math.min(lo[2], z)]; hi = [Math.max(hi[0], x), Math.max(hi[1], y), Math.max(hi[2], z)];
+      F.forEach(function (f) {
+        if (inA(x + f[0], y + f[1], z + f[2])) return;                  // 只畫外露的面（貼著船殼的那一面照畫：船殼那邊拆掉之後也露出來）
+        var v0 = verts.length / 3;
+        for (var q = 3; q < 7; q++) verts.push(x + f[q][0], y + f[q][1], z + f[q][2]);
+        tris.push(v0, v0 + 1, v0 + 2, v0, v0 + 2, v0 + 3); tmat.push(mi[col], mi[col]);
+      });
+    }
+    T.rig = T.rig || {}; T.rig.meshes = T.rig.meshes || []; T.rig.models = T.rig.models || [];
+    T.rig.models.push({ name: p.path, mesh: T.rig.meshes.length, origin: [X0, Y0, Z0], bbox: [X0 + lo[0], Y0 + lo[1], Z0 + lo[2], X0 + hi[0] + 1, Y0 + hi[1] + 1, Z0 + hi[2] + 1],
+      meta: mt, points: p.points || {}, fromPart: C.length / 4 });       // fromPart：拆了幾格（匯入檢查顯示用）
+    T.rig.meshes.push({ verts: verts, tris: tris, tmat: tmat, mats: mats });
+  });
 }
 function anchorAlive(sh, a) {
   if (a.broken) return false;

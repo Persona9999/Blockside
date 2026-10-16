@@ -592,7 +592,76 @@ def export(work, dest):
                      '--arg', 'include=rig,models,parts,meta', '--arg', 'out=' + os.path.abspath(dest)])
     if code != 0 or not os.path.exists(dest):
         raise RuntimeError('匯出失敗（exit %d）：\n%s' % (code, out.strip()))
+    raw = zlib.decompress(open(dest, 'rb').read(), -15)
+    n = struct.unpack('<I', raw[4:8])[0]
+    h = json.loads(raw[8:8 + n].decode('utf-8'))
+    log = anchor_cells(h)
+    if log is not None:
+        vxk_write(dest, h, raw[8 + n:])
+        out += '\n' + '\n'.join(log)
     return out
+
+
+def vxk_write(path, h, body):
+    """header 換掉、格子那一段原樣（同 metasync 的寫法）。"""
+    hb = json.dumps(h, ensure_ascii=False, separators=(',', ':')).encode('utf-8')
+    co = zlib.compressobj(9, zlib.DEFLATED, -15)
+    open(path + '.tmp', 'wb').write(co.compress(b'VXK1' + struct.pack('<I', len(hb)) + hb + body) + co.flush())
+    os.replace(path + '.tmp', path)
+
+
+def anchor_cells(h):
+    """錨的關聯（meta kind=anchor；TASK-0601，Tim 2026-10-16「直接改meta 因為這是遊戲內功能 不影響雕刻作品本身」）：
+    關聯的格子在 .vxk 裡跟船殼攤平成一份，遊戲分不出哪幾格是錨 ⇒ 把來源作品的格子（senate export format=list）照關聯的外框與 mirror 換好，
+    寫進那條關聯的 cells（base64：每格 x、y、z 各一個位元組，相對外框的最小角）；遊戲開局照它把錨拆出船殼、當成模型錨（76_anchor.js anchorParts）。
+    ⛔ turn 不是 0、mirror 不是空或 y、外框任一邊超過 256 格 ⇒ 不寫（遊戲照舊當船殼的一部分，匯入檢查會報）。
+    回：None ＝ header 沒變；不然 ＝ 讀數（每條一行）。"""
+    log, changed, src = [], False, {}
+    senate = shutil.which('senate')
+    for q in h.get('parts', []) or []:
+        want = (q.get('meta') or {}).get('kind') == 'anchor'
+        cells, why = None, ''
+        b, w = q.get('box'), q.get('src')
+        if want and not (b and len(b) == 6 and w):
+            why = '檔頭沒有外框或來源作品'
+        elif want and q.get('turn', 0) not in (0, None):
+            why = 'turn=%s（只認 0）' % q.get('turn')
+        elif want and q.get('mirror', '') not in ('', 'y'):
+            why = 'mirror=%s（只認空或 y）' % q.get('mirror')
+        elif want:
+            sx, sy, sz = int(b[3] - b[0] + 1), int(b[4] - b[1] + 1), int(b[5] - b[2] + 1)
+            if max(sx, sy, sz) > 256:
+                why = '外框超過 256 格'
+            elif not senate:
+                why = '找不到 senate'
+            else:
+                if w not in src:
+                    tmp = os.path.join(CACHE, '_cells_%s.txt' % hashlib.sha1(w.encode('utf-8')).hexdigest()[:10])
+                    code, out = run([senate, 'cmd', 'sculpture', '--arg', 'op=export', '--arg', 'format=list', '--arg', 'work=' + w, '--arg', 'out=' + os.path.abspath(tmp)])
+                    L = []
+                    if code == 0 and os.path.exists(tmp):
+                        L = [tuple(int(v) for v in ln.split(',')[:3]) for ln in open(tmp, encoding='utf-8') if ln[:1].isdigit()]
+                        os.remove(tmp)
+                    src[w] = L
+                L = src[w]
+                if not L:
+                    why = '來源作品 %s 匯不出格子清單' % w
+                elif any(not (0 <= x < sx and 0 <= y < sy and 0 <= z < sz) for x, y, z in L):
+                    why = '來源作品的格子超出關聯的外框（%d×%d×%d）' % (sx, sy, sz)
+                else:
+                    flip = q.get('mirror') == 'y'
+                    cells = base64.b64encode(bytes(v for x, y, z in L for v in (x, sy - 1 - y if flip else y, z))).decode('ascii')
+        if why:
+            log.append('⚠ 錨 %s：%s ⇒ 不拆（照舊是船殼）' % (q.get('path'), why))
+        if q.get('cells') != cells:
+            changed = True
+            if cells is None:
+                q.pop('cells', None)
+            else:
+                q['cells'] = cells
+        if cells:
+            log.append('錨 %s：%d 格（%s%s）' % (q.get('path'), len(base64.b64decode(cells)) // 3, w, '，mirror=y' if q.get('mirror') == 'y' else ''))
+    return log if changed else None
 
 
 # ───────────────────────── 動作（CLI 與後台頁共用） ─────────────────────────
@@ -602,6 +671,7 @@ class Fail(Exception):
 
 def act_metasync(sid, build=True):
     """只同步 meta 與固定點（TASK-0572）：從雕刻作品匯出部件清單，把每條關聯的 meta、points 換進 _cache 那份 .vxk 的 header（路徑對得上的才換）；
+    錨的關聯（meta kind=anchor）補 cells（anchor_cells，TASK-0601）。
     外部模型也一樣（TASK-0640：舵、舵輪的 spin meta 寫在模型上）—— header 的 rig.models[].name ＝ 部件清單 models[].path，只換 meta、points；
     格子、繩、帆、模型的網格與擺放一位元都不動 ⇒ 作品的船體改過也不會被帶進來（要換船體走 reimport）。對不上的路徑列出來（⛔ 不默默略過）。"""
     cfg = load()
@@ -647,13 +717,15 @@ def act_metasync(sid, build=True):
             chm.append(q['name'])
             q['meta'], q['points'] = m, pt
     mnew = sorted(set(PM) - {q.get('name') for q in (h.get('rig') or {}).get('models', [])})
+    ac = anchor_cells(h)                                 # 錨的關聯（meta kind=anchor；TASK-0601）：來源作品的格子寫進 cells
     log = ['metasync %s：%d 條關聯換了 meta／固定點%s' % (sid, len(ch), ('：' + '、'.join(ch)) if ch else '')]
     log.append('metasync %s：%d 個模型換了 meta／固定點%s' % (sid, len(chm), ('：' + '、'.join(chm)) if chm else ''))
     if mmiss:
         log.append('⚠ .vxk 有、作品裡沒有的模型 %d 個（照舊）：%s' % (len(mmiss), '、'.join(mmiss)))
     if mnew:
         log.append('⚠ 作品裡新加、.vxk 還沒有的模型 %d 個（要 reimport 才帶得進來）：%s' % (len(mnew), '、'.join(mnew)))
-    ch += chm
+    log += ac or []
+    ch += chm + (['cells'] if ac is not None else [])
     if miss:
         log.append('⚠ .vxk 有、作品裡沒有的關聯 %d 條（照舊）：%s' % (len(miss), '、'.join(miss)))
     if new:

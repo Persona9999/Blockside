@@ -112,7 +112,7 @@ function buildHull(info, model, t0, C) {
   T.ms = {};                                                               // 每一段花多久（毫秒；讀數 window.__vxk.ms）
   function tm(k, f) { var a = performance.now(); f(); T.ms[k] = +(performance.now() - a).toFixed(1); }
   var steps = [
-    ['格子', function () { tm('grid', function () { T.base = VK.Grid.fromModel(model); }); tm('verify', function () { T.chk = VK.verify(T.base, h); }); tm('material', function () { hullMaterials(T, info); }); tm('armor', function () { armorSetup(T); }); }],   // 材質（05_material.js）：每格的材質索引   // 格子不存快取：照解出來的比 checksum   // armorSetup：砲帶的裝甲拆出來（24_armor.js；T.hullG ＝ 船殼，T.base 照舊是整艘）
+    ['格子', function () { tm('grid', function () { T.base = VK.Grid.fromModel(model); }); tm('verify', function () { T.chk = VK.verify(T.base, h); }); tm('material', function () { hullMaterials(T, info); }); tm('armor', function () { armorSetup(T); }); tm('anchor', function () { anchorParts(T); }); }],   // 材質（05_material.js）：每格的材質索引   // 格子不存快取：照解出來的比 checksum   // armorSetup：砲帶的裝甲拆出來（24_armor.js；T.hullG ＝ 船殼，T.base 照舊是整艘）；anchorParts：錨的關聯拆成模型錨（76_anchor.js，TASK-0601）
     ['模型網格', function () { tm('meshes', function () { buildMeshes(T, C && C.models); }); }],
     ['水線與浮力', function () {
       tm('waterline', function () { waterline(T); }); tm('hullTex', function () { hullTex(T, C && C.hb); }); tm('navImg', function () { navImg(T); sideImg(T); });

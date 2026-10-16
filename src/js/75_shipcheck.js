@@ -60,14 +60,14 @@ function shipCheck(id) {
     // ── 錨（TASK-0601）：模型錨（meta kind=anchor）＋錨環 ring、船殼的錨鏈孔 hawse-P／S（造船規格 §9 anchor）──
     var AN = anchorsOf(sh);
     if (AN.noAnchor) add('warn', '錨', '整艘', '找不到錨（沒有 meta kind=anchor 的模型、也沒有名字有「錨」的關聯）⇒ 不能拋錨：6／7／8 變成停船', '要能拋錨 ⇒ 放共用錨元件（造船規格 §9 anchor）');
-    R.info.anchors = AN.noAnchor ? '沒有錨（6／7／8 ＝ 停船）' : (AN.single ? '單錨（' + (AN.single === 'P' ? '左' : '右') + '舷；左右錨按鈕不顯示、6 只拋這一個）：' : '') + ['P', 'S'].filter(function (k) { return !AN[k].none; }).map(function (k) { var a = AN[k]; return (k === 'P' ? '左' : '右') + (a.m ? '模型' + (a.m.pts.ring ? '＋ring' : '') : a.part ? '格子' : '無') + (a.hw ? '＋hawse' : ''); }).join('、');
+    R.info.anchors = AN.noAnchor ? '沒有錨（6／7／8 ＝ 停船）' : (AN.single ? '單錨（' + (AN.single === 'P' ? '左' : '右') + '舷；左右錨按鈕不顯示、6 只拋這一個）：' : '') + ['P', 'S'].filter(function (k) { return !AN[k].none; }).map(function (k) { var a = AN[k]; return (k === 'P' ? '左' : '右') + (a.m ? ((T.rig.models[a.m.k] || {}).fromPart ? '關聯拆出的模型（' + T.rig.models[a.m.k].fromPart + ' 格）' : '模型') + (a.m.pts.ring ? '＋ring' : '') : a.part ? '格子' : '無') + (a.hw ? '＋hawse' : ''); }).join('、');
     ['P', 'S'].forEach(function (k) {
       var a = AN[k];
       if (a.none) return;                                               // 單錨的船：另一舷本來就沒有（TASK-0635；不補、不報）
       if (a.m && !a.m.pts.ring) add('warn', '錨', a.m.path, '模型錨沒有固定點 ring ⇒ 鐵鍊接在模型頂的中心', '錨子作品登記 ring（造船規格 §9 anchor；共用錨元件已經有）');
-      else if (a.part) add('warn', '錨', a.part.path, '錨是關聯（格子）、不是模型 ⇒ 拋下去時船上那團格子不動、鍊尾另外畫一個簡單的錨', '換成共用錨元件（外部模型、meta kind=anchor）');
+      else if (a.part) add('warn', '錨', a.part.path, '錨是關聯（格子）、不是模型 ⇒ 拋下去時船上那團格子不動、鍊尾另外畫一個簡單的錨', '換成共用錨元件（外部模型、meta kind=anchor），或在這條關聯標 meta kind=anchor（誰都能標；admin.py metasync 補 cells，遊戲拆出來當模型錨）');
       else if (!a.m) add('warn', '錨', k === 'P' ? '左舷' : '右舷', '這一舷的錨沒有模型、也不是關聯（不該走到這裡：單錨與沒有錨都在上面處理了）', '放共用錨元件（造船規格 §9 anchor）');
-      if (!a.hw) add('warn', '錨鏈孔', '船殼', '沒有固定點 hawse-' + k + ' ⇒ 鐵鍊從錨那一點出來、船繞錨那一點被拴住', '船殼登記 hawse-P／S（造船規格 §9 anchor）');
+      if (!a.hw) add('warn', '錨鏈孔', '船殼', '沒有固定點 hawse-' + k + ' ⇒ 鐵鍊從錨那一點出來、船繞錨那一點被拴住', '船殼登記 hawse-P／S（造船規格 §9 anchor），或在錨的 meta 標 hawse="x,y,z"（誰都能標）');
     });
     // ── 材質（TASK-0616）：全船預設＋關聯 meta material；材質表沒有的 ID ⇒ 照全船預設 ──
     R.info.materials = matSummary(T).map(function (m) { return (m.def ? '全船預設 ' : '') + m.name + '（' + m.id + '）' + m.voxels.toLocaleString('en') + ' 格、' + m.t + ' 噸'; }).join('；');
@@ -118,6 +118,7 @@ function shipCheck(id) {
     R.info.doors = doorsSummary(sh);                                    // 門、艙蓋（TASK-0638）
     R.info.spins = spinSummary(sh);                                     // 照參數轉的子物件（TASK-0640）
     (T.armBad || []).forEach(function (b) { add(b.lv, '裝甲', b.where, b.msg, b.fix); });
+    (T.ancBad || []).forEach(function (b) { add(b.lv, '錨', b.where, b.msg, b.fix); });   // 錨的關聯拆不出來（76_anchor.js anchorParts）
     (sh.arm || []).forEach(function (a) {
       if (!a.g) { add('error', '裝甲', a.A.mount, '拆出來了、可是開戰時找不到那門砲的迴旋 ⇒ 裝甲不轉', '那門砲的 meta kind=gun、mount=turret｜pivot（21_gunnery.js gunMountInit）'); return; }
       var bl = armBlock(a); if (bl && bl.some(function (n) { return n > 0; })) add('error', '裝甲', a.A.mount, '砲口沿砲軸碰到裝甲（' + bl.join('／') + ' 點，轉到 ' + Math.round(armYaw(a) / Math.PI * 180) + '°）⇒ 砲口不在砲門裡（砲彈打在自己的裝甲上）', '砲門開在砲軸上（砲口固定點 muzzle 正前方），或把砲往砲門挪');
