@@ -184,8 +184,9 @@ function sail(sh, dt) {
 var SHIPHIT_LV = [null, { foot: 1 }, { stride: 3 }, { stride: 1 }];
 var SHIPFRIC_LV = [null, { n: 0.03, t: 0.01 }, { n: 0.02, t: 0.003 }, { n: 0.012, t: 0.0008 }];   // 每步扣的比例：n ＝ 正面頂著那一份、t ＝ 擦邊那一份；null ＝ 原本（不管方向 ×0.97）
 var HIT_BRUTE = false;                                                   // 除錯（__game.shipHit 第四個參數）：不走八叉樹的篩、每個點都量 ⇒ 對拍用
-var HIT_PROF = { n: 0, ms: 0, max: 0, pairs: 0, touch: 0, pts: 0, nodes: 0 };   // 讀數（__game.shipHit）：量了幾次、花多少 ms（最多一步幾 ms）、外框沒篩掉的配對、貼著幾次、真的換座標的點數、走過的八叉樹節點
+var HIT_PROF = { n: 0, ms: 0, max: 0, pairs: 0, touch: 0, pts: 0, nodes: 0, ram: 0, ramN: 0, ramMax: 0 };   // ram…：撞擊事件（ramTick）花了多少 ms、幾步、最久一步   // 讀數（__game.shipHit）：量了幾次、花多少 ms（最多一步幾 ms）、外框沒篩掉的配對、貼著幾次、真的換座標的點數、走過的八叉樹節點
 function collide() {
+  if (RAM_EV.length) { var tr = performance.now(); ramTick(DT); tr = performance.now() - tr; HIT_PROF.ram += tr; HIT_PROF.ramN++; if (tr > HIT_PROF.ramMax) HIT_PROF.ramMax = tr; }                                       // 撞擊事件（物理設定「碰撞傷害」）：好幾步慢慢壓、減速、最後反彈
   if (SHIPS.length < 2) return;
   var lv = SHIPHIT_LV[PHX.shiphit] || null;
   if (!lv) {
@@ -205,7 +206,7 @@ function collidePair(A, B, ka, kb) {
   var n = best > 1e-3 ? [(pa[0] - pb[0]) / best, 0, (pa[2] - pb[2]) / best] : [0, 0, 1], push = (14 - best) / 2;
   ramHit(A, B, n);                                                      // 撞擊（照每一格量接觸點：膠囊先碰到、格子沒碰到 ⇒ 不算）
   A.px += n[0] * push; A.pz += n[2] * push; B.px -= n[0] * push; B.pz -= n[2] * push;
-  hitFriction(A, B, n);
+  if (!ramOn(A, B)) hitFriction(A, B, n);                              // 撞擊事件進行中 ⇒ 沿 n 的減速交給 ramTick（⛔ 兩邊都扣 ⇒ 彈力 0 也被扣到倒退：量過 −0.33 m/s）
   wpBump(pa, pb, A, B);                                                // 船邊水花（13_water.js；只給人看）
   if (SIMT - (A.bumpT || -9) > 5) { A.bumpT = SIMT; sfx('crack', pa, 1); note(SHIPS[PLAYER_I], '兩艘擦撞'); }
 }
@@ -219,20 +220,29 @@ function hitFriction(A, B, n) {
   });
 }
 // ───── 撞擊（TASK-0652；Tim 2026-10-16：「船隻的碰撞傷害(只有在相對速度夠高時才判斷) 且船隻碰撞要全高」「碰撞傷害可以開關(在物理設定)」「碰撞要全開(每格)」
-//   拍板：開關預設關、門檻 1.5 m/s、撞上時兩艘沿接觸方向的速度照非彈性碰撞改）─────
-// 物理設定「碰撞傷害」（PHX.shipdmg；關 ⇒ 這一段一行都不跑，碰撞跟以前一模一樣）。collidePair／collideFine 碰到了、推開之前呼叫：
+//   拍板：門檻 1.5 m/s、速度照非彈性碰撞改；之後：「把碰撞過程隨能量延長計算(不只發生在一frame中)」「能量夠的話可以持續好幾frame(逐步減速 能量變成破壞力 並累積彈力動能 最後反彈)」）─────
+// 物理設定「碰撞傷害」（PHX.shipdmg；關 ⇒ 這一段一行都不跑，碰撞跟以前一模一樣）。
+// 撞上（ramHit：collidePair／collideFine 碰到了、推開之前呼叫）：
 //   · 接近速度 du ＝ 兩艘的速度（sh.vel）在接觸法線 n（B → A）上的差；du < RAM.v0（滑桿「撞擊門檻」，預設 1.5）⇒ 不算（慢慢靠上去、推開時的擦邊）。
-//   · 接觸點一律照「全開」每一格量（不管船隻碰撞選哪一檔；低檔的膠囊先碰到、格子其實沒碰到 ⇒ 不算）：A 的表面點落在 B 裡、B 的落在 A 裡，各取平均 ＝ 兩艘各自的撞點。
-//   · 速度：沿 n 照非彈性碰撞（恢復係數 RAM.e，滑桿「彈力係數」預設 0；> 0 ⇒ 撞完反彈、可以被彈得倒退）換成共同速度 u ＝ (mA' uA ＋ mB' uB)／(mA' ＋ mB')。船只能沿船頭走（橫向由龍骨與水擋著）⇒ 沿 n 的有效質量 m' ＝ m ÷ max(cos², 1 ÷ RAM.side)
-//     （cos ＝ 船頭跟 n 的夾角；1 ÷ RAM.side，滑桿「側撞有效質量」預設 4 ⇒ 側面被撞的那艘沿 n 的有效質量最多 4 倍 —— 水的附加質量，不是撞不動）；航速改 Δu × cos ÷ max(cos², 1 ÷ RAM.side)（ramSpd；不變號）。
-//     ⛔ 照實際質量算 ⇒ 側面被撞的那艘沿 n 幾乎動不了、撞人的那艘還剩一半的接近速度 ⇒ 下一步又超過門檻、連撞兩次（4 m/s 量過：0.09 秒後再撞 1.82 m/s）。
-//   · 能量 E ＝ ½ μ du²（μ ＝ mA' mB'／(mA' ＋ mB')，噸 ⇒ kJ）；× (1 − e²) × RAM.k（滑桿「撞擊傷害倍率」，預設 1；只乘拿去咬格的那一份）；照撞點的硬度分（硬的吃得少：A 分 E × hB／(hA ＋ hB)）。
-//     從撞點往船裡一口一口咬（shatter，半徑照能量 RAM_R），每一口照打掉的格扣能量（× PEN.wood × 船殼硬度倍率，跟砲彈打木頭同一套），最多 RAM_BITES 口；
-//     碎木傷人（hurt，原因「碰撞」）、撞點附近的模型扣血（砲、小艇…）。打穿水線下 ⇒ 照常進水（removeVoxel）。
-//   · 裝甲子模組不看（碰撞本來就只看船殼 sh.grid）。讀數：sh.rams（每一次：時間、對方、du、E、自己分到的、掉幾格、掉幾噸 t_lost）。廣播：每一次都報，撞掉幾噸。
-var RAM_R = [2, 7], RAM_BITES = 12;   // 咬的半徑、口數上限 ⇒ 傷害倍率 > 1 時跟著 ∛倍率 放大（半徑最多 16 格、口數最多 60；ramBite）                                    // 門檻、傷害倍率、恢復係數、側撞有效質量倍數 ⇒ RAM（04_state.js；物理設定頁的滑桿，config lim.ramv／ramk／rame／ramside）
+//   · 接觸點一律照「全開」每一格量（低檔的膠囊先碰到、格子其實沒碰到 ⇒ 不算）：A 的表面點落在 B 裡、B 的落在 A 裡，各取平均 ＝ 兩艘各自的撞點（分能量用的硬度照這兩點）。
+//   · 沿 n 的有效質量 m' ＝ m ÷ max(cos², 1 ÷ RAM.side)（cos ＝ 船頭跟 n 的夾角；船只能沿船頭走、橫向由龍骨與水擋著；滑桿「側撞有效質量」預設 4）。
+//   · 動能 E0 ＝ ½ μ du²（μ ＝ mA' mB'／(mA' ＋ mB')，噸 ⇒ kJ）：e²（e ＝ 滑桿「彈力係數」）存成彈力、最後反彈；1 − e² 拿去破壞 —— × RAM.k（滑桿「撞擊傷害倍率」，只乘破壞那一份），照撞點的硬度分給兩艘（硬的分得少）。
+//   ⇒ 建一個撞擊事件（RAM_EV；同一對還在撞 ⇒ 不再開新的；撞完 RAM_LATCH 秒內也不開）。
+// 之後每一步（ramTick，collide 開頭）：
+//   · 現在的接近速度 a ＝ du ×√(1 − 吸收了幾成)；壓進去的深度 d 加 a × dt；兩艘互相壓（crushStep：A 的表面點往 −n 移 d 落在 B 的實心格 ⇒ 打掉 B 那一格，B 的往 +n 移 d 落在 A 裡 ⇒ 打掉 A 那一格，
+//     每一格照材質扣那艘分到的破壞能量）；吸收了幾成 ＋＝ max(這一步用掉的破壞能量 ÷ 總共的, dt ÷ RAM_TMAX)（撞到空處也會在 RAM_TMAX（3）秒內停下；每格吸收 × RAM_CRUSH）。
+//   · 速度：接近速度這一步少了多少（Δa），照有效質量分給兩艘（A −mB'／M × Δa、B ＋mA'／M × Δa，質心速度不變），ramSpd 換成航速 ⇒ 一邊壓一邊減速。
+//   · 吸收滿了、或 d 到上限 RAM_DEPTH × ∛max(1, 倍率)（最多 10 m）⇒ 放出彈力：接近速度變成 −e × du（反彈分開），事件結束：
+//     傷人（原因「碰撞」）、撞到的模型扣血、讀數 sh.rams、廣播「撞上 ○○（4.0 m/s，壓了 0.4 秒）—— 自己撞掉 x 噸、○○撞掉 y 噸」。碎屑每一步照當步打掉的格噴。
+//   · ⛔ 以前一步做完（速度一次改好、從撞點沿 n 一口一口咬球）⇒ 50 倍鑽出一條直的隧道、撞上那一步卡 0.2 秒。
+//   · 裝甲子模組不看（碰撞本來就只看船殼 sh.grid）。打穿水線下 ⇒ 照常進水（removeVoxel）。
+// RAM_CRUSH：壓爛一格吸收的能量 ＝ 那一格的耗能 × 這個倍數（周圍的肋骨、甲板跟著變形吸能，不只打掉的那幾格）。⛔ 照 1（砲彈打木頭校的）⇒ 4 m/s 側撞壓 3 m 才用掉不到三分之一的能量，
+//   每次都是撞到深度或時間上限才停（停的那一下速度突然掉 3.2 → 0.8 m/s），倍率 10 跟 50 一模一樣（量過）。
+var RAM_EV = [], RAM_STEP = 1, RAM_DEPTH = 3, RAM_TMAX = 3, RAM_LATCH = 0.5, RAM_CRUSH = 5;
 function ramHit(A, B, n) {
   if (!PHX.shipdmg) return;
+  if (ramOn(A, B)) return;                                              // 這一對還在撞
+  if (SIMT - ((A.ramEnd || {})[B.i] === undefined ? -99 : A.ramEnd[B.i]) < RAM_LATCH) return;   // 剛撞完（反彈還沒分開）
   var vA = A.vel || [0, 0, 0], vB = B.vel || [0, 0, 0], uA = vA[0] * n[0] + vA[2] * n[2], uB = vB[0] * n[0] + vB[2] * n[2], du = uB - uA;   // A 在 +n 那一側：A 往 −n、B 往 +n ⇒ 接近
   if (du < RAM.v0) return;
   var lv = SHIPHIT_LV[3], pa = [], pb = [];
@@ -241,39 +251,89 @@ function ramHit(A, B, n) {
   function mean(P) { var s = [0, 0, 0], k = P.length / 3; for (var i = 0; i < P.length; i += 3) { s[0] += P[i]; s[1] += P[i + 1]; s[2] += P[i + 2]; } return [s[0] / k, s[1] / k, s[2] / k]; }
   function across(P, F, T) { var w = M4.pt(F.M, P[0], P[1], P[2]); return M4.pt(T.inv, w[0], w[1], w[2]); }   // F 的格座標 ⇒ T 的格座標
   var QA = pa.length ? mean(pa) : across(mean(pb), B, A), QB = pb.length ? mean(pb) : across(mean(pa), A, B);
-  var kA = ramK(A, n), kB = ramK(B, n), mA = (A.mass0 || shipT(A)) / kA, mB = (B.mass0 || shipT(B)) / kB, mu = mA * mB / (mA + mB), E = 0.5 * mu * du * du;   // 沿 n 的有效質量（ramK）
-  var u = (mA * uA + mB * uB) / (mA + mB), e = RAM.e;                    // e ＝ 恢復係數（滑桿；0 ＝ 完全非彈性）⇒ 撞完各彈回 e ×（離共同速度的差）、能量只吃掉 (1 − e²)
-  ramSpd(A, u - uA + e * (u - uA), n, kA, e); ramSpd(B, u - uB + e * (u - uB), n, kB, e);
-  E *= (1 - e * e) * RAM.k;                                             // 傷害倍率（滑桿）：只乘拿去咬格的能量，速度照物理
-  var hA = hardAt(A, QA), hB = hardAt(B, QB), eA = E * hB / (hA + hB), eB = E - eA;
-  var w = M4.pt(A.M, QA[0], QA[1], QA[2]);
-  var lA = ramBite(A, QA, n, eA, B, du, E), lB = ramBite(B, QB, [-n[0], 0, -n[2]], eB, A, du, E);
-  sfx('crack', w, 1.6); smoke(w, [0, 0.4, 0], 3, false);
-  function who(sh) { return sh.i === PLAYER_I ? '我艦' : sh.name; } function tons(t) { return t.toFixed(t < 1 ? 2 : 1); }   // 不到 1 噸 ⇒ 小數兩位（一格 0.1 m 見方：500 格才 0.35 噸）
-  note(A, '<b style="color:#ffb35a">撞上' + who(B) + '</b>（' + du.toFixed(1) + ' m/s）—— 自己撞掉 ' + tons(lA) + ' 噸、' + who(B) + '撞掉 ' + tons(lB) + ' 噸', true);   // 廣播（Tim 2026-10-16：「觸發碰撞傷害是否可以廣播(撞掉多少噸)」）：每一次撞擊都報，照撞人的那艘（note 前面帶它的名字）
+  var kA = ramK(A, n), kB = ramK(B, n), mA = (A.mass0 || shipT(A)) / kA, mB = (B.mass0 || shipT(B)) / kB, mu = mA * mB / (mA + mB), E0 = 0.5 * mu * du * du;   // 沿 n 的有效質量（ramK）
+  var e = RAM.e, Ed = E0 * (1 - e * e) * RAM.k, hA = hardAt(A, QA), hB = hardAt(B, QB), eA = Ed * hB / (hA + hB);
+  RAM_EV.push({ A: A, B: B, n: n, kA: kA, kB: kB, mA: mA, mB: mB, du: du, a: du, e: e, E0: E0, Ed: Ed, bud: [eA, Ed - eA], eA: eA, eB: Ed - eA, abs: 0, d: 0,
+    maxD: Math.min(10, RAM_DEPTH * Math.cbrt(Math.max(1, RAM.k))), rem: [[], []], t0: [massLost(A), massLost(B)], ts: SIMT });
+  var w = M4.pt(A.M, QA[0], QA[1], QA[2]); sfx('crack', w, 1.6); smoke(w, [0, 0.4, 0], 3, false);
 }
+/** 撞擊事件每一步（collide 開頭；dt ＝ 一步）：壓、減速；吸收滿了 ⇒ 反彈、收尾。 */
+function ramTick(dt) {
+  for (var q = RAM_EV.length - 1; q >= 0; q--) {
+    var v = RAM_EV[q], A = v.A, B = v.B, n = v.n, done = SHIPS.indexOf(A) < 0 || SHIPS.indexOf(B) < 0 || A.sunk || B.sunk;
+    if (!done) {
+      var a = v.du * Math.sqrt(Math.max(0, 1 - v.abs)); v.d += a * dt;
+      if (v.d > v.maxD) v.abs = 1;
+      else {
+        var r0 = [v.rem[0].length, v.rem[1].length], used = 0, u;
+        if (v.bud[1] > 0) { u = crushStep(B, A, [-n[0] * v.d, 0, -n[2] * v.d], v.rem[1], v.bud[1]); v.bud[1] -= u; used += u; }   // A 往 −n 壓進 B
+        if (v.bud[0] > 0) { u = crushStep(A, B, [n[0] * v.d, 0, n[2] * v.d], v.rem[0], v.bud[0]); v.bud[0] -= u; used += u; }     // B 往 +n 壓進 A
+        v.abs = Math.min(1, v.abs + Math.max(v.Ed > 0 ? used / v.Ed : 0, dt / RAM_TMAX));
+        crushDebris(A, v.rem[0], r0[0], n); crushDebris(B, v.rem[1], r0[1], [-n[0], 0, -n[2]]);
+      }
+      var a2 = v.abs >= 1 ? -v.e * v.du : v.du * Math.sqrt(1 - v.abs), M = v.mA + v.mB;   // 壓到底 ⇒ 放出彈力：接近速度 −e × du（分開）
+      var da = a2 - v.a; v.a = a2;                                       // 接近速度這一步少了多少 ⇒ 照有效質量分給兩艘（質心速度不變）
+      ramSpd(A, -v.mB / M * da, n, v.kA, v.e); ramSpd(B, v.mA / M * da, n, v.kB, v.e);
+      if (v.abs < 1) continue;
+    }
+    RAM_EV.splice(q, 1);
+    (A.ramEnd || (A.ramEnd = {}))[B.i] = SIMT; (B.ramEnd || (B.ramEnd = {}))[A.i] = SIMT;
+    var lA = crushAfter(A, v.rem[0], n, v.eA, B, v, v.t0[0], v.bud[0]), lB = crushAfter(B, v.rem[1], [-n[0], 0, -n[2]], v.eB, A, v, v.t0[1], v.bud[1]);
+    note(A, '<b style="color:#ffb35a">撞上' + ramWho(B) + '</b>（' + v.du.toFixed(1) + ' m/s，壓了 ' + (SIMT - v.ts).toFixed(1) + ' 秒）—— 自己撞掉 ' + ramTons(lA) + ' 噸、' + ramWho(B) + '撞掉 ' + ramTons(lB) + ' 噸', true);   // 廣播（Tim：「觸發碰撞傷害是否可以廣播(撞掉多少噸)」）：每一次撞擊都報
+  }
+}
+function ramWho(sh) { return sh.i === PLAYER_I ? '我艦' : sh.name; }
+function ramTons(t) { return t.toFixed(t < 1 ? 2 : 1); }                 // 不到 1 噸 ⇒ 小數兩位（一格 0.1 m 見方：500 格才 0.35 噸）
 /** 沿 n 的有效質量倍率的倒數：max(cos², 1 ÷ RAM.side)（cos ＝ 船頭跟 n 的夾角）。 */
 function ramK(sh, n) { var f = fwd(sh.yaw), c = f[0] * n[0] + f[2] * n[2]; return Math.max(c * c, 1 / RAM.side); }
-/** 沿 n 的速度改 dU（m/s）⇒ 航速改 dU × cos ÷ k（k ＝ ramK；船只能沿船頭走，橫向那一份由龍骨與水擋掉、推開照舊）；不變號（非彈性：頂多停下來）。
- *  ⛔ 以前 dU ÷ cos ⇒ 側面被撞的那艘（船頭跟 n 幾乎垂直）航速被放大：0 → 7.4 m/s，接著再撞一次（量過）。 */
+/** 這一步沿 n 給的速度增量 dU（有效質量算出來的）⇒ 航速改 dU × cos ÷ k（k ＝ ramK；船只能沿船頭走，沿 n 實際只變 dU × cos² ÷ k，其餘由龍骨與水擋掉、推開照舊）。
+ *  ⛔ 以前 dU ÷ cos ⇒ 側面被撞的那艘（船頭跟 n 幾乎垂直）航速被放大：0 → 7.4 m/s，接著再撞一次（量過）。
+ *  ⛔ 每一步把沿 n 的速度「設成目標值」（差多少補多少）⇒ 只推得動一部分的那艘每一步繼續補，最後收斂到 目標 ÷ cos：側面被撞的那艘撞完 2.6 m/s（量過）⇒ 只給增量。 */
 function ramSpd(sh, dU, n, k, e) {
-  var f = fwd(sh.yaw), c = f[0] * n[0] + f[2] * n[2];
-  var s = sh.spd + dU * c / k; if (!(e > 0) && sh.spd * s < 0) s = 0;   // 有彈性（e > 0）⇒ 可以被彈得倒退
+  var f = fwd(sh.yaw), c = f[0] * n[0] + f[2] * n[2], s = sh.spd + dU * c / k;
+  if (!(e > 0) && sh.spd * s < 0) s = 0;                               // 沒有彈力 ⇒ 頂多停下來、不倒退
   sh.spd = s; sh.vel = mul(f, s);
 }
-/** 一艘被撞：撞點 Q（格座標）、n ＝ 往這艘船裡的方向（世界、水平）、分到的能量 e（kJ）。回撞掉幾噸（massLost 前後的差：格照材質、連帶打飛的模型）。 */
-function ramBite(sh, Q, n, e, other, du, E) {
-  var dL = norm(M4.dir(sh.inv, n[0], 0, n[2])), gk = Math.cbrt(Math.max(1, RAM.k)), R = clamp(1.6 + 0.5 * Math.cbrt(e / 50), RAM_R[0], Math.min(16, RAM_R[1] * gk)), nb = Math.min(60, Math.round(RAM_BITES * gk)), velW = mul(n, 20), left = e, lost = 0, P = Q.slice(), t0 = massLost(sh);
-  for (var k = 0; k < nb && left > 0; k++) {
-    var r = shatter(sh, P, dL, R, velW, 120, 0.55);
-    left -= Math.max(r.cost * PEN.wood * sh.cfg.hard, PEN.wood * R);      // 咬到空的（艙裡）也照一口扣一點 ⇒ 一定會停
-    lost += r.n; P = add(P, mul(dL, R));
+/** 這一對正在撞（撞擊事件進行中）。 */
+function ramOn(A, B) { for (var q = 0; q < RAM_EV.length; q++) { var o = RAM_EV[q]; if ((o.A === A && o.B === B) || (o.A === B && o.B === A)) return true; } return false; }
+/** I 照世界位移 s 壓進 V：I 還在的表面點（全開取樣）落在 V 的實心格 ⇒ 打掉那一格（記進 rem），用到 budget 為止。回用掉多少 kJ。
+ *  每一格照材質扣（(HARD[色] 或 1) × matK × PEN.wood × 船殼硬度倍率，跟 shatter 的耗能同一套）；被壓爛的格不再往前壓（hitCount 只看還在的格）⇒ 船頭越壓越鈍。 */
+function crushStep(V, I, s, rem, budget) {
+  var acc = []; hitCount(I, V, SHIPHIT_LV[3], s, acc, false);
+  if (!acc.length) return 0;
+  var C = M4.mul(V.inv, I.M), J = V.inv, ox = J[0] * s[0] + J[8] * s[2], oy = J[1] * s[0] + J[9] * s[2], oz = J[2] * s[0] + J[10] * s[2], used = 0, k = V.cfg.hard * PEN.wood * RAM_CRUSH;
+  for (var i = 0; i < acc.length && used < budget; i += 3) {
+    var x = acc[i], y = acc[i + 1], z = acc[i + 2];
+    var X = Math.floor(C[0] * x + C[4] * y + C[8] * z + C[12] + ox), Y = Math.floor(C[1] * x + C[5] * y + C[9] * z + C[13] + oy), Z = Math.floor(C[2] * x + C[6] * y + C[10] * z + C[14] + oz);
+    var col = removeVoxel(V, X, Y, Z, true); if (!col) continue;
+    used += (HARD[col] || 1) * matK(V, X, Y, Z) * k; rem.push(X, Y, Z, col);
   }
-  var k2 = clamp(Math.sqrt(e / 1000), 0.3, 1.5);
-  hurt(sh, Q, R * 1.2, R * 2.6, dL, '碰撞', 140 * k2);
-  sh.models.forEach(function (m) { if (!m.alive) return; var d = len(sub(m.c, Q)); if (d < R * 2.5) damageModel(sh, m, mul(n, 6), 120 * k2 * (1 - 0.6 * d / (R * 2.5))); });
-  (sh.rams || (sh.rams = [])).push({ t: +SIMT.toFixed(2), with: other.i, du: +du.toFixed(2), E: Math.round(E), e: Math.round(e), lost: lost });
-  var t = massLost(sh) - t0; sh.rams[sh.rams.length - 1].t_lost = +t.toFixed(2);
+  return used;
+}
+/** 這一步新打掉的格（rem 從第 r0 個起）⇒ 碎屑、片狀碎塊（往 dW：這艘船裡的方向，世界）。 */
+function crushDebris(sh, rem, r0, dW) {
+  var k = (rem.length - r0) / 4; if (!k) return;
+  var part = rem.slice(r0), pr = Math.min(1, 40 / k), vd = norm(dW);
+  for (var i = 0; i < part.length; i += 4) {
+    if (rnd() > pr) continue;
+    var w = M4.pt(sh.M, part[i] + 0.5, part[i + 1] + 0.5, part[i + 2] + 0.5);
+    spawnDebris(w, add(add(mul(vd, rr(0.5, 3)), [gauss() * 2.5, rr(0.5, 4), gauss() * 2.5]), sh.vel || [0, 0, 0]), part[i + 3], rr(0.05, 0.11), rr(6, 14));
+  }
+  spawnPlates(sh, part, vd, 20, 8, 2, sh.M);
+}
+/** 撞擊結束：一艘打掉的那一片（rem：[x, y, z, 色] …，格座標）⇒ 傷人、模型扣血、讀數。dW ＝ 往這艘船裡的方向（世界）。回撞掉幾噸。 */
+function crushAfter(sh, rem, dW, e, other, v, t0, left) {
+  var n = rem.length / 4, c = [0, 0, 0], ext = 0, i;
+  if (n) {
+    for (i = 0; i < rem.length; i += 4) { c[0] += rem[i]; c[1] += rem[i + 1]; c[2] += rem[i + 2]; }
+    c = [c[0] / n + 0.5, c[1] / n + 0.5, c[2] / n + 0.5];
+    for (i = 0; i < rem.length; i += 4) ext = Math.max(ext, Math.hypot(rem[i] + 0.5 - c[0], rem[i + 1] + 0.5 - c[1], rem[i + 2] + 0.5 - c[2]));
+    var dL = norm(M4.dir(sh.inv, dW[0], 0, dW[2])), R = Math.max(2, ext), k2 = clamp(Math.sqrt(e / 1000), 0.3, 1.5);
+    hurt(sh, c, R * 0.8, R * 1.6, dL, '碰撞', 140 * k2);
+    sh.models.forEach(function (m) { if (!m.alive) return; var d = len(sub(m.c, c)); if (d < R * 1.5) damageModel(sh, m, mul(dW, 6), 120 * k2 * (1 - 0.6 * d / (R * 1.5))); });
+  }
+  var t = massLost(sh) - t0;
+  (sh.rams || (sh.rams = [])).push({ t: +v.ts.toFixed(2), dur: +(SIMT - v.ts).toFixed(2), with: other.i, du: +v.du.toFixed(2), E: Math.round(v.E0), Ed: Math.round(v.Ed), e: Math.round(e), lost: n, t_lost: +t.toFixed(2), left: Math.round(left), d: +v.d.toFixed(2), ext: +(ext * S).toFixed(2) });
   return t;
 }
 /** 開局（70_flow.js reset）先把這一場會用到的碰撞取樣建好：船隻碰撞那一檔、碰撞傷害開著再加全開那一份、格子檔的佔用金字塔。只是快取（不碰亂數、不改戰局）。
@@ -429,7 +489,7 @@ function collideFine(A, B, lv) {
   var h = best.d / 2 + 0.01, n = best.dir;
   ramHit(A, B, n);                                                      // 撞擊（物理設定「碰撞傷害」；推開之前量接觸點）
   A.px += n[0] * h; A.pz += n[2] * h; B.px -= n[0] * h; B.pz -= n[2] * h;
-  hitFriction(A, B, n);
+  if (!ramOn(A, B)) hitFriction(A, B, n);                              // 撞擊事件進行中 ⇒ 沿 n 的減速交給 ramTick（⛔ 兩邊都扣 ⇒ 彈力 0 也被扣到倒退：量過 −0.33 m/s）
   var w = acc.length ? M4.pt(A.M, acc[0], acc[1], acc[2]) : [(cA[0] + cB[0]) / 2, cA[1], (cA[2] + cB[2]) / 2];   // 第一個接觸點（給水花、聲音；只有 B 的點落進 A ⇒ 兩艘中心的中點）
   wpBump([w[0] + n[0] * 0.5, w[1], w[2] + n[2] * 0.5], [w[0] - n[0] * 0.5, w[1], w[2] - n[2] * 0.5], A, B);
   if (SIMT - (A.bumpT || -9) > 5) { A.bumpT = SIMT; sfx('crack', w, 1); note(SHIPS[PLAYER_I], '兩艘擦撞'); }
