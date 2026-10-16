@@ -3471,9 +3471,21 @@ function gunMountInit(sh, g) {
   function list(s, d) { var a = String(s === undefined ? d : s).split(',').map(function (v) { return +v * D; }).filter(isFinite); return a.length ? a : String(d).split(',').map(function (v) { return +v * D; }); }
   g.mt = { kind: kind, c: c, ax0: g.ax.slice(), muz0: g.muz.slice(), muzs0: g.muzs ? g.muzs.map(function (q) { return q.slice(); }) : null, yaw: 0, yawT: 0,
     ports: kind === 'pivot' ? list(mt.ports, '0') : null, runin: +mt.runin > 0 ? +mt.runin : 0, sl: 0, arc: kind === 'turret' ? list(mt.arc, '-180,180') : null, rate: (+mt.rate > 0 ? +mt.rate : kind === 'pivot' ? 12 : 20) * D };
-  if (kind === 'turret') g.cone = (+mt.cone > 0 ? +mt.cone : 4) * D;
+  if (kind === 'turret') { g.cone = (+mt.cone > 0 ? +mt.cone : 4) * D; g.mt.full = g.mt.arc[g.mt.arc.length - 1] - g.mt.arc[0] >= 2 * Math.PI - 1e-6; }   // full：轉得了一整圈（arc 沒寫 ＝ −180,180）
   m.piv = c; m.rot = 0;
   (sh.mounts = sh.mounts || []).push(g);
+}
+/** 砲塔這一步要轉到哪（TASK-0636；Tim 2026-10-16：「有可能會繞更大一圈(轉超過180度去瞄準)」—— ⛔ 夾進 arc 再直接相減 ⇒ 跨過 ±180° 往反方向轉 340°、有死角時目標一跨過就整整繞一圈）。
+ *  轉得了一整圈 ⇒ 走近的那一邊（回傳 yaw ＋ 繞回後的差；mountStep 轉完再把 yaw 繞回 ±180°）。
+ *  有死角 ⇒ yaw 只住在 arc 裡、只從 arc 裡轉（不繞回）：目標換算進 [arc 起點, 起點 ＋ 360°)，落在 arc 裡就是它；
+ *  落在死角裡 ⇒ 停在近的那一端，原本靠哪一端就守哪一端，另一端要近過 TURRET_HYS 才換（⛔ 目標在死角中線附近 ⇒ 每一步都整整繞一圈來回甩）。 */
+var TURRET_HYS = 10 * Math.PI / 180;                                     // 離兩端的差 ＝ 離死角中線的兩倍 ⇒ 過中線 5° 才換（莫尼特號死角 12°：中線兩邊各晃 2° 不再甩）
+function turretAim(M, rel) {
+  var lo = M.arc[0], hi = M.arc[M.arc.length - 1], P2 = 2 * Math.PI;
+  if (M.full) { var d = rel - M.yaw; return M.yaw + Math.atan2(Math.sin(d), Math.cos(d)); }
+  var r = lo + ((rel - lo) % P2 + P2) % P2; if (r <= hi) return r;
+  var dh = r - hi, dl = lo + P2 - r, onHi = M.yawT - lo > hi - M.yawT;   // 離兩端各差多少；原本靠哪一端
+  return onHi ? (dl < dh - TURRET_HYS ? lo : hi) : (dh < dl - TURRET_HYS ? hi : lo);
 }
 /** 格座標 p 繞 c 轉 a（跟 modelLocal 同一個 rotM ⇒ 砲口、站位跟畫出來的模型轉得一樣）。 */
 function mountRot(p, c, a) { var d = M4.dir(rotM([0, 0, 1], a), p[0] - c[0], p[1] - c[1], 0); return [c[0] + d[0], c[1] + d[1], p[2]]; }
@@ -3488,13 +3500,15 @@ function mountStep(sh, dt) {
       var best = M.yawT, bd = Math.abs(Math.atan2(Math.sin(rel - M.yawT), Math.cos(rel - M.yawT)));
       M.ports.forEach(function (p) { var d = Math.abs(Math.atan2(Math.sin(rel - p), Math.cos(rel - p))); if (d < bd - 0.1) { bd = d; best = p; } });
       M.yawT = best;
-    } else M.yawT = clamp(rel, M.arc[0], M.arc[M.arc.length - 1]);
+    } else M.yawT = turretAim(M, rel);
     var d = M.yawT - M.yaw, m = g.model, sl0 = M.sl;
     if (Math.abs(d) < 1e-6 && !M.sl) return;
     if (Math.abs(d) >= 1e-6 && M.sl < M.runin) { M.sl = Math.min(M.runin, M.sl + MOUNT_RUN * dt); d = 0; }   // 先拉進來
     else if (Math.abs(d) < 1e-6) M.sl = Math.max(0, M.sl - MOUNT_RUN * dt);   // 到了 ⇒ 推出去
     var st = clamp(d, -M.rate * dt, M.rate * dt), a0 = M.yaw; M.yaw += st; if (Math.abs(M.yawT - M.yaw) < 1e-6) M.yaw = M.yawT;
-    var da = M.yaw - a0; m.rot = M.yaw;
+    var da = M.yaw - a0;
+    if (M.full && Math.abs(M.yaw) > Math.PI) { var w = M.yaw > 0 ? -2 * Math.PI : 2 * Math.PI; M.yaw += w; M.yawT += w; }   // 一整圈的砲塔：yaw 繞回 ±180°（⛔ 一直累加 ⇒ 轉幾圈就差幾個 360°）
+    m.rot = M.yaw;
     if (M.sl !== sl0) m.gsl = M.sl ? [-M.ax0[0] * M.sl, -M.ax0[1] * M.sl] : null;
     var ax = M4.dir(rotM([0, 0, 1], M.yaw), M.ax0[0], M.ax0[1], 0); g.ax = [ax[0], ax[1]];
     var back = function (q) { return [q[0] - M.ax0[0] * M.sl, q[1] - M.ax0[1] * M.sl, q[2]]; };
