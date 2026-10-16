@@ -57,6 +57,26 @@ function shipCheck(id) {
       (DC ? '；主機 ' + DC.E.length + '、軸 ' + DC.SH.length + '、鍋爐 ' + DC.B.reduce(function (a, c) { return a + c.b.seats.length; }, 0) + ' 座' : '');
     if (DC) DP.forEach(function (q) { if (DC.E.length && !(q.w > 0)) add('warn', '動力', q.m ? q.m.path : q.out, '沒有主機推這個輸出物件 ⇒ 不出力', '主機 meta propeller=<螺旋槳模型名>，或讓軸的 aft 靠近 hub（24 格內）、fwd 靠近主機 core'); });
     if (DC) DC.B.forEach(function (c) { if (c.b.funnel && !funnelsOf(T).some(function (f) { return f.name === c.b.funnel; })) add('warn', '鍋爐', c.b.name, 'meta funnel=' + c.b.funnel + ' 找不到這條煙囪 ⇒ 鍋爐壞了也不會停煙', 'funnel 寫煙囪關聯的路徑（一字不差）'); });
+    // ── 動力件（TASK-0653；31_drive.js 檔頭「動力件」）：每一件開局幾格；傳動件（軸、蒸汽管）兩端之間開局有幾條不共用格子的路、傳不傳得滿 ──
+    var PT = drvParts(T), dl = [], DK = { engine: 1, boiler: 1, shaft: 1, steampipe: 1 };
+    (T.h.parts || []).forEach(function (q) {
+      var k = q.meta && q.meta.kind; if (!DK[k]) return;
+      if (!PT.E.concat(PT.B, PT.SH, PT.SP).some(function (o) { return o.name === q.path; })) add('warn', '動力件', q.path, 'meta kind=' + k + ' 缺固定點（' + { engine: 'core', boiler: 'boiler-1…／uptake', shaft: 'aft、fwd', steampipe: 'from、to' }[k] + '）⇒ 遊戲不認這一件', '補固定點（造船規格 §9.6）');
+    });
+    PT.E.concat(PT.B, PT.SH, PT.SP).forEach(function (o) {
+      var kind = o.kind || (PT.E.indexOf(o) >= 0 ? 'engine' : 'boiler'), nm = DRVP[kind].name;
+      if (!o.cells) { dl.push(o.name + '（' + nm + '，沒有格子清單 ⇒ 舊判法：固定點旁 ±' + DRV_PART_R + ' 格）'); if (PT.cells) add('warn', '動力件', o.name, '同一艘有別的件帶格子清單、這一件沒有 ⇒ 這一件照舊判法（固定點旁 ±' + DRV_PART_R + ' 格剩一半）', 'python -I admin.py metasync --id ' + T.id + '（匯出時 drive_cells 寫 cellRuns）'); return; }
+      if (!(o.c0 > 0)) { add('warn', '動力件', o.name, '格子清單在、可是開局一格都不在 ⇒ 量不出剩幾成、當作一直好的', '重匯（格子清單跟船殼對不上）'); dl.push(o.name + '（' + nm + '，開局 0 格）'); return; }
+      var s = o.name + '（' + nm + '，' + o.c0.toLocaleString('en') + ' 格' + (o.tubeN ? '＋穿過船殼借 ' + o.tubeN.toLocaleString('en') + ' 格' : '');
+      if (o.a) {
+        var need = drvNeed(kind), f = drvFlow0(T, o, need);
+        s += '，開局 ' + (f >= need ? '≥ ' + need + ' 條路、傳得滿' : f + ' 條路' + (f ? '（傳滿要 ' + need + ' 條 ⇒ 照開局當滿載）' : ''));
+        if (!f) add('warn', '動力件', o.name, nm + '兩端之間開局就不通 ⇒ 判不了、當作一直通（打斷也不會停）', '格子要從一端的固定點連到另一端（26 鄰；端點 ＝ 固定點 ' + DRV_END_R + ' 格內的格），或固定點挪到格子上');
+        else if (f < need) add('warn', '動力件', o.name, nm + '最細那一截只有 ' + f + ' 條路（每格 ' + Math.round(DRVP[kind].cell * 100) + '%、傳滿要 ' + need + ' 條）⇒ 開局照滿載算，打掉一條就少 ' + Math.round(100 / f) + '%', '雕粗一點（造船規格 §9.6），或道具設定頁調「每格傳幾成」');
+      }
+      dl.push(s + '）');
+    });
+    R.info.drvparts = dl.join('；');
     // ── 錨（TASK-0601）：模型錨（meta kind=anchor）＋錨環 ring、船殼的錨鏈孔 hawse-P／S（造船規格 §9 anchor）──
     var AN = anchorsOf(sh);
     if (AN.noAnchor) add('warn', '錨', '整艘', '找不到錨（沒有 meta kind=anchor 的模型、也沒有名字有「錨」的關聯）⇒ 不能拋錨：6／7／8 變成停船', '要能拋錨 ⇒ 放共用錨元件（造船規格 §9 anchor）');
