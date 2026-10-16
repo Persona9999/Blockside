@@ -382,11 +382,12 @@ def validate(cfg, prev=None):
         for f, lo, hi, what in (('lo', 0, 5, '擊穿機率曲線的下緣（比值低於它 ⇒ 0）'), ('hi', 0.1, 10, '上緣（比值高於它 ⇒ 必穿）'), ('k', 0.2, 10, '曲線的次方（越大 ⇒ 下緣附近越難）'),
                                 ('rico', 30, 89, '彈開的入射角（度，跟法線的夾角）'), ('wood', 0.05, 20, '打木頭每消耗一單位扣幾 kJ（船殼硬度倍率 1）'), ('splinter', 1, 1000, '碎片傷人的基準能量（kJ）'),
                                 ('shellR', 1, 20, '爆裂彈的爆炸半徑（格；24 磅、船殼硬度倍率 1 的橡木）'), ('shellHard', 0, 2, '爆炸半徑照硬度打折的次方'), ('ref', 0.1, 500, '沒寫彈重的砲當幾 kg'),
-                                ('uwMin', 0, 500, '落水後繼續走的最小彈重（kg；TASK-0642）'), ('uwDrag', 0.001, 1, '水的阻力（每走 1 m 速度 × e^(−uwDrag／半徑)）')):
+                                ('uwMin', 0, 500, '落水後繼續走的最小彈重（kg；TASK-0642）'), ('uwDrag', 0.001, 1, '水的阻力（每走 1 m 速度 × e^(−uwDrag／半徑)）'),
+                                ('muzzle', 0, 1, '帶裝甲的砲被打中砲口、砲被打飛時砲班另外吃的那一份的倍率（TASK-0644）')):
             if f in PN and not (isnum(PN[f]) and lo <= PN[f] <= hi):
                 err('pen.' + f, '%s：%s～%s' % (what, lo, hi))
         for f in PN:
-            if f not in ('lo', 'hi', 'k', 'rico', 'wood', 'splinter', 'shellR', 'shellHard', 'ref', 'uwMin', 'uwDrag'):
+            if f not in ('lo', 'hi', 'k', 'rico', 'wood', 'splinter', 'shellR', 'shellHard', 'ref', 'uwMin', 'uwDrag', 'muzzle'):
                 err('pen.' + f, '不認得的鍵')
         if isnum(PN.get('lo', 0.4)) and isnum(PN.get('hi', 1.3)) and PN.get('lo', 0.4) >= PN.get('hi', 1.3):
             err('pen.hi', '要大於 lo')
