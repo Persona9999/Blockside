@@ -68,7 +68,8 @@ function flNew(sh) {
     hA: new Float32Array(H), hX: new Float32Array(H), hY: new Float32Array(H), hZ: new Float32Array(H), hYi: new Float32Array(H), hAcc: new Float32Array(H), hmark: new Uint8Array(H), hon: new Uint8Array(H), hdirty: [], holes: [],
     J: { n: 0, p: new Float32Array(L.jn * 3), v: new Float32Array(L.jn * 3), vol: new Float32Array(L.jn), life: new Float32Array(L.jn) },
     vol: 0, area: 0, open: 0, inQ: 0, outQ: 0, inTot: 0, outTot: 0, pumped: 0, comX: 0, comY: 0, sinkT: 0, step: 0, gen: 0, mesh: null,
-    dq: new Float32Array(N), dqOn: new Uint8Array(N), dqL: [], dqT: 0, fo: new Map() };   // dq…：往下流的量（只給畫面的水幕，flFalls；⛔ 模擬不讀）；fo：每一格往下流的開口在哪（快取）
+    dq: new Float32Array(N), dqOn: new Uint8Array(N), dqL: [], dqT: 0, fo: new Map(),   // dq…：往下流的量（只給畫面的水幕，flFalls；⛔ 模擬不讀）；fo：每一格往下流的開口在哪（快取）
+    lq: new Float32Array(N * 4), lqT: 0 };                               // lq：每一格往前後左右流了多少（只給畫面的水瀑，flSides；⛔ 模擬不讀）
 }
 function flAct(fl, i) {
   if (fl.on[i]) return; fl.on[i] = 1;
@@ -152,6 +153,14 @@ function wetLatch(o, under, n) {
   if (!o.wet && o.wetN >= n) { o.wet = true; return 1; }
   if (o.wet && o.wetN === 0) { o.wet = false; return -1; }
   return 0;
+}
+/** 一艘船的進水讀數（__game.flood 與進水報表 81_floodlab.js 共用同一份）。 */
+function flReadout(sh) {
+  var fl = sh.fl;
+  var cells = 0; for (var t = 0; t < fl.actN; t++) if (fl.A[fl.act[t]] > 0) cells++;
+  return { lv: FLOOD_LV, c: fl.F.c, grid: [fl.F.NX, fl.F.NY, fl.F.NZ], m3: +fl.vol.toFixed(3), t: +(fl.vol * RHO_W).toFixed(2), cells: cells, jets: fl.J.n, holes: fl.open, area: +fl.area.toFixed(3),
+    inQ: +fl.inQ.toFixed(3), outQ: +fl.outQ.toFixed(3), inTot: +fl.inTot.toFixed(2), outTot: +fl.outTot.toFixed(2), pumped: +fl.pumped.toFixed(2), lost: +(fl.lost || 0).toFixed(3),
+    comX: +fl.comX.toFixed(2), comY: +fl.comY.toFixed(2), sinkT: +fl.sinkT.toFixed(3), sink: +sh.sink.toFixed(3), roll: +sh.rollA.toFixed(4), pitch: +sh.pitchA.toFixed(4), dirty: fl.dirty.length + fl.hdirty.length };
 }
 /** 水併進第 i 格（那一格裝不了水 ⇒ 往上找三格）。 */
 function flDeposit(fl, i, v) {
@@ -248,6 +257,7 @@ function flTick(sh, fl, dtc) {
       var dh = hi - head(j); if (dh <= 1e-4) continue;
       m = Math.min(0.5 * dh / hc * Math.min(cap[i], cap[j]) * Vc * 0.25, A[i] * 0.25);
       A[i] -= m; A[j] += m; flAct(fl, j); hi = head(i);
+      fl.lq[i * 4 + nb] += m;                                            // lq：往旁邊流了多少（只記，水瀑用：flSides；⛔ 模擬不讀）
     }
   }
   // 3. 抽水：從最低的那幾層抽（⛔ act 要重拿：上面 flAct 可能換過一條更長的陣列）
@@ -267,7 +277,7 @@ function flTick(sh, fl, dtc) {
   }
   fl.actN = keep;
   for (t = 0; t < J.n; t++) { w += J.vol[t]; mx += J.vol[t] * (J.p[t * 3] - cx); my += J.vol[t] * (J.p[t * 3 + 1] - cy); }
-  fl.vol = w; fl.comX = w > 0 ? mx / w * S : 0; fl.comY = w > 0 ? my / w * S : 0; fl.gen++; fl.dqT += dtc;
+  fl.vol = w; fl.comX = w > 0 ? mx / w * S : 0; fl.comY = w > 0 ? my / w * S : 0; fl.gen++; fl.dqT += dtc; fl.lqT += dtc;
 }
 /** 艙內的水 ⇒ 該多吃水多少（m）：浮力表上「少掉的重量 − 水」跟「少掉的重量」的差。 */
 function floodSinkT(sh, fl) {
@@ -282,16 +292,24 @@ function floodTilt(sh, fl) {
   return [clamp(Math.atan(W * k.comY / (D * FL_GM)), -lim, lim), -clamp(Math.atan(W * k.comX / (D * FL_GML)), -0.07, 0.07)];
 }
 
+// ── 深度吸光（TASK-0654；Tim 2026-10-16：「目前這樣看起來像浮空的一片透明片」、畫質選項 GFX.pdep）──
+//   水面那一點到它後面不透明的東西（RT.B 的深度：畫海之前的場景）有多厚 th（公尺，沿鏡頭方向的深度差）：
+//   越厚越不透明、越深色（1 − e^(−1.3 th)：10 cm ≈ 0.12、1 m ≈ 0.73、2 m ≈ 0.93）；貼著地板、牆的地方（th < 8 cm）淡出 ⇒ 看得出「一池水」而不是一片玻璃。
+//   linZ 跟海的著色器同一支（近 0.5、遠 5000）。透視（FLX3）不讀：關了深度測試，後面那層是擋在前面的船殼 ⇒ 照舊。
+var FL_DEP_GLSL = 'float flLinZ(float d){ float z=d*2.0-1.0; return 5000.0/(5000.5-z*4999.5); }\nvec3 flDepC;\n' +
+  'vec2 flDep(vec3 c,float a0){ float th=max(flLinZ(textureLod(uSceneD,gl_FragCoord.xy/uView,0.0).r)-flLinZ(gl_FragCoord.z),0.0); float ab=1.0-exp(-th*1.3);\n' +
+  ' flDepC=mix(c*1.15+vec3(0.03,0.06,0.05),c*0.55,ab); return vec2(mix(0.2,0.93,ab)*smoothstep(0.0,0.08,th),th); }\n';
 // ── 畫：艙內的水面（每一格水柱的頂，四個角照同一個世界高度擺 ⇒ 船傾斜時水面還是平的）；噴進來的粒子跟點精靈一起畫 ──
 function flGL() {
   P.pool = VK.compile(gl,
     '#version 300 es\nlayout(location=0) in vec4 aP; layout(location=1) in float aZ0; uniform mat4 uModel,uVP; uniform float uMix; out vec3 vW; out float vF; void main(){ vec4 w=uModel*vec4(aP.xy,mix(aZ0,aP.z,uMix),1.0); vW=w.xyz; vF=aP.w; gl_Position=uVP*w; }\n',
-    '#version 300 es\nprecision highp float; in vec3 vW; in float vF; uniform vec3 uEye,uSun,uFog,uSky; uniform float uFogD,uSeaT,uX; out vec4 o;\n' + SHADOW_GLSL +
+    '#version 300 es\nprecision highp float; in vec3 vW; in float vF; uniform vec3 uEye,uSun,uFog,uSky; uniform float uFogD,uSeaT,uX,uDep; uniform vec2 uView; uniform sampler2D uSceneD; out vec4 o;\n' + SHADOW_GLSL + FL_DEP_GLSL +
     'void main(){ vec2 r=vec2(sin(vW.x*3.1+uSeaT*2.3)+sin(vW.z*4.3-uSeaT*1.7),cos(vW.z*2.7-uSeaT*1.9)+cos(vW.x*3.7+uSeaT*2.1))*0.03; vec3 n=normalize(vec3(r.x,1.0,r.y));\n' +
     ' vec3 v=normalize(uEye-vW); float fr=0.04+0.96*pow(1.0-max(dot(n,v),0.0),5.0), sk=shadowK(vW,n);\n' +
     ' vec3 c=mix(vec3(0.08,0.27,0.3)*(0.45+0.55*sk),uSky*0.75,clamp(fr*0.8+0.08,0.0,1.0))+vec3(1.0,0.92,0.75)*pow(max(dot(reflect(-v,n),uSun),0.0),90.0)*(0.25+sk);\n' +
+    ' float al=uX>0.5?0.62:0.78; if(uDep>0.5&&uX<0.5){ vec2 da=flDep(c,0.78); c=flDepC; al=da.x; }\n' +   // 深度吸光（TASK-0654）：關 ⇒ 一位元都不變
     ' if(uX>0.5) c=mix(c,vec3(0.2,0.6,0.95),0.45);\n' +
-    ' float fd=length(vW-uEye); o=vec4(mix(c,uFog,1.0-exp(-fd*uFogD)),uX>0.5?0.62:0.78); }\n');
+    ' float fd=length(vW-uEye); o=vec4(mix(c,uFog,1.0-exp(-fd*uFogD)),al); }\n');
   // 水幕（flFalls）：一道 ＝ 一片直立、繞船的鉛直軸轉向鏡頭的長條；aP 軸上那一點（格座標）、aQ ＝ (左右 ±1、0 上 1 下、長度 m、寬度 m 的上一格)、aW ＝ 這一格的寬度 m
   P.fall = VK.compile(gl,
     '#version 300 es\nlayout(location=0) in vec3 aP; layout(location=1) in vec4 aQ; layout(location=2) in float aW; uniform mat4 uModel,uVP; uniform vec3 uEye; uniform float uMix; out vec3 vW; out vec2 vT; out float vL;\n' +
@@ -301,6 +319,17 @@ function flGL() {
     'void main(){ float u=vT.x, v=vT.y, k=floor((u+1.0)*3.5); float st=0.5+0.5*sin(v*vL*7.0-uSeaT*11.0+k*1.9)*sin(v*vL*2.3-uSeaT*5.0+k*0.7);\n' +   // 往下捲的條紋（每一條相位不同）
     ' vec3 c=mix(vec3(0.1,0.3,0.34),uSky*0.8+vec3(0.12),0.25+0.45*st); if(uX>0.5) c=mix(c,vec3(0.2,0.6,0.95),0.45);\n' +
     ' float a=(0.55+0.3*st)*(1.0-smoothstep(0.55,1.0,abs(u)))*smoothstep(0.0,0.06,v);\n' +
+    ' float fd=length(vW-uEye); o=vec4(mix(c,uFog,1.0-exp(-fd*uFogD)),a); }\n');
+  // 水面的側面與水瀑（flSides；TASK-0654）：沿水格的邊直立的一片（格座標，不轉向鏡頭）；aQ ＝ (沿邊 0–1、0 上 1 下、高 m、種類：0 側面 1 水瀑)
+  P.pside = VK.compile(gl,
+    '#version 300 es\nlayout(location=0) in vec3 aP; layout(location=1) in vec4 aQ; uniform mat4 uModel,uVP; out vec3 vW; out vec4 vQ;\n' +
+    'void main(){ vec4 w=uModel*vec4(aP,1.0); vW=w.xyz; vQ=aQ; gl_Position=uVP*w; }\n',
+    '#version 300 es\nprecision highp float; in vec3 vW; in vec4 vQ; uniform vec3 uEye,uFog,uSky; uniform float uFogD,uSeaT,uX,uDep; uniform vec2 uView; uniform sampler2D uSceneD; out vec4 o;\n' + FL_DEP_GLSL +
+    'void main(){ float u=vQ.x, v=vQ.y, L=vQ.z, k=vQ.w, ks=floor(u*6.0); float st=0.5+0.5*sin(v*L*7.0-uSeaT*11.0+ks*1.9)*sin(v*L*2.3-uSeaT*5.0+ks*0.7);\n' +
+    ' vec3 c=vec3(0.07,0.24,0.27)*(0.8+0.2*(1.0-v)); float a=0.72;\n' +
+    ' if(k>0.5){ c=mix(c,uSky*0.8+vec3(0.12),0.25+0.45*st); a=0.5+0.3*st; }\n' +                  // 水瀑：往下捲的條紋（同 P.fall）
+    ' if(uDep>0.5&&uX<0.5){ vec2 da=flDep(c,a); if(k<0.5){ c=flDepC; a=da.x; } else a*=smoothstep(0.0,0.08,da.y); }\n' +
+    ' if(uX>0.5){ c=mix(c,vec3(0.2,0.6,0.95),0.45); a*=0.8; }\n' +
     ' float fd=length(vW-uEye); o=vec4(mix(c,uFog,1.0-exp(-fd*uFogD)),a); }\n');
 }
 // ── 水幕（TASK-0651；Tim 2026-10-16：「艙內進水 …… 是否可以連接正在往下流動的水(類似瀑布效果)」）──
@@ -369,11 +398,14 @@ function flFalls(sh, fl, me, TI, tops) {
  *    拓撲（哪幾格、每格切成哪幾片）跟上一格一樣 ⇒ 從畫面上現在的高度接著內插（水面慢慢升降）；不一樣（新的格進水、水退了）⇒ 直接換。
  *  代價：畫面的水比模擬晚最多一格；兩格之間船晃動，水面跟著船斜一下（網格在船的座標裡）。 */
 var FL_MESH_MS = 500, FL_FLAT = 1;
+// 量測（TASK-0654；只給 81_floodlab.js 的進水報表，平常兩個都是 false ⇒ 一位元都不多算）：
+//   FL_SNAP ＝ 每次都重做、不內插（截圖跟那一刻的水對得上）；FL_STAT ＝ 每次重做順便分類接縫（me.stat）。
+var FL_SNAP = false, FL_STAT = false;
 function flMesh(sh, fl) {
   var F = fl.F, c = F.c, NX = F.NX, NY = F.NY, NXY = NX * NY, A = fl.A, cap = fl.cap, M = sh.M, Vc = Math.pow(c * S, 3), hc = c * S;
   var me = fl.mesh || (fl.mesh = { vao: gl.createVertexArray(), vb: gl.createBuffer(), buf: new Float32Array(6 * 5 * 512), old: new Float32Array(6 * 5 * 512), sig: [], n: 0, cap: 0, gen: -1, tw: -1e9 });
   var now = performance.now();
-  if (me.gen === fl.gen || (me.n && now - me.tw < FL_MESH_MS)) return me;   // 還沒有網格（剛開始進水）⇒ 馬上做
+  if (me.gen === fl.gen || (!FL_SNAP && me.n && now - me.tw < FL_MESH_MS)) return me;   // 還沒有網格（剛開始進水）⇒ 馬上做
   var mix0 = me.n ? flMix(me) : 1, oldN = me.n, oldSig = me.sig, tmp = me.old; me.old = me.buf; me.buf = tmp.length >= me.old.length ? tmp : new Float32Array(me.old.length); me.sig = [];   // 舊的那一格留著（接著內插用）
   me.tw = now;
   var h0 = M[1] * (F.X0 + 0.5 * c) + M[5] * (F.Y0 + 0.5 * c) + M[13], q = 0, t, i, u;
@@ -381,7 +413,7 @@ function flMesh(sh, fl) {
   var TI = me.ti && me.ti.length === F.N ? me.ti : (me.ti = new Int32Array(F.N).fill(-1)), tops = me.tops || (me.tops = []), S3 = S * S * S, op = fl.op;
   for (t = 0; t < tops.length; t += 2) TI[tops[t]] = -1; tops.length = 0;
   for (t = 0; t < fl.actN; t++) {
-    i = fl.act[t]; if (!(cap[i] > 0.02) || A[i] < 0.02 * cap[i] * Vc) continue;
+    i = fl.act[t]; if (!(cap[i] > 0.02) || A[i] < 0.02 * cap[i] * Vc) { if (FL_STAT && A[i] > 1e-6) (me.thin || (me.thin = [])).push(i); continue; }   // thin：有水但太薄、沒畫（接縫地圖用）
     u = i + NXY; if (u < F.N && cap[u] > 0.02 && A[u] >= 0.02 * cap[u] * Vc) continue;          // 上面那一格也有水 ⇒ 不是水面
     var ix = i % NX, iy = ((i / NX) | 0) % NY, iz = (i / NXY) | 0, W = A[i] / S3, hl = 0;
     for (var l = 0; l < c && W > 1e-6; l++) { var o = op[i * c + l]; if (o <= 0) continue; if (W >= o) { W -= o; hl = l + 1; } else { hl = l + W / o; W = 0; } }   // 空著 0 格的那一層（甲板）水過不去也不停在那裡 ⇒ 跳過
@@ -418,6 +450,8 @@ function flMesh(sh, fl) {
   var PS = new Float64Array(TN), PN = new Int32Array(TN);                 // 每一池的水面平均
   for (t = 0; t < TN; t++) { var rp = root(t); PS[rp] += tops[t * 2 + 1]; PN[rp]++; }
   function corner(r, ix, iy) { var e = CS.get(r * NC + iy * (NX + 1) + ix); return FL_FLAT * PS[r] / PN[r] + (1 - FL_FLAT) * e[0] / e[1]; }
+  var ST = FL_STAT ? flSeams(F, cap, TI, tops, root) : null;
+  if (ST) { ST.thin = (me.thin || []).map(function (k) { return [k % NX, ((k / NX) | 0) % NY]; }); me.thin = null; }
   // 每格切成 KS × KS 小片（約 2 格見方；Tim 2026-10-15：「進水顯示是否能嘗試跟鄰近的水表面合併成柔和曲面」）：高度照四個角（已跟鄰格平均）雙線性內插 ⇒ 相鄰的水面連成平順的一片；
   //   每一小片照中心那一點在不在兩舷船殼之間（flType 的 yM／yP，那個高度那一欄）⇒ 不在就不畫（Tim：「船殼外部也能進水」—— ⛔ 整格畫一塊 ⇒ 靠船殼那幾格的正方形伸出船外，最多 c − 1 格）。
   var KS = Math.max(1, Math.round(c / 2)), sc = c / KS, nxv = F.nxv, YP = F.yP, YM = F.yM, ZT = F.zTop, TRI6 = [0, 1, 2, 0, 2, 3];
@@ -434,6 +468,7 @@ function flMesh(sh, fl) {
     var H = [corner(rt, jx, jy), corner(rt, jx + 1, jy), corner(rt, jx + 1, jy + 1), corner(rt, jx, jy + 1)];
     if ((q + 6 * KS * KS) * 5 > me.buf.length) { var nb = new Float32Array(Math.max(me.buf.length * 2, (q + 6 * KS * KS) * 10)); nb.set(me.buf); me.buf = nb; }
     var inn = 0; for (var a = 0; a < KS; a++) for (var b = 0; b < KS; b++) if ((INS[a * KS + b] = flInside(x0 + (a + 0.5) * sc, y0 + (b + 0.5) * sc, bil(H, (a + 0.5) / KS, (b + 0.5) / KS)))) inn++;
+    if (ST) { var mt = ST.map.top[t / 2]; if (!inn) { ST.outTops++; mt[4] = 2; } else if (inn < KS * KS) { ST.cutTops++; ST.cutPieces += KS * KS - inn; mt[4] = 1; } }
     if (!inn) continue;
     var G = inn === KS * KS ? Math.min(2, KS) : KS, gs = c / G;               // 整格都在船殼裡 ⇒ 2 × 2 就夠（⛔ 每格都細切 ⇒ 粗檔維吉尼亞號 4,226 → 99,070 個三角形，每次進水更新都重建）；碰到船殼的那幾格才細切、丟掉外面的
     for (a = 0; a < G; a++) for (b = 0; b < G; b++) {
@@ -446,6 +481,7 @@ function flMesh(sh, fl) {
       }
     }
   }
+  flSides(sh, fl, me, F, tops, TI, root, corner, flInside);
   // 骨架內插（逐片）：這一片上一格也有（同一格、同樣切法、同一片 ⇒ 6 個頂點的 x、y 跟順序都一樣）⇒ 起點 ＝ 它畫面上現在的高度（上一格的起點、終點照 mix0 內插）；
   //   上一格沒有（新進水的格、切法變了）⇒ 起點 ＝ 終點（直接出現）。⛔ 整份網格一樣才接 ⇒ 還在進水時每一格都有新的格進來 ⇒ 一次都接不上（量過 9 次重做 0 次）
   var OM = new Map(), O = me.old, Bf = me.buf, same = 0;
@@ -459,22 +495,114 @@ function flMesh(sh, fl) {
   if (q * 5 > me.cap) { me.cap = me.buf.length; gl.bufferData(gl.ARRAY_BUFFER, me.cap * 4, gl.DYNAMIC_DRAW); gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 4, gl.FLOAT, false, 20, 0); gl.enableVertexAttribArray(1); gl.vertexAttribPointer(1, 1, gl.FLOAT, false, 20, 16); }
   if (q) gl.bufferSubData(gl.ARRAY_BUFFER, 0, me.buf, 0, q * 5);
   gl.bindVertexArray(null);
-  me.n = q; me.gen = fl.gen; me.same = same; me.quads = me.sig.length; return me;   // same：這一次接著內插的片數
+  me.n = q; me.gen = fl.gen; me.same = same; me.quads = me.sig.length; me.ms = performance.now() - now; if (ST) me.stat = ST; return me;   // same：這一次接著內插的片數；ms：這一次重做花幾毫秒
 }
-/** 這一格內插到哪（0 ＝ 上一格的高度、1 ＝ 這一格的）。 */
-function flMix(me) { return clamp((performance.now() - me.tw) / FL_MESH_MS, 0, 1); }
+/** 接縫分類（FL_STAT；TASK-0654 先量再動手）：每一塊水面（tops）往前後左右看鄰格 ——
+ *  join 同一池（接得起來）／step 別的池（兩池水面差 ≥ 半格 ⇒ 兩片平面之間沒有面 ⇒ 縫；每一側各算一次，dh 記水面差 m）／
+ *  open 鄰格裝得了水但沒有水面（水面邊上懸空的那一邊）／wall 鄰格裝不了水（牆、甲板、船殼外、出界）。
+ *  cutTops／cutPieces（在 flMesh 裡數）：靠船殼、丟掉幾片小片的水面；outTops：整塊都在船殼外、沒畫。 */
+function flSeams(F, cap, TI, tops, root) {
+  var NX = F.NX, NY = F.NY, NXY = NX * NY, TN = tops.length / 2, st = { tops: TN, pools: 0, join: 0, step: 0, open: 0, wall: 0, dh: [], cutTops: 0, cutPieces: 0, outTops: 0, map: { NX: NX, NY: NY, top: [], edge: [] } }, t;   // map：接縫地圖（81_floodlab.js 畫）
+  for (t = 0; t < TN; t++) if (root(t) === t) st.pools++;
+  for (t = 0; t < TN; t++) {
+    var i = tops[t * 2], ix = i % NX, iy = ((i / NX) | 0) % NY, iz = (i / NXY) | 0, r = root(t);
+    st.map.top.push([ix, iy, iz, r, 0]);                                  // 最後一格：0 整塊畫、1 船殼邊切掉幾片、2 整塊沒畫（flMesh 填）
+    for (var d = 0; d < 4; d++) {
+      var jx = ix + (d === 0 ? -1 : d === 1 ? 1 : 0), jy = iy + (d === 2 ? -1 : d === 3 ? 1 : 0);
+      if (jx < 0 || jy < 0 || jx >= NX || jy >= NY) { st.wall++; continue; }
+      var j0 = iz * NXY + jy * NX + jx, tj = -1;
+      for (var k = 0; k < 3 && tj < 0; k++) { var jz = iz + (k === 0 ? 0 : k === 1 ? -1 : 1); if (jz >= 0 && jz < F.NZ && TI[jz * NXY + jy * NX + jx] >= 0) tj = TI[jz * NXY + jy * NX + jx] / 2; }
+      if (tj >= 0) { if (root(tj) === r) st.join++; else { st.step++; st.dh.push(Math.abs(tops[tj * 2 + 1] - tops[t * 2 + 1])); st.map.edge.push([ix, iy, d, 1]); } }
+      else if (cap[j0] > 0.02) { st.open++; st.map.edge.push([ix, iy, d, 2]); } else st.wall++;
+    }
+  }
+  return st;
+}
+// ── 水面的側面與水瀑（TASK-0654；Tim 2026-10-16：「接縫處直接當成往下的水流貼一片 目前這樣看起來像浮空的一片透明片」；畫質選項 GFX.pside）──
+//   跟水面同一次重做（flMesh 呼叫），每一塊水面往前後左右看（同 flSeams 的分法）：
+//   · 兩池交界、鄰池的水面比較低 ⇒ 從這一池的水面往下接到鄰池的水面；這段時間這條邊有水往外流（fl.lq ÷ fl.lqT ≥ FLS_MIN m³／秒）⇒ 水瀑（往下捲的條紋），沒有 ⇒ 側面。
+//   · 懸空的邊（鄰格裝得了水但沒有水面）⇒ 從水面往下到這一格的水底（往下找滿的水格、再到那一格最下面空著的那層）。
+//   · 鄰格是牆、甲板、船殼外 ⇒ 不畫；邊的中點（往格內退 0.5 格）在船殼外 ⇒ 不畫；高不到 0.3 格（3 cm）⇒ 不畫。
+//   頂 ＝ 這一池的角（corner，跟水面同一個值）⇒ 側面頂跟水面接得起來。⚠ 側面不跟著水面的骨架內插：兩次重做之間（FL_MESH_MS）水面在升降，側面頂跟水面最多差那一段的升降量。
+//   只動畫面：fl.lq 是 flTick 只記不讀的流量帳；每次重做讀完就清。
+var FLS_MIN = 0.002, FL_DEPBLIT = 0;                                      // FL_DEPBLIT：深度吸光為了讀深度另外複製了幾次（量成本用）
+function flSides(sh, fl, me, F, tops, TI, root, corner, flInside) {
+  var c = F.c, NX = F.NX, NY = F.NY, NXY = NX * NY, A = fl.A, cap = fl.cap, op = fl.op, M = sh.M, Vc = Math.pow(c * S, 3), lqT = fl.lqT, t;
+  var sq = 0, sideN = 0, fallN = 0, SB = me.sbuf || (me.sbuf = new Float32Array(7 * 6 * 256));
+  function gz(x, y, hw) { return (hw - (M[1] * x + M[5] * y + M[13])) / M[9]; }   // 世界高度 ⇒ 那一點的格 z
+  if (GFX.pside) for (t = 0; t < tops.length; t += 2) {
+    var i = tops[t], sx = i % NX, sy = ((i / NX) | 0) % NY, sz = (i / NXY) | 0, rs = root(t / 2), bx = F.X0 + sx * c, by = F.Y0 + sy * c;
+    for (var d = 0; d < 4; d++) {
+      var nx = sx + (d === 0 ? -1 : d === 1 ? 1 : 0), ny = sy + (d === 2 ? -1 : d === 3 ? 1 : 0);
+      if (nx < 0 || ny < 0 || nx >= NX || ny >= NY) continue;
+      var tj = -1; for (var k = 0; k < 3 && tj < 0; k++) { var jz = sz + (k === 0 ? 0 : k === 1 ? -1 : 1), q0 = jz * NXY + ny * NX + nx; if (jz >= 0 && jz < F.NZ && TI[q0] >= 0) tj = TI[q0] / 2; }
+      var hw = null, zf = 0;                                               // 底：鄰池的水面（世界高度）或這一格的水底（格 z）
+      if (tj >= 0) { if (root(tj) === rs || tops[tj * 2 + 1] >= tops[t + 1] - 0.02) continue; hw = tops[tj * 2 + 1]; }
+      else {
+        if (!(cap[sz * NXY + ny * NX + nx] > 0.02)) continue;
+        var kb = i; while (kb - NXY >= 0 && cap[kb - NXY] > 0.02 && A[kb - NXY] >= 0.98 * cap[kb - NXY] * Vc) kb -= NXY;
+        var lb = 0; while (lb < c - 1 && op[kb * c + lb] <= 0) lb++; zf = ((kb / NXY) | 0) * c + lb;
+      }
+      var x0, y0, x1, y1, ha, hb;                                          // 邊的兩端（格座標）與兩端的水面（這一池的角）
+      if (d === 0) { x0 = x1 = bx; y0 = by; y1 = by + c; ha = corner(rs, sx, sy); hb = corner(rs, sx, sy + 1); }
+      else if (d === 1) { x0 = x1 = bx + c; y0 = by; y1 = by + c; ha = corner(rs, sx + 1, sy); hb = corner(rs, sx + 1, sy + 1); }
+      else if (d === 2) { y0 = y1 = by; x0 = bx; x1 = bx + c; ha = corner(rs, sx, sy); hb = corner(rs, sx + 1, sy); }
+      else { y0 = y1 = by + c; x0 = bx; x1 = bx + c; ha = corner(rs, sx, sy + 1); hb = corner(rs, sx + 1, sy + 1); }
+      if (!flInside((x0 + x1) / 2 + (d === 0 ? 0.5 : d === 1 ? -0.5 : 0), (y0 + y1) / 2 + (d === 2 ? 0.5 : d === 3 ? -0.5 : 0), (ha + hb) / 2)) continue;
+      var za = gz(x0, y0, ha), zb = gz(x1, y1, hb), za1 = hw === null ? zf : gz(x0, y0, hw), zb1 = hw === null ? zf : gz(x1, y1, hw);
+      if (za - za1 < 0.3 && zb - zb1 < 0.3) continue;
+      var kind = lqT > 0 && fl.lq[i * 4 + d] / lqT >= FLS_MIN ? 1 : 0, Lm = Math.max(za - za1, zb - zb1) * S;
+      if (kind) fallN++; else sideN++;
+      if ((sq + 6) * 7 > SB.length) { var SB2 = new Float32Array(SB.length * 2); SB2.set(SB); SB = me.sbuf = SB2; }
+      var V = [[x0, y0, za, 0, 0], [x1, y1, zb, 1, 0], [x1, y1, zb1, 1, 1], [x0, y0, za, 0, 0], [x1, y1, zb1, 1, 1], [x0, y0, za1, 0, 1]];
+      for (var e = 0; e < 6; e++) { var o = sq * 7, p = V[e]; SB[o] = p[0]; SB[o + 1] = p[1]; SB[o + 2] = p[2]; SB[o + 3] = p[3]; SB[o + 4] = p[4]; SB[o + 5] = Lm; SB[o + 6] = kind; sq++; }
+    }
+  }
+  fl.lq.fill(0); fl.lqT = 0;
+  if (!me.svao) {
+    me.svao = gl.createVertexArray(); me.svb = gl.createBuffer(); me.scap = 0;
+    gl.bindVertexArray(me.svao); gl.bindBuffer(gl.ARRAY_BUFFER, me.svb);
+    gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 28, 0); gl.enableVertexAttribArray(1); gl.vertexAttribPointer(1, 4, gl.FLOAT, false, 28, 12);
+  }
+  gl.bindVertexArray(me.svao); gl.bindBuffer(gl.ARRAY_BUFFER, me.svb);
+  if (sq * 7 > me.scap) { me.scap = SB.length; gl.bufferData(gl.ARRAY_BUFFER, me.scap * 4, gl.DYNAMIC_DRAW); }
+  if (sq) gl.bufferSubData(gl.ARRAY_BUFFER, 0, SB, 0, sq * 7);
+  gl.bindVertexArray(null);
+  me.sn = sq; me.sideN = sideN; me.fallN = fallN;
+}
+/** 這一格內插到哪（0 ＝ 上一格的高度、1 ＝ 這一格的）；FL_SNAP ⇒ 直接 1（報表截圖）。 */
+function flMix(me) { return FL_SNAP ? 1 : clamp((performance.now() - me.tw) / FL_MESH_MS, 0, 1); }
 /** 畫艙內的水面（海與白沫之後；開始沉、斷了就不畫 —— 那時候海已經畫進船艙）。 */
 function flDraw() {
   if (!P.pool || FL_HIDE) return;                                           // FL_HIDE：對照用（__game.flood(i, { hide: true })）
-  var any = false, fs = [];
+  var any = false, fs = [], L = [];
   SHIPS.forEach(function (sh) {
     var fl = sh.fl; if (!fl || !fl.actN || ((sh.broken || sh.sinkingFinal) && !fl.vis) || sh.sunk) return;   // 沉船的水照畫（floodVis）
-    var me = flMesh(sh, fl); if (GFX.fall && me.fn) fs.push([sh, me]); if (!me.n) return;
-    if (!any) { any = true; gl.useProgram(P.pool.prog); setCommon(P.pool); gl.uniform1f(P.pool.u.uX, FLX3 ? 1 : 0); gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA); gl.depthMask(false); gl.disable(gl.CULL_FACE); if (FLX3) gl.disable(gl.DEPTH_TEST); }   // 停格的「🔍 透視」開著 ⇒ 隔著船殼看得到（72_floodui.js）
+    var me = flMesh(sh, fl); if (GFX.fall && me.fn) fs.push([sh, me]); if (me.n || me.sn) L.push([sh, me]);
+  });
+  // 深度吸光（GFX.pdep）：要不透明場景的深度 —— 折射開到高（refr 2）⇒ 畫海之前已經複製到 RT.B（60_render.js），直接讀；其他檔 ⇒ 這裡複製一次深度（只在有水要畫的那幾格）。透視開著 ⇒ 不讀（見 FL_DEP_GLSL）。
+  var dep = GFX.pdep && !FLX3 && L.length && RT && RT.B ? 1 : 0;
+  if (dep && GFX.refr !== 2) {
+    gl.bindFramebuffer(gl.READ_FRAMEBUFFER, RT.A.fb); gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, RT.B.fb);
+    gl.blitFramebuffer(0, 0, RT.w, RT.h, 0, 0, RT.w, RT.h, gl.DEPTH_BUFFER_BIT, gl.NEAREST);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, RT.A.fb); FL_DEPBLIT++;
+  }
+  function depU(p) { gl.uniform1f(p.u.uDep, dep); gl.uniform2f(p.u.uView, RT.w, RT.h); gl.activeTexture(gl.TEXTURE3); gl.bindTexture(gl.TEXTURE_2D, RT.B.dep); gl.uniform1i(p.u.uSceneD, 3); }   // 取樣器一律接到第 3 號（⛔ 留在預設 0 號 ⇒ 可能跟別的型別的取樣器撞同一號，畫不出來）
+  function begin() { if (any) return; any = true; gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA); gl.depthMask(false); gl.disable(gl.CULL_FACE); if (FLX3) gl.disable(gl.DEPTH_TEST); }   // 停格的「🔍 透視」開著 ⇒ 隔著船殼看得到（72_floodui.js）
+  var on = false;
+  L.forEach(function (e) {
+    var sh = e[0], me = e[1]; if (!me.n) return;
+    if (!on) { on = true; begin(); gl.useProgram(P.pool.prog); setCommon(P.pool); gl.uniform1f(P.pool.u.uX, FLX3 ? 1 : 0); depU(P.pool); }
     gl.uniformMatrix4fv(P.pool.u.uModel, false, sh.M); gl.uniform1f(P.pool.u.uMix, flMix(me)); gl.bindVertexArray(me.vao); gl.drawArrays(gl.TRIANGLES, 0, me.n);
   });
+  on = false;
+  L.forEach(function (e) {                                                  // 側面與水瀑（flSides，GFX.pside）
+    var sh = e[0], me = e[1]; if (!GFX.pside || !me.sn) return;
+    if (!on) { on = true; begin(); gl.useProgram(P.pside.prog); setCommon(P.pside); gl.uniform1f(P.pside.u.uX, FLX3 ? 1 : 0); depU(P.pside); }
+    gl.uniformMatrix4fv(P.pside.u.uModel, false, sh.M); gl.bindVertexArray(me.svao); gl.drawArrays(gl.TRIANGLES, 0, me.sn);
+  });
   if (fs.length) {                                                          // 水幕（flFalls）：跟水面同一套混色、不寫深度
-    if (!any) { any = true; gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA); gl.depthMask(false); gl.disable(gl.CULL_FACE); if (FLX3) gl.disable(gl.DEPTH_TEST); }
+    begin();
     gl.useProgram(P.fall.prog); setCommon(P.fall); gl.uniform1f(P.fall.u.uX, FLX3 ? 1 : 0);
     fs.forEach(function (e) { gl.uniformMatrix4fv(P.fall.u.uModel, false, e[0].M); gl.uniform1f(P.fall.u.uMix, flMix(e[1])); gl.bindVertexArray(e[1].fvao); gl.drawArrays(gl.TRIANGLES, 0, e[1].fn); });
   }

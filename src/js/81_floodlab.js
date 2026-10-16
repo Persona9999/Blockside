@@ -1,0 +1,114 @@
+// ───────────────────────── 進水報表（沙盒；TASK-0654） ─────────────────────────
+// Tim 2026-10-16：「沙盒可以做專門的報表紀錄水的變化細節與畫面對應 方便比對」（先量接縫是哪一種再動手）。
+// ?lab=flood（＋ ship=<船>,<另一艘>、phx=mid／high／full ⇒ 進水粗／中／細）⇒ 船在沙盒裡浮穩（不開帆、另一艘移遠）、在水線下打幾個洞，
+//   之後每 every 秒記一筆：進水讀數（33_flood.js flReadout）、水面網格（三角形、那一次重做幾毫秒）、接縫分類（flSeams）、同一刻的截圖（固定鏡頭）。
+//   截圖那一刻 FL_SNAP（水面網格當場重做、不內插）⇒ 圖跟讀數是同一刻；量完 FL_SNAP／FL_STAT 還原。
+// 結果寫進頁面上 id ＝ lab 的 pre（JSON；截圖是 data URL）；無頭 Chrome --dump-dom 讀：src/tests/flood_lab.py 寫成並排的 HTML 報表（../reports/，不入版控）。
+//   ?debug=1 時 __game.floodLab(o) 同一套、回傳同一份。
+// 參數（網址同名）：holes（x:dz:side:r，以 ; 分隔：x ＝ 水線那一段船長的比例 0–1、dz ＝ 水線下幾格、side 0 ＝ 格 +y 那一舷、r ＝ 半徑幾格；不給 ⇒ 預設三個）、
+//   dur（秒，預設 60）、every（秒，預設 10）、fyaw、fpitch、fdist、fty（鏡頭；fty ＝ 注視點在船中心上面幾公尺，看底艙給負的；⛔ 不叫 dist／pitch：dist 是開局兩艘船的距離、pitch 是 ?cam=deck 的俯角 —— 撞名量過：dist=38 把另一艘擺到旁邊、進水整個不一樣）、cut（half ＝ 剖面、none；預設 half）、deck（拿掉幾層甲板，預設 0）、xray（1 ＝ 透視）、
+//   w（截圖寬，預設 480）、flat（1 ＝ 浪設 0）。
+// ⛔ 只在 ?lab=flood 或 __game.floodLab 才跑；一般遊戲一行都不多算。
+// ⚠ 要帶 seed（flood_lab.py 沒給就補 seed=3）：沒帶 ⇒ 每次開都是隨機的一局，浮穩的姿勢、洞的位置、進水都不一樣（量過：同一組參數兩次 t 38 是 130／138 m³）；
+//   帶了 ⇒ 兩次逐位元相同（帆繩物理開關都一樣）。
+var FLAB_HOLES = [[0.35, 8, 0, 4], [0.55, 12, 1, 4], [0.7, 6, 0, 3]];
+
+/** 在第 sh 艘、格 (x, z) 那一舷（side 0 ＝ 格 +y、1 ＝ −y）的船殼打一個半徑 r 格的洞（從最外那一格往艙內打穿）。__game.hole 與進水報表共用。 */
+function labHole(sh, x, z, side, r) {
+  var B = sh.T.base, y0 = -1, y, s = side ? 1 : -1, n = 0; r = r || 4;
+  if (side) { for (y = 0; y < sh.T.cy; y++) if (B.get(x, y, z)) { y0 = y; break; } } else { for (y = B.sy - 1; y > sh.T.cy; y--) if (B.get(x, y, z)) { y0 = y; break; } }
+  if (y0 < 0) return null;
+  for (var dz = -r; dz <= r; dz++) for (var dx = -r; dx <= r; dx++) {
+    if (dx * dx + dz * dz > r * r) continue;
+    for (var t = 0; t < 16; t++) { var yy = y0 + s * t; if (t > 2 && !B.get(x + dx, yy, z + dz)) break; if (removeVoxel(sh, x + dx, yy, z + dz, false)) n++; }
+  }
+  sh.rs.flush(); return { removed: n, skin: y0 };
+}
+
+/** 截圖：畫布縮到寬 w 的 JPEG（data URL）。畫布開著 preserveDrawingBuffer（01_gl.js）⇒ render() 之後隨時讀得到。 */
+function flabShot(w) {
+  var h = Math.round(cv.height * w / cv.width), c2 = document.createElement('canvas'); c2.width = w; c2.height = h;
+  c2.getContext('2d').drawImage(cv, 0, 0, w, h); return c2.toDataURL('image/jpeg', 0.82);
+}
+
+/** 接縫地圖（俯視，一格一個方塊；x 往右 ＝ 船頭方向的格 x、y 往下 ＝ 格 y）：
+ *  方塊顏色 ＝ 哪一池（同一池同色，只用綠到藍 ⇒ 不跟紅、橘、洋紅撞；越深 ＝ 越高的甲板，高的畫在上面）、紅 ＝ 整塊沒畫（中心都判在船殼外）、橘框 ＝ 船殼邊切掉幾片、洋紅點 ＝ 有水但太薄沒畫；
+ *  綠粗線 ＝ 兩池交界（兩片平面之間沒有面）、黃線 ＝ 懸空的邊（鄰格裝得了水但乾的）。 */
+function flabMap(st, px) {
+  var M = st.map, c2 = document.createElement('canvas'), W = M.NX * px + 2, H = M.NY * px + 2, g = c2.getContext('2d'); c2.width = W; c2.height = H;
+  g.fillStyle = '#f4f1ea'; g.fillRect(0, 0, W, H);
+  M.top.slice().sort(function (a, b) { return a[2] - b[2]; }).forEach(function (q) {
+    var x = 1 + q[0] * px, y = 1 + q[1] * px;
+    g.fillStyle = q[4] === 2 ? '#e02020' : 'hsl(' + (90 + (q[3] * 53) % 160) + ',45%,' + (66 - Math.min(24, q[2] * 3)) + '%)'; g.fillRect(x, y, px, px);
+    if (q[4] === 1) { g.strokeStyle = '#ff8c00'; g.lineWidth = 2; g.strokeRect(x + 1, y + 1, px - 2, px - 2); }
+  });
+  g.fillStyle = '#d000d0'; (st.thin || []).forEach(function (q) { g.beginPath(); g.arc(1 + (q[0] + 0.5) * px, 1 + (q[1] + 0.5) * px, px * 0.22, 0, 7); g.fill(); });
+  M.edge.forEach(function (e) {
+    var x = 1 + e[0] * px, y = 1 + e[1] * px, d = e[2];
+    g.strokeStyle = e[3] === 1 ? '#0a8a2a' : '#e6c200'; g.lineWidth = e[3] === 1 ? 3 : 2; g.beginPath();
+    if (d === 0) { g.moveTo(x, y); g.lineTo(x, y + px); } else if (d === 1) { g.moveTo(x + px, y); g.lineTo(x + px, y + px); } else if (d === 2) { g.moveTo(x, y); g.lineTo(x + px, y); } else { g.moveTo(x, y + px); g.lineTo(x + px, y + px); }
+    g.stroke();
+  });
+  return c2.toDataURL('image/png');
+}
+
+/** 整個報表：o 見檔頭。回 { hull, lv, o, holes, rows: [{ t, fl, mesh, seam, img, map }] }。
+ *  ⚠ 截圖每次跑都會差一點（量過：還沒進水的 t 8 兩次就不一樣，換掉 Math.random 也一樣 ⇒ 畫面裡有別的跟真實時間走的東西）⇒ 比圖照像素差的大小比，不比位元組。 */
+function floodLab(o) {
+  o = Object.assign({ holes: FLAB_HOLES, dur: 60, every: 10, yaw: 2.6, pitch: 0.42, dist: 0, cut: 'half', deck: 0, xray: false, w: 480, flat: false }, o || {});
+  var seaK = SEA_K; if (o.flat) SEA_K = 0;
+  MODE = 'sandbox'; reset(); AUTOFIRE = false; RUNNING = false;
+  var sh = SHIPS[0], i;
+  SHIPS.forEach(function (s2) { s2.sailSet = 0; s2.power = 0; s2.manual = true; s2.rudder = 0; });
+  if (SHIPS[1]) { SHIPS[1].px += 3000; SHIPS[1].pz += 3000; }
+  for (i = 0; i < Math.round(LAB_SETTLE / DT); i++) step();
+  sh.M = shipMatrix(sh); sh.inv = M4.inv(sh.M); sh.center = shipCenter(sh);
+  var out = { hull: sh.T.id, seed: SEED, lv: FLOOD_LV, c: sh.fl ? sh.fl.F.c : null, sea: SEA_K, o: { dur: o.dur, every: o.every, cut: o.cut, deck: o.deck, xray: !!o.xray }, holes: [], rows: [] };
+  if (!sh.fl) { out.err = '進水是公式模式（物理效果的「進水」第 0 檔）⇒ 沒有艙內的水可畫；網址加 phx=mid／high／full'; SEA_K = seaK; return out; }
+  var T = sh.T, x0 = T.wl0, x1 = T.wl1;
+  o.holes.forEach(function (hd) {
+    var x = Math.round(x0 + (x1 - x0) * hd[0]), sk = labSkin(sh, x, hd[2]);
+    var z = sk ? sk.z - hd[1] : null, r = z === null ? null : labHole(sh, x, z, hd[2], hd[3]);
+    out.holes.push({ x: x, z: z, side: hd[2], r: hd[3], removed: r ? r.removed : 0 });
+  });
+  // 鏡頭：對著船中、看艙內（剖面拿掉靠鏡頭那一半）
+  if (o.ty !== undefined) { var cc = shipCenter(sh); CAM.tgt = [cc[0], cc[1] + o.ty, cc[2]]; CAM.trMe = CAM.trYaw = null; }   // 注視點：船中心往上 ty 公尺（看底艙 ⇒ 負的）
+  CAM.follow = null; CAM.mode = 4; CAM.yaw = o.yaw; CAM.pitch = o.pitch; if (o.dist > 0) CAM.dist = o.dist; else CAM.dist = Math.max(60, (x1 - x0) * S * 0.95);
+  CUTV.half = o.cut === 'half'; CUTV.deck = o.deck | 0; FLX3 = !!o.xray;
+  var snap0 = FL_SNAP, stat0 = FL_STAT; FL_SNAP = FL_STAT = true;
+  var n = Math.round(o.every / DT), steps = Math.max(1, Math.round(o.dur / o.every));
+  for (var k = 0; k <= steps; k++) {
+    if (k) { for (i = 0; i < n; i++) { step(); if (i % 30 === 29) remesh(Infinity); } }
+    remesh(Infinity); CAM.snap = true; camUpdate(1); render();
+    var me = sh.fl.mesh, st = me && me.stat ? me.stat : null, dh = st ? st.dh.slice().sort(function (a, b) { return a - b; }) : [];
+    out.rows.push({ t: +SIMT.toFixed(1), fl: flReadout(sh),
+      mesh: me ? { tris: me.n / 3, quads: me.quads, ms: +(me.ms || 0).toFixed(2), falls: me.fn ? me.fn / 6 : 0, sides: me.sideN || 0, spill: me.fallN || 0, depBlit: FL_DEPBLIT } : null,
+      seam: st ? { tops: st.tops, pools: st.pools, join: st.join, step: st.step, open: st.open, wall: st.wall, cutTops: st.cutTops, cutPieces: st.cutPieces, outTops: st.outTops,
+        dhMed: dh.length ? +dh[dh.length >> 1].toFixed(2) : 0, dhMax: dh.length ? +dh[dh.length - 1].toFixed(2) : 0 } : null,
+      img: flabShot(o.w), map: st ? flabMap(st, sh.fl.F.c >= 10 ? 10 : 6) : null });
+  }
+  FL_SNAP = snap0; FL_STAT = stat0; SEA_K = seaK;
+  return out;
+}
+
+/** 換個鏡頭再拍一張（__game.floodView；找報表的固定角度用）：o ＝ { yaw, pitch, dist, ty, cut: 'half'|'none', deck, xray, w }，沒給的照現在的。回 data URL。 */
+function floodView(o) {
+  o = o || {};
+  if (o.ty !== undefined && SHIPS[0]) { var cc = shipCenter(SHIPS[0]); CAM.tgt = [cc[0], cc[1] + o.ty, cc[2]]; CAM.trMe = CAM.trYaw = null; }
+  CAM.follow = null; CAM.mode = 4; ['yaw', 'pitch', 'dist'].forEach(function (k) { if (o[k] !== undefined) CAM[k] = o[k]; });
+  if (o.cut !== undefined) CUTV.half = o.cut === 'half'; if (o.deck !== undefined) CUTV.deck = o.deck | 0; if (o.xray !== undefined) FLX3 = !!o.xray;
+  var snap0 = FL_SNAP; FL_SNAP = true; CAM.snap = true; camUpdate(1); render(); FL_SNAP = snap0;
+  return flabShot(o.w || 480);
+}
+
+/** 網址 ?lab=flood 的參數 ⇒ floodLab 的 o。 */
+function flLabOpts() {
+  var o = {};
+  if (Q.has('holes')) o.holes = Q.get('holes').split(';').filter(function (w) { return w; }).map(function (w) { return w.split(':').map(Number); });
+  ['dur', 'every', 'deck', 'w'].forEach(function (k) { if (Q.has(k)) o[k] = +Q.get(k); });
+  [['fyaw', 'yaw'], ['fpitch', 'pitch'], ['fdist', 'dist'], ['fty', 'ty']].forEach(function (kk) { if (Q.has(kk[0])) o[kk[1]] = +Q.get(kk[0]); });
+  if (Q.has('cut')) o.cut = Q.get('cut');
+  if (Q.get('xray') === '1') o.xray = true;
+  if (Q.get('flat') === '1') o.flat = true;
+  return o;
+}
