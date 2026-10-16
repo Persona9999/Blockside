@@ -73,6 +73,7 @@ function makeShip(i, team, yaw, pz, T, px) {                          // T：船
   sh.guns.forEach(function (g) { gunMountInit(sh, g); });            // 迴旋砲、砲塔（meta mount；21_gunnery.js）—— 沒標的砲不動
   armorShip(sh);                                                        // 砲帶的裝甲（kind=armor；24_armor.js）跟著那門砲轉 —— 沒有 ⇒ 不做事
   doorsShip(sh);                                                        // 門、艙蓋（kind=door；25_doors.js）—— 沒有 ⇒ 不做事
+  spinShip(sh);                                                         // 照參數轉的子物件（meta spin；26_spin.js，TASK-0640）—— 沒有 ⇒ 不做事
   sh.guns.sort(gunOrder);
   sh.decks = gunDecks(sh); sh.weatherDeck = sh.decks.length ? sh.decks[sh.decks.length - 1].key : null;   // 砲甲板（照砲的高度分層）；最上面那層 ＝ 露天
   sh.deckZ = {}; sh.decks.forEach(function (D) { sh.deckZ[D.key] = D.zr; });
