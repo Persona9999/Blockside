@@ -301,6 +301,7 @@
       "vxk": "virginia.vxk",
       "work": "ame-virginia-01m-assembly",
       "cfg": {"pump": 32, "base": 5.5, "agile": 0.4},
+      "rooms": {"甲板-main": {"type": "deck", "items": [{"it": "keg", "x": 114, "y": 13, "r": 0}, {"it": "keg", "x": 42, "y": 11, "r": 0}]}},
       "geo": {"spar": [100, 102], "marines": [250, 200], "center": 85, "aim": 75, "aimZ": [40, 150], "deckAim": [74, 90], "rigAim": [100, 145]},
       "crew": {
         "marines": 6,
