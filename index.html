@@ -4053,7 +4053,7 @@ function shredSail(owner, s, L) {
   for (var k = 0; k < 3; k++) { var sz = rr(1.2, 2.2); spawnPt(w, [gauss() * 1.5, rr(-0.5, 1.5), gauss() * 1.5], rr(4, 7), c, 1, sz, sz * 0.85, 3, 1.2, 4); }
   PT_MUTE = false;
 }
-function sailLinesDie(owner, s) { (s.lines || []).forEach(function (j) { owner.ropes[j].dead = true; }); owner.rigDirty = true; }
+function sailLinesDie(owner, s) { (s.lines || []).forEach(function (j) { owner.ropes[j].dead = true; owner.ropes[j].offSail = s; }); owner.rigDirty = true; }   // offSail：垂下來時靠帆的那一端放開（30_rig_physics.js spawnLoose）
 // ── js/22_pieces.js ──
 // ───────────────────────── 斷開的一團：倒下、落水 ─────────────────────────
 function isAnchor(x, y, z) { return z <= 12; }   // 龍骨（龍骨是直的 ⇒ 整條都在最底下）
@@ -5416,6 +5416,13 @@ function spawnLoose(sh, r) {
   P.push([src[m * 3 - 3], src[m * 3 - 2], src[m * 3 - 1]]);
   function end(an, mk, pr) { return an >= 0 ? [1, an] : mk !== undefined ? [4, mk] : pr !== undefined ? [2, pr] : [0, -1]; }
   var ea = end(r.a, r.ma, r.pa), eb = end(r.b, r.mb, r.pb), parts = [[P, ea, eb]];
+  // 不釘在空中（Tim 2026-10-16：「憲法號 應該是帆被打掉後繩子殘留」「不能綁定在空中」）：
+  //   ① 帆掉了跟著斷的帆自己的繩（sailLinesDie 標 offSail）⇒ 離帆近的那一端放開。⛔ 以前兩端照 linkRopes 的依靠釘：上層帆的 sheet 只有 0.3 m、兩端都算綁在下一層的帆桁 ⇒ 帆沒了，一小段繩留在帆桁端。
+  //   ② 綁格子的那一端：端點 ROPE_FIX_D（0.15 m）內現在真的有格才釘。⛔ 以前照 linkRopes 的錨（0.5 m 內最近的格）釘 ⇒ 斷掉的繩一端停在離木頭 0.2～0.5 m 的空中。
+  if (r.offSail) { var sv = r.offSail.verts, dE = [P[0], P[P.length - 1]].map(function (w) { var b = 1e9; for (var k = 0; k < sv.length; k += 3) { var x = sv[k] - w[0], y = sv[k + 1] - w[1], z = sv[k + 2] - w[2]; b = Math.min(b, x * x + y * y + z * z); } return b; });
+    if (dE[0] <= dE[1]) ea = [0, -1]; else eb = [0, -1]; parts = [[P, ea, eb]]; }
+  if (ea[0] === 1 && !gridTouch(sh.grid, P[0], ROPE_FIX_D)) { ea = [0, -1]; parts = [[P, ea, eb]]; }
+  if (eb[0] === 1 && !gridTouch(sh.grid, P[P.length - 1], ROPE_FIX_D)) { eb = [0, -1]; parts = [[P, ea, eb]]; }
   if (r.cutL) {
     var bi = 0, bd = 1e9;
     for (i = 0; i + 1 < P.length; i++) { var d = segDist2(r.cutL, P[i][0], P[i][1], P[i][2], P[i + 1][0], P[i + 1][1], P[i + 1][2]); if (d < bd) { bd = d; bi = i; } }
@@ -5433,6 +5440,16 @@ function spawnLoose(sh, r) {
     var drop = sh.loose.findIndex(function (o) { return !o.pin[0] && !o.pin[o.n - 1]; });
     sh.loose.splice(drop >= 0 ? drop : 0, 1);
   }
+}
+/** 點 P（格座標）D 格內（量到格的表面）有沒有實心格。 */
+function gridTouch(G, P, D) {
+  var R = Math.ceil(D) + 1, bx = Math.floor(P[0]), by = Math.floor(P[1]), bz = Math.floor(P[2]);
+  for (var dz = -R; dz <= R; dz++) for (var dy = -R; dy <= R; dy++) for (var dx = -R; dx <= R; dx++) {
+    var x = bx + dx, y = by + dy, z = bz + dz; if (!G.get(x, y, z)) continue;
+    var ex = Math.max(x - P[0], 0, P[0] - x - 1), ey = Math.max(y - P[1], 0, P[1] - y - 1), ez = Math.max(z - P[2], 0, P[2] - z - 1);
+    if (ex * ex + ey * ey + ez * ez <= D * D) return true;
+  }
+  return false;
 }
 function ropePins(sh, o) {
   if (o.pin[0] && !holds(sh, null, o.hk[0], o.hv[0])) o.pin[0] = 0;

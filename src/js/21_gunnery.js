@@ -595,5 +595,5 @@ function shredSail(owner, s, L) {
   for (var k = 0; k < 3; k++) { var sz = rr(1.2, 2.2); spawnPt(w, [gauss() * 1.5, rr(-0.5, 1.5), gauss() * 1.5], rr(4, 7), c, 1, sz, sz * 0.85, 3, 1.2, 4); }
   PT_MUTE = false;
 }
-function sailLinesDie(owner, s) { (s.lines || []).forEach(function (j) { owner.ropes[j].dead = true; }); owner.rigDirty = true; }
+function sailLinesDie(owner, s) { (s.lines || []).forEach(function (j) { owner.ropes[j].dead = true; owner.ropes[j].offSail = s; }); owner.rigDirty = true; }   // offSail：垂下來時靠帆的那一端放開（30_rig_physics.js spawnLoose）
 
