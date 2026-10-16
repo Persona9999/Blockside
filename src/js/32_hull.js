@@ -49,7 +49,7 @@ function stepShip(sh, dt) {
   else if (sh.fl && PHX.sinkflood && (sh.broken || sh.sinkingFinal) && !sh.sunk) floodVis(sh, sh.fl, dt);   // 斷成兩截、開始沉 ⇒ 水照樣灌進去給人看（33_flood.js floodVis：只改畫面與讀數；沉完就停）
   if (!sh.sunk) {
     if (fl) { if (!sh.sinkingFinal) sh.sink += (floodSinkT(sh, fl) - sh.sink) * Math.min(1, dt / FL_TAU); }   // 照艙內的水該多吃水多少，慢慢跟過去
-    else sh.sink = Math.max(0, sh.sink + Math.min(Q * 1.1e-5 - 0.004, 0.25) * fk * dt);   // 進水與抽水一起照滑桿縮放（⛔ 只縮進水 ⇒ 調慢之後抽水永遠贏、永遠不沉）；
+    else sh.sink = Math.max(0, sh.sink + Math.min(Q * 1.1e-5 - 0.004 * pumpK(sh), 0.25) * fk * dt);   // pumpK：基礎抽水量／PUMP_REF（TASK-0604；憲法號 1）   // 進水與抽水一起照滑桿縮放（⛔ 只縮進水 ⇒ 調慢之後抽水永遠贏、永遠不沉）；
                                                                               // 上限 0.25 m/s：彈藥庫殉爆打掉三十幾萬格 ⇒ 不設上限兩秒就沉完，看不到船斷開
     if (sh.sink > 4.2 && !sh.sinkingFinal && fk > 0) { sh.sinkingFinal = true; note(sh, '進水太多，開始沉了'); }
     if (sh.sinkingFinal) { sh.sinkV += 0.06 * fk * dt; sh.sink += sh.sinkV * dt; }
@@ -115,7 +115,7 @@ function survey(sh) {               // 每半秒量一次：砲還在不在、�
   if (sh.fl) sh.flBase = sh.T.disp - sh.mass0 + massLost(sh);                     // 粒子模式：浮力表上水以外的部分（33_flood.js floodSinkT）
   driveSurvey(sh);                                                    // 動力：實際質量（含進水）、引擎／魔力的完好度（31_drive.js）
   drownCheck(sh);                                                     // 船殼通海了 ⇒ 被水淹過頭的人浮上來（43_swim.js）
-  chooseSide(sh); reassign(sh); manning(sh); medTick(sh); callHands(sh);   // medTick：醫療艙治療（44_medic.js）；callHands：預備水手補位（42_hands.js）
+  chooseSide(sh); reassign(sh); manning(sh); medTick(sh); pumpTick(sh); callHands(sh);   // pumpTick：抽水機要幾個人、現在抽多少（45_pumps.js）；medTick：醫療艙治療（44_medic.js）；callHands：預備水手補位（42_hands.js）
   sh.able = sh.crew.filter(able).length;
   sh.gunsManned = sh.guns.filter(function (g) { return g.alive && gunRate(g) > 0; }).length;
   strikeCheck(sh);

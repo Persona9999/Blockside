@@ -75,6 +75,8 @@ def analyse(games, secs):
                     st[j] += v
         live = sum(st[j] for j in (0, 1, 2, 4, 5))
         out.append('- 砲的時間（還在的砲、出局前）：' + '／'.join('%s %s' % (ST[j], pct(st[j], live)) for j in (0, 1, 2, 4, 5)))
+        bear = sum(g.get('bear', 0) for _, _, _, s in L for g in s['guns'])   # 79_report.js bear：可開的時間裡目標在射界內
+        out.append('  - 其中「可開」：目標在射界內 %s、敵艦不在射界 %s（佔可開的時間）' % (pct(bear, st[0]), pct(st[0] - bear, st[0])))
         gone = [g['goneAt'] for _, _, _, s in L for g in s['guns'] if g['goneAt'] is not None]
         first = [min(g['goneAt'] for g in s['guns'] if g['goneAt'] is not None) for _, _, _, s in L if any(g['goneAt'] is not None for g in s['guns'])]
         ng = len(L[0][3]['guns'])

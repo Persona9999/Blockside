@@ -455,7 +455,7 @@ function ropeStep(sh, o, wl, gv, dt) {                 // dt：這一次走多�
     if (wb) { p[ib] -= dx * f; p[ib + 1] -= dy * f; p[ib + 2] -= dz * f; }
   }
 }
-function underWater(sh, p, i) { var w = M4.pt(sh.M, p[i * 3], p[i * 3 + 1], p[i * 3 + 2]); return w[1] < seaH(w[0], w[2], SIMT) - 0.5; }
+function underWater(sh, p, i) { return wetAt(sh, [p[i * 3], p[i * 3 + 1], p[i * 3 + 2]], { depth: 0.5 }); }   // 繩的第 i 點在海面下 0.5 m（33_flood.js 泡水判定）
 /** 每一步：相對風與重力換進船的格座標 → 剛斷的繩變成垂下來的繩 → 每面帆、每條垂下來的繩各走一步；每 0.1 秒量一次靠的東西還在不在。 */
 // ── 遠方的船帆與繩降速（Tim 2026-10-14：「可以設定降速模擬，特別是遠方船隻」）──
 // 物理設定「遠方帆繩」；每艘每一步照離鏡頭多遠、在不在視野裡給倍率 m（1 ＝ 照常）：

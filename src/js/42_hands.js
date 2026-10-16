@@ -346,6 +346,7 @@ function callHands(sh) {
     if (NV.reach.indexOf(lvh) >= 0) for (var j = 0; j < hn; j++) need.push({ kind: 'helm', key: '', lv: lvh, n: 1, x: hh(hd[j])[0], spot: hh(hd[j]), pri: 1, who: hd[j] });
   }
   medNeeds(sh, need);                                                  // 醫療艙的人手、等著被搬的傷員（44_medic.js）
+  pumpNeeds(sh, need);                                                 // 人力抽水機：艙裡有水才要人（45_pumps.js）
   need.sort(function (a, b) { return a.pri - b.pri; });
   need.forEach(function (q) {
     for (var k = 0; k < q.n && idle.length; k++) {
@@ -355,7 +356,7 @@ function callHands(sh) {
       idle.splice(bi, 1); if (!legs) continue;
       if (q.cell !== undefined) legs.push({ w: q.lv, to: q.cell });
       if (q.kind === 'helm') { var si = navSnap(NV.levels[q.lv].N, q.spot, 4); if (si < 0) continue; legs.push({ w: q.lv, to: si }); q.who.relieved = true; }
-      H.job = { kind: q.kind, key: q.key, deck: q.deck, side: q.side, lv: q.lv, spot: q.spot, med: q.med, who: q.who, bed: q.bed }; medTake(q);
+      H.job = { kind: q.kind, key: q.key, deck: q.deck, side: q.side, lv: q.lv, spot: q.spot, med: q.med, who: q.who, bed: q.bed, pump: q.pump }; medTake(q);
       H.legs = legs; H.wp = null; c.moving = false; NV.called++;
     }
   });
@@ -364,6 +365,7 @@ function callHands(sh) {
 function handJoin(sh, c) {
   var H = c.hand, J = H.job, NV = sh.nav;
   if (J.kind === 'staff' || J.kind === 'carry') { medJoin(sh, c); return; }   // 醫療艙的人手、搬傷員（44_medic.js）
+  if (J.kind === 'pump') { pumpJoin(sh, c); return; }                   // 搖抽水機（45_pumps.js）
   if (H.lv !== J.lv) { H.job = null; H.wait = 1; return; }
   c.walk = null; c.moving = false; c.home = c.pos.slice(); c.hand = null; NV.joined++;
   if (J.kind === 'gun') { c.role = ROLE.GUN; c.deck = J.deck; c.side = J.side; c.gun = null; return; }

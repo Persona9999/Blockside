@@ -7,7 +7,7 @@
 //   · 流進來的水是粒子（每顆帶 vj m³）：從洞往艙內噴（初速 √(2g × 水頭差)），照重力在船的座標裡落下，碰到船體或水面就併進水格。粒子滿了 ⇒ 直接併進洞旁那一格。
 //   · 水格（每格 c 格見方，存水量 m³）：往下流（照那一格最密的那一層開著幾成：甲板擋、艙口與破洞讓水下去）；滿了往上擠；
 //     往旁邊流照水面的世界高度（船的矩陣，含傾斜與浪的搖晃）⇒ 船一傾斜，水往低的那一舷跑，再把船壓得更斜（自由液面）。
-//   · 抽水機：每秒從最低的那一層水抽掉 FL_PUMP ×（滑桿／預設）m³（約每分鐘 18 噸：四台鏈式抽水機全力抽）。
+//   · 抽水機：每秒從最低的那一層水抽掉 FL_PUMP × pumpK ×（滑桿／預設）m³（FL_PUMP 約每分鐘 18 噸：四台鏈式抽水機全力抽；pumpK ＝ 那一型的基礎抽水量 cfg.pump／18，TASK-0604）。
 //     ⛔ 照公式那邊的抽水換算（0.004 m/s × 水線面積 ≈ 每秒 0.84 m³）⇒ 比水線附近那幾個洞進得還快，戰鬥 420 秒艙裡一滴水都留不住（量過）。
 //   · 船：艙內的水 ＝ 加上去的重量 ⇒ 照浮力表（32_hull.js liftFor）算多吃水多少，sh.sink 照它慢慢跟過去（FL_TAU 秒）；
 //     水的重心偏哪一舷 ⇒ 往那邊傾斜（穩心高 FL_GM，見下）、偏船頭船尾 ⇒ 縱傾（FL_GML）；上限跟公式一樣（開始沉之前 0.21 rad、縱傾 0.07）。
@@ -128,6 +128,31 @@ function flCell(F, x, y, z) {
   if (ix < 0 || iy < 0 || iz < 0 || ix >= F.NX || iy >= F.NY || iz >= F.NZ) return -1;
   return (iz * F.NY + iy) * F.NX + ix;
 }
+// ── 泡水判定（通用；Tim 2026-10-16：「可以把泡水判定抽成通用API嗎」）──
+// 船上的東西泡沒泡水都問這兩支：砲口（43_swim.js gunWet）、船員的頭與躺著的臉（43_swim.js crewWet）、抽水機與鍋爐（45_pumps.js）、垂下來的繩（30_rig_physics.js underWater）、碎帆（34_shreds.js shredWet）。
+//   wetAt(sh, p, o)：船 sh 上的一點 p（格座標）泡在水裡嗎。o（都可以不給）：
+//     sea   看海面（預設 true）：世界座標在海面（跟著浪，08_sea.js seaH）下面；depth ＝ 要在海面下多深才算（m，預設 0）；touch ＝ 剛好碰到海面也算（≤，碎帆用）。
+//     inner 看艙內的水（0–1，預設不看）：那一格的水滿了這麼多成就算（粒子模式 33_flood.js；公式模式看不到艙內的水 ⇒ 這一項永遠不算）。
+//     兩項都開 ⇒ 任一項成立就算。
+//   wetLatch(o, under, n)：遲滯（n 預設 2）—— o.wetN 計數，連 n 次 under 才變成泡水（o.wet ＝ true）、連 n 次乾了才回來；回 1 ＝ 這一次變成泡水、−1 ＝ 這一次乾了、0 ＝ 沒變。
+//     ⛔ 一次就算 ⇒ 浪打上甲板一下、船搖一下就停（抽水機 2026-10-16 量到：莫尼特號的甲板幾乎貼著水面）。
+function wetAt(sh, p, o) {
+  o = o || {};
+  if (o.sea !== false) {
+    var w = M4.pt(sh.M, p[0], p[1], p[2]), h = seaH(w[0], w[2], SIMT) - (o.depth || 0);
+    if (o.touch ? w[1] <= h : w[1] < h) return true;
+  }
+  if (!(o.inner > 0)) return false;
+  var fl = sh.fl, i = fl ? flCell(fl.F, p[0], p[1], p[2]) : -1;
+  return i >= 0 && fl.cap[i] > 0.02 && fl.A[i] >= o.inner * fl.cap[i] * Math.pow(fl.F.c * S, 3);
+}
+function wetLatch(o, under, n) {
+  n = n || 2;
+  o.wetN = under ? Math.min(n, (o.wetN || 0) + 1) : Math.max(0, (o.wetN || 0) - 1);
+  if (!o.wet && o.wetN >= n) { o.wet = true; return 1; }
+  if (o.wet && o.wetN === 0) { o.wet = false; return -1; }
+  return 0;
+}
 /** 水併進第 i 格（那一格裝不了水 ⇒ 往上找三格）。 */
 function flDeposit(fl, i, v) {
   var NXY = fl.F.NX * fl.F.NY;
@@ -146,6 +171,8 @@ function floodVis(sh, fl, dt) {
   fl.rsV = rsF; rsF = r; fl.vis = true;
 }
 var FL_VISMS = 0, FL_VISN = 0;
+/** 抽水的倍率（TASK-0604）：那一型的基礎抽水量（噸／分，cfg.pump）÷ PUMP_REF。⛔ 沒有 pump（舊存檔、外部傳進來的 cfg）⇒ 1（照以前）。 */
+function pumpK(sh) { var p = sh.cfg.pump, x = sh.pumps ? sh.pumps.x : 0; return (p === undefined || !isFinite(p) ? PUMP_REF : p + x) / PUMP_REF; }   // x：甲板上擺的抽水機另外加的（45_pumps.js；沒擺 ⇒ 0 ⇒ 一位元不動）
 /** 每一步（32_hull.js stepShip，粒子模式）：粒子飛、每 ev 步算一次水格（破口進出水、往下往旁邊流、抽水、讀數）。 */
 function floodStep(sh, fl, dt) {
   if (!(dt > 0)) return;
@@ -225,7 +252,7 @@ function flTick(sh, fl, dtc) {
   }
   // 3. 抽水：從最低的那幾層抽（⛔ act 要重拿：上面 flAct 可能換過一條更長的陣列）
   act = fl.act;
-  var need = FL_PUMP * fk * dtc, lowz = 1e9;
+  var need = FL_PUMP * pumpK(sh) * fk * dtc, lowz = 1e9;
   for (t = 0; t < fl.actN; t++) if (A[act[t]] > 1e-7) lowz = Math.min(lowz, (act[t] / NXY) | 0);
   for (var zz = lowz; zz < lowz + 3 && need > 0 && lowz < 1e9; zz++) for (t = 0; t < fl.actN && need > 0; t++) {
     i = act[t]; if (((i / NXY) | 0) !== zz || A[i] <= 0) continue; m = Math.min(A[i], need); A[i] -= m; need -= m; fl.pumped += m;

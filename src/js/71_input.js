@@ -232,7 +232,7 @@ function sliders() {
   var hk = Math.log(LIM.hard[1] / LIM.hard[0]);
   lf.min = LIM.ballast[0]; lf.max = LIM.ballast[1]; gw.min = LIM.gunw[0]; gw.max = LIM.gunw[1];
   f.min = LIM.flood[0]; f.max = LIM.flood[1]; h.min = 0; h.max = 1; h.step = 0.005; c.min = LIM.cas[0] * 100; c.max = LIM.cas[1] * 100;
-  sp.min = LIM.speed[0]; sp.max = LIM.speed[1]; ag.min = LIM.agile[0]; ag.max = LIM.agile[1]; uw.min = LIM.upwind[0]; uw.max = LIM.upwind[1]; var bs = $('base'); bs.min = LIM.base[0]; bs.max = LIM.base[1];
+  sp.min = LIM.speed[0]; sp.max = LIM.speed[1]; ag.min = LIM.agile[0]; ag.max = LIM.agile[1]; uw.min = LIM.upwind[0]; uw.max = LIM.upwind[1]; var bs = $('base'); bs.min = LIM.base[0]; bs.max = LIM.base[1]; $('pump').min = LIM.pump[0]; $('pump').max = LIM.pump[1];
   gh.min = LIM.gunhp[0]; gh.max = LIM.gunhp[1]; sl.min = LIM.sailhp[0]; sl.max = LIM.sailhp[1]; ph.min = LIM.powderhp[0]; ph.max = LIM.powderhp[1];
   bl.min = LIM.blast[0]; bl.max = LIM.blast[1]; bv.min = LIM.blastv[0] * 100; bv.max = LIM.blastv[1] * 100; ch.min = LIM.crewhp[0]; ch.max = LIM.crewhp[1]; cd.min = LIM.crewdeath[0]; cd.max = LIM.crewdeath[1];
   function am(r, k) { return $('am-' + r + '-' + k); }
@@ -281,7 +281,7 @@ function sliders() {
   //   「擺設…」打開那一間的俯視格子編輯器（#roomEd；0.5 m 一格）：挑物品、點格子擺（物品的中心在點的那一格）、轉 90°、拿掉、自動擺滿、清空。
   //   改了寫進 SHIP_ROOMS（36_rooms.js），存檔跟著存（69_prefs.js）。自動擺滿的那一間第一次被改 ⇒ 先把自動擺的那一份抄下來再改。
   //   甲板也是一間（Tim 2026-10-14）：每一層砲甲板一列，只擺火藥桶（取用點）；沒擺過 ＝ 自動（照舊的那幾處）。RE.d ＝ 編輯的是甲板。
-  var RE = { i: -1, d: false, it: '', r: 0, del: false, hover: null, msg: '' }, ITEM_COL = { bed: '#d8cba4', table: '#9a7552', medkit: '#c04a40', keg: '#7a5230' };
+  var RE = { i: -1, d: false, it: '', r: 0, del: false, hover: null, msg: '' }, ITEM_COL = { bed: '#d8cba4', table: '#9a7552', medkit: '#c04a40', keg: '#7a5230', pump: '#6f9fc4', spump: '#8a8f99' };
   function roomName(r) { return (r.deck ? r.deck.name + ' ' : '') + r.name.split('/').slice(-2).join(' ').replace('艙房-鏡像', '左').replace('艙房', '右'); }
   var ADM_SENT = {};                                                 // 後台模式：每一型上一次送回後台的預設（一樣就不送）
   function roomSet(name, v) { (SHIP_ROOMS[CFG_ID] = SHIP_ROOMS[CFG_ID] || {})[name] = v; if (ADMIN_ROOMS) ADM_SENT[CFG_ID] = ADM_SENT[CFG_ID] || ''; }
@@ -294,7 +294,7 @@ function sliders() {
     ADM_SENT[CFG_ID] = s; try { w.postMessage({ kind: 'cb-rooms', id: CFG_ID, rooms: o }, location.origin); } catch (e) { /* 後台關了 */ }
   }
   function itemsText(items) { var n = {}; items.forEach(function (q) { n[q.it] = (n[q.it] || 0) + 1; }); return Object.keys(n).map(function (it) { return FURN[it].name + ' ' + n[it]; }).join('、'); }
-  function furnNote(it) { var f = FURN[it], b = f.buff || {}; return f.role === 'powder' ? '一處三桶' : f.hold ? '躺 ' + f.hold + ' 人' : Object.keys(b).map(function (k) { return (BUFF_NAMES[k] || k) + ' +' + Math.round(b[k] * 100) + '%'; }).join('、'); }
+  function furnNote(it) { var f = FURN[it], b = f.buff || {}; return f.role === 'powder' ? '一處三桶' : f.role === 'pump' ? '抽水 ' + f.tpm + ' 噸／分' + (f.power === 'steam' ? '、靠鍋爐' : '、' + (f.crew || 1) + ' 人搖') + (f.place === 'well' ? '、主桅旁中線' : '、中線') : f.hold ? '躺 ' + f.hold + ' 人' : Object.keys(b).map(function (k) { return (BUFF_NAMES[k] || k) + ' +' + Math.round(b[k] * 100) + '%'; }).join('、'); }
   function roomsPut() {
     var box = $('roomItems'), T = HULLT[CFG_ID], R = T ? hullRooms(T) : [], html = '';
     R.forEach(function (r, i) {
@@ -333,7 +333,8 @@ function sliders() {
     (T ? hullDeckKit(T).decks : []).forEach(function (D, i) {
       var I = deckItems(T, D, deckPlan(CFG_ID, D.id)), el = $('dk-' + i + 'V'), b = document.querySelector('#deckItems button[data-d="' + i + '"]');
       if (b) b.className = RE.d && RE.i === i ? 'on' : '';
-      if (el) el.textContent = (I.auto ? '自動：' : '自訂：') + '取用點 ' + I.items.length + ' 處（每處三桶）' + (I.items.length ? '' : '　⚠ 這一層的送藥手沒地方拿火藥') + (I.bad.length ? '　⚠ 存的擺法有 ' + I.bad.length + ' 處擺不下（沒擺）' : '');
+      var nk = I.items.filter(function (q) { return FURN[q.it].role === 'powder'; }).length, np = I.items.length - nk;   // 抽水機（45_pumps.js）另外數
+      if (el) el.textContent = (I.auto ? '自動：' : '自訂：') + '取用點 ' + nk + ' 處（每處三桶）' + (np ? '・抽水機 ' + np + ' 台' : '') + (nk ? '' : '　⚠ 這一層的送藥手沒地方拿火藥') + (I.bad.length ? '　⚠ 存的擺法有 ' + I.bad.length + ' 處擺不下（沒擺）' : '');
     });
     $('roomSum').textContent = !T ? '船型載入後列得出艙房。' : !R.length ? '這一型還沒標空艙房（造船規格 §9.2：艙房子作品的固定點 <房名>.min／.max、關聯 meta kind=rooms）。'
       : R.length + ' 間空艙房' + (Object.keys(n).length ? '：' + Object.keys(n).map(function (f) { return ROOM_FN[f].name + ' ' + n[f] + ' 間'; }).join('、') : '，都空著') + '。選了類型就自動擺滿（先擺必要件、再擺加強件、剩下的空間多擺）；「擺設…」自己擺。門口留一格走道。' + (ROOMFN_Q ? '　⚠ 網址 ?roomfn= 蓋過' : '');
@@ -360,7 +361,8 @@ function sliders() {
     [].forEach.call($('roomEdP').querySelectorAll('button'), function (b) {
       b.onclick = function () { if (b.dataset.it) { RE.it = b.dataset.it; RE.del = false; } else if (b.dataset.rot) RE.r = 1 - RE.r; else RE.del = !RE.del; RE.msg = ''; roomEdShow(); };
     });
-    $('roomEdV').innerHTML = (RE.d ? '取用點 ' + E.I.items.length + ' 處：送藥手到最近的一處拿火藥與彈藥（彈藥庫 ＝ 離它最近的那間）；被打到會殉爆。深紅 ＝ 砲班的位置（不能擺）。' : '') + (cap ? '容納 ' + cap + ' 人' : '') + (Object.keys(B).length ? (cap ? '・' : '') + buffText(B) : '') + (lack ? '　<b style="color:#ff9a7a">缺必要件（' + lack + '）⇒ 這一間不能用</b>' : '') +
+    var npE = E.I.items.filter(function (q) { return FURN[q.it].role === 'pump'; }).length;
+    $('roomEdV').innerHTML = (RE.d && npE ? '抽水機 ' + npE + ' 台：加在基礎抽水量上；人力的艙裡有水才派預備水手去搖，蒸汽的靠鍋爐；被打壞、泡水就停。選到抽水機時，調暗的格不能擺（泵井在主桅腳、泵管走中線）。<br>' : '') + (RE.d ? '取用點 ' + E.I.items.filter(function (q) { return FURN[q.it].role === 'powder'; }).length + ' 處：送藥手到最近的一處拿火藥與彈藥（彈藥庫 ＝ 離它最近的那間）；被打到會殉爆。深紅 ＝ 砲班的位置（不能擺）。' : '') + (cap ? '容納 ' + cap + ' 人' : '') + (Object.keys(B).length ? (cap ? '・' : '') + buffText(B) : '') + (lack ? '　<b style="color:#ff9a7a">缺必要件（' + lack + '）⇒ 這一間不能用</b>' : '') +
       (E.I.bad.length ? '<br>⚠ 存的擺法這幾件擺不下（沒擺）：' + E.I.bad.join('；') : '') + (E.I.why ? '<br>⚠ ' + E.I.why : '') + (RE.msg ? '<br>' + RE.msg : '') + (ROOMFN_Q ? '<br>⚠ 網址 ?roomfn= 蓋過：這裡改的開戰時不會用' : '');
     var L = roomEdLay(E.G);
     $('roomEdL').textContent = (L.rot ? '↑ 船頭；左 ＝ 左舷、右 ＝ 右舷' : '← 船尾　船頭 →；上 ＝ 左舷、下 ＝ 右舷') + '。綠 ＝ 可以擺、' + (RE.d ? '深紅 ＝ 砲班的位置' : '黃 ＝ 門口走道') + '（不能擺）、深色 ＝ 站不住。物品的中心擺在點的那一格' + (RE.d ? '。' : '；每一件都要有一邊從門口走得到。');
@@ -382,6 +384,8 @@ function sliders() {
     /** 格子（i, j）起、寬 wi 格、高 hj 格的那一塊 ⇒ 畫面上的 [x, y, w, h]（轉了 ⇒ 船頭朝上：畫面的列 ＝ nx − 1 − i、欄 ＝ j）。 */
     function R(i0, j0, wi, hj) { return L.rot ? [j0 * cs, (G.nx - i0 - wi) * cs, hj * cs, wi * cs] : [i0 * cs, j0 * cs, wi * cs, hj * cs]; }
     for (j = 0; j < G.ny; j++) for (i = 0; i < G.nx; i++) { var s = G.s[i + j * G.nx], r = R(i, j, 1, 1); x.fillStyle = s === 0 ? '#20252c' : s === 2 ? '#5d5530' : s === 3 ? '#4e2a26' : '#3b4a3a'; x.fillRect(r[0], r[1], r[2], r[3]); }
+    var PF = !RE.del && FURN[RE.it] && FURN[RE.it].place;             // 抽水機（45_pumps.js）：選到它 ⇒ 位置規則外的格調暗（主桅旁中線、蒸汽的只有蒸汽船）
+    if (PF) { x.fillStyle = 'rgba(0,0,0,.55)'; for (j = 0; j < G.ny; j++) for (i = 0; i < G.nx; i++) if (G.s[i + j * G.nx] === 1 && pumpPlaceWhy(G, roomEdAt(RE.it, RE.r, i, j))) { var r3 = R(i, j, 1, 1); x.fillRect(r3[0], r3[1], r3[2], r3[3]); } }
     if (cs >= 6) {
       x.strokeStyle = 'rgba(255,255,255,.12)'; x.lineWidth = 1; x.beginPath();
       for (i = 0; i <= W / cs; i++) { x.moveTo(i * cs + 0.5, 0); x.lineTo(i * cs + 0.5, H); }
@@ -473,7 +477,7 @@ function sliders() {
   }
   function put() {                                     // 變數 ⇒ 滑桿位置（開頭、重設預設值、換編輯的船時）
     var k = C(); $('cfgShip').value = CFG_ID;
-    lf.value = k.ballast !== undefined ? k.ballast : LIM.ballast[2]; f.value = k.flood; h.value = Math.log(k.hard / LIM.hard[0]) / hk; c.value = STRIKE.cas * 100; sp.value = k.speed; ag.value = k.agile; uw.value = k.upwind; $('base').value = k.base || 0;
+    lf.value = k.ballast !== undefined ? k.ballast : LIM.ballast[2]; f.value = k.flood; h.value = Math.log(k.hard / LIM.hard[0]) / hk; c.value = STRIKE.cas * 100; sp.value = k.speed; ag.value = k.agile; uw.value = k.upwind; $('base').value = k.base || 0; $('pump').value = k.pump;
     gh.value = GUN_HP; gw.value = k.gunw; sl.value = SAIL_HP; ph.value = POWDER_HP; bl.value = BLAST_K; bv.value = Math.round(BLAST_V * 100); ch.value = CREW_HP;
     bx.value = BOX_N; cy.value = CARRY_N; wk.value = WIND_K; wc.value = WIND_CAP; $('inertia').value = DRV_INERTIA; $('turninert').value = DRV_TURN; $('sailtq').value = DRV_TQ; dr.value = DROWN_T; $('navre').value = NAV_RE; $('heal').value = HEAL_T; $('gcrew').checked = GUN_CREW_HURT; $('dbg').checked = DBG_SET;
     se.value = SEA_K; st.value = STALL_K; fs.value = FUN.speed; fa.value = FUN.agile; fl.value = FUN.stall; fp.value = FUN.powder; fh.value = FUN.hard;
@@ -495,6 +499,7 @@ function sliders() {
     $('funspeedV').textContent = FUN.speed.toFixed(2) + '×'; $('funagileV').textContent = FUN.agile.toFixed(2) + '×'; $('funstallV').textContent = FUN.stall.toFixed(2) + '×';
     $('funhardV').textContent = FUN.hard.toFixed(2) + '×（鐵甲的擊穿門檻：寫實 ' + Math.round(MATS.iron ? MATS.iron.pen || 0 : 0) + ' ⇒ 娛樂 ' + Math.round((MATS.iron ? MATS.iron.pen || 0 : 0) * FUN.hard) + ' kJ／格；木頭不變）';
     $('funpowderV').textContent = FUN.powder.toFixed(2) + '×' + (powderNever() ? '（火藥拉滿：不會爆）' : '（火藥血量 ' + POWDER_HP + ' ⇒ ' + Math.round(POWDER_HP * FUN.powder) + '）');
+    var PU = K.pump; $('pumpV').textContent = PU.toFixed(1) + ' 噸／分' + (PU === cfgBase('pump', CFG_ID) ? '（預設：照排水量）' : '') + (PU <= 0 ? '（不抽水）' : '');
     $('floodV').textContent = FLOOD === 0 ? '0×（不會沉）' : FLOOD.toFixed(2) + '×' + (FLOOD < 0.5 ? '（慢）' : FLOOD < 1.2 ? '' : '（快）');
     var HT = HULLT[CFG_ID], m0 = (HT ? HT.voxT0 : 0) + modelMassT(HT, GUNW_K) + BALLAST_T, l0 = liftFor(HT, HT ? HT.disp - m0 : 0), lx = liftFor(HT, HT ? HT.disp - m0 + 70 : 0);   // 照我艦的船型   // 開戰時浮在哪；例子：再打掉 10 萬格（70 噸）
     var gm = 0, kinds = {}; if (HT) (HT.rig.models || []).forEach(function (m) { var k = modelKind(m); if (GUNS[k]) { gm += GUNS[k].mass * GUNW_K; kinds[k] = 1; } });
@@ -521,7 +526,7 @@ function sliders() {
     $('casV').textContent = STRIKE.cas >= 1 ? '100%（全員倒下才停）' : Math.round(STRIKE.cas * 100) + '%';
     $('strikeV').textContent = strikeText();
     var amDef = AMMO_K.every(function (r, i) { return r.every(function (v, j) { return v === AMMO_K0[i][j]; }); });
-    $('detV').textContent = '玩法 ' + (PLAY === 'fun' ? '娛樂（航速 ×' + FUN.speed.toFixed(2) + '、靈活 ×' + FUN.agile.toFixed(2) + '、頂風失速 ' + Math.round(SK * 100) + '%）' : '寫實（頂風失速 ' + Math.round(SK * 100) + '%）') + '・天氣 ' + WX.name + '・浪 ' + (SEA_K > 0 ? SEA_K.toFixed(2) + '×' : '平靜') + '・' + fleetHulls().map(function (id) { var c = shipCfg(id), hi = hullInfo(id); return (hi ? hi.name : id) + '：硬度 ' + c.hard.toFixed(1) + '×・進水 ' + c.flood.toFixed(2) + '×・壓艙物 ' + (c.ballast !== undefined ? c.ballast + ' 噸' : '（載入後）') + '・砲重 ' + c.gunw.toFixed(2) + '×・航速 ' + c.speed.toFixed(2) + '×・靈活 ' + c.agile.toFixed(2) + '×・逆風 ' + c.upwind.toFixed(2) + '×・預備水手 ' + shipCrew(id).hands; }).join('；') + '・血量 砲 ' + GUN_HP + '／帆 ' + SAIL_HP + '／船員 ' + CREW_HP +
+    $('detV').textContent = '玩法 ' + (PLAY === 'fun' ? '娛樂（航速 ×' + FUN.speed.toFixed(2) + '、靈活 ×' + FUN.agile.toFixed(2) + '、頂風失速 ' + Math.round(SK * 100) + '%）' : '寫實（頂風失速 ' + Math.round(SK * 100) + '%）') + '・天氣 ' + WX.name + '・浪 ' + (SEA_K > 0 ? SEA_K.toFixed(2) + '×' : '平靜') + '・' + fleetHulls().map(function (id) { var c = shipCfg(id), hi = hullInfo(id); return (hi ? hi.name : id) + '：硬度 ' + c.hard.toFixed(1) + '×・進水 ' + c.flood.toFixed(2) + '×・抽水 ' + c.pump.toFixed(1) + ' 噸／分・壓艙物 ' + (c.ballast !== undefined ? c.ballast + ' 噸' : '（載入後）') + '・砲重 ' + c.gunw.toFixed(2) + '×・航速 ' + c.speed.toFixed(2) + '×・靈活 ' + c.agile.toFixed(2) + '×・逆風 ' + c.upwind.toFixed(2) + '×・預備水手 ' + shipCrew(id).hands; }).join('；') + '・血量 砲 ' + GUN_HP + '／帆 ' + SAIL_HP + '／船員 ' + CREW_HP +
       '・傷害 ' + DMG.long + '／' + DMG.long32 + '／' + DMG.carr + '／' + DMG.chase + '／' + DMG.long4 + '／' + DMG.long12 + '／' + DMG.long18 + '／' + DMG.long6 + '／' + DMG.chase3 + (amDef ? '' : '・彈種倍率已改') + '・藥箱 ' + BOX_N + '、一次搬 ' + CARRY_N + '・溺水 ' + (DROWN_T ? DROWN_T + ' 秒' : '關') +
       '・火藥桶 ' + (powderNever() ? '不會爆' : '血量 ' + powderHP() + '、殉爆 ' + BLAST_K.toFixed(2) + '×' + (BLAST_V > 0 ? ' ±' + Math.round(BLAST_V * 100) + '%' : '')) + '・砲長 ' + CAP_SET.map(function (k) { return CAPTAINS[k] ? CAPTAINS[k].name : '隨機'; }).join('／') + '・' + strikeText();
     crewShow(); roomsShow();
@@ -531,7 +536,8 @@ function sliders() {
   sp.oninput = function () { C().speed = +sp.value; show(); };
   ag.oninput = function () { C().agile = +ag.value; show(); };
   uw.oninput = function () { C().upwind = +uw.value; show(); };
-  $('base').oninput = function () { C().base = +$('base').value; show(); };   // 額外動力（31_sailing.js；設定鍵照舊叫 base）
+  $('base').oninput = function () { C().base = +$('base').value; show(); };
+  $('pump').oninput = function () { C().pump = +$('pump').value; show(); };   // 基礎抽水量（噸／分；33_flood.js pumpK）   // 額外動力（31_sailing.js；設定鍵照舊叫 base）
   h.oninput = function () { C().hard = Math.round(LIM.hard[0] * Math.exp(h.value * hk) * 20) / 20; show(); };   // 倍率：0.05 一格（1 ＝ 只看材質）
   c.oninput = function () { STRIKE.cas = c.value / 100; show(); };
   gh.oninput = function () { GUN_HP = Math.round(+gh.value); show(); };
@@ -656,14 +662,25 @@ function gfxShow() {
 function phxUI() {
   var box = $('phxItems');
   box.innerHTML = PHX_ITEMS.map(function (it) {
-    return '<div class="row"><label>' + it.name + '</label>' + it.opt.map(function (o, v) { return '<button data-k="' + it.k + '" data-v="' + v + '">' + o + '</button>'; }).join('') + '</div>';
+    return '<div class="row"><label>' + it.name + '</label>' + it.opt.map(function (o, v) { return '<button data-k="' + it.k + '" data-v="' + v + '">' + o + '</button>'; }).join('') + '</div>' + (it.k === 'shipdmg' ? ramRows() : '');   // 碰撞傷害底下：它的數值（ramRows）
   }).join('') + '<div class="row"><label>物理減速</label><button data-pslow="0">關</button><button data-pslow="1">開（計算量大時放慢模擬）</button></div>'   // 不跟四檔走（73_slowmo.js PSLOW）
     + '<div class="row slide"><label for="pslowR">減速門檻</label><input type="range" id="pslowR" min="' + LIM.pslowb[0] + '" max="' + LIM.pslowb[1] + '" step="0.05" aria-label="模擬最多佔真實時間幾成，超過就放慢"><span id="pslowV"></span></div>';
   [].forEach.call(box.querySelectorAll('button[data-k]'), function (b) { b.onclick = function () { PHX[b.dataset.k] = +b.dataset.v; phxSync(); }; });
   [].forEach.call(box.querySelectorAll('button[data-pslow]'), function (b) { b.onclick = function () { if ((b.dataset.pslow === '1') !== PSLOW.on) pslowToggle(); }; });
   var pr = $('pslowR'); pr.oninput = function () { PSLOW.budget = Math.round(+pr.value * 100) / 100; phxShow(); };
+  RAM_UI.forEach(function (u) { var el = $('ram_' + u.k); el.oninput = function () { RAM[u.k] = Math.round(+el.value / u.st) * u.st; phxShow(); }; });
   [].forEach.call(document.querySelectorAll('#phxs button[data-x], #phxPre button'), function (b) { b.onclick = function () { phxSet(b.dataset.x); phxSync(); }; });
   phxShow();
+}
+/** 碰撞傷害的數值（TASK-0652；Tim 2026-10-16：「數值可以開成設定頁面Slider嗎(開啟碰撞傷害後才顯示)」）：接在「碰撞傷害」那一列底下，開關關著 ⇒ 整塊藏起來（phxShow）。
+ *  k ＝ RAM 的欄位、q ＝ 設定檔 lim 與網址的鍵、st ＝ 步長；txt ＝ 數值後面那一段說明。 */
+var RAM_UI = [
+  { k: 'v0', q: 'ramv', name: '撞擊門檻', st: 0.1, txt: function (x) { return x.toFixed(1) + ' m/s（約 ' + (x * 1.944).toFixed(1) + ' 節）：沿接觸方向接近得比這快才算撞擊'; } },
+  { k: 'k', q: 'ramk', name: '撞擊傷害倍率', st: 0.05, txt: function (x) { return '× ' + x.toFixed(2) + '：撞掉多少格（速度照物理，不跟著變）'; } },
+  { k: 'e', q: 'rame', name: '彈力係數', st: 0.05, txt: function (x) { return x.toFixed(2) + (x ? '：撞完反彈（恢復係數；沿接觸方向彈回 ' + Math.round(x * 100) + '% 的接近速度、拿去撞壞的能量剩 ' + Math.round((1 - x * x) * 100) + '%）' : '：不反彈（完全非彈性，撞完一起走）'); } },   // Tim 2026-10-16：「是否可以有加彈力系數(撞擊後反彈)」
+  { k: 'side', q: 'ramside', name: '側撞有效質量', st: 0.5, txt: function (x) { return '× ' + x.toFixed(1) + '：被側面撞的船沿接觸方向多難推動（水擋著橫向）；越大 ⇒ 撞人的那艘停得越乾脆'; } }];
+function ramRows() {
+  return '<div id="ramBox">' + RAM_UI.map(function (u) { var L = LIM[u.q]; return '<div class="row slide"><label for="ram_' + u.k + '">' + u.name + '</label><input type="range" id="ram_' + u.k + '" min="' + L[0] + '" max="' + L[1] + '" step="' + u.st + '" aria-label="' + u.name + '"><span id="ram_' + u.k + 'V"></span></div>'; }).join('') + '</div>';
 }
 function phxSync() { if ((PHX.rig > 0) !== PHYS) setPhys(PHX.rig > 0); phxShow(); }
 function phxShow() {
@@ -674,6 +691,7 @@ function phxShow() {
   [].forEach.call(document.querySelectorAll('#phxItems button[data-pslow]'), function (b) { b.className = (b.dataset.pslow === '1') === PSLOW.on ? 'on' : ''; });
   $('pslowR').value = PSLOW.budget; $('pslowV').textContent = '模擬最多佔 ' + Math.round(PSLOW.budget * 100) + '% 的時間' + (PSLOW.budget === LIM.pslowb[2] ? '（預設）' : '') + '：越低越早放慢、畫面越順' + (PSLOW.on ? '' : '（物理減速關著）');
   $('phxLv').textContent = '現在：' + PHX_NAME[lv];
+  if ($('ramBox')) { $('ramBox').style.display = PHX.shipdmg ? '' : 'none'; RAM_UI.forEach(function (u) { var x = RAM[u.k]; $('ram_' + u.k).value = x; $('ram_' + u.k + 'V').textContent = u.txt(x) + (Math.abs(x - LIM[u.q][2]) < 1e-9 ? '（預設）' : ''); }); }
   if (typeof gsetShow === 'function') gsetShow();
 }
 /** 玩法：娛樂／寫實（04_state.js 的 PLAY）＋主選單按鈕的亮燈。航行每一步都讀（playK）；按鈕在主選單，沒開戰時才按得到。 */

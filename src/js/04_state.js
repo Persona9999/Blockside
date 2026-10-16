@@ -30,7 +30,10 @@ function playK(k) { return PLAY === 'fun' ? FUN[k] : 1; }
 // 起始值 ＝ 網址參數（?hard= …，套到每一型）或 LIM 的預設；壓艙物網址沒給 ⇒ 存檔裡那一型的（同一份船才算，69_prefs.js）⇒ 那一型的 ballast0（船型載好才知道）。
 //   base  額外動力（節；畫面上 Tim 2026-10-15 改名，以前叫基底航速；31_sailing.js；Tim 2026-10-14：風暴角號是幽靈船、之後的蒸汽船）：額外動力帶來的航速 —— 不管風向、風速、掛幾面帆都有，
 //         跟帆的航速脫鉤（不乘 speed、玩法加成、天氣）；實際航速 ＝ √(帆的航速² ＋ 它²)：兩種動力的推力相加（蒸汽帆船；阻力 ∝ 速度²、各自單獨能跑到的航速就是那份推力 ⇒ 推力相加 ＝ 平方相加）。0 ＝ 沒有 ⇒ 照舊
-var SHIP_KEYS = ['hard', 'flood', 'ballast', 'gunw', 'speed', 'agile', 'upwind', 'base'], SHIP_CFG = {};
+//   pump  基礎抽水量（噸／分；TASK-0604，Tim 2026-10-15：「不同船型的基礎抽水能力應該不同（後台可以調）」）：每型自己的抽水機；跟進水速度分開（flood 照舊同時縮放進水與抽水）。
+//         預設 ＝ 18 ×（設計排水量／憲法號 2152 噸）^⅔（抽水機、搖的人手 ∝ 船的大小；憲法號 18 ＝ 以前每艘都一樣的那個值），值寫在 config/game.json 每艘的 cfg
+var SHIP_KEYS = ['hard', 'flood', 'ballast', 'gunw', 'speed', 'agile', 'upwind', 'base', 'pump'], SHIP_CFG = {};
+var PUMP_REF = 18;                                     // 噸／分：以前每艘船一樣的抽水量（粒子模式 FL_PUMP 0.3 m³/s、公式模式 0.004 m/s 是它）⇒ 抽水 ×（pump／PUMP_REF）
 // 船型自己的預設（沒列的 ＝ LIM 的預設）。Tim 2026-10-13：憲法號要比餘燼號快、靈活 ⇒ 憲法號照舊 1（巡防艦），
 //   餘燼號是兩層砲甲板、90 門砲的重船 ⇒ 航速 0.85、靈活 0.7。網址參數（?speed= …）照舊套到每一型。
 //   夜隼號（Tim 2026-10-13：「速度更快、更靈活，彌補火力劣勢」「加強逆風航速與轉彎，彌補火力跟防禦不足」「材質硬度兩倍試試」）：
@@ -106,6 +109,7 @@ var MODE = CFG.menu.mode, DIST = Q.has('dist') && isFinite(+Q.get('dist')) ? cla
 var SAIL = Q.has('sail') ? (Q.get('sail') === 'off' ? 'off' : Q.get('sail') === 'manual' ? 'manual' : 'auto') : CFG.menu.sail;   // 航行：auto ＝ 兩艘自動、manual ＝ 我艦手動、off ＝ 停船；沒給 ⇒ menu.sail
 var KEYS = { l: false, r: false, sw: null };  // 手動操舵：按住的舵鍵（額外動力以前是按住 W／S 的油門，Tim 2026-10-15 改成帆段兩頭的「全速前進／倒車」⇒ 31_sailing.js sailStep）；sw ＝ 按住加帆／收帆（{ d: ±1, n: 下一次再切的 SIMT }；sailHold）
 // 殉爆的慢動作與特寫（73_slowmo.js）：on／cam 是設定；ts 現在的時間倍率。SLOW_VIS：這一格畫面裡只給人看的效果改由 frame 走（step() 讀它決定要不要跳過）
+var RAM = { v0: qnum('ramv', LIM.ramv), k: qnum('ramk', LIM.ramk), e: qnum('rame', LIM.rame), side: qnum('ramside', LIM.ramside) };   // 碰撞傷害的數值（31_sailing.js ramHit；TASK-0652）：門檻 m/s、傷害倍率、恢復係數、側撞有效質量倍數 —— 物理設定頁的滑桿（打開碰撞傷害才顯示）
 var PSLOW = { on: Q.get('pslow') === '1', ts: 1, ms: 0, budget: qnum('pslowb', LIM.pslowb) };   // 物理減速（73_slowmo.js；Tim 2026-10-14：預設關）：ts ＝ 現在的倍率、ms ＝ 一步模擬平均幾毫秒、budget ＝ 門檻（模擬最多佔真實時間幾成）
 // 模擬速度（Tim 2026-10-15：「設定選單 是否可以加個Slider調整模擬速度」「最低0.05好了(0相當於暫停)」）：0.05–8 倍，設定（O）的滑桿；只是每格畫面累積的時間 × 它（90_main.js frame），模擬一步照舊 DT ⇒ 戰局逐字不變。
 var SIM_SPEED = 1, SIM_SPEED_MIN = 0.05, SIM_SPEED_MAX = 8;

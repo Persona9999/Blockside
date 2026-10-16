@@ -95,7 +95,7 @@ function deckItems(T, D, pl) {
 function deckGrid(T, D) {
   T.deckG = T.deckG || {}; var id = deckId(D); if (T.deckG[id]) return T.deckG[id];
   var g = T.base, hb = T.h.bbox, dm = D.meta, xa = dm ? dm.x0 : T.hx0, xb = dm ? dm.x1 : T.hx1, ya = Math.floor(hb[1]), yb = Math.ceil(hb[4]);
-  var nx = Math.floor((xb - xa + 1) / ROOM_TILE), ny = Math.floor((yb - ya + 1) / ROOM_TILE), G = { nx: nx, ny: ny, x0: xa, y0: ya, s: new Uint8Array(nx * ny), zt: new Int16Array(nx * ny), deck: true };
+  var nx = Math.floor((xb - xa + 1) / ROOM_TILE), ny = Math.floor((yb - ya + 1) / ROOM_TILE), G = { nx: nx, ny: ny, x0: xa, y0: ya, s: new Uint8Array(nx * ny), zt: new Int16Array(nx * ny), deck: true, T: T };   // T：抽水機的位置規則要船型（45_pumps.js pumpPlaceWhy）
   var BB = hullDeckKit(T).gunsBB;
   for (var j = 0; j < ny; j++) for (var i = 0; i < nx; i++) {
     var x0 = xa + i * ROOM_TILE, y0 = ya + j * ROOM_TILE, z = -1, ok = 1;
@@ -140,6 +140,7 @@ function placeOk(G, type, items, p, skip) {
   var f = FURN[p.it], F = ROOM_FN[type];
   if (!f) return '不認得的物品';
   if (F && F.items && F.items.indexOf(p.it) < 0) return '這一類房間不能擺' + f.name;
+  if (f.place) { var pw = pumpPlaceWhy(G, p); if (pw) return pw; }      // 抽水機：主桅旁中線、蒸汽的只有蒸汽船（45_pumps.js）
   var t = itemTiles(p.it, p.r), i, j;
   if (p.x < 0 || p.y < 0 || p.x + t[0] > G.nx || p.y + t[1] > G.ny) return '超出房間';
   var occ = new Int16Array(G.nx * G.ny), all = items.filter(function (q) { return q !== skip; }).concat([p]);
@@ -236,6 +237,8 @@ function furnBoxes(item, ax) {
     [0, 0, H - 2, L, W, H - 1, 0], [1, 1, H - 1, L - 1, W - 1, H, 1], [L - 4, 1.5, H - 0.5, L - 1, W - 1.5, H + 0.5, 2]];
   else if (item === 'table') B = [[1, 1, 0, 2, 2, H - 1, 0], [L - 2, 1, 0, L - 1, 2, H - 1, 0], [1, W - 2, 0, 2, W - 1, H - 1, 0], [L - 2, W - 2, 0, L - 1, W - 1, H - 1, 0], [0, 0, H - 1, L, W, H, 2]];   // 四根腳、檯面
   else if (item === 'medkit') B = [[0, 0, 0, L, W, H - 1, 0], [0, 0, H - 1, L, W, H, 3]];   // 箱子、紅蓋
+  else if (item === 'pump') B = [[0, 0, 0, L, W, 2, 0], [L / 2 - 1.5, W / 2 - 1.5, 2, L / 2 + 1.5, W / 2 + 1.5, H - 2, 0], [0, W / 2 - 0.5, H - 3, L, W / 2 + 0.5, H - 2, 4], [0, W / 2 - 0.5, H - 6, 1, W / 2 + 0.5, H - 2, 4], [L - 1, W / 2 - 0.5, H - 6, L, W / 2 + 0.5, H - 2, 4]];   // 鏈式抽水機：底座、泵管、橫過去的搖把（兩頭往下的把手）
+  else if (item === 'spump') B = [[0, 0, 0, L, W, 2, 4], [1, 1, 2, L - 3, W - 1, H - 2, 4], [L - 3, W / 2 - 1, 2, L - 1, W / 2 + 1, H, 4], [1, 0, H - 2, L - 3, W, H - 1, 0]];   // 蒸汽抽水機：鐵座、汽缸、排水管、木蓋
   else B = [[0, 0, 0, L, W, H, 0]];
   return ax === 'y' ? B.map(function (b) { return [b[1], b[0], b[2], b[4], b[3], b[5], b[6]]; }) : B;
 }
@@ -252,7 +255,7 @@ function boxMesh(boxes, mats) {
   });
   return { verts: v, tris: t, tmat: tm, mats: mats };
 }
-var FURN_MATS = [[0.42, 0.28, 0.16], [0.82, 0.78, 0.66], [0.93, 0.92, 0.88], [0.7, 0.16, 0.14]];   // 木頭、帆布床墊、枕頭（檯面）、藥箱的紅蓋
+var FURN_MATS = [[0.42, 0.28, 0.16], [0.82, 0.78, 0.66], [0.93, 0.92, 0.88], [0.7, 0.16, 0.14], [0.22, 0.22, 0.24]];   // 木頭、帆布床墊、枕頭（檯面）、藥箱的紅蓋、鐵（抽水機）
 /** 那一型的物品網格（每種物品兩個方向各一份，第一次用到才做、接在 T.meshes 後面）⇒ 網格的索引。 */
 function furnMesh(T, item, ax) {
   T.furn = T.furn || {}; var key = item + ax;

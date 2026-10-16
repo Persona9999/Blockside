@@ -152,7 +152,7 @@ def act_authors():
 
 MENU = {'play': ('fun', 'real'), 'mode': ('pve', 'eve', 'sandbox'), 'sail': ('auto', 'manual', 'off'),
         'gfx': ('low', 'mid', 'high'), 'phx': ('full', 'high', 'mid', 'low')}
-SHIP_CFG_KEYS = ('hard', 'flood', 'gunw', 'speed', 'agile', 'upwind', 'base')          # 每艘船的船隻設定（壓艙物照船算，不在這裡）
+SHIP_CFG_KEYS = ('hard', 'flood', 'gunw', 'speed', 'agile', 'upwind', 'base', 'pump')          # 每艘船的船隻設定（壓艙物照船算，不在這裡）
 MAT_ID = r'[a-z][a-z0-9_]{0,31}'                                                      # 材質 ID（TASK-0616）：雕刻作品關聯的 meta material 照它認
 MAT_KINDS = ('wood', 'metal', 'other')                                               # 材質的分類（後台分組、之後燃燒照它）
 MAT_NUMS = (('density', 0.05, 25, '比重（一格 0.1 m ＝ 1 公升 ⇒ 每格幾 kg；橡木 0.7）'), ('hard', 0.05, 50, '硬度倍率（乘在船隻設定的船殼硬度上；橡木 1）'),
@@ -796,6 +796,7 @@ def act_shipcheck(ids=None):
               '| 砲 | 站不滿的砲 | 船員 | 模型 | 繩 | 帆 | 桅 | 彈藥庫 | 甲板 | 梯子 | 艙房 | 錨 | 水線 z |', '|---|---|---|---|---|---|---|---|---|---|---|---|---|',
               '| %s | %s 門缺 %s 人 | %s | %s | %s | %s | %s | %s | %s | %s | %s | %s | %s |' % (I['guns'], I['gunShort']['guns'], I['gunShort']['people'], I['crew'], I['models'], I['ropes'], '%s%s' % (I['sails'], '（＋陣營旗 %d）' % I['teamFlags'] if I.get('teamFlags') else ''), I['masts'], '%s（取用點 %s）' % (I['mags'], I.get('stations', '—')), len(I['decks']), I['ladders'], I['rooms'], I.get('anchors', '—'), I['zw']), '',
               '材質（TASK-0616）：' + (I.get('materials') or '—'), '',
+              '平滑渲染（關聯 meta render=smooth，TASK-0616）：' + (I.get('smooth') or '—'), '',
               '火藥（送藥手：取用點 → 砲尾藥箱）：' + (I.get('powder') or '—'), '',
               '迴旋砲／砲塔（meta mount；沒標 ＝ 固定）：' + (I.get('mounts') or '—'), '',
               '砲帶的裝甲（關聯 meta kind=armor、mount；跟著砲轉、一格一格打掉，TASK-0631）：' + (I.get('armor') or '—'), '',

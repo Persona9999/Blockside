@@ -32,11 +32,10 @@ function drownCheck(sh) {
   sh.crew.forEach(function (c) {
     if (c.st > 1) return;
     var bed = c.st === 1 && c.inBed && c.medBed, hz = bed ? BED_FACE : SWIM_HEAD;   // 躺在病床上 ⇒ 看躺著的臉（床面往上 BED_FACE），不看站著的頭頂
-    var h = M4.pt(sh.M, c.pos[0], c.pos[1], c.pos[2] + hz);
-    if (h[1] >= seaH(h[0], h[2], SIMT)) { c.wetN = 0; return; }
+    var hp = [c.pos[0], c.pos[1], c.pos[2] + hz];
+    if (!wetAt(sh, hp)) { c.wetN = 0; return; }                         // 33_flood.js 泡水判定（通用）
     if (open || c.pos[2] >= low) { if ((c.wetN = (c.wetN || 0) + 1) >= 2) { if (bed) bedDrown(sh, c); else toSwim(sh, c, M4.pt(sh.M, c.pos[0], c.pos[1], c.pos[2])); } return; }   // 砲甲板以上有砲門 ⇒ 通海
-    var i = fl ? flCell(fl.F, c.pos[0], c.pos[1], c.pos[2] + hz) : -1;   // 住艙以下：艙內那一格的水滿了九成（公式模式看不到艙內的水 ⇒ 不管）
-    if (!(i >= 0 && fl.cap[i] > 0.02 && fl.A[i] >= 0.9 * fl.cap[i] * Math.pow(fl.F.c * S, 3))) { c.wetN = 0; return; }
+    if (!wetAt(sh, hp, { sea: false, inner: 0.9 })) { c.wetN = 0; return; }   // 住艙以下：艙內那一格的水滿了九成（公式模式看不到艙內的水 ⇒ 不管）
     if ((c.wetN = (c.wetN || 0) + 1) < 2) return;
     if (bed) bedDrown(sh, c);
     else if (c.role === ROLE.HAND && sh.nav) evacuate(sh, c); else toSwim(sh, c, M4.pt(sh.M, c.pos[0], c.pos[1], c.pos[2]));
@@ -66,10 +65,8 @@ function evacuate(sh, c) {
 function gunWet(sh) {
   sh.guns.forEach(function (g) {
     if (!g.alive) return;
-    var w = M4.pt(sh.M, g.muz[0], g.muz[1], g.muz[2]), under = w[1] < seaH(w[0], w[2], SIMT);
-    g.wetN = under ? Math.min(2, (g.wetN || 0) + 1) : Math.max(0, (g.wetN || 0) - 1);
-    if (!g.wet && g.wetN >= 2) { g.wet = true; g.box = 0; g.needCart = true; if (!(g.reload > 0)) g.reload = sh.reloadT * GUNS[g.type].reload; sh.wetGuns = (sh.wetGuns || 0) + 1; }
-    else if (g.wet && g.wetN === 0) g.wet = false;
+    var ch = wetLatch(g, wetAt(sh, g.muz));                             // 33_flood.js 泡水判定（通用）：砲口在海面下，連兩次
+    if (ch > 0) { g.box = 0; g.needCart = true; if (!(g.reload > 0)) g.reload = sh.reloadT * GUNS[g.type].reload; sh.wetGuns = (sh.wetGuns || 0) + 1; }
   });
 }
 /** 往哪裡游：自己的船還浮著 ⇒ 船舷水線上、同一個 x（夾在船身裡）、靠自己這一舷那一點（世界座標）；在沉、沉了、斷了 ⇒ null。 */
