@@ -106,6 +106,7 @@ var MODE = CFG.menu.mode, DIST = Q.has('dist') && isFinite(+Q.get('dist')) ? cla
 var SAIL = Q.has('sail') ? (Q.get('sail') === 'off' ? 'off' : Q.get('sail') === 'manual' ? 'manual' : 'auto') : CFG.menu.sail;   // 航行：auto ＝ 兩艘自動、manual ＝ 我艦手動、off ＝ 停船；沒給 ⇒ menu.sail
 var KEYS = { l: false, r: false, sw: null };  // 手動操舵：按住的舵鍵（額外動力以前是按住 W／S 的油門，Tim 2026-10-15 改成帆段兩頭的「全速前進／倒車」⇒ 31_sailing.js sailStep）；sw ＝ 按住加帆／收帆（{ d: ±1, n: 下一次再切的 SIMT }；sailHold）
 // 殉爆的慢動作與特寫（73_slowmo.js）：on／cam 是設定；ts 現在的時間倍率。SLOW_VIS：這一格畫面裡只給人看的效果改由 frame 走（step() 讀它決定要不要跳過）
+var RAM = { v0: qnum('ramv', LIM.ramv), k: qnum('ramk', LIM.ramk), e: qnum('rame', LIM.rame), side: qnum('ramside', LIM.ramside) };   // 碰撞傷害的數值（31_sailing.js ramHit；TASK-0652）：門檻 m/s、傷害倍率、恢復係數、側撞有效質量倍數 —— 物理設定頁的滑桿（打開碰撞傷害才顯示）
 var PSLOW = { on: Q.get('pslow') === '1', ts: 1, ms: 0, budget: qnum('pslowb', LIM.pslowb) };   // 物理減速（73_slowmo.js；Tim 2026-10-14：預設關）：ts ＝ 現在的倍率、ms ＝ 一步模擬平均幾毫秒、budget ＝ 門檻（模擬最多佔真實時間幾成）
 // 模擬速度（Tim 2026-10-15：「設定選單 是否可以加個Slider調整模擬速度」「最低0.05好了(0相當於暫停)」）：0.05–8 倍，設定（O）的滑桿；只是每格畫面累積的時間 × 它（90_main.js frame），模擬一步照舊 DT ⇒ 戰局逐字不變。
 var SIM_SPEED = 1, SIM_SPEED_MIN = 0.05, SIM_SPEED_MAX = 8;
