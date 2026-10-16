@@ -70,7 +70,7 @@ function navStep(N, a, d) {
 }
 /** 一層的走路格（照船型與那一層的高度記在 T 上：兩艘同型共用、重開一場不重算）。 */
 function navBuild(sh, L) {
-  var T = sh.T, g = T.base, C = T.navC || (T.navC = {}), key = L.zr.join(',') + ':' + sh.models.length, d = L.deck;
+  var T = sh.T, g = navBase(T), C = T.navC || (T.navC = {}), key = L.zr.join(',') + ':' + sh.models.length, d = L.deck;
   if (C[key]) return C[key];
   var x0 = Math.max(0, T.hx0 - 4), nx = Math.ceil((Math.min(g.sx, T.hx1 + 5) - x0) / NAV_C) + 1, ny = Math.ceil(g.sy / NAV_C), n = nx * ny, i, x, y;
   var Z = new Int16Array(n).fill(-1), blk = new Uint8Array(n);
@@ -392,7 +392,7 @@ function navDirty(sh, x, y, z) {
   });
 }
 function navRefresh(sh) {
-  var NV = sh.nav, g = navG(sh), t0 = performance.now(), ev = [];       // navG：船殼＋砲帶的裝甲原本的位置（24_armor.js：開戰時的走路格照含裝甲的 T.base，重算也要照它；沒有裝甲 ＝ sh.grid）
+  var NV = sh.nav, g = navG(sh), t0 = performance.now(), ev = [];       // navG：船殼＋會轉的裝甲掃過的那一圈（24_armor.js：開戰時的走路格照 navBase ＝ T.base＋那一圈，重算也要照它；沒有裝甲 ＝ sh.grid）
   NV.reT = SIMT; NV.dirty = false;
   NV.levels.forEach(function (L, li) {
     var b = L.dirty; if (!b) return; L.dirty = null;
