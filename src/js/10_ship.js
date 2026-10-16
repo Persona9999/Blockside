@@ -43,7 +43,9 @@ function makeShip(i, team, yaw, pz, T, px) {                          // T：船
       foot = anchorNear(T, +hm.hinge_x + (+hm.axis_x || 0) * t, +hm.hinge_y + (+hm.axis_y || 0) * t, b[5], 8);
     }
     var bl = (m.points || {}).bail;
-    if (foot < 0 && bl) foot = anchorNear(T, bl[0], bl[1], bl[2], 8);   // 提著的燈（夜燈號船首像的提燈，固定點 bail ＝ 提環頂、手握的地方）：「腳」是手（⛔ 往下找：底下是海 ⇒ 開局就掉、燈不亮）
+    if (foot < 0 && bl) foot = anchorNear(T, bl[0], bl[1], bl[2], 8);
+    var sa = (m.points || {})['spin-a'];
+    if (foot < 0 && hm.spin && sa) foot = anchorNear(T, sa[0], sa[1], sa[2], 8);   // 照參數轉的機件（齒輪、飛輪；kotoko 2026-10-16）：掛在轉軸 spin-a 旁那一格（⛔ 往下找：外框底下是空的機艙 ⇒ 當成吊著的小艇、spin 不收）   // 提著的燈（夜燈號船首像的提燈，固定點 bail ＝ 提環頂、手握的地方）：「腳」是手（⛔ 往下找：底下是海 ⇒ 開局就掉、燈不亮）
     var sfw = (m.points || {})['shaft-fwd'];
     if (foot < 0 && hm.kind === 'propeller' && sfw) foot = anchorNear(T, sfw[0], sfw[1], sfw[2], 8);   // 螺旋槳（TASK-0628）：掛在軸接到船殼的那一格（shaft-fwd）旁 ⇒ 那一段被打斷就掉（⛔ 往下找：底下的 skeg 被打掉也掉、跟軸無關）
     var rg = (m.points || {}).ring;

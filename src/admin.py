@@ -348,8 +348,8 @@ def validate(cfg, prev=None):
         if hb is not None and not (isnum(hb) and 0 <= hb <= 1):
             err('furniture.%s.buff.heal' % fid, '0～1（治療速度加成）')
     for kd, f in (cfg.get('drvparts') or {}).items():     # 動力件（TASK-0653；js/31_drive.js DRVP、67_furncfg.js DRV_ITEMS）
-        if kd not in DRV_KINDS or not isinstance(f, dict):
-            err('drvparts.%s' % kd, '種類只有 ' + '／'.join(DRV_KINDS))
+        if kd not in DRV_KINDS + VOXM_KINDS or not isinstance(f, dict):
+            err('drvparts.%s' % kd, '種類只有 ' + '／'.join(DRV_KINDS + VOXM_KINDS))
             continue
         for k, lo, hi in (('lo', 0, 0.95), ('hi', 0.05, 1), ('wet', 0, 1), ('cell', 0, 1)):
             if k in f and not (isnum(f[k]) and lo <= f[k] <= hi):
@@ -612,9 +612,10 @@ def export(work, dest):
     n = struct.unpack('<I', raw[4:8])[0]
     h = json.loads(raw[8:8 + n].decode('utf-8'))
     log, dl = anchor_cells(h), drive_cells(h)
-    if log is not None or dl is not None:
+    pl = prop_vox(h, parts_models(h.get('work') or work))
+    if log is not None or dl is not None or pl is not None:
         vxk_write(dest, h, raw[8 + n:])
-        out += '\n' + '\n'.join((log or []) + (dl or []))
+        out += '\n' + '\n'.join((log or []) + (dl or []) + (pl or []))
     return out
 
 
@@ -681,6 +682,87 @@ def anchor_cells(h):
 
 
 DRV_KINDS = ('engine', 'boiler', 'shaft', 'steampipe')                # 動力件（TASK-0653；遊戲 31_drive.js 照格子算剩幾成、通不通）
+
+
+VOXM_KINDS = ('propeller',)                                              # 會轉的體素件（TASK-0653 第二段；遊戲 24_armor.js propSetup）：這幾種模型匯出時多帶來源作品的格子
+
+
+def parts_models(work):
+    """部件清單（senate export format=parts）的模型 ⇒ {路徑: 那一筆（work、box、meta、points）}；拿不到 ⇒ {}。"""
+    senate = shutil.which('senate')
+    if not senate or not work:
+        return {}
+    tmp = os.path.join(CACHE, '_pm_%s.json' % hashlib.sha1(work.encode('utf-8')).hexdigest()[:10])
+    code, _ = run([senate, 'cmd', 'sculpture', '--arg', 'op=export', '--arg', 'format=parts', '--arg', 'work=' + work, '--arg', 'out=' + os.path.abspath(tmp)])
+    if code != 0 or not os.path.exists(tmp):
+        return {}
+    try:
+        return {q['path']: q for q in json.load(open(tmp, encoding='utf-8')).get('models', [])}
+    finally:
+        os.remove(tmp)
+
+
+def prop_vox(h, PM):
+    """會轉的體素件（Tim 2026-10-16：「鍋爐 & 軸 & 螺旋槳屬於這類 且可以根據剩餘體素去做運算」；TASK-0653 第二段）：
+    meta kind ＝ VOXM_KINDS 的外部模型，在 .vxk 裡只有三角形網格 ⇒ 把來源作品的格子（senate export format=list，帶顏色）照模型的外框搬到船的格座標，
+    寫進 rig.models[].vox ＝ { o: 外框最小角, s: 外框大小, runs: [跟上一段結尾差幾, 長度, …]（外框裡的線性編號 x＋sx·(y＋sy·z)）, c: 每格的顏色（base64，一格一個位元組） }。
+    遊戲開局照它把螺旋槳變成自己一份格子（跟著軸轉、一格一格打掉、推力照剩幾成；24_armor.js propSetup）；沒有 vox ⇒ 照舊是模型（扣血）。
+    ⛔ 只認平移（模型 rotate 0、scale 1、沒有 mirror：來源作品格子的外框大小要跟模型的外框一樣），不然不寫。回：None ＝ header 沒變；不然 ＝ 讀數。"""
+    log, changed = [], False
+    senate = shutil.which('senate')
+    for m in (h.get('rig') or {}).get('models', []) or []:
+        kind = (m.get('meta') or {}).get('kind')
+        if kind not in VOXM_KINDS:
+            continue
+        q, why, vox = PM.get(m.get('name')) or {}, '', None
+        w, b = q.get('work'), m.get('bbox')
+        if not senate:
+            why = '找不到 senate'
+        elif not w or q.get('source') not in (None, 'work'):
+            why = '部件清單裡找不到這個模型的來源作品（外部 obj 不帶格子）'
+        elif not (b and len(b) == 6):
+            why = '檔頭沒有模型的外框'
+        else:
+            tmp = os.path.join(CACHE, '_vox_%s.txt' % hashlib.sha1(w.encode('utf-8')).hexdigest()[:10])
+            code, _ = run([senate, 'cmd', 'sculpture', '--arg', 'op=export', '--arg', 'format=list', '--arg', 'work=' + w, '--arg', 'out=' + os.path.abspath(tmp)])
+            L = []
+            if code == 0 and os.path.exists(tmp):
+                L = [tuple(int(v) for v in ln.split(',')[:4]) for ln in open(tmp, encoding='utf-8') if ln[:1].isdigit()]
+                os.remove(tmp)
+            if not L:
+                why = '來源作品 %s 匯不出格子清單' % w
+            else:
+                lo = [min(c[a] for c in L) for a in range(3)]
+                hi = [max(c[a] for c in L) for a in range(3)]
+                o = [int(math.floor(b[a] + 1e-6)) for a in range(3)]
+                sz = [hi[a] - lo[a] + 1 for a in range(3)]
+                ext = [int(round(b[a + 3] - b[a])) for a in range(3)]
+                if sz != ext:
+                    why = '來源作品的格子外框 %s 跟模型外框 %s 不一樣大（有旋轉、縮放？）' % ('×'.join(map(str, sz)), '×'.join(map(str, ext)))
+                else:
+                    cells = sorted(((c[0] - lo[0]) + sz[0] * ((c[1] - lo[1]) + sz[1] * (c[2] - lo[2])), c[3]) for c in L)
+                    runs, cols, end, i = [], bytearray(), 0, 0
+                    while i < len(cells):
+                        j = i
+                        while j + 1 < len(cells) and cells[j + 1][0] == cells[j][0] + 1:
+                            j += 1
+                        runs += [cells[i][0] - end, j - i + 1]
+                        end = cells[j][0] + 1
+                        i = j + 1
+                    for _, c in cells:
+                        cols.append(c & 255)
+                    vox = {'o': o, 's': sz, 'runs': runs, 'c': base64.b64encode(bytes(cols)).decode('ascii')}
+        if vox is None:
+            log.append('  ⚠ %s（%s）：沒有寫格子 —— %s ⇒ 遊戲照舊當模型（扣血）' % (m.get('name'), kind, why))
+        else:
+            log.append('  %s（%s）：%d 格（%s）寫進 vox' % (m.get('name'), kind, len(L), w))
+        if m.get('vox') != vox:
+            if vox is None:
+                m.pop('vox', None)
+            else:
+                m['vox'] = vox
+            changed = True
+    return log if changed else None
 
 
 def drive_cells(h):
@@ -799,14 +881,15 @@ def act_metasync(sid, build=True):
     mnew = sorted(set(PM) - {q.get('name') for q in (h.get('rig') or {}).get('models', [])})
     ac = anchor_cells(h)                                 # 錨的關聯（meta kind=anchor；TASK-0601）：來源作品的格子寫進 cells
     dc = drive_cells(h)                                  # 動力件（TASK-0653）：來源作品的格子寫進 cellRuns
+    pv = prop_vox(h, PM)                                 # 會轉的體素件（螺旋槳；TASK-0653 第二段）：來源作品的格子寫進 rig.models[].vox
     log = ['metasync %s：%d 條關聯換了 meta／固定點%s' % (sid, len(ch), ('：' + '、'.join(ch)) if ch else '')]
     log.append('metasync %s：%d 個模型換了 meta／固定點%s' % (sid, len(chm), ('：' + '、'.join(chm)) if chm else ''))
     if mmiss:
         log.append('⚠ .vxk 有、作品裡沒有的模型 %d 個（照舊）：%s' % (len(mmiss), '、'.join(mmiss)))
     if mnew:
         log.append('⚠ 作品裡新加、.vxk 還沒有的模型 %d 個（要 reimport 才帶得進來）：%s' % (len(mnew), '、'.join(mnew)))
-    log += (ac or []) + (dc or [])
-    ch += chm + (['cells'] if ac is not None else []) + (['cellRuns'] if dc is not None else [])
+    log += (ac or []) + (dc or []) + (pv or [])
+    ch += chm + (['cells'] if ac is not None else []) + (['cellRuns'] if dc is not None else []) + (['vox'] if pv is not None else [])
     if miss:
         log.append('⚠ .vxk 有、作品裡沒有的關聯 %d 條（照舊）：%s' % (len(miss), '、'.join(miss)))
     if new:
@@ -885,6 +968,7 @@ def act_shipcheck(ids=None):
               '照參數轉的子物件（模型 meta spin；舵、舵輪跟著舵角轉，只是畫面，TASK-0640）：' + (I.get('spins') or '—'), '',
               '額外動力（TASK-0630；輸出物件 份量；主機／軸／鍋爐 照造船規格 §9.6）：' + (I.get('drive') or '—（沒有 cfg.base）'), '',
               '動力件（TASK-0653；關聯 meta kind=engine／boiler／shaft／steampipe 的格子清單，照剩幾成、通不通算）：' + (I.get('drvparts') or '—'), '',
+              '會轉的體素件（螺旋槳模型 meta kind=propeller 的格子；跟著軸轉、一格一格打掉、推力照剩幾成，TASK-0653 第二段）：' + (I.get('props') or '—'), '',
               '**✗ %d　⚠ %d**' % (ne, nw), '']
         for lv, title in (('error', '## ✗ 錯誤'), ('warn', '## ⚠ 警告')):
             ks = [k for k in groups if k[0] == lv]

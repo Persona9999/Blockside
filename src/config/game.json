@@ -386,7 +386,8 @@
     "engine": {"name": "主機", "lo": 0.4, "hi": 1},
     "boiler": {"name": "鍋爐", "lo": 0.5, "hi": 0.8, "wet": 0.5},
     "shaft": {"name": "螺旋槳軸", "cell": 0.15},
-    "steampipe": {"name": "蒸汽管", "cell": 0.15}
+    "steampipe": {"name": "蒸汽管", "cell": 0.15},
+    "propeller": {"name": "螺旋槳", "lo": 0.2, "hi": 0.9}
   },
   "rooms": {
     "medical": {

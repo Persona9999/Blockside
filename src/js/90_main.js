@@ -147,6 +147,22 @@ if (DEBUG) window.__game = {
   /** 砲帶的裝甲（TASK-0631；24_armor.js）：第 i 艘每一塊 —— 那門砲、現在轉了幾度、還剩幾格／原本幾格、砲口沿砲軸碰到裝甲幾格（armBlock；0 ＝ 在砲門裡）；船殼幾格、重量。沒有裝甲 ⇒ null。
    *  o.yaw（度）⇒ 先把那門砲直接轉到那個角度（量測用：不照轉速；砲軸、砲口、模型、站位跟 mountStep 一樣轉，下一步 mountStep 照瞄準點接著轉）。
    *  o.shot ＝ [方位（度；船的格座標繞轉軸，0 ＝ +x 船頭、90 ＝ +y 右舷）, 高 z, 砲種, 彈種] ⇒ 從 6 m 外水平朝轉軸射一發（船不動、只跑這一顆）：打掉幾格裝甲、船殼少幾格、出來剩多快。 */
+  /** 螺旋槳（會轉的體素件，TASK-0653 第二段；24_armor.js propSetup）：第 i 艘每一個 —— 還剩幾格／原本幾格、還剩幾成、轉角、掉了沒。沒有 ⇒ null。
+   *  o.shot ＝ [z 偏移（格，相對 hub）, 砲種, 彈種, 從哪一舷（0 ＝ 從 +y 往 −y 打）] ⇒ 從 3 m 外水平朝第一個螺旋槳的 hub 那一欄射一發（船不動、只跑這一顆）。
+   *  起點在水下 ⇒ 當作已經跳過水漂（bounced；不然一步就被放回水面）；落水就沒的彈（輕的實心彈、爆裂彈、鏈彈）打不到，要用大口徑實心彈（例 11d）。 */
+  prop: function (i, o) {
+    var sh = SHIPS[i || 0], A = (sh && sh.arm || []).filter(function (a) { return a.prop; }), out = {}; if (!A.length) return null;
+    if (o && o.shot) {
+      var a = A[0], h = a.A.hub, s = o.shot[3] ? -1 : 1, z = h[2] + (+o.shot[0] || 0), GS = GUNS[o.shot[1]] || Object.keys(GUNS).map(function (k3) { return GUNS[k3]; }).filter(function (g) { return g.code === o.shot[1]; })[0] || GUNS.long;
+      var p = M4.pt(sh.M, h[0], h[1] + s * 30, z), q = M4.pt(sh.M, h[0], h[1], z), d = norm(sub(q, p)), n0 = a.grid.count, h0 = sh.grid.count;
+      var b = { p: p, v: add(mul(d, GS.V), sh.vel), owner: SHIPS.length > 1 ? 1 - (i || 0) : 0, ammo: o.shot[2] || 0, trav: 0, alive: true, age: 0, bounced: true, big: GS.big, hole: GS.hole, dmg: 0, m: GS.shot, dbg: [] };
+      var L0 = toLocal(sh, b.p), Lk = L0;
+      for (var k = 0; k < 600 && b.alive; k++) { stepBall(b, DT / 4); if (b.alive) Lk = toLocal(sh, b.p); }
+      out.shot = { removed: n0 - a.grid.count, hull: h0 - sh.grid.count, out: b.alive ? +len(b.v).toFixed(0) : 0, uw: !!b.wet, steps: k, from: L0.map(Math.round), last: Lk.map(Math.round) };
+    }
+    out.props = A.map(function (a) { return { name: a.A.name, n: a.grid.count, n0: a.A.n, left: +propLeft(a).toFixed(3), sw: a.m && a.m.sw ? +a.m.sw.toFixed(3) : 0, gone: propGone(a), mat: a.A.mat }; });
+    return out;
+  },
   armor: function (i, o) {
     var sh = SHIPS[i || 0], D = Math.PI / 180, out = {}; if (!sh || !sh.arm) return null;
     if (o && o.yaw !== undefined) sh.arm.forEach(function (a) {

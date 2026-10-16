@@ -53,6 +53,7 @@ function armorSetup(T) {
     G.sm = B.sm;                                                         // 平滑渲染的旗標（不會變 ⇒ 共用船型那一份；VoxelKit 的方塊網格化跳過它們）
     T.armor.push({ k: T.armor.length, mount: mount, parts: parts, grid: G, bb: bb, n: n, t: t });
   });
+  propSetup(T);                                                          // 會轉的體素件（螺旋槳；檔尾）
 }
 /** 船型 T 的裝甲上 GPU（05_hull.js「船體網格」那一步，smoothSetup 之後）：每塊一份合併網格與平滑面（開戰時每艘共用，被打到的區才各自重建）。
  *  平滑面的格角碰到船殼（T.hullG）⇒ 釘在格角上（跟拆出來之前一樣：圓筒底那一圈貼著甲板、不往上縮）。 */
@@ -68,10 +69,12 @@ function armorMesh(T) {
       var m = smBuild(T, A.grid, rk, null, T.hullG); if (m) A.smP.set(rk, m);
     });
   });
+  (T.props || []).forEach(function (P) { P.rs0 = new VK.RegionSet(gl, P.grid, QIDX); P.rs0.buildAll(); });   // 會轉的體素件（螺旋槳；檔尾）：只有方塊、不平滑
 }
 /** 開一艘船（10_ship.js makeShip，gunMountInit 之後）：每塊裝甲一份（共用船型那一份格子與網格）。沒有裝甲 ⇒ sh.arm 不設（一行都不多算）。 */
 function armorShip(sh) {
-  var T = sh.T; if (!T.armor || !T.armor.length) return;
+  var T = sh.T, P = propShip(sh);                                       // 會轉的體素件（螺旋槳；檔尾）也排在 sh.arm 裡（a.prop）：打到、畫、重網格化同一套
+  if (!T.armor || !T.armor.length) { if (P.length) { sh.arm = P; sh.armN0 = 0; } return; }
   sh.arm = T.armor.map(function (A) {
     var g = (sh.mounts || []).filter(function (q) { return q.model.path === A.mount; })[0] || null, grid = A.grid.share(), rs = new VK.RegionSet(gl, grid, QIDX);
     rs.shareFrom(A.rs0);
@@ -80,21 +83,26 @@ function armorShip(sh) {
     smShare(a, A.smP);
     return a;
   });
-  sh.armN0 = T.armor.reduce(function (s, A) { return s + A.n; }, 0);   // 開戰時裝甲幾格（重量：32_hull.js shipT、05_material.js voxLostT）
+  sh.armN0 = T.armor.reduce(function (s, A) { return s + A.n; }, 0);   // 開戰時裝甲幾格（重量：32_hull.js shipT、05_material.js voxLostT）；螺旋槳不算（重量照模型）
+  if (P.length) sh.arm = sh.arm.concat(P);
 }
 /** 裝甲現在轉了多少（那門砲的 g.mt.yaw；沒找到砲 ⇒ 0）。 */
 function armYaw(a) { var M = a.g && a.g.mt; return M ? M.yaw : 0; }
 /** 裝甲的格座標 → 船的格座標（跟 modelLocal 同一個矩陣：平移到轉軸、繞 z 轉、平移回來）；沒轉 ⇒ null。 */
-function armLocal(a) { var y = armYaw(a); if (!y) return null; var c = a.g.mt.c; return M4.mul(M4.mul(trans(c[0], c[1], c[2]), rotM([0, 0, 1], y)), trans(-c[0], -c[1], -c[2])); }
+function armLocal(a) { if (a.prop) return propLocal(a); var y = armYaw(a); if (!y) return null; var c = a.g.mt.c; return M4.mul(M4.mul(trans(c[0], c[1], c[2]), rotM([0, 0, 1], y)), trans(-c[0], -c[1], -c[2])); }
 /** 世界矩陣（sh.M 照當下的：模擬那一步、或畫面內插過的）。 */
 function armM(a) { var L = armLocal(a); return L ? M4.mul(a.sh.M, L) : a.sh.M; }
 /** 船的格座標 p → 裝甲的格座標（反轉 yaw）；dir ⇒ 方向（不平移）。 */
-function armIn(a, p, dir) { var y = armYaw(a); if (!y) return p; return rotZ(p, dir ? [0, 0, 0] : a.g.mt.c, -y); }
+function armIn(a, p, dir) { if (a.prop) return propXf(a, p, dir, true); var y = armYaw(a); if (!y) return p; return rotZ(p, dir ? [0, 0, 0] : a.g.mt.c, -y); }
 /** 裝甲的格座標 → 船的格座標。 */
-function armOut(a, p) { var y = armYaw(a); return y ? rotZ(p, a.g.mt.c, y) : p; }
+function armOut(a, p) { if (a.prop) return propXf(a, p, false, false); var y = armYaw(a); return y ? rotZ(p, a.g.mt.c, y) : p; }
 /** 船的格座標 L 落在哪一塊裝甲的格裡（沒有 ⇒ null）。 */
 function armAt(sh, L) {
-  for (var i = 0; i < sh.arm.length; i++) { var a = sh.arm[i], Q = armIn(a, L); if (a.grid.get(Math.floor(Q[0]), Math.floor(Q[1]), Math.floor(Q[2]))) return a; }
+  for (var i = 0; i < sh.arm.length; i++) {
+    var a = sh.arm[i];
+    if (a.prop && (propGone(a) || drvD2(L, a.A.hub) > a.A.R2)) continue;   // 螺旋槳：模型掉了、或離 hub 比最遠那一格還遠（繞 hub 轉，距離不變）⇒ 不用轉換
+    var Q = armIn(a, L); if (a.grid.get(Math.floor(Q[0]), Math.floor(Q[1]), Math.floor(Q[2]))) return a;
+  }
   return null;
 }
 /** 人員傷害擋不擋得住（TASK-0637；Tim 2026-10-16：「炮塔裝甲對內部炮組的防護力好像不太夠」）：船的格座標 a → b 這一段有沒有穿過裝甲（現在的角度、打掉的不算）。
@@ -103,7 +111,8 @@ function armAt(sh, L) {
 function armBetween(sh, a, b) {
   var d = sub(b, a), l = len(d); if (l < 1) return false;
   for (var i = 0; i < sh.arm.length; i++) {
-    var ar = sh.arm[i], bb = ar.A.bb, Qa = armIn(ar, a), Qb = armIn(ar, b);
+    var ar = sh.arm[i]; if (ar.prop) continue;                           // 螺旋槳（水線下、船外）不擋人
+    var bb = ar.A.bb, Qa = armIn(ar, a), Qb = armIn(ar, b);
     if (Math.max(Qa[0], Qb[0]) < bb[0] - 1 || Math.min(Qa[0], Qb[0]) > bb[3] + 1 || Math.max(Qa[1], Qb[1]) < bb[1] - 1 || Math.min(Qa[1], Qb[1]) > bb[4] + 1 || Math.max(Qa[2], Qb[2]) < bb[2] - 1 || Math.min(Qa[2], Qb[2]) > bb[5] + 1) continue;   // 這一段碰不到這塊的外框
     var ax = Math.floor(Qa[0]), ay = Math.floor(Qa[1]), az = Math.floor(Qa[2]);
     for (var t = 0.5; t < l; t += 0.5) {
@@ -148,8 +157,8 @@ function armMuzzle(sh, m, L) {
   return false;
 }
 /** 裝甲原本的位置 (x, y, z)（裝甲的格座標）還有沒有格（重量照材質層的座標數）。 */
-function armGet(sh, x, y, z) { for (var i = 0; i < sh.arm.length; i++) if (sh.arm[i].grid.get(x, y, z)) return 1; return 0; }
-function armCount(sh) { var n = 0; for (var i = 0; i < sh.arm.length; i++) n += sh.arm[i].grid.count; return n; }
+function armGet(sh, x, y, z) { for (var i = 0; i < sh.arm.length; i++) if (!sh.arm[i].prop && sh.arm[i].grid.get(x, y, z)) return 1; return 0; }   // 螺旋槳不算（重量照模型）
+function armCount(sh) { var n = 0; for (var i = 0; i < sh.arm.length; i++) if (!sh.arm[i].prop) n += sh.arm[i].grid.count; return n; }
 // 掃過的那一圈（TASK-0655；Tim 2026-10-16：「砲塔做成無法通行(這個應該要是通用規格)」「雖然會旋轉 但實際上有一圈物理阻隔通行」）：
 //   會轉的裝甲每一格繞轉軸掃出一圈 ⇒ 每一層（z）記下掃到的半徑（1／ARM_RK 格一份；一格掃到格心距離 ± 0.71 格）；走路看的格子（navBase／navG）在那些半徑上一律算實心。
 //   莫尼特號：圓筒那幾層 ＝ 內緣到外緣一整環（砲門跟著轉、不留縫），頂 ＝ 整個圓。照開局的形狀算、每個船型一次（A.ring）；被打掉的格第一版不打開那一圈（砲塔還在就照樣擋）。
@@ -212,6 +221,7 @@ function armBlast(sh, c, R, w) {
   if (!sh.arm) return 0;
   var n = 0, R2 = R * 1.15;
   sh.arm.forEach(function (a) {
+    if (a.prop && propGone(a)) return;
     var Q = armIn(a, c), b = a.A.bb, removed = [];
     var x0 = Math.max(b[0], Math.floor(Q[0] - R2)), x1 = Math.min(b[3], Math.ceil(Q[0] + R2)), y0 = Math.max(b[1], Math.floor(Q[1] - R2)), y1 = Math.min(b[4], Math.ceil(Q[1] + R2)), z0 = Math.max(b[2], Math.floor(Q[2] - R2)), z1 = Math.min(b[5], Math.ceil(Q[2] + R2));
     for (var z = z0; z <= z1; z++) for (var y = y0; y <= y1; y++) for (var x = x0; x <= x1; x++) {
@@ -233,6 +243,7 @@ function armBlast(sh, c, R, w) {
 /** 畫船殼那一趟（60_render.js drawHulls，cutSet 之後）：每塊照自己的矩陣畫；剖面 uCutL ＝ 裝甲 → 船的格座標（01_gl.js voxFS），畫完放回單位矩陣。 */
 function armDraw(prog, sh) {
   sh.arm.forEach(function (a) {
+    if (a.prop && propGone(a)) return;                                  // 螺旋槳的模型掉了（掛的那一格被打斷）⇒ 不畫（飛出去的是模型的網格，21_gunnery.js blowModel）
     var L = armLocal(a);
     gl.uniformMatrix4fv(prog.u.uModel, false, L ? M4.mul(sh.M, L) : sh.M);
     if (prog.u.uCutL) gl.uniformMatrix4fv(prog.u.uCutL, false, L || CUT_ID);
@@ -282,4 +293,75 @@ function armSummary(T) {
     return A.mount + '：' + A.parts.map(function (P) { return P.path + ' ' + P.n.toLocaleString('en') + ' 格（' + (P.material ? matInfo(P.material).name : '材質照預設') + (P.sm ? '、平滑 ' + P.sm.toLocaleString('en') : '') + '）'; }).join('＋') +
       ' ＝ ' + A.n.toLocaleString('en') + ' 格、' + A.t.toFixed(1) + ' 噸，跟著砲轉';
   }).join('；') + '（船殼 ' + T.hullG.count.toLocaleString('en') + ' 格）';
+}
+// ── 會轉的體素件（TASK-0653 第二段；Tim 2026-10-16：「鍋爐 & 軸 & 螺旋槳屬於這類 且可以根據剩餘體素去做運算」）──
+// 螺旋槳（外部模型 meta kind=propeller）：.vxk 裡只有三角形網格 ⇒ 匯出時 admin.py prop_vox 把來源作品的格子寫進 rig.models[].vox（船的格座標的外框＋連續段＋每格的色）。
+// 這裡把它變成自己一份格子，排進 sh.arm（a.prop）跟裝甲走同一套：
+//   打到（21_gunnery.js stepBall：船殼那一格是空的才看 armAt）⇒ 一格一格打掉（impact／shatter 帶 ab）、碎屑照它轉過的矩陣噴；
+//   硬度照它自己的材質（模型 meta material；沒有 ⇒ iron）、可是當鑄件（pen 0：不凹不彈、照硬度打洞）：T.pmG 只蓋在船殼沒有格的位置（05_material.js matK／matAt 先看它）；
+//   轉 ＝ 模型的 spin（31_drive.js 每一步給 m.spv／m.sax／m.sw：繞 hub、沿軸）；推力 × 曲線（還剩幾成 ＝ 現在的格 ÷ 開局的格；DRVP.propeller，道具設定頁「動力件」）。
+//   模型本身照舊在：掛在 shaft-fwd 旁那一格、那一段被打斷就掉（blowModel 飛出去的是模型的網格）⇒ 掉了這份格子就不畫、不打；
+//   模型的網格不畫（60_render.js drawModels）、不扣血（21_gunnery.js hitModel、damageModel 跳過）。
+// ⛔ 沒做：打斷的葉片不會飛出去（打掉的格照碎屑噴）、轉的時候不碰船殼、平滑渲染。沒有 vox 的螺旋槳 ⇒ 照舊是模型（扣血）。
+/** 船型 T：有 vox 的模型 ⇒ T.props[] ＝ { k 模型編號, name, grid（船的格座標）, bb, n 開局幾格, hub, R2（離 hub 最遠那一格的距離²）, mat }；T.pmG／T.pmI ＝ 材質（見檔頭）。 */
+function propSetup(T) {
+  T.props = []; T.pmG = null; T.pmI = [null];
+  var S0 = T.h.size, B = T.base;
+  (T.rig.models || []).forEach(function (m, k) {
+    var V = m.vox, mt = m.meta || {}; if (!V || !V.runs || !V.s || !V.o || !V.c) return;
+    var G = new VK.Grid(S0), o = V.o, s = V.s, bin = atob(V.c), at = 0, i = 0, n = 0, bb = [1e9, 1e9, 1e9, -1, -1, -1];
+    var mat = MATS[mt.material] ? mt.material : MATS.iron ? 'iron' : T.mat0, pi = T.pmI.length;
+    T.pmG = T.pmG || new VK.Grid(S0);
+    for (var r = 0; r + 1 < V.runs.length; r += 2) {
+      var st = at + V.runs[r], c = V.runs[r + 1];
+      for (var j = 0; j < c; j++, i++) {
+        var q = st + j, z = Math.floor(q / (s[0] * s[1])), w = q - z * s[0] * s[1], y = Math.floor(w / s[0]), x = w - y * s[0], col = bin.charCodeAt(i);
+        x += o[0]; y += o[1]; z += o[2];
+        if (!col || x < 0 || y < 0 || z < 0 || x >= S0[0] || y >= S0[1] || z >= S0[2]) continue;
+        G.set(x, y, z, col); n++;
+        if (!B.get(x, y, z)) T.pmG.set(x, y, z, pi);                   // 跟船殼疊在一起的那幾格：硬度照船殼（打到的先是船殼）
+        if (x < bb[0]) bb[0] = x; if (y < bb[1]) bb[1] = y; if (z < bb[2]) bb[2] = z; if (x > bb[3]) bb[3] = x; if (y > bb[4]) bb[4] = y; if (z > bb[5]) bb[5] = z;
+      }
+      at = st + c;
+    }
+    if (!n) return;
+    var hub = (m.points || {}).hub || [(bb[0] + bb[3] + 1) / 2, (bb[1] + bb[4] + 1) / 2, (bb[2] + bb[5] + 1) / 2], R2 = 0;
+    for (var cz = 0; cz < 2; cz++) for (var cy = 0; cy < 2; cy++) for (var cx = 0; cx < 2; cx++) R2 = Math.max(R2, drvD2([bb[3 * cx] + cx, bb[1 + 3 * cy] + cy, bb[2 + 3 * cz] + cz], hub));
+    T.pmI.push(Object.assign({}, matInfo(mat), { pen: 0 }));            // 鑄件（脆）：硬度照材質（洞小一點），⛔ 不走鐵甲的凹／彈／穿（葉片從側面量有 9 格厚 ⇒ 當成 0.9 m 鐵甲、一格都打不掉）
+    T.props.push({ k: k, mount: m.name, name: m.name, grid: G, bb: bb, n: n, hub: hub.slice(), R2: (Math.sqrt(R2) + 1.5) * (Math.sqrt(R2) + 1.5), mat: mat });
+  });
+  if (!T.props.length) T.pmG = null;
+}
+/** 開一艘船（armorShip）：每個螺旋槳一份（共用船型那一份格子與網格，打到的區才各自重建）；模型記著它（m.vox）。 */
+function propShip(sh) {
+  var T = sh.T; if (!T.props || !T.props.length) return [];
+  return T.props.map(function (P) {
+    var m = sh.models[P.k], grid = P.grid.share(), rs = new VK.RegionSet(gl, grid, QIDX);
+    rs.shareFrom(P.rs0);
+    var a = { A: P, T: T, sh: sh, g: null, prop: true, m: m, grid: grid, rs: rs, pin: T.hullG, lost: 0 };
+    smShare(a, null);
+    if (m) m.vox = a;
+    return a;
+  });
+}
+/** 螺旋槳的模型掉了（打飛、掛的那一格被打斷、跟著斷開的那一團走了）⇒ 這份格子不畫、不打。 */
+function propGone(a) { var m = a.m; return !m || !m.alive || !!m.moved; }
+/** 螺旋槳的格座標 → 船的格座標：繞 m.spv、沿 m.sax 轉 m.sw（同 modelLocal 的 spin 那一條）；沒轉 ⇒ null。轉角變了才重算（a.Lc、反矩陣 a.Li）。 */
+function propLocal(a) {
+  var m = a.m; if (!m || !m.sw || !m.sax) return null;
+  if (a.swL !== m.sw || a.axL !== m.sax) {
+    var q = m.spv || a.A.hub;
+    a.Lc = M4.mul(M4.mul(trans(q[0], q[1], q[2]), rotM(m.sax, m.sw)), trans(-q[0], -q[1], -q[2])); a.Li = M4.inv(a.Lc); a.swL = m.sw; a.axL = m.sax;
+  }
+  return a.Lc;
+}
+/** inv ⇒ 船的格座標 p → 螺旋槳的格座標；不然反過來。dir ⇒ 方向（不平移）。 */
+function propXf(a, p, dir, inv) { var L = propLocal(a); if (!L) return p; var M = inv ? a.Li : L; return dir ? M4.dir(M, p[0], p[1], p[2]) : M4.pt(M, p[0], p[1], p[2]); }
+/** 還剩幾成（0…1）。 */
+function propLeft(a) { return a.A.n ? a.grid.count / a.A.n : 1; }
+/** 讀數（匯入檢查）：每個螺旋槳幾格、材質；有螺旋槳模型卻沒有格子 ⇒ 另外列。 */
+function propSummary(sh) {
+  var T = sh.T, L = (T.props || []).map(function (P) { return P.name + ' ' + P.n.toLocaleString('en') + ' 格（' + matInfo(P.mat).name + '）'; });
+  sh.models.forEach(function (m) { if (m.meta && m.meta.kind === 'propeller' && !m.vox) L.push(m.path + '（沒有格子 ⇒ 照舊是模型、扣血）'); });
+  return L.join('；');
 }

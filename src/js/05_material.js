@@ -62,9 +62,9 @@ function hullMaterials(T, info) {
   }
 }
 /** 那一格的硬度倍率（打掉之後照樣查得到：材質層不跟著改）。 */
-function matK(sh, x, y, z) { var T = sh.T; return T.matG ? T.matK[T.matG.get(x, y, z)] : T.matK[0]; }
+function matK(sh, x, y, z) { var T = sh.T, p = T.pmG && T.pmG.get(x, y, z); if (p) return T.pmI[p].hard; return T.matG ? T.matK[T.matG.get(x, y, z)] : T.matK[0]; }   // pmG：螺旋槳的格（24_armor.js propSetup；船殼沒有格的位置才有）
 /** 那一格的材質參數（matInfo；砲帶的裝甲也照它：裝甲的格座標就是材質層的座標）。實心彈判擊穿用（21_gunnery.js impact：pen、kind）。 */
-function matAt(sh, x, y, z) { var T = sh.T; return matInfo(T.matIds[T.matG ? T.matG.get(x, y, z) : 0]); }
+function matAt(sh, x, y, z) { var T = sh.T, p = T.pmG && T.pmG.get(x, y, z); if (p) return T.pmI[p]; return matInfo(T.matIds[T.matG ? T.matG.get(x, y, z) : 0]); }
 /** 船殼硬度的基準（Tim 2026-10-16：船隻設定的硬度改成倍率、1 ＝ 只看材質；以前的預設 3 搬到這裡 ⇒ 倍率 1 的船跟以前預設硬度的船一樣）。 */
 var HARD_BASE = 3;
 /** 打到 L（格座標）的硬度 ＝ 基準 × 船隻設定的硬度倍率（預設 1）× 那一格的材質倍率。 */

@@ -49,7 +49,7 @@ var DRV_RPM0 = +DRIVE_CFG.rpm > 0 ? +DRIVE_CFG.rpm : 80, DRV_SPIN_T = 1.5, DRV_P
 //     蒸汽管接最近的那一組鍋爐（from 離鍋爐最近）：那一組的蒸汽 × 蒸汽管傳得到的；沒有蒸汽管的組照舊直接供汽。
 //   全船的蒸汽 ＝ Σ 每一組（座數 × 輸出 × 乾的座數比 × 蒸汽管）÷ Σ 座數；主機的份量 × 主機的輸出；接在軸上的輸出物件 × 軸傳得到的。
 // 沒有 cellRuns 的件 ⇒ 照舊（固定點旁 ±DRV_PART_R 格剩一半以上 ＝ 好的、每 0.5 秒）⇒ 沒標的船戰局一位元不動。參數在道具設定頁「動力件」（67_furncfg.js）。
-var DRVP_DEF = { engine: { name: '主機', lo: 0.4, hi: 1 }, boiler: { name: '鍋爐', lo: 0.5, hi: 0.8, wet: 0.5 }, shaft: { name: '螺旋槳軸', cell: 0.15 }, steampipe: { name: '蒸汽管', cell: 0.15 } };
+var DRVP_DEF = { engine: { name: '主機', lo: 0.4, hi: 1 }, boiler: { name: '鍋爐', lo: 0.5, hi: 0.8, wet: 0.5 }, shaft: { name: '螺旋槳軸', cell: 0.15 }, steampipe: { name: '蒸汽管', cell: 0.15 }, propeller: { name: '螺旋槳', lo: 0.2, hi: 0.9 } };   // propeller：會轉的體素件（24_armor.js propSetup；第二段）
 var DRVP = {}; Object.keys(DRVP_DEF).forEach(function (k) { DRVP[k] = Object.assign({}, DRVP_DEF[k], (CFG.drvparts || {})[k] || {}); });
 var DRV_PART_T = 1, DRV_END_R = 4;                                       // 秒（每兩次 survey）；傳動件兩端：固定點 4 格內的格算端點
 /** 檔頭的 cellRuns ⇒ 格座標 [x, y, z, …]（Int16Array）。 */
@@ -266,6 +266,7 @@ function driveSurvey(sh) {
     else if (p.kind === 'steam') {
       var alive = p.m ? p.m.alive && !p.m.moved : true;
       var k = p.m ? (alive ? 1 : 0) : p.n0 ? clamp(driveCount(sh.grid, p.p) / p.n0, 0, 1) : 1;
+      if (alive && p.m && p.m.vox) { p.left = propLeft(p.m.vox); k *= drvCurve('propeller', p.left); if (k <= 0) alive = false; }   // 螺旋槳有自己的格（TASK-0653 第二段）：推力照剩幾成套曲線（葉片打光 ⇒ 0）
       if (p.m && p.alive0 !== undefined && p.alive0 && !alive) cut.push('螺旋槳');
       p.alive0 = alive;
       if (C && C.E.length) {                                              // 這個輸出物件收得到幾成：推它的每具主機（還在、軸沒斷）的份量 ÷ 完好時的份量
@@ -413,7 +414,7 @@ function driveInfo(sh) {
   return { kind: D.kind, k: +D.k.toFixed(3), massT: D.M === null ? null : Math.round(D.M), waterT: Math.round(D.W), cap: +D.cap.toFixed(3), tele: sh.tele, power: sh.power, want: +(D.want || 0).toFixed(3), give: +(D.give || 0).toFixed(3),
     Fx: +D.Fx.toFixed(1), drag: +D.drag.toFixed(1), a: +D.a.toFixed(4), vTkn: +(D.vT * 1.9438).toFixed(2), tq: Math.round(D.tq), omDeg: +(D.om * 57.2958).toFixed(3), funnels: D.fu === undefined ? null : +D.fu.toFixed(2),
     P: D.P.map(function (p) { return { kind: p.kind, name: p.s ? p.s.name : p.out || '', at: p.p.map(function (v) { return Math.round(v); }), ok: +(p.ok || 0).toFixed(2), on: p.kind === 'sail' ? !!p.on : undefined, F: +p.F.toFixed(1), Fy: +p.Fy.toFixed(1),
-      w: p.kind === 'sail' ? undefined : +p.w.toFixed(3), rpm: p.ax ? +p.rpm.toFixed(1) : undefined, shaft: p.shaft >= 0 && D.C ? D.C.SH[p.shaft].s.name : undefined }; }),
+      w: p.kind === 'sail' ? undefined : +p.w.toFixed(3), rpm: p.ax ? +p.rpm.toFixed(1) : undefined, left: p.left === undefined ? undefined : +p.left.toFixed(3), shaft: p.shaft >= 0 && D.C ? D.C.SH[p.shaft].s.name : undefined }; }),
     chain: D.C ? { engines: D.C.E.map(function (c) { return { name: c.e.name, share: +c.f.toFixed(3), to: c.to, ok: +(+c.ok).toFixed(3), r: c.r == null ? undefined : +c.r.toFixed(3) }; }), shafts: D.C.SH.map(function (c) { return { name: c.s.name, ok: +(+c.ok).toFixed(3) }; }),
       boilers: D.C.B.map(function (c) { return { name: c.b.name, funnel: c.b.funnel, ok: c.ok.slice(), r: c.r == null ? undefined : +c.r.toFixed(3), out: c.out == null ? undefined : +c.out.toFixed(3), wet: c.wet, link: c.link }; }),
       pipes: (D.C.SP || []).map(function (c) { return { name: c.p.name, ok: +(+c.ok).toFixed(3) }; }), steam: +(+D.C.steam).toFixed(3), funnelsOff: D.C.fnOff ? D.C.fnOff.slice() : null } : null };   // r ＝ 還剩幾成（動力件，TASK-0653）

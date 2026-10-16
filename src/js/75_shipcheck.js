@@ -77,6 +77,8 @@ function shipCheck(id) {
       dl.push(s + '）');
     });
     R.info.drvparts = dl.join('；');
+    R.info.props = propSummary(sh);                                     // 會轉的體素件（螺旋槳；24_armor.js propSetup）
+    sh.models.forEach(function (m) { if (m.meta && m.meta.kind === 'propeller' && !m.vox) add('warn', '螺旋槳', m.path, '檔頭沒有它的格子（rig.models[].vox）⇒ 照舊是模型：一發扣血、打不碎、推力不照剩幾成', 'python -I admin.py metasync --id ' + T.id + '（admin.py prop_vox：模型要平移放、不旋轉不縮放）'); });
     // ── 錨（TASK-0601）：模型錨（meta kind=anchor）＋錨環 ring、船殼的錨鏈孔 hawse-P／S（造船規格 §9 anchor）──
     var AN = anchorsOf(sh);
     if (AN.noAnchor) add('warn', '錨', '整艘', '找不到錨（沒有 meta kind=anchor 的模型、也沒有名字有「錨」的關聯）⇒ 不能拋錨：6／7／8 變成停船', '要能拋錨 ⇒ 放共用錨元件（造船規格 §9 anchor）');
@@ -152,6 +154,7 @@ function shipCheck(id) {
     (T.armBad || []).forEach(function (b) { add(b.lv, '裝甲', b.where, b.msg, b.fix); });
     (T.ancBad || []).forEach(function (b) { add(b.lv, '錨', b.where, b.msg, b.fix); });   // 錨的關聯拆不出來（76_anchor.js anchorParts）
     (sh.arm || []).forEach(function (a) {
+      if (a.prop) return;                                               // 螺旋槳（會轉的體素件）：下面「動力件」那一段報
       if (!a.g) { add('error', '裝甲', a.A.mount, '拆出來了、可是開戰時找不到那門砲的迴旋 ⇒ 裝甲不轉', '那門砲的 meta kind=gun、mount=turret｜pivot（21_gunnery.js gunMountInit）'); return; }
       var bl = armBlock(a); if (bl && bl.some(function (n) { return n > 0; })) add('error', '裝甲', a.A.mount, '砲口沿砲軸碰到裝甲（' + bl.join('／') + ' 點，轉到 ' + Math.round(armYaw(a) / Math.PI * 180) + '°）⇒ 砲口不在砲門裡（砲彈打在自己的裝甲上）', '砲門開在砲軸上（砲口固定點 muzzle 正前方），或把砲往砲門挪');
       // 掃過的那一圈是牆（TASK-0655；24_armor.js armRing）⇒ 圈裡要有梯子通得到（莫尼特號：梯子/turret 從住艙甲板上到砲塔底下的艙口）

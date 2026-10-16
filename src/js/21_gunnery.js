@@ -357,6 +357,7 @@ function hitModel(sh, L, m, skip, nb) {                                 // skip�
   for (var i = 0; i < bk.length; i++) {
     if (nb && bk[i].nb !== nb) continue;
     var o = bk[i], b = o.bb, Q = o.rot ? unrotL(o, L) : L;                 // 轉過的帆桁：把彈點轉回作品裡的角度再比
+    if (o.vox) continue;                                                  // 螺旋槳有自己的格（24_armor.js propSetup）⇒ 打格子（armAt），不扣模型的血
     if (o.alive && !(skip && skip.indexOf(o) >= 0) && Q[0] > b[0] - m && Q[0] < b[3] + m && Q[1] > b[1] - m && Q[1] < b[4] + m && Q[2] > b[2] - m && Q[2] < b[5] + m &&
         (m > 2 || inMesh(o, Q))) return o;                               // 實心／爆裂彈：外框裡還要真的碰到砲身或砲架（鏈彈橫掃 2.4 m ⇒ 外框就算）
   }
@@ -440,7 +441,7 @@ function blowModel(sh, m, vel, drop, at) {
  *  火藥桶另走 powderHit（歸零殉爆；拉滿 ＝ 不會爆 ⇒ 不扣）。
  *  at：砲彈碰到的那一點（stepBall 才給；爆風、殉爆不給）⇒ 帶裝甲的砲被打中的是砲口（24_armor.js armMuzzle）：藥箱在裝甲裡面 ⇒ 不引爆；碎片從那一點算。 */
 function damageModel(sh, m, vel, dmg, at) {
-  if (!m.alive || !(dmg > 0)) return;
+  if (!m.alive || !(dmg > 0) || m.vox) return;                         // m.vox：螺旋槳照格子打（爆風、殉爆那幾格在 shatter／armBlast 拆）
   if (m.kind === 'powder') { powderHit(sh, m, dmg); return; }
   var muz = at && sh.arm && armMuzzle(sh, m, at) ? at : null;
   if (muz) sh.muzzleHit = (sh.muzzleHit || 0) + 1;                      // 讀數：砲口被打中幾次
