@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>憲法號對轟 設定後台</title>
+<title>Blockside 設定後台</title>
 <!-- 《憲法號對轟》設定後台（TASK-0542）：改 src/config/game.json（各項設定的初始值、船隻清單）、重建遊戲、匯入新船、重新匯入。
      ⛔ 不是展品（不寫展品卡、不進畫廊清單）。要由 admin.py 開：cd src && python -I admin.py serve ⇒ http://127.0.0.1:8642/
      頁面只是表單：驗設定、寫檔、匯出、建置都在 admin.py（同一組函式也給命令列用）。 -->
@@ -63,7 +63,7 @@ nav a.on { background: var(--acc); color: var(--acc-ink); border-color: var(--ac
 </head>
 <body>
 <header>
-  <h1>憲法號對轟 設定後台</h1>
+  <h1>Blockside 設定後台</h1>
   <nav><a href="#" id="navAll">全部設定</a><a href="#guns" id="navGuns">🔫 砲</a></nav>
   <span class="st" id="st">讀取中…</span>
   <button id="bRooms" title="開新分頁：遊戲的船隻配置頁（甲板與艙房）；改了就送回這一頁、標成還沒存（TASK-0647）">甲板與艙房編輯器…</button>
