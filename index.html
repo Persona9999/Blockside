@@ -1984,14 +1984,15 @@ var GFX_ITEMS = [
   { k: 'drops', name: '雨滴（3D）', opt: ['關', '少（1500）', '中（3000）', '多（6000）'] },   // 只在暴風雨下：3D 空間裡的雨絲粒子（14_rain.js）
   { k: 'dropspl', name: '雨滴水花', opt: ['關', '開'] },                                    // 3D 雨滴打在海面與船上濺起的小水花
   { k: 'door', name: '門的開關演出', opt: ['關（一直關著）', '開（有人經過才開）'] },          // 門、艙蓋（TASK-0638，25_doors.js）：人照樣通過、門照樣擋水，這一項只管畫面
+  { k: 'fall', name: '艙內水幕', opt: ['關', '開（往下一層流的水畫成水幕）'] },   // 進水的粒子模式（TASK-0651，33_flood.js flFalls）：水照樣往下流，這一項只管畫面
   // 多船（TASK-0537；60_render.js gpuSlots）：視野裡離鏡頭最近的幾艘才有自己的陰影圖／船艙遮罩（第幾檔 ＝ 幾艘）
   { k: 'shships', name: '陰影船數', opt: gfxOpts(MAX_SHIPS + 1, function (i) { return i ? String(i) : '0（只有全局）'; }) },   // 其他的船畫進一張全局陰影圖（解析度低）
   { k: 'masks', name: '船艙遮罩', opt: gfxOpts(MASK_NEAR + 1, function (i) { return i ? String(i) : '0（艙裡看得到海）'; }) }];   // 說明在畫質設定頁（template #gfxNote）
 function gfxOpts(n, f) { var r = []; for (var i = 0; i < n; i++) r.push(f(i)); return r; }
 var GFX_PRESET = {
-  low: { shadow: 0, refl: 0, refr: 0, sea: 0, res: 1, aa: 0, rain: 0, drops: 0, dropspl: 0, door: 1, shships: 2, masks: 2 },   // 門的演出很便宜（每扇每格掃一次船員）⇒ 三檔都開
-  mid: { shadow: 1, refl: 1, refr: 1, sea: 1, res: 2, aa: 1, rain: 1, drops: 0, dropspl: 0, door: 1, shships: 4, masks: MASK_NEAR },
-  high: { shadow: 2, refl: 2, refr: 2, sea: 2, res: 2, aa: 1, rain: 0, drops: 3, dropspl: 1, door: 1, shships: MAX_SHIPS, masks: MASK_NEAR } };   // 最高 ＝ 每艘都有（Tim 2026-10-13「最高畫質開到 N」）
+  low: { shadow: 0, refl: 0, refr: 0, sea: 0, res: 1, aa: 0, rain: 0, drops: 0, dropspl: 0, door: 1, fall: 1, shships: 2, masks: 2 },   // 門的演出很便宜（每扇每格掃一次船員）⇒ 三檔都開
+  mid: { shadow: 1, refl: 1, refr: 1, sea: 1, res: 2, aa: 1, rain: 1, drops: 0, dropspl: 0, door: 1, fall: 1, shships: 4, masks: MASK_NEAR },
+  high: { shadow: 2, refl: 2, refr: 2, sea: 2, res: 2, aa: 1, rain: 0, drops: 3, dropspl: 1, door: 1, fall: 1, shships: MAX_SHIPS, masks: MASK_NEAR } };   // 最高 ＝ 每艘都有（Tim 2026-10-13「最高畫質開到 N」）
 var GFX_NAME = { low: '低', mid: '中', high: '高', custom: '自訂' }, GFX_DEFAULT = CFG.menu.gfx;   // 預設檔：config/game.json 的 menu.gfx
 var GFX = {}, GFX_FPS = false;                     // GFX_FPS：畫面右上角顯示 FPS（畫質設定頁的勾選）
 // 煙散得多快（Tim 2026-10-14）：畫質頁的一項，不跟低／中／高走（玩家自己選、不算進「自訂」）；煙的壽命 ÷ 這個倍數（12_effects.js smoke、40_crew.js 火槍）。
@@ -2191,8 +2192,9 @@ var PHX_ITEMS = [
   { k: 'blastnb', name: '殉爆波及', opt: ['關（只炸自己）', '開（炸到旁邊的船）'] },   // 殉爆的爆炸球碰到別艘 ⇒ 照樣挖彈坑、傷人、打模型（23_powder.js blastNear；Tim 2026-10-15：「看對性能的影響…性能優先」「可以開關」）。外接球先篩、碰不到不算；⛔ 開著改戰局（船靠在一起時）
   { k: 'sailhit', name: '帆的碰撞', opt: ['關', '開（帆與繩「高」才算）'] },   // 張開的帆碰到桅、帆桁、繩、船殼就推開（TASK-0603，30_rig_physics.js clothContacts）；Tim 2026-10-15：做成選項、預設關、只有物理全開（帆與繩高）才開 ⇒ 四檔都是關
   { k: 'shiphit', name: '船隻碰撞', opt: ['低（龍骨線 14 m，原本的）', '中（水線輪廓）', '高（船殼格子，每 3 格）', '全開（船殼格子，每格）'] },   // 31_sailing.js collide；Tim 2026-10-15：兩艘隔著一段水面就判成撞上 ⇒ 分級。⛔ 改戰局（船推到哪）
-  { k: 'shipfric', name: '船隻摩擦', opt: ['原本（一碰就停）', '中', '滑', '很滑'] }];   // 31_sailing.js hitFriction；Tim 2026-10-15：撞上就黏在一起、要比較容易滑開 ⇒ 預設「滑」。⛔ 改戰局（航速）
-var PHX_PRESET = { full: { rig: 3, rigfar: 1, debris: 3, fx: 3, water: 3, flood: 3, sinkflood: 1, blastnb: 1, sailhit: 0, shiphit: 3, shipfric: 2 }, high: { rig: 2, rigfar: 1, debris: 2, fx: 2, water: 2, flood: 2, sinkflood: 1, blastnb: 1, sailhit: 0, shiphit: 2, shipfric: 2 }, mid: { rig: 1, rigfar: 2, debris: 1, fx: 1, water: 1, flood: 1, sinkflood: 0, blastnb: 1, sailhit: 0, shiphit: 1, shipfric: 2 }, low: { rig: 0, rigfar: 2, debris: 0, fx: 0, water: 0, flood: 0, sinkflood: 0, blastnb: 0, sailhit: 0, shiphit: 0, shipfric: 2 } };   // shiphit 跟著四檔走；shipfric 四檔都是「滑」（Tim：預設要比原本滑）   // rigfar：全開也是遠方半速（150 m 外看不出差別）
+  { k: 'shipfric', name: '船隻摩擦', opt: ['原本（一碰就停）', '中', '滑', '很滑'] },
+  { k: 'shipdmg', name: '碰撞傷害', opt: ['關', '開（相對接近 1.5 m/s 以上：撞掉格子、速度照非彈性碰撞）'] }];   // 31_sailing.js ramHit（TASK-0652）；⛔ 會改戰局，四檔預設都關   // 31_sailing.js hitFriction；Tim 2026-10-15：撞上就黏在一起、要比較容易滑開 ⇒ 預設「滑」。⛔ 改戰局（航速）
+var PHX_PRESET = { full: { rig: 3, rigfar: 1, debris: 3, fx: 3, water: 3, flood: 3, sinkflood: 1, blastnb: 1, sailhit: 0, shiphit: 3, shipfric: 2, shipdmg: 0 }, high: { rig: 2, rigfar: 1, debris: 2, fx: 2, water: 2, flood: 2, sinkflood: 1, blastnb: 1, sailhit: 0, shiphit: 2, shipfric: 2, shipdmg: 0 }, mid: { rig: 1, rigfar: 2, debris: 1, fx: 1, water: 1, flood: 1, sinkflood: 0, blastnb: 1, sailhit: 0, shiphit: 1, shipfric: 2, shipdmg: 0 }, low: { rig: 0, rigfar: 2, debris: 0, fx: 0, water: 0, flood: 0, sinkflood: 0, blastnb: 0, sailhit: 0, shiphit: 0, shipfric: 2, shipdmg: 0 } };   // shiphit 跟著四檔走；shipfric 四檔都是「滑」（Tim：預設要比原本滑）   // rigfar：全開也是遠方半速（150 m 外看不出差別）
 var PHX_NAME = { full: '全開', high: '高', mid: '中', low: '低', custom: '自訂' }, PHX_DEFAULT = CFG.menu.phx;   // 預設檔：config/game.json 的 menu.phx
 // 帆與繩每一檔：it 布與繩的迭代次數、every 帆幾步走一次（2 ＝ 30 Hz，4 ＝ 15 Hz；一半的帆錯開一步）、loose 垂下來的繩最多幾條、shred 帆的布片每艘最多幾片（34_shreds.js）。高 ＝ 原本的。
 var RIG_LV = [null, { it: 2, every: 4, loose: 150, shred: 40 }, { it: 3, every: 2, loose: 300, shred: 80 }, { it: 4, every: 2, loose: 500, shred: 150 }];
@@ -6220,6 +6222,7 @@ function collidePair(A, B, ka, kb) {
   ka.forEach(function (a) { kb.forEach(function (b) { var d = Math.hypot(a[0] - b[0], a[2] - b[2]); if (d < best) { best = d; pa = a; pb = b; } }); });
   if (best >= 14) return;
   var n = best > 1e-3 ? [(pa[0] - pb[0]) / best, 0, (pa[2] - pb[2]) / best] : [0, 0, 1], push = (14 - best) / 2;
+  ramHit(A, B, n);                                                      // 撞擊（照每一格量接觸點：膠囊先碰到、格子沒碰到 ⇒ 不算）
   A.px += n[0] * push; A.pz += n[2] * push; B.px -= n[0] * push; B.pz -= n[2] * push;
   hitFriction(A, B, n);
   wpBump(pa, pb, A, B);                                                // 船邊水花（13_water.js；只給人看）
@@ -6233,6 +6236,61 @@ function hitFriction(A, B, n) {
     var sh = q[0], f = fwd(sh.yaw), c = Math.max(0, q[1] * (f[0] * n[0] + f[2] * n[2]) * Math.sign(sh.spd || 1));   // 航向（倒車照反方向）裡往對方頂的那一份（0..1）
     sh.spd *= 1 - (F.n * c + F.t * (1 - c));
   });
+}
+// ───── 撞擊（TASK-0652；Tim 2026-10-16：「船隻的碰撞傷害(只有在相對速度夠高時才判斷) 且船隻碰撞要全高」「碰撞傷害可以開關(在物理設定)」「碰撞要全開(每格)」
+//   拍板：開關預設關、門檻 1.5 m/s、撞上時兩艘沿接觸方向的速度照非彈性碰撞改）─────
+// 物理設定「碰撞傷害」（PHX.shipdmg；關 ⇒ 這一段一行都不跑，碰撞跟以前一模一樣）。collidePair／collideFine 碰到了、推開之前呼叫：
+//   · 接近速度 du ＝ 兩艘的速度（sh.vel）在接觸法線 n（B → A）上的差；du < RAM_V0 ⇒ 不算（慢慢靠上去、推開時的擦邊）。
+//   · 接觸點一律照「全開」每一格量（不管船隻碰撞選哪一檔；低檔的膠囊先碰到、格子其實沒碰到 ⇒ 不算）：A 的表面點落在 B 裡、B 的落在 A 裡，各取平均 ＝ 兩艘各自的撞點。
+//   · 速度：沿 n 照非彈性碰撞（恢復係數 0）換成共同速度 u ＝ (mA' uA ＋ mB' uB)／(mA' ＋ mB')。船只能沿船頭走（橫向由龍骨與水擋著）⇒ 沿 n 的有效質量 m' ＝ m ÷ max(cos², RAM_SIDE)
+//     （cos ＝ 船頭跟 n 的夾角；RAM_SIDE 0.25 ⇒ 側面被撞的那艘沿 n 的有效質量最多 4 倍 —— 水的附加質量，不是撞不動）；航速改 Δu × cos ÷ max(cos², RAM_SIDE)（ramSpd；不變號）。
+//     ⛔ 照實際質量算 ⇒ 側面被撞的那艘沿 n 幾乎動不了、撞人的那艘還剩一半的接近速度 ⇒ 下一步又超過門檻、連撞兩次（4 m/s 量過：0.09 秒後再撞 1.82 m/s）。
+//   · 能量 E ＝ ½ μ du²（μ ＝ mA' mB'／(mA' ＋ mB')，噸 ⇒ kJ）；照撞點的硬度分（硬的吃得少：A 分 E × hB／(hA ＋ hB)）。
+//     從撞點往船裡一口一口咬（shatter，半徑照能量 RAM_R），每一口照打掉的格扣能量（× PEN.wood × 船殼硬度倍率，跟砲彈打木頭同一套），最多 RAM_BITES 口；
+//     碎木傷人（hurt，原因「碰撞」）、撞點附近的模型扣血（砲、小艇…）。打穿水線下 ⇒ 照常進水（removeVoxel）。
+//   · 裝甲子模組不看（碰撞本來就只看船殼 sh.grid）。讀數：sh.rams（每一次：時間、對方、du、E、自己分到的、掉幾格）。
+var RAM_V0 = 1.5, RAM_R = [2, 7], RAM_BITES = 12, RAM_SIDE = 0.25;
+function ramHit(A, B, n) {
+  if (!PHX.shipdmg) return;
+  var vA = A.vel || [0, 0, 0], vB = B.vel || [0, 0, 0], uA = vA[0] * n[0] + vA[2] * n[2], uB = vB[0] * n[0] + vB[2] * n[2], du = uB - uA;   // A 在 +n 那一側：A 往 −n、B 往 +n ⇒ 接近
+  if (du < RAM_V0) return;
+  var lv = SHIPHIT_LV[3], pa = [], pb = [];
+  hitCount(A, B, lv, [0, 0, 0], pa, false); hitCount(B, A, lv, [0, 0, 0], pb, false);
+  if (!pa.length && !pb.length) return;
+  function mean(P) { var s = [0, 0, 0], k = P.length / 3; for (var i = 0; i < P.length; i += 3) { s[0] += P[i]; s[1] += P[i + 1]; s[2] += P[i + 2]; } return [s[0] / k, s[1] / k, s[2] / k]; }
+  function across(P, F, T) { var w = M4.pt(F.M, P[0], P[1], P[2]); return M4.pt(T.inv, w[0], w[1], w[2]); }   // F 的格座標 ⇒ T 的格座標
+  var QA = pa.length ? mean(pa) : across(mean(pb), B, A), QB = pb.length ? mean(pb) : across(mean(pa), A, B);
+  var kA = ramK(A, n), kB = ramK(B, n), mA = (A.mass0 || shipT(A)) / kA, mB = (B.mass0 || shipT(B)) / kB, mu = mA * mB / (mA + mB), E = 0.5 * mu * du * du;   // 沿 n 的有效質量（ramK）
+  var u = (mA * uA + mB * uB) / (mA + mB);
+  ramSpd(A, u - uA, n, kA); ramSpd(B, u - uB, n, kB);
+  var hA = hardAt(A, QA), hB = hardAt(B, QB), eA = E * hB / (hA + hB), eB = E - eA;
+  var w = M4.pt(A.M, QA[0], QA[1], QA[2]);
+  var lA = ramBite(A, QA, n, eA, B, du, E), lB = ramBite(B, QB, [-n[0], 0, -n[2]], eB, A, du, E);
+  sfx('crack', w, 1.6); smoke(w, [0, 0.4, 0], 3, false);
+  if (A.i === PLAYER_I || B.i === PLAYER_I || MODE === 'eve') note(SHIPS[PLAYER_I], '<b style="color:#ffb35a">' + A.name + ' 和 ' + B.name + ' 撞上了</b>（' + du.toFixed(1) + ' m/s）—— 各掉 ' + lA + '／' + lB + ' 格', true);
+}
+/** 沿 n 的有效質量倍率的倒數：max(cos², RAM_SIDE)（cos ＝ 船頭跟 n 的夾角）。 */
+function ramK(sh, n) { var f = fwd(sh.yaw), c = f[0] * n[0] + f[2] * n[2]; return Math.max(c * c, RAM_SIDE); }
+/** 沿 n 的速度改 dU（m/s）⇒ 航速改 dU × cos ÷ k（k ＝ ramK；船只能沿船頭走，橫向那一份由龍骨與水擋掉、推開照舊）；不變號（非彈性：頂多停下來）。
+ *  ⛔ 以前 dU ÷ cos ⇒ 側面被撞的那艘（船頭跟 n 幾乎垂直）航速被放大：0 → 7.4 m/s，接著再撞一次（量過）。 */
+function ramSpd(sh, dU, n, k) {
+  var f = fwd(sh.yaw), c = f[0] * n[0] + f[2] * n[2];
+  var s = sh.spd + dU * c / k; if (sh.spd * s < 0) s = 0;
+  sh.spd = s; sh.vel = mul(f, s);
+}
+/** 一艘被撞：撞點 Q（格座標）、n ＝ 往這艘船裡的方向（世界、水平）、分到的能量 e（kJ）。回打掉幾格。 */
+function ramBite(sh, Q, n, e, other, du, E) {
+  var dL = norm(M4.dir(sh.inv, n[0], 0, n[2])), R = clamp(1.6 + 0.5 * Math.cbrt(e / 50), RAM_R[0], RAM_R[1]), velW = mul(n, 20), left = e, lost = 0, P = Q.slice();
+  for (var k = 0; k < RAM_BITES && left > 0; k++) {
+    var r = shatter(sh, P, dL, R, velW, 120, 0.55);
+    left -= Math.max(r.cost * PEN.wood * sh.cfg.hard, PEN.wood * R);      // 咬到空的（艙裡）也照一口扣一點 ⇒ 一定會停
+    lost += r.n; P = add(P, mul(dL, R));
+  }
+  var k2 = clamp(Math.sqrt(e / 1000), 0.3, 1.5);
+  hurt(sh, Q, R * 1.2, R * 2.6, dL, '碰撞', 140 * k2);
+  sh.models.forEach(function (m) { if (!m.alive) return; var d = len(sub(m.c, Q)); if (d < R * 2.5) damageModel(sh, m, mul(n, 6), 120 * k2 * (1 - 0.6 * d / (R * 2.5))); });
+  (sh.rams || (sh.rams = [])).push({ t: +SIMT.toFixed(2), with: other.i, du: +du.toFixed(2), E: Math.round(E), e: Math.round(e), lost: lost });
+  return lost;
 }
 /** 船型 T 的碰撞取樣（第一次用到才算、每個船型每一檔只算一次；HIT_PROF 記花了多久）：
  *  foot ⇒ { f0, f1 }：水線下 1 m 到水線上 4 m 那一段，每一欄 x 的 y 最小／最大（沒有 ⇒ -1）＋ 外緣點（每 2 欄取一）；
@@ -6376,6 +6434,7 @@ function collideFine(A, B, lv) {
   });
   if (!best) best = { d: 0.5, dir: dirs[0] };                            // 全都推不開（疊太深）⇒ 照中心連線慢慢推
   var h = best.d / 2 + 0.01, n = best.dir;
+  ramHit(A, B, n);                                                      // 撞擊（物理設定「碰撞傷害」；推開之前量接觸點）
   A.px += n[0] * h; A.pz += n[2] * h; B.px -= n[0] * h; B.pz -= n[2] * h;
   hitFriction(A, B, n);
   var w = acc.length ? M4.pt(A.M, acc[0], acc[1], acc[2]) : [(cA[0] + cB[0]) / 2, cA[1], (cA[2] + cB[2]) / 2];   // 第一個接觸點（給水花、聲音；只有 B 的點落進 A ⇒ 兩艘中心的中點）
@@ -6978,7 +7037,8 @@ function flNew(sh) {
   return { L: L, F: F, cap: F.cap.slice(), pd: F.pd.slice(), op: F.op.slice(), ol: F.ol.slice(), A: new Float32Array(N), on: new Uint8Array(N), act: new Int32Array(4096), actN: 0, dmark: new Uint8Array(N), dirty: [],
     hA: new Float32Array(H), hX: new Float32Array(H), hY: new Float32Array(H), hZ: new Float32Array(H), hYi: new Float32Array(H), hAcc: new Float32Array(H), hmark: new Uint8Array(H), hon: new Uint8Array(H), hdirty: [], holes: [],
     J: { n: 0, p: new Float32Array(L.jn * 3), v: new Float32Array(L.jn * 3), vol: new Float32Array(L.jn), life: new Float32Array(L.jn) },
-    vol: 0, area: 0, open: 0, inQ: 0, outQ: 0, inTot: 0, outTot: 0, pumped: 0, comX: 0, comY: 0, sinkT: 0, step: 0, gen: 0, mesh: null };
+    vol: 0, area: 0, open: 0, inQ: 0, outQ: 0, inTot: 0, outTot: 0, pumped: 0, comX: 0, comY: 0, sinkT: 0, step: 0, gen: 0, mesh: null,
+    dq: new Float32Array(N), dqOn: new Uint8Array(N), dqL: [], dqT: 0, fo: new Map() };   // dq…：往下流的量（只給畫面的水幕，flFalls；⛔ 模擬不讀）；fo：每一格往下流的開口在哪（快取）
 }
 function flAct(fl, i) {
   if (fl.on[i]) return; fl.on[i] = 1;
@@ -7010,6 +7070,7 @@ function flCellRedo(sh, fl, i) {
     fl.op[i * c + l] = il - sl; fl.ol[i * c + l] = il > 0 ? (il - sl) / il : -1; it += il; st += sl; if (il > 0) { any = true; p = Math.min(p, (il - sl) / il); }
   }
   fl.cap[i] = (it - st) / (c * c * c); fl.pd[i] = any ? p : 0;
+  fl.fo.delete(i);                                                        // 水幕的開口照新的格重找（只給畫面）
 }
 /** 一塊破口重算：c × c 個船殼最外的點，每點從外往裡走，先碰到還在的格 ⇒ 不通；先走到原本是空的（艙內）⇒ 通。面積 ＝ 通的點數 × S²，記下中心與艙內那一側。 */
 function flHoleRedo(sh, fl, h) {
@@ -7117,7 +7178,7 @@ function flTick(sh, fl, dtc) {
   for (t = 0; t < n0; t++) {
     i = act[t]; var a = A[i]; if (a <= 1e-7) continue;
     var pdi = i >= NXY ? flPd(fl, i, a / S3) : 0;                          // 往下通幾成：只看水那一層以下（flPd）
-    if (pdi > 0.02) { j = i - NXY; var room = cap[j] * Vc - A[j]; if (room > 0) { m = Math.min(a, room) * Math.min(1, pdi * 4); A[i] -= m; A[j] += m; flAct(fl, j); } }
+    if (pdi > 0.02) { j = i - NXY; var room = cap[j] * Vc - A[j]; if (room > 0) { m = Math.min(a, room) * Math.min(1, pdi * 4); A[i] -= m; A[j] += m; flAct(fl, j); if (!fl.dqOn[i]) { fl.dqOn[i] = 1; fl.dqL.push(i); } fl.dq[i] += m; } }   // dq：往下流了多少（只記，水幕用）
     var ex = A[i] - cap[i] * Vc;
     if (ex > 1e-6 && i + NXY < N && cap[i + NXY] > 0.02 && flPd(fl, i + NXY, A[i + NXY] / S3) > 0.02) { A[i] -= ex; A[i + NXY] += ex; flAct(fl, i + NXY); }
   }
@@ -7149,7 +7210,7 @@ function flTick(sh, fl, dtc) {
   }
   fl.actN = keep;
   for (t = 0; t < J.n; t++) { w += J.vol[t]; mx += J.vol[t] * (J.p[t * 3] - cx); my += J.vol[t] * (J.p[t * 3 + 1] - cy); }
-  fl.vol = w; fl.comX = w > 0 ? mx / w * S : 0; fl.comY = w > 0 ? my / w * S : 0; fl.gen++;
+  fl.vol = w; fl.comX = w > 0 ? mx / w * S : 0; fl.comY = w > 0 ? my / w * S : 0; fl.gen++; fl.dqT += dtc;
 }
 /** 艙內的水 ⇒ 該多吃水多少（m）：浮力表上「少掉的重量 − 水」跟「少掉的重量」的差。 */
 function floodSinkT(sh, fl) {
@@ -7174,6 +7235,76 @@ function flGL() {
     ' vec3 c=mix(vec3(0.08,0.27,0.3)*(0.45+0.55*sk),uSky*0.75,clamp(fr*0.8+0.08,0.0,1.0))+vec3(1.0,0.92,0.75)*pow(max(dot(reflect(-v,n),uSun),0.0),90.0)*(0.25+sk);\n' +
     ' if(uX>0.5) c=mix(c,vec3(0.2,0.6,0.95),0.45);\n' +
     ' float fd=length(vW-uEye); o=vec4(mix(c,uFog,1.0-exp(-fd*uFogD)),uX>0.5?0.62:0.78); }\n');
+  // 水幕（flFalls）：一道 ＝ 一片直立、繞船的鉛直軸轉向鏡頭的長條；aP 軸上那一點（格座標）、aQ ＝ (左右 ±1、0 上 1 下、長度 m、寬度 m 的上一格)、aW ＝ 這一格的寬度 m
+  P.fall = VK.compile(gl,
+    '#version 300 es\nlayout(location=0) in vec3 aP; layout(location=1) in vec4 aQ; layout(location=2) in float aW; uniform mat4 uModel,uVP; uniform vec3 uEye; uniform float uMix; out vec3 vW; out vec2 vT; out float vL;\n' +
+    'void main(){ vec4 w=uModel*vec4(aP,1.0); vec3 ax=normalize(mat3(uModel)*vec3(0.0,0.0,1.0)), r=cross(ax,uEye-w.xyz); float l=length(r); r=l>1e-4?r/l:vec3(1.0,0.0,0.0);\n' +
+    ' w.xyz+=r*aQ.x*0.5*mix(aQ.w,aW,uMix); vW=w.xyz; vT=aQ.xy; vL=aQ.z; gl_Position=uVP*w; }\n',
+    '#version 300 es\nprecision highp float; in vec3 vW; in vec2 vT; in float vL; uniform vec3 uEye,uFog,uSky; uniform float uFogD,uSeaT,uX; out vec4 o;\n' +
+    'void main(){ float u=vT.x, v=vT.y, k=floor((u+1.0)*3.5); float st=0.5+0.5*sin(v*vL*7.0-uSeaT*11.0+k*1.9)*sin(v*vL*2.3-uSeaT*5.0+k*0.7);\n' +   // 往下捲的條紋（每一條相位不同）
+    ' vec3 c=mix(vec3(0.1,0.3,0.34),uSky*0.8+vec3(0.12),0.25+0.45*st); if(uX>0.5) c=mix(c,vec3(0.2,0.6,0.95),0.45);\n' +
+    ' float a=(0.55+0.3*st)*(1.0-smoothstep(0.55,1.0,abs(u)))*smoothstep(0.0,0.06,v);\n' +
+    ' float fd=length(vW-uEye); o=vec4(mix(c,uFog,1.0-exp(-fd*uFogD)),a); }\n');
+}
+// ── 水幕（TASK-0651；Tim 2026-10-16：「艙內進水 …… 是否可以連接正在往下流動的水(類似瀑布效果)」）──
+//   模擬裡水往下一層流是直接搬水量（flTick 第 2 步）⇒ 畫面上上下兩池是斷開的兩片。這裡照 flTick 記的往下流量（fl.dq，只記不改）每一格畫一道：
+//   · 開口：那一格擋水的那一層（開著的比例最小、而且 < FLF_OPEN）裡空著的格（艙口、打穿的洞）—— 中心、寬（快取 fl.fo，那一格被打壞就重找）；整層都開著（艙裡的大空間）⇒ 不畫（不是瀑布，是水整團往下）。
+//   · 從開口往下沿著格子找：碰到有水面的那一格（這一次的水面高度）或實心的格（地板）就停 ⇒ 上下兩池接起來。
+//   · 寬 ＝ FLF_W0 ＋ FLF_WK × √流量（m³／秒），夾在開口的寬以內；流量 < FLF_MIN 不畫（上一次有畫的 ⇒ 掉到一半才收，不在門檻上閃）；落差 < FLF_DROP 格不畫（底艙肋骨間那種淺的不算瀑布）。兩次重做之間寬度照 uMix 內插（跟水面同一個骨架）。
+//   · 落點冒水花（flPushJets，點精靈）。純畫面：不碰 rnd()、不改水量；畫質設定 GFX.fall 關 ⇒ 不畫。
+var FLF_MIN = 0.004, FLF_W0 = 0.25, FLF_WK = 1.0, FLF_OPEN = 0.85, FLF_DROP = 4;
+function flFallAt(sh, fl, i) {
+  var o = fl.fo.get(i); if (o !== undefined) return o;
+  var F = fl.F, c = F.c, ix = i % F.NX, iy = ((i / F.NX) | 0) % F.NY, iz = (i / (F.NX * F.NY)) | 0, best = -1, bl = 2;
+  for (var l = 0; l < c; l++) { var f = fl.ol[i * c + l]; if (f >= 0 && f < bl) { bl = f; best = l; } }
+  o = null;
+  if (best >= 0 && bl < FLF_OPEN && bl > 0) {
+    var z = iz * c + best, n = 0, sx = 0, sy = 0, x0 = 1e9, x1 = -1e9, y0 = 1e9, y1 = -1e9;
+    for (var dx = 0; dx < c; dx++) {
+      var x = F.X0 + ix * c + dx; if (x - F.X0 >= F.nxv) break;
+      var k = z * F.nxv + x - F.X0; if (F.yP[k] < 0) continue;
+      var a = Math.max(F.yM[k] + 1, F.Y0 + iy * c), b = Math.min(F.yP[k] - 1, F.Y0 + iy * c + c - 1);
+      for (var y = a; y <= b; y++) if (!sh.grid.get(x, y, z)) { n++; sx += x; sy += y; if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
+    }
+    if (n) o = { x: sx / n + 0.5, y: sy / n + 0.5, z: z + 1, w: (Math.max(x1 - x0, y1 - y0) + 1) * S };
+  }
+  fl.fo.set(i, o); return o;
+}
+function flFalls(sh, fl, me, TI, tops) {
+  var F = fl.F, M = sh.M, L = me.falls || (me.falls = []), old = new Map(), t, q = 0;
+  for (t = 0; t < L.length; t++) old.set(L[t].i, L[t].w);
+  L.length = 0;
+  var dt = fl.dqT; fl.dqT = 0;
+  for (t = 0; t < fl.dqL.length; t++) {
+    var i = fl.dqL[t], r = dt > 0 ? fl.dq[i] / dt : 0; fl.dq[i] = 0; fl.dqOn[i] = 0;
+    if (!GFX.fall || r < FLF_MIN * (old.has(i) ? 0.5 : 1)) continue;
+    var at = flFallAt(sh, fl, i); if (!at) continue;
+    var X = Math.floor(at.x), Y = Math.floor(at.y), z1 = 0;
+    for (var z = at.z - 2; z >= 0; z--) {                                 // 往下找落點：有水面的那一格（水面以下）或實心的格
+      var k = flCell(F, at.x, at.y, z), ti = k >= 0 ? TI[k] : -1;
+      if (ti >= 0) { var zs = (tops[ti + 1] - (M[1] * at.x + M[5] * at.y + M[13])) / M[9]; if (z <= zs) { z1 = Math.max(z, zs); break; } }
+      if (sh.grid.get(X, Y, z)) { z1 = z + 1; break; }
+    }
+    if (at.z - z1 < FLF_DROP) continue;
+    var w = clamp(FLF_W0 + FLF_WK * Math.sqrt(r), FLF_W0, Math.max(FLF_W0, at.w)), w0 = old.has(i) ? old.get(i) : w;
+    L.push({ i: i, x: at.x, y: at.y, z0: at.z, z1: z1, w: w, w0: w0, r: r });
+  }
+  fl.dqL.length = 0;
+  var B = me.fbuf && me.fbuf.length >= L.length * 48 ? me.fbuf : (me.fbuf = new Float32Array(Math.max(48 * 16, L.length * 96)));   // 每道 6 個頂點 × (3 ＋ 4 ＋ 1)
+  for (t = 0; t < L.length; t++) {
+    var f = L[t], len = (f.z0 - f.z1) * S, V = [[-1, 0], [1, 0], [1, 1], [-1, 0], [1, 1], [-1, 1]];
+    for (var e = 0; e < 6; e++) { var s = V[e][0], v = V[e][1], o = q * 8; B[o] = f.x; B[o + 1] = f.y; B[o + 2] = v ? f.z1 : f.z0; B[o + 3] = s; B[o + 4] = v; B[o + 5] = len; B[o + 6] = f.w0; B[o + 7] = f.w; q++; }
+  }
+  if (!me.fvao) {
+    me.fvao = gl.createVertexArray(); me.fvb = gl.createBuffer(); me.fcap = 0;
+    gl.bindVertexArray(me.fvao); gl.bindBuffer(gl.ARRAY_BUFFER, me.fvb);
+    gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 32, 0); gl.enableVertexAttribArray(1); gl.vertexAttribPointer(1, 4, gl.FLOAT, false, 32, 12); gl.enableVertexAttribArray(2); gl.vertexAttribPointer(2, 1, gl.FLOAT, false, 32, 28);
+  }
+  gl.bindVertexArray(me.fvao); gl.bindBuffer(gl.ARRAY_BUFFER, me.fvb);
+  if (q * 8 > me.fcap) { me.fcap = B.length; gl.bufferData(gl.ARRAY_BUFFER, me.fcap * 4, gl.DYNAMIC_DRAW); }
+  if (q) gl.bufferSubData(gl.ARRAY_BUFFER, 0, B, 0, q * 8);
+  gl.bindVertexArray(null);
+  me.fn = q;
 }
 /** 艙內水面的網格（格座標，每個頂點 [x, y, z, 裝了幾成, 上一格的 z]）：水格有算過、而且離上次重做過了 FL_MESH_MS 才重做（關鍵格）。
  *  Tim 2026-10-15：「水的網格更新(顯示變動)不用完全跟模擬同步」「水網格是否可以加入類似骨架的概念去微調(中間變化用內插)」「更新頻率可以更低」——
@@ -7201,6 +7332,7 @@ function flMesh(sh, fl) {
     var hw = M[1] * (F.X0 + (ix + 0.5) * c) + M[5] * (F.Y0 + (iy + 0.5) * c) + M[9] * (iz * c + hl) + M[13];
     TI[i] = tops.length; tops.push(i, hw);
   }
+  flFalls(sh, fl, me, TI, tops);                                          // 往下流的水幕（跟水面同一格重做）
   // 連成一池（Tim 2026-10-15：「角度有平滑 但是沒有接起來」）：左右前後相鄰（同一層或差一層）、水面差不到半格 ⇒ 同一池。
   //   同一池裡每個角只算一次（那個角周圍四格裡、這一池的水面平均）⇒ 相鄰兩格用的是同一個角 ⇒ 一定接得起來。
   //   ⛔ 以前每一格自己算四個角（周圍水柱裡、跟「這一格」差不到半格的平均）⇒ 同一個角兩邊各算各的、高度不一樣 ⇒ 每一片都斜得平順，片跟片之間裂開。
@@ -7277,22 +7409,32 @@ function flMix(me) { return clamp((performance.now() - me.tw) / FL_MESH_MS, 0, 1
 /** 畫艙內的水面（海與白沫之後；開始沉、斷了就不畫 —— 那時候海已經畫進船艙）。 */
 function flDraw() {
   if (!P.pool || FL_HIDE) return;                                           // FL_HIDE：對照用（__game.flood(i, { hide: true })）
-  var any = false;
+  var any = false, fs = [];
   SHIPS.forEach(function (sh) {
     var fl = sh.fl; if (!fl || !fl.actN || ((sh.broken || sh.sinkingFinal) && !fl.vis) || sh.sunk) return;   // 沉船的水照畫（floodVis）
-    var me = flMesh(sh, fl); if (!me.n) return;
+    var me = flMesh(sh, fl); if (GFX.fall && me.fn) fs.push([sh, me]); if (!me.n) return;
     if (!any) { any = true; gl.useProgram(P.pool.prog); setCommon(P.pool); gl.uniform1f(P.pool.u.uX, FLX3 ? 1 : 0); gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA); gl.depthMask(false); gl.disable(gl.CULL_FACE); if (FLX3) gl.disable(gl.DEPTH_TEST); }   // 停格的「🔍 透視」開著 ⇒ 隔著船殼看得到（72_floodui.js）
     gl.uniformMatrix4fv(P.pool.u.uModel, false, sh.M); gl.uniform1f(P.pool.u.uMix, flMix(me)); gl.bindVertexArray(me.vao); gl.drawArrays(gl.TRIANGLES, 0, me.n);
   });
+  if (fs.length) {                                                          // 水幕（flFalls）：跟水面同一套混色、不寫深度
+    if (!any) { any = true; gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA); gl.depthMask(false); gl.disable(gl.CULL_FACE); if (FLX3) gl.disable(gl.DEPTH_TEST); }
+    gl.useProgram(P.fall.prog); setCommon(P.fall); gl.uniform1f(P.fall.u.uX, FLX3 ? 1 : 0);
+    fs.forEach(function (e) { gl.uniformMatrix4fv(P.fall.u.uModel, false, e[0].M); gl.uniform1f(P.fall.u.uMix, flMix(e[1])); gl.bindVertexArray(e[1].fvao); gl.drawArrays(gl.TRIANGLES, 0, e[1].fn); });
+  }
   if (any) { gl.depthMask(true); gl.enable(gl.DEPTH_TEST); }
 }
 /** 噴進來的粒子放進點精靈的緩衝（60_render.js 的 pushPt）。 */
 function flPushJets(pushPt) {
   var b = 0.55 + 0.45 * WX.sun, col = [0.72 * b, 0.84 * b, 0.9 * b];
   SHIPS.forEach(function (sh) {
-    var fl = sh.fl; if (!fl || !fl.J.n || ((sh.broken || sh.sinkingFinal) && !fl.vis) || sh.sunk) return;
+    var fl = sh.fl; if (!fl || ((sh.broken || sh.sinkingFinal) && !fl.vis) || sh.sunk) return;
     var J = fl.J, M = sh.M;
     for (var i = 0; i < J.n; i++) { var o = i * 3; pushPt(M4.pt(M, J.p[o], J.p[o + 1], J.p[o + 2]), 0.12 + 0.6 * Math.cbrt(J.vol[i]), col, 0.75, -1); }
+    var FS = GFX.fall && !FL_HIDE && fl.mesh && fl.mesh.fn ? fl.mesh.falls : null;   // 水幕的落點：每一道每一格幾顆水花（只給畫面：Math.random，⛔ 不碰 rnd()／rndF()）
+    if (FS) for (var k = 0; k < FS.length; k++) {
+      var f = FS[k], n = 1 + Math.min(3, Math.round(f.r * 6)), hw = f.w / S * 0.5;
+      for (var e = 0; e < n; e++) pushPt(M4.pt(M, f.x + (Math.random() - 0.5) * 2 * hw, f.y + (Math.random() - 0.5) * 2 * hw, f.z1 + Math.random() * 3), 0.05 + 0.08 * Math.random(), [0.85 * b, 0.92 * b, 0.95 * b], 0.45, -1);
+    }
   });
 }
 // ── js/34_shreds.js ──

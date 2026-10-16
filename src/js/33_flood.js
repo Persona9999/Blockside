@@ -67,7 +67,8 @@ function flNew(sh) {
   return { L: L, F: F, cap: F.cap.slice(), pd: F.pd.slice(), op: F.op.slice(), ol: F.ol.slice(), A: new Float32Array(N), on: new Uint8Array(N), act: new Int32Array(4096), actN: 0, dmark: new Uint8Array(N), dirty: [],
     hA: new Float32Array(H), hX: new Float32Array(H), hY: new Float32Array(H), hZ: new Float32Array(H), hYi: new Float32Array(H), hAcc: new Float32Array(H), hmark: new Uint8Array(H), hon: new Uint8Array(H), hdirty: [], holes: [],
     J: { n: 0, p: new Float32Array(L.jn * 3), v: new Float32Array(L.jn * 3), vol: new Float32Array(L.jn), life: new Float32Array(L.jn) },
-    vol: 0, area: 0, open: 0, inQ: 0, outQ: 0, inTot: 0, outTot: 0, pumped: 0, comX: 0, comY: 0, sinkT: 0, step: 0, gen: 0, mesh: null };
+    vol: 0, area: 0, open: 0, inQ: 0, outQ: 0, inTot: 0, outTot: 0, pumped: 0, comX: 0, comY: 0, sinkT: 0, step: 0, gen: 0, mesh: null,
+    dq: new Float32Array(N), dqOn: new Uint8Array(N), dqL: [], dqT: 0, fo: new Map() };   // dq…：往下流的量（只給畫面的水幕，flFalls；⛔ 模擬不讀）；fo：每一格往下流的開口在哪（快取）
 }
 function flAct(fl, i) {
   if (fl.on[i]) return; fl.on[i] = 1;
@@ -99,6 +100,7 @@ function flCellRedo(sh, fl, i) {
     fl.op[i * c + l] = il - sl; fl.ol[i * c + l] = il > 0 ? (il - sl) / il : -1; it += il; st += sl; if (il > 0) { any = true; p = Math.min(p, (il - sl) / il); }
   }
   fl.cap[i] = (it - st) / (c * c * c); fl.pd[i] = any ? p : 0;
+  fl.fo.delete(i);                                                        // 水幕的開口照新的格重找（只給畫面）
 }
 /** 一塊破口重算：c × c 個船殼最外的點，每點從外往裡走，先碰到還在的格 ⇒ 不通；先走到原本是空的（艙內）⇒ 通。面積 ＝ 通的點數 × S²，記下中心與艙內那一側。 */
 function flHoleRedo(sh, fl, h) {
@@ -206,7 +208,7 @@ function flTick(sh, fl, dtc) {
   for (t = 0; t < n0; t++) {
     i = act[t]; var a = A[i]; if (a <= 1e-7) continue;
     var pdi = i >= NXY ? flPd(fl, i, a / S3) : 0;                          // 往下通幾成：只看水那一層以下（flPd）
-    if (pdi > 0.02) { j = i - NXY; var room = cap[j] * Vc - A[j]; if (room > 0) { m = Math.min(a, room) * Math.min(1, pdi * 4); A[i] -= m; A[j] += m; flAct(fl, j); } }
+    if (pdi > 0.02) { j = i - NXY; var room = cap[j] * Vc - A[j]; if (room > 0) { m = Math.min(a, room) * Math.min(1, pdi * 4); A[i] -= m; A[j] += m; flAct(fl, j); if (!fl.dqOn[i]) { fl.dqOn[i] = 1; fl.dqL.push(i); } fl.dq[i] += m; } }   // dq：往下流了多少（只記，水幕用）
     var ex = A[i] - cap[i] * Vc;
     if (ex > 1e-6 && i + NXY < N && cap[i + NXY] > 0.02 && flPd(fl, i + NXY, A[i + NXY] / S3) > 0.02) { A[i] -= ex; A[i + NXY] += ex; flAct(fl, i + NXY); }
   }
@@ -238,7 +240,7 @@ function flTick(sh, fl, dtc) {
   }
   fl.actN = keep;
   for (t = 0; t < J.n; t++) { w += J.vol[t]; mx += J.vol[t] * (J.p[t * 3] - cx); my += J.vol[t] * (J.p[t * 3 + 1] - cy); }
-  fl.vol = w; fl.comX = w > 0 ? mx / w * S : 0; fl.comY = w > 0 ? my / w * S : 0; fl.gen++;
+  fl.vol = w; fl.comX = w > 0 ? mx / w * S : 0; fl.comY = w > 0 ? my / w * S : 0; fl.gen++; fl.dqT += dtc;
 }
 /** 艙內的水 ⇒ 該多吃水多少（m）：浮力表上「少掉的重量 − 水」跟「少掉的重量」的差。 */
 function floodSinkT(sh, fl) {
@@ -263,6 +265,76 @@ function flGL() {
     ' vec3 c=mix(vec3(0.08,0.27,0.3)*(0.45+0.55*sk),uSky*0.75,clamp(fr*0.8+0.08,0.0,1.0))+vec3(1.0,0.92,0.75)*pow(max(dot(reflect(-v,n),uSun),0.0),90.0)*(0.25+sk);\n' +
     ' if(uX>0.5) c=mix(c,vec3(0.2,0.6,0.95),0.45);\n' +
     ' float fd=length(vW-uEye); o=vec4(mix(c,uFog,1.0-exp(-fd*uFogD)),uX>0.5?0.62:0.78); }\n');
+  // 水幕（flFalls）：一道 ＝ 一片直立、繞船的鉛直軸轉向鏡頭的長條；aP 軸上那一點（格座標）、aQ ＝ (左右 ±1、0 上 1 下、長度 m、寬度 m 的上一格)、aW ＝ 這一格的寬度 m
+  P.fall = VK.compile(gl,
+    '#version 300 es\nlayout(location=0) in vec3 aP; layout(location=1) in vec4 aQ; layout(location=2) in float aW; uniform mat4 uModel,uVP; uniform vec3 uEye; uniform float uMix; out vec3 vW; out vec2 vT; out float vL;\n' +
+    'void main(){ vec4 w=uModel*vec4(aP,1.0); vec3 ax=normalize(mat3(uModel)*vec3(0.0,0.0,1.0)), r=cross(ax,uEye-w.xyz); float l=length(r); r=l>1e-4?r/l:vec3(1.0,0.0,0.0);\n' +
+    ' w.xyz+=r*aQ.x*0.5*mix(aQ.w,aW,uMix); vW=w.xyz; vT=aQ.xy; vL=aQ.z; gl_Position=uVP*w; }\n',
+    '#version 300 es\nprecision highp float; in vec3 vW; in vec2 vT; in float vL; uniform vec3 uEye,uFog,uSky; uniform float uFogD,uSeaT,uX; out vec4 o;\n' +
+    'void main(){ float u=vT.x, v=vT.y, k=floor((u+1.0)*3.5); float st=0.5+0.5*sin(v*vL*7.0-uSeaT*11.0+k*1.9)*sin(v*vL*2.3-uSeaT*5.0+k*0.7);\n' +   // 往下捲的條紋（每一條相位不同）
+    ' vec3 c=mix(vec3(0.1,0.3,0.34),uSky*0.8+vec3(0.12),0.25+0.45*st); if(uX>0.5) c=mix(c,vec3(0.2,0.6,0.95),0.45);\n' +
+    ' float a=(0.55+0.3*st)*(1.0-smoothstep(0.55,1.0,abs(u)))*smoothstep(0.0,0.06,v);\n' +
+    ' float fd=length(vW-uEye); o=vec4(mix(c,uFog,1.0-exp(-fd*uFogD)),a); }\n');
+}
+// ── 水幕（TASK-0651；Tim 2026-10-16：「艙內進水 …… 是否可以連接正在往下流動的水(類似瀑布效果)」）──
+//   模擬裡水往下一層流是直接搬水量（flTick 第 2 步）⇒ 畫面上上下兩池是斷開的兩片。這裡照 flTick 記的往下流量（fl.dq，只記不改）每一格畫一道：
+//   · 開口：那一格擋水的那一層（開著的比例最小、而且 < FLF_OPEN）裡空著的格（艙口、打穿的洞）—— 中心、寬（快取 fl.fo，那一格被打壞就重找）；整層都開著（艙裡的大空間）⇒ 不畫（不是瀑布，是水整團往下）。
+//   · 從開口往下沿著格子找：碰到有水面的那一格（這一次的水面高度）或實心的格（地板）就停 ⇒ 上下兩池接起來。
+//   · 寬 ＝ FLF_W0 ＋ FLF_WK × √流量（m³／秒），夾在開口的寬以內；流量 < FLF_MIN 不畫（上一次有畫的 ⇒ 掉到一半才收，不在門檻上閃）；落差 < FLF_DROP 格不畫（底艙肋骨間那種淺的不算瀑布）。兩次重做之間寬度照 uMix 內插（跟水面同一個骨架）。
+//   · 落點冒水花（flPushJets，點精靈）。純畫面：不碰 rnd()、不改水量；畫質設定 GFX.fall 關 ⇒ 不畫。
+var FLF_MIN = 0.004, FLF_W0 = 0.25, FLF_WK = 1.0, FLF_OPEN = 0.85, FLF_DROP = 4;
+function flFallAt(sh, fl, i) {
+  var o = fl.fo.get(i); if (o !== undefined) return o;
+  var F = fl.F, c = F.c, ix = i % F.NX, iy = ((i / F.NX) | 0) % F.NY, iz = (i / (F.NX * F.NY)) | 0, best = -1, bl = 2;
+  for (var l = 0; l < c; l++) { var f = fl.ol[i * c + l]; if (f >= 0 && f < bl) { bl = f; best = l; } }
+  o = null;
+  if (best >= 0 && bl < FLF_OPEN && bl > 0) {
+    var z = iz * c + best, n = 0, sx = 0, sy = 0, x0 = 1e9, x1 = -1e9, y0 = 1e9, y1 = -1e9;
+    for (var dx = 0; dx < c; dx++) {
+      var x = F.X0 + ix * c + dx; if (x - F.X0 >= F.nxv) break;
+      var k = z * F.nxv + x - F.X0; if (F.yP[k] < 0) continue;
+      var a = Math.max(F.yM[k] + 1, F.Y0 + iy * c), b = Math.min(F.yP[k] - 1, F.Y0 + iy * c + c - 1);
+      for (var y = a; y <= b; y++) if (!sh.grid.get(x, y, z)) { n++; sx += x; sy += y; if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
+    }
+    if (n) o = { x: sx / n + 0.5, y: sy / n + 0.5, z: z + 1, w: (Math.max(x1 - x0, y1 - y0) + 1) * S };
+  }
+  fl.fo.set(i, o); return o;
+}
+function flFalls(sh, fl, me, TI, tops) {
+  var F = fl.F, M = sh.M, L = me.falls || (me.falls = []), old = new Map(), t, q = 0;
+  for (t = 0; t < L.length; t++) old.set(L[t].i, L[t].w);
+  L.length = 0;
+  var dt = fl.dqT; fl.dqT = 0;
+  for (t = 0; t < fl.dqL.length; t++) {
+    var i = fl.dqL[t], r = dt > 0 ? fl.dq[i] / dt : 0; fl.dq[i] = 0; fl.dqOn[i] = 0;
+    if (!GFX.fall || r < FLF_MIN * (old.has(i) ? 0.5 : 1)) continue;
+    var at = flFallAt(sh, fl, i); if (!at) continue;
+    var X = Math.floor(at.x), Y = Math.floor(at.y), z1 = 0;
+    for (var z = at.z - 2; z >= 0; z--) {                                 // 往下找落點：有水面的那一格（水面以下）或實心的格
+      var k = flCell(F, at.x, at.y, z), ti = k >= 0 ? TI[k] : -1;
+      if (ti >= 0) { var zs = (tops[ti + 1] - (M[1] * at.x + M[5] * at.y + M[13])) / M[9]; if (z <= zs) { z1 = Math.max(z, zs); break; } }
+      if (sh.grid.get(X, Y, z)) { z1 = z + 1; break; }
+    }
+    if (at.z - z1 < FLF_DROP) continue;
+    var w = clamp(FLF_W0 + FLF_WK * Math.sqrt(r), FLF_W0, Math.max(FLF_W0, at.w)), w0 = old.has(i) ? old.get(i) : w;
+    L.push({ i: i, x: at.x, y: at.y, z0: at.z, z1: z1, w: w, w0: w0, r: r });
+  }
+  fl.dqL.length = 0;
+  var B = me.fbuf && me.fbuf.length >= L.length * 48 ? me.fbuf : (me.fbuf = new Float32Array(Math.max(48 * 16, L.length * 96)));   // 每道 6 個頂點 × (3 ＋ 4 ＋ 1)
+  for (t = 0; t < L.length; t++) {
+    var f = L[t], len = (f.z0 - f.z1) * S, V = [[-1, 0], [1, 0], [1, 1], [-1, 0], [1, 1], [-1, 1]];
+    for (var e = 0; e < 6; e++) { var s = V[e][0], v = V[e][1], o = q * 8; B[o] = f.x; B[o + 1] = f.y; B[o + 2] = v ? f.z1 : f.z0; B[o + 3] = s; B[o + 4] = v; B[o + 5] = len; B[o + 6] = f.w0; B[o + 7] = f.w; q++; }
+  }
+  if (!me.fvao) {
+    me.fvao = gl.createVertexArray(); me.fvb = gl.createBuffer(); me.fcap = 0;
+    gl.bindVertexArray(me.fvao); gl.bindBuffer(gl.ARRAY_BUFFER, me.fvb);
+    gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 32, 0); gl.enableVertexAttribArray(1); gl.vertexAttribPointer(1, 4, gl.FLOAT, false, 32, 12); gl.enableVertexAttribArray(2); gl.vertexAttribPointer(2, 1, gl.FLOAT, false, 32, 28);
+  }
+  gl.bindVertexArray(me.fvao); gl.bindBuffer(gl.ARRAY_BUFFER, me.fvb);
+  if (q * 8 > me.fcap) { me.fcap = B.length; gl.bufferData(gl.ARRAY_BUFFER, me.fcap * 4, gl.DYNAMIC_DRAW); }
+  if (q) gl.bufferSubData(gl.ARRAY_BUFFER, 0, B, 0, q * 8);
+  gl.bindVertexArray(null);
+  me.fn = q;
 }
 /** 艙內水面的網格（格座標，每個頂點 [x, y, z, 裝了幾成, 上一格的 z]）：水格有算過、而且離上次重做過了 FL_MESH_MS 才重做（關鍵格）。
  *  Tim 2026-10-15：「水的網格更新(顯示變動)不用完全跟模擬同步」「水網格是否可以加入類似骨架的概念去微調(中間變化用內插)」「更新頻率可以更低」——
@@ -290,6 +362,7 @@ function flMesh(sh, fl) {
     var hw = M[1] * (F.X0 + (ix + 0.5) * c) + M[5] * (F.Y0 + (iy + 0.5) * c) + M[9] * (iz * c + hl) + M[13];
     TI[i] = tops.length; tops.push(i, hw);
   }
+  flFalls(sh, fl, me, TI, tops);                                          // 往下流的水幕（跟水面同一格重做）
   // 連成一池（Tim 2026-10-15：「角度有平滑 但是沒有接起來」）：左右前後相鄰（同一層或差一層）、水面差不到半格 ⇒ 同一池。
   //   同一池裡每個角只算一次（那個角周圍四格裡、這一池的水面平均）⇒ 相鄰兩格用的是同一個角 ⇒ 一定接得起來。
   //   ⛔ 以前每一格自己算四個角（周圍水柱裡、跟「這一格」差不到半格的平均）⇒ 同一個角兩邊各算各的、高度不一樣 ⇒ 每一片都斜得平順，片跟片之間裂開。
@@ -366,21 +439,31 @@ function flMix(me) { return clamp((performance.now() - me.tw) / FL_MESH_MS, 0, 1
 /** 畫艙內的水面（海與白沫之後；開始沉、斷了就不畫 —— 那時候海已經畫進船艙）。 */
 function flDraw() {
   if (!P.pool || FL_HIDE) return;                                           // FL_HIDE：對照用（__game.flood(i, { hide: true })）
-  var any = false;
+  var any = false, fs = [];
   SHIPS.forEach(function (sh) {
     var fl = sh.fl; if (!fl || !fl.actN || ((sh.broken || sh.sinkingFinal) && !fl.vis) || sh.sunk) return;   // 沉船的水照畫（floodVis）
-    var me = flMesh(sh, fl); if (!me.n) return;
+    var me = flMesh(sh, fl); if (GFX.fall && me.fn) fs.push([sh, me]); if (!me.n) return;
     if (!any) { any = true; gl.useProgram(P.pool.prog); setCommon(P.pool); gl.uniform1f(P.pool.u.uX, FLX3 ? 1 : 0); gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA); gl.depthMask(false); gl.disable(gl.CULL_FACE); if (FLX3) gl.disable(gl.DEPTH_TEST); }   // 停格的「🔍 透視」開著 ⇒ 隔著船殼看得到（72_floodui.js）
     gl.uniformMatrix4fv(P.pool.u.uModel, false, sh.M); gl.uniform1f(P.pool.u.uMix, flMix(me)); gl.bindVertexArray(me.vao); gl.drawArrays(gl.TRIANGLES, 0, me.n);
   });
+  if (fs.length) {                                                          // 水幕（flFalls）：跟水面同一套混色、不寫深度
+    if (!any) { any = true; gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA); gl.depthMask(false); gl.disable(gl.CULL_FACE); if (FLX3) gl.disable(gl.DEPTH_TEST); }
+    gl.useProgram(P.fall.prog); setCommon(P.fall); gl.uniform1f(P.fall.u.uX, FLX3 ? 1 : 0);
+    fs.forEach(function (e) { gl.uniformMatrix4fv(P.fall.u.uModel, false, e[0].M); gl.uniform1f(P.fall.u.uMix, flMix(e[1])); gl.bindVertexArray(e[1].fvao); gl.drawArrays(gl.TRIANGLES, 0, e[1].fn); });
+  }
   if (any) { gl.depthMask(true); gl.enable(gl.DEPTH_TEST); }
 }
 /** 噴進來的粒子放進點精靈的緩衝（60_render.js 的 pushPt）。 */
 function flPushJets(pushPt) {
   var b = 0.55 + 0.45 * WX.sun, col = [0.72 * b, 0.84 * b, 0.9 * b];
   SHIPS.forEach(function (sh) {
-    var fl = sh.fl; if (!fl || !fl.J.n || ((sh.broken || sh.sinkingFinal) && !fl.vis) || sh.sunk) return;
+    var fl = sh.fl; if (!fl || ((sh.broken || sh.sinkingFinal) && !fl.vis) || sh.sunk) return;
     var J = fl.J, M = sh.M;
     for (var i = 0; i < J.n; i++) { var o = i * 3; pushPt(M4.pt(M, J.p[o], J.p[o + 1], J.p[o + 2]), 0.12 + 0.6 * Math.cbrt(J.vol[i]), col, 0.75, -1); }
+    var FS = GFX.fall && !FL_HIDE && fl.mesh && fl.mesh.fn ? fl.mesh.falls : null;   // 水幕的落點：每一道每一格幾顆水花（只給畫面：Math.random，⛔ 不碰 rnd()／rndF()）
+    if (FS) for (var k = 0; k < FS.length; k++) {
+      var f = FS[k], n = 1 + Math.min(3, Math.round(f.r * 6)), hw = f.w / S * 0.5;
+      for (var e = 0; e < n; e++) pushPt(M4.pt(M, f.x + (Math.random() - 0.5) * 2 * hw, f.y + (Math.random() - 0.5) * 2 * hw, f.z1 + Math.random() * 3), 0.05 + 0.08 * Math.random(), [0.85 * b, 0.92 * b, 0.95 * b], 0.45, -1);
+    }
   });
 }
