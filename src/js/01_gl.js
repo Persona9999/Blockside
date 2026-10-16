@@ -34,7 +34,6 @@ var HULL_HIT = 'hullHit()';                                              // 落�
 //   uCutT：那艘船型每一層的切高（R32F，寬 ＝ 格的 x、高 ＝ 層；照舷弧逐欄），uCutW.x ＝ 寬。模型、繩、帆另給 uCutInv（世界 → 格）。
 //   uCutT 一律指第 8 號（setCommon；沒開時綁 1×1 的空貼圖）：⛔ 預設的第 0 號 ⇒ 那一號綁著正在畫的畫布的貼圖時，整次繪製被丟掉（Feedback loop，量到 203 筆警告）——
 //   就算分支沒走到，驅動照樣檢查程式裡每一個取樣器。
-//   開著時水線下不染海水色（剖開、拿掉甲板看到的是艙內：⛔ 照染 ⇒ 沒進水的船底看起來像積了一層水）。
 var CUT_GLSL = 'uniform highp sampler2D uCutT; uniform vec4 uCut; uniform vec2 uCutW;\n' +
   'bool cutOut(vec3 l){ if(uCut.w<0.5) return false; if(uCut.y*(l.y-uCut.x)>0.0) return true;\n' +
   '  return uCut.z>=0.0 && l.z>=texelFetch(uCutT,ivec2(clamp(int(floor(l.x)),0,int(uCutW.x)-1),int(uCut.z)),0).r; }\n';
@@ -59,7 +58,7 @@ function programs() {
     '#version 300 es\nprecision highp float;\n' + SEA_GLSL + 'in vec3 vN; in vec3 vW; flat in float vC; uniform vec3 uSun,uEye,uFog,uSky,uGround; uniform float uFogD,uLum; out vec4 o;\n' +
     'void main(){ uint c=uint(vC+0.5); vec3 b=vec3(float((c>>5u)&7u)/7.0,float((c>>2u)&7u)/7.0,float(c&3u)/3.0); vec3 n=normalize(vN);\n' +
     ' vec3 col=b*(mix(uGround,uSky,n.y*0.5+0.5)*0.62+vec3(1.0,0.96,0.88)*max(dot(n,uSun),0.0)*0.78);\n' +
-    ' col*=uLum; if(vW.y<seaH(vW.xz)) col=mix(col,vec3(0.04,0.18,0.22),0.6); float fd=length(vW-uEye); o=vec4(mix(col,uFog,1.0-exp(-fd*uFogD)),1.0); }\n');
+    ' col*=uLum; float fd=length(vW-uEye); o=vec4(mix(col,uFog,1.0-exp(-fd*uFogD)),1.0); }\n');
   P.tri = VK.compile(gl,
     '#version 300 es\nlayout(location=0) in vec3 aP; layout(location=1) in vec3 aN; layout(location=2) in vec3 aC; layout(location=3) in vec2 aM; uniform mat4 uModel,uVP; out vec3 vN; out vec3 vW; out vec3 vC; out vec2 vM;\n' +
     'void main(){ vec4 w=uModel*vec4(aP,1.0); vW=w.xyz; vN=mat3(uModel)*aN; vC=aC; vM=aM; gl_Position=uVP*w; }\n',
@@ -73,7 +72,7 @@ function programs() {
     ' if(uLN>0) col+=vC*lampK(vW,n);\n' +                                 // 點光源
     // 燈籠（meta kind=lantern；drawModels 設 uGlow）：只有琥珀色的燈罩發光（色 245 ＝ 1, .71, .33）—— 金框（248，藍 0）、暗紅（128）照常受光
     ' if(uGlow>0.0) col=mix(col,vC*1.2+vec3(0.3,0.14,0.0),uGlow*step(0.9,vC.r)*step(0.2,vC.b)*step(vC.b,0.5));\n' +
-    ' if(uCut.w<0.5 && vW.y<seaH(vW.xz)) col=mix(col,vec3(0.04,0.18,0.22),0.6); float fd=length(vW-uEye); o=vec4(mix(col,uFog,1.0-exp(-fd*uFogD)),1.0); }\n');
+    ' float fd=length(vW-uEye); o=vec4(mix(col,uFog,1.0-exp(-fd*uFogD)),1.0); }\n');
   // 帆：頂點法線（平滑，不是一個三角形一個平面）；法線翻向看的那一面；包覆光（背光面不死黑、明暗過渡慢）＋太陽在帆後面時布透出暖光
   // 有貼圖的帆（TASK-0579）：aT ＝ 貼圖集的 uv（11_rig_gpu.js sailBuf；u < 0 ＝ 沒有貼圖，照頂點色）；片段照貼圖取色、alpha < 0.5（已照 alpha_min 二值化）⇒ discard ＝ 洞
   P.sail = VK.compile(gl,
@@ -84,7 +83,7 @@ function programs() {
     ' if(uCut.w>0.5 && cutOut((uCutInv*vec4(vW,1.0)).xyz)) discard; vec3 n=normalize(vN); if(!gl_FrontFacing) n=-n; float s=dot(n,uSun), sk=shadowK(vW,(s<0.0?-n:n)*(3.0-2.0*abs(s)));\n' +
     ' float lit=max(s,0.0)*0.45*sk+(s*0.5+0.5)*0.32*(0.55+0.45*sk); float thru=max(-s,0.0)*0.30*sk;\n' +
     ' vec3 col=bc*(mix(uGround,uSky,n.y*0.5+0.5)*0.62+vec3(1.0,0.96,0.88)*lit)+bc*vec3(1.0,0.88,0.66)*thru;\n' +
-    ' if(uCut.w<0.5 && vW.y<seaH(vW.xz)) col=mix(col,vec3(0.04,0.18,0.22),0.6); float fd=length(vW-uEye); o=vec4(mix(col,uFog,1.0-exp(-fd*uFogD)),1.0); }\n');
+    ' float fd=length(vW-uEye); o=vec4(mix(col,uFog,1.0-exp(-fd*uFogD)),1.0); }\n');
   P.pt = VK.compile(gl,
     '#version 300 es\nlayout(location=0) in vec3 aP; layout(location=1) in float aS; layout(location=2) in vec4 aC; layout(location=3) in float aT; uniform mat4 uVP; uniform float uPx; out vec4 vC; out float vT; out float vR;\n' +
     'void main(){ vec4 c=uVP*vec4(aP,1.0); gl_Position=c; gl_PointSize=clamp(aS*uPx/max(c.w,0.1),1.0,256.0); vC=aC; vT=aT; vR=aP.y*0.9+aT*1.7; }\n',
@@ -191,11 +190,15 @@ function setCommon(p) {
     gl.uniform1f(u.uShG, SHM.glob ? 1 : 0); gl.uniform1f(u.uShGL, SSLOTS.length); gl.uniform1f(u.uShOffG, SHM.offG);
   }
 }
-/** 船殼的著色器：VoxelKit 那一份＋這個遊戲要的（水下的顏色照浪的水面）。⛔ 不改 VoxelKit（別的作品也用）；找不到要換的那一段 ⇒ 照原本的畫。 */
+// 水線下不染海水色（Tim 2026-10-16「莫尼特號艙內有一層水 但是實際上沒有進水」→「拿掉船身與模型的水線下水色，交給海面」）：
+//   船殼、模型、繩、帆以前在浪的水面以下一律混海水色（船殼 35–90%、其他 60%）⇒ 從艙裡（第一人稱）、從艙口往下看，沒進水的艙也像積了一層水。
+//   隔著海面看水下那一段，交給海的著色器自己（中畫質：海面帶一點透明疊上去；高畫質：照水深把後面的東西染成海水色；低畫質的海不透明，本來就看不到水下）。
+//   VoxelKit 那一份的水下著色（uWater）整段拿掉（⛔ 不改 VoxelKit：別的作品也用）。船員的看板圖只染泡在水裡的（41_crew_art.js vS < 0），不動。
+/** 船殼的著色器：VoxelKit 那一份＋這個遊戲要的（陰影、點光源、剖面；水下不染色，見上）。⛔ 不改 VoxelKit（別的作品也用）；找不到要換的那一段 ⇒ 照原本的畫。 */
 function voxFS() {
-  var s = VK.VOXEL_FS, a = 'out vec4 o;', b = 'if(vW.y<uWater){ float dd=clamp((uWater-vW.y)*0.12', c = 'float di=max(dot(n,uSun),0.0);', d = 'void main(){', e = 'vec3 c=base*(amb*0.62+vec3(1.0,0.96,0.88)*di*0.78);';
+  var s = VK.VOXEL_FS, a = 'out vec4 o;', b = 'if(vW.y<uWater){ float dd=clamp((uWater-vW.y)*0.12,0.0,1.0); c=mix(c,vec3(0.04,0.18,0.22),0.35+0.55*dd); }', c = 'float di=max(dot(n,uSun),0.0);', d = 'void main(){', e = 'vec3 c=base*(amb*0.62+vec3(1.0,0.96,0.88)*di*0.78);';
   if ([a, b, c, d, e].some(function (x) { return s.indexOf(x) < 0; })) { console.warn('VoxelKit 的體素著色器改過了：船殼不跟著浪著色、不收陰影、不吃點光源'); return s; }
-  return s.replace(e, e + ' if(uLN>0) c+=base*lampK(vW,n); if(uVGN>0){ for(int i=0;i<' + VLAMP_N + ';i++){ if(i>=uVGN) break; if(abs(float(vC)-uVGC[i].w)<0.5 && distance(vL,uVG[i].xyz)<uVG[i].w) c=mix(c,base*0.35+uVGC[i].rgb*1.15,uVGK); } }').replace(a, SEA_GLSL + SHADOW_GLSL + CUT_GLSL + LAMP_GLSL + a).replace(b, 'float wy=uWater+seaH(vW.xz); if(uCut.w<0.5 && vW.y<wy){ float dd=clamp((wy-vW.y)*0.12')
+  return s.replace(e, e + ' if(uLN>0) c+=base*lampK(vW,n); if(uVGN>0){ for(int i=0;i<' + VLAMP_N + ';i++){ if(i>=uVGN) break; if(abs(float(vC)-uVGC[i].w)<0.5 && distance(vL,uVG[i].xyz)<uVG[i].w) c=mix(c,base*0.35+uVGC[i].rgb*1.15,uVGK); } }').replace(a, SEA_GLSL + SHADOW_GLSL + CUT_GLSL + LAMP_GLSL + a).replace(b, '')
     .replace(c, 'float di=max(dot(n,uSun),0.0); if(di>0.0) di*=shadowK(vW,n*(3.0-2.0*di));').replace(d, d + ' if(vW.y<uClip) discard; if(cutOut((uCutL*vec4(vL,1.0)).xyz)) discard;')   // cutOut：剖面與隱藏甲板（vL ＝ 格座標）
     .replace(a, 'uniform mat4 uCutL;\n' + a);   // uCutL：畫的那份格子 → 船的格座標（船殼 ＝ 單位矩陣，cutSet 設；砲帶的裝甲 ＝ 它轉過的那個，24_armor.js armDraw）⇒ 轉過的裝甲照船的座標切
 }
