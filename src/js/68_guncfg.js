@@ -11,6 +11,7 @@ var GUN_ITEMS = [
   { k: 'reload', name: '裝填時間', lim: [0.3, 2.5], step: 0.05, unit: '×', fix: 2, note: '24 磅長砲 ＝ 1；越小裝得越快' },
   { k: 'burst', name: '連發數', lim: [1, 20], step: 1, unit: ' 發', int: true, def: 1, note: '連發：裝填一次打幾發（風暴角號的 3 磅追擊砲 6 發）' },
   { k: 'burstGap', name: '連發間隔', lim: [0.02, 2], step: 0.01, unit: ' 秒', fix: 2, def: 0.15, note: '連發時每一發隔幾秒' },
+  { k: 'shot', name: '彈重', lim: [0.5, 120], step: 0.1, unit: ' kg', fix: 1, def: 10.9, note: '能量 ＝ ½ × 彈重 × 初速²：鑽多深、打不打得穿鐵甲、爆裂彈裝藥多少都照它（TASK-0621）' },
   { k: 'hole', name: '打出的洞', lim: [0.3, 1.5], step: 0.05, unit: '×', fix: 2, def: 1, note: '打穿船殼的洞多大（24 磅長砲 ＝ 1）' },
   { k: 'crew', name: '標準砲班', lim: [1, 10], step: 1, unit: ' 人', int: true, note: '射速照這個人數算；各船實際配幾個人在船隻配置頁' },
   { k: 'min', name: '最少人數', lim: [1, 10], step: 1, unit: ' 人', int: true, note: '少於這個人數 ⇒ 這門砲不開' }

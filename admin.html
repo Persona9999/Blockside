@@ -46,6 +46,17 @@ td.k { font-family: ui-monospace, Consolas, monospace; font-size: 12px; color: v
 #banner { display: none; background: var(--bad-bg); color: var(--bad); border: 1px solid var(--bad); border-radius: 8px; padding: 12px 16px; }
 #errs { color: var(--bad); margin: 0; padding-left: 18px; }
 .mute { color: var(--mute); }
+nav { display: flex; gap: 4px; margin-right: 8px; }
+nav a { color: var(--ink); text-decoration: none; padding: 4px 10px; border-radius: 6px; border: 1px solid var(--line); }
+nav a.on { background: var(--acc); color: var(--acc-ink); border-color: var(--acc); }
+.gcard { border: 1px solid var(--line); border-radius: 6px; padding: 10px 12px; margin-top: 10px; scroll-margin-top: 70px; }
+.gcard.hl { border-color: var(--acc); box-shadow: 0 0 0 2px var(--acc); }
+.gcard h3 { margin: 0 0 6px; font-size: 15px; display: flex; flex-wrap: wrap; gap: 8px; align-items: baseline; }
+.gcard h3 .k { font: 12px ui-monospace, Consolas, monospace; color: var(--mute); }
+.gcard .calc { margin-top: 8px; font-size: 13px; }
+.gcard .calc td, .gcard .calc th { white-space: normal; }
+.gcard .use a, .ship .guns a { color: var(--acc); margin-right: 10px; }
+.ship { scroll-margin-top: 70px; }
 #roomsWrap { padding: 0 16px 16px; } #roomsF { width: 100%; height: 86vh; border: 1px solid var(--line); border-radius: 6px; background: #000; display: block; }
 @media (max-width: 600px) { header { padding: 8px 16px; } main { padding: 12px 16px; } input[type=number] { width: 70px; } }
 </style>
@@ -53,6 +64,7 @@ td.k { font-family: ui-monospace, Consolas, monospace; font-size: 12px; color: v
 <body>
 <header>
   <h1>憲法號對轟 設定後台</h1>
+  <nav><a href="#" id="navAll">全部設定</a><a href="#guns" id="navGuns">🔫 砲</a></nav>
   <span class="st" id="st">讀取中…</span>
   <button id="bRevert" title="丟掉還沒存的修改，回到磁碟上的設定檔">放棄修改</button>
   <button id="bSave">儲存</button>
@@ -61,7 +73,14 @@ td.k { font-family: ui-monospace, Consolas, monospace; font-size: 12px; color: v
 </header>
 <main>
   <div id="banner">這一頁要由 <code>admin.py</code> 開：在 Blockside 的 <code>src/</code> 執行 <code>python -I admin.py serve</code>，再開 <a href="http://127.0.0.1:8642/">http://127.0.0.1:8642/</a>。直接開檔案讀不到設定檔，也不能寫。</div>
-  <section><h2>結果</h2><ul id="errs"></ul><pre id="log">（還沒有動作）</pre></section>
+  <section class="keep"><h2>結果</h2><ul id="errs"></ul><pre id="log">（還沒有動作）</pre></section>
+
+  <section id="gunPage" class="keep" hidden><h2>砲的設定</h2>
+    <p class="note">每一種砲一張卡：改了照樣是黃底、按上面的「儲存並重建」遊戲才吃得到。下面的「算給你看」照現在填的數字即時算（TASK-0621：能量 ＝ ½ × 彈重 × 初速²；打鐵甲照入射角與板厚算擊穿機率；爆裂彈的爆炸半徑照彈重與硬度）。從「船隻」卡片點「這艘的砲」⇒ 只列那艘船用到的砲。</p>
+    <p class="note" id="gpFilter"></p>
+    <h3 style="margin:10px 0 4px;font-size:14px">擊穿與爆炸（全部的砲共用）</h3>
+    <div class="grid" id="gpPen"></div>
+    <div id="gpCards"></div></section>
 
   <section id="sLimits"><h2>船數上限</h2>
     <p class="note">同時在場最多幾艘（主選單「同時在場」滑桿的上限、畫質設定「陰影船數」的上限都跟著它；著色器的陣列照它配，太大較吃顯卡）、船艙遮罩最多幾艘、編成最多幾艘（超過同時在場的排候補）。改了要重建才生效。</p>
@@ -83,14 +102,15 @@ td.k { font-family: ui-monospace, Consolas, monospace; font-size: 12px; color: v
     <div class="grid" id="ammoLim" style="margin-top:8px"></div></section>
 
   <section><h2>砲種表</h2>
+    <p class="note"><a href="#guns">🔫 砲的設定頁 →</a>（一種砲一張卡、算給你看擊穿機率與爆炸半徑、哪幾艘船裝了幾門）</p>
     <p class="note">代號（code）是雕刻作品裡 meta gun 的值，改了舊船就認不到砲。砲班滿編最多 8（砲旁只有 8 個站位）。每發傷害在上面的滑桿（dmg…）。</p>
-    <div class="tbl"><table id="guns"><thead><tr><th>種類</th><th>代號</th><th>名字</th><th>簡稱</th><th>初速 m/s</th><th>裝填倍率</th><th>大彈</th><th>洞倍率</th><th>砲班滿編</th><th>最少</th><th>重量 噸</th><th>連發（發）</th><th>連發間隔 秒</th></tr></thead><tbody></tbody></table></div></section>
+    <div class="tbl"><table id="guns"><thead><tr><th>種類</th><th>代號</th><th>名字</th><th>簡稱</th><th>初速 m/s</th><th>裝填倍率</th><th>大彈</th><th>洞倍率</th><th>砲班滿編</th><th>最少</th><th>重量 噸</th><th>彈重 kg</th><th>連發（發）</th><th>連發間隔 秒</th></tr></thead><tbody></tbody></table></div></section>
 
   <section><h2>材質表</h2>
     <p class="note">每一格的材質決定它多難打穿、多重（TASK-0616）。跨船共用：雕刻作品的關聯 meta 只寫材質 ID（<code>material=iron</code>），參數都在這裡。沒寫材質的船 ＝ 下面每艘船的「全船預設材質」，那一格也空著 ＝ 這裡的預設。
       ID 英文小寫（改了 ID 舊船就認不到 ⇒ 要換就新增一種）。比重：一格 0.1 m ＝ 1 公升 ⇒ 每格幾 kg（橡木 0.7 ＝ 以前統一的重量）。硬度倍率乘在船隻設定的船殼硬度上（洞多大、砲彈穿過去慢多少）。易燃性 0–1 先記著（燃燒還沒做）。</p>
     <div class="grid" id="matDef"></div>
-    <div class="tbl"><table id="mats"><thead><tr><th>ID</th><th>名字</th><th>分類</th><th>比重</th><th>硬度倍率</th><th>易燃性</th><th>金屬度</th><th>粗糙度</th><th>用在</th><th></th></tr></thead><tbody></tbody></table></div>
+    <div class="tbl"><table id="mats"><thead><tr><th>ID</th><th>名字</th><th>分類</th><th>比重</th><th>硬度倍率</th><th>易燃性</th><th>金屬度</th><th>粗糙度</th><th>擊穿門檻 kJ／格</th><th>用在</th><th></th></tr></thead><tbody></tbody></table></div>
     <div class="row" style="margin-top:8px"><input id="mNew" placeholder="新材質 ID（英文小寫，例 elm、steel）" style="min-width:240px"><button id="bMat">新增材質</button></div></section>
 
   <section><h2>船員配置（每艘船的預設）</h2>
@@ -132,9 +152,15 @@ td.k { font-family: ui-monospace, Consolas, monospace; font-size: 12px; color: v
     ['aimZ', '瞄準高度範圍', 2], ['deckAim', '砲長「砲甲板」瞄的高度', 2], ['rigAim', '砲長「桅」瞄的高度', 2]];
   var SHIP_CFG = [['speed', '航速'], ['agile', '靈活'], ['upwind', '逆風'], ['base', '額外動力'], ['hard', '硬度'], ['flood', '進水'], ['gunw', '砲重']];
   var MAT_KINDS = [['wood', '木頭'], ['metal', '金屬'], ['other', '其他']], MAT_ID = /^[a-z][a-z0-9_]{0,31}$/;   // 材質（TASK-0616；admin.py MAT_KINDS／MAT_ID 同一份規則）
-  var GUNF = [['code', 's'], ['name', 's'], ['short', 's'], ['V', 'n'], ['reload', 'n'], ['big', 'b'], ['hole', 'o'], ['crew', 'n'], ['min', 'n'], ['mass', 'n'], ['burst', 'o'], ['burstGap', 'g']];   // burst／burstGap：連發（一份彈藥打幾發、每發隔幾秒；空白 ＝ 1 發）
+  var GUNF = [['code', 's'], ['name', 's'], ['short', 's'], ['V', 'n'], ['reload', 'n'], ['big', 'b'], ['hole', 'o'], ['crew', 'n'], ['min', 'n'], ['mass', 'n'], ['shot', 'o'], ['burst', 'o'], ['burstGap', 'g']];   // burst／burstGap：連發（一份彈藥打幾發、每發隔幾秒；空白 ＝ 1 發）
 
   var S = null, C = null, C0 = null, dirty = false, busy = false;
+  // 砲的設定頁（TASK-0621）：每發傷害住在滑桿 lim 裡（遊戲 69_prefs.js DMG_Q 同一份對照）；擊穿與爆炸的參數照遊戲 21_gunnery.js PEN 的預設
+  var DMG_Q = { long: 'dmg24', long32: 'dmg32l', carr: 'dmg32', chase: 'dmg18', long4: 'dmg4', long12: 'dmg12', long18: 'dmg18l', long6: 'dmg6', chase3: 'dmg3c', trident: 'dmgtr', dahl9: 'dmg9d', brooke64: 'dmg64b', brooke7: 'dmg7b', dahl11: 'dmg11d' };
+  var PEN_DEF = { lo: 0.4, hi: 1.3, k: 3, rico: 65, wood: 0.8, splinter: 50, shellR: 5.2, shellHard: 0.5, ref: 10.9 };
+  var PEN_F = [['lo', '擊穿機率：比值低於它 ⇒ 0（小口徑完全打不動）'], ['hi', '比值高於它 ⇒ 必穿'], ['k', '曲線的次方（越大 ⇒ 下緣附近越難穿）'], ['rico', '彈開的入射角（度，跟法線的夾角）'],
+    ['wood', '打木頭：每消耗一單位扣幾 kJ（船殼硬度 3）'], ['splinter', '碎片傷人的基準能量（kJ）'], ['shellR', '爆裂彈爆炸半徑（格；24 磅、橡木）'], ['shellHard', '爆炸半徑照硬度打折的次方（越大 ⇒ 硬的越耐爆）'], ['ref', '沒寫彈重的砲當幾 kg']];
+  var RELOAD_S = 7;                                                    // 遊戲 00_core.js RELOAD（裝填倍率 1 ＝ 7 秒）
   function $(id) { return document.getElementById(id); }
   function el(tag, attrs, kids) { var e = document.createElement(tag); for (var k in attrs || {}) { if (k === 'text') e.textContent = attrs[k]; else e.setAttribute(k, attrs[k]); } (kids || []).forEach(function (c) { if (c) e.appendChild(c); }); return e; }
   function get(o, path) { for (var i = 0; i < path.length; i++) { if (o == null) return undefined; o = o[path[i]]; } return o; }
@@ -209,7 +235,7 @@ td.k { font-family: ui-monospace, Consolas, monospace; font-size: 12px; color: v
     var gt = $('guns').tBodies[0]; gt.innerHTML = '';
     Object.keys(C.guns).forEach(function (k) {
       gt.appendChild(el('tr', {}, [el('td', { 'class': 'k', text: k })].concat(GUNF.map(function (f) {
-        var p = ['guns', k, f[0]], w = f[1] === 's' ? txt(p) : f[1] === 'b' ? chk(p) : num(p, f[1] === 'o' ? { opt: true, ph: '1' } : f[1] === 'g' ? { opt: true, ph: '0.15' } : {});
+        var p = ['guns', k, f[0]], w = f[1] === 's' ? txt(p) : f[1] === 'b' ? chk(p) : num(p, f[1] === 'o' ? { opt: true, ph: f[0] === 'shot' ? String(PEN_DEF.ref) : '1' } : f[1] === 'g' ? { opt: true, ph: '0.15' } : {});
         if (f[1] === 's') w.style.width = f[0] === 'code' ? '72px' : '120px';
         return el('td', {}, [w]);
       }))));
@@ -221,6 +247,7 @@ td.k { font-family: ui-monospace, Consolas, monospace; font-size: 12px; color: v
     GEO.forEach(function (r) { GE.appendChild(fld(r[1], r[2] === 2 ? pair(['geo0', r[0]], r[0] === 'spar' ? 'null' : false) : [num(['geo0', r[0]])])); });
     renderShips();
     status();
+    route();
   }
   /** 材質表：哪幾艘船用到（全船預設、或 .vxk 的關聯 meta material）⇒ 「用在」那一欄；用到的不給刪。 */
   function matUse(id) {
@@ -238,7 +265,7 @@ td.k { font-family: ui-monospace, Consolas, monospace; font-size: 12px; color: v
       rm.onclick = function () { if (!confirm('刪掉材質「' + C.materials.list[k].name + '（' + k + '）」？')) return; delete C.materials.list[k]; touch(); render(); };
       var nm = txt(P.concat('name')); nm.style.width = '140px';
       tb.appendChild(el('tr', {}, [el('td', { 'class': 'k', text: k }), el('td', {}, [nm]), el('td', {}, [sel(P.concat('kind'), MAT_KINDS)]),
-        el('td', {}, [num(P.concat('density'))]), el('td', {}, [num(P.concat('hard'))]), el('td', {}, [num(P.concat('flammable'))]), el('td', {}, [num(P.concat('metal'), { opt: true, ph: '0', title: '金屬度 0–1（選填）：金屬有太陽高光與天空反射（平滑渲染的面）' })]), el('td', {}, [num(P.concat('rough'), { opt: true, ph: '0.5', title: '粗糙度 0–1（選填）：0 鏡面、1 很霧' })]), el('td', { text: u.join('、') || '—' }), el('td', {}, [rm])]));
+        el('td', {}, [num(P.concat('density'))]), el('td', {}, [num(P.concat('hard'))]), el('td', {}, [num(P.concat('flammable'))]), el('td', {}, [num(P.concat('metal'), { opt: true, ph: '0', title: '金屬度 0–1（選填）：金屬有太陽高光與天空反射（平滑渲染的面）' })]), el('td', {}, [num(P.concat('rough'), { opt: true, ph: '0.5', title: '粗糙度 0–1（選填）：0 鏡面、1 很霧' })]), el('td', {}, [num(P.concat('pen'), { opt: true, ph: '—', title: '擊穿門檻（選填）：每格板厚要幾 kJ（船殼硬度 3 時）。寫了 ⇒ 實心彈照能量與入射角判穿／凹／彈，爆裂彈炸在外面（TASK-0621）；鐵甲 230' })]), el('td', { text: u.join('、') || '—' }), el('td', {}, [rm])]));
     });
   }
   $('bMat').onclick = function () {
@@ -255,7 +282,7 @@ td.k { font-family: ui-monospace, Consolas, monospace; font-size: 12px; color: v
   function renderShips() {
     var box = $('ships'); box.innerHTML = '';
     C.ships.forEach(function (s, i) {
-      var P = ['ships', i], card = el('div', { 'class': 'ship' });
+      var P = ['ships', i], card = el('div', { 'class': 'ship', id: 'ship-' + s.id });
       var up = el('button', { text: '↑', title: '往前（第一艘 ＝ 預設的船）' }), dn = el('button', { text: '↓' }), rm = el('button', { text: '從清單拿掉', title: '主選單不再列這艘；.vxk 留在 _cache' }), re = el('button', { text: '重新匯入', 'class': 'pri' });
       up.disabled = i === 0; dn.disabled = i === C.ships.length - 1; re.disabled = busy || dirty; if (dirty) re.title = '先儲存或放棄修改';
       up.onclick = function () { var t = C.ships[i - 1]; C.ships[i - 1] = C.ships[i]; C.ships[i] = t; touch(); renderShips(); };
@@ -265,6 +292,7 @@ td.k { font-family: ui-monospace, Consolas, monospace; font-size: 12px; color: v
       var nm = txt(P.concat('name')); nm.style.width = '140px';
       card.appendChild(el('h3', {}, [el('span', { 'class': 'sp', text: (i === 0 ? '★ ' : '') + s.name + '（' + s.id + '）' }), up, dn, rm, re]));
       card.appendChild(el('div', { 'class': 'meta', text: '內嵌 #' + s.el + ' ← _cache/' + s.vxk + '　·　建造者 ' + (s.author || '（沒記 ⇒ admin.py authors）') + '　·　' + fmtInfo(S.ships[s.id]) }));
+      card.appendChild(shipGuns(s));
       var g1 = el('div', { 'class': 'grid' });
       g1.appendChild(fld('名字', [nm]));
       var wk = txt(P.concat('work')); wk.style.width = '220px'; g1.appendChild(fld('雕刻作品', [wk]));
@@ -299,6 +327,86 @@ td.k { font-family: ui-monospace, Consolas, monospace; font-size: 12px; color: v
       box.appendChild(card);
     });
   }
+  /** 船隻卡片的「砲」那一列：各砲種幾門（.vxk 裡數的），點了跳到砲的設定頁那一種；「這艘的砲 →」只列這艘的。 */
+  function shipGuns(s) {
+    var g = (S.ships[s.id] || {}).guns, row = el('div', { 'class': 'meta guns' });
+    if (!g) { row.textContent = '砲：（讀不到 .vxk）'; return row; }
+    row.appendChild(el('span', { text: '砲：' }));
+    Object.keys(g).forEach(function (k) { row.appendChild(el('a', { href: '#guns/' + k, text: ((C.guns[k] || {}).name || k) + ' × ' + g[k] })); });
+    if (!Object.keys(g).length) row.appendChild(el('span', { text: '（沒有）' }));
+    else row.appendChild(el('a', { href: '#guns?ship=' + s.id, text: '這艘的砲 →' }));
+    return row;
+  }
+  function pen(k) { var v = (C.pen || {})[k]; return typeof v === 'number' ? v : PEN_DEF[k]; }
+  function penP(x) { var lo = pen('lo'), hi = pen('hi'); return x <= lo ? 0 : x >= hi ? 1 : Math.pow((x - lo) / (hi - lo), pen('k')); }
+  function pct(p) { return p >= 1 ? '100%' : p <= 0 ? '0%' : p < 0.001 ? '<0.1%' : (p * 100).toFixed(p < 0.1 ? 1 : 0) + '%'; }
+  /** 一種砲照現在填的數字算給人看：能量、裝填、打木頭、打每一種有擊穿門檻的材質、爆裂彈。 */
+  function gunCalc(k) {
+    var g = C.guns[k], m = typeof g.shot === 'number' ? g.shot : pen('ref'), V = g.V, E = 0.0005 * m * V * V, Es = 0.0005 * m * 28 * 28, h = 3, rows = [];
+    var hard = C.lim.hard ? C.lim.hard[2] : 3; h = hard;
+    rows.push(['能量', E.toFixed(0) + ' kJ（彈重 ' + m + ' kg × 初速 ' + V + ' m/s）']);
+    rows.push(['裝填', '約 ' + (RELOAD_S * g.reload).toFixed(1) + ' 秒（砲班滿編；人少照比例變慢）' + (g.burst > 1 ? '，一次 ' + g.burst + ' 發' : '')]);
+    rows.push(['打橡木', '大約鑽掉 ' + Math.round(Math.max(0, E - Es) / (pen('wood') * h / 3)) + ' 單位（1 單位 ≈ 1 格橡木；24 磅長砲約 200）']);
+    var ks = Math.cbrt(m / pen('ref')), shell = [];
+    Object.keys(C.materials.list).forEach(function (id) {
+      var mt = C.materials.list[id], hk = Math.pow(h * mt.hard / 3, -pen('shellHard')), R = pen('shellR') * ks * hk - (mt.pen > 0 ? 1 : 0);
+      if (mt.pen > 0) {
+        var need1 = mt.pen * h / 3, cr = Math.cos(pen('rico') * Math.PI / 180);
+        rows.push(['打' + mt.name, [0, 30, 50].map(function (a) { var c = Math.cos(a * Math.PI / 180); return (a ? a + '°' : '正面') + ' ' + pct(penP(E * c * c / need1)); }).join('　') + '　（板厚 1 格）；2 格正面 ' + pct(penP(E / (2 * need1))) + '；超過 ' + pen('rico') + '° 彈開']);
+      }
+      if (mt.kind === 'wood' && id !== C.materials.default) return;
+      shell.push(mt.name + ' ' + (R > 0.3 ? R.toFixed(1) + ' 格' : '炸不動'));
+    });
+    rows.push(['爆裂彈半徑', shell.join('　') + '（船殼硬度 ' + h + '；24 磅打橡木 ' + pen('shellR') + ' 格）']);
+    return el('table', { 'class': 'calc' }, rows.map(function (r) { return el('tr', {}, [el('th', { text: r[0] }), el('td', { text: r[1] })]); }));
+  }
+  /** 砲的設定頁：#guns 全部、#guns/<種類> 跳到那一種、#guns?ship=<船> 只列那艘船用到的。 */
+  function renderGuns() {
+    var h = location.hash, m = /^#guns(?:\/([\w-]+))?(?:\?ship=([\w-]+))?/.exec(h), only = null, focus = m && m[1];
+    var P = $('gpPen'); P.innerHTML = '';
+    PEN_F.forEach(function (r) { P.appendChild(fld(r[1], [num(['pen', r[0]], { opt: true, ph: String(PEN_DEF[r[0]]), after: function () { if (C.pen && !Object.keys(C.pen).length) delete C.pen; calcAll(); } })])); });
+    var ship = m && m[2] ? C.ships.filter(function (s) { return s.id === m[2]; })[0] : null;
+    if (ship) only = (S.ships[ship.id] || {}).guns || {};
+    $('gpFilter').innerHTML = '';
+    if (ship) $('gpFilter').appendChild(el('span', {}, [el('span', { text: '只列「' + ship.name + '」用到的砲（' + Object.keys(only).map(function (k) { return ((C.guns[k] || {}).name || k) + ' × ' + only[k]; }).join('、') + '）　' }),
+      el('a', { href: '#guns', text: '列全部' }), el('span', { text: '　' }), el('a', { href: '#ship-' + ship.id, text: '回到這艘的船隻設定' })]));
+    var box = $('gpCards'); box.innerHTML = '';
+    Object.keys(C.guns).forEach(function (k) {
+      if (only && !only[k]) return;
+      var g = C.guns[k], card = el('div', { 'class': 'gcard' + (focus === k ? ' hl' : ''), id: 'gun-' + k }), use = [];
+      C.ships.forEach(function (s) { var n = ((S.ships[s.id] || {}).guns || {})[k]; if (n) use.push(el('a', { href: '#ship-' + s.id, text: s.name + ' × ' + n })); });
+      card.appendChild(el('h3', {}, [el('span', { text: g.name }), el('span', { 'class': 'k', text: k + '　代號 ' + g.code })]));
+      var gr = el('div', { 'class': 'grid' });
+      [['code', '代號（meta gun 的值）', 's'], ['name', '名字', 's'], ['short', '簡稱', 's'], ['shot', '彈重 kg（能量 ＝ ½ × 彈重 × 初速²）', 'o'], ['V', '初速 m/s', 'n'], ['reload', '裝填倍率（1 ＝ 7 秒）', 'n'],
+       ['big', '大彈（洞 × 1.25）', 'b'], ['hole', '洞倍率（空白 ＝ 1）', 'o'], ['crew', '砲班滿編（最多 8）', 'n'], ['min', '最少人數', 'n'], ['mass', '重量 噸', 'n'],
+       ['hpK', '血量倍率（空白 ＝ 1；整座鐵甲砲塔才調）', 'o'], ['burst', '連發（發；空白 ＝ 1）', 'o'], ['burstGap', '連發間隔 秒（空白 ＝ 0.15）', 'o']].forEach(function (f) {
+        var p = ['guns', k, f[0]], w = f[2] === 's' ? txt(p) : f[2] === 'b' ? chk(p) : num(p, f[2] === 'o' ? { opt: true, ph: f[0] === 'shot' ? String(pen('ref')) : f[0] === 'burstGap' ? '0.15' : '1', after: function () { calcAll(); } } : { after: function () { calcAll(); } });
+        if (f[2] === 's') w.style.width = '120px';
+        gr.appendChild(fld(f[1], [w]));
+      });
+      if (DMG_Q[k] && C.lim[DMG_Q[k]]) gr.appendChild(fld('每發傷害（打砲、帆、人；滑桿 ' + DMG_Q[k] + ' 的預設）', [num(['lim', DMG_Q[k], 2])]));
+      card.appendChild(gr);
+      var cw = el('div', { 'class': 'cw' }); cw.appendChild(gunCalc(k)); card.appendChild(cw);
+      card.appendChild(el('div', { 'class': 'use meta' }, [el('span', { text: '裝在：' })].concat(use.length ? use : [el('span', { text: '（沒有船用到）' })])));
+      box.appendChild(card);
+    });
+    if (!box.children.length) box.appendChild(el('p', { 'class': 'note', text: '這艘船沒有讀到砲（.vxk 不在、或模型沒有 meta gun）' }));
+  }
+  function calcAll() { Object.keys(C.guns).forEach(function (k) { var c = $('gun-' + k); if (c) { var cw = c.querySelector('.cw'); cw.innerHTML = ''; cw.appendChild(gunCalc(k)); } }); }
+  /** 兩頁：#guns… ⇒ 只看砲的設定頁；其他 ⇒ 全部設定（砲的設定頁收起來）。#ship-<id> ⇒ 捲到那艘船。 */
+  function route() {
+    var g = /^#guns/.test(location.hash);
+    Array.prototype.forEach.call(document.querySelectorAll('main > section'), function (sc) { if (!sc.classList.contains('keep')) sc.hidden = g; });
+    $('gunPage').hidden = !g; $('roomsWrap').hidden = g;
+    $('navGuns').classList.toggle('on', g); $('navAll').classList.toggle('on', !g);
+    if (!C) return;
+    if (g) {
+      renderGuns();
+      var f = /^#guns\/([\w-]+)/.exec(location.hash), c = f && $('gun-' + f[1]);
+      if (c) c.scrollIntoView({ block: 'start' }); else window.scrollTo(0, 0);
+    } else if (/^#ship-/.test(location.hash)) { var sc2 = $(location.hash.slice(1)); if (sc2) sc2.scrollIntoView({ block: 'start' }); }
+  }
+  window.addEventListener('hashchange', route);
   /** 船底下的 cfg／crew／geo 全空 ⇒ 拿掉那一塊（設定檔只寫跟預設不一樣的）。 */
   function tidy(i, k) { var o = C.ships[i][k]; if (o && !Object.keys(o).length) { delete C.ships[i][k]; touch(); } }
   function tidyIn(i, k, k2) { var o = C.ships[i][k]; if (o && o[k2] && !Object.keys(o[k2]).length) { delete o[k2]; touch(); } }

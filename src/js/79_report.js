@@ -65,7 +65,7 @@ function rptData() {
     ships: SHIPS.map(function (sh) {
       var r = rptShip(sh), tl = r.tl.slice(), now = rptRow(sh, r); if (!tl.length || tl[tl.length - 1][0] !== now[0]) tl.push(now);
       return { i: sh.i, id: r.id, name: r.name, team: r.team, from: r.from, out: r.out, fate: sh.fate || null, crew0: r.crew0, fired: sh.fired, hits: sh.hits, taken: r.taken, takenOn: r.takenOn,
-        wounds: sh.wounds, dead: sh.dead, causes: sh.causes || {},
+        wounds: sh.wounds, dead: sh.dead, causes: sh.causes || {}, armor: sh.armRes ? Object.assign({}, sh.armRes) : null,   // armor：打在鐵甲上的實心彈 穿／凹／彈、爆裂彈炸在外面幾發（TASK-0621）
         guns: r.guns.map(function (G) { return { name: G.name, type: G.type, side: G.side, shots: G.shots, hits: G.hits, on: G.on, goneAt: G.goneAt, st: G.st.map(function (v) { return +v.toFixed(1); }) }; }),
         tl: tl };
     }) };
@@ -133,7 +133,7 @@ function rptShow() {
       s.guns.forEach(function (G) { Object.keys(G.on).forEach(function (w) { on2[w] = (on2[w] || 0) + G.on[w]; }); G.st.forEach(function (v, j) { st[j] += v; }); });
       var live = st[0] + st[1] + st[2] + st[4] + st[5];
       return '<tr><td ' + td + '><span style="color:' + rptColor(d, s) + '">' + s.i + ' ' + s.name + '</span></td><td ' + td + '>' + s.fired + '</td><td ' + td + '>' + s.hits + '</td><td ' + td + '>' + pc(s.hits, s.fired) + '</td><td ' + td + '>' + on(on2) +
-        '</td><td ' + td + '>' + s.taken + '（' + on(s.takenOn) + '）</td><td ' + td + '>' + s.wounds + '／' + s.dead + '／' + s.crew0 + '</td><td ' + td + '>' + gone.length + '／' + s.guns.length + (gone.length ? '（最早 ' + Math.min.apply(null, gone.map(function (G) { return G.goneAt; })) + ' 秒）' : '') +
+        '</td><td ' + td + '>' + s.taken + '（' + on(s.takenOn) + '）' + (s.armor ? '<br>鐵甲：穿 ' + s.armor.pen + '／凹 ' + s.armor.dent + '／彈 ' + s.armor.rico + '／爆裂彈 ' + s.armor.shell : '') + '</td><td ' + td + '>' + s.wounds + '／' + s.dead + '／' + s.crew0 + '</td><td ' + td + '>' + gone.length + '／' + s.guns.length + (gone.length ? '（最早 ' + Math.min.apply(null, gone.map(function (G) { return G.goneAt; })) + ' 秒）' : '') +
         '</td><td ' + td + '>' + [0, 1, 2, 4, 5].map(function (j) { return pc(st[j], live); }).join('／') + '</td></tr>';
     }).join('') + '</table><div style="color:var(--dim);margin-top:4px">記報表 ' + d.cost.ticks + ' 次、共 ' + d.cost.ms + ' ms；砲的時間只算還在的砲、船出局前。</div>';
 }

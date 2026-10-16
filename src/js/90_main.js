@@ -118,15 +118,19 @@ if (DEBUG) window.__game = {
   },
   /** 量進水用：第 i 艘在格 (x, z) 那一舷（side 0 ＝ 格 +y、1 ＝ −y）的船殼打一個半徑 r 格的洞（從最外那一格往艙內打穿）。回打掉幾格。 */
   // 除錯（TASK-0616）：從船外對著格座標 (x, z) 那一欄水平射一發（side 同 hole：真 ＝ 從 y 小的那一舷），只跑這一顆砲彈（船不動）⇒ 打掉幾格、穿多深、出來剩多快（木頭／鐵甲打同一點比）
-  shot: function (i, x, z, side, gun, ammo) {
-    var sh = SHIPS[i || 0], B = sh.T.base, s = side ? 1 : -1, y0 = -1, y, GS = GUNS[gun || '24l'] || GUNS[Object.keys(GUNS)[0]];
+  /** 從船外水平打一發到 (x, z) 那一欄的船殼（gun：砲種 key 或 code；ammo：彈種）。ang（度）：沿船長方向斜著打（0 ＝ 正橫）。
+   *  回：mat 表面材質、removed 掉幾格、deep 鑽多深（m）、out 出來剩多快、res 鐵甲那一下是 pen 穿／dent 凹／rico 彈（TASK-0621）。 */
+  shot: function (i, x, z, side, gun, ammo, ang) {
+    var sh = SHIPS[i || 0], B = sh.T.base, s = side ? 1 : -1, y0 = -1, y, GS = GUNS[gun] || Object.keys(GUNS).map(function (k) { return GUNS[k]; }).filter(function (g) { return g.code === gun; })[0] || GUNS.long;
     if (side) { for (y = 0; y < sh.T.cy; y++) if (sh.grid.get(x, y, z)) { y0 = y; break; } } else { for (y = B.sy - 1; y > sh.T.cy; y--) if (sh.grid.get(x, y, z)) { y0 = y; break; } }
     if (y0 < 0) return null;
-    var p = M4.pt(sh.M, x + 0.5, y0 - s * 30, z + 0.5), q = M4.pt(sh.M, x + 0.5, y0, z + 0.5), d = norm(sub(q, p)), n0 = sh.grid.count, mat = sh.T.matIds[sh.T.matG ? sh.T.matG.get(x, y0, z) : 0];
-    var b = { p: p, v: add(mul(d, GS.V), sh.vel), owner: SHIPS.length > 1 ? 1 - (i || 0) : 0, ammo: ammo || 0, trav: 0, alive: true, age: 0, bounced: false, big: GS.big, hole: GS.hole, dmg: 0 }, deep = 0, k;
+    var dx = 30 * Math.tan((ang || 0) * Math.PI / 180), p = M4.pt(sh.M, x + 0.5 - dx, y0 - s * 30, z + 0.5), q = M4.pt(sh.M, x + 0.5, y0, z + 0.5), d = norm(sub(q, p)), n0 = sh.grid.count, mat = sh.T.matIds[sh.T.matG ? sh.T.matG.get(x, y0, z) : 0];
+    var A0 = JSON.stringify(sh.armRes || {});
+    var b = { p: p, v: add(mul(d, GS.V), sh.vel), owner: SHIPS.length > 1 ? 1 - (i || 0) : 0, ammo: ammo || 0, trav: 0, alive: true, age: 0, bounced: false, big: GS.big, hole: GS.hole, dmg: 0, m: GS.shot, dbg: [] }, deep = 0, k;
     for (k = 0; k < 600 && b.alive; k++) { stepBall(b, DT / 4); var L = toLocal(sh, b.p); if (b.alive && L[1] >= 0 && L[1] < B.sy) deep = Math.max(deep, s * (L[1] - y0)); }
     sh.rs.flush();
-    return { mat: mat, skin: y0, removed: n0 - sh.grid.count, deep: +(deep * S).toFixed(2), out: b.alive ? +len(b.v).toFixed(0) : 0, V: GS.V };
+    var A1 = sh.armRes || {}, a0 = JSON.parse(A0), res = ['pen', 'dent', 'rico', 'shell'].filter(function (k2) { return (A1[k2] || 0) > (a0[k2] || 0); }).join('+') || null;
+    return { mat: mat, skin: y0, removed: n0 - sh.grid.count, deep: +(deep * S).toFixed(2), out: b.alive ? +len(b.v).toFixed(0) : 0, V: GS.V, res: res, dbg: b.dbg };
   },
   /** 砲帶的裝甲（TASK-0631；24_armor.js）：第 i 艘每一塊 —— 那門砲、現在轉了幾度、還剩幾格／原本幾格、砲口沿砲軸碰到裝甲幾格（armBlock；0 ＝ 在砲門裡）；船殼幾格、重量。沒有裝甲 ⇒ null。
    *  o.yaw（度）⇒ 先把那門砲直接轉到那個角度（量測用：不照轉速；砲軸、砲口、模型、站位跟 mountStep 一樣轉，下一步 mountStep 照瞄準點接著轉）。
@@ -142,12 +146,14 @@ if (DEBUG) window.__game = {
       (g.spots || []).forEach(function (s) { s.at = mountRot(s.at, M.c, da); var c = s.who; if (c && c.gun === g && !c.walk && c.st === 0) { c.pos = mountRot(c.pos, M.c, da); if (c.home) c.home = mountRot(c.home, M.c, da); } });
     });
     if (o && o.shot) {
-      var a = sh.arm[0], b0 = a.A.bb, c = a.g ? a.g.mt.c : [(b0[0] + b0[3]) / 2, (b0[1] + b0[4]) / 2, b0[2]], ang = o.shot[0] * D, z = o.shot[1] + 0.5, GS = GUNS[o.shot[2] || '24l'] || GUNS[Object.keys(GUNS)[0]];
+      var a = sh.arm[0], b0 = a.A.bb, c = a.g ? a.g.mt.c : [(b0[0] + b0[3]) / 2, (b0[1] + b0[4]) / 2, b0[2]], ang = o.shot[0] * D, z = o.shot[1] + 0.5, GS = GUNS[o.shot[2]] || Object.keys(GUNS).map(function (k3) { return GUNS[k3]; }).filter(function (g3) { return g3.code === o.shot[2]; })[0] || GUNS.long;   // 砲種 key 或 code（以前寫 '24l' 其實查不到、落到第一種）
       var p = M4.pt(sh.M, c[0] + Math.cos(ang) * 60, c[1] + Math.sin(ang) * 60, z), q = M4.pt(sh.M, c[0], c[1], z), d = norm(sub(q, p)), n0 = sh.grid.count, a0 = armCount(sh);
-      var b = { p: p, v: add(mul(d, GS.V), sh.vel), owner: SHIPS.length > 1 ? 1 - (i || 0) : 0, ammo: o.shot[3] || 0, trav: 0, alive: true, age: 0, bounced: false, big: GS.big, hole: GS.hole, dmg: 0 };
+      var b = { p: p, v: add(mul(d, GS.V), sh.vel), owner: SHIPS.length > 1 ? 1 - (i || 0) : 0, ammo: o.shot[3] || 0, trav: 0, alive: true, age: 0, bounced: false, big: GS.big, hole: GS.hole, dmg: 0, m: GS.shot }, A0 = JSON.stringify(sh.armRes || {});
       for (var k = 0; k < 600 && b.alive; k++) stepBall(b, DT / 4);
       sh.rs.flush(); sh.arm.forEach(function (e) { e.rs.flush(); });
-      out.shot = { armRemoved: a0 - armCount(sh), hullRemoved: n0 - sh.grid.count, out: b.alive ? +len(b.v).toFixed(0) : 0, V: GS.V };
+      var A1 = sh.armRes || {}, a00 = JSON.parse(A0);
+      out.shot = { armRemoved: a0 - armCount(sh), hullRemoved: n0 - sh.grid.count, out: b.alive ? +len(b.v).toFixed(0) : 0, V: GS.V,
+        res: ['pen', 'dent', 'rico', 'shell'].filter(function (k2) { return (A1[k2] || 0) > (a00[k2] || 0); }).join('+') || null };   // 鐵甲那一下：穿／凹／彈（TASK-0621）
     }
     out.arm = sh.arm.map(function (a) { return { mount: a.A.mount, yaw: +(armYaw(a) / D).toFixed(2), n: a.grid.count, n0: a.A.n, lost: a.lost, blk: armBlock(a), gun: a.g ? a.g.alive : null, smooth: a.smR ? a.smR.size : 0 }; });
     out.hull = sh.grid.count; out.orig = sh.orig; out.armN0 = sh.armN0; out.mass0 = +shipT(sh).toFixed(3); out.voxLost = +voxLostT(sh).toFixed(4); out.massLost = +massLost(sh).toFixed(4); out.lost = sh.lost;

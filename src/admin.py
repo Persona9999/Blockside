@@ -157,7 +157,8 @@ MAT_ID = r'[a-z][a-z0-9_]{0,31}'                                                
 MAT_KINDS = ('wood', 'metal', 'other')                                               # 材質的分類（後台分組、之後燃燒照它）
 MAT_NUMS = (('density', 0.05, 25, '比重（一格 0.1 m ＝ 1 公升 ⇒ 每格幾 kg；橡木 0.7）'), ('hard', 0.05, 50, '硬度倍率（乘在船隻設定的船殼硬度上；橡木 1）'),
             ('flammable', 0, 1, '易燃性（0 ＝ 不會燒、1 ＝ 一點就著；燃燒還沒做，先記著）'))
-MAT_OPT = (('metal', 0, 1, '金屬度（選填；0 ＝ 不反光、1 ＝ 金屬：太陽高光＋天空反射；TASK-0627）'), ('rough', 0, 1, '粗糙度（選填；0 ＝ 鏡面、1 ＝ 很霧；沒寫 ＝ 0.5）'))
+MAT_OPT = (('metal', 0, 1, '金屬度（選填；0 ＝ 不反光、1 ＝ 金屬：太陽高光＋天空反射；TASK-0627）'), ('rough', 0, 1, '粗糙度（選填；0 ＝ 鏡面、1 ＝ 很霧；沒寫 ＝ 0.5）'),
+           ('pen', 1, 5000, '擊穿門檻（選填；每格板厚要幾 kJ，船殼硬度 3 時；寫了 ⇒ 實心彈照能量與入射角判穿／凹／彈，TASK-0621）'))
 CREW = {'officers': (0, 8, True), 'helm': (0, 4, True), 'marines': (0, 60, True), 'marineGap': (5, 200, True),
         'top': (0, 8, True), 'monkeys': (0, 2, True), 'handsK': (0, 4, False), 'shelter': (0, 1, True)}   # shelter：船員避開露天甲板（TASK-0637；0／1）
 CREW_SHIP = {'hands': (0, 120, True)}          # 只在每艘船寫（TASK-0570 船隻配置頁的預設）：預備水手人數；沒寫 ＝ lim.hands × handsK
@@ -274,6 +275,8 @@ def validate(cfg, prev=None):
             err(p + '.big', '要是 true／false')
         if 'hole' in g and not (isnum(g['hole']) and g['hole'] > 0):
             err(p + '.hole', '要是正數（沒寫 ＝ 1）')
+        if 'shot' in g and not (isnum(g['shot']) and 0.1 <= g['shot'] <= 500):
+            err(p + '.shot', '彈重：0.1～500 kg（沒寫 ＝ pen.ref；能量 ＝ ½ × 彈重 × 初速²，TASK-0621）')
         if 'hpK' in g and not (isnum(g['hpK']) and 0.1 <= g['hpK'] <= 20):
             err(p + '.hpK', '血量倍率：0.1～20（沒寫 ＝ 1；鐵甲砲塔這種整座的才調）')
         if 'burst' in g and not (isint(g['burst']) and 1 <= g['burst'] <= 20):
@@ -372,6 +375,20 @@ def validate(cfg, prev=None):
             N = DV.get('teleNames')
             if N is not None and not (isinstance(N, list) and isinstance(T, list) and len(N) == len(T) and all(isinstance(x, str) and x for x in N)):
                 err('drive.teleNames', '跟 tele 一樣多個名字')
+    PN = cfg.get('pen', {})                              # 實心彈與爆裂彈照能量算（TASK-0621；js/21_gunnery.js 的 PEN）：沒寫的鍵照程式裡的預設
+    if not isinstance(PN, dict):
+        err('pen', '要是物件')
+    else:
+        for f, lo, hi, what in (('lo', 0, 5, '擊穿機率曲線的下緣（比值低於它 ⇒ 0）'), ('hi', 0.1, 10, '上緣（比值高於它 ⇒ 必穿）'), ('k', 0.2, 10, '曲線的次方（越大 ⇒ 下緣附近越難）'),
+                                ('rico', 30, 89, '彈開的入射角（度，跟法線的夾角）'), ('wood', 0.05, 20, '打木頭每消耗一單位扣幾 kJ（船殼硬度 3）'), ('splinter', 1, 1000, '碎片傷人的基準能量（kJ）'),
+                                ('shellR', 1, 20, '爆裂彈的爆炸半徑（格；24 磅、船殼硬度 3 的橡木）'), ('shellHard', 0, 2, '爆炸半徑照硬度打折的次方'), ('ref', 0.1, 500, '沒寫彈重的砲當幾 kg')):
+            if f in PN and not (isnum(PN[f]) and lo <= PN[f] <= hi):
+                err('pen.' + f, '%s：%s～%s' % (what, lo, hi))
+        for f in PN:
+            if f not in ('lo', 'hi', 'k', 'rico', 'wood', 'splinter', 'shellR', 'shellHard', 'ref'):
+                err('pen.' + f, '不認得的鍵')
+        if isnum(PN.get('lo', 0.4)) and isnum(PN.get('hi', 1.3)) and PN.get('lo', 0.4) >= PN.get('hi', 1.3):
+            err('pen.hi', '要大於 lo')
     MT = cfg.get('materials')                            # 材質表（TASK-0616）：{ default: ID, list: { ID: { name, kind, density, hard, flammable } } }；ID 英文小寫，雕刻那側關聯 meta material 寫它
     MIDS = set()
     if not (isinstance(MT, dict) and isinstance(MT.get('list'), dict) and MT['list']):
@@ -1132,11 +1149,41 @@ def act_reimport(sid, work=None, build=True):
     return log
 
 
+def vxk_guns(path, guns):
+    """這艘船各砲種幾門（後台的砲設定頁、船隻卡片用）：模型 meta kind=gun 的 gun 代號 ⇒ 砲種 key（跟遊戲 10_ship.js modelKind 同一套：不認得的代號當長砲）。
+    沒有 meta 的舊模型照名字（carronade／chase／…/砲-S1）認。讀不到 ⇒ None。"""
+    if not os.path.exists(path):
+        return None
+    try:
+        h = vxk_header(open(path, 'rb').read())
+    except Exception:
+        return None
+    code = {g.get('code'): k for k, g in guns.items()}
+    out = {}
+    for m in (h.get('rig') or {}).get('models') or []:
+        mt, nm = m.get('meta') or {}, m.get('name') or ''
+        if mt.get('kind') == 'gun':
+            k = code.get(mt.get('gun'), 'long')
+        elif mt.get('kind'):
+            continue
+        else:
+            k = 'carr' if 'carronade' in nm else 'chase' if 'chase' in nm else 'long' if re.search(r'/砲-[SP]\d+$', nm) else None
+        if k:
+            out[k] = out.get(k, 0) + 1
+    return out
+
+
 def act_state():
     cfg = load()
     code, committed = run(['git', 'show', 'HEAD:./config/game.json'])
+    infos = {}
+    for s in cfg['ships']:
+        p = os.path.join(CACHE, s['vxk'])
+        infos[s['id']] = vxk_info(p)
+        if infos[s['id']] is not None:
+            infos[s['id']]['guns'] = vxk_guns(p, cfg.get('guns') or {})   # 各砲種幾門（後台的砲設定頁，TASK-0621）
     return {'config': cfg, 'committed': json.loads(committed) if code == 0 else None,
-            'ships': {s['id']: vxk_info(os.path.join(CACHE, s['vxk'])) for s in cfg['ships']},
+            'ships': infos,
             'built': os.path.getmtime(OUT) if os.path.exists(OUT) else None, 'saved': os.path.getmtime(CFG_P),
             'paths': {'config': CFG_P, 'out': OUT, 'cache': CACHE}}
 

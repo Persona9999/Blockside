@@ -154,7 +154,7 @@ python -I admin.py cache --all    # 每艘都比 ＝ 比對來源：雕刻作品
 | `14_rain.js` | 3D 雨滴（畫質的「雨滴（3D）」「雨滴水花」）：鏡頭前方圓柱裡的雨絲 `RD`、每格畫面 `stepRain`、打到海面與船的水花 `RS`（`rdPushSplash`）、雨絲的著色器 `P.drop`（`rdGL`／`rdDraw`）、自己的亂數 `rndR` |
 | `15_smooth.js` | 平滑渲染（TASK-0616）：關聯 meta render=smooth 的格（`T.smG`）畫成平滑面 —— surface nets（格角往表面拉＋周圍同一面平均、夾回格角 ±0.5；跟一般格相鄰的格角釘住 ⇒ 不露縫），一區 64³ 一份網格（P.tri／P.dtri 畫：陰影、剖面、點光源都有）；被打掉 ⇒ ±2 格碰得到的區重建（每格畫面最多 `SM_FRAME` 區）。VoxelKit 的方塊網格化跳過這幾格（`grid.sm`） |
 | `20_shatter.js` | 拆格：砲彈打碎船殼 |
-| `21_gunnery.js` | 開砲、齊射、射界、砲彈飛行與命中、模型扣血與被打飛（命中照網格的佔用格 `inMesh`）、斷繩撕帆、帆掉下來 |
+| `21_gunnery.js` | 開砲、齊射、射界、砲彈飛行與命中、模型扣血與被打飛（命中照網格的佔用格 `inMesh`）、斷繩撕帆、帆掉下來；彈重與能量（砲種表 `shot`、設定檔 `pen`）：實心彈打木頭照能量扣、打有 `pen` 的材質（鐵甲）照入射角與板厚判彈開／凹痕／擊穿機率，爆裂彈半徑照彈重與硬度（TASK-0621） |
 | `22_pieces.js` | 斷開的那一團：倒下、壓到人、落水；斷成兩截的半截船（翹起來、沉下去，上面的砲跟著走） |
 | `23_powder.js` | 彈藥庫與火藥桶：血量、點燃、連鎖、整間殉爆（`crater` 排好區塊、`blastStep`／`stepBlasts` 分步挖）、斷船（`breakShip`，彈坑挖完才切）；取用點（`makeStations`）—— 彈藥庫關聯 meta `hoist=<梯子路徑>` ⇒ 那座梯子梯頭那一層的取用點改成「桶在梯腳、在梯頭取」（`hoistStation`；TASK-0632，莫尼特號的火藥從住艙甲板經砲塔艙口吊上來、不擺在露天甲板） |
 | `24_armor.js` | 砲帶的裝甲（TASK-0631）：關聯 meta `kind=armor`、`mount=<砲模型>` 的格從船殼拆出來（`armorSetup`：`T.armor`、船殼 `T.hullG`；`T.base` 照舊是整艘）、每艘一份跟著砲轉（`armorShip`、`armLocal`）、打中（`armAt`／`armRemove`，`shatter`／`slab` 帶 a）、殉爆 `armBlast`、畫（`armDraw`／`armSmDraw`）、走路格看的格子 `navG` |

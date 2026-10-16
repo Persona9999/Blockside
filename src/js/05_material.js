@@ -63,6 +63,8 @@ function hullMaterials(T, info) {
 }
 /** 那一格的硬度倍率（打掉之後照樣查得到：材質層不跟著改）。 */
 function matK(sh, x, y, z) { var T = sh.T; return T.matG ? T.matK[T.matG.get(x, y, z)] : T.matK[0]; }
+/** 那一格的材質參數（matInfo；砲帶的裝甲也照它：裝甲的格座標就是材質層的座標）。實心彈判擊穿用（21_gunnery.js impact：pen、kind）。 */
+function matAt(sh, x, y, z) { var T = sh.T; return matInfo(T.matIds[T.matG ? T.matG.get(x, y, z) : 0]); }
 /** 打到 L（格座標）的硬度 ＝ 船隻設定的船殼硬度 × 那一格的材質倍率。 */
 function hardAt(sh, L) { return sh.cfg.hard * matK(sh, L[0] | 0, L[1] | 0, L[2] | 0); }
 /** 全船預設材質的硬度（殉爆斷船這種整艘的判斷）。 */

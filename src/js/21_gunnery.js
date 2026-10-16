@@ -41,7 +41,7 @@ function fireShot(sh, g, target, ammo, muz) {
   spread *= wxSpread(sh);                                          // 天氣：暴風雨裡船晃得越快，點火那一下差得越多（晴天 ×1）
   el = clamp(el + gauss() * spread, -0.17, 0.26); az += gauss() * spread;
   var dir = [Math.cos(el) * Math.cos(az), Math.sin(el), Math.cos(el) * Math.sin(az)];
-  var b = { p: mw.slice(), v: add(mul(dir, V * rr(0.985, 1.015)), sh.vel), owner: sh.i, ammo: ammo, trav: 0, alive: true, age: 0, bounced: false, big: GS.big, hole: GS.hole, dmg: DMG[g.type] };   // dmg：每發傷害（砲種，細節設定）；hole：洞的倍率（4 磅彈小）
+  var b = { p: mw.slice(), v: add(mul(dir, V * rr(0.985, 1.015)), sh.vel), owner: sh.i, ammo: ammo, trav: 0, alive: true, age: 0, bounced: false, big: GS.big, hole: GS.hole, dmg: DMG[g.type], m: GS.shot };   // dmg：每發傷害（砲種，細節設定）；hole：洞的倍率（4 磅彈小）；m：彈重 kg（能量，TASK-0621）
   windShot(sh, b, dx, dz); BALLS.push(b); rptShot(sh, g, b);         // rptShot：戰鬥報表記是哪一門開的（79_report.js；只讀）
   return { mw: mw, dir: dir };
 }
@@ -219,7 +219,7 @@ function stepBall(b, dt) {
         if (sh.i !== b.owner && !b.hitOnce) { SHIPS[b.owner].hits++; ffHit(sh, b); windHit(b); rptHit(b, sh, hm.gun ? 'gun' : 'model'); b.hitOnce = true; }
         (b.hitM = b.hitM || []).push(hm);
         damageModel(sh, hm, b.v, b.dmg * ammoK(b.ammo, VS_GUN));
-        if (b.ammo === 1) { explode(b.p.slice(), sh, 0); blastModels(sh, L, 22, b.p, b.hitM, b.dmg); hurt(sh, L, 13, 30, null, '爆炸', crewBase(b)); b.alive = false; return; }   // 直接打中的那一門已經扣過，不再吃爆風
+        if (b.ammo === 1) { var kM = PEN_SK * shellK(b); explode(b.p.slice(), sh, 0); blastModels(sh, L, 22 * kM, b.p, b.hitM, b.dmg); hurt(sh, L, 13 * kM, 30 * kM, null, '爆炸', crewBase(b)); b.alive = false; return; }   // 直接打中的那一門已經扣過，不再吃爆風；半徑照裝藥（TASK-0621）
         b.v = mul(b.v, b.ammo === 2 ? 0.5 : 0.55);
         if (len(b.v) < 30) { ballToDebris(b); return; }
       }
@@ -243,13 +243,48 @@ function stepBall(b, dt) {
 /** 讀數（TASK-0551）：順風打（砲線朝風吹去的方向 ⇒ 打的是自己的下風舷）／逆風打各開了幾發、中了幾發（sh.fireDn／fireUp、hitDn／hitUp）。 */
 function windShot(sh, b, dx, dz) { b.dn = dx * WIND[0] + dz * WIND[2] > 0; if (b.dn) sh.fireDn = (sh.fireDn || 0) + 1; else sh.fireUp = (sh.fireUp || 0) + 1; }
 function windHit(b) { var o = SHIPS[b.owner]; if (b.dn) o.hitDn = (o.hitDn || 0) + 1; else o.hitUp = (o.hitUp || 0) + 1; }
+// ───────────────────────── 彈重與能量、入射角、鐵甲門檻（TASK-0621；Tim 2026-10-16）─────────────────────────
+// 「小口徑炮只要夠多也能打壞鐵甲(理論上應該要大部分被彈開) 且炮的入射角是否影響」「大口徑炮非常沒有優勢(射速慢 炮少) 傷害也不足」
+// 「小於一定口徑應該完全打不動鐵甲 然後在依定範圍內可以隨機」「例如有些炮可能100發中 有5發能造成傷害」「太小口徑可能1000發才有1發(甚至可以是0)」
+// 「金屬應該要更能扛爆破(硬度高的材質都應該更耐爆)」「目前爆炸彈優勢太大」「大口徑爆裂彈威力可以大一點(裝藥量大)」
+// 以前：打船殼只看初速與材質（彈重沒用到）、每咬一口一定先掉中心那一格（1～2 格厚的鐵甲任何砲都打得穿）、入射角沒算；爆裂彈不分口徑都炸 10～13 格。
+// 現在每一發帶彈重 b.m（砲種表 shot，kg）⇒ 能量 E ＝ ½ m v²（kJ）。參數在設定檔 pen（沒寫的照下面的預設）：
+//   實心彈打木頭：每咬一口照打掉的格數扣能量（每單位 wood kJ × 船殼硬度／3），速度掉到 28 m/s 以下停 ⇒ 24 磅打橡木的總深度跟以前一樣（校準點），大的深、小的淺。
+//   實心彈打有 pen 的材質（鐵甲）：法線照打中點附近 5×5×5 的格子估（surfN），θ ＝ 砲彈方向跟法線的夾角。
+//     θ > rico ⇒ 彈開（照法線反射、速度剩 0.6，不掉格）。
+//     否則 比值 ＝ E cos²θ ÷（pen × 沿法線量的板厚 × 船殼硬度／3）⇒ 擊穿機率 penP：< lo ⇒ 0、> hi ⇒ 1、中間 ((比值 − lo)／(hi − lo))^k（亂數照戰局那一組）。
+//     沒穿 ⇒ 不掉格、不噴碎片（凹痕只記讀數 sh.armRes），砲彈掉下去；穿了 ⇒ 沿砲彈方向把整塊板咬穿、能量扣掉門檻再往裡（b.plate：板的另一面以前不再判）。
+//   碎片傷人 × √（這一口用掉的能量 ÷ splinter），夾在 0.5～2。
+//   爆裂彈：爆炸半徑 ＝ shellR × (彈重 ÷ ref)^⅓（裝藥 ∝ 彈重）×（硬度 ÷ 3）^−shellHard；打在有 pen 的材質上 ⇒ 炸在外面：
+//     板子吃掉一格（半徑 − 1，剩不到 0.3 ⇒ 一格都不掉）、傷人與傷模型的半徑也照硬度打折。傷人、傷模型的半徑整體 × shellR／8.3（以前 24 磅打橡木平均 8.3 格）。
+var PEN = Object.assign({ lo: 0.4, hi: 1.3, k: 3, rico: 65, wood: 0.8, splinter: 50, shellR: 5.2, shellHard: 0.5, ref: 10.9 }, CFG.pen || {});
+var PEN_COS = Math.cos(PEN.rico * Math.PI / 180), PEN_SK = PEN.shellR / 8.3, PEN_STOP = 28;
+function shotM(b) { return b.m > 0 ? b.m : PEN.ref; }
+function shellK(b) { return Math.cbrt(shotM(b) / PEN.ref); }
+/** 擊穿機率（x ＝ 有效能量 ÷ 需要的能量）。 */
+function penP(x) { return x <= PEN.lo ? 0 : x >= PEN.hi ? 1 : Math.pow((x - PEN.lo) / (PEN.hi - PEN.lo), PEN.k); }
+/** 打中點附近的表面法線（格座標、往外）：5×5×5 裡實心格的重心方向反過來；看不出來（四周一樣滿）⇒ 迎著砲彈。 */
+function surfN(g, Q, dQ) {
+  var x0 = Q[0] | 0, y0 = Q[1] | 0, z0 = Q[2] | 0, n = [0, 0, 0];
+  for (var dz = -2; dz <= 2; dz++) for (var dy = -2; dy <= 2; dy++) for (var dx = -2; dx <= 2; dx++) if (g.get(x0 + dx, y0 + dy, z0 + dz)) { n[0] -= dx; n[1] -= dy; n[2] -= dz; }
+  var l = len(n); return l > 1e-6 ? mul(n, 1 / l) : mul(dQ, -1);
+}
+/** 板厚：從 Q 沿 −n 數有 pen 的材質連續幾格（最多 12）。 */
+function plateT(sh, g, Q, n) {
+  var t = 0;
+  for (var s = 0; s < 12; s++) { var x = (Q[0] - n[0] * s) | 0, y = (Q[1] - n[1] * s) | 0, z = (Q[2] - n[2] * s) | 0; if (!g.get(x, y, z) || !(matAt(sh, x, y, z).pen > 0)) break; t++; }
+  return Math.max(1, t);
+}
 /** ab：打到的是砲帶的裝甲（24_armor.js armAt）⇒ 拆格、硬度照它的格座標 Q（反轉 yaw；材質層的座標就是它原本的位置）；傷人、模型照船的座標 L。沒給 ＝ 船殼。 */
 function impact(b, sh, L, ab) {
   var dirL = norm(M4.dir(sh.inv, b.v[0], b.v[1], b.v[2])), sp = len(b.v), r, w = b.p.slice(), Q = ab ? armIn(ab, L) : L, dQ = ab ? armIn(ab, dirL, true) : dirL;
   if (sh.i !== b.owner) { SHIPS[b.owner].hits += (b.hitOnce ? 0 : 1); if (!b.hitOnce) { ffHit(sh, b); windHit(b); rptHit(b, sh, ab ? 'armor' : 'hull'); } } b.hitOnce = true;
-  if (b.ammo === 1) {                                                   // 爆裂彈：第一下就炸
-    r = shatter(sh, Q, dQ, rr(10, 13) * Math.pow(hardAt(sh, Q), -0.3), mul(b.v, 0.05), 650, 0.85, ab);   // 硬度 ＝ 船殼硬度 × 打到那一格的材質（05_material.js）
-    explode(w, sh, r.n); blastModels(sh, L, 22, w, null, b.dmg); hurt(sh, L, 13, 30, null, '爆炸', crewBase(b)); b.alive = false; return;
+  var g0 = ab ? ab.grid : sh.grid, mi = matAt(sh, Q[0] | 0, Q[1] | 0, Q[2] | 0), A;
+  if (b.ammo === 1) {                                                   // 爆裂彈：第一下就炸（半徑照裝藥與硬度；打在鐵甲上炸在外面）
+    var ks = shellK(b), hk = Math.pow(hardAt(sh, Q) / 3, -PEN.shellHard), out = mi.pen > 0 ? hk : 1, Rb = PEN.shellR * ks * hk * rr(0.87, 1.13);
+    if (mi.pen > 0) { Rb -= 1; A = sh.armRes || (sh.armRes = { pen: 0, dent: 0, rico: 0, shell: 0 }); A.shell++; }
+    r = Rb > 0.3 ? shatter(sh, Q, dQ, Rb, mul(b.v, 0.05), 650, 0.85, ab) : { n: 0, cost: 0 };
+    explode(w, sh, r.n); blastModels(sh, L, 22 * PEN_SK * ks * out, w, null, b.dmg); hurt(sh, L, 13 * PEN_SK * ks * out, 30 * PEN_SK * ks * out, null, '爆炸', crewBase(b)); b.alive = false; return;
   }
   if (b.ammo === 2) {                                                   // 鏈彈：橫著的一片
     r = slab(sh, Q, dQ, b, ab);
@@ -259,13 +294,38 @@ function impact(b, sh, L, ab) {
     if (r.n > 30) { sfx('crack', w, 0.9); smoke(w, [0, 0.2, 0], 3, false); }
     return;
   }
-  var R = rr(3.4, 4.6) * (b.big ? 1.25 : b.hole || 1) * Math.pow(hardAt(sh, Q), -0.25);   // 洞照打到那一格的材質（鐵甲洞小）；穿過去慢多少照每格的消耗（shatter 已乘材質）
-  r = shatter(sh, Q, dQ, R, b.v, 260, 0.55, ab);   // 實心彈：一口一口往裡鑽（carronade 的 32 磅彈洞大一點；越硬洞越小）
-  if (r.n) hurt(sh, L, R * 1.1, R * 2.6, dirL, '碎木', crewBase(b));             // 碎木往前噴：船裡的人主要是被這個傷到的
-  var nsp = sp - r.cost * 0.24 * sh.cfg.hard;
+  var R = rr(3.4, 4.6) * (b.big ? 1.25 : b.hole || 1) * Math.pow(hardAt(sh, Q), -0.25);   // 洞照打到那一格的材質（鐵甲洞小）
+  var m = shotM(b), E = 0.0005 * m * sp * sp, Estop = 0.0005 * m * PEN_STOP * PEN_STOP;   // kJ
+  if (mi.pen > 0 && !(b.plate > b.trav)) {                              // 鐵甲：照入射角與能量分三條路（彈開／凹痕／擊穿）
+    var n = surfN(g0, Q, dQ), c = -dot(dQ, n);
+    if (b.dbg) b.dbg.push({ n: n.map(function (v) { return +v.toFixed(2); }), d: dQ.map(function (v) { return +v.toFixed(2); }), c: +c.toFixed(3), Q: Q.map(function (v) { return v | 0; }) });   // __game.shot 除錯用（b.dbg 只有量測的那一發有）
+    A = sh.armRes || (sh.armRes = { pen: 0, dent: 0, rico: 0, shell: 0 });
+    if (c < PEN_COS) {                                                  // 太斜 ⇒ 彈開：照法線反射、帶著六成的速度飛走，不掉格
+      A.rico++;
+      var rd = sub(dQ, mul(n, 2 * dot(dQ, n))), Mw = ab ? armM(ab) : sh.M, wd = norm(M4.dir(Mw, rd[0], rd[1], rd[2])), wn = norm(M4.dir(Mw, n[0], n[1], n[2]));
+      b.v = add(mul(wd, sp * 0.6), sh.vel); b.p = add(b.p, mul(wn, 0.25)); b.rico = (b.rico || 0) + 1; sfx('crack', w, 0.35);
+      if (b.rico > 2 || sp * 0.6 < PEN_STOP) ballToDebris(b);
+      return;
+    }
+    var t = plateT(sh, g0, Q, n), need = mi.pen * t * sh.cfg.hard / 3, P = penP(E * c * c / need);
+    if (b.dbg) Object.assign(b.dbg[b.dbg.length - 1], { t: t, E: +E.toFixed(1), need: +need.toFixed(1), P: +P.toFixed(3) });
+    if (!(P >= 1 || (P > 0 && rnd() < P))) { A.dent++; sfx('crack', w, 0.5); ballToDebris(b); return; }   // 打不穿 ⇒ 凹痕（不掉格、不噴碎片），砲彈掉下去
+    A.pen++; E -= need;                                                 // 穿了：沿砲彈方向把整塊板咬穿（板厚 ÷ cos θ 那麼長），能量扣掉門檻
+    var Lt = Math.ceil(t / Math.max(c, 0.3)), nr = 0;
+    for (var s2 = 0; s2 <= Lt; s2++) nr += shatter(sh, add(Q, mul(dQ, s2)), dQ, R, b.v, s2 ? 40 : 260, 0.55, ab).n;
+    b.plate = b.trav + (Lt + 1) * S;
+    if (nr) { hurt(sh, L, R * 1.1, R * 2.6, dirL, '鐵片', crewBase(b) * clamp(Math.sqrt(need / PEN.splinter), 0.5, 2)); sfx('crack', w, 1); }
+    if (E <= Estop) { ballToDebris(b); return; }
+    b.v = mul(b.v, Math.sqrt(2000 * E / m) / sp);
+    return;
+  }
+  r = shatter(sh, Q, dQ, R, b.v, 260, 0.55, ab);   // 實心彈：一口一口往裡鑽（洞照口徑；越硬洞越小）
+  var used = r.cost * PEN.wood * sh.cfg.hard / 3;                       // 這一口用掉的能量（每格的消耗 × 材質，shatter 已乘）
+  if (r.n) hurt(sh, L, R * 1.1, R * 2.6, dirL, '碎木', crewBase(b) * clamp(Math.sqrt(Math.min(used, E) / PEN.splinter), 0.5, 2));   // 碎木往前噴：船裡的人主要是被這個傷到的
   if (r.n > 0) { sfx('crack', w, 0.6 + Math.min(1, r.n / 200)); if (r.n > 40) smoke(w, mul(norm(b.v), -0.3), 2, false); }
-  if (nsp < 28) { ballToDebris(b); return; }
-  b.v = mul(b.v, nsp / sp);
+  E -= used;
+  if (E <= Estop) { ballToDebris(b); return; }
+  b.v = mul(b.v, Math.sqrt(2000 * E / m) / sp);
 }
 /** 格座標 L 落在哪個還在的模型外框裡（外擴 m 格）。 */
 function hitModel(sh, L, m, skip, nb) {                                 // skip：這顆砲彈已經打過的（略過它、找後面那一個）；nb：只看蓋了這個戳記的（stepBall 的 ballNear；沒給 ⇒ 全看）

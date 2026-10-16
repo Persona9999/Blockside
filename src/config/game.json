@@ -57,14 +57,14 @@
     "k": [[100, 10, 100], [160, 10, 100], [50, 100, 100]]
   },
   "guns": {
-    "long": {"code": "24l", "name": "24 磅長砲", "short": "長砲", "V": 175, "reload": 1, "big": false, "crew": 5, "min": 3, "mass": 2.5},
-    "long32": {"code": "32l", "name": "32 磅長砲", "short": "32 磅長砲", "V": 172, "reload": 1.15, "big": true, "crew": 6, "min": 4, "mass": 2.9},
-    "carr": {"code": "32c", "name": "32 磅 carronade", "short": " carronade ", "V": 140, "reload": 0.7, "big": true, "crew": 3, "min": 2, "mass": 0.9},
-    "chase": {"code": "18chase", "name": "18 磅追擊砲", "short": "追擊砲", "V": 165, "reload": 1, "big": false, "crew": 3, "min": 2, "mass": 2.1},
-    "long4": {"code": "4l", "name": "4 磅砲", "short": "4 磅砲", "V": 165, "reload": 0.6, "big": false, "hole": 0.6, "crew": 2, "min": 1, "mass": 0.5},
-    "long12": {"code": "12l", "name": "12 磅長砲", "short": "12 磅長砲", "V": 170, "reload": 0.9, "big": false, "hole": 0.85, "crew": 4, "min": 2, "mass": 1.7},
-    "long18": {"code": "18l", "name": "18 磅長砲", "short": "18 磅長砲", "V": 172, "reload": 0.95, "big": false, "hole": 0.92, "crew": 5, "min": 3, "mass": 2.1},
-    "long6": {"code": "6l", "name": "6 磅砲", "short": "6 磅砲", "V": 168, "reload": 0.75, "big": false, "hole": 0.7, "crew": 3, "min": 2, "mass": 1},
+    "long": {"code": "24l", "name": "24 磅長砲", "short": "長砲", "V": 175, "reload": 1, "big": false, "crew": 5, "min": 3, "mass": 2.5, "shot": 10.9},
+    "long32": {"code": "32l", "name": "32 磅長砲", "short": "32 磅長砲", "V": 172, "reload": 1.15, "big": true, "crew": 6, "min": 4, "mass": 2.9, "shot": 14.5},
+    "carr": {"code": "32c", "name": "32 磅 carronade", "short": " carronade ", "V": 140, "reload": 0.7, "big": true, "crew": 3, "min": 2, "mass": 0.9, "shot": 14.5},
+    "chase": {"code": "18chase", "name": "18 磅追擊砲", "short": "追擊砲", "V": 165, "reload": 1, "big": false, "crew": 3, "min": 2, "mass": 2.1, "shot": 8.2},
+    "long4": {"code": "4l", "name": "4 磅砲", "short": "4 磅砲", "V": 165, "reload": 0.6, "big": false, "hole": 0.6, "crew": 2, "min": 1, "mass": 0.5, "shot": 1.8},
+    "long12": {"code": "12l", "name": "12 磅長砲", "short": "12 磅長砲", "V": 170, "reload": 0.9, "big": false, "hole": 0.85, "crew": 4, "min": 2, "mass": 1.7, "shot": 5.4},
+    "long18": {"code": "18l", "name": "18 磅長砲", "short": "18 磅長砲", "V": 172, "reload": 0.95, "big": false, "hole": 0.92, "crew": 5, "min": 3, "mass": 2.1, "shot": 8.2},
+    "long6": {"code": "6l", "name": "6 磅砲", "short": "6 磅砲", "V": 168, "reload": 0.75, "big": false, "hole": 0.7, "crew": 3, "min": 2, "mass": 1, "shot": 2.7},
     "chase3": {
       "code": "3chase",
       "name": "3 磅追擊砲",
@@ -75,7 +75,7 @@
       "hole": 0.5,
       "crew": 2,
       "min": 1,
-      "mass": 0.4,
+      "mass": 0.4, "shot": 1.4,
       "burst": 12,
       "burstGap": 0.15
     },
@@ -89,7 +89,7 @@
       "hole": 0.9,
       "crew": 6,
       "min": 3,
-      "mass": 4.5,
+      "mass": 4.5, "shot": 8.2,
       "burst": 16,
       "burstGap": 0.06
     },
@@ -103,7 +103,7 @@
       "hole": 1.4,
       "crew": 8,
       "min": 5,
-      "mass": 4.2
+      "mass": 4.2, "shot": 40.8
     },
     "dahl11": {
       "code": "11d",
@@ -115,7 +115,7 @@
       "hole": 1.9,
       "crew": 8,
       "min": 5,
-      "mass": 14.5,
+      "mass": 14.5, "shot": 75.3,
       "hpK": 16,
       "burst": 2,
       "burstGap": 1.2
@@ -130,7 +130,7 @@
       "hole": 1.2,
       "crew": 7,
       "min": 4,
-      "mass": 4.1
+      "mass": 4.1, "shot": 43.1
     },
     "brooke7": {
       "code": "7b",
@@ -142,7 +142,7 @@
       "hole": 1.3,
       "crew": 8,
       "min": 5,
-      "mass": 6.6
+      "mass": 6.6, "shot": 47.2
     }
   },
   "geo0": {"spar": null, "marines": [160, 220], "center": 140, "aim": 90, "aimZ": [40, 320], "deckAim": [84, 104], "rigAim": [150, 300]},
@@ -154,13 +154,14 @@
     "tele": [1, 0.6, 0.35, 0.15, 0, -0.15, -0.35, -0.6, -1],
     "teleNames": ["前進全速", "前進半速", "前進慢速", "前進微速", "停俥", "後退微速", "後退慢速", "後退半速", "後退全速"]
   },
+  "pen": {"lo": 0.4, "hi": 1.3, "k": 3, "rico": 65, "wood": 0.8, "splinter": 50, "shellR": 5.2, "shellHard": 0.5, "ref": 10.9},
   "materials": {
     "default": "oak",
     "list": {
       "oak": {"name": "橡木", "kind": "wood", "density": 0.7, "hard": 1, "flammable": 0.5},
       "pine": {"name": "松木", "kind": "wood", "density": 0.5, "hard": 0.7, "flammable": 0.8},
       "teak": {"name": "柚木", "kind": "wood", "density": 0.65, "hard": 1.1, "flammable": 0.3},
-      "iron": {"name": "鐵甲", "kind": "metal", "density": 7.8, "hard": 32, "flammable": 0, "metal": 1, "rough": 0.35},
+      "iron": {"name": "鐵甲", "kind": "metal", "density": 7.8, "hard": 32, "pen": 230, "flammable": 0, "metal": 1, "rough": 0.35},
       "copper_sheath": {"name": "銅皮（包在木殼外）", "kind": "metal", "density": 0.8, "hard": 1.1, "flammable": 0, "metal": 0.7, "rough": 0.55}
     }
   },
