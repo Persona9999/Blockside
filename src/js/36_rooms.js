@@ -31,12 +31,18 @@ function hullRooms(T) {
 // 每一型一份擺法：SHIP_ROOMS[船型][房名] ＝ { type, items: [{ it, x, y, r }] }（x、y ＝ 房間裡第幾格（物品的最小角），r ＝ 1 ⇒ 轉 90°（長邊沿 y））；
 //   沒有 items ⇒ 開戰時自動擺滿；null ⇒ 空著。存檔、匯出入：69_prefs.js。
 //   預設 ＝ config ships[].rooms { 房名: '類型'（自動擺滿）｜{ type, items }（自訂；甲板也是）}；沒寫的艙房空著、沒寫的甲板照舊的取用點。
-//   預設在設定後台編：後台嵌一份 ?admin=rooms 的遊戲（只開船隻配置頁的甲板與艙房、不讀不存 localStorage），改了就把那一型的預設 postMessage 回後台（ADMIN_ROOMS）。
+//   預設在設定後台編：後台開一份 ?admin=rooms 的遊戲（只開船隻配置頁的甲板與艙房、不讀不存 localStorage），改了就把那一型的預設 postMessage 回後台（ADMIN_ROOMS）。
+//   TASK-0647：後台用新分頁開（window.opener）；以前是嵌進後台的 iframe（window.parent）—— 兩種都認（admWin）。
 // 物品 ＝ 模型（跟砲同一套血量、命中、飛出去；打壞的不再能用、不再給 buff）；雕刻的物品（TASK-0569）之前用程式產生的方塊（furnMesh）。
 var FURN = CFG.furniture || {}, ROOM_FN = CFG.rooms || {}, SHIP_ROOMS = {}, ROOM_TILE = 5, ROOM_HEAD = 14;
 var ROOM_AISLE = 6;                                                     // 門口走道：格子的中心離門 0.6 m 以內 ⇒ 不能擺（⇒ 門口往裡一格、門的兩旁各多一格；⛔ 整格碰到就算 ⇒ 往裡兩格，1.5×2 m 的房間擺不下床）
 var ROOMFN_Q = Q.get('roomfn');                                        // 量的時候：?roomfn=medical ⇒ 每一型每一間都配這個類型、自動擺滿（蓋過存檔與設定檔）
 var ADMIN_ROOMS = Q.get('admin') === 'rooms';
+/** 設定後台的視窗：開這一頁的分頁（opener）＞ 嵌這一頁的那一頁（parent）；都沒有（直接開網址）⇒ null，什麼都不送。 */
+function admWin() {
+  try { if (window.opener && !window.opener.closed) return window.opener; } catch (e) { /* 跨來源 */ }
+  return window.parent !== window ? window.parent : null;
+}
 var ADMIN_DEF = Q.get('admin') === 'defaults';                      // 設定後台的「出廠預設值」：用細節設定頁編（71_input.js admDefUI）；跟 rooms 一樣不讀不存 localStorage
 /** 設定檔的預設 ⇒ { 房名: 擺法 }（格式跟存檔同一套：69_prefs.js roomPlanParse）。 */
 function roomPlanDefault(id) { var h = HULL_KNOWN.filter(function (x) { return x.id === id; })[0], d = {}; Object.keys((h && h.rooms) || {}).forEach(function (k) { var v = roomPlanParse(h.rooms[k]); if (v) d[k] = v; }); return d; }

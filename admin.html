@@ -57,7 +57,7 @@ nav a.on { background: var(--acc); color: var(--acc-ink); border-color: var(--ac
 .gcard .calc td, .gcard .calc th { white-space: normal; }
 .gcard .use a, .ship .guns a { color: var(--acc); margin-right: 10px; }
 .ship { scroll-margin-top: 70px; }
-#roomsWrap { padding: 0 16px 16px; } #roomsF { width: 100%; height: 86vh; border: 1px solid var(--line); border-radius: 6px; background: #000; display: block; }
+#roomsWrap { padding: 0 16px 16px; }
 @media (max-width: 600px) { header { padding: 8px 16px; } main { padding: 12px 16px; } input[type=number] { width: 70px; } }
 </style>
 </head>
@@ -66,6 +66,7 @@ nav a.on { background: var(--acc); color: var(--acc-ink); border-color: var(--ac
   <h1>憲法號對轟 設定後台</h1>
   <nav><a href="#" id="navAll">全部設定</a><a href="#guns" id="navGuns">🔫 砲</a></nav>
   <span class="st" id="st">讀取中…</span>
+  <button id="bRooms" title="開新分頁：遊戲的船隻配置頁（甲板與艙房）；改了就送回這一頁、標成還沒存（TASK-0647）">甲板與艙房編輯器…</button>
   <button id="bRevert" title="丟掉還沒存的修改，回到磁碟上的設定檔">放棄修改</button>
   <button id="bSave">儲存</button>
   <button id="bBuild" title="照磁碟上的設定檔重建 index.html">重建遊戲</button>
@@ -129,11 +130,11 @@ nav a.on { background: var(--acc); color: var(--acc-ink); border-color: var(--ac
     <div class="row"><input id="iWork" placeholder="雕刻作品 ID" style="flex:2;min-width:220px"><input id="iId" placeholder="代號（英文小寫，例 frigate2）" style="flex:1;min-width:150px"><input id="iName" placeholder="名字（例 二號艦）" style="flex:1;min-width:120px"><button id="bImport" class="pri">匯入</button></div>
   </section>
 </main>
-<!-- 甲板與艙房的預設（TASK-0568）：格子要船型 ⇒ 嵌一份建好的遊戲（/game?admin=rooms，只開船隻配置頁的甲板與艙房）當編輯器；它改了就把那一型送回來 -->
+<!-- 甲板與艙房的預設（TASK-0568）：格子要船型 ⇒ 用一份建好的遊戲（/game?admin=rooms，只開船隻配置頁的甲板與艙房）當編輯器；它改了就把那一型送回來。
+     TASK-0647（Tim 2026-10-16）：編輯器開成獨立分頁（最上面那一列的「甲板與艙房編輯器…」），不再嵌在這一頁 -->
 <div id="roomsWrap"><section><h2>甲板與艙房（每艘船的預設）</h2>
-  <p class="note">在下面的遊戲畫面裡選船型、改：艙房選類型（自動擺滿）或「擺設…」自己擺；甲板擺火藥桶（取用點）。改了就寫進這裡的設定（ships[].rooms，黃色的「還沒存」），按上面的「儲存」才存檔、重建之後遊戲才吃得到。玩家自己在遊戲裡改的不受影響。編輯器用的是上一次建好的成品（新船、新的艙房標記要先重建）。</p>
-  <p class="note" id="roomsSum"></p>
-  <iframe id="roomsF" src="/game?admin=rooms" title="甲板與艙房編輯器"></iframe></section></div>
+  <p class="note">按最上面的「甲板與艙房編輯器…」開新分頁，在那裡選船型、改：艙房選類型（自動擺滿）或「擺設…」自己擺；甲板擺火藥桶（取用點）。改了就寫進這裡的設定（ships[].rooms，黃色的「還沒存」），按上面的「儲存」才存檔、重建之後遊戲才吃得到。玩家自己在遊戲裡改的不受影響。編輯器用的是上一次建好的成品（新船、新的艙房標記要先重建）。</p>
+  <p class="note" id="roomsSum"></p></section></div>
 <script>
 (function () {
   'use strict';
@@ -436,8 +437,9 @@ nav a.on { background: var(--acc); color: var(--acc-ink); border-color: var(--ac
       say(lines); return then ? then() : load(true).then(function () { say(lines); return true; });
     }).catch(function (e) { busy = false; say(['連不上 admin.py：' + e], true); status(); return false; });
   }
-  // 甲板與艙房：嵌的遊戲準備好（cb-ready）或這裡重讀設定 ⇒ 把每艘船的預設送過去（cb-defaults）；它改了 ⇒ 送回那一型（cb-rooms）⇒ 照收、標成還沒存
-  function roomsPush() { try { $('roomsF').contentWindow.postMessage({ kind: 'cb-defaults', rooms: C.ships.reduce(function (o, s) { o[s.id] = s.rooms; return o; }, {}) }, location.origin); } catch (e) { /* 還沒載好：等 cb-ready */ } roomsSum(); }
+  // 甲板與艙房：編輯器分頁準備好（cb-ready，記住是哪一個分頁）或這裡重讀設定 ⇒ 把每艘船的預設送過去（cb-defaults）；它改了 ⇒ 送回那一型（cb-rooms）⇒ 照收、標成還沒存
+  var roomsWin = null;                                               // 開著的編輯器分頁（cb-ready 送來的那一個；關了 ⇒ 不送）
+  function roomsPush() { if (roomsWin && !roomsWin.closed && C) { try { roomsWin.postMessage({ kind: 'cb-defaults', rooms: C.ships.reduce(function (o, s) { o[s.id] = s.rooms; return o; }, {}) }, location.origin); } catch (e) { /* 分頁關了 */ } } if (C) roomsSum(); }
   function roomsSum() { $('roomsSum').textContent = C.ships.map(function (s) { var n = Object.keys(s.rooms || {}).length, c = C0 && !same(s.rooms, (C0.ships.filter(function (x) { return x.id === s.id; })[0] || {}).rooms); return s.name + '：' + (n ? n + ' 間有寫' : '沒寫（艙房空著、甲板照舊）') + (c ? '（跟版控不一樣）' : ''); }).join('；'); }
   window.addEventListener('message', function (ev) {
     if (ev.origin !== location.origin || !ev.data || !C) return;
@@ -448,7 +450,7 @@ nav a.on { background: var(--acc); color: var(--acc-ink); border-color: var(--ac
         .then(function (ok) { reply({ ok: ok, log: $('log').textContent.split('\n').filter(function (l) { return l; }) }); });
       return;
     }
-    if (ev.data.kind === 'cb-ready') return roomsPush();
+    if (ev.data.kind === 'cb-ready') { roomsWin = ev.source; return roomsPush(); }
     if (ev.data.kind !== 'cb-rooms') return;
     var s = C.ships.filter(function (x) { return x.id === ev.data.id; })[0]; if (!s) return;
     if (ev.data.rooms && Object.keys(ev.data.rooms).length) s.rooms = ev.data.rooms; else delete s.rooms;
@@ -456,6 +458,7 @@ nav a.on { background: var(--acc); color: var(--acc-ink); border-color: var(--ac
   });
   function saveCfg() { return call('/api/config', { config: C }, function () { return load(true).then(function () { return true; }); }); }
   $('bSave').onclick = function () { saveCfg().then(function (ok) { if (ok) say(['✓ 存了 config/game.json —— 重建之後遊戲才吃得到']); }); };
+  $('bRooms').onclick = function () { var w = window.open('/game?admin=rooms', 'cbRooms'); if (w) w.focus(); };   // 甲板與艙房編輯器：獨立分頁（同名 ⇒ 已經開著就切過去）；它 cb-ready 時才算連上
   $('bDetDef').onclick = function () { window.open('/game?admin=defaults', '_blank'); };   // 出廠預設值：遊戲的細節設定頁（69_prefs.js admDefUI），開新分頁；它存檔、重建都經過這一頁（cb-admdef）
   $('bBuild').onclick = function () { if (dirty && !confirm('有還沒存的修改；重建只照磁碟上的設定檔。照樣重建？')) return; call('/api/build', {}); };
   $('bBoth').onclick = function () { saveCfg().then(function (ok) { if (ok) call('/api/build', {}); }); };

@@ -7353,12 +7353,18 @@ function hullRooms(T) {
 // 每一型一份擺法：SHIP_ROOMS[船型][房名] ＝ { type, items: [{ it, x, y, r }] }（x、y ＝ 房間裡第幾格（物品的最小角），r ＝ 1 ⇒ 轉 90°（長邊沿 y））；
 //   沒有 items ⇒ 開戰時自動擺滿；null ⇒ 空著。存檔、匯出入：69_prefs.js。
 //   預設 ＝ config ships[].rooms { 房名: '類型'（自動擺滿）｜{ type, items }（自訂；甲板也是）}；沒寫的艙房空著、沒寫的甲板照舊的取用點。
-//   預設在設定後台編：後台嵌一份 ?admin=rooms 的遊戲（只開船隻配置頁的甲板與艙房、不讀不存 localStorage），改了就把那一型的預設 postMessage 回後台（ADMIN_ROOMS）。
+//   預設在設定後台編：後台開一份 ?admin=rooms 的遊戲（只開船隻配置頁的甲板與艙房、不讀不存 localStorage），改了就把那一型的預設 postMessage 回後台（ADMIN_ROOMS）。
+//   TASK-0647：後台用新分頁開（window.opener）；以前是嵌進後台的 iframe（window.parent）—— 兩種都認（admWin）。
 // 物品 ＝ 模型（跟砲同一套血量、命中、飛出去；打壞的不再能用、不再給 buff）；雕刻的物品（TASK-0569）之前用程式產生的方塊（furnMesh）。
 var FURN = CFG.furniture || {}, ROOM_FN = CFG.rooms || {}, SHIP_ROOMS = {}, ROOM_TILE = 5, ROOM_HEAD = 14;
 var ROOM_AISLE = 6;                                                     // 門口走道：格子的中心離門 0.6 m 以內 ⇒ 不能擺（⇒ 門口往裡一格、門的兩旁各多一格；⛔ 整格碰到就算 ⇒ 往裡兩格，1.5×2 m 的房間擺不下床）
 var ROOMFN_Q = Q.get('roomfn');                                        // 量的時候：?roomfn=medical ⇒ 每一型每一間都配這個類型、自動擺滿（蓋過存檔與設定檔）
 var ADMIN_ROOMS = Q.get('admin') === 'rooms';
+/** 設定後台的視窗：開這一頁的分頁（opener）＞ 嵌這一頁的那一頁（parent）；都沒有（直接開網址）⇒ null，什麼都不送。 */
+function admWin() {
+  try { if (window.opener && !window.opener.closed) return window.opener; } catch (e) { /* 跨來源 */ }
+  return window.parent !== window ? window.parent : null;
+}
 var ADMIN_DEF = Q.get('admin') === 'defaults';                      // 設定後台的「出廠預設值」：用細節設定頁編（71_input.js admDefUI）；跟 rooms 一樣不讀不存 localStorage
 /** 設定檔的預設 ⇒ { 房名: 擺法 }（格式跟存檔同一套：69_prefs.js roomPlanParse）。 */
 function roomPlanDefault(id) { var h = HULL_KNOWN.filter(function (x) { return x.id === id; })[0], d = {}; Object.keys((h && h.rooms) || {}).forEach(function (k) { var v = roomPlanParse(h.rooms[k]); if (v) d[k] = v; }); return d; }
@@ -11312,7 +11318,8 @@ function sliders() {
     if (!ADMIN_ROOMS || ADM_SENT[CFG_ID] === undefined || !HULLT[CFG_ID]) return;
     var o = roomsDefaultSnap(CFG_ID), s = JSON.stringify(o);
     if (s === ADM_SENT[CFG_ID]) return;
-    ADM_SENT[CFG_ID] = s; try { window.parent.postMessage({ kind: 'cb-rooms', id: CFG_ID, rooms: o }, location.origin); } catch (e) { /* 不是嵌在後台裡 */ }
+    var w = admWin(); if (!w) return;                             // 不是從設定後台開的 ⇒ 不送（ADM_SENT 不記，連上之前改的照樣算沒送過）
+    ADM_SENT[CFG_ID] = s; try { w.postMessage({ kind: 'cb-rooms', id: CFG_ID, rooms: o }, location.origin); } catch (e) { /* 後台關了 */ }
   }
   function itemsText(items) { var n = {}; items.forEach(function (q) { n[q.it] = (n[q.it] || 0) + 1; }); return Object.keys(n).map(function (it) { return FURN[it].name + ' ' + n[it]; }).join('、'); }
   function furnNote(it) { var f = FURN[it], b = f.buff || {}; return f.role === 'powder' ? '一處三桶' : f.hold ? '躺 ' + f.hold + ' 人' : Object.keys(b).map(function (k) { return (BUFF_NAMES[k] || k) + ' +' + Math.round(b[k] * 100) + '%'; }).join('、'); }
@@ -11599,7 +11606,12 @@ function sliders() {
   $('phxX').onclick = function () { page(''); };
   $('shipB').onclick = function () { page('ship'); loadHull(CFG_ID).then(function () { put(); show(); }); };   // 船隻配置：先載那一型（砲數、桅數、壓艙物的預設要船型）
   if (ADMIN_DEF) admDefUI(page);                                 // 出廠預設值（?admin=defaults）：直接開細節設定頁
-  if (ADMIN_ROOMS) { $('shipB').onclick(); try { window.parent.postMessage({ kind: 'cb-ready' }, location.origin); } catch (e) { /* 不是嵌在後台裡 */ } }
+  if (ADMIN_ROOMS) {                                              // 甲板與艙房編輯器：後台開的分頁（TASK-0647；舊的 iframe 也認）
+    $('shipB').onclick();
+    var aw = admWin();
+    if (aw) { try { aw.postMessage({ kind: 'cb-ready' }, location.origin); } catch (e) { /* 後台關了 */ } }
+    else { var wn = document.createElement('p'); wn.className = 'admWarn'; wn.style.cssText = 'color:#f9a;margin:6px 0'; wn.textContent = '⚠ 找不到設定後台：要從設定後台最上面的「甲板與艙房編輯器…」開這一頁；直接開的改了也不會送回去'; $('shipp').insertBefore(wn, $('shipp').firstChild); }
+  }
   $('shipX').onclick = function () { page(''); };
   $('gunB').onclick = function () { page('gun'); gunShow(); };   // 砲的設定（68_guncfg.js）
   $('gunX').onclick = function () { page(''); };

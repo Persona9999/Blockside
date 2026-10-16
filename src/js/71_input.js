@@ -287,7 +287,8 @@ function sliders() {
     if (!ADMIN_ROOMS || ADM_SENT[CFG_ID] === undefined || !HULLT[CFG_ID]) return;
     var o = roomsDefaultSnap(CFG_ID), s = JSON.stringify(o);
     if (s === ADM_SENT[CFG_ID]) return;
-    ADM_SENT[CFG_ID] = s; try { window.parent.postMessage({ kind: 'cb-rooms', id: CFG_ID, rooms: o }, location.origin); } catch (e) { /* 不是嵌在後台裡 */ }
+    var w = admWin(); if (!w) return;                             // 不是從設定後台開的 ⇒ 不送（ADM_SENT 不記，連上之前改的照樣算沒送過）
+    ADM_SENT[CFG_ID] = s; try { w.postMessage({ kind: 'cb-rooms', id: CFG_ID, rooms: o }, location.origin); } catch (e) { /* 後台關了 */ }
   }
   function itemsText(items) { var n = {}; items.forEach(function (q) { n[q.it] = (n[q.it] || 0) + 1; }); return Object.keys(n).map(function (it) { return FURN[it].name + ' ' + n[it]; }).join('、'); }
   function furnNote(it) { var f = FURN[it], b = f.buff || {}; return f.role === 'powder' ? '一處三桶' : f.hold ? '躺 ' + f.hold + ' 人' : Object.keys(b).map(function (k) { return (BUFF_NAMES[k] || k) + ' +' + Math.round(b[k] * 100) + '%'; }).join('、'); }
@@ -574,7 +575,12 @@ function sliders() {
   $('phxX').onclick = function () { page(''); };
   $('shipB').onclick = function () { page('ship'); loadHull(CFG_ID).then(function () { put(); show(); }); };   // 船隻配置：先載那一型（砲數、桅數、壓艙物的預設要船型）
   if (ADMIN_DEF) admDefUI(page);                                 // 出廠預設值（?admin=defaults）：直接開細節設定頁
-  if (ADMIN_ROOMS) { $('shipB').onclick(); try { window.parent.postMessage({ kind: 'cb-ready' }, location.origin); } catch (e) { /* 不是嵌在後台裡 */ } }
+  if (ADMIN_ROOMS) {                                              // 甲板與艙房編輯器：後台開的分頁（TASK-0647；舊的 iframe 也認）
+    $('shipB').onclick();
+    var aw = admWin();
+    if (aw) { try { aw.postMessage({ kind: 'cb-ready' }, location.origin); } catch (e) { /* 後台關了 */ } }
+    else { var wn = document.createElement('p'); wn.className = 'admWarn'; wn.style.cssText = 'color:#f9a;margin:6px 0'; wn.textContent = '⚠ 找不到設定後台：要從設定後台最上面的「甲板與艙房編輯器…」開這一頁；直接開的改了也不會送回去'; $('shipp').insertBefore(wn, $('shipp').firstChild); }
+  }
   $('shipX').onclick = function () { page(''); };
   $('gunB').onclick = function () { page('gun'); gunShow(); };   // 砲的設定（68_guncfg.js）
   $('gunX').onclick = function () { page(''); };
