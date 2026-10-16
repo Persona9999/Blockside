@@ -6,6 +6,7 @@ function fireGun(sh, g, target, ammo) {
   if (sh.struck || !g.alive || g.reload > 0 || gunRate(g) <= 0) return false;      // 砲要有人操作；降旗了就不開（排在齊射裡還沒開的也一樣）
   if (!bears(sh, g, target)) return false;                            // 目標不在這門砲的砲門射界 ⇒ 不開（呼叫端先用 gunTarget 挑好這門打得到的點）
   if (g.mt && mountBusy(g)) return false;                              // 迴旋砲換砲門的途中不能開（TASK-0626）
+  if (!mountFireOk(g)) return false;                                   // 砲塔的砲口不在能開火的角度裡（fire；TASK-0636）
   var GS = GUNS[g.type], r = fireShot(sh, g, target, ammo, g.muzs ? g.muzs[0] : g.muz);
   g.reload = sh.reloadT * GS.reload * rr(0.9, 1.1); g.firedAt = SIMT; sh.fired++;
   g.needCart = true;                                                // 下一發要從砲旁的藥箱拿一份火藥與彈藥（沒有 ⇒ 等送藥手，23_powder.js）
@@ -19,7 +20,7 @@ function burstStep(sh) {
     var g = sh.guns[i]; if (!(g.burstLeft > 0) || SIMT < g.burstT) continue;
     if (sh.struck || sh.sunk || !g.alive || g.wet || gunRate(g) <= 0) { g.burstLeft = 0; continue; }
     var t = gunTarget(sh, g, aimPoint(sh));
-    if (t && bears(sh, g, t)) { var r = fireShot(sh, g, t, g.burstAmmo, g.muzs ? g.muzs[g.burstK % g.muzs.length] : g.muz); sh.fired++; shotFx(sh, g, r.mw, r.dir); }
+    if (t && bears(sh, g, t) && mountFireOk(g)) { var r = fireShot(sh, g, t, g.burstAmmo, g.muzs ? g.muzs[g.burstK % g.muzs.length] : g.muz); sh.fired++; shotFx(sh, g, r.mw, r.dir); }
     g.burstK++; g.burstLeft--; g.burstT = SIMT + (GUNS[g.type].burstGap || 0.15);
   }
 }
@@ -106,6 +107,8 @@ function bears(sh, g, w) {
 //   mount=pivot、ports=0,45,-45（度，相對模型原本的砲軸；左正右負照格座標 +y）：只在這幾個方向之間換（維吉尼亞號船頭船尾的 7 吋砲：3 個砲門一門砲）。
 //     目標落在別的砲門那一邊 ⇒ 轉過去；轉的時候不能開、到了才開；只停在作者標的角度 ⇒ 不穿模。rate 度／秒（預設 12）。
 //   mount=turret、arc=-150,150（度）、rate（預設 20）：在 arc 裡連續轉（之後的砲塔）；砲管射界 cone（度，預設 4）⇒ 要真的對準才開。
+//     fire=-174,174（度，選填；沒寫 ＝ arc）：能開砲的角度（TASK-0636；Tim 2026-10-16：「開火角度跟旋轉要分開(可以預設同一組 但可以額外設定開火角度)」「沒有的話就用同一組」）。
+//     arc 管能轉到哪、fire 管砲口在哪裡才開：莫尼特號 arc 一整圈、fire −174,174（轉離中線 6° 才過得了駕駛塔 ⇒ 朝駕駛塔那 12° 不開，但轉得過去）。
 //   轉的中心：模型固定點 pivot（砲塔用）＞ meta pivot（從砲尾沿砲軸量幾格，負 ＝ 往後；維吉尼亞號 −9.5 ＝ 砲廓圓頭的圓心，三個砲門都從那裡放射）＞ 外框中心。
 //   runin（格，預設 0）：換砲門前先沿砲軸往後拉這麼多、轉完再推出去（史料：先把砲拉進來才換）—— 維吉尼亞號 6：停在三個砲門上網格落進實心 0 格，轉到 22° 不拉會穿進砲廓牆 48／124 個頂點，拉 4／5 格就 0。
 //   跟著轉的：模型（m.rot／m.piv，帆桁那一套；拉進來 m.gsl）、砲軸、砲口、砲班的站位與站在上面的人、放藥箱的位置。⛔ 模型的外框（被打中、碰撞）不轉。
@@ -115,23 +118,34 @@ function gunMountInit(sh, g) {
   var D = Math.PI / 180, br = m.pts.breech || g.muz, c = m.pts.pivot ? m.pts.pivot.slice() : isFinite(+mt.pivot) ? [br[0] + g.ax[0] * +mt.pivot, br[1] + g.ax[1] * +mt.pivot, m.bb[2]] : [(m.bb[0] + m.bb[3]) / 2, (m.bb[1] + m.bb[4]) / 2, m.bb[2]];
   function list(s, d) { var a = String(s === undefined ? d : s).split(',').map(function (v) { return +v * D; }).filter(isFinite); return a.length ? a : String(d).split(',').map(function (v) { return +v * D; }); }
   g.mt = { kind: kind, c: c, ax0: g.ax.slice(), muz0: g.muz.slice(), muzs0: g.muzs ? g.muzs.map(function (q) { return q.slice(); }) : null, yaw: 0, yawT: 0,
-    ports: kind === 'pivot' ? list(mt.ports, '0') : null, runin: +mt.runin > 0 ? +mt.runin : 0, sl: 0, arc: kind === 'turret' ? list(mt.arc, '-180,180') : null, rate: (+mt.rate > 0 ? +mt.rate : kind === 'pivot' ? 12 : 20) * D };
+    ports: kind === 'pivot' ? list(mt.ports, '0') : null, runin: +mt.runin > 0 ? +mt.runin : 0, sl: 0, arc: kind === 'turret' ? list(mt.arc, '-180,180') : null, fire: kind === 'turret' ? list(mt.fire !== undefined ? mt.fire : mt.arc, '-180,180') : null, rate: (+mt.rate > 0 ? +mt.rate : kind === 'pivot' ? 12 : 20) * D };
   if (kind === 'turret') { g.cone = (+mt.cone > 0 ? +mt.cone : 4) * D; g.mt.full = g.mt.arc[g.mt.arc.length - 1] - g.mt.arc[0] >= 2 * Math.PI - 1e-6; }   // full：轉得了一整圈（arc 沒寫 ＝ −180,180）
   m.piv = c; m.rot = 0;
   (sh.mounts = sh.mounts || []).push(g);
 }
-/** 砲塔這一步要轉到哪（TASK-0636；Tim 2026-10-16：「有可能會繞更大一圈(轉超過180度去瞄準)」—— ⛔ 夾進 arc 再直接相減 ⇒ 跨過 ±180° 往反方向轉 340°、有死角時目標一跨過就整整繞一圈）。
+/** 角度 x（弧度）落在弧 a（[起, …, 迄]）裡 ⇒ 換算進 [起, 起 ＋ 360°) 的那個值；不在 ⇒ null；一整圈的弧 ⇒ x 原樣。 */
+function arcIn(a, x) { var lo = a[0], hi = a[a.length - 1], P2 = 2 * Math.PI; if (hi - lo >= P2 - 1e-6) return x; var r = lo + ((x - lo) % P2 + P2) % P2; return r <= hi ? r : null; }
+/** 砲塔這一步要轉到哪（TASK-0636；Tim 2026-10-16：「有可能會繞更大一圈(轉超過180度去瞄準)」「全向砲塔瞄準不應該需要轉超過180度」—— ⛔ 夾進 arc 再直接相減 ⇒ 跨過 ±180° 往反方向轉 340°、有死角時目標一跨過就整整繞一圈）。
  *  轉得了一整圈 ⇒ 走近的那一邊（回傳 yaw ＋ 繞回後的差；mountStep 轉完再把 yaw 繞回 ±180°）。
  *  有死角 ⇒ yaw 只住在 arc 裡、只從 arc 裡轉（不繞回）：目標換算進 [arc 起點, 起點 ＋ 360°)，落在 arc 裡就是它；
  *  落在死角裡 ⇒ 停在近的那一端，原本靠哪一端就守哪一端，另一端要近過 TURRET_HYS 才換（⛔ 目標在死角中線附近 ⇒ 每一步都整整繞一圈來回甩）。 */
 var TURRET_HYS = 10 * Math.PI / 180;                                     // 離兩端的差 ＝ 離死角中線的兩倍 ⇒ 過中線 5° 才換（莫尼特號死角 12°：中線兩邊各晃 2° 不再甩）
+// 2026-10-16 第二輪：先照開火角度 fire 挑要瞄的角度 t（落在 fire 外 ⇒ fire 近的那一端，遲滯照上面），再照旋轉範圍 arc 走過去 ——
+// arc 一整圈 ⇒ 走近的那一邊（可以轉過不能開火的那幾度）；arc 有死角 ⇒ 只能在 arc 裡走（物理上轉不過去，只能繞）。fire 沒寫 ＝ arc ⇒ 跟第一輪一樣。
 function turretAim(M, rel) {
-  var lo = M.arc[0], hi = M.arc[M.arc.length - 1], P2 = 2 * Math.PI;
-  if (M.full) { var d = rel - M.yaw; return M.yaw + Math.atan2(Math.sin(d), Math.cos(d)); }
-  var r = lo + ((rel - lo) % P2 + P2) % P2; if (r <= hi) return r;
-  var dh = r - hi, dl = lo + P2 - r, onHi = M.yawT - lo > hi - M.yawT;   // 離兩端各差多少；原本靠哪一端
-  return onHi ? (dl < dh - TURRET_HYS ? lo : hi) : (dh < dl - TURRET_HYS ? hi : lo);
+  var F = M.fire, lo = F[0], hi = F[F.length - 1], P2 = 2 * Math.PI, t = arcIn(F, rel);
+  if (t === null) {                                                   // 目標在不能開火的角度 ⇒ 停在近的那一端，原本靠哪一端就守哪一端
+    var r = lo + ((rel - lo) % P2 + P2) % P2, dh = r - hi, dl = lo + P2 - r, p = arcIn(F, M.yawT), rp = lo + ((M.yawT - lo) % P2 + P2) % P2;
+    var onHi = p !== null ? p - lo > hi - p : rp - hi < lo + P2 - rp;   // 原本靠哪一端（原本就在開火角度外 ⇒ 離哪一端近）
+    t = onHi ? (dl < dh - TURRET_HYS ? lo : hi) : (dh < dl - TURRET_HYS ? hi : lo);
+  }
+  if (M.full) { var d = t - M.yaw; return M.yaw + Math.atan2(Math.sin(d), Math.cos(d)); }   // 轉得了一整圈 ⇒ 近的那一邊
+  var q = arcIn(M.arc, t); if (q !== null) return q;                 // 有死角 ⇒ yaw 住在 arc 裡、直接走過去（不繞回）
+  var A0 = M.arc[0], A1 = M.arc[M.arc.length - 1], rq = A0 + ((t - A0) % P2 + P2) % P2;   // fire 超出 arc（設定不一致）⇒ 轉到 arc 近的那一端
+  return rq - A1 < A0 + P2 - rq ? A1 : A0;
 }
+/** 砲口現在在不在能開火的角度裡（砲塔才有；沒有 fire ⇒ 一律可以）。 */
+function mountFireOk(g) { return !(g.mt && g.mt.fire) || arcIn(g.mt.fire, g.mt.yaw) !== null; }
 /** 格座標 p 繞 c 轉 a（跟 modelLocal 同一個 rotM ⇒ 砲口、站位跟畫出來的模型轉得一樣）。 */
 function mountRot(p, c, a) { var d = M4.dir(rotM([0, 0, 1], a), p[0] - c[0], p[1] - c[1], 0); return [c[0] + d[0], c[1] + d[1], p[2]]; }
 /** 每一步（50_sim.js，在開砲之前）：有迴旋的砲照瞄準點挑方向、照轉速轉；轉了 ⇒ 砲軸、砲口、站位、人跟著轉。 */

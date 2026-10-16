@@ -111,7 +111,7 @@ function shipCheck(id) {
     sh.mags.forEach(function (m) { if (!m.kegs.length) add('error', '彈藥庫', m.name, '裡面沒有火藥桶模型 ⇒ 這一間不會殉爆' + (kegsAny ? '' : '、整艘沒有取用點（砲打完藥箱就停）'), '彈藥庫子作品裡掛火藥桶模型 meta kind=powder, powder_lb（造船規格 §8）'); });
     R.info.stations = sh.stations.length;
     R.info.mounts = (sh.mounts || []).map(function (g) { var M = g.mt, dg = function (a) { return Math.round(a * 57.2958); };   // 迴旋砲、砲塔（TASK-0626）
-      return g.model.path + '（' + (M.ports ? '換砲門 ' + M.ports.map(dg).join('／') + '°' : '砲塔 ' + dg(M.arc[0]) + '～' + dg(M.arc[M.arc.length - 1]) + '°') + '、' + dg(M.rate) + '°／秒）'; }).join('、');
+      return g.model.path + '（' + (M.ports ? '換砲門 ' + M.ports.map(dg).join('／') + '°' : '砲塔 ' + dg(M.arc[0]) + '～' + dg(M.arc[M.arc.length - 1]) + '°' + (M.fire && (M.fire[0] !== M.arc[0] || M.fire[M.fire.length - 1] !== M.arc[M.arc.length - 1]) ? '（開火 ' + dg(M.fire[0]) + '～' + dg(M.fire[M.fire.length - 1]) + '°）' : '')) + '、' + dg(M.rate) + '°／秒）'; }).join('、');
     // ── 砲帶的裝甲（TASK-0631；24_armor.js）：關聯 meta kind=armor、mount=<砲模型的路徑> ⇒ 跟著那門砲轉、一格一格打掉 ──
     R.info.armor = armSummary(T);
     R.info.doors = doorsSummary(sh);                                    // 門、艙蓋（TASK-0638）

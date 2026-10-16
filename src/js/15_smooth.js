@@ -60,7 +60,8 @@ function smDraw(prog, sh, M) {
   sh.smR.forEach(function (m) { gl.bindVertexArray(m.vao); gl.drawElements(gl.TRIANGLES, m.n, gl.UNSIGNED_INT, 0); });
 }
 /** 一區的網格（g ＝ 現在的格子；reuse ＝ 這艘自己的舊緩衝，有就覆寫）⇒ { vao, vb, ib, n, own } 或 null（這一區沒有平滑面）。
- *  pg（砲帶的裝甲，24_armor.js）：只用來釘格角的另一份格子（拆出來之前貼著的船殼）—— 碰到它的格角釘在格角上，它自己不出面、不算實心。 */
+ *  pg（砲帶的裝甲，24_armor.js）：只用來釘格角的另一份格子（拆出來之前貼著的船殼）—— 碰到它的格角只釘高度（z：貼著甲板、不往上縮），水平照樣平滑；它自己不出面、不算實心。
+ *  ⛔ 三個方向都釘 ⇒ 圓筒底那一圈是轉 0° 時的格角階梯 ⇒ 砲塔一轉，階梯跟著轉、跟甲板上的座圈對不上，一圈鋸齒（Tim 2026-10-16：「旋轉砲塔旋轉後 會導致底下甲板出現破圖」）。 */
 function smBuild(T, g, rk, reuse, pg) {
   var SG = T.smG, nx = Math.ceil(T.h.size[0] / SM_R), ny = Math.ceil(T.h.size[1] / SM_R);
   var rx = rk % nx, ry = Math.floor(rk / nx) % ny, rz = Math.floor(rk / (nx * ny)), x0 = rx * SM_R, y0 = ry * SM_R, z0 = rz * SM_R;
@@ -69,17 +70,17 @@ function smBuild(T, g, rk, reuse, pg) {
   var info = new Map();                                                  // 格角 ⇒ { o: 偏移, g: 實心的方向, pin, srf }
   function corner(X, Y, Z) {
     var k = key(X, Y, Z), r = info.get(k); if (r) return r;
-    var occ = [], pin = false, gx = 0, gy = 0, gz = 0, n = 0, i;
+    var occ = [], pin = false, pz = false, gx = 0, gy = 0, gz = 0, n = 0, i;
     for (i = 0; i < 8; i++) {
       var c = SM_C8[i], vx = X - 1 + c[0], vy = Y - 1 + c[1], vz = Z - 1 + c[2], s = g.get(vx, vy, vz) ? 1 : 0;
-      occ.push(s); if (s) { if (!SG.get(vx, vy, vz)) pin = true; gx += c[0] - 0.5; gy += c[1] - 0.5; gz += c[2] - 0.5; n++; } else if (pg && pg.get(vx, vy, vz)) pin = true;
+      occ.push(s); if (s) { if (!SG.get(vx, vy, vz)) pin = true; gx += c[0] - 0.5; gy += c[1] - 0.5; gz += c[2] - 0.5; n++; } else if (pg && pg.get(vx, vy, vz)) pz = true;
     }
     var ox = 0, oy = 0, oz = 0, ne = 0;
     for (i = 0; i < 12; i++) {
       var a = SM_E12[i][0], b = SM_E12[i][1]; if (occ[a] === occ[b]) continue;
       var A = SM_C8[a], B = SM_C8[b]; ox += (A[0] + B[0]) / 2 - 0.5; oy += (A[1] + B[1]) / 2 - 0.5; oz += (A[2] + B[2]) / 2 - 0.5; ne++;
     }
-    r = { srf: n > 0 && n < 8, pin: pin, o: ne ? [ox / ne, oy / ne, oz / ne] : [0, 0, 0], g: [gx, gy, gz] };
+    r = { srf: n > 0 && n < 8, pin: pin, pz: !pin && pz, o: ne ? [ox / ne, oy / ne, oz / ne] : [0, 0, 0], g: [gx, gy, gz] };   // pz：只釘高度（碰到 pg 的格角）
     info.set(k, r); return r;
   }
   var vidx = new Map(), V = [], F = [], MG = T.matG, MM = T.matM, MR = T.matR;   // V：每個頂點 [X, Y, Z, r, g, b, 面數, 金屬度, 粗糙度]；F：每個面 4 個頂點編號
@@ -120,12 +121,12 @@ function smBuild(T, g, rk, reuse, pg) {
       var o = corner(X + dx, Y + dy, Z + dz); if (!o.srf) continue;
       if (o.g[0] * me.g[0] + o.g[1] * me.g[1] + o.g[2] * me.g[2] <= 0) continue;   // 另一面（薄板的背面）⇒ 不混
       nxv -= o.g[0]; nyv -= o.g[1]; nzv -= o.g[2];
-      if (o.pin) { sx += dx; sy += dy; sz += dz; } else { sx += dx + o.o[0]; sy += dy + o.o[1]; sz += dz + o.o[2]; }
+      if (o.pin) { sx += dx; sy += dy; sz += dz; } else { sx += dx + o.o[0]; sy += dy + o.o[1]; sz += dz + (o.pz ? 0 : o.o[2]); }
       sn++;
     }
     if (!me.pin && sn) {
       var f = 0.5;
-      px = X + clamp((1 - f) * me.o[0] + f * sx / sn, -0.5, 0.5); py = Y + clamp((1 - f) * me.o[1] + f * sy / sn, -0.5, 0.5); pz = Z + clamp((1 - f) * me.o[2] + f * sz / sn, -0.5, 0.5);
+      px = X + clamp((1 - f) * me.o[0] + f * sx / sn, -0.5, 0.5); py = Y + clamp((1 - f) * me.o[1] + f * sy / sn, -0.5, 0.5); pz = me.pz ? Z : Z + clamp((1 - f) * me.o[2] + f * sz / sn, -0.5, 0.5);
     }
     var nl = Math.hypot(nxv, nyv, nzv) || 1;
     buf.set([px, py, pz, nxv / nl, nyv / nl, nzv / nl, v[3] / v[6], v[4] / v[6], v[5] / v[6], v[7] / v[6], v[6] && MM ? v[8] / v[6] : 0.5], i * 11);
