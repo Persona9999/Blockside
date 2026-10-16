@@ -6334,6 +6334,18 @@ function teleSet(sh, i) {
 /** 每一步（sail() 裡，算完舊公式的「單獨推動時的航速」之後）：推力、水阻、加速度 ⇒ sh.spd；力矩記在 D.tq（轉向率在 driveYaw，舵算完才知道 rmax）。
  *  vS：帆在這一段、全部完好時的航速（舊公式 target ÷ sailFrac 的那一份；0 ＝ 帆不出力）；vB：額外動力全速的航速（m/s；0 ＝ 沒有或不出力）；
  *  brake：錨咬著、拋錨 ⇒ 6 秒內停。 */
+/** 帆推不過風（TASK-0639；Tim 2026-10-16：「帆提供的速度要考慮到船目前的相對速度(不能跑的比風速快)」）：帆推力的倍率 0…1。
+ *  u ＝ 船沿「風吹去的方向」的速度（sh.spd × cos 船頭與風吹去方向的夾角）；Vw ＝ 羅盤上的風速（windKnots ÷ 1.944，m/s）。
+ *  u0 ＝ 帆單獨推得到的那一份（v × cos，最多 0.9 Vw）：u 不到 u0 ⇒ 推力照舊（帆單獨推的航速、加減速跟以前一樣）；
+ *  超過 ⇒ ((Vw − u)／(Vw − u0))²（視風變小、推力照平方掉），u 追上 Vw ⇒ 0。迎風那一半、橫風、倒退 ⇒ 船不會往風吹去的方向追上風 ⇒ 照舊。
+ *  ⛔ 以前推力只看「帆單獨推得到的航速」⇒ 加上蒸汽順風照樣推：拿破崙號滿帆＋全速前進、風 10–11 節 ⇒ 14.3 節。 */
+function sailWindK(sh, v, deg) {
+  var c = Math.cos(deg / 57.2958); if (c <= 0) return 1;
+  var Vw = windKnots() / 1.944, u = sh.spd * c, u0 = Math.min(v * c, 0.9 * Vw);
+  if (u <= u0) return 1;
+  if (u >= Vw) return 0;
+  var r = (Vw - u) / (Vw - u0); return r * r;
+}
 function driveStep(sh, dt, vS, vB, deg, brake) {
   var D = sh.drive; if (!D) return;
   if (D.M === null) driveSurvey(sh);
@@ -6350,7 +6362,7 @@ function driveStep(sh, dt, vS, vB, deg, brake) {
     if (inSet) { rx += s.area * p.p[0]; ry += s.area * p.p[1]; ra += s.area; }   // 完好時這一段帆的中心（平衡點）
     sumA += s.area;
   }
-  var frac = sumA > 0 ? sumOn / sh.sailArea0 : 0, Fs = vS > 0 ? k * (vS * frac) * (vS * frac) : 0, Fx = 0, Tq = 0, Fabs = 0;
+  var frac = sumA > 0 ? sumOn / sh.sailArea0 : 0, Fs = vS > 0 ? k * (vS * frac) * (vS * frac) * sailWindK(sh, vS * frac, deg) : 0, Fx = 0, Tq = 0, Fabs = 0;   // sailWindK：船跑得比風快 ⇒ 帆不推（TASK-0639）
   if (ra > 0) { rx /= ra; ry /= ra; }
   for (i = 0; i < P.length; i++) {
     p = P[i]; if (p.kind !== 'sail') continue;
@@ -12045,6 +12057,7 @@ function shipCheck(id) {
 //   左右錨分開拋（錨被打壞就不能按）；只拋單邊做急轉（《黑帆》裡只拋一側錨，船繞錨甩過去）） ─────────────────────────
 // 每艘兩個錨（P 左舷、S 右舷），錨鏈孔 ＝ 錨掛著的地方（錨的模型或關聯的中心；這一型找不到錨 ⇒ 船頭兩側，打不壞）。
 //   狀態：up 收著 → drop 往下沉（ANC_FALL 秒）→ down 落底咬住 → weigh 起錨（ANC_WEIGH 秒，鍊子收短：船被平移拉近、每秒最多 ANC_HAUL，航向不動；不夠的由錨被拖過來）→ up。
+//   起錨中鍊子收到剩下不到水深（第 3.6 秒）⇒ 錨離底（anchorFree）：不再拴著船、帆與引擎照常出力（Tim 2026-10-16「只要錨拔起船就可以開始動了」），錨照樣吊上來到第 8 秒。
 //   落底的點 ＝ 放開那一刻錨鏈孔正下方（海面上的 x、z，海底在水線下 ANC_DEPTH）；鍊長 ANC_CHAIN ⇒ 錨鏈孔離錨的水平距離最多 ANC_REACH。
 // 約束（down）：錨鏈孔超過 ANC_REACH ⇒ 拉回圓周上；船身當剛體繞錨鏈孔轉（船心照動量走、船頭被拴住 ⇒ 往前的動量變成轉向）：
 //   帶著速度只拋一側 ⇒ 鍊子一拉緊，船頭被拴在那一側、船尾甩出去 ＝ 急轉；兩側都拋 ⇒ 停住，A／D 原地慢慢轉（ANC_PIVOT）、電腦照舊轉舷側對敵。
@@ -12104,7 +12117,7 @@ function anchorToggle(sh, k, want) {
     a.A = R ? [R[0], R[2]] : h; a.y0 = R ? R[1] : null; a.st = 'drop'; a.t = SIMT + ANC_FALL;   // 有錨鏈孔 ⇒ 錨從自己掛的地方（ring，吊錨架）直直落下去，鍊子從錨鏈孔放出；沒有 ⇒ 照舊從錨鏈孔正下方
     return '拋' + nm;
   }
-  if (a.st === 'drop' || a.st === 'down') { a.st = 'weigh'; a.t0 = SIMT; a.t = SIMT + ANC_WEIGH; return '起' + nm; }
+  if (a.st === 'drop' || a.st === 'down') { a.st = 'weigh'; a.t0 = SIMT; a.t = SIMT + ANC_WEIGH; a.free = false; return '起' + nm; }   // free：離底那一句廣播報過沒（anchorStep）
   return '';
 }
 /** 起錨：還在水裡的（drop／down）都開始收；回傳收了哪幾個（給廣播）。 */
@@ -12125,8 +12138,11 @@ function anchor6(sh) {
   if (wet.length === 1 && free.length) return { act: 'other', k: free[0] };
   return { act: 'weigh' };
 }
-/** 有錨咬著（down／weigh）⇒ 船不再靠帆走（target 0）。 */
-function anchorHeld(sh) { return anchorAny(sh, 'down') || anchorAny(sh, 'weigh'); }
+/** 錨離底了沒（起錨中，鍊子收到剩下不到水深 ⇒ 鍊子直上直下、錨被拔起來）。Tim 2026-10-16：「只要錨拔起船就可以開始動了(現在要等完全收錨才會動)」。
+ *  鍊長 36 m、水深 20 m、起錨 8 秒 ⇒ 起錨第 3.6 秒離底；之後錨只是吊上來（鐵鍊照畫），船不再被拴著。 */
+function anchorFree(a) { return a.st === 'weigh' && ANC_CHAIN * clamp((a.t - SIMT) / ANC_WEIGH, 0, 1) <= ANC_DEPTH; }
+/** 有錨咬著（落底、起錨中還沒離底）⇒ 船不再靠帆、引擎走（target 0）。⛔ 以前起錨中一律算咬著 ⇒ 要等 8 秒整個收好才能動。 */
+function anchorHeld(sh) { var A = sh.anc; return !!A && ['P', 'S'].some(function (k) { var a = A[k]; return a && (a.st === 'down' || a.st === 'weigh' && !anchorFree(a)); }); }
 /** 每一步（sail() 走完位置之後）：沉到底、起完、打壞斷鍊；咬著的錨把錨鏈孔拉回鍊長以內、船身繞錨鏈孔轉。回傳有沒有拉緊。 */
 function anchorStep(sh, dt, px0, pz0) {
   var A = sh.anc; if (!A) return false;
@@ -12138,6 +12154,7 @@ function anchorStep(sh, dt, px0, pz0) {
     if (a.st === 'drop' && SIMT >= a.t) { a.st = 'down'; if (sh.i === PLAYER_I) note(sh, nm + '落底咬住了'); }
     if (a.st === 'weigh' && SIMT >= a.t) { a.st = 'up'; a.A = null; if (sh.i === PLAYER_I) note(sh, nm + '起好了'); return; }
     if (a.st !== 'down' && a.st !== 'weigh') return;
+    if (anchorFree(a)) { if (!a.free) { a.free = true; if (sh.i === PLAYER_I) note(sh, nm + '離底了，船可以走了'); } return; }   // 錨拔起來了 ⇒ 不再拴著船（鍊子照收、錨照吊上來）
     var r = a.st === 'weigh' ? ANC_REACH * clamp((a.t - SIMT) / ANC_WEIGH, 0, 1) : ANC_REACH;   // 起錨：鍊子一路收短 ⇒ 船被拉向錨
     var H = hawseXZ(sh, a, sh.px, sh.pz, sh.yaw), dx = H[0] - a.A[0], dz = H[1] - a.A[1], d = Math.hypot(dx, dz);
     if (d <= r || d < 1e-6) return;
