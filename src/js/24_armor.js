@@ -5,8 +5,8 @@
 // 載入（armorSetup，05_hull.js buildHull：verify 與材質之後 ⇒ checksum 照整艘比、材質層與總重含裝甲）：
 //   T.armor[k] ＝ { mount 那門砲的路徑, parts, grid（只有裝甲的格；座標 ＝ 船的格座標、轉 0 的樣子）, bb, n, t }；
 //   T.hullG ＝ 船殼（T.base 拿掉裝甲；沒有裝甲 ⇒ 就是 T.base 那一份）：每艘的 sh.grid、合併網格、平滑面、進水的水格與破口、繩與模型的錨、桅照它。
-//   T.base 照舊是整艘（含裝甲）：浮力表、站位、走路格、甲板切高、艙房、羅盤的小船照它 ⇒ 裝甲在原本的位置當擋人的牆
-//   （圓筒轉到哪都一樣，只差砲門；Tim：進砲塔只走住艙甲板的梯子艙口，TASK-0632）、浮力跟以前一樣（打掉不重算 —— 船殼也是）。
+//   T.base 照舊是整艘（含裝甲）：浮力表、甲板切高、艙房、羅盤的小船照它、浮力跟以前一樣（打掉不重算 —— 船殼也是）；
+//   站位、走路格、第一人稱照 navBase／navG ＝ 再加上裝甲掃過的那一圈（TASK-0655，見 armRing；Tim：進砲塔只走住艙甲板的梯子艙口，TASK-0632）。
 //   ⛔ 沒有 mount、找不到那門砲、那門砲不會轉 ⇒ 不拆：照舊是船殼的一部分、不轉（T.armBad，匯入檢查報）。
 // 每艘（armorShip，10_ship.js makeShip，砲的迴旋設好之後）：sh.arm[k] ＝ { grid（共用、打掉才複製那一塊）, rs, 平滑面, g 那門砲 }；
 //   轉 ＝ g.mt.yaw 繞 g.mt.c（跟砲的模型 modelLocal 同一個 rotM ⇒ 砲口永遠在砲門裡）；砲被打飛 ⇒ 停在最後的角度（mountStep 不再轉它）。
@@ -76,6 +76,7 @@ function armorShip(sh) {
     var g = (sh.mounts || []).filter(function (q) { return q.model.path === A.mount; })[0] || null, grid = A.grid.share(), rs = new VK.RegionSet(gl, grid, QIDX);
     rs.shareFrom(A.rs0);
     var a = { A: A, T: T, sh: sh, g: g, grid: grid, rs: rs, pin: T.hullG, lost: 0 };
+    if (g) armRing(A, g.mt.c);                                         // 掃過的那一圈（走路看的牆；TASK-0655）：船型第一艘算一次
     smShare(a, A.smP);
     return a;
   });
@@ -149,11 +150,54 @@ function armMuzzle(sh, m, L) {
 /** 裝甲原本的位置 (x, y, z)（裝甲的格座標）還有沒有格（重量照材質層的座標數）。 */
 function armGet(sh, x, y, z) { for (var i = 0; i < sh.arm.length; i++) if (sh.arm[i].grid.get(x, y, z)) return 1; return 0; }
 function armCount(sh) { var n = 0; for (var i = 0; i < sh.arm.length; i++) n += sh.arm[i].grid.count; return n; }
-/** 走路格、站位看的格子（42_hands.js navRefresh、40_crew.js goToGun）：船殼（打掉的照現在）＋裝甲原本的位置（不轉、打掉也照樣擋：見檔頭）。 */
+// 掃過的那一圈（TASK-0655；Tim 2026-10-16：「砲塔做成無法通行(這個應該要是通用規格)」「雖然會旋轉 但實際上有一圈物理阻隔通行」）：
+//   會轉的裝甲每一格繞轉軸掃出一圈 ⇒ 每一層（z）記下掃到的半徑（1／ARM_RK 格一份；一格掃到格心距離 ± 0.71 格）；走路看的格子（navBase／navG）在那些半徑上一律算實心。
+//   莫尼特號：圓筒那幾層 ＝ 內緣到外緣一整環（砲門跟著轉、不留縫），頂 ＝ 整個圓。照開局的形狀算、每個船型一次（A.ring）；被打掉的格第一版不打開那一圈（砲塔還在就照樣擋）。
+//   出入只走圈裡的艙口梯（莫尼特號：梯子/turret，住艙甲板 → 砲塔底下的艙口）；圈裡沒有梯子 ⇒ 匯入檢查警告（75_shipcheck.js）。
+//   用的：第一人稱（81_fps.js）、船員的走路格與站位（42_hands.js navBuild／navRefresh、40_crew.js makeCrew／goToGun）。⛔ 沒用：火藥桶、取用點（23_powder.js 照舊看 T.base）。
+var ARM_RK = 2;
+/** 船型的一塊裝甲 A 繞 c（那門砲的轉軸，船的格座標）掃過的那一圈（armorShip 第一艘算、存在 A.ring）。 */
+function armRing(A, c) {
+  if (A.ring) return A.ring;
+  var bb = A.bb, G = A.grid, rows = {}, rmax = 0, x, y, z;
+  var far = Math.max(Math.hypot(bb[0] - c[0], bb[1] - c[1]), Math.hypot(bb[3] + 1 - c[0], bb[1] - c[1]), Math.hypot(bb[0] - c[0], bb[4] + 1 - c[1]), Math.hypot(bb[3] + 1 - c[0], bb[4] + 1 - c[1])), N = Math.ceil((far + 1) * ARM_RK) + 1;
+  for (z = bb[2]; z <= bb[5]; z++) for (y = bb[1]; y <= bb[4]; y++) for (x = bb[0]; x <= bb[3]; x++) {
+    if (!G.get(x, y, z)) continue;
+    var d = Math.hypot(x + 0.5 - c[0], y + 0.5 - c[1]), row = rows[z] || (rows[z] = new Uint8Array(N));
+    for (var k = Math.max(0, Math.floor((d - 0.71) * ARM_RK)), k1 = Math.min(N - 1, Math.floor((d + 0.71) * ARM_RK)); k <= k1; k++) row[k] = 1;
+    if (d + 0.71 > rmax) rmax = d + 0.71;
+  }
+  return (A.ring = { c: [c[0], c[1]], z0: bb[2], z1: bb[5], rows: rows, r: rmax });
+}
+/** (x, y, z)（船的格座標）在不在哪一塊裝甲掃過的那一圈裡（沒有圈的那塊 ⇒ 照它原本的格）。 */
+function armWall(T, x, y, z) {
+  for (var i = 0; i < T.armor.length; i++) {
+    var A = T.armor[i], R = A.ring;
+    if (!R) { if (A.grid.get(x, y, z)) return 1; continue; }
+    if (z < R.z0 || z > R.z1) continue;
+    var row = R.rows[z]; if (!row) continue;
+    var d = Math.hypot(x + 0.5 - R.c[0], y + 0.5 - R.c[1]);
+    if (d <= R.r && row[Math.floor(d * ARM_RK)]) return 1;
+  }
+  return 0;
+}
+/** 那一圈在 z0 往上 h 層裡的內緣半徑（格；圈裡站人的地方 ＝ 比它近）：匯入檢查、讀數用。沒有 ⇒ 0。 */
+function armRingIn(R, z0, h) {
+  var best = Infinity;
+  for (var z = z0; z < z0 + h; z++) { var row = R.rows[z]; if (!row) continue; for (var k = 0; k < row.length; k++) if (row[k]) { best = Math.min(best, k / ARM_RK); break; } }
+  return best === Infinity ? 0 : best;
+}
+/** 開戰時的走路格、站位看的格子（42_hands.js navBuild、40_crew.js makeCrew）：T.base ＋ 會轉的裝甲掃過的那一圈；沒有裝甲 ⇒ 就是 T.base。 */
+function navBase(T) {
+  if (!T.armor || !T.armor.length) return T.base;
+  var B = T.base;
+  return T.navB || (T.navB = { sx: B.sx, sy: B.sy, sz: B.sz, get: function (x, y, z) { return B.get(x, y, z) || armWall(T, x, y, z); } });
+}
+/** 走路格、站位看的格子（42_hands.js navRefresh、40_crew.js goToGun、81_fps.js 第一人稱）：船殼（打掉的照現在）＋裝甲掃過的那一圈（不轉、打掉也照樣擋：見上面）。 */
 function navG(sh) {
   if (!sh.arm) return sh.grid;
-  var g = sh.grid, A = sh.T.armor;
-  return sh.navG || (sh.navG = { sx: g.sx, sy: g.sy, sz: g.sz, get: function (x, y, z) { if (sh.grid.get(x, y, z)) return 1; for (var i = 0; i < A.length; i++) if (A[i].grid.get(x, y, z)) return 1; return 0; } });
+  var g = sh.grid, T = sh.T;
+  return sh.navG || (sh.navG = { sx: g.sx, sy: g.sy, sz: g.sz, get: function (x, y, z) { return sh.grid.get(x, y, z) ? 1 : armWall(T, x, y, z); } });
 }
 /** 打掉裝甲的一格（20_shatter.js removeVoxel 的裝甲版：不進水、不改走路格、不推連通的種子）。回：原本的色（0 ＝ 本來就沒有）。 */
 function armRemove(sh, a, x, y, z) {
