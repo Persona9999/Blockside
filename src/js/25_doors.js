@@ -61,7 +61,7 @@ function doorInflow(sh, fl, dtc, head) {
     ar += o.ar; n++;
     if (ci < 0 || hOut <= P[1]) return;
     var hIn = fl.A[ci] > 1e-6 ? head(ci) : -1e9, dh = hOut - Math.max(hIn, P[1]); if (dh <= 0.001) return;
-    var dv = FL_C * o.ar * Math.sqrt(2 * G * dh) * fk * dtc; flDeposit(fl, ci, dv); q += dv;
+    var dv = FL_C * o.ar * Math.sqrt(2 * G * dh) * fk * dtc; flDeposit(sh, fl, ci, dv); q += dv;
   });
   return [q, ar, n];
 }
