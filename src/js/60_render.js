@@ -44,6 +44,25 @@ function seaGrid(lv) {
 function hullTex(T, hb) {                              // hb ＝ 快取的那張（06_cache.js）
   T.hullTW = T.base.sx; T.hullTH = Math.min(256, T.base.sz);
   T.hullHB = hb || hullMask(T);                        // 存快取、對拍用（__game.hullCheck）
+  T.hullSea = hullSeaMask(T);                          // 海的著色器用的那一張（砲口、舷窗補起來）；模擬照舊讀 hullHB
+}
+/** 海面遮罩補縫（TASK-0654；Tim 2026-10-16：「炮口進水會變成一個很明顯的長條形」「我發現穿進來的好像是海面」）：
+ *  hullMask 是每個 (x, z) 最外那一格 ⇒ 砲口那幾層、砲口那幾欄沒有船殼 ⇒ 半寬掉到 0（量過：憲法號 z 88–108、112–126，例 x 185–187 上下都是 49、中間 0）
+ *  ⇒ 海的著色器當成船外，船一沉到砲口高，海面就沿著那幾欄整條橫穿進船艙。
+ *  這裡每一欄 x 沿 z 補縫：上下 HULL_FILL_M 公尺內都有船殼 ⇒ 取兩邊較小的那個半寬（缺口補起來，外形的上緣、下緣不往外長）。
+ *  ⛔ 只給海面遮罩（hullArr 上傳的貼圖）；進水模擬、游泳、碎帆照舊讀 T.hullHB（一位元不動 ⇒ 戰局不變）。 */
+var HULL_FILL_M = 1.5;
+function hullSeaMask(T) {
+  var TW = T.hullTW, TH = T.hullTH, hb = T.hullHB, R = Math.max(1, Math.ceil(HULL_FILL_M / S)), out = new Uint8Array(hb);
+  for (var x = 0; x < TW; x++) for (var z = 0; z < TH; z++) {
+    var dn = 0, up = 0;                                                  // z 下面、上面 R 格（不含 z）裡最大的半寬
+    for (var k = 1; k <= R; k++) {
+      if (z - k >= 0) { var a = hb[(z - k) * TW + x]; if (a > dn) dn = a; }
+      if (z + k < TH) { var b = hb[(z + k) * TW + x]; if (b > up) up = b; }
+    }
+    var f = Math.min(dn, up); if (f > out[z * TW + x]) out[z * TW + x] = f;
+  }
+  return out;
 }
 function hullMask(T) {
   var TW = T.base.sx, TH = Math.min(256, T.base.sz), CY = T.cy, hb = new Uint8Array(TW * TH);
@@ -332,7 +351,7 @@ function hullArr() {
   var t = HULLA.tex = gl.createTexture(); HULLA.key = key;
   gl.bindTexture(gl.TEXTURE_2D_ARRAY, t); gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
   gl.texImage3D(gl.TEXTURE_2D_ARRAY, 0, gl.R8, W, H, Math.max(1, Ts.length), 0, gl.RED, gl.UNSIGNED_BYTE, null);
-  Ts.forEach(function (T, k) { T.hullLayer = k; gl.texSubImage3D(gl.TEXTURE_2D_ARRAY, 0, 0, 0, k, T.hullTW, T.hullTH, 1, gl.RED, gl.UNSIGNED_BYTE, T.hullHB); });
+  Ts.forEach(function (T, k) { T.hullLayer = k; gl.texSubImage3D(gl.TEXTURE_2D_ARRAY, 0, 0, 0, k, T.hullTW, T.hullTH, 1, gl.RED, gl.UNSIGNED_BYTE, T.hullSea || T.hullHB); });   // 海面遮罩用補過縫的那張（hullSeaMask）
   [gl.TEXTURE_MIN_FILTER, gl.TEXTURE_MAG_FILTER].forEach(function (p) { gl.texParameteri(gl.TEXTURE_2D_ARRAY, p, gl.NEAREST); });
   [gl.TEXTURE_WRAP_S, gl.TEXTURE_WRAP_T].forEach(function (p) { gl.texParameteri(gl.TEXTURE_2D_ARRAY, p, gl.CLAMP_TO_EDGE); });
   gl.bindTexture(gl.TEXTURE_2D_ARRAY, null);
