@@ -7,8 +7,9 @@
 //   ?debug=1 時 __game.floodLab(o) 同一套、回傳同一份。
 // 參數（網址同名）：holes（x:dz:side:r，以 ; 分隔：x ＝ 水線那一段船長的比例 0–1、dz ＝ 水線下幾格、side 0 ＝ 格 +y 那一舷、r ＝ 半徑幾格；不給 ⇒ 預設三個）、
 //   dur（秒，預設 60）、every（秒，預設 10）、fyaw、fpitch、fdist、fty（鏡頭；fty ＝ 注視點在船中心上面幾公尺，看底艙給負的；⛔ 不叫 dist／pitch：dist 是開局兩艘船的距離、pitch 是 ?cam=deck 的俯角 —— 撞名量過：dist=38 把另一艘擺到旁邊、進水整個不一樣）、cut（half ＝ 剖面、none；預設 half）、deck（拿掉幾層甲板，預設 0）、xray（1 ＝ 透視）、
-//   w（截圖寬，預設 480）、flat（1 ＝ 浪設 0）。
+//   w（截圖寬，預設 480）、flat（1 ＝ 浪設 0）、focus（step ＝ 每一筆把鏡頭對準水面差最大的那條兩池交界；cell:x:y ＝ 固定對準那一欄最高的水面 —— 照 fpitch／fdist 拉近、鏡頭擺在往船中心那一側，fyaw 不用）。
 // ⛔ 只在 ?lab=flood 或 __game.floodLab 才跑；一般遊戲一行都不多算。
+// 鏡頭用自由鏡頭（CAM.mode 0：注視點 CAM.tgt、yaw／pitch／dist 照給的）。⛔ mode 4 是「我艦看向敵艦」：注視點固定在我艦中心上 4 m、yaw 照敵艦方向 ⇒ fyaw、對準都沒效（量過：focus 對準的點被蓋回船中心）。
 // ⚠ 要帶 seed（flood_lab.py 沒給就補 seed=3）：沒帶 ⇒ 每次開都是隨機的一局，浮穩的姿勢、洞的位置、進水都不一樣（量過：同一組參數兩次 t 38 是 130／138 m³）；
 //   帶了 ⇒ 兩次逐位元相同（帆繩物理開關都一樣）。
 var FLAB_HOLES = [[0.35, 8, 0, 4], [0.55, 12, 1, 4], [0.7, 6, 0, 3]];
@@ -72,16 +73,32 @@ function floodLab(o) {
     out.holes.push({ x: x, z: z, side: hd[2], r: hd[3], removed: r ? r.removed : 0 });
   });
   // 鏡頭：對著船中、看艙內（剖面拿掉靠鏡頭那一半）
-  if (o.ty !== undefined) { var cc = shipCenter(sh); CAM.tgt = [cc[0], cc[1] + o.ty, cc[2]]; CAM.trMe = CAM.trYaw = null; }   // 注視點：船中心往上 ty 公尺（看底艙 ⇒ 負的）
-  CAM.follow = null; CAM.mode = 4; CAM.yaw = o.yaw; CAM.pitch = o.pitch; if (o.dist > 0) CAM.dist = o.dist; else CAM.dist = Math.max(60, (x1 - x0) * S * 0.95);
+  var cc = shipCenter(sh); CAM.tgt = [cc[0], cc[1] + (o.ty || 0), cc[2]]; CAM.trMe = CAM.trYaw = null;   // 注視點：船中心往上 ty 公尺（看底艙 ⇒ 負的）
+  CAM.follow = null; CAM.mode = 0; CAM.yaw = o.yaw; CAM.pitch = o.pitch; if (o.dist > 0) CAM.dist = o.dist; else CAM.dist = Math.max(60, (x1 - x0) * S * 0.95);
   CUTV.half = o.cut === 'half'; CUTV.deck = o.deck | 0; FLX3 = !!o.xray;
   var snap0 = FL_SNAP, stat0 = FL_STAT; FL_SNAP = FL_STAT = true;
   var n = Math.round(o.every / DT), steps = Math.max(1, Math.round(o.dur / o.every));
   for (var k = 0; k <= steps; k++) {
+    var focusAt = null;
     if (k) { for (i = 0; i < n; i++) { step(); if (i % 30 === 29) remesh(Infinity); } }
     remesh(Infinity); CAM.snap = true; camUpdate(1); render();
+    if (o.focus === 'step' && sh.fl.mesh && sh.fl.mesh.stat) {             // 對準水面差最大的那條兩池交界（高的那一邊），拉近再拍
+      var E = sh.fl.mesh.stat.map.edge.filter(function (e) { return e[3] === 1 && e[4] > 0; }).sort(function (a, b) { return b[4] - a[4]; })[0];
+      if (o.focusCell) {                                                  // focus=cell:x:y ⇒ 固定對準那一欄（改前改後同一個角度比）：那一欄最高的水面
+        var TT = sh.fl.mesh.stat.map.top.filter(function (q) { return q[0] === o.focusCell[0] && q[1] === o.focusCell[1]; }).sort(function (a, b) { return b[2] - a[2]; })[0];
+        var Fc = sh.fl.F, hcell = TT ? M4.pt(sh.M, Fc.X0 + (TT[0] + 0.5) * Fc.c, Fc.Y0 + (TT[1] + 0.5) * Fc.c, (TT[2] + 1) * Fc.c)[1] : null;
+        E = TT ? [TT[0], TT[1], -1, 1, 0, hcell] : null;
+      }
+      if (E) {
+        var F2 = sh.fl.F, M = sh.M, gx = F2.X0 + (E[0] + 0.5 + (E[2] === 0 ? -0.5 : E[2] === 1 ? 0.5 : 0)) * F2.c, gy = F2.Y0 + (E[1] + 0.5 + (E[2] === 2 ? -0.5 : E[2] === 3 ? 0.5 : 0)) * F2.c;
+        var gzz = (E[5] - (M[1] * gx + M[5] * gy + M[13])) / M[9], P = M4.pt(M, gx, gy, gzz);
+        var ccn = shipCenter(sh); CAM.yaw = Math.atan2(ccn[2] - P[2], ccn[0] - P[0]);   // 鏡頭擺在那一點往船中心那一側（從艙裡往船殼看）⇒ 對準時 fyaw 不用
+        CAM.tgt = [P[0], P[1] - E[4] * 0.5, P[2]]; CAM.trMe = CAM.trYaw = null; CAM.snap = true; camUpdate(1); render();
+        focusAt = { ix: E[0], iy: E[1], dir: E[2], dh: +E[4].toFixed(2) };
+      }
+    }
     var me = sh.fl.mesh, st = me && me.stat ? me.stat : null, dh = st ? st.dh.slice().sort(function (a, b) { return a - b; }) : [];
-    out.rows.push({ t: +SIMT.toFixed(1), fl: flReadout(sh),
+    out.rows.push({ t: +SIMT.toFixed(1), fl: flReadout(sh), focus: focusAt, cam: { eye: CAM.eye.map(function (v) { return +v.toFixed(2); }), look: (CAM.look || CAM.tgt).map(function (v) { return +v.toFixed(2); }) },
       mesh: me ? { tris: me.n / 3, quads: me.quads, ms: +(me.ms || 0).toFixed(2), falls: me.fn ? me.fn / 6 : 0, sides: me.sideN || 0, spill: me.fallN || 0, depBlit: FL_DEPBLIT } : null,
       seam: st ? { tops: st.tops, pools: st.pools, join: st.join, step: st.step, open: st.open, wall: st.wall, cutTops: st.cutTops, cutPieces: st.cutPieces, outTops: st.outTops,
         dhMed: dh.length ? +dh[dh.length >> 1].toFixed(2) : 0, dhMax: dh.length ? +dh[dh.length - 1].toFixed(2) : 0 } : null,
@@ -95,7 +112,7 @@ function floodLab(o) {
 function floodView(o) {
   o = o || {};
   if (o.ty !== undefined && SHIPS[0]) { var cc = shipCenter(SHIPS[0]); CAM.tgt = [cc[0], cc[1] + o.ty, cc[2]]; CAM.trMe = CAM.trYaw = null; }
-  CAM.follow = null; CAM.mode = 4; ['yaw', 'pitch', 'dist'].forEach(function (k) { if (o[k] !== undefined) CAM[k] = o[k]; });
+  CAM.follow = null; CAM.mode = 0; ['yaw', 'pitch', 'dist'].forEach(function (k) { if (o[k] !== undefined) CAM[k] = o[k]; });
   if (o.cut !== undefined) CUTV.half = o.cut === 'half'; if (o.deck !== undefined) CUTV.deck = o.deck | 0; if (o.xray !== undefined) FLX3 = !!o.xray;
   var snap0 = FL_SNAP; FL_SNAP = true; CAM.snap = true; camUpdate(1); render(); FL_SNAP = snap0;
   return flabShot(o.w || 480);
@@ -108,6 +125,7 @@ function flLabOpts() {
   ['dur', 'every', 'deck', 'w'].forEach(function (k) { if (Q.has(k)) o[k] = +Q.get(k); });
   [['fyaw', 'yaw'], ['fpitch', 'pitch'], ['fdist', 'dist'], ['fty', 'ty']].forEach(function (kk) { if (Q.has(kk[0])) o[kk[1]] = +Q.get(kk[0]); });
   if (Q.has('cut')) o.cut = Q.get('cut');
+  if (Q.has('focus')) { o.focus = Q.get('focus'); var fm = /^cell:(\d+):(\d+)$/.exec(o.focus); if (fm) { o.focus = 'step'; o.focusCell = [+fm[1], +fm[2]]; } }
   if (Q.get('xray') === '1') o.xray = true;
   if (Q.get('flat') === '1') o.flat = true;
   return o;
