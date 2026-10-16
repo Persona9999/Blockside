@@ -602,7 +602,8 @@ class Fail(Exception):
 
 def act_metasync(sid, build=True):
     """只同步 meta 與固定點（TASK-0572）：從雕刻作品匯出部件清單，把每條關聯的 meta、points 換進 _cache 那份 .vxk 的 header（路徑對得上的才換）；
-    格子、繩、帆、模型一位元都不動 ⇒ 作品的船體改過也不會被帶進來（要換船體走 reimport）。對不上的路徑列出來（⛔ 不默默略過）。"""
+    外部模型也一樣（TASK-0640：舵、舵輪的 spin meta 寫在模型上）—— header 的 rig.models[].name ＝ 部件清單 models[].path，只換 meta、points；
+    格子、繩、帆、模型的網格與擺放一位元都不動 ⇒ 作品的船體改過也不會被帶進來（要換船體走 reimport）。對不上的路徑列出來（⛔ 不默默略過）。"""
     cfg = load()
     s = next((x for x in cfg['ships'] if x['id'] == sid), None)
     if not s:
@@ -617,7 +618,9 @@ def act_metasync(sid, build=True):
     code, out = run([senate, 'cmd', 'sculpture', '--arg', 'op=export', '--arg', 'format=parts', '--arg', 'work=' + s['work'], '--arg', 'out=' + os.path.abspath(tmp)])
     if code != 0 or not os.path.exists(tmp):
         raise Fail('部件清單匯出失敗（exit %d）：' + chr(10) + '%s' % (code, out.strip()))
-    P = {q['path']: q for q in json.load(open(tmp, encoding='utf-8')).get('links', [])}
+    PJ = json.load(open(tmp, encoding='utf-8'))
+    P = {q['path']: q for q in PJ.get('links', [])}
+    PM = {q['path']: q for q in PJ.get('models', [])}
     os.remove(tmp)
     raw = zlib.decompress(open(path, 'rb').read(), -15)
     n = struct.unpack('<I', raw[4:8])[0]
@@ -633,7 +636,24 @@ def act_metasync(sid, build=True):
             ch.append(q['path'])
             q['meta'], q['points'] = m, pt
     new = sorted(set(P) - {q.get('path') for q in h.get('parts', [])})
+    chm, mmiss = [], []                                  # 外部模型（TASK-0640）
+    for q in (h.get('rig') or {}).get('models', []):
+        src = PM.get(q.get('name'))
+        if not src:
+            mmiss.append(q.get('name'))
+            continue
+        m, pt = src.get('meta') or {}, src.get('points') or {}
+        if (q.get('meta') or {}) != m or (q.get('points') or {}) != pt:
+            chm.append(q['name'])
+            q['meta'], q['points'] = m, pt
+    mnew = sorted(set(PM) - {q.get('name') for q in (h.get('rig') or {}).get('models', [])})
     log = ['metasync %s：%d 條關聯換了 meta／固定點%s' % (sid, len(ch), ('：' + '、'.join(ch)) if ch else '')]
+    log.append('metasync %s：%d 個模型換了 meta／固定點%s' % (sid, len(chm), ('：' + '、'.join(chm)) if chm else ''))
+    if mmiss:
+        log.append('⚠ .vxk 有、作品裡沒有的模型 %d 個（照舊）：%s' % (len(mmiss), '、'.join(mmiss)))
+    if mnew:
+        log.append('⚠ 作品裡新加、.vxk 還沒有的模型 %d 個（要 reimport 才帶得進來）：%s' % (len(mnew), '、'.join(mnew)))
+    ch += chm
     if miss:
         log.append('⚠ .vxk 有、作品裡沒有的關聯 %d 條（照舊）：%s' % (len(miss), '、'.join(miss)))
     if new:
