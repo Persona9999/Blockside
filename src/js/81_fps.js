@@ -13,7 +13,7 @@
 //   走：每一步照現在的格子（sh.grid，打掉的地板就站不住）用 standZ 找腳下 ⇒ 往上 FP_UP、往下 FP_DOWN 格內站得住、頭上 FP_HEAD 格空才走得過去；
 //   中心那一柱要站得住（⇒ 走路不會從艙口掉下去）、身體半徑 FP_R 格的四個角只擋牆 ⇒ 不穿牆、走不出舷牆。
 //   跳起來在半空（Tim 2026-10-16「有些空洞跳不下去」）⇒ 往下不限 FP_DOWN：下面一路找得到地板就過得去、照重力落下去；牆照腳現在的高度擋。
-//   ⚠ 不擋模型（砲、桶）：模型不是格子（Tim 2026-10-16「這個沒關係 不用碰撞」）。
+//   ⚠ 不擋模型（砲、桶）：模型不是格子（Tim 2026-10-16「這個沒關係 不用碰撞」）。會轉的裝甲（砲塔）擋：格子照 navG ＝ 船殼＋它掃過的那一圈（24_armor.js；TASK-0655）⇒ 從圈裡的艙口梯進出。
 //   平滑（Tim 2026-10-16「需要更平滑的移動 以及可以跨越一定高低差(且不要抖動)」）：速度有加減速（FP_ACC／FP_DEC 秒）；
 //   腳底 c.pos[2] 照舊是整格（survey 判腳下要用），鏡頭的眼高 FP.ez 另外平滑地追（FP_EZ 秒）⇒ 跨台階、頭頂變低不會一格一格跳。
 //   梯子：照雕刻的固定點（42_hands.js shipLadders：foot／lo／hi／head），走到梯腳或梯頭旁邊 ⇒ E（或面板的 🪜）沿那條線爬。
@@ -71,7 +71,7 @@ function fpMode(m) {
 /** 浮空結束：從現在的位置往下找站得住的地板 ⇒ 照重力落下去（腳底換成那一層、FP.jz ＝ 離地多高）；
  *  下面一路都沒有（在船外、海上）⇒ 回到開始浮空的地方（那裡也站不住 ⇒ 找它附近 12 格內最近的地板）。 */
 function fpLand() {
-  var c = FP.c, g = FP.sh.grid, x = Math.floor(c.pos[0]), y = Math.floor(c.pos[1]), z = Math.floor(c.pos[2]);
+  var c = FP.c, g = navG(FP.sh), x = Math.floor(c.pos[0]), y = Math.floor(c.pos[1]), z = Math.floor(c.pos[2]);
   FP.vz = 0; FP.jv = 0;
   for (var dz = 0; dz <= 160; dz++) {
     var s = standZ(g, x, y, z - dz, z - dz, FP_HEAD);
@@ -229,7 +229,7 @@ function fpFrame(dt) {
     var o = sh, why = RUNNING && SHIPS[PLAYER_I] === sh ? '我艦沉了' : ''; fpSet(false); if (why && o) note(o, '第一人稱結束：' + why);
     return;
   }
-  var m = FP.mv, g = sh.grid;
+  var m = FP.mv, g = navG(sh);                                        // navG：船殼＋會轉的裝甲掃過的那一圈（24_armor.js；TASK-0655：砲塔的牆走不穿）
   FP.yaw += (m.tr - m.tl + FP.look[0]) * FP_TURN * dt; FP.pitch = clamp(FP.pitch + (m.lu - m.ld - FP.look[1]) * FP_TURN * 0.7 * dt, -1.35, 1.35);   // 方向鍵＋右搖桿
   if (FP.fol && (sh.crew.indexOf(FP.fol) < 0 || FP.fol.st !== 0)) { FP.fol = null; FP.ez = null; note(sh, '第一人稱：跟的人倒下或落水了 —— 回到自己'); fpUI(); }
   if (PAUSED && fpLocked()) fpUnlock();                                // 停格、打開設定 ⇒ 放開滑鼠（要按面板）
@@ -311,7 +311,7 @@ function fpJump() { if (!FP.on || PAUSED || FP.fol || FP.mode === 2 || FP.climb 
 var FP_EZ_DN = 0.04, FP_EZ_UP = 0.35;
 function fpEyeZ(dt) {
   var c = fpWho(), jz = FP.fol ? 0 : FP.jz, fly = FP.mode === 2 && !FP.fol, base = c.pos[2] + jz;
-  var off = fly ? FP_EYE : fpEye(FP.sh.grid, [c.pos[0], c.pos[1], base], FP.fol ? null : FP.v);   // 浮空：眼睛固定在腳上 FP_EYE（穿過甲板時不跟著壓）
+  var off = fly ? FP_EYE : fpEye(navG(FP.sh), [c.pos[0], c.pos[1], base], FP.fol ? null : FP.v);   // 浮空：眼睛固定在腳上 FP_EYE（穿過甲板時不跟著壓）
   if (FP.ez === null || FP.climb || fly || !(dt > 0)) FP.fz = base, FP.eo = off;   // 剛開、換人、爬梯子、浮空（本來就連續）⇒ 直接跟
   else {
     FP.fz += (base - FP.fz) * (1 - Math.exp(-dt / FP_EZ));

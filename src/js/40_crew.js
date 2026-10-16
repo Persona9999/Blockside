@@ -52,7 +52,7 @@ function standNear(g, x, y, z0, z1, head, taken, rmax) {   // (x, y) 附近 rmax
   return null;
 }
 function makeCrew(sh) {
-  var g = sh.T.base, CY = sh.T.cy, HULL_X0 = sh.T.hx0, HULL_X1 = sh.T.hx1, taken = {}, crew = [];
+  var g = navBase(sh.T), CY = sh.T.cy, HULL_X0 = sh.T.hx0, HULL_X1 = sh.T.hx1, taken = {}, crew = [];
   sh.cw = shipCrew(sh.T.id); sh.pmWant = 0;                          // 船員配置（05_hull.js：預設 ← 船隻配置頁）；pmWant：送藥手該有幾個（23_powder.js makeMonkeys 數）
   // ⛔ 以前用平面的 taken 標模型外框：長砲改成模型之後，砲甲板的砲把上面 spar deck 的站位也佔掉了；火藥桶（艙底）更把大半個平面佔掉
   CREW_BLOCK = sh.models.filter(function (m) { return (m.kind !== 'powder' || m.station) && m.kind !== 'door'; });   // 取用點的桶在甲板上 ⇒ 要避；門、艙蓋 ＝ 通道（25_doors.js）⇒ 不避
@@ -202,7 +202,7 @@ function goToGun(sh, c, g) {
     return countBox(sh.grid, x - 1, y - 1, s.at[2] - 1, x + 1, y + 1, s.at[2] - 1) > 0;
   })[0];
   var to = spot ? spot.at : null;
-  if (!to && g.spots && g.spots.length) { var a = g.spots[0].at; to = standNear(navG(sh), Math.floor(a[0]), Math.floor(a[1]), a[2] - 2, a[2] + 2, 14, {}); }   // navG：砲塔的裝甲照原位擋人（24_armor.js；沒有裝甲 ＝ sh.grid）
+  if (!to && g.spots && g.spots.length) { var a = g.spots[0].at; to = standNear(navG(sh), Math.floor(a[0]), Math.floor(a[1]), a[2] - 2, a[2] + 2, 14, {}); }   // navG：砲塔的裝甲掃過的那一圈擋人（24_armor.js；沒有裝甲 ＝ sh.grid）
   if (!to) to = c.pos;
   if (spot) spot.who = c;
   c.walk = { to: to.slice(), sp: 18 };

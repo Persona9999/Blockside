@@ -174,7 +174,7 @@ python -I admin.py cache --all    # 每艘都比 ＝ 比對來源：雕刻作品
 | `21_gunnery.js` | 開砲、齊射、射界、砲彈飛行與命中、模型扣血與被打飛（命中照網格的佔用格 `inMesh`）、斷繩撕帆、帆掉下來；彈重與能量（砲種表 `shot`、設定檔 `pen`）：實心彈打木頭照能量扣、打有 `pen` 的材質（鐵甲）照入射角與板厚判彈開／凹痕／擊穿機率，爆裂彈半徑照彈重與硬度（TASK-0621） |
 | `22_pieces.js` | 斷開的那一團：倒下、壓到人、落水；斷成兩截的半截船（翹起來、沉下去，上面的砲跟著走） |
 | `23_powder.js` | 彈藥庫與火藥桶：血量、點燃、連鎖、整間殉爆（`crater` 排好區塊、`blastStep`／`stepBlasts` 分步挖）、斷船（`breakShip`，彈坑挖完才切）；取用點（`makeStations`）—— 彈藥庫關聯 meta `hoist=<梯子路徑>` ⇒ 那座梯子梯頭那一層的取用點改成「桶在梯腳、在梯頭取」（`hoistStation`；TASK-0632，莫尼特號的火藥從住艙甲板經砲塔艙口吊上來、不擺在露天甲板） |
-| `24_armor.js` | 砲帶的裝甲（TASK-0631）：關聯 meta `kind=armor`、`mount=<砲模型>` 的格從船殼拆出來（`armorSetup`：`T.armor`、船殼 `T.hullG`；`T.base` 照舊是整艘）、每艘一份跟著砲轉（`armorShip`、`armLocal`）、打中（`armAt`／`armRemove`，`shatter`／`slab` 帶 a）、殉爆 `armBlast`、畫（`armDraw`／`armSmDraw`）、走路格看的格子 `navG` |
+| `24_armor.js` | 砲帶的裝甲（TASK-0631）：關聯 meta `kind=armor`、`mount=<砲模型>` 的格從船殼拆出來（`armorSetup`：`T.armor`、船殼 `T.hullG`；`T.base` 照舊是整艘）、每艘一份跟著砲轉（`armorShip`、`armLocal`）、打中（`armAt`／`armRemove`，`shatter`／`slab` 帶 a）、殉爆 `armBlast`、畫（`armDraw`／`armSmDraw`）、走路格看的格子 `navBase`／`navG`（＋會轉的裝甲掃過的那一圈 `armRing`／`armWall`，TASK-0655） |
 | `25_doors.js` | 門、艙蓋（TASK-0638）：模型 meta `kind=door`、固定點 `hinge-a`／`hinge-b`（`doorsShip`：鉸鏈、門正下方的開口格）；有人經過才開（`doorsAnim`，畫面那一格、畫質「門的開關演出」）；門沒了 ⇒ 開口變進水口（`doorsSurvey`：公式模式加進 `sh.flood`、粒子模式 `fl.tops` ⇒ `doorInflow`）；匯入檢查的讀數 `doorsSummary`。詳見下面「門、艙蓋」 |
 | `26_spin.js` | 照參數轉的子物件（TASK-0640）：模型 meta `spin`＝來源參數（`SPIN_SRC`：rudder／speed／rpm）、`spin_mode`（angle／rate）、`spin_k`、`spin_min`／`spin_max`（沒寫 ＝ 無上限）、`spin_lag`；轉軸 `spinAxis`（固定點 spin-a／spin-b ＞ meta spin_pivot_*＋spin_axis_* ＞ 舵的 hinge_*＋axis_* ＞ hub-aft／hub-fore ＞ hub＋axis_*）；`spinShip`（建船）、`spinStep`（模擬每一步，sail() 之後）、匯入檢查 `spinIssues`／`spinSummary`。詳見下面「照參數轉的子物件」 |
 | `30_rig_physics.js` | 帆與繩的物理（可關）；帆的貼圖集 `sailAtlas`（一個船型一張，alpha 照 vxk 的 `alpha_min` 二值化；TASK-0579） |
@@ -442,6 +442,12 @@ python -I admin.py cache --all    # 每艘都比 ＝ 比對來源：雕刻作品
   砲門那個方位那一層是空的 ⇒ 看左右 4 份、上下 3 層的牆；那個方向本來就沒裝甲 ⇒ 不算砲口。是砲口 ⇒ 碎片、砲被打飛的爆點從碰到的那一點算（隔著裝甲的照 `armBetween` 擋掉）、**不引爆砲旁的藥箱**（藥箱在裝甲裡面）、
   砲被打飛時砲班另外吃的那一份（砲被打離砲架撞到人）照砲的中心 × `pen.muzzle`（設定檔，預設 0.3）。打穿裝甲才打中砲、從頂上掉進來的 ⇒ 照舊。爆風、殉爆打到砲（沒有碰到的點）⇒ 照舊。
   讀數：`sh.muzzleHit`（砲口被打中幾次）。只有帶裝甲子模組的船才看 ⇒ 別的船一位元不動。
+- **砲塔走不穿**（TASK-0655；Tim：「砲塔做成無法通行(這個應該要是通用規格)」「雖然會旋轉 但實際上有一圈物理阻隔通行」）：以前第一人稱只看船殼（`sh.grid`，裝甲已經拆出去了）⇒ 直接穿過砲塔的牆；船員照開局位置的裝甲擋（砲門那幾格是空的）。
+  現在 24_armor.js `armRing`：會轉的裝甲每一格繞轉軸掃出一圈 ⇒ 每一層記下掃到的半徑（0.5 格一份、一格掃格心距離 ± 0.71 格；船型第一艘開場時算、存在 `A.ring`）；`armWall` 落在那一圈裡 ⇒ 實心。
+  照它的：`navBase(T)`（T.base＋那一圈：開戰時的走路格 42_hands.js navBuild、站位 40_crew.js makeCrew）、`navG(sh)`（船殼現在的樣子＋那一圈：走路格重算、goToGun、81_fps.js 第一人稱走路・落地・眼睛高度、除錯 fp／fpMap）。
+  被打掉的格不打開那一圈（砲塔還在就照樣擋）；出入走圈裡的艙口梯（莫尼特號 `梯子/turret`）；圈裡沒有梯子 ⇒ 匯入檢查 ⚠「砲塔進不去」，讀數列那一圈的半徑、高度、圈裡的梯子。⛔ 火藥桶、取用點（23_powder.js）照舊看 T.base。
+  量（2026-10-16，莫尼特號）：那一圈離轉軸 29.5～33.5 格、z 35–64；第一人稱從外面往砲塔走停在 34.1 格、從圈裡往外走停在 28.8 格、旁邊沒有砲塔的那一條照樣走過去；從住艙甲板爬砲塔梯上來落在圈裡（離轉軸 6 格）、爬得下去；砲班 9 人開場都在圈裡。
+  對拍（含莫尼特對維吉尼亞 a46efaf631）跟改之前逐位元組相同：船員本來就被開局位置的裝甲擋著。除錯 `__game.fpRun(秒)`：照每秒 60 格推第一人稱（畫面迴圈不跑時量走路用）。
 - **船員避開露天甲板**（船員配置 `shelter` 0／1，TASK-0637；Tim：「讓船員儘量不要上露天甲板 …… 這部分船員應該可以當後補去補砲塔傷亡的」）：開了 ⇒ 預備水手閒晃不上露天那一層（`shelterLv`：最上面那層砲甲板）、在那一層閒著就回待命那一層；點名補位照樣上去。
   船長以外的軍官開戰時站在待命那一層（`shelterSpots`，標 `below` ⇒ 火槍打不到）；船長、舵手照舊在露天甲板。設定檔 crew0 `shelter: 0`；莫尼特號 1。船隻配置頁、後台都有那一格。
   量過（莫尼特號對維吉尼亞號 seed 1–4、300 秒，三件一起）：莫尼特號死傷 22–32／54 → 8–11／54；溺水 3–9 → 0；落在船裡 6–10 人次；在露天那一層的預備水手（含去補位、路過的）seed 3 同時 6–17 → 四個種子最多 2。剩下的：火藥（砲塔裡的藥包）、露天的船長與舵手、從砲門看得到的砲手被火槍打、甲板上的爆炸隔著甲板傷到住艙的人。

@@ -4679,8 +4679,8 @@ function flashCheck(sh, L) {
 // 載入（armorSetup，05_hull.js buildHull：verify 與材質之後 ⇒ checksum 照整艘比、材質層與總重含裝甲）：
 //   T.armor[k] ＝ { mount 那門砲的路徑, parts, grid（只有裝甲的格；座標 ＝ 船的格座標、轉 0 的樣子）, bb, n, t }；
 //   T.hullG ＝ 船殼（T.base 拿掉裝甲；沒有裝甲 ⇒ 就是 T.base 那一份）：每艘的 sh.grid、合併網格、平滑面、進水的水格與破口、繩與模型的錨、桅照它。
-//   T.base 照舊是整艘（含裝甲）：浮力表、站位、走路格、甲板切高、艙房、羅盤的小船照它 ⇒ 裝甲在原本的位置當擋人的牆
-//   （圓筒轉到哪都一樣，只差砲門；Tim：進砲塔只走住艙甲板的梯子艙口，TASK-0632）、浮力跟以前一樣（打掉不重算 —— 船殼也是）。
+//   T.base 照舊是整艘（含裝甲）：浮力表、甲板切高、艙房、羅盤的小船照它、浮力跟以前一樣（打掉不重算 —— 船殼也是）；
+//   站位、走路格、第一人稱照 navBase／navG ＝ 再加上裝甲掃過的那一圈（TASK-0655，見 armRing；Tim：進砲塔只走住艙甲板的梯子艙口，TASK-0632）。
 //   ⛔ 沒有 mount、找不到那門砲、那門砲不會轉 ⇒ 不拆：照舊是船殼的一部分、不轉（T.armBad，匯入檢查報）。
 // 每艘（armorShip，10_ship.js makeShip，砲的迴旋設好之後）：sh.arm[k] ＝ { grid（共用、打掉才複製那一塊）, rs, 平滑面, g 那門砲 }；
 //   轉 ＝ g.mt.yaw 繞 g.mt.c（跟砲的模型 modelLocal 同一個 rotM ⇒ 砲口永遠在砲門裡）；砲被打飛 ⇒ 停在最後的角度（mountStep 不再轉它）。
@@ -4750,6 +4750,7 @@ function armorShip(sh) {
     var g = (sh.mounts || []).filter(function (q) { return q.model.path === A.mount; })[0] || null, grid = A.grid.share(), rs = new VK.RegionSet(gl, grid, QIDX);
     rs.shareFrom(A.rs0);
     var a = { A: A, T: T, sh: sh, g: g, grid: grid, rs: rs, pin: T.hullG, lost: 0 };
+    if (g) armRing(A, g.mt.c);                                         // 掃過的那一圈（走路看的牆；TASK-0655）：船型第一艘算一次
     smShare(a, A.smP);
     return a;
   });
@@ -4823,11 +4824,54 @@ function armMuzzle(sh, m, L) {
 /** 裝甲原本的位置 (x, y, z)（裝甲的格座標）還有沒有格（重量照材質層的座標數）。 */
 function armGet(sh, x, y, z) { for (var i = 0; i < sh.arm.length; i++) if (sh.arm[i].grid.get(x, y, z)) return 1; return 0; }
 function armCount(sh) { var n = 0; for (var i = 0; i < sh.arm.length; i++) n += sh.arm[i].grid.count; return n; }
-/** 走路格、站位看的格子（42_hands.js navRefresh、40_crew.js goToGun）：船殼（打掉的照現在）＋裝甲原本的位置（不轉、打掉也照樣擋：見檔頭）。 */
+// 掃過的那一圈（TASK-0655；Tim 2026-10-16：「砲塔做成無法通行(這個應該要是通用規格)」「雖然會旋轉 但實際上有一圈物理阻隔通行」）：
+//   會轉的裝甲每一格繞轉軸掃出一圈 ⇒ 每一層（z）記下掃到的半徑（1／ARM_RK 格一份；一格掃到格心距離 ± 0.71 格）；走路看的格子（navBase／navG）在那些半徑上一律算實心。
+//   莫尼特號：圓筒那幾層 ＝ 內緣到外緣一整環（砲門跟著轉、不留縫），頂 ＝ 整個圓。照開局的形狀算、每個船型一次（A.ring）；被打掉的格第一版不打開那一圈（砲塔還在就照樣擋）。
+//   出入只走圈裡的艙口梯（莫尼特號：梯子/turret，住艙甲板 → 砲塔底下的艙口）；圈裡沒有梯子 ⇒ 匯入檢查警告（75_shipcheck.js）。
+//   用的：第一人稱（81_fps.js）、船員的走路格與站位（42_hands.js navBuild／navRefresh、40_crew.js makeCrew／goToGun）。⛔ 沒用：火藥桶、取用點（23_powder.js 照舊看 T.base）。
+var ARM_RK = 2;
+/** 船型的一塊裝甲 A 繞 c（那門砲的轉軸，船的格座標）掃過的那一圈（armorShip 第一艘算、存在 A.ring）。 */
+function armRing(A, c) {
+  if (A.ring) return A.ring;
+  var bb = A.bb, G = A.grid, rows = {}, rmax = 0, x, y, z;
+  var far = Math.max(Math.hypot(bb[0] - c[0], bb[1] - c[1]), Math.hypot(bb[3] + 1 - c[0], bb[1] - c[1]), Math.hypot(bb[0] - c[0], bb[4] + 1 - c[1]), Math.hypot(bb[3] + 1 - c[0], bb[4] + 1 - c[1])), N = Math.ceil((far + 1) * ARM_RK) + 1;
+  for (z = bb[2]; z <= bb[5]; z++) for (y = bb[1]; y <= bb[4]; y++) for (x = bb[0]; x <= bb[3]; x++) {
+    if (!G.get(x, y, z)) continue;
+    var d = Math.hypot(x + 0.5 - c[0], y + 0.5 - c[1]), row = rows[z] || (rows[z] = new Uint8Array(N));
+    for (var k = Math.max(0, Math.floor((d - 0.71) * ARM_RK)), k1 = Math.min(N - 1, Math.floor((d + 0.71) * ARM_RK)); k <= k1; k++) row[k] = 1;
+    if (d + 0.71 > rmax) rmax = d + 0.71;
+  }
+  return (A.ring = { c: [c[0], c[1]], z0: bb[2], z1: bb[5], rows: rows, r: rmax });
+}
+/** (x, y, z)（船的格座標）在不在哪一塊裝甲掃過的那一圈裡（沒有圈的那塊 ⇒ 照它原本的格）。 */
+function armWall(T, x, y, z) {
+  for (var i = 0; i < T.armor.length; i++) {
+    var A = T.armor[i], R = A.ring;
+    if (!R) { if (A.grid.get(x, y, z)) return 1; continue; }
+    if (z < R.z0 || z > R.z1) continue;
+    var row = R.rows[z]; if (!row) continue;
+    var d = Math.hypot(x + 0.5 - R.c[0], y + 0.5 - R.c[1]);
+    if (d <= R.r && row[Math.floor(d * ARM_RK)]) return 1;
+  }
+  return 0;
+}
+/** 那一圈在 z0 往上 h 層裡的內緣半徑（格；圈裡站人的地方 ＝ 比它近）：匯入檢查、讀數用。沒有 ⇒ 0。 */
+function armRingIn(R, z0, h) {
+  var best = Infinity;
+  for (var z = z0; z < z0 + h; z++) { var row = R.rows[z]; if (!row) continue; for (var k = 0; k < row.length; k++) if (row[k]) { best = Math.min(best, k / ARM_RK); break; } }
+  return best === Infinity ? 0 : best;
+}
+/** 開戰時的走路格、站位看的格子（42_hands.js navBuild、40_crew.js makeCrew）：T.base ＋ 會轉的裝甲掃過的那一圈；沒有裝甲 ⇒ 就是 T.base。 */
+function navBase(T) {
+  if (!T.armor || !T.armor.length) return T.base;
+  var B = T.base;
+  return T.navB || (T.navB = { sx: B.sx, sy: B.sy, sz: B.sz, get: function (x, y, z) { return B.get(x, y, z) || armWall(T, x, y, z); } });
+}
+/** 走路格、站位看的格子（42_hands.js navRefresh、40_crew.js goToGun、81_fps.js 第一人稱）：船殼（打掉的照現在）＋裝甲掃過的那一圈（不轉、打掉也照樣擋：見上面）。 */
 function navG(sh) {
   if (!sh.arm) return sh.grid;
-  var g = sh.grid, A = sh.T.armor;
-  return sh.navG || (sh.navG = { sx: g.sx, sy: g.sy, sz: g.sz, get: function (x, y, z) { if (sh.grid.get(x, y, z)) return 1; for (var i = 0; i < A.length; i++) if (A[i].grid.get(x, y, z)) return 1; return 0; } });
+  var g = sh.grid, T = sh.T;
+  return sh.navG || (sh.navG = { sx: g.sx, sy: g.sy, sz: g.sz, get: function (x, y, z) { return sh.grid.get(x, y, z) ? 1 : armWall(T, x, y, z); } });
 }
 /** 打掉裝甲的一格（20_shatter.js removeVoxel 的裝甲版：不進水、不改走路格、不推連通的種子）。回：原本的色（0 ＝ 本來就沒有）。 */
 function armRemove(sh, a, x, y, z) {
@@ -8263,7 +8307,7 @@ function standNear(g, x, y, z0, z1, head, taken, rmax) {   // (x, y) 附近 rmax
   return null;
 }
 function makeCrew(sh) {
-  var g = sh.T.base, CY = sh.T.cy, HULL_X0 = sh.T.hx0, HULL_X1 = sh.T.hx1, taken = {}, crew = [];
+  var g = navBase(sh.T), CY = sh.T.cy, HULL_X0 = sh.T.hx0, HULL_X1 = sh.T.hx1, taken = {}, crew = [];
   sh.cw = shipCrew(sh.T.id); sh.pmWant = 0;                          // 船員配置（05_hull.js：預設 ← 船隻配置頁）；pmWant：送藥手該有幾個（23_powder.js makeMonkeys 數）
   // ⛔ 以前用平面的 taken 標模型外框：長砲改成模型之後，砲甲板的砲把上面 spar deck 的站位也佔掉了；火藥桶（艙底）更把大半個平面佔掉
   CREW_BLOCK = sh.models.filter(function (m) { return (m.kind !== 'powder' || m.station) && m.kind !== 'door'; });   // 取用點的桶在甲板上 ⇒ 要避；門、艙蓋 ＝ 通道（25_doors.js）⇒ 不避
@@ -8413,7 +8457,7 @@ function goToGun(sh, c, g) {
     return countBox(sh.grid, x - 1, y - 1, s.at[2] - 1, x + 1, y + 1, s.at[2] - 1) > 0;
   })[0];
   var to = spot ? spot.at : null;
-  if (!to && g.spots && g.spots.length) { var a = g.spots[0].at; to = standNear(navG(sh), Math.floor(a[0]), Math.floor(a[1]), a[2] - 2, a[2] + 2, 14, {}); }   // navG：砲塔的裝甲照原位擋人（24_armor.js；沒有裝甲 ＝ sh.grid）
+  if (!to && g.spots && g.spots.length) { var a = g.spots[0].at; to = standNear(navG(sh), Math.floor(a[0]), Math.floor(a[1]), a[2] - 2, a[2] + 2, 14, {}); }   // navG：砲塔的裝甲掃過的那一圈擋人（24_armor.js；沒有裝甲 ＝ sh.grid）
   if (!to) to = c.pos;
   if (spot) spot.who = c;
   c.walk = { to: to.slice(), sp: 18 };
@@ -8899,7 +8943,7 @@ function navStep(N, a, d) {
 }
 /** 一層的走路格（照船型與那一層的高度記在 T 上：兩艘同型共用、重開一場不重算）。 */
 function navBuild(sh, L) {
-  var T = sh.T, g = T.base, C = T.navC || (T.navC = {}), key = L.zr.join(',') + ':' + sh.models.length, d = L.deck;
+  var T = sh.T, g = navBase(T), C = T.navC || (T.navC = {}), key = L.zr.join(',') + ':' + sh.models.length, d = L.deck;
   if (C[key]) return C[key];
   var x0 = Math.max(0, T.hx0 - 4), nx = Math.ceil((Math.min(g.sx, T.hx1 + 5) - x0) / NAV_C) + 1, ny = Math.ceil(g.sy / NAV_C), n = nx * ny, i, x, y;
   var Z = new Int16Array(n).fill(-1), blk = new Uint8Array(n);
@@ -9221,7 +9265,7 @@ function navDirty(sh, x, y, z) {
   });
 }
 function navRefresh(sh) {
-  var NV = sh.nav, g = navG(sh), t0 = performance.now(), ev = [];       // navG：船殼＋砲帶的裝甲原本的位置（24_armor.js：開戰時的走路格照含裝甲的 T.base，重算也要照它；沒有裝甲 ＝ sh.grid）
+  var NV = sh.nav, g = navG(sh), t0 = performance.now(), ev = [];       // navG：船殼＋會轉的裝甲掃過的那一圈（24_armor.js：開戰時的走路格照 navBase ＝ T.base＋那一圈，重算也要照它；沒有裝甲 ＝ sh.grid）
   NV.reT = SIMT; NV.dirty = false;
   NV.levels.forEach(function (L, li) {
     var b = L.dirty; if (!b) return; L.dirty = null;
@@ -13133,6 +13177,12 @@ function shipCheck(id) {
     (sh.arm || []).forEach(function (a) {
       if (!a.g) { add('error', '裝甲', a.A.mount, '拆出來了、可是開戰時找不到那門砲的迴旋 ⇒ 裝甲不轉', '那門砲的 meta kind=gun、mount=turret｜pivot（21_gunnery.js gunMountInit）'); return; }
       var bl = armBlock(a); if (bl && bl.some(function (n) { return n > 0; })) add('error', '裝甲', a.A.mount, '砲口沿砲軸碰到裝甲（' + bl.join('／') + ' 點，轉到 ' + Math.round(armYaw(a) / Math.PI * 180) + '°）⇒ 砲口不在砲門裡（砲彈打在自己的裝甲上）', '砲門開在砲軸上（砲口固定點 muzzle 正前方），或把砲往砲門挪');
+      // 掃過的那一圈是牆（TASK-0655；24_armor.js armRing）⇒ 圈裡要有梯子通得到（莫尼特號：梯子/turret 從住艙甲板上到砲塔底下的艙口）
+      var Rg = a.A.ring; if (!Rg) return;
+      var rin = armRingIn(Rg, Rg.z0, 12), c = Rg.c, out = 0; Object.keys(Rg.rows).forEach(function (z) { var row = Rg.rows[z]; for (var k = row.length - 1; k >= 0; k--) if (row[k]) { out = Math.max(out, (k + 1) / ARM_RK); break; } });
+      var ins = shipLadders(T).filter(function (l) { return l.pts.some(function (p) { return Math.hypot(p[0] - c[0], p[1] - c[1]) < rin && p[2] >= Rg.z0 - 3 && p[2] <= Rg.z1; }); });
+      R.info.armor += '；' + a.A.mount + ' 掃過的那一圈（走不穿）：離轉軸 ' + rin.toFixed(1) + '～' + out.toFixed(1) + ' 格、z ' + Rg.z0 + '–' + Rg.z1 + '，圈裡的梯子 ' + (ins.length ? ins.map(function (l) { return l.name; }).join('、') : '沒有');
+      if (!ins.length) add('warn', '裝甲', a.A.mount, '會轉的裝甲掃過的那一圈是牆（船員、第一人稱都走不穿）⇒ 圈裡沒有梯子通得到 ＝ 砲塔進不去（砲班只能待在開局的位置）', '在圈裡（離轉軸不到 ' + rin.toFixed(1) + ' 格）放一座梯子（kind=ladders）通到下一層的艙口，或頂上開艙口加梯子；⛔ 不開側門（造船規格：砲塔是封閉的一圈）');
     });
     if (kegsAny) sh.decks.forEach(function (D) { if (!sh.stations.some(function (st) { return st.deck === D.key; })) add('error', '取用點', D.name, '這一層砲甲板找不到取用點（9×9 格平地、頭上 8 格空、不碰砲）⇒ 這一層的砲打完藥箱就停', '甲板留一塊空地，或在船隻配置頁擺取用點'); });
     // ── 每門砲拿不拿得到火藥（Tim 2026-10-15：「檢查炮是否有可以到達的火藥桶」）：照送藥手的走法（23_powder.js stepMonkey）——
@@ -13952,7 +14002,7 @@ function labOpts() {
 //   走：每一步照現在的格子（sh.grid，打掉的地板就站不住）用 standZ 找腳下 ⇒ 往上 FP_UP、往下 FP_DOWN 格內站得住、頭上 FP_HEAD 格空才走得過去；
 //   中心那一柱要站得住（⇒ 走路不會從艙口掉下去）、身體半徑 FP_R 格的四個角只擋牆 ⇒ 不穿牆、走不出舷牆。
 //   跳起來在半空（Tim 2026-10-16「有些空洞跳不下去」）⇒ 往下不限 FP_DOWN：下面一路找得到地板就過得去、照重力落下去；牆照腳現在的高度擋。
-//   ⚠ 不擋模型（砲、桶）：模型不是格子（Tim 2026-10-16「這個沒關係 不用碰撞」）。
+//   ⚠ 不擋模型（砲、桶）：模型不是格子（Tim 2026-10-16「這個沒關係 不用碰撞」）。會轉的裝甲（砲塔）擋：格子照 navG ＝ 船殼＋它掃過的那一圈（24_armor.js；TASK-0655）⇒ 從圈裡的艙口梯進出。
 //   平滑（Tim 2026-10-16「需要更平滑的移動 以及可以跨越一定高低差(且不要抖動)」）：速度有加減速（FP_ACC／FP_DEC 秒）；
 //   腳底 c.pos[2] 照舊是整格（survey 判腳下要用），鏡頭的眼高 FP.ez 另外平滑地追（FP_EZ 秒）⇒ 跨台階、頭頂變低不會一格一格跳。
 //   梯子：照雕刻的固定點（42_hands.js shipLadders：foot／lo／hi／head），走到梯腳或梯頭旁邊 ⇒ E（或面板的 🪜）沿那條線爬。
@@ -14010,7 +14060,7 @@ function fpMode(m) {
 /** 浮空結束：從現在的位置往下找站得住的地板 ⇒ 照重力落下去（腳底換成那一層、FP.jz ＝ 離地多高）；
  *  下面一路都沒有（在船外、海上）⇒ 回到開始浮空的地方（那裡也站不住 ⇒ 找它附近 12 格內最近的地板）。 */
 function fpLand() {
-  var c = FP.c, g = FP.sh.grid, x = Math.floor(c.pos[0]), y = Math.floor(c.pos[1]), z = Math.floor(c.pos[2]);
+  var c = FP.c, g = navG(FP.sh), x = Math.floor(c.pos[0]), y = Math.floor(c.pos[1]), z = Math.floor(c.pos[2]);
   FP.vz = 0; FP.jv = 0;
   for (var dz = 0; dz <= 160; dz++) {
     var s = standZ(g, x, y, z - dz, z - dz, FP_HEAD);
@@ -14168,7 +14218,7 @@ function fpFrame(dt) {
     var o = sh, why = RUNNING && SHIPS[PLAYER_I] === sh ? '我艦沉了' : ''; fpSet(false); if (why && o) note(o, '第一人稱結束：' + why);
     return;
   }
-  var m = FP.mv, g = sh.grid;
+  var m = FP.mv, g = navG(sh);                                        // navG：船殼＋會轉的裝甲掃過的那一圈（24_armor.js；TASK-0655：砲塔的牆走不穿）
   FP.yaw += (m.tr - m.tl + FP.look[0]) * FP_TURN * dt; FP.pitch = clamp(FP.pitch + (m.lu - m.ld - FP.look[1]) * FP_TURN * 0.7 * dt, -1.35, 1.35);   // 方向鍵＋右搖桿
   if (FP.fol && (sh.crew.indexOf(FP.fol) < 0 || FP.fol.st !== 0)) { FP.fol = null; FP.ez = null; note(sh, '第一人稱：跟的人倒下或落水了 —— 回到自己'); fpUI(); }
   if (PAUSED && fpLocked()) fpUnlock();                                // 停格、打開設定 ⇒ 放開滑鼠（要按面板）
@@ -14250,7 +14300,7 @@ function fpJump() { if (!FP.on || PAUSED || FP.fol || FP.mode === 2 || FP.climb 
 var FP_EZ_DN = 0.04, FP_EZ_UP = 0.35;
 function fpEyeZ(dt) {
   var c = fpWho(), jz = FP.fol ? 0 : FP.jz, fly = FP.mode === 2 && !FP.fol, base = c.pos[2] + jz;
-  var off = fly ? FP_EYE : fpEye(FP.sh.grid, [c.pos[0], c.pos[1], base], FP.fol ? null : FP.v);   // 浮空：眼睛固定在腳上 FP_EYE（穿過甲板時不跟著壓）
+  var off = fly ? FP_EYE : fpEye(navG(FP.sh), [c.pos[0], c.pos[1], base], FP.fol ? null : FP.v);   // 浮空：眼睛固定在腳上 FP_EYE（穿過甲板時不跟著壓）
   if (FP.ez === null || FP.climb || fly || !(dt > 0)) FP.fz = base, FP.eo = off;   // 剛開、換人、爬梯子、浮空（本來就連續）⇒ 直接跟
   else {
     FP.fz += (base - FP.fz) * (1 - Math.exp(-dt / FP_EZ));
@@ -14654,9 +14704,10 @@ if (DEBUG) window.__game = {
   pumps: function (i) { return pumpInfo(SHIPS[i || 0]); },   // 抽水（45_pumps.js）：基礎、現在全船幾噸／分、每台抽水機的狀態與原因   // 醫療艙（44_medic.js）：每一間的床、人手、搬下去、治好歸隊
   rooms: function (on) { if (on !== undefined) { ROOMS_DBG = !!on; if (!on) roomLabels(); } return roomsInfo(); },   // 空艙房（36_rooms.js）：讀數；給 true／false ⇒ 開關外框與名字
   shipsIO: { exp: function () { return shipsExport(); }, imp: function (o) { var n = shipsImport(o); SLIDERS_SHOW && SLIDERS_SHOW(); return n; }, crew: function (id) { return shipCrew(id); }, seen: function () { return CREW_SEEN; } },   // 船隻配置的匯出入（TASK-0570；量的時候不必真的下載檔案）
-  fp: function (on, to, yaw) { if (on !== undefined && on !== null) fpSet(!!on); if (yaw !== undefined && FP.on) { FP.yaw = yaw; FP.pitch = 0; } if (to === 'lad' && FP.lads && FP.lads.length) to = FP.lads[0].up[0]; if (to && FP.c) { var sz = -1; for (var dz = 0; dz <= 12 && sz < 0; dz++) { sz = standZ(FP.sh.grid, Math.floor(to[0]), Math.floor(to[1]), to[2] - dz, to[2] + dz, NAV_HEAD); } if (sz >= 0) { FP.c.pos = [to[0], to[1], sz]; FP.ez = null; FP.jz = FP.jv = 0; FP.v = [0, 0]; } } var c = FP.c; return { on: FP.on, mode: FP.mode, eo: +FP.eo.toFixed(2), paused: PAUSED, fol: FP.fol ? { role: FP.fol.role, pos: FP.fol.pos.map(function (v) { return +v.toFixed(2); }) } : null, jz: +FP.jz.toFixed(2), ez: FP.ez === null ? null : +FP.ez.toFixed(2), v: FP.v.map(function (x) { return +x.toFixed(2); }), pos: c ? c.pos.map(function (v) { return +v.toFixed(2); }) : null, yaw: +FP.yaw.toFixed(3), pitch: +FP.pitch.toFixed(3), near: FP.near ? { name: FP.near.name, up: FP.near.up } : null, climb: FP.climb ? FP.climb.k : null, lads: (FP.lads || []).map(function (L) { return L.name + ' ' + L.up[0].join(',') + '→' + L.up[L.up.length - 1].join(','); }), mv: Object.assign({}, FP.mv) }; },   // 第一人稱（81_fps.js）：讀數；fp(1)／fp(0) 開關；fp(null, [x,y,z]｜'lad') 瞬移（'lad' ＝ 第一座梯子的梯腳；貼到 ±12 格內最近的地板，找不到就不移 —— ⛔ 懸空 ⇒ survey 判成掉下去、摔傷）—— 量的時候用
+  fp: function (on, to, yaw) { if (on !== undefined && on !== null) fpSet(!!on); if (yaw !== undefined && FP.on) { FP.yaw = yaw; FP.pitch = 0; } if (to === 'lad' && FP.lads && FP.lads.length) to = FP.lads[0].up[0]; if (to && FP.c) { var sz = -1; for (var dz = 0; dz <= 12 && sz < 0; dz++) { sz = standZ(navG(FP.sh), Math.floor(to[0]), Math.floor(to[1]), to[2] - dz, to[2] + dz, NAV_HEAD); } if (sz >= 0) { FP.c.pos = [to[0], to[1], sz]; FP.ez = null; FP.jz = FP.jv = 0; FP.v = [0, 0]; } } var c = FP.c; return { on: FP.on, mode: FP.mode, eo: +FP.eo.toFixed(2), paused: PAUSED, fol: FP.fol ? { role: FP.fol.role, pos: FP.fol.pos.map(function (v) { return +v.toFixed(2); }) } : null, jz: +FP.jz.toFixed(2), ez: FP.ez === null ? null : +FP.ez.toFixed(2), v: FP.v.map(function (x) { return +x.toFixed(2); }), pos: c ? c.pos.map(function (v) { return +v.toFixed(2); }) : null, yaw: +FP.yaw.toFixed(3), pitch: +FP.pitch.toFixed(3), near: FP.near ? { name: FP.near.name, up: FP.near.up } : null, climb: FP.climb ? FP.climb.k : null, lads: (FP.lads || []).map(function (L) { return L.name + ' ' + L.up[0].join(',') + '→' + L.up[L.up.length - 1].join(','); }), mv: Object.assign({}, FP.mv) }; },   // 第一人稱（81_fps.js）：讀數；fp(1)／fp(0) 開關；fp(null, [x,y,z]｜'lad') 瞬移（'lad' ＝ 第一座梯子的梯腳；貼到 ±12 格內最近的地板，找不到就不移 —— ⛔ 懸空 ⇒ survey 判成掉下去、摔傷）—— 量的時候用
+  fpRun: function (sec) { for (var t = 0; t < sec; t += 1 / 60) fpFrame(1 / 60); return this.fp(); },   // 第一人稱照每秒 60 格推 sec 秒（畫面迴圈不跑時量走路用：預覽窗格藏著、無頭瀏覽器；TASK-0655）
   fpMap: function (r) {   // 第一人稱：船長周圍 ±r 格每一柱站不站得住（照 81_fps.js fpStand；. 站不住、數字 ＝ 腳底比現在高幾格、@ 自己）—— 量的時候用
-    if (!FP.on) return null; r = r || 10; var c = FP.c, g = FP.sh.grid, z = Math.floor(c.pos[2]), x0 = Math.floor(c.pos[0]), y0 = Math.floor(c.pos[1]), rows = [];
+    if (!FP.on) return null; r = r || 10; var c = FP.c, g = navG(FP.sh), z = Math.floor(c.pos[2]), x0 = Math.floor(c.pos[0]), y0 = Math.floor(c.pos[1]), rows = [];
     for (var y = y0 - r; y <= y0 + r; y++) { var s = ''; for (var x = x0 - r; x <= x0 + r; x++) { var h = fpStand(g, x, y, z); s += x === x0 && y === y0 ? '@' : h < 0 ? '.' : String.fromCharCode(48 + Math.max(0, Math.min(9, h - z + 4))); } rows.push(s); }
     return rows;
   },

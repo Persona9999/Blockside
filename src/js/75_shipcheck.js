@@ -154,6 +154,12 @@ function shipCheck(id) {
     (sh.arm || []).forEach(function (a) {
       if (!a.g) { add('error', '裝甲', a.A.mount, '拆出來了、可是開戰時找不到那門砲的迴旋 ⇒ 裝甲不轉', '那門砲的 meta kind=gun、mount=turret｜pivot（21_gunnery.js gunMountInit）'); return; }
       var bl = armBlock(a); if (bl && bl.some(function (n) { return n > 0; })) add('error', '裝甲', a.A.mount, '砲口沿砲軸碰到裝甲（' + bl.join('／') + ' 點，轉到 ' + Math.round(armYaw(a) / Math.PI * 180) + '°）⇒ 砲口不在砲門裡（砲彈打在自己的裝甲上）', '砲門開在砲軸上（砲口固定點 muzzle 正前方），或把砲往砲門挪');
+      // 掃過的那一圈是牆（TASK-0655；24_armor.js armRing）⇒ 圈裡要有梯子通得到（莫尼特號：梯子/turret 從住艙甲板上到砲塔底下的艙口）
+      var Rg = a.A.ring; if (!Rg) return;
+      var rin = armRingIn(Rg, Rg.z0, 12), c = Rg.c, out = 0; Object.keys(Rg.rows).forEach(function (z) { var row = Rg.rows[z]; for (var k = row.length - 1; k >= 0; k--) if (row[k]) { out = Math.max(out, (k + 1) / ARM_RK); break; } });
+      var ins = shipLadders(T).filter(function (l) { return l.pts.some(function (p) { return Math.hypot(p[0] - c[0], p[1] - c[1]) < rin && p[2] >= Rg.z0 - 3 && p[2] <= Rg.z1; }); });
+      R.info.armor += '；' + a.A.mount + ' 掃過的那一圈（走不穿）：離轉軸 ' + rin.toFixed(1) + '～' + out.toFixed(1) + ' 格、z ' + Rg.z0 + '–' + Rg.z1 + '，圈裡的梯子 ' + (ins.length ? ins.map(function (l) { return l.name; }).join('、') : '沒有');
+      if (!ins.length) add('warn', '裝甲', a.A.mount, '會轉的裝甲掃過的那一圈是牆（船員、第一人稱都走不穿）⇒ 圈裡沒有梯子通得到 ＝ 砲塔進不去（砲班只能待在開局的位置）', '在圈裡（離轉軸不到 ' + rin.toFixed(1) + ' 格）放一座梯子（kind=ladders）通到下一層的艙口，或頂上開艙口加梯子；⛔ 不開側門（造船規格：砲塔是封閉的一圈）');
     });
     if (kegsAny) sh.decks.forEach(function (D) { if (!sh.stations.some(function (st) { return st.deck === D.key; })) add('error', '取用點', D.name, '這一層砲甲板找不到取用點（9×9 格平地、頭上 8 格空、不碰砲）⇒ 這一層的砲打完藥箱就停', '甲板留一塊空地，或在船隻配置頁擺取用點'); });
     // ── 每門砲拿不拿得到火藥（Tim 2026-10-15：「檢查炮是否有可以到達的火藥桶」）：照送藥手的走法（23_powder.js stepMonkey）——
