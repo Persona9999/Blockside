@@ -114,7 +114,7 @@
     },
     "dahl11": {
       "code": "11d",
-      "name": "XI 吋 Dahlgren 滑膛砲（雙聯砲塔）",
+      "name": "XI 吋 Dahlgren 滑膛砲",
       "short": "XI 吋 Dahlgren",
       "V": 140,
       "reload": 2.5,
@@ -123,9 +123,7 @@
       "crew": 8,
       "min": 5,
       "mass": 14.5, "shot": 75.3,
-      "hpK": 16,
-      "burst": 2,
-      "burstGap": 1.2
+      "hpK": 1
     },
     "brooke64": {
       "code": "64b",

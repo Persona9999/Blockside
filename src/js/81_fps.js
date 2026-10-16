@@ -50,7 +50,7 @@ function fpSet(on, quiet) {                                           // quiet�
     FP.on = true; FP.sh = sh; FP.c = { pos: c.pos.slice() };            // 玩家自己的角色：只借那個船員的座標（⛔ 不操控他）
     FP.yaw = Math.atan2(d[1], d[0]) || 0; FP.pitch = 0; FP.climb = null; FP.lads = fpLadders(sh); FP.v = [0, 0]; FP.ez = null; FP.jz = FP.jv = 0;
     FP.vz = 0; FP.flyFrom = FP.mode === 2 ? FP.c.pos.slice() : null;
-    if (!quiet) note(sh, '第一人稱：左下搖桿或 WASD 走、Shift 跑、空白鍵跳、右下搖桿／拖曳／方向鍵轉頭（電腦：點畫面用滑鼠轉頭，Esc 或按住 Alt 放開）、E 爬梯子 —— 設定裡再按一次回到原本的鏡頭' + (FP.mode === 2 ? '（浮空：空白鍵上、C 下）' : ''));
+    if (!quiet) note(sh, '第一人稱：左下搖桿或 ' + ['fpFwd', 'fpLeft', 'fpBack', 'fpRight'].map(keyName).join('') + ' 走、' + keyWord('fpRun') + ' 跑、' + keyWord('fpJump') + '跳、右下搖桿／拖曳／方向鍵轉頭（電腦：點畫面用滑鼠轉頭，Esc 或按住 ' + keyName('fpUnlock') + ' 放開）、' + keyName('fpClimb') + ' 爬梯子 —— 設定裡再按一次回到原本的鏡頭' + (FP.mode === 2 ? '（浮空：' + keyWord('fpJump') + '上、' + keyName('fpDown') + ' 下）' : ''));
   } else if (FP.on) {
     FP.on = false; FP.sh = FP.c = FP.climb = FP.near = FP.fol = null; CAM.snap = true; fpUnlock();
   }
@@ -92,9 +92,9 @@ function fpUI() {
   $('fpUI').classList.toggle('fol', !!FP.fol);                         // 跟隨中：藏搖桿、跳、跑、爬梯子（template.html #fpUI.fol）
   $('fpUI').classList.toggle('fly', FP.mode === 2);
   var bm = $('bldMode'), be = bm && bm.querySelector('.em'), bt = FP_MODE_EM[FP.mode];   // 建造模式那一顆（82_build.js）：照現在的碰撞換圖示
-  if (be && be.textContent !== bt) { be.textContent = bt; bm.title = '碰撞：' + FP_MODE[FP.mode] + '（M 換：一般 → 穿牆 → 浮空）'; }                    // 浮空：藏跳、爬梯子，換上 ⬆ ⬇（template.html #fpUI.fly）
+  if (be && be.textContent !== bt) { be.textContent = bt; bm.title = '碰撞：' + FP_MODE[FP.mode] + '（' + keyName('bMode') + ' 換：一般 → 穿牆 → 浮空）'; }                    // 浮空：藏跳、爬梯子，換上 ⬆ ⬇（template.html #fpUI.fly）
   $('fpClimb').style.display = FP.on && FP.near && !FP.fol && FP.mode !== 2 ? '' : 'none';
-  var t = FP.fol ? '↩' : '👁', fe = $('fpFol').querySelector('.em'); if (fe && fe.textContent !== t) { fe.textContent = t; $('fpFol').title = FP.fol ? '回到自己（F）' : '跟隨身邊的船員（F）'; }
+  var t = FP.fol ? '↩' : '👁', fe = $('fpFol').querySelector('.em'); if (fe && fe.textContent !== t) { fe.textContent = t; $('fpFol').title = (FP.fol ? '回到自己（' : '跟隨身邊的船員（') + keyName('fpFollow') + '）'; }
 }
 /** 鏡頭跟著誰：跟隨中 ⇒ 被跟的人，否則 ⇒ 自己。 */
 function fpWho() { return FP.fol || FP.c; }
@@ -352,17 +352,19 @@ function fpCam() {
   return true;
 }
 /** 鍵盤（71_input.js keydown／keyup 先問這裡）：第一人稱的鍵吃掉 ⇒ true；其他照舊（P 停格、O／Esc 設定）。 */
-var FP_KEYS = { w: 'f', arrowup: 'lu', s: 'b', arrowdown: 'ld', a: 'l', d: 'r', arrowleft: 'tl', arrowright: 'tr', q: 'tl', e: null, ' ': null, c: null, shift: null, f: null, g: null, alt: null };
+/** 第一人稱的動作 ⇒ FP.mv 哪一格（走、轉頭；66_keys.js：fpLook* 是固定的方向鍵）。 */
+var FP_MV = { fpFwd: 'f', fpBack: 'b', fpLeft: 'l', fpRight: 'r', fpTurnL: 'tl', fpLookU: 'lu', fpLookD: 'ld', fpLookL: 'tl', fpLookR: 'tr' };
+/** 鍵盤（71_input.js 先問這裡）：照第一人稱的鍵位（66_keys.js keyAct 'fps'）；沒有綁 ⇒ false（往下給建造、海戰）。 */
 function fpKey(k, down) {
-  if (!(k in FP_KEYS)) return false;
-  if (k === 'shift') { FP.run = down && FP.on; return FP.on; }
-  if (k === 'alt') { if (down && FP.on) fpUnlock(); return FP.on; }   // 按住 Alt ⇒ 放開滑鼠、遊戲不停；點回畫面再抓
-  if (!FP.on) { if (!down && FP_KEYS[k]) FP.mv[FP_KEYS[k]] = 0; return false; }
-  if (k === 'e') { if (down) fpClimbGo(); return true; }               // E 爬梯子
-  if (k === ' ') { if (FP.mode === 2) FP.mv.up = down ? 1 : 0; else if (down) fpJump(); return true; }   // 空白鍵跳（Tim 2026-10-16）；浮空 ⇒ 往上
-  if (k === 'c') { FP.mv.dn = down && FP.mode === 2 ? 1 : 0; return true; }   // C：浮空 ⇒ 往下（第一人稱時不換鏡頭，鏡頭本來就不歸它管）
-  if (k === 'f' || k === 'g') { if (down) fpFollow(k === 'g'); return true; }   // F 跟隨／回來、G 換下一個（第一人稱時 F 不開砲）
-  FP.mv[FP_KEYS[k]] = down ? 1 : 0;
+  var a = keyAct('fps', k); if (!a) return false;
+  if (a === 'fpRun') { FP.run = down && FP.on; return FP.on; }
+  if (a === 'fpUnlock') { if (down && FP.on) fpUnlock(); return FP.on; }   // 按住 ⇒ 放開滑鼠、遊戲不停；點回畫面再抓
+  if (!FP.on) { if (!down && FP_MV[a]) FP.mv[FP_MV[a]] = 0; return false; }
+  if (a === 'fpClimb') { if (down) fpClimbGo(); return true; }         // 爬梯子
+  if (a === 'fpJump') { if (FP.mode === 2) FP.mv.up = down ? 1 : 0; else if (down) fpJump(); return true; }   // 跳（Tim 2026-10-16）；浮空 ⇒ 往上
+  if (a === 'fpDown') { FP.mv.dn = down && FP.mode === 2 ? 1 : 0; return true; }   // 浮空 ⇒ 往下（第一人稱時不換鏡頭，鏡頭本來就不歸它管）
+  if (a === 'fpFollow' || a === 'fpNext') { if (down) fpFollow(a === 'fpNext'); return true; }   // 跟隨／回來、換下一個（第一人稱時不開砲）
+  if (FP_MV[a]) FP.mv[FP_MV[a]] = down ? 1 : 0;
   return true;
 }
 /** 拖曳轉頭（71_input.js pointermove）：往右拖 ⇒ 往右看。 */

@@ -119,12 +119,12 @@ function cutToggle() { if (!RUNNING) return; CUTV.half = !CUTV.half; obsNote('�
 function deckCycle() {
   if (!RUNNING || !SHIPS[PLAYER_I]) return;
   var n = deckCut(SHIPS[PLAYER_I]).n; CUTV.deck = n ? (CUTV.deck + 1) % (n + 1) : 0;
-  obsNote(CUTV.deck ? deckLabel().replace('（L）', '') : '☰ 甲板：全部回來'); frzShow();
+  obsNote(CUTV.deck ? deckLabel().replace('（' + keyName('deck') + '）', '') : '☰ 甲板：全部回來'); frzShow();
 }
 /** 停格條上「甲板」那顆的字。 */
 function deckLabel() {
-  var sh = SHIPS[PLAYER_I]; if (!CUTV.deck || !sh) return '☰ 甲板（L）';
+  var sh = SHIPS[PLAYER_I]; if (!CUTV.deck || !sh) return '☰ 甲板（' + keyName('deck') + '）';
   var D = deckCut(sh), k = Math.min(CUTV.deck, D.n);
-  return '☰ ' + (k >= D.n ? '只剩船底' : '拿掉到' + D.names[k - 1]) + '（L）';
+  return '☰ ' + (k >= D.n ? '只剩船底' : '拿掉到' + D.names[k - 1]) + '（' + keyName('deck') + '）';
 }
 $('frzCut').onclick = cutToggle; $('frzDeck').onclick = deckCycle;

@@ -75,7 +75,7 @@ function hullDeckKit(T) {
   P.mags = makeMags(P);
   var auto = {}, kit = { decks: [], auto: auto };
   P.decks.forEach(function (D) { kit.decks.push({ id: deckId(D), key: D.key, name: D.name, zr: D.zr, meta: D.meta || null }); auto[deckId(D)] = []; });
-  makeStations(P, true).forEach(function (st) { var D = P.decks.filter(function (d) { return d.key === st.deck; })[0]; auto[deckId(D)].push({ name: st.name, spot: st.kegs[0].origin.slice(), mag: st.mag.name }); });
+  makeStations(P, true).forEach(function (st) { if (st.tur >= 0) return; var D = P.decks.filter(function (d) { return d.key === st.deck; })[0]; auto[deckId(D)].push({ name: st.name, spot: st.kegs[0].origin.slice(), mag: st.mag.name }); });
   kit.gunsBB = models.filter(function (m) { return GUNS[m.kind] || m.kind === 'wheel'; }).map(function (m) { return m.bb; });
   return T.deckKit = kit;
 }

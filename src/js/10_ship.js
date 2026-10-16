@@ -73,6 +73,7 @@ function makeShip(i, team, yaw, pz, T, px) {                          // T：船
     sh.guns.push(m.gun = { name: m.name, type: m.kind, side: A.ax[1] >= 0 ? 'S' : 'P', model: m, ax: A.ax, muz: A.muz, muzs: A.muzs, alive: true, reload: rr(0, 1.2), box: BOX_N, needCart: false });   // box：砲旁藥箱裡的份數
   });
   sh.guns.forEach(function (g) { gunMountInit(sh, g); });            // 迴旋砲、砲塔（meta mount；21_gunnery.js）—— 沒標的砲不動
+  turretShip(sh);                                                       // 砲塔層（kind=turret；27_turret.js）：砲、模型掛上去 —— 沒有 ⇒ 不做事
   armorShip(sh);                                                        // 砲帶的裝甲（kind=armor；24_armor.js）跟著那門砲轉 —— 沒有 ⇒ 不做事
   doorsShip(sh);                                                        // 門、艙蓋（kind=door；25_doors.js）—— 沒有 ⇒ 不做事
   spinShip(sh);                                                         // 照參數轉的子物件（meta spin；26_spin.js，TASK-0640）—— 沒有 ⇒ 不做事
@@ -167,7 +168,8 @@ function gunDecks(sh) {
 function gunDecksMeta(sh) {
   var T = sh.T, by = {}, list = [];
   sh.guns.forEach(function (g) {
-    var d = deckOfPath(T, g.model.path) || deckAt(T, g.model.c[0], Math.floor(g.model.bb[2])) || hullDecks(T)[0];
+    var R0 = g.model.hd && ndRoot(g.model.hd), tb = R0 && T.turrets[R0.k].box;   // 掛在砲塔上（27_turret.js）⇒ 照最外層那座砲塔的底座落在哪一層（⛔ 照砲自己的高度 ⇒ 疊在砲塔頂上的砲找不到甲板、自成一層）
+    var d = deckOfPath(T, g.model.path) || (tb && deckAt(T, R0.c[0], Math.floor(tb[2]))) || deckAt(T, g.model.c[0], Math.floor(g.model.bb[2])) || hullDecks(T)[0];
     if (!by[d.i]) { by[d.i] = { meta: d, guns: [] }; list.push(by[d.i]); }
     by[d.i].guns.push(g);
   });
@@ -176,7 +178,8 @@ function gunDecksMeta(sh) {
     var zs = L.guns.map(function (g) { return Math.floor(g.model.bb[2]); });
     var D = { key: 'd' + i, z0: Math.min.apply(null, zs), z1: Math.max.apply(null, zs), guns: L.guns, meta: L.meta, name: L.meta.name, weather: i === list.length - 1 };
     L.guns.forEach(function (g) { g.deck = D.key; });
-    var main = L.guns.filter(function (g) { return g.type !== 'chase'; })[0] || L.guns[0], a = Math.floor(main.model.bb[2]);
+    var nc = L.guns.filter(function (g) { return g.type !== 'chase'; }), up = function (g) { var R0 = g.model.hd && ndRoot(g.model.hd); return !!R0 && g.model.bb[2] > T.turrets[R0.k].box[2] + 3; };   // 疊在砲塔頂上、比底座高的砲（27_turret.js）不拿來切這一層的高度
+    var main = nc.filter(function (g) { return !up(g); })[0] || nc[0] || L.guns[0], a = Math.floor(main.model.bb[2]);
     D.zr = main.type === 'carr' ? [a - 6, a + 3] : [a - 8, a + 5];
     return D;
   });
@@ -221,7 +224,8 @@ function modelKind(m) {
 function modelIndex(models) {
   var idx = [];
   models.forEach(function (m) {
-    for (var bx = Math.max(0, Math.floor((m.bb[0] - 12) / 16)); bx <= Math.floor((m.bb[3] + 12) / 16); bx++) (idx[bx] = idx[bx] || []).push(m);
+    var x0 = m.ibx ? m.ibx[0] : m.bb[0], x1 = m.ibx ? m.ibx[1] : m.bb[3];   // ibx：掛在砲塔上的模型照掃過的範圍分桶（27_turret.js）
+    for (var bx = Math.max(0, Math.floor((x0 - 12) / 16)); bx <= Math.floor((x1 + 12) / 16); bx++) (idx[bx] = idx[bx] || []).push(m);
   });
   return idx;
 }

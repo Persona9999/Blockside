@@ -159,14 +159,37 @@ function flReadout(sh) {
   var fl = sh.fl;
   var cells = 0; for (var t = 0; t < fl.actN; t++) if (fl.A[fl.act[t]] > 0) cells++;
   return { lv: FLOOD_LV, c: fl.F.c, grid: [fl.F.NX, fl.F.NY, fl.F.NZ], m3: +fl.vol.toFixed(3), t: +(fl.vol * RHO_W).toFixed(2), cells: cells, jets: fl.J.n, holes: fl.open, area: +fl.area.toFixed(3),
-    inQ: +fl.inQ.toFixed(3), outQ: +fl.outQ.toFixed(3), inTot: +fl.inTot.toFixed(2), outTot: +fl.outTot.toFixed(2), pumped: +fl.pumped.toFixed(2), lost: +(fl.lost || 0).toFixed(3),
+    inQ: +fl.inQ.toFixed(3), outQ: +fl.outQ.toFixed(3), inTot: +fl.inTot.toFixed(2), outTot: +fl.outTot.toFixed(2), pumped: +fl.pumped.toFixed(2), lost: +(fl.lost || 0).toFixed(3), back: +(fl.back || 0).toFixed(2),
     comX: +fl.comX.toFixed(2), comY: +fl.comY.toFixed(2), sinkT: +fl.sinkT.toFixed(3), sink: +sh.sink.toFixed(3), roll: +sh.rollA.toFixed(4), pitch: +sh.pitchA.toFixed(4), dirty: fl.dirty.length + fl.hdirty.length };
 }
-/** 水併進第 i 格（那一格裝不了水 ⇒ 往上找三格）。 */
-function flDeposit(fl, i, v) {
-  var NXY = fl.F.NX * fl.F.NY;
-  for (var t = 0; t < 4 && i >= 0 && i < fl.F.N; t++, i += NXY) if (fl.cap[i] > 0.02) { fl.A[i] += v; flAct(fl, i); return; }
-  fl.lost = (fl.lost || 0) + v;
+/** 水併進第 i 格（那一格裝不了水 ⇒ 往上找三格）—— 照容量放（TASK-0662）：
+ *  · 每一格最多裝到「外面的海面」那麼高（那一格正上方的 seaH，照浪）：從洞進來的水靠的是外面的水壓，不會比海面高；
+ *  · 那一格滿了 ⇒ 往上（上面那一格通得上去，同 flTick 滿了往上擠）一直到水面；被甲板擋住 ⇒ 旁邊四格（同一層）有空的；
+ *  · 四周都滿了 ⇒ 這份水進不來（回到海裡，fl.back；flTick 從進水量扣掉）。
+ *  ⛔ 以前不看滿了沒：粒子撞到滿的格就併進上一格（多半也是滿的）⇒ 殉爆（大破口、粒子一直撞進泡在水裡的格）t 9–24 倒進去的 8,005 m³ 有 99% 倒進滿的格，
+ *     又擠不上去（上面是甲板）⇒ 格子裝到容量的 30 倍、水面照裝了幾成算 ⇒ 艙內水面高出海面 28 m、16 秒就沉（Tim 2026-10-16：「破口在海平面上的部分 碰到模擬水把水吸上去?」；沙盒 ?lab=flood&boom=0 量的）。 */
+function flDeposit(sh, fl, i, v) {
+  var F = fl.F, c = F.c, NXY = F.NX * F.NY, N = F.N, A = fl.A, cap = fl.cap, Vc = Math.pow(c * S, 3), S3 = S * S * S, hc = c * S, M = sh.M, lim = 1, t, j, r, m;
+  function room(k) {                                                     // 第 k 格還裝得下多少（裝到海面為止）；lim ＝ 海面淹到這一格的幾成
+    var ix = k % F.NX, iy = ((k / F.NX) | 0) % F.NY, iz = (k / NXY) | 0, P = M4.pt(M, F.X0 + (ix + 0.5) * c, F.Y0 + (iy + 0.5) * c, iz * c);
+    lim = clamp((seaH(P[0], P[2], SIMT) - P[1]) / hc, 0, 1); return lim * cap[k] * Vc - A[k];
+  }
+  for (t = 0; t < 4 && i >= 0 && i < N && !(cap[i] > 0.02); t++) i += NXY;
+  if (!(i >= 0 && i < N && cap[i] > 0.02)) { fl.lost = (fl.lost || 0) + v; return; }
+  for (j = i, t = 0; v > 1e-9 && t < 32; t++) {
+    r = room(j); if (r > 0) { m = Math.min(v, r); A[j] += m; v -= m; flAct(fl, j); }
+    var u = j + NXY; if (v <= 1e-9 || lim < 1 || u >= N || !(cap[u] > 0.02) || !(flPd(fl, u, A[u] / S3) > 0.02)) break;   // 海面在這一格裡 ⇒ 再上去就比海面高
+    j = u;
+  }
+  if (v > 1e-9) {
+    var ix = j % F.NX, iy = ((j / F.NX) | 0) % F.NY;
+    for (var nb = 0; nb < 4 && v > 1e-9; nb++) {
+      var k = nb === 0 ? (ix > 0 ? j - 1 : -1) : nb === 1 ? (ix < F.NX - 1 ? j + 1 : -1) : nb === 2 ? (iy > 0 ? j - F.NX : -1) : (iy < F.NY - 1 ? j + F.NX : -1);
+      if (k < 0 || !(cap[k] > 0.02)) continue;
+      r = room(k); if (r > 0) { m = Math.min(v, r); A[k] += m; v -= m; flAct(fl, k); }
+    }
+  }
+  if (v > 1e-9) fl.back = (fl.back || 0) + v;
 }
 /** 斷成兩截、開始沉的船（Tim 2026-10-15：「斷成兩截、開始沉的船也繼續算進水給人看（只改畫面與讀數，沉的速度照舊），沉完就停」）：
  *  照樣跑 floodStep（水灌進去、讀數有積水與破口），但 ——
@@ -194,7 +217,7 @@ function floodStep(sh, fl, dt) {
     J.p[o] += J.v[o] * dt; J.p[o + 1] += J.v[o + 1] * dt; J.p[o + 2] += J.v[o + 2] * dt; J.life[i] -= dt;
     var c1 = flCell(F, J.p[o], J.p[o + 1], J.p[o + 2]);
     if (J.life[i] <= 0 || c1 < 0 || sh.grid.get(Math.floor(J.p[o]), Math.floor(J.p[o + 1]), Math.floor(J.p[o + 2])) || fl.A[c1] >= fl.cap[c1] * Vc * 0.95) {
-      flDeposit(fl, c0 >= 0 ? c0 : c1, J.vol[i]);
+      flDeposit(sh, fl, c0 >= 0 ? c0 : c1, J.vol[i]);
       var j = --J.n;
       if (i !== j) { J.p.copyWithin(o, j * 3, j * 3 + 3); J.v.copyWithin(o, j * 3, j * 3 + 3); J.vol[i] = J.vol[j]; J.life[i] = J.life[j]; }
       i--;
@@ -218,7 +241,9 @@ function flTick(sh, fl, dtc) {
     area += ar; open++;
     var side = (h / (NX * F.NZ)) | 0, s = side ? 1 : -1, P = M4.pt(M, fl.hX[h], fl.hY[h], fl.hZ[h]), hOut = seaH(P[0], P[2], SIMT);
     var ci = flCell(F, fl.hX[h], fl.hYi[h] + s * 0.5 * c, fl.hZ[h]), hIn = -1e9;
-    if (ci >= 0 && A[ci] > 1e-6) { var q = ci; while (q + NXY < N && A[q] >= cap[q] * Vc * 0.98 && A[q + NXY] > 1e-6) q += NXY; hIn = head(q); }
+    if (ci >= 0 && !(cap[ci] > 0.02)) { var ci2 = flCell(F, fl.hX[h], fl.hYi[h] + s * 1.5 * c, fl.hZ[h]); if (ci2 >= 0 && cap[ci2] > 0.02) ci = ci2; }   // 洞口那一格裝不了水（船殼占滿）⇒ 再往裡一格
+    // 艙內在洞那裡的水面：從洞口那一格往上，一格裝了九成以上、上面那一格也有水 ⇒ 再往上（⛔ 以前九成八：滿的格常常只有九成五〜九成七（粒子撞到九成五就算滿、旁邊流拉平）⇒ 停在深處、水頭差多算 6 m）
+    if (ci >= 0 && A[ci] > 1e-6) { var q = ci; while (q + NXY < N && A[q] >= cap[q] * Vc * 0.9 && A[q + NXY] > 1e-6) q += NXY; hIn = head(q); }
     var d = Math.max(hOut, P[1]) - Math.max(hIn, P[1]);
     if (d > 0.001) {
       var dv = FL_C * ar * Math.sqrt(2 * G * d) * fk * dtc; inQ += dv;
@@ -229,7 +254,7 @@ function flTick(sh, fl, dtc) {
         if (J.n < L.jn) {
           var jo = J.n * 3; J.p[jo] = fl.hX[h] + rgF(-0.4, 0.4) * c; J.p[jo + 1] = fl.hYi[h] + s; J.p[jo + 2] = fl.hZ[h] + rgF(-0.4, 0.4) * c;
           J.v[jo] = rgF(-0.25, 0.25) * sp; J.v[jo + 1] = s * rgF(0.5, 1.0) * sp; J.v[jo + 2] = rgF(-0.1, 0.25) * sp; J.vol[J.n] = L.vj; J.life[J.n] = 3; J.n++;
-        } else if (ci >= 0) flDeposit(fl, ci, L.vj);
+        } else if (ci >= 0) flDeposit(sh, fl, ci, L.vj);
       }
       accFix(fl.hAcc, h, L.vj, '進水');
     } else if (d < -0.001 && ci >= 0) {
@@ -238,6 +263,7 @@ function flTick(sh, fl, dtc) {
     }
   }
   if (fl.tops) { var dq = doorInflow(sh, fl, dtc, head); inQ += dq[0]; area += dq[1]; open += dq[2]; }   // 門沒了的開口（25_doors.js；沒有門的船沒有 fl.tops）
+  var bk = (fl.back || 0) - (fl.back0 || 0); fl.back0 = fl.back || 0; inQ = Math.max(0, inQ - bk);   // 進不來的（flDeposit 四周都滿了）不算進水 ⇒ 讀數是真的灌進來的量
   fl.inQ = inQ / dtc; fl.outQ = outQ / dtc; fl.inTot += inQ; fl.outTot += outQ; fl.area = area; fl.open = open;
   // 2. 水格：往下（照這一格往下通幾成）、滿了往上擠、往旁邊（照水面的世界高度；來回換方向走 ⇒ 不偏一邊）
   var n0 = fl.actN, act = fl.act, dir = fl.gen & 1, t, j;
@@ -256,6 +282,7 @@ function flTick(sh, fl, dtc) {
       if (j < 0 || !(cap[j] > 0.02)) continue;
       var dh = hi - head(j); if (dh <= 1e-4) continue;
       m = Math.min(0.5 * dh / hc * Math.min(cap[i], cap[j]) * Vc * 0.25, A[i] * 0.25);
+      m = Math.min(m, cap[j] * Vc - A[j]); if (!(m > 0)) continue;     // 不往滿的格流（⛔ 以前會：船一縱傾，兩格都滿、水面照格頂算 ⇒ 高的流進低的、擠上去 ⇒ 水沿著斜的天花板爬到海面以上）
       A[i] -= m; A[j] += m; flAct(fl, j); hi = head(i);
       fl.lq[i * 4 + nb] += m;                                            // lq：往旁邊流了多少（只記，水瀑用：flSides；⛔ 模擬不讀）
     }
@@ -299,15 +326,21 @@ function floodTilt(sh, fl) {
 var FL_DEP_GLSL = 'float flLinZ(float d){ float z=d*2.0-1.0; return 5000.0/(5000.5-z*4999.5); }\nvec3 flDepC;\n' +
   'vec2 flDep(vec3 c,float a0){ float th=max(flLinZ(textureLod(uSceneD,gl_FragCoord.xy/uView,0.0).r)-flLinZ(gl_FragCoord.z),0.0); float ab=1.0-exp(-th*1.3);\n' +
   ' flDepC=mix(c*1.15+vec3(0.03,0.06,0.05),c*0.55,ab); return vec2(mix(0.2,0.93,ab)*smoothstep(0.0,0.08,th),th); }\n';
+// 水邊的 noise（TASK-0654；GFX.pedge）：值雜訊（格點雜湊、平滑內插），船上座標（公尺）⇒ 跟著船走、不會因為船在動而爬
+var FLE_GLSL = 'float flHs(vec2 p){ return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453); }\n' +
+  'float flNz(vec2 p){ vec2 i=floor(p), f=fract(p); f=f*f*(3.0-2.0*f); return mix(mix(flHs(i),flHs(i+vec2(1.0,0.0)),f.x),mix(flHs(i+vec2(0.0,1.0)),flHs(i+vec2(1.0,1.0)),f.x),f.y); }\n';
 // ── 畫：艙內的水面（每一格水柱的頂，四個角照同一個世界高度擺 ⇒ 船傾斜時水面還是平的）；噴進來的粒子跟點精靈一起畫 ──
 function flGL() {
   P.pool = VK.compile(gl,
-    '#version 300 es\nlayout(location=0) in vec4 aP; layout(location=1) in float aZ0; uniform mat4 uModel,uVP; uniform float uMix; out vec3 vW; out float vF; void main(){ vec4 w=uModel*vec4(aP.xy,mix(aZ0,aP.z,uMix),1.0); vW=w.xyz; vF=aP.w; gl_Position=uVP*w; }\n',
-    '#version 300 es\nprecision highp float; in vec3 vW; in float vF; uniform vec3 uEye,uSun,uFog,uSky; uniform float uFogD,uSeaT,uX,uDep; uniform vec2 uView; uniform sampler2D uSceneD; out vec4 o;\n' + SHADOW_GLSL + FL_DEP_GLSL +
+    '#version 300 es\nlayout(location=0) in vec4 aP; layout(location=1) in float aZ0; uniform mat4 uModel,uVP; uniform float uMix,uVox; out vec3 vW; out float vF; out vec2 vG; void main(){ vec4 w=uModel*vec4(aP.xy,mix(aZ0,aP.z,uMix),1.0); vW=w.xyz; vF=aP.w; vG=aP.xy*uVox; gl_Position=uVP*w; }\n',
+    '#version 300 es\nprecision highp float; in vec3 vW; in float vF; in vec2 vG; uniform vec3 uEye,uSun,uFog,uSky; uniform float uFogD,uSeaT,uX,uDep,uEdge; uniform vec2 uView; uniform sampler2D uSceneD; out vec4 o;\n' + SHADOW_GLSL + FL_DEP_GLSL + FLE_GLSL +
     'void main(){ vec2 r=vec2(sin(vW.x*3.1+uSeaT*2.3)+sin(vW.z*4.3-uSeaT*1.7),cos(vW.z*2.7-uSeaT*1.9)+cos(vW.x*3.7+uSeaT*2.1))*0.03; vec3 n=normalize(vec3(r.x,1.0,r.y));\n' +
     ' vec3 v=normalize(uEye-vW); float fr=0.04+0.96*pow(1.0-max(dot(n,v),0.0),5.0), sk=shadowK(vW,n);\n' +
     ' vec3 c=mix(vec3(0.08,0.27,0.3)*(0.45+0.55*sk),uSky*0.75,clamp(fr*0.8+0.08,0.0,1.0))+vec3(1.0,0.92,0.75)*pow(max(dot(reflect(-v,n),uSun),0.0),90.0)*(0.25+sk);\n' +
     ' float al=uX>0.5?0.62:0.78; if(uDep>0.5&&uX<0.5){ vec2 da=flDep(c,0.78); c=flDepC; al=da.x; }\n' +   // 深度吸光（TASK-0654）：關 ⇒ 一位元都不變
+    ' if(uEdge>0.5&&vF>0.001){ float nz=flNz(vG*2.2+vec2(uSeaT*0.11,-uSeaT*0.07))*0.65+flNz(vG*5.3-vec2(uSeaT*0.05,uSeaT*0.13)+7.0)*0.35;\n' +   // 水邊（flEdgeM、GFX.pedge）：白沫一圈、淺的邊照 noise 吃進去；關 ⇒ 一位元都不變
+    '  float fm=smoothstep(0.1+0.45*nz,0.22+0.45*nz,vF)*(0.55+0.45*flNz(vG*11.0+uSeaT*0.3)); c=mix(c,vec3(0.8,0.88,0.88),0.6*fm); al=max(al,0.5*fm);\n' +   // 白沫自帶不透明度（⛔ 乘在 al 上 ⇒ 貼地板的薄水被深度吸光淡到快 0，白沫跟著看不見）
+    '  al*=1.0-smoothstep(0.6+0.38*nz,0.68+0.38*nz,vF); if(al<0.01) discard; }\n' +
     ' if(uX>0.5) c=mix(c,vec3(0.2,0.6,0.95),0.45);\n' +
     ' float fd=length(vW-uEye); o=vec4(mix(c,uFog,1.0-exp(-fd*uFogD)),al); }\n');
   // 水幕（flFalls）：一道 ＝ 一片直立、繞船的鉛直軸轉向鏡頭的長條；aP 軸上那一點（格座標）、aQ ＝ (左右 ±1、0 上 1 下、長度 m、寬度 m 的上一格)、aW ＝ 這一格的寬度 m
@@ -403,6 +436,8 @@ var FL_MESH_MS = 500, FL_FLAT = 0;
 //   FL_FLAT 0：角高 ＝ 這一角四周、同一個水體的水面平均，再跟鄰角平均 FL_SMOOTH 次 ⇒ 落差變成連續的斜坡（同一個角兩邊共用，不會裂）；平的地方照舊是平的。
 //   FL_THIN：水格裝了幾成以上才畫水面（以前 0.02；太淺的照樣畫、交給深度吸光淡出 ⇒ 兩片水中間那條「薄水」帶也接得起來）。
 var FL_JOIN = 1.2, FL_SMOOTH = 1, FL_THIN = 0.002;
+var FLE_DEEP = 0.4;                                                         // 水邊（flEdgeM）：水深到這裡（m）以上 ⇒ 只上白沫、不吃邊
+var FL_FLOOR = Q.get('flfloor') !== '0';                                  // ?flfloor=0：側面不看自己這一欄的地板（2026-10-16 以前）—— 前後對照用
 if (Q.get('fljoin') === '0') { FL_FLAT = 1; FL_JOIN = -1; FL_SMOOTH = 0; FL_THIN = 0.02; }   // ?fljoin=0：舊的畫法（差半格就分池、每池一個平面）—— 前後對照用
 // 量測（TASK-0654；只給 81_floodlab.js 的進水報表，平常兩個都是 false ⇒ 一位元都不多算）：
 //   FL_SNAP ＝ 每次都重做、不內插（截圖跟那一刻的水對得上）；FL_STAT ＝ 每次重做順便分類接縫（me.stat）。
@@ -478,10 +513,31 @@ function flMesh(sh, fl) {
     var z = Math.floor(clamp((hw - (M[1] * x + M[5] * y + M[13])) / M[9], 0, ZT - 1)), X = Math.floor(x), Y = Math.floor(y), kk = z * nxv + X - F.X0;
     return X >= F.X0 && X - F.X0 < nxv && YP[kk] >= 0 && Y > YM[kk] && Y < YP[kk] ? 1 : 0;
   }
+  // 水邊（TASK-0654；Tim 2026-10-16：「水的邊緣是否能做一點不規則變化(用noise算法?) 演出用」；GFX.pedge）：這一格四邊（−x、+x、−y、+y）各是不是「開著的水邊」——
+  //   鄰格裝得了水、但上下一層內都沒有水面（水攤開到一半的那一邊）⇒ 值 ＝ 0.35 ＋ 0.65 × 淺的程度（這一欄水深 0 → 1、FLE_DEEP 以上 → 0）；牆、同一池、別的池（有側面或水瀑）⇒ 0。
+  //   著色器照這個值（邊上 → 往內一片內插到 0）加白沫、把淺的那幾邊照 noise 吃進去一點；深的邊只上白沫（⛔ 吃進去 ⇒ 水面跟側面分家）。
+  function flEdgeM(i, jx, jy, jz, rt, hw) {
+    var R = [0, 0, 0, 0]; if (!GFX.pedge) return R;
+    var dep = -1;
+    for (var d = 0; d < 4; d++) {
+      var nx = jx + (d === 0 ? -1 : d === 1 ? 1 : 0), ny = jy + (d === 2 ? -1 : d === 3 ? 1 : 0);
+      if (nx < 0 || ny < 0 || nx >= NX || ny >= NY) continue;
+      var has = false; for (var k = -1; k <= 1 && !has; k++) { var jz2 = jz + k; if (jz2 >= 0 && jz2 < F.NZ && TI[jz2 * NXY + ny * NX + nx] >= 0) has = true; }
+      if (has || !(cap[jz * NXY + ny * NX + nx] > 0.02)) continue;
+      if (dep < 0) {                                                       // 這一欄的水深（公尺）：從水面往下數開著的格層，碰到關著的（地板）或沒水的格就停
+        var zs = (hw - (M[1] * (F.X0 + (jx + 0.5) * c) + M[5] * (F.Y0 + (jy + 0.5) * c) + M[13])) / M[9], zz = Math.floor(zs) - 1, n = 0;
+        while (zz >= 0 && n < FLE_DEEP / S + 1) { var cz = (zz / c) | 0, ci = cz * NXY + jy * NX + jx; if (op[ci * c + zz - cz * c] <= 0 || !(A[ci] > 0)) break; zz--; n++; }
+        dep = Math.max(0, zs - (zz + 1)) * S;
+      }
+      R[d] = 0.35 + 0.65 * clamp(1 - dep / FLE_DEEP, 0, 1);
+    }
+    return R;
+  }
   for (t = 0; t < tops.length; t += 2) {
     i = tops[t]; var hw0 = tops[t + 1], jx = i % NX, jy = ((i / NX) | 0) % NY, jz = (i / NXY) | 0, f = Math.min(1, A[i] / (cap[i] * Vc));
     var x0 = F.X0 + jx * c, y0 = F.Y0 + jy * c, zl = jz * c - (FL_JOIN < 0 ? 1 : 3) * c, zh = jz * c + (FL_JOIN < 0 ? 2 : 4) * c, rt = root(t / 2);   // zl／zh：只防呆（同一個水體相鄰的差在 FL_JOIN 以內 ⇒ 細檔 1.2 m ≈ 2.4 格 ⇒ 角落在這一格下 3 格、上 4 格以內；夾到了才會裂）
     var H = [corner(rt, jx, jy), corner(rt, jx + 1, jy), corner(rt, jx + 1, jy + 1), corner(rt, jx, jy + 1)];
+    var EM = flEdgeM(i, jx, jy, jz, rt, hw0);
     if ((q + 6 * KS * KS) * 5 > me.buf.length) { var nb = new Float32Array(Math.max(me.buf.length * 2, (q + 6 * KS * KS) * 10)); nb.set(me.buf); me.buf = nb; }
     var inn = 0; for (var a = 0; a < KS; a++) for (var b = 0; b < KS; b++) if ((INS[a * KS + b] = flInside(x0 + (a + 0.5) * sc, y0 + (b + 0.5) * sc, bil(H, (a + 0.5) / KS, (b + 0.5) / KS)))) inn++;
     if (ST) { var mt = ST.map.top[t / 2]; if (!inn) { ST.outTops++; mt[4] = 2; } else if (inn < KS * KS) { ST.cutTops++; ST.cutPieces += KS * KS - inn; mt[4] = 1; } }
@@ -493,7 +549,9 @@ function flMesh(sh, fl) {
       var cs = [[x0 + a * gs, y0 + b * gs, bil(H, u0, v0)], [x0 + (a + 1) * gs, y0 + b * gs, bil(H, u1, v0)], [x0 + (a + 1) * gs, y0 + (b + 1) * gs, bil(H, u1, v1)], [x0 + a * gs, y0 + (b + 1) * gs, bil(H, u0, v1)]];
       for (var e6 = 0; e6 < 6; e6++) {
         var p = cs[TRI6[e6]], z = clamp((p[2] - (M[1] * p[0] + M[5] * p[1] + M[13])) / M[9], zl, zh);   // 同一個世界高度 ⇒ 船傾斜時水面還是平的
-        me.buf[q * 5] = p[0]; me.buf[q * 5 + 1] = p[1]; me.buf[q * 5 + 2] = z; me.buf[q * 5 + 3] = f; me.buf[q * 5 + 4] = z; q++;
+        var cu = TRI6[e6] === 1 || TRI6[e6] === 2 ? u1 : u0, cv = TRI6[e6] >= 2 ? v1 : v0;   // 這個角在格裡的位置 ⇒ 落在哪一邊上 ⇒ 那一邊的水邊值（aP.w；邊上 → 往內一片內插到 0）
+        var ev = Math.max(cu === 0 ? EM[0] : 0, cu === 1 ? EM[1] : 0, cv === 0 ? EM[2] : 0, cv === 1 ? EM[3] : 0);
+        me.buf[q * 5] = p[0]; me.buf[q * 5 + 1] = p[1]; me.buf[q * 5 + 2] = z; me.buf[q * 5 + 3] = ev; me.buf[q * 5 + 4] = z; q++;
       }
     }
   }
@@ -545,6 +603,7 @@ var FLS_MIN = 0.002, FL_DEPBLIT = 0;                                      // FL_
 function flSides(sh, fl, me, F, tops, TI, root, corner, flInside) {
   var c = F.c, NX = F.NX, NY = F.NY, NXY = NX * NY, A = fl.A, cap = fl.cap, op = fl.op, M = sh.M, Vc = Math.pow(c * S, 3), lqT = fl.lqT, t;
   var sq = 0, sideN = 0, fallN = 0, SB = me.sbuf || (me.sbuf = new Float32Array(7 * 6 * 256));
+  var ss = me.sst = { n: 0, max: 0, at: null, xo: 0, xf: 0, xn: 0, xoMax: 0 };
   function gz(x, y, hw) { return (hw - (M[1] * x + M[5] * y + M[13])) / M[9]; }   // 世界高度 ⇒ 那一點的格 z
   if (GFX.pside) for (t = 0; t < tops.length; t += 2) {
     var i = tops[t], sx = i % NX, sy = ((i / NX) | 0) % NY, sz = (i / NXY) | 0, rs = root(t / 2), bx = F.X0 + sx * c, by = F.Y0 + sy * c;
@@ -566,9 +625,21 @@ function flSides(sh, fl, me, F, tops, TI, root, corner, flInside) {
       else { y0 = y1 = by + c; x0 = bx; x1 = bx + c; ha = corner(rs, sx, sy + 1); hb = corner(rs, sx + 1, sy + 1); }
       if (!flInside((x0 + x1) / 2 + (d === 0 ? 0.5 : d === 1 ? -0.5 : 0), (y0 + y1) / 2 + (d === 2 ? 0.5 : d === 3 ? -0.5 : 0), (ha + hb) / 2)) continue;
       var za = gz(x0, y0, ha), zb = gz(x1, y1, hb), za1 = hw === null ? zf : gz(x0, y0, hw), zb1 = hw === null ? zf : gz(x1, y1, hw);
+      var kind = lqT > 0 && fl.lq[i * 4 + d] / lqT >= FLS_MIN ? 1 : 0;
+      if (!kind && FL_FLOOR) {                                             // 一般側面只畫到自己這一欄的地板（2026-10-16 量：上層甲板的水挨著較低的鄰池 ⇒ 側面一路畫到鄰池水面、穿過上層甲板，維吉尼亞號中檔 13 片、最多 15 層）；水瀑（kind 1）照舊落到下面的水面
+        var zf2 = -1; for (var zz2 = Math.floor(Math.max(za, zb)) - 1; zz2 >= 0 && zz2 > Math.min(za1, zb1) - 1; zz2--) { var cz2 = (zz2 / c) | 0; if (cz2 < F.NZ && op[(cz2 * NXY + sy * NX + sx) * c + zz2 - cz2 * c] <= 0) { zf2 = zz2 + 1; break; } }
+        if (zf2 > za1) za1 = Math.min(zf2, za); if (zf2 > zb1) zb1 = Math.min(zf2, zb);
+      }
       if (za - za1 < 0.3 && zb - zb1 < 0.3) continue;
-      var kind = lqT > 0 && fl.lq[i * 4 + d] / lqT >= FLS_MIN ? 1 : 0, Lm = Math.max(za - za1, zb - zb1) * S;
+      var Lm = Math.max(za - za1, zb - zb1) * S;
       if (kind) fallN++; else sideN++;
+      if (FL_STAT) {                                                       // 報表：這片側面多高、從水面往下經過幾層關著的格層（自己這一欄／鄰欄；甲板或船殼外）
+        var zl = Math.max(0, Math.floor(Math.min(za1, zb1))), zh = Math.floor(Math.max(za, zb)) - 1, xo = 0, xn = 0;
+        for (var zz = zl; zz <= zh; zz++) { var cz = (zz / c) | 0, ll = zz - cz * c; if (cz >= F.NZ) break;
+          if (!((zz + 1 > za1 + 0.01 && zz < za - 0.01) || (zz + 1 > zb1 + 0.01 && zz < zb - 0.01))) continue;   // 照兩端各自的範圍（⛔ 不用外框：一端收到地板、另一端沒收時外框會多算）
+          if (op[(cz * NXY + sy * NX + sx) * c + ll] <= 0) xo++; if (op[(cz * NXY + ny * NX + nx) * c + ll] <= 0) xn++; }
+        ss.n++; if (Lm > ss.max) { ss.max = Lm; ss.at = [sx, sy, d, sz]; } if (xo && !kind) (ss.xoAt || (ss.xoAt = [])).push([sx, sy, d, sz, xo, +za.toFixed(2), +zb.toFixed(2), +za1.toFixed(2), +zb1.toFixed(2), hw === null ? 0 : 1]); if (xo) { if (kind) ss.xf++; else ss.xo++; } if (xn) ss.xn++; if (xo > ss.xoMax) ss.xoMax = xo;
+      }
       if ((sq + 6) * 7 > SB.length) { var SB2 = new Float32Array(SB.length * 2); SB2.set(SB); SB = me.sbuf = SB2; }
       var V = [[x0, y0, za, 0, 0], [x1, y1, zb, 1, 0], [x1, y1, zb1, 1, 1], [x0, y0, za, 0, 0], [x1, y1, zb1, 1, 1], [x0, y0, za1, 0, 1]];
       for (var e = 0; e < 6; e++) { var o = sq * 7, p = V[e]; SB[o] = p[0]; SB[o + 1] = p[1]; SB[o + 2] = p[2]; SB[o + 3] = p[3]; SB[o + 4] = p[4]; SB[o + 5] = Lm; SB[o + 6] = kind; sq++; }
@@ -608,7 +679,7 @@ function flDraw() {
   var on = false;
   L.forEach(function (e) {
     var sh = e[0], me = e[1]; if (!me.n) return;
-    if (!on) { on = true; begin(); gl.useProgram(P.pool.prog); setCommon(P.pool); gl.uniform1f(P.pool.u.uX, FLX3 ? 1 : 0); depU(P.pool); }
+    if (!on) { on = true; begin(); gl.useProgram(P.pool.prog); setCommon(P.pool); gl.uniform1f(P.pool.u.uX, FLX3 ? 1 : 0); gl.uniform1f(P.pool.u.uEdge, GFX.pedge && !FLX3 ? 1 : 0); gl.uniform1f(P.pool.u.uVox, S); depU(P.pool); }   // uVox：格 → 公尺（S 載入船型才有 ⇒ ⛔ 編著色器時還是 undefined）
     gl.uniformMatrix4fv(P.pool.u.uModel, false, sh.M); gl.uniform1f(P.pool.u.uMix, flMix(me)); gl.bindVertexArray(me.vao); gl.drawArrays(gl.TRIANGLES, 0, me.n);
   });
   on = false;

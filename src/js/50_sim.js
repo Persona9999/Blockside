@@ -59,7 +59,7 @@ function step() {
   if ((Math.round(SIMT / DT) % CMD_EVERY) === 0) cmdTick();        // 指揮官每 3 秒想一次（52_fleet.js；不抽亂數）
   pickFoes();                                                      // 每艘的目標（52_fleet.js）：這一步之內都用同一個
   stepWind(SIMT);                                                  // 風會變（08_weather.js）
-  SHIPS.forEach(function (sh) { if (sh.mounts) mountStep(sh, DT); });   // 迴旋砲、砲塔照瞄準點轉（21_gunnery.js；TASK-0626）—— 沒有 ⇒ 不做事
+  SHIPS.forEach(function (sh) { if (sh.mounts || sh.tur) mountStep(sh, DT); });   // 迴旋砲、砲塔照瞄準點轉（21_gunnery.js；TASK-0626）—— 沒有 ⇒ 不做事
   for (var i = 0; i < EVENTS.length; i++) {
     var e = EVENTS[i]; if (e.t > SIMT) continue;
     EVENTS.splice(i--, 1);
