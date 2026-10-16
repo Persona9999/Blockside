@@ -64,6 +64,7 @@ function prefsSnap() {
   put('weather', WX_ID, 'clear'); put('sea', SEA_K, LIM.sea[2]); put('play', PLAY, CFG.menu.play); put('stall', STALL_K, LIM.stall[2]); put('funspeed', FUN.speed, LIM.funspeed[2]); put('funagile', FUN.agile, LIM.funagile[2]); put('funstall', FUN.stall, LIM.funstall[2]); put('funpowder', FUN.powder, LIM.funpowder[2]); put('funhard', FUN.hard, LIM.funhard[2]);
   var dm = {}; Object.keys(DMG_Q).forEach(function (t) { if (DMG[t] !== LIM[DMG_Q[t]][2]) dm[t] = DMG[t]; });
   if (Object.keys(dm).length) o.dmg = dm;
+  var fs = furnSnap(); if (Object.keys(fs).length) o.furn = fs;          // 道具設定（67_furncfg.js）：跟設定檔 furniture 不一樣的
   var gs = gunsSnap(); if (Object.keys(gs).length) o.guns = gs;          // 砲的設定（68_guncfg.js）：跟砲種表預設不一樣的
   if (AMMO_K.some(function (r, i) { return r.some(function (v, j) { return v !== AMMO_K0[i][j]; }); })) o.ammoK = AMMO_K.map(function (r) { return r.slice(); });
   if (STRIKE.cas !== LIM.cas[2] || STRIKE.guns || STRIKE.masts || STRIKE.officers) o.strike = { cas: STRIKE.cas, guns: STRIKE.guns, masts: STRIKE.masts, officers: STRIKE.officers };
@@ -116,6 +117,7 @@ function prefsApply(p) {
   set('funhard', p.funhard, LIM.funhard, false, function (x) { FUN.hard = x; });
   if (p.dmg && typeof p.dmg === 'object') Object.keys(DMG_Q).forEach(function (t) { set(DMG_Q[t], p.dmg[t], LIM[DMG_Q[t]], true, function (x) { DMG[t] = x; }); });
   if (p.guns && typeof p.guns === 'object') gunsApply(p.guns);
+  if (p.furn && typeof p.furn === 'object') furnApply(p.furn);           // 道具設定（67_furncfg.js）
   if (!Q.has('ammo') && Array.isArray(p.ammoK)) p.ammoK.forEach(function (r, i) {
     if (i < 3 && Array.isArray(r)) r.forEach(function (v, j) { var x = num(v, AMMO_LIM, true); if (j < 3 && x !== undefined) AMMO_K[i][j] = x; });
   });

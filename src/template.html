@@ -174,6 +174,7 @@
   body.roomEdOn #roomEd{ position:fixed; inset:8px; z-index:50; max-width:none; margin:0; overflow-y:auto; background:#141a22; border-color:rgba(255,255,255,.3); box-shadow:0 6px 30px rgba(0,0,0,.6); }   /* 打開 ⇒ 接近全螢幕（Tim 2026-10-14） */
   #cover #pgX{ position:fixed; top:10px; right:12px; z-index:40; display:none; margin:0; background:#e3c46a; color:#111; border-color:#e3c46a; box-shadow:0 2px 10px rgba(0,0,0,.6); } #cover #pgX.on{ display:block; }
   #roomEdX2{ display:none; } body.roomEdOn #roomEdX2{ display:block; position:sticky; top:0; float:right; z-index:2; background:#e3c46a; color:#111; border-color:#e3c46a; }   /* 編輯器浮層：右上角的完成（捲動時黏在上面） */
+  #furnAdm{ display:none; } #furnp.admin #furnAdm{ display:block; color:#ffd27a; border:1px solid rgba(255,210,122,.5); border-radius:6px; padding:6px 10px; margin:6px 0; }   /* 道具的出廠預設值（?admin=furn） */
   #detAdm{ display:none; } #detail.admin #detAdm{ display:block; color:#ffd27a; border:1px solid rgba(255,210,122,.5); border-radius:6px; padding:6px 10px; margin:6px 0; }   /* 出廠預設值（?admin=defaults） */
   #shipAdm{ display:none; } #shipp.admin #shipAdm{ display:block; color:#ffd27a; } #shipp.admin .nadm{ display:none; }   /* 設定後台嵌的那一份（?admin=rooms） */ #deckItems .rm{ display:flex; align-items:center; justify-content:center; flex-wrap:wrap; gap:4px 8px; font-size:13px; margin:5px 0; } #deckItems .rm label{ min-width:10em; text-align:right; } #deckItems .rm .rs{ color:var(--dim); font-size:12px; text-align:left; max-width:30em; } #deckItems button{ font-size:13px; padding:4px 10px; margin:2px; } #deckItems button.on{ color:#111; background:var(--gold); border-color:var(--gold); }
   #roomEd canvas{ position:static; display:block; margin:6px auto; touch-action:manipulation; cursor:crosshair; }   /* ⛔ 全域的 canvas 是 absolute（遊戲畫面）⇒ 編輯器的格子會飛到頁面外 */
@@ -347,7 +348,7 @@
       <div class="row" id="phxs">物理效果
         <button data-x="full">全開</button><button data-x="high">高</button><button data-x="mid">中</button><button data-x="low">低</button><button id="phxB">物理設定…</button>
       </div>
-      <div class="row"><button id="shipB">船隻配置…</button><button id="gunB">砲的設定…</button><button id="detB">細節設定…</button></div>
+      <div class="row"><button id="shipB">船隻配置…</button><button id="gunB">砲的設定…</button><button id="furnB">道具設定…</button><button id="detB">細節設定…</button></div>
       <div class="row"><button class="go" id="go" disabled>載入中…</button></div>
       <!-- 說明與細節設定的摘要放在開戰鈕下面（Tim 2026-10-13：手機上開戰鈕被擠到畫面外、要捲才看得到） -->
       <div class="sub">Constitution Broadside —— 兩艘 1:1 的憲法號（0.1 公尺一格）互轟，船殼一格一格被打碎、桅杆打得斷、破洞進水會沉。<br>
@@ -431,6 +432,18 @@
       <div class="row note" id="gunSt"></div>
       <div class="row"><button id="gunR">這一種回到預設</button><button id="gunE">匯出…</button><button id="gunI">匯入…</button><input type="file" id="gunF" accept=".json,application/json" style="display:none"></div>
       <div class="row"><button id="gunX">返回</button></div>
+    </div>
+    <!-- 道具設定（從主選單進；Tim 2026-10-16）：一種道具一份；項目在 js/67_furncfg.js 的 FURN_ITEMS；預設值 ＝ config/game.json furniture（開發後台 ?admin=furn 用同一頁存） -->
+    <div class="card panel" id="furnp" style="display:none">
+      <h2>道具設定</h2>
+      <div id="furnAdm" class="row"><b>出廠預設值（設定後台）</b>：這一頁的值 ＝ 設定檔現在的預設；改好按「存成出廠預設」⇒ 寫進 config/game.json 的 furniture，「重建」之後遊戲才吃得到。<br><button id="furnAdmS" class="on">💾 存成出廠預設</button><button id="furnAdmB">🔨 重建</button><button id="furnAdmX">↩ 回設定後台</button><div id="furnAdmL" style="white-space:pre-wrap;text-align:left;font-size:12px"></div></div>
+      <div class="sub">一種道具一份：所有船上同一種都照這一份（抽水機、病床、手術台、藥箱…）。下一場開始生效。擺在哪裡在船隻配置頁的「擺設…」。</div>
+      <div class="row slide"><label for="furnSel">道具</label><select id="furnSel" aria-label="編輯哪一種道具"></select></div>
+      <div class="row note" id="furnInfo"></div>
+      <div id="furnItems"></div>
+      <div class="row note" id="furnSt"></div>
+      <div class="row"><button id="furnR">這一種回到預設</button><button id="furnE">匯出…</button><button id="furnI">匯入…</button><input type="file" id="furnF" accept=".json,application/json" style="display:none"></div>
+      <div class="row"><button id="furnX">返回</button></div>
     </div>
     <!-- 細節設定（從主選單進）：滑桿的上下限與預設在 js/04_state.js 的 LIM（網址參數共用同一組） -->
     <div class="card panel" id="detail" style="display:none">
@@ -589,6 +602,7 @@
 <script src="js/53_commander.js" data-bundle="game"></script>
 <script src="js/60_render.js" data-bundle="game"></script>
 <script src="js/61_hud.js" data-bundle="game"></script>
+<script src="js/67_furncfg.js" data-bundle="game"></script>
 <script src="js/68_guncfg.js" data-bundle="game"></script>
 <script src="js/69_prefs.js" data-bundle="game"></script>
 <script src="js/70_flow.js" data-bundle="game"></script>

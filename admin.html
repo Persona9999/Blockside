@@ -92,7 +92,7 @@ nav a.on { background: var(--acc); color: var(--acc-ink); border-color: var(--ac
     <div class="grid" id="menu"></div></section>
 
   <section><h2>滑桿：下限、上限、預設</h2>
-    <p class="note">預設也可以用遊戲的細節設定頁改：<button id="bDetDef">用細節設定頁設出廠預設值…</button>（跳轉過去；用的是上一次建好的成品，存了要重建才生效）</p>
+    <p class="note">預設也可以用遊戲的細節設定頁改：<button id="bDetDef">用細節設定頁設出廠預設值…</button><button id="bFurnDef">用道具設定頁設道具的出廠預設值…</button>（跳轉過去；用的是上一次建好的成品，存了要重建才生效）</p>
     <p class="note">細節設定頁與主選單的滑桿（網址參數同一組）。黃底 ＝ 跟版控裡的不一樣。</p>
     <div class="tbl"><table id="lim"><thead><tr><th>設定</th><th>鍵</th><th>下限</th><th>上限</th><th>預設</th></tr></thead><tbody></tbody></table></div>
     <h2 style="margin-top:12px">開局距離（公尺）</h2><div class="grid" id="dist"></div></section>
@@ -443,10 +443,11 @@ nav a.on { background: var(--acc); color: var(--acc-ink); border-color: var(--ac
   function roomsSum() { $('roomsSum').textContent = C.ships.map(function (s) { var n = Object.keys(s.rooms || {}).length, c = C0 && !same(s.rooms, (C0.ships.filter(function (x) { return x.id === s.id; })[0] || {}).rooms); return s.name + '：' + (n ? n + ' 間有寫' : '沒寫（艙房空著、甲板照舊）') + (c ? '（跟版控不一樣）' : ''); }).join('；'); }
   window.addEventListener('message', function (ev) {
     if (ev.origin !== location.origin || !ev.data || !C) return;
-    if (ev.data.kind === 'cb-admdef') {                              // 細節設定頁（?admin=defaults）送來：存成出廠預設（op save，lim）或重建（op build）⇒ 呼叫 admin.py、結果送回去
+    if (ev.data.kind === 'cb-admdef') {                              // 細節設定頁（?admin=defaults）送來：存成出廠預設（op save，lim）或重建（op build）；道具設定頁（?admin=furn）：op furn，furn⇒ 呼叫 admin.py、結果送回去
       var src = ev.source, reply = function (r) { try { src.postMessage({ kind: 'cb-admdef-r', ok: !!r.ok, log: r.log || [] }, location.origin); } catch (e) { /* 分頁關了 */ } };
-      if (ev.data.op === 'save' && dirty) return reply({ ok: false, log: ['⚠ 設定後台這一頁有還沒存的修改 ⇒ 先存或還原，再存出廠預設（不然兩邊會互相蓋掉）'] });
-      call(ev.data.op === 'build' ? '/api/build' : '/api/defaults', ev.data.op === 'build' ? {} : { lim: ev.data.lim }, function () { return load(true).then(function () { return true; }); })
+      if ((ev.data.op === 'save' || ev.data.op === 'furn') && dirty) return reply({ ok: false, log: ['⚠ 設定後台這一頁有還沒存的修改 ⇒ 先存或還原，再存出廠預設（不然兩邊會互相蓋掉）'] });
+      var ep = ev.data.op === 'build' ? ['/api/build', {}] : ev.data.op === 'furn' ? ['/api/furniture', { furn: ev.data.furn }] : ['/api/defaults', { lim: ev.data.lim }];   // furn：道具設定頁（67_furncfg.js，?admin=furn）
+      call(ep[0], ep[1], function () { return load(true).then(function () { return true; }); })
         .then(function (ok) { reply({ ok: ok, log: $('log').textContent.split('\n').filter(function (l) { return l; }) }); });
       return;
     }
@@ -459,7 +460,8 @@ nav a.on { background: var(--acc); color: var(--acc-ink); border-color: var(--ac
   function saveCfg() { return call('/api/config', { config: C }, function () { return load(true).then(function () { return true; }); }); }
   $('bSave').onclick = function () { saveCfg().then(function (ok) { if (ok) say(['✓ 存了 config/game.json —— 重建之後遊戲才吃得到']); }); };
   $('bRooms').onclick = function () { var w = window.open('/game?admin=rooms', 'cbRooms'); if (w) w.focus(); };   // 甲板與艙房編輯器：獨立分頁（同名 ⇒ 已經開著就切過去）；它 cb-ready 時才算連上
-  $('bDetDef').onclick = function () { window.open('/game?admin=defaults', '_blank'); };   // 出廠預設值：遊戲的細節設定頁（69_prefs.js admDefUI），開新分頁；它存檔、重建都經過這一頁（cb-admdef）
+  $('bDetDef').onclick = function () { window.open('/game?admin=defaults', '_blank'); };
+  $('bFurnDef').onclick = function () { window.open('/game?admin=furn', '_blank'); };   // 道具的出廠預設值：遊戲的道具設定頁（67_furncfg.js furnAdmUI），一樣經過這一頁存（cb-admdef op furn）   // 出廠預設值：遊戲的細節設定頁（69_prefs.js admDefUI），開新分頁；它存檔、重建都經過這一頁（cb-admdef）
   $('bBuild').onclick = function () { if (dirty && !confirm('有還沒存的修改；重建只照磁碟上的設定檔。照樣重建？')) return; call('/api/build', {}); };
   $('bBoth').onclick = function () { saveCfg().then(function (ok) { if (ok) call('/api/build', {}); }); };
   $('bRevert').onclick = function () { if (confirm('丟掉還沒存的修改？')) load(); };
