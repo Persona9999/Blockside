@@ -538,34 +538,54 @@ var CLOTH_CONTACT_MARGIN = 0.12;
 // 收帆、張帆的演出（Tim 2026-10-15：「開啟帆繩物理時，收帆放帆是否可以多一小段演出（不影響判斷）」）：只改畫出來的樣子（11_rig_gpu.js sailBuf → furlDraw）。
 //   c.furlF ＝ 張開了幾成（1 張開、0 收攏；null ＝ 沒在演）；收帆 FURL_IN 秒、張帆 FURL_OUT 秒。物理照常走、判斷照 s.furled 立刻生效。
 var FURL_IN = 1.2, FURL_OUT = 1.6;
-/** 收攏點（模板共用；第一次用到才算，用設計那一刻的形狀找最近的）：T.fg[i] ＝ 細格點 i 往哪一個綁點收（最近的綁在帆桁上的點；沒有帆桁 ⇒ 最近的綁點），T.fgFloor 第一排留的距離。
- *  帆腳（T.clew：只綁在繩上、旁邊沒有別的綁點的那一點 ＝ sheet 綁的角）不當收攏點、自己也跟著收（實船的 clewline 把帆腳拉上帆桁）。
+/** 收攏點（模板共用；第一次用到才算，用設計那一刻的形狀找最近的）：T.fg[i] ＝ 細格點 i 往哪一個收攏點收，T.fgFloor 第一排留的距離，T.fmv ＝ 不是收攏點的綁點（跟著收）。
+ *  帆腳（T.clew：只綁在繩上、旁邊沒有別的綁點的那一點 ＝ sheet 綁的角）一定跟著收（實船的 clewline 把帆腳拉上帆桁）；下帆桁（boom）上的綁點也是（brail 把帆往桅、斜桁收）。
+ *  收攏點挑哪一組（Tim 2026-10-16 截圖：「新的收帆算法 無法收這面帆」—— spanker 收完還剩 84%）：照順序試 ① 帆桁 ② 帆桁＋綁在桅、船身上的那一條邊（hk 1／3、旁邊也是綁點）③ 每一個綁點，
+ *    挑收到底（f ＝ 0）面積最小的；後面的要小 5% 以上才換（一樣小就照前面的）。
+ *  ⛔ 以前固定 ①、其他綁點照原樣不動：spanker 前緣綁在桅上 ⇒ 從桅拉到兩根帆桁的三角形整片撐開（量到 13 艘裡 spanker 類 64–85%）；
+ *  ⛔ 固定 ③：側邊綁在繩上的方帆往側邊收（暴風角號 fore-course 62%、拿破崙號上層方帆 19–27%）。
  *  ⛔ 舊的 T.gath 帆腳不收：收到底帆桁下面拉出兩條細長的三角形到帆腳（演完就藏所以看不出來；收好的帆留著一捲 ⇒ 看得到）。 */
-function furlGath(T) {
+function furlGath(T, sh) {
   if (T.fg) return T.fg;
-  var cl = T.clew = new Uint8Array(T.n), nb = new Uint8Array(T.n), i, j;
+  var cl = T.clew = new Uint8Array(T.n), nb = new Uint8Array(T.n), bm = new Uint8Array(T.n), i;
   for (var ti = 0; ti < T.tris.length; ti += 3) for (var e = 0; e < 3; e++) { var a = T.tris[ti + e], b = T.tris[ti + (e + 1) % 3]; if (T.hk[a] && T.hk[b]) { nb[a] = 1; nb[b] = 1; } }
   for (i = 0; i < T.n; i++) if (T.hk[i] === 2 && !nb[i]) cl[i] = 1;
-  var pins = [], yard = []; for (i = 0; i < T.n; i++) if (T.hk[i] && !cl[i]) { pins.push(i); if (T.hk[i] === 4) yard.push(i); }
-  var src = yard.length ? yard : pins, g = new Int32Array(T.n).fill(-1);
-  if (src.length) for (i = 0; i < T.n; i++) { var bd = 1e18; for (j = 0; j < src.length; j++) { var q = src[j], dx = T.p0[i * 3] - T.p0[q * 3], dy = T.p0[i * 3 + 1] - T.p0[q * 3 + 1], dz = T.p0[i * 3 + 2] - T.p0[q * 3 + 2], d = dx * dx + dy * dy + dz * dz; if (d < bd) { bd = d; g[i] = q; } } }
+  if (sh && sh.models) for (i = 0; i < T.n; i++) if (T.hk[i] === 4 && sh.models[T.hv[i]] && sh.models[T.hv[i]].yk === 'boom') bm[i] = 1;
+  var yard = [], edge = [], all = [];
+  for (i = 0; i < T.n; i++) { if (!T.hk[i] || cl[i] || bm[i]) continue; all.push(i); if (T.hk[i] === 4) yard.push(i); else if ((T.hk[i] === 1 || T.hk[i] === 3) && nb[i]) edge.push(i); }
+  var cands = []; if (yard.length) { cands.push(yard); if (edge.length) cands.push(yard.concat(edge)); } if (!cands.length || all.length > cands[cands.length - 1].length) cands.push(all);
+  var best = null; cands.forEach(function (S) { var r = furlTry(T, S); if (!best || r.area < best.area * 0.95) best = r; });
+  T.fgFloor = best.floor; T.fmv = best.mv; T.fgN = best.S.length;
+  return (T.fg = best.g);
+}
+/** 一組收攏點 S ⇒ 最近的收攏點 g、第一排留的距離 floor、跟著收的綁點 mv、收到底的面積。 */
+function furlTry(T, S) {
+  var n = T.n, g = new Int32Array(n).fill(-1), floor = new Float32Array(n), mv = new Uint8Array(n), src = new Set(S), i, j, p = T.p0;
+  if (S.length) for (i = 0; i < n; i++) { var bd = 1e18; for (j = 0; j < S.length; j++) { var q = S[j], dx = p[i * 3] - p[q * 3], dy = p[i * 3 + 1] - p[q * 3 + 1], dz = p[i * 3 + 2] - p[q * 3 + 2], d = dx * dx + dy * dy + dz * dz; if (d < bd) { bd = d; g[i] = q; } } }
+  for (i = 0; i < n; i++) if (T.hk[i] && !src.has(i)) mv[i] = 1;
   // Keep the first material row at its full distance from the fastening.
   // Shrinking every row into the yard's centre buries the furled cloth in wood.
-  var source = new Set(src), floor = T.fgFloor = new Float32Array(T.n);
-  for (ti = 0; ti < T.tris.length; ti += 3) for (e = 0; e < 3; e++) {
-    a = T.tris[ti + e]; b = T.tris[ti + (e + 1) % 3];
-    if (source.has(a) === source.has(b)) continue;
-    var free = source.has(a) ? b : a, target = g[free]; if (target < 0) continue;
-    floor[target] = Math.max(floor[target], Math.hypot(T.p0[free * 3] - T.p0[target * 3], T.p0[free * 3 + 1] - T.p0[target * 3 + 1], T.p0[free * 3 + 2] - T.p0[target * 3 + 2]));
+  for (var ti = 0; ti < T.tris.length; ti += 3) for (var e = 0; e < 3; e++) {
+    var a = T.tris[ti + e], b = T.tris[ti + (e + 1) % 3];
+    if (src.has(a) === src.has(b)) continue;
+    var free = src.has(a) ? b : a, target = g[free]; if (target < 0) continue;
+    floor[target] = Math.max(floor[target], Math.hypot(p[free * 3] - p[target * 3], p[free * 3 + 1] - p[target * 3 + 1], p[free * 3 + 2] - p[target * 3 + 2]));
   }
-  return (T.fg = g);
+  var P = Float32Array.from(p);
+  for (i = 0; i < n; i++) {
+    var t = g[i]; if (t < 0 || t === i || T.hk[i] && !mv[i]) continue;
+    var rest = Math.hypot(p[i * 3] - p[t * 3], p[i * 3 + 1] - p[t * 3 + 1], p[i * 3 + 2] - p[t * 3 + 2]), fr = Math.max(0.04, Math.min(1, floor[t] / (rest || 1)));
+    for (var x = 0; x < 3; x++) P[i * 3 + x] = P[t * 3 + x] + (p[i * 3 + x] - p[t * 3 + x]) * fr;
+  }
+  var A = 0; for (j = 0; j < T.tris.length; j += 3) { var u = T.tris[j] * 3, v = T.tris[j + 1] * 3, w = T.tris[j + 2] * 3, ux = P[v] - P[u], uy = P[v + 1] - P[u + 1], uz = P[v + 2] - P[u + 2], vx = P[w] - P[u], vy = P[w + 1] - P[u + 1], vz = P[w + 2] - P[u + 2]; A += Math.hypot(uy * vz - uz * vy, uz * vx - ux * vz, ux * vy - uy * vx); }
+  return { S: S, g: g, floor: floor, mv: mv, area: A };
 }
 /** 畫面上收攏：每個細格點往它的收攏點（furlGath）靠過去，f ＝ 張開幾成（緩動）。 */
-function furlDraw(c, P, f) {
-  var T = c.T, g = furlGath(T), cl = T.clew, i;
+function furlDraw(c, P, f, sh) {
+  var T = c.T, g = furlGath(T, sh), mv = T.fmv, i;
   var e = f * f * (3 - 2 * f), k = 0.04 + 0.96 * e;                     // 收到底留 4%（一捲布，不是一條線）
   for (i = 0; i < T.n; i++) {
-    var a = g[i]; if (a < 0 || a === i || T.hk[i] && !cl[i]) continue; // Rendering must preserve every authored fastening, including rope/body pins.（帆腳除外，見 furlGath）
+    var a = g[i]; if (a < 0 || a === i || T.hk[i] && !mv[i]) continue; // Rendering must preserve every authored fastening, including rope/body pins.（帆腳、下帆桁除外，見 furlGath）
     var rest = Math.hypot(T.p0[i * 3] - T.p0[a * 3], T.p0[i * 3 + 1] - T.p0[a * 3 + 1], T.p0[i * 3 + 2] - T.p0[a * 3 + 2]);
     var fraction = Math.max(k, Math.min(1, (T.fgFloor[a] || 0) / (rest || 1)));
     for (var ax = 0; ax < 3; ax++) P[i * 3 + ax] = P[a * 3 + ax] + (P[i * 3 + ax] - P[a * 3 + ax]) * fraction;
@@ -578,13 +598,24 @@ function furlDraw(c, P, f) {
 function furlKeep(s) { return s.furled && !s.dead && !s.flag; }
 /** 收好的那一捲：out ＝ 細格位置（設計的形狀；綁點與往它收的點照那根帆桁現在轉了多少轉）。 */
 function furlBundle(sh, c, out) {
-  var T = c.T, g = furlGath(T), yk = T.sim.yk, cl = T.clew, rot = sh && yk && T.sim.n === T.n && sh.yards && sh.yards.some(function (m) { return m.rot; });
+  var T = c.T, g = furlGath(T, sh), yk = T.sim.yk, mv = T.fmv, rot = sh && yk && T.sim.n === T.n && sh.yards && sh.yards.some(function (m) { return m.rot; });
   for (var i = 0; i < T.n; i++) {
-    var o = i * 3, y = rot ? (T.hk[i] && !cl[i] ? yk[i] : g[i] >= 0 ? yk[g[i]] : -1) : -1, m = y >= 0 ? sh.models[y] : null;
+    var o = i * 3, y = rot ? (T.hk[i] && !mv[i] ? yk[i] : g[i] >= 0 ? yk[g[i]] : -1) : -1, m = y >= 0 ? sh.models[y] : null;
     if (m && m.rot) { var w = rotZ([T.p0[o], T.p0[o + 1], T.p0[o + 2]], m.piv, m.rot); out[o] = w[0]; out[o + 1] = w[1]; out[o + 2] = w[2]; }
     else { out[o] = T.p0[o]; out[o + 1] = T.p0[o + 1]; out[o + 2] = T.p0[o + 2]; }
   }
-  return furlDraw(c, out, 0);
+  return furlDraw(c, out, 0, sh);
+}
+/** 收好的那一捲哪幾點不畫（Tim 2026-10-16 截圖：「且會浮空」—— 收著的帆不會因為帆桁、桅被打掉而算掉了（32_hull.js：收著的帆不怕），那一捲照畫在原處）：
+ *  每一點往它的收攏點收（綁點自己 ＝ 自己）；那個綁點靠的東西（格、繩、帆桁）不在了 ⇒ 那一點不畫（碰到它的三角形不畫）。帆的破洞照舊不畫。null ＝ 全畫。 */
+function furlLost(sh, s, c) {
+  var T = c.T, g = furlGath(T, sh), mv = T.fmv, out = null, ok = {};
+  for (var i = 0; i < T.n; i++) {
+    var a = T.hk[i] && !mv[i] ? i : g[i], lost = c.torn && c.tv && c.tv[i];
+    if (!lost && a >= 0) { var key = T.hk[a] + ':' + T.hv[a]; if (!(key in ok)) ok[key] = holds(sh, s, T.hk[a], T.hv[a]); lost = !ok[key]; }
+    if (lost) (out || (out = new Uint8Array(T.n)))[i] = 1;
+  }
+  return out;
 }
 // 帆腳跟 sheet 連動（Tim 2026-10-16：「帆跟纜線綁在一起時 物理是否可以連動 目前好像是一起固定在空中的固定點」）：
 //   帆腳（furlGath 的 T.clew）不再釘在作品的位置：交給布的物理，只多一條「離 sheet 另一端（綁甲板、下一根帆桁）不超過作品那一刻的距離」⇒ 被風吹得動、被繩拉住。
@@ -595,7 +626,7 @@ var TETH_R = 10;
 /** 帆腳的繩（模板共用，第一次用到才算）：[{ i 帆腳, j 繩, ce 靠帆腳那一端（點的序號）, fe 另一端, L 最長距離, t 每一點從另一端算起的弧長比例 }]。 */
 function tethOf(sh, s, c) {
   var T = c.T; if (T.teth !== undefined) return T.teth;
-  furlGath(T); var list = [];
+  furlGath(T, sh); var list = [];
   if (T.sim.n === T.n) for (var i = 0; i < T.n; i++) if (T.clew[i]) (s.lines || []).forEach(function (j) {
     var q = sh.ropes[j].pts0 || sh.ropes[j].pts, m = q.length / 3; if (m < 2) return;
     function d(k) { return Math.hypot(q[k * 3] - T.p0[i * 3], q[k * 3 + 1] - T.p0[i * 3 + 1], q[k * 3 + 2] - T.p0[i * 3 + 2]); }
