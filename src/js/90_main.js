@@ -119,11 +119,7 @@ if (DEBUG) window.__game = {
   flood: function (i, o) {
     if (o && 'hide' in o) FL_HIDE = !!o.hide;
     if (o && o.gm > 0) FL_GM = o.gm;                                   // 調穩心高（量傾斜用）
-    var sh = SHIPS[i || 0], fl = sh.fl; if (!fl) return null;
-    var cells = 0; for (var t = 0; t < fl.actN; t++) if (fl.A[fl.act[t]] > 0) cells++;
-    return { lv: FLOOD_LV, c: fl.F.c, grid: [fl.F.NX, fl.F.NY, fl.F.NZ], m3: +fl.vol.toFixed(3), t: +(fl.vol * RHO_W).toFixed(2), cells: cells, jets: fl.J.n, holes: fl.open, area: +fl.area.toFixed(3),
-      inQ: +fl.inQ.toFixed(3), outQ: +fl.outQ.toFixed(3), inTot: +fl.inTot.toFixed(2), outTot: +fl.outTot.toFixed(2), pumped: +fl.pumped.toFixed(2), lost: +(fl.lost || 0).toFixed(3),
-      comX: +fl.comX.toFixed(2), comY: +fl.comY.toFixed(2), sinkT: +fl.sinkT.toFixed(3), sink: +sh.sink.toFixed(3), roll: +sh.rollA.toFixed(4), pitch: +sh.pitchA.toFixed(4), dirty: fl.dirty.length + fl.hdirty.length };
+    var sh = SHIPS[i || 0]; return sh.fl ? flReadout(sh) : null;   // 讀數在 33_flood.js flReadout（進水報表 81_floodlab.js 共用）
   },
   /** 量進水用：第 i 艘在格 (x, z) 那一舷（side 0 ＝ 格 +y、1 ＝ −y）的船殼打一個半徑 r 格的洞（從最外那一格往艙內打穿）。回打掉幾格。 */
   // 除錯（TASK-0616）：從船外對著格座標 (x, z) 那一欄水平射一發（side 同 hole：真 ＝ 從 y 小的那一舷），只跑這一顆砲彈（船不動）⇒ 打掉幾格、穿多深、出來剩多快（木頭／鐵甲打同一點比）
@@ -131,6 +127,9 @@ if (DEBUG) window.__game = {
    *  回：mat 表面材質、removed 掉幾格、deep 鑽多深（m）、out 出來剩多快、res 鐵甲那一下是 pen 穿／dent 凹／rico 彈（TASK-0621）。 */
   /** 落水彈道的測試場（80_lab.js，TASK-0642）：o 同網址 ?lab=uw 的參數 ⇒ 每一發的落水點、水下走多遠、打到船殼多深、軌跡。⛔ 會重開一局。 */
   lab: function (o) { return uwLab(o); },
+  /** 沙盒進水報表（81_floodlab.js，TASK-0654）：o 同網址 ?lab=flood 的參數 ⇒ 每 every 秒一筆讀數＋接縫分類＋截圖。⛔ 會重開一局。 */
+  floodLab: function (o) { return floodLab(o); },
+  floodView: function (o) { return floodView(o); },                   // 換鏡頭再拍一張（81_floodlab.js）
   shot: function (i, x, z, side, gun, ammo, ang) {
     var sh = SHIPS[i || 0], B = sh.T.base, s = side ? 1 : -1, y0 = -1, y, GS = GUNS[gun] || Object.keys(GUNS).map(function (k) { return GUNS[k]; }).filter(function (g) { return g.code === gun; })[0] || GUNS.long;
     if (side) { for (y = 0; y < sh.T.cy; y++) if (sh.grid.get(x, y, z)) { y0 = y; break; } } else { for (y = B.sy - 1; y > sh.T.cy; y--) if (sh.grid.get(x, y, z)) { y0 = y; break; } }
@@ -170,16 +169,7 @@ if (DEBUG) window.__game = {
     out.hull = sh.grid.count; out.orig = sh.orig; out.armN0 = sh.armN0; out.mass0 = +shipT(sh).toFixed(3); out.voxLost = +voxLostT(sh).toFixed(4); out.massLost = +massLost(sh).toFixed(4); out.lost = sh.lost;
     return out;
   },
-  hole: function (i, x, z, side, r) {
-    var sh = SHIPS[i || 0], B = sh.T.base, y0 = -1, y, s = side ? 1 : -1, n = 0; r = r || 4;
-    if (side) { for (y = 0; y < sh.T.cy; y++) if (B.get(x, y, z)) { y0 = y; break; } } else { for (y = B.sy - 1; y > sh.T.cy; y--) if (B.get(x, y, z)) { y0 = y; break; } }
-    if (y0 < 0) return null;
-    for (var dz = -r; dz <= r; dz++) for (var dx = -r; dx <= r; dx++) {
-      if (dx * dx + dz * dz > r * r) continue;
-      for (var t = 0; t < 16; t++) { var yy = y0 + s * t; if (t > 2 && !B.get(x + dx, yy, z + dz)) break; if (removeVoxel(sh, x + dx, yy, z + dz, false)) n++; }
-    }
-    sh.rs.flush(); return { removed: n, skin: y0 };
-  },
+  hole: function (i, x, z, side, r) { return labHole(SHIPS[i || 0], x, z, side, r); },   // 81_floodlab.js（進水報表共用）
   /** 船邊水花（13_water.js）：現在的檔、水滴與白沫各幾顆、開局以來生了幾顆。{ hide: true } ⇒ 照算、不畫（量繪製成本）。 */
   /** 逐幀分段計時（TASK-0531）：最慢的 top 格（預設 8）各段幾 ms、這一格走了幾步模擬；{ clear: true } ⇒ 清掉重記；{ sum: true } ⇒ 再附上全部格的各段總和與平均。 */
   /** 照真的畫面迴圈跑 sec 秒模擬（同步呼叫 frame()，dt ＝ 實際經過的時間 ⇒ 追趕迴圈補幾步跟真的玩一樣；預覽分頁在背景時 rAF 停也量得到）。finish ⇒ 每格 gl.finish()（把 GPU 的時間也算進去）。 */
@@ -334,6 +324,7 @@ yieldUI().then(function () {                                        // 先讓主
   if (!chk.ok) { fail('船體資料跟封裝檔對不上，停下來（不畫半艘船）。\n' + line); return; }
   $('go').disabled = false; $('go').textContent = '開戰';
   if (Q.has('shipcheck')) { shipCheck(Q.get('shipcheck')); return; }   // 匯入檢查（75_shipcheck.js；admin.py check 用無頭 Chrome 讀）
+  if (Q.get('lab') === 'flood') { var FR = floodLab(flLabOpts()), fp = document.createElement('pre'); fp.id = 'lab'; document.body.appendChild(fp); fp.textContent = JSON.stringify(FR); $('cover').style.display = 'none'; return; }   // 沙盒進水報表（81_floodlab.js；src/tests/flood_lab.py）
   if (Q.get('lab') === 'uw') { var LR = uwLab(labOpts()), lp = document.createElement('pre'); lp.id = 'lab'; document.body.appendChild(lp); lp.textContent = JSON.stringify(LR); $('cover').style.display = 'none'; return; }   // 落水彈道的測試場（80_lab.js；src/tests/uw_lab.py 讀 #lab）
   if (DEMO >= 0) {                                             // 快轉：電腦對電腦、固定步長
     MODE = 'eve'; reset(); RUNNING = true;
