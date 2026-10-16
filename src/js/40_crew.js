@@ -62,6 +62,8 @@ function makeCrew(sh) {
     if (gn.type === 'chase') { z0 = b[2] - 3; z1 = b[2] + 3; }
     else if (gn.type === 'carr') { z0 = b[2] - 6; z1 = b[2] + 3; }
     else { z0 = b[2] - 8; z1 = b[2] + 3; }                            // 長砲（24、32 磅）
+    var tn = gn.hd || (gn.mt && gn.mt.up);                             // 掛在砲塔上（27_turret.js）⇒ 站在砲塔底座那一層（⛔ 照砲的高度往下 8 格 ⇒ 莫尼特號兩個砲手站進砲塔底下的艙口梯井、踩在梯子上）
+    if (tn) { var tb = sh.T.turrets[tn.k].box; z0 = Math.floor(tb[2]) - 1; z1 = Math.floor(tb[2]) + 3; }
     var cx = Math.floor((b[0] + b[3]) / 2), sg = gn.side === 'P' ? -1 : 1, y0 = sg > 0 ? b[1] : b[4], spots;
     if (Math.abs(gn.ax[0]) <= Math.abs(gn.ax[1])) {
       // 往舷外開的砲（舷側砲、偏正橫的追擊砲）：砲的兩側（沿 x）、砲尾後面（inboard：S 那一舷的砲是 y 小的那邊、P 那一舷的砲是 y 大的那邊）
@@ -78,9 +80,10 @@ function makeCrew(sh) {
       if (!at) continue;
       add(ROLE.GUN, at, gn, 1); var c = crew[crew.length - 1]; c.deck = gunDeck(gn); c.side = gn.side; gn.spots.push({ at: at, who: c });
     }
-    if (gn.spots.length < Math.min(n, gn.crewMin)) {                  // 站不到開得動的人數（三叉戟號船頭：6 磅砲擠在三叉戟砲旁邊，兩側被它的模型與砲班佔掉，各只站得到 1 個 ⇒ 開局就是灰的）
+    var want = tn ? n : Math.min(n, gn.crewMin);                       // 砲塔上的砲（27_turret.js）⇒ 補到滿編（砲塔裡擠，照排法常常只站得到幾個；舊船照舊補到開得動就停）
+    if (gn.spots.length < want) {                  // 站不到開得動的人數（三叉戟號船頭：6 磅砲擠在三叉戟砲旁邊，兩側被它的模型與砲班佔掉，各只站得到 1 個 ⇒ 開局就是灰的）
       var gy = Math.floor((b[1] + b[4]) / 2);                          //   ⇒ 補到最少人數為止：以砲為中心往外找同一層站得住、沒被佔的格（放寬到 3 m）；照舊找得到的砲不走這裡 ⇒ 其他船一位元不動
-      for (i = gn.spots.length; i < n && gn.spots.length < gn.crewMin; i++) {
+      for (i = gn.spots.length; i < n && gn.spots.length < want; i++) {
         var at2 = standNear(g, cx, gy, z0, z1, 14, taken, 30); if (!at2) break;
         add(ROLE.GUN, at2, gn, 1); var c2 = crew[crew.length - 1]; c2.deck = gunDeck(gn); c2.side = gn.side; gn.spots.push({ at: at2, who: c2 });
       }

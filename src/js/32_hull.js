@@ -106,6 +106,7 @@ function survey(sh) {               // 每半秒量一次：砲還在不在、�
   });
   sh.crew.forEach(function (c) {   // 腳下 3×3 都沒了 ⇒ 掉下去（走路中的不算：途中跨過艙口邊）
     if (c.st >= 3 || c.walk || c.moving) return;
+    if (c.gun && (c.gun.hd || (c.gun.mt && c.gun.mt.up)) && c.st === 0) return;   // 在砲塔上的砲旁（27_turret.js）⇒ 跟著砲轉、當成站在砲塔上（Tim 2026-10-17：「如果直接讓水手跟著砲轉呢」；⛔ 照腳下的格 ⇒ 莫尼特號的砲班轉到砲塔底下的艙口上就掉下去，開局 4 秒砲-b 剩 0 人）
     var x = Math.floor(c.pos[0]), y = Math.floor(c.pos[1]), fz = c.inBed ? c.medBed.origin[2] : c.pos[2];   // 躺在病床上：看床底下的地板（床是模型、不是格）
     if (!countBox(sh.grid, x - 1, y - 1, fz - 1, x + 1, y + 1, fz - 1) && turDeckAt(sh, [c.pos[0], c.pos[1], fz]) < 0) fallIn(sh, c);   // 下面船裡還有一層接得住 ⇒ 落在那一層；沒有才落水（40_crew.js）；踩在砲塔自己的格上（吊籃，27_turret.js）不算懸空
   });
