@@ -177,7 +177,7 @@ function shipCheck(id) {
       if (!sts.length) return;
       if (!g.drop) { add('error', '火藥', nm, '砲尾後面找不到放藥箱的位置 ⇒ 送藥手不送這門、打完砲旁藥箱就停', '砲尾後面（往中線 0.7 m）留一塊站得住的地方'); return; }
       if (!sh.crew.some(function (c) { return c.pm && c.deck === deck; })) { add('error', '火藥', nm, '這一層沒有送藥手（站不下）⇒ 打完砲旁藥箱就停', '那一層兩舷砲中間靠中線留站位'); return; }
-      var st = sts.reduce(function (a, b) { return Math.abs(b.at[0] - g.muz[0]) < Math.abs(a.at[0] - g.muz[0]) ? b : a; });
+      var st = stationPick(sh, deck, g);                                 // 跟送藥手同一支（23_powder.js：x 最近、走路格不連通而同一層有連通的 ⇒ 挑連通的）
       var d = Math.hypot(g.drop[0] - st.at[0], g.drop[1] - st.at[1]) * S;
       if (d > pw.far) { pw.far = d; pw.farG = nm; }
       var li = NV ? lvAt(sh, st.at) : -1, L = li >= 0 ? NV.levels[li] : null, N = L && L.N, a = N ? navSnap(N, st.at, 4) : -1, b = N ? navSnap(N, g.drop, 4) : -1;

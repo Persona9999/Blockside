@@ -53,7 +53,7 @@ function gunCrew(cw, type) { var n = cw.guns && cw.guns[type]; return n === unde
 // 艦名（TASK-0552；Tim 2026-10-14：參考歷史同級艦）：ships[].names ＝ 那一型的艦名池（第一個 ＝ 原名；沒給 ⇒ 只有原名），同一場照編成的順序發（52_fleet.js fleetNames）；
 //   池子用完拿公共池 names_pub，再用完 ⇒ 原名＋序號。憲法號：同級的 44 砲巡防艦（合眾國號、總統號），再來是照它們的設計造的 44 砲巡防艦；公共池：同時代美國海軍的巡防艦。
 //   餘燼號、夜隼號是 basecamp、summit 的船：她們給艦名池之前只有原名。
-var HULL_KNOWN = CFG.ships.map(function (s) { var h = { id: s.id, el: s.el, name: s.name, geo: s.geo, crew: s.crew, rooms: s.rooms, lamps: s.lamps, flags: s.flags, names: s.names && s.names.length ? s.names : [s.name] }; if (s.zw0) h.zw0 = s.zw0; if (s.material) h.material = s.material; if (s.author) h.author = s.author; if (s.drive) h.drive = s.drive; return h; });   // material：全船預設材質（05_material.js）；author：建造者（admin.py 匯入時從 .vxk 檔頭 owner 記；船隻配置頁顯示）
+var HULL_KNOWN = CFG.ships.map(function (s) { var h = { id: s.id, el: s.el, name: s.name, geo: s.geo, crew: s.crew, rooms: s.rooms, lamps: s.lamps, flags: s.flags, names: s.names && s.names.length ? s.names : [s.name] }; if (s.zw0) h.zw0 = s.zw0; if (s.material) h.material = s.material; if (s.author) h.author = s.author; if (s.drive) h.drive = s.drive; if (s.variant_of) h.variant_of = s.variant_of; return h; });   // material：全船預設材質（05_material.js）；author：建造者（admin.py 匯入時從 .vxk 檔頭 owner 記；船隻配置頁顯示）
 var SHIP_NAMES_PUB = CFG.names_pub || [];
 var HULL_LIST = HULL_KNOWN.filter(function (h) { return !!document.getElementById(h.el); });
 var HULL_DEF = (HULL_LIST[0] || HULL_KNOWN[0]).id;                      // 預設的船：清單裡第一艘有內嵌資料的
@@ -82,6 +82,32 @@ function loadHull(id) {
     .then(function (r) { return buildHull(info, r[0], t0, r[1]); })
     .then(function (T) { HULLT[id] = T; cachePut(T, info); return T; }));
 }
+/**
+ * meta 裡指名別的部件的路徑（TASK-0657 改裝船；Tim：「概念類似 Unity 的 nested prefab」）：原船整艘是改裝船的一條關聯（原船/…）⇒ 原船裡的 meta 互相指名用的還是原船裡的路徑
+ * （裝甲 mount=甲板-main/砲塔、鍋爐 funnel=煙囪、彈藥庫 hoist=梯子/turret）。照 nested prefab 的規矩：一個部件（模型）的 meta 字串照它自己那一層往上找 ——
+ * 本身就是一條路徑（部件、模型、梯子）⇒ 不動；不是、而「它所在的那幾層＋它」是 ⇒ 換成完整路徑（最近的那一層先）。回：換了幾格。
+ * ⛔ 只換「補上前綴才對得上」的字串 ⇒ pos=mid、material=iron 這種永遠不會被當成路徑；沒有巢狀的船一格都不換（對拍逐位元組相同）。
+ */
+function metaRebase(h) {
+  var parts = h.parts || [], models = (h.rig && h.rig.models) || [], P = new Set(), n = 0;
+  parts.forEach(function (p) {
+    P.add(p.path);
+    Object.keys(p.points || {}).forEach(function (k) { var i = k.lastIndexOf('.'); if (i > 0) P.add(p.path + '/' + k.slice(0, i)); });   // 梯子：<部件>/<梯名>（42_hands.js shipLadders）
+  });
+  models.forEach(function (m) { if (m.name) P.add(m.name); });
+  function fix(path, meta) {
+    if (!meta || !path || path.indexOf('/') < 0) return;
+    var a = path.split('/'), pre = [];
+    for (var i = a.length - 1; i >= 1; i--) pre.push(a.slice(0, i).join('/') + '/');
+    Object.keys(meta).forEach(function (k) {
+      var v = meta[k]; if (typeof v !== 'string' || !v || P.has(v)) return;
+      for (var j = 0; j < pre.length; j++) if (P.has(pre[j] + v)) { meta[k] = pre[j] + v; n++; return; }
+    });
+  }
+  parts.forEach(function (p) { fix(p.path, p.meta); });
+  models.forEach(function (m) { fix(m.name, m.meta); });
+  return n;
+}
 /** 壓縮版的成品（admin.py build 預設；--raw ＝ 原格式；TASK-0583）：header 有 mesh_pool ⇒ rig.meshes 是池子編號 { pool: i }，從 <script id=mesh_pool> 還原（池子只解一次、幾艘船共用）。
  *  池子裡一份 ＝ { v: 不重複的頂點（整數 × q，跟前一點的差值）, t: 三角形的頂點編號（跟前一個的差值）, tmat, mats }；還原成跟原本一樣的三角形（頂點去重過，法線照三角形算 ⇒ 畫出來一樣）。 */
 var MESH_POOL = null, MESH_POOL_M = {};
@@ -103,6 +129,7 @@ var hullSay = function () {};                                            // 90_m
 /** C：快取的記錄（06_cache.js；null ⇒ 全部現場算）。現場算的時候，要存的那幾份另外留在 T.keep，給 cachePut 存。 */
 function buildHull(info, model, t0, C) {
   var h = model.header, t1 = performance.now();                            // 到這裡是解碼（loadEmbedded，跟讀快取一起），之後是網格化
+  h.metaRebased = metaRebase(h);                                           // 改裝船（TASK-0657）：原船裡的 meta 路徑照它所在的那一層往上找（見 metaRebase）
   if (C && (C.voxels !== h.voxels || C.checksum !== h.checksum)) C = null;  // 雙保險：鍵是 .vxk 原文的雜湊，格數與 checksum 也要一樣
   if (S && Math.abs(h.meters_per_voxel - S) > 1e-9) throw new Error(info.name + ' 是 ' + h.meters_per_voxel + ' 公尺一格，跟已經載入的船（' + S + '）不一樣 —— 模擬只吃同一個比例');
   S = h.meters_per_voxel;
