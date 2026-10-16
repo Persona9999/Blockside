@@ -10,6 +10,8 @@
 //   船艙裡（第一人稱、眼睛那一柱往上有實心 ⇒ 頭上有甲板）：三條一起過低通 AMB_HOLD_F、音量 × AMB_HOLD_G ⇒ 悶在船殼外。
 // 純聲音：⛔ 不抽 rnd()、不用 Math.random（自己的 LCG）⇒ 戰局的亂數一位元都不動；靜音（M）⇒ 音量 0、節點照跑。
 // 同一份建圖給 OfflineAudioContext 用（ambRender）⇒ 無頭模式也錄得出 WAV（src/tests/ambient_lab.py），給人試聽、前後對照。
+// AMB_WIND_G：風（含索具呼嘯）的總音量 —— Tim 2026-10-17「那風聲調小一些」⇒ 1 → 0.5（−6 dB）
+var AMB_WIND_G = 0.5;
 var AMB_WIND_REF = 25, AMB_WIND_F0 = 260, AMB_WIND_FK = 620, AMB_DROPS = 26, AMB_HOLD_F = 600, AMB_HOLD_G = 0.5, AMB_TC = 0.6;
 var AMB = null, AMB_SEED = 1234567, AMB_COVER_T = 0;
 
@@ -79,9 +81,9 @@ function ambBuild(ac, dest, rain) {
 function ambSet(A, p, t, tc) {
   function to(par, v) { if (tc > 0) par.setTargetAtTime(v, t, tc); else par.setValueAtTime(v, t); }
   var w = clamp(p.w, 0, 1.6), vol = p.vol, sea = Math.pow(Math.max(p.sea, 0), 0.8), hatt = 1 / (1 + Math.max(0, p.hgt) / 30);
-  to(A.wg.gain, vol * (0.04 + 0.3 * Math.pow(w, 1.5)));
+  to(A.wg.gain, vol * AMB_WIND_G * (0.04 + 0.3 * Math.pow(w, 1.5)));
   to(A.wbp.frequency, AMB_WIND_F0 + AMB_WIND_FK * w);
-  to(A.whg.gain, vol * 0.5 * Math.pow(Math.max(0, w - 0.5), 2));
+  to(A.whg.gain, vol * AMB_WIND_G * 0.5 * Math.pow(Math.max(0, w - 0.5), 2));
   to(A.whbp.frequency, 700 + 900 * w);
   if (A.pan) to(A.pan.pan, clamp(p.pan, -1, 1) * 0.45);
   to(A.vg.gain, vol * 0.055 * sea * hatt);   // 量過（ambient_lab）：0.5 ⇒ 海況 1 一條就 −12.8 dB、撞到 master 的限制器（−14 dB）、把風跟砲聲一起壓扁
