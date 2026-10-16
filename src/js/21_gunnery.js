@@ -42,7 +42,7 @@ function fireShot(sh, g, target, ammo, muz) {
   el = clamp(el + gauss() * spread, -0.17, 0.26); az += gauss() * spread;
   var dir = [Math.cos(el) * Math.cos(az), Math.sin(el), Math.cos(el) * Math.sin(az)];
   var b = { p: mw.slice(), v: add(mul(dir, V * rr(0.985, 1.015)), sh.vel), owner: sh.i, ammo: ammo, trav: 0, alive: true, age: 0, bounced: false, big: GS.big, hole: GS.hole, dmg: DMG[g.type] };   // dmg：每發傷害（砲種，細節設定）；hole：洞的倍率（4 磅彈小）
-  windShot(sh, b, dx, dz); BALLS.push(b);
+  windShot(sh, b, dx, dz); BALLS.push(b); rptShot(sh, g, b);         // rptShot：戰鬥報表記是哪一門開的（79_report.js；只讀）
   return { mw: mw, dir: dir };
 }
 /** 開火的火光、煙、後座、聲音（連發每一發都有）。 */
@@ -216,7 +216,7 @@ function stepBall(b, dt) {
       var L = M4.pt(sh.inv, b.p[0], b.p[1], b.p[2]), nb = (near || (near = []))[i] || (near[i] = ballNear(sh, L, sp * dt));
       var hm = hitModel(sh, L, b.ammo === 2 ? 10 : 1.5, b.hitM, nb.id);          // 同一顆砲彈對同一個模型只算一次（穿過外框要好幾個小步；⛔ 每步都扣 ⇒ 一發扣好幾次血）
       if (hm) {                                                          // 打到模型：扣血（每發傷害 × 彈種對砲倍率；歸零整個飛出去），砲彈被擋掉一大半
-        if (sh.i !== b.owner && !b.hitOnce) { SHIPS[b.owner].hits++; ffHit(sh, b); windHit(b); b.hitOnce = true; }
+        if (sh.i !== b.owner && !b.hitOnce) { SHIPS[b.owner].hits++; ffHit(sh, b); windHit(b); rptHit(b, sh, hm.gun ? 'gun' : 'model'); b.hitOnce = true; }
         (b.hitM = b.hitM || []).push(hm);
         damageModel(sh, hm, b.v, b.dmg * ammoK(b.ammo, VS_GUN));
         if (b.ammo === 1) { explode(b.p.slice(), sh, 0); blastModels(sh, L, 22, b.p, b.hitM, b.dmg); hurt(sh, L, 13, 30, null, '爆炸', crewBase(b)); b.alive = false; return; }   // 直接打中的那一門已經扣過，不再吃爆風
@@ -246,7 +246,7 @@ function windHit(b) { var o = SHIPS[b.owner]; if (b.dn) o.hitDn = (o.hitDn || 0)
 /** ab：打到的是砲帶的裝甲（24_armor.js armAt）⇒ 拆格、硬度照它的格座標 Q（反轉 yaw；材質層的座標就是它原本的位置）；傷人、模型照船的座標 L。沒給 ＝ 船殼。 */
 function impact(b, sh, L, ab) {
   var dirL = norm(M4.dir(sh.inv, b.v[0], b.v[1], b.v[2])), sp = len(b.v), r, w = b.p.slice(), Q = ab ? armIn(ab, L) : L, dQ = ab ? armIn(ab, dirL, true) : dirL;
-  if (sh.i !== b.owner) { SHIPS[b.owner].hits += (b.hitOnce ? 0 : 1); if (!b.hitOnce) { ffHit(sh, b); windHit(b); } } b.hitOnce = true;
+  if (sh.i !== b.owner) { SHIPS[b.owner].hits += (b.hitOnce ? 0 : 1); if (!b.hitOnce) { ffHit(sh, b); windHit(b); rptHit(b, sh, ab ? 'armor' : 'hull'); } } b.hitOnce = true;
   if (b.ammo === 1) {                                                   // 爆裂彈：第一下就炸
     r = shatter(sh, Q, dQ, rr(10, 13) * Math.pow(hardAt(sh, Q), -0.3), mul(b.v, 0.05), 650, 0.85, ab);   // 硬度 ＝ 船殼硬度 × 打到那一格的材質（05_material.js）
     explode(w, sh, r.n); blastModels(sh, L, 22, w, null, b.dmg); hurt(sh, L, 13, 30, null, '爆炸', crewBase(b)); b.alive = false; return;
