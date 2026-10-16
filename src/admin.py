@@ -707,6 +707,7 @@ def act_shipcheck(ids=None):
               '迴旋砲／砲塔（meta mount；沒標 ＝ 固定）：' + (I.get('mounts') or '—'), '',
               '砲帶的裝甲（關聯 meta kind=armor、mount；跟著砲轉、一格一格打掉，TASK-0631）：' + (I.get('armor') or '—'), '',
               '門、艙蓋（模型 meta kind=door、固定點 hinge-a／hinge-b；不擋人、打掉了開口才進水，TASK-0638）：' + (I.get('doors') or '—'), '',
+              '照參數轉的子物件（模型 meta spin；舵、舵輪跟著舵角轉，只是畫面，TASK-0640）：' + (I.get('spins') or '—'), '',
               '額外動力（TASK-0630；輸出物件 份量；主機／軸／鍋爐 照造船規格 §9.6）：' + (I.get('drive') or '—（沒有 cfg.base）'), '',
               '**✗ %d　⚠ %d**' % (ne, nw), '']
         for lv, title in (('error', '## ✗ 錯誤'), ('warn', '## ⚠ 警告')):

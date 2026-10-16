@@ -29,6 +29,7 @@ function shipCheck(id) {
     var C = SHIPS[1].T, rl = (T.hx1 - T.hx0) / (C.hx1 - C.hx0), rh = T.sz / C.sz;   // 跟憲法號比大小：差不到一成（餘燼號從憲法號改的）⇒ 憲法號的 geo 本來就對
     if (!info.geo && id !== 'constitution' && (Math.abs(rl - 1) > 0.1 || Math.abs(rh - 1) > 0.1)) add('warn', 'geo', '設定檔', '沒填 geo ⇒ 陸戰隊站的範圍、瞄準高度、鏡頭中心都是憲法號的數字（這艘長 ×' + rl.toFixed(2) + '、高 ×' + rh.toFixed(2) + '）', '遊戲那側填 config/game.json ships[].geo（造船規格 §9.4）');
     // ── 模型 ──
+    spinIssues(sh, add);                                                // 照參數轉的子物件寫了 spin 卻轉不起來（26_spin.js，TASK-0640）
     sh.models.forEach(function (m) {
       var mt = m.meta || {};
       if (mt.kind === 'gun' && !GUN_CODE[mt.gun]) add('error', '砲', m.path, 'meta gun=' + mt.gun + ' 不認得 ⇒ 默默當成長砲', 'gun 寫砲種表有的代碼（' + Object.keys(GUN_CODE).join('、') + '）');
@@ -115,6 +116,7 @@ function shipCheck(id) {
     // ── 砲帶的裝甲（TASK-0631；24_armor.js）：關聯 meta kind=armor、mount=<砲模型的路徑> ⇒ 跟著那門砲轉、一格一格打掉 ──
     R.info.armor = armSummary(T);
     R.info.doors = doorsSummary(sh);                                    // 門、艙蓋（TASK-0638）
+    R.info.spins = spinSummary(sh);                                     // 照參數轉的子物件（TASK-0640）
     (T.armBad || []).forEach(function (b) { add(b.lv, '裝甲', b.where, b.msg, b.fix); });
     (sh.arm || []).forEach(function (a) {
       if (!a.g) { add('error', '裝甲', a.A.mount, '拆出來了、可是開戰時找不到那門砲的迴旋 ⇒ 裝甲不轉', '那門砲的 meta kind=gun、mount=turret｜pivot（21_gunnery.js gunMountInit）'); return; }

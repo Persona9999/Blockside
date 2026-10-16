@@ -314,6 +314,13 @@ function shadowMats() {
   for (var k = 0; k < MAX_SHIPS; k++) SHM.mats.set(k < SSLOTS.length && SHM.maps[k] ? SHM.maps[k].m : FAR_M, k * 16);
   var MG = SHM.maps[SSLOTS.length]; SHM.mats.set(SHM.glob && MG ? MG.m : FAR_M, MAX_SHIPS * 16);
 }
+/** 破洞底下的海（TASK-0643）：畫完海之後、白沫之前。只落在深度還是清空值的像素（LESS），著色器再用 hullHit 只留海被丟掉的那一塊。⛔ 不寫深度、不混色。 */
+function abyssDraw() {
+  gl.disable(gl.BLEND); gl.depthMask(false); gl.depthFunc(gl.LESS);
+  gl.useProgram(P.abyss.prog); setCommon(P.abyss); gl.uniformMatrix4fv(P.abyss.u.uCamInv, false, CAM.inv); hullUniforms(P.abyss);
+  gl.bindVertexArray(SKYVAO); gl.drawArrays(gl.TRIANGLES, 0, 3);
+  gl.depthFunc(gl.LEQUAL); gl.depthMask(true);
+}
 /** 船艙遮罩的貼圖陣列（uHullA，第 1 號）：載好的每一型一層（T.hullLayer），寬高取最大的那一型；載了新的船型 ⇒ 重建。 */
 var HULLA = { tex: null, key: '' };
 function hullArr() {
@@ -433,6 +440,7 @@ function render() {
   })(xi);
   gl.uniform4fv(P.water.u.uXb, HU.xb);
   gl.bindVertexArray(SEAG.vao); gl.drawElements(gl.TRIANGLES, SEAG.n, gl.UNSIGNED_INT, 0);
+  abyssDraw();                                                           // 破洞底下的海（TASK-0643；01_gl.js P.abyss）：海在船殼外形裡被丟掉、又什麼都沒畫到的像素 ⇒ 深海色
   gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
   if (!FLX3 && !CUTV.half) wpDrawFoam(hullUniforms);                                              // 船邊水花的白沫（13_water.js）：貼著浪、不寫深度
   flDraw();                                                              // 艙內的水面（33_flood.js，粒子模式）

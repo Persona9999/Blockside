@@ -152,6 +152,15 @@ function programs() {
     '#version 300 es\nprecision highp float; in vec3 vD; uniform vec3 uEye,uSun,uFog,uSky; out vec4 o;\n' +
     'void main(){ vec3 d=normalize(vD-uEye); float h=clamp(d.y,0.0,1.0); vec3 c=mix(uFog,uSky,pow(h,0.55)); float s=max(dot(d,uSun),0.0);\n' +
     ' c+=vec3(1.0,0.85,0.6)*(pow(s,600.0)*3.0+pow(s,12.0)*0.18); if(d.y<0.0) c=uFog; o=vec4(c,1.0); }\n');
+  // 破洞底下的海（TASK-0643；Tim 2026-10-16「船如果被打穿甲板跟船殼 因為海面在船範圍內被Clipping 會導致破洞可以直接看到空氣」）：
+  //   海在原本的船殼外形裡一律丟掉（hullHit：船艙裡不要看起來積了一層水）⇒ 船底被打穿時，從洞往下看什麼都沒打到 ⇒ 以前看到天空在地平線以下的霧色（淺灰白）。
+  //   這一趟畫在海之後（60_render.js abyssDraw）：全螢幕一個三角形、深度 0.9999、深度測試 LESS ⇒ 只落在深度還是清空值（什麼都沒畫到：海、船、天空都沒寫深度的地方）的像素；
+  //   再把那條視線跟海平面（y 0）的交點丟進同一個 hullHit ⇒ 只有「海在這裡被丟掉」的那一塊塗深海色（海的 deep，取陰影那一端 0.72）。
+  //   ⛔ v1 改天空在地平線以下一律畫深海色 ⇒ 中等折射（海面帶一點透明、疊在背景上）整片海變暗（近處 55,82,93 → 30,59,73）—— 平常看海也變了，退掉。
+  P.abyss = VK.compile(gl,
+    '#version 300 es\nlayout(location=0) in vec2 aP; uniform mat4 uCamInv; out vec3 vD; void main(){ vec4 a=uCamInv*vec4(aP,1.0,1.0); vD=a.xyz/a.w; gl_Position=vec4(aP,0.9999,1.0); }\n',
+    '#version 300 es\nprecision highp float; in vec3 vD; uniform vec3 uEye; out vec4 o; vec3 vW;\n' + HULL_GLSL +
+    'void main(){ vec3 d=normalize(vD-uEye); if(d.y>-1e-4||uEye.y<=0.0) discard; vW=uEye+d*(-uEye.y/d.y); if(!' + HULL_HIT + ') discard; o=vec4(vec3(0.03,0.16,0.21)*0.72,1.0); }\n');
 }
 function setCommon(p) {
   var u = p.u;
