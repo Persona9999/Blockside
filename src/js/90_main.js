@@ -190,7 +190,8 @@ if (DEBUG) window.__game = {
   turret: function (i, o) {
     var sh = SHIPS[i || 0], D = Math.PI / 180; if (!sh || !sh.tur) return null;
     if (o && o.k !== undefined && o.yaw !== undefined) turretSet(sh, o.k, o.yaw * D);
-    var nav = null;
+    var nav = null, between = null;
+    if (o && o.between && sh.arm) between = o.between.map(function (s) { return armBetween(sh, s[0], s[1]); });   // 線段 [a, b]（船的格座標）中間隔著裝甲／砲盾嗎（hurt 擋人那一支）
     if (o && o.nav && sh.nav) nav = sh.nav.levels.map(function (L) {   // 會轉的甲板的走路格：每一點 navPos（照現在的角度換出去）→ navSnap 找回來，是不是同一點
       var N = L.N; if (!N.rot) return null; var n = 0, ok = 0, bad = [];
       for (var i = 0; i < N.rot.length; i++) { if (!N.rot[i] || !N.ok[i]) continue; n++; var P = navPos(N, i), j = navSnap(N, P, 0); if (j === i) ok++; else if (bad.length < 5) bad.push([i, j, P.map(function (v) { return +v.toFixed(1); })]); }
@@ -200,7 +201,7 @@ if (DEBUG) window.__game = {
     return { deck: !!sh.T.turDeck, tur: sh.tur.map(function (N) {
       return { path: N.path, up: N.up ? N.up.path : null, yaw: +(N.yaw / D).toFixed(2), yawT: +(N.yawT / D).toFixed(2), total: +(ndYaw(N) / D).toFixed(2), f0: +(N.f0 / D).toFixed(1), models: N.models.length,
         guns: N.guns.map(function (g) { return { path: g.model.path, alive: g.alive, own: !!g.mt, yaw: g.mt ? +(g.mt.yaw / D).toFixed(2) : null, muz: r3(g.muz), ax: r3(g.ax), fireOk: mountFireOk(g), cone: +((g.cone || 0.45) / D).toFixed(1), spots: (g.spots || []).length, drop: r3(g.drop) }; }) };
-    }), nav: nav, stations: sh.stations.filter(function (st) { return st.tur >= 0; }).map(function (st) { return { name: st.name, at: r3(st.at), tur: st.tur }; }) };
+    }), nav: nav, between: between, stations: sh.stations.filter(function (st) { return st.tur >= 0; }).map(function (st) { return { name: st.name, at: r3(st.at), tur: st.tur }; }) };
   },
   hole: function (i, x, z, side, r) { return labHole(SHIPS[i || 0], x, z, side, r); },   // 81_floodlab.js（進水報表共用）
   /** 船邊水花（13_water.js）：現在的檔、水滴與白沫各幾顆、開局以來生了幾顆。{ hide: true } ⇒ 照算、不畫（量繪製成本）。 */
