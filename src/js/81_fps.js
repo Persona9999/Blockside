@@ -48,11 +48,11 @@ function fpSet(on) {
     if (c.art !== ART_CAPTAIN) note(sh, '第一人稱：船長不在 ⇒ 從' + (c.role === ROLE.OFFICER ? '軍官' : ROLE_NAME[c.role] || '船員') + '的位置開始');
     var d = CAM.look && CAM.eye ? M4.dir(sh.inv, CAM.look[0] - CAM.eye[0], CAM.look[1] - CAM.eye[1], CAM.look[2] - CAM.eye[2]) : [1, 0, 0];
     FP.on = true; FP.sh = sh; FP.c = { pos: c.pos.slice() };            // 玩家自己的角色：只借那個船員的座標（⛔ 不操控他）
-    FP.yaw = Math.atan2(d[1], d[0]) || 0; FP.pitch = 0; FP.climb = null; FP.lads = fpLadders(sh); FP.v = [0, 0]; FP.ez = null; FP.jz = FP.jv = 0;
+    FP.wasP = PAUSED; FP.yaw = Math.atan2(d[1], d[0]) || 0; FP.pitch = 0; FP.climb = null; FP.lads = fpLadders(sh); FP.v = [0, 0]; FP.ez = null; FP.jz = FP.jv = 0;
     FP.vz = 0; FP.flyFrom = FP.mode === 2 ? FP.c.pos.slice() : null;
-    note(sh, '第一人稱：左下搖桿或 WASD 走、Shift 跑、空白鍵跳、拖曳或方向鍵轉頭、E 爬梯子 —— 設定裡再按一次回到原本的鏡頭' + (FP.mode === 2 ? '（浮空：空白鍵上、C 下）' : ''));
+    note(sh, '第一人稱：左下搖桿或 WASD 走、Shift 跑、空白鍵跳、滑鼠（點畫面鎖定，Esc 放開）或拖曳轉頭、E 爬梯子 —— 設定裡再按一次回到原本的鏡頭' + (FP.mode === 2 ? '（浮空：空白鍵上、C 下）' : ''));
   } else if (FP.on) {
-    FP.on = false; FP.sh = FP.c = FP.climb = FP.near = FP.fol = null; CAM.snap = true;
+    FP.on = false; FP.sh = FP.c = FP.climb = FP.near = FP.fol = null; CAM.snap = true; fpUnlock();
   }
   fpStop(); fpUI(); return FP.on;
 }
@@ -134,14 +134,25 @@ function fpTry(g, z, nx, ny, thin, up, feet) {
   if (hi < 0) hi = fpFoot(g, z, nx, ny, up);                          // 中心那一柱是縫 ⇒ 看腳掌踩不踩得到旁邊（樓梯口圍欄與第一階之間那一格縫，量過）
   if (hi < 0 && feet !== undefined) { down = FP_FALL; hi = fpStand(g, Math.floor(nx), Math.floor(ny), z, up, down); }   // 半空、旁邊也踩不到 ⇒ 是洞：往下找（⛔ 先找 FP_FALL ⇒ 一兩格的縫也掉得進去）
   if (hi < 0) return null;
-  if (feet !== undefined && !thin && fpBody(g, Math.floor(nx), Math.floor(ny), Math.max(hi, Math.floor(feet)))) return null;
+  hi = fpFlat(g, nx, ny, hi);                                         // 小起伏：腳掌踩得到 0.2 m 以內高一點的地方 ⇒ 站在那裡
+  var deep = feet !== undefined && feet - hi > FP_DOWN;                // 真的掉進洞（離下面的地板超過 0.8 m）才照腳現在的高度擋（⛔ 半空一律擋 ⇒ 格柵每下一格 0.1 m 就把前面的格條當成牆、速度歸零，量過：維吉尼亞號每 3 格停 4–5 格畫面）
+  if (deep && !thin && fpBody(g, Math.floor(nx), Math.floor(ny), Math.max(hi, Math.floor(feet)))) return null;
   if (thin) return hi;                                                 // 卡住了（現在的位置四個角就撞牆）⇒ 只看中心那一柱，先走出來
   for (var i = 0; i < 4; i++) {
     var x = Math.floor(nx + (i & 1 ? FP_R : -FP_R)), y = Math.floor(ny + (i & 2 ? FP_R : -FP_R));
-    if (feet !== undefined && fpBody(g, x, y, Math.max(hi, Math.floor(feet)))) return null;   // 半空：照腳現在的高度擋（⛔ 照新地板 ⇒ 落進艙口的途中橫著穿過上一層甲板）
+    if (deep && fpBody(g, x, y, Math.max(hi, Math.floor(feet)))) return null;   // 半空：照腳現在的高度擋（⛔ 照新地板 ⇒ 落進艙口的途中橫著穿過上一層甲板）
     if (fpStand(g, x, y, z, up, down) >= 0) continue;
     if (fpBody(g, x, y, hi)) return null;                              // 牆：新地板上方、身高範圍裡有實心（那個角本身站得住 ⇒ 是台階，上面已經跳過）
   }
+  return hi;
+}
+/** 小起伏（Tim 2026-10-16「再往格表面行走會一卡一卡的(是否能無視小的高低起伏)」）：腳掌範圍（中心 ±FP_FOOT）裡高 FP_FLAT 格以內站得住 ⇒ 腳底就在那個高度。
+ *  格柵（維吉尼亞號甲板：0.1 m 高的格條、0.2 m 寬的空格）一路踩在格條頂上，不一上一下；更高的台階照舊一步一步上。 */
+var FP_FLAT = 2;
+function fpFlat(g, nx, ny, hi) {
+  for (var h = hi + FP_FLAT; h > hi; h--)
+    for (var i = -1; i <= 1; i++) for (var j = -1; j <= 1; j++)
+      if (standZ(g, Math.floor(nx + i * FP_FOOT), Math.floor(ny + j * FP_FOOT), h, h, FP_HEAD) >= 0) return h;
   return hi;
 }
 /** 穿牆時 (x, y)（腳底 z）在不在船裡：往船頭、船尾、左舷、右舷四個方向都碰得到實心（腳上 0.2 m 或 1.2 m 那一層，任一層碰到就算 ⇒ 砲門的洞不會讓人判成船外）。
@@ -202,6 +213,7 @@ function fpFrame(dt) {
   var m = FP.mv, g = sh.grid;
   FP.yaw += (m.tr - m.tl) * FP_TURN * dt; FP.pitch = clamp(FP.pitch + (m.lu - m.ld) * FP_TURN * 0.7 * dt, -1.35, 1.35);
   if (FP.fol && (sh.crew.indexOf(FP.fol) < 0 || FP.fol.st !== 0)) { FP.fol = null; FP.ez = null; note(sh, '第一人稱：跟的人倒下或落水了 —— 回到自己'); fpUI(); }
+  if (PAUSED && !FP.wasP) fpUnlock(); FP.wasP = PAUSED;                // 剛停格、剛打開設定 ⇒ 放開滑鼠（要按面板）；停格中再點畫面可以重新鎖
   if (PAUSED) { fpEyeZ(0); return; }                                   // 停格、設定打開：只能轉頭
   if (FP.fol) {                                                        // 跟隨中：自己的角色不動，只轉頭
     var q = FP.fol.pos, lp = FP.folP || q, mx = q[0] - lp[0], my = q[1] - lp[1]; FP.folP = q.slice();
@@ -336,7 +348,15 @@ function fpKey(k, down) {
 /** 拖曳轉頭（71_input.js pointermove）：往右拖 ⇒ 往右看。 */
 function fpLook(dx, dy) { FP.yaw += dx * 0.005; FP.pitch = clamp(FP.pitch - dy * 0.005, -1.35, 1.35); FP.lookT = performance.now(); }   // lookT：跟隨中 2 秒內不自動轉
 // 設定面板的開關、第一人稱的操作面板（按住才動：放開、移出、取消都停）
-$('fpT').onclick = function () { fpSet(!FP.on); gsetClose(); };
+$('fpT').onclick = function (e) { fpSet(!FP.on); gsetClose(); if (FP.on && e && e.pointerType === 'mouse') fpLock(); };   // 用滑鼠按的 ⇒ 一開就鎖（這一下點擊就是瀏覽器要的使用者動作）
+// 滑鼠轉頭（Tim 2026-10-16「第一人稱如果在PC上 讓視角直接跟著滑鼠轉吧」）：鎖住游標（Pointer Lock），滑鼠一動就轉頭、不用按住拖；Esc 放開（瀏覽器自己的）、點畫面再鎖。
+//   只認滑鼠（pointerType mouse）：觸控照舊拖曳轉頭。剛停格、剛打開設定、離開第一人稱 ⇒ 放開。鎖住時游標的 client 座標不動 ⇒ 71_input.js 的拖曳轉頭算出 0，不會轉兩次。
+var FP_MOUSE_K = 0.6;                                                 // 滑鼠一 px 轉 0.003 rad（拖曳的 0.6 倍：一直跟著轉，太快會暈）
+function fpLocked() { return document.pointerLockElement === cv; }
+function fpLock() { if (!fpLocked() && cv.requestPointerLock) { try { var r = cv.requestPointerLock(); if (r && r.catch) r.catch(function () { }); } catch (x) { } } }
+function fpUnlock() { if (fpLocked() && document.exitPointerLock) document.exitPointerLock(); }
+cv.addEventListener('pointerdown', function (e) { if (FP.on && e.pointerType === 'mouse' && e.button === 0) fpLock(); });
+document.addEventListener('mousemove', function (e) { if (FP.on && fpLocked()) fpLook((e.movementX || 0) * FP_MOUSE_K, (e.movementY || 0) * FP_MOUSE_K); });
 [].forEach.call(document.querySelectorAll('#gset [data-fpm]'), function (b) { b.onclick = function () { fpMode(+b.dataset.fpm); }; });   // 碰撞三段（正常／穿牆／浮空）：開關不關設定面板；跨場留著
 [].forEach.call(document.querySelectorAll('#fpUI [data-fp]'), function (b) {
   var k = b.dataset.fp;
