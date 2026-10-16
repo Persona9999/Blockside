@@ -199,6 +199,7 @@ function flTick(sh, fl, dtc) {
       if (PHX.water && ov > 0.01) wpPour(P, M4.dir(M, 0, -s, 0), ov / dtc);    // 往外流：只給人看（13_water.js，自己的亂數）
     }
   }
+  if (fl.tops) { var dq = doorInflow(sh, fl, dtc, head); inQ += dq[0]; area += dq[1]; open += dq[2]; }   // 門沒了的開口（25_doors.js；沒有門的船沒有 fl.tops）
   fl.inQ = inQ / dtc; fl.outQ = outQ / dtc; fl.inTot += inQ; fl.outTot += outQ; fl.area = area; fl.open = open;
   // 2. 水格：往下（照這一格往下通幾成）、滿了往上擠、往旁邊（照水面的世界高度；來回換方向走 ⇒ 不偏一邊）
   var n0 = fl.actN, act = fl.act, dir = fl.gen & 1, t, j;

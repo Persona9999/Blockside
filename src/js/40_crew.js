@@ -38,7 +38,7 @@ function makeCrew(sh) {
   var g = sh.T.base, CY = sh.T.cy, HULL_X0 = sh.T.hx0, HULL_X1 = sh.T.hx1, taken = {}, crew = [];
   sh.cw = shipCrew(sh.T.id); sh.pmWant = 0;                          // 船員配置（05_hull.js：預設 ← 船隻配置頁）；pmWant：送藥手該有幾個（23_powder.js makeMonkeys 數）
   // ⛔ 以前用平面的 taken 標模型外框：長砲改成模型之後，砲甲板的砲把上面 spar deck 的站位也佔掉了；火藥桶（艙底）更把大半個平面佔掉
-  CREW_BLOCK = sh.models.filter(function (m) { return m.kind !== 'powder' || m.station; });   // 取用點的桶在甲板上 ⇒ 要避
+  CREW_BLOCK = sh.models.filter(function (m) { return (m.kind !== 'powder' || m.station) && m.kind !== 'door'; });   // 取用點的桶在甲板上 ⇒ 要避；門、艙蓋 ＝ 通道（25_doors.js）⇒ 不避
   function add(role, at, gun, face) { if (at) crew.push({ role: role, home: at, pos: at.slice(), gun: gun, face: face || 1, st: 0, t: rnd() * 10, walk: null, fireT: 0, shotT: rr(2, 6), lost: 0, hp: CREW_HP, hitT: 0 }); }
   sh.guns.forEach(function (gn) {
     var b = gn.model.bb.map(Math.floor), z0, z1, i, n = Math.min(gunCrew(sh.cw, gn.type), GUN_CREW_MAX);   // 砲班滿編（船隻配置；預設 ＝ 砲種表）

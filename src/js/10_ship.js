@@ -48,12 +48,14 @@ function makeShip(i, team, yaw, pz, T, px) {                          // T：船
     if (foot < 0 && hm.kind === 'propeller' && sfw) foot = anchorNear(T, sfw[0], sfw[1], sfw[2], 8);   // 螺旋槳（TASK-0628）：掛在軸接到船殼的那一格（shaft-fwd）旁 ⇒ 那一段被打斷就掉（⛔ 往下找：底下的 skeg 被打掉也掉、跟軸無關）
     var rg = (m.points || {}).ring;
     if (foot < 0 && hm.kind === 'anchor' && rg) foot = anchorNear(T, rg[0], rg[1], rg[2], 8);   // 錨（meta kind=anchor）：掛在吊錨木上 ⇒「腳」是錨環 ring 旁的那一格（⛔ 往下找：掛在舷外、底下是海 ⇒ 開局就掉；維吉尼亞號 2026-10-15）
+    var hg = (m.points || {})['hinge-a'];
+    if (foot < 0 && hm.kind === 'door' && hg) foot = anchorNear(T, hg[0], hg[1], hg[2], 8);   // 門、艙蓋（TASK-0638，25_doors.js）：掛在鉸鏈旁的那一格（⛔ 往下找：艙蓋底下就是艙口 ⇒ 腳落到下一層甲板，艙口邊被打掉也不掉）
     var hang = false;
     if (foot < 0) { var z0 = fz; while (fz > 0 && !T.hullG.get(cx, cy, fz)) fz--; if (z0 - fz <= 12 || kind !== 'model') foot = VK.pack(cx, cy, fz); else hang = true; }   // 腳下那一格甲板（被打掉 ⇒ 掉下去）
     // 掛著的（吊艇架上的小艇；Tim 2026-10-14：一開場就掉）：底下 1.2 m 內沒有甲板 ⇒ 掛在吊索上（下面 hangFalls 找；吊索全斷才掉）。
     //   ⛔ 照舊往下找 ⇒ 找到海底 z 0 ⇒ 第一次 survey 就掉。foot 暫時是正下方（找到吊索之後換成吊索上端的那一格 ⇒ 吊艇架被打斷帶走時跟著走）
     if (foot < 0) foot = VK.pack(cx, cy, fz);
-    var hpm = kind === 'powder' ? powderHP() : kind === 'wheel' ? Math.round(GUN_HP * 0.6) : kind === 'model' ? 1 : Math.round(GUN_HP * (GUNS[kind] && GUNS[kind].hpK || 1));   // 細節設定的血量；舵輪 6 成；帆桁、舵跟砲一樣；砲種表的 hpK ＝ 血量倍率（莫尼特號的鐵甲砲塔 8；Tim 2026-10-15 匯入莫尼特號：一發就打飛不像史實）
+    var hpm = kind === 'powder' ? powderHP() : kind === 'wheel' ? Math.round(GUN_HP * 0.6) : kind === 'door' ? Math.round(GUN_HP * 0.5) : kind === 'model' ? 1 : Math.round(GUN_HP * (GUNS[kind] && GUNS[kind].hpK || 1));   // 細節設定的血量；舵輪 6 成；帆桁、舵跟砲一樣；砲種表的 hpK ＝ 血量倍率（莫尼特號的鐵甲砲塔 8；Tim 2026-10-15 匯入莫尼特號：一發就打飛不像史實）
     var mt = m.meta || {};
     return { T: T, k: k, name: m.name.split('/').pop(), path: m.name, kind: kind, hp: hpm, hpMax: hpm, mesh: m.mesh, origin: m.origin, bb: b, pts: m.points || {}, meta: mt,
       c: [(b[0] + b[3]) / 2, (b[1] + b[4]) / 2, (b[2] + b[5]) / 2], foot: foot, alive: true,
@@ -70,6 +72,7 @@ function makeShip(i, team, yaw, pz, T, px) {                          // T：船
   });
   sh.guns.forEach(function (g) { gunMountInit(sh, g); });            // 迴旋砲、砲塔（meta mount；21_gunnery.js）—— 沒標的砲不動
   armorShip(sh);                                                        // 砲帶的裝甲（kind=armor；24_armor.js）跟著那門砲轉 —— 沒有 ⇒ 不做事
+  doorsShip(sh);                                                        // 門、艙蓋（kind=door；25_doors.js）—— 沒有 ⇒ 不做事
   sh.guns.sort(gunOrder);
   sh.decks = gunDecks(sh); sh.weatherDeck = sh.decks.length ? sh.decks[sh.decks.length - 1].key : null;   // 砲甲板（照砲的高度分層）；最上面那層 ＝ 露天
   sh.deckZ = {}; sh.decks.forEach(function (D) { sh.deckZ[D.key] = D.zr; });
@@ -205,6 +208,7 @@ function modelKind(m) {
   if (mt.kind === 'yard') return 'yard';                              // 帆桁（basecamp 階段三十三：15 根各一件模型，可以繞轉軸轉）
   if (mt.kind === 'wheel') return 'wheel';                            // 餘燼號的舵輪叫「舵輪」、有 meta（⛔ 只照名字 ⇒ 認不出來，船只剩舵柄滑車的 35% 轉向）
   if (mt.kind === 'rudder') return 'rudder';                          // 夜隼號的舵是模型（summit：方艉船掛在艉板外）；憲法號、餘燼號的舵是船殼的格子
+  if (mt.kind === 'door') return 'door';                              // 門、艙蓋（TASK-0638；25_doors.js）：血量砲的一半、不擋人、開關只是演出
   if (mt.kind === 'propeller') return 'propeller';                    // 螺旋槳（TASK-0628／0630）：血量跟舵一樣（⛔ 一般模型 1 點 ⇒ 一發爆炸彈就把整艘的動力打掉）；照輸出轉（31_drive.js）
   return /carronade/.test(m.name) ? 'carr' : /chase/.test(m.name) ? 'chase' : /\/砲-[SP]\d+$/.test(m.name) ? 'long' : /wheel/.test(m.name) ? 'wheel' : 'model';
 }
