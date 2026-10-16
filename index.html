@@ -7893,10 +7893,27 @@ function standZ(g, x, y, z0, z1, head) {          // (x, y) 這一柱裡，z0..z
   return -1;
 }
 var CREW_BLOCK = [];                               // 站位要避開的模型（砲、舵輪）：外框外擴 1 格、而且高度對得上那一層甲板
+// 比一層甲板高的模型（舵：船底一路到下層砲甲板）只看站的那一段（腳到頭，CREW_SLAB 格）佔了哪裡。
+// ⛔ 照整個外框 ⇒ 舵改成模型之後（2026-10-16 重匯），舵葉的寬（5.5 m）佔掉餘燼號下層兩門船尾追擊砲的站位（2／3 人）；矮的照舊用外框 ⇒ 其他模型一位元不動
+var CREW_TALL = 20, CREW_SLAB = 14;
+function blockFoot(M, z) {                         // 模型 M 在 z..z+CREW_SLAB 那一段的佔用格外框 [x0, y0, x1, y1]（格座標；網格 occ 已外擴 1 格）；那一段沒有 ⇒ null；沒有 occ ⇒ true（照外框）
+  var C = M.footZ || (M.footZ = {}); if (C[z] !== undefined) return C[z];
+  var oc = M.T.meshes && M.T.meshes[M.mesh] && M.T.meshes[M.mesh].occ; if (!oc || !M.origin) return (C[z] = true);
+  var o = M.origin, lo = [1e9, 1e9], hi = [-1e9, -1e9];
+  for (var k = Math.max(0, z - o[2] + 1); k < oc.nz && o[2] + k - 1 <= z + CREW_SLAB; k++)
+    for (var j = 0; j < oc.ny; j++) for (var i = 0; i < oc.nx; i++) if (oc.a[i + oc.nx * (j + oc.ny * k)]) {
+      lo[0] = Math.min(lo[0], i); lo[1] = Math.min(lo[1], j); hi[0] = Math.max(hi[0], i); hi[1] = Math.max(hi[1], j);
+    }
+  return (C[z] = lo[0] > hi[0] ? null : [o[0] + lo[0] - 1, o[1] + lo[1] - 1, o[0] + hi[0] - 1, o[1] + hi[1] - 1]);
+}
 function blocked(x, y, z) {
   for (var i = 0; i < CREW_BLOCK.length; i++) {
-    var b = CREW_BLOCK[i].bb;
-    if (x >= Math.floor(b[0]) - 1 && x <= Math.ceil(b[3]) + 1 && y >= Math.floor(b[1]) - 1 && y <= Math.ceil(b[4]) + 1 && z >= b[2] - 3 && z <= b[5]) return true;
+    var M = CREW_BLOCK[i], b = M.bb;
+    if (x >= Math.floor(b[0]) - 1 && x <= Math.ceil(b[3]) + 1 && y >= Math.floor(b[1]) - 1 && y <= Math.ceil(b[4]) + 1 && z >= b[2] - 3 && z <= b[5]) {
+      if (b[5] - b[2] <= CREW_TALL) return true;
+      var f = blockFoot(M, z);
+      if (f === true || (f && x >= f[0] && x <= f[2] && y >= f[1] && y <= f[3])) return true;
+    }
   }
   return false;
 }
