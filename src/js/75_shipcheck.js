@@ -40,6 +40,12 @@ function shipCheck(id) {
       if (m.kind === 'propeller' && !(Math.abs(+mt.axis_x || 0) + Math.abs(+mt.axis_y || 0) + Math.abs(+mt.axis_z || 0) > 0)) add('warn', '螺旋槳', m.path, '沒有 meta axis_x／y／z ⇒ 照 +x（船頭方向）轉', 'meta axis_x=1, axis_y=0, axis_z=0（造船規格 §9 propeller）');
       if (m.kind === 'propeller' && !m.pts['shaft-fwd']) add('warn', '螺旋槳', m.path, '沒有固定點 shaft-fwd ⇒ 掛在正下方的船殼上（底下被打掉才掉、軸斷了不掉）', '登記 shaft-fwd（軸往前接到船殼那一格）');
       if (m.kind === 'propeller' && !(sh.cfg.base > 0)) add('warn', '螺旋槳', m.path, '設定檔沒有額外動力（cfg.base）⇒ 螺旋槳不會轉、船不靠它走', 'ships[].cfg.base 填史料航速（節）');
+      if (m.kind === 'door') {                                           // 門、艙蓋（TASK-0638；25_doors.js、造船規格 §9 door）
+        var dr = (sh.doors || []).filter(function (d) { return d.m === m; })[0];
+        if (!dr || !dr.a) add('error', '門', m.path, '沒有固定點 hinge-a／hinge-b（或兩點重疊）⇒ 開關不演出、腳往正下方找（艙口底下）', '門子作品登記 hinge-a、hinge-b（鉸鏈軸上兩點；造船規格 §9 door）');
+        else if (mt.open && (mt.open !== 'up' && mt.open !== 'side' || (mt.open === 'side') !== (Math.abs(dr.ax[2]) > 0.7))) add('warn', '門', m.path, 'meta open=' + mt.open + ' 跟鉸鏈軸對不上（軸' + (Math.abs(dr.ax[2]) > 0.7 ? '垂直 ⇒ 左右開' : '水平 ⇒ 上下開') + '）⇒ 照鉸鏈軸開', 'open 寫 up（鉸鏈水平）或 side（鉸鏈垂直），或改鉸鏈的兩點');
+        if (dr && !dr.cells.length) add('warn', '門', m.path, '門正下方那一層（z ' + dr.zt + '）沒有原本就空的格 ⇒ 門被打掉也不會從這裡進水', '門擺在開口上面（外框底面 ＝ 開口那一層的上一格）');
+      }
       var sn = m.name.replace(/^.*yard-/, ''), hasSail = sh.sails.some(function (s) { return s.name === sn; });   // 沒掛帆的帆桁（crossjack、spritsail 常見）不用寫 sail
       if (m.kind === 'yard' && ((!mt.sail && hasSail) || (!mt.mast && !/bowsprit|艏斜桅/.test(m.path)))) add('warn', '帆桁', m.path, '帆桁 meta 少了 ' + [!mt.sail && hasSail && 'sail（有一面帆叫 ' + sn + '）', !mt.mast && 'mast'].filter(Boolean).join('、') + ' ⇒ 照名字配帆／桅', '帆桁 meta sail=<帆名>、mast=<桅>（造船規格 §9.1）');
       if (!m.alive && !GUNS[m.kind] && m.kind !== 'powder') add('error', '開場就掉', m.path, (mt.kind || m.kind) + ' 開場 ' + SC_SECS + ' 秒內就判成沒東西撐、掉了（腳 z ' + (m.foot >> 21) + '）', '把它接到實心上；掛著的（燈、舵）登記掛點固定點（bail、stock-top）');
@@ -108,6 +114,7 @@ function shipCheck(id) {
       return g.model.path + '（' + (M.ports ? '換砲門 ' + M.ports.map(dg).join('／') + '°' : '砲塔 ' + dg(M.arc[0]) + '～' + dg(M.arc[M.arc.length - 1]) + '°') + '、' + dg(M.rate) + '°／秒）'; }).join('、');
     // ── 砲帶的裝甲（TASK-0631；24_armor.js）：關聯 meta kind=armor、mount=<砲模型的路徑> ⇒ 跟著那門砲轉、一格一格打掉 ──
     R.info.armor = armSummary(T);
+    R.info.doors = doorsSummary(sh);                                    // 門、艙蓋（TASK-0638）
     (T.armBad || []).forEach(function (b) { add(b.lv, '裝甲', b.where, b.msg, b.fix); });
     (sh.arm || []).forEach(function (a) {
       if (!a.g) { add('error', '裝甲', a.A.mount, '拆出來了、可是開戰時找不到那門砲的迴旋 ⇒ 裝甲不轉', '那門砲的 meta kind=gun、mount=turret｜pivot（21_gunnery.js gunMountInit）'); return; }
