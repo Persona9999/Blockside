@@ -98,6 +98,12 @@ function shipCheck(id) {
     (sh.medSkip || []).forEach(function (s) { add('warn', '醫療艙', s.name, s.why, '房間所在的甲板要有梯子通到'); });
     // ── 繩、帆 ──
     float0.forEach(function (f) { add('error', '繩', f, '開場那一刻就浮空', '繩端綁到實心或 model: 路徑（造船規格 §6）'); });
+    sh.ropes.forEach(function (r) {                                     // 兩端都沒固定（綁在空中）⇒ 遊戲不生成（10_ship.js ropeFixCheck；Tim 2026-10-16）
+      if (!r.unfixed) return;
+      var D = r.unfixed.ends.map(function (d, e) { return (e ? '終點' : '起點') + (d.d === null ? ' 附近 ' + (Math.ceil(ROPE_FIX_D) + 1) + ' 格內沒有實心格' : '離最近的實心格 ' + (d.d * S).toFixed(2) + ' m'); });
+      add('error', '繩', r.name, '兩端都沒固定（綁在空中）⇒ 不生成：' + D.join('、') + '；也不在帆角、帆桁、模型上，也沒掛在合格的繩上', '至少一端綁到實心格（0.15 m 內）、固定點、model: 路徑、sail:帆/角，或掛在合格的繩上（造船規格 §6）');
+    });
+    R.info.ropesUnfixed = sh.ropes.filter(function (r) { return r.unfixed; }).length;
     var noMeta = sh.sails.filter(function (s) { return !s.meta || !s.meta.kind; }).map(function (s) { return s.name; });
     if (noMeta.length) add('warn', '帆', noMeta.join('、'), '沒有 meta ⇒ 照名字判斷（帆的種類、旗、收帆順序）', 'work sub=meta part=sail（造船規格 §9.1）');
     var ownSails = sh.sails.filter(function (s) { return !(s.meta && s.meta.team); }).length;   // 陣營旗不算

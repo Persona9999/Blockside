@@ -2270,6 +2270,7 @@ function makeShip(i, team, yaw, pz, T, px) {                          // T：船
     sh.ropes.push({ pts: r.pts, col: r.color, bb: ropeBox(r.pts), a: anchorNear(T, r.pts[0], r.pts[1], r.pts[2], 5), b: anchorNear(T, r.pts[n * 3 - 3], r.pts[n * 3 - 2], r.pts[n * 3 - 1], 5), name: r.name, meta: r.meta || null });
   });
   linkRopes(T, sh.ropes, sh.models);
+  ropeFixApply(sh);                                                     // 兩端都沒固定（綁在空中）的繩不生成（ropeFixCheck；匯入檢查報 ✗）
   hangFalls(sh); sh.rbin = new Set();
   T.rig.sails.forEach(function (s) {
     var vz = -1e9, ax = 0, ay = 0, az = 0, k = 0, j;
@@ -2491,7 +2492,7 @@ function ropeAuditStatic(sh) {
       if (E.k === 'none') none.push({ name: r.name, end: e, P: E.P.map(Math.round) });
     });
   });
-  return { ropes: sh.ropes.length, ends: kinds, far: far, none: none, floatAtStart: ropesFloating(sh).map(function (f) { return f.name + '#' + f.end + '：' + f.why; }) };
+  return { ropes: sh.ropes.length, ends: kinds, far: far, none: none, unfixed: sh.ropes.filter(function (r) { return r.unfixed; }).map(function (r) { return { name: r.name, d: r.unfixed.ends.map(function (e) { return e.d; }) }; }), floatAtStart: ropesFloating(sh).map(function (f) { return f.name + '#' + f.end + '：' + f.why; }) };
 }
 function linkRopes(T, ropes, models) {
   ropes.forEach(function (r, i) {
@@ -2517,6 +2518,58 @@ function linkRopes(T, ropes, models) {
     if (!r.par.length && !r.mods.length && !onSail) r.dead = true;     // 哪裡都不靠（格、繩、模型、帆角都沒有）⇒ 不畫
   });
 }
+// ── 繩的固定檢查（Tim 2026-10-16：「是否能確保纜繩至少要有一端固定到帆或其他固定點(不能綁定在空中)」「不符合的直接再生成時排除 且匯入時要有錯誤報告」）──
+// 一條繩至少要有一端「固定」：端點 ROPE_FIX_D 格內貼著實心格（到格的表面）、在帆角上、在帆桁上、碰到模型的外框，或掛在一條合格的繩上（一路傳到不再變）。
+// 兩端都不固定 ⇒ 開局就不生成（r.dead、r.unfixed），別的繩、帆不再靠它（不連帶斷）；匯入檢查（75_shipcheck.js）每條報 ✗。只有一端固定 ⇒ 照舊（另一端垂著）。
+// ⛔ 不看 linkRopes 的錨：它往外找 0.5 m 內最近的格，兩端都找得到就不再看帆角、模型、繩 ⇒ 離木頭 0.4 m 的端點也算綁好了。
+var ROPE_FIX_D = 1.5;                                                   // 格（0.15 m）
+/** 端點 P 不看別的繩靠什麼：{ k: 'grid'|'sail'|'yard'|'model'|null, d：到最近實心格表面幾格（附近沒有 ⇒ null）}。 */
+function ropeEndSupport(T, models, P) {
+  var R = Math.ceil(ROPE_FIX_D) + 1, bx = Math.floor(P[0]), by = Math.floor(P[1]), bz = Math.floor(P[2]), best = 1e9;
+  for (var dz = -R; dz <= R; dz++) for (var dy = -R; dy <= R; dy++) for (var dx = -R; dx <= R; dx++) {
+    var x = bx + dx, y = by + dy, z = bz + dz; if (!T.hullG.get(x, y, z)) continue;
+    var ex = Math.max(x - P[0], 0, P[0] - x - 1), ey = Math.max(y - P[1], 0, P[1] - y - 1), ez = Math.max(z - P[2], 0, P[2] - z - 1);   // 到這一格（單位方塊）表面
+    best = Math.min(best, Math.sqrt(ex * ex + ey * ey + ez * ez));
+  }
+  var d = best < 1e9 ? +best.toFixed(2) : null;
+  if (best <= ROPE_FIX_D) return { k: 'grid', d: d };
+  if (T.rig.sails.some(function (s) { var v = s.verts; for (var k = 0; k < v.length; k += 3) { var a = v[k] - P[0], b = v[k + 1] - P[1], c = v[k + 2] - P[2]; if (a * a + b * b + c * c < 4) return true; } return false; })) return { k: 'sail', d: d };   // 帆角（同 linkRopes）
+  if (yardNear(T, P, 3) >= 0) return { k: 'yard', d: d };
+  if (models.some(function (m) { var b = m.bb; return !m.station && m.kind !== 'yard' && P[0] > b[0] - 2 && P[0] < b[3] + 2 && P[1] > b[1] - 2 && P[1] < b[4] + 2 && P[2] > b[2] - 2 && P[2] < b[5] + 2; })) return { k: 'model', d: d };
+  return { k: null, d: d };
+}
+/** 船型 T 每條繩合不合格（同一型只算一次，T.ropeFix）：合格 ⇒ null；不合格 ⇒ { ends: [{ d }, { d }] }（兩端到最近實心格表面幾格）。 */
+function ropeFixCheck(T, ropes, models) {
+  if (T.ropeFix && T.ropeFix.length === ropes.length) return T.ropeFix;
+  var S = ropes.map(function (r) { var n = r.pts.length / 3; return [0, n - 1].map(function (i) { return ropeEndSupport(T, models, [r.pts[i * 3], r.pts[i * 3 + 1], r.pts[i * 3 + 2]]); }); });
+  var ok = S.map(function (s) { return !!(s[0].k || s[1].k); });
+  var near = ropes.map(function (r, i) {                                // 每一端 0.3 m 內（同 linkRopes）有哪幾條繩
+    var n = r.pts.length / 3;
+    return [0, n - 1].map(function (q) {
+      var P = [r.pts[q * 3], r.pts[q * 3 + 1], r.pts[q * 3 + 2]], L = [];
+      ropes.forEach(function (o, j) {
+        if (j === i || P[0] < o.bb[0] - 3 || P[0] > o.bb[3] + 3 || P[1] < o.bb[1] - 3 || P[1] > o.bb[4] + 3 || P[2] < o.bb[2] - 3 || P[2] > o.bb[5] + 3) return;
+        for (var k = 0; k + 5 < o.pts.length; k += 3) if (segDist2(P, o.pts[k], o.pts[k + 1], o.pts[k + 2], o.pts[k + 3], o.pts[k + 4], o.pts[k + 5]) < 9) { L.push(j); return; }
+      });
+      return L;
+    });
+  });
+  for (var changed = true; changed;) {                                   // 掛在合格的繩上 ⇒ 也合格（一路傳）
+    changed = false;
+    ok.forEach(function (v, i) { if (!v && near[i].some(function (L) { return L.some(function (j) { return ok[j]; }); })) { ok[i] = true; changed = true; } });
+  }
+  return (T.ropeFix = ok.map(function (v, i) { return v ? null : { ends: S[i].map(function (s) { return { d: s.d }; }) }; }));
+}
+/** 開一艘船（makeShip，linkRopes 之後）：不合格的繩不生成；別的繩對它的依靠拿掉（⛔ 留著 ⇒ 第一次 survey「靠的繩斷了」連帶斷）。 */
+function ropeFixApply(sh) {
+  var RF = ropeFixCheck(sh.T, sh.ropes, sh.models), bad = {};
+  sh.ropes.forEach(function (r, i) { if (RF[i]) { r.dead = true; r.unfixed = RF[i]; bad[i] = 1; } });
+  sh.ropes.forEach(function (r) {
+    if (r.dead || !r.par) return;
+    r.par = r.par.filter(function (j) { return !bad[j]; });
+    if (bad[r.pa]) delete r.pa; if (bad[r.pb]) delete r.pb;
+  });
+}
 /** 帆的依靠：最高那一排、最低的前角與後角各找 0.6 公尺內的實心格；找不到就掛在 0.4 公尺內最近的繩（支索）上。 */
 function sailAnchors(sh, sail, top) {
   var v = sail.verts, lo = 1e9, fx = null, bx = null, j;
@@ -2529,6 +2582,7 @@ function sailAnchors(sh, sail, top) {
     if (a >= 0) { if (sail.as.indexOf(a) < 0) sail.as.push(a); return; }
     var best = -1, bd = 16;
     sh.ropes.forEach(function (o, i) {
+      if (o.unfixed) return;                                             // 綁在空中、沒生成的繩（ropeFixApply）不能當依靠
       var bb = o.bb; if (P[0] < bb[0] - 4 || P[0] > bb[3] + 4 || P[1] < bb[1] - 4 || P[1] > bb[4] + 4 || P[2] < bb[2] - 4 || P[2] > bb[5] + 4) return;
       for (var k = 0; k + 5 < o.pts.length; k += 3) { var d = segDist2(P, o.pts[k], o.pts[k + 1], o.pts[k + 2], o.pts[k + 3], o.pts[k + 4], o.pts[k + 5]); if (d < bd) { bd = d; best = i; } }
     });
@@ -12181,6 +12235,12 @@ function shipCheck(id) {
     (sh.medSkip || []).forEach(function (s) { add('warn', '醫療艙', s.name, s.why, '房間所在的甲板要有梯子通到'); });
     // ── 繩、帆 ──
     float0.forEach(function (f) { add('error', '繩', f, '開場那一刻就浮空', '繩端綁到實心或 model: 路徑（造船規格 §6）'); });
+    sh.ropes.forEach(function (r) {                                     // 兩端都沒固定（綁在空中）⇒ 遊戲不生成（10_ship.js ropeFixCheck；Tim 2026-10-16）
+      if (!r.unfixed) return;
+      var D = r.unfixed.ends.map(function (d, e) { return (e ? '終點' : '起點') + (d.d === null ? ' 附近 ' + (Math.ceil(ROPE_FIX_D) + 1) + ' 格內沒有實心格' : '離最近的實心格 ' + (d.d * S).toFixed(2) + ' m'); });
+      add('error', '繩', r.name, '兩端都沒固定（綁在空中）⇒ 不生成：' + D.join('、') + '；也不在帆角、帆桁、模型上，也沒掛在合格的繩上', '至少一端綁到實心格（0.15 m 內）、固定點、model: 路徑、sail:帆/角，或掛在合格的繩上（造船規格 §6）');
+    });
+    R.info.ropesUnfixed = sh.ropes.filter(function (r) { return r.unfixed; }).length;
     var noMeta = sh.sails.filter(function (s) { return !s.meta || !s.meta.kind; }).map(function (s) { return s.name; });
     if (noMeta.length) add('warn', '帆', noMeta.join('、'), '沒有 meta ⇒ 照名字判斷（帆的種類、旗、收帆順序）', 'work sub=meta part=sail（造船規格 §9.1）');
     var ownSails = sh.sails.filter(function (s) { return !(s.meta && s.meta.team); }).length;   // 陣營旗不算

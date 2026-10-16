@@ -66,7 +66,7 @@ def main():
                 e = d.setdefault(f['name'] + ' #' + str(f['end']), {'n': 0, 't': [], 'why': f['why'], 'P': f['P'], 'kind': f['kind']})
                 e['n'] += 1; e['t'].append(f['t'])
     L = ['# 繩的檢查報告（浮空的纜線）', '',
-         '- 成品：`%s`' % os.path.relpath(a.html, HERE).replace('\\', '/'),
+         '- 成品：`%s`' % (os.path.relpath(a.html, HERE) if os.path.splitdrive(os.path.abspath(a.html))[0].lower() == os.path.splitdrive(HERE)[0].lower() else os.path.abspath(a.html)).replace('\\', '/'),   # 不同磁碟 ⇒ relpath 會丟錯（成品放在 C:、工具在 D:）
          '- 每局 %d 秒；對戰：%s；種子：%s；共 %d 局（讀不到 %d 局%s）' % (a.secs, '、'.join(a.match), a.seeds, len(runs), len(bad), '：' + '、'.join(bad) if bad else ''),
          '- 浮空 ＝ 繩還活著，可是有一端撐它的東西沒了（判斷在 js/10_ship.js ropesFloating）。每局每半秒量一次，每條繩只記第一次。', '']
     total = sum(e['n'] for h in dyn for c in dyn[h] for e in dyn[h][c].values())
