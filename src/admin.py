@@ -347,6 +347,15 @@ def validate(cfg, prev=None):
         hb = (f.get('buff') or {}).get('heal') if isinstance(f, dict) else None
         if hb is not None and not (isnum(hb) and 0 <= hb <= 1):
             err('furniture.%s.buff.heal' % fid, '0～1（治療速度加成）')
+    for kd, f in (cfg.get('drvparts') or {}).items():     # 動力件（TASK-0653；js/31_drive.js DRVP、67_furncfg.js DRV_ITEMS）
+        if kd not in DRV_KINDS or not isinstance(f, dict):
+            err('drvparts.%s' % kd, '種類只有 ' + '／'.join(DRV_KINDS))
+            continue
+        for k, lo, hi in (('lo', 0, 0.95), ('hi', 0.05, 1), ('wet', 0, 1), ('cell', 0, 1)):
+            if k in f and not (isnum(f[k]) and lo <= f[k] <= hi):
+                err('drvparts.%s.%s' % (kd, k), '%s～%s 的數字' % (lo, hi))
+        if isnum(f.get('lo')) and isnum(f.get('hi')) and not f['lo'] < f['hi']:
+            err('drvparts.%s' % kd, 'lo（剩幾成就沒力）要小於 hi（剩幾成還是全力）')
 
     def rooms(rm, p):
         # 甲板與艙房的預設（TASK-0568；遊戲 36_rooms.js）：{ 房名: '類型'（艙房自動擺滿）｜{ type, items: [{ it, x, y, r }] }（自訂；甲板 type=deck）}
@@ -602,10 +611,10 @@ def export(work, dest):
     raw = zlib.decompress(open(dest, 'rb').read(), -15)
     n = struct.unpack('<I', raw[4:8])[0]
     h = json.loads(raw[8:8 + n].decode('utf-8'))
-    log = anchor_cells(h)
-    if log is not None:
+    log, dl = anchor_cells(h), drive_cells(h)
+    if log is not None or dl is not None:
         vxk_write(dest, h, raw[8 + n:])
-        out += '\n' + '\n'.join(log)
+        out += '\n' + '\n'.join((log or []) + (dl or []))
     return out
 
 
@@ -671,6 +680,70 @@ def anchor_cells(h):
     return log if changed else None
 
 
+DRV_KINDS = ('engine', 'boiler', 'shaft', 'steampipe')                # 動力件（TASK-0653；遊戲 31_drive.js 照格子算剩幾成、通不通）
+
+
+def drive_cells(h):
+    """動力件（關聯 meta kind ＝ DRV_KINDS；TASK-0653，Tim 2026-10-16：「不是直接根據該子模組當前剩下多少voxel計算嗎」）：
+    關聯的格子在 .vxk 裡跟船殼攤平成一份 ⇒ 把來源作品的格子（senate export format=list）照關聯的外框與 mirror 換成整艘船的格座標，
+    照線性編號（x ＋ 寬 ×（y ＋ 深 × z））排好、寫成連續段 parts[].cellRuns ＝ [跟上一段結尾差幾, 長度, …]（同材質層的段落；⛔ 錨的 cells 一格一個位元組、外框不能超過 256 格，
+    這幾件的外框常常是整艘船 ⇒ 不能用）。遊戲開局照它記哪幾格是那一件（31_drive.js）。
+    ⛔ turn 不是 0、mirror 不是空或 y ⇒ 不寫（遊戲退回舊判法：固定點旁 ±8 格）。回：None ＝ header 沒變；不然 ＝ 讀數（每條一行）。"""
+    log, changed, src = [], False, {}
+    senate = shutil.which('senate')
+    SX, SY, SZ = (h.get('size') or [0, 0, 0])[:3]
+    for q in h.get('parts', []) or []:
+        kind = (q.get('meta') or {}).get('kind')
+        if kind not in DRV_KINDS:
+            continue
+        runs, why = None, ''
+        b, w = q.get('box'), q.get('src')
+        if not (b and len(b) == 6 and w):
+            why = '檔頭沒有外框或來源作品'
+        elif q.get('turn', 0) not in (0, None):
+            why = 'turn=%s（只認 0）' % q.get('turn')
+        elif q.get('mirror', '') not in ('', 'y'):
+            why = 'mirror=%s（只認空或 y）' % q.get('mirror')
+        elif not senate:
+            why = '找不到 senate'
+        else:
+            if w not in src:
+                tmp = os.path.join(CACHE, '_cells_%s.txt' % hashlib.sha1(w.encode('utf-8')).hexdigest()[:10])
+                code, out = run([senate, 'cmd', 'sculpture', '--arg', 'op=export', '--arg', 'format=list', '--arg', 'work=' + w, '--arg', 'out=' + os.path.abspath(tmp)])
+                L = []
+                if code == 0 and os.path.exists(tmp):
+                    L = [tuple(int(v) for v in ln.split(',')[:3]) for ln in open(tmp, encoding='utf-8') if ln[:1].isdigit()]
+                    os.remove(tmp)
+                src[w] = L
+            L = src[w]
+            sy = int(b[4] - b[1] + 1)
+            flip = q.get('mirror') == 'y'
+            idx = sorted({(int(b[0]) + x) + SX * ((int(b[1]) + (sy - 1 - y if flip else y)) + SY * (int(b[2]) + z)) for x, y, z in L
+                          if 0 <= int(b[0]) + x < SX and 0 <= int(b[1]) + (sy - 1 - y if flip else y) < SY and 0 <= int(b[2]) + z < SZ})
+            if not idx:
+                why = '來源作品 %s 匯不出格子清單（或全在船外）' % w
+            else:
+                runs, end, i = [], 0, 0
+                while i < len(idx):
+                    j = i
+                    while j + 1 < len(idx) and idx[j + 1] == idx[j] + 1:
+                        j += 1
+                    runs += [idx[i] - end, j - i + 1]
+                    end = idx[j] + 1
+                    i = j + 1
+        if why:
+            log.append('⚠ 動力件 %s（%s）：%s ⇒ 不寫格子清單（遊戲照固定點旁 ±8 格判）' % (q.get('path'), kind, why))
+        if q.get('cellRuns') != runs:
+            changed = True
+            if runs is None:
+                q.pop('cellRuns', None)
+            else:
+                q['cellRuns'] = runs
+        if runs:
+            log.append('動力件 %s（%s）：%d 格、%d 段（%s%s）' % (q.get('path'), kind, sum(runs[1::2]), len(runs) // 2, w, '，mirror=y' if q.get('mirror') == 'y' else ''))
+    return log if changed else None
+
+
 # ───────────────────────── 動作（CLI 與後台頁共用） ─────────────────────────
 class Fail(Exception):
     pass
@@ -725,14 +798,15 @@ def act_metasync(sid, build=True):
             q['meta'], q['points'] = m, pt
     mnew = sorted(set(PM) - {q.get('name') for q in (h.get('rig') or {}).get('models', [])})
     ac = anchor_cells(h)                                 # 錨的關聯（meta kind=anchor；TASK-0601）：來源作品的格子寫進 cells
+    dc = drive_cells(h)                                  # 動力件（TASK-0653）：來源作品的格子寫進 cellRuns
     log = ['metasync %s：%d 條關聯換了 meta／固定點%s' % (sid, len(ch), ('：' + '、'.join(ch)) if ch else '')]
     log.append('metasync %s：%d 個模型換了 meta／固定點%s' % (sid, len(chm), ('：' + '、'.join(chm)) if chm else ''))
     if mmiss:
         log.append('⚠ .vxk 有、作品裡沒有的模型 %d 個（照舊）：%s' % (len(mmiss), '、'.join(mmiss)))
     if mnew:
         log.append('⚠ 作品裡新加、.vxk 還沒有的模型 %d 個（要 reimport 才帶得進來）：%s' % (len(mnew), '、'.join(mnew)))
-    log += ac or []
-    ch += chm + (['cells'] if ac is not None else [])
+    log += (ac or []) + (dc or [])
+    ch += chm + (['cells'] if ac is not None else []) + (['cellRuns'] if dc is not None else [])
     if miss:
         log.append('⚠ .vxk 有、作品裡沒有的關聯 %d 條（照舊）：%s' % (len(miss), '、'.join(miss)))
     if new:
@@ -810,6 +884,7 @@ def act_shipcheck(ids=None):
               '門、艙蓋（模型 meta kind=door、固定點 hinge-a／hinge-b；不擋人、打掉了開口才進水，TASK-0638）：' + (I.get('doors') or '—'), '',
               '照參數轉的子物件（模型 meta spin；舵、舵輪跟著舵角轉，只是畫面，TASK-0640）：' + (I.get('spins') or '—'), '',
               '額外動力（TASK-0630；輸出物件 份量；主機／軸／鍋爐 照造船規格 §9.6）：' + (I.get('drive') or '—（沒有 cfg.base）'), '',
+              '動力件（TASK-0653；關聯 meta kind=engine／boiler／shaft／steampipe 的格子清單，照剩幾成、通不通算）：' + (I.get('drvparts') or '—'), '',
               '**✗ %d　⚠ %d**' % (ne, nw), '']
         for lv, title in (('error', '## ✗ 錯誤'), ('warn', '## ⚠ 警告')):
             ks = [k for k in groups if k[0] == lv]
@@ -1322,16 +1397,31 @@ def act_defaults(lim):
 
 
 FURN_KEYS = ('tpm', 'crew', 'cap', 'hold', 'hp', 'buff.heal')            # 道具設定頁（js/67_furncfg.js FURN_ITEMS）調得到的那幾格
+DRVP_KEYS = ('lo', 'hi', 'wet', 'cell')                                  # 同一頁的動力件（DRV_ITEMS ⇒ config drvparts）
 
 
-def act_furniture(furn):
+def act_furniture(furn, drv=None):
     """道具的出廠預設值（Tim 2026-10-16：「一樣是開發後台調預設 玩家後台套同一個UI」）：遊戲的道具設定頁（/game?admin=furn）送來 { 道具: { 鍵: 值 } }
-    ⇒ 改 furniture[道具][鍵]（buff.heal ＝ furniture[道具].buff.heal）；只認 FURN_KEYS、而且那一種本來就有那一格；照樣過 validate 才存。"""
-    if not isinstance(furn, dict) or not furn:
+    ⇒ 改 furniture[道具][鍵]（buff.heal ＝ furniture[道具].buff.heal）；只認 FURN_KEYS、而且那一種本來就有那一格；照樣過 validate 才存。
+    drv ＝ 同一頁的動力件 { 種類: { 鍵: 值 } } ⇒ 改 drvparts[種類][鍵]（只認 DRVP_KEYS、那一種本來就有那一格）。"""
+    furn, drv = furn or {}, drv or {}
+    if not isinstance(furn, dict) or not isinstance(drv, dict) or not (furn or drv):
         raise Fail('沒有要改的道具')
     prev = load()
     new = json.loads(json.dumps(prev))
     FU, log, bad = new.get('furniture') or {}, [], []
+    DP = new.get('drvparts') or {}
+    for kd, kv in drv.items():
+        if kd not in DP or not isinstance(kv, dict):
+            bad.append('drv:' + str(kd))
+            continue
+        for k, v in kv.items():
+            if k not in DRVP_KEYS or k not in DP[kd] or not isnum(v) or v < 0:
+                bad.append('drv:%s.%s' % (kd, k))
+                continue
+            if DP[kd][k] != v:
+                log.append('  %s（%s，動力件）%s：%s → %s' % (kd, DP[kd].get('name', ''), k, DP[kd][k], v))
+                DP[kd][k] = v
     for fid, kv in furn.items():
         if fid not in FU or not isinstance(kv, dict):
             bad.append(str(fid))
@@ -1354,7 +1444,7 @@ def act_furniture(furn):
     if E:
         raise Fail('設定不合法，沒有存：\n' + '\n'.join('  ✗ ' + e for e in E))
     save(new)
-    return ['✓ 道具的出廠預設改了 %d 項（config/game.json furniture；重建之後遊戲才吃得到）：' % len(log)] + log
+    return ['✓ 道具的出廠預設改了 %d 項（config/game.json furniture、drvparts；重建之後遊戲才吃得到）：' % len(log)] + log
 
 
 def act_save(new):
@@ -1438,7 +1528,7 @@ def serve(port, do_open=False):
                 elif self.path == '/api/defaults':
                     log = act_defaults(b.get('lim'))
                 elif self.path == '/api/furniture':
-                    log = act_furniture(b.get('furn'))
+                    log = act_furniture(b.get('furn'), b.get('drv'))
                 elif self.path == '/api/build':
                     log = act_build()
                 elif self.path == '/api/import':

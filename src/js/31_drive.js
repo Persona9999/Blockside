@@ -38,6 +38,73 @@ var TELE = DRIVE_CFG.tele || [1, 0.6, 0.35, 0.15, 0, -0.15, -0.35, -0.6, -1];
 var TELE_NAME = DRIVE_CFG.teleNames || ['前進全速', '前進半速', '前進慢速', '前進微速', '停俥', '後退微速', '後退慢速', '後退半速', '後退全速'];
 var TELE_FULL = TELE.indexOf(1) >= 0 ? TELE.indexOf(1) : 0;               // 開局：全速前進（跟以前額外動力一直開著一樣）
 var DRV_RPM0 = +DRIVE_CFG.rpm > 0 ? +DRIVE_CFG.rpm : 80, DRV_SPIN_T = 1.5, DRV_PART_R = 8;   // 螺旋槳預設最高轉速（rpm；⚠ 不是史料）、轉速跟上的時間常數（秒）、部件壞了沒有數幾格（±格）
+// ── 動力件（TASK-0653；Tim 2026-10-16：「不是直接根據該子模組當前剩下多少voxel計算嗎? 另外更新頻率1s應該就夠了」「鍋爐可能剩50%就沒動力了」
+//    「槳軸是否可以是類似mc紅石電路概念的東西 傳遞動力」「被打細了傳得比較少 可能可以是每隔能傳遞多少動力(類似電線粗細與電流量關係)」）──
+// 雕刻的關聯 meta kind engine／boiler／shaft／steampipe，匯出時 admin.py drive_cells 把那一件的格子清單寫進檔頭 parts[].cellRuns（整艘船格座標的線性編號，連續段）。
+//   格子照舊在船殼裡（畫面、被打、進水都不變）；遊戲只是記得哪幾格是它的 ⇒ 每 DRV_PART_T 秒照實數：
+//   · 體素件（engine、boiler）：還剩幾成 r ＝ 現在還在的格 ÷ 開局的格 ⇒ 輸出 ＝ 曲線（DRVP[種類].lo 以下 0、hi 以上 1、中間直線）；
+//     鍋爐每一座再看中心那一格泡沒泡在艙內的水裡（33_flood.js wetAt inner ＝ DRVP.boiler.wet）⇒ 泡水那一座熄火。
+//   · 傳動件（shaft fwd→aft、steampipe from→to）：從一端到另一端、互不共用格子的路最多幾條（26 鄰的最大流 ＝ 最細的那一截）× 每格傳幾成（DRVP[種類].cell），夾 0…1；
+//     cell ＝ 0 ⇒ 只看通不通。開局就傳不滿（雕得細）⇒ 照開局當滿載（匯入檢查報）；開局就不通 ⇒ 判不了、當作一直通（匯入檢查報）。
+//     蒸汽管接最近的那一組鍋爐（from 離鍋爐最近）：那一組的蒸汽 × 蒸汽管傳得到的；沒有蒸汽管的組照舊直接供汽。
+//   全船的蒸汽 ＝ Σ 每一組（座數 × 輸出 × 乾的座數比 × 蒸汽管）÷ Σ 座數；主機的份量 × 主機的輸出；接在軸上的輸出物件 × 軸傳得到的。
+// 沒有 cellRuns 的件 ⇒ 照舊（固定點旁 ±DRV_PART_R 格剩一半以上 ＝ 好的、每 0.5 秒）⇒ 沒標的船戰局一位元不動。參數在道具設定頁「動力件」（67_furncfg.js）。
+var DRVP_DEF = { engine: { name: '主機', lo: 0.4, hi: 1 }, boiler: { name: '鍋爐', lo: 0.5, hi: 0.8, wet: 0.5 }, shaft: { name: '螺旋槳軸', cell: 0.15 }, steampipe: { name: '蒸汽管', cell: 0.15 } };
+var DRVP = {}; Object.keys(DRVP_DEF).forEach(function (k) { DRVP[k] = Object.assign({}, DRVP_DEF[k], (CFG.drvparts || {})[k] || {}); });
+var DRV_PART_T = 1, DRV_END_R = 4;                                       // 秒（每兩次 survey）；傳動件兩端：固定點 4 格內的格算端點
+/** 檔頭的 cellRuns ⇒ 格座標 [x, y, z, …]（Int16Array）。 */
+function drvCells(T, runs) {
+  var sx = T.h.size[0], sy = T.h.size[1], out = [], at = 0;
+  for (var k = 0; k + 1 < runs.length; k += 2) {
+    var s = at + runs[k], c = runs[k + 1];
+    for (var j = 0; j < c; j++) { var i = s + j, z = Math.floor(i / (sx * sy)), r = i - z * sx * sy, y = Math.floor(r / sx); out.push(r - y * sx, y, z); }
+    at = s + c;
+  }
+  return new Int16Array(out);
+}
+function drvLeft(G, C) { var n = 0; for (var i = 0; i < C.length; i += 3) if (G.get(C[i], C[i + 1], C[i + 2])) n++; return n; }
+/** 體素件：還剩幾成 ⇒ 輸出（0…1）。 */
+function drvCurve(kind, r) { var P = DRVP[kind]; return P && P.hi > P.lo ? clamp((r - P.lo) / (P.hi - P.lo), 0, 1) : (r > 0 ? 1 : 0); }
+/** 傳動件要幾條路才算傳滿（cell ＝ 0 ⇒ 1：只看通不通）。 */
+function drvNeed(kind) { var c = +(DRVP[kind] || {}).cell; return c > 0 ? Math.ceil(1 / c - 1e-9) : 1; }
+/** 傳動件：照 G 現在還在的格子，從 a 端到 b 端互不共用格子的路最多幾條（找到 need 條就停）。每一格容量 1（拆成進、出兩點），26 鄰。 */
+function drvFlow(G, C, a, b, need) {
+  var n = 0, id = new Map(), X = [], i, k;
+  for (i = 0; i < C.length; i += 3) { if (!G.get(C[i], C[i + 1], C[i + 2])) continue; id.set(C[i] + 2048 * (C[i + 1] + 2048 * C[i + 2]), n); X.push(C[i], C[i + 1], C[i + 2]); n++; }
+  if (!n) return 0;
+  function ends(p) {                                                     // 端點：固定點 DRV_END_R 格內的格；都沒有 ⇒ 最近的那一格
+    var L = [], bd = 1e18, bi = -1;
+    for (var j = 0; j < n; j++) { var dx = X[3 * j] - p[0], dy = X[3 * j + 1] - p[1], dz = X[3 * j + 2] - p[2], d = dx * dx + dy * dy + dz * dz; if (d <= DRV_END_R * DRV_END_R) L.push(j); if (d < bd) { bd = d; bi = j; } }
+    return L.length ? L : [bi];
+  }
+  var S = 2 * n, T = 2 * n + 1, N = 2 * n + 2, head = new Int32Array(N).fill(-1), to = [], cap = [], nxt = [];
+  function edge(u, v, c) { to.push(v); cap.push(c); nxt.push(head[u]); head[u] = to.length - 1; to.push(u); cap.push(0); nxt.push(head[v]); head[v] = to.length - 1; }
+  for (i = 0; i < n; i++) {
+    edge(2 * i, 2 * i + 1, 1);                                           // 進 → 出（這一格只能走一次）
+    for (var dz = -1; dz <= 1; dz++) for (var dy = -1; dy <= 1; dy++) for (var dx = -1; dx <= 1; dx++) {
+      if (!dx && !dy && !dz) continue;
+      var j = id.get((X[3 * i] + dx) + 2048 * ((X[3 * i + 1] + dy) + 2048 * (X[3 * i + 2] + dz)));
+      if (j !== undefined) edge(2 * i + 1, 2 * j, 1);
+    }
+  }
+  ends(a).forEach(function (j) { edge(S, 2 * j, 1); });
+  ends(b).forEach(function (j) { edge(2 * j + 1, T, 1); });
+  var flow = 0, prev = new Int32Array(N);
+  while (flow < need) {                                                  // 找一條增廣路（BFS）
+    prev.fill(-1); prev[S] = -2; var q = [S], h = 0;
+    while (h < q.length && prev[T] === -1) { var u = q[h++]; for (k = head[u]; k >= 0; k = nxt[k]) if (cap[k] > 0 && prev[to[k]] === -1) { prev[to[k]] = k; q.push(to[k]); } }
+    if (prev[T] === -1) break;
+    for (var v = T; v !== S; v = to[prev[v] ^ 1]) { cap[prev[v]]--; cap[prev[v] ^ 1]++; }
+    flow++;
+  }
+  return flow;
+}
+/** 傳動件現在傳得到幾成（0…1）：路數 × 每格傳幾成；開局就傳不滿 ⇒ 照開局的路數當滿載。 */
+function drvTrans(G, s, kind) {
+  var need = drvNeed(kind), f0 = s.flow0 && s.flow0[need]; if (f0 === undefined) return 1;
+  if (!(f0 > 0)) return 1;                                              // 開局就不通 ⇒ 判不了（匯入檢查報）
+  return clamp(drvFlow(G, s.cells, s.a, s.b, Math.min(need, f0)) / Math.min(need, f0), 0, 1);
+}
 /** 一面帆的面積中心（格座標；雙層布的兩層一起算，中心不變）。 */
 function sailCentroid(s) {
   var v = s.verts, A = 0, cx = 0, cy = 0, cz = 0;
@@ -63,23 +130,52 @@ function drvCount(G, p) {
 /** 船型 T 的動力部件（造船規格 §9.6；關聯 meta，固定點已經是格心；載入時算一次）：主機、鍋爐（每座一點）、軸。 */
 function drvParts(T) {
   if (T.drvParts) return T.drvParts;
-  var E = [], B = [], SH = [];
+  var E = [], B = [], SH = [], SP = [], cells = false;
+  function cl(q, o) { if (q.cellRuns && q.cellRuns.length) { o.cells = drvCells(T, q.cellRuns); cells = true; } return o; }
   (T.h.parts || []).forEach(function (q) {
     var m = q.meta, pt = q.points || {}; if (!m) return;
-    if (m.kind === 'engine' && pt.core) E.push({ name: q.path, p: pt.core.slice(), w: +m.ihp > 0 ? +m.ihp : +m.nhp > 0 ? +m.nhp : 1, prop: m.propeller ? String(m.propeller) : '' });
+    if (m.kind === 'engine' && pt.core) E.push(cl(q, { name: q.path, p: pt.core.slice(), w: +m.ihp > 0 ? +m.ihp : +m.nhp > 0 ? +m.nhp : 1, prop: m.propeller ? String(m.propeller) : '' }));
     else if (m.kind === 'boiler') {
       var seats = [], nb = Math.max(1, Math.round(+m.boilers || 1));
       for (var j = 1; j <= nb; j++) if (pt['boiler-' + j]) seats.push(pt['boiler-' + j].slice());
       if (!seats.length && pt.uptake) seats.push(pt.uptake.slice());
-      if (seats.length) B.push({ name: q.path, seats: seats, funnel: m.funnel ? String(m.funnel) : '' });
-    } else if (m.kind === 'shaft' && pt.aft && pt.fwd) SH.push({ name: q.path, aft: pt.aft.slice(), fwd: pt.fwd.slice() });
+      if (seats.length) B.push(cl(q, { name: q.path, seats: seats, funnel: m.funnel ? String(m.funnel) : '', up: pt.uptake ? pt.uptake.slice() : seats[0] }));
+    } else if (m.kind === 'shaft' && pt.aft && pt.fwd) SH.push(cl(q, { name: q.path, aft: pt.aft.slice(), fwd: pt.fwd.slice(), a: pt.fwd.slice(), b: pt.aft.slice(), kind: 'shaft' }));   // 傳動：主機那頭（fwd）→ 螺旋槳那頭（aft）
+    else if (m.kind === 'steampipe' && pt.from && pt.to) SP.push(cl(q, { name: q.path, a: pt.from.slice(), b: pt.to.slice(), kind: 'steampipe' }));   // 蒸汽管（TASK-0653）：鍋爐那頭 from → 主機那頭 to
   });
   var G0 = T.hullG || T.base;                                             // 開局的格子：船殼（24_armor.js 把會轉的裝甲拆出去 ⇒ T.hullG；sh.grid 也是從它來的）；沒有 ⇒ 整艘
   E.forEach(function (e) { e.n0 = drvCount(G0, e.p); });
   B.forEach(function (b) { b.n0 = b.seats.map(function (p) { return drvCount(G0, p); }); });
   SH.forEach(function (s) { s.n0 = [drvCount(G0, s.aft), drvCount(G0, s.fwd)]; });
-  return (T.drvParts = { E: E, B: B, SH: SH });
+  E.concat(B, SH, SP).forEach(function (o) { if (o.cells) o.c0 = drvLeft(G0, o.cells); });   // 開局有幾格（armorSetup 拆出去的不算）
+  SH.concat(SP).forEach(function (o) { if (o.cells) drvTube(G0, o); });   // 穿過船殼的那一段借船殼的格（見 drvTube）
+  SP.forEach(function (p) { var bi = -1, bd = 1e18; B.forEach(function (b, j) { b.seats.concat([b.up]).forEach(function (s) { var d = drvD2(s, p.a); if (d < bd) { bd = d; bi = j; } }); }); p.boiler = bi; });
+  return (T.drvParts = { E: E, B: B, SH: SH, SP: SP, cells: cells });
 }
+/** 傳動件穿過船殼的那一段（三艘鐵甲艦的軸都是：船尾柱、隔艙壁那幾格算船殼的、不算軸的 ⇒ 軸的格子斷成兩截、開局就「不通」）：
+ *  沿兩端固定點的連線（a → b），照軸自己的粗細（每一截格數的中位數 A ⇒ 半徑 √(A／π)＋0.25）把連線上開局就在的格借進來。
+ *  借來的格被打掉 ＝ 軸管被打爛 ⇒ 一樣傳不過去。o.cells 換成自己的＋借來的；o.tubeN ＝ 借了幾格（匯入檢查報）。 */
+function drvTube(G, o) {
+  var a = o.a, b = o.b, u = [b[0] - a[0], b[1] - a[1], b[2] - a[2]], L = len(u), C = o.cells; o.tubeN = 0;
+  if (!(L > 0)) return;
+  u = [u[0] / L, u[1] / L, u[2] / L];
+  function tr(x, y, z) { var px = x + 0.5 - a[0], py = y + 0.5 - a[1], pz = z + 0.5 - a[2], t = px * u[0] + py * u[1] + pz * u[2], qx = px - t * u[0], qy = py - t * u[1], qz = pz - t * u[2]; return [t, Math.sqrt(qx * qx + qy * qy + qz * qz)]; }
+  var cnt = {}, own = new Set(), i;
+  for (i = 0; i < C.length; i += 3) { own.add(C[i] + 2048 * (C[i + 1] + 2048 * C[i + 2])); var q = tr(C[i], C[i + 1], C[i + 2]); if (q[0] >= 0 && q[0] <= L) { var k = Math.floor(q[0]); cnt[k] = (cnt[k] || 0) + 1; } }
+  var A = Object.keys(cnt).map(function (k) { return cnt[k]; }).sort(function (p, q) { return p - q; });
+  if (!A.length) return;
+  var R = clamp(Math.sqrt(A[A.length >> 1] / Math.PI) + 0.25, 0.75, 8), add = [];
+  var x0 = Math.floor(Math.min(a[0], b[0]) - R), x1 = Math.ceil(Math.max(a[0], b[0]) + R), y0 = Math.floor(Math.min(a[1], b[1]) - R), y1 = Math.ceil(Math.max(a[1], b[1]) + R), z0 = Math.floor(Math.min(a[2], b[2]) - R), z1 = Math.ceil(Math.max(a[2], b[2]) + R);
+  for (var z = z0; z <= z1; z++) for (var y = y0; y <= y1; y++) for (var x = x0; x <= x1; x++) {
+    if (own.has(x + 2048 * (y + 2048 * z)) || !G.get(x, y, z)) continue;
+    var w = tr(x, y, z); if (w[0] >= 0 && w[0] <= L && w[1] <= R) add.push(x, y, z);
+  }
+  if (!add.length) return;
+  var N = new Int16Array(C.length + add.length); N.set(C); N.set(add, C.length);
+  o.cells = N; o.tubeN = add.length / 3;
+}
+/** 傳動件開局的路數（照 need 封頂；每一種 need 記一次 ⇒ 道具設定改了「每格傳幾成」也對）。 */
+function drvFlow0(T, s, need) { s.flow0 = s.flow0 || {}; if (s.flow0[need] === undefined) s.flow0[need] = s.cells ? drvFlow(T.hullG || T.base, s.cells, s.a, s.b, need) : 0; return s.flow0[need]; }
 function drvD2(a, b) { var x = a[0] - b[0], y = a[1] - b[1], z = a[2] - b[2]; return x * x + y * y + z * z; }
 function drvUp(n, n0) { return !(n0 > 0) || n * 2 >= n0; }               // 剩一半以上 ＝ 好的；開局就 0 格 ⇒ 量不出來、當作好的
 /** 綁定（driveInit 呼叫；steam 輸出物件都建好之後）：每個輸出物件接哪根軸、每具主機推哪幾個輸出物件 ⇒ 每個輸出物件完好時分到的份量 w。 */
@@ -91,7 +187,9 @@ function drvBind(sh, outs) {
     o.shaft = best;
   });
   PT.SH.forEach(function (s) { C.SH.push({ s: s, ok: 1 }); });
-  PT.B.forEach(function (b) { C.B.push({ b: b, ok: b.seats.map(function () { return 1; }) }); });
+  PT.B.forEach(function (b) { C.B.push({ b: b, ok: b.seats.map(function () { return 1; }), out: 1 }); });
+  C.SP = PT.SP.map(function (p) { return { p: p, ok: 1 }; }); C.cells = PT.cells; C.steam = 1;
+  if (PT.cells) PT.SH.concat(PT.SP).forEach(function (s) { drvFlow0(sh.T, s, drvNeed(s.kind)); });
   var W = PT.E.reduce(function (a, e) { return a + e.w; }, 0);
   PT.E.forEach(function (e) {
     var to = [];
@@ -148,7 +246,9 @@ function driveSurvey(sh) {
   if (F.length) { var up = 0; F.forEach(function (f) { if (f.model ? sh.models.some(function (q) { return q.path === f.model && q.alive && !q.moved; }) : f.n0 > 0 && funnelCount(sh.grid, f.p) * 2 >= f.n0) up++; }); fu = up / F.length; }
   D.fu = fu;
   var C = D.C, bk = 1, G = sh.grid, cut = [];
-  if (C) {                                                                // 動力的那一條鏈：主機、軸、鍋爐（沒標 ⇒ 都是空的、這一段什麼都不改）
+  if (C && C.cells) { D.partN = (D.partN || 0) + 1; if (D.partN % 2 === 1) drvPartsTick(sh, C, cut); bk = C.steam; }   // 動力件（TASK-0653）：每 1 秒（survey 每 0.5 秒、隔一次）
+  if (C && C.cells) C.fnOff = drvFunnelsOff(sh, C);
+  else if (C) {                                                           // 動力的那一條鏈：主機、軸、鍋爐（沒標 ⇒ 都是空的、這一段什麼都不改）
     C.E.forEach(function (c) { var u = drvUp(drvCount(G, c.e.p), c.e.n0) ? 1 : 0; if (c.ok && !u) cut.push('主機'); c.ok = u; });
     C.SH.forEach(function (c) { var u = drvUp(drvCount(G, c.s.aft), c.s.n0[0]) && drvUp(drvCount(G, c.s.fwd), c.s.n0[1]) ? 1 : 0; if (c.ok && !u) cut.push('螺旋槳軸'); c.ok = u; });
     var on = 0, all = 0;
@@ -170,15 +270,41 @@ function driveSurvey(sh) {
       p.alive0 = alive;
       if (C && C.E.length) {                                              // 這個輸出物件收得到幾成：推它的每具主機（還在、軸沒斷）的份量 ÷ 完好時的份量
         var got = 0;
-        C.E.forEach(function (c) { if (c.ok && c.to.indexOf(p.j) >= 0) got += c.f / c.to.length; });
+        C.E.forEach(function (c) { if (c.ok && c.to.indexOf(p.j) >= 0) got += c.f / c.to.length * c.ok; });   // c.ok：0／1（舊判法）或 0…1（動力件的曲線）
         k *= p.w > 0 ? got / p.w : 0;
       }
-      if (C && p.shaft >= 0 && C.SH[p.shaft] && !C.SH[p.shaft].ok) k = 0;
+      if (C && p.shaft >= 0 && C.SH[p.shaft]) k = C.SH[p.shaft].ok ? k * C.SH[p.shaft].ok : 0;   // 軸：0／1（舊判法）或 0…1（傳得到幾成）
       if (C) k *= bk;
       p.ok = k * (0.5 + 0.5 * fu);
     }
   });
   if (cut.length && !sh.sunk && D.kind === 'steam') note(sh, cut.filter(function (v, j) { return cut.indexOf(v) === j; }).join('、') + '被打壞了 ⇒ 額外動力只剩 ' + Math.round(clamp(D.P.reduce(function (a, p) { return a + (p.kind === 'steam' ? p.w * p.ok : 0); }, 0), 0, 1) * 100) + '%');
+}
+/** 動力件（每 1 秒；見檔頭「動力件」）：主機、鍋爐照剩幾成＋曲線、鍋爐泡水、軸與蒸汽管照傳得到幾成 ⇒ C.E[].ok、C.B[].out／ok、C.SH[].ok、C.SP[].ok、C.steam；壞掉的那一刻記進 cut（廣播）。 */
+function drvPartsTick(sh, C, cut) {
+  var G = sh.grid;
+  C.E.forEach(function (c) { var e = c.e, r = e.cells && e.c0 ? drvLeft(G, e.cells) / e.c0 : null, u = e.cells ? drvCurve('engine', r === null ? 1 : r) : (drvUp(drvCount(G, e.p), e.n0) ? 1 : 0); if (c.ok > 0 && u <= 0) cut.push('主機'); c.ok = u; c.r = r; });
+  C.SH.forEach(function (c) { var s = c.s, u = s.cells ? drvTrans(G, s, 'shaft') : (drvUp(drvCount(G, s.aft), s.n0[0]) && drvUp(drvCount(G, s.fwd), s.n0[1]) ? 1 : 0); if (c.ok > 0 && u <= 0) cut.push('螺旋槳軸'); c.ok = u; });
+  C.SP.forEach(function (c) { var u = c.p.cells ? drvTrans(G, c.p, 'steampipe') : 1; if (c.ok > 0 && u <= 0) cut.push('蒸汽管'); c.ok = u; });
+  var num = 0, den = 0, wetIn = +DRVP.boiler.wet > 0 ? +DRVP.boiler.wet : 0;
+  C.B.forEach(function (c, gi) {
+    var b = c.b, r = b.cells && b.c0 ? drvLeft(G, b.cells) / b.c0 : null, out = b.cells ? drvCurve('boiler', r === null ? 1 : r) : 1, wet = 0;
+    b.seats.forEach(function (p, j) {
+      var w = wetIn > 0 && wetAt(sh, p, { sea: false, inner: wetIn }), up = b.cells ? out > 0 : drvUp(drvCount(G, p), b.n0[j]);
+      if (w) wet++;
+      var u = up && !w ? 1 : 0; if (c.ok[j] && !u) cut.push(w ? '鍋爐（淹水熄火）' : '鍋爐'); c.ok[j] = u;
+    });
+    var dry = c.ok.reduce(function (a, u) { return a + u; }, 0) / b.seats.length;
+    var pipe = C.SP.filter(function (q) { return q.p.boiler === gi; }), link = pipe.length ? Math.min(1, pipe.reduce(function (a, q) { return a + q.ok; }, 0)) : 1;
+    c.r = r; c.wet = wet; c.link = link; c.out = (b.cells ? out : 1) * dry;
+    num += b.seats.length * c.out * link; den += b.seats.length;
+  });
+  C.steam = den ? num / den : 1;
+}
+/** 煙囪停煙（動力件那一條）：主機全壞 ⇒ 每根停；通這根煙囪的鍋爐組全部沒蒸汽 ⇒ 這根停（同舊判法）。 */
+function drvFunnelsOff(sh, C) {
+  var F = funnelsOf(sh.T), eAll = C.E.length > 0 && !C.E.some(function (c) { return c.ok > 0; });
+  return F.length && (eAll || C.B.length) ? F.map(function (f) { if (eAll) return true; var B2 = C.B.filter(function (c) { return c.b.funnel === f.name; }); return B2.length > 0 && !B2.some(function (c) { return c.out > 0; }); }) : null;
 }
 /** 俥鐘撥一格（d：−1 往前、+1 往後；E／T、點俥鐘）。 */
 function teleStep(sh, d) { if (!sh || !(sh.cfg.base > 0)) return; teleSet(sh, sh.tele + d); }
@@ -288,8 +414,9 @@ function driveInfo(sh) {
     Fx: +D.Fx.toFixed(1), drag: +D.drag.toFixed(1), a: +D.a.toFixed(4), vTkn: +(D.vT * 1.9438).toFixed(2), tq: Math.round(D.tq), omDeg: +(D.om * 57.2958).toFixed(3), funnels: D.fu === undefined ? null : +D.fu.toFixed(2),
     P: D.P.map(function (p) { return { kind: p.kind, name: p.s ? p.s.name : p.out || '', at: p.p.map(function (v) { return Math.round(v); }), ok: +(p.ok || 0).toFixed(2), on: p.kind === 'sail' ? !!p.on : undefined, F: +p.F.toFixed(1), Fy: +p.Fy.toFixed(1),
       w: p.kind === 'sail' ? undefined : +p.w.toFixed(3), rpm: p.ax ? +p.rpm.toFixed(1) : undefined, shaft: p.shaft >= 0 && D.C ? D.C.SH[p.shaft].s.name : undefined }; }),
-    chain: D.C ? { engines: D.C.E.map(function (c) { return { name: c.e.name, share: +c.f.toFixed(3), to: c.to, ok: c.ok }; }), shafts: D.C.SH.map(function (c) { return { name: c.s.name, ok: c.ok }; }),
-      boilers: D.C.B.map(function (c) { return { name: c.b.name, funnel: c.b.funnel, ok: c.ok.slice() }; }), funnelsOff: D.C.fnOff ? D.C.fnOff.slice() : null } : null };
+    chain: D.C ? { engines: D.C.E.map(function (c) { return { name: c.e.name, share: +c.f.toFixed(3), to: c.to, ok: +(+c.ok).toFixed(3), r: c.r == null ? undefined : +c.r.toFixed(3) }; }), shafts: D.C.SH.map(function (c) { return { name: c.s.name, ok: +(+c.ok).toFixed(3) }; }),
+      boilers: D.C.B.map(function (c) { return { name: c.b.name, funnel: c.b.funnel, ok: c.ok.slice(), r: c.r == null ? undefined : +c.r.toFixed(3), out: c.out == null ? undefined : +c.out.toFixed(3), wet: c.wet, link: c.link }; }),
+      pipes: (D.C.SP || []).map(function (c) { return { name: c.p.name, ok: +(+c.ok).toFixed(3) }; }), steam: +(+D.C.steam).toFixed(3), funnelsOff: D.C.fnOff ? D.C.fnOff.slice() : null } : null };   // r ＝ 還剩幾成（動力件，TASK-0653）
 }
 /** 詳細資訊那一行：額外動力的俥鐘與輸出。 */
 function driveText(sh) {

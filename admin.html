@@ -446,7 +446,7 @@ nav a.on { background: var(--acc); color: var(--acc-ink); border-color: var(--ac
     if (ev.data.kind === 'cb-admdef') {                              // 細節設定頁（?admin=defaults）送來：存成出廠預設（op save，lim）或重建（op build）；道具設定頁（?admin=furn）：op furn，furn⇒ 呼叫 admin.py、結果送回去
       var src = ev.source, reply = function (r) { try { src.postMessage({ kind: 'cb-admdef-r', ok: !!r.ok, log: r.log || [] }, location.origin); } catch (e) { /* 分頁關了 */ } };
       if ((ev.data.op === 'save' || ev.data.op === 'furn') && dirty) return reply({ ok: false, log: ['⚠ 設定後台這一頁有還沒存的修改 ⇒ 先存或還原，再存出廠預設（不然兩邊會互相蓋掉）'] });
-      var ep = ev.data.op === 'build' ? ['/api/build', {}] : ev.data.op === 'furn' ? ['/api/furniture', { furn: ev.data.furn }] : ['/api/defaults', { lim: ev.data.lim }];   // furn：道具設定頁（67_furncfg.js，?admin=furn）
+      var ep = ev.data.op === 'build' ? ['/api/build', {}] : ev.data.op === 'furn' ? ['/api/furniture', { furn: ev.data.furn, drv: ev.data.drv }] : ['/api/defaults', { lim: ev.data.lim }];   // furn：道具設定頁（67_furncfg.js，?admin=furn；drv ＝ 動力件）
       call(ep[0], ep[1], function () { return load(true).then(function () { return true; }); })
         .then(function (ok) { reply({ ok: ok, log: $('log').textContent.split('\n').filter(function (l) { return l; }) }); });
       return;
