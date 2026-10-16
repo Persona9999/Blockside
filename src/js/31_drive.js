@@ -192,6 +192,18 @@ function teleSet(sh, i) {
 /** 每一步（sail() 裡，算完舊公式的「單獨推動時的航速」之後）：推力、水阻、加速度 ⇒ sh.spd；力矩記在 D.tq（轉向率在 driveYaw，舵算完才知道 rmax）。
  *  vS：帆在這一段、全部完好時的航速（舊公式 target ÷ sailFrac 的那一份；0 ＝ 帆不出力）；vB：額外動力全速的航速（m/s；0 ＝ 沒有或不出力）；
  *  brake：錨咬著、拋錨 ⇒ 6 秒內停。 */
+/** 帆推不過風（TASK-0639；Tim 2026-10-16：「帆提供的速度要考慮到船目前的相對速度(不能跑的比風速快)」）：帆推力的倍率 0…1。
+ *  u ＝ 船沿「風吹去的方向」的速度（sh.spd × cos 船頭與風吹去方向的夾角）；Vw ＝ 羅盤上的風速（windKnots ÷ 1.944，m/s）。
+ *  u0 ＝ 帆單獨推得到的那一份（v × cos，最多 0.9 Vw）：u 不到 u0 ⇒ 推力照舊（帆單獨推的航速、加減速跟以前一樣）；
+ *  超過 ⇒ ((Vw − u)／(Vw − u0))²（視風變小、推力照平方掉），u 追上 Vw ⇒ 0。迎風那一半、橫風、倒退 ⇒ 船不會往風吹去的方向追上風 ⇒ 照舊。
+ *  ⛔ 以前推力只看「帆單獨推得到的航速」⇒ 加上蒸汽順風照樣推：拿破崙號滿帆＋全速前進、風 10–11 節 ⇒ 14.3 節。 */
+function sailWindK(sh, v, deg) {
+  var c = Math.cos(deg / 57.2958); if (c <= 0) return 1;
+  var Vw = windKnots() / 1.944, u = sh.spd * c, u0 = Math.min(v * c, 0.9 * Vw);
+  if (u <= u0) return 1;
+  if (u >= Vw) return 0;
+  var r = (Vw - u) / (Vw - u0); return r * r;
+}
 function driveStep(sh, dt, vS, vB, deg, brake) {
   var D = sh.drive; if (!D) return;
   if (D.M === null) driveSurvey(sh);
@@ -208,7 +220,7 @@ function driveStep(sh, dt, vS, vB, deg, brake) {
     if (inSet) { rx += s.area * p.p[0]; ry += s.area * p.p[1]; ra += s.area; }   // 完好時這一段帆的中心（平衡點）
     sumA += s.area;
   }
-  var frac = sumA > 0 ? sumOn / sh.sailArea0 : 0, Fs = vS > 0 ? k * (vS * frac) * (vS * frac) : 0, Fx = 0, Tq = 0, Fabs = 0;
+  var frac = sumA > 0 ? sumOn / sh.sailArea0 : 0, Fs = vS > 0 ? k * (vS * frac) * (vS * frac) * sailWindK(sh, vS * frac, deg) : 0, Fx = 0, Tq = 0, Fabs = 0;   // sailWindK：船跑得比風快 ⇒ 帆不推（TASK-0639）
   if (ra > 0) { rx /= ra; ry /= ra; }
   for (i = 0; i < P.length; i++) {
     p = P[i]; if (p.kind !== 'sail') continue;
