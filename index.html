@@ -174,6 +174,13 @@
   body.roomEdOn #roomEd{ position:fixed; inset:8px; z-index:50; max-width:none; margin:0; overflow-y:auto; background:#141a22; border-color:rgba(255,255,255,.3); box-shadow:0 6px 30px rgba(0,0,0,.6); }   /* 打開 ⇒ 接近全螢幕（Tim 2026-10-14） */
   #cover #pgX{ position:fixed; top:10px; right:12px; z-index:40; display:none; margin:0; background:#e3c46a; color:#111; border-color:#e3c46a; box-shadow:0 2px 10px rgba(0,0,0,.6); } #cover #pgX.on{ display:block; }
   #roomEdX2{ display:none; } body.roomEdOn #roomEdX2{ display:block; position:sticky; top:0; float:right; z-index:2; background:#e3c46a; color:#111; border-color:#e3c46a; }   /* 編輯器浮層：右上角的完成（捲動時黏在上面） */
+  #keysAdm{ display:none; } #keysp.admin #keysAdm{ display:block; color:#ffd27a; border:1px solid rgba(255,210,122,.5); border-radius:6px; padding:6px 10px; margin:6px 0; }   /* 鍵位的出廠預設值（?admin=keys） */
+  #keysItems .keyrow{ display:flex; align-items:center; gap:10px; max-width:640px; margin:4px auto; }   /* ⛔ 不套 .row.slide：那裡的 span 一律固定寬度，圖示會被撐成 156px */
+  #keysItems .keyrow label{ flex:1 1 auto; text-align:left; display:flex; align-items:center; gap:6px; } #keysItems .keyrow label small{ color:var(--dim); }
+  #keysItems .kico{ flex:0 0 3.6em; text-align:center; white-space:nowrap; letter-spacing:-.1em; } #keysItems .kcap{ flex:0 0 7.5em; text-align:center; padding:3px 8px; border:1px solid rgba(255,255,255,.35); border-radius:6px; font-weight:bold; }
+  #keysItems .kcap.wait{ color:var(--gold); border-color:var(--gold); font-weight:normal; font-size:.85em; } #keysItems .keyrow > .note{ flex:0 0 8.5em; text-align:left; font-size:.85em; }
+  @media (max-width:560px){ #keysItems .keyrow > .note{ display:none; } #keysItems .kcap{ flex-basis:5.5em; } }
+  #keysTabs button.on{ background:var(--gold); color:#111; }
   #furnAdm{ display:none; } #furnp.admin #furnAdm{ display:block; color:#ffd27a; border:1px solid rgba(255,210,122,.5); border-radius:6px; padding:6px 10px; margin:6px 0; }   /* 道具的出廠預設值（?admin=furn） */
   #detAdm{ display:none; } #detail.admin #detAdm{ display:block; color:#ffd27a; border:1px solid rgba(255,210,122,.5); border-radius:6px; padding:6px 10px; margin:6px 0; }   /* 出廠預設值（?admin=defaults） */
   #shipAdm{ display:none; } #shipp.admin #shipAdm{ display:block; color:#ffd27a; } #shipp.admin .nadm{ display:none; }   /* 設定後台嵌的那一份（?admin=rooms） */ #deckItems .rm{ display:flex; align-items:center; justify-content:center; flex-wrap:wrap; gap:4px 8px; font-size:13px; margin:5px 0; } #deckItems .rm label{ min-width:10em; text-align:right; } #deckItems .rm .rs{ color:var(--dim); font-size:12px; text-align:left; max-width:30em; } #deckItems button{ font-size:13px; padding:4px 10px; margin:2px; } #deckItems button.on{ color:#111; background:var(--gold); border-color:var(--gold); }
@@ -266,24 +273,24 @@
   <div id="fleetL" class="hud fleet"></div>
   <div id="fleetR" class="hud fleet"></div>
   <div id="topC" class="hud"><div id="fps" class="hud"></div><div id="irow"><div id="icol"><div id="info" class="panel"></div><div id="msg"></div></div><canvas id="gmap"></canvas></div></div>
-  <div id="teleBox" class="hud" style="display:none"><span class="kb tk" data-k="e" title="俥鐘往前撥一格（E）"><b>E</b>▲</span><canvas id="telc" title="俥鐘（點或拖）"></canvas><span class="kb tk" data-k="t" title="俥鐘往後撥一格（T）"><b>T</b>▼</span></div>
+  <div id="teleBox" class="hud" style="display:none"><span class="kb tk" data-act="teleFwd" data-tip="俥鐘往前撥一格"><b>E</b>▲</span><canvas id="telc" title="俥鐘（點或拖）"></canvas><span class="kb tk" data-act="teleBack" data-tip="俥鐘往後撥一格"><b>T</b>▼</span></div>
   <div id="botC" class="hud"><div id="navBox"><div id="modeT"></div><div id="gunsB" class="gend"></div><div id="nav" class="panel"><canvas id="navc"></canvas><div id="navt"></div><div id="gunsL" class="gside"></div><div id="gunsR" class="gside"></div></div><div id="gunsA" class="gend"></div></div>
-  <div id="ctlRow"><div id="helmL" class="helm"><span class="kb hb" data-k="a" data-hold="1" title="左舵（A，按住）"><b>A</b><i class="em">⬅️</i></span><span class="kb hb" data-k="s" data-hold="1" title="收帆（S）"><b>S</b><i class="em">⛵⬇</i></span><span class="kb hb" data-k="w" data-hold="1" title="加帆（W）"><b>W</b><i class="em">⛵⬆</i></span><span class="kb hb" id="sailT" title="自動操舵（4）：亮 ＝ 自動、暗 ＝ 手動 —— 點一下切換"><b>4</b><i class="em">🤖☸</i></span><span class="kb hb" data-k="7" id="ancP" title="左錨（7）"><b>7</b><i class="em">◀⚓</i></span></div><div id="ctl" class="panel">
-    <div id="keys"><span class="kb hb" data-k="c" title="鏡頭（C）"><b>C</b><i class="em">🎥</i></span><span class="kb hb" data-k="p" id="pauseK" title="停格（P）"><b>P</b><i class="em">⏸</i></span><span class="kb hb" id="setB" title="設定（O）"><b>O</b><i class="em">⚙</i></span><span class="kb hb" data-k="6" id="ancAll" title="雙錨（6）：兩邊都沒拋 ⇒ 一起拋；一邊在水裡 ⇒ 拋另一邊；兩邊都在水裡 ⇒ 起錨"><b>6</b><i class="em">⚓⚓</i></span></div>
+  <div id="ctlRow"><div id="helmL" class="helm"><span class="kb hb" data-act="ruddL" data-hold="1" data-tip="左舵"><b>A</b><i class="em">⬅️</i></span><span class="kb hb" data-act="sailDn" data-hold="1" data-tip="收帆"><b>S</b><i class="em">⛵⬇</i></span><span class="kb hb" data-act="sailUp" data-hold="1" data-tip="加帆"><b>W</b><i class="em">⛵⬆</i></span><span class="kb hb" id="sailT" data-kl="sailMode" data-tip="自動操舵：亮 ＝ 自動、暗 ＝ 手動 —— 點一下切換"><b>2</b><i class="em">🤖☸</i></span><span class="kb hb" data-act="ancP" id="ancP" data-tip="拋左錨"><b>3</b><i class="em">◀⚓</i></span></div><div id="ctl" class="panel">
+    <div id="keys"><span class="kb hb" data-act="cam" data-tip="換鏡頭"><b>C</b><i class="em">🎥</i></span><span class="kb hb" data-act="pause" id="pauseK" data-tip="停格"><b>P</b><i class="em">⏸</i></span><span class="kb hb" id="setB" data-kl="settings" data-tip="設定"><b>O</b><i class="em">⚙</i></span><span class="kb hb" data-act="ancAll" id="ancAll" data-tip="拋錨（雙錨）：兩邊都沒拋 ⇒ 一起拋；一邊在水裡 ⇒ 拋另一邊；兩邊都在水裡 ⇒ 起錨"><b>4</b><i class="em">⚓⚓</i></span></div>
     <div id="guns"></div>
-    <div id="ammo"><span class="kb hb" id="ammoB" data-k="1" title="彈種：點一下或按 1 換下一種"><b>1</b><i class="em"><span class="ball"></span></i></span></div>
-  </div><div id="helmR" class="helm"><span class="kb hb" data-k="8" id="ancS" title="右錨（8）"><b>8</b><i class="em">⚓▶</i></span><span class="kb hb" data-k="g" id="autoF" title="自動開砲（G）"><b>G</b><i class="em">🤖💥</i></span><span class="kb hb" data-k="f" id="fireK" title="開一門（F）"><b>F</b><i class="em">💥</i></span><span class="kb hb" data-k=" " id="volleyK" title="齊射（空白鍵）"><b>空白</b><i class="em">💥💥💥</i></span><span class="kb hb" data-k="d" data-hold="1" title="右舵（D，按住）"><b>D</b><i class="em">➡️</i></span></div></div></div>
+    <div id="ammo"><span class="kb hb" id="ammoB" data-act="ammo" data-tip="切換彈藥"><b>1</b><i class="em"><span class="ball"></span></i></span></div>
+  </div><div id="helmR" class="helm"><span class="kb hb" data-act="ancS" id="ancS" data-tip="拋右錨"><b>5</b><i class="em">⚓▶</i></span><span class="kb hb" data-act="autoFire" id="autoF" data-tip="自動開砲"><b>G</b><i class="em">🤖💥</i></span><span class="kb hb" data-act="fire1" id="fireK" data-tip="開一門砲"><b>F</b><i class="em">💥</i></span><span class="kb hb" data-act="volley" id="volleyK" data-tip="齊射"><b>空白</b><i class="em">💥💥</i></span><span class="kb hb" data-act="ruddR" data-hold="1" data-tip="右舵"><b>D</b><i class="em">➡️</i></span></div></div></div>
   <!-- 第一人稱的操作面板（81_fps.js；#stage.fp 才顯示）：左下虛擬搖桿（移動；鍵盤 WASD 也行、不顯示按鍵）、右下轉頭（按住）；中間 跳、跑、爬梯子；拖曳畫面也能轉頭 -->
   <!-- 建造模式（82_build.js，TASK-0648；#stage.bld 才顯示）：準心下面一行說明、📦 目錄（分類分頁）；快捷欄在 #fpUI 裡 -->
   <div id="bldInfo"></div>
-  <div id="bldCat" class="panel" style="display:none"><div id="bldCatH"><b>📦 目錄</b><span class="kb" id="bldCatX">✕ 關（B）</span></div><div id="bldTabs"></div><div id="bldGrid"></div></div>
+  <div id="bldCat" class="panel" style="display:none"><div id="bldCatH"><b>📦 目錄</b><span class="kb" id="bldCatX">✕ 關（<span class="kn" data-kl="bCat">B</span>）</span></div><div id="bldTabs"></div><div id="bldGrid"></div></div>
   <div id="fpUI">
     <div id="bldBar"></div>
     <div id="fpJoy"><div id="fpKnob"></div></div>
-    <div id="fpAct"><span class="kb hb fpb" id="fpClimb" style="display:none" title="爬梯子（E）"><b>E</b><i class="em">🪜</i></span><span class="kb hb fpb" id="fpRun" title="跑（Shift）"><b>Shift</b><i class="em">🏃</i></span><span class="kb hb fpb" id="fpFol" title="跟隨身邊的船員（F）"><b>F</b><i class="em">👁</i></span><span class="kb hb fpb" id="fpNext" title="換下一個（G）"><b>G</b><i class="em">⏭</i></span><span class="kb hb fpb bldOnly" id="bldMode" title="碰撞：一般（M 換：一般 → 穿牆 → 浮空）"><b>M</b><i class="em">🚶</i></span><span class="kb hb fpb bldOnly" id="bldRot" title="轉 90°（R）"><b>R</b><i class="em">⟳</i></span><span class="kb hb fpb bldOnly" id="bldDel" title="拆（左鍵、X）"><b>X</b><i class="em">✖</i></span><span class="kb hb fpb bldOnly" id="bldPut" title="放（右鍵、V）"><b>V</b><i class="em">✔</i></span></div>
+    <div id="fpAct"><span class="kb hb fpb" id="fpClimb" style="display:none" data-kl="fpClimb" data-tip="爬梯子"><b>E</b><i class="em">🪜</i></span><span class="kb hb fpb" id="fpRun" data-kl="fpRun" data-tip="跑"><b>Shift</b><i class="em">🏃</i></span><span class="kb hb fpb" id="fpFol" data-kl="fpFollow" title="跟隨身邊的船員（F）"><b>F</b><i class="em">👁</i></span><span class="kb hb fpb" id="fpNext" data-kl="fpNext" data-tip="跟隨下一個"><b>G</b><i class="em">⏭</i></span><span class="kb hb fpb bldOnly" id="bldMode" data-kl="bMode" title="碰撞：一般（M 換：一般 → 穿牆 → 浮空）"><b>M</b><i class="em">🚶</i></span><span class="kb hb fpb bldOnly" id="bldRot" data-kl="bRot" data-tip="轉 90°"><b>R</b><i class="em">⟳</i></span><span class="kb hb fpb bldOnly" id="bldDel" data-kl="bDel" data-tip="拆（滑鼠左鍵也行）"><b>X</b><i class="em">✖</i></span><span class="kb hb fpb bldOnly" id="bldPut" data-kl="bPut" data-tip="放（滑鼠右鍵也行）"><b>V</b><i class="em">✔</i></span></div>
     <div id="fpCross"></div>
-    <div id="fpJoyR" title="轉頭（方向鍵、Q，或按住畫面拖曳）"><div id="fpKnobR"></div></div>
-    <div id="fpVert" class="fpPad"><span style="grid-area:1/1" class="kb hb fpb" id="fpJump" title="跳（空白鍵）"><b>空白</b><i class="em">⤴</i></span><span style="grid-area:1/1" class="kb hb fpb fpFly" data-fp="up" title="往上（空白鍵）"><b>空白</b><i class="em">⬆</i></span><span style="grid-area:2/1" class="kb hb fpb fpFly" data-fp="dn" title="往下（C）"><b>C</b><i class="em">⬇</i></span></div>
+    <div id="fpJoyR" title="轉頭（方向鍵，或按住畫面拖曳）"><div id="fpKnobR"></div></div>
+    <div id="fpVert" class="fpPad"><span style="grid-area:1/1" class="kb hb fpb" id="fpJump" data-kl="fpJump" data-tip="跳"><b>空白</b><i class="em">⤴</i></span><span style="grid-area:1/1" class="kb hb fpb fpFly" data-fp="up" data-kl="fpJump" data-tip="往上"><b>空白</b><i class="em">⬆</i></span><span style="grid-area:2/1" class="kb hb fpb fpFly" data-fp="dn" data-kl="fpDown" data-tip="往下"><b>C</b><i class="em">⬇</i></span></div>
   </div>
   <div id="tip" class="hud"></div>
   <div id="slowB" class="hud"></div>
@@ -297,15 +304,15 @@
   <div id="helpBg"></div>
   <div id="help" class="hud panel">
     <div class="hT">說明（遊戲暫停中）<span class="hX" id="helpX">✕ 關閉</span></div>
-    <div class="note" style="color:var(--dim)">金框的鍵點下去就等於按那個鍵（手機也能玩）。點說明外面任何地方、✕、H 或 Esc 關掉</div>
-    <div class="hH">下方大圓鈕（點一下 ＝ 按那個鍵）</div>
-    <div>左邊由外往內：<kbd data-k="a" data-hold="1">⬅️ A</kbd> 左舵（按住；自動中一碰就換手動）<kbd data-k="s">⛵⬇ S</kbd> 收帆 <kbd data-k="w">⛵⬆ W</kbd> 加帆 <kbd data-k="4">🤖☸ 4</kbd> 自動操舵（亮 ＝ 自動、暗 ＝ 手動，點一下切換；錨在水裡 ⇒ 先起錨）<kbd data-k="7">◀⚓ 7</kbd> 左錨</div>
-    <div>中間一排：<kbd data-k="c">🎥 C</kbd> 換鏡頭 <kbd data-k="p">⏸ P</kbd> 停格 <kbd data-k="o">⚙ O</kbd> 設定（Esc 也可以）<kbd data-k="6">⚓⚓ 6</kbd> 雙錨 <kbd data-k="1"><span class="ball"></span> 1／2／3</kbd> 彈種（圓鈕點一下換下一種，顯示現在的彈種）</div>
-    <div>右邊由內往外：<kbd data-k="8">⚓▶ 8</kbd> 右錨 <kbd data-k="g">🤖💥 G</kbd> 自動開砲（亮 ＝ 開；觀戰預設開）<kbd data-k="f">💥 F</kbd> 開一門 <kbd data-k=" ">💥💥💥 空白</kbd> 齊射（裝填好、對得到的砲依序開火）<kbd data-k="d" data-hold="1">➡️ D</kbd> 右舵　—— 💥 ＝ 艦隊圓鈕上算砲數的那個符號</div>
+    <div class="note" style="color:var(--dim)">金框的鍵點下去就等於按那個鍵（手機也能玩）。點說明外面任何地方、✕、<span class="kn" data-kl="help"></span> 或 Esc 關掉</div>
+    <div class="hH">下方大圓鈕（點一下 ＝ 按那個鍵；鍵可以在主選單的「鍵位設定…」改）</div>
+    <div>左邊由外往內：<kbd data-act="ruddL" data-hold="1" data-ico="⬅️"></kbd> 左舵（按住；自動中一碰就換手動）<kbd data-act="sailDn" data-ico="⛵⬇"></kbd> 收帆 <kbd data-act="sailUp" data-ico="⛵⬆"></kbd> 加帆 <kbd data-act="sailMode" data-ico="🤖☸"></kbd> 自動操舵（亮 ＝ 自動、暗 ＝ 手動，點一下切換；錨在水裡 ⇒ 先起錨）<kbd data-act="ancP" data-ico="◀⚓"></kbd> 左錨</div>
+    <div>中間一排：<kbd data-act="cam" data-ico="🎥"></kbd> 換鏡頭 <kbd data-act="pause" data-ico="⏸"></kbd> 停格 <kbd data-act="settings" data-ico="⚙"></kbd> 設定（Esc 也可以）<kbd data-act="ancAll" data-ico="⚓⚓"></kbd> 雙錨 <span class="ball"></span><kbd data-act="ammo" data-ico=""></kbd> 彈種（圓鈕點一下換下一種，顯示現在的彈種）</div>
+    <div>右邊由內往外：<kbd data-act="ancS" data-ico="⚓▶"></kbd> 右錨 <kbd data-act="autoFire" data-ico="🤖💥"></kbd> 自動開砲（亮 ＝ 開；觀戰預設開）<kbd data-act="fire1" data-ico="💥"></kbd> 開一門 <kbd data-act="volley" data-ico="💥💥"></kbd> 齊射（裝填好、對得到的砲依序開火）<kbd data-act="ruddR" data-hold="1" data-ico="➡️"></kbd> 右舵　—— 💥 ＝ 艦隊圓鈕上算砲數的那個符號</div>
     <div class="hH">帆與航行</div>
     <div><kbd>⛵</kbd> 帆裝 全收／收帆／戰鬥帆／滿帆：點一下切一級，按住 1 秒後每 0.5 秒再切一級；帆收得越多越慢、越穩，收起來的帆打不壞（除非桅斷了）。有額外動力的船（風暴角號）兩頭各多一段：<b>滿帆再加 ＝ 全速前進</b>（額外動力開）、<b>全收再收 ＝ 倒車</b>（倒退時舵反過來）</div>
     <div><kbd>☸</kbd> 自動操舵：讓敵艦保持在開火那一舷、繞著彼此轉；航速看帆還剩多少與風向（頂風最慢；手動頂風會失速）</div>
-    <div><kbd>⚓</kbd> 錨：⚓⚓（6）兩邊都沒拋 ⇒ 一起拋、停住，A／D 繞錨原地轉；一邊在水裡 ⇒ 拋另一邊；兩邊都在水裡 ⇒ 起錨。◀⚓（7）⚓▶（8）只拋一邊：帶著速度拋 ⇒ 繞錨急轉。後面接 ⬆ ＝ 在水裡（再按起錨）、⏳ 起錨中、✖ 打壞了（不能拋、鍊子斷了）；鐵鍊從錨鏈孔放出、沉到海底</div>
+    <div><kbd>⚓</kbd> 錨：⚓⚓（<span class="kn" data-kl="ancAll"></span>）兩邊都沒拋 ⇒ 一起拋、停住，<span class="kn" data-kl="ruddL"></span>／<span class="kn" data-kl="ruddR"></span> 繞錨原地轉；一邊在水裡 ⇒ 拋另一邊；兩邊都在水裡 ⇒ 起錨。◀⚓（<span class="kn" data-kl="ancP"></span>）⚓▶（<span class="kn" data-kl="ancS"></span>）只拋一邊：帶著速度拋 ⇒ 繞錨急轉。後面接 ⬆ ＝ 在水裡（再按起錨）、⏳ 起錨中、✖ 打壞了（不能拋、鍊子斷了）；鐵鍊從錨鏈孔放出、沉到海底</div>
     <div class="hH">畫面上的資訊</div>
     <div><kbd>🧭</kbd> 羅盤（下方中間）：跟著鏡頭轉（N ＝ 北），中間是我艦、藍箭頭 ＝ 風從哪吹來、紅點 ＝ 敵艦、金色扇形 ＝ 兩舷的射界（對得到時亮）；外圈兩環：<span style="color:#e8c26a">金 ＝ 船體還剩多少</span>、<span style="color:#4fb3ff">藍 ＝ 進水</span>（七成以上轉紅；滑鼠停著看數字）</div>
     <div><kbd>🎯</kbd> 羅盤上方：🎯 瞄準模式　🎥 鏡頭　⚠ 射界外（瞄準點對不到）；第二行 ⛵ 航速（節，倒車是 −）＋現在的帆段與帆 %（張著、還在的帆 × 血量）；物理減速放慢時後面多一個 🐢 ×倍率</div>
@@ -314,12 +321,12 @@
     <div><kbd>報</kbd> 上方廣播：砲被打飛（同一刻的併成一行）、傷亡（每 5 秒報一次陣亡與受傷人數；是 0 的不報）；船長、軍官、舵手倒下當下就報</div>
     <div class="hH">操作</div>
     <div><kbd>左鍵</kbd> 點敵艦：設瞄準點（拖曳 ＝ 轉鏡頭；手機：點一下瞄準、拖曳轉鏡頭）　<kbd>右鍵</kbd> 拖曳：平移　<kbd>滾輪</kbd> 遠近（手機：雙指張合縮放、雙指一起拖平移）</div>
-    <div><kbd data-k="c">🎥 C</kbd> 鏡頭：看我艦（開局預設，朝向敵艦）→ 我艦→敵艦 → 自由 → 追砲彈 → 看敵艦　<kbd data-k="v">V</kbd> 鏡頭跟船／固定</div>
-    <div><kbd data-k="q">🎯 Q</kbd> 瞄準模式（⚙ 設定裡也有）：自由（點敵艦）→ 水線 → 砲甲板 → 帆具 → 甲板人員 → 彈藥庫（瞄那個模式的中心點）；自動開砲時交給砲長</div>
-    <div>彈種：<kbd data-k="1">1</kbd> 換下一種（輪流）—— <span class="ball"></span> 實心彈：鑽得深，打水線讓船進水　💣 爆裂彈：炸開大洞但不深，對砲傷害大　⛓️ 鏈彈：橫掃一片，專打桅杆、繩與帆</div>
-    <div><kbd data-k="p">⏸ P</kbd> 停格：停住、照樣轉鏡頭；上方一條可以開 📊 圖表（I，進水）、🔍 透視（X）、✂ 剖面（Z：拿掉靠鏡頭那一半看艙內）、☰ 甲板（L：由上往下一層一層拿掉）—— 按繼續後 🔍 ✂ ☰ 保持（遊戲中照樣看得到），📊 收起；X、Z、L 不停格也能直接按（開著的寫在下方）</div>
-    <div><kbd data-k="o">⚙ O</kbd> 設定（暫停）：繼續、重新開始、回主選單、自爆（我艦的彈藥庫由小到大一間一間引爆 —— 相當於重開，先看煙花）、說明、瞄準模式、畫質與物理效果、帆繩物理（B）、鏡頭跟船、靜音（M）、FPS、全螢幕、殉爆的慢動作與特寫</div>
-    <div><kbd data-k="n">N</kbd> 重新開始（同樣的設定）　<kbd data-k="r">R</kbd> 回選單　<kbd data-k="h">H</kbd> 說明（打開時暫停；點外面、✕ 或 Esc 關掉）</div>
+    <div><kbd data-act="cam" data-ico="🎥"></kbd> 鏡頭：看我艦（開局預設，朝向敵艦）→ 我艦→敵艦 → 自由 → 追砲彈 → 看敵艦　<kbd data-act="camTrack" data-ico=""></kbd> 鏡頭跟船／固定</div>
+    <div><kbd data-act="aim" data-ico="🎯"></kbd> 瞄準模式（⚙ 設定裡也有）：自由（點敵艦）→ 水線 → 砲甲板 → 帆具 → 甲板人員 → 彈藥庫（瞄那個模式的中心點）；自動開砲時交給砲長</div>
+    <div>彈種：<kbd data-act="ammo" data-ico=""></kbd> 換下一種（輪流）—— <span class="ball"></span> 實心彈：鑽得深，打水線讓船進水　💣 爆裂彈：炸開大洞但不深，對砲傷害大　⛓️ 鏈彈：橫掃一片，專打桅杆、繩與帆</div>
+    <div><kbd data-act="pause" data-ico="⏸"></kbd> 停格：停住、照樣轉鏡頭；上方一條可以開 📊 圖表（<span class="kn" data-kl="flood"></span>，進水）、🔍 透視（<span class="kn" data-kl="xray"></span>）、✂ 剖面（<span class="kn" data-kl="cut"></span>：拿掉靠鏡頭那一半看艙內）、☰ 甲板（<span class="kn" data-kl="deck"></span>：由上往下一層一層拿掉）—— 按繼續後 🔍 ✂ ☰ 保持（遊戲中照樣看得到），📊 收起；<span class="kn" data-kl="xray"></span>、<span class="kn" data-kl="cut"></span>、<span class="kn" data-kl="deck"></span> 不停格也能直接按（開著的寫在下方）</div>
+    <div><kbd data-act="settings" data-ico="⚙"></kbd> 設定（暫停）：繼續、重新開始、回主選單、自爆（我艦的彈藥庫由小到大一間一間引爆 —— 相當於重開，先看煙花）、說明、瞄準模式、畫質與物理效果、帆繩物理（<span class="kn" data-kl="phys"></span>）、鏡頭跟船、靜音（<span class="kn" data-kl="mute"></span>）、FPS、全螢幕、殉爆的慢動作與特寫</div>
+    <div><kbd data-act="restart" data-ico=""></kbd> 重新開始（同樣的設定）　<kbd data-act="menu" data-ico=""></kbd> 回選單　<kbd data-act="help" data-ico=""></kbd> 說明（打開時暫停；點外面、✕ 或 Esc 關掉）</div>
     <div class="hH">船上的人與規則</div>
     <div><kbd>砲長</kbd> 每艘一個（細節設定選，預設隨機）：照局勢與自己的偏好換瞄準模式、配彈種；敵艦浮高就改瞄水線。換的時候上方廣播</div>
     <div><kbd>人</kbd> 砲要有人操作：人少裝填慢，少於最少人數就開不了；人不夠時會集中到幾門砲上。兩舷各有砲班、各自開火（砲門 ±26°）</div>
@@ -341,7 +348,7 @@
     <div class="gsR"><span class="chip big" id="gsGo">▶ 繼續</span><span class="chip big" id="restartB"><b>N</b> 重新開始</span><span class="chip big" id="menuB"><b>R</b> 回主選單</span><span class="chip big" id="boomB">💥</span><span class="chip big" id="helpB"><b>H</b> 說明</span></div>
     <div class="gsR"><span class="gsL">畫質</span><span class="chip" data-gg="low">低</span><span class="chip" data-gg="mid">中</span><span class="chip" data-gg="high">高</span><span class="note" id="gsGfx"></span></div>
     <div class="gsR"><span class="gsL">物理效果</span><span class="chip" data-gx="full">全開</span><span class="chip" data-gx="high">高</span><span class="chip" data-gx="mid">中</span><span class="chip" data-gx="low">低</span><span class="note" id="gsPhx"></span></div>
-    <div class="gsR"><span class="gsL">瞄準</span><span class="chip" data-k="q" id="aimk">🎯 換瞄準模式（Q）</span><span class="note">自由 → 水線 → 砲甲板 → 帆具 → 甲板人員 → 彈藥庫（現在的寫在羅盤上面）</span></div>
+    <div class="gsR"><span class="gsL">瞄準</span><span class="chip" data-act="aim" id="aimk">🎯 換瞄準模式（<span class="kn" data-kl="aim">Q</span>）</span><span class="note">自由 → 水線 → 砲甲板 → 帆具 → 甲板人員 → 彈藥庫（現在的寫在羅盤上面）</span></div>
     <div class="gsR"><span class="chip" id="physT"><b>B</b> 帆繩物理</span><span class="chip" id="camT"><b>V</b> 鏡頭跟船</span><span class="chip" id="muteT"><b>M</b> 靜音</span><span class="chip" id="fpsT">顯示 FPS</span><span class="chip" id="fullT"><b>F11</b> 全螢幕</span><span class="note" id="gsFull"></span></div>
     <div class="gsR"><span class="gsL">視角</span><span class="chip" id="fpT">🧍 第一人稱</span><span class="chip on" id="fpLampT" title="第一人稱時自己帶一盞燈（艙裡比較亮）">🏮 提燈</span><span class="chip" id="bldLinesT" title="建造模式：每一間艙房的外框（穿過牆畫）">📐 艙房外框</span><span class="note">在我艦上走（左下搖桿或 WASD、右下搖桿／拖曳／方向鍵轉頭（電腦：點畫面用滑鼠轉頭，Esc 或按住 Alt 放開）、空白鍵跳、E 爬梯子、Shift 跑）；再按一次回到原本的鏡頭（TASK-0649）</span></div>
     <div class="gsR"><span class="gsL">碰撞</span><span class="chip" data-fpm="0" title="牆擋人、會從甲板的破洞落下去">正常</span><span class="chip" data-fpm="1" title="牆不擋人，腳底照樣貼著甲板、不墜落；走不出船外">🚪 穿牆</span><span class="chip" data-fpm="2" title="沒有重力、什麼都不擋；空白鍵／C（面板的 ⬆ ⬇）上下">🕊 浮空</span><span class="note">第一人稱時的碰撞</span></div>
@@ -375,7 +382,7 @@
       <div class="row" id="phxs">物理效果
         <button data-x="full">全開</button><button data-x="high">高</button><button data-x="mid">中</button><button data-x="low">低</button><button id="phxB">物理設定…</button>
       </div>
-      <div class="row"><button id="shipB">船隻配置…</button><button id="gunB">砲的設定…</button><button id="furnB">道具設定…</button><button id="detB">細節設定…</button></div>
+      <div class="row"><button id="shipB">船隻配置…</button><button id="gunB">砲的設定…</button><button id="furnB">道具設定…</button><button id="keysB">鍵位設定…</button><button id="detB">細節設定…</button></div>
       <div class="row"><button class="go" id="go" disabled>載入中…</button></div>
       <!-- 說明與細節設定的摘要放在開戰鈕下面（Tim 2026-10-13：手機上開戰鈕被擠到畫面外、要捲才看得到） -->
       <div class="sub">Blockside（方舷）—— 雕刻作品做成的船，1:1（0.1 公尺一格）互轟：船殼一格一格被打碎、桅杆打得斷、破洞進水會沉。<br>
@@ -471,6 +478,18 @@
       <div class="row note" id="furnSt"></div>
       <div class="row"><button id="furnR">這一種回到預設</button><button id="furnE">匯出…</button><button id="furnI">匯入…</button><input type="file" id="furnF" accept=".json,application/json" style="display:none"></div>
       <div class="row"><button id="furnX">返回</button></div>
+    </div>
+    <!-- 鍵位設定（從主選單進；Tim 2026-10-17）：分頁 ＝ 模式（海戰／第一人稱／建造）；動作表在 js/66_keys.js 的 KEY_ACTS；預設值 ＝ config/game.json keys（開發後台 ?admin=keys 用同一頁存） -->
+    <div class="card panel" id="keysp" style="display:none">
+      <h2>鍵位設定</h2>
+      <div id="keysAdm" class="row"><b>出廠預設值（設定後台）</b>：這一頁的鍵 ＝ 設定檔現在的預設；改好按「存成出廠預設」⇒ 寫進 config/game.json 的 keys，「重建」之後遊戲才吃得到。<br><button id="keysAdmS" class="on">💾 存成出廠預設</button><button id="keysAdmB">🔨 重建</button><button id="keysAdmX">↩ 回設定後台</button><pre id="keysAdmL" class="note"></pre></div>
+      <div class="sub">點「改」再按新的鍵（Esc 取消）。同一個模式裡撞到別的動作 ⇒ 兩個對調。Esc、方向鍵、Tab、F1–F12 不能綁。前面的圖示 ＝ 畫面上那顆圓鈕。</div>
+      <div class="row" id="keysTabs"></div>
+      <div class="row note" id="keysInfo"></div>
+      <div id="keysItems"></div>
+      <div class="row note" id="keysSt"></div>
+      <div class="row"><button id="keysR">這一頁回到預設</button><button id="keysE">匯出…</button><button id="keysI">匯入…</button><input type="file" id="keysF" accept=".json,application/json" style="display:none"></div>
+      <div class="row"><button id="keysX">返回</button></div>
     </div>
     <!-- 細節設定（從主選單進）：滑桿的上下限與預設在 js/04_state.js 的 LIM（網址參數共用同一組） -->
     <div class="card panel" id="detail" style="display:none">
@@ -11820,7 +11839,7 @@ function sbIcon(k, emo) { return HUD_ART ? '<span class="ico" style="background-
  *  跟艦隊圓鈕砲數同一個（sbIcon(3)：有 HUD 美術 ⇒ 那一格圖、沒有 ⇒ 💥）；美術是載入後才有的 ⇒ 每次 HUD 看一次（字串一樣就不動）。 */
 var HUD_OUTARC = false;                                                  // 瞄準點在射界外（gunHud 記、羅盤上方那一行寫）
 function hudIcons() {
-  var g = sbIcon(3, '💥'), L = [['fireK', '<b>F</b>', g], ['volleyK', '<b>空白</b>', g + g + g], ['autoF', '<b>G</b>', '🤖' + g]];
+  var g = sbIcon(3, '💥'), L = [['fireK', '<b>' + keyName('fire1') + '</b>', g], ['volleyK', '<b>' + keyName('volley') + '</b>', g + g], ['autoF', '<b>' + keyName('autoFire') + '</b>', '🤖' + g]];   // 鍵照 66_keys.js
   L.forEach(function (q) { var el = $(q[0]), h = q[1] + '<i class="em">' + q[2] + '</i>'; if (el && el.innerHTML !== h) el.innerHTML = h; });
 }
 function sbNums(b, o) {
@@ -12122,11 +12141,11 @@ function navText(sh) {
     '傾斜 ' + Math.abs(roll).toFixed(1) + '°' + (Math.abs(roll) < 0.2 ? '' : roll < 0 ? '（左低）' : '（右低）') + '　縱傾 ' + pitch.toFixed(1) + '°';
 }
 /** P 那顆按鈕：停格中寫「繼續」、平常寫「停格」（Tim 2026-10-14）。 */
-function pauseLabel() { var b = $('pauseK'), s = '<b>P</b><i class="em">' + (PAUSED ? '▶' : '⏸') + '</i>'; if (b && b.innerHTML !== s) b.innerHTML = s; }   // 圖示（Tim 2026-10-15）：停格中 ⇒ ▶ 繼續
+function pauseLabel() { var b = $('pauseK'), s = '<b>' + keyName('pause') + '</b><i class="em">' + (PAUSED ? '▶' : '⏸') + '</i>'; if (b && b.innerHTML !== s) b.innerHTML = s; }   // 圖示（Tim 2026-10-15）：停格中 ⇒ ▶ 繼續
 /** 彈種那一顆（Tim 2026-10-15：「砲彈改成一個按鈕，切換所有支援的砲彈（顯示當前彈種圖示）」）：鐵球 實心彈（CSS 畫的 .ball：灰色、左上高光、淡白邊；⛔ ⚫ 在深色圓鈕上看不見、⚪ 是白點不像砲彈 —— Tim 2026-10-15「顯示為一顆白色圓點，是否可以替換」）、💣 爆裂彈、⛓️ 鏈彈；每一種砲三種都能打。 */
 var PSLOW_SHOW = 0.7;   // 物理減速放慢到 ×0.7 以下才在航速那一行顯示（Tim 2026-10-15：「高於 0.7 可以不顯示，目前頻繁閃爍」—— 以前 < 0.98 就顯示，倍率在 0.9 上下跳 ⇒ 一直閃）
 var AMMO_ICON = ['<span class="ball"></span>', '💣', '⛓️'], AMMO_TXT = ['實心彈', '爆裂彈', '鏈彈'];
-function ammoLabel() { var b = $('ammoB'); if (!b) return; var s = '<b>1</b><i class="em">' + AMMO_ICON[AMMO_I] + '</i>'; if (b.innerHTML !== s) { b.innerHTML = s; b.title = '彈種：' + AMMO_TXT[AMMO_I] + '（點一下或按 1 換下一種）'; } }   // 上面寫的是鍵（同其他圓鈕），不是第幾種
+function ammoLabel() { var b = $('ammoB'); if (!b) return; var s = '<b>' + keyName('ammo') + '</b><i class="em">' + AMMO_ICON[AMMO_I] + '</i>'; if (b.innerHTML !== s) { b.innerHTML = s; b.title = '切換彈藥：現在 ' + AMMO_TXT[AMMO_I] + '（點一下或按 ' + keyName('ammo') + ' 換下一種）'; } }   // 上面寫的是鍵（同其他圓鈕；66_keys.js），不是第幾種
 /** 這艘船打得出哪幾種彈（AMMO 的序號，照輪流的順序）。Tim 2026-10-16：「目前彈種是固定的 不過可以保留擴充接口」⇒ 現在每艘都是全部；之後照船擴充（例 ships[].ammo）只改這裡。 */
 function ammoOf(sh) { return AMMO.map(function (_, i) { return i; }); }
 /** 換下一種彈（Tim 2026-10-16：「統一用一個鍵循環切換所有彈藥(不一定三種 之後可能根據船擴充)」）：鍵盤 1 與圓鈕共用；照我艦的 ammoOf 輪流，現在這一種不在清單裡 ⇒ 從第一種開始。 */
@@ -12227,6 +12246,177 @@ function endShow(W) {
     '<br><span style="color:var(--dim)">' + strikeText() + '</span>';
   $('end').className = 'on';
 }
+// ── js/66_keys.js ──
+// ───────────────────────── 鍵位（Tim 2026-10-17：「整理一套系統去管理鍵位(然後要分不同模式 目前還有建造模式 第一人稱)」「不是後台 而是遊戲中(後台可以設定預設值)」）─────────────────────────
+// 一個動作一列（KEY_ACTS）：id（全域唯一）、模式 c（battle 海戰／fps 第一人稱／build 建造）、名字、預設鍵、按住才算（hold）。
+//   鍵 ＝ KeyboardEvent.key 轉小寫（空白鍵 ' '、'shift'、'alt'）；畫面上照 keyName 寫（空白、Shift、A）。
+//   三層：出廠（這裡的 def）→ 設定檔 config/game.json keys（開發後台 ?admin=keys 用同一頁存）→ 玩家（69_prefs.js keys ＝ KEY_SET，只存跟預設不一樣的）。
+// 模式疊在一起時上層先問：第一人稱（81_fps.js fpKey）→ 建造（82_build.js bldKey）→ 海戰（71_input.js doKey）⇒ 第一人稱開著時 WASD 走路、不打舵（照舊）。
+//   ⇒ 同一個模式裡一個鍵只能給一個動作（設定頁換鍵撞到 ⇒ 兩個對調）；不同模式可以重複（上層蓋過下層，就是設計）。
+// 固定、不給改：Esc（設定／關頁）、方向鍵（海戰 ＝ 打舵、帆；第一人稱 ＝ 轉頭、看上下）、?（說明）。
+// 畫面上寫鍵的地方一律照這裡（keyPaint）：[data-act]（點了 ＝ 做那個海戰動作）、[data-kl]（只寫鍵）：裡面的 <b> 換成鍵名、title 用 data-tip ＋（鍵）；
+//   kbd[data-ico] ⇒ 整格寫「圖示 鍵」；span.kn ⇒ 只寫鍵名。程式裡組字串的提示用 keyName（鍵帽）／keyWord（句子裡：空白鍵）。
+var KEY_CTX = [{ id: 'battle', name: '海戰' }, { id: 'fps', name: '第一人稱' }, { id: 'build', name: '建造' }];
+var KEY_ACTS = [
+  // ico ＝ 畫面上那顆圓鈕的圖示（設定頁寫「圖示 正式名稱」；Tim 2026-10-17：「圓鈕的操作 設定頁除了emoji外 額外顯示正式名稱(例如 拋錨 切換彈藥)」）；沒有圓鈕的不寫。
+  // 海戰（71_input.js doAct）——數字鍵照畫面左右排（Tim 2026-10-16：「拋錨數字鍵位重新排列(目前簡化後 跳過好幾個鍵)」）：1 彈種、2 自動操舵、3 左錨、4 雙錨、5 右錨
+  { c: 'battle', id: 'ruddL', ico: '⬅️', name: '左舵', def: 'a', hold: 1 }, { c: 'battle', id: 'ruddR', ico: '➡️', name: '右舵', def: 'd', hold: 1 },
+  { c: 'battle', id: 'sailDn', ico: '⛵⬇', name: '收帆', def: 's', hold: 1 }, { c: 'battle', id: 'sailUp', ico: '⛵⬆', name: '加帆', def: 'w', hold: 1 },
+  { c: 'battle', id: 'ammo', ico: '💣', name: '切換彈藥（輪流）', def: '1' }, { c: 'battle', id: 'sailMode', ico: '🤖☸', name: '自動操舵（自動 ⇄ 手動）', def: '2' },
+  { c: 'battle', id: 'ancP', ico: '◀⚓', name: '拋左錨', def: '3' }, { c: 'battle', id: 'ancAll', ico: '⚓⚓', name: '拋錨（雙錨；再按起錨）', def: '4' }, { c: 'battle', id: 'ancS', ico: '⚓▶', name: '拋右錨', def: '5' },
+  { c: 'battle', id: 'volley', ico: '💥💥', name: '齊射', def: ' ' }, { c: 'battle', id: 'fire1', ico: '💥', name: '開一門砲', def: 'f' }, { c: 'battle', id: 'autoFire', ico: '🤖💥', name: '自動開砲', def: 'g' },
+  { c: 'battle', id: 'aim', ico: '🎯', name: '瞄準模式', def: 'q' }, { c: 'battle', id: 'teleFwd', ico: '▲', name: '俥鐘往前撥', def: 'e' }, { c: 'battle', id: 'teleBack', ico: '▼', name: '俥鐘往後撥', def: 't' },
+  { c: 'battle', id: 'cam', ico: '🎥', name: '換鏡頭', def: 'c' }, { c: 'battle', id: 'camTrack', name: '鏡頭跟船／固定', def: 'v' },
+  { c: 'battle', id: 'pause', ico: '⏸', name: '停格', def: 'p' }, { c: 'battle', id: 'settings', ico: '⚙', name: '設定', def: 'o' }, { c: 'battle', id: 'help', name: '說明', def: 'h' },
+  { c: 'battle', id: 'flood', ico: '📊', name: '進水圖表（停格時）', def: 'i' }, { c: 'battle', id: 'xray', ico: '🔍', name: '透視', def: 'x' }, { c: 'battle', id: 'cut', ico: '✂', name: '剖面', def: 'z' }, { c: 'battle', id: 'deck', ico: '☰', name: '隱藏甲板', def: 'l' },
+  { c: 'battle', id: 'phys', name: '帆繩物理', def: 'b' }, { c: 'battle', id: 'mute', name: '靜音', def: 'm' }, { c: 'battle', id: 'restart', name: '重新開始', def: 'n' }, { c: 'battle', id: 'menu', name: '回主選單', def: 'r' },
+  // 第一人稱（81_fps.js fpKey）：走路四個鍵、轉頭 Q 按住才算（畫面上是搖桿，沒有圓鈕）
+  { c: 'fps', id: 'fpFwd', name: '往前走', def: 'w', hold: 1 }, { c: 'fps', id: 'fpBack', name: '往後走', def: 's', hold: 1 }, { c: 'fps', id: 'fpLeft', name: '往左走', def: 'a', hold: 1 }, { c: 'fps', id: 'fpRight', name: '往右走', def: 'd', hold: 1 },
+  { c: 'fps', id: 'fpTurnL', name: '往左轉頭', def: 'q', hold: 1 }, { c: 'fps', id: 'fpRun', ico: '🏃', name: '跑', def: 'shift', hold: 1 },
+  { c: 'fps', id: 'fpJump', ico: '⤴', name: '跳（浮空：往上）', def: ' ', hold: 1 }, { c: 'fps', id: 'fpDown', ico: '⬇', name: '浮空：往下', def: 'c', hold: 1 },
+  { c: 'fps', id: 'fpClimb', ico: '🪜', name: '爬梯子', def: 'e' }, { c: 'fps', id: 'fpFollow', ico: '👁', name: '跟隨身邊的船員（再按回來）', def: 'f' }, { c: 'fps', id: 'fpNext', ico: '⏭', name: '跟隨下一個', def: 'g' },
+  { c: 'fps', id: 'fpUnlock', name: '放開滑鼠（遊戲不停）', def: 'alt' },
+  // 建造（82_build.js bldKey）：快捷欄 1–9
+  { c: 'build', id: 'bSlot1', name: '快捷欄 1', def: '1' }, { c: 'build', id: 'bSlot2', name: '快捷欄 2', def: '2' }, { c: 'build', id: 'bSlot3', name: '快捷欄 3', def: '3' },
+  { c: 'build', id: 'bSlot4', name: '快捷欄 4', def: '4' }, { c: 'build', id: 'bSlot5', name: '快捷欄 5', def: '5' }, { c: 'build', id: 'bSlot6', name: '快捷欄 6', def: '6' },
+  { c: 'build', id: 'bSlot7', name: '快捷欄 7', def: '7' }, { c: 'build', id: 'bSlot8', name: '快捷欄 8', def: '8' }, { c: 'build', id: 'bSlot9', name: '快捷欄 9', def: '9' },
+  { c: 'build', id: 'bRot', ico: '⟳', name: '轉 90°', def: 'r' }, { c: 'build', id: 'bCat', ico: '📦', name: '目錄', def: 'b' }, { c: 'build', id: 'bDel', ico: '✖', name: '拆', def: 'x' }, { c: 'build', id: 'bPut', ico: '✔', name: '放', def: 'v' },
+  { c: 'build', id: 'bMode', ico: '🚶', name: '碰撞模式（一般 → 穿牆 → 浮空）', def: 'm' }
+];
+/** 固定的鍵（不在設定頁、不能改）：照模式 ⇒ 動作。fpLook* 只在這裡（方向鍵轉頭、看上下）。 */
+var KEY_FIX = { battle: { arrowleft: 'ruddL', arrowright: 'ruddR', arrowup: 'sailUp', arrowdown: 'sailDn', '?': 'help' }, fps: { arrowup: 'fpLookU', arrowdown: 'fpLookD', arrowleft: 'fpLookL', arrowright: 'fpLookR' }, build: {} };
+/** 不給綁的鍵（設定頁按到 ⇒ 不收）。 */
+var KEY_RESERVED = /^(escape|arrow(up|down|left|right)|tab|capslock|meta|os|control|contextmenu|f\d+|\?|dead|unidentified|process)$/;
+var KEY_BY = {}; KEY_ACTS.forEach(function (a) { KEY_BY[a.id] = a; });
+var KEY_DEF = {}; KEY_ACTS.forEach(function (a) { KEY_DEF[a.id] = a.def; }); keyMerge(KEY_DEF, CFG.keys);   // 出廠 ＝ 程式的 def 蓋上設定檔 keys（同一個模式撞到 ⇒ 照設定檔、被搶的那個退回程式的 def）
+var KEY_SET = {};                                                        // 玩家改的：{ 動作: 鍵 }（跟 KEY_DEF 不一樣的才有）
+var KEYS_NOW = {}, KEY_IDX = {};                                         // 現在用的 { 動作: 鍵 }、反查 { 模式: { 鍵: 動作 } }
+var ADMIN_KEYS = Q.get('admin') === 'keys';
+/** o（{ 動作: 鍵 }）蓋進 M：只收認得的動作、合法的鍵。 */
+function keyMerge(M, o) {
+  if (!o || typeof o !== 'object') return 0;
+  var n = 0; Object.keys(o).forEach(function (id) { var k = keyNorm(o[id]); if (KEY_BY[id] && k && !KEY_RESERVED.test(k)) { M[id] = k; n++; } });
+  return n;
+}
+function keyNorm(k) { if (typeof k !== 'string' || !k.length || k.length > 12) return ''; return k === ' ' ? ' ' : k.toLowerCase(); }
+/** KEYS_NOW、KEY_IDX 重算（開頁、改鍵、讀存檔之後），順便重寫畫面上的鍵。同一組模式兩個動作搶同一個鍵（存檔被手改過）⇒ 後到的那個退回出廠。 */
+function keyRebuild() {
+  KEYS_NOW = {}; KEY_IDX = {}; KEY_CTX.forEach(function (c) { KEY_IDX[c.id] = Object.assign({}, KEY_FIX[c.id] || {}); });
+  KEY_ACTS.filter(function (a) { return KEY_SET[a.id] === undefined; }).concat(KEY_ACTS.filter(function (a) { return KEY_SET[a.id] !== undefined; })).forEach(function (a) {   // 兩輪：出廠的先放、玩家改過的後放 ⇒ 撞到時退的是改過的那個
+    var k = KEY_SET[a.id] !== undefined ? KEY_SET[a.id] : KEY_DEF[a.id], I = KEY_IDX[a.c];
+    function taken(v) { return (KEY_GROUP[a.c] || [a.c]).some(function (c) { var o = KEY_IDX[c] && KEY_IDX[c][v]; return o && KEY_BY[o] && o !== a.id; }); }   // 同一組模式（KEY_GROUP）
+    if (taken(k)) { delete KEY_SET[a.id]; k = KEY_DEF[a.id]; if (taken(k)) k = ''; }   // 撞到 ⇒ 退回出廠；出廠也撞（設定檔被手改過）⇒ 這個動作沒有鍵
+    KEYS_NOW[a.id] = k; if (k && !(KEY_FIX[a.c] || {})[k]) I[k] = a.id;
+  });
+  keyPaint();
+}
+/** 那個模式裡，鍵 k 對應的動作（沒有 ⇒ ''）。 */
+function keyAct(c, k) { var I = KEY_IDX[c]; return (I && I[k]) || ''; }
+/** 動作的鍵（畫面上鍵帽那種寫法：空白、Shift、A、1）；沒有鍵 ⇒ '—'。 */
+function keyName(id) { return keyLabel(KEYS_NOW[id]); }
+var KEY_ARROW = { arrowup: '↑', arrowdown: '↓', arrowleft: '←', arrowright: '→' };
+function keyLabel(k) { if (!k) return '—'; if (KEY_ARROW[k]) return KEY_ARROW[k]; if (k === ' ') return '空白'; if (k === 'shift') return 'Shift'; if (k === 'alt') return 'Alt'; if (k.length === 1) return k.toUpperCase(); return k.charAt(0).toUpperCase() + k.slice(1); }
+/** 句子裡的寫法（空白 ⇒ 空白鍵）。 */
+function keyWord(id) { var s = keyName(id); return s === '空白' ? '空白鍵' : s; }
+/** 畫面上寫鍵的地方照現在的鍵重寫（見檔頭）。開局、改鍵、建造的快捷欄重畫之後都會叫。 */
+function keyPaint(root) {
+  root = root || document;
+  [].forEach.call(root.querySelectorAll('[data-act],[data-kl]'), function (el) {
+    var id = el.dataset.act || el.dataset.kl, n = keyName(id), A = KEY_BY[id];
+    if (el.tagName === 'KBD' && el.dataset.ico !== undefined) { var h = (el.dataset.ico ? el.dataset.ico + ' ' : '') + n; if (el.innerHTML !== h) el.innerHTML = h; }
+    else if (el.classList.contains('kn')) { if (el.textContent !== n) el.textContent = n; }
+    else { var b = el.querySelector('b'); if (b && b.textContent !== n) b.textContent = n; }
+    if (el.dataset.tip) el.title = el.dataset.tip + '（' + n + (A && A.hold && el.dataset.hold ? '，按住' : '') + '）';
+  });
+}
+// ── 鍵位設定頁（主選單「鍵位設定…」；71_input.js 接返回、換頁）：分頁 ＝ 模式；點「改」再按新的鍵（Esc 取消）。寫法照道具設定頁（67_furncfg.js）——
+//   玩家：存檔只存跟出廠不一樣的（69_prefs.js keys）、可以匯出匯入；開發後台 ?admin=keys ⇒ 同一頁多一列「存成出廠預設」⇒ postMessage ⇒ admin.py act_keys 寫 config/game.json keys。
+/** 同時開著的模式算一組（建造模式本身就是第一人稱 ⇒ 兩頁一起查撞鍵；海戰被第一人稱蓋掉是設計：WASD 走路不打舵）。 */
+var KEY_GROUP = { battle: ['battle'], fps: ['fps', 'build'], build: ['fps', 'build'] };
+var KEY_TAB = 'battle', KEY_WAIT = null;                                 // KEY_WAIT ＝ 正在等新鍵的那個動作
+/** 動作 id 改成鍵 k：同一組模式（KEY_GROUP）裡別的動作原本用 k ⇒ 換成 id 原本的鍵（對調）。回：被對調的那個動作（沒有 ⇒ null）。 */
+function keySet(id, k) {
+  var A = KEY_BY[id]; k = keyNorm(k); if (!A || !k || KEY_RESERVED.test(k) || KEY_FIX[A.c][k]) return null;
+  var old = KEYS_NOW[id], other = '', sw = null;
+  KEY_GROUP[A.c].forEach(function (c) { var o = keyAct(c, k); if (o && !other && KEY_BY[o]) other = o; });   // KEY_BY：固定鍵（fpLook*）不算
+  function put(a, v) { if (v === KEY_DEF[a]) delete KEY_SET[a]; else KEY_SET[a] = v; }
+  put(id, k);
+  if (other && other !== id) { put(other, old); sw = other; }
+  keyRebuild();
+  return sw;
+}
+function keyReset(c) { KEY_ACTS.forEach(function (a) { if (!c || a.c === c) delete KEY_SET[a.id]; }); keyRebuild(); }
+function keySnap() { return JSON.parse(JSON.stringify(KEY_SET)); }
+/** 存檔／匯入 ⇒ 變數：認得的動作、合法的鍵才收；回收了幾個。 */
+function keyApply(o) { var n = keyMerge(KEY_SET, o); Object.keys(KEY_SET).forEach(function (id) { if (KEY_SET[id] === KEY_DEF[id]) delete KEY_SET[id]; }); keyRebuild(); return n; }
+function keyExport() { var all = {}; KEY_ACTS.forEach(function (a) { all[a.id] = KEYS_NOW[a.id]; }); return { game: 'ame_constitution_broadside', kind: 'keys', v: 1, at: new Date().toISOString(), keys: all }; }
+function keyImport(o) { return o && o.game === 'ame_constitution_broadside' && o.kind === 'keys' ? keyApply(o.keys) : -1; }
+function keysUI(page) {
+  $('keysTabs').innerHTML = KEY_CTX.map(function (c) { return '<button data-kc="' + c.id + '">' + c.name + '</button>'; }).join('');
+  [].forEach.call($('keysTabs').querySelectorAll('button'), function (b) { b.onclick = function () { KEY_TAB = b.dataset.kc; KEY_WAIT = null; keysShow(); }; });
+  var rArm = 0;
+  $('keysR').onclick = function () {                                     // 按兩下（同道具設定）
+    var b = $('keysR'), nm = KEY_CTX.filter(function (c) { return c.id === KEY_TAB; })[0].name;
+    if (performance.now() - rArm > 4000) { rArm = performance.now(); b.textContent = '再按一次：' + nm + '回到預設'; setTimeout(function () { if (performance.now() - rArm >= 3900) b.textContent = '這一頁回到預設'; }, 4000); return; }
+    rArm = 0; b.textContent = '這一頁回到預設'; keyReset(KEY_TAB); keysShow();
+  };
+  $('keysE').onclick = function () {
+    var s = JSON.stringify(keyExport(), null, 1), a = document.createElement('a'), d = new Date();
+    a.href = URL.createObjectURL(new Blob([s], { type: 'application/json' }));
+    a.download = 'blockside_keys_' + d.getFullYear() + ('0' + (d.getMonth() + 1)).slice(-2) + ('0' + d.getDate()).slice(-2) + '.json';
+    document.body.appendChild(a); a.click(); setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+    $('keysSt').textContent = '已匯出 ' + a.download + '（三個模式整份）。';
+  };
+  $('keysI').onclick = function () { $('keysF').value = ''; $('keysF').click(); };
+  $('keysF').onchange = function () {
+    var f = $('keysF').files[0]; if (!f) return;
+    var r = new FileReader();
+    r.onload = function () { var n = -1; try { n = keyImport(JSON.parse(r.result)); } catch (e) { n = -1; } keysShow(); $('keysSt').textContent = n < 0 ? '⚠ 匯入失敗：' + f.name + ' 不是這個遊戲匯出的鍵位。' : '已匯入 ' + f.name + '：' + n + ' 個鍵' + (PREFS.write ? '（已存）。' : '（這一頁存不了，下次打開要再匯入）。'); };
+    r.readAsText(f);
+  };
+  window.addEventListener('keydown', function (e) {                      // 等新鍵：開著這一頁、按了「改」才收（捕獲階段：⛔ 讓遊戲的鍵盤處理先吃到）
+    if (!KEY_WAIT || $('keysp').style.display === 'none') return;
+    e.preventDefault(); e.stopImmediatePropagation();                   // ⛔ stopPropagation 擋不住同掛在 window 上的（71_input.js 的 Esc 關頁、遊戲的鍵）
+    var k = e.code === 'Space' ? ' ' : keyNorm(e.key), id = KEY_WAIT;
+    if (k === 'escape') { KEY_WAIT = null; keysShow(); return; }
+    if (KEY_RESERVED.test(k) || KEY_FIX[KEY_BY[id].c][k]) { $('keysSt').textContent = '⚠ ' + keyLabel(k) + ' 不能綁（Esc、方向鍵、Tab、F1–F12 留給遊戲與瀏覽器）—— 換一個鍵，或按 Esc 取消'; return; }
+    KEY_WAIT = null; var sw = keySet(id, k);
+    $('keysSt').textContent = KEY_BY[id].name + ' ⇒ ' + keyLabel(k) + (sw ? '；跟「' + KEY_BY[sw].name + '」對調（它改成 ' + keyName(sw) + '）' : '') + (PREFS.write ? '（已存）' : '');
+    prefsSave(); keysShow();
+  }, true);
+  if (ADMIN_KEYS) keysAdmUI(page);
+}
+/** 變數 ⇒ 這一頁。 */
+function keysShow() {
+  [].forEach.call($('keysTabs').querySelectorAll('button'), function (b) { b.className = b.dataset.kc === KEY_TAB ? 'on' : ''; });
+  var note = { battle: '開戰時用。方向鍵固定：← → 打舵、↑ ↓ 加帆收帆；Esc 設定；? 說明。', fps: '第一人稱開著時先問這一頁：同一個鍵在這裡有動作 ⇒ 不做海戰那一個（例 WASD 走路、不打舵）。跟「建造」那一頁一起查撞鍵（建造模式也是第一人稱）。方向鍵固定：轉頭、看上下；滑鼠拖曳也能轉頭。', build: '建造模式（也是第一人稱）時再問這一頁；跟「第一人稱」那一頁一起查撞鍵；海戰的鍵只剩停格、設定、鏡頭。' }[KEY_TAB];
+  $('keysInfo').textContent = note;
+  $('keysItems').innerHTML = KEY_ACTS.filter(function (a) { return a.c === KEY_TAB; }).map(function (a) {
+    var k = KEYS_NOW[a.id], d = KEY_DEF[a.id], w = KEY_WAIT === a.id;
+    return '<div class="keyrow"><label>' + (a.ico ? '<span class="kico">' + a.ico + '</span>' : '') + a.name + (a.hold ? '<small>（按住）</small>' : '') + '</label><span class="kcap' + (w ? ' wait' : '') + '">' + (w ? '按新的鍵…（Esc 取消）' : keyLabel(k)) + '</span>' +
+      '<button data-kid="' + a.id + '">' + (w ? '取消' : '改') + '</button><span class="note">' + (k === d ? '' : '改過；預設 ' + keyLabel(d)) + '</span></div>';
+  }).join('');
+  [].forEach.call($('keysItems').querySelectorAll('button[data-kid]'), function (b) { b.onclick = function () { KEY_WAIT = KEY_WAIT === b.dataset.kid ? null : b.dataset.kid; keysShow(); }; });
+  var n = Object.keys(KEY_SET).length, kb = $('keysB'); if (kb) { kb.textContent = n ? '鍵位設定（改過）…' : '鍵位設定…'; kb.className = n ? 'on' : ''; }
+}
+/** 開發後台（?admin=keys）：同一頁多一列 —— 「存成出廠預設」⇒ KEY_SET 送給開這一頁的設定後台（postMessage；⛔ 成品裡不能有 fetch）⇒ admin.py act_keys；「重建」；「回設定後台」。 */
+function keysAdmUI(page) {
+  $('keysp').classList.add('admin');
+  var out = $('keysAdmL'), wait = null;
+  window.addEventListener('message', function (ev) { if (ev.origin !== location.origin || !ev.data || ev.data.kind !== 'cb-admdef-r' || !wait) return; var w = wait; wait = null; out.textContent = (ev.data.log || []).join('\n'); w(ev.data); });
+  function post(op, data) {
+    var ad = window.opener; if (!ad || ad.closed) { out.textContent = '⚠ 找不到設定後台：要從設定後台的「用鍵位設定頁設出廠預設值…」開這一頁'; return Promise.resolve({ ok: false }); }
+    out.textContent = '…（設定後台處理中；重建要十幾秒）'; ad.postMessage({ kind: 'cb-admdef', op: op, keys: data }, location.origin);
+    return new Promise(function (res) { wait = res; });
+  }
+  $('keysAdmS').onclick = function () {
+    var o = keySnap(); if (!Object.keys(o).length) { out.textContent = '（都跟出廠預設一樣，沒有要存的）'; return; }
+    post('keys', o).then(function (j) { if (!j.ok) return; Object.keys(o).forEach(function (id) { KEY_DEF[id] = o[id]; delete KEY_SET[id]; }); keyRebuild(); keysShow(); });
+  };
+  $('keysAdmB').onclick = function () { post('build'); };
+  $('keysAdmX').onclick = $('keysX').onclick = $('pgX').onclick = function () { if (window.opener && !window.opener.closed) window.close(); else location.href = '/'; };
+}
+keyRebuild();                                                            // 載入時先算一次（69_prefs.js 讀存檔之後 keyApply 會再算）
 // ── js/67_furncfg.js ──
 // ───────────────────────── 道具設定（主選單「道具設定…」；Tim 2026-10-16：「是否可以把這些道具的參數(抽水速度等) 加一個道具後台可以調整(一樣是開發後台調預設 玩家後台套同一個UI)」） ─────────────────────────
 // 一種道具一份（config furniture：病床、手術台、藥箱、抽水機…）：所有船上同一種都照這一份。寫法照砲的設定（68_guncfg.js）：
@@ -12549,7 +12739,8 @@ function prefsSnap() {
   var dm = {}; Object.keys(DMG_Q).forEach(function (t) { if (DMG[t] !== LIM[DMG_Q[t]][2]) dm[t] = DMG[t]; });
   if (Object.keys(dm).length) o.dmg = dm;
   var fs = furnSnap(); if (Object.keys(fs).length) o.furn = fs;          // 道具設定（67_furncfg.js）：跟設定檔 furniture 不一樣的
-  var dv = drvSnap(); if (Object.keys(dv).length) o.drv = dv;          // 動力件（67_furncfg.js，31_drive.js DRVP）：跟設定檔 drvparts 不一樣的
+  var dv = drvSnap(); if (Object.keys(dv).length) o.drv = dv;
+  var ks = keySnap(); if (Object.keys(ks).length) o.keys = ks;            // 鍵位（66_keys.js）：跟出廠不一樣的          // 動力件（67_furncfg.js，31_drive.js DRVP）：跟設定檔 drvparts 不一樣的
   var gs = gunsSnap(); if (Object.keys(gs).length) o.guns = gs;          // 砲的設定（68_guncfg.js）：跟砲種表預設不一樣的
   if (AMMO_K.some(function (r, i) { return r.some(function (v, j) { return v !== AMMO_K0[i][j]; }); })) o.ammoK = AMMO_K.map(function (r) { return r.slice(); });
   if (STRIKE.cas !== LIM.cas[2] || STRIKE.guns || STRIKE.masts || STRIKE.officers) o.strike = { cas: STRIKE.cas, guns: STRIKE.guns, masts: STRIKE.masts, officers: STRIKE.officers };
@@ -12603,7 +12794,8 @@ function prefsApply(p) {
   if (p.dmg && typeof p.dmg === 'object') Object.keys(DMG_Q).forEach(function (t) { set(DMG_Q[t], p.dmg[t], LIM[DMG_Q[t]], true, function (x) { DMG[t] = x; }); });
   if (p.guns && typeof p.guns === 'object') gunsApply(p.guns);
   if (p.furn && typeof p.furn === 'object') furnApply(p.furn);           // 道具設定（67_furncfg.js）
-  if (p.drv && typeof p.drv === 'object') drvApply(p.drv);              // 動力件（67_furncfg.js）
+  if (p.drv && typeof p.drv === 'object') drvApply(p.drv);
+  if (p.keys && typeof p.keys === 'object') keyApply(p.keys);           // 鍵位（66_keys.js）              // 動力件（67_furncfg.js）
   if (!Q.has('ammo') && Array.isArray(p.ammoK)) p.ammoK.forEach(function (r, i) {
     if (i < 3 && Array.isArray(r)) r.forEach(function (v, j) { var x = num(v, AMMO_LIM, true); if (j < 3 && x !== undefined) AMMO_K[i][j] = x; });
   });
@@ -12770,7 +12962,7 @@ function start() {
   if (document.activeElement && document.activeElement.blur) document.activeElement.blur();   // 不然空白鍵會再按一次「開戰」
   reset(); RUNNING = true;
   var seenT = {}; SHIPS.forEach(function (sh) { if (!seenT[sh.T.id]) { seenT[sh.T.id] = 1; crewShortNote(sh); } });   // 船員站不下：每一型報一次
-  if (MODE !== 'build') note(SHIPS[PLAYER_I], AUTOFIRE ? '自動開砲中（G 關掉就自己打）' : '點敵艦設瞄準點，空白鍵齊射（G 自動開砲）');
+  if (MODE !== 'build') note(SHIPS[PLAYER_I], AUTOFIRE ? '自動開砲中（' + keyName('autoFire') + ' 關掉就自己打）' : '點敵艦設瞄準點，' + keyWord('volley') + '齊射（' + keyName('autoFire') + ' 自動開砲）');
   bldEnter();                                                        // 建造（82_build.js）：進第一人稱、顯示建造介面；別的玩法 ⇒ 收起來
   fpKeep();                                                          // 第一人稱（81_fps.js）：玩家開著 ⇒ 重新開始、下一場都維持
   if (WX.aim) note(SHIPS[PLAYER_I], '暴風雨：浪大、風強 —— 船晃得越兇砲越散，舵也難使');
@@ -12840,7 +13032,7 @@ function pick(cx, cy) {
   if (hit) {
     setAim(me, [hit.x + 0.5, hit.y + 0.5, hit.z + 0.5], on); me.pMode = AIM_P = 'free'; sfx('crack', null, 0.08);
     if (!isFoe(me, on)) note(me, '瞄準友艦 ' + on.name + teamTag(on) + ' —— 打下去一樣會傷到它');
-    if (AUTOFIRE && !me.hand) { me.hand = true; note(me, '手動瞄準：這一舷你來打（空白鍵齊射），另一舷照樣自動 —— 點海面回到全自動'); }
+    if (AUTOFIRE && !me.hand) { me.hand = true; note(me, '手動瞄準：這一舷你來打（' + keyWord('volley') + '齊射），另一舷照樣自動 —— 點海面回到全自動'); }
   } else if (me.aim) {
     setAim(me, null);
     if (AUTOFIRE && me.hand) { me.hand = false; note(me, '取消瞄準 —— 回到全自動開砲'); } else note(me, '取消瞄準');
@@ -12851,55 +13043,58 @@ window.addEventListener('keydown', function (e) {
   var k = e.key.toLowerCase(); if (e.code === 'Space') k = ' ';
   if (k === 'escape') { e.preventDefault(); if (FP.on && fpEscEaten()) return; if (HELP.open) helpClose(); else if (FLX) floodClose(); else if (FLX3) xrayToggle(); else gsetToggle(); return; }   // 遊戲內的設定面板
   if (FP.on && fpKey(k, true)) { e.preventDefault(); return; }       // 第一人稱：走、轉頭、爬梯子的鍵（81_fps.js）；P 停格、O 設定照舊
-  if (bldKey(k, true)) { e.preventDefault(); return; }               // 建造（82_build.js）：1–9、R、B、X、V
-  if (MODE === 'build' && k !== 'p' && k !== 'o' && k !== 'c') return;   // 建造：開砲、轉舵那些鍵不作用
-  if (k === ' ' || k === 'a' || k === 'd' || k === 'w' || k === 's' || k.indexOf('arrow') === 0) e.preventDefault();
+  if (bldKey(k, true)) { e.preventDefault(); return; }               // 建造（82_build.js）：快捷欄、轉、拆、放、目錄、碰撞（鍵照 66_keys.js）
+  var ba = keyAct('battle', k);                                       // 海戰的動作（66_keys.js 鍵位）
+  if (MODE === 'build' && ba !== 'pause' && ba !== 'settings' && ba !== 'cam') return;   // 建造：開砲、轉舵那些鍵不作用
+  if (ba) e.preventDefault();
   kbLit(k, true);
   doKey(k, e.repeat);
 });
 /** 鍵盤按著的時候，畫面上對應的按鈕也亮成按下的顏色（Tim 2026-10-14；跟手指按住同一個 .down）；方向鍵照 A／D／W／S 的按鈕。 */
-var KB_ALIAS = { arrowleft: 'a', arrowright: 'd', arrowup: 'w', arrowdown: 's' };
-function kbLit(k, on) { k = KB_ALIAS[k] || k; [].forEach.call(document.querySelectorAll('.kb[data-k]'), function (b) { if (b.dataset.k === k) b.classList.toggle('down', on); }); }
-/** 一個鍵的動作（鍵盤與畫面上的按鈕共用 ⇒ 手機也能玩）。打舵（A／D）是「按住」：這裡只按下，放開走 keyUp。 */
-function doKey(k, repeat) {
+function kbLit(k, on) { var a = keyAct('battle', k); if (!a) return; [].forEach.call(document.querySelectorAll('.kb[data-act]'), function (b) { if (b.dataset.act === a) b.classList.toggle('down', on); }); }   // 方向鍵照它對應的動作（66_keys.js KEY_FIX）
+/** 一個鍵（鍵盤）⇒ 海戰的動作（66_keys.js keyAct：照現在的鍵位；方向鍵固定 ＝ 打舵、帆）。 */
+function doKey(k, repeat) { var a = keyAct('battle', k); if (a) doAct(a, repeat); }
+/** 一個動作（鍵盤與畫面上的圓鈕共用 ⇒ 手機也能玩；動作表在 66_keys.js KEY_ACTS）。打舵、帆是「按住」：這裡只按下，放開走 actUp。 */
+function doAct(a, repeat) {
   if (!RUNNING) return;
   var me = SHIPS[PLAYER_I];
-  if (k === ' ') { if (!PAUSED && !me.sunk) broadside(me, AMMO_I); }   // 降旗了 ⇒ broadside／fireOne 自己擋
-  else if (k === 'f') { if (!PAUSED) fireOne(me, AMMO_I); }
-  else if (k === '1') ammoNext();                                     // 彈種：一個鍵輪流（61_hud.js ammoNext；以前 1／2／3 各一種）
-  else if (k === 'q') { me.pMode = AIM_P = AIM_CYCLE[(AIM_CYCLE.indexOf(me.pMode || 'free') + 1) % AIM_CYCLE.length]; note(me, '瞄準：' + AIM_NAME[me.pMode] + (me.pMode === 'free' ? '（點敵艦設瞄準點）' : '')); }   // 瞄準模式（51_captain.js）
-  else if (k === 'c') { CAM.mode = CAM_ORDER[(CAM_ORDER.indexOf(CAM.mode) + 1) % CAM_ORDER.length]; CAM.follow = null; CAM.pan = [0, 0]; CAM.see = null; if (CAM.mode === 2 || CAM.mode === 3) { CAM.dist = 75; } else if (CAM.mode === 0) CAM.dist = DIST + 40; else if (CAM.mode === 4) { CAM.dist = 78; CAM.aoff = 0.35; } }
-  else if (k === 'p') { PAUSED = !PAUSED; frzShow(); pauseLabel(); }                               // 停格（72_floodui.js：停格時上方一條、進水細節頁）
-  else if (k === 'i') { if (PAUSED) floodToggle(); }                 // 停格時：進水圖表／透視（72_floodui.js）
-  else if (k === 'x') xrayToggle();                                   // 觀察模式：透視（72_floodui.js）、剖面、隱藏甲板（74_cutaway.js）—— 不停格也能切換（Tim 2026-10-16）
-  else if (k === 'z') cutToggle();
-  else if (k === 'l') deckCycle();
-  else if (k === 'm') { muted = !muted; gsetShow(); }
-  else if (k === 'h' || k === '?') helpToggle();
-  else if (k === 'r') { gsetClose(); helpClose(); RUNNING = false; END_AT = 0; END_WAIT = null; $('cover').style.display = ''; $('end').className = ''; }
-  else if (k === '4') sailToggle();   // 4 一顆切換 自動 ⇄ 手動（Tim 2026-10-15：「改成單鍵，4 就好，不用 4/5」；手動也可以直接打舵 A／D）；錨在水裡 ⇒ 先起錨（7／8 拋的也一起）
-  else if ((k === '6' || k === '7' || k === '8') && me && !me.sunk && anchorsOf(me).noAnchor) setSailMode(SAIL === 'off' ? 'manual' : 'off');   // 整艘沒有錨（TASK-0635）：6／7／8 都是停船 ⇄ 手動
-  else if (k === '6' && me && !me.sunk) {                              // 拋錨／起錨同一顆（Tim 2026-10-15；76_anchor.js anchor6）：兩邊都沒拋 ⇒ 雙錨（拋錨模式、只有我艦）；一邊在水裡 ⇒ 拋另一邊；兩邊都在水裡 ⇒ 起錨
+  if (a === 'volley') { if (!PAUSED && !me.sunk) broadside(me, AMMO_I); }   // 降旗了 ⇒ broadside／fireOne 自己擋
+  else if (a === 'fire1') { if (!PAUSED) fireOne(me, AMMO_I); }
+  else if (a === 'ammo') ammoNext();                                     // 彈種：一個鍵輪流（61_hud.js ammoNext）
+  else if (a === 'aim') { me.pMode = AIM_P = AIM_CYCLE[(AIM_CYCLE.indexOf(me.pMode || 'free') + 1) % AIM_CYCLE.length]; note(me, '瞄準：' + AIM_NAME[me.pMode] + (me.pMode === 'free' ? '（點敵艦設瞄準點）' : '')); }   // 瞄準模式（51_captain.js）
+  else if (a === 'cam') { CAM.mode = CAM_ORDER[(CAM_ORDER.indexOf(CAM.mode) + 1) % CAM_ORDER.length]; CAM.follow = null; CAM.pan = [0, 0]; CAM.see = null; if (CAM.mode === 2 || CAM.mode === 3) { CAM.dist = 75; } else if (CAM.mode === 0) CAM.dist = DIST + 40; else if (CAM.mode === 4) { CAM.dist = 78; CAM.aoff = 0.35; } }
+  else if (a === 'pause') { PAUSED = !PAUSED; frzShow(); pauseLabel(); }                               // 停格（72_floodui.js：停格時上方一條、進水細節頁）
+  else if (a === 'flood') { if (PAUSED) floodToggle(); }                 // 停格時：進水圖表／透視（72_floodui.js）
+  else if (a === 'xray') xrayToggle();                                   // 觀察模式：透視（72_floodui.js）、剖面、隱藏甲板（74_cutaway.js）—— 不停格也能切換（Tim 2026-10-16）
+  else if (a === 'cut') cutToggle();
+  else if (a === 'deck') deckCycle();
+  else if (a === 'mute') { muted = !muted; gsetShow(); }
+  else if (a === 'help') helpToggle();
+  else if (a === 'menu') { gsetClose(); helpClose(); RUNNING = false; END_AT = 0; END_WAIT = null; $('cover').style.display = ''; $('end').className = ''; }
+  else if (a === 'sailMode') sailToggle();   // 一顆切換 自動 ⇄ 手動（Tim 2026-10-15：「改成單鍵」；手動也可以直接打舵）；錨在水裡 ⇒ 先起錨（左右錨拋的也一起）
+  else if ((a === 'ancAll' || a === 'ancP' || a === 'ancS') && me && !me.sunk && anchorsOf(me).noAnchor) setSailMode(SAIL === 'off' ? 'manual' : 'off');   // 整艘沒有錨（TASK-0635）：三個錨鍵都是停船 ⇄ 手動
+  else if (a === 'ancAll' && me && !me.sunk) {                              // 拋錨／起錨同一顆（Tim 2026-10-15；76_anchor.js anchor6）：兩邊都沒拋 ⇒ 雙錨（拋錨模式、只有我艦）；一邊在水裡 ⇒ 拋另一邊；兩邊都在水裡 ⇒ 起錨
     var a6 = anchor6(me);
     if (a6.act === 'both') setSailMode('off');
     else if (a6.act === 'other') { var am = anchorToggle(me, a6.k, true); if (am) note(me, am + '（兩邊都拋了，再按一次起錨）'); }
     else { if (SAIL === 'off') setSailMode('manual'); var nw = anchorWeighAll(me); note(me, nw ? '起錨（' + nw + '）—— 8 秒收好' : '錨都收著'); }   // 拋錨模式 ⇒ 換手動、我艦的雙錨跟著收
   }
-  else if ((k === '7' || k === '8') && RUNNING && me && !me.sunk && !anchorsOf(me).single) { var am = anchorToggle(me, k === '7' ? 'P' : 'S'); if (am) note(me, am + (/^拋/.test(am) ? '（帶著速度只拋一側 ⇒ 繞錨急轉；再按一次起錨）' : '')); }   // 左右錨（76_anchor.js）   // 航行（TASK-0567，Tim 2026-10-14：不用 Tab 循環，三個鍵直接切）
-  else if (k === 'o') gsetToggle();                                    // 設定（Esc 也可以）
-  else if (k === 'a' || k === 'd' || k === 'arrowleft' || k === 'arrowright') {   // 打舵：自動中一碰就換手動
-    if (SAIL === 'auto') setSailMode('manual'); KEYS[k === 'a' || k === 'arrowleft' ? 'l' : 'r'] = true;   // 拋錨（6）中 ⇒ 不換模式、繞錨原地轉
+  else if ((a === 'ancP' || a === 'ancS') && RUNNING && me && !me.sunk && !anchorsOf(me).single) { var am = anchorToggle(me, a === 'ancP' ? 'P' : 'S'); if (am) note(me, am + (/^拋/.test(am) ? '（帶著速度只拋一側 ⇒ 繞錨急轉；再按一次起錨）' : '')); }   // 左右錨（76_anchor.js）   // 航行（TASK-0567，Tim 2026-10-14：不用 Tab 循環，三個鍵直接切）
+  else if (a === 'settings') gsetToggle();                                    // 設定（Esc 也可以）
+  else if (a === 'ruddL' || a === 'ruddR') {   // 打舵：自動中一碰就換手動
+    if (SAIL === 'auto') setSailMode('manual'); KEYS[a === 'ruddL' ? 'l' : 'r'] = true;   // 拋錨中 ⇒ 不換模式、繞錨原地轉
   }
-  else if ((k === 'e' || k === 't') && RUNNING && me && !me.sunk) teleStep(me, k === 'e' ? -1 : 1);   // 俥鐘（31_drive.js；Tim：「也要支援快捷鍵操作」）：E 往前撥、T 往後撥；沒有額外動力的船不動
-  else if (k === 'v') setCamTrack(!CAM.track);
-  else if (k === 'g') setAutoFire(!AUTOFIRE);
-  else if (k === 'b') setPhys(!PHYS);
-  else if (k === 'n') { gsetClose(); helpClose(); start(); }                                        // 重新開始：同樣的模式、距離、滑桿，不用打完
-  else if (k === 'w' || k === 's' || k === 'arrowup' || k === 'arrowdown') {     // 帆裝
-    if (!repeat) { var sd = k === 'w' || k === 'arrowup' ? 1 : -1; sailStep(me, sd); KEYS.sw = { d: sd, n: SIMT + SAIL_HOLD }; }   // 按住 ⇒ 1 秒後逐級再切（31_sailing.js sailHold）   // 有額外動力的船：滿帆再加 ⇒ 全速前進、全收再收 ⇒ 倒車（31_sailing.js）
+  else if ((a === 'teleFwd' || a === 'teleBack') && RUNNING && me && !me.sunk) teleStep(me, a === 'teleFwd' ? -1 : 1);   // 俥鐘（31_drive.js；Tim：「也要支援快捷鍵操作」）：往前撥、往後撥；沒有額外動力的船不動
+  else if (a === 'camTrack') setCamTrack(!CAM.track);
+  else if (a === 'autoFire') setAutoFire(!AUTOFIRE);
+  else if (a === 'phys') setPhys(!PHYS);
+  else if (a === 'restart') { gsetClose(); helpClose(); start(); }                                        // 重新開始：同樣的模式、距離、滑桿，不用打完
+  else if (a === 'sailUp' || a === 'sailDn') {     // 帆裝
+    if (!repeat) { var sd = a === 'sailUp' ? 1 : -1; sailStep(me, sd); KEYS.sw = { d: sd, n: SIMT + SAIL_HOLD }; }   // 按住 ⇒ 1 秒後逐級再切（31_sailing.js sailHold）   // 有額外動力的船：滿帆再加 ⇒ 全速前進、全收再收 ⇒ 倒車（31_sailing.js）
   }
 }
-function keyUp(k) { if (k === 'a' || k === 'arrowleft') KEYS.l = false; if (k === 'd' || k === 'arrowright') KEYS.r = false; if (KEYS.sw && (k === 'w' || k === 'arrowup' ? 1 : k === 's' || k === 'arrowdown' ? -1 : 0) === KEYS.sw.d) KEYS.sw = null; }
+function keyUp(k) { var a = keyAct('battle', k); if (a) actUp(a); }
+function actUp(a) { if (a === 'ruddL') KEYS.l = false; if (a === 'ruddR') KEYS.r = false; if (KEYS.sw && (a === 'sailUp' ? 1 : a === 'sailDn' ? -1 : 0) === KEYS.sw.d) KEYS.sw = null; }
 window.addEventListener('keyup', function (e) { var k = e.key.toLowerCase(); if (e.code === 'Space') k = ' '; if (fpKey(k, false)) { e.preventDefault(); return; } if (bldKey(k, false)) return; kbLit(k, false); keyUp(k); });   // fpKey：第一人稱的鍵放開（沒開 ⇒ 只清掉自己按著的、照舊往下走）
 window.addEventListener('blur', function () { KEYS.l = KEYS.r = false; KEYS.sw = null; [].forEach.call(document.querySelectorAll('.kb.down'), function (b) { b.classList.remove('down'); }); });   // 切走視窗 ⇒ 收不到 keyup，按下的顏色一起清掉
 // iPhone 連點兩下放大（Tim 2026-10-15：「連點角落兩下還是會放大，按控帆按鈕太快就觸發」—— 根上的 touch-action:manipulation iOS 不一定照做）：
@@ -12912,35 +13107,35 @@ document.addEventListener('touchend', function (e) {
   e.preventDefault();
   if (!t.closest('[data-hold]')) { var c = e.changedTouches[0]; t.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window, clientX: c ? c.clientX : 0, clientY: c ? c.clientY : 0 })); }
 }, { passive: false });
-// 畫面上的按鍵提示（下方控制列 .kb、說明裡的 kbd[data-k]）：點 ＝ 按那個鍵；data-hold 的（打舵）按住才算
-[].forEach.call(document.querySelectorAll('[data-k]'), function (b) {
-  var k = b.dataset.k;
+// 畫面上的圓鈕（下方控制列 .kb、說明裡的 kbd[data-act]）：點 ＝ 做那個海戰動作（鍵照 66_keys.js keyPaint 寫上去）；data-hold 的（打舵、帆）按住才算
+[].forEach.call(document.querySelectorAll('[data-act]'), function (b) {
+  var k = b.dataset.act;
   if (b.dataset.hold) {
-    b.addEventListener('pointerdown', function (e) { e.preventDefault(); b.classList.add('down'); doKey(k, false); try { b.setPointerCapture(e.pointerId); } catch (x) { } });   // 手指滑出按鈕也算按著，放開才鬆舵
-    ['pointerup', 'pointercancel', 'lostpointercapture'].forEach(function (ev) { b.addEventListener(ev, function () { b.classList.remove('down'); keyUp(k); }); });
-  } else b.addEventListener('click', function (e) { e.preventDefault(); doKey(k, false); });
+    b.addEventListener('pointerdown', function (e) { e.preventDefault(); b.classList.add('down'); doAct(k, false); try { b.setPointerCapture(e.pointerId); } catch (x) { } });   // 手指滑出按鈕也算按著，放開才鬆舵
+    ['pointerup', 'pointercancel', 'lostpointercapture'].forEach(function (ev) { b.addEventListener(ev, function () { b.classList.remove('down'); actUp(k); }); });
+  } else b.addEventListener('click', function (e) { e.preventDefault(); doAct(k, false); });
 });
 /** 航行模式（選單與遊戲中同一個）：auto 兩艘自動、manual 我艦手動、off 我艦拋雙錨（只管我艦；31_sailing.js sail）（76_anchor.js；Tim 2026-10-15：停船改叫拋錨）。 */
-var SAIL_NAMES = { auto: '自動航行', manual: '手動操舵（A／D 打舵）', off: '拋錨（雙錨；A／D 繞錨轉）' };
+var SAIL_NAMES = { auto: '自動航行', manual: '手動操舵（{AD} 打舵）', off: '拋錨（雙錨；{AD} 繞錨轉）' };   // {AD}：左右舵的鍵（66_keys.js）
 function setSailMode(m) {
   SAIL = m; KEYS.l = KEYS.r = false;
   [].forEach.call(document.querySelectorAll('[data-s]'), function (x) { x.classList.toggle('on', x.dataset.s === SAIL); }); sailLabel();
   var noA = RUNNING && SHIPS.length && anchorsOf(SHIPS[PLAYER_I]).noAnchor;
-  if (RUNNING && SHIPS.length) note(SHIPS[PLAYER_I], (m === 'off' && noA ? '停船（這艘沒有錨：帆與引擎不出力、船慢慢停下）' : m === 'off' && anchorsOf(SHIPS[PLAYER_I]).single ? '拋錨（單錨；A／D 繞錨轉）' : SAIL_NAMES[m]) + (noA ? '（4 自動／手動切換、6 停船、再按一次開船）' : '（4 自動／手動切換、6 拋錨、再按一次起錨）'));   // 單錨的船（TASK-0635）
+  if (RUNNING && SHIPS.length) note(SHIPS[PLAYER_I], ((m === 'off' && noA ? '停船（這艘沒有錨：帆與引擎不出力、船慢慢停下）' : m === 'off' && anchorsOf(SHIPS[PLAYER_I]).single ? '拋錨（單錨；{AD} 繞錨轉）' : SAIL_NAMES[m]) + (noA ? '（' + keyName('sailMode') + ' 自動／手動切換、' + keyName('ancAll') + ' 停船、再按一次開船）' : '（' + keyName('sailMode') + ' 自動／手動切換、' + keyName('ancAll') + ' 拋錨、再按一次起錨）')).replace(/\{AD\}/g, keyName('ruddL') + '／' + keyName('ruddR')));   // 單錨的船（TASK-0635）
 }
 /** 自由鏡頭跟不跟著兩艘的中點走（預設跟；鏡頭「看敵艦／看我艦」本來就跟著那一艘）。 */
 function setCamTrack(on) {
   CAM.track = on; CAM.trMe = CAM.trYaw = null;
   $('camT').classList.toggle('on', on);
-  if (RUNNING && SHIPS.length) note(SHIPS[PLAYER_I], on ? '鏡頭跟著船' : '鏡頭固定（V 切換）');
+  if (RUNNING && SHIPS.length) note(SHIPS[PLAYER_I], on ? '鏡頭跟著船' : '鏡頭固定（' + keyName('camTrack') + ' 切換）');
 }
 /** 自動開砲（我艦）：觀戰預設開、其他模式預設關（reset 時照模式設）。 */
 function setAutoFire(on) {
   AUTOFIRE = on; $('autoF').classList.toggle('on', on); if (SHIPS[PLAYER_I]) SHIPS[PLAYER_I].hand = false;   // 切換 ⇒ 手動瞄準那一舷也收掉
-  if (RUNNING && SHIPS.length) note(SHIPS[PLAYER_I], on ? '自動開砲' : '自己開砲（點敵艦瞄準、空白鍵齊射）');
+  if (RUNNING && SHIPS.length) note(SHIPS[PLAYER_I], on ? '自動開砲' : '自己開砲（點敵艦瞄準、' + keyWord('volley') + '齊射）');
 }
 function sailToggle() { if (RUNNING && SHIPS[PLAYER_I] && SHIPS[PLAYER_I].anc) anchorWeighAll(SHIPS[PLAYER_I]); setSailMode(SAIL === 'auto' ? 'manual' : 'auto'); }   // ☸ 一顆切換（Tim 2026-10-15）：自動 ⇄ 手動；拋錨中 ⇒ 起錨、換自動
-$('sailT').onclick = sailToggle;   // 鍵盤 4 同一顆。自動開砲（G）、拋錨（6）是下方的大圓鈕（data-k）
+$('sailT').onclick = sailToggle;   // 鍵盤（66_keys.js sailMode）同一顆。自動開砲、拋錨是下方的大圓鈕（data-act）
 /** 🤖☸ 自動操舵那一顆（Tim 2026-10-15：「開啟時常亮（參考自動開砲），不換 Icon」）：圖示固定，自動 ⇒ 亮（on）；手動、拋錨模式 ⇒ 暗。 */
 function sailLabel() { var b = $('sailT'); if (b) b.classList.toggle('on', SAIL === 'auto'); }
 $('camT').onclick = function () { setCamTrack(!CAM.track); };
@@ -12970,7 +13165,7 @@ function helpToggle() { if (HELP.open) helpClose(); else helpOpen(); }
 $('helpBg').onclick = helpClose; $('helpX').onclick = helpClose; $('helpB').onclick = helpOpen;
 $('gsetBg').onclick = gsetClose;                                    // 面板外點一下 ⇒ 關（不會順便瞄準、開砲：底下的東西被這一層蓋住）
 $('gsGo').onclick = gsetClose;
-$('menuB').onclick = function () { doKey('r'); };
+$('menuB').onclick = function () { doAct('menu'); };
 $('muteT').onclick = function () { muted = !muted; gsetShow(); };
 $('fpsT').onclick = function () { GFX_FPS = !GFX_FPS; gfxShow(); };
 // 全螢幕（設定面板的「F11 全螢幕」；Tim 2026-10-13：主要給手機用）：整頁（documentElement）進出全螢幕；畫布大小每一格照量（60_render.js resize）⇒ 不用另外處理。
@@ -13354,7 +13549,7 @@ function sliders() {
   cs.onchange = function () { CFG_ID = cs.value; loadHull(CFG_ID).then(function () { put(); show(); }); put(); show(); };
   fleetUI();                                                     // 主選單：艦隊編成
   // 細節設定那一頁：主選單 ⇄ 細節設定（同一個 #cover 裡兩張卡片，一次顯示一張）
-  function page(w) { $('detail').style.display = w === 'det' ? '' : 'none'; $('gfxp').style.display = w === 'gfx' ? '' : 'none'; $('phxp').style.display = w === 'phx' ? '' : 'none'; $('shipp').style.display = w === 'ship' ? '' : 'none'; $('gunp').style.display = w === 'gun' ? '' : 'none'; $('furnp').style.display = w === 'furn' ? '' : 'none'; document.querySelector('#cover .card:not(#detail):not(#gfxp):not(#phxp):not(#shipp):not(#gunp):not(#furnp)').style.display = w ? 'none' : ''; $('cover').scrollTop = 0; $('pgX').classList.toggle('on', !!w && !ADMIN_ROOMS); }   // w：'' 主選單、'det' 細節設定、'gfx' 畫質設定、'phx' 物理設定、'ship' 船隻配置、'gun' 砲的設定、'furn' 道具設定（67_furncfg.js）
+  function page(w) { $('detail').style.display = w === 'det' ? '' : 'none'; $('gfxp').style.display = w === 'gfx' ? '' : 'none'; $('phxp').style.display = w === 'phx' ? '' : 'none'; $('shipp').style.display = w === 'ship' ? '' : 'none'; $('gunp').style.display = w === 'gun' ? '' : 'none'; $('furnp').style.display = w === 'furn' ? '' : 'none'; $('keysp').style.display = w === 'keys' ? '' : 'none'; if (w !== 'keys') KEY_WAIT = null; document.querySelector('#cover .card:not(#detail):not(#gfxp):not(#phxp):not(#shipp):not(#gunp):not(#furnp):not(#keysp)').style.display = w ? 'none' : ''; $('cover').scrollTop = 0; $('pgX').classList.toggle('on', !!w && !ADMIN_ROOMS); }   // w：'' 主選單、'det' 細節設定、'gfx' 畫質設定、'phx' 物理設定、'ship' 船隻配置、'gun' 砲的設定、'furn' 道具設定（67_furncfg.js）
   [].forEach.call(document.querySelectorAll('#plays button'), function (b) { b.onclick = function () { setPlay(b.dataset.p); show(); }; });   // 主選單：玩法
   $('detB').onclick = function () { page('det'); };
   $('detX').onclick = function () { page(''); };
@@ -13375,6 +13570,8 @@ function sliders() {
   $('gunX').onclick = function () { page(''); };
   $('furnB').onclick = function () { page('furn'); furnShow(); };   // 道具設定（67_furncfg.js）
   $('furnX').onclick = function () { page(''); };
+  $('keysB').onclick = function () { page('keys'); keysShow(); };   // 鍵位設定（66_keys.js）
+  $('keysX').onclick = function () { page(''); };
   $('pgX').onclick = function () { RE.i = -1; show(); page(''); };   // 右上角的返回（每一頁同一顆）
   var rArm = 0;                                        // 這一型回到預設：按兩下（Tim：編起來很花時間 ⇒ 不要一按就沒了；⛔ 不用 confirm()：畫廊彈窗的 iframe 沒開 allow-modals，confirm 直接回 false）
   $('shipR').onclick = function () {
@@ -13403,8 +13600,9 @@ function sliders() {
     };
     r.readAsText(f);
   };
-  gfxUI(); phxUI(); gunUI(); gunShow(); furnUI(page); furnShow();
-  if (ADMIN_FURN) { page('furn'); furnShow(); }                   // 道具的出廠預設值（?admin=furn）：直接開道具設定頁（67_furncfg.js furnAdmUI 接存檔、重建）
+  gfxUI(); phxUI(); gunUI(); gunShow(); furnUI(page); furnShow(); keysUI(page); keysShow();
+  if (ADMIN_FURN) { page('furn'); furnShow(); }
+  if (ADMIN_KEYS) { page('keys'); keysShow(); }                   // 鍵位的出廠預設值（?admin=keys）：直接開鍵位設定頁（66_keys.js keysAdmUI）                   // 道具的出廠預設值（?admin=furn）：直接開道具設定頁（67_furncfg.js furnAdmUI 接存檔、重建）
   $('detR').onclick = function () {                    // 重設預設值：LIM 的第三格、降旗全不勾
     // 船隻配置頁（每一型的船員與性能）不跟著重設：那一頁有自己的「這一型回到預設」（TASK-0570：編起來很花時間）
     GUN_HP = LIM.gunhp[2]; SAIL_HP = LIM.sailhp[2]; POWDER_HP = LIM.powderhp[2]; BLAST_K = LIM.blast[2]; BLAST_V = LIM.blastv[2]; CREW_HP = LIM.crewhp[2]; CREW_DEATH = LIM.crewdeath[2];
@@ -13414,7 +13612,7 @@ function sliders() {
     STRIKE.cas = LIM.cas[2]; STRIKE.guns = STRIKE.masts = STRIKE.officers = false; CAP_SET = ['random', 'random'];
     put(); show(); prefsReset();                         // 存檔跟著清（69_prefs.js：只剩主選單的選擇）
   };
-  window.addEventListener('keydown', function (e) { if (!RUNNING && e.key === 'Escape' && ($('detail').style.display !== 'none' || $('gfxp').style.display !== 'none' || $('phxp').style.display !== 'none' || $('shipp').style.display !== 'none' || $('gunp').style.display !== 'none' || $('furnp').style.display !== 'none')) page(''); });
+  window.addEventListener('keydown', function (e) { if (!RUNNING && e.key === 'Escape' && ($('detail').style.display !== 'none' || $('gfxp').style.display !== 'none' || $('phxp').style.display !== 'none' || $('shipp').style.display !== 'none' || $('gunp').style.display !== 'none' || $('furnp').style.display !== 'none' || ($('keysp').style.display !== 'none' && !KEY_WAIT))) page(''); });   // 鍵位設定頁正在等新鍵 ⇒ Esc 是取消（66_keys.js），不關頁
   put(); show(); SLIDERS_SHOW = function () { put(); show(); };
 }
 /** 畫質（07_gfx.js）：主選單的低／中／高、畫質設定頁每一項的按鈕、顯示 FPS。改了立刻生效（render 每一格讀 GFX）。 */
@@ -13563,8 +13761,8 @@ function frzShow() {
 /** 開著的觀察模式（透視、剖面、甲板）寫成一行；都沒開 ⇒ ''。 */
 function obsText() {
   var a = [];
-  if (FLX3) a.push('🔍 透視（X）');
-  if (CUTV.half) a.push('✂ 剖面（Z）');
+  if (FLX3) a.push('🔍 透視（' + keyName('xray') + '）');
+  if (CUTV.half) a.push('✂ 剖面（' + keyName('cut') + '）');
   if (CUTV.deck > 0) a.push(deckLabel());
   return a.join('　');
 }
@@ -13862,13 +14060,13 @@ function cutToggle() { if (!RUNNING) return; CUTV.half = !CUTV.half; obsNote('�
 function deckCycle() {
   if (!RUNNING || !SHIPS[PLAYER_I]) return;
   var n = deckCut(SHIPS[PLAYER_I]).n; CUTV.deck = n ? (CUTV.deck + 1) % (n + 1) : 0;
-  obsNote(CUTV.deck ? deckLabel().replace('（L）', '') : '☰ 甲板：全部回來'); frzShow();
+  obsNote(CUTV.deck ? deckLabel().replace('（' + keyName('deck') + '）', '') : '☰ 甲板：全部回來'); frzShow();
 }
 /** 停格條上「甲板」那顆的字。 */
 function deckLabel() {
-  var sh = SHIPS[PLAYER_I]; if (!CUTV.deck || !sh) return '☰ 甲板（L）';
+  var sh = SHIPS[PLAYER_I]; if (!CUTV.deck || !sh) return '☰ 甲板（' + keyName('deck') + '）';
   var D = deckCut(sh), k = Math.min(CUTV.deck, D.n);
-  return '☰ ' + (k >= D.n ? '只剩船底' : '拿掉到' + D.names[k - 1]) + '（L）';
+  return '☰ ' + (k >= D.n ? '只剩船底' : '拿掉到' + D.names[k - 1]) + '（' + keyName('deck') + '）';
 }
 $('frzCut').onclick = cutToggle; $('frzDeck').onclick = deckCycle;
 // ── js/75_shipcheck.js ──
@@ -15062,7 +15260,7 @@ function fpSet(on, quiet) {                                           // quiet�
     FP.on = true; FP.sh = sh; FP.c = { pos: c.pos.slice() };            // 玩家自己的角色：只借那個船員的座標（⛔ 不操控他）
     FP.yaw = Math.atan2(d[1], d[0]) || 0; FP.pitch = 0; FP.climb = null; FP.lads = fpLadders(sh); FP.v = [0, 0]; FP.ez = null; FP.jz = FP.jv = 0;
     FP.vz = 0; FP.flyFrom = FP.mode === 2 ? FP.c.pos.slice() : null;
-    if (!quiet) note(sh, '第一人稱：左下搖桿或 WASD 走、Shift 跑、空白鍵跳、右下搖桿／拖曳／方向鍵轉頭（電腦：點畫面用滑鼠轉頭，Esc 或按住 Alt 放開）、E 爬梯子 —— 設定裡再按一次回到原本的鏡頭' + (FP.mode === 2 ? '（浮空：空白鍵上、C 下）' : ''));
+    if (!quiet) note(sh, '第一人稱：左下搖桿或 ' + ['fpFwd', 'fpLeft', 'fpBack', 'fpRight'].map(keyName).join('') + ' 走、' + keyWord('fpRun') + ' 跑、' + keyWord('fpJump') + '跳、右下搖桿／拖曳／方向鍵轉頭（電腦：點畫面用滑鼠轉頭，Esc 或按住 ' + keyName('fpUnlock') + ' 放開）、' + keyName('fpClimb') + ' 爬梯子 —— 設定裡再按一次回到原本的鏡頭' + (FP.mode === 2 ? '（浮空：' + keyWord('fpJump') + '上、' + keyName('fpDown') + ' 下）' : ''));
   } else if (FP.on) {
     FP.on = false; FP.sh = FP.c = FP.climb = FP.near = FP.fol = null; CAM.snap = true; fpUnlock();
   }
@@ -15104,9 +15302,9 @@ function fpUI() {
   $('fpUI').classList.toggle('fol', !!FP.fol);                         // 跟隨中：藏搖桿、跳、跑、爬梯子（template.html #fpUI.fol）
   $('fpUI').classList.toggle('fly', FP.mode === 2);
   var bm = $('bldMode'), be = bm && bm.querySelector('.em'), bt = FP_MODE_EM[FP.mode];   // 建造模式那一顆（82_build.js）：照現在的碰撞換圖示
-  if (be && be.textContent !== bt) { be.textContent = bt; bm.title = '碰撞：' + FP_MODE[FP.mode] + '（M 換：一般 → 穿牆 → 浮空）'; }                    // 浮空：藏跳、爬梯子，換上 ⬆ ⬇（template.html #fpUI.fly）
+  if (be && be.textContent !== bt) { be.textContent = bt; bm.title = '碰撞：' + FP_MODE[FP.mode] + '（' + keyName('bMode') + ' 換：一般 → 穿牆 → 浮空）'; }                    // 浮空：藏跳、爬梯子，換上 ⬆ ⬇（template.html #fpUI.fly）
   $('fpClimb').style.display = FP.on && FP.near && !FP.fol && FP.mode !== 2 ? '' : 'none';
-  var t = FP.fol ? '↩' : '👁', fe = $('fpFol').querySelector('.em'); if (fe && fe.textContent !== t) { fe.textContent = t; $('fpFol').title = FP.fol ? '回到自己（F）' : '跟隨身邊的船員（F）'; }
+  var t = FP.fol ? '↩' : '👁', fe = $('fpFol').querySelector('.em'); if (fe && fe.textContent !== t) { fe.textContent = t; $('fpFol').title = (FP.fol ? '回到自己（' : '跟隨身邊的船員（') + keyName('fpFollow') + '）'; }
 }
 /** 鏡頭跟著誰：跟隨中 ⇒ 被跟的人，否則 ⇒ 自己。 */
 function fpWho() { return FP.fol || FP.c; }
@@ -15364,17 +15562,19 @@ function fpCam() {
   return true;
 }
 /** 鍵盤（71_input.js keydown／keyup 先問這裡）：第一人稱的鍵吃掉 ⇒ true；其他照舊（P 停格、O／Esc 設定）。 */
-var FP_KEYS = { w: 'f', arrowup: 'lu', s: 'b', arrowdown: 'ld', a: 'l', d: 'r', arrowleft: 'tl', arrowright: 'tr', q: 'tl', e: null, ' ': null, c: null, shift: null, f: null, g: null, alt: null };
+/** 第一人稱的動作 ⇒ FP.mv 哪一格（走、轉頭；66_keys.js：fpLook* 是固定的方向鍵）。 */
+var FP_MV = { fpFwd: 'f', fpBack: 'b', fpLeft: 'l', fpRight: 'r', fpTurnL: 'tl', fpLookU: 'lu', fpLookD: 'ld', fpLookL: 'tl', fpLookR: 'tr' };
+/** 鍵盤（71_input.js 先問這裡）：照第一人稱的鍵位（66_keys.js keyAct 'fps'）；沒有綁 ⇒ false（往下給建造、海戰）。 */
 function fpKey(k, down) {
-  if (!(k in FP_KEYS)) return false;
-  if (k === 'shift') { FP.run = down && FP.on; return FP.on; }
-  if (k === 'alt') { if (down && FP.on) fpUnlock(); return FP.on; }   // 按住 Alt ⇒ 放開滑鼠、遊戲不停；點回畫面再抓
-  if (!FP.on) { if (!down && FP_KEYS[k]) FP.mv[FP_KEYS[k]] = 0; return false; }
-  if (k === 'e') { if (down) fpClimbGo(); return true; }               // E 爬梯子
-  if (k === ' ') { if (FP.mode === 2) FP.mv.up = down ? 1 : 0; else if (down) fpJump(); return true; }   // 空白鍵跳（Tim 2026-10-16）；浮空 ⇒ 往上
-  if (k === 'c') { FP.mv.dn = down && FP.mode === 2 ? 1 : 0; return true; }   // C：浮空 ⇒ 往下（第一人稱時不換鏡頭，鏡頭本來就不歸它管）
-  if (k === 'f' || k === 'g') { if (down) fpFollow(k === 'g'); return true; }   // F 跟隨／回來、G 換下一個（第一人稱時 F 不開砲）
-  FP.mv[FP_KEYS[k]] = down ? 1 : 0;
+  var a = keyAct('fps', k); if (!a) return false;
+  if (a === 'fpRun') { FP.run = down && FP.on; return FP.on; }
+  if (a === 'fpUnlock') { if (down && FP.on) fpUnlock(); return FP.on; }   // 按住 ⇒ 放開滑鼠、遊戲不停；點回畫面再抓
+  if (!FP.on) { if (!down && FP_MV[a]) FP.mv[FP_MV[a]] = 0; return false; }
+  if (a === 'fpClimb') { if (down) fpClimbGo(); return true; }         // 爬梯子
+  if (a === 'fpJump') { if (FP.mode === 2) FP.mv.up = down ? 1 : 0; else if (down) fpJump(); return true; }   // 跳（Tim 2026-10-16）；浮空 ⇒ 往上
+  if (a === 'fpDown') { FP.mv.dn = down && FP.mode === 2 ? 1 : 0; return true; }   // 浮空 ⇒ 往下（第一人稱時不換鏡頭，鏡頭本來就不歸它管）
+  if (a === 'fpFollow' || a === 'fpNext') { if (down) fpFollow(a === 'fpNext'); return true; }   // 跟隨／回來、換下一個（第一人稱時不開砲）
+  if (FP_MV[a]) FP.mv[FP_MV[a]] = down ? 1 : 0;
   return true;
 }
 /** 拖曳轉頭（71_input.js pointermove）：往右拖 ⇒ 往右看。 */
@@ -15592,8 +15792,8 @@ function bldUI() {
   var L = bldList(), last = '';
   bar.innerHTML = L.map(function (it, n) {
     var c = bldCat(it), gap = last && c !== last ? ' gap' : ''; last = c;
-    return '<span class="kb hb bslot' + gap + (it === BLD.it ? ' on' : '') + '" data-it="' + it + '" title="' + FURN[it].name + '（' + (n + 1) + '）' + bldNote(it) + '"><b>' + (n + 1) + '</b><i class="em">' + bldEm(it) + '</i></span>';
-  }).join('') + '<span class="kb hb bslot gap" id="bldCatB" title="目錄（B）"><b>B</b><i class="em">📦</i></span>';
+    return '<span class="kb hb bslot' + gap + (it === BLD.it ? ' on' : '') + '" data-it="' + it + '" title="' + FURN[it].name + (n < 9 ? '（' + keyName('bSlot' + (n + 1)) + '）' : '') + bldNote(it) + '"><b>' + (n < 9 ? keyName('bSlot' + (n + 1)) : '') + '</b><i class="em">' + bldEm(it) + '</i></span>';
+  }).join('') + '<span class="kb hb bslot gap" id="bldCatB" title="目錄（' + keyName('bCat') + '）"><b>' + keyName('bCat') + '</b><i class="em">📦</i></span>';
   [].forEach.call(bar.querySelectorAll('[data-it]'), function (b) { b.onclick = function () { BLD.it = b.dataset.it; bldUI(); }; });
   $('bldCatB').onclick = function () { bldCatOpen(!BLD.open); };
   $('bldRot').querySelector('.em').textContent = BLD.r ? '⟲' : '⟳';
@@ -15613,13 +15813,13 @@ function bldCatOpen(on) { BLD.open = !!on; if (on) fpUnlock(); bldUI(); }
 /** 鍵盤（71_input.js keydown／keyup，第一人稱的鍵之後）：建造玩法吃掉 ⇒ true。 */
 function bldKey(k, down) {
   if (!BLD.on) return false;
-  var L = bldList(), n = +k;
-  if (k.length === 1 && n >= 1 && n <= 9) { if (down && L[n - 1]) { BLD.it = L[n - 1]; bldUI(); } return true; }
-  if (k === 'r') { if (down) { BLD.r = 1 - BLD.r; bldUI(); } return true; }
-  if (k === 'b') { if (down) bldCatOpen(!BLD.open); return true; }
-  if (k === 'x') { if (down) bldDo(true); return true; }
-  if (k === 'v') { if (down) bldDo(false); return true; }
-  if (k === 'm') { if (down) fpMode((FP.mode + 1) % 3); return true; }   // 碰撞循環：一般 → 穿牆 → 浮空（Tim 2026-10-16「建造模式加一個按鈕 可以循環切換 一般 穿牆 浮空模式吧」）
+  var L = bldList(), a = keyAct('build', k), n = /^bSlot\d$/.test(a) ? +a.slice(5) : 0;   // 建造的鍵位（66_keys.js）
+  if (n) { if (down && L[n - 1]) { BLD.it = L[n - 1]; bldUI(); } return true; }
+  if (a === 'bRot') { if (down) { BLD.r = 1 - BLD.r; bldUI(); } return true; }
+  if (a === 'bCat') { if (down) bldCatOpen(!BLD.open); return true; }
+  if (a === 'bDel') { if (down) bldDo(true); return true; }
+  if (a === 'bPut') { if (down) bldDo(false); return true; }
+  if (a === 'bMode') { if (down) fpMode((FP.mode + 1) % 3); return true; }   // 碰撞循環：一般 → 穿牆 → 浮空（Tim 2026-10-16「建造模式加一個按鈕 可以循環切換 一般 穿牆 浮空模式吧」）
   return false;
 }
 // 滑鼠（只在滑鼠模式＝抓住滑鼠時，跟 Minecraft 一樣）：左鍵拆、右鍵放。沒抓住時左鍵照舊是「抓住滑鼠」（81_fps.js）。

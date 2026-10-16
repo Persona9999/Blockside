@@ -145,8 +145,8 @@ function bldUI() {
   var L = bldList(), last = '';
   bar.innerHTML = L.map(function (it, n) {
     var c = bldCat(it), gap = last && c !== last ? ' gap' : ''; last = c;
-    return '<span class="kb hb bslot' + gap + (it === BLD.it ? ' on' : '') + '" data-it="' + it + '" title="' + FURN[it].name + '（' + (n + 1) + '）' + bldNote(it) + '"><b>' + (n + 1) + '</b><i class="em">' + bldEm(it) + '</i></span>';
-  }).join('') + '<span class="kb hb bslot gap" id="bldCatB" title="目錄（B）"><b>B</b><i class="em">📦</i></span>';
+    return '<span class="kb hb bslot' + gap + (it === BLD.it ? ' on' : '') + '" data-it="' + it + '" title="' + FURN[it].name + (n < 9 ? '（' + keyName('bSlot' + (n + 1)) + '）' : '') + bldNote(it) + '"><b>' + (n < 9 ? keyName('bSlot' + (n + 1)) : '') + '</b><i class="em">' + bldEm(it) + '</i></span>';
+  }).join('') + '<span class="kb hb bslot gap" id="bldCatB" title="目錄（' + keyName('bCat') + '）"><b>' + keyName('bCat') + '</b><i class="em">📦</i></span>';
   [].forEach.call(bar.querySelectorAll('[data-it]'), function (b) { b.onclick = function () { BLD.it = b.dataset.it; bldUI(); }; });
   $('bldCatB').onclick = function () { bldCatOpen(!BLD.open); };
   $('bldRot').querySelector('.em').textContent = BLD.r ? '⟲' : '⟳';
@@ -166,13 +166,13 @@ function bldCatOpen(on) { BLD.open = !!on; if (on) fpUnlock(); bldUI(); }
 /** 鍵盤（71_input.js keydown／keyup，第一人稱的鍵之後）：建造玩法吃掉 ⇒ true。 */
 function bldKey(k, down) {
   if (!BLD.on) return false;
-  var L = bldList(), n = +k;
-  if (k.length === 1 && n >= 1 && n <= 9) { if (down && L[n - 1]) { BLD.it = L[n - 1]; bldUI(); } return true; }
-  if (k === 'r') { if (down) { BLD.r = 1 - BLD.r; bldUI(); } return true; }
-  if (k === 'b') { if (down) bldCatOpen(!BLD.open); return true; }
-  if (k === 'x') { if (down) bldDo(true); return true; }
-  if (k === 'v') { if (down) bldDo(false); return true; }
-  if (k === 'm') { if (down) fpMode((FP.mode + 1) % 3); return true; }   // 碰撞循環：一般 → 穿牆 → 浮空（Tim 2026-10-16「建造模式加一個按鈕 可以循環切換 一般 穿牆 浮空模式吧」）
+  var L = bldList(), a = keyAct('build', k), n = /^bSlot\d$/.test(a) ? +a.slice(5) : 0;   // 建造的鍵位（66_keys.js）
+  if (n) { if (down && L[n - 1]) { BLD.it = L[n - 1]; bldUI(); } return true; }
+  if (a === 'bRot') { if (down) { BLD.r = 1 - BLD.r; bldUI(); } return true; }
+  if (a === 'bCat') { if (down) bldCatOpen(!BLD.open); return true; }
+  if (a === 'bDel') { if (down) bldDo(true); return true; }
+  if (a === 'bPut') { if (down) bldDo(false); return true; }
+  if (a === 'bMode') { if (down) fpMode((FP.mode + 1) % 3); return true; }   // 碰撞循環：一般 → 穿牆 → 浮空（Tim 2026-10-16「建造模式加一個按鈕 可以循環切換 一般 穿牆 浮空模式吧」）
   return false;
 }
 // 滑鼠（只在滑鼠模式＝抓住滑鼠時，跟 Minecraft 一樣）：左鍵拆、右鍵放。沒抓住時左鍵照舊是「抓住滑鼠」（81_fps.js）。

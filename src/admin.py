@@ -347,6 +347,14 @@ def validate(cfg, prev=None):
         hb = (f.get('buff') or {}).get('heal') if isinstance(f, dict) else None
         if hb is not None and not (isnum(hb) and 0 <= hb <= 1):
             err('furniture.%s.buff.heal' % fid, '0～1（治療速度加成）')
+    KY = cfg.get('keys')                                  # 鍵位的出廠預設（js/66_keys.js：{ 動作: 鍵 }；動作的清單在遊戲裡 ⇒ 這裡只驗形狀，認不得的動作遊戲不收）
+    if KY is not None:
+        if not isinstance(KY, dict):
+            err('keys', '要是 { 動作: 鍵 }')
+        else:
+            for a, k in KY.items():
+                if not (isinstance(k, str) and 1 <= len(k) <= 12) or re.match(r'^(escape|arrow(up|down|left|right)|tab|capslock|meta|os|control|contextmenu|f\d+|\?)$', k):
+                    err('keys.%s' % a, '一個鍵（KeyboardEvent.key 小寫，空白鍵 ＝ " "；Esc、方向鍵、Tab、F1–F12 不能綁）')
     for kd, f in (cfg.get('drvparts') or {}).items():     # 動力件（TASK-0653；js/31_drive.js DRVP、67_furncfg.js DRV_ITEMS）
         if kd not in DRV_KINDS + VOXM_KINDS or not isinstance(f, dict):
             err('drvparts.%s' % kd, '種類只有 ' + '／'.join(DRV_KINDS + VOXM_KINDS))
@@ -1588,6 +1596,30 @@ FURN_KEYS = ('tpm', 'crew', 'cap', 'hold', 'hp', 'buff.heal')            # 道�
 DRVP_KEYS = ('lo', 'hi', 'wet', 'cell')                                  # 同一頁的動力件（DRV_ITEMS ⇒ config drvparts）
 
 
+def act_keys(keys):
+    """鍵位的出廠預設值（Tim 2026-10-17：「不是後台 而是遊戲中(後台可以設定預設值)」）：遊戲的鍵位設定頁（/game?admin=keys，js/66_keys.js）送來 { 動作: 鍵 }
+    ⇒ 蓋進 config/game.json 的 keys（沒有就建）；照樣過 validate 才存。同一個模式撞鍵由遊戲那頁先對調好（這裡不知道動作屬於哪個模式）。"""
+    if not isinstance(keys, dict) or not keys:
+        raise Fail('沒有要改的鍵')
+    prev = load()
+    new = json.loads(json.dumps(prev))
+    K, log = new.get('keys') or {}, []
+    for a, k in keys.items():
+        if not isinstance(a, str) or not isinstance(k, str):
+            raise Fail('格式不對：' + repr(a))
+        if K.get(a) != k:
+            log.append('  %s：%s → %s' % (a, json.dumps(K.get(a), ensure_ascii=False), json.dumps(k, ensure_ascii=False)))
+            K[a] = k
+    if not log:
+        return ['（鍵位的預設都一樣，沒有存）']
+    new['keys'] = K
+    E = validate(new, prev)
+    if E:
+        raise Fail('設定不合法，沒有存：\n' + '\n'.join('  ✗ ' + e for e in E))
+    save(new)
+    return ['✓ 鍵位的出廠預設改了 %d 個（config/game.json keys；重建之後遊戲才吃得到）：' % len(log)] + log
+
+
 def act_furniture(furn, drv=None):
     """道具的出廠預設值（Tim 2026-10-16：「一樣是開發後台調預設 玩家後台套同一個UI」）：遊戲的道具設定頁（/game?admin=furn）送來 { 道具: { 鍵: 值 } }
     ⇒ 改 furniture[道具][鍵]（buff.heal ＝ furniture[道具].buff.heal）；只認 FURN_KEYS、而且那一種本來就有那一格；照樣過 validate 才存。
@@ -1715,6 +1747,8 @@ def serve(port, do_open=False):
                     log = act_save(b.get('config'))
                 elif self.path == '/api/defaults':
                     log = act_defaults(b.get('lim'))
+                elif self.path == '/api/keys':
+                    log = act_keys(b.get('keys'))
                 elif self.path == '/api/furniture':
                     log = act_furniture(b.get('furn'), b.get('drv'))
                 elif self.path == '/api/build':

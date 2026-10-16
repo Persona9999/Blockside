@@ -214,10 +214,11 @@ python -I admin.py cache --all    # 每艘都比 ＝ 比對來源：雕刻作品
 | `51_captain.js` | 砲長：瞄準模式（水線／砲甲板／帆具／甲板人員／彈藥庫）、各砲長的偏好與換模式（`captainThink`）、模式要瞄哪裡（`modeAim`） |
 | `60_render.js` | 畫一格：畫質管線（`targets` 場景與解析的 framebuffer、`shadowPass` 陰影圖、`reflPass` 反射、折射複製、最後縮放貼到畫布）、海面網格 `seaGrid` |
 | `61_hud.js` | HUD、砲列、左下羅盤、上方廣播（`note`／`newsGun`／`newsFlush`） |
+| `66_keys.js` | 鍵位（Tim 2026-10-17：「整理一套系統去管理鍵位(然後要分不同模式 目前還有建造模式 第一人稱)」）：動作表 `KEY_ACTS`（id、模式 battle／fps／build、正式名稱、圓鈕圖示 ico、預設鍵、按住）；三層 ＝ 程式的 def → 設定檔 `keys`（開發後台 `?admin=keys`）→ 玩家（存檔 `keys`）。`keyAct(模式, 鍵)` ⇒ 動作（71_input.js `doAct`、81_fps.js `fpKey`、82_build.js `bldKey` 都照它）；畫面上寫鍵一律 `keyPaint`（`[data-act]` 點了 ＝ 做那個海戰動作、`[data-kl]` 只寫鍵、`kbd[data-ico]`、`span.kn`），字串裡用 `keyName`／`keyWord`。主選單「鍵位設定…」：分頁 ＝ 模式，撞鍵 ⇒ 對調（第一人稱與建造算同一組）；Esc、方向鍵、Tab、F1–F12 固定。戰鬥數字鍵：1 彈藥、2 自動操舵、3 左錨、4 雙錨、5 右錨 |
 | `68_guncfg.js` | 砲的設定頁（主選單「砲的設定…」；Tim 2026-10-14）：一種砲一份 —— 每發傷害、重量、初速、裝填、連發、洞、砲班；改的直接寫進 `GUNS`、存檔只存跟砲種表預設不一樣的（`GUN_SET`），可匯出匯入 |
 | `69_prefs.js` | 設定存檔（localStorage）：載入時套用、每秒比一次有變才寫（`prefsSnap`／`prefsApply`） |
 | `70_flow.js` | 開局（`reset`／`start`） |
-| `71_input.js` | 輸入與選單（鍵盤與畫面上的按鍵按鈕共用 `doKey`、滑鼠、觸控（雙指張合縮放、雙指一起拖平移 ＝ 右鍵拖曳，`panBy`）、滑桿、彈種倍率表、主選單 ⇄ 船隻配置頁（船員滑桿、匯出匯入）⇄ 細節設定頁、重設預設值） |
+| `71_input.js` | 輸入與選單（鍵盤 `doKey` ⇒ 66_keys.js 的動作 ⇒ `doAct`，畫面上的圓鈕直接 `doAct`、滑鼠、觸控（雙指張合縮放、雙指一起拖平移 ＝ 右鍵拖曳，`panBy`）、滑桿、彈種倍率表、主選單 ⇄ 船隻配置頁（船員滑桿、匯出匯入）⇄ 細節設定頁、重設預設值） |
 | `73_slowmo.js` | 殉爆的慢動作與特寫（TASK-0531）：`slowKick`（殉爆那一刻）、`slowTick`（每格畫面的時間倍率、特寫時間到還鏡頭）、`slowVisStep`（慢動作中只給人看的照畫面的時間走）、提示 `slowShow`；狀態 `SLOW` 在 `04_state.js` |
 | `72_floodui.js` | 停格條（`frzShow`）與進水細節頁（`floodPanel`：數字＋側視、俯視剖面 `fpDraw`；開著時 3D 的破口點 `flHoleMarks`、艙內水面透視） |
 | `74_cutaway.js` | 停格的剖面與隱藏甲板：`CUTV`、甲板切高 `deckCut`（照舷弧逐欄量、R32F 貼圖）、畫之前設 uniform `cutSet`、人藏不藏 `cutHides`、`cutToggle`／`deckCycle` |

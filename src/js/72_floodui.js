@@ -21,8 +21,8 @@ function frzShow() {
 /** 開著的觀察模式（透視、剖面、甲板）寫成一行；都沒開 ⇒ ''。 */
 function obsText() {
   var a = [];
-  if (FLX3) a.push('🔍 透視（X）');
-  if (CUTV.half) a.push('✂ 剖面（Z）');
+  if (FLX3) a.push('🔍 透視（' + keyName('xray') + '）');
+  if (CUTV.half) a.push('✂ 剖面（' + keyName('cut') + '）');
   if (CUTV.deck > 0) a.push(deckLabel());
   return a.join('　');
 }

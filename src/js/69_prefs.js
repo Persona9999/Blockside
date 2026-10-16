@@ -65,7 +65,8 @@ function prefsSnap() {
   var dm = {}; Object.keys(DMG_Q).forEach(function (t) { if (DMG[t] !== LIM[DMG_Q[t]][2]) dm[t] = DMG[t]; });
   if (Object.keys(dm).length) o.dmg = dm;
   var fs = furnSnap(); if (Object.keys(fs).length) o.furn = fs;          // 道具設定（67_furncfg.js）：跟設定檔 furniture 不一樣的
-  var dv = drvSnap(); if (Object.keys(dv).length) o.drv = dv;          // 動力件（67_furncfg.js，31_drive.js DRVP）：跟設定檔 drvparts 不一樣的
+  var dv = drvSnap(); if (Object.keys(dv).length) o.drv = dv;
+  var ks = keySnap(); if (Object.keys(ks).length) o.keys = ks;            // 鍵位（66_keys.js）：跟出廠不一樣的          // 動力件（67_furncfg.js，31_drive.js DRVP）：跟設定檔 drvparts 不一樣的
   var gs = gunsSnap(); if (Object.keys(gs).length) o.guns = gs;          // 砲的設定（68_guncfg.js）：跟砲種表預設不一樣的
   if (AMMO_K.some(function (r, i) { return r.some(function (v, j) { return v !== AMMO_K0[i][j]; }); })) o.ammoK = AMMO_K.map(function (r) { return r.slice(); });
   if (STRIKE.cas !== LIM.cas[2] || STRIKE.guns || STRIKE.masts || STRIKE.officers) o.strike = { cas: STRIKE.cas, guns: STRIKE.guns, masts: STRIKE.masts, officers: STRIKE.officers };
@@ -119,7 +120,8 @@ function prefsApply(p) {
   if (p.dmg && typeof p.dmg === 'object') Object.keys(DMG_Q).forEach(function (t) { set(DMG_Q[t], p.dmg[t], LIM[DMG_Q[t]], true, function (x) { DMG[t] = x; }); });
   if (p.guns && typeof p.guns === 'object') gunsApply(p.guns);
   if (p.furn && typeof p.furn === 'object') furnApply(p.furn);           // 道具設定（67_furncfg.js）
-  if (p.drv && typeof p.drv === 'object') drvApply(p.drv);              // 動力件（67_furncfg.js）
+  if (p.drv && typeof p.drv === 'object') drvApply(p.drv);
+  if (p.keys && typeof p.keys === 'object') keyApply(p.keys);           // 鍵位（66_keys.js）              // 動力件（67_furncfg.js）
   if (!Q.has('ammo') && Array.isArray(p.ammoK)) p.ammoK.forEach(function (r, i) {
     if (i < 3 && Array.isArray(r)) r.forEach(function (v, j) { var x = num(v, AMMO_LIM, true); if (j < 3 && x !== undefined) AMMO_K[i][j] = x; });
   });
