@@ -169,6 +169,7 @@ python -I admin.py cache --all    # 每艘都比 ＝ 比對來源：雕刻作品
 | `23_powder.js` | 彈藥庫與火藥桶：血量、點燃、連鎖、整間殉爆（`crater` 排好區塊、`blastStep`／`stepBlasts` 分步挖）、斷船（`breakShip`，彈坑挖完才切）；取用點（`makeStations`）—— 彈藥庫關聯 meta `hoist=<梯子路徑>` ⇒ 那座梯子梯頭那一層的取用點改成「桶在梯腳、在梯頭取」（`hoistStation`；TASK-0632，莫尼特號的火藥從住艙甲板經砲塔艙口吊上來、不擺在露天甲板） |
 | `24_armor.js` | 砲帶的裝甲（TASK-0631）：關聯 meta `kind=armor`、`mount=<砲模型>` 的格從船殼拆出來（`armorSetup`：`T.armor`、船殼 `T.hullG`；`T.base` 照舊是整艘）、每艘一份跟著砲轉（`armorShip`、`armLocal`）、打中（`armAt`／`armRemove`，`shatter`／`slab` 帶 a）、殉爆 `armBlast`、畫（`armDraw`／`armSmDraw`）、走路格看的格子 `navG` |
 | `25_doors.js` | 門、艙蓋（TASK-0638）：模型 meta `kind=door`、固定點 `hinge-a`／`hinge-b`（`doorsShip`：鉸鏈、門正下方的開口格）；有人經過才開（`doorsAnim`，畫面那一格、畫質「門的開關演出」）；門沒了 ⇒ 開口變進水口（`doorsSurvey`：公式模式加進 `sh.flood`、粒子模式 `fl.tops` ⇒ `doorInflow`）；匯入檢查的讀數 `doorsSummary`。詳見下面「門、艙蓋」 |
+| `26_spin.js` | 照參數轉的子物件（TASK-0640）：模型 meta `spin`＝來源參數（`SPIN_SRC`：rudder／speed／rpm）、`spin_mode`（angle／rate）、`spin_k`、`spin_min`／`spin_max`（沒寫 ＝ 無上限）、`spin_lag`；轉軸 `spinAxis`（固定點 spin-a／spin-b ＞ meta spin_pivot_*＋spin_axis_* ＞ 舵的 hinge_*＋axis_* ＞ hub-aft／hub-fore ＞ hub＋axis_*）；`spinShip`（建船）、`spinStep`（模擬每一步，sail() 之後）、匯入檢查 `spinIssues`／`spinSummary`。詳見下面「照參數轉的子物件」 |
 | `30_rig_physics.js` | 帆與繩的物理（可關）；帆的貼圖集 `sailAtlas`（一個船型一張，alpha 照 vxk 的 `alpha_min` 二值化；TASK-0579） |
 | `31_sailing.js` | 航行：航速、操舵、帆裝、航跡、擦撞（船隻碰撞四檔：龍骨線／水線輪廓／船殼格子＋八叉樹 `hitSamples`／`occPyr`；摩擦 `hitFriction`） |
 | `31_drive.js` | 動力（TASK-0630）：動力源清單（帆、蒸汽機、魔法）、推力 ＝ k·v²、水阻、實際質量（含進水）⇒ 加速度；受損降輸出；受損不平衡的偏航力矩；俥鐘（橫版左下角、直版左邊那一欄按鈕上方；E／T） |
@@ -438,6 +439,14 @@ python -I admin.py cache --all    # 每艘都比 ＝ 比對來源：雕刻作品
   量過（莫尼特號：前艙口、機艙艙口各一扇，開口 165 格）：沙盒在水線下挖兩個洞，粒子模式 門在 130 秒開始沉、門打掉（開戰就拿掉）60 秒；公式模式（挖八個大洞）下沉 0.36 m 起洞數 4,662 → 4,992、早 5 秒開始沉。
   觀戰（預備水手照常閒晃時）開戰 8 秒機艙艙蓋第一次開。⚠ 莫尼特號預設「避開露天甲板」⇒ 預備水手很少走這兩個艙口（補砲班走砲塔底下那座梯子，那裡沒有門）⇒ 開關不常看到。
   反向對照：三組對拍跟 f3e52a2 逐字相同（f093d6757b／ba5971c984／b001a40062）；莫尼特號對維吉尼亞號 `?demo=180&dump=1&seed=3` 演出開／關（`g_door=0／1`）逐字相同。
+- **照參數轉的子物件**（`26_spin.js`，TASK-0640；Tim 2026-10-16：「跟隨船隻轉彎方向去轉舵輪&舵(參考螺旋槳跟船速關聯)」「是否可以弄成一套通用架構 綁定某項參數&某個子物件的旋轉關聯(meta設定) 然後可能要定義可以旋轉的上限(可以無上限) 舵面本身應該要有上限 舵輪可以沒有(可以轉超過一圈)」）：
+  **標法**（造船規格 §9.8）：模型 meta `spin=<來源>` 才綁；`rudder`（`sh.rudder` −1..1，左舵為正）、`speed`（航速，節）、`rpm`（螺旋槳轉速）。`spin_mode=angle`（角度 ＝ `spin_k` × 參數，`spin_lag` 秒跟上，預設 0.3）或 `rate`（每秒 `spin_k` × 參數 度）；`spin_min`／`spin_max` 沒寫 ＝ 那一頭無上限（rate 無上限時角度收在 ±180，不影響畫面）。
+  轉軸照右手定則（格座標 x 往船頭、y 往右舷、z 往上）：舵的軸朝上 ⇒ 正轉 ＝ 後緣擺向左舷 ＝ 左舵；舵輪的軸朝船頭 ⇒ 正轉 ＝ 輪頂往左舷。模型固定點照用（引擎匯出時已經是連續座標，⛔ 不加 0.5）。
+  **只是畫面**：模擬每一步照 `sh.rudder` 等狀態算（不抽亂數），寫 `m.sw／spv／sax`（modelLocal，跟螺旋槳、門同一條路）；被打飛那一刻擺回 0°（`blowModel`，門也這樣）。⛔ 掛著擺的小艇、門不收（同一格各寫各的會打架）。螺旋槳寫了 `spin` ⇒ 照這裡轉、31_drive.js 不再寫它的 `m.sw`；沒寫 ⇒ 照舊。
+  第一批（2026-10-16）：夜隼號、風暴角號的舵（`spin=rudder, spin_k=35, ±35°`）與舵輪（`spin=rudder, spin_k=540, spin_lag=0.6`、無上限，轉軸寫 meta：軸心 ＝ axle、軸向 +x）。⚠ 540°（滿舵一舷一圈半）是挑的，不是史料。
+  量過（瀏覽器，`?debug=1&seed=3&ship=falcon,stormkaap`、`__game.run(0.5)` 取樣）：開局滿左舵 ⇒ 舵 0.5 秒 28.7°、2 秒 35°（停在上限）、舵輪 308° → 522° → 540°；右舵 ⇒ −35°／−540°。風暴角號右舵 17.7° 的停格跟同一格把 sw 歸 0 比：舵的後緣擺向右舷。
+  反向對照：三組對拍跟 141afa5 逐字相同 —— 沒有 meta 的成品、有 meta 的成品都是 7433a27008／ac0eb06aff／59d8db4a12（sha1）。⚠ 第二組在 fc9b439 是 a3d3f67175：9c08daa 重匯兩艘加了錨（多了格與模型）⇒ 那一組本來就變了，跟這一筆無關。
+  ⚠ 沒做：舵柄上的繩（夜隼號 tiller-end ↔ 舵輪的 tiller-rope）不跟著舵轉 ⇒ 滿舵時看得出繩頭離開舵柄；舵轉了不影響碰撞（只是畫面）。
 - **設定存檔**（`69_prefs.js`，localStorage；Tim 2026-10-13）：細節設定、船隻設定（照船型）、砲長、選的兩艘船、彈種、自動開砲、帆與繩的物理、主選單的模式／距離／航行。只存跟預設不一樣的項目 ⇒ 之後改預設值，沒動過的玩家也吃得到。壓艙物連那艘船的 checksum 一起存，船重匯過就不套。
   - 網址參數優先：網址有的那一項照網址；網址帶了任何設定參數 ⇒ 這一場只讀不寫。`?demo` 與 `?prefs=0` 不讀不寫（縮圖不受存檔影響）。
   - 格式帶版本號；看不懂的版本或壞掉的 JSON ⇒ 照預設，而且不蓋掉它（玩家動了設定才寫）；型別不對的那一項不套、界外的夾回範圍。

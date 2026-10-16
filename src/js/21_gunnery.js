@@ -393,7 +393,7 @@ function meshOcc(m) {
 function blowModel(sh, m, vel, drop) {
   if (!m.alive) return;
   m.alive = false;
-  if (m.kind === 'door') m.sw = 0;                                      // 門：開關只是演出（25_doors.js）⇒ 照關著的樣子飛出去（落水的水花抽戰局的亂數：⛔ 照開著的角度 ⇒ 演出開關會改戰局）
+  if (m.kind === 'door' || m.spinB) m.sw = 0;                           // 照參數轉的（26_spin.js）同一個理由：轉角只是畫面。門：開關只是演出（25_doors.js）⇒ 照關著的樣子飛出去（落水的水花抽戰局的亂數：⛔ 照開著的角度 ⇒ 演出開關會改戰局）
   var M0 = M4.mul(sh.M, modelLocal(m)), c0 = M4.pt(sh.M, m.c[0], m.c[1], m.c[2]);
   var vd = norm(vel), sp = drop ? 0 : clamp(len(vel) * 0.07, 5, 16);
   FLY.push({ T: sh.T, mesh: m.mesh, M0: M0, c0: c0, c: c0.slice(), R: M4.ident(), t: 0, wet: false,
