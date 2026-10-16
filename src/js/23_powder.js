@@ -26,7 +26,7 @@ function makeMags(sh) {
     // 關聯的外框比整艘船還大 ＝ 子作品是整個框（收穫號、維吉尼亞號）⇒ 照庫裡的桶收緊（⛔ 照框 ⇒ 只有一間的船從框的兩端往外找取用點、全找到船外 ⇒ 一個取用點都沒有；電腦瞄彈藥庫的高度也跟著錯）
     var B = sh.T.h.bbox, box = kegs.length && p.box[0] <= B[0] && p.box[3] >= B[3] ? kegs.reduce(function (b, m) { var q = m.bb; return [Math.min(b[0], q[0]), Math.min(b[1], q[1]), Math.min(b[2], q[2]), Math.max(b[3], q[3]), Math.max(b[4], q[4]), Math.max(b[5], q[5])]; }, [1e9, 1e9, 1e9, -1e9, -1e9, -1e9]) : p.box;
     var bl = (p.points && p.points.blast) || [(box[0] + box[3]) / 2, (box[1] + box[4]) / 2, (box[2] + box[5]) / 2];
-    var mag = { name: p.path, pos: p.meta.pos || '', hoist: p.meta.hoist || '', box: box, blast: bl, pts: p.points || {}, lb: lb, kegs: kegs, boomed: 0, gone: false, lit: false };   // pos：關聯 meta 的前／中／後（TASK-0539）；hoist：火藥從哪座梯子的艙口吊上去（TASK-0632，makeStations）
+    var mag = { name: p.path, pos: p.meta.pos || '', hoist: p.meta.hoist || '', box: box, blast: bl, pts: p.points || {}, lb: lb, kegs: kegs, boomed: 0, gone: false, lit: false, tur: turOf(sh.T, p.path) };   // tur：在第幾座砲塔裡（砲塔裡的彈藥箱，27_turret.js；-1 ＝ 不在）   // pos：關聯 meta 的前／中／後（TASK-0539）；hoist：火藥從哪座梯子的艙口吊上去（TASK-0632，makeStations）
     kegs.forEach(function (m) { m.mag = mag; });
     return mag;
   });
@@ -243,8 +243,9 @@ function makeStations(sh, auto) {
   // 只有一間彈藥庫（餘燼號的中央彈藥庫）⇒ 每層前後各一個取用點：從彈藥庫前端往船頭、後端往船尾各退 1.6 m 找（Tim 2026-10-13：「取用點分到前後兩處」）。
   //   ⛔ 一層只有一個、疊在彈藥庫正上方 ⇒ 那一層的送藥手全擠在船中段，電腦的瞄準點也在船中段 ⇒ 第一輪齊射就連炸（餘燼號對打 180 秒 2／3 場殉爆、一場第 4.5 秒）。
   //   兩間以上（憲法號前後兩間）⇒ 照舊每間正上方一個。送藥手照要送的那門砲挑最近的取用點（stationFor）⇒ 自然分成前後兩批。
+  var MG0 = sh.mags.filter(function (m) { return !(m.tur >= 0); });   // 砲塔裡的彈藥箱另外擺（turStation）⇒ 不算在「只有一間」裡
   function anchors(mag) {
-    if (sh.mags.length !== 1) return [{ x: Math.round(mag.blast[0]), dir: 0, tag: magTag(mag) }];
+    if (MG0.length !== 1) return [{ x: Math.round(mag.blast[0]), dir: 0, tag: magTag(mag) }];
     return [{ x: Math.round(mag.box[3]) + 16, dir: 1, tag: '前' }, { x: Math.round(mag.box[0]) - 16, dir: -1, tag: '後' }];
   }
   function nearMag(x) { var best = sh.mags[0], bd = 1e9; sh.mags.forEach(function (m) { var d = Math.abs(m.blast[0] - x); if (d < bd) { bd = d; best = m; } }); return best; }
@@ -280,7 +281,8 @@ function makeStations(sh, auto) {
     // 這一層有從艙口吊上來的 ⇒ 吊的那幾間不再找空地；沒有 hoist 的彈藥庫照舊找（TASK-0658 哨兵號：甲板上的備便彈藥櫃 ——
     //   原船的火藥從砲塔裡的艙口上來，砲塔那一圈走不穿（TASK-0655）⇒ 甲板上的速射砲要靠櫃子旁的取用點）。⛔ 以前整層 return ⇒ 第二間的取用點不見。
     //   只有一間、或每一間都有 hoist（莫尼特號）⇒ 跟以前一樣。
-    var rest = out.length > n0 ? sh.mags.filter(function (m) { return !m.hoist; }) : sh.mags;
+    sh.mags.forEach(function (m) { if (m.tur >= 0 && m.kegs.length && m.box[2] >= zr[0] - 2 && m.box[2] <= zr[1] + 2) turStation(D, m); });
+    var rest = (out.length > n0 ? sh.mags.filter(function (m) { return !m.hoist; }) : sh.mags).filter(function (m) { return !(m.tur >= 0); });
     if (!rest.length) return;
     rest.forEach(function (mag) { anchors(mag).forEach(function (A) {
       var spot = findSpot(A.x, A.dir, zr);
@@ -288,6 +290,26 @@ function makeStations(sh, auto) {
     }); });
   });
   return out;
+  // 砲塔裡的彈藥箱（TASK-0659；Tim 2026-10-16：「砲塔內也要可以放彈藥箱」）：桶就是彈藥箱自己的（不另外擺），送藥手站在箱子旁、砲塔裡站得住、不在砲裡的一格；
+  //   取用點跟著砲塔轉（27_turret.js turRiders：st.tur）。照開局的擺法找（砲塔座標 ＝ 開局的船的格座標）。
+  function turStation(D, mag) {
+    var b = mag.box, cx = (b[0] + b[3]) / 2, cy = (b[1] + b[4]) / 2, at = null, bd = 1e9, TB = T.turrets[mag.tur].box, rk = turRootK(T, mag.tur), NB = navBase(T), RB = navRestB(T, rk);
+    // 站得住 ＝ 不轉的甲板上（navBase：砲塔掃過的那一圈是牆 ⇒ 不會找到牆外、也不站進箱子掃過的那一圈）或會轉的甲板上（吊籃：照砲塔座標、腳下是砲塔的格）
+    function sz(x, y, z0, z1) { var z = standZ(NB, x, y, z0, z1, 8); if (z >= 0) return z; z = standZ(RB, x, y, z0, z1, 8); return z >= 0 && armDeckK(T, x, y, z - 1) >= 0 ? z : -1; }
+    for (var y = Math.floor(b[1]) - 4; y <= Math.ceil(b[4]) + 4; y++) for (var x = Math.floor(b[0]) - 4; x <= Math.ceil(b[3]) + 4; x++) {
+      if (x >= b[0] - 1 && x <= b[3] + 1 && y >= b[1] - 1 && y <= b[4] + 1) continue;   // 箱子本身
+      if (x < TB[0] || x > TB[3] || y < TB[1] || y > TB[4]) continue;  // 砲塔的框外
+      var z = sz(x, y, D.zr[0], D.zr[1]); if (z < 0 || inGun(x, y, z)) continue;
+      var d = Math.hypot(x + 0.5 - cx, y + 0.5 - cy); if (d < bd) { bd = d; at = [x + 0.5, y + 0.5, z]; }
+    }
+    if (!at) return;
+    var st = { deck: D.key, mag: mag, name: D.name + magTag(mag) + '取用點（砲塔裡）', kegs: mag.kegs, pos: [cx, cy, b[2] + 3], flashT: -9, tur: mag.tur, at: at, slots: [at] };
+    [[2, 0], [-2, 0], [0, 2], [0, -2]].forEach(function (o) {
+      var x = Math.floor(at[0] + o[0]), y = Math.floor(at[1] + o[1]), z = sz(x, y, at[2] - 1, at[2] + 1);
+      if (z >= 0 && !inGun(x, y, z) && !(x >= b[0] && x <= b[3] && y >= b[1] && y <= b[4]) && x >= TB[0] && x <= TB[3] && y >= TB[1] && y <= TB[4]) st.slots.push([x + 0.5, y + 0.5, z]);
+    });
+    out.push(st);
+  }
   function build(D, mag, name, spot, up) {                             // up：吊上來的取用點，送藥手取藥的那一格（梯頭）；桶照樣擺在 spot
       var deck = D.key;
       var st = { deck: deck, mag: mag, name: name, kegs: [], pos: [spot[0] + 4.5, spot[1] + 4.5, spot[2] + 3], flashT: -9 };
@@ -388,7 +410,7 @@ function monkeyTo(sh, c, to, dt) {
   var dx = to[0] - c.pos[0], dy = to[1] - c.pos[1], l = Math.hypot(dx, dy);
   if (l < 0.6) { c.pos = to.slice(); c.moving = false; return true; }
   var s = Math.min(l, MONKEY_SP * dt); c.pos[0] += dx / l * s; c.pos[1] += dy / l * s; c.moving = true;
-  var zr = sh.deckZ[c.deck], z = standZ(sh.grid, Math.floor(c.pos[0]), Math.floor(c.pos[1]), zr[0], zr[1], 6); if (z >= 0) c.pos[2] = z;
+  var zr = sh.deckZ[c.deck], z = standZ(sh.T.turDeck ? turStandG(sh) : sh.grid, Math.floor(c.pos[0]), Math.floor(c.pos[1]), zr[0], zr[1], 6); if (z >= 0) c.pos[2] = z;   // 有會轉的甲板 ⇒ 砲塔的格也踩得住（27_turret.js）
   return false;
 }
 function stepMonkey(sh, c, dt) {

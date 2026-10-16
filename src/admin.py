@@ -981,6 +981,7 @@ def act_shipcheck(ids=None):
               '平滑渲染（關聯 meta render=smooth，TASK-0616）：' + (I.get('smooth') or '—'), '',
               '火藥（送藥手：取用點 → 砲尾藥箱）：' + (I.get('powder') or '—'), '',
               '迴旋砲／砲塔（meta mount；沒標 ＝ 固定）：' + (I.get('mounts') or '—'), '',
+              '砲塔層（關聯 meta kind=turret；殼、上面的砲與模型、彈藥箱跟著轉，前方 front 對準瞄準方位，TASK-0659）：' + (I.get('turrets') or '—'), '',
               '砲帶的裝甲（關聯 meta kind=armor、mount；跟著砲轉、一格一格打掉，TASK-0631）：' + (I.get('armor') or '—'), '',
               '門、艙蓋（模型 meta kind=door、固定點 hinge-a／hinge-b；不擋人、打掉了開口才進水，TASK-0638）：' + (I.get('doors') or '—'), '',
               '照參數轉的子物件（模型 meta spin；舵、舵輪跟著舵角轉，只是畫面，TASK-0640）：' + (I.get('spins') or '—'), '',

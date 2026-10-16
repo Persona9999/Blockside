@@ -149,13 +149,19 @@ function shipCheck(id) {
       return g.model.path + '（' + (M.ports ? '換砲門 ' + M.ports.map(dg).join('／') + '°' : '砲塔 ' + dg(M.arc[0]) + '～' + dg(M.arc[M.arc.length - 1]) + '°' + (M.fire && (M.fire[0] !== M.arc[0] || M.fire[M.fire.length - 1] !== M.arc[M.arc.length - 1]) ? '（開火 ' + dg(M.fire[0]) + '～' + dg(M.fire[M.fire.length - 1]) + '°）' : '')) + '、' + dg(M.rate) + '°／秒）'; }).join('、');
     // ── 砲帶的裝甲（TASK-0631；24_armor.js）：關聯 meta kind=armor、mount=<砲模型的路徑> ⇒ 跟著那門砲轉、一格一格打掉 ──
     R.info.armor = armSummary(T);
+    // ── 砲塔層（TASK-0659；27_turret.js）：關聯 meta kind=turret ⇒ 子樹裡的殼、砲、模型、彈藥箱跟著轉，前方（固定點 front）對準瞄準方位 ──
+    R.info.turrets = turretSummary(sh);
+    (sh.tur || []).forEach(function (N) {
+      if (!N.guns.length) add('error', '砲塔', N.path, '砲塔底下沒有砲 ⇒ 不會轉（砲全滅才停 ＝ 一開始就停）', '在砲塔作品裡掛砲的模型（meta kind=gun；造船規格 §4.8）');
+    });
+    if (T.turDeck) R.info.turrets += '；會轉的甲板（腳下是砲塔自己的格）：有';
     R.info.doors = doorsSummary(sh);                                    // 門、艙蓋（TASK-0638）
     R.info.spins = spinSummary(sh);                                     // 照參數轉的子物件（TASK-0640）
     (T.armBad || []).forEach(function (b) { add(b.lv, '裝甲', b.where, b.msg, b.fix); });
     (T.ancBad || []).forEach(function (b) { add(b.lv, '錨', b.where, b.msg, b.fix); });   // 錨的關聯拆不出來（76_anchor.js anchorParts）
     (sh.arm || []).forEach(function (a) {
       if (a.prop) return;                                               // 螺旋槳（會轉的體素件）：下面「動力件」那一段報
-      if (!a.g) { add('error', '裝甲', a.A.mount, '拆出來了、可是開戰時找不到那門砲的迴旋 ⇒ 裝甲不轉', '那門砲的 meta kind=gun、mount=turret｜pivot（21_gunnery.js gunMountInit）'); return; }
+      if (!a.nd) { add('error', '裝甲', a.A.mount, '拆出來了、可是開戰時找不到那門砲的迴旋 ⇒ 裝甲不轉', '那門砲的 meta kind=gun、mount=turret｜pivot（21_gunnery.js gunMountInit）'); return; }
       var bl = armBlock(a); if (bl && bl.some(function (n) { return n > 0; })) add('error', '裝甲', a.A.mount, '砲口沿砲軸碰到裝甲（' + bl.join('／') + ' 點，轉到 ' + Math.round(armYaw(a) / Math.PI * 180) + '°）⇒ 砲口不在砲門裡（砲彈打在自己的裝甲上）', '砲門開在砲軸上（砲口固定點 muzzle 正前方），或把砲往砲門挪');
       // 掃過的那一圈是牆（TASK-0655；24_armor.js armRing）⇒ 圈裡要有梯子通得到（莫尼特號：梯子/turret 從住艙甲板上到砲塔底下的艙口）
       var Rg = a.A.ring; if (!Rg) return;

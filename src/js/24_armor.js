@@ -19,10 +19,12 @@
 /** 船型 T：找 kind=armor 的關聯、拆出來（見檔頭）。 */
 function armorSetup(T) {
   T.armor = []; T.armBad = []; T.hullG = T.base;
+  turretSetup(T);                                                        // 砲塔層（kind=turret，27_turret.js）：殼在下面拆（舊的 kind=armor 先拆）
   var by = {}, models = T.rig.models || [], keys = [];
   (T.h.parts || []).forEach(function (p) {
     var mt = p.meta || {}; if (mt.kind !== 'armor') return;
     function bad(lv, msg, fix) { T.armBad.push({ lv: lv, where: p.path, msg: msg, fix: fix }); }
+    if (!mt.mount && turOf(T, p.path) >= 0) return;                    // 砲塔底下的 kind=armor（沒寫 mount）⇒ 那座砲塔的殼（下面一起拆）
     if (!mt.mount) { bad('warn', 'kind=armor 沒有 mount ⇒ 照舊是船殼（不轉）', '關聯 meta mount=<砲模型的路徑>（那門砲的 meta 要有 mount=turret｜pivot）'); return; }
     var m = models.filter(function (q) { return q.name === mt.mount; })[0], gm = (m && m.meta) || {};
     if (!m) { bad('error', 'mount=' + mt.mount + ' 找不到這個模型 ⇒ 照舊是船殼（不轉）', 'mount 寫砲模型的完整路徑（例：甲板-main/砲塔）'); return; }
@@ -51,8 +53,27 @@ function armorSetup(T) {
     });
     if (!n) return;
     G.sm = B.sm;                                                         // 平滑渲染的旗標（不會變 ⇒ 共用船型那一份；VoxelKit 的方塊網格化跳過它們）
-    T.armor.push({ k: T.armor.length, mount: mount, parts: parts, grid: G, bb: bb, n: n, t: t });
+    T.armor.push({ k: T.armor.length, mount: mount, parts: parts, grid: G, bb: bb, n: n, t: t, rootK: turRootK(T, turOf(T, mount)) });
   });
+  // 砲塔的殼（27_turret.js）：外框（parts[].box，砲塔作品的框）裡、還沒被拆走的格（舊的 kind=armor、裡面那一層砲塔先拿）⇒ 由內往外拆
+  for (var ti = (T.turrets || []).length - 1; ti >= 0; ti--) {
+    var TD = T.turrets[ti], b = TD.box, G = new VK.Grid(T.h.size), bb = [1e9, 1e9, 1e9, -1, -1, -1], t = 0, B = T.base, MG = T.matG, want = TD.meta.material || null;
+    var P = { path: TD.path, material: want, render: TD.meta.render || '', n: 0, sm: 0, badMat: 0 };
+    var x0 = Math.max(0, Math.floor(b[0])), y0 = Math.max(0, Math.floor(b[1])), z0 = Math.max(0, Math.floor(b[2])), x1 = Math.min(B.sx - 1, Math.floor(b[3])), y1 = Math.min(B.sy - 1, Math.floor(b[4])), z1 = Math.min(B.sz - 1, Math.floor(b[5]));   // 兩端都含
+    for (var z = z0; z <= z1; z++) for (var y = y0; y <= y1; y++) for (var x = x0; x <= x1; x++) {
+      var c = B.get(x, y, z); if (!c || (T.hullG !== B && !T.hullG.get(x, y, z))) continue;   // 已經拆走（別的裝甲、裡面那層砲塔）⇒ 不再拿
+      if (T.hullG === B) T.hullG = B.share();
+      G.set(x, y, z, c); T.hullG.set(x, y, z, 0); P.n++;
+      var mi = MG ? MG.get(x, y, z) : 0; t += T.matT[mi];
+      if (T.smG && T.smG.get(x, y, z)) P.sm++;
+      if (want && T.matIds[mi] !== want) P.badMat++;
+      if (x < bb[0]) bb[0] = x; if (y < bb[1]) bb[1] = y; if (z < bb[2]) bb[2] = z; if (x > bb[3]) bb[3] = x; if (y > bb[4]) bb[4] = y; if (z > bb[5]) bb[5] = z;
+    }
+    if (!P.n) { T.armBad.push({ lv: 'warn', where: TD.path, msg: '砲塔的外框裡沒有格（沒有殼）⇒ 只有上面的模型跟著轉', fix: '確認砲塔作品的框框到殼的格（造船規格 §4.8）' }); continue; }
+    if (P.badMat) T.armBad.push({ lv: 'warn', where: TD.path, msg: '砲塔外框裡有 ' + P.badMat.toLocaleString('en') + ' 格的材質不是 ' + want + ' ⇒ 照它們自己的材質、一起跟著轉', fix: '砲塔外框裡只放砲塔的格，或把材質標成一樣' });
+    G.sm = B.sm;
+    T.armor.push({ k: T.armor.length, mount: TD.path, tur: ti, parts: [P], grid: G, bb: bb, n: P.n, t: t, rootK: turRootK(T, ti) });
+  }
   propSetup(T);                                                          // 會轉的體素件（螺旋槳；檔尾）
 }
 /** 船型 T 的裝甲上 GPU（05_hull.js「船體網格」那一步，smoothSetup 之後）：每塊一份合併網格與平滑面（開戰時每艘共用，被打到的區才各自重建）。
@@ -76,26 +97,28 @@ function armorShip(sh) {
   var T = sh.T, P = propShip(sh);                                       // 會轉的體素件（螺旋槳；檔尾）也排在 sh.arm 裡（a.prop）：打到、畫、重網格化同一套
   if (!T.armor || !T.armor.length) { if (P.length) { sh.arm = P; sh.armN0 = 0; } return; }
   sh.arm = T.armor.map(function (A) {
-    var g = (sh.mounts || []).filter(function (q) { return q.model.path === A.mount; })[0] || null, grid = A.grid.share(), rs = new VK.RegionSet(gl, grid, QIDX);
+    var tu = A.tur !== undefined, g = tu ? null : (sh.mounts || []).filter(function (q) { return q.model.path === A.mount; })[0] || null, grid = A.grid.share(), rs = new VK.RegionSet(gl, grid, QIDX);
     rs.shareFrom(A.rs0);
-    var a = { A: A, T: T, sh: sh, g: g, grid: grid, rs: rs, pin: T.hullG, lost: 0 };
-    if (g) armRing(A, g.mt.c);                                         // 掃過的那一圈（走路看的牆；TASK-0655）：船型第一艘算一次
+    var nd = tu ? (sh.tur ? sh.tur[A.tur] : null) : g ? g.mt : null;    // 跟著哪個節點轉：砲塔的殼 ⇒ 那座砲塔（27_turret.js）；舊的 kind=armor ⇒ 那門砲的迴旋
+    var a = { A: A, T: T, sh: sh, g: g, nd: nd, grid: grid, rs: rs, pin: T.hullG, lost: 0 };
+    if (nd) armRing(A, ndPivots(nd));                                  // 掃過的那一圈（走路看的牆；TASK-0655）：船型第一艘算一次（疊在砲塔上的照每一層的轉軸）
     smShare(a, A.smP);
     return a;
   });
+  armDeckZf(T);
   sh.armN0 = T.armor.reduce(function (s, A) { return s + A.n; }, 0);   // 開戰時裝甲幾格（重量：32_hull.js shipT、05_material.js voxLostT）；螺旋槳不算（重量照模型）
   if (P.length) sh.arm = sh.arm.concat(P);
 }
-/** 裝甲現在轉了多少（那門砲的 g.mt.yaw；沒找到砲 ⇒ 0）。 */
-function armYaw(a) { var M = a.g && a.g.mt; return M ? M.yaw : 0; }
-/** 裝甲的格座標 → 船的格座標（跟 modelLocal 同一個矩陣：平移到轉軸、繞 z 轉、平移回來）；沒轉 ⇒ null。 */
-function armLocal(a) { if (a.prop) return propLocal(a); var y = armYaw(a); if (!y) return null; var c = a.g.mt.c; return M4.mul(M4.mul(trans(c[0], c[1], c[2]), rotM([0, 0, 1], y)), trans(-c[0], -c[1], -c[2])); }
+/** 裝甲現在轉了多少（跟著的那個節點一路的角度：那門砲的 g.mt.yaw、砲塔；沒有 ⇒ 0）。 */
+function armYaw(a) { return a.nd ? ndYaw(a.nd) : 0; }
+/** 裝甲的格座標 → 船的格座標（跟 modelLocal 同一個矩陣：平移到轉軸、繞 z 轉、平移回來；疊在砲塔上 ⇒ 再一層一層往外，27_turret.js ndMat）；沒轉 ⇒ null。 */
+function armLocal(a) { if (a.prop) return propLocal(a); return a.nd ? ndMat(a.nd) : null; }
 /** 世界矩陣（sh.M 照當下的：模擬那一步、或畫面內插過的）。 */
 function armM(a) { var L = armLocal(a); return L ? M4.mul(a.sh.M, L) : a.sh.M; }
 /** 船的格座標 p → 裝甲的格座標（反轉 yaw）；dir ⇒ 方向（不平移）。 */
-function armIn(a, p, dir) { if (a.prop) return propXf(a, p, dir, true); var y = armYaw(a); if (!y) return p; return rotZ(p, dir ? [0, 0, 0] : a.g.mt.c, -y); }
+function armIn(a, p, dir) { if (a.prop) return propXf(a, p, dir, true); return a.nd ? ndIn(a.nd, p, dir) : p; }
 /** 裝甲的格座標 → 船的格座標。 */
-function armOut(a, p) { if (a.prop) return propXf(a, p, false, false); var y = armYaw(a); return y ? rotZ(p, a.g.mt.c, y) : p; }
+function armOut(a, p) { if (a.prop) return propXf(a, p, false, false); return a.nd ? ndOut(a.nd, p) : p; }
 /** 船的格座標 L 落在哪一塊裝甲的格裡（沒有 ⇒ null）。 */
 function armAt(sh, L) {
   for (var i = 0; i < sh.arm.length; i++) {
@@ -130,7 +153,7 @@ function armBetween(sh, a, b) {
 var ARM_BINS = 64;
 function armPolar(a) {
   var A = a.A; if (A.pol) return A.pol;
-  var c = a.g.mt.c, bb = A.bb, G = A.grid, pol = {};
+  var c = a.nd.c, bb = A.bb, G = A.grid, pol = {};
   for (var z = bb[2]; z <= bb[5]; z++) {
     var row = null;
     for (var y = bb[1]; y <= bb[4]; y++) for (var x = bb[0]; x <= bb[3]; x++) {
@@ -145,8 +168,8 @@ function armPolar(a) {
 /** 船的格座標 L 在 m 那門砲的裝甲內面外側？（沒有裝甲、那門砲沒帶裝甲 ⇒ false） */
 function armMuzzle(sh, m, L) {
   for (var i = 0; i < sh.arm.length; i++) {
-    var a = sh.arm[i]; if (!a.g || a.g.model !== m) continue;
-    var pol = armPolar(a), c = a.g.mt.c, Q = armIn(a, L), dx = Q[0] - c[0], dy = Q[1] - c[1], d = Math.hypot(dx, dy);
+    var a = sh.arm[i]; if (!armOwns(a, m)) continue;
+    var pol = armPolar(a), c = a.nd.c, Q = armIn(a, L), dx = Q[0] - c[0], dy = Q[1] - c[1], d = Math.hypot(dx, dy);
     var k = Math.floor((Math.atan2(dy, dx) + Math.PI) / (2 * Math.PI) * ARM_BINS) % ARM_BINS, z0 = Math.floor(Q[2]), rin = Infinity;
     for (var dz = 0; dz <= 3 && rin === Infinity; dz++) for (var s = dz ? -1 : 1; s <= 1 && rin === Infinity; s += 2) {
       var row = pol[z0 + s * dz]; if (!row) continue;
@@ -156,6 +179,8 @@ function armMuzzle(sh, m, L) {
   }
   return false;
 }
+/** 這塊裝甲是不是 m 那門砲的（舊的：mount 那門砲；砲塔的殼：砲掛在那座砲塔、或它上面的砲塔上）。 */
+function armOwns(a, m) { return a.g ? a.g.model === m : !!(a.nd && a.nd.isTur && m.gun && gunNode(m.gun) && ndHas(gunNode(m.gun), a.nd)); }
 /** 裝甲原本的位置 (x, y, z)（裝甲的格座標）還有沒有格（重量照材質層的座標數）。 */
 function armGet(sh, x, y, z) { for (var i = 0; i < sh.arm.length; i++) if (!sh.arm[i].prop && sh.arm[i].grid.get(x, y, z)) return 1; return 0; }   // 螺旋槳不算（重量照模型）
 function armCount(sh) { var n = 0; for (var i = 0; i < sh.arm.length; i++) if (!sh.arm[i].prop) n += sh.arm[i].grid.count; return n; }
@@ -165,23 +190,29 @@ function armCount(sh) { var n = 0; for (var i = 0; i < sh.arm.length; i++) if (!
 //   出入只走圈裡的艙口梯（莫尼特號：梯子/turret，住艙甲板 → 砲塔底下的艙口）；圈裡沒有梯子 ⇒ 匯入檢查警告（75_shipcheck.js）。
 //   用的：第一人稱（81_fps.js）、船員的走路格與站位（42_hands.js navBuild／navRefresh、40_crew.js makeCrew／goToGun）。⛔ 沒用：火藥桶、取用點（23_powder.js 照舊看 T.base）。
 var ARM_RK = 2;
-/** 船型的一塊裝甲 A 繞 c（那門砲的轉軸，船的格座標）掃過的那一圈（armorShip 第一艘算、存在 A.ring）。 */
-function armRing(A, c) {
+/** 船型的一塊裝甲 A 繞 cs（轉軸由外往內，船的格座標；一個 ＝ 那門砲、那座砲塔的轉軸）掃過的那一圈（armorShip 第一艘算、存在 A.ring）。
+ *  疊在砲塔上的（27_turret.js）：每一層都能一整圈轉 ⇒ 一格離最外層轉軸的距離落在 [max(0, 2·最長那一段 − 總長), 總長]（一串轉軸＋格心連成的折線）；只有一層 ＝ 格心到轉軸那一段。 */
+function armRing(A, cs) {
   if (A.ring) return A.ring;
+  if (typeof cs[0] === 'number') cs = [cs];
+  var c = cs[0], cl = cs[cs.length - 1], s0 = 0, m0 = 0;
+  for (var i = 1; i < cs.length; i++) { var l = Math.hypot(cs[i][0] - cs[i - 1][0], cs[i][1] - cs[i - 1][1]); s0 += l; m0 = Math.max(m0, l); }
   var bb = A.bb, G = A.grid, rows = {}, rmax = 0, x, y, z;
-  var far = Math.max(Math.hypot(bb[0] - c[0], bb[1] - c[1]), Math.hypot(bb[3] + 1 - c[0], bb[1] - c[1]), Math.hypot(bb[0] - c[0], bb[4] + 1 - c[1]), Math.hypot(bb[3] + 1 - c[0], bb[4] + 1 - c[1])), N = Math.ceil((far + 1) * ARM_RK) + 1;
+  var far = s0 + Math.max(Math.hypot(bb[0] - cl[0], bb[1] - cl[1]), Math.hypot(bb[3] + 1 - cl[0], bb[1] - cl[1]), Math.hypot(bb[0] - cl[0], bb[4] + 1 - cl[1]), Math.hypot(bb[3] + 1 - cl[0], bb[4] + 1 - cl[1])), N = Math.ceil((far + 1) * ARM_RK) + 1;
   for (z = bb[2]; z <= bb[5]; z++) for (y = bb[1]; y <= bb[4]; y++) for (x = bb[0]; x <= bb[3]; x++) {
     if (!G.get(x, y, z)) continue;
-    var d = Math.hypot(x + 0.5 - c[0], y + 0.5 - c[1]), row = rows[z] || (rows[z] = new Uint8Array(N));
-    for (var k = Math.max(0, Math.floor((d - 0.71) * ARM_RK)), k1 = Math.min(N - 1, Math.floor((d + 0.71) * ARM_RK)); k <= k1; k++) row[k] = 1;
-    if (d + 0.71 > rmax) rmax = d + 0.71;
+    var d = Math.hypot(x + 0.5 - cl[0], y + 0.5 - cl[1]), hi = s0 + d, lo = Math.max(0, 2 * Math.max(m0, d) - hi), row = rows[z] || (rows[z] = new Uint8Array(N));
+    for (var k = Math.max(0, Math.floor((lo - 0.71) * ARM_RK)), k1 = Math.min(N - 1, Math.floor((hi + 0.71) * ARM_RK)); k <= k1; k++) row[k] = 1;
+    if (hi + 0.71 > rmax) rmax = hi + 0.71;
   }
   return (A.ring = { c: [c[0], c[1]], z0: bb[2], z1: bb[5], rows: rows, r: rmax });
 }
-/** (x, y, z)（船的格座標）在不在哪一塊裝甲掃過的那一圈裡（沒有圈的那塊 ⇒ 照它原本的格）。 */
-function armWall(T, x, y, z) {
+/** (x, y, z)（船的格座標）在不在哪一塊裝甲掃過的那一圈裡（沒有圈的那塊 ⇒ 照它原本的格）。rk 給了 ⇒ 最外層是第 rk 座砲塔的那幾塊不算（會轉的甲板照砲塔座標看自己那一串）。 */
+function armWall(T, x, y, z, rk) {
   for (var i = 0; i < T.armor.length; i++) {
     var A = T.armor[i], R = A.ring;
+    if (rk !== undefined && A.rootK === rk) continue;
+    if (A.tur !== undefined && T.turZf && z >= T.turZf[x + y * T.base.sx] && T.turZr[x + y * T.base.sx] === A.rootK) continue;   // 站在這座砲塔自己的地板上（吊籃）⇒ 照砲塔座標看，掃過的那一圈不擋（armDeckZf）
     if (!R) { if (A.grid.get(x, y, z)) return 1; continue; }
     if (z < R.z0 || z > R.z1) continue;
     var row = R.rows[z]; if (!row) continue;
@@ -208,11 +239,47 @@ function navG(sh) {
   var g = sh.grid, T = sh.T;
   return sh.navG || (sh.navG = { sx: g.sx, sy: g.sy, sz: g.sz, get: function (x, y, z) { return sh.grid.get(x, y, z) ? 1 : armWall(T, x, y, z); } });
 }
-/** 打掉裝甲的一格（20_shatter.js removeVoxel 的裝甲版：不進水、不改走路格、不推連通的種子）。回：原本的色（0 ＝ 本來就沒有）。 */
+// 會轉的甲板（27_turret.js；42_hands.js navBuild／navRefresh）：腳下是砲塔自己的格的那幾點照砲塔座標看 ——
+//   船殼＋殼（開局的樣子／這艘打掉之後的；殼的格座標 ＝ 砲塔座標）＋別座砲塔掃過的那一圈（自己這一串不算）。
+/** 砲塔自己的地板（吊籃、砲塔頂；27_turret.js「會轉的甲板」）：每一柱 (x, y) 最低那一個「砲塔的格、上面是空的」再往上一格 ⇒ T.turZf（站的高度）、T.turZr（最外層第幾座）。
+ *  那一柱在那個高度以上，那一串砲塔掃過的那一圈不算牆（armWall）——站在吊籃上的人跟著轉，吊籃上的東西照開局的位置擋（T.base）。罩在甲板上的砲塔（莫尼特號）裡面沒有砲塔的地板 ⇒ 只有頂上那一層，走路格碰不到。
+ *  船型第一艘算一次（armorShip）。 */
+function armDeckZf(T) {
+  if (T.turZf !== undefined) return; T.turZf = null;
+  var B = T.base, Zf = null, Zr = null;
+  T.armor.forEach(function (A) {
+    if (A.tur === undefined) return;
+    var b = A.bb;
+    for (var y = b[1]; y <= b[4]; y++) for (var x = b[0]; x <= b[3]; x++) for (var z = b[2]; z <= b[5]; z++) {
+      if (!A.grid.get(x, y, z) || B.get(x, y, z + 1)) continue;
+      if (!Zf) { Zf = new Int16Array(B.sx * B.sy).fill(32767); Zr = new Int16Array(B.sx * B.sy).fill(-1); }
+      var i = x + y * B.sx; if (z + 1 < Zf[i]) { Zf[i] = z + 1; Zr[i] = A.rootK; }
+      break;                                                             // 這一柱最低的那一個就好
+    }
+  });
+  T.turZf = Zf; T.turZr = Zr;
+}
+/** 第 k 座砲塔最外層是第幾座（不在砲塔上 ⇒ -1）。 */
+function turRootK(T, k) { if (k < 0) return -1; while (T.turrets[k].up >= 0) k = T.turrets[k].up; return k; }
+/** (x, y, z)（開局的船的格座標）是哪一座砲塔的殼（照開局的樣子；不是 ⇒ -1）。 */
+function armDeckK(T, x, y, z) { for (var i = 0; i < T.armor.length; i++) { var A = T.armor[i]; if (A.tur !== undefined && A.grid.get(x, y, z)) return A.tur; } return -1; }
+/** 開戰時（船型共用）：最外層第 rk 座砲塔那一串的會轉的甲板看的格子。 */
+function navRestB(T, rk) {
+  var C = T.navRB || (T.navRB = {}); if (C[rk]) return C[rk];
+  var B = T.base; return (C[rk] = { sx: B.sx, sy: B.sy, sz: B.sz, get: function (x, y, z) { return B.get(x, y, z) || armWall(T, x, y, z, rk); } });
+}
+/** 這艘（打掉之後的）：最外層第 rk 座砲塔那一串的會轉的甲板看的格子。 */
+function navRestG(sh, rk) {
+  var C = sh.navRG || (sh.navRG = {}); if (C[rk]) return C[rk];
+  var g = sh.grid, T = sh.T;
+  return (C[rk] = { sx: g.sx, sy: g.sy, sz: g.sz, get: function (x, y, z) { if (sh.grid.get(x, y, z)) return 1; for (var i = 0; i < sh.arm.length; i++) if (!sh.arm[i].prop && sh.arm[i].grid.get(x, y, z)) return 1; return armWall(T, x, y, z, rk); } });
+}
+/** 打掉裝甲的一格（20_shatter.js removeVoxel 的裝甲版：不進水、不推連通的種子；砲塔的殼 ⇒ 會轉的甲板那幾點重算走路格，照砲塔座標）。回：原本的色（0 ＝ 本來就沒有）。 */
 function armRemove(sh, a, x, y, z) {
   var c = a.grid.set(x, y, z, 0);
   if (c <= 0) return 0;
   a.rs.touch(x, y, z); a.lost++; sh.lost++;
+  if (a.A.tur !== undefined && sh.T.turDeck && NAV_RE > 0 && sh.nav) navDirty(sh, x, y, z);
   if (a.smD) smTouch(a, x, y, z);                                       // 平滑面：附近的區重建（15_smooth.js）
   return c;
 }
@@ -278,20 +345,24 @@ function armRay(o, oL, dL, tMax) {
 /** 砲口在不在砲門裡：每個砲口（g.muzs，沒有 ⇒ g.muz）沿砲軸從砲口往後 2 格、往外走到裝甲外框外面，每 0.25 格量一點，換到裝甲的座標碰到幾格（0 ＝ 穿過砲門）。
  *  匯入檢查、?debug=1 的 __game.armor 量（Tim 的驗收：轉到哪個角度兩個砲口都在砲門裡）。 */
 function armBlock(a) {
-  var g = a.g; if (!g) return null;
-  var ax = g.ax, b = a.A.bb, far = Math.hypot(b[3] - b[0], b[4] - b[1]) + 4;
-  return (g.muzs || [g.muz]).map(function (m) {
-    var hit = 0;
-    for (var t = -2; t <= far; t += 0.25) { var Q = armIn(a, [m[0] + ax[0] * t, m[1] + ax[1] * t, m[2]]); if (a.grid.get(Math.floor(Q[0]), Math.floor(Q[1]), Math.floor(Q[2]))) hit++; }
-    return hit;
+  var gs = a.g ? [a.g] : a.nd && a.nd.isTur ? a.nd.guns : null; if (!gs || !gs.length) return null;   // 砲塔的殼（27_turret.js）⇒ 上面每一門砲的每個砲口
+  var b = a.A.bb, far = Math.hypot(b[3] - b[0], b[4] - b[1]) + 4, out = [];
+  gs.forEach(function (g) {
+    var ax = g.ax;
+    (g.muzs || [g.muz]).forEach(function (m) {
+      var hit = 0;
+      for (var t = -2; t <= far; t += 0.25) { var Q = armIn(a, [m[0] + ax[0] * t, m[1] + ax[1] * t, m[2]]); if (a.grid.get(Math.floor(Q[0]), Math.floor(Q[1]), Math.floor(Q[2]))) hit++; }
+      out.push(hit);
+    });
   });
+  return out;
 }
 /** 讀數（匯入檢查 info.armor）：每塊 ＝ 那門砲：每個關聯幾格（材質、平滑幾格）、合計幾格幾噸。 */
 function armSummary(T) {
   if (!T.armor || !T.armor.length) return '';
   return T.armor.map(function (A) {
-    return A.mount + '：' + A.parts.map(function (P) { return P.path + ' ' + P.n.toLocaleString('en') + ' 格（' + (P.material ? matInfo(P.material).name : '材質照預設') + (P.sm ? '、平滑 ' + P.sm.toLocaleString('en') : '') + '）'; }).join('＋') +
-      ' ＝ ' + A.n.toLocaleString('en') + ' 格、' + A.t.toFixed(1) + ' 噸，跟著砲轉';
+    return A.mount + (A.tur !== undefined ? '（砲塔的殼）' : '') + '：' + A.parts.map(function (P) { return P.path + ' ' + P.n.toLocaleString('en') + ' 格（' + (P.material ? matInfo(P.material).name : '材質照預設') + (P.sm ? '、平滑 ' + P.sm.toLocaleString('en') : '') + '）'; }).join('＋') +
+      ' ＝ ' + A.n.toLocaleString('en') + ' 格、' + A.t.toFixed(1) + ' 噸，跟著' + (A.tur !== undefined ? '砲塔' : '砲') + '轉';
   }).join('；') + '（船殼 ' + T.hullG.count.toLocaleString('en') + ' 格）';
 }
 // ── 會轉的體素件（TASK-0653 第二段；Tim 2026-10-16：「鍋爐 & 軸 & 螺旋槳屬於這類 且可以根據剩餘體素去做運算」）──

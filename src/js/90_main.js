@@ -165,7 +165,7 @@ if (DEBUG) window.__game = {
   armor: function (i, o) {
     var sh = SHIPS[i || 0], D = Math.PI / 180, out = {}; if (!sh || !sh.arm) return null;
     if (o && o.yaw !== undefined) sh.arm.forEach(function (a) {
-      var g = a.g, M = g && g.mt; if (!M) return;
+      var g = a.g, M = g && g.mt; if (!M || M.up) return;               // 掛在砲塔上的（27_turret.js）⇒ 用 __game.turret 設
       var y = o.yaw * D, da = y - M.yaw, ax = M4.dir(rotM([0, 0, 1], y), M.ax0[0], M.ax0[1], 0);
       M.yaw = M.yawT = y; g.model.rot = y; g.ax = [ax[0], ax[1]];
       g.muz = mountRot(M.muz0, M.c, y); if (M.muzs0) g.muzs = M.muzs0.map(function (q) { return mountRot(q, M.c, y); });
@@ -173,7 +173,7 @@ if (DEBUG) window.__game = {
       (g.spots || []).forEach(function (s) { s.at = mountRot(s.at, M.c, da); var c = s.who; if (c && c.gun === g && !c.walk && c.st === 0) { c.pos = mountRot(c.pos, M.c, da); if (c.home) c.home = mountRot(c.home, M.c, da); } });
     });
     if (o && o.shot) {
-      var a = sh.arm[0], b0 = a.A.bb, c = a.g ? a.g.mt.c : [(b0[0] + b0[3]) / 2, (b0[1] + b0[4]) / 2, b0[2]], ang = o.shot[0] * D, z = o.shot[1] + 0.5, GS = GUNS[o.shot[2]] || Object.keys(GUNS).map(function (k3) { return GUNS[k3]; }).filter(function (g3) { return g3.code === o.shot[2]; })[0] || GUNS.long;   // 砲種 key 或 code（以前寫 '24l' 其實查不到、落到第一種）
+      var a = sh.arm[0], b0 = a.A.bb, c = a.nd ? a.nd.c : [(b0[0] + b0[3]) / 2, (b0[1] + b0[4]) / 2, b0[2]], ang = o.shot[0] * D, z = o.shot[1] + 0.5, GS = GUNS[o.shot[2]] || Object.keys(GUNS).map(function (k3) { return GUNS[k3]; }).filter(function (g3) { return g3.code === o.shot[2]; })[0] || GUNS.long;   // 砲種 key 或 code（以前寫 '24l' 其實查不到、落到第一種）
       var p = M4.pt(sh.M, c[0] + Math.cos(ang) * 60, c[1] + Math.sin(ang) * 60, z), q = M4.pt(sh.M, c[0], c[1], z), d = norm(sub(q, p)), n0 = sh.grid.count, a0 = armCount(sh);
       var b = { p: p, v: add(mul(d, GS.V), sh.vel), owner: SHIPS.length > 1 ? 1 - (i || 0) : 0, ammo: o.shot[3] || 0, trav: 0, alive: true, age: 0, bounced: false, big: GS.big, hole: GS.hole, dmg: 0, m: GS.shot }, A0 = JSON.stringify(sh.armRes || {});
       for (var k = 0; k < 600 && b.alive; k++) stepBall(b, DT / 4);
@@ -182,9 +182,25 @@ if (DEBUG) window.__game = {
       out.shot = { armRemoved: a0 - armCount(sh), hullRemoved: n0 - sh.grid.count, out: b.alive ? +len(b.v).toFixed(0) : 0, V: GS.V,
         res: ['pen', 'dent', 'rico', 'shell'].filter(function (k2) { return (A1[k2] || 0) > (a00[k2] || 0); }).join('+') || null };   // 鐵甲那一下：穿／凹／彈（TASK-0621）
     }
-    out.arm = sh.arm.map(function (a) { return { mount: a.A.mount, yaw: +(armYaw(a) / D).toFixed(2), n: a.grid.count, n0: a.A.n, lost: a.lost, blk: armBlock(a), gun: a.g ? a.g.alive : null, smooth: a.smR ? a.smR.size : 0 }; });
+    out.arm = sh.arm.map(function (a) { return { mount: a.A.mount, yaw: +(armYaw(a) / D).toFixed(2), n: a.grid.count, n0: a.A.n, lost: a.lost, blk: armBlock(a), gun: a.g ? a.g.alive : a.nd && a.nd.isTur ? a.nd.guns.filter(function (q) { return q.alive; }).length : null, smooth: a.smR ? a.smR.size : 0 }; });
     out.hull = sh.grid.count; out.orig = sh.orig; out.armN0 = sh.armN0; out.mass0 = +shipT(sh).toFixed(3); out.voxLost = +voxLostT(sh).toFixed(4); out.massLost = +massLost(sh).toFixed(4); out.lost = sh.lost;
     return out;
+  },
+  /** 砲塔層（TASK-0659；27_turret.js）：{ k, yaw（度）} ⇒ 把第 k 座直接設成那個角度（跟著轉的一起換）。回每一座的角度、上面的砲（砲口、砲軸、能不能開）、會不會轉的甲板。 */
+  turret: function (i, o) {
+    var sh = SHIPS[i || 0], D = Math.PI / 180; if (!sh || !sh.tur) return null;
+    if (o && o.k !== undefined && o.yaw !== undefined) turretSet(sh, o.k, o.yaw * D);
+    var nav = null;
+    if (o && o.nav && sh.nav) nav = sh.nav.levels.map(function (L) {   // 會轉的甲板的走路格：每一點 navPos（照現在的角度換出去）→ navSnap 找回來，是不是同一點
+      var N = L.N; if (!N.rot) return null; var n = 0, ok = 0, bad = [];
+      for (var i = 0; i < N.rot.length; i++) { if (!N.rot[i] || !N.ok[i]) continue; n++; var P = navPos(N, i), j = navSnap(N, P, 0); if (j === i) ok++; else if (bad.length < 5) bad.push([i, j, P.map(function (v) { return +v.toFixed(1); })]); }
+      return { level: L.name, n: n, ok: ok, bad: bad };
+    });
+    var r3 = function (p) { return p ? p.map(function (v) { return +v.toFixed(2); }) : null; };
+    return { deck: !!sh.T.turDeck, tur: sh.tur.map(function (N) {
+      return { path: N.path, up: N.up ? N.up.path : null, yaw: +(N.yaw / D).toFixed(2), yawT: +(N.yawT / D).toFixed(2), total: +(ndYaw(N) / D).toFixed(2), f0: +(N.f0 / D).toFixed(1), models: N.models.length,
+        guns: N.guns.map(function (g) { return { path: g.model.path, alive: g.alive, own: !!g.mt, yaw: g.mt ? +(g.mt.yaw / D).toFixed(2) : null, muz: r3(g.muz), ax: r3(g.ax), fireOk: mountFireOk(g), cone: +((g.cone || 0.45) / D).toFixed(1), spots: (g.spots || []).length, drop: r3(g.drop) }; }) };
+    }), nav: nav, stations: sh.stations.filter(function (st) { return st.tur >= 0; }).map(function (st) { return { name: st.name, at: r3(st.at), tur: st.tur }; }) };
   },
   hole: function (i, x, z, side, r) { return labHole(SHIPS[i || 0], x, z, side, r); },   // 81_floodlab.js（進水報表共用）
   /** 船邊水花（13_water.js）：現在的檔、水滴與白沫各幾顆、開局以來生了幾顆。{ hide: true } ⇒ 照算、不畫（量繪製成本）。 */

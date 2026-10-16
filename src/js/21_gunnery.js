@@ -145,15 +145,20 @@ function turretAim(M, rel) {
   return rq - A1 < A0 + P2 - rq ? A1 : A0;
 }
 /** 砲口現在在不在能開火的角度裡（砲塔才有；沒有 fire ⇒ 一律可以）。 */
-function mountFireOk(g) { return !(g.mt && g.mt.fire) || arcIn(g.mt.fire, g.mt.yaw) !== null; }
+function mountFireOk(g) {
+  if (g.mt && g.mt.fire && arcIn(g.mt.fire, g.mt.yaw) === null) return false;
+  for (var N = g.mt ? g.mt.up : g.hd; N; N = N.up) if (arcIn(N.fire, N.yaw) === null) return false;   // 掛在砲塔上（27_turret.js）⇒ 每一層砲塔都要在能開火的角度
+  return true;
+}
 /** 格座標 p 繞 c 轉 a（跟 modelLocal 同一個 rotM ⇒ 砲口、站位跟畫出來的模型轉得一樣）。 */
 function mountRot(p, c, a) { var d = M4.dir(rotM([0, 0, 1], a), p[0] - c[0], p[1] - c[1], 0); return [c[0] + d[0], c[1] + d[1], p[2]]; }
 /** 每一步（50_sim.js，在開砲之前）：有迴旋的砲照瞄準點挑方向、照轉速轉；轉了 ⇒ 砲軸、砲口、站位、人跟著轉。 */
 function mountStep(sh, dt) {
-  var G = sh.mounts; if (!G || sh.sunk || sh.struck) return;
+  var G = sh.mounts; if ((!G && !sh.tur) || sh.sunk || sh.struck) return;
   var tgt = aimPoint(sh), foe = aimShip(sh), L = tgt ? toLocal(sh, tgt) : foe && foe.M ? toLocal(sh, M4.pt(foe.M, foe.T.cx, foe.T.cy, foe.T.zw)) : null;
-  G.forEach(function (g) {
-    var M = g.mt; if (!g.alive || !L) return;
+  if (sh.tur) turretStep(sh, dt, L);                                   // 砲塔層（27_turret.js）：砲塔、上面的砲（自己會轉、掛在砲塔上的也在那裡轉）
+  if (G) G.forEach(function (g) {
+    var M = g.mt; if (!g.alive || !L || M.up) return;
     var rel = Math.atan2(L[1] - M.c[1], L[0] - M.c[0]) - Math.atan2(M.ax0[1], M.ax0[0]); rel = Math.atan2(Math.sin(rel), Math.cos(rel));
     if (M.ports) {                                                    // 換砲門：挑離目標最近的那個；差不到 0.1 rad 不換（⛔ 目標在兩個砲門中間 ⇒ 來回換）
       var best = M.yawT, bd = Math.abs(Math.atan2(Math.sin(rel - M.yawT), Math.cos(rel - M.yawT)));
@@ -356,7 +361,8 @@ function hitModel(sh, L, m, skip, nb) {                                 // skip�
   var bk = L[0] >= 0 ? sh.mIdx[Math.floor(L[0] / 16)] : null; if (!bk) return null;   // 只看這一桶（modelIndex；登記時外擴 12 格 ≥ 鏈彈的 10）
   for (var i = 0; i < bk.length; i++) {
     if (nb && bk[i].nb !== nb) continue;
-    var o = bk[i], b = o.bb, Q = o.rot ? unrotL(o, L) : L;                 // 轉過的帆桁：把彈點轉回作品裡的角度再比
+    var o = bk[i], b = o.bb, Q = o.hd ? ndIn(o.hd, L) : L;                // 掛在砲塔上（27_turret.js）：彈點換到砲塔座標（外框照開局的擺法）
+    if (o.rot) Q = unrotL(o, Q);                                          // 轉過的帆桁、迴旋砲：把彈點轉回作品裡的角度再比
     if (o.vox) continue;                                                  // 螺旋槳有自己的格（24_armor.js propSetup）⇒ 打格子（armAt），不扣模型的血
     if (o.alive && !(skip && skip.indexOf(o) >= 0) && Q[0] > b[0] - m && Q[0] < b[3] + m && Q[1] > b[1] - m && Q[1] < b[4] + m && Q[2] > b[2] - m && Q[2] < b[5] + m &&
         (m > 2 || inMesh(o, Q))) return o;                               // 實心／爆裂彈：外框裡還要真的碰到砲身或砲架（鏈彈橫掃 2.4 m ⇒ 外框就算）
@@ -366,8 +372,9 @@ function hitModel(sh, L, m, skip, nb) {                                 // skip�
 /** 繞帆桁的轉軸（鉛直）把格座標轉 a（弧度；+x 轉向 +y 為正，跟雕刻引擎同一個方向）。 */
 function rotZ(P, piv, a) { var c = Math.cos(a), s = Math.sin(a), x = P[0] - piv[0], y = P[1] - piv[1]; return [piv[0] + x * c - y * s, piv[1] + x * s + y * c, P[2]]; }
 function unrotL(o, L) { return rotZ(L, o.piv, -o.rot); }
-/** 模型在船的格座標裡的擺法：平移到 origin；帆桁另外繞轉軸轉 rot。 */
-function modelLocal(m) {
+/** 模型在船的格座標裡的擺法：平移到 origin；帆桁另外繞轉軸轉 rot；掛在砲塔上（m.hd，27_turret.js）⇒ 再照砲塔現在的角度。 */
+function modelLocal(m) { var L = modelLocal0(m), H = m.hd && ndMat(m.hd); return H ? M4.mul(H, L) : L; }
+function modelLocal0(m) {
   if (m.sw) { var q = m.spv; return M4.mul(M4.mul(M4.mul(trans(q[0], q[1], q[2]), rotM(m.sax, m.sw)), trans(-q[0], -q[1], -q[2])), trans(m.origin[0], m.origin[1], m.origin[2])); }   // 掛著擺的（小艇；30_rig_physics.js swingHangs）
   if (!m.rot || !m.piv) return trans(m.origin[0], m.origin[1], m.origin[2]);
   var p = m.piv;

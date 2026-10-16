@@ -73,17 +73,31 @@ function navBuild(sh, L) {
   var T = sh.T, g = navBase(T), C = T.navC || (T.navC = {}), key = L.zr.join(',') + ':' + sh.models.length, d = L.deck;
   if (C[key]) return C[key];
   var x0 = Math.max(0, T.hx0 - 4), nx = Math.ceil((Math.min(g.sx, T.hx1 + 5) - x0) / NAV_C) + 1, ny = Math.ceil(g.sy / NAV_C), n = nx * ny, i, x, y;
-  var Z = new Int16Array(n).fill(-1), blk = new Uint8Array(n);
+  var Z = new Int16Array(n).fill(-1), blk = new Uint8Array(n), rot = T.turrets && T.turrets.length ? new Uint8Array(n) : null, nrot = 0;
   for (y = 1; y < ny - 1; y++) for (x = 1; x < nx - 1; x++) {
     var gx = x0 + x * NAV_C, gy = y * NAV_C; if (gx >= g.sx || gy >= g.sy) continue;
     var z = navZ(g, d, L, gx, gy);
+    if (rot) { var tz = turNavZ(T, d, L, gx, gy); if (tz) { z = tz[0]; rot[x + y * nx] = tz[1] + 1; nrot++; } }   // 會轉的甲板（27_turret.js）：腳下是砲塔自己的格 ⇒ 照砲塔座標
     if (z >= 0 && blocked(gx, gy, z)) { blk[x + y * nx] = 1; continue; }   // 站在砲、舵輪、家具裡 ⇒ 永遠不能走（動態更新時照它，⛔ 不再看 CREW_BLOCK：那是最後一艘建的船的）
     if (z >= 0) Z[x + y * nx] = z;
   }
-  var N = { x0: x0, nx: nx, ny: ny, Z: Z, blk: blk };
+  var N = { x0: x0, nx: nx, ny: ny, Z: Z, blk: blk, rot: nrot ? rot : null };
+  if (nrot) T.turDeck = true;
   navRegions(N);
   return C[key] = N;
 }
+/** 會轉的甲板（27_turret.js）：(gx, gy) 照砲塔座標（＝ 開局的船的格座標）看，站得住、而且腳下是砲塔自己的格 ⇒ [高度, 第幾座砲塔]；不是 ⇒ null。
+ *  頭上照那一串砲塔自己的樣子看（掃過的那一圈不擋 ⇒ 吊籃上的彈藥箱照它的位置擋）。⛔ 腳下是不轉的甲板（罩在甲板上的砲塔）⇒ 照舊（那一圈是牆）。 */
+function turNavZ(T, d, L, gx, gy) {
+  for (var i = 0; i < T.armor.length; i++) {
+    var A = T.armor[i], R = A.ring; if (A.tur === undefined || !R || A.rootK < 0 || Math.hypot(gx + 0.5 - R.c[0], gy + 0.5 - R.c[1]) > R.r) continue;
+    var z = navZ(navRestB(T, A.rootK), d, L, gx, gy); if (z < 0) continue;
+    var k = armDeckK(T, gx, gy, z - 1); if (k >= 0 && turRootK(T, k) === A.rootK) return [z, k];
+  }
+  return null;
+}
+/** 走路格上的一點 p（船的格座標）換成那一層記的座標：站在會轉的甲板上 ⇒ 砲塔座標（27_turret.js）；其他照舊。 */
+function navRestP(N, p) { if (!N.sh) return p; var k = turDeckAt(N.sh, p); return k >= 0 ? ndIn(N.sh.tur[k], p) : p; }
 /** 那一點站得住的高度：有甲板 meta ⇒ 只看那一欄地板上下（−2～+3 格）；沒有 ⇒ 那一層的高度範圍裡最高那個。 */
 function navZ(g, d, L, gx, gy) {
   if (!d) return standZ(g, gx, gy, L.zr[0], L.zr[1], NAV_HEAD);
@@ -107,11 +121,12 @@ function navRegions(N) {
   N.reg = reg; N.ok = ok; N.cells = cells; N.regs = regs; N.big = big; N.parts = sizes.length;
   N.bigCells = cells.filter(function (c) { return reg[c] === big; });
 }
-function navCell(N, p) { var x = Math.round((p[0] - 0.5 - N.x0) / NAV_C), y = Math.round((p[1] - 0.5) / NAV_C); return x < 0 || y < 0 || x >= N.nx || y >= N.ny ? -1 : x + y * N.nx; }
-function navPos(N, i) { return [N.x0 + (i % N.nx) * NAV_C + 0.5, ((i / N.nx) | 0) * NAV_C + 0.5, N.Z[i]]; }
+function navCell(N, p) { if (N.sh) p = navRestP(N, p); var x = Math.round((p[0] - 0.5 - N.x0) / NAV_C), y = Math.round((p[1] - 0.5) / NAV_C); return x < 0 || y < 0 || x >= N.nx || y >= N.ny ? -1 : x + y * N.nx; }
+function navPos(N, i) { var P = [N.x0 + (i % N.nx) * NAV_C + 0.5, ((i / N.nx) | 0) * NAV_C + 0.5, N.Z[i]]; return N.sh && N.rot[i] ? ndOut(N.sh.tur[N.rot[i] - 1], P) : P; }   // 會轉的甲板 ⇒ 照砲塔現在的角度換回船的座標
 /** p 附近 r 點內、連得通的最近那一點（高度差一格 ＝ 遠 8 點的平面距離²；4 格以上最後才挑）；沒有 ⇒ -1。
  *  ⛔ 只看平面距離 ⇒ 梯子 head（甲板 z 82）吸到旁邊艙口圍欄的頂上（z 85），人下梯往上跳一下。 */
 function navSnap(N, p, r) {
+  if (N.sh) p = navRestP(N, p);
   var cx = Math.round((p[0] - 0.5 - N.x0) / NAV_C), cy = Math.round((p[1] - 0.5) / NAV_C), best = -1, bd = 1e9;
   for (var dy = -r; dy <= r; dy++) for (var dx = -r; dx <= r; dx++) {
     var x = cx + dx, y = cy + dy; if (x < 0 || y < 0 || x >= N.nx || y >= N.ny) continue;
@@ -205,7 +220,7 @@ function makeHands(sh, crew, add) {
   sh.nav = null;
   if (sh.cw.hands <= 0 && DROWN_T <= 0) return;                               // 落水的人爬回船上也要走路格（43_swim.js board）
   var t0 = performance.now(), lads = shipLadders(sh.T), Ls = navLevels(sh, lads), LD = [];
-  Ls.forEach(function (L) { L.N = navBuild(sh, L); });
+  Ls.forEach(function (L) { L.N = navBuild(sh, L); if (L.N.rot) L.N = navOwn(L.N, sh); });   // 有會轉的甲板 ⇒ 這艘自己一份（navPos／navSnap 照這艘的砲塔角度換）
   lads.forEach(function (l) {
     var a = l.pts[0], b = l.pts[l.pts.length - 1], dk = ladDecks(sh.T, l), la = dk ? (dk[0] ? dk[0].i : -1) : lvOf(Ls, a[2]), lb = dk ? (dk[1] ? dk[1].i : -1) : lvOf(Ls, b[2]);   // 有甲板 meta ⇒ 照 meta 判層（36_rooms.js ladDecks）
     if (la < 0 || lb < 0 || la === lb) return;
@@ -383,6 +398,8 @@ function handJoin(sh, c) {
 //   那幾層只重算髒的範圍（外擴 2 點）站不站得住、整層重切連通區域；梯子：踏板被打掉、兩頭的走路點不能走 ⇒ 斷（不再走）。
 //   走路格本來是同型的船共用（記在船型上）⇒ 第一次重算先複製一份給這艘自己。
 //   只管站在甲板上的人：落水的照舊沿外船殼爬上來（43_swim.js）；正在爬梯子、正在走的那一段照走完，下一段才照新的。
+/** 有會轉的甲板的那一層：這艘自己一份（共用的格子照舊共用，只多帶 sh）。 */
+function navOwn(O, sh) { var N = {}; for (var k in O) N[k] = O[k]; N.sh = sh; return N; }
 function navDirty(sh, x, y, z) {
   var NV = sh.nav; if (!NV) return;
   NV.levels.forEach(function (L) {
@@ -397,13 +414,13 @@ function navRefresh(sh) {
   NV.levels.forEach(function (L, li) {
     var b = L.dirty; if (!b) return; L.dirty = null;
     var n0 = L.N.regs.length;
-    if (!L.own) { var O = L.N; L.N = { x0: O.x0, nx: O.nx, ny: O.ny, Z: O.Z.slice(), blk: O.blk }; L.own = true; }
+    if (!L.own) { var O = L.N; L.N = { x0: O.x0, nx: O.nx, ny: O.ny, Z: O.Z.slice(), blk: O.blk, rot: O.rot, sh: O.sh }; L.own = true; }
     var N = L.N;
     var xa = Math.max(1, Math.floor((b[0] - N.x0) / NAV_C) - 2), xb = Math.min(N.nx - 2, Math.ceil((b[2] - N.x0) / NAV_C) + 2), ya = Math.max(1, Math.floor(b[1] / NAV_C) - 2), yb = Math.min(N.ny - 2, Math.ceil(b[3] / NAV_C) + 2);
     for (var y = ya; y <= yb; y++) for (var x = xa; x <= xb; x++) {
       var i = x + y * N.nx; if (N.blk[i]) continue;
       var gx = N.x0 + x * NAV_C, gy = y * NAV_C; if (gx >= g.sx || gy >= g.sy) continue;
-      N.Z[i] = navZ(g, L.deck, L, gx, gy);
+      N.Z[i] = N.rot && N.rot[i] ? navZ(navRestG(sh, turRootK(sh.T, N.rot[i] - 1)), L.deck, L, gx, gy) : navZ(g, L.deck, L, gx, gy);   // 會轉的甲板 ⇒ 照砲塔座標（24_armor.js navRestG）
     }
     navRegions(N);
     if (N.regs.length !== n0) ev.push(L.name + ' ' + (N.regs.length > 1 ? '分成 ' + N.regs.length + ' 塊（' + N.regs.join('／') + ' 點）' : '接回一塊'));

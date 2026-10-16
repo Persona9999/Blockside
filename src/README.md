@@ -185,6 +185,7 @@ python -I admin.py cache --all    # 每艘都比 ＝ 比對來源：雕刻作品
 | `24_armor.js` | 砲帶的裝甲（TASK-0631）：關聯 meta `kind=armor`、`mount=<砲模型>` 的格從船殼拆出來（`armorSetup`：`T.armor`、船殼 `T.hullG`；`T.base` 照舊是整艘）、每艘一份跟著砲轉（`armorShip`、`armLocal`）、打中（`armAt`／`armRemove`，`shatter`／`slab` 帶 a）、殉爆 `armBlast`、畫（`armDraw`／`armSmDraw`）、走路格看的格子 `navBase`／`navG`（＋會轉的裝甲掃過的那一圈 `armRing`／`armWall`，TASK-0655） |
 | `25_doors.js` | 門、艙蓋（TASK-0638）：模型 meta `kind=door`、固定點 `hinge-a`／`hinge-b`（`doorsShip`：鉸鏈、門正下方的開口格）；有人經過才開（`doorsAnim`，畫面那一格、畫質「門的開關演出」）；門沒了 ⇒ 開口變進水口（`doorsSurvey`：公式模式加進 `sh.flood`、粒子模式 `fl.tops` ⇒ `doorInflow`）；匯入檢查的讀數 `doorsSummary`。詳見下面「門、艙蓋」 |
 | `26_spin.js` | 照參數轉的子物件（TASK-0640）：模型 meta `spin`＝來源參數（`SPIN_SRC`：rudder／speed／rpm）、`spin_mode`（angle／rate）、`spin_k`、`spin_min`／`spin_max`（沒寫 ＝ 無上限）、`spin_lag`；轉軸 `spinAxis`（固定點 spin-a／spin-b ＞ meta spin_pivot_*＋spin_axis_* ＞ 舵的 hinge_*＋axis_* ＞ hub-aft／hub-fore ＞ hub＋axis_*）；`spinShip`（建船）、`spinStep`（模擬每一步，sail() 之後）、匯入檢查 `spinIssues`／`spinSummary`。詳見下面「照參數轉的子物件」 |
+| `27_turret.js` | 砲塔層（TASK-0659）：關聯 meta `kind=turret`（`turretSetup`：`T.turrets`、`turOf`）；每艘的節點 `sh.tur`、砲與模型掛上去（`turretShip`：`m.hd`、`g.hd`／`g.mt.up`）；座標換算 `ndOut`／`ndIn`／`ndMat`／`ndYaw`；每一步 `turretStep`（`turRiders` → `turTurn` → `turPose`）；會轉的甲板 `turDeckAt`、`turStandG`；除錯 `turretSet`、`__game.turret`；匯入檢查 `turretSummary`。殼照 24_armor.js 拆（`A.tur`）。詳見下面「砲塔層」 |
 | `30_rig_physics.js` | 帆與繩的物理（可關）；帆的貼圖集 `sailAtlas`（一個船型一張，alpha 照 vxk 的 `alpha_min` 二值化；TASK-0579） |
 | `31_sailing.js` | 航行：航速、操舵、帆裝、航跡、擦撞（船隻碰撞四檔：龍骨線／水線輪廓／船殼格子＋八叉樹 `hitSamples`／`occPyr`；摩擦 `hitFriction`） |
 | `31_drive.js` | 動力（TASK-0630）：動力源清單（帆、蒸汽機、魔法）、推力 ＝ k·v²、水阻、實際質量（含進水）⇒ 加速度；受損降輸出；受損不平衡的偏航力矩；俥鐘（橫版左下角、直版左邊那一欄按鈕上方；E／T） |
@@ -457,6 +458,19 @@ python -I admin.py cache --all    # 每艘都比 ＝ 比對來源：雕刻作品
   被打掉的格不打開那一圈（砲塔還在就照樣擋）；出入走圈裡的艙口梯（莫尼特號 `梯子/turret`）；圈裡沒有梯子 ⇒ 匯入檢查 ⚠「砲塔進不去」，讀數列那一圈的半徑、高度、圈裡的梯子。⛔ 火藥桶、取用點（23_powder.js）照舊看 T.base。
   量（2026-10-16，莫尼特號）：那一圈離轉軸 29.5～33.5 格、z 35–64；第一人稱從外面往砲塔走停在 34.1 格、從圈裡往外走停在 28.8 格、旁邊沒有砲塔的那一條照樣走過去；從住艙甲板爬砲塔梯上來落在圈裡（離轉軸 6 格）、爬得下去；砲班 9 人開場都在圈裡。
   對拍（含莫尼特對維吉尼亞 a46efaf631）跟改之前逐位元組相同：船員本來就被開局位置的裝甲擋著。除錯 `__game.fpRun(秒)`：照每秒 60 格推第一人稱（畫面迴圈不跑時量走路用）。
+- **砲塔層**（`27_turret.js`，TASK-0659；Tim 2026-10-16：「讓砲塔本身只是一層殼 上面可以放置炮(跟在船體上放炮一樣) 讓炮跟著砲塔轉」「實際上可能可以在炮塔上額外加裝炮塔」「直接設定一個砲塔前方方向 然後把前方朝向瞄準方位就好」「砲塔內也要可以放彈藥箱」「會跟著轉的部分(砲塔吊籃) …… 如果砲塔是直接覆蓋一片甲板區(底下甲板不會跟著動) 就只有砲塔頂部會是一塊跟著轉的甲板」）：
+  以前砲塔 ＝ 砲模型自己標 `mount=turret`、裝甲 `kind=armor mount=<砲>` 跟著那門砲轉 ⇒ 一座砲塔只能一門砲、砲打飛了砲塔就停、不能疊。
+  **標法**：關聯 meta `kind=turret`（`arc`／`fire`／`rate`／`cone`，跟砲的 mount=turret 同一套）；砲塔作品的固定點 `pivot`（轉軸）、`front`（前方：轉軸往那一點的方向）。子樹裡的格子 ＝ 殼（跟 kind=armor 同一套拆法：外框 ＝ 砲塔作品的框，舊的 kind=armor、裡面那層砲塔先拿）；
+  外部模型 ＝ 跟著轉（砲照砲的標法；沒標 mount ⇒ 固定在砲塔上、砲管射界照砲塔的 cone；標了 ⇒ 掛在砲塔底下再轉一層）；`kind=magazine` ＝ 砲塔裡的彈藥箱（取用點在箱子旁、跟著轉，23_powder.js `turStation`）；子樹裡再一個 `kind=turret` ＝ 疊在上面（照最近的那一層）。造船規格 §4.8。
+  **轉**：節點（`sh.tur[k]`、砲的 `g.mt`）＝ 轉軸 c、yaw、up；`ndOut`／`ndIn`／`ndMat` 一層一層換（只繞鉛直軸 ⇒ 平面上的轉＋平移）。`mountStep` 先跑 `turretStep`：記下跟著轉的東西在砲塔座標的位置（`turRiders`）→ 由外往內照瞄準點轉（`turTurn`：前方對準、`turretAim` 那一套死角遲滯）→ 換回船的座標（`turPose`：砲口、砲軸、模型中心）。
+  跟著轉的：砲的站位與站在上面的人、放藥箱的位置、砲塔裡的取用點、站在砲塔自己的格上的人與他們走到一半的路；畫（`modelLocal` ＝ `ndMat` × 原本的）、被打中（`hitModel` 先 `ndIn`）、分桶（`m.ibx` 照掃過的範圍）。開火：每一層都要在 fire 裡（`mountFireOk`）。砲全滅 ⇒ 停。
+  **會轉的甲板**：腳下是砲塔自己的格（吊籃的地板、砲塔頂）才算 —— 走路格那一點照砲塔座標記（`N.rot`，navBuild `turNavZ`）、`navPos`／`navSnap`／`navCell` 照這艘的砲塔角度換（`navOwn`）；那一柱在砲塔地板以上，那一串砲塔掃過的那一圈不算牆（`armDeckZf`）⇒ 吊籃上的彈藥箱照開局的位置擋。
+  站在砲塔的格上不算懸空（32_hull.js、送藥手的高度 `turStandG`）。罩在甲板上的砲塔（莫尼特號）：底下的甲板不轉、站在上面的人也不轉、那一圈照舊是牆（TASK-0655）。
+  舊標法照舊（gunMountInit、kind=armor）：沒有 kind=turret 的船一位元不動 ⇒ 對拍 eadd7ea872／9e82d4762d／a6ea60cdbf、莫尼特對維吉尼亞 a46efaf631（莫尼特號重匯之前）都一樣。
+  量（2026-10-16）：莫尼特號改成砲塔層（TASK-0660）格子一格不動（checksum 2718882809）、兩門砲的砲口跟舊模型一樣（y 58.5／72.5）、轉 0／45／90／135／180／−90° 砲口都在砲門裡、180° 不開（fire −174～174）。
+  測試船（只在 worktree：吊籃地板、彈藥箱、頂上偏後 10 格疊一座小砲塔、上面一門三叉戟砲 mount=turret ±60°）：轉 90° ⇒ 吊籃上與砲塔頂上的 17 人都轉 90°、離轉軸的距離一格不差，取用點、桶子跟著轉；
+  主砲塔被硬轉 80° ⇒ 頂上那座每秒 30° 補回去、三叉戟砲在 ±60° 裡跟著補；會轉的甲板 261 點在 0／37／90／−150° navPos → navSnap 都回到同一點；對打 150 秒兩門 XI 吋都有人、都開。
+  ⛔ 還沒做：轉台被打壞卡住（第一版砲全滅才停）；第一人稱站在吊籃上不跟著轉；吊籃上的梯子（梯子照舊是不轉的船殼）；從不轉的甲板走上吊籃的那一步照開局的角度對格（吊籃是圓的、不影響）。
 - **船員避開露天甲板**（船員配置 `shelter` 0／1，TASK-0637；Tim：「讓船員儘量不要上露天甲板 …… 這部分船員應該可以當後補去補砲塔傷亡的」）：開了 ⇒ 預備水手閒晃不上露天那一層（`shelterLv`：最上面那層砲甲板）、在那一層閒著就回待命那一層；點名補位照樣上去。
   船長以外的軍官開戰時站在待命那一層（`shelterSpots`，標 `below` ⇒ 火槍打不到）；船長、舵手照舊在露天甲板。設定檔 crew0 `shelter: 0`；莫尼特號 1。船隻配置頁、後台都有那一格。
   量過（莫尼特號對維吉尼亞號 seed 1–4、300 秒，三件一起）：莫尼特號死傷 22–32／54 → 8–11／54；溺水 3–9 → 0；落在船裡 6–10 人次；在露天那一層的預備水手（含去補位、路過的）seed 3 同時 6–17 → 四個種子最多 2。剩下的：火藥（砲塔裡的藥包）、露天的船長與舵手、從砲門看得到的砲手被火槍打、甲板上的爆炸隔著甲板傷到住艙的人。
