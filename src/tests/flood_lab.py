@@ -50,16 +50,16 @@ def save(R, hull, phx, d):
 
 def table(R2):
     o = ['<h2>%s・進水 %s（水格 %s 格）</h2>' % (html.escape(R2['hull']), R2.get('lv'), R2.get('c')),
-         '<p>洞：%s</p>' % '；'.join('x %s z %s %s舷 r %s（打掉 %s 格）' % (h['x'], h['z'], '−y' if h['side'] else '+y', h['r'], h['removed']) for h in R2.get('holes', []))]
+         '<p>洞：%s</p>' % '；'.join(('殉爆 %s 號彈藥庫（%s）' % (h['boom'], h['mag'])) if 'boom' in h else 'x %s z %s %s舷 r %s（打掉 %s 格）' % (h['x'], h['z'], '−y' if h['side'] else '+y', h['r'], h['removed']) for h in R2.get('holes', []))]
     if R2.get('err'):
         return '\n'.join(o + ['<p style="color:#c00">%s</p>' % html.escape(R2['err'])])
-    o.append('<table><tr><th>截圖</th><th>t（秒）</th><th>水（m³）</th><th>進／出（m³/s）</th><th>水格</th><th>網格</th><th>接縫</th></tr>')
+    o.append('<table><tr><th>截圖</th><th>t（秒）</th><th>水（m³）</th><th>高出海面</th><th>進／出（m³/s）</th><th>水格</th><th>網格</th><th>接縫</th></tr>')
     for r in R2['rows']:
         fl, me, st = r['fl'] or {}, r.get('mesh') or {}, r.get('seam') or {}
         seam = '<br>'.join('%s %s' % (lab, st.get(k, '')) for k, lab in SEAM) + ('<br>兩池水面差 中位 %s m、最大 %s m' % (st.get('dhMed'), st.get('dhMax')) if st else '')
         mp = '<br><img src="%s" style="max-width:420px;image-rendering:pixelated">' % r['map'] if r.get('map') else ''
-        o.append(('<tr><td><a href="%s"><img src="%s" width="420"></a>' % (r['img'], r['img'])) + mp + ('</td><td>%s</td><td>%s</td><td>%s／%s</td><td>%s</td><td>%s 三角形<br>%s 片<br>%s ms<br>水幕 %s 道<br>側面 %s・水瀑 %s</td><td>%s</td></tr>' % (
-            r['t'], fl.get('m3'), fl.get('inQ'), fl.get('outQ'), fl.get('cells'), me.get('tris', '—'), me.get('quads', '—'), me.get('ms', '—'), me.get('falls', '—'), me.get('sides', '—'), me.get('spill', '—'), seam)))
+        o.append(('<tr><td><a href="%s"><img src="%s" width="420"></a>' % (r['img'], r['img'])) + mp + ('</td><td>%s</td><td>%s</td><td>%s</td><td>%s／%s</td><td>%s</td><td>%s 三角形<br>%s 片<br>%s ms<br>水幕 %s 道<br>側面 %s・水瀑 %s</td><td>%s</td></tr>' % (
+            r['t'], fl.get('m3'), '%s m<br>%s 格、%s m³' % ((r.get('ex') or {}).get('max', '—'), (r.get('ex') or {}).get('n', '—'), (r.get('ex') or {}).get('vol', '—')), fl.get('inQ'), fl.get('outQ'), fl.get('cells'), me.get('tris', '—'), me.get('quads', '—'), me.get('ms', '—'), me.get('falls', '—'), me.get('sides', '—'), me.get('spill', '—'), seam)))
     o.append('</table><p>接縫地圖：方塊顏色 ＝ 哪一池（同一池同色）、紅 ＝ 整塊沒畫、橘框 ＝ 船殼邊切掉幾片、洋紅點 ＝ 有水但太薄沒畫；綠粗線 ＝ 兩池交界、黃線 ＝ 懸空的邊。</p>')
     return '\n'.join(o)
 
@@ -108,9 +108,13 @@ def main():
         R2 = save(R, hull, phx, d); parts.append(table(R2))
         for r in R2['rows']:
             st, me = r.get('seam') or {}, r.get('mesh') or {}
-            print(hull, phx, 't', r['t'], 'm3', (r['fl'] or {}).get('m3'), '池', st.get('pools'), '兩池之間', st.get('step'), '懸空', st.get('open'), '切', st.get('cutTops'), '整塊沒畫', st.get('outTops'), '三角形', me.get('tris'), 'ms', me.get('ms'))
+            ex = r.get('ex') or {}
+            print(hull, phx, 't', r['t'], 'm3', (r['fl'] or {}).get('m3'), '高出海面', ex.get('max'), 'm（%s 格、%s m³）' % (ex.get('n'), ex.get('vol')), '池', st.get('pools'), '兩池之間', st.get('step'), '懸空', st.get('open'), '切', st.get('cutTops'), '整塊沒畫', st.get('outTops'), '三角形', me.get('tris'), 'ms', me.get('ms'))
     with open(os.path.join(d, 'index.html'), 'w', encoding='utf-8', newline='\n') as f:
         f.write('\n'.join(parts))
+    for hull, phx, R in res:                                            # 每秒一筆（81_floodlab.js trace／flabEx）：t、水、進、出、艙內最高水面 − 海面、高出海面的水、下沉
+        if R and R.get('trace'):
+            print(hull, phx, 'trace t/m3/進/出/高出/高出m3/sink:', ' '.join('%s:%s/%s/%s/%s/%s/%s' % tuple(x) for x in R['trace']))
     print('寫了', os.path.join(d, 'index.html'))
 
 
