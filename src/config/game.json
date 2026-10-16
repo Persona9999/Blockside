@@ -373,6 +373,8 @@
       "hp": 40,
       "buff": {"heal": 0.15}
     },
+    "pump": {"name": "鏈式抽水機", "type": "deck", "size": [10, 8, 12], "hp": 120, "role": "pump", "power": "hand", "tpm": 4.5, "crew": 4, "place": "well", "cap": 36},
+    "spump": {"name": "蒸汽抽水機", "type": "deck", "size": [10, 6, 9], "hp": 160, "role": "pump", "power": "steam", "tpm": 15, "place": "center", "cap": 60},
     "keg": {"name": "火藥桶", "type": "deck", "size": [10, 10, 8], "role": "powder"}
   },
   "rooms": {
@@ -387,6 +389,6 @@
       "staffPer": 3,
       "back": 0.6
     },
-    "deck": {"name": "砲甲板", "deck": true, "items": ["keg"]}
+    "deck": {"name": "砲甲板", "deck": true, "items": ["keg", "pump", "spump"]}
   }
 }

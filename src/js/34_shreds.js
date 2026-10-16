@@ -57,8 +57,8 @@ function shredCut(sh, c, old, b) {
 }
 /** 中間那一點碰到海面、而且不在船殼外形裡（掉進艙口的不算）⇒ 落水。 */
 function shredWet(sh, f) {
-  var p = f.p, o = (f.n >> 1) * 3, w = M4.pt(sh.M, p[o], p[o + 1], p[o + 2]);
-  if (w[1] > seaH(w[0], w[2], SIMT)) return false;
+  var p = f.p, o = (f.n >> 1) * 3;
+  if (!wetAt(sh, [p[o], p[o + 1], p[o + 2]], { touch: true })) return false;   // 碰到海面就算（33_flood.js 泡水判定）
   var T = sh.T, x = p[o] | 0, z = p[o + 2] | 0, hb = T.hullHB;
   return !(hb && x >= 0 && x < T.hullTW && z >= 0 && z < T.hullTH && Math.abs(p[o + 1] + 0.5 - T.cy) < hb[z * T.hullTW + x]);
 }

@@ -133,7 +133,7 @@ function makeCrew(sh) {
     offP.slice(offN, CW.officers).forEach(function (p, k) { add(ROLE.OFFICER, below[k] || standNear(g, p[0], p[1], sz0, sz1, 14, taken), null, 1); if (below[k]) crew[crew.length - 1].below = true; });   // below：在甲板下 ⇒ 火槍打不到（musket）
   }
   crew.filter(function (c) { return c.role === ROLE.OFFICER; }).forEach(function (c, k) { c.rank = k; if (!k) c.art = ART_CAPTAIN; });   // 階級照順序：船長（換貼圖）、大副、二副、三副、見習軍官（廣播用，61_hud.js newsCrew）
-  medInit(sh);                                                       // 醫療艙走得到的床、要幾個人手（44_medic.js；沒有 ⇒ sh.med ＝ null，照舊）
+  medInit(sh); pumpInit(sh);                                         // pumpInit：人力抽水機旁的走路點（45_pumps.js）；醫療艙走得到的床、要幾個人手（44_medic.js；沒有 ⇒ sh.med ＝ null，照舊）
   // 站不下的（船隻配置頁調多了、船小）⇒ 記著，開戰時上方廣播一行（52_fleet.js crewShortNote）；⛔ 不默默少人
   function cnt(r) { return crew.filter(function (c) { return c.role === r; }).length; }
   //   ⚠ 預設本來就有站不下的（憲法號陸戰隊 11／12、送藥手 26／27；夜隼號陸戰隊 2／12）：開戰只報玩家改過的那幾項（61_hud.js crewShortNote），全部照實列在船隻配置頁（CREW_SEEN）

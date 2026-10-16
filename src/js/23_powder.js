@@ -271,7 +271,7 @@ function makeStations(sh, auto) {
   sh.decks.forEach(function (D) {
     var deck = D.key, zr = D.zr, pl = auto ? null : deckPlan(T.id, deckId(D));
     if (pl && pl.items) {                                               // 玩家擺的（驗過：格子、砲班的位置、地面）
-      var G = deckGrid(T, D), ok = roomCheck(T, { grid: G }, 'deck', pl.items).items;
+      var G = deckGrid(T, D), ok = roomCheck(T, { grid: G }, 'deck', pl.items).items.filter(function (q) { return FURN[q.it] && FURN[q.it].role === 'powder'; });   // 甲板上也擺得了抽水機（45_pumps.js pumpModels）⇒ 這裡只拿火藥桶
       ok.forEach(function (q, k) { var x = G.x0 + q.x * ROOM_TILE, y = G.y0 + q.y * ROOM_TILE; build(D, nearMag(x), D.name + '取用點 ' + (k + 1), [x, y, G.zt[q.x + q.y * G.nx]]); });
       return;
     }

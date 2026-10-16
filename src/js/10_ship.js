@@ -79,7 +79,7 @@ function makeShip(i, team, yaw, pz, T, px) {                          // T：船
   sh.deckZ = {}; sh.decks.forEach(function (D) { sh.deckZ[D.key] = D.zr; });
   sh.mags = makeMags(sh);                                                // 彈藥庫（23_powder.js）
   sh.stations = makeStations(sh);                                        // 兩層甲板的火藥與彈藥取用點（火藥桶也是模型，加在 sh.models 後面）
-  shipRooms(sh);                                                        // 空艙房與功能艙的家具（36_rooms.js；TASK-0568）：家具也是模型 ⇒ 排在命中的分桶之前
+  shipRooms(sh); pumpModels(sh);                                        // pumpModels：甲板上擺的抽水機（45_pumps.js；TASK-0604）；空艙房與功能艙的家具（36_rooms.js；TASK-0568）：家具也是模型 ⇒ 排在命中的分桶之前
   sh.mIdx = modelIndex(sh.models);
   // 繩與帆：兩端（帆取最高那一排）各找最近的實心格當錨 —— 錨被打掉或跟船分家 ⇒ 繩斷、帆掉
   T.rig.ropes.forEach(function (r) {
