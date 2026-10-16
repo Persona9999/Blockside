@@ -121,6 +121,8 @@ if (DEBUG) window.__game = {
   // 除錯（TASK-0616）：從船外對著格座標 (x, z) 那一欄水平射一發（side 同 hole：真 ＝ 從 y 小的那一舷），只跑這一顆砲彈（船不動）⇒ 打掉幾格、穿多深、出來剩多快（木頭／鐵甲打同一點比）
   /** 從船外水平打一發到 (x, z) 那一欄的船殼（gun：砲種 key 或 code；ammo：彈種）。ang（度）：沿船長方向斜著打（0 ＝ 正橫）。
    *  回：mat 表面材質、removed 掉幾格、deep 鑽多深（m）、out 出來剩多快、res 鐵甲那一下是 pen 穿／dent 凹／rico 彈（TASK-0621）。 */
+  /** 落水彈道的測試場（80_lab.js，TASK-0642）：o 同網址 ?lab=uw 的參數 ⇒ 每一發的落水點、水下走多遠、打到船殼多深、軌跡。⛔ 會重開一局。 */
+  lab: function (o) { return uwLab(o); },
   shot: function (i, x, z, side, gun, ammo, ang) {
     var sh = SHIPS[i || 0], B = sh.T.base, s = side ? 1 : -1, y0 = -1, y, GS = GUNS[gun] || Object.keys(GUNS).map(function (k) { return GUNS[k]; }).filter(function (g) { return g.code === gun; })[0] || GUNS.long;
     if (side) { for (y = 0; y < sh.T.cy; y++) if (sh.grid.get(x, y, z)) { y0 = y; break; } } else { for (y = B.sy - 1; y > sh.T.cy; y--) if (sh.grid.get(x, y, z)) { y0 = y; break; } }
@@ -324,6 +326,7 @@ yieldUI().then(function () {                                        // 先讓主
   if (!chk.ok) { fail('船體資料跟封裝檔對不上，停下來（不畫半艘船）。\n' + line); return; }
   $('go').disabled = false; $('go').textContent = '開戰';
   if (Q.has('shipcheck')) { shipCheck(Q.get('shipcheck')); return; }   // 匯入檢查（75_shipcheck.js；admin.py check 用無頭 Chrome 讀）
+  if (Q.get('lab') === 'uw') { var LR = uwLab(labOpts()), lp = document.createElement('pre'); lp.id = 'lab'; document.body.appendChild(lp); lp.textContent = JSON.stringify(LR); $('cover').style.display = 'none'; return; }   // 落水彈道的測試場（80_lab.js；src/tests/uw_lab.py 讀 #lab）
   if (DEMO >= 0) {                                             // 快轉：電腦對電腦、固定步長
     MODE = 'eve'; reset(); RUNNING = true;
     var steps = Math.round(DEMO / DT), phys = PHYS, from = Math.max(0, steps - 360);     // 帆與繩只畫最後那一格 ⇒ 物理只在最後 6 秒跑（不影響戰局）

@@ -198,6 +198,7 @@ python -I admin.py cache --all    # 每艘都比 ＝ 比對來源：雕刻作品
 | `77_colours.js` | 陣營旗（長旗＋戰鬥旗，藍方藍旗、紅方紅旗；布料，跟帆同一套）：桅頂 `mastTrucks`、自動掛 `autoFlags`、載入時生旗 `teamFlagsSetup`、貼圖挑藍紅 `sailRect`、旗桿 `poleBuf`／`drawColours` |
 | `78_funnel.js` | 煙囪排煙：meta kind=funnel 的關聯或模型、固定點 smoke（沒有 ⇒ 外框頂面中心）；額外動力在出力 ⇒ 濃、停車 ⇒ 淡，煙囪口附近的格子剩不到一半 ⇒ 不冒；主機全壞、通它的鍋爐全壞 ⇒ 不冒（31_drive.js fnOff）；自己一組亂數（`rndFn`，⛔ 不叫 rndF：33_flood.js 已經有，同名會蓋掉 ⇒ 進水的亂數跟著變、戰局全變） |
 | `79_report.js` | 戰鬥報表（TASK-0620）：每 0.5 秒掃砲的狀態（跟 HUD 砲圖同一套）、每 5 秒一列時間線（船員、砲、開火命中、被打、進水、傾斜、航速）、每一發記是哪一門開的與第一次打中什麼；結束畫面「📊 報表」（曲線、表、匯出 JSON／CSV）、`?dump=1&report=1`、`__game.report()`；⛔ 只讀不寫、不抽亂數（`?report=0` 關掉，戰局逐位元組相同）；多場分析 `src/report.py` |
+| `80_lab.js` | 落水彈道的測試場（TASK-0642）：`?lab=uw&ship=<靶船>,<另一艘>` ⇒ 靶船在沙盒裡浮穩、另一艘移遠，每一發從正橫 R 公尺外照解析解的仰角打，落在水線前 short 公尺的海上；一發一發只跑那顆砲彈（船不動、海面停在同一刻），記軌跡、入水速度與角度、水下走多遠、打到船殼時在水面下多深、掉格、鐵甲穿／凹／彈；之後照常走 floodS 秒看進水。結果寫進頁面上 id ＝ lab 的 pre；`__game.lab(o)` 同一套。參數 guns、short、ammo、R、h0、side、flat、floodS、rec；⛔ 只在 `?lab=` 才跑。無頭跑三艘、出表與側視圖：`python -I -X utf8 src/tests/uw_lab.py --q "R=800"` |
 | `90_main.js` | 主迴圈、`?debug=1` 的 `window.__game`（含 `?demo=&dump=1`）、載入 |
 
 - ⛔ 新的頂層名字先搜一遍有沒有撞名（同一個作用域：以前船員的 `kill` 蓋掉碎屑的 `kill`）。
