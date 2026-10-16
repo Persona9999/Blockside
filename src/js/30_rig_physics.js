@@ -477,7 +477,7 @@ function physStep(sh) {
   var ccOn = PHX.sailhit > 0 && PHX.rig >= 3;                       // 帆的碰撞（09_phx.js；Tim 2026-10-15：選項、預設關、帆與繩「高」才算）
   if (sh.yards.length) { braceYards(sh, wl, DT); if (chk) yardRopes(sh); }
   if (sh.hangs) swingHangs(sh, gv);
-  for (i = 0; i < sh.ropes.length; i++) { var r = sh.ropes[i]; if (r.dead && !r.lz) { r.lz = true; if (!r.moved) spawnLoose(sh, r); } }
+  for (i = 0; i < sh.ropes.length; i++) { var r = sh.ropes[i]; if (r.dead && !r.lz) { r.lz = true; if (!r.moved && !(sh.tCut && sh.tCut[i])) spawnLoose(sh, r); } }   // tCut：帆腳被打掉時已經垂下來了（tethCut）⇒ 不生第二條
   sh.sails.forEach(function (s, k) {
     var c = sh.cl[k];
     var seen = c.seen; c.seen = true;
@@ -496,6 +496,7 @@ function physStep(sh) {
     if (c.hidden || !c.p) { var keep = c.p && c.torn ? { brk: c.brk, bbrk: c.bbrk, tv: c.tv } : null; clothInit(c); c.hidden = false; if (keep) { c.brk = keep.brk; c.bbrk = keep.bbrk; c.tv = keep.tv; c.torn = true; } if (reopen) { c.furlF = 0; sh.rigDirty = true; } }   // 收帆再張：形狀重來、破洞留著；從收攏的樣子放下來（furlF 0 → 1）
     if (c.tt === undefined) { var tl = tethOf(sh, s, c); c.tt = tl.length ? tl : null; }
     if (c.tt) for (var ti = 0; ti < c.tt.length; ti++) c.pin[c.tt[ti].i] = 0;   // 帆腳不釘：交給布、被 sheet 拉住（clothInit 每次照 hk 釘回去 ⇒ 每一步放開）
+    if (c.tt && c.torn && chk && !c.loose) tethCut(sh, c);                // 帆腳那一塊被打掉 ⇒ 那幾條繩跟帆斷開、垂下來
     if (chk || c.npin < 0) clothPins(sh, s, c);
     yardPins(sh, c);
     c.ev = evk;
@@ -521,7 +522,7 @@ function setPhys(on) {
   if (on && !PHX.rig) PHX.rig = PHX_RIG_LAST; else if (!on && PHX.rig) { PHX_RIG_LAST = PHX.rig; PHX.rig = 0; }   // 物理分級的「帆與繩」跟著走（09_phx.js）
   $('physT').classList.toggle('on', on); if (typeof phxShow === 'function' && $('phxB')) phxShow();
   SHIPS.forEach(function (sh) {
-    sh.loose = []; sh.shreds = [];
+    sh.loose = []; sh.shreds = []; sh.tCut = {};
     if (!on) { (sh.yards || []).forEach(function (m) { m.rot = 0; }); if (sh.yRopes) yardRopes(sh, true); unswingHangs(sh); }   // 關 ⇒ 帆桁回到作品的角度、小艇不擺
     sh.ropes.forEach(function (r) { r.lz = !!(r.never || r.moved); });
     sh.cl.forEach(function (c, k) { c.p = null; c.hidden = true; c.loose = false; c.torn = false; c.gone = !!c.moved; c.late = sh.sails[k].dead; });
@@ -602,15 +603,30 @@ function tethOf(sh, s, c) {
     var ce = d0 <= d1 ? 0 : m - 1, fe = m - 1 - ce, t = new Float32Array(m), acc = new Float32Array(m), k;
     for (k = 1; k < m; k++) { var a = fe ? m - 1 - k : k, b = fe ? a + 1 : a - 1; acc[k] = acc[k - 1] + Math.hypot(q[a * 3] - q[b * 3], q[a * 3 + 1] - q[b * 3 + 1], q[a * 3 + 2] - q[b * 3 + 2]); }   // acc[k]：從另一端走到第 k 點（照走的順序）
     for (k = 0; k < m; k++) t[fe ? m - 1 - k : k] = acc[m - 1] > 0 ? acc[k] / acc[m - 1] : 1;
-    list.push({ i: i, j: j, ce: ce, fe: fe, L: d(fe), t: t });
+    var es = []; for (k = 0; k < T.sim.ea.length; k++) if (T.sim.ea[k] === i || T.sim.eb[k] === i) es.push(k);   // es：帆腳的布邊（全斷 ⇒ 帆腳跟帆斷開，tethCut）
+    list.push({ i: i, j: j, ce: ce, fe: fe, L: d(fe), t: t, es: es });
   });
   return (T.teth = list);
+}
+// 帆腳那一塊布被打掉（Tim 2026-10-16 兩張截圖：「發現了繩索浮空」—— 量到：撕掉帆腳的那一塊 ⇒ 帆腳那一點藏起來、布邊全斷，
+//   還被 sheet 拉著一路往下掉（三角帆 18–23 m），繩畫到一個看不見的點上；以前帆腳釘著 ⇒ 繩頭停在作品那一點的空中）：
+//   ⇒ 那條繩跟帆斷開：不再拉、不再跟著帆腳畫，變成一條垂下來的繩（靠帆腳那一端放開、另一端照原本靠的東西；spawnLoose 的 offSail）。
+//   sh.tCut[j]：這艘船這條繩已經斷開了（只是畫：r.dead 不動；之後真的斷了不再生第二條；setPhys 清掉）。
+function tethCut(sh, c) {
+  for (var k = 0; k < c.tt.length; k++) {
+    var t = c.tt[k], r = sh.ropes[t.j]; if (r.dead || sh.tCut && sh.tCut[t.j]) continue;
+    var gone = !!c.tv[t.i]; if (!gone) { gone = true; for (var e = 0; e < t.es.length; e++) if (!c.brk[t.es[e]]) { gone = false; break; } }
+    if (!gone) continue;
+    (sh.tCut || (sh.tCut = {}))[t.j] = 1; sh.rigDirty = true;
+    var q = r.pts, ce = t.ce * 3;
+    spawnLoose(sh, { pts: q, a: r.a, ma: r.ma, pa: r.pa, b: r.b, mb: r.mb, pb: r.pb, col: r.col, offSail: { verts: [q[ce], q[ce + 1], q[ce + 2]] } });
+  }
 }
 /** 帆腳離繩的另一端超過 L ⇒ 拉回 L（另一端照繩現在的位置：綁在帆桁上的跟著帆桁轉）。clothStep 每一輪約束之後。 */
 function tethSolve(sh, c) {
   var tt = c.tt, p = c.p;
   for (var k = 0; k < tt.length; k++) {
-    var t = tt[k], r = sh.ropes[t.j]; if (r.dead) continue;
+    var t = tt[k], r = sh.ropes[t.j]; if (r.dead || sh.tCut && sh.tCut[t.j]) continue;
     var q = r.pts, f = t.fe * 3, o = t.i * 3, dx = p[o] - q[f], dy = p[o + 1] - q[f + 1], dz = p[o + 2] - q[f + 2], l = Math.sqrt(dx * dx + dy * dy + dz * dz);
     if (l > t.L && l > 1e-9) { var s = t.L / l; p[o] = q[f] + dx * s; p[o + 1] = q[f + 1] + dy * s; p[o + 2] = q[f + 2] + dz * s; }
   }
