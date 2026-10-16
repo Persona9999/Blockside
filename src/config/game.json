@@ -351,6 +351,20 @@
       "author": "meadow"
     },
     {
+      "id": "sentinel",
+      "el": "ship-sentinel",
+      "name": "哨兵號",
+      "vxk": "sentinel.vxk",
+      "work": "meadow-sentinel-01m",
+      "variant_of": "monitor",
+      "cfg": {"pump": 11, "base": 6, "agile": 0.6},
+      "drive": "steam",
+      "geo": {"spar": [35, 38], "marines": [60, 60], "center": 40, "aim": 33, "aimZ": [5, 70], "deckAim": [35, 45], "rigAim": [35, 64]},
+      "crew": {"officers": 4, "helm": 1, "marines": 0, "top": 0, "monkeys": 1, "shelter": 1},
+      "names": ["哨兵號"],
+      "author": "meadow"
+    },
+    {
       "id": "tidegrave",
       "cfg": {"pump": 15.5},
       "el": "ship-tidegrave",

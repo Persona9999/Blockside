@@ -277,8 +277,12 @@ function makeStations(sh, auto) {
     }
     var n0 = out.length;
     HO.forEach(function (h) { var hz = h.L.pts[h.L.pts.length - 1][2]; if (hz >= zr[0] - 2 && hz <= zr[1] + 2) hoistStation(D, h); });
-    if (out.length > n0) return;
-    sh.mags.forEach(function (mag) { anchors(mag).forEach(function (A) {
+    // 這一層有從艙口吊上來的 ⇒ 吊的那幾間不再找空地；沒有 hoist 的彈藥庫照舊找（TASK-0658 哨兵號：甲板上的備便彈藥櫃 ——
+    //   原船的火藥從砲塔裡的艙口上來，砲塔那一圈走不穿（TASK-0655）⇒ 甲板上的速射砲要靠櫃子旁的取用點）。⛔ 以前整層 return ⇒ 第二間的取用點不見。
+    //   只有一間、或每一間都有 hoist（莫尼特號）⇒ 跟以前一樣。
+    var rest = out.length > n0 ? sh.mags.filter(function (m) { return !m.hoist; }) : sh.mags;
+    if (!rest.length) return;
+    rest.forEach(function (mag) { anchors(mag).forEach(function (A) {
       var spot = findSpot(A.x, A.dir, zr);
       if (spot) build(D, mag, D.name + A.tag + '取用點', spot);
     }); });
@@ -354,10 +358,20 @@ function needGun(sh, c) {
   return best;
 }
 /** 去哪個取用點拿：同一層、彈藥庫還在的，離要送的那門最近的（一間殉爆了 ⇒ 跑另一間）。 */
-function stationFor(sh, c, g) {
-  var best = null, bd = 1e9;
-  sh.stations.forEach(function (st) { if (st.deck !== c.deck || st.mag.gone) return; var d = Math.abs(st.at[0] - g.muz[0]); if (d < bd) { bd = d; best = st; } });
-  return best;
+function stationFor(sh, c, g) { return stationPick(sh, c.deck, g); }
+/** 那一層給這門砲的取用點：x 最近的那個（以前就是這樣）—— 但它跟砲尾放藥箱的位置（g.drop）在走路格上不在同一塊、而同一層有別的取用點在同一塊 ⇒ 挑同一塊裡 x 最近的
+ *  （TASK-0658 哨兵號：原船的取用點在砲塔那一圈裡（TASK-0655 走不穿），甲板上的速射砲離砲塔比離彈藥櫃近 ⇒ 以前被分到圈裡、照直線穿牆去拿）。
+ *  走路格量不到（沒有、snap 不到）⇒ 照 x 最近。匯入檢查（75_shipcheck.js）用同一支。 */
+function stationPick(sh, deck, g) {
+  var sts = sh.stations.filter(function (st) { return st.deck === deck && !st.mag.gone; }); if (!sts.length) return null;
+  function near(L) { return L.reduce(function (a, b) { return Math.abs(b.at[0] - g.muz[0]) < Math.abs(a.at[0] - g.muz[0]) ? b : a; }); }
+  var best = near(sts); if (sts.length < 2 || !g.drop || !sh.nav) return best;
+  var li = lvAt(sh, g.drop), N = li >= 0 && sh.nav.levels[li] ? sh.nav.levels[li].N : null; if (!N) return best;
+  var gi = navSnap(N, g.drop, 4); if (gi < 0) return best;
+  function same(st) { if (lvAt(sh, st.at) !== li) return false; var i = navSnap(N, st.at, 4); return i >= 0 && N.reg[i] === N.reg[gi]; }
+  if (same(best)) return best;
+  var ok = sts.filter(same);
+  return ok.length ? near(ok) : best;
 }
 /** 在取用點站哪一格：別人（去拿、在拿）最少的那格，一樣多挑近的。 */
 function slotFor(sh, c, st) {
