@@ -146,7 +146,7 @@
     }
   },
   "geo0": {"spar": null, "marines": [160, 220], "center": 140, "aim": 90, "aimZ": [40, 320], "deckAim": [84, 104], "rigAim": [150, 300]},
-  "crew0": {"officers": 4, "helm": 2, "marines": 12, "marineGap": 37, "top": 4, "monkeys": 1, "handsK": 1},
+  "crew0": {"officers": 4, "helm": 2, "marines": 12, "marineGap": 37, "top": 4, "monkeys": 1, "handsK": 1, "shelter": 0},
   "names_pub": ["星座號", "國會號", "切薩皮克號", "埃塞克斯號", "波士頓號", "紐約號", "費城號", "亞當斯號", "坎伯蘭號", "薩凡納號", "聖勞倫斯號", "拉里坦號"],
   "drive": {
     "kDrag": 0.0615,
@@ -334,7 +334,7 @@
       "cfg": {"base": 6, "agile": 0.6, "hard": 6},
       "drive": "steam",
       "geo": {"spar": [35, 38], "marines": [60, 60], "center": 40, "aim": 33, "aimZ": [5, 70], "deckAim": [35, 45], "rigAim": [35, 64]},
-      "crew": {"officers": 4, "helm": 1, "marines": 0, "top": 0, "monkeys": 1},
+      "crew": {"officers": 4, "helm": 1, "marines": 0, "top": 0, "monkeys": 1, "shelter": 1},
       "names": ["莫尼特號"],
       "author": "meadow"
     },

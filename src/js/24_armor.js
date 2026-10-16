@@ -96,6 +96,22 @@ function armAt(sh, L) {
   for (var i = 0; i < sh.arm.length; i++) { var a = sh.arm[i], Q = armIn(a, L); if (a.grid.get(Math.floor(Q[0]), Math.floor(Q[1]), Math.floor(Q[2]))) return a; }
   return null;
 }
+/** 人員傷害擋不擋得住（TASK-0637；Tim 2026-10-16：「炮塔裝甲對內部炮組的防護力好像不太夠」）：船的格座標 a → b 這一段有沒有穿過裝甲（現在的角度、打掉的不算）。
+ *  40_crew.js hurt（爆風、碎片、砲彈掠過、殉爆）、musket（火槍）用：穿過 ⇒ 那個人不受傷。每 0.5 格量一點；a 落在的那一格不算（爆點常在裝甲表面那一格裡：
+ *  莫尼特號的牆只有 2 格厚，再多讓 ⇒ 牆外炸開的照樣穿進來）。牆被打穿、從砲門、頂的格柵縫看得到 ⇒ 照樣打得到。沒有裝甲的船不呼叫。 */
+function armBetween(sh, a, b) {
+  var d = sub(b, a), l = len(d); if (l < 1) return false;
+  for (var i = 0; i < sh.arm.length; i++) {
+    var ar = sh.arm[i], bb = ar.A.bb, Qa = armIn(ar, a), Qb = armIn(ar, b);
+    if (Math.max(Qa[0], Qb[0]) < bb[0] - 1 || Math.min(Qa[0], Qb[0]) > bb[3] + 1 || Math.max(Qa[1], Qb[1]) < bb[1] - 1 || Math.min(Qa[1], Qb[1]) > bb[4] + 1 || Math.max(Qa[2], Qb[2]) < bb[2] - 1 || Math.min(Qa[2], Qb[2]) > bb[5] + 1) continue;   // 這一段碰不到這塊的外框
+    var ax = Math.floor(Qa[0]), ay = Math.floor(Qa[1]), az = Math.floor(Qa[2]);
+    for (var t = 0.5; t < l; t += 0.5) {
+      var k = t / l, x = Math.floor(Qa[0] + (Qb[0] - Qa[0]) * k), y = Math.floor(Qa[1] + (Qb[1] - Qa[1]) * k), z = Math.floor(Qa[2] + (Qb[2] - Qa[2]) * k);
+      if ((x !== ax || y !== ay || z !== az) && ar.grid.get(x, y, z)) return true;
+    }
+  }
+  return false;
+}
 /** 裝甲原本的位置 (x, y, z)（裝甲的格座標）還有沒有格（重量照材質層的座標數）。 */
 function armGet(sh, x, y, z) { for (var i = 0; i < sh.arm.length; i++) if (sh.arm[i].grid.get(x, y, z)) return 1; return 0; }
 function armCount(sh) { var n = 0; for (var i = 0; i < sh.arm.length; i++) n += sh.arm[i].grid.count; return n; }
