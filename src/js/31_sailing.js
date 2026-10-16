@@ -230,7 +230,7 @@ function hitFriction(A, B, n) {
 //     從撞點往船裡一口一口咬（shatter，半徑照能量 RAM_R），每一口照打掉的格扣能量（× PEN.wood × 船殼硬度倍率，跟砲彈打木頭同一套），最多 RAM_BITES 口；
 //     碎木傷人（hurt，原因「碰撞」）、撞點附近的模型扣血（砲、小艇…）。打穿水線下 ⇒ 照常進水（removeVoxel）。
 //   · 裝甲子模組不看（碰撞本來就只看船殼 sh.grid）。讀數：sh.rams（每一次：時間、對方、du、E、自己分到的、掉幾格、掉幾噸 t_lost）。廣播：每一次都報，撞掉幾噸。
-var RAM_R = [2, 7], RAM_BITES = 12;                                    // 門檻、傷害倍率、恢復係數、側撞有效質量倍數 ⇒ RAM（04_state.js；物理設定頁的滑桿，config lim.ramv／ramk／rame／ramside）
+var RAM_R = [2, 7], RAM_BITES = 12;   // 咬的半徑、口數上限 ⇒ 傷害倍率 > 1 時跟著 ∛倍率 放大（半徑最多 16 格、口數最多 60；ramBite）                                    // 門檻、傷害倍率、恢復係數、側撞有效質量倍數 ⇒ RAM（04_state.js；物理設定頁的滑桿，config lim.ramv／ramk／rame／ramside）
 function ramHit(A, B, n) {
   if (!PHX.shipdmg) return;
   var vA = A.vel || [0, 0, 0], vB = B.vel || [0, 0, 0], uA = vA[0] * n[0] + vA[2] * n[2], uB = vB[0] * n[0] + vB[2] * n[2], du = uB - uA;   // A 在 +n 那一側：A 往 −n、B 往 +n ⇒ 接近
@@ -263,8 +263,8 @@ function ramSpd(sh, dU, n, k, e) {
 }
 /** 一艘被撞：撞點 Q（格座標）、n ＝ 往這艘船裡的方向（世界、水平）、分到的能量 e（kJ）。回撞掉幾噸（massLost 前後的差：格照材質、連帶打飛的模型）。 */
 function ramBite(sh, Q, n, e, other, du, E) {
-  var dL = norm(M4.dir(sh.inv, n[0], 0, n[2])), R = clamp(1.6 + 0.5 * Math.cbrt(e / 50), RAM_R[0], RAM_R[1]), velW = mul(n, 20), left = e, lost = 0, P = Q.slice(), t0 = massLost(sh);
-  for (var k = 0; k < RAM_BITES && left > 0; k++) {
+  var dL = norm(M4.dir(sh.inv, n[0], 0, n[2])), gk = Math.cbrt(Math.max(1, RAM.k)), R = clamp(1.6 + 0.5 * Math.cbrt(e / 50), RAM_R[0], Math.min(16, RAM_R[1] * gk)), nb = Math.min(60, Math.round(RAM_BITES * gk)), velW = mul(n, 20), left = e, lost = 0, P = Q.slice(), t0 = massLost(sh);
+  for (var k = 0; k < nb && left > 0; k++) {
     var r = shatter(sh, P, dL, R, velW, 120, 0.55);
     left -= Math.max(r.cost * PEN.wood * sh.cfg.hard, PEN.wood * R);      // 咬到空的（艙裡）也照一口扣一點 ⇒ 一定會停
     lost += r.n; P = add(P, mul(dL, R));
@@ -275,6 +275,15 @@ function ramBite(sh, Q, n, e, other, du, E) {
   (sh.rams || (sh.rams = [])).push({ t: +SIMT.toFixed(2), with: other.i, du: +du.toFixed(2), E: Math.round(E), e: Math.round(e), lost: lost });
   var t = massLost(sh) - t0; sh.rams[sh.rams.length - 1].t_lost = +t.toFixed(2);
   return t;
+}
+/** 開局（70_flow.js reset）先把這一場會用到的碰撞取樣建好：船隻碰撞那一檔、碰撞傷害開著再加全開那一份、格子檔的佔用金字塔。只是快取（不碰亂數、不改戰局）。
+ *  Tim 2026-10-16：「碰撞精度也是物理效果中就開滿(可以測試效能占用)」—— 量過：憲法號全開取樣 24.8 萬點 93.5 ms，以前在第一次碰到的那一步現場建（那一步 96 ms）。 */
+function hitWarm() {
+  var L = [SHIPHIT_LV[PHX.shiphit], PHX.shipdmg ? SHIPHIT_LV[3] : null], seen = {};
+  SHIPS.forEach(function (sh) {
+    if (seen[sh.T.id]) return; seen[sh.T.id] = 1;
+    L.forEach(function (lv) { if (!lv) return; hitSamples(sh.T, lv); if (!lv.foot) occPyr(sh.T); });
+  });
 }
 /** 船型 T 的碰撞取樣（第一次用到才算、每個船型每一檔只算一次；HIT_PROF 記花了多久）：
  *  foot ⇒ { f0, f1 }：水線下 1 m 到水線上 4 m 那一段，每一欄 x 的 y 最小／最大（沒有 ⇒ -1）＋ 外緣點（每 2 欄取一）；
