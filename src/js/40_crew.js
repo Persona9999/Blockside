@@ -85,9 +85,9 @@ function makeCrew(sh) {
     for (var y = CY + 4; y < CY + 80; y++) { if (standZ(g, x, y, m0, m1, 14) >= 0) last = y; else if (last >= 0) break; }
     if (last >= 0) add(ROLE.MARINE, standNear(g, x, last - 2, m0, m1, 14, taken), null, 1);
   }
-  var qx = wheel ? Math.floor(wheel.c[0]) : HULL_X0 + 160;
-  [[qx + 22, CY + 8], [qx + 30, CY - 6], [qx + 40, CY + 14], [qx + 14, CY - 12], [qx + 48, CY - 2], [qx + 22, CY - 20], [qx + 36, CY + 22], [qx + 56, CY + 10]].slice(0, CW.officers).forEach(function (p) { add(ROLE.OFFICER, standNear(g, p[0], p[1], sz0, sz1, 14, taken), null, 1); });   // 後四個給船隻配置頁多調的
-  crew.filter(function (c) { return c.role === ROLE.OFFICER; }).forEach(function (c, k) { c.rank = k; if (!k) c.art = ART_CAPTAIN; });   // 階級照順序：船長（換貼圖）、大副、二副、三副、見習軍官（廣播用，61_hud.js newsCrew）
+  var qx = wheel ? Math.floor(wheel.c[0]) : HULL_X0 + 160, offP = [[qx + 22, CY + 8], [qx + 30, CY - 6], [qx + 40, CY + 14], [qx + 14, CY - 12], [qx + 48, CY - 2], [qx + 22, CY - 20], [qx + 36, CY + 22], [qx + 56, CY + 10]];   // 後四個給船隻配置頁多調的
+  var offN = CW.shelter ? Math.min(1, CW.officers) : CW.officers;    // 船員避開露天甲板（shelter）：露天只留船長，其他的開完預備水手再擺到甲板下（下面）
+  offP.slice(0, offN).forEach(function (p) { add(ROLE.OFFICER, standNear(g, p[0], p[1], sz0, sz1, 14, taken), null, 1); });
   if (wheel) { var wx = Math.floor(wheel.bb[0]) - 3; [[wx, CY + 3], [wx, CY - 3], [wx - 5, CY + 7], [wx - 5, CY - 7]].slice(0, CW.helm).forEach(function (p) { add(ROLE.HELM, standNear(g, p[0], p[1], sz0, sz1, 14, taken), null, -1); }); }   // 舵輪後面（⛔ 舵輪中心往後 4 格還在舵輪的外框裡 ⇒ 以前一個舵手都站不上去）
   // 桅頂：每根桅最低的那層平台（從那根桅最低的橫帆桁往上，第一層有 6 個以上站得住的點；沒有帆桁 meta ⇒ 從 z 200）上分散站四個人；頭頂 1.4 m 空（同一般站位）。
   //   憲法號：前桅 263、主桅 286、後桅 241（帆桁 254／276／232 ⇒ 跟以前從 200 找一樣）；夜隼號：前桅 127、主桅 137。
@@ -111,6 +111,11 @@ function makeCrew(sh) {
     }
   });
   makeHands(sh, crew, add);                                          // 預備水手：最後才生（數量 0 ⇒ 跟以前一樣，rnd() 一個都不多抽）
+  if (offN < CW.officers) {                                          // shelter：船長以外的軍官在預備水手待命的那一層（42_hands.js shelterSpots；沒有走路格 ⇒ 照舊站露天甲板）
+    var below = shelterSpots(sh, CW.officers - offN);
+    offP.slice(offN, CW.officers).forEach(function (p, k) { add(ROLE.OFFICER, below[k] || standNear(g, p[0], p[1], sz0, sz1, 14, taken), null, 1); if (below[k]) crew[crew.length - 1].below = true; });   // below：在甲板下 ⇒ 火槍打不到（musket）
+  }
+  crew.filter(function (c) { return c.role === ROLE.OFFICER; }).forEach(function (c, k) { c.rank = k; if (!k) c.art = ART_CAPTAIN; });   // 階級照順序：船長（換貼圖）、大副、二副、三副、見習軍官（廣播用，61_hud.js newsCrew）
   medInit(sh);                                                       // 醫療艙走得到的床、要幾個人手（44_medic.js；沒有 ⇒ sh.med ＝ null，照舊）
   // 站不下的（船隻配置頁調多了、船小）⇒ 記著，開戰時上方廣播一行（52_fleet.js crewShortNote）；⛔ 不默默少人
   function cnt(r) { return crew.filter(function (c) { return c.role === r; }).length; }
@@ -195,7 +200,8 @@ function hurt(sh, L, rKill, rWound, dir, cause, base, list) {
     var d = sub([c.pos[0], c.pos[1], c.pos[2] + 9], L), dist = len(d);
     if (dir) { var along = dot(d, dir); if (along > 0) dist = Math.sqrt(Math.max(0, dist * dist - along * along * 0.75)); }  // 前方的碎屑錐
     if (dist >= Math.max(rKill, rWound)) return;
-    var f = dist < rKill ? 1 : 0.55 - 0.45 * (dist - rKill) / (rWound - rKill);
+    if (sh.arm && armBetween(sh, L, [c.pos[0], c.pos[1], c.pos[2] + 9])) return;   // 隔著裝甲（砲塔的牆）⇒ 擋住（24_armor.js；沒有裝甲的船不看）
+    var f =dist < rKill ? 1 : 0.55 - 0.45 * (dist - rKill) / (rWound - rKill);
     damageCrew(sh, c, base * f * rr(0.6, 1.4), cause); n++;
   });
   return n;
@@ -222,6 +228,44 @@ function fall(sh, c, v) {
   if (c.st < 2 && DROWN_T > 0) { if (c.st === 1) { sh.wounded--; c.hurtSwim = true; } c.fellAlive = true; }   // 落水求生（43_swim.js）：先不算陣亡，落到水裡變成在游
   else if (c.st < 2) { if (c.st === 1) sh.wounded--; sh.dead++; sh.kills++; sh.causes['落水'] = (sh.causes['落水'] || 0) + 1; newsCrew(sh, c, true, '落水'); }
   c.st = 4; c.fw = w; c.fv = add(v || [gauss(), rr(0, 2), gauss()], sh.vel); c.t = 0; c.walk = null; c.cart = false; c.moving = false;
+}
+/** 站著的地方腳下被打穿（32_hull.js survey）：同一柱往下還有船裡的一層接得住 ⇒ 落在那一層（摔傷照高度），不是穿過船殼掉進海裡。
+ *  Tim 2026-10-16（TASK-0637）：莫尼特號砲塔的地板（0.3 m 的甲板）被打穿 ⇒ 砲手照世界座標一路掉到海面、溺死（seed 1–4 每場 3–9 人）。
+ *  接得住 ＝ 下面那幾層（42_hands.js 的走路格，由上往下）在這一點 2 點內有站得住的點、而且那一點腳下現在還有格；都沒有（掉出船外、船沒有走路格）⇒ 照舊 fall（落水）。
+ *  落地之後：砲班、送藥手、舵手、陸戰隊、桅頂水手換成那一層的預備水手 ⇒ 照常點名、爬梯子回去補位（42_hands.js callHands）；
+ *  軍官留原職（降旗看軍官還在不在）；預備水手照新的那一層重新找路；傷員只換位置。 */
+function fallIn(sh, c) {
+  var NV = sh.nav, x = c.pos[0], y = c.pos[1], z0 = c.pos[2];
+  if (!NV || c.inBed) { fall(sh, c); return; }
+  for (var lv = NV.levels.length - 1; lv >= 0; lv--) {
+    var N = NV.levels[lv].N, i = navSnap(N, [x, y, NV.levels[lv].zr[0]], 2); if (i < 0) continue;
+    var p = navPos(N, i); if (p[2] > z0 - 4) continue;                  // 同一層（腳邊的洞）、比腳還高 ⇒ 不是落點
+    if (!countBox(sh.grid, Math.floor(p[0]) - 1, Math.floor(p[1]) - 1, p[2] - 1, Math.floor(p[0]) + 1, Math.floor(p[1]) + 1, p[2] - 1)) continue;   // 那一層這裡也被打穿了 ⇒ 再往下
+    landIn(sh, c, lv, p, (z0 - p[2]) * S);
+    return;
+  }
+  fall(sh, c);
+}
+var FALL_H0 = 2, FALL_K = 30;                       // 摔傷：高度 h 公尺 ⇒ 扣 (h − 2) × 30（3 m 30、5 m 90、10 m 240）
+function landIn(sh, c, lv, p, h) {
+  var NV = sh.nav, r = c.role, home0 = c.home;
+  c.pos = p.slice(); c.home = p.slice(); c.walk = null; c.moving = false; sh.fellIn = (sh.fellIn || 0) + 1;
+  if (h > FALL_H0) damageCrew(sh, c, (h - FALL_H0) * FALL_K, '摔落');
+  if (c.st !== 0) return;                                                // 摔死、摔傷：倒在那一層
+  if (r === ROLE.OFFICER) { c.below = true; return; }                  // 掉到甲板下的軍官：火槍打不到（musket）
+  if (r === ROLE.HAND) {
+    var H = c.hand; H.lv = lv; H.legs = []; H.wp = null; H.climb = null; H.wait = rr(0.5, 1.5);
+    if (H.job && H.job.kind === 'helm' && H.job.who) H.job.who.relieved = false;   // 去補舵手的路斷了 ⇒ 那個位置重新等人
+    if (H.job && H.job.kind !== 'staff' && H.job.kind !== 'carry') H.job = null;   // 醫療艙的工作照留：medJoin 自己看層對不對
+    c.deck = NV.levels[lv].key; return;
+  }
+  if (c.art === undefined) c.art = r;                                    // 貼圖照原本的職位那一列
+  if (r === ROLE.GUN) leaveGun(c);
+  if (r === ROLE.POWDER) { (c.guns || []).forEach(function (g) { if (g.pm === c) g.pm = null; }); c.fellPm = { deck: c.deck, guns: c.guns || [], home: home0 }; c.pm = null; c.cart = false; }   // 補上來的送藥手接它的砲（handJoin）
+  if (r === ROLE.HELM) c.helmHome = home0;             // 舵手的站位：預備水手照它補（callHands）
+  c.backRole = r === ROLE.MARINE ? r : undefined;
+  c.role = ROLE.HAND; c.gun = null; c.deck = NV.levels[lv].key;
+  c.hand = { lv: lv, wait: rr(1, 3), legs: [], wp: null, k: 0, climb: null, job: null, to: null };
 }
 function stepCrew(sh, dt) {
   sh.navN = HAND_PATHS;                                 // 預備水手這一步還能找幾次路（42_hands.js）
@@ -252,7 +296,8 @@ function stepCrew(sh, dt) {
 function musket(sh, c) {
   var foe = foeOf(sh), w = M4.pt(sh.M, c.pos[0], c.pos[1], c.pos[2] + 14);
   if (!foe) return;
-  var cand = foe.crew.filter(function (o) { return o.st === 0 && (o.role !== ROLE.GUN && o.role !== ROLE.POWDER && o.role !== ROLE.HAND || o.deck === foe.weatherDeck); });   // 露天的人（最上面那層砲甲板的砲班、走到那一層的預備水手也算）
+  var cand = foe.crew.filter(function (o) { return o.st === 0 && !o.below && (o.role !== ROLE.GUN && o.role !== ROLE.POWDER && o.role !== ROLE.HAND || o.deck === foe.weatherDeck); });   // 露天的人（最上面那層砲甲板的砲班、走到那一層的預備水手也算）
+  if (foe.arm) { var wL = M4.pt(foe.inv, w[0], w[1], w[2]); cand = cand.filter(function (o) { return !armBetween(foe, wL, [o.pos[0], o.pos[1], o.pos[2] + 9]); }); }   // 躲在裝甲後面（砲塔裡）的看不到（24_armor.js）
   c.fireT = 0.4;
   spawnPt(w, [WIND[0] * 0.3, 0.4, WIND[2] * 0.3], rr(1.5, 2.5) / smokeK(), [0.85, 0.85, 0.85], 0.35, 0.3, 1.4, -0.03, 0.8);
   if (!cand.length) return;

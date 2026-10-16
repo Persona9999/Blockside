@@ -292,11 +292,24 @@ function legStart(sh, c) {
   H.legs.shift();
   H.wp = navSmooth(N, p).map(function (i) { return navPos(N, i); }); H.k = 0;
 }
-/** 閒著：在待命那一層 HAND_ROAM 的機會上別層；在別層 HAND_BACK 的機會回待命那一層；其餘在這一層隨便挑一點走過去。 */
+// ── 船員避開露天甲板（船員配置 shelter；TASK-0637）──
+// Tim 2026-10-16：「讓船員儘量不要上露天甲板（傷亡主要是這部分 這部分船員應該可以當後補去補砲塔傷亡的）」「露天甲板傷亡 主要是敵人炮擊直接打死」。
+// 開了 ⇒ 預備水手閒晃不上露天那一層（最上面那層砲甲板，sh.weatherDeck）、走到那一層閒著就回待命那一層；點名補位照樣上去（callHands 不看它）。
+//   船長以外的軍官開戰時就站在待命那一層（40_crew.js makeCrew）。莫尼特號預設開：露天那一層 ＝ 砲塔所在的主甲板，人住在水線下。
+/** 露天那一層（走路格的第幾層；沒開 shelter、沒有 ⇒ -1）。 */
+function shelterLv(sh) { return sh.cw.shelter && sh.weatherDeck && sh.deckZ ? lvOf(sh.nav.levels, sh.deckZ[sh.weatherDeck][0]) : -1; }
+/** 待命那一層最大那一塊裡隨機 n 個站位（軍官用；沒有走路格 ⇒ []）。 */
+function shelterSpots(sh, n) {
+  var NV = sh.nav, out = []; if (!NV) return out;
+  var N = NV.levels[NV.home].N, C = N.bigCells; if (!C.length) return out;
+  for (var k = 0; k < n; k++) out.push(navPos(N, C[(rnd() * C.length) | 0]));
+  return out;
+}
+/** 閒著：在待命那一層 HAND_ROAM 的機會上別層；在別層 HAND_BACK 的機會回待命那一層；其餘在這一層隨便挑一點走過去。shelter ⇒ 不上露天那一層、在那一層就回去。 */
 function wander(sh, c) {
-  var H = c.hand, NV = sh.nav, lv = H.lv, tl = lv;
-  if (lv === NV.home) { if (NV.reach.length > 1 && rnd() < HAND_ROAM) { var o = NV.reach.filter(function (i) { return i !== NV.home; }); tl = o[(rnd() * o.length) | 0]; } }
-  else if (rnd() < HAND_BACK && NV.reach.indexOf(lv) >= 0) tl = NV.home;
+  var H = c.hand, NV = sh.nav, lv = H.lv, tl = lv, sl = shelterLv(sh);
+  if (lv === NV.home) { if (NV.reach.length > 1 && rnd() < HAND_ROAM) { var o = NV.reach.filter(function (i) { return i !== NV.home && i !== sl; }); if (o.length) tl = o[(rnd() * o.length) | 0]; } }
+  else if ((lv === sl || rnd() < HAND_BACK) && NV.reach.indexOf(lv) >= 0) tl = NV.home;
   var fr = handReg(sh, c), N = NV.levels[tl].N, to = N.cells[(rnd() * N.cells.length) | 0];
   if (tl === lv && fr >= 0) for (var t = 0; t < 6 && N.reg[to] !== fr; t++) to = N.cells[(rnd() * N.cells.length) | 0];   // 同一層 ⇒ 挑同一塊裡的點（別塊走不到）
   var legs = handRoute(sh, lv, tl, c.pos[0], navPos(N, to)[0], fr, tl === lv ? fr : N.reg[to]);
@@ -326,11 +339,11 @@ function callHands(sh) {
     var pm = sh.crew.filter(function (c) { return c.role === ROLE.POWDER && able(c) && c.deck === D.key; }).length, pn = (NV.pm0[D.key] || 0) - pm - (going['pm' + D.key] || 0);
     if (pn > 0 && sh.stations.some(function (s) { return s.deck === D.key && !s.mag.gone; })) need.push({ kind: 'pm', key: D.key, deck: D.key, lv: lv, n: pn, x: sh.T.cx, pri: 1 });
   });
-  var wheel = sh.models.filter(function (m) { return m.kind === 'wheel'; })[0], hd = sh.crew.filter(function (c) { return c.role === ROLE.HELM && !able(c) && !c.relieved; });
+  var wheel = sh.models.filter(function (m) { return m.kind === 'wheel'; })[0], hd = sh.crew.filter(function (c) { return (c.role === ROLE.HELM && !able(c) || c.helmHome) && !c.relieved; });   // helmHome：從甲板破洞掉下去的舵手（40_crew.js landIn），站位照原本的
   var hn = Math.min(hd.length, NV.helm0 - sh.crew.filter(function (c) { return c.role === ROLE.HELM && able(c); }).length - (going.helm || 0));
   if (wheel && wheel.alive && hn > 0) {
-    var lvh = lvAt(sh, hd[0].home);
-    if (NV.reach.indexOf(lvh) >= 0) for (var j = 0; j < hn; j++) need.push({ kind: 'helm', key: '', lv: lvh, n: 1, x: hd[j].home[0], spot: hd[j].home, pri: 1, who: hd[j] });
+    var hh = function (c) { return c.helmHome || c.home; }, lvh = lvAt(sh, hh(hd[0]));
+    if (NV.reach.indexOf(lvh) >= 0) for (var j = 0; j < hn; j++) need.push({ kind: 'helm', key: '', lv: lvh, n: 1, x: hh(hd[j])[0], spot: hh(hd[j]), pri: 1, who: hd[j] });
   }
   medNeeds(sh, need);                                                  // 醫療艙的人手、等著被搬的傷員（44_medic.js）
   need.sort(function (a, b) { return a.pri - b.pri; });
@@ -354,8 +367,10 @@ function handJoin(sh, c) {
   if (H.lv !== J.lv) { H.job = null; H.wait = 1; return; }
   c.walk = null; c.moving = false; c.home = c.pos.slice(); c.hand = null; NV.joined++;
   if (J.kind === 'gun') { c.role = ROLE.GUN; c.deck = J.deck; c.side = J.side; c.gun = null; return; }
-  if (J.kind === 'helm') { c.role = ROLE.HELM; c.deck = sh.weatherDeck; c.face = -1; return; }
+  if (J.kind === 'helm') { c.role = ROLE.HELM; c.deck = sh.weatherDeck; c.face = -1; c.helmHome = undefined; c.relieved = false; return; }   // 自己是掉下去的那個舵手、爬回來補自己 ⇒ 之後倒下照常有人補
   var dead = sh.crew.filter(function (o) { return o.role === ROLE.POWDER && o.deck === J.deck && !able(o) && !o.relieved; })[0];
+  var fell = dead ? null : sh.crew.filter(function (o) { return o.fellPm && o.fellPm.deck === J.deck; })[0];   // 從甲板破洞掉下去的送藥手（40_crew.js landIn）：接它的砲
+  if (fell) { dead = { guns: fell.fellPm.guns, home: fell.fellPm.home }; fell.fellPm = null; }
   c.role = ROLE.POWDER; c.deck = J.deck; c.pm = { st: 'idle', t: 0 }; c.cart = false; c.guns = dead ? dead.guns : [];
   if (dead) { dead.relieved = true; c.home = dead.home.slice(); }
   c.guns.forEach(function (g) { if (!g.pm || !able(g.pm)) g.pm = c; });
