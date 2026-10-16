@@ -4,7 +4,7 @@ var SHIPS = [], PIECES = [], BALLS = [], EVENTS = [], FLY = [], PLAYER_I = 0;
 // 選單的滑桿：[下限, 上限, 預設]。網址參數與滑桿共用這一組（⛔ 各一組 ⇒ ?demo 跑的不是網址寫的那組）；讀不懂的值 ⇒ 預設
 // 值住在 config/game.json 的 lim（TASK-0542 設定後台）；各鍵的意思：
 //   hard flood ballast gunw speed agile upwind：船隻設定（下面 SHIP_KEYS）；cas：降旗的死傷比例
-//   gunhp sailhp crewhp powderhp：血量（砲／帆／船員／火藥桶；火藥桶拉滿上限 ＝ 不會爆）；blast：殉爆威力；blastv：每次爆炸的威力浮動 ±
+//   gunhp sailhp crewhp powderhp：血量（砲／帆／船員／火藥桶；火藥桶拉滿上限 ＝ 不會爆）；crewdeath：船員 HP 歸零時當場陣亡的機率（%，沒中 ⇒ 傷員）；blast：殉爆威力；blastv：每次爆炸的威力浮動 ±
 //   dmg12 dmg6 dmg3c：12 磅長砲、6 磅砲、3 磅追擊砲（風暴角號，TASK-0547；預設照彈重內插：4 磅 35、18 磅 70、24 磅 100）
 //   dmgtr：三叉戟砲（三叉戟號船頭的奇幻三管速射砲，gura 酒館 24555；一發 18 磅 ⇒ 70）
 //   dmg11d：莫尼特號砲塔的 XI 吋 Dahlgren（166 磅實心彈／136 磅爆裂彈 ⇒ 330；雙聯 ⇒ 一份彈藥兩發 burst 2）。
@@ -57,6 +57,7 @@ function cfgCopy(id) { var c = shipCfg(id), o = {}; SHIP_KEYS.forEach(function (
 var GUN_HP = Math.round(qnum('gunhp', LIM.gunhp));          // 砲的血量（舵輪 6 成）：預設 200 ⇒ 24 磅實心兩發（Tim 2026-10-12：100 太脆，翻倍）
 var SAIL_HP = Math.round(qnum('sailhp', LIM.sailhp));       // 帆的血量
 var CREW_HP = Math.round(qnum('crewhp', LIM.crewhp));       // 船員的血量：歸零陣亡、掉到一半以下受傷倒下、一半以上照常作戰（只閃紅）
+var CREW_DEATH = Math.round(qnum('crewdeath', LIM.crewdeath));   // 船員死亡率（%）：HP 歸零那一刻當場陣亡的機率，沒中 ⇒ 變成傷員（40_crew.js damageCrew；Tim 2026-10-16，預設 50）
 var POWDER_HP = Math.round(qnum('powderhp', LIM.powderhp)); // 火藥桶的血量：歸零殉爆；拉滿（LIM 上限）＝ 不會爆；預設 675 ＝ 很難但有機率
 var BLAST_K = qnum('blast', LIM.blast);                             // 殉爆威力倍率（能量；爆炸半徑 ∝ 立方根）
 var BLAST_V = qnum('blastv', LIM.blastv);                           // 每一次爆炸（火藥桶、彈藥庫、藥包）的威力再乘 1 ± 這個數之間的亂數（23_powder.js blastRoll）

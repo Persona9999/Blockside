@@ -206,12 +206,18 @@ function hurt(sh, L, rKill, rWound, dir, cause, base, list) {
   });
   return n;
 }
-/** 船員扣血：歸零陣亡；掉到一半以下受傷倒下（之後再被打到照樣扣，歸零才算陣亡）；一半以上照常作戰，只閃紅。 */
+/** 船員扣血：歸零 ⇒ 照死亡率（CREW_DEATH %）當場陣亡，沒中 ⇒ 變成傷員、剩一口氣（HP 1；之後再被打到歸零再判一次）；
+ *  掉到一半以下受傷倒下（原本的傷員，照舊）；一半以上照常作戰，只閃紅。
+ *  Tim 2026-10-16：「HP歸零後會額外根據死亡率判斷 如果死亡率是30% 代表70%會變成傷員」「預設死亡率50%」「原本的傷員機制保留」。
+ *  死亡率 100 ⇒ 不抽亂數、一律陣亡（跟以前逐位元組相同）；0 ⇒ 不抽、一律變傷員（只有溺水、落水、醫療艙抬下去才會少人）。 */
 function damageCrew(sh, c, dmg, cause) {
   if (c.st > 1 || !(dmg > 0)) return;
   if (c.cart) cartHit(sh, c, dmg);                   // 手上的藥包：吃到夠重的一下就著火（23_powder.js）
   c.hp -= dmg; c.hitT = 0.4;
-  if (c.hp <= 0) killCrew(sh, c, cause);
+  if (c.hp <= 0) {
+    if (CREW_DEATH >= 100 || (CREW_DEATH > 0 && rnd() * 100 < CREW_DEATH)) killCrew(sh, c, cause);
+    else { c.hp = 1; woundCrew(sh, c, cause); }                      // 已經是傷員 ⇒ 照舊是傷員（woundCrew 只收站著的）
+  }
   else if (c.hp < CREW_HP * 0.5 && c.st === 0) woundCrew(sh, c, cause);
 }
 function woundCrew(sh, c, cause) { if (c.st !== 0) return; c.st = 1; c.t = 0; c.walk = null; c.cart = false; c.moving = false; sh.wounded++; sh.wounds++; sh.causes[cause] = (sh.causes[cause] || 0) + 1; newsCrew(sh, c, false, cause); }
