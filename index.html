@@ -12375,6 +12375,12 @@ function shipCheck(id) {
     // ── 材質（TASK-0616）：全船預設＋關聯 meta material；材質表沒有的 ID ⇒ 照全船預設 ──
     R.info.materials = matSummary(T).map(function (m) { return (m.def ? '全船預設 ' : '') + m.name + '（' + m.id + '）' + m.voxels.toLocaleString('en') + ' 格、' + m.t + ' 噸'; }).join('；');
     T.matBad.forEach(function (id) { add('warn', '材質', id, '材質表沒有這個 ID ⇒ 照全船預設 ' + T.mat0, '後台的材質表加這一種，或把關聯 meta material 改成材質表有的 ID（造船規格 §9.5）'); });
+    // ── 平滑渲染（TASK-0616 ⑧）：關聯 meta render（voxel｜smooth）；檔頭 render 段落 ⇒ T.smG（05_material.js）──
+    var smP = (T.h.parts || []).filter(function (p) { return p.meta && p.meta.render === 'smooth'; });
+    R.info.smooth = smP.length ? smP.map(function (p) { return p.path; }).join('、') + '（平滑 ' + T.smN.toLocaleString('en') + ' 格）' : '';
+    R.info.smoothN = T.smN;
+    if (smP.length && !T.smN) add('warn', '平滑渲染', smP.map(function (p) { return p.path; }).join('、'), '關聯標了 render=smooth，檔頭卻沒有平滑的格（render 段落）⇒ 照方塊畫', 'python -I admin.py reimport --id ' + T.id + '（senate 匯出才帶 render 段落）');
+    (T.h.parts || []).forEach(function (p) { var v = p.meta && p.meta.render; if (v && v !== 'smooth' && v !== 'voxel') add('warn', '平滑渲染', p.path, 'meta render=' + v + ' 不認得 ⇒ 照方塊畫', 'render 只有 voxel｜smooth（造船規格 §9.5）'); });
     sh.guns.forEach(function (g) { if (!g.alive) add('error', '開場就掉', g.name, '砲開場 ' + SC_SECS + ' 秒內就沒了', '砲腳下要有甲板'); });
     // ── 砲班站位（三叉戟號船頭：砲靠太近、站位互佔 ⇒ 站不滿；Tim 2026-10-15）──
     var shortN = 0, shortG = 0;
@@ -13009,7 +13015,7 @@ var RPT_ON = Q.get('report') !== '0';                                   // ?repo
 var RPT_EVERY = 5;                                                       // 時間線每幾秒一列
 var RPT_COLS = ['t', 'able', 'wounded', 'dead', 'swim', 'guns', 'ready', 'reload', 'nocrew', 'powder', 'wet', 'fired', 'hits', 'taken', 'lost', 'water', 'list', 'kn', 'sail', 'power'];
 //   able 能打的人（沒受傷、沒落水）／wounded 受傷（含抬下去的）／dead 陣亡（累計）／swim 在水裡還活著／guns 還在的砲
-//   ready 可以開（裝好了，只是沒有目標或在等齊射）／reload 裝填中／nocrew 人不夠／powder 等火藥（藥箱空了）／wet 泡水
+//   ready 可以開（裝好了，只是沒有目標或在等齊射；每門砲的 bear ＝ 其中目標在射界內的秒數 ⇒ ready − bear ＝ 敵艦不在射界）／reload 裝填中／nocrew 人不夠／powder 等火藥（藥箱空了）／wet 泡水
 //   fired、hits 累計開火、命中／taken 累計被打中／lost 被打掉的格數／water 進水（噸）／list 橫傾（度）／kn 航速（節）／sail 帆／power 俥鐘（−1～1）
 var RPT_ST = ['ready', 'reload', 'nocrew', 'gone', 'powder', 'wet'];   // rptGunState 的六種（數字跟 61_hud.js 的砲圖一樣）
 var RPT = null;
@@ -13020,7 +13026,7 @@ function rptGunState(g) { return !g.alive ? 3 : g.wet ? 5 : gunRate(g) <= 0 ? 2 
 function rptShip(sh) {
   var r = RPT.ships[sh.i];
   if (!r) r = RPT.ships[sh.i] = { id: sh.T.id, name: sh.T.name, team: sh.team, from: +SIMT.toFixed(1), crew0: sh.crew.length, out: null, taken: 0, takenOn: {}, tl: [],
-    guns: sh.guns.map(function (g) { return { name: g.name, type: g.type, side: g.side, shots: 0, hits: 0, on: {}, st: [0, 0, 0, 0, 0, 0], goneAt: null }; }) };
+    guns: sh.guns.map(function (g) { return { name: g.name, type: g.type, side: g.side, shots: 0, hits: 0, on: {}, st: [0, 0, 0, 0, 0, 0], bear: 0, goneAt: null }; }) };
   return r;
 }
 /** 每一步（50_sim.js 最後）：每 30 步掃砲的狀態，每 RPT_EVERY 秒記一列。 */
@@ -13031,7 +13037,9 @@ function rptTick() {
   SHIPS.forEach(function (sh) {
     var r = rptShip(sh);
     if (r.out === null && isOut(sh)) r.out = +SIMT.toFixed(1);
-    if (r.out === null) sh.guns.forEach(function (g, j) { var G = r.guns[j], s = rptGunState(g); if (!G) return; G.st[s] += dt; if (s === 3 && G.goneAt === null) G.goneAt = +SIMT.toFixed(1); });
+    var foe = r.out === null ? foeOf(sh) : null;
+    if (r.out === null) sh.guns.forEach(function (g, j) { var G = r.guns[j], s = rptGunState(g); if (!G) return; G.st[s] += dt; if (s === 3 && G.goneAt === null) G.goneAt = +SIMT.toFixed(1);
+      if (s === 0 && foe && foe.center && gunTarget(sh, g, foe.center)) G.bear += dt; });   // bear：可開的時間裡，目標（foeOf）在射界內的秒數（Tim 2026-10-16 查維吉尼亞號：可開 85% 幾乎都是「裝好了、敵艦不在射界」）
     if (row) r.tl.push(rptRow(sh, r));
   });
   RPT.ms += performance.now() - t0; RPT.n++;
@@ -13063,7 +13071,7 @@ function rptData() {
       var r = rptShip(sh), tl = r.tl.slice(), now = rptRow(sh, r); if (!tl.length || tl[tl.length - 1][0] !== now[0]) tl.push(now);
       return { i: sh.i, id: r.id, name: r.name, team: r.team, from: r.from, out: r.out, fate: sh.fate || null, crew0: r.crew0, fired: sh.fired, hits: sh.hits, taken: r.taken, takenOn: r.takenOn,
         wounds: sh.wounds, dead: sh.dead, causes: sh.causes || {}, armor: sh.armRes ? Object.assign({}, sh.armRes) : null,   // armor：打在鐵甲上的實心彈 穿／凹／彈、爆裂彈炸在外面幾發（TASK-0621）
-        guns: r.guns.map(function (G) { return { name: G.name, type: G.type, side: G.side, shots: G.shots, hits: G.hits, on: G.on, goneAt: G.goneAt, st: G.st.map(function (v) { return +v.toFixed(1); }) }; }),
+        guns: r.guns.map(function (G) { return { name: G.name, type: G.type, side: G.side, shots: G.shots, hits: G.hits, on: G.on, goneAt: G.goneAt, st: G.st.map(function (v) { return +v.toFixed(1); }), bear: +G.bear.toFixed(1) }; }),
         tl: tl };
     }) };
 }
