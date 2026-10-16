@@ -215,13 +215,18 @@
   /* 第一人稱（81_fps.js，TASK-0649；Tim 2026-10-16「下方操作面板隱藏 改為第一人稱用的操作面板」「只保留設定紐 暫停紐」）：
      HUD 全部藏起來，只留下方那一排的 ⏸ 與 ⚙（設定面板、說明照常打得開）；換上 #fpUI。⛔ hud() 照樣在跑（只是看不見）—— 行內的 display 用 !important 壓過 */
   #fpUI{ display:none; }
+  #fpCross{ display:none; position:fixed; left:50%; top:50%; width:6px; height:6px; margin:-3px 0 0 -3px; border-radius:50%; background:rgba(255,255,255,.8); box-shadow:0 0 0 1px rgba(0,0,0,.45); pointer-events:none; }   /* 滑鼠模式（抓住滑鼠）時的準心 */
+  #stage.fpLock #fpCross{ display:block; }
   #stage.fp .hud:not(#botC):not(#gset):not(#help){ display:none !important; }
   #stage.fp #navBox, #stage.fp #helmL, #stage.fp #helmR, #stage.fp #guns, #stage.fp #ammo, #stage.fp #keys > :not(#pauseK):not(#setB){ display:none !important; }
   #stage.fp #fpUI{ display:block; position:absolute; left:0; right:0; bottom:calc(64px + env(safe-area-inset-bottom)); pointer-events:none; z-index:3; }
   #fpUI .fpPad{ position:absolute; bottom:0; display:grid; grid-template-columns:repeat(3, 64px); grid-auto-rows:64px; gap:6px; }   /* 一格 ＝ 圓鈕 .kb.hb 的大小 */
-  #fpLook{ right:calc(14px + env(safe-area-inset-right)); }
-  #fpJoy{ position:absolute; left:calc(18px + env(safe-area-inset-left)); bottom:0; width:136px; height:136px; border-radius:50%; background:rgba(10,14,22,.35); border:2px solid rgba(255,255,255,.22); pointer-events:auto; touch-action:none; }
-  #fpKnob{ position:absolute; left:50%; top:50%; width:58px; height:58px; margin:-29px 0 0 -29px; border-radius:50%; background:rgba(255,255,255,.32); box-shadow:0 0 0 2px rgba(255,255,255,.18); pointer-events:none; }
+  /* 右下：轉頭的搖桿 #fpJoyR（Tim 2026-10-16「旋轉視角是否也可以用虛擬類比控制」）＋它左邊一欄上下 #fpVert：跳／浮空上（空白）在上、浮空下（C）在下（Tim 2026-10-16「為了手機操作 空白移動到右側吧(因為左邊是搖桿 離空白太近很難跳)」）；
+     每顆照 grid-area 擺（⛔ 自動排 ⇒ 藏起來的那顆讓別的補位）；沒有第 2 列時那一欄只剩一格、貼著底 */
+  #fpUI #fpVert{ right:calc(166px + env(safe-area-inset-right)); grid-template-columns:64px; }
+  #fpJoy, #fpJoyR{ position:absolute; left:calc(18px + env(safe-area-inset-left)); bottom:0; width:136px; height:136px; border-radius:50%; background:rgba(10,14,22,.35); border:2px solid rgba(255,255,255,.22); pointer-events:auto; touch-action:none; }
+  #fpKnob, #fpKnobR{ position:absolute; left:50%; top:50%; width:58px; height:58px; margin:-29px 0 0 -29px; border-radius:50%; background:rgba(255,255,255,.32); box-shadow:0 0 0 2px rgba(255,255,255,.18); pointer-events:none; }
+  #fpJoyR{ left:auto; right:calc(18px + env(safe-area-inset-right)); }
   #fpUI .fpb{ pointer-events:auto; display:flex; align-items:center; justify-content:center; margin:0; padding:0; font-size:22px; border-radius:50%; background:rgba(10,14,22,.55); touch-action:none; }
   #fpUI .fpb.down, #fpUI .fpb.on{ background:rgba(110,170,255,.45); }
   #fpAct{ position:absolute; bottom:16px; left:50%; transform:translateX(-50%); display:flex; gap:8px; }   /* 抬 16 px：圓鈕 64 px 高（⛔ bottom 0 ⇒ 底邊壓到下面那排的 ⏸ ⚙，量過） */
@@ -231,7 +236,8 @@
   #fpUI .fpFly{ display:none !important; } #fpUI.fly:not(.fol) .fpFly{ display:flex !important; } #fpUI.fly #fpJump{ display:none !important; }   /* 浮空：跳換成按住的 ⬆ ⬇ */
   @media (max-width: 640px){   /* 直式手機：搖桿與轉頭鈕縮一號，中間的 🪜 ⤴ 🏃 搬到上方（⛔ 同一排 ⇒ 375 px 寬疊在一起，量過） */
     #fpUI .fpPad{ grid-template-columns:repeat(3, 46px); grid-auto-rows:46px; gap:4px; }
-    #fpJoy{ width:112px; height:112px; left:calc(12px + env(safe-area-inset-left)); } #fpKnob{ width:48px; height:48px; margin:-24px 0 0 -24px; }
+    #fpJoy, #fpJoyR{ width:112px; height:112px; left:calc(12px + env(safe-area-inset-left)); } #fpKnob, #fpKnobR{ width:48px; height:48px; margin:-24px 0 0 -24px; }
+    #fpJoyR{ left:auto; right:calc(12px + env(safe-area-inset-right)); } #fpUI #fpVert{ right:calc(132px + env(safe-area-inset-right)); grid-template-columns:46px; bottom:12px; }   /* 抬 12 px（⛔ 0 ⇒ 浮空時 C⬇ 碰到下面那排的 ⚙，截圖量過） */
     #fpUI .fpb{ font-size:19px; }
     #fpAct{ bottom:122px; }   /* 搖桿 112 px 高 ＋ 空一點（⛔ 108 ⇒ 跟搖桿頂疊 8 px，量過） */
   }
@@ -255,8 +261,10 @@
   <!-- 第一人稱的操作面板（81_fps.js；#stage.fp 才顯示）：左下虛擬搖桿（移動；鍵盤 WASD 也行、不顯示按鍵）、右下轉頭（按住）；中間 跳、跑、爬梯子；拖曳畫面也能轉頭 -->
   <div id="fpUI">
     <div id="fpJoy"><div id="fpKnob"></div></div>
-    <div id="fpAct"><span class="kb hb fpb" id="fpClimb" style="display:none" title="爬梯子（E）"><b>E</b><i class="em">🪜</i></span><span class="kb hb fpb" id="fpJump" title="跳（空白鍵）"><b>空白</b><i class="em">⤴</i></span><span class="kb hb fpb fpFly" data-fp="up" title="往上（空白鍵）"><b>空白</b><i class="em">⬆</i></span><span class="kb hb fpb fpFly" data-fp="dn" title="往下（C）"><b>C</b><i class="em">⬇</i></span><span class="kb hb fpb" id="fpRun" title="跑（Shift）"><b>Shift</b><i class="em">🏃</i></span><span class="kb hb fpb" id="fpFol" title="跟隨身邊的船員（F）"><b>F</b><i class="em">👁</i></span><span class="kb hb fpb" id="fpNext" title="換下一個（G）"><b>G</b><i class="em">⏭</i></span></div>
-    <div id="fpLook" class="fpPad"><span></span><span class="kb hb fpb" data-fp="lu" title="抬頭（↑）"><b>↑</b><i class="em">⤒</i></span><span></span><span class="kb hb fpb" data-fp="tl" title="往左轉（← 或 Q）"><b>←</b><i class="em">⟲</i></span><span class="kb hb fpb" data-fp="ld" title="低頭（↓）"><b>↓</b><i class="em">⤓</i></span><span class="kb hb fpb" data-fp="tr" title="往右轉（→）"><b>→</b><i class="em">⟳</i></span></div>
+    <div id="fpAct"><span class="kb hb fpb" id="fpClimb" style="display:none" title="爬梯子（E）"><b>E</b><i class="em">🪜</i></span><span class="kb hb fpb" id="fpRun" title="跑（Shift）"><b>Shift</b><i class="em">🏃</i></span><span class="kb hb fpb" id="fpFol" title="跟隨身邊的船員（F）"><b>F</b><i class="em">👁</i></span><span class="kb hb fpb" id="fpNext" title="換下一個（G）"><b>G</b><i class="em">⏭</i></span></div>
+    <div id="fpCross"></div>
+    <div id="fpJoyR" title="轉頭（方向鍵、Q，或按住畫面拖曳）"><div id="fpKnobR"></div></div>
+    <div id="fpVert" class="fpPad"><span style="grid-area:1/1" class="kb hb fpb" id="fpJump" title="跳（空白鍵）"><b>空白</b><i class="em">⤴</i></span><span style="grid-area:1/1" class="kb hb fpb fpFly" data-fp="up" title="往上（空白鍵）"><b>空白</b><i class="em">⬆</i></span><span style="grid-area:2/1" class="kb hb fpb fpFly" data-fp="dn" title="往下（C）"><b>C</b><i class="em">⬇</i></span></div>
   </div>
   <div id="tip" class="hud"></div>
   <div id="slowB" class="hud"></div>
@@ -316,7 +324,7 @@
     <div class="gsR"><span class="gsL">物理效果</span><span class="chip" data-gx="full">全開</span><span class="chip" data-gx="high">高</span><span class="chip" data-gx="mid">中</span><span class="chip" data-gx="low">低</span><span class="note" id="gsPhx"></span></div>
     <div class="gsR"><span class="gsL">瞄準</span><span class="chip" data-k="q" id="aimk">🎯 換瞄準模式（Q）</span><span class="note">自由 → 水線 → 砲甲板 → 帆具 → 甲板人員 → 彈藥庫（現在的寫在羅盤上面）</span></div>
     <div class="gsR"><span class="chip" id="physT"><b>B</b> 帆繩物理</span><span class="chip" id="camT"><b>V</b> 鏡頭跟船</span><span class="chip" id="muteT"><b>M</b> 靜音</span><span class="chip" id="fpsT">顯示 FPS</span><span class="chip" id="fullT"><b>F11</b> 全螢幕</span><span class="note" id="gsFull"></span></div>
-    <div class="gsR"><span class="gsL">視角</span><span class="chip" id="fpT">🧍 第一人稱</span><span class="chip on" id="fpLampT" title="第一人稱時自己帶一盞燈（艙裡比較亮）">🏮 提燈</span><span class="note">在我艦上走（左下搖桿或 WASD、拖曳或方向鍵轉頭、空白鍵跳、E 爬梯子、Shift 跑）；再按一次回到原本的鏡頭（TASK-0649）</span></div>
+    <div class="gsR"><span class="gsL">視角</span><span class="chip" id="fpT">🧍 第一人稱</span><span class="chip on" id="fpLampT" title="第一人稱時自己帶一盞燈（艙裡比較亮）">🏮 提燈</span><span class="note">在我艦上走（左下搖桿或 WASD、右下搖桿／拖曳／方向鍵轉頭（電腦：點畫面用滑鼠轉頭，Esc 或按住 Alt 放開）、空白鍵跳、E 爬梯子、Shift 跑）；再按一次回到原本的鏡頭（TASK-0649）</span></div>
     <div class="gsR"><span class="gsL">碰撞</span><span class="chip" data-fpm="0" title="牆擋人、會從甲板的破洞落下去">正常</span><span class="chip" data-fpm="1" title="牆不擋人，腳底照樣貼著甲板、不墜落；走不出船外">🚪 穿牆</span><span class="chip" data-fpm="2" title="沒有重力、什麼都不擋；空白鍵／C（面板的 ⬆ ⬇）上下">🕊 浮空</span><span class="note">第一人稱時的碰撞</span></div>
     <div class="gsR"><span class="gsL">彈藥庫殉爆</span><span class="chip" id="slowT">慢動作</span><span class="chip" id="slowCamT">特寫鏡頭</span></div>
     <div class="gsR"><span class="gsL">模擬速度</span><input type="range" id="simSpd" min="-1301" max="903" step="1" value="0" aria-label="模擬速度"><b id="simSpdV" style="min-width:3.6em">×1</b><span class="chip" id="simSpd1">1×</span></div>

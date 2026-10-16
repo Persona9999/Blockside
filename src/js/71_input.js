@@ -71,7 +71,7 @@ function pick(cx, cy) {
 window.addEventListener('keydown', function (e) {
   if (!RUNNING) return;
   var k = e.key.toLowerCase(); if (e.code === 'Space') k = ' ';
-  if (k === 'escape') { e.preventDefault(); if (HELP.open) helpClose(); else if (FLX) floodClose(); else if (FLX3) xrayToggle(); else gsetToggle(); return; }   // 遊戲內的設定面板
+  if (k === 'escape') { e.preventDefault(); if (FP.on && fpEscEaten()) return; if (HELP.open) helpClose(); else if (FLX) floodClose(); else if (FLX3) xrayToggle(); else gsetToggle(); return; }   // 遊戲內的設定面板
   if (FP.on && fpKey(k, true)) { e.preventDefault(); return; }       // 第一人稱：走、轉頭、爬梯子的鍵（81_fps.js）；P 停格、O 設定照舊
   if (k === ' ' || k === 'a' || k === 'd' || k === 'w' || k === 's' || k.indexOf('arrow') === 0) e.preventDefault();
   kbLit(k, true);
@@ -120,7 +120,7 @@ function doKey(k, repeat) {
   }
 }
 function keyUp(k) { if (k === 'a' || k === 'arrowleft') KEYS.l = false; if (k === 'd' || k === 'arrowright') KEYS.r = false; if (KEYS.sw && (k === 'w' || k === 'arrowup' ? 1 : k === 's' || k === 'arrowdown' ? -1 : 0) === KEYS.sw.d) KEYS.sw = null; }
-window.addEventListener('keyup', function (e) { var k = e.key.toLowerCase(); if (e.code === 'Space') k = ' '; if (fpKey(k, false)) return; kbLit(k, false); keyUp(k); });   // fpKey：第一人稱的鍵放開（沒開 ⇒ 只清掉自己按著的、照舊往下走）
+window.addEventListener('keyup', function (e) { var k = e.key.toLowerCase(); if (e.code === 'Space') k = ' '; if (fpKey(k, false)) { e.preventDefault(); return; } kbLit(k, false); keyUp(k); });   // fpKey：第一人稱的鍵放開（沒開 ⇒ 只清掉自己按著的、照舊往下走）
 window.addEventListener('blur', function () { KEYS.l = KEYS.r = false; KEYS.sw = null; [].forEach.call(document.querySelectorAll('.kb.down'), function (b) { b.classList.remove('down'); }); });   // 切走視窗 ⇒ 收不到 keyup，按下的顏色一起清掉
 // iPhone 連點兩下放大（Tim 2026-10-15：「連點角落兩下還是會放大，按控帆按鈕太快就觸發」—— 根上的 touch-action:manipulation iOS 不一定照做）：
 // 兩次手指放開相隔 < 350 ms ⇒ 取消第二次的預設動作（＝雙擊縮放）。取消之後瀏覽器不會補 click ⇒ 一般按鈕自己補一個；

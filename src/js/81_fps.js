@@ -21,7 +21,7 @@
 // 只在畫面這一層跑（frame，90_main.js）：⛔ 不抽 rnd()、不碰模擬的狀態 ⇒ 開不開第一人稱，戰局都逐位元組相同。
 //   停格、設定打開（PAUSED）時只能轉頭、不能走。
 // 自動退出：我艦沉了、換了一艘我艦（playerHandoff）、重新開始、回主選單、腳下一路都沒有地板。
-var FP = { on: false, lamp: true, mode: 0, sh: null, c: null, yaw: 0, pitch: 0, mv: { f: 0, b: 0, l: 0, r: 0, tl: 0, tr: 0, lu: 0, ld: 0, up: 0, dn: 0 }, run: false, climb: null, near: null, lads: null, v: [0, 0], vz: 0, ez: null, fz: 0, eo: 0, jz: 0, jv: 0, joy: [0, 0], fol: null, folP: null, lookT: 0, flyFrom: null };
+var FP = { on: false, lamp: true, mode: 0, sh: null, c: null, yaw: 0, pitch: 0, mv: { f: 0, b: 0, l: 0, r: 0, tl: 0, tr: 0, lu: 0, ld: 0, up: 0, dn: 0 }, run: false, climb: null, near: null, lads: null, v: [0, 0], vz: 0, ez: null, fz: 0, eo: 0, jz: 0, jv: 0, joy: [0, 0], look: [0, 0], fol: null, folP: null, lookT: 0, flyFrom: null };
 var FP_MODE = ['正常', '穿牆', '浮空'], FP_FLY_OUT = 200, FP_NC_EXIT = 2, FP_NC_UP = 3;   // 浮空時離船身最多 20 m；穿牆時從牆裡出來，前面的地板跟腳最多差 0.2 m；穿牆時跨得上 0.3 m（樓梯一階；⛔ 照正常的 0.6 m ⇒ 憲法號舷牆邊 0.2 m 木條＋0.4 m 欄杆蓋板一路踩上欄杆頂，量過）
 // 跟隨船員（Tim 2026-10-16「加一個 跟隨船員(把第一人稱鏡頭綁到附近船員上)」）：FP.fol ＝ 被跟的人 —— 鏡頭在他的眼睛、他照常做自己的工作（⛔ 不設 c.fp）、
 //   玩家只能轉頭；自己的角色停在原地。F 跟隨／回來、G 換下一個（照離自己由近到遠輪）；被跟的人落水、倒下 ⇒ 回到自己。
@@ -50,13 +50,13 @@ function fpSet(on) {
     FP.on = true; FP.sh = sh; FP.c = { pos: c.pos.slice() };            // 玩家自己的角色：只借那個船員的座標（⛔ 不操控他）
     FP.yaw = Math.atan2(d[1], d[0]) || 0; FP.pitch = 0; FP.climb = null; FP.lads = fpLadders(sh); FP.v = [0, 0]; FP.ez = null; FP.jz = FP.jv = 0;
     FP.vz = 0; FP.flyFrom = FP.mode === 2 ? FP.c.pos.slice() : null;
-    note(sh, '第一人稱：左下搖桿或 WASD 走、Shift 跑、空白鍵跳、拖曳或方向鍵轉頭、E 爬梯子 —— 設定裡再按一次回到原本的鏡頭' + (FP.mode === 2 ? '（浮空：空白鍵上、C 下）' : ''));
+    note(sh, '第一人稱：左下搖桿或 WASD 走、Shift 跑、空白鍵跳、右下搖桿／拖曳／方向鍵轉頭（電腦：點畫面用滑鼠轉頭，Esc 或按住 Alt 放開）、E 爬梯子 —— 設定裡再按一次回到原本的鏡頭' + (FP.mode === 2 ? '（浮空：空白鍵上、C 下）' : ''));
   } else if (FP.on) {
-    FP.on = false; FP.sh = FP.c = FP.climb = FP.near = FP.fol = null; CAM.snap = true;
+    FP.on = false; FP.sh = FP.c = FP.climb = FP.near = FP.fol = null; CAM.snap = true; fpUnlock();
   }
   fpStop(); fpUI(); return FP.on;
 }
-function fpStop() { var m = FP.mv; Object.keys(m).forEach(function (k) { m[k] = 0; }); FP.run = false; FP.joy = [0, 0]; FP.jz = FP.jv = 0; FP.v = [0, 0]; FP.vz = 0; joyDraw(0, 0); }
+function fpStop() { var m = FP.mv; Object.keys(m).forEach(function (k) { m[k] = 0; }); FP.run = false; FP.joy = [0, 0]; FP.look = [0, 0]; FP.jz = FP.jv = 0; FP.v = [0, 0]; FP.vz = 0; joyDraw(0, 0); joyDrawR(0, 0); }
 /** 碰撞三段（設定裡的「碰撞」）：0 正常、1 穿牆、2 浮空。開著第一人稱時切：進浮空 ⇒ 記下從哪裡開始；離開浮空 ⇒ fpLand 落到下面的地板。 */
 function fpMode(m) {
   if (m === FP.mode) return;
@@ -228,8 +228,9 @@ function fpFrame(dt) {
     return;
   }
   var m = FP.mv, g = sh.grid;
-  FP.yaw += (m.tr - m.tl) * FP_TURN * dt; FP.pitch = clamp(FP.pitch + (m.lu - m.ld) * FP_TURN * 0.7 * dt, -1.35, 1.35);
+  FP.yaw += (m.tr - m.tl + FP.look[0]) * FP_TURN * dt; FP.pitch = clamp(FP.pitch + (m.lu - m.ld - FP.look[1]) * FP_TURN * 0.7 * dt, -1.35, 1.35);   // 方向鍵＋右搖桿
   if (FP.fol && (sh.crew.indexOf(FP.fol) < 0 || FP.fol.st !== 0)) { FP.fol = null; FP.ez = null; note(sh, '第一人稱：跟的人倒下或落水了 —— 回到自己'); fpUI(); }
+  if (PAUSED && fpLocked()) fpUnlock();                                // 停格、打開設定 ⇒ 放開滑鼠（要按面板）
   if (PAUSED) { fpEyeZ(0); return; }                                   // 停格、設定打開：只能轉頭
   if (FP.fol) {                                                        // 跟隨中：自己的角色不動，只轉頭
     var q = FP.fol.pos, lp = FP.folP || q, mx = q[0] - lp[0], my = q[1] - lp[1]; FP.folP = q.slice();
@@ -349,10 +350,11 @@ function fpCam() {
   return true;
 }
 /** 鍵盤（71_input.js keydown／keyup 先問這裡）：第一人稱的鍵吃掉 ⇒ true；其他照舊（P 停格、O／Esc 設定）。 */
-var FP_KEYS = { w: 'f', arrowup: 'lu', s: 'b', arrowdown: 'ld', a: 'l', d: 'r', arrowleft: 'tl', arrowright: 'tr', q: 'tl', e: null, ' ': null, c: null, shift: null, f: null, g: null };
+var FP_KEYS = { w: 'f', arrowup: 'lu', s: 'b', arrowdown: 'ld', a: 'l', d: 'r', arrowleft: 'tl', arrowright: 'tr', q: 'tl', e: null, ' ': null, c: null, shift: null, f: null, g: null, alt: null };
 function fpKey(k, down) {
   if (!(k in FP_KEYS)) return false;
   if (k === 'shift') { FP.run = down && FP.on; return FP.on; }
+  if (k === 'alt') { if (down && FP.on) fpUnlock(); return FP.on; }   // 按住 Alt ⇒ 放開滑鼠、遊戲不停；點回畫面再抓
   if (!FP.on) { if (!down && FP_KEYS[k]) FP.mv[FP_KEYS[k]] = 0; return false; }
   if (k === 'e') { if (down) fpClimbGo(); return true; }               // E 爬梯子
   if (k === ' ') { if (FP.mode === 2) FP.mv.up = down ? 1 : 0; else if (down) fpJump(); return true; }   // 空白鍵跳（Tim 2026-10-16）；浮空 ⇒ 往上
@@ -366,7 +368,26 @@ function fpLook(dx, dy) { FP.yaw += dx * 0.005; FP.pitch = clamp(FP.pitch - dy *
 // 設定面板的開關、第一人稱的操作面板（按住才動：放開、移出、取消都停）
 $('fpT').onclick = function () { fpSet(!FP.on); gsetClose(); };
 $('fpLampT').onclick = function () { FP.lamp = !FP.lamp; fpUI(); };   // 提燈：開關不關設定面板；跨場留著
-// ⛔ 電腦上滑鼠一動就轉頭（Pointer Lock，31be9d3 做過）：Tim 2026-10-16 實測「還是改回原本按住才能轉視角好了(否則要esc後才能跟ui互動)」⇒ 拿掉，照舊按住拖曳轉頭（71_input.js）。
+// 滑鼠模式（Tim 2026-10-16「視角旋轉是否可以參考PC版minecraft … 點了滑鼠後會變成滑鼠模式」；查過：Minecraft Java 版抓住滑鼠一動就轉頭，Esc 放開並打開暫停選單，點回畫面再抓住）：
+//   ⛔ 31be9d3 那版的鎖定：Esc 只放開、什麼都沒打開 ⇒ Tim「要esc後才能跟ui互動」。這一版照 Minecraft：
+//   · 點一下 3D 畫面（左鍵）⇒ 抓住滑鼠（Pointer Lock），一動就轉頭（FP_MOUSE_K：每 px 約 0.15°，約 Minecraft 預設靈敏度），畫面中間一個準心（#fpCross）。開第一人稱時不自動抓。
+//   · Esc（瀏覽器自己放開）⇒ 打開設定（遊戲停）＝ Minecraft 的暫停選單；關掉之後點畫面再抓。
+//   · 按住 Alt ⇒ 先放開、遊戲不停（像 Minecraft 的 Mouse Unlock 模組），點回畫面再抓。P 停格、O 設定也會放開。
+//   · 沒抓的時候照舊按住拖曳轉頭（71_input.js）；只認滑鼠（pointerType mouse），觸控不受影響。抓住時游標的 client 座標不動 ⇒ 拖曳那條算出 0，不會轉兩次。
+var FP_MOUSE_K = 0.52, FP_ESC_T = 0;
+function fpLocked() { return document.pointerLockElement === cv; }
+function fpLock() { if (!fpLocked() && cv.requestPointerLock) { try { var r = cv.requestPointerLock(); if (r && r.catch) r.catch(function () { }); } catch (x) { } } }
+function fpUnlock() { if (fpLocked() && document.exitPointerLock) { FP.unlockMine = true; document.exitPointerLock(); } }
+/** 71_input.js 的 Esc 先問這裡：剛因為 Esc 放開、已經替它打開了設定 ⇒ 吃掉（⛔ 不吃 ⇒ 同一下 Esc 又把設定關掉）。 */
+function fpEscEaten() { return performance.now() - FP_ESC_T < 400; }
+cv.addEventListener('pointerdown', function (e) { if (FP.on && e.pointerType === 'mouse' && e.button === 0 && !PAUSED) fpLock(); });
+document.addEventListener('mousemove', function (e) { if (FP.on && fpLocked()) fpLook((e.movementX || 0) * FP_MOUSE_K, (e.movementY || 0) * FP_MOUSE_K); });
+document.addEventListener('pointerlockchange', function () {
+  var on = fpLocked(); $('stage').classList.toggle('fpLock', on);
+  if (on) return;
+  if (FP.unlockMine) { FP.unlockMine = false; return; }                // 自己放的（Alt、停格、離開第一人稱）
+  if (FP.on) setTimeout(function () { if (FP.on && !GSET.open) { gsetOpen(); FP_ESC_T = performance.now(); } }, 60);   // 瀏覽器放的（Esc）⇒ 打開設定
+});
 [].forEach.call(document.querySelectorAll('#gset [data-fpm]'), function (b) { b.onclick = function () { fpMode(+b.dataset.fpm); }; });   // 碰撞三段（正常／穿牆／浮空）：開關不關設定面板；跨場留著
 [].forEach.call(document.querySelectorAll('#fpUI [data-fp]'), function (b) {
   var k = b.dataset.fp;
@@ -380,21 +401,27 @@ $('fpJump').addEventListener('pointerdown', function (e) { e.preventDefault(); f
 $('fpFol').onclick = function () { fpFollow(false); };
 $('fpNext').onclick = function () { fpFollow(true); };
 window.addEventListener('blur', fpStop);
-// 虛擬搖桿（Tim 2026-10-16「移動要改為虛擬搖桿(同時支援WASD 但不用顯示按鍵)」）：左下一個圓，按住拖 ⇒ 往那個方向走；
-//   推到邊 ＝ 全速、推一半 ＝ 半速（FP.joy ＝ [往前, 往右]，跟鍵盤的合起來夾到 1）。放開、取消 ⇒ 回中間。
-var JOY = { id: null, cx: 0, cy: 0, R: 1 };
-function joyDraw(x, y) { var k = $('fpKnob'); if (k) k.style.transform = 'translate(' + x.toFixed(1) + 'px,' + y.toFixed(1) + 'px)'; }
-function joyMove(e) {
-  var dx = e.clientX - JOY.cx, dy = e.clientY - JOY.cy, l = Math.hypot(dx, dy), s = l > JOY.R ? JOY.R / l : 1;
-  dx *= s; dy *= s; joyDraw(dx, dy);
-  var a = Math.hypot(dx, dy) / JOY.R, dead = 0.12, k = a < dead ? 0 : (a - dead) / (1 - dead) / (a || 1);   // 中間一小圈不動（手指放上去不會溜）
-  FP.joy = [-dy / JOY.R * k, dx / JOY.R * k];
+// 虛擬搖桿（Tim 2026-10-16「移動要改為虛擬搖桿(同時支援WASD 但不用顯示按鍵)」「旋轉視角是否也可以用虛擬類比控制」）：按住拖 ⇒ 推到邊 ＝ 全速、推一半 ＝ 半速；
+//   中間一小圈（12%）不動（手指放上去不會溜）；放開、取消 ⇒ 回中間。兩支同一套（joyBind）：
+//   左下 #fpJoy 走路 ⇒ FP.joy ＝ [往前, 往右]（跟鍵盤的合起來夾到 1）；右下 #fpJoyR 轉頭 ⇒ FP.look ＝ [往右轉, 往下看]（fpFrame 照 FP_TURN 的速度轉，跟方向鍵加在一起）。
+function joyBind(pad, knob, set) {
+  var J = { id: null, cx: 0, cy: 0, R: 1 };
+  function draw(x, y) { knob.style.transform = 'translate(' + x.toFixed(1) + 'px,' + y.toFixed(1) + 'px)'; }
+  function move(e) {
+    var dx = e.clientX - J.cx, dy = e.clientY - J.cy, l = Math.hypot(dx, dy), s = l > J.R ? J.R / l : 1;
+    dx *= s; dy *= s; draw(dx, dy);
+    var a = Math.hypot(dx, dy) / J.R, dead = 0.12, k = a < dead ? 0 : (a - dead) / (1 - dead) / (a || 1);
+    set(dx / J.R * k, dy / J.R * k);
+  }
+  function end(e) { if (e.pointerId !== J.id) return; J.id = null; set(0, 0); draw(0, 0); }
+  pad.addEventListener('pointerdown', function (e) {
+    e.preventDefault(); var b = pad.getBoundingClientRect();
+    J.id = e.pointerId; J.cx = b.left + b.width / 2; J.cy = b.top + b.height / 2; J.R = b.width / 2 - 14;
+    try { pad.setPointerCapture(e.pointerId); } catch (x) { } move(e);   // 抓不到（合成的事件、指標已經放開）⇒ 照樣動
+  });
+  pad.addEventListener('pointermove', function (e) { if (e.pointerId === J.id) move(e); });
+  pad.addEventListener('pointerup', end); pad.addEventListener('pointercancel', end);
+  return draw;
 }
-$('fpJoy').addEventListener('pointerdown', function (e) {
-  e.preventDefault(); var b = $('fpJoy').getBoundingClientRect();
-  JOY.id = e.pointerId; JOY.cx = b.left + b.width / 2; JOY.cy = b.top + b.height / 2; JOY.R = b.width / 2 - 14;
-  $('fpJoy').setPointerCapture(e.pointerId); joyMove(e);
-});
-$('fpJoy').addEventListener('pointermove', function (e) { if (e.pointerId === JOY.id) joyMove(e); });
-function joyEnd(e) { if (e.pointerId !== JOY.id) return; JOY.id = null; FP.joy = [0, 0]; joyDraw(0, 0); }
-$('fpJoy').addEventListener('pointerup', joyEnd); $('fpJoy').addEventListener('pointercancel', joyEnd);
+var joyDraw = joyBind($('fpJoy'), $('fpKnob'), function (x, y) { FP.joy = [-y, x]; });
+var joyDrawR = joyBind($('fpJoyR'), $('fpKnobR'), function (x, y) { FP.look = [x, y]; if (x || y) FP.lookT = performance.now(); });   // lookT：跟隨中 2 秒內不自動轉
