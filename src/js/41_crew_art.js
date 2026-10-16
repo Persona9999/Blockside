@@ -107,7 +107,8 @@ function loadArt() {
 /** billboard：一個人 ＝ 一張直立、面向鏡頭的貼圖。每個實例：iP（腳底、高）、iU（貼圖格）、iS（寬、明暗、傾斜、上下）、iA（閃紅）。
  *  傾斜繞腳底轉（在貼圖平面上）⇒ 前傾、後仰都是同一個旋轉；上下是整個人抬高或壓低。
  *  倒下的人（iA.yzw ＝ 倒向，世界座標）：身體從直立轉向那個固定的方向（iS.z ＝ 倒下了幾度），貼圖繞身體那條軸轉向鏡頭
- *  ⇒ 躺的方向不跟著鏡頭轉，但還是面向鏡頭（Tim 2026-10-12；⛔ 以前躺倒也是在貼圖平面上轉 ⇒ 鏡頭一轉，屍體跟著在甲板上轉）。 */
+ *  ⇒ 躺的方向不跟著鏡頭轉，但還是面向鏡頭（Tim 2026-10-12；⛔ 以前躺倒也是在貼圖平面上轉 ⇒ 鏡頭一轉，屍體跟著在甲板上轉）。
+ *  iS.y 的正負號 ＝ 在不在海裡（墜落、在游 ⇒ 負）：只有在海裡、而且在那一點的浪面以下才染水色（Tim 2026-10-16：船沒進水，水線下那幾層的人卻一層水色；⛔ 以前照世界 y < 0 一律染）。 */
 function bbSetup() {
   P.bb = VK.compile(gl,
     '#version 300 es\nlayout(location=0) in vec2 aQ; layout(location=1) in vec4 iP; layout(location=2) in vec4 iU; layout(location=3) in vec4 iS; layout(location=4) in vec4 iA;\n' +
@@ -117,8 +118,8 @@ function bbSetup() {
     '   w=iP.xyz+sx*q.x+a*q.y+vec3(0.0,iS.w,0.0); }\n' +
     ' else { float c=cos(iS.z), s=sin(iS.z); q=vec2(c*q.x-s*q.y,s*q.x+c*q.y); w=iP.xyz+uRight*q.x+vec3(0.0,q.y+iS.w,0.0); }\n' +
     ' vW=w; vUV=vec2(mix(iU.x,iU.z,aQ.x+0.5),mix(iU.w,iU.y,aQ.y)); vS=iS.y; vF=iA.x; gl_Position=uVP*vec4(w,1.0); }\n',
-    '#version 300 es\nprecision highp float; in vec2 vUV; in vec3 vW; in float vS; in float vF; uniform sampler2D uTex; uniform vec3 uEye,uFog; uniform float uFogD,uLum; out vec4 o;\n' +
-    'void main(){ vec4 t=texture(uTex,vUV); if(t.a<0.5) discard; vec3 c=mix(t.rgb*vS*uLum,vec3(1.0,0.12,0.08),vF*0.8); if(vW.y<0.0) c=mix(c,vec3(0.04,0.18,0.22),0.6);\n' +
+    '#version 300 es\nprecision highp float;\n' + SEA_GLSL + 'in vec2 vUV; in vec3 vW; in float vS; in float vF; uniform sampler2D uTex; uniform vec3 uEye,uFog; uniform float uFogD,uLum; out vec4 o;\n' +
+    'void main(){ vec4 t=texture(uTex,vUV); if(t.a<0.5) discard; vec3 c=mix(t.rgb*abs(vS)*uLum,vec3(1.0,0.12,0.08),vF*0.8); if(vS<0.0 && vW.y<seaH(vW.xz)) c=mix(c,vec3(0.04,0.18,0.22),0.6);\n' +
     ' float fd=length(vW-uEye); o=vec4(mix(c,uFog,1.0-exp(-fd*uFogD)),1.0); }\n');
   BBVAO = gl.createVertexArray(); gl.bindVertexArray(BBVAO);
   var q = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, q); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-0.5, 0, 0.5, 0, 0.5, 1, -0.5, 0, 0.5, 1, -0.5, 1]), gl.STATIC_DRAW);
@@ -248,7 +249,7 @@ function drawCrew() {
       var flash = Math.max(c.st === 1 || c.st === 2 || c.st === 4 ? Math.max(0, 1 - c.t / 0.4) : 0, c.hitT > 0 ? c.hitT / 0.4 : 0);   // 被打中那一下閃紅（倒下：c.t 在那一刻歸零；沒倒下：hitT）
       BB[k] = w[0]; BB[k + 1] = w[1]; BB[k + 2] = w[2]; BB[k + 3] = h * sy;
       BB[k + 4] = flip ? u1 : u0; BB[k + 5] = v0; BB[k + 6] = flip ? u0 : u1; BB[k + 7] = v1;
-      BB[k + 8] = h * CELL_W / CELL_H * sx; BB[k + 9] = c.st === 1 ? 0.85 : 1; BB[k + 10] = flip ? lean : -lean; BB[k + 11] = ps.bob * amp;   // 往面向的那邊傾：面右 ⇒ 順時針
+      BB[k + 8] = h * CELL_W / CELL_H * sx; BB[k + 9] = (c.st === 1 ? 0.85 : 1) * (c.st === 4 || c.st === 5 ? -1 : 1); BB[k + 10] = flip ? lean : -lean; BB[k + 11] = ps.bob * amp;   // 往面向的那邊傾：面右 ⇒ 順時針
       BB[k + 12] = flash; BB[k + 13] = 0; BB[k + 14] = 0; BB[k + 15] = 0;
       if (c.st === 2 && f === FR.DEAD && !frames) {                                // 倒下：躺向固定的方向（不跟著鏡頭轉），見 bbSetup
         if (!c.fallD) { var fa = hash3(c.home[0] * 4 | 0, c.home[1] * 4 | 0, c.home[2] | 0) * 6.2832; c.fallD = [Math.cos(fa), Math.sin(fa)]; }   // 只給畫用：照站位的雜湊挑一個方向（不碰 rnd()）
