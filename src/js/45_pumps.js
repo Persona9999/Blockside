@@ -98,7 +98,7 @@ function pumpTick(sh) {
   P.list.forEach(function (p) {
     var k = 0, n = p.f.crew || 1;
     if (p.m.alive) wetLatch(p, wetAt(sh, [p.m.c[0], p.m.c[1], p.m.origin[2] + 1], { inner: PUMP_WET_IN }));   // 泡水：連兩次在水裡才算、連兩次乾了才回來
-    var mine = p.hand ? sh.crew.filter(function (c) { return c.role === ROLE.HAND && able(c) && c.hand.job && c.hand.job.pump === p; }) : [];
+    var mine = p.hand ? sh.crew.filter(function (c) { return c.role === ROLE.HAND && crewAble(c) && c.hand.job && c.hand.job.pump === p; }) : [];
     p.need = p.hand && wet && p.m.alive && !p.wet && p.cell !== undefined && !sh.struck ? n : 0;
     if (mine.length > p.need) mine.sort(function (a, b) { return (a.hand.job.at ? 1 : 0) - (b.hand.job.at ? 1 : 0); }).slice(0, mine.length - p.need).forEach(function (c) { c.hand.job = null; c.hand.legs = []; c.hand.wait = 1; });   // 多出來的放回去（還沒到的先放）
     p.have = mine.filter(function (c) { return c.hand.job && c.hand.job.at; }).length;
@@ -113,9 +113,9 @@ function pumpTick(sh) {
   var W = shipWaterT(sh);
   P.urgent = P.list.some(function (p) { return p.need > 0; }) && W >= Math.max(PUMP_WET, PUMP_URGENT * (sh.T.disp || 0));
   if (P.urgent) {                                                   // 還缺幾個人（派了、在路上的都算）⇒ 從醫療艙值班的人叫過來（還沒到的先叫）
-    var go = 0; sh.crew.forEach(function (c) { if (c.role === ROLE.HAND && able(c) && c.hand.job && c.hand.job.kind === 'pump') go++; });
+    var go = 0; sh.crew.forEach(function (c) { if (c.role === ROLE.HAND && crewAble(c) && c.hand.job && c.hand.job.kind === 'pump') go++; });
     var short = P.list.reduce(function (a, p) { return a + p.need; }, 0) - go;
-    if (short > 0) sh.crew.filter(function (c) { return c.role === ROLE.HAND && able(c) && c.hand.job && c.hand.job.kind === 'staff' && !c.hand.climb; })
+    if (short > 0) sh.crew.filter(function (c) { return c.role === ROLE.HAND && crewAble(c) && c.hand.job && c.hand.job.kind === 'staff' && !c.hand.climb; })
       .sort(function (a, b) { return (a.hand.job.at ? 1 : 0) - (b.hand.job.at ? 1 : 0); }).slice(0, short)
       .forEach(function (c) { c.hand.job = null; c.hand.legs = []; c.hand.wait = 0; P.pulled = (P.pulled || 0) + 1; });
   }
@@ -124,7 +124,7 @@ function pumpTick(sh) {
 /** 點名時（callHands，medNeeds 之後）：人力抽水機還缺的人 ⇒ 加進 need（cell ＝ 抽水機旁那一點）。 */
 function pumpNeeds(sh, need) {
   var P = sh.pumps; if (!P) return;
-  var go = {}; sh.crew.forEach(function (c) { if (c.role === ROLE.HAND && able(c) && c.hand.job && c.hand.job.kind === 'pump') { var k = c.hand.job.key; go[k] = (go[k] || 0) + 1; } });
+  var go = {}; sh.crew.forEach(function (c) { if (c.role === ROLE.HAND && crewAble(c) && c.hand.job && c.hand.job.kind === 'pump') { var k = c.hand.job.key; go[k] = (go[k] || 0) + 1; } });
   P.list.forEach(function (p) {
     var n = p.need - (go[p.m.path] || 0);
     if (n > 0) need.push({ kind: 'pump', key: p.m.path, lv: p.lv, n: n, x: p.m.c[0], cell: p.cell, pump: p, pri: 1 });

@@ -11,9 +11,9 @@
 // ⛔ 只給人看：自己的亂數 rndR、不碰模擬的狀態（step() 讀不到）⇒ 開關不改戰局。
 var RD_N = [0, 1500, 3000, 6000], RD_R = 45, RD_TOP = 28, RD_VY = 15, RD_WK = 0.35, RD_STREAK = 0.07, RD_SPL = 0.22, RS_MAX = 900;
 var RD = { n: 0, p: null, k: null, c: [0, 0], top: 30, v: [0, -RD_VY, 0], buf: null, vao: null, vbo: null, drawn: 0 };
-var RS = { n: 0, p: new Float32Array(RS_MAX * 3), life: new Float32Array(RS_MAX) }, rsR = 0x51ED270B, RD_STAT = { hitSea: 0, hitShip: 0 };
+var RS = { n: 0, p: new Float32Array(RS_MAX * 3), life: new Float32Array(RS_MAX) }, RD_STAT = { hitSea: 0, hitShip: 0 };
 PBUF = new Float32Array(PBUF.length + RS_MAX * 9);          // 點精靈的緩衝多留雨的水花（60_render.js 一起畫）
-function rndR() { rsR |= 0; rsR = rsR + 0x6D2B79F5 | 0; var t = Math.imul(rsR ^ rsR >>> 15, 1 | rsR); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }
+var RNG_R = rngMake('rain', 0x51ED270B, true), rndR = RNG_R.f;          // 雨：固定種子（不跟 SEED；只給人看），開局照樣重設（00_core.js 亂數工廠）
 function rdCount() { return WX.rain > 0 ? RD_N[GFX.drops] || 0 : 0; }
 function rdGL() {
   P.drop = VK.compile(gl,

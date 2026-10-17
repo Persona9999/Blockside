@@ -24,15 +24,25 @@ function pfEnd(f0, steps) { var c = PF.cur; c.total = performance.now() - f0; c.
 if (STILL) document.getElementById('stage').classList.add('still');
 function $(id) { return document.getElementById(id); }
 
-// ───────────────────────── 亂數（有種子） ─────────────────────────
-var rs = SEED;
-function rnd() { rs |= 0; rs = rs + 0x6D2B79F5 | 0; var t = Math.imul(rs ^ rs >>> 15, 1 | rs); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }
-function rr(a, b) { return a + (b - a) * rnd(); }
-function gauss() { var u = rnd() || 1e-9, v = rnd(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(6.2831853 * v); }
-// 碎木自己的亂數（轉軸、落水、落地；12_effects.js 的碎木、24_armor.js 的裝甲碎片共用 —— TASK-0669 從 12_effects.js 搬來）：⛔ 跟戰局共用 rnd() ⇒ 少生一顆碎木（物理分級），後面的亂數全部錯位、整局都變（09_phx.js）。開局跟 rs 一起重設（70_flow.js）
-var RSD0 = 0x2545F491, rsD = SEED ^ RSD0;
-function rndD() { rsD |= 0; rsD = rsD + 0x6D2B79F5 | 0; var t = Math.imul(rsD ^ rsD >>> 15, 1 | rsD); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }
-function rD(a, b) { return a + (b - a) * rndD(); }                     // 碎木自己的亂數（⛔ 不用 rr：那是戰局的 rnd()）
+// ───────────────────────── 亂數工廠（有種子；TASK-0671） ─────────────────────────
+// 每一條亂數一個名字（RNG[名字]）、同一個演算法（mulberry32）；開局 rngReset() 一起重設（70_flow.js reset）：種子 ＝ SEED ^ salt（fixed ⇒ 就是 salt，不跟著 SEED）。
+// 為什麼分好幾條：只給人看的（煙、水花、雨、布片…）少抽幾次不能動到戰局那一條（10-15 rndF 撞名、TASK-0669 煙吃戰局的亂數）。
+// 新加一條 ⇒ 在自己的檔 rngMake 一個名字（重名 ⇒ 載入就丟錯），⛔ 不要再複製一份演算法。
+// R.s ＝ 狀態（整數；要暫時換一條流的 —— 33_flood.js floodVis —— 直接存、換、還原它）；R.f() ＝ [0, 1)、R.r(a, b)、R.g() ＝ 常態分佈。
+var RNG = {};
+function rngMake(name, salt, fixed) {
+  if (RNG[name]) throw new Error('亂數重名：' + name);
+  var R = { name: name, salt: salt, fixed: !!fixed, s: 0 };
+  R.seed = function () { R.s = R.fixed ? R.salt : SEED ^ R.salt; };
+  R.f = function () { var s = R.s | 0; s = s + 0x6D2B79F5 | 0; R.s = s; var t = Math.imul(s ^ s >>> 15, 1 | s); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; };
+  R.r = function (a, b) { return a + (b - a) * R.f(); };
+  R.g = function () { var u = R.f() || 1e-9, v = R.f(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(6.2831853 * v); };
+  R.seed(); RNG[name] = R; return R;
+}
+function rngReset() { for (var k in RNG) RNG[k].seed(); }
+var RNG_B = rngMake('battle', 0), rnd = RNG_B.f, rr = RNG_B.r, gauss = RNG_B.g;   // 戰局（電腦、命中、傷亡…）
+// 碎木自己的亂數（轉軸、落水、落地；12_effects.js 的碎木、24_armor.js 的裝甲碎片共用 —— TASK-0669 從 12_effects.js 搬來）：⛔ 跟戰局共用 rnd() ⇒ 少生一顆碎木（物理分級），後面的亂數全部錯位、整局都變（09_phx.js）。開局一起重設（rngReset）
+var RNG_D = rngMake('debris', 0x2545F491), rndD = RNG_D.f, rD = RNG_D.r;   // 碎木自己的亂數（⛔ 不用 rr：那是戰局的 rnd()）
 function hash3(x, y, z) { var h = (Math.imul(x, 374761393) + Math.imul(y, 668265263) + Math.imul(z, 1274126177)) | 0; h = Math.imul(h ^ (h >>> 13), 1103515245); return ((h ^ (h >>> 16)) >>> 0) / 4294967296; }
 function clamp(v, a, b) { return v < a ? a : v > b ? b : v; }
 // 累加迴圈的防呆（Tim 2026-10-15：「累加迴圈 & 其他類似邏輯是否可以加防呆（要有上限）」）：「累加到 1 就生一個」那種迴圈一次最多 ACC_CAP 次；

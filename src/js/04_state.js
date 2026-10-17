@@ -13,12 +13,12 @@ var SHIPS = [], PIECES = [], BALLS = [], EVENTS = [], FLY = [], PLAYER_I = 0;
 //   box：砲旁藥箱放幾份；carry：送藥手一次搬幾份；wind：帆的風壓；hands：預備水手（每艘幾個人物，42_hands.js）；drown：溺水時間（秒，43_swim.js）
 //   sea：浪的大小（0 平靜、1 中浪、3 大浪）；stall：頂風失速（0 只是慢、1 寫實）；funspeed funagile funstall funpowder funhard：娛樂加成（玩法選娛樂時再乘；funhard ＝ 鐵甲的擊穿門檻倍率，TASK-0621）
 var LIM = CFG.lim;
-function qnum(k, lim) { var v = parseFloat(Q.get(k)); return isFinite(v) ? clamp(v, lim[0], lim[1]) : lim[2]; }
+function stateQnum(k, lim) { var v = parseFloat(Q.get(k)); return isFinite(v) ? clamp(v, lim[0], lim[1]) : lim[2]; }
 // 玩法（Tim 2026-10-13：配置分成寫實與娛樂兩組，主選單切換，預設娛樂）：細節設定的滑桿 ＝ 寫實的基準，
 //   娛樂 ＝ 在那之上再乘娛樂加成（航速、靈活性、頂風失速）。⇒ 兩組共用同一份滑桿，切換不會把調好的數字蓋掉。網址 ?play=real／fun
 var PLAY = Q.has('play') ? (Q.get('play') === 'real' ? 'real' : 'fun') : CFG.menu.play;   // 沒給 ⇒ 設定檔的預設（menu.play）
-var STALL_K = qnum('stall', LIM.stall);
-var FUN = { speed: qnum('funspeed', LIM.funspeed), agile: qnum('funagile', LIM.funagile), stall: qnum('funstall', LIM.funstall), powder: qnum('funpowder', LIM.funpowder), hard: qnum('funhard', LIM.funhard) };
+var STALL_K = stateQnum('stall', LIM.stall);
+var FUN = { speed: stateQnum('funspeed', LIM.funspeed), agile: stateQnum('funagile', LIM.funagile), stall: stateQnum('funstall', LIM.funstall), powder: stateQnum('funpowder', LIM.funpowder), hard: stateQnum('funhard', LIM.funhard) };
 function playK(k) { return PLAY === 'fun' ? FUN[k] : 1; }
 // 船隻設定（照船型套；Tim 2026-10-12：不同船套用不同設定）：每一型一組，開戰時複製到每艘船（sh.cfg）。
 //   hard  船殼硬度倍率（越硬越難打穿、洞越小；被打的那艘照自己的）：預設 3（Tim：原本 2 ⇒ 1.5 倍）
@@ -43,8 +43,8 @@ var HULL_CFG0 = {}; CFG.ships.forEach(function (s) { if (s.cfg) HULL_CFG0[s.id] 
 function cfgBase(k, id) { var d = HULL_CFG0[id]; return d && d[k] !== undefined ? d[k] : LIM[k][2]; }
 var PREF_BALLAST = {};                                   // 存檔裡的壓艙物：id → { v: 噸, chk: 存的時候那艘船的 checksum }（船重匯過 ⇒ 不套）
 function cfgDefault(k, T, id) {
-  if (k !== 'ballast') return Q.has(k) ? qnum(k, LIM[k]) : cfgBase(k, id);
-  if (Q.has('ballast')) return Math.round(qnum('ballast', LIM.ballast));
+  if (k !== 'ballast') return Q.has(k) ? stateQnum(k, LIM[k]) : cfgBase(k, id);
+  if (Q.has('ballast')) return Math.round(stateQnum('ballast', LIM.ballast));
   var pb = T && PREF_BALLAST[T.id];
   if (pb && pb.chk === T.h.checksum) return pb.v;
   return T && isFinite(T.ballast0) ? T.ballast0 : LIM.ballast[2];
@@ -57,33 +57,33 @@ function shipCfg(id) {
   return c;
 }
 function cfgCopy(id) { var c = shipCfg(id), o = {}; SHIP_KEYS.forEach(function (k) { o[k] = c[k]; }); return o; }
-var GUN_HP = Math.round(qnum('gunhp', LIM.gunhp));          // 砲的血量（舵輪 6 成）：預設 200 ⇒ 24 磅實心兩發（Tim 2026-10-12：100 太脆，翻倍）
-var SAIL_HP = Math.round(qnum('sailhp', LIM.sailhp));       // 帆的血量
-var CREW_HP = Math.round(qnum('crewhp', LIM.crewhp));       // 船員的血量：歸零陣亡、掉到一半以下受傷倒下、一半以上照常作戰（只閃紅）
-var CREW_DEATH = Math.round(qnum('crewdeath', LIM.crewdeath));   // 船員死亡率（%）：HP 歸零那一刻當場陣亡的機率，沒中 ⇒ 變成傷員（40_crew.js damageCrew；Tim 2026-10-16，預設 50）
-var POWDER_HP = Math.round(qnum('powderhp', LIM.powderhp)); // 火藥桶的血量：歸零殉爆；拉滿（LIM 上限）＝ 不會爆；預設 675 ＝ 很難但有機率
-var BLAST_K = qnum('blast', LIM.blast);                             // 殉爆威力倍率（能量；爆炸半徑 ∝ 立方根）
-var BLAST_V = qnum('blastv', LIM.blastv);                           // 每一次爆炸（火藥桶、彈藥庫、藥包）的威力再乘 1 ± 這個數之間的亂數（23_powder.js blastRoll）
-var BOX_N = Math.round(qnum('box', LIM.box)), CARRY_N = Math.round(qnum('carry', LIM.carry));   // 砲旁藥箱容量、送藥手一次搬幾份（火藥與彈藥一份 ＝ 裝填一次）
-var HANDS = Math.round(qnum('hands', LIM.hands));                  // 預備水手：缺人手時補位（42_hands.js）
-var HEAL_T = Math.round(qnum('heal', LIM.heal));                  // 醫療艙：治好一個傷員要幾秒（滿人手、沒有 buff；0 ＝ 關 ⇒ 傷員照舊 12 秒抬下去；44_medic.js）
-var NAV_RE = qnum('navre', LIM.navre);                              // 尋路動態更新：每幾秒看一次有沒有甲板、梯子被打壞（0 ＝ 關；42_hands.js navRefresh；TASK-0572）
+var GUN_HP = Math.round(stateQnum('gunhp', LIM.gunhp));          // 砲的血量（舵輪 6 成）：預設 200 ⇒ 24 磅實心兩發（Tim 2026-10-12：100 太脆，翻倍）
+var SAIL_HP = Math.round(stateQnum('sailhp', LIM.sailhp));       // 帆的血量
+var CREW_HP = Math.round(stateQnum('crewhp', LIM.crewhp));       // 船員的血量：歸零陣亡、掉到一半以下受傷倒下、一半以上照常作戰（只閃紅）
+var CREW_DEATH = Math.round(stateQnum('crewdeath', LIM.crewdeath));   // 船員死亡率（%）：HP 歸零那一刻當場陣亡的機率，沒中 ⇒ 變成傷員（40_crew.js damageCrew；Tim 2026-10-16，預設 50）
+var POWDER_HP = Math.round(stateQnum('powderhp', LIM.powderhp)); // 火藥桶的血量：歸零殉爆；拉滿（LIM 上限）＝ 不會爆；預設 675 ＝ 很難但有機率
+var BLAST_K = stateQnum('blast', LIM.blast);                             // 殉爆威力倍率（能量；爆炸半徑 ∝ 立方根）
+var BLAST_V = stateQnum('blastv', LIM.blastv);                           // 每一次爆炸（火藥桶、彈藥庫、藥包）的威力再乘 1 ± 這個數之間的亂數（23_powder.js blastRoll）
+var BOX_N = Math.round(stateQnum('box', LIM.box)), CARRY_N = Math.round(stateQnum('carry', LIM.carry));   // 砲旁藥箱容量、送藥手一次搬幾份（火藥與彈藥一份 ＝ 裝填一次）
+var HANDS = Math.round(stateQnum('hands', LIM.hands));                  // 預備水手：缺人手時補位（42_hands.js）
+var HEAL_T = Math.round(stateQnum('heal', LIM.heal));                  // 醫療艙：治好一個傷員要幾秒（滿人手、沒有 buff；0 ＝ 關 ⇒ 傷員照舊 12 秒抬下去；44_medic.js）
+var NAV_RE = stateQnum('navre', LIM.navre);                              // 尋路動態更新：每幾秒看一次有沒有甲板、梯子被打壞（0 ＝ 關；42_hands.js navRefresh；TASK-0572）
 // Debug 模式（Tim 2026-10-15：「在細節設定加上Debug模式 之後用來Debug(可以加特殊功能 & 顯示額外資訊 我來幫忙查問題)」）：細節設定的勾選（存檔）、網址 ?dbg=1；?debug=1 也算開。
 //   開著 ⇒ 詳細資訊的「⚓ 改操控這艘」敵艦也有（52_fleet.js canTake）、羅盤下面那一行除錯資訊（格數、四邊形、碎片、FPS…，61_hud.js）。之後的除錯功能都掛在 dbgOn() 底下。⛔ __game 與逐幀計時照舊只看 ?debug=1（載入時就定）。
 var DBG_SET = Q.get('dbg') === '1';
 function dbgOn() { return DEBUG || DBG_SET; }
 var GUN_CREW_HURT = Q.get('gcrew') !== '0';                          // 砲被打飛 ⇒ 那門砲的砲班跟著受傷（21_gunnery.js blowModel；TASK-0568，預設開；?gcrew=0 ＝ 照舊）
-var DROWN_T = Math.round(qnum('drown', LIM.drown));                // 落水求生：浮上水面、往自己的船游，撐這麼久（× 0.6～1.2）就溺水（43_swim.js）
-var SEA_K = qnum('sea', LIM.sea);                                   // 浪的大小（08_sea.js；物理與畫面共用）
-var WIND_CAP = qnum('windcap', LIM.windcap);
+var DROWN_T = Math.round(stateQnum('drown', LIM.drown));                // 落水求生：浮上水面、往自己的船游，撐這麼久（× 0.6～1.2）就溺水（43_swim.js）
+var SEA_K = stateQnum('sea', LIM.sea);                                   // 浪的大小（08_sea.js；物理與畫面共用）
+var WIND_CAP = stateQnum('windcap', LIM.windcap);
 // 動力的手感（TASK-0630；細節設定「動力」；Tim 2026-10-15：「迴轉半徑我之後再調手感(可以有參數調整)」）：預設都是 1 ＝ 校準好的樣子（31_drive.js）。
 //   DRV_INERTIA 加速慣性：實際質量的倍率（2 ⇒ 加減速慢一倍）；DRV_TURN 迴轉慣性：轉向率追舵的時間（1 ＝ 以前的 2 秒）；DRV_TQ 帆的力矩：受損不平衡時船自己偏多少（0 ＝ 不偏）。
-var DRV_INERTIA = qnum('inertia', LIM.inertia), DRV_TURN = qnum('turninert', LIM.turninert), DRV_TQ = qnum('sailtq', LIM.sailtq);                       // 推帆的風速上限（m/s；30_rig_physics.js physStep）：Tim 2026-10-15「暴風雨中變形有點太誇張」⇒ 風壓×陣風×暴風雨×風速 乘完再夾
-var WIND_K = qnum('wind', LIM.wind);                                // 帆的風壓倍率（只管物理開著時帆被吹成什麼樣子；不改航速）
+var DRV_INERTIA = stateQnum('inertia', LIM.inertia), DRV_TURN = stateQnum('turninert', LIM.turninert), DRV_TQ = stateQnum('sailtq', LIM.sailtq);                       // 推帆的風速上限（m/s；30_rig_physics.js physStep）：Tim 2026-10-15「暴風雨中變形有點太誇張」⇒ 風壓×陣風×暴風雨×風速 乘完再夾
+var WIND_K = stateQnum('wind', LIM.wind);                                // 帆的風壓倍率（只管物理開著時帆被吹成什麼樣子；不改航速）
 function powderNever() { return POWDER_HP >= LIM.powderhp[1]; }      // 拉滿 ＝ 不會爆：兩種玩法都是（娛樂的倍率不管它）
 function powderHP() { return Math.round(POWDER_HP * playK('powder')); }   // 實際的火藥血量：娛樂再乘 FUN.powder（預設 675 ⇒ 300）
 // 每發傷害（砲種）：砲彈開火時帶著 b.dmg
-var DMG = { long12: Math.round(qnum('dmg12', LIM.dmg12)), long18: Math.round(qnum('dmg18l', LIM.dmg18l)), long6: Math.round(qnum('dmg6', LIM.dmg6)), chase3: Math.round(qnum('dmg3c', LIM.dmg3c)), trident: Math.round(qnum('dmgtr', LIM.dmgtr)), dahl9: Math.round(qnum('dmg9d', LIM.dmg9d)), brooke64: Math.round(qnum('dmg64b', LIM.dmg64b)), brooke7: Math.round(qnum('dmg7b', LIM.dmg7b)), dahl11: Math.round(qnum('dmg11d', LIM.dmg11d)), long: Math.round(qnum('dmg24', LIM.dmg24)), long32: Math.round(qnum('dmg32l', LIM.dmg32l)), carr: Math.round(qnum('dmg32', LIM.dmg32)), chase: Math.round(qnum('dmg18', LIM.dmg18)), long4: Math.round(qnum('dmg4', LIM.dmg4)) };
+var DMG = { long12: Math.round(stateQnum('dmg12', LIM.dmg12)), long18: Math.round(stateQnum('dmg18l', LIM.dmg18l)), long6: Math.round(stateQnum('dmg6', LIM.dmg6)), chase3: Math.round(stateQnum('dmg3c', LIM.dmg3c)), trident: Math.round(stateQnum('dmgtr', LIM.dmgtr)), dahl9: Math.round(stateQnum('dmg9d', LIM.dmg9d)), brooke64: Math.round(stateQnum('dmg64b', LIM.dmg64b)), brooke7: Math.round(stateQnum('dmg7b', LIM.dmg7b)), dahl11: Math.round(stateQnum('dmg11d', LIM.dmg11d)), long: Math.round(stateQnum('dmg24', LIM.dmg24)), long32: Math.round(stateQnum('dmg32l', LIM.dmg32l)), carr: Math.round(stateQnum('dmg32', LIM.dmg32)), chase: Math.round(stateQnum('dmg18', LIM.dmg18)), long4: Math.round(stateQnum('dmg4', LIM.dmg4)) };
 // 彈種倍率（%）：列 ＝ 實心／爆裂／鏈彈，欄 ＝ 對砲（模型：砲、舵輪、火藥桶）／對帆／對人。網址 ?ammo= 九個數字（照列）
 var AMMO_LIM = CFG.ammo.lim, AMMO_K0 = CFG.ammo.k;   // config/game.json 的 ammo（上下限、預設）。爆裂對人原訂 115：量過死亡平均 42（舊版 27）⇒ 100（35，傷亡合計 62 對舊版 65）
 var AMMO_K = AMMO_K0.map(function (r) { return r.slice(); });
@@ -109,8 +109,8 @@ var MODE = CFG.menu.mode, DIST = Q.has('dist') && isFinite(+Q.get('dist')) ? cla
 var SAIL = Q.has('sail') ? (Q.get('sail') === 'off' ? 'off' : Q.get('sail') === 'manual' ? 'manual' : 'auto') : CFG.menu.sail;   // 航行：auto ＝ 兩艘自動、manual ＝ 我艦手動、off ＝ 停船；沒給 ⇒ menu.sail
 var KEYS = { l: false, r: false, sw: null };  // 手動操舵：按住的舵鍵（額外動力以前是按住 W／S 的油門，Tim 2026-10-15 改成帆段兩頭的「全速前進／倒車」⇒ 31_sailing.js sailStep）；sw ＝ 按住加帆／收帆（{ d: ±1, n: 下一次再切的 SIMT }；sailHold）
 // 殉爆的慢動作與特寫（73_slowmo.js）：on／cam 是設定；ts 現在的時間倍率。SLOW_VIS：這一格畫面裡只給人看的效果改由 frame 走（step() 讀它決定要不要跳過）
-var RAM = { v0: qnum('ramv', LIM.ramv), k: qnum('ramk', LIM.ramk), e: qnum('rame', LIM.rame), side: qnum('ramside', LIM.ramside) };   // 碰撞傷害的數值（31_sailing.js ramHit；TASK-0652）：門檻 m/s、傷害倍率、恢復係數、側撞有效質量倍數 —— 物理設定頁的滑桿（打開碰撞傷害才顯示）
-var PSLOW = { on: Q.get('pslow') === '1', ts: 1, ms: 0, budget: qnum('pslowb', LIM.pslowb) };   // 物理減速（73_slowmo.js；Tim 2026-10-14：預設關）：ts ＝ 現在的倍率、ms ＝ 一步模擬平均幾毫秒、budget ＝ 門檻（模擬最多佔真實時間幾成）
+var RAM = { v0: stateQnum('ramv', LIM.ramv), k: stateQnum('ramk', LIM.ramk), e: stateQnum('rame', LIM.rame), side: stateQnum('ramside', LIM.ramside) };   // 碰撞傷害的數值（31_sailing.js ramHit；TASK-0652）：門檻 m/s、傷害倍率、恢復係數、側撞有效質量倍數 —— 物理設定頁的滑桿（打開碰撞傷害才顯示）
+var PSLOW = { on: Q.get('pslow') === '1', ts: 1, ms: 0, budget: stateQnum('pslowb', LIM.pslowb) };   // 物理減速（73_slowmo.js；Tim 2026-10-14：預設關）：ts ＝ 現在的倍率、ms ＝ 一步模擬平均幾毫秒、budget ＝ 門檻（模擬最多佔真實時間幾成）
 // 模擬速度（Tim 2026-10-15：「設定選單 是否可以加個Slider調整模擬速度」「最低0.05好了(0相當於暫停)」）：0.05–8 倍，設定（O）的滑桿；只是每格畫面累積的時間 × 它（90_main.js frame），模擬一步照舊 DT ⇒ 戰局逐字不變。
 var SIM_SPEED = 1, SIM_SPEED_MIN = 0.05, SIM_SPEED_MAX = 8;
 var SLOW = { on: Q.get('slowmo') !== '0', cam: Q.get('slowcam') !== '0', ts: 1, t: 0, min: 1, hold: 0, active: false, camSave: null, camT: 0, camMode: 0, kicks: 0 }, SLOW_VIS = false;

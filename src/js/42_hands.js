@@ -105,7 +105,7 @@ function toHand(sh, c) {
 }
 /** 那一層倒下、還沒人接的送藥手（點名與接手照同一個挑）；reg 給了 ⇒ 先挑家在那一塊的。 */
 function deadPm(sh, deck, lv, reg) {
-  var L = sh.crew.filter(function (o) { return o.role === ROLE.POWDER && o.deck === deck && !able(o) && !o.relieved; });
+  var L = sh.crew.filter(function (o) { return o.role === ROLE.POWDER && o.deck === deck && !crewAble(o) && !o.relieved; });
   return (reg !== undefined ? L.filter(function (o) { return needReg(sh, lv, o.home) === reg; })[0] : null) || L[0];
 }
 /** 走得到的甲板（由下往上）：砲甲板＋梯子一頭落在砲甲板以外的高度（相差 8 格內併成一層，上下各留 5 格的舷弧，不蓋到砲甲板）。 */
@@ -439,16 +439,16 @@ function callHands(sh) {
   var NV = sh.nav; if (!NV || sh.struck || sh.sunk) return;
   if (NAV_RE > 0 && NV.dirty && SIMT - NV.reT >= NAV_RE) navRefresh(sh);     // 尋路動態更新（TASK-0572）
   NV.ladders.forEach(function (L) { L.q = 0; });                       // 排隊的人數每半秒重數（倒下、放棄的路不會一直佔著）
-  sh.crew.forEach(function (c) { if (c.role === ROLE.HAND && able(c)) c.hand.legs.forEach(function (l) { if (l.c !== undefined) NV.ladders[l.c].q++; }); });
-  var idle = sh.crew.filter(function (c) { return c.role === ROLE.HAND && able(c) && !c.hand.job && !c.hand.climb; }); if (!idle.length) return;
+  sh.crew.forEach(function (c) { if (c.role === ROLE.HAND && crewAble(c)) c.hand.legs.forEach(function (l) { if (l.c !== undefined) NV.ladders[l.c].q++; }); });
+  var idle = sh.crew.filter(function (c) { return c.role === ROLE.HAND && crewAble(c) && !c.hand.job && !c.hand.climb; }); if (!idle.length) return;
   var going = {}, need = [];
-  sh.crew.forEach(function (c) { if (c.role === ROLE.HAND && able(c) && c.hand.job) { var k = c.hand.job.kind + c.hand.job.key; going[k] = (going[k] || 0) + 1; } });
+  sh.crew.forEach(function (c) { if (c.role === ROLE.HAND && crewAble(c) && c.hand.job) { var k = c.hand.job.kind + c.hand.job.key; going[k] = (going[k] || 0) + 1; } });
   sh.decks.forEach(function (D) {
     var lv = lvOf(NV.levels, D.zr[0]); if (NV.reach.indexOf(lv) < 0) return;
     ['S', 'P'].forEach(function (side) {
       var gs = sh.guns.filter(function (g) { return g.alive && !g.wet && g.deck === D.key && g.side === side; }); if (!gs.length) return;
       var want = Math.min(NV.gun0[D.key + side] || 0, gs.reduce(function (a, g) { return a + g.crewFull; }, 0));
-      var have = sh.crew.filter(function (c) { return c.role === ROLE.GUN && able(c) && c.deck === D.key && c.side === side; }).length;
+      var have = sh.crew.filter(function (c) { return c.role === ROLE.GUN && crewAble(c) && c.deck === D.key && c.side === side; }).length;
       var n = want - have - (going['gun' + D.key + side] || 0), wx = 0, ww = 0;
       var gm = null, mm = -1;
       gs.forEach(function (g) { var m = Math.max(0, g.crewFull - g.manned); wx += g.muz[0] * m; ww += m; if (m > mm) { mm = m; gm = g; } });
@@ -460,13 +460,13 @@ function callHands(sh) {
         if (tn > 0) need.push({ kind: 'gun', key: D.key + side + '^', deck: D.key, side: side, lv: ti, n: tn, x: tgs[0].muz[0], pri: 0, reg: needReg(sh, ti, gunNavAt(sh, tgs[0])) });
       }
     });
-    var pm = sh.crew.filter(function (c) { return c.role === ROLE.POWDER && able(c) && c.deck === D.key; }).length, pn = (NV.pm0[D.key] || 0) - pm - (going['pm' + D.key] || 0);
+    var pm = sh.crew.filter(function (c) { return c.role === ROLE.POWDER && crewAble(c) && c.deck === D.key; }).length, pn = (NV.pm0[D.key] || 0) - pm - (going['pm' + D.key] || 0);
     var wl = pn > 0 && sh.T.armor && sh.T.armor.length, dp = wl ? deadPm(sh, D.key) : null;   // 會轉裝甲的船：走到倒下那位的家所在的那一塊；沒有倒下的可接 ⇒ 同層缺送藥手的活砲那一塊
-    var pg = wl && !dp ? sh.guns.filter(function (g) { return g.alive && g.drop && gunDeck(g) === D.key && (!g.pm || !able(g.pm)); })[0] : null;   // ⛔ 沒有 ⇒ reg 空著、在原地（沒有活砲的那一塊）就接上，下一輪又被 toHand 打回來（測試模式量到：同一人 0.5 秒一輪打轉 310 次）
+    var pg = wl && !dp ? sh.guns.filter(function (g) { return g.alive && g.drop && gunDeck(g) === D.key && (!g.pm || !crewAble(g.pm)); })[0] : null;   // ⛔ 沒有 ⇒ reg 空著、在原地（沒有活砲的那一塊）就接上，下一輪又被 toHand 打回來（測試模式量到：同一人 0.5 秒一輪打轉 310 次）
     if (pn > 0 && sh.stations.some(function (s) { return s.deck === D.key && !s.mag.gone; })) need.push({ kind: 'pm', key: D.key, deck: D.key, lv: lv, n: pn, x: sh.T.cx, pri: 1, reg: needReg(sh, lv, dp ? dp.home : pg && pg.drop) });
   });
-  var wheel = sh.models.filter(function (m) { return m.kind === 'wheel'; })[0], hd = sh.crew.filter(function (c) { return (c.role === ROLE.HELM && !able(c) || c.helmHome) && !c.relieved; });   // helmHome：從甲板破洞掉下去的舵手（40_crew.js landIn），站位照原本的
-  var hn = Math.min(hd.length, NV.helm0 - sh.crew.filter(function (c) { return c.role === ROLE.HELM && able(c); }).length - (going.helm || 0));
+  var wheel = sh.models.filter(function (m) { return m.kind === 'wheel'; })[0], hd = sh.crew.filter(function (c) { return (c.role === ROLE.HELM && !crewAble(c) || c.helmHome) && !c.relieved; });   // helmHome：從甲板破洞掉下去的舵手（40_crew.js landIn），站位照原本的
+  var hn = Math.min(hd.length, NV.helm0 - sh.crew.filter(function (c) { return c.role === ROLE.HELM && crewAble(c); }).length - (going.helm || 0));
   if (wheel && wheel.alive && hn > 0) {
     var hh = function (c) { return c.helmHome || c.home; }, lvh = lvAt(sh, hh(hd[0]));
     if (NV.reach.indexOf(lvh) >= 0) for (var j = 0; j < hn; j++) need.push({ kind: 'helm', key: '', lv: lvh, n: 1, x: hh(hd[j])[0], spot: hh(hd[j]), pri: 1, who: hd[j] });
@@ -506,7 +506,7 @@ function handJoin(sh, c) {
   if (fell) { dead = { guns: fell.fellPm.guns, home: fell.fellPm.home }; fell.fellPm = null; }
   c.role = ROLE.POWDER; c.deck = J.deck; c.pm = { st: 'idle', t: 0 }; c.cart = false; c.guns = dead ? dead.guns : [];
   if (dead) { dead.relieved = true; c.home = dead.home.slice(); }
-  c.guns.forEach(function (g) { if (!g.pm || !able(g.pm)) g.pm = c; });
+  c.guns.forEach(function (g) { if (!g.pm || !crewAble(g.pm)) g.pm = c; });
 }
 // ── 尋路動態更新（TASK-0572；Tim 2026-10-14：要有開關與刷新頻率）──
 // 細節設定「尋路更新」NAV_RE 秒（0 ＝ 關：走路格只照開戰時的船，甲板打穿了照樣走過去、可以浮空移動 —— 以前的樣子）。
@@ -560,6 +560,6 @@ function navRefresh(sh) {
 /** HUD 一段：預備水手（閒著的／在路上補位的）。 */
 function handsText(sh) {
   if (!sh.nav) return '';
-  var h = sh.crew.filter(function (c) { return c.role === ROLE.HAND && able(c); }), go = h.filter(function (c) { return c.hand.job; }).length;
+  var h = sh.crew.filter(function (c) { return c.role === ROLE.HAND && crewAble(c); }), go = h.filter(function (c) { return c.hand.job; }).length;
   return '　預備 ' + (h.length - go) + (go ? '（補位中 ' + go + '）' : '') + carpText(sh);
 }

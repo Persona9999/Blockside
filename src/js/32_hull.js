@@ -68,7 +68,8 @@ function stepShip(sh, dt) {
     else sh.sink = Math.max(0, sh.sink + Math.min(Q * 1.1e-5 - 0.004 * pumpK(sh), 0.25) * fk * dt);   // pumpK：基礎抽水量／PUMP_REF（TASK-0604；憲法號 1）   // 進水與抽水一起照滑桿縮放（⛔ 只縮進水 ⇒ 調慢之後抽水永遠贏、永遠不沉）；
                                                                               // 上限 0.25 m/s：彈藥庫殉爆打掉三十幾萬格 ⇒ 不設上限兩秒就沉完，看不到船斷開
     if (sh.sink > 4.2 && !sh.sinkingFinal && fk > 0) { sh.sinkingFinal = true; note(sh, '進水太多，開始沉了'); }
-    if (sh.sinkingFinal) { sh.sinkV += 0.06 * fk * dt; sh.sink += sh.sinkV * dt; }
+    if (VX && !sh.sinkingFinal && Math.hypot(sh.px, sh.pz) < VX.re) { sh.sinkingFinal = true; sh.vxEaten = true; sh.fate = '捲進漩渦'; note(sh, '被捲進漩渦的中心，往下沉了', true); }   // 大漩渦的眼（08_sea.js VX.re）
+    if (sh.sinkingFinal) { sh.sinkV += 0.06 * (sh.vxEaten ? 3 : fk) * dt; sh.sink += sh.sinkV * dt; }   // 捲進漩渦 ⇒ 照三倍往下拉（約 10 秒沉完；進水速度調成 0 也一樣）
     if (sh.sink > 9) { sh.sunk = true; sh.sunkAt = SIMT; note(sh, '沉沒', true); }   // sunkAt：結算判自爆沉沒（61_hud.js shipFate）
   } else { sh.sinkV = Math.min(sh.sinkV + 0.05 * dt, 1.2); sh.sink += sh.sinkV * dt; }
   // 傾斜：破洞那一舷往下（格座標 +y ＝ 船體 +Z（右舷）；繞 +X 轉正角時 +Z 那邊下沉）；粒子模式照水的重心（33_flood.js floodTilt）
@@ -105,7 +106,7 @@ function survey(sh) {               // 每半秒量一次：砲還在不在、�
   var up = 0;
   sh.masts.forEach(function (m) { if (m.up) { m.up = countBox(sh.grid, m.x - 8, sh.T.cy - 8, m.z0, m.x + 8, sh.T.cy + 8, m.z1) > m.orig * 0.3; if (!m.up) note(sh, m.name + '倒了'); } if (m.up) up++; });
   sh.mastsUp = up;
-  sh.ropes.forEach(function (r) { if (r.dead) return; if ((r.a >= 0 && !gp(sh.grid, r.a)) || (r.b >= 0 && !gp(sh.grid, r.b))) { r.dead = true; sh.rigDirty = true; } });
+  sh.ropes.forEach(function (r) { if (r.dead) return; if ((r.a >= 0 && !hullGp(sh.grid, r.a)) || (r.b >= 0 && !hullGp(sh.grid, r.b))) { r.dead = true; sh.rigDirty = true; } });
   sh.ropes.forEach(function (r) { if (!r.dead && r.par && r.par.some(function (j) { return sh.ropes[j].dead; })) { r.dead = true; sh.rigDirty = true; } });
   // 浮空的繩（Tim 2026-10-14：破壞後有浮空的纜線；判斷在 10_ship.js ropeFloat）：綁的帆桁／模型沒了或被帶走、端點附近的格全被打掉（錨是另一格、還在）⇒ 斷
   //   （物理開著 ⇒ 從還綁著的那一端垂下來）。繩掛在繩上 ⇒ 同一次一路斷到底（⛔ 只走一遍 ⇒ 一層等半秒，量到一串 36 條浮空 1–2 秒）。
@@ -117,7 +118,7 @@ function survey(sh) {               // 每半秒量一次：砲還在不在、�
     sh.ropes.forEach(function (r) { if (!r.dead && !r.moved && ropeFloat(sh, r, 0, near)) { r.dead = true; sh.rigDirty = true; again = true; } });
   }
   sh.sails.forEach(function (s) {
-    if (!s.dead && !s.furled && (s.as.some(function (a) { return !gp(sh.grid, a); }) || s.par.some(function (j) { return sh.ropes[j].dead; }) ||
+    if (!s.dead && !s.furled && (s.as.some(function (a) { return !hullGp(sh.grid, a); }) || s.par.some(function (j) { return sh.ropes[j].dead; }) ||
         (s.yards || []).some(function (y) { return !y.alive && !y.moved; }))) dropSail(sh, s);   // 掛它的帆桁被打斷或掉了 ⇒ 帆掉
   });
   sh.crew.forEach(function (c) {   // 腳下 3×3 都沒了 ⇒ 掉下去（走路中的不算：途中跨過艙口邊）
@@ -133,7 +134,7 @@ function survey(sh) {               // 每半秒量一次：砲還在不在、�
   driveSurvey(sh);                                                    // 動力：實際質量（含進水）、引擎／魔力的完好度（31_drive.js）
   drownCheck(sh);                                                     // 船殼通海了 ⇒ 被水淹過頭的人浮上來（43_swim.js）
   chooseSide(sh); reassign(sh); manning(sh); medTick(sh); pumpTick(sh); callHands(sh); carpTick(sh);   // pumpTick：抽水機要幾個人、現在抽多少（45_pumps.js）；medTick：醫療艙治療（44_medic.js）；callHands：預備水手補位（42_hands.js）
-  sh.able = sh.crew.filter(able).length;
+  sh.able = sh.crew.filter(crewAble).length;
   sh.gunsManned = sh.guns.filter(function (g) { return g.alive && gunRate(g) > 0; }).length;
   strikeCheck(sh);
 }
@@ -148,7 +149,7 @@ function strikeCheck(sh) {
   else if (cas >= STRIKE.cas) why = '降旗（' + pc + '）';
   else if (STRIKE.guns && sh.silentT >= 0 && SIMT - sh.silentT >= 10) why = '降旗（砲全啞 10 秒）';
   else if (STRIKE.masts && sh.mastsUp === 0 && cas >= 0.33) why = '降旗（桅全倒、' + pc + '）';
-  else if (STRIKE.officers && cas >= 0.25 && !sh.crew.some(function (c) { return c.role === ROLE.OFFICER && able(c); })) why = '降旗（軍官全倒、' + pc + '）';
+  else if (STRIKE.officers && cas >= 0.25 && !sh.crew.some(function (c) { return c.role === ROLE.OFFICER && crewAble(c); })) why = '降旗（軍官全倒、' + pc + '）';
   if (!why) return;
   sh.struck = true; sh.fate = why; note(sh, why, true); strikeColors(sh);
 }
@@ -161,5 +162,5 @@ function strikeText() {
   if (STRIKE.officers) r.push('軍官全倒且死傷 ≥ 25%');
   return r.length ? '任一條成立就降旗：' + r.join('／') : '不降旗：打到沉或全員倒下';
 }
-function gp(g, p) { return g.get(p & 2047, (p >> 11) & 1023, p >> 21); }   // 格座標壓法見 VK.pack（x 11 位元）
+function hullGp(g, p) { return g.get(p & 2047, (p >> 11) & 1023, p >> 21); }   // 格座標壓法見 VK.pack（x 11 位元）
 

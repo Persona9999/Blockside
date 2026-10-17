@@ -146,11 +146,11 @@ function makeCrew(sh) {
   CREW_SEEN[sh.T.id] = { n: crew.length, short: sh.crewShort, sig: crewSig(CW) };
   return crew;
 }
-function able(c) { return c.st === 0; }
+function crewAble(c) { return c.st === 0; }
 /** 每門砲現在有幾個人在崗（走過去的路上不算）。 */
 function manning(sh) {
   sh.guns.forEach(function (g) { g.manned = 0; });
-  sh.crew.forEach(function (c) { if (able(c) && c.gun && !c.walk) c.gun.manned++; });
+  sh.crew.forEach(function (c) { if (crewAble(c) && c.gun && !c.walk) c.gun.manned++; });
 }
 /** 重新分派（每半秒），每層甲板各自來：
  *  ① 開得動的砲（在崗 ≥ crewMin）留著，人不動；
@@ -158,12 +158,12 @@ function manning(sh) {
  *  ③ 借不夠的砲人放出來；空閒的人夠一整門才去開空砲，剩下的補滿留下的砲（都挑最近的）。
  *  只有換砲的人才走路。每層砲甲板（照砲的高度分，sh.decks）各自調度：憲法號 ＝ 砲甲板（長砲＋追擊砲）／上甲板（carronade）。 */
 function reassign(sh) {
-  sh.crew.forEach(function (c) { if (c.gun && (!able(c) || !c.gun.alive || c.gun.wet)) leaveGun(c); });   // wet：砲口泡在水裡（43_swim.js）
+  sh.crew.forEach(function (c) { if (c.gun && (!crewAble(c) || !c.gun.alive || c.gun.wet)) leaveGun(c); });   // wet：砲口泡在水裡（43_swim.js）
   var ds2 = []; sh.decks.forEach(function (D) { ds2.push([D.key, 'S'], [D.key, 'P']); });
   ds2.forEach(function (ds) {                                          // 每層甲板、每一舷各自調度
     var deck = ds[0], side = ds[1];
     var gs = sh.guns.filter(function (g) { return g.alive && !g.wet && g.side === side && gunDeck(g) === deck; });
-    var men = sh.crew.filter(function (c) { return able(c) && c.role === ROLE.GUN && c.deck === deck && c.side === side; });
+    var men = sh.crew.filter(function (c) { return crewAble(c) && c.role === ROLE.GUN && c.deck === deck && c.side === side; });
     var cur = new Map(); gs.forEach(function (g) { cur.set(g, 0); });
     men.forEach(function (c) { if (c.gun) cur.set(c.gun, cur.get(c.gun) + 1); });
     var kept = new Set(gs.filter(function (g) { return cur.get(g) >= g.crewMin; }));
@@ -197,7 +197,7 @@ function reassign(sh) {
     if (walled) free.forEach(function (c) { if (!c.gun && !c.walk && !gs.some(function (g) { return can(c, g); })) toHand(sh, c); });   // 這一塊沒有活著的砲了（砲塔裡的砲全被打掉）⇒ 改當預備水手、走梯子去別處補（42_hands.js toHand）
   });
   if (sh.nav && sh.T.armor && sh.T.armor.length) sh.crew.forEach(function (c) {   // 送藥手同理：同一層走得到的砲全沒了、手上沒藥包 ⇒ 預備水手
-    if (c.role !== ROLE.POWDER || !able(c) || !c.pm || c.pm.st !== 'idle' || c.cart) return;
+    if (c.role !== ROLE.POWDER || !crewAble(c) || !c.pm || c.pm.st !== 'idle' || c.cart) return;
     if (!sh.guns.some(function (g) { return g.alive && g.drop && gunDeck(g) === c.deck && navReach(sh, c.pos, g.drop); })) toHand(sh, c);
   });
 }
@@ -215,7 +215,7 @@ function leaveGun(c) {
 /** 走去新砲：挑一個沒人、腳下還有甲板的站位；都沒有 ⇒ 在第一個站位附近重新找站得住的格（⛔ 退路不能落在砲身裡）。 */
 function goToGun(sh, c, g) {
   var spot = (g.spots || []).filter(function (s) {
-    if (s.who && able(s.who) && s.who.gun === g) return false;
+    if (s.who && crewAble(s.who) && s.who.gun === g) return false;
     var x = Math.floor(s.at[0]), y = Math.floor(s.at[1]);
     return countBox(sh.grid, x - 1, y - 1, s.at[2] - 1, x + 1, y + 1, s.at[2] - 1) > 0;
   })[0];
@@ -228,7 +228,7 @@ function goToGun(sh, c, g) {
 /** 這一點附近的人扣血（r 格數）：rKill 內吃滿基準傷害 base，rKill～rWound 從 0.55 遞減到 0.1，再乘 0.6～1.4 的隨機。
  *  base ＝ 1.4 × 每發傷害 × 彈種對人倍率（crewBase）⇒ 24 磅實心 140：rKill 內約 85% 當場陣亡（跟以前的 0.85 對齊）。
  *  dir（格座標的單位向量）給了 ⇒ 前方（碎屑噴的方向）的範圍拉長。list：只看這幾個人（砲彈掠過，21_gunnery.js ballNear 先挑好的；沒給 ⇒ 全船）。 */
-function hurt(sh, L, rKill, rWound, dir, cause, base, list) {
+function crewHurt(sh, L, rKill, rWound, dir, cause, base, list) {
   var n = 0;
   (list || sh.crew).forEach(function (c) {
     if (c.st > 1) return;
@@ -263,7 +263,7 @@ function killCrew(sh, c, cause) {
   c.st = 2; c.t = 0; c.walk = null; c.cart = false; c.moving = false; c.hp = Math.min(c.hp, 0); sh.dead++; sh.kills++; sh.causes[cause] = (sh.causes[cause] || 0) + 1; newsCrew(sh, c, true, cause); tlgEv(sh, c, 'dead', cause);
 }
 /** 掉下去：腳下那一格沒了（甲板被打穿、桅頂跟著桅倒）⇒ 換成世界座標的落體，落水算失蹤（亡）。 */
-function fall(sh, c, v) {
+function crewFall(sh, c, v) {
   if (c.st >= 2 && c.st !== 2) return;
   var w = M4.pt(sh.M, c.pos[0], c.pos[1], c.pos[2]);
   if (c.st < 2 && DROWN_T > 0) { if (c.st === 1) { sh.wounded--; c.hurtSwim = true; } c.fellAlive = true; }   // 落水求生（43_swim.js）：先不算陣亡，落到水裡變成在游
@@ -277,7 +277,7 @@ function fall(sh, c, v) {
  *  軍官留原職（降旗看軍官還在不在）；預備水手照新的那一層重新找路；傷員只換位置。 */
 function fallIn(sh, c) {
   var NV = sh.nav, x = c.pos[0], y = c.pos[1], z0 = c.pos[2];
-  if (!NV || c.inBed) { fall(sh, c); return; }
+  if (!NV || c.inBed) { crewFall(sh, c); return; }
   for (var lv = NV.levels.length - 1; lv >= 0; lv--) {
     var N = NV.levels[lv].N, i = navSnap(N, [x, y, NV.levels[lv].zr[0]], 2); if (i < 0) continue;
     var p = navPos(N, i); if (p[2] > z0 - 4) continue;                  // 同一層（腳邊的洞）、比腳還高 ⇒ 不是落點
@@ -285,7 +285,7 @@ function fallIn(sh, c) {
     landIn(sh, c, lv, p, (z0 - p[2]) * S);
     return;
   }
-  fall(sh, c);
+  crewFall(sh, c);
 }
 var FALL_H0 = 2, FALL_K = 30;                       // 摔傷：高度 h 公尺 ⇒ 扣 (h − 2) × 30（3 m 30、5 m 90、10 m 240）
 function landIn(sh, c, lv, p, h) {

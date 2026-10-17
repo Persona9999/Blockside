@@ -98,7 +98,7 @@ function sideGuns(sh, side) { return sh.guns.filter(function (g) { return g.aliv
 // 航速（TASK-0630，31_drive.js）：這裡照舊算「每個動力單獨推動時的航速」—— 帆（滿帆、完好、這個風向）與額外動力（cfg.base 節）——
 //   driveStep 把它們換成推力（k·v²）、扣掉水阻、照實際質量（含進水）算加速度；最高航速 ＝ √(帆² ＋ 額外動力²) 跟以前一樣，變的是加減速與受損的偏轉。
 //   額外動力照俥鐘（sh.power ＝ 航速的比例，−1…1）；倒退時舵效反過來（像倒車）。電腦的船一直全速前進（跟以前一樣）；停船（6）照舊停。
-function sail(sh, dt) {
+function sailShip(sh, dt) {
   var F = fwd(sh.yaw), W = norm(WIND), deg = Math.acos(clamp(dot(F, W), -1, 1)) * 57.2958;
   var UP = sh.cfg.upwind || 1, dU = UP === 1 || deg <= 90 ? deg : 90 + (deg - 90) / UP;   // 逆風性能：迎風那一半的角度壓縮（1.25 ⇒ 風從船頭 52.5° 才開始失速、45° 跑得像 36° 的船…）；1 ⇒ 一位元都不動
   sh.sailFrac = sh.sails.reduce(function (a, s) { return a + (s.dead || s.furled ? 0 : s.area * s.hp / s.hpMax); }, 0) / sh.sailArea0;   // 被打中還沒掉的帆：照剩下的血量算推力
@@ -160,7 +160,8 @@ function sail(sh, dt) {
     if (!(ld && !ld.sunk)) { sh.station = null; sh.lineErr = sh.lineLag = sh.lineArc = sh.lineOff = undefined; }
     sh.throttle = sh.helmSpill || 1;                                     // 只靠帆的船：期望航速比夠用的那一段帆慢 ⇒ 放掉一點風（54_helm.js helmGovern）
     if (od && od.throttle !== undefined && !hc) sh.throttle = Math.min(sh.throttle, od.throttle);   // 指揮官給的油門（沙盒用；遊戲的排頭、跟隨照期望航速）
-    if (!sh.struck && !sh.sunk) { var av = friendAvoid(sh, hc && od.mode === 'lead' ? helmLeadAvoid(sh) : undefined); if (av === null) av = foeAvoid(sh); if (av === null && !hc) av = lineClear(sh); else if (hc) sh.clearing = null; if (av !== null) { tY = av; sh.avT = SIMT; } }   // avT：最後一次讓船的時刻（讀數）   // 戰列、搶上風（hc）不讓砲線（TASK-0679）：守隊形，擋到的那幾門照 friendInLine 不開（⛔ 讓 ⇒ 接近時敵艦在前方、前一艘永遠擋著後面的砲線，排頭 35 秒、紅方排頭 80 秒都在讓，隊形散掉）   // throttle 每一步重設（lineClear 要放慢才改）   // 讓友船 ＞ 讓敵艦（不撞，54_helm.js）＞ 讓開友艦的砲線（52_fleet.js；沒有友船 ⇒ null）
+    // 大漩渦：讓船（快撞上才出手）之後、讓開砲線之前 ⇒ 離中心太近就往外（54_helm.js vxAvoid；沒有漩渦 ⇒ null）。⛔ 排在讓船前面 ⇒ 內圈的船不管旁邊的船，2 對 2 一直互撞（11 m/s）
+    if (!sh.struck && !sh.sunk) { var av = friendAvoid(sh, hc && od.mode === 'lead' ? helmLeadAvoid(sh) : undefined); if (av === null) av = foeAvoid(sh); if (av === null) av = vxAvoid(sh); if (av === null && !hc) av = lineClear(sh); else if (hc) sh.clearing = null; if (av !== null) { tY = av; sh.avT = SIMT; } }   // avT：最後一次讓船的時刻（讀數）   // 戰列、搶上風（hc）不讓砲線（TASK-0679）：守隊形，擋到的那幾門照 friendInLine 不開（⛔ 讓 ⇒ 接近時敵艦在前方、前一艘永遠擋著後面的砲線，排頭 35 秒、紅方排頭 80 秒都在讓，隊形散掉）   // throttle 每一步重設（lineClear 要放慢才改）   // 讓友船 ＞ 讓敵艦（不撞，54_helm.js）＞ 讓開友艦的砲線（52_fleet.js；沒有友船 ⇒ null）
     var e = Math.atan2(Math.sin(tY - sh.yaw), Math.cos(tY - sh.yaw));
     rate = clamp(e * 0.5, -rmax, rmax); sh.rudder = rmax > 0 ? rate / rmax * (sh.spd < 0 ? -1 : 1) : 0;   // 倒退 ⇒ 舵反著打（畫面上的舵角；轉向照要的轉）
   }
@@ -169,6 +170,8 @@ function sail(sh, dt) {
   sh.yaw += sh.yawRate * dt;
   F = fwd(sh.yaw);
   sh.vel = mul(F, sh.spd);
+  if (VX) { var cf = vxFlow(sh.px, sh.pz); sh.vel[0] += cf[0]; sh.vel[2] += cf[1]; }   // 大漩渦（08_sea.js）：水流帶著船走 ⇒ sh.vel 是對地的速度（砲彈帶的船速、瞄準的前置量、帆上的視風都照它）
+  if (sh.vxEaten) { sh.spd *= Math.max(0, 1 - 0.5 * dt); sh.vel = [cf[0] - 0.3 * sh.px, 0, cf[1] - 0.3 * sh.pz]; }   // 被捲進眼裡（32_hull.js）：自己的船速兩秒內沒了，只跟著水流、往中心拉（⛔ 不拉 ⇒ 靠原本的航速滑出眼外 49 m 才沉完）
   var px0 = sh.px, pz0 = sh.pz;
   sh.px += sh.vel[0] * dt; sh.pz += sh.vel[2] * dt;
   if (sh.anc) anchorStep(sh, dt, px0, pz0);                          // 錨咬著 ⇒ 錨鏈孔拉回鍊長以內、船繞錨鏈孔轉（76_anchor.js）
@@ -344,7 +347,7 @@ function crushAfter(sh, rem, dW, e, other, v, t0, left) {
     c = [c[0] / n + 0.5, c[1] / n + 0.5, c[2] / n + 0.5];
     for (i = 0; i < rem.length; i += 4) ext = Math.max(ext, Math.hypot(rem[i] + 0.5 - c[0], rem[i + 1] + 0.5 - c[1], rem[i + 2] + 0.5 - c[2]));
     var dL = norm(M4.dir(sh.inv, dW[0], 0, dW[2])), R = Math.max(2, ext), k2 = clamp(Math.sqrt(e / 1000), 0.3, 1.5);
-    hurt(sh, c, R * 0.8, R * 1.6, dL, '碰撞', 140 * k2);
+    crewHurt(sh, c, R * 0.8, R * 1.6, dL, '碰撞', 140 * k2);
     sh.models.forEach(function (m) { if (!m.alive) return; var d = len(sub(m.c, c)); if (d < R * 1.5) damageModel(sh, m, mul(dW, 6), 120 * k2 * (1 - 0.6 * d / (R * 1.5))); });
   }
   var t = massLost(sh) - t0;

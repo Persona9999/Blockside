@@ -1,6 +1,6 @@
 var SURVEY_PH = 7;                                                  // 定期檢查的相位：第 i 艘在第 (i × 7) mod 30 步量（TASK-0673；7 跟 30 互質 ⇒ 30 艘以內不重複）
 // ───────────────────────── 電腦 ─────────────────────────
-function ai(sh, dt) {
+function simAi(sh, dt) {
   var foe = foeOf(sh);                                              // 自己的目標（52_fleet.js；一對一 ＝ 另一艘）
   if (sh.sunk || sh.struck || sh.sinkingFinal || !foe) return;
   if (foe.sunk || foe.struck || foe.sinkingFinal) return;            // 對方降旗或在沉 ⇒ 停火
@@ -54,7 +54,7 @@ function aiSecond(sh, foe, dt) {
 }
 
 // ───────────────────────── 一步 ─────────────────────────
-function step() {
+function simStep() {
   if (PF) PF.t = performance.now();                                 // 逐幀分段計時（?debug=1，00_core.js）
   SIMT += DT;
   if ((Math.round(SIMT / DT) % everySteps(CMD_EVERY_S)) === 0) cmdTick();   // 指揮官每 3 秒想一次（52_fleet.js；不抽亂數）
@@ -70,11 +70,11 @@ function step() {
   }
   SHIPS.forEach(burstStep);                                        // 連發剩下的那幾發（21_gunnery.js；burst ＝ 1 的砲什麼都不做）
   if (PF) pfLap('fire');
-  SHIPS.forEach(function (sh) { sail(sh, DT); if (sh.spins) spinStep(sh, DT); stepShip(sh, DT); if (sh.anc) chainStep(sh, DT); if (PF) pfLap('ship'); stepCrew(sh, DT); if (PF) pfLap('crew'); });
+  SHIPS.forEach(function (sh) { sailShip(sh, DT); if (sh.spins) spinStep(sh, DT); stepShip(sh, DT); if (sh.anc) chainStep(sh, DT); if (PF) pfLap('ship'); stepCrew(sh, DT); if (PF) pfLap('crew'); });
   collide();
   SHIPS.forEach(function (sh) {                                    // 照 SHIPS 的順序（一對一：我艦先、敵艦後 ⇒ 跟以前同一個順序抽亂數）
-    if (sh.i === PLAYER_I) { if (AUTOFIRE) ai(sh, DT); }            // 自動開砲：我艦也交給電腦瞄準開火
-    else if (modeRule('othersAct')) ai(sh, DT);                // 玩法規則 othersAct（04_modes.js）：沙盒的其他船不還手
+    if (sh.i === PLAYER_I) { if (AUTOFIRE) simAi(sh, DT); }            // 自動開砲：我艦也交給電腦瞄準開火
+    else if (modeRule('othersAct')) simAi(sh, DT);                // 玩法規則 othersAct（04_modes.js）：沙盒的其他船不還手
   });
   if (PF) pfLap('ai');
   for (i = 0; i < BALLS.length; i++) { stepBall(BALLS[i], DT); if (!BALLS[i].alive) { evEmit('ballGone', BALLS[i]); BALLS.splice(i--, 1); } }

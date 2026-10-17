@@ -113,7 +113,7 @@ function sailRect(ow, A, ti) {
 /** 旗桿（每一格畫面；船身格座標）：桅頂那一格還在才畫。降旗旗桿照留（旗收了）。 */
 function poleBuf(sh) {
   var P = sh.T.poles; if (!P || !P.length) return;
-  var key = P.map(function (p) { return p.cell < 0 || gp(sh.grid, p.cell) > 0 ? 1 : 0; }).join('') + (sh.sink > 40 ? 'x' : '');
+  var key = P.map(function (p) { return p.cell < 0 || hullGp(sh.grid, p.cell) > 0 ? 1 : 0; }).join('') + (sh.sink > 40 ? 'x' : '');
   if (sh.poleKey === key) return;
   sh.poleKey = key;
   var out = [], hw = COL_POLE_W / S / 2, c = COL_POLE_C;

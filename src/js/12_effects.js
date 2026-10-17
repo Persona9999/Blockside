@@ -8,11 +8,8 @@ var DMAX = 45000, D = {
 var DEB_FLUT = 0.9, DEB_THIN = [1, 0.22, 0.22, 0.25];
 var DINST = new Float32Array(DMAX * 9);
 var DEB_ACC = 0, PT_ACC = 0;   // DEB_ACC／PT_ACC：照分級少生的節拍（不抽亂數）
-// 煙、火光、水花自己的亂數（TASK-0669）：以前抽戰局的 rr／gauss ⇒ 少放一團煙（調粒子數、不開畫面）後面的戰局全部錯位；開局跟 rs 一起重設（70_flow.js）
-var RSX0 = 0x5BD1E995, rsX = SEED ^ RSX0;
-function rndX() { rsX |= 0; rsX = rsX + 0x6D2B79F5 | 0; var t = Math.imul(rsX ^ rsX >>> 15, 1 | rsX); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }
-function rrX(a, b) { return a + (b - a) * rndX(); }
-function gaussX() { var u = rndX() || 1e-9, v = rndX(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(6.2831853 * v); }
+// 煙、火光、水花自己的亂數（TASK-0669）：以前抽戰局的 rr／gauss ⇒ 少放一團煙（調粒子數、不開畫面）後面的戰局全部錯位；開局一起重設（rngReset）
+var RNG_X = rngMake('fx', 0x5BD1E995), rndX = RNG_X.f, rrX = RNG_X.r, gaussX = RNG_X.g;   // 00_core.js 亂數工廠
 function fxDebris(p, v, col, size, life, shape) {
   var k = DEB_KS[PHX.debris]; if (k < 1) { DEB_ACC += k; if (DEB_ACC < 1) return; DEB_ACC -= 1; }   // 物理分級：少生幾顆（呼叫端的亂數已經抽完 ⇒ 戰局不變）
   var i;
@@ -52,8 +49,8 @@ function debCull() {
   var ns = Math.min(1024, n), step = n / ns;
   for (i = 0; i < ns; i++) DSAMP[i] = DSCORE[Math.floor(i * step)];
   var S = DSAMP.subarray(0, ns).sort(), th = S[Math.min(ns - 1, Math.max(0, Math.floor(ns * want / n)))];
-  for (i = n - 1; i >= 0; i--) if (DSCORE[i] > th) kill(i);           // 由後往前：kill 把最後一顆搬來 i，那顆已經看過、留著
-  if (D.n > want) for (i = D.n - 1; i >= 0 && D.n > want; i--) if (DSCORE[i] >= th) kill(i);   // 同分很多（全在水裡）⇒ 再清一輪
+  for (i = n - 1; i >= 0; i--) if (DSCORE[i] > th) fxKill(i);           // 由後往前：kill 把最後一顆搬來 i，那顆已經看過、留著
+  if (D.n > want) for (i = D.n - 1; i >= 0 && D.n > want; i--) if (DSCORE[i] >= th) fxKill(i);   // 同分很多（全在水裡）⇒ 再清一輪
 }
 /** 碎木每一步：飛、轉、落水、落在甲板上。
  *  省時間（TASK-0531：殉爆噴一萬多顆，每步 10 ms 以上）：比最高的浪還高 ⇒ 不算 seaH；不在那艘船的格子外接球裡（格子盒的中心＋半對角線）⇒ 不換格座標查格子。結果跟全算一樣。 */
@@ -63,7 +60,7 @@ function stepDebris(dt) {
   for (var i = 0; i < D.n; i++) {
     var st = D.st[i]; if (!st) continue;
     D.life[i] -= dt;
-    if (D.life[i] <= 0) { kill(i); i--; continue; }
+    if (D.life[i] <= 0) { fxKill(i); i--; continue; }
     var o = i * 3;
     if (st === 2) {                                            // 落在甲板上：跟著船（座標存的是格座標）；底下那一格沒了 ⇒ 重新掉
       var hs = SHIPS[D.ship[i]];
@@ -96,7 +93,7 @@ function stepDebris(dt) {
     }
   }
 }
-function kill(i) {
+function fxKill(i) {
   var j = D.n - 1;
   if (i !== j) {
     D.p.copyWithin(i * 3, j * 3, j * 3 + 3); D.v.copyWithin(i * 3, j * 3, j * 3 + 3); D.w.copyWithin(i * 3, j * 3, j * 3 + 3); D.q.copyWithin(i * 4, j * 4, j * 4 + 4);

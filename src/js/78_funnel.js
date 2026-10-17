@@ -5,9 +5,8 @@
 //   主機全壞（31_drive.js driveSurvey：sh.drive.C.fnOff）⇒ 每根都不冒；通這根的鍋爐全壞 ⇒ 這根不冒；額外動力一成都出不來（cap 0）⇒ 淡。
 //   煙往上升、跟著風飄；煙囪口附近（排煙點水平 ±12 格、往下 6 格）的格子剩不到一半（煙囪被打斷）⇒ 不冒（每半秒數一次）；沉了、在沉 ⇒ 不冒。
 // ⛔ 只給人看：自己一組亂數（不抽 rnd()）⇒ 戰局跟沒有煙囪一樣。物理設定「煙與水花」照樣少生幾顆（spawnPt）。
-var FN_ON = 7, FN_IDLE = 1.5, RSFN0 = 0x2F6B1D4D, rsFn = SEED ^ RSFN0;
-function rndFn() { rsFn |= 0; rsFn = rsFn + 0x6D2B79F5 | 0; var t = Math.imul(rsFn ^ rsFn >>> 15, 1 | rsFn); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }
-function rgFn(a, b) { return a + (b - a) * rndFn(); }
+var FN_ON = 7, FN_IDLE = 1.5;
+var RNG_FN = rngMake('funnel', 0x2F6B1D4D), rndFn = RNG_FN.f, rgFn = RNG_FN.r;   // 煙囪（00_core.js 亂數工廠；以前開局不重設 ⇒ 現在一起重設，只給人看）
 /** 船型 T 的煙囪：[{ name, p: 排煙點（格座標）, pt: 有沒有登記 smoke }]（載入時算一次）。 */
 function funnelsOf(T) {
   if (T.funnels) return T.funnels;

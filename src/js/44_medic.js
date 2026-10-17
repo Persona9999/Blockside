@@ -63,7 +63,7 @@ function medRelease(c) {
 /** 倒下的人這一步要不要照舊「12 秒抬下去」：有醫療艙可以送（sh.med.open）、而且這個人搬得到（medOk 還沒判 ⇒ 先等）⇒ 不抬、等人來搬；被扛著 ⇒ 跟著扛他的人。 */
 function medHold(sh, c) {
   if (c.carriedBy) {
-    var k = c.carriedBy, J = able(k) && k.hand && k.hand.job;
+    var k = c.carriedBy, J = crewAble(k) && k.hand && k.hand.job;
     if (!J || J.who !== c) medRelease(c);                                // 扛他的人倒下、被叫走 ⇒ 放在原地
     else { c.pos = [k.pos[0], k.pos[1], k.pos[2] + MED_UP]; return true; }
   }
@@ -77,12 +77,12 @@ function medTick(sh) {
   M.rooms.forEach(function (o) {
     var pt = 0; o.beds.forEach(function (m) { var w = m.med.who; if (w && w.st === 1 && w.medBed === m && m.alive) pt++; });
     o.need = pt ? Math.max(M.smin, Math.ceil(pt / M.sper)) : 0;           // 有病人才要人
-    o.sg = 0; sh.crew.forEach(function (c) { if (c.role === ROLE.SURGEON && able(c) && c.medRoom === o) o.sg++; });   // 船醫（medSurgeons）：在這一間、還能動的
+    o.sg = 0; sh.crew.forEach(function (c) { if (c.role === ROLE.SURGEON && crewAble(c) && c.medRoom === o) o.sg++; });   // 船醫（medSurgeons）：在這一間、還能動的
     var hn = Math.max(0, o.need - o.sg);                                 // 要預備水手來的 ＝ 要的 − 船醫（船醫 0 ⇒ 跟以前一樣）
-    var mine = sh.crew.filter(function (c) { return c.role === ROLE.HAND && able(c) && c.hand.job && c.hand.job.med === o; });
+    var mine = sh.crew.filter(function (c) { return c.role === ROLE.HAND && crewAble(c) && c.hand.job && c.hand.job.med === o; });
     if (mine.length > hn) mine.sort(function (a, b) { return (a.hand.job.at ? 1 : 0) - (b.hand.job.at ? 1 : 0); }).slice(0, mine.length - hn).forEach(function (c) { c.hand.job = null; c.hand.legs = []; c.hand.wait = 1; });   // 多出來的放回去（還沒到的先放）
     o.have = 0;
-    sh.crew.forEach(function (c) { if (c.role === ROLE.HAND && able(c) && c.hand.job && c.hand.job.med === o && c.hand.job.at) o.have++; });
+    sh.crew.forEach(function (c) { if (c.role === ROLE.HAND && crewAble(c) && c.hand.job && c.hand.job.med === o && c.hand.job.at) o.have++; });
     var B = roomBuffNow(o.room), hb = (B.heal ? B.heal.v : 0) + (o.sg ? M.sheal : 0), staff = o.need ? Math.min(1, (o.have + o.sg) / o.need) : 1;   // 有船醫 ⇒ 治療快 sheal
     o.beds.forEach(function (m) {
       var p = m.med.who;
@@ -97,7 +97,7 @@ function medTick(sh) {
       if (rnd() < M.back) medBack(sh, p, lv, ci); else { p.st = 3; M.out++; }
     });
   });
-  M.open = beds > 0 && sh.crew.some(function (c) { return c.role === ROLE.HAND && able(c); });
+  M.open = beds > 0 && sh.crew.some(function (c) { return c.role === ROLE.HAND && crewAble(c); });
 }
 /** 船醫（TASK-0676；Tim 2026-10-17：「醫療倉可以直接換成護士」→「先把船醫套用上」）：開戰就站在醫療艙裡（照醫療艙的順序一間一位、同一間的照床排），不走動、不補位、火槍打不到（below）；
  *  那一間要的人手先算船醫、不夠的才從預備水手派（預備水手 ＝ 船醫助手）；有船醫在的那一間治療快 sheal（設定檔 rooms.medical.surgeonHeal，預設 0.5 ＝ ＋50%）；
@@ -128,7 +128,7 @@ function medBack(sh, c, lv, ci) {
 function medNeeds(sh, need) {
   var M = sh.med; if (!M) return;
   var NV = sh.nav, assigned = {};
-  sh.crew.forEach(function (c) { if (c.role === ROLE.HAND && able(c) && c.hand.job && c.hand.job.kind === 'staff') { var k = c.hand.job.key; assigned[k] = (assigned[k] || 0) + 1; } });
+  sh.crew.forEach(function (c) { if (c.role === ROLE.HAND && crewAble(c) && c.hand.job && c.hand.job.kind === 'staff') { var k = c.hand.job.key; assigned[k] = (assigned[k] || 0) + 1; } });
   M.rooms.forEach(function (o) {
     var n = Math.max(0, o.need - (o.sg || 0)) - (assigned[o.room.name] || 0);   // 船醫先算（medTick o.sg）
     for (var j = 0; j < n; j++) { var b = o.beds[(assigned[o.room.name] || 0) + j] || o.beds[j % o.beds.length]; need.push({ kind: 'staff', key: o.room.name, lv: o.lv, n: 1, x: b.c[0], cell: b.med.cell, med: o, pri: 1 }); }

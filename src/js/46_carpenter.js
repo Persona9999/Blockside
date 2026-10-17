@@ -80,7 +80,7 @@ function carpScan(sh) {
 /** 每次點名（survey）：閒著的木匠接一件（梯子 ＞ 通道 ＞ 其他洞；同一級挑最近、走得到的）。 */
 function carpTick(sh) {
   var NV = sh.nav, K = sh.carp; if (!K || !NV || sh.struck || sh.sunk || sh.broken) return;
-  var C = sh.crew.filter(function (c) { return c.role === ROLE.CARPENTER && able(c); }); if (!C.length) return;
+  var C = sh.crew.filter(function (c) { return c.role === ROLE.CARPENTER && crewAble(c); }); if (!C.length) return;
   if (K.at !== (NV.refreshN || 0)) { K.at = NV.refreshN || 0; K.todo = carpScan(sh); K.done = {}; if (K.todo.length) medComps(sh); }   // 尋路刷新過 ⇒ 重掃；medComps：「層:區域」照沒斷的梯子連成幾群（44_medic.js；只看區域與梯子，便宜）
   if (!K.todo.length) return;
   var taken = {}; C.forEach(function (c) { if (c.hand.job) taken[c.hand.job.key] = 1; });
@@ -135,6 +135,6 @@ function carpFixHole(sh, lv, cells) {
 /** HUD 一段：木匠（在修／還能動、修好的梯子與洞）。 */
 function carpText(sh) {
   if (!sh.carp) return '';
-  var C = sh.crew.filter(function (c) { return c.role === ROLE.CARPENTER && able(c); }), w = C.filter(function (c) { return c.hand.job; }).length;
+  var C = sh.crew.filter(function (c) { return c.role === ROLE.CARPENTER && crewAble(c); }), w = C.filter(function (c) { return c.hand.job; }).length;
   return '　木匠 ' + C.length + (w ? '（修 ' + w + '）' : '') + (sh.carp.lad || sh.carp.holes ? '　修好 梯 ' + sh.carp.lad + '、洞 ' + sh.carp.holes : '');
 }

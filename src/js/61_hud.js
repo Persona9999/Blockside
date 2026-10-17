@@ -28,7 +28,7 @@ function hudNewsCrew(sh, c, dead, cause) {
   var cap = c.art === ART_CAPTAIN, how = dead ? (cause === '落水' || cause === '溺水' ? cause : '陣亡') : '受傷倒下', why = cause && cause !== '落水' && cause !== '溺水' ? '（' + cause + '）' : '';
   if (cap) { note(sh, '<b style="color:var(--gold)">船長' + how + '！</b>' + why, true); return; }
   if (c.role === ROLE.OFFICER || c.role === ROLE.HELM || c.role === ROLE.SURGEON) {   // 船醫（TASK-0676）：人少，當下報
-    var left = sh.crew.filter(function (o) { return o.role === c.role && able(o); }).length, nm = ROLE_NAME[c.role], off = c.role === ROLE.OFFICER;   // 軍官照階級報（大副、二副…；40_crew.js makeCrew）
+    var left = sh.crew.filter(function (o) { return o.role === c.role && crewAble(o); }).length, nm = ROLE_NAME[c.role], off = c.role === ROLE.OFFICER;   // 軍官照階級報（大副、二副…；40_crew.js makeCrew）
     note(sh, (off && c.rank !== undefined ? officerRank(c.rank) : nm) + how + why + (left ? '（還有 ' + left + ' 位' + (off ? '軍官' : '') + '）' : '　<b style="color:#ff9a7a">' + nm + '全倒' + (c.role === ROLE.OFFICER ? ' —— 沒人指揮，瞄準變散' : c.role === ROLE.SURGEON ? ' —— 醫療艙只剩預備水手' : '') + '</b>'), !left);
     return;
   }
@@ -126,8 +126,6 @@ var INFO_SH = null, SB_EL = {}, SUNK_HIDE = 60;   // SUNK_HIDE：沉了幾秒（
 // 按羅盤 ＝ 按艦隊的我艦圓鈕（Tim 2026-10-15：「遊戲下方的羅盤是否可以改成可以按，效果跟按下我艦一樣顯示詳細資訊」）：開／收我艦的詳細資訊。
 //   pointerdown（同上：羅盤每 6 格重畫，click 可能落空）；只綁在羅盤的畫布 ⇒ 兩舷的砲（#gunsL／#gunsR，pointer-events:none）、鏡頭拖曳（遊戲畫布）都不受影響。
 $('navc').addEventListener('pointerdown', function (e) { e.preventDefault(); e.stopPropagation(); var me = SHIPS[PLAYER_I]; if (!me) return; INFO_SH = INFO_SH === me ? null : me; fleetHud(me); });
-/** 「🎥 看這艘」（詳細資訊的標題列；Tim 2026-10-14）：鏡頭換成看那一艘（看我艦那一種：跟著它、繞著它轉，拖曳、平移、縮放照舊）；資訊不收。按 C 換鏡頭 ⇒ 回到照常的循環。 */
-function camSee(o) { if (!o) return; CAM.mode = 3; CAM.follow = null; CAM.pan = [0, 0]; CAM.see = o.i === PLAYER_I ? null : o; CAM.dist = 75; CAM.trYaw = null; }
 function fleetReset() { INFO_SH = null; for (var k in SB_EL) SB_EL[k].el.remove(); SB_EL = {}; [].forEach.call(document.querySelectorAll('.sbres, .sigb'), function (e) { e.remove(); }); if ($('sigP')) $('sigP').classList.remove('on'); }
 function sbMake(o, box) {
   var el = document.createElement('div'), cv = document.createElement('canvas'); el.className = 'sb'; el.appendChild(cv);
@@ -145,7 +143,7 @@ function hudIcons() {
   L.forEach(function (q) { var el = $(q[0]), h = q[1] + '<i class="em">' + q[2] + '</i>'; if (el && el.innerHTML !== h) el.innerHTML = h; });
 }
 function sbNums(b, o) {
-  var cr = 0, gn = 0; o.crew.forEach(function (c) { if (able(c)) cr++; }); o.guns.forEach(function (g) { if (g.alive && !g.wet) gn++; });   // 泡水的不算（Tim 2026-10-14：只算還能用的）
+  var cr = 0, gn = 0; o.crew.forEach(function (c) { if (crewAble(c)) cr++; }); o.guns.forEach(function (g) { if (g.alive && !g.wet) gn++; });   // 泡水的不算（Tim 2026-10-14：只算還能用的）
   var k = cr + '/' + gn + (HUD_ART ? 'a' : ''); if (k === b.nk) return; b.nk = k;
   b.nl.innerHTML = sbIcon(0, '👤') + cr; b.nr.innerHTML = sbIcon(3, '💥') + gn;
   b.nl.title = '船員還能動的 ' + cr + ' 人'; b.nr.title = '還能用的砲 ' + gn + ' 門（沒被打掉、沒泡水）';
@@ -310,7 +308,7 @@ function gunHud(me) {
 }
 /** 補給一行：送藥手還能動的／全部、等火藥的砲幾門、取用點還剩幾桶。 */
 function supplyText(sh) {
-  var pm = sh.crew.filter(function (c) { return c.role === ROLE.POWDER; }), ok = pm.filter(able).length;
+  var pm = sh.crew.filter(function (c) { return c.role === ROLE.POWDER; }), ok = pm.filter(crewAble).length;
   var wait = sh.guns.filter(function (g) { return g.alive && g.needCart && !(g.box > 0) && gunRate(g) > 0; }).length;
   return '送藥手 ' + ok + '/' + pm.length + (wait ? '　<span style="color:#ffb35a">等火藥 ' + wait + ' 門</span>' : '');
 }
@@ -501,7 +499,7 @@ function ammoNext() {
   var L = ammoOf(SHIPS[PLAYER_I]); if (!L.length) return;
   var i = L.indexOf(AMMO_I); AMMO_I = L[(i + 1) % L.length]; ammoLabel();
 }
-function hud(dt) {
+function hudFrame(dt) {
   stepMsgs(dt);
   if (ROOMS_DBG) roomLabels();                                                   // 空艙房的名字（36_rooms.js；?rooms=1）：每一格跟著鏡頭
   aimRingUi();                                                                   // 瞄準圈（UI 層）：每一格跟著鏡頭
@@ -556,7 +554,7 @@ function floodLine(sh) {
 var END_AT = 0, END_SINK = 5, END_OTHER = 5.5, END_MAX = 40, END_SETTLE = 10, END_WAIT = null, SELF_WIN = 60;
 /** 這艘怎麼收場（結算畫面的那一句）。sh.selfAt：按自爆的模擬時間（23_powder.js selfDestruct）；sh.sunkAt：沉沒的那一刻（32_hull.js）。 */
 function shipFate(sh) {
-  if (sh.sunk) return sh.selfAt !== undefined && sh.sunkAt - sh.selfAt < SELF_WIN ? '自爆沉沒' : sh.broken ? '殉爆斷船沉沒' : '沉沒';
+  if (sh.sunk) return sh.selfAt !== undefined && sh.sunkAt - sh.selfAt < SELF_WIN ? '自爆沉沒' : sh.broken ? '殉爆斷船沉沒' : sh.vxEaten ? '捲進漩渦沉沒' : '沉沒';
   if (sh.sinkingFinal) return (sh.fate ? sh.fate + '、' : '') + '沉沒中';
   return sh.fate || '出局';
 }
