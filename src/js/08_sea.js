@@ -43,7 +43,7 @@ var VX = null;
 function vxInit() {
   var o = WX.vortex; if (!o) { VX = null; return; }
   var rv = o.r, rc = o.width * rv;
-  VX = { rv: rv, rc2: rc * rc, D: o.depth, V: o.v / 1.9438, IN: o.inflow, re: Math.min(o.eye, 0.8 * rv), pull: o.pull };
+  VX = { rv: rv, rc2: rc * rc, D: o.depth, V: o.v / 1.9438, IN: o.inflow, re: Math.min(o.eye, 0.8 * rv), pull: o.pull, grav: o.grav, suck: o.suck };
   VX.De = o.eyeDepth; VX.re2 = VX.re * VX.re;   // 眼的喉部：再往下 De（寬 ＝ 眼的半徑）
   VX.r0 = Math.max(o.start, 3 * VX.re);          // 開局那一圈（52_fleet.js vxPlace；Tim「起始可以在漩渦中」）：最近是眼的 3 倍（電腦避開眼的那一圈是 2.5 倍，54_helm.js vxAvoid）
 }
@@ -60,6 +60,18 @@ function vxDrag(sh, dt) {
 //   ＋ 眼的喉部（Tim 2026-10-17「眼可以更深一點(後台也可調參數)」）：−De·re²／(r² ＋ re²)，re ＝ 眼的半徑 ⇒ 中心總深 D ＋ De（預設 75 ＋ 60）、眼的邊上多 De／2。
 function vxH(x, z) { var r2 = x * x + z * z; return -VX.D * VX.rc2 / (r2 + VX.rc2) - VX.De * VX.re2 / (r2 + VX.re2); }
 /** 那一點的水流（m/s，[x, z]）；沒有漩渦 ⇒ null。逆時針（從上往下看）＝ 繞 +y 轉正角 ⇒ 切線 (z, −x)／r。 */
+/** 漩渦水面的坡度（∂h/∂x, ∂h/∂z；h 往中心凹 ⇒ 坡度朝外，−坡度 ＝ 往下坡 ＝ 往中心）。 */
+function vxGrad(x, z) { var r2 = x * x + z * z, a = VX.rc2 + r2, b = VX.re2 + r2, k = 2 * (VX.D * VX.rc2 / (a * a) + VX.De * VX.re2 / (b * b)); return [k * x, k * z]; }
+/** 下坡加速（Tim 2026-10-17：「是否可以讓往下時加速(重力位能) 往下時加速」）：重力沿著船頭方向的那一份 × grav（天氣設定頁）⇒ m/s²（正 ＝ 往前推：順著坡往下開變快、往上開變慢）。
+ *  31_drive.js driveStep 換成推力（× 質量）加進 Fx ⇒ 終端航速、加速度、不衝過頭都照同一套。 */
+function vxSlopeAcc(sh) { if (!VX || !(VX.grav > 0)) return 0; var g = vxGrad(sh.px, sh.pz), F = fwd(sh.yaw); return -VX.grav * G * (g[0] * F[0] + g[1] * F[2]); }
+/** 漩渦吸力（Tim：「同時漩渦要有吸力(參數可調)」）：重力沿著坡往下（往中心）的那一份 × suck ⇒ 加速度，積成船的漂移速度 sh.vxD（m/s，[x, z]），
+ *  水的阻力每秒消掉 VX_DRIFT_DRAG（⇒ 越陡拉得越快、但不會一直變快：終端 ≈ suck·g·坡度／0.3）。跟船頭方向無關（下坡加速另算）。31_sailing.js 加進 sh.vel。 */
+var VX_DRIFT_DRAG = 0.3;
+function vxDrift(sh, dt) {
+  var D = sh.vxD || (sh.vxD = [0, 0]), g = vxGrad(sh.px, sh.pz), a = (VX.suck > 0 ? VX.suck : 0) * G, f = Math.max(0, 1 - VX_DRIFT_DRAG * dt);
+  D[0] = (D[0] - a * g[0] * dt) * f; D[1] = (D[1] - a * g[1] * dt) * f; return D;
+}
 function vxFlow(x, z) {
   if (!VX) return null;
   var r = Math.hypot(x, z); if (r < 1e-3) return [0, 0];

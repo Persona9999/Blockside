@@ -411,6 +411,7 @@ function driveStep(sh, dt, vS, vB, deg, brake) {
     p.ang += p.rpm * dt * Math.PI / 30; if (p.ang > Math.PI) p.ang -= 2 * Math.PI; else if (p.ang < -Math.PI) p.ang += 2 * Math.PI;
     if (!p.m.spinB) { p.m.spv = p.m.pts.hub || p.p; p.m.sax = p.ax; p.m.sw = p.ang; }   // 螺旋槳寫了 meta spin ⇒ 照 26_spin.js 轉（TASK-0640）。modelLocal 的「繞 spv、沿 sax 轉 sw」（小艇擺動那一套；21_gunnery.js）
   }
+  if (VX) Fx += D.M * vxSlopeAcc(sh);                                    // 大漩渦的下坡加速（08_sea.js）：重力沿著船頭的那一份當成推力（t × m/s² ＝ kN）
   var vT = Fx >= 0 ? Math.sqrt(Fx / k) : -Math.sqrt(-Fx / k); D.vT = vT;   // 只靠這些推力最後會到的航速
   if (sh.spd0) { sh.spd = vT; sh.spd0 = false; }                          // 開局就在走
   var M = D.M * (DRV_INERTIA || 1);
