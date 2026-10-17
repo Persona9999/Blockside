@@ -166,7 +166,8 @@
   /* 手機橫拿（矮）：面板與控制列都縮 */
   @media (max-height:520px) and (min-width:761px){
     .sb{ width:50px; height:50px; } #fleetL{ max-height:calc(100vh - 170px); } #info{ transform:scale(.8); transform-origin:center top; }
-    #botC{ transform:translateX(-50%) scale(.82); transform-origin:center bottom; } .kb.hb{ width:52px; height:52px; } #tip{ display:none; } }
+    #botC{ transform:translateX(-50%) scale(.82); transform-origin:center bottom; } .kb.hb{ width:52px; height:52px; } #tip{ display:none; }
+    #navc{ width:83px; height:83px; } }   /* 羅盤跟直式一樣大（Tim 2026-10-17「橫版羅盤是否可以維持跟直版的一樣尺寸」「目前手機橫版的羅盤會變大」）：直式 68 px、不縮；這裡整團 scale .82 ⇒ 68 ÷ .82 ≈ 83 */
   /* 中等寬度（761–1100 px，平板、小筆電、手機橫拿）：一整排 15 顆 64 px ＋ 間距 8 ＝ 1072 px 放不下 ⇒ 圓鈕跟著畫面寬縮、間距 4（15 顆（各加 2 px 邊框）＋ 14 個間距 ＋ 左右各 12 ＋ 4 px 餘裕 ＝ 100vw；#keys 裡面也是間距 4）
      ⛔ 2026-10-15 1024 寬實測：沒有這段 ⇒ ◀⚓ 蓋住 🎥、彈種鈕被 ⚓▶ 蓋住 */
   @media (min-width:761px) and (max-width:1100px){ .kb.hb{ width:min(64px, calc((100vw - 114px) / 15)); height:min(64px, calc((100vw - 114px) / 15)); } .helm, #ctlRow, #ctl.panel, #keys{ gap:4px; } }
@@ -255,6 +256,10 @@
   /* 第一人稱（81_fps.js，TASK-0649；Tim 2026-10-16「下方操作面板隱藏 改為第一人稱用的操作面板」「只保留設定紐 暫停紐」）：
      HUD 全部藏起來，只留下方那一排的 ⏸ 與 ⚙（設定面板、說明照常打得開）；換上 #fpUI。⛔ hud() 照樣在跑（只是看不見）—— 行內的 display 用 !important 壓過 */
   #fpUI{ display:none; }
+  /* 瞄準圈（UI 層，61_hud.js aimRingUi）：translate 到瞄準點、自己往左上退一半；外圈＋中心十字（中間留空看得到對準的那一點）＋中心點，先畫一層暗邊再畫顏色 ⇒ 海上、船身上都看得清 */
+  #aimR{ position:absolute; left:0; top:0; width:48px; height:48px; margin:-24px 0 0 -24px; pointer-events:none; display:none; z-index:1; --c:#ff4a3d; }
+  #aimR.on{ display:block; } #aimR.ally{ --c:#5fb0ff; }   /* 瞄敵艦紅、瞄友艦藍（Tim 2026-10-17「瞄敵人時改紅色(友軍維持藍色)」） */
+  #aimR svg{ width:100%; height:100%; overflow:visible; } #aimR .o{ fill:none; stroke:rgba(0,0,0,.6); stroke-width:4.4; stroke-linecap:round; } #aimR .k{ fill:none; stroke:var(--c); stroke-width:2.2; stroke-linecap:round; } #aimR .d{ fill:var(--c); stroke:rgba(0,0,0,.6); stroke-width:1.2; }
   #fpCross{ display:none; position:absolute; left:50%; top:50%; width:6px; height:6px; margin:-3px 0 0 -3px; border-radius:50%; background:rgba(255,255,255,.8); box-shadow:0 0 0 1px rgba(0,0,0,.45); pointer-events:none; }   /* 滑鼠模式（抓住滑鼠）時的準心 */
   #stage.fpLock #fpCross, #stage.bld #fpCross{ display:block; }
   /* 建造模式（82_build.js，TASK-0648；Tim 2026-10-16「UI可以選取要擺放的物件(參考常見建造遊戲UI設計 可以給物件分類)」）：
@@ -306,6 +311,7 @@
   <div id="fleetR" class="hud fleet"></div>
   <div id="topC" class="hud"><div id="fps" class="hud"></div><div id="irow"><div id="icol"><div id="info" class="panel"></div><div id="msg"></div></div><canvas id="gmap"></canvas></div></div>
   <div id="teleBox" class="hud" style="display:none"><span class="kb tk" data-act="teleFwd" data-tip="俥鐘往前撥一格"><b>T</b>▲</span><canvas id="telc" title="俥鐘（點或拖）"></canvas><span class="kb tk" data-act="teleBack" data-tip="俥鐘往後撥一格"><b>G</b>▼</span></div>
+  <div id="aimR" aria-hidden="true"><svg viewBox="-24 -24 48 48"><g class="o"><circle r="16"/><path d="M-11 0H-4M4 0H11M0 -11V-4M0 4V11"/></g><g class="k"><circle r="16"/><path d="M-11 0H-4M4 0H11M0 -11V-4M0 4V11"/></g><circle class="d" r="1.6"/></svg></div><!-- 瞄準圈（UI 層，61_hud.js aimRingUi；在 HUD 底下） -->
   <div id="botC" class="hud"><div id="navBox"><div id="modeT"></div><div id="gunsB" class="gend"></div><div id="nav" class="panel"><canvas id="navc"></canvas><div id="navt"></div><div id="gunsL" class="gside"></div><div id="gunsR" class="gside"></div></div><div id="gunsA" class="gend"></div></div>
   <div id="ctlRow"><div id="helmL" class="helm"><span class="kb hb" data-act="ruddL" data-hold="1" data-tip="左舵"><b>A</b><i class="em">⬅️</i></span><span class="kb hb" data-act="sailDn" data-hold="1" data-tip="收帆"><b>S</b><i class="em">⛵⬇</i></span><span class="kb hb" data-act="sailUp" data-hold="1" data-tip="加帆"><b>W</b><i class="em">⛵⬆</i></span><span class="kb hb" id="sailT" data-kl="sailMode" data-tip="自動操舵：亮 ＝ 自動、暗 ＝ 手動 —— 點一下切換"><b>2</b><i class="em">🤖☸</i></span><span class="kb hb" data-act="ancP" id="ancP" data-tip="拋左錨"><b>Q</b><i class="em">◀⚓</i></span></div><div id="ctl" class="panel">
     <div id="keys"><span class="kb hb" data-act="cam" data-tip="換鏡頭"><b>C</b><i class="em">🎥</i></span><span class="kb hb" data-act="pause" id="pauseK" data-tip="停格"><b>P</b><i class="em">⏸</i></span><span class="kb hb" id="setB" data-kl="settings" data-tip="設定"><b>O</b><i class="em">⚙</i></span><span class="kb hb" data-act="ancAll" id="ancAll" data-tip="拋錨（雙錨）：兩邊都沒拋 ⇒ 一起拋；一邊在水裡 ⇒ 拋另一邊；兩邊都在水裡 ⇒ 起錨"><b>4</b><i class="em">⚓⚓</i></span></div>

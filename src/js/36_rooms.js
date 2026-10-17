@@ -38,11 +38,6 @@ var FURN = CFG.furniture || {}, ROOM_FN = CFG.rooms || {}, SHIP_ROOMS = {}, ROOM
 var ROOM_AISLE = 6;                                                     // 門口走道：格子的中心離門 0.6 m 以內 ⇒ 不能擺（⇒ 門口往裡一格、門的兩旁各多一格；⛔ 整格碰到就算 ⇒ 往裡兩格，1.5×2 m 的房間擺不下床）
 var ROOMFN_Q = Q.get('roomfn');                                        // 量的時候：?roomfn=medical ⇒ 每一型每一間都配這個類型、自動擺滿（蓋過存檔與設定檔）
 var ADMIN_ROOMS = Q.get('admin') === 'rooms';
-/** 設定後台的視窗：開這一頁的分頁（opener）＞ 嵌這一頁的那一頁（parent）；都沒有（直接開網址）⇒ null，什麼都不送。 */
-function admWin() {
-  try { if (window.opener && !window.opener.closed) return window.opener; } catch (e) { /* 跨來源 */ }
-  return window.parent !== window ? window.parent : null;
-}
 var ADMIN_DEF = Q.get('admin') === 'defaults';                      // 設定後台的「出廠預設值」：用細節設定頁編（71_input.js admDefUI）；跟 rooms 一樣不讀不存 localStorage
 /** 設定檔的預設 ⇒ { 房名: 擺法 }（格式跟存檔同一套：下面的 roomPlanParse，69_prefs.js 讀存檔也用它）。 */
 function roomPlanDefault(id) { var h = HULL_KNOWN.filter(function (x) { return x.id === id; })[0], d = {}; Object.keys((h && h.rooms) || {}).forEach(function (k) { var v = roomPlanParse(h.rooms[k]); if (v) d[k] = v; }); return d; }
@@ -335,37 +330,6 @@ function roomBuffNow(o) { return roomBuff(o.type, o.furn.filter(function (m) { r
 function roomCap(o) { var s = 0; o.furn.forEach(function (m) { if (m.alive && m.hold) s += m.hold * m.hp / m.hpMax; }); return s; }
 /** 打壞了幾成：現在的能力 ÷ 剛擺好時（0–1）。 */
 function roomEff(o) { var n = 0; o.furn.forEach(function (m) { n += m.hold; }); return o.type && n ? roomCap(o) / n : 0; }
-/** 除錯的外框：每一間 12 條邊（格的外緣：min .. max + 1），船的座標；畫法跟繩一樣（60_render.js）。 */
-function roomLines(sh) {
-  var L = [], c = [0.35, 0.95, 1];
-  sh.rooms.forEach(function (r) {
-    var a = r.min, b = [r.max[0] + 1, r.max[1] + 1, r.max[2] + 1], P = [];
-    for (var i = 0; i < 8; i++) P.push([i & 1 ? b[0] : a[0], i & 2 ? b[1] : a[1], i & 4 ? b[2] : a[2]]);
-    [[0, 1], [2, 3], [4, 5], [6, 7], [0, 2], [1, 3], [4, 6], [5, 7], [0, 4], [1, 5], [2, 6], [3, 7]].forEach(function (e) {
-      L.push(P[e[0]][0], P[e[0]][1], P[e[0]][2], c[0], c[1], c[2], P[e[1]][0], P[e[1]][1], P[e[1]][2], c[0], c[1], c[2]);
-    });
-  });
-  sh.roomLines = upload(sh.roomLines, new Float32Array(L), 6, [[0, 3, 0], [2, 3, 3]]);
-}
-/** 除錯的名字：每一間的中心投到畫面上（每一格 HUD 那一拍更新）。 */
-function roomLabels() {
-  var box = $('roomLbl');
-  if (!ROOMS_DBG) { if (box) box.innerHTML = ''; return; }
-  if (!box) { box = document.createElement('div'); box.id = 'roomLbl'; box.style.cssText = 'position:absolute;inset:0;pointer-events:none;overflow:hidden;font:11px sans-serif;color:#7ff;text-shadow:0 0 2px #000,0 0 2px #000'; $('stage').appendChild(box); }
-  var sb = stageBox(), W = sb.width, H = sb.height, vp = CAM.vp, html = '';   // 標籤放在 #stage 裡 ⇒ 照它的大小（安全區收過邊）
-  SHIPS.forEach(function (sh) {
-    if (sh.sunk || !sh.rooms) return;
-    sh.rooms.forEach(function (r) {
-      var w = M4.pt(sh.M, (r.min[0] + r.max[0] + 1) / 2, (r.min[1] + r.max[1] + 1) / 2, r.max[2] + 1);
-      var cx = vp[0] * w[0] + vp[4] * w[1] + vp[8] * w[2] + vp[12], cy = vp[1] * w[0] + vp[5] * w[1] + vp[9] * w[2] + vp[13], cw = vp[3] * w[0] + vp[7] * w[1] + vp[11] * w[2] + vp[15];
-      if (cw <= 0.1) return;
-      var sx = (cx / cw + 1) / 2 * W, sy = (1 - cy / cw) / 2 * H;
-      if (sx < -50 || sx > W + 50 || sy < -20 || sy > H + 20) return;
-      html += '<span style="position:absolute;left:' + sx.toFixed(0) + 'px;top:' + sy.toFixed(0) + 'px;transform:translate(-50%,-100%)">' + r.name.split('/').slice(-2).join('/') + (r.type ? '・' + ROOM_FN[r.type].name + ' ' + r.furn.filter(function (m) { return m.alive; }).length + '／' + r.furn.length : '') + '</span>';
-    });
-  });
-  if (box.innerHTML !== html) box.innerHTML = html;
-}
 /** 讀數（__game.rooms）：每艘每一間的名字、組裝件座標、尺寸（m）、類型、物品（還在／擺上；打壞的帶 ×）、buff、能力。 */
 function roomsInfo() {
   return SHIPS.map(function (sh) {

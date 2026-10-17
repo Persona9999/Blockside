@@ -74,8 +74,3 @@ function modeAim(foe, mode, rand) {
   }
   return { t: [R(WL_X0 + 60, WL_X1 - 60), CY, R(foe.T.geo.deckAim[0], foe.T.geo.deckAim[1])], ammo: P(0.3) ? 1 : 0 };   // 砲甲板（高度照船型，05_hull.js GEO0）
 }
-/** 細節設定的砲長選單：選項 ＝ 隨機 ＋ 各砲長（說明當 title）。 */
-function capOptions(sel, v) {
-  sel.innerHTML = '<option value="random">隨機</option>' + CAP_KEYS.map(function (k) { return '<option value="' + k + '" title="' + CAPTAINS[k].tip + '">' + CAPTAINS[k].name + '（' + CAPTAINS[k].tip + '）</option>'; }).join('');
-  sel.value = v;
-}
