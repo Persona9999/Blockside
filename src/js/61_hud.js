@@ -28,7 +28,7 @@ function hudNewsCrew(sh, c, dead, cause) {
   var cap = c.art === ART_CAPTAIN, how = dead ? (cause === '落水' || cause === '溺水' ? cause : '陣亡') : '受傷倒下', why = cause && cause !== '落水' && cause !== '溺水' ? '（' + cause + '）' : '';
   if (cap) { note(sh, '<b style="color:var(--gold)">船長' + how + '！</b>' + why, true); return; }
   if (c.role === ROLE.OFFICER || c.role === ROLE.HELM || c.role === ROLE.SURGEON) {   // 船醫（TASK-0676）：人少，當下報
-    var left = sh.crew.filter(function (o) { return o.role === c.role && able(o); }).length, nm = ROLE_NAME[c.role], off = c.role === ROLE.OFFICER;   // 軍官照階級報（大副、二副…；40_crew.js makeCrew）
+    var left = sh.crew.filter(function (o) { return o.role === c.role && crewAble(o); }).length, nm = ROLE_NAME[c.role], off = c.role === ROLE.OFFICER;   // 軍官照階級報（大副、二副…；40_crew.js makeCrew）
     note(sh, (off && c.rank !== undefined ? officerRank(c.rank) : nm) + how + why + (left ? '（還有 ' + left + ' 位' + (off ? '軍官' : '') + '）' : '　<b style="color:#ff9a7a">' + nm + '全倒' + (c.role === ROLE.OFFICER ? ' —— 沒人指揮，瞄準變散' : c.role === ROLE.SURGEON ? ' —— 醫療艙只剩預備水手' : '') + '</b>'), !left);
     return;
   }
@@ -145,7 +145,7 @@ function hudIcons() {
   L.forEach(function (q) { var el = $(q[0]), h = q[1] + '<i class="em">' + q[2] + '</i>'; if (el && el.innerHTML !== h) el.innerHTML = h; });
 }
 function sbNums(b, o) {
-  var cr = 0, gn = 0; o.crew.forEach(function (c) { if (able(c)) cr++; }); o.guns.forEach(function (g) { if (g.alive && !g.wet) gn++; });   // 泡水的不算（Tim 2026-10-14：只算還能用的）
+  var cr = 0, gn = 0; o.crew.forEach(function (c) { if (crewAble(c)) cr++; }); o.guns.forEach(function (g) { if (g.alive && !g.wet) gn++; });   // 泡水的不算（Tim 2026-10-14：只算還能用的）
   var k = cr + '/' + gn + (HUD_ART ? 'a' : ''); if (k === b.nk) return; b.nk = k;
   b.nl.innerHTML = sbIcon(0, '👤') + cr; b.nr.innerHTML = sbIcon(3, '💥') + gn;
   b.nl.title = '船員還能動的 ' + cr + ' 人'; b.nr.title = '還能用的砲 ' + gn + ' 門（沒被打掉、沒泡水）';
@@ -310,7 +310,7 @@ function gunHud(me) {
 }
 /** 補給一行：送藥手還能動的／全部、等火藥的砲幾門、取用點還剩幾桶。 */
 function supplyText(sh) {
-  var pm = sh.crew.filter(function (c) { return c.role === ROLE.POWDER; }), ok = pm.filter(able).length;
+  var pm = sh.crew.filter(function (c) { return c.role === ROLE.POWDER; }), ok = pm.filter(crewAble).length;
   var wait = sh.guns.filter(function (g) { return g.alive && g.needCart && !(g.box > 0) && gunRate(g) > 0; }).length;
   return '送藥手 ' + ok + '/' + pm.length + (wait ? '　<span style="color:#ffb35a">等火藥 ' + wait + ' 門</span>' : '');
 }
@@ -501,7 +501,7 @@ function ammoNext() {
   var L = ammoOf(SHIPS[PLAYER_I]); if (!L.length) return;
   var i = L.indexOf(AMMO_I); AMMO_I = L[(i + 1) % L.length]; ammoLabel();
 }
-function hud(dt) {
+function hudFrame(dt) {
   stepMsgs(dt);
   if (ROOMS_DBG) roomLabels();                                                   // 空艙房的名字（36_rooms.js；?rooms=1）：每一格跟著鏡頭
   aimRingUi();                                                                   // 瞄準圈（UI 層）：每一格跟著鏡頭

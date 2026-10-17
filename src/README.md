@@ -39,6 +39,9 @@
 #   建置前先擋兩件事（TASK-0671；src/js_globals.cjs 用 node 內建的 acorn 讀，沒有 node ⇒ 讀數寫「沒驗」照建）：
 #     · 頂層同名：同一個包（data-bundle）裡兩個地方定義同一個頂層名字 ⇒ 不建置、印出兩處的檔名與行號（後面的會靜悄悄蓋掉前面的；10-15 的 rndF）。不同包（遊戲／沙盒）的同名不算。
 #     · 沒宣告就寫入：寫入一個哪裡都沒宣告的名字（多半是忘了 var）⇒ 不建置。跟 window 上的名字（name、status…）同名也擋 —— 那種連嚴格模式都不報錯。
+#     · 頂層短名：4 字以內的小寫頂層名字不在 admin.py SHORT_OK（向量數學、gl／cv、亂數別名、事件、已帶模組字首的）⇒ 不建置 —— 加模組字首（simStep、crewHurt…）。
+#     · 用到改過名的：admin.py RENAMED 的舊名（step、hurt、able、rs…；2026-10-17 一次改的）還有人在用、沒被區域宣告遮住 ⇒ 不建置、印出新名字（別人的分支合進來時）。
+#   亂數一律走 00_core.js 的亂數工廠 rngMake(名字, salt)：開局 rngReset() 一起重設；⛔ 不要再複製一份演算法、自己記種子。
 #   成品記住來源（TASK-0674；10-16 共用工作區把別人改到一半的 js 包進成品，開砲後整場停住 —— 成品跟哪一版提交都對不上，可是看不出來）：
 #     建置最後一步把來源清單接在成品第 4 行 <meta charset> 後面（<script type="application/json" id="blockside-src">，同一行 ⇒ 行號不變，約 3.7 KB）：
 #     template.html 與它引用的每一支檔各記一個指紋（文字檔照 LF 算）；.vxk 不入版控 ⇒ 記 config/vxk_lock.json 裡那艘的指紋。建置程式（admin.py、vxk_inline.py）不算來源。

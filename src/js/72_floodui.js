@@ -42,13 +42,13 @@ function floodToggle() { if (FLX) floodClose(); else floodOpen(); }
 $('frzFlood').onclick = floodToggle; $('frzX').onclick = xrayToggle;
 $('frzGo').onclick = function () { PAUSED = false; frzShow(); };
 $('floodX').onclick = floodClose;
-function deg(a) { return (a * 57.2958).toFixed(1) + '°'; }
+function fuDeg(a) { return (a * 57.2958).toFixed(1) + '°'; }
 /** 填進水細節頁：兩艘各一段，畫完剖面。 */
 function floodPanel() {
   var box = $('floodBody');
   box.innerHTML = SHIPS.map(function (sh, k) {
     var fl = sh.fl, who = (k === PLAYER_I ? '我艦' : sh.team === playerTeam() ? '友艦' : '敵艦') + ' ' + sh.name, lines;
-    var tilt = '橫傾 ' + deg(sh.rollA) + (sh.rollA > 0.002 ? '（往' + sideName('S') + '）' : sh.rollA < -0.002 ? '（往' + sideName('P') + '）' : '') + '・縱傾 ' + deg(sh.pitchA) + (sh.pitchA < -0.002 ? '（船頭低）' : sh.pitchA > 0.002 ? '（船尾低）' : '');
+    var tilt = '橫傾 ' + fuDeg(sh.rollA) + (sh.rollA > 0.002 ? '（往' + sideName('S') + '）' : sh.rollA < -0.002 ? '（往' + sideName('P') + '）' : '') + '・縱傾 ' + fuDeg(sh.pitchA) + (sh.pitchA < -0.002 ? '（船頭低）' : sh.pitchA > 0.002 ? '（船尾低）' : '');
     if (!fl || sh.broken) {
       lines = '<div>' + (sh.broken ? '斷成兩截 ⇒ 照公式（一定沉）' : '公式模式（物理效果「進水」選粒子才看得到艙內的水）') + '</div>' +
         '<div>水線下打掉 ' + (sh.inflow || 0).toLocaleString() + ' 格・下沉 ' + sh.sink.toFixed(2) + ' m・' + tilt + '</div>';

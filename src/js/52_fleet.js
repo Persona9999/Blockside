@@ -39,7 +39,7 @@ function cmdView(side) {
   var W = norm(WIND);
   return { t: SIMT, side: side, wind: [W[0], W[2]], R: aiRange(), gauge: CMD_GAUGE[side], signal: sigFor(side), ships: SHIPS.map(function (s) {
     return { id: s.i, team: s.team, x: s.px, z: s.pz, yaw: s.yaw, spd: s.spd, hp: 1 - clamp(s.sink / 4.2, 0, 1), guns: s.guns.length ? (s.gunsAlive === undefined ? s.guns.length : s.gunsAlive) / s.guns.length : 0,
-      crew: s.crew0 ? s.crew.filter(able).length / s.crew0 : 0, mass: s.mass0 || shipT(s), len: (s.T.wl1 - s.T.wl0) * S, out: isOut(s), cmd: !(s.i === PLAYER_I && MODE !== 'eve'), tgt: s.foe ? s.foe.i : null,
+      crew: s.crew0 ? s.crew.filter(crewAble).length / s.crew0 : 0, mass: s.mass0 || shipT(s), len: (s.T.wl1 - s.T.wl0) * S, out: isOut(s), cmd: !(s.i === PLAYER_I && MODE !== 'eve'), tgt: s.foe ? s.foe.i : null,
       lerr: s.lineErr === undefined ? null : s.lineErr, llag: s.lineLag === undefined ? null : s.lineLag, larc: s.lineArc === undefined ? null : s.lineArc, loff: s.lineOff === undefined ? null : s.lineOff };
   }) };
 }

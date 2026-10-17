@@ -231,7 +231,7 @@ function drawModels(prog, near) {
       gl.bindVertexArray(me.vao); gl.drawArrays(gl.TRIANGLES, 0, me.n);
     });
     (sh.decos || []).forEach(function (d) {                             // 裝飾（TASK-0682；畫質「裝飾」關著 ⇒ 載入時就沒有）：腳下那一格被打掉 ⇒ 不畫
-      var me = sh.T.meshes[d.mesh]; if (!me || (d.foot >= 0 && !gp(sh.grid, d.foot))) return; if (!me.vao) meshGpu(me);
+      var me = sh.T.meshes[d.mesh]; if (!me || (d.foot >= 0 && !hullGp(sh.grid, d.foot))) return; if (!me.vao) meshGpu(me);
       gl.uniformMatrix4fv(prog.u.uModel, false, M4.mul(sh.M, trans(d.origin[0], d.origin[1], d.origin[2])));
       if (prog.u.uGlow) gl.uniform1f(prog.u.uGlow, isLamp(d) ? lanternK(d) : 0);
       gl.bindVertexArray(me.vao); gl.drawArrays(gl.TRIANGLES, 0, me.n);

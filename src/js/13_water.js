@@ -6,7 +6,7 @@
 //     推與拍都留白沫 ⇒ 船頭兩道往外散的白沫線。
 //   · 船尾：照航速翻白沫（會轉的一片）、冒一點水滴。
 //   · 擦撞（31_sailing.js collide）、砲彈與碎片與落水的人（12_effects.js splash）、碎木落水（stepDebris）。
-// ⛔ 只給人看：自己的亂數 rndW（開局跟 rs 一起重設，70_flow.js）、不回寫任何模擬狀態 ⇒ 開與關同一個種子戰局逐字相同。
+// ⛔ 只給人看：自己的亂數 rndW（00_core.js 亂數工廠，開局 rngReset 一起重設）、不回寫任何模擬狀態 ⇒ 開與關同一個種子戰局逐字相同。
 //   開著的時候，原本的航跡與水花（spawnPt）照樣由呼叫端抽完 rnd()、只是不放進去（PT_MUTE）⇒ 戰局的亂數順序不變。
 // 關（09_phx.js「船邊水花」第 0 檔）⇒ 原本的樣子：航跡與水花照舊是 spawnPt 的點。
 // 分級：ws／wf 水滴與白沫的上限、k 生的量、pts 每舷幾點、life 白沫活多久的倍率。
@@ -17,10 +17,8 @@ var WF = { n: 0, p: new Float32Array(WF_MAX * 2), v: new Float32Array(WF_MAX * 2
   a: new Float32Array(WF_MAX), rot: new Float32Array(WF_MAX), w: new Float32Array(WF_MAX), seed: new Float32Array(WF_MAX) };
 var WP_HIDE = false, WFBUF = new Float32Array(WF_MAX * 8), WP_STAT = { spray: 0, foam: 0, src: {} }, FOAMG = null;
 PBUF = new Float32Array((PMAX + WS_MAX + 64) * 9);          // 點精靈的緩衝多留水滴的份（12_effects.js；60_render.js 一起畫）
-var WP_SRC = '', RSW0 = 0x1B873593, rsW = SEED ^ RSW0, PT_MUTE = false;   // PT_MUTE：spawnPt 收到也不放（亂數呼叫端已經抽完）
-function rndW() { rsW |= 0; rsW = rsW + 0x6D2B79F5 | 0; var t = Math.imul(rsW ^ rsW >>> 15, 1 | rsW); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }
-function rgW(a, b) { return a + (b - a) * rndW(); }
-function gsW() { var u = rndW() || 1e-9, v = rndW(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(6.2831853 * v); }
+var WP_SRC = '', PT_MUTE = false;   // PT_MUTE：spawnPt 收到也不放（亂數呼叫端已經抽完）
+var RNG_W = rngMake('water', 0x1B873593), rndW = RNG_W.f, rgW = RNG_W.r, gsW = RNG_W.g;   // 00_core.js 亂數工廠
 function wpLv() { return WP_LV[PHX.water] || null; }
 function wsAdd(x, y, z, vx, vy, vz, life, s, a) {
   var L = wpLv(); if (!L || WS.n >= L.ws) return;

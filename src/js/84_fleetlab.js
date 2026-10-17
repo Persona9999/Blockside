@@ -103,7 +103,7 @@ function flabPump() {
   var ev = everySteps(0.5);
   while (performance.now() - now < 12) {
     if (FLAB.speed !== Infinity && !batch) { if (M.acc < DT) break; M.acc -= DT; }
-    step(); M.steps++;
+    simStep(); M.steps++;
     if (M.steps % ev === 0) { flabRec(M); if (flabCheck(M)) { flabFinish(M); return; } }
   }
   var rt = (performance.now() - (M.rateT || 0)) / 1000; if (!M.rateT || rt > 1) { if (M.rateT) FLAB.simRate = (SIMT - M.rateS) / rt; M.rateT = performance.now(); M.rateS = SIMT; }   // 實際倍速（模擬秒 ÷ 真實秒，每秒量一次；⛔ 放在畫面那一格 ⇒ 分頁在背景時不畫、讀數停在 0）

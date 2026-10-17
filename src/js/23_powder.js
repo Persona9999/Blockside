@@ -73,7 +73,7 @@ function kegBoom(sh, m) {
   m.alive = false;
   var f = blastRoll(), k = blastK() * Math.cbrt(f), w = M4.pt(sh.M, m.c[0], m.c[1], m.c[2]), r = shatter(sh, m.c, [0, 0, 1], KEG_R * k, [0, 6, 0], 220, 1);
   explode(w, sh, r.n);
-  hurt(sh, m.c, KEG_REACH * 0.4 * k, KEG_REACH * k, null, '殉爆', 300 * BLAST_K * f);
+  crewHurt(sh, m.c, KEG_REACH * 0.4 * k, KEG_REACH * k, null, '殉爆', 300 * BLAST_K * f);
   var reach = KEG_REACH * k;
   sh.models.forEach(function (o) {                                    // 旁邊的模型（火藥桶 ⇒ 連鎖；砲 ⇒ 扣血或飛出去）
     if (!o.alive || o === m) return;
@@ -99,7 +99,7 @@ function magBoom(sh, mag) {
   sfx('blast', w, 2); sfx('creak', w, 1.6);
   slowKick(sh, w, R);              // 殉爆的慢動作與特寫（73_slowmo.js；只動畫面的時間與鏡頭）
   // 爆心附近：人、模型
-  hurt(sh, c, R * 0.85, R * 1.4, null, '殉爆', 1500 * BLAST_K * f);
+  crewHurt(sh, c, R * 0.85, R * 1.4, null, '殉爆', 1500 * BLAST_K * f);
   sh.models.forEach(function (o) {
     if (!o.alive) return;
     var d = len(sub(o.c, c)); if (d > R * 1.3) return;
@@ -127,7 +127,7 @@ function blastNear(src, w, R, f) {
     var B = o.T.base, cc = M4.pt(o.M, B.sx / 2, B.sy / 2, B.sz / 2), rb = 0.5 * S * Math.hypot(B.sx, B.sy, B.sz);
     if (len(sub(cc, w)) > rb + reach) continue;
     var c = toLocal(o, w);
-    hurt(o, c, R * 0.85, R * 1.4, null, '殉爆波及', 1500 * BLAST_K * f);
+    crewHurt(o, c, R * 0.85, R * 1.4, null, '殉爆波及', 1500 * BLAST_K * f);
     o.models.forEach(function (m) {
       if (!m.alive) return;
       var d = len(sub(m.c, c)); if (d > R * 1.3) return;
@@ -364,7 +364,7 @@ function makeMonkeys(sh, crew, taken, add) {
 /** 別的送藥手已經要送去 g 的份數（在去拿、在拿、拿著送的；拿著的照手上的份數）。 */
 function incoming(sh, c, g) {
   var n = 0;
-  sh.crew.forEach(function (o) { if (o !== c && o.pm && o.pm.g === g && o.pm.st !== 'idle' && able(o)) n += o.pm.st === 'carry' ? o.cart || 0 : CARRY_N; });
+  sh.crew.forEach(function (o) { if (o !== c && o.pm && o.pm.g === g && o.pm.st !== 'idle' && crewAble(o)) n += o.pm.st === 'carry' ? o.cart || 0 : CARRY_N; });
   return n;
 }
 /** 下一份送去哪門：同一層、走路格上走得到（砲塔那一圈隔開的不算）、還在、藥箱（算上別人已經在送的）沒滿、是自己的或送藥手倒了的砲；先送等著的、空的、有人操作的、自己的、近的。
@@ -372,7 +372,7 @@ function incoming(sh, c, g) {
 function needGun(sh, c) {
   var best = null, bs = 1e9;
   sh.guns.forEach(function (g) {
-    if (!g.alive || !g.drop || gunDeck(g) !== c.deck || g.box >= BOX_N || (g.pm && g.pm !== c && able(g.pm))) return;
+    if (!g.alive || !g.drop || gunDeck(g) !== c.deck || g.box >= BOX_N || (g.pm && g.pm !== c && crewAble(g.pm))) return;
     if (g.box + incoming(sh, c, g) >= BOX_N) return;
     if (!navReach(sh, c.pos, g.drop)) return;                          // 照直線走（monkeyTo）⇒ 隔著砲塔那一圈的砲不送（42_hands.js；Tim 2026-10-17「水手會穿進去」）
     var s = g.box * 10 + (g.needCart ? 0 : 5) + (g.pm === c ? 0 : 3) + (gunRate(g) > 0 ? 0 : 20) + Math.abs(g.muz[0] - c.pos[0]) / 40;
@@ -400,7 +400,7 @@ function stationPick(sh, deck, g) {
 function slotFor(sh, c, st) {
   var best = st.at, bs = 1e9;
   (st.slots || [st.at]).forEach(function (s) {
-    var n = sh.crew.filter(function (o) { return o !== c && o.pm && o.pm.src === st && o.pm.at === s && (o.pm.st === 'fetch' || o.pm.st === 'fill') && able(o); }).length;
+    var n = sh.crew.filter(function (o) { return o !== c && o.pm && o.pm.src === st && o.pm.at === s && (o.pm.st === 'fetch' || o.pm.st === 'fill') && crewAble(o); }).length;
     var v = n * 1e4 + Math.hypot(s[0] - c.pos[0], s[1] - c.pos[1]);
     if (v < bs) { bs = v; best = s; }
   });
@@ -460,7 +460,7 @@ function cartBoom(sh, L, n, what) {
   sh.cartN = (sh.cartN || 0) + 1;                                       // 讀數：藥包炸了幾次
   var f = blastRoll(), k = blastK() * Math.cbrt(n * f), w = M4.pt(sh.M, L[0], L[1], L[2]), r = shatter(sh, L, [0, 0, 1], 3.5 * k, [0, 4, 0], 60, 1), reach = 18 * k;
   explode(w, sh, r.n);
-  hurt(sh, L, 8 * k, 22 * k, null, '火藥', 200 * BLAST_K * f * Math.cbrt(n));
+  crewHurt(sh, L, 8 * k, 22 * k, null, '火藥', 200 * BLAST_K * f * Math.cbrt(n));
   sh.models.forEach(function (o) {
     if (!o.alive) return;
     var d = len(sub(o.c, L)); if (d > reach) return;

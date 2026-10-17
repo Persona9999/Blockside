@@ -1,5 +1,5 @@
 // ───────────────────────── 輸入 ─────────────────────────
-var drag = null, PTRS = new Map(), PINCH = null;          // PTRS：按著的指頭（觸控）；兩指（PINCH）⇒ 張合 ＝ 縮放、一起拖 ＝ 平移（同右鍵拖曳；Tim 2026-10-13），不轉鏡頭也不瞄準
+var inDrag = null, PTRS = new Map(), PINCH = null;          // PTRS：按著的指頭（觸控）；兩指（PINCH）⇒ 張合 ＝ 縮放、一起拖 ＝ 平移（同右鍵拖曳；Tim 2026-10-13），不轉鏡頭也不瞄準
 function pinchD() { var a = Array.from(PTRS.values()); return Math.hypot(a[0].x - a[1].x, a[0].y - a[1].y) || 1; }
 function pinchM() { var a = Array.from(PTRS.values()); return { x: (a[0].x + a[1].x) / 2, y: (a[0].y + a[1].y) / 2 }; }
 /** 平移（右鍵拖曳、兩指拖曳）：鏡頭照原本的（Tim 2026-10-14：⛔ 以前一拖就換成自由鏡頭）。dx／dy ＝ 螢幕像素。
@@ -15,9 +15,9 @@ cv.addEventListener('contextmenu', function (e) { e.preventDefault(); });
 document.addEventListener('contextmenu', function (e) { if (!/^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)) e.preventDefault(); });   // 面板、按鈕、說明上長按也不跳選單（輸入框照常）
 cv.addEventListener('pointerdown', function (e) {
   cv.setPointerCapture(e.pointerId); PTRS.set(e.pointerId, { x: e.clientX, y: e.clientY });
-  if (PTRS.size === 2) { var m0 = pinchM(); PINCH = { d: pinchD(), dist: CAM.dist, x0: m0.x, y0: m0.y, mx: m0.x, my: m0.y, moved: false }; drag = null; return; }
+  if (PTRS.size === 2) { var m0 = pinchM(); PINCH = { d: pinchD(), dist: CAM.dist, x0: m0.x, y0: m0.y, mx: m0.x, my: m0.y, moved: false }; inDrag = null; return; }
   if (PTRS.size > 2) return;
-  drag = { x: e.clientX, y: e.clientY, b: e.button, moved: false };
+  inDrag = { x: e.clientX, y: e.clientY, b: e.button, moved: false };
 });
 cv.addEventListener('pointermove', function (e) {
   if (PTRS.has(e.pointerId)) PTRS.set(e.pointerId, { x: e.clientX, y: e.clientY });
@@ -29,22 +29,22 @@ cv.addEventListener('pointermove', function (e) {
     PINCH.moved = true; panBy(m.x - PINCH.mx, m.y - PINCH.my); PINCH.mx = m.x; PINCH.my = m.y;
     return;
   }
-  if (!drag) return;
-  var dx = e.clientX - drag.x, dy = e.clientY - drag.y;
-  if (!drag.moved && Math.hypot(dx, dy) < 5) return;
-  drag.moved = true; drag.x = e.clientX; drag.y = e.clientY;
+  if (!inDrag) return;
+  var dx = e.clientX - inDrag.x, dy = e.clientY - inDrag.y;
+  if (!inDrag.moved && Math.hypot(dx, dy) < 5) return;
+  inDrag.moved = true; inDrag.x = e.clientX; inDrag.y = e.clientY;
   if (FP.on) { fpLook(dx, dy); return; }                             // 第一人稱：拖曳 ＝ 轉頭（81_fps.js）
-  if (drag.b === 2) panBy(dx, dy);
+  if (inDrag.b === 2) panBy(dx, dy);
   else { if (CAM.mode === 1) CAM.mode = 0; if (CAM.mode === 4) CAM.aoff += dx * 0.006; else CAM.yaw += dx * 0.006; CAM.pitch = clamp(CAM.pitch + dy * 0.005, 0.02, 1.45); }
 });
 function ptrEnd(e) { PTRS.delete(e.pointerId); if (PTRS.size < 2) PINCH = null; }
 cv.addEventListener('pointerup', function (e) {
-  if (drag && !drag.moved && drag.b === 0 && RUNNING && !PINCH && !FP.on) pick(e.clientX, e.clientY);   // 第一人稱：點一下不瞄準
-  drag = null; ptrEnd(e);
+  if (inDrag && !inDrag.moved && inDrag.b === 0 && RUNNING && !PINCH && !FP.on) inPick(e.clientX, e.clientY);   // 第一人稱：點一下不瞄準
+  inDrag = null; ptrEnd(e);
 });
-cv.addEventListener('pointercancel', function (e) { drag = null; ptrEnd(e); });
+cv.addEventListener('pointercancel', function (e) { inDrag = null; ptrEnd(e); });
 cv.addEventListener('wheel', function (e) { e.preventDefault(); if (FP.on) return; CAM.dist = clamp(CAM.dist * Math.pow(1.0015, e.deltaY), 12, 900); }, { passive: false });
-function pick(cx, cy) {
+function inPick(cx, cy) {
   var r = cv.getBoundingClientRect(), nx = (cx - r.left) / r.width * 2 - 1, ny = 1 - (cy - r.top) / r.height * 2;
   var a = M4.pt(CAM.inv, nx, ny, -1), bq = CAM.inv, w0 = bq[3] * nx + bq[7] * ny + bq[11] * -1 + bq[15], w1 = bq[3] * nx + bq[7] * ny + bq[11] + bq[15];
   var p0 = mul(M4.pt(CAM.inv, nx, ny, -1), 1 / w0), p1 = mul(M4.pt(CAM.inv, nx, ny, 1), 1 / w1), d = norm(sub(p1, p0));

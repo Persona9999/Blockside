@@ -12,10 +12,8 @@
 // ⛔ 只給人看：自己的亂數 rndC（開局重設，70_flow.js）、不碰 rnd()、不回寫模擬 ⇒ 開或關同一個種子戰局逐字相同。
 //   原本的點精靈布片（21_gunnery.js dropSail／shredSail）在布片接手時照樣抽完 rnd()、只是不放。
 var SH_TRI = 10, SH_KW = 3, SH_LIFE = 40, SH_WET = 3, SH_SINK = 0.3;
-var RSC0 = 0x2B79F5A1, rsC = SEED ^ RSC0, SH_STAT = { cut: 0, tris: 0 }, SHT = null;
-function rndC() { rsC |= 0; rsC = rsC + 0x6D2B79F5 | 0; var t = Math.imul(rsC ^ rsC >>> 15, 1 | rsC); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }
-function rgC(a, b) { return a + (b - a) * rndC(); }
-function gsC() { var u = rndC() || 1e-9, v = rndC(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(6.2831853 * v); }
+var SH_STAT = { cut: 0, tris: 0 }, SHT = null;
+var RNG_C = rngMake('cloth', 0x2B79F5A1), rndC = RNG_C.f, rgC = RNG_C.r, gsC = RNG_C.g;   // 布片（00_core.js 亂數工廠）
 /** tearCloth 撕開之後：這一發新藏起來的三角形（old ＝ 撕之前的 c.tv）切成布片。b ＝ 砲彈（世界座標的速度）。 */
 function shredCut(sh, c, old, b) {
   var lv = rigLv(); if (!lv.shred || !sh.shreds) return;

@@ -89,7 +89,7 @@ function sideGuns(sh, side) { return sh.guns.filter(function (g) { return g.aliv
 // 航速（TASK-0630，31_drive.js）：這裡照舊算「每個動力單獨推動時的航速」—— 帆（滿帆、完好、這個風向）與額外動力（cfg.base 節）——
 //   driveStep 把它們換成推力（k·v²）、扣掉水阻、照實際質量（含進水）算加速度；最高航速 ＝ √(帆² ＋ 額外動力²) 跟以前一樣，變的是加減速與受損的偏轉。
 //   額外動力照俥鐘（sh.power ＝ 航速的比例，−1…1）；倒退時舵效反過來（像倒車）。電腦的船一直全速前進（跟以前一樣）；停船（6）照舊停。
-function sail(sh, dt) {
+function sailShip(sh, dt) {
   var F = fwd(sh.yaw), W = norm(WIND), deg = Math.acos(clamp(dot(F, W), -1, 1)) * 57.2958;
   var UP = sh.cfg.upwind || 1, dU = UP === 1 || deg <= 90 ? deg : 90 + (deg - 90) / UP;   // 逆風性能：迎風那一半的角度壓縮（1.25 ⇒ 風從船頭 52.5° 才開始失速、45° 跑得像 36° 的船…）；1 ⇒ 一位元都不動
   sh.sailFrac = sh.sails.reduce(function (a, s) { return a + (s.dead || s.furled ? 0 : s.area * s.hp / s.hpMax); }, 0) / sh.sailArea0;   // 被打中還沒掉的帆：照剩下的血量算推力
@@ -333,7 +333,7 @@ function crushAfter(sh, rem, dW, e, other, v, t0, left) {
     c = [c[0] / n + 0.5, c[1] / n + 0.5, c[2] / n + 0.5];
     for (i = 0; i < rem.length; i += 4) ext = Math.max(ext, Math.hypot(rem[i] + 0.5 - c[0], rem[i + 1] + 0.5 - c[1], rem[i + 2] + 0.5 - c[2]));
     var dL = norm(M4.dir(sh.inv, dW[0], 0, dW[2])), R = Math.max(2, ext), k2 = clamp(Math.sqrt(e / 1000), 0.3, 1.5);
-    hurt(sh, c, R * 0.8, R * 1.6, dL, '碰撞', 140 * k2);
+    crewHurt(sh, c, R * 0.8, R * 1.6, dL, '碰撞', 140 * k2);
     sh.models.forEach(function (m) { if (!m.alive) return; var d = len(sub(m.c, c)); if (d < R * 1.5) damageModel(sh, m, mul(dW, 6), 120 * k2 * (1 - 0.6 * d / (R * 1.5))); });
   }
   var t = massLost(sh) - t0;

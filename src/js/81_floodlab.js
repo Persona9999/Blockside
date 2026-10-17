@@ -63,7 +63,7 @@ function floodLab(o) {
   var sh = SHIPS[0], i;
   SHIPS.forEach(function (s2) { s2.sailSet = 0; s2.power = 0; s2.manual = true; s2.rudder = 0; });
   if (SHIPS[1]) { SHIPS[1].px += 3000; SHIPS[1].pz += 3000; }
-  for (i = 0; i < Math.round(LAB_SETTLE / DT); i++) step();
+  for (i = 0; i < Math.round(LAB_SETTLE / DT); i++) simStep();
   sh.M = shipMatrix(sh); sh.inv = M4.inv(sh.M); sh.center = shipCenter(sh);
   var out = { hull: sh.T.id, seed: SEED, lv: FLOOD_LV, c: sh.fl ? sh.fl.F.c : null, sea: SEA_K, o: { dur: o.dur, every: o.every, cut: o.cut, deck: o.deck, xray: !!o.xray }, holes: [], rows: [] };
   if (!sh.fl) { out.err = '進水是公式模式（物理效果的「進水」第 0 檔）⇒ 沒有艙內的水可畫；網址加 phx=mid／high／full'; SEA_K = seaK; return out; }
@@ -83,7 +83,7 @@ function floodLab(o) {
   out.trace = [];                                                       // 每秒一筆：[t, 水 m³, 進 m³/s, 出 m³/s, 艙內最高水面 − 海面 m, 高出海面的水 m³, 下沉 m]（flabEx）
   for (var k = 0; k <= steps; k++) {
     var focusAt = null;
-    if (k) { for (i = 0; i < n; i++) { step(); if (i % 30 === 29) remesh(Infinity); if (i % tn === tn - 1) { var ex = flabEx(sh); out.trace.push([+SIMT.toFixed(1), +sh.fl.vol.toFixed(1), +sh.fl.inQ.toFixed(2), +sh.fl.outQ.toFixed(2), ex.max, ex.vol, +sh.sink.toFixed(2)]); } } }
+    if (k) { for (i = 0; i < n; i++) { simStep(); if (i % 30 === 29) remesh(Infinity); if (i % tn === tn - 1) { var ex = flabEx(sh); out.trace.push([+SIMT.toFixed(1), +sh.fl.vol.toFixed(1), +sh.fl.inQ.toFixed(2), +sh.fl.outQ.toFixed(2), ex.max, ex.vol, +sh.sink.toFixed(2)]); } } }
     remesh(Infinity); CAM.snap = true; camUpdate(1); render();
     if (o.focus === 'step' && sh.fl.mesh && sh.fl.mesh.stat) {             // 對準水面差最大的那條兩池交界（高的那一邊），拉近再拍
       var E = sh.fl.mesh.stat.map.edge.filter(function (e) { return e[3] === 1 && e[4] > 0; }).sort(function (a, b) { return b[4] - a[4]; })[0];

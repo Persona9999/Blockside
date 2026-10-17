@@ -19,9 +19,8 @@ var FL_LV = [null, { c: 10, ev: 4, jn: 300, vj: 0.25, dn: 120 }, { c: 7, ev: 2, 
 // FL_GM 穩心高（Tim 2026-10-13：傾斜收一點）：1.1 m（巡防艦的量級）⇒ 水往低的那一舷跑（自由液面），一舷有洞積 200 噸就斜到上限 12°、兩舷都有洞也一樣；
 //   4 m ⇒ 一舷有洞 180／380／600／840 噸時 1.9°／4.7°／8.4°／12°，兩舷都有洞 1,140 噸才 3.7°（沙盒 60 秒量的；2 m、3 m 還是很快頂到上限，5 m 一舷 830 噸才 8.3°）。
 var FL_C = 1.0, FL_PUMP = 0.3, FL_GM = 4, FL_GML = 60, FL_TAU = 2;
-var FL_HIDE = false, FLOOD_LV = 0, RSF0 = 0x3C6EF372, rsF = SEED ^ RSF0;
-function rndF() { rsF |= 0; rsF = rsF + 0x6D2B79F5 | 0; var t = Math.imul(rsF ^ rsF >>> 15, 1 | rsF); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }
-function rgF(a, b) { return a + (b - a) * rndF(); }
+var FL_HIDE = false, FLOOD_LV = 0;
+var RNG_F = rngMake('flood', 0x3C6EF372), rndF = RNG_F.f, rgF = RNG_F.r;   // 進水粒子（00_core.js 亂數工廠）
 /** 船型 T 的水格（邊長 c 格；第一次用到時算，掛在 T.flc[c]）：兩舷船殼最外那一格（yP／yM，每個 (x, z)）、每格能裝多少（cap：艙內空的比例）、往下通多少（pd：最密那一層開著的比例）。
  *  照船殼 T.hullG（砲帶的裝甲拆掉之後，24_armor.js；沒有裝甲 ＝ T.base）：⛔ 照含裝甲的 ⇒ 砲塔圓筒當成外殼，sh.grid 裡沒有它 ⇒ flHoleRedo 一量就是破口。 */
 function flType(T, c) {
@@ -200,13 +199,13 @@ function flDeposit(sh, fl, i, v) {
 /** 斷成兩截、開始沉的船（Tim 2026-10-15：「斷成兩截、開始沉的船也繼續算進水給人看（只改畫面與讀數，沉的速度照舊），沉完就停」）：
  *  照樣跑 floodStep（水灌進去、讀數有積水與破口），但 ——
  *  · 下沉照舊（32_hull.js：開始沉之後照公式、不看水）；傾斜照「開始沉那一刻」的水（fl.keep，floodTilt 讀它）⇒ 船的動作一位元都不變；
- *  · 亂數用這艘自己的一串（fl.rsV）⇒ 不動到全場共用的 rsF，別艘的進水照舊；
+ *  · 亂數用這艘自己的一串（fl.rsV）⇒ 不動到全場共用的那一條（RNG_F），別艘的進水照舊；
  *  · 沉沒（sh.sunk）就不再跑（⛔ 以前照算 ⇒ 沉掉的船積到 8 萬噸、白耗 CPU）。 */
 function floodVis(sh, fl, dt) {
   if (!fl.keep) fl.keep = { vol: fl.vol, comX: fl.comX, comY: fl.comY };
-  var r = rsF; rsF = fl.rsV === undefined ? (SEED ^ RSF0 ^ Math.imul(0x9E3779B9, sh.i + 1)) : fl.rsV;
+  var r = RNG_F.s; RNG_F.s = fl.rsV === undefined ? (SEED ^ RNG_F.salt ^ Math.imul(0x9E3779B9, sh.i + 1)) : fl.rsV;
   var t0 = DEBUG ? performance.now() : 0; floodStep(sh, fl, dt); if (DEBUG) { FL_VISMS += performance.now() - t0; FL_VISN++; }
-  fl.rsV = rsF; rsF = r; fl.vis = true;
+  fl.rsV = RNG_F.s; RNG_F.s = r; fl.vis = true;
 }
 var FL_VISMS = 0, FL_VISN = 0;
 /** 抽水的倍率（TASK-0604）：那一型的基礎抽水量（噸／分，cfg.pump）÷ PUMP_REF。⛔ 沒有 pump（舊存檔、外部傳進來的 cfg）⇒ 1（照以前）。 */

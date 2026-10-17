@@ -17,7 +17,7 @@ function shipCheck(id) {
     var sh = SHIPS[0], T = sh.T, NV = sh.nav;
     // ── 開場那一刻（還沒跑）──
     var float0 = ropesFloating(sh).map(function (f) { return f.name + '#' + f.end + '（' + f.why + '）'; });
-    for (var i = 0, n = Math.round(SC_SECS / DT); i < n; i++) step();
+    for (var i = 0, n = Math.round(SC_SECS / DT); i < n; i++) simStep();
     RUNNING = false;
     R.info = { name: T.name, guns: sh.guns.length, crew: sh.crew.length, models: sh.models.length, ropes: sh.ropes.length, sails: sh.sails.filter(function (s) { return !(s.meta && s.meta.team); }).length, teamFlags: sh.sails.filter(function (s) { return s.meta && s.meta.team; }).length,   // 作品的帆／遊戲加的陣營旗分開數（77_colours.js；⛔ 混在一起 ⇒ 夜燈號 vxk 12 面、報告寫 15，basecamp 2026-10-15 問）
     masts: sh.masts.length, mags: sh.mags.length,

@@ -16,14 +16,16 @@ function names(p, out) {
 // --writes：這幾支檔是同一個包（同一個閉包）⇒ 另外列「寫入一個哪裡都沒宣告的名字」（區域變數忘了 var：嚴格模式下執行到才報錯；
 //   寫到 window 本來就有的名字（name、status…）連錯都不報）。範圍照函式算（參數、var／let／const／class、函式名、catch 參數都算進那個函式；
 //   區塊範圍當成函式範圍 ⇒ 只會少報、不會亂報）；最外層 ＝ 整個包的頂層名字。
+// --retired a,b,c：這幾個名字改名了（admin.py RENAMED）⇒ 另外列「還在用舊名字、而且沒被區域宣告遮住」的地方（別人的分支合進來還在叫舊名 ⇒ 執行到才 ReferenceError）。
 const writes = process.argv[2] === '--writes';
-const files = process.argv.slice(writes ? 3 : 2);
+const retired = process.argv[2] === '--retired' ? new Set(process.argv[3].split(',').filter(Boolean)) : null;
+const files = process.argv.slice(writes ? 3 : retired ? 4 : 2);
 function kids(n, fn) {
   for (const k of Object.keys(n)) {
     if (k === 'loc') continue;
     const v = n[k];
-    if (Array.isArray(v)) v.forEach(function (x) { if (x && typeof x.type === 'string') fn(x); });
-    else if (v && typeof v.type === 'string') fn(v);
+    if (Array.isArray(v)) v.forEach(function (x) { if (x && typeof x.type === 'string') fn(x, k); });
+    else if (v && typeof v.type === 'string') fn(v, k);
   }
 }
 function isFn(n) { return n.type === 'FunctionDeclaration' || n.type === 'FunctionExpression' || n.type === 'ArrowFunctionExpression'; }
@@ -54,6 +56,35 @@ for (const f of files) {
   } catch (e) {
     res[f] = { err: e.message };
   }
+}
+if (retired) {
+  const old = [];
+  for (const f of files) {
+    if (!trees[f]) continue;
+    (function visit(n, chain, parent, key) {
+      if (isFn(n)) {
+        const own = new Set();
+        if (n.id && n.type === 'FunctionExpression') own.add(n.id.name);
+        n.params.forEach(function (p) { const L = []; names(p, L); L.forEach(function (id) { own.add(id.name); }); });
+        if (n.type !== 'ArrowFunctionExpression') own.add('arguments');
+        declared(n.body, own);
+        n.params.forEach(function (p) { if (p.type === 'AssignmentPattern') visit(p.right, chain.concat([own]), p, 'right'); });
+        visit(n.body, chain.concat([own]), n, 'body');
+        return;
+      }
+      if (n.type === 'Identifier') {
+        if (parent && ((parent.type === 'MemberExpression' && key === 'property' && !parent.computed) ||
+            ((parent.type === 'Property' || parent.type === 'MethodDefinition' || parent.type === 'PropertyDefinition') && key === 'key' && !parent.computed && !parent.shorthand) ||
+            ((parent.type === 'LabeledStatement' || parent.type === 'BreakStatement' || parent.type === 'ContinueStatement') && key === 'label') ||
+            (parent.type === 'CatchClause' && key === 'param'))) return;
+        if (retired.has(n.name) && !chain.some(function (s) { return s.has(n.name); })) old.push([f, n.loc.start.line, n.name]);
+        return;
+      }
+      kids(n, function (c, k) { visit(c, chain, n, k); });
+    })(trees[f], [], null, null);
+  }
+  console.log(JSON.stringify({ old: old }));
+  process.exit(0);
 }
 if (!writes) { console.log(JSON.stringify(res)); process.exit(0); }
 const top = new Set();

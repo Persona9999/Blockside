@@ -66,7 +66,7 @@ function uwLab(o) {
   var sh = SHIPS[0];
   SHIPS.forEach(function (s2) { s2.sailSet = 0; s2.power = 0; s2.manual = true; s2.rudder = 0; });
   if (SHIPS[1]) { SHIPS[1].px += 3000; SHIPS[1].pz += 3000; }        // 另一艘移遠（砲彈算它的、但飛不到）
-  for (var i = 0; i < Math.round(LAB_SETTLE / DT); i++) step();
+  for (var i = 0; i < Math.round(LAB_SETTLE / DT); i++) simStep();
   sh.M = shipMatrix(sh); sh.inv = M4.inv(sh.M); sh.center = shipCenter(sh);
   var out = { hull: sh.T.id, seed: SEED, sea: SEA_K, settle: { t: LAB_SETTLE, sink: +sh.sink.toFixed(3), roll: +(sh.rollA * 57.3).toFixed(2), pitch: +(sh.pitchA * 57.3).toFixed(2) }, o: { R: o.R, h0: o.h0, ammo: o.ammo, side: o.side }, cases: [] };
   var B = sh.T.base, n = o.guns.length * o.short.length, x0 = Math.round(B.sx * 0.25), x1 = Math.round(B.sx * 0.75), k = 0;   // 每一發各打一欄（船身中段一半，平均分開 ⇒ 不打進前一發的洞）
@@ -74,7 +74,7 @@ function uwLab(o) {
   o.guns.forEach(function (g) { o.short.forEach(function (sd) { var x = n > 1 ? Math.round(x0 + (x1 - x0) * k / (n - 1)) : (x0 + x1) >> 1; k++; out.cases.push(uwLabShot(sh, x, o.side, g, sd, o)); }); });
   out.removed = n0 - sh.grid.count;
   if (o.floodS > 0) {                                                 // 之後照常走：打到水線下的洞會不會進水
-    for (i = 0; i < Math.round(o.floodS / DT); i++) step();
+    for (i = 0; i < Math.round(o.floodS / DT); i++) simStep();
     var fl = sh.fl; out.flood = { t: o.floodS, lv: FLOOD_LV, inTot: fl ? +(fl.inTot - fl0).toFixed(2) : null, tonnes: fl ? +(fl.vol * RHO_W).toFixed(2) : null, holes: fl ? fl.open : null, sink: +sh.sink.toFixed(3), roll: +(sh.rollA * 57.3).toFixed(2) };
   }
   SEA_K = seaK;

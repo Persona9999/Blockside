@@ -9,9 +9,9 @@
 // ?cache=0 ⇒ 不讀也不寫（量現場解析的時間用）。
 var CACHE_DB = 'ame_constitution_broadside', CACHE_FMT = 1, CACHE_ON = Q.get('cache') !== '0';
 /** FNV-1a 32 位元（字串照 UTF-16 碼位）。 */
-function fnv(s) { var h = 0x811c9dc5; for (var i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return h >>> 0; }
+function cacheFnv(s) { var h = 0x811c9dc5; for (var i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return h >>> 0; }
 // 程式版本 ＝ 頁面上所有內嵌 JS 的原文（VoxelKit ＋ 遊戲本體）：改了任何一行都會換 ⇒ 寧可多清，不拿舊程式算的網格
-var CODE_VER = fnv([].map.call(document.scripts, function (el) { return !el.type || /javascript/i.test(el.type) ? el.textContent : ''; }).join('\n'));
+var CODE_VER = cacheFnv([].map.call(document.scripts, function (el) { return !el.type || /javascript/i.test(el.type) ? el.textContent : ''; }).join('\n'));
 var cacheDB = null;
 /** 開資料庫 ⇒ Promise<IDBDatabase|null>（開不了 ⇒ null；1.5 秒沒回也當開不了）。 */
 function cacheOpen() {
@@ -32,7 +32,7 @@ function cacheGet(info) {
   // 改裝船（TASK-0657）：格子存成跟原船的差 ⇒ 原船改了、差卻一樣（兩艘一起長了同樣的格）也要換鍵 ⇒ 鍵把原船那一路的內嵌原文也算進去
   var el = document.getElementById(info.el), txt = el ? el.textContent : '';
   for (var vb = info, vn = 0; vb && vb.variant_of && vn < 8; vn++) { vb = hullInfo(vb.variant_of); var ve = vb && document.getElementById(vb.el); txt += '|' + (ve ? ve.textContent : ''); }
-  var st = info.cache = { vxk: fnv(txt), code: CODE_VER + (GFX.deco ? '' : '|deco0'), hit: false, why: '' };   // 畫質「裝飾」關著存的那一份沒有裝飾的網格（05_hull.js decoSplit）⇒ 兩份分開
+  var st = info.cache = { vxk: cacheFnv(txt), code: CODE_VER + (GFX.deco ? '' : '|deco0'), hit: false, why: '' };   // 畫質「裝飾」關著存的那一份沒有裝飾的網格（05_hull.js decoSplit）⇒ 兩份分開
   if (!CACHE_ON) { st.why = '?cache=0'; return Promise.resolve(null); }
   var t0 = performance.now();
   return cacheOpen().then(function (db) {

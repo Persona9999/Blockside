@@ -1158,6 +1158,28 @@ def act_shipcheck(ids=None):
     return ['匯入檢查：'] + log
 
 
+# 頂層短名（TASK-0671）：4 字以內的小寫頂層名字（step、last、hurt…）⇒ 區域變數忘了 var 就蓋到它、讀的人也猜不到是哪支檔的 ⇒ 加模組字首。
+#   留著的（大家共用的詞彙，改了會跟每一條分支撞）照類列在 SHORT_OK；新加的短名不在裡面 ⇒ 不建置（加字首，或真的是共用詞彙就寫進來）。
+SHORT_OK = {
+    'add', 'sub', 'mul', 'dot', 'len', 'norm', 'fwd', 'rotM', 'rotZ',                      # 向量數學（00_core、31_sailing、21_gunnery）
+    'gl', 'cv',                                                                             # WebGL 的 context 與畫布（01_gl）
+    'rnd', 'rr', 'rD', 'rndD', 'rndX', 'rrX', 'rndW', 'rgW', 'gsW', 'rndR', 'rndF', 'rgF',  # 亂數工廠的別名（00_core rngMake；每條一個字母）
+    'rndC', 'rgC', 'gsC', 'rgFn',
+    'note', 'sfx', 'evOn',                                                                  # 事件（00_events）
+    'seaH', 'matK', 'lvAt', 'lvOf', 'navG', 'navZ', 'ndIn', 'armM', 'fpG', 'fpUI', 'fpsT',  # 已經帶模組字首的（sea、mat、lv、nav、nd、arm、fp、fps…）
+    'fsOn', 'fxPt', 'flGL', 'flPd', 'rdGL', 'wpGL', 'wpLv', 'smRk', 'mkFB', 'mkRB', 'penP',
+    'ramK', 'wlZ', 'deg3', 'fGet', 'fPut',
+}
+SHORT_RX = re.compile(r'[a-z][a-zA-Z0-9]{0,3}$')
+# 改過名的（TASK-0671，2026-10-17）：舊名 ⇒ 新名。別人的分支合進來還在用舊名（沒被區域宣告遮住）⇒ 不建置、告訴他新名字（⛔ 不擋 ⇒ 執行到才 ReferenceError）。
+RENAMED = {'last': 'loopLast', 'acc': 'loopAcc', 't0': 'loadT0', 'say': 'loadSay', 'drag': 'inDrag', 'pick': 'inPick', 'deg': 'fuDeg', 'hud': 'hudFrame',
+           'step': 'simStep', 'ai': 'simAi', 'gp': 'hullGp', 'slab': 'gunSlab', 'fnv': 'cacheFnv', 'qnum': 'stateQnum', 'fail': 'glFail', 'kill': 'fxKill',
+           'fall': 'crewFall', 'hurt': 'crewHurt', 'able': 'crewAble', 'sail': 'sailShip',
+           'rs': 'RNG.battle（00_core 亂數工廠）', 'rsD': 'RNG.debris', 'rsX': 'RNG.fx', 'rsW': 'RNG.water', 'rsR': 'RNG.rain', 'rsF': 'RNG.flood', 'rsC': 'RNG.cloth',
+           'rsFn': 'RNG.funnel', 'RSD0': 'RNG.debris.salt', 'RSX0': 'RNG.fx.salt', 'RSW0': 'RNG.water.salt', 'RSF0': 'RNG.flood.salt', 'RSC0': 'RNG.cloth.salt',
+           'RSFN0': 'RNG.funnel.salt'}
+
+
 def bundle_names_check():
     """TASK-0671：同一個包（data-bundle）裡兩個地方定義同一個頂層名字 ⇒ 擋下、不建置（後面的會靜悄悄蓋掉前面的；10-15 的 rndF）。
     頂層宣告照 node 內建的 acorn 讀（src/js_globals.cjs：function、var／let／const、class，解構也拆開）；同一支檔裡定義兩次也算。
@@ -1194,6 +1216,20 @@ def bundle_names_check():
                     seen[nm] = (f, line)
     if E:
         raise Fail('頂層同名（同一個包裡後面的會蓋掉前面的，不建置；改名或加模組字首）：\n' + '\n'.join('  ✗ ' + e for e in E))
+    S = sorted({(nm, f, line) for f in files for nm, line in G[f] if SHORT_RX.match(nm) and nm not in SHORT_OK})
+    if S:
+        raise Fail('頂層短名（4 字以內的小寫；加模組字首，或真的是共用詞彙就寫進 admin.py SHORT_OK）：\n' + '\n'.join('  ✗ %s（%s:%d）' % x for x in S))
+    O = []
+    for (pg, name), L in bundles.items():
+        r = subprocess.run([node, '--expose-internals', os.path.join(HERE, 'js_globals.cjs'), '--retired', ','.join(RENAMED)] + [os.path.join(HERE, f) for f in L],
+                           capture_output=True, text=True, encoding='utf-8', cwd=HERE)
+        try:
+            old = json.loads(r.stdout.strip().splitlines()[-1])['old']
+        except Exception:
+            raise Fail('舊名字的檢查讀不到結果：%s' % (r.stdout + r.stderr).strip()[-300:])
+        O += ['%s:%d 還在用 %s ⇒ 改名叫 %s' % (os.path.relpath(f, HERE).replace(os.sep, '/'), line, nm, RENAMED[nm]) for f, line, nm in old]
+    if O:
+        raise Fail('用到改過名的頂層名字（TASK-0671；不建置）：\n' + '\n'.join('  ✗ ' + o for o in sorted(set(O))))
     # 沒宣告就寫入：區域變數忘了 var ⇒ 嚴格模式下執行到才報錯；剛好跟 window 上的名字（name、status…）同名 ⇒ 連錯都不報、寫到 window 上
     W = []
     for (pg, name), L in bundles.items():
@@ -1206,7 +1242,7 @@ def bundle_names_check():
         W += ['%s 包「%s」：%s:%d 寫入 %s，可是哪裡都沒宣告' % (pg, name, os.path.relpath(f, HERE).replace(os.sep, '/'), line, nm) for f, line, nm in bad]
     if W:
         raise Fail('沒宣告就寫入（多半是忘了 var；不建置）：\n' + '\n'.join('  ✗ ' + w for w in W))
-    return ['✓ 頂層同名：%d 個包、%d 支檔、%d 個頂層名字，沒有重複；沒宣告就寫入：0（acorn）' % (len(bundles), len(files), n)]
+    return ['✓ 頂層同名：%d 個包、%d 支檔、%d 個頂層名字，沒有重複；沒宣告就寫入：0；新的短名：0；用到改過名的：0（acorn）' % (len(bundles), len(files), n)]
 
 
 # ───────────────────────── 分層讀數（TASK-0669：模擬與畫面解耦） ─────────────────────────

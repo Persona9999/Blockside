@@ -353,7 +353,7 @@ function clothBrace(sh, c) {
   }
 }
 /** 靠的東西還在不在：格（被打掉 ⇒ 不在）、繩（斷了）、模型（飛了）；3 ＝ 帆還算數就在。 */
-function holds(sh, s, k, v) { return k === 1 ? gp(sh.grid, v) > 0 : k === 2 ? !sh.ropes[v].dead : k === 3 ? !!s && !s.dead : k === 4 ? sh.models[v].alive : false; }
+function holds(sh, s, k, v) { return k === 1 ? hullGp(sh.grid, v) > 0 : k === 2 ? !sh.ropes[v].dead : k === 3 ? !!s && !s.dead : k === 4 ? sh.models[v].alive : false; }
 function clothPins(sh, s, c) {
   var T = c.T.sim, n = 0;
   for (var i = 0; i < T.n; i++) if (c.pin[i]) { if (holds(sh, s, T.hk[i], T.hv[i])) n++; else c.pin[i] = 0; }

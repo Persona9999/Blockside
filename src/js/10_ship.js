@@ -336,7 +336,7 @@ function ropeEndWhy(sh, r, e, depth, near) {
   var E = ropeEnd(r, e), n = r.pts.length / 3, i = e ? n - 1 : 0, P = [r.pts[i * 3], r.pts[i * 3 + 1], r.pts[i * 3 + 2]];   // 端點照現在的形狀（帆桁轉了、小艇擺了）
   if (E.k === 'grid') {
     if (near !== undefined && (!near || !near.has(ropeBin(Math.floor(P[0]), Math.floor(P[1]), Math.floor(P[2]))))) return '';
-    if (!gp(sh.grid, E.a)) return '錨格被打掉（應該已經斷）';
+    if (!hullGp(sh.grid, E.a)) return '錨格被打掉（應該已經斷）';
     var R = Math.max(2, E.d0 + 1), x0 = Math.floor(P[0]), y0 = Math.floor(P[1]), z0 = Math.floor(P[2]), Ri = Math.ceil(R), dx, dy, dz;
     for (dz = -1; dz <= 1; dz++) for (dy = -1; dy <= 1; dy++) for (dx = -1; dx <= 1; dx++) if (sh.grid.get(x0 + dx, y0 + dy, z0 + dz)) return '';   // 先看貼著的（大多數繩端埋在格裡）
     for (dz = -Ri; dz <= Ri; dz++) for (dy = -Ri; dy <= Ri; dy++) for (dx = -Ri; dx <= Ri; dx++) {
