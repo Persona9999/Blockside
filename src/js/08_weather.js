@@ -22,7 +22,7 @@ WEATHERS.storm.gusts = { dir: 0.6, spd: 0.3, per: [71, 29, 11] };
 //   r 水流最快那一圈的半徑（m）、depth 中間多深（m）、width 漏斗寬窄（幾倍的 r）、v 水流最快（節）、inflow 往中心吸（切向的幾成）、eye 眼的半徑（m）、pull 眼把船往下拖（m/秒，0 ＝ 不拖）。
 //   預設（Tim 2026-10-17「半徑再放大2倍 然後更深一點 水流快一些」）：r 95 → 190、depth 28 → 75、v 6.8 → 10 節、eye 21 → 42；可以在天氣設定頁改（下面 WXK_ITEMS）。
 //   再一次（Tim：「漩渦半徑預設值可以改400(上限改1000) 深度預設150 上限300」「起始可以在漩渦中」）：r 190 → 400、depth 75 → 150；start 開局離中心（m）130 —— 兩隊在漏斗裡面開打，不在水流最快那一圈。
-WEATHERS.maelstrom = Object.assign({}, WEATHERS.storm, { name: '大漩渦', vortex: { r: 400, depth: 150, width: 0.6, v: 10, inflow: 0.2, eye: 42, eyeDepth: 60, pull: 0.15, start: 130 } });
+WEATHERS.maelstrom = Object.assign({}, WEATHERS.storm, { name: '大漩渦', vortex: { r: 400, depth: 150, width: 0.6, v: 10, inflow: 0.2, eye: 42, eyeDepth: 60, pull: 0.15, start: 130, grav: 0.05, suck: 0.05 } });
 // 天氣設定頁（Tim 2026-10-17：「或是開一個天氣設定頁(參考船隻設定) 可以設定不同天氣參數(大漩渦半徑 轉速 深度等放裡面)」）：
 //   描述表照 64_cfgkit.js cfgPage（71_input.js 生頁、69_prefs.js 存 wxk：只存跟預設不一樣的）。get／set 直接讀寫 WEATHERS 那一格（of：哪幾種天氣、key：哪一欄）。
 //   暴風雨的浪、風同時改暴風雨與大漩渦（大漩渦照抄暴風雨）；晴天不在這一頁（晴天 ＝ 1 倍，對拍的基準）。⛔ 對拍（?demo、?prefs=0）不讀存檔 ⇒ 照預設。
@@ -34,6 +34,8 @@ var WXK_ITEMS = [
   { k: 'start', of: ['maelstrom'], vx: 1, name: '開局位置', lim: [50, 1000], step: 10, int: true, unit: ' m', note: '開局兩隊在中心兩側、離中心這麼遠的那一圈上（兩隊隔兩倍）；最近是眼的 3 倍' },
   { k: 'width', of: ['maelstrom'], vx: 1, name: '漏斗寬窄', lim: [0.3, 1.2], step: 0.05, fix: 2, unit: ' 倍半徑', note: '越小越陡（中間尖）、越大越平（像碗）' },
   { k: 'v', of: ['maelstrom'], vx: 1, name: '漩渦水流', lim: [1, 25], step: 0.5, fix: 1, unit: ' 節', note: '在那一圈最快；往外照距離淡掉（船自己的航速另外加）' },
+  { k: 'grav', of: ['maelstrom'], vx: 1, name: '下坡加速', lim: [0, 0.3], step: 0.01, fix: 2, unit: '', note: '順著漏斗壁往下開變快、往上開變慢（重力沿著船頭的那一份 × 這個；0 ＝ 沒有）' },
+  { k: 'suck', of: ['maelstrom'], vx: 1, name: '漩渦吸力', lim: [0, 0.3], step: 0.01, fix: 2, unit: '', note: '把船往中心拉，坡越陡拉得越大（重力沿著坡的那一份 × 這個；水的阻力讓它不會一直變快；0 ＝ 沒有）' },
   { k: 'inflow', of: ['maelstrom'], vx: 1, name: '往中心吸', lim: [0, 0.6], step: 0.05, fix: 2, unit: '', note: '切向水流的幾成往中心（0 ＝ 只繞不吸）' },
   { k: 'eye', of: ['maelstrom'], vx: 1, name: '眼的半徑', lim: [5, 150], step: 1, int: true, unit: ' m', note: '船進到這個半徑以內就被往下拖（最多半徑的 0.8）' },
   { k: 'eyeDepth', of: ['maelstrom'], vx: 1, name: '眼的深度', lim: [0, 200], step: 5, int: true, unit: ' m', note: '眼那一段喉部再往下多深（中心總深 ＝ 深度 ＋ 這個；0 ＝ 沒有喉部）' },
