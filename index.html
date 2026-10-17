@@ -13646,6 +13646,7 @@ function pick(cx, cy) {
     if (o === me || o.sunk) return;
     var oL = toLocal(o, p0), dL = M4.dir(o.inv, d[0], d[1], d[2]), h = VK.raycast(o.grid, oL, dL, 3000);
     if (o.arm) { var ha = armRay(o, oL, dL, 3000); if (ha && (!h || ha.t < h.t)) h = ha; }   // 砲帶的裝甲（24_armor.js）也點得到（換回船的格座標）
+    var hs = sailRay(o, oL, dL, h ? h.t : 3000); if (hs) h = hs;         // 帆布也點得到（比船身近才算）
     if (h && (!hit || h.t < hit.t)) { hit = h; on = o; }
   });
   // Tim 2026-10-14：「點海會取消瞄準；點在船身上（也可以瞄友軍，可以變色）就變成那一邊的砲手控」
@@ -13655,11 +13656,42 @@ function pick(cx, cy) {
   if (hit) {
     setAim(me, [hit.x + 0.5, hit.y + 0.5, hit.z + 0.5], on); me.pMode = AIM_P = 'free'; sfx('crack', null, 0.08);
     if (!isFoe(me, on)) note(me, '瞄準友艦 ' + on.name + teamTag(on) + ' —— 打下去一樣會傷到它');
+    else if (hit.sail) note(me, '瞄準 ' + on.name + ' 的帆');
     if (AUTOFIRE && !me.hand) { me.hand = true; note(me, '手動瞄準：這一舷你來打（' + keyWord('volley') + '齊射），另一舷照樣自動 —— 點海面回到全自動'); }
   } else if (me.aim) {
     setAim(me, null);
     if (AUTOFIRE && me.hand) { me.hand = false; note(me, '取消瞄準 —— 回到全自動開砲'); } else note(me, '取消瞄準');
   }
+}
+/** 帆布也點得到（Tim 2026-10-17：「手動瞄準也能瞄準帆布」）：照畫出來的那一面（11_rig_gpu.js sailBuf 同一個判斷）每個三角形量一次射線（兩面都算），取 tMax 以內最近的。
+ *  回傳跟 VK.raycast 一樣：x,y,z ＝ 落點 −0.5（pick 會加回去 ⇒ 瞄準點就在布上那一點）、t 以 dL 的長度為單位。
+ *  收起來的帆（s.furled，留著的那一捲也是）、掉了的不算 —— 砲彈也打不到它們。只在點的那一下算，不碰戰局。 */
+var SAIL_PICK = null;
+function sailRay(o, oL, dL, tMax) {
+  var bt = tMax, best = null;
+  (o.cl || []).forEach(function (c, k) {
+    var s = o.sails[k], P; if (!s || s.dead || s.furled) return;
+    if (PHYS) {
+      if (!c.p || c.hidden || c.gone) return;
+      if (!SAIL_PICK || SAIL_PICK.length < c.T.n * 3) SAIL_PICK = new Float32Array(c.T.n * 3);
+      P = clothFine(c, SAIL_PICK); if (c.furlF !== null && c.furlF !== undefined) P = furlDraw(c, P, c.furlF, o);   // 張帆收帆演到一半：照畫出來的位置
+    } else P = c.T.p0;
+    var tr = c.T.tris, tv = c.torn ? c.tv : null;                        // tv：撕開的洞（不畫的細格點）
+    for (var j = 0; j < tr.length; j += 3) {
+      if (tv && (tv[tr[j]] || tv[tr[j + 1]] || tv[tr[j + 2]])) continue;
+      var a = tr[j] * 3, b = tr[j + 1] * 3, e = tr[j + 2] * 3;           // Möller–Trumbore
+      var ux = P[b] - P[a], uy = P[b + 1] - P[a + 1], uz = P[b + 2] - P[a + 2], vx = P[e] - P[a], vy = P[e + 1] - P[a + 1], vz = P[e + 2] - P[a + 2];
+      var px = dL[1] * vz - dL[2] * vy, py = dL[2] * vx - dL[0] * vz, pz = dL[0] * vy - dL[1] * vx, det = ux * px + uy * py + uz * pz;
+      if (Math.abs(det) < 1e-12) continue;
+      var f = 1 / det, sx = oL[0] - P[a], sy = oL[1] - P[a + 1], sz = oL[2] - P[a + 2], u = (sx * px + sy * py + sz * pz) * f;
+      if (u < 0 || u > 1) continue;
+      var qx = sy * uz - sz * uy, qy = sz * ux - sx * uz, qz = sx * uy - sy * ux, v = (dL[0] * qx + dL[1] * qy + dL[2] * qz) * f;
+      if (v < 0 || u + v > 1) continue;
+      var t = (vx * qx + vy * qy + vz * qz) * f;
+      if (t > 0 && t < bt) { bt = t; best = s; }
+    }
+  });
+  return best ? { x: oL[0] + dL[0] * bt - 0.5, y: oL[1] + dL[1] * bt - 0.5, z: oL[2] + dL[2] * bt - 0.5, t: bt, sail: best } : null;
 }
 window.addEventListener('keydown', function (e) {
   if (!RUNNING) return;
@@ -16702,6 +16734,11 @@ if (DEBUG) window.__game = {
   take: function (i) { return playerTakeShip(SHIPS[i]); },
   drive: function (i, o) { var sh = SHIPS[i || 0]; if (o && 'tele' in o) teleSet(sh, o.tele); if (o && 'power' in o) sh.power = o.power; return driveInfo(sh); },   // 動力（31_drive.js）：每個動力源的完好度、推力、力矩；{ tele: 格 } 撥俥鐘          // 改操控第 i 艘（52_fleet.js；敵艦要 Debug 模式）
   one: function (ammo, aim) { var me = SHIPS[PLAYER_I]; if (aim) setAim(me, aim); fireOne(me, ammo || 0); return BALLS.length; },
+  /** 點一下瞄準（71_input.js pick）：給螢幕座標；或給 [i, x, y, z]（第 i 艘的格座標）⇒ 先照現在的鏡頭投影到螢幕再點。回傳點的位置、瞄準點（格座標）與點到哪艘。 */
+  pick: function (cx, cy) {
+    if (Array.isArray(cx)) { var o = SHIPS[cx[0]], w = M4.pt(o.M, cx[1], cx[2], cx[3]), r = cv.getBoundingClientRect(), q = CAM.vp, cw = q[3] * w[0] + q[7] * w[1] + q[11] * w[2] + q[15], c = M4.pt(q, w[0], w[1], w[2]); cx = r.left + (c[0] / cw + 1) / 2 * r.width; cy = r.top + (1 - c[1] / cw) / 2 * r.height; }
+    pick(cx, cy); var me = SHIPS[PLAYER_I]; return { cx: cx, cy: cy, aim: me.aim, on: me.aimOn ? me.aimOn.i : null };
+  },
   ships: function () { return SHIPS; }, balls: function () { return BALLS; }, pieces: function () { return PIECES; },
   /** 船隻碰撞（31_sailing.js collide）：shipHit() ⇒ 檔位、HIT_PROF、每個船型的取樣數與算了幾 ms；shipHit(i, j, lv) ⇒ 照第 i、j 艘現在的位置（先重算矩陣）量那一檔：
    *  lv 0 ⇒ 龍骨線最近距離（m，< 14 ＝ 撞）；1–3 ⇒ 互相落進去的點數（0 ＝ 沒撞）。只量、不推。 */

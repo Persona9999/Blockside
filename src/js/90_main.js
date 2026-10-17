@@ -53,6 +53,11 @@ if (DEBUG) window.__game = {
   take: function (i) { return playerTakeShip(SHIPS[i]); },
   drive: function (i, o) { var sh = SHIPS[i || 0]; if (o && 'tele' in o) teleSet(sh, o.tele); if (o && 'power' in o) sh.power = o.power; return driveInfo(sh); },   // 動力（31_drive.js）：每個動力源的完好度、推力、力矩；{ tele: 格 } 撥俥鐘          // 改操控第 i 艘（52_fleet.js；敵艦要 Debug 模式）
   one: function (ammo, aim) { var me = SHIPS[PLAYER_I]; if (aim) setAim(me, aim); fireOne(me, ammo || 0); return BALLS.length; },
+  /** 點一下瞄準（71_input.js pick）：給螢幕座標；或給 [i, x, y, z]（第 i 艘的格座標）⇒ 先照現在的鏡頭投影到螢幕再點。回傳點的位置、瞄準點（格座標）與點到哪艘。 */
+  pick: function (cx, cy) {
+    if (Array.isArray(cx)) { var o = SHIPS[cx[0]], w = M4.pt(o.M, cx[1], cx[2], cx[3]), r = cv.getBoundingClientRect(), q = CAM.vp, cw = q[3] * w[0] + q[7] * w[1] + q[11] * w[2] + q[15], c = M4.pt(q, w[0], w[1], w[2]); cx = r.left + (c[0] / cw + 1) / 2 * r.width; cy = r.top + (1 - c[1] / cw) / 2 * r.height; }
+    pick(cx, cy); var me = SHIPS[PLAYER_I]; return { cx: cx, cy: cy, aim: me.aim, on: me.aimOn ? me.aimOn.i : null };
+  },
   ships: function () { return SHIPS; }, balls: function () { return BALLS; }, pieces: function () { return PIECES; },
   /** 船隻碰撞（31_sailing.js collide）：shipHit() ⇒ 檔位、HIT_PROF、每個船型的取樣數與算了幾 ms；shipHit(i, j, lv) ⇒ 照第 i、j 艘現在的位置（先重算矩陣）量那一檔：
    *  lv 0 ⇒ 龍骨線最近距離（m，< 14 ＝ 撞）；1–3 ⇒ 互相落進去的點數（0 ＝ 沒撞）。只量、不推。 */
