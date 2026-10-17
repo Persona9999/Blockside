@@ -30,6 +30,24 @@ function shipLadders(T) {
       out.push({ name: (p.path || '') + (nm ? '/' + nm : ''), pts: pts, link: p.meta[nm ? nm + '.decks' : 'decks'] });
     });
   });
+  return out.concat(ropeLadders(T));
+}
+/** 繩梯（雕刻 TASK-0678：橫繩組標了 climb）：每道橫繩的 meta 帶 ratlines（組路徑）、rung、foot、head（組裝件座標 x,y,z）⇒
+ *  foot → 最低一道的中點 → 最高一道的中點 → head（同梯子的 foot／lo／hi／head；中點站在橫繩上 ⇒ z ＝ 橫繩那一格的上一格）。
+ *  rope ＝ 那幾道橫繩的名字：橫繩不是格子 ⇒ 斷不斷照繩（42_hands.js 的踏板檢查不適用，見 makeHands）。一頭不在甲板上（例：桅頂平台）⇒ 只有第一人稱爬得上去，水手照舊走梯子。 */
+function ropeLadders(T) {
+  var by = {}, out = [];
+  ((T.rig && T.rig.ropes) || []).forEach(function (r) {
+    var m = r.meta; if (!m || !+m.climb || !m.ratlines || !m.foot || !m.head || !r.pts || r.pts.length < 6) return;
+    (by[m.ratlines] = by[m.ratlines] || []).push(r);
+  });
+  function xyz(s) { var v = String(s).split(',').map(Number); return [v[0], v[1], Math.floor(v[2])]; }
+  function mid(r) { var p = r.pts, n = p.length / 3 - 1; return [(p[0] + p[n * 3]) / 2, (p[1] + p[n * 3 + 1]) / 2, Math.floor((p[2] + p[n * 3 + 2]) / 2) + 1]; }
+  Object.keys(by).forEach(function (k) {
+    var L = by[k].sort(function (a, b) { return a.meta.rung - b.meta.rung; }), m = L[0].meta;
+    var pts = [xyz(m.foot), mid(L[0]), mid(L[L.length - 1]), xyz(m.head)]; if (pts[0][2] > pts[3][2]) pts.reverse();
+    out.push({ name: k, pts: pts, link: m.decks, rope: L.map(function (r) { return r.name; }) });
+  });
   return out;
 }
 function lvOf(Ls, z) { for (var i = 0; i < Ls.length; i++) if (z >= Ls[i].zr[0] && z <= Ls[i].zr[1]) return i; return -1; }
@@ -97,6 +115,7 @@ function navLevels(sh, lads) {
   }
   var Ls = sh.decks.map(function (D) { return { key: D.key, name: D.name, zr: D.zr }; }), ext = [];
   lads.forEach(function (l) {
+    if (l.rope) return;                                                   // 繩梯不開新的一層（桅頂平台不是甲板）；兩頭都在甲板上的照樣接（makeHands）
     [l.pts[0], l.pts[l.pts.length - 1]].forEach(function (p) {
       if (lvOf(Ls, p[2]) >= 0) return;
       var e = ext.filter(function (e) { return p[2] >= e[0] - 8 && p[2] <= e[1] + 8; })[0];
@@ -269,15 +288,17 @@ function handReg(sh, c) { var N = sh.nav.levels[c.hand.lv].N, i = navSnap(N, c.p
 function makeHands(sh, crew, add) {
   sh.nav = null;
   if (sh.cw.hands <= 0 && DROWN_T <= 0) return;                               // 落水的人爬回船上也要走路格（43_swim.js board）
-  var t0 = performance.now(), lads = shipLadders(sh.T), Ls = navLevels(sh, lads), LD = [];
+  var t0 = performance.now(), lads = shipLadders(sh.T), Ls = navLevels(sh, lads), LD = [], ri = {};
+  (sh.ropes || []).forEach(function (r, j) { ri[r.name] = j; });       // 繩梯的橫繩 ⇒ sh.ropes 第幾條（斷不斷照它）
   Ls.forEach(function (L) { L.N = navBuild(sh, L); if (L.N.rot) L.N = navOwn(L.N, sh); });   // 有會轉的甲板 ⇒ 這艘自己一份（navPos／navSnap 照這艘的砲塔角度換）
   lads.forEach(function (l) {
     var a = l.pts[0], b = l.pts[l.pts.length - 1], dk = ladDecks(sh.T, l), la = dk ? (dk[0] ? dk[0].i : -1) : lvOf(Ls, a[2]), lb = dk ? (dk[1] ? dk[1].i : -1) : lvOf(Ls, b[2]);   // 有甲板 meta ⇒ 照 meta 判層（36_rooms.js ladDecks）
     if (la < 0 || lb < 0 || la === lb) return;
     var R = dk && dk.link ? 10 : 5, ia = navSnap(Ls[la].N, a, R), ib = navSnap(Ls[lb].N, b, R); if (ia < 0 || ib < 0) return;   // 兩頭接不上走路格（10 格內；直接指定的 20 格內）⇒ 這座不用
     var mid = l.pts.slice(1, -1).map(function (q) { return [q[0], q[1], q[2] + CLIMB_LIFT]; });   // lo、hi 抬 0.2 m：兩點連線會切過踏板的前緣（量過：腳在踏板裡 24／71 點 ⇒ 10）
-    var steps = l.pts.slice(1, -1).map(function (q) { return [Math.floor(q[0]), Math.floor(q[1]), Math.floor(q[2]) - 1]; });   // 踏板：lo、hi 那一格底下（固定點是腳踩的那一格空氣）
-    LD.push({ name: l.name, lo: la, hi: lb, ia: ia, ib: ib, ra: Ls[la].N.reg[ia], rb: Ls[lb].N.reg[ib], steps: steps, broken: false, pts: [navPos(Ls[la].N, ia), a].concat(mid, [b, navPos(Ls[lb].N, ib)]), x: (a[0] + b[0]) / 2, t0: -9, n: 0, q: 0 });
+    var steps = l.rope ? [] : l.pts.slice(1, -1).map(function (q) { return [Math.floor(q[0]), Math.floor(q[1]), Math.floor(q[2]) - 1]; });   // 踏板：lo、hi 那一格底下（固定點是腳踩的那一格空氣）；繩梯的踏板是繩 ⇒ 照繩判（rj）
+    var rj = l.rope ? l.rope.map(function (n) { return ri[n]; }).filter(function (j) { return j !== undefined; }) : null;
+    LD.push({ name: l.name, lo: la, hi: lb, ia: ia, ib: ib, ra: Ls[la].N.reg[ia], rb: Ls[lb].N.reg[ib], steps: steps, rj: rj, broken: false, pts: [navPos(Ls[la].N, ia), a].concat(mid, [b, navPos(Ls[lb].N, ib)]), x: (a[0] + b[0]) / 2, t0: -9, n: 0, q: 0 });
   });
   var home = -1;
   LD.forEach(function (L) { if (home < 0 || L.lo < home) home = L.lo; });
@@ -485,7 +506,8 @@ function navRefresh(sh) {
   NV.ladders.forEach(function (L) {
     var A = NV.levels[L.lo].N, B = NV.levels[L.hi].N, was = L.broken;
     L.ra = A.reg[L.ia]; L.rb = B.reg[L.ib];
-    L.broken = L.ra < 0 || L.rb < 0 || L.steps.some(function (p) { return !g.get(p[0], p[1], p[2]); });
+    L.broken = L.ra < 0 || L.rb < 0 || L.steps.some(function (p) { return !g.get(p[0], p[1], p[2]); })
+      || !!(L.rj && L.rj.filter(function (j) { return sh.ropes[j] && sh.ropes[j].dead; }).length * 2 > L.rj.length);   // 繩梯：橫繩斷了一半以上 ⇒ 斷了
     if (L.broken && !was) ev.push('梯子 ' + L.name + ' 斷了');
   });
   if (sh.med) medComps(sh);                                            // 醫療艙：走不走得到床跟著重算（44_medic.js）
