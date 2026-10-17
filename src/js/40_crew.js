@@ -2,11 +2,11 @@
 // 一個人 ＝ 一張面向鏡頭、但永遠直立的貼圖。位置存格座標（腳底那一格的上緣），畫的時候用船的矩陣換到世界。
 // 砲要有人操作：人數 < 最少人數就不能開；裝填速度 ∝ (人數／滿編)^0.85。死傷的人不再操作；
 // 人不夠時，倖存者集中到還開得動的砲 ⇒ 其餘的砲沒人操作（HUD ○）。調度見 reassign。
-var ROLE = { GUN: 0, POWDER: 1, OFFICER: 2, MARINE: 3, TOP: 4, HELM: 5, HAND: 6 }, NROLE = 6;   // NROLE：貼圖照職位的列數（HAND 預備水手沒有自己那一列，畫成砲手；42_hands.js）
+var ROLE = { GUN: 0, POWDER: 1, OFFICER: 2, MARINE: 3, TOP: 4, HELM: 5, HAND: 6, SURGEON: 7 }, NROLE = 6;   // NROLE：貼圖照職位的列數（HAND 預備水手沒有自己那一列，畫成砲手；42_hands.js）
 var FR = { IDLE: 0, WORK_A: 1, WORK_B: 2, FIRE: 3, RUN_A: 4, RUN_B: 5, WOUNDED: 6, DEAD: 7 }, NFR = 8;
 // 砲班：滿編／最少照砲種表（GUNS 的 crew／min，10_ship.js）—— 兩舷各一班；24 磅長砲一班 12 人＋送藥童 ⇒ 一個人物約兩人
 // Tim 2026-10-12：砲班減一人（長砲 6 → 5、追擊砲 4 → 3），多出來的去搬火藥與彈藥（送藥手，23_powder.js）；射速照舊（裝填 ∝ 在崗／滿編）
-var ROLE_NAME = ['砲手', '送藥手', '軍官', '陸戰隊', '桅頂水手', '舵手', '水手'];
+var ROLE_NAME = ['砲手', '送藥手', '軍官', '陸戰隊', '桅頂水手', '舵手', '水手', '船醫'];   // 船醫（TASK-0676）：貼圖用 ART_NURSE 那一列（44_medic.js medSurgeons）
 var ART_CAPTAIN = 6, NART = 13;                   // 貼圖的列：0–5 照職位，6 船長（每艘船第一個軍官；職位照舊是軍官），7–12 Sirius 的六位（下一行）
 var ART_NURSE = 7, ART_CARPENTER = 8, ART_COOK = 9, ART_SAILMAKER = 10, ART_NAVIGATOR = 11, ART_QUARTERMASTER = 12;   // 新職位（TASK-0676）的貼圖列；職位接上之前沒有人用
 function standZ(g, x, y, z0, z1, head) {          // (x, y) 這一柱裡，z0..z1 之間可以站的高度（腳下實心、頭上 head 格空）；沒有 ⇒ -1
@@ -137,12 +137,12 @@ function makeCrew(sh) {
     offP.slice(offN, CW.officers).forEach(function (p, k) { add(ROLE.OFFICER, below[k] || standNear(g, p[0], p[1], sz0, sz1, 14, taken), null, 1); if (below[k]) crew[crew.length - 1].below = true; });   // below：在甲板下 ⇒ 火槍打不到（musket）
   }
   crew.filter(function (c) { return c.role === ROLE.OFFICER; }).forEach(function (c, k) { c.rank = k; if (!k) c.art = ART_CAPTAIN; });   // 階級照順序：船長（換貼圖）、大副、二副、三副、見習軍官（廣播用，61_hud.js newsCrew）
-  medInit(sh); pumpInit(sh);                                         // pumpInit：人力抽水機旁的走路點（45_pumps.js）；醫療艙走得到的床、要幾個人手（44_medic.js；沒有 ⇒ sh.med ＝ null，照舊）
+  medInit(sh); medSurgeons(sh, crew, add); pumpInit(sh);                                         // pumpInit：人力抽水機旁的走路點（45_pumps.js）；醫療艙走得到的床、要幾個人手（44_medic.js；沒有 ⇒ sh.med ＝ null，照舊）
   // 站不下的（船隻配置頁調多了、船小）⇒ 記著，開戰時上方廣播一行（52_fleet.js crewShortNote）；⛔ 不默默少人
   function cnt(r) { return crew.filter(function (c) { return c.role === r; }).length; }
   //   ⚠ 預設本來就有站不下的（憲法號陸戰隊 11／12、送藥手 26／27；夜隼號陸戰隊 2／12）：開戰只報玩家改過的那幾項（61_hud.js crewShortNote），全部照實列在船隻配置頁（CREW_SEEN）
   sh.crewShort = [['砲班', sh.guns.reduce(function (a, gn) { return a + gn.crewFull; }, 0), cnt(ROLE.GUN), 'guns'], ['送藥手', sh.pmWant, cnt(ROLE.POWDER), 'monkeys'], ['軍官', CW.officers, cnt(ROLE.OFFICER), 'officers'],
-    ['舵手', wheel ? CW.helm : 0, cnt(ROLE.HELM), 'helm'], ['陸戰隊', CW.marines, cnt(ROLE.MARINE), 'marines'], ['桅頂水手', CW.top * sh.masts.length, cnt(ROLE.TOP), 'top'], ['預備水手', CW.hands, cnt(ROLE.HAND), 'hands']].filter(function (r) { return r[2] < r[1]; });
+    ['舵手', wheel ? CW.helm : 0, cnt(ROLE.HELM), 'helm'], ['陸戰隊', CW.marines, cnt(ROLE.MARINE), 'marines'], ['桅頂水手', CW.top * sh.masts.length, cnt(ROLE.TOP), 'top'], ['預備水手', CW.hands, cnt(ROLE.HAND), 'hands'], ['船醫', sh.surgWant || 0, cnt(ROLE.SURGEON), 'surgeon']].filter(function (r) { return r[2] < r[1]; });
   CREW_SEEN[sh.T.id] = { n: crew.length, short: sh.crewShort, sig: crewSig(CW) };
   return crew;
 }

@@ -18,7 +18,8 @@
 // 船員配置（crew0 ＝ 預設，每艘船的 crew 只寫不一樣的；40_crew.js、23_powder.js、42_hands.js）：
 //   officers 軍官（0–8，照順序是船長、大副、二副、三副，再來是見習軍官）、helm 舵手（0–4）、marines 陸戰隊最多幾個、marineGap 陸戰隊沿舷牆每幾格一個、
 //   top 每根桅的桅頂水手、monkeys 送藥手（每一對砲幾個：0 ＝ 沒有、1、2）、hands 預備水手人數（沒寫 ⇒ 預備水手的基準人數 HANDS × handsK；夜隼號 ¼）、
-//   guns 砲班滿編 { 砲種: 人 }（沒寫的砲種 ⇒ 砲種表 10_ship.js GUNS 的 crew）、shelter 船員避開露天甲板（0／1；42_hands.js shelterLv：莫尼特號 1）。
+//   guns 砲班滿編 { 砲種: 人 }（沒寫的砲種 ⇒ 砲種表 10_ship.js GUNS 的 crew）、shelter 船員避開露天甲板（0／1；42_hands.js shelterLv：莫尼特號 1）、
+//   surgeon 船醫（0–8；站在醫療艙裡，有醫療艙才上船；44_medic.js medSurgeons）。
 // 船隻清單 ＝ config/game.json 的 ships（el ＝ 內嵌 .vxk 的 id；匯入新船、重新匯入走 admin.py）；選單只列 HTML 裡真的有內嵌資料的那幾艘。
 var GEO0 = CFG.geo0, CREW0 = CFG.crew0;
 // 船隻配置頁（TASK-0570；Tim 2026-10-14：一型一份、要存檔、預設在後台管理頁設）：玩家改過的船員配置 SHIP_CREW（id → 改過的那幾項；69_prefs.js 存），
@@ -26,7 +27,7 @@ var GEO0 = CFG.geo0, CREW0 = CFG.crew0;
 //   每艘船開戰時用的 ＝ crew0 ← 那艘船的 crew（後台頁）← SHIP_CREW（shipCrew；40_crew.js makeCrew 存進 sh.cw）。
 var CREW_ITEMS = [{ k: 'officers', name: '軍官', lim: [0, 8] }, { k: 'helm', name: '舵手', lim: [0, 4] }, { k: 'marines', name: '陸戰隊', lim: [0, 40] },
   { k: 'top', name: '桅頂水手', lim: [0, 8] }, { k: 'monkeys', name: '送藥手', lim: [0, 2] }, { k: 'hands', name: '預備水手', lim: [0, 120] },
-  { k: 'shelter', name: '避開露天甲板', lim: [0, 1] }];
+  { k: 'shelter', name: '避開露天甲板', lim: [0, 1] }, { k: 'surgeon', name: '船醫', lim: [0, 8] }];
 var GUN_CREW_MAX = 8;                                                   // 砲旁的站位只有 8 個（40_crew.js spots）；最少 ＝ 砲種表的 min（少於它那門砲永遠開不了）
 var OFFICER_RANKS = ['船長', '大副', '二副', '三副'];                    // 照順序；第五個起 ＝ 見習軍官
 var SHIP_CREW = {};

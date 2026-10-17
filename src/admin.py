@@ -161,7 +161,8 @@ MAT_OPT = (('metal', 0, 1, '金屬度（選填；0 ＝ 不反光、1 ＝ 金屬�
            ('pen', 1, 5000, '擊穿門檻（選填；每格板厚要幾 kJ，船殼硬度倍率 1 時；寫了 ⇒ 實心彈照能量與入射角判穿／凹／彈，TASK-0621）'))
 MAT_BOOL = (('smooth', '平滑（選填 true／false；true ⇒ 這種材質的格沒寫 render 也畫成平滑面＋金屬反光，螺旋槳整份平滑；關聯明寫 render=voxel 照方塊。Tim 2026-10-17：鐵甲、鍋爐開，包銅皮不開）'),)
 CREW = {'officers': (0, 8, True), 'helm': (0, 4, True), 'marines': (0, 60, True), 'marineGap': (5, 200, True),
-        'top': (0, 8, True), 'monkeys': (0, 2, True), 'handsK': (0, 4, False), 'shelter': (0, 1, True)}   # shelter：船員避開露天甲板（TASK-0637；0／1）
+        'top': (0, 8, True), 'monkeys': (0, 2, True), 'handsK': (0, 4, False), 'shelter': (0, 1, True),   # shelter：船員避開露天甲板（TASK-0637；0／1）
+        'surgeon': (0, 8, True)}                                                                       # 船醫（TASK-0676；有醫療艙才上船）
 CREW_SHIP = {'hands': (0, 120, True)}          # 只在每艘船寫（TASK-0570 船隻配置頁的預設）：預備水手人數；沒寫 ＝ lim.hands × handsK
 GUN_CREW_MAX = 8                               # 砲班滿編上限（砲旁的站位；遊戲 05_hull.js GUN_CREW_MAX）
 GEO_PAIRS = ('marines', 'aimZ', 'deckAim', 'rigAim')
