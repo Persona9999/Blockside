@@ -22,13 +22,16 @@ function helmGunW(g) { var G = GUNS[g.type] || {}; return (+G.mass || 1) * gunRa
 /** 一舷的火力（迴旋砲、砲塔 g.mt 兩舷都算）。 */
 function helmPower(sh, side) { var p = 0; sh.guns.forEach(function (g) { if (g.alive && (g.mt || g.side === side)) p += helmGunW(g); }); return p; }
 function helmOther(side) { return side === 'S' ? 'P' : 'S'; }
-/** 大漩渦（TASK-0683；08_sea.js VX）：離中心不到 VX_AVOID × rv ⇒ 航向改成順著水流往外斜（越近斜得越多：20° → 90° 正往外）、帆照全速；
- *  遠一點 ⇒ null（照艦長的）。優先序（31_sailing.js sail）：讓友船、讓敵艦（快撞上才出手）＞ 它 ＞ 讓開友艦的砲線。 */
-var VX_AVOID = 0.65;
+/** 大漩渦（TASK-0683；08_sea.js VX）：快沉了才逃離漩渦（Tim 2026-10-17：「可以讓電腦要沉沒時避開就好(因為我想模擬電影場景 在漩渦內戰鬥)」「應該說快沉沒時 觸發逃離漩渦邏輯」）——
+ *  吃水（sh.sink：進水＋被眼拖下去的，32_hull.js；4.2 m 開始沉）到 VX_ESC（2.5 m）⇒ 航向順著水流往外斜 60°、帆照全速，開到 1.1 × rv（水流最快那一圈外）就交回艦長；
+ *  吃水退回 VX_ESC_OK（1 m）才不再逃。其他時候 ⇒ null（照艦長的，在漩渦裡照常打，眼裡也照打）。
+ *  ⛔ 以前照離中心多近就逃（0.65 × rv）：半徑 400 ⇒ 260 m 內一直往外，漏斗裡打不起來。優先序（31_sailing.js sail）：讓友船、讓敵艦（快撞上才出手）＞ 它 ＞ 讓開友艦的砲線。 */
+var VX_ESC = 2.5, VX_ESC_OK = 1, VX_ESC_OUT = 1.1;
 function vxAvoid(sh) {
   if (!VX || sh.sinkingFinal) return null;
-  var r = Math.hypot(sh.px, sh.pz), rD = VX_AVOID * VX.rv; if (r >= rD || r < 1e-3) return null;
-  var ux = sh.px / r, uz = sh.pz / r, b = (20 + 70 * clamp((rD - r) / (rD - VX.re), 0, 1)) * Math.PI / 180;
+  if (sh.sink >= VX_ESC && !sh.vxEsc) { sh.vxEsc = true; note(sh, '快撐不住了 —— 往漩渦外逃'); } else if (sh.vxEsc && sh.sink <= VX_ESC_OK) sh.vxEsc = false;
+  var r = Math.hypot(sh.px, sh.pz); if (!sh.vxEsc || r >= VX_ESC_OUT * VX.rv || r < 1e-3) return null;
+  var ux = sh.px / r, uz = sh.pz / r, b = 60 * Math.PI / 180;
   var dx = uz * Math.cos(b) + ux * Math.sin(b), dz = -ux * Math.cos(b) + uz * Math.sin(b);   // 切線 (z, −x)／r 往外（ux, uz）轉 b
   sh.wantV = Infinity;
   return Math.atan2(-dz, dx);                                            // fwd(yaw) ＝ (cos yaw, −sin yaw)
