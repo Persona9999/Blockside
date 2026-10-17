@@ -43,6 +43,7 @@ function fireShot(sh, g, target, ammo, muz) {
   el = clamp(el + gauss() * spread, -0.17, 0.26); az += gauss() * spread;
   var dir = [Math.cos(el) * Math.cos(az), Math.sin(el), Math.cos(el) * Math.sin(az)];
   var b = { p: mw.slice(), v: add(mul(dir, V * rr(0.985, 1.015)), sh.vel), owner: sh.i, ammo: ammo, trav: 0, alive: true, age: 0, bounced: false, big: GS.big, hole: GS.hole, dmg: DMG[g.type], m: GS.shot };   // dmg：每發傷害（砲種，細節設定）；hole：洞的倍率（4 磅彈小）；m：彈重 kg（能量，TASK-0621）
+  if (ammo === 2) b.ph = BALLS.length * 2.39996 % 6.28319;           // 鏈彈的起始角（csBar）：照場上第幾顆彈錯開（黃金角），⛔ 不抽亂數
   windShot(sh, b, dx, dz); BALLS.push(b); rptShot(sh, g, b);         // rptShot：戰鬥報表記是哪一門開的（79_report.js；只讀）
   return { mw: mw, dir: dir };
 }
@@ -255,9 +256,9 @@ function stepBall(b, dt) {
       var ah = sh.arm && !sh.grid.get(L[0] | 0, L[1] | 0, L[2] | 0) ? armAt(sh, L) : null;   // 砲帶的裝甲（24_armor.js）：船殼那一格是空的才看（兩邊不重疊）；沒有裝甲的船 ⇒ 一行都不多算
       if (!ah && !sh.grid.get(L[0] | 0, L[1] | 0, L[2] | 0)) {
         if (b.ammo !== 2) continue;
-        // 鏈彈：兩顆彈中間一條鏈、轉著飛，約 2.4 公尺寬 ⇒ 沿那條橫桿取樣，碰到哪裡就從哪裡咬下去
-        var dL = norm(M4.dir(sh.inv, b.v[0], b.v[1], b.v[2])), sd = norm(cross(dL, [0, 0, 1])), hitL = null;
-        for (var q = -12; q <= 12 && !hitL; q += 3) { var Lq = [L[0] + sd[0] * q, L[1] + sd[1] * q, L[2]]; if (sh.grid.get(Lq[0] | 0, Lq[1] | 0, Lq[2] | 0)) hitL = Lq; else if (sh.arm && (ah = armAt(sh, Lq))) hitL = Lq; }
+        // 鏈彈：兩顆彈中間一條鏈、轉著飛，2.4 公尺寬 ⇒ 沿那條鏈現在的方向（csBar：跟畫出來的同一根）取樣，碰到哪裡就從哪裡咬下去
+        var cw = csBar(b), wL = M4.dir(sh.inv, cw[0], cw[1], cw[2]), hitL = null;   // wL：鏈的方向，每公尺幾格
+        for (var q = -CS_HALF; q <= CS_HALF + 1e-6 && !hitL; q += CS_HALF / 4) { var Lq = [L[0] + wL[0] * q, L[1] + wL[1] * q, L[2] + wL[2] * q]; if (sh.grid.get(Lq[0] | 0, Lq[1] | 0, Lq[2] | 0)) hitL = Lq; else if (sh.arm && (ah = armAt(sh, Lq))) hitL = Lq; }
         if (!hitL) continue;                                              // 橫掃是以彈心為中心 ⇒ 照彈心那一點咬
       }
       impact(b, sh, L, ah);
@@ -265,6 +266,15 @@ function stepBall(b, dt) {
     }
   }
   if (b.age > 12) b.alive = false;
+}
+/** 鏈彈（Tim 2026-10-17：「鍊彈 是否可以改成套用錨的鐵鍊 連接兩顆砲彈(做出真實鍊彈效果)」）：兩顆彈相距 2 × CS_HALF 公尺、中間一條錨鍊那樣的鐵鍊（76_anchor.js csBuf 畫），
+ *  在垂直飛行方向的平面上轉（CS_SPIN 轉／秒；起始角 b.ph）。回傳鏈現在的方向（世界、單位向量）：角度 0 ＝ 水平（以前固定的那一根橫桿）。命中取樣（stepBall）跟畫面用同一根。 */
+var CS_HALF = 1.2, CS_SPIN = 2.5;
+function csBar(b) {
+  var v = b.v, vl = Math.hypot(v[0], v[1], v[2]) || 1, d = [v[0] / vl, v[1] / vl, v[2] / vl];
+  var sd = Math.abs(d[1]) > 0.98 ? [1, 0, 0] : norm([-d[2], 0, d[0]]), up = [sd[1] * d[2] - sd[2] * d[1], sd[2] * d[0] - sd[0] * d[2], sd[0] * d[1] - sd[1] * d[0]];   // sd：水平、垂直飛行方向；up ＝ sd × d
+  var a = (b.ph || 0) + b.age * CS_SPIN * 6.28319, c = Math.cos(a), s = Math.sin(a);
+  return [sd[0] * c + up[0] * s, sd[1] * c + up[1] * s, sd[2] * c + up[2] * s];
 }
 /** 讀數（TASK-0551）：順風打（砲線朝風吹去的方向 ⇒ 打的是自己的下風舷）／逆風打各開了幾發、中了幾發（sh.fireDn／fireUp、hitDn／hitUp）。 */
 function windShot(sh, b, dx, dz) { b.dn = dx * WIND[0] + dz * WIND[2] > 0; if (b.dn) sh.fireDn = (sh.fireDn || 0) + 1; else sh.fireUp = (sh.fireUp || 0) + 1; }

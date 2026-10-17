@@ -304,16 +304,7 @@ function chainBuf(sh) {
     var c = cc[0], p = c.p, N = CHAIN_SEG, P = [], i;
     for (i = 0; i <= N; i++) P.push(M4.pt(sh.inv, p[i * 3], p[i * 3 + 1], p[i * 3 + 2]));
     var hw = CH_LINK_W / S;                                             // 環的半寬（格）
-    for (i = 0; i < N; i++) {
-      var d = sub(P[i + 1], P[i]), dl = len(d); if (dl < 1e-6) continue;
-      d = mul(d, 1 / dl);
-      var n1 = Math.abs(d[2]) > 0.9 ? [1, 0, 0] : norm([d[1], -d[0], 0]), n2 = [d[1] * n1[2] - d[2] * n1[1], d[2] * n1[0] - d[0] * n1[2], d[0] * n1[1] - d[1] * n1[0]];   // 船身格座標：+z 是上
-      for (var j = 0; j < CH_LINKS; j++) {                              // 每一節 CH_LINKS 環：菱形（頭、一側、尾、另一側），相鄰兩環轉 90° 交錯、深淺交錯
-        var a = lerp3(P[i], P[i + 1], j / CH_LINKS), b = lerp3(P[i], P[i + 1], (j + 1) / CH_LINKS), m = lerp3(a, b, 0.5), k = i * CH_LINKS + j, u = k & 1 ? n2 : n1, col = CHAIN_C[k & 1];
-        var s1 = add(m, mul(u, hw)), s2 = add(m, mul(u, -hw));
-        [[a, s1], [s1, b], [b, s2], [s2, a]].forEach(function (e) { L.push(e[0][0], e[0][1], e[0][2], col[0], col[1], col[2], e[1][0], e[1][1], e[1][2], col[0], col[1], col[2]); });
-      }
-    }
+    for (i = 0; i < N; i++) chainLinks(L, P[i], P[i + 1], CH_LINKS, hw, 2, i * CH_LINKS);   // 船身格座標：+z 是上
     if (!cc[1]) return;
     var e = [p[N * 3], p[N * 3 + 1], p[N * 3 + 2]], dv = [e[0] - p[N * 3 - 3], e[1] - p[N * 3 - 2], e[2] - p[N * 3 - 1]], dl = Math.hypot(dv[0], dv[1], dv[2]);   // 錨：錨環在鍊子那一端，錨桿順著最後一節往外
     dv = dl > 0.05 ? [dv[0] / dl, dv[1] / dl, dv[2] / dl] : [0, -1, 0];
@@ -325,6 +316,31 @@ function chainBuf(sh) {
     });
   });
   sh.chain = upload(sh.chain, new Float32Array(L), 6, [[0, 3, 0], [2, 3, 3]]);
+}
+/** 一段鍊子 A→B 分 n 環推進 L（線段＋色）：菱形（頭、一側、尾、另一側），相鄰兩環轉 90° 交錯、深淺交錯（CHAIN_C）。
+ *  hw：環的半寬（跟 A、B 同單位）；up：哪一軸是上（船身格座標 2、世界 1）；k0：第一環的編號（接著上一段交錯）。錨鍊（chainBuf）與鏈彈（csBuf）共用。 */
+function chainLinks(L, A, B, n, hw, up, k0) {
+  var d = sub(B, A), dl = len(d); if (dl < 1e-6) return;
+  d = mul(d, 1 / dl);
+  var n1 = Math.abs(d[up]) > 0.9 ? [1, 0, 0] : up === 2 ? norm([d[1], -d[0], 0]) : norm([-d[2], 0, d[0]]), n2 = [d[1] * n1[2] - d[2] * n1[1], d[2] * n1[0] - d[0] * n1[2], d[0] * n1[1] - d[1] * n1[0]];
+  for (var j = 0; j < n; j++) {
+    var a = lerp3(A, B, j / n), b = lerp3(A, B, (j + 1) / n), m = lerp3(a, b, 0.5), k = k0 + j, u = k & 1 ? n2 : n1, col = CHAIN_C[k & 1];
+    var s1 = add(m, mul(u, hw)), s2 = add(m, mul(u, -hw));
+    [[a, s1], [s1, b], [b, s2], [s2, a]].forEach(function (e) { L.push(e[0][0], e[0][1], e[0][2], col[0], col[1], col[2], e[1][0], e[1][1], e[1][2], col[0], col[1], col[2]); });
+  }
+}
+/** 鏈彈的鐵鍊（21_gunnery.js csBar）：每一顆鏈彈，兩顆彈之間一條錨鍊那樣的鍊子（世界座標、每一格畫面重做）。兩顆彈本身照砲彈的點畫（60_render.js）。
+ *  環比錨鍊細、短（CS_LINK 公尺一環、半寬 CS_LINK_W）—— 鏈彈的鍊子是一門砲塞得進去的那種。 */
+var CS_LINK = 0.3, CS_LINK_W = 0.07, CSL = null, CS_ID = null;          // CS_ID：畫的時候的 uModel（單位矩陣，60_render.js）
+function csBuf() {
+  var L = [], r = 0.1;                                                   // r：鍊子從彈的表面接出去（彈半徑大約）
+  BALLS.forEach(function (b) {
+    if (b.ammo !== 2 || !b.alive) return;
+    var w = csBar(b), h = CS_HALF - r, A = [b.p[0] - w[0] * h, b.p[1] - w[1] * h, b.p[2] - w[2] * h], B = [b.p[0] + w[0] * h, b.p[1] + w[1] * h, b.p[2] + w[2] * h];
+    chainLinks(L, A, B, Math.max(2, Math.round(2 * h / CS_LINK)), CS_LINK_W, 1, 0);
+  });
+  CSL = upload(CSL, new Float32Array(L), 6, [[0, 3, 0], [2, 3, 3]]);
+  return CSL;
 }
 /** HUD 一段：兩個錨的狀態。 */
 function anchorText(sh) {

@@ -437,6 +437,9 @@ function render() {
     if (BLD.on && ow.bldLines && ow.bldLines.n) { gl.disable(gl.DEPTH_TEST); gl.bindVertexArray(ow.bldLines.vao); gl.drawArrays(gl.LINES, 0, ow.bldLines.n); gl.enable(gl.DEPTH_TEST); }   // 建造的預覽框（82_build.js bldLines；穿牆看得到）
     if ((ROOMS_DBG || (BLD.on && BLD.lines)) && ow.rooms && ow.rooms.length) { if (!ow.roomLines) roomLines(ow); gl.disable(gl.DEPTH_TEST); gl.bindVertexArray(ow.roomLines.vao); gl.drawArrays(gl.LINES, 0, ow.roomLines.n); gl.enable(gl.DEPTH_TEST); }   // 空艙房的外框（?rooms=1；穿過船殼看得到）
   });
+  if (BALLS.some(function (b) { return b.ammo === 2; })) {               // 鏈彈的鐵鍊（76_anchor.js csBuf；世界座標）
+    var csl = csBuf(); if (csl.n) { cutSet(P.tri, null); gl.uniformMatrix4fv(P.tri.u.uModel, false, CS_ID || (CS_ID = M4.ident())); gl.bindVertexArray(csl.vao); gl.drawArrays(gl.LINES, 0, csl.n); }
+  }
   gl.frontFace(gl.CW); gl.useProgram(P.sail.prog); setCommon(P.sail); drawSails(P.sail); gl.frontFace(gl.CCW);
   // 折射（高）：畫海之前的場景複製到 RT.B（顏色＋深度），海的著色器讀它
   if (GFX.refr === 2) {
@@ -473,7 +476,10 @@ function render() {
   flPushJets(pushPt);                                                    // 從破口噴進來的水（33_flood.js）
   rdPushSplash(pushPt);                                                  // 雨滴打在海面與船上的水花（14_rain.js）
   lanternHalo(pushPt);                                                   // 燈籠的光暈
-  BALLS.forEach(function (b) { pushPt(b.p, 0.32, [0.08, 0.08, 0.08], 1); });
+  BALLS.forEach(function (b) {
+    if (b.ammo !== 2) { pushPt(b.p, 0.32, [0.08, 0.08, 0.08], 1); return; }
+    var w = csBar(b); pushPt(sub(b.p, mul(w, CS_HALF)), 0.32, [0.08, 0.08, 0.08], 1); pushPt(add(b.p, mul(w, CS_HALF)), 0.32, [0.08, 0.08, 0.08], 1);   // 鏈彈：鍊子兩頭各一顆（21_gunnery.js csBar）
+  });
   var me = SHIPS[PLAYER_I], mWorld = m;                                   // mWorld 之後的是瞄準圈：另一批畫、不做深度測試（被船身擋住也看得到）
   if (me && me.aim && handAim(me) && !STILL) {                          // 自己瞄的才畫圈（含自動開砲時點了敵艦的那一舷）
     // 圈：直立，水平軸跟著敵艦的船長方向（扣掉視線方向的分量）⇒ 從側面看跟著敵艦轉；快正對船頭／船尾時改用鏡頭的右方

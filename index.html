@@ -3853,6 +3853,7 @@ function fireShot(sh, g, target, ammo, muz) {
   el = clamp(el + gauss() * spread, -0.17, 0.26); az += gauss() * spread;
   var dir = [Math.cos(el) * Math.cos(az), Math.sin(el), Math.cos(el) * Math.sin(az)];
   var b = { p: mw.slice(), v: add(mul(dir, V * rr(0.985, 1.015)), sh.vel), owner: sh.i, ammo: ammo, trav: 0, alive: true, age: 0, bounced: false, big: GS.big, hole: GS.hole, dmg: DMG[g.type], m: GS.shot };   // dmg：每發傷害（砲種，細節設定）；hole：洞的倍率（4 磅彈小）；m：彈重 kg（能量，TASK-0621）
+  if (ammo === 2) b.ph = BALLS.length * 2.39996 % 6.28319;           // 鏈彈的起始角（csBar）：照場上第幾顆彈錯開（黃金角），⛔ 不抽亂數
   windShot(sh, b, dx, dz); BALLS.push(b); rptShot(sh, g, b);         // rptShot：戰鬥報表記是哪一門開的（79_report.js；只讀）
   return { mw: mw, dir: dir };
 }
@@ -4065,9 +4066,9 @@ function stepBall(b, dt) {
       var ah = sh.arm && !sh.grid.get(L[0] | 0, L[1] | 0, L[2] | 0) ? armAt(sh, L) : null;   // 砲帶的裝甲（24_armor.js）：船殼那一格是空的才看（兩邊不重疊）；沒有裝甲的船 ⇒ 一行都不多算
       if (!ah && !sh.grid.get(L[0] | 0, L[1] | 0, L[2] | 0)) {
         if (b.ammo !== 2) continue;
-        // 鏈彈：兩顆彈中間一條鏈、轉著飛，約 2.4 公尺寬 ⇒ 沿那條橫桿取樣，碰到哪裡就從哪裡咬下去
-        var dL = norm(M4.dir(sh.inv, b.v[0], b.v[1], b.v[2])), sd = norm(cross(dL, [0, 0, 1])), hitL = null;
-        for (var q = -12; q <= 12 && !hitL; q += 3) { var Lq = [L[0] + sd[0] * q, L[1] + sd[1] * q, L[2]]; if (sh.grid.get(Lq[0] | 0, Lq[1] | 0, Lq[2] | 0)) hitL = Lq; else if (sh.arm && (ah = armAt(sh, Lq))) hitL = Lq; }
+        // 鏈彈：兩顆彈中間一條鏈、轉著飛，2.4 公尺寬 ⇒ 沿那條鏈現在的方向（csBar：跟畫出來的同一根）取樣，碰到哪裡就從哪裡咬下去
+        var cw = csBar(b), wL = M4.dir(sh.inv, cw[0], cw[1], cw[2]), hitL = null;   // wL：鏈的方向，每公尺幾格
+        for (var q = -CS_HALF; q <= CS_HALF + 1e-6 && !hitL; q += CS_HALF / 4) { var Lq = [L[0] + wL[0] * q, L[1] + wL[1] * q, L[2] + wL[2] * q]; if (sh.grid.get(Lq[0] | 0, Lq[1] | 0, Lq[2] | 0)) hitL = Lq; else if (sh.arm && (ah = armAt(sh, Lq))) hitL = Lq; }
         if (!hitL) continue;                                              // 橫掃是以彈心為中心 ⇒ 照彈心那一點咬
       }
       impact(b, sh, L, ah);
@@ -4075,6 +4076,15 @@ function stepBall(b, dt) {
     }
   }
   if (b.age > 12) b.alive = false;
+}
+/** 鏈彈（Tim 2026-10-17：「鍊彈 是否可以改成套用錨的鐵鍊 連接兩顆砲彈(做出真實鍊彈效果)」）：兩顆彈相距 2 × CS_HALF 公尺、中間一條錨鍊那樣的鐵鍊（76_anchor.js csBuf 畫），
+ *  在垂直飛行方向的平面上轉（CS_SPIN 轉／秒；起始角 b.ph）。回傳鏈現在的方向（世界、單位向量）：角度 0 ＝ 水平（以前固定的那一根橫桿）。命中取樣（stepBall）跟畫面用同一根。 */
+var CS_HALF = 1.2, CS_SPIN = 2.5;
+function csBar(b) {
+  var v = b.v, vl = Math.hypot(v[0], v[1], v[2]) || 1, d = [v[0] / vl, v[1] / vl, v[2] / vl];
+  var sd = Math.abs(d[1]) > 0.98 ? [1, 0, 0] : norm([-d[2], 0, d[0]]), up = [sd[1] * d[2] - sd[2] * d[1], sd[2] * d[0] - sd[0] * d[2], sd[0] * d[1] - sd[1] * d[0]];   // sd：水平、垂直飛行方向；up ＝ sd × d
+  var a = (b.ph || 0) + b.age * CS_SPIN * 6.28319, c = Math.cos(a), s = Math.sin(a);
+  return [sd[0] * c + up[0] * s, sd[1] * c + up[1] * s, sd[2] * c + up[2] * s];
 }
 /** 讀數（TASK-0551）：順風打（砲線朝風吹去的方向 ⇒ 打的是自己的下風舷）／逆風打各開了幾發、中了幾發（sh.fireDn／fireUp、hitDn／hitUp）。 */
 function windShot(sh, b, dx, dz) { b.dn = dx * WIND[0] + dz * WIND[2] > 0; if (b.dn) sh.fireDn = (sh.fireDn || 0) + 1; else sh.fireUp = (sh.fireUp || 0) + 1; }
@@ -12199,6 +12209,9 @@ function render() {
     if (BLD.on && ow.bldLines && ow.bldLines.n) { gl.disable(gl.DEPTH_TEST); gl.bindVertexArray(ow.bldLines.vao); gl.drawArrays(gl.LINES, 0, ow.bldLines.n); gl.enable(gl.DEPTH_TEST); }   // 建造的預覽框（82_build.js bldLines；穿牆看得到）
     if ((ROOMS_DBG || (BLD.on && BLD.lines)) && ow.rooms && ow.rooms.length) { if (!ow.roomLines) roomLines(ow); gl.disable(gl.DEPTH_TEST); gl.bindVertexArray(ow.roomLines.vao); gl.drawArrays(gl.LINES, 0, ow.roomLines.n); gl.enable(gl.DEPTH_TEST); }   // 空艙房的外框（?rooms=1；穿過船殼看得到）
   });
+  if (BALLS.some(function (b) { return b.ammo === 2; })) {               // 鏈彈的鐵鍊（76_anchor.js csBuf；世界座標）
+    var csl = csBuf(); if (csl.n) { cutSet(P.tri, null); gl.uniformMatrix4fv(P.tri.u.uModel, false, CS_ID || (CS_ID = M4.ident())); gl.bindVertexArray(csl.vao); gl.drawArrays(gl.LINES, 0, csl.n); }
+  }
   gl.frontFace(gl.CW); gl.useProgram(P.sail.prog); setCommon(P.sail); drawSails(P.sail); gl.frontFace(gl.CCW);
   // 折射（高）：畫海之前的場景複製到 RT.B（顏色＋深度），海的著色器讀它
   if (GFX.refr === 2) {
@@ -12235,7 +12248,10 @@ function render() {
   flPushJets(pushPt);                                                    // 從破口噴進來的水（33_flood.js）
   rdPushSplash(pushPt);                                                  // 雨滴打在海面與船上的水花（14_rain.js）
   lanternHalo(pushPt);                                                   // 燈籠的光暈
-  BALLS.forEach(function (b) { pushPt(b.p, 0.32, [0.08, 0.08, 0.08], 1); });
+  BALLS.forEach(function (b) {
+    if (b.ammo !== 2) { pushPt(b.p, 0.32, [0.08, 0.08, 0.08], 1); return; }
+    var w = csBar(b); pushPt(sub(b.p, mul(w, CS_HALF)), 0.32, [0.08, 0.08, 0.08], 1); pushPt(add(b.p, mul(w, CS_HALF)), 0.32, [0.08, 0.08, 0.08], 1);   // 鏈彈：鍊子兩頭各一顆（21_gunnery.js csBar）
+  });
   var me = SHIPS[PLAYER_I], mWorld = m;                                   // mWorld 之後的是瞄準圈：另一批畫、不做深度測試（被船身擋住也看得到）
   if (me && me.aim && handAim(me) && !STILL) {                          // 自己瞄的才畫圈（含自動開砲時點了敵艦的那一舷）
     // 圈：直立，水平軸跟著敵艦的船長方向（扣掉視線方向的分量）⇒ 從側面看跟著敵艦轉；快正對船頭／船尾時改用鏡頭的右方
@@ -15250,16 +15266,7 @@ function chainBuf(sh) {
     var c = cc[0], p = c.p, N = CHAIN_SEG, P = [], i;
     for (i = 0; i <= N; i++) P.push(M4.pt(sh.inv, p[i * 3], p[i * 3 + 1], p[i * 3 + 2]));
     var hw = CH_LINK_W / S;                                             // 環的半寬（格）
-    for (i = 0; i < N; i++) {
-      var d = sub(P[i + 1], P[i]), dl = len(d); if (dl < 1e-6) continue;
-      d = mul(d, 1 / dl);
-      var n1 = Math.abs(d[2]) > 0.9 ? [1, 0, 0] : norm([d[1], -d[0], 0]), n2 = [d[1] * n1[2] - d[2] * n1[1], d[2] * n1[0] - d[0] * n1[2], d[0] * n1[1] - d[1] * n1[0]];   // 船身格座標：+z 是上
-      for (var j = 0; j < CH_LINKS; j++) {                              // 每一節 CH_LINKS 環：菱形（頭、一側、尾、另一側），相鄰兩環轉 90° 交錯、深淺交錯
-        var a = lerp3(P[i], P[i + 1], j / CH_LINKS), b = lerp3(P[i], P[i + 1], (j + 1) / CH_LINKS), m = lerp3(a, b, 0.5), k = i * CH_LINKS + j, u = k & 1 ? n2 : n1, col = CHAIN_C[k & 1];
-        var s1 = add(m, mul(u, hw)), s2 = add(m, mul(u, -hw));
-        [[a, s1], [s1, b], [b, s2], [s2, a]].forEach(function (e) { L.push(e[0][0], e[0][1], e[0][2], col[0], col[1], col[2], e[1][0], e[1][1], e[1][2], col[0], col[1], col[2]); });
-      }
-    }
+    for (i = 0; i < N; i++) chainLinks(L, P[i], P[i + 1], CH_LINKS, hw, 2, i * CH_LINKS);   // 船身格座標：+z 是上
     if (!cc[1]) return;
     var e = [p[N * 3], p[N * 3 + 1], p[N * 3 + 2]], dv = [e[0] - p[N * 3 - 3], e[1] - p[N * 3 - 2], e[2] - p[N * 3 - 1]], dl = Math.hypot(dv[0], dv[1], dv[2]);   // 錨：錨環在鍊子那一端，錨桿順著最後一節往外
     dv = dl > 0.05 ? [dv[0] / dl, dv[1] / dl, dv[2] / dl] : [0, -1, 0];
@@ -15271,6 +15278,31 @@ function chainBuf(sh) {
     });
   });
   sh.chain = upload(sh.chain, new Float32Array(L), 6, [[0, 3, 0], [2, 3, 3]]);
+}
+/** 一段鍊子 A→B 分 n 環推進 L（線段＋色）：菱形（頭、一側、尾、另一側），相鄰兩環轉 90° 交錯、深淺交錯（CHAIN_C）。
+ *  hw：環的半寬（跟 A、B 同單位）；up：哪一軸是上（船身格座標 2、世界 1）；k0：第一環的編號（接著上一段交錯）。錨鍊（chainBuf）與鏈彈（csBuf）共用。 */
+function chainLinks(L, A, B, n, hw, up, k0) {
+  var d = sub(B, A), dl = len(d); if (dl < 1e-6) return;
+  d = mul(d, 1 / dl);
+  var n1 = Math.abs(d[up]) > 0.9 ? [1, 0, 0] : up === 2 ? norm([d[1], -d[0], 0]) : norm([-d[2], 0, d[0]]), n2 = [d[1] * n1[2] - d[2] * n1[1], d[2] * n1[0] - d[0] * n1[2], d[0] * n1[1] - d[1] * n1[0]];
+  for (var j = 0; j < n; j++) {
+    var a = lerp3(A, B, j / n), b = lerp3(A, B, (j + 1) / n), m = lerp3(a, b, 0.5), k = k0 + j, u = k & 1 ? n2 : n1, col = CHAIN_C[k & 1];
+    var s1 = add(m, mul(u, hw)), s2 = add(m, mul(u, -hw));
+    [[a, s1], [s1, b], [b, s2], [s2, a]].forEach(function (e) { L.push(e[0][0], e[0][1], e[0][2], col[0], col[1], col[2], e[1][0], e[1][1], e[1][2], col[0], col[1], col[2]); });
+  }
+}
+/** 鏈彈的鐵鍊（21_gunnery.js csBar）：每一顆鏈彈，兩顆彈之間一條錨鍊那樣的鍊子（世界座標、每一格畫面重做）。兩顆彈本身照砲彈的點畫（60_render.js）。
+ *  環比錨鍊細、短（CS_LINK 公尺一環、半寬 CS_LINK_W）—— 鏈彈的鍊子是一門砲塞得進去的那種。 */
+var CS_LINK = 0.3, CS_LINK_W = 0.07, CSL = null, CS_ID = null;          // CS_ID：畫的時候的 uModel（單位矩陣，60_render.js）
+function csBuf() {
+  var L = [], r = 0.1;                                                   // r：鍊子從彈的表面接出去（彈半徑大約）
+  BALLS.forEach(function (b) {
+    if (b.ammo !== 2 || !b.alive) return;
+    var w = csBar(b), h = CS_HALF - r, A = [b.p[0] - w[0] * h, b.p[1] - w[1] * h, b.p[2] - w[2] * h], B = [b.p[0] + w[0] * h, b.p[1] + w[1] * h, b.p[2] + w[2] * h];
+    chainLinks(L, A, B, Math.max(2, Math.round(2 * h / CS_LINK)), CS_LINK_W, 1, 0);
+  });
+  CSL = upload(CSL, new Float32Array(L), 6, [[0, 3, 0], [2, 3, 3]]);
+  return CSL;
 }
 /** HUD 一段：兩個錨的狀態。 */
 function anchorText(sh) {
