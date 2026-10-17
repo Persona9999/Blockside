@@ -121,7 +121,8 @@ function sailShip(sh, dt) {
   sh.vS1 = SPK > 0 ? vS / SPK * LIM.speed[2] : 0;                     // 視風的基準點（31_drive.js sailWindK，TASK-0639）：航速倍率 ＝ 船隻設定的預設（LIM.speed，1.5）的船這個風向的航速
                                                                       //   Tim 2026-10-16：「預設設定的船航速照舊，只有比預設快的加成（娛樂 ×1.4、夜隼號 ×3）才被視風限住」
   var vB = BK > 0 && !sh.sunk && !stop && !held ? BK / 1.9438 * dk : 0;   // 額外動力全速的航速（節 ⇒ m/s）；不吃航速倍率（跟以前一樣）
-  driveStep(sh, dt, vS, vB, deg, stop || held);                       // 推力、水阻、實際質量 ⇒ 加速度 ⇒ sh.spd（31_drive.js）
+  driveStep(sh, dt, vS, vB, deg, stop || held);
+  if (VX) sh.spd *= vxHold(sh, dt);                                    // 大漩渦：眼裡船速被水吃掉（08_sea.js vxHold）                       // 推力、水阻、實際質量 ⇒ 加速度 ⇒ sh.spd（31_drive.js）
   if (!stop && !held && !sh.sunk && !sh.struck && (sh.i !== PLAYER_I || SAIL === 'auto')) { var thP = sh.throttle || 1; helmGovern(sh, vS / thP, vB / thP); }   // 航速調節：艦長的期望航速 ⇒ 帆裝、俥鐘（54_helm.js；vS、vB 扣掉上一步的放慢）
   else sh.helmSpill = 1;
   // 舵

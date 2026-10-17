@@ -43,7 +43,7 @@ var VX = null;
 function vxInit() {
   var o = WX.vortex; if (!o) { VX = null; return; }
   var rv = o.r, rc = o.width * rv;
-  VX = { rv: rv, rc2: rc * rc, D: o.depth, V: o.v / 1.9438, IN: o.inflow, re: Math.min(o.eye, 0.8 * rv), pull: o.pull, gulp: o.gulp || 0, grav: o.grav, suck: o.suck, suckR: o.suckR, suckP: o.suckP, turn: o.turn, spin: (o.spin || 0) * Math.PI / 180 };
+  VX = { rv: rv, rc2: rc * rc, D: o.depth, V: o.v / 1.9438, IN: o.inflow, re: Math.min(o.eye, 0.8 * rv), pull: o.pull, gulp: o.gulp || 0, hold: o.hold || 0, eyeSuck: o.eyeSuck || 0, grav: o.grav, suck: o.suck, suckR: o.suckR, suckP: o.suckP, turn: o.turn, spin: (o.spin || 0) * Math.PI / 180 };
   VX.De = o.eyeDepth; VX.re2 = VX.re * VX.re; VX.trap = VX.re;   // 逃不掉的範圍 ＝ 眼（Tim：「逃不掉範圍 不用特別設定」；31_drive.js 上坡減免只在這一圈外）   // 眼的喉部：再往下 De（寬 ＝ 眼的半徑）
   VX.r0min = 3 * VX.re;                           // 開局最近離中心多遠（52_fleet.js vxPlace：照主選單的距離排；Tim「起始可以在漩渦中」）          // 開局那一圈（52_fleet.js vxPlace；Tim「起始可以在漩渦中」）：最近是眼的 3 倍（電腦避開眼的那一圈是 2.5 倍，54_helm.js vxAvoid）
 }
@@ -85,6 +85,10 @@ function vxTurn(sh, dt) {
   return VX.turn / (1 + q * q) * (z * vx - x * vz) / r2 * dt;
 }
 var VX_UPHILL = 0.5;                                                   // 眼外（逃不掉的範圍 ＝ 眼），上坡最多吃掉幾成推力（31_drive.js）
+/** 眼的束縛（Tim 2026-10-18：「我衝向漩渦眼 被吸進去高速旋轉後 無傷的被甩出來了」）：這一步船速剩幾成 ——
+ *  眼的邊上 1、往裡線性加到一半以內每秒吃掉 VX.hold（31_sailing.js 乘在 sh.spd 上，driveStep 之後）⇒ 衝進來的船幾秒內停下、引擎和帆在裡面推不起速度 ⇒ 逃不掉（逃不掉的範圍 ＝ 眼）。
+ *  ⛔ 沒有它：順著坡衝下去 27–30 節，半徑 42 m 的眼一兩秒就穿過去；吸力（最多約 3 m/s）抵不過、往下拖要 28 秒，自旋只轉船頭不扣船速 ⇒ 轉一轉從另一邊滑出去。 */
+function vxHold(sh, dt) { if (!(VX.hold > 0)) return 1; var r = Math.hypot(sh.px, sh.pz); return r >= VX.re ? 1 : Math.max(0, 1 - VX.hold * clamp(2 * (1 - r / VX.re), 0, 1) * dt); }
 function vxSpin(sh, dt) { if (!(VX.spin > 0)) return 0; var r = Math.hypot(sh.px, sh.pz); return r >= VX.re ? 0 : VX.spin * clamp(2 * (1 - r / VX.re), 0, 1) * dt; }
 function vxDrift(sh, dt) {
   var D = sh.vxD || (sh.vxD = [0, 0]), r = Math.hypot(sh.px, sh.pz), f = Math.max(0, 1 - VX_DRIFT_DRAG * dt);
@@ -95,7 +99,9 @@ function vxFlow(x, z) {
   if (!VX) return null;
   var r = Math.hypot(x, z); if (r < 1e-3) return [0, 0];
   var q = r / VX.rv, vt = VX.V * 2 * q / (1 + q * q), ux = x / r, uz = z / r;
-  return [vt * (uz - VX.IN * ux), vt * (-ux - VX.IN * uz)];
+  // 眼的吸力（Tim 2026-10-18「眼的吸力要更強」）：眼裡另外一股直接往中心的水流 VX.eyeSuck（m/s）—— 眼的邊上 0、四分之一深處全力、正中心 8 m 內收掉（不在中心點亂跳）；船、碎片、落水的人都吃
+  var ve = VX.eyeSuck > 0 && r < VX.re ? VX.eyeSuck * clamp((VX.re - r) / (0.25 * VX.re), 0, 1) * Math.min(1, r / 8) : 0;
+  return [vt * (uz - VX.IN * ux) - ve * ux, vt * (-ux - VX.IN * uz) - ve * uz];
 }
 /** 順著水流的船頭方向（yaw；fwd(yaw) ＝ 切線）：開局用（52_fleet.js spawnFleet）。 */
 function vxTangentYaw(x, z) { var r = Math.hypot(x, z) || 1; return Math.atan2(x / r, z / r); }
