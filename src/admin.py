@@ -1045,6 +1045,7 @@ def act_build(pack=True):   # pack：壓縮版（預設，TASK-0583）；False �
         raise Fail('\n'.join(log) + '\n✗ 建置失敗（exit %d）' % code)
     if pack:
         log += pack_html(OUT)
+        log += js_strip_html(OUT)
     return log
 
 # ───────────────────────── 壓縮版成品（預設；build --raw ＝ 原格式。Tim 2026-10-14，TASK-0583：雕刻作品與匯出的 .vxk 格式不變，匯進遊戲才壓縮） ─────────────────────────
@@ -1084,6 +1085,12 @@ def mesh_pack(m):
         t.append(x - pt)
         pt = x
     return {'v': v, 't': t, 'tmat': m['tmat'], 'mats': m['mats']}
+
+
+def pool_entry(P, ref):
+    """網格的引用 { pool: i, o?: [x, y, z] } ⇒ 池子那一格；有 o ⇒ 起點換成 o（差值編碼的第一個頂點；只差起點的網格共用一格，TASK-0667）。"""
+    e = P['meshes'][ref['pool']]
+    return dict(e, v=list(ref['o']) + e['v'][3:]) if 'o' in ref else e
 
 
 def mesh_unpack(e):
@@ -1255,13 +1262,13 @@ def pack_html(path):
     html = open(path, encoding='utf-8').read()
     if 'id="%s"' % POOL_EL in html:
         raise Fail('成品已經是壓縮模式（有 #%s）' % POOL_EL)
-    pool, where, log, keep, mirrors = [], {}, [], 0, []
+    pool, where, shape, log, keep, mirrors, moved = [], {}, {}, [], 0, [], 0
     size0 = len(html.encode('utf-8'))
     ships = load()['ships']
     byel, byid = {s['el']: s for s in ships}, {s['id']: s for s in ships}
 
     def one(mt):
-        nonlocal keep
+        nonlocal keep, moved
         if len(mt.group(2)) < 64:   # 程式註解裡的「<script type="application/x-vxk" id="…">base64</script>」不是船
             return mt.group(0)
         raw = zlib.decompress(base64.b64decode(mt.group(2)), -15)
@@ -1276,15 +1283,21 @@ def pack_html(path):
                 if key not in where:
                     e = mesh_pack(m)
                     if e is None or not same_tris(m, mesh_unpack(e)):
-                        where[key] = -1
+                        where[key] = None
                     else:
-                        where[key] = len(pool)
-                        pool.append(e)
-                if where[key] < 0:
+                        # TASK-0667：只差起點的網格（同一種砲擺在不同位置：差值編碼只有第一個頂點不同）共用池子的同一格，引用帶自己的起點 o
+                        sk = hashlib.sha1(json.dumps([e['v'][3:], e['t'], e['tmat'], e['mats']], separators=(',', ':')).encode()).hexdigest()
+                        if sk not in shape:
+                            shape[sk] = len(pool)
+                            pool.append(e)
+                        i = shape[sk]
+                        where[key] = {'pool': i} if pool[i]['v'][:3] == e['v'][:3] else {'pool': i, 'o': e['v'][:3]}
+                if where[key] is None:
                     out.append(m)
                     keep += 1
                 else:
-                    out.append({'pool': where[key]})
+                    out.append(dict(where[key]))
+                    moved += 'o' in where[key]
             h['rig']['meshes'] = out
             h['mesh_pool'] = POOL_EL
         grid = raw[8 + n:]
@@ -1322,6 +1335,7 @@ def pack_html(path):
     nv, E = pack_verify(html2)                                  # 寫出去之前：照遊戲的讀法還原、跟 _cache 原檔逐個比（對不上 ⇒ 不寫，舊成品留著）
     if E:
         raise Fail('壓縮版還原出來跟原檔對不上（成品沒寫）：\n' + '\n'.join('  ✗ ' + e for e in E[:12]))
+    log.append('✓ 網格池：只差起點的網格共用同一格 ⇒ %d 個引用帶自己的起點（TASK-0667）' % moved)
     log.append('✓ 還原驗算：%d 艘、%d 份網格的三角形跟 _cache 原檔逐個相同，格子、繩、帆一位元組不差（有配方的帆只存配方，頂點由遊戲照配方生，不在這裡比）' % (k, nv))
     for el, M, g0, g1, V in mirrors:
         what = ('改裝船：跟原船 #%s 差 %d 格' % (V['el'], V['ndiff'])) if V else ('鏡射 y ↔ %d − y、一半 %d 塊、diff %d 格' % (M['s'], M['nhalf'], M['ndiff'])) if M else '照原樣（鏡射沒有比較小）'
@@ -1330,6 +1344,165 @@ def pack_html(path):
     size1 = len(html2.encode('utf-8'))
     log.append('✓ 壓縮模式：%d 艘、網格池 %d 份（%d KB）%s；成品 %.2f MB → %.2f MB（−%.0f%%）' % (
         k, len(pool), len(pb) // 1024, '、照原樣留在船裡 %d 份' % keep if keep else '', size0 / 1048576, size1 / 1048576, (1 - size1 / size0) * 100))
+    return log
+
+
+# ───────────────────────── 成品去註解（TASK-0667，Tim 2026-10-17：成品瘦身）─────────────────────────
+# 只動成品（壓縮版）裡內嵌的程式（<script> 不帶屬性的那幾段：voxelkit.js、遊戲閉包）；原始碼的註解照留，build --raw 也照留。
+# 拿掉：註解、行首縮排、行尾空白、行內連續空白縮成一格。⛔ 換行一個都不拿 ⇒ 成品的行號跟去註解前一樣（錯誤訊息照樣對得到原本那一行）；
+#   每支檔開頭那一行「// ── js/xx.js ──」照留（照行號找是哪一支檔）。
+# 掃描器照 JS 的讀法分：字串、正則、註解、其他；'/' 是正則還是除號照前一個字（運算子、左括號、return 這類關鍵字之後 ⇒ 正則）。
+# 驗算（寫回去之前）：node 內建的 acorn 把去註解前後各解析一次，語法樹（拿掉位置）逐個節點相同才寫（js_ast_same.cjs，另一份獨立的讀法）；
+#   沒有 node ⇒ 照寫、讀數明寫「沒驗」。樣板字串（反引號）遊戲沒用 ⇒ 碰到就擋（不猜它的 ${} 怎麼巢狀）。
+JS_RX_AFTER = {'return', 'typeof', 'instanceof', 'in', 'of', 'new', 'delete', 'void', 'throw', 'case', 'do', 'else', 'yield', 'await'}
+JS_KEEP_LINE = '// ── '
+
+
+def js_strip(src):
+    """一段 JS ⇒ 去掉註解與多餘空白（換行全留）。"""
+    out, i, n = [], 0, len(src)
+    last, word = '', ''                                   # 前一個有意義的字：'' 開頭、'id' 名字（word）、'num'、'str'、'rx' 正則、其他 ＝ 那個符號
+    at_line = True
+    while i < n:
+        c = src[i]
+        if c == '\r':
+            i += 1
+            continue
+        if c == '\n':
+            while out and out[-1] == ' ':
+                out.pop()
+            out.append('\n')
+            i += 1
+            while i < n and src[i] in ' \t':
+                i += 1
+            at_line = True
+            continue
+        if c in ' \t':
+            j = i
+            while j < n and src[j] in ' \t':
+                j += 1
+            if out and out[-1] not in ' \n':
+                out.append(' ')
+            i = j
+            continue
+        if src.startswith('//', i):
+            j = src.find('\n', i)
+            j = n if j < 0 else j
+            if at_line and src.startswith(JS_KEEP_LINE, i):
+                out.append(src[i:j].rstrip())
+            i = j
+            continue
+        if src.startswith('/*', i):
+            j = src.find('*/', i + 2)
+            if j < 0:
+                raise Fail('去註解：/* 沒有結尾（第 %d 行）' % (src.count('\n', 0, i) + 1))
+            k = src.count('\n', i, j)
+            if k:
+                while out and out[-1] == ' ':
+                    out.pop()
+                out.append('\n' * k)
+                at_line = True
+            elif out and out[-1] not in ' \n':
+                out.append(' ')
+            i = j + 2
+            continue
+        at_line = False
+        if c in '\'"':
+            j = i + 1
+            while j < n and src[j] != c:
+                if src[j] == '\\':
+                    j += 1
+                elif src[j] == '\n':
+                    raise Fail('去註解：字串沒有結尾（第 %d 行）' % (src.count('\n', 0, i) + 1))
+                j += 1
+            out.append(src[i:j + 1])
+            last, i = 'str', j + 1
+            continue
+        if c == '`':
+            raise Fail('去註解：碰到樣板字串（第 %d 行）—— 遊戲沒用、掃描器不認 ⇒ 擋下（要用就先把掃描器補上）' % (src.count('\n', 0, i) + 1))
+        if c == '/':
+            rx = last in ('',) or (last == 'id' and word in JS_RX_AFTER) or (last not in ('id', 'num', 'str', 'rx') and last not in (')', ']'))
+            if rx:
+                j, cls = i + 1, False
+                while j < n:
+                    d = src[j]
+                    if d == '\\':
+                        j += 2
+                        continue
+                    if d == '\n':
+                        raise Fail('去註解：正則沒有結尾（第 %d 行）' % (src.count('\n', 0, i) + 1))
+                    if d == '[':
+                        cls = True
+                    elif d == ']':
+                        cls = False
+                    elif d == '/' and not cls:
+                        break
+                    j += 1
+                j += 1
+                while j < n and (src[j].isalnum() or src[j] == '_'):
+                    j += 1
+                out.append(src[i:j])
+                last, i = 'rx', j
+                continue
+            out.append(c)
+            last, i = c, i + 1
+            continue
+        if c.isalpha() or c in '_$' or ord(c) > 127:
+            j = i + 1
+            while j < n and (src[j].isalnum() or src[j] in '_$' or ord(src[j]) > 127):
+                j += 1
+            word = src[i:j]
+            out.append(word)
+            last, i = 'id', j
+            continue
+        if c.isdigit() or (c == '.' and i + 1 < n and src[i + 1].isdigit()):
+            j = i + 1
+            while j < n and (src[j].isalnum() or src[j] in '._' or (src[j] in '+-' and src[j - 1] in 'eE' and not src[i:j].lower().startswith('0x'))):
+                j += 1
+            out.append(src[i:j])
+            last, i = 'num', j
+            continue
+        out.append(c)
+        last, i = c, i + 1
+    return ''.join(out)
+
+
+def js_strip_html(path):
+    """成品裡每段 <script>（不帶屬性：程式本體）去註解；驗算過才寫回。回傳讀數。"""
+    import tempfile
+    html = open(path, encoding='utf-8').read()
+    parts, log = [], []
+
+    def one(mt):
+        a = mt.group(1)
+        b = js_strip(a)
+        if a.count('\n') != b.count('\n'):
+            raise Fail('去註解：行數 %d → %d（應該一樣）' % (a.count('\n'), b.count('\n')))
+        parts.append((a, b))
+        return '<script>' + b + '</script>'
+
+    html2 = re.sub(r'<script>(.*?)</script>', one, html, flags=re.S)
+    node = shutil.which('node')
+    checked = 0
+    if node:
+        with tempfile.TemporaryDirectory() as td:
+            for k, (a, b) in enumerate(parts):
+                fa, fb = os.path.join(td, '%d_a.js' % k), os.path.join(td, '%d_b.js' % k)
+                open(fa, 'w', encoding='utf-8', newline='').write(a.replace('<\\/script', '</script'))
+                open(fb, 'w', encoding='utf-8', newline='').write(b.replace('<\\/script', '</script'))
+                r = subprocess.run([node, '--expose-internals', os.path.join(HERE, 'js_ast_same.cjs'), fa, fb], capture_output=True, text=True, encoding='utf-8')
+                try:
+                    res = json.loads(r.stdout.strip().splitlines()[-1])
+                except Exception:
+                    res = {'ok': False, 'why': (r.stdout + r.stderr).strip()[-300:]}
+                if not res.get('ok'):
+                    raise Fail('去註解的驗算沒過（成品照去註解前的留著）：第 %d 段 %s' % (k + 1, res.get('why')))
+                checked += res.get('nodes', 0)
+    open(path, 'w', encoding='utf-8', newline='').write(html2)
+    a0, b0 = sum(len(a.encode('utf-8')) for a, _ in parts), sum(len(b.encode('utf-8')) for _, b in parts)
+    log.append('✓ 成品去註解：%d 段程式 %.2f MB → %.2f MB（行數不變）；%s' % (
+        len(parts), a0 / 1048576, b0 / 1048576, '語法樹逐點相同（acorn，%d 個節點）' % checked if node else '⚠ 沒驗（找不到 node）'))
+    log.append('✓ 成品 %.2f MB' % (len(html2.encode('utf-8')) / 1048576))
     return log
 
 
@@ -1386,7 +1559,7 @@ def pack_verify(html):
             if P is None:
                 E.append('%s：header 說有網格池，成品裡沒有 #%s' % (s['id'], POOL_EL))
                 continue
-            ma = [mesh_unpack(P['meshes'][x['pool']]) if isinstance(x, dict) and 'pool' in x else x for x in ma]
+            ma = [mesh_unpack(pool_entry(P, x)) if isinstance(x, dict) and 'pool' in x else x for x in ma]
         if len(ma) != len(mb):
             E.append('%s：網格 %d 份，原檔 %d 份' % (s['id'], len(ma), len(mb)))
             continue
