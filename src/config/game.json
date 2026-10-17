@@ -359,6 +359,9 @@
       "drive": "steam",
       "geo": {"spar": [35, 38], "marines": [60, 60], "center": 40, "aim": 33, "aimZ": [5, 70], "deckAim": [35, 45], "rigAim": [35, 64]},
       "crew": {"officers": 4, "helm": 1, "marines": 0, "top": 0, "monkeys": 1, "shelter": 1},
+      "flags": [
+        {"kind": "ensign", "at": [30, 65, 34], "pole": 3}
+      ],
       "names": ["莫尼特號"],
       "author": "meadow"
     },
@@ -373,6 +376,9 @@
       "drive": "steam",
       "geo": {"spar": [35, 38], "marines": [60, 60], "center": 40, "aim": 33, "aimZ": [5, 70], "deckAim": [35, 45], "rigAim": [35, 64]},
       "crew": {"officers": 4, "helm": 1, "marines": 0, "top": 0, "monkeys": 1, "shelter": 1},
+      "flags": [
+        {"kind": "ensign", "at": [444, 64, 113], "pole": 1.5}
+      ],
       "names": ["哨兵號"],
       "author": "meadow"
     },
