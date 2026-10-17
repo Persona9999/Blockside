@@ -18,6 +18,7 @@ var FURN_ITEMS = [
   { k: 'cap', name: '全船上限', lim: [0, 300], step: 1, unit: ' 噸／分', int: true, has: furnIsPump, note: '同一種抽水機全船加總最多抽多少（0 ＝ 不限）' },
   { k: 'hold', name: '容納', lim: [1, 4], step: 1, unit: ' 人', int: true, has: function (f) { return f.hold !== undefined; }, note: '一張床躺幾個傷員' },
   { k: 'buff.heal', name: '治療速度加成', lim: [0, 1], step: 0.05, pct: true, has: function (f) { return !!(f.buff && f.buff.heal !== undefined); }, note: '同一間加總，上限照房間類型（醫療艙 60%）' },
+  { k: 'staff.surgeon', name: '配幾位船醫', lim: [0, 4], step: 1, unit: ' 人', int: true, has: function (f) { return !!(f.staff && f.staff.surgeon !== undefined); }, note: '設施配員：開戰時走得到的每一件配這麼多位船醫，站在旁邊（全船上限在船隻配置頁）' },
   { k: 'hp', name: '血量', lim: [10, 1000], step: 10, unit: '', int: true, has: function (f) { return f.hp !== undefined; }, note: '被打到扣血，歸零就壞（不再能用、不再給加成）' }
 ];
 /** 動力件的項目（31_drive.js drvCurve／drvNeed／drvPartsTick 讀）；fit ＝ 拉滑桿時跟另一格保持 lo < hi。 */

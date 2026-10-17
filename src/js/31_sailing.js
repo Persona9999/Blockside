@@ -121,7 +121,8 @@ function sailShip(sh, dt) {
   sh.vS1 = SPK > 0 ? vS / SPK * LIM.speed[2] : 0;                     // 視風的基準點（31_drive.js sailWindK，TASK-0639）：航速倍率 ＝ 船隻設定的預設（LIM.speed，1.5）的船這個風向的航速
                                                                       //   Tim 2026-10-16：「預設設定的船航速照舊，只有比預設快的加成（娛樂 ×1.4、夜隼號 ×3）才被視風限住」
   var vB = BK > 0 && !sh.sunk && !stop && !held ? BK / 1.9438 * dk : 0;   // 額外動力全速的航速（節 ⇒ m/s）；不吃航速倍率（跟以前一樣）
-  driveStep(sh, dt, vS, vB, deg, stop || held);                       // 推力、水阻、實際質量 ⇒ 加速度 ⇒ sh.spd（31_drive.js）
+  driveStep(sh, dt, vS, vB, deg, stop || held);
+  if (VX) sh.spd *= vxHold(sh, dt);                                    // 大漩渦：眼裡船速被水吃掉（08_sea.js vxHold）                       // 推力、水阻、實際質量 ⇒ 加速度 ⇒ sh.spd（31_drive.js）
   if (!stop && !held && !sh.sunk && !sh.struck && (sh.i !== PLAYER_I || SAIL === 'auto')) { var thP = sh.throttle || 1; helmGovern(sh, vS / thP, vB / thP); }   // 航速調節：艦長的期望航速 ⇒ 帆裝、俥鐘（54_helm.js；vS、vB 扣掉上一步的放慢）
   else sh.helmSpill = 1;
   // 舵
@@ -168,9 +169,10 @@ function sailShip(sh, dt) {
   if (!stop && !(held && Math.abs(sh.spd) < 0.6)) rate += driveYaw(sh, rmax);   // 受損的不平衡（前帆被打掉、一邊的螺旋槳沒了）⇒ 船自己偏（31_drive.js）；舵照舊修得回來
   sh.yawRate += (rate - sh.yawRate) * Math.min(1, dt / (2 * DRV_TURN));   // 迴轉慣性（細節設定「迴轉慣性」，預設 1 ＝ 以前的 2 秒）
   sh.yaw += sh.yawRate * dt;
+  if (VX) sh.yaw += vxSpin(sh, dt) + vxTurn(sh, dt);                  // 大漩渦：眼裡跟著漩渦自旋、繞行轉向（08_sea.js）
   F = fwd(sh.yaw);
   sh.vel = mul(F, sh.spd);
-  if (VX) { var cf = vxFlow(sh.px, sh.pz); sh.vel[0] += cf[0]; sh.vel[2] += cf[1]; }   // 大漩渦（08_sea.js）：水流帶著船走 ⇒ sh.vel 是對地的速度（砲彈帶的船速、瞄準的前置量、帆上的視風都照它）
+  if (VX) { var cf = vxFlow(sh.px, sh.pz), vd = vxDrift(sh, dt); sh.vel[0] += cf[0] + vd[0]; sh.vel[2] += cf[1] + vd[1]; }   // ＋ 漩渦吸力的漂移（08_sea.js vxDrift）   // 大漩渦（08_sea.js）：水流帶著船走 ⇒ sh.vel 是對地的速度（砲彈帶的船速、瞄準的前置量、帆上的視風都照它）
   if (sh.vxEaten && sh.sinkingFinal) { sh.spd *= Math.max(0, 1 - 0.5 * dt); sh.vel = [cf[0] - 0.3 * sh.px, 0, cf[1] - 0.3 * sh.pz]; }   // 被漩渦拖沉了（32_hull.js）：自己的船速兩秒內沒了，只跟著水流、往中心拉（⛔ 不拉 ⇒ 靠原本的航速滑出眼外才沉完）
   var px0 = sh.px, pz0 = sh.pz;
   sh.px += sh.vel[0] * dt; sh.pz += sh.vel[2] * dt;

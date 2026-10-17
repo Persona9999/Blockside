@@ -512,7 +512,8 @@ function sliders() {
     n = cw.monkeys; v('monkeys', n ? n + ' 人 × 每一對砲' + (hc ? '（約 ' + Math.ceil(hc.n / 2) + ' 對）' : '') + '：從取用點搬火藥與彈藥' : '0（沒有：砲旁的藥箱用完就停）', n, d.monkeys);
     n = cw.hands; v('hands', n + ' 人（在住艙甲板待命，缺人手時補位）' + (Q.has('hands') ? '　⚠ 網址 ?hands= 蓋過' : ''), n, d.hands);
     n = cw.carpenter; v('carpenter', n ? n + ' 人（修斷掉的梯子 —— 整件還原、補甲板破洞 —— 先補把甲板打成兩塊的；跟預備水手一樣在船裡走動）' : '0（沒有：梯子、甲板打壞了就一直壞著）', n, d.carpenter);
-    n = cw.surgeon; v('surgeon', n ? n + ' 人（開戰就站在醫療艙裡；醫療艙要的人手先算船醫、不夠才派預備水手；有船醫的那一間治療快 50%；沒設醫療艙的船不上船）' : '0（沒有：醫療艙照舊只靠預備水手）', n, d.surgeon);
+    n = cw.surgeon; var sg = hullStaff(CFG_ID, 'surgeon');   // 設施配員（36_rooms.js staffSlots）：病床每張配幾位 ⇒ 這型擺了幾張；上限截掉的照實寫
+    v('surgeon', n ? '上限 ' + n + ' 人：病床每張配 ' + furnStaff('bed', 'surgeon') + ' 位' + (sg === null ? '' : '（這型 ' + sg + ' 位' + (sg > n ? ' ⇒ 上限截到 ' + n : '') + '；走不到的床不配）') + '；開戰就站在床旁；醫療艙要的人手先算船醫、不夠才派預備水手；有船醫的那一間治療快 50%；沒設醫療艙的船不上船' : '0（沒有：醫療艙照舊只靠預備水手）', n, d.surgeon);
     n = cw.shelter ? 1 : 0; v('shelter', n ? '開：預備水手不上露天甲板閒晃（只上去補位）、船長以外的軍官待在甲板下' : '關：預備水手偶爾上露天甲板走動、軍官站在露天甲板', n, d.shelter ? 1 : 0);
     var gsum = 0;
     Object.keys(GUNS).forEach(function (t) {
@@ -652,8 +653,12 @@ function sliders() {
   var WQ = cfgPage({ id: 'wq', title: '天氣設定', sub: '暴風雨與大漩渦的參數（晴天不在這裡）。下一場開始生效；主選單背景的大漩渦馬上跟著變。',
     items: WXK_ITEMS, get: wxkGet, def: wxkDef, set: function (k, v) { wxkSet(k, v); wqBtn(); }, reset: function () { wxkReset(); wqBtn(); },
     kind: 'weather', file: 'blockside_weather', what: '天氣設定', back: function () { page(''); } });
-  $('wqB').onclick = function () { page('wq'); WQ.show(); };
-  wqBtn();
+  // 吸力讀數（Tim 2026-10-17「或是可以有一個頁面可調參數 來控制吸力變化」）：照現在的設定算各處的終端漂移（08_sea.js vxSuckV），改滑桿就跟著變
+  var wqS = document.createElement('div'); wqS.className = 'row note'; wqS.id = 'wqSuck'; $('wqItems').appendChild(wqS);
+  function wqSuck() { var o = WEATHERS.maelstrom.vortex; wqS.textContent = '吸力（靜止的船最後被拉多快）：' + [10, 50, 100, 200, 400].map(function (r) { return r + ' m ' + vxSuckV(o, r).toFixed(2); }).join('・') + ' m/s'; }
+  [].forEach.call($('wqItems').querySelectorAll('input[type=range]'), function (r) { r.addEventListener('input', wqSuck); });
+  $('wqB').onclick = function () { page('wq'); WQ.show(); wqSuck(); };
+  wqBtn(); wqSuck();
   $('gunX').onclick = function () { page(''); };
   $('furnB').onclick = function () { page('furn'); furnShow(); };   // 道具設定（67_furncfg.js）
   $('furnX').onclick = function () { page(''); };

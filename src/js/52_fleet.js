@@ -272,12 +272,16 @@ function spawnFleet(spec) {
   });
   if (VX) vxPlace(SHIPS);                                                // 大漩渦（08_sea.js）：改成沿著漏斗那一圈排
 }
-/** 大漩渦（TASK-0683）的開局：沿著「開局位置」那一圈（VX.r0；以前是水流最快那一圈 rv）排 —— 我方在 +z 那一側、敵方 −z（兩隊隔著漏斗，像電影裡各在一邊繞著打），
+/** 大漩渦（TASK-0683）的開局：沿著照主選單距離算出來的那一圈（r0；第三版是天氣設定頁的「開局位置」、第二版是水流最快那一圈 rv）排 —— 我方在 +z 那一側、敵方 −z（兩隊隔著漏斗，像電影裡各在一邊繞著打），
  *  每一隊照編成的順序從那一側的正中往後排（後 ＝ 逆著水流 ⇒ atan2(z, x) 變大），前後隔「兩艘的半長 ＋ 30 m」；一圈排過 150° 還有 ⇒ 往外一圈（＋45 m）從頭排。船頭順著水流的切線。
  *  ⛔ 照並排的 FLEET_GAP（中心隔 70 m）轉成縱隊 ⇒ 87 m 長的憲法號跟 93 m 的餘燼號開局就疊在一起，2 對 2 前 50 秒互撞 4 次（暴風雨同一場 0 次）。 */
 function vxPlace(L) {
+  // 那一圈多大（Tim 2026-10-17：「兩船起始距離是否可以根據實際距離」「300比起非漩渦 近了很多」）：跟一般開局同一個意思 —— 兩隊第一艘的中心距離 ＝ 主選單的距離（船頭到船頭）＋ 兩艘各自從原點到船頭，
+  //   平分到中心兩側；最近 VX.r0min（眼的 3 倍）。⛔ 以前是天氣設定頁固定的 130 m ⇒ 距離拉到 300 也還是隔 260 m（中心到中心），比不在漩渦近很多。
+  var bow = function (team) { var s = L.filter(function (sh) { return sh.team === team; })[0]; return s ? (s.T.wl1 - s.T.cx) * S : 0; };
+  var r0 = Math.max((DIST + bow('blue') + bow('red')) / 2, VX.r0min);
   ['blue', 'red'].forEach(function (team) {
-    var R = VX.r0, a0 = team === 'blue' ? Math.PI / 2 : -Math.PI / 2, a = a0, prev = 0;   // r0：天氣設定頁的「開局位置」（08_sea.js vxInit）
+    var R = r0, a0 = team === 'blue' ? Math.PI / 2 : -Math.PI / 2, a = a0, prev = 0;
     L.filter(function (sh) { return sh.team === team; }).forEach(function (sh) {
       var half = (sh.T.hx1 - sh.T.hx0) * S / 2;
       if (prev) { a += (prev + half + 30) / R; if (a - a0 > 150 * Math.PI / 180) { R += 45; a = a0; } }

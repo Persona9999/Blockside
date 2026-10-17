@@ -22,7 +22,9 @@ WEATHERS.storm.gusts = { dir: 0.6, spd: 0.3, per: [71, 29, 11] };
 //   r 水流最快那一圈的半徑（m）、depth 中間多深（m）、width 漏斗寬窄（幾倍的 r）、v 水流最快（節）、inflow 往中心吸（切向的幾成）、eye 眼的半徑（m）、pull 眼把船往下拖（m/秒，0 ＝ 不拖）。
 //   預設（Tim 2026-10-17「半徑再放大2倍 然後更深一點 水流快一些」）：r 95 → 190、depth 28 → 75、v 6.8 → 10 節、eye 21 → 42；可以在天氣設定頁改（下面 WXK_ITEMS）。
 //   再一次（Tim：「漩渦半徑預設值可以改400(上限改1000) 深度預設150 上限300」「起始可以在漩渦中」）：r 190 → 400、depth 75 → 150；start 開局離中心（m）130 —— 兩隊在漏斗裡面開打，不在水流最快那一圈。
-WEATHERS.maelstrom = Object.assign({}, WEATHERS.storm, { name: '大漩渦', vortex: { r: 400, depth: 150, width: 0.6, v: 10, inflow: 0.2, eye: 42, eyeDepth: 60, pull: 0.15, start: 130 } });
+WEATHERS.maelstrom = Object.assign({}, WEATHERS.storm, { name: '大漩渦', vortex: { r: 400, depth: 250, width: 0.6, v: 10, inflow: 0.2, eye: 42, eyeDepth: 100, pull: 0.15, gulp: 4, hold: 1.5, eyeSuck: 5, grav: 0.1, suck: 0.1, suckR: 90, suckP: 2, spin: 40, turn: 1 } });
+//   再一次（Tim：「兩船起始距離是否可以根據實際距離」「300比起非漩渦 近了很多」「深度預設250吧(上限可以改400)」「下坡加速跟吸力 預設0.1」）：
+//   開局距離跟主選單的「距離」走（52_fleet.js vxPlace；拿掉「開局位置」start）、depth 150 → 250（上限 400）、grav／suck 0.05 → 0.1。
 // 天氣設定頁（Tim 2026-10-17：「或是開一個天氣設定頁(參考船隻設定) 可以設定不同天氣參數(大漩渦半徑 轉速 深度等放裡面)」）：
 //   描述表照 64_cfgkit.js cfgPage（71_input.js 生頁、69_prefs.js 存 wxk：只存跟預設不一樣的）。get／set 直接讀寫 WEATHERS 那一格（of：哪幾種天氣、key：哪一欄）。
 //   暴風雨的浪、風同時改暴風雨與大漩渦（大漩渦照抄暴風雨）；晴天不在這一頁（晴天 ＝ 1 倍，對拍的基準）。⛔ 對拍（?demo、?prefs=0）不讀存檔 ⇒ 照預設。
@@ -30,12 +32,20 @@ var WXK_ITEMS = [
   { k: 'sea', of: ['storm', 'maelstrom'], name: '暴風雨的浪', lim: [1, 5], step: 0.1, fix: 1, unit: ' 倍', note: '暴風雨與大漩渦的浪高（晴天 ＝ 1 倍）' },
   { k: 'wind', of: ['storm', 'maelstrom'], name: '暴風雨的風', lim: [1, 4], step: 0.1, fix: 1, unit: ' 倍', note: '帆上的風、煙飄的速度（晴天 ＝ 1 倍）' },
   { k: 'r', of: ['maelstrom'], vx: 1, name: '漩渦半徑', lim: [60, 1000], step: 10, int: true, unit: ' m', note: '水流最快的那一圈（漏斗的大小跟著它）' },
-  { k: 'depth', of: ['maelstrom'], vx: 1, name: '漩渦深度', lim: [5, 300], step: 5, int: true, unit: ' m', note: '中心比海面低多少（不算眼的喉部）' },
-  { k: 'start', of: ['maelstrom'], vx: 1, name: '開局位置', lim: [50, 1000], step: 10, int: true, unit: ' m', note: '開局兩隊在中心兩側、離中心這麼遠的那一圈上（兩隊隔兩倍）；最近是眼的 3 倍' },
+  { k: 'depth', of: ['maelstrom'], vx: 1, name: '漩渦深度', lim: [5, 400], step: 5, int: true, unit: ' m', note: '中心比海面低多少（不算眼的喉部）' },
   { k: 'width', of: ['maelstrom'], vx: 1, name: '漏斗寬窄', lim: [0.3, 1.2], step: 0.05, fix: 2, unit: ' 倍半徑', note: '越小越陡（中間尖）、越大越平（像碗）' },
   { k: 'v', of: ['maelstrom'], vx: 1, name: '漩渦水流', lim: [1, 25], step: 0.5, fix: 1, unit: ' 節', note: '在那一圈最快；往外照距離淡掉（船自己的航速另外加）' },
+  { k: 'grav', of: ['maelstrom'], vx: 1, name: '下坡加速', lim: [0, 0.3], step: 0.01, fix: 2, unit: '', note: '順著漏斗壁往下開變快、往上開變慢（重力沿著船頭的那一份 × 這個；0 ＝ 沒有）' },
+  { k: 'spin', of: ['maelstrom'], vx: 1, name: '眼裡自旋', lim: [0, 180], step: 5, int: true, unit: ' 度/秒', note: '被吸到眼裡的船跟著漩渦自己打轉（眼的邊上開始、一半以內全速；舵抵不掉；0 ＝ 不轉）；往下拖照「眼往下拖」' },
+  { k: 'suck', of: ['maelstrom'], vx: 1, name: '漩渦吸力', lim: [0, 0.3], step: 0.01, fix: 2, unit: '', note: '把船往中心拉：中心最強，往外照「吸力範圍」「吸力曲線」淡掉（水的阻力讓它不會一直變快；0 ＝ 沒有）' },
+  { k: 'turn', of: ['maelstrom'], vx: 1, name: '繞行轉向', lim: [0, 2], step: 0.1, fix: 1, unit: '', note: '船頭跟著漩渦往內轉、繞著走（1 ＝ 不打舵剛好沿著那一圈繞；0 ＝ 照慣性直走、往外偏）' },
+  { k: 'suckR', of: ['maelstrom'], vx: 1, name: '吸力範圍', lim: [10, 800], step: 10, int: true, unit: ' m', note: '離中心這麼遠時吸力剩一半（越小越集中在中心）' },
+  { k: 'suckP', of: ['maelstrom'], vx: 1, name: '吸力曲線', lim: [0.5, 6], step: 0.5, fix: 1, unit: '', note: '往外淡掉得多快：越大外圈掉得越乾脆、越小外圈留得越多（2 ＝ 一般）' },
   { k: 'inflow', of: ['maelstrom'], vx: 1, name: '往中心吸', lim: [0, 0.6], step: 0.05, fix: 2, unit: '', note: '切向水流的幾成往中心（0 ＝ 只繞不吸）' },
   { k: 'eye', of: ['maelstrom'], vx: 1, name: '眼的半徑', lim: [5, 150], step: 1, int: true, unit: ' m', note: '船進到這個半徑以內就被往下拖（最多半徑的 0.8）' },
+  { k: 'eyeSuck', of: ['maelstrom'], vx: 1, name: '眼的吸力', lim: [0, 15], step: 0.5, fix: 1, unit: ' m/s', note: '眼裡另外一股直接往中心的水流（眼的邊上開始、四分之一深處全力；船、碎片、落水的人都吃；0 ＝ 沒有）' },
+  { k: 'hold', of: ['maelstrom'], vx: 1, name: '眼的束縛', lim: [0, 5], step: 0.1, fix: 1, unit: ' /秒', note: '眼裡船速每秒被水吃掉的比例（眼的邊上開始、一半以內全力；越大越難衝過去；0 ＝ 沒有，高速可以穿過眼）' },
+  { k: 'gulp', of: ['maelstrom'], vx: 1, name: '眼吞沉船', lim: [0, 20], step: 0.5, fix: 1, unit: ' m/s²', note: '開始沉的船在眼裡往下吸的加速度（4 ⇒ 約 4 秒沉到看不見；0 ＝ 照一般沉船，要半分鐘）' },
   { k: 'eyeDepth', of: ['maelstrom'], vx: 1, name: '眼的深度', lim: [0, 200], step: 5, int: true, unit: ' m', note: '眼那一段喉部再往下多深（中心總深 ＝ 深度 ＋ 這個；0 ＝ 沒有喉部）' },
   { k: 'pull', of: ['maelstrom'], vx: 1, name: '眼往下拖', lim: [0, 0.5], step: 0.01, fix: 2, unit: ' m/秒', note: '0 ＝ 不拖（只繞、不會沉）；在眼裡每秒多吃水這麼多，吃到 4.2 m 跟進水一樣開始沉（預設約 28 秒）；出了眼每秒浮回 0.1 m' }];
 function wxkObj(it, w) { return it.vx ? WEATHERS[w].vortex : WEATHERS[w]; }   // vx：大漩渦那一格（vortex）裡的欄位

@@ -43,9 +43,9 @@ var VX = null;
 function vxInit() {
   var o = WX.vortex; if (!o) { VX = null; return; }
   var rv = o.r, rc = o.width * rv;
-  VX = { rv: rv, rc2: rc * rc, D: o.depth, V: o.v / 1.9438, IN: o.inflow, re: Math.min(o.eye, 0.8 * rv), pull: o.pull };
-  VX.De = o.eyeDepth; VX.re2 = VX.re * VX.re;   // 眼的喉部：再往下 De（寬 ＝ 眼的半徑）
-  VX.r0 = Math.max(o.start, 3 * VX.re);          // 開局那一圈（52_fleet.js vxPlace；Tim「起始可以在漩渦中」）：最近是眼的 3 倍（電腦避開眼的那一圈是 2.5 倍，54_helm.js vxAvoid）
+  VX = { rv: rv, rc2: rc * rc, D: o.depth, V: o.v / 1.9438, IN: o.inflow, re: Math.min(o.eye, 0.8 * rv), pull: o.pull, gulp: o.gulp || 0, hold: o.hold || 0, eyeSuck: o.eyeSuck || 0, grav: o.grav, suck: o.suck, suckR: o.suckR, suckP: o.suckP, turn: o.turn, spin: (o.spin || 0) * Math.PI / 180 };
+  VX.De = o.eyeDepth; VX.re2 = VX.re * VX.re; VX.trap = VX.re;   // 逃不掉的範圍 ＝ 眼（Tim：「逃不掉範圍 不用特別設定」；31_drive.js 上坡減免只在這一圈外）   // 眼的喉部：再往下 De（寬 ＝ 眼的半徑）
+  VX.r0min = 3 * VX.re;                           // 開局最近離中心多遠（52_fleet.js vxPlace：照主選單的距離排；Tim「起始可以在漩渦中」）          // 開局那一圈（52_fleet.js vxPlace；Tim「起始可以在漩渦中」）：最近是眼的 3 倍（電腦避開眼的那一圈是 2.5 倍，54_helm.js vxAvoid）
 }
 /** 眼把船往下拖（TASK-0683；Tim 2026-10-17：「漩渦中心是否可以不要強制沈船(或天氣候台可以開關是否沉 但希望是像進水一樣慢慢沉 不要直接判定沉船(會秒切下一台船)」）：
  *  船在眼裡 ⇒ 每秒多吃水 VX.pull 公尺（sh.vxSink；32_hull.js 加在吃水上，粒子模式也一樣 ⇒ 砲門壓到水下照樣進水）；吃到 4.2 m 跟進水同一條線開始沉。
@@ -60,11 +60,48 @@ function vxDrag(sh, dt) {
 //   ＋ 眼的喉部（Tim 2026-10-17「眼可以更深一點(後台也可調參數)」）：−De·re²／(r² ＋ re²)，re ＝ 眼的半徑 ⇒ 中心總深 D ＋ De（預設 75 ＋ 60）、眼的邊上多 De／2。
 function vxH(x, z) { var r2 = x * x + z * z; return -VX.D * VX.rc2 / (r2 + VX.rc2) - VX.De * VX.re2 / (r2 + VX.re2); }
 /** 那一點的水流（m/s，[x, z]）；沒有漩渦 ⇒ null。逆時針（從上往下看）＝ 繞 +y 轉正角 ⇒ 切線 (z, −x)／r。 */
+/** 漩渦水面的坡度（∂h/∂x, ∂h/∂z；h 往中心凹 ⇒ 坡度朝外，−坡度 ＝ 往下坡 ＝ 往中心）。 */
+function vxGrad(x, z) { var r2 = x * x + z * z, a = VX.rc2 + r2, b = VX.re2 + r2, k = 2 * (VX.D * VX.rc2 / (a * a) + VX.De * VX.re2 / (b * b)); return [k * x, k * z]; }
+/** 下坡加速（Tim 2026-10-17：「是否可以讓往下時加速(重力位能) 往下時加速」）：重力沿著船頭方向的那一份 × grav（天氣設定頁）⇒ m/s²（正 ＝ 往前推：順著坡往下開變快、往上開變慢）。
+ *  31_drive.js driveStep 換成推力（× 質量）加進 Fx ⇒ 終端航速、加速度、不衝過頭都照同一套。 */
+function vxSlopeAcc(sh) { if (!VX || !(VX.grav > 0)) return 0; var g = vxGrad(sh.px, sh.pz), F = fwd(sh.yaw); return -VX.grav * G * (g[0] * F[0] + g[1] * F[2]); }
+/** 漩渦吸力（Tim：「同時漩渦要有吸力(參數可調)」「可以把外圈吸力調弱一些 中心強一些」「或是可以有一個頁面可調參數 來控制吸力變化」）：
+ *  往中心的加速度 ＝ suck × g × VX_SUCK_K × f(r)，f ＝ 1／(1 ＋ (r／suckR)^suckP) × r／(r ＋ 5)（中心最強、離中心 suckR 剩一半、suckP 越大外圈掉得越乾脆；正中心 5 m 內收到 0 ⇒ 不在中心點亂跳），
+ *  積成船的漂移速度 sh.vxD（m/s，[x, z]），水的阻力每秒消掉 VX_DRIFT_DRAG ⇒ 終端 ≈ 加速度／0.3（vxSuckV）。跟船頭方向無關（下坡加速另算）。31_sailing.js 加進 sh.vel。
+ *  ⛔ 第四版照坡度算 ⇒ 外圈的坡也陡，開局那一圈就被拉 2.6 m/s。 */
+var VX_DRIFT_DRAG = 0.3, VX_SUCK_K = 1.2;
+function vxSuckF(r, R, P) { return r / (r + 5) / (1 + Math.pow(r / R, P)); }
+/** 吸力的終端漂移（m/s）：那一圈靜止的船最後會被拉多快（天氣設定頁的讀數；o ＝ vortex 設定）。 */
+function vxSuckV(o, r) { return (o.suck > 0 ? o.suck : 0) * G * VX_SUCK_K * vxSuckF(r, o.suckR, o.suckP) / VX_DRIFT_DRAG; }
+/** 眼裡自旋（Tim 2026-10-17：「被吸到底部時是否可以給一個強大的旋轉力度(讓船自旋 然後往下吸) 開參數到設定頁吧」）：這一步船頭要多轉幾 rad ——
+ *  眼的邊上（r ＝ re）0、往裡線性加到一半以內全速 VX.spin（rad/秒；跟水流同向 ＝ 從上往下看逆時針 ＝ yaw 變大）。31_sailing.js 直接加在 yaw 上（⛔ 不經 yawRate ⇒ 舵抵不掉）。 */
+/** 繞行轉向（Tim 2026-10-17：「讓漩渦的轉向力 讓船頭會往內轉(目前因為慣性 會往外偏)」「希望做到的效果是船可以繞行漩渦」）：這一步船頭要多轉幾 rad ——
+ *  照船自己的速度（船頭 × 航速）繞中心的角速度 (z·vx − x·vz)／r²（＝ 剛好沿著這一圈繞要轉的量；順著水流或逆著都照它的方向）× turn，
+ *  超過 rv 照 1／(1 ＋ (r／rv)⁴) 淡掉。直接加在 yaw 上（舵照樣能改，艦長要別的航向會自己打回去）。 */
+function vxTurn(sh, dt) {
+  if (!(VX.turn > 0)) return 0;
+  var x = sh.px, z = sh.pz, r2 = x * x + z * z; if (r2 < 1) return 0;
+  var F = fwd(sh.yaw), vx = F[0] * sh.spd, vz = F[2] * sh.spd, q = r2 / (VX.rv * VX.rv);
+  return VX.turn / (1 + q * q) * (z * vx - x * vz) / r2 * dt;
+}
+var VX_UPHILL = 0.5;                                                   // 眼外（逃不掉的範圍 ＝ 眼），上坡最多吃掉幾成推力（31_drive.js）
+/** 眼的束縛（Tim 2026-10-18：「我衝向漩渦眼 被吸進去高速旋轉後 無傷的被甩出來了」）：這一步船速剩幾成 ——
+ *  眼的邊上 1、往裡線性加到一半以內每秒吃掉 VX.hold（31_sailing.js 乘在 sh.spd 上，driveStep 之後）⇒ 衝進來的船幾秒內停下、引擎和帆在裡面推不起速度 ⇒ 逃不掉（逃不掉的範圍 ＝ 眼）。
+ *  ⛔ 沒有它：順著坡衝下去 27–30 節，半徑 42 m 的眼一兩秒就穿過去；吸力（最多約 3 m/s）抵不過、往下拖要 28 秒，自旋只轉船頭不扣船速 ⇒ 轉一轉從另一邊滑出去。 */
+function vxHold(sh, dt) { if (!(VX.hold > 0)) return 1; var r = Math.hypot(sh.px, sh.pz); return r >= VX.re ? 1 : Math.max(0, 1 - VX.hold * clamp(2 * (1 - r / VX.re), 0, 1) * dt); }
+function vxSpin(sh, dt) { if (!(VX.spin > 0)) return 0; var r = Math.hypot(sh.px, sh.pz); return r >= VX.re ? 0 : VX.spin * clamp(2 * (1 - r / VX.re), 0, 1) * dt; }
+function vxDrift(sh, dt) {
+  var D = sh.vxD || (sh.vxD = [0, 0]), r = Math.hypot(sh.px, sh.pz), f = Math.max(0, 1 - VX_DRIFT_DRAG * dt);
+  var a = r > 1e-3 ? (VX.suck > 0 ? VX.suck : 0) * G * VX_SUCK_K * vxSuckF(r, VX.suckR, VX.suckP) / r : 0;   // ÷ r ⇒ 乘上 (x, z) 就是往中心的單位向量
+  D[0] = (D[0] - a * sh.px * dt) * f; D[1] = (D[1] - a * sh.pz * dt) * f; return D;
+}
 function vxFlow(x, z) {
   if (!VX) return null;
   var r = Math.hypot(x, z); if (r < 1e-3) return [0, 0];
   var q = r / VX.rv, vt = VX.V * 2 * q / (1 + q * q), ux = x / r, uz = z / r;
-  return [vt * (uz - VX.IN * ux), vt * (-ux - VX.IN * uz)];
+  // 眼的吸力（Tim 2026-10-18「眼的吸力要更強」）：眼裡另外一股直接往中心的水流 VX.eyeSuck（m/s）—— 眼的邊上 0、四分之一深處全力、正中心 8 m 內收掉（不在中心點亂跳）；船、碎片、落水的人都吃
+  var ve = VX.eyeSuck > 0 && r < VX.re ? VX.eyeSuck * clamp((VX.re - r) / (0.25 * VX.re), 0, 1) * Math.min(1, r / 8) : 0;
+  return [vt * (uz - VX.IN * ux) - ve * ux, vt * (-ux - VX.IN * uz) - ve * uz];
 }
 /** 順著水流的船頭方向（yaw；fwd(yaw) ＝ 切線）：開局用（52_fleet.js spawnFleet）。 */
 function vxTangentYaw(x, z) { var r = Math.hypot(x, z) || 1; return Math.atan2(x / r, z / r); }
@@ -121,6 +158,9 @@ function stepWaves(sh, dt) {
     hm += h; su += u * h; uu += u * u; sw += w * h; ww += w * w; n++;
   }
   hm /= n;
+  // 大漩渦：開始沉了 ⇒ 1 秒內把水面換成船中心那一點的（Tim 2026-10-17：「沈船會在漩渦底部浮很久」「我對漩渦眼的預期是 沈船會在幾秒內被吸走(沉掉)」）——
+  //   ⛔ 照十個點的平均 ⇒ 眼的喉部（半徑 42 m）比船（87 m）窄，平均是 −322 m、中心是 −350 m ⇒ 沉了的船懸在喉底上面 28 m，沉 40 m 才消失（約 30 秒）
+  if (VX && sh.sinkingFinal) { sh.vxB = Math.min(1, (sh.vxB || 0) + dt); var hc = seaH(c[0], c[2], SIMT); if (hc < hm) hm += (hc - hm) * sh.vxB; }
   var tp = Math.atan(su / uu), tr = -Math.atan(sw / ww);              // 縱搖正 ＝ 船頭（格 +x）抬起；橫搖正 ＝ 船體 +Z 那舷往下 ⇒ 水在 +Z 那邊高就取負
   var V = sh.wv;
   if (!V) V = sh.wv = { h: hm, hv: 0, p: tp, pv: 0, r: tr, rv: 0 };
