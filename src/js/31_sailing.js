@@ -168,6 +168,7 @@ function sailShip(sh, dt) {
   if (!stop && !(held && Math.abs(sh.spd) < 0.6)) rate += driveYaw(sh, rmax);   // 受損的不平衡（前帆被打掉、一邊的螺旋槳沒了）⇒ 船自己偏（31_drive.js）；舵照舊修得回來
   sh.yawRate += (rate - sh.yawRate) * Math.min(1, dt / (2 * DRV_TURN));   // 迴轉慣性（細節設定「迴轉慣性」，預設 1 ＝ 以前的 2 秒）
   sh.yaw += sh.yawRate * dt;
+  if (VX) sh.yaw += vxSpin(sh, dt) + vxTurn(sh, dt);                  // 大漩渦：眼裡跟著漩渦自旋、繞行轉向（08_sea.js）
   F = fwd(sh.yaw);
   sh.vel = mul(F, sh.spd);
   if (VX) { var cf = vxFlow(sh.px, sh.pz), vd = vxDrift(sh, dt); sh.vel[0] += cf[0] + vd[0]; sh.vel[2] += cf[1] + vd[1]; }   // ＋ 漩渦吸力的漂移（08_sea.js vxDrift）   // 大漩渦（08_sea.js）：水流帶著船走 ⇒ sh.vel 是對地的速度（砲彈帶的船速、瞄準的前置量、帆上的視風都照它）
