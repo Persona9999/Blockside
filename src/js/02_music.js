@@ -40,7 +40,18 @@ var THEMES = [
       '[V:2] [I:musicbox] D,,3 | z3    | D,,3 | A,,3  | D,,3 | G,,3  | B,,3  | A,,3  | D,,3 |',
       '% --- Part 2: Waltz（管風琴；最後一小節漸慢、弱奏：Tim 先給的那份寫的）---',
       "[V:1] [I:organ] A d e | f2 e/2d/2 | ^c3 | A ^c d | e2 d | d3 | f g a | d'2 c'/2b/2 | b a g | f3 | e f g | ^c3 | !p! !rit! d3 |]",
-      '[V:2] [I:organ] D, [F,A,] [F,A,] | D, [F,A,] [F,A,] | A,, [E,G,] [E,G,] | A,, [E,G,] [E,G,] | A,, [E,G,] [E,G,] | D, [F,A,] [F,A,] | F, [A,C] [A,C] | B,, [D,F,] [D,F,] | G,, [D,G,] [D,G,] | D, [F,A,] [F,A,] | G,, [D,G,] [D,G,] | A,, [E,A,] [E,A,] | !p! !rit! [D,F,A,D]3 |]'] }
+      '[V:2] [I:organ] D, [F,A,] [F,A,] | D, [F,A,] [F,A,] | A,, [E,G,] [E,G,] | A,, [E,G,] [E,G,] | A,, [E,G,] [E,G,] | D, [F,A,] [F,A,] | F, [A,C] [A,C] | B,, [D,F,] [D,F,] | G,, [D,G,] [D,G,] | D, [F,A,] [F,A,] | G,, [D,G,] [D,G,] | A,, [E,A,] [E,A,] | !p! !rit! [D,F,A,D]3 |]'] },
+  { id: 'nightlamp', name: '夜燈號主題曲', en: 'Nightlamp', src: 'Tim 提供旋律（2026-10-17 簡譜，TASK-0684）；低音、Part B 低八度的手風琴是 summit 照旋律配的',
+    abc: ['M:6/8', 'L:1/8', 'Q:3/8=70', 'K:Am', 'V:1', 'V:2', 'V:3',
+      '% 簡譜 1＝C（沒標調）：6 ＝ A4、1· ＝ C5（上加點高八度）、#5 ＝ G#4；一個字 ＝ 八分、- 延長八分、6_6_ ＝ 兩個十六分',
+      '% --- Part A：前奏交鋒（弱起 6_6_）---',
+      '[V:1] [I:fiddle] !mp! A/2A/2 | B2 c c3 | c2 d B3 | B2 A ^G3 | A5 A/2A/2 | B2 c d3 | d2 e f3 | f2 e d3 | c2 d e3 | A2 B c3 | c2 d B3 | B2 A ^G3 | A5 E |',
+      '[V:2] [I:pluck] !mp! z | A,,3 E,3 | E,,3 B,,3 | E,,3 B,,3 | A,,3 E,3 | G,,3 D,3 | D,,3 A,,3 | D,,3 A,,3 | C,3 G,,3 | A,,3 E,3 | E,,3 B,,3 | E,,3 B,,3 | A,,3 E,3 |',
+      '[V:3] [I:accordion] z | z6 | z6 | z6 | z6 | z6 | z6 | z6 | z6 | z6 | z6 | z6 | z6 |',
+      '% --- Part B：海盜狂想大主題（手風琴低八度跟著旋律）---',
+      '[V:1] !mf! A2 A B2 c | d2 d e2 f | e2 c A2 c | B2 A B2 E | A2 A B2 c | d2 d e2 f | e2 c B2 A | A6 |]',
+      '[V:2] !mf! A,,3 E,3 | D,,3 A,,3 | A,,3 E,3 | E,,3 B,,3 | A,,3 E,3 | D,,3 A,,3 | A,,3 E,,3 | A,,6 |]',
+      '[V:3] !mp! A,2 A, B,2 C | D2 D E2 F | E2 C A,2 C | B,2 A, B,2 E, | A,2 A, B,2 C | D2 D E2 F | E2 C B,2 A, | A,6 |]'] }
 ];
 var ABC_KEYS = { C: 0, G: 1, D: 2, A: 3, E: 4, F: -1, Bb: -2, Eb: -3, Ab: -4,   // 調 ⇒ 升降記號數（正 ＝ 升）；小調照關係大調
   Am: 0, Em: 1, Bm: 2, 'F#m': 3, Dm: -1, Gm: -2, Cm: -3, Fm: -4 };
@@ -70,10 +81,10 @@ function abcParse(s, K, U, bar) {
     for (var q = 0; q < ties.length; q++) if (ties[q][2] === p && Math.abs(ties[q][0] + ties[q][1] - t) < 1e-9) { ties[q][1] += d; return ties[q]; }
     var n = [t, d, p, inst, vel]; out.push(n); return n;
   }
-  function barEnd() {
+  function barEnd() {                                                  // 第一小節可以比較短（弱起，例如夜燈號的 6_6_）；其他小節拍數要剛好
     carry = {}; nb++;
     if (rit) { rit[1] = t; rits.push(rit); rit = null; }
-    if (bar && Math.abs(t - b0 - bar) > 1e-9) throw new Error('abcParse：第 ' + nb + ' 小節 ' + (t - b0) + ' 拍（拍號是 ' + bar + ' 拍）');
+    if (bar && Math.abs(t - b0 - bar) > 1e-9 && !(nb === 1 && t - b0 < bar)) throw new Error('abcParse：第 ' + nb + ' 小節 ' + (t - b0) + ' 拍（拍號是 ' + bar + ' 拍）');
     b0 = t;
   }
   while (i < s.length) {
