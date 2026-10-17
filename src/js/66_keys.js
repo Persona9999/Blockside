@@ -27,6 +27,7 @@ var KEY_ACTS = [
   { c: 'fps', id: 'fpJump', ico: '⤴', name: '跳（浮空：往上）', def: ' ', hold: 1 }, { c: 'fps', id: 'fpDown', ico: '⬇', name: '浮空：往下', def: 'c', hold: 1 },
   { c: 'fps', id: 'fpClimb', ico: '🪜', name: '爬梯子', def: 'e' }, { c: 'fps', id: 'fpFollow', ico: '👁', name: '跟隨身邊的船員（再按回來）', def: 'f' }, { c: 'fps', id: 'fpNext', ico: '⏭', name: '跟隨下一個', def: 'g' },
   { c: 'fps', id: 'fpUnlock', name: '放開滑鼠（遊戲不停）', def: 'alt' },
+  { c: 'fps', id: 'fpExit', ico: '🎥', name: '離開第一人稱（建造模式固定第一人稱）', def: 'y' },   // Tim 2026-10-17「一鍵退出第一人稱」
   // 建造（82_build.js bldKey）：快捷欄 1–9
   { c: 'build', id: 'bSlot1', name: '快捷欄 1', def: '1' }, { c: 'build', id: 'bSlot2', name: '快捷欄 2', def: '2' }, { c: 'build', id: 'bSlot3', name: '快捷欄 3', def: '3' },
   { c: 'build', id: 'bSlot4', name: '快捷欄 4', def: '4' }, { c: 'build', id: 'bSlot5', name: '快捷欄 5', def: '5' }, { c: 'build', id: 'bSlot6', name: '快捷欄 6', def: '6' },
