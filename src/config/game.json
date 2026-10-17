@@ -283,6 +283,7 @@
       "name": "夜燈號",
       "vxk": "nightlamp.vxk",
       "work": "basecamp-nightlamp-01m-assembly",
+      "theme": "nightlamp",
       "geo": {"spar": [130, 146], "marines": [60, 330], "center": 160, "aim": 100, "aimZ": [35, 430], "deckAim": [103, 130], "rigAim": [170, 480]},
       "cfg": {"pump": 23, "speed": 3, "agile": 3, "upwind": 2},
       "author": "basecamp"
