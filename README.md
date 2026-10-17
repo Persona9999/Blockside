@@ -62,6 +62,11 @@ last_updated: 2026-10-15
 - 船是雕刻區的作品匯出的 `.vxk`（`VoxelKit/_cache/`，不入版控；換機器 ⇒ `python -I src/admin.py cache` 從作品重新匯出、跟指紋比），內嵌在網頁裡；同一份模型（例如同一門砲）幾艘船只存一次，所以六艘船擠得進幾 MB。
 - 2026-10-15 以前在 ArtGallery 開發（`HtmlGames/_build/ame_constitution_broadside/`，歷史還在那邊的 git log）。
 - 部署：push 到 `main` ⇒ GitHub Actions（`.github/workflows/pages.yml`）上傳到 Pages。
-- 遠端（Tim 2026-10-16）：**先 push 到 `dev`**（`git push dev main`；開發用、公開但不宣傳的測試環境，同一份 `.github/workflows/pages.yml` 部署 Pages），要正式公開再 push 到 `origin`（會觸發上面的 Pages）；另有 `private`（之前的測試環境，不再預設）、`gitlab.com` 遠端。
+- **分支與發版**（Tim 2026-10-17：「預設開發時都是先 merge 到 dev 然後 push 到 dev，dev 測試版本 ok 後再發版本到 main」）：
+  1. **開發合回 `dev`**：`dev` 分支是開發主線。改程式照施工場規則開自己的 worktree（從 `dev` 開），做完**合回 `dev`**（不是 `main`）；合併那一步在共用工作區照合併後的 `src/` 重建 `index.html` 再提交。
+  2. **推測試站**：`git push dev dev dev:main` —— 推到 `dev` 遠端的 `dev` 與 `main` 兩個分支。那邊的 Pages 只在 `main` 被推時部署（GitHub 的 Pages 環境預設只准預設分支部署；量過：只推 `dev` 分支時沒有觸發任何部署），所以 `dev:main` 那一份是給測試站的。
+  3. **發版**：Tim 在測試站驗過、說要發 ⇒ 共用工作區 `git switch main`、`git merge --ff-only dev`（快轉不了就停下來問），再 `git push origin main` ⇒ 正式的 Pages；做完 `git switch dev` 切回開發主線。
+  - ⛔ 推之前先 fetch、列出要推的提交（測試：`git log dev/dev..dev`；發版：`git log origin/main..main`），只能有這次要推的；跟說好的不一樣就先問。不 force push。
+  - 遠端：`dev` ＝ 開發用、公開但不宣傳的測試環境；`origin` ＝ 正式公開；另有 `private`（之前的測試環境，不再預設）、`gitlab.com`。網址看 `git remote -v`，⛔ 不寫進文件、提交訊息。
 
 製作：ame（遊戲）× basecamp、summit、gura（船）× Tim
