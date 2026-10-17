@@ -653,8 +653,12 @@ function sliders() {
   var WQ = cfgPage({ id: 'wq', title: '天氣設定', sub: '暴風雨與大漩渦的參數（晴天不在這裡）。下一場開始生效；主選單背景的大漩渦馬上跟著變。',
     items: WXK_ITEMS, get: wxkGet, def: wxkDef, set: function (k, v) { wxkSet(k, v); wqBtn(); }, reset: function () { wxkReset(); wqBtn(); },
     kind: 'weather', file: 'blockside_weather', what: '天氣設定', back: function () { page(''); } });
-  $('wqB').onclick = function () { page('wq'); WQ.show(); };
-  wqBtn();
+  // 吸力讀數（Tim 2026-10-17「或是可以有一個頁面可調參數 來控制吸力變化」）：照現在的設定算各處的終端漂移（08_sea.js vxSuckV），改滑桿就跟著變
+  var wqS = document.createElement('div'); wqS.className = 'row note'; wqS.id = 'wqSuck'; $('wqItems').appendChild(wqS);
+  function wqSuck() { var o = WEATHERS.maelstrom.vortex; wqS.textContent = '吸力（靜止的船最後被拉多快）：' + [10, 50, 100, 200, 400].map(function (r) { return r + ' m ' + vxSuckV(o, r).toFixed(2); }).join('・') + ' m/s'; }
+  [].forEach.call($('wqItems').querySelectorAll('input[type=range]'), function (r) { r.addEventListener('input', wqSuck); });
+  $('wqB').onclick = function () { page('wq'); WQ.show(); wqSuck(); };
+  wqBtn(); wqSuck();
   $('gunX').onclick = function () { page(''); };
   $('furnB').onclick = function () { page('furn'); furnShow(); };   // 道具設定（67_furncfg.js）
   $('furnX').onclick = function () { page(''); };
