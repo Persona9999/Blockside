@@ -383,7 +383,8 @@ yieldUI().then(function () {                                        // 先讓主
     '\n解碼 ' + (T.decodeMs / 1000).toFixed(2) + ' 秒、網格化 ' + (T.meshMs / 1000).toFixed(2) + ' 秒' + cacheText(hullInfo(T.id).cache) +
     '\n設定：' + PREFS.state;
   say(line); window.__vxk = { verify: chk, quads: T.pristine.quads(), masts: T.masts.length, decodeMs: +T.decodeMs.toFixed(1), meshMs: +T.meshMs.toFixed(1), ms: T.ms,
-    cache: hullInfo(T.id).cache, prefs: PREFS.state };
+    cache: hullInfo(T.id).cache, prefs: PREFS.state,
+    deco: { on: !!GFX.deco, n: T.decoN || 0, drawn: (T.decos || []).length, meshes: T.meshes.filter(Boolean).length, tris: T.meshes.reduce(function (a, m) { return a + (m && m.n ? m.n / 3 : 0); }, 0) } };   // 裝飾（TASK-0682）：開關、作品裡幾件、這次畫幾件、建了幾份模型網格、三角形
   loadArt().then(function (why) { line += '\n素材：' + why; say(line); window.__vxk.art = why; if (HUD_ART) hudArt(); });
   if (!chk.ok) { fail('船體資料跟封裝檔對不上，停下來（不畫半艘船）。\n' + line); return; }
   $('go').disabled = false; $('go').textContent = '開戰';

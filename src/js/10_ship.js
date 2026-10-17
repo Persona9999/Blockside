@@ -64,6 +64,13 @@ function makeShip(i, team, yaw, pz, T, px) {                          // T：船
       rot: 0, r0: (+mt.rotate_z_deg || 0) * Math.PI / 180, piv: pv, yk: mt.yard, sail: mt.sail, hang: hang };   // 帆桁：rot ＝ 在作品的角度（r0）之外又轉了多少（追風，30_rig_physics.js）
   });
   sh.yards = sh.models.filter(function (m) { return m.kind === 'yard' && m.piv; });
+  // 裝飾（TASK-0682；05_hull.js decoSplit）：不在 sh.models ⇒ 戰局看不到（重量、命中、殉爆、掉落都不算）。只記腳下那一格（同上面的模型：外框底往下 12 格內的甲板）：
+  //   被打掉 ⇒ 不畫（⛔ 不 blowModel：那會抽 rnd()，開／關裝飾戰局就分岔）。k：燈晃的相位（lanternK）。
+  sh.decos = (T.decos || []).map(function (m, k) {
+    var b = m.bbox, cx = Math.floor((b[0] + b[3]) / 2), cy = Math.floor((b[1] + b[4]) / 2), z0 = Math.floor(b[2]) - 1, fz = z0;
+    while (fz > 0 && z0 - fz < 12 && !T.hullG.get(cx, cy, fz)) fz--;
+    return { mesh: m.mesh, origin: m.origin, meta: m.meta || {}, k: 1000 + k, foot: T.hullG.get(cx, cy, fz) ? VK.pack(cx, cy, fz) : -1 };
+  });
   // 砲：長砲（24 磅，兩舷各 14）、carronade（32 磅，兩舷各 12）、追擊砲（18 磅，船頭兩舷各 1）都是模型。
   // 砲軸 ＝ 固定點 muzzle − breech（格座標、水平）；砲口 ＝ muzzle 再往外 1.5 格（muzzle 在砲口內膛那一格）。
   // 程式裡的 'S'／'P' 照砲軸（+y ＝ S，跟模型名字一致）＝ 右舷／左舷（shipBaseMatrix 照雕刻引擎的手性鏡射過來）。給人看的走 sideName；A／D 照畫面的左右。
