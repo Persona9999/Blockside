@@ -127,8 +127,8 @@ function helmBeat(sh) {
   for (var deg = 90; deg <= 180 - NOGO_DEG; deg += 0.5) { var dU = UP === 1 ? deg : 90 + (deg - 90) / UP, v = polar(dU) * -Math.cos(deg / 57.2958); if (v > bv) { bv = v; best = deg; } }
   sh.beatUp = UP; return (sh.beatDeg = best);
 }
-/** 這艘船朝 yaw 時帆速曲線的係數（照它的逆風性能壓縮過的角度；＝ 31_sailing.js sail 的 polar(dU)）。 */
-function helmPolarAt(o, yaw) { var W = norm(WIND), F = fwd(yaw), UP = o.cfg.upwind || 1, deg = Math.acos(clamp(F[0] * W[0] + F[2] * W[2], -1, 1)) * 57.2958; return polar(UP === 1 || deg <= 90 ? deg : 90 + (deg - 90) / UP); }
+/** 這艘船朝 yaw 時帆速曲線的係數（照它的逆風性能壓縮過的角度；＝ 31_sailing.js sail 的 polarPlay(dU)：娛樂玩法有下限）。 */
+function helmPolarAt(o, yaw) { var W = norm(WIND), F = fwd(yaw), UP = o.cfg.upwind || 1, deg = Math.acos(clamp(F[0] * W[0] + F[2] * W[2], -1, 1)) * 57.2958; return polarPlay(UP === 1 || deg <= 90 ? deg : 90 + (deg - 90) / UP); }
 /** 航向落在風從船頭 NOGO_DEG（60°）以內 ⇒ 換成近的那一側的搶風航向（helmBeat）。戰列的排頭用（TASK-0679）：
  *  ⛔ 直接對著敵方開 ⇒ 敵方在上風時排頭正頂風（電腦不吃頂風失速、帆速曲線剩 0.25）2.3–2.7 節走 90 秒，後面整條跟著爬（量過風從船頭來的開局）。 */
 function helmNoGo(sh, yaw) {
@@ -137,6 +137,23 @@ function helmNoGo(sh, yaw) {
   // 換舷搶風要越過正頂風 HELM_TACK_E 以上才換（⛔ 不留 ⇒ 要的航向在正頂風兩邊晃、排頭一直換舷，掉頭的那一段穿過後面跟上來的船，讓船讓到 3000–4500 步：量過）
   var t = sh.noGoTack || sh.noGoPref || (e >= 0 ? 1 : -1); if (t * e < -HELM_TACK_E - (sh.noGoTack ? 0 : 0.6)) t = -t; sh.noGoTack = t;   // 第一次照偏好的那一舷（要的航向在另一側 0.95 rad 以上才不照）
   return up + t * a;
+}
+/** 避開頂風（Tim 2026-10-17「可以讓船嘗試轉向避免頂風」「可以參考現實情況如何處置嗎」）：電腦每一艘要的航向（交戰、戰列、搶上風；讓船不算）最後過這一關 ——
+ *  · 要的航向落在風從船頭 NOGO_DEG（60°）以內 ⇒ 改成近的那一側的邊（照船現在在正頂風的哪一側；要的在另一側超過 HELM_TACK_E 才換舷）。
+ *  · 要轉過正頂風（換舷搶風，tack）但航速不到 HELM_TACK_V ⇒ 改往下風那一邊繞（順風換舷，wear）：現實裡帆船要帶著速度才轉得過頂風，
+ *    速度不夠會卡在頂風（missing stays），老水手寧可順風繞一圈。繞過正後方之後要的航向就不再隔著頂風 ⇒ 照常。
+ *  ⛔ 不管 ⇒ 戰列的排頭讓船讓進離頂風 46°、視風吃不到（31_drive.js sailWindK）⇒ 6 秒剎到 0.2 節，再加速回來要兩分鐘（量過風從船頭來的開局）。 */
+var HELM_TACK_V = 1.5;                                                  // m/s（約 3 節）：低於這個航速不搶風換舷
+function helmIrons(sh, yaw) {
+  var W = norm(WIND), up = Math.atan2(W[2], -W[0]), a = NOGO_DEG / 57.2958;   // up：正頂風的航向（fwd ＝ −W）
+  var e = Math.atan2(Math.sin(yaw - up), Math.cos(yaw - up)), c = Math.atan2(Math.sin(sh.yaw - up), Math.cos(sh.yaw - up));   // 要的、現在的：離正頂風幾 rad（正 ＝ yaw 大的那一側）
+  if (Math.abs(e) < a) { var t = c >= 0 ? 1 : -1; if (t * e < -HELM_TACK_E) t = -t; e = t * a; yaw = up + e; }
+  if (c * e < 0 && Math.abs(e - c) < Math.PI && Math.abs(sh.spd) < HELM_TACK_V) {   // 短的那條路穿過正頂風、速度不夠 ⇒ 往下風轉（離開正頂風那一邊）
+    if (!sh.wearing) { sh.wearing = true; helmSay(sh, 'wear', '航速 ' + (sh.spd * 1.944).toFixed(1) + ' 節，轉不過頂風 ⇒ 順風繞過去', false); }
+    return sh.yaw + (c >= 0 ? 1 : -1) * 1.0;
+  }
+  sh.wearing = false;
+  return yaw;
 }
 /** 搶上風（mode 'gauge'）：迎風、往 od.tack 那一側偏 helmBeat 的角度；能多快就多快。 */
 function helmGauge(sh, od) {

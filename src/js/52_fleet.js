@@ -338,7 +338,7 @@ function lineClear(sh) {
   var nx = -best.uz, nz = best.ux, off = (mid[0] - best.px) * nx + (mid[2] - best.pz) * nz;   // 法線、自己在砲線的哪一側（正 ＝ 法線那邊）
   var W = norm(WIND), UP = sh.cfg.upwind || 1, F = fwd(sh.yaw), fv = best.f.vel || [0, 0, 0], tv = best.t.vel || [0, 0, 0], sv = [fv[0] + (tv[0] - fv[0]) * best.tt, 0, fv[2] + (tv[2] - fv[2]) * best.tt], bt = 1e9, bv = null, slow = false;
   var V0 = VMAX * sh.cfg.speed * playK('speed') * WX.speed * Math.sqrt(WIND_SPD) * sh.sailFrac;
-  function spdAt(v) { var deg = Math.acos(clamp(dot(v, W), -1, 1)) * 57.2958; return V0 * polar(UP === 1 || deg <= 90 ? deg : 90 + (deg - 90) / UP); }
+  function spdAt(v) { var deg = Math.acos(clamp(dot(v, W), -1, 1)) * 57.2958; return V0 * polarPlay(UP === 1 || deg <= 90 ? deg : 90 + (deg - 90) / UP); }
   function opt(v, spd, isSlow) {
     var rel = [v[0] * spd - sv[0], 0, v[2] * spd - sv[2]], turn = Math.acos(clamp(dot(v, F), -1, 1));
     [1, -1].forEach(function (s) {

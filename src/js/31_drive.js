@@ -415,7 +415,9 @@ function driveStep(sh, dt, vS, vB, deg, brake) {
   if (sh.spd0) { sh.spd = vT; sh.spd0 = false; }                          // 開局就在走
   var M = D.M * (DRV_INERTIA || 1);
   if (brake) { sh.spd += (0 - sh.spd) * Math.min(1, dt / 6); D.a = 0; }     // 錨咬著、拋錨 ⇒ 照舊 6 秒內停下
-  else if ((sh.throttle || 1) < 1 && sh.spd > vT) { sh.spd += (vT - sh.spd) * Math.min(1, dt / 6); D.a = 0; }   // 電腦放慢（讓砲線、戰列等後面的）⇒ 轉帆擋風，6 秒內收到該有的航速
+  else if ((sh.throttle || 1) < 1 && sh.spd > vT && !(deg > 180 - NOGO_DEG)) { sh.spd += (vT - sh.spd) * Math.min(1, dt / 6); D.a = 0; }   // 電腦放慢（讓砲線、戰列等後面的）⇒ 轉帆擋風，6 秒內收到該有的航速
+  //   船頭在頂風扇區（離正頂風 NOGO_DEG 以內）不算：帆吃不到風、vT 掉到 0 ⇒ 照水阻滑行（⛔ 也 6 秒剎住 ⇒ 排頭讓船讓進頂風，4.2 節 6 秒剎到 0.4 節：量過）。
+  //   ⛔ 改成「只剎油門放掉的那一段（spd ≤ vT／油門）」⇒ 順風開局 12 節的排頭變成滑行、慢不下來等後面的，順風那一方的戰列散掉（0.6／11／27 m → 22／138／186 m：量過）
   else {
     D.drag = k * sh.spd * Math.abs(sh.spd);
     D.a = (Fx - D.drag) / M;

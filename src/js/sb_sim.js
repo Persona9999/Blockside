@@ -95,7 +95,7 @@ function sbSail(W, s, dt) {
   s.spd += (target - s.spd) * Math.min(1, dt / (s.throttle < 1 ? 6 : 20));
   s.throttle = 1;
   var tY = s.yaw, foe = s.foe;
-  var rmax = (0.012 + 0.016 * s.spd / SPK) * s.H.agile * sbPlayK(W, 'agile');
+  var rmax = Math.max(0.03, 0.012 + 0.016 * s.spd / SPK) * s.H.agile * sbPlayK(W, 'agile');   // 0.03 ＝ 31_sailing.js RUD_LOW（低速靠帆轉的下限）
   if (!s.out && foe) {
     var st = [Math.sin(s.yaw), Math.cos(s.yaw)], dx = foe.x - s.x, dz = foe.z - s.z, d = Math.hypot(dx, dz) || 1, k = (dx * st[0] + dz * st[1]) / d;   // ＝ chooseSide
     if (k > 0.2) s.side = 'S'; else if (k < -0.2) s.side = 'P';

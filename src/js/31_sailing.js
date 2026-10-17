@@ -13,11 +13,20 @@
 //   失速 ＝ 細節設定的「頂風失速」（0 ＝ 頂風只是慢，係數 0.25 靠慣性帶過去）× 玩法的加成（娛樂 0.4）。
 var VMAX = 3.6;                                                    // m/s（約 7 節）：滿帆、側順風
 var NOGO_DEG = 60, NOGO_FULL = 45, IRONS_PUSH = 0.02;              // 頂風失速：開始、全失速的角度（風從船頭偏幾度）、船頭被推開的轉向率（rad/s，船停住時）
+// 低速的轉向下限（rad/s，乘靈活性等倍率之前；Tim 2026-10-17「船在很低速時 也能有一定轉彎能力」「頂風失速時也要能轉向 我遇過頂風失速動彈不得」）：
+//   現實裡舵沒水流就沒用，帆船靠帆轉（倒帆：前帆反受風把船頭推開、後帆收掉）⇒ 這裡當成「用帆轉」的那一份，航速 1.1 m/s（約 2 節）以下才用得到。
+//   ⛔ 照舊 0.012 ⇒ 停住的船 0.7°/s，戰列的排頭讓船讓進頂風、停到 0.2 節後轉不出來（量過風從船頭來的開局）
+var RUD_LOW = 0.03;
 var POLAR = [[0, 0.72], [45, 1], [90, 0.92], [112, 0.6], [125, 0.32], [180, 0.25]];   // 船頭跟「風吹去的方向」的夾角（度）→ 係數
 function polar(deg) {
   for (var i = 1; i < POLAR.length; i++) if (deg <= POLAR[i][0]) { var a = POLAR[i - 1], b = POLAR[i]; return a[1] + (b[1] - a[1]) * (deg - a[0]) / (b[0] - a[0]); }
   return POLAR[POLAR.length - 1][1];
 }
+// 娛樂玩法的帆速曲線下限（Tim 2026-10-17「娛樂模式可以讓頂風也能有一定加速能力」）：最低 FUN_HEAD（寫實：正頂風 0.25、離頂風 45° 0.31）⇒ 頂風推力 ×2.6（推力照航速²）。
+//   0.4 ＝ 比近迎風（離頂風 60°，0.43）低一點 ⇒ 曲線照舊越頂風越慢、不會反過來鼓勵往風裡開。
+//   ⛔ 先試過在 31_drive.js sailWindK 給視風倍率下限：頂風那一段本來就回 1（基準點自己吃不到風）⇒ 一位元都沒變，慢的是 vS 本身（量過：正頂風 60 秒 0.79 節，前後相同）
+var FUN_HEAD = 0.4;
+function polarPlay(deg) { var p = polar(deg); return PLAY === 'fun' ? Math.max(p, FUN_HEAD) : p; }
 function pointName(deg) { return deg < 30 ? '順風' : deg < 70 ? '側順風' : deg < 105 ? '橫風' : deg < 125 ? '迎風' : '頂風'; }
 function sailArea(s) {
   var v = s.verts, A = 0;
@@ -108,7 +117,7 @@ function sail(sh, dt) {
   var nogo = manual && !stop && !sh.sunk ? STALL_K * playK('stall') * clamp((NOGO_DEG - (180 - dU)) / (NOGO_DEG - NOGO_FULL), 0, 1) : 0;   // 頂風失速的程度
   sh.irons = nogo;
   var dk = (1 - clamp(sh.sink / 9, 0, 0.8)) * (sh.struck ? 0.15 : 1) * (sh.throttle || 1);   // 進水、降旗、讓砲線（52_fleet.js lineClear；平常 1）照樣慢
-  var vS = sh.sunk || stop || held ? 0 : VMAX * SPK * Math.sqrt(WIND_SPD) * polar(dU) * (1 - nogo) * dk;   // 帆：這一段全都張著、完好時的航速（driveStep 再乘帆的比例 sailFrac 換成推力）
+  var vS = sh.sunk || stop || held ? 0 : VMAX * SPK * Math.sqrt(WIND_SPD) * polarPlay(dU) * (1 - nogo) * dk;   // 帆：這一段全都張著、完好時的航速（driveStep 再乘帆的比例 sailFrac 換成推力）
   sh.vS1 = SPK > 0 ? vS / SPK * LIM.speed[2] : 0;                     // 視風的基準點（31_drive.js sailWindK，TASK-0639）：航速倍率 ＝ 船隻設定的預設（LIM.speed，1.5）的船這個風向的航速
                                                                       //   Tim 2026-10-16：「預設設定的船航速照舊，只有比預設快的加成（娛樂 ×1.4、夜隼號 ×3）才被視風限住」
   var vB = BK > 0 && !sh.sunk && !stop && !held ? BK / 1.9438 * dk : 0;   // 額外動力全速的航速（節 ⇒ m/s）；不吃航速倍率（跟以前一樣）
@@ -120,7 +129,7 @@ function sail(sh, dt) {
   var foe = foeOf(sh), tY = sh.yaw, rate = 0;
   var wheel = sh.models.some(function (m) { return m.kind === 'wheel' && m.alive; });
   var rud = sh.models.filter(function (m) { return m.kind === 'rudder'; }), rudK = rud.length && !rud.some(function (m) { return m.alive; }) ? 0.12 : 1;   // 舵是模型（夜隼號）而且被打掉了 ⇒ 只剩調帆轉向
-  var rmax = (0.012 + 0.016 * Math.abs(sh.spd) / SPK) * (wheel ? 1 : 0.35) * rudK * (UP === 1 ? 1 : 1 + (UP - 1) * clamp((deg - 90) / 45, 0, 1)) * sh.cfg.agile * playK('agile') * WX.agile;   // 天氣：暴風雨浪大、舵難使 ×0.8。⛔ 用 sh.spd 直接算 ⇒ 調快航速連帶變得更會轉
+  var rmax = Math.max(RUD_LOW, 0.012 + 0.016 * Math.abs(sh.spd) / SPK) * (wheel ? 1 : 0.35) * rudK * (UP === 1 ? 1 : 1 + (UP - 1) * clamp((deg - 90) / 45, 0, 1)) * sh.cfg.agile * playK('agile') * WX.agile;   // 天氣：暴風雨浪大、舵難使 ×0.8。⛔ 用 sh.spd 直接算 ⇒ 調快航速連帶變得更會轉
   if (held && Math.abs(sh.spd) < 0.6 && !sh.struck && !sh.sunk) {   // 錨咬著、船幾乎停了 ⇒ 繞錨原地轉：我艦照 A／D、電腦（或雙錨時的我艦沒按）轉舷側對敵
     var pw = sh.i === PLAYER_I ? (KEYS.l ? 1 : 0) - (KEYS.r ? 1 : 0) : 0;
     if (pw) rate = pw * ANC_PIVOT;
@@ -136,6 +145,7 @@ function sail(sh, dt) {
     if (nogo > 0) {                                                     // 船頭被風推開：往讓船頭離開風的那一側（正頂風 ⇒ 照上次那一側）
       var off = -Math.sin(sh.yaw) * W[0] - Math.cos(sh.yaw) * W[2];     // d(船頭·風吹去的方向)/d(yaw)：正 ＝ yaw 變大會離開風
       if (Math.abs(off) > 0.02) sh.ironSide = off > 0 ? 1 : -1;
+      if (Math.abs(sh.rudder) > 0.3) sh.ironSide = sh.rudder * (sh.spd < 0 ? -1 : 1) > 0 ? 1 : -1;   // 有打舵 ⇒ 倒帆往舵那一側推（現實：前帆反受風，船頭往要的那一側掉；⛔ 照風推的那一側 ⇒ 往另一側打舵時舵效 0.012 抵不過 0.02，停在頂風動彈不得：Tim 2026-10-17）
       rate += (sh.ironSide || 1) * nogo * IRONS_PUSH * clamp(1 - sh.spd / (VMAX * SPK * 0.5), 0, 1);
       if (nogo > 0.5 && !(SIMT - (sh.ironsT || -99) < 20)) { sh.ironsT = SIMT; note(sh, '頂風失速：帆被吹回來了 —— 帶著速度轉過去，或往下風轉一圈'); }
     }
@@ -146,6 +156,7 @@ function sail(sh, dt) {
     var hc = ld && !ld.sunk ? helmFollow(sh, ld, od) : ok && od && od.mode === 'gauge' ? helmGauge(sh, od) : ok && od && od.mode === 'lead' ? helmLead(sh, od) : null;
     if (hc) { tY = hc.yaw; sh.wantV = hc.v; }
     else if (ok && foe) { var hs = helmSteer(sh, foe); tY = hs.yaw; sh.wantV = hs.v; } else sh.wantV = null;
+    if (ok && (hc || foe)) tY = helmIrons(sh, tY);                        // 避開頂風、速度不夠就順風繞（54_helm.js；讓船在下面，照舊優先）
     if (!(ld && !ld.sunk)) { sh.station = null; sh.lineErr = sh.lineLag = sh.lineArc = sh.lineOff = undefined; }
     sh.throttle = sh.helmSpill || 1;                                     // 只靠帆的船：期望航速比夠用的那一段帆慢 ⇒ 放掉一點風（54_helm.js helmGovern）
     if (od && od.throttle !== undefined && !hc) sh.throttle = Math.min(sh.throttle, od.throttle);   // 指揮官給的油門（沙盒用；遊戲的排頭、跟隨照期望航速）
