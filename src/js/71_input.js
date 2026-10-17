@@ -210,6 +210,11 @@ var GSET = { open: false, paused: false };
 function gsetOpen() { if (!RUNNING || GSET.open) return; helpClose(); GSET.open = true; GSET.paused = PAUSED; PAUSED = true; $('gset').classList.add('on'); $('gsetBg').classList.add('on'); gsetShow(); }
 function gsetClose() { if (!GSET.open) return; GSET.open = false; PAUSED = GSET.paused; $('gset').classList.remove('on'); $('gsetBg').classList.remove('on'); }
 function gsetToggle() { if (GSET.open) gsetClose(); else gsetOpen(); }
+// 不給全螢幕時那一行（Tim 2026-10-17：iPhone 照臺北狂飆那樣「加入主畫面」就是全螢幕 ——「iphone支援的操作 不用另外做功能」「純文字也可以」）：
+//   iPhone ⇒ 寫怎麼加入主畫面（iOS 自己會用網頁 App 開：沒有網址列與工具列）；別的（沒開全螢幕權限的 iframe…）照舊只說不給。
+//   已經從主畫面開（iOS 的 navigator.standalone、manifest 的 display-mode）⇒ 本來就沒有網址列：按鈕亮著、不寫原因。
+var FS_APP = navigator.standalone === true || !!(window.matchMedia && window.matchMedia('(display-mode: fullscreen), (display-mode: standalone)').matches);
+var FS_WHY = FS_APP ? '' : /iPhone|iPod/.test(navigator.userAgent) ? '（iPhone 的 Safari 不給網頁全螢幕 ⇒ 點「分享」→「加入主畫面」，從主畫面的圖示開就沒有網址列；橫放手機）' : '（這裡不給全螢幕）';
 function gsetShow() {
   var gl = gfxLevel(), xl = phxLevel();
   [].forEach.call(document.querySelectorAll('#gset [data-gg]'), function (b) { b.classList.toggle('on', b.dataset.gg === gl); });
@@ -218,7 +223,7 @@ function gsetShow() {
   $('muteT').classList.toggle('on', muted); $('fpsT').classList.toggle('on', GFX_FPS);
   $('slowT').classList.toggle('on', SLOW.on); $('slowCamT').classList.toggle('on', SLOW.cam); $('pslowT').classList.toggle('on', PSLOW.on); $('testT').classList.toggle('on', !!(TLOG && TLOG.off === undefined) || (!TLOG && tlgWanted())); $('testN').textContent = tlgNote();   // 測試模式（83_testlog.js） $('boomB').classList.toggle('dis', !canSelfDestruct());
   sndShow();                                                          // 音量滑桿（02_music.js）
-  $('fullT').classList.toggle('on', fsOn()); $('fullT').classList.toggle('dis', !fsCan()); $('gsFull').textContent = fsCan() ? '' : '（這裡不給全螢幕：iPhone 的 Safari 只給影片）';
+  $('fullT').classList.toggle('on', fsOn() || FS_APP); $('fullT').classList.toggle('dis', !fsCan() && !FS_APP); $('gsFull').textContent = fsCan() ? '' : FS_WHY;
 }
 $('setB').onclick = gsetToggle;
 // 說明（設定裡的「H 說明」、H、?）：打開 ⇒ 暫停（關掉回到打開之前的暫停狀態，跟設定一樣）；外面蓋一層 #helpBg，點外面、✕、H、Esc 都關（Tim 2026-10-13：手機上不好關說明）
@@ -230,6 +235,9 @@ $('helpBg').onclick = helpClose; $('helpX').onclick = helpClose; $('helpB').oncl
 $('gsetBg').onclick = gsetClose;                                    // 面板外點一下 ⇒ 關（不會順便瞄準、開砲：底下的東西被這一層蓋住）
 $('gsGo').onclick = gsetClose;
 $('menuB').onclick = function () { doAct('menu'); };
+// Discord（主選單；Tim 2026-10-17）：新分頁開（從主畫面開的 ⇒ iOS 交給 Safari）。畫廊彈窗的 iframe 沒開 allow-popups ⇒ 開不了，照樣不擋遊戲。
+var DISCORD_URL = 'https://discord.gg/XuHkBFN9r';
+$('discordB').onclick = function () { window.open(DISCORD_URL, '_blank', 'noopener'); };
 $('muteT').onclick = function () { muted = !muted; sndApply(); gsetShow(); };
 $('fpsT').onclick = function () { GFX_FPS = !GFX_FPS; gfxShow(); };
 // 全螢幕（設定面板的「F11 全螢幕」；Tim 2026-10-13：主要給手機用）：整頁（documentElement）進出全螢幕；畫布大小每一格照量（60_render.js resize）⇒ 不用另外處理。
