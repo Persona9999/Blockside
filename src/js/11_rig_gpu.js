@@ -4,6 +4,7 @@ function buildRig(owner) {          // 還綁著的繩（靜態，照雕刻作�
   (owner.sails || []).forEach(function (s, k) {                       // 收起來的帆，它自己的繩（s.lines：sheet、tack…）不畫（Tim 2026-10-15：收帆後會浮空）；物理開著 ⇒ 收攏演完、帆真的藏起來才藏。只是不畫：判斷照舊
     if (!s.furled || s.dead || !s.lines) return; var c = owner.cl && owner.cl[k];
     if (PHYS && c && c.p && !c.hidden) return;
+    if (PHYS && c && c.fz && !c.gone && !c.loose) return;               // 收帆停在演完那一刻（30_rig_physics.js furlFreeze）⇒ 繩留著
     s.lines.forEach(function (j) { hide[j] = 1; });
   });
   var tj = PHYS && owner.tJ, tc = PHYS && owner.tCut;                  // 跟著帆腳走的 sheet、tack（30_rig_physics.js tethOf）：looseBuf 每一格畫；tCut：帆腳被打掉、已經垂下來的（tethCut）
@@ -44,7 +45,9 @@ function sailBuf(ow) {
     if (isShip) {
       var s = ow.sails[k], keep = furlKeep(s) && (PHYS ? !c.gone && !c.loose && (!c.p || c.hidden) : true);   // 收好的帆留一捲（30_rig_physics.js furlBundle；只是畫）
       if (!keep && (PHYS ? (!c.p || c.hidden || c.gone) : (s.dead || s.furled))) return;
-      if (keep) { P = furlBundle(ow, c, SBP); var lost = furlLost(ow, s, c); }   // lost：靠的帆桁、格不在了的那幾點不畫（30_rig_physics.js furlLost）
+      var frz = keep && PHYS && c.fz;                                    // 物理開著、收攏演完過 ⇒ 停在演完那一刻（30_rig_physics.js furlFreeze）；沒演過（開局就收著）⇒ 照舊那一捲
+      if (keep) { P = frz ? furlFrozen(ow, c, SBP) : furlBundle(ow, c, SBP); var lost = furlLost(ow, s, c); }   // lost：靠的帆桁、格不在了的那幾點不畫（30_rig_physics.js furlLost）
+      if (frz && c.tt) c.tt.forEach(function (t) { if (ow.ropes[t.j].dead || ow.tCut && ow.tCut[t.j] || lost && lost[t.i]) return; var o = t.i * 3; td.push({ t: t, x: P[o], y: P[o + 1], z: P[o + 2] }); tk += t.j + ','; });   // 帆腳的繩跟著凍結的帆腳
     }
     if (!P) P = (PHYS || !isShip) && c.p ? (isShip && c.furlF !== null && c.furlF !== undefined ? furlDraw(c, clothFine(c, SBP), c.furlF, ow) : clothFine(c, SBP)) : c.T.p0;   // furlDraw：收帆張帆的演出（30_rig_physics.js）
     if (isShip && PHYS && c.tt && c.p && !c.hidden && !c.gone && !c.loose) c.tt.forEach(function (t) { if (ow.ropes[t.j].dead || ow.tCut && ow.tCut[t.j]) return; var o = t.i * 3; td.push({ t: t, x: P[o], y: P[o + 1], z: P[o + 2] }); tk += t.j + ','; });   // 畫出來的帆腳（收帆演出時也是）

@@ -499,10 +499,10 @@ function physStep(sh) {
     if (s.furled && !s.dead) {                                       // 收帆：物理開著 ⇒ 先演一段收上去（畫面上往帆桁／綁邊收攏，FURL_IN 秒）再藏；判斷照舊立刻算收起來（s.furled：航速、命中、鏈彈）
       if (c.hidden || !c.p || c.loose) { c.hidden = true; c.furlF = null; return; }
       c.furlF = (c.furlF === null || c.furlF === undefined ? 1 : c.furlF) - DT / FURL_IN;
-      if (c.furlF <= 0) { c.hidden = true; c.furlF = null; sh.rigDirty = true; return; }   // rigDirty：它的繩跟著藏（11_rig_gpu.js buildRig）
+      if (c.furlF <= 0) { furlFreeze(sh, c); c.hidden = true; c.furlF = null; sh.rigDirty = true; return; }   // 演完那一格凍結下來照畫、繩留著（furlFreeze）；rigDirty：重做繩（11_rig_gpu.js buildRig）
     } else if (c.furlF !== null && c.furlF !== undefined && !c.hidden) { c.furlF += DT / FURL_OUT; if (c.furlF >= 1) c.furlF = null; }   // 張帆（或收到一半又張）：從帆桁放下來
     var reopen = seen && c.hidden === true && !s.furled;               // 開局初次啟用不是重新張帆；makeShip 確實以 hidden:true 建立
-    if (c.hidden || !c.p) { var keep = c.p && c.torn ? { brk: c.brk, bbrk: c.bbrk, tv: c.tv } : null; clothInit(c); c.hidden = false; if (keep) { c.brk = keep.brk; c.bbrk = keep.bbrk; c.tv = keep.tv; c.torn = true; } if (reopen) { c.furlF = 0; sh.rigDirty = true; } }   // 收帆再張：形狀重來、破洞留著；從收攏的樣子放下來（furlF 0 → 1）
+    if (c.hidden || !c.p) { c.fz = null; var keep = c.p && c.torn ? { brk: c.brk, bbrk: c.bbrk, tv: c.tv } : null; clothInit(c); c.hidden = false; if (keep) { c.brk = keep.brk; c.bbrk = keep.bbrk; c.tv = keep.tv; c.torn = true; } if (reopen) { c.furlF = 0; sh.rigDirty = true; } }   // 收帆再張：形狀重來、破洞留著；從收攏的樣子放下來（furlF 0 → 1）
     if (c.tt === undefined) { var tl = tethOf(sh, s, c); c.tt = tl.length ? tl : null; }
     if (c.tt) for (var ti = 0; ti < c.tt.length; ti++) c.pin[c.tt[ti].i] = 0;   // 帆腳不釘：交給布、被 sheet 拉住（clothInit 每次照 hk 釘回去 ⇒ 每一步放開）
     if (c.tt && c.torn && chk && !c.loose) tethCut(sh, c);                // 帆腳那一塊被打掉 ⇒ 那幾條繩跟帆斷開、垂下來
@@ -534,7 +534,7 @@ function setPhys(on) {
     sh.loose = []; sh.shreds = []; sh.tCut = {};
     if (!on) { (sh.yards || []).forEach(function (m) { m.rot = 0; }); if (sh.yRopes) yardRopes(sh, true); unswingHangs(sh); }   // 關 ⇒ 帆桁回到作品的角度、小艇不擺
     sh.ropes.forEach(function (r) { r.lz = !!(r.never || r.moved); });
-    sh.cl.forEach(function (c, k) { c.p = null; c.hidden = true; c.loose = false; c.torn = false; c.gone = !!c.moved; c.late = sh.sails[k].dead; });
+    sh.cl.forEach(function (c, k) { c.p = null; c.hidden = true; c.loose = false; c.torn = false; c.gone = !!c.moved; c.late = sh.sails[k].dead; c.fz = null; });
     sh.rigDirty = true;
   });
   if (RUNNING && SHIPS.length) note(SHIPS[PLAYER_I], on ? '帆與繩的物理：開（帆被風吹鼓、斷掉的會垂下來）' : '帆與繩的物理：關（靜態）');
@@ -614,6 +614,26 @@ function furlBundle(sh, c, out) {
     else { out[o] = T.p0[o]; out[o + 1] = T.p0[o + 1]; out[o + 2] = T.p0[o + 2]; }
   }
   return furlDraw(c, out, 0, sh);
+}
+// 收帆停在演完那一刻（Tim 2026-10-17：「收帆是否可以改為停留在最後一刻的狀態(保留纜索) 物理判定照舊 只影響外觀」「且帆也是維持在最後一刻的狀態」「只要套用到開啟繩帆物理的就好」）：
+//   收攏演到底（furlF ≤ 0）那一格畫出來的布 ⇒ c.fz（細格位置）＋每一點跟著哪根帆桁、那時轉了多少（c.fzY／c.fzR）；之後照它畫（帆桁再轉 ⇒ 照差的角度轉），不換成設計形狀的那一捲；
+//   帆腳的 sheet、tack 留著、跟著凍結的帆腳（11_rig_gpu.js sailBuf 的 td、buildRig 不藏）。布不再模擬（c.hidden）、判斷照舊 s.furled。
+//   只有物理開著才有（物理關著照舊 furlBundle、繩藏起來）；再張帆、開關物理 ⇒ 清掉。
+function furlFreeze(sh, c) {
+  if (!c.p) return;
+  var T = c.T, P = furlDraw(c, clothFine(c, new Float32Array(T.n * 3)), 0, sh), g = furlGath(T, sh), yk = T.sim.yk, mv = T.fmv, Y = new Int16Array(T.n).fill(-1), R = {};
+  if (yk && T.sim.n === T.n) for (var i = 0; i < T.n; i++) { var y = T.hk[i] && !mv[i] ? yk[i] : g[i] >= 0 ? yk[g[i]] : -1; Y[i] = y; if (y >= 0 && !(y in R)) R[y] = sh.models[y] ? sh.models[y].rot || 0 : 0; }
+  c.fz = P; c.fzY = Y; c.fzR = R;
+}
+/** 凍結的那一格（out ＝ 細格位置）：帆桁從凍結那時起又轉了多少 ⇒ 那幾點跟著轉。 */
+function furlFrozen(sh, c, out) {
+  var T = c.T, P = c.fz, Y = c.fzY, R = c.fzR;
+  for (var i = 0; i < T.n; i++) {
+    var o = i * 3, y = Y ? Y[i] : -1, m = y >= 0 ? sh.models[y] : null, d = m ? (m.rot || 0) - R[y] : 0;
+    if (d) { var w = rotZ([P[o], P[o + 1], P[o + 2]], m.piv, d); out[o] = w[0]; out[o + 1] = w[1]; out[o + 2] = w[2]; }
+    else { out[o] = P[o]; out[o + 1] = P[o + 1]; out[o + 2] = P[o + 2]; }
+  }
+  return out;
 }
 /** 收好的那一捲哪幾點不畫（Tim 2026-10-16 截圖：「且會浮空」—— 收著的帆不會因為帆桁、桅被打掉而算掉了（32_hull.js：收著的帆不怕），那一捲照畫在原處）：
  *  每一點往它的收攏點收（綁點自己 ＝ 自己）；那個綁點靠的東西（格、繩、帆桁）不在了 ⇒ 那一點不畫（碰到它的三角形不畫）。帆的破洞照舊不畫。null ＝ 全畫。 */
