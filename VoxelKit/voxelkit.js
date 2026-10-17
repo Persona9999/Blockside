@@ -119,10 +119,26 @@
     if (out.length !== header.nchunks) throw new Error('VXK1 改裝船還原出 ' + out.length + ' 塊，header 說 ' + header.nchunks + ' 塊');
     return { header: header, chunks: out };
   }
+  /**
+   * 成品裡改裝船跟原船相同的檔頭欄（TASK-0667；Blockside admin.py header_shared／header_unshare 是同一個算法）：header.vh ＝ { el: 原船的內嵌標籤, k: [路徑, …] }，
+   * 路徑 ＝ 一串鍵（只走物件）；那幾欄從原船（照它自己的讀法解好的檔頭）放回來、拿掉 vh。原船每次都是新解的一份 ⇒ 直接拿它的物件、不用複製。
+   */
+  function unshare(header, base) {
+    header.vh.k.forEach(function (p) {
+      var a = header, b = base;
+      for (var i = 0; i < p.length - 1; i++) { if (!a[p[i]]) a[p[i]] = {}; a = a[p[i]]; b = b[p[i]]; }
+      a[p[p.length - 1]] = b[p[p.length - 1]];
+    });
+    delete header.vh;
+  }
   function decode(u8) {
     return inflateRaw(u8).then(parse).then(function (r) {
-      if (!r.variantAt) return r;
-      return loadEmbedded(r.header.variant.el).then(function (base) { return unvariant(r, base); });   // 原船照它自己的讀法（鏡射、再上一層的改裝船都行）
+      var V = r.header.vh, el = r.variantAt ? r.header.variant.el : V ? V.el : null;
+      if (!el) return r;
+      return loadEmbedded(el).then(function (base) {                   // 原船照它自己的讀法（鏡射、再上一層的改裝船都行）
+        if (V) unshare(r.header, base.header);
+        return r.variantAt ? unvariant(r, base) : r;
+      });
     });
   }
   /** <script type="application/x-asset" id="…" data-mime="…">base64</script>（vxk_inline.py 填的）；空的（optional 素材沒交）⇒ null。 */
@@ -156,6 +172,8 @@
     this.own = new Uint8Array(this.tab.length);    // 1 ＝ 這份 Grid 自己的（可以直接寫）
     this.count = 0;
     this.sm = null;                                // 平滑渲染的旗標網格（呼叫端給；meshChunk 不出那些格的方塊面）
+    this.cv = new Uint32Array(this.tab.length);    // 每一塊改過幾次、整份改過幾次（ver）：呼叫端記下來比 ⇒ 知道哪幾塊變了（Blockside 05_material.js voxLostT 只重數變過的塊）
+    this.ver = 0;
   }
   Grid.fromModel = function (model) {
     var g = new Grid(model.header.size);
@@ -183,7 +201,7 @@
     if (c === null) { if (!v) return 0; c = this.tab[i] = new Uint8Array(CH3); this.own[i] = 1; }
     else if (!this.own[i]) { if (c[li] === v) return v; c = this.tab[i] = new Uint8Array(c); this.own[i] = 1; }
     var old = c[li];
-    if (old !== v) { c[li] = v; this.count += (v ? 1 : 0) - (old ? 1 : 0); }
+    if (old !== v) { c[li] = v; this.count += (v ? 1 : 0) - (old ? 1 : 0); this.cv[i]++; this.ver++; }
     return old;
   };
   /** 每格走一次（cb(x, y, z, c)）。 */

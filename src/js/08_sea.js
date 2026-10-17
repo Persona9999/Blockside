@@ -32,6 +32,10 @@ function seaH(x, z, t) {
   for (var i = 0; i < WAVES.length; i++) { var w = WAVES[i]; h += w.a * Math.sin(w.kx * rx + w.kz * rz - w.w * t + w.ph); }
   return h * SEA_K * WX.sea;                    // 天氣（08_weather.js）：暴風雨 ×2.5；晴天 ×1（逐位元組不變）
 }
+/** 水面高度的上限（m）：|seaH| 一定不超過它（TASK-0673）—— 泡水判定先比它，離海面夠遠的點不用算七道浪。
+ *  振幅照 seaH 同一個加法順序加、同一個乘法順序乘 ⇒ 捨入只會讓 seaH 比它小（再多留 1e-6 m）；量不準的情況（浪 ≤ 0、天氣倍率 < 0）給 Infinity ＝ 照算。 */
+var SEA_AMP = WAVES.reduce(function (s, w) { return s + w.a; }, 0);
+function seaBound() { return SEA_K > 0 && WX.sea >= 0 ? SEA_AMP * SEA_K * WX.sea + 1e-6 : Infinity; }
 // 著色器用的同一組浪（常數照 WAVES 生成；uSeaK、uSeaT 在 setCommon 給）。seaH ＝ 高度，seaG ＝ 坡度（∂h/∂x, ∂h/∂z）；
 // seaHs ＝ 照網格間距 s 拿掉太短的浪（⛔ 頂點間距比波長的 1/4 還粗 ⇒ 鋸齒、浪在網格上游動）；
 // seaGf ＝ 照一個像素在海面上多寬（fp，公尺）淡掉太短的浪的坡度（⛔ 不淡 ⇒ 遠處的浪比像素還細，疊出規則的疊紋）。

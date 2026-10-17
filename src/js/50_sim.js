@@ -1,3 +1,4 @@
+var SURVEY_PH = 7;                                                  // 定期檢查的相位：第 i 艘在第 (i × 7) mod 30 步量（TASK-0673；7 跟 30 互質 ⇒ 30 艘以內不重複）
 // ───────────────────────── 電腦 ─────────────────────────
 function ai(sh, dt) {
   var foe = foeOf(sh);                                              // 自己的目標（52_fleet.js；一對一 ＝ 另一艘）
@@ -90,7 +91,9 @@ function step() {
   stepPowder();                                                    // 殉爆排程（23_powder.js）
   stepBlasts();                                                    // 還沒挖完的彈坑接著挖（23_powder.js）
   if (PF) pfLap('powder');
-  if ((Math.round(SIMT / DT) % 30) === 0) { SHIPS.forEach(survey); SHIPS.forEach(function (sh) { evEmit('survey', sh); }); reinforce(); playerHandoff(); }   // reinforce：空出名額 ⇒ 候補進場；playerHandoff：我艦出局 ⇒ 換到友艦（52_fleet.js；沒有候補／我艦還在打 ⇒ 直接回去）
+  var stp = Math.round(SIMT / DT);                                  // 每半秒的定期檢查（TASK-0673）：每艘自己的相位（sh.i × 7 步）⇒ 8 艘不擠在同一步（以前同一步 35–50 ms）；
+  SHIPS.forEach(function (sh) { if ((stp + sh.i * SURVEY_PH) % 30 === 0 || sh.mass0 === undefined) { survey(sh); evEmit('survey', sh); } });   //   第一次（開戰那一步、候補進場）照舊馬上量（定浮的位置、開戰時的重量）
+  if (stp % 30 === 0) { reinforce(); playerHandoff(); }             // reinforce：空出名額 ⇒ 候補進場；playerHandoff：我艦出局 ⇒ 換到友艦（52_fleet.js；沒有候補／我艦還在打 ⇒ 直接回去）
   if (PF) pfLap('survey');
   evEmit('stepEnd');                                              // 每一步最後：戰鬥報表（79_report.js，只讀）、測試記錄（83_testlog.js）、結束判定（61_hud.js endTick；結算畫面照模擬時間延後跳）
   if (PF) pfLap('end');

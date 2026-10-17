@@ -84,19 +84,40 @@ function hardAt(sh, L) { return HARD_BASE * sh.cfg.hard * matK(sh, L[0] | 0, L[1
 function hard0(sh) { return HARD_BASE * sh.cfg.hard * sh.T.matK[0]; }
 /** 格子少掉的重量（噸）：以前那一條 ＝ 少幾格 × VOX_T；有材質 ⇒ 每種材質還剩幾格（非預設的照座標數，格子只會少、不會多 ⇒ 只在格數變了才重數）。
  *  砲帶的裝甲（24_armor.js）也是船上的格：還剩幾格 ＝ 船殼＋裝甲（裝甲的格座標就是材質層的座標）；sh.orig 只算船殼 ⇒ 原本幾格 ＝ sh.orig ＋ sh.armN0。沒有裝甲 ⇒ 跟以前同一條算式。 */
+//   重數只數變過的塊（TASK-0673：鐵甲艦一次全數約 20 ms，每次被打中之後的 survey 都要）：非預設材質的格照船殼網格的塊（16³）分組（matChunks，每型一次），
+//   每一組記上次數到幾格、那一塊的版本（VoxelKit Grid.cv）；版本沒變 ⇒ 沿用。裝甲（砲塔的格）有任何一份改過 ⇒ 全部重數（跟以前一樣）。數出來的整數跟全數相同 ⇒ 重量一位元不差。
 function voxLostT(sh) {
   var T = sh.T, n = sh.arm ? sh.grid.count + armCount(sh) : sh.grid.count, n0 = sh.arm ? sh.orig + sh.armN0 : sh.orig;
   if (T.matPlain) return (n0 - n) * VOX_T;
   if (sh.matLostAt === n) return sh.matLost;
+  var G = sh.grid, L = matChunks(T, G), A = sh.matA, as = sh.arm ? sh.arm.map(function (a) { return a.grid.ver; }).join(',') : '', all = !A || A.g !== G || A.as !== as || A.arm !== sh.arm;   // 換了一份網格（斷成兩截之類）⇒ 版本號不能比 ⇒ 全數
+  if (!A) A = sh.matA = { a: new Int32Array(L.length), v: new Uint32Array(L.length), as: '', arm: null, g: null };
+  for (var g = 0; g < L.length; g++) {
+    var q = L[g]; if (!all && G.cv[q.k] === A.v[g]) continue;
+    var P = q.P, a = 0;
+    for (var k = 0; k < P.length; k += 3) if (G.get(P[k], P[k + 1], P[k + 2]) || (sh.arm && armGet(sh, P[k], P[k + 1], P[k + 2]))) a++;
+    A.a[g] = a; A.v[g] = G.cv[q.k];
+  }
+  A.as = as; A.arm = sh.arm; A.g = G;
+  var per = new Float64Array(T.matIds.length); for (g = 0; g < L.length; g++) per[L[g].i] += A.a[g];
   var t = 0, alive = 0;
   for (var i = 1; i < T.matIds.length; i++) {
-    var P = T.matXYZ[i], a = 0;
-    for (var k = 0; k < P.length; k += 3) if (sh.grid.get(P[k], P[k + 1], P[k + 2]) || (sh.arm && armGet(sh, P[k], P[k + 1], P[k + 2]))) a++;
-    t += (T.matN[i] - a) * T.matT[i]; alive += a;
+    t += (T.matN[i] - per[i]) * T.matT[i]; alive += per[i];
   }
   t += (T.matN[0] + (n0 - T.base.count) - (n - alive)) * T.matT[0];   // 預設材質：原本幾格 − 還剩（全部還剩 − 非預設還剩）；n0 ≠ 船型的格數（不該發生）⇒ 差額算在預設材質
   sh.matLostAt = n; sh.matLost = t;
   return t;
+}
+/** 非預設材質的格照網格 G 的塊分組（同型的船共用；G 只拿它的塊數 nx、ny）⇒ [{ i: 材質索引, k: 塊號, P: 格座標 }]。 */
+function matChunks(T, G) {
+  if (T.matCh) return T.matCh;
+  var L = [];
+  for (var i = 1; i < T.matIds.length; i++) {
+    var P = T.matXYZ[i], by = new Map();
+    for (var k = 0; k < P.length; k += 3) { var c = (P[k] >> 4) + G.nx * ((P[k + 1] >> 4) + G.ny * (P[k + 2] >> 4)), a = by.get(c); if (!a) by.set(c, a = []); a.push(P[k], P[k + 1], P[k + 2]); }
+    by.forEach(function (a, c) { L.push({ i: i, k: c, P: new Int16Array(a) }); });
+  }
+  return (T.matCh = L);
 }
 /** 讀數（匯入檢查、主控台）：每種材質幾格、幾噸。 */
 function matSummary(T) {

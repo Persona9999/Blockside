@@ -410,6 +410,8 @@ def validate(cfg, prev=None):
             N = DV.get('teleNames')
             if N is not None and not (isinstance(N, list) and isinstance(T, list) and len(N) == len(T) and all(isinstance(x, str) and x for x in N)):
                 err('drive.teleNames', '跟 tele 一樣多個名字')
+            if 'partCheck' in DV and not isinstance(DV['partCheck'], bool):
+                err('drive.partCheck', 'true／false（動力件檢查：戰鬥中數主機、鍋爐、軸還剩幾成；預設關，TASK-0673）')
     PN = cfg.get('pen', {})                              # 實心彈與爆裂彈照能量算（TASK-0621；js/21_gunnery.js 的 PEN）：沒寫的鍵照程式裡的預設
     if not isinstance(PN, dict):
         err('pen', '要是物件')
@@ -1584,6 +1586,62 @@ def grid_variant_unpack(h, body, h0, grid0):
     return _grid_chunks(L % sx, (L // sx) % sy, L // (sx * sy), C)
 
 
+# ── 檔頭：改裝船跟原船相同的欄位不存（TASK-0667 ①；Tim 2026-10-17「哨兵號這種用其他船當子模組的改造模式 能省下多少空間」→「重構時重點處理這一塊」）──
+# 格式（只在成品裡）：header.vh ＝ {el: 原船的內嵌標籤, k: [路徑, …]}，路徑 ＝ 一串鍵（只走物件、不走陣列：['render', 'runs']）；那幾欄從改裝船的檔頭拿掉。
+# 比的是兩艘都處理好的檔頭（帆只留配方、網格換成池子編號之後）；兩邊寫成 JSON 逐字相同才算（⛔ 不用 ==：Python 的 True == 1、1 == 1.0，JS 分得出來）。
+# 還原（voxelkit.js unshare 同一個算法）：原船照它自己的讀法解（原船自己是改裝船 ⇒ 先還原它的）⇒ 照路徑把那幾欄放回改裝船；pack_verify 照同一個讀法比 _cache 原檔。
+VH_SKIP = {'size', 'nchunks', 'variant', 'mirror', 'mesh_pool', 'vh', 'checksum', 'voxels'}   # 頂層這幾欄是改裝船自己的（或太小）
+VH_MIN = 32                                                                                     # 比這個短（JSON 位元組）的欄不值得記路徑
+
+
+def _js(v):
+    return json.dumps(v, ensure_ascii=False, separators=(',', ':'))
+
+
+def header_shared(h, h0, pre=()):
+    """改裝船檔頭 h 跟原船 h0 逐字相同的欄 ⇒ 路徑清單（物件不同 ⇒ 往下一層找）。"""
+    out = []
+    for k in h:
+        if (not pre and k in VH_SKIP) or k not in h0:
+            continue
+        a, b = h[k], h0[k]
+        if isinstance(a, dict) and isinstance(b, dict) and _js(a) != _js(b):
+            out += header_shared(a, b, pre + (k,))
+        elif _js(a) == _js(b) and len(_js(a).encode('utf-8')) >= VH_MIN:
+            out.append(list(pre + (k,)))
+    return out
+
+
+def header_drop(h, p):
+    for k in p[:-1]:
+        h = h[k]
+    del h[p[-1]]
+
+
+def header_unshare(h, h0):
+    """header_shared 的反向（跟 voxelkit.js unshare 同一個算法）：照 h['vh'] 的路徑從原船 h0 放回來、拿掉 vh。"""
+    for p in h.pop('vh')['k']:
+        a, b = h, h0
+        for k in p[:-1]:
+            a, b = a.setdefault(k, {}), b[k]
+        a[p[-1]] = json.loads(_js(b[p[-1]]))
+
+
+def _emb_header(html, el, depth=0):
+    """成品裡內嵌的那一艘 ⇒ 照遊戲的讀法還原好的檔頭（vh 照原船放回；原船自己有 vh ⇒ 先還原它的）。"""
+    if depth > 8:
+        raise Fail('改裝船的原船鏈太長（成環？）：#%s' % el)
+    mt = re.search(r'<script type="application/x-vxk" id="%s">([^<]*)</script>' % re.escape(el), html)
+    if not mt:
+        raise Fail('成品裡沒有 #%s' % el)
+    a = zlib.decompress(base64.b64decode(mt.group(1)), -15)
+    na = struct.unpack('<I', a[4:8])[0]
+    h = json.loads(a[8:8 + na].decode('utf-8'))
+    if h.get('vh'):
+        header_unshare(h, _emb_header(html, h['vh']['el'], depth + 1))
+    return h
+
+
 def _cache_raw(s):
     """一艘的 _cache 原檔 ⇒ (header, 格子那一段)。"""
     b = zlib.decompress(open(os.path.join(CACHE, s['vxk']), 'rb').read(), -15)
@@ -1663,16 +1721,39 @@ def pack_html(path):
         elif mr:
             h['mirror'], grid = mr
         mirrors.append((el, h.get('mirror'), g0, len(_deflate(grid)), h.get('variant')))
-        if not ms and not mr and not vr and not rs:
-            return mt.group(0)
-        hb = json.dumps(h, ensure_ascii=False, separators=(',', ':')).encode('utf-8')
-        b = base64.b64encode(_deflate(b'VXK1' + struct.pack('<I', len(hb)) + hb + grid)).decode('ascii')
-        return mt.group(1) + b + mt.group(3)
+        items.append({'el': el, 'h': h, 'grid': grid, 'mt': mt, 'changed': bool(ms or mr or vr or rs), 'base': byid[sv['variant_of']]['el'] if sv and sv.get('variant_of') in byid else None})
+        return '\x00SHIP%d\x00' % (len(items) - 1)                # 檔頭共用（TASK-0667）要等每艘都處理完才比得了 ⇒ 先佔位，最後一起寫
 
+    items = []
     RX = r'(<script type="application/x-vxk" id="[^"]+">)([^<]*)(</script>)'
     first = next(mt for mt in re.finditer(RX, html) if len(mt.group(2)) >= 64).start()   # 池子放在第一艘船前面（⛔ 照字串找第一個：voxelkit.js 的註解裡就有一模一樣的標籤 ⇒ 池子插進程式中間）
     html2 = html[:first] + '\x00POOL\x00' + html[first:]
     html2, k = re.subn(RX, one, html2)
+    proc = {it['el']: it['h'] for it in items}
+    shared = []
+    for it in items:                                          # 先全部比完（比的是處理好、還沒拿掉任何欄位的檔頭）再拿掉 ⇒ 原船自己也是改裝船時照樣對
+        if it['base'] in proc:
+            P = header_shared(it['h'], proc[it['base']])
+            if P:
+                it['vh'] = {'el': it['base'], 'k': P}
+    for it in items:
+        if it.get('vh'):
+            n0 = len(json.dumps(it['h'], ensure_ascii=False, separators=(',', ':')).encode('utf-8'))
+            for p in it['vh']['k']:
+                header_drop(it['h'], p)
+            it['h']['vh'] = it['vh']
+            shared.append((it['el'], it['base'], it['vh']['k'], n0 - len(json.dumps(it['h'], ensure_ascii=False, separators=(',', ':')).encode('utf-8'))))
+            it['changed'] = True
+
+    def emit(m):
+        it = items[int(m.group(1))]
+        mt = it['mt']
+        if not it['changed']:
+            return mt.group(0)
+        hb = json.dumps(it['h'], ensure_ascii=False, separators=(',', ':')).encode('utf-8')
+        b = base64.b64encode(_deflate(b'VXK1' + struct.pack('<I', len(hb)) + hb + it['grid'])).decode('ascii')
+        return mt.group(1) + b + mt.group(3)
+    html2 = re.sub('\x00SHIP(\\d+)\x00', emit, html2)
     k = sum(1 for mt in re.finditer(RX, html) if len(mt.group(2)) >= 64)
     pb = base64.b64encode(_deflate(json.dumps({'v': 1, 'q': POOL_Q, 'meshes': pool}, separators=(',', ':')).encode('utf-8'))).decode('ascii')
     tag = '<script type="application/x-vxk-meshes" id="%s">%s</script>\n' % (POOL_EL, pb)
@@ -1685,6 +1766,8 @@ def pack_html(path):
     for el, M, g0, g1, V in mirrors:
         what = ('改裝船：跟原船 #%s 差 %d 格' % (V['el'], V['ndiff'])) if V else ('鏡射 y ↔ %d − y、一半 %d 塊、diff %d 格' % (M['s'], M['nhalf'], M['ndiff'])) if M else '照原樣（鏡射沒有比較小）'
         log.append('  格子 %s：%s　%d KB → %d KB' % (el, what, g0 // 1024, g1 // 1024))
+    for el, el0, P, dn in shared:
+        log.append('  檔頭 %s：跟原船 #%s 相同的 %d 欄不存（%s）⇒ 少 %d KB（壓縮前）' % (el, el0, len(P), '、'.join('.'.join(p) for p in P[:8]) + ('…' if len(P) > 8 else ''), dn // 1024))
     open(path, 'w', encoding='utf-8', newline='').write(html2)
     size1 = len(html2.encode('utf-8'))
     log.append('✓ 壓縮模式：%d 艘、網格池 %d 份（%d KB）%s；成品 %.2f MB → %.2f MB（−%.0f%%）' % (
@@ -1882,6 +1965,12 @@ def pack_verify(html):
         na, nb = struct.unpack('<I', a[4:8])[0], struct.unpack('<I', b[4:8])[0]
         ha, hb = json.loads(a[8:8 + na].decode('utf-8')), json.loads(b[8:8 + nb].decode('utf-8'))
         ga = a[8 + na:]
+        if ha.get('vh'):                                        # TASK-0667：跟原船相同的檔頭欄 ⇒ 照遊戲的讀法從原船（成品裡內嵌的那一份，還原好的）放回來
+            try:
+                header_unshare(ha, _emb_header(html, ha['vh']['el']))
+            except (Fail, KeyError, TypeError) as e:
+                E.append('%s：檔頭從原船放回來失敗（%s）' % (s['id'], e))
+                continue
         if ha.get('variant'):                                   # TASK-0657：改裝船 ⇒ 原船的原檔＋差（原船自己的成品另外在它那一輪比）
             s0 = next((x for x in load()['ships'] if x['el'] == ha['variant']['el']), None)
             if s0 is None:

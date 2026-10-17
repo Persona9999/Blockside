@@ -51,7 +51,10 @@ var DRV_RPM0 = +DRIVE_CFG.rpm > 0 ? +DRIVE_CFG.rpm : 80, DRV_SPIN_T = 1.5, DRV_P
 // 沒有 cellRuns 的件 ⇒ 照舊（固定點旁 ±DRV_PART_R 格剩一半以上 ＝ 好的、每 0.5 秒）⇒ 沒標的船戰局一位元不動。參數在道具設定頁「動力件」（67_furncfg.js）。
 var DRVP_DEF = { engine: { name: '主機', lo: 0.4, hi: 1 }, boiler: { name: '鍋爐', lo: 0.5, hi: 0.8, wet: 0.5 }, shaft: { name: '螺旋槳軸', cell: 0.15 }, steampipe: { name: '蒸汽管', cell: 0.15 }, propeller: { name: '螺旋槳', lo: 0.2, hi: 0.9 } };   // propeller：會轉的體素件（24_armor.js propSetup；第二段）
 var DRVP = {}; Object.keys(DRVP_DEF).forEach(function (k) { DRVP[k] = Object.assign({}, DRVP_DEF[k], (CFG.drvparts || {})[k] || {}); });
-var DRV_PART_T = 1, DRV_END_R = 4;                                       // 秒（每兩次 survey）；傳動件兩端：固定點 4 格內的格算端點
+// 動力件檢查的開關（Tim 2026-10-17：「動力件檢查我感覺可以先關閉」）：關（預設）⇒ 戰鬥中不數主機、鍋爐、軸、蒸汽管還剩幾成（都當完好、鍋爐不會泡水熄火、煙囪不停煙）；
+//   螺旋槳照自己的格、沒標動力件的船（舊判法 ±DRV_PART_R 格）也一起關。設定檔 drive.partCheck: true 或網址 ?drvcheck=1 打開；匯入檢查照舊列。
+var DRV_CHECK = Q.has('drvcheck') ? Q.get('drvcheck') === '1' : DRIVE_CFG.partCheck === true;
+var DRV_PART_T = 1, DRV_END_R = 4;                                      // 秒（每兩次 survey）；傳動件兩端：固定點 4 格內的格算端點
 /** 檔頭的 cellRuns ⇒ 格座標 [x, y, z, …]（Int16Array）。 */
 function drvCells(T, runs) {
   var sx = T.h.size[0], sy = T.h.size[1], out = [], at = 0;
@@ -99,11 +102,24 @@ function drvFlow(G, C, a, b, need) {
   }
   return flow;
 }
-/** 傳動件現在傳得到幾成（0…1）：路數 × 每格傳幾成；開局就傳不滿 ⇒ 照開局的路數當滿載。 */
-function drvTrans(G, s, kind) {
+/** 傳動件現在傳得到幾成（0…1）：路數 × 每格傳幾成；開局就傳不滿 ⇒ 照開局的路數當滿載。
+ *  memo（這艘船自己的那一筆，C.SH[]／C.SP[]；⛔ 不能記在 s 上 ⇒ 同型的船共用 s）：格子還在哪幾格跟上次一樣 ⇒ 路數一定一樣、不重算最大流
+ *  （TASK-0673：一條軸一次約 4 ms、每秒每條都算 ⇒ 4 對 4 的 survey 一半時間在這裡）。 */
+function drvTrans(G, s, kind, memo) {
   var need = drvNeed(kind), f0 = s.flow0 && s.flow0[need]; if (f0 === undefined) return 1;
   if (!(f0 > 0)) return 1;                                              // 開局就不通 ⇒ 判不了（匯入檢查報）
-  return clamp(drvFlow(G, s.cells, s.a, s.b, Math.min(need, f0)) / Math.min(need, f0), 0, 1);
+  var k = Math.min(need, f0);
+  if (memo && drvSame(G, s.cells, memo) && memo.flowK === k) return memo.flowR;
+  var r = clamp(drvFlow(G, s.cells, s.a, s.b, k) / k, 0, 1);
+  if (memo) { memo.flowK = k; memo.flowR = r; }
+  return r;
+}
+/** 格子清單 C 還在的那幾格跟 memo 上次記的一樣嗎（順手記下這一次的）。第一次 ⇒ false。 */
+function drvSame(G, C, memo) {
+  var P = memo.pres, same = !!P;
+  if (!P) P = memo.pres = new Uint8Array(C.length / 3);
+  for (var i = 0, j = 0; i < C.length; i += 3, j++) { var u = G.get(C[i], C[i + 1], C[i + 2]) ? 1 : 0; if (u !== P[j]) { P[j] = u; same = false; } }
+  return same;
 }
 /** 一面帆的面積中心（格座標；雙層布的兩層一起算，中心不變）。 */
 function sailCentroid(s) {
@@ -246,9 +262,9 @@ function driveSurvey(sh) {
   if (F.length) { var up = 0; F.forEach(function (f) { if (f.model ? sh.models.some(function (q) { return q.path === f.model && q.alive && !q.moved; }) : f.n0 > 0 && funnelCount(sh.grid, f.p) * 2 >= f.n0) up++; }); fu = up / F.length; }
   D.fu = fu;
   var C = D.C, bk = 1, G = sh.grid, cut = [];
-  if (C && C.cells) { D.partN = (D.partN || 0) + 1; if (D.partN % 2 === 1) drvPartsTick(sh, C, cut); bk = C.steam; }   // 動力件（TASK-0653）：每 1 秒（survey 每 0.5 秒、隔一次）
-  if (C && C.cells) C.fnOff = drvFunnelsOff(sh, C);
-  else if (C) {                                                           // 動力的那一條鏈：主機、軸、鍋爐（沒標 ⇒ 都是空的、這一段什麼都不改）
+  if (C && C.cells) { D.partN = (D.partN || 0) + 1; if (DRV_CHECK && D.partN % 2 === 1) drvPartsTick(sh, C, cut); bk = C.steam; }   // 動力件（TASK-0653）：每 1 秒（survey 每 0.5 秒、隔一次）；檢查關著 ⇒ 都當完好（DRV_CHECK）
+  if (C && C.cells) C.fnOff = DRV_CHECK ? drvFunnelsOff(sh, C) : null;
+  else if (C && DRV_CHECK) {                                                          // 動力的那一條鏈：主機、軸、鍋爐（沒標 ⇒ 都是空的、這一段什麼都不改）
     C.E.forEach(function (c) { var u = drvUp(drvCount(G, c.e.p), c.e.n0) ? 1 : 0; if (c.ok && !u) cut.push('主機'); c.ok = u; });
     C.SH.forEach(function (c) { var u = drvUp(drvCount(G, c.s.aft), c.s.n0[0]) && drvUp(drvCount(G, c.s.fwd), c.s.n0[1]) ? 1 : 0; if (c.ok && !u) cut.push('螺旋槳軸'); c.ok = u; });
     var on = 0, all = 0;
@@ -285,8 +301,8 @@ function driveSurvey(sh) {
 function drvPartsTick(sh, C, cut) {
   var G = sh.grid;
   C.E.forEach(function (c) { var e = c.e, r = e.cells && e.c0 ? drvLeft(G, e.cells) / e.c0 : null, u = e.cells ? drvCurve('engine', r === null ? 1 : r) : (drvUp(drvCount(G, e.p), e.n0) ? 1 : 0); if (c.ok > 0 && u <= 0) cut.push('主機'); c.ok = u; c.r = r; });
-  C.SH.forEach(function (c) { var s = c.s, u = s.cells ? drvTrans(G, s, 'shaft') : (drvUp(drvCount(G, s.aft), s.n0[0]) && drvUp(drvCount(G, s.fwd), s.n0[1]) ? 1 : 0); if (c.ok > 0 && u <= 0) cut.push('螺旋槳軸'); c.ok = u; });
-  C.SP.forEach(function (c) { var u = c.p.cells ? drvTrans(G, c.p, 'steampipe') : 1; if (c.ok > 0 && u <= 0) cut.push('蒸汽管'); c.ok = u; });
+  C.SH.forEach(function (c) { var s = c.s, u = s.cells ? drvTrans(G, s, 'shaft', c) : (drvUp(drvCount(G, s.aft), s.n0[0]) && drvUp(drvCount(G, s.fwd), s.n0[1]) ? 1 : 0); if (c.ok > 0 && u <= 0) cut.push('螺旋槳軸'); c.ok = u; });
+  C.SP.forEach(function (c) { var u = c.p.cells ? drvTrans(G, c.p, 'steampipe', c) : 1; if (c.ok > 0 && u <= 0) cut.push('蒸汽管'); c.ok = u; });
   var num = 0, den = 0, wetIn = +DRVP.boiler.wet > 0 ? +DRVP.boiler.wet : 0;
   C.B.forEach(function (c, gi) {
     var b = c.b, r = b.cells && b.c0 ? drvLeft(G, b.cells) / b.c0 : null, out = b.cells ? drvCurve('boiler', r === null ? 1 : r) : 1, wet = 0;
