@@ -268,9 +268,9 @@ function bgmFrame() {
   AC.bgmBus.gain.setTargetAtTime(want, now, muted ? 0.05 : want < AC.bgmBus.gain.value ? BGM_FADE / 3 : 0.8);   // 靜音（M）馬上關；交戰變小照 BGM_FADE、回來 0.8 秒
   if (SND.mode === 'off' && !forced) { BGM = null; return; }
   if (!BGM) BGM = { tn: bgmNext(null), t0: now + 0.3, k: 0, pass: 0 };
-  else if (!BGM.forced) {                                                         // 換曲（TASK-0681）：開局、改操控、回主選單 ⇒ 該放的主題曲變了 ⇒ 排完已經排進去的那一段（BGM_LOOK）就換
-    var th = bgmTheme();
-    if (th ? BGM.tn !== th : !!BGM.tn.abc) BGM = { tn: th || bgmNext(BGM.tn), t0: Math.max(now + BGM_LOOK, BGM.t0) + BGM_SWAP, k: 0, pass: 0 };
+  else {                                                                          // 換曲（TASK-0681）：開局、改操控、回主選單 ⇒ 該放的主題曲變了 ⇒ 排完已經排進去的那一段（BGM_LOOK）就換
+    var th = bgmTheme(), tid = th ? th.id : null;                                 // 試聽（forced）只在按下去那時的狀態裡算數：之後該放的主題曲變了（例如試聽完直接開局）⇒ 試聽讓位
+    if (BGM.forced ? tid !== BGM.want : (th ? BGM.tn !== th : !!BGM.tn.abc)) BGM = { tn: th || bgmNext(BGM.tn), t0: Math.max(now + BGM_LOOK, BGM.t0) + BGM_SWAP, k: 0, pass: 0 };
   }
   var E = tuneEvents(BGM.tn), spb = 60 / BGM.tn.Q;
   BGM.k = bgmSched(AC, AC.bgmBus, BGM.tn, BGM.t0, BGM.k, now + BGM_LOOK);
@@ -283,7 +283,7 @@ function bgmFrame() {
 /** 試聽（聲音設定頁的 ▶）：從頭放指定的那一首（還沒有聲音就先建，這一下是使用者的點擊）。 */
 function bgmPreview(id) {
   initAudio(); if (!AC) return; if (AC.state === 'suspended') AC.resume();
-  var tn = tuneById(id); if (tn) BGM = { tn: tn, t0: AC.currentTime + 0.15, k: 0, pass: 0, forced: true };   // ⚠ 前一首已經排進去的那幾個音（最多 BGM_LOOK 秒）照樣會響完
+  var tn = tuneById(id), th = bgmTheme(); if (tn) BGM = { tn: tn, t0: AC.currentTime + 0.15, k: 0, pass: 0, forced: true, want: th ? th.id : null };   // want：按下去那時該放的主題曲（bgmFrame 看它變了沒）   // ⚠ 前一首已經排進去的那幾個音（最多 BGM_LOOK 秒）照樣會響完
 }
 /** 音效、環境音兩條線照 SND 設（靜音 ⇒ 0）；BGM 那條在 bgmFrame 淡。 */
 function sndApply() {
