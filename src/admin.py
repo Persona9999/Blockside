@@ -365,6 +365,16 @@ def validate(cfg, prev=None):
                 err('drvparts.%s.%s' % (kd, k), '%s～%s 的數字' % (lo, hi))
         if isnum(f.get('lo')) and isnum(f.get('hi')) and not f['lo'] < f['hi']:
             err('drvparts.%s' % kd, 'lo（剩幾成就沒力）要小於 hi（剩幾成還是全力）')
+    for sec, most in (('teamCloth', 8), ('hairColors', 16)):   # 船員換色（js/41_crew_art.js：隊色照船的 team、髮色每人挑一個；著色器的表最多 8 隊、16 色）
+        T = cfg.get(sec)
+        if T is None:
+            continue
+        if not (isinstance(T, dict) and 1 <= len(T) <= most):
+            err(sec, '要是 { 英文 ID: [R, G, B] }，1～%d 個' % most)
+            continue
+        for k, c in T.items():
+            if not (re.match(r'^[a-z][a-z0-9_]*$', k) and isinstance(c, list) and len(c) == 3 and all(isint(x) and 0 <= x <= 255 for x in c)):
+                err('%s.%s' % (sec, k), 'ID 英文小寫；顏色 [R, G, B] 各 0～255 的整數')
 
     def rooms(rm, p):
         # 甲板與艙房的預設（TASK-0568；遊戲 36_rooms.js）：{ 房名: '類型'（艙房自動擺滿）｜{ type, items: [{ it, x, y, r }] }（自訂；甲板 type=deck）}
