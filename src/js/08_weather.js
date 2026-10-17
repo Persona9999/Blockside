@@ -18,6 +18,9 @@ var WEATHERS = {
 //   航速 ∝ √WIND_SPD（31_sailing.js）、帆上的風 × WIND_SPD（30_rig_physics.js）。浪的方向不跟：湧浪是開局那陣風吹出來的（08_sea.js 建一次）。
 WEATHERS.clear.gusts = { dir: 0.2, spd: 0.15, per: [233, 97, 41] };
 WEATHERS.storm.gusts = { dir: 0.6, spd: 0.3, per: [71, 29, 11] };
+// 大漩渦（TASK-0683；Tim 2026-10-17：「暴風雨+海中央大漩渦(在敵我中間)」）：暴風雨的每一格照抄，再加 vortex（08_sea.js VX）——
+//   depth 中間深幾倍的 rv、v 水流最快（m/s，≈ 6.8 節）、inflow 往中心吸（切向的幾成）、eye 眼的半徑（幾倍的 rv：進去就被捲下去）。
+WEATHERS.maelstrom = Object.assign({}, WEATHERS.storm, { name: '大漩渦', vortex: { depth: 0.3, v: 3.5, inflow: 0.2, eye: 0.22 } });
 // 開局的風（Tim 2026-10-14：起始風向、風速也要隨機）：每一場開局（70_flow.js reset）挑一次 —— 風向相對 WIND0 轉 WIND_ROT（0–360°）、風速倍率 WIND_S0（0.6–1.5；航速 ∝ √）。
 //   帶 ?seed 或 ?demo（對拍、縮圖）⇒ 照種子的雜湊、同一個種子同一陣風；一般開戰 ⇒ Math.random()，每一場不同。兩種都不抽 rnd()（戰局的亂數順序不動）。
 //   ?wdir=度（相對 WIND0，往 +z 轉為正）、?wspd=倍率 ⇒ 指定（?wdir=0&wspd=1 ＝ 以前固定的那陣風）。浪跟著轉（08_sea.js SEA_A）。
@@ -55,7 +58,7 @@ function windKnots() { return WIND_SAIL * WIND_K * WX.wind * WIND_SPD * 1.944; }
 /** 換天氣：天色跟著換（00_core.js 的 SKY／HORIZON／GROUND；晴天 ＝ 原本那三個陣列本身）。 */
 function setWeather(id) {
   WX_ID = WEATHERS[id] ? id : 'clear'; WX = WEATHERS[WX_ID];
-  SKY = WX.sky; HORIZON = WX.horizon; GROUND = WX.ground;
+  SKY = WX.sky; HORIZON = WX.horizon; GROUND = WX.ground; vxInit();   // 大漩渦（08_sea.js）：主選單的背景也看得到
   [].forEach.call(document.querySelectorAll('#wxs button'), function (b) { b.className = b.dataset.w === WX_ID ? 'on' : ''; });
 }
 /** 開砲散布的倍率：晴天 1；暴風雨 ＝ 1.25 ＋ 9 ×（橫搖角速度 ＋ 一半的縱搖角速度，rad/s）—— 船晃得越快，點火那一下差得越多。 */

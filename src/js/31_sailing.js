@@ -146,7 +146,8 @@ function sail(sh, dt) {
     var od = ORDERS[sh.i], ld = od && od.mode === 'line' ? SHIPS[od.leader] : null;   // 戰列跟隨（指揮官，53_commander.js cmdHelmLine）：跟著前一艘的船尾
     if (ld && !ld.sunk && !sh.struck && !sh.sunk) { var hl = cmdHelmLine({ x: sh.px, z: sh.pz, yaw: sh.yaw }, { x: ld.px, z: ld.pz, yaw: ld.yaw }); tY = hl.yaw; sh.throttle = hl.throttle; sh.station = hl.station; sh.wantV = Infinity; } else sh.station = null;   // 跟隨：帆照全速、快慢照跟隨的油門（跟以前一樣）
     if (od && od.throttle !== undefined && !ld) sh.throttle = Math.min(sh.throttle, od.throttle);   // 指揮官給的油門（戰列的排頭等後面的跟上）
-    if (!sh.struck && !sh.sunk) { var av = friendAvoid(sh); if (av === null) av = foeAvoid(sh); if (av === null) av = lineClear(sh); if (av !== null) tY = av; }   // throttle 每一步重設（lineClear 要放慢才改）   // 讓友船 ＞ 讓敵艦（不撞，54_helm.js）＞ 讓開友艦的砲線（52_fleet.js；沒有友船 ⇒ null）
+    // 大漩渦：讓船（快撞上才出手）之後、讓開砲線之前 ⇒ 離中心太近就往外（54_helm.js vxAvoid；沒有漩渦 ⇒ null）。⛔ 排在讓船前面 ⇒ 內圈的船不管旁邊的船，2 對 2 一直互撞（11 m/s）
+    if (!sh.struck && !sh.sunk) { var av = friendAvoid(sh); if (av === null) av = foeAvoid(sh); if (av === null) av = vxAvoid(sh); if (av === null) av = lineClear(sh); if (av !== null) tY = av; }   // throttle 每一步重設（lineClear 要放慢才改）   // 讓友船 ＞ 讓敵艦（不撞，54_helm.js）＞ 讓開友艦的砲線（52_fleet.js；沒有友船 ⇒ null）
     var e = Math.atan2(Math.sin(tY - sh.yaw), Math.cos(tY - sh.yaw));
     rate = clamp(e * 0.5, -rmax, rmax); sh.rudder = rmax > 0 ? rate / rmax * (sh.spd < 0 ? -1 : 1) : 0;   // 倒退 ⇒ 舵反著打（畫面上的舵角；轉向照要的轉）
   }
@@ -155,6 +156,8 @@ function sail(sh, dt) {
   sh.yaw += sh.yawRate * dt;
   F = fwd(sh.yaw);
   sh.vel = mul(F, sh.spd);
+  if (VX) { var cf = vxFlow(sh.px, sh.pz); sh.vel[0] += cf[0]; sh.vel[2] += cf[1]; }   // 大漩渦（08_sea.js）：水流帶著船走 ⇒ sh.vel 是對地的速度（砲彈帶的船速、瞄準的前置量、帆上的視風都照它）
+  if (sh.vxEaten) { sh.spd *= Math.max(0, 1 - 0.5 * dt); sh.vel = [cf[0] - 0.3 * sh.px, 0, cf[1] - 0.3 * sh.pz]; }   // 被捲進眼裡（32_hull.js）：自己的船速兩秒內沒了，只跟著水流、往中心拉（⛔ 不拉 ⇒ 靠原本的航速滑出眼外 49 m 才沉完）
   var px0 = sh.px, pz0 = sh.pz;
   sh.px += sh.vel[0] * dt; sh.pz += sh.vel[2] * dt;
   if (sh.anc) anchorStep(sh, dt, px0, pz0);                          // 錨咬著 ⇒ 錨鏈孔拉回鍊長以內、船繞錨鏈孔轉（76_anchor.js）

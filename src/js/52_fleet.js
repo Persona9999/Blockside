@@ -210,6 +210,21 @@ function spawnFleet(spec) {
     var T = HULLT[f.hull], bow = (T.wl1 - T.cx) * S;                    // 船的原點（x ＝ T.cx）到船頭的距離
     var sh = makeShip(i, f.team, blue ? Math.PI / 2 : -Math.PI / 2, blue ? DIST / 2 + bow : -DIST / 2 - bow, T, off); sh.name = f.name; SHIPS.push(sh);
   });
+  if (VX) vxPlace(SHIPS);                                                // 大漩渦（08_sea.js）：改成沿著漏斗那一圈排
+}
+/** 大漩渦（TASK-0683）的開局：沿著水流最快那一圈（rv）排 —— 我方在 +z 那一側、敵方 −z（兩隊隔著漏斗，像電影裡各在一邊繞著打），
+ *  每一隊照編成的順序從那一側的正中往後排（後 ＝ 逆著水流 ⇒ atan2(z, x) 變大），前後隔「兩艘的半長 ＋ 30 m」；一圈排過 150° 還有 ⇒ 往外一圈（＋45 m）從頭排。船頭順著水流的切線。
+ *  ⛔ 照並排的 FLEET_GAP（中心隔 70 m）轉成縱隊 ⇒ 87 m 長的憲法號跟 93 m 的餘燼號開局就疊在一起，2 對 2 前 50 秒互撞 4 次（暴風雨同一場 0 次）。 */
+function vxPlace(L) {
+  ['blue', 'red'].forEach(function (team) {
+    var R = VX.rv, a0 = team === 'blue' ? Math.PI / 2 : -Math.PI / 2, a = a0, prev = 0;
+    L.filter(function (sh) { return sh.team === team; }).forEach(function (sh) {
+      var half = (sh.T.hx1 - sh.T.hx0) * S / 2;
+      if (prev) { a += (prev + half + 30) / R; if (a - a0 > 150 * Math.PI / 180) { R += 45; a = a0; } }
+      prev = half;
+      sh.px = Math.cos(a) * R; sh.pz = Math.sin(a) * R; sh.yaw = vxTangentYaw(sh.px, sh.pz);
+    });
+  });
 }
 
 // ───────────────────────── 艦隊電腦（TASK-0537 第二段） ─────────────────────────

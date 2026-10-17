@@ -550,7 +550,7 @@ function floodLine(sh) {
 var END_AT = 0, END_SINK = 5, END_OTHER = 5.5, END_MAX = 40, END_SETTLE = 10, END_WAIT = null, SELF_WIN = 60;
 /** 這艘怎麼收場（結算畫面的那一句）。sh.selfAt：按自爆的模擬時間（23_powder.js selfDestruct）；sh.sunkAt：沉沒的那一刻（32_hull.js）。 */
 function shipFate(sh) {
-  if (sh.sunk) return sh.selfAt !== undefined && sh.sunkAt - sh.selfAt < SELF_WIN ? '自爆沉沒' : sh.broken ? '殉爆斷船沉沒' : '沉沒';
+  if (sh.sunk) return sh.selfAt !== undefined && sh.sunkAt - sh.selfAt < SELF_WIN ? '自爆沉沒' : sh.broken ? '殉爆斷船沉沒' : sh.vxEaten ? '捲進漩渦沉沒' : '沉沒';
   if (sh.sinkingFinal) return (sh.fate ? sh.fate + '、' : '') + '沉沒中';
   return sh.fate || '出局';
 }

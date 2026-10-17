@@ -146,7 +146,7 @@ function wetAt(sh, p, o) {
   o = o || {};
   if (o.sea !== false) {
     var w = M4.pt(sh.M, p[0], p[1], p[2]), d = o.depth || 0, bd = seaBound();   // 先比海面的上下限（08_sea.js seaBound；TASK-0673：drownCheck 每個船員一次、八艘擠在同一步 30 ms）⇒ 結果不變
-    if (w[1] < -bd - d) return true;                                    //   比最低的浪谷還低 ⇒ 一定在水下
+    if (w[1] < seaLow() - d) return true;                               //   比最低的浪谷還低 ⇒ 一定在水下（大漩渦：再往下漏斗的深度，08_sea.js seaLow）
     if (w[1] <= bd - d) { var h = seaH(w[0], w[2], SIMT) - d; if (o.touch ? w[1] <= h : w[1] < h) return true; }   //   比最高的浪頭還高 ⇒ 一定不在水下，不用算
   }
   if (!(o.inner > 0)) return false;
