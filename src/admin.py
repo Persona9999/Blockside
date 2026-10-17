@@ -1134,6 +1134,7 @@ def act_shipcheck(ids=None):
               '砲帶的裝甲（關聯 meta kind=armor、mount；跟著砲轉、一格一格打掉，TASK-0631）：' + (I.get('armor') or '—'), '',
               '門、艙蓋（模型 meta kind=door、固定點 hinge-a／hinge-b；不擋人、打掉了開口才進水，TASK-0638）：' + (I.get('doors') or '—'), '',
               '照參數轉的子物件（模型 meta spin；舵、舵輪跟著舵角轉，只是畫面，TASK-0640）：' + (I.get('spins') or '—'), '',
+              '裝飾（模型 meta deco=1；載入時拿掉、畫質「裝飾」開著才畫，不算重量、不被打，TASK-0682）：' + (I.get('deco') or '—'), '',
               '額外動力（TASK-0630；輸出物件 份量；主機／軸／鍋爐 照造船規格 §9.6）：' + (I.get('drive') or '—（沒有 cfg.base）'), '',
               '動力件（TASK-0653；關聯 meta kind=engine／boiler／shaft／steampipe 的格子清單，照剩幾成、通不通算）：' + (I.get('drvparts') or '—'), '',
               '會轉的體素件（螺旋槳模型 meta kind=propeller 的格子；跟著軸轉、一格一格打掉、推力照剩幾成，TASK-0653 第二段）：' + (I.get('props') or '—'), '',

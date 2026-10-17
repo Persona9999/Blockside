@@ -44,6 +44,10 @@ function shipCheck(id) {
       else if (p[2] === 'on') add('warn', 'meta 規格表', where, 'kind=' + p[0] + ' 掛在' + { link: '關聯', model: '模型', sail: '帆', rope: '繩' }[p[1]] + '上，規格表寫的是 ' + META_KINDS[p[0]].on.join('／'), '照造船規格 ' + (META_KINDS[p[0]].doc || '') + ' 掛，或規格表的 on 加上這一種');
     });
     R.info.metaKinds = Object.keys(MK).filter(function (key) { return /\|ok$/.test(key); }).map(function (key) { return key.split('|')[0]; }).filter(function (k, i, a) { return a.indexOf(k) === i; }).join('、');
+    // ── 裝飾（TASK-0682；05_hull.js decoSplit）：模型 meta deco=1 ⇒ 載入時拿掉（畫質「裝飾」開著才畫）—— 不算重量、不被打 ──
+    (T.decoAll || []).forEach(function (m) { var k = m.meta && m.meta.kind; if (k) add('warn', '裝飾', m.name, '標了 deco 又有 kind=' + k + ' ⇒ 載入時整個拿掉，那個功能在遊戲裡就沒了', '有功能的模型不標 deco（造船規格 §9.9）'); });
+    (T.h.parts || []).forEach(function (q) { if (isDeco(q)) add('warn', '裝飾', q.path, '關聯標了 deco ⇒ 遊戲不拿掉（格子是船的一部分：重量、命中照算）；只有外部模型能隱藏', '做成外部模型再標 deco（造船規格 §9.9）'); });
+    R.info.deco = T.decoN ? T.decoN + ' 個模型' + (GFX.deco ? '（畫質「裝飾」開：畫 ' + T.decos.length + ' 個）' : '（畫質「裝飾」關：載入時就沒有）') + '；不算重量、不被打' : '';
     // ── 模型 ──
     spinIssues(sh, add);                                                // 照參數轉的子物件寫了 spin 卻轉不起來（26_spin.js，TASK-0640）
     sh.models.forEach(function (m) {
