@@ -17,16 +17,16 @@ var SND_FIGHT = -1e9, BGM_FIGHT_S = 20, BGM_FADE = 2.5, BGM_DUCK = 0.7;   // BGM
 var BGM_LOOK = 0.8, BGM_TUNE_S = 60, BGM_GAP = 4, BGM_VOL = 0.5, BGM_SWAP = 0.4;          // 每首反覆到約 BGM_TUNE_S 秒（2–6 遍：一遍 11 秒的跟一遍 38 秒的都差不多一分鐘）        // BGM_VOL：音樂整條的基準（量過才定，見 TASK-0677）
 var BGM = null, BGM_SEED = 7654321, BGM_ORDER = [];                    // BGM：{ tn 正在放的那首, t0 這一遍從幾秒開始, k 下一個沒排的事件, pass 第幾遍, forced 試聽鈕點的（交戰時不變小、播完回輪播） }
 var TUNES = [
-  { id: 'drunken', name: '酒醉的水手', en: 'What Shall We Do with the Drunken Sailor?', src: 'Terry, The Shanty Book I (1921) No.14, pp.30–31', M: '2/4', K: 'C', Q: 108,
+  { id: 'drunken', name: '酒醉的水手', en: 'What Shall We Do with the Drunken Sailor?', src: 'Terry, The Shanty Book I (1921) No.14, pp.30–31', M: '2/4', K: 'C', Q: 108, inst: ['whistle', 'accordion'],
     mel: 'A A/2 A/2 A A/2 A/2|A D F A|G G/2 G/2 G G/2 G/2|G C E G|A A/2 A/2 A A/2 A/2|A B c d|c A G E|D2 D2|A2 A3/2 A/2|A D F A|G2 G3/2 G/2|G C E G|A2 A3/2 A/2|A B c d|c A G E|D2 D2',
     bass: 'D,4|D,4|C,,4|C,4|D,,4-|D,,2 F, D,|A,, C, E, C,|D,2 D,2|D,,4|D,,4|C,,4|C,,4|D,,4-|D,,2 F, D,|A,, C, E, C,|D,2 D,,2' },
-  { id: 'shenandoah', name: '雪蘭多亞', en: 'Shenandoah', src: 'Terry, The Shanty Book I (1921) No.9, pp.20–21', M: '4/4', K: 'Eb', Q: 50,
+  { id: 'shenandoah', name: '雪蘭多亞', en: 'Shenandoah', src: 'Terry, The Shanty Book I (1921) No.9, pp.20–21', M: '4/4', K: 'Eb', Q: 50, inst: ['fiddle', 'organ'],
     mel: 'B,2|E E E3 F G A|[M:3/4] c B3 e d|c3 B c B|G B3 B2|[M:4/4] c c c3 G B G|[M:3/4] F E3 F2|G3 E G3/2 c/2|B6|E3/2 F/2 G3 F|F2 E2',
     bass: 'B,,2|E,,2 E,6|[M:3/4] E,,2 E,4|E,6|E,6|[M:4/4] A,,4 B,,4|[M:3/4] C,6|B,,,6|B,,,6|C,4 A,,2|B,,2 E,,2' },
-  { id: 'blowtheman', name: '把那傢伙吹倒', en: 'Blow the Man Down', src: 'Terry, The Shanty Book I (1921) No.16, pp.34–35', M: '6/8', K: 'Eb', Q: 132,
+  { id: 'blowtheman', name: '把那傢伙吹倒', en: 'Blow the Man Down', src: 'Terry, The Shanty Book I (1921) No.16, pp.34–35', M: '6/8', K: 'Eb', Q: 132, inst: ['accordion', 'pluck'], vol: 0.78,
     mel: 'E G|B3/2 c/2 B G E G|B c B G E G|B3 c3|A3/2 G/2 A F2 G|A3/2 G/2 A F D F|A G F c2 e|B/2 B3/2 B B2 A|G3/2 F/2 G E',
     bass: 'z3/2 E,,/2|E,5/2 E,,/2 B,,5/2 E,,/2|E,5/2 E,,/2 B,,5/2 G,,/2-|G,,5/2 C,3 F,,/2|F,5/2 B,,3 F,/2-|F,5/2 B,,3 F,/2-|F,3 E,3|D,3 E,2 C,|B,,3 E,' },
-  { id: 'rio', name: '開往里約格蘭德', en: 'Bound for the Rio Grande', src: 'Terry, The Shanty Book I (1921) No.2, pp.4–5', M: '6/8', K: 'Eb', Q: 90,
+  { id: 'rio', name: '開往里約格蘭德', en: 'Bound for the Rio Grande', src: 'Terry, The Shanty Book I (1921) No.2, pp.4–5', M: '6/8', K: 'Eb', Q: 90, inst: ['pluck', 'accordion'],
     mel: 'B,|E E E G G G|F E F E3|B5 G|c B4 B|c e c B A G|A B A G E F|G3/2 A/2 G F E F|E3 E2 F|G3 F E F|E6|B5 G|c B4 B|c e c B A G|A B A G E F|G3/2 A/2 G F E F|E5',
     bass: 'z|E,,3 E,,3|E,,3 E,,3|E,6|E, F,5|A,,3 G,,3|F,,2 B,,, C,,3|B,,,6|E,,3 C,,3|B,,,2 B,,4|E,6|E,6|E,6|A,,3 G,,3|F,2 B,, C,3|B,,,3 B,,,3|E,,3 E,,2' }
 ];
@@ -132,13 +132,15 @@ function bgmWarp(rits, x) {
   rits.forEach(function (r) { var L = r[1] - r[0], u = Math.min(x, r[1]) - r[0]; if (u > 0 && L > 0) y += -L / k * Math.log(1 - k * u / L) - u; });
   return y;
 }
-var BGM_INST = ['fiddle', 'accordion'];                                // 沒寫 [I:] 的聲部：第一個（旋律）提琴、其他手風琴（四首船歌就是這樣）
+// 每首可以寫 inst（[旋律, 伴奏] 的樂器，TASK-0681 配器）、vol（整首的音量倍數：配器換了之後 A 加權響度跟別首對齊用）。
+var BGM_INST = ['fiddle', 'accordion'];                                // 沒寫 [I:] 的聲部：照那一首的 inst（[旋律, 伴奏]）；沒寫 inst ⇒ 第一個（旋律）提琴、其他手風琴（TASK-0677 第一版四首就是這樣）
 /** 一首 ⇒ 排好的事件（各聲部合在一起照時間排）：[[拍, 長度拍, 音高, 聲部 0 旋律／1… 伴奏, 樂器, 力度]]、一遍幾拍。快取在 tune.ev。 */
 function tuneEvents(tn) {
   if (tn.ev) return tn.ev;
   var P = tn.abc ? abcTune(tn) : [abcParse(tn.mel, tn.K), abcParse(tn.bass, tn.K)], ev = [], rits = [], seen = {};
   P.forEach(function (v, k) { if (Math.abs(v.len - P[0].len) > 1e-9) throw new Error('樂譜 ' + tn.id + '：第 1 聲部 ' + P[0].len + ' 拍、第 ' + (k + 1) + ' 聲部 ' + v.len + ' 拍，長度不一樣'); });
-  P.forEach(function (v, k) { v.notes.forEach(function (n) { ev.push([n[0], n[1], n[2], k, n[3] || BGM_INST[Math.min(k, 1)], n[4]]); }); });
+  var IN = tn.inst || BGM_INST;
+  P.forEach(function (v, k) { v.notes.forEach(function (n) { ev.push([n[0], n[1], n[2], k, n[3] || IN[Math.min(k, IN.length - 1)], n[4]]); }); });
   ev.sort(function (x, y) { return x[0] - y[0] || x[3] - y[3]; });
   P.forEach(function (v) { v.rits.forEach(function (r) { if (!seen[r]) { seen[r] = 1; rits.push(r); } }); });   // 兩個聲部同一段 !rit! 只算一次
   rits.sort(function (a, b) { return a[0] - b[0]; });
@@ -210,8 +212,31 @@ var INSTR = {
       var o = ac.createOscillator(), og = ac.createGain(); o.type = 'sine'; o.frequency.value = f * q[0]; o.detune.value = q[2]; og.gain.value = q[1]; o.connect(og); og.connect(tg);
       o.start(t); o.stop(Math.max(t + a, end) + rel + 0.02);
     });
+  } },
+  whistle: { name: '錫口笛', rev: 0.15, note: function (ac, dest, f, t, d, vel) {   // 正弦＋一點 2、3 倍泛音；起音帶一口氣（帶通雜訊，很快收掉、留一點底）；長音 0.25 秒後才出來的 5 Hz 顫音
+    var g = ac.createGain(), end = t + d, peak = 0.13 * vel, os = [];
+    g.connect(dest); g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(peak, t + 0.03); g.gain.setValueAtTime(peak, Math.max(t + 0.03, end - 0.05)); g.gain.linearRampToValueAtTime(0.0001, end);
+    [[1, 1], [2, 0.18], [3, 0.06]].forEach(function (q) { var o = ac.createOscillator(), og = ac.createGain(); o.type = 'sine'; o.frequency.value = f * q[0]; og.gain.value = q[1]; o.connect(og); og.connect(g); os.push(o); });
+    if (d > 0.35) { var lf = ac.createOscillator(), lg = ac.createGain(); lf.frequency.value = 5; lg.gain.setValueAtTime(0, t); lg.gain.setValueAtTime(0, t + 0.25); lg.gain.linearRampToValueAtTime(12, t + 0.45); lf.connect(lg); os.forEach(function (o) { lg.connect(o.detune); }); lf.start(t); lf.stop(end + 0.02); }
+    var nz = ac.createBufferSource(), bp = ac.createBiquadFilter(), ng = ac.createGain(); nz.buffer = bgmNoise(ac); nz.loop = true; bp.type = 'bandpass'; bp.frequency.value = Math.min(9000, f * 2); bp.Q.value = 2;
+    nz.connect(bp); bp.connect(ng); ng.connect(g); ng.gain.setValueAtTime(0.5, t); ng.gain.setTargetAtTime(0.06, t + 0.02, 0.03);
+    nz.start(t); nz.stop(end + 0.02); os.forEach(function (o) { o.start(t); o.stop(end + 0.02); });
+  } },
+  pluck: { name: '撥弦', rev: 0.12, note: function (ac, dest, f, t, d, vel) {     // 像班卓琴／吉他：鋸齒＋三角波，低通從亮掃到暗、音量自己衰減（低的音撐得久）；譜上的長度到了就按住弦（0.04 秒收掉）
+    var g = ac.createGain(), lp = ac.createBiquadFilter(), end = t + d, peak = 0.2 * vel, dec = clamp(0.45 - 0.15 * Math.log2(f / 262), 0.18, 0.9);
+    lp.type = 'lowpass'; lp.Q.value = 1.2; lp.connect(g); g.connect(dest);
+    lp.frequency.setValueAtTime(Math.min(9000, f * 14), t); lp.frequency.exponentialRampToValueAtTime(Math.max(180, f * 1.6), t + dec * 1.5);
+    g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(peak, t + 0.003); g.gain.setTargetAtTime(0.0001, t + 0.003, dec); g.gain.setTargetAtTime(0.0001, end, 0.04);
+    [['sawtooth', 0.6, 0], ['triangle', 1, 3]].forEach(function (q) { var o = ac.createOscillator(), og = ac.createGain(); o.type = q[0]; o.frequency.value = f; o.detune.value = q[2]; og.gain.value = q[1]; o.connect(og); og.connect(lp); o.start(t); o.stop(end + 0.3); });
   } }
 };
+/** 一段 1 秒的白雜訊（錫口笛的氣音；自己的 LCG ⇒ ⛔ 不用 Math.random）。每個 AudioContext 一份。 */
+function bgmNoise(ac) {
+  if (ac.__noise) return ac.__noise;
+  var n = ac.sampleRate, b = ac.createBuffer(1, n, ac.sampleRate), x = b.getChannelData(0), s = 24680;
+  for (var i = 0; i < n; i++) { s = (Math.imul(s, 1103515245) + 12345) & 0x7fffffff; x[i] = s / 0x40000000 - 1; }
+  return (ac.__noise = b);
+}
 var BGM_REV_S = 2.6;                                                   // 殘響的長度（秒；衰到 −60 dB）
 /** 樂器的出口：rev ＝ 0 ⇒ 直接 dest；否則一個節點 ⇒ dest（乾）＋ 送 rev 份到殘響（每個 dest 一份卷積，衝激響應用自己的 LCG 生 ⇒ ⛔ 不用 Math.random）。快取在 dest 上。 */
 function bgmOut(ac, dest, inst) {
@@ -231,7 +256,7 @@ function bgmNote(ac, dest, inst, f, t, d, vel) { INSTR[inst].note(ac, bgmOut(ac,
 function bgmSched(ac, dest, tn, t0, k, until) {
   var E = tuneEvents(tn), spb = 60 / tn.Q;
   while (k < E.ev.length && t0 + E.ev[k][0] * spb < until) {
-    var e = E.ev[k]; bgmNote(ac, dest, e[4], 440 * Math.pow(2, (e[2] - 69) / 12), t0 + e[0] * spb, Math.max(0.05, e[1] * spb - 0.02), e[5]); k++;
+    var e = E.ev[k]; bgmNote(ac, dest, e[4], 440 * Math.pow(2, (e[2] - 69) / 12), t0 + e[0] * spb, Math.max(0.05, e[1] * spb - 0.02), e[5] * (tn.vol || 1)); k++;
   }
   return k;
 }
@@ -274,7 +299,7 @@ function bgmRender(o) {
   E.ev.forEach(function (e) {
     if (o.solo !== undefined && e[3] !== o.solo) return;
     var t = 0.1 + e[0] * spb - (o.from || 0); if (t >= sec || t < 0.1) return;
-    bgmNote(oc, mg, e[4], 440 * Math.pow(2, (e[2] - 69) / 12), t, Math.max(0.05, e[1] * spb - 0.02), e[5]); notes.push([+t.toFixed(4), +(e[1] * spb).toFixed(4), e[2], e[3], e[4]]);
+    bgmNote(oc, mg, e[4], 440 * Math.pow(2, (e[2] - 69) / 12), t, Math.max(0.05, e[1] * spb - 0.02), e[5] * (tn.vol || 1)); notes.push([+t.toFixed(4), +(e[1] * spb).toFixed(4), e[2], e[3], e[4]]);
   });
   return oc.startRendering().then(function (buf) { var r = audioWav(buf); r.id = tn.id; r.notes = notes; r.spb = spb; return r; });
 }
@@ -292,7 +317,7 @@ function sndUI() {
   var tb = $('bgmTunes');
   if (tb && !tb.firstChild) {
     var h = '曲目 <button data-bt="shuffle">輪播</button>';
-    TUNES.forEach(function (t) { h += '<button data-bt="' + t.id + '" title="' + t.en + '（' + t.src + '）">' + t.name + '</button><button data-bp="' + t.id + '" title="試聽 ' + t.name + '">▶</button>'; });
+    TUNES.forEach(function (t) { h += '<button data-bt="' + t.id + '" title="' + t.en + '（' + t.src + '）—— ' + (t.inst || BGM_INST).map(function (k) { return INSTR[k].name; }).join('＋') + '">' + t.name + '</button><button data-bp="' + t.id + '" title="試聽 ' + t.name + '">▶</button>'; });
     tb.innerHTML = h;
   }
   var tt = $('bgmThemes');
