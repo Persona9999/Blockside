@@ -61,6 +61,8 @@ def main():
                 return '<script type="application/x-asset" id="%s" data-mime="%s"></script>' % (m.group(1), mime)
             sys.exit('✗ 找不到 %s（%s）' % (m.group(2), p))
         b = open(p, 'rb').read()
+        if mime == 'application/json':   # 文字素材照 LF 內嵌（TASK-0674）：git checkout 寫 CRLF、admin.py 存檔寫 LF ⇒ 同一份設定建出兩種成品
+            b = b.replace(b'\r\n', b'\n')
         report.append('  素材  #%s ← %s（%.1f KB）' % (m.group(1), m.group(2), len(b) / 1e3))
         return '<script type="application/x-asset" id="%s" data-mime="%s">%s</script>' % (m.group(1), mime, base64.b64encode(b).decode('ascii'))
 

@@ -1,1 +1,8 @@
+# 換行（TASK-0674）：版控一律 LF，checkout 也一律 LF（不管 core.autocrlf）⇒ 每個 worktree 長得一樣，補丁腳本、node、git diff 都不用管 CRLF
+* text=auto eol=lf
+# Windows 的批次檔要 CRLF（cmd.exe 讀 LF 的批次檔，標籤與 goto 會壞）
+*.cmd text eol=crlf
+# 成品與手寫的 html 照原樣（不轉換）
 *.html -text
+*.png binary
+*.vxk binary

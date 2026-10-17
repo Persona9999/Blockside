@@ -17,7 +17,7 @@
 #   python -I admin.py cache                      _cache/ 缺的、跟指紋不同的 .vxk 從版控那份成品裡解回來（換機器、只改程式時用；建置也會自己做）
 #   python -I admin.py relock --id <船的代號>     指紋改成 _cache 現在那份（手動換過 .vxk 時；平常匯入／重新匯入／metasync 會自己更新）
 #   加 --no-build：匯入／重新匯入之後不重建
-import argparse, base64, hashlib, json, math, os, re, shutil, socket, struct, subprocess, sys, urllib.request, webbrowser, zlib
+import argparse, base64, hashlib, json, math, os, posixpath, re, shutil, socket, struct, subprocess, sys, urllib.request, webbrowser, zlib
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -1163,6 +1163,181 @@ def bundle_names_check():
     return ['✓ 頂層同名：%d 個包、%d 支檔、%d 個頂層名字，沒有重複；沒宣告就寫入：0（acorn）' % (len(bundles), len(files), n)]
 
 
+# ───────────────────────── 成品記住來源（TASK-0674） ─────────────────────────
+# 10-16 出過事：共用工作區建成品時包進別人改到一半的 js ⇒ 成品跟任何一版提交的來源都對不上，可是看不出來。
+# ⇒ 成品裡放一份來源清單（<script type="application/json" id="blockside-src">）：template.html 與它引用的每一支檔各記一個指紋；
+#   .vxk 不入版控 ⇒ 改記 config/vxk_lock.json 裡那艘的指紋（_cache 跟指紋不同時 cache_guard 已經擋了）；文字檔照 LF 算 ⇒ 跟 checkout 的換行無關。
+# srccheck 照同一套從工作區／暫存區（--staged）／某一版（--rev）重算、跟那一份成品比 ⇒ 對不上就列出哪幾支檔不同。
+# 只管「成品是不是照這些來源建的」：建置程式（admin.py、vxk_inline.py）不算來源 —— 它們改了、成品沒重建，成品仍是照這些來源建的（只是舊做法）。
+SRC_EL = 'blockside-src'
+SRC_RE = re.compile(r'<script type="application/json" id="%s">([^<]*)</script>' % SRC_EL)
+SRC_TEXT = ('.js', '.cjs', '.json', '.html', '.css', '.glsl', '.md', '.txt')
+SRC_LOCK = 'src/config/vxk_lock.json'
+ROOT = os.path.normpath(os.path.join(HERE, '..'))
+
+
+def src_manifest(read):
+    """來源清單 {'fp': 總指紋, 'files': {根目錄的相對路徑: 指紋前 12 碼}}。read(相對路徑) ⇒ bytes；不存在 ⇒ None。"""
+    tpl = read('src/template.html')
+    if tpl is None:
+        raise Fail('讀不到 src/template.html')
+    lock = json.loads((read(SRC_LOCK) or b'{}').decode('utf-8'))
+    files = {}
+
+    def put(p, b):
+        if b is None:
+            files[p] = '（不存在）'
+            return
+        if p.endswith(SRC_TEXT):
+            b = b.replace(b'\r\n', b'\n')
+        files[p] = sha1_bytes(b)[:12]
+    put('src/template.html', tpl)
+    for rel in re.findall(r'<script\b[^>]*\ssrc="([^"]+)"', tpl.decode('utf-8')):
+        p = posixpath.normpath(posixpath.join('src', rel))
+        if p in files:
+            continue
+        if p.endswith('.vxk'):
+            files[p] = 'lock ' + (lock.get(posixpath.basename(p)) or '（沒有指紋）')[:14]
+        else:
+            put(p, read(p))
+    fp = sha1_bytes('\n'.join('%s %s' % (k, files[k]) for k in sorted(files)).encode('utf-8'))[:16]
+    return {'fp': fp, 'files': files}
+
+
+def work_read(p):
+    f = os.path.join(ROOT, *p.split('/'))
+    return open(f, 'rb').read() if os.path.isfile(f) else None
+
+
+class GitRead:
+    """git cat-file --batch 讀某一版（pre ＝ '<rev>:'）或暫存區（pre ＝ ':'）的檔；不存在 ⇒ None。"""
+    def __init__(self, pre):
+        self.pre = pre
+        self.p = subprocess.Popen(['git', 'cat-file', '--batch'], cwd=ROOT, stdin=subprocess.PIPE, stdout=subprocess.PIPE)
+
+    def __call__(self, path):
+        self.p.stdin.write((self.pre + path + '\n').encode('utf-8'))
+        self.p.stdin.flush()
+        head = self.p.stdout.readline().decode('utf-8', 'replace').split()
+        if len(head) != 3 or head[1] != 'blob':
+            return None
+        b = self.p.stdout.read(int(head[2]))
+        self.p.stdout.read(1)
+        return b
+
+    def close(self):
+        self.p.stdin.close()
+        self.p.wait()
+
+
+def src_of(html):
+    """成品裡的來源清單；舊版建的（沒有）⇒ None。"""
+    m = SRC_RE.search(html)
+    return json.loads(m.group(1)) if m else None
+
+
+def src_stamp():
+    """建置最後一步：照工作區算來源清單、接在成品的 <meta charset> 同一行後面（不多一行 ⇒ 錯誤訊息的行號照舊；charset 仍在前 1024 位元組）。"""
+    M = src_manifest(work_read)
+    html = SRC_RE.sub('', open(OUT, encoding='utf-8').read())
+    at = html.index('<meta charset="utf-8">') + len('<meta charset="utf-8">')
+    tag = '<script type="application/json" id="%s">%s</script>' % (SRC_EL, json.dumps(M, ensure_ascii=False, sort_keys=True, separators=(',', ':')))
+    with open(OUT, 'w', encoding='utf-8', newline='\n') as f:
+        f.write(html[:at] + tag + html[at:])
+    return ['✓ 成品記下來源：指紋 %s（%d 支檔；python -I src/admin.py srccheck 對得回來）' % (M['fp'], len(M['files']))]
+
+
+def src_diff(have, want):
+    """兩份來源清單差在哪幾支檔。"""
+    a, b = (have or {}).get('files', {}), want['files']
+    return ['%s：成品 %s ／ 來源 %s' % (k, a.get(k, '（沒有）'), b.get(k, '（沒有）')) for k in sorted(set(a) | set(b)) if a.get(k) != b.get(k)]
+
+
+def src_check_one(read, what):
+    """read 讀得到的那一份成品跟同一份來源比。回傳 (對不對得上, 讀數)。"""
+    prod = read('index.html')
+    have = src_of(prod.decode('utf-8')) if prod is not None else None
+    want = src_manifest(read)
+    if have is None:
+        return False, ['✗ %s：成品沒有來源清單（舊版 admin.py 建的，或沒有成品）⇒ python -I src/admin.py build' % what]
+    if have.get('fp') == want['fp']:
+        return True, ['✓ %s：成品照這份來源建的（指紋 %s、%d 支檔）' % (what, want['fp'], len(want['files']))]
+    return False, ['✗ %s：成品跟來源對不上（成品 %s ／ 來源 %s）⇒ python -I src/admin.py build 重建再提交：' % (what, have.get('fp'), want['fp'])] + \
+        ['    ' + x for x in src_diff(have, want)]
+
+
+def act_srccheck(staged=False, rev=None, hook=None):
+    """TASK-0674：成品跟來源對不對得上。
+    沒給 ⇒ 工作區；--staged ⇒ 暫存區（提交前）；--rev ⇒ 那一版。
+    --hook pre-commit：提交裡有成品 ⇒ 任何分支都要對得上；只動來源 ⇒ dev、main 上要對得上，其他分支照慣例可以（合進 dev 前照合併後的來源重建）。
+    --hook pre-push：推到 dev、main 的那一版要對得上（fast-forward 合併不經過 pre-commit，擋在這裡）。"""
+    if hook == 'pre-push':
+        log, ok = [], True
+        for line in sys.stdin.read().splitlines():
+            f = line.split()
+            if len(f) != 4 or f[2] not in ('refs/heads/dev', 'refs/heads/main') or set(f[1]) == {'0'}:
+                continue
+            r = GitRead(f[1] + ':')
+            try:
+                good, out = src_check_one(r, '推到 %s 的 %s' % (f[2][11:], f[1][:7]))
+            finally:
+                r.close()
+            ok, log = ok and good, log + out
+        if not ok:
+            raise Fail('\n'.join(log + ['（推送擋下了；成品重建、提交之後再推）']))
+        return log or ['（這次沒有推到 dev、main，不檢查成品）']
+    if rev or staged:
+        r = GitRead((rev + ':') if rev else ':')
+        try:
+            if hook == 'pre-commit':
+                return src_hook_commit(r)
+            good, out = src_check_one(r, '%s' % (rev or '暫存區'))
+        finally:
+            r.close()
+    else:
+        good, out = src_check_one(work_read, '工作區')
+    if not good:
+        raise Fail('\n'.join(out))
+    return out
+
+
+def act_hooks():
+    """裝鉤子：core.hooksPath ＝ .githooks（相對路徑 ⇒ 每個 worktree 用自己 checkout 出來的那兩支；還沒有 .githooks 的舊分支 ⇒ git 找不到鉤子、照常提交）。
+    已經設成別的 ⇒ 不蓋掉；.git/hooks 裡原本有的鉤子（不是 .sample）會失效 ⇒ 有的話先擋下、列出來。"""
+    code, cur = run(['git', 'config', '--get', 'core.hooksPath'], cwd=ROOT)
+    cur = cur.strip()
+    if cur == '.githooks':
+        return ['✓ 已經裝了（core.hooksPath ＝ .githooks）']
+    if cur:
+        raise Fail('core.hooksPath 已經是 %s ⇒ 不蓋掉（要換自己改）' % cur)
+    code, common = run(['git', 'rev-parse', '--git-common-dir'], cwd=ROOT)
+    hd = os.path.join(ROOT, common.strip(), 'hooks')
+    old = [f for f in (os.listdir(hd) if os.path.isdir(hd) else []) if not f.endswith('.sample')]
+    if old:
+        raise Fail('%s 裡已經有鉤子（%s）⇒ 改 core.hooksPath 會讓它們失效，不裝' % (hd, '、'.join(old)))
+    code, out = run(['git', 'config', 'core.hooksPath', '.githooks'], cwd=ROOT)
+    if code != 0:
+        raise Fail('git config 失敗：' + out.strip())
+    return ['✓ 裝好了：core.hooksPath ＝ .githooks（提交前 pre-commit、推送前 pre-push 都會跑 srccheck）']
+
+
+def src_hook_commit(r):
+    code, names = run(['git', 'diff', '--cached', '--name-only'], cwd=ROOT)
+    names = set(names.split())
+    want = src_manifest(r)
+    srcs = names & (set(want['files']) | {SRC_LOCK})
+    if 'index.html' not in names and not srcs:
+        return []
+    code, br = run(['git', 'symbolic-ref', '--short', '-q', 'HEAD'], cwd=ROOT)
+    br = br.strip()
+    if 'index.html' not in names and br not in ('dev', 'main'):
+        return ['· 成品檢查：這次只動了來源（%d 支）、成品沒重建 —— 分支 %s 上可以；合進 dev 之前要照合併後的來源重建' % (len(srcs), br or '（沒有）')]
+    good, out = src_check_one(r, '這次提交（分支 %s）' % (br or '（沒有）'))
+    if not good:
+        raise Fail('\n'.join(out + ['（提交擋下了）']))
+    return out
+
+
 def act_build(pack=True):   # pack：壓縮版（預設，TASK-0583）；False ＝ 原格式（build --raw）
     cfg = load()
     E = validate(cfg)
@@ -1180,7 +1355,7 @@ def act_build(pack=True):   # pack：壓縮版（預設，TASK-0583）；False �
     if pack:
         log += pack_html(OUT)
         log += js_strip_html(OUT)
-    return log
+    return log + src_stamp()
 
 # ───────────────────────── 壓縮版成品（預設；build --raw ＝ 原格式。Tim 2026-10-14，TASK-0583：雕刻作品與匯出的 .vxk 格式不變，匯進遊戲才壓縮） ─────────────────────────
 # 量過（六艘、壓縮後）：格子合計約 0.87 MB，模型網格（砲、燈、舵輪…的三角形，header 的 rig.meshes）約 3.50 MB ⇒ 大頭是網格：
@@ -2142,6 +2317,12 @@ def main():
     s = sp.add_parser('build')
     s.add_argument('--raw', action='store_true', help='原格式（不壓縮）；預設是壓縮版：模型網格收成一個池子（同一份只存一次、頂點去重＋差值），_cache 不動')
     sp.add_parser('verify', help='成品跟 _cache 原檔比（壓縮版照遊戲的讀法還原）')
+    s = sp.add_parser('srccheck', help='成品跟來源對不對得上（TASK-0674）：成品裡的來源清單 vs 照工作區／暫存區／某一版重算')
+    g = s.add_mutually_exclusive_group()
+    g.add_argument('--staged', action='store_true', help='比暫存區（要提交的那一份）')
+    g.add_argument('--rev', help='比某一版（commit、分支名都可以）')
+    s.add_argument('--hook', choices=['pre-commit', 'pre-push'], help='git 鉤子用（.githooks/ 裡的兩支）')
+    sp.add_parser('hooks', help='裝提交前／推送前的成品檢查：git config core.hooksPath .githooks（這個 repo 的每個 worktree 共用）')
     s = sp.add_parser('cache', help='_cache 缺的 .vxk 從雕刻作品重新匯出、跟指紋比；--all 每艘都比（比對來源）')
     s.add_argument('--all', action='store_true')
     sp.add_parser('fmt')
@@ -2178,6 +2359,10 @@ def main():
             log = act_build(not o.raw)
         elif o.op == 'verify':
             log = act_verify()
+        elif o.op == 'srccheck':
+            log = act_srccheck(o.staged or o.hook == 'pre-commit', o.rev, o.hook)
+        elif o.op == 'hooks':
+            log = act_hooks()
         elif o.op == 'cache':
             log = act_cache(o.all)
         elif o.op == 'fmt':

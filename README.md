@@ -63,7 +63,7 @@ last_updated: 2026-10-15
 - 2026-10-15 以前在 ArtGallery 開發（`HtmlGames/_build/ame_constitution_broadside/`，歷史還在那邊的 git log）。
 - 部署：`origin`（正式）push 到 `main` ⇒ GitHub Actions（`.github/workflows/pages.yml`）上傳到 Pages；`dev`（測試站）照分支部署，見下面第 2 步。
 - **分支與發版**（Tim 2026-10-17：「預設開發時都是先 merge 到 dev 然後 push 到 dev，dev 測試版本 ok 後再發版本到 main」）：
-  1. **開發合回 `dev`**：`dev` 分支是開發主線。改程式照施工場規則開自己的 worktree（從 `dev` 開：`git worktree add <路徑> -b <分支> heads/dev`），做完**合回 `dev`**（不是 `main`）；合併那一步在共用工作區照合併後的 `src/` 重建 `index.html` 再提交。
+  1. **開發合回 `dev`**：`dev` 分支是開發主線。改程式照施工場規則開自己的 worktree（從 `dev` 開：`git worktree add <路徑> -b <分支> heads/dev`），做完**合回 `dev`**（不是 `main`）；合併那一步在共用工作區照合併後的 `src/` 重建 `index.html` 再提交。換行一律 LF（`.gitattributes`），新 worktree 不用轉換；成品裡記著它是照哪些來源建的，`python -I src/admin.py srccheck` 對得回來（裝了鉤子 ⇒ 提交到 `dev`／`main`、推到 `dev`／`main` 前自動檢查，見 `src/README.md`）。
   2. **推測試站**：`git push dev heads/dev:dev` —— `dev` 遠端的 Pages 設成「Deploy from a branch：`dev`／root」（Tim 2026-10-17 改的），推上去就部署，不走 `pages.yml`。⚠ 遠端和分支都叫 `dev`，只寫 `dev` 時 git 會報 `refname 'dev' is ambiguous` ⇒ 本機分支一律寫 `heads/dev`。⛔ 不用再把 `main` 推到 `dev` 遠端：測試站照 `dev` 分支部署，推 `main` 不會更新它。
   3. **發版**：Tim 在測試站驗過、說要發 ⇒ 共用工作區 `git switch main`、`git merge --ff-only heads/dev`（快轉不了就停下來問），再 `git push origin main` ⇒ 正式的 Pages；做完 `git switch dev` 切回開發主線。
   - ⛔ 推之前先 fetch、列出要推的提交（測試：`git log dev/dev..heads/dev`；發版：`git log origin/main..main`），只能有這次要推的；跟說好的不一樣就先問。不 force push。

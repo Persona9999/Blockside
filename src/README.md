@@ -38,8 +38,22 @@
 #   建置前先擋兩件事（TASK-0671；src/js_globals.cjs 用 node 內建的 acorn 讀，沒有 node ⇒ 讀數寫「沒驗」照建）：
 #     · 頂層同名：同一個包（data-bundle）裡兩個地方定義同一個頂層名字 ⇒ 不建置、印出兩處的檔名與行號（後面的會靜悄悄蓋掉前面的；10-15 的 rndF）。不同包（遊戲／沙盒）的同名不算。
 #     · 沒宣告就寫入：寫入一個哪裡都沒宣告的名字（多半是忘了 var）⇒ 不建置。跟 window 上的名字（name、status…）同名也擋 —— 那種連嚴格模式都不報錯。
+#   成品記住來源（TASK-0674；10-16 共用工作區把別人改到一半的 js 包進成品，開砲後整場停住 —— 成品跟哪一版提交都對不上，可是看不出來）：
+#     建置最後一步把來源清單接在成品第 4 行 <meta charset> 後面（<script type="application/json" id="blockside-src">，同一行 ⇒ 行號不變，約 3.7 KB）：
+#     template.html 與它引用的每一支檔各記一個指紋（文字檔照 LF 算）；.vxk 不入版控 ⇒ 記 config/vxk_lock.json 裡那艘的指紋。建置程式（admin.py、vxk_inline.py）不算來源。
+#     srccheck 照同一套從工作區／暫存區（--staged）／某一版（--rev）重算 ⇒ 對不上就列出哪幾支檔不同。
+#     git 鉤子（.githooks/；python -I src/admin.py hooks 裝 ＝ core.hooksPath .githooks，每個 worktree 共用）：
+#       · pre-commit：提交裡有成品 ⇒ 任何分支都要對得上；只動來源 ⇒ dev、main 上擋，其他分支照慣例放行（合進 dev 前照合併後的來源重建）。
+#       · pre-push：推到 dev、main 的那一版要對得上（用 update-ref 快轉合併不經過 pre-commit ⇒ 擋在這裡）。
+#   換行（TASK-0674）：.gitattributes ＝ 版控與 checkout 一律 LF（admin.cmd 照 CRLF、html 照原樣）⇒ 新 worktree 不用手動轉換。
+#     內嵌的 JSON（game.json、meta_kinds.json）照 LF 內嵌（vxk_inline.py）：以前照原位元組 ⇒ git checkout（CRLF）跟 admin.py 存檔（LF）建出兩種成品。
+#     讀數（2026-10-17）：CRLF 的舊 worktree 與 LF 的新 worktree 建出來的成品逐位元組相同；遊戲讀到的設定不變（三組對拍相同）。
 #   匯入、重新匯入、同步 meta、後台「儲存並重建」都走這一條（預設壓縮）。
 python -I admin.py build
+# 成品跟來源對不對得上（工作區；--staged 暫存區；--rev <版> 那一版）
+python -I admin.py srccheck
+# 裝提交前／推送前的成品檢查（git config core.hooksPath .githooks；.git/hooks 裡原本有鉤子 ⇒ 不裝、列出來）
+python -I admin.py hooks
 # 原格式（不壓縮）
 python -I admin.py build --raw
 # 成品跟 _cache 原檔比（壓縮版照遊戲的讀法還原；網格三角形逐個、格子一位元組不差）
