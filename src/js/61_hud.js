@@ -524,7 +524,7 @@ function shipSettled(sh) {
   return sh.boomAt === undefined || SIMT - sh.boomAt >= END_SETTLE;
 }
 function checkEnd() {
-  if (MODE === 'sandbox' || MODE === 'build' || DEMO >= 0) return;   // 建造（82_build.js）：沒有敵艦、不判勝負
+  if (!modeRule('judge') || DEMO >= 0) return;   // 玩法規則 judge（04_modes.js）：沙盒、建造不判勝負
   if (OVER) {                                                         // ③：等輸的那一方定了 ⇒ 倒數 ⇒ 跳
     var W = END_WAIT; if (!W) return;
     if (!W.at) { if (SIMT < W.limit && !W.lose.every(shipSettled)) return; W.at = SIMT + (W.lose.some(function (o) { return o.sunk; }) ? END_SINK : END_OTHER); }

@@ -14,7 +14,7 @@ function reset() {
   cmdReset(); cmdTick();                                             // 指揮官（52_fleet.js、53_commander.js）：開局先想一次
   pickFoes();
   KEYS.l = KEYS.r = false;
-  if (MODE !== LAST_MODE) { setAutoFire(MODE === 'eve'); LAST_MODE = MODE; }   // 自動開砲：換了模式才套預設（觀戰開、其他關），同一個模式重開保留（Tim 2026-10-12）
+  if (MODE !== LAST_MODE) { setAutoFire(modeRule('autoFire')); LAST_MODE = MODE; }   // 自動開砲：換了模式才套預設（玩法規則 autoFire，04_modes.js：觀戰開、其他關），同一個模式重開保留（Tim 2026-10-12）
   SHIPS.forEach(function (sh) { stepShip(sh, 0); survey(sh); });
   RAM_EV = []; hitWarm();                                                            // 船隻碰撞的取樣先建好（31_sailing.js；⛔ 第一次碰到才建 ⇒ 撞上那一刻卡約 0.1 秒）
   pickCaptains();                                                    // 砲長（51_captain.js）
@@ -36,7 +36,7 @@ function start() {
   if (document.activeElement && document.activeElement.blur) document.activeElement.blur();   // 不然空白鍵會再按一次「開戰」
   reset(); RUNNING = true;
   var seenT = {}; SHIPS.forEach(function (sh) { if (!seenT[sh.T.id]) { seenT[sh.T.id] = 1; crewShortNote(sh); } });   // 船員站不下：每一型報一次
-  if (MODE !== 'build') note(SHIPS[PLAYER_I], AUTOFIRE ? '自動開砲中（' + keyName('autoFire') + ' 關掉就自己打）' : '點敵艦設瞄準點，' + keyWord('volley') + '齊射（' + keyName('autoFire') + ' 自動開砲）');
+  if (modeRule('hint')) note(SHIPS[PLAYER_I], AUTOFIRE ? '自動開砲中（' + keyName('autoFire') + ' 關掉就自己打）' : '點敵艦設瞄準點，' + keyWord('volley') + '齊射（' + keyName('autoFire') + ' 自動開砲）');
   bldEnter();                                                        // 建造（82_build.js）：進第一人稱、顯示建造介面；別的玩法 ⇒ 收起來
   fpKeep();                                                          // 第一人稱（81_fps.js）：玩家開著 ⇒ 重新開始、下一場都維持
   if (WX.aim) note(SHIPS[PLAYER_I], '暴風雨：浪大、風強 —— 船晃得越兇砲越散，舵也難使');

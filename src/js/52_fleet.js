@@ -79,7 +79,7 @@ function fleetNames(spec) {
 }
 function fleetSpec() {
   if (FLEET_DBG) return FLEET_DBG;
-  if (MODE === 'build') return [{ team: 'blue', hull: FLEET_SET[0][0] }];   // 建造（82_build.js）：只有我方第一艘
+  if (modeRule('fleet') === 'first') return [{ team: 'blue', hull: FLEET_SET[0][0] }];   // 玩法規則 fleet（04_modes.js；建造）：只有我方第一艘
   var b = FLEET_SET[0], r = FLEET_SET[1], L = [{ team: 'blue', hull: b[0] }, { team: 'red', hull: r[0] }];
   b.slice(1).forEach(function (h) { L.push({ team: 'blue', hull: h }); });
   r.slice(1).forEach(function (h) { L.push({ team: 'red', hull: h }); });
@@ -183,7 +183,7 @@ function playerHandoff() {
 function playerTake(nw, msg) {
   var me = SHIPS[PLAYER_I];
   me.pMode = 'free'; me.hand = false; PLAYER_I = nw.i; nw.pMode = AIM_P; nw.hand = false;
-  if (MODE === 'sandbox') { nw.reloadT = RELOAD_SANDBOX; me.reloadT = RELOAD; }
+  nw.reloadT = modeRule('myReload'); me.reloadT = RELOAD;   // 玩法規則 myReload（04_modes.js）：我艦的裝填跟著玩家換船（沙盒的快裝填；別的玩法兩艘都是 RELOAD）
   KEYS.l = KEYS.r = false; CAM.trMe = CAM.trYaw = null;
   note(nw, msg, true);
 }

@@ -328,7 +328,7 @@ function stepCrew(sh, dt) {
       else if (l < 0.6) { c.pos = W.to.slice(); c.home = c.pos.slice(); c.walk = null; }
       else { var s = Math.min(l, W.sp * dt); c.pos[0] += d[0] / l * s; c.pos[1] += d[1] / l * s; }
     } else if (c.role === ROLE.POWDER) stepMonkey(sh, c, dt);   // 送藥手：取用點 ⇄ 砲
-    if ((c.role === ROLE.MARINE || c.role === ROLE.TOP) && !sh.sunk && !sh.struck && !(MODE === 'sandbox' && sh.i !== PLAYER_I)) {   // 陸戰隊與桅頂水手：火槍（沙盒的敵艦不還手）
+    if ((c.role === ROLE.MARINE || c.role === ROLE.TOP) && !sh.sunk && !sh.struck && (modeRule('othersAct') || sh.i === PLAYER_I)) {   // 陸戰隊與桅頂水手：火槍（沙盒的敵艦不還手）
       c.shotT -= dt; c.fireT -= dt;
       if (c.shotT <= 0) { c.shotT = rr(4, 8); musket(sh, c); }
     }
