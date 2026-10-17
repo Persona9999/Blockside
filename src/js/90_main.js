@@ -20,6 +20,7 @@ function frame(ts, noRaf) {                                         // noRaf：_
   camFollow(dt);                                                      // 追砲彈（03_camera.js）
   if (!PAUSED && !STILL) stepRain(dt);                                // 3D 雨滴（14_rain.js）：照畫面的時間走；停格、縮圖不動
   ambFrame();                                                         // 環境音：風、浪、暴風雨的雨（02_ambient.js；還沒有聲音 ⇒ 什麼都不做）
+  bgmFrame();                                                         // 背景音樂（02_music.js，TASK-0677）：主選單也放
   if (PF) pfLap('rain');
   remesh(RM_BUDGET);                                                  // 重網格化，每格有預算（60_render.js）
   if (PF) pfLap('flush');
@@ -53,6 +54,11 @@ if (DEBUG) window.__game = {
   take: function (i) { return playerTakeShip(SHIPS[i]); },
   drive: function (i, o) { var sh = SHIPS[i || 0]; if (o && 'tele' in o) teleSet(sh, o.tele); if (o && 'power' in o) sh.power = o.power; return driveInfo(sh); },   // 動力（31_drive.js）：每個動力源的完好度、推力、力矩；{ tele: 格 } 撥俥鐘          // 改操控第 i 艘（52_fleet.js；敵艦要 Debug 模式）
   one: function (ammo, aim) { var me = SHIPS[PLAYER_I]; if (aim) setAim(me, aim); fireOne(me, ammo || 0); return BALLS.length; },
+  /** 點一下瞄準（71_input.js pick）：給螢幕座標；或給 [i, x, y, z]（第 i 艘的格座標）⇒ 先照現在的鏡頭投影到螢幕再點。回傳點的位置、瞄準點（格座標）與點到哪艘。 */
+  pick: function (cx, cy) {
+    if (Array.isArray(cx)) { var o = SHIPS[cx[0]], w = M4.pt(o.M, cx[1], cx[2], cx[3]), r = cv.getBoundingClientRect(), q = CAM.vp, cw = q[3] * w[0] + q[7] * w[1] + q[11] * w[2] + q[15], c = M4.pt(q, w[0], w[1], w[2]); cx = r.left + (c[0] / cw + 1) / 2 * r.width; cy = r.top + (1 - c[1] / cw) / 2 * r.height; }
+    pick(cx, cy); var me = SHIPS[PLAYER_I]; return { cx: cx, cy: cy, aim: me.aim, on: me.aimOn ? me.aimOn.i : null };
+  },
   ships: function () { return SHIPS; }, balls: function () { return BALLS; }, pieces: function () { return PIECES; },
   /** 船隻碰撞（31_sailing.js collide）：shipHit() ⇒ 檔位、HIT_PROF、每個船型的取樣數與算了幾 ms；shipHit(i, j, lv) ⇒ 照第 i、j 艘現在的位置（先重算矩陣）量那一檔：
    *  lv 0 ⇒ 龍骨線最近距離（m，< 14 ＝ 撞）；1–3 ⇒ 互相落進去的點數（0 ＝ 沒撞）。只量、不推。 */
@@ -134,6 +140,8 @@ if (DEBUG) window.__game = {
   floodView: function (o) { return floodView(o); },                   // 換鏡頭再拍一張（81_floodlab.js）
   /** 環境音試聽（02_ambient.js，TASK-0663）：q ＝ 'sec=10&cases=名字:w:sea:rain:hold;…' ⇒ Promise<[{ name, peak, rmsDb, wav }]>（src/tests/ambient_lab.py 經 DevTools 呼叫）。 */
   ambLab: function (q) { return ambLab(new URLSearchParams(q || '')); },
+  bgmRender: function (o) { return bgmRender(o || {}); },                // 背景音樂離線錄（02_music.js；src/tests/music_lab.py）
+  bgm: function () { return { snd: JSON.parse(JSON.stringify(SND)), tune: BGM ? BGM.tn.id : null, pass: BGM ? BGM.pass : null, forced: !!(BGM && BGM.forced), bus: AC && AC.bgmBus ? +AC.bgmBus.gain.value.toFixed(4) : null, sfxBus: AC && AC.sfxBus ? +AC.sfxBus.gain.value.toFixed(4) : null, ambBus: AC && AC.ambBus ? +AC.ambBus.gain.value.toFixed(4) : null, fight: AC ? +(AC.currentTime - SND_FIGHT).toFixed(1) : null, tunes: TUNES.map(function (t) { return t.id; }) }; },   // 聲音的讀數：三條音量線、正在放哪首
   /** 遊戲裡那一份環境音現在的值（還沒有聲音 ⇒ null）：風、浪、雨的音量、風的頻率、悶掉的低通、左右、在不在船艙裡。 */
   amb: function () { if (!AMB) return null; var r = function (v) { return +v.toFixed(4); }; return { ctx: AC.state, rain: AMB.rain, wind: r(AMB.wg.gain.value), windHz: r(AMB.wbp.frequency.value), sea: r(AMB.vg.gain.value), rainG: AMB.rain ? r(AMB.rg.gain.value) : 0, muff: r(AMB.muff.frequency.value), pan: AMB.pan ? r(AMB.pan.pan.value) : 0, hold: AMB.hold0, p: ambParams() }; },
   shot: function (i, x, z, side, gun, ammo, ang) {

@@ -53,6 +53,7 @@ function pick(cx, cy) {
     if (o === me || o.sunk) return;
     var oL = toLocal(o, p0), dL = M4.dir(o.inv, d[0], d[1], d[2]), h = VK.raycast(o.grid, oL, dL, 3000);
     if (o.arm) { var ha = armRay(o, oL, dL, 3000); if (ha && (!h || ha.t < h.t)) h = ha; }   // 砲帶的裝甲（24_armor.js）也點得到（換回船的格座標）
+    var hs = sailRay(o, oL, dL, h ? h.t : 3000); if (hs) h = hs;         // 帆布也點得到（比船身近才算）
     if (h && (!hit || h.t < hit.t)) { hit = h; on = o; }
   });
   // Tim 2026-10-14：「點海會取消瞄準；點在船身上（也可以瞄友軍，可以變色）就變成那一邊的砲手控」
@@ -62,11 +63,42 @@ function pick(cx, cy) {
   if (hit) {
     setAim(me, [hit.x + 0.5, hit.y + 0.5, hit.z + 0.5], on); me.pMode = AIM_P = 'free'; sfx('crack', null, 0.08);
     if (!isFoe(me, on)) note(me, '瞄準友艦 ' + on.name + teamTag(on) + ' —— 打下去一樣會傷到它');
+    else if (hit.sail) note(me, '瞄準 ' + on.name + ' 的帆');
     if (AUTOFIRE && !me.hand) { me.hand = true; note(me, '手動瞄準：這一舷你來打（' + keyWord('volley') + '齊射），另一舷照樣自動 —— 點海面回到全自動'); }
   } else if (me.aim) {
     setAim(me, null);
     if (AUTOFIRE && me.hand) { me.hand = false; note(me, '取消瞄準 —— 回到全自動開砲'); } else note(me, '取消瞄準');
   }
+}
+/** 帆布也點得到（Tim 2026-10-17：「手動瞄準也能瞄準帆布」）：照畫出來的那一面（11_rig_gpu.js sailBuf 同一個判斷）每個三角形量一次射線（兩面都算），取 tMax 以內最近的。
+ *  回傳跟 VK.raycast 一樣：x,y,z ＝ 落點 −0.5（pick 會加回去 ⇒ 瞄準點就在布上那一點）、t 以 dL 的長度為單位。
+ *  收起來的帆（s.furled，留著的那一捲也是）、掉了的不算 —— 砲彈也打不到它們。只在點的那一下算，不碰戰局。 */
+var SAIL_PICK = null;
+function sailRay(o, oL, dL, tMax) {
+  var bt = tMax, best = null;
+  (o.cl || []).forEach(function (c, k) {
+    var s = o.sails[k], P; if (!s || s.dead || s.furled) return;
+    if (PHYS) {
+      if (!c.p || c.hidden || c.gone) return;
+      if (!SAIL_PICK || SAIL_PICK.length < c.T.n * 3) SAIL_PICK = new Float32Array(c.T.n * 3);
+      P = clothFine(c, SAIL_PICK); if (c.furlF !== null && c.furlF !== undefined) P = furlDraw(c, P, c.furlF, o);   // 張帆收帆演到一半：照畫出來的位置
+    } else P = c.T.p0;
+    var tr = c.T.tris, tv = c.torn ? c.tv : null;                        // tv：撕開的洞（不畫的細格點）
+    for (var j = 0; j < tr.length; j += 3) {
+      if (tv && (tv[tr[j]] || tv[tr[j + 1]] || tv[tr[j + 2]])) continue;
+      var a = tr[j] * 3, b = tr[j + 1] * 3, e = tr[j + 2] * 3;           // Möller–Trumbore
+      var ux = P[b] - P[a], uy = P[b + 1] - P[a + 1], uz = P[b + 2] - P[a + 2], vx = P[e] - P[a], vy = P[e + 1] - P[a + 1], vz = P[e + 2] - P[a + 2];
+      var px = dL[1] * vz - dL[2] * vy, py = dL[2] * vx - dL[0] * vz, pz = dL[0] * vy - dL[1] * vx, det = ux * px + uy * py + uz * pz;
+      if (Math.abs(det) < 1e-12) continue;
+      var f = 1 / det, sx = oL[0] - P[a], sy = oL[1] - P[a + 1], sz = oL[2] - P[a + 2], u = (sx * px + sy * py + sz * pz) * f;
+      if (u < 0 || u > 1) continue;
+      var qx = sy * uz - sz * uy, qy = sz * ux - sx * uz, qz = sx * uy - sy * ux, v = (dL[0] * qx + dL[1] * qy + dL[2] * qz) * f;
+      if (v < 0 || u + v > 1) continue;
+      var t = (vx * qx + vy * qy + vz * qz) * f;
+      if (t > 0 && t < bt) { bt = t; best = s; }
+    }
+  });
+  return best ? { x: oL[0] + dL[0] * bt - 0.5, y: oL[1] + dL[1] * bt - 0.5, z: oL[2] + dL[2] * bt - 0.5, t: bt, sail: best } : null;
 }
 window.addEventListener('keydown', function (e) {
   if (!RUNNING) return;
@@ -98,7 +130,7 @@ function doAct(a, repeat) {
   else if (a === 'xray') xrayToggle();                                   // 觀察模式：透視（72_floodui.js）、剖面、隱藏甲板（74_cutaway.js）—— 不停格也能切換（Tim 2026-10-16）
   else if (a === 'cut') cutToggle();
   else if (a === 'deck') deckCycle();
-  else if (a === 'mute') { muted = !muted; gsetShow(); }
+  else if (a === 'mute') { muted = !muted; sndApply(); gsetShow(); }
   else if (a === 'help') helpToggle();
   else if (a === 'menu') { gsetClose(); helpClose(); RUNNING = false; END_AT = 0; END_WAIT = null; $('cover').style.display = ''; $('end').className = ''; }
   else if (a === 'sailMode') sailToggle();   // 一顆切換 自動 ⇄ 手動（Tim 2026-10-15：「改成單鍵」；手動也可以直接打舵）；錨在水裡 ⇒ 先起錨（左右錨拋的也一起）
@@ -185,6 +217,7 @@ function gsetShow() {
   $('gsGfx').textContent = gl === 'custom' ? '（自訂）' : ''; $('gsPhx').textContent = xl === 'custom' ? '（自訂）' : '';
   $('muteT').classList.toggle('on', muted); $('fpsT').classList.toggle('on', GFX_FPS);
   $('slowT').classList.toggle('on', SLOW.on); $('slowCamT').classList.toggle('on', SLOW.cam); $('pslowT').classList.toggle('on', PSLOW.on); $('testT').classList.toggle('on', !!(TLOG && TLOG.off === undefined) || (!TLOG && tlgWanted())); $('testN').textContent = tlgNote();   // 測試模式（83_testlog.js） $('boomB').classList.toggle('dis', !canSelfDestruct());
+  sndShow();                                                          // 音量滑桿（02_music.js）
   $('fullT').classList.toggle('on', fsOn()); $('fullT').classList.toggle('dis', !fsCan()); $('gsFull').textContent = fsCan() ? '' : '（這裡不給全螢幕：iPhone 的 Safari 只給影片）';
 }
 $('setB').onclick = gsetToggle;
@@ -197,7 +230,7 @@ $('helpBg').onclick = helpClose; $('helpX').onclick = helpClose; $('helpB').oncl
 $('gsetBg').onclick = gsetClose;                                    // 面板外點一下 ⇒ 關（不會順便瞄準、開砲：底下的東西被這一層蓋住）
 $('gsGo').onclick = gsetClose;
 $('menuB').onclick = function () { doAct('menu'); };
-$('muteT').onclick = function () { muted = !muted; gsetShow(); };
+$('muteT').onclick = function () { muted = !muted; sndApply(); gsetShow(); };
 $('fpsT').onclick = function () { GFX_FPS = !GFX_FPS; gfxShow(); };
 // 全螢幕（設定面板的「F11 全螢幕」；Tim 2026-10-13：主要給手機用）：整頁（documentElement）進出全螢幕；畫布大小每一格照量（60_render.js resize）⇒ 不用另外處理。
 //   畫廊彈窗的 iframe（sandbox＋allow="fullscreen"，ArtGallery/index.html）進得去（量過：fullscreenEnabled、點了 fs ＝ true、按鈕亮）。
@@ -266,7 +299,7 @@ function sliders() {
   function crewTotal(cw, hc) { var g = 0; Object.keys(GUNS).forEach(function (t) { g += gunCrew(cw, t) * (hc.guns[t] || 0); }); return g + Math.ceil(hc.n / 2) * cw.monkeys + cw.officers + (hc.wheel ? cw.helm : 0) + cw.marines + cw.top * hc.masts + cw.hands; }
   /** 船隻配置頁最上面（Tim 2026-10-14）：大圓鈕（61_hud.js badgeDraw）＋排水量、航速（順風／側順風／逆風，照這一型的航速與逆風性能、玩法的加成；標準風、滿帆）、砲、船員、靈活與硬度。 */
   function shipCardShow() {
-    var T = HULLT[CFG_ID], h = hullInfo(CFG_ID), el = $('shipCardT'); badgeDraw($('shipCardC'), T, h ? h.name : CFG_ID);
+    var T = HULLT[CFG_ID], h = hullInfo(CFG_ID), el = $('shipCardT'); badgeDraw($('shipCardC'), T);   // 不寫艦名：右邊那一欄第一行就是（Tim 2026-10-17）
     if (!T) { el.innerHTML = '<div class="h">' + (h ? h.name : CFG_ID) + '</div><div class="n">船型載入中…</div>'; return; }
     var c = shipCfg(CFG_ID), hc = hullCounts(CFG_ID), kn = VMAX * c.speed * playK('speed') * 1.9438, UP = c.upwind || 1, dz = 180 - NOGO_DEG, stall = 180 - (UP === 1 ? dz : 90 + (dz - 90) * UP);
     var gl = Object.keys(GUNS).filter(function (t) { return hc.guns[t]; }).map(function (t) { return (GUNS[t].short || GUNS[t].name).trim() + ' ' + hc.guns[t]; }).join('、');
@@ -580,7 +613,7 @@ function sliders() {
   cs.onchange = function () { CFG_ID = cs.value; loadHull(CFG_ID).then(function () { put(); show(); }); put(); show(); };
   fleetUI();                                                     // 主選單：艦隊編成
   // 細節設定那一頁：主選單 ⇄ 細節設定（同一個 #cover 裡兩張卡片，一次顯示一張）
-  function page(w) { $('detail').style.display = w === 'det' ? '' : 'none'; $('gfxp').style.display = w === 'gfx' ? '' : 'none'; $('phxp').style.display = w === 'phx' ? '' : 'none'; $('shipp').style.display = w === 'ship' ? '' : 'none'; $('gunp').style.display = w === 'gun' ? '' : 'none'; $('furnp').style.display = w === 'furn' ? '' : 'none'; $('keysp').style.display = w === 'keys' ? '' : 'none'; if (w !== 'keys') KEY_WAIT = null; document.querySelector('#cover .card:not(#detail):not(#gfxp):not(#phxp):not(#shipp):not(#gunp):not(#furnp):not(#keysp)').style.display = w ? 'none' : ''; $('cover').scrollTop = 0; $('pgX').classList.toggle('on', !!w && !ADMIN_ROOMS); }   // w：'' 主選單、'det' 細節設定、'gfx' 畫質設定、'phx' 物理設定、'ship' 船隻配置、'gun' 砲的設定、'furn' 道具設定（67_furncfg.js）
+  function page(w) { $('detail').style.display = w === 'det' ? '' : 'none'; $('gfxp').style.display = w === 'gfx' ? '' : 'none'; $('phxp').style.display = w === 'phx' ? '' : 'none'; $('shipp').style.display = w === 'ship' ? '' : 'none'; $('gunp').style.display = w === 'gun' ? '' : 'none'; $('furnp').style.display = w === 'furn' ? '' : 'none'; $('keysp').style.display = w === 'keys' ? '' : 'none'; $('sndp').style.display = w === 'snd' ? '' : 'none'; if (w !== 'keys') KEY_WAIT = null; document.querySelector('#cover .card:not(#detail):not(#gfxp):not(#phxp):not(#shipp):not(#gunp):not(#furnp):not(#keysp):not(#sndp)').style.display = w ? 'none' : ''; $('cover').scrollTop = 0; $('pgX').classList.toggle('on', !!w && !ADMIN_ROOMS); }   // w：'' 主選單、'det' 細節設定、'gfx' 畫質設定、'phx' 物理設定、'ship' 船隻配置、'gun' 砲的設定、'furn' 道具設定（67_furncfg.js）
   [].forEach.call(document.querySelectorAll('#plays button'), function (b) { b.onclick = function () { setPlay(b.dataset.p); show(); }; });   // 主選單：玩法
   $('detB').onclick = function () { page('det'); };
   $('detX').onclick = function () { page(''); };
@@ -603,6 +636,9 @@ function sliders() {
   $('furnX').onclick = function () { page(''); };
   $('keysB').onclick = function () { page('keys'); keysShow(); };   // 鍵位設定（66_keys.js）
   $('keysX').onclick = function () { page(''); };
+  sndUI();                                                       // 聲音設定的滑桿與按鈕（主選單那一頁＋遊戲內設定面板，02_music.js）
+  $('sndB').onclick = function () { page('snd'); sndShow(); };   // 聲音設定（02_music.js，TASK-0677）
+  $('sndX').onclick = function () { page(''); };
   $('pgX').onclick = function () { RE.i = -1; show(); page(''); };   // 右上角的返回（每一頁同一顆）
   var rArm = 0;                                        // 這一型回到預設：按兩下（Tim：編起來很花時間 ⇒ 不要一按就沒了；⛔ 不用 confirm()：畫廊彈窗的 iframe 沒開 allow-modals，confirm 直接回 false）
   $('shipR').onclick = function () {
