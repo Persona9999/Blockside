@@ -139,7 +139,7 @@ function prefsApply(p) {
   if (p.gfx && typeof p.gfx === 'object' && !Q.has('gfx')) GFX_ITEMS.forEach(function (it) { var x = num(p.gfx[it.k], [0, it.opt.length - 1], true); if (x !== undefined && !Q.has('g_' + it.k)) GFX[it.k] = x; });
   if (typeof p.fps === 'boolean') GFX_FPS = p.fps;
   [['vsfx', 'sfx'], ['vamb', 'amb'], ['vbgm', 'bgm']].forEach(function (k) { if (typeof p[k[0]] === 'number' && isFinite(p[k[0]])) SND[k[1]] = clamp(p[k[0]], 0, 1); });   // 聲音設定（02_music.js）
-  if (p.bgm === 'sail' || p.bgm === 'on' || p.bgm === 'off') SND.mode = p.bgm;
+  if (p.bgm === 'duck' || p.bgm === 'on' || p.bgm === 'off') SND.mode = p.bgm; else if (p.bgm === 'sail') SND.mode = 'duck';   // 'sail'：第一版的「開砲就淡出」（已拿掉）⇒ 照新的預設
   if (p.tune === 'shuffle' || TUNES.some(function (t) { return t.id === p.tune; })) SND.tune = p.tune;
   if (typeof p.gcrew === 'boolean' && !Q.has('gcrew')) GUN_CREW_HURT = p.gcrew;
   if (typeof p.dbg === 'boolean' && !Q.has('dbg')) DBG_SET = p.dbg;

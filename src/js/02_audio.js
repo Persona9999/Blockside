@@ -20,7 +20,7 @@ function initAudio() {
 }
 function sfx(kind, at, vol) {
   if (!AC || muted) return;
-  if (kind === 'boom' || kind === 'blast') SND_FIGHT = AC.currentTime;     // 開砲、爆炸 ⇒ 交戰中（02_music.js：BGM「只在航行」那一檔淡出）
+  if (kind === 'boom' || kind === 'blast') SND_FIGHT = AC.currentTime;     // 開砲、爆炸 ⇒ 交戰中（02_music.js：BGM「交戰時小聲一點」那一檔 × BGM_DUCK）
   var dist = at ? len(sub(at, CAM.eye)) : 0, v = (vol || 1) / (1 + dist / 70);
   if (v < 0.01) return;
   var now = AC.currentTime, rec = SFX_RECENT[kind] || (SFX_RECENT[kind] = []);
