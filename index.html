@@ -106,7 +106,13 @@
   #msg div{ margin:0 0 1.5px; transition:opacity .4s; }   /* 字的大小跟羅盤上方那行資訊（#modeT）一樣、跟著 --modeFs（Tim 2026-10-16；以前 7／8 px，最新那行大一號；更早 14／16 px）*/
   #tip{ left:12px; bottom:12px; color:var(--dim); font-size:12px; }
   /* 遊戲內的設定面板（⚙ 設定、Esc）：打開時暫停；重新開始、回主選單、畫質與物理的三四檔、帆繩物理、鏡頭跟船、靜音、FPS（Tim 2026-10-13：手機下方列省空間） */
-  #gset{ left:50%; top:50%; transform:translate(-50%,-50%); display:none; text-align:center; padding:14px 16px; width:min(92vw,460px); box-sizing:border-box; pointer-events:auto; z-index:6; }   /* ⛔ 只給 max-width：left:50% ⇒ 最多只有半個螢幕寬、每一列都折行 */
+  #gset{ left:50%; top:50%; transform:translate(-50%,-50%); display:none; text-align:center; padding:14px 16px; width:min(92vw,460px); box-sizing:border-box; pointer-events:auto; z-index:6;
+    max-height:calc(100% - 16px - env(safe-area-inset-top) - env(safe-area-inset-bottom)); overflow-y:auto; overscroll-behavior:contain; -webkit-overflow-scrolling:touch; }   /* ⛔ 只給 max-width：left:50% ⇒ 最多只有半個螢幕寬、每一列都折行。
+     比畫面高 ⇒ 面板裡捲（Tim 2026-10-17：「設定選單 在手機上會超出畫面導致按不到 繼續 重新開始 回主選單」—— 以前沒有高度上限、置中 ⇒ 上下各超出一截，頂端那一列在畫面外） */
+  #gset .gsTop{ position:sticky; top:-14px; z-index:1; margin:-14px -16px 0; padding:14px 16px 2px; background:rgba(14,18,24,.96); border-radius:8px 8px 0 0; }   /* 標題＋繼續／重新開始／回主選單：捲下去也釘在面板頂端（底色不透明 ⇒ 捲過去的列不會透出來） */
+  #gset{ scrollbar-width:thin; scrollbar-color:rgba(232,194,106,.75) rgba(255,255,255,.08); }   /* 捲軸看得見（Tim：「可能可以加 Slider?」）：金色細條 ⇒ 一看就知道下面還有 */
+  #gset::-webkit-scrollbar{ width:8px; } #gset::-webkit-scrollbar-track{ background:rgba(255,255,255,.08); border-radius:4px; margin:8px 0; } #gset::-webkit-scrollbar-thumb{ background:rgba(232,194,106,.75); border-radius:4px; }
+  @media (max-height:520px){ #gset{ padding:8px 10px; } #gset .gsTop{ top:-8px; margin:-8px -10px 0; padding:8px 10px 2px; } #gset .gsR{ margin:5px 0; } #gset .gsT{ margin-bottom:2px; } #gset .gsT .note{ display:none; } #gset .chip.big{ padding:5px 14px; } }   /* 手機橫放（矮）：列距收、標題的說明藏 */
   #gset.on{ display:block; }
   #gsetBg{ position:absolute; inset:0; display:none; background:rgba(0,0,0,.25); z-index:5; } #gsetBg.on{ display:block; }   /* 面板外點一下就關（蓋住整個畫面，含下方的 ⚙ 設定；Tim 2026-10-13） */ #gset .gsT{ font-size:16px; color:var(--gold); margin-bottom:6px; } #gset .note{ color:var(--dim); font-size:12px; }
   #gset .gsR{ margin:9px 0; display:flex; flex-wrap:wrap; justify-content:center; align-items:center; gap:5px; } #gset .gsL{ color:var(--dim); font-size:13px; margin-right:2px; }
@@ -345,8 +351,7 @@
 
   <div id="gsetBg"></div>
   <div id="gset" class="hud panel">
-    <div class="gsT">設定　<span class="note">遊戲暫停中（Esc、「繼續」或點面板外面回到戰鬥）</span></div>
-    <div class="gsR"><span class="chip big" id="gsGo">▶ 繼續</span><span class="chip big" id="restartB"><b>N</b> 重新開始</span><span class="chip big" id="menuB"><b>R</b> 回主選單</span><span class="chip big" id="boomB">💥</span><span class="chip big" id="helpB"><b>H</b> 說明</span></div>
+    <div class="gsTop"><div class="gsT">設定<span class="note">遊戲暫停中（Esc、「繼續」或點面板外面回到戰鬥）</span></div><div class="gsR"><span class="chip big" id="gsGo">▶ 繼續</span><span class="chip big" id="restartB"><b>N</b> 重新開始</span><span class="chip big" id="menuB"><b>R</b> 回主選單</span><span class="chip big" id="boomB">💥</span><span class="chip big" id="helpB"><b>H</b> 說明</span></div></div>
     <div class="gsR"><span class="gsL">畫質</span><span class="chip" data-gg="low">低</span><span class="chip" data-gg="mid">中</span><span class="chip" data-gg="high">高</span><span class="note" id="gsGfx"></span></div>
     <div class="gsR"><span class="gsL">物理效果</span><span class="chip" data-gx="full">全開</span><span class="chip" data-gx="high">高</span><span class="chip" data-gx="mid">中</span><span class="chip" data-gx="low">低</span><span class="note" id="gsPhx"></span></div>
     <div class="gsR"><span class="gsL">瞄準</span><span class="chip" data-act="aim" id="aimk">🎯 換瞄準模式（<span class="kn" data-kl="aim">Q</span>）</span><span class="note">自由 → 水線 → 砲甲板 → 帆具 → 甲板人員 → 彈藥庫（現在的寫在羅盤上面）</span></div>
