@@ -21,7 +21,9 @@
 // 只在畫面這一層跑（frame，90_main.js）：⛔ 不抽 rnd()、不碰模擬的狀態 ⇒ 開不開第一人稱，戰局都逐位元組相同。
 //   停格、設定打開（PAUSED）時只能轉頭、不能走。
 // 自動退出：我艦沉了、換了一艘我艦（playerHandoff）、重新開始、回主選單、腳下一路都沒有地板。
-var FP = { on: false, want: false, lamp: true, mode: 0, sh: null, c: null, yaw: 0, pitch: 0, mv: { f: 0, b: 0, l: 0, r: 0, tl: 0, tr: 0, lu: 0, ld: 0, up: 0, dn: 0 }, run: false, climb: null, near: null, lads: null, v: [0, 0], vz: 0, ez: null, fz: 0, eo: 0, jz: 0, jv: 0, joy: [0, 0], look: [0, 0], fol: null, folP: null, lookT: 0, flyFrom: null };
+// 建造模式鎖定第一人稱（Tim 2026-10-17「建築模式鎖定第一人稱」）：退出鈕藏起來、設定的開關與 Y 不作用；腳下沒有地板 ⇒ 回到船員旁邊重新開始。
+//   別的玩法：重新開始、下一場都不維持（Tim 2026-10-17「第一人稱維持只有在建築模式下 重開維持 其他模式都不維持」；⛔ 10-16 那版 FP.want 每個玩法都維持）。
+var FP = { on: false, lamp: true, mode: 0, sh: null, c: null, yaw: 0, pitch: 0, mv: { f: 0, b: 0, l: 0, r: 0, tl: 0, tr: 0, lu: 0, ld: 0, up: 0, dn: 0 }, run: false, climb: null, near: null, lads: null, v: [0, 0], vz: 0, ez: null, fz: 0, eo: 0, jz: 0, jv: 0, joy: [0, 0], look: [0, 0], fol: null, folP: null, lookT: 0, flyFrom: null };
 var FP_MODE_EM = ['🚶', '🚪', '🕊'], FP_MODE = ['正常', '穿牆', '浮空'], FP_FLY_OUT = 200, FP_NC_EXIT = 2, FP_NC_UP = 3;   // 浮空時離船身最多 20 m；穿牆時從牆裡出來，前面的地板跟腳最多差 0.2 m；穿牆時跨得上 0.3 m（樓梯一階；⛔ 照正常的 0.6 m ⇒ 憲法號舷牆邊 0.2 m 木條＋0.4 m 欄杆蓋板一路踩上欄杆頂，量過）
 // 跟隨船員（Tim 2026-10-16「加一個 跟隨船員(把第一人稱鏡頭綁到附近船員上)」）：FP.fol ＝ 被跟的人 —— 鏡頭在他的眼睛、他照常做自己的工作（⛔ 不設 c.fp）、
 //   玩家只能轉頭；自己的角色停在原地。F 跟隨／回來、G 換下一個（照離自己由近到遠輪）；被跟的人落水、倒下 ⇒ 回到自己。
@@ -50,13 +52,21 @@ function fpSet(on, quiet) {                                           // quiet�
     FP.on = true; FP.sh = sh; FP.c = { pos: c.pos.slice() };            // 玩家自己的角色：只借那個船員的座標（⛔ 不操控他）
     FP.yaw = Math.atan2(d[1], d[0]) || 0; FP.pitch = 0; FP.climb = null; FP.lads = fpLadders(sh); FP.v = [0, 0]; FP.ez = null; FP.jz = FP.jv = 0;
     FP.vz = 0; FP.flyFrom = FP.mode === 2 ? FP.c.pos.slice() : null;
-    if (!quiet) note(sh, '第一人稱：左下搖桿或 ' + ['fpFwd', 'fpLeft', 'fpBack', 'fpRight'].map(keyName).join('') + ' 走、' + keyWord('fpRun') + ' 跑、' + keyWord('fpJump') + '跳、右下搖桿／拖曳／方向鍵轉頭（電腦：點畫面用滑鼠轉頭，Esc 或按住 ' + keyName('fpUnlock') + ' 放開）、' + keyName('fpClimb') + ' 爬梯子 —— 設定裡再按一次回到原本的鏡頭' + (FP.mode === 2 ? '（浮空：' + keyWord('fpJump') + '上、' + keyName('fpDown') + ' 下）' : ''));
+    if (!quiet) note(sh, '第一人稱：左下搖桿或 ' + ['fpFwd', 'fpLeft', 'fpBack', 'fpRight'].map(keyName).join('') + ' 走、' + keyWord('fpRun') + ' 跑、' + keyWord('fpJump') + '跳、拖曳畫面／方向鍵轉頭（電腦：點畫面用滑鼠轉頭，Esc 或按住 ' + keyName('fpUnlock') + ' 放開）、' + keyName('fpClimb') + ' 爬梯子 —— 🎥（' + keyName('fpExit') + '）回到原本的鏡頭' + (FP.mode === 2 ? '（浮空：' + keyWord('fpJump') + '上、' + keyName('fpDown') + ' 下）' : ''));
   } else if (FP.on) {
     FP.on = false; FP.sh = FP.c = FP.climb = FP.near = FP.fol = null; CAM.snap = true; fpUnlock();
   }
   fpStop(); fpUI(); return FP.on;
 }
-function fpStop() { var m = FP.mv; Object.keys(m).forEach(function (k) { m[k] = 0; }); FP.run = false; FP.joy = [0, 0]; FP.look = [0, 0]; FP.jz = FP.jv = 0; FP.v = [0, 0]; FP.vz = 0; joyDraw(0, 0); joyDrawR(0, 0); }
+function fpStop() { var m = FP.mv; Object.keys(m).forEach(function (k) { m[k] = 0; }); FP.run = false; FP.joy = [0, 0]; FP.look = [0, 0]; FP.jz = FP.jv = 0; FP.v = [0, 0]; FP.vz = 0; joyDraw(0, 0); }
+/** 建造模式（82_build.js）開著 ⇒ 第一人稱鎖定：玩家關不掉。 */
+function fpBuildLock() { return RUNNING && MODE === 'build'; }
+/** 玩家要離開第一人稱（🎥 鈕、Y、設定的開關）：建造模式鎖定 ⇒ 不關、說一聲。 */
+function fpExit() {
+  if (!FP.on) return;
+  if (fpBuildLock()) { note(FP.sh, '建造模式固定第一人稱'); return; }
+  fpSet(false); gsetClose();
+}
 /** 碰撞三段（設定裡的「碰撞」）：0 正常、1 穿牆、2 浮空。開著第一人稱時切：進浮空 ⇒ 記下從哪裡開始；離開浮空 ⇒ fpLand 落到下面的地板。 */
 function fpMode(m) {
   if (m === FP.mode) return;
@@ -83,11 +93,14 @@ function fpLand() {
     for (var k = 0; k <= 12 && sz < 0; k++) sz = standZ(g, Math.floor(p[0]), Math.floor(p[1]), Math.floor(p[2]) - k, Math.floor(p[2]) + k, FP_HEAD);
     if (sz >= 0) { c.pos = [p[0], p[1], sz]; FP.jz = 0; FP.ez = null; note(FP.sh, '第一人稱：下面沒有甲板 ⇒ 回到' + L[q][1]); return; }
   }
-  var sh = FP.sh; fpSet(false); note(sh, '第一人稱結束：下面沒有甲板');
+  var sh = FP.sh; fpSet(false);
+  if (fpBuildLock() && fpSet(true, true)) { note(sh, '建造：下面沒有甲板 ⇒ 從船員的位置重新開始'); return; }   // 鎖定第一人稱：⛔ 退出 ⇒ 建造介面跟著不見、玩家回不來
+  note(sh, '第一人稱結束：下面沒有甲板');
 }
 function fpUI() {
   $('stage').classList.toggle('fp', FP.on);
   $('fpT').classList.toggle('on', FP.on); $('fpLampT').classList.toggle('on', FP.lamp);
+  var lk = fpBuildLock(); $('fpExit').style.display = lk ? 'none' : ''; $('fpT').title = lk ? '建造模式固定第一人稱' : '';   // 建造模式鎖定：沒有退出鈕
   [].forEach.call(document.querySelectorAll('#gset [data-fpm]'), function (b) { b.classList.toggle('on', +b.dataset.fpm === FP.mode); });
   $('fpUI').classList.toggle('fol', !!FP.fol);                         // 跟隨中：藏搖桿、跳、跑、爬梯子（template.html #fpUI.fol）
   $('fpUI').classList.toggle('fly', FP.mode === 2);
@@ -360,6 +373,7 @@ function fpKey(k, down) {
   if (a === 'fpRun') { FP.run = down && FP.on; return FP.on; }
   if (a === 'fpUnlock') { if (down && FP.on) fpUnlock(); return FP.on; }   // 按住 ⇒ 放開滑鼠、遊戲不停；點回畫面再抓
   if (!FP.on) { if (!down && FP_MV[a]) FP.mv[FP_MV[a]] = 0; return false; }
+  if (a === 'fpExit') { if (down) fpExit(); return true; }             // 回到原本的鏡頭（建造模式鎖定 ⇒ 只說一聲）
   if (a === 'fpClimb') { if (down) fpClimbGo(); return true; }         // 爬梯子
   if (a === 'fpJump') { if (FP.mode === 2) FP.mv.up = down ? 1 : 0; else if (down) fpJump(); return true; }   // 跳（Tim 2026-10-16）；浮空 ⇒ 往上
   if (a === 'fpDown') { FP.mv.dn = down && FP.mode === 2 ? 1 : 0; return true; }   // 浮空 ⇒ 往下（第一人稱時不換鏡頭，鏡頭本來就不歸它管）
@@ -370,11 +384,13 @@ function fpKey(k, down) {
 /** 拖曳轉頭（71_input.js pointermove）：往右拖 ⇒ 往右看。 */
 function fpLook(dx, dy) { FP.yaw += dx * 0.005; FP.pitch = clamp(FP.pitch - dy * 0.005, -1.35, 1.35); FP.lookT = performance.now(); }   // lookT：跟隨中 2 秒內不自動轉
 // 設定面板的開關、第一人稱的操作面板（按住才動：放開、移出、取消都停）
-$('fpT').onclick = function () { fpSet(!FP.on); FP.want = FP.on; gsetClose(); };   // FP.want：玩家自己開的 ⇒ 重新開始、下一場開局都維持（fpKeep）
-/** 開局（70_flow.js start，reset 之後）：玩家開著第一人稱 ⇒ 回到第一人稱（Tim 2026-10-16「按下重新開始會變成非第一人稱模式(重新開始應該要維持在第一人稱)」；
- *  ⛔ 不記 ⇒ reset 換了一艘我艦，fpFrame 看到 SHIPS[PLAYER_I] 不是原本那艘就退出）。被擊沉退出的那一場，下一場照樣回來。 */
+$('fpT').onclick = function () { if (FP.on) fpExit(); else { fpSet(true); gsetClose(); } };   // 關：跟 🎥 同一條（建造模式鎖定 ⇒ 不關）
+$('fpExit').onclick = fpExit;
+/** 開局（70_flow.js start，reset 之後）：只有建造模式回到第一人稱（Tim 2026-10-17「第一人稱維持只有在建築模式下 重開維持 其他模式都不維持」）。
+ *  別的玩法：reset 換了一艘我艦 ⇒ 下一格 fpFrame 看到 SHIPS[PLAYER_I] 不是原本那艘就退出 ＝ 不維持（⛔ 10-16 那版 FP.want 每個玩法都帶回來）。
+ *  建造模式 bldEnter（82_build.js）自己會開；這裡再保一次（bldEnter 之後才跑）。 */
 //   ⚠ reset 之後 FP.on 還是 true（下一格 fpFrame 才退出）⇒ 看的是「跟的是不是現在這艘我艦」，不是 FP.on。
-function fpKeep() { if (FP.want && RUNNING && !fpOnMine()) fpSet(true, true); }
+function fpKeep() { if (fpBuildLock() && !fpOnMine()) fpSet(true, true); }
 function fpOnMine() { return FP.on && FP.sh === SHIPS[PLAYER_I]; }
 $('fpLampT').onclick = function () { FP.lamp = !FP.lamp; fpUI(); };   // 提燈：開關不關設定面板；跨場留著
 // 滑鼠模式（Tim 2026-10-16「視角旋轉是否可以參考PC版minecraft … 點了滑鼠後會變成滑鼠模式」；查過：Minecraft Java 版抓住滑鼠一動就轉頭，Esc 放開並打開暫停選單，點回畫面再抓住）：
@@ -411,8 +427,10 @@ $('fpFol').onclick = function () { fpFollow(false); };
 $('fpNext').onclick = function () { fpFollow(true); };
 window.addEventListener('blur', fpStop);
 // 虛擬搖桿（Tim 2026-10-16「移動要改為虛擬搖桿(同時支援WASD 但不用顯示按鍵)」「旋轉視角是否也可以用虛擬類比控制」）：按住拖 ⇒ 推到邊 ＝ 全速、推一半 ＝ 半速；
-//   中間一小圈（12%）不動（手指放上去不會溜）；放開、取消 ⇒ 回中間。兩支同一套（joyBind）：
-//   左下 #fpJoy 走路 ⇒ FP.joy ＝ [往前, 往右]（跟鍵盤的合起來夾到 1）；右下 #fpJoyR 轉頭 ⇒ FP.look ＝ [往右轉, 往下看]（fpFrame 照 FP_TURN 的速度轉，跟方向鍵加在一起）。
+//   中間一小圈（12%）不動（手指放上去不會溜）；放開、取消 ⇒ 回中間（joyBind）：
+//   左下 #fpJoy 走路 ⇒ FP.joy ＝ [往前, 往右]（跟鍵盤的合起來夾到 1）。
+//   ⛔ 右下轉頭的那一支（#fpJoyR）拿掉了（Tim 2026-10-17 手機試玩「右側轉視角的我發現用不到(螢幕任意位置都能滑動轉視角)」）：
+//   轉頭 ＝ 畫面上任何地方拖曳（71_input.js pointermove → fpLook）或方向鍵；FP.look 留著給 fpFrame 加，現在一直是 0。
 function joyBind(pad, knob, set) {
   var J = { id: null, cx: 0, cy: 0, R: 1 };
   function draw(x, y) { knob.style.transform = 'translate(' + x.toFixed(1) + 'px,' + y.toFixed(1) + 'px)'; }
@@ -433,4 +451,3 @@ function joyBind(pad, knob, set) {
   return draw;
 }
 var joyDraw = joyBind($('fpJoy'), $('fpKnob'), function (x, y) { FP.joy = [-y, x]; });
-var joyDrawR = joyBind($('fpJoyR'), $('fpKnobR'), function (x, y) { FP.look = [x, y]; if (x || y) FP.lookT = performance.now(); });   // lookT：跟隨中 2 秒內不自動轉

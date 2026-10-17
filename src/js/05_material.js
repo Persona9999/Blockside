@@ -46,20 +46,31 @@ function hullMaterials(T, info) {
   if (!T.matPlain) for (i = 0; i < n; i++) T.voxT0 += T.matN[i] * T.matT[i];
   if (T.matBad.length) console.warn('材質表沒有：' + T.matBad.join('、') + ' ⇒ 照全船預設 ' + T.mat0 + '（' + T.name + '）');
   // 平滑渲染（TASK-0616 第二段）：檔頭 render（關聯的 meta render，同一個段落格式）⇒ T.smG（smooth 那幾格 ＝ 1；VoxelKit 的方塊網格化跳過它們，15_smooth.js 另外畫成平滑面）
-  var rh = T.h.render, si = rh && rh.ids ? rh.ids.indexOf('smooth') + 1 : 0;
-  T.smG = null; T.smN = 0;
-  if (si && rh.runs && rh.runs.length) {
-    var SG = new VK.Grid(T.h.size), sx2 = T.h.size[0], sy2 = T.h.size[1], at2 = 0, R2 = rh.runs;
+  //   金屬（Tim 2026-10-17：「把鍋爐 螺旋槳 以及其他金屬部件都改成光滑金屬質感」「形狀也做成平滑的（像維吉尼亞號砲廓那樣），再加金屬反光」）：
+  //   材質表標 smooth: true 的（鐵甲、鍋爐；包銅皮不標：水線下那層薄殼不要變圓）⇒ 那幾格沒寫 render 也平滑；關聯明寫 render=voxel ⇒ 照方塊。
+  //   ⛔ 只看非預設的材質層（關聯 meta material）：全船預設是金屬的船不會整艘變圓（現在沒有這種船）。
+  var rh = T.h.render, si = rh && rh.ids ? rh.ids.indexOf('smooth') + 1 : 0, vi = rh && rh.ids ? rh.ids.indexOf('voxel') + 1 : 0;
+  T.smG = null; T.smN = 0; T.smAuto = 0;
+  var SG = new VK.Grid(T.h.size), VG = null;
+  function runs(id, f) {                                                   // 檔頭 render 的段落裡、索引 ＝ id 的那幾格
+    var sx2 = T.h.size[0], sy2 = T.h.size[1], at2 = 0, R2 = rh.runs;
     for (var k2 = 0; k2 + 2 < R2.length; k2 += 3) {
       var s2 = at2 + R2[k2], c2 = R2[k2 + 1];
-      if (R2[k2 + 2] === si) {
+      if (R2[k2 + 2] === id) {
         var z2 = Math.floor(s2 / (sx2 * sy2)), q2 = s2 - z2 * sx2 * sy2, y2 = Math.floor(q2 / sx2), x2 = q2 - y2 * sx2;
-        for (var j2 = 0; j2 < c2; j2++) { if (base.get(x2, y2, z2)) { SG.set(x2, y2, z2, 1); T.smN++; } if (++x2 === sx2) { x2 = 0; if (++y2 === sy2) { y2 = 0; z2++; } } }
+        for (var j2 = 0; j2 < c2; j2++) { if (base.get(x2, y2, z2)) f(x2, y2, z2); if (++x2 === sx2) { x2 = 0; if (++y2 === sy2) { y2 = 0; z2++; } } }
       }
       at2 = s2 + c2;
     }
-    if (T.smN) { T.smG = SG; base.sm = SG; }
   }
+  if (si && rh.runs && rh.runs.length) runs(si, function (x, y, z) { SG.set(x, y, z, 1); T.smN++; });
+  if (vi && rh.runs && rh.runs.length) { VG = new VK.Grid(T.h.size); runs(vi, function (x, y, z) { VG.set(x, y, z, 1); }); }
+  for (var mi = 1; mi < T.matIds.length; mi++) {
+    if (matInfo(T.matIds[mi]).smooth !== true) continue;
+    var P = T.matXYZ[mi];
+    for (var pk = 0; pk < P.length; pk += 3) { var px = P[pk], py = P[pk + 1], pz = P[pk + 2]; if (SG.get(px, py, pz) || (VG && VG.get(px, py, pz))) continue; SG.set(px, py, pz, 1); T.smN++; T.smAuto++; }
+  }
+  if (T.smN) { T.smG = SG; base.sm = SG; }
 }
 /** 那一格的硬度倍率（打掉之後照樣查得到：材質層不跟著改）。 */
 function matK(sh, x, y, z) { var T = sh.T, p = T.pmG && T.pmG.get(x, y, z); if (p) return T.pmI[p].hard; return T.matG ? T.matK[T.matG.get(x, y, z)] : T.matK[0]; }   // pmG：螺旋槳的格（24_armor.js propSetup；船殼沒有格的位置才有）
