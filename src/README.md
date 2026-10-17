@@ -221,7 +221,7 @@ python -I admin.py cache --all    # 每艘都比 ＝ 比對來源：雕刻作品
 | `08_weather.js` | 天氣：`WEATHERS`（晴／暴風雨的每個係數）、`setWeather`、開砲散布 `wxSpread`、閃電 `wxBolt`；會變的風 `stepWind`／`WIND_SPD`／`windKnots` |
 | `09_phx.js` | 物理效果分級：`PHX`（帆與繩／碎木／煙與水花／船邊水花／進水／帆的碰撞／船隻碰撞／船隻摩擦／碰撞傷害）、全開高中低四檔 `PHX_PRESET`、`phxLevel`（對不上 ⇒ 自訂）、帆與繩每一檔的細緻度 `RIG_LV`／`rigLv`、網址參數 |
 | `10_ship.js` | 開一艘船：模型（照 meta 認種類）、砲（模型＋固定點）、繩與帆的錨、桅、船員（`makeShip`）；模型照 x 分桶（`modelIndex`） |
-| `11_rig_gpu.js` | 繩與帆的 GPU 緩衝（還綁著的繩、帆的網格 `sailBuf`（頂點帶貼圖集的 uv）、垂下來的繩）；帆的貼圖集上 GPU `sailTex`（第 9 號貼圖，NEAREST） |
+| `11_rig_gpu.js` | 繩與帆的 GPU 緩衝（還綁著的繩、帆的網格 `sailBuf`（頂點帶貼圖集的 uv）、垂下來的繩）；帆的貼圖集上 GPU `sailTex`（第 9 號貼圖，NEAREST）。**繩梯畫成管子**（Tim 2026-10-17「繩梯的繩子可以粗一點」）：一般的繩照舊一條線（1 像素）；繩梯（`climbRopes`：橫繩組 climb 的每一道＋它掛的兩根母繩）照雕刻的粗細畫六角管（`ropeTube`，最細 `ROPE_TUBE_MIN`，不打光）⇒ `owner.ropeT`，60_render.js 跟線同一趟畫 |
 | `12_effects.js` | 碎屑（每格一顆小方塊；自己的亂數 `rndD`，在 00_core.js）與粒子（煙、水花、火光；自己的亂數 `rndX`／`rrX`／`gaussX` —— TASK-0669 以前抽戰局的 `rr`／`gauss`，少放一團煙後面的戰局全部錯位）；照物理分級少生（`DEB_ACC`／`PT_ACC` 節拍）；`PT_MUTE`（船邊水花開著時原本的水花照樣抽亂數、不放）。做事的是 `fxDebris`／`fxPlates`／`fxPt`／`fxSmoke`／`fxFlash`／`fxSplash`（訂閱 00_events.js 的事件，view）；`stepDebris`、`stepPts` 掛在 `viewStep` |
 | `13_water.js` | 船邊水花（TASK-0524）：水滴 `WS`、貼著浪的白沫 `WF`、船身水線一圈 `wpRing`、每步 `stepWater`／`wpShip`、砲彈落水 `wpSplash`、碎木 `wpDrop`、擦撞 `wpBump`、艙內的水往外流 `wpPour`、自己的亂數 `rndW`；白沫的著色器 `P.foam`（`wpGL`／`wpDrawFoam`） |
 | `14_rain.js` | 3D 雨滴（畫質的「雨滴（3D）」「雨滴水花」）：鏡頭前方圓柱裡的雨絲 `RD`、每格畫面 `stepRain`、打到海面與船的水花 `RS`（`rdPushSplash`）、雨絲的著色器 `P.drop`（`rdGL`／`rdDraw`）、自己的亂數 `rndR` |
