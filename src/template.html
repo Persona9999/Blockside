@@ -113,7 +113,7 @@
   /* 羅盤那一團（說明字、船頭砲、羅盤、船尾砲）往下壓、貼在下方面板上（Tim 2026-10-14）：61_hud.js botFit 照 #ctl 的頂調 margin-bottom（負的 ⇒ 落進兩組大圓鈕之間） */
   #navBox{ display:flex; flex-direction:column; align-items:center; gap:1px; }
   /* 直式手機（html.navlow，61_hud.js navLow；Tim 2026-10-17「是否可以iphone直畫面全螢幕時 把羅盤放到最下排」「羅盤跟炮提示統一到畫面下方」）：
-     最下排 ＝ A、羅盤（＋兩舷的砲數點）、D —— 羅盤只看不按，放在 home 條上面剛好；C P O 4 R 抬到羅盤上面（#ctl 的 margin-bottom ＝ #navBox 多高，botFit 量）；
+     最下排整排只留給羅盤（＋兩舷的砲數點）—— 羅盤只看不按，放在 home 條上面剛好；按鈕全部從羅盤上方開始排：C P O 4 R（#ctl）與左右兩欄（#helmL／#helmR）的 margin-bottom ＝ #navBox 多高（botFit 量；Tim「最下方全部留給羅盤空間 按鈕從羅盤上方開始排」）；
      狀態文字（#modeT）不跟著羅盤下去，放在 C P O 4 R 上面（--lowup ＝ 那一排的高度＋間距，botFit 寫）。 */
   html.navlow #navBox{ position:relative; }
   html.navlow #modeT{ position:absolute; left:50%; bottom:calc(100% + var(--lowup, 56px)); transform:translateX(-50%); width:max-content; max-width:calc(100vw - 120px); text-align:center; }

@@ -320,7 +320,7 @@ function hudArt() {
  *  #botC 可能被 scale（手機橫拿 .82）⇒ 量到的差先除回去；差不到半格不動。 */
 var BOT_GAP = 2;
 /** 直式手機（Tim 2026-10-17「iphone直畫面全螢幕時 把羅盤放到最下排」「輪盤上方文字 改成按鈕上方」「或是統一改到下面好了」「羅盤跟炮提示統一到畫面下方」）
- *  ⇒ html.navlow：羅盤與兩舷的砲數提示（#gunsB＋#nav）在最下排、跟 A／D 同高，C P O 4 R（#ctl）抬到它上面、狀態文字（#modeT）再上面
+ *  ⇒ html.navlow：最下排整排只留給羅盤與兩舷的砲數提示（#navBox），按鈕（#ctl 的 C P O 4 R、左右兩欄 #helmL／#helmR）都抬到它上面、狀態文字（#modeT）再上面
  *  （template.html html.navlow 那一段）。瀏覽器裡、從主畫面開都一樣；橫式與平板照舊（Tim：橫板不用改）。 */
 var NAV_LOW_MQ = window.matchMedia ? window.matchMedia('(orientation:portrait) and (max-width:760px)') : null, NAV_LOW_GAP = 4;
 function navLow() { return !!(NAV_LOW_MQ && NAV_LOW_MQ.matches); }
@@ -330,6 +330,8 @@ function botFit() {
   if (root.classList.contains('navlow') !== low) root.classList.toggle('navlow', low);
   var up = low ? nb.offsetHeight + NAV_LOW_GAP : 0;   // C P O 4 R 抬多少 ＝ 羅盤那一團多高（砲條 #gunsB＋羅盤＋追擊砲 #gunsA；#modeT 這時是 absolute、不算）
   if ((parseFloat(ctl.style.marginBottom) || 0) !== up) ctl.style.marginBottom = up ? up + 'px' : '';
+  // 左右兩欄也一起抬（Tim 2026-10-17「滿版時左右兩側按鈕也要往上移動」「應該說直式排版時 最下方全部留給羅盤空間 按鈕從羅盤上方開始排」）⇒ 最下排只有羅盤
+  ['helmL', 'helmR'].forEach(function (id) { var h = $(id); if ((parseFloat(h.style.marginBottom) || 0) !== up) h.style.marginBottom = up ? up + 'px' : ''; });
   if (low) { var lu = ctl.offsetHeight + 2 * NAV_LOW_GAP + 'px'; if (nb.style.getPropertyValue('--lowup') !== lu) nb.style.setProperty('--lowup', lu); }
   var k = bc.getBoundingClientRect().width / (bc.offsetWidth || 1) || 1,
       to = low ? $('ctlRow').getBoundingClientRect().bottom : ctl.getBoundingClientRect().top - BOT_GAP,   // 羅盤的底：最下排（A／D 的底）｜C P O 4 R 的頂上
