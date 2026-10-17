@@ -123,6 +123,11 @@ function flPd(fl, i, W) {
   for (var l = 0; l < c; l++) { var f = fl.ol[o + l]; if (f < 0) continue; any = true; if (f < p) p = f; var n = fl.op[o + l]; if (n > 0) { if (W <= n) break; W -= n; } }
   return any ? p : 0;
 }
+/** 這一格（格座標）在不在船殼外形裡面（照船型的外形 F.yM／F.yP，⛔ 不看打壞了沒）。 */
+function flInHull(F, x, y, z) {
+  if (z < 0 || z >= F.zTop || x < F.X0 || x >= F.X0 + F.nxv) return false;
+  var k = z * F.nxv + x - F.X0; return F.yP[k] >= 0 && y > F.yM[k] && y < F.yP[k];
+}
 /** 艙內那一點 (x, y, z)（格座標）所在的水格；不在格子範圍 ⇒ −1。 */
 function flCell(F, x, y, z) {
   var ix = Math.floor((x - F.X0) / F.c), iy = Math.floor((y - F.Y0) / F.c), iz = Math.floor(z / F.c);
@@ -368,7 +373,7 @@ function flGL() {
 // ── 水幕（TASK-0651；Tim 2026-10-16：「艙內進水 …… 是否可以連接正在往下流動的水(類似瀑布效果)」）──
 //   模擬裡水往下一層流是直接搬水量（flTick 第 2 步）⇒ 畫面上上下兩池是斷開的兩片。這裡照 flTick 記的往下流量（fl.dq，只記不改）每一格畫一道：
 //   · 開口：那一格擋水的那一層（開著的比例最小、而且 < FLF_OPEN）裡空著的格（艙口、打穿的洞）—— 中心、寬（快取 fl.fo，那一格被打壞就重找）；整層都開著（艙裡的大空間）⇒ 不畫（不是瀑布，是水整團往下）。
-//   · 從開口往下沿著格子找：碰到有水面的那一格（這一次的水面高度）或實心的格（地板）就停 ⇒ 上下兩池接起來。
+//   · 從開口往下沿著格子找：碰到有水面的那一格（這一次的水面高度）或實心的格（地板）就停 ⇒ 上下兩池接起來；走出船殼外形（flInHull，照船型、不看打壞了沒）也停 —— 船殼被打穿的地方 ⛔ 不往船外畫。
 //   · 寬 ＝ FLF_W0 ＋ FLF_WK × √流量（m³／秒），夾在開口的寬以內；流量 < FLF_MIN 不畫（上一次有畫的 ⇒ 掉到一半才收，不在門檻上閃）；落差 < FLF_DROP 格不畫（底艙肋骨間那種淺的不算瀑布）。兩次重做之間寬度照 uMix 內插（跟水面同一個骨架）。
 //   · 落點冒水花（flPushJets，點精靈）。純畫面：不碰 rnd()、不改水量；畫質設定 GFX.fall 關 ⇒ 不畫。
 var FLF_MIN = 0.004, FLF_W0 = 0.25, FLF_WK = 1.0, FLF_OPEN = 0.85, FLF_DROP = 4;
@@ -394,17 +399,24 @@ function flFalls(sh, fl, me, TI, tops) {
   for (t = 0; t < L.length; t++) old.set(L[t].i, L[t].w);
   L.length = 0;
   var dt = fl.dqT; fl.dqT = 0;
+  var fs = me.fst = FL_STAT ? { n: 0, surf: 0, solid: 0, hull: 0, none: 0, out: 0, outMax: 0, at: [] } : null;   // 報表：每一道停在哪（水面／實心格／走出船殼外形／一路到底）、經過幾格船殼外形外的格（flInHull）
   for (t = 0; t < fl.dqL.length; t++) {
     var i = fl.dqL[t], r = dt > 0 ? fl.dq[i] / dt : 0; fl.dq[i] = 0; fl.dqOn[i] = 0;
     if (!GFX.fall || r < FLF_MIN * (old.has(i) ? 0.5 : 1)) continue;
     var at = flFallAt(sh, fl, i); if (!at) continue;
-    var X = Math.floor(at.x), Y = Math.floor(at.y), z1 = 0;
-    for (var z = at.z - 2; z >= 0; z--) {                                 // 往下找落點：有水面的那一格（水面以下）或實心的格
+    var X = Math.floor(at.x), Y = Math.floor(at.y), z1 = 0, how = 'none';
+    for (var z = at.z - 2; z >= 0; z--) {                                 // 往下找落點：有水面的那一格（水面以下）、實心的格，或走出船殼外形（打穿的船殼）
       var k = flCell(F, at.x, at.y, z), ti = k >= 0 ? TI[k] : -1;
-      if (ti >= 0) { var zs = (tops[ti + 1] - (M[1] * at.x + M[5] * at.y + M[13])) / M[9]; if (z <= zs) { z1 = Math.max(z, zs); break; } }
-      if (sh.grid.get(X, Y, z)) { z1 = z + 1; break; }
+      if (ti >= 0) { var zs = (tops[ti + 1] - (M[1] * at.x + M[5] * at.y + M[13])) / M[9]; if (z <= zs) { z1 = Math.max(z, zs); how = 'surf'; break; } }
+      if (!flInHull(F, X, Y, z)) { z1 = z + 1; how = 'hull'; break; }   // ⛔ 以前沒看外形：開口底下的船殼被打穿 ⇒ 一路畫到 z 0，從船底下面穿出去（Tim 2026-10-17）
+      if (sh.grid.get(X, Y, z)) { z1 = z + 1; how = 'solid'; break; }
     }
     if (at.z - z1 < FLF_DROP) continue;
+    if (fs) {
+      var xo = 0;
+      for (var zq = at.z - 1; zq >= Math.ceil(z1); zq--) if (!flInHull(F, X, Y, zq)) xo++;
+      fs.n++; fs[how]++; if (xo) fs.out++; if (xo > fs.outMax) fs.outMax = xo; if (xo && fs.at.length < 8) fs.at.push([X, Y, at.z, +z1.toFixed(2), how, xo]);
+    }
     var w = clamp(FLF_W0 + FLF_WK * Math.sqrt(r), FLF_W0, Math.max(FLF_W0, at.w)), w0 = old.has(i) ? old.get(i) : w;
     L.push({ i: i, x: at.x, y: at.y, z0: at.z, z1: z1, w: w, w0: w0, r: r });
   }
