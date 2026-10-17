@@ -268,6 +268,7 @@
       "rooms": {"甲板-上/艙房/1": "medical", "甲板-上/艙房/2": "medical", "甲板-上/艙房/3": "medical"},
       "cfg": {"pump": 13, "base": 6},
       "drive": "magic",
+      "theme": "stormkaap",
       "lamps": [
         {"at": [98.5, 130.5, 168], "r": 6, "color": 158, "rgb": [0.35, 1, 0.55]},
         {"at": [100.5, 147.5, 155], "r": 4, "color": 158, "rgb": [0.35, 1, 0.55]},
