@@ -94,7 +94,7 @@ function step() {
   if (PF) pfLap('powder');
   if ((Math.round(SIMT / DT) % 30) === 0) { SHIPS.forEach(survey); SHIPS.forEach(newsFlush); reinforce(); playerHandoff(); }   // reinforce：空出名額 ⇒ 候補進場；playerHandoff：我艦出局 ⇒ 換到友艦（52_fleet.js；沒有候補／我艦還在打 ⇒ 直接回去）
   if (PF) pfLap('survey');
-  rptTick();                                                       // 戰鬥報表（79_report.js）：每 0.5 秒掃一次、每 5 秒一列；只讀，不改戰局
+  rptTick(); tlgTick();                                            // tlgTick：測試模式的船員記錄（83_testlog.js；只讀）                                                       // 戰鬥報表（79_report.js）：每 0.5 秒掃一次、每 5 秒一列；只讀，不改戰局
   if (!OVER || END_AT) checkEnd();                                 // 結束判定每一步看（結算畫面照模擬時間延後跳）
   if (PF) pfLap('end');
 }

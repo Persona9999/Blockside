@@ -254,12 +254,12 @@ function damageCrew(sh, c, dmg, cause) {
   }
   else if (c.hp < CREW_HP * 0.5 && c.st === 0) woundCrew(sh, c, cause);
 }
-function woundCrew(sh, c, cause) { if (c.st !== 0) return; c.st = 1; c.t = 0; c.walk = null; c.cart = false; c.moving = false; sh.wounded++; sh.wounds++; sh.causes[cause] = (sh.causes[cause] || 0) + 1; newsCrew(sh, c, false, cause); }
+function woundCrew(sh, c, cause) { if (c.st !== 0) return; c.st = 1; c.t = 0; c.walk = null; c.cart = false; c.moving = false; sh.wounded++; sh.wounds++; sh.causes[cause] = (sh.causes[cause] || 0) + 1; newsCrew(sh, c, false, cause); tlgEv(sh, c, 'wound', cause); }
 function killCrew(sh, c, cause) {
   if (c.st >= 2) return;
   if (c.st === 1) sh.wounded--;
   c.fromW = c.st === 1;                               // 只給畫用：從跪著倒下（不是從站直倒）
-  c.st = 2; c.t = 0; c.walk = null; c.cart = false; c.moving = false; c.hp = Math.min(c.hp, 0); sh.dead++; sh.kills++; sh.causes[cause] = (sh.causes[cause] || 0) + 1; newsCrew(sh, c, true, cause);
+  c.st = 2; c.t = 0; c.walk = null; c.cart = false; c.moving = false; c.hp = Math.min(c.hp, 0); sh.dead++; sh.kills++; sh.causes[cause] = (sh.causes[cause] || 0) + 1; newsCrew(sh, c, true, cause); tlgEv(sh, c, 'dead', cause);
 }
 /** 掉下去：腳下那一格沒了（甲板被打穿、桅頂跟著桅倒）⇒ 換成世界座標的落體，落水算失蹤（亡）。 */
 function fall(sh, c, v) {
@@ -289,6 +289,7 @@ function fallIn(sh, c) {
 var FALL_H0 = 2, FALL_K = 30;                       // 摔傷：高度 h 公尺 ⇒ 扣 (h − 2) × 30（3 m 30、5 m 90、10 m 240）
 function landIn(sh, c, lv, p, h) {
   var NV = sh.nav, r = c.role, home0 = c.home;
+  tlgEv(sh, c, 'fallIn', { from: c.pos.map(function (v) { return +v.toFixed(1); }), to: p.map(function (v) { return +v.toFixed(1); }), h: +h.toFixed(1) });   // 測試模式（83_testlog.js）
   c.pos = p.slice(); c.home = p.slice(); c.walk = null; c.moving = false; sh.fellIn = (sh.fellIn || 0) + 1;
   if (h > FALL_H0) damageCrew(sh, c, (h - FALL_H0) * FALL_K, '摔落');
   if (c.st !== 0) return;                                                // 摔死、摔傷：倒在那一層

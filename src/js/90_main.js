@@ -259,6 +259,7 @@ if (DEBUG) window.__game = {
     stations: sh.stations.map(function (st) { return { name: st.name, at: st.at, kegs: st.kegs.filter(function (m) { return m.alive; }).length }; }) }; },
   /** 預備水手的讀數（42_hands.js）：走得到的甲板（走路格幾點、分成幾片）、梯子（兩頭在哪一層、爬過幾次）、人在哪一層、在做什麼、派了幾次、補上幾個。 */
   /** 走路格上一點是第幾層、哪一塊（42_hands.js navRegAt）；給兩點 ⇒ 再回直線走的人走不走得到（navReach）—— 量的時候用。 */
+  crewlog: function () { return tlgData(); },   // 測試模式的船員記錄（83_testlog.js；?test=1 或設定面板的開關）
   navReg: function (i, p, q) { var sh = SHIPS[i || 0]; return q ? { a: navRegAt(sh, p), b: navRegAt(sh, q), reach: navReach(sh, p, q) } : navRegAt(sh, p); },
   hands: function (i) {
     var sh = SHIPS[i || 0], H = sh.nav; if (!H) return null;
@@ -390,6 +391,7 @@ yieldUI().then(function () {                                        // 先讓主
       if (RC && i % 30 === 29) SHIPS.forEach(function (sh, k) { if (sh.sink > 40) return; ropesFloating(sh).forEach(function (f) { var key = f.name + '#' + f.end; if (RC[k].seen[key]) return; RC[k].seen[key] = 1; RC[k].float.push({ t: +SIMT.toFixed(1), name: f.name, end: f.end, kind: f.kind, why: f.why, P: f.P }); }); });
     }
     remesh(Infinity); RUNNING = false; $('cover').style.display = 'none';
+    if (TLOG && Q.get('test') === '1') { var pre4 = document.createElement('pre'); pre4.id = 'crewlog'; document.body.appendChild(pre4); pre4.textContent = JSON.stringify(tlgData()); }   // 測試模式（83_testlog.js；src/tests/crew_log.py 讀）：另外一塊，#dump 照舊
     if (RC) { var pre2 = document.createElement('pre'); pre2.id = 'ropecheck'; document.body.appendChild(pre2); pre2.textContent = JSON.stringify(RC.map(function (c) { return { hull: c.hull, stat: c.stat, float: c.float }; })); }
     if (rec) { var pre = document.createElement('pre'); pre.id = 'dump'; document.body.appendChild(pre);
       var CV = cmdView('blue').ships, pow = { blue: 0, red: 0 }; CV.forEach(function (v) { if (!v.out) pow[v.team] += cmdStrength(v); });

@@ -113,11 +113,11 @@ function rptShow() {
     P.style.cssText = 'position:absolute;inset:0;z-index:30;display:flex;align-items:flex-start;justify-content:center;overflow:auto;background:rgba(0,0,0,.55);padding:12px 0';
     P.innerHTML = '<div class="card panel" style="width:min(96vw,760px);padding:12px 14px;text-align:left;box-sizing:border-box;background:rgba(12,18,26,.95)"><h3 style="margin:0 0 6px">📊 戰鬥報表</h3>' +
       '<div id="rptL" style="font-size:12px;margin-bottom:6px"></div><div id="rptC"></div><div id="rptT" style="font-size:12px;overflow-x:auto"></div><div id="rptH" style="font-size:12px;margin-top:8px"></div>' +
-      '<div style="margin-top:8px"><button id="rptJ">匯出 JSON</button> <button id="rptV">匯出 CSV</button> <button id="rptX">關閉</button></div></div>';
+      '<div style="margin-top:8px"><button id="rptJ">匯出 JSON</button> <button id="rptV">匯出 CSV</button> <button id="rptCL">🧪 匯出船員記錄</button> <button id="rptX">關閉</button></div></div>';
     document.body.appendChild(P);
-    $('rptJ').onclick = function () { rptSave('json'); }; $('rptV').onclick = function () { rptSave('csv'); }; $('rptX').onclick = function () { P.style.display = 'none'; };
+    $('rptJ').onclick = function () { rptSave('json'); }; $('rptV').onclick = function () { rptSave('csv'); }; $('rptX').onclick = function () { P.style.display = 'none'; }; $('rptCL').onclick = tlgSave;
   }
-  P.style.display = 'flex';
+  P.style.display = 'flex'; $('rptCL').style.display = TLOG ? '' : 'none';   // 測試模式才有（83_testlog.js）
   var I = {}; d.cols.forEach(function (c, j) { I[c] = j; });
   $('rptL').innerHTML = d.ships.map(function (s) { return '<span style="color:' + rptColor(d, s) + '">━ ' + s.i + ' ' + s.name + '</span>'; }).join('　');
   var C = $('rptC'); C.innerHTML = '';

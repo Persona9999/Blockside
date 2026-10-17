@@ -357,6 +357,7 @@
     <div class="gsR"><span class="gsL">彈藥庫殉爆</span><span class="chip" id="slowT">慢動作</span><span class="chip" id="slowCamT">特寫鏡頭</span></div>
     <div class="gsR"><span class="gsL">模擬速度</span><input type="range" id="simSpd" min="-1301" max="903" step="1" value="0" aria-label="模擬速度"><b id="simSpdV" style="min-width:3.6em">×1</b><span class="chip" id="simSpd1">1×</span></div>
     <div class="gsR"><span class="gsL">物理減速</span><span class="chip" id="pslowT">計算量大時放慢</span></div>
+    <div class="gsR"><span class="gsL">測試</span><span class="chip" id="testT" title="記錄整局每個船員的路徑、職位與狀態的變化、身體落在牆裡（83_testlog.js）；結束畫面「📊 報表」匯出">🧪 測試模式（記錄船員）</span><span class="note" id="testN"></span></div>
     <div class="note">畫質與物理的細項在主選單的「畫質設定…」「物理設定…」；血量、傷害、浪、天氣在開戰前設定；物理效果裡的「進水」（公式／粒子）下一場生效</div>
   </div>
 
@@ -9513,12 +9514,12 @@ function damageCrew(sh, c, dmg, cause) {
   }
   else if (c.hp < CREW_HP * 0.5 && c.st === 0) woundCrew(sh, c, cause);
 }
-function woundCrew(sh, c, cause) { if (c.st !== 0) return; c.st = 1; c.t = 0; c.walk = null; c.cart = false; c.moving = false; sh.wounded++; sh.wounds++; sh.causes[cause] = (sh.causes[cause] || 0) + 1; newsCrew(sh, c, false, cause); }
+function woundCrew(sh, c, cause) { if (c.st !== 0) return; c.st = 1; c.t = 0; c.walk = null; c.cart = false; c.moving = false; sh.wounded++; sh.wounds++; sh.causes[cause] = (sh.causes[cause] || 0) + 1; newsCrew(sh, c, false, cause); tlgEv(sh, c, 'wound', cause); }
 function killCrew(sh, c, cause) {
   if (c.st >= 2) return;
   if (c.st === 1) sh.wounded--;
   c.fromW = c.st === 1;                               // 只給畫用：從跪著倒下（不是從站直倒）
-  c.st = 2; c.t = 0; c.walk = null; c.cart = false; c.moving = false; c.hp = Math.min(c.hp, 0); sh.dead++; sh.kills++; sh.causes[cause] = (sh.causes[cause] || 0) + 1; newsCrew(sh, c, true, cause);
+  c.st = 2; c.t = 0; c.walk = null; c.cart = false; c.moving = false; c.hp = Math.min(c.hp, 0); sh.dead++; sh.kills++; sh.causes[cause] = (sh.causes[cause] || 0) + 1; newsCrew(sh, c, true, cause); tlgEv(sh, c, 'dead', cause);
 }
 /** 掉下去：腳下那一格沒了（甲板被打穿、桅頂跟著桅倒）⇒ 換成世界座標的落體，落水算失蹤（亡）。 */
 function fall(sh, c, v) {
@@ -9548,6 +9549,7 @@ function fallIn(sh, c) {
 var FALL_H0 = 2, FALL_K = 30;                       // 摔傷：高度 h 公尺 ⇒ 扣 (h − 2) × 30（3 m 30、5 m 90、10 m 240）
 function landIn(sh, c, lv, p, h) {
   var NV = sh.nav, r = c.role, home0 = c.home;
+  tlgEv(sh, c, 'fallIn', { from: c.pos.map(function (v) { return +v.toFixed(1); }), to: p.map(function (v) { return +v.toFixed(1); }), h: +h.toFixed(1) });   // 測試模式（83_testlog.js）
   c.pos = p.slice(); c.home = p.slice(); c.walk = null; c.moving = false; sh.fellIn = (sh.fellIn || 0) + 1;
   if (h > FALL_H0) damageCrew(sh, c, (h - FALL_H0) * FALL_K, '摔落');
   if (c.st !== 0) return;                                                // 摔死、摔傷：倒在那一層
@@ -9934,8 +9936,10 @@ function lvAt(sh, p) { var d = hullDecks(sh.T).length ? deckAt(sh.T, p[0], p[2])
 function navRegAt(sh, p) {
   if (!sh.nav) return null;
   var li = lvAt(sh, p), L = li >= 0 ? sh.nav.levels[li] : null; if (!L) return null;
-  var i = navSnap(L.N, p, 2); return i < 0 ? null : [li, L.N.reg[i]];
+  var i = navSnapW(L.N, p); return i < 0 ? null : [li, L.N.reg[i]];
 }
+/** 找走路格上最近的一點：2 點內，找不到再放寬到 6 點（站在牆邊、走路格外的放藥箱位置；測試模式量到：2 點量不到 ⇒ 當作走得到 ⇒ 被分去送砲塔裡的砲、直線穿過去）。 */
+function navSnapW(N, p) { var i = navSnap(N, p, 2); return i >= 0 ? i : navSnap(N, p, 6); }
 /** 直線走的人（砲手換砲 goToGun、送藥手 monkeyTo）從 a 走得到 b 嗎：走路格上同一層、同一塊才算（Tim 2026-10-17「水手會穿進去」：
  *  主砲塔吊籃裡的砲手被借去補甲板上的速射砲、送藥手被分到圈裡的砲 ⇒ 照直線穿過砲塔那一圈牆（TASK-0655 的牆只擋走路格）。
  *  只看有會轉的裝甲／砲塔的船（T.armor）⇒ 其他船一行都不多算、戰局逐位元組不變；量不到（沒有走路格、snap 不到、不同層）⇒ 照以前當作走得到。 */
@@ -9949,7 +9953,7 @@ function navReach(sh, a, b) {
 function navWay(sh, a, b) {
   if (!sh.nav || !sh.T.armor || !sh.T.armor.length) return [b];
   var li = lvAt(sh, a), L = li >= 0 ? sh.nav.levels[li] : null; if (!L || lvAt(sh, b) !== li) return [b];
-  var N = L.N, i = navSnap(N, a, 2), j = navSnap(N, b, 2);
+  var N = L.N, i = navSnapW(N, a), j = navSnapW(N, b);
   if (i < 0 || j < 0 || i === j || N.reg[i] !== N.reg[j] || navSee(N, i, j)) return [b];
   var p = navPath(N, i, j); if (!p) return [b];
   var w = navSmooth(N, p).slice(1, -1).map(function (k) { return navPos(N, k); });   // 頭尾不要（頭 ＝ 自己腳下、尾換成 b 本身）
@@ -9965,6 +9969,7 @@ function needReg(sh, lv, p) {
  *  ⛔ 不改 ⇒ 不會爬梯子、又不能穿牆（navReach）⇒ 一直關在吊籃裡，點名還把他算成在崗 ⇒ 外面缺人的砲永遠沒人補。只在會轉裝甲的船叫（40_crew.js reassign）。 */
 function toHand(sh, c) {
   var NV = sh.nav, lv = NV ? lvAt(sh, c.pos) : -1; if (lv < 0 || !NV.levels[lv]) return false;
+  tlgEv(sh, c, 'toHand', { role: c.role, why: '這一塊沒有活著的砲' });   // 測試模式（83_testlog.js）
   if (c.role === ROLE.GUN) leaveGun(c);
   if (c.role === ROLE.POWDER) { (c.guns || []).forEach(function (g) { if (g.pm === c) g.pm = null; }); c.pm = null; c.cart = false; }
   if (c.art === undefined) c.art = c.role;                               // 貼圖照原本的職位那一列
@@ -10238,7 +10243,7 @@ function legStart(sh, c) {
   if (leg.c !== undefined) {
     var L = NV.ladders[leg.c]; if (SIMT - L.t0 < LADDER_GAP) return;
     L.t0 = SIMT; L.n++; L.q = Math.max(0, L.q - 1); H.legs.shift();
-    H.climb = { pts: leg.up ? L.pts : L.pts.slice().reverse(), k: 0, lv: leg.up ? L.hi : L.lo };
+    H.climb = { pts: leg.up ? L.pts : L.pts.slice().reverse(), k: 0, lv: leg.up ? L.hi : L.lo, L: L.name + (leg.up ? '↑' : '↓') };   // L：梯子的名字（測試模式的記錄看；83_testlog.js）
     return;
   }
   if (sh.navN <= 0) return;
@@ -10295,8 +10300,9 @@ function callHands(sh) {
       if (n > 0) need.push({ kind: 'gun', key: D.key + side, deck: D.key, side: side, lv: lv, n: n, x: ww ? wx / ww : gs[0].muz[0], pri: side === sh.side ? 0 : 2, reg: gm && sh.T.armor && sh.T.armor.length ? needReg(sh, lv, gunNavAt(sh, gm)) : undefined });   // reg：缺最多人那門砲所在的那一塊（會轉裝甲的船）
     });
     var pm = sh.crew.filter(function (c) { return c.role === ROLE.POWDER && able(c) && c.deck === D.key; }).length, pn = (NV.pm0[D.key] || 0) - pm - (going['pm' + D.key] || 0);
-    var dp = pn > 0 && sh.T.armor && sh.T.armor.length ? deadPm(sh, D.key) : null;   // 會轉裝甲的船：走到倒下那位的家所在的那一塊
-    if (pn > 0 && sh.stations.some(function (s) { return s.deck === D.key && !s.mag.gone; })) need.push({ kind: 'pm', key: D.key, deck: D.key, lv: lv, n: pn, x: sh.T.cx, pri: 1, reg: needReg(sh, lv, dp && dp.home) });
+    var wl = pn > 0 && sh.T.armor && sh.T.armor.length, dp = wl ? deadPm(sh, D.key) : null;   // 會轉裝甲的船：走到倒下那位的家所在的那一塊；沒有倒下的可接 ⇒ 同層缺送藥手的活砲那一塊
+    var pg = wl && !dp ? sh.guns.filter(function (g) { return g.alive && g.drop && gunDeck(g) === D.key && (!g.pm || !able(g.pm)); })[0] : null;   // ⛔ 沒有 ⇒ reg 空著、在原地（沒有活砲的那一塊）就接上，下一輪又被 toHand 打回來（測試模式量到：同一人 0.5 秒一輪打轉 310 次）
+    if (pn > 0 && sh.stations.some(function (s) { return s.deck === D.key && !s.mag.gone; })) need.push({ kind: 'pm', key: D.key, deck: D.key, lv: lv, n: pn, x: sh.T.cx, pri: 1, reg: needReg(sh, lv, dp ? dp.home : pg && pg.drop) });
   });
   var wheel = sh.models.filter(function (m) { return m.kind === 'wheel'; })[0], hd = sh.crew.filter(function (c) { return (c.role === ROLE.HELM && !able(c) || c.helmHome) && !c.relieved; });   // helmHome：從甲板破洞掉下去的舵手（40_crew.js landIn），站位照原本的
   var hn = Math.min(hd.length, NV.helm0 - sh.crew.filter(function (c) { return c.role === ROLE.HELM && able(c); }).length - (going.helm || 0));
@@ -10325,7 +10331,11 @@ function handJoin(sh, c) {
   var H = c.hand, J = H.job, NV = sh.nav;
   if (J.kind === 'staff' || J.kind === 'carry') { medJoin(sh, c); return; }   // 醫療艙的人手、搬傷員（44_medic.js）
   if (J.kind === 'pump') { pumpJoin(sh, c); return; }                   // 搖抽水機（45_pumps.js）
-  if (H.lv !== J.lv || (J.reg !== undefined && handReg(sh, c) !== J.reg)) { H.job = null; H.wait = 1; return; }   // 不在那一層、不在那一塊（路斷了）⇒ 作廢
+  var hr = J.reg !== undefined ? handReg(sh, c) : -1;                   // 量不到（-1）⇒ 照以前當作到了：爬進轉過的砲塔，梯頭那一點是開局時算的、吊籃已經轉走 ⇒ snap 不到（測試模式量到：同一人被派 88 次、次次作廢）
+  if (H.lv !== J.lv || (hr >= 0 && hr !== J.reg)) { tlgEv(sh, c, 'void', { job: J.kind, lv: [H.lv, J.lv], reg: [hr, J.reg === undefined ? null : J.reg] }); H.job = null; H.wait = 1; return; }   // 不在那一層、確定在別塊（路斷了）⇒ 作廢；void：測試模式記一筆（83_testlog.js）
+  if ((J.kind === 'gun' || J.kind === 'pm') && sh.T.armor && sh.T.armor.length && !sh.guns.some(function (g) {   // 會轉裝甲的船：這裡走得到的活砲一門都沒有 ⇒ 不接（接了下一輪 reassign 又 toHand ⇒ 打轉）
+    return g.alive && !g.wet && gunDeck(g) === J.deck && (J.kind !== 'gun' || g.side === J.side) && navReach(sh, c.pos, J.kind === 'gun' ? gunNavAt(sh, g) : g.drop || g.muz);
+  })) { tlgEv(sh, c, 'void', { job: J.kind, why: '這裡走得到的活砲一門都沒有' }); H.job = null; H.wait = 4; return; }
   c.walk = null; c.moving = false; c.home = c.pos.slice(); c.hand = null; NV.joined++;
   if (J.kind === 'gun') { c.role = ROLE.GUN; c.deck = J.deck; c.side = J.side; c.gun = null; return; }
   if (J.kind === 'helm') { c.role = ROLE.HELM; c.deck = sh.weatherDeck; c.face = -1; c.helmHome = undefined; c.relieved = false; return; }   // 自己是掉下去的那個舵手、爬回來補自己 ⇒ 之後倒下照常有人補
@@ -10950,7 +10960,7 @@ function step() {
   if (PF) pfLap('powder');
   if ((Math.round(SIMT / DT) % 30) === 0) { SHIPS.forEach(survey); SHIPS.forEach(newsFlush); reinforce(); playerHandoff(); }   // reinforce：空出名額 ⇒ 候補進場；playerHandoff：我艦出局 ⇒ 換到友艦（52_fleet.js；沒有候補／我艦還在打 ⇒ 直接回去）
   if (PF) pfLap('survey');
-  rptTick();                                                       // 戰鬥報表（79_report.js）：每 0.5 秒掃一次、每 5 秒一列；只讀，不改戰局
+  rptTick(); tlgTick();                                            // tlgTick：測試模式的船員記錄（83_testlog.js；只讀）                                                       // 戰鬥報表（79_report.js）：每 0.5 秒掃一次、每 5 秒一列；只讀，不改戰局
   if (!OVER || END_AT) checkEnd();                                 // 結束判定每一步看（結算畫面照模擬時間延後跳）
   if (PF) pfLap('end');
 }
@@ -13340,7 +13350,7 @@ function reset() {
   PIECES.forEach(function (pc) { pc.rs.dispose(); });
   SHIPS = []; PIECES = []; BALLS = []; EVENTS = []; FLY = []; BOOMS = []; SELFB = []; BLASTS = []; D.n = 0; PT.n = 0; WS.n = WF.n = 0; SIMT = 0; OVER = false; PAUSED = false;   // 彈種（AMMO_I）重開時保留（Tim 2026-10-12）
   clearMsgs(); fleetReset();                                          // 上方艦隊：每一場開局全折疊（61_hud.js）
-  rptReset(); if ($('rpt')) $('rpt').style.display = 'none';          // 戰鬥報表（79_report.js）：每一場從頭記
+  rptReset(); tlgReset(); if ($('rpt')) $('rpt').style.display = 'none';   // tlgReset：測試模式的船員記錄（83_testlog.js）          // 戰鬥報表（79_report.js）：每一場從頭記
   PSLOW.ts = 1; PSLOW.ms = 0;                                         // 物理減速（73_slowmo.js）：重開從 1× 起、重新量
   SLOW.active = false; SLOW.ts = 1; SLOW.t = 0; SLOW.camSave = null; SLOW.kicks = 0;   // 殉爆的慢動作與特寫（73_slowmo.js）：⛔ 不清 ⇒ 殉爆、自爆後馬上重開，新的一局接著慢、幾秒後鏡頭被拉回上一局的爆心
   PLAYER_I = 0;
@@ -13562,7 +13572,7 @@ function gsetShow() {
   [].forEach.call(document.querySelectorAll('#gset [data-gx]'), function (b) { b.classList.toggle('on', b.dataset.gx === xl); });
   $('gsGfx').textContent = gl === 'custom' ? '（自訂）' : ''; $('gsPhx').textContent = xl === 'custom' ? '（自訂）' : '';
   $('muteT').classList.toggle('on', muted); $('fpsT').classList.toggle('on', GFX_FPS);
-  $('slowT').classList.toggle('on', SLOW.on); $('slowCamT').classList.toggle('on', SLOW.cam); $('pslowT').classList.toggle('on', PSLOW.on); $('boomB').classList.toggle('dis', !canSelfDestruct());
+  $('slowT').classList.toggle('on', SLOW.on); $('slowCamT').classList.toggle('on', SLOW.cam); $('pslowT').classList.toggle('on', PSLOW.on); $('testT').classList.toggle('on', !!(TLOG && TLOG.off === undefined) || (!TLOG && tlgWanted())); $('testN').textContent = tlgNote();   // 測試模式（83_testlog.js） $('boomB').classList.toggle('dis', !canSelfDestruct());
   $('fullT').classList.toggle('on', fsOn()); $('fullT').classList.toggle('dis', !fsCan()); $('gsFull').textContent = fsCan() ? '' : '（這裡不給全螢幕：iPhone 的 Safari 只給影片）';
 }
 $('setB').onclick = gsetToggle;
@@ -15346,11 +15356,11 @@ function rptShow() {
     P.style.cssText = 'position:absolute;inset:0;z-index:30;display:flex;align-items:flex-start;justify-content:center;overflow:auto;background:rgba(0,0,0,.55);padding:12px 0';
     P.innerHTML = '<div class="card panel" style="width:min(96vw,760px);padding:12px 14px;text-align:left;box-sizing:border-box;background:rgba(12,18,26,.95)"><h3 style="margin:0 0 6px">📊 戰鬥報表</h3>' +
       '<div id="rptL" style="font-size:12px;margin-bottom:6px"></div><div id="rptC"></div><div id="rptT" style="font-size:12px;overflow-x:auto"></div><div id="rptH" style="font-size:12px;margin-top:8px"></div>' +
-      '<div style="margin-top:8px"><button id="rptJ">匯出 JSON</button> <button id="rptV">匯出 CSV</button> <button id="rptX">關閉</button></div></div>';
+      '<div style="margin-top:8px"><button id="rptJ">匯出 JSON</button> <button id="rptV">匯出 CSV</button> <button id="rptCL">🧪 匯出船員記錄</button> <button id="rptX">關閉</button></div></div>';
     document.body.appendChild(P);
-    $('rptJ').onclick = function () { rptSave('json'); }; $('rptV').onclick = function () { rptSave('csv'); }; $('rptX').onclick = function () { P.style.display = 'none'; };
+    $('rptJ').onclick = function () { rptSave('json'); }; $('rptV').onclick = function () { rptSave('csv'); }; $('rptX').onclick = function () { P.style.display = 'none'; }; $('rptCL').onclick = tlgSave;
   }
-  P.style.display = 'flex';
+  P.style.display = 'flex'; $('rptCL').style.display = TLOG ? '' : 'none';   // 測試模式才有（83_testlog.js）
   var I = {}; d.cols.forEach(function (c, j) { I[c] = j; });
   $('rptL').innerHTML = d.ships.map(function (s) { return '<span style="color:' + rptColor(d, s) + '">━ ' + s.i + ' ' + s.name + '</span>'; }).join('　');
   var C = $('rptC'); C.innerHTML = '';
@@ -16266,6 +16276,152 @@ $('bldRot').onclick = function () { BLD.r = 1 - BLD.r; bldUI(); };
 $('bldMode').onclick = function () { fpMode((FP.mode + 1) % 3); };
 $('bldCatX').onclick = function () { bldCatOpen(false); };
 $('bldLinesT').onclick = function () { BLD.lines = !BLD.lines; $('bldLinesT').classList.toggle('on', BLD.lines); };   // 艙房外框（Tim 2026-10-16「房間透視線要可以開關(預設關閉)」）：開關不關設定面板；跨場留著
+// ── js/83_testlog.js ──
+// ───────────────────────── 測試模式：船員記錄（整局；Tim 2026-10-17） ─────────────────────────
+// Tim：「重現水手走進主砲塔圓筒 這個是否可以加測試模式&專屬資訊Log 可以知道水手移動路徑等資訊(記錄一整局) 之後也可以用來排查其他Bug(測試模式可以是一個開關flag)」
+// 開關：網址 ?test=1，或設定面板「🧪 測試模式」（存在這個瀏覽器，下一場開戰起記；開著時中途打開 ⇒ 從那一刻起記）。
+// ⛔ 只讀不寫：不抽亂數、不改戰局 ⇒ 開著、關著戰局逐位元組相同（?dump=1 的 #dump 也一樣；記錄另外寫在 #crewlog）。
+// 記什麼（每艘一份）：
+//   · 走路格（每一層哪幾點走得到，畫底圖用）、會轉的裝甲掃過的那一圈（砲塔的牆）。
+//   · 每個船員每 TLOG_EVERY 秒一點 [秒, x, y, z, 狀態, 職位]（動了 ≥ 0.3 格或狀態、職位變了才記）—— 路徑。
+//   · 每個船員一個固定編號 id（第一次看到時給；游到敵艦換了名單也不變 ⇒ 不用名單上的第幾個）。
+//   · 事件 [秒, 第幾艘, 船員 id, 種類, 內容]：
+//       chg  欄位變了（職位、狀態、砲、甲板、舷、送藥手的階段與目標、預備水手的任務、爬哪座梯子、換砲走去哪）；
+//       wall 身體落在牆裡（每一步查，不是每 0.5 秒：穿過 4 格厚的牆只要 0.2 秒）／wallOut 離開：ring ＝ 正在走路、小腿或胸口那格在砲塔那一圈裡、離外緣超過 1.2 格（站在會轉的甲板上的不算：那一圈本來就把他圍在裡面；
+//         帶 ring ＝ 哪一座、from ＝ 上一個路徑點在圈裡 in（往外走：開放的砲房從背面走出來是正常的）／圈外 out（往裡走）／牆裡 band）、
+//         hull ＝ 小腿和胸口兩格都是船殼（只碰一格多半是船底弧面、梁，不算）；
+//       dead／wound（原因）、toHand（改當預備水手的理由）、void（點名的任務作廢）、fallIn（掉到下一層）。
+// 看得到的地方：結束畫面「📊 報表」的「匯出船員記錄」（JSON）；__game.crewlog()（?debug=1）；?dump=1&test=1 的 #crewlog（src/tests/crew_log.py 讀它、畫成路徑圖）。
+var TLOG = null, TLOG_EVERY = 0.5, TLOG_MAX = 600000;                    // TLOG_MAX：路徑點的上限（超過 ⇒ 停記路徑、事件照記，標 trunc）
+var TLOG_KEY = 'blockside_testmode';
+function tlgWanted() { if (Q.get('test') === '1') return true; if (Q.get('test') === '0') return false; try { return window.localStorage.getItem(TLOG_KEY) === '1'; } catch (e) { return false; } }
+function tlgReset() { TLOG = tlgWanted() ? { v: 1, seed: SEED, from: +SIMT.toFixed(1), every: TLOG_EVERY, ships: [], ev: [], n: 0, ms: 0, trunc: false, ids: new WeakMap(), crew: [] } : null; }
+/** 船員的固定編號與那一份（第一次看到才建；WeakMap ⇒ 不在船員物件上多掛欄位）。 */
+function tlgCrew(sh, c) {
+  var e = TLOG.ids.get(c);
+  if (!e) { e = { id: TLOG.crew.length, ship0: sh.i, ship: sh.i, k0: sh.crew.indexOf(c), role0: c.role, art: c.art !== undefined ? c.art : null, tr: [], last: null, wall: null }; TLOG.ids.set(c, e); TLOG.crew.push(e); }
+  return e;
+}
+/** 設定面板的開關：存在這個瀏覽器；打開 ⇒ 這一場從現在起記（下一場從開戰起），關掉 ⇒ 這一場停記（已記的還在、可以匯出）。
+ *  網址帶了 ?test=1／0 ⇒ 網址說了算，按鈕只管這一場暫停／繼續（暫停的那段沒有路徑點）。 */
+function tlgToggle() {
+  if (Q.has('test')) { if (TLOG) { if (TLOG.off === undefined) TLOG.off = +SIMT.toFixed(1); else { TLOG.ev.push([+SIMT.toFixed(1), -1, -1, 'resume', TLOG.off]); delete TLOG.off; } } }
+  else {
+    var on = !tlgWanted(); try { window.localStorage.setItem(TLOG_KEY, on ? '1' : '0'); } catch (e) { }
+    if (on && (!TLOG || TLOG.off !== undefined)) { if (TLOG) { TLOG.ev.push([+SIMT.toFixed(1), -1, -1, 'resume', TLOG.off]); delete TLOG.off; } else tlgReset(); } else if (!on && TLOG && TLOG.off === undefined) TLOG.off = +SIMT.toFixed(1);
+  }
+  if (typeof gsetShow === 'function') gsetShow();
+}
+/** 設定面板那一行的說明（71_input.js gsetShow）。 */
+function tlgNote() {
+  var s = TLOG ? (TLOG.off === undefined ? '記錄中' : '暫停（' + TLOG.off + ' 秒起）') + '：' + TLOG.n + ' 點、' + TLOG.ev.length + ' 筆事件；結束畫面「📊 報表」匯出' : tlgWanted() ? '下一場開戰起記' : '';
+  return s + (Q.has('test') ? '（網址 ?test=' + Q.get('test') + ' 決定開不開，按鈕只管這一場暫停／繼續）' : '');
+}
+function tlgEv(sh, c, kind, data) {
+  if (!TLOG || TLOG.off !== undefined || !sh) return;
+  TLOG.ev.push([+SIMT.toFixed(1), sh.i, c ? tlgCrew(sh, c).id : -1, kind, data === undefined ? null : data]);
+}
+/** 第 i 艘的那一份（第一次用到才建：援軍半路進場也有）：走路格、砲塔那一圈只在這時候記一次。 */
+function tlgShip(sh) {
+  var r = TLOG.ships[sh.i];
+  if (!r) r = TLOG.ships[sh.i] = { i: sh.i, id: sh.T.id, name: sh.T.name, team: sh.team, from: +SIMT.toFixed(1), size: sh.T.h.size, navC: NAV_C, levels: tlgLevels(sh), rings: tlgRings(sh) };
+  return r;
+}
+function tlgLevels(sh) {
+  if (!sh.nav) return [];
+  return sh.nav.levels.map(function (L) {
+    var N = L.N, s = '', run = 0, cur = 0;                               // 走得到的點：0／1 交替的連續長度（從 0 開始），逗號分隔
+    for (var i = 0; i < N.nx * N.ny; i++) { var v = N.ok[i] ? 1 : 0; if (v === cur) run++; else { s += run + ','; run = 1; cur = v; } }
+    s += run;
+    var zs = []; for (i = 0; i < N.cells.length; i += 7) zs.push(N.Z[N.cells[i]]);
+    return { key: L.key, name: L.name || L.key, zr: L.zr, x0: N.x0, nx: N.nx, ny: N.ny, ok: s, rot: !!N.rot, z: zs.length ? Math.round(zs.reduce(function (a, b) { return a + b; }, 0) / zs.length) : null };
+  });
+}
+function tlgRings(sh) {
+  return (sh.arm || []).filter(function (a) { return a.A && a.A.ring; }).map(function (a) { var R = a.A.ring; return { path: a.A.mount, c: R.c, z0: R.z0, z1: R.z1, rIn: +armRingIn(R, R.z0, R.z1 - R.z0 + 1).toFixed(1), r: +R.r.toFixed(1) }; });
+}
+/** 一個船員現在的樣子（跟上一次比 ⇒ chg 事件）。 */
+function tlgSnap(c) {
+  var P = c.pm, H = c.hand, W = c.walk, J = H && H.job;
+  return { role: c.role, st: c.st, gun: c.gun ? c.gun.model.path : null, deck: c.deck || null, side: c.side || null,
+    pm: P ? P.st + (P.g ? '→' + P.g.model.path : '') + (P.src && (P.st === 'fetch' || P.st === 'fill') ? '＠' + P.src.name : '') : null,
+    job: J ? J.kind + (J.key ? ':' + J.key : '') + (J.reg !== undefined ? '#' + J.reg : '') : null,
+    climb: H && H.climb ? (H.climb.L || '梯子') : null,
+    walk: W ? W.to.map(function (v) { return Math.round(v); }).join(',') + (W.w && W.w.length > 1 ? '（繞 ' + (W.w.length - 1) + ' 點）' : '') : null };
+}
+var TLOG_F = ['role', 'st', 'gun', 'deck', 'side', 'pm', 'job', 'climb', 'walk'];
+/** 站在會轉的甲板上嗎（走路格那一點是 N.rot）。 */
+function tlgOnRot(sh, p) {
+  if (!sh.nav) return false;
+  var li = lvAt(sh, p), L = li >= 0 ? sh.nav.levels[li] : null; if (!L || !L.N.rot) return false;
+  var i = navSnap(L.N, p, 1); return i >= 0 && !!L.N.rot[i];
+}
+/** 落在哪一圈裡、離外緣超過 1.2 格嗎（只擦到外緣的不算：速射砲房的放藥箱位置就在外緣上，量過 18.0–18.6 格、外緣 18.4）。 */
+function tlgDeep(sh, p) {
+  var hit = null;
+  (sh.arm || []).forEach(function (a) { var R = a.A && a.A.ring; if (hit || !R || p[2] + 6 < R.z0 || p[2] + 2 > R.z1) return; if (Math.hypot(p[0] - R.c[0], p[1] - R.c[1]) < R.r - 1.2) hit = { path: a.A.mount, R: R }; });
+  return hit;
+}
+/** 每一步：身體落在牆裡嗎（進去那一刻記一筆、多記一個路徑點；出來再記一筆）。 */
+function tlgWall(sh) {
+  var g = sh.arm ? navG(sh) : sh.grid, t = +SIMT.toFixed(2);
+  sh.crew.forEach(function (c) {
+    var e = tlgCrew(sh, c), p = c.pos, w = null, rg = null;
+    if (c.st === 0 && p && !(c.hand && c.hand.climb)) {                // 爬梯子：本來就貼著艙口
+      var x = Math.floor(p[0]), y = Math.floor(p[1]), z = Math.round(p[2]), h2 = sh.grid.get(x, y, z + 2), h6 = sh.grid.get(x, y, z + 6);
+      if (h2 && h6) w = 'hull';
+      else if (sh.arm && !h2 && !h6 && (c.walk || c.moving || (c.hand && c.hand.wp)) && (g.get(x, y, z + 2) || g.get(x, y, z + 6)) && !tlgOnRot(sh, p) && (rg = tlgDeep(sh, p))) w = 'ring';   // 只查正在走路的：砲房平台上跟著砲塔轉的砲班站位常不在走路格上，站著不動不算
+    }
+    if (w && !e.wall) {
+      var ed = { what: w, at: [+p[0].toFixed(1), +p[1].toFixed(1), Math.round(p[2])] };
+      if (rg) { var q = e.tr.length ? e.tr[e.tr.length - 1] : null, R = rg.R, rIn = armRingIn(R, Math.max(R.z0, Math.round(p[2]) + 2), 5), dq = q ? Math.hypot(q[1] - R.c[0], q[2] - R.c[1]) : null;   // 從哪一邊來：上一個路徑點在圈裡（in：往外走）、圈外（out：往裡走）、牆裡（band）
+        ed.ring = rg.path; ed.from = dq === null ? null : dq < rIn ? 'in' : dq > R.r ? 'out' : 'band'; }
+      e.wall = w; TLOG.ev.push([t, sh.i, e.id, 'wall', ed]);
+      if (!TLOG.trunc && TLOG.n < TLOG_MAX) { e.tr.push([+SIMT.toFixed(1), +p[0].toFixed(1), +p[1].toFixed(1), Math.round(p[2]), c.st, c.role, sh.i]); TLOG.n++; } }
+    else if (!w && e.wall) { TLOG.ev.push([t, sh.i, e.id, 'wallOut', null]); e.wall = null; }
+  });
+}
+/** 每一步（50_sim.js 最後）：牆每一步查；路徑、欄位變化每 TLOG_EVERY 秒掃一次。 */
+function tlgTick() {
+  if (!TLOG || TLOG.off !== undefined) return;
+  var tw = performance.now(); SHIPS.forEach(tlgWall); TLOG.ms += performance.now() - tw;
+  var k = Math.round(SIMT / DT); if (k % Math.round(TLOG_EVERY / DT)) return;
+  var t0 = performance.now(), t = +SIMT.toFixed(1);
+  SHIPS.forEach(function (sh) {
+    tlgShip(sh);
+    sh.crew.forEach(function (c) {
+      var e = tlgCrew(sh, c), j = e.id, s = tlgSnap(c), L = e.last;
+      if (e.ship !== sh.i) { TLOG.ev.push([t, sh.i, j, 'ship', [e.ship, sh.i]]); e.ship = sh.i; }   // 游到敵艦、換了名單
+      if (L) { var d = {}, any = false; TLOG_F.forEach(function (f) { if (L[f] !== s[f]) { d[f] = [L[f], s[f]]; any = true; } }); if (any) TLOG.ev.push([t, sh.i, j, 'chg', d]); }
+      e.last = s;
+      if (c.st === 3) return;                                            // 抬下去、沉了：不再記點
+      var p = c.st === 4 || c.st === 5 ? null : c.pos; if (!p) return;  // 落體、在水裡（世界座標）不記路徑
+      var q = e.tr.length ? e.tr[e.tr.length - 1] : null;
+      if (!TLOG.trunc && (!q || q[6] !== sh.i || Math.hypot(p[0] - q[1], p[1] - q[2]) >= 0.3 || Math.abs(p[2] - q[3]) >= 1 || q[4] !== c.st || q[5] !== c.role)) {
+        if (TLOG.n >= TLOG_MAX) TLOG.trunc = t; else { e.tr.push([t, +p[0].toFixed(1), +p[1].toFixed(1), Math.round(p[2]), c.st, c.role, sh.i]); TLOG.n++; }
+      }
+    });
+  });
+  TLOG.ms += performance.now() - t0;
+}
+/** 整份（#crewlog、匯出、__game.crewlog 都讀這一份）。 */
+function tlgData() {
+  if (!TLOG) return null;
+  return { v: TLOG.v, seed: TLOG.seed, from: TLOG.from, off: TLOG.off === undefined ? null : TLOG.off, t: +SIMT.toFixed(1), every: TLOG.every, trunc: TLOG.trunc || null, cost: { points: TLOG.n, ms: +TLOG.ms.toFixed(1) },
+    roles: ROLE_NAME, states: ['站著', '受傷', '陣亡', '抬下去', '落體', '在水裡'], fields: ['t', 'x', 'y', 'z', 'st', 'role', 'ship'],
+    ships: TLOG.ships.filter(Boolean).map(function (r) { return { i: r.i, id: r.id, name: r.name, team: r.team, from: r.from, size: r.size, navC: r.navC, levels: r.levels, rings: r.rings }; }),
+    crew: TLOG.crew.map(function (e) { return { id: e.id, ship0: e.ship0, ship: e.ship, k0: e.k0, role0: e.role0, art: e.art, tr: e.tr }; }),
+    ev: TLOG.ev };
+}
+/** 匯出 JSON（⛔ 成品不准 fetch ⇒ 用 Blob 下載）。 */
+function tlgSave() {
+  var d = tlgData(); if (!d) return;
+  var a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([JSON.stringify(d)], { type: 'application/json' }));
+  a.download = 'blockside-crewlog-seed' + SEED + '-' + Math.round(SIMT) + 's.json'; document.body.appendChild(a); a.click();
+  setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+}
+$('testT').onclick = tlgToggle;
 // ── js/90_main.js ──
 // ───────────────────────── 主迴圈 ─────────────────────────
 var last = 0, acc = 0, FPS = 60, fpsT = 0;
@@ -16528,6 +16684,7 @@ if (DEBUG) window.__game = {
     stations: sh.stations.map(function (st) { return { name: st.name, at: st.at, kegs: st.kegs.filter(function (m) { return m.alive; }).length }; }) }; },
   /** 預備水手的讀數（42_hands.js）：走得到的甲板（走路格幾點、分成幾片）、梯子（兩頭在哪一層、爬過幾次）、人在哪一層、在做什麼、派了幾次、補上幾個。 */
   /** 走路格上一點是第幾層、哪一塊（42_hands.js navRegAt）；給兩點 ⇒ 再回直線走的人走不走得到（navReach）—— 量的時候用。 */
+  crewlog: function () { return tlgData(); },   // 測試模式的船員記錄（83_testlog.js；?test=1 或設定面板的開關）
   navReg: function (i, p, q) { var sh = SHIPS[i || 0]; return q ? { a: navRegAt(sh, p), b: navRegAt(sh, q), reach: navReach(sh, p, q) } : navRegAt(sh, p); },
   hands: function (i) {
     var sh = SHIPS[i || 0], H = sh.nav; if (!H) return null;
@@ -16659,6 +16816,7 @@ yieldUI().then(function () {                                        // 先讓主
       if (RC && i % 30 === 29) SHIPS.forEach(function (sh, k) { if (sh.sink > 40) return; ropesFloating(sh).forEach(function (f) { var key = f.name + '#' + f.end; if (RC[k].seen[key]) return; RC[k].seen[key] = 1; RC[k].float.push({ t: +SIMT.toFixed(1), name: f.name, end: f.end, kind: f.kind, why: f.why, P: f.P }); }); });
     }
     remesh(Infinity); RUNNING = false; $('cover').style.display = 'none';
+    if (TLOG && Q.get('test') === '1') { var pre4 = document.createElement('pre'); pre4.id = 'crewlog'; document.body.appendChild(pre4); pre4.textContent = JSON.stringify(tlgData()); }   // 測試模式（83_testlog.js；src/tests/crew_log.py 讀）：另外一塊，#dump 照舊
     if (RC) { var pre2 = document.createElement('pre'); pre2.id = 'ropecheck'; document.body.appendChild(pre2); pre2.textContent = JSON.stringify(RC.map(function (c) { return { hull: c.hull, stat: c.stat, float: c.float }; })); }
     if (rec) { var pre = document.createElement('pre'); pre.id = 'dump'; document.body.appendChild(pre);
       var CV = cmdView('blue').ships, pow = { blue: 0, red: 0 }; CV.forEach(function (v) { if (!v.out) pow[v.team] += cmdStrength(v); });

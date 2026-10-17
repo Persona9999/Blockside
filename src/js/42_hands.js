@@ -39,8 +39,10 @@ function lvAt(sh, p) { var d = hullDecks(sh.T).length ? deckAt(sh.T, p[0], p[2])
 function navRegAt(sh, p) {
   if (!sh.nav) return null;
   var li = lvAt(sh, p), L = li >= 0 ? sh.nav.levels[li] : null; if (!L) return null;
-  var i = navSnap(L.N, p, 2); return i < 0 ? null : [li, L.N.reg[i]];
+  var i = navSnapW(L.N, p); return i < 0 ? null : [li, L.N.reg[i]];
 }
+/** 找走路格上最近的一點：2 點內，找不到再放寬到 6 點（站在牆邊、走路格外的放藥箱位置；測試模式量到：2 點量不到 ⇒ 當作走得到 ⇒ 被分去送砲塔裡的砲、直線穿過去）。 */
+function navSnapW(N, p) { var i = navSnap(N, p, 2); return i >= 0 ? i : navSnap(N, p, 6); }
 /** 直線走的人（砲手換砲 goToGun、送藥手 monkeyTo）從 a 走得到 b 嗎：走路格上同一層、同一塊才算（Tim 2026-10-17「水手會穿進去」：
  *  主砲塔吊籃裡的砲手被借去補甲板上的速射砲、送藥手被分到圈裡的砲 ⇒ 照直線穿過砲塔那一圈牆（TASK-0655 的牆只擋走路格）。
  *  只看有會轉的裝甲／砲塔的船（T.armor）⇒ 其他船一行都不多算、戰局逐位元組不變；量不到（沒有走路格、snap 不到、不同層）⇒ 照以前當作走得到。 */
@@ -54,7 +56,7 @@ function navReach(sh, a, b) {
 function navWay(sh, a, b) {
   if (!sh.nav || !sh.T.armor || !sh.T.armor.length) return [b];
   var li = lvAt(sh, a), L = li >= 0 ? sh.nav.levels[li] : null; if (!L || lvAt(sh, b) !== li) return [b];
-  var N = L.N, i = navSnap(N, a, 2), j = navSnap(N, b, 2);
+  var N = L.N, i = navSnapW(N, a), j = navSnapW(N, b);
   if (i < 0 || j < 0 || i === j || N.reg[i] !== N.reg[j] || navSee(N, i, j)) return [b];
   var p = navPath(N, i, j); if (!p) return [b];
   var w = navSmooth(N, p).slice(1, -1).map(function (k) { return navPos(N, k); });   // 頭尾不要（頭 ＝ 自己腳下、尾換成 b 本身）
@@ -70,6 +72,7 @@ function needReg(sh, lv, p) {
  *  ⛔ 不改 ⇒ 不會爬梯子、又不能穿牆（navReach）⇒ 一直關在吊籃裡，點名還把他算成在崗 ⇒ 外面缺人的砲永遠沒人補。只在會轉裝甲的船叫（40_crew.js reassign）。 */
 function toHand(sh, c) {
   var NV = sh.nav, lv = NV ? lvAt(sh, c.pos) : -1; if (lv < 0 || !NV.levels[lv]) return false;
+  tlgEv(sh, c, 'toHand', { role: c.role, why: '這一塊沒有活著的砲' });   // 測試模式（83_testlog.js）
   if (c.role === ROLE.GUN) leaveGun(c);
   if (c.role === ROLE.POWDER) { (c.guns || []).forEach(function (g) { if (g.pm === c) g.pm = null; }); c.pm = null; c.cart = false; }
   if (c.art === undefined) c.art = c.role;                               // 貼圖照原本的職位那一列
@@ -343,7 +346,7 @@ function legStart(sh, c) {
   if (leg.c !== undefined) {
     var L = NV.ladders[leg.c]; if (SIMT - L.t0 < LADDER_GAP) return;
     L.t0 = SIMT; L.n++; L.q = Math.max(0, L.q - 1); H.legs.shift();
-    H.climb = { pts: leg.up ? L.pts : L.pts.slice().reverse(), k: 0, lv: leg.up ? L.hi : L.lo };
+    H.climb = { pts: leg.up ? L.pts : L.pts.slice().reverse(), k: 0, lv: leg.up ? L.hi : L.lo, L: L.name + (leg.up ? '↑' : '↓') };   // L：梯子的名字（測試模式的記錄看；83_testlog.js）
     return;
   }
   if (sh.navN <= 0) return;
@@ -400,8 +403,9 @@ function callHands(sh) {
       if (n > 0) need.push({ kind: 'gun', key: D.key + side, deck: D.key, side: side, lv: lv, n: n, x: ww ? wx / ww : gs[0].muz[0], pri: side === sh.side ? 0 : 2, reg: gm && sh.T.armor && sh.T.armor.length ? needReg(sh, lv, gunNavAt(sh, gm)) : undefined });   // reg：缺最多人那門砲所在的那一塊（會轉裝甲的船）
     });
     var pm = sh.crew.filter(function (c) { return c.role === ROLE.POWDER && able(c) && c.deck === D.key; }).length, pn = (NV.pm0[D.key] || 0) - pm - (going['pm' + D.key] || 0);
-    var dp = pn > 0 && sh.T.armor && sh.T.armor.length ? deadPm(sh, D.key) : null;   // 會轉裝甲的船：走到倒下那位的家所在的那一塊
-    if (pn > 0 && sh.stations.some(function (s) { return s.deck === D.key && !s.mag.gone; })) need.push({ kind: 'pm', key: D.key, deck: D.key, lv: lv, n: pn, x: sh.T.cx, pri: 1, reg: needReg(sh, lv, dp && dp.home) });
+    var wl = pn > 0 && sh.T.armor && sh.T.armor.length, dp = wl ? deadPm(sh, D.key) : null;   // 會轉裝甲的船：走到倒下那位的家所在的那一塊；沒有倒下的可接 ⇒ 同層缺送藥手的活砲那一塊
+    var pg = wl && !dp ? sh.guns.filter(function (g) { return g.alive && g.drop && gunDeck(g) === D.key && (!g.pm || !able(g.pm)); })[0] : null;   // ⛔ 沒有 ⇒ reg 空著、在原地（沒有活砲的那一塊）就接上，下一輪又被 toHand 打回來（測試模式量到：同一人 0.5 秒一輪打轉 310 次）
+    if (pn > 0 && sh.stations.some(function (s) { return s.deck === D.key && !s.mag.gone; })) need.push({ kind: 'pm', key: D.key, deck: D.key, lv: lv, n: pn, x: sh.T.cx, pri: 1, reg: needReg(sh, lv, dp ? dp.home : pg && pg.drop) });
   });
   var wheel = sh.models.filter(function (m) { return m.kind === 'wheel'; })[0], hd = sh.crew.filter(function (c) { return (c.role === ROLE.HELM && !able(c) || c.helmHome) && !c.relieved; });   // helmHome：從甲板破洞掉下去的舵手（40_crew.js landIn），站位照原本的
   var hn = Math.min(hd.length, NV.helm0 - sh.crew.filter(function (c) { return c.role === ROLE.HELM && able(c); }).length - (going.helm || 0));
@@ -430,7 +434,11 @@ function handJoin(sh, c) {
   var H = c.hand, J = H.job, NV = sh.nav;
   if (J.kind === 'staff' || J.kind === 'carry') { medJoin(sh, c); return; }   // 醫療艙的人手、搬傷員（44_medic.js）
   if (J.kind === 'pump') { pumpJoin(sh, c); return; }                   // 搖抽水機（45_pumps.js）
-  if (H.lv !== J.lv || (J.reg !== undefined && handReg(sh, c) !== J.reg)) { H.job = null; H.wait = 1; return; }   // 不在那一層、不在那一塊（路斷了）⇒ 作廢
+  var hr = J.reg !== undefined ? handReg(sh, c) : -1;                   // 量不到（-1）⇒ 照以前當作到了：爬進轉過的砲塔，梯頭那一點是開局時算的、吊籃已經轉走 ⇒ snap 不到（測試模式量到：同一人被派 88 次、次次作廢）
+  if (H.lv !== J.lv || (hr >= 0 && hr !== J.reg)) { tlgEv(sh, c, 'void', { job: J.kind, lv: [H.lv, J.lv], reg: [hr, J.reg === undefined ? null : J.reg] }); H.job = null; H.wait = 1; return; }   // 不在那一層、確定在別塊（路斷了）⇒ 作廢；void：測試模式記一筆（83_testlog.js）
+  if ((J.kind === 'gun' || J.kind === 'pm') && sh.T.armor && sh.T.armor.length && !sh.guns.some(function (g) {   // 會轉裝甲的船：這裡走得到的活砲一門都沒有 ⇒ 不接（接了下一輪 reassign 又 toHand ⇒ 打轉）
+    return g.alive && !g.wet && gunDeck(g) === J.deck && (J.kind !== 'gun' || g.side === J.side) && navReach(sh, c.pos, J.kind === 'gun' ? gunNavAt(sh, g) : g.drop || g.muz);
+  })) { tlgEv(sh, c, 'void', { job: J.kind, why: '這裡走得到的活砲一門都沒有' }); H.job = null; H.wait = 4; return; }
   c.walk = null; c.moving = false; c.home = c.pos.slice(); c.hand = null; NV.joined++;
   if (J.kind === 'gun') { c.role = ROLE.GUN; c.deck = J.deck; c.side = J.side; c.gun = null; return; }
   if (J.kind === 'helm') { c.role = ROLE.HELM; c.deck = sh.weatherDeck; c.face = -1; c.helmHome = undefined; c.relieved = false; return; }   // 自己是掉下去的那個舵手、爬回來補自己 ⇒ 之後倒下照常有人補
