@@ -210,7 +210,7 @@ function anchorChips(me) {
  *  兩端：錨鏈孔（船身格座標 hx、hy、hz ⇒ 每一步照 sh.M 釘住）；錨 ——
  *    下沉中（drop）⇒ 從錨鏈孔落到海底（照時間，先慢後快）、鍊子跟著放出（放出長度 ＝ 鍊長 × 時間，追不上錨就照兩端的距離）；
  *    咬著（down）⇒ 釘在海底的錨點（a.A；拖錨時跟著移）；起錨中（weigh）⇒ 鍊子照時間收短、錨放開（很重：約束時只動 CH_ANCW 份），先在海底被拖過來、再被吊起來。
- *  物理：沒有風阻；水下（y < 0）浮力扣掉 1／7.8（鐵）、阻尼大（CH_DMPW）；約束 CHAIN_IT 次（幾乎不能伸長）；海底 y ＝ −ANC_DEPTH，碰到就停住（磨擦：水平速度留 30%）。
+ *  物理：沒有風阻；水下（y 低於那一點的水面：0，大漩渦是漏斗的水面）浮力扣掉 1／7.8（鐵）、阻尼大（CH_DMPW）；約束 CHAIN_IT 次（幾乎不能伸長）；海底 ＝ 那一點的水面 − ANC_DEPTH，碰到就停住（磨擦：水平速度留 30%）。
  *  碰撞（只碰自己的船殼，Tim 拍板：不碰別艘）：每個質點、每一節的中點換到船身格座標查格；在格子裡 ⇒ 沿橫向（離中線的方向）推到最近的空格、速度吃掉七成。
  *    錨鏈孔旁的前兩節不查（錨鏈孔就在錨那團格子上 ⇒ 一定在格子裡）。?chainhit=0 ⇒ 不推（只數穿進去幾節，對照用）。
  *  斷鍊（錨被打壞）⇒ 那條鍊子兩端都放開、往下沉，CH_LOST 秒後拿掉（sh.chLost）。 */
@@ -232,7 +232,9 @@ function chainHull(sh, x, y, z, push) {
   return true;
 }
 function chainSolve(sh, a, c, dt) {
-  var N = CHAIN_SEG, p = c.p, q = c.q, sb = -ANC_DEPTH, W = null, E = null, i, o, it;
+  // 水面高度（大漩渦：漏斗那裡的水面，08_sea.js vxH；Tim 2026-10-18「漩渦內拋錨會飛到天上」⛔ 照 0 ⇒ 船在 −180 m，海底 −20 m 在頭頂上，錨鏈一路掛到天上）；沒有漩渦 ⇒ 0（跟以前一樣）
+  var lv = function (x, z) { return VX ? vxH(x, z) : 0; };
+  var N = CHAIN_SEG, p = c.p, q = c.q, sb = (c.lost ? lv(p[N * 3], p[N * 3 + 2]) : lv(a.A[0], a.A[1])) - ANC_DEPTH, W = null, E = null, i, o, it;   // sb：錨那一點的海底
   if (!c.lost) {
     W = M4.pt(sh.M, a.hx, a.hy, a.hz);
     if (a.st === 'drop') {
@@ -244,7 +246,7 @@ function chainSolve(sh, a, c, dt) {
   }
   var rest = Math.max(c.pay / N, 0.01), dt2 = dt * dt;
   for (i = 0; i <= N; i++) {                                            // 走一步（釘住的兩端等一下直接放）
-    o = i * 3; var wet = p[o + 1] < 0, d = wet ? CH_DMPW : CH_DMPA;
+    o = i * 3; var wet = p[o + 1] < lv(p[o], p[o + 2]), d = wet ? CH_DMPW : CH_DMPA;
     var vx = (p[o] - q[o]) * d, vy = (p[o + 1] - q[o + 1]) * d, vz = (p[o + 2] - q[o + 2]) * d;
     q[o] = p[o]; q[o + 1] = p[o + 1]; q[o + 2] = p[o + 2];
     p[o] += vx; p[o + 1] += vy - (wet ? CH_GW : G) * dt2; p[o + 2] += vz;
@@ -265,7 +267,8 @@ function chainSolve(sh, a, c, dt) {
   var hit = 0, pen = 0;
   for (i = W ? 2 : 0; i <= N; i++) {                                    // 船殼：質點與每一節的中點
     o = i * 3;
-    if (p[o + 1] < sb) { p[o + 1] = sb; q[o] = p[o] - (p[o] - q[o]) * 0.3; q[o + 1] = sb; q[o + 2] = p[o + 2] - (p[o + 2] - q[o + 2]) * 0.3; }   // 海底：停住、水平留三成
+    var sbo = VX ? lv(p[o], p[o + 2]) - ANC_DEPTH : sb;                    // 這一節底下的海底（大漩渦：跟著漏斗）
+    if (p[o + 1] < sbo) { p[o + 1] = sbo; q[o] = p[o] - (p[o] - q[o]) * 0.3; q[o + 1] = sbo; q[o + 2] = p[o + 2] - (p[o + 2] - q[o + 2]) * 0.3; }   // 海底：停住、水平留三成
     var h = chainHull(sh, p[o], p[o + 1], p[o + 2], CHAIN_HIT && !(i === N && E));
     if (h) { hit++; if (h !== true) { q[o] = h[0] - (p[o] - q[o]) * 0.3; q[o + 1] = h[1] - (p[o + 1] - q[o + 1]) * 0.3; q[o + 2] = h[2] - (p[o + 2] - q[o + 2]) * 0.3; p[o] = h[0]; p[o + 1] = h[1]; p[o + 2] = h[2]; } }
     if (i === N) break;
