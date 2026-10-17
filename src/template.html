@@ -353,7 +353,7 @@
     <div class="gsR"><span class="chip" id="physT"><b>B</b> 帆繩物理</span><span class="chip" id="camT"><b>V</b> 鏡頭跟船</span><span class="chip" id="muteT"><b>M</b> 靜音</span><span class="chip" id="fpsT">顯示 FPS</span><span class="chip" id="fullT"><b>F11</b> 全螢幕</span><span class="note" id="gsFull"></span></div>
     <div class="gsR"><span class="gsL">視角</span><span class="chip" id="fpT">🧍 第一人稱</span><span class="chip on" id="fpLampT" title="第一人稱時自己帶一盞燈（艙裡比較亮）">🏮 提燈</span><span class="chip" id="bldLinesT" title="建造模式：每一間艙房的外框（穿過牆畫）">📐 艙房外框</span><span class="note">在我艦上走（左下搖桿或 WASD、右下搖桿／拖曳／方向鍵轉頭（電腦：點畫面用滑鼠轉頭，Esc 或按住 Alt 放開）、空白鍵跳、E 爬梯子、Shift 跑）；再按一次回到原本的鏡頭（TASK-0649）</span></div>
     <div class="gsR"><span class="gsL">碰撞</span><span class="chip" data-fpm="0" title="牆擋人、會從甲板的破洞落下去">正常</span><span class="chip" data-fpm="1" title="牆不擋人，腳底照樣貼著甲板、不墜落；走不出船外">🚪 穿牆</span><span class="chip" data-fpm="2" title="沒有重力、什麼都不擋；空白鍵／C（面板的 ⬆ ⬇）上下">🕊 浮空</span><span class="note">第一人稱時的碰撞</span></div>
-    <div class="gsR"><span class="gsL">音量</span><span class="gsV">音效 <input type="range" min="0" max="100" step="1" data-snd="sfx" aria-label="音效音量"></span><span class="gsV">環境 <input type="range" min="0" max="100" step="1" data-snd="amb" aria-label="環境音音量"></span><span class="gsV">音樂 <input type="range" min="0" max="100" step="1" data-snd="bgm" aria-label="背景音樂音量"></span><span class="note">背景音樂放哪首、什麼時候放在主選單的「聲音設定…」</span></div>
+    <div class="gsR"><span class="gsL">音量</span><span class="gsV">音效 <input type="range" min="0" max="100" step="1" data-snd="sfx" aria-label="音效音量"></span><span class="gsV">環境 <input type="range" min="0" max="100" step="1" data-snd="amb" aria-label="環境音音量"></span><span class="gsV">音樂 <input type="range" min="0" max="100" step="1" data-snd="bgm" aria-label="背景音樂音量"></span><span class="note">背景音樂放哪首、交戰時要不要小聲在主選單的「聲音設定…」</span></div>
     <div class="gsR"><span class="gsL">彈藥庫殉爆</span><span class="chip" id="slowT">慢動作</span><span class="chip" id="slowCamT">特寫鏡頭</span></div>
     <div class="gsR"><span class="gsL">模擬速度</span><input type="range" id="simSpd" min="-1301" max="903" step="1" value="0" aria-label="模擬速度"><b id="simSpdV" style="min-width:3.6em">×1</b><span class="chip" id="simSpd1">1×</span></div>
     <div class="gsR"><span class="gsL">物理減速</span><span class="chip" id="pslowT">計算量大時放慢</span></div>
@@ -502,7 +502,7 @@
       <div class="row slide"><label for="vSfx">音效</label><input type="range" min="0" max="100" step="1" id="vSfx" data-snd="sfx" aria-label="音效音量"><span data-sndv="sfx"></span></div>
       <div class="row slide"><label for="vAmb">環境音</label><input type="range" min="0" max="100" step="1" id="vAmb" data-snd="amb" aria-label="環境音音量"><span data-sndv="amb"></span></div>
       <div class="row slide"><label for="vBgm">背景音樂</label><input type="range" min="0" max="100" step="1" id="vBgm" data-snd="bgm" aria-label="背景音樂音量"><span data-sndv="bgm"></span></div>
-      <div class="row" id="bgmModes">什麼時候放 <button data-bm="sail">只在航行（開砲就淡出）</button><button data-bm="on">一直放</button><button data-bm="off">關</button></div>
+      <div class="row" id="bgmModes">背景音樂 <button data-bm="duck">放（交戰時小聲一點）</button><button data-bm="on">放（一直一樣大）</button><button data-bm="off">關</button></div>
       <div class="row" id="bgmTunes"></div>
       <div class="row note" id="bgmNow"></div>
       <div class="row"><button id="sndR">這一頁回到預設</button></div>

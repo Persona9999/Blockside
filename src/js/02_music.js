@@ -8,11 +8,12 @@
 // 播放：WebAudio（02_audio.js 的 AC）；旋律 ＝ 鋸齒波＋低通＋晚到的顫音（像提琴），低音 ＝ 兩道微走音的方波＋低通（像手風琴）。往前排 BGM_LOOK 秒，不吃主迴圈。
 //   每首反覆到約 BGM_TUNE_S 秒（bgmPasses）、停 BGM_GAP 秒換下一首（輪播照自己的 LCG 洗牌）。
 // 純聲音：⛔ 不抽 rnd()、不用 Math.random ⇒ 戰局的亂數一位元都不動；靜音（M）⇒ 三條音量線一起 0、排程照跑。
-var SND = { sfx: 1, amb: 1, bgm: 0.5, mode: 'sail', tune: 'shuffle' };   // 音量 0–1；mode：'sail' 只在航行（開砲就淡出）／'on' 一直播／'off'；tune：'shuffle' 輪播或曲 id
+var SND = { sfx: 1, amb: 1, bgm: 0.5, mode: 'duck', tune: 'shuffle' };   // 音量 0–1；mode：'duck' 交戰時稍微小聲（× BGM_DUCK）／'on' 一直放、不變／'off'；tune：'shuffle' 輪播或曲 id
 var SND_DEF = JSON.parse(JSON.stringify(SND));
-var SND_FIGHT = -1e9, BGM_FIGHT_S = 20, BGM_FADE = 2.5;                // 開砲、爆炸（02_audio.js sfx boom／blast）之後 BGM_FIGHT_S 秒內算交戰 ⇒ 'sail' 模式淡出（時間常數 BGM_FADE 秒）
+var SND_FIGHT = -1e9, BGM_FIGHT_S = 20, BGM_FADE = 2.5, BGM_DUCK = 0.7;   // BGM_DUCK：交戰時剩幾成（Tim 2026-10-17「其實不用開炮淡出」「或不要完全淡出」「可以稍微變小一點點」⇒ 0.7 ≈ −3 dB，⛔ 不歸零）
+//   開砲、爆炸（02_audio.js sfx boom／blast）之後 BGM_FIGHT_S 秒內算交戰 ⇒ 'duck' 模式小聲一點（時間常數 BGM_FADE 秒）
 var BGM_LOOK = 0.8, BGM_TUNE_S = 60, BGM_GAP = 4, BGM_VOL = 0.5;          // 每首反覆到約 BGM_TUNE_S 秒（2–6 遍：一遍 11 秒的跟一遍 38 秒的都差不多一分鐘）        // BGM_VOL：音樂整條的基準（量過才定，見 TASK-0677）
-var BGM = null, BGM_SEED = 7654321, BGM_ORDER = [];                    // BGM：{ tn 正在放的那首, t0 這一遍從幾秒開始, k 下一個沒排的事件, pass 第幾遍, forced 試聽鈕點的（不淡出、播完回輪播） }
+var BGM = null, BGM_SEED = 7654321, BGM_ORDER = [];                    // BGM：{ tn 正在放的那首, t0 這一遍從幾秒開始, k 下一個沒排的事件, pass 第幾遍, forced 試聽鈕點的（交戰時不變小、播完回輪播） }
 var TUNES = [
   { id: 'drunken', name: '酒醉的水手', en: 'What Shall We Do with the Drunken Sailor?', src: 'Terry, The Shanty Book I (1921) No.14, pp.30–31', M: '2/4', K: 'C', Q: 108,
     mel: 'A A/2 A/2 A A/2 A/2|A D F A|G G/2 G/2 G G/2 G/2|G C E G|A A/2 A/2 A A/2 A/2|A B c d|c A G E|D2 D2|A2 A3/2 A/2|A D F A|G2 G3/2 G/2|G C E G|A2 A3/2 A/2|A B c d|c A G E|D2 D2',
@@ -108,8 +109,8 @@ function bgmSched(ac, dest, tn, t0, k, until) {
 function bgmFrame() {
   if (!AC || !AC.bgmBus) return;
   var now = AC.currentTime, fight = now - SND_FIGHT < BGM_FIGHT_S;
-  var forced = !!(BGM && BGM.forced), want = muted || (SND.mode === 'off' && !forced) || (SND.mode === 'sail' && fight && !forced) ? 0 : SND.bgm * BGM_VOL;
-  AC.bgmBus.gain.setTargetAtTime(want, now, muted ? 0.05 : want < AC.bgmBus.gain.value ? BGM_FADE / 3 : 0.4);   // 靜音（M）馬上關；淡出照 BGM_FADE、回來 0.4 秒
+  var forced = !!(BGM && BGM.forced), want = muted || (SND.mode === 'off' && !forced) ? 0 : SND.bgm * BGM_VOL * (SND.mode === 'duck' && fight && !forced ? BGM_DUCK : 1);
+  AC.bgmBus.gain.setTargetAtTime(want, now, muted ? 0.05 : want < AC.bgmBus.gain.value ? BGM_FADE / 3 : 0.8);   // 靜音（M）馬上關；交戰變小照 BGM_FADE、回來 0.8 秒
   if (SND.mode === 'off' && !forced) { BGM = null; return; }
   if (!BGM) BGM = { tn: bgmNext(null), t0: now + 0.3, k: 0, pass: 0 };
   var E = tuneEvents(BGM.tn), spb = 60 / BGM.tn.Q;
