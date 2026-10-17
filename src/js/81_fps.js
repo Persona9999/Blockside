@@ -60,7 +60,7 @@ function fpSet(on, quiet) {                                           // quiet�
 }
 function fpStop() { var m = FP.mv; Object.keys(m).forEach(function (k) { m[k] = 0; }); FP.run = false; FP.joy = [0, 0]; FP.look = [0, 0]; FP.jz = FP.jv = 0; FP.v = [0, 0]; FP.vz = 0; joyDraw(0, 0); }
 /** 建造模式（82_build.js）開著 ⇒ 第一人稱鎖定：玩家關不掉。 */
-function fpBuildLock() { return RUNNING && MODE === 'build'; }
+function fpBuildLock() { return RUNNING && modeRule('fpLock'); }   // 玩法規則 fpLock（04_modes.js；建造）
 /** 玩家要離開第一人稱（🎥 鈕、Y、設定的開關）：建造模式鎖定 ⇒ 不關、說一聲。 */
 function fpExit() {
   if (!FP.on) return;

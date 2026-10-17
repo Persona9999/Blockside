@@ -107,7 +107,7 @@ window.addEventListener('keydown', function (e) {
   if (FP.on && fpKey(k, true)) { e.preventDefault(); return; }       // 第一人稱：走、轉頭、爬梯子的鍵（81_fps.js）；P 停格、O 設定照舊
   if (bldKey(k, true)) { e.preventDefault(); return; }               // 建造（82_build.js）：快捷欄、轉、拆、放、目錄、碰撞（鍵照 66_keys.js）
   var ba = keyAct('battle', k);                                       // 海戰的動作（66_keys.js 鍵位）
-  if (MODE === 'build' && ba !== 'pause' && ba !== 'settings' && ba !== 'cam') return;   // 建造：開砲、轉舵那些鍵不作用
+  if (!modeRule('battleKeys') && ba !== 'pause' && ba !== 'settings' && ba !== 'cam') return;   // 玩法規則 battleKeys（04_modes.js；建造）：開砲、轉舵那些鍵不作用
   if (ba) e.preventDefault();
   kbLit(k, true);
   doKey(k, e.repeat);
@@ -253,7 +253,12 @@ $('fullT').onclick = fsToggle;
 [].forEach.call(document.querySelectorAll('#gset [data-gx]'), function (b) { b.onclick = function () { phxSet(b.dataset.gx); phxSync(); }; });
 $('endA').onclick = start;
 // 彈種一顆（#ammoB）：帶 data-k="1" ⇒ 點一下 ＝ 按 1（上面那段 [data-k] 的 click）⇒ ammoNext；⛔ 別再另外掛 onclick（會一次換兩種）
-[].forEach.call(document.querySelectorAll('#modes button'), function (b) { b.onclick = function () { MODE = b.dataset.m; [].forEach.call(document.querySelectorAll('#modes button'), function (x) { x.className = x === b ? 'on' : ''; }); }; });
+/** 主選單的玩法鈕：照玩法規則表（04_modes.js MODE_RULES）裡 menu 的那幾份生、照表的順序（TASK-0668：加一種玩法不用改這裡）。 */
+function modeButtons() {
+  $('modes').innerHTML = Object.keys(MODE_RULES).filter(function (m) { return MODE_RULES[m].menu; }).map(function (m) { return '<button data-m="' + m + '">' + MODE_RULES[m].name + '</button>'; }).join('');
+  [].forEach.call(document.querySelectorAll('#modes button'), function (b) { b.onclick = function () { MODE = b.dataset.m; [].forEach.call(document.querySelectorAll('#modes button'), function (x) { x.className = x === b ? 'on' : ''; }); }; });
+}
+modeButtons();
 /** 選單：滑桿的上下限從 LIM 來；數值只在使用者動了那一條時才從滑桿讀回（⛔ 一開頭就讀回 ⇒ 網址給的 0.33 被 step 吃成 0.35）。
  *  船殼、砲、帆、火藥桶、航行、降旗的滑桿在「細節設定」那一頁（從主選單進）；主選單只留一行摘要（#detV）。 */
 /** 模型（砲、火藥桶）的總重（噸）：照匯出的模型清單＋取用點的 12 桶（細節設定的例子用；開戰時每艘照自己的模型算）。 */

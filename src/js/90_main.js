@@ -390,7 +390,7 @@ yieldUI().then(function () {                                        // 先讓主
   if (Q.get('lab') === 'flood') { var FR = floodLab(flLabOpts()), fp = document.createElement('pre'); fp.id = 'lab'; document.body.appendChild(fp); fp.textContent = JSON.stringify(FR); $('cover').style.display = 'none'; return; }   // 沙盒進水報表（81_floodlab.js；src/tests/flood_lab.py）
   if (Q.get('lab') === 'uw') { var LR = uwLab(labOpts()), lp = document.createElement('pre'); lp.id = 'lab'; document.body.appendChild(lp); lp.textContent = JSON.stringify(LR); $('cover').style.display = 'none'; return; }   // 落水彈道的測試場（80_lab.js；src/tests/uw_lab.py 讀 #lab）
   if (DEMO >= 0) {                                             // 快轉：電腦對電腦、固定步長；?mode= 換玩法（TASK-0668 對拍對戰、沙盒用；沒給 ＝ 觀戰）
-    MODE = ['pve', 'eve', 'sandbox', 'build'].indexOf(Q.get('mode')) >= 0 ? Q.get('mode') : 'eve'; reset(); RUNNING = true;
+    MODE = Object.prototype.hasOwnProperty.call(MODE_RULES, Q.get('mode')) ? Q.get('mode') : 'eve'; reset(); RUNNING = true;
     var steps = Math.round(DEMO / DT), phys = PHYS, from = Math.max(0, steps - 360);     // 帆與繩只畫最後那一格 ⇒ 物理只在最後 6 秒跑（不影響戰局）
     if (phys && from > 0) setPhys(false);
     // ?dump=1：每半秒記每艘的最大橫傾、開始沉／沉沒／降旗的時間，跑完寫進頁面（#dump；無頭 Chrome --dump-dom 讀，量進水模式用）

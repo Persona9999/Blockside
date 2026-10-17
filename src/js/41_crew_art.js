@@ -193,7 +193,7 @@ function heldItem(sh, c, f) {
   if (c.st !== 0) return null;                                                      // 受傷、陣亡、墜落 ⇒ 手上的東西掉了
   if (c.role === ROLE.POWDER) return c.cart > 0 ? { id: 'carry', hx: 0.17, hy: 0.52, a: 0 } : null;
   if (c.role === ROLE.MARINE || c.role === ROLE.TOP) {                              // 開槍前一秒舉槍瞄準、開完 0.4 秒放下（沙盒的敵艦、降旗、沉了不開槍）
-    var aim = (c.fireT > 0 || c.shotT < 1) && !sh.struck && !sh.sunk && !(MODE === 'sandbox' && sh.i !== PLAYER_I);
+    var aim = (c.fireT > 0 || c.shotT < 1) && !sh.struck && !sh.sunk && (modeRule('othersAct') || sh.i === PLAYER_I);
     return aim ? { id: 'musket', hx: 0.04, hy: 0.78, a: 0.04 } : null;
   }
   if (c.role === ROLE.OFFICER) return sh.salvoT && SIMT - sh.salvoT < 1.2 ? { id: 'sword', hx: 0.12, hy: 0.86, a: 1.05 } : null;   // 齊射：舉劍

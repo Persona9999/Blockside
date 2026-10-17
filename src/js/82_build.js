@@ -34,7 +34,7 @@ function bldNote(it) { var f = FURN[it], b = f.buff || {}; return f.role === 'po
 function bldRoomName(r) { return (r.deck ? r.deck.name + ' ' : '') + r.name.split('/').slice(-2).join(' ').replace('艙房-鏡像', '左').replace('艙房', '右'); }
 /** 開局（70_flow.js start，reset 之後）：建造玩法 ⇒ 進第一人稱、顯示建造介面；別的玩法 ⇒ 收起來。 */
 function bldEnter() {
-  BLD.on = MODE === 'build'; BLD.key = ''; BLD.open = false;
+  BLD.on = modeRule('build'); BLD.key = ''; BLD.open = false;
   if (BLD.on) { if (!BLD.it) BLD.it = bldList()[0] || null; if (!fpOnMine()) fpSet(true, true); note(SHIPS[PLAYER_I], '建造：準心對著甲板 —— 右鍵（或 ✔）放、左鍵（或 ✖）拆、R 轉 90°、1–9 選物品、B 目錄'); }
   bldUI();
 }

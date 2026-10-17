@@ -73,7 +73,7 @@ function step() {
   collide();
   SHIPS.forEach(function (sh) {                                    // 照 SHIPS 的順序（一對一：我艦先、敵艦後 ⇒ 跟以前同一個順序抽亂數）
     if (sh.i === PLAYER_I) { if (AUTOFIRE) ai(sh, DT); }            // 自動開砲：我艦也交給電腦瞄準開火
-    else if (MODE !== 'sandbox') ai(sh, DT);                        // 沙盒的其他船不還手
+    else if (modeRule('othersAct')) ai(sh, DT);                // 玩法規則 othersAct（04_modes.js）：沙盒的其他船不還手
   });
   if (PF) pfLap('ai');
   for (i = 0; i < BALLS.length; i++) { stepBall(BALLS[i], DT); if (!BALLS[i].alive) { if (CAM.follow === BALLS[i]) { CAM.hold = 1.2; } BALLS.splice(i--, 1); } }

@@ -140,8 +140,8 @@ var PREF_ITEMS = [
   prefNum('ramside', prefLim('ramside'), false, function () { return RAM.side; }, function (x) { RAM.side = x; }),
   prefBool('slowcam', true, function () { return SLOW.cam; }, function (x) { SLOW.cam = x; }),   // ⚠ 以前只讀不存（存的那一行被併進註解裡）⇒ 改了下次打開又回預設；現在照描述表存
   prefAny('sail', function (o) { if (SAIL !== CFG.menu.sail) o.sail = SAIL; }, function (p) { if (!Q.has('sail') && (p.sail === 'auto' || p.sail === 'manual' || p.sail === 'off')) SAIL = p.sail; }),
-  prefAny('mode', function (o) { if (MODE !== CFG.menu.mode) o.mode = MODE; }, function (p) { if (p.mode === 'pve' || p.mode === 'eve' || p.mode === 'sandbox' || p.mode === 'build') MODE = p.mode; }),
-  prefAny('auto', function (o) { if (LAST_MODE === MODE && AUTOFIRE !== (MODE === 'eve')) o.auto = AUTOFIRE; },   // 換了模式還沒開局 ⇒ 開局時會照模式重套（70_flow.js reset），這時的值不算數
+  prefAny('mode', function (o) { if (MODE !== CFG.menu.mode) o.mode = MODE; }, function (p) { if (Object.prototype.hasOwnProperty.call(MODE_RULES, p.mode) && MODE_RULES[p.mode].menu) MODE = p.mode; }),
+  prefAny('auto', function (o) { if (LAST_MODE === MODE && AUTOFIRE !== modeRule('autoFire')) o.auto = AUTOFIRE; },   // 換了模式還沒開局 ⇒ 開局時會照模式重套（70_flow.js reset），這時的值不算數
     function (p) { if (typeof p.auto === 'boolean') { AUTOFIRE = p.auto; LAST_MODE = MODE; } }),   // 存了自動開砲 ⇒ 開局不再照模式套預設
   prefAny('field', function (o) { if (FIELD_N !== MAX_SHIPS) o.field = FIELD_N; }, function (p) { if (!Q.has('field') && typeof p.field === 'number' && isFinite(p.field)) FIELD_N = clamp(Math.round(p.field), 2, MAX_SHIPS); }),   // 候補（52_fleet.js）
   prefAny('reinf', function (o) { if (REINF_MODE !== 'prop') o.reinf = REINF_MODE; }, function (p) { if (!Q.has('reinf') && REINF_NAMES[p.reinf]) REINF_MODE = p.reinf; }),
