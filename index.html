@@ -15489,14 +15489,21 @@ function chainLinks(L, A, B, n, hw, up, k0) {
   }
 }
 /** 鏈彈的鐵鍊（21_gunnery.js csBar）：每一顆鏈彈，兩顆彈之間一條錨鍊那樣的鍊子（世界座標、每一格畫面重做）。兩顆彈本身照砲彈的點畫（60_render.js）。
- *  環比錨鍊細、短（CS_LINK 公尺一環、半寬 CS_LINK_W）—— 鏈彈的鍊子是一門砲塞得進去的那種。 */
-var CS_LINK = 0.3, CS_LINK_W = 0.07, CSL = null, CS_ID = null;          // CS_ID：畫的時候的 uModel（單位矩陣，60_render.js）
+ *  環比錨鍊細、短（CS_LINK 公尺一環、半寬 CS_LINK_W）—— 鏈彈的鍊子是一門砲塞得進去的那種。
+ *  鍊子是鬆的（Tim 2026-10-17：「轉起來有點像棍子而非鐵鍊(兩條拉成直線了)」）：比兩顆彈的距離長 CS_SLACK 倍 ⇒ 垂成一道弧（垂度照弧長與弦長的拋物線近似）；
+ *  弧往後拖（風阻：飛行的反方向）、也落後旋轉（轉的反方向），弧的方向來回擺、再疊一道 S 形的抖 ⇒ 轉起來是一條甩著的鍊子。只是畫：命中照舊是兩顆彈之間那一根（csBar）。 */
+var CS_LINK = 0.3, CS_LINK_W = 0.07, CS_SLACK = 1.2, CSL = null, CS_ID = null;   // CS_ID：畫的時候的 uModel（單位矩陣，60_render.js）
 function csBuf() {
   var L = [], r = 0.1;                                                   // r：鍊子從彈的表面接出去（彈半徑大約）
   BALLS.forEach(function (b) {
     if (b.ammo !== 2 || !b.alive) return;
     var w = csBar(b), h = CS_HALF - r, A = [b.p[0] - w[0] * h, b.p[1] - w[1] * h, b.p[2] - w[2] * h], B = [b.p[0] + w[0] * h, b.p[1] + w[1] * h, b.p[2] + w[2] * h];
-    chainLinks(L, A, B, Math.max(2, Math.round(2 * h / CS_LINK)), CS_LINK_W, 1, 0);
+    var c = 2 * h, sag = Math.sqrt(0.375 * c * c * (CS_SLACK - 1)), n = Math.max(4, Math.round(c * CS_SLACK / CS_LINK)), ph = b.ph || 0;
+    var vl = len(b.v) || 1, bk = mul(b.v, -1 / vl), tg = norm(cross(bk, w));   // bk：往後（飛行的反方向）；tg：垂直鍊子與飛行方向（± 旋轉的切向）
+    var sw = 0.45 * Math.sin(b.age * 9 + ph), bd = add(mul(bk, Math.cos(0.9 + sw)), mul(tg, Math.sin(0.9 + sw)));   // 弧的方向：後拖與落後旋轉之間，來回擺
+    var sd = norm(cross(w, bd)), wob = 0.14 * Math.sin(b.age * 14 + ph * 2), P = [];   // sd：S 形抖的方向
+    for (var i = 0; i <= n; i++) { var t = i / n, k = sag * 4 * t * (1 - t), q = wob * Math.sin(6.28319 * t); P.push(add(lerp3(A, B, t), add(mul(bd, k), mul(sd, q)))); }
+    for (i = 0; i < n; i++) chainLinks(L, P[i], P[i + 1], 1, CS_LINK_W, 1, i);
   });
   CSL = upload(CSL, new Float32Array(L), 6, [[0, 3, 0], [2, 3, 3]]);
   return CSL;
