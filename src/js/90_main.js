@@ -1,6 +1,7 @@
 // ───────────────────────── 主迴圈 ─────────────────────────
 var last = 0, acc = 0, FPS = 60, fpsT = 0;
 function frame(ts, noRaf) {                                         // noRaf：__game.live 同步呼叫（不再排下一格，⛔ 排了 ⇒ 兩條畫面迴圈、模擬走兩倍快）
+  if (LAB_FLEET) { flabFrame(ts); if (!noRaf) requestAnimationFrame(frame); return; }   // 擬真沙盒：模擬自己排（84_fleetlab.js），這裡只畫（俯視圖；看實景時才畫 3D）
   var f0 = PF ? performance.now() : 0;                                // 逐幀分段計時（?debug=1）
   var dt = last ? Math.min(0.1, (ts - last) / 1000) : DT; last = ts;
   FPS = FPS * 0.95 + (1 / Math.max(dt, 1e-3)) * 0.05;
@@ -45,6 +46,10 @@ if (DEBUG) window.__game = {
   mask: function (k) { MASK_OFF = k === undefined ? -1 : k; render(); return MASK_OFF; },   // 船艙遮罩（60_render.js）：關掉第 k 艘的、畫一格
   /** 指揮官（TASK-0551）：cmd('line', 'pair') ⇒ 換兩方的策略（下一次開戰／下一次想生效）；orders() ⇒ 每艘現在的命令與目標。 */
   cmd: function (b, r) { if (CMD_NAMES[b]) CMD_SIDE.blue = b; if (CMD_NAMES[r]) CMD_SIDE.red = r; return CMD_SIDE; },
+  /** TASK-0679：搶上風開關 gauge(我方, 敵方)（true／false，沒給 ＝ 不改）；旗號 signal(id)（52_fleet.js SIG_LIST 的 id；沒給 ⇒ 只讀）；指揮官的記憶 cmdMem()（搶上風的進度 gauge、戰列的順序 line、隊形誤差 lineErr）。 */
+  gauge: function (b, r) { if (b !== undefined && b !== null) CMD_GAUGE.blue = !!b; if (r !== undefined && r !== null) CMD_GAUGE.red = !!r; return CMD_GAUGE; },
+  signal: function (id) { if (id) sigSet(id); return { sig: SIGNAL, text: sigText(), can: sigCan() }; },
+  cmdMem: function () { return JSON.parse(JSON.stringify(CMD_MEM)); },
   orders: function () { return SHIPS.map(function (s) { var o = ORDERS[s.i]; return { i: s.i, team: s.team, out: isOut(s), order: o ? o.mode + '→' + o.target + (o.leader !== undefined ? ' 跟' + o.leader : '') : null, foe: s.foe ? s.foe.i : null, station: s.station ? [Math.round(s.station[0]), Math.round(s.station[1])] : null, x: Math.round(s.px), z: Math.round(s.pz), yaw: +s.yaw.toFixed(2) }; }); },
   gpu: function () { render(); function ix(L) { return L.map(function (s) { return s.i; }); } return { max: MAX_SHIPS, shships: GFX.shships, masks: GFX.masks, shadow: ix(SSLOTS), global: ix(SSLOTS.rest), mask: ix(MSLOTS), noMask: ix(MSLOTS.rest), glob: SHM.glob, layers: SHM.layers, shadowN: SHM.n, offG: +SHM.offG.toFixed(3), hullLayers: HULLA.key, err: gl.getError() }; },   // GPU 的格（60_render.js gpuSlots）
   cut: function (o) { if (o) for (var k in o) CUTV[k] = o[k]; render(); return CUTV; },     // 剖面與隱藏甲板（74_cutaway.js）：{ half, deck }
@@ -387,7 +392,8 @@ yieldUI().then(function () {                                        // 先讓主
   loadArt().then(function (why) { line += '\n素材：' + why; say(line); window.__vxk.art = why; if (HUD_ART) hudArt(); });
   if (!chk.ok) { fail('船體資料跟封裝檔對不上，停下來（不畫半艘船）。\n' + line); return; }
   $('go').disabled = false; $('go').textContent = '開戰';
-  if (Q.has('shipcheck')) { shipCheck(Q.get('shipcheck')); return; }   // 匯入檢查（75_shipcheck.js；admin.py check 用無頭 Chrome 讀）
+  if (Q.has('shipcheck')) { shipCheck(Q.get('shipcheck')); return; }
+  if (LAB_FLEET) { flabInit(); return; }                                // 擬真沙盒（84_fleetlab.js）   // 匯入檢查（75_shipcheck.js；admin.py check 用無頭 Chrome 讀）
   if (Q.get('lab') === 'flood') { var FR = floodLab(flLabOpts()), fp = document.createElement('pre'); fp.id = 'lab'; document.body.appendChild(fp); fp.textContent = JSON.stringify(FR); $('cover').style.display = 'none'; return; }   // 沙盒進水報表（81_floodlab.js；src/tests/flood_lab.py）
   if (Q.get('lab') === 'uw') { var LR = uwLab(labOpts()), lp = document.createElement('pre'); lp.id = 'lab'; document.body.appendChild(lp); lp.textContent = JSON.stringify(LR); $('cover').style.display = 'none'; return; }   // 落水彈道的測試場（80_lab.js；src/tests/uw_lab.py 讀 #lab）
   if (DEMO >= 0) {                                             // 快轉：電腦對電腦、固定步長；?mode= 換玩法（TASK-0668 對拍對戰、沙盒用；沒給 ＝ 觀戰）

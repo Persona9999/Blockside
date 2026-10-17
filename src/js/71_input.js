@@ -143,6 +143,7 @@ function doAct(a, repeat) {
   }
   else if ((a === 'ancP' || a === 'ancS') && RUNNING && me && !me.sunk && !anchorsOf(me).single) { var am = anchorToggle(me, a === 'ancP' ? 'P' : 'S'); if (am) note(me, am + (/^拋/.test(am) ? '（帶著速度只拋一側 ⇒ 繞錨急轉；再按一次起錨）' : '')); }   // 左右錨（76_anchor.js）   // 航行（TASK-0567，Tim 2026-10-14：不用 Tab 循環，三個鍵直接切）
   else if (a === 'settings') gsetToggle();                                    // 設定（Esc 也可以）
+  else if (a === 'signals') sigToggle();                                     // 旗號面板（TASK-0679）
   else if (a === 'ruddL' || a === 'ruddR') {   // 打舵：自動中一碰就換手動
     if (SAIL === 'auto') setSailMode('manual'); KEYS[a === 'ruddL' ? 'l' : 'r'] = true;   // 拋錨中 ⇒ 不換模式、繞錨原地轉
   }
@@ -801,6 +802,21 @@ function fieldShow() { var f = $('field'); f.value = FIELD_N; $('fieldV').textCo
 function cmdShow() { [].forEach.call(document.querySelectorAll('.cmds'), function (row) { [].forEach.call(row.querySelectorAll('button'), function (b) { b.className = b.dataset.c === CMD_SIDE[row.dataset.side] ? 'on' : ''; }); }); }
 [].forEach.call(document.querySelectorAll('.cmds'), function (row) { [].forEach.call(row.querySelectorAll('button'), function (b) { b.onclick = function () { CMD_SIDE[row.dataset.side] = b.dataset.c; cmdShow(); }; }); });
 cmdShow();
+/** 細節設定：搶上風（52_fleet.js CMD_GAUGE；TASK-0679）每一方一顆開關。 */
+function gaugeShow() { [].forEach.call(document.querySelectorAll('#gauges button'), function (b) { b.className = CMD_GAUGE[b.dataset.side] ? 'on' : ''; }); }
+[].forEach.call(document.querySelectorAll('#gauges button'), function (b) { b.onclick = function () { CMD_GAUGE[b.dataset.side] = !CMD_GAUGE[b.dataset.side]; gaugeShow(); }; });
+gaugeShow();
+/** 旗號面板（TASK-0679；下令走 52_fleet.js sigSet）：🚩（我方艦隊那一欄最上面、鍵 K）開關；只有我方有電腦開的友艦、不是觀戰時才開得了。按鈕照 SIG_LIST，現在的那個亮。 */
+function sigCan() { var me = SHIPS[PLAYER_I]; return !!(RUNNING && MODE !== 'eve' && me && SHIPS.some(function (o) { return o !== me && o.team === me.team && !isOut(o); })); }
+function sigToggle(on) { var p = $('sigP'); if (!p) return; on = on === undefined ? !p.classList.contains('on') : on; p.classList.toggle('on', !!on && sigCan()); if (p.classList.contains('on')) sigShow(); }
+function sigShow() {
+  var B = $('sigBtns'); if (!B) return;
+  if (!B.children.length) SIG_LIST.forEach(function (it) { var b = document.createElement('button'); b.dataset.sig = it.id; b.title = it.tip; b.textContent = it.ico + ' ' + it.name; b.onclick = function (e) { e.stopPropagation(); sigSet(it.id); }; B.appendChild(b); });
+  var cur = SIGNAL ? SIGNAL.strat : 'cmd';
+  [].forEach.call(B.children, function (b) { b.className = b.dataset.sig === 'gauge' ? (SIGNAL && SIGNAL.gauge ? 'on' : '') : b.dataset.sig === cur ? 'on' : ''; });
+  $('sigNow').textContent = '現在：' + sigText();
+}
+if ($('sigX')) $('sigX').onclick = function (e) { e.stopPropagation(); sigToggle(false); };
 /** 細節設定：候補補位（52_fleet.js REINF_MODE）。 */
 function reinfShow() { [].forEach.call(document.querySelectorAll('#reinfs button'), function (b) { b.className = b.dataset.r === REINF_MODE ? 'on' : ''; }); if ($('fleetN')) fleetUI(); }
 [].forEach.call(document.querySelectorAll('#reinfs button'), function (b) { b.onclick = function () { REINF_MODE = b.dataset.r; reinfShow(); }; });

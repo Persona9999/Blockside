@@ -29,8 +29,8 @@ function rptShip(sh) {
 /** 每一步（50_sim.js 最後）：每 30 步掃砲的狀態，每 RPT_EVERY 秒記一列。 */
 function rptTick() {
   if (!RPT) return;
-  var k = Math.round(SIMT / DT); if (k % 30) return;
-  var t0 = performance.now(), row = k % Math.round(RPT_EVERY / DT) === 0, dt = 30 * DT;
+  var k = Math.round(SIMT / DT), ev = everySteps(0.5); if (k % ev) return;   // 每半秒（60 Hz ＝ 30 步；擬真沙盒降物理 fps 照秒數）
+  var t0 = performance.now(), row = k % Math.round(RPT_EVERY / DT) === 0, dt = ev * DT;
   SHIPS.forEach(function (sh) {
     var r = rptShip(sh);
     if (r.out === null && isOut(sh)) r.out = +SIMT.toFixed(1);

@@ -11,12 +11,13 @@
 var PREFS_KEY = 'ame_constitution_broadside.prefs', PREFS_VER = 1;
 var PREF_Q = ['wdir', 'wspd', 'ship', 'blue', 'red', 'hard', 'flood', 'ballast', 'gunw', 'speed', 'agile', 'upwind', 'base', 'pump', 'gunhp', 'sailhp', 'crewhp', 'crewdeath', 'powderhp', 'blast', 'blastv', 'dmg24', 'dmg32l', 'dmg32', 'dmg18', 'dmg12', 'dmg18l', 'dmg6', 'dmg3c', 'dmgtr',
   'box', 'carry', 'hands', 'drown', 'heal', 'wind', 'windcap', 'inertia', 'turninert', 'sailtq', 'ammo', 'strike', 'cap', 'phys', 'sail', 'play', 'stall', 'funspeed', 'funagile', 'funstall', 'funpowder', 'funhard', 'sea',
-  'gfx', 'g_shadow', 'g_refl', 'g_refr', 'g_sea', 'g_res', 'g_aa', 'phx', 'p_rig', 'p_rigfar', 'p_debris', 'p_fx', 'weather', 'g_rain', 'g_drops', 'g_dropspl', 'g_shships', 'g_masks', 'dist', 'field', 'reinf', 'cmd', 'blue', 'red', 'slowmo', 'dbg', 'slowcam', 'roomfn', 'navre', 'gcrew', 'smoke', 'pslow', 'pslowb', 'ramv', 'ramk', 'rame', 'ramside', 'debcap'];          // 會蓋過存檔的網址參數（04_state.js、05_hull.js 讀的那些）
+  'gfx', 'g_shadow', 'g_refl', 'g_refr', 'g_sea', 'g_res', 'g_aa', 'phx', 'p_rig', 'p_rigfar', 'p_debris', 'p_fx', 'weather', 'g_rain', 'g_drops', 'g_dropspl', 'g_shships', 'g_masks', 'dist', 'field', 'reinf', 'cmd', 'gauge', 'blue', 'red', 'slowmo', 'dbg', 'slowcam', 'roomfn', 'navre', 'gcrew', 'smoke', 'pslow', 'pslowb', 'ramv', 'ramk', 'rame', 'ramside', 'debcap'];          // 會蓋過存檔的網址參數（04_state.js、05_hull.js 讀的那些）
 var DMG_Q = { long: 'dmg24', long32: 'dmg32l', carr: 'dmg32', chase: 'dmg18', long4: 'dmg4', long12: 'dmg12', long18: 'dmg18l', long6: 'dmg6', chase3: 'dmg3c', trident: 'dmgtr', dahl9: 'dmg9d', brooke64: 'dmg64b', brooke7: 'dmg7b', dahl11: 'dmg11d' };
 var PREFS = { read: DEMO < 0 && Q.get('prefs') !== '0' && !Q.has('admin') && !Q.has('shipcheck'), write: false, state: '', last: '' };   // ?admin=rooms（設定後台嵌的那一份）、?shipcheck（匯入檢查）⇒ 不讀不存
-PREFS.write = PREFS.read && !PREF_Q.some(function (k) { return Q.has(k); });
+PREFS.write = PREFS.read && !PREF_Q.some(function (k) { return Q.has(k); }) && !LAB_FLEET;   // 擬真沙盒：讀玩家的存檔（規則跟玩家玩的同一套），⛔ 不寫回（沙盒改的距離、策略、物理檔位不能蓋掉玩家的）
 // ?cmd=我方,敵方（艦隊指揮官，52_fleet.js CMD_SIDE）：放這裡 —— ⛔ 放在 52_fleet.js 那時 53_commander.js 的 CMD_NAMES 還沒定義 ⇒ 帶 ?cmd 一開就丟錯、整頁停在載入
 if (Q.has('cmd')) Q.get('cmd').split(',').forEach(function (w, i) { if (i < 2 && CMD_NAMES[w]) CMD_SIDE[i ? 'red' : 'blue'] = w; });
+if (Q.has('gauge')) Q.get('gauge').split(',').forEach(function (w, i) { if (i < 2 && (w === '1' || w === '0')) CMD_GAUGE[i ? 'red' : 'blue'] = w === '1'; });   // 搶上風（TASK-0679）：?gauge=我方,敵方（1 開／0 關）
 /** 出廠預設值（設定後台跳轉開的 ?admin=defaults；Tim 2026-10-15：「後台介面是否可以直接使用細節設定頁面的Layout(可以跳轉開啟) 只是變成套用成預設設定」「應該說用一樣的頁面去設定出廠預設值」）：
  *  開頁 ⇒ 細節設定頁（值 ＝ 這份成品裡設定檔的預設，PREFS 不讀不存）；「存成出廠預設」⇒ prefsSnap 跟預設不一樣的那幾項裡、是滑桿（LIM 有那個鍵、數字）的 ⇒ POST /api/defaults（admin.py act_defaults 只改 lim[鍵][2]）；
  *  其他（勾選、彈種倍率、砲長、主選單的選擇…）列出來、不存。存了 ⇒ 這一頁的 LIM 預設跟著換（再改從新的預設比）。「重建」⇒ /api/build。「回設定後台」⇒ 回 /。 */
@@ -147,6 +148,8 @@ var PREF_ITEMS = [
   prefAny('reinf', function (o) { if (REINF_MODE !== 'prop') o.reinf = REINF_MODE; }, function (p) { if (!Q.has('reinf') && REINF_NAMES[p.reinf]) REINF_MODE = p.reinf; }),
   prefAny('cmd', function (o) { if (CMD_SIDE.blue !== 'pair' || CMD_SIDE.red !== 'pair') o.cmd = [CMD_SIDE.blue, CMD_SIDE.red]; },   // 指揮官（TASK-0551）
     function (p) { if (!Q.has('cmd') && Array.isArray(p.cmd)) p.cmd.forEach(function (w, i) { if (i < 2 && CMD_NAMES[w]) CMD_SIDE[i ? 'red' : 'blue'] = w; }); }),
+  prefAny('gauge', function (o) { if (CMD_GAUGE.blue || CMD_GAUGE.red) o.gauge = [CMD_GAUGE.blue ? 1 : 0, CMD_GAUGE.red ? 1 : 0]; },   // 搶上風（TASK-0679）
+    function (p) { if (!Q.has('gauge') && Array.isArray(p.gauge)) p.gauge.forEach(function (w, i) { if (i < 2) CMD_GAUGE[i ? 'red' : 'blue'] = w === 1; }); }),
   prefAny('dist', function (o) { if (DIST !== LIM_DIST[2]) o.dist = DIST; }, function (p) { if (!Q.has('dist') && typeof p.dist === 'number' && isFinite(p.dist)) DIST = clamp(Math.round(p.dist), LIM_DIST[0], LIM_DIST[1]); })   // 舊存檔的 90／140／220 照樣是合法的值
 ];
 /** 現在的設定裡跟預設不一樣的那幾項（＋版本號）—— 照描述表。 */

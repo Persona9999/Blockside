@@ -56,7 +56,7 @@ function aiSecond(sh, foe, dt) {
 function step() {
   if (PF) PF.t = performance.now();                                 // 逐幀分段計時（?debug=1，00_core.js）
   SIMT += DT;
-  if ((Math.round(SIMT / DT) % CMD_EVERY) === 0) cmdTick();        // 指揮官每 3 秒想一次（52_fleet.js；不抽亂數）
+  if ((Math.round(SIMT / DT) % everySteps(CMD_EVERY_S)) === 0) cmdTick();   // 指揮官每 3 秒想一次（52_fleet.js；不抽亂數）
   pickFoes();                                                      // 每艘的目標（52_fleet.js）：這一步之內都用同一個
   stepWind(SIMT);                                                  // 風會變（08_weather.js）
   SHIPS.forEach(function (sh) { if (sh.mounts || sh.tur) mountStep(sh, DT); });   // 迴旋砲、砲塔照瞄準點轉（21_gunnery.js；TASK-0626）—— 沒有 ⇒ 不做事
@@ -83,14 +83,14 @@ function step() {
   for (i = 0; i < PIECES.length; i++) if (!stepPiece(PIECES[i], DT)) { evEmit('pieceGone', PIECES[i]); PIECES.splice(i--, 1); }
   for (i = 0; i < FLY.length; i++) if (!stepFly(FLY[i], DT)) FLY.splice(i--, 1);
   if (PF) pfLap('pieces');
-  evEmit(SLOW_VIS ? 'viewStepSlow' : 'viewStep', DT);             // 只給人看的推進：碎木、煙囪排煙、粒子、船邊水花（各自的亂數；00_events.js）；殉爆慢動作中（73_slowmo.js）只推船邊水花，其餘照畫面的時間走
+  if (!FLAB_HIDE) evEmit(SLOW_VIS ? 'viewStepSlow' : 'viewStep', DT);   // FLAB_HIDE：擬真沙盒只看俯視圖時不推（84_fleetlab.js；只給人看的，不改戰局）             // 只給人看的推進：碎木、煙囪排煙、粒子、船邊水花（各自的亂數；00_events.js）；殉爆慢動作中（73_slowmo.js）只推船邊水花，其餘照畫面的時間走
   if (PF) pfLap('water');                       // 船邊水花（13_water.js；只給人看、自己的亂數）
   if (PHYS) { var pt0 = performance.now(); SHIPS.forEach(function (sh) { if (sh.sink < 40) physStep(sh); }); clothContactsRun(); PHYS_MS = PHYS_MS * 0.98 + (performance.now() - pt0) * 0.02; }   // 讀數只看、不回寫模擬
   if (PF) pfLap('phys');
   stepPowder();                                                    // 殉爆排程（23_powder.js）
   stepBlasts();                                                    // 還沒挖完的彈坑接著挖（23_powder.js）
   if (PF) pfLap('powder');
-  if ((Math.round(SIMT / DT) % 30) === 0) { SHIPS.forEach(survey); SHIPS.forEach(function (sh) { evEmit('survey', sh); }); reinforce(); playerHandoff(); }   // reinforce：空出名額 ⇒ 候補進場；playerHandoff：我艦出局 ⇒ 換到友艦（52_fleet.js；沒有候補／我艦還在打 ⇒ 直接回去）
+  if ((Math.round(SIMT / DT) % everySteps(0.5)) === 0) { SHIPS.forEach(survey); SHIPS.forEach(function (sh) { evEmit('survey', sh); }); reinforce(); playerHandoff(); }   // reinforce：空出名額 ⇒ 候補進場；playerHandoff：我艦出局 ⇒ 換到友艦（52_fleet.js；沒有候補／我艦還在打 ⇒ 直接回去）
   if (PF) pfLap('survey');
   evEmit('stepEnd');                                              // 每一步最後：戰鬥報表（79_report.js，只讀）、測試記錄（83_testlog.js）、結束判定（61_hud.js endTick；結算畫面照模擬時間延後跳）
   if (PF) pfLap('end');

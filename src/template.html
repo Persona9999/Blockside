@@ -44,6 +44,10 @@
   .sbn{ position:absolute; top:100%; margin-top:-1px; display:flex; align-items:center; gap:1px; color:#f2f2f2; font:bold 11px/13px Consolas,monospace; pointer-events:none; white-space:nowrap; z-index:1;   /* 沒有底板、描黑邊（Tim 2026-10-14）；放在圓圈底下不蓋圓環 */
     text-shadow:-1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000, 0 0 3px rgba(0,0,0,.9); }
   .fleet .sb{ margin-bottom:12px; }   /* 底下那一行數字的位置 */
+  .sigb{ width:40px; height:30px; border-radius:8px; display:flex; align-items:center; justify-content:center; font-size:18px; cursor:pointer; background:rgba(20,26,36,.82); border:1px solid #556; box-shadow:0 2px 7px rgba(0,0,0,.65); } .sigb.on{ border-color:var(--gold); background:rgba(80,64,20,.9); }   /* 🚩 旗號（TASK-0679）：我方那一欄最上面 */
+  #sigP{ position:absolute; left:84px; top:12px; display:none; z-index:7; pointer-events:auto; width:min(250px, calc(100vw - 110px)); padding:8px 10px; } #sigP.on{ display:block; }
+  @media (max-width:760px){ #sigP{ left:50px; width:min(250px, calc(100vw - 105px)); } #sigBtns button{ padding:5px 8px; font-size:13px; } }   /* 手機：別蓋到右邊敵方那一欄（38 px 圓鈕 ＋ 5 px） */
+  #sigH{ font-size:13px; margin-bottom:4px; } #sigX{ float:right; cursor:pointer; padding:0 4px; } #sigBtns button{ display:block; width:100%; text-align:left; margin:3px 0; padding:6px 9px; font-size:14px; cursor:pointer; } #sigBtns button.on{ background:var(--gold); color:#111; border-color:var(--gold); } #sigNow{ font-size:12px; opacity:.85; margin-top:4px; }
   .sbn.l{ left:-2px; } .sbn.r{ right:-2px; } .sbn .ico{ width:12px; height:12px; vertical-align:0; } .sbn i{ font-style:normal; font-size:10px; }
   /* 船隻配置頁最上面（Tim 2026-10-14）：大一點的艦隊圓鈕＋重要資訊 */
   #shipCard{ display:flex; align-items:center; justify-content:center; gap:14px; flex-wrap:wrap; margin:6px auto 4px; max-width:660px; }
@@ -300,15 +304,44 @@
     #fpUI .fpb{ font-size:19px; }
     #fpAct{ bottom:122px; }   /* 搖桿 112 px 高 ＋ 空一點（⛔ 108 ⇒ 跟搖桿頂疊 8 px，量過） */
   }
+  /* 擬真沙盒（84_fleetlab.js） */
+  #flab{ display:none; } body.flab #flab{ display:flex; flex-direction:column; position:fixed; inset:0; z-index:60; background:#0e1a26; color:#e8eef5; font:13px/1.45 system-ui, "Microsoft JhengHei", sans-serif; }
+  body.flab #stage > :not(#cv), body.flab #cover, body.flab #end{ display:none !important; }
+  body.flab.flab3d #flab{ background:transparent; pointer-events:none; } body.flab.flab3d #flabCv, body.flab.flab3d #flabBatch{ visibility:hidden; } body.flab.flab3d #flabTop, body.flab.flab3d #flabRight{ pointer-events:auto; background:rgba(14,26,38,.82); }
+  #flabTop{ display:flex; flex-wrap:wrap; gap:6px 14px; align-items:center; padding:7px 12px; border-bottom:1px solid rgba(255,255,255,.1); } #flabTop .fg{ display:inline-flex; gap:4px; align-items:center; flex-wrap:wrap; }
+  #flab label{ color:#9fb0c2; } #flab input, #flab select{ font:inherit; background:#1a2a3a; color:#e8eef5; border:1px solid rgba(255,255,255,.2); border-radius:5px; padding:2px 4px; } #flab input[type=number]{ width:58px; }
+  #flab button{ font:inherit; background:rgba(255,255,255,.08); color:#e8eef5; border:1px solid rgba(255,255,255,.25); border-radius:5px; padding:3px 9px; cursor:pointer; } #flab button.on{ background:#e0b453; color:#111; }
+  #flabMsg{ color:#ffd27a; } #flabMain{ flex:1; display:flex; gap:8px; min-height:0; padding:6px 10px; } #flabCv{ position:relative; left:auto; top:auto; flex:1 1 auto; min-width:0; width:auto; height:100%; border-radius:6px; touch-action:none; }   /* ⛔ 全域的 canvas 是 absolute ⇒ 蓋滿整頁、把上面的設定列與右邊的讀數擠掉（量過） */
+  #flabRight{ flex:0 0 380px; display:flex; flex-direction:column; gap:6px; min-height:0; } #flabSide{ flex:1 1 40%; overflow:auto; font-size:12px; }
+  #flab #flabChart{ position:relative; left:auto; top:auto; flex:0 0 130px; width:100%; height:130px; border-radius:5px; } #flabDet{ flex:1 1 30%; overflow:auto; font-size:12px; color:#cfd8e2; } #flabDet .hd{ cursor:pointer; padding:1px 3px; } #flabDet .hd:hover{ background:rgba(255,255,255,.07); } #flabTL{ width:min(360px, 50vw); } #flabSide .fr{ padding:2px 5px; border-left:3px solid; margin:2px 0; cursor:pointer; } #flabSide .fr.blue{ border-color:#5aa2ff; } #flabSide .fr.red{ border-color:#ff6b5a; } #flabSide .fr.out{ opacity:.5; } #flabSide .fr.sel{ background:rgba(224,180,83,.18); }
+  #flabBatch{ padding:6px 12px 10px; max-height:34vh; overflow:auto; border-top:1px solid rgba(255,255,255,.1); } #flabBtab{ border-collapse:collapse; margin-top:6px; } #flabBtab th, #flabBtab td{ border:1px solid rgba(255,255,255,.15); padding:3px 8px; text-align:center; } #flabBtab small{ color:#9fb0c2; } #flab .note{ color:#9fb0c2; font-size:12px; margin-top:6px; }
+  @media (max-width:760px){ #flabMain{ flex-direction:column; } #flabRight{ flex:0 0 auto; max-height:34vh; } #flabSide{ max-height:14vh; } #flabCv{ min-height:46vh; } }
   #err{ position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); max-width:80%; color:#ffb3a6; display:none; white-space:pre-wrap; }
 </style>
 </head>
 <body>
+<!-- 擬真沙盒（84_fleetlab.js；?lab=fleet，根目錄 fleetlab.html 轉過來）：body.flab 才顯示；看實景（body.flab3d）時俯視圖藏起來、底下的遊戲畫布露出來 -->
+<div id="flab">
+  <div id="flabTop">
+    <b>擬真沙盒</b>
+    <span class="fg"><label>藍</label><input type="number" id="flabNB" min="1" max="20"><select id="flabHB"></select><select id="flabCB"></select><label><input type="checkbox" id="flabGB">搶上風</label></span>
+    <span class="fg"><label>紅</label><input type="number" id="flabNR" min="1" max="20"><select id="flabHR"></select><select id="flabCR"></select><label><input type="checkbox" id="flabGR">搶上風</label></span>
+    <span class="fg"><label>距離</label><input type="number" id="flabDist" min="50" max="1000" step="10"><label>風向°</label><input type="text" id="flabWdir" placeholder="照種子" size="5"><label>風速×</label><input type="text" id="flabWspd" placeholder="照種子" size="4"><label>種子</label><input type="number" id="flabSeed" min="1"></span>
+    <span class="fg"><label>物理</label><select id="flabHz"></select><label>時限</label><input type="number" id="flabT" min="30" step="30">秒</span>
+    <span class="fg"><button id="flabGo">開始</button><button id="flabPause">暫停</button><span id="flabSpd"><button data-s="1">1×</button><button data-s="4">4×</button><button data-s="16">16×</button><button data-s="64">64×</button><button data-s="0">最快</button></span><button id="flabTrace">🧭 軌跡</button><button id="flabView">🎥 看實景</button><button id="flabExp">⬇ 匯出</button></span>
+    <span id="flabTLbox" class="fg" style="display:none"><input type="range" id="flabTL" min="0" max="1" step="0.5" value="0"><span id="flabTLv"></span></span>
+    <span id="flabMsg"></span>
+  </div>
+  <div id="flabMain"><canvas id="flabCv"></canvas><div id="flabRight"><div id="flabSide"></div><canvas id="flabChart"></canvas><div id="flabDet"></div></div></div>
+  <div id="flabBatch"><label>批次：每格</label><input type="number" id="flabBN" min="1" max="100">場（一半換邊）<label><input type="checkbox" id="flabBall">四種策略兩兩（不勾 ＝ 只跑上面那一組）</label><button id="flabBgo">批次對打</button><span id="flabBprog"></span><table id="flabBtab"></table>
+    <div class="note">遊戲本體的模擬（規則、命中、進水、指揮官、艦長同一份；設定照遊戲的存檔讀、不寫回）。只關「給人看的」：帆與繩、碎木、煙與水花、船邊水花；只看俯視圖時不畫 3D。物理 60 Hz ＝ 跟遊戲逐步相同，降下來比較快但結果會不一樣。俯視圖：滾輪縮放、拖曳平移、點船選取、雙擊回到自動。批次跑的時候照最快跑。</div></div>
+</div>
 <div id="stage">
   <canvas id="cv"></canvas>
 
   <div id="fleetL" class="hud fleet"></div>
   <div id="fleetR" class="hud fleet"></div>
+  <div id="sigP" class="panel"><div id="sigH"><b>🚩 旗號</b> 對我方友艦下令<span id="sigX">✕</span></div><div id="sigBtns"></div><div id="sigNow"></div></div><!-- 旗號面板（TASK-0679；71_input.js sigShow） -->
   <div id="topC" class="hud"><div id="fps" class="hud"></div><div id="irow"><div id="icol"><div id="info" class="panel"></div><div id="msg"></div></div><canvas id="gmap"></canvas></div></div>
   <div id="teleBox" class="hud" style="display:none"><span class="kb tk" data-act="teleFwd" data-tip="俥鐘往前撥一格"><b>T</b>▲</span><canvas id="telc" title="俥鐘（點或拖）"></canvas><span class="kb tk" data-act="teleBack" data-tip="俥鐘往後撥一格"><b>G</b>▼</span></div>
   <div id="aimR" aria-hidden="true"><svg viewBox="-24 -24 48 48"><g class="o"><circle r="16"/><path d="M-11 0H-4M4 0H11M0 -11V-4M0 4V11"/></g><g class="k"><circle r="16"/><path d="M-11 0H-4M4 0H11M0 -11V-4M0 4V11"/></g><circle class="d" r="1.6"/></svg></div><!-- 瞄準圈（UI 層，61_hud.js aimRingUi；在 HUD 底下） -->
@@ -604,9 +637,10 @@
       <h3>艦隊指揮官</h3>
       <div class="row cmds" id="cmdB" data-side="blue">我方 <button data-c="free">各自為戰</button><button data-c="pair">一對一配對</button><button data-c="focus">集火</button><button data-c="line">戰列</button></div>
       <div class="row cmds" id="cmdR" data-side="red">敵方 <button data-c="free">各自為戰</button><button data-c="pair">一對一配對</button><button data-c="focus">集火</button><button data-c="line">戰列</button></div>
+      <div class="row" id="gauges">搶上風 <button data-side="blue">我方</button><button data-side="red">敵方</button></div>
       <div class="row note">每一方一個指揮官，每 3 秒看一次局勢、替自己那一方的電腦船下命令（打哪艘、怎麼開）；你自己開的那艘不聽（觀戰時連我艦也聽）。一邊只有一艘時四種都一樣。<br>
         <b>各自為戰</b>：每艘打最近的敵艦（以前的電腦）。<b>一對一配對</b>（預設）：把敵我配成對，每艘敵艦最多分到「我方艘數 ÷ 敵方艘數」艘 ⇒ 不會三艘圍一艘、另一艘沒人管。
-        <b>集火</b>：全隊打同一艘（又弱又近的），打到它出局才換。<b>戰列</b>：旗艦帶頭交戰，其他的排成縱隊跟著前一艘的船尾（隔 90 m），全隊用同一舷。網址 ?cmd=我方,敵方（free｜pair｜focus｜line）</div>
+        <b>集火</b>：全隊打同一艘（又弱又近的），打到它出局才換。<b>戰列</b>：旗艦帶頭，把敵方中心擺在同一舷、不換舷；其他的排成縱隊照前一艘的航跡跟（隔 90 m，前一艘在哪裡轉、後面的就在哪裡轉），全隊用同一舷。網址 ?cmd=我方,敵方（free｜pair｜focus｜line）<br>        <b>搶上風</b>（每一方各一顆，亮 ＝ 開）：開局離得遠時先全隊迎風搶到敵方上風（多 150 m）再壓過去；搶到、4 分鐘沒搶到、或敵我已經接近就照策略接戰（只搶一次）。網址 ?gauge=我方,敵方（1｜0）。<br>        對戰時按我方艦隊那一欄最上面的 🚩（或 K）可以下旗號，蓋過我方指揮官：照指揮官、各自交戰、一對一配對、集火我的目標、成戰列跟我、搶上風</div>
       <h3>候補</h3>
       <div class="row" id="reinfs">候補補位 <button data-r="prop">比例</button><button data-r="own">誰沉誰補</button><button data-r="alt">輪流</button></div>
       <div class="row note">編成比主選單的「同時在場」多 ⇒ 多的照編成順序排進候補；場上的船沉了、在沉或降旗 ⇒ 空出一個名額，候補從自己那一方的後面進場（船頭對著敵方）。開局每一方至少 1 艘、其他名額照比例分。<br>
@@ -731,6 +765,7 @@
 <script src="js/81_fps.js" data-bundle="game"></script>
 <script src="js/82_build.js" data-bundle="game"></script>
 <script src="js/83_testlog.js" data-bundle="game"></script>
+<script src="js/84_fleetlab.js" data-bundle="game"></script>
 <script src="js/90_main.js" data-bundle="game"></script>
 </body>
 </html>

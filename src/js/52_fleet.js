@@ -26,22 +26,82 @@ function pickFoes() {
 }
 function foeOf(sh) { if (sh.foe === undefined) pickFoes(); return sh.foe; }
 // ───────────────────────── 指揮官（TASK-0551；策略在 53_commander.js，這裡是遊戲那一側的轉接） ─────────────────────────
-// 每一方一個指揮官（細節設定「艦隊指揮官」我方／敵方，?cmd=我方,敵方，存檔 cmd；預設兩方都是一對一配對）。每 CMD_EVERY 步想一次（3 秒；開局、候補進場也想一次），不抽亂數。
+// 每一方一個指揮官（細節設定「艦隊指揮官」我方／敵方，?cmd=我方,敵方，存檔 cmd；預設兩方都是一對一配對）。每 CMD_EVERY_S 秒想一次（3 秒 ＝ 60 Hz 的 180 步；開局、候補進場也想一次），不抽亂數。
 // 命令 ORDERS[船的序號]：目標進 pickFoes（命令的目標還在打、是敵艦才用，不然照舊挑最近的）、戰列跟隨的舵進 31_sailing.js（cmdHelmLine）。
 // 收命令的：電腦開的船（觀戰時玩家那艘也是）；對戰電腦／沙盒裡玩家自己那艘不收（Tim 2026-10-14：玩家對友艦下令之後再說），但算在配對與戰列裡（可以當排頭）。
 // 一對一：配對 ⇒ 目標就是唯一那艘敵艦 ＝ 本來就挑到的那艘 ⇒ 一位元都不差。
-var CMD_SIDE = { blue: 'pair', red: 'pair' }, CMD_MEM = { blue: {}, red: {} }, ORDERS = {}, CMD_EVERY = 180;
-// ?cmd=我方,敵方 在 69_prefs.js 讀（要等 53_commander.js 的 CMD_NAMES）
+var CMD_SIDE = { blue: 'pair', red: 'pair' }, CMD_MEM = { blue: {}, red: {} }, ORDERS = {}, CMD_EVERY_S = 3;   // 指揮官幾秒想一次（50_sim.js everySteps；60 Hz ＝ 180 步）
+// 搶上風（TASK-0679；細節設定「艦隊指揮官」每一方一顆開關，?gauge=我方,敵方（1／0），存檔 gauge；預設都關 ⇒ 跟以前一樣）
+var CMD_GAUGE = { blue: false, red: false };
+// ?cmd=我方,敵方、?gauge= 在 69_prefs.js 讀（要等 53_commander.js 的 CMD_NAMES）
 /** 遊戲的船 ⇒ 指揮官看的局勢（53_commander.js 開頭的格式）。 */
 function cmdView(side) {
   var W = norm(WIND);
-  return { t: SIMT, side: side, wind: [W[0], W[2]], ships: SHIPS.map(function (s) {
+  return { t: SIMT, side: side, wind: [W[0], W[2]], R: aiRange(), gauge: CMD_GAUGE[side], signal: sigFor(side), ships: SHIPS.map(function (s) {
     return { id: s.i, team: s.team, x: s.px, z: s.pz, yaw: s.yaw, spd: s.spd, hp: 1 - clamp(s.sink / 4.2, 0, 1), guns: s.guns.length ? (s.gunsAlive === undefined ? s.guns.length : s.gunsAlive) / s.guns.length : 0,
-      crew: s.crew0 ? s.crew.filter(able).length / s.crew0 : 0, mass: s.mass0 || shipT(s), len: (s.T.wl1 - s.T.wl0) * S, out: isOut(s), cmd: !(s.i === PLAYER_I && MODE !== 'eve'), tgt: s.foe ? s.foe.i : null };
+      crew: s.crew0 ? s.crew.filter(able).length / s.crew0 : 0, mass: s.mass0 || shipT(s), len: (s.T.wl1 - s.T.wl0) * S, out: isOut(s), cmd: !(s.i === PLAYER_I && MODE !== 'eve'), tgt: s.foe ? s.foe.i : null,
+      lerr: s.lineErr === undefined ? null : s.lineErr, llag: s.lineLag === undefined ? null : s.lineLag, larc: s.lineArc === undefined ? null : s.lineArc, loff: s.lineOff === undefined ? null : s.lineOff };
   }) };
 }
-function cmdTick() { ORDERS = {}; ['blue', 'red'].forEach(function (side) { var o = cmdThink(cmdView(side), CMD_SIDE[side], CMD_MEM[side]); for (var k in o) ORDERS[k] = o[k]; }); }
-function cmdReset() { CMD_MEM = { blue: {}, red: {} }; ORDERS = {}; }
+function cmdTick() {
+  ORDERS = {};
+  ['blue', 'red'].forEach(function (side) {
+    var M = CMD_MEM[side], g0 = M.gauge ? M.gauge.st : null;
+    var o = cmdThink(cmdView(side), CMD_SIDE[side], M); for (var k in o) ORDERS[k] = o[k];
+    if (M.gauge && M.gauge.st !== g0) cmdGaugeSay(side, M.gauge);
+  });
+}
+function cmdReset() { CMD_MEM = { blue: {}, red: {} }; ORDERS = {}; SIGNAL = null; SHIPS.forEach(function (s) { s.wake = null; s.lineErr = s.lineLag = s.lineArc = s.lineOff = undefined; }); }
+/** 搶上風的進度換了 ⇒ 上方廣播＋記進那一方旗艦的戰鬥報表（艦長的決定）。 */
+function cmdGaugeSay(side, G) {
+  var fs = flagship(side); if (!fs) return;
+  var up = Math.round(G.up), dn = up < 0 ? '下風 ' + (-up) + ' m' : '上風 ' + up + ' m';
+  var t = G.st === 'beat' ? '指揮官：搶上風 —— 我方在敵方' + dn + '，全隊迎風往' + (G.tack > 0 ? '左' : '右') + '（對著風看）搶'
+    : G.st === 'done' ? '指揮官：搶到上風（我方在敵方' + dn + '，花了 ' + Math.round(G.tEnd - G.t0) + ' 秒）—— 壓過去接戰'
+    : G.st === 'timeout' ? '指揮官：' + CMD_GAUGE_MAX + ' 秒沒搶到上風（我方在敵方' + dn + '）—— 照樣接戰'
+    : '指揮官：敵我已經接近（最近 ' + Math.round(G.near) + ' m）—— 不搶上風了，接戰（我方在敵方' + dn + '）';
+  helmSay(fs, 'gauge', t, true);
+}
+// ── 航跡（TASK-0679：戰列跟隨照前一艘走過的路，53_commander.js cmdHelmWake）：每艘每走 WAKE_STEP 記一點，留最近 WAKE_LEN（m）。只記位置、不抽亂數。
+var WAKE_STEP = 4, WAKE_LEN = 1200;
+function shipWake(sh) {
+  var W = sh.wake || (sh.wake = []), n = W.length;
+  if (!n || Math.hypot(sh.px - W[n - 1][0], sh.pz - W[n - 1][1]) >= WAKE_STEP) { W.push([sh.px, sh.pz]); if (W.length > WAKE_LEN / WAKE_STEP) W.shift(); }
+}
+// ── 玩家的旗號（TASK-0679；Tim 2026-10-17「電腦和玩家都能下」）：對我方電腦開的友艦下令，蓋過我方指揮官的策略（細節設定那一格不變；照指揮官 ⇒ 回去）。
+//   SIGNAL：null（照指揮官）或 { strat（free／pair／focus／line）, lead（成戰列跟我 ⇒ 玩家那艘的 i）, focus（集火我的目標 ⇒ 下令那一刻瞄的那艘）, gauge（搶上風：true／false；沒寫 ⇒ 照設定）}。
+//   觀戰（eve）沒有玩家 ⇒ 不收；重新開始 ⇒ 回到照指揮官（cmdReset）。
+var SIGNAL = null;
+var SIG_LIST = [
+  { id: 'cmd', ico: '🏳', name: '照指揮官', tip: '回到細節設定裡我方指揮官的策略' },
+  { id: 'free', ico: '⚔', name: '各自交戰', tip: '每艘打最近的敵艦' },
+  { id: 'pair', ico: '🤝', name: '一對一配對', tip: '把敵我配成對，不會三艘圍一艘' },
+  { id: 'focus', ico: '🎯', name: '集火我的目標', tip: '全隊打我現在瞄的那艘（打掉再換弱又近的）' },
+  { id: 'line', ico: '⛓', name: '成戰列跟我', tip: '排成縱隊跟在我後面（照我的航跡、隔 90 m），全隊用同一舷' },
+  { id: 'gauge', ico: '🌬', name: '搶上風', tip: '先迎風搶到敵方上風再接戰（再按一次取消）' }
+];
+function sigFor(side) { return SIGNAL && MODE !== 'eve' && side === playerTeam() ? SIGNAL : null; }
+/** 下旗號（面板的按鈕、__game.signal）。回傳現在的 SIGNAL。 */
+function sigSet(id) {
+  var me = SHIPS[PLAYER_I]; if (!RUNNING || !me || MODE === 'eve') return SIGNAL;
+  var cur = SIGNAL || { strat: null }, it = SIG_LIST.filter(function (s) { return s.id === id; })[0]; if (!it) return SIGNAL;
+  if (id === 'cmd') SIGNAL = null;
+  else if (id === 'gauge') { var on = !(SIGNAL && SIGNAL.gauge); SIGNAL = { strat: cur.strat || CMD_SIDE[me.team], lead: cur.lead, focus: cur.focus, gauge: on }; if (!on && !cur.strat) SIGNAL = null; }
+  else SIGNAL = { strat: id, lead: id === 'line' ? me.i : null, focus: id === 'focus' ? (aimShip(me) || foeOf(me) || {}).i : null, gauge: cur.gauge };
+  var g = CMD_MEM[me.team].gauge; if (id === 'gauge' && SIGNAL && SIGNAL.gauge && g && g.st !== 'beat') CMD_MEM[me.team].gauge = null;   // 再下一次搶上風 ⇒ 重新搶
+  note(me, '🚩 旗號：' + (id === 'gauge' ? (SIGNAL && SIGNAL.gauge ? '搶上風' : '取消搶上風') : it.name) + (id === 'focus' && SIGNAL.focus !== null && SIGNAL.focus !== undefined ? '（' + SHIPS[SIGNAL.focus].name + '）' : ''), true);
+  rptHelm(me, 'signal', '旗號：' + sigText());
+  cmdTick(); pickFoes();
+  if (typeof sigShow === 'function') sigShow();
+  return SIGNAL;
+}
+/** 現在的旗號（HUD、面板、報表）：照指揮官 ⇒ 「照指揮官（策略名）」。 */
+function sigText() {
+  var me = SHIPS[PLAYER_I], base = me ? CMD_NAMES[CMD_SIDE[me.team]] : '';
+  if (!SIGNAL) return '照指揮官（' + base + (me && CMD_GAUGE[me.team] ? '＋搶上風' : '') + '）';
+  var it = SIG_LIST.filter(function (s) { return s.id === SIGNAL.strat; })[0];
+  return (it ? it.name : '照指揮官（' + base + '）') + (SIGNAL.gauge ? '＋搶上風' : '');
+}
 /** 瞄準點落在哪艘船（設瞄準點那一刻的那艘；沒有 ⇒ 現在的目標）。 */
 function aimShip(sh) { return sh.aim && sh.aimOn ? sh.aimOn : foeOf(sh); }
 function setAim(sh, aim, on) { sh.aim = aim; sh.aimOn = aim ? on || foeOf(sh) : null; }

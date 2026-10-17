@@ -23,13 +23,13 @@ WEATHERS.storm.gusts = { dir: 0.6, spd: 0.3, per: [71, 29, 11] };
 //   ?wdir=度（相對 WIND0，往 +z 轉為正）、?wspd=倍率 ⇒ 指定（?wdir=0&wspd=1 ＝ 以前固定的那陣風）。浪跟著轉（08_sea.js SEA_A）。
 //   ⛔ 以前固定 WIND0（往 +z 吹）⇒ 開局藍方（+z 往 −z）永遠頂風、紅方永遠在上風：4 對 4 電腦對電腦 12 場紅方贏 10 場，策略比不出來（TASK-0551）。
 var WIND0 = WIND.slice(), WIND_A0 = Math.atan2(WIND0[2], WIND0[0]), WIND_L0 = Math.hypot(WIND0[0], WIND0[2]), WIND_SPD = 1, WIND_LOG = { a: WIND_A0, s: 1, t: 0 };
-var WIND_ROT = 0, WIND_S0 = 1;
+var WIND_ROT = 0, WIND_S0 = 1, WIND_FIX = null;                        // WIND_FIX：擬真沙盒（84_fleetlab.js）{ rot（度；null ＝ 照種子）, s0（null ＝ 照種子）}，蓋過網址、照種子抽（null ⇒ 跟以前一樣）
 var WX_ID = WEATHERS[Q.get('weather')] ? Q.get('weather') : 'clear', WX = WEATHERS[WX_ID];
 function seedHash(k) { var x = Math.sin((SEED % 99991) * 12.9898 + k * 78.233) * 43758.5453; return x - Math.floor(x); }
 function windInit() {
-  var pin = Q.has('seed') || DEMO >= 0, u1 = pin ? seedHash(11) : Math.random(), u2 = pin ? seedHash(12) : Math.random();
-  WIND_ROT = Q.has('wdir') && isFinite(+Q.get('wdir')) ? +Q.get('wdir') * Math.PI / 180 : u1 * 2 * Math.PI;
-  WIND_S0 = Q.has('wspd') && isFinite(+Q.get('wspd')) ? clamp(+Q.get('wspd'), 0.3, 3) : 0.6 + 0.9 * u2;
+  var pin = Q.has('seed') || DEMO >= 0 || !!WIND_FIX, u1 = pin ? seedHash(11) : Math.random(), u2 = pin ? seedHash(12) : Math.random();
+  WIND_ROT = WIND_FIX && WIND_FIX.rot !== null ? WIND_FIX.rot * Math.PI / 180 : !WIND_FIX && Q.has('wdir') && isFinite(+Q.get('wdir')) ? +Q.get('wdir') * Math.PI / 180 : u1 * 2 * Math.PI;
+  WIND_S0 = WIND_FIX && WIND_FIX.s0 !== null ? clamp(WIND_FIX.s0, 0.3, 3) : !WIND_FIX && Q.has('wspd') && isFinite(+Q.get('wspd')) ? clamp(+Q.get('wspd'), 0.3, 3) : 0.6 + 0.9 * u2;
   SEA_A = WIND_ROT;
 }
 /** 每一步（50_sim.js step 開頭、70_flow.js 開局）：照模擬時間算現在的風，改 WIND 與 WIND_SPD；風向轉了 20° 以上、風速變了三成以上 ⇒ 上方廣播（15 秒內不重複）。 */

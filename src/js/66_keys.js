@@ -20,7 +20,7 @@ var KEY_ACTS = [
   { c: 'battle', id: 'volley', ico: '💥💥', name: '齊射', def: ' ' }, { c: 'battle', id: 'fire1', ico: '💥', name: '開一門砲', def: 'f' }, { c: 'battle', id: 'autoFire', ico: '🤖💥', name: '自動開砲', def: '5' },
   { c: 'battle', id: 'aim', ico: '🎯', name: '瞄準模式', def: '3' }, { c: 'battle', id: 'teleFwd', ico: '▲', name: '俥鐘往前撥', def: 't' }, { c: 'battle', id: 'teleBack', ico: '▼', name: '俥鐘往後撥', def: 'g' },
   { c: 'battle', id: 'cam', ico: '🎥', name: '換鏡頭', def: 'c' }, { c: 'battle', id: 'camTrack', name: '鏡頭跟船／固定', def: 'v' },
-  { c: 'battle', id: 'pause', ico: '⏸', name: '停格', def: 'p' }, { c: 'battle', id: 'settings', ico: '⚙', name: '設定', def: 'o' }, { c: 'battle', id: 'help', name: '說明', def: 'h' },
+  { c: 'battle', id: 'signals', ico: '🚩', name: '旗號（對我方友艦下令）', def: 'k' }, { c: 'battle', id: 'pause', ico: '⏸', name: '停格', def: 'p' }, { c: 'battle', id: 'settings', ico: '⚙', name: '設定', def: 'o' }, { c: 'battle', id: 'help', name: '說明', def: 'h' },
   { c: 'battle', id: 'flood', ico: '📊', name: '進水圖表（停格時）', def: 'i' }, { c: 'battle', id: 'xray', ico: '🔍', name: '透視', def: 'x' }, { c: 'battle', id: 'cut', ico: '✂', name: '剖面', def: 'z' }, { c: 'battle', id: 'deck', ico: '☰', name: '隱藏甲板', def: 'l' },
   { c: 'battle', id: 'phys', name: '帆繩物理', def: 'b' }, { c: 'battle', id: 'mute', name: '靜音', def: 'm' }, { c: 'battle', id: 'restart', name: '重新開始', def: 'n' }, { c: 'battle', id: 'menu', name: '回主選單', def: '0' },
   // 第一人稱（81_fps.js fpKey）：走路四個鍵、轉頭 Q 按住才算（畫面上是搖桿，沒有圓鈕）

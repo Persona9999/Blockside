@@ -128,7 +128,7 @@ var INFO_SH = null, SB_EL = {}, SUNK_HIDE = 60;   // SUNK_HIDE：沉了幾秒（
 $('navc').addEventListener('pointerdown', function (e) { e.preventDefault(); e.stopPropagation(); var me = SHIPS[PLAYER_I]; if (!me) return; INFO_SH = INFO_SH === me ? null : me; fleetHud(me); });
 /** 「🎥 看這艘」（詳細資訊的標題列；Tim 2026-10-14）：鏡頭換成看那一艘（看我艦那一種：跟著它、繞著它轉，拖曳、平移、縮放照舊）；資訊不收。按 C 換鏡頭 ⇒ 回到照常的循環。 */
 function camSee(o) { if (!o) return; CAM.mode = 3; CAM.follow = null; CAM.pan = [0, 0]; CAM.see = o.i === PLAYER_I ? null : o; CAM.dist = 75; CAM.trYaw = null; }
-function fleetReset() { INFO_SH = null; for (var k in SB_EL) SB_EL[k].el.remove(); SB_EL = {}; [].forEach.call(document.querySelectorAll('.sbres'), function (e) { e.remove(); }); }
+function fleetReset() { INFO_SH = null; for (var k in SB_EL) SB_EL[k].el.remove(); SB_EL = {}; [].forEach.call(document.querySelectorAll('.sbres, .sigb'), function (e) { e.remove(); }); if ($('sigP')) $('sigP').classList.remove('on'); }
 function sbMake(o, box) {
   var el = document.createElement('div'), cv = document.createElement('canvas'); el.className = 'sb'; el.appendChild(cv);
   var nl = document.createElement('span'), nr = document.createElement('span'); nl.className = 'sbn l'; nr.className = 'sbn r'; el.appendChild(nl); el.appendChild(nr);   // 船員、砲（sbNums）
@@ -215,6 +215,12 @@ function fleetHud(me) {
       var b = SB_EL[o.i]; if (!b || b.box !== box) { if (b) b.el.remove(); b = SB_EL[o.i] = sbMake(o, box); }
       sbDraw(b, o, s === 'R'); sbNums(b, o);
     });
+    if (s === 'L') {                                                       // 🚩 旗號（TASK-0679）：我方有電腦開的友艦才有，排在我方那一欄最上面；點了開關旗號面板（71_input.js sigToggle）
+      var sg = box.querySelector('.sigb'), can = sigCan();
+      if (can && !sg) { sg = document.createElement('div'); sg.className = 'sigb'; sg.title = '旗號：對我方友艦下令（' + keyName('signals') + '）'; sg.textContent = '🚩'; sg.onclick = function (e) { e.stopPropagation(); sigToggle(); }; box.insertBefore(sg, box.firstChild); }
+      else if (!can && sg) { sg.remove(); sg = null; sigToggle(false); }
+      if (sg) sg.classList.toggle('on', !!SIGNAL);
+    }
     var n = RESERVE[team].length, rc = box.querySelector('.sbres');
     if (n && !rc) { rc = document.createElement('div'); rc.className = 'sbres'; box.appendChild(rc); }
     if (rc) { if (n) rc.textContent = '候補 ' + n; else rc.remove(); }
@@ -513,7 +519,7 @@ function hud(dt) {
   // 圖示（Tim 2026-10-15：「瞄準、鏡頭的文字顯示也改成 Icon，然後那邊是否可以額外顯示航速、船體 %、進水 %（一樣用 Icon）」）：第二行 ⛵ 航速（節，倒車 −）；船體 %、進水 % 改成羅盤外圈的兩圈（drawNav；Tim：「這樣就不用文字顯示」）
   var kn = me.spd * 1.944;
   var mt = $('modeT'), ms = '🎯 <b>' + (!handAim(me) ? '砲長' : (AUTOFIRE ? '手動一舷・' : '') + AIM_NAME[me.pMode || 'free']) + '</b>　🎥 <b>' + cn + '</b>' +
-    (HUD_OUTARC ? '　<b style="color:#ff9a7a">⚠ 射界外</b>' : '') + '<br>' +
+    (HUD_OUTARC ? '　<b style="color:#ff9a7a">⚠ 射界外</b>' : '') + (SIGNAL && MODE !== 'eve' ? '　🚩 <b>' + sigText() + '</b>' : '') + '<br>' +   // 玩家的旗號（TASK-0679；照指揮官 ⇒ 不寫）
     '⛵ <b>' + (kn < -0.05 ? '−' + (-kn).toFixed(1) : Math.max(0, kn).toFixed(1)) + '</b> 節' + (hasSails(me) ? '　' + sailSetName(me) + ' ' + Math.round(me.sailFrac * 100) + '%' : '') + (me.cfg.base > 0 ? '　⚙ ' + TELE_NAME[me.tele] : '') +   // 兩套控制（TASK-0630）：有帆才寫帆段、有額外動力才寫俥鐘
        // 帆 %（Tim 2026-10-15）：張著、還在的帆面積 × 血量（sailFrac，航速照它算）
     (RUNNING && SIM_SPEED !== 1 ? '　<b style="color:#9fd8ff">⏱ 模擬 ×' + (SIM_SPEED < 1 ? SIM_SPEED.toFixed(2) : SIM_SPEED.toFixed(1)) + '</b>' : '') +   // 設定的模擬速度（73_slowmo.js simSpeedSet）
@@ -562,7 +568,7 @@ function shipSettled(sh) {
   return sh.boomAt === undefined || SIMT - sh.boomAt >= END_SETTLE;
 }
 function checkEnd() {
-  if (!modeRule('judge') || DEMO >= 0) return;   // 玩法規則 judge（04_modes.js）：沙盒、建造不判勝負
+  if (!modeRule('judge') || DEMO >= 0 || LAB_FLEET) return;   // 擬真沙盒自己判（84_fleetlab.js）   // 玩法規則 judge（04_modes.js）：沙盒、建造不判勝負
   if (OVER) {                                                         // ③：等輸的那一方定了 ⇒ 倒數 ⇒ 跳
     var W = END_WAIT; if (!W) return;
     if (!W.at) { if (SIMT < W.limit && !W.lose.every(shipSettled)) return; W.at = SIMT + (W.lose.some(function (o) { return o.sunk; }) ? END_SINK : END_OTHER); }

@@ -13,6 +13,7 @@ var VK = window.VoxelKit, M4 = VK.M4;
 var Q = new URLSearchParams(location.search);
 var DEMO = Q.has('demo') ? Math.max(0, parseFloat(Q.get('demo')) || 0) : -1;
 var STILL = Q.get('still') === '1', DEBUG = Q.get('debug') === '1';
+var LAB_FLEET = Q.get('lab') === 'fleet';                              // 擬真沙盒（84_fleetlab.js；根目錄 fleetlab.html 轉過來）：遊戲本體的模擬、只畫俯視圖
 var SEED = (parseInt(Q.get('seed'), 10) >>> 0) || 1797;
 var CAMQ = Q.get('cam') || '';
 // 逐幀分段計時（?debug=1 才有；TASK-0531 找卡頓）：每一格畫面各段花幾 ms（模擬每一步的各段累加），留最近 PF.max 格；__game.frames() 讀最慢的幾格。
@@ -52,6 +53,8 @@ function accFix(o, k, unit, tag) {
 //   陰影圖、船艙遮罩都是貼圖陣列（各佔一個單元：陰影第 4 號、遮罩第 1 號）⇒ 船數不受貼圖單元限制。
 // FLEET_MAX：編成最多幾艘（主選單；Tim 2026-10-13「編成可以設高一點」）—— 同時在場的最多 FIELD_N 艘（主選單滑桿 2～MAX_SHIPS），其他的候補（52_fleet.js）。
 var MAX_SHIPS = CFG.limits.maxShips, MASK_NEAR = CFG.limits.maskNear, FLEET_MAX = CFG.limits.fleetMax;   // 預設 8／4／40
+/** 每 sec 秒一次 ＝ 每幾步（照現在的步長 DT；擬真沙盒可以把物理降到 30／20／15／10 Hz）。60 Hz 時 ＝ 以前寫死的步數（3 秒 180、半秒 30）。 */
+function everySteps(sec) { return Math.max(1, Math.round(sec / DT)); }
 var DT = 1 / 60, G = 9.81, V0 = 175, ZW0 = 63;    // ZW0：沒有 meta 時的設計水線（憲法號吃水 63 格，basecamp 的下水段同一個數）；每種船的在 T.zw
 var RELOAD = 7, RELOAD_SANDBOX = 1.6;
 var AMMO = ['實心彈', '爆裂彈', '鏈彈'];

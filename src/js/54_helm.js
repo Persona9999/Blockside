@@ -16,7 +16,7 @@ var HELMS = {
   basic: { name: '基礎款', tip: '把敵艦擺在一舷正橫、守開局距離；一舷被打爛就換另一舷；火力差太多就拉開', range: 1, swap: 0.5, evade: 0.5, evadeOut: 0.65, think: 3 }
 };
 var HELM_BACK_V = 2, HELM_EVADE_OUT = 0.9, HELM_FAR = 1.6, HELM_EVADE_R = 1.4, HELM_VMIN = 0.8, HELM_BRG_K = 2, HELM_BACK_D = 0.45;   // 遠於 1.6 R ⇒ 全速接近；被壓制 ⇒ 距離 × 1.4；最慢 0.8 m/s（舵要有水流）；正橫差 90° ⇒ 期望航速 ± 2 m/s；近於 0.45 R 而且敵艦在船頭 ⇒ 有動力的倒退
-var HELM_SAIL_T = 8, HELM_GOV_T = 1;                                     // 帆裝往下收要「該收」連續 8 秒（往上加馬上）；航速調節每 1 秒想一次
+var HELM_SAIL_T = 8, HELM_GOV_T = 1, HELM_LEAD_T = 15, HELM_TURN_E = 0.6, HELM_TURN_V = 2, HELM_TACK_E = 0.35, HELM_LEAD_MIN = 0.5;   // HELM_LEAD_T：戰列的排頭照幾秒後的距離轉（helmLead）；航向差 > HELM_TURN_E rad ⇒ 排頭全速、跟隨至少 HELM_TURN_V m/s（轉得過來）                                     // 帆裝往下收要「該收」連續 8 秒（往上加馬上）；航速調節每 1 秒想一次
 /** 一門砲的火力：砲重 × 有人操作的比例 ÷ 裝填倍率（10_ship.js GUNS：mass 噸、reload）。 */
 function helmGunW(g) { var G = GUNS[g.type] || {}; return (+G.mass || 1) * gunRate(g) / (+G.reload || 1); }
 /** 一舷的火力（迴旋砲、砲塔 g.mt 兩舷都算）。 */
@@ -68,7 +68,83 @@ function helmSteer(sh, foe) {
   }
   return { yaw: yaw, v: v };
 }
-var HELM_MODE = { approach: '接近', swap: '換舷', evade: '拉開', back: '倒退', abeam: '守正橫', cruise: '巡航' }, HELM_MODE_T = 4;
+var HELM_MODE = { approach: '接近', swap: '換舷', evade: '拉開', back: '倒退', abeam: '守正橫', cruise: '巡航', lead: '戰列排頭', line: '戰列跟隨', gauge: '搶上風' }, HELM_MODE_T = 4;
+/** 指揮官的命令改了打法（排頭、跟隨、搶上風）⇒ 記一筆（跟 helmSteer 的打法同一格 sh.hMode、同一個間隔）。 */
+function helmMode(sh, m, text) { if (m !== sh.hMode && SIMT - (sh.hModeT || -1e9) >= HELM_MODE_T) { sh.hMode = m; sh.hModeT = SIMT; helmSay(sh, 'mode', HELM_MODE[m] + '：' + text, false); } }
+/** 戰列的排頭（TASK-0679；指揮官 mode 'lead'，53_commander.js cmdLine）：照「整條戰列」開 ——
+ *  敵方還在打的船的中心（近了 ⇒ 最近的那艘敵艦）擺在交戰那一舷（od.side）正橫、距離 ＝ 交戰距離（aiRange；照 HELM_LEAD_T 秒後的距離）；
+ *  航向照 helmSteer 那一條（遠了往敵方切、近了往外拉），但不換舷、不拉開、不倒退；
+ *  期望航速 ＝ 巡航（戰鬥帆＋引擎）× od.pace（隊形還沒排好 ⇒ 0.7 等後面的；⛔ 全速 ⇒ 後面的跟一樣快的船永遠追不上）。 */
+function helmLead(sh, od) {
+  var L = SHIPS.filter(function (o) { return isFoe(sh, o) && !isOut(o); }); if (!L.length) return null;
+  var cx = 0, cz = 0, vx = 0, vz = 0; L.forEach(function (o) { cx += o.px; cz += o.pz; vx += o.vel[0]; vz += o.vel[2]; }); cx /= L.length; cz /= L.length; vx /= L.length; vz /= L.length;
+  // 近了（離敵方中心 < 2 × 交戰距離）改照最近的那艘敵艦：⛔ 一直照中心 ⇒ 敵方中心在它排頭後面 135 m，兩個排頭各自把「對方中心」擺在 210 m、自己卻並排在對方排頭旁邊 59 m（量過）
+  var nb = null, nd = 1e18; L.forEach(function (o) { var q = Math.hypot(o.px - sh.px, o.pz - sh.pz); if (q < nd) { nd = q; nb = o; } });
+  if (Math.hypot(cx - sh.px, cz - sh.pz) < 2 * aiRange() && nb) { cx = nb.px; cz = nb.pz; vx = nb.vel[0]; vz = nb.vel[2]; }
+  var n = SHIPS.filter(function (o) { return ORDERS[o.i] && ORDERS[o.i].mode === 'line' && o.team === sh.team && !isOut(o); }).length;
+  var sg = od.side === 'P' ? 1 : -1, dx = cx - sh.px, dz = cz - sh.pz, d = Math.hypot(dx, dz) || 1, R = aiRange();
+  var px = dx + (vx - sh.vel[0]) * HELM_LEAD_T, pz = dz + (vz - sh.vel[2]) * HELM_LEAD_T, dp = Math.min(d, Math.hypot(px, pz));   // HELM_LEAD_T 秒後會多近（兩條戰列對著開 ⇒ 早一點轉）
+  // 遠了往敵方切（最多 1.0 rad）、近了往外拉（最多 0.9）。⛔ 照 helmSteer 的 −0.4／照現在的距離 ⇒ 兩條戰列對著開、一起轉到同向時已經只隔 20 m，兩條穿插在一起並排走（量過 180 秒：兩個排頭隔 20 m、同航向）
+  var yaw = (sg > 0 ? Math.atan2(-dx / d, -dz / d) : Math.atan2(dx / d, dz / d)) + sg * clamp((dp - R) / R * 1.5, -0.9, 1.0);
+  if (!sh.noGoTack && n) {                                               // 第一次要搶風：往離自己的隊伍遠的那一舷搶（⛔ 往隊伍那一側 ⇒ 開局橫隊時排頭橫切過旁邊幾艘的船頭，讓船讓到 4000 步、0.2 節：量過風從船頭來的開局）
+    var mx = 0, mz = 0, W0 = norm(WIND); SHIPS.forEach(function (o) { var q = ORDERS[o.i]; if (q && q.mode === 'line' && q.head === sh.i && !isOut(o)) { mx += o.px - sh.px; mz += o.pz - sh.pz; } });
+    sh.noGoPref = (mx * -W0[2] + mz * W0[0]) > 0 ? -1 : 1;                  // 隊伍在風軸的哪一側（＋ ＝ 風吹去的方向往左轉 90°）⇒ 往另一側
+  }
+  yaw = helmNoGo(sh, yaw);
+  var cruise = sh.vCruise > 0 ? sh.vCruise : Infinity, v = cruise === Infinity ? Infinity : Math.max(HELM_VMIN, cruise * (od.pace || 1));
+  // 等最慢的那艘：跟著自己的（排頭的航跡）裡最慢的滿帆航速 × 0.9；慢到不到自己一半的（帆被打爛）不等，讓它脫隊（⛔ 不等 ⇒ 帆被打掉兩成的隊尾 4.6 節、整條 7.7 節，越拉越遠到 150 m：量過）
+  //   每艘的滿帆航速換成「在排頭這個航向」的（照帆速曲線的比例；⛔ 照它自己現在的航向 ⇒ 跟隨的正在頂風轉向、滿帆也只有 1 m/s，排頭跟著等到 0.2 節，整條停住：量過風從船頭來的開局）
+  var my = helmPolarAt(sh, sh.yaw), slow = Infinity;
+  SHIPS.forEach(function (o) {
+    var q = ORDERS[o.i]; if (!(q && q.mode === 'line' && q.head === sh.i && !isOut(o) && o.vFull > 0)) return;
+    var vo = o.vFull / Math.max(0.05, helmPolarAt(o, o.yaw)) * my;
+    if (!(sh.vFull > 0 && vo < 0.5 * sh.vFull)) slow = Math.min(slow, vo);
+  });
+  if (slow < Infinity) v = Math.max(HELM_VMIN, Math.min(v, 0.9 * slow));
+  if (sh.vFull > 0 && v !== Infinity) v = Math.max(v, HELM_LEAD_MIN * sh.vFull);   // 最慢 ＝ 自己滿帆的一半：⛔ 等到 0.2 節 ⇒ 航跡拉不出來、後面的擠在排頭旁邊互相讓（隊尾讓了 1 萬步），越等越排不起來（量過風從船頭來的開局）
+  if (Math.abs(Math.atan2(Math.sin(yaw - sh.yaw), Math.cos(yaw - sh.yaw))) > HELM_TURN_E) v = Infinity;   // 要大轉向 ⇒ 全速（舵靠水流；⛔ 照巡航 × pace ⇒ 頂風時巡航只剩 1.3 m/s、再打七折 ⇒ 0.3 節轉不過來，整條戰列停在那裡：量過風從船頭來的開局）
+  sh.leadDbg = { d: Math.round(d), dp: Math.round(dp), R: R, yaw: +yaw.toFixed(2) };   // 讀數（__game.ships()[i].leadDbg）
+  helmMode(sh, 'lead', '帶 ' + n + ' 艘排成縱隊，敵方中心擺在' + sideName(od.side) + '、距離 ' + d.toFixed(0) + ' m（要 ' + R.toFixed(0) + ' m）；巡航的 ' + Math.round((od.pace || 1) * 100) + '%' + (od.pace < CMD_PACE ? '（隊形還沒排好，等後面的）' : ''));
+  return { yaw: yaw, v: v };
+}
+/** 排頭要讓的友船（TASK-0679）：自己隊伍裡跟著的只在 40 m 內才讓（讓路是跟隨的事：它們照航跡、會讓排頭）。
+ *  ⛔ 每艘都讓 ⇒ 開局橫隊、排頭在中間，往哪一舷搶風都橫切過旁邊那艘的船頭 ⇒ 排頭 30–80 秒一直在讓、48 秒起 0.1 節停住（量過風從船頭來的開局）。 */
+function helmLeadAvoid(sh) { return friendsOf(sh).filter(function (o) { var q = ORDERS[o.i]; return !(q && q.mode === 'line' && q.head === sh.i) || Math.hypot(o.px - sh.px, o.pz - sh.pz) < 40; }); }
+/** 戰列跟隨（TASK-0679；mode 'line'）：照排頭的航跡、第 od.slot 個間距（53_commander.js cmdHelmWake）；離站位多遠、沿航跡落後多少記在 sh.lineErr／lineLag（指揮官下一次想的時候讀：排好了沒、排頭要不要等）。 */
+function helmFollow(sh, ld, od) {
+  var hd = od && od.head !== undefined && SHIPS[od.head] && !SHIPS[od.head].sunk ? SHIPS[od.head] : ld, gap = hd === ld ? CMD_LINE_GAP : (od.slot || 1) * CMD_LINE_GAP;   // 照排頭的航跡、第 slot 個間距（排頭沉了 ⇒ 照前一艘）
+  var r = cmdHelmWake({ x: sh.px, z: sh.pz, yaw: sh.yaw }, { x: hd.px, z: hd.pz, yaw: hd.yaw, spd: hd.spd }, hd.wake, gap);
+  if (r.v !== Infinity && Math.abs(Math.atan2(Math.sin(r.yaw - sh.yaw), Math.cos(r.yaw - sh.yaw))) > HELM_TURN_E) r.v = Math.max(r.v, HELM_TURN_V);   // 要大轉向 ⇒ 至少 HELM_TURN_V（舵要有水流）
+  sh.lineErr = r.err; sh.lineLag = r.lag; sh.lineOff = r.off; sh.lineArc = od && od.head !== undefined && hd === SHIPS[od.head] ? r.lag + gap : null;   // 沿排頭航跡離排頭多遠（指揮官照它重排前後；排頭沉了、改跟前一艘 ⇒ 沒有） sh.station = r.station;
+  helmMode(sh, 'line', '跟著 ' + ld.name + '（排頭 ' + hd.name + ' 的航跡、第 ' + Math.round(gap / CMD_LINE_GAP) + ' 個間距 ' + gap + ' m）；' + (r.lag > 0 ? '落後站位 ' + r.lag.toFixed(0) + ' m' : '超前 ' + (-r.lag).toFixed(0) + ' m') + '、離航跡 ' + r.off.toFixed(0) + ' m');
+  return r;
+}
+/** 搶風的角度（TASK-0679）：船頭跟「風吹去的方向」夾幾度時往上風走得最快（polar × 往上風的分量），照這艘的逆風性能（cfg.upwind）壓縮過的角度算；
+ *  只找到風從船頭 60° 為止（夾角 ≤ 120°）：⛔ 電腦現在不吃頂風失速（31_sailing.js nogo 只算手動）⇒ 帆速曲線在正頂風還有 0.25，再找下去會挑正頂風直衝，那不像帆船。快取在 sh.beatDeg。 */
+function helmBeat(sh) {
+  var UP = sh.cfg.upwind || 1; if (sh.beatDeg && sh.beatUp === UP) return sh.beatDeg;
+  var best = 90, bv = -1;
+  for (var deg = 90; deg <= 180 - NOGO_DEG; deg += 0.5) { var dU = UP === 1 ? deg : 90 + (deg - 90) / UP, v = polar(dU) * -Math.cos(deg / 57.2958); if (v > bv) { bv = v; best = deg; } }
+  sh.beatUp = UP; return (sh.beatDeg = best);
+}
+/** 這艘船朝 yaw 時帆速曲線的係數（照它的逆風性能壓縮過的角度；＝ 31_sailing.js sail 的 polar(dU)）。 */
+function helmPolarAt(o, yaw) { var W = norm(WIND), F = fwd(yaw), UP = o.cfg.upwind || 1, deg = Math.acos(clamp(F[0] * W[0] + F[2] * W[2], -1, 1)) * 57.2958; return polar(UP === 1 || deg <= 90 ? deg : 90 + (deg - 90) / UP); }
+/** 航向落在風從船頭 NOGO_DEG（60°）以內 ⇒ 換成近的那一側的搶風航向（helmBeat）。戰列的排頭用（TASK-0679）：
+ *  ⛔ 直接對著敵方開 ⇒ 敵方在上風時排頭正頂風（電腦不吃頂風失速、帆速曲線剩 0.25）2.3–2.7 節走 90 秒，後面整條跟著爬（量過風從船頭來的開局）。 */
+function helmNoGo(sh, yaw) {
+  var W = norm(WIND), F = fwd(yaw), deg = Math.acos(clamp(F[0] * W[0] + F[2] * W[2], -1, 1)) * 57.2958; if (deg <= 180 - NOGO_DEG) { sh.noGoTack = 0; return yaw; }
+  var up = Math.atan2(W[2], -W[0]), a = Math.PI - helmBeat(sh) / 57.2958, e = Math.atan2(Math.sin(yaw - up), Math.cos(yaw - up));   // up：正頂風的航向（fwd ＝ −W）
+  // 換舷搶風要越過正頂風 HELM_TACK_E 以上才換（⛔ 不留 ⇒ 要的航向在正頂風兩邊晃、排頭一直換舷，掉頭的那一段穿過後面跟上來的船，讓船讓到 3000–4500 步：量過）
+  var t = sh.noGoTack || sh.noGoPref || (e >= 0 ? 1 : -1); if (t * e < -HELM_TACK_E - (sh.noGoTack ? 0 : 0.6)) t = -t; sh.noGoTack = t;   // 第一次照偏好的那一舷（要的航向在另一側 0.95 rad 以上才不照）
+  return up + t * a;
+}
+/** 搶上風（mode 'gauge'）：迎風、往 od.tack 那一側偏 helmBeat 的角度；能多快就多快。 */
+function helmGauge(sh, od) {
+  var W = norm(WIND), a = Math.PI - helmBeat(sh) / 57.2958, ux = -W[0], uz = -W[2], nx = -W[2], nz = W[0], t = od.tack || 1;   // u：往上風；n：風吹去的方向往左轉 90°（＝ 53_commander.js cmdGauge 的 lat 那一側）
+  var hx = ux * Math.cos(a) + nx * t * Math.sin(a), hz = uz * Math.cos(a) + nz * t * Math.sin(a);
+  helmMode(sh, 'gauge', '迎風（風從船頭 ' + Math.round(180 - helmBeat(sh)) + '°）往' + (t > 0 ? '左' : '右') + '搶');
+  return { yaw: Math.atan2(-hz, hx), v: Infinity };
+}
 /** 艦長的一個決定：記進戰鬥報表（79_report.js rptHelm：時間、種類、理由）；big ⇒ 也上方廣播（換舷、拉開）。 */
 function helmSay(sh, kind, text, big) { if (big) note(sh, '艦長：' + text); rptHelm(sh, kind, text); }
 /** 這一段帆（k）還能出多少（0..1，照面積 × 血量，跟 sailFrac 同一個分母）。 */
@@ -84,7 +160,8 @@ function helmGovern(sh, vS, vB) {
   if (SIMT - (sh.govT || -1e9) < HELM_GOV_T) return;
   sh.govT = SIMT;
   var vk = [0, 1, 2, 3].map(function (k) { return vS * helmSetFrac(sh, k); }), k = sh.sailSet, p = sh.power || 0, spill = 1;
-  sh.vCruise = Math.hypot(hasSails(sh) ? vk[2] : 0, vB);                 // 巡航：戰鬥帆＋引擎全速（helmSteer 交戰時用；沒有帆 ⇒ 引擎全速）
+  sh.vCruise = Math.hypot(hasSails(sh) ? vk[2] : 0, vB);
+  sh.vFull = Math.hypot(hasSails(sh) ? vk[3] : 0, vB);                    // 這個航向能多快（滿帆＋引擎全速；戰列的排頭照最慢的那艘調，helmLead）                 // 巡航：戰鬥帆＋引擎全速（helmSteer 交戰時用；沒有帆 ⇒ 引擎全速）
   if (want === 'cruise') { if (useS) k = 2; p = 1; }                     // 巡航（helmSteer）：戰鬥帆＋引擎全速
   else if (want < 0) { if (useE) { k = useS ? 0 : k; p = want / vB; } else { k = useS ? 1 : k; spill = 0.3; } }
   else if (want >= Math.hypot(vk[3], useE ? vB : 0) * 0.98) { k = 3; p = 1; }

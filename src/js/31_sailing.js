@@ -141,12 +141,15 @@ function sail(sh, dt) {
     }
   } else {
     // 艦長（54_helm.js）：要哪一舷對敵（一舷火力不到另一舷一半 ⇒ 轉另一舷；⛔ 以前要一門都開不了才換）、航向（敵艦在那一舷正橫 ＋ 距離修正）、期望航速（下一步 helmGovern 換成帆裝與俥鐘）
-    if (!sh.struck && !sh.sunk && foe) { var hs = helmSteer(sh, foe); tY = hs.yaw; sh.wantV = hs.v; } else sh.wantV = null;
+    // 指揮官的命令（53_commander.js；TASK-0679）先問：戰列跟隨（照排頭的航跡）、戰列的排頭、搶上風 ⇒ 航向與期望航速照命令；都不是 ⇒ 艦長自己的交戰操舵
+    var od = ORDERS[sh.i], ok = !sh.struck && !sh.sunk, ld = ok && od && od.mode === 'line' ? SHIPS[od.leader] : null;
+    var hc = ld && !ld.sunk ? helmFollow(sh, ld, od) : ok && od && od.mode === 'gauge' ? helmGauge(sh, od) : ok && od && od.mode === 'lead' ? helmLead(sh, od) : null;
+    if (hc) { tY = hc.yaw; sh.wantV = hc.v; }
+    else if (ok && foe) { var hs = helmSteer(sh, foe); tY = hs.yaw; sh.wantV = hs.v; } else sh.wantV = null;
+    if (!(ld && !ld.sunk)) { sh.station = null; sh.lineErr = sh.lineLag = sh.lineArc = sh.lineOff = undefined; }
     sh.throttle = sh.helmSpill || 1;                                     // 只靠帆的船：期望航速比夠用的那一段帆慢 ⇒ 放掉一點風（54_helm.js helmGovern）
-    var od = ORDERS[sh.i], ld = od && od.mode === 'line' ? SHIPS[od.leader] : null;   // 戰列跟隨（指揮官，53_commander.js cmdHelmLine）：跟著前一艘的船尾
-    if (ld && !ld.sunk && !sh.struck && !sh.sunk) { var hl = cmdHelmLine({ x: sh.px, z: sh.pz, yaw: sh.yaw }, { x: ld.px, z: ld.pz, yaw: ld.yaw }); tY = hl.yaw; sh.throttle = hl.throttle; sh.station = hl.station; sh.wantV = Infinity; } else sh.station = null;   // 跟隨：帆照全速、快慢照跟隨的油門（跟以前一樣）
-    if (od && od.throttle !== undefined && !ld) sh.throttle = Math.min(sh.throttle, od.throttle);   // 指揮官給的油門（戰列的排頭等後面的跟上）
-    if (!sh.struck && !sh.sunk) { var av = friendAvoid(sh); if (av === null) av = foeAvoid(sh); if (av === null) av = lineClear(sh); if (av !== null) tY = av; }   // throttle 每一步重設（lineClear 要放慢才改）   // 讓友船 ＞ 讓敵艦（不撞，54_helm.js）＞ 讓開友艦的砲線（52_fleet.js；沒有友船 ⇒ null）
+    if (od && od.throttle !== undefined && !hc) sh.throttle = Math.min(sh.throttle, od.throttle);   // 指揮官給的油門（沙盒用；遊戲的排頭、跟隨照期望航速）
+    if (!sh.struck && !sh.sunk) { var av = friendAvoid(sh, hc && od.mode === 'lead' ? helmLeadAvoid(sh) : undefined); if (av === null) av = foeAvoid(sh); if (av === null && !hc) av = lineClear(sh); else if (hc) sh.clearing = null; if (av !== null) { tY = av; sh.avT = SIMT; } }   // avT：最後一次讓船的時刻（讀數）   // 戰列、搶上風（hc）不讓砲線（TASK-0679）：守隊形，擋到的那幾門照 friendInLine 不開（⛔ 讓 ⇒ 接近時敵艦在前方、前一艘永遠擋著後面的砲線，排頭 35 秒、紅方排頭 80 秒都在讓，隊形散掉）   // throttle 每一步重設（lineClear 要放慢才改）   // 讓友船 ＞ 讓敵艦（不撞，54_helm.js）＞ 讓開友艦的砲線（52_fleet.js；沒有友船 ⇒ null）
     var e = Math.atan2(Math.sin(tY - sh.yaw), Math.cos(tY - sh.yaw));
     rate = clamp(e * 0.5, -rmax, rmax); sh.rudder = rmax > 0 ? rate / rmax * (sh.spd < 0 ? -1 : 1) : 0;   // 倒退 ⇒ 舵反著打（畫面上的舵角；轉向照要的轉）
   }
@@ -158,6 +161,7 @@ function sail(sh, dt) {
   var px0 = sh.px, pz0 = sh.pz;
   sh.px += sh.vel[0] * dt; sh.pz += sh.vel[2] * dt;
   if (sh.anc) anchorStep(sh, dt, px0, pz0);                          // 錨咬著 ⇒ 錨鏈孔拉回鍊長以內、船繞錨鏈孔轉（76_anchor.js）
+  shipWake(sh);                                                       // 航跡（52_fleet.js；戰列跟隨照它走）
   // 航跡：船尾留一條白沫、船頭兩側推出的浪（點精靈，不撞任何東西）；船邊水花開著 ⇒ 換成 13_water.js 的（這裡照樣抽亂數、不放進去）
   if ((sh.wakeT -= dt) <= 0 && sh.spd > 0.4 && sh.sink < 6) {
     sh.wakeT = 0.12; ptMute(PHX.water > 0);
