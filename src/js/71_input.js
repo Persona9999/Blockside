@@ -640,47 +640,26 @@ function sliders() {
   $('sndB').onclick = function () { page('snd'); sndShow(); };   // 聲音設定（02_music.js，TASK-0677）
   $('sndX').onclick = function () { page(''); };
   $('pgX').onclick = function () { RE.i = -1; show(); page(''); };   // 右上角的返回（每一頁同一顆）
-  var rArm = 0;                                        // 這一型回到預設：按兩下（Tim：編起來很花時間 ⇒ 不要一按就沒了；⛔ 不用 confirm()：畫廊彈窗的 iframe 沒開 allow-modals，confirm 直接回 false）
-  $('shipR').onclick = function () {
-    var b = $('shipR'), hi = hullInfo(CFG_ID);
-    if (performance.now() - rArm > 4000) { rArm = performance.now(); b.textContent = '再按一次：' + (hi ? hi.name : CFG_ID) + '的船員、艙房與性能都回到預設'; setTimeout(function () { if (performance.now() - rArm >= 3900) b.textContent = '這一型回到預設'; }, 4000); return; }
-    rArm = 0; b.textContent = '這一型回到預設';
-    shipReset(CFG_ID); put(); show();
-  };
   function shipReset(id) {                             // 一型回到預設：船員、艙房的擺法、壓艙物、性能
     delete SHIP_CREW[id]; delete SHIP_ROOMS[id]; delete PREF_BALLAST[id];
     var c = shipCfg(id); SHIP_KEYS.forEach(function (k) { c[k] = k === 'ballast' ? (HULLT[id] ? HULLT[id].ballast0 : undefined) : cfgBase(k, id); });
   }
-  $('shipRA').onclick = function () {                  // 全部回到預設（65_ask.js 彈窗確認）：每一型（設定檔裡的船＋存檔裡有、這份成品沒有的）
-    askOk('船隻配置全部回到預設', '每一型船（不只正在看的這一型）的船員、艙房擺設、壓艙物與性能都回到預設。改過的會不見；要留的話先按「匯出…」。', '全部回到預設', function () {
-      var ids = {}; CFG.ships.forEach(function (s) { ids[s.id] = 1; }); [SHIP_CFG, SHIP_CREW, SHIP_ROOMS, PREF_BALLAST].forEach(function (m) { Object.keys(m).forEach(function (id) { ids[id] = 1; }); });
-      Object.keys(ids).forEach(shipReset); put(); show(); $('shipSt').textContent = '已全部回到預設（' + CFG.ships.length + ' 型船）。';
-    });
-  };
+  cfgKit('ship', {                                     // 那一排按鈕（64_cfgkit.js）；這一型回到預設按兩下（Tim：編起來很花時間 ⇒ 不要一按就沒了）
+    one: { idle: '這一型回到預設', arm: function () { var hi = hullInfo(CFG_ID); return '再按一次：' + (hi ? hi.name : CFG_ID) + '的船員、艙房與性能都回到預設'; }, run: function () { shipReset(CFG_ID); } },
+    all: { title: '船隻配置全部回到預設', body: '每一型船（不只正在看的這一型）的船員、艙房擺設、壓艙物與性能都回到預設。改過的會不見；要留的話先按「匯出…」。',
+      run: function () {                               // 每一型（設定檔裡的船＋存檔裡有、這份成品沒有的）
+        var ids = {}; CFG.ships.forEach(function (s) { ids[s.id] = 1; }); [SHIP_CFG, SHIP_CREW, SHIP_ROOMS, PREF_BALLAST].forEach(function (m) { Object.keys(m).forEach(function (id) { ids[id] = 1; }); });
+        Object.keys(ids).forEach(shipReset); return '已全部回到預設（' + CFG.ships.length + ' 型船）。';
+      } },
+    kind: 'ships', file: 'constitution_broadside_ships', expSay: '每一型的船員與性能', exp: function () { var o = shipsExport(); return { cfg: o.cfg, crew: o.crew, rooms: o.rooms }; },   // 69_prefs.js shipsExport
+    imp: shipsImport, what: '船隻配置', unit: '型船', show: function () { put(); show(); }
+  });
   $('allR').onclick = function () {                    // 主選單的全部回到預設：刪掉這台瀏覽器的存檔、重新載入 ⇒ 每一項都照程式與設定檔的預設（網址帶的參數照舊優先）
     askOk('全部回到預設', '主選單的選擇（模式、玩法、艦隊、航行、距離、天氣、畫質、物理效果）、細節設定、船隻配置、砲的設定、道具設定、鍵位，全部回到預設：這台瀏覽器裡的存檔會刪掉，頁面重新載入。要留的話先到各設定頁按「匯出…」。', '全部回到預設', function () {
       PREFS.write = false;                               // ⛔ 關頁時的自動存檔會把現在的設定又寫回去（69_prefs.js）
       try { window.localStorage.removeItem(PREFS_KEY); } catch (e) { /* 這一頁不能用 localStorage（畫廊彈窗）⇒ 本來就沒有存檔 */ }
       location.reload();
     });
-  };
-  $('shipE').onclick = function () {                   // 匯出：每一型整份（69_prefs.js shipsExport）
-    var s = JSON.stringify(shipsExport(), null, 1), a = document.createElement('a'), d = new Date();
-    a.href = URL.createObjectURL(new Blob([s], { type: 'application/json' }));
-    a.download = 'constitution_broadside_ships_' + d.getFullYear() + ('0' + (d.getMonth() + 1)).slice(-2) + ('0' + d.getDate()).slice(-2) + '.json';
-    document.body.appendChild(a); a.click(); setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
-    $('shipSt').textContent = '已匯出 ' + a.download + '（每一型的船員與性能）。';
-  };
-  $('shipI').onclick = function () { $('shipF').value = ''; $('shipF').click(); };
-  $('shipF').onchange = function () {
-    var f = $('shipF').files[0]; if (!f) return;
-    var r = new FileReader();
-    r.onload = function () {
-      var n = -1; try { n = shipsImport(JSON.parse(r.result)); } catch (e) { n = -1; }
-      put(); show();
-      $('shipSt').textContent = n < 0 ? '⚠ 匯入失敗：' + f.name + ' 不是這個遊戲匯出的船隻配置。' : '已匯入 ' + f.name + '：' + n + ' 型船' + (PREFS.write ? '（已存）。' : '（這一頁存不了，下次打開要再匯入）。');
-    };
-    r.readAsText(f);
   };
   askUI();                                             // 確認彈窗（65_ask.js）：⛔ 要比 keysUI 先掛（鍵盤的捕獲階段照掛的先後）
   gfxUI(); phxUI(); gunUI(); gunShow(); furnUI(page); furnShow(); keysUI(page); keysShow();

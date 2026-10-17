@@ -23,7 +23,7 @@ function gunVal(t, k) { if (k === 'dmg') return DMG[t]; var v = GUNS[t][k]; retu
 /** 改一項（夾進範圍、整數的取整）；跟預設一樣 ⇒ 從 GUN_SET 拿掉。標準砲班 ＜ 最少 ⇒ 最少跟著降。 */
 function gunSet(t, k, v) {
   var it = gunItem(k); if (!it || !GUNS[t] || typeof v !== 'number' || !isFinite(v)) return;
-  var L = gunLim(t, it); v = clamp(v, L[0], L[1]); v = it.int ? Math.round(v) : Math.round(v / it.step) * it.step; v = +v.toFixed(4);
+  v = cfgSnap(it, v, gunLim(t, it));                                   // 夾進範圍、對齊刻度（64_cfgkit.js）
   if (k === 'min') v = Math.min(v, gunVal(t, 'crew'));
   if (k === 'dmg') { DMG[t] = v; return; }
   var d = gunDef(t, k), S = GUN_SET[t] = GUN_SET[t] || {};
@@ -51,9 +51,9 @@ function gunsApply(o) {
 /** 匯出：每一種砲整份（含傷害）。 */
 function gunsExport() {
   var g = {}; Object.keys(GUNS).forEach(function (t) { g[t] = {}; GUN_ITEMS.forEach(function (it) { g[t][it.k] = gunVal(t, it.k); }); });
-  return { game: 'ame_constitution_broadside', kind: 'guns', v: 1, at: new Date().toISOString(), guns: g };
+  return cfgHead('guns', { guns: g });
 }
-function gunsImport(o) { return o && o.game === 'ame_constitution_broadside' && o.kind === 'guns' ? gunsApply(o.guns) : -1; }
+function gunsImport(o) { return cfgMine(o, 'guns') ? gunsApply(o.guns) : -1; }
 // ── 頁面（71_input.js sliders 接返回、換頁） ──
 var GUN_ID = Object.keys(GUNS)[0];
 function gunFmt(t, it, v) { return (it.int ? String(v) : v.toFixed(it.fix || 2)) + (it.unit || ''); }
@@ -61,40 +61,15 @@ function gunUI() {
   var sel = $('gunSel');
   sel.innerHTML = Object.keys(GUNS).map(function (t) { return '<option value="' + t + '">' + GUNS[t].name + '（' + GUNS[t].code + '）</option>'; }).join('');
   sel.value = GUN_ID; sel.onchange = function () { GUN_ID = sel.value; gunShow(); };
-  $('gunItems').innerHTML = GUN_ITEMS.map(function (it) {
-    return '<div class="row slide"><label for="gk-' + it.k + '">' + it.name + '</label><input type="range" id="gk-' + it.k + '" step="' + it.step + '" aria-label="' + it.name + '"><span id="gk-' + it.k + 'V"></span></div>' +
-      '<div class="row note gkn">' + it.note + '</div>';
-  }).join('');
+  $('gunItems').innerHTML = cfgSliders(GUN_ITEMS, 'gk-');
   GUN_ITEMS.forEach(function (it) { var r = $('gk-' + it.k); r.oninput = function () { gunSet(GUN_ID, it.k, +r.value); gunShow(); }; });
-  var rArm = 0;
-  $('gunR').onclick = function () {                      // 按兩下（跟船隻配置頁一樣：⛔ confirm() 在畫廊彈窗裡直接回 false）
-    var b = $('gunR');
-    if (performance.now() - rArm > 4000) { rArm = performance.now(); b.textContent = '再按一次：' + GUNS[GUN_ID].name + '回到預設'; setTimeout(function () { if (performance.now() - rArm >= 3900) b.textContent = '這一種回到預設'; }, 4000); return; }
-    rArm = 0; b.textContent = '這一種回到預設'; gunReset(GUN_ID); gunShow();
-  };
-  $('gunRA').onclick = function () {                     // 全部回到預設（65_ask.js 彈窗確認）
-    askOk('砲的設定全部回到預設', '每一種砲（不只正在看的這一種）的數值與每發傷害都回到預設。改過的會不見；要留的話先按「匯出…」。', '全部回到預設', function () {
-      var ts = Object.keys(GUNS); ts.forEach(gunReset); gunShow(); $('gunSt').textContent = '已全部回到預設（' + ts.length + ' 種砲）。';
-    });
-  };
-  $('gunE').onclick = function () {
-    var s = JSON.stringify(gunsExport(), null, 1), a = document.createElement('a'), d = new Date();
-    a.href = URL.createObjectURL(new Blob([s], { type: 'application/json' }));
-    a.download = 'constitution_broadside_guns_' + d.getFullYear() + ('0' + (d.getMonth() + 1)).slice(-2) + ('0' + d.getDate()).slice(-2) + '.json';
-    document.body.appendChild(a); a.click(); setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
-    $('gunSt').textContent = '已匯出 ' + a.download + '（每一種砲整份）。';
-  };
-  $('gunI').onclick = function () { $('gunF').value = ''; $('gunF').click(); };
-  $('gunF').onchange = function () {
-    var f = $('gunF').files[0]; if (!f) return;
-    var r = new FileReader();
-    r.onload = function () {
-      var n = -1; try { n = gunsImport(JSON.parse(r.result)); } catch (e) { n = -1; }
-      gunShow();
-      $('gunSt').textContent = n < 0 ? '⚠ 匯入失敗：' + f.name + ' 不是這個遊戲匯出的砲的設定。' : '已匯入 ' + f.name + '：' + n + ' 種砲' + (PREFS.write ? '（已存）。' : '（這一頁存不了，下次打開要再匯入）。');
-    };
-    r.readAsText(f);
-  };
+  cfgKit('gun', {                                        // 那一排按鈕（64_cfgkit.js）
+    one: { idle: '這一種回到預設', arm: function () { return '再按一次：' + GUNS[GUN_ID].name + '回到預設'; }, run: function () { gunReset(GUN_ID); } },
+    all: { title: '砲的設定全部回到預設', body: '每一種砲（不只正在看的這一種）的數值與每發傷害都回到預設。改過的會不見；要留的話先按「匯出…」。',
+      run: function () { var ts = Object.keys(GUNS); ts.forEach(gunReset); return '已全部回到預設（' + ts.length + ' 種砲）。'; } },
+    kind: 'guns', file: 'constitution_broadside_guns', expSay: '每一種砲整份', exp: function () { return { guns: gunsExport().guns }; },
+    imp: gunsImport, what: '砲的設定', unit: '種砲', show: gunShow
+  });
 }
 /** 變數 ⇒ 這一頁（滑桿、數字、跟預設不一樣的標「改過」）。 */
 function gunShow() {
@@ -102,7 +77,7 @@ function gunShow() {
   GUN_ITEMS.forEach(function (it) {
     var r = $('gk-' + it.k), L = gunLim(t, it), v = gunVal(t, it.k), d = gunDef(t, it.k);
     r.min = L[0]; r.max = it.k === 'min' ? gunVal(t, 'crew') : L[1]; r.value = v;
-    $('gk-' + it.k + 'V').textContent = gunFmt(t, it, v) + (v === d ? '' : '（改過；預設 ' + gunFmt(t, it, d) + '）');
+    $('gk-' + it.k + 'V').textContent = cfgShown(function (x) { return gunFmt(t, it, x); }, v, d);
   });
   $('gk-burstGap').disabled = gunVal(t, 'burst') <= 1;
   var where = Object.keys(HULLT).map(function (id) { var n = (HULLT[id].rig.models || []).filter(function (m) { return modelKind(m) === t; }).length; return n ? ((hullInfo(id) || {}).name || id) + ' ' + n + ' 門' : ''; }).filter(Boolean);

@@ -103,37 +103,19 @@ function keyReset(c) { KEY_ACTS.forEach(function (a) { if (!c || a.c === c) dele
 function keySnap() { return JSON.parse(JSON.stringify(KEY_SET)); }
 /** 存檔／匯入 ⇒ 變數：認得的動作、合法的鍵才收；回收了幾個。 */
 function keyApply(o) { var n = keyMerge(KEY_SET, o); Object.keys(KEY_SET).forEach(function (id) { if (KEY_SET[id] === KEY_DEF[id]) delete KEY_SET[id]; }); keyRebuild(); return n; }
-function keyExport() { var all = {}; KEY_ACTS.forEach(function (a) { all[a.id] = KEYS_NOW[a.id]; }); return { game: 'ame_constitution_broadside', kind: 'keys', v: 1, at: new Date().toISOString(), keys: all }; }
-function keyImport(o) { return o && o.game === 'ame_constitution_broadside' && o.kind === 'keys' ? keyApply(o.keys) : -1; }
+function keyExport() { var all = {}; KEY_ACTS.forEach(function (a) { all[a.id] = KEYS_NOW[a.id]; }); return cfgHead('keys', { keys: all }); }
+function keyImport(o) { return cfgMine(o, 'keys') ? keyApply(o.keys) : -1; }
 function keysUI(page) {
   $('keysTabs').innerHTML = KEY_CTX.map(function (c) { return '<button data-kc="' + c.id + '">' + c.name + '</button>'; }).join('');
   [].forEach.call($('keysTabs').querySelectorAll('button'), function (b) { b.onclick = function () { KEY_TAB = b.dataset.kc; KEY_WAIT = null; keysShow(); }; });
-  var rArm = 0;
-  $('keysR').onclick = function () {                                     // 按兩下（同道具設定）
-    var b = $('keysR'), nm = KEY_CTX.filter(function (c) { return c.id === KEY_TAB; })[0].name;
-    if (performance.now() - rArm > 4000) { rArm = performance.now(); b.textContent = '再按一次：' + nm + '回到預設'; setTimeout(function () { if (performance.now() - rArm >= 3900) b.textContent = '這一頁回到預設'; }, 4000); return; }
-    rArm = 0; b.textContent = '這一頁回到預設'; keyReset(KEY_TAB); keysShow();
-  };
-  $('keysRA').onclick = function () {                                    // 全部回到預設（65_ask.js 彈窗確認）：三個模式
-    KEY_WAIT = null;
-    askOk('鍵位全部回到預設', KEY_CTX.map(function (c) { return c.name; }).join('、') + '（不只正在看的這一頁）的鍵都回到預設。改過的會不見；要留的話先按「匯出…」。', '全部回到預設', function () {
-      keyReset(); keysShow(); $('keysSt').textContent = '已全部回到預設（' + KEY_CTX.length + ' 個模式）。';
-    });
-  };
-  $('keysE').onclick = function () {
-    var s = JSON.stringify(keyExport(), null, 1), a = document.createElement('a'), d = new Date();
-    a.href = URL.createObjectURL(new Blob([s], { type: 'application/json' }));
-    a.download = 'blockside_keys_' + d.getFullYear() + ('0' + (d.getMonth() + 1)).slice(-2) + ('0' + d.getDate()).slice(-2) + '.json';
-    document.body.appendChild(a); a.click(); setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
-    $('keysSt').textContent = '已匯出 ' + a.download + '（三個模式整份）。';
-  };
-  $('keysI').onclick = function () { $('keysF').value = ''; $('keysF').click(); };
-  $('keysF').onchange = function () {
-    var f = $('keysF').files[0]; if (!f) return;
-    var r = new FileReader();
-    r.onload = function () { var n = -1; try { n = keyImport(JSON.parse(r.result)); } catch (e) { n = -1; } keysShow(); $('keysSt').textContent = n < 0 ? '⚠ 匯入失敗：' + f.name + ' 不是這個遊戲匯出的鍵位。' : '已匯入 ' + f.name + '：' + n + ' 個鍵' + (PREFS.write ? '（已存）。' : '（這一頁存不了，下次打開要再匯入）。'); };
-    r.readAsText(f);
-  };
+  function tabName() { return KEY_CTX.filter(function (c) { return c.id === KEY_TAB; })[0].name; }
+  cfgKit('keys', {                                       // 那一排按鈕（64_cfgkit.js）
+    one: { idle: '這一頁回到預設', arm: function () { return '再按一次：' + tabName() + '回到預設'; }, run: function () { keyReset(KEY_TAB); } },
+    all: { before: function () { KEY_WAIT = null; }, title: '鍵位全部回到預設', body: KEY_CTX.map(function (c) { return c.name; }).join('、') + '（不只正在看的這一頁）的鍵都回到預設。改過的會不見；要留的話先按「匯出…」。',
+      run: function () { keyReset(); return '已全部回到預設（' + KEY_CTX.length + ' 個模式）。'; } },
+    kind: 'keys', file: 'blockside_keys', expSay: '三個模式整份', exp: function () { return { keys: keyExport().keys }; },
+    imp: keyImport, what: '鍵位', unit: '個鍵', show: keysShow
+  });
   window.addEventListener('keydown', function (e) {                      // 等新鍵：開著這一頁、按了「改」才收（捕獲階段：⛔ 讓遊戲的鍵盤處理先吃到）
     if (!KEY_WAIT || $('keysp').style.display === 'none') return;
     e.preventDefault(); e.stopImmediatePropagation();                   // ⛔ stopPropagation 擋不住同掛在 window 上的（71_input.js 的 Esc 關頁、遊戲的鍵）
@@ -161,19 +143,10 @@ function keysShow() {
 }
 /** 開發後台（?admin=keys）：同一頁多一列 —— 「存成出廠預設」⇒ KEY_SET 送給開這一頁的設定後台（postMessage；⛔ 成品裡不能有 fetch）⇒ admin.py act_keys；「重建」；「回設定後台」。 */
 function keysAdmUI(page) {
-  $('keysp').classList.add('admin');
-  var out = $('keysAdmL'), wait = null;
-  window.addEventListener('message', function (ev) { if (ev.origin !== location.origin || !ev.data || ev.data.kind !== 'cb-admdef-r' || !wait) return; var w = wait; wait = null; out.textContent = (ev.data.log || []).join('\n'); w(ev.data); });
-  function post(op, data) {
-    var ad = window.opener; if (!ad || ad.closed) { out.textContent = '⚠ 找不到設定後台：要從設定後台的「用鍵位設定頁設出廠預設值…」開這一頁'; return Promise.resolve({ ok: false }); }
-    out.textContent = '…（設定後台處理中；重建要十幾秒）'; ad.postMessage({ kind: 'cb-admdef', op: op, keys: data }, location.origin);
-    return new Promise(function (res) { wait = res; });
-  }
-  $('keysAdmS').onclick = function () {
-    var o = keySnap(); if (!Object.keys(o).length) { out.textContent = '（都跟出廠預設一樣，沒有要存的）'; return; }
-    post('keys', o).then(function (j) { if (!j.ok) return; Object.keys(o).forEach(function (id) { KEY_DEF[id] = o[id]; delete KEY_SET[id]; }); keyRebuild(); keysShow(); });
-  };
-  $('keysAdmB').onclick = function () { post('build'); };
-  $('keysAdmX').onclick = $('keysX').onclick = $('pgX').onclick = function () { if (window.opener && !window.opener.closed) window.close(); else location.href = '/'; };
+  cfgAdm({ panel: 'keysp', out: 'keysAdmL', from: '用鍵位設定頁設出廠預設值…', build: 'keysAdmB', back: ['keysAdmX', 'keysX', 'pgX'],
+    save: { id: 'keysAdmS', run: function (post, out) {
+      var o = keySnap(); if (!Object.keys(o).length) { out.textContent = '（都跟出廠預設一樣，沒有要存的）'; return; }
+      post('keys', { keys: o }).then(function (j) { if (!j.ok) return; Object.keys(o).forEach(function (id) { KEY_DEF[id] = o[id]; delete KEY_SET[id]; }); keyRebuild(); keysShow(); });
+    } } });
 }
 keyRebuild();                                                            // 載入時先算一次（69_prefs.js 讀存檔之後 keyApply 會再算）

@@ -21,140 +21,151 @@ if (Q.has('cmd')) Q.get('cmd').split(',').forEach(function (w, i) { if (i < 2 &&
  *  開頁 ⇒ 細節設定頁（值 ＝ 這份成品裡設定檔的預設，PREFS 不讀不存）；「存成出廠預設」⇒ prefsSnap 跟預設不一樣的那幾項裡、是滑桿（LIM 有那個鍵、數字）的 ⇒ POST /api/defaults（admin.py act_defaults 只改 lim[鍵][2]）；
  *  其他（勾選、彈種倍率、砲長、主選單的選擇…）列出來、不存。存了 ⇒ 這一頁的 LIM 預設跟著換（再改從新的預設比）。「重建」⇒ /api/build。「回設定後台」⇒ 回 /。 */
 function admDefUI(page) {
-  page('det'); $('detail').classList.add('admin');
-  var out = $('detAdmL');
-  // ⛔ 成品裡不能有 fetch（vxk_inline.py 的檢查：展品零外部依賴）⇒ 跟甲板與艙房編輯器一樣用 postMessage：送給開這一頁的設定後台（window.opener），由它呼叫 admin.py、把結果送回來（cb-admdef-r）
-  var wait = null;
-  window.addEventListener('message', function (ev) { if (ev.origin !== location.origin || !ev.data || ev.data.kind !== 'cb-admdef-r' || !wait) return; var w = wait; wait = null; out.textContent = (ev.data.log || []).join('\n'); w(ev.data); });
-  function post(op, data) {
-    var ad = window.opener; if (!ad || ad.closed) { out.textContent = '⚠ 找不到設定後台：要從設定後台的「用細節設定頁設出廠預設值…」開這一頁'; return Promise.resolve({ ok: false }); }
-    out.textContent = '…（設定後台處理中；重建要十幾秒）'; ad.postMessage({ kind: 'cb-admdef', op: op, lim: data }, location.origin);
-    return new Promise(function (res) { wait = res; });
-  }
-  $('detAdmS').onclick = function () {
-    var o = prefsSnap(), lim = {}, skip = [];
-    Object.keys(o).forEach(function (k) { if (k === 'v') return; if (LIM[k] && typeof o[k] === 'number') lim[k] = o[k]; else skip.push(k); });
-    if (!Object.keys(lim).length) { out.textContent = '（滑桿都跟出廠預設一樣，沒有要存的）' + (skip.length ? '\n不是滑桿、沒存：' + skip.join('、') : ''); return; }
-    post('save', lim).then(function (j) {
-      if (j.ok) Object.keys(lim).forEach(function (k) { LIM[k][2] = lim[k]; });
-      if (skip.length) out.textContent += '\n不是滑桿、沒存：' + skip.join('、');
-    });
-  };
-  $('detAdmB').onclick = function () { post('build'); };
-  $('detAdmX').onclick = $('detX').onclick = $('pgX').onclick = function () { if (window.opener && !window.opener.closed) window.close(); else location.href = '/'; };   // 回設定後台：關掉這個分頁（後台是開它的那一頁）
+  page('det');
+  cfgAdm({ panel: 'detail', out: 'detAdmL', from: '用細節設定頁設出廠預設值…', build: 'detAdmB', back: ['detAdmX', 'detX', 'pgX'],   // 64_cfgkit.js：回設定後台 ＝ 關掉這個分頁（後台是開它的那一頁）
+    save: { id: 'detAdmS', run: function (post, out) {
+      var o = prefsSnap(), lim = {}, skip = [];
+      Object.keys(o).forEach(function (k) { if (k === 'v') return; if (LIM[k] && typeof o[k] === 'number') lim[k] = o[k]; else skip.push(k); });
+      if (!Object.keys(lim).length) { out.textContent = '（滑桿都跟出廠預設一樣，沒有要存的）' + (skip.length ? '\n不是滑桿、沒存：' + skip.join('、') : ''); return; }
+      post('save', { lim: lim }).then(function (j) {
+        if (j.ok) Object.keys(lim).forEach(function (k) { LIM[k][2] = lim[k]; });
+        if (skip.length) out.textContent += '\n不是滑桿、沒存：' + skip.join('、');
+      });
+    } } });
 }
-/** 現在的設定裡跟預設不一樣的那幾項（＋版本號）。 */
+/** 存檔的描述表（TASK-0670：以前 prefsSnap／prefsApply 一項一項各寫一次）：每一項 ＝
+ *    數字 prefNum(鍵, 範圍（函式：設定後台改了預設要讀到新的）, 整數, 讀, 寫, 網址參數)：跟範圍的第三格（預設）不一樣才存；讀的時候夾進範圍
+ *    勾選 prefBool(鍵, 預設, 讀, 寫, 網址參數)：跟預設不一樣才存；讀的時候要是 true／false
+ *    其他 prefAny(鍵, 存（寫進 o）, 讀（從 p）)：艦隊、船隻配置、各設定頁的表、畫質、物理效果…自己的格式
+ *  網址參數（q；沒給 ＝ 跟鍵同名，null ＝ 網址不管）有帶 ⇒ 那一項不讀（照網址）。照讀的先後排（mode 在 auto 之前、phx 之後才算 PHYS）；
+ *  存檔的鍵也照這個順序。⛔ 拿掉一項 ⇒ 那一項不存也不讀。 */
+function prefNum(k, lim, int, get, set, q) { return { k: k, q: q === undefined ? k : q, lim: lim, int: int, get: get, set: set }; }
+function prefBool(k, def, get, set, q) { return { k: k, q: q === undefined ? k : q, def: def, get: get, set: set, bool: true }; }
+function prefAny(k, snap, apply) { return { k: k, snap: snap, apply: apply }; }
+function prefLim(k) { return function () { return LIM[k]; }; }
+function prefOk(v, lim, int) { if (typeof v !== 'number' || !isFinite(v)) return undefined; v = clamp(v, lim[0], lim[1]); return int ? Math.round(v) : v; }
+var PREF_ITEMS = [
+  prefAny('fleet', function (o) { if (FLEET_SET.some(function (L) { return L.length !== 1 || L[0] !== HULL_DEF; })) o.fleet = FLEET_SET.map(function (L) { return L.slice(); }); },   // 艦隊編成（TASK-0537；舊存檔的 ship ＝ 一邊一艘，讀的時候照樣認）
+    function (p) {
+      if (Q.has('ship') || Q.has('blue') || Q.has('red')) return;        // 編成：網址給了任何一個 ⇒ 整組照網址
+      if (Array.isArray(p.ship)) p.ship.forEach(function (w, i) { if (i < 2 && hullInfo(w)) FLEET_SET[i] = [w]; });   // 舊存檔（一邊一艘）
+      if (Array.isArray(p.fleet)) p.fleet.forEach(function (L, i) { if (i < 2 && Array.isArray(L)) { L = L.filter(function (w) { return typeof w === 'string' && hullInfo(w); }); if (L.length) FLEET_SET[i] = L; } });
+      fleetTrim(FLEET_SET);
+    }),
+  prefAny('ships', function (o) {                                       // 船隻配置頁：船隻設定 cfg（照那一型的預設比）、船員 crew（TASK-0570）、艙房的擺法 rooms（TASK-0568）
+    var cfg = {};
+    Object.keys(SHIP_CFG).forEach(function (id) {
+      var c = SHIP_CFG[id], T = HULLT[id], d = {};
+      SHIP_KEYS.forEach(function (k) { if (k !== 'ballast' && c[k] !== cfgBase(k, id)) d[k] = c[k]; });   // 跟那一型的預設比（HULL_CFG0）
+      if (d.hard !== undefined) d.hard1 = 1;                            // 硬度是倍率（1 ＝ 只看材質；2026-10-16 起）⇒ 讀的時候分得出舊存檔（舊的是 3 ＝ 預設的刻度）
+      if (T && c.ballast !== undefined) { if (c.ballast !== T.ballast0) { d.ballast = c.ballast; d.chk = T.h.checksum; } }
+      else if (PREF_BALLAST[id]) { d.ballast = PREF_BALLAST[id].v; d.chk = PREF_BALLAST[id].chk; }   // 這一場沒載那艘船 ⇒ 存檔裡的照留
+      if (Object.keys(d).length) cfg[id] = d;
+    });
+    if (Object.keys(cfg).length) o.cfg = cfg;
+    var cr = crewSnap(true); if (Object.keys(cr).length) o.crew = cr;
+    var rm = roomsSnap(true); if (Object.keys(rm).length) o.rooms = rm;
+  }, function (p) { shipsApply(p); }),
+  prefNum('gunhp', prefLim('gunhp'), true, function () { return GUN_HP; }, function (x) { GUN_HP = x; }),
+  prefNum('sailhp', prefLim('sailhp'), true, function () { return SAIL_HP; }, function (x) { SAIL_HP = x; }),
+  prefNum('crewhp', prefLim('crewhp'), true, function () { return CREW_HP; }, function (x) { CREW_HP = x; }),
+  prefNum('crewdeath', prefLim('crewdeath'), true, function () { return CREW_DEATH; }, function (x) { CREW_DEATH = x; }),
+  prefNum('powderhp', prefLim('powderhp'), true, function () { return POWDER_HP; }, function (x) { POWDER_HP = x; }),
+  prefNum('blast', prefLim('blast'), false, function () { return BLAST_K; }, function (x) { BLAST_K = x; }),
+  prefNum('blastv', prefLim('blastv'), false, function () { return BLAST_V; }, function (x) { BLAST_V = x; }),
+  prefNum('box', prefLim('box'), true, function () { return BOX_N; }, function (x) { BOX_N = x; }),
+  prefNum('carry', prefLim('carry'), true, function () { return CARRY_N; }, function (x) { CARRY_N = x; }),
+  prefNum('hands', prefLim('hands'), true, function () { return HANDS; }, function (x) { HANDS = x; }),
+  prefNum('drown', prefLim('drown'), true, function () { return DROWN_T; }, function (x) { DROWN_T = x; }),
+  prefNum('navre', prefLim('navre'), false, function () { return NAV_RE; }, function (x) { NAV_RE = x; }),
+  prefNum('heal', prefLim('heal'), true, function () { return HEAL_T; }, function (x) { HEAL_T = x; }),
+  prefNum('debcap', function () { return DEB_LIM; }, true, function () { return DEB_CAP; }, function (x) { DEB_CAP = x; }),   // 碎片上限（畫質頁；07_gfx.js）
+  prefNum('smoke', function () { return SMOKE_LIM; }, false, function () { return SMOKE_K; }, function (x) { SMOKE_K = Math.round(x * 10) / 10; }),   // 煙消散（畫質頁；07_gfx.js）
+  prefNum('wind', prefLim('wind'), false, function () { return WIND_K; }, function (x) { WIND_K = x; }),
+  prefNum('windcap', prefLim('windcap'), false, function () { return WIND_CAP; }, function (x) { WIND_CAP = x; }),
+  prefNum('inertia', prefLim('inertia'), false, function () { return DRV_INERTIA; }, function (x) { DRV_INERTIA = x; }),   // 動力的手感（31_drive.js）
+  prefNum('turninert', prefLim('turninert'), false, function () { return DRV_TURN; }, function (x) { DRV_TURN = x; }),
+  prefNum('sailtq', prefLim('sailtq'), false, function () { return DRV_TQ; }, function (x) { DRV_TQ = x; }),
+  prefAny('play', function (o) { if (PLAY !== CFG.menu.play) o.play = PLAY; }, function (p) { if (!Q.has('play') && (p.play === 'fun' || p.play === 'real')) PLAY = p.play; }),
+  prefNum('stall', prefLim('stall'), false, function () { return STALL_K; }, function (x) { STALL_K = x; }),
+  prefNum('sea', prefLim('sea'), false, function () { return SEA_K; }, function (x) { SEA_K = x; }),
+  prefAny('weather', function (o) { if (WX_ID !== 'clear') o.weather = WX_ID; }, function (p) { if (!Q.has('weather') && WEATHERS[p.weather]) { WX_ID = p.weather; WX = WEATHERS[WX_ID]; } }),   // 天色在 71_input.js 開頭 setWeather 套
+  prefNum('funspeed', prefLim('funspeed'), false, function () { return FUN.speed; }, function (x) { FUN.speed = x; }),
+  prefNum('funagile', prefLim('funagile'), false, function () { return FUN.agile; }, function (x) { FUN.agile = x; }),
+  prefNum('funstall', prefLim('funstall'), false, function () { return FUN.stall; }, function (x) { FUN.stall = x; }),
+  prefNum('funpowder', prefLim('funpowder'), false, function () { return FUN.powder; }, function (x) { FUN.powder = x; }),
+  prefNum('funhard', prefLim('funhard'), false, function () { return FUN.hard; }, function (x) { FUN.hard = x; }),
+  prefAny('dmg', function (o) { var dm = {}; Object.keys(DMG_Q).forEach(function (t) { if (DMG[t] !== LIM[DMG_Q[t]][2]) dm[t] = DMG[t]; }); if (Object.keys(dm).length) o.dmg = dm; },   // 每發傷害（砲的設定頁；網址 ?dmg24= 那幾個優先）
+    function (p) { if (p.dmg && typeof p.dmg === 'object') Object.keys(DMG_Q).forEach(function (t) { if (Q.has(DMG_Q[t])) return; var x = prefOk(p.dmg[t], LIM[DMG_Q[t]], true); if (x !== undefined) DMG[t] = x; }); }),
+  prefAny('guns', function (o) { var gs = gunsSnap(); if (Object.keys(gs).length) o.guns = gs; }, function (p) { if (p.guns && typeof p.guns === 'object') gunsApply(p.guns); }),   // 砲的設定（68_guncfg.js）
+  prefAny('furn', function (o) { var fs = furnSnap(); if (Object.keys(fs).length) o.furn = fs; }, function (p) { if (p.furn && typeof p.furn === 'object') furnApply(p.furn); }),   // 道具設定（67_furncfg.js）
+  prefAny('drv', function (o) { var dv = drvSnap(); if (Object.keys(dv).length) o.drv = dv; }, function (p) { if (p.drv && typeof p.drv === 'object') drvApply(p.drv); }),   // 動力件（67_furncfg.js、31_drive.js DRVP）
+  prefAny('keys', function (o) { var ks = keySnap(); if (Object.keys(ks).length) o.keys = ks; }, function (p) { if (p.keys && typeof p.keys === 'object') keyApply(p.keys); }),   // 鍵位（66_keys.js）
+  prefAny('ammoK', function (o) { if (AMMO_K.some(function (r, i) { return r.some(function (v, j) { return v !== AMMO_K0[i][j]; }); })) o.ammoK = AMMO_K.map(function (r) { return r.slice(); }); },
+    function (p) { if (!Q.has('ammo') && Array.isArray(p.ammoK)) p.ammoK.forEach(function (r, i) { if (i < 3 && Array.isArray(r)) r.forEach(function (v, j) { var x = prefOk(v, AMMO_LIM, true); if (j < 3 && x !== undefined) AMMO_K[i][j] = x; }); }); }),
+  prefAny('strike', function (o) { if (STRIKE.cas !== LIM.cas[2] || STRIKE.guns || STRIKE.masts || STRIKE.officers) o.strike = { cas: STRIKE.cas, guns: STRIKE.guns, masts: STRIKE.masts, officers: STRIKE.officers }; },
+    function (p) {
+      if (Q.has('strike') || !p.strike || typeof p.strike !== 'object') return;
+      var cas = prefOk(p.strike.cas, LIM.cas); if (cas !== undefined) STRIKE.cas = cas;
+      ['guns', 'masts', 'officers'].forEach(function (k) { if (typeof p.strike[k] === 'boolean') STRIKE[k] = p.strike[k]; });
+    }),
+  prefAny('cap', function (o) { if (CAP_SET.some(function (k) { return k !== 'random'; })) o.cap = CAP_SET.slice(); },
+    function (p) { if (!Q.has('cap') && Array.isArray(p.cap)) p.cap.forEach(function (w, i) { if (i < 2 && (w === 'random' || Object.prototype.hasOwnProperty.call(CAPTAINS, w))) CAP_SET[i] = w; }); }),
+  prefAny('ammo', function (o) { if (AMMO_I !== 0) o.ammo = AMMO_I; }, function (p) { var a = prefOk(p.ammo, [0, AMMO.length - 1], true); if (a !== undefined) AMMO_I = a; }),
+  prefAny('phx', function (o) { var xd = PHX_PRESET[PHX_DEFAULT]; if (PHX_ITEMS.some(function (it) { return PHX[it.k] !== xd[it.k]; })) { o.phx = {}; PHX_ITEMS.forEach(function (it) { o.phx[it.k] = PHX[it.k]; }); } },   // 物理效果（09_phx.js）：跟預設不一樣 ⇒ 整組存
+    function (p) {
+      var qx = Q.has('phx') || Q.has('phys') || PHX_ITEMS.some(function (it) { return Q.has('p_' + it.k); });   // 網址指定了物理 ⇒ 存檔的那份不套
+      if (!qx && p.phx && typeof p.phx === 'object') PHX_ITEMS.forEach(function (it) { var x = prefOk(p.phx[it.k], [0, it.opt.length - 1], true); if (x !== undefined) PHX[it.k] = x; });
+      else if (!qx && p.phys === false) PHX.rig = 0;                   // 舊格式（只存了帆與繩的開關）
+      PHYS = PHX.rig > 0;
+    }),
+  prefAny('gfx', function (o) { var gd = GFX_PRESET[GFX_DEFAULT]; if (GFX_ITEMS.some(function (it) { return GFX[it.k] !== gd[it.k]; })) { o.gfx = {}; GFX_ITEMS.forEach(function (it) { o.gfx[it.k] = GFX[it.k]; }); } },   // 畫質（07_gfx.js）：跟預設不一樣 ⇒ 整組存
+    function (p) { if (p.gfx && typeof p.gfx === 'object' && !Q.has('gfx')) GFX_ITEMS.forEach(function (it) { var x = prefOk(p.gfx[it.k], [0, it.opt.length - 1], true); if (x !== undefined && !Q.has('g_' + it.k)) GFX[it.k] = x; }); }),
+  prefBool('fps', false, function () { return GFX_FPS; }, function (x) { GFX_FPS = x; }, null),
+  prefAny('snd', function (o) {                                         // 聲音設定（02_music.js，TASK-0677）
+    [['vsfx', 'sfx'], ['vamb', 'amb'], ['vbgm', 'bgm'], ['bgm', 'mode'], ['tune', 'tune']].forEach(function (k) { if (SND[k[1]] !== SND_DEF[k[1]]) o[k[0]] = SND[k[1]]; });
+  }, function (p) {
+    [['vsfx', 'sfx'], ['vamb', 'amb'], ['vbgm', 'bgm']].forEach(function (k) { if (typeof p[k[0]] === 'number' && isFinite(p[k[0]])) SND[k[1]] = clamp(p[k[0]], 0, 1); });
+    if (p.bgm === 'duck' || p.bgm === 'on' || p.bgm === 'off') SND.mode = p.bgm; else if (p.bgm === 'sail') SND.mode = 'duck';   // 'sail'：第一版的「開砲就淡出」（已拿掉）⇒ 照新的預設
+    if (p.tune === 'shuffle' || TUNES.some(function (t) { return t.id === p.tune; })) SND.tune = p.tune;
+  }),
+  prefBool('gcrew', true, function () { return GUN_CREW_HURT; }, function (x) { GUN_CREW_HURT = x; }),   // 砲被打飛 ⇒ 砲班跟著受傷（21_gunnery.js）
+  prefBool('dbg', false, function () { return DBG_SET; }, function (x) { DBG_SET = x; }),   // Debug 模式（04_state.js dbgOn）
+  prefBool('slow', true, function () { return SLOW.on; }, function (x) { SLOW.on = x; }, 'slowmo'),   // 殉爆的慢動作與特寫（73_slowmo.js）
+  prefBool('pslow', false, function () { return PSLOW.on; }, function (x) { PSLOW.on = x; }),   // 物理減速（73_slowmo.js）
+  prefNum('pslowb', prefLim('pslowb'), false, function () { return PSLOW.budget; }, function (x) { PSLOW.budget = Math.round(x * 100) / 100; }),
+  prefNum('ramv', prefLim('ramv'), false, function () { return RAM.v0; }, function (x) { RAM.v0 = x; }),   // 碰撞傷害的數值（物理設定頁）
+  prefNum('ramk', prefLim('ramk'), false, function () { return RAM.k; }, function (x) { RAM.k = x; }),
+  prefNum('rame', prefLim('rame'), false, function () { return RAM.e; }, function (x) { RAM.e = x; }),
+  prefNum('ramside', prefLim('ramside'), false, function () { return RAM.side; }, function (x) { RAM.side = x; }),
+  prefBool('slowcam', true, function () { return SLOW.cam; }, function (x) { SLOW.cam = x; }),   // ⚠ 以前只讀不存（存的那一行被併進註解裡）⇒ 改了下次打開又回預設；現在照描述表存
+  prefAny('sail', function (o) { if (SAIL !== CFG.menu.sail) o.sail = SAIL; }, function (p) { if (!Q.has('sail') && (p.sail === 'auto' || p.sail === 'manual' || p.sail === 'off')) SAIL = p.sail; }),
+  prefAny('mode', function (o) { if (MODE !== CFG.menu.mode) o.mode = MODE; }, function (p) { if (p.mode === 'pve' || p.mode === 'eve' || p.mode === 'sandbox' || p.mode === 'build') MODE = p.mode; }),
+  prefAny('auto', function (o) { if (LAST_MODE === MODE && AUTOFIRE !== (MODE === 'eve')) o.auto = AUTOFIRE; },   // 換了模式還沒開局 ⇒ 開局時會照模式重套（70_flow.js reset），這時的值不算數
+    function (p) { if (typeof p.auto === 'boolean') { AUTOFIRE = p.auto; LAST_MODE = MODE; } }),   // 存了自動開砲 ⇒ 開局不再照模式套預設
+  prefAny('field', function (o) { if (FIELD_N !== MAX_SHIPS) o.field = FIELD_N; }, function (p) { if (!Q.has('field') && typeof p.field === 'number' && isFinite(p.field)) FIELD_N = clamp(Math.round(p.field), 2, MAX_SHIPS); }),   // 候補（52_fleet.js）
+  prefAny('reinf', function (o) { if (REINF_MODE !== 'prop') o.reinf = REINF_MODE; }, function (p) { if (!Q.has('reinf') && REINF_NAMES[p.reinf]) REINF_MODE = p.reinf; }),
+  prefAny('cmd', function (o) { if (CMD_SIDE.blue !== 'pair' || CMD_SIDE.red !== 'pair') o.cmd = [CMD_SIDE.blue, CMD_SIDE.red]; },   // 指揮官（TASK-0551）
+    function (p) { if (!Q.has('cmd') && Array.isArray(p.cmd)) p.cmd.forEach(function (w, i) { if (i < 2 && CMD_NAMES[w]) CMD_SIDE[i ? 'red' : 'blue'] = w; }); }),
+  prefAny('dist', function (o) { if (DIST !== LIM_DIST[2]) o.dist = DIST; }, function (p) { if (!Q.has('dist') && typeof p.dist === 'number' && isFinite(p.dist)) DIST = clamp(Math.round(p.dist), LIM_DIST[0], LIM_DIST[1]); })   // 舊存檔的 90／140／220 照樣是合法的值
+];
+/** 現在的設定裡跟預設不一樣的那幾項（＋版本號）—— 照描述表。 */
 function prefsSnap() {
-  var o = { v: PREFS_VER }, cfg = {};
-  function put(k, v, d) { if (v !== d) o[k] = v; }
-  if (FLEET_SET.some(function (L) { return L.length !== 1 || L[0] !== HULL_DEF; })) o.fleet = FLEET_SET.map(function (L) { return L.slice(); });   // 艦隊編成（TASK-0537；舊存檔的 ship ＝ 一邊一艘，讀的時候照樣認）
-  Object.keys(SHIP_CFG).forEach(function (id) {
-    var c = SHIP_CFG[id], T = HULLT[id], d = {};
-    SHIP_KEYS.forEach(function (k) { if (k !== 'ballast' && c[k] !== cfgBase(k, id)) d[k] = c[k]; });   // 跟那一型的預設比（HULL_CFG0）
-    if (d.hard !== undefined) d.hard1 = 1;                              // 硬度是倍率（1 ＝ 只看材質；2026-10-16 起）⇒ 讀的時候分得出舊存檔（舊的是 3 ＝ 預設的刻度）
-    if (T && c.ballast !== undefined) { if (c.ballast !== T.ballast0) { d.ballast = c.ballast; d.chk = T.h.checksum; } }
-    else if (PREF_BALLAST[id]) { d.ballast = PREF_BALLAST[id].v; d.chk = PREF_BALLAST[id].chk; }   // 這一場沒載那艘船 ⇒ 存檔裡的照留
-    if (Object.keys(d).length) cfg[id] = d;
+  var o = { v: PREFS_VER };
+  PREF_ITEMS.forEach(function (it) {
+    if (it.snap) return it.snap(o);
+    var v = it.get(); if (v !== (it.bool ? it.def : it.lim()[2])) o[it.k] = v;
   });
-  if (Object.keys(cfg).length) o.cfg = cfg;
-  var cr = crewSnap(true); if (Object.keys(cr).length) o.crew = cr;          // 船員配置（TASK-0570）：跟那一型的預設不一樣的
-  var rm = roomsSnap(true); if (Object.keys(rm).length) o.rooms = rm;        // 艙房的擺法（TASK-0568）
-  put('gunhp', GUN_HP, LIM.gunhp[2]); put('sailhp', SAIL_HP, LIM.sailhp[2]); put('crewhp', CREW_HP, LIM.crewhp[2]); put('crewdeath', CREW_DEATH, LIM.crewdeath[2]); put('powderhp', POWDER_HP, LIM.powderhp[2]);
-  put('blast', BLAST_K, LIM.blast[2]); put('blastv', BLAST_V, LIM.blastv[2]); put('box', BOX_N, LIM.box[2]); put('carry', CARRY_N, LIM.carry[2]); put('hands', HANDS, LIM.hands[2]); put('drown', DROWN_T, LIM.drown[2]); put('heal', HEAL_T, LIM.heal[2]); put('navre', NAV_RE, LIM.navre[2]); put('smoke', SMOKE_K, SMOKE_LIM[2]); put('debcap', DEB_CAP, DEB_LIM[2]); put('wind', WIND_K, LIM.wind[2]); put('windcap', WIND_CAP, LIM.windcap[2]); put('inertia', DRV_INERTIA, LIM.inertia[2]); put('turninert', DRV_TURN, LIM.turninert[2]); put('sailtq', DRV_TQ, LIM.sailtq[2]);
-  put('weather', WX_ID, 'clear'); put('sea', SEA_K, LIM.sea[2]); put('play', PLAY, CFG.menu.play); put('stall', STALL_K, LIM.stall[2]); put('funspeed', FUN.speed, LIM.funspeed[2]); put('funagile', FUN.agile, LIM.funagile[2]); put('funstall', FUN.stall, LIM.funstall[2]); put('funpowder', FUN.powder, LIM.funpowder[2]); put('funhard', FUN.hard, LIM.funhard[2]);
-  var dm = {}; Object.keys(DMG_Q).forEach(function (t) { if (DMG[t] !== LIM[DMG_Q[t]][2]) dm[t] = DMG[t]; });
-  if (Object.keys(dm).length) o.dmg = dm;
-  var fs = furnSnap(); if (Object.keys(fs).length) o.furn = fs;          // 道具設定（67_furncfg.js）：跟設定檔 furniture 不一樣的
-  var dv = drvSnap(); if (Object.keys(dv).length) o.drv = dv;
-  var ks = keySnap(); if (Object.keys(ks).length) o.keys = ks;            // 鍵位（66_keys.js）：跟出廠不一樣的          // 動力件（67_furncfg.js，31_drive.js DRVP）：跟設定檔 drvparts 不一樣的
-  var gs = gunsSnap(); if (Object.keys(gs).length) o.guns = gs;          // 砲的設定（68_guncfg.js）：跟砲種表預設不一樣的
-  if (AMMO_K.some(function (r, i) { return r.some(function (v, j) { return v !== AMMO_K0[i][j]; }); })) o.ammoK = AMMO_K.map(function (r) { return r.slice(); });
-  if (STRIKE.cas !== LIM.cas[2] || STRIKE.guns || STRIKE.masts || STRIKE.officers) o.strike = { cas: STRIKE.cas, guns: STRIKE.guns, masts: STRIKE.masts, officers: STRIKE.officers };
-  if (CAP_SET.some(function (k) { return k !== 'random'; })) o.cap = CAP_SET.slice();
-  var gd = GFX_PRESET[GFX_DEFAULT]; if (GFX_ITEMS.some(function (it) { return GFX[it.k] !== gd[it.k]; })) { o.gfx = {}; GFX_ITEMS.forEach(function (it) { o.gfx[it.k] = GFX[it.k]; }); }   // 畫質（07_gfx.js）：跟預設不一樣 ⇒ 整組存
-  put('vsfx', SND.sfx, SND_DEF.sfx); put('vamb', SND.amb, SND_DEF.amb); put('vbgm', SND.bgm, SND_DEF.bgm); put('bgm', SND.mode, SND_DEF.mode); put('tune', SND.tune, SND_DEF.tune);   // 聲音設定（02_music.js，TASK-0677）
-  put('gcrew', GUN_CREW_HURT, true);
-  put('dbg', DBG_SET, false);                                         // Debug 模式（04_state.js dbgOn）                                  // 砲被打飛 ⇒ 砲班跟著受傷（21_gunnery.js）
-  put('fps', GFX_FPS, false); put('slow', SLOW.on, true); put('pslow', PSLOW.on, false); put('pslowb', PSLOW.budget, LIM.pslowb[2]); put('ramv', RAM.v0, LIM.ramv[2]); put('ramk', RAM.k, LIM.ramk[2]); put('rame', RAM.e, LIM.rame[2]); put('ramside', RAM.side, LIM.ramside[2]);   // 碰撞傷害的數值（物理設定頁） put('slowcam', SLOW.cam, true);   // 殉爆的慢動作與特寫（73_slowmo.js）
-  var xd = PHX_PRESET[PHX_DEFAULT]; if (PHX_ITEMS.some(function (it) { return PHX[it.k] !== xd[it.k]; })) { o.phx = {}; PHX_ITEMS.forEach(function (it) { o.phx[it.k] = PHX[it.k]; }); }   // 物理效果（09_phx.js）：跟預設不一樣 ⇒ 整組存
-  put('ammo', AMMO_I, 0); put('mode', MODE, CFG.menu.mode); put('sail', SAIL, CFG.menu.sail); put('dist', DIST, LIM_DIST[2]); put('field', FIELD_N, MAX_SHIPS); put('reinf', REINF_MODE, 'prop'); if (CMD_SIDE.blue !== 'pair' || CMD_SIDE.red !== 'pair') o.cmd = [CMD_SIDE.blue, CMD_SIDE.red];
-  if (LAST_MODE === MODE) put('auto', AUTOFIRE, MODE === 'eve');     // 換了模式還沒開局 ⇒ 開局時會照模式重套（70_flow.js reset），這時的值不算數
   return o;
 }
-/** 存檔 ⇒ 變數。網址有的那一項不套；每一項各自驗（型別、範圍），不對的那一項照預設。 */
+/** 存檔 ⇒ 變數（照描述表的先後）。網址有的那一項不套；每一項各自驗（型別、範圍），不對的那一項照預設。 */
 function prefsApply(p) {
-  function num(v, lim, int) { if (typeof v !== 'number' || !isFinite(v)) return undefined; v = clamp(v, lim[0], lim[1]); return int ? Math.round(v) : v; }
-  function set(qk, v, lim, int, f) { if (Q.has(qk)) return; var x = num(v, lim, int); if (x !== undefined) f(x); }
-  if (!Q.has('ship') && !Q.has('blue') && !Q.has('red')) {               // 編成：網址給了任何一個 ⇒ 整組照網址
-    if (Array.isArray(p.ship)) p.ship.forEach(function (w, i) { if (i < 2 && hullInfo(w)) FLEET_SET[i] = [w]; });   // 舊存檔（一邊一艘）
-    if (Array.isArray(p.fleet)) p.fleet.forEach(function (L, i) { if (i < 2 && Array.isArray(L)) { L = L.filter(function (w) { return typeof w === 'string' && hullInfo(w); }); if (L.length) FLEET_SET[i] = L; } });
-    fleetTrim(FLEET_SET);
-  }
-  shipsApply(p);
-  set('gunhp', p.gunhp, LIM.gunhp, true, function (x) { GUN_HP = x; });
-  set('sailhp', p.sailhp, LIM.sailhp, true, function (x) { SAIL_HP = x; });
-  set('crewhp', p.crewhp, LIM.crewhp, true, function (x) { CREW_HP = x; });
-  set('crewdeath', p.crewdeath, LIM.crewdeath, true, function (x) { CREW_DEATH = x; });
-  set('powderhp', p.powderhp, LIM.powderhp, true, function (x) { POWDER_HP = x; });
-  set('blast', p.blast, LIM.blast, false, function (x) { BLAST_K = x; });
-  set('blastv', p.blastv, LIM.blastv, false, function (x) { BLAST_V = x; });
-  set('box', p.box, LIM.box, true, function (x) { BOX_N = x; });
-  set('carry', p.carry, LIM.carry, true, function (x) { CARRY_N = x; });
-  set('hands', p.hands, LIM.hands, true, function (x) { HANDS = x; });
-  set('drown', p.drown, LIM.drown, true, function (x) { DROWN_T = x; });
-  set('navre', p.navre, LIM.navre, false, function (x) { NAV_RE = x; });
-  set('heal', p.heal, LIM.heal, true, function (x) { HEAL_T = x; });
-  set('debcap', p.debcap, DEB_LIM, true, function (x) { DEB_CAP = x; });   // 碎片上限（畫質頁；07_gfx.js）
-  set('smoke', p.smoke, SMOKE_LIM, false, function (x) { SMOKE_K = Math.round(x * 10) / 10; });   // 煙消散（畫質頁；07_gfx.js）
-  set('wind', p.wind, LIM.wind, false, function (x) { WIND_K = x; });
-  set('windcap', p.windcap, LIM.windcap, false, function (x) { WIND_CAP = x; });
-  set('inertia', p.inertia, LIM.inertia, false, function (x) { DRV_INERTIA = x; }); set('turninert', p.turninert, LIM.turninert, false, function (x) { DRV_TURN = x; }); set('sailtq', p.sailtq, LIM.sailtq, false, function (x) { DRV_TQ = x; });   // 動力的手感（31_drive.js）
-  if (!Q.has('play') && (p.play === 'fun' || p.play === 'real')) PLAY = p.play;
-  set('stall', p.stall, LIM.stall, false, function (x) { STALL_K = x; });
-  set('sea', p.sea, LIM.sea, false, function (x) { SEA_K = x; });
-  if (!Q.has('weather') && WEATHERS[p.weather]) { WX_ID = p.weather; WX = WEATHERS[WX_ID]; }   // 天色在 71_input.js 開頭 setWeather 套
-  set('funspeed', p.funspeed, LIM.funspeed, false, function (x) { FUN.speed = x; });
-  set('funagile', p.funagile, LIM.funagile, false, function (x) { FUN.agile = x; });
-  set('funstall', p.funstall, LIM.funstall, false, function (x) { FUN.stall = x; });
-  set('funpowder', p.funpowder, LIM.funpowder, false, function (x) { FUN.powder = x; });
-  set('funhard', p.funhard, LIM.funhard, false, function (x) { FUN.hard = x; });
-  if (p.dmg && typeof p.dmg === 'object') Object.keys(DMG_Q).forEach(function (t) { set(DMG_Q[t], p.dmg[t], LIM[DMG_Q[t]], true, function (x) { DMG[t] = x; }); });
-  if (p.guns && typeof p.guns === 'object') gunsApply(p.guns);
-  if (p.furn && typeof p.furn === 'object') furnApply(p.furn);           // 道具設定（67_furncfg.js）
-  if (p.drv && typeof p.drv === 'object') drvApply(p.drv);
-  if (p.keys && typeof p.keys === 'object') keyApply(p.keys);           // 鍵位（66_keys.js）              // 動力件（67_furncfg.js）
-  if (!Q.has('ammo') && Array.isArray(p.ammoK)) p.ammoK.forEach(function (r, i) {
-    if (i < 3 && Array.isArray(r)) r.forEach(function (v, j) { var x = num(v, AMMO_LIM, true); if (j < 3 && x !== undefined) AMMO_K[i][j] = x; });
+  PREF_ITEMS.forEach(function (it) {
+    if (it.apply) return it.apply(p);
+    if (it.q && Q.has(it.q)) return;
+    if (it.bool) { if (typeof p[it.k] === 'boolean') it.set(p[it.k]); return; }
+    var x = prefOk(p[it.k], it.lim(), it.int); if (x !== undefined) it.set(x);
   });
-  if (!Q.has('strike') && p.strike && typeof p.strike === 'object') {
-    var cas = num(p.strike.cas, LIM.cas); if (cas !== undefined) STRIKE.cas = cas;
-    ['guns', 'masts', 'officers'].forEach(function (k) { if (typeof p.strike[k] === 'boolean') STRIKE[k] = p.strike[k]; });
-  }
-  if (!Q.has('cap') && Array.isArray(p.cap)) p.cap.forEach(function (w, i) { if (i < 2 && (w === 'random' || Object.prototype.hasOwnProperty.call(CAPTAINS, w))) CAP_SET[i] = w; });
-  var a = num(p.ammo, [0, AMMO.length - 1], true); if (a !== undefined) AMMO_I = a;
-  var qx = Q.has('phx') || Q.has('phys') || PHX_ITEMS.some(function (it) { return Q.has('p_' + it.k); });   // 網址指定了物理 ⇒ 存檔的那份不套
-  if (!qx && p.phx && typeof p.phx === 'object') PHX_ITEMS.forEach(function (it) { var x = num(p.phx[it.k], [0, it.opt.length - 1], true); if (x !== undefined) PHX[it.k] = x; });
-  else if (!qx && p.phys === false) PHX.rig = 0;                     // 舊格式（只存了帆與繩的開關）
-  PHYS = PHX.rig > 0;
-  if (p.gfx && typeof p.gfx === 'object' && !Q.has('gfx')) GFX_ITEMS.forEach(function (it) { var x = num(p.gfx[it.k], [0, it.opt.length - 1], true); if (x !== undefined && !Q.has('g_' + it.k)) GFX[it.k] = x; });
-  if (typeof p.fps === 'boolean') GFX_FPS = p.fps;
-  [['vsfx', 'sfx'], ['vamb', 'amb'], ['vbgm', 'bgm']].forEach(function (k) { if (typeof p[k[0]] === 'number' && isFinite(p[k[0]])) SND[k[1]] = clamp(p[k[0]], 0, 1); });   // 聲音設定（02_music.js）
-  if (p.bgm === 'duck' || p.bgm === 'on' || p.bgm === 'off') SND.mode = p.bgm; else if (p.bgm === 'sail') SND.mode = 'duck';   // 'sail'：第一版的「開砲就淡出」（已拿掉）⇒ 照新的預設
-  if (p.tune === 'shuffle' || TUNES.some(function (t) { return t.id === p.tune; })) SND.tune = p.tune;
-  if (typeof p.gcrew === 'boolean' && !Q.has('gcrew')) GUN_CREW_HURT = p.gcrew;
-  if (typeof p.dbg === 'boolean' && !Q.has('dbg')) DBG_SET = p.dbg;
-  if (typeof p.slow === 'boolean' && !Q.has('slowmo')) SLOW.on = p.slow;
-  if (typeof p.pslow === 'boolean' && !Q.has('pslow')) PSLOW.on = p.pslow;   // 物理減速（73_slowmo.js）
-  set('pslowb', p.pslowb, LIM.pslowb, false, function (x) { PSLOW.budget = Math.round(x * 100) / 100; });
-  set('ramv', p.ramv, LIM.ramv, false, function (x) { RAM.v0 = x; }); set('ramk', p.ramk, LIM.ramk, false, function (x) { RAM.k = x; }); set('rame', p.rame, LIM.rame, false, function (x) { RAM.e = x; }); set('ramside', p.ramside, LIM.ramside, false, function (x) { RAM.side = x; });
-  if (typeof p.slowcam === 'boolean' && !Q.has('slowcam')) SLOW.cam = p.slowcam;
-  if (!Q.has('sail') && (p.sail === 'auto' || p.sail === 'manual' || p.sail === 'off')) SAIL = p.sail;
-  if (p.mode === 'pve' || p.mode === 'eve' || p.mode === 'sandbox' || p.mode === 'build') MODE = p.mode;
-  if (typeof p.auto === 'boolean') { AUTOFIRE = p.auto; LAST_MODE = MODE; }   // 存了自動開砲 ⇒ 開局不再照模式套預設（70_flow.js reset）
-  if (!Q.has('field') && typeof p.field === 'number' && isFinite(p.field)) FIELD_N = clamp(Math.round(p.field), 2, MAX_SHIPS);   // 候補（52_fleet.js）
-  if (!Q.has('reinf') && REINF_NAMES[p.reinf]) REINF_MODE = p.reinf;
-  if (!Q.has('cmd') && Array.isArray(p.cmd)) p.cmd.forEach(function (w, i) { if (i < 2 && CMD_NAMES[w]) CMD_SIDE[i ? 'red' : 'blue'] = w; });   // 指揮官（TASK-0551）
-  if (!Q.has('dist') && typeof p.dist === 'number' && isFinite(p.dist)) DIST = clamp(Math.round(p.dist), LIM_DIST[0], LIM_DIST[1]);   // 舊存檔的 90／140／220 照樣是合法的值
 }
 /** 船隻配置（船隻設定 cfg ＋ 船員 crew，照船型）：存檔、匯入共用這一支。每一項各自驗；網址有的那一項不套。 */
 function shipsApply(p) {

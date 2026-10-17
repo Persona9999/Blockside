@@ -40,7 +40,7 @@ function furnIds() {
 /** 改一項（夾進範圍、對齊刻度）；跟預設一樣 ⇒ 從 FURN_SET／DRV_SET 拿掉。 */
 function furnSet(id, k, v) {
   var T = furnTab(id), it = furnItem(T, k), f = T.cur[T.id]; if (!it || !f || !it.has(T.def[T.id] || f) || typeof v !== 'number' || !isFinite(v)) return;
-  v = clamp(v, it.lim[0], it.lim[1]); v = it.int ? Math.round(v) : +(Math.round(v / it.step) * it.step).toFixed(4);
+  v = cfgSnap(it, v);                                                  // 夾進範圍、對齊刻度（64_cfgkit.js）
   var d = fGet(T.def[T.id], k), S = T.set[T.id] = T.set[T.id] || {};
   fPut(f, k, v);
   if (v === d) delete S[k]; else S[k] = v;
@@ -65,9 +65,9 @@ function furnApply(o, pre) {
 function drvApply(o) { return furnApply(o, 'drv:'); }
 function furnExport() {
   function all(pre, src) { var g = {}; furnIds().forEach(function (id) { var T = furnTab(id); if (id.indexOf(pre) !== 0 || (pre === '' && id.indexOf('drv:') === 0)) return; g[T.id] = {}; T.items.forEach(function (it) { if (it.has(T.def[T.id])) g[T.id][it.k] = fGet(src[T.id], it.k); }); }); return g; }
-  return { game: 'ame_constitution_broadside', kind: 'furniture', v: 1, at: new Date().toISOString(), furn: all('', FURN), drv: all('drv:', DRVP) };
+  return cfgHead('furniture', { furn: all('', FURN), drv: all('drv:', DRVP) });
 }
-function furnImport(o) { return o && o.game === 'ame_constitution_broadside' && o.kind === 'furniture' ? furnApply(o.furn) + drvApply(o.drv) : -1; }
+function furnImport(o) { return cfgMine(o, 'furniture') ? furnApply(o.furn) + drvApply(o.drv) : -1; }
 // ── 頁面（71_input.js 接返回、換頁） ──
 var FURN_ID = furnIds()[0];
 function furnFmt(it, v) { return it.pct ? '+' + Math.round(v * 100) + '%' : it.per ? Math.round(v * 100) + '%' : (it.int ? String(v) : v.toFixed(it.fix || 2)) + (it.unit || ''); }
@@ -76,40 +76,15 @@ function furnUI(page) {
   var sel = $('furnSel'), ids = furnIds(), ALL = FURN_ITEMS.concat(DRV_ITEMS);
   sel.innerHTML = ids.map(function (id) { return '<option value="' + id + '">' + furnName(id) + '</option>'; }).join('');
   sel.value = FURN_ID; sel.onchange = function () { FURN_ID = sel.value; furnShow(); };
-  $('furnItems').innerHTML = ALL.map(function (it) {
-    return '<div class="fk" data-k="' + it.k + '"><div class="row slide"><label for="fk-' + it.k + '">' + it.name + '</label><input type="range" id="fk-' + it.k + '" min="' + it.lim[0] + '" max="' + it.lim[1] + '" step="' + it.step + '" aria-label="' + it.name + '"><span id="fk-' + it.k + 'V"></span></div>' +
-      '<div class="row note gkn">' + it.note + '</div></div>';
-  }).join('');
+  $('furnItems').innerHTML = cfgSliders(ALL, 'fk-', function (it, h) { return '<div class="fk" data-k="' + it.k + '">' + h + '</div>'; });   // 這一種沒有的那一格照 data-k 藏（furnShow）
   ALL.forEach(function (it) { var r = $('fk-' + it.k); r.oninput = function () { var T = furnTab(FURN_ID), v = +r.value; if (it.fit) v = it.fit(T.cur[T.id], v); furnSet(FURN_ID, it.k, v); furnShow(); }; });
-  var rArm = 0;
-  $('furnR').onclick = function () {                     // 按兩下（同砲的設定：⛔ confirm() 在畫廊彈窗裡直接回 false）
-    var b = $('furnR'), T = furnTab(FURN_ID);
-    if (performance.now() - rArm > 4000) { rArm = performance.now(); b.textContent = '再按一次：' + T.cur[T.id].name + '回到預設'; setTimeout(function () { if (performance.now() - rArm >= 3900) b.textContent = '這一種回到預設'; }, 4000); return; }
-    rArm = 0; b.textContent = '這一種回到預設'; furnReset(FURN_ID); furnShow();
-  };
-  $('furnRA').onclick = function () {                    // 全部回到預設（65_ask.js 彈窗確認）：道具與動力件
-    askOk('道具設定全部回到預設', '每一種道具與動力件（不只正在看的這一種）都回到預設。改過的會不見；要留的話先按「匯出…」。', '全部回到預設', function () {
-      var ids = furnIds(); ids.forEach(furnReset); furnShow(); $('furnSt').textContent = '已全部回到預設（' + ids.length + ' 種）。';
-    });
-  };
-  $('furnE').onclick = function () {
-    var s = JSON.stringify(furnExport(), null, 1), a = document.createElement('a'), d = new Date();
-    a.href = URL.createObjectURL(new Blob([s], { type: 'application/json' }));
-    a.download = 'constitution_broadside_furniture_' + d.getFullYear() + ('0' + (d.getMonth() + 1)).slice(-2) + ('0' + d.getDate()).slice(-2) + '.json';
-    document.body.appendChild(a); a.click(); setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
-    $('furnSt').textContent = '已匯出 ' + a.download + '（每一種道具、動力件整份）。';
-  };
-  $('furnI').onclick = function () { $('furnF').value = ''; $('furnF').click(); };
-  $('furnF').onchange = function () {
-    var f = $('furnF').files[0]; if (!f) return;
-    var r = new FileReader();
-    r.onload = function () {
-      var n = -1; try { n = furnImport(JSON.parse(r.result)); } catch (e) { n = -1; }
-      furnShow();
-      $('furnSt').textContent = n < 0 ? '⚠ 匯入失敗：' + f.name + ' 不是這個遊戲匯出的道具設定。' : '已匯入 ' + f.name + '：' + n + ' 種' + (PREFS.write ? '（已存）。' : '（這一頁存不了，下次打開要再匯入）。');
-    };
-    r.readAsText(f);
-  };
+  cfgKit('furn', {                                       // 那一排按鈕（64_cfgkit.js）
+    one: { idle: '這一種回到預設', arm: function () { var T = furnTab(FURN_ID); return '再按一次：' + T.cur[T.id].name + '回到預設'; }, run: function () { furnReset(FURN_ID); } },
+    all: { title: '道具設定全部回到預設', body: '每一種道具與動力件（不只正在看的這一種）都回到預設。改過的會不見；要留的話先按「匯出…」。',
+      run: function () { var ids = furnIds(); ids.forEach(furnReset); return '已全部回到預設（' + ids.length + ' 種）。'; } },
+    kind: 'furniture', file: 'constitution_broadside_furniture', expSay: '每一種道具、動力件整份', exp: function () { var o = furnExport(); return { furn: o.furn, drv: o.drv }; },
+    imp: furnImport, what: '道具設定', unit: '種', show: furnShow
+  });
   if (ADMIN_FURN) furnAdmUI(page);
 }
 /** 變數 ⇒ 這一頁（這一種沒有的那一格藏起來；跟預設不一樣的標「改過」）。 */
@@ -119,7 +94,7 @@ function furnShow() {
     var box = document.querySelector('#furnItems .fk[data-k="' + it.k + '"]'), on = T.items.indexOf(it) >= 0 && it.has(f0); box.style.display = on ? '' : 'none'; if (!on) return;
     var v = fGet(f, it.k), d = fGet(f0, it.k);
     $('fk-' + it.k).value = v;
-    $('fk-' + it.k + 'V').textContent = furnFmt(it, v) + (v === d ? '' : '（改過；預設 ' + furnFmt(it, d) + '）');
+    $('fk-' + it.k + 'V').textContent = cfgShown(function (x) { return furnFmt(it, x); }, v, d);
   });
   if (T.cur === DRVP) $('furnInfo').innerHTML = '動力件：雕刻的關聯 meta kind=' + id + '（造船規格 §9.6）・' + (f.cell !== undefined ? '傳動件：照兩端之間最細的那一截算' : '體素件：照這一件還剩幾成的格算') + '・每 1 秒算一次・改了下一場開始生效';
   else {
@@ -130,22 +105,13 @@ function furnShow() {
 }
 /** 開發後台（?admin=furn）：同一頁多一列 —— 「存成出廠預設」⇒ FURN_SET、DRV_SET 送給開這一頁的設定後台（postMessage；⛔ 成品裡不能有 fetch）⇒ admin.py act_furniture；「重建」；「回設定後台」。 */
 function furnAdmUI(page) {
-  $('furnp').classList.add('admin');
-  var out = $('furnAdmL'), wait = null;
-  window.addEventListener('message', function (ev) { if (ev.origin !== location.origin || !ev.data || ev.data.kind !== 'cb-admdef-r' || !wait) return; var w = wait; wait = null; out.textContent = (ev.data.log || []).join('\n'); w(ev.data); });
-  function post(op, data) {
-    var ad = window.opener; if (!ad || ad.closed) { out.textContent = '⚠ 找不到設定後台：要從設定後台的「用道具設定頁設出廠預設值…」開這一頁'; return Promise.resolve({ ok: false }); }
-    out.textContent = '…（設定後台處理中；重建要十幾秒）'; ad.postMessage({ kind: 'cb-admdef', op: op, furn: data && data.furn, drv: data && data.drv }, location.origin);
-    return new Promise(function (res) { wait = res; });
-  }
-  $('furnAdmS').onclick = function () {
-    var o = furnSnap(), d = drvSnap(); if (!Object.keys(o).length && !Object.keys(d).length) { out.textContent = '（都跟出廠預設一樣，沒有要存的）'; return; }
-    post('furn', { furn: o, drv: d }).then(function (j) {
-      if (!j.ok) return;
-      [[o, FURN0, FURN_SET], [d, DRVP0, DRV_SET]].forEach(function (A) { Object.keys(A[0]).forEach(function (id) { Object.keys(A[0][id]).forEach(function (k) { fPut(A[1][id], k, A[0][id][k]); }); delete A[2][id]; }); });
-      furnShow();
-    });
-  };
-  $('furnAdmB').onclick = function () { post('build'); };
-  $('furnAdmX').onclick = $('furnX').onclick = $('pgX').onclick = function () { if (window.opener && !window.opener.closed) window.close(); else location.href = '/'; };
+  cfgAdm({ panel: 'furnp', out: 'furnAdmL', from: '用道具設定頁設出廠預設值…', build: 'furnAdmB', back: ['furnAdmX', 'furnX', 'pgX'],
+    save: { id: 'furnAdmS', run: function (post, out) {
+      var o = furnSnap(), d = drvSnap(); if (!Object.keys(o).length && !Object.keys(d).length) { out.textContent = '（都跟出廠預設一樣，沒有要存的）'; return; }
+      post('furn', { furn: o, drv: d }).then(function (j) {
+        if (!j.ok) return;
+        [[o, FURN0, FURN_SET], [d, DRVP0, DRV_SET]].forEach(function (A) { Object.keys(A[0]).forEach(function (id) { Object.keys(A[0][id]).forEach(function (k) { fPut(A[1][id], k, A[0][id][k]); }); delete A[2][id]; }); });
+        furnShow();
+      });
+    } } });
 }
