@@ -10,6 +10,11 @@ var DINST = new Float32Array(DMAX * 9);
 // 碎木自己的亂數（轉軸、落水、落地）：⛔ 跟戰局共用 rnd() ⇒ 少生一顆碎木（物理分級），後面的亂數全部錯位、整局都變（09_phx.js）。開局跟 rs 一起重設（70_flow.js）
 var RSD0 = 0x2545F491, rsD = SEED ^ RSD0, DEB_ACC = 0, PT_ACC = 0;   // DEB_ACC／PT_ACC：照分級少生的節拍（不抽亂數）
 function rndD() { rsD |= 0; rsD = rsD + 0x6D2B79F5 | 0; var t = Math.imul(rsD ^ rsD >>> 15, 1 | rsD); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }
+// 煙、火光、水花自己的亂數（TASK-0669）：以前抽戰局的 rr／gauss ⇒ 少放一團煙（調粒子數、不開畫面）後面的戰局全部錯位；開局跟 rs 一起重設（70_flow.js）
+var RSX0 = 0x5BD1E995, rsX = SEED ^ RSX0;
+function rndX() { rsX |= 0; rsX = rsX + 0x6D2B79F5 | 0; var t = Math.imul(rsX ^ rsX >>> 15, 1 | rsX); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }
+function rrX(a, b) { return a + (b - a) * rndX(); }
+function gaussX() { var u = rndX() || 1e-9, v = rndX(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(6.2831853 * v); }
 function spawnDebris(p, v, col, size, life, shape) {
   var k = DEB_KS[PHX.debris]; if (k < 1) { DEB_ACC += k; if (DEB_ACC < 1) return; DEB_ACC -= 1; }   // 物理分級：少生幾顆（呼叫端的亂數已經抽完 ⇒ 戰局不變）
   var i;
@@ -133,20 +138,20 @@ function stepPts(dt) {
 }
 function smoke(p, dir, n, big) {
   for (var i = 0; i < n; i++) {
-    var v = add(mul(dir, rr(2, big ? 9 : 14)), [gauss() * 1.2, rr(0.3, 1.6), gauss() * 1.2]);
-    var g = rr(0.62, 0.86);
+    var v = add(mul(dir, rrX(2, big ? 9 : 14)), [gaussX() * 1.2, rrX(0.3, 1.6), gaussX() * 1.2]);
+    var g = rrX(0.62, 0.86);
     // 2.5–5.5 秒就散：齊射的煙不要一直擋著看砲彈落點；÷ 畫質頁的「煙消散」倍數（07_gfx.js smokeK）
-    spawnPt(add(p, mul(dir, rr(0, 2))), v, rr(2.5, 5.5) / smokeK(), [g, g, g * 0.98], rr(0.35, 0.55), rr(1.2, 2.2) * (big ? 1.6 : 1), rr(6, 11) * (big ? 1.5 : 1), -0.05, 1.1, 0);
+    spawnPt(add(p, mul(dir, rrX(0, 2))), v, rrX(2.5, 5.5) / smokeK(), [g, g, g * 0.98], rrX(0.35, 0.55), rrX(1.2, 2.2) * (big ? 1.6 : 1), rrX(6, 11) * (big ? 1.5 : 1), -0.05, 1.1, 0);
   }
 }
 function flash(p, dir, n, big) {
-  for (var i = 0; i < n; i++) spawnPt(p, add(mul(dir, rr(5, 30)), [gauss() * 3, gauss() * 3, gauss() * 3]), rr(0.08, 0.22), [1, rr(0.6, 0.85), 0.3], 1, rr(1, 2.5) * (big ? 2 : 1), 0.3, 0, 4, 1);
+  for (var i = 0; i < n; i++) spawnPt(p, add(mul(dir, rrX(5, 30)), [gaussX() * 3, gaussX() * 3, gaussX() * 3]), rrX(0.08, 0.22), [1, rrX(0.6, 0.85), 0.3], 1, rrX(1, 2.5) * (big ? 2 : 1), 0.3, 0, 4, 1);
 }
 function splash(p, big) {
   PT_MUTE = PHX.water > 0;                         // 船邊水花開著（13_water.js）：下面這些照樣抽亂數、不放進去，換成 wpSplash
   var n = big ? 60 : 26;
-  for (var i = 0; i < n; i++) spawnPt([p[0] + gauss() * 0.6, 0.1, p[2] + gauss() * 0.6], [gauss() * 1.6, rr(4, big ? 14 : 10), gauss() * 1.6], rr(0.8, 1.8), [0.92, 0.96, 1], 0.75, rr(0.4, 1.0), rr(0.8, 1.6), G, 0.3, 2);
-  for (i = 0; i < 10; i++) spawnPt([p[0] + gauss() * 1.5, 0.15, p[2] + gauss() * 1.5], [gauss() * 0.4, 0.2, gauss() * 0.4], rr(1.5, 3), [0.95, 0.97, 1], 0.35, 1.5, 4, 0, 0.5, 2);
+  for (var i = 0; i < n; i++) spawnPt([p[0] + gaussX() * 0.6, 0.1, p[2] + gaussX() * 0.6], [gaussX() * 1.6, rrX(4, big ? 14 : 10), gaussX() * 1.6], rrX(0.8, 1.8), [0.92, 0.96, 1], 0.75, rrX(0.4, 1.0), rrX(0.8, 1.6), G, 0.3, 2);
+  for (i = 0; i < 10; i++) spawnPt([p[0] + gaussX() * 1.5, 0.15, p[2] + gaussX() * 1.5], [gaussX() * 0.4, 0.2, gaussX() * 0.4], rrX(1.5, 3), [0.95, 0.97, 1], 0.35, 1.5, 4, 0, 0.5, 2);
   PT_MUTE = false; wpSplash(p, big);
   sfx('splash', p, big ? 1.2 : 0.7);
 }
