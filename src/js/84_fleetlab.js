@@ -77,8 +77,8 @@ function flabSetup(p) {
   return Promise.all(Object.keys(ids).map(loadHull)).then(function () {
     DT = 1 / p.hz; SEED = p.seed >>> 0 || 1; WIND_FIX = { rot: p.wdir, s0: p.wspd }; DIST = p.dist;
     CMD_SIDE.blue = p.blue.strat; CMD_SIDE.red = p.red.strat; CMD_GAUGE.blue = p.blue.gauge; CMD_GAUGE.red = p.red.gauge;
-    MODE = 'eve'; FLEET_DBG = flabSpec(p); FIELD_N = Math.min(MAX_SHIPS, Math.max(2, FLEET_DBG.length));
-    reset(); RUNNING = true; SIGNAL = null;
+    flowMode('eve'); FLEET_DBG = flabSpec(p); FIELD_N = Math.min(MAX_SHIPS, Math.max(2, FLEET_DBG.length));
+    reset(); flowRun(true); SIGNAL = null;
     FLAB.match = { p: p, steps: 0, acc: 0, lastR: 0, t0: performance.now(), down: { blue: null, red: null }, res: null, simT0: 0, realT0: performance.now(),
       rec: { every: 0.5, hz: p.hz, ships: [], wind: [], gauge: { blue: [], red: [] }, helm: [] } };
     FLAB.tl = null; flabRec(FLAB.match);
@@ -175,7 +175,7 @@ function flabSetView(v) {
   FLAB.view = v; FLAB_HIDE = v !== '3d';
   document.body.classList.toggle('flab3d', v === '3d'); flabEl('flabView').textContent = v === '3d' ? '🗺 俯視圖' : '🎥 看實景';
   flabEl('flabTrace').className = v === 'trace' ? 'on' : ''; flabEl('flabTLbox').style.display = v === 'trace' ? '' : 'none';
-  if (v === '3d' && SHIPS.length) { remesh(Infinity); var o = SHIPS[FLAB.sel] || SHIPS[0]; CAM.mode = 3; CAM.follow = null; CAM.pan = [0, 0]; CAM.see = o.i === PLAYER_I ? null : o; CAM.dist = 120; CAM.snap = true; }
+  if (v === '3d' && SHIPS.length) { remesh(Infinity); var o = SHIPS[FLAB.sel] || SHIPS[0]; camSet({ mode: 3, follow: null, pan: [0, 0], see: o.i === PLAYER_I ? null : o, dist: 120, snap: true }); }
 }
 function flabCam() { return FLAB.cam || (FLAB.cam = { x: 0, z: 0, k: 0.5, auto: true }); }
 function flabPick(e) {

@@ -42,6 +42,8 @@
 #     · 頂層短名：4 字以內的小寫頂層名字不在 admin.py SHORT_OK（向量數學、gl／cv、亂數別名、事件、已帶模組字首的）⇒ 不建置 —— 加模組字首（simStep、crewHurt…）。
 #     · 用到改過名的：admin.py RENAMED 的舊名（step、hurt、able、rs…；2026-10-17 一次改的）還有人在用、沒被區域宣告遮住 ⇒ 不建置、印出新名字（別人的分支合進來時）。
 #   亂數一律走 00_core.js 的亂數工廠 rngMake(名字, salt)：開局 rngReset() 一起重設；⛔ 不要再複製一份演算法、自己記種子。
+#   共用狀態只由擁有者寫（TASK-0669 ③；admin.py OWNED，照作用域判）：鏡頭 CAM 只有 03_camera.js 寫（別的檔叫 camStart／camPanBy／camOrbit／camCycle／camSee／camSize／camSet）；
+#     在跑 RUNNING、停格 PAUSED、玩法 MODE 只有 70_flow.js 寫（flowRun／flowPause／flowMode）。別的檔直接寫（含 CAM.yaw = …）⇒ 不建置。
 #   成品記住來源（TASK-0674；10-16 共用工作區把別人改到一半的 js 包進成品，開砲後整場停住 —— 成品跟哪一版提交都對不上，可是看不出來）：
 #     建置最後一步把來源清單接在成品第 4 行 <meta charset> 後面（<script type="application/json" id="blockside-src">，同一行 ⇒ 行號不變，約 3.7 KB）：
 #     template.html 與它引用的每一支檔各記一個指紋（文字檔照 LF 算）；.vxk 不入版控 ⇒ 記 config/vxk_lock.json 裡那艘的指紋。建置程式（admin.py、vxk_inline.py）不算來源。

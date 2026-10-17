@@ -140,3 +140,36 @@ function camRigFar(sh) {
   return vis ? m : Math.max(m, F.off);
 }
 evAnswer('rigFar', camRigFar, true);
+
+// ── 鏡頭只由這一支檔寫（TASK-0669 ③；以前輸入、開局、HUD、慢動作、第一人稱、測試場 9 支檔直接寫 CAM）：其他檔要動鏡頭 ⇒ 叫下面這些；admin.py 建置擋別的檔直接寫 CAM。
+/** 開局（70_flow.js reset）：鏡頭擺到開局的位置；?cam= 給了 ⇒ 那個固定機位。 */
+function camStart() {
+  CAM.mode = 0; CAM.follow = null; CAM.trMe = CAM.trYaw = null; CAM.pan = [0, 0]; CAM.see = null; CAM.dist = DIST * 1.05 + 40; CAM.tgt = [0, 8, 0]; CAM.yaw = 2.2; CAM.pitch = 0.22; CAM.snap = true;
+  if (!CAMQ) {                                                         // 預設：看我艦（鎖定我艦、拖曳自己轉），開局那一刻擺在我艦背對敵艦那一側 ⇒ 朝敵艦看（Tim 2026-10-15；以前是「我艦→敵艦」一直跟著兩艘的連線轉）
+    var cm = SHIPS[PLAYER_I], cf = cm && foeOf(cm), a0 = cm && cf ? Math.atan2(cf.center[2] - cm.center[2], cf.center[0] - cm.center[0]) : 0;
+    CAM.mode = 3; CAM.yaw = a0 + Math.PI + 0.35; CAM.aoff = 0.35; CAM.dist = 78; CAM.pitch = 0.2;   // ?cam= 給了 ⇒ 那個固定機位
+  }
+  if (CAMQ === 'close') { CAM.dist = 85; CAM.tgt = [10, 9, -DIST / 2 + 12]; CAM.yaw = 1.95; CAM.pitch = 0.16; }
+  if (CAMQ === 'blue') { CAM.dist = 88; CAM.tgt = [4, 12, DIST / 2 - 10]; CAM.yaw = -1.8; CAM.pitch = 0.15; }
+  if (CAMQ === 'deck') { CAM.mode = 4; CAM.aoff = +(Q.get('aoff') || 0.3); CAM.dist = +(Q.get('dist') || 56); CAM.pitch = +(Q.get('pitch') || 0.3); }   // 縮圖：跟著我艦、近一點高一點 ⇒ 看得到甲板上的人
+  if (CAMQ === 'high') { CAM.dist = DIST + 120; CAM.yaw = 2.5; CAM.pitch = 0.62; }
+}
+/** 平移（右鍵拖曳、兩指拖曳）：鏡頭照原本的（Tim 2026-10-14：⛔ 以前一拖就換成自由鏡頭）。dx／dy ＝ 螢幕像素。
+ *  自由鏡頭 ⇒ 移注視點；跟船的鏡頭 ⇒ 移 CAM.pan（相對那艘船的方向，03_camera.js camPan）。追砲彈正在追 ⇒ 不動。 */
+function camPanBy(dx, dy) {
+  var fw = norm([CAM.look[0] - CAM.eye[0], 0, CAM.look[2] - CAM.eye[2]]), rt = [-fw[2], 0, fw[0]], k = CAM.dist * 0.0018, d = add(mul(rt, -dx * k), mul(fw, dy * k));
+  if (CAM.mode === 0) { CAM.tgt = add(CAM.tgt, d); return; }
+  if (CAM.mode === 1 && CAM.follow) return;
+  var sh = camShip(); if (!sh) return;
+  var F = fwd(sh.yaw); CAM.pan[0] += d[0] * F[0] + d[2] * F[2]; CAM.pan[1] += -d[0] * F[2] + d[2] * F[0];
+}
+/** 轉（左鍵拖曳；71_input.js）：dx／dy ＝ 螢幕像素。追砲彈 ⇒ 換成自由鏡頭；我艦→敵艦 ⇒ 轉偏角。 */
+function camOrbit(dx, dy) { if (CAM.mode === 1) CAM.mode = 0; if (CAM.mode === 4) CAM.aoff += dx * 0.006; else CAM.yaw += dx * 0.006; CAM.pitch = clamp(CAM.pitch + dy * 0.005, 0.02, 1.45); }
+/** C 鍵：照 CAM_ORDER 換下一種鏡頭。 */
+function camCycle() { CAM.mode = CAM_ORDER[(CAM_ORDER.indexOf(CAM.mode) + 1) % CAM_ORDER.length]; CAM.follow = null; CAM.pan = [0, 0]; CAM.see = null; if (CAM.mode === 2 || CAM.mode === 3) { CAM.dist = 75; } else if (CAM.mode === 0) CAM.dist = DIST + 40; else if (CAM.mode === 4) { CAM.dist = 78; CAM.aoff = 0.35; } }
+/** 「🎥 看這艘」（詳細資訊的標題列；Tim 2026-10-14）：鏡頭換成看那一艘（看我艦那一種：跟著它、繞著它轉，拖曳、平移、縮放照舊）；資訊不收。按 C 換鏡頭 ⇒ 回到照常的循環。 */
+function camSee(o) { if (!o) return; CAM.mode = 3; CAM.follow = null; CAM.pan = [0, 0]; CAM.see = o.i === PLAYER_I ? null : o; CAM.dist = 75; CAM.trYaw = null; }
+/** 畫面大小（60_render.js resize）：場景照這個大小畫。 */
+function camSize(w, h) { CAM.w = w; CAM.h = h; }
+/** 一次寫好幾格（照給的順序一個一個寫）：慢動作的特寫與還原、第一人稱、測試場、主控台 __game.cam。 */
+function camSet(o) { for (var k in o) CAM[k] = o[k]; }

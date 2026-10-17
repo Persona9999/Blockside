@@ -75,7 +75,7 @@ function resize() {
   var dpr = Math.min(window.devicePixelRatio || 1, 1.5), w = Math.max(1, cv.clientWidth * dpr | 0), h = Math.max(1, cv.clientHeight * dpr | 0);
   if (cv.width !== w || cv.height !== h) { cv.width = w; cv.height = h; }
   var k = GFX_RES[GFX.res] || 1;                                       // 解析度（畫質）：場景照這個大小畫，最後縮放貼到畫布
-  CAM.w = Math.max(1, Math.round(w * k)); CAM.h = Math.max(1, Math.round(h * k));
+  camSize(Math.max(1, Math.round(w * k)), Math.max(1, Math.round(h * k)));
 }
 // ── 畫質管線（TASK-0522；設定在 07_gfx.js 的 GFX） ──
 // 場景畫在自己的 framebuffer RT.A（反鋸齒開 ⇒ MSAA 4×），大小 ＝ 畫布 × 解析度；畫完解析到 RT.B、縮放貼到畫布。

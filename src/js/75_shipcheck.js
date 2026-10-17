@@ -12,13 +12,13 @@ function shipCheck(id) {
   Promise.all([loadHull(id), loadHull('constitution')]).then(function () {
     var info = hullInfo(id) || HULL_KNOWN.filter(function (h) { return h.id === id; })[0];
     if (!info) { add('error', '船型', id, '設定檔 ships 沒有這一型', 'admin.py import'); done(); return; }
-    FLEET_DBG = [{ team: 'blue', hull: id }, { team: 'red', hull: 'constitution' }]; MODE = 'eve'; DIST = LIM_DIST[1];
-    reset(); RUNNING = true;
+    FLEET_DBG = [{ team: 'blue', hull: id }, { team: 'red', hull: 'constitution' }]; flowMode('eve'); DIST = LIM_DIST[1];
+    reset(); flowRun(true);
     var sh = SHIPS[0], T = sh.T, NV = sh.nav;
     // ── 開場那一刻（還沒跑）──
     var float0 = ropesFloating(sh).map(function (f) { return f.name + '#' + f.end + '（' + f.why + '）'; });
     for (var i = 0, n = Math.round(SC_SECS / DT); i < n; i++) simStep();
-    RUNNING = false;
+    flowRun(false);
     R.info = { name: T.name, guns: sh.guns.length, crew: sh.crew.length, models: sh.models.length, ropes: sh.ropes.length, sails: sh.sails.filter(function (s) { return !(s.meta && s.meta.team); }).length, teamFlags: sh.sails.filter(function (s) { return s.meta && s.meta.team; }).length,   // 作品的帆／遊戲加的陣營旗分開數（77_colours.js；⛔ 混在一起 ⇒ 夜燈號 vxk 12 面、報告寫 15，basecamp 2026-10-15 問）
     masts: sh.masts.length, mags: sh.mags.length,
       decks: NV ? NV.levels.map(function (L) { return L.key + ' ' + L.name; }) : [], ladders: NV ? NV.ladders.length : 0, rooms: (sh.rooms || []).length, zw: T.zw, hits: SHIPS[1].hits + sh.hits };

@@ -19,16 +19,13 @@ function reset() {
   RAM_EV = []; hitWarm();                                                            // 船隻碰撞的取樣先建好（31_sailing.js；⛔ 第一次碰到才建 ⇒ 撞上那一刻卡約 0.1 秒）
   pickCaptains();                                                    // 砲長（51_captain.js）
   obsReset();                                                        // 觀察模式（透視、剖面、隱藏甲板；72_floodui.js）：繼續後會留著 ⇒ 新開一局才收
-  CAM.mode = 0; CAM.follow = null; CAM.trMe = CAM.trYaw = null; CAM.pan = [0, 0]; CAM.see = null; CAM.dist = DIST * 1.05 + 40; CAM.tgt = [0, 8, 0]; CAM.yaw = 2.2; CAM.pitch = 0.22; CAM.snap = true;
-  if (!CAMQ) {                                                         // 預設：看我艦（鎖定我艦、拖曳自己轉），開局那一刻擺在我艦背對敵艦那一側 ⇒ 朝敵艦看（Tim 2026-10-15；以前是「我艦→敵艦」一直跟著兩艘的連線轉）
-    var cm = SHIPS[PLAYER_I], cf = cm && foeOf(cm), a0 = cm && cf ? Math.atan2(cf.center[2] - cm.center[2], cf.center[0] - cm.center[0]) : 0;
-    CAM.mode = 3; CAM.yaw = a0 + Math.PI + 0.35; CAM.aoff = 0.35; CAM.dist = 78; CAM.pitch = 0.2;   // ?cam= 給了 ⇒ 那個固定機位
-  }
-  if (CAMQ === 'close') { CAM.dist = 85; CAM.tgt = [10, 9, -DIST / 2 + 12]; CAM.yaw = 1.95; CAM.pitch = 0.16; }
-  if (CAMQ === 'blue') { CAM.dist = 88; CAM.tgt = [4, 12, DIST / 2 - 10]; CAM.yaw = -1.8; CAM.pitch = 0.15; }
-  if (CAMQ === 'deck') { CAM.mode = 4; CAM.aoff = +(Q.get('aoff') || 0.3); CAM.dist = +(Q.get('dist') || 56); CAM.pitch = +(Q.get('pitch') || 0.3); }   // 縮圖：跟著我艦、近一點高一點 ⇒ 看得到甲板上的人
-  if (CAMQ === 'high') { CAM.dist = DIST + 120; CAM.yaw = 2.5; CAM.pitch = 0.62; }
+  camStart();                                                        // 開局的鏡頭（03_camera.js：鏡頭只由那一支檔寫）
 }
+
+// ── 遊戲狀態（在跑 RUNNING、停格 PAUSED、玩法 MODE）只由這一支檔寫（TASK-0669 ③）：其他檔要改 ⇒ 叫這三個（admin.py 建置擋別的檔直接寫）。
+function flowRun(on) { RUNNING = on; }
+function flowPause(on) { PAUSED = on; }
+function flowMode(m) { MODE = m; }
 
 function start() {
   initAudio(); if (AC && AC.state === 'suspended') AC.resume();

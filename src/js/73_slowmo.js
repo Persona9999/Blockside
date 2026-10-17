@@ -24,7 +24,7 @@ function slowOnBlast(sh, w, R) {
     var F = M4.dir(sh.M, 1, 0, 0), side = norm([-F[2], 0, F[0]]), e = CAM.eye;          // 船的正橫；站在鏡頭本來那一側
     if ((e[0] - w[0]) * side[0] + (e[2] - w[2]) * side[2] < 0) side = mul(side, -1);
     var yw = Math.atan2(side[2], side[0]) + 0.35;                                         // 偏一點船頭的方向 ⇒ 看得到斷開的兩截
-    CAM.mode = 0; CAM.track = false; CAM.tgt = [w[0], w[1] + R * S * 0.4, w[2]]; CAM.dist = clamp(R * S * 5.2, 28, 70); CAM.yaw = yw; CAM.pitch = 0.2; CAM.snap = true;
+    camSet({ mode: 0, track: false, tgt: [w[0], w[1] + R * S * 0.4, w[2]], dist: clamp(R * S * 5.2, 28, 70), yaw: yw, pitch: 0.2, snap: true });
     SLOW.camT = SLOW.hold + SLOW_EASE + SLOW_CAM_TAIL; SLOW.camMode = 0;
   }
 }
@@ -41,7 +41,7 @@ function slowTick(dt) {
     if (CAM.mode !== SLOW.camMode) SLOW.camSave = null;                                   // 中間換過鏡頭 ⇒ 照玩家的
     else if (SLOW.camT <= 0 || !SLOW.cam) {
       var s = SLOW.camSave; SLOW.camSave = null;
-      CAM.mode = s.mode; CAM.tgt = s.tgt; CAM.dist = s.dist; CAM.yaw = s.yaw; CAM.pitch = s.pitch; CAM.track = s.track;
+      camSet({ mode: s.mode, tgt: s.tgt, dist: s.dist, yaw: s.yaw, pitch: s.pitch, track: s.track });
     }
   }
   return SLOW.ts;

@@ -40,7 +40,7 @@ function floodOpen() { if (!RUNNING || !PAUSED) return; FLX = true; $('floodp').
 function floodClose() { FLX = false; $('floodp').classList.remove('on'); $('frzFlood').classList.remove('on'); }
 function floodToggle() { if (FLX) floodClose(); else floodOpen(); }
 $('frzFlood').onclick = floodToggle; $('frzX').onclick = xrayToggle;
-$('frzGo').onclick = function () { PAUSED = false; frzShow(); };
+$('frzGo').onclick = function () { flowPause(false); frzShow(); };
 $('floodX').onclick = floodClose;
 function fuDeg(a) { return (a * 57.2958).toFixed(1) + '°'; }
 /** 填進水細節頁：兩艘各一段，畫完剖面。 */

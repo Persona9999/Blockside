@@ -1245,6 +1245,32 @@ def bundle_names_check():
     return ['✓ 頂層同名：%d 個包、%d 支檔、%d 個頂層名字，沒有重複；沒宣告就寫入：0；新的短名：0；用到改過名的：0（acorn）' % (len(bundles), len(files), n)]
 
 
+# ───────────────────────── 共用狀態只由擁有者寫（TASK-0669 ③） ─────────────────────────
+# 鏡頭 CAM 只由 03_camera.js 寫（其他檔叫 camStart／camPanBy／camOrbit／camCycle／camSee／camSize／camSet）；
+# 在跑 RUNNING、停格 PAUSED、玩法 MODE 只由 70_flow.js 寫（其他檔叫 flowRun／flowPause／flowMode）。
+# 寫 ＝ 直接指派（MODE = …、RUNNING++）或寫它的欄位（CAM.yaw = …、CAM.pan[0] += …、CAM[k] = …）；照作用域判（src/js_refs.cjs），區域同名的不算。
+OWNED = {'CAM': '03_camera.js', 'RUNNING': '70_flow.js', 'PAUSED': '70_flow.js', 'MODE': '70_flow.js'}
+
+
+def owner_check():
+    """別的檔直接寫 OWNED 裡的共用狀態 ⇒ 不建置（印出哪一行、該叫誰）。沒有 node ⇒ 讀數寫「沒驗」。"""
+    node = shutil.which('node')
+    if not node:
+        return ['⚠ 共用狀態的擁有者：沒驗（找不到 node）']
+    files = re.findall(r'<script\s+src="(js/[^"]+)"\s+data-bundle="game"', open(TPL, encoding='utf-8').read())
+    r = subprocess.run([node, '--expose-internals', os.path.join(HERE, 'js_refs.cjs')] + [os.path.join(HERE, f) for f in files],
+                       capture_output=True, text=True, encoding='utf-8', cwd=HERE)
+    try:
+        d = json.loads(r.stdout.strip().splitlines()[-1])
+    except Exception:
+        raise Fail('共用狀態的擁有者檢查讀不到結果：%s' % (r.stdout + r.stderr).strip()[-300:])
+    E = sorted({'%s:%d 寫了 %s ⇒ 只有 %s 能寫（叫它的函式）' % (os.path.relpath(f, HERE).replace(os.sep, '/'), line, nm, OWNED[nm])
+                for f, nm, line, how in d['refs'] if nm in OWNED and how in ('w', 'm') and os.path.basename(f) != OWNED[nm]})
+    if E:
+        raise Fail('共用狀態只由擁有者寫（TASK-0669；不建置）：\n' + '\n'.join('  ✗ ' + e for e in E))
+    return ['✓ 共用狀態的擁有者：%s 只有擁有者寫' % '、'.join('%s（%s）' % (k, v) for k, v in OWNED.items())]
+
+
 # ───────────────────────── 分層讀數（TASK-0669：模擬與畫面解耦） ─────────────────────────
 # 模擬層 ＝ 20–54 號檔（船體、物理、船員、模擬與 AI；41_crew_art 是畫船員貼圖 ⇒ 算畫面）；上層 ＝ 60 號以後＋下面那幾支畫面、聲音、鏡頭的檔。
 # 76_anchor、78_funnel 編號在後面、職責是模擬（拋錨、煙囪通不通）⇒ 不算上層（不改檔名：會跟大家的分支撞）。
@@ -1466,6 +1492,7 @@ def act_build(pack=True):   # pack：壓縮版（預設，TASK-0583）；False �
     if miss:
         raise Fail('VoxelKit/_cache/ 少了 %s ⇒ 先 python -I admin.py cache（從成品解回）或 reimport' % '、'.join(miss))
     log += bundle_names_check()
+    log += owner_check()
     code, out = run([sys.executable, '-I', INLINE, TPL, OUT])
     log.append(out.strip())
     if code != 0:

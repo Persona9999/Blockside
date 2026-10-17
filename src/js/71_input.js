@@ -2,15 +2,6 @@
 var inDrag = null, PTRS = new Map(), PINCH = null;          // PTRS：按著的指頭（觸控）；兩指（PINCH）⇒ 張合 ＝ 縮放、一起拖 ＝ 平移（同右鍵拖曳；Tim 2026-10-13），不轉鏡頭也不瞄準
 function pinchD() { var a = Array.from(PTRS.values()); return Math.hypot(a[0].x - a[1].x, a[0].y - a[1].y) || 1; }
 function pinchM() { var a = Array.from(PTRS.values()); return { x: (a[0].x + a[1].x) / 2, y: (a[0].y + a[1].y) / 2 }; }
-/** 平移（右鍵拖曳、兩指拖曳）：鏡頭照原本的（Tim 2026-10-14：⛔ 以前一拖就換成自由鏡頭）。dx／dy ＝ 螢幕像素。
- *  自由鏡頭 ⇒ 移注視點；跟船的鏡頭 ⇒ 移 CAM.pan（相對那艘船的方向，03_camera.js camPan）。追砲彈正在追 ⇒ 不動。 */
-function panBy(dx, dy) {
-  var fw = norm([CAM.look[0] - CAM.eye[0], 0, CAM.look[2] - CAM.eye[2]]), rt = [-fw[2], 0, fw[0]], k = CAM.dist * 0.0018, d = add(mul(rt, -dx * k), mul(fw, dy * k));
-  if (CAM.mode === 0) { CAM.tgt = add(CAM.tgt, d); return; }
-  if (CAM.mode === 1 && CAM.follow) return;
-  var sh = camShip(); if (!sh) return;
-  var F = fwd(sh.yaw); CAM.pan[0] += d[0] * F[0] + d[2] * F[2]; CAM.pan[1] += -d[0] * F[2] + d[2] * F[0];
-}
 cv.addEventListener('contextmenu', function (e) { e.preventDefault(); });
 document.addEventListener('contextmenu', function (e) { if (!/^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)) e.preventDefault(); });   // 面板、按鈕、說明上長按也不跳選單（輸入框照常）
 cv.addEventListener('pointerdown', function (e) {
@@ -23,10 +14,10 @@ cv.addEventListener('pointermove', function (e) {
   if (PTRS.has(e.pointerId)) PTRS.set(e.pointerId, { x: e.clientX, y: e.clientY });
   if (PINCH && PTRS.size === 2) {
     if (FP.on) return;                                                 // 第一人稱：兩指不縮放、不平移
-    CAM.dist = clamp(PINCH.dist * PINCH.d / pinchD(), 12, 900);
+    camSet({ dist: clamp(PINCH.dist * PINCH.d / pinchD(), 12, 900) });
     var m = pinchM();                                                  // 兩指中點移了 8 px 以上才開始平移（⛔ 不設門檻 ⇒ 只是張合時手指晃一下畫面也跟著跑）
     if (!PINCH.moved && Math.hypot(m.x - PINCH.x0, m.y - PINCH.y0) < 8) return;
-    PINCH.moved = true; panBy(m.x - PINCH.mx, m.y - PINCH.my); PINCH.mx = m.x; PINCH.my = m.y;
+    PINCH.moved = true; camPanBy(m.x - PINCH.mx, m.y - PINCH.my); PINCH.mx = m.x; PINCH.my = m.y;
     return;
   }
   if (!inDrag) return;
@@ -34,8 +25,8 @@ cv.addEventListener('pointermove', function (e) {
   if (!inDrag.moved && Math.hypot(dx, dy) < 5) return;
   inDrag.moved = true; inDrag.x = e.clientX; inDrag.y = e.clientY;
   if (FP.on) { fpLook(dx, dy); return; }                             // 第一人稱：拖曳 ＝ 轉頭（81_fps.js）
-  if (inDrag.b === 2) panBy(dx, dy);
-  else { if (CAM.mode === 1) CAM.mode = 0; if (CAM.mode === 4) CAM.aoff += dx * 0.006; else CAM.yaw += dx * 0.006; CAM.pitch = clamp(CAM.pitch + dy * 0.005, 0.02, 1.45); }
+  if (inDrag.b === 2) camPanBy(dx, dy);
+  else camOrbit(dx, dy);
 });
 function ptrEnd(e) { PTRS.delete(e.pointerId); if (PTRS.size < 2) PINCH = null; }
 cv.addEventListener('pointerup', function (e) {
@@ -43,7 +34,7 @@ cv.addEventListener('pointerup', function (e) {
   inDrag = null; ptrEnd(e);
 });
 cv.addEventListener('pointercancel', function (e) { inDrag = null; ptrEnd(e); });
-cv.addEventListener('wheel', function (e) { e.preventDefault(); if (FP.on) return; CAM.dist = clamp(CAM.dist * Math.pow(1.0015, e.deltaY), 12, 900); }, { passive: false });
+cv.addEventListener('wheel', function (e) { e.preventDefault(); if (FP.on) return; camSet({ dist: clamp(CAM.dist * Math.pow(1.0015, e.deltaY), 12, 900) }); }, { passive: false });
 function inPick(cx, cy) {
   var r = cv.getBoundingClientRect(), nx = (cx - r.left) / r.width * 2 - 1, ny = 1 - (cy - r.top) / r.height * 2;
   var a = M4.pt(CAM.inv, nx, ny, -1), bq = CAM.inv, w0 = bq[3] * nx + bq[7] * ny + bq[11] * -1 + bq[15], w1 = bq[3] * nx + bq[7] * ny + bq[11] + bq[15];
@@ -124,15 +115,15 @@ function doAct(a, repeat) {
   else if (a === 'fire1') { if (!PAUSED) fireOne(me, AMMO_I); }
   else if (a === 'ammo') ammoNext();                                     // 彈種：一個鍵輪流（61_hud.js ammoNext）
   else if (a === 'aim') { me.pMode = AIM_P = AIM_CYCLE[(AIM_CYCLE.indexOf(me.pMode || 'free') + 1) % AIM_CYCLE.length]; note(me, '瞄準：' + AIM_NAME[me.pMode] + (me.pMode === 'free' ? '（點敵艦設瞄準點）' : '')); }   // 瞄準模式（51_captain.js）
-  else if (a === 'cam') { CAM.mode = CAM_ORDER[(CAM_ORDER.indexOf(CAM.mode) + 1) % CAM_ORDER.length]; CAM.follow = null; CAM.pan = [0, 0]; CAM.see = null; if (CAM.mode === 2 || CAM.mode === 3) { CAM.dist = 75; } else if (CAM.mode === 0) CAM.dist = DIST + 40; else if (CAM.mode === 4) { CAM.dist = 78; CAM.aoff = 0.35; } }
-  else if (a === 'pause') { PAUSED = !PAUSED; frzShow(); pauseLabel(); }                               // 停格（72_floodui.js：停格時上方一條、進水細節頁）
+  else if (a === 'cam') camCycle();                                    // 換鏡頭（03_camera.js）
+  else if (a === 'pause') { flowPause(!PAUSED); frzShow(); pauseLabel(); }                               // 停格（72_floodui.js：停格時上方一條、進水細節頁）
   else if (a === 'flood') { if (PAUSED) floodToggle(); }                 // 停格時：進水圖表／透視（72_floodui.js）
   else if (a === 'xray') xrayToggle();                                   // 觀察模式：透視（72_floodui.js）、剖面、隱藏甲板（74_cutaway.js）—— 不停格也能切換（Tim 2026-10-16）
   else if (a === 'cut') cutToggle();
   else if (a === 'deck') deckCycle();
   else if (a === 'mute') { muted = !muted; sndApply(); gsetShow(); }
   else if (a === 'help') helpToggle();
-  else if (a === 'menu') { gsetClose(); helpClose(); RUNNING = false; END_AT = 0; END_WAIT = null; $('cover').style.display = ''; $('end').className = ''; decoSync(); }
+  else if (a === 'menu') { gsetClose(); helpClose(); flowRun(false); END_AT = 0; END_WAIT = null; $('cover').style.display = ''; $('end').className = ''; decoSync(); }
   else if (a === 'sailMode') sailToggle();   // 一顆切換 自動 ⇄ 手動（Tim 2026-10-15：「改成單鍵」；手動也可以直接打舵）；錨在水裡 ⇒ 先起錨（左右錨拋的也一起）
   else if ((a === 'ancAll' || a === 'ancP' || a === 'ancS') && me && !me.sunk && anchorsOf(me).noAnchor) setSailMode(SAIL === 'off' ? 'manual' : 'off');   // 整艘沒有錨（TASK-0635）：三個錨鍵都是停船 ⇄ 手動
   else if (a === 'ancAll' && me && !me.sunk) {                              // 拋錨／起錨同一顆（Tim 2026-10-15；76_anchor.js anchor6）：兩邊都沒拋 ⇒ 雙錨（拋錨模式、只有我艦）；一邊在水裡 ⇒ 拋另一邊；兩邊都在水裡 ⇒ 起錨
@@ -189,7 +180,7 @@ function setSailMode(m) {
 }
 /** 自由鏡頭跟不跟著兩艘的中點走（預設跟；鏡頭「看敵艦／看我艦」本來就跟著那一艘）。 */
 function setCamTrack(on) {
-  CAM.track = on; CAM.trMe = CAM.trYaw = null;
+  camSet({ track: on, trYaw: null, trMe: null });
   $('camT').classList.toggle('on', on);
   if (RUNNING && SHIPS.length) note(SHIPS[PLAYER_I], on ? '鏡頭跟著船' : '鏡頭固定（' + keyName('camTrack') + ' 切換）');
 }
@@ -205,11 +196,11 @@ function sailLabel() { var b = $('sailT'); if (b) b.classList.toggle('on', SAIL 
 $('camT').onclick = function () { setCamTrack(!CAM.track); };
 $('physT').onclick = function () { setPhys(!PHYS); };
 $('restartB').onclick = function () { if (RUNNING) { gsetClose(); helpClose(); start(); } };
-$('boomB').onclick = function () { if (selfDestruct()) { gsetClose(); helpClose(); PAUSED = false; } };   // 自爆：關掉設定、解除停格，看煙花（23_powder.js）
+$('boomB').onclick = function () { if (selfDestruct()) { gsetClose(); helpClose(); flowPause(false); } };   // 自爆：關掉設定、解除停格，看煙花（23_powder.js）
 // 遊戲內的設定面板（⚙ 設定、Esc）：打開 ⇒ 暫停（關掉回到打開之前的暫停狀態）；畫質、物理效果的檔位跟主選單是同一份（07_gfx.js／09_phx.js）
 var GSET = { open: false, paused: false };
-function gsetOpen() { if (!RUNNING || GSET.open) return; helpClose(); GSET.open = true; GSET.paused = PAUSED; PAUSED = true; $('gset').classList.add('on'); $('gsetBg').classList.add('on'); gsetShow(); }
-function gsetClose() { if (!GSET.open) return; GSET.open = false; PAUSED = GSET.paused; $('gset').classList.remove('on'); $('gsetBg').classList.remove('on'); }
+function gsetOpen() { if (!RUNNING || GSET.open) return; helpClose(); GSET.open = true; GSET.paused = PAUSED; flowPause(true); $('gset').classList.add('on'); $('gsetBg').classList.add('on'); gsetShow(); }
+function gsetClose() { if (!GSET.open) return; GSET.open = false; flowPause(GSET.paused); $('gset').classList.remove('on'); $('gsetBg').classList.remove('on'); }
 function gsetToggle() { if (GSET.open) gsetClose(); else gsetOpen(); }
 // 不給全螢幕時那一行（Tim 2026-10-17：iPhone 照臺北狂飆那樣「加入主畫面」就是全螢幕 ——「iphone支援的操作 不用另外做功能」「純文字也可以」）：
 //   iPhone ⇒ 寫怎麼加入主畫面（iOS 自己會用網頁 App 開：沒有網址列與工具列）；別的（沒開全螢幕權限的 iframe…）照舊只說不給。
@@ -231,8 +222,8 @@ function gsetShow() {
 $('setB').onclick = gsetToggle;
 // 說明（設定裡的「H 說明」、H、?）：打開 ⇒ 暫停（關掉回到打開之前的暫停狀態，跟設定一樣）；外面蓋一層 #helpBg，點外面、✕、H、Esc 都關（Tim 2026-10-13：手機上不好關說明）
 var HELP = { open: false, paused: false };
-function helpOpen() { if (!RUNNING || HELP.open) return; gsetClose(); HELP.open = true; HELP.paused = PAUSED; PAUSED = true; $('help').classList.add('on'); $('helpBg').classList.add('on'); }
-function helpClose() { if (!HELP.open) return; HELP.open = false; PAUSED = HELP.paused; $('help').classList.remove('on'); $('helpBg').classList.remove('on'); }
+function helpOpen() { if (!RUNNING || HELP.open) return; gsetClose(); HELP.open = true; HELP.paused = PAUSED; flowPause(true); $('help').classList.add('on'); $('helpBg').classList.add('on'); }
+function helpClose() { if (!HELP.open) return; HELP.open = false; flowPause(HELP.paused); $('help').classList.remove('on'); $('helpBg').classList.remove('on'); }
 function helpToggle() { if (HELP.open) helpClose(); else helpOpen(); }
 $('helpBg').onclick = helpClose; $('helpX').onclick = helpClose; $('helpB').onclick = helpOpen;
 $('gsetBg').onclick = gsetClose;                                    // 面板外點一下 ⇒ 關（不會順便瞄準、開砲：底下的東西被這一層蓋住）
@@ -267,7 +258,7 @@ $('endA').onclick = start;
 /** 主選單的玩法鈕：照玩法規則表（04_modes.js MODE_RULES）裡 menu 的那幾份生、照表的順序（TASK-0668：加一種玩法不用改這裡）。 */
 function modeButtons() {
   $('modes').innerHTML = Object.keys(MODE_RULES).filter(function (m) { return MODE_RULES[m].menu; }).map(function (m) { return '<button data-m="' + m + '">' + MODE_RULES[m].name + '</button>'; }).join('');
-  [].forEach.call(document.querySelectorAll('#modes button'), function (b) { b.onclick = function () { MODE = b.dataset.m; [].forEach.call(document.querySelectorAll('#modes button'), function (x) { x.className = x === b ? 'on' : ''; }); }; });
+  [].forEach.call(document.querySelectorAll('#modes button'), function (b) { b.onclick = function () { flowMode(b.dataset.m); [].forEach.call(document.querySelectorAll('#modes button'), function (x) { x.className = x === b ? 'on' : ''; }); }; });
 }
 modeButtons();
 /** 選單：滑桿的上下限從 LIM 來；數值只在使用者動了那一條時才從滑桿讀回（⛔ 一開頭就讀回 ⇒ 網址給的 0.33 被 step 吃成 0.35）。
@@ -839,6 +830,6 @@ function distShow() { var d = $('dist'); d.value = DIST; $('distV').textContent 
 setSailMode(SAIL); setCamTrack(true); $('physT').classList.toggle('on', PHYS);
 $('go').onclick = start;
 $('endC').onclick = function () { $('end').className = ''; };
-$('endR').onclick = function () { RUNNING = false; $('end').className = ''; $('cover').style.display = ''; decoSync(); };
+$('endR').onclick = function () { flowRun(false); $('end').className = ''; $('cover').style.display = ''; decoSync(); };
 // 訂閱（TASK-0669：模擬層只發事件，00_events.js）
 evOn('playerTake', function () { KEYS.l = KEYS.r = false; });   // 玩家換船：按住的舵鍵放開（52_fleet.js playerTake）

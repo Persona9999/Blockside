@@ -55,7 +55,7 @@ function fpSet(on, quiet) {                                           // quiet�
     FP.vz = 0; FP.flyFrom = FP.mode === 2 ? FP.c.pos.slice() : null;
     if (!quiet) note(sh, '第一人稱：左下搖桿或 ' + ['fpFwd', 'fpLeft', 'fpBack', 'fpRight'].map(keyName).join('') + ' 走、' + keyWord('fpRun') + ' 跑、' + keyWord('fpJump') + '跳、拖曳畫面／方向鍵轉頭（電腦：點畫面用滑鼠轉頭，Esc 或按住 ' + keyName('fpUnlock') + ' 放開）、' + keyName('fpClimb') + ' 爬梯子 —— 🎥（' + keyName('fpExit') + '）回到原本的鏡頭' + (FP.mode === 2 ? '（浮空：' + keyWord('fpJump') + '上、' + keyName('fpDown') + ' 下）' : ''));
   } else if (FP.on) {
-    FP.on = false; FP.sh = FP.c = FP.climb = FP.near = FP.fol = null; CAM.snap = true; fpUnlock();
+    FP.on = false; FP.sh = FP.c = FP.climb = FP.near = FP.fol = null; camSet({ snap: true }); fpUnlock();
   }
   fpStop(); fpUI(); return FP.on;
 }
@@ -401,9 +401,9 @@ function fpCam() {
   if (FP.ez === null) fpEyeZ(0);
   var eye = M4.pt(sh.M, c.pos[0], c.pos[1], FP.ez);                    // 眼高平滑過（fpEyeZ）
   var cp = Math.cos(FP.pitch), dir = norm(M4.dir(sh.M, Math.cos(FP.yaw) * cp, Math.sin(FP.yaw) * cp, Math.sin(FP.pitch)));
-  CAM.eye = eye; CAM.look = add(eye, dir);
+  var look = add(eye, dir);
   var proj = M4.persp(FP_FOV, CAM.w / CAM.h, 0.05, 5000);            // 近裁切面 5 cm（⛔ 0.5 m ⇒ 艙裡身邊的牆被切掉）
-  CAM.vp = M4.mul(proj, M4.lookAt(CAM.eye, CAM.look, [0, 1, 0])); CAM.inv = M4.inv(CAM.vp);
+  var vp = M4.mul(proj, M4.lookAt(eye, look, [0, 1, 0])); camSet({ eye: eye, look: look, vp: vp, inv: M4.inv(vp) });
   return true;
 }
 /** 鍵盤（71_input.js keydown／keyup 先問這裡）：第一人稱的鍵吃掉 ⇒ true；其他照舊（P 停格、O／Esc 設定）。 */

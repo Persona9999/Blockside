@@ -62,7 +62,7 @@ function uwLabShot(sh, x, side, gun, short, o) {
 function uwLab(o) {
   o = Object.assign({ guns: ['dahl11', 'dahl9', 'brooke7', 'long32', 'long'], short: [0, 2, 4, 6, 8, 12, 16, 25], ammo: 0, R: 400, h0: 3, side: 0, flat: false, floodS: 30, rec: 0.5 }, o || {});
   var seaK = SEA_K; if (o.flat) SEA_K = 0;
-  MODE = 'sandbox'; reset(); AUTOFIRE = false; RUNNING = false;
+  flowMode('sandbox'); reset(); AUTOFIRE = false; flowRun(false);
   var sh = SHIPS[0];
   SHIPS.forEach(function (s2) { s2.sailSet = 0; s2.power = 0; s2.manual = true; s2.rudder = 0; });
   if (SHIPS[1]) { SHIPS[1].px += 3000; SHIPS[1].pz += 3000; }        // 另一艘移遠（砲彈算它的、但飛不到）

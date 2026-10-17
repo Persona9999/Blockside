@@ -36,9 +36,9 @@ function frame(ts, noRaf) {                                         // noRaf：_
 
 // ───────────────────────── 載入 ─────────────────────────
 if (DEBUG) window.__game = {
-  start: function (mode, dist) { MODE = mode || 'pve'; DIST = dist || DIST; start(); },
+  start: function (mode, dist) { flowMode(mode || 'pve'); DIST = dist || DIST; start(); },
   fleet: function (spec, mode) {   // 多船（TASK-0537）：spec ＝ [{ team: 'blue'|'red', hull: 'constitution'|… }]，第一艘是我艦；船型要先載好（loadHull）；null ⇒ 回到兩艘
-    FLEET_DBG = spec; MODE = mode || 'eve'; start();
+    FLEET_DBG = spec; flowMode(mode || 'eve'); start();
     return SHIPS.map(function (s) { return { i: s.i, team: s.team, hull: s.T.id, px: s.px, pz: s.pz, foe: s.foe ? s.foe.i : null }; });
   },
   loadHull: function (id) { return loadHull(id).then(function (T) { return T.id; }); },
@@ -128,7 +128,7 @@ if (DEBUG) window.__game = {
   sea: function (x, z, t) { return x === undefined ? { k: SEA_K, waves: WAVES } : seaH(x, z, t === undefined ? SIMT : t); },
   camFollow: function (dt) { camFollow(dt); return CAM.follow; },
   predict: function (b) { return ballPredict(b); },
-  cam: function (o) { for (var k in o) CAM[k] = o[k]; CAM.snap = true; camUpdate(1); render(); },
+  cam: function (o) { camSet(o); camSet({ snap: true }); camUpdate(1); render(); },
   seaDbg: function (o) { SEA_DBG = o || {}; render(); return SEA_DBG; },   // 海面試驗場（src/tests/sea_lab.py）：{ det, an, … } 覆寫著色器的那幾格；{} ⇒ 照畫質
   phys: function (on) { if (on !== undefined) setPhys(!!on); return PHYS; },
   /** 進水（33_flood.js，粒子模式）：第 i 艘的水量、破口、進出水、抽水、粒子、重心、該下沉多少；公式模式 ⇒ null。 */
@@ -398,7 +398,7 @@ yieldUI().then(function () {                                        // 先讓主
   if (Q.get('lab') === 'flood') { var FR = floodLab(flLabOpts()), fp = document.createElement('pre'); fp.id = 'lab'; document.body.appendChild(fp); fp.textContent = JSON.stringify(FR); $('cover').style.display = 'none'; return; }   // 沙盒進水報表（81_floodlab.js；src/tests/flood_lab.py）
   if (Q.get('lab') === 'uw') { var LR = uwLab(labOpts()), lp = document.createElement('pre'); lp.id = 'lab'; document.body.appendChild(lp); lp.textContent = JSON.stringify(LR); $('cover').style.display = 'none'; return; }   // 落水彈道的測試場（80_lab.js；src/tests/uw_lab.py 讀 #lab）
   if (DEMO >= 0) {                                             // 快轉：電腦對電腦、固定步長；?mode= 換玩法（TASK-0668 對拍對戰、沙盒用；沒給 ＝ 觀戰）
-    MODE = Object.prototype.hasOwnProperty.call(MODE_RULES, Q.get('mode')) ? Q.get('mode') : 'eve'; reset(); RUNNING = true;
+    flowMode(Object.prototype.hasOwnProperty.call(MODE_RULES, Q.get('mode')) ? Q.get('mode') : 'eve'); reset(); flowRun(true);
     var steps = Math.round(DEMO / DT), phys = PHYS, from = Math.max(0, steps - 360);     // 帆與繩只畫最後那一格 ⇒ 物理只在最後 6 秒跑（不影響戰局）
     if (phys && from > 0) setPhys(false);
     // ?dump=1：每半秒記每艘的最大橫傾、開始沉／沉沒／降旗的時間，跑完寫進頁面（#dump；無頭 Chrome --dump-dom 讀，量進水模式用）
@@ -419,7 +419,7 @@ yieldUI().then(function () {                                        // 先讓主
       if (rec && i % 30 === 29) ['blue', 'red'].forEach(function (tm) { if (downAt[tm] === null && teamDown(tm)) downAt[tm] = +SIMT.toFixed(1); });
       if (RC && i % 30 === 29) SHIPS.forEach(function (sh, k) { if (sh.sink > 40) return; ropesFloating(sh).forEach(function (f) { var key = f.name + '#' + f.end; if (RC[k].seen[key]) return; RC[k].seen[key] = 1; RC[k].float.push({ t: +SIMT.toFixed(1), name: f.name, end: f.end, kind: f.kind, why: f.why, P: f.P }); }); });
     }
-    if (!HEADLESS) remesh(Infinity); RUNNING = false; $('cover').style.display = 'none';
+    if (!HEADLESS) remesh(Infinity); flowRun(false); $('cover').style.display = 'none';
     if (TLOG && Q.get('test') === '1') { var pre4 = document.createElement('pre'); pre4.id = 'crewlog'; document.body.appendChild(pre4); pre4.textContent = JSON.stringify(tlgData()); }   // 測試模式（83_testlog.js；src/tests/crew_log.py 讀）：另外一塊，#dump 照舊
     if (RC) { var pre2 = document.createElement('pre'); pre2.id = 'ropecheck'; document.body.appendChild(pre2); pre2.textContent = JSON.stringify(RC.map(function (c) { return { hull: c.hull, stat: c.stat, float: c.float }; })); }
     if (rec) { var pre = document.createElement('pre'); pre.id = 'dump'; document.body.appendChild(pre);
