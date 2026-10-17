@@ -317,6 +317,30 @@ function hudArt() {
 }
 /** 羅盤那一團（#navBox）往下壓、底邊貼在下方面板（#ctl）頂上 BOT_GAP px（Tim 2026-10-14）：量現在差多少、改 margin-bottom（負的 ⇒ 落進兩組大圓鈕之間；砲列壓在大圓鈕底下）。
  *  #botC 可能被 scale（手機橫拿 .82）⇒ 量到的差先除回去；差不到半格不動。 */
+/** 瞄準圈（UI 層；Tim 2026-10-17「瞄準圈是否可以改成UI層顯示(目前會隨敵艦旋轉 且很不清楚) 然後瞄敵人時改紅色(友軍維持藍色)」「希望在中心加個十字」）：
+ *  以前是 3D 裡 16 個點、圈面跟著敵艦的船長方向轉（60_render.js）⇒ 船一轉就側成橢圓、點小看不清。現在每一格把瞄準點（sh.aim，那艘的格座標）投影到螢幕，
+ *  #aimR（template.html：外圈＋中心十字＋中心點，描暗邊）放在那一點、固定像素大小、不轉；瞄敵艦紅、瞄友艦藍（.ally）。
+ *  只畫玩家自己瞄的（handAim：沒開自動開砲，或開著但點了那一舷）；跑到鏡頭後面、畫面外、沒開戰、?still=1 ⇒ 藏。⛔ 不擋點擊（pointer-events:none）。
+ *  座標照畫布（＝ #stage，安全區收過邊）的大小 —— 跟點擊瞄準（71_input.js pick）同一套換算。 */
+var AIMR = { on: false, ally: null, x: NaN, y: NaN };
+function aimRingUi() {
+  var el = $('aimR'); if (!el) return;
+  var me = SHIPS[PLAYER_I], fs = me && me.aim && handAim(me) && RUNNING && !STILL ? aimShip(me) : null, show = !!(fs && fs.M), x = 0, y = 0;
+  if (show) {
+    var w = M4.pt(fs.M, me.aim[0], me.aim[1], me.aim[2]), q = CAM.vp, cw = q[3] * w[0] + q[7] * w[1] + q[11] * w[2] + q[15];
+    if (cw <= 0.1) show = false;                                               // 在鏡頭後面
+    else {
+      var W = cv.clientWidth, H = cv.clientHeight;
+      x = Math.round(((q[0] * w[0] + q[4] * w[1] + q[8] * w[2] + q[12]) / cw + 1) / 2 * W);
+      y = Math.round((1 - (q[1] * w[0] + q[5] * w[1] + q[9] * w[2] + q[13]) / cw) / 2 * H);
+      if (x < -30 || y < -30 || x > W + 30 || y > H + 30) show = false;
+    }
+  }
+  if (AIMR.on !== show) { AIMR.on = show; el.classList.toggle('on', show); }
+  if (!show) return;
+  var ally = !isFoe(me, fs); if (AIMR.ally !== ally) { AIMR.ally = ally; el.classList.toggle('ally', ally); }
+  if (AIMR.x !== x || AIMR.y !== y) { AIMR.x = x; AIMR.y = y; el.style.transform = 'translate(' + x + 'px,' + y + 'px)'; }
+}
 var BOT_GAP = 2;
 /** 直式手機（Tim 2026-10-17「iphone直畫面全螢幕時 把羅盤放到最下排」「輪盤上方文字 改成按鈕上方」「或是統一改到下面好了」「羅盤跟炮提示統一到畫面下方」）
  *  ⇒ html.navlow：最下排整排只留給羅盤與兩舷的砲數提示（#navBox），按鈕（#ctl 的 C P O 4 R、左右兩欄 #helmL／#helmR）都抬到它上面、狀態文字（#modeT）再上面
@@ -474,6 +498,7 @@ function ammoNext() {
 function hud(dt) {
   stepMsgs(dt);
   if (ROOMS_DBG) roomLabels();                                                   // 空艙房的名字（36_rooms.js；?rooms=1）：每一格跟著鏡頭
+  aimRingUi();                                                                   // 瞄準圈（UI 層）：每一格跟著鏡頭
   if (!SHIPS.length || (HUDN++ % 6)) return;
   var me = SHIPS[PLAYER_I];
   fleetHud(me);                                                                  // 上方：每艘一個圓形按鈕＋中間一艘的詳細資訊（TASK-0552）
