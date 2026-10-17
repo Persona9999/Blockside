@@ -10438,7 +10438,8 @@ function mid(r) { var p = r.pts, n = p.length / 3 - 1; return [(p[0] + p[n * 3])
 Object.keys(by).forEach(function (k) {
 var L = by[k].sort(function (a, b) { return a.meta.rung - b.meta.rung; }), m = L[0].meta;
 var pts = [xyz(m.foot), mid(L[0]), mid(L[L.length - 1]), xyz(m.head)]; if (pts[0][2] > pts[3][2]) pts.reverse();
-out.push({ name: k, pts: pts, link: m.decks, rope: L.map(function (r) { return r.name; }) });
+var p = L[0].pts, xa = p[0], xb = p[p.length - 3];
+out.push({ name: k, pts: pts, link: m.decks, rope: L.map(function (r) { return r.name; }), span: [Math.min(xa, xb), Math.max(xa, xb)] });
 });
 return out;
 }
@@ -16428,7 +16429,7 @@ FP.fol = L[(i + 1) % L.length]; FP.folP = null; FP.ez = null; FP.climb = null; F
 function fpLadders(sh) {
 return shipLadders(sh.T).map(function (l) {
 var P = l.pts, mid = P.slice(1, -1).map(function (q) { return [q[0], q[1], q[2] + CLIMB_LIFT]; });
-return { name: l.name, up: [P[0]].concat(mid, [P[P.length - 1]]) };
+return { name: l.name, up: [P[0]].concat(mid, [P[P.length - 1]]), rope: !!l.rope, span: l.span || null };
 });
 }
 
@@ -16619,12 +16620,19 @@ FP.eo += (off - FP.eo) * (1 - Math.exp(-dt / (off < FP.eo ? FP_EZ_DN : FP_EZ_UP)
 FP.ez = FP.fz + FP.eo;
 }
 
+
+
+var FP_REACH_ROPE = 18, FP_REACH_ROPE_Z = 6;
 function fpNear(p) {
 var best = null, bd = 1e9;
 (FP.lads || []).forEach(function (L) {
-[[L.up[0], L.up], [L.up[L.up.length - 1], L.up.slice().reverse()]].forEach(function (e) {
-var q = e[0], dh = Math.hypot(q[0] - p[0], q[1] - p[1]);
-if (dh < FP_REACH && Math.abs(q[2] - p[2]) <= 4 && dh < bd) { bd = dh; best = { pts: e[1], up: e[1] === L.up, name: L.name }; }
+[[L.up[0], L.up], [L.up[L.up.length - 1], L.up.slice().reverse()]].forEach(function (e, k) {
+var q = e[0], pts = e[1], R = L.rope ? FP_REACH_ROPE : FP_REACH, RZ = L.rope ? FP_REACH_ROPE_Z : 4, dh;
+if (L.rope && L.span && k === 0) {
+var cx = clamp(p[0], L.span[0], L.span[1]); dh = Math.hypot(cx - p[0], q[1] - p[1]);
+pts = [[cx, q[1], q[2]]].concat(pts.slice(1));
+} else dh = Math.hypot(q[0] - p[0], q[1] - p[1]);
+if (dh < R && Math.abs(q[2] - p[2]) <= RZ && dh < bd) { bd = dh; best = { pts: pts, up: k === 0, name: L.name }; }
 });
 });
 return best;

@@ -46,7 +46,8 @@ function ropeLadders(T) {
   Object.keys(by).forEach(function (k) {
     var L = by[k].sort(function (a, b) { return a.meta.rung - b.meta.rung; }), m = L[0].meta;
     var pts = [xyz(m.foot), mid(L[0]), mid(L[L.length - 1]), xyz(m.head)]; if (pts[0][2] > pts[3][2]) pts.reverse();
-    out.push({ name: k, pts: pts, link: m.decks, rope: L.map(function (r) { return r.name; }) });
+    var p = L[0].pts, xa = p[0], xb = p[p.length - 3];                   // span：最低一道的前後兩端（x）⇒ 第一人稱沿著這一段都摸得到梯腳（81_fps.js fpNear；Tim 2026-10-17「繩梯…還是不能爬(是否可以加大判定範圍?)」）
+    out.push({ name: k, pts: pts, link: m.decks, rope: L.map(function (r) { return r.name; }), span: [Math.min(xa, xb), Math.max(xa, xb)] });
   });
   return out;
 }
