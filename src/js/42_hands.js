@@ -35,6 +35,53 @@ function shipLadders(T) {
 function lvOf(Ls, z) { for (var i = 0; i < Ls.length; i++) if (z >= Ls[i].zr[0] && z <= Ls[i].zr[1]) return i; return -1; }
 /** 船上一點 p 落在哪一層：有甲板 meta ⇒ 照那一欄的地板（deckAt，x 也看；navLevels 一層甲板一層 ⇒ 第幾層 ＝ d.i）；沒有甲板 meta、或離每層地板都太遠 ⇒ 照高度（lvOf）。 */
 function lvAt(sh, p) { var d = hullDecks(sh.T).length ? deckAt(sh.T, p[0], p[2]) : null; return d ? d.i : lvOf(sh.nav.levels, p[2]); }
+/** 一點在走路格上是第幾層、哪一塊（[層, 塊]；量不到 ⇒ null）。 */
+function navRegAt(sh, p) {
+  if (!sh.nav) return null;
+  var li = lvAt(sh, p), L = li >= 0 ? sh.nav.levels[li] : null; if (!L) return null;
+  var i = navSnap(L.N, p, 2); return i < 0 ? null : [li, L.N.reg[i]];
+}
+/** 直線走的人（砲手換砲 goToGun、送藥手 monkeyTo）從 a 走得到 b 嗎：走路格上同一層、同一塊才算（Tim 2026-10-17「水手會穿進去」：
+ *  主砲塔吊籃裡的砲手被借去補甲板上的速射砲、送藥手被分到圈裡的砲 ⇒ 照直線穿過砲塔那一圈牆（TASK-0655 的牆只擋走路格）。
+ *  只看有會轉的裝甲／砲塔的船（T.armor）⇒ 其他船一行都不多算、戰局逐位元組不變；量不到（沒有走路格、snap 不到、不同層）⇒ 照以前當作走得到。 */
+function navReach(sh, a, b) {
+  if (!sh.nav || !sh.T.armor || !sh.T.armor.length) return true;
+  var A = navRegAt(sh, a), B = navRegAt(sh, b);
+  return !A || !B || A[0] !== B[0] || A[1] === B[1];
+}
+/** 直線走的人（砲手換砲、送藥手來回）a → b 要經過的點（最後一點 ＝ b）：會轉裝甲的船、同一層同一塊、直直走過去會碰到牆（navSee）⇒ 照走路格找路再拉直；
+ *  其他（沒有會轉裝甲的船、看得到、量不到、不同塊）⇒ [b]（照以前直線）。⛔ 只看同一塊不夠：甲板繞著砲塔一圈是連通的，兩點在砲塔兩邊時直線照樣穿過去（Tim 2026-10-17「水手會穿進去」，量到的就是這一例）。 */
+function navWay(sh, a, b) {
+  if (!sh.nav || !sh.T.armor || !sh.T.armor.length) return [b];
+  var li = lvAt(sh, a), L = li >= 0 ? sh.nav.levels[li] : null; if (!L || lvAt(sh, b) !== li) return [b];
+  var N = L.N, i = navSnap(N, a, 2), j = navSnap(N, b, 2);
+  if (i < 0 || j < 0 || i === j || N.reg[i] !== N.reg[j] || navSee(N, i, j)) return [b];
+  var p = navPath(N, i, j); if (!p) return [b];
+  var w = navSmooth(N, p).slice(1, -1).map(function (k) { return navPos(N, k); });   // 頭尾不要（頭 ＝ 自己腳下、尾換成 b 本身）
+  w.push(b); return w;
+}
+/** 點名補位要走到第 lv 層的哪一塊（callHands；同一個理由：到了那一層就換職位、之後照直線走 ⇒ 落在砲塔外的那一塊就會穿牆走進去）：
+ *  p 落在第 lv 層 ⇒ 那一塊；沒有會轉裝甲的船、量不到 ⇒ undefined（那一層哪一塊都行，跟以前一樣）。 */
+function needReg(sh, lv, p) {
+  if (!sh.T.armor || !sh.T.armor.length || !p) return undefined;
+  var A = navRegAt(sh, p); return A && A[0] === lv ? A[1] : undefined;
+}
+/** 砲手、送藥手所在那一塊已經沒有活著的砲可去（砲塔裡的砲全被打掉）⇒ 改當預備水手（會走梯子；點名照缺額重新派到別塊）。
+ *  ⛔ 不改 ⇒ 不會爬梯子、又不能穿牆（navReach）⇒ 一直關在吊籃裡，點名還把他算成在崗 ⇒ 外面缺人的砲永遠沒人補。只在會轉裝甲的船叫（40_crew.js reassign）。 */
+function toHand(sh, c) {
+  var NV = sh.nav, lv = NV ? lvAt(sh, c.pos) : -1; if (lv < 0 || !NV.levels[lv]) return false;
+  if (c.role === ROLE.GUN) leaveGun(c);
+  if (c.role === ROLE.POWDER) { (c.guns || []).forEach(function (g) { if (g.pm === c) g.pm = null; }); c.pm = null; c.cart = false; }
+  if (c.art === undefined) c.art = c.role;                               // 貼圖照原本的職位那一列
+  c.role = ROLE.HAND; c.gun = null; c.walk = null; c.moving = false; c.deck = NV.levels[lv].key;
+  c.hand = { lv: lv, wait: rr(1, 3), legs: [], wp: null, k: 0, climb: null, job: null, to: null };
+  return true;
+}
+/** 那一層倒下、還沒人接的送藥手（點名與接手照同一個挑）；reg 給了 ⇒ 先挑家在那一塊的。 */
+function deadPm(sh, deck, lv, reg) {
+  var L = sh.crew.filter(function (o) { return o.role === ROLE.POWDER && o.deck === deck && !able(o) && !o.relieved; });
+  return (reg !== undefined ? L.filter(function (o) { return needReg(sh, lv, o.home) === reg; })[0] : null) || L[0];
+}
 /** 走得到的甲板（由下往上）：砲甲板＋梯子一頭落在砲甲板以外的高度（相差 8 格內併成一層，上下各留 5 格的舷弧，不蓋到砲甲板）。 */
 function navLevels(sh, lads) {
   var DM = hullDecks(sh.T);
@@ -348,11 +395,13 @@ function callHands(sh) {
       var want = Math.min(NV.gun0[D.key + side] || 0, gs.reduce(function (a, g) { return a + g.crewFull; }, 0));
       var have = sh.crew.filter(function (c) { return c.role === ROLE.GUN && able(c) && c.deck === D.key && c.side === side; }).length;
       var n = want - have - (going['gun' + D.key + side] || 0), wx = 0, ww = 0;
-      gs.forEach(function (g) { var m = Math.max(0, g.crewFull - g.manned); wx += g.muz[0] * m; ww += m; });
-      if (n > 0) need.push({ kind: 'gun', key: D.key + side, deck: D.key, side: side, lv: lv, n: n, x: ww ? wx / ww : gs[0].muz[0], pri: side === sh.side ? 0 : 2 });
+      var gm = null, mm = -1;
+      gs.forEach(function (g) { var m = Math.max(0, g.crewFull - g.manned); wx += g.muz[0] * m; ww += m; if (m > mm) { mm = m; gm = g; } });
+      if (n > 0) need.push({ kind: 'gun', key: D.key + side, deck: D.key, side: side, lv: lv, n: n, x: ww ? wx / ww : gs[0].muz[0], pri: side === sh.side ? 0 : 2, reg: gm && sh.T.armor && sh.T.armor.length ? needReg(sh, lv, gunNavAt(sh, gm)) : undefined });   // reg：缺最多人那門砲所在的那一塊（會轉裝甲的船）
     });
     var pm = sh.crew.filter(function (c) { return c.role === ROLE.POWDER && able(c) && c.deck === D.key; }).length, pn = (NV.pm0[D.key] || 0) - pm - (going['pm' + D.key] || 0);
-    if (pn > 0 && sh.stations.some(function (s) { return s.deck === D.key && !s.mag.gone; })) need.push({ kind: 'pm', key: D.key, deck: D.key, lv: lv, n: pn, x: sh.T.cx, pri: 1 });
+    var dp = pn > 0 && sh.T.armor && sh.T.armor.length ? deadPm(sh, D.key) : null;   // 會轉裝甲的船：走到倒下那位的家所在的那一塊
+    if (pn > 0 && sh.stations.some(function (s) { return s.deck === D.key && !s.mag.gone; })) need.push({ kind: 'pm', key: D.key, deck: D.key, lv: lv, n: pn, x: sh.T.cx, pri: 1, reg: needReg(sh, lv, dp && dp.home) });
   });
   var wheel = sh.models.filter(function (m) { return m.kind === 'wheel'; })[0], hd = sh.crew.filter(function (c) { return (c.role === ROLE.HELM && !able(c) || c.helmHome) && !c.relieved; });   // helmHome：從甲板破洞掉下去的舵手（40_crew.js landIn），站位照原本的
   var hn = Math.min(hd.length, NV.helm0 - sh.crew.filter(function (c) { return c.role === ROLE.HELM && able(c); }).length - (going.helm || 0));
@@ -367,11 +416,11 @@ function callHands(sh) {
     for (var k = 0; k < q.n && idle.length; k++) {
       var bi = -1, bd = 1e9;
       idle.forEach(function (c, i) { var d = Math.abs(c.pos[0] - q.x) + 150 * Math.abs(c.hand.lv - q.lv); if (d < bd) { bd = d; bi = i; } });
-      var c = idle[bi], H = c.hand, legs = handRoute(sh, H.lv, q.lv, c.pos[0], q.x, handReg(sh, c), q.cell !== undefined ? NV.levels[q.lv].N.reg[q.cell] : undefined);   // cell：要走到的那一點（醫療艙；照它那一塊找路）
+      var c = idle[bi], H = c.hand, legs = handRoute(sh, H.lv, q.lv, c.pos[0], q.x, handReg(sh, c), q.cell !== undefined ? NV.levels[q.lv].N.reg[q.cell] : q.reg);   // cell：要走到的那一點（醫療艙；照它那一塊找路）；reg：補砲班、送藥手要到的那一塊（needReg）
       idle.splice(bi, 1); if (!legs) continue;
       if (q.cell !== undefined) legs.push({ w: q.lv, to: q.cell });
       if (q.kind === 'helm') { var si = navSnap(NV.levels[q.lv].N, q.spot, 4); if (si < 0) continue; legs.push({ w: q.lv, to: si }); q.who.relieved = true; }
-      H.job = { kind: q.kind, key: q.key, deck: q.deck, side: q.side, lv: q.lv, spot: q.spot, med: q.med, who: q.who, bed: q.bed, pump: q.pump }; medTake(q);
+      H.job = { kind: q.kind, key: q.key, deck: q.deck, side: q.side, lv: q.lv, reg: q.reg, spot: q.spot, med: q.med, who: q.who, bed: q.bed, pump: q.pump }; medTake(q);
       H.legs = legs; H.wp = null; c.moving = false; NV.called++;
     }
   });
@@ -381,11 +430,11 @@ function handJoin(sh, c) {
   var H = c.hand, J = H.job, NV = sh.nav;
   if (J.kind === 'staff' || J.kind === 'carry') { medJoin(sh, c); return; }   // 醫療艙的人手、搬傷員（44_medic.js）
   if (J.kind === 'pump') { pumpJoin(sh, c); return; }                   // 搖抽水機（45_pumps.js）
-  if (H.lv !== J.lv) { H.job = null; H.wait = 1; return; }
+  if (H.lv !== J.lv || (J.reg !== undefined && handReg(sh, c) !== J.reg)) { H.job = null; H.wait = 1; return; }   // 不在那一層、不在那一塊（路斷了）⇒ 作廢
   c.walk = null; c.moving = false; c.home = c.pos.slice(); c.hand = null; NV.joined++;
   if (J.kind === 'gun') { c.role = ROLE.GUN; c.deck = J.deck; c.side = J.side; c.gun = null; return; }
   if (J.kind === 'helm') { c.role = ROLE.HELM; c.deck = sh.weatherDeck; c.face = -1; c.helmHome = undefined; c.relieved = false; return; }   // 自己是掉下去的那個舵手、爬回來補自己 ⇒ 之後倒下照常有人補
-  var dead = sh.crew.filter(function (o) { return o.role === ROLE.POWDER && o.deck === J.deck && !able(o) && !o.relieved; })[0];
+  var dead = deadPm(sh, J.deck, J.lv, J.reg);
   var fell = dead ? null : sh.crew.filter(function (o) { return o.fellPm && o.fellPm.deck === J.deck; })[0];   // 從甲板破洞掉下去的送藥手（40_crew.js landIn）：接它的砲
   if (fell) { dead = { guns: fell.fellPm.guns, home: fell.fellPm.home }; fell.fellPm = null; }
   c.role = ROLE.POWDER; c.deck = J.deck; c.pm = { st: 'idle', t: 0 }; c.cart = false; c.guns = dead ? dead.guns : [];
