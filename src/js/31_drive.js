@@ -4,7 +4,8 @@
 //   · 蒸汽機（steam）：輸出物件 ＝ 螺旋槳模型（meta kind=propeller，作用點 ＝ 固定點 hub，幾個就分幾份）；沒有 ⇒ 船尾中線、水線下 1.5 m（T.wl0 往內 4 格）。
 //       完好度 ＝ 螺旋槳還在（模型）／船尾那一塊格子還剩幾成（退路，±10 格的方塊，每半秒數一次）×（0.5 ＋ 0.5 × 煙囪還在幾成；沒有煙囪 ⇒ ×1）
 //       × 動力的那一條鏈（有標才算；造船規格 §9.6）：主機 → 軸 → 螺旋槳，鍋爐供汽 —— 見下面「動力源與輸出物件」。
-//   · 魔法（magic，幽靈船；ships[].drive = "magic"）：當成蒸汽機、沒有實體 ⇒ 作用點 ＝ 船（中線、T.cx），完好度 ＝ 船殼還剩幾成（grid.count／orig）。
+//   · 魔法（magic，幽靈船；ships[].drive = "magic"）：當成蒸汽機 ⇒ 作用點 ＝ 船（中線、T.cx）；完好度 ＝ 船殼還剩幾成（grid.count／orig）——
+//       船上有標 kind=engine 的部件（TASK-0680：風暴角號船長室的管風琴）⇒ 改照那幾件的完好度（動力件的曲線，同蒸汽機的主機），船殼別處打壞不影響。
 //   有額外動力（cfg.base > 0）才有蒸汽機／魔法；種類照 ships[].drive（沒寫 ⇒ steam）。
 // 推力與加速度（每一步，sail() 呼叫 driveStep）：
 //   每個動力源有一個「單獨推動時的航速」v（帆：舊公式的滿帆航速 × 帆的比例；額外動力：cfg.base 節 × 俥鐘），推力 F ＝ k·v²，水阻 ＝ k·v|v|
@@ -225,7 +226,8 @@ function driveInit(sh) {
       else { var sp = [T.wl0 + 4, T.cy, Math.max(2, T.zw - 15)]; P.push({ kind: 'steam', p: sp, w: 1, F: 0, Fy: 0, ok: 1, n0: driveCount(T.hullG || T.base, sp), stern: true, out: '船尾' }); }
     }
   }
-  var chain = base > 0 && !(info.drive === 'magic') ? drvBind(sh, P.filter(function (p) { return p.kind === 'steam'; })) : null;
+  var magicE = base > 0 && info.drive === 'magic' && drvParts(T).E.length > 0;   // 魔法動力源有實體（TASK-0680，Tim 2026-10-17「直接讓管風琴等於動力源」：風暴角號船長室的管風琴標 kind=engine）⇒ 也走動力件那一條；沒標 ⇒ 照舊用整艘船殼
+  var chain = base > 0 && (!(info.drive === 'magic') || magicE) ? drvBind(sh, P.filter(function (p) { return p.kind === (magicE ? 'magic' : 'steam'); })) : null;
   sh.drive = { P: P, C: chain, kind: base > 0 ? (info.drive === 'magic' ? 'magic' : 'steam') : null, k: DRV_KD * Math.pow(Math.max(1, T.disp || 1), 2 / 3),
     L: Math.max(5, ((T.wl1 || T.hx1) - (T.wl0 || T.hx0)) * S), M: null, W: 0, cap: 1, Fx: 0, drag: 0, a: 0, tq: 0, om: 0, vT: 0 };
   sh.tele = TELE_FULL; sh.power = base > 0 ? TELE[sh.tele] : 0;
@@ -262,7 +264,12 @@ function driveSurvey(sh) {
     }) : null;
   }
   D.P.forEach(function (p, i) {
-    if (p.kind === 'magic') p.ok = clamp(sh.grid.count / (sh.orig || 1), 0, 1);
+    if (p.kind === 'magic') {
+      if (C && C.E.length) {                                              // 有實體的魔法動力源（kind=engine，例：管風琴）：照那幾件的完好度（同主機的曲線）；船殼別處打壞不影響
+        var gm = 0; C.E.forEach(function (c) { if (c.ok && c.to.indexOf(p.j) >= 0) gm += c.f / c.to.length * c.ok; });
+        p.ok = p.w > 0 ? clamp(gm / p.w, 0, 1) : 0;
+      } else p.ok = clamp(sh.grid.count / (sh.orig || 1), 0, 1);
+    }
     else if (p.kind === 'steam') {
       var alive = p.m ? p.m.alive && !p.m.moved : true;
       var k = p.m ? (alive ? 1 : 0) : p.n0 ? clamp(driveCount(sh.grid, p.p) / p.n0, 0, 1) : 1;
@@ -279,6 +286,7 @@ function driveSurvey(sh) {
       p.ok = k * (0.5 + 0.5 * fu);
     }
   });
+  if (cut.length && !sh.sunk && D.kind === 'magic' && C) note(sh, C.E.map(function (c) { return c.e.name; }).join('、') + '被打壞了 ⇒ 魔力只剩 ' + Math.round(clamp(D.P.reduce(function (a, p) { return a + (p.kind === 'magic' ? p.ok : 0); }, 0), 0, 1) * 100) + '%');
   if (cut.length && !sh.sunk && D.kind === 'steam') note(sh, cut.filter(function (v, j) { return cut.indexOf(v) === j; }).join('、') + '被打壞了 ⇒ 額外動力只剩 ' + Math.round(clamp(D.P.reduce(function (a, p) { return a + (p.kind === 'steam' ? p.w * p.ok : 0); }, 0), 0, 1) * 100) + '%');
 }
 /** 動力件（每 1 秒；見檔頭「動力件」）：主機、鍋爐照剩幾成＋曲線、鍋爐泡水、軸與蒸汽管照傳得到幾成 ⇒ C.E[].ok、C.B[].out／ok、C.SH[].ok、C.SP[].ok、C.steam；壞掉的那一刻記進 cut（廣播）。 */
