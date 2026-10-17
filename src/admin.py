@@ -37,6 +37,19 @@ SHIPS_A, SHIPS_B = '—— ships 開始 -->\n', '<!-- ships 結束 -->'
 #   對得上 ⇒ 照建；對不上 ⇒ 版控的成品裡內嵌的那份對得上指紋就自動換回（原檔留成 .stale）；也對不上 ⇒ 擋下不建（⛔ 不猜哪一份才對）。
 #   匯入／重新匯入／metasync 寫了 .vxk 就更新指紋；要改用 _cache 現在那份（例如手動換過檔）⇒ relock。
 LOCK_P = os.path.join(HERE, 'config', 'vxk_lock.json')
+MUSIC_JS = os.path.join(HERE, 'js', '02_music.js')
+
+
+def theme_ids():
+    """船的主題曲（TASK-0681）：js/02_music.js 的 THEMES 裡有哪些 id（ships[].theme 要是其中一個）。照原文抓 `var THEMES = [` 到下一個 `];` 之間的 `{ id: '…'` —— 抓不到 ⇒ 空（每艘寫了 theme 的都會報錯，不會靜靜放過）。"""
+    try:
+        t = open(MUSIC_JS, encoding='utf-8').read()
+    except OSError:
+        return []
+    m = re.search(r'^var THEMES = \[(.*?)^\];', t, re.S | re.M)
+    return re.findall(r"^  \{ id: '([a-z0-9_-]+)'", m.group(1), re.M) if m else []
+
+
 
 
 def sha1_bytes(b):
@@ -428,6 +441,7 @@ def validate(cfg, prev=None):
             err('pen.hi', '要大於 lo')
     MT = cfg.get('materials')                            # 材質表（TASK-0616）：{ default: ID, list: { ID: { name, kind, density, hard, flammable } } }；ID 英文小寫，雕刻那側關聯 meta material 寫它
     MIDS = set()
+    THEME_IDS = theme_ids()
     if not (isinstance(MT, dict) and isinstance(MT.get('list'), dict) and MT['list']):
         err('materials', '要是 { default: 材質 ID, list: { ID: 參數 } }，list 至少一種')
     else:
@@ -506,6 +520,8 @@ def validate(cfg, prev=None):
             err(p + '.zw0', '正整數（作品沒有水線 meta 時的設計水線）')
         if 'drive' in s and s['drive'] not in ('steam', 'magic'):
             err(p + '.drive', '額外動力的種類：steam（蒸汽機，預設）或 magic（魔法／幽靈船）；沒有額外動力（cfg.base）就不用寫')
+        if 'theme' in s and not (isinstance(s['theme'], str) and s['theme'] in THEME_IDS):
+            err(p + '.theme', '主題曲的 id（js/02_music.js 的 THEMES：%s；TASK-0681）' % ('、'.join(THEME_IDS) or '—'))
         if 'author' in s and not (isinstance(s['author'], str) and s['author'].strip()):
             err(p + '.author', '建造者（雕刻作品的作者；匯入時從 .vxk 檔頭 owner 記，沒有就不寫這個鍵）')
         if 'variant_of' in s and not (isinstance(s['variant_of'], str) and s['variant_of'] != s.get('id')):
