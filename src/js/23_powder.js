@@ -367,13 +367,14 @@ function incoming(sh, c, g) {
   sh.crew.forEach(function (o) { if (o !== c && o.pm && o.pm.g === g && o.pm.st !== 'idle' && able(o)) n += o.pm.st === 'carry' ? o.cart || 0 : CARRY_N; });
   return n;
 }
-/** 下一份送去哪門：同一層、還在、藥箱（算上別人已經在送的）沒滿、是自己的或送藥手倒了的砲；先送等著的、空的、有人操作的、自己的、近的。
+/** 下一份送去哪門：同一層、走路格上走得到（砲塔那一圈隔開的不算）、還在、藥箱（算上別人已經在送的）沒滿、是自己的或送藥手倒了的砲；先送等著的、空的、有人操作的、自己的、近的。
  *  ⛔ 不算別人在送的 ⇒ 沒有送藥手的砲一缺，整層的送藥手全跑去拿（量到 8 個），沒搶到的拿著藥包站在桶邊等十幾秒。 */
 function needGun(sh, c) {
   var best = null, bs = 1e9;
   sh.guns.forEach(function (g) {
     if (!g.alive || !g.drop || gunDeck(g) !== c.deck || g.box >= BOX_N || (g.pm && g.pm !== c && able(g.pm))) return;
     if (g.box + incoming(sh, c, g) >= BOX_N) return;
+    if (!navReach(sh, c.pos, g.drop)) return;                          // 照直線走（monkeyTo）⇒ 隔著砲塔那一圈的砲不送（42_hands.js；Tim 2026-10-17「水手會穿進去」）
     var s = g.box * 10 + (g.needCart ? 0 : 5) + (g.pm === c ? 0 : 3) + (gunRate(g) > 0 ? 0 : 20) + Math.abs(g.muz[0] - c.pos[0]) / 40;
     if (s < bs) { bs = s; best = g; }
   });
@@ -405,10 +406,16 @@ function slotFor(sh, c, st) {
   });
   return best;
 }
-/** 走直線到 to（格座標）；高度跟著甲板。到了回 true。 */
+/** 走到 to（格座標）；高度跟著甲板。到了回 true。直線走；會轉裝甲的船直線會碰到牆 ⇒ 照走路格一段一段走（42_hands.js navWay；c.mway 記著這一趟，目的地換了才重找）。 */
 function monkeyTo(sh, c, to, dt) {
-  var dx = to[0] - c.pos[0], dy = to[1] - c.pos[1], l = Math.hypot(dx, dy);
-  if (l < 0.6) { c.pos = to.slice(); c.moving = false; return true; }
+  var M = null, tg = to;
+  if (sh.nav && sh.T.armor && sh.T.armor.length) {
+    M = c.mway; if (!M || M.to !== to) M = c.mway = { to: to, w: navWay(sh, c.pos, to), k: 0 };
+    tg = M.w[M.k];
+  }
+  var dx = tg[0] - c.pos[0], dy = tg[1] - c.pos[1], l = Math.hypot(dx, dy);
+  if (l < 0.6 && M && M.k < M.w.length - 1) { c.pos[0] = tg[0]; c.pos[1] = tg[1]; M.k++; return false; }   // 走到中間那一點 ⇒ 下一段
+  if (l < 0.6) { c.pos = to.slice(); c.moving = false; if (M) c.mway = null; return true; }
   var s = Math.min(l, MONKEY_SP * dt); c.pos[0] += dx / l * s; c.pos[1] += dy / l * s; c.moving = true;
   var zr = sh.deckZ[c.deck], z = standZ(sh.T.turDeck ? turStandG(sh) : sh.grid, Math.floor(c.pos[0]), Math.floor(c.pos[1]), zr[0], zr[1], 6); if (z >= 0) c.pos[2] = z;   // 有會轉的甲板 ⇒ 砲塔的格也踩得住（27_turret.js）
   return false;

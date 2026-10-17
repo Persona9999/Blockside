@@ -171,27 +171,41 @@ function reassign(sh) {
       if (c.gun) { cur.set(c.gun, cur.get(c.gun) - 1); leaveGun(c); }
       c.gun = g; cur.set(g, cur.get(g) + 1); goToGun(sh, c, g);
     }
-    function nearest(list, g) { var bi = 0, bd = 1e9; list.forEach(function (c, i) { var d = Math.abs(g.muz[0] - c.pos[0]); if (d < bd) { bd = d; bi = i; } }); return list.splice(bi, 1)[0]; }
+    // 換砲的人照直線走（goToGun）⇒ 只借走路格上走得到的（42_hands.js navReach；砲塔那一圈隔開的不借：吊籃裡的砲班不去補甲板上的砲，反過來也是）。沒有會轉裝甲的船 ⇒ 一律走得到（跟以前一樣）
+    var walled = !!(sh.nav && sh.T.armor && sh.T.armor.length);
+    function can(c, g) { return !walled || navReach(sh, c.pos, gunNavAt(sh, g)); }
+    function nearest(list, g) { var bi = -1, bd = 1e9; list.forEach(function (c, i) { if (!can(c, g)) return; var d = Math.abs(g.muz[0] - c.pos[0]); if (d < bd) { bd = d; bi = i; } }); return bi < 0 ? null : list.splice(bi, 1)[0]; }
+    function fill(list, g, n) { for (var k = 0; cur.get(g) < n && list.length && k < 64; k++) { var c = nearest(list, g); if (!c) break; move(c, g); } }   // 防呆：上限 64、借光或沒有走得到的就停
     gs.filter(function (g) { return !kept.has(g) && cur.get(g) > 0; })
       .sort(function (a, b) { return cur.get(b) - cur.get(a) || gs.indexOf(a) - gs.indexOf(b); })
       .forEach(function (g) {
         if (!cur.get(g)) return;                                           // 已經被別門借光
-        var pool = men.filter(function (c) { return c.gun !== g && short(c); });
+        var pool = men.filter(function (c) { return c.gun !== g && short(c) && can(c, g); });
         if (cur.get(g) + pool.length < g.crewMin) return;                  // 借不夠 ⇒ 這門是借出去的那一方
-        for (var nm = 0; cur.get(g) < g.crewMin && pool.length && nm < 64; nm++) move(nearest(pool, g), g);   // 防呆：上限 64、借光了就停（上一行已經先數過夠不夠）
+        fill(pool, g, g.crewMin);                                          // 上一行已經先數過夠不夠
         kept.add(g);
       });
     men.forEach(function (c) { if (c.gun && !kept.has(c.gun)) { cur.set(c.gun, cur.get(c.gun) - 1); leaveGun(c); } });
     var free = men.filter(function (c) { return !c.gun; });
     gs.forEach(function (g) {
-      if (kept.has(g) || free.length < g.crewMin) return;
-      for (var nf = 0; cur.get(g) < g.crewMin && free.length && nf < 64; nf++) move(nearest(free, g), g);
+      if (kept.has(g) || free.filter(function (c) { return can(c, g); }).length < g.crewMin) return;
+      fill(free, g, g.crewMin);
       kept.add(g);
     });
-    kept.forEach(function (g) { for (var nk = 0; cur.get(g) < g.crewFull && free.length && nk < 64; nk++) move(nearest(free, g), g); });
+    kept.forEach(function (g) { fill(free, g, g.crewFull); });
+    if (walled) free.forEach(function (c) { if (!c.gun && !c.walk && !gs.some(function (g) { return can(c, g); })) toHand(sh, c); });   // 這一塊沒有活著的砲了（砲塔裡的砲全被打掉）⇒ 改當預備水手、走梯子去別處補（42_hands.js toHand）
+  });
+  if (sh.nav && sh.T.armor && sh.T.armor.length) sh.crew.forEach(function (c) {   // 送藥手同理：同一層走得到的砲全沒了、手上沒藥包 ⇒ 預備水手
+    if (c.role !== ROLE.POWDER || !able(c) || !c.pm || c.pm.st !== 'idle' || c.cart) return;
+    if (!sh.guns.some(function (g) { return g.alive && g.drop && gunDeck(g) === c.deck && navReach(sh, c.pos, g.drop); })) toHand(sh, c);
   });
 }
 function gunDeck(g) { return g.deck; }                  // 那門砲在哪一層（10_ship.js gunDecks）
+/** 砲班要走去的那一點（換砲 navReach 用）：第一個在走路格上量得到的站位（砲房前半的站位常落在會轉的甲板外、snap 不到）⇒ 放藥箱的位置 ⇒ 砲口。 */
+function gunNavAt(sh, g) {
+  var sp = (g.spots || []).filter(function (s) { return navRegAt(sh, s.at); })[0];
+  return sp ? sp.at : g.drop || g.muz;
+}
 /** 離開原本那門砲：站位讓出來（⛔ 不清 ⇒ 幾輪之後每個站位都被兩個人佔著）。 */
 function leaveGun(c) {
   if (c.gun && c.gun.spots) c.gun.spots.forEach(function (s) { if (s.who === c) s.who = null; });
@@ -208,7 +222,7 @@ function goToGun(sh, c, g) {
   if (!to && g.spots && g.spots.length) { var a = g.spots[0].at; to = standNear(navG(sh), Math.floor(a[0]), Math.floor(a[1]), a[2] - 2, a[2] + 2, 14, {}); }   // navG：砲塔的裝甲掃過的那一圈擋人（24_armor.js；沒有裝甲 ＝ sh.grid）
   if (!to) to = c.pos;
   if (spot) spot.who = c;
-  c.walk = { to: to.slice(), sp: 18 };
+  c.walk = { to: to.slice(), sp: 18, w: navWay(sh, c.pos, to.slice()), k: 0 };   // w：一段一段走的點（會轉裝甲的船繞過砲塔那一圈；42_hands.js navWay）；其他船 ＝ [to]，照以前直線
 }
 /** 這一點附近的人扣血（r 格數）：rKill 內吃滿基準傷害 base，rKill～rWound 從 0.55 遞減到 0.1，再乘 0.6～1.4 的隨機。
  *  base ＝ 1.4 × 每發傷害 × 彈種對人倍率（crewBase）⇒ 24 磅實心 140：rKill 內約 85% 當場陣亡（跟以前的 0.85 對齊）。
@@ -307,9 +321,10 @@ function stepCrew(sh, dt) {
     if (c.st !== 0) return;
     if (c.role === ROLE.HAND) { stepHand(sh, c, dt); return; }   // 預備水手：走路、爬梯子、補位（42_hands.js）
     if (c.walk) {
-      var d = sub(c.walk.to, c.pos), l = Math.hypot(d[0], d[1]);
-      if (l < 0.6) { c.pos = c.walk.to.slice(); c.home = c.pos.slice(); c.walk = null; }
-      else { var s = Math.min(l, c.walk.sp * dt); c.pos[0] += d[0] / l * s; c.pos[1] += d[1] / l * s; }
+      var W = c.walk, wt = W.w ? W.w[W.k] : W.to, d = sub(wt, c.pos), l = Math.hypot(d[0], d[1]);
+      if (l < 0.6 && W.w && W.k < W.w.length - 1) { c.pos[0] = wt[0]; c.pos[1] = wt[1]; W.k++; }   // 走到中間那一點 ⇒ 下一段
+      else if (l < 0.6) { c.pos = W.to.slice(); c.home = c.pos.slice(); c.walk = null; }
+      else { var s = Math.min(l, W.sp * dt); c.pos[0] += d[0] / l * s; c.pos[1] += d[1] / l * s; }
     } else if (c.role === ROLE.POWDER) stepMonkey(sh, c, dt);   // 送藥手：取用點 ⇄ 砲
     if ((c.role === ROLE.MARINE || c.role === ROLE.TOP) && !sh.sunk && !sh.struck && !(MODE === 'sandbox' && sh.i !== PLAYER_I)) {   // 陸戰隊與桅頂水手：火槍（沙盒的敵艦不還手）
       c.shotT -= dt; c.fireT -= dt;

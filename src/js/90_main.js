@@ -258,6 +258,8 @@ if (DEBUG) window.__game = {
     pieces: PIECES.map(function (p) { return { n: p.n, hull: !!p.hull, mods: (p.mods || []).length, y: +p.c[1].toFixed(2) }; }),
     stations: sh.stations.map(function (st) { return { name: st.name, at: st.at, kegs: st.kegs.filter(function (m) { return m.alive; }).length }; }) }; },
   /** 預備水手的讀數（42_hands.js）：走得到的甲板（走路格幾點、分成幾片）、梯子（兩頭在哪一層、爬過幾次）、人在哪一層、在做什麼、派了幾次、補上幾個。 */
+  /** 走路格上一點是第幾層、哪一塊（42_hands.js navRegAt）；給兩點 ⇒ 再回直線走的人走不走得到（navReach）—— 量的時候用。 */
+  navReg: function (i, p, q) { var sh = SHIPS[i || 0]; return q ? { a: navRegAt(sh, p), b: navRegAt(sh, q), reach: navReach(sh, p, q) } : navRegAt(sh, p); },
   hands: function (i) {
     var sh = SHIPS[i || 0], H = sh.nav; if (!H) return null;
     var hs = sh.crew.filter(function (c) { return c.role === ROLE.HAND; }), st = {}, on = {};
