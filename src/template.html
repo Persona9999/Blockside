@@ -3,6 +3,16 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
+<!-- 加入主畫面 ⇒ 全螢幕（Tim 2026-10-17，照臺北狂飆：「我加了Blockside沒辦法全螢幕 但那款可以」）：iPhone 的 Safari 不給網頁全螢幕，
+     從主畫面的圖示開才沒有網址列與工具列 —— 要 apple-mobile-web-app-capable 與 manifest（display:fullscreen）。manifest 與圖示是根目錄的檔（manifest.webmanifest、icons/），
+     不內嵌（不是遊戲的依賴：畫廊彈窗讀不到也照玩）。狀態列 black ＋ 不開 viewport-fit=cover ⇒ 畫面只到安全區（瀏海兩側補底色），HUD 的定位一行都不用改。 -->
+<meta name="theme-color" content="#0d1218">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Blockside">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" sizes="180x180" href="icons/apple-touch-icon.png">
 <title>Blockside（方舷）</title>
 <style>
   :root{ --modeFs:13px; --ink:#f3ead8; --dim:#b9ae98; --gold:#e8c26a; --blue:#6f9bff; --red:#ff6f6f; --panel:rgba(14,18,24,.72); }
@@ -164,6 +174,8 @@
   #cover button.on{ background:var(--gold); color:#111; border-color:var(--gold); }
   #cover button.go{ font-size:18px; padding:9px 30px; background:#b8452e; border-color:#e06a4f; }
   #cover button:disabled{ opacity:.4; cursor:wait; }
+  #cover #discordB{ display:inline-block; font-size:15px; margin:4px; padding:7px 18px; border-radius:6px; border:1px solid #7983f5; background:#5865f2; color:#fff; text-decoration:none; cursor:pointer; }   /* Discord 的品牌紫 */
+  #cover #discordB:hover{ background:#4752c4; }
   #cover .slide{ display:flex; align-items:center; justify-content:center; gap:10px; font-size:14px; }
   #cover .slide label{ width:5em; text-align:right; }
   #cover .slide input{ width:220px; accent-color:var(--gold); }
@@ -391,6 +403,7 @@
       </div>
       <div class="row"><button id="shipB">船隻配置…</button><button id="gunB">砲的設定…</button><button id="furnB">道具設定…</button><button id="keysB">鍵位設定…</button><button id="sndB">聲音設定…</button><button id="detB">細節設定…</button></div>
       <div class="row"><button id="allR">全部回到預設</button></div>
+      <div class="row"><button id="discordB">💬 加入 Discord 社群</button></div><!-- Tim 2026-10-17：「加入一個 Discord按鈕入口」；連結在 71_input.js DISCORD_URL（⛔ 寫成 <a href="https…"> 會被 vxk_inline 的零外部依賴檢查擋下） -->
       <!-- 說明與細節設定的摘要放在最下面（Tim 2026-10-13：手機上開戰鈕被擠到畫面外、要捲才看得到；10-17 開戰鈕再往上搬到天氣下面） -->
       <div class="sub">Blockside（方舷）—— 雕刻作品做成的船，1:1（0.1 公尺一格）互轟：船殼一格一格被打碎、桅杆打得斷、破洞進水會沉。<br>
         素材：雕刻作品（每一艘的作者在「船隻配置…」）</div>
