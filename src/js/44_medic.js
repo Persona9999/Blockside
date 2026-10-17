@@ -99,17 +99,21 @@ function medTick(sh) {
   });
   M.open = beds > 0 && sh.crew.some(function (c) { return c.role === ROLE.HAND && crewAble(c); });
 }
-/** 船醫（TASK-0676；Tim 2026-10-17：「醫療倉可以直接換成護士」→「先把船醫套用上」）：開戰就站在醫療艙裡（照醫療艙的順序一間一位、同一間的照床排），不走動、不補位、火槍打不到（below）；
+/** 船醫（TASK-0676；Tim 2026-10-17：「醫療倉可以直接換成護士」→「先把船醫套用上」）：開戰就站在醫療艙裡的床旁，不走動、不補位、火槍打不到（below）；
+ *  幾位 ＝ 設施配員（Tim 2026-10-17：「房間(或關鍵設施) 可以自動配對應人員 例如醫療床配一名船醫」；36_rooms.js staffSlots）：走得到的病床每張配 furniture.bed.staff.surgeon 位，
+ *  照醫療艙的順序一間一位輪著排（每一間先站第一張床，再輪第二張），船隻配置頁的 crew.surgeon 是全船上限；
  *  那一間要的人手先算船醫、不夠的才從預備水手派（預備水手 ＝ 船醫助手）；有船醫在的那一間治療快 sheal（設定檔 rooms.medical.surgeonHeal，預設 0.5 ＝ ＋50%）；
  *  搬傷員選床時有船醫的那幾間優先（同樣走得到的床，沒船醫的多算 MED_DOC 格）。倒下、陣亡 ⇒ 那一間退回只有助手；掉到別層、落水爬回來 ⇒ 當預備水手（同其他職位）。
- *  人數在船隻配置頁（crew.surgeon，預設 1）；沒有醫療艙（sh.med ＝ null）⇒ 不上船、不算站不下；0 ⇒ 戰局跟以前一位元不差（不抽 rnd()）。 */
+ *  沒有醫療艙（sh.med ＝ null）⇒ 不上船、不算站不下；上限 0 ⇒ 戰局跟以前一位元不差（不抽 rnd()）；上限 1 ⇒ 跟以前「一位」同一個位置（第一間的第一張床）。 */
 var MED_DOC = 300;
 function medSurgeons(sh, crew, add) {
-  var M = sh.med, n = sh.cw.surgeon || 0; sh.surgWant = M ? n : 0;
-  if (!M || !n) return;
+  var M = sh.med, cap = sh.cw.surgeon || 0;
+  var S = M && cap ? staffSlots(M.rooms.map(function (o) { return o.beds; }), 'surgeon') : [], n = Math.min(cap, S.length);
+  sh.surgWant = n; sh.surgSlots = S.length;                              // surgSlots：設施配得到的人數（讀數；被上限截掉的 ＝ surgSlots − surgWant）
+  if (!n) return;
   var NV = sh.nav;
   for (var k = 0; k < n; k++) {
-    var o = M.rooms[k % M.rooms.length], m = o.beds[Math.floor(k / M.rooms.length) % o.beds.length], N = NV.levels[o.lv].N;
+    var o = M.rooms[S[k].g], m = S[k].m, N = NV.levels[o.lv].N;
     add(ROLE.SURGEON, navPos(N, m.med.cell), null, 1);
     var c = crew[crew.length - 1]; c.art = ART_NURSE; c.medRoom = o; c.below = true; c.deck = NV.levels[o.lv].key;
   }
@@ -187,7 +191,7 @@ function medText(sh) {
 function medInfo(sh) {
   var M = sh.med, skipped = (sh.medSkip || []).slice();
   if (!M) return skipped.length ? { skipped: skipped } : null;
-  return { carried: M.carried, healed: M.healed, out: M.out, drowned: sh.bedDrowned || 0, open: M.open, rooms: M.rooms.map(function (o) {
+  return { carried: M.carried, healed: M.healed, out: M.out, drowned: sh.bedDrowned || 0, open: M.open, surgeons: { want: sh.surgWant || 0, slots: sh.surgSlots || 0, cap: sh.cw.surgeon || 0 }, rooms: M.rooms.map(function (o) {
     return { name: o.room.name, lv: o.lv, beds: o.beds.length, far: o.far, alive: o.beds.filter(function (m) { return m.alive; }).length, inBed: o.beds.filter(function (m) { return m.med.who && m.med.who.inBed; }).length, coming: o.beds.filter(function (m) { return m.med.who && !m.med.who.inBed; }).length, staff: o.have + '/' + o.need, surgeon: o.sg || 0 };
   }), skipped: skipped, waiting: sh.crew.filter(function (c) { return c.st === 1 && !c.medBed && c.medOk !== false; }).length, carrying: sh.crew.filter(function (c) { return c.st === 1 && c.carriedBy; }).length, noRoute: sh.crew.filter(function (c) { return c.medNo; }).length };
 }

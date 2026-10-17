@@ -151,7 +151,7 @@
     }
   },
   "geo0": {"spar": null, "marines": [160, 220], "center": 140, "aim": 90, "aimZ": [40, 320], "deckAim": [84, 104], "rigAim": [150, 300]},
-  "crew0": {"officers": 4, "helm": 2, "marines": 12, "marineGap": 37, "top": 4, "monkeys": 1, "handsK": 1, "shelter": 0, "surgeon": 1, "carpenter": 2},
+  "crew0": {"officers": 4, "helm": 2, "marines": 12, "marineGap": 37, "top": 4, "monkeys": 1, "handsK": 1, "shelter": 0, "surgeon": 60, "carpenter": 2},
   "teamCloth": {
     "blue": [34, 43, 65],
     "red": [82, 24, 21]
@@ -397,7 +397,7 @@
     }
   ],
   "furniture": {
-    "bed": {"name": "病床", "type": "medical", "size": [19, 8, 6], "hp": 100, "hold": 1},
+    "bed": {"name": "病床", "type": "medical", "size": [19, 8, 6], "hp": 100, "hold": 1, "staff": {"surgeon": 1}},
     "table": {
       "name": "手術台",
       "type": "medical",

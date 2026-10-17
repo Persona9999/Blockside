@@ -230,6 +230,22 @@ function roomBuff(type, its) {
   Object.keys(o).forEach(function (k) { o[k].v = Math.min(o[k].sum, o[k].cap); });
   return o;
 }
+// ── 設施配員（TASK-0676；Tim 2026-10-17：「房間(或關鍵設施) 可以自動配對應人員 例如醫療床配一名船醫」）──
+// 物品寫 furniture[].staff { 職位: 每件幾位 }（道具設定頁調；例：病床 { surgeon: 1 }）⇒ 開戰時照船上「能用的」那幾件配人（能不能用由各職位自己篩：船醫 ＝ 走得到的床）。
+//   照組（房間）輪著排：每一組先配第一件，再輪第二件 ⇒ 被船隻配置頁的上限截掉時，人平均分在各間。之後的職位（廚師配爐灶…）照同一套接。
+function furnStaff(it, role) { var s = (FURN[it] || {}).staff; return s && +s[role] > 0 ? Math.floor(+s[role]) : 0; }
+/** groups：[[物品模型（m.item）…]…] ⇒ 照輪的順序排好的 [{ g: 第幾組, m: 那一件 }]（一件配 n 位 ⇒ 那一件出現 n 次）。 */
+function staffSlots(groups, role) {
+  var L = groups.map(function (ms) { var o = []; ms.forEach(function (m) { for (var k = furnStaff(m.item, role); k > 0; k--) o.push(m); }); return o; }), out = [];
+  for (var j = 0, more = true; more; j++) { more = false; L.forEach(function (o, g) { if (j < o.length) { out.push({ g: g, m: o[j] }); more = true; } }); }
+  return out;
+}
+/** 船隻配置頁（還沒開戰）：那一型擺了幾件配這個職位的物品 × 每件幾位（照擺法；走不走得到要開戰才知道 ⇒「最多」）。 */
+function hullStaff(id, role) {
+  var T = HULLT[id], n = 0; if (!T) return null;
+  hullRooms(T).forEach(function (r) { roomItems(T, r, roomPlan(id, r.name)).items.forEach(function (p) { n += furnStaff(p.it, role); }); });
+  return n;
+}
 /** buff 寫成一行字：「治療速度 +45%（上限 60%）」。 */
 function buffText(B) { return Object.keys(B).map(function (k) { var b = B[k]; return (BUFF_NAMES[k] || k) + ' +' + Math.round(b.v * 100) + '%' + (b.sum > b.cap ? '（加總 ' + Math.round(b.sum * 100) + '%，上限 ' + Math.round(b.cap * 100) + '%）' : isFinite(b.cap) ? '（上限 ' + Math.round(b.cap * 100) + '%）' : ''); }).join('、'); }
 /** 程式產生的物品模型（雕刻的物品到之前的佔位）：幾個方塊，網格格式跟 .vxk 的模型一樣（verts 相對外框最小角、tris、tmat → mats）。
