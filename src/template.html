@@ -21,17 +21,14 @@
     -webkit-user-select:none; user-select:none; -webkit-touch-callout:none; }   /* 手機長按不選字、不跳拷貝選單（Tim 2026-10-13）；右鍵／長按選單在 71_input.js 擋 */
   html{ touch-action:manipulation; -webkit-text-size-adjust:100%; text-size-adjust:100%; }   /* 手機瀏覽器不自動放大小字（iOS 的 text-size-adjust、Android Chrome 的 font boosting；Tim 2026-10-16）*/   /* iPhone 點兩下不放大（Tim 2026-10-15）：touch-action 實際生效的是自己與所有祖先的交集 ⇒ 設在根上整頁都關掉雙擊縮放；捲動、雙指縮放照舊，遊戲畫面的 none 照舊；⛔ iOS 不一定照做 ⇒ 71_input.js 另外擋第二下 touchend */
   input, textarea, select{ -webkit-user-select:text; user-select:text; -webkit-touch-callout:default; }   /* 彈種倍率表要能打字 */
-  /* 安全區（Tim 2026-10-17：「手機全螢幕後 下方UI需要往上一點(不然很難操作) 有辦法判別嗎」「可以重構UI架構優化」「大概往上一格按鈕高就好 另外橫板不用改」）：
+  /* 安全區（Tim 2026-10-17：「手機全螢幕後 下方UI需要往上一點(不然很難操作) 有辦法判別嗎」「可以重構UI架構優化」「橫板不用改」）：
      裝置的邊（瀏海、圓角、iPhone 底部的 home 條）只在這裡處理一次 —— #stage 照 --sa-* 收邊，裡面的 HUD、畫布全部照 #stage 排 ⇒ 各自的 bottom:12px 不用再加安全區。
-     直式：從主畫面開（display-mode fullscreen／standalone；iOS 舊版看 navigator.standalone ⇒ 71_input.js 加 html.app）或進了全螢幕 ⇒ 底邊抬 --lift-app
-       ＝ 一顆直式圓鈕（.kb.hb 46 px）＋ 間距 ⇒ 下面那排離開 home 條（瀏覽器裡有工具列墊著，不抬）；底邊取 home 條的安全區與它大的那個。
      橫式：底邊照舊 0（Tim：橫板不用改）；左右照安全區收（跟以前沒開 viewport-fit=cover 時 iOS 自己補的邊一樣）。
+     直式：底邊 ＝ home 條的安全區（從主畫面開才有；瀏覽器裡是 0），直式手機下面那一團一律用 html.navlow 的排法（羅盤在最下排，見下面 #navBox 那一段；61_hud.js botFit）。
      ⛔ 別在個別元件上再加安全區：會算兩次。要貼著整個螢幕的（全頁彈窗、fixed 的鈕）用 --sa-* 自己加。JS 量「畫面多大」量 #stage（stageBox，71_input.js），⛔ 不用 innerWidth／innerHeight。 */
-  :root{ --sa-t:env(safe-area-inset-top, 0px); --sa-r:env(safe-area-inset-right, 0px); --sa-b:env(safe-area-inset-bottom, 0px); --sa-l:env(safe-area-inset-left, 0px); --lift:0px; --lift-app:52px; }
+  :root{ --sa-t:env(safe-area-inset-top, 0px); --sa-r:env(safe-area-inset-right, 0px); --sa-b:env(safe-area-inset-bottom, 0px); --sa-l:env(safe-area-inset-left, 0px); }
   @media (orientation:landscape){ :root{ --sa-b:0px; } }
-  @media (orientation:portrait) and (display-mode:fullscreen), (orientation:portrait) and (display-mode:standalone){ :root{ --lift:var(--lift-app); } }
-  @media (orientation:portrait){ html.app, html:fullscreen{ --lift:var(--lift-app); } html:-webkit-full-screen{ --lift:var(--lift-app); } }
-  #stage{ position:fixed; top:var(--sa-t); right:var(--sa-r); bottom:max(var(--sa-b), var(--lift)); left:var(--sa-l); }
+  #stage{ position:fixed; top:var(--sa-t); right:var(--sa-r); bottom:var(--sa-b); left:var(--sa-l); }
   canvas{ position:absolute; inset:0; width:100%; height:100%; display:block; cursor:crosshair; touch-action:none; }   /* 手機：拖曳 ＝ 轉鏡頭、雙指張合 ＝ 縮放、雙指一起拖 ＝ 平移（⛔ 不關 ⇒ 瀏覽器拿去捲頁面） */
   .hud{ position:absolute; pointer-events:none; font-size:13px; line-height:1.5; text-shadow:0 1px 2px #000; }
   .panel{ background:var(--panel); border:1px solid rgba(255,255,255,.12); border-radius:8px; padding:8px 12px; }
@@ -115,6 +112,11 @@
   .gside .gk3, .gend .gk3{ font-size:calc(var(--gc) * .85); } .gside .gk4, .gend .gk4{ font-size:calc(var(--gc) * .68); }   /* ✕ 約 .8 字寬、△ 約 1.1 字寬（Chrome 量的）⇒ 縮到放得進 .8 的格子 */
   /* 羅盤那一團（說明字、船頭砲、羅盤、船尾砲）往下壓、貼在下方面板上（Tim 2026-10-14）：61_hud.js botFit 照 #ctl 的頂調 margin-bottom（負的 ⇒ 落進兩組大圓鈕之間） */
   #navBox{ display:flex; flex-direction:column; align-items:center; gap:1px; }
+  /* 直式手機（html.navlow，61_hud.js navLow；Tim 2026-10-17「是否可以iphone直畫面全螢幕時 把羅盤放到最下排」「羅盤跟炮提示統一到畫面下方」）：
+     最下排 ＝ A、羅盤（＋兩舷的砲數點）、D —— 羅盤只看不按，放在 home 條上面剛好；C P O 4 R 抬到羅盤上面（#ctl 的 margin-bottom ＝ #navBox 多高，botFit 量）；
+     狀態文字（#modeT）不跟著羅盤下去，放在 C P O 4 R 上面（--lowup ＝ 那一排的高度＋間距，botFit 寫）。 */
+  html.navlow #navBox{ position:relative; }
+  html.navlow #modeT{ position:absolute; left:50%; bottom:calc(100% + var(--lowup, 56px)); transform:translateX(-50%); width:max-content; max-width:calc(100vw - 120px); text-align:center; }
   .gend{ font-family:Consolas,monospace; letter-spacing:0; white-space:nowrap; margin:0; padding:1px 2px;
     text-shadow:-1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000, 0 0 3px rgba(0,0,0,.9); }   /* 船頭砲（羅盤上）、船尾砲（羅盤下）：同上，沒有底板 */
   #gunsB{ border-bottom:2px solid transparent; } #gunsA{ border-top:2px solid transparent; } #gunsB.on{ border-bottom-color:var(--gold); } #gunsA.on{ border-top-color:var(--gold); }

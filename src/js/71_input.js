@@ -214,8 +214,7 @@ function gsetToggle() { if (GSET.open) gsetClose(); else gsetOpen(); }
 //   iPhone ⇒ 寫怎麼加入主畫面（iOS 自己會用網頁 App 開：沒有網址列與工具列）；別的（沒開全螢幕權限的 iframe…）照舊只說不給。
 //   已經從主畫面開（iOS 的 navigator.standalone、manifest 的 display-mode）⇒ 本來就沒有網址列：按鈕亮著、不寫原因。
 var FS_APP = navigator.standalone === true || !!(window.matchMedia && window.matchMedia('(display-mode: fullscreen), (display-mode: standalone)').matches);
-if (FS_APP) document.documentElement.classList.add('app');           // 安全區的 --lift（template.html #stage 那一段）：iOS 舊版沒有 display-mode 媒體查詢 ⇒ 照這個 class
-/** 畫面（#stage）在視窗裡的框：裝置的安全區已經扣掉（template.html :root 的 --sa-*、--lift）。HUD 要量「畫面多大」量這個，⛔ 不用 innerWidth／innerHeight（那是整個視窗，含瀏海與 home 條）。 */
+/** 畫面（#stage）在視窗裡的框：裝置的安全區已經扣掉（template.html :root 的 --sa-*）。HUD 要量「畫面多大」量這個，⛔ 不用 innerWidth／innerHeight（那是整個視窗，含瀏海與 home 條）。 */
 function stageBox() { return $('stage').getBoundingClientRect(); }
 var FS_WHY = FS_APP ? '' : /iPhone|iPod/.test(navigator.userAgent) ? '（iPhone 的 Safari 不給網頁全螢幕 ⇒ 點「分享」→「加入主畫面」，從主畫面的圖示開就沒有網址列；橫放手機）' : '（這裡不給全螢幕）';
 function gsetShow() {
