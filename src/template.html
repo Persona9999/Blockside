@@ -2,10 +2,10 @@
 <html lang="zh-Hant">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <!-- 加入主畫面 ⇒ 全螢幕（Tim 2026-10-17，照臺北狂飆：「我加了Blockside沒辦法全螢幕 但那款可以」）：iPhone 的 Safari 不給網頁全螢幕，
      從主畫面的圖示開才沒有網址列與工具列 —— 要 apple-mobile-web-app-capable 與 manifest（display:fullscreen）。manifest 與圖示是根目錄的檔（manifest.webmanifest、icons/），
-     不內嵌（不是遊戲的依賴：畫廊彈窗讀不到也照玩）。狀態列 black ＋ 不開 viewport-fit=cover ⇒ 畫面只到安全區（瀏海兩側補底色），HUD 的定位一行都不用改。 -->
+     不內嵌（不是遊戲的依賴：畫廊彈窗讀不到也照玩）。狀態列 black；viewport-fit=cover ⇒ 拿得到真正的安全區（env(safe-area-inset-*)），畫面照它收邊見下面 #stage 那一段。 -->
 <meta name="theme-color" content="#0d1218">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -21,7 +21,14 @@
     -webkit-user-select:none; user-select:none; -webkit-touch-callout:none; }   /* 手機長按不選字、不跳拷貝選單（Tim 2026-10-13）；右鍵／長按選單在 71_input.js 擋 */
   html{ touch-action:manipulation; -webkit-text-size-adjust:100%; text-size-adjust:100%; }   /* 手機瀏覽器不自動放大小字（iOS 的 text-size-adjust、Android Chrome 的 font boosting；Tim 2026-10-16）*/   /* iPhone 點兩下不放大（Tim 2026-10-15）：touch-action 實際生效的是自己與所有祖先的交集 ⇒ 設在根上整頁都關掉雙擊縮放；捲動、雙指縮放照舊，遊戲畫面的 none 照舊；⛔ iOS 不一定照做 ⇒ 71_input.js 另外擋第二下 touchend */
   input, textarea, select{ -webkit-user-select:text; user-select:text; -webkit-touch-callout:default; }   /* 彈種倍率表要能打字 */
-  #stage{ position:fixed; inset:0; }
+  /* 安全區（Tim 2026-10-17：「手機全螢幕後 下方UI需要往上一點(不然很難操作) 有辦法判別嗎」「可以重構UI架構優化」「橫板不用改」）：
+     裝置的邊（瀏海、圓角、iPhone 底部的 home 條）只在這裡處理一次 —— #stage 照 --sa-* 收邊，裡面的 HUD、畫布全部照 #stage 排 ⇒ 各自的 bottom:12px 不用再加安全區。
+     橫式：底邊照舊 0（Tim：橫板不用改）；左右照安全區收（跟以前沒開 viewport-fit=cover 時 iOS 自己補的邊一樣）。
+     直式：底邊 ＝ home 條的安全區（從主畫面開才有；瀏覽器裡是 0），直式手機下面那一團一律用 html.navlow 的排法（羅盤在最下排，見下面 #navBox 那一段；61_hud.js botFit）。
+     ⛔ 別在個別元件上再加安全區：會算兩次。要貼著整個螢幕的（全頁彈窗、fixed 的鈕）用 --sa-* 自己加。JS 量「畫面多大」量 #stage（stageBox，71_input.js），⛔ 不用 innerWidth／innerHeight。 */
+  :root{ --sa-t:env(safe-area-inset-top, 0px); --sa-r:env(safe-area-inset-right, 0px); --sa-b:env(safe-area-inset-bottom, 0px); --sa-l:env(safe-area-inset-left, 0px); }
+  @media (orientation:landscape){ :root{ --sa-b:0px; } }
+  #stage{ position:fixed; top:var(--sa-t); right:var(--sa-r); bottom:var(--sa-b); left:var(--sa-l); }
   canvas{ position:absolute; inset:0; width:100%; height:100%; display:block; cursor:crosshair; touch-action:none; }   /* 手機：拖曳 ＝ 轉鏡頭、雙指張合 ＝ 縮放、雙指一起拖 ＝ 平移（⛔ 不關 ⇒ 瀏覽器拿去捲頁面） */
   .hud{ position:absolute; pointer-events:none; font-size:13px; line-height:1.5; text-shadow:0 1px 2px #000; }
   .panel{ background:var(--panel); border:1px solid rgba(255,255,255,.12); border-radius:8px; padding:8px 12px; }
@@ -105,6 +112,11 @@
   .gside .gk3, .gend .gk3{ font-size:calc(var(--gc) * .85); } .gside .gk4, .gend .gk4{ font-size:calc(var(--gc) * .68); }   /* ✕ 約 .8 字寬、△ 約 1.1 字寬（Chrome 量的）⇒ 縮到放得進 .8 的格子 */
   /* 羅盤那一團（說明字、船頭砲、羅盤、船尾砲）往下壓、貼在下方面板上（Tim 2026-10-14）：61_hud.js botFit 照 #ctl 的頂調 margin-bottom（負的 ⇒ 落進兩組大圓鈕之間） */
   #navBox{ display:flex; flex-direction:column; align-items:center; gap:1px; }
+  /* 直式手機（html.navlow，61_hud.js navLow；Tim 2026-10-17「是否可以iphone直畫面全螢幕時 把羅盤放到最下排」「羅盤跟炮提示統一到畫面下方」）：
+     最下排整排只留給羅盤（＋兩舷的砲數點）—— 羅盤只看不按，放在 home 條上面剛好；按鈕全部從羅盤上方開始排：C P O 4 R（#ctl）與左右兩欄（#helmL／#helmR）的 margin-bottom ＝ #navBox 多高（botFit 量；Tim「最下方全部留給羅盤空間 按鈕從羅盤上方開始排」）；
+     狀態文字（#modeT）不跟著羅盤下去，放在 C P O 4 R 上面（--lowup ＝ 那一排的高度＋間距，botFit 寫）。 */
+  html.navlow #navBox{ position:relative; }
+  html.navlow #modeT{ position:absolute; left:50%; bottom:calc(100% + var(--lowup, 56px)); transform:translateX(-50%); width:max-content; max-width:calc(100vw - 120px); text-align:center; }
   .gend{ font-family:Consolas,monospace; letter-spacing:0; white-space:nowrap; margin:0; padding:1px 2px;
     text-shadow:-1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000, 0 0 3px rgba(0,0,0,.9); }   /* 船頭砲（羅盤上）、船尾砲（羅盤下）：同上，沒有底板 */
   #gunsB{ border-bottom:2px solid transparent; } #gunsA{ border-top:2px solid transparent; } #gunsB.on{ border-bottom-color:var(--gold); } #gunsA.on{ border-top-color:var(--gold); }
@@ -117,7 +129,7 @@
   #tip{ left:12px; bottom:12px; color:var(--dim); font-size:12px; }
   /* 遊戲內的設定面板（⚙ 設定、Esc）：打開時暫停；重新開始、回主選單、畫質與物理的三四檔、帆繩物理、鏡頭跟船、靜音、FPS（Tim 2026-10-13：手機下方列省空間） */
   #gset{ left:50%; top:50%; transform:translate(-50%,-50%); display:none; text-align:center; padding:14px 16px; width:min(92vw,460px); box-sizing:border-box; pointer-events:auto; z-index:6;
-    max-height:calc(100% - 16px - env(safe-area-inset-top) - env(safe-area-inset-bottom)); overflow-y:auto; overscroll-behavior:contain; -webkit-overflow-scrolling:touch; }   /* ⛔ 只給 max-width：left:50% ⇒ 最多只有半個螢幕寬、每一列都折行。
+    max-height:calc(100% - 16px); overflow-y:auto; overscroll-behavior:contain; -webkit-overflow-scrolling:touch; }   /* ⛔ 只給 max-width：left:50% ⇒ 最多只有半個螢幕寬、每一列都折行。
      比畫面高 ⇒ 面板裡捲（Tim 2026-10-17：「設定選單 在手機上會超出畫面導致按不到 繼續 重新開始 回主選單」—— 以前沒有高度上限、置中 ⇒ 上下各超出一截，頂端那一列在畫面外） */
   #gset .gsTop{ position:sticky; top:-14px; z-index:1; margin:-14px -16px 0; padding:14px 16px 2px; background:rgba(14,18,24,.96); border-radius:8px 8px 0 0; }   /* 標題＋繼續／重新開始／回主選單：捲下去也釘在面板頂端（底色不透明 ⇒ 捲過去的列不會透出來） */
   #gset{ scrollbar-width:thin; scrollbar-color:rgba(232,194,106,.75) rgba(255,255,255,.08); }   /* 捲軸看得見（Tim：「可能可以加 Slider?」）：金色細條 ⇒ 一看就知道下面還有 */
@@ -190,8 +202,8 @@
   #roomItems button, #roomEd button{ font-size:13px; padding:4px 10px; margin:2px; } #roomItems button.on, #roomEd button.on{ color:#111; background:var(--gold); border-color:var(--gold); }
   #roomEd{ margin:8px auto; max-width:660px; border:1px solid rgba(255,255,255,.18); border-radius:8px; padding:8px; } #roomEd .rt{ color:var(--gold); font-size:14px; margin-bottom:4px; } #roomEd .rn{ color:var(--dim); font-size:12px; margin:4px 0; line-height:1.5; }
   #roomEdW{ max-width:100%; }
-  body.roomEdOn #roomEd{ position:fixed; inset:8px; z-index:50; max-width:none; margin:0; overflow-y:auto; background:#141a22; border-color:rgba(255,255,255,.3); box-shadow:0 6px 30px rgba(0,0,0,.6); }   /* 打開 ⇒ 接近全螢幕（Tim 2026-10-14） */
-  #cover #pgX{ position:fixed; top:10px; right:12px; z-index:40; display:none; margin:0; background:#e3c46a; color:#111; border-color:#e3c46a; box-shadow:0 2px 10px rgba(0,0,0,.6); } #cover #pgX.on{ display:block; }
+  body.roomEdOn #roomEd{ position:fixed; top:calc(8px + var(--sa-t)); right:calc(8px + var(--sa-r)); bottom:calc(8px + var(--sa-b)); left:calc(8px + var(--sa-l)); z-index:50; max-width:none; margin:0; overflow-y:auto; background:#141a22; border-color:rgba(255,255,255,.3); box-shadow:0 6px 30px rgba(0,0,0,.6); }   /* 打開 ⇒ 接近全螢幕（Tim 2026-10-14） */
+  #cover #pgX{ position:fixed; top:calc(10px + var(--sa-t)); right:calc(12px + var(--sa-r)); z-index:40; display:none; margin:0; background:#e3c46a; color:#111; border-color:#e3c46a; box-shadow:0 2px 10px rgba(0,0,0,.6); } #cover #pgX.on{ display:block; }
   #askp{ display:none; position:fixed; inset:0; z-index:60; background:rgba(0,0,0,.62); align-items:center; justify-content:center; padding:16px; } #askp.on{ display:flex; }   /* 確認彈窗（js/65_ask.js）：蓋過右上角的返回（z 40） */
   #askp .askc{ max-width:440px; padding:18px 22px; text-align:center; }   /* ⛔ 不掛 .card：71_input.js page() 拿「#cover 裡第一個不是設定頁的 .card」當主選單 */ #askM{ color:var(--dim); font-size:14px; line-height:1.6; margin:8px 0 14px; } #cover #askY{ background:#b8452e; border-color:#e06a4f; }
   #roomEdX2{ display:none; } body.roomEdOn #roomEdX2{ display:block; position:sticky; top:0; float:right; z-index:2; background:#e3c46a; color:#111; border-color:#e3c46a; }   /* 編輯器浮層：右上角的完成（捲動時黏在上面） */
@@ -243,7 +255,7 @@
   /* 第一人稱（81_fps.js，TASK-0649；Tim 2026-10-16「下方操作面板隱藏 改為第一人稱用的操作面板」「只保留設定紐 暫停紐」）：
      HUD 全部藏起來，只留下方那一排的 ⏸ 與 ⚙（設定面板、說明照常打得開）；換上 #fpUI。⛔ hud() 照樣在跑（只是看不見）—— 行內的 display 用 !important 壓過 */
   #fpUI{ display:none; }
-  #fpCross{ display:none; position:fixed; left:50%; top:50%; width:6px; height:6px; margin:-3px 0 0 -3px; border-radius:50%; background:rgba(255,255,255,.8); box-shadow:0 0 0 1px rgba(0,0,0,.45); pointer-events:none; }   /* 滑鼠模式（抓住滑鼠）時的準心 */
+  #fpCross{ display:none; position:absolute; left:50%; top:50%; width:6px; height:6px; margin:-3px 0 0 -3px; border-radius:50%; background:rgba(255,255,255,.8); box-shadow:0 0 0 1px rgba(0,0,0,.45); pointer-events:none; }   /* 滑鼠模式（抓住滑鼠）時的準心 */
   #stage.fpLock #fpCross, #stage.bld #fpCross{ display:block; }
   /* 建造模式（82_build.js，TASK-0648；Tim 2026-10-16「UI可以選取要擺放的物件(參考常見建造遊戲UI設計 可以給物件分類)」）：
      快捷欄（下方一排圓鈕：上快捷鍵 1–9、下 emoji；分類之間空一點）＋ 📦 目錄（分類分頁、卡片）＋ 準心下面一行說明；放 ✔／拆 ✖／轉 ⟳ 在第一人稱那一排（建造時跟隨 F／G 收起來） */
@@ -262,12 +274,12 @@
   @media (max-width: 640px){ #stage.bld #bldBar{ bottom:178px; gap:4px; } #bldBar .bslot{ width:40px; height:40px; } #bldBar .bslot.gap{ margin-left:6px; } }
   #stage.fp .hud:not(#botC):not(#gset):not(#help){ display:none !important; }
   #stage.fp #navBox, #stage.fp #helmL, #stage.fp #helmR, #stage.fp #guns, #stage.fp #ammo, #stage.fp #keys > :not(#pauseK):not(#setB){ display:none !important; }
-  #stage.fp #fpUI{ display:block; position:absolute; left:0; right:0; bottom:calc(64px + env(safe-area-inset-bottom)); pointer-events:none; z-index:3; }
+  #stage.fp #fpUI{ display:block; position:absolute; left:0; right:0; bottom:64px; pointer-events:none; z-index:3; }
   #fpUI .fpPad{ position:absolute; bottom:0; display:grid; grid-template-columns:repeat(3, 64px); grid-auto-rows:64px; gap:6px; }   /* 一格 ＝ 圓鈕 .kb.hb 的大小 */
   /* 右下：一欄上下 #fpVert（⛔ 轉頭的搖桿 #fpJoyR 拿掉了：Tim 2026-10-17「右側轉視角的我發現用不到(螢幕任意位置都能滑動轉視角)」⇒ 這一欄搬到原本搖桿的位置）：跳／浮空上（空白）在上、浮空下（C）在下（Tim 2026-10-16「為了手機操作 空白移動到右側吧(因為左邊是搖桿 離空白太近很難跳)」）；
      每顆照 grid-area 擺（⛔ 自動排 ⇒ 藏起來的那顆讓別的補位）；沒有第 2 列時那一欄只剩一格、貼著底 */
-  #fpUI #fpVert{ right:calc(18px + env(safe-area-inset-right)); grid-template-columns:64px; }
-  #fpJoy{ position:absolute; left:calc(18px + env(safe-area-inset-left)); bottom:0; width:136px; height:136px; border-radius:50%; background:rgba(10,14,22,.35); border:2px solid rgba(255,255,255,.22); pointer-events:auto; touch-action:none; }
+  #fpUI #fpVert{ right:18px; grid-template-columns:64px; }
+  #fpJoy{ position:absolute; left:18px; bottom:0; width:136px; height:136px; border-radius:50%; background:rgba(10,14,22,.35); border:2px solid rgba(255,255,255,.22); pointer-events:auto; touch-action:none; }
   #fpKnob{ position:absolute; left:50%; top:50%; width:58px; height:58px; margin:-29px 0 0 -29px; border-radius:50%; background:rgba(255,255,255,.32); box-shadow:0 0 0 2px rgba(255,255,255,.18); pointer-events:none; }
   #fpUI .fpb{ pointer-events:auto; display:flex; align-items:center; justify-content:center; margin:0; padding:0; font-size:22px; border-radius:50%; background:rgba(10,14,22,.55); touch-action:none; }
   #fpUI .fpb.down, #fpUI .fpb.on{ background:rgba(110,170,255,.45); }
@@ -278,8 +290,8 @@
   #fpUI .fpFly{ display:none !important; } #fpUI.fly:not(.fol) .fpFly{ display:flex !important; } #fpUI.fly #fpJump{ display:none !important; }   /* 浮空：跳換成按住的 ⬆ ⬇ */
   @media (max-width: 640px){   /* 直式手機：搖桿縮一號，中間的 🪜 ⤴ 🏃 搬到上方（⛔ 同一排 ⇒ 375 px 寬疊在一起，量過） */
     #fpUI .fpPad{ grid-template-columns:repeat(3, 46px); grid-auto-rows:46px; gap:4px; }
-    #fpJoy{ width:112px; height:112px; left:calc(12px + env(safe-area-inset-left)); } #fpKnob{ width:48px; height:48px; margin:-24px 0 0 -24px; }
-    #fpUI #fpVert{ right:calc(12px + env(safe-area-inset-right)); grid-template-columns:46px; bottom:12px; }   /* 抬 12 px（⛔ 0 ⇒ 浮空時 C⬇ 碰到下面那排的 ⚙，截圖量過） */
+    #fpJoy{ width:112px; height:112px; left:12px; } #fpKnob{ width:48px; height:48px; margin:-24px 0 0 -24px; }
+    #fpUI #fpVert{ right:12px; grid-template-columns:46px; bottom:12px; }   /* 抬 12 px（⛔ 0 ⇒ 浮空時 C⬇ 碰到下面那排的 ⚙，截圖量過） */
     #fpUI .fpb{ font-size:19px; }
     #fpAct{ bottom:122px; }   /* 搖桿 112 px 高 ＋ 空一點（⛔ 108 ⇒ 跟搖桿頂疊 8 px，量過） */
   }

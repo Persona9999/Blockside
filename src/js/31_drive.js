@@ -438,10 +438,10 @@ function teleFit(box) {
   var L = '', B = '', r;
   if (TELE_NARROW && TELE_NARROW.matches) {
     var h = $('helmL'); if (!h) return;
-    r = h.getBoundingClientRect(); L = Math.round(r.left + (r.width - box.offsetWidth) / 2) + 'px'; B = Math.round(window.innerHeight - r.top + 6) + 'px';
+    r = h.getBoundingClientRect(); var s = stageBox(); L = Math.round(r.left - s.left + (r.width - box.offsetWidth) / 2) + 'px'; B = Math.round(s.bottom - r.top + 6) + 'px';   // left／bottom 是相對 #stage（安全區收過邊，stageBox）
   } else {
     var row = $('ctlRow'); r = row && row.getBoundingClientRect();
-    if (r && r.width && r.left < 12 + (box.offsetWidth || 40) + 8) B = Math.round(window.innerHeight - r.top + 6) + 'px';
+    if (r && r.width && r.left - stageBox().left < 12 + (box.offsetWidth || 40) + 8) B = Math.round(stageBox().bottom - r.top + 6) + 'px';
   }
   if (box.style.left !== L || box.style.bottom !== B) { box.style.left = L; box.style.bottom = B; }
 }

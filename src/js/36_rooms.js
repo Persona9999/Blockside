@@ -352,7 +352,7 @@ function roomLabels() {
   var box = $('roomLbl');
   if (!ROOMS_DBG) { if (box) box.innerHTML = ''; return; }
   if (!box) { box = document.createElement('div'); box.id = 'roomLbl'; box.style.cssText = 'position:absolute;inset:0;pointer-events:none;overflow:hidden;font:11px sans-serif;color:#7ff;text-shadow:0 0 2px #000,0 0 2px #000'; $('stage').appendChild(box); }
-  var W = innerWidth, H = innerHeight, vp = CAM.vp, html = '';
+  var sb = stageBox(), W = sb.width, H = sb.height, vp = CAM.vp, html = '';   // 標籤放在 #stage 裡 ⇒ 照它的大小（安全區收過邊）
   SHIPS.forEach(function (sh) {
     if (sh.sunk || !sh.rooms) return;
     sh.rooms.forEach(function (r) {

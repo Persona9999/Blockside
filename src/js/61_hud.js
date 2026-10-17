@@ -318,9 +318,23 @@ function hudArt() {
 /** 羅盤那一團（#navBox）往下壓、底邊貼在下方面板（#ctl）頂上 BOT_GAP px（Tim 2026-10-14）：量現在差多少、改 margin-bottom（負的 ⇒ 落進兩組大圓鈕之間；砲列壓在大圓鈕底下）。
  *  #botC 可能被 scale（手機橫拿 .82）⇒ 量到的差先除回去；差不到半格不動。 */
 var BOT_GAP = 2;
+/** 直式手機（Tim 2026-10-17「iphone直畫面全螢幕時 把羅盤放到最下排」「輪盤上方文字 改成按鈕上方」「或是統一改到下面好了」「羅盤跟炮提示統一到畫面下方」）
+ *  ⇒ html.navlow：最下排整排只留給羅盤與兩舷的砲數提示（#navBox），按鈕（#ctl 的 C P O 4 R、左右兩欄 #helmL／#helmR）都抬到它上面、狀態文字（#modeT）再上面
+ *  （template.html html.navlow 那一段）。瀏覽器裡、從主畫面開都一樣；橫式與平板照舊（Tim：橫板不用改）。 */
+var NAV_LOW_MQ = window.matchMedia ? window.matchMedia('(orientation:portrait) and (max-width:760px)') : null, NAV_LOW_GAP = 4;
+function navLow() { return !!(NAV_LOW_MQ && NAV_LOW_MQ.matches); }
 function botFit() {
   var nb = $('navBox'), ctl = $('ctl'), bc = $('botC'); if (!nb || !ctl) return;
-  var k = bc.getBoundingClientRect().width / (bc.offsetWidth || 1) || 1, d = (ctl.getBoundingClientRect().top - BOT_GAP - nb.getBoundingClientRect().bottom) / k;
+  var low = navLow(), root = document.documentElement;
+  if (root.classList.contains('navlow') !== low) root.classList.toggle('navlow', low);
+  var up = low ? nb.offsetHeight + NAV_LOW_GAP : 0;   // C P O 4 R 抬多少 ＝ 羅盤那一團多高（砲條 #gunsB＋羅盤＋追擊砲 #gunsA；#modeT 這時是 absolute、不算）
+  if ((parseFloat(ctl.style.marginBottom) || 0) !== up) ctl.style.marginBottom = up ? up + 'px' : '';
+  // 左右兩欄也一起抬（Tim 2026-10-17「滿版時左右兩側按鈕也要往上移動」「應該說直式排版時 最下方全部留給羅盤空間 按鈕從羅盤上方開始排」）⇒ 最下排只有羅盤
+  ['helmL', 'helmR'].forEach(function (id) { var h = $(id); if ((parseFloat(h.style.marginBottom) || 0) !== up) h.style.marginBottom = up ? up + 'px' : ''; });
+  if (low) { var lu = ctl.offsetHeight + 2 * NAV_LOW_GAP + 'px'; if (nb.style.getPropertyValue('--lowup') !== lu) nb.style.setProperty('--lowup', lu); }
+  var k = bc.getBoundingClientRect().width / (bc.offsetWidth || 1) || 1,
+      to = low ? $('ctlRow').getBoundingClientRect().bottom : ctl.getBoundingClientRect().top - BOT_GAP,   // 羅盤的底：最下排（A／D 的底）｜C P O 4 R 的頂上
+      d = (to - nb.getBoundingClientRect().bottom) / k;
   if (Math.abs(d) < 0.5) return;
   nb.style.marginBottom = Math.min(0, (parseFloat(nb.style.marginBottom) || 0) - d) + 'px';   // ⛔ 不給正的：面板比大圓鈕高的時候照舊排在面板上面
 }
