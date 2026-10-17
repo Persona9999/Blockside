@@ -25,6 +25,8 @@ function geometry() {
   gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW); gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 8, 0); gl.bindVertexArray(null);
 }
 // 海面網格的細緻度（畫質）：seg 一圈幾格、min 最密的網格間距（m）、det 細漣漪幾道。網格間距往外照比例變粗（同心圓，跟透視一樣近密遠疏），到 4 km
+var SEA_NZ_P = 0.8;                                                   // 細漣漪每道的相位雜訊（圈；01_gl.js detail）：0 ＝ 以前的畫法（一格一格的菱形格子）；0.8 量過（TASK 單）
+var SEA_DBG = {};                                                   // 海面試驗場的覆寫（__game.seaDbg；det 漣漪道數、an 解析浪的法線倍率）—— 平常是空的
 var SEA_LV = [{ seg: 96, min: 1.2, det: 4 }, { seg: 160, min: 0.7, det: 8 }, { seg: 256, min: 0.4, det: 14 }];
 /** 海面網格（第 lv 檔）：同心圓，頂點 (dx, dz, 那一圈的間距)，離中心 4 km；中心每格跟著鏡頭（render 給 uC）。 */
 function seaGrid(lv) {
@@ -450,7 +452,8 @@ function render() {
   // 海
   if (GFX.refr) { gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA); }
   if (!SEAG || SEAG.lv !== GFX.sea) seaGrid(GFX.sea);
-  gl.useProgram(P.water.prog); setCommon(P.water); gl.uniform1f(P.water.u.uDet, SEA_LV[GFX.sea].det);
+  gl.useProgram(P.water.prog); setCommon(P.water); gl.uniform1f(P.water.u.uDet, SEA_DBG.det !== undefined ? SEA_DBG.det : SEA_LV[GFX.sea].det); gl.uniform1f(P.water.u.uAn, SEA_DBG.an !== undefined ? SEA_DBG.an : 1);
+  gl.uniform1f(P.water.u.uNzP, SEA_DBG.p !== undefined ? SEA_DBG.p : SEA_NZ_P);   // 打散重複：細漣漪每道的相位雜訊（01_gl.js detail）   // SEA_DBG：海面試驗場（src/tests/sea_lab.py，__game.seaDbg）才給；平常 {} ⇒ 照畫質
   gl.uniform2f(P.water.u.uC, Math.round(CAM.eye[0] / SEAG.snap) * SEAG.snap, Math.round(CAM.eye[2] / SEAG.snap) * SEAG.snap);   // 中心照網格間距對齊 ⇒ 近處的頂點不在浪上滑動
   gl.uniform1f(P.water.u.uReflOn, RT.R ? 1 : 0); gl.uniform1f(P.water.u.uRefr, GFX.refr); gl.uniform2f(P.water.u.uView, w, h);
   gl.activeTexture(gl.TEXTURE6); gl.bindTexture(gl.TEXTURE_2D, RT.R ? RT.R.col : DUMMY); gl.uniform1i(P.water.u.uRefl, 6);

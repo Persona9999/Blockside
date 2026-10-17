@@ -122,6 +122,7 @@ if (DEBUG) window.__game = {
   camFollow: function (dt) { camFollow(dt); return CAM.follow; },
   predict: function (b) { return ballPredict(b); },
   cam: function (o) { for (var k in o) CAM[k] = o[k]; CAM.snap = true; camUpdate(1); render(); },
+  seaDbg: function (o) { SEA_DBG = o || {}; render(); return SEA_DBG; },   // 海面試驗場（src/tests/sea_lab.py）：{ det, an, … } 覆寫著色器的那幾格；{} ⇒ 照畫質
   phys: function (on) { if (on !== undefined) setPhys(!!on); return PHYS; },
   /** 進水（33_flood.js，粒子模式）：第 i 艘的水量、破口、進出水、抽水、粒子、重心、該下沉多少；公式模式 ⇒ null。 */
   flood: function (i, o) {
