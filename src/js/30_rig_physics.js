@@ -330,6 +330,21 @@ function clothInit(c) {
   c.pin = new Uint8Array(T.n); for (var i = 0; i < T.n; i++) c.pin[i] = T.hk[i] ? 1 : 0;
   c.brk = new Uint8Array(T.ea.length); c.bbrk = new Uint8Array(T.ba.length); c.tv = new Uint8Array(c.T.n); c.torn = false; c.loose = false; c.free = 0; c.gone = false; c.npin = -1;
 }
+/** 帆桁已經追風轉過（m.rot）⇒ 布照作品的形狀、繞帆桁轉同樣的角度開始，速度 0（clothInit 之後；收帆再張、物理開著時才掉下來的帆）。
+ *  綁在帆桁上的點照它自己那根；綁在格、繩上的不轉；沒綁的點照這面帆綁最多點的那根（同一根桅的帆桁轉軸在一條線上；憲法號開局 8 秒量到同桅四根 1.049–1.120 rad）。沒綁帆桁的帆（支索帆）不動。
+ *  ⛔ 以前照作品的角度重來、釘點卻在轉過的帆桁上（yardPins）⇒ 第一步整面帆被拉過去、往外噴（Tim 2026-10-17：「放帆的一瞬間 帆會往外側噴出一段距離」；
+ *    憲法號 main-topsail 帆桁轉 1.084 rad，放帆第一步有一點一步走 127.6 格，平常一步最多 1.87）。 */
+function clothBrace(sh, c) {
+  var T = c.T.sim, yk = T.yk, cnt = {}, top = -1, i; if (!yk || !sh.yards.some(function (m) { return m.rot; })) return;
+  for (i = 0; i < T.n; i++) if (yk[i] >= 0 && (cnt[yk[i]] = (cnt[yk[i]] || 0) + 1) > (cnt[top] || 0)) top = yk[i];
+  if (top < 0) return;
+  for (i = 0; i < T.n; i++) {
+    if (yk[i] < 0 && T.hk[i]) continue;                                // 綁在格、繩上的（course 的帆腳、側邊）照作品的位置
+    var m = sh.models[yk[i] >= 0 ? yk[i] : top]; if (!m || !m.rot) continue;
+    var o = i * 3, w = rotZ([T.p0[o], T.p0[o + 1], T.p0[o + 2]], m.piv, m.rot);
+    c.p[o] = c.q[o] = w[0]; c.p[o + 1] = c.q[o + 1] = w[1];
+  }
+}
 /** 靠的東西還在不在：格（被打掉 ⇒ 不在）、繩（斷了）、模型（飛了）；3 ＝ 帆還算數就在。 */
 function holds(sh, s, k, v) { return k === 1 ? gp(sh.grid, v) > 0 : k === 2 ? !sh.ropes[v].dead : k === 3 ? !!s && !s.dead : k === 4 ? sh.models[v].alive : false; }
 function clothPins(sh, s, c) {
@@ -493,7 +508,7 @@ function physStep(sh) {
     if (c.gone) return;
     if (s.dead && !c.loose) {                                         // 物理打開之前就掉了的（late）⇒ 現在才垂下來；收著的時候掉的 ⇒ 不畫
       if (!c.late || s.furled) { c.gone = true; return; }
-      clothInit(c); c.hidden = false; c.loose = true;
+      clothInit(c); clothBrace(sh, c); c.hidden = false; c.loose = true;
     }
     c.late = false;
     if (s.furled && !s.dead) {                                       // 收帆：物理開著 ⇒ 先演一段收上去（畫面上往帆桁／綁邊收攏，FURL_IN 秒）再藏；判斷照舊立刻算收起來（s.furled：航速、命中、鏈彈）
@@ -502,7 +517,7 @@ function physStep(sh) {
       if (c.furlF <= 0) { furlFreeze(sh, c); c.hidden = true; c.furlF = null; sh.rigDirty = true; return; }   // 演完那一格凍結下來照畫、繩留著（furlFreeze）；rigDirty：重做繩（11_rig_gpu.js buildRig）
     } else if (c.furlF !== null && c.furlF !== undefined && !c.hidden) { c.furlF += DT / FURL_OUT; if (c.furlF >= 1) c.furlF = null; }   // 張帆（或收到一半又張）：從帆桁放下來
     var reopen = seen && c.hidden === true && !s.furled;               // 開局初次啟用不是重新張帆；makeShip 確實以 hidden:true 建立
-    if (c.hidden || !c.p) { c.fz = null; var keep = c.p && c.torn ? { brk: c.brk, bbrk: c.bbrk, tv: c.tv } : null; clothInit(c); c.hidden = false; if (keep) { c.brk = keep.brk; c.bbrk = keep.bbrk; c.tv = keep.tv; c.torn = true; } if (reopen) { c.furlF = 0; sh.rigDirty = true; } }   // 收帆再張：形狀重來、破洞留著；從收攏的樣子放下來（furlF 0 → 1）
+    if (c.hidden || !c.p) { c.fz = null; var keep = c.p && c.torn ? { brk: c.brk, bbrk: c.bbrk, tv: c.tv } : null; clothInit(c); clothBrace(sh, c); c.hidden = false; if (keep) { c.brk = keep.brk; c.bbrk = keep.bbrk; c.tv = keep.tv; c.torn = true; } if (reopen) { c.furlF = 0; sh.rigDirty = true; } }   // 收帆再張：形狀重來、破洞留著；從收攏的樣子放下來（furlF 0 → 1）
     if (c.tt === undefined) { var tl = tethOf(sh, s, c); c.tt = tl.length ? tl : null; }
     if (c.tt) for (var ti = 0; ti < c.tt.length; ti++) c.pin[c.tt[ti].i] = 0;   // 帆腳不釘：交給布、被 sheet 拉住（clothInit 每次照 hk 釘回去 ⇒ 每一步放開）
     if (c.tt && c.torn && chk && !c.loose) tethCut(sh, c);                // 帆腳那一塊被打掉 ⇒ 那幾條繩跟帆斷開、垂下來
