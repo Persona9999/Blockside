@@ -61,7 +61,7 @@ function cachePut(T, info) {
   var all = new Uint16Array(n), o = 0;
   for (var k = 0; k < idx.length; k += 2) { all.set(ms.get(idx[k]), o); o += idx[k + 1]; }
   var rec = { fmt: CACHE_FMT, vxk: st.vxk, code: st.code, voxels: T.h.voxels, checksum: T.h.checksum, at: Date.now(), nx: g.nx, ny: g.ny,
-    mesh: { all: all, idx: new Int32Array(idx) }, models: T.keep.models, hb: T.hullHB, hyd: T.hyd, disp: T.disp, rbox: T.rbox, cloth: T.nSail0 === undefined ? T.cloth : T.cloth.slice(0, T.nSail0) };   // 陣營旗的布不存（照設定檔每次現算）
+    mesh: { all: all, idx: new Int32Array(idx) }, models: T.keep.models, hb: T.hullHB, hyd: T.hyd, disp: T.disp, rbox: T.rbox, sails: T.keep.sails || null, cloth: T.nSail0 === undefined ? T.cloth : T.cloth.slice(0, T.nSail0) };   // 陣營旗的布不存（照設定檔每次現算）
   T.keep = null;
   cacheOpen().then(function (db) {
     if (!db) return;

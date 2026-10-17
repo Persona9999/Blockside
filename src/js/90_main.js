@@ -289,6 +289,17 @@ if (DEBUG) window.__game = {
     return { monkeys: pm.length, able: pm.filter(able).length, states: pm.reduce(function (a, c) { var s = c.st ? 'down' : c.pm.st; a[s] = (a[s] || 0) + 1; return a; }, {}),
       boxes: sh.guns.map(function (g) { return g.alive ? g.box : '✕'; }).join(''), waiting: sh.guns.filter(function (g) { return g.alive && g.needCart && !(g.box > 0); }).length, noDrop: sh.guns.filter(function (g) { return !g.drop; }).length }; },
   /** 鐵鍊（76_anchor.js）：第 i 艘每條鍊子的狀態、放出多長、這一步碰到船殼幾次（hit）、推完還穿在船殼裡幾節（pen 這一步／平均／最多；?chainhit=0 ⇒ 不推）、錨那一端的位置；ms ＝ 全部鍊子每一步平均幾毫秒。 */
+  /** 帆的配方（TASK-0602 ①；29_sailrecipe.js）：第 i 艘每面照配方生的帆，跟成品裡雕刻引擎的頂點（還帶著才比得了）逐點差多少格；billow ＝ 最鼓那一點離四角平面幾格（兩邊各一個）。 */
+  sailDev: function (i) {
+    var T = SHIPS[i || 0].T;
+    function bil(v, s) { var c = s.recipe.corners, n0 = c.length, cx = 0, cy = 0, cz = 0; c.forEach(function (p) { cx += p[0] / n0; cy += p[1] / n0; cz += p[2] / n0; });
+      var nx = 0, ny = 0, nz = 0; for (var k = 0; k < n0; k++) { var a = c[k], b = c[(k + 1) % n0]; nx += (a[1] - b[1]) * (a[2] + b[2]); ny += (a[2] - b[2]) * (a[0] + b[0]); nz += (a[0] - b[0]) * (a[1] + b[1]); }
+      var L = Math.hypot(nx, ny, nz) || 1, m = 0; for (var q = 0; q < v.length / 2; q += 3) { var d = ((v[q] - cx) * nx + (v[q + 1] - cy) * ny + (v[q + 2] - cz) * nz) / L; if (Math.abs(d) > Math.abs(m)) m = d; } return +m.toFixed(1); }
+    return { recipes: T.sailRecipes, ms: T.ms.sails, sails: T.rig.sails.filter(function (s) { return s.recipe; }).map(function (s) {
+      var a = s.verts, b = s.verts0, r = { name: s.name, res: s.recipe.res, n: a.length / 6, billow: bil(a, s) };
+      if (b) { var n = Math.min(a.length, b.length) / 6, mx = 0, sm = 0; for (var k = 0; k < n * 3; k += 3) { var d = Math.hypot(a[k] - b[k], a[k + 1] - b[k + 1], a[k + 2] - b[k + 2]); mx = Math.max(mx, d); sm += d; } r.same = a.length === b.length; r.maxDev = +mx.toFixed(1); r.meanDev = +(sm / n).toFixed(1); r.billow0 = bil(b, s); }
+      return r; }) };
+  },
   chains: function (i, reset) {
     var sh = SHIPS[i || 0], A = sh.anc, r = { ms: CH_PROF.steps ? +(CH_PROF.ms / CH_PROF.steps).toFixed(4) : 0, hit: CHAIN_HIT, lost: (sh.chLost || []).length };
     if (A) ['P', 'S'].forEach(function (k) { var c = A[k].ch; r[k] = c ? { st: A[k].st, pay: +c.pay.toFixed(1), hit: c.hit, pen: c.pen, penAvg: +(c.penSum / Math.max(1, c.steps)).toFixed(2), penMax: c.penMax, end: [c.p[CHAIN_SEG * 3], c.p[CHAIN_SEG * 3 + 1], c.p[CHAIN_SEG * 3 + 2]].map(function (v) { return +v.toFixed(1); }), y: [].filter.call(c.p, function (v, j) { return j % 3 === 1; }).map(function (v) { return +v.toFixed(1); }) } : A[k].st; });

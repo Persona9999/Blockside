@@ -134,6 +134,9 @@ function clothTemplate(H, s) {                         // H：船型（帆的布
     sides.push({ n: side.length, len: +ch.toFixed(1), dev: +md.toFixed(2), bound: bound });
     if (bound) side.forEach(function (q) { hk[q] = 3; });
   }
+  // 配方生的帆（29_sailrecipe.js）：綁定全照 meta —— 帆角的 refs、bind 的邊、繩的 ends（Tim 2026-10-17：「都不要靠猜 帆跟繩的綁定必須靠 meta」）⇒ 下面猜的那幾段跳過
+  var MB = s.recipe && s.recipe.refs && s.bmeta ? clothBindMeta(H, s, n, P) : null;
+  if (MB) { hk = MB.hk; hv = MB.hv; }
   function ropeNear(w, r2) {
     var best = -1, bd = r2, r = Math.sqrt(r2);
     H.rig.ropes.forEach(function (o, j2) {
@@ -142,7 +145,7 @@ function clothTemplate(H, s) {                         // H：船型（帆的布
     });
     return best;
   }
-  for (i = 0; i < n; i++) {
+  if (!MB) for (i = 0; i < n; i++) {
     if (hk[i] !== 3) continue;
     var yw = yardNear(H, P(i), 3); if (yw >= 0) { hk[i] = 4; hv[i] = yw; continue; }   // 綁在帆桁上（帆桁改成模型之後，那裡已經沒有格）
     var w = P(i), an = anchorNear(H, w[0], w[1], w[2], 6);
@@ -150,12 +153,12 @@ function clothTemplate(H, s) {                         // H：船型（帆的布
   }
   // 掛在斜桁頂上的旗（三叉戟號的 ensign；Tim 2026-10-15：船尾旗飄在空中）：綁邊上面幾點靠在 gaff 上、下面幾點找不到靠的（3）⇒
   //   gaff 追風轉了、旗留在作品的位置。旗有任何一點綁在帆桁上 ⇒ 整條綁邊都歸那根帆桁（跟著轉、帆桁沒了一起鬆開）；跟轉的 yk 在下面照 hv 給。
-  var flagYard = -1; if (isFlag(s)) for (i = 0; i < n; i++) if (hk[i] === 4) { flagYard = hv[i]; break; }
+  var flagYard = -1; if (!MB && isFlag(s)) for (i = 0; i < n; i++) if (hk[i] === 4) { flagYard = hv[i]; break; }
   if (flagYard >= 0) for (i = 0; i < n; i++) if (hk[i] === 3) { hk[i] = 4; hv[i] = flagYard; }
   if (s.pins) { hk.fill(0); hv.fill(-1); s.pins.forEach(function (q) { hk[q] = s.pinK; hv[q] = s.pinV; }); }   // 明寫的綁邊（陣營旗：靠旗桿那一邊釘在桅頂那一格；⛔ 不照外緣直不直猜）
   var own = []; H.rig.ropes.forEach(function (r, j2) { if (sailRope(r, s.name)) own.push(j2); });   // 帆自己的 sheet、tack（10_ship.js sailRope：照 meta，沒有才照名字）
-  var clews = 0, clewYard = {};                          // 帆腳 → 跟哪根帆桁轉（-1 ＝ 不轉）
-  if (!s.pins) corner.forEach(function (kc) {
+  var clews = MB ? MB.clews : 0, clewYard = MB ? MB.clewYard : {};   // 帆腳 → 跟哪根帆桁轉（-1 ＝ 不轉）；配方的帆照繩的 ends（clothBindMeta）
+  if (!s.pins && !MB) corner.forEach(function (kc) {
     var q = loop[kc]; if (hk[q]) return;
     var w = P(q), best = -1, bd = 100, end = null;
     own.forEach(function (j2) { var pts = H.rig.ropes[j2].pts; [0, pts.length - 3].forEach(function (o) { var dx = pts[o] - w[0], dy = pts[o + 1] - w[1], dz = pts[o + 2] - w[2], d = dx * dx + dy * dy + dz * dz; if (d < bd) { bd = d; best = j2; end = [pts[o], pts[o + 1], pts[o + 2]]; } }); });
@@ -182,7 +185,11 @@ function clothTemplate(H, s) {                         // H：船型（帆的布
     var a = pt['arm-P'] || pt.pivot, b = pt['arm-S'] || pt.end || pt.pivot; ys.push({ k: k, a: a, b: b });
   });
   sim.yk = new Int16Array(cg.idx.length).fill(-1);
-  if (ys.length) cg.idx.forEach(function (f, ci) {
+  if (MB) cg.idx.forEach(function (f, ci) {                            // 配方的帆：綁在帆桁模型上的點跟那根帆桁轉；帆腳跟它那條繩另一端指名的帆桁轉（clewYard）
+    if (f in clewYard) { sim.yk[ci] = clewYard[f]; return; }
+    var m = sim.hk[ci] === 4 ? H.rig.models[sim.hv[ci]] : null; sim.yk[ci] = m && m.meta && m.meta.kind === 'yard' ? sim.hv[ci] : -1;
+  });
+  else if (ys.length) cg.idx.forEach(function (f, ci) {
     if (!sim.hk[ci]) return;
     if (f in clewYard) { sim.yk[ci] = clewYard[f]; return; }
     var w = P(f), bi = -1, bd = 1e18;
@@ -193,7 +200,7 @@ function clothTemplate(H, s) {                         // H：船型（帆的布
   var foot = -1; Object.keys(clewYard).forEach(function (q) { if (clewYard[q] >= 0) foot = clewYard[q]; });
   var vcol = texColors(s.texture, n);                   // 有貼圖（旗）⇒ 每個頂點照 UV 取貼圖的顏色；整面的顏色（布片、碎布）取平均
   return { name: s.name, col: vcol ? vcol.avg : s.color || [0.95, 0.92, 0.85], vcol: vcol ? vcol.c : null, uv: vcol ? Float32Array.from(s.texture.uv.slice(0, n * 2)) : null, n: n, p0: p0, tris: new Uint16Array(T), sim: sim, mi: cg.mi, mw: cg.mw, grid: cg.kind,
-    hk: hk, hv: hv, sides: sides, pins: pins, clews: clews, foot: foot };   // foot：帆腳跟著轉的帆桁（-1 ＝ 不轉；砲彈打帆照高度內插轉角用）
+    hk: hk, hv: hv, sides: sides, pins: pins, clews: clews, foot: foot, tm: MB ? MB.tm : null };   // foot：帆腳跟著轉的帆桁（-1 ＝ 不轉；砲彈打帆照高度內插轉角用）；tm：帆腳被哪條繩的哪一端拉著（照 meta，tethOf）
 }
 /** 旗的貼圖（.vxk 帆的 texture：w×h 的 RGBA、base64，uv 每個頂點一對）⇒ 前 n 個頂點（正面那一份）的顏色：每個頂點取它四周一格布寬的平均（不透明的才算）。
  *  Tim 2026-10-13：夜隼號的旗變成白旗 —— 遊戲畫帆只用一個顏色，夜隼號那面旗的顏色欄是帆布白（憲法號的是紅）。沒有貼圖 ⇒ null（照舊單色）。 */
@@ -627,11 +634,14 @@ var TETH_R = 10;
 function tethOf(sh, s, c) {
   var T = c.T; if (T.teth !== undefined) return T.teth;
   furlGath(T, sh); var list = [];
-  if (T.sim.n === T.n) for (var i = 0; i < T.n; i++) if (T.clew[i]) (s.lines || []).forEach(function (j) {
-    var q = sh.ropes[j].pts0 || sh.ropes[j].pts, m = q.length / 3; if (m < 2) return;
+  // 配方的帆（29_sailrecipe.js clothBindMeta）：帆腳被哪條繩的哪一端拉著照繩的 ends（T.tm）；舊 .vxk ⇒ 照帆自己的繩哪一端離帆腳 TETH_R 內
+  var pairs = []; if (T.sim.n === T.n) { if (T.tm) T.tm.forEach(function (x) { if (T.clew[x.i]) pairs.push(x); }); else for (var i0 = 0; i0 < T.n; i0++) if (T.clew[i0]) (s.lines || []).forEach(function (j) { pairs.push({ i: i0, j: j }); }); }
+  pairs.forEach(function (pr) {
+    var i = pr.i, j = pr.j, q = sh.ropes[j].pts0 || sh.ropes[j].pts, m = q.length / 3; if (m < 2) return;
     function d(k) { return Math.hypot(q[k * 3] - T.p0[i * 3], q[k * 3 + 1] - T.p0[i * 3 + 1], q[k * 3 + 2] - T.p0[i * 3 + 2]); }
-    var d0 = d(0), d1 = d(m - 1); if (Math.min(d0, d1) > TETH_R) return;
-    var ce = d0 <= d1 ? 0 : m - 1, fe = m - 1 - ce, t = new Float32Array(m), acc = new Float32Array(m), k;
+    var ce;
+    if (pr.ce !== undefined) ce = pr.ce; else { var d0 = d(0), d1 = d(m - 1); if (Math.min(d0, d1) > TETH_R) return; ce = d0 <= d1 ? 0 : m - 1; }
+    var fe = m - 1 - ce, t = new Float32Array(m), acc = new Float32Array(m), k;
     for (k = 1; k < m; k++) { var a = fe ? m - 1 - k : k, b = fe ? a + 1 : a - 1; acc[k] = acc[k - 1] + Math.hypot(q[a * 3] - q[b * 3], q[a * 3 + 1] - q[b * 3 + 1], q[a * 3 + 2] - q[b * 3 + 2]); }   // acc[k]：從另一端走到第 k 點（照走的順序）
     for (k = 0; k < m; k++) t[fe ? m - 1 - k : k] = acc[m - 1] > 0 ? acc[k] / acc[m - 1] : 1;
     var es = []; for (k = 0; k < T.sim.ea.length; k++) if (T.sim.ea[k] === i || T.sim.eb[k] === i) es.push(k);   // es：帆腳的布邊（全斷 ⇒ 帆腳跟帆斷開，tethCut）

@@ -631,7 +631,7 @@ def export(work, dest):
     if not senate:
         raise RuntimeError('找不到 senate（匯出 .vxk 要它）')
     code, out = run([senate, 'cmd', 'sculpture', '--arg', 'op=export', '--arg', 'format=vxk', '--arg', 'work=' + work,
-                     '--arg', 'include=rig,models,parts,meta', '--arg', 'out=' + os.path.abspath(dest)])
+                     '--arg', 'include=rig,models,parts,meta,ends,recipe', '--arg', 'out=' + os.path.abspath(dest)])   # ends：繩兩端的參照（帆腳綁哪條繩照它）；recipe：帆的配方（TASK-0602 ①：成品只存配方，遊戲照配方生帆）
     if code != 0 or not os.path.exists(dest):
         raise RuntimeError('匯出失敗（exit %d）：\n%s' % (code, out.strip()))
     raw = zlib.decompress(open(dest, 'rb').read(), -15)
@@ -1253,6 +1253,7 @@ def pack_html(path):
         raw = zlib.decompress(base64.b64decode(mt.group(2)), -15)
         n = struct.unpack('<I', raw[4:8])[0]
         h = json.loads(raw[8:8 + n].decode('utf-8'))
+        rs = sail_strip(h)                                       # TASK-0602 ①：有配方的帆只留配方（遊戲照配方生帆，js/29_sailrecipe.js）
         ms = (h.get('rig') or {}).get('meshes')
         if ms:
             out = []
@@ -1290,7 +1291,7 @@ def pack_html(path):
         elif mr:
             h['mirror'], grid = mr
         mirrors.append((el, h.get('mirror'), g0, len(_deflate(grid)), h.get('variant')))
-        if not ms and not mr and not vr:
+        if not ms and not mr and not vr and not rs:
             return mt.group(0)
         hb = json.dumps(h, ensure_ascii=False, separators=(',', ':')).encode('utf-8')
         b = base64.b64encode(_deflate(b'VXK1' + struct.pack('<I', len(hb)) + hb + grid)).decode('ascii')
@@ -1307,7 +1308,7 @@ def pack_html(path):
     nv, E = pack_verify(html2)                                  # 寫出去之前：照遊戲的讀法還原、跟 _cache 原檔逐個比（對不上 ⇒ 不寫，舊成品留著）
     if E:
         raise Fail('壓縮版還原出來跟原檔對不上（成品沒寫）：\n' + '\n'.join('  ✗ ' + e for e in E[:12]))
-    log.append('✓ 還原驗算：%d 艘、%d 份網格的三角形跟 _cache 原檔逐個相同，格子、繩、帆一位元組不差' % (k, nv))
+    log.append('✓ 還原驗算：%d 艘、%d 份網格的三角形跟 _cache 原檔逐個相同，格子、繩、帆一位元組不差（有配方的帆只存配方，頂點由遊戲照配方生，不在這裡比）' % (k, nv))
     for el, M, g0, g1, V in mirrors:
         what = ('改裝船：跟原船 #%s 差 %d 格' % (V['el'], V['ndiff'])) if V else ('鏡射 y ↔ %d − y、一半 %d 塊、diff %d 格' % (M['s'], M['nhalf'], M['ndiff'])) if M else '照原樣（鏡射沒有比較小）'
         log.append('  格子 %s：%s　%d KB → %d KB' % (el, what, g0 // 1024, g1 // 1024))
@@ -1316,6 +1317,21 @@ def pack_html(path):
     log.append('✓ 壓縮模式：%d 艘、網格池 %d 份（%d KB）%s；成品 %.2f MB → %.2f MB（−%.0f%%）' % (
         k, len(pool), len(pb) // 1024, '、照原樣留在船裡 %d 份' % keep if keep else '', size0 / 1048576, size1 / 1048576, (1 - size1 / size0) * 100))
     return log
+
+
+def sail_strip(h):
+    """TASK-0602 ①（Tim 2026-10-17：「匯入時可以只包含配方（吹鼓直接用遊戲內的帆繩物理）」）：有 recipe 的帆拿掉雕刻引擎模擬完的 verts、tris、貼圖的 uv ——
+    遊戲載入時照配方生出來（js/29_sailrecipe.js）。回：拿掉了幾面。_cache 的原檔照留（量偏差、舊讀者用）。"""
+    n = 0
+    for s in (h.get('rig') or {}).get('sails') or []:
+        if 'recipe' not in s:
+            continue
+        s.pop('verts', None)
+        s.pop('tris', None)
+        if isinstance(s.get('texture'), dict):
+            s['texture'].pop('uv', None)
+        n += 1
+    return n
 
 
 def pack_verify(html):
@@ -1368,6 +1384,7 @@ def pack_verify(html):
             ha['rig'] = dict(ha['rig'], meshes=None)
         if hb.get('rig'):
             hb['rig'] = dict(hb['rig'], meshes=None)
+        sail_strip(hb)                                          # 有配方的帆：成品本來就沒有 verts／tris／uv（遊戲照配方生）⇒ 原檔那一份也拿掉再比，其他欄位照樣逐欄相同
         if ha != hb:
             E.append('%s：header（網格以外）跟原檔不一樣' % s['id'])
     return n, E
