@@ -28,6 +28,10 @@ var rs = SEED;
 function rnd() { rs |= 0; rs = rs + 0x6D2B79F5 | 0; var t = Math.imul(rs ^ rs >>> 15, 1 | rs); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }
 function rr(a, b) { return a + (b - a) * rnd(); }
 function gauss() { var u = rnd() || 1e-9, v = rnd(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(6.2831853 * v); }
+// 碎木自己的亂數（轉軸、落水、落地；12_effects.js 的碎木、24_armor.js 的裝甲碎片共用 —— TASK-0669 從 12_effects.js 搬來）：⛔ 跟戰局共用 rnd() ⇒ 少生一顆碎木（物理分級），後面的亂數全部錯位、整局都變（09_phx.js）。開局跟 rs 一起重設（70_flow.js）
+var RSD0 = 0x2545F491, rsD = SEED ^ RSD0;
+function rndD() { rsD |= 0; rsD = rsD + 0x6D2B79F5 | 0; var t = Math.imul(rsD ^ rsD >>> 15, 1 | rsD); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }
+function rD(a, b) { return a + (b - a) * rndD(); }                     // 碎木自己的亂數（⛔ 不用 rr：那是戰局的 rnd()）
 function hash3(x, y, z) { var h = (Math.imul(x, 374761393) + Math.imul(y, 668265263) + Math.imul(z, 1274126177)) | 0; h = Math.imul(h ^ (h >>> 13), 1103515245); return ((h ^ (h >>> 16)) >>> 0) / 4294967296; }
 function clamp(v, a, b) { return v < a ? a : v > b ? b : v; }
 // 累加迴圈的防呆（Tim 2026-10-15：「累加迴圈 & 其他類似邏輯是否可以加防呆（要有上限）」）：「累加到 1 就生一個」那種迴圈一次最多 ACC_CAP 次；

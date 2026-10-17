@@ -1163,6 +1163,42 @@ def bundle_names_check():
     return ['✓ 頂層同名：%d 個包、%d 支檔、%d 個頂層名字，沒有重複；沒宣告就寫入：0（acorn）' % (len(bundles), len(files), n)]
 
 
+# ───────────────────────── 分層讀數（TASK-0669：模擬與畫面解耦） ─────────────────────────
+# 模擬層 ＝ 20–54 號檔（船體、物理、船員、模擬與 AI；41_crew_art 是畫船員貼圖 ⇒ 算畫面）；上層 ＝ 60 號以後＋下面那幾支畫面、聲音、鏡頭的檔。
+# 76_anchor、78_funnel 編號在後面、職責是模擬（拋錨、煙囪通不通）⇒ 不算上層（不改檔名：會跟大家的分支撞）。
+# 模擬層要叫上層 ⇒ 00_events.js 加一個發事件的名字、讓上層訂閱（README 00_events.js 那一列）；這裡列出還沒拆的。
+LAYER_VIEW = ('02_audio.js', '02_ambient.js', '02_music.js', '03_camera.js', '11_rig_gpu.js', '12_effects.js', '13_water.js', '14_rain.js', '15_smooth.js', '41_crew_art.js')
+LAYER_SIMX = ('76_anchor.js', '78_funnel.js')
+
+
+def act_layers(src=None):
+    """模擬層直接用到上層的名字（照作用域判：src/js_refs.cjs）⇒ 每個名字：定義在哪、誰用了幾次。src ＝ 另一份 src 目錄（量別的版本）。"""
+    node = shutil.which('node')
+    if not node:
+        raise Fail('找不到 node（src/js_refs.cjs 要它）')
+    root = os.path.abspath(src) if src else HERE
+    files = re.findall(r'<script\s+src="(js/[^"]+)"\s+data-bundle="game"', open(os.path.join(root, 'template.html'), encoding='utf-8').read())
+    r = subprocess.run([node, '--expose-internals', os.path.join(HERE, 'js_refs.cjs')] + [os.path.join(root, f) for f in files],
+                       capture_output=True, text=True, encoding='utf-8', cwd=root)
+    try:
+        d = json.loads(r.stdout.strip().splitlines()[-1])
+    except Exception:
+        raise Fail('js_refs.cjs 讀不到結果：%s' % (r.stdout + r.stderr).strip()[-300:])
+    b = os.path.basename
+    sim = lambda f: 20 <= int(b(f)[:2]) <= 54 and b(f) not in LAYER_VIEW
+    up = lambda f: (int(b(f)[:2]) >= 60 and b(f) not in LAYER_SIMX) or b(f) in LAYER_VIEW
+    res = {}
+    for f, nm, line, how in d['refs']:
+        df = d['defs'][nm]
+        if sim(f) and up(df) and df != f:
+            res.setdefault((b(df), nm), {}).setdefault(b(f)[:-3], []).append(line)
+    log = ['模擬層（20–54 號檔）直接用到上層的名字（%s）：' % (src or 'src')]
+    for (df, nm), U in sorted(res.items()):
+        log.append('  %-15s %-16s %s' % (df, nm, '  '.join('%s:%s' % (u, ','.join(map(str, L))) for u, L in sorted(U.items()))))
+    n, e = sum(len(L) for U in res.values() for L in U.values()), len({(u, df) for (df, nm), U in res.items() for u in U})
+    return log + ['名字 %d 個、引用 %d 次、檔對檔 %d 條' % (len(res), n, e)]
+
+
 # ───────────────────────── 成品記住來源（TASK-0674） ─────────────────────────
 # 10-16 出過事：共用工作區建成品時包進別人改到一半的 js ⇒ 成品跟任何一版提交的來源都對不上，可是看不出來。
 # ⇒ 成品裡放一份來源清單（<script type="application/json" id="blockside-src">）：template.html 與它引用的每一支檔各記一個指紋；
@@ -2322,6 +2358,8 @@ def main():
     g.add_argument('--staged', action='store_true', help='比暫存區（要提交的那一份）')
     g.add_argument('--rev', help='比某一版（commit、分支名都可以）')
     s.add_argument('--hook', choices=['pre-commit', 'pre-push'], help='git 鉤子用（.githooks/ 裡的兩支）')
+    s = sp.add_parser('layers', help='模擬層（20–54 號檔）直接用到上層的名字（TASK-0669；node 照作用域判）')
+    s.add_argument('--src', help='另一份 src 目錄（量別的版本）')
     sp.add_parser('hooks', help='裝提交前／推送前的成品檢查：git config core.hooksPath .githooks（這個 repo 的每個 worktree 共用）')
     s = sp.add_parser('cache', help='_cache 缺的 .vxk 從雕刻作品重新匯出、跟指紋比；--all 每艘都比（比對來源）')
     s.add_argument('--all', action='store_true')
@@ -2363,6 +2401,8 @@ def main():
             log = act_srccheck(o.staged or o.hook == 'pre-commit', o.rev, o.hook)
         elif o.op == 'hooks':
             log = act_hooks()
+        elif o.op == 'layers':
+            log = act_layers(o.src)
         elif o.op == 'cache':
             log = act_cache(o.all)
         elif o.op == 'fmt':

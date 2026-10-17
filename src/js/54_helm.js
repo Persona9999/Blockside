@@ -70,7 +70,7 @@ function helmSteer(sh, foe) {
 }
 var HELM_MODE = { approach: '接近', swap: '換舷', evade: '拉開', back: '倒退', abeam: '守正橫', cruise: '巡航' }, HELM_MODE_T = 4;
 /** 艦長的一個決定：記進戰鬥報表（79_report.js rptHelm：時間、種類、理由）；big ⇒ 也上方廣播（換舷、拉開）。 */
-function helmSay(sh, kind, text, big) { if (big) note(sh, '艦長：' + text); if (typeof rptHelm === 'function') rptHelm(sh, kind, text); }
+function helmSay(sh, kind, text, big) { if (big) note(sh, '艦長：' + text); rptHelm(sh, kind, text); }
 /** 這一段帆（k）還能出多少（0..1，照面積 × 血量，跟 sailFrac 同一個分母）。 */
 function helmSetFrac(sh, k) { var a = 0; sh.sails.forEach(function (s) { if (!s.flag && !s.dead && setHas(s, k)) a += s.area * s.hp / s.hpMax; }); return a / sh.sailArea0; }
 /** 航速調節（31_sailing.js sail 每一步、算完 vS／vB 之後）：期望航速 sh.wantV ⇒ 帆裝、俥鐘、放掉一點風（sh.helmSpill，下一步乘進 sh.throttle）。

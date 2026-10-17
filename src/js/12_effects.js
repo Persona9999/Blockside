@@ -7,15 +7,13 @@ var DMAX = 45000, D = {
 // 上限（Tim 2026-10-14）：畫質頁的「碎片上限」DEB_CAP（不跟低／中／高走）；超過 ⇒ debCull 先清視野外、遠處、沉在水裡的（照畫面的鏡頭；只影響畫面）。DMAX 是陣列的硬上限。
 var DEB_FLUT = 0.9, DEB_THIN = [1, 0.22, 0.22, 0.25];
 var DINST = new Float32Array(DMAX * 9);
-// 碎木自己的亂數（轉軸、落水、落地）：⛔ 跟戰局共用 rnd() ⇒ 少生一顆碎木（物理分級），後面的亂數全部錯位、整局都變（09_phx.js）。開局跟 rs 一起重設（70_flow.js）
-var RSD0 = 0x2545F491, rsD = SEED ^ RSD0, DEB_ACC = 0, PT_ACC = 0;   // DEB_ACC／PT_ACC：照分級少生的節拍（不抽亂數）
-function rndD() { rsD |= 0; rsD = rsD + 0x6D2B79F5 | 0; var t = Math.imul(rsD ^ rsD >>> 15, 1 | rsD); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }
+var DEB_ACC = 0, PT_ACC = 0;   // DEB_ACC／PT_ACC：照分級少生的節拍（不抽亂數）
 // 煙、火光、水花自己的亂數（TASK-0669）：以前抽戰局的 rr／gauss ⇒ 少放一團煙（調粒子數、不開畫面）後面的戰局全部錯位；開局跟 rs 一起重設（70_flow.js）
 var RSX0 = 0x5BD1E995, rsX = SEED ^ RSX0;
 function rndX() { rsX |= 0; rsX = rsX + 0x6D2B79F5 | 0; var t = Math.imul(rsX ^ rsX >>> 15, 1 | rsX); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }
 function rrX(a, b) { return a + (b - a) * rndX(); }
 function gaussX() { var u = rndX() || 1e-9, v = rndX(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(6.2831853 * v); }
-function spawnDebris(p, v, col, size, life, shape) {
+function fxDebris(p, v, col, size, life, shape) {
   var k = DEB_KS[PHX.debris]; if (k < 1) { DEB_ACC += k; if (DEB_ACC < 1) return; DEB_ACC -= 1; }   // 物理分級：少生幾顆（呼叫端的亂數已經抽完 ⇒ 戰局不變）
   var i;
   if (D.n < DMAX) i = D.n++;
@@ -27,15 +25,14 @@ function spawnDebris(p, v, col, size, life, shape) {
   D.q[i * 4] = 0; D.q[i * 4 + 1] = 0; D.q[i * 4 + 2] = 0; D.q[i * 4 + 3] = 1;
   D.life[i] = life; D.size[i] = size; D.col[i] = col; D.st[i] = 1; D.ship[i] = -1; D.sh[i] = shape || 0;
 }
-function rD(a, b) { return a + (b - a) * rndD(); }                     // 碎木自己的亂數（⛔ 不用 rr：那是戰局的 rnd()）
 /** 片狀的碎塊：從 removed（x, y, z, 色 一組四個，格座標）挑幾格當起點，往 vd（世界的單位向量）噴；數量照打掉的格數（每 per 格一片、最多 max 片）。
  *  只抽碎木自己的亂數 rndD ⇒ 戰局不變；物理分級少生照 spawnDebris。 */
-function spawnPlates(sh, removed, vd, sp, per, max, M) {                 // M：removed 的格座標換到世界（沒給 ＝ sh.M；砲帶的裝甲給它轉過的那個，24_armor.js）
+function fxPlates(sh, removed, vd, sp, per, max, M) {                 // M：removed 的格座標換到世界（沒給 ＝ sh.M；砲帶的裝甲給它轉過的那個，24_armor.js）
   var m = removed.length / 4, k = Math.min(max, Math.floor(m / per));
   for (var j = 0; j < k; j++) {
     var q = ((rndD() * m) | 0) * 4, w = M4.pt(M || sh.M, removed[q] + 0.5, removed[q + 1] + 0.5, removed[q + 2] + 0.5);
     var v = add(add(mul(vd, sp * rD(0.05, 0.25)), [rD(-4, 4), rD(1.5, 7), rD(-4, 4)]), sh.vel);
-    spawnDebris(w, v, removed[q + 3], rD(0.12, 0.22), rD(10, 18), 1 + ((rndD() * 3) | 0));
+    fxDebris(w, v, removed[q + 3], rD(0.12, 0.22), rD(10, 18), 1 + ((rndD() * 3) | 0));
   }
 }
 /** 超過上限 ⇒ 清到 DEB_CAP 的九成：分數 ＝ 離鏡頭的距離 ×（視野外 4）＋ 沉在水裡的 +1e4（最先清）；取樣找門檻，分數比門檻高的都清掉（不抽亂數）。
@@ -83,7 +80,7 @@ function stepDebris(dt) {
     if (st === 1) {
       if (D.p[o + 1] < top && D.p[o + 1] < seaH(D.p[o], D.p[o + 2], SIMT)) {               // 落水：慢慢沉
         D.st[i] = 3; D.v[o] *= 0.1; D.v[o + 1] = -0.25; D.v[o + 2] *= 0.1; D.life[i] = Math.min(D.life[i], 4);
-        if (rndD() < 0.04) spawnPt(add([D.p[o], 0.05, D.p[o + 2]], [0, 0, 0]), [0, 1.5, 0], 0.5, [0.9, 0.95, 1], 0.6, 0.6, 0, 1);
+        if (rndD() < 0.04) fxPt(add([D.p[o], 0.05, D.p[o + 2]], [0, 0, 0]), [0, 1.5, 0], 0.5, [0.9, 0.95, 1], 0.6, 0.6, 0, 1);
         wpDrop(D.p[o], D.p[o + 2]);                                     // 船邊水花（13_water.js）：幾滴、偶爾一小片白沫
         continue;
       }
@@ -112,7 +109,7 @@ function kill(i) {
 var PMAX = 12000, PT = { n: 0, p: new Float32Array(PMAX * 3), v: new Float32Array(PMAX * 3), life: new Float32Array(PMAX), max: new Float32Array(PMAX),
   s0: new Float32Array(PMAX), s1: new Float32Array(PMAX), c: new Float32Array(PMAX * 3), a: new Float32Array(PMAX), grav: new Float32Array(PMAX), drag: new Float32Array(PMAX), ty: new Float32Array(PMAX) };
 var PBUF = new Float32Array(PMAX * 9);
-function spawnPt(p, v, life, col, a, s0, s1, grav, drag, ty) {
+function fxPt(p, v, life, col, a, s0, s1, grav, drag, ty) {
   if (PT_MUTE) return;                               // 船邊水花開著：原本的航跡與水花不放（呼叫端的亂數照樣抽完，13_water.js）
   var k = FX_KS[PHX.fx]; if (k < 1) { PT_ACC += k; if (PT_ACC < 1) return; PT_ACC -= 1; }   // 物理分級：少生幾顆（參數的亂數呼叫端已經抽完）
   if (PT.n >= PMAX) return;
@@ -136,23 +133,25 @@ function stepPts(dt) {
     if (PT.grav[i] > 0 && PT.p[o + 1] < 0) PT.life[i] = Math.min(PT.life[i], 0.05);
   }
 }
-function smoke(p, dir, n, big) {
+function fxSmoke(p, dir, n, big) {
   for (var i = 0; i < n; i++) {
     var v = add(mul(dir, rrX(2, big ? 9 : 14)), [gaussX() * 1.2, rrX(0.3, 1.6), gaussX() * 1.2]);
     var g = rrX(0.62, 0.86);
     // 2.5–5.5 秒就散：齊射的煙不要一直擋著看砲彈落點；÷ 畫質頁的「煙消散」倍數（07_gfx.js smokeK）
-    spawnPt(add(p, mul(dir, rrX(0, 2))), v, rrX(2.5, 5.5) / smokeK(), [g, g, g * 0.98], rrX(0.35, 0.55), rrX(1.2, 2.2) * (big ? 1.6 : 1), rrX(6, 11) * (big ? 1.5 : 1), -0.05, 1.1, 0);
+    fxPt(add(p, mul(dir, rrX(0, 2))), v, rrX(2.5, 5.5) / smokeK(), [g, g, g * 0.98], rrX(0.35, 0.55), rrX(1.2, 2.2) * (big ? 1.6 : 1), rrX(6, 11) * (big ? 1.5 : 1), -0.05, 1.1, 0);
   }
 }
-function flash(p, dir, n, big) {
-  for (var i = 0; i < n; i++) spawnPt(p, add(mul(dir, rrX(5, 30)), [gaussX() * 3, gaussX() * 3, gaussX() * 3]), rrX(0.08, 0.22), [1, rrX(0.6, 0.85), 0.3], 1, rrX(1, 2.5) * (big ? 2 : 1), 0.3, 0, 4, 1);
+function fxFlash(p, dir, n, big) {
+  for (var i = 0; i < n; i++) fxPt(p, add(mul(dir, rrX(5, 30)), [gaussX() * 3, gaussX() * 3, gaussX() * 3]), rrX(0.08, 0.22), [1, rrX(0.6, 0.85), 0.3], 1, rrX(1, 2.5) * (big ? 2 : 1), 0.3, 0, 4, 1);
 }
-function splash(p, big) {
+function fxSplash(p, big) {
   PT_MUTE = PHX.water > 0;                         // 船邊水花開著（13_water.js）：下面這些照樣抽亂數、不放進去，換成 wpSplash
   var n = big ? 60 : 26;
-  for (var i = 0; i < n; i++) spawnPt([p[0] + gaussX() * 0.6, 0.1, p[2] + gaussX() * 0.6], [gaussX() * 1.6, rrX(4, big ? 14 : 10), gaussX() * 1.6], rrX(0.8, 1.8), [0.92, 0.96, 1], 0.75, rrX(0.4, 1.0), rrX(0.8, 1.6), G, 0.3, 2);
-  for (i = 0; i < 10; i++) spawnPt([p[0] + gaussX() * 1.5, 0.15, p[2] + gaussX() * 1.5], [gaussX() * 0.4, 0.2, gaussX() * 0.4], rrX(1.5, 3), [0.95, 0.97, 1], 0.35, 1.5, 4, 0, 0.5, 2);
+  for (var i = 0; i < n; i++) fxPt([p[0] + gaussX() * 0.6, 0.1, p[2] + gaussX() * 0.6], [gaussX() * 1.6, rrX(4, big ? 14 : 10), gaussX() * 1.6], rrX(0.8, 1.8), [0.92, 0.96, 1], 0.75, rrX(0.4, 1.0), rrX(0.8, 1.6), G, 0.3, 2);
+  for (i = 0; i < 10; i++) fxPt([p[0] + gaussX() * 1.5, 0.15, p[2] + gaussX() * 1.5], [gaussX() * 0.4, 0.2, gaussX() * 0.4], rrX(1.5, 3), [0.95, 0.97, 1], 0.35, 1.5, 4, 0, 0.5, 2);
   PT_MUTE = false; wpSplash(p, big);
   sfx('splash', p, big ? 1.2 : 0.7);
 }
-
+// 訂閱（TASK-0669：模擬層只發事件，00_events.js）
+evOn('debris', fxDebris, 0, true); evOn('plates', fxPlates, 0, true); evOn('pt', fxPt, 0, true); evOn('smoke', fxSmoke, 0, true); evOn('flash', fxFlash, 0, true); evOn('splash', fxSplash, 0, true);
+evOn('viewStep', stepDebris, 0, true); evOn('viewStep', stepPts, 2, true);   // 每一步：碎木先、煙囪排煙（78_funnel.js，order 1）、粒子最後 —— 跟拆之前 step() 裡的順序一樣

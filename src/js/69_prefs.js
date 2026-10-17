@@ -190,14 +190,6 @@ function shipsApply(p) {
     Object.keys(d).forEach(function (k) { var v = roomPlanParse(d[k]); if (v !== undefined) c[k] = v; });
   });
 }
-/** 存檔裡的一間 ⇒ 擺法：'' ⇒ null（空著）；'medical'（舊格式：只有類型）⇒ { type }（自動擺滿）；{ type, items } ⇒ 照收看得懂的物品；看不懂 ⇒ undefined（不收）。 */
-function roomPlanParse(v) {
-  if (v === '' || v === null) return null;
-  if (typeof v === 'string') return ROOM_FN[v] ? { type: v } : undefined;
-  if (!v || typeof v !== 'object' || !ROOM_FN[v.type]) return undefined;
-  if (!Array.isArray(v.items)) return { type: v.type };
-  return { type: v.type, items: v.items.filter(function (q) { return q && FURN[q.it] && [q.x, q.y].every(function (n) { return Number.isInteger(n) && n >= 0 && n < 400; }); }).map(function (q) { return { it: q.it, x: q.x, y: q.y, r: q.r ? 1 : 0 }; }) };
-}
 /** 艙房的擺法 { 船型: { 房名: '' ＝ 空著｜{ type }（自動擺滿）｜{ type, items } } }：diff ＝ 只留跟設定檔的預設不一樣的（存檔）；否則每一型玩家改過的全部（匯出）。 */
 function roomsSnap(diff) {
   var o = {};

@@ -812,4 +812,5 @@ setSailMode(SAIL); setCamTrack(true); $('physT').classList.toggle('on', PHYS);
 $('go').onclick = start;
 $('endC').onclick = function () { $('end').className = ''; };
 $('endR').onclick = function () { RUNNING = false; $('end').className = ''; $('cover').style.display = ''; };
-
+// 訂閱（TASK-0669：模擬層只發事件，00_events.js）
+evOn('playerTake', function () { KEYS.l = KEYS.r = false; });   // 玩家換船：按住的舵鍵放開（52_fleet.js playerTake）

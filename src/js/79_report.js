@@ -49,12 +49,12 @@ function rptRow(sh, r) {
     sh.fl ? Math.round(sh.fl.vol * RHO_W) : 0, +(Math.abs(sh.rollA) * 57.3).toFixed(1), +(sh.spd * 1.944).toFixed(1), +sh.sailFrac.toFixed(2), +(sh.power || 0).toFixed(2)];
 }
 /** 一發砲彈出膛（21_gunnery.js fireShot）：記在那一門上，砲彈帶著它（b.rg）⇒ 打中時算回那一門。 */
-function rptShot(sh, g, b) {
+function rptOnShot(sh, g, b) {
   if (!RPT) return;
   var G = rptShip(sh).guns[sh.guns.indexOf(g)]; b.rg = g; if (G) G.shots++;
 }
 /** 這發第一次打中別艘（21_gunnery.js，跟 sh.hits++ 同一個點）：what ＝ gun／model／armor／hull。 */
-function rptHit(b, sh, what) {
+function rptOnHit(b, sh, what) {
   if (!RPT || !b.rg) return;
   var o = SHIPS[b.owner], G = rptShip(o).guns[o.guns.indexOf(b.rg)], rt = rptShip(sh), w = isFoe(o, sh) ? what : 'ff';
   if (G) { G.hits++; G.on[w] = (G.on[w] || 0) + 1; }
@@ -62,7 +62,9 @@ function rptHit(b, sh, what) {
 }
 /** 艦長的決定（54_helm.js helmSay）：[秒, 種類, 理由]；一艘最多 RPT_HELM_MAX 筆（超過 ⇒ 丟最早的、記丟了幾筆）。只讀：不改戰局。 */
 var RPT_HELM_MAX = 400;
-function rptHelm(sh, kind, text) { if (!RPT) return; var r = rptShip(sh), L = r.helm || (r.helm = []); L.push([+SIMT.toFixed(1), kind, text]); if (L.length > RPT_HELM_MAX) { L.shift(); r.helmDrop = (r.helmDrop || 0) + 1; } }
+function rptOnHelm(sh, kind, text) { if (!RPT) return; var r = rptShip(sh), L = r.helm || (r.helm = []); L.push([+SIMT.toFixed(1), kind, text]); if (L.length > RPT_HELM_MAX) { L.shift(); r.helmDrop = (r.helmDrop || 0) + 1; } }
+// 訂閱（TASK-0669：模擬層只發事件，00_events.js）
+evOn('rptShot', rptOnShot); evOn('rptHit', rptOnHit); evOn('rptHelm', rptOnHelm); evOn('stepEnd', rptTick, 0);
 /** 整份報表（#dump、匯出、畫面都讀這一份）。最後一列補到現在。 */
 function rptData() {
   if (!RPT) return null;

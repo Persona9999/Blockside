@@ -38,7 +38,7 @@ function tlgNote() {
   var s = TLOG ? (TLOG.off === undefined ? '記錄中' : '暫停（' + TLOG.off + ' 秒起）') + '：' + TLOG.n + ' 點、' + TLOG.ev.length + ' 筆事件；結束畫面「📊 報表」匯出' : tlgWanted() ? '下一場開戰起記' : '';
   return s + (Q.has('test') ? '（網址 ?test=' + Q.get('test') + ' 決定開不開，按鈕只管這一場暫停／繼續）' : '');
 }
-function tlgEv(sh, c, kind, data) {
+function tlgOnEv(sh, c, kind, data) {
   if (!TLOG || TLOG.off !== undefined || !sh) return;
   TLOG.ev.push([+SIMT.toFixed(1), sh.i, c ? tlgCrew(sh, c).id : -1, kind, data === undefined ? null : data]);
 }
@@ -143,3 +143,5 @@ function tlgSave() {
   setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
 }
 $('testT').onclick = tlgToggle;
+// 訂閱（TASK-0669：模擬層只發事件，00_events.js）
+evOn('tlgEv', tlgOnEv); evOn('stepEnd', tlgTick, 1);

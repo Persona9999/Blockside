@@ -203,7 +203,8 @@ python -I admin.py cache --all    # 每艘都比 ＝ 比對來源：雕刻作品
 | 檔 | 管什麼 |
 |---|---|
 | `00_config.js` | 讀內嵌的設定檔（`#game-config` ⇒ `CFG`）；讀不到 ⇒ 停在載入畫面寫原因（不照某一份舊值跑） |
-| `00_core.js` | 網址參數（`?demo`／`?seed`／`?debug`…）、有種子的亂數、常數、向量與矩陣小工具 |
+| `00_core.js` | 網址參數（`?demo`／`?seed`／`?debug`…）、有種子的亂數（戰局 `rnd`；碎木 `rndD`）、常數、向量與矩陣小工具 |
+| `00_events.js` | 事件（TASK-0669：模擬與畫面解耦）：模擬層（船體、物理、船員、模擬與 AI）往上層講話只走這裡。`note`／`newsGun`／`newsCrew`／`swimNews`／`crewShortNote`（廣播）、`rptHit`／`rptShot`／`rptHelm`（報表）、`slowKick`（慢動作）、`tlgEv`（測試記錄）、`sfx`（音效）、`spawnDebris`／`spawnPlates`／`spawnPt`／`smoke`／`flash`／`splash`（特效）照舊給模擬檔呼叫，但只發事件；做事的在各層（`hudNote`、`rptOnHit`、`slowOnBlast`、`tlgOnEv`、`sfxPlay`、`fxPt`…），載入時 `evOn(事件, 函式, order, view)` 訂閱。`step()` 裡另外發 `viewStep`（碎木、煙囪排煙、粒子）、`survey`（每半秒每艘：廣播整理）、`stepEnd`（報表、測試記錄、結束判定）、`ballGone`（鏡頭）、`playerTake`（換船：鏡頭、按住的舵鍵）。同一件事好幾個人聽 ⇒ order 小的先、同 order 照訂閱先後 —— 拆之前同一步裡誰先做，拆之後還是誰先做。**無頭**：`?demo=…&headless=1` ⇒ view 的訂閱不收、不開畫面迴圈、不建網格（不畫、不放特效、不出聲、不廣播）；戰局 dump 跟有畫面那場逐位元相同。`evOff(事件[, 函式])` 拿掉訂閱（反向對照用）。⛔ 新的模擬程式要叫上層 ⇒ 在這裡加一個發事件的名字、讓上層訂閱，不要直接呼叫上層的函式（量法見 TASK-0669：模擬層 20–54 號檔用到上層名字的清單） |
 | `01_gl.js` | WebGL 環境、著色器（體素、碎屑、模型、帆 `P.sail`（有貼圖 ⇒ 片段照貼圖取色、透明的 discard）、粒子、海、天、陰影圖用的只寫深度 `P.dvox`／`P.dtri`／帆的 `P.dsail`（洞不投影子））、收陰影的 `SHADOW_GLSL`、共用 uniform（`setCommon`，`PASS` 換掉這一趟的 VP／鏡頭／裁切） |
 | `02_audio.js` | 音效（按下開始後才建）；master 後面一個限制器（DynamicsCompressor −14 dB、比 20）＋同時發聲上限（同一種 60 ms 內 3 個、全部 24 個還在響）⇒ 爆炸再密也不削波（Tim 2026-10-15：「目前爆炸太頻繁會爆音」；兩舷齊射 4 輪＋殉爆：輸出峰值 1.672 → 0.683、≥ 1 的樣本 194 → 0） |
 | `02_ambient.js` | 環境音（TASK-0663；Tim 2026-10-17「是否可以用程式模擬雨聲&浪聲」「雨聲用在暴風雨場景」「還有風聲」）：跟音效同一套（噪音＋濾波器、沒有音檔）的三條持續聲 —— 風（帶通，跟 `WIND_SAIL × WX.wind × WIND_SPD` 走、⛔ 不乘帆的風壓 `WIND_K`；強風多一條索具呼嘯；左右照風從哪邊來）、浪（棕噪音＋低通，三道慢正弦推成一波一波；× 海況、× 鏡頭離海面多高）、雨（只在 `WX.rain`：沙沙底＋卜瓦松排的雨滴）。第一人稱頭上有甲板 ⇒ 三條一起悶掉。⛔ 不抽 `rnd()`、不用 `Math.random`。試聽：`__game.ambLab(q)`（`?debug=1`；`ambRender` 用 OfflineAudioContext 離線錄，跟遊戲同一張圖、同一個限制器）⇒ `python -I -X utf8 src/tests/ambient_lab.py --tag a`（經 DevTools 呼叫：⛔ `--dump-dom` 等不到離線錄音）；遊戲裡那一份現在的值：`__game.amb()`（`reports/ambient_lab/<tag>/index.html` 可以直接播，不入版控）；`--cases "名字:w:sea:rain:hold;…"` 換段落 |
@@ -220,7 +221,7 @@ python -I admin.py cache --all    # 每艘都比 ＝ 比對來源：雕刻作品
 | `09_phx.js` | 物理效果分級：`PHX`（帆與繩／碎木／煙與水花／船邊水花／進水／帆的碰撞／船隻碰撞／船隻摩擦／碰撞傷害）、全開高中低四檔 `PHX_PRESET`、`phxLevel`（對不上 ⇒ 自訂）、帆與繩每一檔的細緻度 `RIG_LV`／`rigLv`、網址參數 |
 | `10_ship.js` | 開一艘船：模型（照 meta 認種類）、砲（模型＋固定點）、繩與帆的錨、桅、船員（`makeShip`）；模型照 x 分桶（`modelIndex`） |
 | `11_rig_gpu.js` | 繩與帆的 GPU 緩衝（還綁著的繩、帆的網格 `sailBuf`（頂點帶貼圖集的 uv）、垂下來的繩）；帆的貼圖集上 GPU `sailTex`（第 9 號貼圖，NEAREST） |
-| `12_effects.js` | 碎屑（每格一顆小方塊；自己的亂數 `rndD`）與粒子（煙、水花、火光）；照物理分級少生（`DEB_ACC`／`PT_ACC` 節拍）；`PT_MUTE`（船邊水花開著時原本的水花照樣抽亂數、不放） |
+| `12_effects.js` | 碎屑（每格一顆小方塊；自己的亂數 `rndD`，在 00_core.js）與粒子（煙、水花、火光；自己的亂數 `rndX`／`rrX`／`gaussX` —— TASK-0669 以前抽戰局的 `rr`／`gauss`，少放一團煙後面的戰局全部錯位）；照物理分級少生（`DEB_ACC`／`PT_ACC` 節拍）；`PT_MUTE`（船邊水花開著時原本的水花照樣抽亂數、不放）。做事的是 `fxDebris`／`fxPlates`／`fxPt`／`fxSmoke`／`fxFlash`／`fxSplash`（訂閱 00_events.js 的事件，view）；`stepDebris`、`stepPts` 掛在 `viewStep` |
 | `13_water.js` | 船邊水花（TASK-0524）：水滴 `WS`、貼著浪的白沫 `WF`、船身水線一圈 `wpRing`、每步 `stepWater`／`wpShip`、砲彈落水 `wpSplash`、碎木 `wpDrop`、擦撞 `wpBump`、艙內的水往外流 `wpPour`、自己的亂數 `rndW`；白沫的著色器 `P.foam`（`wpGL`／`wpDrawFoam`） |
 | `14_rain.js` | 3D 雨滴（畫質的「雨滴（3D）」「雨滴水花」）：鏡頭前方圓柱裡的雨絲 `RD`、每格畫面 `stepRain`、打到海面與船的水花 `RS`（`rdPushSplash`）、雨絲的著色器 `P.drop`（`rdGL`／`rdDraw`）、自己的亂數 `rndR` |
 | `15_smooth.js` | 平滑渲染（TASK-0616）：關聯 meta render=smooth 的格（`T.smG`）畫成平滑面 —— surface nets（格角往表面拉＋周圍同一面平均、夾回格角 ±0.5；跟一般格相鄰的格角釘住 ⇒ 不露縫），一區 64³ 一份網格（P.tri／P.dtri 畫：陰影、剖面、點光源都有）；被打掉 ⇒ ±2 格碰得到的區重建（每格畫面最多 `SM_FRAME` 區）。VoxelKit 的方塊網格化跳過這幾格（`grid.sm`） |

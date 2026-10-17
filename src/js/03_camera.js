@@ -129,4 +129,6 @@ function pickBall() {
   CAM.pick = { n: mine.length, hit: !!best, t: best ? +bt.toFixed(2) : null };   // 讀數（__game.camera）
   return best || fresh;
 }
-
+// 訂閱（TASK-0669：模擬層只發事件，00_events.js）
+evOn('ballGone', function (b) { if (CAM.follow === b) CAM.hold = 1.2; }, 0, true);   // 跟著的那顆落地或打中 ⇒ 停 1.2 秒再回來（50_sim.js step）
+evOn('playerTake', function (nw) { CAM.trMe = CAM.trYaw = null; if (CAM.see === nw) CAM.see = null; }, 0, true);   // 玩家換船（52_fleet.js playerTake）：跟船的角度重算；正在「🎥 看著」那艘 ⇒ 改成看我艦那一種（就是它）

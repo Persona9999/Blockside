@@ -11,7 +11,7 @@
 // 設定：遊戲內設定面板的「殉爆慢動作」「殉爆特寫」（跟著存檔；網址 ?slowmo=0、?slowcam=0）。狀態 SLOW 在 04_state.js（存檔在 69_prefs.js 載入時就讀）。
 var SLOW_EASE = 3.5, SLOW_CAM_TAIL = 0.8;
 /** 殉爆（23_powder.js magBoom）：w ＝ 爆心（世界）、R ＝ 爆炸半徑（格）。快轉（?demo）不切。 */
-function slowKick(sh, w, R) {
+function slowOnBlast(sh, w, R) {
   if (DEMO >= 0 || !RUNNING) return;
   var k = clamp(R / MAG_R, 0, 1.3);
   SLOW.kicks++;
@@ -82,3 +82,5 @@ function simSpeedSet(x) {
 $('simSpd').oninput = function () { simSpeedSet(Math.pow(10, +$('simSpd').value / 1000)); };
 $('simSpd1').onclick = function () { simSpeedSet(1); };
 simSpeedSet(1);
+// 訂閱（TASK-0669：模擬層只發事件，00_events.js）
+evOn('blast', slowOnBlast, 0, true);

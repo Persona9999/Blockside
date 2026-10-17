@@ -184,7 +184,7 @@ function playerTake(nw, msg) {
   var me = SHIPS[PLAYER_I];
   me.pMode = 'free'; me.hand = false; PLAYER_I = nw.i; nw.pMode = AIM_P; nw.hand = false;
   nw.reloadT = modeRule('myReload'); me.reloadT = RELOAD;   // 玩法規則 myReload（04_modes.js）：我艦的裝填跟著玩家換船（沙盒的快裝填；別的玩法兩艘都是 RELOAD）
-  KEYS.l = KEYS.r = false; CAM.trMe = CAM.trYaw = null;
+  evEmit('playerTake', nw, me);   // 按住的舵鍵、鏡頭重設（71_input.js、03_camera.js；00_events.js）
   note(nw, msg, true);
 }
 /** 改操控 o 可不可以（詳細資訊的「⚓ 改操控這艘」、__game.take 都問它；Tim 2026-10-15：「假如是我方船艦 看著這艘按鈕旁 可以多一個切換控制這艘船」「切換控制可以直接抽成通用API(甚至可以開放切換到敵艦(Debug模式)」）：
@@ -194,7 +194,6 @@ function playerTakeShip(o) {
   if (!canTake(o)) return false;
   var me = SHIPS[PLAYER_I];
   playerTake(o, '改操控 ' + o.name + teamTag(o) + '（原本是 ' + me.name + '，交給電腦' + (o.team !== me.team ? '；Debug：換到另一方' : '') + '）');
-  if (CAM.see === o) CAM.see = null;                                    // 正在「🎥 看著」它 ⇒ 改成看我艦那一種（就是它）
   return true;
 }
 function spawnFleet(spec) {

@@ -18,7 +18,7 @@ function initAudio() {
     for (var i = 0; i < n; i++) { s = (Math.imul(s, 1103515245) + 12345) & 0x7fffffff; d[i] = s / 0x3fffffff - 1; }
   } catch (e) { AC = null; }
 }
-function sfx(kind, at, vol) {
+function sfxPlay(kind, at, vol) {
   if (!AC || muted) return;
   if (kind === 'boom' || kind === 'blast') SND_FIGHT = AC.currentTime;     // 開砲、爆炸 ⇒ 交戰中（02_music.js：BGM「交戰時小聲一點」那一檔 × BGM_DUCK）
   var dist = at ? len(sub(at, CAM.eye)) : 0, v = (vol || 1) / (1 + dist / 70);
@@ -58,3 +58,5 @@ function audioWav(buf) {
   for (i = 0; i < u8.length; i += CH) bin += String.fromCharCode.apply(null, u8.subarray(i, i + CH));
   return { peak: +pk.toFixed(3), rmsDb: +(10 * Math.log10(ss / (2 * n) + 1e-12)).toFixed(1), wav: 'data:audio/wav;base64,' + btoa(bin) };
 }
+// 訂閱（TASK-0669：模擬層只發事件，00_events.js）
+evOn('sfx', sfxPlay, 0, true);

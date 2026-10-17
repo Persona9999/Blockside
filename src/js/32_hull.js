@@ -38,6 +38,12 @@ function liftFor(T, t) {
   for (z = 0; z < n; z++) if (HYD[z + 1] <= dv) return (ZW - z - (HYD[z] - dv) / (HYD[z] - HYD[z + 1])) * S;
   return (ZW - n) * S;
 }
+/** 浮高 L 公尺（負 ＝ 吃水深）時比設計水線的排水輕幾噸（liftFor 的反函數；TASK-0669 從 61_hud.js 搬來：31_drive.js 也用）。 */
+function tonsAt(T, L) {
+  var HYD = T.hyd, n = HYD.length - 1, z = T.zw - L / S;
+  if (z <= 0) return HYD[0] * RHO_W; if (z >= n) return HYD[n] * RHO_W;
+  var i = Math.floor(z); return (HYD[i] + (HYD[i + 1] - HYD[i]) * (z - i)) * RHO_W;
+}
 function stepShip(sh, dt) {
   // 進水：水線下每個破洞的流量 ∝ √(水深)（貼著水面的洞進得慢）；抽水機每秒抽掉一點 ⇒ 小洞撐得住
   var wz = Math.min(sh.T.sz - 1, Math.floor(sh.T.zw + (sh.sink - sh.lift - sh.bob) / S)), N = 0, Q = 0, Dsp = 0, Dbs = 0;

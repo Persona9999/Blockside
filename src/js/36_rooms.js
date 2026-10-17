@@ -44,8 +44,16 @@ function admWin() {
   return window.parent !== window ? window.parent : null;
 }
 var ADMIN_DEF = Q.get('admin') === 'defaults';                      // 設定後台的「出廠預設值」：用細節設定頁編（71_input.js admDefUI）；跟 rooms 一樣不讀不存 localStorage
-/** 設定檔的預設 ⇒ { 房名: 擺法 }（格式跟存檔同一套：69_prefs.js roomPlanParse）。 */
+/** 設定檔的預設 ⇒ { 房名: 擺法 }（格式跟存檔同一套：下面的 roomPlanParse，69_prefs.js 讀存檔也用它）。 */
 function roomPlanDefault(id) { var h = HULL_KNOWN.filter(function (x) { return x.id === id; })[0], d = {}; Object.keys((h && h.rooms) || {}).forEach(function (k) { var v = roomPlanParse(h.rooms[k]); if (v) d[k] = v; }); return d; }
+/** 存檔裡的一間 ⇒ 擺法：'' ⇒ null（空著）；'medical'（舊格式：只有類型）⇒ { type }（自動擺滿）；{ type, items } ⇒ 照收看得懂的物品；看不懂 ⇒ undefined（不收）。 */
+function roomPlanParse(v) {
+  if (v === '' || v === null) return null;
+  if (typeof v === 'string') return ROOM_FN[v] ? { type: v } : undefined;
+  if (!v || typeof v !== 'object' || !ROOM_FN[v.type]) return undefined;
+  if (!Array.isArray(v.items)) return { type: v.type };
+  return { type: v.type, items: v.items.filter(function (q) { return q && FURN[q.it] && [q.x, q.y].every(function (n) { return Number.isInteger(n) && n >= 0 && n < 400; }); }).map(function (q) { return { it: q.it, x: q.x, y: q.y, r: q.r ? 1 : 0 }; }) };
+}
 /** 後台模式：那一型現在的擺法寫成預設的格式（艙房：自動 ⇒ '類型'、自訂 ⇒ { type, items }；甲板只寫自訂的；空著的不寫）。 */
 function roomsDefaultSnap(id) {
   var T = HULLT[id], o = {}; if (!T) return null;

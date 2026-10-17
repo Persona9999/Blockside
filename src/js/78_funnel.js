@@ -58,3 +58,5 @@ function funnelUp(sh, f, j) {
   if (!U[j] || SIMT - U[j].t >= 0.5) U[j] = { t: SIMT, ok: f.n0 > 0 && funnelCount(sh.grid, f.p) * 2 >= f.n0 };
   return U[j].ok;
 }
+// 訂閱（TASK-0669：模擬層只發事件，00_events.js）
+evOn('viewStep', funnelSmoke, 1, true);   // 碎木之後、粒子之前（自己的亂數 rndFn，不改戰局）

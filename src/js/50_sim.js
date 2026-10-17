@@ -76,7 +76,7 @@ function step() {
     else if (modeRule('othersAct')) ai(sh, DT);                // 玩法規則 othersAct（04_modes.js）：沙盒的其他船不還手
   });
   if (PF) pfLap('ai');
-  for (i = 0; i < BALLS.length; i++) { stepBall(BALLS[i], DT); if (!BALLS[i].alive) { if (CAM.follow === BALLS[i]) { CAM.hold = 1.2; } BALLS.splice(i--, 1); } }
+  for (i = 0; i < BALLS.length; i++) { stepBall(BALLS[i], DT); if (!BALLS[i].alive) { evEmit('ballGone', BALLS[i]); BALLS.splice(i--, 1); } }
   if (PF) pfLap('balls');
   SHIPS.forEach(function (sh) { integrity(sh); sh.impulse = [0, 0, 0]; });
   if (PF) pfLap('integrity');
@@ -84,18 +84,16 @@ function step() {
   for (i = 0; i < FLY.length; i++) if (!stepFly(FLY[i], DT)) FLY.splice(i--, 1);
   if (PF) pfLap('pieces');
   if (SLOW_VIS) stepWater(DT, 'ship');                             // 殉爆慢動作中：只給人看的照畫面的時間走（73_slowmo.js），這裡只生船邊的水花
-  else { stepDebris(DT); if (PF) pfLap('debris'); funnelSmoke(DT); stepPts(DT);   // funnelSmoke：煙囪排煙（78_funnel.js；自己的亂數，不改戰局）
-    if (PF) pfLap('pts'); stepWater(DT); }
+  else { evEmit('viewStep', DT); if (PF) pfLap('pts'); stepWater(DT); }   // viewStep：碎木、煙囪排煙、粒子（只給人看、各自的亂數；00_events.js）
   if (PF) pfLap('water');                       // 船邊水花（13_water.js；只給人看、自己的亂數）
   if (PHYS) { var pt0 = performance.now(); SHIPS.forEach(function (sh) { if (sh.sink < 40) physStep(sh); }); clothContactsRun(); PHYS_MS = PHYS_MS * 0.98 + (performance.now() - pt0) * 0.02; }   // 讀數只看、不回寫模擬
   if (PF) pfLap('phys');
   stepPowder();                                                    // 殉爆排程（23_powder.js）
   stepBlasts();                                                    // 還沒挖完的彈坑接著挖（23_powder.js）
   if (PF) pfLap('powder');
-  if ((Math.round(SIMT / DT) % 30) === 0) { SHIPS.forEach(survey); SHIPS.forEach(newsFlush); reinforce(); playerHandoff(); }   // reinforce：空出名額 ⇒ 候補進場；playerHandoff：我艦出局 ⇒ 換到友艦（52_fleet.js；沒有候補／我艦還在打 ⇒ 直接回去）
+  if ((Math.round(SIMT / DT) % 30) === 0) { SHIPS.forEach(survey); SHIPS.forEach(function (sh) { evEmit('survey', sh); }); reinforce(); playerHandoff(); }   // reinforce：空出名額 ⇒ 候補進場；playerHandoff：我艦出局 ⇒ 換到友艦（52_fleet.js；沒有候補／我艦還在打 ⇒ 直接回去）
   if (PF) pfLap('survey');
-  rptTick(); tlgTick();                                            // tlgTick：測試模式的船員記錄（83_testlog.js；只讀）                                                       // 戰鬥報表（79_report.js）：每 0.5 秒掃一次、每 5 秒一列；只讀，不改戰局
-  if (!OVER || END_AT) checkEnd();                                 // 結束判定每一步看（結算畫面照模擬時間延後跳）
+  evEmit('stepEnd');                                              // 每一步最後：戰鬥報表（79_report.js，只讀）、測試記錄（83_testlog.js）、結束判定（61_hud.js endTick；結算畫面照模擬時間延後跳）
   if (PF) pfLap('end');
 }
 

@@ -4,7 +4,7 @@
 // 砲被打飛：同一個半秒內的併成一行；傷亡：第一個人倒下起算 5 秒，報這 5 秒裡陣亡、受傷各幾個（不洗版；是 0 的那一項不報）。
 var MSGS = [], MSG_MAX = 5, MSG_LIFE = 4;
 /** imp：重要的（殉爆、斷成兩截、沉沒、降旗）⇒ 留 8 秒，滿了先擠掉不重要的。 */
-function note(sh, text, imp) {
+function hudNote(sh, text, imp) {
   if (DEMO >= 0 && !RUNNING) return;
   var who = sh.i === PLAYER_I ? '我艦' : sh.name, el = document.createElement('div');   // 我艦照舊；其他每艘用艦名（TASK-0552：多船時分得出是哪一艘），顏色照陣營
   el.innerHTML = '<span style="color:' + (teamIdx(sh) === 0 ? 'var(--blue)' : 'var(--red)') + '">' + who + '</span>　' + text;
@@ -16,14 +16,14 @@ function stepMsgs(dt) {
 }
 function clearMsgs() { MSGS.forEach(function (m) { m.el.remove(); }); MSGS = []; }
 /** 砲被打飛（blowModel 呼叫）：先記著，下一次 newsFlush 併成一行。 */
-function newsGun(sh, m, drop) {
+function hudNewsGun(sh, m, drop) {
   var g = sh.guns.filter(function (x) { return x.model === m; })[0]; if (!g) return;
   var no = /(\d+)$/.exec(m.name), lab = sideName(g.side) + (g.type === 'chase' || g.type === 'carr' ? GUNS[g.type].short : GUNS[g.type].short + ' ') + (g.type === 'chase' ? '' : no ? +no[1] : '');
   sh.news.guns.push(lab + (drop ? '（掉下去）' : ''));
 }
 var NEWS_WIN = 5;                                  // 傷亡廣播的時間區間（秒；Tim：3 → 5）
 /** 普通水手（砲手）以外的人倒下：船長、軍官、舵手 ⇒ 當下各報一則（船長 ＝ 重要）；陸戰隊、桅頂水手、送藥手 ⇒ 記著，併進 5 秒那一行（人多，一個一個報會洗版）。 */
-function newsCrew(sh, c, dead, cause) {
+function hudNewsCrew(sh, c, dead, cause) {
   if (c.role === ROLE.GUN) return;
   var cap = c.art === ART_CAPTAIN, how = dead ? (cause === '落水' || cause === '溺水' ? cause : '陣亡') : '受傷倒下', why = cause && cause !== '落水' && cause !== '溺水' ? '（' + cause + '）' : '';
   if (cap) { note(sh, '<b style="color:var(--gold)">船長' + how + '！</b>' + why, true); return; }
@@ -36,14 +36,19 @@ function newsCrew(sh, c, dead, cause) {
 }
 /** 船員站不下（40_crew.js makeCrew 記的 sh.crewShort）⇒ 開戰時每一型報一行、援軍進場時報那一艘（TASK-0570：⛔ 不默默少人）。
  *  只報船隻配置頁改過的那幾項（預設本來就站不下的每一場都報會洗版；那些照實列在船隻配置頁）。 */
-function crewShortNote(sh) {
+function hudCrewShort(sh) {
   var d = crewDefault(sh.T.id), cw = sh.cw;
   var L = (sh.crewShort || []).filter(function (r) { return r[3] === 'guns' ? Object.keys(GUNS).some(function (t) { return gunCrew(cw, t) !== gunCrew(d, t); }) : cw[r[3]] !== d[r[3]]; });
   if (L.length) note(sh, '船員站不下（' + sh.T.name + '型）：' + L.map(function (r) { return r[0] + ' ' + r[2] + '／' + r[1]; }).join('、'));
 }
 /** 落水的水手（43_swim.js）：爬回船上、爬上友艦、被敵艦撈走、撈起別艘的 ⇒ 記著，第一件起算 NEWS_WIN 秒那一艘報一行（Tim 2026-10-14：⛔ 一個一個報會洗版）。 */
 var SWIM_TXT = { back: '爬回船上', ally: '爬上友艦', foe: '被敵艦撈走', gotAlly: '撈起友艦水手', gotFoe: '撈起敵艦水手（加入我方）' };
-function swimNews(sh, k) { var N = sh.news; N.sw = N.sw || {}; N.sw[k] = (N.sw[k] || 0) + 1; if (!(N.st >= 0)) N.st = SIMT; }
+function hudSwimNews(sh, k) { var N = sh.news; N.sw = N.sw || {}; N.sw[k] = (N.sw[k] || 0) + 1; if (!(N.st >= 0)) N.st = SIMT; }
+// 訂閱（TASK-0669：模擬層只發事件，00_events.js）
+evOn('note', hudNote, 0, true); evOn('newsGun', hudNewsGun, 0, true); evOn('newsCrew', hudNewsCrew, 0, true); evOn('swimNews', hudSwimNews, 0, true); evOn('crewShort', hudCrewShort, 0, true);
+evOn('survey', newsFlush, 0, true);                                // 每半秒（50_sim.js survey 那一拍）：記著的砲、傷亡併成一行
+evOn('stepEnd', endTick, 9);                                       // 結束判定在每一步最後（報表、測試紀錄之後；⛔ 不是 view：不畫也要判）
+function endTick() { if (!OVER || END_AT) checkEnd(); }
 function roleList(by) { var r = []; for (var k in by) r.push(ROLE_NAME[k] + ' ' + by[k]); return r.length ? '（' + r.join('、') + '）' : ''; }
 /** 每半秒（survey 那一拍）：把記著的砲併成一行；傷亡滿 NEWS_WIN 秒報一次。 */
 function newsFlush(sh) {
@@ -84,12 +89,6 @@ function liftText(sh) {
   var s = net > 0.05 ? '　浮高 ' + net.toFixed(1) + ' m' : net < -0.05 ? '　吃水深 ' + (-net).toFixed(1) + ' m' : '';
   if (s && Math.abs(up) > 0.05 && dn > 0.05) s += '（減重 ' + (up >= 0 ? '+' : '−') + Math.abs(up).toFixed(1) + '・進水 −' + dn.toFixed(1) + '）';
   return s;
-}
-/** 浮高 L 公尺（負 ＝ 吃水深）時比設計水線的排水輕幾噸（32_hull.js liftFor 的反函數）。 */
-function tonsAt(T, L) {
-  var HYD = T.hyd, n = HYD.length - 1, z = T.zw - L / S;
-  if (z <= 0) return HYD[0] * RHO_W; if (z >= n) return HYD[n] * RHO_W;
-  var i = Math.floor(z); return (HYD[i] + (HYD[i + 1] - HYD[i]) * (z - i)) * RHO_W;
 }
 /** 進水 %（0–1）。 */
 function floodPct(sh) {
