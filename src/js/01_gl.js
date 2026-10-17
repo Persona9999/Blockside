@@ -171,8 +171,8 @@ function programs() {
   //   ⛔ v1 改天空在地平線以下一律畫深海色 ⇒ 中等折射（海面帶一點透明、疊在背景上）整片海變暗（近處 55,82,93 → 30,59,73）—— 平常看海也變了，退掉。
   P.abyss = VK.compile(gl,
     '#version 300 es\nlayout(location=0) in vec2 aP; uniform mat4 uCamInv; out vec3 vD; void main(){ vec4 a=uCamInv*vec4(aP,1.0,1.0); vD=a.xyz/a.w; gl_Position=vec4(aP,0.9999,1.0); }\n',
-    '#version 300 es\nprecision highp float; in vec3 vD; uniform vec3 uEye; out vec4 o; vec3 vW;\n' + HULL_GLSL +
-    'void main(){ vec3 d=normalize(vD-uEye); if(d.y>-1e-4||uEye.y<=0.0) discard; vW=uEye+d*(-uEye.y/d.y); if(!' + HULL_HIT + ') discard; o=vec4(vec3(0.03,0.16,0.21)*0.72,1.0); }\n');
+    '#version 300 es\nprecision highp float; in vec3 vD; uniform vec3 uEye; uniform float uAbY; out vec4 o; vec3 vW;\n' + HULL_GLSL +
+    'void main(){ vec3 d=normalize(vD-uEye); if(d.y>-1e-4||uEye.y<=uAbY) discard; vW=uEye+d*((uAbY-uEye.y)/d.y); if(!' + HULL_HIT + ') discard; o=vec4(vec3(0.03,0.16,0.21)*0.72,1.0); }\n');
 }
 function setCommon(p) {
   var u = p.u;
@@ -189,6 +189,7 @@ function setCommon(p) {
   if (u.uSeaT) gl.uniform1f(u.uSeaT, SIMT);
   if (u.uSeaA) gl.uniform1f(u.uSeaA, SEA_A);                           // 這一場的風轉了多少，浪跟著轉（08_sea.js）
   if (u.uVx) { if (VX) gl.uniform4f(u.uVx, VX.D, VX.rc2, VX.rv, VX.V); else gl.uniform4f(u.uVx, 0, 1, 1, 0); }   // 大漩渦（08_sea.js VX）：D ＝ 0 ⇒ 沒有
+  if (u.uVe) { if (VX) gl.uniform2f(u.uVe, VX.De, VX.re2); else gl.uniform2f(u.uVe, 0, 1); }   // 眼的喉部（深度、半徑²）
   if (u.uClip) gl.uniform1f(u.uClip, PASS.clip);
   if (u.uCutT) gl.uniform1i(u.uCutT, 8);                       // 剖面的切高貼圖（74_cutaway.js）：固定第 8 號
   if (u.uSunK) gl.uniform1f(u.uSunK, WX.sun);                   // 天氣（08_weather.js）：陽光、水手與碎木的亮度、白沫

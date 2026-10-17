@@ -638,7 +638,7 @@ function sliders() {
   cs.onchange = function () { CFG_ID = cs.value; loadHull(CFG_ID).then(function () { put(); show(); }); put(); show(); };
   fleetUI();                                                     // 主選單：艦隊編成
   // 細節設定那一頁：主選單 ⇄ 細節設定（同一個 #cover 裡兩張卡片，一次顯示一張）
-  function page(w) { $('detail').style.display = w === 'det' ? '' : 'none'; $('gfxp').style.display = w === 'gfx' ? '' : 'none'; $('phxp').style.display = w === 'phx' ? '' : 'none'; $('shipp').style.display = w === 'ship' ? '' : 'none'; $('gunp').style.display = w === 'gun' ? '' : 'none'; $('furnp').style.display = w === 'furn' ? '' : 'none'; $('keysp').style.display = w === 'keys' ? '' : 'none'; $('sndp').style.display = w === 'snd' ? '' : 'none'; if (w !== 'keys') KEY_WAIT = null; document.querySelector('#cover .card:not(#detail):not(#gfxp):not(#phxp):not(#shipp):not(#gunp):not(#furnp):not(#keysp):not(#sndp)').style.display = w ? 'none' : ''; $('cover').scrollTop = 0; $('pgX').classList.toggle('on', !!w && !ADMIN_ROOMS); }   // w：'' 主選單、'det' 細節設定、'gfx' 畫質設定、'phx' 物理設定、'ship' 船隻配置、'gun' 砲的設定、'furn' 道具設定（67_furncfg.js）
+  function page(w) { $('detail').style.display = w === 'det' ? '' : 'none'; $('gfxp').style.display = w === 'gfx' ? '' : 'none'; $('phxp').style.display = w === 'phx' ? '' : 'none'; $('shipp').style.display = w === 'ship' ? '' : 'none'; $('gunp').style.display = w === 'gun' ? '' : 'none'; $('furnp').style.display = w === 'furn' ? '' : 'none'; $('keysp').style.display = w === 'keys' ? '' : 'none'; $('sndp').style.display = w === 'snd' ? '' : 'none'; if ($('wqp')) $('wqp').style.display = w === 'wq' ? '' : 'none'; if (w !== 'keys') KEY_WAIT = null; document.querySelector('#cover .card:not(#detail):not(#gfxp):not(#phxp):not(#shipp):not(#gunp):not(#furnp):not(#keysp):not(#sndp):not(#wqp)').style.display = w ? 'none' : ''; $('cover').scrollTop = 0; $('pgX').classList.toggle('on', !!w && !ADMIN_ROOMS); }   // w：'' 主選單、'det' 細節設定、'gfx' 畫質設定、'phx' 物理設定、'ship' 船隻配置、'gun' 砲的設定、'furn' 道具設定（67_furncfg.js）
   [].forEach.call(document.querySelectorAll('#plays button'), function (b) { b.onclick = function () { setPlay(b.dataset.p); show(); }; });   // 主選單：玩法
   $('detB').onclick = function () { page('det'); };
   $('detX').onclick = function () { page(''); };
@@ -656,6 +656,13 @@ function sliders() {
   }
   $('shipX').onclick = function () { page(''); };
   $('gunB').onclick = function () { page('gun'); gunShow(); };   // 砲的設定（68_guncfg.js）
+  // 天氣設定（TASK-0683；Tim 2026-10-17「或是開一個天氣設定頁(參考船隻設定) 可以設定不同天氣參數(大漩渦半徑 轉速 深度等放裡面)」）：描述表 08_weather.js WXK_ITEMS，整頁照 64_cfgkit.js cfgPage 生
+  function wqBtn() { var b = $('wqB'), n = wxkChanged(); b.textContent = n ? '天氣設定（改過）…' : '天氣設定…'; b.className = n ? 'on' : ''; }
+  var WQ = cfgPage({ id: 'wq', title: '天氣設定', sub: '暴風雨與大漩渦的參數（晴天不在這裡）。下一場開始生效；主選單背景的大漩渦馬上跟著變。',
+    items: WXK_ITEMS, get: wxkGet, def: wxkDef, set: function (k, v) { wxkSet(k, v); wqBtn(); }, reset: function () { wxkReset(); wqBtn(); },
+    kind: 'weather', file: 'blockside_weather', what: '天氣設定', back: function () { page(''); } });
+  $('wqB').onclick = function () { page('wq'); WQ.show(); };
+  wqBtn();
   $('gunX').onclick = function () { page(''); };
   $('furnB').onclick = function () { page('furn'); furnShow(); };   // 道具設定（67_furncfg.js）
   $('furnX').onclick = function () { page(''); };

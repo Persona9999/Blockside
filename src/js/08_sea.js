@@ -28,23 +28,36 @@ var WAVES = [                                   // a 振幅（m，再乘 SEA_K�
 // ───────────────────────── 大漩渦（TASK-0683） ─────────────────────────
 // Tim 2026-10-17：「是否能做出加勒比海盜3中的大漩渦天候」「暴風雨+海中央大漩渦(在敵我中間)」。只有天氣「大漩渦」（08_weather.js maelstrom 的 vortex）有；
 //   其他天氣 VX ＝ null ⇒ 每一處都走原本那一條（晴天、暴風雨逐位元組不變）。⛔ 不抽 rnd()。
-// 中心 ＝ 世界原點：兩隊開局船頭各在 ±DIST/2（52_fleet.js spawnFleet）⇒ 正中間。大小照開局距離（vxInit）：
-//   水流最快的那一圈 rv ＝ DIST/2 ＋ 25 m（夾在 70–260）⇒ 開局的船剛好在那一圈上（預設 DIST 140 ⇒ rv 95）。
+// 中心 ＝ 世界原點（兩隊正中間）。大小、深度、水流照天氣設定頁（08_weather.js WXK_ITEMS；Tim 2026-10-17「半徑再放大2倍 然後更深一點 水流快一些」
+//   「或是開一個天氣設定頁(參考船隻設定) 可以設定不同天氣參數」）：水流最快的那一圈 rv（預設 190 m；開局兩隊就排在這一圈上，52_fleet.js vxPlace）。
+//   ⚠ 以前 rv 照開局距離（DIST/2 ＋ 25，預設 95）；現在是設定頁的公尺數，跟開局距離無關。
 // 地形（進 seaH ⇒ 物理與畫面同一個式子；著色器在下面 SEA_GLSL 的 vxH／vxG）：h ＝ −D·rc²／(r² ＋ rc²) —— 中間深 D，往外照 1/r² 淡掉（不用截斷：1 km 外剩幾公分）。
-//   rc ＝ 0.6 rv、D ＝ depth × rv。預設（rv 95）：中間 −28 m、開局的船（r ≈ 97 m）水面 −7.2 m、坡度 6°；最陡在 r ＝ rc/√3（18°）。
+//   rc ＝ 寬窄 × rv。預設（rv 190、D 75、寬窄 0.6）：開局的船（r 190）水面 −20 m、坡度 9°；最陡在 r ＝ rc/√3（23°）。
 //   船：船底十個點擬合一個平面（stepWaves）⇒ 自己沉進漏斗、往內側傾，不用另外寫。
 // 水流（不改水面，帶著東西走：船 31_sailing.js、碎片 22_pieces.js、落水的人 43_swim.js）：從上往下看逆時針繞中心，
 //   切向 v_t ＝ V·2q／(1 ＋ q²)（q ＝ r／rv：在 rv 最快 V、往外照 1/r 淡掉），再往中心吸 inflow × v_t。
-// 眼（r < eye × rv）：船被捲下去 ⇒ 開始沉（32_hull.js stepShip）。
+// 眼（r < eye，預設 42 m）：船被往下拖、像進水一樣慢慢吃水，吃到 4.2 m 才開始沉（vxDrag；⛔ 以前一進眼就判開始沉 ⇒ 我艦馬上換下一艘）。
 var VX = null;
-/** 開局（70_flow.js reset）、換天氣（setWeather）：照這一場的天氣與開局距離建漩渦；天氣沒有 vortex ⇒ null。 */
+/** 開局（70_flow.js reset）、換天氣（setWeather）、天氣設定頁改了：照天氣的 vortex 建漩渦；天氣沒有 vortex ⇒ null。
+ *  vortex：r 半徑（m）、depth 深度（m）、width 寬窄（rc ／ r）、v 水流（節）、inflow 往中心吸（切向的幾成）、eye 眼（m，最多 0.8 r）。 */
 function vxInit() {
   var o = WX.vortex; if (!o) { VX = null; return; }
-  var rv = clamp(DIST / 2 + 25, 70, 260), rc = 0.6 * rv;
-  VX = { rv: rv, rc2: rc * rc, D: o.depth * rv, V: o.v, IN: o.inflow, re: o.eye * rv };
+  var rv = o.r, rc = o.width * rv;
+  VX = { rv: rv, rc2: rc * rc, D: o.depth, V: o.v / 1.9438, IN: o.inflow, re: Math.min(o.eye, 0.8 * rv), pull: o.pull };
+  VX.De = o.eyeDepth; VX.re2 = VX.re * VX.re;   // 眼的喉部：再往下 De（寬 ＝ 眼的半徑）
+}
+/** 眼把船往下拖（TASK-0683；Tim 2026-10-17：「漩渦中心是否可以不要強制沈船(或天氣候台可以開關是否沉 但希望是像進水一樣慢慢沉 不要直接判定沉船(會秒切下一台船)」）：
+ *  船在眼裡 ⇒ 每秒多吃水 VX.pull 公尺（sh.vxSink；32_hull.js 加在吃水上，粒子模式也一樣 ⇒ 砲門壓到水下照樣進水）；吃到 4.2 m 跟進水同一條線開始沉。
+ *  出了眼 ⇒ 每秒浮回 VX_RISE。pull ＝ 0（天氣設定頁）⇒ 不拖（只繞）。回這一步吃水要變多少（m）。 */
+var VX_RISE = 0.1;
+function vxDrag(sh, dt) {
+  var v0 = sh.vxSink || 0, inEye = Math.hypot(sh.px, sh.pz) < VX.re, v = inEye && VX.pull > 0 ? v0 + VX.pull * dt : Math.max(0, v0 - VX_RISE * dt);
+  if (inEye && VX.pull > 0 && !sh.vxIn) note(sh, '被捲進漩渦的中心 —— 船身被往下拖，快開出去！', true);
+  sh.vxIn = inEye && VX.pull > 0; sh.vxSink = v; return v - v0;
 }
 /** 漩渦的水面（m，負 ＝ 往下凹）。 */
-function vxH(x, z) { return -VX.D * VX.rc2 / (x * x + z * z + VX.rc2); }
+//   ＋ 眼的喉部（Tim 2026-10-17「眼可以更深一點(後台也可調參數)」）：−De·re²／(r² ＋ re²)，re ＝ 眼的半徑 ⇒ 中心總深 D ＋ De（預設 75 ＋ 60）、眼的邊上多 De／2。
+function vxH(x, z) { var r2 = x * x + z * z; return -VX.D * VX.rc2 / (r2 + VX.rc2) - VX.De * VX.re2 / (r2 + VX.re2); }
 /** 那一點的水流（m/s，[x, z]）；沒有漩渦 ⇒ null。逆時針（從上往下看）＝ 繞 +y 轉正角 ⇒ 切線 (z, −x)／r。 */
 function vxFlow(x, z) {
   if (!VX) return null;
@@ -68,7 +81,7 @@ function seaH(x, z, t) {
 var SEA_AMP = WAVES.reduce(function (s, w) { return s + w.a; }, 0);
 function seaBound() { return SEA_K > 0 && WX.sea >= 0 ? SEA_AMP * SEA_K * WX.sea + 1e-6 : Infinity; }
 /** 水面高度的下限（m）：seaH 一定不低於它。沒有漩渦 ＝ −seaBound()；有 ⇒ 再往下 D（⛔ 不扣 ⇒ 漏斗裡甲板上的水手「比最低的浪谷還低」被判成溺水，33_flood.js）。 */
-function seaLow() { var b = seaBound(); return VX ? -b - VX.D - 1e-6 : -b; }
+function seaLow() { var b = seaBound(); return VX ? -b - VX.D - VX.De - 1e-6 : -b; }
 // 著色器用的同一組浪（常數照 WAVES 生成；uSeaK、uSeaT 在 setCommon 給）。seaH ＝ 高度，seaG ＝ 坡度（∂h/∂x, ∂h/∂z）；
 // seaHs ＝ 照網格間距 s 拿掉太短的浪（⛔ 頂點間距比波長的 1/4 還粗 ⇒ 鋸齒、浪在網格上游動）；
 // seaGf ＝ 照一個像素在海面上多寬（fp，公尺）淡掉太短的浪的坡度（⛔ 不淡 ⇒ 遠處的浪比像素還細，疊出規則的疊紋）。
@@ -83,11 +96,12 @@ var SEA_GLSL = (function () {
     gf.push(f(w.a) + '*(1.0-smoothstep(' + f(w.L * 0.25) + ',' + f(w.L * 0.6) + ',fp))*cos(' + arg + ')*vec2(' + f(w.kx) + ',' + f(w.kz) + ')');
   });
   // 大漩渦（VX，上面）：uVx ＝ (D, rc², rv, V)；D ＝ 0 ⇒ 沒有（vxH、vxG 回 0：晴天、暴風雨的畫面不變）。q ＝ 世界座標（漩渦不跟著浪轉）
-  return 'uniform float uSeaK, uSeaT, uSeaA; uniform vec4 uVx;\n' +
+  //   uVe ＝ (眼的深度, 眼的半徑²)：眼那一段喉部（vxH 的第二項）
+  return 'uniform float uSeaK, uSeaT, uSeaA; uniform vec4 uVx; uniform vec2 uVe;\n' +
     'vec2 seaP(vec2 p){ float c=cos(uSeaA), s=sin(uSeaA); return vec2(c*p.x+s*p.y,c*p.y-s*p.x); }\n' +   // 世界 ⇒ 原本那組浪的座標（反轉 uSeaA）
     'vec2 seaV(vec2 g){ float c=cos(uSeaA), s=sin(uSeaA); return vec2(c*g.x-s*g.y,s*g.x+c*g.y); }\n' +   // 坡度轉回世界
-    'float vxH(vec2 q){ return uVx.x>0.0 ? -uVx.x*uVx.y/(dot(q,q)+uVx.y) : 0.0; }\n' +
-    'vec2 vxG(vec2 q){ if(uVx.x<=0.0) return vec2(0.0); float d=dot(q,q)+uVx.y; return q*(2.0*uVx.x*uVx.y/(d*d)); }\n' +
+    'float vxH(vec2 q){ return uVx.x>0.0 ? -uVx.x*uVx.y/(dot(q,q)+uVx.y)-uVe.x*uVe.y/(dot(q,q)+uVe.y) : 0.0; }\n' +
+    'vec2 vxG(vec2 q){ if(uVx.x<=0.0) return vec2(0.0); float d=dot(q,q)+uVx.y, e=dot(q,q)+uVe.y; return q*(2.0*uVx.x*uVx.y/(d*d)+2.0*uVe.x*uVe.y/(e*e)); }\n' +
     'float seaH(vec2 q){ vec2 p=seaP(q); return uSeaK*(' + h.join('+') + ')+vxH(q); }\n' +
     'vec2 seaG(vec2 q){ vec2 p=seaP(q); return seaV(uSeaK*(' + g.join('+') + '))+vxG(q); }\n' +
     'float seaHs(vec2 q,float s){ vec2 p=seaP(q); return uSeaK*(' + hs.join('+') + ')+vxH(q); }\n' +

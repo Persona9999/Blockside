@@ -88,7 +88,7 @@ function stepPiece(pc, dt) {
     pc.R = rotM(pc.hull, ang);
     if (!pc.wet) { pc.wet = true; for (var k2 = 0; k2 < 6; k2++) splash(add(pc.c, [gauss() * 6, 0, gauss() * 6]), true); }
     pc.M = M4.mul(M4.mul(M4.mul(trans(pc.c[0], pc.c[1], pc.c[2]), pc.R), trans(-pc.c0[0], -pc.c0[1], -pc.c0[2])), pc.M0);
-    return pc.c[1] > -60 && pc.t < 150;
+    return pc.c[1] > (VX ? vxH(pc.c[0], pc.c[2]) : 0) - 60 && pc.t < 150;   // 大漩渦：照漏斗那裡的水面算多深
   }
   if (pc.hinge) {                                               // 繞斷口倒：細棒繞端點 α ＝ (r × g)·3／(4|r|²)
     if (pc.sh) { var np = M4.pt(pc.sh.M, pc.pivotL[0], pc.pivotL[1], pc.pivotL[2]); pc.c = add(pc.c, sub(np, pc.pivot)); pc.pivot = np; }   // 斷口跟著船走（船在航行）
@@ -112,6 +112,6 @@ function stepPiece(pc, dt) {
     var a2 = len(pc.w) * dt; if (a2 > 0) pc.R = M4.mul(rotM(pc.w, a2), pc.R);
   }
   pc.M = M4.mul(M4.mul(M4.mul(trans(pc.c[0], pc.c[1], pc.c[2]), pc.R), trans(-pc.c0[0], -pc.c0[1], -pc.c0[2])), pc.M0);
-  return pc.c[1] > -40 && pc.t < 120;
+  return pc.c[1] > (VX ? vxH(pc.c[0], pc.c[2]) : 0) - 40 && pc.t < 120;   // 大漩渦：照漏斗那裡的水面算多深（⛔ 照 0 ⇒ 深 75 m 的漏斗裡碎片一出現就拿掉）
 }
 

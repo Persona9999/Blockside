@@ -511,7 +511,7 @@ function stepFly(f, dt) {
   f.c = add(f.c, mul(f.v, dt));
   var a = len(f.w) * dt; if (a > 0) f.R = M4.mul(rotM(f.w, a), f.R);
   f.M = M4.mul(M4.mul(M4.mul(trans(f.c[0], f.c[1], f.c[2]), f.R), trans(-f.c0[0], -f.c0[1], -f.c0[2])), f.M0);
-  return f.t < 25 && f.c[1] > -25;
+  return f.t < 25 && f.c[1] > (VX ? vxH(f.c[0], f.c[2]) : 0) - 25;   // 大漩渦：照漏斗那裡的水面算多深（⛔ 照 0 ⇒ 漏斗裡漂著的一出現就拿掉）
 }
 function meshTris(m) {
   var v = m.verts, T = [];
