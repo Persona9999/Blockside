@@ -520,25 +520,30 @@ function navDirty(sh, x, y, z) {
   var NV = sh.nav; if (!NV) return;
   NV.levels.forEach(function (L) {
     if (z < L.zr[0] - 8 || z > L.zr[1] + NAV_HEAD) return;
-    var b = L.dirty; if (!b) L.dirty = [x, y, x, y]; else { if (x < b[0]) b[0] = x; if (y < b[1]) b[1] = y; if (x > b[2]) b[2] = x; if (y > b[3]) b[3] = y; }
-    NV.dirty = true;
+    L.dirty = true; NV.dirty = true;                                      // 刷新時那一層要看（梯子的踏板照樣每次刷新都查）
+    var N = L.N, cx = (x - N.x0) / NAV_C, cy = y / NAV_C;                 // 走路點的高度只看它那一柱（navZ：x0 ＋ cx·NAV_C, cy·NAV_C）⇒ 打到的格剛好在取樣柱上才記那一點（TASK-0673）
+    if (cx >= 1 && cy >= 1 && cx <= N.nx - 2 && cy <= N.ny - 2 && cx === Math.floor(cx) && cy === Math.floor(cy)) (L.dc || (L.dc = new Set())).add(cx + cy * N.nx);
   });
 }
 function navRefresh(sh) {
   var NV = sh.nav, g = navG(sh), t0 = performance.now(), ev = [];       // navG：船殼＋會轉的裝甲掃過的那一圈（24_armor.js：開戰時的走路格照 navBase ＝ T.base＋那一圈，重算也要照它；沒有裝甲 ＝ sh.grid）
   NV.reT = SIMT; NV.dirty = false;
   NV.levels.forEach(function (L, li) {
-    var b = L.dirty; if (!b) return; L.dirty = null;
-    var n0 = L.N.regs.length;
-    if (!L.own) { var O = L.N; L.Z0 = O.Z; L.N = { x0: O.x0, nx: O.nx, ny: O.ny, Z: O.Z.slice(), blk: O.blk, rot: O.rot, sh: O.sh }; L.own = true; }
-    var N = L.N;
-    var xa = Math.max(1, Math.floor((b[0] - N.x0) / NAV_C) - 2), xb = Math.min(N.nx - 2, Math.ceil((b[2] - N.x0) / NAV_C) + 2), ya = Math.max(1, Math.floor(b[1] / NAV_C) - 2), yb = Math.min(N.ny - 2, Math.ceil(b[3] / NAV_C) + 2);
-    for (var y = ya; y <= yb; y++) for (var x = xa; x <= xb; x++) {
-      var i = x + y * N.nx; if (N.blk[i]) continue;
-      var gx = N.x0 + x * NAV_C, gy = y * NAV_C; if (gx >= g.sx || gy >= g.sy) continue;
-      N.Z[i] = N.rot && N.rot[i] ? navZ(navRestG(sh, turRootK(sh.T, N.rot[i] - 1)), L.deck, L, gx, gy) : navZ(g, L.deck, L, gx, gy);   // 會轉的甲板 ⇒ 照砲塔座標（24_armor.js navRestG）
-    }
-    navRegions(N);
+    if (!L.dirty) return; L.dirty = false;
+    var dc = L.dc; L.dc = null;
+    var n0 = L.N.regs.length, fresh = false;
+    if (!dc && L.own) return;                                             // 打到的格都不在取樣柱上 ⇒ 這一層的走路格一點都不會變
+    if (!L.own) { var O = L.N; L.Z0 = O.Z; L.N = { x0: O.x0, nx: O.nx, ny: O.ny, Z: O.Z.slice(), blk: O.blk, rot: O.rot, sh: O.sh }; L.own = fresh = true; }
+    var N = L.N, moved = fresh;
+    // 只重算記下來的那幾點（TASK-0673：以前重算整個外框 ⇒ 一舷齊射打在兩頭，整層從頭到尾重算＋重切區域，單次 69 ms）；
+    //   高度一點都沒變 ⇒ 連通區域一定一樣 ⇒ 不重切（navRegions 只看 Z）。結果跟重算整個外框一位元不差（外框裡其他點那一柱沒被動過）。
+    if (dc) dc.forEach(function (i) {
+      if (N.blk[i]) return;
+      var gx = N.x0 + (i % N.nx) * NAV_C, gy = ((i / N.nx) | 0) * NAV_C; if (gx >= g.sx || gy >= g.sy) return;
+      var z = N.rot && N.rot[i] ? navZ(navRestG(sh, turRootK(sh.T, N.rot[i] - 1)), L.deck, L, gx, gy) : navZ(g, L.deck, L, gx, gy);   // 會轉的甲板 ⇒ 照砲塔座標（24_armor.js navRestG）
+      if (z !== N.Z[i]) { N.Z[i] = z; moved = true; }
+    });
+    if (moved) navRegions(N);
     if (N.regs.length !== n0) ev.push(L.name + ' ' + (N.regs.length > 1 ? '分成 ' + N.regs.length + ' 塊（' + N.regs.join('／') + ' 點）' : '接回一塊'));
   });
   NV.ladders.forEach(function (L) {
