@@ -1030,6 +1030,57 @@ def act_shipcheck(ids=None):
     return ['匯入檢查：'] + log
 
 
+def bundle_names_check():
+    """TASK-0671：同一個包（data-bundle）裡兩個地方定義同一個頂層名字 ⇒ 擋下、不建置（後面的會靜悄悄蓋掉前面的；10-15 的 rndF）。
+    頂層宣告照 node 內建的 acorn 讀（src/js_globals.cjs：function、var／let／const、class，解構也拆開）；同一支檔裡定義兩次也算。
+    頁面：template.html（遊戲）＋ sandbox.html（指揮官沙盒，有的話）；不同包的同名不算（各自一個閉包）。沒有 node ⇒ 讀數寫「沒驗」，照建。"""
+    node = shutil.which('node')
+    if not node:
+        return ['⚠ 頂層同名：沒驗（找不到 node）']
+    pages = [TPL] + [x for x in [os.path.join(HERE, 'sandbox.html')] if os.path.exists(x)]
+    bundles = {}
+    for pg in pages:
+        for rel, name in re.findall(r'<script\s+src="([^"]+)"\s+data-bundle="([^"]+)"', open(pg, encoding='utf-8').read()):
+            L = bundles.setdefault((os.path.basename(pg), name), [])
+            if rel not in L:
+                L.append(rel)
+    files = sorted({rel for L in bundles.values() for rel in L})
+    r = subprocess.run([node, '--expose-internals', os.path.join(HERE, 'js_globals.cjs')] + [os.path.join(HERE, f) for f in files],
+                       capture_output=True, text=True, encoding='utf-8', cwd=HERE)
+    try:
+        G = {os.path.relpath(k, HERE).replace(os.sep, '/'): v for k, v in json.loads(r.stdout.strip().splitlines()[-1]).items()}
+    except Exception:
+        raise Fail('頂層同名檢查讀不到結果：%s' % (r.stdout + r.stderr).strip()[-300:])
+    bad = [f for f in files if isinstance(G.get(f), dict)]
+    if bad:
+        raise Fail('頂層同名檢查：解析失敗（不建置）：\n' + '\n'.join('  ✗ %s：%s' % (f, G[f]['err']) for f in bad))
+    E, n = [], 0
+    for (pg, name), L in bundles.items():
+        seen = {}
+        for f in L:
+            for nm, line in G[f]:
+                n += 1
+                if nm in seen:
+                    E.append('%s 包「%s」：%s 在 %s:%d 跟 %s:%d 都有定義' % (pg, name, nm, seen[nm][0], seen[nm][1], f, line))
+                else:
+                    seen[nm] = (f, line)
+    if E:
+        raise Fail('頂層同名（同一個包裡後面的會蓋掉前面的，不建置；改名或加模組字首）：\n' + '\n'.join('  ✗ ' + e for e in E))
+    # 沒宣告就寫入：區域變數忘了 var ⇒ 嚴格模式下執行到才報錯；剛好跟 window 上的名字（name、status…）同名 ⇒ 連錯都不報、寫到 window 上
+    W = []
+    for (pg, name), L in bundles.items():
+        r = subprocess.run([node, '--expose-internals', os.path.join(HERE, 'js_globals.cjs'), '--writes'] + [os.path.join(HERE, f) for f in L],
+                           capture_output=True, text=True, encoding='utf-8', cwd=HERE)
+        try:
+            bad = json.loads(r.stdout.strip().splitlines()[-1])['bad']
+        except Exception:
+            raise Fail('沒宣告就寫入的檢查讀不到結果：%s' % (r.stdout + r.stderr).strip()[-300:])
+        W += ['%s 包「%s」：%s:%d 寫入 %s，可是哪裡都沒宣告' % (pg, name, os.path.relpath(f, HERE).replace(os.sep, '/'), line, nm) for f, line, nm in bad]
+    if W:
+        raise Fail('沒宣告就寫入（多半是忘了 var；不建置）：\n' + '\n'.join('  ✗ ' + w for w in W))
+    return ['✓ 頂層同名：%d 個包、%d 支檔、%d 個頂層名字，沒有重複；沒宣告就寫入：0（acorn）' % (len(bundles), len(files), n)]
+
+
 def act_build(pack=True):   # pack：壓縮版（預設，TASK-0583）；False ＝ 原格式（build --raw）
     cfg = load()
     E = validate(cfg)
@@ -1039,6 +1090,7 @@ def act_build(pack=True):   # pack：壓縮版（預設，TASK-0583）；False �
     miss = [s['vxk'] for s in cfg['ships'] if not os.path.exists(os.path.join(CACHE, s['vxk']))]
     if miss:
         raise Fail('VoxelKit/_cache/ 少了 %s ⇒ 先 python -I admin.py cache（從成品解回）或 reimport' % '、'.join(miss))
+    log += bundle_names_check()
     code, out = run([sys.executable, '-I', INLINE, TPL, OUT])
     log.append(out.strip())
     if code != 0:
