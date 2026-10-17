@@ -123,11 +123,12 @@ var PREF_ITEMS = [
     function (p) { if (p.gfx && typeof p.gfx === 'object' && !Q.has('gfx')) GFX_ITEMS.forEach(function (it) { var x = prefOk(p.gfx[it.k], [0, it.opt.length - 1], true); if (x !== undefined && !Q.has('g_' + it.k)) GFX[it.k] = x; }); }),
   prefBool('fps', false, function () { return GFX_FPS; }, function (x) { GFX_FPS = x; }, null),
   prefAny('snd', function (o) {                                         // 聲音設定（02_music.js，TASK-0677）
-    [['vsfx', 'sfx'], ['vamb', 'amb'], ['vbgm', 'bgm'], ['bgm', 'mode'], ['tune', 'tune']].forEach(function (k) { if (SND[k[1]] !== SND_DEF[k[1]]) o[k[0]] = SND[k[1]]; });
+    [['vsfx', 'sfx'], ['vamb', 'amb'], ['vbgm', 'bgm'], ['bgm', 'mode'], ['tune', 'tune'], ['theme', 'theme']].forEach(function (k) { if (SND[k[1]] !== SND_DEF[k[1]]) o[k[0]] = SND[k[1]]; });
   }, function (p) {
     [['vsfx', 'sfx'], ['vamb', 'amb'], ['vbgm', 'bgm']].forEach(function (k) { if (typeof p[k[0]] === 'number' && isFinite(p[k[0]])) SND[k[1]] = clamp(p[k[0]], 0, 1); });
     if (p.bgm === 'duck' || p.bgm === 'on' || p.bgm === 'off') SND.mode = p.bgm; else if (p.bgm === 'sail') SND.mode = 'duck';   // 'sail'：第一版的「開砲就淡出」（已拿掉）⇒ 照新的預設
     if (p.tune === 'shuffle' || TUNES.some(function (t) { return t.id === p.tune; })) SND.tune = p.tune;
+    if (p.theme === 0 || p.theme === 1) SND.theme = p.theme;                // 船的主題曲（TASK-0681）
   }),
   prefBool('gcrew', true, function () { return GUN_CREW_HURT; }, function (x) { GUN_CREW_HURT = x; }),   // 砲被打飛 ⇒ 砲班跟著受傷（21_gunnery.js）
   prefBool('dbg', false, function () { return DBG_SET; }, function (x) { DBG_SET = x; }),   // Debug 模式（04_state.js dbgOn）

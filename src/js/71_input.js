@@ -272,7 +272,6 @@ modeButtons();
 /** 選單：滑桿的上下限從 LIM 來；數值只在使用者動了那一條時才從滑桿讀回（⛔ 一開頭就讀回 ⇒ 網址給的 0.33 被 step 吃成 0.35）。
  *  船殼、砲、帆、火藥桶、航行、降旗的滑桿在「細節設定」那一頁（從主選單進）；主選單只留一行摘要（#detV）。 */
 /** 模型（砲、火藥桶）的總重（噸）：照匯出的模型清單＋取用點的 12 桶（細節設定的例子用；開戰時每艘照自己的模型算）。 */
-function modelMassT(T, gunw) { if (!T) return 0; var t = 12 * KEG_T; (T.rig.models || []).forEach(function (m) { t += modelT({ kind: modelKind(m) }, gunw); }); return t; }
 var CFG_ID = myHull();                             // 細節設定的「船隻設定」正在編輯哪一型
 var SLIDERS_SHOW = null;                               // 載入完（HYD 算好）再顯示一次 ⇒ 減重上浮的例子有數字
 function sliders() {
@@ -318,12 +317,20 @@ function sliders() {
     if (!T) { el.innerHTML = '<div class="h">' + (h ? h.name : CFG_ID) + '</div><div class="n">船型載入中…</div>'; return; }
     var c = shipCfg(CFG_ID), hc = hullCounts(CFG_ID), kn = VMAX * c.speed * playK('speed') * 1.9438, UP = c.upwind || 1, dz = 180 - NOGO_DEG, stall = 180 - (UP === 1 ? dz : 90 + (dz - 90) * UP);
     var gl = Object.keys(GUNS).filter(function (t) { return hc.guns[t]; }).map(function (t) { return (GUNS[t].short || GUNS[t].name).trim() + ' ' + hc.guns[t]; }).join('、');
+    // 開戰時的排水量（Tim 2026-10-17「額外顯示實際遊戲開場的排水量(加上炮重&其他配件重)」）：浮著的船排開的水 ＝ 自己的重量（32_hull.js hullT0，跟開戰時的 sh.mass0 同一套）；
+    //   跟設計水線差多少 ⇒ 開戰時浮高／吃水深幾公尺（liftFor）
+    var W = hullT0(T, c), L = liftFor(T, T.disp - W.all) || 0, t0 = function (v) { return Math.round(v).toLocaleString(); };
+    // 沒有帆（莫尼特號；Tim 2026-10-17「實戰中實際上是固定6節(沒有帆)」）：遊戲裡帆的推力 × sailFrac ＝ 0 ⇒ 只寫額外動力（以前照帆的公式算出順風 12.2 節）
+    var sails = T.rig.sails.some(function (s) { return !isFlag(s); }), B = +c.base || 0;
     el.innerHTML = '<div class="h">' + h.name + '</div>' +
       (h.author ? '建造者 <b>' + h.author + '</b><br>' : '') +   // Tim 2026-10-15：船的作者（ships[].author ← 匯入時 .vxk 檔頭的 owner）
-      '排水量 <b>' + Math.round(T.disp).toLocaleString() + '</b> 噸<span class="n">（設計水線）</span><br>' +
-      '航速 順風 <b>' + Math.hypot(kn * polar(0), +c.base || 0).toFixed(1) + '</b>・側順風 <b>' + Math.hypot(kn, +c.base || 0).toFixed(1) + '</b>（最快）・逆風 <b>' + Math.hypot(kn * polar(dz), +c.base || 0).toFixed(1) + '</b> 節<br>' +
-      (c.base ? '額外動力 <b>' + (+c.base).toFixed(1) + '</b> 節<span class="n">（推力跟帆相加 ⇒ 上面三格 ＝ √(帆² ＋ 額外動力²)：不看風向與帆，頂風、收帆也走得動；帆段滿帆再加 ＝ 全速前進（開）、全收再收 ＝ 倒車）</span><br>' : '') +
-      '<span class="n">標準風、滿帆；逆風 ＝ 離風 ' + Math.round(stall) + '° 時（再頂就開始失速）' + (PLAY === 'fun' ? '；含娛樂玩法的加成' : '') + '</span><br>' +
+      '排水量 <b>' + t0(W.all) + '</b> 噸<span class="n">（開戰時）</span>・設計水線 <b>' + t0(T.disp) + '</b> 噸<br>' +
+      '<span class="n">開戰時 ＝ 格子 ' + t0(W.vox) + '＋砲 ' + t0(W.gun) + '＋火藥桶 ' + t0(W.keg) + '＋壓艙物 ' + t0(W.ballast) + ' 噸' +
+        (Math.abs(L) >= 0.005 ? ' ⇒ 比設計水線' + (L > 0 ? '浮高 ' : '吃水深 ') + Math.abs(L).toFixed(2) + ' m' : ' ⇒ 剛好在設計水線') + '</span><br>' +
+      (sails ? '航速 順風 <b>' + Math.hypot(kn * polar(0), B).toFixed(1) + '</b>・側順風 <b>' + Math.hypot(kn, B).toFixed(1) + '</b>（最快）・逆風 <b>' + Math.hypot(kn * polar(dz), B).toFixed(1) + '</b> 節<br>' +
+        (B ? '額外動力 <b>' + B.toFixed(1) + '</b> 節<span class="n">（推力跟帆相加 ⇒ 上面三格 ＝ √(帆² ＋ 額外動力²)：不看風向與帆，頂風、收帆也走得動；帆段滿帆再加 ＝ 全速前進（開）、全收再收 ＝ 倒車）</span><br>' : '') +
+        '<span class="n">標準風、滿帆；逆風 ＝ 離風 ' + Math.round(stall) + '° 時（再頂就開始失速）' + (PLAY === 'fun' ? '；含娛樂玩法的加成' : '') + '</span><br>'
+      : '航速 <b>' + B.toFixed(1) + '</b> 節<span class="n">（沒有帆：只靠額外動力，不看風向；全速前進時）</span><br>') +
       '砲 <b>' + hc.n + '</b> 門<span class="n">（' + gl + '）</span><br>' +
       '船員 約 <b>' + crewTotal(shipCrew(CFG_ID), hc) + '</b> 人<span class="n">（含預備水手 ' + shipCrew(CFG_ID).hands + '）</span><br>' +
       '靈活 <b>×' + (+c.agile).toFixed(2) + '</b>・船殼硬度 <b>×' + (+c.hard).toFixed(2) + '</b>・桅 <b>' + hc.masts + '</b> 根<br>' +
@@ -557,7 +564,7 @@ function sliders() {
     $('funpowderV').textContent = FUN.powder.toFixed(2) + '×' + (powderNever() ? '（火藥拉滿：不會爆）' : '（火藥血量 ' + POWDER_HP + ' ⇒ ' + Math.round(POWDER_HP * FUN.powder) + '）');
     var PU = K.pump; $('pumpV').textContent = PU.toFixed(1) + ' 噸／分' + (PU === cfgBase('pump', CFG_ID) ? '（預設：照排水量）' : '') + (PU <= 0 ? '（不抽水）' : '');
     $('floodV').textContent = FLOOD === 0 ? '0×（不會沉）' : FLOOD.toFixed(2) + '×' + (FLOOD < 0.5 ? '（慢）' : FLOOD < 1.2 ? '' : '（快）');
-    var HT = HULLT[CFG_ID], m0 = (HT ? HT.voxT0 : 0) + modelMassT(HT, GUNW_K) + BALLAST_T, l0 = liftFor(HT, HT ? HT.disp - m0 : 0), lx = liftFor(HT, HT ? HT.disp - m0 + 70 : 0);   // 照我艦的船型   // 開戰時浮在哪；例子：再打掉 10 萬格（70 噸）
+    var HT = HULLT[CFG_ID], m0 = HT ? hullT0(HT, { ballast: BALLAST_T, gunw: GUNW_K }).all : 0, l0 = liftFor(HT, HT ? HT.disp - m0 : 0), lx = liftFor(HT, HT ? HT.disp - m0 + 70 : 0);   // 照我艦的船型   // 開戰時浮在哪；例子：再打掉 10 萬格（70 噸）
     var gm = 0, kinds = {}; if (HT) (HT.rig.models || []).forEach(function (m) { var k = modelKind(m); if (GUNS[k]) { gm += GUNS[k].mass * GUNW_K; kinds[k] = 1; } });
     $('gunwV').textContent = GUNW_K.toFixed(2) + '×（' + Object.keys(GUNS).filter(function (k) { return !HT || kinds[k]; }).map(function (k) { return GUNS[k].name + ' ' + (GUNS[k].mass * GUNW_K).toFixed(1) + ' 噸'; }).join('、') + (gm ? '；全部 ' + Math.round(gm) + ' 噸' : '') + '）';
     $('ballastV').textContent = BALLAST_T + ' 噸' + (l0 === null ? '' : '（' + HT.name + ' ' + Math.round(m0).toLocaleString() + ' 噸 ⇒ ' + (Math.abs(l0) < 0.05 ? '剛好在設計水線' : l0 > 0 ? '浮高 ' + l0.toFixed(1) + ' m' : '吃水深 ' + (-l0).toFixed(1) + ' m') + '；打掉 10 萬格再浮 ' + (lx - l0).toFixed(2) + ' m）');
