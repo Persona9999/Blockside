@@ -43,7 +43,7 @@ var VX = null;
 function vxInit() {
   var o = WX.vortex; if (!o) { VX = null; return; }
   var rv = o.r, rc = o.width * rv;
-  VX = { rv: rv, rc2: rc * rc, D: o.depth, V: o.v / 1.9438, IN: o.inflow, re: Math.min(o.eye, 0.8 * rv), pull: o.pull, grav: o.grav, suck: o.suck, suckR: o.suckR, suckP: o.suckP, turn: o.turn, spin: (o.spin || 0) * Math.PI / 180 };
+  VX = { rv: rv, rc2: rc * rc, D: o.depth, V: o.v / 1.9438, IN: o.inflow, re: Math.min(o.eye, 0.8 * rv), pull: o.pull, gulp: o.gulp || 0, grav: o.grav, suck: o.suck, suckR: o.suckR, suckP: o.suckP, turn: o.turn, spin: (o.spin || 0) * Math.PI / 180 };
   VX.De = o.eyeDepth; VX.re2 = VX.re * VX.re; VX.trap = VX.re;   // 逃不掉的範圍 ＝ 眼（Tim：「逃不掉範圍 不用特別設定」；31_drive.js 上坡減免只在這一圈外）   // 眼的喉部：再往下 De（寬 ＝ 眼的半徑）
   VX.r0min = 3 * VX.re;                           // 開局最近離中心多遠（52_fleet.js vxPlace：照主選單的距離排；Tim「起始可以在漩渦中」）          // 開局那一圈（52_fleet.js vxPlace；Tim「起始可以在漩渦中」）：最近是眼的 3 倍（電腦避開眼的那一圈是 2.5 倍，54_helm.js vxAvoid）
 }
@@ -152,6 +152,9 @@ function stepWaves(sh, dt) {
     hm += h; su += u * h; uu += u * u; sw += w * h; ww += w * w; n++;
   }
   hm /= n;
+  // 大漩渦：開始沉了 ⇒ 1 秒內把水面換成船中心那一點的（Tim 2026-10-17：「沈船會在漩渦底部浮很久」「我對漩渦眼的預期是 沈船會在幾秒內被吸走(沉掉)」）——
+  //   ⛔ 照十個點的平均 ⇒ 眼的喉部（半徑 42 m）比船（87 m）窄，平均是 −322 m、中心是 −350 m ⇒ 沉了的船懸在喉底上面 28 m，沉 40 m 才消失（約 30 秒）
+  if (VX && sh.sinkingFinal) { sh.vxB = Math.min(1, (sh.vxB || 0) + dt); var hc = seaH(c[0], c[2], SIMT); if (hc < hm) hm += (hc - hm) * sh.vxB; }
   var tp = Math.atan(su / uu), tr = -Math.atan(sw / ww);              // 縱搖正 ＝ 船頭（格 +x）抬起；橫搖正 ＝ 船體 +Z 那舷往下 ⇒ 水在 +Z 那邊高就取負
   var V = sh.wv;
   if (!V) V = sh.wv = { h: hm, hv: 0, p: tp, pv: 0, r: tr, rv: 0 };
