@@ -11,16 +11,18 @@ var KEY_CTX = [{ id: 'battle', name: '海戰' }, { id: 'fps', name: '第一人�
 var KEY_ACTS = [
   // ico ＝ 畫面上那顆圓鈕的圖示（設定頁寫「圖示 正式名稱」；Tim 2026-10-17：「圓鈕的操作 設定頁除了emoji外 額外顯示正式名稱(例如 拋錨 切換彈藥)」）；沒有圓鈕的不寫。
   // 海戰（71_input.js doAct）——數字鍵照畫面左右排（Tim 2026-10-16：「拋錨數字鍵位重新排列(目前簡化後 跳過好幾個鍵)」）：1 彈種、2 自動操舵、3 左錨、4 雙錨、5 右錨
+  // Tim 2026-10-17「開火的預設鍵位 F 拋左錨Q 右錨E (可以看跟那些鍵有衝突)」「換彈藥種類 R」⇒ 錨 Q／E、換彈藥 R；擠掉的：俥鐘 E▲T▼ → T▲G▼（上下一對）、
+  //   自動開砲 G → 5、瞄準模式 Q → 3、回主選單 R → 0（⛔ 放 1：就在 Q 旁邊，回主選單沒有確認、一按這局就結束）。開一門砲照舊 F、齊射照舊空白。
   { c: 'battle', id: 'ruddL', ico: '⬅️', name: '左舵', def: 'a', hold: 1 }, { c: 'battle', id: 'ruddR', ico: '➡️', name: '右舵', def: 'd', hold: 1 },
   { c: 'battle', id: 'sailDn', ico: '⛵⬇', name: '收帆', def: 's', hold: 1 }, { c: 'battle', id: 'sailUp', ico: '⛵⬆', name: '加帆', def: 'w', hold: 1 },
-  { c: 'battle', id: 'ammo', ico: '💣', name: '切換彈藥（輪流）', def: '1' }, { c: 'battle', id: 'sailMode', ico: '🤖☸', name: '自動操舵（自動 ⇄ 手動）', def: '2' },
-  { c: 'battle', id: 'ancP', ico: '◀⚓', name: '拋左錨', def: '3' }, { c: 'battle', id: 'ancAll', ico: '⚓⚓', name: '拋錨（雙錨；再按起錨）', def: '4' }, { c: 'battle', id: 'ancS', ico: '⚓▶', name: '拋右錨', def: '5' },
-  { c: 'battle', id: 'volley', ico: '💥💥', name: '齊射', def: ' ' }, { c: 'battle', id: 'fire1', ico: '💥', name: '開一門砲', def: 'f' }, { c: 'battle', id: 'autoFire', ico: '🤖💥', name: '自動開砲', def: 'g' },
-  { c: 'battle', id: 'aim', ico: '🎯', name: '瞄準模式', def: 'q' }, { c: 'battle', id: 'teleFwd', ico: '▲', name: '俥鐘往前撥', def: 'e' }, { c: 'battle', id: 'teleBack', ico: '▼', name: '俥鐘往後撥', def: 't' },
+  { c: 'battle', id: 'ammo', ico: '💣', name: '切換彈藥（輪流）', def: 'r' }, { c: 'battle', id: 'sailMode', ico: '🤖☸', name: '自動操舵（自動 ⇄ 手動）', def: '2' },
+  { c: 'battle', id: 'ancP', ico: '◀⚓', name: '拋左錨', def: 'q' }, { c: 'battle', id: 'ancAll', ico: '⚓⚓', name: '拋錨（雙錨；再按起錨）', def: '4' }, { c: 'battle', id: 'ancS', ico: '⚓▶', name: '拋右錨', def: 'e' },
+  { c: 'battle', id: 'volley', ico: '💥💥', name: '齊射', def: ' ' }, { c: 'battle', id: 'fire1', ico: '💥', name: '開一門砲', def: 'f' }, { c: 'battle', id: 'autoFire', ico: '🤖💥', name: '自動開砲', def: '5' },
+  { c: 'battle', id: 'aim', ico: '🎯', name: '瞄準模式', def: '3' }, { c: 'battle', id: 'teleFwd', ico: '▲', name: '俥鐘往前撥', def: 't' }, { c: 'battle', id: 'teleBack', ico: '▼', name: '俥鐘往後撥', def: 'g' },
   { c: 'battle', id: 'cam', ico: '🎥', name: '換鏡頭', def: 'c' }, { c: 'battle', id: 'camTrack', name: '鏡頭跟船／固定', def: 'v' },
   { c: 'battle', id: 'pause', ico: '⏸', name: '停格', def: 'p' }, { c: 'battle', id: 'settings', ico: '⚙', name: '設定', def: 'o' }, { c: 'battle', id: 'help', name: '說明', def: 'h' },
   { c: 'battle', id: 'flood', ico: '📊', name: '進水圖表（停格時）', def: 'i' }, { c: 'battle', id: 'xray', ico: '🔍', name: '透視', def: 'x' }, { c: 'battle', id: 'cut', ico: '✂', name: '剖面', def: 'z' }, { c: 'battle', id: 'deck', ico: '☰', name: '隱藏甲板', def: 'l' },
-  { c: 'battle', id: 'phys', name: '帆繩物理', def: 'b' }, { c: 'battle', id: 'mute', name: '靜音', def: 'm' }, { c: 'battle', id: 'restart', name: '重新開始', def: 'n' }, { c: 'battle', id: 'menu', name: '回主選單', def: 'r' },
+  { c: 'battle', id: 'phys', name: '帆繩物理', def: 'b' }, { c: 'battle', id: 'mute', name: '靜音', def: 'm' }, { c: 'battle', id: 'restart', name: '重新開始', def: 'n' }, { c: 'battle', id: 'menu', name: '回主選單', def: '0' },
   // 第一人稱（81_fps.js fpKey）：走路四個鍵、轉頭 Q 按住才算（畫面上是搖桿，沒有圓鈕）
   { c: 'fps', id: 'fpFwd', name: '往前走', def: 'w', hold: 1 }, { c: 'fps', id: 'fpBack', name: '往後走', def: 's', hold: 1 }, { c: 'fps', id: 'fpLeft', name: '往左走', def: 'a', hold: 1 }, { c: 'fps', id: 'fpRight', name: '往右走', def: 'd', hold: 1 },
   { c: 'fps', id: 'fpTurnL', name: '往左轉頭', def: 'q', hold: 1 }, { c: 'fps', id: 'fpRun', ico: '🏃', name: '跑', def: 'shift', hold: 1 },
