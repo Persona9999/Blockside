@@ -18,6 +18,11 @@ function evEmit(t, a, b, c, d, e, f, g, h, i, j) {
   var L = EV_SUB[t]; if (!L) return;
   for (var k = 0; k < L.length; k++) L[k].f(a, b, c, d, e, f, g, h, i, j);
 }
+/** 問答（TASK-0669 第二段）：模擬層要問上層一個值（例：遠的船帆與繩降級 —— 只有鏡頭知道離多遠）⇒ evAsk(t, 沒人答時的值, 參數)；
+ *  上層 evAnswer(t, 函式, view) 回答（一題一個人答；view 的無頭時不收 ⇒ 回沒人答時的值）。 */
+var EV_ASK = {};
+function evAnswer(t, fn, view) { if (!(view && HEADLESS)) EV_ASK[t] = fn; }
+function evAsk(t, d, a, b) { var f = EV_ASK[t]; return f ? f(a, b) : d; }
 /** 拿掉事件 t 的訂閱（fn 沒給 ＝ 全部；反向對照與測試用）。回傳拿掉幾個。 */
 function evOff(t, fn) {
   var L = EV_SUB[t] || [], n = L.length;
@@ -29,6 +34,9 @@ function evOff(t, fn) {
 // 只在同一步裡發的事件（不是函式名）：viewStep（每一步只給人看的推進：碎木、煙囪排煙、粒子；12_effects、78_funnel）、
 //   survey（每半秒每艘一次：廣播整理；61_hud）、stepEnd（每一步最後：報表、測試紀錄、結束判定；79_report、83_testlog、61_hud）、
 //   ballGone（砲彈落地或打中：鏡頭跟著它的話停一下；03_camera）、playerTake（玩家換船：鏡頭、按住的舵鍵；03_camera、71_input）。
+//   第二段：viewStepSlow（殉爆慢動作中只推船邊水花；13_water）、cell／armCell（打掉船殼／裝甲的一格：附近的區重建；62_simview）、
+//   armorShip（開船：裝甲掛網格；62_simview）、pieceNew／pieceGone（碎塊的網格；62_simview）、phys（物理開關的按鈕；62_simview）。
+//   問答：rigFar（遠的船帆與繩降級；03_camera camRigFar）。
 function note(sh, text, imp) { evEmit('note', sh, text, imp); }                                  // 廣播（61_hud hudNote）
 function newsGun(sh, m, drop) { evEmit('newsGun', sh, m, drop); }                                 // 砲被打飛（61_hud）
 function newsCrew(sh, c, dead, cause) { evEmit('newsCrew', sh, c, dead, cause); }                 // 有人倒下（61_hud）
@@ -46,3 +54,6 @@ function spawnPt(p, v, life, col, a, s0, s1, grav, drag, ty) { evEmit('pt', p, v
 function smoke(p, dir, n, big) { evEmit('smoke', p, dir, n, big); }
 function flash(p, dir, n, big) { evEmit('flash', p, dir, n, big); }
 function splash(p, big) { evEmit('splash', p, big); }
+function wpBump(pa, pb, A, B) { evEmit('wpBump', pa, pb, A, B); }                                // 船邊水花（13_water waterBump）
+function wpPour(P, out, rate) { evEmit('wpPour', P, out, rate); }                                 // 艙裡的水往外流（13_water waterPour）
+function ptMute(on) { evEmit('ptMute', on); }                                                     // 接下來的 spawnPt 收到也不放（參數的亂數照樣抽完；13_water PT_MUTE）

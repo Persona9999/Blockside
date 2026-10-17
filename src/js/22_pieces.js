@@ -21,11 +21,10 @@ function spawnPiece(sh, pc) {
   }
   var px = 0, py = 0, pz = 0, pn = 0;
   for (i = 0; i < n; i++) { z = pc[i] >> 21; if (z <= minz + 2) { px += (pc[i] & 2047); py += (pc[i] >> 11) & 1023; pz += z; pn++; } }
-  var rs2 = new VK.RegionSet(gl, g, QIDX); rsAllDirty(rs2);                 // 網格分批建（60_render.js remesh；⛔ buildAll ⇒ 十萬格的半截船那一格卡上百 ms）
   var M0 = sh.M, c0 = M4.pt(M0, sx / n + 0.5, sy / n + 0.5, sz / n + 0.5), pivot = M4.pt(M0, px / pn + 0.5, py / pn + 0.5, pz / pn);
   var imp = sh.impulse; imp = [imp[0], 0, imp[2]]; if (len(imp) < 1e-6) imp = [rnd() - 0.5, 0, rnd() - 0.5];
   var axis = norm(cross([0, 1, 0], norm(imp)));
-  var piece = { T: sh.T, team: sh.team, grid: g, rs: rs2, M0: M0, c0: c0, c: c0.slice(), R: M4.ident(), v: [0, 0, 0], w: mul(axis, rr(0.18, 0.35)), pivot: pivot, n: n,
+  var piece = { T: sh.T, team: sh.team, grid: g, M0: M0, c0: c0, c: c0.slice(), R: M4.ident(), v: [0, 0, 0], w: mul(axis, rr(0.18, 0.35)), pivot: pivot, n: n,
     hinge: c0[1] - pivot[1] > 2.5, t: 0, wet: false, ropes: [], cl: [], rigDirty: true, lines: null, mods: [] };
   if (sh.keel && n > 60000) {                                 // 斷成兩截的那半截船：不繞斷口倒 —— 帶著船速漂、斷口那頭往下、慢慢沉
     var fw = M4.dir(sh.M, 1, 0, 0), sideK = (sx / n) > sh.breakX ? 1 : -1;
@@ -66,7 +65,7 @@ function spawnPiece(sh, pc) {
   });
   piece.sh = sh; piece.pivotL = M4.pt(sh.inv, pivot[0], pivot[1], pivot[2]);
   sh.rigDirty = true;
-  PIECES.push(piece);
+  PIECES.push(piece); evEmit('pieceNew', piece);                       // 網格分批建（62_simview.js；只給人看）
   if (n > 3000) { sfx('creak', c0, 1.4); note(sh, piece.hull ? '船斷成兩截！' : c0[1] - pivot[1] > 8 ? '桅杆斷了！' : '一大塊船體脫落', !!piece.hull); }
 }
 /** 倒下的那一團掃過甲板：沿著它倒下的那條線（斷口 → 2 倍重心距離）1.5 公尺內的人被壓到。 */

@@ -310,17 +310,24 @@ function coarseOf(n, T) {
   }
   return { kind: kind, idx: idx, tris: ct, mi: mi, mw: mw };
 }
+/** 布的粗格 ⇒ 細格位置（TASK-0669 從 11_rig_gpu.js 搬來：接觸、碎布、收帆凍結都在算它，畫帆也用）。 */
+function clothFine(c, out) {
+  var T = c.T, p = c.p, mi = T.mi, mw = T.mw;
+  for (var i = 0; i < T.n; i++) {
+    var o = i * 4, x = 0, y = 0, z = 0;
+    for (var k = 0; k < 4; k++) { var w = mw[o + k]; if (!w) break; var q = mi[o + k] * 3; x += p[q] * w; y += p[q + 1] * w; z += p[q + 2] * w; }
+    out[i * 3] = x; out[i * 3 + 1] = y; out[i * 3 + 2] = z;
+  }
+  return out;
+}
 function clothSetup(H, C) {                            // 船型 H 的布模板；暫存區（兩艘、各型共用）照目前最大的那一型配；C ＝ 快取的記錄（06_cache.js：rbox、cloth）
   H.rbox = C ? C.rbox : H.rig.ropes.map(function (r) { return ropeBox(r.pts); });
   var n0 = H.nSail0 === undefined ? H.rig.sails.length : H.nSail0;      // 作品自己的帆（快取只存這幾面）；後面是陣營旗（77_colours.js teamFlagsSetup，每次現算）
   H.cloth = H.rig.sails.map(function (s, k) { if (C && k < n0 && C.cloth[k]) return C.cloth[k]; var t = clothTemplate(H, s); t.ti = k; return t; });   // ti：第幾面帆 ⇒ 貼圖集的哪一格（布片、斷開的那一團也認得）
   H.sailAtlas = sailAtlas(H.rig.sails.concat(H.teamExtra || [])); H.sailTexGL = null;   // teamExtra：陣營旗紅方那份、替換作品旗的藍紅兩份（77_colours.js teamFlagsSetup；畫的時候 sailRect 挑）              // 貼圖集不進快取（照 vxk 現算；GL 貼圖第一次畫才建，11_rig_gpu.js sailTex）
-  var mv = 1, mc = 1, sv = 0, si = 0;
-  H.cloth.forEach(function (C) { mv = Math.max(mv, C.n); mc = Math.max(mc, C.sim.n); sv += C.n; si += C.tris.length; });
+  var mc = 1;                                                            // 畫帆的暫存區（SBV／SBI／SBN／SBP）由 11_rig_gpu.js sailBuf 照當下要畫的配（TASK-0669）
+  H.cloth.forEach(function (C) { mc = Math.max(mc, C.sim.n); });
   if (!CACC || CACC.length < mc * 3) { CACC = new Float32Array(mc * 3); CCNT = new Uint8Array(mc); }
-  if (!SBV || SBV.length < Math.max(1, sv) * SB_STRIDE) SBV = new Float32Array(Math.max(1, sv) * SB_STRIDE);
-  if (!SBI || SBI.length < Math.max(1, si)) SBI = new Uint32Array(Math.max(1, si));
-  if (!SBN || SBN.length < mv * 3) { SBN = new Float32Array(mv * 3); SBP = new Float32Array(mv * 3); }
 }
 /** 張開的帆從雕刻作品那一刻的形狀開始（開局、收帆後再張、物理剛打開）。 */
 function clothInit(c) {
@@ -486,13 +493,7 @@ function underWater(sh, p, i) { return wetAt(sh, [p[i * 3], p[i * 3 + 1], p[i * 
 //   布：每 every × m 步走一次（時間間隔跟著放大；最多 RIG_FAR_HC 秒 ⇒ Verlet 的布步長太大會炸開，m 照它截）；垂下來的繩：每 m 步走一次、dt ＝ m × DT。
 //   這一段本來就只管畫出來的樣子（不碰 rnd()、不改命中）⇒ 開關不改戰局。鏡頭還沒算過（快轉、無頭對拍）⇒ 照常。
 var RIG_FAR = [null, { d1: 150, m1: 2, d2: 1e9, m2: 2, off: 2 }, { d1: 100, m1: 2, d2: 200, m2: 3, off: 4 }], RIG_FAR_HC = 0.1;
-function rigFarM(sh) {
-  var F = RIG_FAR[PHX.rigfar], e = CAM.eye, vp = CAM.vp; if (!F || !e || !vp) return 1;
-  var B = sh.T.base, R = 0.5 * S * Math.hypot(B.sx, B.sy, B.sz), c = M4.pt(sh.M, B.sx / 2, B.sy / 2, B.sz / 2), d = Math.hypot(c[0] - e[0], c[1] - e[1], c[2] - e[2]);
-  var m = d > F.d2 ? F.m2 : d > F.d1 ? F.m1 : 1, cw = vp[3] * c[0] + vp[7] * c[1] + vp[11] * c[2] + vp[15], vis = d < R;
-  if (!vis && cw > 0.1) { var k = 1 + 2 * R / cw, x = (vp[0] * c[0] + vp[4] * c[1] + vp[8] * c[2] + vp[12]) / cw, y = (vp[1] * c[0] + vp[5] * c[1] + vp[9] * c[2] + vp[13]) / cw; vis = Math.abs(x) < k && Math.abs(y) < k; }   // 外接球大概碰到畫面
-  return vis ? m : Math.max(m, F.off);
-}
+function rigFarM(sh) { return evAsk('rigFar', 1, sh); }   // 鏡頭外、遠的船降級（03_camera.js camRigFar 回答；沒有畫面 ⇒ 1 ＝ 不降級）
 function physStep(sh) {
   var W = norm(WIND), ws = WIND_SAIL * WIND_K * (1 + GUST[0] * Math.sin(SIMT * 0.9 + sh.phase) + GUST[1] * Math.sin(SIMT * 2.7 + 1.3) + GUST[2] * Math.sin(SIMT * 6.1 + sh.phase * 2)) * WX.wind * WIND_SPD;   // 陣風（不用亂數）；天氣：暴風雨 ×2.2；風速會變（08_weather.js）
   ws = Math.min(ws, WIND_CAP);                                         // 上限（細節設定「風速上限」，預設 30 m/s；Tim 2026-10-15：暴風雨裡帆被吹成螺旋、「上限可以比這個變形幅度稍微小一點就好」⇒ 只夾暴風雨陣風的峰值（沒有上限時可到 50 m/s）；晴天峰值約 23、暴風雨平常約 23 都碰不到）
@@ -544,7 +545,7 @@ function physStep(sh) {
 function setPhys(on) {
   PHYS = on;
   if (on && !PHX.rig) PHX.rig = PHX_RIG_LAST; else if (!on && PHX.rig) { PHX_RIG_LAST = PHX.rig; PHX.rig = 0; }   // 物理分級的「帆與繩」跟著走（09_phx.js）
-  $('physT').classList.toggle('on', on); if (typeof phxShow === 'function' && $('phxB')) phxShow();
+  evEmit('phys', on);                                                  // 按鈕的亮暗、物理分級頁（62_simview.js）
   SHIPS.forEach(function (sh) {
     sh.loose = []; sh.shreds = []; sh.tCut = {};
     if (!on) { (sh.yards || []).forEach(function (m) { m.rot = 0; }); if (sh.yRopes) yardRopes(sh, true); unswingHangs(sh); }   // 關 ⇒ 帆桁回到作品的角度、小艇不擺

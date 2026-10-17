@@ -71,7 +71,6 @@ function camUpdate(dt) {
   var proj = M4.persp(0.9, CAM.w / CAM.h, 0.5, 5000), view = M4.lookAt(CAM.eye, CAM.look, [0, 1, 0]);
   CAM.vp = M4.mul(proj, view); CAM.inv = M4.inv(CAM.vp);
 }
-function lerp3(a, b, k) { return [a[0] + (b[0] - a[0]) * k, a[1] + (b[1] - a[1]) * k, a[2] + (b[2] - a[2]) * k]; }
 // 追砲彈（mode 1；Tim 2026-10-13）：只追我艦打的（觀戰也是）；追著的那顆打中或落水才換（落點停 1.2 秒，CAM.hold）。
 //   挑下一顆的時機：這輪齊射打完（最新那顆飛了 BALL_SETTLE 秒）或最舊那顆飛了 BALL_WAIT 秒（連續開火時不等到天荒地老）；
 //   挑哪顆：照現在的位置與速度往前推算（重力、打水漂同 stepBall；敵艦照現在的船速平移），會打中敵艦的優先、其中離命中最久的那顆；
@@ -132,3 +131,12 @@ function pickBall() {
 // 訂閱（TASK-0669：模擬層只發事件，00_events.js）
 evOn('ballGone', function (b) { if (CAM.follow === b) CAM.hold = 1.2; }, 0, true);   // 跟著的那顆落地或打中 ⇒ 停 1.2 秒再回來（50_sim.js step）
 evOn('playerTake', function (nw) { CAM.trMe = CAM.trYaw = null; if (CAM.see === nw) CAM.see = null; }, 0, true);   // 玩家換船（52_fleet.js playerTake）：跟船的角度重算；正在「🎥 看著」那艘 ⇒ 改成看我艦那一種（就是它）
+/** 遠的船、鏡頭外的船：帆與繩的物理隔幾步才算一次（30_rig_physics.js rigFarM 問的；RIG_FAR 在那裡、照 PHX.rigfar）。TASK-0669 從 30 搬來：只有鏡頭知道離多遠、看不看得到。 */
+function camRigFar(sh) {
+  var F = RIG_FAR[PHX.rigfar], e = CAM.eye, vp = CAM.vp; if (!F || !e || !vp) return 1;
+  var B = sh.T.base, R = 0.5 * S * Math.hypot(B.sx, B.sy, B.sz), c = M4.pt(sh.M, B.sx / 2, B.sy / 2, B.sz / 2), d = Math.hypot(c[0] - e[0], c[1] - e[1], c[2] - e[2]);
+  var m = d > F.d2 ? F.m2 : d > F.d1 ? F.m1 : 1, cw = vp[3] * c[0] + vp[7] * c[1] + vp[11] * c[2] + vp[15], vis = d < R;
+  if (!vis && cw > 0.1) { var k = 1 + 2 * R / cw, x = (vp[0] * c[0] + vp[4] * c[1] + vp[8] * c[2] + vp[12]) / cw, y = (vp[1] * c[0] + vp[5] * c[1] + vp[9] * c[2] + vp[13]) / cw; vis = Math.abs(x) < k && Math.abs(y) < k; }   // 外接球大概碰到畫面
+  return vis ? m : Math.max(m, F.off);
+}
+evAnswer('rigFar', camRigFar, true);

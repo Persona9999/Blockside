@@ -495,15 +495,6 @@ function stepFly(f, dt) {
   f.M = M4.mul(M4.mul(M4.mul(trans(f.c[0], f.c[1], f.c[2]), f.R), trans(-f.c0[0], -f.c0[1], -f.c0[2])), f.M0);
   return f.t < 25 && f.c[1] > -25;
 }
-function buildMeshes(H, C) {      // 船型 H 的每份模型網格一個 VAO：三角形展開、平面法線、材質色（P.tri 畫）；C ＝ 快取的 [{ tri, occ }]（06_cache.js）
-  H.meshes = []; var keep = [];
-  (H.rig.meshes || []).forEach(function (m, k) {
-    var d = C ? C[k] : { tri: meshTris(m), occ: meshOcc(m) };
-    var up = upload(null, d.tri, 9, [[0, 3, 0], [1, 3, 3], [2, 3, 6]]);
-    up.occ = d.occ; H.meshes.push(up); keep.push(d);
-  });
-  if (H.keep) H.keep.models = keep;
-}
 function meshTris(m) {
   var v = m.verts, T = [];
   for (var j = 0; j < m.tris.length; j += 3) {
@@ -610,9 +601,9 @@ function dropSail(owner, s, torn) {
 /** 帆被打中但還撐得住：撕下幾片布（不掉）。物理開著、布在 ⇒ tearCloth 已經撕下真的布片（34_shreds.js），這裡照樣抽亂數、不放（PT_MUTE）。 */
 function shredSail(owner, s, L) {
   var w = M4.pt(owner.M, L[0], L[1], L[2]), c = s.col || [0.95, 0.92, 0.85], cl = owner.cl && owner.cl[s.k];
-  PT_MUTE = !!(PHYS && cl && !cl.gone);                              // 物理開著 ⇒ 不撒點精靈（布還沒建也一樣；TASK-0579）
+  ptMute(!!(PHYS && cl && !cl.gone));                              // 物理開著 ⇒ 不撒點精靈（布還沒建也一樣；TASK-0579）
   for (var k = 0; k < 3; k++) { var sz = rr(1.2, 2.2); spawnPt(w, [gauss() * 1.5, rr(-0.5, 1.5), gauss() * 1.5], rr(4, 7), c, 1, sz, sz * 0.85, 3, 1.2, 4); }
-  PT_MUTE = false;
+  ptMute(false);
 }
 function sailLinesDie(owner, s) { (s.lines || []).forEach(function (j) { owner.ropes[j].dead = true; owner.ropes[j].offSail = s; }); owner.rigDirty = true; }   // offSail：垂下來時靠帆的那一端放開（30_rig_physics.js spawnLoose）
 

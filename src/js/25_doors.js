@@ -26,22 +26,6 @@ function doorsShip(sh) {
   });
   if (D.length) sh.doors = D;
 }
-/** 畫面那一格（90_main.js frame）：有人經過 ⇒ 開、沒人 ⇒ 關。只寫 m.sw／spv／sax（畫，modelLocal）。 */
-function doorsAnim(dt) {
-  SHIPS.forEach(function (sh) {
-    if (!sh.doors) return;
-    sh.doors.forEach(function (d) {
-      var m = d.m; if (!m.alive || !d.a) return;
-      var near = GFX.door && shPassers(sh, function (p) {                 // 經過 ＝ 正在走、正在爬（站著不動的不算）；第一人稱的玩家也算（81_fps.js shPassers）
-        return Math.hypot(p[0] - m.c[0], p[1] - m.c[1]) < DOOR_R && Math.abs(p[2] - d.zt) < DOOR_RZ;
-      });
-      if (near) d.hold = DOOR_HOLD; else d.hold -= dt;
-      d.t = GFX.door ? clamp(d.t + (d.hold > 0 ? 1 : -1) * DOOR_SP * dt, 0, 1) : 0;
-      var e = d.t * d.t * (3 - 2 * d.t);                                  // 起步、停下都慢一點
-      m.sw = e * d.deg; m.spv = d.a; m.sax = d.ax;
-    });
-  });
-}
 /** 每半秒（32_hull.js survey）：門沒了（打飛、腳下的甲板沒了）⇒ 開口變成進水口（只登記一次）。 */
 function doorsSurvey(sh) {
   sh.doors.forEach(function (d) {

@@ -225,7 +225,7 @@ function drawModels(prog, near) {
     if (sh.sink > 40 || (near && !near(sh))) return;
     cutSet(prog, sh);
     sh.models.forEach(function (m) {
-      var me = sh.T.meshes[m.mesh]; if (!m.alive || !me || (m.vox && !m.moved)) return;   // m.vox：螺旋槳畫它自己的格（24_armor.js armDraw）
+      var me = sh.T.meshes[m.mesh]; if (!m.alive || !me || (m.vox && !m.moved)) return; if (!me.vao) meshGpu(me);   // m.vox：螺旋槳畫它自己的格（24_armor.js armDraw）
       gl.uniformMatrix4fv(prog.u.uModel, false, M4.mul(sh.M, m.ancD ? M4.mul(trans(m.ancD[0], m.ancD[1], m.ancD[2]), modelLocal(m)) : modelLocal(m)));   // ancD：拋下去的模型錨，畫在鐵鍊那一端（76_anchor.js chainStep）
       if (prog.u.uGlow) gl.uniform1f(prog.u.uGlow, isLamp(m) ? lanternK(m) : 0);   // 取用點的火藥桶是後加的模型，沒有 meta
       gl.bindVertexArray(me.vao); gl.drawArrays(gl.TRIANGLES, 0, me.n);
@@ -236,11 +236,11 @@ function drawModels(prog, near) {
   if (prog.u.uGlow) gl.uniform1f(prog.u.uGlow, 0);                     // 斷開的那一團、飛出去的模型：燈熄了
   cutSet(prog, null);
   PIECES.forEach(function (pc) { if (near && !near(pc)) return; (pc.mods || []).forEach(function (m) {      // 跟著斷開的那一團走的模型
-    var me = pc.T.meshes[m.mesh]; if (!me) return;
+    var me = pc.T.meshes[m.mesh]; if (!me) return; if (!me.vao) meshGpu(me);
     gl.uniformMatrix4fv(prog.u.uModel, false, M4.mul(pc.M, m.L));
     gl.bindVertexArray(me.vao); gl.drawArrays(gl.TRIANGLES, 0, me.n);
   }); });
-  FLY.forEach(function (f) { var me = f.T.meshes[f.mesh]; if (!me || !f.M) return; gl.uniformMatrix4fv(prog.u.uModel, false, f.M); gl.bindVertexArray(me.vao); gl.drawArrays(gl.TRIANGLES, 0, me.n); });
+  FLY.forEach(function (f) { var me = f.T.meshes[f.mesh]; if (!me || !f.M) return; if (!me.vao) meshGpu(me); gl.uniformMatrix4fv(prog.u.uModel, false, f.M); gl.bindVertexArray(me.vao); gl.drawArrays(gl.TRIANGLES, 0, me.n); });
 }
 /** 燈（餘燼號船尾三盞燈籠 meta kind=lantern、夜燈號船首像的提燈 kind=light）：燈罩發光、光暈、點光源。 */
 function isLamp(m) { return !!(m.meta && (m.meta.kind === 'lantern' || m.meta.kind === 'light')); }

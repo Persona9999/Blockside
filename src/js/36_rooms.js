@@ -268,8 +268,8 @@ var FURN_MATS = [[0.42, 0.28, 0.16], [0.82, 0.78, 0.66], [0.93, 0.92, 0.88], [0.
 function furnMesh(T, item, ax) {
   T.furn = T.furn || {}; var key = item + ax;
   if (T.furn[key] === undefined) {
-    var m = boxMesh(furnBoxes(item, ax), FURN_MATS), up = upload(null, meshTris(m), 9, [[0, 3, 0], [1, 3, 3], [2, 3, 6]]);
-    up.occ = meshOcc(m); T.meshes.push(up); T.furn[key] = T.meshes.length - 1;
+    var m = boxMesh(furnBoxes(item, ax), FURN_MATS);
+    T.meshes.push({ tri: meshTris(m), occ: meshOcc(m) }); T.furn[key] = T.meshes.length - 1;   // GPU 那一半第一次畫到才上傳（62_simview.js meshGpu；TASK-0669）
   }
   return T.furn[key];
 }
