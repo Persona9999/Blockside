@@ -70,7 +70,7 @@ function makeShip(i, team, yaw, pz, T, px) {                          // T：船
   sh.models.forEach(function (m) {
     if (!GUNS[m.kind]) return;
     var A = gunMuzzle(m);
-    sh.guns.push(m.gun = { name: m.name, type: m.kind, side: A.ax[1] >= 0 ? 'S' : 'P', model: m, ax: A.ax, muz: A.muz, muzs: A.muzs, alive: true, reload: rr(0, 1.2), box: BOX_N, needCart: false });   // box：砲旁藥箱裡的份數
+    sh.guns.push(m.gun = { name: m.name, type: m.kind, side: A.ax[1] >= 0 ? 'S' : 'P', model: m, ax: A.ax, muz: A.muz, muzs: A.muzs, alive: true, reload: rr(0, 1.2), box: BOX_N, needCart: false, safe: !!(m.meta && +m.meta.safe) });   // box：砲旁藥箱裡的份數；safe：模型 meta safe=1 ⇒ 開火前看砲線（21_gunnery.js selfBlock）
   });
   sh.guns.forEach(function (g) { gunMountInit(sh, g); });            // 迴旋砲、砲塔（meta mount；21_gunnery.js）—— 沒標的砲不動
   turretShip(sh);                                                       // 砲塔層（kind=turret；27_turret.js）：砲、模型掛上去 —— 沒有 ⇒ 不做事

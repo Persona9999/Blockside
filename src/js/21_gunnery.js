@@ -7,6 +7,7 @@ function fireGun(sh, g, target, ammo) {
   if (!bears(sh, g, target)) return false;                            // 目標不在這門砲的砲門射界 ⇒ 不開（呼叫端先用 gunTarget 挑好這門打得到的點）
   if (g.mt && mountBusy(g)) return false;                              // 迴旋砲換砲門的途中不能開（TASK-0626）
   if (!mountFireOk(g)) return false;                                   // 砲塔的砲口不在能開火的角度裡（fire；TASK-0636）
+  if (g.safe && selfBlock(sh, g, target)) { sh.selfBlk = (sh.selfBlk || 0) + 1; return false; }   // 標了 safe 的砲：砲線上有自己的砲塔、砲、火藥桶 ⇒ 先不開（等砲線清了；裝填不浪費）；selfBlk：擋了幾次（讀數）
   var GS = GUNS[g.type], r = fireShot(sh, g, target, ammo, g.muzs ? g.muzs[0] : g.muz);
   g.reload = sh.reloadT * GS.reload * rr(0.9, 1.1); g.firedAt = SIMT; sh.fired++;
   g.needCart = true;                                                // 下一發要從砲旁的藥箱拿一份火藥與彈藥（沒有 ⇒ 等送藥手，23_powder.js）
@@ -20,9 +21,26 @@ function burstStep(sh) {
     var g = sh.guns[i]; if (!(g.burstLeft > 0) || SIMT < g.burstT) continue;
     if (sh.struck || sh.sunk || !g.alive || g.wet || gunRate(g) <= 0) { g.burstLeft = 0; continue; }
     var t = gunTarget(sh, g, aimPoint(sh));
-    if (t && bears(sh, g, t) && mountFireOk(g)) { var r = fireShot(sh, g, t, g.burstAmmo, g.muzs ? g.muzs[g.burstK % g.muzs.length] : g.muz); sh.fired++; shotFx(sh, g, r.mw, r.dir); }
+    if (t && bears(sh, g, t) && mountFireOk(g) && !(g.safe && selfBlock(sh, g, t))) { var r = fireShot(sh, g, t, g.burstAmmo, g.muzs ? g.muzs[g.burstK % g.muzs.length] : g.muz); sh.fired++; shotFx(sh, g, r.mw, r.dir); }
     g.burstK++; g.burstLeft--; g.burstT = SIMT + (GUNS[g.type].burstGap || 0.15);
   }
+}
+/** 砲線上有沒有自己船的關鍵部位（Tim 2026-10-17：「應該是被自己的炮打掉的」「因為剛好在炮線上 可以讓炮檢查是否會打到自己船的關鍵部位(砲塔或炮)」
+ *  「打到自己船非關鍵部位不管 因為目前風暴角號前向炮會打掉裝飾用的船頭」）：從砲口沿著往目標那條直線（船的格座標）每一格量一點，到離開船的外框或到目標為止 ——
+ *  只有模型 meta 標了 safe=1 的砲才量（Tim「炮上可以加meta設定開關 有打開的炮才檢查(節省效能)」⇒ 沒標的船一行都不多算、戰局逐位元組不變）。
+ *  碰到別門砲、火藥桶（模型，照網格 inMesh，不是外框；Tim「只要避開其他自己的砲塔 火藥桶之類的關鍵部件」）、砲塔／砲盾的殼（armAt；⛔ 不算這門砲自己掛的那一座：砲從它的砲門打出去；螺旋槳不算）⇒ 擋住、這一發先不開
+ *  （開火的閘照舊在，砲線清了下一拍就開；裝填不浪費）。船殼、甲板、裝飾照開。⚠ 直線、不算彈道的弧（船邊幾十公尺內差不到一格）。 */
+function selfBlock(sh, g, target) {
+  var M = g.muz, T = toLocal(sh, target), d = sub(T, M), l = len(d); if (l < 1) return false;
+  d = mul(d, 1 / l);
+  var S = sh.T.h.size, own = g.model && g.model.hd, skip = g.model ? [g.model] : null, lim = Math.min(l, 1000);
+  for (var s = 2; s <= lim; s++) {
+    var P = [M[0] + d[0] * s, M[1] + d[1] * s, M[2] + d[2] * s];
+    if (P[0] < 0 || P[1] < 0 || P[2] < 0 || P[0] >= S[0] || P[1] >= S[1] || P[2] >= S[2]) return false;   // 出了船的外框
+    var o = hitModel(sh, P, 0, skip); if (o && (GUNS[o.kind] || o.kind === 'powder')) return true;   // 別門砲、火藥桶（彈藥庫、砲旁的備便桶）
+    if (sh.arm) { var a = armAt(sh, P); if (a && !a.prop && a.g !== g && !(own && a.nd === own)) return true; }
+  }
+  return false;
 }
 /** 一發砲彈：從 muz（格座標的砲口）照 target 算仰角、前置量、散布，放進 BALLS。回：{ mw 世界的砲口, dir 出膛方向 }。 */
 function fireShot(sh, g, target, ammo, muz) {
