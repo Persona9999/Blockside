@@ -8,12 +8,44 @@ function buildRig(owner) {          // 還綁著的繩（靜態，照雕刻作�
     s.lines.forEach(function (j) { hide[j] = 1; });
   });
   var tj = PHYS && owner.tJ, tc = PHYS && owner.tCut;                  // 跟著帆腳走的 sheet、tack（30_rig_physics.js tethOf）：looseBuf 每一格畫；tCut：帆腳被打掉、已經垂下來的（tethCut）
+  var CR = owner.crew && owner.T ? climbRopes(owner.T) : null, TB = CR ? [] : null;   // 繩梯的繩畫成管子（climbRopes）
   owner.ropes.forEach(function (r, j) {
     if (r.dead || hide[j] || tj && tj[j] || tc && tc[j]) return;
+    if (CR && CR[j]) { ropeTube(TB, r.pts, r.col, Math.max(ROPE_TUBE_MIN, owner.T.rig.ropes[j].radius || 0)); return; }
     for (var j = 0; j + 5 < r.pts.length; j += 3) L.push(r.pts[j], r.pts[j + 1], r.pts[j + 2], r.col[0], r.col[1], r.col[2], r.pts[j + 3], r.pts[j + 4], r.pts[j + 5], r.col[0], r.col[1], r.col[2]);
   });
   owner.lines = upload(owner.lines, new Float32Array(L), 6, [[0, 3, 0], [2, 3, 3]]);
+  if (TB) owner.ropeT = upload(owner.ropeT, new Float32Array(TB), 6, [[0, 3, 0], [2, 3, 3]]);   // 60_render.js 跟線同一趟畫（三角形）
   owner.rigDirty = false;
+}
+// 繩梯的繩畫成實心的細管（Tim 2026-10-17：「繩梯的繩子可以粗一點」）：一般的繩照舊一條線（1 像素，雕刻的粗細只拿來算碰撞）；
+//   繩梯 ＝ 橫繩組 climb 的每一道（meta climb）＋它掛的那兩根母繩（每一道的端點 rope:母繩/比例）⇒ 照雕刻的粗細（radius，格；最細 ROPE_TUBE_MIN）畫六角管、不打光（顏色同線）。
+var ROPE_TUBE_MIN = 0.15, ROPE_TUBE_SIDES = 6;
+/** 船型 T 的繩梯是哪幾條繩（{ j: 1 }；沒有 ⇒ null；同一型算一次）。 */
+function climbRopes(T) {
+  if (T.climbR !== undefined) return T.climbR;
+  var R = (T.rig && T.rig.ropes) || [], idx = {}, S = null;
+  function full(fr, n) { return fr ? fr + '/' + n : n; }
+  R.forEach(function (r, j) { idx[full(r.frame || '', r.name)] = j; });
+  R.forEach(function (r, j) {
+    if (!r.meta || !+r.meta.climb) return;
+    (S = S || {})[j] = 1;
+    (r.ends || []).forEach(function (e) { if (typeof e !== 'string' || e.indexOf('rope:') !== 0) return; var q = e.slice(5), i = q.lastIndexOf('/'), k = idx[full(r.frame || '', q.slice(0, i))]; if (k !== undefined) S[k] = 1; });
+  });
+  return (T.climbR = S);
+}
+/** 一條繩（pts：格座標，三個一組）畫成半徑 w 的六角管，三角形推進 TB（位置 3、色 3）。 */
+function ropeTube(TB, P, col, w) {
+  for (var i = 0; i + 5 < P.length; i += 3) {
+    var a = [P[i], P[i + 1], P[i + 2]], b = [P[i + 3], P[i + 4], P[i + 5]], d = sub(b, a), dl = len(d); if (dl < 1e-6) continue;
+    d = mul(d, 1 / dl);
+    var u = Math.abs(d[2]) > 0.9 ? [1, 0, 0] : norm([d[1], -d[0], 0]), v = [d[1] * u[2] - d[2] * u[1], d[2] * u[0] - d[0] * u[2], d[0] * u[1] - d[1] * u[0]], R = [];
+    for (var k = 0; k <= ROPE_TUBE_SIDES; k++) { var t = k / ROPE_TUBE_SIDES * 6.28319, o = add(mul(u, Math.cos(t) * w), mul(v, Math.sin(t) * w)); R.push(o); }
+    for (k = 0; k < ROPE_TUBE_SIDES; k++) {
+      var p0 = add(a, R[k]), p1 = add(a, R[k + 1]), q0 = add(b, R[k]), q1 = add(b, R[k + 1]);
+      [p0, p1, q1, p0, q1, q0].forEach(function (p) { TB.push(p[0], p[1], p[2], col[0], col[1], col[2]); });
+    }
+  }
 }
 /** 帆的網格（一個 owner 一份，索引畫）：頂點法線 ＝ 相鄰三角形的面積加權平均 ⇒ 布是圓的，不是一面一面的。
  *  關物理 ⇒ 位置就是雕刻作品那一刻（T.p0），只在 rigDirty 時重做；開物理 ⇒ 每一格畫面重做。

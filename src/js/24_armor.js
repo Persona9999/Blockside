@@ -222,6 +222,43 @@ function navG(sh) {
   var g = sh.grid, T = sh.T;
   return sh.navG || (sh.navG = { sx: g.sx, sy: g.sy, sz: g.sz, get: function (x, y, z) { return sh.grid.get(x, y, z) ? 1 : armWall(T, x, y, z); } });
 }
+/** P（開局的船的格座標）r 格內有沒有砲塔（kind=turret）的殼：有 ⇒ 那一塊是第幾座砲塔（A.tur）；沒有 ⇒ −1。繩綁在砲塔上（10_ship.js linkRopes、ropeEndSupport）。 */
+function armNear(T, P, r) {
+  var bx = Math.floor(P[0]), by = Math.floor(P[1]), bz = Math.floor(P[2]);
+  for (var i = 0; i < (T.armor || []).length; i++) {
+    var A = T.armor[i], b = A.bb; if (A.tur === undefined || bx < b[0] - r || bx > b[3] + r || by < b[1] - r || by > b[4] + r || bz < b[2] - r || bz > b[5] + r) continue;
+    for (var dz = -r; dz <= r; dz++) for (var dy = -r; dy <= r; dy++) for (var dx = -r; dx <= r; dx++) if (A.grid.get(bx + dx, by + dy, bz + dz)) return A.tur;
+  }
+  return -1;
+}
+// 第一人稱站上砲塔（Tim 2026-10-17：繩梯「上下跑塔上方那一塊」）：navG 把整座砲塔當成它掃過的那一圈（轉一圈的樣子，旋轉對稱）、
+//   站在砲塔自己的地板上方那幾柱（吊籃上）整柱都不擋 ⇒ 吊籃上方的砲塔頂是空的、站不上去（量過：哨兵號主砲塔頂除了吊籃外圈那一環，teleport 都找不到地板）。
+//   fpG：那幾柱照砲塔現在的角度轉回砲塔座標、看砲塔真的格（殼、頂、吊籃、疊在上面的砲房，各照自己的節點；打掉的照這艘的）；其他照 navG。
+/** (x, y, z)（船現在的格座標）在不在某座砲塔自己的地板上方：在 ⇒ { k：最外層第幾座, a：那一點是哪一塊殼的格（沒有 ⇒ null）}；不在 ⇒ null。 */
+function turCell(sh, x, y, z) {
+  var T = sh.T, B = T.base; if (!T.turZf || !sh.tur) return null;
+  var P = [x + 0.5, y + 0.5, z + 0.5];
+  for (var k = 0; k < sh.tur.length; k++) {
+    var N = sh.tur[k]; if (N.up || !N.isTur) continue;
+    var q = ndIn(N, P), qx = Math.floor(q[0]), qy = Math.floor(q[1]); if (qx < 0 || qy < 0 || qx >= B.sx || qy >= B.sy) continue;
+    var i = qx + qy * B.sx; if (T.turZr[i] !== k || z < T.turZf[i]) continue;
+    for (var j = 0; j < sh.arm.length; j++) {
+      var a = sh.arm[j]; if (a.A.rootK !== k || !a.nd) continue;
+      var qq = a.nd === N ? q : ndIn(a.nd, P); if (a.grid.get(Math.floor(qq[0]), Math.floor(qq[1]), Math.floor(qq[2]))) return { k: k, a: a };
+    }
+    return { k: k, a: null };
+  }
+  return null;
+}
+/** 第一人稱的格（81_fps.js）：沒有砲塔層 ⇒ navG；有 ⇒ 砲塔自己的地板上方照 turCell，其他照 navG（船殼＋掃過的那一圈）。 */
+function fpG(sh) {
+  if (!sh.arm || !sh.T.turZf) return navG(sh);
+  var g = sh.grid, T = sh.T;
+  return sh.fpG || (sh.fpG = { sx: g.sx, sy: g.sy, sz: g.sz, get: function (x, y, z) {
+    if (sh.grid.get(x, y, z)) return 1;
+    var c = turCell(sh, x, y, z); return c ? (c.a ? 1 : 0) : armWall(T, x, y, z);
+  } });
+}
 // 會轉的甲板（27_turret.js；42_hands.js navBuild／navRefresh）：腳下是砲塔自己的格的那幾點照砲塔座標看 ——
 //   船殼＋殼（開局的樣子／這艘打掉之後的；殼的格座標 ＝ 砲塔座標）＋別座砲塔掃過的那一圈（自己這一串不算）。
 /** 砲塔自己的地板（吊籃、砲塔頂；27_turret.js「會轉的甲板」）：每一柱 (x, y) 最低那一個「砲塔的格、上面是空的」再往上一格 ⇒ T.turZf（站的高度）、T.turZr（最外層第幾座）。

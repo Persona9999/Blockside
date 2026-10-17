@@ -56,6 +56,9 @@ function ndMat(N) {
 }
 /** 一路轉了多少（自己＋外面每一層）。 */
 function ndYaw(N) { return N.yaw + (N.up ? ndYaw(N.up) : 0); }
+/** 這一串（自己、外面每一層）現在的角度 ⇒ 陣列；ndYawsSet 設回去（第一人稱照「上一格畫面的角度」換算，81_fps.js fpRide）。 */
+function ndYaws(N) { var a = []; for (; N; N = N.up) a.push(N.yaw); return a; }
+function ndYawsSet(N, a) { for (var i = 0; N; N = N.up, i++) N.yaw = a[i]; }
 /** 最外層那一座。 */
 function ndRoot(N) { while (N.up) N = N.up; return N; }
 /** N 在不在 A 底下（或就是 A）。 */
@@ -149,6 +152,81 @@ function turPose(sh) {
   sh.tur.forEach(function (N) { N.models.forEach(function (m) { m.c = ndOut(N, m.c0); }); });
   (sh.mags || []).forEach(function (g) { if (g.tur >= 0) { g.blast0 = g.blast0 || g.blast.slice(); g.blast = ndOut(sh.tur[g.tur], g.blast0); } });   // 砲塔裡的彈藥箱：殉爆的爆心跟著轉（⛔ 照開局的位置 ⇒ 轉過之後在別的地方炸）
   sh.turG.forEach(turGunPose);
+  ropeRideStep(sh);                                                     // 綁在砲塔上的繩、繩梯跟著轉／拉伸
+}
+// ── 跟著砲塔轉的繩、繩梯（Tim 2026-10-17：「繩梯直接綁在頂部開口」「優化繩梯支援旋轉(旋轉後兩端仍然連通)」「也可以被拉伸(有彈性)」）──
+// 每條繩的兩端各自綁在哪：照雕刻的寫法（r.ends，相對於繩所在那一層 r.frame；匯出 include=ends）——
+//   x,y,z ⇒ 繩所在那一層；固定點、關聯/…/固定點、model:… ⇒ 那個路徑；落在哪一座砲塔底下（turOf，最近的那一層；船身 ⇒ −1）。
+//   rope:母繩/比例（橫繩組的每一道、子繩）⇒ 母繩兩端照比例混。⇒ 一端 ＝ 幾座的權重 [[k, w], …]。
+// 畫、被打斷都照現在的位置：每一點 ＝ 兩端的換算照它沿繩的位置 t 內插 —— 兩端同一座 ⇒ 整條跟著轉（剛體，一點都不變形）；
+//   不同（一頭在砲塔、一頭在甲板／別座砲塔）⇒ 中間被拉長、縮短（有彈性）。
+// 船型上沒有任何一條綁在砲塔上 ⇒ T.ropeRide ＝ null ⇒ 一行都不多算、戰局逐位元組不變。
+/** 船型 T 每條繩兩端的權重（同一型算一次）：[[E0, E1] | null, …]；整艘都沒有 ⇒ null。 */
+function ropeRideOf(T) {
+  if (T.ropeRide !== undefined) return T.ropeRide;
+  var R = (T.rig && T.rig.ropes) || [], idx = {}, memo = [], any = false;
+  if (!(T.turrets || []).length || !R.length) return (T.ropeRide = null);
+  function full(fr, n) { return fr ? fr + '/' + n : n; }
+  R.forEach(function (r, j) { idx[full(r.frame || '', r.name)] = j; });
+  function endW(r, ref, seen) {
+    var fr = r.frame || '';
+    if (typeof ref !== 'string') return [[turOf(T, full(fr, '_')), 1]];
+    if (ref.indexOf('rope:') === 0) {                                    // 掛在母繩上：母繩兩端照比例混
+      var s = ref.slice(5), i = s.lastIndexOf('/'), u = clamp(+s.slice(i + 1) || 0, 0, 1), j = idx[full(fr, s.slice(0, i))];
+      if (j === undefined || seen[j]) return [[turOf(T, full(fr, '_')), 1]];
+      var E = ends(j, seen), out = [];
+      E[0].forEach(function (a) { out.push([a[0], a[1] * (1 - u)]); }); E[1].forEach(function (a) { out.push([a[0], a[1] * u]); });
+      return out;
+    }
+    if (/^-?[\d.]+,-?[\d.]+,-?[\d.]+$/.test(ref)) return [[turOf(T, full(fr, '_')), 1]];   // 座標 ⇒ 繩所在那一層
+    return [[turOf(T, full(fr, ref.replace(/^(model|sail):/, ''))), 1]];
+  }
+  function ends(j, seen) {
+    if (memo[j]) return memo[j];
+    var r = R[j], s2 = Object.assign({}, seen); s2[j] = 1;
+    var e = r.ends || [], E = [endW(r, e[0], s2), endW(r, e[1], s2)];
+    E = E.map(function (L) { var m = {}; L.forEach(function (a) { m[a[0]] = (m[a[0]] || 0) + a[1]; }); return Object.keys(m).map(function (k) { return [+k, m[k]]; }).filter(function (a) { return a[1] > 1e-9; }); });
+    return (memo[j] = E);
+  }
+  var out = R.map(function (r, j) {
+    var E = ends(j, {}); if (!E[0].some(function (a) { return a[0] >= 0; }) && !E[1].some(function (a) { return a[0] >= 0; })) return null;
+    any = true; return E;
+  });
+  return (T.ropeRide = any ? out : null);
+}
+/** 一點 p（開局的船的格座標）照一端的權重換到現在（船身 ⇒ 原地；砲塔 ⇒ 照那一座現在的角度）。 */
+function rideAt(sh, E, p) {
+  if (E.length === 1) return E[0][0] < 0 ? p : ndOut(sh.tur[E[0][0]], p);
+  var x = 0, y = 0, z = 0;
+  E.forEach(function (a) { var q = a[0] < 0 ? p : ndOut(sh.tur[a[0]], p); x += q[0] * a[1]; y += q[1] * a[1]; z += q[2] * a[1]; });
+  return [x, y, z];
+}
+/** 第 j 條繩上的一點 p（沿繩的位置 t：0 ＝ 第一端、1 ＝ 第二端）現在在哪。 */
+function rideRope(sh, j, p, t) {
+  var E = sh.T.ropeRide[j]; if (!E) return p;
+  var a = rideAt(sh, E[0], p), b = E[0] === E[1] ? a : rideAt(sh, E[1], p);
+  return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
+}
+/** 綁在砲塔上的繩梯（R ＝ { j：[最低一道, 最高一道] 是第幾條繩, z0, z1：梯腳、梯頭的高度 }）上的一點 p（開局的船的格座標）現在在哪：
+ *  最低、最高那一道各照它們現在的換法換過去，照高度在兩者之間內插 —— 兩道同一座砲塔 ⇒ 整座跟著轉；一頭在砲塔、一頭在甲板 ⇒ 中間拉長、縮短。
+ *  第一人稱（81_fps.js）、預備水手（42_hands.js stepHand）爬的時候都照它（梯腳、梯頭、爬到一半的人）。 */
+function ladRide(sh, R, p) {
+  if (!R) return p;
+  var a = rideRope(sh, R.j[0], p, 0.5), b = rideRope(sh, R.j[1], p, 0.5), s = R.z1 !== R.z0 ? clamp((p[2] - R.z0) / (R.z1 - R.z0), 0, 1) : 0;
+  return [a[0] + (b[0] - a[0]) * s, a[1] + (b[1] - a[1]) * s, a[2] + (b[2] - a[2]) * s];
+}
+/** 一座繩梯（shipLadders 的一項）綁不綁在砲塔上：綁 ⇒ ladRide 用的 R；不綁 ⇒ null。 */
+function ladRideOf(T, l, z0, z1) { var RR = ropeRideOf(T); return RR && l.ri && (RR[l.ri[0]] || RR[l.ri[1]]) ? { j: l.ri, z0: z0, z1: z1 } : null; }
+/** 砲塔轉過（turPose）：綁在砲塔上的繩照現在的角度重擺（畫 ⇒ rigDirty；被打斷 cutRig 照 r.pts、r.bb）。 */
+function ropeRideStep(sh) {
+  var R = ropeRideOf(sh.T); if (!R) return;
+  for (var j = 0; j < R.length; j++) {
+    var r = sh.ropes[j]; if (!R[j] || !r || r.dead) continue;
+    var P0 = r.pts0 || (r.pts0 = r.pts), n = P0.length / 3, P = new Array(P0.length);   // ⛔ 不改 P0：開局那一份跟船型共用
+    for (var i = 0; i < n; i++) { var q = rideRope(sh, j, [P0[i * 3], P0[i * 3 + 1], P0[i * 3 + 2]], n > 1 ? i / (n - 1) : 0); P[i * 3] = q[0]; P[i * 3 + 1] = q[1]; P[i * 3 + 2] = q[2]; }
+    r.pts = P; r.bb = ropeBox(P);
+  }
+  sh.rigDirty = true;
 }
 /** 一個節點這一步轉多少（砲塔：前方對準瞄準方位；自己會轉、掛在砲塔上的砲：照舊的 mountStep 一樣挑砲門／照 arc、fire 轉）。回：有沒有動。 */
 function turTurn(N, L, dt) {

@@ -15,6 +15,7 @@
 #   python -I admin.py metasync --id <船的代號>   只同步 meta 與固定點（作品改了 meta、加了固定點，格子不動；TASK-0572）
 #   python -I admin.py reimport --id <船的代號> [--work <作品 ID>]                 重新匯入（換新的 .vxk、印跟上一版的差別、重建）
 #   python -I admin.py cache                      _cache/ 缺的、跟指紋不同的 .vxk 從版控那份成品裡解回來（換機器、只改程式時用；建置也會自己做）
+#   python -I admin.py cells --id <船的代號>      只寫動力件與梯子的格子清單（meta、格子不動；TASK-0676 木匠照它還原整件梯子）
 #   python -I admin.py relock --id <船的代號>     指紋改成 _cache 現在那份（手動換過 .vxk 時；平常匯入／重新匯入／metasync 會自己更新）
 #   加 --no-build：匯入／重新匯入之後不重建
 import argparse, base64, hashlib, json, math, os, posixpath, re, shutil, socket, struct, subprocess, sys, urllib.request, webbrowser, zlib
@@ -37,6 +38,19 @@ SHIPS_A, SHIPS_B = '—— ships 開始 -->\n', '<!-- ships 結束 -->'
 #   對得上 ⇒ 照建；對不上 ⇒ 版控的成品裡內嵌的那份對得上指紋就自動換回（原檔留成 .stale）；也對不上 ⇒ 擋下不建（⛔ 不猜哪一份才對）。
 #   匯入／重新匯入／metasync 寫了 .vxk 就更新指紋；要改用 _cache 現在那份（例如手動換過檔）⇒ relock。
 LOCK_P = os.path.join(HERE, 'config', 'vxk_lock.json')
+MUSIC_JS = os.path.join(HERE, 'js', '02_music.js')
+
+
+def theme_ids():
+    """船的主題曲（TASK-0681）：js/02_music.js 的 THEMES 裡有哪些 id（ships[].theme 要是其中一個）。照原文抓 `var THEMES = [` 到下一個 `];` 之間的 `{ id: '…'` —— 抓不到 ⇒ 空（每艘寫了 theme 的都會報錯，不會靜靜放過）。"""
+    try:
+        t = open(MUSIC_JS, encoding='utf-8').read()
+    except OSError:
+        return []
+    m = re.search(r'^var THEMES = \[(.*?)^\];', t, re.S | re.M)
+    return re.findall(r"^  \{ id: '([a-z0-9_-]+)'", m.group(1), re.M) if m else []
+
+
 
 
 def sha1_bytes(b):
@@ -161,7 +175,8 @@ MAT_OPT = (('metal', 0, 1, '金屬度（選填；0 ＝ 不反光、1 ＝ 金屬�
            ('pen', 1, 5000, '擊穿門檻（選填；每格板厚要幾 kJ，船殼硬度倍率 1 時；寫了 ⇒ 實心彈照能量與入射角判穿／凹／彈，TASK-0621）'))
 MAT_BOOL = (('smooth', '平滑（選填 true／false；true ⇒ 這種材質的格沒寫 render 也畫成平滑面＋金屬反光，螺旋槳整份平滑；關聯明寫 render=voxel 照方塊。Tim 2026-10-17：鐵甲、鍋爐開，包銅皮不開）'),)
 CREW = {'officers': (0, 8, True), 'helm': (0, 4, True), 'marines': (0, 60, True), 'marineGap': (5, 200, True),
-        'top': (0, 8, True), 'monkeys': (0, 2, True), 'handsK': (0, 4, False), 'shelter': (0, 1, True)}   # shelter：船員避開露天甲板（TASK-0637；0／1）
+        'top': (0, 8, True), 'monkeys': (0, 2, True), 'handsK': (0, 4, False), 'shelter': (0, 1, True),   # shelter：船員避開露天甲板（TASK-0637；0／1）
+        'surgeon': (0, 8, True), 'carpenter': (0, 8, True)}                                           # 木匠（TASK-0676 ②）                                                                       # 船醫（TASK-0676；有醫療艙才上船）
 CREW_SHIP = {'hands': (0, 120, True)}          # 只在每艘船寫（TASK-0570 船隻配置頁的預設）：預備水手人數；沒寫 ＝ lim.hands × handsK
 GUN_CREW_MAX = 8                               # 砲班滿編上限（砲旁的站位；遊戲 05_hull.js GUN_CREW_MAX）
 GEO_PAIRS = ('marines', 'aimZ', 'deckAim', 'rigAim')
@@ -410,6 +425,8 @@ def validate(cfg, prev=None):
             N = DV.get('teleNames')
             if N is not None and not (isinstance(N, list) and isinstance(T, list) and len(N) == len(T) and all(isinstance(x, str) and x for x in N)):
                 err('drive.teleNames', '跟 tele 一樣多個名字')
+            if 'partCheck' in DV and not isinstance(DV['partCheck'], bool):
+                err('drive.partCheck', 'true／false（動力件檢查：戰鬥中數主機、鍋爐、軸還剩幾成；預設關，TASK-0673）')
     PN = cfg.get('pen', {})                              # 實心彈與爆裂彈照能量算（TASK-0621；js/21_gunnery.js 的 PEN）：沒寫的鍵照程式裡的預設
     if not isinstance(PN, dict):
         err('pen', '要是物件')
@@ -428,6 +445,7 @@ def validate(cfg, prev=None):
             err('pen.hi', '要大於 lo')
     MT = cfg.get('materials')                            # 材質表（TASK-0616）：{ default: ID, list: { ID: { name, kind, density, hard, flammable } } }；ID 英文小寫，雕刻那側關聯 meta material 寫它
     MIDS = set()
+    THEME_IDS = theme_ids()
     if not (isinstance(MT, dict) and isinstance(MT.get('list'), dict) and MT['list']):
         err('materials', '要是 { default: 材質 ID, list: { ID: 參數 } }，list 至少一種')
     else:
@@ -506,6 +524,8 @@ def validate(cfg, prev=None):
             err(p + '.zw0', '正整數（作品沒有水線 meta 時的設計水線）')
         if 'drive' in s and s['drive'] not in ('steam', 'magic'):
             err(p + '.drive', '額外動力的種類：steam（蒸汽機，預設）或 magic（魔法／幽靈船）；沒有額外動力（cfg.base）就不用寫')
+        if 'theme' in s and not (isinstance(s['theme'], str) and s['theme'] in THEME_IDS):
+            err(p + '.theme', '主題曲的 id（js/02_music.js 的 THEMES：%s；TASK-0681）' % ('、'.join(THEME_IDS) or '—'))
         if 'author' in s and not (isinstance(s['author'], str) and s['author'].strip()):
             err(p + '.author', '建造者（雕刻作品的作者；匯入時從 .vxk 檔頭 owner 記，沒有就不寫這個鍵）')
         if 'variant_of' in s and not (isinstance(s['variant_of'], str) and s['variant_of'] != s.get('id')):
@@ -729,7 +749,8 @@ def meta_kinds():
     return json.load(open(META_P, encoding='utf-8'))['kinds']
 
 
-DRV_KINDS = tuple(k for k, v in meta_kinds().items() if v.get('drv') == 'part')   # 動力件（TASK-0653；遊戲 31_drive.js 照格子算剩幾成、通不通）：規格表 drv=part（主機、鍋爐、軸、蒸汽管）
+DRV_KINDS = tuple(k for k, v in meta_kinds().items() if v.get('drv') == 'part')
+CELL_KINDS = DRV_KINDS + ('ladders', 'ladder')       # 寫格子清單 parts[].cellRuns 的關聯：動力件＋梯子（TASK-0676：木匠照它把整件梯子還原，Tim「可以單純是還原該子模組(梯子)」）   # 動力件（TASK-0653；遊戲 31_drive.js 照格子算剩幾成、通不通）：規格表 drv=part（主機、鍋爐、軸、蒸汽管）
 
 
 VOXM_KINDS = tuple(k for k, v in meta_kinds().items() if v.get('drv') == 'vox')   # 會轉的體素件（TASK-0653 第二段；遊戲 24_armor.js propSetup）：規格表 drv=vox（螺旋槳）；這幾種模型匯出時多帶來源作品的格子
@@ -824,8 +845,9 @@ def drive_cells(h):
     SX, SY, SZ = (h.get('size') or [0, 0, 0])[:3]
     for q in h.get('parts', []) or []:
         kind = (q.get('meta') or {}).get('kind')
-        if kind not in DRV_KINDS:
+        if kind not in CELL_KINDS:
             continue
+        what = '動力件' if kind in DRV_KINDS else '梯子'
         runs, why = None, ''
         b, w = q.get('box'), q.get('src')
         if not (b and len(b) == 6 and w):
@@ -862,7 +884,7 @@ def drive_cells(h):
                     end = idx[j] + 1
                     i = j + 1
         if why:
-            log.append('⚠ 動力件 %s（%s）：%s ⇒ 不寫格子清單（遊戲照固定點旁 ±8 格判）' % (q.get('path'), kind, why))
+            log.append('⚠ %s %s（%s）：%s ⇒ 不寫格子清單（%s）' % (what, q.get('path'), kind, why, '遊戲照固定點旁 ±8 格判' if what == '動力件' else '木匠只補踏板'))
         if q.get('cellRuns') != runs:
             changed = True
             if runs is None:
@@ -870,7 +892,7 @@ def drive_cells(h):
             else:
                 q['cellRuns'] = runs
         if runs:
-            log.append('動力件 %s（%s）：%d 格、%d 段（%s%s）' % (q.get('path'), kind, sum(runs[1::2]), len(runs) // 2, w, '，mirror=y' if q.get('mirror') == 'y' else ''))
+            log.append('%s %s（%s）：%d 格、%d 段（%s%s）' % (what, q.get('path'), kind, sum(runs[1::2]), len(runs) // 2, w, '，mirror=y' if q.get('mirror') == 'y' else ''))
     return log if changed else None
 
 
@@ -952,6 +974,29 @@ def act_metasync(sid, build=True):
         if build:
             log += act_build()
             log += act_shipcheck([sid])                  # meta 改了 ⇒ 順手檢查一次（只讀）
+    return log
+
+
+def act_cells(sid, build=True):
+    """只寫格子清單（TASK-0676）：動力件與梯子的關聯 parts[].cellRuns 照來源作品重算（drive_cells），meta、固定點、格子一位元都不動
+    （⛔ 不走 metasync：那會把作品上別人還沒定案的 meta 一起帶進來）。寫了 ⇒ 更新指紋。"""
+    cfg = load()
+    s = next((x for x in cfg['ships'] if x['id'] == sid), None)
+    if not s:
+        raise Fail('設定檔沒有這艘：' + sid)
+    path = os.path.join(CACHE, s['vxk'])
+    if not os.path.exists(path):
+        raise Fail('_cache 沒有 ' + s['vxk'] + '（先 python -I admin.py cache）')
+    raw = zlib.decompress(open(path, 'rb').read(), -15)
+    n = struct.unpack('<I', raw[4:8])[0]
+    h = json.loads(raw[8:8 + n].decode('utf-8'))
+    dc = drive_cells(h)
+    if dc is None:
+        return ['cells %s：格子清單沒變' % sid]
+    vxk_write(path, h, raw[8 + n:])
+    log = ['cells %s：' % sid] + ['  ' + x for x in dc] + [lock_put(s['vxk'])]
+    if build:
+        log += act_build()
     return log
 
 
@@ -1089,6 +1134,7 @@ def act_shipcheck(ids=None):
               '砲帶的裝甲（關聯 meta kind=armor、mount；跟著砲轉、一格一格打掉，TASK-0631）：' + (I.get('armor') or '—'), '',
               '門、艙蓋（模型 meta kind=door、固定點 hinge-a／hinge-b；不擋人、打掉了開口才進水，TASK-0638）：' + (I.get('doors') or '—'), '',
               '照參數轉的子物件（模型 meta spin；舵、舵輪跟著舵角轉，只是畫面，TASK-0640）：' + (I.get('spins') or '—'), '',
+              '裝飾（模型 meta deco=1；載入時拿掉、畫質「裝飾」開著才畫，不算重量、不被打，TASK-0682）：' + (I.get('deco') or '—'), '',
               '額外動力（TASK-0630；輸出物件 份量；主機／軸／鍋爐 照造船規格 §9.6）：' + (I.get('drive') or '—（沒有 cfg.base）'), '',
               '動力件（TASK-0653；關聯 meta kind=engine／boiler／shaft／steampipe 的格子清單，照剩幾成、通不通算）：' + (I.get('drvparts') or '—'), '',
               '會轉的體素件（螺旋槳模型 meta kind=propeller 的格子；跟著軸轉、一格一格打掉、推力照剩幾成，TASK-0653 第二段）：' + (I.get('props') or '—'), '',
@@ -1584,6 +1630,62 @@ def grid_variant_unpack(h, body, h0, grid0):
     return _grid_chunks(L % sx, (L // sx) % sy, L // (sx * sy), C)
 
 
+# ── 檔頭：改裝船跟原船相同的欄位不存（TASK-0667 ①；Tim 2026-10-17「哨兵號這種用其他船當子模組的改造模式 能省下多少空間」→「重構時重點處理這一塊」）──
+# 格式（只在成品裡）：header.vh ＝ {el: 原船的內嵌標籤, k: [路徑, …]}，路徑 ＝ 一串鍵（只走物件、不走陣列：['render', 'runs']）；那幾欄從改裝船的檔頭拿掉。
+# 比的是兩艘都處理好的檔頭（帆只留配方、網格換成池子編號之後）；兩邊寫成 JSON 逐字相同才算（⛔ 不用 ==：Python 的 True == 1、1 == 1.0，JS 分得出來）。
+# 還原（voxelkit.js unshare 同一個算法）：原船照它自己的讀法解（原船自己是改裝船 ⇒ 先還原它的）⇒ 照路徑把那幾欄放回改裝船；pack_verify 照同一個讀法比 _cache 原檔。
+VH_SKIP = {'size', 'nchunks', 'variant', 'mirror', 'mesh_pool', 'vh', 'checksum', 'voxels'}   # 頂層這幾欄是改裝船自己的（或太小）
+VH_MIN = 32                                                                                     # 比這個短（JSON 位元組）的欄不值得記路徑
+
+
+def _js(v):
+    return json.dumps(v, ensure_ascii=False, separators=(',', ':'))
+
+
+def header_shared(h, h0, pre=()):
+    """改裝船檔頭 h 跟原船 h0 逐字相同的欄 ⇒ 路徑清單（物件不同 ⇒ 往下一層找）。"""
+    out = []
+    for k in h:
+        if (not pre and k in VH_SKIP) or k not in h0:
+            continue
+        a, b = h[k], h0[k]
+        if isinstance(a, dict) and isinstance(b, dict) and _js(a) != _js(b):
+            out += header_shared(a, b, pre + (k,))
+        elif _js(a) == _js(b) and len(_js(a).encode('utf-8')) >= VH_MIN:
+            out.append(list(pre + (k,)))
+    return out
+
+
+def header_drop(h, p):
+    for k in p[:-1]:
+        h = h[k]
+    del h[p[-1]]
+
+
+def header_unshare(h, h0):
+    """header_shared 的反向（跟 voxelkit.js unshare 同一個算法）：照 h['vh'] 的路徑從原船 h0 放回來、拿掉 vh。"""
+    for p in h.pop('vh')['k']:
+        a, b = h, h0
+        for k in p[:-1]:
+            a, b = a.setdefault(k, {}), b[k]
+        a[p[-1]] = json.loads(_js(b[p[-1]]))
+
+
+def _emb_header(html, el, depth=0):
+    """成品裡內嵌的那一艘 ⇒ 照遊戲的讀法還原好的檔頭（vh 照原船放回；原船自己有 vh ⇒ 先還原它的）。"""
+    if depth > 8:
+        raise Fail('改裝船的原船鏈太長（成環？）：#%s' % el)
+    mt = re.search(r'<script type="application/x-vxk" id="%s">([^<]*)</script>' % re.escape(el), html)
+    if not mt:
+        raise Fail('成品裡沒有 #%s' % el)
+    a = zlib.decompress(base64.b64decode(mt.group(1)), -15)
+    na = struct.unpack('<I', a[4:8])[0]
+    h = json.loads(a[8:8 + na].decode('utf-8'))
+    if h.get('vh'):
+        header_unshare(h, _emb_header(html, h['vh']['el'], depth + 1))
+    return h
+
+
 def _cache_raw(s):
     """一艘的 _cache 原檔 ⇒ (header, 格子那一段)。"""
     b = zlib.decompress(open(os.path.join(CACHE, s['vxk']), 'rb').read(), -15)
@@ -1663,16 +1765,39 @@ def pack_html(path):
         elif mr:
             h['mirror'], grid = mr
         mirrors.append((el, h.get('mirror'), g0, len(_deflate(grid)), h.get('variant')))
-        if not ms and not mr and not vr and not rs:
-            return mt.group(0)
-        hb = json.dumps(h, ensure_ascii=False, separators=(',', ':')).encode('utf-8')
-        b = base64.b64encode(_deflate(b'VXK1' + struct.pack('<I', len(hb)) + hb + grid)).decode('ascii')
-        return mt.group(1) + b + mt.group(3)
+        items.append({'el': el, 'h': h, 'grid': grid, 'mt': mt, 'changed': bool(ms or mr or vr or rs), 'base': byid[sv['variant_of']]['el'] if sv and sv.get('variant_of') in byid else None})
+        return '\x00SHIP%d\x00' % (len(items) - 1)                # 檔頭共用（TASK-0667）要等每艘都處理完才比得了 ⇒ 先佔位，最後一起寫
 
+    items = []
     RX = r'(<script type="application/x-vxk" id="[^"]+">)([^<]*)(</script>)'
     first = next(mt for mt in re.finditer(RX, html) if len(mt.group(2)) >= 64).start()   # 池子放在第一艘船前面（⛔ 照字串找第一個：voxelkit.js 的註解裡就有一模一樣的標籤 ⇒ 池子插進程式中間）
     html2 = html[:first] + '\x00POOL\x00' + html[first:]
     html2, k = re.subn(RX, one, html2)
+    proc = {it['el']: it['h'] for it in items}
+    shared = []
+    for it in items:                                          # 先全部比完（比的是處理好、還沒拿掉任何欄位的檔頭）再拿掉 ⇒ 原船自己也是改裝船時照樣對
+        if it['base'] in proc:
+            P = header_shared(it['h'], proc[it['base']])
+            if P:
+                it['vh'] = {'el': it['base'], 'k': P}
+    for it in items:
+        if it.get('vh'):
+            n0 = len(json.dumps(it['h'], ensure_ascii=False, separators=(',', ':')).encode('utf-8'))
+            for p in it['vh']['k']:
+                header_drop(it['h'], p)
+            it['h']['vh'] = it['vh']
+            shared.append((it['el'], it['base'], it['vh']['k'], n0 - len(json.dumps(it['h'], ensure_ascii=False, separators=(',', ':')).encode('utf-8'))))
+            it['changed'] = True
+
+    def emit(m):
+        it = items[int(m.group(1))]
+        mt = it['mt']
+        if not it['changed']:
+            return mt.group(0)
+        hb = json.dumps(it['h'], ensure_ascii=False, separators=(',', ':')).encode('utf-8')
+        b = base64.b64encode(_deflate(b'VXK1' + struct.pack('<I', len(hb)) + hb + it['grid'])).decode('ascii')
+        return mt.group(1) + b + mt.group(3)
+    html2 = re.sub('\x00SHIP(\\d+)\x00', emit, html2)
     k = sum(1 for mt in re.finditer(RX, html) if len(mt.group(2)) >= 64)
     pb = base64.b64encode(_deflate(json.dumps({'v': 1, 'q': POOL_Q, 'meshes': pool}, separators=(',', ':')).encode('utf-8'))).decode('ascii')
     tag = '<script type="application/x-vxk-meshes" id="%s">%s</script>\n' % (POOL_EL, pb)
@@ -1685,6 +1810,8 @@ def pack_html(path):
     for el, M, g0, g1, V in mirrors:
         what = ('改裝船：跟原船 #%s 差 %d 格' % (V['el'], V['ndiff'])) if V else ('鏡射 y ↔ %d − y、一半 %d 塊、diff %d 格' % (M['s'], M['nhalf'], M['ndiff'])) if M else '照原樣（鏡射沒有比較小）'
         log.append('  格子 %s：%s　%d KB → %d KB' % (el, what, g0 // 1024, g1 // 1024))
+    for el, el0, P, dn in shared:
+        log.append('  檔頭 %s：跟原船 #%s 相同的 %d 欄不存（%s）⇒ 少 %d KB（壓縮前）' % (el, el0, len(P), '、'.join('.'.join(p) for p in P[:8]) + ('…' if len(P) > 8 else ''), dn // 1024))
     open(path, 'w', encoding='utf-8', newline='').write(html2)
     size1 = len(html2.encode('utf-8'))
     log.append('✓ 壓縮模式：%d 艘、網格池 %d 份（%d KB）%s；成品 %.2f MB → %.2f MB（−%.0f%%）' % (
@@ -1882,6 +2009,12 @@ def pack_verify(html):
         na, nb = struct.unpack('<I', a[4:8])[0], struct.unpack('<I', b[4:8])[0]
         ha, hb = json.loads(a[8:8 + na].decode('utf-8')), json.loads(b[8:8 + nb].decode('utf-8'))
         ga = a[8 + na:]
+        if ha.get('vh'):                                        # TASK-0667：跟原船相同的檔頭欄 ⇒ 照遊戲的讀法從原船（成品裡內嵌的那一份，還原好的）放回來
+            try:
+                header_unshare(ha, _emb_header(html, ha['vh']['el']))
+            except (Fail, KeyError, TypeError) as e:
+                E.append('%s：檔頭從原船放回來失敗（%s）' % (s['id'], e))
+                continue
         if ha.get('variant'):                                   # TASK-0657：改裝船 ⇒ 原船的原檔＋差（原船自己的成品另外在它那一輪比）
             s0 = next((x for x in load()['ships'] if x['el'] == ha['variant']['el']), None)
             if s0 is None:
@@ -2376,6 +2509,9 @@ def main():
     s = sp.add_parser('metasync', help='只同步 meta 與固定點（格子不動）')
     s.add_argument('--id', required=True)
     s.add_argument('--no-build', action='store_true')
+    s = sp.add_parser('cells', help='只寫動力件與梯子的格子清單（parts[].cellRuns；meta、格子不動）')
+    s.add_argument('--id', required=True)
+    s.add_argument('--no-build', action='store_true')
     s = sp.add_parser('relock', help='指紋改成 _cache 現在那份')
     s.add_argument('--id', required=True)
     sp.add_parser('authors', help='建造者：每艘船照 _cache 那份 .vxk 檔頭的 owner 記 ships[].author（補以前匯入的船；不重建）')
@@ -2418,6 +2554,8 @@ def main():
             log = act_authors()
         elif o.op == 'metasync':
             log = act_metasync(o.id, not o.no_build)
+        elif o.op == 'cells':
+            log = act_cells(o.id, not o.no_build)
         elif o.op == 'import':
             log = act_import(o.work, o.id, o.name, not o.no_build, o.variant_of)
         else:

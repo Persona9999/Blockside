@@ -24,6 +24,16 @@ function hydrostatics(T) {
 function modelT(m, gunw) { return m.kind === 'powder' ? KEG_T : (GUNS[m.kind] ? GUNS[m.kind].mass : 0) * gunw; }   // 模型的重量（砲乘船隻設定的倍率）
 /** 開戰時的重量（噸）：格 ＋ 模型 ＋ 壓艙物。砲帶的裝甲（24_armor.js）也是格：sh.orig 只算船殼 ⇒ 加 sh.armN0（有材質層 ⇒ T.voxT0 本來就含）。 */
 function shipT(sh) { var t = (sh.T.matPlain ? (sh.arm ? sh.orig + sh.armN0 : sh.orig) * VOX_T : sh.T.voxT0) + sh.cfg.ballast; sh.models.forEach(function (m) { t += modelT(m, sh.cfg.gunw); }); return t; }
+/** 還沒開戰就算得出來的開戰時重量（船隻配置頁；Tim 2026-10-17「額外顯示實際遊戲開場的排水量(加上炮重&其他配件重)」）：跟 shipT 同一套，照船型 T 與設定 c ⇒
+ *  { vox 格（砲帶的裝甲也算）, gun 砲（× 砲的重量）, keg 火藥桶（作品裡的＋甲板取用點每一處三桶，照配置頁擺的）, ballast 壓艙物, all 合計 }（噸）。 */
+function hullT0(T, c) {
+  var o = { vox: T.matPlain ? (T.hullG.count + (T.armor || []).reduce(function (s, A) { return s + A.n; }, 0)) * VOX_T : T.voxT0, gun: 0, keg: 0, ballast: +c.ballast || 0 };
+  (T.rig.models || []).forEach(function (m) { var k = modelKind(m); if (k === 'powder') o.keg += KEG_T; else o.gun += modelT({ kind: k }, c.gunw); });
+  var pw = Object.keys(FURN).filter(function (k) { return FURN[k].role === 'powder'; })[0];
+  hullDeckKit(T).decks.forEach(function (D) { deckItems(T, D, deckPlan(T.id, D.id)).items.forEach(function (it) { if (it.it === pw) o.keg += 3 * KEG_T; }); });
+  o.all = o.vox + o.gun + o.keg + o.ballast;
+  return o;
+}
 /** 少掉的重量（噸）：格（被打掉、跟著斷開的一團走）＋ 不在船上的模型（飛掉、炸掉、跟著斷開的一團走）。帆桁不算。 */
 function massLost(sh) {
   var t = voxLostT(sh);                                                   // 每格照材質（05_material.js；全是預設比重 0.7 ⇒ 少幾格 × VOX_T）
@@ -122,7 +132,7 @@ function survey(sh) {               // 每半秒量一次：砲還在不在、�
   if (sh.fl) sh.flBase = sh.T.disp - sh.mass0 + massLost(sh);                     // 粒子模式：浮力表上水以外的部分（33_flood.js floodSinkT）
   driveSurvey(sh);                                                    // 動力：實際質量（含進水）、引擎／魔力的完好度（31_drive.js）
   drownCheck(sh);                                                     // 船殼通海了 ⇒ 被水淹過頭的人浮上來（43_swim.js）
-  chooseSide(sh); reassign(sh); manning(sh); medTick(sh); pumpTick(sh); callHands(sh);   // pumpTick：抽水機要幾個人、現在抽多少（45_pumps.js）；medTick：醫療艙治療（44_medic.js）；callHands：預備水手補位（42_hands.js）
+  chooseSide(sh); reassign(sh); manning(sh); medTick(sh); pumpTick(sh); callHands(sh); carpTick(sh);   // pumpTick：抽水機要幾個人、現在抽多少（45_pumps.js）；medTick：醫療艙治療（44_medic.js）；callHands：預備水手補位（42_hands.js）
   sh.able = sh.crew.filter(able).length;
   sh.gunsManned = sh.guns.filter(function (g) { return g.alive && gunRate(g) > 0; }).length;
   strikeCheck(sh);

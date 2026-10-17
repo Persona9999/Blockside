@@ -82,7 +82,7 @@ function fpMode(m) {
 /** 浮空結束：從現在的位置往下找站得住的地板 ⇒ 照重力落下去（腳底換成那一層、FP.jz ＝ 離地多高）；
  *  下面一路都沒有（在船外、海上）⇒ 回到開始浮空的地方（那裡也站不住 ⇒ 找它附近 12 格內最近的地板）。 */
 function fpLand() {
-  var c = FP.c, g = navG(FP.sh), x = Math.floor(c.pos[0]), y = Math.floor(c.pos[1]), z = Math.floor(c.pos[2]);
+  var c = FP.c, g = fpG(FP.sh), x = Math.floor(c.pos[0]), y = Math.floor(c.pos[1]), z = Math.floor(c.pos[2]);
   FP.vz = 0; FP.jv = 0;
   for (var dz = 0; dz <= 160; dz++) {
     var s = standZ(g, x, y, z - dz, z - dz, FP_HEAD);
@@ -142,9 +142,25 @@ function fpFollow(next) {
 /** 梯子：foot → lo → hi → head（格座標，z ＝ 腳踩的那一格）；lo、hi 抬 CLIMB_LIFT 格（同預備水手，42_hands.js：兩點連線會切過踏板前緣）。 */
 function fpLadders(sh) {
   return shipLadders(sh.T).map(function (l) {
-    var P = l.pts, mid = P.slice(1, -1).map(function (q) { return [q[0], q[1], q[2] + CLIMB_LIFT]; });
-    return { name: l.name, up: [P[0]].concat(mid, [P[P.length - 1]]), rope: !!l.rope, span: l.span || null };
+    var P = l.pts, mid = P.slice(1, -1).map(function (q) { return [q[0], q[1], q[2] + CLIMB_LIFT]; }), up = [P[0]].concat(mid, [P[P.length - 1]]);
+    var ride = ladRideOf(sh.T, l, up[0][2], up[up.length - 1][2]);   // 繩梯綁在砲塔上（27_turret.js ladRide）
+    return { name: l.name, up: up, up0: up, rope: !!l.rope, span: ride ? null : l.span || null, ride: ride };   // 跟著轉的：梯腳不照 span（那是開局的 x 範圍）
   });
+}
+// 綁在砲塔上的繩梯（Tim 2026-10-17：「繩梯直接綁在頂部開口」「旋轉後兩端仍然連通」「也可以被拉伸(有彈性)」）：梯腳、梯頭、爬到一半的人都照 27_turret.js ladRide。
+function fpLadMap(sh, L, p) { return ladRide(sh, L.ride, p); }
+/** 每一格畫面：跟著轉的繩梯照現在的位置擺（fpNear 找梯腳、梯頭用）。 */
+function fpLadPose(sh) { (FP.lads || []).forEach(function (L) { if (L.ride) L.up = L.up0.map(function (q) { return fpLadMap(sh, L, q); }); }); }
+/** 站在砲塔上 ⇒ 跟著轉（Tim 2026-10-17）：上一格畫面記下腳下是哪一座砲塔的格（那一塊殼的節點）與那時這一串的角度（FP.ride）；
+ *  這一格把位置照「那時 → 現在」換過去、視線跟著轉（⛔ 只記砲塔座標 ⇒ 這一格自己走的那一段會被吃掉）。腳下不是砲塔的格（甲板、爬梯子、跳起來）⇒ 不跟。 */
+function fpRide(sh, c) {
+  var R = FP.ride;
+  if (R) {
+    var now = ndYaws(R.nd); ndYawsSet(R.nd, R.y); var q = ndIn(R.nd, c.pos); ndYawsSet(R.nd, now);
+    var p = ndOut(R.nd, q); c.pos[0] = p[0]; c.pos[1] = p[1]; FP.yaw += ndYaw(R.nd) - R.w;
+  }
+  var t = FP.climb || FP.jz > 0 || FP.mode === 2 ? null : turCell(sh, Math.floor(c.pos[0]), Math.floor(c.pos[1]), Math.floor(c.pos[2]) - 1);
+  FP.ride = t && t.a ? { nd: t.a.nd, y: ndYaws(t.a.nd), w: ndYaw(t.a.nd) } : null;
 }
 /** 腳下：(x, y) 那一柱在 z 往下 down（沒給 ＝ FP_DOWN）、往上 up（沒給 ＝ FP_UP）格內站得住的高度（離 z 最近的）；站不住 ⇒ −1。 */
 function fpStand(g, x, y, z, up, down) {
@@ -243,11 +259,12 @@ function fpFrame(dt) {
     var o = sh, why = RUNNING && SHIPS[PLAYER_I] === sh ? '我艦沉了' : ''; fpSet(false); if (why && o) note(o, '第一人稱結束：' + why);
     return;
   }
-  var m = FP.mv, g = navG(sh);                                        // navG：船殼＋會轉的裝甲掃過的那一圈（24_armor.js；TASK-0655：砲塔的牆走不穿）
+  var m = FP.mv, g = fpG(sh);                                         // fpG：船殼＋會轉的裝甲掃過的那一圈（24_armor.js；TASK-0655：砲塔的牆走不穿）＋砲塔自己的地板上方照砲塔現在的格（站得上砲塔頂）
   FP.yaw += (m.tr - m.tl + FP.look[0]) * FP_TURN * dt; FP.pitch = clamp(FP.pitch + (m.lu - m.ld - FP.look[1]) * FP_TURN * 0.7 * dt, -1.35, 1.35);   // 方向鍵＋右搖桿
   if (FP.fol && (sh.crew.indexOf(FP.fol) < 0 || FP.fol.st !== 0)) { FP.fol = null; FP.ez = null; note(sh, '第一人稱：跟的人倒下或落水了 —— 回到自己'); fpUI(); }
   if (PAUSED && fpLocked()) fpUnlock();                                // 停格、打開設定 ⇒ 放開滑鼠（要按面板）
   if (PAUSED) { fpEyeZ(0); return; }                                   // 停格、設定打開：只能轉頭
+  fpLadPose(sh); fpRide(sh, c);                                         // 砲塔轉過：跟著轉的繩梯重擺、站在砲塔上的自己跟著轉
   if (FP.fol) {                                                        // 跟隨中：自己的角色不動，只轉頭
     var q = FP.fol.pos, lp = FP.folP || q, mx = q[0] - lp[0], my = q[1] - lp[1]; FP.folP = q.slice();
     if (Math.hypot(mx, my) > 1e-3 && performance.now() - (FP.lookT || 0) > 2000) {   // 他在走、玩家 2 秒沒拖 ⇒ 視線慢慢轉向他走的方向（⛔ 固定朝向 ⇒ 他一轉彎鏡頭就對著艙壁，量過）
@@ -255,6 +272,15 @@ function fpFrame(dt) {
       FP.yaw += dyaw * (1 - Math.exp(-dt / 0.5));
     }
     FP.near = null; fpEyeZ(dt); fpUI(); return;
+  }
+  if (FP.climb && FP.climb.L) {                                        // 爬跟著轉的繩梯：在開局的座標裡沿梯子走（pb），每一格照它現在的位置換過去（fpLadMap）⇒ 爬到一半砲塔轉了也不會脫手
+    var CL = FP.climb, B = CL.b, tb = B[CL.k], db = sub(tb, CL.pb), lb = len(db), sb = FP_CLIMB * dt;
+    FP.jz = FP.jv = 0; FP.v[0] = FP.v[1] = 0;
+    if (lb <= sb) { CL.pb = tb.slice(); if (++CL.k >= B.length) FP.climb = null; }
+    else CL.pb = add(CL.pb, mul(db, sb / lb));
+    c.pos = fpLadMap(sh, CL.L, CL.pb);
+    FP.near = null; fpEyeZ(dt); fpUI();
+    return;
   }
   if (FP.climb) {                                                      // 爬：一段一段沿梯子的線走（三維）
     var P = FP.climb.pts, to = P[FP.climb.k], d = sub(to, c.pos), l = len(d), s = FP_CLIMB * dt;
@@ -327,7 +353,7 @@ function fpEyeZ(dt) {
   var c = fpWho(), jz = FP.fol ? 0 : FP.jz, fly = FP.mode === 2 && !FP.fol, base = c.pos[2] + jz;
   // 爬梯子：眼睛也固定在腳上 FP_EYE、不看頭頂（Tim 2026-10-17「爬梯子時…是否可以關閉碰撞 目前爬繩梯會撞到」—— 爬的線本來就不擋，撞的是眼高：
   //   憲法號 fore-lower-P 繩梯越過舷牆那 1.4 秒、鑽進桅樓底下那 3 秒，fpEye 看到頭頂有格 ⇒ 眼高 16 → 3（腳上 0.3 m），鏡頭埋進木頭裡）
-  var off = fly || FP.climb && !FP.fol ? FP_EYE : fpEye(navG(FP.sh), [c.pos[0], c.pos[1], base], FP.fol ? null : FP.v);   // 浮空：眼睛固定在腳上 FP_EYE（穿過甲板時不跟著壓）
+  var off = fly || FP.climb && !FP.fol ? FP_EYE : fpEye(fpG(FP.sh), [c.pos[0], c.pos[1], base], FP.fol ? null : FP.v);   // 浮空：眼睛固定在腳上 FP_EYE（穿過甲板時不跟著壓）
   if (FP.ez === null || FP.climb || fly || !(dt > 0)) FP.fz = base, FP.eo = off;   // 剛開、換人、爬梯子、浮空（本來就連續）⇒ 直接跟
   else {
     FP.fz += (base - FP.fz) * (1 - Math.exp(-dt / FP_EZ));
@@ -348,7 +374,7 @@ function fpNear(p) {
         var cx = clamp(p[0], L.span[0], L.span[1]); dh = Math.hypot(cx - p[0], q[1] - p[1]);
         pts = [[cx, q[1], q[2]]].concat(pts.slice(1));
       } else dh = Math.hypot(q[0] - p[0], q[1] - p[1]);
-      if (dh < R && Math.abs(q[2] - p[2]) <= RZ && dh < bd) { bd = dh; best = { pts: pts, up: k === 0, name: L.name }; }
+      if (dh < R && Math.abs(q[2] - p[2]) <= RZ && dh < bd) { bd = dh; best = { pts: pts, up: k === 0, name: L.name, L: L.ride ? L : null }; }   // L：跟著轉的繩梯（fpClimbGo 照開局的座標爬）
     });
   });
   return best;
@@ -361,7 +387,13 @@ function fpHide(sh, c) {
   var p = fpWho().pos;                                                 // 跟隨中：看的是被跟的人身邊（自己的身體在遠處 ⇒ 照畫）
   return Math.abs(c.pos[0] - p[0]) < FP_NEAR && Math.abs(c.pos[1] - p[1]) < FP_NEAR && Math.abs(c.pos[2] - p[2]) < 12;
 }
-function fpClimbGo() { if (!FP.on || FP.fol || FP.mode === 2 || FP.climb || !FP.near || PAUSED) return; FP.climb = { pts: FP.near.pts, k: 0 }; }
+function fpClimbGo() {
+  if (!FP.on || FP.fol || FP.mode === 2 || FP.climb || !FP.near || PAUSED) return;
+  var n = FP.near, L = n.L;
+  if (!L) { FP.climb = { pts: n.pts, k: 0 }; return; }
+  var B = n.up ? L.up0 : L.up0.slice().reverse(), m0 = fpLadMap(FP.sh, L, B[0]), c = FP.c.pos;   // 跟著轉的繩梯：pb ＝ 自己在開局座標裡的位置（照梯子起點那一點的位移估）
+  FP.climb = { L: L, b: B, k: 0, pb: [c[0] - (m0[0] - B[0][0]), c[1] - (m0[1] - B[0][1]), c[2] - (m0[2] - B[0][2])] };
+}
 /** 鏡頭（03_camera.js camUpdate 開頭）：眼睛在船長頭上、照船的矩陣（內插過的）換到世界。 */
 function fpCam() {
   if (!FP.on) return false;

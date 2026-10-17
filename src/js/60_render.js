@@ -230,6 +230,12 @@ function drawModels(prog, near) {
       if (prog.u.uGlow) gl.uniform1f(prog.u.uGlow, isLamp(m) ? lanternK(m) : 0);   // 取用點的火藥桶是後加的模型，沒有 meta
       gl.bindVertexArray(me.vao); gl.drawArrays(gl.TRIANGLES, 0, me.n);
     });
+    (sh.decos || []).forEach(function (d) {                             // 裝飾（TASK-0682；畫質「裝飾」關著 ⇒ 載入時就沒有）：腳下那一格被打掉 ⇒ 不畫
+      var me = sh.T.meshes[d.mesh]; if (!me || (d.foot >= 0 && !gp(sh.grid, d.foot))) return; if (!me.vao) meshGpu(me);
+      gl.uniformMatrix4fv(prog.u.uModel, false, M4.mul(sh.M, trans(d.origin[0], d.origin[1], d.origin[2])));
+      if (prog.u.uGlow) gl.uniform1f(prog.u.uGlow, isLamp(d) ? lanternK(d) : 0);
+      gl.bindVertexArray(me.vao); gl.drawArrays(gl.TRIANGLES, 0, me.n);
+    });
     smDraw(prog, sh);                                                   // 平滑渲染的格（15_smooth.js）：跟模型同一支著色器（陰影、剖面、點光源都有）
     if (sh.arm) armSmDraw(prog, sh);                                    // 砲帶的裝甲的平滑面（24_armor.js）
   });
@@ -436,6 +442,7 @@ function render() {
     if (ow.lines && ow.lines.n) { gl.bindVertexArray(ow.lines.vao); gl.drawArrays(gl.LINES, 0, ow.lines.n); }
     if (PHYS && ow.ll && ow.ll.n) { gl.bindVertexArray(ow.ll.vao); gl.drawArrays(gl.LINES, 0, ow.ll.n); }
     if (ow.chain && ow.chain.n) { gl.bindVertexArray(ow.chain.vao); gl.drawArrays(gl.LINES, 0, ow.chain.n); }
+    if (ow.ropeT && ow.ropeT.n) { gl.bindVertexArray(ow.ropeT.vao); gl.drawArrays(gl.TRIANGLES, 0, ow.ropeT.n); }   // 繩梯的繩：管子（11_rig_gpu.js ropeTube）
     if (BLD.on && ow.bldLines && ow.bldLines.n) { gl.disable(gl.DEPTH_TEST); gl.bindVertexArray(ow.bldLines.vao); gl.drawArrays(gl.LINES, 0, ow.bldLines.n); gl.enable(gl.DEPTH_TEST); }   // 建造的預覽框（82_build.js bldLines；穿牆看得到）
     if ((ROOMS_DBG || (BLD.on && BLD.lines)) && ow.rooms && ow.rooms.length) { if (!ow.roomLines) roomLines(ow); gl.disable(gl.DEPTH_TEST); gl.bindVertexArray(ow.roomLines.vao); gl.drawArrays(gl.LINES, 0, ow.roomLines.n); gl.enable(gl.DEPTH_TEST); }   // 空艙房的外框（?rooms=1；穿過船殼看得到）
   });

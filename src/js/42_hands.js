@@ -27,7 +27,7 @@ function shipLadders(T) {
     Object.keys(by).forEach(function (nm) {
       var b = by[nm]; if (!b.foot || !b.head) return;
       var pts = [b.foot, b.lo, b.hi, b.head].filter(Boolean); if (b.foot[2] > b.head[2]) pts.reverse();
-      out.push({ name: (p.path || '') + (nm ? '/' + nm : ''), pts: pts, link: p.meta[nm ? nm + '.decks' : 'decks'] });
+      out.push({ name: (p.path || '') + (nm ? '/' + nm : ''), pts: pts, link: p.meta[nm ? nm + '.decks' : 'decks'], part: p.path });   // part：那一件關聯（木匠照它的格子清單整件還原，46_carpenter.js）
     });
   });
   return out.concat(ropeLadders(T));
@@ -47,13 +47,16 @@ function ropeLadders(T) {
     var L = by[k].sort(function (a, b) { return a.meta.rung - b.meta.rung; }), m = L[0].meta;
     var pts = [xyz(m.foot), mid(L[0]), mid(L[L.length - 1]), xyz(m.head)]; if (pts[0][2] > pts[3][2]) pts.reverse();
     var p = L[0].pts, xa = p[0], xb = p[p.length - 3];                   // span：最低一道的前後兩端（x）⇒ 第一人稱沿著這一段都摸得到梯腳（81_fps.js fpNear；Tim 2026-10-17「繩梯…還是不能爬(是否可以加大判定範圍?)」）
-    out.push({ name: k, pts: pts, link: m.decks, rope: L.map(function (r) { return r.name; }), span: [Math.min(xa, xb), Math.max(xa, xb)] });
+    out.push({ name: k, pts: pts, link: m.decks, rope: L.map(function (r) { return r.name; }), span: [Math.min(xa, xb), Math.max(xa, xb)], ri: [T.rig.ropes.indexOf(L[0]), T.rig.ropes.indexOf(L[L.length - 1])] });   // ri：最低、最高那一道是第幾條繩（綁在砲塔上 ⇒ 第一人稱照它們現在的位置爬，81_fps.js fpLadMap）
   });
   return out;
 }
 function lvOf(Ls, z) { for (var i = 0; i < Ls.length; i++) if (z >= Ls[i].zr[0] && z <= Ls[i].zr[1]) return i; return -1; }
 /** 船上一點 p 落在哪一層：有甲板 meta ⇒ 照那一欄的地板（deckAt，x 也看；navLevels 一層甲板一層 ⇒ 第幾層 ＝ d.i）；沒有甲板 meta、或離每層地板都太遠 ⇒ 照高度（lvOf）。 */
-function lvAt(sh, p) { var d = hullDecks(sh.T).length ? deckAt(sh.T, p[0], p[2]) : null; return d ? d.i : lvOf(sh.nav.levels, p[2]); }
+function lvAt(sh, p) {
+  var Ls = sh.nav.levels, t = Ls[Ls.length - 1]; if (t && t.tur && p[2] >= t.zr[0] && p[2] <= t.zr[1]) return Ls.length - 1;   // 砲塔頂那一層（turTopLevel）
+  var d = hullDecks(sh.T).length ? deckAt(sh.T, p[0], p[2]) : null; return d ? d.i : lvOf(Ls, p[2]);
+}
 /** 一點在走路格上是第幾層、哪一塊（[層, 塊]；量不到 ⇒ null）。 */
 function navRegAt(sh, p) {
   if (!sh.nav) return null;
@@ -68,6 +71,7 @@ function navSnapW(N, p) { var i = navSnap(N, p, 2); return i >= 0 ? i : navSnap(
 function navReach(sh, a, b) {
   if (!sh.nav || !sh.T.armor || !sh.T.armor.length) return true;
   var A = navRegAt(sh, a), B = navRegAt(sh, b);
+  if (A && B && A[0] !== B[0] && (sh.nav.levels[A[0]].tur || sh.nav.levels[B[0]].tur)) return false;   // 一頭在砲塔頂（turTopLevel）⇒ 要爬繩梯，直線走不到（量過：頂上砲班倒下 5 秒內，甲板上的砲手直線穿過砲塔頂站上去 3 個）
   return !A || !B || A[0] !== B[0] || A[1] === B[1];
 }
 /** 直線走的人（砲手換砲、送藥手來回）a → b 要經過的點（最後一點 ＝ b）：會轉裝甲的船、同一層同一塊、直直走過去會碰到牆（navSee）⇒ 照走路格找路再拉直；
@@ -108,11 +112,12 @@ function deadPm(sh, deck, lv, reg) {
 function navLevels(sh, lads) {
   var DM = hullDecks(sh.T);
   if (DM.length) {                                                        // 有甲板 meta（35_decks.js）⇒ 一層甲板一層；有砲的那幾層用砲甲板的 key（砲班、送藥手補位照它找層）
-    return DM.map(function (d, i) {                                       // 高度範圍：跟上下兩層各切在中間（頭一層往下 10 格、最上層往上 20 格）
+    var DL = DM.map(function (d, i) {                                     // 高度範圍：跟上下兩層各切在中間（頭一層往下 10 格、最上層往上 20 格）
       var lo = i ? Math.floor((DM[i - 1].zmax + d.zmin) / 2) + 1 : d.zmin - 10, hi = i < DM.length - 1 ? Math.floor((d.zmax + DM[i + 1].zmin) / 2) : d.zmax + 20;
       var G = sh.decks.filter(function (D) { return D.meta === d; })[0];
       return { key: G ? G.key : 'h' + i, name: d.name, zr: [lo, hi], deck: d };
     });
+    return DL.concat(turTopLevel(sh, DL[DL.length - 1].zr[1]));
   }
   var Ls = sh.decks.map(function (D) { return { key: D.key, name: D.name, zr: D.zr }; }), ext = [];
   lads.forEach(function (l) {
@@ -129,7 +134,15 @@ function navLevels(sh, lads) {
     Ls.forEach(function (L) { if (L.zr[0] > e[1] && zr[1] >= L.zr[0]) zr[1] = L.zr[0] - 1; if (L.zr[1] < e[0] && zr[0] <= L.zr[1]) zr[0] = L.zr[1] + 1; });
     Ls.push({ key: 'h' + i, name: e[1] < low ? '住艙甲板' : '甲板（z ' + e[0] + '）', zr: zr });
   });
-  return Ls.sort(function (a, b) { return a.zr[0] - b.zr[0]; });
+  Ls.sort(function (a, b) { return a.zr[0] - b.zr[0]; });
+  return Ls.concat(turTopLevel(sh, Ls.length ? Ls[Ls.length - 1].zr[1] : -1));
+}
+/** 砲塔頂一層（Tim 2026-10-17：「確定水手可以上去就ok」—— 繩梯從砲塔頂的艙口垂到吊籃）：有砲塔層（kind=turret）、殼頂比最上面那層甲板的範圍還高
+ *  ⇒ 多一層「砲塔頂」（最上層之上 ～ 殼頂往上 20 格）：站在砲塔的格上的點照會轉的甲板記（navBuild N.rot），繩梯（綁在砲塔上）接吊籃那一層 ⇄ 這一層。
+ *  ⛔ 沒有砲塔層、或砲塔都矮（砲盾）⇒ 一層都不多（其他船的走路格逐位元組不變）。 */
+function turTopLevel(sh, top) {
+  var hi = -1; (sh.T.armor || []).forEach(function (A) { if (A.tur !== undefined) hi = Math.max(hi, A.bb[5]); });
+  return hi + 1 > top && top >= 0 ? [{ key: 'tt', name: '砲塔頂', zr: [top + 1, hi + 20], tur: true }] : [];
 }
 /** a 往 d 方向走一格 ⇒ 那一格（站不住、高低差太大、斜走切到角 ⇒ -1）。邊上一圈一定站不住 ⇒ 不用另外查界。 */
 function navStep(N, a, d) {
@@ -294,14 +307,17 @@ function makeHands(sh, crew, add) {
   Ls.forEach(function (L) { L.N = navBuild(sh, L); if (L.N.rot) L.N = navOwn(L.N, sh); });   // 有會轉的甲板 ⇒ 這艘自己一份（navPos／navSnap 照這艘的砲塔角度換）
   sh.ladDrop = [];                                                   // 尋路沒收的梯子與原因（只記，給匯入檢查報：TASK-0672「被靜悄悄丟掉的部件」）
   lads.forEach(function (l) {
-    var a = l.pts[0], b = l.pts[l.pts.length - 1], dk = ladDecks(sh.T, l), la = dk ? (dk[0] ? dk[0].i : -1) : lvOf(Ls, a[2]), lb = dk ? (dk[1] ? dk[1].i : -1) : lvOf(Ls, b[2]);   // 有甲板 meta ⇒ 照 meta 判層（36_rooms.js ladDecks）
+    var a = l.pts[0], b = l.pts[l.pts.length - 1], dk = ladDecks(sh.T, l), tt = Ls[Ls.length - 1].tur ? Ls.length - 1 : -1;
+    var la = dk ? (dk[0] ? dk[0].i : -1) : lvOf(Ls, a[2]), lb = dk ? (dk[1] ? dk[1].i : -1) : lvOf(Ls, b[2]);   // 有甲板 meta ⇒ 照 meta 判層（36_rooms.js ladDecks）
+    if (tt >= 0 && lb < 0 && b[2] >= Ls[tt].zr[0] && b[2] <= Ls[tt].zr[1]) lb = tt;   // 梯頭在砲塔頂（turTopLevel）⇒ 接那一層
     if (la < 0 || lb < 0 || la === lb) { sh.ladDrop.push({ name: l.name, rope: !!l.rope, why: la < 0 && lb < 0 ? '兩頭（foot、head）都判不出在哪一層甲板' : la < 0 ? '下端（foot）判不出在哪一層甲板' : lb < 0 ? '上端（head）判不出在哪一層甲板' : '兩頭判成同一層', a: a, b: b }); return; }
     var R = dk && dk.link ? 10 : 5, ia = navSnap(Ls[la].N, a, R), ib = navSnap(Ls[lb].N, b, R);
     if (ia < 0 || ib < 0) { sh.ladDrop.push({ name: l.name, rope: !!l.rope, why: (ia < 0 ? '下端' : '上端') + '接不上那一層的走路格（' + R + ' 點內沒有能走的點）', a: a, b: b }); return; }   // 兩頭接不上走路格（10 格內；直接指定的 20 格內）⇒ 這座不用
     var mid = l.pts.slice(1, -1).map(function (q) { return [q[0], q[1], q[2] + CLIMB_LIFT]; });   // lo、hi 抬 0.2 m：兩點連線會切過踏板的前緣（量過：腳在踏板裡 24／71 點 ⇒ 10）
     var steps = l.rope ? [] : l.pts.slice(1, -1).map(function (q) { return [Math.floor(q[0]), Math.floor(q[1]), Math.floor(q[2]) - 1]; });   // 踏板：lo、hi 那一格底下（固定點是腳踩的那一格空氣）；繩梯的踏板是繩 ⇒ 照繩判（rj）
     var rj = l.rope ? l.rope.map(function (n) { return ri[n]; }).filter(function (j) { return j !== undefined; }) : null;
-    LD.push({ name: l.name, lo: la, hi: lb, ia: ia, ib: ib, ra: Ls[la].N.reg[ia], rb: Ls[lb].N.reg[ib], steps: steps, rj: rj, broken: false, pts: [navPos(Ls[la].N, ia), a].concat(mid, [b, navPos(Ls[lb].N, ib)]), x: (a[0] + b[0]) / 2, t0: -9, n: 0, q: 0 });
+    LD.push({ name: l.name, part: l.part, lo: la, hi: lb, ia: ia, ib: ib, ra: Ls[la].N.reg[ia], rb: Ls[lb].N.reg[ib], steps: steps, rj: rj, broken: false, pts: [navPos(Ls[la].N, ia), a].concat(mid, [b, navPos(Ls[lb].N, ib)]), x: (a[0] + b[0]) / 2, t0: -9, n: 0, q: 0,
+      ride: ladRideOf(sh.T, l, a[2], b[2]) });   // ride：繩梯綁在砲塔上 ⇒ pts 是開局的座標，爬的時候照 ladRide 換到現在（27_turret.js）
   });
   var home = -1;
   LD.forEach(function (L) { if (home < 0 || L.lo < home) home = L.lo; });
@@ -337,6 +353,17 @@ function makeHands(sh, crew, add) {
 /** 每一步：爬梯子、照路走、出發下一段、到了就補位；閒著 ⇒ 站一會兒再走去別處（待命那一層多、偶爾上別層）。 */
 function stepHand(sh, c, dt) {
   var H = c.hand, NV = sh.nav, fast = H.job ? 1 : 0;
+  if (H.climb && H.climb.R) {                                            // 爬綁在砲塔上的繩梯：在開局的座標裡走（pb），每一步照它現在的位置換過去（27_turret.js ladRide）⇒ 爬到一半砲塔轉了也不脫手
+    var CL = H.climb, tb = CL.pts[CL.k], db = sub(tb, CL.pb), lb = len(db), sb = CLIMB_SP[fast] * dt;
+    c.moving = true;
+    if (lb <= sb) { CL.pb = tb.slice(); CL.k++; } else CL.pb = add(CL.pb, mul(db, sb / lb));
+    c.pos = ladRide(sh, CL.R, CL.pb); H.to = ladRide(sh, CL.R, tb);
+    if (CL.k >= CL.pts.length) {
+      H.lv = CL.lv; c.deck = NV.levels[H.lv].key; H.climb = null; c.moving = false;
+      if (c.backRole !== undefined) { c.role = c.backRole; c.backRole = undefined; c.hand = null; c.home = c.pos.slice(); }
+    }
+    return;
+  }
   if (H.climb) {                                                         // 爬：沿 foot → lo → hi → head 一段一段走（三維）
     var P = H.climb.pts, to = P[H.climb.k], d = sub(to, c.pos), l = len(d), s = CLIMB_SP[fast] * dt;
     c.moving = true; H.to = to;
@@ -371,6 +398,7 @@ function legStart(sh, c) {
     var L = NV.ladders[leg.c]; if (SIMT - L.t0 < LADDER_GAP) return;
     L.t0 = SIMT; L.n++; L.q = Math.max(0, L.q - 1); H.legs.shift();
     H.climb = { pts: leg.up ? L.pts : L.pts.slice().reverse(), k: 0, lv: leg.up ? L.hi : L.lo, L: L.name + (leg.up ? '↑' : '↓') };   // L：梯子的名字（測試模式的記錄看；83_testlog.js）
+    if (L.ride) { var B0 = H.climb.pts[0], m0 = ladRide(sh, L.ride, B0); H.climb.R = L.ride; H.climb.pb = [c.pos[0] - (m0[0] - B0[0]), c.pos[1] - (m0[1] - B0[1]), c.pos[2] - (m0[2] - B0[2])]; }   // 綁在砲塔上：pb ＝ 自己在開局座標裡的位置（照起點那一點的位移估）
     return;
   }
   if (sh.navN <= 0) return;
@@ -397,8 +425,8 @@ function shelterSpots(sh, n) {
 /** 閒著：在待命那一層 HAND_ROAM 的機會上別層；在別層 HAND_BACK 的機會回待命那一層；其餘在這一層隨便挑一點走過去。shelter ⇒ 不上露天那一層、在那一層就回去。 */
 function wander(sh, c) {
   var H = c.hand, NV = sh.nav, lv = H.lv, tl = lv, sl = shelterLv(sh);
-  if (lv === NV.home) { if (NV.reach.length > 1 && rnd() < HAND_ROAM) { var o = NV.reach.filter(function (i) { return i !== NV.home && i !== sl; }); if (o.length) tl = o[(rnd() * o.length) | 0]; } }
-  else if ((lv === sl || rnd() < HAND_BACK) && NV.reach.indexOf(lv) >= 0) tl = NV.home;
+  if (lv === NV.home) { if (NV.reach.length > 1 && rnd() < HAND_ROAM) { var o = NV.reach.filter(function (i) { return i !== NV.home && i !== sl && !NV.levels[i].tur; }); if (o.length) tl = o[(rnd() * o.length) | 0]; } }   // 砲塔頂（turTopLevel）不去閒晃：露天、正對著砲火，點名補位才上去
+  else if ((lv === sl || NV.levels[lv].tur || rnd() < HAND_BACK) && NV.reach.indexOf(lv) >= 0) tl = NV.home;
   var fr = handReg(sh, c), N = NV.levels[tl].N, to = N.cells[(rnd() * N.cells.length) | 0];
   if (tl === lv && fr >= 0) for (var t = 0; t < 6 && N.reg[to] !== fr; t++) to = N.cells[(rnd() * N.cells.length) | 0];   // 同一層 ⇒ 挑同一塊裡的點（別塊走不到）
   var legs = handRoute(sh, lv, tl, c.pos[0], navPos(N, to)[0], fr, tl === lv ? fr : N.reg[to]);
@@ -425,6 +453,12 @@ function callHands(sh) {
       var gm = null, mm = -1;
       gs.forEach(function (g) { var m = Math.max(0, g.crewFull - g.manned); wx += g.muz[0] * m; ww += m; if (m > mm) { mm = m; gm = g; } });
       if (n > 0) need.push({ kind: 'gun', key: D.key + side, deck: D.key, side: side, lv: lv, n: n, x: ww ? wx / ww : gs[0].muz[0], pri: side === sh.side ? 0 : 2, reg: gm && sh.T.armor && sh.T.armor.length ? needReg(sh, lv, gunNavAt(sh, gm)) : undefined });   // reg：缺最多人那門砲所在的那一塊（會轉裝甲的船）
+      var ti = NV.levels.length - 1, tt = NV.levels[ti];                 // 砲塔頂上的砲（turTopLevel；哨兵號頂上的速射砲）另外算：缺幾個派幾個、派去那一層（從繩梯爬上去）——
+      if (tt.tur && NV.reach.indexOf(ti) >= 0) {                         //   ⛔ 跟整組一起算 ⇒ 甲板上的砲手（走不到頂上，navReach）也算在人數裡，頂上的砲班全倒了整組照樣不缺人（量過：頂上 0／6、一個都沒派）
+        var tgs = gs.filter(function (g) { var q = gunNavAt(sh, g); return q[2] >= tt.zr[0] && q[2] <= tt.zr[1]; });
+        var tn = tgs.reduce(function (a, g) { return a + Math.max(0, g.crewFull - g.manned); }, 0) - (going['gun' + D.key + side + '^'] || 0);
+        if (tn > 0) need.push({ kind: 'gun', key: D.key + side + '^', deck: D.key, side: side, lv: ti, n: tn, x: tgs[0].muz[0], pri: 0, reg: needReg(sh, ti, gunNavAt(sh, tgs[0])) });
+      }
     });
     var pm = sh.crew.filter(function (c) { return c.role === ROLE.POWDER && able(c) && c.deck === D.key; }).length, pn = (NV.pm0[D.key] || 0) - pm - (going['pm' + D.key] || 0);
     var wl = pn > 0 && sh.T.armor && sh.T.armor.length, dp = wl ? deadPm(sh, D.key) : null;   // 會轉裝甲的船：走到倒下那位的家所在的那一塊；沒有倒下的可接 ⇒ 同層缺送藥手的活砲那一塊
@@ -456,7 +490,8 @@ function callHands(sh) {
 /** 到了：換成那個職位（砲班 ⇒ 下一拍 reassign 分砲；送藥手 ⇒ 接倒下那位的砲；舵手 ⇒ 站到舵輪後）。不在那一層（路斷了）⇒ 任務作廢、照常閒晃。 */
 function handJoin(sh, c) {
   var H = c.hand, J = H.job, NV = sh.nav;
-  if (J.kind === 'staff' || J.kind === 'carry') { medJoin(sh, c); return; }   // 醫療艙的人手、搬傷員（44_medic.js）
+  if (J.kind === 'staff' || J.kind === 'carry') { medJoin(sh, c); return; }
+  if (J.kind === 'repair') { carpJoin(sh, c); return; }                // 木匠修東西（46_carpenter.js）   // 醫療艙的人手、搬傷員（44_medic.js）
   if (J.kind === 'pump') { pumpJoin(sh, c); return; }                   // 搖抽水機（45_pumps.js）
   var hr = J.reg !== undefined ? handReg(sh, c) : -1;                   // 量不到（-1）⇒ 照以前當作到了：爬進轉過的砲塔，梯頭那一點是開局時算的、吊籃已經轉走 ⇒ snap 不到（測試模式量到：同一人被派 88 次、次次作廢）
   if (H.lv !== J.lv || (hr >= 0 && hr !== J.reg)) { tlgEv(sh, c, 'void', { job: J.kind, lv: [H.lv, J.lv], reg: [hr, J.reg === undefined ? null : J.reg] }); H.job = null; H.wait = 1; return; }   // 不在那一層、確定在別塊（路斷了）⇒ 作廢；void：測試模式記一筆（83_testlog.js）
@@ -495,7 +530,7 @@ function navRefresh(sh) {
   NV.levels.forEach(function (L, li) {
     var b = L.dirty; if (!b) return; L.dirty = null;
     var n0 = L.N.regs.length;
-    if (!L.own) { var O = L.N; L.N = { x0: O.x0, nx: O.nx, ny: O.ny, Z: O.Z.slice(), blk: O.blk, rot: O.rot, sh: O.sh }; L.own = true; }
+    if (!L.own) { var O = L.N; L.Z0 = O.Z; L.N = { x0: O.x0, nx: O.nx, ny: O.ny, Z: O.Z.slice(), blk: O.blk, rot: O.rot, sh: O.sh }; L.own = true; }
     var N = L.N;
     var xa = Math.max(1, Math.floor((b[0] - N.x0) / NAV_C) - 2), xb = Math.min(N.nx - 2, Math.ceil((b[2] - N.x0) / NAV_C) + 2), ya = Math.max(1, Math.floor(b[1] / NAV_C) - 2), yb = Math.min(N.ny - 2, Math.ceil(b[3] / NAV_C) + 2);
     for (var y = ya; y <= yb; y++) for (var x = xa; x <= xb; x++) {
@@ -521,5 +556,5 @@ function navRefresh(sh) {
 function handsText(sh) {
   if (!sh.nav) return '';
   var h = sh.crew.filter(function (c) { return c.role === ROLE.HAND && able(c); }), go = h.filter(function (c) { return c.hand.job; }).length;
-  return '　預備 ' + (h.length - go) + (go ? '（補位中 ' + go + '）' : '');
+  return '　預備 ' + (h.length - go) + (go ? '（補位中 ' + go + '）' : '') + carpText(sh);
 }

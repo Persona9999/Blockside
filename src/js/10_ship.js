@@ -64,13 +64,20 @@ function makeShip(i, team, yaw, pz, T, px) {                          // T：船
       rot: 0, r0: (+mt.rotate_z_deg || 0) * Math.PI / 180, piv: pv, yk: mt.yard, sail: mt.sail, hang: hang };   // 帆桁：rot ＝ 在作品的角度（r0）之外又轉了多少（追風，30_rig_physics.js）
   });
   sh.yards = sh.models.filter(function (m) { return m.kind === 'yard' && m.piv; });
+  // 裝飾（TASK-0682；05_hull.js decoSplit）：不在 sh.models ⇒ 戰局看不到（重量、命中、殉爆、掉落都不算）。只記腳下那一格（同上面的模型：外框底往下 12 格內的甲板）：
+  //   被打掉 ⇒ 不畫（⛔ 不 blowModel：那會抽 rnd()，開／關裝飾戰局就分岔）。k：燈晃的相位（lanternK）。
+  sh.decos = (T.decos || []).map(function (m, k) {
+    var b = m.bbox, cx = Math.floor((b[0] + b[3]) / 2), cy = Math.floor((b[1] + b[4]) / 2), z0 = Math.floor(b[2]) - 1, fz = z0;
+    while (fz > 0 && z0 - fz < 12 && !T.hullG.get(cx, cy, fz)) fz--;
+    return { mesh: m.mesh, origin: m.origin, meta: m.meta || {}, k: 1000 + k, foot: T.hullG.get(cx, cy, fz) ? VK.pack(cx, cy, fz) : -1 };
+  });
   // 砲：長砲（24 磅，兩舷各 14）、carronade（32 磅，兩舷各 12）、追擊砲（18 磅，船頭兩舷各 1）都是模型。
   // 砲軸 ＝ 固定點 muzzle − breech（格座標、水平）；砲口 ＝ muzzle 再往外 1.5 格（muzzle 在砲口內膛那一格）。
   // 程式裡的 'S'／'P' 照砲軸（+y ＝ S，跟模型名字一致）＝ 右舷／左舷（shipBaseMatrix 照雕刻引擎的手性鏡射過來）。給人看的走 sideName；A／D 照畫面的左右。
   sh.models.forEach(function (m) {
     if (!GUNS[m.kind]) return;
     var A = gunMuzzle(m);
-    sh.guns.push(m.gun = { name: m.name, type: m.kind, side: A.ax[1] >= 0 ? 'S' : 'P', model: m, ax: A.ax, muz: A.muz, muzs: A.muzs, alive: true, reload: rr(0, 1.2), box: BOX_N, needCart: false });   // box：砲旁藥箱裡的份數
+    sh.guns.push(m.gun = { name: m.name, type: m.kind, side: A.ax[1] >= 0 ? 'S' : 'P', model: m, ax: A.ax, muz: A.muz, muzs: A.muzs, alive: true, reload: rr(0, 1.2), box: BOX_N, needCart: false, safe: !!(m.meta && +m.meta.safe) });   // box：砲旁藥箱裡的份數；safe：模型 meta safe=1 ⇒ 開火前看砲線（21_gunnery.js selfBlock）
   });
   sh.guns.forEach(function (g) { gunMountInit(sh, g); });            // 迴旋砲、砲塔（meta mount；21_gunnery.js）—— 沒標的砲不動
   turretShip(sh);                                                       // 砲塔層（kind=turret；27_turret.js）：砲、模型掛上去 —— 沒有 ⇒ 不做事
@@ -377,17 +384,21 @@ function linkRopes(T, ropes, models) {
       // 綁在帆角上（雕刻的 `sail:帆名/角`：帆腳垂在半空、只靠 sheet 拉住，例：風暴角號 spritsail）⇒ 端點就在帆的頂點上，算有靠（帆掉了它跟著斷：s.lines）
       //   ⛔ 不認 ⇒ 開局就判「哪裡都不靠」死掉、掛在它上面的帆跟著掉（TASK-0579 量到：spritsail-sheet-P／S 開局 dead、spritsail hp 滿血就掉）
       if (T.rig.sails.some(function (s) { var v = s.verts; for (var k = 0; k < v.length; k += 3) { var dx = v[k] - P[0], dy = v[k + 1] - P[1], dz = v[k + 2] - P[2]; if (dx * dx + dy * dy + dz * dz < 4) return true; } return false; })) onSail = true;
-      var yk = yardNear(T, P, 3);                                                // 帆桁：照網格（⛔ 照外框：轉過的帆桁外框很大，桅頂附近的 ratline 都會被當成綁在帆桁上）
-      if (yk >= 0) { r.mods.push(yk); r['m' + e[2]] = yk; return; }
-      var mod = models.filter(function (m) { var b = m.bb; if (m.station || m.kind === 'yard') return false; return P[0] > b[0] - 4 && P[0] < b[3] + 4 && P[1] > b[1] - 4 && P[1] < b[4] + 4 && P[2] > b[2] - 4 && P[2] < b[5] + 4; })[0];
-      if (mod) { r.mods.push(mod.k); r['m' + e[2]] = mod.k; return; }   // 綁在模型上（舵索綁舵輪）⇒ 模型飛了才斷
+      if (armNear(T, P, 3) >= 0) { r.tur = true; return; }                     // 綁在砲塔的殼上（頂上的艙口邊、吊籃；27_turret.js ropeRideOf：跟著轉）⇒ 算有靠（⛔ 錨 anchorNear 只找船殼 ⇒ 判成綁在空中、開局就不畫）
+      var rd = ropeRideOf(T), re = T.rig.ropes[i], onRope = rd && rd[i] && re && re.ends && typeof re.ends[e[0] ? 1 : 0] === 'string' && re.ends[e[0] ? 1 : 0].indexOf('rope:') === 0;
+      if (!onRope) {                                                             // 跟著砲塔轉、雕刻寫明掛在母繩上（橫繩組的每一道）⇒ 只找繩（⛔ 先找模型 ⇒ 哨兵號繩梯中間五道綁到旁邊的 XI 吋砲尾，砲被打掉橫繩跟著斷、繩梯判成斷了；量過）
+        var yk = yardNear(T, P, 3);                                              // 帆桁：照網格（⛔ 照外框：轉過的帆桁外框很大，桅頂附近的 ratline 都會被當成綁在帆桁上）
+        if (yk >= 0) { r.mods.push(yk); r['m' + e[2]] = yk; return; }
+        var mod = models.filter(function (m) { var b = m.bb; if (m.station || m.kind === 'yard') return false; return P[0] > b[0] - 4 && P[0] < b[3] + 4 && P[1] > b[1] - 4 && P[1] < b[4] + 4 && P[2] > b[2] - 4 && P[2] < b[5] + 4; })[0];
+        if (mod) { r.mods.push(mod.k); r['m' + e[2]] = mod.k; return; }   // 綁在模型上（舵索綁舵輪）⇒ 模型飛了才斷
+      }
       ropes.forEach(function (o, j) {
         if (j === i || P[0] < o.bb[0] - 3 || P[0] > o.bb[3] + 3 || P[1] < o.bb[1] - 3 || P[1] > o.bb[4] + 3 || P[2] < o.bb[2] - 3 || P[2] > o.bb[5] + 3) return;
         for (var k = 0; k + 5 < o.pts.length; k += 3) { var d = segDist2(P, o.pts[k], o.pts[k + 1], o.pts[k + 2], o.pts[k + 3], o.pts[k + 4], o.pts[k + 5]); if (d < bd) { bd = d; best = j; } }
       });
       if (best >= 0) { if (r.par.indexOf(best) < 0) r.par.push(best); r['p' + e[2]] = best; }   // 哪一端掛在哪條繩（垂下來的繩要知道是哪一端鬆了）
     });
-    if (!r.par.length && !r.mods.length && !onSail) r.dead = true;     // 哪裡都不靠（格、繩、模型、帆角都沒有）⇒ 不畫
+    if (!r.par.length && !r.mods.length && !onSail && !r.tur) r.dead = true;     // 哪裡都不靠（格、繩、模型、帆角、砲塔的殼都沒有）⇒ 不畫
   });
 }
 // ── 繩的固定檢查（Tim 2026-10-16：「是否能確保纜繩至少要有一端固定到帆或其他固定點(不能綁定在空中)」「不符合的直接再生成時排除 且匯入時要有錯誤報告」）──
@@ -405,6 +416,7 @@ function ropeEndSupport(T, models, P) {
   }
   var d = best < 1e9 ? +best.toFixed(2) : null;
   if (best <= ROPE_FIX_D) return { k: 'grid', d: d };
+  if (armNear(T, P, R) >= 0) return { k: 'turret', d: d };            // 砲塔的殼（會轉的；24_armor.js armNear）
   if (T.rig.sails.some(function (s) { var v = s.verts; for (var k = 0; k < v.length; k += 3) { var a = v[k] - P[0], b = v[k + 1] - P[1], c = v[k + 2] - P[2]; if (a * a + b * b + c * c < 4) return true; } return false; })) return { k: 'sail', d: d };   // 帆角（同 linkRopes）
   if (yardNear(T, P, 3) >= 0) return { k: 'yard', d: d };
   if (models.some(function (m) { var b = m.bb; return !m.station && m.kind !== 'yard' && P[0] > b[0] - 2 && P[0] < b[3] + 2 && P[1] > b[1] - 2 && P[1] < b[4] + 2 && P[2] > b[2] - 2 && P[2] < b[5] + 2; })) return { k: 'model', d: d };

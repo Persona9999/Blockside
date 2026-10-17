@@ -32,7 +32,7 @@ def f0(seg, sr, fexp):
 
 def pitches(sr, x, notes):
     out = []
-    for t, d, p, v in notes:
+    for t, d, p, v, *_ in notes:
         a = int((t + 0.06) * sr); b = int((t + min(0.06 + 0.3, d * 0.85)) * sr)
         if b - a < int(0.04 * sr): continue                              # 太短（< 40 ms）不量
         fe = 440 * 2 ** ((p - 69) / 12); f = f0(x[a:b], sr, fe)
@@ -51,7 +51,7 @@ def onsets(sr, x, notes):
         if g <= 0 or g < max(db[j] - db[j - 1] for j in range(max(1, i - 2), min(n, i + 3))): continue
         if det and i * hop / sr - det[-1] < 0.04: continue
         det.append(i * hop / sr)
-    exp = sorted(set(round(t, 4) for t, d, p, v in notes))
+    exp = sorted(set(round(t, 4) for t, d, p, v, *_ in notes))
     pair = []; used = set()
     for t in exp:
         best = None

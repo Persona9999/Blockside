@@ -132,7 +132,7 @@ function doAct(a, repeat) {
   else if (a === 'deck') deckCycle();
   else if (a === 'mute') { muted = !muted; sndApply(); gsetShow(); }
   else if (a === 'help') helpToggle();
-  else if (a === 'menu') { gsetClose(); helpClose(); RUNNING = false; END_AT = 0; END_WAIT = null; $('cover').style.display = ''; $('end').className = ''; }
+  else if (a === 'menu') { gsetClose(); helpClose(); RUNNING = false; END_AT = 0; END_WAIT = null; $('cover').style.display = ''; $('end').className = ''; decoSync(); }
   else if (a === 'sailMode') sailToggle();   // 一顆切換 自動 ⇄ 手動（Tim 2026-10-15：「改成單鍵」；手動也可以直接打舵）；錨在水裡 ⇒ 先起錨（左右錨拋的也一起）
   else if ((a === 'ancAll' || a === 'ancP' || a === 'ancS') && me && !me.sunk && anchorsOf(me).noAnchor) setSailMode(SAIL === 'off' ? 'manual' : 'off');   // 整艘沒有錨（TASK-0635）：三個錨鍵都是停船 ⇄ 手動
   else if (a === 'ancAll' && me && !me.sunk) {                              // 拋錨／起錨同一顆（Tim 2026-10-15；76_anchor.js anchor6）：兩邊都沒拋 ⇒ 雙錨（拋錨模式、只有我艦）；一邊在水裡 ⇒ 拋另一邊；兩邊都在水裡 ⇒ 起錨
@@ -273,7 +273,6 @@ modeButtons();
 /** 選單：滑桿的上下限從 LIM 來；數值只在使用者動了那一條時才從滑桿讀回（⛔ 一開頭就讀回 ⇒ 網址給的 0.33 被 step 吃成 0.35）。
  *  船殼、砲、帆、火藥桶、航行、降旗的滑桿在「細節設定」那一頁（從主選單進）；主選單只留一行摘要（#detV）。 */
 /** 模型（砲、火藥桶）的總重（噸）：照匯出的模型清單＋取用點的 12 桶（細節設定的例子用；開戰時每艘照自己的模型算）。 */
-function modelMassT(T, gunw) { if (!T) return 0; var t = 12 * KEG_T; (T.rig.models || []).forEach(function (m) { t += modelT({ kind: modelKind(m) }, gunw); }); return t; }
 var CFG_ID = myHull();                             // 細節設定的「船隻設定」正在編輯哪一型
 var SLIDERS_SHOW = null;                               // 載入完（HYD 算好）再顯示一次 ⇒ 減重上浮的例子有數字
 function sliders() {
@@ -319,12 +318,20 @@ function sliders() {
     if (!T) { el.innerHTML = '<div class="h">' + (h ? h.name : CFG_ID) + '</div><div class="n">船型載入中…</div>'; return; }
     var c = shipCfg(CFG_ID), hc = hullCounts(CFG_ID), kn = VMAX * c.speed * playK('speed') * 1.9438, UP = c.upwind || 1, dz = 180 - NOGO_DEG, stall = 180 - (UP === 1 ? dz : 90 + (dz - 90) * UP);
     var gl = Object.keys(GUNS).filter(function (t) { return hc.guns[t]; }).map(function (t) { return (GUNS[t].short || GUNS[t].name).trim() + ' ' + hc.guns[t]; }).join('、');
+    // 開戰時的排水量（Tim 2026-10-17「額外顯示實際遊戲開場的排水量(加上炮重&其他配件重)」）：浮著的船排開的水 ＝ 自己的重量（32_hull.js hullT0，跟開戰時的 sh.mass0 同一套）；
+    //   跟設計水線差多少 ⇒ 開戰時浮高／吃水深幾公尺（liftFor）
+    var W = hullT0(T, c), L = liftFor(T, T.disp - W.all) || 0, t0 = function (v) { return Math.round(v).toLocaleString(); };
+    // 沒有帆（莫尼特號；Tim 2026-10-17「實戰中實際上是固定6節(沒有帆)」）：遊戲裡帆的推力 × sailFrac ＝ 0 ⇒ 只寫額外動力（以前照帆的公式算出順風 12.2 節）
+    var sails = T.rig.sails.some(function (s) { return !isFlag(s); }), B = +c.base || 0;
     el.innerHTML = '<div class="h">' + h.name + '</div>' +
       (h.author ? '建造者 <b>' + h.author + '</b><br>' : '') +   // Tim 2026-10-15：船的作者（ships[].author ← 匯入時 .vxk 檔頭的 owner）
-      '排水量 <b>' + Math.round(T.disp).toLocaleString() + '</b> 噸<span class="n">（設計水線）</span><br>' +
-      '航速 順風 <b>' + Math.hypot(kn * polar(0), +c.base || 0).toFixed(1) + '</b>・側順風 <b>' + Math.hypot(kn, +c.base || 0).toFixed(1) + '</b>（最快）・逆風 <b>' + Math.hypot(kn * polar(dz), +c.base || 0).toFixed(1) + '</b> 節<br>' +
-      (c.base ? '額外動力 <b>' + (+c.base).toFixed(1) + '</b> 節<span class="n">（推力跟帆相加 ⇒ 上面三格 ＝ √(帆² ＋ 額外動力²)：不看風向與帆，頂風、收帆也走得動；帆段滿帆再加 ＝ 全速前進（開）、全收再收 ＝ 倒車）</span><br>' : '') +
-      '<span class="n">標準風、滿帆；逆風 ＝ 離風 ' + Math.round(stall) + '° 時（再頂就開始失速）' + (PLAY === 'fun' ? '；含娛樂玩法的加成' : '') + '</span><br>' +
+      '排水量 <b>' + t0(W.all) + '</b> 噸<span class="n">（開戰時）</span>・設計水線 <b>' + t0(T.disp) + '</b> 噸<br>' +
+      '<span class="n">開戰時 ＝ 格子 ' + t0(W.vox) + '＋砲 ' + t0(W.gun) + '＋火藥桶 ' + t0(W.keg) + '＋壓艙物 ' + t0(W.ballast) + ' 噸' +
+        (Math.abs(L) >= 0.005 ? ' ⇒ 比設計水線' + (L > 0 ? '浮高 ' : '吃水深 ') + Math.abs(L).toFixed(2) + ' m' : ' ⇒ 剛好在設計水線') + '</span><br>' +
+      (sails ? '航速 順風 <b>' + Math.hypot(kn * polar(0), B).toFixed(1) + '</b>・側順風 <b>' + Math.hypot(kn, B).toFixed(1) + '</b>（最快）・逆風 <b>' + Math.hypot(kn * polar(dz), B).toFixed(1) + '</b> 節<br>' +
+        (B ? '額外動力 <b>' + B.toFixed(1) + '</b> 節<span class="n">（推力跟帆相加 ⇒ 上面三格 ＝ √(帆² ＋ 額外動力²)：不看風向與帆，頂風、收帆也走得動；帆段滿帆再加 ＝ 全速前進（開）、全收再收 ＝ 倒車）</span><br>' : '') +
+        '<span class="n">標準風、滿帆；逆風 ＝ 離風 ' + Math.round(stall) + '° 時（再頂就開始失速）' + (PLAY === 'fun' ? '；含娛樂玩法的加成' : '') + '</span><br>'
+      : '航速 <b>' + B.toFixed(1) + '</b> 節<span class="n">（沒有帆：只靠額外動力，不看風向；全速前進時）</span><br>') +
       '砲 <b>' + hc.n + '</b> 門<span class="n">（' + gl + '）</span><br>' +
       '船員 約 <b>' + crewTotal(shipCrew(CFG_ID), hc) + '</b> 人<span class="n">（含預備水手 ' + shipCrew(CFG_ID).hands + '）</span><br>' +
       '靈活 <b>×' + (+c.agile).toFixed(2) + '</b>・船殼硬度 <b>×' + (+c.hard).toFixed(2) + '</b>・桅 <b>' + hc.masts + '</b> 根<br>' +
@@ -513,6 +520,8 @@ function sliders() {
     n = cw.top; v('top', n + ' 人 × ' + (hc ? hc.masts + ' 根桅 ＝ ' + n * hc.masts : '每根桅'), n, d.top);
     n = cw.monkeys; v('monkeys', n ? n + ' 人 × 每一對砲' + (hc ? '（約 ' + Math.ceil(hc.n / 2) + ' 對）' : '') + '：從取用點搬火藥與彈藥' : '0（沒有：砲旁的藥箱用完就停）', n, d.monkeys);
     n = cw.hands; v('hands', n + ' 人（在住艙甲板待命，缺人手時補位）' + (Q.has('hands') ? '　⚠ 網址 ?hands= 蓋過' : ''), n, d.hands);
+    n = cw.carpenter; v('carpenter', n ? n + ' 人（修斷掉的梯子 —— 整件還原、補甲板破洞 —— 先補把甲板打成兩塊的；跟預備水手一樣在船裡走動）' : '0（沒有：梯子、甲板打壞了就一直壞著）', n, d.carpenter);
+    n = cw.surgeon; v('surgeon', n ? n + ' 人（開戰就站在醫療艙裡；醫療艙要的人手先算船醫、不夠才派預備水手；有船醫的那一間治療快 50%；沒設醫療艙的船不上船）' : '0（沒有：醫療艙照舊只靠預備水手）', n, d.surgeon);
     n = cw.shelter ? 1 : 0; v('shelter', n ? '開：預備水手不上露天甲板閒晃（只上去補位）、船長以外的軍官待在甲板下' : '關：預備水手偶爾上露天甲板走動、軍官站在露天甲板', n, d.shelter ? 1 : 0);
     var gsum = 0;
     Object.keys(GUNS).forEach(function (t) {
@@ -556,7 +565,7 @@ function sliders() {
     $('funpowderV').textContent = FUN.powder.toFixed(2) + '×' + (powderNever() ? '（火藥拉滿：不會爆）' : '（火藥血量 ' + POWDER_HP + ' ⇒ ' + Math.round(POWDER_HP * FUN.powder) + '）');
     var PU = K.pump; $('pumpV').textContent = PU.toFixed(1) + ' 噸／分' + (PU === cfgBase('pump', CFG_ID) ? '（預設：照排水量）' : '') + (PU <= 0 ? '（不抽水）' : '');
     $('floodV').textContent = FLOOD === 0 ? '0×（不會沉）' : FLOOD.toFixed(2) + '×' + (FLOOD < 0.5 ? '（慢）' : FLOOD < 1.2 ? '' : '（快）');
-    var HT = HULLT[CFG_ID], m0 = (HT ? HT.voxT0 : 0) + modelMassT(HT, GUNW_K) + BALLAST_T, l0 = liftFor(HT, HT ? HT.disp - m0 : 0), lx = liftFor(HT, HT ? HT.disp - m0 + 70 : 0);   // 照我艦的船型   // 開戰時浮在哪；例子：再打掉 10 萬格（70 噸）
+    var HT = HULLT[CFG_ID], m0 = HT ? hullT0(HT, { ballast: BALLAST_T, gunw: GUNW_K }).all : 0, l0 = liftFor(HT, HT ? HT.disp - m0 : 0), lx = liftFor(HT, HT ? HT.disp - m0 + 70 : 0);   // 照我艦的船型   // 開戰時浮在哪；例子：再打掉 10 萬格（70 噸）
     var gm = 0, kinds = {}; if (HT) (HT.rig.models || []).forEach(function (m) { var k = modelKind(m); if (GUNS[k]) { gm += GUNS[k].mass * GUNW_K; kinds[k] = 1; } });
     $('gunwV').textContent = GUNW_K.toFixed(2) + '×（' + Object.keys(GUNS).filter(function (k) { return !HT || kinds[k]; }).map(function (k) { return GUNS[k].name + ' ' + (GUNS[k].mass * GUNW_K).toFixed(1) + ' 噸'; }).join('、') + (gm ? '；全部 ' + Math.round(gm) + ' 噸' : '') + '）';
     $('ballastV').textContent = BALLAST_T + ' 噸' + (l0 === null ? '' : '（' + HT.name + ' ' + Math.round(m0).toLocaleString() + ' 噸 ⇒ ' + (Math.abs(l0) < 0.05 ? '剛好在設計水線' : l0 > 0 ? '浮高 ' + l0.toFixed(1) + ' m' : '吃水深 ' + (-l0).toFixed(1) + ' m') + '；打掉 10 萬格再浮 ' + (lx - l0).toFixed(2) + ' m）');
@@ -716,6 +725,7 @@ function gfxShow() {
   $('smokeR').value = SMOKE_K; $('smokeV').textContent = SMOKE_K.toFixed(1) + '×' + (SMOKE_K === 1 ? '（原本）' : SMOKE_K === SMOKE_LIM[2] ? '（預設）' : SMOKE_K > 1 ? '（散得快）' : '（留得久）') + '　砲煙約 ' + (2.5 / SMOKE_K).toFixed(1) + '–' + (5.5 / SMOKE_K).toFixed(1) + ' 秒';
   $('gfxLv').textContent = '現在：' + GFX_NAME[lv]; $('gfxFps').checked = GFX_FPS; $('fps').className = GFX_FPS ? 'hud on' : 'hud';
   if (typeof gsetShow === 'function') gsetShow();
+  decoSync();                                                           // 畫質「裝飾」換了 ⇒ 主選單的船重新載入（05_hull.js；打仗中等回主選單）
 }
 /** 物理效果（09_phx.js）：主選單的全開／高／中／低、物理設定頁每一項的按鈕。帆與繩換到「關」或從「關」換出來 ⇒ setPhys（跟 B 鍵同一支）。 */
 function phxUI() {
@@ -829,6 +839,6 @@ function distShow() { var d = $('dist'); d.value = DIST; $('distV').textContent 
 setSailMode(SAIL); setCamTrack(true); $('physT').classList.toggle('on', PHYS);
 $('go').onclick = start;
 $('endC').onclick = function () { $('end').className = ''; };
-$('endR').onclick = function () { RUNNING = false; $('end').className = ''; $('cover').style.display = ''; };
+$('endR').onclick = function () { RUNNING = false; $('end').className = ''; $('cover').style.display = ''; decoSync(); };
 // 訂閱（TASK-0669：模擬層只發事件，00_events.js）
 evOn('playerTake', function () { KEYS.l = KEYS.r = false; });   // 玩家換船：按住的舵鍵放開（52_fleet.js playerTake）
