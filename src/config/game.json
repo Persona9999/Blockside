@@ -167,7 +167,8 @@
       "pine": {"name": "松木", "kind": "wood", "density": 0.5, "hard": 0.7, "flammable": 0.8},
       "teak": {"name": "柚木", "kind": "wood", "density": 0.65, "hard": 1.1, "flammable": 0.3},
       "iron": {"name": "鐵甲", "kind": "metal", "density": 7.8, "hard": 32, "pen": 230, "flammable": 0, "metal": 1, "rough": 0.35},
-      "copper_sheath": {"name": "銅皮（包在木殼外）", "kind": "metal", "density": 0.8, "hard": 1.1, "flammable": 0, "metal": 0.7, "rough": 0.55}
+      "copper_sheath": {"name": "銅皮（包在木殼外）", "kind": "metal", "density": 0.8, "hard": 1.1, "flammable": 0, "metal": 0.7, "rough": 0.55},
+      "boiler": {"name": "鍋爐（鐵殼＋滿水）", "kind": "metal", "density": 0.9, "hard": 1.5, "flammable": 0, "metal": 0.85, "rough": 0.45}
     }
   },
   "ships": [
