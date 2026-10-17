@@ -22,6 +22,17 @@ function helmGunW(g) { var G = GUNS[g.type] || {}; return (+G.mass || 1) * gunRa
 /** 一舷的火力（迴旋砲、砲塔 g.mt 兩舷都算）。 */
 function helmPower(sh, side) { var p = 0; sh.guns.forEach(function (g) { if (g.alive && (g.mt || g.side === side)) p += helmGunW(g); }); return p; }
 function helmOther(side) { return side === 'S' ? 'P' : 'S'; }
+/** 大漩渦（TASK-0683；08_sea.js VX）：離中心不到 VX_AVOID × rv ⇒ 航向改成順著水流往外斜（越近斜得越多：20° → 90° 正往外）、帆照全速；
+ *  遠一點 ⇒ null（照艦長的）。優先序（31_sailing.js sail）：讓友船、讓敵艦（快撞上才出手）＞ 它 ＞ 讓開友艦的砲線。 */
+var VX_AVOID = 0.65;
+function vxAvoid(sh) {
+  if (!VX || sh.sinkingFinal) return null;
+  var r = Math.hypot(sh.px, sh.pz), rD = VX_AVOID * VX.rv; if (r >= rD || r < 1e-3) return null;
+  var ux = sh.px / r, uz = sh.pz / r, b = (20 + 70 * clamp((rD - r) / (rD - VX.re), 0, 1)) * Math.PI / 180;
+  var dx = uz * Math.cos(b) + ux * Math.sin(b), dz = -ux * Math.cos(b) + uz * Math.sin(b);   // 切線 (z, −x)／r 往外（ux, uz）轉 b
+  sh.wantV = Infinity;
+  return Math.atan2(-dz, dx);                                            // fwd(yaw) ＝ (cos yaw, −sin yaw)
+}
 /** 艦長想一想（每 think 秒）：要哪一舷對敵、是不是被壓制。回傳 sh.hs ＝ { present, evade, t }。 */
 function helmThink(sh, foe) {
   var H = HELMS[sh.helm] || HELMS.basic, st = sh.hs || (sh.hs = { present: null, evade: false, t: -1e9 });

@@ -133,8 +133,16 @@ function programs() {
     '   vec3 under=textureLod(uScene,sc+off,0.0).rgb*vec3(0.55,0.86,0.92); deep=mix(deep,under,exp(-th*0.3)*clamp(1.0-fd/500.0,0.0,1.0)); a=1.0; }\n' +
     ' vec3 c=mix(deep,sky,fr)+vec3(1.0,0.92,0.75)*sp;\n' +
     // 白沫（天氣：暴風雨）：浪頭（高度在全部振幅的 40% 以上）照一層慢慢飄的雜訊碎成一塊一塊；晴天 uFoam ＝ 0 ⇒ 整段跳過（畫面逐位元組不變）
-    ' if(uFoam>0.0){ float hn=seaH(p)/max(uSeaK*1.14,1e-3); float fm=smoothstep(0.4,0.8,hn)*smoothstep(0.3,0.7,vn(p*0.16+vec2(uSeaT*0.05,0.0)))+0.25*smoothstep(0.6,0.9,vn(p*0.9-vec2(0.0,uSeaT*0.2)))*smoothstep(0.2,0.6,hn);\n' +
+    //   大漩渦：浪頭照浪本身的高度判（扣掉漩渦凹下去的那一份；⛔ 不扣 ⇒ 漏斗裡一律比 40% 低、整片沒有白沫）
+    ' if(uFoam>0.0){ float hn=(seaH(p)-vxH(p))/max(uSeaK*1.14,1e-3); float fm=smoothstep(0.4,0.8,hn)*smoothstep(0.3,0.7,vn(p*0.16+vec2(uSeaT*0.05,0.0)))+0.25*smoothstep(0.6,0.9,vn(p*0.9-vec2(0.0,uSeaT*0.2)))*smoothstep(0.2,0.6,hn);\n' +
     '   c=mix(c,vec3(0.82,0.86,0.88)*(0.55+0.45*uSunK),clamp(fm,0.0,1.0)*0.8*uFoam*(1.0-smoothstep(200.0,900.0,fd))); }\n' +
+    // 大漩渦（08_sea.js VX；uVx.x ＝ 深度，0 ⇒ 整段跳過）：漏斗壁上 5 條對數螺旋的白沫（照水流的方向一起轉：從上往下看逆時針 ⇒ atan(z, x) 變小），
+    //   用雜訊碎成一段一段；越往中心越暗（眼是一個黑洞）。只在畫面上。
+    ' if(uVx.x>0.0){ float r=length(p), q=r/uVx.z, th=atan(p.y,p.x); float ph=5.0*(th+uSeaT*uVx.w/uVx.z)+7.0*log(max(r,1.0));\n' +
+    '   float arm=smoothstep(0.35,0.95,sin(ph))*smoothstep(0.25,0.75,vn(p*0.07+vec2(uSeaT*0.03,0.0)));\n' +
+    '   float band=smoothstep(0.12,0.4,q)*(1.0-smoothstep(1.4,2.6,q));\n' +
+    '   c=mix(c,vec3(0.82,0.86,0.88)*(0.55+0.45*uSunK),clamp(arm*band,0.0,1.0)*0.75*(1.0-smoothstep(250.0,1000.0,fd)));\n' +
+    '   c=mix(c,vec3(0.01,0.04,0.06),(1.0-smoothstep(0.08,0.35,q))*0.85); }\n' +
     ' c=mix(c,uFog,1.0-exp(-fd*uFogD)); o=vec4(c,a); }\n');
   // 雨（天氣 × 畫質的「雨」）：整個畫面一層斜的雨絲，三層遠近（越近越粗越快）；欄位照雜湊挑哪幾欄有雨、每欄的相位亂撒。鏡頭轉的時候雨絲跟著水平滑（uYaw）。
   P.rain = VK.compile(gl, '#version 300 es\nlayout(location=0) in vec2 aP; void main(){ gl_Position=vec4(aP,0.0,1.0); }\n',
@@ -180,6 +188,7 @@ function setCommon(p) {
   if (u.uSeaK) gl.uniform1f(u.uSeaK, SEA_K * WX.sea);                  // 浪（08_sea.js）：大小、時間（模擬時間 ⇒ 暫停時浪也停）
   if (u.uSeaT) gl.uniform1f(u.uSeaT, SIMT);
   if (u.uSeaA) gl.uniform1f(u.uSeaA, SEA_A);                           // 這一場的風轉了多少，浪跟著轉（08_sea.js）
+  if (u.uVx) { if (VX) gl.uniform4f(u.uVx, VX.D, VX.rc2, VX.rv, VX.V); else gl.uniform4f(u.uVx, 0, 1, 1, 0); }   // 大漩渦（08_sea.js VX）：D ＝ 0 ⇒ 沒有
   if (u.uClip) gl.uniform1f(u.uClip, PASS.clip);
   if (u.uCutT) gl.uniform1i(u.uCutT, 8);                       // 剖面的切高貼圖（74_cutaway.js）：固定第 8 號
   if (u.uSunK) gl.uniform1f(u.uSunK, WX.sun);                   // 天氣（08_weather.js）：陽光、水手與碎木的亮度、白沫

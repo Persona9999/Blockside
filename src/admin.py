@@ -1168,7 +1168,7 @@ SHORT_OK = {
     'note', 'sfx', 'evOn',                                                                  # 事件（00_events）
     'seaH', 'matK', 'lvAt', 'lvOf', 'navG', 'navZ', 'ndIn', 'armM', 'fpG', 'fpUI', 'fpsT',  # 已經帶模組字首的（sea、mat、lv、nav、nd、arm、fp、fps…）
     'fsOn', 'fxPt', 'flGL', 'flPd', 'rdGL', 'wpGL', 'wpLv', 'smRk', 'mkFB', 'mkRB', 'penP',
-    'ramK', 'wlZ', 'deg3', 'fGet', 'fPut',
+    'ramK', 'wlZ', 'deg3', 'fGet', 'fPut', 'vxH',
 }
 SHORT_RX = re.compile(r'[a-z][a-zA-Z0-9]{0,3}$')
 # 改過名的（TASK-0671，2026-10-17）：舊名 ⇒ 新名。別人的分支合進來還在用舊名（沒被區域宣告遮住）⇒ 不建置、告訴他新名字（⛔ 不擋 ⇒ 執行到才 ReferenceError）。

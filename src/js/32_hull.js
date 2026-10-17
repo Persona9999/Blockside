@@ -68,7 +68,8 @@ function stepShip(sh, dt) {
     else sh.sink = Math.max(0, sh.sink + Math.min(Q * 1.1e-5 - 0.004 * pumpK(sh), 0.25) * fk * dt);   // pumpK：基礎抽水量／PUMP_REF（TASK-0604；憲法號 1）   // 進水與抽水一起照滑桿縮放（⛔ 只縮進水 ⇒ 調慢之後抽水永遠贏、永遠不沉）；
                                                                               // 上限 0.25 m/s：彈藥庫殉爆打掉三十幾萬格 ⇒ 不設上限兩秒就沉完，看不到船斷開
     if (sh.sink > 4.2 && !sh.sinkingFinal && fk > 0) { sh.sinkingFinal = true; note(sh, '進水太多，開始沉了'); }
-    if (sh.sinkingFinal) { sh.sinkV += 0.06 * fk * dt; sh.sink += sh.sinkV * dt; }
+    if (VX && !sh.sinkingFinal && Math.hypot(sh.px, sh.pz) < VX.re) { sh.sinkingFinal = true; sh.vxEaten = true; sh.fate = '捲進漩渦'; note(sh, '被捲進漩渦的中心，往下沉了', true); }   // 大漩渦的眼（08_sea.js VX.re）
+    if (sh.sinkingFinal) { sh.sinkV += 0.06 * (sh.vxEaten ? 3 : fk) * dt; sh.sink += sh.sinkV * dt; }   // 捲進漩渦 ⇒ 照三倍往下拉（約 10 秒沉完；進水速度調成 0 也一樣）
     if (sh.sink > 9) { sh.sunk = true; sh.sunkAt = SIMT; note(sh, '沉沒', true); }   // sunkAt：結算判自爆沉沒（61_hud.js shipFate）
   } else { sh.sinkV = Math.min(sh.sinkV + 0.05 * dt, 1.2); sh.sink += sh.sinkV * dt; }
   // 傾斜：破洞那一舷往下（格座標 +y ＝ 船體 +Z（右舷）；繞 +X 轉正角時 +Z 那邊下沉）；粒子模式照水的重心（33_flood.js floodTilt）
