@@ -43,24 +43,27 @@ function pumpAuto(T, D, items, it, n) {
 }
 /** 開戰時（10_ship.js，shipRooms 之後）：甲板擺法裡的抽水機 ⇒ 模型（加進 sh.models，跟砲同一套血量、命中）；sh.pumps ＝ { list, ... }，沒有 ⇒ null。 */
 function pumpModels(sh) {
-  var T = sh.T, list = [], decks = hullDeckKit(T).decks;
-  sh.pumps = null;
+  var T = sh.T, list = [], decks = hullDeckKit(T).decks, bd = benchDeck(T), bench = sh.models.filter(function (m) { return m.kind === 'furn' && FURN[m.item] && FURN[m.item].role === 'bench'; });   // 木工台（46_carpenter.js）：艙房裡的（shipRooms 做好的）＋下面甲板上的 ⇒ sh.benches
+  sh.pumps = null; sh.benches = null;
   var qd = PUMP_Q ? decks.filter(function (D) { return D.zr[0] >= T.zw; })[0] || decks[decks.length - 1] : null;   // ?pumps= 擺在哪一層：水線以上最低那層
   decks.forEach(function (D) {
     var pl = deckPlan(T.id, deckId(D)), G = deckGrid(T, D), its = pl.items ? roomCheck(T, { grid: G }, 'deck', pl.items).items : [];
-    if (D === qd) { its = deckItems(T, D, pl).items.slice(); pumpAuto(T, D, its, 'pump', PUMP_Q[0] || 0); if (pumpSteamShip(T)) pumpAuto(T, D, its, 'spump', PUMP_Q[1] || 0); }
+    if (D === qd || D === bd) its = deckItems(T, D, pl).items.slice();      // 木工台那一層：照 deckItems（含自動補的木工台；自動的取用點不是抽水機、下面照 role 篩掉）
+    if (D === qd) { pumpAuto(T, D, its, 'pump', PUMP_Q[0] || 0); if (pumpSteamShip(T)) pumpAuto(T, D, its, 'spump', PUMP_Q[1] || 0); }
     its.forEach(function (q) {
-      var f = FURN[q.it]; if (!f || f.role !== 'pump') return;
+      var f = FURN[q.it]; if (!f || (f.role !== 'pump' && f.role !== 'bench')) return;
       var lx = q.r ? f.size[1] : f.size[0], ly = q.r ? f.size[0] : f.size[1], t = itemTiles(q.it, q.r);
       var at = [G.x0 + q.x * ROOM_TILE + Math.floor((t[0] * ROOM_TILE - lx) / 2), G.y0 + q.y * ROOM_TILE + Math.floor((t[1] * ROOM_TILE - ly) / 2), G.zt[q.x + q.y * G.nx]];
       var bb = [at[0], at[1], at[2], at[0] + lx, at[1] + ly, at[2] + f.size[2] + 1], nm = D.name + f.name + '-' + (list.length + 1);
       var m = { T: T, k: sh.models.length, name: nm, path: deckId(D) + '/' + nm, kind: 'furn', item: q.it, hold: 0, room: null, hp: f.hp, hpMax: f.hp, mesh: furnMesh(T, q.it, q.r ? 'y' : 'x'), origin: at, bb: bb, pts: {}, meta: { kind: 'furniture', item: q.it },
         c: [(bb[0] + bb[3]) / 2, (bb[1] + bb[4]) / 2, (bb[2] + bb[5]) / 2], foot: VK.pack(Math.floor(bb[0] + 1), Math.floor(bb[1] + 1), at[2] - 1), alive: true };
       sh.models.push(m);
+      if (f.role === 'bench') { bench.push(m); return; }
       list.push({ m: m, it: q.it, f: f, deck: D.key, hand: f.power !== 'steam', need: 0, have: 0, tpm: 0, why: '' });
     });
   });
   if (list.length) sh.pumps = { list: list, x: 0, t: 0, called: 0 };
+  if (bench.length) sh.benches = bench;
 }
 /** 開戰時（makeCrew 最後，medInit 之後）：人力抽水機旁邊的走路點（從待命那一層走得到）；走不到 ⇒ 記原因（派不了人 ⇒ 不抽）。 */
 function pumpInit(sh) {

@@ -19,6 +19,10 @@ var FURN_ITEMS = [
   { k: 'hold', name: '容納', lim: [1, 4], step: 1, unit: ' 人', int: true, has: function (f) { return f.hold !== undefined; }, note: '一張床躺幾個傷員' },
   { k: 'buff.heal', name: '治療速度加成', lim: [0, 1], step: 0.05, pct: true, has: function (f) { return !!(f.buff && f.buff.heal !== undefined); }, note: '同一間加總，上限照房間類型（醫療艙 60%）' },
   { k: 'staff.surgeon', name: '配幾位船醫', lim: [0, 4], step: 1, unit: ' 人', int: true, has: function (f) { return !!(f.staff && f.staff.surgeon !== undefined); }, note: '設施配員：開戰時走得到的每一件配這麼多位船醫，站在旁邊（全船上限在船隻配置頁）' },
+  { k: 'staff.carpenter', name: '配幾位木匠', lim: [1, 4], step: 1, unit: ' 人', int: true, has: function (f) { return !!(f.staff && f.staff.carpenter !== undefined); }, note: '設施配員：每張配這麼多位木匠，開戰時生在台旁（全船上限在船隻配置頁）' },
+  { k: 'wood', name: '木材存量', lim: [0, 20000], step: 100, unit: ' 份', int: true, has: function (f) { return f.role === 'bench'; }, note: '每張台存幾份木材（補一格用一份；台被打壞 ⇒ 剩下的拿不到）' },
+  { k: 'carry', name: '一趟帶幾份', lim: [10, 2000], step: 10, unit: ' 份', int: true, has: function (f) { return f.role === 'bench'; }, note: '木匠開戰時身上帶滿；用完了、又有東西要修 ⇒ 走回台旁拿到滿' },
+  { k: 'auto', name: '每船至少幾張', lim: [1, 4], step: 1, unit: ' 張', int: true, has: function (f) { return f.role === 'bench'; }, note: '甲板上擺的不夠就自動補在水線以上最低那層砲甲板（拿掉最後一張也會補回來；不要木匠 ⇒ 船隻配置頁上限設 0）' },
   { k: 'hp', name: '血量', lim: [10, 1000], step: 10, unit: '', int: true, has: function (f) { return f.hp !== undefined; }, note: '被打到扣血，歸零就壞（不再能用、不再給加成）' }
 ];
 /** 動力件的項目（31_drive.js drvCurve／drvNeed／drvPartsTick 讀）；fit ＝ 拉滑桿時跟另一格保持 lo < hi。 */
@@ -99,7 +103,7 @@ function furnShow() {
   });
   if (T.cur === DRVP) $('furnInfo').innerHTML = '動力件：雕刻的關聯 meta kind=' + id + '（造船規格 §9.6）・' + (f.cell !== undefined ? '傳動件：照兩端之間最細的那一截算' : '體素件：照這一件還剩幾成的格算') + '・每 1 秒算一次・改了下一場開始生效';
   else {
-    var t = ROOM_FN[f.type], where = f.role === 'pump' ? '甲板（' + (f.place === 'well' ? '主桅旁中線' : '中線') + (f.power === 'steam' ? '、只有蒸汽船' : '') + '）' : t ? t.name : '';
+    var t = ROOM_FN[f.type], where = f.role === 'pump' ? '甲板（' + (f.place === 'well' ? '主桅旁中線' : '中線') + (f.power === 'steam' ? '、只有蒸汽船' : '') + '）' : f.role === 'bench' ? '甲板（不夠每船至少的張數 ⇒ 自動補在水線以上最低那層砲甲板）' : t ? t.name : '';
     $('furnInfo').innerHTML = '擺在：' + where + '（船隻配置頁的「擺設…」）' + (f.size && S > 0 ? '・大小 ' + f.size.map(function (v) { return (v * S).toFixed(1); }).join('×') + ' m' : '')   /* S（公尺／格）第一艘船載好才有 ⇒ 之前不寫大小 */;
   }
   var n = Object.keys(FURN_SET).length + Object.keys(DRV_SET).length, b = $('furnB'); b.textContent = n ? '道具設定（改過）…' : '道具設定…'; b.className = n ? 'on' : '';

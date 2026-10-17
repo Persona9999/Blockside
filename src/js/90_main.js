@@ -102,6 +102,7 @@ if (DEBUG) window.__game = {
   furnHit: function (i, name, k, dmg) { var sh = SHIPS[i], o = sh.rooms.filter(function (r) { return r.name === name; })[0], m = o.furn[k]; damageModel(sh, m, [0, 5, 0], dmg); var B = roomBuffNow(o); return { item: m.item, hp: m.hp, alive: m.alive, buff: buffText(B), cap: +roomCap(o).toFixed(2), eff: +roomEff(o).toFixed(2) }; },
   roomPlace: function (id, name, type, items, p) { var T = HULLT[id], r = hullRooms(T).filter(function (x) { return x.name === name; })[0]; return placeOk(roomGrid(T, r), type, items, p); },
   med: function (i) { return medInfo(SHIPS[i || 0]); },
+  carp: function (i) { return carpInfo(SHIPS[i || 0]); },   // 木匠與木工台（46_carpenter.js）
   pumps: function (i) { return pumpInfo(SHIPS[i || 0]); },   // 抽水（45_pumps.js）：基礎、現在全船幾噸／分、每台抽水機的狀態與原因   // 醫療艙（44_medic.js）：每一間的床、人手、搬下去、治好歸隊
   rooms: function (on) { if (on !== undefined) { ROOMS_DBG = !!on; if (!on) roomLabels(); } return roomsInfo(); },   // 空艙房（36_rooms.js）：讀數；給 true／false ⇒ 開關外框與名字
   shipsIO: { exp: function () { return shipsExport(); }, imp: function (o) { var n = shipsImport(o); SLIDERS_SHOW && SLIDERS_SHOW(); return n; }, crew: function (id) { return shipCrew(id); }, seen: function () { return CREW_SEEN; } },   // 船隻配置的匯出入（TASK-0570；量的時候不必真的下載檔案）

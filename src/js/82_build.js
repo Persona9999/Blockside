@@ -22,7 +22,7 @@ var BLD_CAT = [
   { id: 'powder', name: '火藥', em: '🧨', has: function (f) { return f.role === 'powder'; } },
   { id: 'misc', name: '其他', em: '📦', has: function () { return true; } }
 ];
-var BLD_EM = { bed: '🛏', table: '🩺', medkit: '💊', pump: '🚰', spump: '♨', keg: '🛢' };   // 設定檔沒有圖示 ⇒ 這裡給；沒列的 ⇒ 📦
+var BLD_EM = { bed: '🛏', table: '🩺', medkit: '💊', pump: '🚰', spump: '♨', keg: '🛢', bench: '🪚' };   // 設定檔沒有圖示 ⇒ 這裡給；沒列的 ⇒ 📦
 function bldEm(it) { return BLD_EM[it] || '📦'; }
 function bldCat(it) { var f = FURN[it]; for (var i = 0; i < BLD_CAT.length; i++) if (BLD_CAT[i].has(f)) return BLD_CAT[i].id; return 'misc'; }
 /** 快捷欄的順序：照分類（醫療 → 抽水 → 火藥 → 其他），同一類照設定檔的順序。 */
@@ -30,7 +30,7 @@ function bldList() {
   var ks = Object.keys(FURN);
   return BLD_CAT.reduce(function (a, c) { return a.concat(ks.filter(function (k) { return bldCat(k) === c.id; })); }, []);
 }
-function bldNote(it) { var f = FURN[it], b = f.buff || {}; return f.role === 'powder' ? '取用點（一處三桶）' : f.role === 'pump' ? '抽水 ' + f.tpm + ' 噸／分' + (f.power === 'steam' ? '、靠鍋爐' : '') : f.hold ? '躺 ' + f.hold + ' 人' : b.heal ? '治療速度 +' + Math.round(b.heal * 100) + '%' : ''; }
+function bldNote(it) { var f = FURN[it], b = f.buff || {}; return f.role === 'powder' ? '取用點（一處三桶）' : f.role === 'bench' ? '木匠 ' + furnStaff(it, 'carpenter') + ' 位' : f.role === 'pump' ? '抽水 ' + f.tpm + ' 噸／分' + (f.power === 'steam' ? '、靠鍋爐' : '') : f.hold ? '躺 ' + f.hold + ' 人' : b.heal ? '治療速度 +' + Math.round(b.heal * 100) + '%' : ''; }
 function bldRoomName(r) { return (r.deck ? r.deck.name + ' ' : '') + r.name.split('/').slice(-2).join(' ').replace('艙房-鏡像', '左').replace('艙房', '右'); }
 /** 開局（70_flow.js start，reset 之後）：建造玩法 ⇒ 進第一人稱、顯示建造介面；別的玩法 ⇒ 收起來。 */
 function bldEnter() {
