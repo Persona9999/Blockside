@@ -72,6 +72,7 @@ function prefsSnap() {
   if (STRIKE.cas !== LIM.cas[2] || STRIKE.guns || STRIKE.masts || STRIKE.officers) o.strike = { cas: STRIKE.cas, guns: STRIKE.guns, masts: STRIKE.masts, officers: STRIKE.officers };
   if (CAP_SET.some(function (k) { return k !== 'random'; })) o.cap = CAP_SET.slice();
   var gd = GFX_PRESET[GFX_DEFAULT]; if (GFX_ITEMS.some(function (it) { return GFX[it.k] !== gd[it.k]; })) { o.gfx = {}; GFX_ITEMS.forEach(function (it) { o.gfx[it.k] = GFX[it.k]; }); }   // 畫質（07_gfx.js）：跟預設不一樣 ⇒ 整組存
+  put('vsfx', SND.sfx, SND_DEF.sfx); put('vamb', SND.amb, SND_DEF.amb); put('vbgm', SND.bgm, SND_DEF.bgm); put('bgm', SND.mode, SND_DEF.mode); put('tune', SND.tune, SND_DEF.tune);   // 聲音設定（02_music.js，TASK-0677）
   put('gcrew', GUN_CREW_HURT, true);
   put('dbg', DBG_SET, false);                                         // Debug 模式（04_state.js dbgOn）                                  // 砲被打飛 ⇒ 砲班跟著受傷（21_gunnery.js）
   put('fps', GFX_FPS, false); put('slow', SLOW.on, true); put('pslow', PSLOW.on, false); put('pslowb', PSLOW.budget, LIM.pslowb[2]); put('ramv', RAM.v0, LIM.ramv[2]); put('ramk', RAM.k, LIM.ramk[2]); put('rame', RAM.e, LIM.rame[2]); put('ramside', RAM.side, LIM.ramside[2]);   // 碰撞傷害的數值（物理設定頁） put('slowcam', SLOW.cam, true);   // 殉爆的慢動作與特寫（73_slowmo.js）
@@ -137,6 +138,9 @@ function prefsApply(p) {
   PHYS = PHX.rig > 0;
   if (p.gfx && typeof p.gfx === 'object' && !Q.has('gfx')) GFX_ITEMS.forEach(function (it) { var x = num(p.gfx[it.k], [0, it.opt.length - 1], true); if (x !== undefined && !Q.has('g_' + it.k)) GFX[it.k] = x; });
   if (typeof p.fps === 'boolean') GFX_FPS = p.fps;
+  [['vsfx', 'sfx'], ['vamb', 'amb'], ['vbgm', 'bgm']].forEach(function (k) { if (typeof p[k[0]] === 'number' && isFinite(p[k[0]])) SND[k[1]] = clamp(p[k[0]], 0, 1); });   // 聲音設定（02_music.js）
+  if (p.bgm === 'sail' || p.bgm === 'on' || p.bgm === 'off') SND.mode = p.bgm;
+  if (p.tune === 'shuffle' || TUNES.some(function (t) { return t.id === p.tune; })) SND.tune = p.tune;
   if (typeof p.gcrew === 'boolean' && !Q.has('gcrew')) GUN_CREW_HURT = p.gcrew;
   if (typeof p.dbg === 'boolean' && !Q.has('dbg')) DBG_SET = p.dbg;
   if (typeof p.slow === 'boolean' && !Q.has('slowmo')) SLOW.on = p.slow;

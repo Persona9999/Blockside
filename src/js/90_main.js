@@ -20,6 +20,7 @@ function frame(ts, noRaf) {                                         // noRaf：_
   camFollow(dt);                                                      // 追砲彈（03_camera.js）
   if (!PAUSED && !STILL) stepRain(dt);                                // 3D 雨滴（14_rain.js）：照畫面的時間走；停格、縮圖不動
   ambFrame();                                                         // 環境音：風、浪、暴風雨的雨（02_ambient.js；還沒有聲音 ⇒ 什麼都不做）
+  bgmFrame();                                                         // 背景音樂（02_music.js，TASK-0677）：主選單也放
   if (PF) pfLap('rain');
   remesh(RM_BUDGET);                                                  // 重網格化，每格有預算（60_render.js）
   if (PF) pfLap('flush');
@@ -139,6 +140,8 @@ if (DEBUG) window.__game = {
   floodView: function (o) { return floodView(o); },                   // 換鏡頭再拍一張（81_floodlab.js）
   /** 環境音試聽（02_ambient.js，TASK-0663）：q ＝ 'sec=10&cases=名字:w:sea:rain:hold;…' ⇒ Promise<[{ name, peak, rmsDb, wav }]>（src/tests/ambient_lab.py 經 DevTools 呼叫）。 */
   ambLab: function (q) { return ambLab(new URLSearchParams(q || '')); },
+  bgmRender: function (o) { return bgmRender(o || {}); },                // 背景音樂離線錄（02_music.js；src/tests/music_lab.py）
+  bgm: function () { return { snd: JSON.parse(JSON.stringify(SND)), tune: BGM ? BGM.tn.id : null, pass: BGM ? BGM.pass : null, forced: !!(BGM && BGM.forced), bus: AC && AC.bgmBus ? +AC.bgmBus.gain.value.toFixed(4) : null, sfxBus: AC && AC.sfxBus ? +AC.sfxBus.gain.value.toFixed(4) : null, ambBus: AC && AC.ambBus ? +AC.ambBus.gain.value.toFixed(4) : null, fight: AC ? +(AC.currentTime - SND_FIGHT).toFixed(1) : null, tunes: TUNES.map(function (t) { return t.id; }) }; },   // 聲音的讀數：三條音量線、正在放哪首
   /** 遊戲裡那一份環境音現在的值（還沒有聲音 ⇒ null）：風、浪、雨的音量、風的頻率、悶掉的低通、左右、在不在船艙裡。 */
   amb: function () { if (!AMB) return null; var r = function (v) { return +v.toFixed(4); }; return { ctx: AC.state, rain: AMB.rain, wind: r(AMB.wg.gain.value), windHz: r(AMB.wbp.frequency.value), sea: r(AMB.vg.gain.value), rainG: AMB.rain ? r(AMB.rg.gain.value) : 0, muff: r(AMB.muff.frequency.value), pan: AMB.pan ? r(AMB.pan.pan.value) : 0, hold: AMB.hold0, p: ambParams() }; },
   shot: function (i, x, z, side, gun, ammo, ang) {

@@ -110,6 +110,7 @@
   #gset.on{ display:block; }
   #gsetBg{ position:absolute; inset:0; display:none; background:rgba(0,0,0,.25); z-index:5; } #gsetBg.on{ display:block; }   /* 面板外點一下就關（蓋住整個畫面，含下方的 ⚙ 設定；Tim 2026-10-13） */ #gset .gsT{ font-size:16px; color:var(--gold); margin-bottom:6px; } #gset .note{ color:var(--dim); font-size:12px; }
   #gset .gsR{ margin:9px 0; display:flex; flex-wrap:wrap; justify-content:center; align-items:center; gap:5px; } #gset .gsL{ color:var(--dim); font-size:13px; margin-right:2px; }
+  #gset .gsV{ display:inline-flex; align-items:center; gap:4px; font-size:12px; color:var(--dim); } #gset .gsV input{ width:90px; accent-color:var(--gold); }   /* 音量（TASK-0677） */
   #gset .chip{ font-size:14px; padding:4px 12px; margin:0; } #gset .chip.big{ font-size:15px; padding:6px 16px; } #gset .chip.dis{ opacity:.45; } #gset #boomB{ color:#ff9a7a; border-color:rgba(255,120,90,.55); }   /* dis：這個頁面不給全螢幕 */
   #fps{ position:static; margin-bottom:3px; font:12px Consolas,monospace; color:#bfe9ff; text-shadow:0 0 3px #000, 0 0 3px #000; display:none; z-index:5; }
   #fps.on{ display:block; }
@@ -352,6 +353,7 @@
     <div class="gsR"><span class="chip" id="physT"><b>B</b> 帆繩物理</span><span class="chip" id="camT"><b>V</b> 鏡頭跟船</span><span class="chip" id="muteT"><b>M</b> 靜音</span><span class="chip" id="fpsT">顯示 FPS</span><span class="chip" id="fullT"><b>F11</b> 全螢幕</span><span class="note" id="gsFull"></span></div>
     <div class="gsR"><span class="gsL">視角</span><span class="chip" id="fpT">🧍 第一人稱</span><span class="chip on" id="fpLampT" title="第一人稱時自己帶一盞燈（艙裡比較亮）">🏮 提燈</span><span class="chip" id="bldLinesT" title="建造模式：每一間艙房的外框（穿過牆畫）">📐 艙房外框</span><span class="note">在我艦上走（左下搖桿或 WASD、右下搖桿／拖曳／方向鍵轉頭（電腦：點畫面用滑鼠轉頭，Esc 或按住 Alt 放開）、空白鍵跳、E 爬梯子、Shift 跑）；再按一次回到原本的鏡頭（TASK-0649）</span></div>
     <div class="gsR"><span class="gsL">碰撞</span><span class="chip" data-fpm="0" title="牆擋人、會從甲板的破洞落下去">正常</span><span class="chip" data-fpm="1" title="牆不擋人，腳底照樣貼著甲板、不墜落；走不出船外">🚪 穿牆</span><span class="chip" data-fpm="2" title="沒有重力、什麼都不擋；空白鍵／C（面板的 ⬆ ⬇）上下">🕊 浮空</span><span class="note">第一人稱時的碰撞</span></div>
+    <div class="gsR"><span class="gsL">音量</span><span class="gsV">音效 <input type="range" min="0" max="100" step="1" data-snd="sfx" aria-label="音效音量"></span><span class="gsV">環境 <input type="range" min="0" max="100" step="1" data-snd="amb" aria-label="環境音音量"></span><span class="gsV">音樂 <input type="range" min="0" max="100" step="1" data-snd="bgm" aria-label="背景音樂音量"></span><span class="note">背景音樂放哪首、什麼時候放在主選單的「聲音設定…」</span></div>
     <div class="gsR"><span class="gsL">彈藥庫殉爆</span><span class="chip" id="slowT">慢動作</span><span class="chip" id="slowCamT">特寫鏡頭</span></div>
     <div class="gsR"><span class="gsL">模擬速度</span><input type="range" id="simSpd" min="-1301" max="903" step="1" value="0" aria-label="模擬速度"><b id="simSpdV" style="min-width:3.6em">×1</b><span class="chip" id="simSpd1">1×</span></div>
     <div class="gsR"><span class="gsL">物理減速</span><span class="chip" id="pslowT">計算量大時放慢</span></div>
@@ -384,7 +386,7 @@
       <div class="row" id="phxs">物理效果
         <button data-x="full">全開</button><button data-x="high">高</button><button data-x="mid">中</button><button data-x="low">低</button><button id="phxB">物理設定…</button>
       </div>
-      <div class="row"><button id="shipB">船隻配置…</button><button id="gunB">砲的設定…</button><button id="furnB">道具設定…</button><button id="keysB">鍵位設定…</button><button id="detB">細節設定…</button></div>
+      <div class="row"><button id="shipB">船隻配置…</button><button id="gunB">砲的設定…</button><button id="furnB">道具設定…</button><button id="keysB">鍵位設定…</button><button id="sndB">聲音設定…</button><button id="detB">細節設定…</button></div>
       <div class="row"><button id="allR">全部回到預設</button></div>
       <!-- 說明與細節設定的摘要放在最下面（Tim 2026-10-13：手機上開戰鈕被擠到畫面外、要捲才看得到；10-17 開戰鈕再往上搬到天氣下面） -->
       <div class="sub">Blockside（方舷）—— 雕刻作品做成的船，1:1（0.1 公尺一格）互轟：船殼一格一格被打碎、桅杆打得斷、破洞進水會沉。<br>
@@ -492,6 +494,19 @@
       <div class="row note" id="keysSt"></div>
       <div class="row"><button id="keysR">這一頁回到預設</button><button id="keysRA">全部回到預設</button><button id="keysE">匯出…</button><button id="keysI">匯入…</button><input type="file" id="keysF" accept=".json,application/json" style="display:none"></div>
       <div class="row"><button id="keysX">返回</button></div>
+    </div>
+    <!-- 聲音設定（TASK-0677，02_music.js）：三條音量線、背景音樂什麼時候放、放哪首；跟遊戲內設定面板的「音量」同一組值 -->
+    <div class="card panel" id="sndp" style="display:none">
+      <h2>聲音設定</h2>
+      <div class="sub">音量分三條：音效（砲、爆炸、碎裂）、環境音（風、浪、雨）、背景音樂（合成音照樂譜奏的船歌）。M 靜音照舊三條一起關。改了馬上生效、存在這台瀏覽器。</div>
+      <div class="row slide"><label for="vSfx">音效</label><input type="range" min="0" max="100" step="1" id="vSfx" data-snd="sfx" aria-label="音效音量"><span data-sndv="sfx"></span></div>
+      <div class="row slide"><label for="vAmb">環境音</label><input type="range" min="0" max="100" step="1" id="vAmb" data-snd="amb" aria-label="環境音音量"><span data-sndv="amb"></span></div>
+      <div class="row slide"><label for="vBgm">背景音樂</label><input type="range" min="0" max="100" step="1" id="vBgm" data-snd="bgm" aria-label="背景音樂音量"><span data-sndv="bgm"></span></div>
+      <div class="row" id="bgmModes">什麼時候放 <button data-bm="sail">只在航行（開砲就淡出）</button><button data-bm="on">一直放</button><button data-bm="off">關</button></div>
+      <div class="row" id="bgmTunes"></div>
+      <div class="row note" id="bgmNow"></div>
+      <div class="row"><button id="sndR">這一頁回到預設</button></div>
+      <div class="row"><button id="sndX">返回</button></div>
     </div>
     <!-- 細節設定（從主選單進）：滑桿的上下限與預設在 js/04_state.js 的 LIM（網址參數共用同一組） -->
     <div class="card panel" id="detail" style="display:none">
@@ -1427,6 +1442,8 @@ function initAudio() {
     master = AC.createGain(); master.gain.value = 0.8;
     var lim = AC.createDynamicsCompressor(); lim.threshold.value = -14; lim.knee.value = 4; lim.ratio.value = 20; lim.attack.value = 0.002; lim.release.value = 0.25;
     master.connect(lim); lim.connect(AC.destination); AC.lim = lim;
+    ['sfxBus', 'ambBus', 'bgmBus'].forEach(function (k) { var b = AC.createGain(); b.gain.value = 0; b.connect(master); AC[k] = b; });   // 三條音量線（TASK-0677，聲音設定頁）：音效／環境音（02_ambient.js）／背景音樂（02_music.js）；值照 SND（sndApply）
+    sndApply();
     var n = AC.sampleRate * 2; noiseBuf = AC.createBuffer(1, n, AC.sampleRate);
     var d = noiseBuf.getChannelData(0), s = 22222;
     for (var i = 0; i < n; i++) { s = (Math.imul(s, 1103515245) + 12345) & 0x7fffffff; d[i] = s / 0x3fffffff - 1; }
@@ -1434,6 +1451,7 @@ function initAudio() {
 }
 function sfx(kind, at, vol) {
   if (!AC || muted) return;
+  if (kind === 'boom' || kind === 'blast') SND_FIGHT = AC.currentTime;     // 開砲、爆炸 ⇒ 交戰中（02_music.js：BGM「只在航行」那一檔淡出）
   var dist = at ? len(sub(at, CAM.eye)) : 0, v = (vol || 1) / (1 + dist / 70);
   if (v < 0.01) return;
   var now = AC.currentTime, rec = SFX_RECENT[kind] || (SFX_RECENT[kind] = []);
@@ -1441,19 +1459,35 @@ function sfx(kind, at, vol) {
   while (rec.length && rec[0] < now - SFX_WIN) rec.shift();
   if (rec.length >= SFX_SAME || SFX_END.length >= SFX_MAX) return;     // 同一種剛放過好幾個、或已經太多聲音在響 ⇒ 這一個不放
   rec.push(now);
-  var t = AC.currentTime + Math.min(0.25, dist / 340) * 0.5, g = AC.createGain(); g.connect(master);
+  var t = AC.currentTime + Math.min(0.25, dist / 340) * 0.5, g = AC.createGain(); g.connect(AC.sfxBus);
   var src = AC.createBufferSource(); src.buffer = noiseBuf; src.playbackRate.value = 0.6 + Math.random() * 0.5;
   var f = AC.createBiquadFilter(); src.connect(f); f.connect(g);
   function env(a, d) { var e = t + d + 0.05, k = SFX_END.length; while (k > 0 && SFX_END[k - 1] > e) k--; SFX_END.splice(k, 0, e); g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(a * v, t + 0.01); g.gain.exponentialRampToValueAtTime(0.0001, t + d); src.start(t, Math.random()); src.stop(t + d + 0.05); }
   if (kind === 'boom') {
     f.type = 'lowpass'; f.frequency.setValueAtTime(1400, t); f.frequency.exponentialRampToValueAtTime(90, t + 0.9); env(1.1, 1.3);
     var o = AC.createOscillator(), og = AC.createGain(); o.frequency.setValueAtTime(70, t); o.frequency.exponentialRampToValueAtTime(32, t + 0.6);
-    og.gain.setValueAtTime(0.9 * v, t); og.gain.exponentialRampToValueAtTime(0.0001, t + 0.7); o.connect(og); og.connect(master); o.start(t); o.stop(t + 0.75);
+    og.gain.setValueAtTime(0.9 * v, t); og.gain.exponentialRampToValueAtTime(0.0001, t + 0.7); o.connect(og); og.connect(AC.sfxBus); o.start(t); o.stop(t + 0.75);
   } else if (kind === 'crack') { f.type = 'bandpass'; f.frequency.value = 900 + Math.random() * 900; f.Q.value = 0.8; env(1.4, 0.35); }
   else if (kind === 'splash') { f.type = 'highpass'; f.frequency.setValueAtTime(400, t); f.frequency.exponentialRampToValueAtTime(2500, t + 0.5); env(0.6, 0.8); }
   else if (kind === 'blast') { f.type = 'lowpass'; f.frequency.setValueAtTime(2400, t); f.frequency.exponentialRampToValueAtTime(60, t + 1.8); env(1.6, 2.2); }
   else if (kind === 'thunder') { f.type = 'lowpass'; f.frequency.setValueAtTime(260, t); f.frequency.exponentialRampToValueAtTime(40, t + 3.2); env(1.5, 3.6); }   // 暴風雨的雷（08_weather.js）
   else if (kind === 'creak') { f.type = 'lowpass'; f.frequency.setValueAtTime(300, t); f.frequency.exponentialRampToValueAtTime(80, t + 2.5); env(1.2, 2.8); }
+}
+
+/** 離線錄好的 AudioBuffer ⇒ { peak, rmsDb, wav（data URL，16 位元雙聲道） }（02_ambient.js ambRender、02_music.js bgmRender 共用）。 */
+function audioWav(buf) {
+  var n = buf.length, sr = buf.sampleRate, L = buf.getChannelData(0), R = buf.numberOfChannels > 1 ? buf.getChannelData(1) : L, pk = 0, ss = 0, i;
+  var out = new DataView(new ArrayBuffer(44 + n * 4));
+  function str(p, s) { for (var k = 0; k < s.length; k++) out.setUint8(p + k, s.charCodeAt(k)); }
+  str(0, 'RIFF'); out.setUint32(4, 36 + n * 4, true); str(8, 'WAVEfmt '); out.setUint32(16, 16, true); out.setUint16(20, 1, true); out.setUint16(22, 2, true);
+  out.setUint32(24, sr, true); out.setUint32(28, sr * 4, true); out.setUint16(32, 4, true); out.setUint16(34, 16, true); str(36, 'data'); out.setUint32(40, n * 4, true);
+  for (i = 0; i < n; i++) {
+    var l = clamp(L[i], -1, 1), r = clamp(R[i], -1, 1); pk = Math.max(pk, Math.abs(l), Math.abs(r)); ss += l * l + r * r;
+    out.setInt16(44 + i * 4, l * 32767, true); out.setInt16(46 + i * 4, r * 32767, true);
+  }
+  var u8 = new Uint8Array(out.buffer), bin = '', CH = 0x8000;
+  for (i = 0; i < u8.length; i += CH) bin += String.fromCharCode.apply(null, u8.subarray(i, i + CH));
+  return { peak: +pk.toFixed(3), rmsDb: +(10 * Math.log10(ss / (2 * n) + 1e-12)).toFixed(1), wav: 'data:audio/wav;base64,' + btoa(bin) };
 }
 // ── js/02_ambient.js ──
 // ───────────────────────── 環境音：風、浪、暴風雨的雨（TASK-0663） ─────────────────────────
@@ -1584,7 +1618,7 @@ function ambCovered() {
 function ambFrame() {
   if (!AC) return;
   if (AMB && AMB.rain !== !!WX.rain) { try { AMB.bus.disconnect(); AMB.osc.concat(AMB.src).forEach(function (n) { n.stop(); }); } catch (e) { } AMB = null; }
-  if (!AMB) { AMB = ambBuild(AC, master, WX.rain > 0); AMB.hold0 = 0; ambSet(AMB, ambParams(), AC.currentTime, 0); return; }
+  if (!AMB) { AMB = ambBuild(AC, AC.ambBus || master, WX.rain > 0); AMB.hold0 = 0; ambSet(AMB, ambParams(), AC.currentTime, 0); return; }   // AC.ambBus：環境音那條音量線（02_audio.js、TASK-0677）
   var now = AC.currentTime; ambSet(AMB, ambParams(), now, AMB_TC); ambDrops(AMB, now, now + 0.25);
 }
 /** 試聽集（__game.ambLab；src/tests/ambient_lab.py）：預設四段，各 sec 秒；?cases=名字:w:sea:rain:hold;… 換掉。回 Promise<[{ name, peak, rmsDb, wav }]>。 */
@@ -1603,20 +1637,175 @@ function ambRender(o) {
   AMB_SEED = 1234567; var A = ambBuild(oc, mg, o.rain > 0);
   ambSet(A, { w: o.w, pan: o.pan || 0, sea: o.sea, hgt: o.hgt === undefined ? 6 : o.hgt, rain: o.rain || 0, hold: o.hold ? 1 : 0, vol: 1 }, 0, 0);
   ambDrops(A, 0, sec);
-  return oc.startRendering().then(function (buf) {
-    var n = buf.length, L = buf.getChannelData(0), R = buf.getChannelData(1), pk = 0, ss = 0, i;
-    var out = new DataView(new ArrayBuffer(44 + n * 4));
-    function str(p, s) { for (var k = 0; k < s.length; k++) out.setUint8(p + k, s.charCodeAt(k)); }
-    str(0, 'RIFF'); out.setUint32(4, 36 + n * 4, true); str(8, 'WAVEfmt '); out.setUint32(16, 16, true); out.setUint16(20, 1, true); out.setUint16(22, 2, true);
-    out.setUint32(24, sr, true); out.setUint32(28, sr * 4, true); out.setUint16(32, 4, true); out.setUint16(34, 16, true); str(36, 'data'); out.setUint32(40, n * 4, true);
-    for (i = 0; i < n; i++) {
-      var l = clamp(L[i], -1, 1), r = clamp(R[i], -1, 1); pk = Math.max(pk, Math.abs(l), Math.abs(r)); ss += l * l + r * r;
-      out.setInt16(44 + i * 4, l * 32767, true); out.setInt16(46 + i * 4, r * 32767, true);
-    }
-    var u8 = new Uint8Array(out.buffer), bin = '', CH = 0x8000;
-    for (i = 0; i < u8.length; i += CH) bin += String.fromCharCode.apply(null, u8.subarray(i, i + CH));
-    return { o: o, peak: +pk.toFixed(3), rmsDb: +(10 * Math.log10(ss / (2 * n) + 1e-12)).toFixed(1), wav: 'data:audio/wav;base64,' + btoa(bin) };
+  return oc.startRendering().then(function (buf) { var r = audioWav(buf); r.o = o; return r; });   // WAV 編碼跟 bgmRender 共用（02_audio.js audioWav）
+}
+// ── js/02_music.js ──
+// ───────────────────────── 背景音樂：合成音讀譜播放船歌（TASK-0677） ─────────────────────────
+// Tim 2026-10-17：「是否可以用點子合成音來播放樂譜 樂譜可以找看看真實船歌 同時設計一套樂譜系統(讀譜播放 節省空間)」「然後這個做為BGM 要另外增加一個音效 BGM音量設定頁面」。
+// 樂譜：ABC 記譜法的子集（一首一個物件，見 TUNES；格式寫在 src/README「背景音樂的樂譜」）—— 一首旋律＋低音約 0.2–0.3 KB（音檔一首要 1–3 MB）。
+//   音名 C D E F G A B（C ＝ 中央 C）、小寫高八度，後面 ' 再高、, 再低；^ 升 _ 降 = 還原（照 K 調號；同一小節同一個音名同八度沿用，| 換小節失效）；
+//   時值 ＝ 單位長度 L（八分音符）的倍數：無 ＝ 1、2 ＝ 2、/2 ＝ 一半、3/2 ＝ 一個半；z 休止；- 連到下一個同音高（跨小節）；[M:3/4] 中途換拍號（只給人讀，時間照時值算）。
+// 曲子只從公有領域的樂譜取（⛔ 不用近代編曲、網路上別人的 ABC 轉譜）：R. R. Terry《The Shanty Book》Part I（Curwen 1921）——
+//   旋律照書上的人聲那一行、低音取鋼琴左手最低音；從 Project Gutenberg #20774 附的 MIDI 量化到十六分，再逐小節對過書頁的譜面（讀數在 TASK-0677）。
+// 播放：WebAudio（02_audio.js 的 AC）；旋律 ＝ 鋸齒波＋低通＋晚到的顫音（像提琴），低音 ＝ 兩道微走音的方波＋低通（像手風琴）。往前排 BGM_LOOK 秒，不吃主迴圈。
+//   每首反覆到約 BGM_TUNE_S 秒（bgmPasses）、停 BGM_GAP 秒換下一首（輪播照自己的 LCG 洗牌）。
+// 純聲音：⛔ 不抽 rnd()、不用 Math.random ⇒ 戰局的亂數一位元都不動；靜音（M）⇒ 三條音量線一起 0、排程照跑。
+var SND = { sfx: 1, amb: 1, bgm: 0.5, mode: 'sail', tune: 'shuffle' };   // 音量 0–1；mode：'sail' 只在航行（開砲就淡出）／'on' 一直播／'off'；tune：'shuffle' 輪播或曲 id
+var SND_DEF = JSON.parse(JSON.stringify(SND));
+var SND_FIGHT = -1e9, BGM_FIGHT_S = 20, BGM_FADE = 2.5;                // 開砲、爆炸（02_audio.js sfx boom／blast）之後 BGM_FIGHT_S 秒內算交戰 ⇒ 'sail' 模式淡出（時間常數 BGM_FADE 秒）
+var BGM_LOOK = 0.8, BGM_TUNE_S = 60, BGM_GAP = 4, BGM_VOL = 0.5;          // 每首反覆到約 BGM_TUNE_S 秒（2–6 遍：一遍 11 秒的跟一遍 38 秒的都差不多一分鐘）        // BGM_VOL：音樂整條的基準（量過才定，見 TASK-0677）
+var BGM = null, BGM_SEED = 7654321, BGM_ORDER = [];                    // BGM：{ tn 正在放的那首, t0 這一遍從幾秒開始, k 下一個沒排的事件, pass 第幾遍, forced 試聽鈕點的（不淡出、播完回輪播） }
+var TUNES = [
+  { id: 'drunken', name: '酒醉的水手', en: 'What Shall We Do with the Drunken Sailor?', src: 'Terry, The Shanty Book I (1921) No.14, pp.30–31', M: '2/4', K: 'C', Q: 108,
+    mel: 'A A/2 A/2 A A/2 A/2|A D F A|G G/2 G/2 G G/2 G/2|G C E G|A A/2 A/2 A A/2 A/2|A B c d|c A G E|D2 D2|A2 A3/2 A/2|A D F A|G2 G3/2 G/2|G C E G|A2 A3/2 A/2|A B c d|c A G E|D2 D2',
+    bass: 'D,4|D,4|C,,4|C,4|D,,4-|D,,2 F, D,|A,, C, E, C,|D,2 D,2|D,,4|D,,4|C,,4|C,,4|D,,4-|D,,2 F, D,|A,, C, E, C,|D,2 D,,2' },
+  { id: 'shenandoah', name: '雪蘭多亞', en: 'Shenandoah', src: 'Terry, The Shanty Book I (1921) No.9, pp.20–21', M: '4/4', K: 'Eb', Q: 50,
+    mel: 'B,2|E E E3 F G A|[M:3/4] c B3 e d|c3 B c B|G B3 B2|[M:4/4] c c c3 G B G|[M:3/4] F E3 F2|G3 E G3/2 c/2|B6|E3/2 F/2 G3 F|F2 E2',
+    bass: 'B,,2|E,,2 E,6|[M:3/4] E,,2 E,4|E,6|E,6|[M:4/4] A,,4 B,,4|[M:3/4] C,6|B,,,6|B,,,6|C,4 A,,2|B,,2 E,,2' },
+  { id: 'blowtheman', name: '把那傢伙吹倒', en: 'Blow the Man Down', src: 'Terry, The Shanty Book I (1921) No.16, pp.34–35', M: '6/8', K: 'Eb', Q: 132,
+    mel: 'E G|B3/2 c/2 B G E G|B c B G E G|B3 c3|A3/2 G/2 A F2 G|A3/2 G/2 A F D F|A G F c2 e|B/2 B3/2 B B2 A|G3/2 F/2 G E',
+    bass: 'z3/2 E,,/2|E,5/2 E,,/2 B,,5/2 E,,/2|E,5/2 E,,/2 B,,5/2 G,,/2-|G,,5/2 C,3 F,,/2|F,5/2 B,,3 F,/2-|F,5/2 B,,3 F,/2-|F,3 E,3|D,3 E,2 C,|B,,3 E,' },
+  { id: 'rio', name: '開往里約格蘭德', en: 'Bound for the Rio Grande', src: 'Terry, The Shanty Book I (1921) No.2, pp.4–5', M: '6/8', K: 'Eb', Q: 90,
+    mel: 'B,|E E E G G G|F E F E3|B5 G|c B4 B|c e c B A G|A B A G E F|G3/2 A/2 G F E F|E3 E2 F|G3 F E F|E6|B5 G|c B4 B|c e c B A G|A B A G E F|G3/2 A/2 G F E F|E5',
+    bass: 'z|E,,3 E,,3|E,,3 E,,3|E,6|E, F,5|A,,3 G,,3|F,,2 B,,, C,,3|B,,,6|E,,3 C,,3|B,,,2 B,,4|E,6|E,6|E,6|A,,3 G,,3|F,2 B,, C,3|B,,,3 B,,,3|E,,3 E,,2' }
+];
+var ABC_KEYS = { C: 0, G: 1, D: 2, A: 3, E: 4, F: -1, Bb: -2, Eb: -3, Ab: -4 };   // 調 ⇒ 升降記號數（正 ＝ 升）
+/** 一行 ABC 子集 ⇒ [[起點拍, 長度拍, MIDI 音高]]（拍 ＝ 四分音符；L ＝ 八分 ⇒ 時值 × 0.5）、總長。認不得的字 ⇒ 丟錯（寫錯的譜不要靜靜地少一個音）。 */
+function abcParse(s, K) {
+  var sf = ABC_KEYS[K], key = {}, carry = {}, out = [], t = 0, i = 0, tie = null, BASE = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 };
+  if (sf === undefined) throw new Error('abcParse：不認得的調 ' + K);
+  'FCGDAEB'.split('').forEach(function (c, k) { if (sf > k) key[c] = 1; if (-sf > 6 - k) key[c] = -1; });
+  function dur() {                                                     // 時值：n、/、/d、n/d
+    var m = /^(\d*)(\/(\d*))?/.exec(s.slice(i)); i += m[0].length;
+    var n = m[1] ? +m[1] : 1, d = m[2] ? (m[3] ? +m[3] : 2) : 1; return n / d * 0.5;
+  }
+  while (i < s.length) {
+    var c = s[i];
+    if (c === ' ') { i++; continue; }
+    if (c === '|') { carry = {}; i++; continue; }
+    if (c === '[') { var e = s.indexOf(']', i); if (e < 0) throw new Error('abcParse：[ 沒有收尾'); i = e + 1; continue; }   // [M:3/4] 之類的欄位：只給人讀
+    if (c === 'z') { i++; t += dur(); tie = null; continue; }
+    var acc = null;
+    if (c === '^' || c === '_' || c === '=') { acc = c === '^' ? 1 : c === '_' ? -1 : 0; i++; c = s[i]; }
+    var up = c.toUpperCase(); if (!(up in BASE)) throw new Error('abcParse：第 ' + i + ' 個字「' + c + '」不認得');
+    var o = c === up ? 0 : 1; i++;
+    while (s[i] === "'" || s[i] === ',') { o += s[i] === "'" ? 1 : -1; i++; }
+    var k = up + o; if (acc !== null) carry[k] = acc;
+    var a = k in carry ? carry[k] : (key[up] || 0), p = 60 + 12 * o + BASE[up] + a, d = dur();
+    if (tie && tie[2] === p && Math.abs(tie[0] + tie[1] - t) < 1e-9) tie[1] += d; else out.push(tie = [t, d, p]);
+    t += d;
+    if (s[i] === '-') i++; else tie = null;
+  }
+  return { notes: out, len: t };
+}
+/** 一首 ⇒ 排好的事件（兩聲部合在一起照時間排）：[[拍, 長度拍, 音高, 聲部 0 旋律／1 低音]]、一遍幾拍。快取在 tune.ev。 */
+function tuneEvents(tn) {
+  if (tn.ev) return tn.ev;
+  var m = abcParse(tn.mel, tn.K), b = abcParse(tn.bass, tn.K), ev = [];
+  if (Math.abs(m.len - b.len) > 1e-9) throw new Error('樂譜 ' + tn.id + '：旋律 ' + m.len + ' 拍、低音 ' + b.len + ' 拍，長度不一樣');
+  m.notes.forEach(function (n) { ev.push([n[0], n[1], n[2], 0]); }); b.notes.forEach(function (n) { ev.push([n[0], n[1], n[2], 1]); });
+  ev.sort(function (x, y) { return x[0] - y[0] || x[3] - y[3]; });
+  return (tn.ev = { ev: ev, len: m.len });
+}
+/** 這一首奏幾遍：一遍的秒數 ⇒ 湊到約 BGM_TUNE_S 秒，夾在 2–6。 */
+function bgmPasses(tn) { var E = tuneEvents(tn); return clamp(Math.round(BGM_TUNE_S / (E.len * 60 / tn.Q)), 2, 6); }
+function bgmRand() { BGM_SEED = (Math.imul(BGM_SEED, 1103515245) + 12345) & 0x7fffffff; return BGM_SEED / 0x7fffffff; }
+/** 下一首：設定裡指定的那首 ／ 輪播（洗一輪、新的一輪第一首不跟上一首重複）。 */
+function bgmNext(prev) {
+  if (SND.tune !== 'shuffle') { for (var k = 0; k < TUNES.length; k++) if (TUNES[k].id === SND.tune) return TUNES[k]; }
+  if (!BGM_ORDER.length) {
+    BGM_ORDER = TUNES.slice();
+    for (var i = BGM_ORDER.length - 1; i > 0; i--) { var j = Math.floor(bgmRand() * (i + 1)), x = BGM_ORDER[i]; BGM_ORDER[i] = BGM_ORDER[j]; BGM_ORDER[j] = x; }
+    if (prev && BGM_ORDER[BGM_ORDER.length - 1] === prev && BGM_ORDER.length > 1) BGM_ORDER.unshift(BGM_ORDER.pop());   // 新的一輪第一首不要剛好是上一首
+  }
+  return BGM_ORDER.pop();
+}
+/** 一個音：f（Hz）、t（開始，秒）、d（長，秒）、v 聲部。旋律：鋸齒＋低通、0.18 秒後才出來的 5.5 Hz 顫音；低音：兩道 ±4 cent 的方波＋低通。 */
+function bgmNote(ac, dest, v, f, t, d) {
+  var g = ac.createGain(), lp = ac.createBiquadFilter(), end = t + d, rel = v ? 0.06 : 0.09, peak = v ? 0.11 : 0.16, os = [];
+  lp.type = 'lowpass'; lp.Q.value = 0.7; lp.connect(g); g.connect(dest);
+  g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(peak, t + (v ? 0.015 : 0.04));
+  if (v) { g.gain.linearRampToValueAtTime(peak * 0.7, t + 0.15); g.gain.setValueAtTime(peak * 0.7, Math.max(t + 0.15, end - rel)); }
+  else g.gain.setValueAtTime(peak, Math.max(t + 0.04, end - rel));
+  g.gain.linearRampToValueAtTime(0.0001, end);
+  if (v) {
+    lp.frequency.value = Math.min(1800, f * 5);
+    [-4, 4].forEach(function (c) { var o = ac.createOscillator(); o.type = 'square'; o.frequency.value = f; o.detune.value = c; o.connect(lp); os.push(o); });
+  } else {
+    lp.frequency.value = Math.min(4200, f * 7);
+    var o = ac.createOscillator(); o.type = 'sawtooth'; o.frequency.value = f; o.connect(lp); os.push(o);
+    if (d > 0.3) { var lf = ac.createOscillator(), lg = ac.createGain(); lf.frequency.value = 5.5; lg.gain.setValueAtTime(0, t); lg.gain.setValueAtTime(0, t + 0.18); lg.gain.linearRampToValueAtTime(7, t + 0.4); lf.connect(lg); lg.connect(o.detune); lf.start(t); lf.stop(end + 0.02); }
+  }
+  os.forEach(function (o) { o.start(t); o.stop(end + 0.02); });
+}
+/** 從 t0（秒）起把一首的 [a, b) 拍排進去；回下一個沒排的事件序號。 */
+function bgmSched(ac, dest, tn, t0, k, until) {
+  var E = tuneEvents(tn), spb = 60 / tn.Q;
+  while (k < E.ev.length && t0 + E.ev[k][0] * spb < until) {
+    var e = E.ev[k]; bgmNote(ac, dest, e[3], 440 * Math.pow(2, (e[2] - 69) / 12), t0 + e[0] * spb, Math.max(0.05, e[1] * spb - 0.02)); k++;
+  }
+  return k;
+}
+/** 每一格（90_main.js，主選單也跑）：音量線、淡入淡出、往前排程。還沒有聲音 ⇒ 什麼都不做。 */
+function bgmFrame() {
+  if (!AC || !AC.bgmBus) return;
+  var now = AC.currentTime, fight = now - SND_FIGHT < BGM_FIGHT_S;
+  var forced = !!(BGM && BGM.forced), want = muted || (SND.mode === 'off' && !forced) || (SND.mode === 'sail' && fight && !forced) ? 0 : SND.bgm * BGM_VOL;
+  AC.bgmBus.gain.setTargetAtTime(want, now, muted ? 0.05 : want < AC.bgmBus.gain.value ? BGM_FADE / 3 : 0.4);   // 靜音（M）馬上關；淡出照 BGM_FADE、回來 0.4 秒
+  if (SND.mode === 'off' && !forced) { BGM = null; return; }
+  if (!BGM) BGM = { tn: bgmNext(null), t0: now + 0.3, k: 0, pass: 0 };
+  var E = tuneEvents(BGM.tn), spb = 60 / BGM.tn.Q;
+  BGM.k = bgmSched(AC, AC.bgmBus, BGM.tn, BGM.t0, BGM.k, now + BGM_LOOK);
+  if (BGM.k >= E.ev.length && now + BGM_LOOK >= BGM.t0 + E.len * spb) {          // 這一遍排完 ⇒ 接下一遍（同一首照拍子接上）或停一下換下一首
+    BGM.pass++;
+    if (BGM.pass < bgmPasses(BGM.tn)) { BGM.t0 += E.len * spb; BGM.k = 0; }
+    else BGM = { tn: bgmNext(BGM.tn), t0: BGM.t0 + E.len * spb + BGM_GAP, k: 0, pass: 0 };
+  }
+}
+/** 試聽（聲音設定頁的 ▶）：從頭放指定的那一首（還沒有聲音就先建，這一下是使用者的點擊）。 */
+function bgmPreview(id) {
+  initAudio(); if (!AC) return; if (AC.state === 'suspended') AC.resume();
+  for (var k = 0; k < TUNES.length; k++) if (TUNES[k].id === id) BGM = { tn: TUNES[k], t0: AC.currentTime + 0.15, k: 0, pass: 0, forced: true };   // ⚠ 前一首已經排進去的那幾個音（最多 BGM_LOOK 秒）照樣會響完
+}
+/** 音效、環境音兩條線照 SND 設（靜音 ⇒ 0）；BGM 那條在 bgmFrame 淡。 */
+function sndApply() {
+  if (!AC || !AC.sfxBus) return;
+  var now = AC.currentTime; AC.sfxBus.gain.setTargetAtTime(muted ? 0 : SND.sfx, now, 0.05); AC.ambBus.gain.setTargetAtTime(muted ? 0 : SND.amb, now, 0.05);
+}
+/** 離線錄（__game.bgmRender；src/tests/music_lab.py 量音高、音頭）：o ＝ { id, sec, solo（0 只旋律、1 只低音、省略 ＝ 兩聲部）}；回 Promise<{ id, notes（[秒, 長, 音高, 聲部]）, peak, rmsDb, wav }>。 */
+function bgmRender(o) {
+  var tn = null; for (var k = 0; k < TUNES.length; k++) if (TUNES[k].id === o.id) tn = TUNES[k];
+  if (!tn) return Promise.reject(new Error('沒有這首：' + o.id));
+  var E = tuneEvents(tn), spb = 60 / tn.Q, sec = o.sec || E.len * spb + 0.5, sr = 44100, oc = new OfflineAudioContext(2, Math.round(sr * sec), sr), mg = oc.createGain(); mg.gain.value = 1; mg.connect(oc.destination);
+  var notes = [];
+  E.ev.forEach(function (e) {
+    if (o.solo !== undefined && e[3] !== o.solo) return;
+    var t = 0.1 + e[0] * spb; if (t >= sec) return;
+    bgmNote(oc, mg, e[3], 440 * Math.pow(2, (e[2] - 69) / 12), t, Math.max(0.05, e[1] * spb - 0.02)); notes.push([+t.toFixed(4), +(e[1] * spb).toFixed(4), e[2], e[3]]);
   });
+  return oc.startRendering().then(function (buf) { var r = audioWav(buf); r.id = tn.id; r.notes = notes; r.spb = spb; return r; });
+}
+/** 聲音設定頁＋遊戲內設定面板的「音量」（[data-snd] 滑桿兩處同一組值）：畫出現在的值。 */
+function sndShow() {
+  [].forEach.call(document.querySelectorAll('[data-snd]'), function (r) { r.value = Math.round(SND[r.dataset.snd] * 100); });
+  [].forEach.call(document.querySelectorAll('[data-sndv]'), function (e) { var v = SND[e.dataset.sndv]; e.textContent = v > 0 ? Math.round(v * 100) + '%' : '關'; });
+  [].forEach.call(document.querySelectorAll('#bgmModes [data-bm]'), function (b) { b.classList.toggle('on', b.dataset.bm === SND.mode); });
+  [].forEach.call(document.querySelectorAll('#bgmTunes [data-bt]'), function (b) { b.classList.toggle('on', b.dataset.bt === SND.tune); });
+  var nw = $('bgmNow'); if (nw) { var tn = BGM && BGM.tn; nw.textContent = tn ? '正在放：' + tn.name + '（' + tn.en + '）—— 譜：' + tn.src : '還沒放（按 ▶ 試聽，或開局後照上面的設定放）'; }
+}
+/** 綁一次（71_input.js 主選單初始化時叫）：滑桿、什麼時候放、選曲、試聽、這一頁回到預設。 */
+function sndUI() {
+  var tb = $('bgmTunes');
+  if (tb && !tb.firstChild) {
+    var h = '曲目 <button data-bt="shuffle">輪播</button>';
+    TUNES.forEach(function (t) { h += '<button data-bt="' + t.id + '" title="' + t.en + '（' + t.src + '）">' + t.name + '</button><button data-bp="' + t.id + '" title="試聽 ' + t.name + '">▶</button>'; });
+    tb.innerHTML = h;
+  }
+  [].forEach.call(document.querySelectorAll('[data-snd]'), function (r) { r.oninput = function () { SND[r.dataset.snd] = clamp(+r.value / 100, 0, 1); sndApply(); sndShow(); }; });
+  [].forEach.call(document.querySelectorAll('#bgmModes [data-bm]'), function (b) { b.onclick = function () { SND.mode = b.dataset.bm; sndShow(); }; });
+  [].forEach.call(document.querySelectorAll('#bgmTunes [data-bt]'), function (b) { b.onclick = function () { SND.tune = b.dataset.bt; if (BGM && !BGM.forced && SND.tune !== 'shuffle' && BGM.tn.id !== SND.tune) BGM = null; sndShow(); }; });   // 指定了別首 ⇒ 下一格從那首開始
+  [].forEach.call(document.querySelectorAll('#bgmTunes [data-bp]'), function (b) { b.onclick = function () { bgmPreview(b.dataset.bp); sndShow(); }; });
+  var rb = $('sndR'); if (rb) rb.onclick = function () { for (var k in SND_DEF) SND[k] = SND_DEF[k]; sndApply(); sndShow(); };
 }
 // ── js/03_camera.js ──
 // ───────────────────────── 鏡頭 ─────────────────────────
@@ -13385,6 +13574,7 @@ function prefsSnap() {
   if (STRIKE.cas !== LIM.cas[2] || STRIKE.guns || STRIKE.masts || STRIKE.officers) o.strike = { cas: STRIKE.cas, guns: STRIKE.guns, masts: STRIKE.masts, officers: STRIKE.officers };
   if (CAP_SET.some(function (k) { return k !== 'random'; })) o.cap = CAP_SET.slice();
   var gd = GFX_PRESET[GFX_DEFAULT]; if (GFX_ITEMS.some(function (it) { return GFX[it.k] !== gd[it.k]; })) { o.gfx = {}; GFX_ITEMS.forEach(function (it) { o.gfx[it.k] = GFX[it.k]; }); }   // 畫質（07_gfx.js）：跟預設不一樣 ⇒ 整組存
+  put('vsfx', SND.sfx, SND_DEF.sfx); put('vamb', SND.amb, SND_DEF.amb); put('vbgm', SND.bgm, SND_DEF.bgm); put('bgm', SND.mode, SND_DEF.mode); put('tune', SND.tune, SND_DEF.tune);   // 聲音設定（02_music.js，TASK-0677）
   put('gcrew', GUN_CREW_HURT, true);
   put('dbg', DBG_SET, false);                                         // Debug 模式（04_state.js dbgOn）                                  // 砲被打飛 ⇒ 砲班跟著受傷（21_gunnery.js）
   put('fps', GFX_FPS, false); put('slow', SLOW.on, true); put('pslow', PSLOW.on, false); put('pslowb', PSLOW.budget, LIM.pslowb[2]); put('ramv', RAM.v0, LIM.ramv[2]); put('ramk', RAM.k, LIM.ramk[2]); put('rame', RAM.e, LIM.rame[2]); put('ramside', RAM.side, LIM.ramside[2]);   // 碰撞傷害的數值（物理設定頁） put('slowcam', SLOW.cam, true);   // 殉爆的慢動作與特寫（73_slowmo.js）
@@ -13450,6 +13640,9 @@ function prefsApply(p) {
   PHYS = PHX.rig > 0;
   if (p.gfx && typeof p.gfx === 'object' && !Q.has('gfx')) GFX_ITEMS.forEach(function (it) { var x = num(p.gfx[it.k], [0, it.opt.length - 1], true); if (x !== undefined && !Q.has('g_' + it.k)) GFX[it.k] = x; });
   if (typeof p.fps === 'boolean') GFX_FPS = p.fps;
+  [['vsfx', 'sfx'], ['vamb', 'amb'], ['vbgm', 'bgm']].forEach(function (k) { if (typeof p[k[0]] === 'number' && isFinite(p[k[0]])) SND[k[1]] = clamp(p[k[0]], 0, 1); });   // 聲音設定（02_music.js）
+  if (p.bgm === 'sail' || p.bgm === 'on' || p.bgm === 'off') SND.mode = p.bgm;
+  if (p.tune === 'shuffle' || TUNES.some(function (t) { return t.id === p.tune; })) SND.tune = p.tune;
   if (typeof p.gcrew === 'boolean' && !Q.has('gcrew')) GUN_CREW_HURT = p.gcrew;
   if (typeof p.dbg === 'boolean' && !Q.has('dbg')) DBG_SET = p.dbg;
   if (typeof p.slow === 'boolean' && !Q.has('slowmo')) SLOW.on = p.slow;
@@ -13739,7 +13932,7 @@ function doAct(a, repeat) {
   else if (a === 'xray') xrayToggle();                                   // 觀察模式：透視（72_floodui.js）、剖面、隱藏甲板（74_cutaway.js）—— 不停格也能切換（Tim 2026-10-16）
   else if (a === 'cut') cutToggle();
   else if (a === 'deck') deckCycle();
-  else if (a === 'mute') { muted = !muted; gsetShow(); }
+  else if (a === 'mute') { muted = !muted; sndApply(); gsetShow(); }
   else if (a === 'help') helpToggle();
   else if (a === 'menu') { gsetClose(); helpClose(); RUNNING = false; END_AT = 0; END_WAIT = null; $('cover').style.display = ''; $('end').className = ''; }
   else if (a === 'sailMode') sailToggle();   // 一顆切換 自動 ⇄ 手動（Tim 2026-10-15：「改成單鍵」；手動也可以直接打舵）；錨在水裡 ⇒ 先起錨（左右錨拋的也一起）
@@ -13826,6 +14019,7 @@ function gsetShow() {
   $('gsGfx').textContent = gl === 'custom' ? '（自訂）' : ''; $('gsPhx').textContent = xl === 'custom' ? '（自訂）' : '';
   $('muteT').classList.toggle('on', muted); $('fpsT').classList.toggle('on', GFX_FPS);
   $('slowT').classList.toggle('on', SLOW.on); $('slowCamT').classList.toggle('on', SLOW.cam); $('pslowT').classList.toggle('on', PSLOW.on); $('testT').classList.toggle('on', !!(TLOG && TLOG.off === undefined) || (!TLOG && tlgWanted())); $('testN').textContent = tlgNote();   // 測試模式（83_testlog.js） $('boomB').classList.toggle('dis', !canSelfDestruct());
+  sndShow();                                                          // 音量滑桿（02_music.js）
   $('fullT').classList.toggle('on', fsOn()); $('fullT').classList.toggle('dis', !fsCan()); $('gsFull').textContent = fsCan() ? '' : '（這裡不給全螢幕：iPhone 的 Safari 只給影片）';
 }
 $('setB').onclick = gsetToggle;
@@ -13838,7 +14032,7 @@ $('helpBg').onclick = helpClose; $('helpX').onclick = helpClose; $('helpB').oncl
 $('gsetBg').onclick = gsetClose;                                    // 面板外點一下 ⇒ 關（不會順便瞄準、開砲：底下的東西被這一層蓋住）
 $('gsGo').onclick = gsetClose;
 $('menuB').onclick = function () { doAct('menu'); };
-$('muteT').onclick = function () { muted = !muted; gsetShow(); };
+$('muteT').onclick = function () { muted = !muted; sndApply(); gsetShow(); };
 $('fpsT').onclick = function () { GFX_FPS = !GFX_FPS; gfxShow(); };
 // 全螢幕（設定面板的「F11 全螢幕」；Tim 2026-10-13：主要給手機用）：整頁（documentElement）進出全螢幕；畫布大小每一格照量（60_render.js resize）⇒ 不用另外處理。
 //   畫廊彈窗的 iframe（sandbox＋allow="fullscreen"，ArtGallery/index.html）進得去（量過：fullscreenEnabled、點了 fs ＝ true、按鈕亮）。
@@ -14221,7 +14415,7 @@ function sliders() {
   cs.onchange = function () { CFG_ID = cs.value; loadHull(CFG_ID).then(function () { put(); show(); }); put(); show(); };
   fleetUI();                                                     // 主選單：艦隊編成
   // 細節設定那一頁：主選單 ⇄ 細節設定（同一個 #cover 裡兩張卡片，一次顯示一張）
-  function page(w) { $('detail').style.display = w === 'det' ? '' : 'none'; $('gfxp').style.display = w === 'gfx' ? '' : 'none'; $('phxp').style.display = w === 'phx' ? '' : 'none'; $('shipp').style.display = w === 'ship' ? '' : 'none'; $('gunp').style.display = w === 'gun' ? '' : 'none'; $('furnp').style.display = w === 'furn' ? '' : 'none'; $('keysp').style.display = w === 'keys' ? '' : 'none'; if (w !== 'keys') KEY_WAIT = null; document.querySelector('#cover .card:not(#detail):not(#gfxp):not(#phxp):not(#shipp):not(#gunp):not(#furnp):not(#keysp)').style.display = w ? 'none' : ''; $('cover').scrollTop = 0; $('pgX').classList.toggle('on', !!w && !ADMIN_ROOMS); }   // w：'' 主選單、'det' 細節設定、'gfx' 畫質設定、'phx' 物理設定、'ship' 船隻配置、'gun' 砲的設定、'furn' 道具設定（67_furncfg.js）
+  function page(w) { $('detail').style.display = w === 'det' ? '' : 'none'; $('gfxp').style.display = w === 'gfx' ? '' : 'none'; $('phxp').style.display = w === 'phx' ? '' : 'none'; $('shipp').style.display = w === 'ship' ? '' : 'none'; $('gunp').style.display = w === 'gun' ? '' : 'none'; $('furnp').style.display = w === 'furn' ? '' : 'none'; $('keysp').style.display = w === 'keys' ? '' : 'none'; $('sndp').style.display = w === 'snd' ? '' : 'none'; if (w !== 'keys') KEY_WAIT = null; document.querySelector('#cover .card:not(#detail):not(#gfxp):not(#phxp):not(#shipp):not(#gunp):not(#furnp):not(#keysp):not(#sndp)').style.display = w ? 'none' : ''; $('cover').scrollTop = 0; $('pgX').classList.toggle('on', !!w && !ADMIN_ROOMS); }   // w：'' 主選單、'det' 細節設定、'gfx' 畫質設定、'phx' 物理設定、'ship' 船隻配置、'gun' 砲的設定、'furn' 道具設定（67_furncfg.js）
   [].forEach.call(document.querySelectorAll('#plays button'), function (b) { b.onclick = function () { setPlay(b.dataset.p); show(); }; });   // 主選單：玩法
   $('detB').onclick = function () { page('det'); };
   $('detX').onclick = function () { page(''); };
@@ -14244,6 +14438,9 @@ function sliders() {
   $('furnX').onclick = function () { page(''); };
   $('keysB').onclick = function () { page('keys'); keysShow(); };   // 鍵位設定（66_keys.js）
   $('keysX').onclick = function () { page(''); };
+  sndUI();                                                       // 聲音設定的滑桿與按鈕（主選單那一頁＋遊戲內設定面板，02_music.js）
+  $('sndB').onclick = function () { page('snd'); sndShow(); };   // 聲音設定（02_music.js，TASK-0677）
+  $('sndX').onclick = function () { page(''); };
   $('pgX').onclick = function () { RE.i = -1; show(); page(''); };   // 右上角的返回（每一頁同一顆）
   var rArm = 0;                                        // 這一型回到預設：按兩下（Tim：編起來很花時間 ⇒ 不要一按就沒了；⛔ 不用 confirm()：畫廊彈窗的 iframe 沒開 allow-modals，confirm 直接回 false）
   $('shipR').onclick = function () {
@@ -16733,6 +16930,7 @@ function frame(ts, noRaf) {                                         // noRaf：_
   camFollow(dt);                                                      // 追砲彈（03_camera.js）
   if (!PAUSED && !STILL) stepRain(dt);                                // 3D 雨滴（14_rain.js）：照畫面的時間走；停格、縮圖不動
   ambFrame();                                                         // 環境音：風、浪、暴風雨的雨（02_ambient.js；還沒有聲音 ⇒ 什麼都不做）
+  bgmFrame();                                                         // 背景音樂（02_music.js，TASK-0677）：主選單也放
   if (PF) pfLap('rain');
   remesh(RM_BUDGET);                                                  // 重網格化，每格有預算（60_render.js）
   if (PF) pfLap('flush');
@@ -16852,6 +17050,8 @@ if (DEBUG) window.__game = {
   floodView: function (o) { return floodView(o); },                   // 換鏡頭再拍一張（81_floodlab.js）
   /** 環境音試聽（02_ambient.js，TASK-0663）：q ＝ 'sec=10&cases=名字:w:sea:rain:hold;…' ⇒ Promise<[{ name, peak, rmsDb, wav }]>（src/tests/ambient_lab.py 經 DevTools 呼叫）。 */
   ambLab: function (q) { return ambLab(new URLSearchParams(q || '')); },
+  bgmRender: function (o) { return bgmRender(o || {}); },                // 背景音樂離線錄（02_music.js；src/tests/music_lab.py）
+  bgm: function () { return { snd: JSON.parse(JSON.stringify(SND)), tune: BGM ? BGM.tn.id : null, pass: BGM ? BGM.pass : null, forced: !!(BGM && BGM.forced), bus: AC && AC.bgmBus ? +AC.bgmBus.gain.value.toFixed(4) : null, sfxBus: AC && AC.sfxBus ? +AC.sfxBus.gain.value.toFixed(4) : null, ambBus: AC && AC.ambBus ? +AC.ambBus.gain.value.toFixed(4) : null, fight: AC ? +(AC.currentTime - SND_FIGHT).toFixed(1) : null, tunes: TUNES.map(function (t) { return t.id; }) }; },   // 聲音的讀數：三條音量線、正在放哪首
   /** 遊戲裡那一份環境音現在的值（還沒有聲音 ⇒ null）：風、浪、雨的音量、風的頻率、悶掉的低通、左右、在不在船艙裡。 */
   amb: function () { if (!AMB) return null; var r = function (v) { return +v.toFixed(4); }; return { ctx: AC.state, rain: AMB.rain, wind: r(AMB.wg.gain.value), windHz: r(AMB.wbp.frequency.value), sea: r(AMB.vg.gain.value), rainG: AMB.rain ? r(AMB.rg.gain.value) : 0, muff: r(AMB.muff.frequency.value), pan: AMB.pan ? r(AMB.pan.pan.value) : 0, hold: AMB.hold0, p: ambParams() }; },
   shot: function (i, x, z, side, gun, ammo, ang) {
