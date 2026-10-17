@@ -90,7 +90,12 @@ function armorMesh(T) {
       var m = smBuild(T, A.grid, rk, null, T.hullG); if (m) A.smP.set(rk, m);
     });
   });
-  (T.props || []).forEach(function (P) { P.rs0 = new VK.RegionSet(gl, P.grid, QIDX); P.rs0.buildAll(); });   // 會轉的體素件（螺旋槳；檔尾）：只有方塊、不平滑
+  (T.props || []).forEach(function (P) {                                // 會轉的體素件（螺旋槳；檔尾）：材質標 smooth（鐵甲）⇒ 整份平滑＋金屬反光（Tim 2026-10-17），方塊網格化跳過它們
+    var mt = matInfo(P.mat); P.smP = P.smRK = P.smO = null;
+    if (mt.smooth === true) { P.grid.sm = P.grid; P.smO = { SG: P.grid, mm: +mt.metal || 0, mr: isFinite(+mt.rough) && mt.rough !== undefined ? +mt.rough : 0.5 }; P.smRK = smRegions(T, P.grid); P.smP = new Map();
+      P.smRK.forEach(function (rk) { var m = smBuild(T, P.grid, rk, null, null, P.smO); if (m) P.smP.set(rk, m); }); }
+    P.rs0 = new VK.RegionSet(gl, P.grid, QIDX); P.rs0.buildAll();
+  });
 }
 /** 開一艘船（10_ship.js makeShip，gunMountInit 之後）：每塊裝甲一份（共用船型那一份格子與網格）。沒有裝甲 ⇒ sh.arm 不設（一行都不多算）。 */
 function armorShip(sh) {
@@ -319,7 +324,7 @@ function armDraw(prog, sh) {
   if (prog.u.uCutL) gl.uniformMatrix4fv(prog.u.uCutL, false, CUT_ID);
 }
 /** 平滑面（drawModels，smDraw 之後）：P.tri 的剖面照世界座標換回船的格座標（uCutInv ＝ sh.inv）⇒ 轉過也切得對。 */
-function armSmDraw(prog, sh) { sh.arm.forEach(function (a) { if (a.smR && a.smR.size) smDraw(prog, a, armM(a)); }); }
+function armSmDraw(prog, sh) { sh.arm.forEach(function (a) { if (a.smR && a.smR.size && !(a.prop && propGone(a))) smDraw(prog, a, armM(a)); }); }   // 螺旋槳掉了 ⇒ 不畫
 /** 重網格化（60_render.js remesh）：方塊照預算、平滑面照 sl 區；回 [剩的預算, 剩的區]。 */
 function armRemesh(sh, left, sl) {
   sh.arm.forEach(function (a) {
@@ -373,7 +378,8 @@ function armSummary(T) {
 //   轉 ＝ 模型的 spin（31_drive.js 每一步給 m.spv／m.sax／m.sw：繞 hub、沿軸）；推力 × 曲線（還剩幾成 ＝ 現在的格 ÷ 開局的格；DRVP.propeller，道具設定頁「動力件」）。
 //   模型本身照舊在：掛在 shaft-fwd 旁那一格、那一段被打斷就掉（blowModel 飛出去的是模型的網格）⇒ 掉了這份格子就不畫、不打；
 //   模型的網格不畫（60_render.js drawModels）、不扣血（21_gunnery.js hitModel、damageModel 跳過）。
-// ⛔ 沒做：打斷的葉片不會飛出去（打掉的格照碎屑噴）、轉的時候不碰船殼、平滑渲染。沒有 vox 的螺旋槳 ⇒ 照舊是模型（扣血）。
+// 平滑：材質標 smooth（預設 iron）⇒ 整份畫成平滑面＋金屬反光（Tim 2026-10-17；armorMesh 建、打掉照區重建）。
+// ⛔ 沒做：打斷的葉片不會飛出去（打掉的格照碎屑噴）、轉的時候不碰船殼。沒有 vox 的螺旋槳 ⇒ 照舊是模型（扣血）。
 /** 船型 T：有 vox 的模型 ⇒ T.props[] ＝ { k 模型編號, name, grid（船的格座標）, bb, n 開局幾格, hub, R2（離 hub 最遠那一格的距離²）, mat }；T.pmG／T.pmI ＝ 材質（見檔頭）。 */
 function propSetup(T) {
   T.props = []; T.pmG = null; T.pmI = [null];
@@ -409,8 +415,8 @@ function propShip(sh) {
   return T.props.map(function (P) {
     var m = sh.models[P.k], grid = P.grid.share(), rs = new VK.RegionSet(gl, grid, QIDX);
     rs.shareFrom(P.rs0);
-    var a = { A: P, T: T, sh: sh, g: null, prop: true, m: m, grid: grid, rs: rs, pin: T.hullG, lost: 0 };
-    smShare(a, null);
+    var a = { A: P, T: T, sh: sh, g: null, prop: true, m: m, grid: grid, rs: rs, pin: P.smO ? null : T.hullG, lost: 0, smRK: P.smRK, smO: P.smO };   // smRK／smO：平滑的螺旋槳自己那幾區與選項（15_smooth.js smTouch／smFlush）；不釘船殼（它會轉）
+    smShare(a, P.smP);
     if (m) m.vox = a;
     return a;
   });

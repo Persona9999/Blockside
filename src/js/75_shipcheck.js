@@ -96,9 +96,11 @@ function shipCheck(id) {
     T.matBad.forEach(function (id) { add('warn', '材質', id, '材質表沒有這個 ID ⇒ 照全船預設 ' + T.mat0, '後台的材質表加這一種，或把關聯 meta material 改成材質表有的 ID（造船規格 §9.5）'); });
     // ── 平滑渲染（TASK-0616 ⑧）：關聯 meta render（voxel｜smooth）；檔頭 render 段落 ⇒ T.smG（05_material.js）──
     var smP = (T.h.parts || []).filter(function (p) { return p.meta && p.meta.render === 'smooth'; });
-    R.info.smooth = smP.length ? smP.map(function (p) { return p.path; }).join('、') + '（平滑 ' + T.smN.toLocaleString('en') + ' 格）' : '';
+    R.info.smooth = (smP.length ? smP.map(function (p) { return p.path; }).join('、') + '（平滑 ' + (T.smN - T.smAuto).toLocaleString('en') + ' 格）' : '') +
+      (T.smAuto ? (smP.length ? '；' : '') + '材質標平滑的金屬（' + T.matIds.filter(function (id, i) { return i && matInfo(id).smooth === true; }).map(function (id) { return matInfo(id).name; }).join('、') + '）' + T.smAuto.toLocaleString('en') + ' 格' : '') +
+      ((T.props || []).some(function (P) { return P.smP; }) ? '；螺旋槳整份平滑：' + T.props.filter(function (P) { return P.smP; }).map(function (P) { return P.name + ' ' + P.n.toLocaleString('en') + ' 格'; }).join('、') : '');   // Tim 2026-10-17：金屬件光滑（05_material.js、24_armor.js propSetup）
     R.info.smoothN = T.smN;
-    if (smP.length && !T.smN) add('warn', '平滑渲染', smP.map(function (p) { return p.path; }).join('、'), '關聯標了 render=smooth，檔頭卻沒有平滑的格（render 段落）⇒ 照方塊畫', 'python -I admin.py reimport --id ' + T.id + '（senate 匯出才帶 render 段落）');
+    if (smP.length && !(T.smN - T.smAuto)) add('warn', '平滑渲染', smP.map(function (p) { return p.path; }).join('、'), '關聯標了 render=smooth，檔頭卻沒有平滑的格（render 段落）⇒ 照方塊畫', 'python -I admin.py reimport --id ' + T.id + '（senate 匯出才帶 render 段落）');
     (T.h.parts || []).forEach(function (p) { var v = p.meta && p.meta.render; if (v && v !== 'smooth' && v !== 'voxel') add('warn', '平滑渲染', p.path, 'meta render=' + v + ' 不認得 ⇒ 照方塊畫', 'render 只有 voxel｜smooth（造船規格 §9.5）'); });
     sh.guns.forEach(function (g) { if (!g.alive) add('error', '開場就掉', g.name, '砲開場 ' + SC_SECS + ' 秒內就沒了', '砲腳下要有甲板'); });
     // ── 砲班站位（三叉戟號船頭：砲靠太近、站位互佔 ⇒ 站不滿；Tim 2026-10-15）──

@@ -1,5 +1,6 @@
 // ───────────────────────── 平滑渲染（TASK-0616 第二段；Tim 2026-10-15：鐵甲艦光滑的裝甲）─────────────────────────
-// 哪幾格：雕刻作品關聯的 meta render=smooth（巢狀照最近一層）⇒ .vxk 檔頭 render ⇒ T.smG（05_material.js）。
+// 哪幾格：雕刻作品關聯的 meta render=smooth（巢狀照最近一層）⇒ .vxk 檔頭 render ⇒ T.smG（05_material.js）；材質表標 smooth 的金屬（鐵甲、鍋爐）沒寫 render 也算（Tim 2026-10-17）。
+//   會轉的體素件（螺旋槳，24_armor.js propSetup）：自己那份格子整份平滑（smBuild 的 o：SG ＝ 它自己、金屬度照它的材質）。
 // 怎麼畫：
 //   · VoxelKit 的方塊網格化跳過這幾格自己的面（grid.sm），但它們照樣擋住旁邊格子的面 ⇒ 一般格貼著平滑格的那一面不畫。
 //   · 平滑面 ＝ surface nets：每一個「平滑格貼著空氣」的面換成四個頂點（那一面的四個格角），格角的位置往表面拉：
@@ -18,11 +19,16 @@ function smRk(T, x, y, z) { var nx = Math.ceil(T.h.size[0] / SM_R), ny = Math.ce
 /** 船型 T：有平滑格 ⇒ 每個有平滑格的區建一份網格（T.smP：區 ⇒ 網格），T.smRK ＝ 那幾個區。 */
 function smoothSetup(T) {
   T.smP = null; T.smRK = null; if (!T.smG) return;
-  var G = T.smG, RK = T.smRK = new Set(), t0 = performance.now();
-  for (var cz = 0; cz < G.nz; cz++) for (var cy = 0; cy < G.ny; cy++) for (var cx = 0; cx < G.nx; cx++) if (G.tab[G.ci(cx, cy, cz)]) RK.add(smRk(T, cx * 16, cy * 16, cz * 16));
+  var RK = T.smRK = smRegions(T, T.smG), t0 = performance.now();
   T.smP = new Map();
   RK.forEach(function (rk) { var m = smBuild(T, T.hullG || T.base, rk, null); if (m) T.smP.set(rk, m); });   // T.hullG：船殼（砲帶的裝甲另外建，24_armor.js armorMesh）
   T.ms.smooth = +(performance.now() - t0).toFixed(1);
+}
+/** G 有格的那幾區（16³ 的塊 ⇒ 64³ 的區）。 */
+function smRegions(T, G) {
+  var RK = new Set();
+  for (var cz = 0; cz < G.nz; cz++) for (var cy = 0; cy < G.ny; cy++) for (var cx = 0; cx < G.nx; cx++) if (G.tab[G.ci(cx, cy, cz)]) RK.add(smRk(T, cx * 16, cy * 16, cz * 16));
+  return RK;
 }
 /** 一艘船開戰：共用船型那一份（被打到的區才各自重建）。 */
 function smoothShip(sh) { smShare(sh, sh.T.smP); }
@@ -34,9 +40,9 @@ function smShare(o, P) {
 }
 /** 打掉 (x, y, z)：±2 格碰得到的、有平滑格的區排進重建。 */
 function smTouch(sh, x, y, z) {
-  var T = sh.T; if (!sh.smD) return;
+  var T = sh.T, RK = sh.smRK || T.smRK; if (!sh.smD) return;   // smRK：螺旋槳自己那幾區（24_armor.js propShip）
   for (var dz = -2; dz <= 2; dz += 4) for (var dy = -2; dy <= 2; dy += 4) for (var dx = -2; dx <= 2; dx += 4) {
-    var rk = smRk(T, Math.max(0, x + dx), Math.max(0, y + dy), Math.max(0, z + dz)); if (T.smRK.has(rk)) sh.smD.add(rk);
+    var rk = smRk(T, Math.max(0, x + dx), Math.max(0, y + dy), Math.max(0, z + dz)); if (RK.has(rk)) sh.smD.add(rk);
   }
 }
 /** 重建最多 n 區（回：做了幾區）。 */
@@ -46,7 +52,7 @@ function smFlush(sh, n) {
   sh.smD.forEach(function (rk) { if (done++ < n) list.push(rk); });
   list.forEach(function (rk) {
     sh.smD.delete(rk);
-    var old = sh.smR.get(rk), m = smBuild(sh.T, sh.grid, rk, old && old.own ? old : null, sh.pin);   // pin：裝甲貼著的船殼（24_armor.js；船沒有）
+    var old = sh.smR.get(rk), m = smBuild(sh.T, sh.grid, rk, old && old.own ? old : null, sh.pin, sh.smO);   // pin：裝甲貼著的船殼（24_armor.js；船沒有）；smO：螺旋槳的選項
     if (m) sh.smR.set(rk, m); else { if (old && old.own) smFree(old); sh.smR.delete(rk); }
   });
   return list.length;
@@ -61,9 +67,10 @@ function smDraw(prog, sh, M) {
 }
 /** 一區的網格（g ＝ 現在的格子；reuse ＝ 這艘自己的舊緩衝，有就覆寫）⇒ { vao, vb, ib, n, own } 或 null（這一區沒有平滑面）。
  *  pg（砲帶的裝甲，24_armor.js）：只用來釘格角的另一份格子（拆出來之前貼著的船殼）—— 碰到它的格角只釘高度（z：貼著甲板、不往上縮），水平照樣平滑；它自己不出面、不算實心。
- *  ⛔ 三個方向都釘 ⇒ 圓筒底那一圈是轉 0° 時的格角階梯 ⇒ 砲塔一轉，階梯跟著轉、跟甲板上的座圈對不上，一圈鋸齒（Tim 2026-10-16：「旋轉砲塔旋轉後 會導致底下甲板出現破圖」）。 */
-function smBuild(T, g, rk, reuse, pg) {
-  var SG = T.smG, nx = Math.ceil(T.h.size[0] / SM_R), ny = Math.ceil(T.h.size[1] / SM_R);
+ *  ⛔ 三個方向都釘 ⇒ 圓筒底那一圈是轉 0° 時的格角階梯 ⇒ 砲塔一轉，階梯跟著轉、跟甲板上的座圈對不上，一圈鋸齒（Tim 2026-10-16：「旋轉砲塔旋轉後 會導致底下甲板出現破圖」）。
+ *  o（螺旋槳）：{ SG：哪幾格算平滑（不給 ＝ T.smG）, mm, mr：整份一樣的金屬度、粗糙度（不看材質層）}。 */
+function smBuild(T, g, rk, reuse, pg, o) {
+  var SG = (o && o.SG) || T.smG, nx = Math.ceil(T.h.size[0] / SM_R), ny = Math.ceil(T.h.size[1] / SM_R);
   var rx = rk % nx, ry = Math.floor(rk / nx) % ny, rz = Math.floor(rk / (nx * ny)), x0 = rx * SM_R, y0 = ry * SM_R, z0 = rz * SM_R;
   var SX = T.h.size[0] + 2, SXY = SX * (T.h.size[1] + 2);
   function key(X, Y, Z) { return X + SX * Y + SXY * Z; }
@@ -83,12 +90,12 @@ function smBuild(T, g, rk, reuse, pg) {
     r = { srf: n > 0 && n < 8, pin: pin, pz: !pin && pz, o: ne ? [ox / ne, oy / ne, oz / ne] : [0, 0, 0], g: [gx, gy, gz] };   // pz：只釘高度（碰到 pg 的格角）
     info.set(k, r); return r;
   }
-  var vidx = new Map(), V = [], F = [], MG = T.matG, MM = T.matM, MR = T.matR;   // V：每個頂點 [X, Y, Z, r, g, b, 面數, 金屬度, 粗糙度]；F：每個面 4 個頂點編號
+  var vidx = new Map(), V = [], F = [], MG = o ? null : T.matG, MM = o ? null : T.matM, MR = o ? null : T.matR;   // V：每個頂點 [X, Y, Z, r, g, b, 面數, 金屬度, 粗糙度]；F：每個面 4 個頂點編號
   function vert(X, Y, Z, col, mi) {
     var k = key(X, Y, Z), i = vidx.get(k);
     if (i === undefined) { i = V.length; vidx.set(k, i); V.push([X, Y, Z, 0, 0, 0, 0, 0, 0]); }
     var v = V[i]; v[3] += ((col >> 5) & 7) / 7; v[4] += ((col >> 2) & 7) / 7; v[5] += (col & 3) / 3; v[6]++;
-    if (MM) { v[7] += MM[mi]; v[8] += MR[mi]; }
+    if (MM) { v[7] += MM[mi]; v[8] += MR[mi]; } else if (o) { v[7] += o.mm; v[8] += o.mr; }
     return i;
   }
   var CORN = [[0, 0], [1, 0], [1, 1], [0, 1]], P = [0, 0, 0];
@@ -129,7 +136,7 @@ function smBuild(T, g, rk, reuse, pg) {
       px = X + clamp((1 - f) * me.o[0] + f * sx / sn, -0.5, 0.5); py = Y + clamp((1 - f) * me.o[1] + f * sy / sn, -0.5, 0.5); pz = me.pz ? Z : Z + clamp((1 - f) * me.o[2] + f * sz / sn, -0.5, 0.5);
     }
     var nl = Math.hypot(nxv, nyv, nzv) || 1;
-    buf.set([px, py, pz, nxv / nl, nyv / nl, nzv / nl, v[3] / v[6], v[4] / v[6], v[5] / v[6], v[7] / v[6], v[6] && MM ? v[8] / v[6] : 0.5], i * 11);
+    buf.set([px, py, pz, nxv / nl, nyv / nl, nzv / nl, v[3] / v[6], v[4] / v[6], v[5] / v[6], v[7] / v[6], v[6] && (MM || o) ? v[8] / v[6] : 0.5], i * 11);
   }
   var idx = new Uint32Array(F.length * 6);
   for (var j = 0; j < F.length; j++) { var Q = F[j]; idx.set([Q[0], Q[1], Q[2], Q[0], Q[2], Q[3]], j * 6); }
