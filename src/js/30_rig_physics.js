@@ -55,12 +55,13 @@ function swingHangs(sh, gv) {
         for (var k = 0; k < p0.length; k += 3) { var q = rotAxis([p0[k], p0[k + 1], p0[k + 2]], m.spv, A, m.sw); out[k] = q[0]; out[k + 1] = q[1]; out[k + 2] = q[2]; }
         r.pts = out; r.bb = ropeBox(out);
       });
+      childBind(sh);
       sh.rigDirty = true;
     }
   });
 }
 /** 物理關掉 ⇒ 掛著的回到作品的位置。 */
-function unswingHangs(sh) { (sh.hangs || []).forEach(function (m) { m.sw = m.swA = m.psi = m.psiV = 0; m.pw = m.pw2 = null; m.falls.forEach(function (j) { var r = sh.ropes[j]; if (!r.dead) { r.pts = r.pts0; r.bb = ropeBox(r.pts); } }); }); }
+function unswingHangs(sh) { (sh.hangs || []).forEach(function (m) { m.sw = m.swA = m.psi = m.psiV = 0; m.pw = m.pw2 = null; m.falls.forEach(function (j) { var r = sh.ropes[j]; if (!r.dead) { r.pts = r.pts0; r.bb = ropeBox(r.pts); } }); }); childBind(sh); }
 /** 綁在帆桁上的繩重算形狀（帆桁轉了 0.25° 以上才算；物理關掉時 rot 歸零 ⇒ 回到作品的形狀）。 */
 function yardRopes(sh, force) {
   var moved = force || sh.yards.some(function (m) { return Math.abs(m.rot - (m.rotA || 0)) > 0.004; });
@@ -80,6 +81,7 @@ function yardRopes(sh, force) {
     }
     r.pts = out; r.bb = ropeBox(out);
   });
+  childBind(sh);                                                        // 子繩（ratlines）跟著母繩（10_ship.js；Tim 2026-10-17：shroud 上端跟著帆桁轉、ratlines 留在原地 ⇒ 浮空）
   sh.rigDirty = true;
 }
 /** 綁著的布點跟著帆桁轉（每一步都放回「作品的位置繞轉軸轉 rot」；鬆開的點交給物理）。 */
