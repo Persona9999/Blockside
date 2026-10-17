@@ -31,8 +31,11 @@ function gunSet(t, k, v) {
   if (!Object.keys(S).length) delete GUN_SET[t];
   if (k === 'crew' && gunVal(t, 'min') > v) gunSet(t, 'min', v);
 }
-/** 這一種回到預設（傷害一起）。 */
-function gunReset(t) { GUN_ITEMS.forEach(function (it) { gunSet(t, it.k, gunDef(t, it.k)); }); }
+/** 這一種回到預設（傷害一起）：整份照抄（⛔ 不走 gunSet：有些砲的預設在滑桿範圍外 —— 例 brooke7 的重量、dahl11 的洞 —— 夾進範圍就不是預設了，還會被當成改過存起來）。 */
+function gunReset(t) {
+  GUN_ITEMS.forEach(function (it) { if (it.k === 'dmg') DMG[t] = gunDef(t, 'dmg'); else if (GUNS0[t][it.k] === undefined) delete GUNS[t][it.k]; else GUNS[t][it.k] = GUNS0[t][it.k]; });
+  delete GUN_SET[t];
+}
 /** 存檔用：GUN_SET 的拷貝（傷害照舊存在 dmg）。 */
 function gunsSnap() { return JSON.parse(JSON.stringify(GUN_SET)); }
 /** 存檔／匯入 ⇒ 變數：看得懂的砲種、鍵才套（照 gunSet 夾範圍）。最少放在標準砲班之後套。 */
@@ -68,6 +71,11 @@ function gunUI() {
     var b = $('gunR');
     if (performance.now() - rArm > 4000) { rArm = performance.now(); b.textContent = '再按一次：' + GUNS[GUN_ID].name + '回到預設'; setTimeout(function () { if (performance.now() - rArm >= 3900) b.textContent = '這一種回到預設'; }, 4000); return; }
     rArm = 0; b.textContent = '這一種回到預設'; gunReset(GUN_ID); gunShow();
+  };
+  $('gunRA').onclick = function () {                     // 全部回到預設（65_ask.js 彈窗確認）
+    askOk('砲的設定全部回到預設', '每一種砲（不只正在看的這一種）的數值與每發傷害都回到預設。改過的會不見；要留的話先按「匯出…」。', '全部回到預設', function () {
+      var ts = Object.keys(GUNS); ts.forEach(gunReset); gunShow(); $('gunSt').textContent = '已全部回到預設（' + ts.length + ' 種砲）。';
+    });
   };
   $('gunE').onclick = function () {
     var s = JSON.stringify(gunsExport(), null, 1), a = document.createElement('a'), d = new Date();

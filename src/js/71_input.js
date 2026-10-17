@@ -609,9 +609,24 @@ function sliders() {
     var b = $('shipR'), hi = hullInfo(CFG_ID);
     if (performance.now() - rArm > 4000) { rArm = performance.now(); b.textContent = '再按一次：' + (hi ? hi.name : CFG_ID) + '的船員、艙房與性能都回到預設'; setTimeout(function () { if (performance.now() - rArm >= 3900) b.textContent = '這一型回到預設'; }, 4000); return; }
     rArm = 0; b.textContent = '這一型回到預設';
-    delete SHIP_CREW[CFG_ID]; delete SHIP_ROOMS[CFG_ID]; delete PREF_BALLAST[CFG_ID];
-    var c = C(); SHIP_KEYS.forEach(function (k) { c[k] = k === 'ballast' ? (HULLT[CFG_ID] ? HULLT[CFG_ID].ballast0 : undefined) : cfgBase(k, CFG_ID); });
-    put(); show();
+    shipReset(CFG_ID); put(); show();
+  };
+  function shipReset(id) {                             // 一型回到預設：船員、艙房的擺法、壓艙物、性能
+    delete SHIP_CREW[id]; delete SHIP_ROOMS[id]; delete PREF_BALLAST[id];
+    var c = shipCfg(id); SHIP_KEYS.forEach(function (k) { c[k] = k === 'ballast' ? (HULLT[id] ? HULLT[id].ballast0 : undefined) : cfgBase(k, id); });
+  }
+  $('shipRA').onclick = function () {                  // 全部回到預設（65_ask.js 彈窗確認）：每一型（設定檔裡的船＋存檔裡有、這份成品沒有的）
+    askOk('船隻配置全部回到預設', '每一型船（不只正在看的這一型）的船員、艙房擺設、壓艙物與性能都回到預設。改過的會不見；要留的話先按「匯出…」。', '全部回到預設', function () {
+      var ids = {}; CFG.ships.forEach(function (s) { ids[s.id] = 1; }); [SHIP_CFG, SHIP_CREW, SHIP_ROOMS, PREF_BALLAST].forEach(function (m) { Object.keys(m).forEach(function (id) { ids[id] = 1; }); });
+      Object.keys(ids).forEach(shipReset); put(); show(); $('shipSt').textContent = '已全部回到預設（' + CFG.ships.length + ' 型船）。';
+    });
+  };
+  $('allR').onclick = function () {                    // 主選單的全部回到預設：刪掉這台瀏覽器的存檔、重新載入 ⇒ 每一項都照程式與設定檔的預設（網址帶的參數照舊優先）
+    askOk('全部回到預設', '主選單的選擇（模式、玩法、艦隊、航行、距離、天氣、畫質、物理效果）、細節設定、船隻配置、砲的設定、道具設定、鍵位，全部回到預設：這台瀏覽器裡的存檔會刪掉，頁面重新載入。要留的話先到各設定頁按「匯出…」。', '全部回到預設', function () {
+      PREFS.write = false;                               // ⛔ 關頁時的自動存檔會把現在的設定又寫回去（69_prefs.js）
+      try { window.localStorage.removeItem(PREFS_KEY); } catch (e) { /* 這一頁不能用 localStorage（畫廊彈窗）⇒ 本來就沒有存檔 */ }
+      location.reload();
+    });
   };
   $('shipE').onclick = function () {                   // 匯出：每一型整份（69_prefs.js shipsExport）
     var s = JSON.stringify(shipsExport(), null, 1), a = document.createElement('a'), d = new Date();
@@ -631,6 +646,7 @@ function sliders() {
     };
     r.readAsText(f);
   };
+  askUI();                                             // 確認彈窗（65_ask.js）：⛔ 要比 keysUI 先掛（鍵盤的捕獲階段照掛的先後）
   gfxUI(); phxUI(); gunUI(); gunShow(); furnUI(page); furnShow(); keysUI(page); keysShow();
   if (ADMIN_FURN) { page('furn'); furnShow(); }
   if (ADMIN_KEYS) { page('keys'); keysShow(); }                   // 鍵位的出廠預設值（?admin=keys）：直接開鍵位設定頁（66_keys.js keysAdmUI）                   // 道具的出廠預設值（?admin=furn）：直接開道具設定頁（67_furncfg.js furnAdmUI 接存檔、重建）

@@ -111,6 +111,12 @@ function keysUI(page) {
     if (performance.now() - rArm > 4000) { rArm = performance.now(); b.textContent = '再按一次：' + nm + '回到預設'; setTimeout(function () { if (performance.now() - rArm >= 3900) b.textContent = '這一頁回到預設'; }, 4000); return; }
     rArm = 0; b.textContent = '這一頁回到預設'; keyReset(KEY_TAB); keysShow();
   };
+  $('keysRA').onclick = function () {                                    // 全部回到預設（65_ask.js 彈窗確認）：三個模式
+    KEY_WAIT = null;
+    askOk('鍵位全部回到預設', KEY_CTX.map(function (c) { return c.name; }).join('、') + '（不只正在看的這一頁）的鍵都回到預設。改過的會不見；要留的話先按「匯出…」。', '全部回到預設', function () {
+      keyReset(); keysShow(); $('keysSt').textContent = '已全部回到預設（' + KEY_CTX.length + ' 個模式）。';
+    });
+  };
   $('keysE').onclick = function () {
     var s = JSON.stringify(keyExport(), null, 1), a = document.createElement('a'), d = new Date();
     a.href = URL.createObjectURL(new Blob([s], { type: 'application/json' }));

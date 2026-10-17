@@ -173,6 +173,8 @@
   #roomEdW{ max-width:100%; }
   body.roomEdOn #roomEd{ position:fixed; inset:8px; z-index:50; max-width:none; margin:0; overflow-y:auto; background:#141a22; border-color:rgba(255,255,255,.3); box-shadow:0 6px 30px rgba(0,0,0,.6); }   /* 打開 ⇒ 接近全螢幕（Tim 2026-10-14） */
   #cover #pgX{ position:fixed; top:10px; right:12px; z-index:40; display:none; margin:0; background:#e3c46a; color:#111; border-color:#e3c46a; box-shadow:0 2px 10px rgba(0,0,0,.6); } #cover #pgX.on{ display:block; }
+  #askp{ display:none; position:fixed; inset:0; z-index:60; background:rgba(0,0,0,.62); align-items:center; justify-content:center; padding:16px; } #askp.on{ display:flex; }   /* 確認彈窗（js/65_ask.js）：蓋過右上角的返回（z 40） */
+  #askp .askc{ max-width:440px; padding:18px 22px; text-align:center; }   /* ⛔ 不掛 .card：71_input.js page() 拿「#cover 裡第一個不是設定頁的 .card」當主選單 */ #askM{ color:var(--dim); font-size:14px; line-height:1.6; margin:8px 0 14px; } #cover #askY{ background:#b8452e; border-color:#e06a4f; }
   #roomEdX2{ display:none; } body.roomEdOn #roomEdX2{ display:block; position:sticky; top:0; float:right; z-index:2; background:#e3c46a; color:#111; border-color:#e3c46a; }   /* 編輯器浮層：右上角的完成（捲動時黏在上面） */
   #keysAdm{ display:none; } #keysp.admin #keysAdm{ display:block; color:#ffd27a; border:1px solid rgba(255,210,122,.5); border-radius:6px; padding:6px 10px; margin:6px 0; }   /* 鍵位的出廠預設值（?admin=keys） */
   #keysItems .keyrow{ display:flex; align-items:center; gap:10px; max-width:640px; margin:4px auto; }   /* ⛔ 不套 .row.slide：那裡的 span 一律固定寬度，圖示會被撐成 156px */
@@ -359,7 +361,7 @@
   </div>
 
   <div id="cover">
-    <button id="pgX" aria-label="返回主選單">返回</button><!-- 細節、畫質、物理、船隻配置頁：右上角固定的返回（Tim 2026-10-14：不用捲到底才按得到、不跟著捲） -->
+    <button id="pgX" aria-label="返回主選單">返回</button><div id="askp" role="dialog" aria-modal="true" aria-labelledby="askT"><div class="panel askc"><h2 id="askT"></h2><div id="askM"></div><div class="row"><button id="askN">取消</button><button id="askY">確定</button></div></div></div><!-- 細節、畫質、物理、船隻配置頁：右上角固定的返回（Tim 2026-10-14：不用捲到底才按得到、不跟著捲） -->
     <div class="card panel">
       <h1>Blockside</h1><!-- Tim 2026-10-16：「網頁中的遊戲名稱 可以改成Blockside了」（存檔鍵 ame_constitution_broadside、匯出檔名照舊 ⇒ 舊存檔照樣讀得到） -->
       <div class="row" id="modes">
@@ -376,6 +378,7 @@
       <div class="row" id="wxs">天氣
         <button data-w="clear">晴</button><button data-w="storm">暴風雨</button>
       </div>
+      <div class="row"><button class="go" id="go" disabled>載入中…</button></div><!-- Tim 2026-10-17：開戰鈕往上搬到天氣下面、畫質上面 -->
       <div class="row" id="gfxs">畫質
         <button data-g="low">低</button><button data-g="mid">中</button><button data-g="high">高</button><button id="gfxB">畫質設定…</button>
       </div>
@@ -383,8 +386,8 @@
         <button data-x="full">全開</button><button data-x="high">高</button><button data-x="mid">中</button><button data-x="low">低</button><button id="phxB">物理設定…</button>
       </div>
       <div class="row"><button id="shipB">船隻配置…</button><button id="gunB">砲的設定…</button><button id="furnB">道具設定…</button><button id="keysB">鍵位設定…</button><button id="detB">細節設定…</button></div>
-      <div class="row"><button class="go" id="go" disabled>載入中…</button></div>
-      <!-- 說明與細節設定的摘要放在開戰鈕下面（Tim 2026-10-13：手機上開戰鈕被擠到畫面外、要捲才看得到） -->
+      <div class="row"><button id="allR">全部回到預設</button></div>
+      <!-- 說明與細節設定的摘要放在最下面（Tim 2026-10-13：手機上開戰鈕被擠到畫面外、要捲才看得到；10-17 開戰鈕再往上搬到天氣下面） -->
       <div class="sub">Blockside（方舷）—— 雕刻作品做成的船，1:1（0.1 公尺一格）互轟：船殼一格一格被打碎、桅杆打得斷、破洞進水會沉。<br>
         素材：雕刻作品（每一艘的作者在「船隻配置…」）</div>
       <div class="row" id="detV"></div>
@@ -452,7 +455,7 @@
       <div class="row slide"><label for="agile">靈活性</label><input type="range" id="agile" step="0.05"><span id="agileV"></span></div>
       <div class="row slide"><label for="upwind">逆風</label><input type="range" id="upwind" step="0.05" aria-label="逆風性能"><span id="upwindV"></span></div>
       <div class="row slide"><label for="base">額外動力</label><input type="range" id="base" step="0.5" aria-label="額外動力（節）：不看風向與帆"><span id="baseV"></span></div>
-      <div class="row"><button id="shipR">這一型回到預設</button><button id="shipE">匯出…</button><button id="shipI">匯入…</button><input type="file" id="shipF" accept=".json,application/json" style="display:none"></div>
+      <div class="row"><button id="shipR">這一型回到預設</button><button id="shipRA">全部回到預設</button><button id="shipE">匯出…</button><button id="shipI">匯入…</button><input type="file" id="shipF" accept=".json,application/json" style="display:none"></div>
       <div class="row"><button id="shipX">返回</button></div>
       </div>
     </div>
@@ -464,7 +467,7 @@
       <div class="row note" id="gunInfo"></div>
       <div id="gunItems"></div>
       <div class="row note" id="gunSt"></div>
-      <div class="row"><button id="gunR">這一種回到預設</button><button id="gunE">匯出…</button><button id="gunI">匯入…</button><input type="file" id="gunF" accept=".json,application/json" style="display:none"></div>
+      <div class="row"><button id="gunR">這一種回到預設</button><button id="gunRA">全部回到預設</button><button id="gunE">匯出…</button><button id="gunI">匯入…</button><input type="file" id="gunF" accept=".json,application/json" style="display:none"></div>
       <div class="row"><button id="gunX">返回</button></div>
     </div>
     <!-- 道具設定（從主選單進；Tim 2026-10-16）：一種道具一份；項目在 js/67_furncfg.js 的 FURN_ITEMS；預設值 ＝ config/game.json furniture（開發後台 ?admin=furn 用同一頁存） -->
@@ -476,7 +479,7 @@
       <div class="row note" id="furnInfo"></div>
       <div id="furnItems"></div>
       <div class="row note" id="furnSt"></div>
-      <div class="row"><button id="furnR">這一種回到預設</button><button id="furnE">匯出…</button><button id="furnI">匯入…</button><input type="file" id="furnF" accept=".json,application/json" style="display:none"></div>
+      <div class="row"><button id="furnR">這一種回到預設</button><button id="furnRA">全部回到預設</button><button id="furnE">匯出…</button><button id="furnI">匯入…</button><input type="file" id="furnF" accept=".json,application/json" style="display:none"></div>
       <div class="row"><button id="furnX">返回</button></div>
     </div>
     <!-- 鍵位設定（從主選單進；Tim 2026-10-17）：分頁 ＝ 模式（海戰／第一人稱／建造）；動作表在 js/66_keys.js 的 KEY_ACTS；預設值 ＝ config/game.json keys（開發後台 ?admin=keys 用同一頁存） -->
@@ -488,7 +491,7 @@
       <div class="row note" id="keysInfo"></div>
       <div id="keysItems"></div>
       <div class="row note" id="keysSt"></div>
-      <div class="row"><button id="keysR">這一頁回到預設</button><button id="keysE">匯出…</button><button id="keysI">匯入…</button><input type="file" id="keysF" accept=".json,application/json" style="display:none"></div>
+      <div class="row"><button id="keysR">這一頁回到預設</button><button id="keysRA">全部回到預設</button><button id="keysE">匯出…</button><button id="keysI">匯入…</button><input type="file" id="keysF" accept=".json,application/json" style="display:none"></div>
       <div class="row"><button id="keysX">返回</button></div>
     </div>
     <!-- 細節設定（從主選單進）：滑桿的上下限與預設在 js/04_state.js 的 LIM（網址參數共用同一組） -->
@@ -12528,6 +12531,27 @@ function endShow(W) {
     '<br><span style="color:var(--dim)">' + strikeText() + '</span>';
   $('end').className = 'on';
 }
+// ── js/65_ask.js ──
+// ───────────────────────── 確認彈窗（Tim 2026-10-17：「設定頁面的 道具設定 船隻設定 以及其他類似的設定 是否可以加一個 全部回到預設(可以彈窗確認)」「主頁面也可以加一個 全部回到預設按鈕」） ─────────────────────────
+// 頁面裡自己畫的一層（template.html #askp）：⛔ 不用 confirm()：畫廊彈窗的 iframe 沒開 allow-modals，confirm 直接回 false（71_input.js shipR 那一段）。
+// askOk(標題, 內文, 確定鈕的字, 按確定之後做的事)：預設停在「取消」（Enter ＝ 取消、要確定得點或 Tab 過去）；Esc、點外面 ＝ 取消。
+// 開著的時候鍵盤不往下傳（捕獲階段、stopImmediatePropagation）⇒ 鍵位設定頁等新鍵、71_input.js 的 Esc 關頁都收不到；⛔ askUI 要比 keysUI 先掛（同掛在 window 的捕獲階段照掛的先後）。
+var ASK_DO = null;
+function askOk(title, body, ok, fn) {
+  $('askT').textContent = title; $('askM').textContent = body; $('askY').textContent = ok;
+  ASK_DO = fn; $('askp').classList.add('on'); $('askN').focus();
+}
+function askClose(yes) { var fn = ASK_DO; ASK_DO = null; $('askp').classList.remove('on'); if (yes && fn) fn(); }
+function askUI() {
+  $('askY').onclick = function () { askClose(true); };
+  $('askN').onclick = function () { askClose(false); };
+  $('askp').onclick = function (e) { if (e.target === $('askp')) askClose(false); };
+  window.addEventListener('keydown', function (e) {
+    if (!ASK_DO) return;
+    e.stopImmediatePropagation();
+    if (e.key === 'Escape') { e.preventDefault(); askClose(false); }   // 其他鍵照瀏覽器的預設（Tab 換鈕、Enter／空白鍵按下有焦點的那顆）
+  }, true);
+}
 // ── js/66_keys.js ──
 // ───────────────────────── 鍵位（Tim 2026-10-17：「整理一套系統去管理鍵位(然後要分不同模式 目前還有建造模式 第一人稱)」「不是後台 而是遊戲中(後台可以設定預設值)」）─────────────────────────
 // 一個動作一列（KEY_ACTS）：id（全域唯一）、模式 c（battle 海戰／fps 第一人稱／build 建造）、名字、預設鍵、按住才算（hold）。
@@ -12641,6 +12665,12 @@ function keysUI(page) {
     var b = $('keysR'), nm = KEY_CTX.filter(function (c) { return c.id === KEY_TAB; })[0].name;
     if (performance.now() - rArm > 4000) { rArm = performance.now(); b.textContent = '再按一次：' + nm + '回到預設'; setTimeout(function () { if (performance.now() - rArm >= 3900) b.textContent = '這一頁回到預設'; }, 4000); return; }
     rArm = 0; b.textContent = '這一頁回到預設'; keyReset(KEY_TAB); keysShow();
+  };
+  $('keysRA').onclick = function () {                                    // 全部回到預設（65_ask.js 彈窗確認）：三個模式
+    KEY_WAIT = null;
+    askOk('鍵位全部回到預設', KEY_CTX.map(function (c) { return c.name; }).join('、') + '（不只正在看的這一頁）的鍵都回到預設。改過的會不見；要留的話先按「匯出…」。', '全部回到預設', function () {
+      keyReset(); keysShow(); $('keysSt').textContent = '已全部回到預設（' + KEY_CTX.length + ' 個模式）。';
+    });
   };
   $('keysE').onclick = function () {
     var s = JSON.stringify(keyExport(), null, 1), a = document.createElement('a'), d = new Date();
@@ -12789,6 +12819,11 @@ function furnUI(page) {
     if (performance.now() - rArm > 4000) { rArm = performance.now(); b.textContent = '再按一次：' + T.cur[T.id].name + '回到預設'; setTimeout(function () { if (performance.now() - rArm >= 3900) b.textContent = '這一種回到預設'; }, 4000); return; }
     rArm = 0; b.textContent = '這一種回到預設'; furnReset(FURN_ID); furnShow();
   };
+  $('furnRA').onclick = function () {                    // 全部回到預設（65_ask.js 彈窗確認）：道具與動力件
+    askOk('道具設定全部回到預設', '每一種道具與動力件（不只正在看的這一種）都回到預設。改過的會不見；要留的話先按「匯出…」。', '全部回到預設', function () {
+      var ids = furnIds(); ids.forEach(furnReset); furnShow(); $('furnSt').textContent = '已全部回到預設（' + ids.length + ' 種）。';
+    });
+  };
   $('furnE').onclick = function () {
     var s = JSON.stringify(furnExport(), null, 1), a = document.createElement('a'), d = new Date();
     a.href = URL.createObjectURL(new Blob([s], { type: 'application/json' }));
@@ -12880,8 +12915,11 @@ function gunSet(t, k, v) {
   if (!Object.keys(S).length) delete GUN_SET[t];
   if (k === 'crew' && gunVal(t, 'min') > v) gunSet(t, 'min', v);
 }
-/** 這一種回到預設（傷害一起）。 */
-function gunReset(t) { GUN_ITEMS.forEach(function (it) { gunSet(t, it.k, gunDef(t, it.k)); }); }
+/** 這一種回到預設（傷害一起）：整份照抄（⛔ 不走 gunSet：有些砲的預設在滑桿範圍外 —— 例 brooke7 的重量、dahl11 的洞 —— 夾進範圍就不是預設了，還會被當成改過存起來）。 */
+function gunReset(t) {
+  GUN_ITEMS.forEach(function (it) { if (it.k === 'dmg') DMG[t] = gunDef(t, 'dmg'); else if (GUNS0[t][it.k] === undefined) delete GUNS[t][it.k]; else GUNS[t][it.k] = GUNS0[t][it.k]; });
+  delete GUN_SET[t];
+}
 /** 存檔用：GUN_SET 的拷貝（傷害照舊存在 dmg）。 */
 function gunsSnap() { return JSON.parse(JSON.stringify(GUN_SET)); }
 /** 存檔／匯入 ⇒ 變數：看得懂的砲種、鍵才套（照 gunSet 夾範圍）。最少放在標準砲班之後套。 */
@@ -12917,6 +12955,11 @@ function gunUI() {
     var b = $('gunR');
     if (performance.now() - rArm > 4000) { rArm = performance.now(); b.textContent = '再按一次：' + GUNS[GUN_ID].name + '回到預設'; setTimeout(function () { if (performance.now() - rArm >= 3900) b.textContent = '這一種回到預設'; }, 4000); return; }
     rArm = 0; b.textContent = '這一種回到預設'; gunReset(GUN_ID); gunShow();
+  };
+  $('gunRA').onclick = function () {                     // 全部回到預設（65_ask.js 彈窗確認）
+    askOk('砲的設定全部回到預設', '每一種砲（不只正在看的這一種）的數值與每發傷害都回到預設。改過的會不見；要留的話先按「匯出…」。', '全部回到預設', function () {
+      var ts = Object.keys(GUNS); ts.forEach(gunReset); gunShow(); $('gunSt').textContent = '已全部回到預設（' + ts.length + ' 種砲）。';
+    });
   };
   $('gunE').onclick = function () {
     var s = JSON.stringify(gunsExport(), null, 1), a = document.createElement('a'), d = new Date();
@@ -13861,9 +13904,24 @@ function sliders() {
     var b = $('shipR'), hi = hullInfo(CFG_ID);
     if (performance.now() - rArm > 4000) { rArm = performance.now(); b.textContent = '再按一次：' + (hi ? hi.name : CFG_ID) + '的船員、艙房與性能都回到預設'; setTimeout(function () { if (performance.now() - rArm >= 3900) b.textContent = '這一型回到預設'; }, 4000); return; }
     rArm = 0; b.textContent = '這一型回到預設';
-    delete SHIP_CREW[CFG_ID]; delete SHIP_ROOMS[CFG_ID]; delete PREF_BALLAST[CFG_ID];
-    var c = C(); SHIP_KEYS.forEach(function (k) { c[k] = k === 'ballast' ? (HULLT[CFG_ID] ? HULLT[CFG_ID].ballast0 : undefined) : cfgBase(k, CFG_ID); });
-    put(); show();
+    shipReset(CFG_ID); put(); show();
+  };
+  function shipReset(id) {                             // 一型回到預設：船員、艙房的擺法、壓艙物、性能
+    delete SHIP_CREW[id]; delete SHIP_ROOMS[id]; delete PREF_BALLAST[id];
+    var c = shipCfg(id); SHIP_KEYS.forEach(function (k) { c[k] = k === 'ballast' ? (HULLT[id] ? HULLT[id].ballast0 : undefined) : cfgBase(k, id); });
+  }
+  $('shipRA').onclick = function () {                  // 全部回到預設（65_ask.js 彈窗確認）：每一型（設定檔裡的船＋存檔裡有、這份成品沒有的）
+    askOk('船隻配置全部回到預設', '每一型船（不只正在看的這一型）的船員、艙房擺設、壓艙物與性能都回到預設。改過的會不見；要留的話先按「匯出…」。', '全部回到預設', function () {
+      var ids = {}; CFG.ships.forEach(function (s) { ids[s.id] = 1; }); [SHIP_CFG, SHIP_CREW, SHIP_ROOMS, PREF_BALLAST].forEach(function (m) { Object.keys(m).forEach(function (id) { ids[id] = 1; }); });
+      Object.keys(ids).forEach(shipReset); put(); show(); $('shipSt').textContent = '已全部回到預設（' + CFG.ships.length + ' 型船）。';
+    });
+  };
+  $('allR').onclick = function () {                    // 主選單的全部回到預設：刪掉這台瀏覽器的存檔、重新載入 ⇒ 每一項都照程式與設定檔的預設（網址帶的參數照舊優先）
+    askOk('全部回到預設', '主選單的選擇（模式、玩法、艦隊、航行、距離、天氣、畫質、物理效果）、細節設定、船隻配置、砲的設定、道具設定、鍵位，全部回到預設：這台瀏覽器裡的存檔會刪掉，頁面重新載入。要留的話先到各設定頁按「匯出…」。', '全部回到預設', function () {
+      PREFS.write = false;                               // ⛔ 關頁時的自動存檔會把現在的設定又寫回去（69_prefs.js）
+      try { window.localStorage.removeItem(PREFS_KEY); } catch (e) { /* 這一頁不能用 localStorage（畫廊彈窗）⇒ 本來就沒有存檔 */ }
+      location.reload();
+    });
   };
   $('shipE').onclick = function () {                   // 匯出：每一型整份（69_prefs.js shipsExport）
     var s = JSON.stringify(shipsExport(), null, 1), a = document.createElement('a'), d = new Date();
@@ -13883,6 +13941,7 @@ function sliders() {
     };
     r.readAsText(f);
   };
+  askUI();                                             // 確認彈窗（65_ask.js）：⛔ 要比 keysUI 先掛（鍵盤的捕獲階段照掛的先後）
   gfxUI(); phxUI(); gunUI(); gunShow(); furnUI(page); furnShow(); keysUI(page); keysShow();
   if (ADMIN_FURN) { page('furn'); furnShow(); }
   if (ADMIN_KEYS) { page('keys'); keysShow(); }                   // 鍵位的出廠預設值（?admin=keys）：直接開鍵位設定頁（66_keys.js keysAdmUI）                   // 道具的出廠預設值（?admin=furn）：直接開道具設定頁（67_furncfg.js furnAdmUI 接存檔、重建）

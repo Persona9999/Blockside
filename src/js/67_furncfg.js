@@ -87,6 +87,11 @@ function furnUI(page) {
     if (performance.now() - rArm > 4000) { rArm = performance.now(); b.textContent = '再按一次：' + T.cur[T.id].name + '回到預設'; setTimeout(function () { if (performance.now() - rArm >= 3900) b.textContent = '這一種回到預設'; }, 4000); return; }
     rArm = 0; b.textContent = '這一種回到預設'; furnReset(FURN_ID); furnShow();
   };
+  $('furnRA').onclick = function () {                    // 全部回到預設（65_ask.js 彈窗確認）：道具與動力件
+    askOk('道具設定全部回到預設', '每一種道具與動力件（不只正在看的這一種）都回到預設。改過的會不見；要留的話先按「匯出…」。', '全部回到預設', function () {
+      var ids = furnIds(); ids.forEach(furnReset); furnShow(); $('furnSt').textContent = '已全部回到預設（' + ids.length + ' 種）。';
+    });
+  };
   $('furnE').onclick = function () {
     var s = JSON.stringify(furnExport(), null, 1), a = document.createElement('a'), d = new Date();
     a.href = URL.createObjectURL(new Blob([s], { type: 'application/json' }));
