@@ -245,12 +245,11 @@
   #stage.fp #navBox, #stage.fp #helmL, #stage.fp #helmR, #stage.fp #guns, #stage.fp #ammo, #stage.fp #keys > :not(#pauseK):not(#setB){ display:none !important; }
   #stage.fp #fpUI{ display:block; position:absolute; left:0; right:0; bottom:calc(64px + env(safe-area-inset-bottom)); pointer-events:none; z-index:3; }
   #fpUI .fpPad{ position:absolute; bottom:0; display:grid; grid-template-columns:repeat(3, 64px); grid-auto-rows:64px; gap:6px; }   /* 一格 ＝ 圓鈕 .kb.hb 的大小 */
-  /* 右下：轉頭的搖桿 #fpJoyR（Tim 2026-10-16「旋轉視角是否也可以用虛擬類比控制」）＋它左邊一欄上下 #fpVert：跳／浮空上（空白）在上、浮空下（C）在下（Tim 2026-10-16「為了手機操作 空白移動到右側吧(因為左邊是搖桿 離空白太近很難跳)」）；
+  /* 右下：一欄上下 #fpVert（⛔ 轉頭的搖桿 #fpJoyR 拿掉了：Tim 2026-10-17「右側轉視角的我發現用不到(螢幕任意位置都能滑動轉視角)」⇒ 這一欄搬到原本搖桿的位置）：跳／浮空上（空白）在上、浮空下（C）在下（Tim 2026-10-16「為了手機操作 空白移動到右側吧(因為左邊是搖桿 離空白太近很難跳)」）；
      每顆照 grid-area 擺（⛔ 自動排 ⇒ 藏起來的那顆讓別的補位）；沒有第 2 列時那一欄只剩一格、貼著底 */
-  #fpUI #fpVert{ right:calc(166px + env(safe-area-inset-right)); grid-template-columns:64px; }
-  #fpJoy, #fpJoyR{ position:absolute; left:calc(18px + env(safe-area-inset-left)); bottom:0; width:136px; height:136px; border-radius:50%; background:rgba(10,14,22,.35); border:2px solid rgba(255,255,255,.22); pointer-events:auto; touch-action:none; }
-  #fpKnob, #fpKnobR{ position:absolute; left:50%; top:50%; width:58px; height:58px; margin:-29px 0 0 -29px; border-radius:50%; background:rgba(255,255,255,.32); box-shadow:0 0 0 2px rgba(255,255,255,.18); pointer-events:none; }
-  #fpJoyR{ left:auto; right:calc(18px + env(safe-area-inset-right)); }
+  #fpUI #fpVert{ right:calc(18px + env(safe-area-inset-right)); grid-template-columns:64px; }
+  #fpJoy{ position:absolute; left:calc(18px + env(safe-area-inset-left)); bottom:0; width:136px; height:136px; border-radius:50%; background:rgba(10,14,22,.35); border:2px solid rgba(255,255,255,.22); pointer-events:auto; touch-action:none; }
+  #fpKnob{ position:absolute; left:50%; top:50%; width:58px; height:58px; margin:-29px 0 0 -29px; border-radius:50%; background:rgba(255,255,255,.32); box-shadow:0 0 0 2px rgba(255,255,255,.18); pointer-events:none; }
   #fpUI .fpb{ pointer-events:auto; display:flex; align-items:center; justify-content:center; margin:0; padding:0; font-size:22px; border-radius:50%; background:rgba(10,14,22,.55); touch-action:none; }
   #fpUI .fpb.down, #fpUI .fpb.on{ background:rgba(110,170,255,.45); }
   #fpAct{ position:absolute; bottom:16px; left:50%; transform:translateX(-50%); display:flex; gap:8px; }   /* 抬 16 px：圓鈕 64 px 高（⛔ bottom 0 ⇒ 底邊壓到下面那排的 ⏸ ⚙，量過） */
@@ -258,10 +257,10 @@
   #fpNext{ display:none !important; } #fpUI.fol #fpNext{ display:flex !important; }   /* 跟隨船員（TASK-0649）：跟隨中才有「下一個」；搖桿、跳、跑、爬梯子收起來 */
   #fpUI.fol #fpJoy, #fpUI.fol #fpJump, #fpUI.fol #fpRun, #fpUI.fol #fpClimb{ display:none !important; }
   #fpUI .fpFly{ display:none !important; } #fpUI.fly:not(.fol) .fpFly{ display:flex !important; } #fpUI.fly #fpJump{ display:none !important; }   /* 浮空：跳換成按住的 ⬆ ⬇ */
-  @media (max-width: 640px){   /* 直式手機：搖桿與轉頭鈕縮一號，中間的 🪜 ⤴ 🏃 搬到上方（⛔ 同一排 ⇒ 375 px 寬疊在一起，量過） */
+  @media (max-width: 640px){   /* 直式手機：搖桿縮一號，中間的 🪜 ⤴ 🏃 搬到上方（⛔ 同一排 ⇒ 375 px 寬疊在一起，量過） */
     #fpUI .fpPad{ grid-template-columns:repeat(3, 46px); grid-auto-rows:46px; gap:4px; }
-    #fpJoy, #fpJoyR{ width:112px; height:112px; left:calc(12px + env(safe-area-inset-left)); } #fpKnob, #fpKnobR{ width:48px; height:48px; margin:-24px 0 0 -24px; }
-    #fpJoyR{ left:auto; right:calc(12px + env(safe-area-inset-right)); } #fpUI #fpVert{ right:calc(132px + env(safe-area-inset-right)); grid-template-columns:46px; bottom:12px; }   /* 抬 12 px（⛔ 0 ⇒ 浮空時 C⬇ 碰到下面那排的 ⚙，截圖量過） */
+    #fpJoy{ width:112px; height:112px; left:calc(12px + env(safe-area-inset-left)); } #fpKnob{ width:48px; height:48px; margin:-24px 0 0 -24px; }
+    #fpUI #fpVert{ right:calc(12px + env(safe-area-inset-right)); grid-template-columns:46px; bottom:12px; }   /* 抬 12 px（⛔ 0 ⇒ 浮空時 C⬇ 碰到下面那排的 ⚙，截圖量過） */
     #fpUI .fpb{ font-size:19px; }
     #fpAct{ bottom:122px; }   /* 搖桿 112 px 高 ＋ 空一點（⛔ 108 ⇒ 跟搖桿頂疊 8 px，量過） */
   }
@@ -282,16 +281,15 @@
     <div id="guns"></div>
     <div id="ammo"><span class="kb hb" id="ammoB" data-act="ammo" data-tip="切換彈藥"><b>1</b><i class="em"><span class="ball"></span></i></span></div>
   </div><div id="helmR" class="helm"><span class="kb hb" data-act="ancS" id="ancS" data-tip="拋右錨"><b>5</b><i class="em">⚓▶</i></span><span class="kb hb" data-act="autoFire" id="autoF" data-tip="自動開砲"><b>G</b><i class="em">🤖💥</i></span><span class="kb hb" data-act="fire1" id="fireK" data-tip="開一門砲"><b>F</b><i class="em">💥</i></span><span class="kb hb" data-act="volley" id="volleyK" data-tip="齊射"><b>空白</b><i class="em">💥💥</i></span><span class="kb hb" data-act="ruddR" data-hold="1" data-tip="右舵"><b>D</b><i class="em">➡️</i></span></div></div></div>
-  <!-- 第一人稱的操作面板（81_fps.js；#stage.fp 才顯示）：左下虛擬搖桿（移動；鍵盤 WASD 也行、不顯示按鍵）、右下轉頭（按住）；中間 跳、跑、爬梯子；拖曳畫面也能轉頭 -->
+  <!-- 第一人稱的操作面板（81_fps.js；#stage.fp 才顯示）：左下虛擬搖桿（移動；鍵盤 WASD 也行、不顯示按鍵）、右下 跳（浮空：上下）；中間 🎥 離開（建造模式沒有）、跑、爬梯子；拖曳畫面也能轉頭 -->
   <!-- 建造模式（82_build.js，TASK-0648；#stage.bld 才顯示）：準心下面一行說明、📦 目錄（分類分頁）；快捷欄在 #fpUI 裡 -->
   <div id="bldInfo"></div>
   <div id="bldCat" class="panel" style="display:none"><div id="bldCatH"><b>📦 目錄</b><span class="kb" id="bldCatX">✕ 關（<span class="kn" data-kl="bCat">B</span>）</span></div><div id="bldTabs"></div><div id="bldGrid"></div></div>
   <div id="fpUI">
     <div id="bldBar"></div>
     <div id="fpJoy"><div id="fpKnob"></div></div>
-    <div id="fpAct"><span class="kb hb fpb" id="fpClimb" style="display:none" data-kl="fpClimb" data-tip="爬梯子"><b>E</b><i class="em">🪜</i></span><span class="kb hb fpb" id="fpRun" data-kl="fpRun" data-tip="跑"><b>Shift</b><i class="em">🏃</i></span><span class="kb hb fpb" id="fpFol" data-kl="fpFollow" title="跟隨身邊的船員（F）"><b>F</b><i class="em">👁</i></span><span class="kb hb fpb" id="fpNext" data-kl="fpNext" data-tip="跟隨下一個"><b>G</b><i class="em">⏭</i></span><span class="kb hb fpb bldOnly" id="bldMode" data-kl="bMode" title="碰撞：一般（M 換：一般 → 穿牆 → 浮空）"><b>M</b><i class="em">🚶</i></span><span class="kb hb fpb bldOnly" id="bldRot" data-kl="bRot" data-tip="轉 90°"><b>R</b><i class="em">⟳</i></span><span class="kb hb fpb bldOnly" id="bldDel" data-kl="bDel" data-tip="拆（滑鼠左鍵也行）"><b>X</b><i class="em">✖</i></span><span class="kb hb fpb bldOnly" id="bldPut" data-kl="bPut" data-tip="放（滑鼠右鍵也行）"><b>V</b><i class="em">✔</i></span></div>
+    <div id="fpAct"><span class="kb hb fpb" id="fpExit" data-kl="fpExit" data-tip="離開第一人稱（回到原本的鏡頭）"><b>Y</b><i class="em">🎥</i></span><span class="kb hb fpb" id="fpClimb" style="display:none" data-kl="fpClimb" data-tip="爬梯子"><b>E</b><i class="em">🪜</i></span><span class="kb hb fpb" id="fpRun" data-kl="fpRun" data-tip="跑"><b>Shift</b><i class="em">🏃</i></span><span class="kb hb fpb" id="fpFol" data-kl="fpFollow" title="跟隨身邊的船員（F）"><b>F</b><i class="em">👁</i></span><span class="kb hb fpb" id="fpNext" data-kl="fpNext" data-tip="跟隨下一個"><b>G</b><i class="em">⏭</i></span><span class="kb hb fpb bldOnly" id="bldMode" data-kl="bMode" title="碰撞：一般（M 換：一般 → 穿牆 → 浮空）"><b>M</b><i class="em">🚶</i></span><span class="kb hb fpb bldOnly" id="bldRot" data-kl="bRot" data-tip="轉 90°"><b>R</b><i class="em">⟳</i></span><span class="kb hb fpb bldOnly" id="bldDel" data-kl="bDel" data-tip="拆（滑鼠左鍵也行）"><b>X</b><i class="em">✖</i></span><span class="kb hb fpb bldOnly" id="bldPut" data-kl="bPut" data-tip="放（滑鼠右鍵也行）"><b>V</b><i class="em">✔</i></span></div>
     <div id="fpCross"></div>
-    <div id="fpJoyR" title="轉頭（方向鍵，或按住畫面拖曳）"><div id="fpKnobR"></div></div>
     <div id="fpVert" class="fpPad"><span style="grid-area:1/1" class="kb hb fpb" id="fpJump" data-kl="fpJump" data-tip="跳"><b>空白</b><i class="em">⤴</i></span><span style="grid-area:1/1" class="kb hb fpb fpFly" data-fp="up" data-kl="fpJump" data-tip="往上"><b>空白</b><i class="em">⬆</i></span><span style="grid-area:2/1" class="kb hb fpb fpFly" data-fp="dn" data-kl="fpDown" data-tip="往下"><b>C</b><i class="em">⬇</i></span></div>
   </div>
   <div id="tip" class="hud"></div>
