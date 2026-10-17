@@ -126,7 +126,7 @@ function ambCovered() {
 function ambFrame() {
   if (!AC) return;
   if (AMB && AMB.rain !== !!WX.rain) { try { AMB.bus.disconnect(); AMB.osc.concat(AMB.src).forEach(function (n) { n.stop(); }); } catch (e) { } AMB = null; }
-  if (!AMB) { AMB = ambBuild(AC, master, WX.rain > 0); AMB.hold0 = 0; ambSet(AMB, ambParams(), AC.currentTime, 0); return; }
+  if (!AMB) { AMB = ambBuild(AC, AC.ambBus || master, WX.rain > 0); AMB.hold0 = 0; ambSet(AMB, ambParams(), AC.currentTime, 0); return; }   // AC.ambBus：環境音那條音量線（02_audio.js、TASK-0677）
   var now = AC.currentTime; ambSet(AMB, ambParams(), now, AMB_TC); ambDrops(AMB, now, now + 0.25);
 }
 /** 試聽集（__game.ambLab；src/tests/ambient_lab.py）：預設四段，各 sec 秒；?cases=名字:w:sea:rain:hold;… 換掉。回 Promise<[{ name, peak, rmsDb, wav }]>。 */
@@ -145,18 +145,5 @@ function ambRender(o) {
   AMB_SEED = 1234567; var A = ambBuild(oc, mg, o.rain > 0);
   ambSet(A, { w: o.w, pan: o.pan || 0, sea: o.sea, hgt: o.hgt === undefined ? 6 : o.hgt, rain: o.rain || 0, hold: o.hold ? 1 : 0, vol: 1 }, 0, 0);
   ambDrops(A, 0, sec);
-  return oc.startRendering().then(function (buf) {
-    var n = buf.length, L = buf.getChannelData(0), R = buf.getChannelData(1), pk = 0, ss = 0, i;
-    var out = new DataView(new ArrayBuffer(44 + n * 4));
-    function str(p, s) { for (var k = 0; k < s.length; k++) out.setUint8(p + k, s.charCodeAt(k)); }
-    str(0, 'RIFF'); out.setUint32(4, 36 + n * 4, true); str(8, 'WAVEfmt '); out.setUint32(16, 16, true); out.setUint16(20, 1, true); out.setUint16(22, 2, true);
-    out.setUint32(24, sr, true); out.setUint32(28, sr * 4, true); out.setUint16(32, 4, true); out.setUint16(34, 16, true); str(36, 'data'); out.setUint32(40, n * 4, true);
-    for (i = 0; i < n; i++) {
-      var l = clamp(L[i], -1, 1), r = clamp(R[i], -1, 1); pk = Math.max(pk, Math.abs(l), Math.abs(r)); ss += l * l + r * r;
-      out.setInt16(44 + i * 4, l * 32767, true); out.setInt16(46 + i * 4, r * 32767, true);
-    }
-    var u8 = new Uint8Array(out.buffer), bin = '', CH = 0x8000;
-    for (i = 0; i < u8.length; i += CH) bin += String.fromCharCode.apply(null, u8.subarray(i, i + CH));
-    return { o: o, peak: +pk.toFixed(3), rmsDb: +(10 * Math.log10(ss / (2 * n) + 1e-12)).toFixed(1), wav: 'data:audio/wav;base64,' + btoa(bin) };
-  });
+  return oc.startRendering().then(function (buf) { var r = audioWav(buf); r.o = o; return r; });   // WAV 編碼跟 bgmRender 共用（02_audio.js audioWav）
 }

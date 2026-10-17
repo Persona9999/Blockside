@@ -98,7 +98,7 @@ function doAct(a, repeat) {
   else if (a === 'xray') xrayToggle();                                   // 觀察模式：透視（72_floodui.js）、剖面、隱藏甲板（74_cutaway.js）—— 不停格也能切換（Tim 2026-10-16）
   else if (a === 'cut') cutToggle();
   else if (a === 'deck') deckCycle();
-  else if (a === 'mute') { muted = !muted; gsetShow(); }
+  else if (a === 'mute') { muted = !muted; sndApply(); gsetShow(); }
   else if (a === 'help') helpToggle();
   else if (a === 'menu') { gsetClose(); helpClose(); RUNNING = false; END_AT = 0; END_WAIT = null; $('cover').style.display = ''; $('end').className = ''; }
   else if (a === 'sailMode') sailToggle();   // 一顆切換 自動 ⇄ 手動（Tim 2026-10-15：「改成單鍵」；手動也可以直接打舵）；錨在水裡 ⇒ 先起錨（左右錨拋的也一起）
@@ -185,6 +185,7 @@ function gsetShow() {
   $('gsGfx').textContent = gl === 'custom' ? '（自訂）' : ''; $('gsPhx').textContent = xl === 'custom' ? '（自訂）' : '';
   $('muteT').classList.toggle('on', muted); $('fpsT').classList.toggle('on', GFX_FPS);
   $('slowT').classList.toggle('on', SLOW.on); $('slowCamT').classList.toggle('on', SLOW.cam); $('pslowT').classList.toggle('on', PSLOW.on); $('testT').classList.toggle('on', !!(TLOG && TLOG.off === undefined) || (!TLOG && tlgWanted())); $('testN').textContent = tlgNote();   // 測試模式（83_testlog.js） $('boomB').classList.toggle('dis', !canSelfDestruct());
+  sndShow();                                                          // 音量滑桿（02_music.js）
   $('fullT').classList.toggle('on', fsOn()); $('fullT').classList.toggle('dis', !fsCan()); $('gsFull').textContent = fsCan() ? '' : '（這裡不給全螢幕：iPhone 的 Safari 只給影片）';
 }
 $('setB').onclick = gsetToggle;
@@ -197,7 +198,7 @@ $('helpBg').onclick = helpClose; $('helpX').onclick = helpClose; $('helpB').oncl
 $('gsetBg').onclick = gsetClose;                                    // 面板外點一下 ⇒ 關（不會順便瞄準、開砲：底下的東西被這一層蓋住）
 $('gsGo').onclick = gsetClose;
 $('menuB').onclick = function () { doAct('menu'); };
-$('muteT').onclick = function () { muted = !muted; gsetShow(); };
+$('muteT').onclick = function () { muted = !muted; sndApply(); gsetShow(); };
 $('fpsT').onclick = function () { GFX_FPS = !GFX_FPS; gfxShow(); };
 // 全螢幕（設定面板的「F11 全螢幕」；Tim 2026-10-13：主要給手機用）：整頁（documentElement）進出全螢幕；畫布大小每一格照量（60_render.js resize）⇒ 不用另外處理。
 //   畫廊彈窗的 iframe（sandbox＋allow="fullscreen"，ArtGallery/index.html）進得去（量過：fullscreenEnabled、點了 fs ＝ true、按鈕亮）。
@@ -580,7 +581,7 @@ function sliders() {
   cs.onchange = function () { CFG_ID = cs.value; loadHull(CFG_ID).then(function () { put(); show(); }); put(); show(); };
   fleetUI();                                                     // 主選單：艦隊編成
   // 細節設定那一頁：主選單 ⇄ 細節設定（同一個 #cover 裡兩張卡片，一次顯示一張）
-  function page(w) { $('detail').style.display = w === 'det' ? '' : 'none'; $('gfxp').style.display = w === 'gfx' ? '' : 'none'; $('phxp').style.display = w === 'phx' ? '' : 'none'; $('shipp').style.display = w === 'ship' ? '' : 'none'; $('gunp').style.display = w === 'gun' ? '' : 'none'; $('furnp').style.display = w === 'furn' ? '' : 'none'; $('keysp').style.display = w === 'keys' ? '' : 'none'; if (w !== 'keys') KEY_WAIT = null; document.querySelector('#cover .card:not(#detail):not(#gfxp):not(#phxp):not(#shipp):not(#gunp):not(#furnp):not(#keysp)').style.display = w ? 'none' : ''; $('cover').scrollTop = 0; $('pgX').classList.toggle('on', !!w && !ADMIN_ROOMS); }   // w：'' 主選單、'det' 細節設定、'gfx' 畫質設定、'phx' 物理設定、'ship' 船隻配置、'gun' 砲的設定、'furn' 道具設定（67_furncfg.js）
+  function page(w) { $('detail').style.display = w === 'det' ? '' : 'none'; $('gfxp').style.display = w === 'gfx' ? '' : 'none'; $('phxp').style.display = w === 'phx' ? '' : 'none'; $('shipp').style.display = w === 'ship' ? '' : 'none'; $('gunp').style.display = w === 'gun' ? '' : 'none'; $('furnp').style.display = w === 'furn' ? '' : 'none'; $('keysp').style.display = w === 'keys' ? '' : 'none'; $('sndp').style.display = w === 'snd' ? '' : 'none'; if (w !== 'keys') KEY_WAIT = null; document.querySelector('#cover .card:not(#detail):not(#gfxp):not(#phxp):not(#shipp):not(#gunp):not(#furnp):not(#keysp):not(#sndp)').style.display = w ? 'none' : ''; $('cover').scrollTop = 0; $('pgX').classList.toggle('on', !!w && !ADMIN_ROOMS); }   // w：'' 主選單、'det' 細節設定、'gfx' 畫質設定、'phx' 物理設定、'ship' 船隻配置、'gun' 砲的設定、'furn' 道具設定（67_furncfg.js）
   [].forEach.call(document.querySelectorAll('#plays button'), function (b) { b.onclick = function () { setPlay(b.dataset.p); show(); }; });   // 主選單：玩法
   $('detB').onclick = function () { page('det'); };
   $('detX').onclick = function () { page(''); };
@@ -603,6 +604,9 @@ function sliders() {
   $('furnX').onclick = function () { page(''); };
   $('keysB').onclick = function () { page('keys'); keysShow(); };   // 鍵位設定（66_keys.js）
   $('keysX').onclick = function () { page(''); };
+  sndUI();                                                       // 聲音設定的滑桿與按鈕（主選單那一頁＋遊戲內設定面板，02_music.js）
+  $('sndB').onclick = function () { page('snd'); sndShow(); };   // 聲音設定（02_music.js，TASK-0677）
+  $('sndX').onclick = function () { page(''); };
   $('pgX').onclick = function () { RE.i = -1; show(); page(''); };   // 右上角的返回（每一頁同一顆）
   var rArm = 0;                                        // 這一型回到預設：按兩下（Tim：編起來很花時間 ⇒ 不要一按就沒了；⛔ 不用 confirm()：畫廊彈窗的 iframe 沒開 allow-modals，confirm 直接回 false）
   $('shipR').onclick = function () {
