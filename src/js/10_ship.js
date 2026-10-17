@@ -110,7 +110,7 @@ function makeShip(i, team, yaw, pz, T, px) {                          // T：船
     s.footYard = f >= 0 ? sh.models[f] : low.length > 1 ? low[0] : null;
     if (low.length > 1) s.yards = low.reverse();                          // 帆頂那根排第一（打中帆照它轉回作品角度）
   });
-  ropeYards(sh);
+  ropeYards(sh); childRopes(sh); childBind(sh);
   sh.ropes.forEach(function (r) { r.never = r.lz = !!r.dead; });        // 一開始就不畫的繩不會變成垂下來的繩（物理，見 physStep）
   sh.cl = T.cloth.map(function (C) { return { T: C, p: null, hidden: true }; }); sh.loose = []; sh.shreds = [];   // shreds：帆的布片（34_shreds.js）
   sh.sails.forEach(function (s) { s.flag = isFlag(s); s.area = s.flag ? 0 : sailArea(s); }); sh.sailArea0 = sh.sails.reduce(function (a, s) { return a + s.area; }, 0) || 1;   // 旗不算推力（面積 0）
@@ -206,6 +206,55 @@ function ropeYards(sh) {
   if (!T.ropeYard) T.ropeYard = T.rig.ropes.map(function (r) { var n = r.pts.length / 3; return [yardNear(T, [r.pts[0], r.pts[1], r.pts[2]], 3), yardNear(T, [r.pts[n * 3 - 3], r.pts[n * 3 - 2], r.pts[n * 3 - 1]], 3)]; });
   sh.ropes.forEach(function (r, j) { r.pts0 = r.pts; r.ya = T.ropeYard[j][0]; r.yb = T.ropeYard[j][1]; });
   sh.yRopes = sh.ropes.filter(function (r) { return r.ya >= 0 || r.yb >= 0; });
+}
+/** 子繩（雕刻 TASK-0511：一端寫 `rope:母繩/比例`，ratlines 的每一道）：照 .vxk 的 ends（include=ends；frame ＝ 繩所在那一層）找母繩 ⇒ sh.cRopes ＝ [{ j, e: [{ p: 母繩序號, t: 比例 }|null ×2], d: 往上掛幾層 }]，母繩先排。
+ *  Tim 2026-10-17「子纜線會浮空…讓兩端真的綁在母纜線上」：母繩跟著帆桁轉（shroud 上端靠在帆桁的 sling 旁 ⇒ ropeYards 把它當成綁在帆桁上）⇒ 子繩以前留在作品的位置。
+ *  沒有 ends 的舊 .vxk ⇒ 空（照以前）。 */
+function childRopes(sh) {
+  var R = sh.T.rig.ropes, idx = {}, out = [];
+  R.forEach(function (r, j) { idx[r.name] = j; });
+  R.forEach(function (r, j) {
+    var E = r.ends; if (!E) return;
+    var fr = r.frame || '', e = [0, 1].map(function (k) {
+      var s = E[k]; if (typeof s !== 'string' || s.indexOf('rope:') !== 0) return null;
+      var i = s.lastIndexOf('/'), rel = s.slice(5, i), t = +s.slice(i + 1), p = idx[fr ? fr + '/' + rel : rel];
+      return p === undefined || !isFinite(t) ? null : { p: p, t: t };
+    });
+    if (e[0] || e[1]) out.push({ j: j, e: e, d: 0 });
+  });
+  var by = {}; out.forEach(function (c) { by[c.j] = c; });
+  function depth(c, n) { if (n > 8) return 0; var d = 0; c.e.forEach(function (x) { if (x && by[x.p]) d = Math.max(d, depth(by[x.p], n + 1) + 1); }); return d; }
+  out.forEach(function (c) { c.d = depth(c, 0); });
+  sh.cRopes = out.sort(function (a, b) { return a.d - b.d; });
+}
+/** 子繩的兩端放回母繩現在的形狀上（沿母繩的長度比，同雕刻的 rope:母繩/比例）；中間的點照兩端之間的比例內插（子繩是拉直的）。
+ *  開局、帆桁帶著繩轉（30_rig_physics.js yardRopes）、小艇擺（swingHangs）之後叫。母繩斷了 ⇒ 不動（子繩照 linkRopes 跟著斷）。 */
+function childBind(sh) {
+  (sh.cRopes || []).forEach(function (c) {
+    var r = sh.ropes[c.j]; if (!r || r.dead) return;
+    var src = r.pts0 || r.pts, n = src.length / 3; if (n < 2) return;
+    var P = [0, 1].map(function (e) {
+      var x = c.e[e], q = x && sh.ropes[x.p]; if (!q || q.dead) return null;
+      return ropeAtT(q.pts, x.t);
+    });
+    if (!P[0] && !P[1]) return;
+    var A = P[0] || [src[0], src[1], src[2]], B = P[1] || [src[n * 3 - 3], src[n * 3 - 2], src[n * 3 - 1]], out = new Float32Array(n * 3);
+    for (var i = 0; i < n; i++) { var t = i / (n - 1); out[i * 3] = A[0] + (B[0] - A[0]) * t; out[i * 3 + 1] = A[1] + (B[1] - A[1]) * t; out[i * 3 + 2] = A[2] + (B[2] - A[2]) * t; }
+    r.pts = out; r.bb = ropeBox(out);
+  });
+}
+/** 折線 L（xyz 攤平）上沿長度比 t 的那一點（同雕刻 SCP_SculptRopes.PointAt）。 */
+function ropeAtT(L, t) {
+  var n = L.length / 3, tot = 0, i, seg = [];
+  for (i = 1; i < n; i++) { var s = Math.hypot(L[i * 3] - L[i * 3 - 3], L[i * 3 + 1] - L[i * 3 - 2], L[i * 3 + 2] - L[i * 3 - 1]); seg.push(s); tot += s; }
+  if (t <= 0 || tot < 1e-9) return [L[0], L[1], L[2]];
+  if (t >= 1) return [L[n * 3 - 3], L[n * 3 - 2], L[n * 3 - 1]];
+  var want = t * tot, acc = 0;
+  for (i = 0; i < seg.length; i++) {
+    if (acc + seg[i] >= want) { var f = seg[i] > 0 ? (want - acc) / seg[i] : 0; return [L[i * 3] + (L[i * 3 + 3] - L[i * 3]) * f, L[i * 3 + 1] + (L[i * 3 + 4] - L[i * 3 + 1]) * f, L[i * 3 + 2] + (L[i * 3 + 5] - L[i * 3 + 2]) * f]; }
+    acc += seg[i];
+  }
+  return [L[n * 3 - 3], L[n * 3 - 2], L[n * 3 - 1]];
 }
 /** 模型的種類：meta 優先（basecamp TASK-0517：kind／gun），沒有 meta 才照名字（舊的 .vxk；舵輪本來就沒有 meta）。 */
 function modelKind(m) {
