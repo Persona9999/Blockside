@@ -29,7 +29,8 @@ var FP_MODE_EM = ['🚶', '🚪', '🕊'], FP_MODE = ['正常', '穿牆', '浮�
 //   玩家只能轉頭；自己的角色停在原地。F 跟隨／回來、G 換下一個（照離自己由近到遠輪）；被跟的人落水、倒下 ⇒ 回到自己。
 // FP_R：身體半徑（格）—— Tim 2026-10-16「只要判定不會穿牆就好 身體碰撞窄一點(目前會下不了憲法號樓梯)」⇒ 1.5 → 0.6（6 cm：只擋牆，踏板之間擠得進去）
 // FP_SP：走路（格／秒）—— Tim 2026-10-16「走路速度可以改成目前跑的速度」⇒ 14 → 28（2.8 m/s）；跑 ＝ ×FP_RUN（5.6 m/s）
-var FP_EYE = 16, FP_SP = 28, FP_RUN = 2, FP_TURN = 1.8, FP_R = 0.6, FP_CLIMB = 8, FP_REACH = 9, FP_FOV = 1.15;
+// FP_CLIMB：爬梯子（格／秒）—— Tim 2026-10-17「可以爬快一點(1.5倍速)」⇒ 8 → 12（憲法號 fore-lower-P 繩梯 z 105 → 264 量到 22.45 秒）
+var FP_EYE = 16, FP_SP = 28, FP_RUN = 2, FP_TURN = 1.8, FP_R = 0.6, FP_CLIMB = 12, FP_REACH = 9, FP_FOV = 1.15;
 var FP_UP = 6, FP_DOWN = 8, FP_ACC = 0.12, FP_DEC = 0.08, FP_EZ = 0.09;   // 跨得上 0.6 m、踩得下 0.8 m（更深 ⇒ 擋住，不會從艙口掉下去）；加速／減速／眼高的時間常數（秒）
 var FP_G = 98, FP_JUMP = 10;                                          // 重力 9.8 m/s²（格／秒²）、跳 1.0 m（Tim 2026-10-16「跳躍高度改兩倍吧」：0.5 → 1.0 m）
 // FP_HEAD：站得住要頭上幾格空 —— Tim 2026-10-16「碰撞高度也可以低一些(目前下樓梯會撞頭卡住)」⇒ 船員的 NAV_HEAD 1.2 m → 0.7 m（彎腰過得去；眼高照 fpEye 壓低）
@@ -324,7 +325,9 @@ function fpJump() { if (!FP.on || PAUSED || FP.fol || FP.mode === 2 || FP.climb 
 var FP_EZ_DN = 0.04, FP_EZ_UP = 0.35;
 function fpEyeZ(dt) {
   var c = fpWho(), jz = FP.fol ? 0 : FP.jz, fly = FP.mode === 2 && !FP.fol, base = c.pos[2] + jz;
-  var off = fly ? FP_EYE : fpEye(navG(FP.sh), [c.pos[0], c.pos[1], base], FP.fol ? null : FP.v);   // 浮空：眼睛固定在腳上 FP_EYE（穿過甲板時不跟著壓）
+  // 爬梯子：眼睛也固定在腳上 FP_EYE、不看頭頂（Tim 2026-10-17「爬梯子時…是否可以關閉碰撞 目前爬繩梯會撞到」—— 爬的線本來就不擋，撞的是眼高：
+  //   憲法號 fore-lower-P 繩梯越過舷牆那 1.4 秒、鑽進桅樓底下那 3 秒，fpEye 看到頭頂有格 ⇒ 眼高 16 → 3（腳上 0.3 m），鏡頭埋進木頭裡）
+  var off = fly || FP.climb && !FP.fol ? FP_EYE : fpEye(navG(FP.sh), [c.pos[0], c.pos[1], base], FP.fol ? null : FP.v);   // 浮空：眼睛固定在腳上 FP_EYE（穿過甲板時不跟著壓）
   if (FP.ez === null || FP.climb || fly || !(dt > 0)) FP.fz = base, FP.eo = off;   // 剛開、換人、爬梯子、浮空（本來就連續）⇒ 直接跟
   else {
     FP.fz += (base - FP.fz) * (1 - Math.exp(-dt / FP_EZ));
