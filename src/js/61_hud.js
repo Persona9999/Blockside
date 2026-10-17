@@ -163,7 +163,8 @@ function sideDraw(g, im, R, clipR, horizon, maxW, top, flip, sky) {
   g.globalAlpha *= SEA_VEIL; g.fillStyle = sky; g.fillRect(R - clipR, horizon, clipR * 2, R + clipR - horizon);
   g.restore();
 }
-/** 船隻配置頁最上面那個大圓鈕（跟艦隊圓鈕同一種畫法：天與海、側面投影、艦名；沒有圓環）。 */
+/** 船隻配置頁最上面那個大圓鈕（跟艦隊圓鈕同一種畫法：天與海、側面投影；沒有圓環）。
+ *  name 不給 ⇒ 不寫艦名（Tim 2026-10-17「船隻配置頁的Logo可以不印船名(因為已經有顯示)」：右邊那一欄第一行就是艦名）。 */
 function badgeDraw(cv, T, name) {
   var dpr = window.devicePixelRatio || 1, W = Math.round((cv.clientWidth || 150) * dpr); if (!W) return;
   cv.width = cv.height = W; var g = cv.getContext('2d'), R = W / 2; g.clearRect(0, 0, W, W);
@@ -172,6 +173,7 @@ function badgeDraw(cv, T, name) {
   g.fillStyle = sky; g.beginPath(); g.arc(R, R, R * 0.86, 0, 6.2832); g.fill();
   g.lineWidth = Math.max(2, 2 * dpr); g.strokeStyle = '#e8c26a'; g.beginPath(); g.arc(R, R, R - 2 * dpr, 0, 6.2832); g.stroke();
   sideDraw(g, T && T.sideImg, R, R * 0.86, R * 0.2 + R * 1.6 * SEA_STOP, R * 1.5, R * 0.2, false, sky);
+  if (!name) return;
   g.textAlign = 'center'; g.textBaseline = 'middle'; g.shadowColor = '#000'; g.shadowBlur = 4 * dpr; g.fillStyle = '#fff';
   g.font = 'bold ' + Math.round(R * 0.2) + 'px "Noto Sans TC","Microsoft JhengHei",sans-serif'; g.fillText(name, R, R * 1.4, R * 1.3);
 }
