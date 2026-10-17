@@ -18,7 +18,7 @@ var CMD_LINE_GAP = 90;                                                   // 戰�
 //   往風軸哪一側搶：敵方中心在哪一側就往哪一側（離風軸 CMD_GAUGE_SIDE 以內不換邊 ⇒ 不會一直換舷搶風）。
 var CMD_GAUGE_UP = 150, CMD_GAUGE_MAX = 240, CMD_GAUGE_NEAR = 1.5, CMD_GAUGE_SIDE = 120;
 // 戰列的排頭（TASK-0679）：期望航速 ＝ 巡航 × pace（隊形還沒排好 ⇒ CMD_PACE_FORM 等後面的跟上）；跟隨（cmdHelmWake）：沿航跡往前 CMD_WAKE_LA 那一點開、落後 1 m ⇒ 快 CMD_WAKE_K m/s
-var CMD_PACE = 0.9, CMD_PACE_FORM = 0.7, CMD_WAKE_LA = 40, CMD_WAKE_K = 0.04, CMD_WAKE_VMIN = 0.8, CMD_WAKE_FAR = 80;
+var CMD_PACE = 0.9, CMD_PACE_FORM = 0.7, CMD_WAKE_LA = 40, CMD_WAKE_K = 0.04, CMD_WAKE_VMIN = 0.8, CMD_WAKE_FAR = 80, CMD_WAKE_AWAY = 0.5;   // AWAY：在排頭旁邊或前面時往遠離排頭那邊偏多少（跟排頭航向合成；0.5 ≈ 27°）
 
 function cmdDist(a, b) { return Math.hypot(a.x - b.x, a.z - b.z); }
 function cmdStrength(s) { return 0.5 * s.hp + 0.3 * s.guns + 0.2 * s.crew; }   // 還剩多少戰力（0..1）
@@ -83,8 +83,28 @@ function cmdFocus(own, foes, mem, orders, want) {                         // wan
  *    交戰那一舷：敵方中心在排頭的哪一舷；遠（> 2.5 × 交戰距離）而且明顯在一側的時候才重看 ⇒ 接戰之後定下來，掉頭時整條不換舷。
  *    ⛔ 以前排頭照一艘船的打法交戰（54_helm.js helmSteer：換舷、拉開、繞敵艦一艘轉圈）⇒ 後面的跟不上：量過 4 對 4、800 m，紅方跟隨 1.4–3 節、離站位 75–243 m。
  *  只有一艘 ⇒ 照舊交戰（沒有戰列可帶，跟以前一位元都不差）。 */
+/** 戰列的排頭（沒有旗號指定時）：開局是橫隊 ⇒ 一齊轉向（turn together）—— 挑橫隊最外側、往外轉比較不頂風的那一端當排頭，交戰那一舷照往外轉的方向定（mem.side）；
+ *  其他船一開始就都在它後面，只要橫著收攏，不用誰往後退。不是橫隊（前後拉得比左右長 1/1.5 以上）⇒ 照舊挑最重的。挑了就記住（mem.pick），出局了才重挑。
+ *  ⛔ 照重量挑（以前）⇒ 4 艘一樣重 ⇒ 照編號，排頭剛好在橫隊第 2 個位置，不管往哪一舷轉都有船擋在航線上（開局頂風那一方：14–18 秒擦撞、排頭 5.8 → 0.1 節；
+ *    改讓法、改超前的判準都只消掉擦撞，四個種子隊形平均沒變好：量過 wdir=0 種子 1797／11／22／33）。 */
+function cmdLinePick(own, view, mem) {
+  var hv = own.slice().sort(function (a, b) { return b.mass - a.mass || a.id - b.id; })[0];
+  if (own.length < 2) return hv;
+  var c = cmdCenter(own), fx = 0, fz = 0;
+  own.forEach(function (s) { fx += Math.cos(s.yaw); fz -= Math.sin(s.yaw); });          // 平均船頭方向（fwd ＝ (cos yaw, −sin yaw)）
+  var fl = Math.hypot(fx, fz); if (fl < 1e-6) return hv; fx /= fl; fz /= fl;
+  var lx = fz, lz = -fx, lo = null, hi = null, a0 = 1e9, a1 = -1e9;                  // l：往左（yaw ＋ 90°）
+  own.forEach(function (s) { var l = (s.x - c.x) * lx + (s.z - c.z) * lz, a = (s.x - c.x) * fx + (s.z - c.z) * fz; if (!lo || l < lo.l) lo = { s: s, l: l }; if (!hi || l > hi.l) hi = { s: s, l: l }; a0 = Math.min(a0, a); a1 = Math.max(a1, a); });
+  if (hi.l - lo.l < 1 || hi.l - lo.l < 1.5 * (a1 - a0)) return hv;
+  var W = view && view.wind, offL = 0, offR = 0;                                    // 往外轉之後（往左 ⇒ 左端那艘、往右 ⇒ 右端）離正頂風幾 rad：大的比較好
+  if (W) { var wl = Math.hypot(W[0], W[1]) || 1, cu = Math.max(-1, Math.min(1, -(lx * W[0] + lz * W[1]) / wl)); offL = Math.acos(cu); offR = Math.acos(-cu); }
+  var useL = Math.abs(offL - offR) > 0.2 ? offL > offR : hi.s.mass > lo.s.mass || hi.s.mass === lo.s.mass && hi.s.id < lo.s.id;
+  mem.side = useL ? 'S' : 'P';                                                     // 往左轉 ⇒ 敵方落在右舷
+  return useL ? hi.s : lo.s;
+}
 function cmdLine(own, foes, mem, orders, view, leadId) {
-  var lead = own.filter(function (s) { return s.id === leadId; })[0] || own.slice().sort(function (a, b) { return b.mass - a.mass || a.id - b.id; })[0];
+  var lead = own.filter(function (s) { return s.id === leadId; })[0] || own.filter(function (s) { return s.id === mem.pick; })[0];
+  if (!lead) { lead = cmdLinePick(own, view, mem); mem.pick = lead.id; }
   var L = (mem.line || []).filter(function (id) { return id !== lead.id && own.some(function (s) { return s.id === id; }); });
   // 新排進來的（開局整條、候補進場）：一艘一艘接 —— 離隊尾那艘「船尾後面一個間距」最近的先接（TASK-0679；⛔ 照編號 ⇒ 開局橫隊時第 2 艘跟在排頭左邊、第 3 艘跟第 2 艘卻在排頭右邊，整條交叉）
   var rest = own.filter(function (s) { return s.id !== lead.id && L.indexOf(s.id) < 0; });
@@ -175,13 +195,16 @@ function cmdHelmWake(s, lead, wake, gap) {
   seg(P[0][0] + bx * 1000, P[0][1] + bz * 1000, c[0] + 1000, P[0][0], P[0][1], c[0]);
   if (n === 1) { bd = Math.hypot(s.x - P[0][0], s.z - P[0][1]); ba = 0; }
   var st = at(gap), lag = ba - gap, la = Math.max(CMD_WAKE_LA, bd), tg = at(Math.max(0, ba - la)), yaw, v;
-  if (lag < 0 && bd > 30) {
+  if (lag < -Math.max(30, 0.5 * bd) && bd > 30) {                       // 超前站位比離航跡的一半還多（開局橫隊在排頭旁邊）才算；⛔ 只看 lag < 0 ⇒ 沿航跡已經到了、只是橫向離航跡 224 m 的那艘也被當成「在旁邊」，0.8 m/s 爬 3 分鐘（量過 wdir=0 藍方 181 秒：lag −2、離航跡 224 m、1.8 節）
     // 在航跡旁邊、而且還沒落到站位後面（開局橫隊）⇒ 慢下來讓排頭往前拉開，船頭跟排頭同向、往航跡偏（最多 35°）；落到站位後面就照下面追
     // ⛔ 往前面的追蹤點開 ⇒ 一直跟它並排（量過：橫隊開局 113 秒，第 3、4 艘並排在旁邊 150–185 m、1.5 節）；
     // ⛔ 掉頭往站位後面開 ⇒ 一路橫切別艘的航線、讓船讓到每艘 3000–5000 步（50–80 秒），離站位反而 100–160 m（量過）
     var fx = Math.cos(lead.yaw), fz = -Math.sin(lead.yaw), wx = (qx - s.x) / bd, wz = (qz - s.z) / bd, k = Math.min(0.7, bd / 100);
+    if (ba < CMD_WAKE_LA) {                                              // 投影落在排頭身上（在排頭旁邊或前面）⇒ 往航跡偏 ＝ 往排頭身上開 ⇒ 改成往遠離排頭那邊偏
+      var dl = Math.hypot(s.x - lead.x, s.z - lead.z) || 1; wx = (s.x - lead.x) / dl; wz = (s.z - lead.z) / dl; k = CMD_WAKE_AWAY;
+    }   // ⛔ 照舊 ⇒ 開局橫隊、排到隊尾的那艘在排頭另一舷 66 m，排頭往那一舷搶風、它又往排頭偏 ⇒ 14 秒擦撞，排頭 5.8 → 0.1 節、整條耗掉（量過 wdir=0 藍方）
     yaw = Math.atan2(-(fz + wz * k), fx + wx * k);
-    v = CMD_WAKE_VMIN;
+    v = CMD_WAKE_VMIN;                                                   // ⛔ 試過 0.4 m/s（往後退快三成）⇒ 種子 22 接戰時排頭急轉、後面的被判成超前就停在 0.4 m/s，兩方都掉到 0.8–1.5 節（量過）
   } else {
     yaw = ba - la <= 0 && lag < 0 ? lead.yaw : Math.atan2(-(tg[1] - s.z), tg[0] - s.x);   // 追到前一艘正後方、貼著航跡又超前一點 ⇒ 跟它同向
     v = lag > CMD_WAKE_FAR || bd > 60 && lag > 0 ? Infinity : Math.max(CMD_WAKE_VMIN, (lead.spd || 0) + lag * CMD_WAKE_K);

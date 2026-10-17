@@ -100,9 +100,19 @@ function helmLead(sh, od) {
   var px = dx + (vx - sh.vel[0]) * HELM_LEAD_T, pz = dz + (vz - sh.vel[2]) * HELM_LEAD_T, dp = Math.min(d, Math.hypot(px, pz));   // HELM_LEAD_T 秒後會多近（兩條戰列對著開 ⇒ 早一點轉）
   // 遠了往敵方切（最多 1.0 rad）、近了往外拉（最多 0.9）。⛔ 照 helmSteer 的 −0.4／照現在的距離 ⇒ 兩條戰列對著開、一起轉到同向時已經只隔 20 m，兩條穿插在一起並排走（量過 180 秒：兩個排頭隔 20 m、同航向）
   var yaw = (sg > 0 ? Math.atan2(-dx / d, -dz / d) : Math.atan2(dx / d, dz / d)) + sg * clamp((dp - R) / R * 1.5, -0.9, 1.0);
-  if (!sh.noGoTack && n) {                                               // 第一次要搶風：往離自己的隊伍遠的那一舷搶（⛔ 往隊伍那一側 ⇒ 開局橫隊時排頭橫切過旁邊幾艘的船頭，讓船讓到 4000 步、0.2 節：量過風從船頭來的開局）
-    var mx = 0, mz = 0, W0 = norm(WIND); SHIPS.forEach(function (o) { var q = ORDERS[o.i]; if (q && q.mode === 'line' && q.head === sh.i && !isOut(o)) { mx += o.px - sh.px; mz += o.pz - sh.pz; } });
-    sh.noGoPref = (mx * -W0[2] + mz * W0[0]) > 0 ? -1 : 1;                  // 隊伍在風軸的哪一側（＋ ＝ 風吹去的方向往左轉 90°）⇒ 往另一側
+  if (!sh.noGoTack && n) {                                               // 第一次要搶風：挑航線比較空的那一舷；兩舷都空（友船離航線都在 HELM_TACK_CLR 以外）⇒ 往離自己的隊伍遠的那一舷
+    //   航線 ＝ 那一舷的搶風航向（helmNoGo 會給的 up ± a）往前 HELM_TACK_LOOK 公尺；空不空 ＝ 自己這一方的船離那條線最近幾公尺。
+    //   ⛔ 只照隊伍的重心 ⇒ 開局橫隊 3 號在排頭右邊 66 m、2、4 號在左邊 ⇒ 重心在左、往右搶，3 號就在航線上 8 m、前方 38 m，14–18 秒擦撞、排頭 5.8 → 0.1 節（量過 wdir=0 藍方）；
+    //   ⛔ 往隊伍那一側（以前）⇒ 開局橫隊時排頭橫切過旁邊幾艘的船頭，讓船讓到 4000 步、0.2 節（量過風從船頭來的開局）
+    var mx = 0, mz = 0, W0 = norm(WIND), up0 = Math.atan2(W0[2], -W0[0]), a0 = Math.PI - helmBeat(sh) / 57.2958, clr = {};
+    SHIPS.forEach(function (o) { var q = ORDERS[o.i]; if (q && q.mode === 'line' && q.head === sh.i && !isOut(o)) { mx += o.px - sh.px; mz += o.pz - sh.pz; } });
+    [1, -1].forEach(function (t) {
+      var F = fwd(up0 + t * a0), c = Infinity;
+      SHIPS.forEach(function (o) { if (o === sh || o.team !== sh.team || isOut(o)) return; var dx = o.px - sh.px, dz = o.pz - sh.pz, al = dx * F[0] + dz * F[2]; if (al > -20 && al < HELM_TACK_LOOK) c = Math.min(c, Math.abs(dx * F[2] - dz * F[0])); });
+      clr[t] = c;
+    });
+    var away = (mx * -W0[2] + mz * W0[0]) > 0 ? -1 : 1;                    // 隊伍在風軸的哪一側（＋ ＝ 風吹去的方向往左轉 90°）⇒ 往另一側
+    sh.noGoPref = Math.min(clr[1], clr[-1]) >= HELM_TACK_CLR ? away : clr[1] >= clr[-1] ? 1 : -1;
   }
   yaw = helmNoGo(sh, yaw);
   var cruise = sh.vCruise > 0 ? sh.vCruise : Infinity, v = cruise === Infinity ? Infinity : Math.max(HELM_VMIN, cruise * (od.pace || 1));
@@ -157,6 +167,7 @@ function helmNoGo(sh, yaw) {
  *  · 要轉過正頂風（換舷搶風，tack）但航速不到 HELM_TACK_V ⇒ 改往下風那一邊繞（順風換舷，wear）：現實裡帆船要帶著速度才轉得過頂風，
  *    速度不夠會卡在頂風（missing stays），老水手寧可順風繞一圈。繞過正後方之後要的航向就不再隔著頂風 ⇒ 照常。
  *  ⛔ 不管 ⇒ 戰列的排頭讓船讓進離頂風 46°、視風吃不到（31_drive.js sailWindK）⇒ 6 秒剎到 0.2 節，再加速回來要兩分鐘（量過風從船頭來的開局）。 */
+var HELM_TACK_LOOK = 400, HELM_TACK_CLR = 120;                         // 排頭第一次搶風：看航線往前幾公尺、友船離航線幾公尺以外算空（helmLead）
 var HELM_TACK_V = 1.5;                                                  // m/s（約 3 節）：低於這個航速不搶風換舷
 function helmIrons(sh, yaw) {
   var W = norm(WIND), up = Math.atan2(W[2], -W[0]), a = NOGO_DEG / 57.2958;   // up：正頂風的航向（fwd ＝ −W）
