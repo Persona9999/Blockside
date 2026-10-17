@@ -512,6 +512,7 @@ function sliders() {
     n = cw.top; v('top', n + ' 人 × ' + (hc ? hc.masts + ' 根桅 ＝ ' + n * hc.masts : '每根桅'), n, d.top);
     n = cw.monkeys; v('monkeys', n ? n + ' 人 × 每一對砲' + (hc ? '（約 ' + Math.ceil(hc.n / 2) + ' 對）' : '') + '：從取用點搬火藥與彈藥' : '0（沒有：砲旁的藥箱用完就停）', n, d.monkeys);
     n = cw.hands; v('hands', n + ' 人（在住艙甲板待命，缺人手時補位）' + (Q.has('hands') ? '　⚠ 網址 ?hands= 蓋過' : ''), n, d.hands);
+    n = cw.carpenter; v('carpenter', n ? n + ' 人（修斷掉的梯子 —— 整件還原、補甲板破洞 —— 先補把甲板打成兩塊的；跟預備水手一樣在船裡走動）' : '0（沒有：梯子、甲板打壞了就一直壞著）', n, d.carpenter);
     n = cw.surgeon; v('surgeon', n ? n + ' 人（開戰就站在醫療艙裡；醫療艙要的人手先算船醫、不夠才派預備水手；有船醫的那一間治療快 50%；沒設醫療艙的船不上船）' : '0（沒有：醫療艙照舊只靠預備水手）', n, d.surgeon);
     n = cw.shelter ? 1 : 0; v('shelter', n ? '開：預備水手不上露天甲板閒晃（只上去補位）、船長以外的軍官待在甲板下' : '關：預備水手偶爾上露天甲板走動、軍官站在露天甲板', n, d.shelter ? 1 : 0);
     var gsum = 0;

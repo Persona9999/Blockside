@@ -122,7 +122,7 @@ function survey(sh) {               // 每半秒量一次：砲還在不在、�
   if (sh.fl) sh.flBase = sh.T.disp - sh.mass0 + massLost(sh);                     // 粒子模式：浮力表上水以外的部分（33_flood.js floodSinkT）
   driveSurvey(sh);                                                    // 動力：實際質量（含進水）、引擎／魔力的完好度（31_drive.js）
   drownCheck(sh);                                                     // 船殼通海了 ⇒ 被水淹過頭的人浮上來（43_swim.js）
-  chooseSide(sh); reassign(sh); manning(sh); medTick(sh); pumpTick(sh); callHands(sh);   // pumpTick：抽水機要幾個人、現在抽多少（45_pumps.js）；medTick：醫療艙治療（44_medic.js）；callHands：預備水手補位（42_hands.js）
+  chooseSide(sh); reassign(sh); manning(sh); medTick(sh); pumpTick(sh); callHands(sh); carpTick(sh);   // pumpTick：抽水機要幾個人、現在抽多少（45_pumps.js）；medTick：醫療艙治療（44_medic.js）；callHands：預備水手補位（42_hands.js）
   sh.able = sh.crew.filter(able).length;
   sh.gunsManned = sh.guns.filter(function (g) { return g.alive && gunRate(g) > 0; }).length;
   strikeCheck(sh);

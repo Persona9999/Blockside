@@ -15,6 +15,7 @@
 #   python -I admin.py metasync --id <船的代號>   只同步 meta 與固定點（作品改了 meta、加了固定點，格子不動；TASK-0572）
 #   python -I admin.py reimport --id <船的代號> [--work <作品 ID>]                 重新匯入（換新的 .vxk、印跟上一版的差別、重建）
 #   python -I admin.py cache                      _cache/ 缺的、跟指紋不同的 .vxk 從版控那份成品裡解回來（換機器、只改程式時用；建置也會自己做）
+#   python -I admin.py cells --id <船的代號>      只寫動力件與梯子的格子清單（meta、格子不動；TASK-0676 木匠照它還原整件梯子）
 #   python -I admin.py relock --id <船的代號>     指紋改成 _cache 現在那份（手動換過 .vxk 時；平常匯入／重新匯入／metasync 會自己更新）
 #   加 --no-build：匯入／重新匯入之後不重建
 import argparse, base64, hashlib, json, math, os, posixpath, re, shutil, socket, struct, subprocess, sys, urllib.request, webbrowser, zlib
@@ -162,7 +163,7 @@ MAT_OPT = (('metal', 0, 1, '金屬度（選填；0 ＝ 不反光、1 ＝ 金屬�
 MAT_BOOL = (('smooth', '平滑（選填 true／false；true ⇒ 這種材質的格沒寫 render 也畫成平滑面＋金屬反光，螺旋槳整份平滑；關聯明寫 render=voxel 照方塊。Tim 2026-10-17：鐵甲、鍋爐開，包銅皮不開）'),)
 CREW = {'officers': (0, 8, True), 'helm': (0, 4, True), 'marines': (0, 60, True), 'marineGap': (5, 200, True),
         'top': (0, 8, True), 'monkeys': (0, 2, True), 'handsK': (0, 4, False), 'shelter': (0, 1, True),   # shelter：船員避開露天甲板（TASK-0637；0／1）
-        'surgeon': (0, 8, True)}                                                                       # 船醫（TASK-0676；有醫療艙才上船）
+        'surgeon': (0, 8, True), 'carpenter': (0, 8, True)}                                           # 木匠（TASK-0676 ②）                                                                       # 船醫（TASK-0676；有醫療艙才上船）
 CREW_SHIP = {'hands': (0, 120, True)}          # 只在每艘船寫（TASK-0570 船隻配置頁的預設）：預備水手人數；沒寫 ＝ lim.hands × handsK
 GUN_CREW_MAX = 8                               # 砲班滿編上限（砲旁的站位；遊戲 05_hull.js GUN_CREW_MAX）
 GEO_PAIRS = ('marines', 'aimZ', 'deckAim', 'rigAim')
@@ -732,7 +733,8 @@ def meta_kinds():
     return json.load(open(META_P, encoding='utf-8'))['kinds']
 
 
-DRV_KINDS = tuple(k for k, v in meta_kinds().items() if v.get('drv') == 'part')   # 動力件（TASK-0653；遊戲 31_drive.js 照格子算剩幾成、通不通）：規格表 drv=part（主機、鍋爐、軸、蒸汽管）
+DRV_KINDS = tuple(k for k, v in meta_kinds().items() if v.get('drv') == 'part')
+CELL_KINDS = DRV_KINDS + ('ladders', 'ladder')       # 寫格子清單 parts[].cellRuns 的關聯：動力件＋梯子（TASK-0676：木匠照它把整件梯子還原，Tim「可以單純是還原該子模組(梯子)」）   # 動力件（TASK-0653；遊戲 31_drive.js 照格子算剩幾成、通不通）：規格表 drv=part（主機、鍋爐、軸、蒸汽管）
 
 
 VOXM_KINDS = tuple(k for k, v in meta_kinds().items() if v.get('drv') == 'vox')   # 會轉的體素件（TASK-0653 第二段；遊戲 24_armor.js propSetup）：規格表 drv=vox（螺旋槳）；這幾種模型匯出時多帶來源作品的格子
@@ -827,8 +829,9 @@ def drive_cells(h):
     SX, SY, SZ = (h.get('size') or [0, 0, 0])[:3]
     for q in h.get('parts', []) or []:
         kind = (q.get('meta') or {}).get('kind')
-        if kind not in DRV_KINDS:
+        if kind not in CELL_KINDS:
             continue
+        what = '動力件' if kind in DRV_KINDS else '梯子'
         runs, why = None, ''
         b, w = q.get('box'), q.get('src')
         if not (b and len(b) == 6 and w):
@@ -865,7 +868,7 @@ def drive_cells(h):
                     end = idx[j] + 1
                     i = j + 1
         if why:
-            log.append('⚠ 動力件 %s（%s）：%s ⇒ 不寫格子清單（遊戲照固定點旁 ±8 格判）' % (q.get('path'), kind, why))
+            log.append('⚠ %s %s（%s）：%s ⇒ 不寫格子清單（%s）' % (what, q.get('path'), kind, why, '遊戲照固定點旁 ±8 格判' if what == '動力件' else '木匠只補踏板'))
         if q.get('cellRuns') != runs:
             changed = True
             if runs is None:
@@ -873,7 +876,7 @@ def drive_cells(h):
             else:
                 q['cellRuns'] = runs
         if runs:
-            log.append('動力件 %s（%s）：%d 格、%d 段（%s%s）' % (q.get('path'), kind, sum(runs[1::2]), len(runs) // 2, w, '，mirror=y' if q.get('mirror') == 'y' else ''))
+            log.append('%s %s（%s）：%d 格、%d 段（%s%s）' % (what, q.get('path'), kind, sum(runs[1::2]), len(runs) // 2, w, '，mirror=y' if q.get('mirror') == 'y' else ''))
     return log if changed else None
 
 
@@ -955,6 +958,29 @@ def act_metasync(sid, build=True):
         if build:
             log += act_build()
             log += act_shipcheck([sid])                  # meta 改了 ⇒ 順手檢查一次（只讀）
+    return log
+
+
+def act_cells(sid, build=True):
+    """只寫格子清單（TASK-0676）：動力件與梯子的關聯 parts[].cellRuns 照來源作品重算（drive_cells），meta、固定點、格子一位元都不動
+    （⛔ 不走 metasync：那會把作品上別人還沒定案的 meta 一起帶進來）。寫了 ⇒ 更新指紋。"""
+    cfg = load()
+    s = next((x for x in cfg['ships'] if x['id'] == sid), None)
+    if not s:
+        raise Fail('設定檔沒有這艘：' + sid)
+    path = os.path.join(CACHE, s['vxk'])
+    if not os.path.exists(path):
+        raise Fail('_cache 沒有 ' + s['vxk'] + '（先 python -I admin.py cache）')
+    raw = zlib.decompress(open(path, 'rb').read(), -15)
+    n = struct.unpack('<I', raw[4:8])[0]
+    h = json.loads(raw[8:8 + n].decode('utf-8'))
+    dc = drive_cells(h)
+    if dc is None:
+        return ['cells %s：格子清單沒變' % sid]
+    vxk_write(path, h, raw[8 + n:])
+    log = ['cells %s：' % sid] + ['  ' + x for x in dc] + [lock_put(s['vxk'])]
+    if build:
+        log += act_build()
     return log
 
 
@@ -2466,6 +2492,9 @@ def main():
     s = sp.add_parser('metasync', help='只同步 meta 與固定點（格子不動）')
     s.add_argument('--id', required=True)
     s.add_argument('--no-build', action='store_true')
+    s = sp.add_parser('cells', help='只寫動力件與梯子的格子清單（parts[].cellRuns；meta、格子不動）')
+    s.add_argument('--id', required=True)
+    s.add_argument('--no-build', action='store_true')
     s = sp.add_parser('relock', help='指紋改成 _cache 現在那份')
     s.add_argument('--id', required=True)
     sp.add_parser('authors', help='建造者：每艘船照 _cache 那份 .vxk 檔頭的 owner 記 ships[].author（補以前匯入的船；不重建）')
@@ -2508,6 +2537,8 @@ def main():
             log = act_authors()
         elif o.op == 'metasync':
             log = act_metasync(o.id, not o.no_build)
+        elif o.op == 'cells':
+            log = act_cells(o.id, not o.no_build)
         elif o.op == 'import':
             log = act_import(o.work, o.id, o.name, not o.no_build, o.variant_of)
         else:

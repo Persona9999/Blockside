@@ -27,7 +27,7 @@ function shipLadders(T) {
     Object.keys(by).forEach(function (nm) {
       var b = by[nm]; if (!b.foot || !b.head) return;
       var pts = [b.foot, b.lo, b.hi, b.head].filter(Boolean); if (b.foot[2] > b.head[2]) pts.reverse();
-      out.push({ name: (p.path || '') + (nm ? '/' + nm : ''), pts: pts, link: p.meta[nm ? nm + '.decks' : 'decks'] });
+      out.push({ name: (p.path || '') + (nm ? '/' + nm : ''), pts: pts, link: p.meta[nm ? nm + '.decks' : 'decks'], part: p.path });   // part：那一件關聯（木匠照它的格子清單整件還原，46_carpenter.js）
     });
   });
   return out.concat(ropeLadders(T));
@@ -316,7 +316,7 @@ function makeHands(sh, crew, add) {
     var mid = l.pts.slice(1, -1).map(function (q) { return [q[0], q[1], q[2] + CLIMB_LIFT]; });   // lo、hi 抬 0.2 m：兩點連線會切過踏板的前緣（量過：腳在踏板裡 24／71 點 ⇒ 10）
     var steps = l.rope ? [] : l.pts.slice(1, -1).map(function (q) { return [Math.floor(q[0]), Math.floor(q[1]), Math.floor(q[2]) - 1]; });   // 踏板：lo、hi 那一格底下（固定點是腳踩的那一格空氣）；繩梯的踏板是繩 ⇒ 照繩判（rj）
     var rj = l.rope ? l.rope.map(function (n) { return ri[n]; }).filter(function (j) { return j !== undefined; }) : null;
-    LD.push({ name: l.name, lo: la, hi: lb, ia: ia, ib: ib, ra: Ls[la].N.reg[ia], rb: Ls[lb].N.reg[ib], steps: steps, rj: rj, broken: false, pts: [navPos(Ls[la].N, ia), a].concat(mid, [b, navPos(Ls[lb].N, ib)]), x: (a[0] + b[0]) / 2, t0: -9, n: 0, q: 0,
+    LD.push({ name: l.name, part: l.part, lo: la, hi: lb, ia: ia, ib: ib, ra: Ls[la].N.reg[ia], rb: Ls[lb].N.reg[ib], steps: steps, rj: rj, broken: false, pts: [navPos(Ls[la].N, ia), a].concat(mid, [b, navPos(Ls[lb].N, ib)]), x: (a[0] + b[0]) / 2, t0: -9, n: 0, q: 0,
       ride: ladRideOf(sh.T, l, a[2], b[2]) });   // ride：繩梯綁在砲塔上 ⇒ pts 是開局的座標，爬的時候照 ladRide 換到現在（27_turret.js）
   });
   var home = -1;
@@ -490,7 +490,8 @@ function callHands(sh) {
 /** 到了：換成那個職位（砲班 ⇒ 下一拍 reassign 分砲；送藥手 ⇒ 接倒下那位的砲；舵手 ⇒ 站到舵輪後）。不在那一層（路斷了）⇒ 任務作廢、照常閒晃。 */
 function handJoin(sh, c) {
   var H = c.hand, J = H.job, NV = sh.nav;
-  if (J.kind === 'staff' || J.kind === 'carry') { medJoin(sh, c); return; }   // 醫療艙的人手、搬傷員（44_medic.js）
+  if (J.kind === 'staff' || J.kind === 'carry') { medJoin(sh, c); return; }
+  if (J.kind === 'repair') { carpJoin(sh, c); return; }                // 木匠修東西（46_carpenter.js）   // 醫療艙的人手、搬傷員（44_medic.js）
   if (J.kind === 'pump') { pumpJoin(sh, c); return; }                   // 搖抽水機（45_pumps.js）
   var hr = J.reg !== undefined ? handReg(sh, c) : -1;                   // 量不到（-1）⇒ 照以前當作到了：爬進轉過的砲塔，梯頭那一點是開局時算的、吊籃已經轉走 ⇒ snap 不到（測試模式量到：同一人被派 88 次、次次作廢）
   if (H.lv !== J.lv || (hr >= 0 && hr !== J.reg)) { tlgEv(sh, c, 'void', { job: J.kind, lv: [H.lv, J.lv], reg: [hr, J.reg === undefined ? null : J.reg] }); H.job = null; H.wait = 1; return; }   // 不在那一層、確定在別塊（路斷了）⇒ 作廢；void：測試模式記一筆（83_testlog.js）
@@ -529,7 +530,7 @@ function navRefresh(sh) {
   NV.levels.forEach(function (L, li) {
     var b = L.dirty; if (!b) return; L.dirty = null;
     var n0 = L.N.regs.length;
-    if (!L.own) { var O = L.N; L.N = { x0: O.x0, nx: O.nx, ny: O.ny, Z: O.Z.slice(), blk: O.blk, rot: O.rot, sh: O.sh }; L.own = true; }
+    if (!L.own) { var O = L.N; L.Z0 = O.Z; L.N = { x0: O.x0, nx: O.nx, ny: O.ny, Z: O.Z.slice(), blk: O.blk, rot: O.rot, sh: O.sh }; L.own = true; }
     var N = L.N;
     var xa = Math.max(1, Math.floor((b[0] - N.x0) / NAV_C) - 2), xb = Math.min(N.nx - 2, Math.ceil((b[2] - N.x0) / NAV_C) + 2), ya = Math.max(1, Math.floor(b[1] / NAV_C) - 2), yb = Math.min(N.ny - 2, Math.ceil(b[3] / NAV_C) + 2);
     for (var y = ya; y <= yb; y++) for (var x = xa; x <= xb; x++) {
@@ -555,5 +556,5 @@ function navRefresh(sh) {
 function handsText(sh) {
   if (!sh.nav) return '';
   var h = sh.crew.filter(function (c) { return c.role === ROLE.HAND && able(c); }), go = h.filter(function (c) { return c.hand.job; }).length;
-  return '　預備 ' + (h.length - go) + (go ? '（補位中 ' + go + '）' : '');
+  return '　預備 ' + (h.length - go) + (go ? '（補位中 ' + go + '）' : '') + carpText(sh);
 }

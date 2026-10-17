@@ -75,6 +75,8 @@ python -I admin.py authors
 python -I admin.py shipcheck --id phoenix    # 不給 --id ＝ 每一艘
 # meta 規格表對拍（TASK-0672）：規格表本身、每艘船用到的 kind（沒列的、掛錯地方的）、造船規格 §9 那張 kind 表與每個 kind 的 need 固定點；不一致 ⇒ exit 非 0
 python -I admin.py metaspec                  # --doc <檔案> ＝ 不經 senate cmd doc
+# 只寫動力件與梯子的格子清單 parts[].cellRuns（meta、格子一位元不動 ⇒ 不會把作品上還沒定案的 meta 帶進來；TASK-0676 木匠照它整件還原梯子）
+python -I admin.py cells --id constitution
 ```
 
 匯入檢查的規則在 `js/75_shipcheck.js`（成品帶 `?shipcheck=<代號>`：跟憲法號擺在最遠、固定步長跑 2 秒，結果寫進頁面）—— 遊戲自己知道缺了什麼會退回什麼，所以規則住在遊戲裡，admin.py 只用無頭 Chrome 跑、寫報告。
@@ -245,6 +247,7 @@ python -I admin.py cache --all    # 每艘都比 ＝ 比對來源：雕刻作品
 | `40_crew.js` | 船員：站位、操砲、人手集中、血量與傷亡（`hurt`／`damageCrew`）、火槍 |
 | `42_hands.js` | 預備水手：梯子（`shipLadders`，關聯 meta `kind=ladders`；繩梯 `ropeLadders`：雕刻的橫繩組標了 climb ⇒ 每道橫繩 meta 帶 `ratlines`／`rung`／`foot`／`head`，foot → 最低一道 → 最高一道 → head；兩頭都在甲板上 ⇒ 水手也走，一頭在桅頂 ⇒ 只有第一人稱；斷不斷照橫繩：斷一半以上 ⇒ 斷了，basecamp TASK-0678）、走得到的甲板（`navLevels`）與走路格（`navBuild`，記在船型上）、找路（`navPath` BFS＋`navSmooth` 拉直）、每一步 `stepHand`（走、爬梯子、閒晃 `wander`）、點名派人 `callHands`、到了換職位 `handJoin`；甲板 meta 版（TASK-0572）：一層甲板一層、走路格照那一欄的地板、切成連通區域（`navRegions`）、跨層在「層:區域」上找梯子（`handRoute`；斷掉的梯子不走）、尋路動態更新（細節設定「尋路更新」`NAV_RE` 秒，0 ＝ 關：打掉的格記髒區 `navDirty`，每個間隔有髒的才重算那幾層與檢查梯子 `navRefresh`）。**砲塔頂一層**（`turTopLevel`；Tim 2026-10-17「確定水手可以上去就ok」）：砲塔層的殼頂比最上層甲板的範圍高 ⇒ 多一層「砲塔頂」（會轉的走路格），綁在砲塔上的繩梯接吊籃 ⇄ 砲塔頂；閒晃不上去（露天），頂上的砲另外點名（缺幾個派幾個，`gun…^`）；`navReach` 一頭在砲塔頂 ⇒ 直線走不到；爬的時候 `H.climb.R` 照 `ladRide`（爬到一半砲塔轉了也不脫手）。哨兵號量過：頂上砲班全倒 ⇒ 15 秒開始有人爬、45 秒補回 5／6，爬的那段砲塔轉了 −135° → −43° |
 | `43_swim.js` | 落水求生：被水淹過頭 `drownCheck`（每半秒）、變成在水裡 `toSwim`（c.st 5，世界座標）、每一步 `stepSwim`（浮上來、踩水、往船游）、往哪游 `boardPoint`、爬回船上 `board`、溺水 `drown` |
+| `46_carpenter.js` | 木匠（TASK-0676 ②）：`carpInit`（crew.carpenter，有走路格才上船）、點名時 `carpTick` 挑一件（斷掉的梯子 ⇒ 那件關聯照檔頭 `parts[].cellRuns` 整件還原；甲板破洞 ⇒ 一個洞一件、腳下那一層補回，連著兩塊的先修）、`restoreVoxel`（`removeVoxel` 反過來）；要修的清單只在尋路刷新後重掃。船醫（①）在 `44_medic.js medSurgeons` |
 | `41_crew_art.js` | 船員貼圖（單圖；程式畫的替代品／美術素材）與程式動作（`crewPose`：晃、上下、縮放、傾斜、躺倒、閃紅）；手持物（點陣圖在程式裡畫，`heldItem`） |
 | `50_sim.js` | 電腦（瞄準、開火）與固定步長的一步 `step()` |
 | `51_captain.js` | 砲長：瞄準模式（水線／砲甲板／帆具／甲板人員／彈藥庫）、各砲長的偏好與換模式（`captainThink`）、模式要瞄哪裡（`modeAim`） |
