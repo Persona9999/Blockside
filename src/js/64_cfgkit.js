@@ -105,3 +105,8 @@ function cfgPage(d) {
   show();
   return { el: el, show: show };
 }
+/** 設定後台的視窗（TASK-0669 從 36_rooms.js 搬來）：開這一頁的分頁（opener）＞ 嵌這一頁的那一頁（parent）；都沒有（直接開網址）⇒ null，什麼都不送。 */
+function admWin() {
+  try { if (window.opener && !window.opener.closed) return window.opener; } catch (e) { /* 跨來源 */ }
+  return window.parent !== window ? window.parent : null;
+}

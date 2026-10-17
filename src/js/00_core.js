@@ -61,6 +61,7 @@ var WIND = [0.6, 0, 1.65];   // 風往哪吹（m/s，煙飄的速度）；方向
 
 function norm(v) { var l = Math.hypot(v[0], v[1], v[2]) || 1; return [v[0] / l, v[1] / l, v[2] / l]; }
 function add(a, b) { return [a[0] + b[0], a[1] + b[1], a[2] + b[2]]; }
+function lerp3(a, b, k) { return [a[0] + (b[0] - a[0]) * k, a[1] + (b[1] - a[1]) * k, a[2] + (b[2] - a[2]) * k]; }   // TASK-0669 從 03_camera.js 搬來（繩也用）
 function sub(a, b) { return [a[0] - b[0], a[1] - b[1], a[2] - b[2]]; }
 function mul(a, k) { return [a[0] * k, a[1] * k, a[2] * k]; }
 function dot(a, b) { return a[0] * b[0] + a[1] * b[1] + a[2] * b[2]; }

@@ -34,11 +34,12 @@ function sailTex(T) {
 }
 function sailBuf(ow) {
   var nv = 0, ni = 0, isShip = !!ow.crew, F = isShip && PHYS && ow.shreds && ow.shreds.length ? ow.shreds : null, A = ow.T && ow.T.sailAtlas;
-  if (F) {                                                               // 緩衝照帆的模板配（30_rig_physics.js clothSetup）；多了布片不夠 ⇒ 加大
-    var mv = 0, mi = 0; ow.cl.forEach(function (c) { mv += c.T.n; mi += c.T.tris.length; }); F.forEach(function (f) { mv += f.n; mi += f.T.sim.tris.length; });
-    if (SBV.length < mv * SB_STRIDE) SBV = new Float32Array(Math.ceil(mv * 1.33) * SB_STRIDE);
-    if (SBI.length < mi) SBI = new Uint32Array(Math.ceil(mi * 1.33));
-  }
+  // 暫存區照這一艘現在要畫的配、不夠就加大三成（TASK-0669：以前開局時 30_rig_physics.js clothSetup 照最大那一型先配 ⇒ 物理檔碰畫的緩衝）
+  var mv = 0, mi = 0, m1 = 1; (ow.cl || []).forEach(function (c) { mv += c.T.n; mi += c.T.tris.length; m1 = Math.max(m1, c.T.n); });
+  if (F) F.forEach(function (f) { mv += f.n; mi += f.T.sim.tris.length; m1 = Math.max(m1, f.n); });
+  if (!SBV || SBV.length < mv * SB_STRIDE) SBV = new Float32Array(Math.ceil(Math.max(1, mv) * 1.33) * SB_STRIDE);
+  if (!SBI || SBI.length < mi) SBI = new Uint32Array(Math.ceil(Math.max(1, mi) * 1.33));
+  if (!SBN || SBN.length < m1 * 3) { SBN = new Float32Array(m1 * 3); SBP = new Float32Array(m1 * 3); }
   var td = [], tk = '';                                                  // 這一格跟著帆腳畫的繩（looseBuf）
   (ow.cl || []).forEach(function (c, k) {
     var P;
@@ -86,15 +87,6 @@ function sailBuf(ow) {
   ow.sb.n = ni;
 }
 /** 細格的位置：照權重從物理的粗格內插（粗格就是細格 ⇒ 原樣）。 */
-function clothFine(c, out) {
-  var T = c.T, p = c.p, mi = T.mi, mw = T.mw;
-  for (var i = 0; i < T.n; i++) {
-    var o = i * 4, x = 0, y = 0, z = 0;
-    for (var k = 0; k < 4; k++) { var w = mw[o + k]; if (!w) break; var q = mi[o + k] * 3; x += p[q] * w; y += p[q + 1] * w; z += p[q + 2] * w; }
-    out[i * 3] = x; out[i * 3 + 1] = y; out[i * 3 + 2] = z;
-  }
-  return out;
-}
 /** 垂下來的繩（物理開著才有）：每一格畫面重做。 */
 function looseBuf(sh) {
   var L = [];

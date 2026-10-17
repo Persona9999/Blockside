@@ -169,13 +169,13 @@ function wpDrop(x, z) {
   if (rndW() < 0.3) wfAdd(x, z, 0, 0, rgW(3, 5), 0.3, 0.8, 0.5, 0);
 }
 /** 艙內的水從破口往外流（33_flood.js，粒子模式）：洞口往外噴幾滴（量照每秒流出幾 m³）。只給人看。 */
-function wpPour(P, out, rate) {
+function waterPour(P, out, rate) {
   var L = wpLv(); if (!L) return;
   var ol = Math.hypot(out[0], out[2]) || 1, n = Math.min(6, rate * 2) * L.k; WP_SRC = 'pour';
   for (var i = 0; i < n; i++) { var u = rgW(1, 3); wsAdd(P[0], P[1], P[2], out[0] / ol * u + gsW() * 0.3, rgW(-0.5, 0.8), out[2] / ol * u + gsW() * 0.3, rgW(0.8, 1.4), rgW(0.15, 0.3), 0.7); }
 }
 /** 擦撞（31_sailing.js collide，貼著的每一步）：兩艘之間往上、往兩舷噴，量照相對速度。 */
-function wpBump(pa, pb, A, B) {
+function waterBump(pa, pb, A, B) {
   var L = wpLv(); if (!L) return;
   var rel = Math.hypot(A.vel[0] - B.vel[0], A.vel[2] - B.vel[2]), tx = pb[2] - pa[2], tz = pa[0] - pb[0], tl = Math.hypot(tx, tz) || 1, mx = (pa[0] + pb[0]) / 2, mz = (pa[2] + pb[2]) / 2;
   tx /= tl; tz /= tl; WP_SRC = 'bump';
@@ -240,3 +240,7 @@ function wpPushSpray(pushPt) {
   var b = 0.55 + 0.45 * WX.sun, c = [0.9 * b, 0.94 * b, 0.98 * b];
   for (var i = 0; i < WS.n; i++) { var f = WS.life[i] / WS.max[i]; pushPt([WS.p[i * 3], WS.p[i * 3 + 1], WS.p[i * 3 + 2]], WS.s[i] * (1.3 - 0.3 * f), c, WS.a[i] * Math.min(1, f * 3), -1); }
 }
+// 訂閱（TASK-0669：模擬層只發事件，00_events.js）
+evOn('wpPour', waterPour, 0, true); evOn('wpBump', waterBump, 0, true); evOn('ptMute', function (on) { PT_MUTE = !!on; }, 0, true);
+evOn('viewStep', stepWater, 3, true);                              // 粒子之後（12_effects.js stepPts order 2）—— 跟拆之前 step() 裡的順序一樣
+evOn('viewStepSlow', function (dt) { stepWater(dt, 'ship'); }, 0, true);   // 殉爆慢動作中：這裡只生船邊的水花（其餘照畫面的時間走，73_slowmo.js slowVisStep）

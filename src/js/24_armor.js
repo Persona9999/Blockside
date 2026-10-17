@@ -76,43 +76,21 @@ function armorSetup(T) {
   }
   propSetup(T);                                                          // 會轉的體素件（螺旋槳；檔尾）
 }
-/** 船型 T 的裝甲上 GPU（05_hull.js「船體網格」那一步，smoothSetup 之後）：每塊一份合併網格與平滑面（開戰時每艘共用，被打到的區才各自重建）。
- *  平滑面的格角碰到船殼（T.hullG）⇒ 釘在格角上（跟拆出來之前一樣：圓筒底那一圈貼著甲板、不往上縮）。 */
-function armorMesh(T) {
-  (T.armor || []).forEach(function (A) {
-    A.rs0 = new VK.RegionSet(gl, A.grid, QIDX); A.rs0.buildAll();
-    A.smP = null; if (!T.smRK) return;
-    var nx = Math.ceil(T.h.size[0] / SM_R), ny = Math.ceil(T.h.size[1] / SM_R), b = A.bb;
-    A.smP = new Map();
-    T.smRK.forEach(function (rk) {
-      var rx = rk % nx, ry = Math.floor(rk / nx) % ny, rz = Math.floor(rk / (nx * ny));   // 區碰不到這塊的外框（±2 格：surface nets 看鄰格）⇒ 跳過
-      if ((rx + 1) * SM_R < b[0] - 2 || rx * SM_R > b[3] + 2 || (ry + 1) * SM_R < b[1] - 2 || ry * SM_R > b[4] + 2 || (rz + 1) * SM_R < b[2] - 2 || rz * SM_R > b[5] + 2) return;
-      var m = smBuild(T, A.grid, rk, null, T.hullG); if (m) A.smP.set(rk, m);
-    });
-  });
-  (T.props || []).forEach(function (P) {                                // 會轉的體素件（螺旋槳；檔尾）：材質標 smooth（鐵甲）⇒ 整份平滑＋金屬反光（Tim 2026-10-17），方塊網格化跳過它們
-    var mt = matInfo(P.mat); P.smP = P.smRK = P.smO = null;
-    if (mt.smooth === true) { P.grid.sm = P.grid; P.smO = { SG: P.grid, mm: +mt.metal || 0, mr: isFinite(+mt.rough) && mt.rough !== undefined ? +mt.rough : 0.5 }; P.smRK = smRegions(T, P.grid); P.smP = new Map();
-      P.smRK.forEach(function (rk) { var m = smBuild(T, P.grid, rk, null, null, P.smO); if (m) P.smP.set(rk, m); }); }
-    P.rs0 = new VK.RegionSet(gl, P.grid, QIDX); P.rs0.buildAll();
-  });
-}
 /** 開一艘船（10_ship.js makeShip，gunMountInit 之後）：每塊裝甲一份（共用船型那一份格子與網格）。沒有裝甲 ⇒ sh.arm 不設（一行都不多算）。 */
 function armorShip(sh) {
   var T = sh.T, P = propShip(sh);                                       // 會轉的體素件（螺旋槳；檔尾）也排在 sh.arm 裡（a.prop）：打到、畫、重網格化同一套
-  if (!T.armor || !T.armor.length) { if (P.length) { sh.arm = P; sh.armN0 = 0; } return; }
+  if (!T.armor || !T.armor.length) { if (P.length) { sh.arm = P; sh.armN0 = 0; evEmit('armorShip', sh); } return; }
   sh.arm = T.armor.map(function (A) {
-    var tu = A.tur !== undefined, g = tu ? null : (sh.mounts || []).filter(function (q) { return q.model.path === A.mount; })[0] || null, grid = A.grid.share(), rs = new VK.RegionSet(gl, grid, QIDX);
-    rs.shareFrom(A.rs0);
+    var tu = A.tur !== undefined, g = tu ? null : (sh.mounts || []).filter(function (q) { return q.model.path === A.mount; })[0] || null, grid = A.grid.share();
     var nd = tu ? (sh.tur ? sh.tur[A.tur] : null) : g ? g.mt : null;    // 跟著哪個節點轉：砲塔的殼 ⇒ 那座砲塔（27_turret.js）；舊的 kind=armor ⇒ 那門砲的迴旋
-    var a = { A: A, T: T, sh: sh, g: g, nd: nd, grid: grid, rs: rs, pin: T.hullG, lost: 0 };
+    var a = { A: A, T: T, sh: sh, g: g, nd: nd, grid: grid, pin: T.hullG, lost: 0 };
     if (nd) armRing(A, ndPivots(nd));                                  // 掃過的那一圈（走路看的牆；TASK-0655）：船型第一艘算一次（疊在砲塔上的照每一層的轉軸）
-    smShare(a, A.smP);
     return a;
   });
   armDeckZf(T);
   sh.armN0 = T.armor.reduce(function (s, A) { return s + A.n; }, 0);   // 開戰時裝甲幾格（重量：32_hull.js shipT、05_material.js voxLostT）；螺旋槳不算（重量照模型）
   if (P.length) sh.arm = sh.arm.concat(P);
+  evEmit('armorShip', sh);                                              // 每塊的網格與平滑面掛上去（62_simview.js；只給人看）
 }
 /** 裝甲現在轉了多少（跟著的那個節點一路的角度：那門砲的 g.mt.yaw、砲塔；沒有 ⇒ 0）。 */
 function armYaw(a) { return a.nd ? ndYaw(a.nd) : 0; }
@@ -320,9 +298,8 @@ function navRestG(sh, rk) {
 function armRemove(sh, a, x, y, z) {
   var c = a.grid.set(x, y, z, 0);
   if (c <= 0) return 0;
-  a.rs.touch(x, y, z); a.lost++; sh.lost++;
+  evEmit('armCell', a, x, y, z); a.lost++; sh.lost++;               // 網格、平滑面附近的區重建（62_simview.js；只給人看）
   if (a.A.tur !== undefined && sh.T.turDeck && NAV_RE > 0 && sh.nav) navDirty(sh, x, y, z);
-  if (a.smD) smTouch(a, x, y, z);                                       // 平滑面：附近的區重建（15_smooth.js）
   return c;
 }
 /** 殉爆的彈坑（23_powder.js；c ＝ 爆心的船的格座標、R 格、w 世界座標）碰得到的裝甲：跟 blastStep 同一個參差的球，這一步就打掉；碎屑只抽碎木的亂數（戰局的 rnd() 不動）。 */
@@ -348,32 +325,6 @@ function armBlast(sh, c, R, w) {
     spawnPlates(sh, removed, [0, 1, 0], 30, 3, 20, Mw);
   });
   return n;
-}
-/** 畫船殼那一趟（60_render.js drawHulls，cutSet 之後）：每塊照自己的矩陣畫；剖面 uCutL ＝ 裝甲 → 船的格座標（01_gl.js voxFS），畫完放回單位矩陣。 */
-function armDraw(prog, sh) {
-  sh.arm.forEach(function (a) {
-    if (a.prop && propGone(a)) return;                                  // 螺旋槳的模型掉了（掛的那一格被打斷）⇒ 不畫（飛出去的是模型的網格，21_gunnery.js blowModel）
-    var L = armLocal(a);
-    gl.uniformMatrix4fv(prog.u.uModel, false, L ? M4.mul(sh.M, L) : sh.M);
-    if (prog.u.uCutL) gl.uniformMatrix4fv(prog.u.uCutL, false, L || CUT_ID);
-    a.rs.draw();
-  });
-  if (prog.u.uCutL) gl.uniformMatrix4fv(prog.u.uCutL, false, CUT_ID);
-}
-/** 平滑面（drawModels，smDraw 之後）：P.tri 的剖面照世界座標換回船的格座標（uCutInv ＝ sh.inv）⇒ 轉過也切得對。 */
-function armSmDraw(prog, sh) { sh.arm.forEach(function (a) { if (a.smR && a.smR.size && !(a.prop && propGone(a))) smDraw(prog, a, armM(a)); }); }   // 螺旋槳掉了 ⇒ 不畫
-/** 重網格化（60_render.js remesh）：方塊照預算、平滑面照 sl 區；回 [剩的預算, 剩的區]。 */
-function armRemesh(sh, left, sl) {
-  sh.arm.forEach(function (a) {
-    if (left > 0 && a.rs.dirty.size) left -= rsFlushSome(a.rs, left);
-    if (sl > 0 && a.smD && a.smD.size) sl -= smFlush(a, sl);
-  });
-  return [left, sl];
-}
-/** 重開一場（70_flow.js reset）：這艘自己的緩衝丟掉（共用船型的那幾份不動）。 */
-function armDispose(sh) {
-  if (!sh.arm) return;
-  sh.arm.forEach(function (a) { a.rs.dispose(); if (a.smR) a.smR.forEach(function (m) { if (m.own) smFree(m); }); });
 }
 /** 點選瞄準（71_input.js pick）：射線也打裝甲（換到它的座標打、碰到的那一格換回船的格座標；回傳的 x、y、z 跟 VK.raycast 一樣 ＋0.5 ＝ 格心）。 */
 function armRay(o, oL, dL, tMax) {
@@ -450,10 +401,8 @@ function propSetup(T) {
 function propShip(sh) {
   var T = sh.T; if (!T.props || !T.props.length) return [];
   return T.props.map(function (P) {
-    var m = sh.models[P.k], grid = P.grid.share(), rs = new VK.RegionSet(gl, grid, QIDX);
-    rs.shareFrom(P.rs0);
-    var a = { A: P, T: T, sh: sh, g: null, prop: true, m: m, grid: grid, rs: rs, pin: P.smO ? null : T.hullG, lost: 0, smRK: P.smRK, smO: P.smO };   // smRK／smO：平滑的螺旋槳自己那幾區與選項（15_smooth.js smTouch／smFlush）；不釘船殼（它會轉）
-    smShare(a, P.smP);
+    var m = sh.models[P.k], grid = P.grid.share();
+    var a = { A: P, T: T, sh: sh, g: null, prop: true, m: m, grid: grid, pin: P.smO ? null : T.hullG, lost: 0, smRK: P.smRK, smO: P.smO };   // smRK／smO：平滑的螺旋槳自己那幾區與選項（15_smooth.js smTouch／smFlush）；不釘船殼（它會轉）
     if (m) m.vox = a;
     return a;
   });
