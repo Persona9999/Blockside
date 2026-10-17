@@ -142,7 +142,7 @@ function fpFollow(next) {
 function fpLadders(sh) {
   return shipLadders(sh.T).map(function (l) {
     var P = l.pts, mid = P.slice(1, -1).map(function (q) { return [q[0], q[1], q[2] + CLIMB_LIFT]; });
-    return { name: l.name, up: [P[0]].concat(mid, [P[P.length - 1]]) };
+    return { name: l.name, up: [P[0]].concat(mid, [P[P.length - 1]]), rope: !!l.rope, span: l.span || null };
   });
 }
 /** 腳下：(x, y) 那一柱在 z 往下 down（沒給 ＝ FP_DOWN）、往上 up（沒給 ＝ FP_UP）格內站得住的高度（離 z 最近的）；站不住 ⇒ −1。 */
@@ -332,13 +332,20 @@ function fpEyeZ(dt) {
   }
   FP.ez = FP.fz + FP.eo;
 }
-/** 旁邊有沒有梯腳（往上爬）或梯頭（往下爬）：水平 FP_REACH 格內、高度差 4 格內，取最近的那一個。 */
+/** 旁邊有沒有梯腳（往上爬）或梯頭（往下爬）：水平 FP_REACH 格內、高度差 4 格內，取最近的那一個。
+ *  繩梯（ratlines，L.rope）：水平 FP_REACH_ROPE 格、高度差 FP_REACH_ROPE_Z 格內；梯腳是一整段（L.span ＝ 最低一道的前後兩端 x，沿舷牆內側）⇒ 站在那一排 shroud 旁邊哪裡都摸得到，
+ *  從站的那個 x 開始爬（⛔ 只有一個點 ⇒ 一組 ratlines 前後 3–4.6 m，站在 shroud 旁邊常常離那一點 0.9 m 以上；Tim 2026-10-17「繩梯…還是不能爬(是否可以加大判定範圍?)」）。 */
+var FP_REACH_ROPE = 18, FP_REACH_ROPE_Z = 6;
 function fpNear(p) {
   var best = null, bd = 1e9;
   (FP.lads || []).forEach(function (L) {
-    [[L.up[0], L.up], [L.up[L.up.length - 1], L.up.slice().reverse()]].forEach(function (e) {
-      var q = e[0], dh = Math.hypot(q[0] - p[0], q[1] - p[1]);
-      if (dh < FP_REACH && Math.abs(q[2] - p[2]) <= 4 && dh < bd) { bd = dh; best = { pts: e[1], up: e[1] === L.up, name: L.name }; }
+    [[L.up[0], L.up], [L.up[L.up.length - 1], L.up.slice().reverse()]].forEach(function (e, k) {
+      var q = e[0], pts = e[1], R = L.rope ? FP_REACH_ROPE : FP_REACH, RZ = L.rope ? FP_REACH_ROPE_Z : 4, dh;
+      if (L.rope && L.span && k === 0) {                                // 繩梯的梯腳：離那一段最近的點
+        var cx = clamp(p[0], L.span[0], L.span[1]); dh = Math.hypot(cx - p[0], q[1] - p[1]);
+        pts = [[cx, q[1], q[2]]].concat(pts.slice(1));
+      } else dh = Math.hypot(q[0] - p[0], q[1] - p[1]);
+      if (dh < R && Math.abs(q[2] - p[2]) <= RZ && dh < bd) { bd = dh; best = { pts: pts, up: k === 0, name: L.name }; }
     });
   });
   return best;
