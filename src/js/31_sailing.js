@@ -171,7 +171,7 @@ function sailShip(sh, dt) {
   F = fwd(sh.yaw);
   sh.vel = mul(F, sh.spd);
   if (VX) { var cf = vxFlow(sh.px, sh.pz); sh.vel[0] += cf[0]; sh.vel[2] += cf[1]; }   // 大漩渦（08_sea.js）：水流帶著船走 ⇒ sh.vel 是對地的速度（砲彈帶的船速、瞄準的前置量、帆上的視風都照它）
-  if (sh.vxEaten) { sh.spd *= Math.max(0, 1 - 0.5 * dt); sh.vel = [cf[0] - 0.3 * sh.px, 0, cf[1] - 0.3 * sh.pz]; }   // 被捲進眼裡（32_hull.js）：自己的船速兩秒內沒了，只跟著水流、往中心拉（⛔ 不拉 ⇒ 靠原本的航速滑出眼外 49 m 才沉完）
+  if (sh.vxEaten && sh.sinkingFinal) { sh.spd *= Math.max(0, 1 - 0.5 * dt); sh.vel = [cf[0] - 0.3 * sh.px, 0, cf[1] - 0.3 * sh.pz]; }   // 被漩渦拖沉了（32_hull.js）：自己的船速兩秒內沒了，只跟著水流、往中心拉（⛔ 不拉 ⇒ 靠原本的航速滑出眼外才沉完）
   var px0 = sh.px, pz0 = sh.pz;
   sh.px += sh.vel[0] * dt; sh.pz += sh.vel[2] * dt;
   if (sh.anc) anchorStep(sh, dt, px0, pz0);                          // 錨咬著 ⇒ 錨鏈孔拉回鍊長以內、船繞錨鏈孔轉（76_anchor.js）

@@ -63,13 +63,14 @@ function stepShip(sh, dt) {
   var fl = sh.fl && !sh.broken ? sh.fl : null;                                   // 粒子模式（33_flood.js）：進水、下沉、傾斜照艙內的水；斷成兩截照舊用公式（一定沉）
   if (fl && !sh.sinkingFinal && !sh.sunk) floodStep(sh, fl, dt);                 // 開始沉之後不再算水（船要下去了；⛔ 照算 ⇒ 沉掉的船積到 8 萬噸、白耗 CPU）
   else if (sh.fl && PHX.sinkflood && (sh.broken || sh.sinkingFinal) && !sh.sunk) floodVis(sh, sh.fl, dt);   // 斷成兩截、開始沉 ⇒ 水照樣灌進去給人看（33_flood.js floodVis：只改畫面與讀數；沉完就停）
+  var vd = VX && !sh.sinkingFinal && !sh.sunk ? vxDrag(sh, dt) : 0;            // 大漩渦的眼：這一步被往下拖（負 ＝ 出了眼、浮回來）幾公尺（08_sea.js）
   if (!sh.sunk) {
-    if (fl) { if (!sh.sinkingFinal) sh.sink += (floodSinkT(sh, fl) - sh.sink) * Math.min(1, dt / FL_TAU); }   // 照艙內的水該多吃水多少，慢慢跟過去
+    if (fl) { if (!sh.sinkingFinal) sh.sink += (floodSinkT(sh, fl) + (sh.vxSink || 0) - sh.sink) * Math.min(1, dt / FL_TAU); }   // 大漩渦：照艙內的水 ＋ 被眼拖下去的那一份   // 照艙內的水該多吃水多少，慢慢跟過去
     else sh.sink = Math.max(0, sh.sink + Math.min(Q * 1.1e-5 - 0.004 * pumpK(sh), 0.25) * fk * dt);   // pumpK：基礎抽水量／PUMP_REF（TASK-0604；憲法號 1）   // 進水與抽水一起照滑桿縮放（⛔ 只縮進水 ⇒ 調慢之後抽水永遠贏、永遠不沉）；
                                                                               // 上限 0.25 m/s：彈藥庫殉爆打掉三十幾萬格 ⇒ 不設上限兩秒就沉完，看不到船斷開
-    if (sh.sink > 4.2 && !sh.sinkingFinal && fk > 0) { sh.sinkingFinal = true; note(sh, '進水太多，開始沉了'); }
-    if (VX && !sh.sinkingFinal && Math.hypot(sh.px, sh.pz) < VX.re) { sh.sinkingFinal = true; sh.vxEaten = true; sh.fate = '捲進漩渦'; note(sh, '被捲進漩渦的中心，往下沉了', true); }   // 大漩渦的眼（08_sea.js VX.re）
-    if (sh.sinkingFinal) { sh.sinkV += 0.06 * (sh.vxEaten ? 3 : fk) * dt; sh.sink += sh.sinkV * dt; }   // 捲進漩渦 ⇒ 照三倍往下拉（約 10 秒沉完；進水速度調成 0 也一樣）
+    if (!fl && vd) sh.sink = Math.max(0, sh.sink + vd);                         // 公式模式：被拖下去的直接加在吃水上（出了眼照樣慢慢浮回來）
+    if (sh.sink > 4.2 && !sh.sinkingFinal && (fk > 0 || sh.vxSink > 0)) { sh.sinkingFinal = true; if (sh.vxSink > 0) { sh.vxEaten = true; sh.fate = '捲進漩渦'; note(sh, '被漩渦拖下去，開始沉了', true); } else note(sh, '進水太多，開始沉了'); }   // 大漩渦：跟進水同一條線（4.2 m）—— 進水速度調成 0 也照樣會被拖沉
+    if (sh.sinkingFinal) { sh.sinkV += 0.06 * (sh.vxEaten ? Math.max(fk, 1) : fk) * dt; sh.sink += sh.sinkV * dt; }
     if (sh.sink > 9) { sh.sunk = true; sh.sunkAt = SIMT; note(sh, '沉沒', true); }   // sunkAt：結算判自爆沉沒（61_hud.js shipFate）
   } else { sh.sinkV = Math.min(sh.sinkV + 0.05 * dt, 1.2); sh.sink += sh.sinkV * dt; }
   // 傾斜：破洞那一舷往下（格座標 +y ＝ 船體 +Z（右舷）；繞 +X 轉正角時 +Z 那邊下沉）；粒子模式照水的重心（33_flood.js floodTilt）

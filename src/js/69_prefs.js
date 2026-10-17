@@ -98,6 +98,7 @@ var PREF_ITEMS = [
   prefNum('funhard', prefLim('funhard'), false, function () { return FUN.hard; }, function (x) { FUN.hard = x; }),
   prefAny('dmg', function (o) { var dm = {}; Object.keys(DMG_Q).forEach(function (t) { if (DMG[t] !== LIM[DMG_Q[t]][2]) dm[t] = DMG[t]; }); if (Object.keys(dm).length) o.dmg = dm; },   // 每發傷害（砲的設定頁；網址 ?dmg24= 那幾個優先）
     function (p) { if (p.dmg && typeof p.dmg === 'object') Object.keys(DMG_Q).forEach(function (t) { if (Q.has(DMG_Q[t])) return; var x = prefOk(p.dmg[t], LIM[DMG_Q[t]], true); if (x !== undefined) DMG[t] = x; }); }),
+  prefAny('wxk', function (o) { var w = wxkSnap(); if (Object.keys(w).length) o.wxk = w; }, function (p) { if (p.wxk && typeof p.wxk === 'object') wxkApply(p.wxk); }),   // 天氣設定（08_weather.js WXK_ITEMS）
   prefAny('guns', function (o) { var gs = gunsSnap(); if (Object.keys(gs).length) o.guns = gs; }, function (p) { if (p.guns && typeof p.guns === 'object') gunsApply(p.guns); }),   // 砲的設定（68_guncfg.js）
   prefAny('furn', function (o) { var fs = furnSnap(); if (Object.keys(fs).length) o.furn = fs; }, function (p) { if (p.furn && typeof p.furn === 'object') furnApply(p.furn); }),   // 道具設定（67_furncfg.js）
   prefAny('drv', function (o) { var dv = drvSnap(); if (Object.keys(dv).length) o.drv = dv; }, function (p) { if (p.drv && typeof p.drv === 'object') drvApply(p.drv); }),   // 動力件（67_furncfg.js、31_drive.js DRVP）

@@ -18,9 +18,36 @@ var WEATHERS = {
 //   航速 ∝ √WIND_SPD（31_sailing.js）、帆上的風 × WIND_SPD（30_rig_physics.js）。浪的方向不跟：湧浪是開局那陣風吹出來的（08_sea.js 建一次）。
 WEATHERS.clear.gusts = { dir: 0.2, spd: 0.15, per: [233, 97, 41] };
 WEATHERS.storm.gusts = { dir: 0.6, spd: 0.3, per: [71, 29, 11] };
-// 大漩渦（TASK-0683；Tim 2026-10-17：「暴風雨+海中央大漩渦(在敵我中間)」）：暴風雨的每一格照抄，再加 vortex（08_sea.js VX）——
-//   depth 中間深幾倍的 rv、v 水流最快（m/s，≈ 6.8 節）、inflow 往中心吸（切向的幾成）、eye 眼的半徑（幾倍的 rv：進去就被捲下去）。
-WEATHERS.maelstrom = Object.assign({}, WEATHERS.storm, { name: '大漩渦', vortex: { depth: 0.3, v: 3.5, inflow: 0.2, eye: 0.22 } });
+// 大漩渦（TASK-0683；Tim 2026-10-17：「暴風雨+海中央大漩渦(在敵我中間)」）：暴風雨的每一格照抄，再加 vortex（08_sea.js vxInit 讀）——
+//   r 水流最快那一圈的半徑（m）、depth 中間多深（m）、width 漏斗寬窄（幾倍的 r）、v 水流最快（節）、inflow 往中心吸（切向的幾成）、eye 眼的半徑（m）、pull 眼把船往下拖（m/秒，0 ＝ 不拖）。
+//   預設（Tim 2026-10-17「半徑再放大2倍 然後更深一點 水流快一些」）：r 95 → 190、depth 28 → 75、v 6.8 → 10 節、eye 21 → 42；可以在天氣設定頁改（下面 WXK_ITEMS）。
+WEATHERS.maelstrom = Object.assign({}, WEATHERS.storm, { name: '大漩渦', vortex: { r: 190, depth: 75, width: 0.6, v: 10, inflow: 0.2, eye: 42, eyeDepth: 60, pull: 0.15 } });
+// 天氣設定頁（Tim 2026-10-17：「或是開一個天氣設定頁(參考船隻設定) 可以設定不同天氣參數(大漩渦半徑 轉速 深度等放裡面)」）：
+//   描述表照 64_cfgkit.js cfgPage（71_input.js 生頁、69_prefs.js 存 wxk：只存跟預設不一樣的）。get／set 直接讀寫 WEATHERS 那一格（of：哪幾種天氣、key：哪一欄）。
+//   暴風雨的浪、風同時改暴風雨與大漩渦（大漩渦照抄暴風雨）；晴天不在這一頁（晴天 ＝ 1 倍，對拍的基準）。⛔ 對拍（?demo、?prefs=0）不讀存檔 ⇒ 照預設。
+var WXK_ITEMS = [
+  { k: 'sea', of: ['storm', 'maelstrom'], name: '暴風雨的浪', lim: [1, 5], step: 0.1, fix: 1, unit: ' 倍', note: '暴風雨與大漩渦的浪高（晴天 ＝ 1 倍）' },
+  { k: 'wind', of: ['storm', 'maelstrom'], name: '暴風雨的風', lim: [1, 4], step: 0.1, fix: 1, unit: ' 倍', note: '帆上的風、煙飄的速度（晴天 ＝ 1 倍）' },
+  { k: 'r', of: ['maelstrom'], vx: 1, name: '漩渦半徑', lim: [60, 400], step: 5, int: true, unit: ' m', note: '水流最快的那一圈；開局兩隊就排在這一圈上（兩隊隔兩倍半徑）' },
+  { k: 'depth', of: ['maelstrom'], vx: 1, name: '漩渦深度', lim: [5, 150], step: 1, int: true, unit: ' m', note: '中心比海面低多少' },
+  { k: 'width', of: ['maelstrom'], vx: 1, name: '漏斗寬窄', lim: [0.3, 1.2], step: 0.05, fix: 2, unit: ' 倍半徑', note: '越小越陡（中間尖）、越大越平（像碗）' },
+  { k: 'v', of: ['maelstrom'], vx: 1, name: '漩渦水流', lim: [1, 25], step: 0.5, fix: 1, unit: ' 節', note: '在那一圈最快；往外照距離淡掉（船自己的航速另外加）' },
+  { k: 'inflow', of: ['maelstrom'], vx: 1, name: '往中心吸', lim: [0, 0.6], step: 0.05, fix: 2, unit: '', note: '切向水流的幾成往中心（0 ＝ 只繞不吸）' },
+  { k: 'eye', of: ['maelstrom'], vx: 1, name: '眼的半徑', lim: [5, 150], step: 1, int: true, unit: ' m', note: '船進到這個半徑以內就被往下拖（最多半徑的 0.8）' },
+  { k: 'eyeDepth', of: ['maelstrom'], vx: 1, name: '眼的深度', lim: [0, 200], step: 5, int: true, unit: ' m', note: '眼那一段喉部再往下多深（中心總深 ＝ 深度 ＋ 這個；0 ＝ 沒有喉部）' },
+  { k: 'pull', of: ['maelstrom'], vx: 1, name: '眼往下拖', lim: [0, 0.5], step: 0.01, fix: 2, unit: ' m/秒', note: '0 ＝ 不拖（只繞、不會沉）；在眼裡每秒多吃水這麼多，吃到 4.2 m 跟進水一樣開始沉（預設約 28 秒）；出了眼每秒浮回 0.1 m' }];
+function wxkObj(it, w) { return it.vx ? WEATHERS[w].vortex : WEATHERS[w]; }   // vx：大漩渦那一格（vortex）裡的欄位
+function wxkGet(k) { var it = wxkItem(k); return wxkObj(it, it.of[0])[k]; }
+function wxkSet(k, v) { var it = wxkItem(k); if (v === undefined) return; it.of.forEach(function (w) { wxkObj(it, w)[k] = v; }); vxInit(); }   // 主選單的背景（大漩渦）跟著變
+function wxkItem(k) { return WXK_ITEMS.filter(function (it) { return it.k === k; })[0]; }
+var WXK_DEF = {}; WXK_ITEMS.forEach(function (it) { WXK_DEF[it.k] = wxkGet(it.k); });
+function wxkDef(k) { return WXK_DEF[k]; }
+function wxkReset() { WXK_ITEMS.forEach(function (it) { wxkSet(it.k, WXK_DEF[it.k]); }); }
+/** 存檔（69_prefs.js wxk）：跟預設不一樣的那幾項；讀的時候照描述表夾進範圍（cfgSnap）。 */
+function wxkSnap() { var o = {}; WXK_ITEMS.forEach(function (it) { var v = wxkGet(it.k); if (v !== WXK_DEF[it.k]) o[it.k] = v; }); return o; }
+function wxkApply(o) { WXK_ITEMS.forEach(function (it) { var v = cfgSnap(it, o[it.k]); if (v !== undefined) wxkSet(it.k, v); }); }
+/** 改過幾項（主選單那顆鈕寫「改過」）。 */
+function wxkChanged() { return Object.keys(wxkSnap()).length; }
 // 開局的風（Tim 2026-10-14：起始風向、風速也要隨機）：每一場開局（70_flow.js reset）挑一次 —— 風向相對 WIND0 轉 WIND_ROT（0–360°）、風速倍率 WIND_S0（0.6–1.5；航速 ∝ √）。
 //   帶 ?seed 或 ?demo（對拍、縮圖）⇒ 照種子的雜湊、同一個種子同一陣風；一般開戰 ⇒ Math.random()，每一場不同。兩種都不抽 rnd()（戰局的亂數順序不動）。
 //   ?wdir=度（相對 WIND0，往 +z 轉為正）、?wspd=倍率 ⇒ 指定（?wdir=0&wspd=1 ＝ 以前固定的那陣風）。浪跟著轉（08_sea.js SEA_A）。

@@ -346,6 +346,7 @@ function shadowMats() {
 function abyssDraw() {
   gl.disable(gl.BLEND); gl.depthMask(false); gl.depthFunc(gl.LESS);
   gl.useProgram(P.abyss.prog); setCommon(P.abyss); gl.uniformMatrix4fv(P.abyss.u.uCamInv, false, CAM.inv); hullUniforms(P.abyss);
+  gl.uniform1f(P.abyss.u.uAbY, VX ? vxH(CAM.tgt[0], CAM.tgt[2]) : 0);   // 那一片海平面的高度：大漩渦 ⇒ 鏡頭看的那一點的漏斗水面（⛔ 照 0 ⇒ 漏斗裡的船從破洞往下看是霧色）
   gl.bindVertexArray(SKYVAO); gl.drawArrays(gl.TRIANGLES, 0, 3);
   gl.depthFunc(gl.LEQUAL); gl.depthMask(true);
 }
