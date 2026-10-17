@@ -100,7 +100,7 @@ function metaRebase(h) {
     var a = path.split('/'), pre = [];
     for (var i = a.length - 1; i >= 1; i--) pre.push(a.slice(0, i).join('/') + '/');
     Object.keys(meta).forEach(function (k) {
-      var v = meta[k]; if (typeof v !== 'string' || !v || P.has(v)) return;
+      var v = meta[k]; if (k === 'kind' || typeof v !== 'string' || !v || P.has(v)) return;   // kind 不是路徑（⛔ 以前照改：鳳凰號 kind=capstan 旁邊剛好有模型「主砲甲板/capstan」⇒ kind 變成那條路徑；TASK-0672 規格表檢查量出來的）
       for (var j = 0; j < pre.length; j++) if (P.has(pre[j] + v)) { meta[k] = pre[j] + v; n++; return; }
     });
   }

@@ -9,6 +9,7 @@
 |---|---|
 | `template.html` | 版面、HUD（下方的按鍵提示就是按鈕）、主選單（模式、航行、距離（滑桿）、帆繩物理、「船隻配置…」「細節設定…」與一行摘要）、船隻配置頁（每一型的船員與性能）與細節設定頁（砲與每發傷害、彈種倍率、帆、船員血量、火藥桶、航行、降旗）；引用 `../VoxelKit/voxelkit.js`、`js/*.js`（照順序、`data-bundle="game"`）、船的 `.vxk`（`ships 開始`／`ships 結束` 兩個記號中間那段由 `admin.py` 照設定檔改寫）、設定檔與 `art/` 的選用素材 |
 | `config/game.json` | **各項設定的初始值與船隻清單**（TASK-0542）：船數上限、主選單預設、滑桿的上下限與預設、開局距離、彈種倍率、砲種表、船型高度與船員配置的預設、每艘船（內嵌 id、名字、`.vxk`、雕刻作品、建造者 `author`、船隻設定、高度、船員）。內嵌進成品，`js/00_config.js` 讀成 `CFG`。⛔ 這些值在 js 裡沒有第二份 |
+| `config/meta_kinds.json` | **雕刻 meta 的 kind 規格表**（TASK-0672）：每個 kind 一列 —— 掛在哪（模型／關聯／帆／繩）、遊戲讀的 meta 鍵、要哪些固定點（need）、有就用的（use）、造船規格哪一節、遊戲哪幾支檔照它分流（`null` ＝ 只說是什麼）、`mk`（`modelKind` 照 meta 直接回）、`drv`（admin.py 的動力件）。建置時內嵌成 `#meta-kinds`（`00_config.js` 讀成 `META_KINDS`）。新增 kind：造船規格照舊寫、這裡加一列；沒加 ⇒ 匯入檢查報「規格表沒有這個 kind」、`admin.py metaspec` 擋 |
 | `decks.py` | 量甲板的 meta（TASK-0572）：每一層甲板子作品單獨匯出 .vxk ⇒ 舷弧折線與厚度 ⇒ 印出要標在甲板關聯上的 meta（TSV，`work sub=meta file=` 直接用）。只讀 |
 | `ropecheck.py` | 繩的檢查（Tim 2026-10-14：破壞後浮空的纜線）：跑很多局無頭 Chrome（成品 `?demo=<秒>&dump=1&ropecheck=1`），每半秒記第一次浮空的繩（哪一端、原因），彙整成報告（作品本身每一端靠什麼、端點離錨 > 2 格的；打起來照原因分的浮空清單）。判斷在 `js/10_ship.js` ropesFloating；遊戲裡浮空的繩在 survey 就斷（`js/32_hull.js`）⇒ 報告應該是 0。只讀。開局另有**固定檢查**（`js/10_ship.js` `ropeFixCheck`／`ropeFixApply`；Tim 2026-10-16：「確保纜繩至少要有一端固定到帆或其他固定點(不能綁定在空中)」「不符合的直接再生成時排除 且匯入時要有錯誤報告」）：每條繩至少一端固定 —— 端點 0.15 m 內貼著實心格（量到格的表面）、在帆角、帆桁、碰到模型外框，或掛在一條合格的繩上（一路傳）；兩端都不固定 ⇒ 不生成（`r.unfixed`），別的繩與帆不再靠它（不連帶斷），匯入檢查每條報 ✗（兩端離最近的實心格多遠）。2026-10-16 量：12 艘 0 條 |
 | `tests/crew_log.py`＋`tests/crew_log_view.html` | 測試模式的船員記錄（Tim 2026-10-17：「加測試模式&專屬資訊Log 可以知道水手移動路徑等資訊(記錄一整局) 之後也可以用來排查其他Bug」）：無頭 Chrome 跑成品 `?demo=<秒>&dump=1&test=1&<q>` 讀 `#crewlog`（或 `--files` 讀遊戲裡匯出的 JSON），印摘要（走路穿過砲塔那一圈的每一筆＋那人前一次變了什麼、碰進船殼的照位置歸堆），寫 `reports/crew_log/<tag>/index.html`（不入版控）：俯看一層甲板的走路格、砲塔那一圈、每個人的路徑（時間滑桿），點一個人看他整局的事件。`--fail-on-wall` ⇒ 有人走路穿過砲塔那一圈就 exit 1。`crew_log_view.html` 直接開也行（選匯出的 JSON）。例：`python -I -X utf8 src/tests/crew_log.py --q "ship=sentinel,virginia&seed=3" --secs 300 --tag s3` |
@@ -57,6 +58,8 @@ python -I admin.py reimport --id constitution
 python -I admin.py authors
 # 匯入檢查（import／reimport／metasync 之後會自動跑）：缺 meta、砲班站不滿、開場就掉的 ⇒ ../reports/shipcheck_<代號>.md（不入版控）
 python -I admin.py shipcheck --id phoenix    # 不給 --id ＝ 每一艘
+# meta 規格表對拍（TASK-0672）：規格表本身、每艘船用到的 kind（沒列的、掛錯地方的）、造船規格 §9 那張 kind 表與每個 kind 的 need 固定點；不一致 ⇒ exit 非 0
+python -I admin.py metaspec                  # --doc <檔案> ＝ 不經 senate cmd doc
 ```
 
 匯入檢查的規則在 `js/75_shipcheck.js`（成品帶 `?shipcheck=<代號>`：跟憲法號擺在最遠、固定步長跑 2 秒，結果寫進頁面）—— 遊戲自己知道缺了什麼會退回什麼，所以規則住在遊戲裡，admin.py 只用無頭 Chrome 跑、寫報告。
@@ -240,7 +243,7 @@ python -I admin.py cache --all    # 每艘都比 ＝ 比對來源：雕刻作品
 | `73_slowmo.js` | 殉爆的慢動作與特寫（TASK-0531）：`slowKick`（殉爆那一刻）、`slowTick`（每格畫面的時間倍率、特寫時間到還鏡頭）、`slowVisStep`（慢動作中只給人看的照畫面的時間走）、提示 `slowShow`；狀態 `SLOW` 在 `04_state.js` |
 | `72_floodui.js` | 停格條（`frzShow`）與進水細節頁（`floodPanel`：數字＋側視、俯視剖面 `fpDraw`；開著時 3D 的破口點 `flHoleMarks`、艙內水面透視） |
 | `74_cutaway.js` | 停格的剖面與隱藏甲板：`CUTV`、甲板切高 `deckCut`（照舷弧逐欄量、R32F 貼圖）、畫之前設 uniform `cutSet`、人藏不藏 `cutHides`、`cutToggle`／`deckCycle` |
-| `75_shipcheck.js` | 匯入檢查（`?shipcheck=<id>`；`admin.py shipcheck` 讀它寫的 JSON 出報告） |
+| `75_shipcheck.js` | 匯入檢查（`?shipcheck=<id>`；`admin.py shipcheck` 讀它寫的 JSON 出報告）。照 meta 規格表報：規格表沒有的 kind、掛錯地方的 kind；**被靜悄悄丟掉的部件**：尋路沒收的梯子與原因（`sh.ladDrop`，42_hands.js makeHands 記；兩頭判不出層、同一層、接不上走路格）—— 繩梯（頂端在桅上）只記進讀數 `ropeLadders`、不報 |
 | `76_anchor.js` | 拋錨（雙錨、左右錨、拖錨、起錨）與鐵鍊（質點鍊、碰自己的船殼與海底、畫成鏈環）；單錨的船（TASK-0635：只找到一個真的錨 ⇒ 另一舷不補、`A.single`；7／8 按鈕藏起來、按鍵不理，6 只拋這一個；整艘都沒有錨（夜隼號、風暴角號）⇒ 6／7／8 照樣顯示（🛑），按哪一顆都是停船 ⇄ 手動，不拋錨） |
 | `77_colours.js` | 陣營旗（長旗＋戰鬥旗，藍方藍旗、紅方紅旗；布料，跟帆同一套）：桅頂 `mastTrucks`、自動掛 `autoFlags`、載入時生旗 `teamFlagsSetup`、貼圖挑藍紅 `sailRect`、旗桿 `poleBuf`／`drawColours` |
 | `78_funnel.js` | 煙囪排煙：meta kind=funnel 的關聯或模型、固定點 smoke（沒有 ⇒ 外框頂面中心）；額外動力在出力 ⇒ 濃、停車 ⇒ 淡，煙囪口附近的格子剩不到一半 ⇒ 不冒；主機全壞、通它的鍋爐全壞 ⇒ 不冒（31_drive.js fnOff）；自己一組亂數（`rndFn`，⛔ 不叫 rndF：33_flood.js 已經有，同名會蓋掉 ⇒ 進水的亂數跟著變、戰局全變） |

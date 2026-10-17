@@ -721,10 +721,18 @@ def anchor_cells(h):
     return log if changed else None
 
 
-DRV_KINDS = ('engine', 'boiler', 'shaft', 'steampipe')                # 動力件（TASK-0653；遊戲 31_drive.js 照格子算剩幾成、通不通）
+META_P = os.path.join(HERE, 'config', 'meta_kinds.json')               # 雕刻 meta 的 kind 規格表（TASK-0672）：遊戲內嵌（#meta-kinds）、這裡照它的 drv 分動力件
 
 
-VOXM_KINDS = ('propeller',)                                              # 會轉的體素件（TASK-0653 第二段；遊戲 24_armor.js propSetup）：這幾種模型匯出時多帶來源作品的格子
+def meta_kinds():
+    """規格表的 kinds（kind ⇒ { name, on, keys, need, use, doc, game, mk, drv }）。"""
+    return json.load(open(META_P, encoding='utf-8'))['kinds']
+
+
+DRV_KINDS = tuple(k for k, v in meta_kinds().items() if v.get('drv') == 'part')   # 動力件（TASK-0653；遊戲 31_drive.js 照格子算剩幾成、通不通）：規格表 drv=part（主機、鍋爐、軸、蒸汽管）
+
+
+VOXM_KINDS = tuple(k for k, v in meta_kinds().items() if v.get('drv') == 'vox')   # 會轉的體素件（TASK-0653 第二段；遊戲 24_armor.js propSetup）：規格表 drv=vox（螺旋槳）；這幾種模型匯出時多帶來源作品的格子
 
 
 def parts_models(work):
@@ -956,6 +964,80 @@ def act_check():
 
 REPORTS = os.path.normpath(os.path.join(HERE, '..', 'reports'))   # 匯入檢查的報告（不入版控）
 CHROMES = [r'C:\Program Files\Google\Chrome\Application\chrome.exe', r'C:\Program Files (x86)\Google\Chrome\Application\chrome.exe']
+
+
+META_ON = ('model', 'link', 'sail', 'rope')
+
+
+def act_metaspec(doc_path=None):
+    """meta 規格表（config/meta_kinds.json，TASK-0672）對拍三樣東西 ⇒ 不一致的列出來（exit 非 0）：
+    ① 規格表本身（每一列欄位齊、on 只有 model／link／sail／rope、game 指到的檔存在）；
+    ② 船隻清單每一艘的 _cache 檔頭：用到、規格表沒有的 kind，掛的地方（模型／關聯／帆／繩）規格表沒寫的；
+    ③ 造船規格（Senate 文件 Sculpture_Shipbuilding；senate cmd doc 讀，或 --doc 給檔案）：§9 那張 kind 表的每一列規格表要有、
+       規格表寫了 doc 的每一個 kind 文件裡要出現（`kind=<k>` 或表格那一格）、need 的固定點要寫在文件裡（表格那一列或那一節）。"""
+    K, E, log = meta_kinds(), [], []
+    for k, v in K.items():
+        for f in ('name', 'on', 'keys', 'need', 'use', 'doc', 'game'):
+            if f not in v:
+                E.append('規格表 %s：少了 %s' % (k, f))
+        if not set(v.get('on') or []) <= set(META_ON) or not v.get('on'):
+            E.append('規格表 %s：on 只能是 %s' % (k, '／'.join(META_ON)))
+        for g in v.get('game') or []:
+            if not os.path.exists(os.path.join(HERE, 'js', g)):
+                E.append('規格表 %s：game 的 %s 不存在' % (k, g))
+    log.append('① 規格表：%d 個 kind' % len(K))
+    seen = {}
+    for sh in load()['ships']:
+        if not os.path.exists(os.path.join(CACHE, sh['vxk'])):
+            continue
+        h, _ = _cache_raw(sh)
+        rig = h.get('rig') or {}
+        for on, L in (('link', h.get('parts')), ('model', rig.get('models')), ('sail', rig.get('sails')), ('rope', rig.get('ropes'))):
+            for q in L or []:
+                k = ((q or {}).get('meta') or {}).get('kind') if isinstance(q, dict) else None
+                if k:
+                    seen.setdefault((k, on), set()).add(sh['id'])
+    for (k, on), ids in sorted(seen.items()):
+        if k not in K:
+            E.append('船：kind=%s（%s）規格表沒有 —— %s' % (k, on, '、'.join(sorted(ids))))
+        elif on not in K[k]['on']:
+            E.append('船：kind=%s 掛在 %s 上，規格表寫 %s —— %s' % (k, on, '／'.join(K[k]['on']), '、'.join(sorted(ids))))
+    log.append('② 船：%d 艘用到 %d 個 kind' % (len(load()['ships']), len({k for k, _ in seen})))
+    if doc_path:
+        doc = open(doc_path, encoding='utf-8').read()
+    else:
+        senate = shutil.which('senate')
+        if not senate:
+            log.append('③ 造船規格：沒對（找不到 senate；或給 --doc <檔案>）')
+            doc = None
+        else:
+            r = subprocess.run([senate, 'cmd', 'doc', '--arg', 'op=show', '--arg', 'name=Sculpture_Shipbuilding'], capture_output=True, text=True, encoding='utf-8')
+            doc = r.stdout if r.returncode == 0 else None
+            if doc is None:
+                log.append('③ 造船規格：沒對（senate cmd doc 讀不到：exit %d）' % r.returncode)
+    if doc:
+        i = doc.find('## 9. ')
+        j = doc.find('\n- ', i) if i >= 0 else -1
+        table = doc[i:j] if i >= 0 else ''
+        rows = dict(re.findall(r'^\| `([a-z_]+)`[^|]*\|(.*)$', table, re.M))
+        for k in rows:
+            if k not in K:
+                E.append('造船規格 §9 表有 kind=%s，規格表沒有' % k)
+        for k, v in K.items():
+            if not v.get('doc'):
+                continue
+            if k not in rows and not re.search(r'kind=%s\b' % re.escape(k), doc) and ('`%s`' % k) not in doc:
+                E.append('規格表 %s（doc %s）：造船規格裡找不到 kind=%s' % (k, v['doc'], k))
+                continue
+            text = rows.get(k, '') + ' ' + ' '.join(m for m in re.findall(r'[^\n]*kind=%s\b[^\n]*' % re.escape(k), doc))
+            for pt in v.get('need') or []:
+                bare = pt.replace('<名>', '')
+                if bare not in text:
+                    E.append('規格表 %s：need 的固定點 %s 造船規格裡那一列／提到 kind=%s 的地方沒寫' % (k, pt, k))
+        log.append('③ 造船規格：§9 表 %d 列；規格表寫了 doc 的 %d 個 kind 都對過' % (len(rows), sum(1 for v in K.values() if v.get('doc'))))
+    if E:
+        raise Fail('\n'.join(log) + '\nmeta 規格表對不上：\n' + '\n'.join('  ✗ ' + e for e in E))
+    return log + ['✓ meta 規格表跟船、造船規格一致']
 
 
 def act_shipcheck(ids=None):
@@ -2053,6 +2135,8 @@ def main():
     ap = argparse.ArgumentParser(description='《憲法號對轟》設定後台（TASK-0542）')
     sp = ap.add_subparsers(dest='op', required=True)
     sp.add_parser('check')
+    s = sp.add_parser('metaspec', help='meta 規格表（config/meta_kinds.json）對拍：規格表本身、每艘船用到的 kind、造船規格文件（TASK-0672）')
+    s.add_argument('--doc', help='造船規格的檔案（不給 ⇒ senate cmd doc 讀）')
     s = sp.add_parser('shipcheck', help='匯入檢查：缺 meta、砲班站不滿、開場就掉的 ⇒ reports/shipcheck_<船>.md（import／reimport／metasync 之後會自動跑）')
     s.add_argument('--id', action='append', help='哪一艘（可以給好幾次）；不給 ＝ 每一艘')
     s = sp.add_parser('build')
@@ -2086,6 +2170,8 @@ def main():
             return serve(o.port, o.open)
         if o.op == 'check':
             log = act_check()
+        elif o.op == 'metaspec':
+            log = act_metaspec(o.doc)
         elif o.op == 'shipcheck':
             log = act_shipcheck(o.id)
         elif o.op == 'build':

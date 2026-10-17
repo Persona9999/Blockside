@@ -291,10 +291,12 @@ function makeHands(sh, crew, add) {
   var t0 = performance.now(), lads = shipLadders(sh.T), Ls = navLevels(sh, lads), LD = [], ri = {};
   (sh.ropes || []).forEach(function (r, j) { ri[r.name] = j; });       // 繩梯的橫繩 ⇒ sh.ropes 第幾條（斷不斷照它）
   Ls.forEach(function (L) { L.N = navBuild(sh, L); if (L.N.rot) L.N = navOwn(L.N, sh); });   // 有會轉的甲板 ⇒ 這艘自己一份（navPos／navSnap 照這艘的砲塔角度換）
+  sh.ladDrop = [];                                                   // 尋路沒收的梯子與原因（只記，給匯入檢查報：TASK-0672「被靜悄悄丟掉的部件」）
   lads.forEach(function (l) {
     var a = l.pts[0], b = l.pts[l.pts.length - 1], dk = ladDecks(sh.T, l), la = dk ? (dk[0] ? dk[0].i : -1) : lvOf(Ls, a[2]), lb = dk ? (dk[1] ? dk[1].i : -1) : lvOf(Ls, b[2]);   // 有甲板 meta ⇒ 照 meta 判層（36_rooms.js ladDecks）
-    if (la < 0 || lb < 0 || la === lb) return;
-    var R = dk && dk.link ? 10 : 5, ia = navSnap(Ls[la].N, a, R), ib = navSnap(Ls[lb].N, b, R); if (ia < 0 || ib < 0) return;   // 兩頭接不上走路格（10 格內；直接指定的 20 格內）⇒ 這座不用
+    if (la < 0 || lb < 0 || la === lb) { sh.ladDrop.push({ name: l.name, rope: !!l.rope, why: la < 0 && lb < 0 ? '兩頭（foot、head）都判不出在哪一層甲板' : la < 0 ? '下端（foot）判不出在哪一層甲板' : lb < 0 ? '上端（head）判不出在哪一層甲板' : '兩頭判成同一層', a: a, b: b }); return; }
+    var R = dk && dk.link ? 10 : 5, ia = navSnap(Ls[la].N, a, R), ib = navSnap(Ls[lb].N, b, R);
+    if (ia < 0 || ib < 0) { sh.ladDrop.push({ name: l.name, rope: !!l.rope, why: (ia < 0 ? '下端' : '上端') + '接不上那一層的走路格（' + R + ' 點內沒有能走的點）', a: a, b: b }); return; }   // 兩頭接不上走路格（10 格內；直接指定的 20 格內）⇒ 這座不用
     var mid = l.pts.slice(1, -1).map(function (q) { return [q[0], q[1], q[2] + CLIMB_LIFT]; });   // lo、hi 抬 0.2 m：兩點連線會切過踏板的前緣（量過：腳在踏板裡 24／71 點 ⇒ 10）
     var steps = l.rope ? [] : l.pts.slice(1, -1).map(function (q) { return [Math.floor(q[0]), Math.floor(q[1]), Math.floor(q[2]) - 1]; });   // 踏板：lo、hi 那一格底下（固定點是腳踩的那一格空氣）；繩梯的踏板是繩 ⇒ 照繩判（rj）
     var rj = l.rope ? l.rope.map(function (n) { return ri[n]; }).filter(function (j) { return j !== undefined; }) : null;

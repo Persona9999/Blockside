@@ -211,12 +211,12 @@ function ropeYards(sh) {
 function modelKind(m) {
   var mt = m.meta || {};
   if (mt.kind === 'gun') return GUN_CODE[mt.gun] || 'long';           // 不認得的代碼 ⇒ 當長砲
-  if (mt.kind === 'powder') return 'powder';
-  if (mt.kind === 'yard') return 'yard';                              // 帆桁（basecamp 階段三十三：15 根各一件模型，可以繞轉軸轉）
-  if (mt.kind === 'wheel') return 'wheel';                            // 餘燼號的舵輪叫「舵輪」、有 meta（⛔ 只照名字 ⇒ 認不出來，船只剩舵柄滑車的 35% 轉向）
-  if (mt.kind === 'rudder') return 'rudder';                          // 夜隼號的舵是模型（summit：方艉船掛在艉板外）；憲法號、餘燼號的舵是船殼的格子
-  if (mt.kind === 'door') return 'door';                              // 門、艙蓋（TASK-0638；25_doors.js）：血量砲的一半、不擋人、開關只是演出
-  if (mt.kind === 'propeller') return 'propeller';                    // 螺旋槳（TASK-0628／0630）：血量跟舵一樣（⛔ 一般模型 1 點 ⇒ 一發爆炸彈就把整艘的動力打掉）；照輸出轉（31_drive.js）
+  if (META_KINDS[mt.kind] && META_KINDS[mt.kind].mk) return mt.kind;   // 規格表標 mk 的（config/meta_kinds.json，TASK-0672）：火藥桶、帆桁、舵輪、舵、門、螺旋槳 —— 以前在下面一行一行寫
+  // 以前一行一行寫的那幾個（留著說明為什麼有）：
+  //   wheel：餘燼號的舵輪叫「舵輪」、有 meta（⛔ 只照名字 ⇒ 認不出來，船只剩舵柄滑車的 35% 轉向）
+  //   rudder：夜隼號的舵是模型（summit：方艉船掛在艉板外）；憲法號、餘燼號的舵是船殼的格子
+  //   door：門、艙蓋（TASK-0638；25_doors.js）：血量砲的一半、不擋人、開關只是演出
+  //   propeller：螺旋槳（TASK-0628／0630）：血量跟舵一樣（⛔ 一般模型 1 點 ⇒ 一發爆炸彈就把整艘的動力打掉）；照輸出轉（31_drive.js）
   return /carronade/.test(m.name) ? 'carr' : /chase/.test(m.name) ? 'chase' : /\/砲-[SP]\d+$/.test(m.name) ? 'long' : /wheel/.test(m.name) ? 'wheel' : 'model';
 }
 /** 模型照 x 分桶（每 16 格一桶，外框外擴 12 格登記）⇒ hitModel 只看砲彈所在那一桶（193 個模型 × 每顆砲彈每個小步全掃太貴）。

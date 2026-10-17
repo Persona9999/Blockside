@@ -28,6 +28,22 @@ function shipCheck(id) {
     if (!(isFinite(+wm.waterline_z) && +wm.waterline_z > 0) && id !== 'constitution') add('warn', '水線', '船殼', info.zw0 ? '沒有 meta kind=ship waterline_z ⇒ 用設定檔的 zw0 ' + info.zw0 : '沒有 meta kind=ship waterline_z ⇒ 用憲法號的 ' + ZW0 + '（排水量跟著錯）', '船殼的關聯（或組裝件）meta kind=ship, waterline_z=<設計水線>（造船規格 §9）');
     var C = SHIPS[1].T, rl = (T.hx1 - T.hx0) / (C.hx1 - C.hx0), rh = T.sz / C.sz;   // 跟憲法號比大小：差不到一成（餘燼號從憲法號改的）⇒ 憲法號的 geo 本來就對
     if (!info.geo && id !== 'constitution' && (Math.abs(rl - 1) > 0.1 || Math.abs(rh - 1) > 0.1)) add('warn', 'geo', '設定檔', '沒填 geo ⇒ 陸戰隊站的範圍、瞄準高度、鏡頭中心都是憲法號的數字（這艘長 ×' + rl.toFixed(2) + '、高 ×' + rh.toFixed(2) + '）', '遊戲那側填 config/game.json ships[].geo（造船規格 §9.4）');
+    // ── meta 規格表（TASK-0672；config/meta_kinds.json）：作品裡用到、規格表沒有的 kind ⇒ 遊戲不認（照一般模型／關聯／帆／繩）；掛的地方跟規格表不一樣也報 ──
+    if (!META_SPEC) add('warn', 'meta 規格表', '—', '成品裡沒有 #meta-kinds ⇒ 照不了規格表', 'python -I admin.py build（template.html 要有 meta-kinds 那一行）');
+    var MK = {};
+    [['link', T.h.parts], ['model', T.rig.models], ['sail', T.rig.sails], ['rope', T.rig.ropes]].forEach(function (A) {
+      (A[1] || []).forEach(function (q) {
+        var k = q && q.meta && q.meta.kind; if (!k) return;
+        var K = Object.prototype.hasOwnProperty.call(META_KINDS, k) ? META_KINDS[k] : null, key = k + '|' + A[0] + '|' + (K ? (K.on.indexOf(A[0]) >= 0 ? 'ok' : 'on') : 'none');
+        (MK[key] = MK[key] || []).push(q.path || q.name);
+      });
+    });
+    Object.keys(MK).forEach(function (key) {
+      var p = key.split('|'), L = MK[key], where = L.length > 3 ? L.slice(0, 3).join('、') + ' 等 ' + L.length + ' 個' : L.join('、');
+      if (p[2] === 'none') add('warn', 'meta 規格表', where, 'kind=' + p[0] + ' 規格表沒有 ⇒ 遊戲不認，照一般' + { link: '關聯', model: '模型', sail: '帆', rope: '繩' }[p[1]] + '處理', '要遊戲照它分流 ⇒ src/config/meta_kinds.json 加一列（造船規格照舊寫）；寫錯字 ⇒ 改 meta');
+      else if (p[2] === 'on') add('warn', 'meta 規格表', where, 'kind=' + p[0] + ' 掛在' + { link: '關聯', model: '模型', sail: '帆', rope: '繩' }[p[1]] + '上，規格表寫的是 ' + META_KINDS[p[0]].on.join('／'), '照造船規格 ' + (META_KINDS[p[0]].doc || '') + ' 掛，或規格表的 on 加上這一種');
+    });
+    R.info.metaKinds = Object.keys(MK).filter(function (key) { return /\|ok$/.test(key); }).map(function (key) { return key.split('|')[0]; }).filter(function (k, i, a) { return a.indexOf(k) === i; }).join('、');
     // ── 模型 ──
     spinIssues(sh, add);                                                // 照參數轉的子物件寫了 spin 卻轉不起來（26_spin.js，TASK-0640）
     sh.models.forEach(function (m) {
@@ -58,10 +74,10 @@ function shipCheck(id) {
     if (DC) DP.forEach(function (q) { if (DC.E.length && !(q.w > 0)) add('warn', '動力', q.m ? q.m.path : q.out, '沒有主機推這個輸出物件 ⇒ 不出力', '主機 meta propeller=<螺旋槳模型名>，或讓軸的 aft 靠近 hub（24 格內）、fwd 靠近主機 core'); });
     if (DC) DC.B.forEach(function (c) { if (c.b.funnel && !funnelsOf(T).some(function (f) { return f.name === c.b.funnel; })) add('warn', '鍋爐', c.b.name, 'meta funnel=' + c.b.funnel + ' 找不到這條煙囪 ⇒ 鍋爐壞了也不會停煙', 'funnel 寫煙囪關聯的路徑（一字不差）'); });
     // ── 動力件（TASK-0653；31_drive.js 檔頭「動力件」）：每一件開局幾格；傳動件（軸、蒸汽管）兩端之間開局有幾條不共用格子的路、傳不傳得滿 ──
-    var PT = drvParts(T), dl = [], DK = { engine: 1, boiler: 1, shaft: 1, steampipe: 1 };
+    var PT = drvParts(T), dl = [];
     (T.h.parts || []).forEach(function (q) {
-      var k = q.meta && q.meta.kind; if (!DK[k]) return;
-      if (!PT.E.concat(PT.B, PT.SH, PT.SP).some(function (o) { return o.name === q.path; })) add('warn', '動力件', q.path, 'meta kind=' + k + ' 缺固定點（' + { engine: 'core', boiler: 'boiler-1…／uptake', shaft: 'aft、fwd', steampipe: 'from、to' }[k] + '）⇒ 遊戲不認這一件', '補固定點（造船規格 §9.6）');
+      var k = q.meta && q.meta.kind, K = META_KINDS[k]; if (!K || K.drv !== 'part') return;   // 動力件：規格表標 drv=part 的（主機、鍋爐、軸、蒸汽管）
+      if (!PT.E.concat(PT.B, PT.SH, PT.SP).some(function (o) { return o.name === q.path; })) add('warn', '動力件', q.path, 'meta kind=' + k + ' 缺固定點（' + K.need.concat(K.use).join('、') + '）⇒ 遊戲不認這一件', '補固定點（造船規格 ' + K.doc + '）');
     });
     PT.E.concat(PT.B, PT.SH, PT.SP).forEach(function (o) {
       var kind = o.kind || (PT.E.indexOf(o) >= 0 ? 'engine' : 'boiler'), nm = DRVP[kind].name;
@@ -122,6 +138,13 @@ function shipCheck(id) {
         if (NV.reach.indexOf(li) < 0) add('warn', '甲板', L.key + ' ' + L.name, '沒有梯子通到 ⇒ 預備水手、傷員到不了', '加梯子（kind=ladders 四個點），或梯子 meta <梯名>.decks 指定兩層');
       });
       NV.ladders.forEach(function (L) { if (L.broken) add('error', '梯子', L.name, '開場就是斷的（踏板或兩頭的走路點不能站）', '對 foot／lo／hi／head 四個點（踩的那一格空氣）'); });
+      var ropeLad = [];
+      (sh.ladDrop || []).forEach(function (d) {                         // 被尋路靜悄悄丟掉的梯子（42_hands.js makeHands；TASK-0672：餘燼號、憲法號的貨艙梯子量出來的）
+        var z = function (p) { return 'z ' + Math.floor(p[2]); };
+        if (d.rope) { ropeLad.push(d.name); return; }                   // 繩梯（橫繩組 climb）：頂端在桅上、本來就不在甲板 ⇒ 只給第一人稱爬，不算丟掉
+        add('warn', '梯子', d.name, '尋路沒收這一座：' + d.why + '（foot ' + z(d.a) + '、head ' + z(d.b) + '）⇒ 預備水手、傷員不走這座（第一人稱照樣爬得到）', '梯子兩頭落在宣告了 kind=deck 的甲板上（造船規格 §9.3），或梯子 meta <梯名>.decks 直接指定兩層');
+      });
+      if (ropeLad.length) R.info.ropeLadders = ropeLad.length + ' 座繩梯只給第一人稱爬（頂端不在甲板上 ⇒ 尋路不走）：' + ropeLad.join('、');
       if (!NV.ladders.length && NV.levels.length > 1) add('warn', '梯子', '—', '有 ' + NV.levels.length + ' 層甲板、沒有梯子', 'kind=ladders');
     }
     (T.roomsBad || []).forEach(function (b) { add('error', '艙房', b, '艙房標得不對', 'rooms.py check（造船規格 §9.2）'); });
