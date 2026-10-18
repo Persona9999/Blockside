@@ -129,13 +129,45 @@ function metaRebase(h) {
     var a = path.split('/'), pre = [];
     for (var i = a.length - 1; i >= 1; i--) pre.push(a.slice(0, i).join('/') + '/');
     Object.keys(meta).forEach(function (k) {
-      var v = meta[k]; if (k === 'kind' || typeof v !== 'string' || !v || P.has(v)) return;   // kind 不是路徑（⛔ 以前照改：鳳凰號 kind=capstan 旁邊剛好有模型「主砲甲板/capstan」⇒ kind 變成那條路徑；TASK-0672 規格表檢查量出來的）
+      var v = meta[k]; if (k === 'kind' || k === 'id' || typeof v !== 'string' || !v || P.has(v) || ID_RX.test(v.split('#')[0])) return;   // id 寫法（TASK-0715）不是路徑   // kind 不是路徑（⛔ 以前照改：鳳凰號 kind=capstan 旁邊剛好有模型「主砲甲板/capstan」⇒ kind 變成那條路徑；TASK-0672 規格表檢查量出來的）
       for (var j = 0; j < pre.length; j++) if (P.has(pre[j] + v)) { meta[k] = pre[j] + v; n++; return; }
     });
   }
   parts.forEach(function (p) { fix(p.path, p.meta); });
   models.forEach(function (m) { fix(m.name, m.meta); });
   return n;
+}
+/**
+ * 物件 id（TASK-0715；造船規格 §12）：每件關聯（部件）、外部模型的 meta id ＝ `<類別>-<序號>`（改裝船自己加的 `<船>.<類別>-<序號>`；admin.py ids 發號、寫回作品）。
+ * 指名別的部件一律寫 id、或 `id#固定點`（一條關聯裡有好幾座的：`<梯子關聯的 id>#<梯名>`）；哪些 meta 鍵是指名 ＝ 規格表 refs（config/meta_kinds.json）。
+ * 同一件子作品被關聯好幾次（哨兵號兩個彈藥櫃）⇒ 裡面那幾件 id 一樣 ⇒ 照最近一層關聯的 id 分開：`<關聯 id>/<內部 id>`。
+ * 回 { by: id ⇒ { what: 'link'｜'model', q, path }, dup: [撞號（分開之後還撞）], none: 沒有 id 的件數 }。
+ */
+var ID_RX = /^(?:[a-z][a-z0-9_]*\.)?[a-z][a-z0-9_]*-[1-9][0-9]*(?:\/(?:[a-z][a-z0-9_]*\.)?[a-z][a-z0-9_]*-[1-9][0-9]*)*$/;
+function idIndex(h) {
+  var parts = h.parts || [], models = (h.rig && h.rig.models) || [], L = [], none = 0, pid = {};
+  parts.forEach(function (p) { var v = p.meta && p.meta.id; if (v) pid[p.path] = String(v); L.push({ what: 'link', q: p, path: p.path, id: v ? String(v) : '' }); });
+  models.forEach(function (m) { var v = m.meta && m.meta.id; L.push({ what: 'model', q: m, path: m.name, id: v ? String(v) : '' }); });
+  var n = {}; L.forEach(function (r) { if (r.id) n[r.id] = (n[r.id] || 0) + 1; else none++; });
+  function up(path) { var a = path.split('/'); for (var i = a.length - 1; i >= 1; i--) { var pp = a.slice(0, i).join('/'); if (pid[pp]) return pid[pp]; } return ''; }
+  var by = {}, dup = [];
+  L.forEach(function (r) {
+    if (!r.id) return;
+    var k = n[r.id] > 1 && up(r.path) ? up(r.path) + '/' + r.id : r.id;
+    if (by[k]) dup.push(k + '：' + by[k].path + '、' + r.path); else by[k] = { what: r.what, q: r.q, path: r.path };
+  });
+  return { by: by, dup: dup, none: none };
+}
+/** 指名 ⇒ 部件的完整路徑（遊戲各處本來就照路徑比：彈藥庫 hoist 比梯子名、鍋爐 funnel 比煙囪、裝甲 mount 比砲模型）：
+ *  `id` ⇒ 那件的路徑；`id#座名` ⇒ `<路徑>/<座名>`（梯子 ＝ 42_hands.js shipLadders 的名字）；不是 id 寫法（舊的路徑寫法）⇒ 原樣（metaRebase 已經補過前綴）；
+ *  是 id 寫法卻找不到 ⇒ ''（⛔ 不退回去當路徑比 —— 匯入檢查報 ✗）。 */
+function refPath(T, v) {
+  if (v === undefined || v === null || v === '') return '';
+  v = String(v);
+  var i = v.indexOf('#'), id = i < 0 ? v : v.slice(0, i);
+  if (!ID_RX.test(id)) return v;
+  var r = T.ids && T.ids.by[id];
+  return r ? r.path + (i < 0 ? '' : '/' + v.slice(i + 1)) : '';
 }
 /** 壓縮版的成品（admin.py build 預設；--raw ＝ 原格式；TASK-0583）：header 有 mesh_pool ⇒ rig.meshes 是池子編號 { pool: i }，從 <script id=mesh_pool> 還原（池子只解一次、幾艘船共用）。
  *  池子裡一份 ＝ { v: 不重複的頂點（整數 × q，跟前一點的差值）, t: 三角形的頂點編號（跟前一個的差值）, tmat, mats }；還原成跟原本一樣的三角形（頂點去重過，法線照三角形算 ⇒ 畫出來一樣）。
@@ -168,6 +200,7 @@ function buildHull(info, model, t0, C, deco) {
   S = h.meters_per_voxel;
   var T = { id: info.id, name: info.name, model: model, h: h, rig: h.rig || { ropes: [], sails: [] },
     sz: h.size[2], cx: (h.bbox[0] + h.bbox[3]) / 2, cy: h.size[1] / 2, hx0: h.bbox[0], hx1: h.bbox[3], zw: hullZW(h, info), geo: Object.assign({}, GEO0, info.geo), lamps: info.lamps || [], crew: Object.assign({}, CREW0, info.crew) };   // 外框：含艏斜桅與後桅帆桁
+  T.ids = idIndex(h);                                                      // 物件 id（TASK-0715）：refPath 照它把 id 換成路徑
   T.cached = !!C; T.keep = C ? null : {};
   T.decos = DS.decos; T.decoAll = DS.all; T.decoN = DS.n; T.meshSkip = DS.skip;                // 裝飾：要畫的、作品裡有幾件、這次不建的網格
   T.ms = {};                                                               // 每一段花多久（毫秒；讀數 window.__vxk.ms）

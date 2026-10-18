@@ -15,6 +15,7 @@
 #   python -I admin.py metasync --id <船的代號>   只同步 meta 與固定點（作品改了 meta、加了固定點，格子不動；TASK-0572）
 #   python -I admin.py reimport --id <船的代號> [--work <作品 ID>]                 重新匯入（換新的 .vxk、印跟上一版的差別、重建）
 #   python -I admin.py cache                      _cache/ 缺的、跟指紋不同的 .vxk 從版控那份成品裡解回來（換機器、只改程式時用；建置也會自己做）
+#   python -I admin.py ids --id <船的代號> [--dry]  物件 id：發號、指名別的部件的 meta 換成 id、寫回雕刻作品再 metasync（TASK-0715；造船規格 §12）
 #   python -I admin.py cells --id <船的代號>      只寫動力件與梯子的格子清單（meta、格子不動；TASK-0676 木匠照它還原整件梯子）
 #   python -I admin.py relock --id <船的代號>     指紋改成 _cache 現在那份（手動換過 .vxk 時；平常匯入／重新匯入／metasync 會自己更新）
 #   加 --no-build：匯入／重新匯入之後不重建
@@ -554,6 +555,8 @@ def validate(cfg, prev=None):
             err(p + '.author', '建造者（雕刻作品的作者；匯入時從 .vxk 檔頭 owner 記，沒有就不寫這個鍵）')
         if 'variant_of' in s and not (isinstance(s['variant_of'], str) and s['variant_of'] != s.get('id')):
             err(p + '.variant_of', '原船的 id（改裝船，TASK-0657；字串、不能是自己）')
+        if 'idNext' in s and not (isinstance(s['idNext'], dict) and all(re.fullmatch(r'[a-z][a-z0-9_]*', k) and isint(v) and v >= 1 for k, v in s['idNext'].items())):
+            err(p + '.idNext', '物件 id 每一類的下一號 { 類別: 正整數 }（admin.py ids 寫的，TASK-0715；別手改）')
         for k, v in (s.get('cfg') or {}).items():
             if k not in SHIP_CFG_KEYS:
                 err(p + '.cfg.' + k, '不認得的鍵（%s）' % '、'.join(SHIP_CFG_KEYS))
@@ -921,6 +924,255 @@ def drive_cells(h):
     return log if changed else None
 
 
+# ───────────────────────── 物件 id（TASK-0715；造船規格 §12） ─────────────────────────
+# 每件關聯（部件）、外部模型一個可讀的固定 id：`<類別>-<序號>`（類別 ＝ meta kind；沒有 kind 的關聯 part、模型 model），寫在它自己的 meta `id`。
+#   改裝船自己加的：`<船的代號>.<類別>-<序號>`；原船那一棵（改裝船裡關聯到原船組裝件的那一條底下）沿用原船的 id，不在這裡發。
+#   一條關聯裡有好幾座的（梯子、艙房）不另外發：`<關聯 id>#<座名>`。繩、帆：名字在一艘船裡本來就唯一、又不是路徑 ⇒ 先用名字。
+# 下一號記在設定檔 ships[].idNext（{類別: 下一號}）⇒ 刪掉的號不重用。
+# 指名別的部件的 meta（規格表 meta_kinds.json 每一類的 refs：欄位 ⇒ 能指哪幾類、舊寫法是哪個鍵）從路徑換成 id；舊路徑照遊戲 metaRebase 的規矩找（自己那一層往上）。
+# 寫回作品走 senate sculpture op=work sub=meta（批次檔；meta 不限作者，造船規格 Sculpture.md「sub=meta」）；之後 metasync 帶進 _cache。
+ID_RE = re.compile(r'(?:([a-z][a-z0-9_]*)\.)?([a-z][a-z0-9_]*)-([1-9][0-9]*)')
+
+
+def id_kind(meta, what):
+    k = str((meta or {}).get('kind') or '')
+    return k if re.fullmatch(r'[a-z][a-z0-9_]*', k) else what
+
+
+def parts_json(work):
+    """部件清單（senate export format=parts）整份：{links, models, …}。拿不到 ⇒ Fail。"""
+    senate = shutil.which('senate')
+    if not senate:
+        raise Fail('找不到 senate')
+    tmp = os.path.join(CACHE, '_pj_%s.json' % hashlib.sha1(work.encode('utf-8')).hexdigest()[:10])
+    code, out = run([senate, 'cmd', 'sculpture', '--arg', 'op=export', '--arg', 'format=parts', '--arg', 'work=' + work, '--arg', 'out=' + os.path.abspath(tmp)])
+    if code != 0 or not os.path.exists(tmp):
+        raise Fail('部件清單匯出失敗（%s，exit %d）：\n%s' % (work, code, out.strip()[-600:]))
+    try:
+        return json.load(open(tmp, encoding='utf-8'))
+    finally:
+        os.remove(tmp)
+
+
+def id_records(PJ):
+    """部件清單 ⇒ 每一件 [{what: link／model, path, name（在它所在作品裡的名字）, holder（它所在的作品）, meta, points}]，照部件清單的順序（關聯先、模型後）。"""
+    L = {q['path']: q for q in PJ.get('links', [])}
+    out = []
+    for q in PJ.get('links', []):
+        par, _, nm = q['path'].rpartition('/')
+        out.append({'what': 'link', 'path': q['path'], 'name': nm, 'holder': L[par]['work'] if par else PJ['work'], 'meta': q.get('meta') or {}, 'points': q.get('points') or {}})
+    for q in PJ.get('models', []):
+        fr = q.get('frame') or ''
+        out.append({'what': 'model', 'path': q['path'], 'name': q['name'], 'holder': L[fr]['work'] if fr else PJ['work'], 'meta': q.get('meta') or {}, 'points': q.get('points') or {}})
+    return out
+
+
+def id_refspec():
+    """規格表的 refs：{kind: {欄位: {to: [類別…], old: 舊鍵}}}。"""
+    return {k: v['refs'] for k, v in meta_kinds().items() if v.get('refs')}
+
+
+def id_plan(cfg, sid, PJ):
+    """這艘要發的號與要換的關聯（不寫任何東西）。回 (writes {作品: [(part, 名字, meta 增量)]}, idNext, 讀數, 問題)。"""
+    s = next(x for x in cfg['ships'] if x['id'] == sid)
+    R = id_records(PJ)
+    ns = ''
+    base_pre = None                                    # 改裝船：關聯到原船組裝件的那一條（它底下的沿用原船的 id）
+    if s.get('variant_of'):
+        b = next((x for x in cfg['ships'] if x['id'] == s['variant_of']), None)
+        L0 = [q for q in PJ.get('links', []) if b and q.get('work') == b.get('work')]
+        if len(L0) != 1:
+            raise Fail('%s 是 %s 的改裝船，可是部件清單裡關聯到原船組裝件（%s）的有 %d 條（要剛好 1 條）' % (sid, s['variant_of'], b and b.get('work'), len(L0)))
+        ns, base_pre = sid + '.', L0[0]['path'] + '/'
+    own = [r for r in R if not (base_pre and r['path'].startswith(base_pre))]
+    nxt = dict(s.get('idNext') or {})
+    top = {}
+    probs = []
+    seen = {}
+    for r in R:                                        # 已經有的 id：撞號、格式不對都報；序號頂到哪
+        v = r['meta'].get('id')
+        if v is None:
+            continue
+        m = ID_RE.fullmatch(str(v))
+        if not m:
+            probs.append('✗ %s 的 id=%s 格式不對（要 <類別>-<序號>）' % (r['path'], v))
+            continue
+        rk = (r['holder'], r['what'], r['name'])
+        if v in seen and seen[v][1] != rk:             # 同一筆紀錄經好幾條關聯（同一件子作品關聯兩次）不算撞號：遊戲照 <關聯 id>/<內部 id> 分開
+            probs.append('✗ id 撞號：%s 與 %s 都是 %s' % (seen[v][0], r['path'], v))
+        seen.setdefault(v, (r['path'], rk))
+        if (m.group(1) or '') + '.' == ns or (not m.group(1) and not ns):
+            top[m.group(2)] = max(top.get(m.group(2), 0), int(m.group(3)))
+    want, byrec = {}, {}
+    for r in own:                                      # 沒有 id 的發號（照部件清單的順序）
+        if r['meta'].get('id') is not None:
+            continue
+        rk = (r['holder'], r['what'], r['name'])       # 同一件子作品被關聯好幾次（哨兵號兩個彈藥櫃）⇒ 同一筆紀錄只發一個號；遊戲照 <關聯 id>/<內部 id> 分開（造船規格 §12.2）
+        if rk in byrec:
+            want[r['path']] = byrec[rk]
+            continue
+        k = id_kind(r['meta'], 'part' if r['what'] == 'link' else 'model')
+        n = max(nxt.get(k, 1), top.get(k, 0) + 1)
+        want[r['path']] = byrec[rk] = ns + '%s-%d' % (k, n)
+        nxt[k] = n + 1
+    if base_pre:
+        miss = [r['path'] for r in R if r['path'].startswith(base_pre) and r['meta'].get('id') is None]
+        if miss:
+            probs.append('✗ 原船 %s 那一棵還有 %d 件沒有 id ⇒ 先跑 admin.py ids --id %s（例：%s）' % (s['variant_of'], len(miss), s['variant_of'], '、'.join(miss[:4])))
+    idof = {r['path']: (want.get(r['path']) or r['meta'].get('id')) for r in R}
+    kind_of = {r['path']: id_kind(r['meta'], '') for r in R}
+    # 舊寫法的路徑 ⇒ 完整路徑（遊戲 metaRebase 同一條規矩：本身就是 ⇒ 不動；不然自己那一層往上、最近的先）；梯子 ＝ <關聯>/<梯名>
+    P = set(idof)
+    lad = {}
+    for r in R:
+        if r['what'] == 'link':
+            for k in r['points']:
+                i = k.rfind('.')
+                if i > 0:
+                    lad[r['path'] + '/' + k[:i]] = r['path']
+
+    def full(path, v):
+        if v in P or v in lad:
+            return v
+        a = path.split('/')
+        for i in range(len(a) - 1, 0, -1):
+            c = '/'.join(a[:i]) + '/' + v
+            if c in P or c in lad:
+                return c
+        return None
+    spec = id_refspec()
+    conv = {}
+    for r in own:
+        for f, sp in (spec.get(kind_of[r['path']]) or {}).items():
+            old = sp.get('old', f)
+            if old != f and r['meta'].get(f) is not None:
+                continue                                   # 新鍵已經寫了
+            v = r['meta'].get(old)
+            if v is None or (old == f and isinstance(v, str) and ('#' in v or ID_RE.fullmatch(v))):
+                continue                                   # 沒寫、或已經是 id 寫法
+            fp = full(r['path'], str(v))
+            if fp is None:
+                probs.append('✗ %s 的 %s=%s 找不到這個部件（換不成 id，照舊）' % (r['path'], old, v))
+                continue
+            if fp in lad:
+                tgt, tk = idof.get(lad[fp]) + '#' + fp[len(lad[fp]) + 1:], 'ladders#'
+            else:
+                tgt, tk = idof.get(fp), kind_of.get(fp)
+            if tk not in sp['to']:
+                probs.append('✗ %s 的 %s=%s 指到的是 %s，規格表只收 %s' % (r['path'], old, v, tk or '（沒有 kind）', '、'.join(sp['to'])))
+                continue
+            d = conv.setdefault(r['path'], {})
+            d[f] = tgt
+            if old != f:
+                d[old] = None
+    writes, done = {}, {}
+    for r in own:
+        d = {}
+        if r['path'] in want:
+            d['id'] = want[r['path']]
+        d.update(conv.get(r['path'], {}))
+        if not d:
+            continue
+        rk = (r['holder'], r['what'], r['name'])
+        if rk in done:                                 # 同一筆紀錄經兩條關聯 ⇒ 只寫一次（兩條的增量要一樣）
+            if done[rk] != d:
+                probs.append('✗ %s 跟經別條關聯的同一筆紀錄要寫的不一樣：%s ≠ %s' % (r['path'], done[rk], d))
+            continue
+        done[rk] = d
+        writes.setdefault(r['holder'], []).append((r['what'], r['name'], d, r['path']))
+    dup = [r['path'] for r in own if (r['holder'], r['what'], r['name']) in done and not any(w[3] == r['path'] for w in writes.get(r['holder'], []))]
+    log = ['ids %s：%d 件、已有 id %d、這次發 %d、關聯換成 id %d 格%s' % (sid, len(R), len(seen), len(set(want.values())), sum(len([k for k in d if d[k] is not None]) for d in conv.values()),
+                                                         ('（改裝船：原船 %s 那一棵沿用）' % s['variant_of']) if base_pre else '')]
+    if dup:
+        log.append('  同一筆紀錄經好幾條關聯（只寫一次、遊戲照 <關聯 id>/<內部 id> 分開）%d 件：%s' % (len(dup), '、'.join(dup[:6])))
+    apply = {}                                         # 檔頭照路徑要補的（跟寫回作品的同一份增量；同一筆紀錄經好幾條關聯 ⇒ 每條路徑各補一次）
+    for r in own:
+        d = dict({'id': want[r['path']]} if r['path'] in want else {}, **conv.get(r['path'], {}))
+        if d:
+            apply[r['path']] = d
+    return writes, nxt, log, probs, apply
+
+
+def act_ids(sid, dry=False, build=True):
+    """物件 id（TASK-0715）：發號、指名別的部件的 meta 換成 id、寫回雕刻作品（sub=meta 批次），再 metasync 帶進 _cache。dry ＝ 只列要做什麼、不寫。"""
+    cfg = load()
+    s = next((x for x in cfg['ships'] if x['id'] == sid), None)
+    if not s:
+        raise Fail('設定檔沒有這艘：' + sid)
+    writes, nxt, log, probs, apply = id_plan(cfg, sid, parts_json(s['work']))
+    log += probs
+    if any(p.startswith('✗ 原船') or p.startswith('✗ id 撞號') for p in probs):
+        raise Fail('\n'.join(log + ['⛔ 擋下：一筆都沒寫']))
+    for w, L in writes.items():
+        log.append('  %s：%d 筆' % (w, len(L)))
+        for what, nm, d, path in L[:3 if not dry else 400]:
+            log.append('    %s %s ⇐ %s' % (what, path, json.dumps(d, ensure_ascii=False)))
+    if dry:
+        return log + ['（dry：一筆都沒寫）']
+    if not writes:                                     # 作品裡都有了 ⇒ 只把 _cache 的檔頭對齊作品（改裝船裡原船那一棵也是）
+        return log + ['＝ 作品裡沒有要寫的'] + id_apply(s, parts_json(s['work']))
+    senate = shutil.which('senate')
+    for w, L in writes.items():
+        tmp = os.path.join(CACHE, '_ids_%s.tsv' % hashlib.sha1(w.encode('utf-8')).hexdigest()[:10])
+        with open(tmp, 'w', encoding='utf-8', newline='\n') as f:
+            for what, nm, d, path in L:
+                f.write('%s\t%s\t%s\n' % (what, nm, json.dumps(d, ensure_ascii=False)))
+        code, out = run([senate, 'cmd', 'sculpture', '--arg', 'op=work', '--arg', 'sub=meta', '--arg', 'work=' + w, '--arg', 'persona=ame', '--arg', 'file=' + os.path.abspath(tmp)])
+        os.remove(tmp)
+        if code != 0:
+            raise Fail('\n'.join(log + ['✗ 寫回 %s 失敗（exit %d；前面的作品已經寫了）：' % (w, code), out.strip()[-800:]]))
+    cfg = load()
+    next(x for x in cfg['ships'] if x['id'] == sid)['idNext'] = dict(sorted(nxt.items()))
+    save(cfg)
+    log.append('✓ 寫回 %d 件作品；下一號記在 ships[%s].idNext' % (len(writes), sid))
+    log += id_apply(s, parts_json(s['work']))
+    if build:
+        log += act_build()
+        log += act_shipcheck([sid])
+    return log
+
+
+def id_keys():
+    """id 與指名別的部件的 meta 鍵（規格表 refs 的新鍵與舊鍵）。"""
+    K = {'id'}
+    for R in id_refspec().values():
+        for f, sp in R.items():
+            K |= {f, sp.get('old', f)}
+    return K
+
+
+def id_apply(s, PJ):
+    """作品（部件清單，寫回之後重讀的）裡的 id 與指名鍵照路徑同步進 _cache 那份 .vxk 的檔頭（關聯 parts[].path、模型 rig.models[].name）；
+    改裝船裡原船那一棵也一樣（路徑對得上就同步）。
+    ⛔ 不走 metasync：它會把作品裡別人還沒匯進來的 meta 改動一起帶進來 ⇒ 戰局變了分不出是誰。這裡只動 id_keys() 那幾個鍵。"""
+    path = os.path.join(CACHE, s['vxk'])
+    raw = zlib.decompress(open(path, 'rb').read(), -15)
+    n = struct.unpack('<I', raw[4:8])[0]
+    h = json.loads(raw[8:8 + n].decode('utf-8'))
+    K = id_keys()
+    src = {r['path']: r['meta'] for r in id_records(PJ)}
+    hit, miss = 0, 0
+    for q in list(h.get('parts', [])) + list((h.get('rig') or {}).get('models', [])):
+        sm = src.get(q.get('path') or q.get('name'))
+        if sm is None:
+            continue
+        m = dict(q.get('meta') or {})
+        before = dict(m)
+        for k in K:
+            if k in sm:
+                m[k] = sm[k]
+            else:
+                m.pop(k, None)
+        if m != before:
+            q['meta'] = dict(sorted(m.items()))
+            hit += 1
+    hp = {q.get('path') for q in h.get('parts', [])} | {q.get('name') for q in (h.get('rig') or {}).get('models', [])}
+    miss = len([p for p, m in src.items() if 'id' in m and p not in hp])
+    if hit:
+        vxk_write(path, h, raw[8 + n:])
+    return ['✓ _cache %s 的檔頭同步了 %d 件的 id／指名%s' % (s['vxk'], hit, '（⚠ %d 件作品裡有、.vxk 還沒有 ⇒ 要 reimport 才帶得進來）' % miss if miss else '')] + ([lock_put(s['vxk'])] if hit else [])
+
+
 # ───────────────────────── 動作（CLI 與後台頁共用） ─────────────────────────
 class Fail(Exception):
     pass
@@ -1060,6 +1312,12 @@ def act_metaspec(doc_path=None):
                             ('noFall', lambda x: isinstance(x, bool), 'true／false'), ('anim', lambda x: isinstance(x, bool), 'true／false')):   # 遊戲屬性（TASK-0672 ②；js/00_config.js kindProp）
             if f in v and not ok(v[f]):
                 E.append('規格表 %s：%s 要是 %s' % (k, f, what))
+        for f, sp in (v.get('refs') or {}).items():          # 指名別的部件（TASK-0715）：鍵要在 keys、to 指的 kind 要在規格表（<kind># ＝ 那一類關聯裡的一座）
+            if f not in (v.get('keys') or []) or sp.get('old', f) not in (v.get('keys') or []):
+                E.append('規格表 %s：refs 的 %s（舊鍵 %s）要列在 keys' % (k, f, sp.get('old', f)))
+            for t in sp.get('to') or [None]:
+                if not t or t.rstrip('#') not in K:
+                    E.append('規格表 %s：refs.%s.to 的 %s 規格表沒有' % (k, f, t))
     log.append('① 規格表：%d 個 kind' % len(K))
     seen = {}
     for sh in load()['ships']:
@@ -1128,7 +1386,7 @@ def act_shipcheck(ids=None):
     if not os.path.exists(OUT):
         return ['⚠ 匯入檢查沒跑：還沒有成品（先 build）']
     os.makedirs(REPORTS, exist_ok=True)
-    log = []
+    log, cards = [], {}
     for sid in ids:
         prof = tempfile.mkdtemp(prefix='shipcheck_')
         try:
@@ -1185,7 +1443,31 @@ def act_shipcheck(ids=None):
         path = os.path.join(REPORTS, 'shipcheck_%s.md' % sid)
         open(path, 'w', encoding='utf-8').write('\n'.join(md))
         log.append('  %s %s（%s）：✗ %d　⚠ %d ⇒ %s' % ('✗' if ne else '⚠' if nw else '✓', I.get('name', sid), sid, ne, nw, path))
+        if R.get('card'):
+            cards[sid] = R['card']
+    if cards:
+        log.append('  ' + cards_write(cards))
     return ['匯入檢查：'] + log
+
+
+CARDS_P = os.path.join(HERE, 'config', 'ship_cards.json')   # 選船彈窗的卡片（js/72_shippick.js；建置時內嵌成 #ship-cards）：shipcheck 量出來的（js/75_shipcheck.js shipCard），⛔ 不手改
+
+
+def cards_write(new):
+    """shipcheck 量到的卡片併進 config/ship_cards.json（量到哪幾艘換哪幾艘；船隻清單沒有的拿掉）。內容沒變 ⇒ 不寫（免得每次 shipcheck 都多一筆 diff）。"""
+    old = json.load(open(CARDS_P, encoding='utf-8')) if os.path.exists(CARDS_P) else {}
+    ids = [s['id'] for s in load()['ships']]
+    C = {k: v for k, v in (old.get('ships') or {}).items() if k in ids}
+    C.update(new)
+    out = {'about': '選船彈窗的卡片（主選單；js/72_shippick.js）：每艘船開戰那一刻量的排水量、水線長、砲、齊射彈重、動力、帆、船員。admin.py shipcheck 產生（js/75_shipcheck.js shipCard），不要手改。',
+           'ships': {k: C[k] for k in ids if k in C}}
+    if out == old:
+        return '卡片沒變（config/ship_cards.json）'
+    with open(CARDS_P, 'w', encoding='utf-8', newline='\n') as f:
+        f.write('{\n  "about": %s,\n  "ships": {\n%s\n  }\n}\n' % (json.dumps(out['about'], ensure_ascii=False),
+                ',\n'.join('    %s: %s' % (json.dumps(k), json.dumps(v, ensure_ascii=False, separators=(', ', ': '))) for k, v in out['ships'].items())))
+    miss = [k for k in ids if k not in out['ships']]
+    return '卡片寫進 config/ship_cards.json（%d 艘%s；重建之後選船彈窗才看得到）' % (len(out['ships']), '；還沒量：' + '、'.join(miss) if miss else '')
 
 
 # 頂層短名（TASK-0671）：4 字以內的小寫頂層名字（step、last、hurt…）⇒ 區域變數忘了 var 就蓋到它、讀的人也猜不到是哪支檔的 ⇒ 加模組字首。
@@ -2653,6 +2935,10 @@ def main():
     s = sp.add_parser('cells', help='只寫動力件與梯子的格子清單（parts[].cellRuns；meta、格子不動）')
     s.add_argument('--id', required=True)
     s.add_argument('--no-build', action='store_true')
+    s = sp.add_parser('ids', help='物件 id（TASK-0715；造船規格 §12）：每件關聯、模型發一個 <類別>-<序號>、指名別的部件的 meta 換成 id、寫回雕刻作品，再 metasync')
+    s.add_argument('--id', action='append', required=True, help='哪一艘（可以給好幾次；改裝船排在原船後面）')
+    s.add_argument('--dry', action='store_true', help='只列要發的號與要換的關聯，一筆都不寫')
+    s.add_argument('--no-build', action='store_true')
     s = sp.add_parser('relock', help='指紋改成 _cache 現在那份')
     s.add_argument('--id', required=True)
     sp.add_parser('authors', help='建造者：每艘船照 _cache 那份 .vxk 檔頭的 owner 記 ships[].author（補以前匯入的船；不重建）')
@@ -2696,6 +2982,10 @@ def main():
             log = act_authors()
         elif o.op == 'metasync':
             log = act_metasync(o.id, not o.no_build)
+        elif o.op == 'ids':
+            log = []
+            for i in o.id:
+                log += act_ids(i, o.dry, not o.no_build and i == o.id[-1])
         elif o.op == 'cells':
             log = act_cells(o.id, not o.no_build)
         elif o.op == 'import':

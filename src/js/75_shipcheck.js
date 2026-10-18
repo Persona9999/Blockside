@@ -5,6 +5,15 @@
 // 每一筆：{ lv: 'error'｜'warn', what: 哪一類, where: 哪個部件, msg: 現在怎麼了（遊戲退回什麼）, fix: 怎麼修 }。
 //   error ＝ 遊戲裡壞掉（開場就掉、砲開不動、斷掉的梯子…）；warn ＝ 能動，但照退路／預設跑（名字認、憲法號的數字…）。
 var SC_SECS = 2;
+/** 選船彈窗的卡片（Tim 2026-10-18「選船介面可以給船分類…不用載入所有船隻資訊 而是只載必要資訊」）：開戰那一刻量（還沒被打），admin.py shipcheck 寫進 config/ship_cards.json、建置時內嵌 ⇒ 主選單不用解碼船就有。
+ *  tons ＝ 設計水線的排水量（T.disp）；len ＝ 水線長（公尺）；guns ＝ 砲（含迴旋砲、追擊砲）門數；volley ＝ 全部的砲各打一發的彈重（公斤，砲種表 shot）；
+ *  drive ＝ 額外動力（31_drive.js D.kind：steam／oar／magic；沒有 ＝ sail）；sails ＝ 作品的帆（不算陣營旗）；crew ＝ 開戰時的人數。 */
+function shipCard(sh) {
+  var T = sh.T, D = sh.drive, vol = 0, by = {};
+  sh.guns.forEach(function (g) { var G = GUNS[g.type] || {}; vol += +G.shot || 0; by[g.type] = (by[g.type] || 0) + 1; });
+  return { tons: Math.round(T.disp || 0), len: +(((T.wl1 || T.hx1) - (T.wl0 || T.hx0)) * S).toFixed(1), guns: sh.guns.length, gunTypes: by, volley: Math.round(vol),
+    drive: D && D.kind ? D.kind : 'sail', sails: sh.sails.filter(function (s) { return !(s.meta && s.meta.team); }).length, crew: sh.crew.length };
+}
 function shipCheck(id) {
   var R = { id: id, t: SC_SECS, issues: [], info: {} };
   function add(lv, what, where, msg, fix) { R.issues.push({ lv: lv, what: what, where: where, msg: msg, fix: fix }); }
@@ -22,6 +31,7 @@ function shipCheck(id) {
     R.info = { name: T.name, guns: sh.guns.length, crew: sh.crew.length, models: sh.models.length, ropes: sh.ropes.length, sails: sh.sails.filter(function (s) { return !(s.meta && s.meta.team); }).length, teamFlags: sh.sails.filter(function (s) { return s.meta && s.meta.team; }).length,   // 作品的帆／遊戲加的陣營旗分開數（77_colours.js；⛔ 混在一起 ⇒ 夜燈號 vxk 12 面、報告寫 15，basecamp 2026-10-15 問）
     masts: sh.masts.length, mags: sh.mags.length,
       decks: NV ? NV.levels.map(function (L) { return L.key + ' ' + L.name; }) : [], ladders: NV ? NV.ladders.length : 0, rooms: (sh.rooms || []).length, zw: T.zw, hits: SHIPS[1].hits + sh.hits };
+    R.card = shipCard(sh);                                               // 選船彈窗的卡片（72_shippick.js；admin.py 寫進 config/ship_cards.json）
     if (sh.hits || SHIPS[1].hits) add('warn', '量測', '—', '量的這 ' + SC_SECS + ' 秒裡有砲彈打中（hits ' + (sh.hits + SHIPS[1].hits) + '）⇒ 下面「站不滿」「掉了」可能有被打的', '照舊看，或重跑');
     // ── 船型：水線、geo ──
     var p = (T.h.parts || []).filter(function (q) { return q.meta && q.meta.kind === 'ship'; })[0], wm = (p && p.meta) || T.h.meta || {};
@@ -44,6 +54,27 @@ function shipCheck(id) {
       else if (p[2] === 'on') add('warn', 'meta 規格表', where, 'kind=' + p[0] + ' 掛在' + { link: '關聯', model: '模型', sail: '帆', rope: '繩' }[p[1]] + '上，規格表寫的是 ' + META_KINDS[p[0]].on.join('／'), '照造船規格 ' + (META_KINDS[p[0]].doc || '') + ' 掛，或規格表的 on 加上這一種');
     });
     R.info.metaKinds = Object.keys(MK).filter(function (key) { return /\|ok$/.test(key); }).map(function (key) { return key.split('|')[0]; }).filter(function (k, i, a) { return a.indexOf(k) === i; }).join('、');
+    // ── 物件 id 與指名（TASK-0715；造船規格 §12；05_hull.js idIndex／refPath）：沒有 id、撞號、指不到、指錯類、還是舊的路徑寫法 ──
+    var IX = T.ids || idIndex(T.h);
+    if (IX.none) add('warn', '物件 id', '—', IX.none + ' 件關聯／模型沒有 id ⇒ 別的部件指名不到它', 'python -I admin.py ids --id ' + id);
+    IX.dup.forEach(function (d) { var j = d.indexOf('：'); add('error', '物件 id', d.slice(0, j), 'id 撞號：' + d.slice(j + 1) + ' ⇒ 指名它的只會找到第一件', '改回唯一（admin.py ids 發號不會撞；多半是手改或複製出來的）'); });
+    [T.h.parts, T.rig.models].forEach(function (A) {
+      (A || []).forEach(function (q) {
+        var mt = q.meta || {}, K = Object.prototype.hasOwnProperty.call(META_KINDS, mt.kind) ? META_KINDS[mt.kind] : null, RF = K && K.refs; if (!RF) return;
+        Object.keys(RF).forEach(function (f) {
+          var sp = RF[f], old = sp.old || f, v = mt[f] !== undefined ? mt[f] : mt[old], where = q.path || q.name; if (v === undefined || v === '') return;
+          var s = String(v), i = s.indexOf('#'), ip = i < 0 ? s : s.slice(0, i), sub = i < 0 ? '' : s.slice(i + 1);
+          if (!ID_RX.test(ip)) { add('warn', '物件 id', where, old + '=' + s + ' 是舊的路徑寫法 ⇒ 改名、搬資料夾就斷', 'python -I admin.py ids --id ' + id + ' 會換成 ' + f + '=<id>'); return; }
+          var r = IX.by[ip]; if (!r) { add('error', '物件 id', where, f + '=' + s + ' 找不到這個 id ⇒ 遊戲當成沒寫', '寫這艘船裡有的 id（造船規格 §12）'); return; }
+          var k = (r.q.meta && r.q.meta.kind) || '', ok = sp.to.some(function (t) { return t.slice(-1) === '#' ? i >= 0 && k === t.slice(0, -1) : i < 0 && k === t; });
+          if (!ok) { add('error', '物件 id', where, f + '=' + s + ' 指到的是 ' + (k || '（沒有 kind）') + (i >= 0 ? '#' + sub : '') + '，規格表只收 ' + sp.to.join('、'), '照規格表 refs 指（config/meta_kinds.json）'); return; }
+          if (sub && !Object.keys(r.q.points || {}).some(function (n) { return n.indexOf(sub + '.') === 0; })) add('error', '物件 id', where, f + '=' + s + '：' + r.path + ' 裡沒有「' + sub + '」這一座', '# 後面寫那一座的名字（固定點 <名>.foot 的 <名>）');
+        });
+      });
+    });
+    R.info.ids = Object.keys(IX.by).length + ' 件有 id' + (IX.none ? '、' + IX.none + ' 件沒有' : '');
+    var RG = sh.ropes.filter(function (r) { return r.guess; });            // 繩端照外框猜綁到模型上（10_ship.js linkRopes：作品的 ends 沒寫綁哪個模型才猜）
+    if (RG.length) add('warn', '物件 id', RG.slice(0, 3).map(function (r) { return r.name; }).join('、') + (RG.length > 3 ? ' 等 ' + RG.length + ' 條' : ''), '繩端是照位置猜綁到模型上的（作品沒寫綁哪個模型）⇒ 模型一換、一搬就可能綁錯', '雕刻端把繩端綁到模型的固定點（ends 寫 model:<模型>/<固定點>）');
     // ── 裝飾（TASK-0682；05_hull.js decoSplit）：模型 meta deco=1 ⇒ 載入時拿掉（畫質「裝飾」開著才畫）—— 不算重量、不被打 ──
     (T.decoAll || []).forEach(function (m) { var k = m.meta && m.meta.kind; if (k) add('warn', '裝飾', m.name, '標了 deco 又有 kind=' + k + ' ⇒ 載入時整個拿掉，那個功能在遊戲裡就沒了', '有功能的模型不標 deco（造船規格 §9.9）'); });
     (T.h.parts || []).forEach(function (q) { if (isDeco(q)) add('warn', '裝飾', q.path, '關聯標了 deco ⇒ 遊戲不拿掉（格子是船的一部分：重量、命中照算）；只有外部模型能隱藏', '做成外部模型再標 deco（造船規格 §9.9）'); });

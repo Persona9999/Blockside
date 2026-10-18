@@ -395,8 +395,10 @@ function linkRopes(T, ropes, models) {
       if (!onRope) {                                                             // 跟著砲塔轉、雕刻寫明掛在母繩上（橫繩組的每一道）⇒ 只找繩（⛔ 先找模型 ⇒ 哨兵號繩梯中間五道綁到旁邊的 XI 吋砲尾，砲被打掉橫繩跟著斷、繩梯判成斷了；量過）
         var yk = yardNear(T, P, 3);                                              // 帆桁：照網格（⛔ 照外框：轉過的帆桁外框很大，桅頂附近的 ratline 都會被當成綁在帆桁上）
         if (yk >= 0) { r.mods.push(yk); r['m' + e[2]] = yk; return; }
-        var mod = models.filter(function (m) { var b = m.bb; if (m.station || m.kind === 'yard') return false; return P[0] > b[0] - 4 && P[0] < b[3] + 4 && P[1] > b[1] - 4 && P[1] < b[4] + 4 && P[2] > b[2] - 4 && P[2] < b[5] + 4; })[0];
-        if (mod) { r.mods.push(mod.k); r['m' + e[2]] = mod.k; return; }   // 綁在模型上（舵索綁舵輪）⇒ 模型飛了才斷
+        var nk = re && re.ends ? rcpModel(T.rig, re.frame, re.ends[e[0] ? 1 : 0]) : -1, named = nk >= 0 && models[nk] && !models[nk].station && models[nk].kind !== 'yard' ? models[nk] : null;   // 作品寫明綁在哪個模型（ends model:<模型>/<固定點>；TASK-0715）⇒ 照它，不猜
+        var mod = named || models.filter(function (m) { var b = m.bb; if (m.station || m.kind === 'yard') return false; return P[0] > b[0] - 4 && P[0] < b[3] + 4 && P[1] > b[1] - 4 && P[1] < b[4] + 4 && P[2] > b[2] - 4 && P[2] < b[5] + 4; })[0];
+        //   ⛔ 照外框猜（以前唯一的做法）會綁錯：風暴角號 P1 砲的 breeching 綁到 S1 砲、潮墓號 96 條砲尾的繩綁到旁邊的導纜器（TASK-0715 量的）⇒ 只剩作品沒寫的時候用，匯入檢查報
+        if (mod) { r.mods.push(mod.k); r['m' + e[2]] = mod.k; if (!named) r.guess = (r.guess || 0) + 1; return; }   // 綁在模型上（舵索綁舵輪）⇒ 模型飛了才斷
       }
       ropes.forEach(function (o, j) {
         if (j === i || P[0] < o.bb[0] - 3 || P[0] > o.bb[3] + 3 || P[1] < o.bb[1] - 3 || P[1] > o.bb[4] + 3 || P[2] < o.bb[2] - 3 || P[2] > o.bb[5] + 3) return;
