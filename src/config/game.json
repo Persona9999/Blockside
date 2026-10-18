@@ -978,5 +978,6 @@
       "need": {"bench": 1}
     },
     "deck": {"name": "砲甲板", "deck": true, "items": ["keg", "pump", "spump", "bench", "loft"]}
-  }
+  },
+  "report": {"webhook": "x1:KhgbExhJRksBRgEGHx0WWkwXXG0NHwpEBAwGDUAdDgNAQ0EZSQJwWl5XXUpZUFcZRlJAW10NHjNrMCIqGi9FI0kuGDUkJTgLO0JMVBJaLBc5CRwcEWQfKEcYAgQaC0kKOx8uHAIaIyFoJiE4VjMMRy1CMw4ZAgAFIA", "cooldown": 60, "perSession": 5}
 }

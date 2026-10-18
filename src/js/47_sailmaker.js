@@ -128,7 +128,7 @@ function smTick(sh) {
     var H = c.hand; if (H.job || H.climb) return;
     var fr = handReg(sh, c); if (fr < 0) return;                         // 站在走路格外（剛爬上來、在路上）⇒ 下一次
     if (!(c.cloth > 0) || c.smShort) { smFetch(sh, c, fr); return; }   // smShort：上一面帶的不夠修完 ⇒ 先回去拿滿（⛔ 不回 ⇒ 剩 10 份接不了一條 20 份的繩，同一面一直重來）
-    if (!L) L = sh.sails.filter(function (s) { return !s.dead && !s.flag && smHas(smNeed(sh, s)); }).concat((sh.smLads || []).filter(function (l) { return smHas(smNeed(sh, l)); }));
+    if (!L) L = dmgFor(sh, 'sailmaker').map(function (r) { return r.t; });   // 全船的損壞表（48_damage.js）：帆與繩變了才重掃
     var cand = L.filter(function (s) { return !taken[s.k]; });
     cand.sort(function (a, b) { return smRank(a) - smRank(b) || Math.abs(smAlongX(a) - c.pos[0]) - Math.abs(smAlongX(b) - c.pos[0]); });
     for (var k = 0; k < cand.length && k < 4; k++) {                    // 同一面試不到（路斷了）⇒ 下一面
@@ -140,6 +140,13 @@ function smTick(sh) {
       return;
     }
   });
+}
+/** 損壞表裡帆匠的那幾列（48_damage.js dmgRows：帆與繩變了才叫）：還掛著、不是旗、有東西要補的帆，接著是要接的繩梯。 */
+function smScan(sh) {
+  var out = [];
+  sh.sails.forEach(function (s) { if (s.dead || s.flag) return; var N = smNeed(sh, s); if (smHas(N)) out.push({ key: 'S' + s.k, kind: 'sail', role: 'sailmaker', t: s, need: N, pri: smRank(s) }); });
+  (sh.smLads || []).forEach(function (l) { var N = smNeed(sh, l); if (smHas(N)) out.push({ key: 'R' + l.k, kind: 'rlad', role: 'sailmaker', t: l, need: N, pri: smRank(l) }); });
+  return out;
 }
 /** 先補哪一個：帆照血量比例（0～1，最破的先）；繩梯排在所有帆後面。 */
 function smRank(t) { return t.lad ? 2 : t.hp / t.hpMax; }

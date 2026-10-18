@@ -57,6 +57,8 @@
   #info{ display:none; pointer-events:auto; cursor:pointer; border-left:3px solid var(--blue); margin-bottom:6px; max-width:100%; box-sizing:border-box; }
   #info h3::after{ content:''; display:block; clear:both; }
   #info .bar{ max-width:100%; }   /* 血條最多跟那一欄一樣寬（⛔ 固定寬 ⇒ 窄的時候伸進右欄） */
+  #info .fold.gm{ padding:0; overflow:hidden; } #info .fold.gm i{ font-style:normal; padding:0 6px; display:inline-block; } #info .fold.gm i.on{ color:#111; background:var(--gold); }   /* 旁邊那張圖：砲位｜損壞（61_hud.js GMAP_MODE） */
+  #info .dmgsum{ margin-top:2px; }
   #info .fold.see.on{ color:#111; background:var(--gold); }   /* 「🎥 看這艘」：正在看 ⇒ 實心 */
   #info .fold{ float:right; margin-left:12px; cursor:pointer; color:var(--gold); font-size:12px; font-weight:normal; border:1px solid rgba(232,194,106,.55); border-radius:4px; padding:0 7px; }
   #info .cls{ color:var(--dim); font-weight:normal; font-size:.85em; }
@@ -329,7 +331,9 @@
   #err .note{ margin-top:6px; font-size:12px; opacity:.75; }
   #err .btns{ margin-top:12px; text-align:right; }
   #err button{ font:inherit; margin:0 0 0 8px; padding:6px 16px; border-radius:6px; border:1px solid rgba(255,255,255,.3); background:rgba(255,255,255,.08); color:var(--ink); cursor:pointer; }
-  #err button#errSend{ background:#b8452e; border-color:#e06a4f; }
+  #err button.pri{ background:#b8452e; border-color:#e06a4f; }   /* 主要的那一顆：有 Discord webhook ⇒「送出回報」，沒有 ⇒「寄出」（01_gl.js errShow） */
+  #err button:disabled{ opacity:.5; cursor:default; }
+  #err label.chk{ display:inline-flex; align-items:center; gap:6px; margin:8px 0 0; font-size:13px; }
 </style>
 </head>
 <body>
@@ -682,9 +686,10 @@
   <div id="err" role="alertdialog" aria-labelledby="errH"><div class="card panel">
     <h2 id="errH">出錯了</h2><pre id="errMsg"></pre>
     <div id="errRep" hidden><label for="errTxt">發生什麼事、剛剛在做什麼（選填）</label><textarea id="errTxt" rows="4"></textarea>
-      <div class="note">按「寄出」會先把完整內容（上面的錯誤訊息、這段文字、遊戲狀態：玩法、編成、畫質、裝置…）複製起來，再打開你的郵件程式；寄不寄由你決定。郵件程式沒跳出來 ⇒ 把複製的內容貼到信裡寄到 <b id="errAddr"></b>，或貼到 Discord。</div>
+      <label id="errShotL" class="chk"><input type="checkbox" id="errShot" checked> 附上畫面截圖</label>
+      <div class="note" id="errNote"></div><!-- 文字照有沒有 Discord webhook 換（01_gl.js errShow） -->
       <div class="note" id="errHint" hidden></div></div>
-    <div class="btns"><button id="errRepB">回報錯誤</button><button id="errCopy" hidden>複製內容</button><button id="errSend" hidden>寄出</button><button id="errX">關閉</button></div>
+    <div class="btns"><button id="errRepB">回報錯誤</button><button id="errCopy" hidden>複製內容</button><button id="errSend" hidden>寄出</button><button id="errPost" hidden>送出回報</button><button id="errX">關閉</button></div>
   </div></div>
 </div>
 
@@ -765,6 +770,7 @@
 <script src="js/45_pumps.js" data-bundle="game"></script>
 <script src="js/46_carpenter.js" data-bundle="game"></script>
 <script src="js/47_sailmaker.js" data-bundle="game"></script>
+<script src="js/48_damage.js" data-bundle="game"></script>
 <script src="js/50_sim.js" data-bundle="game"></script>
 <script src="js/51_captain.js" data-bundle="game"></script>
 <script src="js/52_fleet.js" data-bundle="game"></script>
