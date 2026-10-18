@@ -379,34 +379,74 @@ function ropeAuditStatic(sh) {
   });
   return { ropes: sh.ropes.length, ends: kinds, far: far, none: none, unfixed: sh.ropes.filter(function (r) { return r.unfixed; }).map(function (r) { return { name: r.name, d: r.unfixed.ends.map(function (e) { return e.d; }) }; }), floatAtStart: ropesFloating(sh).map(function (f) { return f.name + '#' + f.end + '：' + f.why; }) };
 }
+/**
+ * 繩兩端綁在哪（TASK-0716；Tim 2026-10-18「遊戲端真的要猜測應該要放在匯入時（檢查、猜測並產生報表）」）：
+ * 一端的決定 D ＝ { k: 'turret'｜'yard'｜'model'｜'rope'｜'none', m: 模型 id（沒有 id ⇒ 路徑）, r: 母繩的名字, s: 1 ＝ 端點在帆的頂點上, g: 1 ＝ 照外框猜的模型 }；格子（anchorNear）不在這裡。
+ * 檔頭有 rig.ropes[i].bind（admin.py ropebind 匯入時寫的；0 ＝ 那一端綁格子）⇒ 照它套、不猜；沒有（舊 .vxk、還沒跑 ropebind）⇒ 照 ropeDecide 現場算（同一套）。
+ */
 function linkRopes(T, ropes, models) {
+  var rd = ropeRideOf(T), mOf = null, rOf = null;
+  function modelFind(v) {
+    if (!mOf) { mOf = {}; models.forEach(function (m, k) { if (m.station || m.kind === 'furn') return; var id = m.meta && m.meta.id; if (id && !(('#' + id) in mOf)) mOf['#' + id] = k; if (!(('@' + m.path) in mOf)) mOf['@' + m.path] = k; }); }
+    return ('#' + v) in mOf ? mOf['#' + v] : ('@' + v) in mOf ? mOf['@' + v] : -1;
+  }
+  function ropeFind(v) { if (!rOf) { rOf = {}; ropes.forEach(function (o, j) { if (!(o.name in rOf)) rOf[o.name] = j; }); } return v in rOf ? rOf[v] : -1; }
   ropes.forEach(function (r, i) {
     if (r.a >= 0 && r.b >= 0) return;
     r.par = []; r.mods = [];
-    var n = r.pts.length / 3, onSail = false;
-    [[0, r.a, 'a'], [n - 1, r.b, 'b']].forEach(function (e) {
+    var re = T.rig.ropes[i], saved = re && re.bind, n = r.pts.length / 3, onSail = false;
+    [[0, r.a, 'a'], [n - 1, r.b, 'b']].forEach(function (e, ei) {
       if (e[1] >= 0) return;
-      var P = [r.pts[e[0] * 3], r.pts[e[0] * 3 + 1], r.pts[e[0] * 3 + 2]], best = -1, bd = 9;      // 0.3 公尺內
-      // 綁在帆角上（雕刻的 `sail:帆名/角`：帆腳垂在半空、只靠 sheet 拉住，例：風暴角號 spritsail）⇒ 端點就在帆的頂點上，算有靠（帆掉了它跟著斷：s.lines）
-      //   ⛔ 不認 ⇒ 開局就判「哪裡都不靠」死掉、掛在它上面的帆跟著掉（TASK-0579 量到：spritsail-sheet-P／S 開局 dead、spritsail hp 滿血就掉）
-      if (T.rig.sails.some(function (s) { var v = s.verts; for (var k = 0; k < v.length; k += 3) { var dx = v[k] - P[0], dy = v[k + 1] - P[1], dz = v[k + 2] - P[2]; if (dx * dx + dy * dy + dz * dz < 4) return true; } return false; })) onSail = true;
-      if (armNear(T, P, 3) >= 0) { r.tur = true; return; }                     // 綁在砲塔的殼上（頂上的艙口邊、吊籃；27_turret.js ropeRideOf：跟著轉）⇒ 算有靠（⛔ 錨 anchorNear 只找船殼 ⇒ 判成綁在空中、開局就不畫）
-      var rd = ropeRideOf(T), re = T.rig.ropes[i], onRope = rd && rd[i] && re && re.ends && typeof re.ends[e[0] ? 1 : 0] === 'string' && re.ends[e[0] ? 1 : 0].indexOf('rope:') === 0;
-      if (!onRope) {                                                             // 跟著砲塔轉、雕刻寫明掛在母繩上（橫繩組的每一道）⇒ 只找繩（⛔ 先找模型 ⇒ 哨兵號繩梯中間五道綁到旁邊的 XI 吋砲尾，砲被打掉橫繩跟著斷、繩梯判成斷了；量過）
-        var yk = yardNear(T, P, 3);                                              // 帆桁：照網格（⛔ 照外框：轉過的帆桁外框很大，桅頂附近的 ratline 都會被當成綁在帆桁上）
-        if (yk >= 0) { r.mods.push(yk); r['m' + e[2]] = yk; return; }
-        var nk = re && re.ends ? rcpModel(T.rig, re.frame, re.ends[e[0] ? 1 : 0]) : -1, named = nk >= 0 && models[nk] && !models[nk].station && models[nk].kind !== 'yard' ? models[nk] : null;   // 作品寫明綁在哪個模型（ends model:<模型>/<固定點>；TASK-0715）⇒ 照它，不猜
-        var mod = named || models.filter(function (m) { var b = m.bb; if (m.station || m.kind === 'yard') return false; return P[0] > b[0] - 4 && P[0] < b[3] + 4 && P[1] > b[1] - 4 && P[1] < b[4] + 4 && P[2] > b[2] - 4 && P[2] < b[5] + 4; })[0];
-        //   ⛔ 照外框猜（以前唯一的做法）會綁錯：風暴角號 P1 砲的 breeching 綁到 S1 砲、潮墓號 96 條砲尾的繩綁到旁邊的導纜器（TASK-0715 量的）⇒ 只剩作品沒寫的時候用，匯入檢查報
-        if (mod) { r.mods.push(mod.k); r['m' + e[2]] = mod.k; if (!named) r.guess = (r.guess || 0) + 1; return; }   // 綁在模型上（舵索綁舵輪）⇒ 模型飛了才斷
-      }
-      ropes.forEach(function (o, j) {
-        if (j === i || P[0] < o.bb[0] - 3 || P[0] > o.bb[3] + 3 || P[1] < o.bb[1] - 3 || P[1] > o.bb[4] + 3 || P[2] < o.bb[2] - 3 || P[2] > o.bb[5] + 3) return;
-        for (var k = 0; k + 5 < o.pts.length; k += 3) { var d = segDist2(P, o.pts[k], o.pts[k + 1], o.pts[k + 2], o.pts[k + 3], o.pts[k + 4], o.pts[k + 5]); if (d < bd) { bd = d; best = j; } }
-      });
-      if (best >= 0) { if (r.par.indexOf(best) < 0) r.par.push(best); r['p' + e[2]] = best; }   // 哪一端掛在哪條繩（垂下來的繩要知道是哪一端鬆了）
+      var D = saved && saved[ei] ? saved[ei] : ropeDecide(T, ropes, models, i, e[0], rd);
+      if (D.s) onSail = true;
+      if (D.k === 'turret') r.tur = true;
+      else if (D.k === 'yard' || D.k === 'model') { var k = modelFind(D.m); if (k >= 0) { r.mods.push(k); r['m' + e[2]] = k; if (D.g) r.guess = (r.guess || 0) + 1; } }
+      else if (D.k === 'rope') { var j = ropeFind(D.r); if (j >= 0 && j !== i) { if (r.par.indexOf(j) < 0) r.par.push(j); r['p' + e[2]] = j; } }
     });
     if (!r.par.length && !r.mods.length && !onSail && !r.tur) r.dead = true;     // 哪裡都不靠（格、繩、模型、帆角、砲塔的殼都沒有）⇒ 不畫
+  });
+}
+/** 一端（第 pi 個點）的決定（見 linkRopes）。順序：砲塔的殼 → 作品寫明的（ends）→ 帆桁（照網格）→ 母繩（≤ 3 格）→ 最後才照外框猜模型。
+ *  作品寫明的：model: ⇒ 那個模型（帆桁照網格先認）；rope: ⇒ 只找繩；sail:、固定點（關聯路徑）⇒ 不猜模型（帆桁、繩照找）；座標或沒寫 ⇒ 全部照找，模型放最後。
+ *  ⛔ 以前模型排在母繩前面：風暴角號的側支索下端明明接在三眼滑車的繩上，卻被旁邊砲、錨的外框搶走（砲被打掉、錨拋下去支索跟著斷）；
+ *     收穫號、持火號寫明綁帆角與繫索樁的帆腳索被猜到船尾燈、槳上（TASK-0716 量的，雕刻端 sub=ropecheck 對照）。 */
+function ropeDecide(T, ropes, models, i, pi, rd) {
+  var r = ropes[i], re = T.rig.ropes[i], P = [r.pts[pi * 3], r.pts[pi * 3 + 1], r.pts[pi * 3 + 2]], D = { k: 'none' };
+  function key(k) { var m = models[k]; return m.meta && m.meta.id ? String(m.meta.id) : m.path; }
+  // 綁在帆角上（雕刻的 `sail:帆名/角`：帆腳垂在半空、只靠 sheet 拉住，例：風暴角號 spritsail）⇒ 端點就在帆的頂點上，算有靠（帆掉了它跟著斷：s.lines）
+  //   ⛔ 不認 ⇒ 開局就判「哪裡都不靠」死掉、掛在它上面的帆跟著掉（TASK-0579 量到：spritsail-sheet-P／S 開局 dead、spritsail hp 滿血就掉）
+  if (T.rig.sails.some(function (s) { var v = s.verts; for (var k = 0; k < v.length; k += 3) { var dx = v[k] - P[0], dy = v[k + 1] - P[1], dz = v[k + 2] - P[2]; if (dx * dx + dy * dy + dz * dz < 4) return true; } return false; })) D.s = 1;
+  if (armNear(T, P, 3) >= 0) { D.k = 'turret'; return D; }                // 綁在砲塔的殼上（頂上的艙口邊、吊籃；27_turret.js ropeRideOf：跟著轉）⇒ 算有靠（⛔ 錨 anchorNear 只找船殼 ⇒ 判成綁在空中、開局就不畫）
+  var ref = re && re.ends ? re.ends[pi ? 1 : 0] : null;
+  var decl = typeof ref !== 'string' ? '' : ref.indexOf('model:') === 0 ? 'model' : ref.indexOf('rope:') === 0 ? 'rope' : ref.indexOf('sail:') === 0 ? 'sail' : /^-?[\d.]+,-?[\d.]+,-?[\d.]+$/.test(ref) ? '' : 'anchor';
+  if (decl !== 'rope') {                                                   // 寫明掛在母繩上（橫繩組的每一道）⇒ 只找繩（⛔ 先找模型 ⇒ 哨兵號繩梯中間五道綁到旁邊的 XI 吋砲尾）
+    var yk = yardNear(T, P, 3);                                            // 帆桁：照網格（⛔ 照外框：轉過的帆桁外框很大，桅頂附近的 ratline 都會被當成綁在帆桁上）
+    if (yk >= 0) { D.k = 'yard'; D.m = key(yk); return D; }
+    if (decl === 'model') {                                                // 作品寫明綁在哪個模型（ends model:<模型>/<固定點>；TASK-0715）⇒ 照它，不猜
+      var nk = rcpModel(T.rig, re.frame, ref);
+      if (nk >= 0 && models[nk] && !models[nk].station && models[nk].kind !== 'yard') { D.k = 'model'; D.m = key(nk); return D; }
+    }
+  }
+  var best = -1, bd = 9;                                                   // 母繩：0.3 公尺內（距離² ＜ 9 格²）
+  ropes.forEach(function (o, j) {
+    if (j === i || P[0] < o.bb[0] - 3 || P[0] > o.bb[3] + 3 || P[1] < o.bb[1] - 3 || P[1] > o.bb[4] + 3 || P[2] < o.bb[2] - 3 || P[2] > o.bb[5] + 3) return;
+    for (var k = 0; k + 5 < o.pts.length; k += 3) { var d = segDist2(P, o.pts[k], o.pts[k + 1], o.pts[k + 2], o.pts[k + 3], o.pts[k + 4], o.pts[k + 5]); if (d < bd) { bd = d; best = j; } }
+  });
+  if (best >= 0) { D.k = 'rope'; D.r = ropes[best].name; return D; }      // 哪一端掛在哪條繩（垂下來的繩要知道是哪一端鬆了）
+  if (decl === '') {                                                       // 座標或沒寫 ⇒ 最後才照外框猜模型（匯入報表列出來；雕刻端 sub=ropecheck 可以改成寫明）
+    var mk = -1;
+    models.some(function (m, k) { var b = m.bb; if (m.station || m.kind === 'yard' || m.kind === 'furn') return false; if (P[0] > b[0] - 4 && P[0] < b[3] + 4 && P[1] > b[1] - 4 && P[1] < b[4] + 4 && P[2] > b[2] - 4 && P[2] < b[5] + 4) { mk = k; return true; } return false; });
+    if (mk >= 0) { D.k = 'model'; D.m = key(mk); D.g = 1; return D; }    // 綁在模型上（舵索綁舵輪）⇒ 模型飛了才斷
+  }
+  return D;
+}
+/** 匯入時用（75_shipcheck.js ⇒ admin.py ropebind 寫進檔頭）：每條繩兩端現場算的決定（不看檔頭已有的 bind）；兩端都綁格子 ⇒ null，綁格子的那一端 ⇒ 0。 */
+function ropeBindsFresh(sh) {
+  var rd = ropeRideOf(sh.T);
+  return sh.ropes.map(function (r, i) {
+    if (r.a >= 0 && r.b >= 0) return null;
+    var n = r.pts.length / 3;
+    return [r.a >= 0 ? 0 : ropeDecide(sh.T, sh.ropes, sh.models, i, 0, rd), r.b >= 0 ? 0 : ropeDecide(sh.T, sh.ropes, sh.models, i, n - 1, rd)];
   });
 }
 // ── 繩的固定檢查（Tim 2026-10-16：「是否能確保纜繩至少要有一端固定到帆或其他固定點(不能綁定在空中)」「不符合的直接再生成時排除 且匯入時要有錯誤報告」）──

@@ -16,6 +16,7 @@
 #   python -I admin.py reimport --id <船的代號> [--work <作品 ID>]                 重新匯入（換新的 .vxk、印跟上一版的差別、重建）
 #   python -I admin.py cache                      _cache/ 缺的、跟指紋不同的 .vxk 從版控那份成品裡解回來（換機器、只改程式時用；建置也會自己做）
 #   python -I admin.py ids --id <船的代號> [--dry]  物件 id：發號、指名別的部件的 meta 換成 id、寫回雕刻作品再 metasync（TASK-0715；造船規格 §12）
+#   python -I admin.py ropebind [--id <船的代號>]   繩端綁定：成品算好每條繩兩端綁在哪、寫進 .vxk 檔頭、出報表（TASK-0716；匯入、重新匯入、metasync、ids 會自己跑）
 #   python -I admin.py cells --id <船的代號>      只寫動力件與梯子的格子清單（meta、格子不動；TASK-0676 木匠照它還原整件梯子）
 #   python -I admin.py relock --id <船的代號>     指紋改成 _cache 現在那份（手動換過 .vxk 時；平常匯入／重新匯入／metasync 會自己更新）
 #   加 --no-build：匯入／重新匯入之後不重建
@@ -1141,6 +1142,7 @@ def act_ids(sid, dry=False, build=True):
     log += id_apply(s, parts_json(s['work']))
     if build:
         log += act_build()
+        log += act_ropebind([sid])
         log += act_shipcheck([sid])
     return log
 
@@ -1263,6 +1265,7 @@ def act_metasync(sid, build=True):
         log.append(lock_put(s['vxk']))
         if build:
             log += act_build()
+            log += act_ropebind([sid])                   # 繩端綁定（TASK-0716）：模型的 id、meta 變了 ⇒ 重算
             log += act_shipcheck([sid])                  # meta 改了 ⇒ 順手檢查一次（只讀）
     return log
 
@@ -1386,11 +1389,102 @@ def act_metaspec(doc_path=None):
     return log + ['✓ meta 規格表跟船、造船規格一致']
 
 
+def shipcheck_page(chrome, sid):
+    """無頭 Chrome 跑成品的 ?shipcheck=<船>，回頁面寫出來的結果（JSON）；沒跑完 ⇒ None。"""
+    import html as _html, tempfile
+    prof = tempfile.mkdtemp(prefix='shipcheck_')
+    try:
+        url = 'file:///' + OUT.replace('\\', '/') + '?shipcheck=' + sid
+        r = subprocess.run([chrome, '--headless=new', '--no-first-run', '--user-data-dir=' + prof, '--use-angle=swiftshader', '--enable-unsafe-swiftshader',
+                            '--virtual-time-budget=300000', '--dump-dom', url], capture_output=True, timeout=900)
+        ms = re.findall(r'<pre id="shipcheck">(.*?)</pre>', r.stdout.decode('utf-8', 'replace'), re.S)
+        return json.loads(_html.unescape(ms[-1])) if ms else None   # 最後一個 ＝ 頁面寫出來的那個（⛔ 第一個可能是內嵌程式裡的字串）
+    except Exception:
+        return None
+    finally:
+        shutil.rmtree(prof, ignore_errors=True)
+
+
+ROPEBIND_KIND = {'grid': '格子（旁邊 5 格內有實心格）', 'turret': '砲塔的殼', 'yard': '帆桁', 'model': '模型（作品寫明）', 'guess': '模型（照外框猜）', 'rope': '母繩', 'sail': '只靠帆角', 'none': '哪裡都不靠'}
+
+
+def act_ropebind(ids=None, build=True):
+    """繩端綁定（TASK-0716；Tim 2026-10-18「遊戲端真的要猜測應該要放在匯入時（檢查、猜測並產生報表）」）：
+    跑成品的 ?shipcheck=<船>，拿遊戲照同一套規則現場算的每條繩兩端綁在哪（R.binds；js/10_ship.js ropeDecide），寫進 _cache 那份 .vxk 的 rig.ropes[i].bind
+    ⇒ 遊戲照它套、不猜（js/10_ship.js linkRopes）；出報表 reports/ropebind_<船>.md（每一類幾端、照外框猜的模型、哪裡都不靠的一端）。
+    要先建過（成品裡的船 ＝ _cache 那份）；檔頭變了 ⇒ 更新指紋，build 為真就重建。"""
+    cfg = load()
+    ids = ids or [s['id'] for s in cfg['ships']]
+    chrome = next((c for c in CHROMES if os.path.exists(c)), None)
+    if not chrome:
+        return ['⚠ 繩端綁定沒跑：找不到 Chrome（' + '、'.join(CHROMES) + '）']
+    os.makedirs(REPORTS, exist_ok=True)
+    log, dirty = [], False
+    for sid in ids:
+        s = next((x for x in cfg['ships'] if x['id'] == sid), None)
+        R = shipcheck_page(chrome, sid) if s else None
+        B = R.get('binds') if R else None
+        if B is None:
+            log.append('  ✗ %s：繩端綁定讀不到結果（無頭 Chrome 沒跑完、或成品比 _cache 舊 ⇒ 先 build）' % sid)
+            continue
+        path = os.path.join(CACHE, s['vxk'])
+        raw = zlib.decompress(open(path, 'rb').read(), -15)
+        n = struct.unpack('<I', raw[4:8])[0]
+        h = json.loads(raw[8:8 + n].decode('utf-8'))
+        RP = (h.get('rig') or {}).get('ropes') or []
+        if len(B) != len(RP):
+            log.append('  ✗ %s：成品裡 %d 條繩、_cache 那份 %d 條 ⇒ 成品比 _cache 舊，先 build 再跑' % (sid, len(B), len(RP)))
+            continue
+        changed, cnt, guess, none = 0, {}, [], []
+        for r, b in zip(RP, B):
+            if b is None:
+                if 'bind' in r:
+                    del r['bind']
+                    changed += 1
+                cnt['grid'] = cnt.get('grid', 0) + 2
+                continue
+            if r.get('bind') != b:
+                r['bind'] = b
+                changed += 1
+            for e, d in enumerate(b):
+                if d == 0:
+                    k = 'grid'
+                elif d['k'] == 'none':
+                    k = 'sail' if d.get('s') else 'none'
+                else:
+                    k = 'guess' if d.get('g') else d['k']
+                cnt[k] = cnt.get(k, 0) + 1
+                ref = (r.get('ends') or [None, None])[e]
+                if k == 'guess':
+                    guess.append((r.get('name'), e, d.get('m'), ref))
+                if k == 'none':
+                    none.append((r.get('name'), e, ref))
+        md = ['# 繩端綁定：%s（%s）' % (s['name'], sid), '',
+              '> `python -I admin.py ropebind --id %s` 產生（匯入、重新匯入、metasync、ids 會自己跑）；規則在 `js/10_ship.js` ropeDecide：' % sid,
+              '> 砲塔的殼 → 作品寫明的（ends：`model:` 那個模型、`rope:` 只找繩、`sail:` 與固定點不猜模型）→ 帆桁 → 母繩（≤ 3 格）→ 最後才照外框猜模型。結果寫進 `.vxk` 的 `rig.ropes[].bind`，遊戲照它綁、不猜。', '',
+              '| 綁在 | 端數 |', '|---|---|'] + ['| %s | %d |' % (ROPEBIND_KIND.get(k, k), v) for k, v in sorted(cnt.items(), key=lambda kv: -kv[1])] + ['']
+        if guess:
+            md += ['## 照外框猜的模型（作品沒寫綁哪裡）', '', '雕刻端可以跑 `senate cmd sculpture --arg op=work --arg sub=ropecheck --arg work=%s` 對照、改成寫明。' % s['work'], '',
+                   '| 繩 | 端 | 作品寫的 | 猜到 |', '|---|---|---|---|'] + ['| `%s` | %s | `%s` | `%s` |' % (nm, 'from' if e == 0 else 'to', ref, m) for nm, e, m, ref in guess] + ['']
+        if none:
+            md += ['## 哪裡都不靠的一端', '', '另一端有靠就照常畫（垂著）；兩端都不靠的繩開局就不畫。', '',
+                   '| 繩 | 端 | 作品寫的 |', '|---|---|---|'] + ['| `%s` | %s | `%s` |' % (nm, 'from' if e == 0 else 'to', ref) for nm, e, ref in none] + ['']
+        rp = os.path.join(REPORTS, 'ropebind_%s.md' % sid)
+        open(rp, 'w', encoding='utf-8').write('\n'.join(md))
+        if changed:
+            vxk_write(path, h, raw[8 + n:])
+            log.append(lock_put(s['vxk']))
+            dirty = True
+        log.append('  %s %s（%s）：繩 %d 條、檔頭改了 %d 條；照外框猜 %d 端、不靠 %d 端 ⇒ %s' % ('⚠' if guess else '✓', s['name'], sid, len(RP), changed, len(guess), len(none), rp))
+    if dirty and build:
+        log += act_build()
+    return ['繩端綁定：'] + log
+
+
 def act_shipcheck(ids=None):
     """匯入檢查（Tim 2026-10-15：缺 meta、砲位擠到砲班站不滿 ⇒ 匯入時就報出來，方便修）。
     規則住在遊戲裡（js/75_shipcheck.js，?shipcheck=<船>）：遊戲自己知道缺了什麼會退回什麼 ⇒ 這裡只用無頭 Chrome 跑成品、把結果寫成報告。
     ids 不給 ⇒ 船隻清單每一艘。報告：reports/shipcheck_<船>.md（同樣的問題併成一筆、列出是哪些部件）。"""
-    import html as _html, shutil, tempfile
     cfg = load()
     ids = ids or [s['id'] for s in cfg['ships']]
     chrome = next((c for c in CHROMES if os.path.exists(c)), None)
@@ -1401,17 +1495,7 @@ def act_shipcheck(ids=None):
     os.makedirs(REPORTS, exist_ok=True)
     log, cards = [], {}
     for sid in ids:
-        prof = tempfile.mkdtemp(prefix='shipcheck_')
-        try:
-            url = 'file:///' + OUT.replace('\\', '/') + '?shipcheck=' + sid
-            r = subprocess.run([chrome, '--headless=new', '--no-first-run', '--user-data-dir=' + prof, '--use-angle=swiftshader', '--enable-unsafe-swiftshader',
-                                '--virtual-time-budget=300000', '--dump-dom', url], capture_output=True, timeout=900)
-            ms = re.findall(r'<pre id="shipcheck">(.*?)</pre>', r.stdout.decode('utf-8', 'replace'), re.S)
-            R = json.loads(_html.unescape(ms[-1])) if ms else None   # 最後一個 ＝ 頁面寫出來的那個（⛔ 第一個可能是內嵌程式裡的字串）
-        except Exception as e:
-            R = None
-        finally:
-            shutil.rmtree(prof, ignore_errors=True)
+        R = shipcheck_page(chrome, sid)
         if not R:
             log.append('  ✗ %s：匯入檢查讀不到結果（無頭 Chrome 沒跑完）' % sid)
             continue
@@ -2541,6 +2625,7 @@ def act_import(work, sid, name, build=True, variant_of=None):
     log.append('✓ 登記進船隻清單：%s（%s）—— 航速、靈活、船員照預設，要調到後台的船隻設定' % (name, sid))
     if build:
         log += act_build()
+        log += act_ropebind([sid])                       # 繩端綁定（TASK-0716）：匯入時算好寫進檔頭、出報表
         log += act_shipcheck([sid])                      # 匯入檢查：缺 meta、砲班站不滿、開場就掉的（只讀）
     return log
 
@@ -2590,6 +2675,7 @@ def act_reimport(sid, work=None, build=True):
         save(cfg)
     if build:
         log += act_build()
+        log += act_ropebind([sid])                       # 繩端綁定（TASK-0716）：新的 .vxk 沒有 bind ⇒ 算好寫進去
         log += act_shipcheck([sid])                      # 匯入檢查（只讀）
     return log
 
@@ -2952,6 +3038,8 @@ def main():
     s.add_argument('--id', action='append', required=True, help='哪一艘（可以給好幾次；改裝船排在原船後面）')
     s.add_argument('--dry', action='store_true', help='只列要發的號與要換的關聯，一筆都不寫')
     s.add_argument('--no-build', action='store_true')
+    s = sp.add_parser('ropebind', help='繩端綁定（TASK-0716）：先建置、跑成品算每條繩兩端綁在哪寫進 .vxk 檔頭（遊戲照它、不猜）、出 reports/ropebind_<船>.md；檔頭變了再建置')
+    s.add_argument('--id', action='append', help='哪一艘（可以給好幾次）；不給 ＝ 每一艘')
     s = sp.add_parser('relock', help='指紋改成 _cache 現在那份')
     s.add_argument('--id', required=True)
     sp.add_parser('authors', help='建造者：每艘船照 _cache 那份 .vxk 檔頭的 owner 記 ships[].author（補以前匯入的船；不重建）')
@@ -2999,6 +3087,8 @@ def main():
             log = []
             for i in o.id:
                 log += act_ids(i, o.dry, not o.no_build and i == o.id[-1])
+        elif o.op == 'ropebind':
+            log = act_build() + act_ropebind(o.id)
         elif o.op == 'cells':
             log = act_cells(o.id, not o.no_build)
         elif o.op == 'import':

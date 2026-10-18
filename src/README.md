@@ -81,6 +81,12 @@ python -I admin.py reimport --id constitution
 #   新船匯入後、作品加了部件之後跑一次（已經有 id 的不動）；改裝船排在原船後面。--dry 只列不寫。
 #   遊戲：05_hull.js idIndex（T.ids）／refPath（id 或 id#座名 ⇒ 路徑）；繩端照作品 ends 寫的模型綁（10_ship.js linkRopes），沒寫才照外框猜；匯入檢查報沒 id、撞號、指不到、指錯類、舊寫法、猜的繩端。
 python -I admin.py ids --id constitution --dry
+# 繩端綁定（TASK-0716；Tim：「遊戲端真的要猜測應該要放在匯入時（檢查、猜測並產生報表）」）：跑成品的 ?shipcheck=<船>，拿遊戲照同一套規則（10_ship.js ropeDecide）
+#   算的每條繩兩端綁在哪，寫進 .vxk 的 rig.ropes[].bind（0 ＝ 綁格子；{k: turret｜yard｜model｜rope｜none, m: 模型 id, r: 母繩名, s: 帆角, g: 照外框猜}）⇒ 遊戲照它套、不猜；
+#   出 ../reports/ropebind_<船>.md（每一類幾端、照外框猜的模型、不靠的一端）。順序：砲塔的殼 → 作品寫明的（ends：model: 那個模型、rope: 只找繩、sail:／固定點不猜模型）
+#   → 帆桁（網格）→ 母繩（≤ 3 格）→ 最後才照外框猜模型。匯入、重新匯入、metasync、ids 會自己跑；沒有 bind 的舊 .vxk 照同一套現場算。
+#   雕刻端對照：senate cmd sculpture --arg op=work --arg sub=ropecheck --arg work=<組裝件>（座標端猜得到的可以 fix=1 改成寫明）。
+python -I admin.py ropebind --id stormkaap
 # 建造者（Tim 2026-10-15）：ships[].author ＝ .vxk 檔頭的 owner（senate 匯出時寫的雕刻作品作者）—— import／reimport 會自己記；以前匯入的船補一次（不重建）⇒ 船隻配置頁船卡、後台船隻卡顯示
 python -I admin.py authors
 # 匯入檢查（import／reimport／metasync 之後會自動跑）：缺 meta、砲班站不滿、開場就掉的 ⇒ ../reports/shipcheck_<代號>.md（不入版控）
