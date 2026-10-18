@@ -268,6 +268,7 @@ python -I admin.py cache --all    # 每艘都比 ＝ 比對來源：雕刻作品
 | `68_guncfg.js` | 砲的設定頁（主選單「砲的設定…」；Tim 2026-10-14）：一種砲一份 —— 每發傷害、重量、初速、裝填、連發、洞、砲班；改的直接寫進 `GUNS`、存檔只存跟砲種表預設不一樣的（`GUN_SET`），可匯出匯入 |
 | `69_prefs.js` | 設定存檔（localStorage）：載入時套用、每秒比一次有變才寫。存什麼、怎麼讀寫照描述表 `PREF_ITEMS`（`prefNum`／`prefBool`／`prefAny`；`prefsSnap`／`prefsApply` 只是走一遍那張表）；`__game.prefs(p)`（debug）套進存檔、回現在的存檔內容 |
 | `70_flow.js` | 開局（`reset`／`start`） |
+| `71_ctrl.js` | 控制器（TASK-0668 ②）：`ctrlAdd` 一份一種操作、照優先序 `ctrlDo` 一個一個問（回 true ＝ 接住）——第一人稱（fp）→ 建造（build）→ 海戰鏡頭（orbit，永遠在底下）；鍵、拖曳、兩指、滾輪、點一下、按下、抓住時的移動、每格的 `ctrlFrame`。`__game.ctrl()` 讀現在最上面的。加一種操作 ＝ 加一份，不用改 71_input.js 的事件 |
 | `71_input.js` | 輸入與選單（鍵盤 `doKey` ⇒ 66_keys.js 的動作 ⇒ `doAct`，畫面上的圓鈕直接 `doAct`、滑鼠、觸控（雙指張合縮放、雙指一起拖平移 ＝ 右鍵拖曳，`panBy`）、滑桿、彈種倍率表、主選單 ⇄ 船隻配置頁（船員滑桿、匯出匯入）⇄ 細節設定頁、重設預設值） |
 | `73_slowmo.js` | 殉爆的慢動作與特寫（TASK-0531）：`slowKick`（殉爆那一刻）、`slowTick`（每格畫面的時間倍率、特寫時間到還鏡頭）、`slowVisStep`（慢動作中只給人看的照畫面的時間走）、提示 `slowShow`；狀態 `SLOW` 在 `04_state.js` |
 | `72_floodui.js` | 停格條（`frzShow`）與進水細節頁（`floodPanel`：數字＋側視、俯視剖面 `fpDraw`；開著時 3D 的破口點 `flHoleMarks`、艙內水面透視） |

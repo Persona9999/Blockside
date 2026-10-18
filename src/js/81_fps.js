@@ -447,8 +447,7 @@ function fpLock() { if (!fpLocked() && cv.requestPointerLock) { try { var r = cv
 function fpUnlock() { if (fpLocked() && document.exitPointerLock) { FP.unlockMine = true; document.exitPointerLock(); } }
 /** 71_input.js 的 Esc 先問這裡：剛因為 Esc 放開、已經替它打開了設定 ⇒ 吃掉（⛔ 不吃 ⇒ 同一下 Esc 又把設定關掉）。 */
 function fpEscEaten() { return performance.now() - FP_ESC_T < 400; }
-cv.addEventListener('pointerdown', function (e) { if (FP.on && e.pointerType === 'mouse' && e.button === 0 && !PAUSED) fpLock(); });
-document.addEventListener('mousemove', function (e) { if (FP.on && fpLocked()) fpLook((e.movementX || 0) * FP_MOUSE_K, (e.movementY || 0) * FP_MOUSE_K); });
+// 抓住滑鼠（左鍵按下）、抓住時的移動 ⇒ 轉頭：71_ctrl.js 的 fp 控制器（down／look）。
 document.addEventListener('pointerlockchange', function () {
   var on = fpLocked(); $('stage').classList.toggle('fpLock', on);
   if (on) return;

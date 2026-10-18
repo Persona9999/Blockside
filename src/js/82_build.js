@@ -175,11 +175,7 @@ function bldKey(k, down) {
   if (a === 'bMode') { if (down) fpMode((FP.mode + 1) % 3); return true; }   // 碰撞循環：一般 → 穿牆 → 浮空（Tim 2026-10-16「建造模式加一個按鈕 可以循環切換 一般 穿牆 浮空模式吧」）
   return false;
 }
-// 滑鼠（只在滑鼠模式＝抓住滑鼠時，跟 Minecraft 一樣）：左鍵拆、右鍵放。沒抓住時左鍵照舊是「抓住滑鼠」（81_fps.js）。
-cv.addEventListener('mousedown', function (e) {
-  if (!BLD.on || !FP.on || !fpLocked()) return;
-  if (e.button === 0) bldDo(true); else if (e.button === 2) bldDo(false);
-});
+// 滑鼠（只在滑鼠模式＝抓住滑鼠時，跟 Minecraft 一樣）：左鍵拆、右鍵放 ⇒ 71_ctrl.js 的 build 控制器（mouse）。沒抓住時左鍵照舊是「抓住滑鼠」（fp 控制器）。
 $('bldPut').onclick = function () { bldDo(false); };
 $('bldDel').onclick = function () { bldDo(true); };
 $('bldRot').onclick = function () { BLD.r = 1 - BLD.r; bldUI(); };

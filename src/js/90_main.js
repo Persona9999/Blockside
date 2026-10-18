@@ -26,7 +26,7 @@ function frame(ts, noRaf) {                                         // noRaf：_
   remesh(RM_BUDGET);                                                  // 重網格化，每格有預算（60_render.js）
   if (PF) pfLap('flush');
   renderLerp(true, RUNNING ? loopAcc / DT : 1);                           // 畫面內插（03_camera.js）：鏡頭、畫、HUD 用兩步之間的位置，畫完換回模擬的
-  fpFrame(dt); bldFrame();                                                        // 第一人稱：走、爬、退出判斷（81_fps.js；沒開 ⇒ 什麼都不做）
+  ctrlFrame(dt);                                                                  // 控制器（71_ctrl.js）：第一人稱走、爬、退出判斷（81_fps.js）、建造的準心（82_build.js）；沒開 ⇒ 什麼都不做
   camUpdate(dt); render(); if (PF) pfLap('render'); hudFrame(dt); frzShow(); slowShow();
   renderLerp(false);                        // 停格條（72_floodui.js）
   if (PF) { pfLap('hud'); pfEnd(f0, RUNNING && !PAUSED ? n : 0); }
@@ -128,6 +128,7 @@ if (DEBUG) window.__game = {
   /** 浪（08_sea.js）：(x, z) 的水面高度（t 不給 ＝ 現在）；sea() ＝ 浪的設定。 */
   sea: function (x, z, t) { return x === undefined ? { k: SEA_K, waves: WAVES } : seaH(x, z, t === undefined ? SIMT : t); },
   camFollow: function (dt) { camFollow(dt); return CAM.follow; },
+  ctrl: function () { return { top: ctrlTop(), list: CTRLS.map(function (c) { return c.name + (c.on() ? '' : '（關）'); }) }; },   // 控制器（71_ctrl.js）：現在最上面的、由上往下
   predict: function (b) { return ballPredict(b); },
   cam: function (o) { camSet(o); camSet({ snap: true }); camUpdate(1); render(); },
   seaDbg: function (o) { SEA_DBG = o || {}; render(); return SEA_DBG; },   // 海面試驗場（src/tests/sea_lab.py）：{ det, an, … } 覆寫著色器的那幾格；{} ⇒ 照畫質
