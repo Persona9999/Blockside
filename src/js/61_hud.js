@@ -635,7 +635,7 @@ function hudFrame(dt) {
   var kn = me.spd * 1.944;
   var mt = $('modeT'), ms = '🎯 <b>' + (!handAim(me) ? '砲長' : (AUTOFIRE ? '手動一舷・' : '') + AIM_NAME[me.pMode || 'free']) + '</b>　🎥 <b>' + cn + '</b>' +
     (HUD_OUTARC ? '　<b style="color:#ff9a7a">⚠ 射界外</b>' : '') + (SIGNAL && MODE !== 'eve' ? '　🚩 <b>' + sigText() + '</b>' : '') + '<br>' +   // 玩家的旗號（TASK-0679；照指揮官 ⇒ 不寫）
-    '⛵ <b>' + (kn < -0.05 ? '−' + (-kn).toFixed(1) : Math.max(0, kn).toFixed(1)) + '</b> 節' + (hasSails(me) ? '　' + sailSetName(me) + ' ' + Math.round(me.sailFrac * 100) + '%' : '') + (me.cfg.base > 0 ? '　⚙ ' + TELE_NAME[me.tele] : '') +   // 兩套控制（TASK-0630）：有帆才寫帆段、有額外動力才寫俥鐘
+    '⛵ <b>' + (kn < -0.05 ? '−' + (-kn).toFixed(1) : Math.max(0, kn).toFixed(1)) + '</b> 節' + (hasSails(me) ? '　' + sailSetName(me) + ' ' + Math.round(me.sailFrac * 100) + '%' : '') + (me.cfg.base > 0 ? '　⚙ ' + TELE_NAME[me.tele] + driveCapText(me) : '') +   // 兩套控制（TASK-0630）：有帆才寫帆段、有額外動力才寫俥鐘
        // 帆 %（Tim 2026-10-15）：張著、還在的帆面積 × 血量（sailFrac，航速照它算）
     (RUNNING && SIM_SPEED !== 1 ? '　<b style="color:#9fd8ff">⏱ 模擬 ×' + (SIM_SPEED < 1 ? SIM_SPEED.toFixed(2) : SIM_SPEED.toFixed(1)) + '</b>' : '') +   // 設定的模擬速度（73_slowmo.js simSpeedSet）
     (RUNNING && PSLOW.on && PSLOW.ts < PSLOW_SHOW && !(SLOW.active && SLOW.ts < 0.98) ? '　<b style="color:#ffd27a">🐢 物理減速 ×' + PSLOW.ts.toFixed(2) + '</b>' : '');   // 物理減速的提示（Tim 2026-10-15：搬到航速這一行；73_slowmo.js）—— 殉爆的慢動作照舊在畫面中間   // 船體、進水改成羅盤外圈的兩圈（drawNav）；後面接帆裝（Tim 2026-10-15「羅盤上方航速資訊可以顯示當前帆狀態」：全收…滿帆，有額外動力的船多倒車、全速前進）

@@ -103,11 +103,14 @@ evOn('phys', function () { $('physT').classList.toggle('on', PHYS); if ($('phxB'
 /** 詳細資訊那一行：額外動力的俥鐘與輸出。 */
 function driveText(sh) {
   var D = sh.drive; if (!D || !D.kind) return '';
-  var nm = D.kind === 'magic' ? '魔力' : '引擎';
+  var nm = D.kind === 'magic' ? '魔力' : D.kind === 'oar' ? '划槳' : '引擎';
   var pr = D.P.filter(function (p) { return p.ax; });
   return '⚙ ' + TELE_NAME[sh.tele] + '（' + nm + ' ' + Math.round(D.cap * 100) + '%' + (D.cap < 0.98 && Math.abs(D.want || 0) > D.cap + 0.005 ? '・給不足' : '') +
     (pr.length ? '・螺旋槳 ' + pr.map(function (p) { return p.m.alive && !p.m.moved ? Math.round(Math.abs(p.rpm)) + ' rpm' : '沒了'; }).join('／') : '') + '）';
 }
+/** 羅盤上方那一行俥鐘後面的出力（Tim 2026-10-18「引擎(槳)受損後 是否能額外顯示出力百分比(參考帆)」）：受損了（31_drive.js D.cap ＜ 99.5%：每個動力源「份數 × 完好度」合起來，
+ *  引擎、鍋爐、螺旋槳、煙囪、槳都算）才寫「 73%」；完好 ⇒ ''（只讀模擬）。 */
+function driveCapText(sh) { var D = sh.drive; return D && D.kind && D.cap < 0.995 ? ' ' + Math.round(D.cap * 100) + '%' : ''; }
 // ── 俥鐘（#teleBox：上 E、下 T 兩顆鍵帽夾著 canvas 點陣圖；先畫在低解析度的格子上、放大不平滑 ⇒ 像素風；字照正常解析度蓋上去） ──
 // 位置（Tim 2026-10-16：「俥鐘 可以先放到左側按鈕上方 然後可以稍微縮小一些 並且在上下顯示快捷鍵」「橫版的話 就放在左下角吧」）：
 //   橫版 ⇒ 畫面左下角（CSS #teleBox；除錯那一行 #tip 上面）；直版手機（≤ 760 px，左邊那組大圓鈕是直的一欄）⇒ 貼在那一欄的正上方（teleFit 每格照按鈕的位置擺）。
