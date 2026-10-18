@@ -293,11 +293,13 @@ function programs() {
     '   c=mix(c,vec3(0.82,0.86,0.88)*(0.55+0.45*uSunK),clamp(arm*band,0.0,1.0)*0.75*(1.0-smoothstep(250.0,1000.0,fd)));\n' +
     '   c=mix(c,vec3(0.01,0.04,0.06),(1.0-smoothstep(0.08,0.35,q))*0.85); }\n' +
     // 岸邊的白沫（有海圖才有，TASK-0721；63_bed_gl.js BEDFOAM）：水深 ＝ 這一點的海面（含浪）− 海底（uBedT：8 m 一格的高度，uBedR ＝ 第 0 格的世界 x、z、間距、格數）。
-    //   水邊一條亮線（< 0.7 m）＋往岸邊推的一道一道浪花（照水深的正弦、隨時間往淺處走；2 m 內），用兩層雜訊碎開；1.2 km 外淡掉。只在畫面上。
+    //   水邊一條亮線（< 0.5 m）＋往岸邊推的一道一道浪花（照水深的正弦、隨時間往淺處走；1.5 m 內 —— 2 m 內 ⇒ 大片淺礁坪整片都是條紋），用兩層雜訊碎開；1.2 km 外淡掉。只在畫面上。
+    //   亮線照「旁邊一格（8 m）內最淺的」⇒ 峭壁腳下（水深一下子 10 m 以上、< 2 m 的那一圈不到一格）也有一圈浪花拍岸。
     ' if(uBedOn>0.5){ vec2 bu=((p-uBedR.xy)/uBedR.z+0.5)/uBedR.w; if(bu.x>0.0&&bu.y>0.0&&bu.x<1.0&&bu.y<1.0){ float dep=vW.y-textureLod(uBedT,bu,0.0).r;\n' +
-    '   if(dep<2.5&&dep>-0.5){ float nz=vn(p*0.11+vec2(uSeaT*0.04,-uSeaT*0.03)); float ln=1.0-smoothstep(0.05,0.7,dep);\n' +
-    '     float sw=smoothstep(0.55,0.95,sin(dep*4.0+uSeaT*1.7+nz*5.0))*(1.0-smoothstep(0.9,2.2,dep));\n' +
-    '     float fm=clamp(ln*0.9+sw*0.75,0.0,1.0)*smoothstep(0.2,0.6,0.55*vn(p*0.45+vec2(0.0,uSeaT*0.15))+0.6*nz)*(1.0-smoothstep(400.0,1200.0,fd));\n' +
+    '   float dn=dep; if(dep<60.0){ vec2 e=vec2(1.0/uBedR.w,0.0); dn=min(dep,vW.y-max(max(textureLod(uBedT,bu+e.xy,0.0).r,textureLod(uBedT,bu-e.xy,0.0).r),max(textureLod(uBedT,bu+e.yx,0.0).r,textureLod(uBedT,bu-e.yx,0.0).r))); }\n' +
+    '   if(dn<0.5||dep<1.6&&dep>-0.5){ float nz=vn(p*0.11+vec2(uSeaT*0.04,-uSeaT*0.03)); float ln=1.0-smoothstep(0.05,0.5,dn);\n' +
+    '     float sw=smoothstep(0.7,0.97,sin(dep*4.0+uSeaT*1.7+nz*5.0))*(1.0-smoothstep(0.6,1.6,dep));\n' +
+    '     float fm=clamp(ln*0.9+sw*0.6,0.0,1.0)*smoothstep(0.2,0.6,0.55*vn(p*0.45+vec2(0.0,uSeaT*0.15))+0.6*nz)*(1.0-smoothstep(400.0,1200.0,fd));\n' +
     '     c=mix(c,vec3(0.86,0.9,0.92)*(0.55+0.45*uSunK),fm*0.85); a=mix(a,1.0,fm); } } }\n' +
     ' c=mix(c,uFog,1.0-exp(-fd*uFogD)); o=vec4(c,a); }\n');
   // 雨（天氣 × 畫質的「雨」）：整個畫面一層斜的雨絲，三層遠近（越近越粗越快）；欄位照雜湊挑哪幾欄有雨、每欄的相位亂撒。鏡頭轉的時候雨絲跟著水平滑（uYaw）。
