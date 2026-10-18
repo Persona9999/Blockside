@@ -61,6 +61,9 @@ function shipCheck(id) {
       if (m.kind === 'propeller' && !(Math.abs(+mt.axis_x || 0) + Math.abs(+mt.axis_y || 0) + Math.abs(+mt.axis_z || 0) > 0)) add('warn', '螺旋槳', m.path, '沒有 meta axis_x／y／z ⇒ 照 +x（船頭方向）轉', 'meta axis_x=1, axis_y=0, axis_z=0（造船規格 §9 propeller）');
       if (m.kind === 'propeller' && !m.pts['shaft-fwd']) add('warn', '螺旋槳', m.path, '沒有固定點 shaft-fwd ⇒ 掛在正下方的船殼上（底下被打掉才掉、軸斷了不掉）', '登記 shaft-fwd（軸往前接到船殼那一格）');
       if (m.kind === 'propeller' && !(sh.cfg.base > 0)) add('warn', '螺旋槳', m.path, '設定檔沒有額外動力（cfg.base）⇒ 螺旋槳不會轉、船不靠它走', 'ships[].cfg.base 填史料航速（節）');
+      if (m.kind === 'oar' && !m.pts.pivot) add('error', '槳', m.path, '沒有固定點 pivot（槳座）⇒ 不算動力、沒有槳手、往下找腳（槳伸在舷外 ⇒ 開局就掉）', '槳子作品登記 pivot（轉的中心：槳靠在舷緣的那一點；造船規格 §9.10）');
+      if (m.kind === 'oar' && m.pts.pivot && !m.pts.blade) add('warn', '槳', m.path, '沒有固定點 blade（槳葉端）⇒ 槳手照「往中線」排', '登記 blade（槳葉末端；造船規格 §9.10）');
+      if (m.kind === 'oar' && !(sh.cfg.base > 0)) add('warn', '槳', m.path, '設定檔沒有額外動力（cfg.base）⇒ 槳不划、船不靠它走', 'ships[].cfg.base 填划槳的全速（節）');
       if (m.kind === 'door') {                                           // 門、艙蓋（TASK-0638；25_doors.js、造船規格 §9 door）
         var dr = (sh.doors || []).filter(function (d) { return d.m === m; })[0];
         if (!dr || !dr.a) add('error', '門', m.path, '沒有固定點 hinge-a／hinge-b（或兩點重疊）⇒ 開關不演出、腳往正下方找（艙口底下）', '門子作品登記 hinge-a、hinge-b（鉸鏈軸上兩點；造船規格 §9 door）');
@@ -73,8 +76,11 @@ function shipCheck(id) {
     });
     // ── 動力（TASK-0630；造船規格 §9.6）：主機 → 軸 → 螺旋槳、鍋爐 ──
     var DV = sh.drive, DC = DV && DV.C, DP = DV ? DV.P.filter(function (q) { return q.kind !== 'sail'; }) : [];
-    if (DV && DV.kind) R.info.drive = (DV.kind === 'magic' ? '魔法（作用點 ＝ 船）' : DP.map(function (q) { return (q.m ? '螺旋槳 ' + q.m.name : q.out) + ' ' + Math.round(q.w * 100) + '%'; }).join('、')) +
+    if (DV && DV.kind === 'oar') { var oS = DP.filter(function (q) { return q.sg > 0; }).length; R.info.drive = '槳 ' + DP.length + ' 支（左舷 ' + (DP.length - oS) + '、右舷 ' + oS + '）、槳手 ' + sh.crew.filter(function (c) { return c.role === ROLE.OAR; }).length + '／' + (sh.oarWant || 0) + '（每支 ' + DP.map(function (q) { return q.rw0; }).filter(function (v, i, a) { return a.indexOf(v) === i; }).join('／') + ' 人）'; }
+    else if (DV && DV.kind) R.info.drive = (DV.kind === 'magic' ? '魔法（作用點 ＝ 船）' : DP.map(function (q) { return (q.m ? '螺旋槳 ' + q.m.name : q.out) + ' ' + Math.round(q.w * 100) + '%'; }).join('、')) +
       (DC ? '；主機 ' + DC.E.length + '、軸 ' + DC.SH.length + '、鍋爐 ' + DC.B.reduce(function (a, c) { return a + c.b.seats.length; }, 0) + ' 座' : '');
+    if (DV && DV.kind === 'oar' && sh.models.some(function (m) { return m.kind === 'propeller'; })) add('warn', '動力', '—', '有槳又有螺旋槳 ⇒ 只算槳（31_drive.js：份量怎麼分還沒定）', '跟 Tim 確認這艘的動力怎麼分');
+    if (DV && DV.kind === 'oar') { var oP = DP.length - DP.filter(function (q) { return q.sg > 0; }).length; if (oP !== DP.length - oP) add('warn', '槳', '—', '左右舷槳數不一樣（左 ' + oP + '、右 ' + (DP.length - oP) + '）⇒ 全速時會往少的那一舷偏', '兩舷照對稱擺，或確認是故意的'); }
     if (DC) DP.forEach(function (q) { if (DC.E.length && !(q.w > 0)) add('warn', '動力', q.m ? q.m.path : q.out, '沒有主機推這個輸出物件 ⇒ 不出力', '主機 meta propeller=<螺旋槳模型名>，或讓軸的 aft 靠近 hub（24 格內）、fwd 靠近主機 core'); });
     if (DC) DC.B.forEach(function (c) { if (c.b.funnel && !funnelsOf(T).some(function (f) { return f.name === c.b.funnel; })) add('warn', '鍋爐', c.b.name, 'meta funnel=' + c.b.funnel + ' 找不到這條煙囪 ⇒ 鍋爐壞了也不會停煙', 'funnel 寫煙囪關聯的路徑（一字不差）'); });
     // ── 動力件（TASK-0653；31_drive.js 檔頭「動力件」）：每一件開局幾格；傳動件（軸、蒸汽管）兩端之間開局有幾條不共用格子的路、傳不傳得滿 ──
