@@ -89,7 +89,8 @@ nav a.on { background: var(--acc); color: var(--acc-ink); border-color: var(--ac
 
   <section><h2>問題回報（Discord）</h2>
     <p class="note">遊戲裡「🐞 問題回報」與報錯彈窗的「送出回報」送到這個 Discord webhook（短訊息＋ report.txt 完整內容＋截圖）。空白 ＝ 沒有「送出回報」，只剩寄信與複製。
-      ⚠ 這個網址會跟著成品公開（誰都看得到、拿得去送訊息）：遊戲端關掉 @、限長、限次數；被濫用 ⇒ 在 Discord 頻道設定重建 webhook，換這一格、重建。改完存檔＋重建才生效。</p>
+      <b>貼明文網址、按存檔 ⇒ 自動加密成 x1:… 才寫進 game.json</b>（明文不落地；也可以用指令 <code>python -I src/admin.py hook</code> 貼上）。
+      ⚠ 加密只是混淆：遊戲要自己解得開，鑰匙跟著成品公開 —— 擋得住掃 repo 的機器人與順手一瞥，擋不住有心翻程式的人。遊戲端另外關掉 @、限長、限次數；被濫用 ⇒ 在 Discord 頻道設定重建 webhook，換這一格、重建。改完存檔＋重建才生效。</p>
     <div class="grid" id="reportCfg"></div></section>
 
   <section><h2>主選單預設</h2>
