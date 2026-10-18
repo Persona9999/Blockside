@@ -442,7 +442,8 @@
       "vxk": "gloire.vxk",
       "work": "kaguya-gloire-01m-assembly",
       "author": "kaguya",
-      "cfg": {"pump": 32, "base": 12.3, "agile": 1},
+      "drive": "steam",
+      "cfg": {"pump": 32, "base": 13, "agile": 1},
       "geo": {"spar": [113, 141], "marines": [80, 290], "center": 160, "aim": 100, "aimZ": [55, 330], "deckAim": [90, 120], "rigAim": [160, 310]},
       "names": ["光榮號"]
     }
