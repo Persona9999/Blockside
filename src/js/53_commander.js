@@ -7,6 +7,7 @@
 //        out（沉了、在沉、降旗）, cmd（指揮得動：玩家自己開的那艘 ⇒ false）, tgt（現在打的那艘 id；玩家那艘照它自己的）}
 //   view 選填（TASK-0679；沒給 ⇒ 跟以前一樣，沙盒就沒給）：R（交戰距離 m）、gauge（這一方要不要搶上風）、signal（玩家的旗號：{ strat, lead, focus, gauge }，蓋過設定的策略）；
 //   s.lerr、s.llag、s.larc、s.loff（戰列跟隨：離站位多遠、沿航跡落後多少、沿排頭航跡離排頭多遠、離航跡多遠 m，遊戲上一步量的）。
+//   s.asp（選填）：這艘的武器主要朝哪裡 —— 'B' 船頭／'A' 船尾（比正橫兩舷火力大）／'side'；沒給 ＝ 'side'（54_helm.js helmAspect）。
 // 命令 orders：{ [id]: { target（打哪艘 id；null ⇒ 照船自己挑）, mode, leader（戰列：跟著誰；站位每一步照它現在的位置算）, throttle（油門；沒寫 ＝ 1）,
 //   side（排頭：交戰的那一舷 'P'／'S'）, pace（排頭：巡航的幾成）, tack（搶上風：往風軸哪一側搶，±1）} }
 //   mode：'engage' 交戰 ／ 'line' 戰列跟隨（遊戲：cmdHelmWake 跟前一艘的航跡；沙盒：cmdHelmLine）／ 'lead' 戰列的排頭（遊戲 54_helm.js helmLead；沙盒當交戰）／ 'gauge' 搶上風（helmGauge）
@@ -106,6 +107,13 @@ function cmdLinePick(own, view, mem) {
   return useL ? hi.s : lo.s;
 }
 function cmdLine(own, foes, mem, orders, view, leadId) {
+  // 武器朝船頭（船尾）的船（s.asp 'B'／'A'：持火號的 siphon、槳帆船的艏砲）不排進戰列 —— 戰列是兩舷對轟，跟著航跡走它的武器永遠對不到；
+  //   改成各自交戰（mode 'engage'）打離自己最近的敵艦，艦長照自己的武器靠過去（Tim 2026-10-18：「艦隊指揮官的邏輯 需要判斷我方武器射程去指揮船隻」）。
+  function near0(s) { var b = null, bd = 1e18; foes.forEach(function (f) { var d = cmdDist(s, f); if (d < bd) { bd = d; b = f; } }); return b; }
+  own.filter(function (s) { return s.asp === 'B' || s.asp === 'A'; }).forEach(function (s) { orders[s.id] = { target: near0(s).id, mode: 'engage' }; });
+  own = own.filter(function (s) { return s.asp !== 'B' && s.asp !== 'A'; });
+  if (!own.length) return;
+  if (leadId !== null && leadId !== undefined && !own.some(function (s) { return s.id === leadId; })) leadId = null;   // 玩家旗號「成戰列跟我」、玩家那艘卻是船頭接敵的 ⇒ 照平常挑排頭
   var lead = own.filter(function (s) { return s.id === leadId; })[0] || own.filter(function (s) { return s.id === mem.pick; })[0];
   if (!lead) { lead = cmdLinePick(own, view, mem); mem.pick = lead.id; }
   var L = (mem.line || []).filter(function (id) { return id !== lead.id && own.some(function (s) { return s.id === id; }); });
