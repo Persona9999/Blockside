@@ -42,7 +42,10 @@ ctrlAdd({ name: 'fp', pri: 20, on: function () { return FP.on; },
   wheel: function () { return FP.on; },
   tap: function () { return FP.on; },                                   // 點一下不瞄準
   down: function (e) { if (FP.on && e.pointerType === 'mouse' && e.button === 0 && !PAUSED) fpLock(); },
-  look: function (e) { if (FP.on && fpLocked()) fpLook((e.movementX || 0) * FP_MOUSE_K, (e.movementY || 0) * FP_MOUSE_K); },
+  look: function (e) {                                                  // 單一事件超過 FP_SPIKE px ⇒ 丟掉（Windows 上 Chrome 抓住滑鼠時偶爾回一個上百 px 的假位移 ⇒ 視角一下甩好幾十度；本機沒重現到，TASK-0700 的保險）
+    var mx = e.movementX || 0, my = e.movementY || 0;
+    if (FP.on && fpLocked() && Math.abs(mx) <= FP_SPIKE && Math.abs(my) <= FP_SPIKE) fpLook(mx * FP_MOUSE_K, my * FP_MOUSE_K);
+  },
   frame: function (dt) { fpFrame(dt); }
 });
 // 建造（82_build.js）：疊在第一人稱上 —— 快捷欄、轉、拆、放、目錄、碰撞的鍵；抓住滑鼠時左鍵拆、右鍵放（跟 Minecraft 一樣）。
