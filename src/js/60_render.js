@@ -467,6 +467,7 @@ function render() {
   gl.uniform1f(P.water.u.uNzP, SEA_DBG.p !== undefined ? SEA_DBG.p : SEA_NZ_P);   // 打散重複：細漣漪每道的相位雜訊（01_gl.js detail）   // SEA_DBG：海面試驗場（src/tests/sea_lab.py，__game.seaDbg）才給；平常 {} ⇒ 照畫質
   gl.uniform2f(P.water.u.uC, Math.round(CAM.eye[0] / SEAG.snap) * SEAG.snap, Math.round(CAM.eye[2] / SEAG.snap) * SEAG.snap);   // 中心照網格間距對齊 ⇒ 近處的頂點不在浪上滑動
   gl.uniform1f(P.water.u.uReflOn, RT.R ? 1 : 0); gl.uniform1f(P.water.u.uRefr, GFX.refr); gl.uniform2f(P.water.u.uView, w, h);
+  gl.uniform1f(P.water.u.uRefrD, BED ? 1600 : 500); gl.uniform1f(P.water.u.uRefrK, BED ? 0.12 : 0.3);   // 水下透出來的東西多遠就看不到（m）、每公尺吸掉多少：有海圖 ⇒ 淺海的礁、沙洲看得出顏色（TASK-0721）；沒有 ⇒ 照舊 500 m、0.3
   gl.activeTexture(gl.TEXTURE6); gl.bindTexture(gl.TEXTURE_2D, RT.R ? RT.R.col : DUMMY); gl.uniform1i(P.water.u.uRefl, 6);
   gl.activeTexture(gl.TEXTURE7); gl.bindTexture(gl.TEXTURE_2D, RT.B.col); gl.uniform1i(P.water.u.uScene, 7);
   gl.activeTexture(gl.TEXTURE3); gl.bindTexture(gl.TEXTURE_2D, RT.B.dep); gl.uniform1i(P.water.u.uSceneD, 3);

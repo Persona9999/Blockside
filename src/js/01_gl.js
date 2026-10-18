@@ -247,7 +247,7 @@ function programs() {
   P.water = VK.compile(gl,
     '#version 300 es\nlayout(location=0) in vec3 aP; uniform mat4 uVP; uniform vec2 uC;\n' + SEA_GLSL +
     'out vec3 vW; void main(){ vec2 p=uC+aP.xy; float h=seaHs(p,aP.z)*(1.0-smoothstep(900.0,1600.0,length(aP.xy))); vW=vec3(p.x,h,p.y); gl_Position=uVP*vec4(vW,1.0); }\n',
-    '#version 300 es\nprecision highp float; in vec3 vW; uniform vec3 uEye,uSun,uFog,uSky; uniform float uFogD,uDet,uAn,uNzP,uReflOn,uRefr,uFoam; uniform vec2 uView; uniform sampler2D uRefl,uScene,uSceneD; out vec4 o;\n' + SEA_GLSL + SHADOW_GLSL +
+    '#version 300 es\nprecision highp float; in vec3 vW; uniform vec3 uEye,uSun,uFog,uSky; uniform float uFogD,uDet,uAn,uNzP,uReflOn,uRefr,uFoam,uRefrD,uRefrK; uniform vec2 uView; uniform sampler2D uRefl,uScene,uSceneD; out vec4 o;\n' + SEA_GLSL + SHADOW_GLSL +
     // 反射（uReflOn）：RT.R 是鏡像過來的船，照螢幕座標＋法線擾動讀，沒畫到的地方（a ＝ 0）照舊是天空。
     // 折射（uRefr）：0 不透明、1 半透明（底下的照舊混進來）、2 讀 RT.B（畫海之前的場景）：照法線擾動、照水的厚度（兩個深度相減）吸收成海的顏色。
     'float linZ(float d){ float z=d*2.0-1.0; return 5000.0/(5000.5-z*4999.5); }\n' +
@@ -279,7 +279,7 @@ function programs() {
     ' vec3 deep=vec3(0.03,0.16,0.21)*mix(0.72,1.0,sk);\n' +
     ' if(uRefr<0.5) a=1.0; else if(uRefr>1.5){ float zw=linZ(gl_FragCoord.z); vec2 off=n.xz*0.045; float zs=linZ(textureLod(uSceneD,sc+off,0.0).r);\n' +
     '   if(zs<zw){ off=vec2(0.0); zs=linZ(textureLod(uSceneD,sc,0.0).r); } float th=max(zs-zw,0.0);\n' +
-    '   vec3 under=textureLod(uScene,sc+off,0.0).rgb*vec3(0.55,0.86,0.92); deep=mix(deep,under,exp(-th*0.3)*clamp(1.0-fd/500.0,0.0,1.0)); a=1.0; }\n' +
+    '   vec3 under=textureLod(uScene,sc+off,0.0).rgb*vec3(0.55,0.86,0.92); deep=mix(deep,under,exp(-th*uRefrK)*clamp(1.0-fd/uRefrD,0.0,1.0)); a=1.0; }\n' +
     ' vec3 c=mix(deep,sky,fr)+vec3(1.0,0.92,0.75)*sp;\n' +
     // 白沫（天氣：暴風雨）：浪頭（高度在全部振幅的 40% 以上）照一層慢慢飄的雜訊碎成一塊一塊；晴天 uFoam ＝ 0 ⇒ 整段跳過（畫面逐位元組不變）
     //   大漩渦：浪頭照浪本身的高度判（扣掉漩渦凹下去的那一份；⛔ 不扣 ⇒ 漏斗裡一律比 40% 低、整片沒有白沫）
