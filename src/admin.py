@@ -1374,6 +1374,8 @@ def act_metaspec(doc_path=None):
             for t in sp.get('to') or [None]:
                 if not t or t.rstrip('#') not in K:
                     E.append('規格表 %s：refs.%s.to 的 %s 規格表沒有' % (k, f, t))
+            if 'list' in sp and not isinstance(sp['list'], bool):   # list：可以指好幾件（逗號分開；彈藥庫 hoist）
+                E.append('規格表 %s：refs.%s.list 要是 true／false' % (k, f))
     log.append('① 規格表：%d 個 kind' % len(K))
     seen = {}
     for sh in load()['ships']:

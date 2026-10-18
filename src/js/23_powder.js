@@ -26,7 +26,8 @@ function makeMags(sh) {
     // 關聯的外框比整艘船還大 ＝ 子作品是整個框（收穫號、維吉尼亞號）⇒ 照庫裡的桶收緊（⛔ 照框 ⇒ 只有一間的船從框的兩端往外找取用點、全找到船外 ⇒ 一個取用點都沒有；電腦瞄彈藥庫的高度也跟著錯）
     var B = sh.T.h.bbox, box = kegs.length && p.box[0] <= B[0] && p.box[3] >= B[3] ? kegs.reduce(function (b, m) { var q = m.bb; return [Math.min(b[0], q[0]), Math.min(b[1], q[1]), Math.min(b[2], q[2]), Math.max(b[3], q[3]), Math.max(b[4], q[4]), Math.max(b[5], q[5])]; }, [1e9, 1e9, 1e9, -1e9, -1e9, -1e9]) : p.box;
     var bl = (p.points && p.points.blast) || [(box[0] + box[3]) / 2, (box[1] + box[4]) / 2, (box[2] + box[5]) / 2];
-    var mag = { name: p.path, pos: p.meta.pos || '', hoist: refPath(sh.T, p.meta.hoist), box: box, blast: bl, pts: p.points || {}, lb: lb, kegs: kegs, boomed: 0, gone: false, lit: false, tur: turOf(sh.T, p.path) };   // tur：在第幾座砲塔裡（砲塔裡的彈藥箱，27_turret.js；-1 ＝ 不在）   // pos：關聯 meta 的前／中／後（TASK-0539）；hoist：火藥從哪座梯子的艙口吊上去（TASK-0632，makeStations）
+    var ho = String(p.meta.hoist === undefined || p.meta.hoist === null ? '' : p.meta.hoist).split(',').map(function (v) { return refPath(sh.T, v.trim()); }).filter(Boolean);   // hoist 可以寫好幾座梯子（逗號分開；makeStations 每一層挑梯頭在那一層的那一座）
+    var mag = { name: p.path, pos: p.meta.pos || '', hoist: ho[0] || '', hoists: ho, box: box, blast: bl, pts: p.points || {}, lb: lb, kegs: kegs, boomed: 0, gone: false, lit: false, tur: turOf(sh.T, p.path) };   // tur：在第幾座砲塔裡（砲塔裡的彈藥箱，27_turret.js；-1 ＝ 不在）   // pos：關聯 meta 的前／中／後（TASK-0539）；hoist：火藥從哪座梯子的艙口吊上去（TASK-0632，makeStations）
     kegs.forEach(function (m) { m.mag = mag; });
     return mag;
   });
@@ -258,7 +259,20 @@ function makeStations(sh, auto) {
   //   梯頭落在哪一層砲甲板，那一層的取用點就是這座梯子：桶擺在梯腳那一層（莫尼特號：住艙甲板，室內）、送藥手在梯頭（砲塔裡、艙口旁）取 ⇒ 火藥從艙口吊上來，⛔ 不擺在露天甲板；
   //   那一層不再照彈藥庫找空地（找不到梯腳的空地或梯頭的站位 ⇒ 照舊找，匯入檢查看得到取用點在哪）。梯子隨時能走（Tim：「讓樓梯隨時都能通行」，砲塔不用轉到右舷對位）。
   //   原船（Greene〈In the Monitor Turret〉）：彈藥庫在住艙甲板、中隔艙壁前的右舷；火藥經甲板與砲塔地板的艙口吊進砲塔。
-  var HO = sh.mags.filter(function (m) { return m.hoist; }).map(function (m) { var L = shipLadders(T).filter(function (l) { return l.name === m.hoist; })[0]; return L ? { mag: m, L: L } : null; }).filter(Boolean);
+  //   一間彈藥庫可以寫好幾座梯子（hoist=ladders-1#castle,ladders-1#forecastle；持火號：只有船尾一間藥庫，木塔、艏樓各一座梯子 —— Tim 2026-10-19「繼續完成待辦」：
+  //   以前兩層都照彈藥庫往船頭找空地 ⇒ 兩層的取用點疊在木塔同一格、三個桶把木塔內側的走道堵死，木塔的弩砲照直線穿牆送、艏樓的照直線從木塔飛過去）⇒
+  //   每一層只用梯頭落在那一層的那一座（下面 hoistPick）；只寫一座 ⇒ 跟以前一樣。
+  var HO = [];
+  sh.mags.forEach(function (m) { (m.hoists || []).forEach(function (nm) { var L = shipLadders(T).filter(function (l) { return l.name === nm; })[0]; if (L) HO.push({ mag: m, L: L }); }); });
+  /** 這一層要吊的：梯頭高度在這一層範圍裡的；同一間有好幾座對得上（艏樓、木塔的高度範圍重疊）⇒ 挑梯頭在這一層甲板（meta）上的那一座，都不在 ⇒ 第一座。 */
+  function hoistPick(D) {
+    var zr = D.zr, hh = HO.filter(function (h) { var hz = h.L.pts[h.L.pts.length - 1][2]; return hz >= zr[0] - 2 && hz <= zr[1] + 2; });
+    return hh.filter(function (h) {
+      var same = hh.filter(function (o) { return o.mag === h.mag; }); if (same.length < 2) return true;
+      var on = D.meta ? same.filter(function (o) { var p = o.L.pts[o.L.pts.length - 1], d = deckAt(T, p[0], Math.floor(p[2])); return !!d && d.i === D.meta.i; }) : [];
+      return h === (on[0] || same[0]);
+    });
+  }
   function hoistStation(D, h) {
     var foot = h.L.pts[0], head = h.L.pts[h.L.pts.length - 1], spot = null, at = null, r, dx, dy;
     for (r = 0; r <= 24 && !spot; r++) for (dy = -r; dy <= r && !spot; dy++) for (dx = -r; dx <= r && !spot; dx++) {   // 梯腳旁一塊 9×9 的空地（梯子的側板、踏板是實心 ⇒ 自己會避開）
@@ -281,7 +295,7 @@ function makeStations(sh, auto) {
       return;
     }
     var n0 = out.length;
-    HO.forEach(function (h) { var hz = h.L.pts[h.L.pts.length - 1][2]; if (hz >= zr[0] - 2 && hz <= zr[1] + 2) hoistStation(D, h); });
+    hoistPick(D).forEach(function (h) { hoistStation(D, h); });
     // 這一層有從艙口吊上來的 ⇒ 吊的那幾間不再找空地；沒有 hoist 的彈藥庫照舊找（TASK-0658 哨兵號：甲板上的備便彈藥櫃 ——
     //   原船的火藥從砲塔裡的艙口上來，砲塔那一圈走不穿（TASK-0655）⇒ 甲板上的速射砲要靠櫃子旁的取用點）。⛔ 以前整層 return ⇒ 第二間的取用點不見。
     //   只有一間、或每一間都有 hoist（莫尼特號）⇒ 跟以前一樣。

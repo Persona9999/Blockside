@@ -64,15 +64,18 @@ function shipCheck(id) {
         var mt = q.meta || {}, K = Object.prototype.hasOwnProperty.call(META_KINDS, mt.kind) ? META_KINDS[mt.kind] : null, RF = K && K.refs; if (!RF) return;
         Object.keys(RF).forEach(function (f) {
           var sp = RF[f], old = sp.old || f, v = mt[f] !== undefined ? mt[f] : mt[old], where = q.path || q.name; if (v === undefined || v === '') return;
-          var s = String(v), i = s.indexOf('#'), ip = i < 0 ? s : s.slice(0, i), sub = i < 0 ? '' : s.slice(i + 1);
-          if (!ID_RX.test(ip)) { add('warn', '物件 id', where, old + '=' + s + ' 是舊的路徑寫法 ⇒ 改名、搬資料夾就斷', 'python -I admin.py ids --id ' + id + ' 會換成 ' + f + '=<id>'); return; }
-          var r = IX.by[ip]; if (!r) { add('error', '物件 id', where, f + '=' + s + ' 找不到這個 id ⇒ 遊戲當成沒寫', '寫這艘船裡有的 id（造船規格 §12）'); return; }
-          var k = (r.q.meta && r.q.meta.kind) || '', ok = sp.to.some(function (t) { return t.slice(-1) === '#' ? i >= 0 && k === t.slice(0, -1) : i < 0 && k === t; });
-          if (!ok) { add('error', '物件 id', where, f + '=' + s + ' 指到的是 ' + (k || '（沒有 kind）') + (i >= 0 ? '#' + sub : '') + '，規格表只收 ' + sp.to.join('、'), '照規格表 refs 指（config/meta_kinds.json）'); return; }
-          if (sub && !Object.keys(r.q.points || {}).some(function (n) { return n.indexOf(sub + '.') === 0; })) add('error', '物件 id', where, f + '=' + s + '：' + r.path + ' 裡沒有「' + sub + '」這一座', '# 後面寫那一座的名字（固定點 <名>.foot 的 <名>）');
+          (sp.list ? String(v).split(',').map(function (x) { return x.trim(); }) : [String(v)]).forEach(function (s) { one(sp, f, old, where, s); });   // list：可以指好幾件（逗號分開；彈藥庫 hoist）⇒ 每一件各查一次
         });
       });
     });
+    function one(sp, f, old, where, s) {
+      var i = s.indexOf('#'), ip = i < 0 ? s : s.slice(0, i), sub = i < 0 ? '' : s.slice(i + 1);
+      if (!ID_RX.test(ip)) { add('warn', '物件 id', where, old + '=' + s + ' 是舊的路徑寫法 ⇒ 改名、搬資料夾就斷', 'python -I admin.py ids --id ' + id + ' 會換成 ' + f + '=<id>'); return; }
+      var r = IX.by[ip]; if (!r) { add('error', '物件 id', where, f + '=' + s + ' 找不到這個 id ⇒ 遊戲當成沒寫', '寫這艘船裡有的 id（造船規格 §12）'); return; }
+      var k = (r.q.meta && r.q.meta.kind) || '', ok = sp.to.some(function (t) { return t.slice(-1) === '#' ? i >= 0 && k === t.slice(0, -1) : i < 0 && k === t; });
+      if (!ok) { add('error', '物件 id', where, f + '=' + s + ' 指到的是 ' + (k || '（沒有 kind）') + (i >= 0 ? '#' + sub : '') + '，規格表只收 ' + sp.to.join('、'), '照規格表 refs 指（config/meta_kinds.json）'); return; }
+      if (sub && !Object.keys(r.q.points || {}).some(function (n) { return n.indexOf(sub + '.') === 0; })) add('error', '物件 id', where, f + '=' + s + '：' + r.path + ' 裡沒有「' + sub + '」這一座', '# 後面寫那一座的名字（固定點 <名>.foot 的 <名>）');
+    }
     R.info.ids = Object.keys(IX.by).length + ' 件有 id' + (IX.none ? '、' + IX.none + ' 件沒有' : '');
     var RG = sh.ropes.filter(function (r) { return r.guess; });            // 繩端照外框猜綁到模型上（10_ship.js linkRopes：作品的 ends 沒寫綁哪個模型才猜）
     if (RG.length) add('warn', '物件 id', RG.slice(0, 3).map(function (r) { return r.name; }).join('、') + (RG.length > 3 ? ' 等 ' + RG.length + ' 條' : ''), '繩端是照位置猜綁到模型上的（作品沒寫綁哪個模型）⇒ 模型一換、一搬就可能綁錯', '雕刻端把繩端綁到模型的固定點（ends 寫 model:<模型>/<固定點>）');
