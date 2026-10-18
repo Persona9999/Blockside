@@ -1,5 +1,8 @@
 // ───────────────────────── 選船彈窗（主選單的艦隊編成；Tim 2026-10-18「船數已經有多 下拉選單不好操作 是否可以改成變成一個按鈕 按下後彈窗選取…給船分類」） ─────────────────────────
-// 編成那一列每艘一顆鈕（71_input.js fleetUI）⇒ 點了開這個彈窗：上面篩選（動力、噸位、火力、搜尋名字），下面卡片；點卡片 ＝ 換那一格的船（pickShip），彈窗關掉。
+// 編成那一列每艘一顆鈕（71_input.js fleetUI）、船隻配置頁的「船型」鈕（Tim 2026-10-18「船隻配置的選船是否可以套一樣的UI」）⇒ 點了開這個彈窗：
+//   spkOpen({ title, cur 現在選的那一型, pick(id) 選了別的才叫 })；上面篩選（動力、噸位、火力、搜尋名字），下面卡片；點卡片 ＝ pick，彈窗關掉。
+// 航速（Tim「選船時有辦法顯示船速嗎」）：跟船隻配置頁最上面那張卡片同一條算法（71_input.js shipCardShow）—— 照那一型現在的船隻設定（航速倍率、逆風性能、額外動力）與玩法的加成，
+//   標準風、滿帆：順風／側順風（最快）／逆風（離風 180 − NOGO_DEG 度）＝ √(帆² ＋ 額外動力²)；沒有帆 ⇒ 只寫額外動力。⇒ 改了船隻設定、換了玩法，下次打開就跟著變（不存進卡片）。
 // 卡片資料 ＝ config/ship_cards.json（admin.py shipcheck 量的：js/75_shipcheck.js shipCard；建置時內嵌成 #ship-cards）⇒ 打開彈窗不用解碼任何一艘船，
 //   選定了才照舊 loadHull（只載編成裡的那幾艘）。沒量過的船（新匯入還沒跑 shipcheck）⇒ 卡片只寫名字，只在「全部」裡。
 // 分類（Tim：「預設All 然後可以切分類 根據動力 噸位 火力等大致分類」）：三排各自篩、可以疊；預設都是全部。
@@ -9,7 +12,7 @@
 var SHIP_CARDS = (window.VoxelKit.embeddedJSON('ship-cards') || {}).ships || {};
 var SPK_TONS = [1000, 3000], SPK_VOLLEY = [200, 600];
 var SPK_DRIVE = [['sail', '⛵', '帆船'], ['steam', '♨️', '蒸汽'], ['oar', '🚣', '槳帆'], ['magic', '✨', '魔法']];
-var SPK = { s: 0, j: 0, f: { drive: '', tons: '', fire: '', q: '' } };     // 篩選照上一次（同一次開遊戲裡記著）
+var SPK = { cur: '', pick: null, f: { drive: '', tons: '', fire: '', q: '' } };   // 篩選照上一次（同一次開遊戲裡記著）
 function spkTier(v, cut) { return v === undefined ? '' : v < cut[0] ? 'lo' : v >= cut[1] ? 'hi' : 'mid'; }
 function spkMatch(h) {
   var c = SHIP_CARDS[h.id], F = SPK.f, q = F.q.trim().toLowerCase();
@@ -18,9 +21,16 @@ function spkMatch(h) {
   if (!c) return false;
   return (!F.drive || c.drive === F.drive) && (!F.tons || spkTier(c.tons, SPK_TONS) === F.tons) && (!F.fire || spkTier(c.volley, SPK_VOLLEY) === F.fire);
 }
-function spkOpen(s, j) {
-  SPK.s = s; SPK.j = j;
-  $('spkT').textContent = '選船：' + (s === 0 ? (j ? '友艦 ' + j : '我艦') : '敵艦 ' + (j + 1));
+/** 這一型的航速（節）：[順風, 側順風, 逆風]；沒有帆 ⇒ [額外動力]。⛔ 不呼叫 shipCfg：那會替沒動過的船型建一份設定（照預設值算就好）。 */
+function spkSpeed(id, c) {
+  var k = SHIP_CFG[id] || {}, g = function (key) { return k[key] !== undefined ? k[key] : cfgDefault(key, null, id); };
+  var kn = VMAX * g('speed') * playK('speed') * 1.9438, B = +g('base') || 0;
+  if (c && !c.sails) return B ? [B] : null;
+  return [Math.hypot(kn * polar(0), B), Math.hypot(kn, B), Math.hypot(kn * polar(180 - NOGO_DEG), B)];
+}
+function spkOpen(o) {
+  SPK.cur = o.cur; SPK.pick = o.pick;
+  $('spkT').textContent = o.title || '選船';
   spkFilters(); spkShow();
   $('spk').classList.add('on');
   var sb = $('spk').querySelector('input[type=search]'); if (sb && matchMedia('(pointer:fine)').matches) sb.focus();   // 手機不自動跳鍵盤
@@ -45,17 +55,19 @@ function spkFilters() {
 /** 卡片（照篩選）＋篩選鈕的亮燈。 */
 function spkShow() {
   [].forEach.call($('spkF').querySelectorAll('.spkR[data-k]'), function (r) { [].forEach.call(r.querySelectorAll('button'), function (b) { b.className = b.dataset.v === SPK.f[r.dataset.k] ? 'on' : ''; }); });
-  var cur = FLEET_SET[SPK.s][SPK.j], L = HULL_LIST.filter(spkMatch), dn = {};
+  var cur = SPK.cur, L = HULL_LIST.filter(spkMatch), dn = {};
   SPK_DRIVE.forEach(function (d) { dn[d[0]] = d; });
-  $('spkN').textContent = '顯示 ' + L.length + '／' + HULL_LIST.length + ' 艘' + (L.length ? '' : ' —— 沒有符合的船，換一個篩選');
+  $('spkN').textContent = '顯示 ' + L.length + '／' + HULL_LIST.length + ' 艘' + (L.length ? '' : ' —— 沒有符合的船，換一個篩選') + '・航速照現在的船隻設定與玩法（' + (PLAY === 'fun' ? '娛樂' : '寫實') + '），標準風、滿帆';
   $('spkG').innerHTML = L.map(function (h) {
     var c = SHIP_CARDS[h.id], d = c && dn[c.drive];
     var m = c ? '<span class="m">' + c.tons.toLocaleString() + ' 噸・水線 ' + c.len + ' m</span><span class="m">砲 ' + c.guns + ' 門・齊射 ' + c.volley.toLocaleString() + ' kg' + (c.crew ? '・' + c.crew + ' 人' : '') + '</span>'
       : '<span class="m">（還沒量：admin.py shipcheck）</span>';
+    var v = spkSpeed(h.id, c);
+    if (v) m += '<span class="m">' + (v.length === 1 ? '航速 ' + v[0].toFixed(1) + ' 節（額外動力）' : '航速 順風 ' + v[0].toFixed(1) + '・側順風 ' + v[1].toFixed(1) + '・逆風 ' + v[2].toFixed(1) + ' 節') + '</span>';
     return '<button class="spkC' + (h.id === cur ? ' on' : '') + '" data-id="' + h.id + '"' + (d ? ' title="' + d[2] + '"' : '') + '>' + (d ? '<span class="i">' + d[1] + '</span>' : '') + '<b>' + h.name + '</b>' + m +
       (h.author ? '<span class="m">建造者 ' + h.author + '</span>' : '') + '</button>';
   }).join('');
-  [].forEach.call($('spkG').querySelectorAll('button.spkC'), function (b) { b.onclick = function () { spkClose(); if (b.dataset.id !== cur) { pickShip(SPK.s, SPK.j, b.dataset.id); fleetUI(); } }; });
+  [].forEach.call($('spkG').querySelectorAll('button.spkC'), function (b) { b.onclick = function () { spkClose(); if (b.dataset.id !== cur && SPK.pick) SPK.pick(b.dataset.id); }; });
 }
 $('spkX').onclick = spkClose;
 $('spk').onclick = function (e) { if (e.target === $('spk')) spkClose(); };   // 點彈窗外面關
