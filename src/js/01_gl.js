@@ -1,6 +1,30 @@
 // ───────────────────────── WebGL ─────────────────────────
 var cv = $('cv'), gl = cv.getContext('webgl2', { antialias: false, preserveDrawingBuffer: true });   // 反鋸齒自己做（MSAA framebuffer，畫質設定；60_render.js targets）
-function glFail(msg) { var e = $('err'); e.style.display = 'block'; e.textContent = msg; $('load').textContent = msg; }
+function glFail(msg) { $('load').textContent = msg; errShow(msg); }
+// ── 報錯彈窗與回報（Tim 2026-10-18：「是否可以加一個彈窗(可關閉) 以及一個回報錯誤按鈕(可以填錯誤內容 然後寄email…(包含報錯訊息與玩家的回報內容)」）──
+// glFail 與沒接住的錯誤（window error／unhandledrejection）都開這個彈窗；同一則訊息只自己跳一次（關掉之後不再煩人）。
+// 「回報錯誤」⇒ 多一格讓玩家寫發生什麼事；「寄出」⇒ mailto: 打開玩家的郵件程式（⛔ 成品不准 fetch：admin.py vxk_inline 檢查）：
+//   主旨帶訊息開頭，內文 ＝ 錯誤訊息（最多 ERR_MAX 字，信太長有的郵件程式打不開）＋ 玩家寫的 ＋ 網址、時間、瀏覽器、成品的來源指紋。寄不寄由玩家決定。
+var ERR_MAIL = 'tim11251994@gmail.com', ERR_MAX = 1500, ERR_SEEN = {}, ERR_NOW = '';
+function errShow(msg) {
+  var e = $('err'); if (!e) return;
+  msg = String(msg); ERR_SEEN[msg] = 1; ERR_NOW = msg;
+  $('errMsg').textContent = msg; $('errRep').hidden = true; $('errSend').hidden = true; $('errRepB').hidden = false; $('errTxt').value = '';
+  e.style.display = 'flex';
+}
+function errFp() { try { return JSON.parse(document.getElementById('blockside-src').textContent).fp; } catch (x) { return '?'; } }   // 成品的來源指紋（admin.py src_stamp）
+function errMail() {
+  var msg = ERR_NOW.length > ERR_MAX ? ERR_NOW.slice(0, ERR_MAX) + '…（後面截掉 ' + (ERR_NOW.length - ERR_MAX) + ' 字）' : ERR_NOW;
+  var body = '錯誤訊息：\n' + msg + '\n\n玩家回報：\n' + ($('errTxt').value.trim() || '（沒寫）') + '\n\n網址：' + location.href + '\n時間：' + new Date().toISOString() +
+    '\n瀏覽器：' + navigator.userAgent + '\n版本：' + errFp();
+  location.href = 'mailto:' + ERR_MAIL + '?subject=' + encodeURIComponent('Blockside 錯誤回報：' + ERR_NOW.split('\n')[0].slice(0, 60)) + '&body=' + encodeURIComponent(body);
+}
+$('errX').onclick = function () { $('err').style.display = 'none'; };
+$('errRepB').onclick = function () { $('errRep').hidden = false; $('errSend').hidden = false; $('errRepB').hidden = true; $('errTxt').focus(); };
+$('errSend').onclick = errMail;
+function errAuto(m) { m = String(m || ''); if (!m || m === 'Script error.' || /ResizeObserver/.test(m) || ERR_SEEN[m] || $('err').style.display === 'flex') return; errShow(m); }   // 跨網域的「Script error.」、ResizeObserver 的警告不跳；開著的不換掉（glFail 之後的 throw 不蓋掉那一句好懂的）
+window.addEventListener('error', function (ev) { errAuto(ev.error && ev.error.stack ? ev.error.message + '\n' + ev.error.stack : ev.message); });
+window.addEventListener('unhandledrejection', function (ev) { var r = ev.reason; errAuto(r && r.stack ? (r.message || r) + '\n' + r.stack : r); });
 if (!gl) { glFail('這個瀏覽器沒有 WebGL2，畫不出來。'); throw new Error('no WebGL2'); }   // 拆檔後這裡是閉包的頂層：throw ＝ 原本的 return（停下來）
 
 var P = {};
