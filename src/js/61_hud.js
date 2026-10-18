@@ -29,6 +29,11 @@ function hudNewsCrew(sh, c, dead, cause) {
   if (cap) { note(sh, '<b style="color:var(--gold)">船長' + how + '！</b>' + why, true); return; }
   if (c.role === ROLE.OFFICER || c.role === ROLE.HELM || c.role === ROLE.SURGEON) {   // 船醫（TASK-0676）：人少，當下報
     var left = sh.crew.filter(function (o) { return o.role === c.role && crewAble(o); }).length, nm = ROLE_NAME[c.role], off = c.role === ROLE.OFFICER;   // 軍官照階級報（大副、二副…；40_crew.js makeCrew）
+    // 「全倒」只報一次（sh.news.down[職位]；newsFlush 看到那個職位又有人能動才收回）：之後倒下的同職位併進 5 秒那一行。
+    //   ⛔ 不管 ⇒ 醫療艙淹了、幾位船醫一起落水（在水裡的不算能動）、一個一個溺水 ⇒ 每淹死一位都算出「還有 0 位」，連報好幾次「船醫溺水　船醫全倒」（Tim 2026-10-18 截圖：憲法號 4 次；軍官同理）。
+    var D = sh.news.down || (sh.news.down = {});
+    if (!left && D[c.role]) { var by0 = dead ? sh.news.kr : sh.news.wr; by0[c.role] = (by0[c.role] || 0) + 1; return; }
+    D[c.role] = !left;
     note(sh, (off && c.rank !== undefined ? officerRank(c.rank) : nm) + how + why + (left ? '（還有 ' + left + ' 位' + (off ? '軍官' : '') + '）' : '　<b style="color:#ff9a7a">' + nm + '全倒' + (c.role === ROLE.OFFICER ? ' —— 沒人指揮，瞄準變散' : c.role === ROLE.SURGEON ? ' —— 醫療艙只剩預備水手' : '') + '</b>'), !left);
     return;
   }
@@ -57,6 +62,7 @@ function newsFlush(sh) {
     var gl0 = N.guns.length, list = gl0 > 5 ? N.guns.slice(0, 4).join('、') + '…' : N.guns.join('、');   // 一次太多（殉爆）⇒ 只列前四門
     note(sh, (gl0 === 1 ? N.guns[0] + ' 被打飛' : gl0 + ' 門砲被打飛：' + list) + '（砲還在 ' + sh.gunsAlive + '／' + sh.guns.length + '）'); N.guns = [];
   }
+  if (N.down) for (var r in N.down) if (N.down[r] && sh.crew.some(function (o) { return String(o.role) === r && crewAble(o); })) N.down[r] = false;   // 全倒過的職位又有人能動（軍官爬回船上歸隊）⇒ 下次全倒照常報
   var dk = sh.kills - N.k, dw = sh.wounds - N.w;
   if (N.t < 0 && (dk > 0 || dw > 0)) N.t = SIMT;                       // 第一個人倒下 ⇒ 開始數
   if (N.t >= 0 && SIMT - N.t >= NEWS_WIN) {
