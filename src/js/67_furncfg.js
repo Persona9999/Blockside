@@ -20,9 +20,11 @@ var FURN_ITEMS = [
   { k: 'buff.heal', name: '治療速度加成', lim: [0, 1], step: 0.05, pct: true, has: function (f) { return !!(f.buff && f.buff.heal !== undefined); }, note: '同一間加總，上限照房間類型（醫療艙 60%）' },
   { k: 'staff.surgeon', name: '配幾位船醫', lim: [0, 4], step: 1, unit: ' 人', int: true, has: function (f) { return !!(f.staff && f.staff.surgeon !== undefined); }, note: '設施配員：開戰時走得到的每一件配這麼多位船醫，站在旁邊（全船上限在船隻配置頁）' },
   { k: 'staff.carpenter', name: '配幾位木匠', lim: [1, 4], step: 1, unit: ' 人', int: true, has: function (f) { return !!(f.staff && f.staff.carpenter !== undefined); }, note: '設施配員：每張配這麼多位木匠，開戰時生在台旁（全船上限在船隻配置頁）' },
+  { k: 'staff.sailmaker', name: '配幾位帆匠', lim: [1, 4], step: 1, unit: ' 人', int: true, has: function (f) { return !!(f.staff && f.staff.sailmaker !== undefined); }, note: '設施配員：每件配這麼多位帆匠，開戰時生在櫃旁（船隻配置頁的帆匠是全船上限）' },
+  { k: 'cloth', name: '帆布存量', lim: [0, 20000], step: 100, unit: ' 份', int: true, has: function (f) { return f.role === 'loft'; }, note: '每件櫃存幾份帆布（補一點血量用一份、接一條繩 20 份；櫃被打壞 ⇒ 剩下的拿不到）' },
   { k: 'wood', name: '木材存量', lim: [0, 20000], step: 100, unit: ' 份', int: true, has: function (f) { return f.role === 'bench'; }, note: '每張台存幾份木材（補一格用一份；台被打壞 ⇒ 剩下的拿不到）' },
-  { k: 'carry', name: '一趟帶幾份', lim: [10, 2000], step: 10, unit: ' 份', int: true, has: function (f) { return f.role === 'bench'; }, note: '木匠開戰時身上帶滿；用完了、又有東西要修 ⇒ 走回台旁拿到滿' },
-  { k: 'auto', name: '每船至少幾張', lim: [1, 4], step: 1, unit: ' 張', int: true, has: function (f) { return f.role === 'bench'; }, note: '甲板上擺的不夠就自動補在水線以上最低那層砲甲板（拿掉最後一張也會補回來；不要木匠 ⇒ 船隻配置頁上限設 0）' },
+  { k: 'carry', name: '一趟帶幾份', lim: [10, 2000], step: 10, unit: ' 份', int: true, has: function (f) { return f.role === 'bench' || f.role === 'loft'; }, note: '木匠（帆匠）開戰時身上帶滿；用完了、又有東西要修 ⇒ 走回台旁拿到滿' },
+  { k: 'auto', name: '每船至少幾張', lim: [1, 4], step: 1, unit: ' 張', int: true, has: function (f) { return f.role === 'bench' || f.role === 'loft'; }, note: '甲板上擺的不夠就自動補在水線以上最低那層砲甲板（拿掉最後一張也會補回來；不要木匠 ⇒ 船隻配置頁上限設 0）' },
   { k: 'hp', name: '血量', lim: [10, 1000], step: 10, unit: '', int: true, has: function (f) { return f.hp !== undefined; }, note: '被打到扣血，歸零就壞（不再能用、不再給加成）' }
 ];
 /** 動力件的項目（31_drive.js drvCurve／drvNeed／drvPartsTick 讀）；fit ＝ 拉滑桿時跟另一格保持 lo < hi。 */

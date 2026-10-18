@@ -45,6 +45,7 @@
     "drown": [0, 120, 45],
     "heal": [0, 180, 20],
     "musket": [50, 1000, 300],
+    "sailfix": [5, 300, 40],
     "navre": [0, 10, 2],
     "pslowb": [0.2, 0.9, 0.5],
     "ramv": [0.5, 5, 1.5],
@@ -152,7 +153,7 @@
     }
   },
   "geo0": {"spar": null, "marines": [160, 220], "center": 140, "aim": 90, "aimZ": [40, 320], "deckAim": [84, 104], "rigAim": [150, 300]},
-  "crew0": {"officers": 4, "helm": 2, "marines": 12, "marineGap": 37, "top": 4, "monkeys": 1, "handsK": 1, "shelter": 0, "surgeon": 60, "carpenter": 20},
+  "crew0": {"officers": 4, "helm": 2, "marines": 12, "marineGap": 37, "top": 4, "monkeys": 1, "handsK": 1, "shelter": 0, "surgeon": 60, "carpenter": 20, "sailmaker": 20},
   "teamCloth": {
     "blue": [34, 43, 65],
     "red": [82, 24, 21]
@@ -416,6 +417,7 @@
     "pump": {"name": "鏈式抽水機", "type": "deck", "size": [10, 8, 12], "hp": 120, "role": "pump", "power": "hand", "tpm": 4.5, "crew": 4, "place": "well", "cap": 36},
     "spump": {"name": "蒸汽抽水機", "type": "deck", "size": [10, 6, 9], "hp": 160, "role": "pump", "power": "steam", "tpm": 15, "place": "center", "cap": 60},
     "bench": {"name": "木工台", "type": "deck", "size": [16, 8, 8], "hp": 120, "role": "bench", "auto": 1, "staff": {"carpenter": 2}, "wood": 3000, "carry": 300},
+    "loft": {"name": "帆布櫃", "type": "deck", "size": [12, 6, 8], "hp": 100, "role": "loft", "auto": 1, "staff": {"sailmaker": 2}, "cloth": 3000, "carry": 300},
     "keg": {"name": "火藥桶", "type": "deck", "size": [10, 10, 8], "role": "powder"}
   },
   "drvparts": {
@@ -437,7 +439,7 @@
       "staffPer": 3,
       "back": 0.6
     },
-    "workshop": {"name": "木工間", "items": ["bench"], "need": {"bench": 1}},
-    "deck": {"name": "砲甲板", "deck": true, "items": ["keg", "pump", "spump", "bench"]}
+    "workshop": {"name": "木工間", "items": ["bench", "loft"], "need": {"bench": 1}},
+    "deck": {"name": "砲甲板", "deck": true, "items": ["keg", "pump", "spump", "bench", "loft"]}
   }
 }
