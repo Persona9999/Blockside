@@ -396,6 +396,17 @@
       "author": "Sirius",
       "crew": {"marines": 12, "marineGap": 30},
       "geo": {"spar": [114, 140], "marines": [100, 80], "center": 155, "aim": 90, "aimZ": [30, 480], "deckAim": [74, 106], "rigAim": [210, 410]}
+    },
+    {
+      "id": "gloire",
+      "el": "ship-gloire",
+      "name": "光榮號",
+      "vxk": "gloire.vxk",
+      "work": "kaguya-gloire-01m-assembly",
+      "author": "kaguya",
+      "cfg": {"pump": 32, "base": 12.3, "agile": 1},
+      "geo": {"spar": [113, 141], "marines": [80, 290], "center": 160, "aim": 100, "aimZ": [55, 330], "deckAim": [90, 120], "rigAim": [160, 310]},
+      "names": ["光榮號"]
     }
   ],
   "furniture": {
