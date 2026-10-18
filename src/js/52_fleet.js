@@ -320,17 +320,23 @@ function segSeg(a, b, c, d) {
 function friendKeels(sh) { return friendsOf(sh).map(keelLine); }
 function friendInLine(K, from, to) { for (var i = 0; i < K.length; i++) if (segSeg(from, to, K[i][0], K[i][1]).d < FF_CLEAR) return true; return false; }
 /** 讓船：要讓 ⇒ 回傳該走的航向；不用 ⇒ null。只看最危險（最近）的那一艘友船。 */
-function friendAvoid(sh, L) {                                             // L：要讓的那幾艘（沒給 ＝ 友船；54_helm.js foeAvoid 給敵艦）
+/** 這艘船的防撞參數（Tim 2026-10-18：「防撞設定是否可以每艘船有獨立參數(有的船可以裝備撞角 故意撞敵船)」）：設定檔 ships[].cfg.avoid ＝
+ *  { near（m，預判的距離近於它就讓；預設 AV_NEAR）, hard（m，現在就近於它 ⇒ 馬上讓；AV_HARD）, t（秒，往前預判多久；AV_T）, foe（false ⇒ 不讓敵艦：裝撞角、要撞上去的船；友船照讓）}，
+ *  沒寫的那一項照預設 ⇒ 沒有 avoid 的船一位元都不差。 */
+var AV_NONE = {};
+function avoidCfg(sh) { var c = HULL_CFG0[sh.T.id]; return c && c.avoid || AV_NONE; }
+function friendAvoid(sh, L, T) {                                          // L：要讓的那幾艘（沒給 ＝ 友船；54_helm.js foeAvoid 給敵艦）；T：往前看幾秒（沒給 ＝ AV_T；船頭接敵 ⇒ 短的）
   var fr = L || friendsOf(sh); if (!fr.length) return null;
+  var A = avoidCfg(sh), near = A.near > 0 ? A.near : AV_NEAR, hard = A.hard > 0 ? A.hard : AV_HARD, lt = T || (A.t > 0 ? A.t : AV_T);   // 這艘自己的防撞參數（設定檔 ships[].cfg.avoid；沒寫 ＝ 預設）
   var me = keelLine(sh), best = null;
   fr.forEach(function (o) {
     var r = segSeg(me[0], me[1], keelLine(o)[0], keelLine(o)[1]), n = sub(r.q, r.p); n[1] = 0; n = norm(n);
     var close = dot(sub(sh.vel, o.vel), n);                                // 往它靠近的速度（m/s）
-    if (r.d < AV_HARD || (close > 0.05 && r.d - close * AV_T < AV_NEAR)) if (!best || r.d < best.d) best = { d: r.d, n: n };
+    if (r.d < hard || (close > 0.05 && r.d - close * lt < near)) if (!best || r.d < best.d) best = { d: r.d, n: n };
   });
   if (!best) return null;
   var left = [-Math.sin(sh.yaw), 0, -Math.cos(sh.yaw)];                   // 左舷那一側（yaw 變大 ＝ 左轉，31_sailing.js fwd）
-  var w = clamp(1 - (best.d - 14) / AV_NEAR, 0.4, 1);
+  var w = clamp(1 - (best.d - 14) / near, 0.4, 1);
   sh.avoidN = (sh.avoidN || 0) + 1;                                       // 讀數：開局以來讓了幾步
   return sh.yaw + (dot(best.n, left) > 0 ? -1 : 1) * AV_TURN * w;          // 友船在左 ⇒ 右轉
 }
