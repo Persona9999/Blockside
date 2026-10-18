@@ -19,12 +19,15 @@
 //     木匠站到洞邊走得到的那一點；到了才往外接洞邊還缺格子的點（carpHoleArea：被打掉一部分、還走得過去的那一圈）⇒
 //     修 CARP_HOLE_T0 ＋ CARP_HOLE_K × 點數 秒 ⇒ 這一片腳下那一層（每點 NAV_C × NAV_C 格、開戰時的高度）一次補回來（木材夠的話）。
 //     連著兩塊以上的洞（甲板被打成兩塊不通）先修 ＝ 恢復通道。
-//   性能：要修的清單只在尋路刷新（navRefresh，每 NAV_RE 秒、有被打到才刷）之後重掃一次（sh.carp.at ＝ NV.refreshN），平常點名只是挑；修好的那件到下一次刷新之前不再挑。
+//   · 帆的綁定點（carpAnchors；Tim 2026-10-18：「是否可以讓木匠也去修帆的綁定點(優先度在修斷掉甲板之後 在修破洞之前」）：排在通道之後、其他洞之前。
+//     補好 ⇒ 帆匠下一次點名就判得出那條繩接得回去，走去修那面帆（47_sailmaker.js smRopeOk；Tim：「修完後 帆匠要能去修這面帆(因為綁定點回來了)」）。
+//   性能：要修的清單是全船一份（48_damage.js 損壞表）：梯子與洞只在尋路刷新（navRefresh，每 NAV_RE 秒、有被打到才刷）之後重掃，平常點名只是挑；修好的那件到下一次刷新之前不再挑。
 //   補回來的格 ＝ 開戰時那一格的顏色（restoreVoxel：網格重建、進水、尋路跟著更新，removeVoxel 反過來）；尋路刷新之後才看得到（梯子接回去、兩塊接回一塊）。
 //   細節設定「尋路更新」關（NAV_RE 0）⇒ 走路格不會變 ⇒ 看不到洞、梯子不會斷 ⇒ 木匠只會閒逛。
 // 木匠倒下、陣亡 ⇒ 沒人修；掉到別層 ⇒ 照舊是木匠；落水爬回來 ⇒ 當預備水手（同其他職位）。0 人 ⇒ 戰局跟以前一位元不差（不生、不抽 rnd()）。
 var CARP_LAD_T = 6, CARP_HOLE_T0 = 2, CARP_HOLE_K = 0.5;                     // 修一件梯子幾秒；補一個洞 ＝ 2 秒 ＋ 每點 0.5 秒
-var CARP_WOOD_T = 3;                                                          // 在木工台拿木材幾秒
+var CARP_WOOD_T = 3;
+var CARP_ANC_UP = 20, CARP_ANC_DN = 10, CARP_ANC_T0 = 2, CARP_ANC_K = 0.25;  // 綁定點搆得到的高度（離腳下地板往上／往下幾格）；補一個 ＝ 2 秒 ＋ 每格 0.25 秒                                                          // 在木工台拿木材幾秒
 /** 有人駐守、每船至少幾件的設施（自動補擺、開戰時補在待命那一層、台旁走得到的點都同一套）：木工台（木匠）、帆布櫃（帆匠，47_sailmaker.js）。 */
 var STATION_ROLES = ['bench', 'loft'];
 /** furniture 裡 role 是這個的第一種道具；沒有 ⇒ null。 */
@@ -90,7 +93,7 @@ function carpInit(sh, crew, add) {
   if (B.length) NV.ladders.forEach(function (L) { L.q = 0; });          // handRoute 會記排隊人數；這裡只是試走
   for (var q = 0; q < n; q++) { var bm = S && S[q].m.origin ? S[q].m : null; at.push(bm ? bm.spot : null); if (!at[q]) hn++; }
   if (!C0.length && hn) { sh.carpWant = 0; return; }
-  sh.carp = { lad: 0, holes: 0, cells: 0, log: [], todo: [], at: -1, done: {}, fetch: 0, used: 0 };   // fetch：拿了幾趟木材；used：從台上拿走幾份
+  sh.carp = { lad: 0, holes: 0, anc: 0, cells: 0, log: [], todo: [], at: -1, done: {}, fetch: 0, used: 0 };   // fetch：拿了幾趟木材；used：從台上拿走幾份
   for (var k = 0, h = 0; k < n; k++) {
     var lv = at[k] ? at[k].lv : NV.home, i = at[k] ? at[k].ci : C0[Math.floor((h++ + 0.5) / hn * C0.length)];
     add(ROLE.CARPENTER, navPos(NV.levels[lv].N, i), null, 1);
@@ -114,7 +117,7 @@ function ladCells(T, path) {
   var q = (T.h.parts || []).filter(function (p) { return p.path === path; })[0];
   return (C[path] = q && q.cellRuns && q.cellRuns.length ? drvCells(T, q.cellRuns) : null);
 }
-/** 要修的（尋路刷新之後重掃）：[{ key, kind: 'lad'｜'hole', lv, cell（木匠站的走路點）, pri, … }]。 */
+/** 要修的梯子與洞（尋路刷新之後重掃；48_damage.js dmgRows）：[{ key, kind: 'lad'｜'hole'｜'anchor', lv, cell（木匠站的走路點）, pri, … }]。 */
 function carpScan(sh) {
   var NV = sh.nav, out = [], G = sh.grid, T = sh.T, seen = {};
   NV.ladders.forEach(function (L, j) {
@@ -144,11 +147,46 @@ function carpScan(sh) {
   });
   return out;
 }
-/** 每次點名（survey）：閒著的木匠接一件（梯子 ＞ 通道 ＞ 其他洞；同一級挑最近、走得到的）。 */
+/** 帆的綁定點（帆與繩變了才重掃；48_damage.js dmgRows）：還掛著的帆（不是旗）、綁在帆上的斷繩（s.lines）、它綁的格（r.a／r.b）被打掉了 ⇒ 一件（同一格只算一件；pri 1.5：通道之後、其他洞之前）。
+ *  站在那一格旁走得到的走路點，綁定點要在腳下地板往上 CARP_ANC_UP、往下 CARP_ANC_DN 格內（舷牆、帆腳索栓、chainplate；桅頂的搆不到 ⇒ 不修）。
+ *  繩的另一端（帆桁、模型）沒了或被帶走、被斷開的那一團帶走（moved）的 ⇒ 補了也接不回去 ⇒ 不修。 */
+function carpAnchors(sh) {
+  var NV = sh.nav, G = sh.grid, B = sh.T.base, out = [], seen = {};
+  (sh.sails || []).forEach(function (s) {
+    if (s.dead || s.flag) return;
+    (s.lines || []).forEach(function (j) {
+      var r = sh.ropes[j]; if (!(r.dead || (sh.tCut && sh.tCut[j])) || r.moved || r.never || r.unfixed) return;
+      if ((r.mods || []).some(function (k) { return !sh.models[k] || !sh.models[k].alive; })) return;
+      for (var e = 0; e < 2; e++) { var E = ropeEnd(r, e); if ((E.k === 'yard' || E.k === 'model') && ropeEndWhy(sh, r, e, 0)) return; }
+      [r.a, r.b].forEach(function (a) {
+        if (!(a >= 0) || seen[a] || hullGp(G, a)) return;
+        var x = a & 2047, y = (a >> 11) & 1023, z = a >> 21, best = null; if (!B.get(x, y, z)) return;
+        seen[a] = 1;
+        NV.reach.forEach(function (lv) {
+          var N = NV.levels[lv].N, ci = navSnap(N, [x + 0.5, y + 0.5, z], 8); if (ci < 0) return;
+          var dz = z - N.Z[ci]; if (dz > CARP_ANC_UP || dz < -CARP_ANC_DN) return;
+          if (!best || Math.abs(dz) < best.d) best = { lv: lv, ci: ci, d: Math.abs(dz) };
+        });
+        if (best) out.push({ key: 'A' + a, kind: 'anchor', a: a, sail: s, lv: best.lv, cell: best.ci, pri: 1.5 });
+      });
+    });
+  });
+  return out;
+}
+/** 綁定點要補的格：那一格（排第一：木材不夠也先補它）加旁邊一圈（3×3×3）開戰時有、現在沒有的 ⇒ [[x, y, z], …]。 */
+function carpAncCells(sh, a) {
+  var G = sh.grid, B = sh.T.base, x0 = a & 2047, y0 = (a >> 11) & 1023, z0 = a >> 21, out = [[x0, y0, z0]];
+  for (var dz = -1; dz <= 1; dz++) for (var dy = -1; dy <= 1; dy++) for (var dx = -1; dx <= 1; dx++) {
+    if (!dx && !dy && !dz) continue;
+    var x = x0 + dx, y = y0 + dy, z = z0 + dz; if (B.get(x, y, z) && !G.get(x, y, z)) out.push([x, y, z]);
+  }
+  return out;
+}
+/** 每次點名（survey）：閒著的木匠接一件（梯子 ＞ 通道 ＞ 帆的綁定點 ＞ 其他洞；同一級挑最近、走得到的）。 */
 function carpTick(sh) {
   var NV = sh.nav, K = sh.carp; if (!K || !NV || sh.struck || sh.sunk || sh.broken) return;
   var C = sh.crew.filter(function (c) { return c.role === ROLE.CARPENTER && crewAble(c); }); if (!C.length) return;
-  if (K.at !== (NV.refreshN || 0)) { K.at = NV.refreshN || 0; K.todo = carpScan(sh); K.done = {}; if (K.todo.length) medComps(sh); }   // 尋路刷新過 ⇒ 重掃；medComps：「層:區域」照沒斷的梯子連成幾群（44_medic.js；只看區域與梯子，便宜）
+  K.todo = dmgFor(sh, 'carpenter');                                       // 全船的損壞表（48_damage.js）：尋路刷新過才重掃梯子與洞、帆與繩變了才重掃綁定點
   if (!K.todo.length) return;
   var taken = {}; C.forEach(function (c) { if (c.hand.job) taken[c.hand.job.key] = 1; });
   for (var k in K.done) taken[k] = 1;
@@ -188,7 +226,7 @@ function carpWood(sh, c) {
   m.wood -= get; c.wood += get; sh.carp.fetch++; sh.carp.used += get;
   H.job = null; H.wait = 0.5;
 }
-/** 挑件的距離：梯子 ＞ 通道 ＞ 其他洞，同一級照沿船長的距離＋換層。 */
+/** 挑件的距離：梯子 ＞ 通道 ＞ 帆的綁定點 ＞ 其他洞，同一級照沿船長的距離＋換層。 */
 function carpD(NV, t, c) { var p = navPos(NV.levels[t.lv].N, t.cell); return t.pri * 1e6 + Math.abs(p[0] - c.pos[0]) + 150 * Math.abs(t.lv - c.hand.lv); }
 /** 到了（42_hands.js handJoin）：站著修，修滿那件的秒數 ⇒ 補回去。不在那一層（路斷了）⇒ 作廢。 */
 function carpJoin(sh, c) {
@@ -197,12 +235,13 @@ function carpJoin(sh, c) {
     if (H.lv !== J.lv) { H.job = null; H.wait = 0.5; return; }
     J.at = SIMT; c.home = c.pos.slice();
     if (t.kind === 'hole') J.area = carpHoleArea(sh, t.lv, t.hole);       // 到了才看要補多大一片（洞＋洞邊還缺格子的那一圈）
+    else if (t.kind === 'anchor') J.area = carpAncCells(sh, t.a);
     return;
   }
-  if (SIMT - J.at < (t.kind === 'lad' ? CARP_LAD_T : CARP_HOLE_T0 + CARP_HOLE_K * J.area.length)) return;
-  var W = { n: c.wood, more: false }, n = t.kind === 'lad' ? carpFixLadder(sh, t, W) : carpFixHole(sh, t.lv, J.area, W), K = sh.carp;   // W：身上的木材（補一格用一份；用完 ⇒ more）
+  if (SIMT - J.at < (t.kind === 'lad' ? CARP_LAD_T : t.kind === 'anchor' ? CARP_ANC_T0 + CARP_ANC_K * J.area.length : CARP_HOLE_T0 + CARP_HOLE_K * J.area.length)) return;
+  var W = { n: c.wood, more: false }, n = t.kind === 'lad' ? carpFixLadder(sh, t, W) : t.kind === 'anchor' ? carpFixCells(sh, J.area, W) : carpFixHole(sh, t.lv, J.area, W), K = sh.carp;   // W：身上的木材（補一格用一份；用完 ⇒ more）
   c.wood -= n;
-  if (n && !W.more) { if (t.kind === 'lad') { K.lad++; note(sh, '木匠修好了梯子（' + sh.nav.ladders[t.j].name.split('/').pop() + '）'); } else { K.holes++; note(sh, '木匠補好了甲板破洞（' + (sh.nav.levels[t.lv].name || sh.nav.levels[t.lv].key) + '，' + n + ' 格）'); } }   // Tim 2026-10-18：「木匠跟帆匠修補完成可以廣播」
+  if (n && !W.more) { if (t.kind === 'lad') { K.lad++; note(sh, '木匠修好了梯子（' + sh.nav.ladders[t.j].name.split('/').pop() + '）'); } else if (t.kind === 'anchor') { K.anc++; note(sh, '木匠補好了帆的綁定點（' + t.sail.name + '，' + n + ' 格）'); } else { K.holes++; note(sh, '木匠補好了甲板破洞（' + (sh.nav.levels[t.lv].name || sh.nav.levels[t.lv].key) + '，' + n + ' 格）'); } }   // Tim 2026-10-18：「木匠跟帆匠修補完成可以廣播」
   K.cells += n;
   K.log.push({ t: +SIMT.toFixed(1), what: t.kind, key: t.key, n: n, more: W.more }); if (!W.more) K.done[t.key] = 1;   // 木材不夠補完 ⇒ 那一件留著（拿了木材再來）
   H.job = null; H.wait = 0.5;
@@ -235,6 +274,17 @@ function carpHoleArea(sh, lv, hole) {
   }
   return q;
 }
+/** 綁定點：carpAncCells 的每一格照開戰時的船補回來 ⇒ 補了幾格。 */
+function carpFixCells(sh, cells, W) {
+  var B = sh.T.base, n = 0;
+  cells.forEach(function (p) {
+    if (W.more) return;
+    var col = B.get(p[0], p[1], p[2]); if (!col || sh.grid.get(p[0], p[1], p[2])) return;
+    if (n >= W.n) { W.more = true; return; }
+    if (restoreVoxel(sh, p[0], p[1], p[2], col)) n++;
+  });
+  return n;
+}
 /** 洞：carpHoleArea 的每一點 [走路點, 甲板那一層的 z]，那一層的 NAV_C × NAV_C 格照開戰時的船補回來 ⇒ 補了幾格。 */
 function carpFixHole(sh, lv, cells, W) {
   var N = sh.nav.levels[lv].N, B = sh.T.base, n = 0;
@@ -249,10 +299,10 @@ function carpFixHole(sh, lv, cells, W) {
   });
   return n;
 }
-/** 讀數（__game.carp）：木工台（中心、還在不在、走得到的點、存量）、木匠 { want, slots, cap }、每位木匠在哪一層、身上的木材、離最近的木工台幾格；修好幾件、拿了幾趟。 */
+/** 讀數（__game.carp）：木工台（中心、還在不在、走得到的點、存量）、木匠 { want, slots, cap }、每位木匠在哪一層、身上的木材、離最近的木工台幾格；修好幾件（梯子、洞、綁定點）、拿了幾趟。 */
 function carpInfo(sh) {
   var B = sh.benches || [], C = sh.crew.filter(function (c) { return c.role === ROLE.CARPENTER; }), K = sh.carp;
-  return { want: sh.carpWant || 0, slots: sh.carpSlots || 0, cap: sh.cw.carpenter || 0, lad: K ? K.lad : 0, holes: K ? K.holes : 0, cells: K ? K.cells : 0, fetch: K ? K.fetch : 0, used: K ? K.used : 0,
+  return { want: sh.carpWant || 0, slots: sh.carpSlots || 0, cap: sh.cw.carpenter || 0, lad: K ? K.lad : 0, holes: K ? K.holes : 0, anc: K ? K.anc : 0, cells: K ? K.cells : 0, fetch: K ? K.fetch : 0, used: K ? K.used : 0,
     benches: B.map(function (m) { return { name: m.name, c: m.c.map(Math.round), alive: m.alive, reach: !!m.spot, wood: m.wood }; }),
     crew: C.map(function (c) { return { deck: c.deck, st: c.st, wood: isFinite(c.wood) ? c.wood : null, job: c.hand && c.hand.job ? c.hand.job.kind : null, near: B.length ? Math.round(Math.min.apply(null, B.map(function (m) { return Math.hypot(c.pos[0] - m.c[0], c.pos[1] - m.c[1]); }))) : null }; }) };
 }
@@ -261,5 +311,5 @@ function carpText(sh) {
   if (!sh.carp) return '';
   var C = sh.crew.filter(function (c) { return c.role === ROLE.CARPENTER && crewAble(c); }), w = C.filter(function (c) { return c.hand.job && c.hand.job.kind === 'repair'; }).length, g = C.filter(function (c) { return c.hand.job && c.hand.job.kind === 'wood'; }).length;
   var B = sh.benches || [], left = B.reduce(function (a, m) { return a + (m.alive ? m.wood : 0); }, 0);
-  return '　木匠 ' + C.length + (w ? '（修 ' + w + '）' : '') + (g ? '（拿木材 ' + g + '）' : '') + (sh.carp.lad || sh.carp.holes ? '　修好 梯 ' + sh.carp.lad + '、洞 ' + sh.carp.holes : '') + (B.length ? '　木材 ' + left : '');
+  return '　木匠 ' + C.length + (w ? '（修 ' + w + '）' : '') + (g ? '（拿木材 ' + g + '）' : '') + (sh.carp.lad || sh.carp.holes || sh.carp.anc ? '　修好 梯 ' + sh.carp.lad + '、洞 ' + sh.carp.holes + (sh.carp.anc ? '、綁定點 ' + sh.carp.anc : '') : '') + (B.length ? '　木材 ' + left : '');
 }

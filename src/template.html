@@ -57,6 +57,8 @@
   #info{ display:none; pointer-events:auto; cursor:pointer; border-left:3px solid var(--blue); margin-bottom:6px; max-width:100%; box-sizing:border-box; }
   #info h3::after{ content:''; display:block; clear:both; }
   #info .bar{ max-width:100%; }   /* 血條最多跟那一欄一樣寬（⛔ 固定寬 ⇒ 窄的時候伸進右欄） */
+  #info .fold.gm{ padding:0; overflow:hidden; } #info .fold.gm i{ font-style:normal; padding:0 6px; display:inline-block; } #info .fold.gm i.on{ color:#111; background:var(--gold); }   /* 旁邊那張圖：砲位｜損壞（61_hud.js GMAP_MODE） */
+  #info .dmgsum{ margin-top:2px; }
   #info .fold.see.on{ color:#111; background:var(--gold); }   /* 「🎥 看這艘」：正在看 ⇒ 實心 */
   #info .fold{ float:right; margin-left:12px; cursor:pointer; color:var(--gold); font-size:12px; font-weight:normal; border:1px solid rgba(232,194,106,.55); border-radius:4px; padding:0 7px; }
   #info .cls{ color:var(--dim); font-weight:normal; font-size:.85em; }
@@ -765,6 +767,7 @@
 <script src="js/45_pumps.js" data-bundle="game"></script>
 <script src="js/46_carpenter.js" data-bundle="game"></script>
 <script src="js/47_sailmaker.js" data-bundle="game"></script>
+<script src="js/48_damage.js" data-bundle="game"></script>
 <script src="js/50_sim.js" data-bundle="game"></script>
 <script src="js/51_captain.js" data-bundle="game"></script>
 <script src="js/52_fleet.js" data-bundle="game"></script>
