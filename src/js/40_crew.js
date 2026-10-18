@@ -335,16 +335,20 @@ function stepCrew(sh, dt) {
   });
   if (sh.xfer) swimXfer(sh);                            // 游到敵艦的人換名單（43_swim.js；跑完 forEach 才換）
 }
-/** 火槍：打對方露天的人（spar deck、桅頂），距離越遠越難中。 */
+/** 火槍：打對方露天的人（spar deck、桅頂），距離越遠越難中。
+ *  最大射程 MUSKET_R（細節設定「火槍射程」，04_state.js；TASK-0633：以前沒有上限、命中率保底 1% ⇒ 28 km 外照樣打死軍官）：
+ *  射程內看不到人 ⇒ 不開槍（不冒煙、不抽亂數）。射程內有人 ⇒ 跟以前一樣：照原本的順序挑一個、照距離算命中（命中率曲線之後另外設計）。 */
 function musket(sh, c) {
   var foe = foeOf(sh), w = M4.pt(sh.M, c.pos[0], c.pos[1], c.pos[2] + 14);
   if (!foe) return;
   var cand = foe.crew.filter(function (o) { return o.st === 0 && !o.below && (o.role !== ROLE.GUN && o.role !== ROLE.POWDER && o.role !== ROLE.HAND && o.role !== ROLE.CARPENTER || o.deck === foe.weatherDeck); });   // 露天的人（最上面那層砲甲板的砲班、走到那一層的預備水手也算）
   if (foe.arm) { var wL = M4.pt(foe.inv, w[0], w[1], w[2]); cand = cand.filter(function (o) { return !armBetween(foe, wL, [o.pos[0], o.pos[1], o.pos[2] + 9]); }); }   // 躲在裝甲後面（砲塔裡）的看不到（24_armor.js）
+  var near = [];                                                       // 射程內的：[人, 距離 m]
+  cand.forEach(function (o) { var d = len(sub(M4.pt(foe.M, o.pos[0], o.pos[1], o.pos[2]), w)); if (d <= MUSKET_R) near.push([o, d]); });
+  if (!near.length) return;
   c.fireT = 0.4;
   spawnPt(w, [WIND[0] * 0.3, 0.4, WIND[2] * 0.3], rr(1.5, 2.5) / smokeK(), [0.85, 0.85, 0.85], 0.35, 0.3, 1.4, -0.03, 0.8);
-  if (!cand.length) return;
-  var o = cand[(rnd() * cand.length) | 0], ow = M4.pt(foe.M, o.pos[0], o.pos[1], o.pos[2]), dist = len(sub(ow, w));
+  var t = near[(rnd() * near.length) | 0], o = t[0], dist = t[1];
   if (rnd() < clamp(0.05 * 100 / dist, 0.01, 0.12)) damageCrew(foe, o, rr(40, 125), '火槍');   // 血量 100 時約三成一槍斃命（跟以前的 0.3 對齊）
 }
 /** 一門砲：在崗的人數決定能不能開、裝填多快。 */
