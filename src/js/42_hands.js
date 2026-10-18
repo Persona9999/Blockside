@@ -181,10 +181,10 @@ function turNavZ(T, d, L, gx, gy) {
 }
 /** 走路格上的一點 p（船的格座標）換成那一層記的座標：站在會轉的甲板上 ⇒ 砲塔座標（27_turret.js）；其他照舊。 */
 function navRestP(N, p) { if (!N.sh) return p; var k = turDeckAt(N.sh, p); return k >= 0 ? ndIn(N.sh.tur[k], p) : p; }
-/** 那一點站得住的高度：有甲板 meta ⇒ 只看那一欄地板上下（−2～+3 格）；沒有 ⇒ 那一層的高度範圍裡最高那個。 */
+/** 那一點站得住的高度：有甲板 meta ⇒ 只看那一欄地板上下（−2～+3 格；甲板 meta 有 walk ⇒ 照走的那一層面，35_decks.js deckWalk）；沒有 ⇒ 那一層的高度範圍裡最高那個。 */
 function navZ(g, d, L, gx, gy) {
   if (!d) return standZ(g, gx, gy, L.zr[0], L.zr[1], NAV_HEAD);
-  var f = deckFloor(d, gx); return f === null ? -1 : standZ(g, gx, gy, f - 2, f + 3, NAV_HEAD);
+  var f = deckWalk(d, gx); return f === null ? -1 : standZ(g, gx, gy, f - 2, f + 3, NAV_HEAD);
 }
 var NAV_MINREG = 12;                                                      // 連通區域至少幾點才算（小於它 ⇒ 砲架頂、桶堆上那種站得住的小塊，不走）
 /** 切連通區域（8 鄰）：N.reg（每一點屬於第幾塊，−1 ＝ 不能走）、N.regs（每一塊幾點）、N.ok、N.cells（全部能走的點）、N.big（最大那一塊）。

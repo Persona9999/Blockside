@@ -16,13 +16,19 @@ var CACC = null, CCNT = null, PHYS_MS = 0, PROF = { cloth: 0, rope: 0, shred: 0,
 //   gaff／boom（後桅縱帆）往下風擺，帆面跟船身的夾角 ＝ (180° − 相對風角)／2，8°–80°；頂風 ±25° 內不換邊（遲滯）。每秒最多轉 8°。
 //   帆的綁點、帆腳與綁在帆桁上的繩跟著轉（繩照弧長在兩端之間內插：一端綁甲板的 brace 就只有帆桁那一頭轉）。
 //   ⚠ 帆桁轉了，砲彈打到帆桁的位置跟著變 ⇒ 物理開或關不再走出逐格同一局（只差在打到帆桁的那幾下）。
-var BRACE_MAX = 0.70, BOOM_MIN = 0.14, BOOM_MAX = 1.40, BRACE_RATE = 0.14, BRACE_HYST = 2.7;
+//   三角帆桁（帆桁 meta rig=lateen，皇家號；照 gaff 往下風擺）：前端（car）被 tack 綁在船頭 ⇒ 只能在船頭左右移 LATEEN_SWING 格 ⇒ 最多擺 asin(LATEEN_SWING ÷ 轉軸到前端的水平距離)
+//     （Tim 2026-10-18「皇家號 發現浮空纜線」：照 gaff 擺到 80° ⇒ 主帆桁前端甩出舷外 13 m、tack 從那裡斜拉到中央走道前端）。沒有固定點 fore ⇒ 照 gaff。
+var BRACE_MAX = 0.70, BOOM_MIN = 0.14, BOOM_MAX = 1.40, BRACE_RATE = 0.14, BRACE_HYST = 2.7, LATEEN_SWING = 25;
+function yardSwingMax(m) {
+  if (m.swMax === undefined) { var f = m.pts.fore, p = m.piv, L = f && p ? Math.hypot(f[0] - p[0], f[1] - p[1]) : 0; m.swMax = m.meta.rig === 'lateen' && L > LATEEN_SWING ? Math.asin(LATEEN_SWING / L) : BOOM_MAX; }
+  return m.swMax;
+}
 function braceYards(sh, wl, dt) {
   var psi = Math.atan2(wl[1], wl[0]);                                // 相對風吹去的方向（格座標、從船頭往 +y 量）：0 ＝ 正後方來的風
   if (Math.abs(psi) < BRACE_HYST || !sh.braceSide) sh.braceSide = psi >= 0 ? 1 : -1;
   sh.yards.forEach(function (m) {
     if (!m.alive) return;
-    var tgt = m.yk === 'gaff' || m.yk === 'boom' ? -sh.braceSide * clamp((Math.PI - Math.abs(psi)) / 2, BOOM_MIN, BOOM_MAX)
+    var tgt = m.yk === 'gaff' || m.yk === 'boom' ? -sh.braceSide * clamp((Math.PI - Math.abs(psi)) / 2, Math.min(BOOM_MIN, yardSwingMax(m)), yardSwingMax(m))
       : Math.abs(psi) < BRACE_HYST ? clamp(psi / 2, -BRACE_MAX, BRACE_MAX) : sh.braceSide * BRACE_MAX;
     m.rot += clamp(tgt - m.r0 - m.rot, -BRACE_RATE * dt, BRACE_RATE * dt);
   });

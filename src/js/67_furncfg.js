@@ -32,6 +32,7 @@ var DRV_ITEMS = [
   { k: 'lo', name: '剩幾成就沒力', lim: [0, 0.95], step: 0.05, per: true, has: function (f) { return f.lo !== undefined; }, fit: function (f, v) { return Math.min(v, f.hi - 0.05); }, note: '這一件還在的格 ÷ 開局的格，低於這個 ⇒ 輸出 0（鍋爐預設 50%：打掉一半就沒蒸汽）' },
   { k: 'hi', name: '剩幾成還是全力', lim: [0.05, 1], step: 0.05, per: true, has: function (f) { return f.hi !== undefined; }, fit: function (f, v) { return Math.max(v, f.lo + 0.05); }, note: '高於這個 ⇒ 全力；兩格中間照直線' },
   { k: 'wet', name: '泡水熄火', lim: [0, 1], step: 0.05, per: true, has: function (f) { return f.wet !== undefined; }, note: '每一座鍋爐中心那一格，艙內的水淹到這麼深就熄火（0 ＝ 不會因為泡水熄）' },
+  { k: 'hpK', name: '血量（砲的幾倍）', lim: [0.1, 5], step: 0.05, unit: ' 倍', fix: 2, has: function (f) { return f.hpK !== undefined; }, note: '整支一塊：被打到扣血，歸零就斷。血量 ＝ 細節設定「砲的血量」× 這個數' },
   { k: 'cell', name: '每格傳幾成', lim: [0, 1], step: 0.01, per: true, has: function (f) { return f.cell !== undefined; }, note: '最細那一截有幾條不共用格子的路 × 這個數 ＝ 傳得過去的比例（15% ≈ 7 格粗就傳滿；0 ＝ 只看通不通）' }
 ];
 /** id ⇒ 那一份的表：道具（FURN）或動力件（'drv:種類' ⇒ DRVP）。 */
@@ -103,7 +104,8 @@ function furnShow() {
     $('fk-' + it.k).value = v;
     $('fk-' + it.k + 'V').textContent = cfgShown(function (x) { return furnFmt(it, x); }, v, d);
   });
-  if (T.cur === DRVP) $('furnInfo').innerHTML = '動力件：雕刻的關聯 meta kind=' + id + '（造船規格 §9.6）・' + (f.cell !== undefined ? '傳動件：照兩端之間最細的那一截算' : '體素件：照這一件還剩幾成的格算') + '・每 1 秒算一次・改了下一場開始生效';
+  if (T.cur === DRVP && f.hpK !== undefined) $('furnInfo').innerHTML = '動力件：雕刻的模型 meta kind=' + id + '（造船規格 §9.10）・整支一塊・現在血量 ' + Math.round(GUN_HP * f.hpK) + '（砲 ' + GUN_HP + ' × ' + f.hpK.toFixed(2) + '）・改了下一場開始生效';
+  else if (T.cur === DRVP) $('furnInfo').innerHTML = '動力件：雕刻的關聯 meta kind=' + id + '（造船規格 §9.6）・' + (f.cell !== undefined ? '傳動件：照兩端之間最細的那一截算' : '體素件：照這一件還剩幾成的格算') + '・每 1 秒算一次・改了下一場開始生效';
   else {
     var t = ROOM_FN[f.type], where = f.role === 'pump' ? '甲板（' + (f.place === 'well' ? '主桅旁中線' : '中線') + (f.power === 'steam' ? '、只有蒸汽船' : '') + '）' : f.role === 'bench' ? '甲板（不夠每船至少的張數 ⇒ 自動補在水線以上最低那層砲甲板）' : t ? t.name : '';
     $('furnInfo').innerHTML = '擺在：' + where + '（船隻配置頁的「擺設…」）' + (f.size && S > 0 ? '・大小 ' + f.size.map(function (v) { return (v * S).toFixed(1); }).join('×') + ' m' : '')   /* S（公尺／格）第一艘船載好才有 ⇒ 之前不寫大小 */;

@@ -6,7 +6,8 @@ function pinchM() { var a = Array.from(PTRS.values()); return { x: (a[0].x + a[1
 cv.addEventListener('contextmenu', function (e) { e.preventDefault(); });
 document.addEventListener('contextmenu', function (e) { if (!/^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)) e.preventDefault(); });   // 面板、按鈕、說明上長按也不跳選單（輸入框照常）
 cv.addEventListener('pointerdown', function (e) {
-  cv.setPointerCapture(e.pointerId); PTRS.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  try { cv.setPointerCapture(e.pointerId); } catch (x) { }                // 抓住滑鼠（pointer lock，第一人稱）時抓不到指標 ⇒ InvalidStateError（Tim 2026-10-18 回報：皇家號第一人稱）；照樣記指頭
+  PTRS.set(e.pointerId, { x: e.clientX, y: e.clientY });
   if (PTRS.size === 2) { var m0 = pinchM(); PINCH = { d: pinchD(), dist: CAM.dist, x0: m0.x, y0: m0.y, mx: m0.x, my: m0.y, moved: false }; inDrag = null; return; }
   if (PTRS.size > 2) return;
   inDrag = { x: e.clientX, y: e.clientY, b: e.button, moved: false };

@@ -456,6 +456,8 @@
       "author": "apex-one",
       "cfg": {"base": 6},
       "geo": {"spar": [30, 46], "marines": [75, 115], "center": 60, "aim": 38, "aimZ": [20, 380], "deckAim": [28, 45], "rigAim": [120, 330]},
+      "crew": {"top": 0, "marines": 7, "guns": {"long36": 5, "long8": 2}},
+      "rooms": {"甲板-hold/艙房/proue": "medical", "甲板-hold/艙房/taverne": "workshop"},
       "names": ["皇家號"]
     }
   ],
@@ -486,7 +488,8 @@
     "boiler": {"name": "鍋爐", "lo": 0.5, "hi": 0.8, "wet": 0.5},
     "shaft": {"name": "螺旋槳軸", "cell": 0.15},
     "steampipe": {"name": "蒸汽管", "cell": 0.15},
-    "propeller": {"name": "螺旋槳", "lo": 0.2, "hi": 0.9}
+    "propeller": {"name": "螺旋槳", "lo": 0.2, "hi": 0.9},
+    "oar": {"name": "槳", "hpK": 0.9}
   },
   "rooms": {
     "medical": {

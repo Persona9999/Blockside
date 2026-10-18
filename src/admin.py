@@ -380,10 +380,10 @@ def validate(cfg, prev=None):
                 if not (isinstance(k, str) and 1 <= len(k) <= 12) or re.match(r'^(escape|arrow(up|down|left|right)|tab|capslock|meta|os|control|contextmenu|f\d+|\?)$', k):
                     err('keys.%s' % a, '一個鍵（KeyboardEvent.key 小寫，空白鍵 ＝ " "；Esc、方向鍵、Tab、F1–F12 不能綁）')
     for kd, f in (cfg.get('drvparts') or {}).items():     # 動力件（TASK-0653；js/31_drive.js DRVP、67_furncfg.js DRV_ITEMS）
-        if kd not in DRV_KINDS + VOXM_KINDS or not isinstance(f, dict):
-            err('drvparts.%s' % kd, '種類只有 ' + '／'.join(DRV_KINDS + VOXM_KINDS))
+        if kd not in DRV_KINDS + VOXM_KINDS + HPM_KINDS or not isinstance(f, dict):
+            err('drvparts.%s' % kd, '種類只有 ' + '／'.join(DRV_KINDS + VOXM_KINDS + HPM_KINDS))
             continue
-        for k, lo, hi in (('lo', 0, 0.95), ('hi', 0.05, 1), ('wet', 0, 1), ('cell', 0, 1)):
+        for k, lo, hi in (('lo', 0, 0.95), ('hi', 0.05, 1), ('wet', 0, 1), ('cell', 0, 1), ('hpK', 0.1, 5)):
             if k in f and not (isnum(f[k]) and lo <= f[k] <= hi):
                 err('drvparts.%s.%s' % (kd, k), '%s～%s 的數字' % (lo, hi))
         if isnum(f.get('lo')) and isnum(f.get('hi')) and not f['lo'] < f['hi']:
@@ -761,6 +761,7 @@ DRV_KINDS = tuple(k for k, v in meta_kinds().items() if v.get('drv') == 'part')
 CELL_KINDS = DRV_KINDS + ('ladders', 'ladder')       # 寫格子清單 parts[].cellRuns 的關聯：動力件＋梯子（TASK-0676：木匠照它把整件梯子還原，Tim「可以單純是還原該子模組(梯子)」）   # 動力件（TASK-0653；遊戲 31_drive.js 照格子算剩幾成、通不通）：規格表 drv=part（主機、鍋爐、軸、蒸汽管）
 
 
+HPM_KINDS = tuple(k for k, v in meta_kinds().items() if v.get('drv') == 'hp')     # 整件一塊的動力件（規格表 drv=hp：槳）：不匯出格子，血量倍率 drvparts.<種類>.hpK（道具設定頁）
 VOXM_KINDS = tuple(k for k, v in meta_kinds().items() if v.get('drv') == 'vox')   # 會轉的體素件（TASK-0653 第二段；遊戲 24_armor.js propSetup）：規格表 drv=vox（螺旋槳）；這幾種模型匯出時多帶來源作品的格子
 
 
@@ -2351,7 +2352,7 @@ def act_defaults(lim):
 
 
 FURN_KEYS = ('tpm', 'crew', 'cap', 'hold', 'hp', 'buff.heal', 'staff.surgeon', 'staff.carpenter', 'staff.sailmaker', 'auto', 'wood', 'cloth', 'carry')            # 道具設定頁（js/67_furncfg.js FURN_ITEMS）調得到的那幾格
-DRVP_KEYS = ('lo', 'hi', 'wet', 'cell')                                  # 同一頁的動力件（DRV_ITEMS ⇒ config drvparts）
+DRVP_KEYS = ('lo', 'hi', 'wet', 'cell', 'hpK')                                  # 同一頁的動力件（DRV_ITEMS ⇒ config drvparts）
 
 
 def act_keys(keys):

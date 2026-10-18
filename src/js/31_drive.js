@@ -45,6 +45,7 @@
 // 差動轉向（TASK-0691；Tim 2026-10-18：「船有左右側動力的話(包含雙螺旋槳) 轉彎時可以停掉一邊動力(甚至倒車)加速轉彎(自動化的 不用手動操作)」）：
 //   兩舷都有輸出（槳、偏離中線 3 格以上的螺旋槳）、往前划／開 ⇒ 內側那一舷（舵角正 ＝ 往左舷轉 ⇒ 左舷）的推力 × (1 − 2 × |舵角|)，夾 −0.5…1：
 //   舵打一半 ⇒ 內側停、打滿 ⇒ 內側倒車一半。力矩照舊從推力的不平衡來（driveYaw）；玩家、電腦都一樣（照 sh.rudder）。
+//   划槳的畫面跟著（oarAnim）：內側那一舷的槳頻 × 同一個倍率 ⇒ 舵打一半停槳、打滿倒划。
 //   只有一舷、中線單螺旋槳 ⇒ 不作用（戰局不變）。設定檔 drive.diff: false 或網址 ?drvdiff=0 關掉。
 // ⏳ 第二版（TASK-0630 驗收）：繩帆物理開著時用布上的風壓算帆的推力（各檔一個乘數）、物件重量預先算好、風洞沙盒。
 var DRIVE_CFG = CFG.drive || {};
@@ -66,7 +67,7 @@ var OAR_SPM = +DRIVE_CFG.oarSpm > 0 ? +DRIVE_CFG.oarSpm : 26, OAR_ANIM = Q.get('
 //     蒸汽管接最近的那一組鍋爐（from 離鍋爐最近）：那一組的蒸汽 × 蒸汽管傳得到的；沒有蒸汽管的組照舊直接供汽。
 //   全船的蒸汽 ＝ Σ 每一組（座數 × 輸出 × 乾的座數比 × 蒸汽管）÷ Σ 座數；主機的份量 × 主機的輸出；接在軸上的輸出物件 × 軸傳得到的。
 // 沒有 cellRuns 的件 ⇒ 照舊（固定點旁 ±DRV_PART_R 格剩一半以上 ＝ 好的、每 0.5 秒）⇒ 沒標的船戰局一位元不動。參數在道具設定頁「動力件」（67_furncfg.js）。
-var DRVP_DEF = { engine: { name: '主機', lo: 0.4, hi: 1 }, boiler: { name: '鍋爐', lo: 0.5, hi: 0.8, wet: 0.5 }, shaft: { name: '螺旋槳軸', cell: 0.15 }, steampipe: { name: '蒸汽管', cell: 0.15 }, propeller: { name: '螺旋槳', lo: 0.2, hi: 0.9 } };   // propeller：會轉的體素件（24_armor.js propSetup；第二段）
+var DRVP_DEF = { engine: { name: '主機', lo: 0.4, hi: 1 }, boiler: { name: '鍋爐', lo: 0.5, hi: 0.8, wet: 0.5 }, shaft: { name: '螺旋槳軸', cell: 0.15 }, steampipe: { name: '蒸汽管', cell: 0.15 }, propeller: { name: '螺旋槳', lo: 0.2, hi: 0.9 }, oar: { name: '槳', hpK: 0.9 } };   // propeller：會轉的體素件（24_armor.js propSetup；第二段）。oar：整支一塊（規格表 drv=hp），血量 ＝ GUN_HP × hpK（10_ship.js；Tim 2026-10-18「槳太脆弱了 是否可以加到三倍血量(且可以作為道具設定頁定調整血量 參考螺旋槳)」：0.3 → 0.9）
 var DRVP = {}; Object.keys(DRVP_DEF).forEach(function (k) { DRVP[k] = Object.assign({}, DRVP_DEF[k], (CFG.drvparts || {})[k] || {}); });
 // 動力件檢查的開關（Tim 2026-10-17：「動力件檢查我感覺可以先關閉」）：關（預設）⇒ 戰鬥中不數主機、鍋爐、軸、蒸汽管還剩幾成（都當完好、鍋爐不會泡水熄火、煙囪不停煙）；
 //   螺旋槳照自己的格、沒標動力件的船（舊判法 ±DRV_PART_R 格）也一起關；魔法動力源有實體的（TASK-0680 風暴角號的管風琴：在船長室、打得到）照常數。設定檔 drive.partCheck: true 或網址 ?drvcheck=1 打開；匯入檢查照舊列。
@@ -264,7 +265,7 @@ function driveInit(sh) {
   var magicE = base > 0 && info.drive === 'magic' && drvParts(T).E.length > 0;   // 魔法動力源有實體（TASK-0680，Tim 2026-10-17「直接讓管風琴等於動力源」：風暴角號船長室的管風琴標 kind=engine）⇒ 也走動力件那一條；沒標 ⇒ 照舊用整艘船殼
   var chain = base > 0 && kind !== 'oar' && (!(info.drive === 'magic') || magicE) ? drvBind(sh, P.filter(function (p) { return p.kind === (magicE ? 'magic' : 'steam'); })) : null;
   var sides = {}; P.forEach(function (p) { if (p.kind === 'sail' || p.kind === 'magic') return; var dy = p.p[1] - T.cy; p.sd = p.sg || (Math.abs(dy) > DRV_SIDE_MIN ? (dy > 0 ? 1 : -1) : 0); if (p.sd) sides[p.sd] = 1; });   // 哪一舷（差動轉向）
-  sh.drive = { P: P, C: chain, kind: kind, oph: 0, dif: !!(sides[1] && sides[-1]), k: DRV_KD * Math.pow(Math.max(1, T.disp || 1), 2 / 3),
+  sh.drive = { P: P, C: chain, kind: kind, oph: 0, ophS: [0, 0], dfk: 1, dfs: 0, dif: !!(sides[1] && sides[-1]), k: DRV_KD * Math.pow(Math.max(1, T.disp || 1), 2 / 3),
     L: Math.max(5, ((T.wl1 || T.hx1) - (T.wl0 || T.hx0)) * S), M: null, W: 0, cap: 1, Fx: 0, drag: 0, a: 0, tq: 0, om: 0, vT: 0 };
   sh.tele = TELE_FULL; sh.power = base > 0 ? TELE[sh.tele] : 0;
 }
@@ -347,14 +348,17 @@ function oarRowers(m) { return Math.max(1, Math.round(+(m.meta || {}).rowers || 
 function oarSide(sh, m) { var sd = String((m.meta || {}).side || '').toUpperCase(); return sd === 'S' ? 1 : sd === 'P' ? -1 : m.pts.pivot[1] >= sh.T.cy ? 1 : -1; }
 /** 每支槳現在幾個槳手在崗（還能動、不在走路；40_crew.js 槳手 c.oar ＝ 那支槳的模型）。 */
 function oarManned(sh) { var M = new Map(); sh.crew.forEach(function (c) { if (c.role === ROLE.OAR && crewAble(c) && !c.walk && c.oar) M.set(c.oar, (M.get(c.oar) || 0) + 1); }); return M; }
-/** 划槳（畫面；driveStep 每一步）：同一艘一個相位 D.oph，槳頻 ∝ 俥鐘（倒划反著走）；φ 0…0.5 槳葉在水裡往後掃（出力）、0.5…1 抬出水往前回槳。
+/** 划槳（畫面；driveStep 每一步）：每一舷一個相位 D.ophS（[左舷, 右舷]；D.oph ＝ 右舷，舊的讀法），槳頻 ∝ 俥鐘（倒划反著走）；φ 0…0.5 槳葉在水裡往後掃（出力）、0.5…1 抬出水往前回槳。
+ *  差動轉向（Tim 2026-10-18「轉彎時 一側的槳是否可以反向划」）：內側那一舷的槳頻再 × D.dfk（推力的同一個倍率）⇒ 舵打一半內側停槳、打滿內側倒划（槳反著掃）。
  *  每支槳：繞槳座直立軸掃 ±stroke_deg（右舷照 +、左舷照 −，槳葉往船尾 ＝ 出力）、繞沿船身的軸抬 dip_deg ⇒ m.swM（modelLocal 照它畫）；沒人划、斷了 ⇒ 平放不動。 */
 function oarAnim(sh, D, dt) {
-  D.oph += (sh.sunk || sh.struck ? 0 : (sh.power || 0)) * OAR_SPM / 60 * dt; D.oph -= Math.floor(D.oph);
-  var t = 2 * Math.PI * D.oph;
+  var r0 = (sh.sunk || sh.struck ? 0 : (sh.power || 0)) * OAR_SPM / 60 * dt;
+  [-1, 1].forEach(function (sd, j) { var f = sd === D.dfs ? D.dfk : 1; D.ophS[j] += r0 * f; D.ophS[j] -= Math.floor(D.ophS[j]); });
+  D.oph = D.ophS[1];
   D.P.forEach(function (p) {
     if (p.kind !== 'oar') return;
-    var m = p.m; if (!m.alive || m.moved || !(p.ok > 0)) { m.swM = null; return; }
+    var m = p.m, t = 2 * Math.PI * D.ophS[p.sg > 0 ? 1 : 0]; m.oph = D.ophS[p.sg > 0 ? 1 : 0];
+    if (!m.alive || m.moved || !(p.ok > 0)) { m.swM = null; return; }
     var mt = m.meta || {}, A = (+mt.stroke_deg > 0 ? +mt.stroke_deg : 30) / 57.2958, Lf = (+mt.dip_deg > 0 ? +mt.dip_deg : 12) / 57.2958;
     var th = -p.sg * A * Math.cos(t), al = p.sg * Lf * Math.max(0, -Math.sin(t));
     m.spv = m.pts.pivot; m.swM = M4.mul(rotM([0, 0, 1], th), rotM([1, 0, 0], al));
@@ -450,10 +454,11 @@ function driveStep(sh, dt, vS, vB, deg, brake) {
   if (ew > 0) { ex /= ew; ey /= ew; }
   var r = sh.power || 0, want = r * Math.abs(r), give = vB > 0 ? Math.sign(want) * Math.min(Math.abs(want), cap) : 0, Fe = give * k * vB * vB;
   var dif = D.dif && DRV_DIFF && give > 0 ? clamp(sh.rudder || 0, -1, 1) : 0;
+  D.dfk = dif ? clamp(1 - 2 * Math.abs(dif), -0.5, 1) : 1; D.dfs = dif > 0 ? -1 : dif < 0 ? 1 : 0;   // 內側那一舷（−1 左舷、+1 右舷）出幾成 ⇒ 划槳的畫面照它（oarAnim）
   for (i = 0; i < P.length; i++) {
     p = P[i]; if (p.kind === 'sail') continue;
     p.F = cap > 0 ? Fe * p.w * p.ok / cap : 0; p.Fy = 0;
-    if (dif && p.sd * dif < 0) p.F *= clamp(1 - 2 * Math.abs(dif), -0.5, 1);   // 差動轉向：內側那一舷減出力、打滿倒車（見檔頭）
+    if (dif && p.sd * dif < 0) p.F *= D.dfk;                            // 差動轉向：內側那一舷減出力、打滿倒車（見檔頭）
     Fx += p.F; Fabs += Math.abs(p.F);
     Tq -= (p.p[1] - ey) * S * p.F;
   }
