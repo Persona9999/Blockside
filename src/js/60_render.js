@@ -489,6 +489,7 @@ function render() {
   lanternHalo(pushPt);                                                   // 燈籠的光暈
   BALLS.forEach(function (b) {
     if (b.gf) { pushPt(b.p, 0.75, [1, 0.5, 0.1], 1); pushPt(sub(b.p, mul(b.v, 0.03)), 0.5, [1, 0.25, 0.05], 0.8); return; }   // 希臘火：一團火＋拖尾（28_fire.js）
+    if (b.bolt) { var bv = norm(b.v); pushPt(b.p, 0.12, [0.2, 0.2, 0.22], 1); for (var bk = 1; bk <= 6; bk++) pushPt(sub(b.p, mul(bv, bk * 0.18)), 0.09, [0.42, 0.28, 0.13], 1); return; }   // 弩箭：鐵頭＋1 m 的木桿（10_ship.js AMMO_BOLT）
     if (b.ammo !== 2) { pushPt(b.p, 0.32, [0.08, 0.08, 0.08], 1); return; }
     var w = csBar(b); pushPt(sub(b.p, mul(w, CS_HALF)), 0.32, [0.08, 0.08, 0.08], 1); pushPt(add(b.p, mul(w, CS_HALF)), 0.32, [0.08, 0.08, 0.08], 1);   // 鏈彈：鍊子兩頭各一顆（21_gunnery.js csBar）
   });

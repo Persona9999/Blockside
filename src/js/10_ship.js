@@ -93,9 +93,10 @@ function makeShip(i, team, yaw, pz, T, px) {                          // T：船
   shipRooms(sh); pumpModels(sh);                                        // pumpModels：甲板上擺的抽水機（45_pumps.js；TASK-0604）；空艙房與功能艙的家具（36_rooms.js；TASK-0568）：家具也是模型 ⇒ 排在命中的分桶之前
   sh.mIdx = modelIndex(sh.models);
   // 繩與帆：兩端（帆取最高那一排）各找最近的實心格當錨 —— 錨被打掉或跟船分家 ⇒ 繩斷、帆掉
+  //   會動的繩（meta anim；26_gunanim.js）寫明 model: 的那一端 ⇒ 不找格、交給 linkRopes 綁模型（⛔ 照找格 ⇒ 木塔上的弩弦兩端都貼著木塔，被綁在船上、跟不了弩砲；其他繩照舊 ⇒ 戰局不變）
   T.rig.ropes.forEach(function (r) {
-    var n = r.pts.length / 3;
-    sh.ropes.push({ pts: r.pts, col: r.color, bb: ropeBox(r.pts), a: anchorNear(T, r.pts[0], r.pts[1], r.pts[2], 5), b: anchorNear(T, r.pts[n * 3 - 3], r.pts[n * 3 - 2], r.pts[n * 3 - 1], 5), name: r.name, meta: r.meta || null });
+    var n = r.pts.length / 3, mv = !!(r.meta && r.meta.anim), md = function (k) { return mv && r.ends && typeof r.ends[k] === 'string' && r.ends[k].indexOf('model:') === 0; };
+    sh.ropes.push({ pts: r.pts, col: r.color, bb: ropeBox(r.pts), a: md(0) ? -1 : anchorNear(T, r.pts[0], r.pts[1], r.pts[2], 5), b: md(1) ? -1 : anchorNear(T, r.pts[n * 3 - 3], r.pts[n * 3 - 2], r.pts[n * 3 - 1], 5), name: r.name, meta: r.meta || null });
   });
   linkRopes(T, sh.ropes, sh.models);
   ropeFixApply(sh);                                                     // 兩端都沒固定（綁在空中）的繩不生成（ropeFixCheck；匯入檢查報 ✗）
@@ -139,7 +140,22 @@ var GUN_CODE = {}; Object.keys(GUNS).forEach(function (k) { GUN_CODE[GUNS[k].cod
 // 武器種類（TASK-0693，持火號）：砲種表的 weapon（現在只有 siphon；弩砲 toxoballistra、投石機 manganikon 的機制還在想）⇒ 模型 meta weapon= 照它分流（優先於 gun=：舊作品 gun 寫的是頂替用的砲種代碼）。
 var GUN_WEAPON = {}; Object.keys(GUNS).forEach(function (k) { if (GUNS[k].weapon) GUN_WEAPON[GUNS[k].weapon] = k; });
 // 固定彈種：砲種表 ammo（或模型 meta ammo）⇒ 那門砲不管玩家選哪一種都打這一種（現在只有希臘火）；沒寫、或不認得 ⇒ 照選的。
-var AMMO_NAME = { solid: 0, shell: 1, chain: 2, greekfire: 3 };
+var AMMO_NAME = { solid: 0, shell: 1, chain: 2, greekfire: 3, bolt: 4 };
+// 弩箭（Tim 2026-10-18：「弩炮目前我想直接做成換皮大炮(只是彈藥不同) 一樣走裝彈 發射流程」）：彈種序號 4，飛行與命中照實心彈（b.ammo ＝ 0、b.bolt 標著畫成一支箭、開火沒有砲煙砲聲），
+//   傷害照砲種表的每發傷害（DMG.ballista ＝ 細節設定 dmgbl）。⛔ 不在玩家換彈的三種（AMMO）裡：只給固定彈種的砲（砲種表 ammo=bolt）。
+var AMMO_BOLT = 4;
+/** 這種砲打得出哪幾種彈（AMMO 的序號，照輪流的順序）：砲種表 ammo（固定彈種：希臘火、弩箭）⇒ 只有那一種；其他（大砲）⇒ 實心、爆裂、鏈彈。 */
+function gunAmmoList(type) { var a = GUNS[type] && GUNS[type].ammo; return a !== undefined && AMMO_NAME[a] !== undefined ? [AMMO_NAME[a]] : [0, 1, 2]; }
+/** 這艘的主武器（Tim 2026-10-18：「應該只有主武器能換彈種」）：開戰時火力（砲重 ÷ 裝填倍率，跟艦長的 helmGunW 同一把尺、不看人手）加總最大的那一種砲；沒有砲 ⇒ null。快取在 sh.mainGun。
+ *  換彈鍵照它的清單輪（61_hud.js ammoOf）；主武器是固定彈種的船（持火號 ⇒ 希臘火）彈種鈕直接顯示那一種。 */
+function shipMainGun(sh) {
+  if (sh.mainGun !== undefined) return sh.mainGun;
+  var w = {}, best = null; sh.guns.forEach(function (g) { var G0 = GUNS[g.type] || {}; w[g.type] = (w[g.type] || 0) + (+G0.mass || 1) / (+G0.reload || 1); });
+  Object.keys(w).forEach(function (k) { if (best === null || w[k] > w[best]) best = k; });
+  return (sh.mainGun = best);
+}
+/** 這門砲這一發打哪種彈：固定彈種（ammoFix）⇒ 它；這種砲打得出要的那一種 ⇒ 要的（各種口徑的大砲一起換）；不然 ⇒ 這種砲的第一種。 */
+function gunAmmo(g, ammo) { if (g.ammoFix >= 0) return g.ammoFix; var L = gunAmmoList(g.type); return L.indexOf(ammo) >= 0 ? ammo : L[0]; }
 function gunAmmoFix(m, type) { var a = (m.meta && m.meta.ammo) || GUNS[type].ammo; return a !== undefined && AMMO_NAME[a] !== undefined ? AMMO_NAME[a] : -1; }
 /** 砲甲板：照舷側砲（不含追擊砲）的高度（外框底）分層 —— 排好之後相差 10 格以上就是另一層（甲板有舷弧，同一層前後差 6 格）；
  *  追擊砲再歸到最近的那一層（⛔ 一起排：船尾追擊砲的高度落在兩層之間，會把上下兩層砲甲板接成一層）。

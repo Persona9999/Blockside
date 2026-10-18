@@ -4,16 +4,16 @@
 //   模型有 muzzle-a／b／c ⇒ 輪流從那幾根砲管出彈。burst ＝ 1 的砲一個亂數都不多抽 ⇒ 別的船戰局不變。
 function fireGun(sh, g, target, ammo) {
   if (sh.struck || !g.alive || g.reload > 0 || gunRate(g) <= 0) return false;      // 砲要有人操作；降旗了就不開（排在齊射裡還沒開的也一樣）
-  if (g.ammoFix >= 0) ammo = g.ammoFix;                                // 固定彈種（10_ship.js gunAmmoFix；TASK-0693）：希臘火 siphon、弩砲、投石機 ⇒ 不管選哪一種都打自己的
-  if (GUNS[g.type].close && !gunInRange(sh, g, target)) return false;    // 短射程的武器（砲種表 close：希臘火）⇒ 打不到就不開（⛔ 開了只是噴進海裡）
+  ammo = gunAmmo(g, ammo);                                            // 固定彈種（希臘火、弩箭）打自己的；大砲照選的（換不了的 ⇒ 這種砲的第一種；10_ship.js gunAmmo）
+  if (GUNS[g.type].close && !gunInRange(sh, g, target) && !manualFire(sh)) return false;   // 短射程的武器（砲種表 close：希臘火）⇒ 電腦打不到就不開（⛔ 開了只是噴進海裡）；玩家自己按的照開（Tim 2026-10-18：「持火號 目前按F無法單發開火」）
   if (!bears(sh, g, target)) return false;                            // 目標不在這門砲的砲門射界 ⇒ 不開（呼叫端先用 gunTarget 挑好這門打得到的點）
   if (g.mt && mountBusy(g)) return false;                              // 迴旋砲換砲門的途中不能開（TASK-0626）
   if (!mountFireOk(g)) return false;                                   // 砲塔的砲口不在能開火的角度裡（fire；TASK-0636）
   if (g.safe && selfBlock(sh, g, target)) { sh.selfBlk = (sh.selfBlk || 0) + 1; return false; }   // 標了 safe 的砲：砲線上有自己的砲塔、砲、火藥桶 ⇒ 先不開（等砲線清了；裝填不浪費）；selfBlk：擋了幾次（讀數）
   var GS = GUNS[g.type], r = fireShot(sh, g, target, ammo, g.muzs ? g.muzs[0] : g.muz);
-  g.reload = sh.reloadT * GS.reload * rr(0.9, 1.1); g.firedAt = SIMT; sh.fired++;
+  g.reload = sh.reloadT * GS.reload * rr(0.9, 1.1); g.reload0 = g.reload; g.firedAt = SIMT; sh.fired++;   // reload0：這一輪裝填要多久（武器演出的進度 gunPhase，26_gunanim.js）
   g.needCart = true;                                                // 下一發要從砲旁的藥箱拿一份火藥與彈藥（沒有 ⇒ 等送藥手，23_powder.js）
-  if (ammo === AMMO_GF) { evEmit('gfJet', r.mw, r.dir, sh.vel); sfx('splash', r.mw, 0.5); } else shotFx(sh, g, r.mw, r.dir);   // 希臘火：噴口一道火舌（28_fire.js），沒有砲聲、沒有後座
+  if (ammo === AMMO_GF) { evEmit('gfJet', r.mw, r.dir, sh.vel); sfx('splash', r.mw, 0.5); } else if (ammo === AMMO_BOLT) boltFx(sh, r.mw); else shotFx(sh, g, r.mw, r.dir);   // 希臘火：噴口一道火舌（28_fire.js），沒有砲聲、沒有後座；弩箭：只有弓弦一響
   if ((GS.burst || 1) > 1) { g.burstLeft = GS.burst - 1; g.burstK = 1; g.burstAmmo = ammo; g.burstT = SIMT + (GS.burstGap || 0.15); }   // 連發：同一份彈藥再打 burst − 1 發
   return true;
 }
@@ -25,7 +25,7 @@ function burstStep(sh) {
     var t = gunTarget(sh, g, aimPoint(sh));
     if (t && bears(sh, g, t) && mountFireOk(g) && !(g.safe && selfBlock(sh, g, t))) {
       var r = fireShot(sh, g, t, g.burstAmmo, g.muzs ? g.muzs[g.burstK % g.muzs.length] : g.muz); sh.fired++;
-      if (g.burstAmmo === AMMO_GF) evEmit('gfJet', r.mw, r.dir, sh.vel); else shotFx(sh, g, r.mw, r.dir);   // 希臘火連發（Tim 2026-10-18：「siphon 是否可以改成連射(參考速射炮) 先設定為10連發」）：每一發一道火舌，同第一發（⛔ shotFx ⇒ 砲煙＋砲聲）
+      if (g.burstAmmo === AMMO_GF) evEmit('gfJet', r.mw, r.dir, sh.vel); else if (g.burstAmmo === AMMO_BOLT) boltFx(sh, r.mw); else shotFx(sh, g, r.mw, r.dir);   // 希臘火連發（Tim 2026-10-18：「siphon 是否可以改成連射(參考速射炮) 先設定為10連發」）：每一發一道火舌，同第一發（⛔ shotFx ⇒ 砲煙＋砲聲）
     }
     g.burstK++; g.burstLeft--; g.burstT = SIMT + (GUNS[g.type].burstGap || 0.15);
   }
@@ -68,12 +68,17 @@ function fireShot(sh, g, target, ammo, muz) {
   spread *= wxSpread(sh);                                          // 天氣：暴風雨裡船晃得越快，點火那一下差得越多（晴天 ×1）
   el = clamp(el + gauss() * spread, -0.17, 0.26); az += gauss() * spread;
   var dir = [Math.cos(el) * Math.cos(az), Math.sin(el), Math.cos(el) * Math.sin(az)];
-  var b = { p: mw.slice(), v: add(mul(dir, V * rr(0.985, 1.015)), sh.vel), owner: sh.i, ammo: ammo, trav: 0, alive: true, age: 0, bounced: false, big: GS.big, hole: GS.hole, dmg: DMG[g.type], m: GS.shot };   // dmg：每發傷害（砲種，細節設定）；hole：洞的倍率（4 磅彈小）；m：彈重 kg（能量，TASK-0621）
+  var b = { p: mw.slice(), v: add(mul(dir, V * rr(0.985, 1.015)), sh.vel), owner: sh.i, ammo: ammo === AMMO_BOLT ? 0 : ammo, trav: 0, alive: true, age: 0, bounced: false, big: GS.big, hole: GS.hole, dmg: DMG[g.type], m: GS.shot };   // dmg：每發傷害（砲種，細節設定）；hole：洞的倍率（4 磅彈小）；m：彈重 kg（能量，TASK-0621）
   if (ammo === 2) b.ph = BALLS.length * 2.39996 % 6.28319;
+  if (ammo === AMMO_BOLT) b.bolt = true;                              // 弩箭：照實心彈飛、命中（b.ammo 0），只是畫成一支箭（60_render.js）
   if (ammo === AMMO_GF) b.gf = true;                                  // 希臘火（28_fire.js）：一團火，碰到什麼就潑開，⛔ 不穿透           // 鏈彈的起始角（csBar）：照場上第幾顆彈錯開（黃金角），⛔ 不抽亂數
   windShot(sh, b, dx, dz); BALLS.push(b); rptShot(sh, g, b);         // rptShot：戰鬥報表記是哪一門開的（79_report.js；只讀）
   return { mw: mw, dir: dir };
 }
+/** 弩砲放箭：沒有火光、煙、後座，只有弓弦一響（小聲的 crack）。 */
+function boltFx(sh, mw) { sfx('crack', mw, sh.i === PLAYER_I ? 0.35 : 0.25); return true; }
+/** 玩家自己按的那一發（沒開自動開砲；電腦替玩家開的 sh.autoNow 不算）。 */
+function manualFire(sh) { return sh.i === PLAYER_I && !AUTOFIRE && !sh.autoNow; }
 /** 開火的火光、煙、後座、聲音（連發每一發都有）。 */
 function shotFx(sh, g, mw, dir) {
   flash(add(mw, mul(dir, 1)), dir, 14, false); smoke(add(mw, mul(dir, 1.5)), dir, 10, false);
@@ -238,11 +243,15 @@ function mountBusy(g) { return !!(g.mt && g.mt.ports && (Math.abs(g.mt.yaw - g.m
  *    14 秒只開 1 發（量過）。長砲的射程上千公尺 ⇒ 一定在射程裡、跟以前一位元都不差。 */
 function gunTarget(sh, g, w) {
   if (bears(sh, g, w) && gunInRange(sh, g, w)) return w;
+  var t = gunTargetIn(sh, g, w, true); if (t || !manualFire(sh)) return t;
+  return bears(sh, g, w) ? w : gunTargetIn(sh, g, w, false);           // 玩家自己按的：射程內都打不到 ⇒ 照射界挑（打不到也開，火舌噴進海裡；Tim 2026-10-18「按F無法單發開火」）
+}
+function gunTargetIn(sh, g, w, inR) {
   var foe = aimShip(sh); if (!foe || !foe.M) return null;
   var z = clamp(toLocal(foe, w)[2], foe.T.geo.aimZ[0], foe.T.geo.aimZ[1]), best = null, bd = 1e18;   // 高度範圍照敵艦的船型（05_hull.js GEO0）
   for (var k = 0; k <= 12; k++) {
     var p = M4.pt(foe.M, foe.T.wl0 + 15 + (foe.T.wl1 - foe.T.wl0 - 30) * k / 12, foe.T.cy, z);
-    if (!bears(sh, g, p) || !gunInRange(sh, g, p)) continue;
+    if (!bears(sh, g, p) || inR && !gunInRange(sh, g, p)) continue;
     var d = (p[0] - w[0]) * (p[0] - w[0]) + (p[2] - w[2]) * (p[2] - w[2]); if (d < bd) { bd = d; best = p; }
   }
   return best;
