@@ -178,7 +178,10 @@
   /* 手機橫拿（矮）：艦隊圓鈕改橫排、由外往內（Tim 2026-10-15：「不然會跟按鈕重疊」—— 直排往下長，撞到兩側直立的大圓鈕 ⚓▶ ◀⚓）；
      我方從左邊往右、敵方從右邊往左；太多艘 ⇒ 往下換一排（每側最多三分之一個畫面寬） */
   @media (orientation:landscape) and (max-height:520px){ .fleet{ flex-direction:row; flex-wrap:wrap; align-content:flex-start; max-height:none; max-width:34vw; } #fleetL{ max-height:none; } #fleetR{ flex-direction:row-reverse; flex-wrap:wrap; align-items:flex-start; } }
-  #cover{ position:absolute; inset:0; display:flex; align-items:flex-start; justify-content:center; overflow-y:auto; background:radial-gradient(ellipse at 50% 40%, rgba(20,30,44,.80), rgba(5,8,12,.94)); }
+  /* 主選單、結算視窗的疊放層（Tim 2026-10-18：「車鐘 會壓過彈窗」「在主畫面中 會穿透船隻資訊的船員跟炮數」）：以前兩個都沒寫 z-index ⇒ HUD 上有寫的
+     （艦隊圓鈕底下的人數／砲數 .sbn 1、砲數條 #gunsL／R 1、大圓鈕 .helm 2、俥鐘 #teleBox 3）一律畫在它們上面。⇒ 4：蓋過這些、跟停格提示／進水面板（4，DOM 在前面）也蓋得過；
+     設定（#gsetBg 5、#gset 6）、說明（6）、錯誤／確認彈窗（50／60）照樣在上面（主選單、結算時打開設定，點面板外照樣關得掉）。 */
+  #cover{ z-index:4; position:absolute; inset:0; display:flex; align-items:flex-start; justify-content:center; overflow-y:auto; background:radial-gradient(ellipse at 50% 40%, rgba(20,30,44,.80), rgba(5,8,12,.94)); }
   #cover .card{ max-width:680px; margin:auto; padding:22px 30px; text-align:center; }   /* margin:auto ⇒ 放得下就置中、放不下就從頂端開始捲（⛔ align-items:center 放不下會切掉上半） */
   #cover h1{ margin:0 0 4px; font-size:24px; letter-spacing:2px; }   /* Tim 2026-10-13：標題小一點（30 → 24；手機 24 → 19） */
   #cover .sub{ color:var(--dim); margin-bottom:14px; font-size:13px; }
@@ -251,7 +254,7 @@
   #help .hH{ color:var(--gold); font-weight:bold; margin:8px 0 2px; padding-bottom:1px; border-bottom:1px solid rgba(232,194,106,.3); }   /* 說明分段（Tim 2026-10-15：「很多改成 emoji 了，說明要更新」⇒ 先列大圓鈕的圖示，再分航行、資訊、操作、規則） */
   #help kbd{ display:inline-block; min-width:16px; padding:0 4px; border:1px solid rgba(255,255,255,.3); border-radius:3px; font-family:Consolas,monospace; text-align:center; }
   #help kbd[data-k]{ cursor:pointer; background:rgba(232,194,106,.16); border-color:rgba(232,194,106,.55); } #help kbd[data-k]:active{ background:rgba(232,194,106,.45); }
-  #end{ position:absolute; inset:0; display:none; align-items:center; justify-content:center; background:rgba(0,0,0,.45); }
+  #end{ z-index:4; position:absolute; inset:0; display:none; align-items:center; justify-content:center; background:rgba(0,0,0,.45); }
   #end.on{ display:flex; }
   #end .card{ text-align:center; padding:22px 30px; }
   #end h2{ margin:0 0 8px; font-size:26px; }
