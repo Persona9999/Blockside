@@ -12,14 +12,24 @@ function glFail(msg) { $('load').textContent = msg; errShow(msg); }
 //   ⇒「寄出」先把完整內容複製起來；網址超過 ERR_URL ⇒ 信裡只放短版（玩家寫的、錯誤第一行、版本）＋「完整內容在剪貼簿，貼上」；
 //     1.5 秒內視窗沒失焦（郵件程式沒搶到前景）⇒ 彈窗裡寫「沒跳出郵件程式」與收件地址。
 // 手動回報（主選單「問題回報…」，Tim 2026-10-18）：errShow(null) ⇒ 標題「問題回報」、沒有錯誤訊息、直接打開填寫欄；內文的錯誤訊息寫「手動回報」。
+// 送到 Discord（Tim 2026-10-18「幫我額外傳送資訊到這個Discord webhook吧」，參考其他遊戲：按一下就送到開發者）：config report.webhook 有填才出「送出回報」。
+//   ⚠ 這是成品裡唯一一處連網：玩家按了才送、送不出去就照實說（沒網路、被擋）並指向「寄出」「複製內容」；不送也不影響遊戲（零外部依賴照舊成立）。
+//     用 XMLHttpRequest（Discord 的 webhook 回 CORS 允許 persona9999.github.io ⇒ 讀得到結果）；multipart：payload_json（短訊息）＋ report.txt（完整內容）＋ 截圖（可選，JPEG）。
+//   ⚠ webhook 網址在成品裡看得到 ⇒ 誰都能拿去送訊息：allowed_mentions 全關（不會 @ 人）、內容截長、兩次至少隔 report.cooldown 秒、開一次遊戲最多 report.perSession 則、同一份不重送；
+//     被濫用 ⇒ 在 Discord 重建 webhook、換 game.json 那一格。
 var ERR_MAIL = 'tim11251994@gmail.com', ERR_MAX = 1500, ERR_URL = 1900, ERR_SEEN = {}, ERR_NOW = '';
+var ERR_RP = CFG.report || {}, ERR_HOOK = typeof ERR_RP.webhook === 'string' && /^https:\/\/(discord|discordapp)\.com\/api\/webhooks\/\d+\/[\w-]+$/.test(ERR_RP.webhook) ? ERR_RP.webhook : '';
+var ERR_POST = { n: 0, t: -1e9, sent: {} };
 function errShow(msg) {
   var e = $('err'); if (!e) return;
   var hand = msg === null;
   msg = hand ? '' : String(msg); if (!hand) ERR_SEEN[msg] = 1; ERR_NOW = msg;
   $('errH').textContent = hand ? '問題回報' : '出錯了'; $('errMsg').hidden = hand;
-  $('errMsg').textContent = msg; $('errRep').hidden = !hand; $('errSend').hidden = !hand; $('errCopy').hidden = !hand; $('errRepB').hidden = hand; $('errTxt').value = '';
-  $('errAddr').textContent = ERR_MAIL; $('errHint').hidden = true;
+  $('errMsg').textContent = msg; $('errRep').hidden = !hand; $('errSend').hidden = !hand; $('errCopy').hidden = !hand; $('errPost').hidden = !hand || !ERR_HOOK; $('errRepB').hidden = hand; $('errTxt').value = '';
+  $('errNote').textContent = (ERR_HOOK ? '按「送出回報」直接送給開發者（Discord）：上面的錯誤訊息、這段文字、遊戲狀態（玩法、編成、畫質、裝置…）與截圖。送不出去 ⇒ 用「寄出」或「複製內容」。'
+    : '按「寄出」會先把完整內容（上面的錯誤訊息、這段文字、遊戲狀態：玩法、編成、畫質、裝置…）複製起來，再打開你的郵件程式；寄不寄由你決定。') + '郵件程式沒跳出來 ⇒ 把複製的內容貼到信裡寄到 ' + ERR_MAIL + '，或貼到 Discord。';
+  $('errHint').hidden = true; $('errShotL').hidden = !ERR_HOOK; $('errPost').disabled = false;
+  $('errPost').className = ERR_HOOK ? 'pri' : ''; $('errSend').className = ERR_HOOK ? '' : 'pri';
   e.style.display = 'flex';
   if (hand) $('errTxt').focus();
 }
@@ -81,9 +91,39 @@ function errCopy() {
   var b = $('errCopy');
   errClip(errBody(), function (r) { b.textContent = r ? '已複製' : '複製不了'; setTimeout(function () { b.textContent = '複製內容'; }, 1500); });
 }
+/** 送到 Discord（見檔頭）：短訊息（2000 字內）＋ report.txt（完整內容）＋ 截圖（勾了才附；畫布保留了上一格 ⇒ toBlob 拿得到彈窗後面的畫面）。結果寫進 errHint。 */
+function errPost() {
+  var hint = $('errHint'), b = $('errPost'), body = errBody(), now = performance.now() / 1000, cd = +ERR_RP.cooldown > 0 ? +ERR_RP.cooldown : 60, mx = +ERR_RP.perSession > 0 ? +ERR_RP.perSession : 5;
+  function say(t) { hint.hidden = false; hint.textContent = t; }
+  if (!ERR_HOOK) return;
+  var key = ($('errTxt').value.trim() + '|' + ERR_NOW).slice(0, 4000);
+  if (ERR_POST.sent[key]) { say('這一則已經送過了。'); return; }
+  if (ERR_POST.n >= mx) { say('這次開遊戲已經送了 ' + mx + ' 則 ⇒ 請用「複製內容」貼到 Discord。'); return; }
+  if (now - ERR_POST.t < cd) { say('送太快了 —— 再等 ' + Math.ceil(cd - (now - ERR_POST.t)) + ' 秒。'); return; }
+  b.disabled = true; say('送出中…');
+  var said = $('errTxt').value.trim(), head = (ERR_NOW ? '🐞 **錯誤回報**' : '📝 **問題回報**') + '（版本 ' + errFp() + '）';
+  var msg = head + '\n> ' + (said || '（沒寫）').slice(0, 900).replace(/\n/g, '\n> ') + (ERR_NOW ? '\n```\n' + ERR_NOW.split('\n').slice(0, 3).join('\n').slice(0, 600).replace(/```/g, "'''") + '\n```' : '');
+  var shot = $('errShot').checked;
+  function send(img) {
+    var fd = new FormData();
+    fd.append('payload_json', JSON.stringify({ username: 'Blockside 回報', content: msg.slice(0, 1990), allowed_mentions: { parse: [] } }));
+    fd.append('files[0]', new Blob([body], { type: 'text/plain;charset=utf-8' }), 'report.txt');
+    if (img) fd.append('files[1]', img, 'screenshot.jpg');
+    var x = new XMLHttpRequest();
+    x.open('POST', ERR_HOOK + '?wait=true'); x.timeout = 20000;
+    x.onload = function () {
+      if (x.status >= 200 && x.status < 300) { ERR_POST.n++; ERR_POST.t = performance.now() / 1000; ERR_POST.sent[key] = 1; say('✓ 已送出，謝謝回報！（Discord' + (img ? '，含截圖' : '') + '）'); return; }
+      b.disabled = false; say('✗ 送不出去（HTTP ' + x.status + (x.status === 429 ? '：送太多了，等一下再試' : '') + '）⇒ 請用「寄出」或「複製內容」。');
+    };
+    x.onerror = x.ontimeout = function () { b.disabled = false; say('✗ 送不出去（沒有網路、或被瀏覽器擋下）⇒ 請用「寄出」或「複製內容」。'); };
+    x.send(fd);
+  }
+  if (shot && cv.toBlob) { try { cv.toBlob(function (img) { send(img); }, 'image/jpeg', 0.85); return; } catch (e) { } }   // 畫布被汙染之類拿不到 ⇒ 不附截圖照送
+  send(null);
+}
 $('errX').onclick = function () { $('err').style.display = 'none'; };
-$('errRepB').onclick = function () { $('errRep').hidden = false; $('errSend').hidden = false; $('errCopy').hidden = false; $('errRepB').hidden = true; $('errTxt').focus(); };
-$('errSend').onclick = errMail; $('errCopy').onclick = errCopy;
+$('errRepB').onclick = function () { $('errRep').hidden = false; $('errSend').hidden = false; $('errCopy').hidden = false; $('errPost').hidden = !ERR_HOOK; $('errRepB').hidden = true; $('errTxt').focus(); };
+$('errSend').onclick = errMail; $('errCopy').onclick = errCopy; $('errPost').onclick = errPost;
 $('repB').onclick = $('gsRep').onclick = function () { errShow(null); };   // 主選單「問題回報…」、遊戲內設定（⚙，暫停中）「問題回報」：手動回報（沒有錯誤訊息）
 function errAuto(m) { m = String(m || ''); if (!m || m === 'Script error.' || /ResizeObserver/.test(m) || ERR_SEEN[m] || $('err').style.display === 'flex') return; errShow(m); }   // 跨網域的「Script error.」、ResizeObserver 的警告不跳；開著的不換掉（glFail 之後的 throw 不蓋掉那一句好懂的）
 window.addEventListener('error', function (ev) { errAuto(ev.error && ev.error.stack ? ev.error.message + '\n' + ev.error.stack : ev.message); });
