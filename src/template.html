@@ -192,8 +192,8 @@
   #cover .row{ margin:7px 0; }
   #shipsel .fl{ display:inline-flex; flex-wrap:wrap; align-items:center; justify-content:center; gap:2px 4px; vertical-align:middle; }   /* 艦隊編成（TASK-0537）：一邊一列，每艘一個選單 */
   #shipsel .fs{ white-space:nowrap; } #cover #shipsel button.fx, #cover #shipsel button.fa{ padding:1px 7px; margin:0 0 0 2px; font-size:13px; } #fleetN{ color:var(--dim); font-size:12px; }
-  #cover #shipsel button.fsb{ margin:0; padding:3px 8px; font-size:13px; min-width:7em; text-align:left; background:#1a212b; }   /* 一艘一顆鈕（72_shippick.js：點了開選船彈窗） */
-  #cover #shipsel button.fsb::after{ content:' ▾'; color:var(--dim); }
+  #cover button.fsb{ margin:0; padding:3px 8px; font-size:13px; min-width:7em; text-align:left; background:#1a212b; }   /* 一艘一顆鈕（72_shippick.js：點了開選船彈窗） */
+  #cover button.fsb::after{ content:' ▾'; color:var(--dim); }
   /* 選船彈窗（72_shippick.js）：上面篩選（動力、噸位、火力、搜尋），下面卡片 */
   #spk{ position:fixed; inset:0; z-index:45; display:none; align-items:center; justify-content:center; padding:16px; background:rgba(0,0,0,.55); }
   #spk.on{ display:flex; }
@@ -524,7 +524,7 @@
     <div class="card panel" id="shipp" style="display:none">
       <h2>船隻配置</h2>
       <div class="sub">一型船一份：同一型的船（我方、敵方、友艦、候補）都照這一份。下一場開始生效。預設值在後台管理頁設。</div>
-      <div class="row slide"><label for="cfgShip">船型</label><select id="cfgShip" aria-label="編輯哪一型船"></select></div>
+      <div class="row slide"><label for="cfgShip">船型</label><button id="cfgShip" class="fsb" aria-label="編輯哪一型船（點了選船）"></button><!-- 選船彈窗（72_shippick.js；Tim 2026-10-18「船隻配置的選船是否可以套一樣的UI」） --></div>
       <div id="shipCard"><canvas id="shipCardC"></canvas><div id="shipCardT"></div></div>
       <div class="row note" id="shipSt"></div>
       <div class="row note" id="shipAdm">設定後台：這裡改的是設定檔的預設（ships[].rooms），改了就送回後台；記得在後台按「儲存」，重建之後遊戲才吃得到。船員與性能的預設在後台的欄位改。</div>

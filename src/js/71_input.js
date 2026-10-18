@@ -533,7 +533,7 @@ function sliders() {
       : '⚠ 這一頁現在存不了' + (PREFS.state ? '（' + PREFS.state + '）' : '（網址帶了設定參數、或是在畫廊的彈窗裡）') + ' —— 要留住請用下面的「匯出」。';
   }
   function put() {                                     // 變數 ⇒ 滑桿位置（開頭、重設預設值、換編輯的船時）
-    var k = C(); $('cfgShip').value = CFG_ID;
+    var k = C(); $('cfgShip').textContent = (hullInfo(CFG_ID) || {}).name || CFG_ID;
     lf.value = k.ballast !== undefined ? k.ballast : LIM.ballast[2]; f.value = k.flood; h.value = Math.log(k.hard / LIM.hard[0]) / hk; c.value = STRIKE.cas * 100; sp.value = k.speed; ag.value = k.agile; uw.value = k.upwind; $('base').value = k.base || 0; $('pump').value = k.pump;
     gh.value = GUN_HP; gw.value = k.gunw; sl.value = SAIL_HP; ph.value = POWDER_HP; bl.value = BLAST_K; bv.value = Math.round(BLAST_V * 100); ch.value = CREW_HP;
     bx.value = BOX_N; cy.value = CARRY_N; wk.value = WIND_K; wc.value = WIND_CAP; $('inertia').value = DRV_INERTIA; $('turninert').value = DRV_TURN; $('sailtq').value = DRV_TQ; dr.value = DROWN_T; $('navre').value = NAV_RE; $('heal').value = HEAL_T; $('musket').value = MUSKET_R; $('sailfix').value = SAILFIX_T; $('gcrew').checked = GUN_CREW_HURT; $('dbg').checked = DBG_SET;
@@ -633,8 +633,8 @@ function sliders() {
   })(r, k);
   ['guns', 'masts', 'officers'].forEach(function (k) { var b = $('st-' + k); b.onchange = function () { STRIKE[k] = b.checked; show(); }; });
   [0, 1].forEach(function (i) { var s = $('cap' + i); capOptions(s, CAP_SET[i]); s.onchange = function () { CAP_SET[i] = s.value; show(); }; });   // 砲長
-  var cs = $('cfgShip'); hullOptions(cs, CFG_ID);                // 船隻設定：編輯哪一型（選到還沒載的船 ⇒ 先載，壓艙物的預設要船型才算得出來）
-  cs.onchange = function () { CFG_ID = cs.value; loadHull(CFG_ID).then(function () { put(); show(); }); put(); show(); };
+  // 船隻設定：編輯哪一型 —— 跟編成同一個選船彈窗（72_shippick.js；選到還沒載的船 ⇒ 先載，壓艙物的預設要船型才算得出來）
+  $('cfgShip').onclick = function () { spkOpen({ title: '船隻配置：編輯哪一型', cur: CFG_ID, pick: function (id) { CFG_ID = id; loadHull(CFG_ID).then(function () { put(); show(); }); put(); show(); } }); };
   fleetUI();                                                     // 主選單：艦隊編成
   // 細節設定那一頁：主選單 ⇄ 細節設定（同一個 #cover 裡兩張卡片，一次顯示一張）
   function page(w) { $('detail').style.display = w === 'det' ? '' : 'none'; $('gfxp').style.display = w === 'gfx' ? '' : 'none'; $('phxp').style.display = w === 'phx' ? '' : 'none'; $('shipp').style.display = w === 'ship' ? '' : 'none'; $('gunp').style.display = w === 'gun' ? '' : 'none'; $('furnp').style.display = w === 'furn' ? '' : 'none'; $('keysp').style.display = w === 'keys' ? '' : 'none'; $('sndp').style.display = w === 'snd' ? '' : 'none'; if ($('wqp')) $('wqp').style.display = w === 'wq' ? '' : 'none'; if (w !== 'keys') KEY_WAIT = null; document.querySelector('#cover .card:not(#detail):not(#gfxp):not(#phxp):not(#shipp):not(#gunp):not(#furnp):not(#keysp):not(#sndp):not(#wqp)').style.display = w ? 'none' : ''; $('cover').scrollTop = 0; $('pgX').classList.toggle('on', !!w && !ADMIN_ROOMS); }   // w：'' 主選單、'det' 細節設定、'gfx' 畫質設定、'phx' 物理設定、'ship' 船隻配置、'gun' 砲的設定、'furn' 道具設定（67_furncfg.js）
@@ -794,7 +794,10 @@ function fleetUI() {
       var h = hullInfo(id);
       return '<span class="fs"><button class="fsb" data-s="' + s + '" data-j="' + j + '" aria-label="' + lab + '的船：' + (h ? h.name : id) + '（點了選船）" title="' + lab + '">' + (h ? h.name : id) + '</button>' + (j ? '<button class="fx" data-s="' + s + '" data-j="' + j + '" aria-label="拿掉' + lab + '">×</button>' : '') + '</span>';
     }).join('') + '<button class="fa" data-s="' + s + '" aria-label="' + (s ? '加一艘敵艦' : '加一艘友艦') + '"' + (full ? ' disabled' : '') + '>＋</button>';
-    [].forEach.call(box.querySelectorAll('button.fsb'), function (b) { b.onclick = function () { spkOpen(s, +b.dataset.j); }; });   // 選船彈窗（72_shippick.js；Tim 2026-10-18：下拉選單換成按鈕＋彈窗分類）
+    [].forEach.call(box.querySelectorAll('button.fsb'), function (b) {
+      var j = +b.dataset.j;
+      b.onclick = function () { spkOpen({ title: '選船：' + (s === 0 ? (j ? '友艦 ' + j : '我艦') : '敵艦 ' + (j + 1)), cur: L[j], pick: function (id) { pickShip(s, j, id); fleetUI(); } }); };
+    });   // 選船彈窗（72_shippick.js；Tim 2026-10-18：下拉選單換成按鈕＋彈窗分類）
     [].forEach.call(box.querySelectorAll('button.fx'), function (b) { b.onclick = function () { L.splice(+b.dataset.j, 1); fleetUI(); pickShip(); }; });
     box.querySelector('button.fa').onclick = function () { if (FLEET_SET[0].length + FLEET_SET[1].length < FLEET_MAX) { L.push(L[L.length - 1]); fleetUI(); pickShip(); } };
   });
