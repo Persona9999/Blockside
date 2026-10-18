@@ -379,6 +379,20 @@ def validate(cfg, prev=None):
             for a, k in KY.items():
                 if not (isinstance(k, str) and 1 <= len(k) <= 12) or re.match(r'^(escape|arrow(up|down|left|right)|tab|capslock|meta|os|control|contextmenu|f\d+|\?)$', k):
                     err('keys.%s' % a, '一個鍵（KeyboardEvent.key 小寫，空白鍵 ＝ " "；Esc、方向鍵、Tab、F1–F12 不能綁）')
+    RP = cfg.get('report')                                 # 問題回報送到 Discord（js/01_gl.js errPost；Tim 2026-10-18「幫我額外傳送資訊到這個Discord webhook」）：webhook 空 ⇒ 沒有「送出回報」
+    if RP is not None:
+        if not isinstance(RP, dict):
+            err('report', '要是 { webhook, cooldown, perSession }')
+        else:
+            for k in RP:
+                if k not in ('webhook', 'cooldown', 'perSession'):
+                    err('report.' + k, '不認得的鍵（webhook、cooldown、perSession）')
+            if RP.get('webhook') and not (isinstance(RP['webhook'], str) and re.match(r'^https://(discord|discordapp)\.com/api/webhooks/\d+/[A-Za-z0-9_-]+$', RP['webhook'])):
+                err('report.webhook', 'Discord webhook 網址 https://discord.com/api/webhooks/<id>/<token>；空字串 ＝ 不送')
+            if 'cooldown' in RP and not (isnum(RP['cooldown']) and 10 <= RP['cooldown'] <= 3600):
+                err('report.cooldown', '兩次送出至少隔幾秒：10～3600')
+            if 'perSession' in RP and not (isint(RP['perSession']) and 1 <= RP['perSession'] <= 50):
+                err('report.perSession', '開一次遊戲最多送幾則：1～50')
     for kd, f in (cfg.get('drvparts') or {}).items():     # 動力件（TASK-0653；js/31_drive.js DRVP、67_furncfg.js DRV_ITEMS）
         if kd not in DRV_KINDS + VOXM_KINDS + HPM_KINDS or not isinstance(f, dict):
             err('drvparts.%s' % kd, '種類只有 ' + '／'.join(DRV_KINDS + VOXM_KINDS + HPM_KINDS))

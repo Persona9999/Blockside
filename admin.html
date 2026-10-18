@@ -87,6 +87,11 @@ nav a.on { background: var(--acc); color: var(--acc-ink); border-color: var(--ac
     <p class="note">同時在場最多幾艘（主選單「同時在場」滑桿的上限、畫質設定「陰影船數」的上限都跟著它；著色器的陣列照它配，太大較吃顯卡）、船艙遮罩最多幾艘、編成最多幾艘（超過同時在場的排候補）。改了要重建才生效。</p>
     <div class="grid" id="limits"></div></section>
 
+  <section><h2>問題回報（Discord）</h2>
+    <p class="note">遊戲裡「🐞 問題回報」與報錯彈窗的「送出回報」送到這個 Discord webhook（短訊息＋ report.txt 完整內容＋截圖）。空白 ＝ 沒有「送出回報」，只剩寄信與複製。
+      ⚠ 這個網址會跟著成品公開（誰都看得到、拿得去送訊息）：遊戲端關掉 @、限長、限次數；被濫用 ⇒ 在 Discord 頻道設定重建 webhook，換這一格、重建。改完存檔＋重建才生效。</p>
+    <div class="grid" id="reportCfg"></div></section>
+
   <section><h2>主選單預設</h2>
     <p class="note">第一次打開（沒有存檔）時主選單選在哪一格。玩家自己改過的照他的存檔。預設的船 ＝ 下面船隻清單的第一艘。</p>
     <div class="grid" id="menu"></div></section>
@@ -221,6 +226,10 @@ nav a.on { background: var(--acc); color: var(--acc-ink); border-color: var(--ac
   function render() {
     var L = $('limits'); L.innerHTML = '';
     LIMITS.forEach(function (r) { L.appendChild(fld(r[1], [num(['limits', r[0]], { title: r[2] + '～' + r[3] + ' 的整數' })])); });
+    var RC = $('reportCfg'); RC.innerHTML = ''; if (!C.report) C.report = { webhook: '', cooldown: 60, perSession: 5 };   // 問題回報（js/01_gl.js errPost；admin.py validate 驗格式）
+    RC.appendChild(fld('Discord webhook 網址', [txt(['report', 'webhook'], { cls: 'wide' })]));
+    RC.appendChild(fld('兩次至少隔（秒）', [num(['report', 'cooldown'], { title: '10～3600' })]));
+    RC.appendChild(fld('開一次遊戲最多送幾則', [num(['report', 'perSession'], { title: '1～50' })]));
     var M = $('menu'); M.innerHTML = '';
     MENU.forEach(function (r) { M.appendChild(fld(r[1], [sel(['menu', r[0]], r[2])])); });
     var tb = $('lim').tBodies[0]; tb.innerHTML = '';

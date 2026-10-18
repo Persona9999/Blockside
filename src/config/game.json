@@ -544,5 +544,6 @@
     },
     "workshop": {"name": "木工間", "items": ["bench", "loft"], "need": {"bench": 1}},
     "deck": {"name": "砲甲板", "deck": true, "items": ["keg", "pump", "spump", "bench", "loft"]}
-  }
+  },
+  "report": {"webhook": "", "cooldown": 60, "perSession": 5}
 }

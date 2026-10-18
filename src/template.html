@@ -331,7 +331,9 @@
   #err .note{ margin-top:6px; font-size:12px; opacity:.75; }
   #err .btns{ margin-top:12px; text-align:right; }
   #err button{ font:inherit; margin:0 0 0 8px; padding:6px 16px; border-radius:6px; border:1px solid rgba(255,255,255,.3); background:rgba(255,255,255,.08); color:var(--ink); cursor:pointer; }
-  #err button#errSend{ background:#b8452e; border-color:#e06a4f; }
+  #err button.pri{ background:#b8452e; border-color:#e06a4f; }   /* 主要的那一顆：有 Discord webhook ⇒「送出回報」，沒有 ⇒「寄出」（01_gl.js errShow） */
+  #err button:disabled{ opacity:.5; cursor:default; }
+  #err label.chk{ display:inline-flex; align-items:center; gap:6px; margin:8px 0 0; font-size:13px; }
 </style>
 </head>
 <body>
@@ -684,9 +686,10 @@
   <div id="err" role="alertdialog" aria-labelledby="errH"><div class="card panel">
     <h2 id="errH">出錯了</h2><pre id="errMsg"></pre>
     <div id="errRep" hidden><label for="errTxt">發生什麼事、剛剛在做什麼（選填）</label><textarea id="errTxt" rows="4"></textarea>
-      <div class="note">按「寄出」會先把完整內容（上面的錯誤訊息、這段文字、遊戲狀態：玩法、編成、畫質、裝置…）複製起來，再打開你的郵件程式；寄不寄由你決定。郵件程式沒跳出來 ⇒ 把複製的內容貼到信裡寄到 <b id="errAddr"></b>，或貼到 Discord。</div>
+      <label id="errShotL" class="chk"><input type="checkbox" id="errShot" checked> 附上畫面截圖</label>
+      <div class="note" id="errNote"></div><!-- 文字照有沒有 Discord webhook 換（01_gl.js errShow） -->
       <div class="note" id="errHint" hidden></div></div>
-    <div class="btns"><button id="errRepB">回報錯誤</button><button id="errCopy" hidden>複製內容</button><button id="errSend" hidden>寄出</button><button id="errX">關閉</button></div>
+    <div class="btns"><button id="errRepB">回報錯誤</button><button id="errCopy" hidden>複製內容</button><button id="errSend" hidden>寄出</button><button id="errPost" hidden>送出回報</button><button id="errX">關閉</button></div>
   </div></div>
 </div>
 
