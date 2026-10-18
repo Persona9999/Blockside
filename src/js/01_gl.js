@@ -18,7 +18,18 @@ function glFail(msg) { $('load').textContent = msg; errShow(msg); }
 //   ⚠ webhook 網址在成品裡看得到 ⇒ 誰都能拿去送訊息：allowed_mentions 全關（不會 @ 人）、內容截長、兩次至少隔 report.cooldown 秒、開一次遊戲最多 report.perSession 則、同一份不重送；
 //     被濫用 ⇒ 在 Discord 重建 webhook、換 game.json 那一格。
 var ERR_MAIL = 'tim11251994@gmail.com', ERR_MAX = 1500, ERR_URL = 1900, ERR_SEEN = {}, ERR_NOW = '';
-var ERR_RP = CFG.report || {}, ERR_HOOK = typeof ERR_RP.webhook === 'string' && /^https:\/\/(discord|discordapp)\.com\/api\/webhooks\/\d+\/[\w-]+$/.test(ERR_RP.webhook) ? ERR_RP.webhook : '';
+//   設定檔存的是 x1:…（admin.py hook_enc；Tim 2026-10-18「把網址加密在填」）⇒ hookDec 解開。⚠ 混淆不是加密：鑰匙就在這裡（擋掃 repo 的機器人與順手一瞥）。
+var HOOK_KEY = 'Blockside/report/x1';                                   // ⛔ 跟 admin.py HOOK_KEY 同一串（改一邊另一邊解不開 ⇒ 沒有「送出回報」）
+function hookDec(s) {
+  if (typeof s !== 'string' || s.indexOf('x1:') !== 0) return '';
+  try {
+    var b = atob(s.slice(3).replace(/-/g, '+').replace(/_/g, '/')), u = new Uint8Array(b.length);
+    for (var i = 0; i < b.length; i++) u[i] = b.charCodeAt(i) ^ HOOK_KEY.charCodeAt(i % HOOK_KEY.length);
+    return new TextDecoder().decode(u);
+  } catch (e) { return ''; }
+}
+var ERR_RP = CFG.report || {}, ERR_HOOK = hookDec(ERR_RP.webhook);
+if (!/^https:\/\/(discord|discordapp)\.com\/api\/webhooks\/\d+\/[\w-]+$/.test(ERR_HOOK)) ERR_HOOK = '';
 var ERR_POST = { n: 0, t: -1e9, sent: {} };
 function errShow(msg) {
   var e = $('err'); if (!e) return;

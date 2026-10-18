@@ -387,8 +387,10 @@ def validate(cfg, prev=None):
             for k in RP:
                 if k not in ('webhook', 'cooldown', 'perSession'):
                     err('report.' + k, '不認得的鍵（webhook、cooldown、perSession）')
-            if RP.get('webhook') and not (isinstance(RP['webhook'], str) and re.match(r'^https://(discord|discordapp)\.com/api/webhooks/\d+/[A-Za-z0-9_-]+$', RP['webhook'])):
-                err('report.webhook', 'Discord webhook 網址 https://discord.com/api/webhooks/<id>/<token>；空字串 ＝ 不送')
+            wh = RP.get('webhook')
+            if wh and not (isinstance(wh, str) and wh.startswith('x1:') and HOOK_RE.match(hook_dec(wh))):
+                err('report.webhook', '要是加密過的 Discord webhook（x1:…；在設定後台貼明文網址，存檔時自動加密）；空字串 ＝ 不送'
+                    if isinstance(wh, str) and HOOK_RE.match(wh) else '解不開或不是 Discord webhook 網址（https://discord.com/api/webhooks/<id>/<token>）；空字串 ＝ 不送')
             if 'cooldown' in RP and not (isnum(RP['cooldown']) and 10 <= RP['cooldown'] <= 3600):
                 err('report.cooldown', '兩次送出至少隔幾秒：10～3600')
             if 'perSession' in RP and not (isint(RP['perSession']) and 1 <= RP['perSession'] <= 50):
@@ -2368,6 +2370,26 @@ def act_defaults(lim):
 FURN_KEYS = ('tpm', 'crew', 'cap', 'hold', 'hp', 'buff.heal', 'staff.surgeon', 'staff.carpenter', 'staff.sailmaker', 'auto', 'wood', 'cloth', 'carry')            # 道具設定頁（js/67_furncfg.js FURN_ITEMS）調得到的那幾格
 DRVP_KEYS = ('lo', 'hi', 'wet', 'cell', 'hpK')                                  # 同一頁的動力件（DRV_ITEMS ⇒ config drvparts）
 
+# 問題回報的 Discord webhook（Tim 2026-10-18「那妳先把網址加密在填吧(工具直接填加密後的)」）：game.json 只存 x1:<base64url>，遊戲（js/01_gl.js hookDec）解開。
+#   ⚠ 是混淆、不是加密：遊戲自己要解得開 ⇒ 鑰匙跟著成品公開。擋的是掃 repo 找 webhook 的機器人與順手一瞥，擋不住有心翻程式的人。
+#   x1 ＝ UTF-8 位元組逐位 XOR HOOK_KEY（循環）再 base64url（不補 =）。鑰匙兩處：這裡、js/01_gl.js HOOK_KEY（⛔ 改一邊另一邊解不開 ⇒ 遊戲沒有「送出回報」）。
+HOOK_KEY = b'Blockside/report/x1'
+HOOK_RE = re.compile(r'^https://(discord|discordapp)\.com/api/webhooks/\d+/[A-Za-z0-9_-]+$')
+
+
+def hook_enc(url):
+    b = url.encode('utf-8')
+    return 'x1:' + base64.urlsafe_b64encode(bytes(c ^ HOOK_KEY[i % len(HOOK_KEY)] for i, c in enumerate(b))).decode('ascii').rstrip('=')
+
+
+def hook_dec(s):
+    try:
+        t = s[3:]
+        b = base64.urlsafe_b64decode(t + '=' * (-len(t) % 4))
+        return bytes(c ^ HOOK_KEY[i % len(HOOK_KEY)] for i, c in enumerate(b)).decode('utf-8')
+    except Exception:
+        return ''
+
 
 def act_keys(keys):
     """鍵位的出廠預設值（Tim 2026-10-17：「不是後台 而是遊戲中(後台可以設定預設值)」）：遊戲的鍵位設定頁（/game?admin=keys，js/66_keys.js）送來 { 動作: 鍵 }
@@ -2440,8 +2462,36 @@ def act_furniture(furn, drv=None):
     return ['✓ 道具的出廠預設改了 %d 項（config/game.json furniture、drvparts；重建之後遊戲才吃得到）：' % len(log)] + log
 
 
+def act_hook(url):
+    """admin.py hook：明文網址（標準輸入）⇒ x1:… 寫進 config/game.json 的 report.webhook —— 只換那一格的字（其他排版不動）；照樣過 validate。印出來的只有解開後的 id 與 token 長度。"""
+    url = (url or '').strip()
+    if url and not HOOK_RE.match(url):
+        raise Fail('不是 Discord webhook 網址（https://discord.com/api/webhooks/<id>/<token>），沒有存')
+    enc = hook_enc(url) if url else ''
+    if url and hook_dec(enc) != url:
+        raise Fail('加密後解不回原文（HOOK_KEY 壞了？），沒有存')
+    text = open(CFG_P, encoding='utf-8').read()
+    rx = re.compile(r'("report"\s*:\s*\{[^{}]*?"webhook"\s*:\s*)"[^"]*"')
+    if not rx.search(text):
+        raise Fail('config/game.json 找不到 report.webhook 那一格（先在設定後台存一次「問題回報」）')
+    new_text = rx.sub(lambda m: m.group(1) + json.dumps(enc), text, count=1)
+    new = json.loads(new_text)
+    E = validate(new, load())
+    if E:
+        raise Fail('設定不合法，沒有存：\n' + '\n'.join('  ✗ ' + e for e in E))
+    with open(CFG_P, 'w', encoding='utf-8', newline='') as f:
+        f.write(new_text)
+    if not url:
+        return ['✓ 清掉了 report.webhook（遊戲不再有「送出回報」；重建之後生效）']
+    hid = url.rstrip('/').split('/')[-2]
+    return ['✓ report.webhook ＝ 加密後的網址（webhook id %s、token %d 字；解開驗過 ＝ 原文）—— 重建之後遊戲才有「送出回報」' % (hid, len(url.rsplit('/', 1)[1]))]
+
+
 def act_save(new):
     prev = load()
+    RP = new.get('report') if isinstance(new, dict) else None
+    if isinstance(RP, dict) and isinstance(RP.get('webhook'), str) and HOOK_RE.match(RP['webhook'].strip()):
+        RP['webhook'] = hook_enc(RP['webhook'].strip())    # 設定後台貼的明文 ⇒ 存成 x1:…（見 hook_enc）；明文不落地
     E = validate(new, prev)
     if E:
         raise Fail('設定不合法，沒有存：\n' + '\n'.join('  ✗ ' + e for e in E))
@@ -2610,6 +2660,7 @@ def main():
     s.add_argument('--id', required=True)
     s.add_argument('--work')
     s.add_argument('--no-build', action='store_true')
+    sp.add_parser('hook', help='問題回報的 Discord webhook：從標準輸入讀明文網址（貼上、Enter；⛔ 不收參數 ⇒ 不留在指令歷史）⇒ 加密成 x1:… 寫進 config/game.json report.webhook（只換那一格）；空白一行 ＝ 清掉')
     o = ap.parse_args()
     try:
         if o.op == 'serve':
@@ -2649,6 +2700,10 @@ def main():
             log = act_cells(o.id, not o.no_build)
         elif o.op == 'import':
             log = act_import(o.work, o.id, o.name, not o.no_build, o.variant_of)
+        elif o.op == 'hook':
+            if sys.stdin.isatty():
+                print('貼上 Discord webhook 網址後按 Enter（空白 ＝ 清掉）：', end='', flush=True)
+            log = act_hook(sys.stdin.readline())
         else:
             log = act_reimport(o.id, o.work, not o.no_build)
     except Fail as e:
