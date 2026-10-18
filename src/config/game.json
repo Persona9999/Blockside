@@ -179,7 +179,9 @@
       "crew": 3,
       "min": 2,
       "mass": 1.2, "shot": 6,
-      "ammo": "greekfire", "close": true, "weapon": "siphon"
+      "ammo": "greekfire", "close": true, "weapon": "siphon",
+      "burst": 10,
+      "burstGap": 0.15
     },
     "brooke64": {
       "code": "64b",

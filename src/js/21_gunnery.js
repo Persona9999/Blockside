@@ -23,7 +23,10 @@ function burstStep(sh) {
     var g = sh.guns[i]; if (!(g.burstLeft > 0) || SIMT < g.burstT) continue;
     if (sh.struck || sh.sunk || !g.alive || g.wet || gunRate(g) <= 0) { g.burstLeft = 0; continue; }
     var t = gunTarget(sh, g, aimPoint(sh));
-    if (t && bears(sh, g, t) && mountFireOk(g) && !(g.safe && selfBlock(sh, g, t))) { var r = fireShot(sh, g, t, g.burstAmmo, g.muzs ? g.muzs[g.burstK % g.muzs.length] : g.muz); sh.fired++; shotFx(sh, g, r.mw, r.dir); }
+    if (t && bears(sh, g, t) && mountFireOk(g) && !(g.safe && selfBlock(sh, g, t))) {
+      var r = fireShot(sh, g, t, g.burstAmmo, g.muzs ? g.muzs[g.burstK % g.muzs.length] : g.muz); sh.fired++;
+      if (g.burstAmmo === AMMO_GF) evEmit('gfJet', r.mw, r.dir, sh.vel); else shotFx(sh, g, r.mw, r.dir);   // 希臘火連發（Tim 2026-10-18：「siphon 是否可以改成連射(參考速射炮) 先設定為10連發」）：每一發一道火舌，同第一發（⛔ shotFx ⇒ 砲煙＋砲聲）
+    }
     g.burstK++; g.burstLeft--; g.burstT = SIMT + (GUNS[g.type].burstGap || 0.15);
   }
 }
