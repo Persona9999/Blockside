@@ -262,7 +262,7 @@ function fleetHud(me) {
     var who = o.i === PLAYER_I ? '我艦' : o.team === pt ? (many && o === fs ? '我方旗艦' : '友艦') : (many && o === fs ? '敵方旗艦' : '敵艦');
     var title = who + ' ' + o.name + (o.name !== o.T.name ? '<span class="cls">（' + o.T.name + '型）</span>' : '') + teamTag(o);
     var seeing = CAM.mode === 3 && (CAM.see === o || (!CAM.see && o.i === PLAYER_I));
-    el.innerHTML = panel(o, title).replace('<h3>', '<h3><span class="fold">▲ 收起</span><span class="fold see' + (seeing ? ' on' : '') + '" data-see="1">🎥 ' + (seeing ? '看著這艘' : '看這艘') + '</span>' + (canTake(o) ? '<span class="fold take" data-take="1">⚓ 改操控這艘</span>' : '') + '<span class="fold gm">' + [['gun', '砲位'], ['dmg', '損壞'], ['flood', '進水']].map(function (m) { return '<i data-gmode="' + m[0] + '"' + (GMAP_MODE === m[0] ? ' class="on"' : '') + '>' + m[1] + '</i>'; }).join('') + '</span>');   // 旁邊那張圖：砲位／損壞／進水（gmapDraw）   // 友艦才有（52_fleet.js playerTakeShip）   // 放在標題最前面再靠右浮動（⛔ 放最後 ⇒ 窄的時候浮到排水量那一行、壓到右欄）
+    el.innerHTML = panel(o, title).replace('<h3>', '<h3><span class="fold">▲ 收起</span><span class="fold see' + (seeing ? ' on' : '') + '" data-see="1">🎥 ' + (seeing ? '看著這艘' : '看這艘') + '</span>' + (canTake(o) ? '<span class="fold take" data-take="1">⚓ 改操控這艘</span>' : '') + '<span class="fold gm">' + [['gun', '💥 砲位'], ['dmg', '🔧 損壞'], ['flood', '💧 進水']].map(function (m) { return '<i data-gmode="' + m[0] + '"' + (GMAP_MODE === m[0] ? ' class="on"' : '') + '>' + m[1] + '</i>'; }).join('') + '</span>');   // 旁邊那張圖：砲位／損壞／進水（gmapDraw）   // 友艦才有（52_fleet.js playerTakeShip）   // 放在標題最前面再靠右浮動（⛔ 放最後 ⇒ 窄的時候浮到排水量那一行、壓到右欄）
     el.style.display = 'block'; el.style.borderLeftColor = teamIdx(o) === 0 ? 'var(--blue)' : 'var(--red)';
     gmapDraw(o);
   }
