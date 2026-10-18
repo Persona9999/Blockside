@@ -654,7 +654,8 @@ function cutRig(sh, L, r, b, ropes, sails) {
     var Ls = y0 && a ? rotZ(L, y0.piv, -a) : L;
     if (Ls[0] < sb[0] - rb || Ls[0] > sb[3] + rb || Ls[1] < sb[1] - rb || Ls[1] > sb[4] + rb || Ls[2] < sb[2] - rb || Ls[2] > sb[5] + rb) return;
     for (var j = 0; j < v.length; j += chain ? 9 : 3) { var dx = v[j] - Ls[0], dy = v[j + 1] - Ls[1], dz = v[j + 2] - Ls[2]; if (dx * dx + dy * dy + dz * dz < rs2) {
-      tearCloth(sh, s, L, chain ? 7 : 3, b); s.hp -= b.dmg * ammoK(b.ammo, VS_SAIL); (b.sails = b.sails || []).push(s);
+      if (b.ammo === AMMO_GF && BURN_PCT > 0) burnSailAt(sh, s, j / 3); else { tearCloth(sh, s, L, chain ? 7 : 3, b); if (b.fire && BURN_PCT > 0) burnSailAt(sh, s, j / 3); }   // 希臘火：帆從這一點燒起來、不撕洞（49_burn.js；火勢 0 ⇒ 照舊撕）；火箭：打個小洞、也從那一點燒起來
+      s.hp -= b.dmg * ammoK(b.ammo, VS_SAIL); (b.sails = b.sails || []).push(s);
       if (s.hp <= 0) dropSail(sh, s, true); else if (chain) shredSail(sh, s, L);   // 歸零才掉；還撐得住 ⇒ 撕下幾片（鏈彈）、少一份推力
       changed = true; break; } }
   });

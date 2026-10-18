@@ -174,7 +174,9 @@ var ITEM_DEF = {
   plank: { w: 30, h: 10, pv: [12, 9], r: [[0, 7, 30, 3, '#a0743f'], [0, 7, 30, 1, '#c08f55'], [2, 4, 27, 3, '#8a6033'], [2, 4, 27, 1, '#a87a45'], [1, 1, 28, 3, '#b3824a'], [1, 1, 28, 1, '#cf9f62'],   // 木匠抱的木材：三塊疊起來的木板 0.65 m（Tim 2026-10-17：「手上要拿木材(跟拿砲彈一樣) 用點陣圖」）
     [0, 7, 1, 3, '#6e4a24'], [29, 7, 1, 3, '#6e4a24'], [2, 4, 1, 3, '#5e3f1f'], [28, 4, 1, 3, '#5e3f1f'], [1, 1, 1, 3, '#7a5228'], [28, 1, 1, 3, '#7a5228'], [8, 8, 3, 1, '#7d5530'], [19, 2, 4, 1, '#8f6538'], [14, 5, 2, 1, '#6a4626']] },
   canvas: { w: 26, h: 10, pv: [11, 9], r: [[1, 1, 24, 8, '#e8e2cf'], [1, 1, 24, 2, '#f6f2e4'], [1, 7, 24, 2, '#c9c1a8'], [0, 2, 1, 6, '#bdb59c'], [25, 2, 1, 6, '#bdb59c'],   // 帆匠抱的帆布：一捲 0.55 m，兩道麻繩綁著（TASK-0699）
-    [6, 1, 2, 8, '#8a6a3c'], [18, 1, 2, 8, '#8a6a3c'], [0, 4, 2, 2, '#d8d0b8'], [24, 4, 2, 2, '#d8d0b8']] }
+    [6, 1, 2, 8, '#8a6a3c'], [18, 1, 2, 8, '#8a6a3c'], [0, 4, 2, 2, '#d8d0b8'], [24, 4, 2, 2, '#d8d0b8']] },
+  bucket: { w: 12, h: 13, pv: [6, 2], r: [[2, 0, 8, 1, '#3b3d42'], [1, 1, 1, 2, '#3b3d42'], [10, 1, 1, 2, '#3b3d42'],   // 救火的水桶（TASK-0717）：0.26 m 的木桶、兩道鐵箍、上緣一圈水，提把在上面
+    [1, 3, 10, 10, '#8a5a2e'], [2, 3, 2, 10, '#a06c3a'], [1, 5, 10, 1, '#4a4c52'], [1, 10, 10, 1, '#4a4c52'], [1, 3, 10, 1, '#5fa8e8'], [2, 3, 8, 1, '#9fd3ff']] }
 };
 function itemAtlas() {
   var W = 0, H = 0, k, x = 0;
@@ -198,6 +200,7 @@ function heldItem(sh, c, f) {
   if (c.role === ROLE.POWDER) return c.cart > 0 ? { id: 'carry', hx: 0.17, hy: 0.52, a: 0 } : null;
   if (c.role === ROLE.CARPENTER) return c.wood > 0 ? { id: 'plank', hx: 0.14, hy: 0.5, a: 0 } : null;   // 木匠：身上還有木材就抱著（46_carpenter.js）
   if (c.role === ROLE.SAILMAKER) return c.cloth > 0 ? { id: 'canvas', hx: 0.14, hy: 0.5, a: 0 } : null;   // 帆匠：身上還有帆布就抱著（47_sailmaker.js）
+  if (c.hand && c.hand.job && c.hand.job.kind === 'fire') return { id: 'bucket', hx: 0.16, hy: 0.42, a: 0 };   // 救火的預備水手：提一桶水（49_burn.js；潑的水花 59_burnfx.js）
   if (c.role === ROLE.MARINE || c.role === ROLE.TOP) {                              // 開槍前一秒舉槍瞄準、開完 0.4 秒放下（沙盒的敵艦、降旗、沉了不開槍）
     var aim = (c.fireT > 0 || c.shotT < 1) && !sh.struck && !sh.sunk && (modeRule('othersAct') || sh.i === PLAYER_I);
     return aim ? { id: 'musket', hx: 0.04, hy: 0.78, a: 0.04 } : null;
@@ -215,6 +218,7 @@ function crewFrame(sh, c) {
   if (c.st === 1) return FR.WOUNDED;
   var ph = Math.floor(c.t * 2.5) & 1;
   if (c.walk || c.moving) return ph ? FR.RUN_A : FR.RUN_B;
+  if (c.hand && c.hand.job && c.hand.job.kind === 'fire' && c.hand.job.at) return ph ? FR.WORK_A : FR.WORK_B;   // 站到火邊：彎腰潑水（跟裝填同一個前傾的節奏）
   if (c.role === ROLE.POWDER && c.pm && c.pm.st === 'fill') return ph ? FR.WORK_A : FR.WORK_B;   // 在取用點拿火藥與彈藥
   if (c.role === ROLE.GUN && c.gun) {
     if (SIMT - (c.gun.firedAt || -9) < 0.7) return FR.FIRE;

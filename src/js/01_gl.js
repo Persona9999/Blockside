@@ -182,6 +182,14 @@ var CUT_GLSL = 'uniform highp sampler2D uCutT; uniform vec4 uCut; uniform vec2 u
 var VLAMP_N = 4, LAMP_N = 8, LAMP_GLSL = 'uniform vec4 uLP[' + LAMP_N + ']; uniform vec4 uLC[' + LAMP_N + ']; uniform int uLN; uniform vec4 uVG[' + VLAMP_N + ']; uniform vec4 uVGC[' + VLAMP_N + ']; uniform int uVGN; uniform float uVGK;\n' +
   'vec3 lampK(vec3 w, vec3 n){ vec3 s=vec3(0.0); for(int i=0;i<' + LAMP_N + ';i++){ if(i>=uLN) break; vec3 L=uLP[i].xyz-w; float d=length(L), a=clamp(1.0-d/uLP[i].w,0.0,1.0);\n' +
   ' s+=uLC[i].rgb*a*a*(0.35+0.65*max(dot(n,L/max(d,0.001)),0.0)); } return s; }\n';
+// 帆燒起來（TASK-0717；Tim 2026-10-18「帆也可以燒起來(可以嘗試真的燒掉帆的演出 出現邊緣焦黑以及逐漸燒掉)」）：每個頂點帶 aF ＝ (火燒到的時間 a, 撲滅的時間 x, 雜訊座標 u, v)
+//   （11_rig_gpu.js sailBuf ← 49_burn.js s.burn；沒燒過 a ＝ 1e6 ⇒ 整段跳過、跟以前一模一樣）。
+//   燒的進度 b ＝ (min(現在, x) − a) ÷ uFireT（燒到穿要幾秒，burn.sailBurn）＋ 兩層雜訊（邊緣不是直線）：b ＞ 1 ⇒ 洞（discard，陰影那一支也是）；
+//   −0.3～0.05 焦黃、0.05～0.8 焦黑、0.7 以上還在燒（現在 ＜ x）⇒ 燒口一圈火紅（em，加在打光後、霧之前）。⛔ 用 if，不寫巢狀的三元（D3D11 編不過）。
+var BURN_GLSL = 'uniform float uFireT;\n' +
+  'float bnH(vec2 q){ return fract(sin(dot(q,vec2(127.1,311.7)))*43758.5453); }\n' +
+  'float bnN(vec2 p){ vec2 i=floor(p); vec2 f=fract(p); f=f*f*(3.0-2.0*f); return mix(mix(bnH(i),bnH(i+vec2(1.0,0.0)),f.x),mix(bnH(i+vec2(0.0,1.0)),bnH(i+vec2(1.0,1.0)),f.x),f.y); }\n' +
+  'float bnB(vec4 F,float t){ return (min(t,F.y)-F.x)/uFireT+(bnN(F.zw*1.6)-0.5)*0.55+(bnN(F.zw*5.1)-0.5)*0.2; }\n';
 function programs() {
   var cd = gl.createTexture(); gl.activeTexture(gl.TEXTURE8); gl.bindTexture(gl.TEXTURE_2D, cd);   // 第 8 號：剖面切高的空貼圖（見 CUT_GLSL）
   gl.texImage2D(gl.TEXTURE_2D, 0, gl.R32F, 1, 1, 0, gl.RED, gl.FLOAT, new Float32Array([1e9]));
@@ -214,13 +222,16 @@ function programs() {
   // 帆：頂點法線（平滑，不是一個三角形一個平面）；法線翻向看的那一面；包覆光（背光面不死黑、明暗過渡慢）＋太陽在帆後面時布透出暖光
   // 有貼圖的帆（TASK-0579）：aT ＝ 貼圖集的 uv（11_rig_gpu.js sailBuf；u < 0 ＝ 沒有貼圖，照頂點色）；片段照貼圖取色、alpha < 0.5（已照 alpha_min 二值化）⇒ discard ＝ 洞
   P.sail = VK.compile(gl,
-    '#version 300 es\nlayout(location=0) in vec3 aP; layout(location=1) in vec3 aN; layout(location=2) in vec3 aC; layout(location=3) in vec2 aT; uniform mat4 uModel,uVP; out vec3 vN; out vec3 vW; out vec3 vC; out vec2 vT;\n' +
-    'void main(){ vec4 w=uModel*vec4(aP,1.0); vW=w.xyz; vN=mat3(uModel)*aN; vC=aC; vT=aT; gl_Position=uVP*w; }\n',
-    '#version 300 es\nprecision highp float;\n' + SEA_GLSL + SHADOW_GLSL + CUT_GLSL + 'in vec3 vN; in vec3 vW; in vec3 vC; in vec2 vT; uniform vec3 uSun,uEye,uFog,uSky,uGround; uniform float uFogD; uniform mat4 uCutInv; uniform sampler2D uSailT; out vec4 o;\n' +
+    '#version 300 es\nlayout(location=0) in vec3 aP; layout(location=1) in vec3 aN; layout(location=2) in vec3 aC; layout(location=3) in vec2 aT; layout(location=4) in vec4 aF; uniform mat4 uModel,uVP; out vec3 vN; out vec3 vW; out vec3 vC; out vec2 vT; out vec4 vF;\n' +
+    'void main(){ vec4 w=uModel*vec4(aP,1.0); vW=w.xyz; vN=mat3(uModel)*aN; vC=aC; vT=aT; vF=aF; gl_Position=uVP*w; }\n',
+    '#version 300 es\nprecision highp float;\n' + SEA_GLSL + SHADOW_GLSL + CUT_GLSL + BURN_GLSL + 'in vec3 vN; in vec3 vW; in vec3 vC; in vec2 vT; in vec4 vF; uniform vec3 uSun,uEye,uFog,uSky,uGround; uniform float uFogD; uniform mat4 uCutInv; uniform sampler2D uSailT; out vec4 o;\n' +
     'void main(){ if(vW.y<uClip) discard; vec3 bc=vC; if(vT.x>=0.0){ vec4 t=texture(uSailT,vT); if(t.a<0.5) discard; bc=t.rgb; }\n' +
+    ' vec3 em=vec3(0.0); if(vF.x<5e5){ float b=bnB(vF,uSeaT); if(b>1.0) discard;\n' +
+    '  if(b>-0.3){ bc=mix(bc,vec3(0.32,0.2,0.1),smoothstep(-0.3,0.05,b)*0.6); bc=mix(bc,vec3(0.045,0.035,0.03),smoothstep(0.05,0.8,b));\n' +
+    '   if(uSeaT<vF.y && b>0.55) em=vec3(1.0,0.36,0.06)*smoothstep(0.7,0.97,b)*(1.1+0.7*bnN(vF.zw*7.0+vec2(0.0,uSeaT*2.3))); } }\n' +
     ' if(uCut.w>0.5 && cutOut((uCutInv*vec4(vW,1.0)).xyz)) discard; vec3 n=normalize(vN); if(!gl_FrontFacing) n=-n; float s=dot(n,uSun), sk=shadowK(vW,(s<0.0?-n:n)*(3.0-2.0*abs(s)));\n' +
     ' float lit=max(s,0.0)*0.45*sk+(s*0.5+0.5)*0.32*(0.55+0.45*sk); float thru=max(-s,0.0)*0.30*sk;\n' +
-    ' vec3 col=bc*(mix(uGround,uSky,n.y*0.5+0.5)*0.62+vec3(1.0,0.96,0.88)*lit)+bc*vec3(1.0,0.88,0.66)*thru;\n' +
+    ' vec3 col=bc*(mix(uGround,uSky,n.y*0.5+0.5)*0.62+vec3(1.0,0.96,0.88)*lit)+bc*vec3(1.0,0.88,0.66)*thru; col+=em;\n' +
     ' float fd=length(vW-uEye); o=vec4(mix(col,uFog,1.0-exp(-fd*uFogD)),1.0); }\n');
   P.pt = VK.compile(gl,
     '#version 300 es\nlayout(location=0) in vec3 aP; layout(location=1) in float aS; layout(location=2) in vec4 aC; layout(location=3) in float aT; uniform mat4 uVP; uniform float uPx; out vec4 vC; out float vT; out float vR;\n' +
@@ -294,9 +305,9 @@ function programs() {
   var NOFS = '#version 300 es\nprecision highp float; void main(){}\n';
   P.dvox = VK.compile(gl, VK.VOXEL_VS, NOFS);
   P.dtri = VK.compile(gl, '#version 300 es\nlayout(location=0) in vec3 aP; uniform mat4 uModel,uVP; void main(){ gl_Position=uVP*(uModel*vec4(aP,1.0)); }\n', NOFS);
-  // 帆的陰影（TASK-0579）：貼圖的洞不投影子（同 P.sail 的 discard）
-  P.dsail = VK.compile(gl, '#version 300 es\nlayout(location=0) in vec3 aP; layout(location=3) in vec2 aT; uniform mat4 uModel,uVP; out vec2 vT; void main(){ vT=aT; gl_Position=uVP*(uModel*vec4(aP,1.0)); }\n',
-    '#version 300 es\nprecision highp float; in vec2 vT; uniform sampler2D uSailT; void main(){ if(vT.x>=0.0 && texture(uSailT,vT).a<0.5) discard; }\n');
+  // 帆的陰影（TASK-0579）：貼圖的洞不投影子（同 P.sail 的 discard）；燒穿的洞也是（TASK-0717，BURN_GLSL）
+  P.dsail = VK.compile(gl, '#version 300 es\nlayout(location=0) in vec3 aP; layout(location=3) in vec2 aT; layout(location=4) in vec4 aF; uniform mat4 uModel,uVP; out vec2 vT; out vec4 vF; void main(){ vT=aT; vF=aF; gl_Position=uVP*(uModel*vec4(aP,1.0)); }\n',
+    '#version 300 es\nprecision highp float; in vec2 vT; in vec4 vF; uniform sampler2D uSailT; uniform float uSeaT;\n' + BURN_GLSL + 'void main(){ if(vT.x>=0.0 && texture(uSailT,vT).a<0.5) discard; if(vF.x<5e5 && bnB(vF,uSeaT)>1.0) discard; }\n');
   P.sky = VK.compile(gl,
     '#version 300 es\nlayout(location=0) in vec2 aP; uniform mat4 uInv; out vec3 vD; void main(){ vec4 a=uInv*vec4(aP,1.0,1.0); vD=a.xyz/a.w; gl_Position=vec4(aP,0.9999,1.0); }\n',
     '#version 300 es\nprecision highp float; in vec3 vD; uniform vec3 uEye,uSun,uFog,uSky; out vec4 o;\n' +

@@ -1,6 +1,6 @@
 // ───────────────────────── 材質（TASK-0616；Tim 2026-10-15）─────────────────────────
 // 材質表在設定檔（config/game.json materials；後台可以加、可以改）：{ default: ID, list: { ID: { name, kind, density, hard, flammable } } }，ID 英文小寫、跨船共用。
-//   density ＝ 比重（一格 0.1 m ＝ 1 公升 ⇒ 每格幾 kg；橡木 0.7 ＝ 以前統一的 0.7 kg）；hard ＝ 硬度倍率（乘在船隻設定的船殼硬度上；橡木 1）；flammable ＝ 易燃性 0–1（燃燒還沒做，先記著）。
+//   density ＝ 比重（一格 0.1 m ＝ 1 公升 ⇒ 每格幾 kg；橡木 0.7 ＝ 以前統一的 0.7 kg）；hard ＝ 硬度倍率（乘在船隻設定的船殼硬度上；橡木 1）；flammable ＝ 易燃性 0–1（著火：點不點得著、燒多久燒穿，49_burn.js；TASK-0717）。
 // 每一格的材質：
 //   · 全船預設 ＝ 設定檔那艘船的 material（沒寫 ⇒ materials.default）；
 //   · 雕刻作品的關聯 meta material 蓋過它（巢狀照最近的那一層）⇒ .vxk 檔頭 materials（senate 匯出；照線性索引 x＋sx·(y＋sy·z) 的連續段落，見造船規格 §9.5）。

@@ -172,7 +172,25 @@ SHIP_CFG_KEYS = ('hard', 'flood', 'gunw', 'speed', 'agile', 'upwind', 'base', 'p
 MAT_ID = r'[a-z][a-z0-9_]{0,31}'                                                      # 材質 ID（TASK-0616）：雕刻作品關聯的 meta material 照它認
 MAT_KINDS = ('wood', 'metal', 'other')                                               # 材質的分類（後台分組、之後燃燒照它）
 MAT_NUMS = (('density', 0.05, 25, '比重（一格 0.1 m ＝ 1 公升 ⇒ 每格幾 kg；橡木 0.7）'), ('hard', 0.05, 50, '硬度倍率（乘在船隻設定的船殼硬度上；橡木 1）'),
-            ('flammable', 0, 1, '易燃性（0 ＝ 不會燒、1 ＝ 一點就著；燃燒還沒做，先記著）'))
+            ('flammable', 0, 1, '易燃性（0 ＝ 不會燒、1 ＝ 一點就著；著火照它點、照它燒多久，js/49_burn.js）'))
+# 著火（TASK-0717；js/49_burn.js 讀 CFG.burn，⛔ js 裡沒有第二份）：(鍵, 下限, 上限, 說明)；多的鍵、少的鍵都擋
+BURN_NUMS = (('tick', 0.05, 2, '一拍幾秒（每格延燒、燒穿、救火照這個節奏）'),
+             ('ign', 1, 30, '希臘火潑開的點火半徑（格）'), ('ignP', 0, 1, '點火機率（× 材質的 flammable）'), ('ignMax', 1, 2000, '一發最多點著幾格'),
+             ('h0', 0.05, 1, '延燒過去的格一開始的熱度（0–1；希臘火點的 ＝ 1）'), ('grow', 0, 5, '熱度每秒長多少（× flammable）'),
+             ('spread', 0, 50, '滿熱度時每秒往鄰格試幾次'), ('up', 0, 20, '往上延燒的權重（橫向 ＝ 1）'), ('down', 0, 20, '往下延燒的權重'),
+             ('jump', 0, 5, '火苗竄上一層的機率／秒（滿熱度）'), ('jumpZ', 2, 60, '火苗往上竄幾格內'),
+             ('life', 1, 600, '橡木滿熱度燒穿要幾秒（× (1.5 − flammable)）'), ('reK', 0, 1, '焦過的格再著火的機率倍率'),
+             ('max', 1, 100000, '每艘同時最多燒著幾格'), ('outMax', 1, 5000, '每拍最多燒穿幾格'), ('tintMax', 1, 20000, '每拍最多換色幾格（重建網格的量）'),
+             ('crewPer', 1, 2000, '每幾格派一個人救火'), ('crewSpot', 0, 40, '每個火場最多幾個人'), ('crewShip', 0, 200, '每艘最多幾個人救火'),
+             ('reach', 1, 100, '站的地方跟火的高度差（格）'), ('douse', 0, 500, '一個人每秒潑掉多少（熱度 × 格）'),
+             ('hurt', 0, 200, '火場旁的人每秒燒傷（滿熱度，HP）'), ('hurtR', 0, 100, '燒傷的半徑（格，再加 √格數）'),
+             ('keg', 0, 2000, '火場旁的火藥桶每秒扣多少（滿熱度）'), ('kegR', 0, 100, '烤火藥桶的半徑（格，再加 √格數）'),
+             ('rain', 0, 10, '露天的格淋雨每秒降多少熱度（暴風雨）'), ('flameK', 0, 50, '火焰高度（格）＝ flameK × √格數（燒到帆）'), ('sailCatch', 0, 10, '火焰碰到帆的著火率／秒'),
+             ('sailR', 0, 100, '希臘火潑開時點著帆的半徑（格）'), ('sailV', 0.01, 10, '帆上的火每秒燒多遠（m，橫向）'), ('sailUp', 0, 20, '往上燒快幾倍（垂直時 1＋sailUp）'),
+             ('sailBurn', 0.5, 120, '火燒到之後幾秒燒穿成洞'), ('sailHp', 0, 5, '洞的面積比例 × 這個 ⇒ 扣幾成血量'), ('sailDrop', 0.05, 1, '燒掉幾成帆就掉'),
+             ('sailJump', 0, 1, '燒口跳到旁邊那面帆的機率'), ('sailJumpR', 0, 100, '跳到旁邊的帆的距離（格）'),
+             ('sailCrew', 0, 20, '每面著火的帆派幾個人'), ('cutT', 0, 120, '站到帆底下幾秒才潑熄／割下來'), ('sailReach', 0, 300, '帆腳離露天甲板幾格內潑得到（再高 ⇒ 割下來）'),
+             ('rainSail', 0, 5, '下雨熄掉帆火的機率／秒（暴風雨）'))
 MAT_OPT = (('metal', 0, 1, '金屬度（選填；0 ＝ 不反光、1 ＝ 金屬：太陽高光＋天空反射；TASK-0627）'), ('rough', 0, 1, '粗糙度（選填；0 ＝ 鏡面、1 ＝ 很霧；沒寫 ＝ 0.5）'),
            ('pen', 1, 5000, '擊穿門檻（選填；每格板厚要幾 kJ，船殼硬度倍率 1 時；寫了 ⇒ 實心彈照能量與入射角判穿／凹／彈，TASK-0621）'))
 MAT_BOOL = (('smooth', '平滑（選填 true／false；true ⇒ 這種材質的格沒寫 render 也畫成平滑面＋金屬反光，螺旋槳整份平滑；關聯明寫 render=voxel 照方塊。Tim 2026-10-17：鐵甲、鍋爐開，包銅皮不開）'),)
@@ -268,6 +286,22 @@ def validate(cfg, prev=None):
     ak = A.get('k')
     if not (isinstance(ak, list) and len(ak) == 3 and all(isinstance(r, list) and len(r) == 3 and all(isint(x) and al[0] <= x <= al[1] for x in r) for r in ak)):
         err('ammo.k', '要是 3×3 的整數（列 ＝ 實心／爆裂／鏈彈，欄 ＝ 對砲／對帆／對人），每格在 ammo.lim 裡')
+    FI = cfg.get('fire')                                                                # 希臘火（TASK-0693；js/28_fire.js）
+    if not (isinstance(FI, dict) and isinstance(FI.get('k'), list) and len(FI['k']) == 3 and all(isint(x) and 0 <= x <= 1000 for x in FI['k'])):
+        err('fire.k', '要是三個整數（對砲／對帆／對人，%；0～1000）')
+    elif not (isnum(FI.get('r')) and 1 <= FI['r'] <= 60):
+        err('fire.r', '潑開的半徑（格，1～60）')
+    BU = cfg.get('burn')                                                                # 著火（TASK-0717；js/49_burn.js）
+    if not isinstance(BU, dict):
+        err('burn', '要是物件（著火的參數，見 admin.py BURN_NUMS）')
+    else:
+        for f, lo, hi, what in BURN_NUMS:
+            v = BU.get(f)
+            if not (isnum(v) and lo <= v <= hi):
+                err('burn.' + f, '%s（%s～%s）' % (what, lo, hi))
+        for f in BU:
+            if f not in [x[0] for x in BURN_NUMS]:
+                err('burn.' + f, '不認得的鍵（admin.py BURN_NUMS 沒有）')
     G = cfg.get('guns')
     if not isinstance(G, dict) or not G:
         err('guns', '要是非空物件')
@@ -624,7 +658,7 @@ def validate(cfg, prev=None):
                     elif not (isinstance(q.get('rgb'), list) and len(q['rgb']) == 3 and all(isnum(v) and 0 <= v <= 2 for v in q['rgb'])):
                         err(qp + '.rgb', '光色 [r, g, b]，0～2')
     if prev:
-        for sec in ('limits', 'menu', 'lim', 'guns', 'geo0', 'crew0'):
+        for sec in ('limits', 'menu', 'lim', 'guns', 'geo0', 'crew0', 'fire', 'burn'):
             for k in (prev.get(sec) or {}):
                 if k not in (cfg.get(sec) or {}):
                     err(sec + '.' + k, '原本有、這份少了（遊戲會讀它）')

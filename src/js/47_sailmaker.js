@@ -144,7 +144,7 @@ function smTick(sh) {
 /** 損壞表裡帆匠的那幾列（48_damage.js dmgRows：帆與繩變了才叫）：還掛著、不是旗、有東西要補的帆，接著是要接的繩梯。 */
 function smScan(sh) {
   var out = [];
-  sh.sails.forEach(function (s) { if (s.dead || s.flag) return; var N = smNeed(sh, s); if (smHas(N)) out.push({ key: 'S' + s.k, kind: 'sail', role: 'sailmaker', t: s, need: N, pri: smRank(s) }); });
+  sh.sails.forEach(function (s) { if (s.dead || s.flag || (s.burn && s.burn.lit)) return; var N = smNeed(sh, s); if (smHas(N)) out.push({ key: 'S' + s.k, kind: 'sail', role: 'sailmaker', t: s, need: N, pri: smRank(s) }); });   // 著火中的帆不補（49_burn.js；先救火）
   (sh.smLads || []).forEach(function (l) { var N = smNeed(sh, l); if (smHas(N)) out.push({ key: 'R' + l.k, kind: 'rlad', role: 'sailmaker', t: l, need: N, pri: smRank(l) }); });
   return out;
 }
@@ -208,8 +208,14 @@ function smLadFix(sh, L, Nd, W) {
 /** 修：帆布夠 ⇒ 血量回滿、繩接回去、布照作品的形狀重來；不夠 ⇒ 帶的全部補成血量（more）。回用了幾份帆布。 */
 function smFix(sh, s, Nd, W) {
   var K = sh.sm, cost = Nd.hp + SM_ROPE_C * Nd.ropes.length;
-  if (W.n < cost) { var h = Math.min(Nd.hp, Math.floor(W.n)); s.hp = Math.min(s.hpMax, s.hp + h); K.hp += h; W.more = true; return h; }
+  if (s.burn) {                                                        // 燒過的帆（49_burn.js）：換整面 —— ⛔ 只補血量 ⇒ 推力回來、洞還在；帶不夠 ⇒ 回去拿，帶滿了（帆布櫃一次給的上限）還不夠也照換（用掉身上全部）
+    var cap = 0; (sh.lofts || []).forEach(function (m) { cap = Math.max(cap, +FURN[m.item].carry || 0); });
+    if (W.n < Math.min(cost, cap || cost)) { W.more = true; return 0; }
+    cost = Math.min(cost, W.n);
+  }
+  else if (W.n < cost) { var h = Math.min(Nd.hp, Math.floor(W.n)); s.hp = Math.min(s.hpMax, s.hp + h); K.hp += h; W.more = true; return h; }
   s.hp = s.hpMax; K.hp += Nd.hp;
+  if (s.burn) { if (sh.burn) burnSailOff(sh, s); s.burn = null; sh.rigDirty = true; }   // 換新帆布：燒的洞、焦痕一起沒了（還在燒的那一刻剛好補好 ⇒ 也熄了）
   for (var again = true; again;) {                                       // 掛在同一面帆另一條斷繩上的：那條接回來才接得上 ⇒ 一圈一圈接到不再變
     again = false;
     (s.lines || []).forEach(function (j) { var r = sh.ropes[j]; if ((r.dead || (sh.tCut && sh.tCut[j])) && smRopeOk(sh, j, s.lines, null)) { smRopeBack(sh, j); again = true; } });
