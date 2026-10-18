@@ -276,9 +276,10 @@ function sliders() {
   function C() { return shipCfg(CFG_ID); }             // 正在編輯的那一型（船隻配置頁）
   // 船員（船隻配置頁；TASK-0570）：每一項一條滑桿；砲班照砲種各一條（這一型沒有的砲種藏起來）。改了寫進 SHIP_CREW（05_hull.js），存檔跟著存（69_prefs.js）
   var CR = {}, crBox = $('crewItems');
-  CREW_ITEMS.concat([{ k: 'gh' }], Object.keys(GUNS).map(function (t) { return { k: 'g-' + t, gun: t, name: GUNS[t].name, lim: [GUNS[t].min, GUN_CREW_MAX] }; })).forEach(function (it) {
+  CREW_ITEMS.concat([{ k: 'oar' }, { k: 'gh' }], Object.keys(GUNS).map(function (t) { return { k: 'g-' + t, gun: t, name: GUNS[t].name, lim: [GUNS[t].min, GUN_CREW_MAX] }; })).forEach(function (it) {
     var row = document.createElement('div');
     if (it.k === 'gh') { row.className = 'row note'; row.textContent = '砲班（每門砲幾個人）'; crBox.appendChild(row); return; }
+    if (it.k === 'oar') { row.className = 'row slide'; row.id = 'cr-oarR'; row.innerHTML = '<label>槳手</label><span></span><span id="cr-oarV"></span>'; crBox.appendChild(row); return; }   // 只顯示：人數照船上每支槳的 meta rowers（TASK-0691），這一頁不調
     row.className = 'row slide';
     row.innerHTML = '<label for="cr-' + it.k + '">' + it.name + '</label><input type="range" id="cr-' + it.k + '" step="1" min="' + it.lim[0] + '" max="' + it.lim[1] + '"><span id="cr-' + it.k + 'V"></span>';
     crBox.appendChild(row);
@@ -289,12 +290,15 @@ function sliders() {
   /** 這一型的砲（照砲種）、幾根桅、有沒有舵輪：船型載好才知道（沒載 ⇒ null）。 */
   function hullCounts(id) {
     var T = HULLT[id]; if (!T) return null;
-    var g = {}, n = 0, wheel = false;
-    (T.rig.models || []).forEach(function (m) { var k = modelKind(m); if (GUNS[k]) { g[k] = (g[k] || 0) + 1; n++; } if (k === 'wheel') wheel = true; });
-    return { guns: g, n: n, masts: T.masts.length, wheel: wheel };
+    var g = {}, n = 0, wheel = false, oars = 0, rowers = 0, rk = [];
+    (T.rig.models || []).forEach(function (m) {
+      var k = modelKind(m); if (GUNS[k]) { g[k] = (g[k] || 0) + 1; n++; } if (k === 'wheel') wheel = true;
+      if ((m.meta || {}).kind === 'oar' && (m.points || {}).pivot) { var r = oarRowers(m); oars++; rowers += r; if (rk.indexOf(r) < 0) rk.push(r); }   // 槳：跟開戰時 oarCrew 同一條（有槳座才算）
+    });
+    return { guns: g, n: n, masts: T.masts.length, wheel: wheel, oars: oars, rowers: rowers, rk: rk.sort(function (a, b) { return a - b; }) };
   }
   /** 全船人數（跟船員那一節的合計同一條算法）。 */
-  function crewTotal(cw, hc) { var g = 0; Object.keys(GUNS).forEach(function (t) { g += gunCrew(cw, t) * (hc.guns[t] || 0); }); return g + Math.ceil(hc.n / 2) * cw.monkeys + cw.officers + (hc.wheel ? cw.helm : 0) + cw.marines + cw.top * hc.masts + cw.hands; }
+  function crewTotal(cw, hc) { var g = 0; Object.keys(GUNS).forEach(function (t) { g += gunCrew(cw, t) * (hc.guns[t] || 0); }); return g + Math.ceil(hc.n / 2) * cw.monkeys + cw.officers + (hc.wheel ? cw.helm : 0) + cw.marines + cw.top * hc.masts + cw.hands + hc.rowers; }
   /** 船隻配置頁最上面（Tim 2026-10-14）：大圓鈕（61_hud.js badgeDraw）＋排水量、航速（順風／側順風／逆風，照這一型的航速與逆風性能、玩法的加成；標準風、滿帆）、砲、船員、靈活與硬度。 */
   function shipCardShow() {
     var T = HULLT[CFG_ID], h = hullInfo(CFG_ID), el = $('shipCardT'); badgeDraw($('shipCardC'), T);   // 不寫艦名：右邊那一欄第一行就是（Tim 2026-10-17）
@@ -509,6 +513,8 @@ function sliders() {
     v('sailmaker', n ? '上限 ' + n + ' 人：帆布櫃每件配 ' + furnStaff(loftIt() || '', 'sailmaker') + ' 位' + (smn === null ? '' : '（這型 ' + smn + ' 位' + (smn > n ? ' ⇒ 上限截到 ' + n : '') + '）') + '；開戰時生在帆布櫃旁；還掛著的破帆走到帆底下修 —— 血量、斷在帆那一端的繩、破洞一次修好；整面掉了不補；帆布用完回櫃拿' : '0（沒有）', n, d.sailmaker);
     n = cw.surgeon; var sg = hullStaff(CFG_ID, 'surgeon');   // 設施配員（36_rooms.js staffSlots）：病床每張配幾位 ⇒ 這型擺了幾張；上限截掉的照實寫
     v('surgeon', n ? '上限 ' + n + ' 人：病床每張配 ' + furnStaff('bed', 'surgeon') + ' 位' + (sg === null ? '' : '（這型 ' + sg + ' 位' + (sg > n ? ' ⇒ 上限截到 ' + n : '') + '；走不到的床不配）') + '；開戰就站在床旁；醫療艙要的人手先算船醫、不夠才派預備水手；有船醫的那一間治療快 50%；沒設醫療艙的船不上船' : '0（沒有：醫療艙照舊只靠預備水手）', n, d.surgeon);
+    $('cr-oarR').style.display = hc && !hc.oars ? 'none' : '';   // 沒有槳的船藏起來
+    $('cr-oarV').textContent = !hc ? '船型載入後才知道' : hc.rowers + ' 人：' + hc.oars + ' 支槳 × 每支 ' + hc.rk.join('–') + ' 人（照船上每支槳的設定，這一頁不調）；坐在槳座內側划；倒下時預備水手照位子補；一支槳到崗幾成就出幾成力';
     n = cw.shelter ? 1 : 0; v('shelter', n ? '開：預備水手不上露天甲板閒晃（只上去補位）、船長以外的軍官待在甲板下' : '關：預備水手偶爾上露天甲板走動、軍官站在露天甲板', n, d.shelter ? 1 : 0);
     var gsum = 0;
     Object.keys(GUNS).forEach(function (t) {
@@ -516,11 +522,11 @@ function sliders() {
       v('g-' + t, x + ' 人' + (hc ? ' × ' + c + ' 門 ＝ ' + x * c : '') + '（' + (x < std ? '標準 ' + std + '：人少裝填慢' : x > std ? '標準 ' + std + '：多的 ' + (x - std) + ' 人是替補' : '標準') + '；最少 ' + GUNS[t].min + ' 人才開得動）', x, gunCrew(d, t));
     });
     if (hc) {
-      var pm = Math.ceil(hc.n / 2) * cw.monkeys, hl = hc.wheel ? cw.helm : 0, tp = cw.top * hc.masts, tot = gsum + pm + cw.officers + hl + cw.marines + tp + cw.hands;
+      var pm = Math.ceil(hc.n / 2) * cw.monkeys, hl = hc.wheel ? cw.helm : 0, tp = cw.top * hc.masts, tot = gsum + pm + cw.officers + hl + cw.marines + tp + cw.hands + hc.rowers;
       var seen = CREW_SEEN[CFG_ID], ss = !seen ? '這一型還沒上過船：站不站得下，開戰時才知道（站不下的那一項會在上方廣播）。'
         : seen.sig !== crewSig(cw) ? '改過之後還沒開過戰：站不站得下，下一場開戰時才知道（站不下的那一項會在上方廣播）。'
         : '上一場實際上船 ' + seen.n + ' 人' + (seen.short.length ? '；站位不夠、站不下的：' + seen.short.map(function (r) { return r[0] + ' ' + r[2] + '／' + r[1]; }).join('、') + '。' : '，全部站得下。');
-      $('crewSum').textContent = '全船約 ' + tot + ' 人：砲班 ' + gsum + '、送藥手約 ' + pm + '、軍官 ' + cw.officers + '、舵手 ' + hl + '、陸戰隊 ' + cw.marines + '、桅頂 ' + tp + '、預備水手 ' + cw.hands + '。' + ss;
+      $('crewSum').textContent = '全船約 ' + tot + ' 人：砲班 ' + gsum + '、送藥手約 ' + pm + '、軍官 ' + cw.officers + '、舵手 ' + hl + '、陸戰隊 ' + cw.marines + '、桅頂 ' + tp + (hc.rowers ? '、槳手 ' + hc.rowers : '') + '、預備水手 ' + cw.hands + '。' + ss;
     } else $('crewSum').textContent = '船型載入後算得出全船人數。';
     shipCardShow();
     $('shipSt').textContent = PREFS.write ? '改了就自動存在這個瀏覽器（重新整理、下次打開都還在）；換瀏覽器或裝置：用下面的匯出、匯入。'
