@@ -63,7 +63,7 @@
 // 記憶 mem：每一方一份（配對、集火的目標、戰列的順序、搶上風的進度），下一次想的時候接著用 ⇒ 不會每想一次就整個換一套；換策略、換旗號 ⇒ 除了搶上風都重來。
 var CMD_STRATS = ['free', 'pair', 'focus', 'line'];
 var CMD_NAMES = { free: '各自為戰', pair: '一對一配對', focus: '集火', line: '戰列' };
-var CMD_LINE_GAP = 90;                                                   // 戰列：前後兩艘的中心隔多遠（m；憲法號水線長 55 m ⇒ 頭尾隔 35 m）
+var CMD_LINE_GAP = 70;                                                   // 戰列：前後兩艘的中心隔多遠（m；憲法號水線長 55 m ⇒ 頭尾隔 15 m）；自動調參調出來的（TASK-0687，2026-10-18，撞在下限 70；調之前 90）
 // 搶上風（TASK-0679）：我方中心比敵方中心多上風 CMD_GAUGE_UP ⇒ 搶到；CMD_GAUGE_MAX 秒沒搶到、或敵我最近的兩艘近於 CMD_GAUGE_NEAR × 交戰距離 ⇒ 不搶了、接戰。
 //   往風軸哪一側搶：敵方中心在哪一側就往哪一側（離風軸 CMD_GAUGE_SIDE 以內不換邊 ⇒ 不會一直換舷搶風）。
 var CMD_GAUGE_UP = 150, CMD_GAUGE_MAX = 240, CMD_GAUGE_NEAR = 1.5, CMD_GAUGE_SIDE = 120;
@@ -72,6 +72,8 @@ var CMD_PACE = 0.9, CMD_PACE_FORM = 0.7, CMD_WAKE_LA = 40, CMD_WAKE_K = 0.04, CM
 
 function cmdDist(a, b) { return Math.hypot(a.x - b.x, a.z - b.z); }
 function cmdStrength(s) { return 0.5 * s.hp + 0.3 * s.guns + 0.2 * s.crew; }   // 還剩多少戰力（0..1）
+/** 可調參數（TASK-0687）：這一方的覆寫（cmdView 帶進來的 view.tune，存在 mem.tn）有這一鍵 ⇒ 用它，沒有 ⇒ d（原本的常數）。2D 沙盒沒有覆寫 ⇒ 一律 d。 */
+function cmdTune(mem, k, d) { var t = mem.tn; return t && t[k] !== undefined ? t[k] : d; }
 function cmdCenter(L) { var x = 0, z = 0; L.forEach(function (s) { x += s.x; z += s.z; }); return L.length ? { x: x / L.length, z: z / L.length } : null; }
 
 /** 替 view.side 那一方想一次。strat：CMD_STRATS 其中一個；free ⇒ 不下命令（船照自己的：最近的敵艦）。
@@ -84,6 +86,7 @@ function cmdThink(view, strat, mem) {
   if (!CMD_NAMES[strat]) strat = 'free';
   var key = sig ? 'sig:' + strat + ':' + sig.lead + ':' + sig.focus : 'cfg:' + strat;
   if (mem.key !== key) { var g = mem.gauge; Object.keys(mem).forEach(function (k) { delete mem[k]; }); mem.key = key; if (g) mem.gauge = g; }   // 換策略、換旗號 ⇒ 配對、集火、戰列重來（搶上風的進度留著）
+  mem.tn = view.tune || null;                                            // 這一方的可調參數覆寫（55_tune.js；平常 null）
   if (!own.length || !foes.length) return orders;
   if (strat === 'pair') cmdPair(own, foes, mem, orders);
   else if (strat === 'focus') cmdFocus(own, foes, mem, orders, sig ? sig.focus : null);
@@ -120,8 +123,8 @@ function cmdFocus(own, foes, mem, orders, want) {                         // wan
   var ids = foes.map(function (f) { return f.id; });
   if (want !== null && want !== undefined && ids.indexOf(want) >= 0 && mem.focus === undefined) mem.focus = want;
   if (mem.focus === undefined || ids.indexOf(mem.focus) < 0) {
-    var c = cmdCenter(own), best = null, bs = 1e18;
-    foes.forEach(function (f) { var sc = 0.6 * cmdStrength(f) + 0.4 * cmdDist(c, f) / 1000; if (sc < bs - 1e-9) { bs = sc; best = f; } });
+    var c = cmdCenter(own), best = null, bs = 1e18, fw = cmdTune(mem, 'focusW', 0);   // fw：剩的戰力的權重，其餘給距離；0 ＝ 挑離我方中心最近的（自動調參，TASK-0687 2026-10-18；調之前 0.6）
+    foes.forEach(function (f) { var sc = fw * cmdStrength(f) + (1 - fw) * cmdDist(c, f) / 1000; if (sc < bs - 1e-9) { bs = sc; best = f; } });
     mem.focus = best.id;
   }
   own.forEach(function (s) { orders[s.id] = { target: mem.focus, mode: 'engage' }; });
@@ -159,7 +162,7 @@ function cmdLine(own, foes, mem, orders, view, leadId) {
   // 新排進來的（開局整條、候補進場）：一艘一艘接 —— 離隊尾那艘「船尾後面一個間距」最近的先接（TASK-0679；⛔ 照編號 ⇒ 開局橫隊時第 2 艘跟在排頭左邊、第 3 艘跟第 2 艘卻在排頭右邊，整條交叉）
   var rest = own.filter(function (s) { return s.id !== lead.id && L.indexOf(s.id) < 0; });
   while (rest.length) {
-    var tail = L.length ? own.filter(function (o) { return o.id === L[L.length - 1]; })[0] : lead, bx = tail.x - Math.cos(tail.yaw) * CMD_LINE_GAP, bz = tail.z + Math.sin(tail.yaw) * CMD_LINE_GAP;
+    var tail = L.length ? own.filter(function (o) { return o.id === L[L.length - 1]; })[0] : lead, LG = cmdTune(mem, 'lineGap', CMD_LINE_GAP), bx = tail.x - Math.cos(tail.yaw) * LG, bz = tail.z + Math.sin(tail.yaw) * LG;
     rest.sort(function (a, b) { return Math.hypot(a.x - bx, a.z - bz) - Math.hypot(b.x - bx, b.z - bz) || a.id - b.id; });
     L.push(rest.shift().id);
   }

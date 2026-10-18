@@ -154,6 +154,8 @@ function fleetSpec() {
 //     （一樣多 ⇒ 在場少的；再一樣 ⇒ 跟上一次補的不同邊）。⇒ 大致誰沉誰補，懸殊時人少的那一方也保得住一點名額、人多的保有優勢。
 //   · own 誰沉誰補：每一方守住自己的名額，沉一艘從自己的候補補一艘；自己沒候補了 ⇒ 那個名額空著。
 //   · alt 輪流：空出名額就兩方輪流補（輪到的那一方沒候補 ⇒ 給另一方）。
+//   ⛔ 三種都先看：場上一艘都沒有、還有候補的那一方先補（Tim 2026-10-18：上限 2 艘、敵艦沉了，比例制把名額給了候補多的我方 ⇒ 敵方場上 0 艘、候補還有 1 艘
+//      ⇒ 名額要等場上的船沉了才空、可是敵方沒船打不沉我方 ⇒ 不算輸也進不來，卡死）。FIELD_N ≥ 2 ⇒ 兩方都至少保得住一艘。
 // 進場的位置：那一方場上的船的中心往「離敵方中心」的方向再退 120 m（至少離敵方中心 260 m；那一方場上沒船 ⇒ 開局那一側），
 //   左右錯開到離每一艘還浮著的船 70 m 以上；船頭對著敵方中心。廣播「援軍進場」。
 // 船數 ≤ FIELD_N ⇒ 沒有候補，一切照舊（一對一一位元都不差）。
@@ -194,7 +196,9 @@ function reinforce() {
   var free = FIELD_N - act.blue - act.red;
   while (free > 0) {
     var res = { blue: RESERVE.blue.length, red: RESERVE.red.length }, s = null;
-    if (REINF_MODE === 'own') { while (REINF.outQ.length && !s) { var t = REINF.outQ.shift(); if (res[t]) s = t; } }
+    var empty = ['blue', 'red'].filter(function (t) { return !act[t] && res[t]; });   // 場上沒船、還有候補 ⇒ 先補（不然那一方永遠進不來）
+    if (empty.length) { s = empty.length > 1 && REINF.last === empty[0] ? empty[1] : empty[0]; var qi = REINF.outQ.indexOf(s); if (qi >= 0) REINF.outQ.splice(qi, 1); }   // 誰沉誰補：這一筆算用掉了
+    else if (REINF_MODE === 'own') { while (REINF.outQ.length && !s) { var t = REINF.outQ.shift(); if (res[t]) s = t; } }
     else if (REINF_MODE === 'alt') { var nx = REINF.last ? other(REINF.last) : (REINF.outQ[0] || 'blue'); s = res[nx] ? nx : res[other(nx)] ? other(nx) : null; }
     else s = propSide(act, res, REINF.last);
     if (!s) break;
