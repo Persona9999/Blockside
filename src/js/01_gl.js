@@ -6,12 +6,22 @@ function glFail(msg) { $('load').textContent = msg; errShow(msg); }
 // 「回報錯誤」⇒ 多一格讓玩家寫發生什麼事；「寄出」⇒ mailto: 打開玩家的郵件程式（⛔ 成品不准 fetch：admin.py vxk_inline 檢查）：
 //   主旨帶訊息開頭，內文 ＝ 錯誤訊息（最多 ERR_MAX 字，信太長有的郵件程式打不開）＋ 玩家寫的 ＋ 遊戲狀態（errState）＋ 網址、時間、瀏覽器、成品的來源指紋。寄不寄由玩家決定。
 //   「複製內容」⇒ 同一份文字放進剪貼簿（郵件程式打不開、或想貼到 Discord 的時候用）。
-var ERR_MAIL = 'tim11251994@gmail.com', ERR_MAX = 1500, ERR_SEEN = {}, ERR_NOW = '';
+// 寄不出去（Tim 2026-10-18「我發現沒跳出郵件程式…排查一下為何沒有辦法發信」）：
+//   ① 網址太長：中文 encodeURIComponent 一個字 9 個字元，那一封回報的 mailto 網址 2575 字 ⇒ Windows 上交給郵件程式的網址超過約 2083 字就開不起來，也不報錯。
+//   ② 那台電腦 mailto 的預設程式指到一個查不到註冊的 App（登錄檔 UrlAssociations\mailto 的 ProgId）⇒ 一樣什麼都不跳。
+//   ⇒「寄出」先把完整內容複製起來；網址超過 ERR_URL ⇒ 信裡只放短版（玩家寫的、錯誤第一行、版本）＋「完整內容在剪貼簿，貼上」；
+//     1.5 秒內視窗沒失焦（郵件程式沒搶到前景）⇒ 彈窗裡寫「沒跳出郵件程式」與收件地址。
+// 手動回報（主選單「問題回報…」，Tim 2026-10-18）：errShow(null) ⇒ 標題「問題回報」、沒有錯誤訊息、直接打開填寫欄；內文的錯誤訊息寫「手動回報」。
+var ERR_MAIL = 'tim11251994@gmail.com', ERR_MAX = 1500, ERR_URL = 1900, ERR_SEEN = {}, ERR_NOW = '';
 function errShow(msg) {
   var e = $('err'); if (!e) return;
-  msg = String(msg); ERR_SEEN[msg] = 1; ERR_NOW = msg;
-  $('errMsg').textContent = msg; $('errRep').hidden = true; $('errSend').hidden = true; $('errCopy').hidden = true; $('errRepB').hidden = false; $('errTxt').value = '';
+  var hand = msg === null;
+  msg = hand ? '' : String(msg); if (!hand) ERR_SEEN[msg] = 1; ERR_NOW = msg;
+  $('errH').textContent = hand ? '問題回報' : '出錯了'; $('errMsg').hidden = hand;
+  $('errMsg').textContent = msg; $('errRep').hidden = !hand; $('errSend').hidden = !hand; $('errCopy').hidden = !hand; $('errRepB').hidden = hand; $('errTxt').value = '';
+  $('errAddr').textContent = ERR_MAIL; $('errHint').hidden = true;
   e.style.display = 'flex';
+  if (hand) $('errTxt').focus();
 }
 function errFp() { try { return JSON.parse(document.getElementById('blockside-src').textContent).fp; } catch (x) { return '?'; } }   // 成品的來源指紋（admin.py src_stamp）
 /** 遊戲狀態（Tim 2026-10-18：「錯誤回報可以打包遊戲內其他參數資訊一起回傳」）：一行一項，每一行各自 try（載入一半出錯 ⇒ 讀不到的寫原因，其他照寫）；存檔那一行不列 v（版本號，每次都有）。 */
@@ -32,23 +42,49 @@ function errState() {
 }
 /** 回報的內文（寄信、複製同一份）。 */
 function errBody() {
-  var msg = ERR_NOW.length > ERR_MAX ? ERR_NOW.slice(0, ERR_MAX) + '…（後面截掉 ' + (ERR_NOW.length - ERR_MAX) + ' 字）' : ERR_NOW;
+  var msg = !ERR_NOW ? '（手動回報，沒有錯誤訊息）' : ERR_NOW.length > ERR_MAX ? ERR_NOW.slice(0, ERR_MAX) + '…（後面截掉 ' + (ERR_NOW.length - ERR_MAX) + ' 字）' : ERR_NOW;
   return '錯誤訊息：\n' + msg + '\n\n玩家回報：\n' + ($('errTxt').value.trim() || '（沒寫）') + '\n\n遊戲狀態：\n' + errState() +
     '\n\n網址：' + location.href + '\n時間：' + new Date().toISOString() + '\n瀏覽器：' + navigator.userAgent + '\n版本：' + errFp();
 }
+/** mailto 網址（主旨＋內文）；太長 ⇒ 內文換短版（玩家寫的、錯誤第一行、版本；完整的在剪貼簿）。回傳 [網址, 有沒有換短版]。 */
+function errMailUrl(body) {
+  var said = $('errTxt').value.trim();
+  var subj = ERR_NOW ? 'Blockside 錯誤回報：' + ERR_NOW.split('\n')[0].slice(0, 60) : 'Blockside 問題回報：' + (said.split('\n')[0].slice(0, 40) || '（手動）');
+  function url(b) { return 'mailto:' + ERR_MAIL + '?subject=' + encodeURIComponent(subj) + '&body=' + encodeURIComponent(b); }
+  var u = url(body); if (u.length <= ERR_URL) return [u, false];
+  var head = '（完整內容太長、郵件程式收不下 —— 已複製到剪貼簿，請在這裡按 Ctrl+V 貼上）\n\n玩家回報：\n' + (said || '（沒寫）') +
+    (ERR_NOW ? '\n\n錯誤：' + ERR_NOW.split('\n')[0].slice(0, 120) : '') + '\n版本：' + errFp();
+  u = url(head);
+  while (u.length > ERR_URL && head.length > 40) { head = head.slice(0, Math.floor(head.length * 0.8)) + '…'; u = url(head); }   // 玩家寫了很長一段 ⇒ 再縮（剪貼簿裡有全文）
+  return [u, true];
+}
+/** 放進剪貼簿 ⇒ done(成功沒)。 */
+function errClip(t, done) {
+  if (navigator.clipboard && navigator.clipboard.writeText) { navigator.clipboard.writeText(t).then(function () { done(true); }, function () { done(false); }); return; }
+  var a = $('errTxt'), v = a.value; a.value = t; a.select(); var r = false; try { r = document.execCommand('copy'); } catch (x) {} a.value = v; done(r);   // 舊瀏覽器：借輸入格選起來複製
+}
 function errMail() {
-  var body = errBody();
-  location.href = 'mailto:' + ERR_MAIL + '?subject=' + encodeURIComponent('Blockside 錯誤回報：' + ERR_NOW.split('\n')[0].slice(0, 60)) + '&body=' + encodeURIComponent(body);
+  var body = errBody(), U = errMailUrl(body), hint = $('errHint'), left = false;
+  function onBlur() { left = true; }
+  window.addEventListener('blur', onBlur);
+  errClip(body, function (ok) {
+    location.href = U[0];
+    setTimeout(function () {
+      window.removeEventListener('blur', onBlur);
+      hint.hidden = false;
+      hint.textContent = left ? '已交給郵件程式' + (U[1] ? '（信裡是短版，完整內容' + (ok ? '已複製，請貼進信裡' : '複製不了，請按「複製內容」') + '）' : '') + '；在郵件程式裡按傳送才會寄出。'
+        : '沒跳出郵件程式？（這台電腦可能沒設定預設的郵件程式）⇒ ' + (ok ? '完整內容已複製' : '請先按「複製內容」') + '，貼到信裡寄到 ' + ERR_MAIL + '，或貼到 Discord。';
+    }, 1500);
+  });
 }
 function errCopy() {
-  var t = errBody(), b = $('errCopy');
-  function ok(s) { b.textContent = s; setTimeout(function () { b.textContent = '複製內容'; }, 1500); }
-  if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(t).then(function () { ok('已複製'); }, function () { ok('複製不了'); });
-  else { var a = $('errTxt'), v = a.value; a.value = t; a.select(); var r = false; try { r = document.execCommand('copy'); } catch (x) {} a.value = v; ok(r ? '已複製' : '複製不了'); }   // 舊瀏覽器：借輸入格選起來複製
+  var b = $('errCopy');
+  errClip(errBody(), function (r) { b.textContent = r ? '已複製' : '複製不了'; setTimeout(function () { b.textContent = '複製內容'; }, 1500); });
 }
 $('errX').onclick = function () { $('err').style.display = 'none'; };
 $('errRepB').onclick = function () { $('errRep').hidden = false; $('errSend').hidden = false; $('errCopy').hidden = false; $('errRepB').hidden = true; $('errTxt').focus(); };
 $('errSend').onclick = errMail; $('errCopy').onclick = errCopy;
+$('repB').onclick = $('gsRep').onclick = function () { errShow(null); };   // 主選單「問題回報…」、遊戲內設定（⚙，暫停中）「問題回報」：手動回報（沒有錯誤訊息）
 function errAuto(m) { m = String(m || ''); if (!m || m === 'Script error.' || /ResizeObserver/.test(m) || ERR_SEEN[m] || $('err').style.display === 'flex') return; errShow(m); }   // 跨網域的「Script error.」、ResizeObserver 的警告不跳；開著的不換掉（glFail 之後的 throw 不蓋掉那一句好懂的）
 window.addEventListener('error', function (ev) { errAuto(ev.error && ev.error.stack ? ev.error.message + '\n' + ev.error.stack : ev.message); });
 window.addEventListener('unhandledrejection', function (ev) { var r = ev.reason; errAuto(r && r.stack ? (r.message || r) + '\n' + r.stack : r); });

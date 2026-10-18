@@ -427,7 +427,7 @@
 
   <div id="gsetBg"></div>
   <div id="gset" class="hud panel">
-    <div class="gsTop"><div class="gsT">設定<span class="note">遊戲暫停中（Esc、「繼續」或點面板外面回到戰鬥）</span></div><div class="gsR"><span class="chip big" id="gsGo">▶ 繼續</span><span class="chip big" id="restartB"><b>N</b> 重新開始</span><span class="chip big" id="menuB"><b>R</b> 回主選單</span><span class="chip big" id="boomB">💥</span><span class="chip big" id="helpB"><b>H</b> 說明</span></div></div>
+    <div class="gsTop"><div class="gsT">設定<span class="note">遊戲暫停中（Esc、「繼續」或點面板外面回到戰鬥）</span></div><div class="gsR"><span class="chip big" id="gsGo">▶ 繼續</span><span class="chip big" id="restartB"><b>N</b> 重新開始</span><span class="chip big" id="menuB"><b>R</b> 回主選單</span><span class="chip big" id="boomB">💥</span><span class="chip big" id="helpB"><b>H</b> 說明</span><span class="chip big" id="gsRep">🐞 問題回報</span></div></div>
     <div class="gsR"><span class="gsL">畫質</span><span class="chip" data-gg="low">低</span><span class="chip" data-gg="mid">中</span><span class="chip" data-gg="high">高</span><span class="note" id="gsGfx"></span></div>
     <div class="gsR"><span class="gsL">物理效果</span><span class="chip" data-gx="full">全開</span><span class="chip" data-gx="high">高</span><span class="chip" data-gx="mid">中</span><span class="chip" data-gx="low">低</span><span class="note" id="gsPhx"></span></div>
     <div class="gsR"><span class="gsL">瞄準</span><span class="chip" data-act="aim" id="aimk">🎯 換瞄準模式（<span class="kn" data-kl="aim">Q</span>）</span><span class="note">自由 → 水線 → 砲甲板 → 帆具 → 甲板人員 → 彈藥庫（現在的寫在羅盤上面）</span></div>
@@ -467,6 +467,7 @@
       </div>
       <div class="row"><button id="shipB">船隻配置…</button><button id="gunB">砲的設定…</button><button id="furnB">道具設定…</button><button id="keysB">鍵位設定…</button><button id="sndB">聲音設定…</button><button id="wqB">天氣設定…</button><button id="detB">細節設定…</button></div>
       <div class="row"><button id="allR">全部回到預設</button></div>
+      <div class="row"><button id="repB">🐞 問題回報…</button></div><!-- Tim 2026-10-18：「設定頁多一個問題回報按紐 按下後跳出回報視窗(只是沒有錯誤訊息 因為是手動觸發)」；01_gl.js errShow(null) -->
       <div class="row"><button id="discordB">💬 加入 Discord 社群</button></div><!-- Tim 2026-10-17：「加入一個 Discord按鈕入口」；連結在 71_input.js DISCORD_URL（⛔ 寫成 <a href="https…"> 會被 vxk_inline 的零外部依賴檢查擋下） -->
       <!-- 說明與細節設定的摘要放在最下面（Tim 2026-10-13：手機上開戰鈕被擠到畫面外、要捲才看得到；10-17 開戰鈕再往上搬到天氣下面） -->
       <div class="sub">Blockside（方舷）—— 雕刻作品做成的船，1:1（0.1 公尺一格）互轟：船殼一格一格被打碎、桅杆打得斷、破洞進水會沉。<br>
@@ -681,7 +682,8 @@
   <div id="err" role="alertdialog" aria-labelledby="errH"><div class="card panel">
     <h2 id="errH">出錯了</h2><pre id="errMsg"></pre>
     <div id="errRep" hidden><label for="errTxt">發生什麼事、剛剛在做什麼（選填）</label><textarea id="errTxt" rows="4"></textarea>
-      <div class="note">按「寄出」會打開你的郵件程式，信裡帶著上面的錯誤訊息、這段文字和遊戲狀態（玩法、編成、畫質、裝置…）；寄不寄由你決定。郵件程式打不開的話，可以按「複製內容」自己貼。</div></div>
+      <div class="note">按「寄出」會先把完整內容（上面的錯誤訊息、這段文字、遊戲狀態：玩法、編成、畫質、裝置…）複製起來，再打開你的郵件程式；寄不寄由你決定。郵件程式沒跳出來 ⇒ 把複製的內容貼到信裡寄到 <b id="errAddr"></b>，或貼到 Discord。</div>
+      <div class="note" id="errHint" hidden></div></div>
     <div class="btns"><button id="errRepB">回報錯誤</button><button id="errCopy" hidden>複製內容</button><button id="errSend" hidden>寄出</button><button id="errX">關閉</button></div>
   </div></div>
 </div>
