@@ -192,6 +192,23 @@
   #cover .row{ margin:7px 0; }
   #shipsel .fl{ display:inline-flex; flex-wrap:wrap; align-items:center; justify-content:center; gap:2px 4px; vertical-align:middle; }   /* 艦隊編成（TASK-0537）：一邊一列，每艘一個選單 */
   #shipsel .fs{ white-space:nowrap; } #cover #shipsel button.fx, #cover #shipsel button.fa{ padding:1px 7px; margin:0 0 0 2px; font-size:13px; } #fleetN{ color:var(--dim); font-size:12px; }
+  #cover #shipsel button.fsb{ margin:0; padding:3px 8px; font-size:13px; min-width:7em; text-align:left; background:#1a212b; }   /* 一艘一顆鈕（72_shippick.js：點了開選船彈窗） */
+  #cover #shipsel button.fsb::after{ content:' ▾'; color:var(--dim); }
+  /* 選船彈窗（72_shippick.js）：上面篩選（動力、噸位、火力、搜尋），下面卡片 */
+  #spk{ position:fixed; inset:0; z-index:45; display:none; align-items:center; justify-content:center; padding:16px; background:rgba(0,0,0,.55); }
+  #spk.on{ display:flex; }
+  #spk .card{ width:100%; max-width:860px; max-height:100%; display:flex; flex-direction:column; padding:14px 16px; background:#1c2129; box-shadow:0 8px 30px rgba(0,0,0,.6); box-sizing:border-box; }
+  #spk .spkH{ display:flex; align-items:center; gap:8px; } #spk h2{ flex:1; margin:0; font-size:19px; color:var(--gold); text-align:left; }
+  #spk button{ font:inherit; font-size:14px; margin:2px; padding:4px 11px; border-radius:6px; border:1px solid rgba(255,255,255,.25); background:rgba(255,255,255,.06); color:var(--ink); cursor:pointer; }
+  #spk button.on{ background:var(--gold); color:#111; border-color:var(--gold); }
+  #spk .spkR{ display:flex; flex-wrap:wrap; align-items:center; gap:2px; margin-top:6px; text-align:left; } #spk .spkR > span{ width:3.2em; color:var(--dim); font-size:13px; }
+  #spk input[type=search]{ flex:1; min-width:8em; font:inherit; font-size:14px; padding:4px 8px; border-radius:6px; border:1px solid rgba(255,255,255,.3); background:rgba(0,0,0,.3); color:var(--ink); }
+  #spk .spkN{ margin:6px 0 4px; color:var(--dim); font-size:12px; text-align:left; }
+  #spk .spkG{ overflow-y:auto; display:grid; grid-template-columns:repeat(auto-fill, minmax(190px, 1fr)); gap:8px; padding:2px; }
+  #spk button.spkC{ margin:0; padding:8px 10px; text-align:left; line-height:1.45; background:rgba(255,255,255,.05); }
+  #spk button.spkC b{ font-size:15px; } #spk button.spkC .i{ float:right; } #spk button.spkC .m{ display:block; color:var(--dim); font-size:12px; }
+  #spk button.spkC.on{ background:rgba(232,194,106,.18); color:var(--ink); border-color:var(--gold); }
+  #spk button.spkC:hover{ border-color:rgba(255,255,255,.6); }
   #cover button{ font:inherit; font-size:15px; margin:4px; padding:7px 16px; border-radius:6px; border:1px solid rgba(255,255,255,.25); background:rgba(255,255,255,.06); color:var(--ink); cursor:pointer; }
   #cover button.on{ background:var(--gold); color:#111; border-color:var(--gold); }
   #cover button.go{ font-size:18px; padding:9px 30px; background:#b8452e; border-color:#e06a4f; }
@@ -683,6 +700,10 @@
   </div>
   <div id="end"><div class="card panel"><h2 id="endT"></h2><div id="endS"></div>
     <button id="endC">繼續看</button><button id="endA">再一場</button><button id="endR">回選單</button></div></div>
+  <div id="spk" role="dialog" aria-modal="true" aria-labelledby="spkT"><div class="card panel">
+    <div class="spkH"><h2 id="spkT">選船</h2><button id="spkX" aria-label="關閉選船">✕</button></div>
+    <div id="spkF"></div><div class="spkN" id="spkN"></div><div class="spkG" id="spkG"></div>
+  </div></div>
   <div id="err" role="alertdialog" aria-labelledby="errH"><div class="card panel">
     <h2 id="errH">出錯了</h2><pre id="errMsg"></pre>
     <div id="errRep" hidden><label for="errTxt">發生什麼事、剛剛在做什麼（選填）</label><textarea id="errTxt" rows="4"></textarea>
@@ -716,6 +737,7 @@
 <!-- 設定檔（TASK-0542）：各項設定的初始值與船隻清單；js/00_config.js 讀成 CFG。設定後台：python -I admin.py serve -->
 <script type="application/x-asset" id="game-config" src="config/game.json"></script>
 <script type="application/x-asset" id="meta-kinds" src="config/meta_kinds.json"></script>
+<script type="application/x-asset" id="ship-cards" src="config/ship_cards.json" data-optional="1"></script><!-- 選船彈窗的卡片（admin.py shipcheck 產生；沒有 ⇒ 卡片只寫名字，js/72_shippick.js） -->
 <!-- 美術素材（選用）：沒交 ⇒ 遊戲用程式畫的替代品；規格見 README.md 與 TASK 的素材清單 -->
 <script type="application/x-asset" id="art-crew" src="art/crew.png" data-optional="1"></script>
 <script type="application/x-asset" id="art-fx" src="art/fx.png" data-optional="1"></script>
@@ -791,6 +813,7 @@
 <script src="js/71_ctrl.js" data-bundle="game"></script>
 <script src="js/71_input.js" data-bundle="game"></script>
 <script src="js/72_floodui.js" data-bundle="game"></script>
+<script src="js/72_shippick.js" data-bundle="game"></script>
 <script src="js/73_slowmo.js" data-bundle="game"></script>
 <script src="js/74_cutaway.js" data-bundle="game"></script>
 <script src="js/75_shipcheck.js" data-bundle="game"></script>

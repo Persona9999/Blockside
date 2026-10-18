@@ -1128,7 +1128,7 @@ def act_shipcheck(ids=None):
     if not os.path.exists(OUT):
         return ['⚠ 匯入檢查沒跑：還沒有成品（先 build）']
     os.makedirs(REPORTS, exist_ok=True)
-    log = []
+    log, cards = [], {}
     for sid in ids:
         prof = tempfile.mkdtemp(prefix='shipcheck_')
         try:
@@ -1185,7 +1185,31 @@ def act_shipcheck(ids=None):
         path = os.path.join(REPORTS, 'shipcheck_%s.md' % sid)
         open(path, 'w', encoding='utf-8').write('\n'.join(md))
         log.append('  %s %s（%s）：✗ %d　⚠ %d ⇒ %s' % ('✗' if ne else '⚠' if nw else '✓', I.get('name', sid), sid, ne, nw, path))
+        if R.get('card'):
+            cards[sid] = R['card']
+    if cards:
+        log.append('  ' + cards_write(cards))
     return ['匯入檢查：'] + log
+
+
+CARDS_P = os.path.join(HERE, 'config', 'ship_cards.json')   # 選船彈窗的卡片（js/72_shippick.js；建置時內嵌成 #ship-cards）：shipcheck 量出來的（js/75_shipcheck.js shipCard），⛔ 不手改
+
+
+def cards_write(new):
+    """shipcheck 量到的卡片併進 config/ship_cards.json（量到哪幾艘換哪幾艘；船隻清單沒有的拿掉）。內容沒變 ⇒ 不寫（免得每次 shipcheck 都多一筆 diff）。"""
+    old = json.load(open(CARDS_P, encoding='utf-8')) if os.path.exists(CARDS_P) else {}
+    ids = [s['id'] for s in load()['ships']]
+    C = {k: v for k, v in (old.get('ships') or {}).items() if k in ids}
+    C.update(new)
+    out = {'about': '選船彈窗的卡片（主選單；js/72_shippick.js）：每艘船開戰那一刻量的排水量、水線長、砲、齊射彈重、動力、帆、船員。admin.py shipcheck 產生（js/75_shipcheck.js shipCard），不要手改。',
+           'ships': {k: C[k] for k in ids if k in C}}
+    if out == old:
+        return '卡片沒變（config/ship_cards.json）'
+    with open(CARDS_P, 'w', encoding='utf-8', newline='\n') as f:
+        f.write('{\n  "about": %s,\n  "ships": {\n%s\n  }\n}\n' % (json.dumps(out['about'], ensure_ascii=False),
+                ',\n'.join('    %s: %s' % (json.dumps(k), json.dumps(v, ensure_ascii=False, separators=(', ', ': '))) for k, v in out['ships'].items())))
+    miss = [k for k in ids if k not in out['ships']]
+    return '卡片寫進 config/ship_cards.json（%d 艘%s；重建之後選船彈窗才看得到）' % (len(out['ships']), '；還沒量：' + '、'.join(miss) if miss else '')
 
 
 # 頂層短名（TASK-0671）：4 字以內的小寫頂層名字（step、last、hurt…）⇒ 區域變數忘了 var 就蓋到它、讀的人也猜不到是哪支檔的 ⇒ 加模組字首。

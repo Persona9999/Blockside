@@ -791,9 +791,10 @@ function fleetUI() {
     var box = $('fleet' + s), L = FLEET_SET[s];
     box.innerHTML = L.map(function (id, j) {
       var lab = s === 0 ? (j ? '友艦 ' + j : '我艦') : '敵艦 ' + (j + 1);
-      return '<span class="fs"><select data-s="' + s + '" data-j="' + j + '" aria-label="' + lab + '的船" title="' + lab + '"></select>' + (j ? '<button class="fx" data-s="' + s + '" data-j="' + j + '" aria-label="拿掉' + lab + '">×</button>' : '') + '</span>';
+      var h = hullInfo(id);
+      return '<span class="fs"><button class="fsb" data-s="' + s + '" data-j="' + j + '" aria-label="' + lab + '的船：' + (h ? h.name : id) + '（點了選船）" title="' + lab + '">' + (h ? h.name : id) + '</button>' + (j ? '<button class="fx" data-s="' + s + '" data-j="' + j + '" aria-label="拿掉' + lab + '">×</button>' : '') + '</span>';
     }).join('') + '<button class="fa" data-s="' + s + '" aria-label="' + (s ? '加一艘敵艦' : '加一艘友艦') + '"' + (full ? ' disabled' : '') + '>＋</button>';
-    [].forEach.call(box.querySelectorAll('select'), function (el) { hullOptions(el, L[+el.dataset.j]); el.onchange = function () { pickShip(s, +el.dataset.j, el.value); }; });
+    [].forEach.call(box.querySelectorAll('button.fsb'), function (b) { b.onclick = function () { spkOpen(s, +b.dataset.j); }; });   // 選船彈窗（72_shippick.js；Tim 2026-10-18：下拉選單換成按鈕＋彈窗分類）
     [].forEach.call(box.querySelectorAll('button.fx'), function (b) { b.onclick = function () { L.splice(+b.dataset.j, 1); fleetUI(); pickShip(); }; });
     box.querySelector('button.fa').onclick = function () { if (FLEET_SET[0].length + FLEET_SET[1].length < FLEET_MAX) { L.push(L[L.length - 1]); fleetUI(); pickShip(); } };
   });

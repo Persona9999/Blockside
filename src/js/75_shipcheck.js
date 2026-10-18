@@ -5,6 +5,15 @@
 // 每一筆：{ lv: 'error'｜'warn', what: 哪一類, where: 哪個部件, msg: 現在怎麼了（遊戲退回什麼）, fix: 怎麼修 }。
 //   error ＝ 遊戲裡壞掉（開場就掉、砲開不動、斷掉的梯子…）；warn ＝ 能動，但照退路／預設跑（名字認、憲法號的數字…）。
 var SC_SECS = 2;
+/** 選船彈窗的卡片（Tim 2026-10-18「選船介面可以給船分類…不用載入所有船隻資訊 而是只載必要資訊」）：開戰那一刻量（還沒被打），admin.py shipcheck 寫進 config/ship_cards.json、建置時內嵌 ⇒ 主選單不用解碼船就有。
+ *  tons ＝ 設計水線的排水量（T.disp）；len ＝ 水線長（公尺）；guns ＝ 砲（含迴旋砲、追擊砲）門數；volley ＝ 全部的砲各打一發的彈重（公斤，砲種表 shot）；
+ *  drive ＝ 額外動力（31_drive.js D.kind：steam／oar／magic；沒有 ＝ sail）；sails ＝ 作品的帆（不算陣營旗）；crew ＝ 開戰時的人數。 */
+function shipCard(sh) {
+  var T = sh.T, D = sh.drive, vol = 0, by = {};
+  sh.guns.forEach(function (g) { var G = GUNS[g.type] || {}; vol += +G.shot || 0; by[g.type] = (by[g.type] || 0) + 1; });
+  return { tons: Math.round(T.disp || 0), len: +(((T.wl1 || T.hx1) - (T.wl0 || T.hx0)) * S).toFixed(1), guns: sh.guns.length, gunTypes: by, volley: Math.round(vol),
+    drive: D && D.kind ? D.kind : 'sail', sails: sh.sails.filter(function (s) { return !(s.meta && s.meta.team); }).length, crew: sh.crew.length };
+}
 function shipCheck(id) {
   var R = { id: id, t: SC_SECS, issues: [], info: {} };
   function add(lv, what, where, msg, fix) { R.issues.push({ lv: lv, what: what, where: where, msg: msg, fix: fix }); }
@@ -22,6 +31,7 @@ function shipCheck(id) {
     R.info = { name: T.name, guns: sh.guns.length, crew: sh.crew.length, models: sh.models.length, ropes: sh.ropes.length, sails: sh.sails.filter(function (s) { return !(s.meta && s.meta.team); }).length, teamFlags: sh.sails.filter(function (s) { return s.meta && s.meta.team; }).length,   // 作品的帆／遊戲加的陣營旗分開數（77_colours.js；⛔ 混在一起 ⇒ 夜燈號 vxk 12 面、報告寫 15，basecamp 2026-10-15 問）
     masts: sh.masts.length, mags: sh.mags.length,
       decks: NV ? NV.levels.map(function (L) { return L.key + ' ' + L.name; }) : [], ladders: NV ? NV.ladders.length : 0, rooms: (sh.rooms || []).length, zw: T.zw, hits: SHIPS[1].hits + sh.hits };
+    R.card = shipCard(sh);                                               // 選船彈窗的卡片（72_shippick.js；admin.py 寫進 config/ship_cards.json）
     if (sh.hits || SHIPS[1].hits) add('warn', '量測', '—', '量的這 ' + SC_SECS + ' 秒裡有砲彈打中（hits ' + (sh.hits + SHIPS[1].hits) + '）⇒ 下面「站不滿」「掉了」可能有被打的', '照舊看，或重跑');
     // ── 船型：水線、geo ──
     var p = (T.h.parts || []).filter(function (q) { return q.meta && q.meta.kind === 'ship'; })[0], wm = (p && p.meta) || T.h.meta || {};
