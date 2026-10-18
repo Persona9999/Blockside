@@ -223,6 +223,15 @@ function crewFrame(sh, c) {
   if (c.role === ROLE.HELM) return FR.WORK_B;
   return FR.IDLE;
 }
+/** 傷員的動（Tim 2026-10-18：「讓受傷倒地的水手 稍微搖晃一下(不然跟死亡很像) 參考rimworld的演出」）：只給畫面、不碰 rnd() ⇒ { lean, bob, sy } 疊在姿勢上。
+ *  · 喘：身體一直慢慢起伏（sy ±0.03，約 2.6 秒一次）。
+ *  · 掙扎：每 WOUND_P 秒一下 —— 前 WOUND_B 秒快速左右扭（±0.16 弧度、越來越小）＋往上撐一點；其他時間只是喘。
+ *  節奏從倒下那一刻（c.t 歸零）算 ⇒ 每個人自然錯開；躺在病床上、等人來搬的都一樣（被扛著的 crewFrame 照走路的姿勢、不走這裡）。 */
+var WOUND_P = 2.4, WOUND_B = 0.5;
+function woundWiggle(c) {
+  var t = c.t || 0, tt = t % WOUND_P, b = tt < WOUND_B ? 1 - tt / WOUND_B : 0;
+  return { lean: 0.03 * Math.sin(t * 2.4) + b * 0.16 * Math.sin(tt * 30), bob: b * 0.06 * Math.abs(Math.sin(tt * 15)), sy: 0.03 * Math.sin(t * 2.4) };
+}
 /** 程式動作：lean（往面向的那邊傾，弧度；負 ＝ 往後仰）、bob（整個人上下，公尺）、sx／sy（寬、高的倍率）。
  *  c.t：活著的人是自己的時鐘（開局給了亂數相位，大家不會同步晃）；受傷、陣亡、墜落那一刻歸零 ⇒ 也拿來算閃紅。
  *  ⛔ 只管畫：不碰 rnd()、不回寫模擬。 */
@@ -235,7 +244,7 @@ function crewPose(sh, c, f) {
     if (c.fromW) { k.lean = -0.18 + (-1.5708 + 0.18) * d2; k.sy = 0.7 + 0.3 * d; k.sx = 1.06 - 0.06 * d; k.bob = 0.18 * d; return k; }   // 受傷跪著的人：從跪姿倒下
     k.lean = -1.5708 * d2; k.bob = 0.18 * d; return k;
   }
-  if (f === FR.WOUNDED) { k.sy = 0.7; k.sx = 1.06; k.lean = -0.18 + 0.04 * Math.sin(t * 9); return k; }        // 跪下、發抖（倒下時從這個姿勢接，見上面 fromW）
+  if (f === FR.WOUNDED) { var wg = woundWiggle(c); k.sy = 0.7 + wg.sy; k.sx = 1.06; k.lean = -0.18 + wg.lean; k.bob = wg.bob; return k; }   // 跪下、喘、隔一陣掙扎一下（woundWiggle；倒下時從這個姿勢接，見上面 fromW）
   if (f === FR.RUN_A || f === FR.RUN_B) {                                             // 跑：彈跳、前傾、落地壓扁
     var r = Math.abs(Math.sin(t * P2 * 2.2)); k.bob = 0.09 * r; k.lean = 0.16 + 0.05 * Math.sin(t * P2 * 2.2); k.sy = 0.94 + 0.06 * r; k.sx = 1.04 - 0.04 * r; return k;
   }
@@ -271,7 +280,7 @@ function drawCrew() {
       var fd = c.st === 5 && (c.fv[0] || c.fv[2]) ? [c.fv[0], 0, c.fv[2]] : wt ? M4.dir(sh.M, wt[0] - c.pos[0], wt[1] - c.pos[1], 0) : mul(faceW, c.face), flip = dot(fd, right) < 0;   // 在水裡：面向游的方向（世界座標）
       var col = frames ? f : 0, u0 = col / CREW_COLS / 2, u1 = (col + 1) / CREW_COLS / 2, v0 = art / CREW_ROWS, v1 = (art + 1) / CREW_ROWS, k = n * BBS, h = CREW_H;   // 左半張是底圖（右半張遮罩）
       var ps = crewPose(sh, c, f), amp = frames ? 0.35 : 1;                            // 8 欄逐格：姿勢在圖裡，程式只疊輕的一層（不再躺、不再跪）
-      if (frames && (f === FR.DEAD || f === FR.WOUNDED) && c.st !== 4) ps = { lean: 0, bob: 0, sx: 1, sy: 1 };
+      if (frames && (f === FR.DEAD || f === FR.WOUNDED) && c.st !== 4) { var wg = f === FR.WOUNDED ? woundWiggle(c) : null; ps = wg ? { lean: wg.lean / amp, bob: wg.bob / amp, sx: 1, sy: 1 + wg.sy / amp } : { lean: 0, bob: 0, sx: 1, sy: 1 }; }   // 8 欄逐格：跪姿在圖裡，傷員照樣喘、掙扎（÷ amp ⇒ 跟單圖一樣大）
       var lean = ps.lean * (c.st === 4 ? 1 : amp), sy = 1 + (ps.sy - 1) * amp, sx = 1 + (ps.sx - 1) * amp;
       var flash = Math.max(c.st === 1 || c.st === 2 || c.st === 4 ? Math.max(0, 1 - c.t / 0.4) : 0, c.hitT > 0 ? c.hitT / 0.4 : 0);   // 被打中那一下閃紅（倒下：c.t 在那一刻歸零；沒倒下：hitT）
       BB[k] = w[0]; BB[k + 1] = w[1]; BB[k + 2] = w[2]; BB[k + 3] = h * sy;
