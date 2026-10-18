@@ -26,7 +26,7 @@ function makeMags(sh) {
     // 關聯的外框比整艘船還大 ＝ 子作品是整個框（收穫號、維吉尼亞號）⇒ 照庫裡的桶收緊（⛔ 照框 ⇒ 只有一間的船從框的兩端往外找取用點、全找到船外 ⇒ 一個取用點都沒有；電腦瞄彈藥庫的高度也跟著錯）
     var B = sh.T.h.bbox, box = kegs.length && p.box[0] <= B[0] && p.box[3] >= B[3] ? kegs.reduce(function (b, m) { var q = m.bb; return [Math.min(b[0], q[0]), Math.min(b[1], q[1]), Math.min(b[2], q[2]), Math.max(b[3], q[3]), Math.max(b[4], q[4]), Math.max(b[5], q[5])]; }, [1e9, 1e9, 1e9, -1e9, -1e9, -1e9]) : p.box;
     var bl = (p.points && p.points.blast) || [(box[0] + box[3]) / 2, (box[1] + box[4]) / 2, (box[2] + box[5]) / 2];
-    var mag = { name: p.path, pos: p.meta.pos || '', hoist: p.meta.hoist || '', box: box, blast: bl, pts: p.points || {}, lb: lb, kegs: kegs, boomed: 0, gone: false, lit: false, tur: turOf(sh.T, p.path) };   // tur：在第幾座砲塔裡（砲塔裡的彈藥箱，27_turret.js；-1 ＝ 不在）   // pos：關聯 meta 的前／中／後（TASK-0539）；hoist：火藥從哪座梯子的艙口吊上去（TASK-0632，makeStations）
+    var mag = { name: p.path, pos: p.meta.pos || '', hoist: refPath(sh.T, p.meta.hoist), box: box, blast: bl, pts: p.points || {}, lb: lb, kegs: kegs, boomed: 0, gone: false, lit: false, tur: turOf(sh.T, p.path) };   // tur：在第幾座砲塔裡（砲塔裡的彈藥箱，27_turret.js；-1 ＝ 不在）   // pos：關聯 meta 的前／中／後（TASK-0539）；hoist：火藥從哪座梯子的艙口吊上去（TASK-0632，makeStations）
     kegs.forEach(function (m) { m.mag = mag; });
     return mag;
   });

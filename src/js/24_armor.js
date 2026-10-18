@@ -24,10 +24,12 @@ function armorSetup(T) {
   (T.h.parts || []).forEach(function (p) {
     var mt = p.meta || {}; if (mt.kind !== 'armor') return;
     function bad(lv, msg, fix) { T.armBad.push({ lv: lv, where: p.path, msg: msg, fix: fix }); }
-    if (!mt.mount && turOf(T, p.path) >= 0) return;                    // 砲塔底下的 kind=armor（沒寫 mount）⇒ 那座砲塔的殼（下面一起拆）
-    if (!mt.mount) { bad('warn', 'kind=armor 沒有 mount ⇒ 照舊是船殼（不轉）', '關聯 meta mount=<砲模型的路徑>（那門砲的 meta 要有 mount=turret｜pivot）'); return; }
-    var m = models.filter(function (q) { return q.name === mt.mount; })[0], gm = (m && m.meta) || {};
-    if (!m) { bad('error', 'mount=' + mt.mount + ' 找不到這個模型 ⇒ 照舊是船殼（不轉）', 'mount 寫砲模型的完整路徑（例：甲板-main/砲塔）'); return; }
+    var mw = mt.mount_of !== undefined ? 'mount_of=' + mt.mount_of : 'mount=' + mt.mount;   // 跟著哪門砲：mount_of=<砲的 id>（TASK-0715）；舊寫法 mount=<砲模型的路徑>
+    mt = Object.assign({}, mt, { mount: mt.mount_of !== undefined ? refPath(T, mt.mount_of) : mt.mount });   // ⇒ 下面照舊比路徑（refPath 找不到 ⇒ ''）
+    if (!mt.mount && mt.mount_of === undefined && turOf(T, p.path) >= 0) return;                    // 砲塔底下的 kind=armor（沒寫 mount）⇒ 那座砲塔的殼（下面一起拆）
+    if (!mt.mount && mt.mount_of === undefined) { bad('warn', 'kind=armor 沒有 mount_of ⇒ 照舊是船殼（不轉）', '關聯 meta mount_of=<砲的 id>（那門砲的 meta 要有 mount=turret｜pivot；造船規格 §12）'); return; }
+    var m = mt.mount ? models.filter(function (q) { return q.name === mt.mount; })[0] : null, gm = (m && m.meta) || {};
+    if (!m) { bad('error', mw + ' 找不到這個模型 ⇒ 照舊是船殼（不轉）', 'mount_of 寫砲的 id（例：gun-3；造船規格 §12）'); return; }
     if (gm.kind !== 'gun' || (gm.mount !== 'pivot' && gm.mount !== 'turret')) { bad('error', 'mount=' + mt.mount + ' 不是會轉的砲（要 meta kind=gun、mount=turret｜pivot）⇒ 照舊是船殼（不轉）', '那門砲的模型標 mount=turret（或 pivot），或拿掉這個關聯的 mount'); return; }
     if (!p.box || p.box.length !== 6) { bad('error', '檔頭沒有這個關聯的外框（box）⇒ 拆不出來、照舊是船殼', '重新匯出（senate 匯出會寫 parts[].box）'); return; }
     if (!by[mt.mount]) { by[mt.mount] = []; keys.push(mt.mount); }

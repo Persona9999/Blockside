@@ -75,6 +75,12 @@ python -I admin.py import --work <雕刻作品 ID> --id <代號> --name <名字>
 python -I admin.py import --work <改裝船的雕刻作品> --id <代號> --name <名字> --variant-of <原船的代號>
 # 重新匯入（作品長了）：印出跟上一版的格數、checksum、繩帆模型數與 vxk_compare.py 的內容對拍；只差匯出時間 ⇒ 不換
 python -I admin.py reimport --id constitution
+# 物件 id（TASK-0715；造船規格 §12）：每件關聯、外部模型發一個 <類別>-<序號>（改裝船自己加的 <代號>.<類別>-<序號>）、
+#   指名別的部件的 meta（規格表 meta_kinds.json 的 refs：鍋爐 funnel、主機 propeller、彈藥庫 hoist、裝甲 mount_of）從路徑換成 id，
+#   用 senate sub=meta 寫回雕刻作品，再只把 id 與指名鍵同步進 _cache（不走 metasync）；下一號記在 ships[].idNext。
+#   新船匯入後、作品加了部件之後跑一次（已經有 id 的不動）；改裝船排在原船後面。--dry 只列不寫。
+#   遊戲：05_hull.js idIndex（T.ids）／refPath（id 或 id#座名 ⇒ 路徑）；繩端照作品 ends 寫的模型綁（10_ship.js linkRopes），沒寫才照外框猜；匯入檢查報沒 id、撞號、指不到、指錯類、舊寫法、猜的繩端。
+python -I admin.py ids --id constitution --dry
 # 建造者（Tim 2026-10-15）：ships[].author ＝ .vxk 檔頭的 owner（senate 匯出時寫的雕刻作品作者）—— import／reimport 會自己記；以前匯入的船補一次（不重建）⇒ 船隻配置頁船卡、後台船隻卡顯示
 python -I admin.py authors
 # 匯入檢查（import／reimport／metasync 之後會自動跑）：缺 meta、砲班站不滿、開場就掉的 ⇒ ../reports/shipcheck_<代號>.md（不入版控）

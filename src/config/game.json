@@ -70,15 +70,61 @@
     "k": [[100, 10, 100], [160, 10, 100], [50, 100, 100]]
   },
   "fire": {"k": [40, 150, 120], "r": 12},
-
   "guns": {
     "long": {"code": "24l", "name": "24 磅長砲", "short": "長砲", "V": 175, "reload": 1, "big": false, "crew": 5, "min": 3, "mass": 2.5, "shot": 10.9},
     "long32": {"code": "32l", "name": "32 磅長砲", "short": "32 磅長砲", "V": 172, "reload": 1.15, "big": true, "crew": 6, "min": 4, "mass": 2.9, "shot": 14.5},
-    "carr": {"code": "32c", "name": "32 磅 carronade", "short": " carronade ", "V": 140, "reload": 0.7, "big": true, "crew": 3, "min": 2, "mass": 0.9, "shot": 14.5},
+    "carr": {
+      "code": "32c",
+      "name": "32 磅 carronade",
+      "short": " carronade ",
+      "V": 140,
+      "reload": 0.7,
+      "big": true,
+      "crew": 3,
+      "min": 2,
+      "mass": 0.9,
+      "shot": 14.5
+    },
     "chase": {"code": "18chase", "name": "18 磅追擊砲", "short": "追擊砲", "V": 165, "reload": 1, "big": false, "crew": 3, "min": 2, "mass": 2.1, "shot": 8.2},
-    "long4": {"code": "4l", "name": "4 磅砲", "short": "4 磅砲", "V": 165, "reload": 0.6, "big": false, "hole": 0.6, "crew": 2, "min": 1, "mass": 0.5, "shot": 1.8},
-    "long12": {"code": "12l", "name": "12 磅長砲", "short": "12 磅長砲", "V": 170, "reload": 0.9, "big": false, "hole": 0.85, "crew": 4, "min": 2, "mass": 1.7, "shot": 5.4},
-    "long18": {"code": "18l", "name": "18 磅長砲", "short": "18 磅長砲", "V": 172, "reload": 0.95, "big": false, "hole": 0.92, "crew": 5, "min": 3, "mass": 2.1, "shot": 8.2},
+    "long4": {
+      "code": "4l",
+      "name": "4 磅砲",
+      "short": "4 磅砲",
+      "V": 165,
+      "reload": 0.6,
+      "big": false,
+      "hole": 0.6,
+      "crew": 2,
+      "min": 1,
+      "mass": 0.5,
+      "shot": 1.8
+    },
+    "long12": {
+      "code": "12l",
+      "name": "12 磅長砲",
+      "short": "12 磅長砲",
+      "V": 170,
+      "reload": 0.9,
+      "big": false,
+      "hole": 0.85,
+      "crew": 4,
+      "min": 2,
+      "mass": 1.7,
+      "shot": 5.4
+    },
+    "long18": {
+      "code": "18l",
+      "name": "18 磅長砲",
+      "short": "18 磅長砲",
+      "V": 172,
+      "reload": 0.95,
+      "big": false,
+      "hole": 0.92,
+      "crew": 5,
+      "min": 3,
+      "mass": 2.1,
+      "shot": 8.2
+    },
     "long6": {"code": "6l", "name": "6 磅砲", "short": "6 磅砲", "V": 168, "reload": 0.75, "big": false, "hole": 0.7, "crew": 3, "min": 2, "mass": 1, "shot": 2.7},
     "chase3": {
       "code": "3chase",
@@ -90,7 +136,8 @@
       "hole": 0.5,
       "crew": 2,
       "min": 1,
-      "mass": 0.4, "shot": 1.4,
+      "mass": 0.4,
+      "shot": 1.4,
       "burst": 12,
       "burstGap": 0.15
     },
@@ -104,7 +151,8 @@
       "hole": 0.9,
       "crew": 6,
       "min": 3,
-      "mass": 4.5, "shot": 8.2,
+      "mass": 4.5,
+      "shot": 8.2,
       "burst": 16,
       "burstGap": 0.06
     },
@@ -118,7 +166,8 @@
       "hole": 1.4,
       "crew": 8,
       "min": 5,
-      "mass": 4.2, "shot": 40.8
+      "mass": 4.2,
+      "shot": 40.8
     },
     "dahl11": {
       "code": "11d",
@@ -130,7 +179,8 @@
       "hole": 1.9,
       "crew": 8,
       "min": 5,
-      "mass": 14.5, "shot": 75.3,
+      "mass": 14.5,
+      "shot": 75.3,
       "hpK": 1
     },
     "long36": {
@@ -142,7 +192,8 @@
       "big": true,
       "crew": 7,
       "min": 4,
-      "mass": 2.4, "shot": 17.6
+      "mass": 2.4,
+      "shot": 17.6
     },
     "long8": {
       "code": "8l",
@@ -154,7 +205,8 @@
       "hole": 0.75,
       "crew": 3,
       "min": 2,
-      "mass": 1.3, "shot": 3.9
+      "mass": 1.3,
+      "shot": 3.9
     },
     "pierrier": {
       "code": "pierrier",
@@ -166,7 +218,8 @@
       "hole": 0.4,
       "crew": 1,
       "min": 1,
-      "mass": 0.15, "shot": 1
+      "mass": 0.15,
+      "shot": 1
     },
     "siphon": {
       "code": "siphon",
@@ -178,8 +231,11 @@
       "hole": 0.3,
       "crew": 3,
       "min": 2,
-      "mass": 1.2, "shot": 6,
-      "ammo": "greekfire", "close": true, "weapon": "siphon"
+      "mass": 1.2,
+      "shot": 6,
+      "ammo": "greekfire",
+      "close": true,
+      "weapon": "siphon"
     },
     "brooke64": {
       "code": "64b",
@@ -191,7 +247,8 @@
       "hole": 1.2,
       "crew": 7,
       "min": 4,
-      "mass": 4.1, "shot": 43.1
+      "mass": 4.1,
+      "shot": 43.1
     },
     "brooke7": {
       "code": "7b",
@@ -203,23 +260,26 @@
       "hole": 1.3,
       "crew": 8,
       "min": 5,
-      "mass": 6.6, "shot": 47.2
+      "mass": 6.6,
+      "shot": 47.2
     }
   },
   "geo0": {"spar": null, "marines": [160, 220], "center": 140, "aim": 90, "aimZ": [40, 320], "deckAim": [84, 104], "rigAim": [150, 300]},
-  "crew0": {"officers": 4, "helm": 2, "marines": 12, "marineGap": 37, "top": 4, "monkeys": 1, "handsK": 1, "shelter": 0, "surgeon": 60, "carpenter": 20, "sailmaker": 20},
-  "teamCloth": {
-    "blue": [34, 43, 65],
-    "red": [82, 24, 21]
+  "crew0": {
+    "officers": 4,
+    "helm": 2,
+    "marines": 12,
+    "marineGap": 37,
+    "top": 4,
+    "monkeys": 1,
+    "handsK": 1,
+    "shelter": 0,
+    "surgeon": 60,
+    "carpenter": 20,
+    "sailmaker": 20
   },
-  "hairColors": {
-    "black": [40, 34, 32],
-    "brown": [96, 60, 34],
-    "blonde": [206, 162, 82],
-    "red": [150, 52, 26],
-    "grey": [128, 124, 120],
-    "white": [210, 206, 196]
-  },
+  "teamCloth": {"blue": [34, 43, 65], "red": [82, 24, 21]},
+  "hairColors": {"black": [40, 34, 32], "brown": [96, 60, 34], "blonde": [206, 162, 82], "red": [150, 52, 26], "grey": [128, 124, 120], "white": [210, 206, 196]},
   "names_pub": ["星座號", "國會號", "切薩皮克號", "埃塞克斯號", "波士頓號", "紐約號", "費城號", "亞當斯號", "坎伯蘭號", "薩凡納號", "聖勞倫斯號", "拉里坦號"],
   "drive": {
     "kDrag": 0.0615,
@@ -227,7 +287,20 @@
     "tele": [1, 0.6, 0.35, 0.15, 0, -0.15, -0.35, -0.6, -1],
     "teleNames": ["前進全速", "前進半速", "前進慢速", "前進微速", "停俥", "後退微速", "後退慢速", "後退半速", "後退全速"]
   },
-  "pen": {"lo": 0.4, "hi": 1.3, "k": 3, "rico": 65, "wood": 0.8, "splinter": 50, "shellR": 5.2, "shellHard": 0.5, "ref": 10.9, "uwMin": 20, "uwDrag": 0.019, "muzzle": 0.3},
+  "pen": {
+    "lo": 0.4,
+    "hi": 1.3,
+    "k": 3,
+    "rico": 65,
+    "wood": 0.8,
+    "splinter": 50,
+    "shellR": 5.2,
+    "shellHard": 0.5,
+    "ref": 10.9,
+    "uwMin": 20,
+    "uwDrag": 0.019,
+    "muzzle": 0.3
+  },
   "materials": {
     "default": "oak",
     "list": {
@@ -268,7 +341,24 @@
         "甲板-berth/艙房-鏡像/7": "medical",
         "甲板-berth/艙房-鏡像/8": "medical"
       },
-      "author": "basecamp"
+      "author": "basecamp",
+      "idNext": {
+        "anchor": 3,
+        "boat": 4,
+        "capstan": 3,
+        "deck": 5,
+        "grating": 3,
+        "gun": 55,
+        "ladders": 5,
+        "magazine": 3,
+        "part": 34,
+        "powder": 139,
+        "rooms": 7,
+        "rudder": 2,
+        "wheel": 2,
+        "wheel_stand": 2,
+        "yard": 16
+      }
     },
     {
       "id": "ember",
@@ -300,7 +390,25 @@
         "甲板-berth/艙房-鏡像/7": "medical",
         "甲板-berth/艙房-鏡像/8": "medical"
       },
-      "author": "basecamp"
+      "author": "basecamp",
+      "idNext": {
+        "anchor": 3,
+        "binnacle": 2,
+        "boat": 3,
+        "capstan": 2,
+        "deck": 7,
+        "gun": 91,
+        "ladders": 7,
+        "lantern": 4,
+        "magazine": 2,
+        "part": 30,
+        "powder": 231,
+        "rooms": 7,
+        "rudder": 2,
+        "wheel": 2,
+        "wheel_stand": 2,
+        "yard": 16
+      }
     },
     {
       "id": "falcon",
@@ -312,7 +420,23 @@
       "cfg": {"pump": 2, "speed": 3, "agile": 5, "upwind": 3, "flood": 0.25},
       "crew": {"handsK": 0.25},
       "rooms": {"甲板-主/艙房/1": "medical", "甲板-主/艙房/2": "medical"},
-      "author": "summit"
+      "author": "summit",
+      "idNext": {
+        "anchor": 3,
+        "binnacle": 2,
+        "deck": 3,
+        "gun": 13,
+        "ladders": 2,
+        "magazine": 2,
+        "part": 17,
+        "powder": 9,
+        "rooms": 2,
+        "rudder": 2,
+        "ship": 2,
+        "wheel": 2,
+        "wheel_stand": 2,
+        "yard": 8
+      }
     },
     {
       "id": "stormkaap",
@@ -331,7 +455,28 @@
         {"at": [100.5, 113.5, 155], "r": 4, "color": 158, "rgb": [0.35, 1, 0.55]},
         {"at": [149.5, 149.5, 119.5], "r": 11, "color": 154, "rgb": [0.35, 1, 0.55]}
       ],
-      "author": "summit"
+      "author": "summit",
+      "idNext": {
+        "anchor": 3,
+        "binnacle": 2,
+        "capstan": 2,
+        "deck": 6,
+        "engine": 2,
+        "grating": 2,
+        "gun": 43,
+        "ladders": 3,
+        "light": 4,
+        "magazine": 2,
+        "model": 14,
+        "part": 17,
+        "powder": 18,
+        "rooms": 2,
+        "rudder": 2,
+        "ship": 2,
+        "wheel": 2,
+        "wheel_stand": 2,
+        "yard": 11
+      }
     },
     {
       "id": "nightlamp",
@@ -342,7 +487,24 @@
       "theme": "nightlamp",
       "geo": {"spar": [130, 146], "marines": [60, 330], "center": 160, "aim": 100, "aimZ": [35, 430], "deckAim": [103, 130], "rigAim": [170, 480]},
       "cfg": {"pump": 23, "speed": 3, "agile": 3, "upwind": 2},
-      "author": "basecamp"
+      "author": "basecamp",
+      "idNext": {
+        "anchor": 3,
+        "binnacle": 2,
+        "capstan": 2,
+        "deck": 5,
+        "gun": 25,
+        "ladders": 2,
+        "light": 5,
+        "magazine": 2,
+        "part": 9,
+        "powder": 57,
+        "rudder": 2,
+        "ship": 2,
+        "wheel": 2,
+        "wheel_stand": 2,
+        "yard": 11
+      }
     },
     {
       "id": "tridente",
@@ -352,7 +514,26 @@
       "work": "gura-tridente-01m-assembly",
       "cfg": {"pump": 31.5, "speed": 1, "agile": 1, "upwind": 0.8},
       "geo": {"marines": [50, 260], "center": 195, "aim": 110, "aimZ": [45, 560], "deckAim": [92, 160], "rigAim": [200, 650]},
-      "author": "gura"
+      "author": "gura",
+      "idNext": {
+        "anchor": 3,
+        "binnacle": 2,
+        "boat": 3,
+        "capstan": 2,
+        "deck": 8,
+        "gun": 143,
+        "ladders": 7,
+        "light": 3,
+        "magazine": 3,
+        "part": 26,
+        "powder": 359,
+        "rooms": 3,
+        "rudder": 2,
+        "ship": 2,
+        "wheel": 2,
+        "wheel_stand": 2,
+        "yard": 15
+      }
     },
     {
       "id": "phoenix",
@@ -362,7 +543,24 @@
       "vxk": "phoenix.vxk",
       "work": "kiara-phoenix-01m-assembly",
       "geo": {"marines": [50, 100], "center": 75, "aim": 72, "aimZ": [20, 300], "deckAim": [60, 86], "rigAim": [135, 300]},
-      "author": "kiara"
+      "author": "kiara",
+      "idNext": {
+        "anchor": 3,
+        "binnacle": 2,
+        "boat": 2,
+        "capstan": 2,
+        "deck": 3,
+        "gun": 33,
+        "ladders": 2,
+        "magazine": 3,
+        "part": 8,
+        "powder": 33,
+        "rudder": 2,
+        "ship": 2,
+        "wheel": 2,
+        "wheel_stand": 2,
+        "yard": 9
+      }
     },
     {
       "id": "virginia",
@@ -371,7 +569,15 @@
       "vxk": "virginia.vxk",
       "work": "ame-virginia-01m-assembly",
       "cfg": {"pump": 32, "base": 5.5, "agile": 0.4},
-      "rooms": {"甲板-main": {"type": "deck", "items": [{"it": "keg", "x": 114, "y": 13, "r": 0}, {"it": "keg", "x": 42, "y": 11, "r": 0}]}},
+      "rooms": {
+        "甲板-main": {
+          "type": "deck",
+          "items": [
+            {"it": "keg", "x": 114, "y": 13, "r": 0},
+            {"it": "keg", "x": 42, "y": 11, "r": 0}
+          ]
+        }
+      },
       "geo": {"spar": [100, 102], "marines": [250, 200], "center": 85, "aim": 75, "aimZ": [40, 150], "deckAim": [74, 90], "rigAim": [100, 145]},
       "crew": {
         "marines": 6,
@@ -382,7 +588,25 @@
         {"kind": "ensign", "at": [300, 90, 140], "pole": 1}
       ],
       "names": ["維吉尼亞號"],
-      "author": "ame"
+      "author": "ame",
+      "idNext": {
+        "anchor": 3,
+        "boiler": 2,
+        "deck": 5,
+        "engine": 2,
+        "funnel": 2,
+        "gun": 11,
+        "ladders": 2,
+        "magazine": 3,
+        "part": 6,
+        "powder": 101,
+        "propeller": 2,
+        "rudder": 2,
+        "shaft": 2,
+        "ship": 2,
+        "wheel": 2,
+        "wheel_stand": 2
+      }
     },
     {
       "id": "cosecha",
@@ -394,7 +618,25 @@
       "geo": {"spar": [86, 121], "marines": [120, 90], "center": 90, "aim": 70, "aimZ": [30, 330], "deckAim": [74, 97], "rigAim": [140, 330]},
       "crew": {"marines": 6, "top": 1},
       "names": ["收穫號"],
-      "author": "calli"
+      "author": "calli",
+      "idNext": {
+        "anchor": 3,
+        "binnacle": 2,
+        "boat": 2,
+        "capstan": 2,
+        "deck": 7,
+        "gun": 45,
+        "ladders": 6,
+        "light": 4,
+        "magazine": 2,
+        "part": 14,
+        "powder": 113,
+        "rudder": 2,
+        "ship": 2,
+        "wheel": 2,
+        "wheel_stand": 2,
+        "yard": 8
+      }
     },
     {
       "id": "napoleon",
@@ -405,7 +647,33 @@
       "cfg": {"pump": 32, "base": 12, "agile": 1.2},
       "geo": {"spar": [137, 145], "marines": [80, 240], "center": 185, "aim": 120, "aimZ": [56, 364], "deckAim": [100, 150], "rigAim": [190, 340]},
       "names": ["拿破崙號"],
-      "author": "kotoko"
+      "author": "kotoko",
+      "idNext": {
+        "anchor": 3,
+        "binnacle": 2,
+        "boat": 3,
+        "boiler": 3,
+        "capstan": 2,
+        "deck": 6,
+        "engine": 2,
+        "funnel": 3,
+        "gear": 3,
+        "gun": 91,
+        "ladders": 5,
+        "light": 4,
+        "magazine": 3,
+        "model": 9,
+        "part": 11,
+        "powder": 231,
+        "propeller": 2,
+        "rooms": 3,
+        "rudder": 2,
+        "shaft": 2,
+        "ship": 2,
+        "wheel": 2,
+        "wheel_stand": 2,
+        "yard": 14
+      }
     },
     {
       "id": "monitor",
@@ -421,7 +689,27 @@
         {"kind": "ensign", "at": [30, 65, 34], "pole": 3}
       ],
       "names": ["莫尼特號"],
-      "author": "meadow"
+      "author": "meadow",
+      "idNext": {
+        "anchor": 2,
+        "boiler": 3,
+        "deck": 3,
+        "door": 3,
+        "engine": 2,
+        "funnel": 3,
+        "gun": 3,
+        "ladders": 2,
+        "magazine": 2,
+        "part": 8,
+        "powder": 17,
+        "propeller": 2,
+        "rudder": 2,
+        "shaft": 2,
+        "ship": 2,
+        "turret": 2,
+        "wheel": 2,
+        "wheel_stand": 2
+      }
     },
     {
       "id": "sentinel",
@@ -438,7 +726,8 @@
         {"kind": "ensign", "at": [444, 64, 113], "pole": 1.5}
       ],
       "names": ["哨兵號"],
-      "author": "meadow"
+      "author": "meadow",
+      "idNext": {"gun": 9, "magazine": 4, "part": 8, "powder": 6, "turret": 8, "wheel": 2, "wheel_stand": 2}
     },
     {
       "id": "tidegrave",
@@ -449,7 +738,27 @@
       "work": "sirius-tidegrave-01m-assembly",
       "author": "Sirius",
       "crew": {"marines": 12, "marineGap": 30},
-      "geo": {"spar": [114, 140], "marines": [100, 80], "center": 155, "aim": 90, "aimZ": [30, 480], "deckAim": [74, 106], "rigAim": [210, 410]}
+      "geo": {"spar": [114, 140], "marines": [100, 80], "center": 155, "aim": 90, "aimZ": [30, 480], "deckAim": [74, 106], "rigAim": [210, 410]},
+      "idNext": {
+        "anchor": 3,
+        "binnacle": 2,
+        "boat": 2,
+        "capstan": 2,
+        "deck": 7,
+        "fairlead": 51,
+        "gun": 55,
+        "ladders": 2,
+        "light": 3,
+        "magazine": 3,
+        "model": 20,
+        "part": 8,
+        "powder": 49,
+        "rudder": 2,
+        "ship": 2,
+        "wheel": 2,
+        "wheel_stand": 2,
+        "yard": 11
+      }
     },
     {
       "id": "gloire",
@@ -461,7 +770,33 @@
       "drive": "steam",
       "cfg": {"pump": 32, "base": 13, "agile": 1},
       "geo": {"spar": [113, 141], "marines": [80, 290], "center": 160, "aim": 100, "aimZ": [55, 330], "deckAim": [90, 120], "rigAim": [160, 310]},
-      "names": ["光榮號"]
+      "names": ["光榮號"],
+      "idNext": {
+        "anchor": 3,
+        "binnacle": 2,
+        "boat": 3,
+        "boiler": 2,
+        "capstan": 2,
+        "deck": 7,
+        "engine": 2,
+        "funnel": 2,
+        "gear": 2,
+        "gun": 37,
+        "ladders": 6,
+        "light": 4,
+        "magazine": 3,
+        "model": 9,
+        "part": 12,
+        "powder": 93,
+        "propeller": 2,
+        "rooms": 3,
+        "rudder": 2,
+        "shaft": 2,
+        "ship": 2,
+        "wheel": 2,
+        "wheel_stand": 2,
+        "yard": 14
+      }
     },
     {
       "id": "reale",
@@ -472,9 +807,28 @@
       "author": "apex-one",
       "cfg": {"base": 6},
       "geo": {"spar": [30, 46], "marines": [75, 115], "center": 60, "aim": 38, "aimZ": [20, 380], "deckAim": [28, 45], "rigAim": [120, 330]},
-      "crew": {"top": 0, "marines": 7, "guns": {"long36": 5, "long8": 2}},
+      "crew": {
+        "top": 0,
+        "marines": 7,
+        "guns": {"long36": 5, "long8": 2}
+      },
       "rooms": {"甲板-hold/艙房/proue": "medical", "甲板-hold/艙房/taverne": "workshop"},
-      "names": ["皇家號"]
+      "names": ["皇家號"],
+      "idNext": {
+        "anchor": 3,
+        "deck": 4,
+        "gun": 20,
+        "ladders": 4,
+        "light": 4,
+        "magazine": 2,
+        "oar": 65,
+        "part": 6,
+        "powder": 26,
+        "rooms": 2,
+        "rudder": 2,
+        "ship": 2,
+        "yard": 3
+      }
     },
     {
       "id": "susquehanna",
@@ -485,7 +839,31 @@
       "author": "crest-001",
       "drive": "steam",
       "cfg": {"pump": 15, "base": 10},
-      "geo": {"spar": [90, 104], "marines": [80, 200], "center": 150, "aim": 85, "aimZ": [30, 480], "deckAim": [90, 110], "rigAim": [200, 470]}
+      "geo": {"spar": [90, 104], "marines": [80, 200], "center": 150, "aim": 85, "aimZ": [30, 480], "deckAim": [90, 110], "rigAim": [200, 470]},
+      "idNext": {
+        "anchor": 3,
+        "binnacle": 2,
+        "boat": 3,
+        "boiler": 3,
+        "capstan": 2,
+        "deck": 5,
+        "engine": 3,
+        "funnel": 2,
+        "gun": 10,
+        "ladders": 4,
+        "light": 4,
+        "magazine": 3,
+        "part": 16,
+        "powder": 33,
+        "propeller": 3,
+        "rooms": 3,
+        "rudder": 2,
+        "shaft": 3,
+        "ship": 2,
+        "wheel": 2,
+        "wheel_stand": 2,
+        "yard": 11
+      }
     },
     {
       "id": "dromon",
@@ -497,11 +875,32 @@
       "cfg": {"upwind": 1.2, "base": 7},
       "geo": {"spar": [21, 30], "marines": [42, 96], "center": 30, "aim": 18, "aimZ": [8, 230], "deckAim": [18, 30], "rigAim": [60, 210]},
       "crew": {"officers": 2, "top": 0, "marines": 12, "marineGap": 18},
-      "names": ["持火號"]
+      "names": ["持火號"],
+      "idNext": {
+        "anchor": 3,
+        "deck": 5,
+        "gun": 2,
+        "ladders": 2,
+        "magazine": 2,
+        "model": 5,
+        "oar": 99,
+        "part": 4,
+        "powder": 7,
+        "rudder": 3,
+        "ship": 2,
+        "yard": 3
+      }
     }
   ],
   "furniture": {
-    "bed": {"name": "病床", "type": "medical", "size": [19, 8, 6], "hp": 100, "hold": 1, "staff": {"surgeon": 1}},
+    "bed": {
+      "name": "病床",
+      "type": "medical",
+      "size": [19, 8, 6],
+      "hp": 100,
+      "hold": 1,
+      "staff": {"surgeon": 1}
+    },
     "table": {
       "name": "手術台",
       "type": "medical",
@@ -516,10 +915,41 @@
       "hp": 40,
       "buff": {"heal": 0.15}
     },
-    "pump": {"name": "鏈式抽水機", "type": "deck", "size": [10, 8, 12], "hp": 120, "role": "pump", "power": "hand", "tpm": 4.5, "crew": 4, "place": "well", "cap": 36},
+    "pump": {
+      "name": "鏈式抽水機",
+      "type": "deck",
+      "size": [10, 8, 12],
+      "hp": 120,
+      "role": "pump",
+      "power": "hand",
+      "tpm": 4.5,
+      "crew": 4,
+      "place": "well",
+      "cap": 36
+    },
     "spump": {"name": "蒸汽抽水機", "type": "deck", "size": [10, 6, 9], "hp": 160, "role": "pump", "power": "steam", "tpm": 15, "place": "center", "cap": 60},
-    "bench": {"name": "木工台", "type": "deck", "size": [16, 8, 8], "hp": 120, "role": "bench", "auto": 1, "staff": {"carpenter": 2}, "wood": 3000, "carry": 300},
-    "loft": {"name": "帆布櫃", "type": "deck", "size": [12, 6, 8], "hp": 100, "role": "loft", "auto": 1, "staff": {"sailmaker": 2}, "cloth": 3000, "carry": 300},
+    "bench": {
+      "name": "木工台",
+      "type": "deck",
+      "size": [16, 8, 8],
+      "hp": 120,
+      "role": "bench",
+      "auto": 1,
+      "staff": {"carpenter": 2},
+      "wood": 3000,
+      "carry": 300
+    },
+    "loft": {
+      "name": "帆布櫃",
+      "type": "deck",
+      "size": [12, 6, 8],
+      "hp": 100,
+      "role": "loft",
+      "auto": 1,
+      "staff": {"sailmaker": 2},
+      "cloth": 3000,
+      "carry": 300
+    },
     "keg": {"name": "火藥桶", "type": "deck", "size": [10, 10, 8], "role": "powder"}
   },
   "drvparts": {
@@ -542,7 +972,11 @@
       "staffPer": 3,
       "back": 0.6
     },
-    "workshop": {"name": "木工間", "items": ["bench", "loft"], "need": {"bench": 1}},
+    "workshop": {
+      "name": "木工間",
+      "items": ["bench", "loft"],
+      "need": {"bench": 1}
+    },
     "deck": {"name": "砲甲板", "deck": true, "items": ["keg", "pump", "spump", "bench", "loft"]}
   }
 }
