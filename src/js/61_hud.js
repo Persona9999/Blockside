@@ -114,13 +114,23 @@ function panel(sh, title) {
     '砲 有人 ' + (sh.gunsManned || 0) + '／還在 ' + sh.gunsAlive + '／' + sh.guns.length + '　' + m + '<br>開火 ' + sh.fired + '　命中 ' + sh.hits +
     gmapLegend(sh) + '</div></div>';
 }
-/** 旁邊那張圖的圖說：砲位（預設）或損壞（GMAP_MODE；Tim 2026-10-18「在開啟船體詳細資訊頁上加一個toggle 切換顯示炮位或是船隻損壞情況」）。 */
+/** 旁邊那張圖的圖說：砲位（預設）、損壞或進水（GMAP_MODE；Tim 2026-10-18「在開啟船體詳細資訊頁上加一個toggle 切換顯示炮位或是船隻損壞情況」「在炮位 損壞之外 加一個切換顯示進水」）。 */
 function gmapLegend(sh) {
+  if (GMAP_MODE === 'flood') return '<div class="dmgsum">' + floodSumText(sh) + '</div><div class="legend">進水圖：<b style="color:#3a9ae6">■</b> 艙內的水（上下整柱加起來，越滿越深） <b style="color:#ff3c32">●</b> 水下的破口 <b style="color:#ffaa28">●</b> 水上的破口（大小照洞的面積）</div>';
   if (GMAP_MODE !== 'dmg') return '<div class="legend">砲位圖：● 好 ◌ 裝填 ○ 開不了 △ 等火藥 ≈ 泡水 ✕ 毀｜<b style="color:#7be37b">綠</b> 滿編 <b style="color:#f0d264">黃</b> 不足 <b style="color:#9a9a9a">灰</b> 沒人｜最上層在船內、越下層越外</div>';
   var C = GMAP_DMG;
   return '<div class="dmgsum">' + dmgSumText(sh) + '</div><div class="legend">損壞圖：<b style="color:' + C.chan + '">■</b> 通道斷了 <b style="color:' + C.hole + '">■</b> 甲板破洞 <b style="color:' + C.lad + '">H</b> 梯子 <b style="color:' + C.anc + '">◆</b> 帆的綁定點 ' +
     '<b style="color:#fff">━</b> 帆（白 ＝ 剩下的血量，✂ 繩斷） <b style="color:' + C.rlad + '">⋮</b> 繩梯 <b style="color:' + C.mast + '">✕</b> 倒掉的桅｜<b style="color:' + C.carp + '">●</b> 木匠 <b style="color:' + C.sm + '">●</b> 帆匠（白圈 ＝ 正在修）</div>';
 }
+/** 進水一行（33_flood.js 的讀數，同停格的進水細節頁 72_floodui.js floodPanel；只讀）：積水、破口（水下幾處）、進出水、抽水、下沉。公式模式 ⇒ 水線下打掉幾格。 */
+function floodSumText(sh) {
+  var fl = sh.fl;
+  if (!fl || sh.broken) return (sh.broken ? '斷成兩截（照公式，一定沉）' : '公式模式：看不到艙內的水（物理效果「進水」選粒子才看得到）') + '・水線下打掉 ' + (sh.inflow || 0).toLocaleString() + ' 格・下沉 ' + sh.sink.toFixed(2) + ' m';
+  var under = 0; fl.holes.forEach(function (h) { if (fl.hA[h] > 0 && gmapHoleWet(sh, h)) under++; });
+  return '積水 ' + Math.round(fl.vol * RHO_W).toLocaleString() + ' 噸・破口 ' + fl.open + ' 處（水下 ' + under + '）・進水 ' + fl.inQ.toFixed(2) + ' m³/s・抽水 ' + pumpNow(sh).toFixed(1) + ' 噸/分・下沉 ' + sh.sink.toFixed(2) + ' m';
+}
+/** 破口 h 現在在水下嗎（照那一點的世界水面）。 */
+function gmapHoleWet(sh, h) { var fl = sh.fl, P = M4.pt(sh.M, fl.hX[h], fl.hY[h], fl.hZ[h]); return P[1] < seaH(P[0], P[2], SIMT); }
 /** 損壞表一行（48_damage.js；只讀，⛔ 不在這裡重掃 ⇒ 有畫面那場跟無頭的戰局一位元不差）。 */
 function dmgSumText(sh) {
   var D = sh.dmg; if (!D) return '損壞表：' + (sh.carp || sh.sm ? '還沒點名' : '這艘沒有木匠、帆匠');
@@ -137,7 +147,7 @@ function dmgSumText(sh) {
 var HUD_SAILS = null;   // 收帆、加帆兩顆按鈕現在顯不顯示（換船才重設）
 var INFO_SH = null, SB_EL = {}, SUNK_HIDE = 60;   // SUNK_HIDE：沉了幾秒（模擬時間）之後上方的圓鈕收掉（Tim 2026-10-14：補船之後那一欄才不會越排越長）
 // 點資訊或旁邊的砲位圖任何地方 ⇒ 收回。用 pointerdown：⛔ click 要按下、放開都落在同一個元素 —— 卡片每 6 格整個重畫（innerHTML），按下到放開之間剛好重畫 ⇒ click 不觸發（Tim：收起有時沒反應）
-['info', 'gmap'].forEach(function (id) { $(id).addEventListener('pointerdown', function (e) { e.preventDefault(); if (e.target.closest && e.target.closest('[data-gmode]')) { GMAP_MODE = GMAP_MODE === 'dmg' ? 'gun' : 'dmg'; fleetHud(SHIPS[PLAYER_I]); return; } if (e.target.closest && e.target.closest('[data-see]')) { camSee(INFO_SH); return; } if (e.target.closest && e.target.closest('[data-take]')) { playerTakeShip(INFO_SH); fleetHud(SHIPS[PLAYER_I]); return; } INFO_SH = null; fleetHud(SHIPS[PLAYER_I]); }); });
+['info', 'gmap'].forEach(function (id) { $(id).addEventListener('pointerdown', function (e) { e.preventDefault(); var gm = e.target.closest && e.target.closest('[data-gmode]'); if (gm) { GMAP_MODE = gm.getAttribute('data-gmode'); fleetHud(SHIPS[PLAYER_I]); return; } if (e.target.closest && e.target.closest('[data-see]')) { camSee(INFO_SH); return; } if (e.target.closest && e.target.closest('[data-take]')) { playerTakeShip(INFO_SH); fleetHud(SHIPS[PLAYER_I]); return; } INFO_SH = null; fleetHud(SHIPS[PLAYER_I]); }); });
 // 按羅盤 ＝ 按艦隊的我艦圓鈕（Tim 2026-10-15：「遊戲下方的羅盤是否可以改成可以按，效果跟按下我艦一樣顯示詳細資訊」）：開／收我艦的詳細資訊。
 //   pointerdown（同上：羅盤每 6 格重畫，click 可能落空）；只綁在羅盤的畫布 ⇒ 兩舷的砲（#gunsL／#gunsR，pointer-events:none）、鏡頭拖曳（遊戲畫布）都不受影響。
 $('navc').addEventListener('pointerdown', function (e) { e.preventDefault(); e.stopPropagation(); var me = SHIPS[PLAYER_I]; if (!me) return; INFO_SH = INFO_SH === me ? null : me; fleetHud(me); });
@@ -249,7 +259,7 @@ function fleetHud(me) {
     var who = o.i === PLAYER_I ? '我艦' : o.team === pt ? (many && o === fs ? '我方旗艦' : '友艦') : (many && o === fs ? '敵方旗艦' : '敵艦');
     var title = who + ' ' + o.name + (o.name !== o.T.name ? '<span class="cls">（' + o.T.name + '型）</span>' : '') + teamTag(o);
     var seeing = CAM.mode === 3 && (CAM.see === o || (!CAM.see && o.i === PLAYER_I));
-    el.innerHTML = panel(o, title).replace('<h3>', '<h3><span class="fold">▲ 收起</span><span class="fold see' + (seeing ? ' on' : '') + '" data-see="1">🎥 ' + (seeing ? '看著這艘' : '看這艘') + '</span>' + (canTake(o) ? '<span class="fold take" data-take="1">⚓ 改操控這艘</span>' : '') + '<span class="fold gm" data-gmode="1"><i' + (GMAP_MODE === 'dmg' ? '' : ' class="on"') + '>砲位</i><i' + (GMAP_MODE === 'dmg' ? ' class="on"' : '') + '>損壞</i></span>');   // 旁邊那張圖：砲位／損壞（gmapDraw）   // 友艦才有（52_fleet.js playerTakeShip）   // 放在標題最前面再靠右浮動（⛔ 放最後 ⇒ 窄的時候浮到排水量那一行、壓到右欄）
+    el.innerHTML = panel(o, title).replace('<h3>', '<h3><span class="fold">▲ 收起</span><span class="fold see' + (seeing ? ' on' : '') + '" data-see="1">🎥 ' + (seeing ? '看著這艘' : '看這艘') + '</span>' + (canTake(o) ? '<span class="fold take" data-take="1">⚓ 改操控這艘</span>' : '') + '<span class="fold gm">' + [['gun', '砲位'], ['dmg', '損壞'], ['flood', '進水']].map(function (m) { return '<i data-gmode="' + m[0] + '"' + (GMAP_MODE === m[0] ? ' class="on"' : '') + '>' + m[1] + '</i>'; }).join('') + '</span>');   // 旁邊那張圖：砲位／損壞／進水（gmapDraw）   // 友艦才有（52_fleet.js playerTakeShip）   // 放在標題最前面再靠右浮動（⛔ 放最後 ⇒ 窄的時候浮到排水量那一行、壓到右欄）
     el.style.display = 'block'; el.style.borderLeftColor = teamIdx(o) === 0 ? 'var(--blue)' : 'var(--red)';
     gmapDraw(o);
   }
@@ -259,7 +269,9 @@ function fleetHud(me) {
 //   比例尺固定（電腦 GMAP_K px／公尺、手機 2.5，跟卡片並排）⇒ 小船就小；一條 10 m 在船的下面（GMAP_FOOT：⛔ 疊在右下角會蓋到船尾的砲）。上下幾層的砲同一個位置 ⇒ 沿砲軸往外錯開：最上層往船內 1.4 m、往下每一層再往外 2.3 m。
 //   砲的符號與顏色跟下方 HUD（gunCell）同一套：形狀 ＝ 裝填（● 好 ◌ 裝填中 ○ 開不了 △ 等火藥 ≈ 泡水 ✕ 毀）、顏色 ＝ 人手（綠 滿編、黃 不足、灰 沒人、紅 毀、藍 泡水）；
 //   不寫「左舷／右舷」（Tim 2026-10-14 拿掉：船頭朝上 ⇒ 左右就是左右舷）。
-// 損壞（GMAP_MODE ＝ 'dmg'；卡片標題的「砲位｜損壞」切換，預設砲位）：同一張俯視圖上畫全船的損壞表（48_damage.js sh.dmg.rows，只讀）——
+// 進水（GMAP_MODE ＝ 'flood'；Tim 2026-10-18「在炮位 損壞之外 加一個切換顯示進水」）：同停格的進水細節頁的俯視剖面（72_floodui.js fpDraw view 1）—— 艙內的水沿高度加總、越滿越藍；
+//   破口照洞的大小（水下紅、水上橙）。公式模式沒有艙內的水 ⇒ 圖上不畫、卡片寫水線下打掉幾格。⛔ 只讀模擬。
+// 損壞（GMAP_MODE ＝ 'dmg'；卡片標題的「砲位｜損壞｜進水」切換，預設砲位）：同一張俯視圖上畫全船的損壞表（48_damage.js sh.dmg.rows，只讀）——
 //   甲板破洞（每個走路點一小格；通道斷了深紅、其他橘紅）、梯子（H）、帆的綁定點（◆）、帆（橫過船寬一條：白的長度 ＝ 剩下的血量，繩斷了標 ✂）、繩梯（⋮，梯腳）、
 //   倒掉的桅（✕）；木匠、帆匠在哪（點），正在修的那一件外面一圈白。
 var GMAP_MODE = 'gun';
@@ -280,6 +292,7 @@ function gmapDraw(sh) {
   g.drawImage(NI, P0, P0, NI.width * C * s, NI.height * C * s); g.restore();
   var R = Math.max(narrow ? 1.5 : 2.2, Math.min(4, K * 0.55));
   if (GMAP_MODE === 'dmg') gmapDmg(g, sh, scr, s, R);
+  else if (GMAP_MODE === 'flood') gmapFlood(g, sh, scr, s);
   else sh.guns.forEach(function (gn) {
     var k = 0; for (var q = 0; q < n; q++) if (D[q].key === gn.deck) k = q;
     var off = (-1.4 + 2.3 * (n - 1 - k)) / S, p = scr(gn.muz[0] + gn.ax[0] * off, gn.muz[1] + gn.ax[1] * off), X = p[0], Y = p[1];
@@ -334,6 +347,23 @@ function gmapDmg(g, sh, scr, s, R) {
     if (!crewAble(c) || (c.role !== ROLE.CARPENTER && c.role !== ROLE.SAILMAKER)) return;
     var P = scr(c.pos[0], c.pos[1]); g.fillStyle = c.role === ROLE.CARPENTER ? C.carp : C.sm; g.strokeStyle = '#000'; g.lineWidth = 0.8;
     g.beginPath(); g.arc(P[0], P[1], R * 0.75, 0, 6.2832); g.fill(); g.stroke();
+  });
+}
+/** 進水圖（gmapDraw 的 'flood'）：水格（33_flood.js：邊長 c 格）沿高度加總 ⇒ 每一柱水量／容量，越滿越藍；破口照洞的大小（水下紅、水上橙）。 */
+function gmapFlood(g, sh, scr, s) {
+  var fl = sh.fl; if (!fl || sh.broken) return;
+  var F = fl.F, c = F.c, NX = F.NX, NY = F.NY, NXY = NX * NY, Vc = Math.pow(c * S, 3), capS = new Float32Array(NXY), watS = new Float32Array(NXY), k;
+  for (k = 0; k < F.N; k++) { if (!(fl.cap[k] > 0.02)) continue; var j = k % NXY; capS[j] += fl.cap[k] * Vc; watS[j] += fl.A[k]; }
+  for (k = 0; k < NXY; k++) {
+    if (!(watS[k] > 1e-4) || !(capS[k] > 0)) continue;
+    var x = F.X0 + (k % NX) * c, y = F.Y0 + ((k / NX) | 0) * c, A = scr(x, y), B = scr(x + c, y + c), f = Math.min(1, watS[k] / capS[k]);
+    g.fillStyle = 'rgba(40,140,230,' + (0.3 + 0.65 * f).toFixed(2) + ')';
+    g.fillRect(Math.min(A[0], B[0]), Math.min(A[1], B[1]), Math.abs(B[0] - A[0]) + 0.5, Math.abs(B[1] - A[1]) + 0.5);
+  }
+  fl.holes.forEach(function (h) {
+    if (!(fl.hA[h] > 0)) return;
+    var P = scr(fl.hX[h], fl.hY[h]), wet = gmapHoleWet(sh, h), r = Math.max(1.5, Math.sqrt(fl.hA[h]) / 2 / S * s * 1.3);
+    g.fillStyle = wet ? 'rgba(255,60,50,0.95)' : 'rgba(255,170,40,0.85)'; g.beginPath(); g.arc(P[0], P[1], r, 0, 6.2832); g.fill();
   });
 }
 /** 帆橫過船寬的範圍（帆的頂點 y 的最小、最大；算一次）。 */
