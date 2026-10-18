@@ -20,6 +20,7 @@
     "rooms": { "name": "空艙房", "on": ["link"], "keys": [], "need": ["<名>.min", "<名>.max"], "use": ["<名>.door"], "doc": "§9.2", "game": ["36_rooms.js"] },
     "ship": { "name": "船殼", "on": ["link"], "keys": ["waterline_z", "crew", "material"], "need": [], "use": ["hawse-P", "hawse-S"], "doc": "§9", "game": ["05_hull.js", "75_shipcheck.js"] },
     "anchor": { "name": "錨", "on": ["link", "model"], "keys": ["anchor", "hawse"], "need": [], "use": ["ring"], "doc": "§9", "game": ["76_anchor.js"] },
+    "ram": { "name": "撞角", "on": ["link"], "keys": ["material", "render", "back_m"], "need": [], "use": ["tip"], "doc": "§9.11", "game": ["54_helm.js"] },
     "wheel": { "name": "舵輪", "on": ["model"], "keys": ["spin", "spin_k", "spin_lag", "spin_axis_x", "spin_axis_y", "spin_axis_z", "pivot_anchor"], "need": [], "use": ["hub-aft", "hub-fore"], "doc": "§9.8", "game": ["10_ship.js", "26_spin.js"], "mk": true, "hpK": 0.6, "clear": true },
     "wheel_stand": { "name": "舵輪座", "on": ["model"], "keys": [], "need": [], "use": ["base"], "doc": null, "game": null },
     "rudder": { "name": "舵", "on": ["model"], "keys": ["hinge_x", "hinge_y", "hinge_z", "axis_x", "axis_y", "axis_z", "max_deg", "turn_axis", "spin"], "need": ["stock-top"], "use": ["tiller-end"], "doc": "§9.8.1", "game": ["10_ship.js", "26_spin.js"], "mk": true },

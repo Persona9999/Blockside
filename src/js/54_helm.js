@@ -36,6 +36,7 @@ function helmCovers(g, a) { if (g.mt) return true; var e = a - Math.atan2(g.ax[1
 function helmAspPower(sh, asp) { var p = 0, a = HELM_ASP[asp]; sh.guns.forEach(function (g) { if (g.alive && helmCovers(g, a)) p += helmGunW(g); }); return p; }
 /** 船頭或船尾比正橫火力大 ⇒ 'B'／'A'，不然 'side'（指揮官排戰列用：53_commander.js cmdLine）。 */
 function helmAspect(sh) {
+  if (helmRamDef(sh.T)) return 'B';                                      // 裝了撞角（關聯 meta kind=ram）⇒ 撞角是主武器、船頭對敵（helmSteerRam）
   var pb = helmAspPower(sh, 'B'), pa = helmAspPower(sh, 'A'), ab = Math.max(helmAspPower(sh, 'P'), helmAspPower(sh, 'S')), pe = Math.max(pb, pa);
   return pe > 0 && pe > ab ? (pb >= pa ? 'B' : 'A') : 'side';
 }
@@ -79,14 +80,15 @@ function helmThink(sh, foe) {
   var present = pc < tuneH(sh, H, 'swap') * po ? oth : cur;
   var end = helmAspect(sh);                                              // 船頭／船尾對得到的火力比正橫兩舷都大 ⇒ 拿那一頭對敵（持火號的 siphon、槳帆船的艏砲）
   if (end === 'side' && present !== cur && st.present !== present) helmSay(sh, 'side', sideName(cur) + '火力只剩另一舷的 ' + Math.round(pc / Math.max(1e-6, po) * 100) + '% —— 轉' + sideName(present) + '對敵', true);   // ⛔ 船頭對敵的船也比兩舷 ⇒ 朝前的 siphon 照砲軸算成右舷砲、左舷 0% ⇒ 每想一次就報一次「轉右舷對敵」（Tim 2026-10-18 截圖）
-  if (end !== 'side') { if (st.present !== end) helmSay(sh, 'side', HELM_ASP_NAME[end] + '對得到的火力比兩舷大（' + helmAspPower(sh, end).toFixed(1) + ' 對 ' + Math.max(helmAspPower(sh, 'P'), helmAspPower(sh, 'S')).toFixed(1) + '）—— ' + HELM_ASP_NAME[end] + '對敵、守在 ' + helmAspectR(sh, end).toFixed(0) + ' m 內', true); present = end; }
+  if (end !== 'side' && helmRamDef(sh.T)) { if (st.present !== end) helmSay(sh, 'side', '裝了撞角 —— 撞角對敵（對準它衝、撞完拉開再衝；砲照常開）', true); present = end; }
+  else if (end !== 'side') { if (st.present !== end) helmSay(sh, 'side', HELM_ASP_NAME[end] + '對得到的火力比兩舷大（' + helmAspPower(sh, end).toFixed(1) + ' 對 ' + Math.max(helmAspPower(sh, 'P'), helmAspPower(sh, 'S')).toFixed(1) + '）—— ' + HELM_ASP_NAME[end] + '對敵、守在 ' + helmAspectR(sh, end).toFixed(0) + ' m 內', true); present = end; }
   st.present = present;
   // 被壓制：自己最強的那一舷（或那一頭）< evade × 敵艦最強的 ⇒ 拉開距離（強的那一舷照樣對著它）；回到 evadeOut 以上才回原本的距離
   var mine = Math.max(pc, po, helmAspPower(sh, 'B'), helmAspPower(sh, 'A')), theirs = Math.max(helmPower(foe, 'P'), helmPower(foe, 'S'), helmAspPower(foe, 'B'), helmAspPower(foe, 'A')), r = theirs > 0 ? mine / theirs : 9;
   var ev = st.evade ? r < tuneH(sh, H, 'evadeOut') : r < tuneH(sh, H, 'evade');
   // 拉開之後武器還打得到才拉開（拉開是換個距離繼續打；武器打不到那麼遠 ⇒ 拉開 ＝ 不打 ⇒ 照常靠過去打）。長砲的有效射程（700 m 以上）遠過拉開的距離 ⇒ 跟以前一樣。
   //   ⛔ 不管 ⇒ 持火號（siphon 25 m）對憲法號火力只有一成 ⇒ 一開戰就拉開到 370 m，120 秒一發都沒開（量過 seed 3）。
-  var reach = helmAspectR(sh, present), evR = aiRange(sh) * tuneH(sh, H, 'range') * tuneV(sh.team, 'evadeR'), stay = ev && reach < evR;
+  var reach = helmRamDef(sh.T) ? 0 : helmAspectR(sh, present), evR = aiRange(sh) * tuneH(sh, H, 'range') * tuneV(sh.team, 'evadeR'), stay = ev && reach < evR;
   if (stay !== !!st.stay) { st.stay = stay; if (stay) helmSay(sh, 'evade', '火力只剩敵艦的 ' + Math.round(r * 100) + '%，但拉開到 ' + evR.toFixed(0) + ' m ' + HELM_ASP_NAME[present] + '的武器打不到（' + reach.toFixed(0) + ' m）—— 不拉開、照常靠過去', true); }
   if (stay) ev = false;
   if (ev !== st.evade && !stay) helmSay(sh, 'evade', ev ? '火力只剩敵艦的 ' + Math.round(r * 100) + '%（我 ' + mine.toFixed(0) + ' 對 ' + theirs.toFixed(0) + '）—— 拉開到 ' + tuneV(sh.team, 'evadeR') + ' 倍交戰距離' : '火力回到敵艦的 ' + Math.round(r * 100) + '% —— 回到交戰距離', true);
@@ -141,6 +143,7 @@ function helmGap(sh, foe, asp) {
   return Math.max(0, Math.hypot(p[0] - K[0][0] - ux * t, p[2] - K[0][2] - uz * t) - hb);
 }
 function helmSteerEnd(sh, foe, asp, d, dx, dz) {
+  if (helmRamDef(sh.T)) return helmSteerRam(sh, foe, d, dx, dz);
   var reach = helmAspectR(sh, asp), gap = helmGap(sh, foe, asp), hold = HELM_END_HOLD * reach, vf = (foe.vel[0] * dx + foe.vel[2] * dz) / d, bow = asp === 'B';   // vf：敵艦沿連線離開我的速度
   // 遠了照敵艦的航速往前估（截住它）；兩倍射程內直接對準它 —— ⛔ 一路往前估 10 秒 ⇒ 貼到憲法號旁邊 4 m 時對準的是它前面 40 m，敵艦落在 siphon 的射界（±26°）外，120 秒只開 1 發（量過）
   var T = gap > 2 * reach ? Math.min(HELM_END_LEAD, d / Math.max(1, Math.abs(sh.spd))) : 0, tx = dx + foe.vel[0] * T, tz = dz + foe.vel[2] * T;
@@ -166,7 +169,46 @@ function helmSteerEnd(sh, foe, asp, d, dx, dz) {
   }
   return { yaw: yaw, v: v };
 }
-var HELM_MODE = { approach: '接近', swap: '換舷', evade: '拉開', back: '倒退', abeam: '守正橫', cruise: '巡航', lead: '戰列排頭', line: '戰列跟隨', gauge: '搶上風', close: '船頭接近', bow: '船頭對敵', stern: '船尾對敵', turn: '轉向對敵' }, HELM_MODE_T = 4;
+// ───────── 撞角（Tim 2026-10-18：「防撞設定是否可以每艘船有獨立參數(有的船可以裝備撞角 故意撞敵船)」）─────────
+// 撞角 ＝ 一件關聯標 meta kind=ram（造船規格 §9.11；維吉尼亞號的鐵撞角那一種）：撞角是這艘的主武器 ⇒ helmAspect 'B'、指揮官不排戰列、被壓制也不拉開（撞角打不到遠處）。
+// 打法（helmSteerRam）：對準敵艦、照它的航速往前估（截住它，最多 RAM_LEAD 秒）全速衝；讓敵艦不讓（foeAvoid）；撞上（31_sailing.js 撞擊事件結束、sh.ramEnd）⇒
+//   拉開到兩條龍骨線隔 back_m（meta；預設 RAM_BACK_M）或 RAM_BACK_T 秒（有動力 ⇒ 船頭對著它倒車；只有帆 ⇒ 背對它跑開），再衝下一次；貼上了卻沒撞成（太慢）也一樣。砲照常開（50_sim.js simAi 不管艦長）。撞多狠照撞擊物理（硬度照撞點的材質：鐵撞角撞木船，木船吃虧）。
+var RAM_LEAD = 15, RAM_BACK_M = 60, RAM_BACK_T = 25, RAM_HIT_T = 1.5, RAM_TOUCH = 1;
+/** 船中水線那一段的半寬（m）。 */
+function helmHalfBeam(T) { return (T.hullHB[T.zw * T.hullTW + clamp(Math.round((T.wl0 + T.wl1) / 2), 0, T.hullTW - 1)] || 20) * S; }
+/** 船型 T 的撞角：{ tip（格座標：固定點 tip，沒有 ⇒ 船頭中線水線附近最前面那一格）, back（拉開幾 m）, path } 或 null（沒標 kind=ram）。載入時算一次。 */
+function helmRamDef(T) {
+  if (T.ramDef !== undefined) return T.ramDef;
+  var p = (T.h.parts || []).filter(function (q) { return q.meta && q.meta.kind === 'ram'; })[0];
+  if (!p) return (T.ramDef = null);
+  var tip = p.points && p.points.tip ? p.points.tip.slice() : null;
+  if (!tip && T.base) { var G = T.base, y = Math.floor(T.cy); for (var x = G.sx - 1; x >= 0 && !tip; x--) for (var z = T.zw - 15; z <= T.zw + 10; z++) if (G.get(x, y, z)) { tip = [x + 0.5, y + 0.5, z + 0.5]; break; } }
+  return (T.ramDef = { tip: tip, back: +p.meta.back_m > 0 ? +p.meta.back_m : RAM_BACK_M, path: p.path || p.name });
+}
+function helmSteerRam(sh, foe, d, dx, dz) {
+  var R = helmRamDef(sh.T), st = sh.ramSt || (sh.ramSt = { back: -1e9 }), yaw, m;
+  var hit = sh.ramEnd && sh.ramEnd[foe.i] !== undefined && SIMT - sh.ramEnd[foe.i] < RAM_HIT_T;
+  // 貼上了卻沒撞成（船身隔不到 RAM_TOUCH m、這一對沒有撞擊事件、接近速度低於撞擊門檻）⇒ 一樣先拉開、助跑再衝。
+  //   ⛔ 不管 ⇒ 維吉尼亞號從正後方追上憲法號（相對 1 m/s，門檻 1.5）船頭頂著它的船尾一直推，60 秒一次都沒撞成（量過 seed 3、風 0.3）
+  var kd = segSeg(keelLine(sh)[0], keelLine(sh)[1], keelLine(foe)[0], keelLine(foe)[1]).d, vc = ((sh.vel[0] - foe.vel[0]) * dx + (sh.vel[2] - foe.vel[2]) * dz) / d;   // kd：兩條龍骨線隔多遠（m）；vc：接近速度
+  var touch = !hit && !ramOn(sh, foe) && kd < helmHalfBeam(sh.T) + helmHalfBeam(foe.T) + RAM_TOUCH && vc < RAM.v0;   // 船身貼上（兩艘半寬 ＋ RAM_TOUCH）而且接近得比撞擊門檻慢
+  var backing = SIMT - st.back < RAM_BACK_T && kd < R.back;
+  if (hit && SIMT - st.back > RAM_HIT_T || touch && !backing) {   // 貼著倒車的那一段不再算（⛔ 每 1.5 秒重報一次「沒撞成」）
+    st.back = SIMT; helmSay(sh, 'ram', (hit ? '撞上' : '貼上了但太慢、沒撞成 ——') + (foe.i === PLAYER_I ? '我艦' : foe.name) + ' —— 拉開 ' + R.back + ' m 再衝', true); }
+  var canBack = sh.cfg.base > 0 && sh.drive && sh.drive.cap > 0.05, v = Infinity;
+  if (SIMT - st.back < RAM_BACK_T && kd < R.back) {                     // 拉開到龍骨線隔 back m（或 RAM_BACK_T 秒；剛撞上、剛貼上 ⇒ st.back 剛重設）
+    if (canBack) { yaw = Math.atan2(-dz, dx); v = -HELM_BACK_V; } else yaw = Math.atan2(dz, -dx);   // 有動力 ⇒ 船頭照樣對著它倒車退出來（維吉尼亞號撞完坎伯蘭號就是倒車退出來的）；只有帆 ⇒ 背對它跑開
+    m = 'ramback';
+    // ⛔ 掉頭跑開再掉頭回來 ⇒ 維吉尼亞號（靈活 0.4）一來一回 60 秒以上；⛔ 照中心距 80 m ⇒ 84 m 長的船等於沒分開（量過）
+  } else {
+    var T = Math.min(RAM_LEAD, d / Math.max(1, Math.abs(sh.spd))), tx = dx + foe.vel[0] * T, tz = dz + foe.vel[2] * T;
+    yaw = Math.atan2(-tz, tx); m = 'ram';
+  }
+  sh.endDbg = { ram: m, d: +d.toFixed(1) }; sh.hEndT = SIMT;
+  if (m !== sh.hMode && SIMT - (sh.hModeT || -1e9) >= HELM_MODE_T) { sh.hMode = m; sh.hModeT = SIMT; helmSay(sh, 'mode', HELM_MODE[m] + '：距離 ' + d.toFixed(0) + ' m —— ' + (m === 'ram' ? '對準它、全速衝' : canBack ? '船頭對著它倒車退開' : '背對它全速拉開'), false); }
+  return { yaw: yaw, v: v };
+}
+var HELM_MODE = { approach: '接近', swap: '換舷', evade: '拉開', back: '倒退', abeam: '守正橫', cruise: '巡航', lead: '戰列排頭', line: '戰列跟隨', gauge: '搶上風', close: '船頭接近', bow: '船頭對敵', stern: '船尾對敵', turn: '轉向對敵', ram: '衝撞', ramback: '撞完拉開' }, HELM_MODE_T = 4;
 /** 指揮官的命令改了打法（排頭、跟隨、搶上風）⇒ 記一筆（跟 helmSteer 的打法同一格 sh.hMode、同一個間隔）。 */
 function helmMode(sh, m, text) { if (m !== sh.hMode && SIMT - (sh.hModeT || -1e9) >= HELM_MODE_T) { sh.hMode = m; sh.hModeT = SIMT; helmSay(sh, 'mode', HELM_MODE[m] + '：' + text, false); } }
 /** 戰列的排頭（TASK-0679；指揮官 mode 'lead'，53_commander.js cmdLine）：照「整條戰列」開 ——
@@ -317,7 +359,8 @@ function helmGovern(sh, vS, vB) {
 function helmWantText(w) { return w === 'cruise' ? '巡航：戰鬥帆＋引擎全速' : w === Infinity ? '要全速' : w < 0 ? '要倒退 ' + (-w).toFixed(1) + ' m/s' : '要 ' + (w * 1.944).toFixed(1) + ' 節'; }
 /** 讓敵艦（不撞）：跟讓友船同一套（52_fleet.js friendAvoid），對象換成還在的敵艦。 */
 function foeAvoid(sh) {
-  if (avoidCfg(sh).foe === false) return null;                           // 設定檔 cfg.avoid.foe false：裝撞角、要撞上去的船不讓敵艦（52_fleet.js avoidCfg）
+  if (avoidCfg(sh).foe === false) return null;
+  if (helmEndOn(sh) && sh.endDbg && sh.endDbg.ram === 'ram') return null;   // 撞角船在衝 ⇒ 不讓敵艦（拉開那一段照讓）                           // 設定檔 cfg.avoid.foe false：裝撞角、要撞上去的船不讓敵艦（52_fleet.js avoidCfg）
   var L = SHIPS.filter(function (o) { return isFoe(sh, o) && !o.sunk && !o.sinkingFinal; }); if (!L.length) return null;
   // 船頭／船尾接敵（helmSteerEnd）⇒ 只往前看 HELM_END_AVT 秒（接近率已經照距離收了）：⛔ 照讓友船的 15 秒 ⇒ 兩艘持火號對衝、龍骨線還隔 97 m 就判成會撞而轉開，永遠進不了 siphon 的 25 m
   return friendAvoid(sh, L, helmEndOn(sh) ? HELM_END_AVT : undefined);
