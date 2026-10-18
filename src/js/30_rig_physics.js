@@ -445,7 +445,7 @@ function spawnLoose(sh, r) {
     var Q = pt[0], n = Q.length; if (n < 2) return;
     var p = new Float32Array(n * 3), rest = new Float32Array(n - 1);
     Q.forEach(function (w, j) { p[j * 3] = w[0]; p[j * 3 + 1] = w[1]; p[j * 3 + 2] = w[2]; if (j) rest[j - 1] = len(sub(w, Q[j - 1])); });
-    var o = { p: p, q: Float32Array.from(p), rest: rest, n: n, pin: new Uint8Array(n), hk: [pt[1][0], pt[2][0]], hv: [pt[1][1], pt[2][1]], col: r.col, free: 0 };
+    var o = { p: p, q: Float32Array.from(p), rest: rest, n: n, pin: new Uint8Array(n), hk: [pt[1][0], pt[2][0]], hv: [pt[1][1], pt[2][1]], col: r.col, free: 0, of: r.of || r };   // of：從哪一條繩垂下來的（帆匠修好那條 ⇒ 把垂著的收掉，47_sailmaker.js）
     o.pin[0] = o.hk[0] ? 1 : 0; o.pin[n - 1] = o.hk[1] ? 1 : 0;
     ropePins(sh, o); sh.loose.push(o);
   });
@@ -698,7 +698,7 @@ function tethCut(sh, c) {
     if (!gone) continue;
     (sh.tCut || (sh.tCut = {}))[t.j] = 1; sh.rigDirty = true;
     var q = r.pts, ce = t.ce * 3;
-    spawnLoose(sh, { pts: q, a: r.a, ma: r.ma, pa: r.pa, b: r.b, mb: r.mb, pb: r.pb, col: r.col, offSail: { verts: [q[ce], q[ce + 1], q[ce + 2]] } });
+    spawnLoose(sh, { pts: q, a: r.a, ma: r.ma, pa: r.pa, b: r.b, mb: r.mb, pb: r.pb, col: r.col, of: r, offSail: { verts: [q[ce], q[ce + 1], q[ce + 2]] } });
   }
 }
 /** 帆腳離繩的另一端超過 L ⇒ 拉回 L（另一端照繩現在的位置：綁在帆桁上的跟著帆桁轉）。clothStep 每一輪約束之後。 */

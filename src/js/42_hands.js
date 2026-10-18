@@ -554,6 +554,8 @@ function handJoin(sh, c) {
   var H = c.hand, J = H.job, NV = sh.nav;
   if (J.kind === 'staff' || J.kind === 'carry') { medJoin(sh, c); return; }
   if (J.kind === 'repair') { carpJoin(sh, c); return; }                // 木匠修東西（46_carpenter.js）
+  if (J.kind === 'sail') { smJoin(sh, c); return; }                    // 帆匠補帆（47_sailmaker.js）
+  if (J.kind === 'cloth') { smCloth(sh, c); return; }                  // 帆匠回帆布櫃拿帆布（47_sailmaker.js）
   if (J.kind === 'wood') { carpWood(sh, c); return; }                  // 木匠回木工台拿木材（46_carpenter.js）   // 醫療艙的人手、搬傷員（44_medic.js）
   if (J.kind === 'pump') { pumpJoin(sh, c); return; }                   // 搖抽水機（45_pumps.js）
   var hr = J.reg !== undefined ? handReg(sh, c) : -1;                   // 量不到（-1）⇒ 照以前當作到了：爬進轉過的砲塔，梯頭那一點是開局時算的、吊籃已經轉走 ⇒ snap 不到（測試模式量到：同一人被派 88 次、次次作廢）
@@ -625,5 +627,5 @@ function navRefresh(sh) {
 function handsText(sh) {
   if (!sh.nav) return '';
   var h = sh.crew.filter(function (c) { return c.role === ROLE.HAND && crewAble(c); }), go = h.filter(function (c) { return c.hand.job; }).length;
-  return '　預備 ' + (h.length - go) + (go ? '（補位中 ' + go + '）' : '') + carpText(sh);
+  return '　預備 ' + (h.length - go) + (go ? '（補位中 ' + go + '）' : '') + carpText(sh) + smText(sh);
 }
