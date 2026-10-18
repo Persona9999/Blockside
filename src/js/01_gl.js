@@ -1,6 +1,57 @@
 // ───────────────────────── WebGL ─────────────────────────
 var cv = $('cv'), gl = cv.getContext('webgl2', { antialias: false, preserveDrawingBuffer: true });   // 反鋸齒自己做（MSAA framebuffer，畫質設定；60_render.js targets）
-function glFail(msg) { var e = $('err'); e.style.display = 'block'; e.textContent = msg; $('load').textContent = msg; }
+function glFail(msg) { $('load').textContent = msg; errShow(msg); }
+// ── 報錯彈窗與回報（Tim 2026-10-18：「是否可以加一個彈窗(可關閉) 以及一個回報錯誤按鈕(可以填錯誤內容 然後寄email…(包含報錯訊息與玩家的回報內容)」）──
+// glFail 與沒接住的錯誤（window error／unhandledrejection）都開這個彈窗；同一則訊息只自己跳一次（關掉之後不再煩人）。
+// 「回報錯誤」⇒ 多一格讓玩家寫發生什麼事；「寄出」⇒ mailto: 打開玩家的郵件程式（⛔ 成品不准 fetch：admin.py vxk_inline 檢查）：
+//   主旨帶訊息開頭，內文 ＝ 錯誤訊息（最多 ERR_MAX 字，信太長有的郵件程式打不開）＋ 玩家寫的 ＋ 遊戲狀態（errState）＋ 網址、時間、瀏覽器、成品的來源指紋。寄不寄由玩家決定。
+//   「複製內容」⇒ 同一份文字放進剪貼簿（郵件程式打不開、或想貼到 Discord 的時候用）。
+var ERR_MAIL = 'tim11251994@gmail.com', ERR_MAX = 1500, ERR_SEEN = {}, ERR_NOW = '';
+function errShow(msg) {
+  var e = $('err'); if (!e) return;
+  msg = String(msg); ERR_SEEN[msg] = 1; ERR_NOW = msg;
+  $('errMsg').textContent = msg; $('errRep').hidden = true; $('errSend').hidden = true; $('errCopy').hidden = true; $('errRepB').hidden = false; $('errTxt').value = '';
+  e.style.display = 'flex';
+}
+function errFp() { try { return JSON.parse(document.getElementById('blockside-src').textContent).fp; } catch (x) { return '?'; } }   // 成品的來源指紋（admin.py src_stamp）
+/** 遊戲狀態（Tim 2026-10-18：「錯誤回報可以打包遊戲內其他參數資訊一起回傳」）：一行一項，每一行各自 try（載入一半出錯 ⇒ 讀不到的寫原因，其他照寫）；存檔那一行不列 v（版本號，每次都有）。 */
+function errState() {
+  function L(k, f) { try { return k + '：' + f(); } catch (x) { return k + '：（讀不到：' + (x && x.message || x) + '）'; } }
+  var st = function (s) { return s.sunk ? '沉' : s.sinkingFinal ? '沉沒中' : s.struck ? '降旗' : ''; };
+  return [
+    L('遊戲', function () { return MODE + '／' + PLAY + '／' + (RUNNING ? '打仗中 ' + SIMT.toFixed(1) + ' 秒' + (PAUSED ? '（暫停）' : '') : '主選單') + '／種子 ' + SEED; }),
+    L('編成', function () { return '我方 ' + FLEET_SET[0].join(',') + '｜敵方 ' + FLEET_SET[1].join(',') + '／同時在場 ' + FIELD_N + '／補位 ' + REINF_MODE; }),
+    L('場上', function () { return (SHIPS.map(function (s) { return (s.i === PLAYER_I ? '*' : '') + s.T.id + (s.team === 'blue' ? '藍' : '紅') + st(s); }).join(' ') || '（沒有）') + '／候補 藍 ' + RESERVE.blue.length + '、紅 ' + RESERVE.red.length; }),
+    L('畫質', function () { return gfxLevel() + '（裝飾' + (GFX.deco ? '開' : '關') + '、解析度 ' + GFX.res + '）／物理 ' + phxLevel() + '／天氣 ' + WX_ID; }),
+    L('存檔', function () { var k = Object.keys(prefsSnap()).filter(function (x) { return x !== 'v'; }); return (PREFS.read ? '有讀' : '沒讀') + '；改過 ' + k.length + ' 項' + (k.length ? '：' + k.join(',').slice(0, 300) : ''); }),
+    L('載入', function () { var v = window.__vxk; return v ? '解碼 ' + v.decodeMs + ' ms、網格 ' + v.meshMs + ' ms、快取' + (v.cache && v.cache.hit ? '有' : '沒有') : '還沒載完'; }),
+    L('裝置', function () { return '螢幕 ' + screen.width + '×' + screen.height + '、視窗 ' + innerWidth + '×' + innerHeight + '、DPR ' + devicePixelRatio + '、核心 ' + (navigator.hardwareConcurrency || '?') + '、記憶體 ' + (navigator.deviceMemory || '?') + ' GB、觸控 ' + (navigator.maxTouchPoints || 0); }),
+    L('GPU', function () { if (!gl) return '沒有 WebGL2'; var x = gl.getExtension('WEBGL_debug_renderer_info'); return x ? gl.getParameter(x.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER); }),
+    L('JS 記憶體', function () { var m = performance.memory; return m ? Math.round(m.usedJSHeapSize / 1048576) + ' / ' + Math.round(m.jsHeapSizeLimit / 1048576) + ' MB' : '（這個瀏覽器不給）'; })
+  ].join('\n');
+}
+/** 回報的內文（寄信、複製同一份）。 */
+function errBody() {
+  var msg = ERR_NOW.length > ERR_MAX ? ERR_NOW.slice(0, ERR_MAX) + '…（後面截掉 ' + (ERR_NOW.length - ERR_MAX) + ' 字）' : ERR_NOW;
+  return '錯誤訊息：\n' + msg + '\n\n玩家回報：\n' + ($('errTxt').value.trim() || '（沒寫）') + '\n\n遊戲狀態：\n' + errState() +
+    '\n\n網址：' + location.href + '\n時間：' + new Date().toISOString() + '\n瀏覽器：' + navigator.userAgent + '\n版本：' + errFp();
+}
+function errMail() {
+  var body = errBody();
+  location.href = 'mailto:' + ERR_MAIL + '?subject=' + encodeURIComponent('Blockside 錯誤回報：' + ERR_NOW.split('\n')[0].slice(0, 60)) + '&body=' + encodeURIComponent(body);
+}
+function errCopy() {
+  var t = errBody(), b = $('errCopy');
+  function ok(s) { b.textContent = s; setTimeout(function () { b.textContent = '複製內容'; }, 1500); }
+  if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(t).then(function () { ok('已複製'); }, function () { ok('複製不了'); });
+  else { var a = $('errTxt'), v = a.value; a.value = t; a.select(); var r = false; try { r = document.execCommand('copy'); } catch (x) {} a.value = v; ok(r ? '已複製' : '複製不了'); }   // 舊瀏覽器：借輸入格選起來複製
+}
+$('errX').onclick = function () { $('err').style.display = 'none'; };
+$('errRepB').onclick = function () { $('errRep').hidden = false; $('errSend').hidden = false; $('errCopy').hidden = false; $('errRepB').hidden = true; $('errTxt').focus(); };
+$('errSend').onclick = errMail; $('errCopy').onclick = errCopy;
+function errAuto(m) { m = String(m || ''); if (!m || m === 'Script error.' || /ResizeObserver/.test(m) || ERR_SEEN[m] || $('err').style.display === 'flex') return; errShow(m); }   // 跨網域的「Script error.」、ResizeObserver 的警告不跳；開著的不換掉（glFail 之後的 throw 不蓋掉那一句好懂的）
+window.addEventListener('error', function (ev) { errAuto(ev.error && ev.error.stack ? ev.error.message + '\n' + ev.error.stack : ev.message); });
+window.addEventListener('unhandledrejection', function (ev) { var r = ev.reason; errAuto(r && r.stack ? (r.message || r) + '\n' + r.stack : r); });
 if (!gl) { glFail('這個瀏覽器沒有 WebGL2，畫不出來。'); throw new Error('no WebGL2'); }   // 拆檔後這裡是閉包的頂層：throw ＝ 原本的 return（停下來）
 
 var P = {};

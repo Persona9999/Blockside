@@ -37,7 +37,7 @@ function selfBlock(sh, g, target) {
   for (var s = 2; s <= lim; s++) {
     var P = [M[0] + d[0] * s, M[1] + d[1] * s, M[2] + d[2] * s];
     if (P[0] < 0 || P[1] < 0 || P[2] < 0 || P[0] >= S[0] || P[1] >= S[1] || P[2] >= S[2]) return false;   // 出了船的外框
-    var o = hitModel(sh, P, 0, skip); if (o && (GUNS[o.kind] || o.kind === 'powder')) return true;   // 別門砲、火藥桶（彈藥庫、砲旁的備便桶）
+    var o = hitModel(sh, P, 0, skip); if (o && (GUNS[o.kind] || kindProp(o.kind, 'safe'))) return true;   // 別門砲、規格表 safe 的（火藥桶（彈藥庫、砲旁的備便桶）
     if (sh.arm) { var a = armAt(sh, P); if (a && !a.prop && a.g !== g && !(own && a.nd === own)) return true; }
   }
   return false;
@@ -463,7 +463,7 @@ function meshOcc(m) {
 function blowModel(sh, m, vel, drop, at) {
   if (!m.alive) return;
   m.alive = false;
-  if (m.kind === 'door' || m.spinB) m.sw = 0;                           // 照參數轉的（26_spin.js）同一個理由：轉角只是畫面。門：開關只是演出（25_doors.js）⇒ 照關著的樣子飛出去（落水的水花抽戰局的亂數：⛔ 照開著的角度 ⇒ 演出開關會改戰局）
+  if (kindProp(m.kind, 'anim') || m.spinB) m.sw = 0;                           // 照參數轉的（26_spin.js）同一個理由：轉角只是畫面。門：開關只是演出（25_doors.js）⇒ 照關著的樣子飛出去（落水的水花抽戰局的亂數：⛔ 照開著的角度 ⇒ 演出開關會改戰局）
   var M0 = M4.mul(sh.M, modelLocal(m)), c0 = M4.pt(sh.M, m.c[0], m.c[1], m.c[2]);
   var vd = norm(vel), sp = drop ? 0 : clamp(len(vel) * 0.07, 5, 16);
   FLY.push({ T: sh.T, mesh: m.mesh, M0: M0, c0: c0, c: c0.slice(), R: M4.ident(), t: 0, wet: false,

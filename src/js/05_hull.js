@@ -106,7 +106,8 @@ function loadHull(id) {
   HULL_DECO[id] = deco;
   return (HULLS[id] = P = yieldUI().then(function () { return Promise.all([VK.loadEmbedded(info.el).then(meshPool), cacheGet(info)]); })   // 解碼與讀快取一起跑（06_cache.js）
     .then(function (r) { return buildHull(info, r[0], t0, r[1], deco); })
-    .then(function (T) { if (HULLS[id] === P) { HULLT[id] = T; cachePut(T, info); } return T; }));   // 載到一半被 decoSync 丟掉 ⇒ 不蓋新的那一份
+    .then(function (T) { if (HULLS[id] === P) { HULLT[id] = T; cachePut(T, info); return T; } return loadHull(id); }));   // 載到一半被 decoSync 丟掉 ⇒ 不蓋新的那一份，改等換上去的那一份
+    //   ⛔ 回舊的 T ⇒ 等它的人（90_main.js 開場那一串）接著讀 HULLT[id] 讀到 undefined ⇒「載入失敗：…(reading 'h')」（Tim 2026-10-18 手機：解析到一半點了畫質「低」，裝飾換了）
 }
 /**
  * meta 裡指名別的部件的路徑（TASK-0657 改裝船；Tim：「概念類似 Unity 的 nested prefab」）：原船整艘是改裝船的一條關聯（原船/…）⇒ 原船裡的 meta 互相指名用的還是原船裡的路徑

@@ -316,7 +316,17 @@
   #flab #flabChart{ position:relative; left:auto; top:auto; flex:0 0 130px; width:100%; height:130px; border-radius:5px; } #flabDet{ flex:1 1 30%; overflow:auto; font-size:12px; color:#cfd8e2; } #flabDet .hd{ cursor:pointer; padding:1px 3px; } #flabDet .hd:hover{ background:rgba(255,255,255,.07); } #flabTL{ width:min(360px, 50vw); } #flabSide .fr{ padding:2px 5px; border-left:3px solid; margin:2px 0; cursor:pointer; } #flabSide .fr.blue{ border-color:#5aa2ff; } #flabSide .fr.red{ border-color:#ff6b5a; } #flabSide .fr.out{ opacity:.5; } #flabSide .fr.sel{ background:rgba(224,180,83,.18); }
   #flabBatch{ padding:6px 12px 10px; max-height:34vh; overflow:auto; border-top:1px solid rgba(255,255,255,.1); } #flabBtab{ border-collapse:collapse; margin-top:6px; } #flabBtab th, #flabBtab td{ border:1px solid rgba(255,255,255,.15); padding:3px 8px; text-align:center; } #flabBtab small{ color:#9fb0c2; } #flab .note{ color:#9fb0c2; font-size:12px; margin-top:6px; }
   @media (max-width:760px){ #flabMain{ flex-direction:column; } #flabRight{ flex:0 0 auto; max-height:34vh; } #flabSide{ max-height:14vh; } #flabCv{ min-height:46vh; } }
-  #err{ position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); max-width:80%; color:#ffb3a6; display:none; white-space:pre-wrap; }
+  /* 報錯（01_gl.js errShow；Tim 2026-10-18「報錯會一直出現在畫面上 是否可以加一個彈窗(可關閉) 以及一個回報錯誤按鈕」）：蓋在最上面、可以關 */
+  #err{ position:fixed; inset:0; z-index:50; display:none; align-items:center; justify-content:center; padding:16px; background:rgba(0,0,0,.5); }
+  #err .card{ width:100%; max-width:520px; max-height:100%; overflow:auto; padding:16px 18px; text-align:left; background:#1c2129; box-shadow:0 8px 30px rgba(0,0,0,.6); }   /* 實色：.panel 是半透明，後面的主選單會透出來 */
+  #err h2{ margin:0 0 8px; font-size:20px; color:#ffb3a6; }
+  #err pre{ margin:0; max-height:30vh; overflow:auto; white-space:pre-wrap; word-break:break-word; color:#ffb3a6; font-size:13px; }
+  #err label{ display:block; margin:12px 0 4px; }
+  #err textarea{ box-sizing:border-box; width:100%; font:inherit; font-size:14px; padding:6px 8px; border-radius:6px; border:1px solid rgba(255,255,255,.3); background:rgba(0,0,0,.3); color:var(--ink); }
+  #err .note{ margin-top:6px; font-size:12px; opacity:.75; }
+  #err .btns{ margin-top:12px; text-align:right; }
+  #err button{ font:inherit; margin:0 0 0 8px; padding:6px 16px; border-radius:6px; border:1px solid rgba(255,255,255,.3); background:rgba(255,255,255,.08); color:var(--ink); cursor:pointer; }
+  #err button#errSend{ background:#b8452e; border-color:#e06a4f; }
 </style>
 </head>
 <body>
@@ -663,7 +673,12 @@
   </div>
   <div id="end"><div class="card panel"><h2 id="endT"></h2><div id="endS"></div>
     <button id="endC">繼續看</button><button id="endA">再一場</button><button id="endR">回選單</button></div></div>
-  <div id="err"></div>
+  <div id="err" role="alertdialog" aria-labelledby="errH"><div class="card panel">
+    <h2 id="errH">出錯了</h2><pre id="errMsg"></pre>
+    <div id="errRep" hidden><label for="errTxt">發生什麼事、剛剛在做什麼（選填）</label><textarea id="errTxt" rows="4"></textarea>
+      <div class="note">按「寄出」會打開你的郵件程式，信裡帶著上面的錯誤訊息、這段文字和遊戲狀態（玩法、編成、畫質、裝置…）；寄不寄由你決定。郵件程式打不開的話，可以按「複製內容」自己貼。</div></div>
+    <div class="btns"><button id="errRepB">回報錯誤</button><button id="errCopy" hidden>複製內容</button><button id="errSend" hidden>寄出</button><button id="errX">關閉</button></div>
+  </div></div>
 </div>
 
 <script src="../VoxelKit/voxelkit.js"></script>

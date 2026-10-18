@@ -219,7 +219,7 @@ function makeStations(sh, auto) {
   var keg = sh.mags.reduce(function (a, m) { return a || m.kegs[0]; }, null); if (!keg || !T.rig.meshes[keg.mesh]) return [];   // 取用點的桶照哪一間的桶都行（⛔ 只看第一間 ⇒ 第一間沒桶整艘就沒有取用點）；都沒有桶 ⇒ 沒有取用點（匯入檢查報 ✗）
   var V = T.rig.meshes[keg.mesh].verts, mn = [1e9, 1e9, 1e9], mx = [-1e9, -1e9, -1e9], j, a;
   for (j = 0; j < V.length; j += 3) for (a = 0; a < 3; a++) { mn[a] = Math.min(mn[a], V[j + a]); mx[a] = Math.max(mx[a], V[j + a]); }
-  var guns = sh.models.filter(function (m) { return GUNS[m.kind] || m.kind === 'wheel'; }), out = [];
+  var guns = sh.models.filter(function (m) { return GUNS[m.kind] || kindProp(m.kind, 'clear'); }), out = [];
   function clear(x, y, z) {
     for (var dy = 0; dy <= 9; dy += 3) for (var dx = 0; dx <= 9; dx += 3) { var zz = standZ(BASE, x + dx, y + dy, z - 1, z + 1, 8); if (zz < 0) return false; }
     return !guns.some(function (m) { var b = m.bb; return x + 11 > b[0] && x - 2 < b[3] && y + 11 > b[1] && y - 2 < b[4] && z + 8 > b[2] && z - 3 < b[5]; });
