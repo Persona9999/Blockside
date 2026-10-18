@@ -689,7 +689,7 @@ function tethOf(sh, s, c) {
     for (k = 1; k < m; k++) { var a = fe ? m - 1 - k : k, b = fe ? a + 1 : a - 1; acc[k] = acc[k - 1] + Math.hypot(q[a * 3] - q[b * 3], q[a * 3 + 1] - q[b * 3 + 1], q[a * 3 + 2] - q[b * 3 + 2]); }   // acc[k]：從另一端走到第 k 點（照走的順序）
     for (k = 0; k < m; k++) t[fe ? m - 1 - k : k] = acc[m - 1] > 0 ? acc[k] / acc[m - 1] : 1;
     var es = []; for (k = 0; k < T.sim.ea.length; k++) if (T.sim.ea[k] === i || T.sim.eb[k] === i) es.push(k);   // es：帆腳的布邊（全斷 ⇒ 帆腳跟帆斷開，tethCut）
-    list.push({ i: i, j: j, ce: ce, fe: fe, L: d(fe), t: t, es: es });
+    list.push({ i: i, j: j, ce: ce, fe: fe, L: d(fe), t: t, es: es, y: tethYard(T) });
   });
   return (T.teth = list);
 }
@@ -708,12 +708,19 @@ function tethCut(sh, c) {
   }
 }
 /** 帆腳離繩的另一端超過 L ⇒ 拉回 L（另一端照繩現在的位置：綁在帆桁上的跟著帆桁轉）。clothStep 每一輪約束之後。 */
+// 帆桁轉了 ⇒ sheet 跟著鬆（Tim 2026-10-19：持火號「拋錨會導致帆布出現一塊下拉」「轉彎也會出帆bug」「固定出現在前帆」）：
+//   sheet 的長度照「帆腳作品的位置繞這面帆的帆桁轉 rot 之後」到 sheet 另一端的距離，不短於作品的長度 L —— 實船轉帆桁時 sheet 是放出去的。
+//   ⛔ 一直照作品的 L：三角帆的帆桁長（持火號前桅 20 m）、追風轉到 ±58° ⇒ 轉過的帆腳離帆腳索樁遠過 L，帆腳被拉回樁那邊，整片布從帆桁扯成一塊拖到甲板。
+//   帆桁 ＝ 這面帆綁最多點的那根（tethYard，跟 clothBrace 同一個挑法）；沒綁帆桁、沒轉 ⇒ 照 L（以前那樣）。只是畫面（布），戰局不讀。
+function tethYard(T) { var yk = T.sim && T.sim.yk, cnt = {}, top = -1; if (!yk) return -1; for (var i = 0; i < yk.length; i++) if (yk[i] >= 0 && (cnt[yk[i]] = (cnt[yk[i]] || 0) + 1) > (cnt[top] || 0)) top = yk[i]; return top; }
 function tethSolve(sh, c) {
-  var tt = c.tt, p = c.p;
+  var tt = c.tt, p = c.p, P0 = c.T.sim.p0;
   for (var k = 0; k < tt.length; k++) {
     var t = tt[k], r = sh.ropes[t.j]; if (r.dead || sh.tCut && sh.tCut[t.j]) continue;
-    var q = r.pts, f = t.fe * 3, o = t.i * 3, dx = p[o] - q[f], dy = p[o + 1] - q[f + 1], dz = p[o + 2] - q[f + 2], l = Math.sqrt(dx * dx + dy * dy + dz * dz);
-    if (l > t.L && l > 1e-9) { var s = t.L / l; p[o] = q[f] + dx * s; p[o + 1] = q[f + 1] + dy * s; p[o + 2] = q[f + 2] + dz * s; }
+    var q = r.pts, f = t.fe * 3, o = t.i * 3, dx = p[o] - q[f], dy = p[o + 1] - q[f + 1], dz = p[o + 2] - q[f + 2], l = Math.sqrt(dx * dx + dy * dy + dz * dz), L = t.L;
+    var m = t.y >= 0 ? sh.models[t.y] : null;
+    if (m && m.rot) { var w = rotZ([P0[o], P0[o + 1], P0[o + 2]], m.piv, m.rot); L = Math.max(L, Math.hypot(w[0] - q[f], w[1] - q[f + 1], w[2] - q[f + 2])); }   // 帆桁轉了 ⇒ sheet 放出去（見上）
+    if (l > L && l > 1e-9) { var s = L / l; p[o] = q[f] + dx * s; p[o + 1] = q[f + 1] + dy * s; p[o + 2] = q[f + 2] + dz * s; }
   }
 }
 // 效能（ame 2026-10-15，Tim：「接手效能，在她的碰撞做法上加篩選和降頻」；碰撞的做法本身照 Sirius 的）：
