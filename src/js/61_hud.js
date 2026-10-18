@@ -126,13 +126,12 @@ function gmapLegend(sh) {
 function floodSumText(sh) {
   var fl = sh.fl;
   if (!fl || sh.broken) return (sh.broken ? '斷成兩截（照公式，一定沉）' : '公式模式：看不到艙內的水（物理效果「進水」選粒子才看得到）') + '・水線下打掉 ' + (sh.inflow || 0).toLocaleString() + ' 格・下沉 ' + sh.sink.toFixed(2) + ' m';
-  var under = 0, out = 0; fl.holes.forEach(function (h) { if (!(fl.hA[h] > 0)) return; if (fl.hWet[h]) under++; if (flHoleState(fl, h) === 'out') out++; });   // 33_flood.js 破口的狀態
-  return '積水 ' + Math.round(fl.vol * RHO_W).toLocaleString() + ' 噸・破口 ' + fl.open + ' 處（水下 ' + under + (out ? '、往外流 ' + out : '') + '）・進水 ' + fl.inQ.toFixed(2) + ' m³/s' + (fl.outQ > 0.005 ? '・往外流 ' + fl.outQ.toFixed(2) + ' m³/s' : '') + '・抽水 ' + pumpNow(sh).toFixed(1) + ' 噸/分・下沉 ' + sh.sink.toFixed(2) + ' m';
+  return '積水 ' + Math.round(fl.vol * RHO_W).toLocaleString() + ' 噸・破口 ' + fl.open + ' 處（水下 ' + fl.underN + (fl.outN ? '、往外流 ' + fl.outN : '') + '）・進水 ' + flTpm(fl.inQ) + (fl.outQ > 0.005 ? '・往外流 ' + flTpm(fl.outQ) : '') + '・抽水 ' + pumpNow(sh).toFixed(1) + ' 噸／分・淨進水 ' + flNetText(fl) + '・下沉 ' + sh.sink.toFixed(2) + ' m';
 }
 /** 損壞表一行（48_damage.js；只讀，⛔ 不在這裡重掃 ⇒ 有畫面那場跟無頭的戰局一位元不差）。 */
 function dmgSumText(sh) {
   var D = sh.dmg; if (!D) return '損壞表：' + (sh.carp || sh.sm ? '還沒點名' : '這艘沒有木匠、帆匠');
-  var n = {}; D.rows.forEach(function (r) { n[r.kind] = (n[r.kind] || 0) + 1; });
+  var n = D.n;                                                          // 各種幾件：損壞表重掃時記的（48_damage.js）
   var c = (n.hole || 0) + (n.lad || 0) + (n.anchor || 0), m = (n.sail || 0) + (n.rlad || 0);
   if (!c && !m) return '損壞表：沒有要修的';
   return '損壞表：木匠 ' + c + ' 件' + (c ? '（洞 ' + (n.hole || 0) + '、梯子 ' + (n.lad || 0) + '、綁定點 ' + (n.anchor || 0) + '）' : '') + '　帆匠 ' + m + ' 件' + (m ? '（帆 ' + (n.sail || 0) + '、繩梯 ' + (n.rlad || 0) + '）' : '');
