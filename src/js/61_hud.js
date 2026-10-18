@@ -140,7 +140,10 @@ function sbIcon(k, emo) { return HUD_ART ? '<span class="ico" style="background-
 var HUD_OUTARC = false;                                                  // 瞄準點在射界外（gunHud 記、羅盤上方那一行寫）
 function hudIcons() {
   var g = sbIcon(3, '💥'), L = [['fireK', '<b>' + keyName('fire1') + '</b>', g], ['volleyK', '<b>' + keyName('volley') + '</b>', g + g], ['autoF', '<b>' + keyName('autoFire') + '</b>', '🤖' + g]];   // 鍵照 66_keys.js
+  var me = SHIPS[PLAYER_I], pk = me && !me.sunk ? fireOnePick(me) : null, waste = !!(pk && !pk.t);   // 單發鈕：有砲裝填好、但沒有一門打得到目標（或沒有目標）⇒ 按下會往空中打一發（Tim 2026-10-18「讓玩家知道目前按下會浪費砲彈」）
+  if (waste) L[0][2] = '💨';
   L.forEach(function (q) { var el = $(q[0]), h = q[1] + '<i class="em">' + q[2] + '</i>'; if (el && el.innerHTML !== h) el.innerHTML = h; });
+  var fk = $('fireK'); if (fk && fk.classList.contains('waste') !== waste) { fk.classList.toggle('waste', waste); fk.dataset.tip = waste ? '開一門砲：沒有砲打得到目標 —— 按下會往砲口方向空打一發' : '開一門砲'; fk.title = fk.dataset.tip + '（' + keyName('fire1') + '）'; }   // title 照 66_keys.js keyPaint 的寫法
 }
 function sbNums(b, o) {
   var cr = 0, gn = 0; o.crew.forEach(function (c) { if (crewAble(c)) cr++; }); o.guns.forEach(function (g) { if (g.alive && !g.wet) gn++; });   // 泡水的不算（Tim 2026-10-14：只算還能用的）
@@ -491,12 +494,26 @@ function pauseLabel() { var b = $('pauseK'), s = '<b>' + keyName('pause') + '</b
 /** 彈種那一顆（Tim 2026-10-15：「砲彈改成一個按鈕，切換所有支援的砲彈（顯示當前彈種圖示）」）：鐵球 實心彈（CSS 畫的 .ball：灰色、左上高光、淡白邊；⛔ ⚫ 在深色圓鈕上看不見、⚪ 是白點不像砲彈 —— Tim 2026-10-15「顯示為一顆白色圓點，是否可以替換」）、💣 爆裂彈、⛓️ 鏈彈；每一種砲三種都能打。 */
 var PSLOW_SHOW = 0.7;   // 物理減速放慢到 ×0.7 以下才在航速那一行顯示（Tim 2026-10-15：「高於 0.7 可以不顯示，目前頻繁閃爍」—— 以前 < 0.98 就顯示，倍率在 0.9 上下跳 ⇒ 一直閃）
 var AMMO_ICON = ['<span class="ball"></span>', '💣', '⛓️'], AMMO_TXT = ['實心彈', '爆裂彈', '鏈彈'];
-function ammoLabel() { var b = $('ammoB'); if (!b) return; var s = '<b>' + keyName('ammo') + '</b><i class="em">' + AMMO_ICON[AMMO_I] + '</i>'; if (b.innerHTML !== s) { b.innerHTML = s; b.title = '切換彈藥：現在 ' + AMMO_TXT[AMMO_I] + '（點一下或按 ' + keyName('ammo') + ' 換下一種）'; } }   // 上面寫的是鍵（同其他圓鈕；66_keys.js），不是第幾種
+function ammoLabel() {
+  var b = $('ammoB'); if (!b) return; var a = ammoNow(), s = '<b>' + keyName('ammo') + '</b><i class="em">' + (AUTOFIRE ? '🤖' : '') + (AMMO_ICON[a] || '?') + '</i>';   // 上面寫的是鍵（同其他圓鈕；66_keys.js），不是第幾種
+  if (b.innerHTML !== s) { b.innerHTML = s; b.title = AUTOFIRE ? '自動開砲：砲長照瞄準位置挑彈，現在 ' + AMMO_TXT[a] + '（關掉自動開砲才自己換）' : '切換彈藥：現在 ' + AMMO_TXT[a] + '（點一下或按 ' + keyName('ammo') + ' 換下一種）'; }
+}
+/** 自動開砲時砲長挑的彈（50_sim.js simAi 每一輪齊射寫；⛔ 不寫 AMMO_I：那是玩家自己選的、記在偏好裡）。 */
+var AMMO_AUTO = 0;
+/** 我艦現在用哪一種彈（按鍵開砲、彈種鈕都照它）：沒開自動開砲 ⇒ 玩家選的（AMMO_I）；開著 ⇒ 砲長照瞄準位置挑（Tim 2026-10-18）——
+ *  玩家自己瞄的那一舷（點了船、或 Q 選了瞄準模式）照玩家的瞄準點挑，其他照砲長上一輪齊射挑的。 */
+function ammoNow() {
+  if (!AUTOFIRE) return AMMO_I;
+  var me = SHIPS[PLAYER_I];
+  if (me && handAim(me)) { var f = foeOf(me), on = me.pMode && me.pMode !== 'free' ? f : aimShip(me), t = me.pMode && me.pMode !== 'free' ? f && modeAim(f, me.pMode, false).t : me.aim; if (on && t) return gunnerAmmo(me, on, t); }
+  return AMMO_AUTO;
+}
 /** 這艘船打得出哪幾種彈（AMMO 的序號，照輪流的順序）。Tim 2026-10-16：「目前彈種是固定的 不過可以保留擴充接口」⇒ 現在每艘都是全部；之後照船擴充（例 ships[].ammo）只改這裡。 */
 function ammoOf(sh) { return AMMO.map(function (_, i) { return i; }); }
 /** 換下一種彈（Tim 2026-10-16：「統一用一個鍵循環切換所有彈藥(不一定三種 之後可能根據船擴充)」）：鍵盤 1 與圓鈕共用；照我艦的 ammoOf 輪流，現在這一種不在清單裡 ⇒ 從第一種開始。 */
 function ammoNext() {
   var L = ammoOf(SHIPS[PLAYER_I]); if (!L.length) return;
+  if (AUTOFIRE) { note(SHIPS[PLAYER_I], '自動開砲中：彈種由砲長照瞄準位置挑（' + keyName('autoFire') + ' 關掉自動開砲才自己換）'); return; }
   var i = L.indexOf(AMMO_I); AMMO_I = L[(i + 1) % L.length]; ammoLabel();
 }
 function hudFrame(dt) {

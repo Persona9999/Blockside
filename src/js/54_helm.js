@@ -232,3 +232,22 @@ function helmGovern(sh, vS, vB) {
 function helmWantText(w) { return w === 'cruise' ? '巡航：戰鬥帆＋引擎全速' : w === Infinity ? '要全速' : w < 0 ? '要倒退 ' + (-w).toFixed(1) + ' m/s' : '要 ' + (w * 1.944).toFixed(1) + ' 節'; }
 /** 讓敵艦（不撞）：跟讓友船同一套（52_fleet.js friendAvoid），對象換成還在的敵艦。 */
 function foeAvoid(sh) { var L = SHIPS.filter(function (o) { return isFoe(sh, o) && !o.sunk && !o.sinkingFinal; }); return L.length ? friendAvoid(sh, L) : null; }
+// ───────────────────────── 艦長指揮砲長（Tim 2026-10-18：「可以讓艦長指揮炮長(配合策略) 概念跟艦隊指揮官指揮艦長類似」） ─────────────────────────
+// 指揮官 → 艦長是「命令」（ORDERS：跟誰、打誰、排第幾），艦長 → 砲長也是：艦長照自己的處境與這一方的策略點名一個瞄準模式，
+//   砲長（51_captain.js captainThink）把那個模式的偏好 × GUN_ORD_K 再照局勢挑 ⇒ 命令是加重，不是硬性（局勢分數 0 ⇒ 照樣不打：桅都倒了就不會再打帆具）。
+// 先後（前面的先）：
+//   被壓制、在拉開（helmThink 的 evade）⇒ 帆具（讓它追不上）；敵艦在拉開 ⇒ 帆具（留住它）；遠於全速接近的距離 ⇒ 帆具（遠距離先拆帆，史料：法國海軍的打法）；
+//   近於半個交戰距離 ⇒ 甲板人員；戰列（line）⇒ 砲甲板（對轟、壓它的砲）；集火（focus）⇒ 水線（讓集火的那艘先沉）；其他 ⇒ 不下命令（砲長照自己的性格）。
+/** 艦長要砲長打哪裡：{ m（AIM_MODES 其中一個）, why } 或 null。不抽亂數。 */
+function helmGunOrder(sh, foe) {
+  if (!foe || !foe.center) return null;
+  var H = HELMS[sh.helm] || HELMS.basic, R = aiRange() * tuneH(sh, H, 'range'), d = Math.hypot(foe.px - sh.px, foe.pz - sh.pz);
+  var sg = sigFor(sh.team), strat = sg && sg.strat || CMD_SIDE[sh.team];
+  if (sh.hs && sh.hs.evade) return { m: 'rig', why: '我們火力不如它、在拉開 —— 拆它的帆讓它追不上' };
+  if (foe.hs && foe.hs.evade) return { m: 'rig', why: '敵艦在拉開 —— 拆它的帆留住它' };
+  if (d > tuneV(sh.team, 'far') * R) return { m: 'rig', why: '還遠（' + d.toFixed(0) + ' m）—— 先拆帆' };
+  if (d < 0.5 * R) return { m: 'deck', why: '很近（' + d.toFixed(0) + ' m）—— 掃甲板上的人' };
+  if (strat === 'line') return { m: 'hull', why: '戰列對轟 —— 壓它的砲' };
+  if (strat === 'focus') return { m: 'water', why: '集火 —— 讓它先沉' };
+  return null;
+}

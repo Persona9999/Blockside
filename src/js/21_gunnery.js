@@ -47,7 +47,7 @@ function fireShot(sh, g, target, ammo, muz) {
   var mw = M4.pt(sh.M, muz[0], muz[1], muz[2]);
   var side = gunAxis(sh, g);
   var GS = GUNS[g.type], V = GS.V;                                    // 初速照砲種（carronade：32 磅、短砲身 ⇒ 初速低、彈大）
-  var foe = aimShip(sh), rel = sub(foe.vel, sh.vel);              // 前置量：砲彈帶著本艦的船速 ⇒ 瞄對方「相對本艦」飛行時間後的位置（瞄的那艘，52_fleet.js）
+  var foe = aimShip(sh), rel = foe ? sub(foe.vel, sh.vel) : [0, 0, 0];   // 前置量：砲彈帶著本艦的船速 ⇒ 瞄對方「相對本艦」飛行時間後的位置（瞄的那艘，52_fleet.js）；沒有目標（單發對空打）⇒ 不加
   target = add(target, mul(rel, Math.hypot(target[0] - mw[0], target[2] - mw[2]) / V));
   var dx = target[0] - mw[0], dz = target[2] - mw[2], dy = target[1] - mw[1], d = Math.hypot(dx, dz);
   var v2 = V * V, disc = v2 * v2 - G * (G * d * d + 2 * dy * v2);
@@ -104,12 +104,32 @@ function broadsideAt(sh, ammo, on, aim, guns) {
   if (k) { sh.salvo++; sh.salvoT = SIMT; sh.salvo2 = (sh.salvo2 || 0) + 1; }
   return k;
 }
+/** 單發（F；Tim 2026-10-18：「沒有目標時也開一發(可以對空開炮) 有目標時優先開能打到目標的」）：照 fireOneList 的順序一門一門試，開成一發就停
+ *  （⛔ 只試第一門 ⇒ 那門剛好被 safe 擋住、砲塔還沒轉到，就整發沒了）。回：開成了沒。 */
 function fireOne(sh, ammo) {
-  if (sh.struck) return;
-  var tgt = aimPoint(sh), best = null, bd = 1e9;
-  sh.guns.forEach(function (g) { if (!g.alive || g.reload > 0 || gunRate(g) <= 0 || !gunTarget(sh, g, tgt)) return; var w = M4.pt(sh.M, g.muz[0], g.muz[1], g.muz[2]), d = len(sub(w, tgt)); if (d < bd) { bd = d; best = g; } });
-  if (best) fireGun(sh, best, gunTarget(sh, best, tgt), ammo);
+  var L = fireOneList(sh);
+  for (var i = 0; i < L.length; i++) if (fireGun(sh, L[i].g, L[i].t || skyPoint(sh, L[i].g), ammo)) return true;
+  return false;
 }
+/** 單發要試的砲（照順序）：裝填好、有人、能開（迴旋砲沒在換砲門、砲塔在開火角度裡）的砲裡 ——
+ *  先打得到瞄準點的（離瞄準點近的先，t ＝ gunTarget 挑的點），再其他的（砲軸對著瞄準點的先；沒有目標 ⇒ 照砲的順序，t ＝ null ⇒ 對空打）。 */
+function fireOneList(sh) {
+  if (sh.struck) return [];
+  var ready = sh.guns.filter(function (g) { return g.alive && g.reload <= 0 && gunRate(g) > 0 && !(g.mt && mountBusy(g)) && mountFireOk(g); });
+  if (!ready.length) return [];
+  var tgt = foeOf(sh) || (sh.aim && sh.aimOn) ? aimPoint(sh) : null, hit = [], rest = [];
+  ready.forEach(function (g) {
+    var m = M4.pt(sh.M, g.muz[0], g.muz[1], g.muz[2]), t = tgt ? gunTarget(sh, g, tgt) : null;
+    if (t) hit.push({ g: g, t: t, d: len(sub(m, tgt)) });
+    else { var a = gunAxis(sh, g), d = tgt ? -((tgt[0] - m[0]) * a[0] + (tgt[2] - m[2]) * a[2]) / (Math.hypot(tgt[0] - m[0], tgt[2] - m[2]) || 1) : 0; rest.push({ g: g, t: null, d: d }); }   // d：砲軸跟往瞄準點那條線的夾角（−cos，小 ＝ 對得比較準）
+  });
+  function by(a, b) { return a.d - b.d; }
+  return hit.sort(by).concat(rest.sort(by));
+}
+/** 單發最先會開的那一門（HUD 單發鈕：t ＝ null ⇒ 沒有一門打得到目標，按下會往空中打一發；null ⇒ 沒有砲能開）。 */
+function fireOnePick(sh) { var L = fireOneList(sh); return L.length ? L[0] : null; }
+/** 對空打一發的目標點：沿砲軸 300 m、比砲口高 60 m（fireShot 照它算仰角 ⇒ 夾在最大仰角 15°）。 */
+function skyPoint(sh, g) { var m = M4.pt(sh.M, g.muz[0], g.muz[1], g.muz[2]), a = gunAxis(sh, g); return [m[0] + a[0] * 300, m[1] + 60, m[2] + a[2] * 300]; }
 /** 這門砲的砲軸（世界、水平）：模型的固定點 muzzle − breech（舷側砲 ＝ 那一舷的正橫；追擊砲 ＝ 正橫偏船頭 20°）。 */
 function gunAxis(sh, g) {
   var a = M4.dir(sh.M, g.ax[0], g.ax[1], 0);

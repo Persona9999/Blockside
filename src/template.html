@@ -79,7 +79,7 @@
     background:rgba(14,18,24,.78); border:1px solid rgba(255,255,255,.32); box-shadow:0 2px 7px rgba(0,0,0,.6); }
   .ball{ display:inline-block; width:.95em; height:.95em; border-radius:50%; vertical-align:-.12em; background:radial-gradient(circle at 34% 30%, #e4e9ee 0, #8a939d 20%, #3a4048 58%, #15181c 100%); box-shadow:0 0 0 1px rgba(255,255,255,.4); }   /* 實心彈的鐵球（Tim 2026-10-15：白點換掉；CSS 畫 ⇒ 每支手機長一樣） */
   .kb.hb .em{ font-size:17px; line-height:1.1; letter-spacing:-1px; white-space:nowrap; } .kb.hb .em .ico{ width:16px; height:16px; }   /* 圖示（Tim 2026-10-15：舵、帆、錨、開砲、航行都改 emoji；砲用艦隊圓鈕砲數那個符號 sbIcon(3)）*/
-  .kb.hb b{ font-size:11px; } .kb.hb i{ font-style:normal; } .kb.hb.on{ color:#111; background:rgba(159,199,255,.92); border-color:#9fc7ff; } .kb.hb.on b{ color:#4a3500; } .kb.hb.dis{ opacity:.45; }   /* 拋錨、左右錨、自動開砲：亮著 ＝ 開（錨在水裡）、灰 ＝ 錨打壞了 */
+  .kb.hb b{ font-size:11px; } .kb.hb i{ font-style:normal; } .kb.hb.on{ color:#111; background:rgba(159,199,255,.92); border-color:#9fc7ff; } .kb.hb.on b{ color:#4a3500; } .kb.hb.dis{ opacity:.45; } .kb.hb.waste{ border-style:dashed; border-color:#ff9a7a; } .kb.hb.waste .em{ opacity:.75; }   /* 拋錨、左右錨、自動開砲：亮著 ＝ 開（錨在水裡）、灰 ＝ 錨打壞了 */
   #botC{ left:50%; bottom:12px; transform:translateX(-50%); display:flex; flex-direction:column; align-items:center; gap:6px; width:max-content; max-width:calc(100vw - 24px); }   /* ⛔ 不寫 width ⇒ left:50% 的絕對定位只剩半個畫面寬，主面板被兩組大圓鈕擠成一條 */
   #ctl{ text-align:center; min-width:0; box-sizing:border-box; }
   #ctl b{ color:var(--gold); }
