@@ -494,7 +494,7 @@
       "vxk": "dromon.vxk",
       "work": "erina-dromon-01m-assembly",
       "author": "erina",
-      "cfg": {"upwind": 1.2},
+      "cfg": {"upwind": 1.2, "base": 7},
       "geo": {"spar": [21, 30], "marines": [42, 96], "center": 30, "aim": 18, "aimZ": [8, 230], "deckAim": [18, 30], "rigAim": [60, 210]},
       "crew": {"officers": 2, "top": 0, "marines": 12, "marineGap": 18},
       "names": ["持火號"]
