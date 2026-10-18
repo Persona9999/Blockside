@@ -16,7 +16,8 @@
 //     admin.py part_cells）⇒ 站到還接得上的那一頭，修 CARP_LAD_T 秒 ⇒ 那一件被打掉的格照開戰時全部補回來（一件裡有好幾座梯子 ⇒ 一起好）。
 //     繩梯（橫繩斷了）不修：繩不是格子；沒有格子清單的舊檔 ⇒ 只補踏板那兩格。
 //   · 甲板破洞（Tim：「修復甲板機制就交給妳發揮了(要考慮性能) 直接補破洞?」）：開戰時能走、現在不能走的走路點連成一個洞 ＝ 一件工作；
-//     木匠站到洞邊走得到的那一點，修 CARP_HOLE_T0 ＋ CARP_HOLE_K × 洞的點數 秒 ⇒ 整個洞腳下那一層（每點 NAV_C × NAV_C 格、開戰時的高度）一次補回來。
+//     木匠站到洞邊走得到的那一點；到了才往外接洞邊還缺格子的點（carpHoleArea：被打掉一部分、還走得過去的那一圈）⇒
+//     修 CARP_HOLE_T0 ＋ CARP_HOLE_K × 點數 秒 ⇒ 這一片腳下那一層（每點 NAV_C × NAV_C 格、開戰時的高度）一次補回來（木材夠的話）。
 //     連著兩塊以上的洞（甲板被打成兩塊不通）先修 ＝ 恢復通道。
 //   性能：要修的清單只在尋路刷新（navRefresh，每 NAV_RE 秒、有被打到才刷）之後重掃一次（sh.carp.at ＝ NV.refreshN），平常點名只是挑；修好的那件到下一次刷新之前不再挑。
 //   補回來的格 ＝ 開戰時那一格的顏色（restoreVoxel：網格重建、進水、尋路跟著更新，removeVoxel 反過來）；尋路刷新之後才看得到（梯子接回去、兩塊接回一塊）。
@@ -183,10 +184,12 @@ function carpJoin(sh, c) {
   var H = c.hand, J = H.job, t = J.t;
   if (!J.at) {
     if (H.lv !== J.lv) { H.job = null; H.wait = 0.5; return; }
-    J.at = SIMT; c.home = c.pos.slice(); return;
+    J.at = SIMT; c.home = c.pos.slice();
+    if (t.kind === 'hole') J.area = carpHoleArea(sh, t.lv, t.hole);       // 到了才看要補多大一片（洞＋洞邊還缺格子的那一圈）
+    return;
   }
-  if (SIMT - J.at < (t.kind === 'lad' ? CARP_LAD_T : CARP_HOLE_T0 + CARP_HOLE_K * t.hole.length)) return;
-  var W = { n: c.wood, more: false }, n = t.kind === 'lad' ? carpFixLadder(sh, t, W) : carpFixHole(sh, t.lv, t.hole, W), K = sh.carp;   // W：身上的木材（補一格用一份；用完 ⇒ more）
+  if (SIMT - J.at < (t.kind === 'lad' ? CARP_LAD_T : CARP_HOLE_T0 + CARP_HOLE_K * J.area.length)) return;
+  var W = { n: c.wood, more: false }, n = t.kind === 'lad' ? carpFixLadder(sh, t, W) : carpFixHole(sh, t.lv, J.area, W), K = sh.carp;   // W：身上的木材（補一格用一份；用完 ⇒ more）
   c.wood -= n;
   if (n && !W.more) { if (t.kind === 'lad') { K.lad++; note(sh, '木匠修好了梯子（' + sh.nav.ladders[t.j].name.split('/').pop() + '）'); } else K.holes++; }
   K.cells += n;
@@ -201,11 +204,31 @@ function carpFixLadder(sh, t, W) {
   else sh.nav.ladders[t.j].steps.forEach(function (p) { one(p[0], p[1], p[2]); });
   return n;
 }
-/** 洞：每一點腳下那一層（NAV_C × NAV_C 格、開戰時的高度）照開戰時的船補回來 ⇒ 補了幾格。 */
+/** 一個洞要補的走路點：洞本身（走不過去的點），再往外接連著的、腳下那一層還缺格子的點（8 方向）。
+ *  Tim 2026-10-18：「修理甲板破洞後會有遺漏部分(只補了一部份) 希望能改成一次補好(材料足夠的話)」—— 洞邊被打掉一部分、還走得過去的點不算洞（carpScan），
+ *  以前只補洞那幾點 ⇒ 修完洞邊留一圈坑（量過：半徑 4 的坑甲板那一層缺 49 格，修完還剩 33）。只看被打過的那一片，不掃整層。 */
+function carpHoleArea(sh, lv, hole) {
+  var Lv = sh.nav.levels[lv], N = Lv.N, Z0 = Lv.Z0, B = sh.T.base, G = sh.grid, nx = N.nx, ny = N.ny, q = [], seen = {};
+  function zOf(i) { return (Z0 ? Z0[i] : N.Z[i]) - 1; }
+  function gap(i, z) {
+    var gx = N.x0 + (i % nx) * NAV_C, gy = ((i / nx) | 0) * NAV_C;
+    for (var dy = 0; dy < NAV_C; dy++) for (var dx = 0; dx < NAV_C; dx++) if (B.get(gx + dx, gy + dy, z) && !G.get(gx + dx, gy + dy, z)) return true;
+    return false;
+  }
+  hole.forEach(function (i) { seen[i] = 1; q.push([i, zOf(i)]); });
+  for (var h = 0; h < q.length; h++) for (var d = 0; d < 8; d++) {
+    var x = q[h][0] % nx + NAV_DX[d], y = ((q[h][0] / nx) | 0) + NAV_DY[d], b = x + y * nx;
+    if (x < 0 || y < 0 || x >= nx || y >= ny || seen[b]) continue;
+    var z = zOf(b); if (!(z >= 0)) z = q[h][1];                          // 開戰時就走不過去的點（艙口、絞盤底下）：沒有自己的高度 ⇒ 照旁邊那一點的甲板高度
+    seen[b] = 1; if (z >= 0 && gap(b, z)) q.push([b, z]);
+  }
+  return q;
+}
+/** 洞：carpHoleArea 的每一點 [走路點, 甲板那一層的 z]，那一層的 NAV_C × NAV_C 格照開戰時的船補回來 ⇒ 補了幾格。 */
 function carpFixHole(sh, lv, cells, W) {
-  var Lv = sh.nav.levels[lv], N = Lv.N, Z0 = Lv.Z0, B = sh.T.base, n = 0;
-  cells.forEach(function (i) {
-    var z = (Z0 ? Z0[i] : N.Z[i]) - 1; if (!(z >= 0)) return;
+  var N = sh.nav.levels[lv].N, B = sh.T.base, n = 0;
+  cells.forEach(function (e) {
+    var i = e[0], z = e[1]; if (!(z >= 0)) return;
     var gx = N.x0 + (i % N.nx) * NAV_C, gy = ((i / N.nx) | 0) * NAV_C;
     for (var dy = 0; dy < NAV_C; dy++) for (var dx = 0; dx < NAV_C; dx++) {
       var col = B.get(gx + dx, gy + dy, z); if (!col || sh.grid.get(gx + dx, gy + dy, z)) continue;
