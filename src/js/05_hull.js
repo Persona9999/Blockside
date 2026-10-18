@@ -19,6 +19,7 @@
 //   officers 軍官（0–8，照順序是船長、大副、二副、三副，再來是見習軍官）、helm 舵手（0–4）、marines 陸戰隊最多幾個、marineGap 陸戰隊沿舷牆每幾格一個、
 //   top 每根桅的桅頂水手、monkeys 送藥手（每一對砲幾個：0 ＝ 沒有、1、2）、hands 預備水手人數（沒寫 ⇒ 預備水手的基準人數 HANDS × handsK；夜隼號 ¼）、
 //   guns 砲班滿編 { 砲種: 人 }（沒寫的砲種 ⇒ 砲種表 10_ship.js GUNS 的 crew）、shelter 船員避開露天甲板（0／1；42_hands.js shelterLv：莫尼特號 1）、
+//   sailmaker 帆匠的全船上限（1–20；人數照設施配員 ＝ 帆布櫃每件 furniture.loft.staff.sailmaker 位，每船至少一件；47_sailmaker.js）、
 //   surgeon 船醫的全船上限（0–60；人數照設施配員 ＝ 走得到的病床每張 furniture.bed.staff.surgeon 位，36_rooms.js staffSlots；站在醫療艙裡，有醫療艙才上船；44_medic.js medSurgeons）、carpenter 木匠的全船上限（1–20：每船至少一位（Tim 2026-10-17「每船至少配一台(跟一名木工)」）；人數照設施配員 ＝ 木工台每張 furniture.bench.staff.carpenter 位，每船至少 1 張；修梯子、補甲板破洞；46_carpenter.js）。
 // 船隻清單 ＝ config/game.json 的 ships（el ＝ 內嵌 .vxk 的 id；匯入新船、重新匯入走 admin.py）；選單只列 HTML 裡真的有內嵌資料的那幾艘。
 var GEO0 = CFG.geo0, CREW0 = CFG.crew0;
@@ -27,7 +28,8 @@ var GEO0 = CFG.geo0, CREW0 = CFG.crew0;
 //   每艘船開戰時用的 ＝ crew0 ← 那艘船的 crew（後台頁）← SHIP_CREW（shipCrew；40_crew.js makeCrew 存進 sh.cw）。
 var CREW_ITEMS = [{ k: 'officers', name: '軍官', lim: [0, 8] }, { k: 'helm', name: '舵手', lim: [0, 4] }, { k: 'marines', name: '陸戰隊', lim: [0, 40] },
   { k: 'top', name: '桅頂水手', lim: [0, 8] }, { k: 'monkeys', name: '送藥手', lim: [0, 2] }, { k: 'hands', name: '預備水手', lim: [0, 120] },
-  { k: 'shelter', name: '避開露天甲板', lim: [0, 1] }, { k: 'surgeon', name: '船醫上限', lim: [0, 60] }, { k: 'carpenter', name: '木匠上限', lim: [1, 20] }];
+  { k: 'shelter', name: '避開露天甲板', lim: [0, 1] }, { k: 'surgeon', name: '船醫上限', lim: [0, 60] }, { k: 'carpenter', name: '木匠上限', lim: [1, 20] },
+  { k: 'sailmaker', name: '帆匠上限', lim: [1, 20] }];
 var GUN_CREW_MAX = 8;                                                   // 砲旁的站位只有 8 個（40_crew.js spots）；最少 ＝ 砲種表的 min（少於它那門砲永遠開不了）
 var OFFICER_RANKS = ['船長', '大副', '二副', '三副'];                    // 照順序；第五個起 ＝ 見習軍官
 var SHIP_CREW = {};

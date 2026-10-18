@@ -176,7 +176,7 @@ MAT_OPT = (('metal', 0, 1, '金屬度（選填；0 ＝ 不反光、1 ＝ 金屬�
 MAT_BOOL = (('smooth', '平滑（選填 true／false；true ⇒ 這種材質的格沒寫 render 也畫成平滑面＋金屬反光，螺旋槳整份平滑；關聯明寫 render=voxel 照方塊。Tim 2026-10-17：鐵甲、鍋爐開，包銅皮不開）'),)
 CREW = {'officers': (0, 8, True), 'helm': (0, 4, True), 'marines': (0, 60, True), 'marineGap': (5, 200, True),
         'top': (0, 8, True), 'monkeys': (0, 2, True), 'handsK': (0, 4, False), 'shelter': (0, 1, True),   # shelter：船員避開露天甲板（TASK-0637；0／1）
-        'surgeon': (0, 60, True), 'carpenter': (1, 20, True)}                                           # 木匠（TASK-0676 ②）                                                                       # 船醫（TASK-0676；有醫療艙才上船）
+        'surgeon': (0, 60, True), 'carpenter': (1, 20, True), 'sailmaker': (1, 20, True)}   # 帆匠（TASK-0699）                                           # 木匠（TASK-0676 ②）                                                                       # 船醫（TASK-0676；有醫療艙才上船）
 CREW_SHIP = {'hands': (0, 120, True)}          # 只在每艘船寫（TASK-0570 船隻配置頁的預設）：預備水手人數；沒寫 ＝ lim.hands × handsK
 GUN_CREW_MAX = 8                               # 砲班滿編上限（砲旁的站位；遊戲 05_hull.js GUN_CREW_MAX）
 GEO_PAIRS = ('marines', 'aimZ', 'deckAim', 'rigAim')
@@ -362,15 +362,15 @@ def validate(cfg, prev=None):
                 err('furniture.%s.%s' % (fid, k), '%s～%s 的數字' % (lo, hi))
         if isinstance(f, dict) and 'auto' in f and not (isint(f['auto']) and 1 <= f['auto'] <= 4):
             err('furniture.%s.auto' % fid, '1～4 的整數（每船至少幾張）')
-        for k, lo, hi in (('wood', 0, 20000), ('carry', 10, 2000)):           # 木工台的木材（js/46_carpenter.js）
+        for k, lo, hi in (('wood', 0, 20000), ('cloth', 0, 20000), ('carry', 10, 2000)):   # 木工台的木材（js/46_carpenter.js）、帆布櫃的帆布（js/47_sailmaker.js）
             if isinstance(f, dict) and k in f and not (isint(f[k]) and lo <= f[k] <= hi):
                 err('furniture.%s.%s' % (fid, k), '%s～%s 的整數' % (lo, hi))
         hb = (f.get('buff') or {}).get('heal') if isinstance(f, dict) else None
         if hb is not None and not (isnum(hb) and 0 <= hb <= 1):
             err('furniture.%s.buff.heal' % fid, '0～1（治療速度加成）')
         st = f.get('staff') if isinstance(f, dict) else None                # 設施配員（TASK-0676；js/36_rooms.js staffSlots）：{ 職位: 每件幾位 }
-        if st is not None and not (isinstance(st, dict) and all(k in ('surgeon', 'carpenter') and isint(v) and (1 if k == 'carpenter' else 0) <= v <= 4 for k, v in st.items())):
-            err('furniture.%s.staff' % fid, '{ surgeon: 0～4、carpenter: 1～4 的整數 }（每件配幾位；木匠每船至少一位）')
+        if st is not None and not (isinstance(st, dict) and all(k in ('surgeon', 'carpenter', 'sailmaker') and isint(v) and (1 if k in ('carpenter', 'sailmaker') else 0) <= v <= 4 for k, v in st.items())):
+            err('furniture.%s.staff' % fid, '{ surgeon: 0～4、carpenter: 1～4、sailmaker: 1～4 的整數 }（每件配幾位；木匠、帆匠每船至少一位）')
     KY = cfg.get('keys')                                  # 鍵位的出廠預設（js/66_keys.js：{ 動作: 鍵 }；動作的清單在遊戲裡 ⇒ 這裡只驗形狀，認不得的動作遊戲不收）
     if KY is not None:
         if not isinstance(KY, dict):
@@ -1148,7 +1148,7 @@ def act_shipcheck(ids=None):
               '門、艙蓋（模型 meta kind=door、固定點 hinge-a／hinge-b；不擋人、打掉了開口才進水，TASK-0638）：' + (I.get('doors') or '—'), '',
               '照參數轉的子物件（模型 meta spin；舵、舵輪跟著舵角轉，只是畫面，TASK-0640）：' + (I.get('spins') or '—'), '',
               '裝飾（模型 meta deco=1；載入時拿掉、畫質「裝飾」開著才畫，不算重量、不被打，TASK-0682）：' + (I.get('deco') or '—'), '',
-              '額外動力（TASK-0630；輸出物件 份量；主機／軸／鍋爐 照造船規格 §9.6）：' + (I.get('drive') or '—（沒有 cfg.base）'), '',
+              '額外動力（TASK-0630；輸出物件 份量；主機／軸／鍋爐 照造船規格 §9.6；槳 §9.10，TASK-0691）：' + (I.get('drive') or '—（沒有 cfg.base）'), '',
               '動力件（TASK-0653；關聯 meta kind=engine／boiler／shaft／steampipe 的格子清單，照剩幾成、通不通算）：' + (I.get('drvparts') or '—'), '',
               '會轉的體素件（螺旋槳模型 meta kind=propeller 的格子；跟著軸轉、一格一格打掉、推力照剩幾成，TASK-0653 第二段）：' + (I.get('props') or '—'), '',
               '**✗ %d　⚠ %d**' % (ne, nw), '']
@@ -2350,7 +2350,7 @@ def act_defaults(lim):
     return ['✓ 出廠預設改了 %d 項（config/game.json lim；重建之後遊戲才吃得到）：' % len(log)] + log
 
 
-FURN_KEYS = ('tpm', 'crew', 'cap', 'hold', 'hp', 'buff.heal', 'staff.surgeon', 'staff.carpenter', 'auto', 'wood', 'carry')            # 道具設定頁（js/67_furncfg.js FURN_ITEMS）調得到的那幾格
+FURN_KEYS = ('tpm', 'crew', 'cap', 'hold', 'hp', 'buff.heal', 'staff.surgeon', 'staff.carpenter', 'staff.sailmaker', 'auto', 'wood', 'cloth', 'carry')            # 道具設定頁（js/67_furncfg.js FURN_ITEMS）調得到的那幾格
 DRVP_KEYS = ('lo', 'hi', 'wet', 'cell')                                  # 同一頁的動力件（DRV_ITEMS ⇒ config drvparts）
 
 

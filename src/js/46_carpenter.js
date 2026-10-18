@@ -25,13 +25,18 @@
 // 木匠倒下、陣亡 ⇒ 沒人修；掉到別層 ⇒ 照舊是木匠；落水爬回來 ⇒ 當預備水手（同其他職位）。0 人 ⇒ 戰局跟以前一位元不差（不生、不抽 rnd()）。
 var CARP_LAD_T = 6, CARP_HOLE_T0 = 2, CARP_HOLE_K = 0.5;                     // 修一件梯子幾秒；補一個洞 ＝ 2 秒 ＋ 每點 0.5 秒
 var CARP_WOOD_T = 3;                                                          // 在木工台拿木材幾秒
+/** 有人駐守、每船至少幾件的設施（自動補擺、開戰時補在待命那一層、台旁走得到的點都同一套）：木工台（木匠）、帆布櫃（帆匠，47_sailmaker.js）。 */
+var STATION_ROLES = ['bench', 'loft'];
+/** furniture 裡 role 是這個的第一種道具；沒有 ⇒ null。 */
+function furnRoleIt(role) { for (var k in FURN) if (FURN[k].role === role) return k; return null; }
 /** 木工台是哪一種道具（furniture 裡 role ＝ 'bench' 的第一種）；沒有 ⇒ null。 */
-function benchIt() { for (var k in FURN) if (FURN[k].role === 'bench') return k; return null; }
-/** 那一型自動補木工台的那一層：水線以上最低那層砲甲板（沒有 ⇒ 最上面那層；沒有砲甲板 ⇒ null）。 */
+function benchIt() { return furnRoleIt('bench'); }
+/** 那一型自動補木工台的那一層：水線以上最低那層砲甲板（沒有 ⇒ 最上面那層；沒有砲甲板 ⇒ null）。帆布櫃也補在這一層。 */
 function benchDeck(T) { var ds = hullDeckKit(T).decks; return ds.filter(function (D) { return D.zr[0] >= T.zw; })[0] || ds[ds.length - 1] || null; }
-/** 甲板 D 的擺法 items（會改它；36_rooms.js deckItems 呼叫）：D 是木工台那一層、全船擺的木工台不到預設張數 ⇒ 補到夠。 */
-function benchFill(T, D, items) {
-  var it = benchIt(), BD = it && benchDeck(T); if (!BD || deckId(BD) !== deckId(D)) return;
+/** 甲板 D 的擺法 items（會改它；36_rooms.js deckItems 呼叫）：D 是木工台那一層、全船擺的木工台（帆布櫃）不到預設張數 ⇒ 補到夠（木工台先補）。 */
+function benchFill(T, D, items) { STATION_ROLES.forEach(function (role) { stationFill(T, D, items, furnRoleIt(role)); }); }
+function stationFill(T, D, items, it) {
+  var BD = it && benchDeck(T); if (!BD || deckId(BD) !== deckId(D)) return;
   var have = items.filter(function (q) { return q.it === it; }).length + benchRooms(T, it);
   hullDeckKit(T).decks.forEach(function (E) {
     if (deckId(E) === deckId(D)) return;
@@ -42,9 +47,10 @@ function benchFill(T, D, items) {
 }
 /** 艙房裡擺了幾張木工台（照擺法；36_rooms.js roomItems）。 */
 function benchRooms(T, it) { var n = 0; hullRooms(T).forEach(function (r) { roomItems(T, r, roomPlan(T.id, r.name)).items.forEach(function (p) { if (p.it === it) n++; }); }); return n; }
-/** 開戰時（carpInit，走路格建好之後）：全船的木工台還不到預設張數（沒有砲甲板、擺不下）⇒ 在待命那一層的中段補（C0：木匠會生的那一塊），也是模型（會被打）。 */
-function benchNavFill(sh, it, C0) {
-  var NV = sh.nav, B = sh.benches = sh.benches || [], want = Math.max(1, Math.round(+FURN[it].auto || 1)) - B.length, f = FURN[it], T = sh.T, N = NV.levels[NV.home].N;
+/** 開戰時（carpInit／smInit，走路格建好之後）：全船的木工台（帆布櫃）還不到預設張數（沒有砲甲板、擺不下）⇒ 在待命那一層的中段補（C0：木匠會生的那一塊），也是模型（會被打）。
+ *  key：存在船上的哪一格（'benches'／'lofts'）。 */
+function benchNavFill(sh, it, C0, key) {
+  var NV = sh.nav, B = sh[key || 'benches'] = sh[key || 'benches'] || [], want = Math.max(1, Math.round(+FURN[it].auto || 1)) - B.length, f = FURN[it], T = sh.T, N = NV.levels[NV.home].N;
   for (var k = 0; k < want && C0.length; k++) {
     var P = navPos(N, C0[Math.floor((k + 0.5) / want * C0.length)]), at = [Math.round(P[0] - f.size[0] / 2), Math.round(P[1] - f.size[1] / 2), Math.round(P[2])];
     var bb = [at[0], at[1], at[2], at[0] + f.size[0], at[1] + f.size[1], at[2] + f.size[2] + 1], nm = (NV.levels[NV.home].name || NV.levels[NV.home].key) + f.name + '-' + (B.length + 1);
@@ -60,17 +66,22 @@ function benchSpot(sh, m) {
   var N = NV.levels[lv].N, ci = navSnap(N, [m.c[0], m.c[1], m.origin[2]], 8);
   return ci >= 0 && handRoute(sh, NV.home, lv, m.c[0], m.c[0], undefined, N.reg[ci]) ? { lv: lv, ci: ci } : null;
 }
-/** 開戰時（makeCrew，預備水手之後）：照設施配員生木匠（上限 sh.cw.carpenter）—— 木工台旁走得到的生在台旁，其他的在待命那一層最大的那一塊（照順序平均分開，不抽 rnd()）。 */
-function carpInit(sh, crew, add) {
-  var NV = sh.nav, it = benchIt(), cap = it ? Math.max(1, sh.cw.carpenter || 0) : sh.cw.carpenter || 0; sh.carp = null;   // 有木工台這種道具 ⇒ 每船至少一位（舊存檔的 0 也照 1）
-  if (!NV || !cap) { sh.carpWant = 0; sh.carpSlots = it ? 0 : cap; return; }
-  var N = NV.levels[NV.home].N, C0 = N.bigCells.length ? N.bigCells : N.cells, hr = {};
+/** 待命那一層最大、有梯子接著的那一塊的走路點（木匠、帆匠生在這裡；台擺不下時也補在這裡）。 */
+function carpHomeCells(sh) {
+  var NV = sh.nav, N = NV.levels[NV.home].N, C0 = N.bigCells.length ? N.bigCells : N.cells, hr = {};
   NV.ladders.forEach(function (L) { if (L.lo === NV.home) hr[L.ra] = 1; if (L.hi === NV.home) hr[L.rb] = 1; });   // 有梯子接著的那幾塊（同 makeHands：憲法號、餘燼號的底艙最大那一塊沒有梯子）
   if (Object.keys(hr).length && !hr[N.reg[C0[0]]]) {
     var br = -1, bn = 0; Object.keys(hr).forEach(function (r) { var k2 = N.cells.filter(function (c) { return N.reg[c] === +r; }).length; if (k2 > bn) { bn = k2; br = +r; } });
     if (br >= 0) C0 = N.cells.filter(function (c) { return N.reg[c] === br; });
   }
-  if (it) benchNavFill(sh, it, C0);                                     // 甲板、艙房擺的不夠預設張數 ⇒ 待命那一層補
+  return C0;
+}
+/** 開戰時（makeCrew，預備水手之後）：照設施配員生木匠（上限 sh.cw.carpenter）—— 木工台旁走得到的生在台旁，其他的在待命那一層最大的那一塊（照順序平均分開，不抽 rnd()）。 */
+function carpInit(sh, crew, add) {
+  var NV = sh.nav, it = benchIt(), cap = it ? Math.max(1, sh.cw.carpenter || 0) : sh.cw.carpenter || 0; sh.carp = null;   // 有木工台這種道具 ⇒ 每船至少一位（舊存檔的 0 也照 1）
+  if (!NV || !cap) { sh.carpWant = 0; sh.carpSlots = it ? 0 : cap; return; }
+  var C0 = carpHomeCells(sh);
+  if (it) benchNavFill(sh, it, C0);                                   // 甲板、艙房擺的不夠預設張數 ⇒ 待命那一層補
   var B = sh.benches || [], S = it ? staffSlots([B.length ? B : [{ item: it }]], 'carpenter') : null;   // 一張都擺不下（那一塊沒有走路點）⇒ 當作有一張
   var n = S ? Math.min(cap, S.length) : cap;                             // 沒有木工台這種道具 ⇒ 照舊（crew.carpenter 就是人數）
   sh.carpWant = n; sh.carpSlots = S ? S.length : cap;
@@ -191,7 +202,7 @@ function carpJoin(sh, c) {
   if (SIMT - J.at < (t.kind === 'lad' ? CARP_LAD_T : CARP_HOLE_T0 + CARP_HOLE_K * J.area.length)) return;
   var W = { n: c.wood, more: false }, n = t.kind === 'lad' ? carpFixLadder(sh, t, W) : carpFixHole(sh, t.lv, J.area, W), K = sh.carp;   // W：身上的木材（補一格用一份；用完 ⇒ more）
   c.wood -= n;
-  if (n && !W.more) { if (t.kind === 'lad') { K.lad++; note(sh, '木匠修好了梯子（' + sh.nav.ladders[t.j].name.split('/').pop() + '）'); } else K.holes++; }
+  if (n && !W.more) { if (t.kind === 'lad') { K.lad++; note(sh, '木匠修好了梯子（' + sh.nav.ladders[t.j].name.split('/').pop() + '）'); } else { K.holes++; note(sh, '木匠補好了甲板破洞（' + (sh.nav.levels[t.lv].name || sh.nav.levels[t.lv].key) + '，' + n + ' 格）'); } }   // Tim 2026-10-18：「木匠跟帆匠修補完成可以廣播」
   K.cells += n;
   K.log.push({ t: +SIMT.toFixed(1), what: t.kind, key: t.key, n: n, more: W.more }); if (!W.more) K.done[t.key] = 1;   // 木材不夠補完 ⇒ 那一件留著（拿了木材再來）
   H.job = null; H.wait = 0.5;

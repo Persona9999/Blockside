@@ -423,6 +423,7 @@ function unrotL(o, L) { return rotZ(L, o.piv, -o.rot); }
 /** 模型在船的格座標裡的擺法：平移到 origin；帆桁另外繞轉軸轉 rot；掛在砲塔上（m.hd，27_turret.js）⇒ 再照砲塔現在的角度。 */
 function modelLocal(m) { var L = modelLocal0(m), H = m.hd && ndMat(m.hd); return H ? M4.mul(H, L) : L; }
 function modelLocal0(m) {
+  if (m.swM) { var u = m.spv; return M4.mul(M4.mul(M4.mul(trans(u[0], u[1], u[2]), m.swM), trans(-u[0], -u[1], -u[2])), trans(m.origin[0], m.origin[1], m.origin[2])); }   // 繞 spv 套一整個轉動（划槳：掃＋抬，31_drive.js oarAnim；只是畫面）
   if (m.sw) { var q = m.spv; return M4.mul(M4.mul(M4.mul(trans(q[0], q[1], q[2]), rotM(m.sax, m.sw)), trans(-q[0], -q[1], -q[2])), trans(m.origin[0], m.origin[1], m.origin[2])); }   // 掛著擺的（小艇；30_rig_physics.js swingHangs）
   if (!m.rot || !m.piv) return trans(m.origin[0], m.origin[1], m.origin[2]);
   var p = m.piv;
@@ -463,7 +464,7 @@ function meshOcc(m) {
 function blowModel(sh, m, vel, drop, at) {
   if (!m.alive) return;
   m.alive = false;
-  if (kindProp(m.kind, 'anim') || m.spinB) m.sw = 0;                           // 照參數轉的（26_spin.js）同一個理由：轉角只是畫面。門：開關只是演出（25_doors.js）⇒ 照關著的樣子飛出去（落水的水花抽戰局的亂數：⛔ 照開著的角度 ⇒ 演出開關會改戰局）
+  if (kindProp(m.kind, 'anim') || m.spinB) { m.sw = 0; m.swM = null; }                           // 照參數轉的（26_spin.js）同一個理由：轉角只是畫面。門：開關只是演出（25_doors.js）⇒ 照關著的樣子飛出去（落水的水花抽戰局的亂數：⛔ 照開著的角度 ⇒ 演出開關會改戰局）
   var M0 = M4.mul(sh.M, modelLocal(m)), c0 = M4.pt(sh.M, m.c[0], m.c[1], m.c[2]);
   var vd = norm(vel), sp = drop ? 0 : clamp(len(vel) * 0.07, 5, 16);
   FLY.push({ T: sh.T, mesh: m.mesh, M0: M0, c0: c0, c: c0.slice(), R: M4.ident(), t: 0, wet: false,

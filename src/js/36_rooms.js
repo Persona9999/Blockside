@@ -244,9 +244,9 @@ function staffSlots(groups, role) {
 function hullStaff(id, role) {
   var T = HULLT[id], n = 0; if (!T) return null;
   hullRooms(T).forEach(function (r) { roomItems(T, r, roomPlan(id, r.name)).items.forEach(function (p) { n += furnStaff(p.it, role); }); });
-  var bi = benchIt(), nb = 0;
-  hullDeckKit(T).decks.forEach(function (D) { deckItems(T, D, deckPlan(id, deckId(D))).items.forEach(function (p) { n += furnStaff(p.it, role); if (p.it === bi) nb++; }); });   // 甲板上的（木工台）
-  if (bi) { nb += benchRooms(T, bi); n += Math.max(0, Math.max(1, Math.round(+FURN[bi].auto || 1)) - nb) * furnStaff(bi, role); }   // 不到預設張數 ⇒ 開戰時在待命那一層補（46_carpenter.js benchNavFill）
+  var st = STATION_ROLES.map(furnRoleIt).filter(Boolean), nb = {};
+  hullDeckKit(T).decks.forEach(function (D) { deckItems(T, D, deckPlan(id, deckId(D))).items.forEach(function (p) { n += furnStaff(p.it, role); if (st.indexOf(p.it) >= 0) nb[p.it] = (nb[p.it] || 0) + 1; }); });   // 甲板上的（木工台、帆布櫃）
+  st.forEach(function (bi) { var k = (nb[bi] || 0) + benchRooms(T, bi); n += Math.max(0, Math.max(1, Math.round(+FURN[bi].auto || 1)) - k) * furnStaff(bi, role); });   // 不到預設張數 ⇒ 開戰時在待命那一層補（46_carpenter.js benchNavFill）
   return n;
 }
 /** buff 寫成一行字：「治療速度 +45%（上限 60%）」。 */
@@ -262,6 +262,7 @@ function furnBoxes(item, ax) {
   else if (item === 'pump') B = [[0, 0, 0, L, W, 2, 0], [L / 2 - 1.5, W / 2 - 1.5, 2, L / 2 + 1.5, W / 2 + 1.5, H - 2, 0], [0, W / 2 - 0.5, H - 3, L, W / 2 + 0.5, H - 2, 4], [0, W / 2 - 0.5, H - 6, 1, W / 2 + 0.5, H - 2, 4], [L - 1, W / 2 - 0.5, H - 6, L, W / 2 + 0.5, H - 2, 4]];   // 鏈式抽水機：底座、泵管、橫過去的搖把（兩頭往下的把手）
   else if (item === 'spump') B = [[0, 0, 0, L, W, 2, 4], [1, 1, 2, L - 3, W - 1, H - 2, 4], [L - 3, W / 2 - 1, 2, L - 1, W / 2 + 1, H, 4], [1, 0, H - 2, L - 3, W, H - 1, 0]];   // 蒸汽抽水機：鐵座、汽缸、排水管、木蓋
   else if (item === 'bench') B = [[1, 1, 0, 2, 2, H - 2, 0], [L - 2, 1, 0, L - 1, 2, H - 2, 0], [1, W - 2, 0, 2, W - 1, H - 2, 0], [L - 2, W - 2, 0, L - 1, W - 1, H - 2, 0], [0, 0, H - 2, L, W, H, 0], [2, 1, H, 5, 3, H + 1, 4]];   // 木工台：四根腳、厚檯面、一塊鐵的台鉗
+  else if (item === 'loft') B = [[0, 0, 0, L, W, H - 3, 0], [0, 0, H - 3, L, W, H - 2, 4], [1, 1, H - 2, L - 1, W / 2, H, 1], [1, W / 2, H - 2, L - 1, W - 1, H - 1, 2]];   // 帆布櫃（TASK-0699）：木櫃、鐵框蓋、上面放一捲帆布和疊好的一塊
   else B = [[0, 0, 0, L, W, H, 0]];
   return ax === 'y' ? B.map(function (b) { return [b[1], b[0], b[2], b[4], b[3], b[5], b[6]]; }) : B;
 }

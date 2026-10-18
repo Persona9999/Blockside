@@ -400,12 +400,28 @@ function fpCam() {
   var sh = FP.sh, c = fpWho();
   if (FP.ez === null) fpEyeZ(0);
   var eye = M4.pt(sh.M, c.pos[0], c.pos[1], FP.ez);                    // 眼高平滑過（fpEyeZ）
-  var cp = Math.cos(FP.pitch), dir = norm(M4.dir(sh.M, Math.cos(FP.yaw) * cp, Math.sin(FP.yaw) * cp, Math.sin(FP.pitch)));
+  var cp = Math.cos(FP.pitch), sp = Math.sin(FP.pitch), cy = Math.cos(FP.yaw), sy = Math.sin(FP.yaw), dir = norm(M4.dir(sh.M, cy * cp, sy * cp, sp));
   var look = add(eye, dir);
   var proj = M4.persp(FP_FOV, CAM.w / CAM.h, 0.05, 5000);            // 近裁切面 5 cm（⛔ 0.5 m ⇒ 艙裡身邊的牆被切掉）
-  var vp = M4.mul(proj, M4.lookAt(eye, look, [0, 1, 0])); camSet({ eye: eye, look: look, vp: vp, inv: M4.inv(vp) });
+  var vp = M4.mul(proj, M4.lookAt(eye, look, fpCamUp(sh, dir, cy, sy, cp, sp))); camSet({ eye: eye, look: look, vp: vp, inv: M4.inv(vp) });
   return true;
 }
+/** 畫面的「上」（TASK-0700；Tim 2026-10-18：「第一人稱會遇到視角偶爾會快速旋轉很大角度(特別是當船傾斜時)」）：
+ *  視線照船的座標算（yaw／pitch 是對船的），「上」以前一律是世界的 +y ⇒ 抬頭／低頭到底（±77°）再加上船傾斜，視線貼近、甚至越過垂直，
+ *  lookAt 用 +y 算出的左右在那附近沒有定義：滑鼠轉 1° 畫面轉好幾度、越過垂直就整個翻 180°（量過：憲法號傾 8° 抬頭到底 1° ⇒ 2.9°，再多傾 20° ⇒ 13.3°）。
+ *  ⇒ 兩個「上」：level ＝ 世界 +y 扣掉視線方向（水平線保持水平，以前的樣子）、ship ＝ 照船算的頭頂方向（永遠跟視線垂直、不會翻，水平線跟著船傾）。
+ *  離垂直夠遠、兩個也同向 ⇒ 全用 level（平常的畫面一像素不差）；貼近垂直或已經越過 ⇒ 平滑換成 ship。
+ *  量過（畫面轉的度數 ÷ yaw 轉的度數，抬頭／低頭到底、整圈每 0.5°）：船多傾 0／8／12／−12° ⇒ 以前 1.2／2.4／10.5／273× ⇒ 現在 1.2／1.2／1.3／1.3×；多傾 30° 最差 2.9×。只改畫面繞視線轉多少，視線本身不動（建造模式的準心照 FP.yaw／pitch 打，82_build.js）。 */
+function fpCamUp(sh, dir, cy, sy, cp, sp) {
+  var ship = norm(M4.dir(sh.M, -cy * sp, -sy * sp, cp)), lv = [-dir[0] * dir[1], 1 - dir[1] * dir[1], -dir[2] * dir[1]], ll = len(lv);   // lv ＝ +y − dir·(dir·+y)；長度 ＝ 視線離垂直的 sin
+  if (ll < 1e-6) return ship;
+  lv = mul(lv, 1 / ll);
+  var d = lv[0] * ship[0] + lv[1] * ship[1] + lv[2] * ship[2];
+  var w = fpSmooth(0.17, 0.87, ll) * fpSmooth(0, 0.5, d);             // 離垂直 10°～60° 之間（抬頭、低頭超過 30° 才開始）、兩個夾角 60°～90° 之間慢慢換（越過垂直 ⇒ 兩個反向 ⇒ 全用 ship）；⛔ 10°～30° ⇒ 船多傾 30° 時換得太急（放大 4.8×，量過）
+  if (w >= 1) return [0, 1, 0];                                         // 平常 ⇒ 跟以前同一個輸入（lookAt 自己扣掉視線方向）
+  return norm(add(mul(lv, w), mul(ship, 1 - w)));                       // d > 0 才有權重 ⇒ 兩個在 90° 內，加起來不會是 0
+}
+function fpSmooth(a, b, x) { var t = clamp((x - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); }
 /** 鍵盤（71_input.js keydown／keyup 先問這裡）：第一人稱的鍵吃掉 ⇒ true；其他照舊（P 停格、O／Esc 設定）。 */
 /** 第一人稱的動作 ⇒ FP.mv 哪一格（走、轉頭；66_keys.js：fpLook* 是固定的方向鍵）。 */
 var FP_MV = { fpFwd: 'f', fpBack: 'b', fpLeft: 'l', fpRight: 'r', fpTurnL: 'tl', fpLookU: 'lu', fpLookD: 'ld', fpLookL: 'tl', fpLookR: 'tr' };
@@ -441,7 +457,7 @@ $('fpLampT').onclick = function () { FP.lamp = !FP.lamp; fpUI(); };   // 提燈�
 //   · Esc（瀏覽器自己放開）⇒ 打開設定（遊戲停）＝ Minecraft 的暫停選單；關掉之後點畫面再抓。
 //   · 按住 Alt ⇒ 先放開、遊戲不停（像 Minecraft 的 Mouse Unlock 模組），點回畫面再抓。P 停格、O 設定也會放開。
 //   · 沒抓的時候照舊按住拖曳轉頭（71_input.js）；只認滑鼠（pointerType mouse），觸控不受影響。抓住時游標的 client 座標不動 ⇒ 拖曳那條算出 0，不會轉兩次。
-var FP_MOUSE_K = 0.52, FP_ESC_T = 0;
+var FP_MOUSE_K = 0.52, FP_ESC_T = 0, FP_SPIKE = 250;   // FP_SPIKE：抓住滑鼠時一次超過這麼多 px 的位移當成假的（71_ctrl.js look；TASK-0700）
 function fpLocked() { return document.pointerLockElement === cv; }
 function fpLock() { if (!fpLocked() && cv.requestPointerLock) { try { var r = cv.requestPointerLock(); if (r && r.catch) r.catch(function () { }); } catch (x) { } } }
 function fpUnlock() { if (fpLocked() && document.exitPointerLock) { FP.unlockMine = true; document.exitPointerLock(); } }
