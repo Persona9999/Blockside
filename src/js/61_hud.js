@@ -132,8 +132,13 @@ function gmapLegend(sh) {
 function floodSumText(sh) {
   var fl = sh.fl;
   if (!fl || sh.broken) return (sh.broken ? '斷成兩截（照公式，一定沉）' : '公式模式：看不到艙內的水（物理效果「進水」選粒子才看得到）') + '・水線下打掉 ' + (sh.inflow || 0).toLocaleString() + ' 格・下沉 ' + sh.sink.toFixed(2) + ' m';
-  return '積水 ' + Math.round(fl.vol * RHO_W).toLocaleString() + ' 噸・破口 ' + fl.open + ' 處（水下 ' + fl.underN + (fl.outN ? '、往外流 ' + fl.outN : '') + '）・進水 ' + flTpm(fl.inQ) + (fl.outQ > 0.005 ? '・往外流 ' + flTpm(fl.outQ) : '') + '・抽水 ' + pumpNow(sh).toFixed(1) + ' 噸／分・淨進水 ' + flNetText(fl) + '・下沉 ' + sh.sink.toFixed(2) + ' m';
+  // 排版固定（Tim 2026-10-18「這一塊會快速抖動(因為字的長度不固定)」）：兩行、每個數字一格固定寬度靠右（numCell：等寬數字），每一段一直都在（沒有 ⇒ 0）⇒ 數字變了欄位不動、不會換行換來換去
+  var R = flRates(fl), t = function (q) { return (q * RHO_W * 60).toFixed(1); }, net = R.netQ * RHO_W * 60;
+  return '積水 ' + numCell(Math.round(fl.vol * RHO_W).toLocaleString(), 5) + ' 噸・破口 ' + numCell(fl.open, 3) + ' 處（水下 ' + numCell(fl.underN, 2) + '・外流 ' + numCell(fl.outN, 2) + '）・下沉 ' + numCell(sh.sink.toFixed(2), 4) + ' m<br>' +
+    FL_AVG_T + ' 秒平均（噸／分）：進水 ' + numCell(t(R.inQ), 5) + '・外流 ' + numCell(t(R.outQ), 5) + '・抽水 ' + numCell(t(R.pumpQ), 4) + '／' + pumpNow(sh).toFixed(1) + '・淨進水 ' + numCell((net > 0.05 ? '+' : net < -0.05 ? '−' : '') + Math.abs(net).toFixed(1), 6);
 }
+/** 一個數字一格（固定寬度 w 個字、靠右、等寬數字；template.html .nv）。 */
+function numCell(v, w) { return '<span class="nv" style="min-width:' + w + 'ch">' + v + '</span>'; }
 /** 損壞表一行（48_damage.js；只讀，⛔ 不在這裡重掃 ⇒ 有畫面那場跟無頭的戰局一位元不差）。 */
 function dmgSumText(sh) {
   var D = sh.dmg; if (!D) return '損壞表：' + (sh.carp || sh.sm ? '還沒點名' : '這艘沒有木匠、帆匠');

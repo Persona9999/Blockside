@@ -68,7 +68,7 @@ function flNew(sh) {
   return { L: L, F: F, cap: F.cap.slice(), pd: F.pd.slice(), op: F.op.slice(), ol: F.ol.slice(), A: new Float32Array(N), on: new Uint8Array(N), act: new Int32Array(4096), actN: 0, dmark: new Uint8Array(N), dirty: [],
     hA: new Float32Array(H), hX: new Float32Array(H), hY: new Float32Array(H), hZ: new Float32Array(H), hYi: new Float32Array(H), hAcc: new Float32Array(H), hmark: new Uint8Array(H), hon: new Uint8Array(H), hdirty: [], holes: [], hWet: new Uint8Array(H), hQ: new Float32Array(H),   // 每個破口上一次算的狀態（flHoleState）：hWet 在海面下、hQ 流量 m³/s（＋進水、−出水、0 沒在流）
     J: { n: 0, p: new Float32Array(L.jn * 3), v: new Float32Array(L.jn * 3), vol: new Float32Array(L.jn), life: new Float32Array(L.jn) },
-    vol: 0, area: 0, open: 0, inQ: 0, outQ: 0, pumpQ: 0, netQ: 0, underN: 0, underA: 0, outN: 0, inTot: 0, outTot: 0, pumped: 0, comX: 0, comY: 0, sinkT: 0, step: 0, gen: 0, mesh: null,
+    vol: 0, area: 0, open: 0, inQ: 0, outQ: 0, pumpQ: 0, netQ: 0, underN: 0, underA: 0, outN: 0, avg: null, avgAcc: { t: 0, inQ: 0, outQ: 0, pumpQ: 0 }, inTot: 0, outTot: 0, pumped: 0, comX: 0, comY: 0, sinkT: 0, step: 0, gen: 0, mesh: null,
     dq: new Float32Array(N), dqOn: new Uint8Array(N), dqL: [], dqT: 0, fo: new Map(),   // dq…：往下流的量（只給畫面的水幕，flFalls；⛔ 模擬不讀）；fo：每一格往下流的開口在哪（快取）
     lq: new Float32Array(N * 4), lqT: 0 };                               // lq：每一格往前後左右流了多少（只給畫面的水瀑，flSides；⛔ 模擬不讀）
 }
@@ -167,6 +167,18 @@ function wetLatch(o, under, n) {
 // 讀數都在模擬裡記好、畫面直接拿（Tim 2026-10-18「這些資訊都可以在模擬層紀錄(顯示層直接取用)」）：每次 floodStep ——
 //   inQ／outQ 進、出水，pumpQ 實際抽掉的，netQ 淨進水（＝ inQ − outQ − pumpQ；正 ⇒ 水還在變多），全是 m³/s；
 //   open／area 破口幾處、多大，underN／underA 海面下的，outN 出水的；每個破口 hWet、hQ（flHoleState）。⛔ 模擬只記、不讀。
+// 流量的平均（Tim 2026-10-18「進水的刷新可以慢一點(目前跳動太快)」「可以取一段時間內的平均?」「除了積水」「水下 外流也是即時顯示」）：
+//   進水、出水、實際抽、淨進水每次 floodStep 都跟著浪跳 ⇒ 照時間加權累加，滿 FL_AVG_T 秒（模擬時間）結算一次 ⇒ fl.avg ＝ { inQ, outQ, pumpQ, netQ }（m³/s）。
+//   畫面的流量讀 fl.avg（flRates：還沒滿第一段 ⇒ 用即時的）；積水、破口幾處多大、水下、出水幾處照舊即時。⛔ 模擬只記、不讀。
+var FL_AVG_T = 2;
+function flAvgStep(fl, dt) {
+  var a = fl.avgAcc; a.t += dt; a.inQ += fl.inQ * dt; a.outQ += fl.outQ * dt; a.pumpQ += fl.pumpQ * dt;
+  if (a.t < FL_AVG_T) return;
+  var o = { inQ: a.inQ / a.t, outQ: a.outQ / a.t, pumpQ: a.pumpQ / a.t }; o.netQ = o.inQ - o.outQ - o.pumpQ;
+  fl.avg = o; a.t = a.inQ = a.outQ = a.pumpQ = 0;
+}
+/** 畫面讀的流量：最近一段 FL_AVG_T 秒的平均；還沒有 ⇒ 即時的。 */
+function flRates(fl) { return fl.avg || fl; }
 function flHoleState(fl, h) { var q = fl.hQ[h]; return q > 1e-6 ? 'in' : q < -1e-6 ? 'out' : 'dry'; }
 /** 每個破口（還開著的）：{ x, y, z（船的格座標）, area m², wet 在海面下, q 流量 m³/s, st 'in'｜'out'｜'dry' } —— __game.flHoles(i)。 */
 function flHoleInfo(sh) {
@@ -313,7 +325,8 @@ function flTick(sh, fl, dtc) {
   for (var zz = lowz; zz < lowz + 3 && need > 0 && lowz < 1e9; zz++) for (t = 0; t < fl.actN && need > 0; t++) {
     i = act[t]; if (((i / NXY) | 0) !== zz || A[i] <= 0) continue; m = Math.min(A[i], need); A[i] -= m; need -= m; fl.pumped += m;
   }
-  fl.pumpQ = (fl.pumped - p0) / dtc; fl.netQ = fl.inQ - fl.outQ - fl.pumpQ;   // 實際抽掉的（m³/s；艙裡沒水 ⇒ 比抽水機的量少）；淨進水 ＝ 進 − 出 − 實際抽（Tim 2026-10-18「實際進水速度(進水-抽水)」）
+  fl.pumpQ = (fl.pumped - p0) / dtc; fl.netQ = fl.inQ - fl.outQ - fl.pumpQ;
+  flAvgStep(fl, dtc);   // 實際抽掉的（m³/s；艙裡沒水 ⇒ 比抽水機的量少）；淨進水 ＝ 進 − 出 − 實際抽（Tim 2026-10-18「實際進水速度(進水-抽水)」）
   // 4. 收掉空的格；讀數：水量、重心（公尺，離船型中線：x 往船頭、y 往格 +y 那一舷為正）
   var w = 0, mx = 0, my = 0, keep = 0, cx = sh.T.cx, cy = sh.T.cy;
   for (t = 0; t < fl.actN; t++) {
