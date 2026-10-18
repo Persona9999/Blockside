@@ -33,11 +33,13 @@ var HELM_ASP = { S: Math.PI / 2, P: -Math.PI / 2, B: 0, A: Math.PI }, HELM_ASP_N
 /** 這門砲對不對得到船的 a 方向（rad，格座標：0 船頭、+π/2 右舷）。 */
 function helmCovers(g, a) { if (g.mt) return true; var e = a - Math.atan2(g.ax[1], g.ax[0]); return Math.abs(Math.atan2(Math.sin(e), Math.cos(e))) < (g.cone || 0.45); }
 /** 對得到 asp 方向的火力（還在的砲）。 */
-function helmAspPower(sh, asp) { var p = 0, a = HELM_ASP[asp]; sh.guns.forEach(function (g) { if (g.alive && helmCovers(g, a)) p += helmGunW(g); }); return p; }
+function helmAspPower(sh, asp, nom) { var p = 0, a = HELM_ASP[asp]; sh.guns.forEach(function (g) { if (g.alive && helmCovers(g, a)) p += nom ? (g.wet ? 0 : (+(GUNS[g.type] || {}).mass || 1) / (+(GUNS[g.type] || {}).reload || 1)) : helmGunW(g); }); return p; }   // nom：照編制（不看人到了沒）
 /** 船頭或船尾比正橫火力大 ⇒ 'B'／'A'，不然 'side'（指揮官排戰列用：53_commander.js cmdLine）。 */
 function helmAspect(sh) {
   if (helmRamDef(sh.T)) return 'B';                                      // 裝了撞角（關聯 meta kind=ram）⇒ 撞角是主武器、船頭對敵（helmSteerRam）
-  var pb = helmAspPower(sh, 'B'), pa = helmAspPower(sh, 'A'), ab = Math.max(helmAspPower(sh, 'P'), helmAspPower(sh, 'S')), pe = Math.max(pb, pa);
+  // 照編制的火力（還在、沒泡水的砲，⛔ 不看砲班到了沒）：武器朝哪裡是船的設計 —— ⛔ 照 helmGunW（× 砲班）⇒ 開局砲班還沒站好全是 0 ⇒ 'side'，
+  //   指揮官第一次下令就把持火號排進戰列當排頭（量過 3 對 3 seed 11：t 0 排頭、t 36 船頭砲班被打散又排成跟隨）。
+  var pb = helmAspPower(sh, 'B', true), pa = helmAspPower(sh, 'A', true), ab = Math.max(helmAspPower(sh, 'P', true), helmAspPower(sh, 'S', true)), pe = Math.max(pb, pa);
   return pe > 0 && pe > ab ? (pb >= pa ? 'B' : 'A') : 'side';
 }
 /** asp 方向的武器打得到多遠（m）：對得到的砲照有效射程由遠到近排、累計到一半火力的那一門的射程；一門都沒有 ⇒ Infinity（不限）。 */
@@ -130,7 +132,10 @@ function helmSteer(sh, foe) {
  *  航速照「接近率」調：要的接近率 ＝ (距離 − HELM_END_HOLD × 射程) ÷ HELM_END_TAU 秒（最慢 −1.5 m/s），自己的航速 ＝ 它 ＋ 敵艦沿連線離開的速度
  *    ⇒ 對衝時兩艘都會收（⛔ 「跟敵艦一樣快」只對追擊成立：對衝 ⇒ 兩艘都照對方的航速衝，接近率翻倍）；要倒退而且有動力 ⇒ 倒退（最多 HELM_BACK_V）、沒有 ⇒ 最慢。
  *  遠於 HELM_END_FAR 倍射程 ⇒ 全速接近。船尾對敵反過來（太近 ⇒ 拉開）。撞不撞照舊交給讓敵艦（foeAvoid；對自己的目標只往前看 HELM_END_AVT 秒，52_fleet.js friendAvoid）。 */
-var HELM_END_LEAD = 10, HELM_END_HOLD = 0.75, HELM_END_TAU = 10, HELM_END_AVT = 3, HELM_END_FAR = 6, HELM_END_TURN = Math.PI / 3;
+// 煞得住（Tim 2026-10-18：「目前AI不會用船頭的希臘火」——量過 seed 3：持火號 18 節衝進去、53 m 才喊倒退，12 秒撞上憲法號，碰撞死 32 人、siphon 與船頭弩砲、投石機全被撞飛，之後 107 秒沒有武器可開）：
+//   要的接近率再夾在「照煞車距離煞得住」的那一個 —— √(2 × HELM_END_DEC × (距離 − 守住的距離))；全速（far）也要煞得住：現在的接近速度煞到 0 要的距離 ×1.5 還在 守住的距離 之外才全速。
+//   HELM_END_DEC：煞車減速度（m/s²；量過持火號收俥減速約 0.3）。帆照急煞收（helmGovern：船頭／船尾接敵、比要的快 HELM_SAIL_URG 以上 ⇒ 帆馬上收，不等 HELM_SAIL_T）。
+var HELM_END_LEAD = 10, HELM_END_HOLD = 0.75, HELM_END_TAU = 10, HELM_END_AVT = 3, HELM_END_FAR = 6, HELM_END_TURN = Math.PI / 3, HELM_END_DEC = 0.3, HELM_SAIL_URG = 1.5;
 /** 這艘現在是不是船頭／船尾接敵（helmSteerEnd 剛跑過）。 */
 function helmEndOn(sh) { return sh.hEndT !== undefined && SIMT - sh.hEndT < 0.5; }
 /** asp 那一頭對得到的砲（還在的）砲口的平均點 ⇒ 敵艦船身最近的距離（m）：到敵艦龍骨線（keelLine）的水平距離 − 那一段的半寬；沒有砲 ⇒ 從船的中心量。 */
@@ -149,9 +154,11 @@ function helmSteerEnd(sh, foe, asp, d, dx, dz) {
   var T = gap > 2 * reach ? Math.min(HELM_END_LEAD, d / Math.max(1, Math.abs(sh.spd))) : 0, tx = dx + foe.vel[0] * T, tz = dz + foe.vel[2] * T;
   var yaw = bow ? Math.atan2(-tz, tx) : Math.atan2(tz, -tx), v, m;           // fwd(yaw) ＝ (cos, −sin)
   var canBack = sh.cfg.base > 0 && sh.drive && sh.drive.cap > 0.05;
-  if (bow && gap > HELM_END_FAR * reach) { v = Infinity; m = 'close'; }   // 很遠才全速：⛔ 遠於兩倍射程（50 m）就全速 ⇒ 兩艘持火號各 8 節對衝、3 秒的預判來不及讓，開局撞在一起（量過 seed 3）
+  var vc = Math.max(0, sh.spd - vf), room = gap - hold;                 // vc：現在的接近速度（自己往前、扣掉敵艦沿連線離開的）；room：離守住的距離還有多遠
+  if (bow && gap > HELM_END_FAR * reach && room > 1.5 * vc * vc / (2 * HELM_END_DEC)) { v = Infinity; m = 'close'; }   // 很遠、而且煞得住才全速：⛔ 遠於兩倍射程（50 m）就全速 ⇒ 兩艘持火號各 8 節對衝、3 秒的預判來不及讓，開局撞在一起（量過 seed 3）
   else {
     var c = Math.max(-1.5, (bow ? gap - hold : hold - gap) / HELM_END_TAU);   // 船頭：要的接近率；船尾：要的拉開率（遠了 ⇒ 大、近了收到 0；不設上限 ⇒ 由船的全速封頂）
+    if (bow && c > 0) c = Math.min(c, Math.sqrt(2 * HELM_END_DEC * room));   // 煞得住（見 HELM_END_DEC）
     v = bow ? c + vf : c - vf;
     if (v < 0) { v = canBack ? Math.max(-HELM_BACK_V, v) : HELM_VMIN; m = canBack ? 'back' : bow ? 'bow' : 'stern'; }
     else { v = Math.max(HELM_VMIN, v); m = !bow ? 'stern' : gap > reach ? 'close' : 'bow'; }
@@ -346,7 +353,7 @@ function helmGovern(sh, vS, vB) {
   if (useS && k !== sh.sailSet) {
     if (k > sh.sailSet) sh.govLow = null;
     else if (sh.govLow === null || sh.govLow === undefined) { sh.govLow = SIMT; k = sh.sailSet; }
-    else if (SIMT - sh.govLow < HELM_SAIL_T) k = sh.sailSet;
+    else if (SIMT - sh.govLow < HELM_SAIL_T && !(helmEndOn(sh) && want !== 'cruise' && sh.spd - want > HELM_SAIL_URG)) k = sh.sailSet;   // 船頭／船尾接敵在急煞（比要的快 HELM_SAIL_URG 以上）⇒ 帆馬上收（見 HELM_END_DEC）
     if (k !== sh.sailSet) { helmSay(sh, 'sail', '帆裝 ' + SAILSETS[sh.sailSet] + ' → ' + SAILSETS[k] + '（' + helmWantText(want) + '）', false); sh.govLow = null; if (me) setSails(sh, k); else { sh.sailSet = k; applySailSet(sh); } }
   } else sh.govLow = null;
   if (useE) {

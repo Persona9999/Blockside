@@ -572,7 +572,7 @@ function sliders() {
     $('blastV').textContent = BLAST_K.toFixed(2) + '×（前彈藥庫半徑約 ' + (MAG_R * Math.pow(BLAST_K, 1 / 3) * (S || 0.1)).toFixed(1) + ' m）';
     var r0 = MAG_R * Math.pow(BLAST_K * (1 - BLAST_V), 1 / 3) * (S || 0.1), r1 = MAG_R * Math.pow(BLAST_K * (1 + BLAST_V), 1 / 3) * (S || 0.1);
     $('blastvV').textContent = BLAST_V <= 0 ? '0（每次一樣）' : '±' + Math.round(BLAST_V * 100) + '%（前彈藥庫半徑 ' + r0.toFixed(1) + '～' + r1.toFixed(1) + ' m）';
-    $('boxV').textContent = BOX_N + ' 份（開戰時裝滿）';
+    var bxK = Object.keys(GUNS).filter(function (k) { return gunBoxK(k) > 1; }).map(function (k) { return GUNS[k].short + ' × ' + gunBoxK(k); }); $('boxV').textContent = BOX_N + ' 份（開戰時裝滿' + (bxK.length ? '；' + bxK.join('、') : '') + '）';   // 砲種表 box：那種武器一份算幾發（10_ship.js gunBoxK）
     $('healV').textContent = HEAL_T ? '約 ' + HEAL_T + ' 秒（預備水手把傷員搬到醫療艙的病床；手術台、藥箱加快，人手不足變慢；治好的回來當預備水手）' : '0（關：傷員照舊 12 秒抬下去，不搬、不治）';
     $('musketV').textContent = MUSKET_R + ' m（射程內看不到人就不開槍；射程內命中率照距離：100 m 約 5%、' + MUSKET_R + ' m 約 ' + (clamp(0.05 * 100 / MUSKET_R, 0.01, 0.12) * 100).toFixed(1) + '%）';
     $('sailfixV').textContent = SAILFIX_T + ' 秒（一面帆從滿血打到快掉，帆匠站在帆底下修這麼久；照缺的血量比例算，接一條繩多 ' + SM_ROPE_T + ' 秒；修完一次補回：血量、繩、破洞）';

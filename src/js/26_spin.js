@@ -44,6 +44,7 @@ function spinShip(sh) {
     var A = spinAxis(m); if (!A) return;
     var lo = spinNum(t.spin_min, -Infinity), hi = spinNum(t.spin_max, Infinity); if (lo > hi) return;
     m.spinB = { src: t.spin, rate: t.spin_mode === 'rate', k: spinNum(t.spin_k, 1), lo: lo, hi: hi, lag: Math.max(0, spinNum(t.spin_lag, SPIN_LAG)), p: A[0], ax: A[1], deg: 0 };
+    if (t.spin === 'gun') { var g = spinGunOf(sh, m); if (g && g.mt) { m.spinB.mt = g.mt; m.spv = A[0]; m.sax = A[1]; m.sw = 0; } }   // 綁的那門砲會迴旋（投石機 ports 0,180）⇒ 先繞自己的軸轉、再跟著那門砲轉（21_gunnery.js modelLocal0）
     L.push(m);
   });
   if (L.length) sh.spins = L;

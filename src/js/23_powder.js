@@ -203,7 +203,7 @@ function breakShip(sh, xb) {
 // ───────────────────────── 取用點與送藥手（火藥與彈藥的補給） ─────────────────────────
 // 史實：火藥桶不離開彈藥庫 —— 砲手長在裡面把火藥裝成藥包，從掛著濕毛氈的小艙口遞出來，送藥童一次一包、裝在皮筒裡跑上砲甲板；
 //   彈丸擺在砲旁與艙口邊的彈架上。遊戲為了讓火藥在戰鬥裡「打得到」，兩層甲板（砲甲板、spar deck）在兩間彈藥庫的上方各放一個
-//   取用點（3 桶火藥＋彈藥；Tim 2026-10-12），送藥手碰一下火藥桶就算拿了火藥與彈藥（簡化；一次 CARRY_N 份），送到砲旁的藥箱（每門最多 BOX_N 份；兩個都在細節設定）。
+//   取用點（3 桶火藥＋彈藥；Tim 2026-10-12），送藥手碰一下火藥桶就算拿了火藥與彈藥（簡化；一次 CARRY_N 份），送到砲旁的藥箱（每門最多 BOX_N 份 × 砲種表 box 發：一份 ＝ box 發，10_ship.js gunBoxK；兩個份數都在細節設定）。
 //   砲開火後要從藥箱拿一份才開始裝填；藥箱空了 ⇒ 等送藥手（HUD △）。
 // 危險（火藥血量拉滿 ＝ 全都不會爆；預設 675 ⇒ 藥包 203（一般命中要擲到偏高）、火光一次 300，要三次）：藥包（送藥手手上、砲旁藥箱）的血量 ＝ 火藥桶的 30%，吃到一下夠重的就著火爆炸；
 //   取用點的桶被打到照火藥桶算；爆炸離取用點 3 m 內 ⇒ 火光竄下艙口：彈藥庫裡靠門最近的 6 桶各扣 300 × 威力 ⇒ 可能整間殉爆。
@@ -377,10 +377,10 @@ function incoming(sh, c, g) {
 function needGun(sh, c) {
   var best = null, bs = 1e9;
   sh.guns.forEach(function (g) {
-    if (!g.alive || !g.drop || gunDeck(g) !== c.deck || g.box >= BOX_N || (g.pm && g.pm !== c && crewAble(g.pm))) return;
-    if (g.box + incoming(sh, c, g) >= BOX_N) return;
+    if (!g.alive || !g.drop || gunDeck(g) !== c.deck || g.box >= gunBoxCap(g) || (g.pm && g.pm !== c && crewAble(g.pm))) return;
+    if (g.box + incoming(sh, c, g) * gunBoxK(g.type) >= gunBoxCap(g)) return;   // incoming 是份數 ⇒ × box 換成發
     if (!navReach(sh, c.pos, g.drop)) return;                          // 照直線走（monkeyTo）⇒ 隔著砲塔那一圈的砲不送（42_hands.js；Tim 2026-10-17「水手會穿進去」）
-    var s = g.box * 10 + (g.needCart ? 0 : 5) + (g.pm === c ? 0 : 3) + (gunRate(g) > 0 ? 0 : 20) + Math.abs(g.muz[0] - c.pos[0]) / 40;
+    var s = g.box / gunBoxK(g.type) * 10 + (g.needCart ? 0 : 5) + (g.pm === c ? 0 : 3) + (gunRate(g) > 0 ? 0 : 20) + Math.abs(g.muz[0] - c.pos[0]) / 40;
     if (s < bs) { bs = s; best = g; }
   });
   return best;
@@ -441,10 +441,10 @@ function stepMonkey(sh, c, dt) {
   if (P.st === 'fill') { c.moving = false; if ((P.t -= dt) <= 0) { c.cart = CARRY_N; P.st = 'carry'; } return; }
   if (P.st === 'carry') {
     if (!c.cart) { P.st = 'idle'; return; }                            // 藥包炸掉或掉了
-    if (!P.g || !P.g.alive || P.g.box >= BOX_N) P.g = needGun(sh, c);
+    if (!P.g || !P.g.alive || P.g.box >= gunBoxCap(P.g)) P.g = needGun(sh, c);
     if (!P.g) { monkeyTo(sh, c, c.home, dt); return; }                 // 都滿了 ⇒ 拿著回自己那一對砲中間等（⛔ 不站在桶邊：擋住下一個來拿的）
     if (monkeyTo(sh, c, P.g.drop, dt)) {                               // 放進藥箱（放得下多少放多少）；手上還有 ⇒ 送下一門
-      var put = Math.min(c.cart, BOX_N - P.g.box); P.g.box += put; c.cart -= put;
+      var bk = gunBoxK(P.g.type), put = Math.min(c.cart, Math.ceil((gunBoxCap(P.g) - P.g.box) / bk)); P.g.box = Math.min(gunBoxCap(P.g), P.g.box + put * bk); c.cart -= put;   // 一份 ＝ box 發（砲種表；沒寫 ＝ 1 ⇒ 跟以前一樣）
       if (c.cart <= 0) { c.cart = 0; P.st = 'idle'; } else P.g = null;
     }
   }
@@ -457,7 +457,7 @@ function cartHit(sh, c, dmg) {
 /** 砲旁的藥箱（damageModel 打到砲時轉過來）。 */
 function boxHit(sh, g, dmg) {
   if (!(g.box > 0) || powderNever() || dmg < powderHP() * CART_K) return;
-  var n = g.box; g.box = 0; cartBoom(sh, g.model.c, n, sideName(g.side) + GUNS[g.type].short + '旁的藥箱炸了');
+  var n = Math.ceil(g.box / gunBoxK(g.type)); g.box = 0; cartBoom(sh, g.model.c, n, sideName(g.side) + GUNS[g.type].short + '旁的藥箱炸了');
 }
 /** 藥包爆炸（n 份）：小洞、旁邊的人與模型（取用點的桶 ⇒ 連鎖）、可能竄下艙口。 */
 function cartBoom(sh, L, n, what) {

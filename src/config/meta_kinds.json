@@ -12,6 +12,7 @@
     "tack": { "name": "帆角索", "on": ["rope"], "keys": ["sail"], "need": [], "use": [], "doc": "§9.1", "game": null },
     "shroud": { "name": "側支索", "on": ["rope"], "keys": [], "need": [], "use": [], "doc": "§6", "game": null },
     "bowstring": { "name": "弩弦", "on": ["rope"], "keys": ["anim", "rest", "fire"], "need": [], "use": [], "doc": "§2.2", "game": ["26_gunanim.js"] },
+    "gunrope": { "name": "武器的繩（拉繩、投袋繩）", "on": ["rope"], "keys": ["anim", "rest", "fire"], "need": [], "use": [], "doc": "§2.2", "game": ["26_gunanim.js"] },
     "stay": { "name": "前後支索", "on": ["rope"], "keys": [], "need": [], "use": [], "doc": "§6", "game": null },
     "backstay": { "name": "後支索", "on": ["rope"], "keys": [], "need": [], "use": [], "doc": "§6", "game": null },
     "steering": { "name": "舵索", "on": ["rope"], "keys": [], "need": [], "use": [], "doc": "§6", "game": null },

@@ -301,6 +301,12 @@ def validate(cfg, prev=None):
             err(p + '.burst', '連發：一份彈藥打幾發，1～20 的整數（沒寫 ＝ 1）')
         if 'burstGap' in g and not (isnum(g['burstGap']) and 0.02 <= g['burstGap'] <= 2):
             err(p + '.burstGap', '連發間隔：0.02～2 秒（沒寫 ＝ 0.15）')
+        if 'box' in g and not (isint(g['box']) and 1 <= g['box'] <= 10):
+            err(p + '.box', '彈藥量倍率：1～10 的整數（砲旁藥箱放 細節設定的份數 × 它；沒寫 ＝ 1）')
+        if 'elev' in g and not (isnum(g['elev']) and 5 <= g['elev'] <= 85):
+            err(p + '.elev', '最大仰角：5～85 度（沒寫 ＝ 15 度）')
+        if 'lob' in g and not isinstance(g['lob'], bool):
+            err(p + '.lob', '曲射：true／false（true ⇒ 走高的那條拋物線，投石機、臼砲）')
         if not (isint(g.get('crew')) and 1 <= g.get('crew') <= 8):
             err(p + '.crew', '1～8 的整數（砲旁的站位只有 8 個）')
         elif not (isint(g.get('min')) and 1 <= g.get('min') <= g.get('crew')):

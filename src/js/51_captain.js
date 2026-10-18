@@ -86,7 +86,7 @@ function modeAim(foe, mode, rand) {
 //   ⇒ 砲長不認彈種的名字，只看每一種的屬性（ammoProps）；挑的範圍是那艘打得出的（61_hud.js ammoOf）。新彈種只要在 AMMO_TAG 補一列、AMMO_K 補一列，砲長就會用。
 //   屬性：gun／sail／crew ＝ 彈種倍率表（AMMO_K，對砲／對帆／對人，細節設定可調）；hull ＝ 打船殼（開洞、進水）；uw ＝ 碰到水不會沒（實心彈：打水漂、水面下照樣穿，21_gunnery.js）；blast ＝ 打中就炸（爆裂彈）。
 //   ⚠ hull 是估的（實心彈穿透、爆裂彈第一下就在外面炸、鏈彈打中就慢一半），還沒量過。
-var AMMO_TAG = [{ hull: 1, uw: 1 }, { hull: 0.6, blast: 1 }, { hull: 0.5 }, { hull: 0.3 }, { hull: 0.4 }];   // 第 5 列：弩箭（10_ship.js AMMO_BOLT；固定彈種）   // 第 4 列：希臘火（28_fire.js；固定彈種，砲長不會挑到 —— 留著給之後「照船給彈種」）
+var AMMO_TAG = [{ hull: 1, uw: 1 }, { hull: 0.6, blast: 1 }, { hull: 0.5 }, { hull: 0.3 }, { hull: 0.4 }, { hull: 0.4 }, { hull: 0.8 }];   // 第 6、7 列：火箭、石彈（固定彈種）   // 第 5 列：弩箭（10_ship.js AMMO_BOLT；固定彈種）   // 第 4 列：希臘火（28_fire.js；固定彈種，砲長不會挑到 —— 留著給之後「照船給彈種」）
 /** 彈種 a 的屬性（砲長挑彈用）。 */
 function ammoProps(a) { var t = AMMO_TAG[a] || {}; return { gun: ammoK(a, VS_GUN), sail: ammoK(a, VS_SAIL), crew: ammoK(a, VS_CREW), hull: t.hull || 0, uw: t.uw || 0, blast: t.blast || 0 }; }
 // 瞄準點落在哪一帶 ⇒ 那一帶看重哪幾樣屬性

@@ -210,7 +210,7 @@ function shipCheck(id) {
     funnelsOf(T).forEach(function (f) { if (!f.pt) add('warn', '煙囪', f.name, '沒有固定點 smoke ⇒ 從外框頂面的中心冒煙', '煙囪子作品登記固定點 smoke（煙囪口的中心；造船規格 §9）'); });
     // ── 彈藥庫與取用點（23_powder.js）：沒有桶 ⇒ 不擺取用點 ⇒ 送藥手沒地方拿、砲打完砲旁藥箱那幾發就永遠停（維吉尼亞號 2026-10-15：180 秒只開 12 發，Tim 先看到）──
     var kegsAny = sh.mags.some(function (o) { return o.kegs.length; });
-    if (!sh.mags.length) add('error', '彈藥庫', '—', '沒有 kind=magazine ⇒ 沒有取用點：砲打完砲旁藥箱（' + BOX_N + ' 發）就停、也不會殉爆', '彈藥庫的關聯 meta kind=magazine, powder_lb ＋ 裡面的火藥桶模型（造船規格 §8）');
+    if (!sh.mags.length) add('error', '彈藥庫', '—', '沒有 kind=magazine ⇒ 沒有取用點：砲打完砲旁藥箱（' + BOX_N + ' 份 × 砲種表 box）就停、也不會殉爆', '彈藥庫的關聯 meta kind=magazine, powder_lb ＋ 裡面的火藥桶模型（造船規格 §8）');
     sh.mags.forEach(function (m) { if (!m.kegs.length) add('error', '彈藥庫', m.name, '裡面沒有火藥桶模型 ⇒ 這一間不會殉爆' + (kegsAny ? '' : '、整艘沒有取用點（砲打完藥箱就停）'), '彈藥庫子作品裡掛火藥桶模型 meta kind=powder, powder_lb（造船規格 §8）'); });
     R.info.stations = sh.stations.length;
     R.info.mounts = (sh.mounts || []).map(function (g) { var M = g.mt, dg = function (a) { return Math.round(a * 57.2958); };   // 迴旋砲、砲塔（TASK-0626）
@@ -245,7 +245,7 @@ function shipCheck(id) {
     //   ✗ 那一層沒有取用點（上面那條已報 ⇒ 這裡不重報）／沒有送藥手／砲尾後面找不到放藥箱的位置 ⇒ 那門砲打完砲旁藥箱就停。
     //   ⚠ 走路格上（預備水手的尋路，42_hands.js）取用點跟放藥箱的位置不連通 ⇒ 送藥手照直線穿過艙壁、艙口去送。
     var pw = { n: 0, ok: 0, unk: 0, far: 0, farG: '' };
-    if (kegsAny && !(sh.cw.monkeys > 0)) add('warn', '火藥', '船員配置', '送藥手 0 ⇒ 每門砲打完砲旁藥箱（' + BOX_N + ' 發）就停', '船員配置的送藥手給 1 或 2');
+    if (kegsAny && !(sh.cw.monkeys > 0)) add('warn', '火藥', '船員配置', '送藥手 0 ⇒ 每門砲打完砲旁藥箱（' + BOX_N + ' 份 × 砲種表 box）就停', '船員配置的送藥手給 1 或 2');
     if (kegsAny && sh.cw.monkeys > 0) sh.guns.forEach(function (g) {
       var deck = gunDeck(g), nm = g.model.path || g.model.name, sts = sh.stations.filter(function (st) { return st.deck === deck && !st.mag.gone; });
       pw.n++;
