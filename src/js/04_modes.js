@@ -24,5 +24,8 @@ var MODE_RULES = {
   build: { name: '🔨 建造', fleet: 'first', judge: false, hint: false, stopOwn: true, battleKeys: false, fpLock: true, build: true }
 };
 Object.keys(MODE_RULES).forEach(function (m) { for (var k in MODE_BASE) if (!(k in MODE_RULES[m])) MODE_RULES[m][k] = MODE_BASE[k]; });
+// ?mode=<玩法>（外部開戰用：Blocksail 的開戰設定，2026-10-18）：一般遊玩也照網址選玩法（主選單有的才認；沒給 ⇒ 照設定檔、存檔）。?demo 照舊在 90_main.js 自己選。
+var MODE_Q = DEMO < 0 && Object.prototype.hasOwnProperty.call(MODE_RULES, Q.get('mode')) && MODE_RULES[Q.get('mode')].menu ? Q.get('mode') : null;
+if (MODE_Q) flowMode(MODE_Q);
 /** 現在這個玩法的規則 k。 */
 function modeRule(k) { return (MODE_RULES[MODE] || MODE_RULES.pve)[k]; }
