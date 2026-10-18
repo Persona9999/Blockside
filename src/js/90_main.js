@@ -83,7 +83,7 @@ if (DEBUG) window.__game = {
   /** 繩的檢查（10_ship.js ropesFloating／ropeAuditStatic）：第 i 艘現在浮空的繩；static ⇒ 作品本身的讀數。 */
   ropes: function (i, stat) { var sh = SHIPS[i || 0]; return stat ? ropeAuditStatic(sh) : ropesFloating(sh); },
   hangs: function (i) { return SHIPS[i || 0].models.filter(function (m) { return m.hang; }).map(function (m) { return m.path + (m.sax ? ' 擺 ' + (m.sw * 57.3).toFixed(1) + '°（擺長 ' + (m.sL * S).toFixed(2) + ' m）' : '') + ' falls ' + (m.falls ? m.falls.map(function (j) { var r = SHIPS[i || 0].ropes[j]; return r.name + (r.dead ? '×' : ''); }).join(',') : '（沒有）') + (m.alive ? '' : ' 掉了'); }); },
-  lostModels: function (i) { return SHIPS[i || 0].models.filter(function (m) { return !m.alive && !GUNS[m.kind] && m.kind !== 'powder'; }).map(function (m) { return m.path + ' ' + (m.meta.kind || m.kind) + ' foot z ' + (m.foot >> 21); }); },
+  lostModels: function (i) { return SHIPS[i || 0].models.filter(function (m) { return !m.alive && !GUNS[m.kind] && !kindProp(m.kind, 'noFall'); }).map(function (m) { return m.path + ' ' + (m.meta.kind || m.kind) + ' foot z ' + (m.foot >> 21); }); },
   gunDirs: function (i) { return SHIPS[i || 0].guns.map(function (g) { return [g.name.split('/').pop(), g.type, g.ax.map(function (v) { return +v.toFixed(2); }), gunDir(g)]; }); },
   /** 艙房的擺法（TASK-0568；船型要先載好）：每一間的格子（nx×ny、門口走道幾格、站不住幾格）、type ⇒ 那個類型自動擺滿的結果、now ⇒ 現在照擺法擺上的；ms ＝ 全部算一次幾毫秒（不記）。 */
   roomPlans: function (id, type) {
