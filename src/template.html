@@ -616,7 +616,7 @@
     <div class="card panel" id="detail" style="display:none">
       <h2>細節設定</h2>
       <div id="detAdm" class="row"><b>出廠預設值（設定後台）</b>：這一頁的值 ＝ 設定檔現在的預設；改好按「存成出廠預設」⇒ 寫進 config/game.json（只改各滑桿的預設，上下限不動），「重建」之後遊戲才吃得到。勾選、彈種倍率、砲長、降旗條件不是滑桿 ⇒ 不會存（會列出來）。<br><button id="detAdmS" class="on">💾 存成出廠預設</button><button id="detAdmB">🔨 重建</button><button id="detAdmX">↩ 回設定後台</button><div id="detAdmL" style="white-space:pre-wrap;text-align:left;font-size:12px"></div></div>
-      <div class="sub">開戰前調好，下一場開始生效。網址參數吃同一組：?blue=我艦,友艦… ?red=敵艦,…（或 ?ship=我艦,敵艦） ?hard= ?flood= ?ballast= ?gunw= ?speed= ?agile= ?upwind= ?hands=（這八個套到每一型，在「船隻配置」）?gunhp= ?dmg24= ?dmg32l= ?dmg32= ?dmg18= ?dmg4= ?ammo=（九個數字）?sailhp= ?crewhp= ?crewdeath= ?musket= ?sailfix= ?box= ?carry= ?wind= ?powderhp= ?blast= ?cap= ?strike= ?play=fun／real ?stall= ?funspeed= ?funagile= ?funstall= ?funpowder= ?sea=</div>
+      <div class="sub">開戰前調好，下一場開始生效。網址參數吃同一組：?blue=我艦,友艦… ?red=敵艦,…（或 ?ship=我艦,敵艦） ?hard= ?flood= ?ballast= ?gunw= ?speed= ?agile= ?upwind= ?hands=（這八個套到每一型，在「船隻配置」）?gunhp= ?dmg24= ?dmg32l= ?dmg32= ?dmg18= ?dmg4= ?ammo=（九個數字）?sailhp= ?crewhp= ?crewdeath= ?musket= ?sailfix= ?burn= ?box= ?carry= ?wind= ?powderhp= ?blast= ?cap= ?strike= ?play=fun／real ?stall= ?funspeed= ?funagile= ?funstall= ?funpowder= ?sea=</div>
       <h3>航行</h3>
       <div class="row slide"><label for="sea">浪</label><input type="range" id="sea" step="0.05" aria-label="浪的大小"><span id="seaV"></span></div>
       <div class="row note">浪是物理的一部分：船跟著浪起伏、縱搖、橫搖（長浪才搖得動整艘船），砲彈打到浪頭就落水，打低的砲會被浪擋掉；碎片、落水的人、斷開的船跟著浪浮沉。0 ＝ 平靜的海。</div>
@@ -673,6 +673,9 @@
       <div class="row slide"><label for="blastv">威力浮動</label><input type="range" id="blastv" step="5" aria-label="每次爆炸的威力浮動（%）"><span id="blastvV"></span></div>
       <div class="row note">彈藥庫在艙底、水線下，砲彈打不到（每桶 100 磅）：憲法號前後兩間（後 22 桶、前 116 桶），餘燼號船中段一間（230 桶），夜隼號艙房底下一間（8 桶）。每層砲甲板在每間彈藥庫上方各有一個取用點（3 桶火藥＋彈藥；正上方沒有甲板就往前後找；只有一間彈藥庫的船每層前後各一個），送藥手從離要送的那門砲最近的取用點搬到砲旁的藥箱。<br>
         預設 675（寫實）：很難殉爆但有機率；娛樂再乘「娛樂加成」的火藥血量（預設 ×2/3 ⇒ 450：藥包會炸、有時整間殉爆）。675 時：很難殉爆但有機率（藥包偶爾會炸，彈藥庫要火光竄下去三次才會著）；拉滿 1000 ＝ 都不會爆。火藥桶歸零 ⇒ 炸、旁邊的桶扣血（連鎖）；藥包（送藥手手上、砲旁藥箱）血量 ＝ 火藥桶的 30%，被打中就可能炸；爆炸離取用點 3 m 內 ⇒ 火光竄下艙口、彈藥庫的桶扣血（同一間 3 秒只算一次）⇒ 一間炸掉三成就整間殉爆，夠大就把船炸成兩截。</div>
+      <h3>著火（希臘火）</h3>
+      <div class="row slide"><label for="burn">火勢</label><input type="range" id="burn" step="10" aria-label="希臘火點著的火延燒多快（%；0 ＝ 不點火）"><span id="burnV"></span></div>
+      <div class="row note">希臘火潑到木頭 ⇒ 照材質的易燃性著火（橡木 0.5、松木 0.8、柚木 0.3；鐵甲、銅皮、鍋爐不燒），往鄰格延燒（往上快）、燒久了燒穿（水線下會進水；公式進水只燒焦）；帆從潑到的那一點往外燒出洞、邊緣焦黑，燒掉一半多就掉。預備水手照火場大小去潑水（降旗的船沒人救），熄了留焦痕；火場旁的人會燒傷、火藥桶會被烤。網址 ?burn=</div>
       <h3>艦隊指揮官</h3>
       <div class="row cmds" id="cmdB" data-side="blue">我方 <button data-c="free">各自為戰</button><button data-c="pair">一對一配對</button><button data-c="focus">集火</button><button data-c="line">戰列</button></div>
       <div class="row cmds" id="cmdR" data-side="red">敵方 <button data-c="free">各自為戰</button><button data-c="pair">一對一配對</button><button data-c="focus">集火</button><button data-c="line">戰列</button></div>
@@ -795,12 +798,14 @@
 <script src="js/46_carpenter.js" data-bundle="game"></script>
 <script src="js/47_sailmaker.js" data-bundle="game"></script>
 <script src="js/48_damage.js" data-bundle="game"></script>
+<script src="js/49_burn.js" data-bundle="game"></script>
 <script src="js/50_sim.js" data-bundle="game"></script>
 <script src="js/51_captain.js" data-bundle="game"></script>
 <script src="js/52_fleet.js" data-bundle="game"></script>
 <script src="js/53_commander.js" data-bundle="game"></script>
 <script src="js/54_helm.js" data-bundle="game"></script>
 <script src="js/55_tune.js" data-bundle="game"></script>
+<script src="js/59_burnfx.js" data-bundle="game"></script>
 <script src="js/60_render.js" data-bundle="game"></script>
 <script src="js/61_hud.js" data-bundle="game"></script>
 <script src="js/62_simview.js" data-bundle="game"></script>

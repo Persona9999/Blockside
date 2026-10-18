@@ -19,7 +19,7 @@ function dmgRigStamp(sh) {
   for (k = 0; k < sh.sails.length; k++) { if (sh.sails[k].dead) f++; hp += sh.sails[k].hp; }
   if (sh.cl) for (k = 0; k < sh.cl.length; k++) if (sh.cl[k] && sh.cl[k].torn) torn++;
   for (k = 0; k < sh.models.length; k++) if (sh.models[k].alive) m++;
-  return [sh.lost, C ? C.cells : 0, d, t, f, hp, torn, m, K ? K.hp + ':' + K.ropes + ':' + K.sails + ':' + K.lads : ''].join('|');
+  return [sh.lost, C ? C.cells : 0, d, t, f, hp, torn, m, K ? K.hp + ':' + K.ropes + ':' + K.sails + ':' + K.lads : ''].join('|') + (sh.burn ? '|b' + sh.burn.sv : '');   // 帆的火變了（49_burn.js sv：著、熄、換帆布）⇒ 重掃；沒著過火 ⇒ 字串照舊
 }
 /** 表（木匠、帆匠點名時叫；過期的那幾種重掃）⇒ sh.dmg.rows。 */
 function dmgRows(sh) {
