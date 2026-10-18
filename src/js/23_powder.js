@@ -452,7 +452,7 @@ function stepMonkey(sh, c, dt) {
     if (monkeyTo(sh, c, P.at, dt)) { P.st = 'fill'; P.t = FILL_T; }
     return;
   }
-  if (P.st === 'fill') { c.moving = false; if ((P.t -= dt) <= 0) { c.cart = CARRY_N; P.st = 'carry'; } return; }
+  if (P.st === 'fill') { c.moving = false; if ((P.t -= dt * crewEff(sh, c)) <= 0) { c.cart = CARRY_N; P.st = 'carry'; } return; }   // 工作效率（TASK-0720，39_eff.js；沒開 ⇒ × 1）：裝藥包快；搬運是走路、不乘
   if (P.st === 'carry') {
     if (!c.cart) { P.st = 'idle'; return; }                            // 藥包炸掉或掉了
     if (!P.g || !P.g.alive || P.g.box >= gunBoxCap(P.g)) P.g = needGun(sh, c);

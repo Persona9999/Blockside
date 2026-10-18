@@ -84,13 +84,14 @@ function medTick(sh) {
     o.have = 0;
     sh.crew.forEach(function (c) { if (c.role === ROLE.HAND && crewAble(c) && c.hand.job && c.hand.job.med === o && c.hand.job.at) o.have++; });
     var B = roomBuffNow(o.room), hb = (B.heal ? B.heal.v : 0) + (o.sg ? M.sheal : 0), staff = o.need ? Math.min(1, (o.have + o.sg) / o.need) : 1;   // 有船醫 ⇒ 治療快 sheal
+    var me = sh.effOn ? effAvg(sh, sh.crew.filter(function (c) { return crewAble(c) && (c.role === ROLE.SURGEON ? c.medRoom === o : c.role === ROLE.HAND && c.hand.job && c.hand.job.med === o && c.hand.job.at); })) : 1;   // 工作效率（TASK-0720，39_eff.js）：這一間到崗的預備水手＋船醫平均；⛔ 沒開 ⇒ 字面上的 1
     o.beds.forEach(function (m) {
       var p = m.med.who;
       if (p && (p.st !== 1 || p.medBed !== m)) { if (p.medBed === m) medRelease(p); m.med.who = p = null; }
       if (!m.alive) { if (p) medRelease(p); m.med.who = null; return; }
       beds++;
       if (!p || !p.inBed) return;
-      p.heal = (p.heal || 0) + dt / HEAL_T * (1 + hb) * staff * m.hp / m.hpMax;
+      p.heal = (p.heal || 0) + dt / HEAL_T * (1 + hb) * staff * me * m.hp / m.hpMax;   // me 乘在 staff 的 Math.min(1, …) 外面（⛔ 放裡面 ⇒ 人到齊時加成被封頂吃掉）
       if (p.heal < 1) return;
       var lv = m.med.lv, ci = m.med.cell;
       medRelease(p);

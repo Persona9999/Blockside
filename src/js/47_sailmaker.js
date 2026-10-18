@@ -164,8 +164,8 @@ function smFetch(sh, c, fr) {
 /** 到了帆布櫃（42_hands.js handJoin）：站 CARP_WOOD_T 秒 ⇒ 拿到滿（櫃裡剩多少拿多少；櫃在這段時間被打壞 ⇒ 空手）。 */
 function smCloth(sh, c) {
   var H = c.hand, J = H.job, m = J.m;
-  if (!J.at) { if (H.lv !== J.lv) { H.job = null; H.wait = 0.5; return; } J.at = SIMT; c.home = c.pos.slice(); return; }
-  if (SIMT - J.at < CARP_WOOD_T) return;
+  if (!J.at) { if (H.lv !== J.lv) { H.job = null; H.wait = 0.5; return; } J.at = SIMT; J.T = CARP_WOOD_T / crewEff(sh, c); c.home = c.pos.slice(); return; }   // J.T：工作效率（TASK-0720，39_eff.js；沒開 ⇒ ÷ 1）到的那一刻算一次
+  if (SIMT - J.at < J.T) return;
   var get = m.alive ? Math.min(Math.max(0, (+FURN[m.item].carry || 0) - c.cloth), m.cloth) : 0;
   m.cloth -= get; c.cloth += get; sh.sm.fetch++; sh.sm.used += get; c.smShort = false;
   H.job = null; H.wait = 0.5;
@@ -176,7 +176,7 @@ function smJoin(sh, c) {
   if (!J.at) {
     if (H.lv !== J.lv) { H.job = null; H.wait = 0.5; return; }
     var N0 = smNeed(sh, s); J.at = SIMT; c.home = c.pos.slice();
-    J.T = s.lad ? N0.ropes.reduce(function (a, j) { return a + smRopeT(s, j); }, SM_T0) : SM_T0 + SAILFIX_T * N0.hp / s.hpMax + SM_ROPE_T * N0.ropes.length; return;
+    J.T = (s.lad ? N0.ropes.reduce(function (a, j) { return a + smRopeT(s, j); }, SM_T0) : SM_T0 + SAILFIX_T * N0.hp / s.hpMax + SM_ROPE_T * N0.ropes.length) / crewEff(sh, c); return;   // ÷ 工作效率（TASK-0720，39_eff.js；沒開 ⇒ ÷ 1）
   }
   if (s.dead) { H.job = null; H.wait = 0.5; return; }
   if (SIMT - J.at < J.T) return;

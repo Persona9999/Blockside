@@ -91,7 +91,8 @@ function stepShip(sh, dt) {
     var g = sh.guns[i]; if (!(g.reload > 0)) continue;
     if (g.needCart && !sh.mags.length && gunRate(g) > 0) g.needCart = false;   // 這艘一間彈藥庫都沒有（作品漏標；夜燈號 2026-10-15）⇒ 不等送藥手（⛔ 等 ⇒ 每門打完開局藥箱那 2 發就永遠在等，整舷一排 △）；彈藥庫被打掉的照舊要等
     if (g.needCart) { if (g.box > 0 && gunRate(g) > 0) { g.box--; g.needCart = false; } else continue; }   // 裝填要一份火藥與彈藥：藥箱空了 ⇒ 等送藥手（不倒數）
-    g.reload -= dt * gunRate(g);                                    // 人少裝填慢、沒人不裝填
+    g.reload -= dt * gunRate(g) * (sh.effOn ? g.eff : 1);           // 人少裝填慢、沒人不裝填；工作效率（TASK-0720，39_eff.js；g.eff ＝ 在崗砲班的平均，40_crew.js manning）乘在每一步的倒數上 ⇒ 中途吃到飯下一步就變快；⛔ 沒開 ⇒ × 字面上的 1
+    if (sh.effOn) { var r0 = dt * gunRate(g); sh.effRk[0] += r0 * g.eff; sh.effRk[1] += r0; }   // 讀數 rk（45_galley.js galleyInfo）：裝填的加權平均倍數
   }
 }
 function survey(sh) {               // 每半秒量一次：砲還在不在、桅還在不在、繩與帆的錨還在不在、少掉多少重量
@@ -135,7 +136,7 @@ function survey(sh) {               // 每半秒量一次：砲還在不在、�
   if (sh.fl) sh.flBase = sh.T.disp - sh.mass0 + massLost(sh);                     // 粒子模式：浮力表上水以外的部分（33_flood.js floodSinkT）
   driveSurvey(sh);                                                    // 動力：實際質量（含進水）、引擎／魔力的完好度（31_drive.js）
   drownCheck(sh);                                                     // 船殼通海了 ⇒ 被水淹過頭的人浮上來（43_swim.js）
-  chooseSide(sh); reassign(sh); manning(sh); medTick(sh); pumpTick(sh); if (sh.burn) burnTick(sh); callHands(sh); carpTick(sh); smTick(sh);   // burnTick：每個火場要幾個人救火（49_burn.js）；pumpTick：抽水機要幾個人、現在抽多少（45_pumps.js）；medTick：醫療艙治療（44_medic.js）；callHands：預備水手補位（42_hands.js）
+  chooseSide(sh); reassign(sh); manning(sh); medTick(sh); pumpTick(sh); if (sh.burn) burnTick(sh); if (sh.galley) galleyTick(sh); effTick(sh); callHands(sh); carpTick(sh); smTick(sh);   // burnTick：每個火場要幾個人救火（49_burn.js）；galleyTick：做飯、伙夫在路上的（45_galley.js）、effTick：每個人的工作效率（39_eff.js；TASK-0720）；pumpTick：抽水機要幾個人、現在抽多少（45_pumps.js）；medTick：醫療艙治療（44_medic.js）；callHands：預備水手補位（42_hands.js）
   sh.able = sh.crew.filter(crewAble).length;
   sh.gunsManned = sh.guns.filter(function (g) { return g.alive && gunRate(g) > 0; }).length;
   strikeCheck(sh);

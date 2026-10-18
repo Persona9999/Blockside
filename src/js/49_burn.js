@@ -109,7 +109,7 @@ function burnCells(sh, B, ph, dt, NB) {
     var p = B.p[i], x = p & 2047, y = (p >> 11) & 1023, z = p >> 21;
     if (!g.get(x, y, z)) { B.g.set(x, y, z, 3); burnDrop(B, i--); continue; }        // 被打掉了、被斷開的那一團帶走了（22_pieces.js）⇒ 這裡不燒了
     var sp = B.spots.get(burnKey(x, y, z)), h = B.h[i] + dt * BURN.grow * B.f[i];
-    if (sp && sp.have) h -= dt * BURN.douse * sp.have / Math.max(1, sp.n);              // 潑水：這一區站到的人數 × douse，分給那一區的每一格
+    if (sp && sp.have) h -= dt * BURN.douse * (sh.effOn ? sp.haveE : sp.have) / Math.max(1, sp.n);   // 潑水：這一區站到的人數 × douse，分給那一區的每一格；haveE：到場的人的工作效率加總（TASK-0720，39_eff.js；沒開 ⇒ 人數本身）
     if (rain && z >= B.zSky) h -= rain;                                                // 淋得到雨
     if (z <= wz + 2 && !burnAir(sh, x, y, z)) h = 0;                                   // 泡進水裡（海面下、艙裡淹了一半）
     if (h <= 0) { burnQuench(sh, B, i--, x, y, z); continue; }
@@ -213,7 +213,8 @@ function burnTick(sh) {
   L.forEach(function (sp) {
     var M = mine[sp.key] || []; delete mine[sp.key];
     if (M.length > sp.need) M.sort(function (a, b) { return (a.hand.job.at ? 1 : 0) - (b.hand.job.at ? 1 : 0); }).slice(0, M.length - sp.need).forEach(burnFree);
-    sp.have = M.filter(function (c) { return c.hand.job && c.hand.job.at; }).length;
+    var at = M.filter(function (c) { return c.hand.job && c.hand.job.at; }); sp.have = at.length;
+    if (sh.effOn) { sp.haveE = 0; at.forEach(function (c) { sp.haveE += crewEff(sh, c); }); }   // 工作效率（TASK-0720）：潑水照到場的人的效率加總（burnCells）；have（人數）照舊給 HUD、讀數
   });
   for (var k in mine) mine[k].forEach(burnFree);                       // 火場沒了（熄了、燒完了）
   burnHurt(sh, B, dt);
@@ -242,9 +243,9 @@ function burnNeeds(sh, need) {
 /** 到了（42_hands.js handJoin）：船殼的火 ⇒ 站著潑（熱度在 burnCells 照到的人數降）、火場沒了才走；帆 ⇒ 站 cutT 秒，低的潑熄、高的割下來。不在那一層（路斷了）⇒ 作廢。 */
 function burnJoin(sh, c) {
   var H = c.hand, J = H.job, sp = J.fire;
-  if (!J.at) { if (H.lv !== J.lv || sp.out) { H.job = null; H.wait = 1; return; } J.at = SIMT; c.home = c.pos.slice(); return; }
+  if (!J.at) { if (H.lv !== J.lv || sp.out) { H.job = null; H.wait = 1; return; } J.at = SIMT; J.T = BURN.cutT / crewEff(sh, c); c.home = c.pos.slice(); return; }   // J.T：帆要站幾秒 ÷ 工作效率（TASK-0720，39_eff.js；沒開 ⇒ ÷ 1），到的那一刻算一次
   if (sp.out) { H.job = null; H.wait = 0.5; return; }
-  if (sp.sail && SIMT - J.at >= BURN.cutT) {
+  if (sp.sail && SIMT - J.at >= J.T) {
     var s = sp.sail, top = sh.weatherDeck && sh.deckZ[sh.weatherDeck] ? sh.deckZ[sh.weatherDeck][1] : sh.T.zw;
     if (!s.dead && s.burn && s.burn.lit) {
       if (s.bb[2] - top <= BURN.sailReach) burnSailOut(sh, s, 'sailOut');

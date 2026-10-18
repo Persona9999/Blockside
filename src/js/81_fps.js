@@ -112,6 +112,19 @@ function fpUI() {
 }
 /** 鏡頭跟著誰：跟隨中 ⇒ 被跟的人，否則 ⇒ 自己。 */
 function fpWho() { return FP.fol || FP.c; }
+/** 跟隨中的小標籤 #fpWho（TASK-0720〔K11〕；Tim 2026-10-19「可以加一個水手工作效率數值」）：被跟的人是誰（職位；伙夫寫他在做什麼）＋工作效率
+ *  （39_eff.js effText：「×1.06（吃過 1 分 12 秒前）」）；沒有任何效率因素的船（sh.effOn false）⇒ 只寫職位。之後做「點一個船員看資訊」照這一支接。 */
+function fpWhoText(sh, c) {
+  var nm = c.role === ROLE.OFFICER && c.rank !== undefined ? officerRank(c.rank) : ROLE_NAME[c.role] || '船員', J = c.hand && c.hand.job;
+  if (J && J.kind === 'eat') nm += '（伙夫：' + (J.at ? '在爐灶盛飯' : '去廚房領飯') + '）';   // 45_galley.js galleyNeeds／galleyJoin
+  var e = effText(sh, c); return e ? nm + '｜工作效率 ' + e : nm;
+}
+/** 跟著 HUD 的節拍（61_hud.js hudFrame 每 6 格）刷新 #fpWho；沒在跟隨 ⇒ 空字串（template.html：空的不顯示）。只讀。 */
+function fpWhoHud() {
+  var el = $('fpWho'); if (!el) return;
+  var t = FP.on && FP.fol && FP.sh ? fpWhoText(FP.sh, FP.fol) : '';
+  if (el.textContent !== t) el.textContent = t;
+}
 /** 玩家自帶的燈（Tim 2026-10-16「是否可以讓玩家自帶點光源(艙內很暗)」；設定「視角」那一排的「🏮 提燈」，預設開）：
  *  60_render.js lampsUpdate 每一格問一次 ⇒ 第一人稱開著（跟隨船員時在被跟的人那裡）就回一盞：眼睛往下 FP_LAMP_DY、暖色、照 FP_LAMP_R 公尺、亮度固定 FP_LAMP_I（⛔ 照天色 ⇒ 白天艙裡照樣暗）。
  *  d −1 ⇒ 排在最前面，LAMP_N 盞的名額一定有它。只照船殼與模型（跟別的燈一樣不投影子、不照看板圖）；只給人看，不碰戰局。 */

@@ -290,12 +290,12 @@ function sliders() {
   /** 這一型的砲（照砲種）、幾根桅、有沒有舵輪：船型載好才知道（沒載 ⇒ null）。 */
   function hullCounts(id) {
     var T = HULLT[id]; if (!T) return null;
-    var g = {}, n = 0, wheel = false, oars = 0, rowers = 0, rk = [];
+    var g = {}, n = 0, wheel = false, oars = 0, rowers = 0, rk = [], gal = 0;
     (T.rig.models || []).forEach(function (m) {
-      var k = modelKind(m); if (GUNS[k]) { g[k] = (g[k] || 0) + 1; n++; } if (k === 'wheel') wheel = true;
+      var k = modelKind(m); if (GUNS[k]) { g[k] = (g[k] || 0) + 1; n++; } if (k === 'wheel') wheel = true; if (k === 'galley') gal++;   // 廚房的爐灶（模型 meta kind=galley；45_galley.js）
       if ((m.meta || {}).kind === 'oar' && (m.points || {}).pivot) { var r = oarRowers(m); oars++; rowers += r; if (rk.indexOf(r) < 0) rk.push(r); }   // 槳：跟開戰時 oarCrew 同一條（有槳座才算）
     });
-    return { guns: g, n: n, masts: T.masts.length, wheel: wheel, oars: oars, rowers: rowers, rk: rk.sort(function (a, b) { return a - b; }) };
+    return { guns: g, n: n, masts: T.masts.length, wheel: wheel, oars: oars, rowers: rowers, rk: rk.sort(function (a, b) { return a - b; }), galley: gal };
   }
   /** 全船人數（跟船員那一節的合計同一條算法）。 */
   function crewTotal(cw, hc) { var g = 0; Object.keys(GUNS).forEach(function (t) { g += gunCrew(cw, t) * (hc.guns[t] || 0); }); return g + Math.ceil(hc.n / 2) * cw.monkeys + cw.officers + (hc.wheel ? cw.helm : 0) + cw.marines + cw.top * hc.masts + cw.hands + hc.rowers; }
@@ -513,6 +513,8 @@ function sliders() {
     v('sailmaker', n ? '上限 ' + n + ' 人：帆布櫃每件配 ' + furnStaff(loftIt() || '', 'sailmaker') + ' 位' + (smn === null ? '' : '（這型 ' + smn + ' 位' + (smn > n ? ' ⇒ 上限截到 ' + n : '') + '）') + '；開戰時生在帆布櫃旁；還掛著的破帆走到帆底下修 —— 血量、斷在帆那一端的繩、破洞一次修好；整面掉了不補；帆布用完回櫃拿' : '0（沒有）', n, d.sailmaker);
     n = cw.surgeon; var sg = hullStaff(CFG_ID, 'surgeon');   // 設施配員（36_rooms.js staffSlots）：病床每張配幾位 ⇒ 這型擺了幾張；上限截掉的照實寫
     v('surgeon', n ? '上限 ' + n + ' 人：病床每張配 ' + furnStaff('bed', 'surgeon') + ' 位' + (sg === null ? '' : '（這型 ' + sg + ' 位' + (sg > n ? ' ⇒ 上限截到 ' + n : '') + '；走不到的床不配）') + '；開戰就站在床旁；醫療艙要的人手先算船醫、不夠才派預備水手；有船醫的那一間治療快 50%；沒設醫療艙的船不上船' : '0（沒有：醫療艙照舊只靠預備水手）', n, d.surgeon);
+    n = cw.cook; var gk = hc ? hc.galley * GALLEY.cooks : null;   // 廚師（TASK-0720，45_galley.js）：爐灶（模型 meta kind=galley）每座配 galley.cooks 位，上限截掉的照實寫
+    v('cook', n ? '上限 ' + n + ' 人：爐灶每座配 ' + GALLEY.cooks + ' 位' + (gk === null ? '' : hc.galley ? '（這型 ' + hc.galley + ' 座 ⇒ ' + Math.min(n, gk) + ' 位' + (gk > n ? '，上限截到 ' + n : '') + '）' : '（這型沒有廚房 ⇒ 不上船）') + '；有廚房（kind=galley）的船才上船，開戰就站在爐灶旁做飯，預備水手輪流當伙夫去領；倒下不補 ⇒ 存糧吃完就斷炊' + (GALLEY_PCT > 0 ? '' : '　⚠ 細節設定「廚房加成」是 0 ⇒ 不開廚房') : '0（不開廚房：沒有廚師、沒人吃飯，工作效率一直是 ×1）', n, d.cook);
     $('cr-oarR').style.display = hc && !hc.oars ? 'none' : '';   // 沒有槳的船藏起來
     $('cr-oarV').textContent = !hc ? '船型載入後才知道' : hc.rowers + ' 人：' + hc.oars + ' 支槳 × 每支 ' + hc.rk.join('–') + ' 人（照船上每支槳的設定，這一頁不調）；坐在槳座內側划；倒下時預備水手照位子補；一支槳到崗幾成就出幾成力';
     n = cw.shelter ? 1 : 0; v('shelter', n ? '開：預備水手不上露天甲板閒晃（只上去補位）、船長以外的軍官待在甲板下' : '關：預備水手偶爾上露天甲板走動、軍官站在露天甲板', n, d.shelter ? 1 : 0);
@@ -536,7 +538,7 @@ function sliders() {
     var k = C(); $('cfgShip').textContent = (hullInfo(CFG_ID) || {}).name || CFG_ID;
     lf.value = k.ballast !== undefined ? k.ballast : LIM.ballast[2]; f.value = k.flood; h.value = Math.log(k.hard / LIM.hard[0]) / hk; c.value = STRIKE.cas * 100; sp.value = k.speed; ag.value = k.agile; uw.value = k.upwind; $('base').value = k.base || 0; $('pump').value = k.pump;
     gh.value = GUN_HP; gw.value = k.gunw; sl.value = SAIL_HP; ph.value = POWDER_HP; bl.value = BLAST_K; bv.value = Math.round(BLAST_V * 100); ch.value = CREW_HP;
-    bx.value = BOX_N; cy.value = CARRY_N; wk.value = WIND_K; wc.value = WIND_CAP; $('inertia').value = DRV_INERTIA; $('turninert').value = DRV_TURN; $('sailtq').value = DRV_TQ; dr.value = DROWN_T; $('navre').value = NAV_RE; $('heal').value = HEAL_T; $('musket').value = MUSKET_R; $('sailfix').value = SAILFIX_T; $('burn').value = BURN_PCT; $('gcrew').checked = GUN_CREW_HURT; $('dbg').checked = DBG_SET;
+    bx.value = BOX_N; cy.value = CARRY_N; wk.value = WIND_K; wc.value = WIND_CAP; $('inertia').value = DRV_INERTIA; $('turninert').value = DRV_TURN; $('sailtq').value = DRV_TQ; dr.value = DROWN_T; $('navre').value = NAV_RE; $('heal').value = HEAL_T; $('musket').value = MUSKET_R; $('sailfix').value = SAILFIX_T; $('burn').value = BURN_PCT; $('galley').value = GALLEY_PCT; $('gcrew').checked = GUN_CREW_HURT; $('dbg').checked = DBG_SET;
     se.value = SEA_K; st.value = STALL_K; fs.value = FUN.speed; fa.value = FUN.agile; fl.value = FUN.stall; fp.value = FUN.powder; fh.value = FUN.hard;
     for (var r = 0; r < 3; r++) for (var k = 0; k < 3; k++) am(r, k).value = AMMO_K[r][k];
     ['guns', 'masts', 'officers'].forEach(function (k) { $('st-' + k).checked = STRIKE[k]; });
@@ -577,6 +579,7 @@ function sliders() {
     $('musketV').textContent = MUSKET_R + ' m（射程內看不到人就不開槍；射程內命中率照距離：100 m 約 5%、' + MUSKET_R + ' m 約 ' + (clamp(0.05 * 100 / MUSKET_R, 0.01, 0.12) * 100).toFixed(1) + '%）';
     $('sailfixV').textContent = SAILFIX_T + ' 秒（一面帆從滿血打到快掉，帆匠站在帆底下修這麼久；照缺的血量比例算，接一條繩多 ' + SM_ROPE_T + ' 秒；修完一次補回：血量、繩、破洞）';
     $('burnV').textContent = BURN_PCT ? BURN_PCT + '%（希臘火點著的木頭往外燒、燒久了燒穿（水線下會進水）；帆也會燒出洞、燒掉；預備水手去潑水）' : '0（不點火：希臘火照以前只燒人、撕帆、燒細繩）';
+    $('galleyV').textContent = GALLEY_PCT ? '×' + (1 + GALLEY_PCT / 100).toFixed(2) + '（吃過飯的人裝填、抽水、修補、救火、治療快 ' + GALLEY_PCT + '%；吃完 ' + GALLEY.hold + ' 秒內滿的、之後 ' + GALLEY.fade + ' 秒慢慢退回 ×1；下一場開戰才決定開不開廚房）' : '0（關：不開廚房、不生廚師，有爐灶的船照沒有廚房跑）';
     $('navreV').textContent = NAV_RE > 0 ? '每 ' + NAV_RE + ' 秒（這段時間裡有甲板、梯子被打壞才重算那幾層：打成兩塊不通 ⇒ 分開找路、梯子斷了 ⇒ 改走別座）' : '關（走路格照開戰時的船：甲板打穿了照樣走過去）';
     $('drownV').textContent = DROWN_T ? '約 ' + DROWN_T + ' 秒（浮上水面、往自己的船游，爬回來當預備水手；受傷的減半）' : '0（關：落水當場算陣亡、淹到的跟著船沉）';
     $('windcapV').textContent = WIND_CAP + ' m/s（暴風雨陣風最大約 ' + Math.round(WIND_SAIL * WIND_K * (1 + GUST[0] + GUST[1] + GUST[2]) * 2.2 * 1.5) + ' m/s ⇒ ' + (WIND_SAIL * WIND_K * (1 + GUST[0] + GUST[1] + GUST[2]) * 2.2 * 1.5 > WIND_CAP ? '會被夾住' : '不會碰到') + '）';
@@ -621,6 +624,8 @@ function sliders() {
   sf.oninput = function () { SAILFIX_T = Math.round(+sf.value); show(); };
   var bu = $('burn'); bu.min = LIM.burn[0]; bu.max = LIM.burn[1];       // 火勢（TASK-0717）
   bu.oninput = function () { BURN_PCT = Math.round(+bu.value); show(); };
+  var ga = $('galley'); ga.min = LIM.galley[0]; ga.max = LIM.galley[1];   // 廚房加成（TASK-0720）
+  ga.oninput = function () { GALLEY_PCT = Math.round(+ga.value); show(); };
   $('gcrew').onchange = function () { GUN_CREW_HURT = $('gcrew').checked; show(); };
   $('dbg').onchange = function () { DBG_SET = $('dbg').checked; show(); };   // Debug 模式（04_state.js dbgOn）：遊戲中也生效   // 砲被打飛 ⇒ 砲班跟著受傷（TASK-0568）
   st.oninput = function () { STALL_K = +st.value; show(); };
@@ -706,7 +711,7 @@ function sliders() {
   $('detR').onclick = function () {                    // 重設預設值：LIM 的第三格、降旗全不勾
     // 船隻配置頁（每一型的船員與性能）不跟著重設：那一頁有自己的「這一型回到預設」（TASK-0570：編起來很花時間）
     GUN_HP = LIM.gunhp[2]; SAIL_HP = LIM.sailhp[2]; POWDER_HP = LIM.powderhp[2]; BLAST_K = LIM.blast[2]; BLAST_V = LIM.blastv[2]; CREW_HP = LIM.crewhp[2]; CREW_DEATH = LIM.crewdeath[2];
-    BOX_N = LIM.box[2]; CARRY_N = LIM.carry[2]; WIND_K = LIM.wind[2]; WIND_CAP = LIM.windcap[2]; DRV_INERTIA = LIM.inertia[2]; DRV_TURN = LIM.turninert[2]; DRV_TQ = LIM.sailtq[2]; HANDS = LIM.hands[2]; DROWN_T = LIM.drown[2]; NAV_RE = LIM.navre[2]; HEAL_T = LIM.heal[2]; MUSKET_R = LIM.musket[2]; SAILFIX_T = LIM.sailfix[2]; BURN_PCT = LIM.burn[2]; GUN_CREW_HURT = true; DBG_SET = false;
+    BOX_N = LIM.box[2]; CARRY_N = LIM.carry[2]; WIND_K = LIM.wind[2]; WIND_CAP = LIM.windcap[2]; DRV_INERTIA = LIM.inertia[2]; DRV_TURN = LIM.turninert[2]; DRV_TQ = LIM.sailtq[2]; HANDS = LIM.hands[2]; DROWN_T = LIM.drown[2]; NAV_RE = LIM.navre[2]; HEAL_T = LIM.heal[2]; MUSKET_R = LIM.musket[2]; SAILFIX_T = LIM.sailfix[2]; BURN_PCT = LIM.burn[2]; GALLEY_PCT = LIM.galley[2]; GUN_CREW_HURT = true; DBG_SET = false;
     AMMO_K = AMMO_K0.map(function (r) { return r.slice(); });
     SEA_K = LIM.sea[2]; STALL_K = LIM.stall[2]; FUN.speed = LIM.funspeed[2]; FUN.agile = LIM.funagile[2]; FUN.stall = LIM.funstall[2]; FUN.powder = LIM.funpowder[2];
     STRIKE.cas = LIM.cas[2]; STRIKE.guns = STRIKE.masts = STRIKE.officers = false; CAP_SET = ['random', 'random'];

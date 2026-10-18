@@ -83,6 +83,11 @@ function shipCheck(id) {
     (T.decoAll || []).forEach(function (m) { var k = m.meta && m.meta.kind; if (k) add('warn', '裝飾', m.name, '標了 deco 又有 kind=' + k + ' ⇒ 載入時整個拿掉，那個功能在遊戲裡就沒了', '有功能的模型不標 deco（造船規格 §9.9）'); });
     (T.h.parts || []).forEach(function (q) { if (isDeco(q)) add('warn', '裝飾', q.path, '關聯標了 deco ⇒ 遊戲不拿掉（格子是船的一部分：重量、命中照算）；只有外部模型能隱藏', '做成外部模型再標 deco（造船規格 §9.9）'); });
     R.info.deco = T.decoN ? T.decoN + ' 個模型' + (GFX.deco ? '（畫質「裝飾」開：畫 ' + T.decos.length + ' 個）' : '（畫質「裝飾」關：載入時就沒有）') + '；不算重量、不被打' : '';
+    // ── 廚房（TASK-0720；45_galley.js galleyInit）：模型 meta kind=galley 的爐灶 ⇒ 那一層走得到、四周有面站得住廚師（第二個面給伙夫領飯）；走不到 ⇒ ⚠（那一座不開） ──
+    var GL = sh.galley ? sh.galley.list : [];
+    (sh.galleySkip || []).forEach(function (k) { if (/走不到/.test(k.why)) add('warn', '廚房', k.name, k.why + ' ⇒ 這一座不開（沒有廚師、沒人去領飯）', '爐灶四周（爐門那一面優先）留一面站得下人、從待命那一層走得到（造船規格 §9.13）'); });
+    R.info.galley = GL.length ? '廚房 ' + GL.length + ' 座：' + GL.map(function (S) { return S.m.path + '（廚師 ' + S.cooks.length + ' 位、站得住的面 ' + S.faces.length + ' ✓）'; }).join('、')
+      : (sh.galleySkip || []).length ? '廚房沒開：' + sh.galleySkip.map(function (k) { return k.name + '（' + k.why + '）'; }).join('、') : '';
     // ── 模型 ──
     spinIssues(sh, add);                                                // 照參數轉的子物件寫了 spin 卻轉不起來（26_spin.js，TASK-0640）
     sh.models.forEach(function (m) {

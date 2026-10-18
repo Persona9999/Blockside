@@ -27,14 +27,14 @@ function hudNewsCrew(sh, c, dead, cause) {
   if (c.role === ROLE.GUN) return;
   var cap = c.art === ART_CAPTAIN, how = dead ? (cause === '落水' || cause === '溺水' ? cause : '陣亡') : '受傷倒下', why = cause && cause !== '落水' && cause !== '溺水' ? '（' + cause + '）' : '';
   if (cap) { note(sh, '<b style="color:var(--gold)">船長' + how + '！</b>' + why, true); return; }
-  if (c.role === ROLE.OFFICER || c.role === ROLE.HELM || c.role === ROLE.SURGEON) {   // 船醫（TASK-0676）：人少，當下報
+  if (c.role === ROLE.OFFICER || c.role === ROLE.HELM || c.role === ROLE.SURGEON || c.role === ROLE.COOK) {   // 船醫（TASK-0676）、廚師（TASK-0720，45_galley.js）：人少，當下報
     var left = sh.crew.filter(function (o) { return o.role === c.role && crewAble(o); }).length, nm = ROLE_NAME[c.role], off = c.role === ROLE.OFFICER;   // 軍官照階級報（大副、二副…；40_crew.js makeCrew）
     // 「全倒」只報一次（sh.news.down[職位]；newsFlush 看到那個職位又有人能動才收回）：之後倒下的同職位併進 5 秒那一行。
     //   ⛔ 不管 ⇒ 醫療艙淹了、幾位船醫一起落水（在水裡的不算能動）、一個一個溺水 ⇒ 每淹死一位都算出「還有 0 位」，連報好幾次「船醫溺水　船醫全倒」（Tim 2026-10-18 截圖：憲法號 4 次；軍官同理）。
     var D = sh.news.down || (sh.news.down = {});
     if (!left && D[c.role]) { var by0 = dead ? sh.news.kr : sh.news.wr; by0[c.role] = (by0[c.role] || 0) + 1; return; }
     D[c.role] = !left;
-    note(sh, (off && c.rank !== undefined ? officerRank(c.rank) : nm) + how + why + (left ? '（還有 ' + left + ' 位' + (off ? '軍官' : '') + '）' : '　<b style="color:#ff9a7a">' + nm + '全倒' + (c.role === ROLE.OFFICER ? ' —— 沒人指揮，瞄準變散' : c.role === ROLE.SURGEON ? ' —— 醫療艙只剩預備水手' : '') + '</b>'), !left);
+    note(sh, (off && c.rank !== undefined ? officerRank(c.rank) : nm) + how + why + (left ? '（還有 ' + left + ' 位' + (off ? '軍官' : '') + '）' : '　<b style="color:#ff9a7a">' + nm + '全倒' + (c.role === ROLE.OFFICER ? ' —— 沒人指揮，瞄準變散' : c.role === ROLE.SURGEON ? ' —— 醫療艙只剩預備水手' : c.role === ROLE.COOK ? ' —— 廚房沒人顧了' : '') + '</b>'), !left);
     return;
   }
   var by = dead ? sh.news.kr : sh.news.wr; by[c.role] = (by[c.role] || 0) + 1;
@@ -96,6 +96,16 @@ function newsFlush(sh) {
     if (sp.length) note(sh, NEWS_WIN + ' 秒內 落水水手 ' + sp.join('、'));
     N.sw = {}; N.st = -1;
   }
+  if (sh.galley) hudGalleyNews(sh);
+}
+/** 廚房（TASK-0720；45_galley.js galleyTick 記的 sh.galley.news：各記第一次的時刻）⇒ 每一件只報一次（sh.news.gal 記報過的）：
+ *  爐灶全打壞（鍋打翻了；同一拍斷炊 ⇒ 併成一行）、斷炊（沒有一座能做飯、現成的鍋也領光了 ⇒ 吃過的加成照 hold＋fade 慢慢退回 1）。
+ *  廚師倒下照 hudNewsCrew 當下報（「廚師全倒 —— 廚房沒人顧了」）；只有不是倒下、而是不在爐灶了（掉到別層當預備水手）才在這裡補一則。⛔ 只讀 sh.galley。 */
+function hudGalleyNews(sh) {
+  var W = sh.galley.news, R = sh.news.gal || (sh.news.gal = {}), D = sh.news.down || {};
+  if (W.broke !== undefined && !R.broke) { R.broke = true; if (W.out !== undefined) R.out = true; note(sh, '<b style="color:#ff9a7a">爐灶被打壞了</b> —— 鍋打翻了' + (R.out ? '　<b style="color:#ff9a7a">斷炊</b>' : ''), true); }
+  if (W.cook !== undefined && !R.cook) { R.cook = true; if (!D[ROLE.COOK]) note(sh, '廚師都不在爐灶 —— 廚房沒人顧了'); }
+  if (W.out !== undefined && !R.out) { R.out = true; note(sh, '<b style="color:#ff9a7a">斷炊</b> —— 鍋領光了、廚房做不出飯（吃過的加成慢慢退回 ×1）', true); }
 }
 /** 面板的一行：砲長與現在瞄哪裡（我艦手動 ⇒ 玩家的瞄準模式，砲長待命）。 */
 function capText(sh) {
@@ -136,7 +146,7 @@ function panel(sh, title) {
     (sh.spd < -0.05 ? '倒車 ' + (-sh.spd * 1.944).toFixed(1) : '航速 ' + (sh.spd * 1.944).toFixed(1)) + ' 節（' + sh.pos + '）　' + (driveText(sh) ? driveText(sh) + '　' : '') + (hasSails(sh) ? sailSetName(sh) + ' ' + Math.round(sh.sailFrac * 100) + '%' : '') + '<br>' +
     ((sh.ancMode ? '拋錨' : sh.manual ? '手動操舵' : '自動操舵') + (sh.anc ? '　' + anchorText(sh) : '') + '　舵 ' + (sh.rudder > 0.05 ? '左 ' + Math.round(sh.rudder * 100) + '%' : sh.rudder < -0.05 ? '右 ' + Math.round(-sh.rudder * 100) + '%' : '正')) + '<br>' + navText(sh) + '</div><div class="pc">' +
     capText(sh) + '<br>' +
-    '船員 ' + (sh.able || 0) + '/' + sh.crew0 + '（傷 ' + sh.wounded + '　亡 ' + sh.dead + '）' + handsText(sh) + medText(sh) + pumpText(sh) + burnText(sh) + swimText(sh) + '　' + supplyText(sh) + '<br>' +
+    '船員 ' + (sh.able || 0) + '/' + sh.crew0 + '（傷 ' + sh.wounded + '　亡 ' + sh.dead + '）' + handsText(sh) + medText(sh) + pumpText(sh) + galleyText(sh) + burnText(sh) + swimText(sh) + '　' + supplyText(sh) + '<br>' +
     '砲 有人 ' + (sh.gunsManned || 0) + '／還在 ' + sh.gunsAlive + '／' + sh.guns.length + '　' + m + '<br>開火 ' + sh.fired + '　命中 ' + sh.hits +
     gmapLegend(sh) + '</div></div>';
 }
@@ -719,6 +729,7 @@ function hudFrame(dt) {
   $('tip').textContent = t;
   drawNav(me);
   teleDraw(me);                                                                  // 俥鐘（橫版左下角、直版左邊那一欄按鈕上方；31_drive.js teleDraw／teleFit）
+  fpWhoHud();                                                                    // 第一人稱跟隨船員時的小標籤：職位＋工作效率（81_fps.js；TASK-0720）
 }
 /** 羅盤上方第三行：💧 艙內積水（噸）、🕳 破口（m²）—— Tim 2026-10-15：「羅盤上方資訊額外多一個積水、破口資訊」「假如沒有破口或積水則隱藏」。
  *  數字跟詳細資訊那一行同一份（sh.fl.vol × RHO_W、sh.fl.area；粒子模式才有）；兩個都沒有 ⇒ 整行不出現（沒有空行）、只有一個 ⇒ 只寫那一個。

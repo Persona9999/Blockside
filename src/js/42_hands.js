@@ -498,7 +498,8 @@ function callHands(sh) {
   if (NAV_RE > 0 && NV.dirty && SIMT - NV.reT >= NAV_RE) navRefresh(sh);     // 尋路動態更新（TASK-0572）
   NV.ladders.forEach(function (L) { L.q = 0; });                       // 排隊的人數每半秒重數（倒下、放棄的路不會一直佔著）
   sh.crew.forEach(function (c) { if (c.role === ROLE.HAND && crewAble(c)) c.hand.legs.forEach(function (l) { if (l.c !== undefined) NV.ladders[l.c].q++; }); });
-  var idle = sh.crew.filter(function (c) { return c.role === ROLE.HAND && crewAble(c) && !c.hand.job && !c.hand.climb; }); if (!idle.length) return;
+  var idle = sh.crew.filter(function (c) { return c.role === ROLE.HAND && crewAble(c) && !c.hand.job && !c.hand.climb; }); if (!idle.length && !(sh.galley && sh.galley.going)) return;   // 伙夫還在路上（45_galley.js）⇒ 沒有閒人也照樣算缺額：缺人就把伙夫叫回來（galleyPull）；沒有廚房 ⇒ 跟以前一樣
+  var idle0 = idle.length;
   var going = {}, need = [];
   sh.crew.forEach(function (c) { if (c.role === ROLE.HAND && crewAble(c) && c.hand.job) { var k = c.hand.job.kind + c.hand.job.key; going[k] = (going[k] || 0) + 1; } });
   sh.decks.forEach(function (D) {
@@ -536,6 +537,7 @@ function callHands(sh) {
   if (pumpUrgent(sh)) { pumpNeeds(sh, need); medNeeds(sh, need); }     // 積水多（45_pumps.js pumpUrgent）⇒ 抽水機排在醫療艙前面（同 pri 1、sort 不換相對順序）
   else { medNeeds(sh, need); pumpNeeds(sh, need); }                    // 醫療艙的人手、等著被搬的傷員（44_medic.js）；人力抽水機：艙裡有水才要人（45_pumps.js）
   if (sh.burn) burnNeeds(sh, need);                                    // 救火（49_burn.js，pri 0.5：交戰那一舷的砲班之後、其他之前）；沒著過火 ⇒ 不加
+  if (sh.galley) galleyNeeds(sh, need);                                // 伙夫領飯（45_galley.js，pri 3：所有補位之後）；沒有廚房 ⇒ 不加（sort 只比 pri、是穩定排序 ⇒ 其他的順序不變）
   need.sort(function (a, b) { return a.pri - b.pri; });
   need.forEach(function (q) {
     for (var k = 0; k < q.n && idle.length; k++) {
@@ -545,10 +547,11 @@ function callHands(sh) {
       idle.splice(bi, 1); if (!legs) continue;
       if (q.cell !== undefined) legs.push({ w: q.lv, to: q.cell });
       if (q.kind === 'helm' || q.kind === 'oar') { var si = navSnap(NV.levels[q.lv].N, q.spot, 4); if (si < 0) continue; legs.push({ w: q.lv, to: si }); q.who.relieved = true; }
-      H.job = { kind: q.kind, key: q.key, deck: q.deck, side: q.side, lv: q.lv, reg: q.reg, spot: q.spot, med: q.med, who: q.who, bed: q.bed, pump: q.pump, oar: q.oar, fire: q.fire }; medTake(q);
+      H.job = { kind: q.kind, key: q.key, deck: q.deck, side: q.side, lv: q.lv, reg: q.reg, spot: q.spot, med: q.med, who: q.who, bed: q.bed, pump: q.pump, oar: q.oar, fire: q.fire, mess: q.mess, gal: q.gal }; medTake(q);   // mess／gal：伙夫領飯的那一桌、那一座爐灶（45_galley.js）
       H.legs = legs; H.wp = null; c.moving = false; NV.called++;
     }
   });
+  if (sh.galley) galleyPull(sh, need, idle0);                          // 補位（pri < 3）比閒人多 ⇒ 還在路上的伙夫叫回來（45_galley.js）
 }
 /** 到了：換成那個職位（砲班 ⇒ 下一拍 reassign 分砲；送藥手 ⇒ 接倒下那位的砲；舵手 ⇒ 站到舵輪後）。不在那一層（路斷了）⇒ 任務作廢、照常閒晃。 */
 function handJoin(sh, c) {
@@ -560,6 +563,7 @@ function handJoin(sh, c) {
   if (J.kind === 'wood') { carpWood(sh, c); return; }                  // 木匠回木工台拿木材（46_carpenter.js）   // 醫療艙的人手、搬傷員（44_medic.js）
   if (J.kind === 'pump') { pumpJoin(sh, c); return; }                   // 搖抽水機（45_pumps.js）
   if (J.kind === 'fire') { burnJoin(sh, c); return; }                   // 救火（49_burn.js）
+  if (J.kind === 'eat') { galleyJoin(sh, c); return; }                  // 伙夫領飯（45_galley.js；TASK-0720）
   var hr = J.reg !== undefined ? handReg(sh, c) : -1;                   // 量不到（-1）⇒ 照以前當作到了：爬進轉過的砲塔，梯頭那一點是開局時算的、吊籃已經轉走 ⇒ snap 不到（測試模式量到：同一人被派 88 次、次次作廢）
   if (H.lv !== J.lv || (hr >= 0 && hr !== J.reg)) { tlgEv(sh, c, 'void', { job: J.kind, lv: [H.lv, J.lv], reg: [hr, J.reg === undefined ? null : J.reg] }); H.job = null; H.wait = 1; return; }   // 不在那一層、確定在別塊（路斷了）⇒ 作廢；void：測試模式記一筆（83_testlog.js）
   if ((J.kind === 'gun' || J.kind === 'pm') && sh.T.armor && sh.T.armor.length && !sh.guns.some(function (g) {   // 會轉裝甲的船：這裡走得到的活砲一門都沒有 ⇒ 不接（接了下一輪 reassign 又 toHand ⇒ 打轉）
@@ -628,6 +632,6 @@ function navRefresh(sh) {
 /** HUD 一段：預備水手（閒著的／在路上補位的）。 */
 function handsText(sh) {
   if (!sh.nav) return '';
-  var h = sh.crew.filter(function (c) { return c.role === ROLE.HAND && crewAble(c); }), go = h.filter(function (c) { return c.hand.job; }).length;
+  var h = sh.crew.filter(function (c) { return c.role === ROLE.HAND && crewAble(c); }), go = h.filter(function (c) { return c.hand.job && c.hand.job.kind !== 'eat'; }).length;   // 伙夫（45_galley.js）不算補位：寫在後面 🍲 廚房那一段
   return '　預備 ' + (h.length - go) + (go ? '（補位中 ' + go + '）' : '') + carpText(sh) + smText(sh);
 }
