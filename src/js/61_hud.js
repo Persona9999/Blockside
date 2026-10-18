@@ -608,7 +608,7 @@ function navText(sh) {
 function pauseLabel() { var b = $('pauseK'), s = '<b>' + keyName('pause') + '</b><i class="em">' + (PAUSED ? '▶' : '⏸') + '</i>'; if (b && b.innerHTML !== s) b.innerHTML = s; }   // 圖示（Tim 2026-10-15）：停格中 ⇒ ▶ 繼續
 /** 彈種那一顆（Tim 2026-10-15：「砲彈改成一個按鈕，切換所有支援的砲彈（顯示當前彈種圖示）」）：鐵球 實心彈（CSS 畫的 .ball：灰色、左上高光、淡白邊；⛔ ⚫ 在深色圓鈕上看不見、⚪ 是白點不像砲彈 —— Tim 2026-10-15「顯示為一顆白色圓點，是否可以替換」）、💣 爆裂彈、⛓️ 鏈彈；每一種砲三種都能打。 */
 var PSLOW_SHOW = 0.7;   // 物理減速放慢到 ×0.7 以下才在航速那一行顯示（Tim 2026-10-15：「高於 0.7 可以不顯示，目前頻繁閃爍」—— 以前 < 0.98 就顯示，倍率在 0.9 上下跳 ⇒ 一直閃）
-var AMMO_ICON = ['<span class="ball"></span>', '💣', '⛓️', '🔥', '🏹'], AMMO_TXT = ['實心彈', '爆裂彈', '鏈彈', '希臘火', '弩箭'];   // 第 4 種希臘火（28_fire.js AMMO_GF）只給固定彈種的砲，不在換彈的輪流裡（ammoOf）
+var AMMO_ICON = ['<span class="ball"></span>', '💣', '⛓️', '🔥', '🏹', '☄️', '🪨'], AMMO_TXT = ['實心彈', '爆裂彈', '鏈彈', '希臘火', '弩箭', '火箭', '石彈'];   // 第 6、7 種：火箭（弩砲）、石彈（投石機）—— 10_ship.js AMMO_FIRE／AMMO_STONE   // 第 4 種希臘火（28_fire.js AMMO_GF）只給固定彈種的砲，不在換彈的輪流裡（ammoOf）
 function ammoLabel() {
   var b = $('ammoB'); if (!b) return; var me = SHIPS[PLAYER_I], L = me ? ammoOf(me) : [0], a = ammoNow(); if (L.indexOf(a) < 0) a = L[0];   // 主武器打不出的那一種 ⇒ 顯示主武器的（持火號 ⇒ 希臘火）
   var fix = L.length === 1, s = '<b>' + keyName('ammo') + '</b><i class="em">' + (AUTOFIRE ? '🤖' : '') + (AMMO_ICON[a] || '?') + '</i>';   // 上面寫的是鍵（同其他圓鈕；66_keys.js），不是第幾種

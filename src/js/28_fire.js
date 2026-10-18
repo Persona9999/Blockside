@@ -42,3 +42,23 @@ function gfBurstFx(p, vel) {
   sfx('crack', p, 0.5);
 }
 evOn('gfJet', gfJetFx, 0, true); evOn('gfTrail', gfTrailFx, 0, true); evOn('gfBurst', gfBurstFx, 0, true);
+// ───────────────────────── 火箭（弩砲；Tim 2026-10-18：「是否可以讓弩炮改發射火箭(有點燃效果) 不然目前威力太弱了」）─────────────────────────
+// 彈種 firebolt（10_ship.js AMMO_FIRE）：照弩箭飛、照實心彈咬進去（穿透、開洞照舊），第一次碰到船（模型或船殼）那一點著火（b.lit 之後不再點）：
+//   半徑 fire.arrow 格（設定檔；沒寫 ＝ 6）裡的人燒傷（基準照希臘火：1.4 × 每發傷害 × fire.k 對人）、帆扣血、細繩燒斷；一小團火＋煙（演出）。
+//   ⚠ 木頭真的著火、延燒、滅火是 TASK-0717（49_burn.js，kaguya 施工中）：合進來之後在這裡接它的點火（小半徑），火箭就會留下火場。
+function fireArrowHit(sh, L, b) {
+  b.lit = true;
+  var R = CFG.fire.arrow > 0 ? CFG.fire.arrow : 6;
+  crewHurt(sh, L, R * 0.5, R * 1.5, null, '燒傷', 1.4 * b.dmg * ammoK(AMMO_GF, VS_CREW));
+  cutRig(sh, L, R, b);
+  evEmit('arrowFire', M4.pt(sh.M, L[0], L[1], L[2]), sh.vel);
+}
+/** 火箭碰到：一小團火往上竄＋一縷煙（只是演出，特效自己的亂數）。 */
+function arrowFireFx(p, vel) {
+  for (var i = 0; i < 14; i++) {
+    var hot = rrX(0, 1);
+    fxPt([p[0] + gaussX() * 0.2, p[1] + rrX(0, 0.3), p[2] + gaussX() * 0.2], add([gaussX() * 1.2, rrX(1, 3.5), gaussX() * 1.2], vel), rrX(0.4, 1), [1, 0.3 + 0.5 * hot, 0.04 + 0.2 * hot], 1, rrX(0.4, 0.8), rrX(1, 2), -2, 1.6, 1);
+  }
+  fxPt([p[0], p[1] + 0.5, p[2]], add([gaussX() * 0.5, rrX(1, 2), gaussX() * 0.5], vel), rrX(1.5, 3) / smokeK(), [0.2, 0.18, 0.17], 0.4, rrX(0.8, 1.4), rrX(2.5, 4), -0.08, 1, 0);
+}
+evOn('arrowFire', arrowFireFx, 0, true);

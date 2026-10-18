@@ -13,7 +13,7 @@ function fireGun(sh, g, target, ammo) {
   var GS = GUNS[g.type], r = fireShot(sh, g, target, ammo, g.muzs ? g.muzs[0] : g.muz);
   g.reload = sh.reloadT * GS.reload * rr(0.9, 1.1); g.reload0 = g.reload; g.firedAt = SIMT; sh.fired++;   // reload0：這一輪裝填要多久（武器演出的進度 gunPhase，26_gunanim.js）
   g.needCart = true;                                                // 下一發要從砲旁的藥箱拿一份火藥與彈藥（沒有 ⇒ 等送藥手，23_powder.js）
-  if (ammo === AMMO_GF) { evEmit('gfJet', r.mw, r.dir, sh.vel); sfx('splash', r.mw, 0.5); } else if (ammo === AMMO_BOLT) boltFx(sh, r.mw); else shotFx(sh, g, r.mw, r.dir);   // 希臘火：噴口一道火舌（28_fire.js），沒有砲聲、沒有後座；弩箭：只有弓弦一響
+  if (ammo === AMMO_GF) { evEmit('gfJet', r.mw, r.dir, sh.vel); sfx('splash', r.mw, 0.5); } else if (ammoQuiet(ammo)) boltFx(sh, r.mw); else shotFx(sh, g, r.mw, r.dir);   // 希臘火：噴口一道火舌（28_fire.js），沒有砲聲、沒有後座；弩箭、火箭、石彈：只有弓弦／投臂一響
   if ((GS.burst || 1) > 1) { g.burstLeft = GS.burst - 1; g.burstK = 1; g.burstAmmo = ammo; g.burstT = SIMT + (GS.burstGap || 0.15); }   // 連發：同一份彈藥再打 burst − 1 發
   return true;
 }
@@ -25,7 +25,7 @@ function burstStep(sh) {
     var t = gunTarget(sh, g, aimPoint(sh));
     if (t && bears(sh, g, t) && mountFireOk(g) && !(g.safe && selfBlock(sh, g, t))) {
       var r = fireShot(sh, g, t, g.burstAmmo, g.muzs ? g.muzs[g.burstK % g.muzs.length] : g.muz); sh.fired++;
-      if (g.burstAmmo === AMMO_GF) evEmit('gfJet', r.mw, r.dir, sh.vel); else if (g.burstAmmo === AMMO_BOLT) boltFx(sh, r.mw); else shotFx(sh, g, r.mw, r.dir);   // 希臘火連發（Tim 2026-10-18：「siphon 是否可以改成連射(參考速射炮) 先設定為10連發」）：每一發一道火舌，同第一發（⛔ shotFx ⇒ 砲煙＋砲聲）
+      if (g.burstAmmo === AMMO_GF) evEmit('gfJet', r.mw, r.dir, sh.vel); else if (ammoQuiet(g.burstAmmo)) boltFx(sh, r.mw); else shotFx(sh, g, r.mw, r.dir);   // 希臘火連發（Tim 2026-10-18：「siphon 是否可以改成連射(參考速射炮) 先設定為10連發」）：每一發一道火舌，同第一發（⛔ shotFx ⇒ 砲煙＋砲聲）
     }
     g.burstK++; g.burstLeft--; g.burstT = SIMT + (GUNS[g.type].burstGap || 0.15);
   }
@@ -47,8 +47,23 @@ function selfBlock(sh, g, target) {
   }
   return false;
 }
-/** 這門砲照初速與最大仰角（fireShot 夾在 0.26 rad）打得到多遠（m，水平）：R ＝ V² sin(2θ)／g；9 成當安全餘量。 */
-function gunMaxR(GS) { return 0.9 * GS.V * GS.V * Math.sin(0.52) / G; }
+/** 這門砲照初速與最大仰角（gunElev；超過 45° 照 45°）打得到多遠（m，水平）：R ＝ V² sin(2θ)／g；9 成當安全餘量。 */
+function gunMaxR(GS) { return 0.9 * GS.V * GS.V * Math.sin(2 * Math.min(gunElev(GS), Math.PI / 4)) / G; }
+// 仰角與曲射（Tim 2026-10-18：「投石機是否可以給高拋物線彈道(可以砸到甲板)」「之後也可能用在迫擊砲(臼炮)上 曲射炮彈」）——砲種表兩個通用的鍵：
+//   elev（度）：最大仰角，沒寫 ＝ 0.26 rad（15°，大砲的砲門）。打不到 ⇒ 照 min(elev, 45°) 打最遠。
+//   lob（true）：曲射 ⇒ 兩條拋物線取高的那一條（從上面砸下來，打得到甲板）；高的那條超過 elev（太近）⇒ 退回低的那條。
+//     前置量照真的飛行時間（水平距離 ÷ 水平速度，迭代兩次）——⛔ 照「距離 ÷ 初速」⇒ 高拋飛得久，打在船走過的地方。
+//   都沒寫的砲一個值都不變（0.26、低的那條、前置量照舊）⇒ 別的船戰局不變。
+function gunElev(GS) { return GS.elev > 0 ? GS.elev * Math.PI / 180 : 0.26; }
+/** 打水平距離 d、高差 dy 要的仰角（見上）。 */
+function shotEl(GS, d, dy) {
+  var v2 = GS.V * GS.V, EL = gunElev(GS), disc = v2 * v2 - G * (G * d * d + 2 * dy * v2);
+  if (disc < 0) return Math.min(EL, Math.PI / 4);
+  var lo = Math.atan((v2 - Math.sqrt(disc)) / (G * d));
+  if (!GS.lob) return lo;
+  var hi = Math.atan((v2 + Math.sqrt(disc)) / (G * d));
+  return hi <= EL ? hi : lo;
+}
 function gunInRange(sh, g, target) { var mw = M4.pt(sh.M, g.muz[0], g.muz[1], g.muz[2]); return Math.hypot(target[0] - mw[0], target[2] - mw[2]) <= gunMaxR(GUNS[g.type]); }
 /** 一發砲彈：從 muz（格座標的砲口）照 target 算仰角、前置量、散布，放進 BALLS。回：{ mw 世界的砲口, dir 出膛方向 }。 */
 function fireShot(sh, g, target, ammo, muz) {
@@ -56,21 +71,23 @@ function fireShot(sh, g, target, ammo, muz) {
   var side = gunAxis(sh, g);
   var GS = GUNS[g.type], V = GS.V;                                    // 初速照砲種（carronade：32 磅、短砲身 ⇒ 初速低、彈大）
   var foe = aimShip(sh), rel = foe ? sub(foe.vel, sh.vel) : [0, 0, 0];   // 前置量：砲彈帶著本艦的船速 ⇒ 瞄對方「相對本艦」飛行時間後的位置（瞄的那艘，52_fleet.js）；沒有目標（單發對空打）⇒ 不加
-  target = add(target, mul(rel, Math.hypot(target[0] - mw[0], target[2] - mw[2]) / V));
+  if (GS.lob) { var t0 = target, tf = Math.hypot(target[0] - mw[0], target[2] - mw[2]) / V; for (var it = 0; it < 2; it++) { target = add(t0, mul(rel, tf)); var dl = Math.hypot(target[0] - mw[0], target[2] - mw[2]); tf = dl / (V * Math.cos(shotEl(GS, dl, target[1] - mw[1]))); } target = add(t0, mul(rel, tf)); }   // 曲射：前置量照飛行時間（見 gunElev 上面）
+  else target = add(target, mul(rel, Math.hypot(target[0] - mw[0], target[2] - mw[2]) / V));
   var dx = target[0] - mw[0], dz = target[2] - mw[2], dy = target[1] - mw[1], d = Math.hypot(dx, dz);
-  var v2 = V * V, disc = v2 * v2 - G * (G * d * d + 2 * dy * v2);
-  var el = disc < 0 ? 0.26 : Math.atan((v2 - Math.sqrt(disc)) / (G * d));
+  var el = shotEl(GS, d, dy);
   var az = Math.atan2(dz, dx), saz = Math.atan2(side[2], side[0]), da = Math.atan2(Math.sin(az - saz), Math.cos(az - saz));
   var cn = g.cone || 0.45; da = clamp(da, -cn, cn); az = saz + da;   // 砲門只容得下 ±26°（砲塔照砲管 cone，TASK-0626）
   var spread = handAim(sh) && !sh.autoNow ? 0.0045 : sh.aiSpread || 0.008;   // 玩家自己瞄的那幾發（含自動開砲時的手動那一舷）；sh.autoNow ＝ 這一發是電腦開的（50_sim.js 另一舷那一輪）
   if (!sh.crew.some(function (c) { return c.role === ROLE.OFFICER && crewAble(c); })) spread *= 1.7;   // 軍官全倒 ⇒ 沒人指揮，瞄得散
   spread *= [0.7, 0.75, 0.85, 1][sh.sailSet];                       // 帆收得越多，船越穩
   spread *= wxSpread(sh);                                          // 天氣：暴風雨裡船晃得越快，點火那一下差得越多（晴天 ×1）
-  el = clamp(el + gauss() * spread, -0.17, 0.26); az += gauss() * spread;
+  el = clamp(el + gauss() * spread, -0.17, gunElev(GS)); az += gauss() * spread;
   var dir = [Math.cos(el) * Math.cos(az), Math.sin(el), Math.cos(el) * Math.sin(az)];
-  var b = { p: mw.slice(), v: add(mul(dir, V * rr(0.985, 1.015)), sh.vel), owner: sh.i, ammo: ammo === AMMO_BOLT ? 0 : ammo, trav: 0, alive: true, age: 0, bounced: false, big: GS.big, hole: GS.hole, dmg: DMG[g.type], m: GS.shot };   // dmg：每發傷害（砲種，細節設定）；hole：洞的倍率（4 磅彈小）；m：彈重 kg（能量，TASK-0621）
+  var b = { p: mw.slice(), v: add(mul(dir, V * rr(0.985, 1.015)), sh.vel), owner: sh.i, ammo: ammoBase(ammo), trav: 0, alive: true, age: 0, bounced: false, big: GS.big, hole: GS.hole, dmg: DMG[g.type], m: GS.shot };   // dmg：每發傷害（砲種，細節設定）；hole：洞的倍率（4 磅彈小）；m：彈重 kg（能量，TASK-0621）
   if (ammo === 2) b.ph = BALLS.length * 2.39996 % 6.28319;
-  if (ammo === AMMO_BOLT) b.bolt = true;                              // 弩箭：照實心彈飛、命中（b.ammo 0），只是畫成一支箭（60_render.js）
+  if (ammo === AMMO_BOLT || ammo === AMMO_FIRE) b.bolt = true;       // 弩箭、火箭：照實心彈飛、命中（b.ammo 0），只是畫成一支箭（60_render.js）
+  if (ammo === AMMO_FIRE) b.fire = true;                             // 火箭：第一次碰到船就點火（28_fire.js fireArrowHit）
+  if (ammo === AMMO_STONE) b.stone = true;                           // 石彈（投石機）：照實心彈，畫成一顆石頭
   if (ammo === AMMO_GF) b.gf = true;                                  // 希臘火（28_fire.js）：一團火，碰到什麼就潑開，⛔ 不穿透           // 鏈彈的起始角（csBar）：照場上第幾顆彈錯開（黃金角），⛔ 不抽亂數
   windShot(sh, b, dx, dz); BALLS.push(b); rptShot(sh, g, b);         // rptShot：戰鬥報表記是哪一門開的（79_report.js；只讀）
   return { mw: mw, dir: dir };
@@ -278,6 +295,7 @@ function stepBall(b, dt) {
   for (var s = 0; s < steps && b.alive; s++) {
     b.v[1] -= G * h;
     if (b.gf && (s & 7) === 0) evEmit('gfTrail', b.p.slice(), b.v.slice());   // 希臘火：零星火星（只是演出）
+    if (b.fire && !b.lit && (s & 31) === 0) evEmit('gfTrail', b.p.slice(), b.v.slice());   // 火箭：同一種火星，少一點
     b.p[0] += b.v[0] * h; b.p[1] += b.v[1] * h; b.p[2] += b.v[2] * h; b.trav += len(b.v) * h;
     var sea = b.p[1] < top ? seaH(b.p[0], b.p[2], SIMT) : -1e9;         // 水面跟著浪（08_sea.js）；比最高的浪還高 ⇒ 不用算
     if (b.p[1] < sea) {
@@ -306,6 +324,7 @@ function stepBall(b, dt) {
         if (sh.i !== b.owner && !b.hitOnce) { SHIPS[b.owner].hits++; ffHit(sh, b); windHit(b); rptHit(b, sh, hm.gun ? 'gun' : 'model'); b.hitOnce = true; }
         (b.hitM = b.hitM || []).push(hm);
         damageModel(sh, hm, b.v, b.dmg * ammoK(b.ammo, VS_GUN), L);         // L：碰到的那一點（帶裝甲的砲 ⇒ 看是不是砲口，24_armor.js armMuzzle）
+        if (b.fire && !b.lit) fireArrowHit(sh, L, b);                      // 火箭：碰到的那一點點火（28_fire.js）
         if (b.ammo === AMMO_GF) { gfSplash(sh, L, b); b.alive = false; return; }   // 希臘火打到模型：扣過血再潑開（28_fire.js）
         if (b.ammo === 1) { var kM = PEN_SK * shellK(b); explode(b.p.slice(), sh, 0); blastModels(sh, L, 22 * kM, b.p, b.hitM, b.dmg); crewHurt(sh, L, 13 * kM, 30 * kM, null, '爆炸', crewBase(b)); b.alive = false; return; }   // 直接打中的那一門已經扣過，不再吃爆風；半徑照裝藥（TASK-0621）
         b.v = mul(b.v, b.ammo === 2 ? 0.5 : 0.55);
@@ -323,6 +342,7 @@ function stepBall(b, dt) {
         if (!hitL) continue;                                              // 橫掃是以彈心為中心 ⇒ 照彈心那一點咬
       }
       if (b.ammo === AMMO_GF) { if (sh.i !== b.owner && !b.hitOnce) { SHIPS[b.owner].hits++; ffHit(sh, b); windHit(b); rptHit(b, sh, 'hull'); } gfSplash(sh, L, b); b.alive = false; return; }   // 希臘火打到船殼：不開洞，潑開燒人、燒帆與細繩（28_fire.js）
+      if (b.fire && !b.lit) fireArrowHit(sh, L, b);                        // 火箭打到船殼：先點火，再照實心彈咬進去
       impact(b, sh, L, ah);
       if (!b.alive) return;
     }
@@ -448,7 +468,8 @@ function unrotL(o, L) { return rotZ(L, o.piv, -o.rot); }
 function modelLocal(m) { var L = modelLocal0(m), H = m.hd && ndMat(m.hd); return H ? M4.mul(H, L) : L; }
 function modelLocal0(m) {
   if (m.swM) { var u = m.spv; return M4.mul(M4.mul(M4.mul(trans(u[0], u[1], u[2]), m.swM), trans(-u[0], -u[1], -u[2])), trans(m.origin[0], m.origin[1], m.origin[2])); }   // 繞 spv 套一整個轉動（划槳：掃＋抬，31_drive.js oarAnim；只是畫面）
-  if (m.sw) { var q = m.spv; return M4.mul(M4.mul(M4.mul(trans(q[0], q[1], q[2]), rotM(m.sax, m.sw)), trans(-q[0], -q[1], -q[2])), trans(m.origin[0], m.origin[1], m.origin[2])); }   // 掛著擺的（小艇；30_rig_physics.js swingHangs）
+  var mt = m.spinB && m.spinB.mt;                                       // 照砲轉的零件掛在迴旋砲上（26_spin.js：投石機的投臂）⇒ 繞自己的軸轉完、再繞砲的中心轉砲的 yaw
+  if (m.sw || mt) { var q = m.spv, S = M4.mul(M4.mul(M4.mul(trans(q[0], q[1], q[2]), rotM(m.sax, m.sw || 0)), trans(-q[0], -q[1], -q[2])), trans(m.origin[0], m.origin[1], m.origin[2])); return mt && mt.yaw ? M4.mul(M4.mul(M4.mul(trans(mt.c[0], mt.c[1], 0), rotM([0, 0, 1], mt.yaw)), trans(-mt.c[0], -mt.c[1], 0)), S) : S; }   // 掛著擺的（小艇；30_rig_physics.js swingHangs）
   if (!m.rot || !m.piv) return trans(m.origin[0], m.origin[1], m.origin[2]);
   var p = m.piv;
   var o = m.gsl ? [m.origin[0] + m.gsl[0], m.origin[1] + m.gsl[1], m.origin[2]] : m.origin;   // gsl：迴旋砲換砲門時往後拉（TASK-0626 mountStep）

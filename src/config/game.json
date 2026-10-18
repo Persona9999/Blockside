@@ -39,6 +39,7 @@
     "dmgpr": [10, 300, 25],
     "dmgsf": [10, 300, 30],
     "dmgbl": [10, 300, 25],
+    "dmgmg": [10, 300, 60],
     "box": [1, 8, 2],
     "carry": [1, 6, 1],
     "wind": [0.25, 3, 1],
@@ -70,7 +71,7 @@
     "lim": [0, 400],
     "k": [[100, 10, 100], [160, 10, 100], [50, 100, 100]]
   },
-  "fire": {"k": [40, 150, 120], "r": 12},
+  "fire": {"k": [40, 150, 120], "r": 12, "arrow": 6},
   "guns": {
     "long": {"code": "24l", "name": "24 磅長砲", "short": "長砲", "V": 175, "reload": 1, "big": false, "crew": 5, "min": 3, "mass": 2.5, "shot": 10.9},
     "long32": {"code": "32l", "name": "32 磅長砲", "short": "32 磅長砲", "V": 172, "reload": 1.15, "big": true, "crew": 6, "min": 4, "mass": 2.9, "shot": 14.5},
@@ -252,8 +253,26 @@
       "min": 2,
       "mass": 0.6,
       "shot": 0.6,
-      "ammo": "bolt",
-      "weapon": "toxoballistra"
+      "ammo": "firebolt",
+      "weapon": "toxoballistra",
+      "box": 3
+    },
+    "mangonel": {
+      "code": "mangonel",
+      "name": "投石機（manganikon，牽引式）",
+      "short": "投石機",
+      "V": 30,
+      "reload": 2.2,
+      "big": false,
+      "hole": 1,
+      "crew": 6,
+      "min": 3,
+      "mass": 1.5,
+      "shot": 8,
+      "ammo": "stone",
+      "weapon": "manganikon",
+      "elev": 75,
+      "lob": true
     },
     "brooke64": {
       "code": "64b",
@@ -890,7 +909,7 @@
       "vxk": "dromon.vxk",
       "work": "erina-dromon-01m-assembly",
       "author": "erina",
-      "cfg": {"upwind": 1.2, "base": 7},
+      "cfg": {"upwind": 1.2, "base": 14, "speed": 2.25, "agile": 4},
       "geo": {"spar": [21, 30], "marines": [42, 96], "center": 30, "aim": 18, "aimZ": [8, 230], "deckAim": [18, 30], "rigAim": [60, 210]},
       "crew": {"officers": 2, "top": 0, "marines": 12, "marineGap": 18},
       "names": ["持火號"],
@@ -900,7 +919,7 @@
         "gun": 2,
         "ladders": 2,
         "magazine": 2,
-        "model": 5,
+        "model": 6,
         "oar": 99,
         "part": 4,
         "powder": 7,
@@ -997,5 +1016,9 @@
     },
     "deck": {"name": "砲甲板", "deck": true, "items": ["keg", "pump", "spump", "bench", "loft"]}
   },
-  "report": {"webhook": "x1:KhgbExhJRksBRgEGHx0WWkwXXG0NHwpEBAwGDUAdDgNAQ0EZSQJwWl5XXUpZUFcZRlJAW10NHjNrMCIqGi9FI0kuGDUkJTgLO0JMVBJaLBc5CRwcEWQfKEcYAgQaC0kKOx8uHAIaIyFoJiE4VjMMRy1CMw4ZAgAFIA", "cooldown": 60, "perSession": 5}
+  "report": {
+    "webhook": "x1:KhgbExhJRksBRgEGHx0WWkwXXG0NHwpEBAwGDUAdDgNAQ0EZSQJwWl5XXUpZUFcZRlJAW10NHjNrMCIqGi9FI0kuGDUkJTgLO0JMVBJaLBc5CRwcEWQfKEcYAgQaC0kKOx8uHAIaIyFoJiE4VjMMRy1CMw4ZAgAFIA",
+    "cooldown": 60,
+    "perSession": 5
+  }
 }

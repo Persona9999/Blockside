@@ -78,7 +78,7 @@ function makeShip(i, team, yaw, pz, T, px) {                          // T：船
   sh.models.forEach(function (m) {
     if (!GUNS[m.kind]) return;
     var A = gunMuzzle(m);
-    sh.guns.push(m.gun = { name: m.name, type: m.kind, side: A.ax[1] >= 0 ? 'S' : 'P', model: m, ax: A.ax, muz: A.muz, muzs: A.muzs, alive: true, reload: rr(0, 1.2), box: BOX_N, needCart: false, safe: !!(m.meta && +m.meta.safe), ammoFix: gunAmmoFix(m, m.kind) });   // box：砲旁藥箱裡的份數；safe：模型 meta safe=1 ⇒ 開火前看砲線（21_gunnery.js selfBlock）
+    sh.guns.push(m.gun = { name: m.name, type: m.kind, side: A.ax[1] >= 0 ? 'S' : 'P', model: m, ax: A.ax, muz: A.muz, muzs: A.muzs, alive: true, reload: rr(0, 1.2), box: BOX_N * gunBoxK(m.kind), needCart: false, safe: !!(m.meta && +m.meta.safe), ammoFix: gunAmmoFix(m, m.kind) });   // box：砲旁藥箱裡的發數（份數 × 砲種表 box）；safe：模型 meta safe=1 ⇒ 開火前看砲線（21_gunnery.js selfBlock）
   });
   sh.guns.forEach(function (g) { gunMountInit(sh, g); });            // 迴旋砲、砲塔（meta mount；21_gunnery.js）—— 沒標的砲不動
   turretShip(sh);                                                       // 砲塔層（kind=turret；27_turret.js）：砲、模型掛上去 —— 沒有 ⇒ 不做事
@@ -140,10 +140,21 @@ var GUN_CODE = {}; Object.keys(GUNS).forEach(function (k) { GUN_CODE[GUNS[k].cod
 // 武器種類（TASK-0693，持火號）：砲種表的 weapon（現在只有 siphon；弩砲 toxoballistra、投石機 manganikon 的機制還在想）⇒ 模型 meta weapon= 照它分流（優先於 gun=：舊作品 gun 寫的是頂替用的砲種代碼）。
 var GUN_WEAPON = {}; Object.keys(GUNS).forEach(function (k) { if (GUNS[k].weapon) GUN_WEAPON[GUNS[k].weapon] = k; });
 // 固定彈種：砲種表 ammo（或模型 meta ammo）⇒ 那門砲不管玩家選哪一種都打這一種（現在只有希臘火）；沒寫、或不認得 ⇒ 照選的。
-var AMMO_NAME = { solid: 0, shell: 1, chain: 2, greekfire: 3, bolt: 4 };
+var AMMO_NAME = { solid: 0, shell: 1, chain: 2, greekfire: 3, bolt: 4, firebolt: 5, stone: 6 };
 // 弩箭（Tim 2026-10-18：「弩炮目前我想直接做成換皮大炮(只是彈藥不同) 一樣走裝彈 發射流程」）：彈種序號 4，飛行與命中照實心彈（b.ammo ＝ 0、b.bolt 標著畫成一支箭、開火沒有砲煙砲聲），
-//   傷害照砲種表的每發傷害（DMG.ballista ＝ 細節設定 dmgbl）。⛔ 不在玩家換彈的三種（AMMO）裡：只給固定彈種的砲（砲種表 ammo=bolt）。
+//   傷害照砲種表的每發傷害（DMG.ballista ＝ 細節設定 dmgbl）。⛔ 不在玩家換彈的三種（AMMO）裡：只給固定彈種的砲（砲種表 ammo=bolt）。持火號的弩砲後來改打火箭（firebolt，下面）。
 var AMMO_BOLT = 4;
+// 火箭（Tim 2026-10-18：「弩炮改發射火箭(有點燃效果) 不然目前威力太弱了」）：彈種序號 5，飛行與命中照弩箭（實心彈那一套、畫成一支箭），箭頭帶火 ⇒
+//   第一次碰到船（模型或船殼）在那一點點火（28_fire.js fireArrowHit）。石彈（投石機；序號 6）：照實心彈飛、命中，畫成一顆灰石頭。兩種都只給固定彈種的砲。
+var AMMO_FIRE = 5, AMMO_STONE = 6;
+/** 判定照哪一種基本彈（弩箭、火箭、石彈 ⇒ 實心彈 0；其他照原樣）：b.ammo、彈種倍率（04_state.js ammoK）都照它。 */
+function ammoBase(a) { return a === AMMO_BOLT || a === AMMO_FIRE || a === AMMO_STONE ? 0 : a; }
+/** 機械的武器（弩箭、火箭、石彈）：開火沒有火光、砲煙、後座、砲聲（21_gunnery.js boltFx）。 */
+function ammoQuiet(a) { return a === AMMO_BOLT || a === AMMO_FIRE || a === AMMO_STONE; }
+// 彈藥量（Tim 2026-10-18：「讓武器支援單獨設定彈藥能存放幾發(目前應該是共用預設2發) 跟共用的是乘數關係(弩炮設定三倍彈藥的話 就是裝填一次可以發射六發 但不是連射)」）：
+//   砲種表 box（整數倍率，沒寫 ＝ 1）⇒ 砲旁藥箱放 細節設定「藥箱」份數 × box 發；送藥手一趟的每一份也算 box 發（23_powder.js）。⛔ 不是連發：每一發照樣裝填。
+function gunBoxK(type) { var k = GUNS[type] && +GUNS[type].box; return k > 1 ? Math.round(k) : 1; }
+function gunBoxCap(g) { return BOX_N * gunBoxK(g.type); }
 /** 這種砲打得出哪幾種彈（AMMO 的序號，照輪流的順序）：砲種表 ammo（固定彈種：希臘火、弩箭）⇒ 只有那一種；其他（大砲）⇒ 實心、爆裂、鏈彈。 */
 function gunAmmoList(type) { var a = GUNS[type] && GUNS[type].ammo; return a !== undefined && AMMO_NAME[a] !== undefined ? [AMMO_NAME[a]] : [0, 1, 2]; }
 /** 這艘的主武器（Tim 2026-10-18：「應該只有主武器能換彈種」）：開戰時火力（砲重 ÷ 裝填倍率，跟艦長的 helmGunW 同一把尺、不看人手）加總最大的那一種砲；沒有砲 ⇒ null。快取在 sh.mainGun。

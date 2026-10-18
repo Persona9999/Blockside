@@ -7,10 +7,12 @@ var GUN_SET = {};                                // { 砲種: { 鍵: 值 } }：�
 var GUN_ITEMS = [
   { k: 'dmg', name: '每發傷害', step: 5, int: true, note: '打到砲、帆、人時的基準，再乘細節設定的彈種倍率' },
   { k: 'mass', name: '重量', lim: [0.1, 5], step: 0.1, unit: ' 噸', fix: 1, note: '算進船的重量（再乘船隻配置頁的「砲的重量」倍率）' },
-  { k: 'V', name: '初速', lim: [80, 260], step: 5, unit: ' m/s', int: true, note: '越快射得越遠、彈道越平' },
+  { k: 'V', name: '初速', lim: [20, 260], step: 5, unit: ' m/s', int: true, note: '越快射得越遠、彈道越平' },
   { k: 'reload', name: '裝填時間', lim: [0.3, 2.5], step: 0.05, unit: '×', fix: 2, note: '24 磅長砲 ＝ 1；越小裝得越快' },
   { k: 'burst', name: '連發數', lim: [1, 20], step: 1, unit: ' 發', int: true, def: 1, note: '連發：裝填一次打幾發（風暴角號的 3 磅追擊砲 6 發）' },
   { k: 'burstGap', name: '連發間隔', lim: [0.02, 2], step: 0.01, unit: ' 秒', fix: 2, def: 0.15, note: '連發時每一發隔幾秒' },
+  { k: 'box', name: '彈藥量', lim: [1, 10], step: 1, unit: '×', int: true, def: 1, note: '砲旁藥箱放 細節設定的份數 × 它（弩砲 3 ⇒ 預設 2 份 ＝ 6 發）；送藥手一份也算這麼多發。⛔ 不是連發：每一發照樣裝填' },
+  { k: 'elev', name: '最大仰角', lim: [5, 85], step: 1, unit: '°', int: true, def: 15, note: '大砲 15°；越大打得越遠（45° 最遠）。曲射的武器（投石機）照它決定能拋多高' },
   { k: 'shot', name: '彈重', lim: [0.5, 120], step: 0.1, unit: ' kg', fix: 1, def: 10.9, note: '能量 ＝ ½ × 彈重 × 初速²：鑽多深、打不打得穿鐵甲、爆裂彈裝藥多少都照它（TASK-0621）' },
   { k: 'hole', name: '打出的洞', lim: [0.3, 1.5], step: 0.05, unit: '×', fix: 2, def: 1, note: '打穿船殼的洞多大（24 磅長砲 ＝ 1）' },
   { k: 'crew', name: '標準砲班', lim: [1, 10], step: 1, unit: ' 人', int: true, note: '射速照這個人數算；各船實際配幾個人在船隻配置頁' },
