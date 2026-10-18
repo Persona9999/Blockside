@@ -163,7 +163,7 @@ function sailShip(sh, dt) {
     sh.throttle = sh.helmSpill || 1;                                     // 只靠帆的船：期望航速比夠用的那一段帆慢 ⇒ 放掉一點風（54_helm.js helmGovern）
     if (od && od.throttle !== undefined && !hc) sh.throttle = Math.min(sh.throttle, od.throttle);   // 指揮官給的油門（沙盒用；遊戲的排頭、跟隨照期望航速）
     // 大漩渦：讓船（快撞上才出手）之後、讓開砲線之前 ⇒ 離中心太近就往外（54_helm.js vxAvoid；沒有漩渦 ⇒ null）。⛔ 排在讓船前面 ⇒ 內圈的船不管旁邊的船，2 對 2 一直互撞（11 m/s）
-    if (!sh.struck && !sh.sunk) { var av = friendAvoid(sh, hc && od.mode === 'lead' ? helmLeadAvoid(sh) : undefined); if (av === null) av = foeAvoid(sh); if (av === null) av = vxAvoid(sh); if (av === null && !hc) av = lineClear(sh); else if (hc) sh.clearing = null; if (av !== null) { tY = av; sh.avT = SIMT; } }   // avT：最後一次讓船的時刻（讀數）   // 戰列、搶上風（hc）不讓砲線（TASK-0679）：守隊形，擋到的那幾門照 friendInLine 不開（⛔ 讓 ⇒ 接近時敵艦在前方、前一艘永遠擋著後面的砲線，排頭 35 秒、紅方排頭 80 秒都在讓，隊形散掉）   // throttle 每一步重設（lineClear 要放慢才改）   // 讓友船 ＞ 讓敵艦（不撞，54_helm.js）＞ 讓開友艦的砲線（52_fleet.js；沒有友船 ⇒ null）
+    if (!sh.struck && !sh.sunk) { var av = bedAvoid(sh); if (av === null) av = friendAvoid(sh, hc && od.mode === 'lead' ? helmLeadAvoid(sh) : undefined); if (av === null) av = foeAvoid(sh); if (av === null) av = vxAvoid(sh); if (av === null && !hc) av = lineClear(sh); else if (hc) sh.clearing = null; if (av !== null) { tY = av; sh.avT = SIMT; } }   // avT：最後一次讓船的時刻（讀數）   // 戰列、搶上風（hc）不讓砲線（TASK-0679）：守隊形，擋到的那幾門照 friendInLine 不開（⛔ 讓 ⇒ 接近時敵艦在前方、前一艘永遠擋著後面的砲線，排頭 35 秒、紅方排頭 80 秒都在讓，隊形散掉）   // throttle 每一步重設（lineClear 要放慢才改）   // 讓友船 ＞ 讓敵艦（不撞，54_helm.js）＞ 讓開友艦的砲線（52_fleet.js；沒有友船 ⇒ null）
     var e = Math.atan2(Math.sin(tY - sh.yaw), Math.cos(tY - sh.yaw));
     rate = clamp(e * 0.5, -rmax, rmax); sh.rudder = rmax > 0 ? rate / rmax * (sh.spd < 0 ? -1 : 1) : 0;   // 倒退 ⇒ 舵反著打（畫面上的舵角；轉向照要的轉）
   }

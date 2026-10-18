@@ -313,6 +313,7 @@ function stepBall(b, dt) {
       b.v[0] *= kq; b.v[1] *= kq; b.v[2] *= kq;
       if (spd * kq < PEN_STOP) { b.alive = false; return; }
     }
+    if (BED && b.p[1] < BED.top && b.p[1] < bedHgt(b.p[0], b.p[2])) { smoke(b.p.slice(), [0, 0.5, 0], 3, false); b.alive = false; return; }   // 打到陸地、海底（TASK-0721；08_seabed.js）
     for (var i = 0; i < SHIPS.length; i++) {
       var sh = SHIPS[i];
       if (i === b.owner && b.trav < 6) continue;

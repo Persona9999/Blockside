@@ -71,6 +71,19 @@ function vxAvoid(sh) {
   sh.wantV = Infinity;
   return Math.atan2(-dz, dx);                                            // fwd(yaw) ＝ (cos yaw, −sin yaw)
 }
+/** 避開淺水與陸地（TASK-0721；有海圖才有，沒有 ⇒ null）：往前看 BEDAV_LOOK 那幾個距離，船底（32_ground.js sh.keelY）下面不到 BEDAV_CLR 公尺 ⇒
+ *  從小到大試左右 30°、60°…180°，第一個整條看出去都夠深的方向；都不夠 ⇒ 看得最遠的那個。sh.bedAv ＝ 讀數（最後一次讓的時刻、前面多遠就淺了）。 */
+var BEDAV_LOOK = [40, 80, 130, 190], BEDAV_CLR = 1.5, BEDAV_TRY = [30, -30, 60, -60, 90, -90, 135, -135, 180];
+function bedAvoid(sh) {
+  if (!BED || sh.sinkingFinal) return null;
+  var need = (sh.keelY !== undefined ? -sh.keelY : 6) + BEDAV_CLR;
+  function clear(yaw) { var F = fwd(yaw); for (var i = 0; i < BEDAV_LOOK.length; i++) { var d = BEDAV_LOOK[i]; if (bedHgt(sh.px + F[0] * d, sh.pz + F[2] * d) > -need) return d; } return Infinity; }
+  var c0 = clear(sh.yaw); if (c0 === Infinity) return null;
+  var best = sh.yaw + Math.PI, bd = -1;
+  for (var i = 0; i < BEDAV_TRY.length && bd !== Infinity; i++) { var y = sh.yaw + BEDAV_TRY[i] * Math.PI / 180, c = clear(y); if (c > bd) { bd = c; best = y; } }
+  sh.bedAv = { t: SIMT, d: c0 };
+  return best;
+}
 /** 艦長想一想（每 think 秒）：要哪一舷對敵、是不是被壓制。回傳 sh.hs ＝ { present, evade, t }。 */
 function helmThink(sh, foe) {
   var H = HELMS[sh.helm] || HELMS.basic, st = sh.hs || (sh.hs = { present: null, evade: false, t: -1e9 });
