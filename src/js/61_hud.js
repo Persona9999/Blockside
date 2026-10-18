@@ -122,7 +122,7 @@ function panel(sh, title) {
 }
 /** 旁邊那張圖的圖說：砲位（預設）、損壞或進水（GMAP_MODE；Tim 2026-10-18「在開啟船體詳細資訊頁上加一個toggle 切換顯示炮位或是船隻損壞情況」「在炮位 損壞之外 加一個切換顯示進水」）。 */
 function gmapLegend(sh) {
-  if (GMAP_MODE === 'flood') return '<div class="dmgsum">' + floodSumText(sh) + '</div><div class="legend">進水圖：<b style="color:#3a9ae6">■</b> 艙內的水（上下整柱加起來，越滿越深） <b style="color:#ff3c32">●</b> 水下的破口 <b style="color:#ffaa28">●</b> 水上的破口 <b style="color:#3ee07a">●</b> 水往外流的破口（大小照洞的面積）</div>';
+  if (GMAP_MODE === 'flood') return '<div class="dmgsum">' + floodSumText(sh) + '</div><div class="legend">進水圖：艙內的水深 0 <span style="display:inline-block;width:48px;height:8px;vertical-align:middle;border-radius:2px;background:' + flRampCss() + '"></span> ' + FL_DEPTH_MAX + ' m <b style="color:#ff3c32">●</b> 水下的破口 <b style="color:#ffaa28">●</b> 水上的破口 <b style="color:#3ee07a">●</b> 水往外流的破口（大小照洞的面積）</div>';
   if (GMAP_MODE !== 'dmg') return '<div class="legend">砲位圖：● 好 ◌ 裝填 ○ 開不了 △ 等火藥 ≈ 泡水 ✕ 毀｜<b style="color:#7be37b">綠</b> 滿編 <b style="color:#f0d264">黃</b> 不足 <b style="color:#9a9a9a">灰</b> 沒人｜最上層在船內、越下層越外</div>';
   var C = GMAP_DMG;
   return '<div class="dmgsum">' + dmgSumText(sh) + '</div><div class="legend">損壞圖：<b style="color:' + C.chan + '">■</b> 通道斷了 <b style="color:' + C.hole + '">■</b> 甲板破洞 <b style="color:' + C.lad + '">H</b> 梯子 <b style="color:' + C.anc + '">◆</b> 帆的綁定點 ' +
@@ -362,11 +362,21 @@ function gmapFlood(g, sh, scr, s) {
   var fl = sh.fl; if (!fl || sh.broken) return;
   var F = fl.F, c = F.c, NX = F.NX, NY = F.NY, NXY = NX * NY, Vc = Math.pow(c * S, 3), capS = new Float32Array(NXY), watS = new Float32Array(NXY), k;
   for (k = 0; k < F.N; k++) { if (!(fl.cap[k] > 0.02)) continue; var j = k % NXY; capS[j] += fl.cap[k] * Vc; watS[j] += fl.A[k]; }
+  // 每一柱水 ＝ 一張小圖上的一個像素（寬 NY：船寬、高 NX：船長，船頭朝上），整張縮放貼上去（Tim 2026-10-18 截圖：一格一格的網格紋）——
+  //   ⛔ 一格一個 fillRect：水格比一個像素還窄（量到每 4 個裝置像素一條暗線）⇒ 取整數之後有的疊兩次、半透明疊出網格紋
+  //   顏色照水深（m）：0 ～ FL_DEPTH_MAX，淺青 → 深靛紫（72_floodui.js FL_RAMP；⛔ 照整柱裝幾成 ⇒ 水少時每柱都一兩成、整片一樣藍）
+  var img = gmapFlood.cv || (gmapFlood.cv = document.createElement('canvas')), any = false;
+  if (img.width !== NY || img.height !== NX) { img.width = NY; img.height = NX; }
+  var ig = img.getContext('2d'), id = ig.createImageData(NY, NX), D = id.data;
   for (k = 0; k < NXY; k++) {
     if (!(watS[k] > 1e-4) || !(capS[k] > 0)) continue;
-    var x = F.X0 + (k % NX) * c, y = F.Y0 + ((k / NX) | 0) * c, A = scr(x, y), B = scr(x + c, y + c), f = Math.min(1, watS[k] / capS[k]);
-    g.fillStyle = 'rgba(40,140,230,' + (0.3 + 0.65 * f).toFixed(2) + ')';
-    g.fillRect(Math.min(A[0], B[0]), Math.min(A[1], B[1]), Math.abs(B[0] - A[0]) + 0.5, Math.abs(B[1] - A[1]) + 0.5);
+    var col = flWaterRGBA(watS[k] / Math.pow(c * S, 2) / FL_DEPTH_MAX), o = ((NX - 1 - (k % NX)) * NY + ((k / NX) | 0)) * 4;   // 船頭（x 大）在上、格 +y 在右（同 scr）
+    D[o] = col[0]; D[o + 1] = col[1]; D[o + 2] = col[2]; D[o + 3] = Math.round(col[3] * 255); any = true;
+  }
+  if (any) {
+    ig.putImageData(id, 0, 0);
+    var A = scr(F.X0 + NX * c, F.Y0), B = scr(F.X0, F.Y0 + NY * c);
+    g.save(); g.imageSmoothingEnabled = true; g.drawImage(img, A[0], A[1], B[0] - A[0], B[1] - A[1]); g.restore();
   }
   fl.holes.forEach(function (h) {
     if (!(fl.hA[h] > 0)) return;
