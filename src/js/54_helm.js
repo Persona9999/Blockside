@@ -13,10 +13,11 @@
 // ⛔ 不抽 rnd()（艦長的判斷照局勢算）⇒ 其他亂數照舊；但船走的路不一樣了 ⇒ 同一個種子打出另一局（三組對拍的基準換新）。
 // 下一期：性格與能力（難度）、搶上風、縱射、追擊、撤退；再下一期：頂風失速、拋錨戰術（拋單側錨甩尾給高級艦長）、指揮官的包夾。
 var HELMS = {
-  basic: { name: '基礎款', tip: '把敵艦擺在一舷正橫、守開局距離；一舷被打爛就換另一舷；火力差太多就拉開', range: 1, swap: 0.5, evade: 0.5, evadeOut: 0.65, think: 3 }
+  basic: { name: '基礎款', tip: '把敵艦擺在一舷正橫、守開局距離；一舷被打爛就換另一舷；火力差太多就拉開', range: 1.6, swap: 0.7636, evade: 0.7296, evadeOut: 0.8803, think: 1 }   // 自動調參調出來的（TASK-0687 第一次整晚 run，2026-10-18；調之前 1／0.5／0.5／0.65／3）
 };
-var HELM_BACK_V = 2, HELM_EVADE_OUT = 0.9, HELM_FAR = 1.6, HELM_EVADE_R = 1.4, HELM_VMIN = 0.8, HELM_BRG_K = 2, HELM_BACK_D = 0.45;   // 遠於 1.6 R ⇒ 全速接近；被壓制 ⇒ 距離 × 1.4；最慢 0.8 m/s（舵要有水流）；正橫差 90° ⇒ 期望航速 ± 2 m/s；近於 0.45 R 而且敵艦在船頭 ⇒ 有動力的倒退
-var HELM_SAIL_T = 8, HELM_GOV_T = 1, HELM_LEAD_T = 15, HELM_TURN_E = 0.6, HELM_TURN_V = 2, HELM_TACK_E = 0.35, HELM_LEAD_MIN = 0.5;   // HELM_LEAD_T：戰列的排頭照幾秒後的距離轉（helmLead）；航向差 > HELM_TURN_E rad ⇒ 排頭全速、跟隨至少 HELM_TURN_V m/s（轉得過來）                                     // 帆裝往下收要「該收」連續 8 秒（往上加馬上）；航速調節每 1 秒想一次
+var HELM_BACK_V = 2, HELM_EVADE_OUT = 0.9, HELM_FAR = 1.969, HELM_EVADE_R = 1.0602, HELM_VMIN = 0.8, HELM_BRG_K = 0.5, HELM_BACK_D = 0.45;   // 遠於 1.969 R ⇒ 全速接近；被壓制 ⇒ 距離 × 1.06；最慢 0.8 m/s（舵要有水流）；正橫差 90° ⇒ 期望航速 ± 0.5 m/s；近於 0.45 R 而且敵艦在船頭 ⇒ 有動力的倒退
+                                                                         //   FAR／EVADE_R／BRG_K 是自動調參調出來的（TASK-0687，2026-10-18；調之前 1.6／1.4／2）
+var HELM_SAIL_T = 8, HELM_GOV_T = 1, HELM_LEAD_T = 40, HELM_TURN_E = 0.6, HELM_TURN_V = 2, HELM_TACK_E = 0.35, HELM_LEAD_MIN = 0.5;   // HELM_LEAD_T：戰列的排頭照幾秒後的距離轉（helmLead）；航向差 > HELM_TURN_E rad ⇒ 排頭全速、跟隨至少 HELM_TURN_V m/s（轉得過來）                                     // 帆裝往下收要「該收」連續 8 秒（往上加馬上）；航速調節每 1 秒想一次
 /** 一門砲的火力：砲重 × 有人操作的比例 ÷ 裝填倍率（10_ship.js GUNS：mass 噸、reload）。 */
 function helmGunW(g) { var G = GUNS[g.type] || {}; return (+G.mass || 1) * gunRate(g) / (+G.reload || 1); }
 /** 一舷的火力（迴旋砲、砲塔 g.mt 兩舷都算）。 */
@@ -39,18 +40,18 @@ function vxAvoid(sh) {
 /** 艦長想一想（每 think 秒）：要哪一舷對敵、是不是被壓制。回傳 sh.hs ＝ { present, evade, t }。 */
 function helmThink(sh, foe) {
   var H = HELMS[sh.helm] || HELMS.basic, st = sh.hs || (sh.hs = { present: null, evade: false, t: -1e9 });
-  if (st.present && SIMT - st.t < H.think) return st;
+  if (st.present && SIMT - st.t < tuneH(sh, H, 'think')) return st;
   st.t = SIMT;
   // 哪一舷對敵：敵艦現在在哪一舷（sh.side，31_sailing.js chooseSide）就用那一舷；那一舷的火力不到另一舷的 swap ⇒ 轉另一舷過去
   //   （換過去之後敵艦就在強的那一舷 ⇒ 不會來回換；⛔ 以前要那一舷一門都開不了才換）。
   var cur = sh.side || 'S', oth = helmOther(cur), pc = helmPower(sh, cur), po = helmPower(sh, oth);
-  var present = pc < H.swap * po ? oth : cur;
+  var present = pc < tuneH(sh, H, 'swap') * po ? oth : cur;
   if (present !== cur && st.present !== present) helmSay(sh, 'side', sideName(cur) + '火力只剩另一舷的 ' + Math.round(pc / Math.max(1e-6, po) * 100) + '% —— 轉' + sideName(present) + '對敵', true);
   st.present = present;
   // 被壓制：自己最強的那一舷 < evade × 敵艦最強的那一舷 ⇒ 拉開距離（強的那一舷照樣對著它）；回到 evadeOut 以上才回原本的距離
   var mine = Math.max(pc, po), theirs = Math.max(helmPower(foe, 'P'), helmPower(foe, 'S')), r = theirs > 0 ? mine / theirs : 9;
-  var ev = st.evade ? r < H.evadeOut : r < H.evade;
-  if (ev !== st.evade) helmSay(sh, 'evade', ev ? '火力只剩敵艦的 ' + Math.round(r * 100) + '%（我 ' + mine.toFixed(0) + ' 對 ' + theirs.toFixed(0) + '）—— 拉開到 ' + HELM_EVADE_R + ' 倍交戰距離' : '火力回到敵艦的 ' + Math.round(r * 100) + '% —— 回到交戰距離', true);
+  var ev = st.evade ? r < tuneH(sh, H, 'evadeOut') : r < tuneH(sh, H, 'evade');
+  if (ev !== st.evade) helmSay(sh, 'evade', ev ? '火力只剩敵艦的 ' + Math.round(r * 100) + '%（我 ' + mine.toFixed(0) + ' 對 ' + theirs.toFixed(0) + '）—— 拉開到 ' + tuneV(sh.team, 'evadeR') + ' 倍交戰距離' : '火力回到敵艦的 ' + Math.round(r * 100) + '% —— 回到交戰距離', true);
   st.evade = ev;
   return st;
 }
@@ -59,21 +60,21 @@ function helmThink(sh, foe) {
  *  太近（< 0.45 R）而且敵艦在船頭前方 60° 內 ⇒ 有動力的倒退（沒有動力的照最慢）。 */
 function helmSteer(sh, foe) {
   var H = HELMS[sh.helm] || HELMS.basic, st = helmThink(sh, foe), sg = st.present === 'P' ? 1 : -1;   // sg：敵艦要在畫面左邊（左舷 P）⇒ +1
-  var dx = foe.px - sh.px, dz = foe.pz - sh.pz, d = Math.hypot(dx, dz) || 1, R = aiRange() * H.range * (st.evade ? HELM_EVADE_R : 1);
-  var yaw = (sg > 0 ? Math.atan2(-dx / d, -dz / d) : Math.atan2(dx / d, dz / d)) + sg * clamp((d - R) / R * 1.5, st.evade ? -HELM_EVADE_OUT : -0.4, 1.2);   // 遠了往敵艦切（最多 1.2 rad）、近了往外拉（最多 0.4；被壓制 ⇒ 0.9，⛔ 0.4 ⇒ 30 秒只拉開 18 m）
+  var dx = foe.px - sh.px, dz = foe.pz - sh.pz, d = Math.hypot(dx, dz) || 1, R = aiRange() * tuneH(sh, H, 'range') * (st.evade ? tuneV(sh.team, 'evadeR') : 1);   // 可調參數（55_tune.js；沒覆寫 ＝ 原本的常數）
+  var yaw = (sg > 0 ? Math.atan2(-dx / d, -dz / d) : Math.atan2(dx / d, dz / d)) + sg * clamp((d - R) / R * tuneV(sh.team, 'distK'), st.evade ? -HELM_EVADE_OUT : -tuneV(sh.team, 'pullOut'), tuneV(sh.team, 'cutIn'));   // 遠了往敵艦切（最多 cutIn 1.5 rad）、近了往外拉（最多 pullOut 0.39；被壓制 ⇒ 0.9，⛔ 0.4 ⇒ 30 秒只拉開 18 m）；倍率 distK 0.5（自動調參，調之前 1.2／0.4／1.5）
   var F = fwd(sh.yaw), b = Math.acos(clamp((F[0] * dx + F[2] * dz) / d, -1, 1)) * 57.2958;   // 敵艦離船頭幾度（90 ＝ 正橫）
   var cruise = sh.vCruise > 0 ? sh.vCruise : Infinity, same = Math.cos(foe.yaw - sh.yaw) > 0.5, v;   // cruise：戰鬥帆（有動力 ⇒ 再加引擎）全速（helmGovern 量的）；same：跟敵艦大致同向（60° 內）
   var m;                                                                 // m：現在的打法（決策紀錄用）
-  if (d > HELM_FAR * R) { v = Infinity; m = 'approach'; }
+  if (d > tuneV(sh.team, 'far') * R) { v = Infinity; m = 'approach'; }
   else if (st.present !== sh.side) { v = Infinity; m = 'swap'; }
   else if (st.evade && d < R) { v = Infinity; m = 'evade'; }
   else if (d < HELM_BACK_D * R && b < 60 && sh.cfg.base > 0 && sh.drive && sh.drive.cap > 0.05) { v = -HELM_BACK_V; m = 'back'; }   // 只有帆的船倒不了 ⇒ 照下面（⛔ 也給負的 ⇒ 收帆、放掉風、0 節停在敵艦船頭前：量過 3 對 3 的餘燼號）
-  else if (same) { v = Math.max(HELM_VMIN, 0.6 * cruise, Math.max(0, foe.spd) + (90 - b) / 90 * HELM_BRG_K); m = 'abeam'; }   // 並排同向 ⇒ 守在正橫：跟敵艦一樣快、它在前面 ⇒ 快一點、落後 ⇒ 慢一點（最慢巡航的六成）
+  else if (same) { v = Math.max(HELM_VMIN, 0.6 * cruise, Math.max(0, foe.spd) + (90 - b) / 90 * tuneV(sh.team, 'brgK')); m = 'abeam'; }   // 並排同向 ⇒ 守在正橫：跟敵艦一樣快、它在前面 ⇒ 快一點、落後 ⇒ 慢一點（最慢巡航的六成）
   else { v = 'cruise'; m = 'cruise'; }                                                     // 反向、繞圈 ⇒ 巡航：戰鬥帆＋引擎全速（⛔ 也照正橫調 ⇒ 兩艘都看到對方稍微落後、一起慢下來：量過 180 秒掉到 1.9 節、帆收到「收帆」；
                                                                          //   ⛔ 給巡航的航速數字 ⇒ 那是上一次照當時航向量的，轉了向就對不上 ⇒ 帆裝在戰鬥帆與滿帆之間來回換）
   if (m !== sh.hMode && SIMT - (sh.hModeT || -1e9) >= HELM_MODE_T) {   // 打法換了（至少隔 HELM_MODE_T 秒才記下一筆 ⇒ 邊界上抖不洗版）
     sh.hMode = m; sh.hModeT = SIMT;
-    helmSay(sh, 'mode', HELM_MODE[m] + '：' + (m === 'approach' ? '距離 ' + d.toFixed(0) + ' m，遠於 ' + HELM_FAR + ' 倍交戰距離 ' + R.toFixed(0) + ' m —— 全速接近'
+    helmSay(sh, 'mode', HELM_MODE[m] + '：' + (m === 'approach' ? '距離 ' + d.toFixed(0) + ' m，遠於 ' + tuneV(sh.team, 'far') + ' 倍交戰距離 ' + R.toFixed(0) + ' m —— 全速接近'
       : m === 'swap' ? '敵艦在' + sideName(sh.side) + '、要用' + sideName(st.present) + ' —— 全速轉過去'
       : m === 'evade' ? '被壓制、距離 ' + d.toFixed(0) + ' m 近於 ' + R.toFixed(0) + ' m —— 全速拉開'
       : m === 'back' ? '距離 ' + d.toFixed(0) + ' m、敵艦在船頭 ' + b.toFixed(0) + '° —— 倒退 ' + HELM_BACK_V + ' m/s'
@@ -97,7 +98,7 @@ function helmLead(sh, od) {
   if (Math.hypot(cx - sh.px, cz - sh.pz) < 2 * aiRange() && nb) { cx = nb.px; cz = nb.pz; vx = nb.vel[0]; vz = nb.vel[2]; }
   var n = SHIPS.filter(function (o) { return ORDERS[o.i] && ORDERS[o.i].mode === 'line' && o.team === sh.team && !isOut(o); }).length;
   var sg = od.side === 'P' ? 1 : -1, dx = cx - sh.px, dz = cz - sh.pz, d = Math.hypot(dx, dz) || 1, R = aiRange();
-  var px = dx + (vx - sh.vel[0]) * HELM_LEAD_T, pz = dz + (vz - sh.vel[2]) * HELM_LEAD_T, dp = Math.min(d, Math.hypot(px, pz));   // HELM_LEAD_T 秒後會多近（兩條戰列對著開 ⇒ 早一點轉）
+  var LT = tuneV(sh.team, 'leadT'), px = dx + (vx - sh.vel[0]) * LT, pz = dz + (vz - sh.vel[2]) * LT, dp = Math.min(d, Math.hypot(px, pz));   // HELM_LEAD_T 秒後會多近（兩條戰列對著開 ⇒ 早一點轉）
   // 遠了往敵方切（最多 1.0 rad）、近了往外拉（最多 0.9）。⛔ 照 helmSteer 的 −0.4／照現在的距離 ⇒ 兩條戰列對著開、一起轉到同向時已經只隔 20 m，兩條穿插在一起並排走（量過 180 秒：兩個排頭隔 20 m、同航向）
   var yaw = (sg > 0 ? Math.atan2(-dx / d, -dz / d) : Math.atan2(dx / d, dz / d)) + sg * clamp((dp - R) / R * 1.5, -0.9, 1.0);
   if (!sh.noGoTack && n) {                                               // 第一次要搶風：挑航線比較空的那一舷；兩舷都空（友船離航線都在 HELM_TACK_CLR 以外）⇒ 往離自己的隊伍遠的那一舷
@@ -136,11 +137,11 @@ function helmLead(sh, od) {
 function helmLeadAvoid(sh) { return friendsOf(sh).filter(function (o) { var q = ORDERS[o.i]; return !(q && q.mode === 'line' && q.head === sh.i) || Math.hypot(o.px - sh.px, o.pz - sh.pz) < 40; }); }
 /** 戰列跟隨（TASK-0679；mode 'line'）：照排頭的航跡、第 od.slot 個間距（53_commander.js cmdHelmWake）；離站位多遠、沿航跡落後多少記在 sh.lineErr／lineLag（指揮官下一次想的時候讀：排好了沒、排頭要不要等）。 */
 function helmFollow(sh, ld, od) {
-  var hd = od && od.head !== undefined && SHIPS[od.head] && !SHIPS[od.head].sunk ? SHIPS[od.head] : ld, gap = hd === ld ? CMD_LINE_GAP : (od.slot || 1) * CMD_LINE_GAP;   // 照排頭的航跡、第 slot 個間距（排頭沉了 ⇒ 照前一艘）
+  var hd = od && od.head !== undefined && SHIPS[od.head] && !SHIPS[od.head].sunk ? SHIPS[od.head] : ld, LG = tuneV(sh.team, 'lineGap'), gap = hd === ld ? LG : (od.slot || 1) * LG;   // 照排頭的航跡、第 slot 個間距（排頭沉了 ⇒ 照前一艘）
   var r = cmdHelmWake({ x: sh.px, z: sh.pz, yaw: sh.yaw }, { x: hd.px, z: hd.pz, yaw: hd.yaw, spd: hd.spd }, hd.wake, gap);
   if (r.v !== Infinity && Math.abs(Math.atan2(Math.sin(r.yaw - sh.yaw), Math.cos(r.yaw - sh.yaw))) > HELM_TURN_E) r.v = Math.max(r.v, HELM_TURN_V);   // 要大轉向 ⇒ 至少 HELM_TURN_V（舵要有水流）
   sh.lineErr = r.err; sh.lineLag = r.lag; sh.lineOff = r.off; sh.lineArc = od && od.head !== undefined && hd === SHIPS[od.head] ? r.lag + gap : null;   // 沿排頭航跡離排頭多遠（指揮官照它重排前後；排頭沉了、改跟前一艘 ⇒ 沒有） sh.station = r.station;
-  helmMode(sh, 'line', '跟著 ' + ld.name + '（排頭 ' + hd.name + ' 的航跡、第 ' + Math.round(gap / CMD_LINE_GAP) + ' 個間距 ' + gap + ' m）；' + (r.lag > 0 ? '落後站位 ' + r.lag.toFixed(0) + ' m' : '超前 ' + (-r.lag).toFixed(0) + ' m') + '、離航跡 ' + r.off.toFixed(0) + ' m');
+  helmMode(sh, 'line', '跟著 ' + ld.name + '（排頭 ' + hd.name + ' 的航跡、第 ' + Math.round(gap / LG) + ' 個間距 ' + gap + ' m）；' + (r.lag > 0 ? '落後站位 ' + r.lag.toFixed(0) + ' m' : '超前 ' + (-r.lag).toFixed(0) + ' m') + '、離航跡 ' + r.off.toFixed(0) + ' m');
   return r;
 }
 /** 搶風的角度（TASK-0679）：船頭跟「風吹去的方向」夾幾度時往上風走得最快（polar × 往上風的分量），照這艘的逆風性能（cfg.upwind）壓縮過的角度算；

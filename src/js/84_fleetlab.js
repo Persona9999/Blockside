@@ -131,6 +131,24 @@ function flabFinish(M) {
   flabEl('flabMsg').textContent = w + '　' + r.t + ' 秒　剩 藍 ' + r.left.blue + '／紅 ' + r.left.red + ' 艘　戰力 ' + r.pow.blue + '／' + r.pow.red + '　（實際 ' + (r.ms / 1000).toFixed(1) + ' 秒、' + r.steps + ' 步）';
   window.__flabLast = r;
   if (FLAB.batch && !FLAB.batch.done) flabBatchNext(r);
+  if (FLAB.work && FLAB.work.job) flabWorkDone(r);
+}
+// ── 調參的工作（TASK-0687；src/tune.py） ──
+// 頁面不自己連線（成品零外部依賴：vxk_inline.py 擋 fetch）⇒ 由 src/tune.py 用 Chrome 的除錯協定（CDP）把工作塞進來、輪詢結果：
+//   __game.flab.job(工作) ⇒ 照工作的參數（flabParams 的格式，p）與兩方的覆寫（tune.blue／red ⇒ TUNE，55_tune.js）用最快速度打一場；
+//   __game.flab.done() ⇒ 打完了 ⇒ { id, res（flabResult）, tune（實際套上的覆寫，回讀用）}，還沒 ⇒ null。打完就把 TUNE 清回 null（遊戲本體永遠是 null）。
+//   出錯 ⇒ window.__flabErr（tune.py 讀到就重開這個工作者、那份工作重發）。
+function flabJob(j) {
+  if (!FLAB.work) { FLAB.work = { n: 0 }; window.addEventListener('error', function (e) { window.__flabErr = String(e.message) + ' @' + e.lineno; }); }
+  FLAB.work.job = j; FLAB.work.done = null;
+  TUNE.blue = tuneClean(j.tune && j.tune.blue); TUNE.red = tuneClean(j.tune && j.tune.red);
+  FLAB.speed = Infinity;
+  return flabSetup(Object.assign(flabParams(), j.p)).then(function () { FLAB.run = true; flabKick(); return true; });
+}
+function flabWorkDone(r) {
+  var W = FLAB.work; W.n++;
+  W.done = { id: W.job.id, res: r, tune: { blue: TUNE.blue, red: TUNE.red } };
+  W.job = null; TUNE.blue = TUNE.red = null;
 }
 // ── 批次 ──
 function flabBatchToggle() {
@@ -318,5 +336,5 @@ function flabDetail() {
     hl.slice(-60).reverse().map(function (d) { return '<div class="hd" data-t="' + d[0] + '">' + d[0].toFixed(1) + ' 秒　' + d[3] + '</div>'; }).join('');
   [].forEach.call(el.querySelectorAll('.hd'), function (d) { d.onclick = function () { flabSetView('trace'); FLAB.tl = +d.dataset.t; }; });
 }
-// 量測（?debug=1）：__game.flab.start(參數)、state()、last()、speed(倍)、prof()（上次讀到現在 step() 每一段累積幾毫秒，00_core.js PF）
-if (DEBUG) setTimeout(function () { if (window.__game) window.__game.flab = { start: function (p) { return flabSetup(Object.assign(flabParams(), p || {})).then(function () { FLAB.run = true; flabKick(); return true; }); }, last: function () { return window.__flabLast || null; }, state: function () { return { t: SIMT, run: FLAB.run, rate: FLAB.simRate, steps: FLAB.match && FLAB.match.steps, res: FLAB.match && FLAB.match.res, batch: FLAB.batch && { i: FLAB.batch.i, n: FLAB.batch.jobs.length, done: FLAB.batch.done, res: FLAB.batch.res } }; }, speed: function (s) { FLAB.speed = s || Infinity; flabSpdShow(); return FLAB.speed; }, prof: function () { var c = PF ? PF.cur : null; if (PF) PF.cur = {}; return c; } }; }, 0);
+// 量測（?debug=1）：__game.flab.start(參數)、state()、last()、speed(倍)、prof()；調參（src/tune.py）：job(工作)、done()、tuneDef()（參數表，55_tune.js）（上次讀到現在 step() 每一段累積幾毫秒，00_core.js PF）
+if (DEBUG) setTimeout(function () { if (window.__game) window.__game.flab = { job: flabJob, done: function () { return FLAB.work && FLAB.work.done || null; }, tuneDef: function () { return TUNE_DEF; }, start: function (p) { return flabSetup(Object.assign(flabParams(), p || {})).then(function () { FLAB.run = true; flabKick(); return true; }); }, last: function () { return window.__flabLast || null; }, state: function () { return { t: SIMT, run: FLAB.run, rate: FLAB.simRate, steps: FLAB.match && FLAB.match.steps, res: FLAB.match && FLAB.match.res, batch: FLAB.batch && { i: FLAB.batch.i, n: FLAB.batch.jobs.length, done: FLAB.batch.done, res: FLAB.batch.res } }; }, speed: function (s) { FLAB.speed = s || Infinity; flabSpdShow(); return FLAB.speed; }, prof: function () { var c = PF ? PF.cur : null; if (PF) PF.cur = {}; return c; } }; }, 0);
