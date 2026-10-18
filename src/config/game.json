@@ -457,6 +457,17 @@
       "cfg": {"base": 6},
       "geo": {"spar": [30, 46], "marines": [75, 115], "center": 60, "aim": 38, "aimZ": [20, 380], "deckAim": [28, 45], "rigAim": [120, 330]},
       "names": ["皇家號"]
+    },
+    {
+      "id": "susquehanna",
+      "el": "ship-susquehanna",
+      "name": "蘇士奎哈納號",
+      "vxk": "susquehanna.vxk",
+      "work": "crest-001-susquehanna-01m-assembly",
+      "author": "crest-001",
+      "drive": "steam",
+      "cfg": {"pump": 15, "base": 10},
+      "geo": {"spar": [90, 104], "marines": [80, 200], "center": 150, "aim": 85, "aimZ": [30, 480], "deckAim": [90, 110], "rigAim": [200, 470]}
     }
   ],
   "furniture": {
