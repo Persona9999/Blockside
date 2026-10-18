@@ -166,7 +166,7 @@ def act_authors():
 
 MENU = {'play': ('fun', 'real'), 'mode': ('pve', 'eve', 'sandbox'), 'sail': ('auto', 'manual', 'off'),
         'gfx': ('low', 'mid', 'high'), 'phx': ('full', 'high', 'mid', 'low')}
-SHIP_CFG_KEYS = ('hard', 'flood', 'gunw', 'speed', 'agile', 'upwind', 'base', 'pump')          # 每艘船的船隻設定（壓艙物照船算，不在這裡）
+SHIP_CFG_KEYS = ('hard', 'flood', 'gunw', 'speed', 'agile', 'upwind', 'base', 'pump', 'avoid')          # 每艘船的船隻設定（壓艙物照船算，不在這裡）；avoid：防撞參數（物件，不是滑桿；js/52_fleet.js avoidCfg）
 MAT_ID = r'[a-z][a-z0-9_]{0,31}'                                                      # 材質 ID（TASK-0616）：雕刻作品關聯的 meta material 照它認
 MAT_KINDS = ('wood', 'metal', 'other')                                               # 材質的分類（後台分組、之後燃燒照它）
 MAT_NUMS = (('density', 0.05, 25, '比重（一格 0.1 m ＝ 1 公升 ⇒ 每格幾 kg；橡木 0.7）'), ('hard', 0.05, 50, '硬度倍率（乘在船隻設定的船殼硬度上；橡木 1）'),
@@ -557,6 +557,19 @@ def validate(cfg, prev=None):
         for k, v in (s.get('cfg') or {}).items():
             if k not in SHIP_CFG_KEYS:
                 err(p + '.cfg.' + k, '不認得的鍵（%s）' % '、'.join(SHIP_CFG_KEYS))
+            elif k == 'avoid':
+                if not isinstance(v, dict):
+                    err(p + '.cfg.avoid', '防撞參數是物件：{ near（m）, hard（m）, t（秒）, foe（false ＝ 不讓敵艦）}，沒寫的照預設')
+                else:
+                    for ak, av in v.items():
+                        if ak in ('near', 'hard', 't'):
+                            if not (isnum(av) and 0 < av <= 200):
+                                err(p + '.cfg.avoid.' + ak, '正的數字（m／秒，≤ 200）')
+                        elif ak == 'foe':
+                            if not isinstance(av, bool):
+                                err(p + '.cfg.avoid.foe', 'true／false（false ＝ 裝撞角、要撞上去：不讓敵艦）')
+                        else:
+                            err(p + '.cfg.avoid.' + ak, '不認得的鍵（near、hard、t、foe）')
             elif k in lim and isinstance(lim[k], list) and len(lim[k]) == 3 and not (isnum(v) and lim[k][0] <= v <= lim[k][1]):
                 err(p + '.cfg.' + k, '要在滑桿範圍 %s～%s 裡' % (lim[k][0], lim[k][1]))
         if 'geo' in s:

@@ -230,14 +230,16 @@ function mountStep(sh, dt) {
 var MOUNT_RUN = 4;                                                       // 拉進來／推出去的速度（格／秒 ⇒ 0.4 m／秒）
 function mountBusy(g) { return !!(g.mt && g.mt.ports && (Math.abs(g.mt.yaw - g.mt.yawT) > 1e-6 || g.mt.sl > 0)); }
 /** 這門砲打哪裡（每一門自己判定）：對得到 w ⇒ w；對不到 ⇒ 敵艦船身上（水線上那一段的中線、跟 w 同高，取 13 點）
- *  這門砲射界內、離 w 最近的那一點；整艘都在射界外 ⇒ null。⇒ 瞄準點在射界外，只要還有機會打中敵艦就開。 */
+ *  這門砲射界內、離 w 最近的那一點；整艘都在射界外 ⇒ null。⇒ 瞄準點在射界外，只要還有機會打中敵艦就開。
+ *  「對得到」也要在射程裡（gunInRange：最大射程）：⛔ 只看射界 ⇒ 持火號貼在憲法號旁邊 5 m，砲長在 55 m 長的船身上抽到離 siphon 31 m 以外的點 ⇒ fireGun 判打不到不開，
+ *    14 秒只開 1 發（量過）。長砲的射程上千公尺 ⇒ 一定在射程裡、跟以前一位元都不差。 */
 function gunTarget(sh, g, w) {
-  if (bears(sh, g, w)) return w;
+  if (bears(sh, g, w) && gunInRange(sh, g, w)) return w;
   var foe = aimShip(sh); if (!foe || !foe.M) return null;
   var z = clamp(toLocal(foe, w)[2], foe.T.geo.aimZ[0], foe.T.geo.aimZ[1]), best = null, bd = 1e18;   // 高度範圍照敵艦的船型（05_hull.js GEO0）
   for (var k = 0; k <= 12; k++) {
     var p = M4.pt(foe.M, foe.T.wl0 + 15 + (foe.T.wl1 - foe.T.wl0 - 30) * k / 12, foe.T.cy, z);
-    if (!bears(sh, g, p)) continue;
+    if (!bears(sh, g, p) || !gunInRange(sh, g, p)) continue;
     var d = (p[0] - w[0]) * (p[0] - w[0]) + (p[2] - w[2]) * (p[2] - w[2]); if (d < bd) { bd = d; best = p; }
   }
   return best;
