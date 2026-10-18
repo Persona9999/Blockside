@@ -188,15 +188,73 @@ function navZ(g, d, L, gx, gy) {
 }
 var NAV_MINREG = 12;                                                      // 連通區域至少幾點才算（小於它 ⇒ 砲架頂、桶堆上那種站得住的小塊，不走）
 /** 切連通區域（8 鄰）：N.reg（每一點屬於第幾塊，−1 ＝ 不能走）、N.regs（每一塊幾點）、N.ok、N.cells（全部能走的點）、N.big（最大那一塊）。
- *  甲板被打成兩塊以上不通 ⇒ 兩塊各自一個區域，找路只在同一塊裡找、跨塊只能走梯子（TASK-0572）。 */
+ *  甲板被打成兩塊以上不通 ⇒ 兩塊各自一個區域，找路只在同一塊裡找、跨塊只能走梯子（TASK-0572）。
+ *  N.cid（每一點屬於第幾個連通塊，含 < NAV_MINREG 的小塊；照塊裡最小的那一點排序）、N.csz、N.cmin 留著給增量重切（navRegionsAt）。 */
 function navRegions(N) {
-  var n = N.nx * N.ny, Z = N.Z, comp = new Int32Array(n).fill(-1), q = new Int32Array(n), sizes = [], i;
+  var n = N.nx * N.ny, Z = N.Z, comp = new Int32Array(n).fill(-1), q = new Int32Array(n), sizes = [], mins = [], i;
   for (i = 0; i < n; i++) {
     if (Z[i] < 0 || comp[i] >= 0) continue;
     var h = 0, t = 0, id = sizes.length; q[t++] = i; comp[i] = id;
     while (h < t) { var a = q[h++]; for (var dd = 0; dd < 8; dd++) { var b = navStep(N, a, dd); if (b >= 0 && comp[b] < 0) { comp[b] = id; q[t++] = b; } } }
-    sizes.push(t);
+    sizes.push(t); mins.push(i);
   }
+  N.cid = comp; N.csz = sizes; N.cmin = mins;
+  navRegFinish(N);
+}
+/** 增量重切（TASK-0673：一層 8 萬點整層 BFS，甲板被打一次就整層重來）：只有 ch（高度變了的點）那幾點的 3×3 裡的邊會變
+ *  （navStep 斜走查的兩格也在 3×3 裡）⇒ 只有碰到 3×3 的舊連通塊可能分開、接上；其他塊一點都不動。
+ *  從 3×3 裡站得住的每一點同時往外 BFS（輪流一步），碰頭就併成一群；走完的那一群 ＝ 一個新的塊；只剩一群還沒走完 ⇒ 停：
+ *  它 ＝ 碰到的舊塊裡其他所有的點（每一點在舊的圖上走得到 3×3、進 3×3 之前走的邊都沒變）⇒ 不用走。
+ *  ⇒ 成本 ＝ 被切下來的那幾小塊；沒被切開 ⇒ 繞過破洞就碰頭。最後照塊裡最小那一點重新編號 ⇒ 跟整層重切（navRegions）一位元不差。 */
+function navRegionsAt(N, ch) {
+  var n = N.nx * N.ny, nx = N.nx, Z = N.Z, cid = N.cid, csz = N.csz, cmin = N.cmin, C = csz.length;
+  var hit = new Uint8Array(C), lab = new Int32Array(n).fill(-1), seeds = [], i, j, d;
+  ch.forEach(function (c) {
+    for (var dy = -1; dy <= 1; dy++) for (var dx = -1; dx <= 1; dx++) {
+      var k = c + dx + dy * nx;
+      if (cid[k] >= 0) hit[cid[k]] = 1;
+      if (Z[k] >= 0 && lab[k] < 0) { lab[k] = seeds.length; seeds.push(k); }
+    }
+  });
+  var S = seeds.length, par = new Int32Array(S), pend = new Int32Array(S), Q = [], qh = new Int32Array(S), live = S;
+  for (j = 0; j < S; j++) { par[j] = j; pend[j] = 1; Q.push([seeds[j]]); }
+  function root(a) { while (par[a] !== a) { par[a] = par[par[a]]; a = par[a]; } return a; }
+  while (live > 1) {
+    for (j = 0; j < S && live > 1; j++) {
+      if (qh[j] >= Q[j].length) continue;
+      var a = Q[j][qh[j]++], r = root(j); pend[r]--;
+      for (d = 0; d < 8; d++) {
+        var b = navStep(N, a, d); if (b < 0) continue;
+        if (lab[b] < 0) { lab[b] = j; Q[j].push(b); pend[r]++; }
+        else { var r2 = root(lab[b]); if (r2 !== r) { par[r2] = r; pend[r] += pend[r2]; live--; } }   // 碰頭 ⇒ 併成一群（走完的那一群不會再被碰到：它走的時候就先碰過了）
+      }
+      if (!pend[r]) live--;                                               // 這一群走完了 ⇒ 一個新的塊
+    }
+  }
+  var rest = -1; for (j = 0; j < S; j++) if (root(j) === j && pend[j] > 0) rest = j;   // 還沒走完的那一群（最多一群）
+  // 新的塊：先給暫時的編號 C、C+1…（照掃到的順序 ＝ 照最小那一點），沒碰到的舊塊照舊；再跟舊塊照最小那一點合併排序
+  var gid = new Int32Array(S).fill(-1), nsz = [], nmin = [];
+  for (i = 0; i < n; i++) {
+    var o = cid[i];
+    if (Z[i] < 0) { cid[i] = -1; continue; }
+    if (o >= 0 && !hit[o]) continue;
+    var g = lab[i] >= 0 ? root(lab[i]) : rest;
+    if (gid[g] < 0) { gid[g] = C + nsz.length; nsz.push(0); nmin.push(i); }
+    cid[i] = gid[g]; nsz[gid[g] - C]++;
+  }
+  var map = new Int32Array(C + nsz.length), sz = [], mn = [], p = 0, q = 0;
+  while (p < C || q < nsz.length) {
+    while (p < C && hit[p]) p++;
+    if (p < C && (q >= nsz.length || cmin[p] < nmin[q])) { map[p] = sz.length; sz.push(csz[p]); mn.push(cmin[p]); p++; }
+    else if (q < nsz.length) { map[C + q] = sz.length; sz.push(nsz[q]); mn.push(nmin[q]); q++; }
+  }
+  for (i = 0; i < n; i++) if (cid[i] >= 0) cid[i] = map[cid[i]];
+  N.csz = sz; N.cmin = mn;
+  navRegFinish(N);
+}
+/** N.cid／csz ⇒ reg、ok、cells、regs、big、parts、bigCells（< NAV_MINREG 的小塊不走）。 */
+function navRegFinish(N) {
+  var n = N.nx * N.ny, comp = N.cid, sizes = N.csz, i;
   var map = sizes.map(function (s) { return -1; }), regs = [], big = -1;
   sizes.forEach(function (s, k) { if (s >= NAV_MINREG) { map[k] = regs.length; if (big < 0 || s > regs[big]) big = regs.length; regs.push(s); } });
   var reg = new Int32Array(n).fill(-1), ok = new Uint8Array(n), cells = [];
@@ -512,7 +570,7 @@ function handJoin(sh, c) {
 // ── 尋路動態更新（TASK-0572；Tim 2026-10-14：要有開關與刷新頻率）──
 // 細節設定「尋路更新」NAV_RE 秒（0 ＝ 關：走路格只照開戰時的船，甲板打穿了照樣走過去、可以浮空移動 —— 以前的樣子）。
 // 開：打掉的格（removeVoxel）落在哪幾層的高度範圍裡 ⇒ 記那幾層「髒了」與範圍；每 NAV_RE 秒（點名那一拍）有髒的才重算：
-//   那幾層只重算髒的範圍（外擴 2 點）站不站得住、整層重切連通區域；梯子：踏板被打掉、兩頭的走路點不能走 ⇒ 斷（不再走）。
+//   那幾層只重算髒的範圍（外擴 2 點）站不站得住、只重切碰到的連通區域（navRegionsAt）；梯子：踏板被打掉、兩頭的走路點不能走 ⇒ 斷（不再走）。
 //   走路格本來是同型的船共用（記在船型上）⇒ 第一次重算先複製一份給這艘自己。
 //   只管站在甲板上的人：落水的照舊沿外船殼爬上來（43_swim.js）；正在爬梯子、正在走的那一段照走完，下一段才照新的。
 /** 有會轉的甲板的那一層：這艘自己一份（共用的格子照舊共用，只多帶 sh）。 */
@@ -534,17 +592,17 @@ function navRefresh(sh) {
     var dc = L.dc; L.dc = null;
     var n0 = L.N.regs.length, fresh = false;
     if (!dc && L.own) return;                                             // 打到的格都不在取樣柱上 ⇒ 這一層的走路格一點都不會變
-    if (!L.own) { var O = L.N; L.Z0 = O.Z; L.N = { x0: O.x0, nx: O.nx, ny: O.ny, Z: O.Z.slice(), blk: O.blk, rot: O.rot, sh: O.sh }; L.own = fresh = true; }
-    var N = L.N, moved = fresh;
+    if (!L.own) { var O = L.N; L.Z0 = O.Z; L.N = { x0: O.x0, nx: O.nx, ny: O.ny, Z: O.Z.slice(), blk: O.blk, rot: O.rot, sh: O.sh, cid: O.cid.slice(), csz: O.csz, cmin: O.cmin }; L.own = fresh = true; }
+    var N = L.N, ch = [];
     // 只重算記下來的那幾點（TASK-0673：以前重算整個外框 ⇒ 一舷齊射打在兩頭，整層從頭到尾重算＋重切區域，單次 69 ms）；
     //   高度一點都沒變 ⇒ 連通區域一定一樣 ⇒ 不重切（navRegions 只看 Z）。結果跟重算整個外框一位元不差（外框裡其他點那一柱沒被動過）。
     if (dc) dc.forEach(function (i) {
       if (N.blk[i]) return;
       var gx = N.x0 + (i % N.nx) * NAV_C, gy = ((i / N.nx) | 0) * NAV_C; if (gx >= g.sx || gy >= g.sy) return;
       var z = N.rot && N.rot[i] ? navZ(navRestG(sh, turRootK(sh.T, N.rot[i] - 1)), L.deck, L, gx, gy) : navZ(g, L.deck, L, gx, gy);   // 會轉的甲板 ⇒ 照砲塔座標（24_armor.js navRestG）
-      if (z !== N.Z[i]) { N.Z[i] = z; moved = true; }
+      if (z !== N.Z[i]) { N.Z[i] = z; ch.push(i); }
     });
-    if (moved) navRegions(N);
+    if (ch.length) navRegionsAt(N, ch); else if (fresh) navRegFinish(N);   // 只重切碰到變了的點的那幾塊（TASK-0673）；第一次複製、沒變 ⇒ 照舊塊重出一份
     if (N.regs.length !== n0) ev.push(L.name + ' ' + (N.regs.length > 1 ? '分成 ' + N.regs.length + ' 塊（' + N.regs.join('／') + ' 點）' : '接回一塊'));
   });
   NV.ladders.forEach(function (L) {
