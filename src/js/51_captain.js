@@ -40,37 +40,62 @@ function aimValue(foe, mode) {
   if (mode === 'mag') { if (powderNever()) return 0; var n = magNear(foe); return !n ? 0 : n.d <= 0 ? 3 : n.d < 1 ? 3 * (1 - n.d) : 0; }
   return 0;
 }
-/** 砲長想一想：該換模式就換、廣播一則。 */
+/** 砲長想一想：該換模式就換、廣播一則。艦長的命令（sh.gOrd，54_helm.js helmGunOrder）：那個模式的偏好 × GUN_ORD_K；命令一換就馬上重想（不等 think 秒）。 */
+var GUN_ORD_K = 2.5, GUN_ORD_T = 6;                                       // 艦長點名的模式偏好 × 2.5；命令至少隔 6 秒才換（邊界上抖不洗版）
 function captainThink(sh, foe) {
-  var C = CAPTAINS[sh.cap]; if (!C || SIMT - sh.capT < C.think) return;
+  var C = CAPTAINS[sh.cap]; if (!C) return;
+  var o = typeof helmGunOrder === 'function' ? helmGunOrder(sh, foe) : null, om = o ? o.m : null;
+  if (om !== (sh.gOrd || null) && SIMT - (sh.gOrdT || -1e9) >= GUN_ORD_T) {   // 艦長換了命令 ⇒ 記下來、砲長馬上重想
+    sh.gOrd = om; sh.gOrdT = SIMT; sh.capT = -1e9;
+    if (o) helmSay(sh, 'gun', '要砲長打' + AIM_NAME[om] + '（' + o.why + '）', false);
+  }
+  if (SIMT - sh.capT < C.think) return;
   sh.capT = SIMT;
   var tired = sh.aimMode ? Math.max(0.5, 1 - (SIMT - sh.modeT) / 90) : 1, sc = {}, best = null, bs = -1;   // 打久了會膩：45 秒折到一半
-  AIM_MODES.forEach(function (m) { var v = aimValue(foe, m), s = C.w[m] * v * rr(0.85, 1.15) * (m === sh.aimMode ? tired : 1); sc[m] = v > 0 ? s : 0; if (sc[m] > bs) { bs = sc[m]; best = m; } });
+  AIM_MODES.forEach(function (m) { var v = aimValue(foe, m), s = C.w[m] * (m === sh.gOrd ? GUN_ORD_K : 1) * v * rr(0.85, 1.15) * (m === sh.aimMode ? tired : 1); sc[m] = v > 0 ? s : 0; if (sc[m] > bs) { bs = sc[m]; best = m; } });
   var cur = sh.aimMode ? sc[sh.aimMode] : -1;
   if (best === sh.aimMode || (sh.aimMode && cur > 0.05 && bs < cur * 1.2)) return;
   var first = !sh.aimMode; sh.aimMode = best; sh.modeT = SIMT; sh.modes = (sh.modes || 0) + 1;
-  var why = best === 'water' && foe.lift > 0.3 ? '敵艦浮高 ' + foe.lift.toFixed(1) + ' m' : best === 'mag' ? (function (n) { return n.d <= 0 ? '彈藥庫露出水面' : '彈藥庫離水面 ' + n.d.toFixed(1) + ' m'; })(magNear(foe)) : !first && tired < 0.75 ? '換個打法' : '';
+  var why = best === sh.gOrd ? '艦長的命令' : best === 'water' && foe.lift > 0.3 ? '敵艦浮高 ' + foe.lift.toFixed(1) + ' m' : best === 'mag' ? (function (n) { return n.d <= 0 ? '彈藥庫露出水面' : '彈藥庫離水面 ' + n.d.toFixed(1) + ' m'; })(magNear(foe)) : !first && tired < 0.75 ? '換個打法' : '';
   note(sh, '砲長（' + C.name + '）：' + (first ? '先瞄' : '改瞄') + AIM_NAME[best] + (why ? '（' + why + '）' : ''), best === 'mag');
 }
-/** 那個模式要瞄哪裡（敵艦的格座標）與用什麼彈；rand ⇒ 在範圍裡亂挑一點（電腦），否則中心點（我艦手動，不抽亂數）。 */
+/** 那個模式要瞄哪裡（敵艦的格座標）；rand ⇒ 在範圍裡亂挑一點（電腦），否則中心點（我艦手動，不抽亂數）。
+ *  ⛔ 彈種不在這裡挑了（以前照模式抽籤：水線全實心、砲甲板 30% 爆裂、帆具 70% 鏈彈 ⇒ 停在水線就整場不換）⇒ 照瞄準點的位置挑（gunnerAmmo）。 */
 function modeAim(foe, mode, rand) {
   function R(a, b) { return rand ? rr(a, b) : (a + b) / 2; }
-  function P(p) { return rand ? rnd() < p : p >= 0.5; }
   var wl = wlZ(foe), CY = foe.T.cy, WL_X0 = foe.T.wl0, WL_X1 = foe.T.wl1, xm = (WL_X0 + WL_X1) / 2;
   if (mode === 'mag') {
-    var n = magNear(foe); if (n) return { t: [R(n.mag.box[0] + 4, n.mag.box[3] - 4), CY, wl + R(0.5, 4)], ammo: 0 };
+    var n = magNear(foe); if (n) return { t: [R(n.mag.box[0] + 4, n.mag.box[3] - 4), CY, wl + R(0.5, 4)] };
     mode = 'water';
   }
-  if (mode === 'water') return { t: [R(WL_X0 + 40, WL_X1 - 40), CY, wl + R(1, 9)], ammo: 0 };                 // 水面上 0.1–0.9 m（砲彈碰到水就沒了）
+  if (mode === 'water') return { t: [R(WL_X0 + 40, WL_X1 - 40), CY, wl + R(1, 9)] };                 // 水面上 0.1–0.9 m（砲彈碰到水就沒了）
   if (mode === 'rig') {
     var masts = foe.masts.filter(function (m) { return m.up; });
-    if (masts.length) { var m = rand ? masts[(rnd() * masts.length) | 0] : masts.reduce(function (a, b) { return Math.abs(b.x - xm) < Math.abs(a.x - xm) ? b : a; }); return { t: [m.x, CY, R(foe.T.geo.rigAim[0], foe.T.geo.rigAim[1])], ammo: P(0.7) ? 2 : 0 }; }
+    if (masts.length) { var m = rand ? masts[(rnd() * masts.length) | 0] : masts.reduce(function (a, b) { return Math.abs(b.x - xm) < Math.abs(a.x - xm) ? b : a; }); return { t: [m.x, CY, R(foe.T.geo.rigAim[0], foe.T.geo.rigAim[1])] }; }
     mode = 'hull';
   }
   if (mode === 'deck') {
     var on = foe.crew.filter(function (c) { return c.st === 0 && (c.deck === foe.weatherDeck || c.role === ROLE.MARINE || c.role === ROLE.OFFICER || c.role === ROLE.HELM); });
-    if (on.length) { var c = rand ? on[(rnd() * on.length) | 0] : on[0]; return { t: [rand ? c.pos[0] : xm, CY, c.pos[2] + 10], ammo: P(0.8) ? 1 : 0 }; }
+    if (on.length) { var c = rand ? on[(rnd() * on.length) | 0] : on[0]; return { t: [rand ? c.pos[0] : xm, CY, c.pos[2] + 10] }; }
     mode = 'hull';
   }
-  return { t: [R(WL_X0 + 60, WL_X1 - 60), CY, R(foe.T.geo.deckAim[0], foe.T.geo.deckAim[1])], ammo: P(0.3) ? 1 : 0 };   // 砲甲板（高度照船型，05_hull.js GEO0）
+  return { t: [R(WL_X0 + 60, WL_X1 - 60), CY, R(foe.T.geo.deckAim[0], foe.T.geo.deckAim[1])] };   // 砲甲板（高度照船型，05_hull.js GEO0）
+}
+// ───────────────────────── 照瞄準位置挑彈種（Tim 2026-10-18：「開啟自動開炮後應該要根據瞄準位置換彈種」） ─────────────────────────
+// Tim 同一天：「之後預計會加新的彈種(不同船隻可以有自己的炮彈類型 每種炮彈會有一些標記 例如對帆傷害 對船員傷害 對船殼傷害 飛行速度 等資訊) 炮長AI要能支援不同彈種(而非固定三種)」
+//   ⇒ 砲長不認彈種的名字，只看每一種的屬性（ammoProps）；挑的範圍是那艘打得出的（61_hud.js ammoOf）。新彈種只要在 AMMO_TAG 補一列、AMMO_K 補一列，砲長就會用。
+//   屬性：gun／sail／crew ＝ 彈種倍率表（AMMO_K，對砲／對帆／對人，細節設定可調）；hull ＝ 打船殼（開洞、進水）；uw ＝ 碰到水不會沒（實心彈：打水漂、水面下照樣穿，21_gunnery.js）；blast ＝ 打中就炸（爆裂彈）。
+//   ⚠ hull 是估的（實心彈穿透、爆裂彈第一下就在外面炸、鏈彈打中就慢一半），還沒量過。
+var AMMO_TAG = [{ hull: 1, uw: 1 }, { hull: 0.6, blast: 1 }, { hull: 0.5 }];
+/** 彈種 a 的屬性（砲長挑彈用）。 */
+function ammoProps(a) { var t = AMMO_TAG[a] || {}; return { gun: ammoK(a, VS_GUN), sail: ammoK(a, VS_SAIL), crew: ammoK(a, VS_CREW), hull: t.hull || 0, uw: t.uw || 0, blast: t.blast || 0 }; }
+// 瞄準點落在哪一帶 ⇒ 那一帶看重哪幾樣屬性
+var AIM_ZONE_W = { water: { hull: 1, uw: 1 }, hull: { gun: 0.6, crew: 0.4, blast: 0.3 }, deck: { crew: 1, blast: 0.5 }, rig: { sail: 1 } };
+/** 瞄準點（敵艦的格座標 t）落在哪一帶：砲甲板以下 ＝ 水線（含彈藥庫）、砲甲板（deckAim）、再往上到帆具以下 ＝ 甲板（站人的）、帆具（rigAim）以上。高度照船型（05_hull.js GEO0）。 */
+function aimZone(foe, t) { var z = t[2], G = foe.T.geo; return z < G.deckAim[0] ? 'water' : z <= G.deckAim[1] ? 'hull' : z < G.rigAim[0] ? 'deck' : 'rig'; }
+/** 砲長照瞄準點挑彈：sh 打得出的彈種裡，照那一帶看重的屬性打分最高的（同分 ⇒ 序號小的；不抽亂數）。 */
+function gunnerAmmo(sh, foe, t) {
+  var W = AIM_ZONE_W[aimZone(foe, t)], L = ammoOf(sh), best = L.length ? L[0] : 0, bs = -1e9;
+  L.forEach(function (a) { var p = ammoProps(a), s = 0; for (var k in W) s += W[k] * p[k]; if (s > bs + 1e-9) { bs = s; best = a; } });
+  return best;
 }

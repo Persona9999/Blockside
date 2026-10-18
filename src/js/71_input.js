@@ -100,8 +100,8 @@ function doKey(k, repeat) { var a = keyAct('battle', k); if (a) doAct(a, repeat)
 function doAct(a, repeat) {
   if (!RUNNING) return;
   var me = SHIPS[PLAYER_I];
-  if (a === 'volley') { if (!PAUSED && !me.sunk) broadside(me, AMMO_I); }   // 降旗了 ⇒ broadside／fireOne 自己擋
-  else if (a === 'fire1') { if (!PAUSED) fireOne(me, AMMO_I); }
+  if (a === 'volley') { if (!PAUSED && !me.sunk) broadside(me, ammoNow()); }   // 降旗了 ⇒ broadside／fireOne 自己擋；ammoNow：開著自動開砲 ⇒ 砲長照瞄準位置挑（61_hud.js）
+  else if (a === 'fire1') { if (!PAUSED && !me.sunk) fireOne(me, ammoNow()); }
   else if (a === 'ammo') ammoNext();                                     // 彈種：一個鍵輪流（61_hud.js ammoNext）
   else if (a === 'aim') { me.pMode = AIM_P = AIM_CYCLE[(AIM_CYCLE.indexOf(me.pMode || 'free') + 1) % AIM_CYCLE.length]; note(me, '瞄準：' + AIM_NAME[me.pMode] + (me.pMode === 'free' ? '（點敵艦設瞄準點）' : '')); }   // 瞄準模式（51_captain.js）
   else if (a === 'cam') camCycle();                                    // 換鏡頭（03_camera.js）
