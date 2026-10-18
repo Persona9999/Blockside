@@ -168,12 +168,12 @@ function drvParts(T) {
   function cl(q, o) { if (q.cellRuns && q.cellRuns.length) { o.cells = drvCells(T, q.cellRuns); cells = true; } return o; }
   (T.h.parts || []).forEach(function (q) {
     var m = q.meta, pt = q.points || {}; if (!m) return;
-    if (m.kind === 'engine' && pt.core) E.push(cl(q, { name: q.path, p: pt.core.slice(), w: +m.ihp > 0 ? +m.ihp : +m.nhp > 0 ? +m.nhp : 1, prop: m.propeller ? String(m.propeller) : '' }));
+    if (m.kind === 'engine' && pt.core) E.push(cl(q, { name: q.path, p: pt.core.slice(), w: +m.ihp > 0 ? +m.ihp : +m.nhp > 0 ? +m.nhp : 1, prop: refPath(T, m.propeller) }));
     else if (m.kind === 'boiler') {
       var seats = [], nb = Math.max(1, Math.round(+m.boilers || 1));
       for (var j = 1; j <= nb; j++) if (pt['boiler-' + j]) seats.push(pt['boiler-' + j].slice());
       if (!seats.length && pt.uptake) seats.push(pt.uptake.slice());
-      if (seats.length) B.push(cl(q, { name: q.path, seats: seats, funnel: m.funnel ? String(m.funnel) : '', up: pt.uptake ? pt.uptake.slice() : seats[0] }));
+      if (seats.length) B.push(cl(q, { name: q.path, seats: seats, funnel: refPath(T, m.funnel), up: pt.uptake ? pt.uptake.slice() : seats[0] }));
     } else if (m.kind === 'shaft' && pt.aft && pt.fwd) SH.push(cl(q, { name: q.path, aft: pt.aft.slice(), fwd: pt.fwd.slice(), a: pt.fwd.slice(), b: pt.aft.slice(), kind: 'shaft' }));   // 傳動：主機那頭（fwd）→ 螺旋槳那頭（aft）
     else if (m.kind === 'steampipe' && pt.from && pt.to) SP.push(cl(q, { name: q.path, a: pt.from.slice(), b: pt.to.slice(), kind: 'steampipe' }));   // 蒸汽管（TASK-0653）：鍋爐那頭 from → 主機那頭 to
   });
