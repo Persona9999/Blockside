@@ -17,6 +17,6 @@
     "gloire": {"tons": 5637, "len": 78, "guns": 36, "gunTypes": {"long32": 36}, "volley": 522, "drive": "steam", "sails": 15, "crew": 308},
     "reale": {"tons": 385, "len": 54.4, "guns": 19, "gunTypes": {"long8": 2, "long36": 1, "long6": 2, "pierrier": 14}, "volley": 45, "drive": "oar", "sails": 5, "crew": 544},
     "susquehanna": {"tons": 3528, "len": 76.7, "guns": 9, "gunTypes": {"dahl11": 3, "dahl9": 6}, "volley": 471, "drive": "steam", "sails": 13, "crew": 151},
-    "dromon": {"tons": 60, "len": 28.2, "guns": 1, "gunTypes": {"siphon": 1}, "volley": 6, "drive": "oar", "sails": 3, "crew": 160}
+    "dromon": {"tons": 60, "len": 28.2, "guns": 4, "gunTypes": {"siphon": 1, "ballista": 3}, "volley": 8, "drive": "oar", "sails": 3, "crew": 171}
   }
 }

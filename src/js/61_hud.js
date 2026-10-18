@@ -593,10 +593,11 @@ function navText(sh) {
 function pauseLabel() { var b = $('pauseK'), s = '<b>' + keyName('pause') + '</b><i class="em">' + (PAUSED ? '▶' : '⏸') + '</i>'; if (b && b.innerHTML !== s) b.innerHTML = s; }   // 圖示（Tim 2026-10-15）：停格中 ⇒ ▶ 繼續
 /** 彈種那一顆（Tim 2026-10-15：「砲彈改成一個按鈕，切換所有支援的砲彈（顯示當前彈種圖示）」）：鐵球 實心彈（CSS 畫的 .ball：灰色、左上高光、淡白邊；⛔ ⚫ 在深色圓鈕上看不見、⚪ 是白點不像砲彈 —— Tim 2026-10-15「顯示為一顆白色圓點，是否可以替換」）、💣 爆裂彈、⛓️ 鏈彈；每一種砲三種都能打。 */
 var PSLOW_SHOW = 0.7;   // 物理減速放慢到 ×0.7 以下才在航速那一行顯示（Tim 2026-10-15：「高於 0.7 可以不顯示，目前頻繁閃爍」—— 以前 < 0.98 就顯示，倍率在 0.9 上下跳 ⇒ 一直閃）
-var AMMO_ICON = ['<span class="ball"></span>', '💣', '⛓️', '🔥'], AMMO_TXT = ['實心彈', '爆裂彈', '鏈彈', '希臘火'];   // 第 4 種希臘火（28_fire.js AMMO_GF）只給固定彈種的砲，不在換彈的輪流裡（ammoOf）
+var AMMO_ICON = ['<span class="ball"></span>', '💣', '⛓️', '🔥', '🏹'], AMMO_TXT = ['實心彈', '爆裂彈', '鏈彈', '希臘火', '弩箭'];   // 第 4 種希臘火（28_fire.js AMMO_GF）只給固定彈種的砲，不在換彈的輪流裡（ammoOf）
 function ammoLabel() {
-  var b = $('ammoB'); if (!b) return; var a = ammoNow(), s = '<b>' + keyName('ammo') + '</b><i class="em">' + (AUTOFIRE ? '🤖' : '') + (AMMO_ICON[a] || '?') + '</i>';   // 上面寫的是鍵（同其他圓鈕；66_keys.js），不是第幾種
-  if (b.innerHTML !== s) { b.innerHTML = s; b.title = AUTOFIRE ? '自動開砲：砲長照瞄準位置挑彈，現在 ' + AMMO_TXT[a] + '（關掉自動開砲才自己換）' : '切換彈藥：現在 ' + AMMO_TXT[a] + '（點一下或按 ' + keyName('ammo') + ' 換下一種）'; }
+  var b = $('ammoB'); if (!b) return; var me = SHIPS[PLAYER_I], L = me ? ammoOf(me) : [0], a = ammoNow(); if (L.indexOf(a) < 0) a = L[0];   // 主武器打不出的那一種 ⇒ 顯示主武器的（持火號 ⇒ 希臘火）
+  var fix = L.length === 1, s = '<b>' + keyName('ammo') + '</b><i class="em">' + (AUTOFIRE ? '🤖' : '') + (AMMO_ICON[a] || '?') + '</i>';   // 上面寫的是鍵（同其他圓鈕；66_keys.js），不是第幾種
+  if (b.innerHTML !== s) { b.innerHTML = s; b.title = fix ? '主武器（' + GUNS[shipMainGun(me)].short + '）只打 ' + AMMO_TXT[a] + '：不能換彈' : AUTOFIRE ? '自動開砲：砲長照瞄準位置挑彈，現在 ' + AMMO_TXT[a] + '（關掉自動開砲才自己換）' : '切換彈藥：現在 ' + AMMO_TXT[a] + '（點一下或按 ' + keyName('ammo') + ' 換下一種）'; }
 }
 /** 自動開砲時砲長挑的彈（50_sim.js simAi 每一輪齊射寫；⛔ 不寫 AMMO_I：那是玩家自己選的、記在偏好裡）。 */
 var AMMO_AUTO = 0;
@@ -609,10 +610,11 @@ function ammoNow() {
   return AMMO_AUTO;
 }
 /** 這艘船打得出哪幾種彈（AMMO 的序號，照輪流的順序）。Tim 2026-10-16：「目前彈種是固定的 不過可以保留擴充接口」⇒ 現在每艘都是全部；之後照船擴充（例 ships[].ammo）只改這裡。 */
-function ammoOf(sh) { return AMMO.map(function (_, i) { return i; }); }
+function ammoOf(sh) { var m = sh && shipMainGun(sh); return m ? gunAmmoList(m) : AMMO.map(function (_, i) { return i; }); }   // 主武器打得出的（Tim 2026-10-18：「應該只有主武器能換彈種」；10_ship.js shipMainGun／gunAmmoList）
 /** 換下一種彈（Tim 2026-10-16：「統一用一個鍵循環切換所有彈藥(不一定三種 之後可能根據船擴充)」）：鍵盤 1 與圓鈕共用；照我艦的 ammoOf 輪流，現在這一種不在清單裡 ⇒ 從第一種開始。 */
 function ammoNext() {
   var L = ammoOf(SHIPS[PLAYER_I]); if (!L.length) return;
+  if (L.length === 1) { note(SHIPS[PLAYER_I], '主武器（' + GUNS[shipMainGun(SHIPS[PLAYER_I])].short + '）只打 ' + AMMO_TXT[L[0]] + '：不能換彈'); return; }
   if (AUTOFIRE) { note(SHIPS[PLAYER_I], '自動開砲中：彈種由砲長照瞄準位置挑（' + keyName('autoFire') + ' 關掉自動開砲才自己換）'); return; }
   var i = L.indexOf(AMMO_I); AMMO_I = L[(i + 1) % L.length]; ammoLabel();
 }
