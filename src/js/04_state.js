@@ -10,6 +10,7 @@ var SHIPS = [], PIECES = [], BALLS = [], EVENTS = [], FLY = [], PLAYER_I = 0;
 //   dmg11d：莫尼特號砲塔的 XI 吋 Dahlgren（166 磅實心彈／136 磅爆裂彈 ⇒ 330；雙聯 ⇒ 一份彈藥兩發 burst 2）。
 //   dmg9d dmg64b dmg7b：維吉尼亞號的 9 吋 Dahlgren（72.5 磅爆裂彈 ⇒ 200）、6.4 吋 Brooke（約 95 磅 ⇒ 190）、7 吋 Brooke（104 磅 ⇒ 240）（TASK-0616）
 //   dmg36l dmg8l dmgpr：皇家號 La Réale（槳帆船）的 36 磅 coursier（36 livres ＝ 17.6 kg ⇒ 32 磅長砲 130 再往上 140）、8 磅 bâtarde（3.9 kg ⇒ 6 磅 40 與 12 磅 55 之間 45）、迴旋砲 pierrier（約 2 livres 的石彈／霰彈 ⇒ 25）（TASK-0703）
+//   dmgsf：持火號（拜占庭 dromon，TASK-0693）的希臘火 siphon（每發 30，再乘 fire.k；潑開燒人、燒帆與細繩，不開洞 —— 28_fire.js）。弩砲、投石機的機制還在想（Tim 2026-10-18）⇒ 還沒進砲種表。
 //   dmg24 dmg32l dmg32 dmg18 dmg4：每發傷害（24 磅長砲、32 磅長砲（餘燼號）、32 磅 carronade、18 磅追擊砲、4 磅砲（夜隼號））
 //   box：砲旁藥箱放幾份；carry：送藥手一次搬幾份；wind：帆的風壓；hands：預備水手（每艘幾個人物，42_hands.js）；drown：溺水時間（秒，43_swim.js）；musket：火槍的最大射程（m，40_crew.js）；sailfix：帆匠補帆的時間（秒，47_sailmaker.js）
 //   sea：浪的大小（0 平靜、1 中浪、3 大浪）；stall：頂風失速（0 只是慢、1 寫實）；funspeed funagile funstall funpowder funhard：娛樂加成（玩法選娛樂時再乘；funhard ＝ 鐵甲的擊穿門檻倍率，TASK-0621）
@@ -86,13 +87,13 @@ var WIND_K = stateQnum('wind', LIM.wind);                                // 帆�
 function powderNever() { return POWDER_HP >= LIM.powderhp[1]; }      // 拉滿 ＝ 不會爆：兩種玩法都是（娛樂的倍率不管它）
 function powderHP() { return Math.round(POWDER_HP * playK('powder')); }   // 實際的火藥血量：娛樂再乘 FUN.powder（預設 675 ⇒ 300）
 // 每發傷害（砲種）：砲彈開火時帶著 b.dmg
-var DMG = { long12: Math.round(stateQnum('dmg12', LIM.dmg12)), long18: Math.round(stateQnum('dmg18l', LIM.dmg18l)), long6: Math.round(stateQnum('dmg6', LIM.dmg6)), chase3: Math.round(stateQnum('dmg3c', LIM.dmg3c)), trident: Math.round(stateQnum('dmgtr', LIM.dmgtr)), dahl9: Math.round(stateQnum('dmg9d', LIM.dmg9d)), brooke64: Math.round(stateQnum('dmg64b', LIM.dmg64b)), brooke7: Math.round(stateQnum('dmg7b', LIM.dmg7b)), dahl11: Math.round(stateQnum('dmg11d', LIM.dmg11d)), long: Math.round(stateQnum('dmg24', LIM.dmg24)), long32: Math.round(stateQnum('dmg32l', LIM.dmg32l)), carr: Math.round(stateQnum('dmg32', LIM.dmg32)), chase: Math.round(stateQnum('dmg18', LIM.dmg18)), long4: Math.round(stateQnum('dmg4', LIM.dmg4)), long36: Math.round(stateQnum('dmg36l', LIM.dmg36l)), long8: Math.round(stateQnum('dmg8l', LIM.dmg8l)), pierrier: Math.round(stateQnum('dmgpr', LIM.dmgpr)) };
+var DMG = { long12: Math.round(stateQnum('dmg12', LIM.dmg12)), long18: Math.round(stateQnum('dmg18l', LIM.dmg18l)), long6: Math.round(stateQnum('dmg6', LIM.dmg6)), chase3: Math.round(stateQnum('dmg3c', LIM.dmg3c)), trident: Math.round(stateQnum('dmgtr', LIM.dmgtr)), dahl9: Math.round(stateQnum('dmg9d', LIM.dmg9d)), brooke64: Math.round(stateQnum('dmg64b', LIM.dmg64b)), brooke7: Math.round(stateQnum('dmg7b', LIM.dmg7b)), dahl11: Math.round(stateQnum('dmg11d', LIM.dmg11d)), long: Math.round(stateQnum('dmg24', LIM.dmg24)), long32: Math.round(stateQnum('dmg32l', LIM.dmg32l)), carr: Math.round(stateQnum('dmg32', LIM.dmg32)), chase: Math.round(stateQnum('dmg18', LIM.dmg18)), long4: Math.round(stateQnum('dmg4', LIM.dmg4)), long36: Math.round(stateQnum('dmg36l', LIM.dmg36l)), long8: Math.round(stateQnum('dmg8l', LIM.dmg8l)), pierrier: Math.round(stateQnum('dmgpr', LIM.dmgpr)), siphon: Math.round(stateQnum('dmgsf', LIM.dmgsf)) };
 // 彈種倍率（%）：列 ＝ 實心／爆裂／鏈彈，欄 ＝ 對砲（模型：砲、舵輪、火藥桶）／對帆／對人。網址 ?ammo= 九個數字（照列）
 var AMMO_LIM = CFG.ammo.lim, AMMO_K0 = CFG.ammo.k;   // config/game.json 的 ammo（上下限、預設）。爆裂對人原訂 115：量過死亡平均 42（舊版 27）⇒ 100（35，傷亡合計 62 對舊版 65）
 var AMMO_K = AMMO_K0.map(function (r) { return r.slice(); });
 if (Q.has('ammo')) Q.get('ammo').split(',').forEach(function (w, i) { var v = parseFloat(w); if (i < 9 && isFinite(v)) AMMO_K[(i / 3) | 0][i % 3] = clamp(Math.round(v), AMMO_LIM[0], AMMO_LIM[1]); });
 var VS_GUN = 0, VS_SAIL = 1, VS_CREW = 2;
-function ammoK(ammo, vs) { return AMMO_K[ammo][vs] / 100; }
+function ammoK(ammo, vs) { return ammo === AMMO_GF ? CFG.fire.k[vs] / 100 : AMMO_K[ammo][vs] / 100; }   // 希臘火（AMMO_GF，28_fire.js）不在玩家換彈的三種裡：倍率在 config/game.json 的 fire.k
 // 降旗規則（選單設定）：死傷比例到 cas 就降旗（1 ＝ 全員倒下才停）；三個勾選各自是另一條。預設 ＝ 不降旗，打到沉或全員倒下。
 // 網址：?strike=60,guns,masts,officers（數字是死傷百分比，後面列出要勾的規則）
 var STRIKE = { cas: LIM.cas[2], guns: false, masts: false, officers: false };

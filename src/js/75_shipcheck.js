@@ -52,7 +52,8 @@ function shipCheck(id) {
     spinIssues(sh, add);                                                // 照參數轉的子物件寫了 spin 卻轉不起來（26_spin.js，TASK-0640）
     sh.models.forEach(function (m) {
       var mt = m.meta || {};
-      if (mt.kind === 'gun' && !GUN_CODE[mt.gun]) add('error', '砲', m.path, 'meta gun=' + mt.gun + ' 不認得 ⇒ 默默當成長砲', 'gun 寫砲種表有的代碼（' + Object.keys(GUN_CODE).join('、') + '）');
+      if (mt.kind === 'gun' && mt.weapon && !GUN_WEAPON[mt.weapon]) add('warn', '武器', m.path, 'meta weapon=' + mt.weapon + ' 砲種表沒有 ⇒ 照 gun=' + mt.gun + ' 算', 'weapon 寫砲種表有的（' + Object.keys(GUN_WEAPON).join('、') + '），或拿掉');
+      if (mt.kind === 'gun' && !GUN_CODE[mt.gun] && !GUN_WEAPON[mt.weapon]) add('error', '砲', m.path, 'meta gun=' + mt.gun + ' 不認得 ⇒ 默默當成長砲', 'gun 寫砲種表有的代碼（' + Object.keys(GUN_CODE).join('、') + '）');
       if (!mt.kind && GUNS[m.kind]) add('warn', '砲', m.path, '沒有 meta ⇒ 照名字認成 ' + m.kind, 'meta kind=gun, gun=<砲種>');
       if (!mt.kind && m.kind === 'wheel') add('warn', '舵輪', m.path, '沒有 meta ⇒ 照名字認', 'meta kind=wheel');
       if (m.kind === 'rudder' && !m.pts['stock-top']) add(isFinite(+mt.hinge_x) ? 'warn' : 'error', '舵', m.path, isFinite(+mt.hinge_x) ? '沒有固定點 stock-top ⇒ 沿鉸鏈軸找船尾（退路）' : '沒有 stock-top、也沒有 hinge meta ⇒ 往下找、開局就掉', '舵子作品登記固定點 stock-top（舵頭；造船規格 §9）');

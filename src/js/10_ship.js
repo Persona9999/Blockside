@@ -78,7 +78,7 @@ function makeShip(i, team, yaw, pz, T, px) {                          // T：船
   sh.models.forEach(function (m) {
     if (!GUNS[m.kind]) return;
     var A = gunMuzzle(m);
-    sh.guns.push(m.gun = { name: m.name, type: m.kind, side: A.ax[1] >= 0 ? 'S' : 'P', model: m, ax: A.ax, muz: A.muz, muzs: A.muzs, alive: true, reload: rr(0, 1.2), box: BOX_N, needCart: false, safe: !!(m.meta && +m.meta.safe) });   // box：砲旁藥箱裡的份數；safe：模型 meta safe=1 ⇒ 開火前看砲線（21_gunnery.js selfBlock）
+    sh.guns.push(m.gun = { name: m.name, type: m.kind, side: A.ax[1] >= 0 ? 'S' : 'P', model: m, ax: A.ax, muz: A.muz, muzs: A.muzs, alive: true, reload: rr(0, 1.2), box: BOX_N, needCart: false, safe: !!(m.meta && +m.meta.safe), ammoFix: gunAmmoFix(m, m.kind) });   // box：砲旁藥箱裡的份數；safe：模型 meta safe=1 ⇒ 開火前看砲線（21_gunnery.js selfBlock）
   });
   sh.guns.forEach(function (g) { gunMountInit(sh, g); });            // 迴旋砲、砲塔（meta mount；21_gunnery.js）—— 沒標的砲不動
   turretShip(sh);                                                       // 砲塔層（kind=turret；27_turret.js）：砲、模型掛上去 —— 沒有 ⇒ 不做事
@@ -136,6 +136,11 @@ function makeShip(i, team, yaw, pz, T, px) {                          // T：船
 // hole：實心彈的洞大小倍率（沒寫 ＝ 1；big ＝ 1.25）。
 var GUNS = CFG.guns;   // config/game.json 的 guns（TASK-0542）：code、name、short、V 初速（m/s）、reload 裝填倍率、big、hole、crew 砲班滿編、min 最少、mass 重量（噸）
 var GUN_CODE = {}; Object.keys(GUNS).forEach(function (k) { GUN_CODE[GUNS[k].code] = k; });
+// 武器種類（TASK-0693，持火號）：砲種表的 weapon（現在只有 siphon；弩砲 toxoballistra、投石機 manganikon 的機制還在想）⇒ 模型 meta weapon= 照它分流（優先於 gun=：舊作品 gun 寫的是頂替用的砲種代碼）。
+var GUN_WEAPON = {}; Object.keys(GUNS).forEach(function (k) { if (GUNS[k].weapon) GUN_WEAPON[GUNS[k].weapon] = k; });
+// 固定彈種：砲種表 ammo（或模型 meta ammo）⇒ 那門砲不管玩家選哪一種都打這一種（現在只有希臘火）；沒寫、或不認得 ⇒ 照選的。
+var AMMO_NAME = { solid: 0, shell: 1, chain: 2, greekfire: 3 };
+function gunAmmoFix(m, type) { var a = (m.meta && m.meta.ammo) || GUNS[type].ammo; return a !== undefined && AMMO_NAME[a] !== undefined ? AMMO_NAME[a] : -1; }
 /** 砲甲板：照舷側砲（不含追擊砲）的高度（外框底）分層 —— 排好之後相差 10 格以上就是另一層（甲板有舷弧，同一層前後差 6 格）；
  *  追擊砲再歸到最近的那一層（⛔ 一起排：船尾追擊砲的高度落在兩層之間，會把上下兩層砲甲板接成一層）。
  *  每層：站人的高度範圍 zr（照那一層第一門不是追擊砲的砲：carronade 那層 −6～+3、其他 −8～+5）、名字、最上面那層 ＝ 露天（陸戰隊、砲長的「甲板人員」）。
@@ -267,7 +272,7 @@ function ropeAtT(L, t) {
 /** 模型的種類：meta 優先（basecamp TASK-0517：kind／gun），沒有 meta 才照名字（舊的 .vxk；舵輪本來就沒有 meta）。 */
 function modelKind(m) {
   var mt = m.meta || {};
-  if (mt.kind === 'gun') return GUN_CODE[mt.gun] || 'long';           // 不認得的代碼 ⇒ 當長砲
+  if (mt.kind === 'gun') return GUN_WEAPON[mt.weapon] || GUN_CODE[mt.gun] || 'long';   // weapon 優先（TASK-0693）；不認得的代碼 ⇒ 當長砲
   if (META_KINDS[mt.kind] && META_KINDS[mt.kind].mk) return mt.kind;   // 規格表標 mk 的（config/meta_kinds.json，TASK-0672）：火藥桶、帆桁、舵輪、舵、門、螺旋槳 —— 以前在下面一行一行寫
   // 以前一行一行寫的那幾個（留著說明為什麼有）：
   //   wheel：餘燼號的舵輪叫「舵輪」、有 meta（⛔ 只照名字 ⇒ 認不出來，船只剩舵柄滑車的 35% 轉向）

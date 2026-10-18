@@ -488,6 +488,7 @@ function render() {
   rdPushSplash(pushPt);                                                  // 雨滴打在海面與船上的水花（14_rain.js）
   lanternHalo(pushPt);                                                   // 燈籠的光暈
   BALLS.forEach(function (b) {
+    if (b.gf) { pushPt(b.p, 0.75, [1, 0.5, 0.1], 1); pushPt(sub(b.p, mul(b.v, 0.03)), 0.5, [1, 0.25, 0.05], 0.8); return; }   // 希臘火：一團火＋拖尾（28_fire.js）
     if (b.ammo !== 2) { pushPt(b.p, 0.32, [0.08, 0.08, 0.08], 1); return; }
     var w = csBar(b); pushPt(sub(b.p, mul(w, CS_HALF)), 0.32, [0.08, 0.08, 0.08], 1); pushPt(add(b.p, mul(w, CS_HALF)), 0.32, [0.08, 0.08, 0.08], 1);   // 鏈彈：鍊子兩頭各一顆（21_gunnery.js csBar）
   });

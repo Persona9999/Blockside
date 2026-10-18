@@ -60,7 +60,7 @@ function helmThink(sh, foe) {
  *  太近（< 0.45 R）而且敵艦在船頭前方 60° 內 ⇒ 有動力的倒退（沒有動力的照最慢）。 */
 function helmSteer(sh, foe) {
   var H = HELMS[sh.helm] || HELMS.basic, st = helmThink(sh, foe), sg = st.present === 'P' ? 1 : -1;   // sg：敵艦要在畫面左邊（左舷 P）⇒ +1
-  var dx = foe.px - sh.px, dz = foe.pz - sh.pz, d = Math.hypot(dx, dz) || 1, R = aiRange() * tuneH(sh, H, 'range') * (st.evade ? tuneV(sh.team, 'evadeR') : 1);   // 可調參數（55_tune.js；沒覆寫 ＝ 原本的常數）
+  var dx = foe.px - sh.px, dz = foe.pz - sh.pz, d = Math.hypot(dx, dz) || 1, R = aiRange(sh) * tuneH(sh, H, 'range') * (st.evade ? tuneV(sh.team, 'evadeR') : 1);   // 可調參數（55_tune.js；沒覆寫 ＝ 原本的常數）
   var yaw = (sg > 0 ? Math.atan2(-dx / d, -dz / d) : Math.atan2(dx / d, dz / d)) + sg * clamp((d - R) / R * tuneV(sh.team, 'distK'), st.evade ? -HELM_EVADE_OUT : -tuneV(sh.team, 'pullOut'), tuneV(sh.team, 'cutIn'));   // 遠了往敵艦切（最多 cutIn 1.5 rad）、近了往外拉（最多 pullOut 0.39；被壓制 ⇒ 0.9，⛔ 0.4 ⇒ 30 秒只拉開 18 m）；倍率 distK 0.5（自動調參，調之前 1.2／0.4／1.5）
   var F = fwd(sh.yaw), b = Math.acos(clamp((F[0] * dx + F[2] * dz) / d, -1, 1)) * 57.2958;   // 敵艦離船頭幾度（90 ＝ 正橫）
   var cruise = sh.vCruise > 0 ? sh.vCruise : Infinity, same = Math.cos(foe.yaw - sh.yaw) > 0.5, v;   // cruise：戰鬥帆（有動力 ⇒ 再加引擎）全速（helmGovern 量的）；same：跟敵艦大致同向（60° 內）
@@ -95,9 +95,9 @@ function helmLead(sh, od) {
   var cx = 0, cz = 0, vx = 0, vz = 0; L.forEach(function (o) { cx += o.px; cz += o.pz; vx += o.vel[0]; vz += o.vel[2]; }); cx /= L.length; cz /= L.length; vx /= L.length; vz /= L.length;
   // 近了（離敵方中心 < 2 × 交戰距離）改照最近的那艘敵艦：⛔ 一直照中心 ⇒ 敵方中心在它排頭後面 135 m，兩個排頭各自把「對方中心」擺在 210 m、自己卻並排在對方排頭旁邊 59 m（量過）
   var nb = null, nd = 1e18; L.forEach(function (o) { var q = Math.hypot(o.px - sh.px, o.pz - sh.pz); if (q < nd) { nd = q; nb = o; } });
-  if (Math.hypot(cx - sh.px, cz - sh.pz) < 2 * aiRange() && nb) { cx = nb.px; cz = nb.pz; vx = nb.vel[0]; vz = nb.vel[2]; }
+  if (Math.hypot(cx - sh.px, cz - sh.pz) < 2 * aiRange(sh) && nb) { cx = nb.px; cz = nb.pz; vx = nb.vel[0]; vz = nb.vel[2]; }
   var n = SHIPS.filter(function (o) { return ORDERS[o.i] && ORDERS[o.i].mode === 'line' && o.team === sh.team && !isOut(o); }).length;
-  var sg = od.side === 'P' ? 1 : -1, dx = cx - sh.px, dz = cz - sh.pz, d = Math.hypot(dx, dz) || 1, R = aiRange();
+  var sg = od.side === 'P' ? 1 : -1, dx = cx - sh.px, dz = cz - sh.pz, d = Math.hypot(dx, dz) || 1, R = aiRange(sh);
   var LT = tuneV(sh.team, 'leadT'), px = dx + (vx - sh.vel[0]) * LT, pz = dz + (vz - sh.vel[2]) * LT, dp = Math.min(d, Math.hypot(px, pz));   // HELM_LEAD_T 秒後會多近（兩條戰列對著開 ⇒ 早一點轉）
   // 遠了往敵方切（最多 1.0 rad）、近了往外拉（最多 0.9）。⛔ 照 helmSteer 的 −0.4／照現在的距離 ⇒ 兩條戰列對著開、一起轉到同向時已經只隔 20 m，兩條穿插在一起並排走（量過 180 秒：兩個排頭隔 20 m、同航向）
   var yaw = (sg > 0 ? Math.atan2(-dx / d, -dz / d) : Math.atan2(dx / d, dz / d)) + sg * clamp((dp - R) / R * 1.5, -0.9, 1.0);
@@ -241,7 +241,7 @@ function foeAvoid(sh) { var L = SHIPS.filter(function (o) { return isFoe(sh, o) 
 /** 艦長要砲長打哪裡：{ m（AIM_MODES 其中一個）, why } 或 null。不抽亂數。 */
 function helmGunOrder(sh, foe) {
   if (!foe || !foe.center) return null;
-  var H = HELMS[sh.helm] || HELMS.basic, R = aiRange() * tuneH(sh, H, 'range'), d = Math.hypot(foe.px - sh.px, foe.pz - sh.pz);
+  var H = HELMS[sh.helm] || HELMS.basic, R = aiRange(sh) * tuneH(sh, H, 'range'), d = Math.hypot(foe.px - sh.px, foe.pz - sh.pz);
   var sg = sigFor(sh.team), strat = sg && sg.strat || CMD_SIDE[sh.team];
   if (sh.hs && sh.hs.evade) return { m: 'rig', why: '我們火力不如它、在拉開 —— 拆它的帆讓它追不上' };
   if (foe.hs && foe.hs.evade) return { m: 'rig', why: '敵艦在拉開 —— 拆它的帆留住它' };
