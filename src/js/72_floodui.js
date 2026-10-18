@@ -44,8 +44,8 @@ $('frzGo').onclick = function () { flowPause(false); frzShow(); };
 $('floodX').onclick = floodClose;
 /** 流量（模擬裡是 m³/s）⇒ 「x 噸／分」：跟抽水同一個單位（Tim 2026-10-18「抽水是否可以用跟進水一樣的單位(或是反過來 進水也用噸/分)」；抽水在設定、滑桿、HUD 都是噸／分）。 */
 function flTpm(q) { return (q * RHO_W * 60).toFixed(1) + ' 噸／分'; }
-/** 淨進水（33_flood.js fl.netQ）：「+x 噸／分」水還在變多、「−x 噸／分（在退）」。 */
-function flNetText(fl) { var t = fl.netQ * RHO_W * 60; return Math.abs(t) < 0.05 ? '0 噸／分' : t > 0 ? '+' + t.toFixed(1) + ' 噸／分' : '−' + (-t).toFixed(1) + ' 噸／分（在退）'; }
+/** 淨進水（33_flood.js：最近 FL_AVG_T 秒的平均，flRates）：「+x 噸／分」水還在變多、「−x 噸／分（在退）」。 */
+function flNetText(fl) { var t = flRates(fl).netQ * RHO_W * 60; return Math.abs(t) < 0.05 ? '0 噸／分' : t > 0 ? '+' + t.toFixed(1) + ' 噸／分' : '−' + (-t).toFixed(1) + ' 噸／分（在退）'; }
 function fuDeg(a) { return (a * 57.2958).toFixed(1) + '°'; }
 /** 填進水細節頁：兩艘各一段，畫完剖面。 */
 function floodPanel() {
@@ -59,7 +59,7 @@ function floodPanel() {
       return '<div class="fpS"><div class="fpH">' + who + '</div>' + lines + '</div>';
     }
     lines = '<div>艙內積水 <b>' + Math.round(fl.vol * RHO_W).toLocaleString() + ' 噸</b>（' + fl.vol.toFixed(1) + ' m³）・破口 ' + fl.open + ' 處 ' + fl.area.toFixed(2) + ' m²，水下 ' + fl.underN + ' 處 ' + fl.underA.toFixed(2) + ' m²' + (fl.outN ? '，往外流 ' + fl.outN + ' 處' : '') + '</div>' +
-      '<div>進水 ' + flTpm(fl.inQ) + '・往外流 ' + flTpm(fl.outQ) + '・抽水 ' + pumpNow(sh).toFixed(1) + ' 噸／分（實際 ' + flTpm(fl.pumpQ) + '）・<b>淨進水 ' + flNetText(fl) + '</b>・累計 進 ' + Math.round(fl.inTot * RHO_W).toLocaleString() + '／出 ' + Math.round(fl.outTot * RHO_W).toLocaleString() + '／抽掉 ' + Math.round(fl.pumped * RHO_W).toLocaleString() + ' 噸</div>' +
+      '<div>' + FL_AVG_T + ' 秒平均：進水 ' + flTpm(flRates(fl).inQ) + '・往外流 ' + flTpm(flRates(fl).outQ) + '・抽水 ' + pumpNow(sh).toFixed(1) + ' 噸／分（實際 ' + flTpm(flRates(fl).pumpQ) + '）・<b>淨進水 ' + flNetText(fl) + '</b>・累計 進 ' + Math.round(fl.inTot * RHO_W).toLocaleString() + '／出 ' + Math.round(fl.outTot * RHO_W).toLocaleString() + '／抽掉 ' + Math.round(fl.pumped * RHO_W).toLocaleString() + ' 噸</div>' +
       '<div>下沉 ' + sh.sink.toFixed(2) + ' m（照水該 ' + fl.sinkT.toFixed(2) + '；4.2 m 開始沉）・' + tilt + '</div>' +
       '<div>水的重心：' + (Math.abs(fl.comY) < 0.05 ? '在中線' : '偏' + sideName(fl.comY > 0 ? 'S' : 'P') + ' ' + Math.abs(fl.comY).toFixed(1) + ' m') + '・' + (fl.comX >= 0 ? '偏船頭 ' : '偏船尾 ') + Math.abs(fl.comX).toFixed(1) + ' m・噴進來的水 ' + fl.J.n + ' 顆・水格 ' + fl.actN + ' 格（邊長 ' + (fl.F.c * S).toFixed(1) + ' m）</div>' +
       '<div class="fpL">側視（船頭在右）</div><canvas class="fpC" id="fpS' + k + '"></canvas><div class="fpL">俯視（船頭在右、' + sideName('P') + '在上）</div><canvas class="fpC" id="fpT' + k + '"></canvas>';
@@ -69,6 +69,21 @@ function floodPanel() {
   requestAnimationFrame(function () { if (FLX) SHIPS.forEach(function (sh, k) { if (sh.fl && !sh.broken && $('fpS' + k)) { fpDraw($('fpS' + k), sh, 0); fpDraw($('fpT' + k), sh, 1); } }); });
 }
 window.addEventListener('resize', function () { if (FLX) floodPanel(); });
+/** 艙內的水的顏色（Tim 2026-10-18「進水顏色深淺差異可以更明顯一點(而且可以有顏色變化 不單純是alpha變化)」）：f ＝ 0～1
+ *  ⇒ 淺青 → 天藍 → 深藍 → 深靛紫，顏色與不透明度一起變（FL_RAMP 四個點之間線性內插）。詳細資訊的進水圖（61_hud.js gmapFlood：照水深）、進水細節頁的剖面同一套。 */
+var FL_RAMP = [[0, 150, 235, 255, 0.55], [0.3, 60, 180, 240, 0.75], [0.6, 30, 100, 220, 0.88], [1, 70, 25, 150, 0.95]];
+var FL_DEPTH_MAX = 4;                                                       // 俯視照水深上色：0 ～ 這麼多公尺（以上一樣深）⇒ 色階的頭到尾
+/** f ⇒ [r, g, b, a（0～1）]。 */
+function flWaterRGBA(f) {
+  f = Math.max(0, Math.min(1, f));
+  for (var i = 1; i < FL_RAMP.length; i++) if (f <= FL_RAMP[i][0] || i === FL_RAMP.length - 1) {
+    var a = FL_RAMP[i - 1], b = FL_RAMP[i], u = (f - a[0]) / (b[0] - a[0]);
+    return [1, 2, 3, 4].map(function (k) { return a[k] + (b[k] - a[k]) * u; });
+  }
+}
+function flWaterCol(f) { var c = flWaterRGBA(f); return 'rgba(' + Math.round(c[0]) + ',' + Math.round(c[1]) + ',' + Math.round(c[2]) + ',' + c[3].toFixed(2) + ')'; }
+/** 圖說用的色帶（FL_RAMP 由少到滿）。 */
+function flRampCss() { return 'linear-gradient(90deg,' + FL_RAMP.map(function (r) { return 'rgb(' + r[1] + ',' + r[2] + ',' + r[3] + ') ' + Math.round(r[0] * 100) + '%'; }).join(',') + ')'; }
 /** 破口的顏色（進水細節頁、詳細資訊的進水圖同一套；33_flood.js flHoleState）：出水綠、在海面下紅、海面上橙。 */
 function flHoleCol(fl, h) { return flHoleState(fl, h) === 'out' ? 'rgba(62,224,122,0.95)' : fl.hWet[h] ? 'rgba(255,60,50,0.95)' : 'rgba(255,170,40,0.85)'; }
 /** 剖面：view 0 側視（x × z，沿船寬加總）、1 俯視（x × y，沿高度加總）。灰 ＝ 艙內空間、藍 ＝ 水（越滿越深）、紅點 ＝ 水下的破口、橙點 ＝ 水上的、青線 ＝ 外面的水面、虛線 ＝ 設計水線。 */
@@ -87,8 +102,9 @@ function fpDraw(cv, sh, view) {
   for (b = 0; b < NV; b++) for (a = 0; a < NX; a++) {
     var q = b * NX + a; if (!(capS[q] > 0)) continue;
     var y0 = view ? b * ch : (NV - 1 - b) * ch;                          // 側視：z 往上；俯視（從上往下看、船頭在右）：格 +y（右舷）在下
-    g.fillStyle = 'rgba(150,150,140,0.45)'; g.fillRect(a * cw, y0, cw + 0.5, ch + 0.5);
-    if (watS[q] > 1e-4) { var f = Math.min(1, watS[q] / capS[q]); g.fillStyle = 'rgba(40,140,230,' + (0.35 + 0.65 * f).toFixed(2) + ')'; g.fillRect(a * cw, y0, cw + 0.5, ch + 0.5); }
+    var X0 = Math.round(a * cw), X1 = Math.round((a + 1) * cw), Y0 = Math.round(y0), Y1 = Math.round(y0 + ch);   // 貼齊整數像素（⛔ 多畫半格 ⇒ 半透明疊兩次、接縫變深成網格紋）
+    g.fillStyle = 'rgba(150,150,140,0.45)'; g.fillRect(X0, Y0, X1 - X0, Y1 - Y0);
+    if (watS[q] > 1e-4) { g.fillStyle = flWaterCol(view ? watS[q] / Math.pow(c * S, 2) / FL_DEPTH_MAX : watS[q] / capS[q]); g.fillRect(X0, Y0, X1 - X0, Y1 - Y0); }   // 俯視：水深；側視：那一層裝幾成
   }
   var M = sh.M, px = function (x) { return (x - F.X0) / c * cw; }, pv = function (v) { return view ? (v - F.Y0) / c * ch : cv.height - v / c * ch; };
   if (!view) {

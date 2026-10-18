@@ -144,7 +144,7 @@ function panel(sh, title) {
 function gmapLegend(sh) {
   if (GMAP_MODE === 'fire') return '<div class="dmgsum">' + burnSumText(sh) + '</div><div class="legend">火災圖：<b style="color:#ffcf4a">●</b>～<b style="color:#ff6a1a">●</b> 火場（大小照格數，越紅越旺；白圈 ＝ 有人在潑、數字 ＝ 到了／要幾人） '
     + '<b style="color:#5a4636">■</b> 焦痕 <b style="color:#1b1210">■</b> 燒穿 <b style="color:#58b7ff">●</b> 救火的水手 <b style="color:#fff">━</b> 著過火的帆（黑 ＝ 燒掉的、橘 ＝ 還在燒）</div>';
-  if (GMAP_MODE === 'flood') return '<div class="dmgsum">' + floodSumText(sh) + '</div><div class="legend">進水圖：<b style="color:#3a9ae6">■</b> 艙內的水（上下整柱加起來，越滿越深） <b style="color:#ff3c32">●</b> 水下的破口 <b style="color:#ffaa28">●</b> 水上的破口 <b style="color:#3ee07a">●</b> 水往外流的破口（大小照洞的面積）</div>';
+  if (GMAP_MODE === 'flood') return '<div class="dmgsum">' + floodSumText(sh) + '</div><div class="legend">進水圖：艙內的水深 0 <span style="display:inline-block;width:48px;height:8px;vertical-align:middle;border-radius:2px;background:' + flRampCss() + '"></span> ' + FL_DEPTH_MAX + ' m <b style="color:#ff3c32">●</b> 水下的破口 <b style="color:#ffaa28">●</b> 水上的破口 <b style="color:#3ee07a">●</b> 水往外流的破口（大小照洞的面積）</div>';
   if (GMAP_MODE !== 'dmg') return '<div class="legend">砲位圖：● 好 ◌ 裝填 ○ 開不了 △ 等火藥 ≈ 泡水 ✕ 毀｜<b style="color:#7be37b">綠</b> 滿編 <b style="color:#f0d264">黃</b> 不足 <b style="color:#9a9a9a">灰</b> 沒人｜最上層在船內、越下層越外</div>';
   var C = GMAP_DMG;
   return '<div class="dmgsum">' + dmgSumText(sh) + '</div><div class="legend">損壞圖：<b style="color:' + C.chan + '">■</b> 通道斷了 <b style="color:' + C.hole + '">■</b> 甲板破洞 <b style="color:' + C.lad + '">H</b> 梯子 <b style="color:' + C.anc + '">◆</b> 帆的綁定點 ' +
@@ -154,8 +154,13 @@ function gmapLegend(sh) {
 function floodSumText(sh) {
   var fl = sh.fl;
   if (!fl || sh.broken) return (sh.broken ? '斷成兩截（照公式，一定沉）' : '公式模式：看不到艙內的水（物理效果「進水」選粒子才看得到）') + '・水線下打掉 ' + (sh.inflow || 0).toLocaleString() + ' 格・下沉 ' + sh.sink.toFixed(2) + ' m';
-  return '積水 ' + Math.round(fl.vol * RHO_W).toLocaleString() + ' 噸・破口 ' + fl.open + ' 處（水下 ' + fl.underN + (fl.outN ? '、往外流 ' + fl.outN : '') + '）・進水 ' + flTpm(fl.inQ) + (fl.outQ > 0.005 ? '・往外流 ' + flTpm(fl.outQ) : '') + '・抽水 ' + pumpNow(sh).toFixed(1) + ' 噸／分・淨進水 ' + flNetText(fl) + '・下沉 ' + sh.sink.toFixed(2) + ' m';
+  // 排版固定（Tim 2026-10-18「這一塊會快速抖動(因為字的長度不固定)」）：兩行、每個數字一格固定寬度靠右（numCell：等寬數字），每一段一直都在（沒有 ⇒ 0）⇒ 數字變了欄位不動、不會換行換來換去
+  var R = flRates(fl), t = function (q) { return (q * RHO_W * 60).toFixed(1); }, net = R.netQ * RHO_W * 60;
+  return '積水 ' + numCell(Math.round(fl.vol * RHO_W).toLocaleString(), 5) + ' 噸・破口 ' + numCell(fl.open, 3) + ' 處（水下 ' + numCell(fl.underN, 2) + '・外流 ' + numCell(fl.outN, 2) + '）・下沉 ' + numCell(sh.sink.toFixed(2), 4) + ' m<br>' +
+    FL_AVG_T + ' 秒平均（噸／分）：進水 ' + numCell(t(R.inQ), 5) + '・外流 ' + numCell(t(R.outQ), 5) + '・抽水 ' + numCell(t(R.pumpQ), 4) + '／' + pumpNow(sh).toFixed(1) + '・淨進水 ' + numCell((net > 0.05 ? '+' : net < -0.05 ? '−' : '') + Math.abs(net).toFixed(1), 6);
 }
+/** 一個數字一格（固定寬度 w 個字、靠右、等寬數字；template.html .nv）。 */
+function numCell(v, w) { return '<span class="nv" style="min-width:' + w + 'ch">' + v + '</span>'; }
 /** 損壞表一行（48_damage.js；只讀，⛔ 不在這裡重掃 ⇒ 有畫面那場跟無頭的戰局一位元不差）。 */
 function dmgSumText(sh) {
   var D = sh.dmg; if (!D) return '損壞表：' + (sh.carp || sh.sm ? '還沒點名' : '這艘沒有木匠、帆匠');
@@ -414,11 +419,21 @@ function gmapFlood(g, sh, scr, s) {
   var fl = sh.fl; if (!fl || sh.broken) return;
   var F = fl.F, c = F.c, NX = F.NX, NY = F.NY, NXY = NX * NY, Vc = Math.pow(c * S, 3), capS = new Float32Array(NXY), watS = new Float32Array(NXY), k;
   for (k = 0; k < F.N; k++) { if (!(fl.cap[k] > 0.02)) continue; var j = k % NXY; capS[j] += fl.cap[k] * Vc; watS[j] += fl.A[k]; }
+  // 每一柱水 ＝ 一張小圖上的一個像素（寬 NY：船寬、高 NX：船長，船頭朝上），整張縮放貼上去（Tim 2026-10-18 截圖：一格一格的網格紋）——
+  //   ⛔ 一格一個 fillRect：水格比一個像素還窄（量到每 4 個裝置像素一條暗線）⇒ 取整數之後有的疊兩次、半透明疊出網格紋
+  //   顏色照水深（m）：0 ～ FL_DEPTH_MAX，淺青 → 深靛紫（72_floodui.js FL_RAMP；⛔ 照整柱裝幾成 ⇒ 水少時每柱都一兩成、整片一樣藍）
+  var img = gmapFlood.cv || (gmapFlood.cv = document.createElement('canvas')), any = false;
+  if (img.width !== NY || img.height !== NX) { img.width = NY; img.height = NX; }
+  var ig = img.getContext('2d'), id = ig.createImageData(NY, NX), D = id.data;
   for (k = 0; k < NXY; k++) {
     if (!(watS[k] > 1e-4) || !(capS[k] > 0)) continue;
-    var x = F.X0 + (k % NX) * c, y = F.Y0 + ((k / NX) | 0) * c, A = scr(x, y), B = scr(x + c, y + c), f = Math.min(1, watS[k] / capS[k]);
-    g.fillStyle = 'rgba(40,140,230,' + (0.3 + 0.65 * f).toFixed(2) + ')';
-    g.fillRect(Math.min(A[0], B[0]), Math.min(A[1], B[1]), Math.abs(B[0] - A[0]) + 0.5, Math.abs(B[1] - A[1]) + 0.5);
+    var col = flWaterRGBA(watS[k] / Math.pow(c * S, 2) / FL_DEPTH_MAX), o = ((NX - 1 - (k % NX)) * NY + ((k / NX) | 0)) * 4;   // 船頭（x 大）在上、格 +y 在右（同 scr）
+    D[o] = col[0]; D[o + 1] = col[1]; D[o + 2] = col[2]; D[o + 3] = Math.round(col[3] * 255); any = true;
+  }
+  if (any) {
+    ig.putImageData(id, 0, 0);
+    var A = scr(F.X0 + NX * c, F.Y0), B = scr(F.X0, F.Y0 + NY * c);
+    g.save(); g.imageSmoothingEnabled = true; g.drawImage(img, A[0], A[1], B[0] - A[0], B[1] - A[1]); g.restore();
   }
   fl.holes.forEach(function (h) {
     if (!(fl.hA[h] > 0)) return;
@@ -650,10 +665,11 @@ function navText(sh) {
 function pauseLabel() { var b = $('pauseK'), s = '<b>' + keyName('pause') + '</b><i class="em">' + (PAUSED ? '▶' : '⏸') + '</i>'; if (b && b.innerHTML !== s) b.innerHTML = s; }   // 圖示（Tim 2026-10-15）：停格中 ⇒ ▶ 繼續
 /** 彈種那一顆（Tim 2026-10-15：「砲彈改成一個按鈕，切換所有支援的砲彈（顯示當前彈種圖示）」）：鐵球 實心彈（CSS 畫的 .ball：灰色、左上高光、淡白邊；⛔ ⚫ 在深色圓鈕上看不見、⚪ 是白點不像砲彈 —— Tim 2026-10-15「顯示為一顆白色圓點，是否可以替換」）、💣 爆裂彈、⛓️ 鏈彈；每一種砲三種都能打。 */
 var PSLOW_SHOW = 0.7;   // 物理減速放慢到 ×0.7 以下才在航速那一行顯示（Tim 2026-10-15：「高於 0.7 可以不顯示，目前頻繁閃爍」—— 以前 < 0.98 就顯示，倍率在 0.9 上下跳 ⇒ 一直閃）
-var AMMO_ICON = ['<span class="ball"></span>', '💣', '⛓️', '🔥'], AMMO_TXT = ['實心彈', '爆裂彈', '鏈彈', '希臘火'];   // 第 4 種希臘火（28_fire.js AMMO_GF）只給固定彈種的砲，不在換彈的輪流裡（ammoOf）
+var AMMO_ICON = ['<span class="ball"></span>', '💣', '⛓️', '🔥', '🏹'], AMMO_TXT = ['實心彈', '爆裂彈', '鏈彈', '希臘火', '弩箭'];   // 第 4 種希臘火（28_fire.js AMMO_GF）只給固定彈種的砲，不在換彈的輪流裡（ammoOf）
 function ammoLabel() {
-  var b = $('ammoB'); if (!b) return; var a = ammoNow(), s = '<b>' + keyName('ammo') + '</b><i class="em">' + (AUTOFIRE ? '🤖' : '') + (AMMO_ICON[a] || '?') + '</i>';   // 上面寫的是鍵（同其他圓鈕；66_keys.js），不是第幾種
-  if (b.innerHTML !== s) { b.innerHTML = s; b.title = AUTOFIRE ? '自動開砲：砲長照瞄準位置挑彈，現在 ' + AMMO_TXT[a] + '（關掉自動開砲才自己換）' : '切換彈藥：現在 ' + AMMO_TXT[a] + '（點一下或按 ' + keyName('ammo') + ' 換下一種）'; }
+  var b = $('ammoB'); if (!b) return; var me = SHIPS[PLAYER_I], L = me ? ammoOf(me) : [0], a = ammoNow(); if (L.indexOf(a) < 0) a = L[0];   // 主武器打不出的那一種 ⇒ 顯示主武器的（持火號 ⇒ 希臘火）
+  var fix = L.length === 1, s = '<b>' + keyName('ammo') + '</b><i class="em">' + (AUTOFIRE ? '🤖' : '') + (AMMO_ICON[a] || '?') + '</i>';   // 上面寫的是鍵（同其他圓鈕；66_keys.js），不是第幾種
+  if (b.innerHTML !== s) { b.innerHTML = s; b.title = fix ? '主武器（' + GUNS[shipMainGun(me)].short + '）只打 ' + AMMO_TXT[a] + '：不能換彈' : AUTOFIRE ? '自動開砲：砲長照瞄準位置挑彈，現在 ' + AMMO_TXT[a] + '（關掉自動開砲才自己換）' : '切換彈藥：現在 ' + AMMO_TXT[a] + '（點一下或按 ' + keyName('ammo') + ' 換下一種）'; }
 }
 /** 自動開砲時砲長挑的彈（50_sim.js simAi 每一輪齊射寫；⛔ 不寫 AMMO_I：那是玩家自己選的、記在偏好裡）。 */
 var AMMO_AUTO = 0;
@@ -666,10 +682,11 @@ function ammoNow() {
   return AMMO_AUTO;
 }
 /** 這艘船打得出哪幾種彈（AMMO 的序號，照輪流的順序）。Tim 2026-10-16：「目前彈種是固定的 不過可以保留擴充接口」⇒ 現在每艘都是全部；之後照船擴充（例 ships[].ammo）只改這裡。 */
-function ammoOf(sh) { return AMMO.map(function (_, i) { return i; }); }
+function ammoOf(sh) { var m = sh && shipMainGun(sh); return m ? gunAmmoList(m) : AMMO.map(function (_, i) { return i; }); }   // 主武器打得出的（Tim 2026-10-18：「應該只有主武器能換彈種」；10_ship.js shipMainGun／gunAmmoList）
 /** 換下一種彈（Tim 2026-10-16：「統一用一個鍵循環切換所有彈藥(不一定三種 之後可能根據船擴充)」）：鍵盤 1 與圓鈕共用；照我艦的 ammoOf 輪流，現在這一種不在清單裡 ⇒ 從第一種開始。 */
 function ammoNext() {
   var L = ammoOf(SHIPS[PLAYER_I]); if (!L.length) return;
+  if (L.length === 1) { note(SHIPS[PLAYER_I], '主武器（' + GUNS[shipMainGun(SHIPS[PLAYER_I])].short + '）只打 ' + AMMO_TXT[L[0]] + '：不能換彈'); return; }
   if (AUTOFIRE) { note(SHIPS[PLAYER_I], '自動開砲中：彈種由砲長照瞄準位置挑（' + keyName('autoFire') + ' 關掉自動開砲才自己換）'); return; }
   var i = L.indexOf(AMMO_I); AMMO_I = L[(i + 1) % L.length]; ammoLabel();
 }

@@ -216,9 +216,13 @@ function magTag(mag) { if (MAG_POS[mag.pos]) return MAG_POS[mag.pos]; return mag
  *  甲板也是一間房（36_rooms.js deckPlan；TASK-0568）：玩家在船隻配置頁擺過那一層 ⇒ 照擺的格子放（每一處 ＝ 三桶；彈藥庫 ＝ x 最近的那間）；沒擺過 ⇒ 照舊自己找（auto ＝ 只照舊找：hullDeckKit 用）。 */
 function makeStations(sh, auto) {
   var T = sh.T, BASE = T.base, CY = T.cy;
-  var keg = sh.mags.reduce(function (a, m) { return a || m.kegs[0]; }, null); if (!keg || !T.rig.meshes[keg.mesh]) return [];   // 取用點的桶照哪一間的桶都行（⛔ 只看第一間 ⇒ 第一間沒桶整艘就沒有取用點）；都沒有桶 ⇒ 沒有取用點（匯入檢查報 ✗）
-  var V = T.rig.meshes[keg.mesh].verts, mn = [1e9, 1e9, 1e9], mx = [-1e9, -1e9, -1e9], j, a;
-  for (j = 0; j < V.length; j += 3) for (a = 0; a < 3; a++) { mn[a] = Math.min(mn[a], V[j + a]); mx[a] = Math.max(mx[a], V[j + a]); }
+  var keg = sh.mags.reduce(function (a, m) { return a || m.kegs[0]; }, null); if (!keg || !T.rig.meshes[keg.mesh]) return [];
+  // 取用點的三個桶輪流用彈藥庫裡不同樣子的桶（Tim 2026-10-18：「彈藥箱可以有不同外觀(但實際上都能補彈)」）：持火號的希臘火陶罐、弩箭箱⋯⋯ 都一樣能補；只有一種 ⇒ 三個都是它（跟以前一樣）
+  //   樣子照桶的模型 meta `store`（補給的種類：greekfire、bolt⋯）分：每一種取第一個桶的網格；沒標的全部算同一種（＝ 第一個桶，跟以前一樣）。
+  //   ⛔ 照網格分 ⇒ 憲法號兩間彈藥庫的桶擺法各不同、網格有 11／25 種 ⇒ 取用點換了樣子、外框跟著變，戰局不一樣（量過）
+  var KM = [keg.mesh], KS = [(keg.meta && keg.meta.store) || ''];
+  sh.mags.forEach(function (m) { m.kegs.forEach(function (k) { var st = (k.meta && k.meta.store) || ''; if (KS.indexOf(st) < 0 && T.rig.meshes[k.mesh] && KM.length < 3) { KS.push(st); KM.push(k.mesh); } }); });
+  var KB = KM.map(function (mesh) { var V0 = T.rig.meshes[mesh].verts, a0 = [1e9, 1e9, 1e9], b0 = [-1e9, -1e9, -1e9]; for (var j0 = 0; j0 < V0.length; j0 += 3) for (var q = 0; q < 3; q++) { a0[q] = Math.min(a0[q], V0[j0 + q]); b0[q] = Math.max(b0[q], V0[j0 + q]); } return [a0, b0]; });   // 取用點的桶照哪一間的桶都行（⛔ 只看第一間 ⇒ 第一間沒桶整艘就沒有取用點）；都沒有桶 ⇒ 沒有取用點（匯入檢查報 ✗）
   var guns = sh.models.filter(function (m) { return GUNS[m.kind] || kindProp(m.kind, 'clear'); }), out = [];
   function clear(x, y, z) {
     for (var dy = 0; dy <= 9; dy += 3) for (var dx = 0; dx <= 9; dx += 3) { var zz = standZ(BASE, x + dx, y + dy, z - 1, z + 1, 8); if (zz < 0) return false; }
@@ -314,8 +318,9 @@ function makeStations(sh, auto) {
       var deck = D.key;
       var st = { deck: deck, mag: mag, name: name, kegs: [], pos: [spot[0] + 4.5, spot[1] + 4.5, spot[2] + 3], flashT: -9 };
       [[0, 0], [5, 0], [0, 5]].forEach(function (o, i) {
-        var org = [spot[0] + o[0], spot[1] + o[1], spot[2]], bb = [org[0] + mn[0], org[1] + mn[1], org[2] + mn[2], org[0] + mx[0], org[1] + mx[1], org[2] + mx[2]];
-        var m = { T: T, k: sh.models.length, name: st.name + '-' + (i + 1), path: st.name + '/' + (i + 1), kind: 'powder', station: st, hp: powderHP(), hpMax: powderHP(), mesh: keg.mesh, origin: org, bb: bb, pts: {}, meta: { kind: 'powder', powder_lb: 100 },
+        var ki = i % KM.length, kn = KB[ki][0], kx = KB[ki][1];
+        var org = [spot[0] + o[0], spot[1] + o[1], spot[2]], bb = [org[0] + kn[0], org[1] + kn[1], org[2] + kn[2], org[0] + kx[0], org[1] + kx[1], org[2] + kx[2]];
+        var m = { T: T, k: sh.models.length, name: st.name + '-' + (i + 1), path: st.name + '/' + (i + 1), kind: 'powder', station: st, hp: powderHP(), hpMax: powderHP(), mesh: KM[ki], origin: org, bb: bb, pts: {}, meta: { kind: 'powder', powder_lb: 100 },
           c: [(bb[0] + bb[3]) / 2, (bb[1] + bb[4]) / 2, (bb[2] + bb[5]) / 2], foot: VK.pack(org[0] + 2, org[1] + 2, org[2] - 1), alive: true };
         sh.models.push(m); st.kegs.push(m);
       });

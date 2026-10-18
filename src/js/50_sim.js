@@ -62,7 +62,7 @@ function simStep() {
   if ((Math.round(SIMT / DT) % everySteps(CMD_EVERY_S)) === 0) cmdTick();   // 指揮官每 3 秒想一次（52_fleet.js；不抽亂數）
   pickFoes();                                                      // 每艘的目標（52_fleet.js）：這一步之內都用同一個
   stepWind(SIMT);                                                  // 風會變（08_weather.js）
-  SHIPS.forEach(function (sh) { if (sh.mounts || sh.tur) mountStep(sh, DT); });   // 迴旋砲、砲塔照瞄準點轉（21_gunnery.js；TASK-0626）—— 沒有 ⇒ 不做事
+  SHIPS.forEach(function (sh) { if (sh.mounts || sh.tur) mountStep(sh, DT); if (sh.ropeAnims !== null) ropeAnimStep(sh); });   // 繩跟著武器：綁在迴旋砲上的繩跟著轉、meta anim=gun 的繩端照開火與裝填動（26_gunanim.js；沒有的船第一步之後就跳過）   // 迴旋砲、砲塔照瞄準點轉（21_gunnery.js；TASK-0626）—— 沒有 ⇒ 不做事
   for (var i = 0; i < EVENTS.length; i++) {
     var e = EVENTS[i]; if (e.t > SIMT) continue;
     EVENTS.splice(i--, 1);

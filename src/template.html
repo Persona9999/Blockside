@@ -59,6 +59,7 @@
   #info .bar{ max-width:100%; }   /* 血條最多跟那一欄一樣寬（⛔ 固定寬 ⇒ 窄的時候伸進右欄） */
   #info .fold.gm{ padding:0; overflow:hidden; } #info .fold.gm i{ font-style:normal; padding:0 6px; display:inline-block; } #info .fold.gm i.on{ color:#111; background:var(--gold); }   /* 旁邊那張圖：砲位｜損壞（61_hud.js GMAP_MODE） */
   #info .dmgsum{ margin-top:2px; }
+  .nv{ display:inline-block; text-align:right; font-variant-numeric:tabular-nums; }   /* 一個數字一格（61_hud.js nv）：寬度固定、等寬數字 ⇒ 數字變了旁邊的字不跟著跳 */
   #info .fold.see.on{ color:#111; background:var(--gold); }   /* 「🎥 看這艘」：正在看 ⇒ 實心 */
   #info .fold{ float:right; margin-left:12px; cursor:pointer; color:var(--gold); font-size:12px; font-weight:normal; border:1px solid rgba(232,194,106,.55); border-radius:4px; padding:0 7px; }
   #info .cls{ color:var(--dim); font-weight:normal; font-size:.85em; }
@@ -776,6 +777,7 @@
 <script src="js/24_armor.js" data-bundle="game"></script>
 <script src="js/25_doors.js" data-bundle="game"></script>
 <script src="js/26_spin.js" data-bundle="game"></script>
+<script src="js/26_gunanim.js" data-bundle="game"></script>
 <script src="js/27_turret.js" data-bundle="game"></script>
 <script src="js/28_fire.js" data-bundle="game"></script>
 <script src="js/29_sailrecipe.js" data-bundle="game"></script>

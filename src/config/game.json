@@ -38,6 +38,7 @@
     "dmg8l": [10, 300, 45],
     "dmgpr": [10, 300, 25],
     "dmgsf": [10, 300, 30],
+    "dmgbl": [10, 300, 25],
     "box": [1, 8, 2],
     "carry": [1, 6, 1],
     "wind": [0.25, 3, 1],
@@ -281,6 +282,21 @@
       "weapon": "siphon",
       "burst": 10,
       "burstGap": 0.15
+    },
+    "ballista": {
+      "code": "ballista",
+      "name": "弩砲（toxoballistra，扭力弩）",
+      "short": "弩砲",
+      "V": 70,
+      "reload": 1.6,
+      "big": false,
+      "hole": 0.2,
+      "crew": 3,
+      "min": 2,
+      "mass": 0.6,
+      "shot": 0.6,
+      "ammo": "bolt",
+      "weapon": "toxoballistra"
     },
     "brooke64": {
       "code": "64b",
