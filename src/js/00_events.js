@@ -35,7 +35,8 @@ function evOff(t, fn) {
 //   survey（每半秒每艘一次：廣播整理；61_hud）、stepEnd（每一步最後：報表、測試紀錄、結束判定；79_report、83_testlog、61_hud）、
 //   ballGone（砲彈落地或打中：鏡頭跟著它的話停一下；03_camera）、playerTake（玩家換船：鏡頭、按住的舵鍵；03_camera、71_input）。
 //   第二段：viewStepSlow（殉爆慢動作中只推船邊水花；13_water）、cell／armCell（打掉船殼／裝甲的一格：附近的區重建；62_simview）、
-//   armorShip（開船：裝甲掛網格；62_simview）、pieceNew／pieceGone（碎塊的網格；62_simview）、phys（物理開關的按鈕；62_simview）。
+//   armorShip（開船：裝甲掛網格；62_simview）、pieceNew／pieceGone（碎塊的網格；62_simview）、phys（物理開關的按鈕；62_simview）、
+//   burnAsh（一格燒穿：灰燼與火星；49_burn ⇒ 59_burnfx）。
 //   問答：rigFar（遠的船帆與繩降級；03_camera camRigFar）。
 function note(sh, text, imp) { evEmit('note', sh, text, imp); }                                  // 廣播（61_hud hudNote）
 function newsGun(sh, m, drop) { evEmit('newsGun', sh, m, drop); }                                 // 砲被打飛（61_hud）
@@ -45,6 +46,7 @@ function crewShortNote(sh) { evEmit('crewShort', sh); }                         
 function rptHit(b, sh, what) { evEmit('rptHit', b, sh, what); }                                   // 戰鬥報表（79_report）
 function rptShot(sh, g, b) { evEmit('rptShot', sh, g, b); }
 function rptHelm(sh, kind, text) { evEmit('rptHelm', sh, kind, text); }
+function burnNews(sh, kind, a) { evEmit('burnNews', sh, kind, a); }                               // 著火的廣播（49_burn.js ⇒ 61_hud hudBurnNews）：first 起火、all 全熄、ign／out 一處、thru 燒穿水線下、sail／sailGone／sailOut／sailCut 帆
 function slowKick(sh, w, R) { evEmit('blast', sh, w, R); }                                        // 殉爆的慢動作與特寫（73_slowmo）
 function tlgEv(sh, c, kind, data) { evEmit('tlgEv', sh, c, kind, data); }                         // 測試模式的船員記錄（83_testlog）
 function sfx(kind, at, vol) { evEmit('sfx', kind, at, vol); }                                     // 音效（02_audio sfxPlay）

@@ -49,8 +49,22 @@ function hudCrewShort(sh) {
 /** 落水的水手（43_swim.js）：爬回船上、爬上友艦、被敵艦撈走、撈起別艘的 ⇒ 記著，第一件起算 NEWS_WIN 秒那一艘報一行（Tim 2026-10-14：⛔ 一個一個報會洗版）。 */
 var SWIM_TXT = { back: '爬回船上', ally: '爬上友艦', foe: '被敵艦撈走', gotAlly: '撈起友艦水手', gotFoe: '撈起敵艦水手（加入我方）' };
 function hudSwimNews(sh, k) { var N = sh.news; N.sw = N.sw || {}; N.sw[k] = (N.sw[k] || 0) + 1; if (!(N.st >= 0)) N.st = SIMT; }
+/** 著火（TASK-0717；49_burn.js burnNews）：整艘第一次起火、燒穿水線下、帆起火 ⇒ 重要（留 8 秒）；帆燒掉、撲滅、割下來、全熄 ⇒ 當下一則；
+ *  一處起火（ign）、一處撲滅（out）⇒ 記著，第一件起算 NEWS_WIN 秒報一行（Tim 2026-10-14：⛔ 一個一個報會洗版）。a：火場（船殼）或帆。 */
+function hudBurnNews(sh, kind, a) {
+  var F = '<b style="color:#ff8a3a">', nm = a && a.name ? a.name : '';
+  if (kind === 'ign' || kind === 'out') { var N = sh.news, B = N.fire || (N.fire = { ign: 0, out: 0, t: -1 }); B[kind]++; if (B.t < 0) B.t = SIMT; return; }
+  if (kind === 'first') { var at = burnPlace(sh, a); note(sh, F + '起火！</b>' + (at ? '（' + at + '）' : ''), true); }
+  else if (kind === 'thru') { var at2 = burnPlace(sh, a); note(sh, F + '燒穿了水線下的船殼！</b>' + (at2 ? '（' + at2 + '）' : ''), true); }
+  else if (kind === 'sail') note(sh, F + nm + '起火！</b>', true);
+  else if (kind === 'sailGone') note(sh, nm + '燒掉了');
+  else if (kind === 'sailOut') note(sh, nm + '的火撲滅了');
+  else if (kind === 'sailCut') note(sh, '把著火的' + nm + '割下來了');
+  else if (kind === 'all') note(sh, '火撲滅了');
+}
 // 訂閱（TASK-0669：模擬層只發事件，00_events.js）
 evOn('note', hudNote, 0, true); evOn('newsGun', hudNewsGun, 0, true); evOn('newsCrew', hudNewsCrew, 0, true); evOn('swimNews', hudSwimNews, 0, true); evOn('crewShort', hudCrewShort, 0, true);
+evOn('burnNews', hudBurnNews, 0, true);                          // 著火（49_burn.js）：起火、全熄、燒穿、帆 ⇒ 當下報；一處起火／撲滅 ⇒ 併進 5 秒那一行
 evOn('survey', newsFlush, 0, true);                                // 每半秒（50_sim.js survey 那一拍）：記著的砲、傷亡併成一行
 evOn('stepEnd', endTick, 9);                                       // 結束判定在每一步最後（報表、測試紀錄之後；⛔ 不是 view：不畫也要判）
 function endTick() { if (!OVER || END_AT) checkEnd(); }
@@ -70,6 +84,12 @@ function newsFlush(sh) {
     N.kr = {}; N.wr = {};
     if (parts.length) note(sh, NEWS_WIN + ' 秒內 ' + parts.join('、'));   // 累計看兩邊面板（⛔ 也寫進來 ⇒ 一行太長、蓋到面板）
     N.k = sh.kills; N.w = sh.wounds; N.t = -1;
+  }
+  var BF = N.fire;                                                   // 著火（hudBurnNews 記的）：NEWS_WIN 秒內起火、撲滅幾處
+  if (BF && BF.t >= 0 && SIMT - BF.t >= NEWS_WIN) {
+    var fpa = []; if (BF.ign) fpa.push('起火 ' + BF.ign + ' 處'); if (BF.out) fpa.push('撲滅 ' + BF.out + ' 處');
+    if (fpa.length) note(sh, NEWS_WIN + ' 秒內 ' + fpa.join('、'));
+    BF.ign = BF.out = 0; BF.t = -1;
   }
   if (N.st >= 0 && SIMT - N.st >= NEWS_WIN) {
     var sp = []; for (var k in SWIM_TXT) if (N.sw[k]) sp.push(SWIM_TXT[k] + ' ' + N.sw[k]);
@@ -116,12 +136,14 @@ function panel(sh, title) {
     (sh.spd < -0.05 ? '倒車 ' + (-sh.spd * 1.944).toFixed(1) : '航速 ' + (sh.spd * 1.944).toFixed(1)) + ' 節（' + sh.pos + '）　' + (driveText(sh) ? driveText(sh) + '　' : '') + (hasSails(sh) ? sailSetName(sh) + ' ' + Math.round(sh.sailFrac * 100) + '%' : '') + '<br>' +
     ((sh.ancMode ? '拋錨' : sh.manual ? '手動操舵' : '自動操舵') + (sh.anc ? '　' + anchorText(sh) : '') + '　舵 ' + (sh.rudder > 0.05 ? '左 ' + Math.round(sh.rudder * 100) + '%' : sh.rudder < -0.05 ? '右 ' + Math.round(-sh.rudder * 100) + '%' : '正')) + '<br>' + navText(sh) + '</div><div class="pc">' +
     capText(sh) + '<br>' +
-    '船員 ' + (sh.able || 0) + '/' + sh.crew0 + '（傷 ' + sh.wounded + '　亡 ' + sh.dead + '）' + handsText(sh) + medText(sh) + pumpText(sh) + swimText(sh) + '　' + supplyText(sh) + '<br>' +
+    '船員 ' + (sh.able || 0) + '/' + sh.crew0 + '（傷 ' + sh.wounded + '　亡 ' + sh.dead + '）' + handsText(sh) + medText(sh) + pumpText(sh) + burnText(sh) + swimText(sh) + '　' + supplyText(sh) + '<br>' +
     '砲 有人 ' + (sh.gunsManned || 0) + '／還在 ' + sh.gunsAlive + '／' + sh.guns.length + '　' + m + '<br>開火 ' + sh.fired + '　命中 ' + sh.hits +
     gmapLegend(sh) + '</div></div>';
 }
 /** 旁邊那張圖的圖說：砲位（預設）、損壞或進水（GMAP_MODE；Tim 2026-10-18「在開啟船體詳細資訊頁上加一個toggle 切換顯示炮位或是船隻損壞情況」「在炮位 損壞之外 加一個切換顯示進水」）。 */
 function gmapLegend(sh) {
+  if (GMAP_MODE === 'fire') return '<div class="dmgsum">' + burnSumText(sh) + '</div><div class="legend">火災圖：<b style="color:#ffcf4a">●</b>～<b style="color:#ff6a1a">●</b> 火場（大小照格數，越紅越旺；白圈 ＝ 有人在潑、數字 ＝ 到了／要幾人） '
+    + '<b style="color:#5a4636">■</b> 焦痕 <b style="color:#1b1210">■</b> 燒穿 <b style="color:#58b7ff">●</b> 救火的水手 <b style="color:#fff">━</b> 著過火的帆（黑 ＝ 燒掉的、橘 ＝ 還在燒）</div>';
   if (GMAP_MODE === 'flood') return '<div class="dmgsum">' + floodSumText(sh) + '</div><div class="legend">進水圖：<b style="color:#3a9ae6">■</b> 艙內的水（上下整柱加起來，越滿越深） <b style="color:#ff3c32">●</b> 水下的破口 <b style="color:#ffaa28">●</b> 水上的破口 <b style="color:#3ee07a">●</b> 水往外流的破口（大小照洞的面積）</div>';
   if (GMAP_MODE !== 'dmg') return '<div class="legend">砲位圖：● 好 ◌ 裝填 ○ 開不了 △ 等火藥 ≈ 泡水 ✕ 毀｜<b style="color:#7be37b">綠</b> 滿編 <b style="color:#f0d264">黃</b> 不足 <b style="color:#9a9a9a">灰</b> 沒人｜最上層在船內、越下層越外</div>';
   var C = GMAP_DMG;
@@ -262,7 +284,7 @@ function fleetHud(me) {
     var who = o.i === PLAYER_I ? '我艦' : o.team === pt ? (many && o === fs ? '我方旗艦' : '友艦') : (many && o === fs ? '敵方旗艦' : '敵艦');
     var title = who + ' ' + o.name + (o.name !== o.T.name ? '<span class="cls">（' + o.T.name + '型）</span>' : '') + teamTag(o);
     var seeing = CAM.mode === 3 && (CAM.see === o || (!CAM.see && o.i === PLAYER_I));
-    el.innerHTML = panel(o, title).replace('<h3>', '<h3><span class="fold">▲ 收起</span><span class="fold see' + (seeing ? ' on' : '') + '" data-see="1">🎥 ' + (seeing ? '看著這艘' : '看這艘') + '</span>' + (canTake(o) ? '<span class="fold take" data-take="1">⚓ 改操控這艘</span>' : '') + '<span class="fold gm">' + [['gun', '💥 砲位'], ['dmg', '🔧 損壞'], ['flood', '💧 進水']].map(function (m) { return '<i data-gmode="' + m[0] + '"' + (GMAP_MODE === m[0] ? ' class="on"' : '') + '>' + m[1] + '</i>'; }).join('') + '</span>');   // 旁邊那張圖：砲位／損壞／進水（gmapDraw）   // 友艦才有（52_fleet.js playerTakeShip）   // 放在標題最前面再靠右浮動（⛔ 放最後 ⇒ 窄的時候浮到排水量那一行、壓到右欄）
+    el.innerHTML = panel(o, title).replace('<h3>', '<h3><span class="fold">▲ 收起</span><span class="fold see' + (seeing ? ' on' : '') + '" data-see="1">🎥 ' + (seeing ? '看著這艘' : '看這艘') + '</span>' + (canTake(o) ? '<span class="fold take" data-take="1">⚓ 改操控這艘</span>' : '') + '<span class="fold gm">' + [['gun', '💥 砲位'], ['dmg', '🔧 損壞'], ['flood', '💧 進水'], ['fire', '🔥 火災']].map(function (m) { return '<i data-gmode="' + m[0] + '"' + (GMAP_MODE === m[0] ? ' class="on"' : '') + '>' + m[1] + '</i>'; }).join('') + '</span>');   // 旁邊那張圖：砲位／損壞／進水（gmapDraw）   // 友艦才有（52_fleet.js playerTakeShip）   // 放在標題最前面再靠右浮動（⛔ 放最後 ⇒ 窄的時候浮到排水量那一行、壓到右欄）
     el.style.display = 'block'; el.style.borderLeftColor = teamIdx(o) === 0 ? 'var(--blue)' : 'var(--red)';
     gmapDraw(o);
   }
@@ -277,6 +299,7 @@ function fleetHud(me) {
 // 損壞（GMAP_MODE ＝ 'dmg'；卡片標題的「砲位｜損壞｜進水」切換，預設砲位）：同一張俯視圖上畫全船的損壞表（48_damage.js sh.dmg.rows，只讀）——
 //   甲板破洞（每個走路點一小格；通道斷了深紅、其他橘紅）、梯子（H）、帆的綁定點（◆）、帆（橫過船寬一條：白的長度 ＝ 剩下的血量，繩斷了標 ✂）、繩梯（⋮，梯腳）、
 //   倒掉的桅（✕）；木匠、帆匠在哪（點），正在修的那一件外面一圈白。
+// 火災（GMAP_MODE ＝ 'fire'；TASK-0717）：焦痕、燒穿的格（4×4 格一小塊）、火場（圓的大小照格數、顏色照熱度；有人在潑 ⇒ 白圈＋到了／要幾人）、救火的水手、著過火的帆（同損壞圖的帆條：黑 ＝ 燒掉的比例）。⛔ 只讀 sh.burn。
 var GMAP_MODE = 'gun';
 var GMAP_DMG = { chan: '#ff3b3b', hole: '#ff9a5b', lad: '#ffb347', anc: '#f0d264', rlad: '#d8b483', mast: '#ff5b5b', carp: '#e0a05a', sm: '#9fd3ff' };
 var GMAP_K = 4, GMAP_PAD = 4.5, GMAP_FOOT = 18;                                          // px／公尺；四周留白（公尺：最下層的砲畫在船殼外）
@@ -296,6 +319,7 @@ function gmapDraw(sh) {
   var R = Math.max(narrow ? 1.5 : 2.2, Math.min(4, K * 0.55));
   if (GMAP_MODE === 'dmg') gmapDmg(g, sh, scr, s, R);
   else if (GMAP_MODE === 'flood') gmapFlood(g, sh, scr, s);
+  else if (GMAP_MODE === 'fire') gmapFire(g, sh, scr, s, R);
   else sh.guns.forEach(function (gn) {
     var k = 0; for (var q = 0; q < n; q++) if (D[q].key === gn.deck) k = q;
     var off = (-1.4 + 2.3 * (n - 1 - k)) / S, p = scr(gn.muz[0] + gn.ax[0] * off, gn.muz[1] + gn.ax[1] * off), X = p[0], Y = p[1];
@@ -349,6 +373,39 @@ function gmapDmg(g, sh, scr, s, R) {
   sh.crew.forEach(function (c) {
     if (!crewAble(c) || (c.role !== ROLE.CARPENTER && c.role !== ROLE.SAILMAKER)) return;
     var P = scr(c.pos[0], c.pos[1]); g.fillStyle = c.role === ROLE.CARPENTER ? C.carp : C.sm; g.strokeStyle = '#000'; g.lineWidth = 0.8;
+    g.beginPath(); g.arc(P[0], P[1], R * 0.75, 0, 6.2832); g.fill(); g.stroke();
+  });
+}
+/** 火災圖（gmapDraw 的 'fire'）：49_burn.js 的 sh.burn 照俯視圖畫（scr：格 (x, y) ⇒ 畫面；s：每格幾 px；R：符號半徑）。 */
+function gmapFire(g, sh, scr, s, R) {
+  var B = sh.burn; if (!B) return;
+  var bin = {}, w = Math.max(1.5, 4 * s), k;
+  for (k = 0; k < B.chP.length; k++) {                                 // 焦痕／燒穿：4×4 格一小塊（同一塊燒穿的蓋過焦的；木匠補回來的那格不算燒穿）
+    var p = B.chP[k], x = p & 2047, y = (p >> 11) & 1023, z = p >> 21, key = (x >> 2) + 512 * (y >> 2), t = B.chK[k];
+    if (t === 3 && sh.grid.get(x, y, z)) continue;
+    if ((bin[key] || 0) < t) bin[key] = t;
+  }
+  for (k in bin) { var bx = (k % 512) * 4, by = Math.floor(k / 512) * 4, P = scr(bx + 2, by + 2); g.fillStyle = bin[k] === 3 ? '#1b1210' : '#5a4636'; g.globalAlpha = 0.85; g.fillRect(P[0] - w / 2, P[1] - w / 2, w, w); }
+  g.globalAlpha = 1;
+  sh.sails.forEach(function (t) {                                      // 著過火的帆：橫過船寬一條（黑 ＝ 燒掉的比例；還在燒 ⇒ 橘）
+    var F = t.burn; if (!F) return;
+    var x = smCenter(t), yb = gmapSailY(t), A = scr(x, yb[0]), C = scr(x, yb[1]), Wc = g.canvas.width / (window.devicePixelRatio || 1), f = Math.max(0, Math.min(1, F.hf));
+    A[0] = Math.max(3, Math.min(Wc - 3, A[0])); C[0] = Math.max(3, Math.min(Wc - 3, C[0]));
+    g.lineWidth = 3; g.strokeStyle = t.dead ? 'rgba(255,255,255,.18)' : F.lit ? '#ff8a3a' : 'rgba(255,255,255,.55)'; g.beginPath(); g.moveTo(A[0], A[1]); g.lineTo(C[0], C[1]); g.stroke();
+    g.strokeStyle = '#120c0a'; g.beginPath(); g.moveTo(A[0], A[1]); g.lineTo(A[0] + (C[0] - A[0]) * f, A[1] + (C[1] - A[1]) * f); g.stroke(); g.lineWidth = 1.4;
+  });
+  g.font = 'bold 10px sans-serif'; g.textAlign = 'center'; g.textBaseline = 'bottom';
+  B.spots.forEach(function (sp) {                                      // 火場：圓的大小照格數、顏色照熱度（黃 → 紅）；有人在潑 ⇒ 白圈；數字 ＝ 到了／要幾人
+    if (sp.sail || !sp.c) return;
+    var P = scr(sp.c[0], sp.c[1]), r = Math.max(R, Math.min(R * 4, Math.sqrt(sp.n) * s * 2.2 + R * 0.6)), h = Math.max(0, Math.min(1, sp.heat));
+    g.fillStyle = 'rgb(255,' + Math.round(207 - 101 * h) + ',' + Math.round(74 - 48 * h) + ')'; g.globalAlpha = 0.85; g.beginPath(); g.arc(P[0], P[1], r, 0, 6.2832); g.fill(); g.globalAlpha = 1;
+    if (sp.have) { g.strokeStyle = '#fff'; g.lineWidth = 1.2; g.beginPath(); g.arc(P[0], P[1], r + 2, 0, 6.2832); g.stroke(); }
+    if (sp.need) { g.fillStyle = '#fff'; g.fillText(sp.have + '/' + sp.need, P[0], P[1] - r - 2); }
+  });
+  g.textAlign = 'left'; g.textBaseline = 'middle';
+  sh.crew.forEach(function (c) {                                       // 救火的水手（藍點；站到了 ⇒ 黑邊粗一點）
+    var J = c.hand && c.hand.job; if (!J || J.kind !== 'fire' || !crewAble(c)) return;
+    var P = scr(c.pos[0], c.pos[1]); g.fillStyle = '#58b7ff'; g.strokeStyle = '#000'; g.lineWidth = J.at ? 1.4 : 0.8;
     g.beginPath(); g.arc(P[0], P[1], R * 0.75, 0, 6.2832); g.fill(); g.stroke();
   });
 }

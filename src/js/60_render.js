@@ -271,6 +271,7 @@ function lampsUpdate() {
     if (sh.sink > 40) return;
     sh.vlamps = (sh.T.lamps || []).filter(function (V) { return vlampOn(sh, V); });   // 船殼上的燈：被打掉 ⇒ 熄（發光、點光源、光暈一起）
     sh.vlamps.forEach(function (V, j) { var w = M4.pt(sh.M, V.at[0], V.at[1], V.at[2]); L.push({ w: w, k: 0.9 + 0.1 * Math.sin(SIMT * 1.3 + j), rgb: V.rgb, d: (w[0] - E[0]) * (w[0] - E[0]) + (w[1] - E[1]) * (w[1] - E[1]) + (w[2] - E[2]) * (w[2] - E[2]) }); });
+    if (sh.burn) burnLamps(sh, L, E);                                 // 著火（59_burnfx.js）：最大的幾個火場也當成船殼上的燈（燒著的格發光、光暈）＋點光源；燒著的帆一盞
     sh.models.forEach(function (m) { if (!m.alive || !isLamp(m)) return; var q = lampAt(m), w = M4.pt(sh.M, q[0], q[1], q[2]); L.push({ w: w, k: lanternK(m), d: (w[0] - E[0]) * (w[0] - E[0]) + (w[1] - E[1]) * (w[1] - E[1]) + (w[2] - E[2]) * (w[2] - E[2]) }); });
   });
   var pl = fpLamp(); if (pl) L.push(pl);                               // 第一人稱的玩家自帶一盞燈（81_fps.js fpLamp；d −1 ⇒ 排第一個，一定有名額）
@@ -287,7 +288,7 @@ function lanternK(m) { var t = SIMT * 1.7 + m.k * 2.39; return 0.8 + 0.1 * Math.
 function lanternHalo(push) {
   SHIPS.forEach(function (sh) {
     if (sh.sink > 40) return;
-    (sh.vlamps || []).forEach(function (V, j) { var k = 0.9 + 0.1 * Math.sin(SIMT * 1.3 + j); push(M4.pt(sh.M, V.at[0], V.at[1], V.at[2]), V.r * S * (2.4 + 0.4 * k), V.rgb, 0.18 + 0.2 * k * (1.6 - WX.lum)); });   // 船殼上的燈的光暈（照它的光色）
+    (sh.vlamps || []).forEach(function (V, j) { var k = 0.9 + 0.1 * Math.sin(SIMT * 1.3 + j); push(M4.pt(sh.M, V.at[0], V.at[1], V.at[2]), V.r * S * (2.4 + 0.4 * k) * (V.ha || 1), V.rgb, 0.18 + 0.2 * k * (1.6 - WX.lum)); });   // 船殼上的燈的光暈（照它的光色）
     sh.models.forEach(function (m) {
       if (!m.alive || !isLamp(m)) return;
       var k = lanternK(m), sz = Math.max(m.bb[3] - m.bb[0], m.bb[5] - m.bb[2]) * S, q = lampAt(m);   // 燈多大（公尺）；光暈在火焰那一點
@@ -297,6 +298,7 @@ function lanternHalo(push) {
 }
 function drawSails(prog, near) {
   if (prog.u.uSailT) gl.uniform1i(prog.u.uSailT, SAIL_UNIT);           // 帆的貼圖集（TASK-0579；11_rig_gpu.js sailTex）：固定第 9 號
+  if (prog.u.uFireT) gl.uniform1f(prog.u.uFireT, BURN.sailBurn);      // 帆燒到穿要幾秒（01_gl.js BURN_GLSL；49_burn.js）
   SHIPS.concat(PIECES).forEach(function (ow) {
     if (ow.sink > 40 || !ow.sb || !ow.sb.n || (near && !near(ow))) return;
     cutSet(prog, ow); gl.uniformMatrix4fv(prog.u.uModel, false, ow.M);

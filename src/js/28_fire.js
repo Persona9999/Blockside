@@ -1,12 +1,15 @@
 // ───────────────────────── 希臘火（TASK-0693，持火號 dromon） ─────────────────────────
 // Tim 2026-10-18：「武器部分套用大炮規格 不過之後會需要新增彈種 希臘火」；
-//   「點燃機制我也還要想(還要搭配滅火) 可以先直接給予傷害就好」「傷害&噴火演出」⇒ 這一版：直接傷害＋噴火演出，⛔ 不留燃燒點、不延燒。
+//   「點燃機制我也還要想(還要搭配滅火) 可以先直接給予傷害就好」「傷害&噴火演出」⇒ 第一版：直接傷害＋噴火演出（不留燃燒點、不延燒）。
+// Tim 2026-10-18（TASK-0717）：「可以趁現在空檔 加一下著火效果(希臘火可以讓木材起火) 火會延燒 然後船員會去滅火」「帆也可以燒起來(可以嘗試真的燒掉帆的演出 出現邊緣焦黑以及逐漸燒掉)」
+//   ⇒ 點燃、延燒、燒穿、滅火、燒帆都在 49_burn.js（演出 59_burnfx.js）；這裡潑開時叫 burnSplash。細節設定「火勢」0（?burn=0）⇒ 照第一版。
 // 史料：Leo VI《Taktika》艏部的 siphon；Haldon 2002 全尺寸實測噴約 15 m（遊戲射程放寬到 ~30 m：砲種表 siphon 的 V 26 m/s，21_gunnery.js gunMaxR）。
 // 彈種序號 AMMO_GF（3）：⛔ 不在 AMMO（玩家換彈的三種）裡 —— 只有砲種表 ammo=greekfire（或模型 meta ammo=greekfire）的砲打它（10_ship.js gunAmmoFix）；
 //   倍率在 config/game.json 的 fire.k（對砲／對帆／對人，%），潑開的半徑 fire.r（格）。
 // 一發希臘火（21_gunnery.js stepBall）碰到什麼就潑開，⛔ 不開洞、不穿透：
 //   · 模型：直接命中扣血（damageModel × 對砲倍率）＋潑開（下面）
-//   · 船殼／甲板：潑開 —— 半徑 r 裡的人燒傷（crewHurt，基準 ＝ 1.4 × 每發傷害 × 對人倍率）、帆扣血、細繩燒斷（cutRig，對帆倍率）
+//   · 船殼／甲板：潑開 —— 半徑 r 裡的人燒傷（crewHurt，基準 ＝ 1.4 × 每發傷害 × 對人倍率）、帆扣血、細繩燒斷（cutRig，對帆倍率）、
+//     木頭著火（burnSplash：半徑 burn.ign 格裡照材質的 flammable；旁邊 burn.sailR 格內的帆也著 —— 49_burn.js）；飛過帆 ⇒ 帆著火、不撕洞（cutRig）
 //   · 水面：沒了（只有演出）
 // 演出（只給人看，走特效自己的亂數 rrX／gaussX ⇒ 不改戰局）：開火 ⇒ 噴口一道火舌；飛的途中 ⇒ 火團＋拖尾（60_render.js）與零星火星；碰到 ⇒ 一團火炸開＋黑煙。
 var AMMO_GF = 3;
@@ -15,6 +18,7 @@ function gfSplash(sh, L, b) {
   var R = CFG.fire.r;
   crewHurt(sh, L, R * 0.5, R * 1.5, null, '燒傷', crewBase(b));
   cutRig(sh, L, R, b);
+  burnSplash(sh, L, b);                                                 // 點火（49_burn.js；火勢 0 ⇒ 不點）
   evEmit('gfBurst', M4.pt(sh.M, L[0], L[1], L[2]), sh.vel);
 }
 // ── 演出 ──

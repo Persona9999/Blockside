@@ -105,6 +105,7 @@ function carpInit(sh, crew, add) {
 function restoreVoxel(sh, x, y, z, col) {
   if (!col || sh.grid.get(x, y, z)) return 0;
   sh.grid.set(x, y, z, col);
+  if (sh.burn) burnForget(sh, x, y, z);                                // 新木頭：沒燒過（49_burn.js）
   evEmit('cell', sh, x, y, z); sh.lost--;
   if (z < sh.T.sz) { sh.flood[z * 3]--; sh.flood[z * 3 + 1] -= y > sh.T.cy ? 1 : -1; sh.flood[z * 3 + 2] -= x > sh.T.cx ? 1 : -1; }
   if (sh.fl) floodTouch(sh, x, y, z);

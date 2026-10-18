@@ -52,7 +52,7 @@ function spawnPiece(sh, pc) {
     if (inA === s.as.length && inP === s.par.length) {
       s.dead = true; sailLinesDie(sh, s);
       var c = sh.cl[s.k];                                               // 帶著現在的形狀走（物理開著 ⇒ 被風吹鼓的那一刻）
-      if (!s.furled) piece.cl.push({ T: c.T, p: PHYS && c.p ? Float32Array.from(c.p) : null, torn: !!c.torn, tv: c.tv });
+      if (!s.furled) piece.cl.push({ T: c.T, p: PHYS && c.p ? Float32Array.from(c.p) : null, torn: !!c.torn, tv: c.tv, bf: s.burn || null });   // bf：燒過的帆（49_burn.js）⇒ 帶走的那面照樣畫焦痕、還在燒的照樣燒完（11_rig_gpu.js）
       c.gone = c.moved = true;
     }
     else dropSail(sh, s);

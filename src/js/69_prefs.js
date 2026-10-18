@@ -10,7 +10,7 @@
 // 什麼時候存：每秒比一次（跟上次存的不一樣才寫）＋ 關頁、切到背景時。全部回到預設 ⇒ 刪掉那一筆。
 var PREFS_KEY = 'ame_constitution_broadside.prefs', PREFS_VER = 1;
 var PREF_Q = ['mode', 'start', 'wdir', 'wspd', 'ship', 'blue', 'red', 'hard', 'flood', 'ballast', 'gunw', 'speed', 'agile', 'upwind', 'base', 'pump', 'gunhp', 'sailhp', 'crewhp', 'crewdeath', 'powderhp', 'blast', 'blastv', 'dmg24', 'dmg32l', 'dmg32', 'dmg18', 'dmg12', 'dmg18l', 'dmg6', 'dmg3c', 'dmgtr', 'dmgsf',
-  'box', 'carry', 'hands', 'drown', 'heal', 'musket', 'sailfix', 'wind', 'windcap', 'inertia', 'turninert', 'sailtq', 'ammo', 'strike', 'cap', 'phys', 'sail', 'play', 'stall', 'funspeed', 'funagile', 'funstall', 'funpowder', 'funhard', 'sea',
+  'box', 'carry', 'hands', 'drown', 'heal', 'musket', 'sailfix', 'burn', 'wind', 'windcap', 'inertia', 'turninert', 'sailtq', 'ammo', 'strike', 'cap', 'phys', 'sail', 'play', 'stall', 'funspeed', 'funagile', 'funstall', 'funpowder', 'funhard', 'sea',
   'gfx', 'g_shadow', 'g_refl', 'g_refr', 'g_sea', 'g_res', 'g_aa', 'phx', 'p_rig', 'p_rigfar', 'p_debris', 'p_fx', 'weather', 'g_rain', 'g_drops', 'g_dropspl', 'g_shships', 'g_masks', 'g_deco', 'dist', 'field', 'reinf', 'cmd', 'gauge', 'blue', 'red', 'slowmo', 'dbg', 'slowcam', 'roomfn', 'navre', 'gcrew', 'smoke', 'pslow', 'pslowb', 'ramv', 'ramk', 'rame', 'ramside', 'debcap'];          // 會蓋過存檔的網址參數（04_state.js、05_hull.js 讀的那些）
 var DMG_Q = { long: 'dmg24', long32: 'dmg32l', carr: 'dmg32', chase: 'dmg18', long4: 'dmg4', long12: 'dmg12', long18: 'dmg18l', long6: 'dmg6', chase3: 'dmg3c', trident: 'dmgtr', dahl9: 'dmg9d', brooke64: 'dmg64b', brooke7: 'dmg7b', dahl11: 'dmg11d', long36: 'dmg36l', long8: 'dmg8l', pierrier: 'dmgpr', siphon: 'dmgsf' };
 var PREFS = { read: DEMO < 0 && Q.get('prefs') !== '0' && !Q.has('admin') && !Q.has('shipcheck'), write: false, state: '', last: '' };   // ?admin=rooms（設定後台嵌的那一份）、?shipcheck（匯入檢查）⇒ 不讀不存
@@ -82,6 +82,7 @@ var PREF_ITEMS = [
   prefNum('heal', prefLim('heal'), true, function () { return HEAL_T; }, function (x) { HEAL_T = x; }),
   prefNum('musket', prefLim('musket'), true, function () { return MUSKET_R; }, function (x) { MUSKET_R = x; }),
   prefNum('sailfix', prefLim('sailfix'), true, function () { return SAILFIX_T; }, function (x) { SAILFIX_T = x; }),
+  prefNum('burn', prefLim('burn'), true, function () { return BURN_PCT; }, function (x) { BURN_PCT = x; }),   // 火勢（49_burn.js；TASK-0717）
   prefNum('debcap', function () { return DEB_LIM; }, true, function () { return DEB_CAP; }, function (x) { DEB_CAP = x; }),   // 碎片上限（畫質頁；07_gfx.js）
   prefNum('smoke', function () { return SMOKE_LIM; }, false, function () { return SMOKE_K; }, function (x) { SMOKE_K = Math.round(x * 10) / 10; }),   // 煙消散（畫質頁；07_gfx.js）
   prefNum('wind', prefLim('wind'), false, function () { return WIND_K; }, function (x) { WIND_K = x; }),

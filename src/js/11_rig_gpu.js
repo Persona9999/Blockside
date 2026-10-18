@@ -50,8 +50,9 @@ function ropeTube(TB, P, col, w) {
 /** 帆的網格（一個 owner 一份，索引畫）：頂點法線 ＝ 相鄰三角形的面積加權平均 ⇒ 布是圓的，不是一面一面的。
  *  關物理 ⇒ 位置就是雕刻作品那一刻（T.p0），只在 rigDirty 時重做；開物理 ⇒ 每一格畫面重做。
  *  帆的布片（34_shreds.js）接在帆後面、同一個緩衝 ⇒ 陰影、反射照帆畫。 */
-// 頂點：位置 3、法線 3、色 3、貼圖集的 uv 2（TASK-0579；沒有貼圖 ⇒ u ＝ −1，著色器照色畫）
-var SBV = null, SBI = null, SBN = null, SBP = null, SB_STRIDE = 11, SAIL_UNIT = 9, SAIL_DUMMY = null;
+// 頂點：位置 3、法線 3、色 3、貼圖集的 uv 2（TASK-0579；沒有貼圖 ⇒ u ＝ −1，著色器照色畫）、著火 4（TASK-0717：火燒到的時間 a、撲滅的時間 x —— 49_burn.js s.burn，
+//   沒燒過 ＝ BURN_NEVER ⇒ 著色器那一段整個跳過；雜訊座標 ＝ 作品形狀的 ((x＋y)·S, z·S) 公尺 ⇒ 布被吹動時焦痕跟著布、不會滑）
+var SBV = null, SBI = null, SBN = null, SBP = null, SB_STRIDE = 15, SAIL_UNIT = 9, SAIL_DUMMY = null;
 /** 帆的貼圖集（30_rig_physics.js sailAtlas）⇒ GL 貼圖（第一次畫才建，記在船型上）；沒有 ⇒ 1×1 的空貼圖（取樣器一定要綁一張）。 */
 function sailTex(T) {
   if (T && T.sailAtlas && !T.sailTexGL) {
@@ -84,11 +85,11 @@ function sailBuf(ow) {
     }
     if (!P) P = (PHYS || !isShip) && c.p ? (isShip && c.furlF !== null && c.furlF !== undefined ? furlDraw(c, clothFine(c, SBP), c.furlF, ow) : clothFine(c, SBP)) : c.T.p0;   // furlDraw：收帆張帆的演出（30_rig_physics.js）
     if (isShip && PHYS && c.tt && c.p && !c.hidden && !c.gone && !c.loose) c.tt.forEach(function (t) { if (ow.ropes[t.j].dead || ow.tCut && ow.tCut[t.j]) return; var o = t.i * 3; td.push({ t: t, x: P[o], y: P[o + 1], z: P[o + 2] }); tk += t.j + ','; });   // 畫出來的帆腳（收帆演出時也是）
-    put(P, c.T.n, c.T.tris, c.T.col, keep ? lost : c.torn ? c.tv : null, c.T.vcol, c.T.uv, A && c.T.ti !== undefined ? sailRect(ow, A, c.T.ti) : null);
+    put(P, c.T.n, c.T.tris, c.T.col, keep ? lost : c.torn ? c.tv : null, c.T.vcol, c.T.uv, A && c.T.ti !== undefined ? sailRect(ow, A, c.T.ti) : null, isShip ? ow.sails[k].burn : c.bf, c.T.p0);   // 斷開那一團帶走的帆：c.bf（22_pieces.js）
   });
   if (isShip) { ow.tDraw = td; if (tk !== (ow.tKey || '')) { ow.tKey = tk; ow.tJ = {}; td.forEach(function (d) { ow.tJ[d.t.j] = 1; }); ow.rigDirty = true; } }   // 換了哪幾條 ⇒ 下一格 buildRig 重做（不畫那幾條）
-  if (F) F.forEach(function (f) { put(f.p, f.n, f.T.sim.tris, f.col, null, null, f.uv, A && f.uv && f.ti !== undefined ? sailRect(ow, A, f.ti) : null); });   // 布片：有貼圖的帆撕下來的照原處的圖（34_shreds.js shredCut 記 uv）
-  function put(p, n, tr, col, tv, vc, uv, r) {                            // tv：藏起來的細格點（撕開的洞）；vc：每個頂點的顏色（沒有貼圖集時的退路，30_rig_physics.js texColors）；uv＋r：貼圖集的那一格
+  if (F) F.forEach(function (f) { put(f.p, f.n, f.T.sim.tris, f.col, null, null, f.uv, A && f.uv && f.ti !== undefined ? sailRect(ow, A, f.ti) : null, null, null); });   // 布片：有貼圖的帆撕下來的照原處的圖（34_shreds.js shredCut 記 uv）
+  function put(p, n, tr, col, tv, vc, uv, r, bF, g0) {                    // tv：藏起來的細格點（撕開的洞）；vc：每個頂點的顏色（沒有貼圖集時的退路，30_rig_physics.js texColors）；uv＋r：貼圖集的那一格；bF：著火（s.burn）、g0：雜訊座標用的作品形狀
     var base = nv, j, i;
     SBN.fill(0, 0, n * 3);
     for (j = 0; j < tr.length; j += 3) {
@@ -104,13 +105,15 @@ function sailBuf(ow) {
       SBV[o] = p[q]; SBV[o + 1] = p[q + 1]; SBV[o + 2] = p[q + 2]; SBV[o + 3] = SBN[q]; SBV[o + 4] = SBN[q + 1]; SBV[o + 5] = SBN[q + 2];
       if (vc) { SBV[o + 6] = vc[q]; SBV[o + 7] = vc[q + 1]; SBV[o + 8] = vc[q + 2]; } else { SBV[o + 6] = col[0]; SBV[o + 7] = col[1]; SBV[o + 8] = col[2]; }
       if (uv && r) { SBV[o + 9] = (r[0] + uv[i * 2] * r[2]) / A.w; SBV[o + 10] = (r[1] + uv[i * 2 + 1] * r[3]) / A.h; } else { SBV[o + 9] = -1; SBV[o + 10] = -1; }
+      if (bF) { SBV[o + 11] = bF.a[i]; SBV[o + 12] = bF.x[i]; } else { SBV[o + 11] = BURN_NEVER; SBV[o + 12] = BURN_NEVER; }
+      if (g0) { SBV[o + 13] = (g0[q] + g0[q + 1]) * S; SBV[o + 14] = g0[q + 2] * S; } else { SBV[o + 13] = 0; SBV[o + 14] = 0; }
     }
     nv += n;
   }
   if (!ow.sb) {
     ow.sb = { vao: gl.createVertexArray(), vbo: gl.createBuffer(), ebo: gl.createBuffer(), n: 0 };
     gl.bindVertexArray(ow.sb.vao); gl.bindBuffer(gl.ARRAY_BUFFER, ow.sb.vbo);
-    [[0, 0, 3], [1, 3, 3], [2, 6, 3], [3, 9, 2]].forEach(function (a) { gl.enableVertexAttribArray(a[0]); gl.vertexAttribPointer(a[0], a[2], gl.FLOAT, false, SB_STRIDE * 4, a[1] * 4); });
+    [[0, 0, 3], [1, 3, 3], [2, 6, 3], [3, 9, 2], [4, 11, 4]].forEach(function (a) { gl.enableVertexAttribArray(a[0]); gl.vertexAttribPointer(a[0], a[2], gl.FLOAT, false, SB_STRIDE * 4, a[1] * 4); });
     gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ow.sb.ebo); gl.bindVertexArray(null);
   }
   gl.bindVertexArray(ow.sb.vao);

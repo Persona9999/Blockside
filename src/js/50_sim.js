@@ -81,6 +81,8 @@ function simStep() {
   if (PF) pfLap('ai');
   for (i = 0; i < BALLS.length; i++) { stepBall(BALLS[i], DT); if (!BALLS[i].alive) { evEmit('ballGone', BALLS[i]); BALLS.splice(i--, 1); } }
   if (PF) pfLap('balls');
+  SHIPS.forEach(function (sh) { if (sh.burn) burnStep(sh); });     // 著火（49_burn.js；著過火的船才有 sh.burn）：燒穿的格下面 integrity 同一步斷開
+  if (PF) pfLap('burn');
   SHIPS.forEach(function (sh) { integrity(sh); sh.impulse = [0, 0, 0]; });
   if (PF) pfLap('integrity');
   for (i = 0; i < PIECES.length; i++) if (!stepPiece(PIECES[i], DT)) { evEmit('pieceGone', PIECES[i]); PIECES.splice(i--, 1); }
