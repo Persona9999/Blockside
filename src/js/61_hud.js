@@ -29,6 +29,11 @@ function hudNewsCrew(sh, c, dead, cause) {
   if (cap) { note(sh, '<b style="color:var(--gold)">船長' + how + '！</b>' + why, true); return; }
   if (c.role === ROLE.OFFICER || c.role === ROLE.HELM || c.role === ROLE.SURGEON) {   // 船醫（TASK-0676）：人少，當下報
     var left = sh.crew.filter(function (o) { return o.role === c.role && crewAble(o); }).length, nm = ROLE_NAME[c.role], off = c.role === ROLE.OFFICER;   // 軍官照階級報（大副、二副…；40_crew.js makeCrew）
+    // 「全倒」只報一次（sh.news.down[職位]；newsFlush 看到那個職位又有人能動才收回）：之後倒下的同職位併進 5 秒那一行。
+    //   ⛔ 不管 ⇒ 醫療艙淹了、幾位船醫一起落水（在水裡的不算能動）、一個一個溺水 ⇒ 每淹死一位都算出「還有 0 位」，連報好幾次「船醫溺水　船醫全倒」（Tim 2026-10-18 截圖：憲法號 4 次；軍官同理）。
+    var D = sh.news.down || (sh.news.down = {});
+    if (!left && D[c.role]) { var by0 = dead ? sh.news.kr : sh.news.wr; by0[c.role] = (by0[c.role] || 0) + 1; return; }
+    D[c.role] = !left;
     note(sh, (off && c.rank !== undefined ? officerRank(c.rank) : nm) + how + why + (left ? '（還有 ' + left + ' 位' + (off ? '軍官' : '') + '）' : '　<b style="color:#ff9a7a">' + nm + '全倒' + (c.role === ROLE.OFFICER ? ' —— 沒人指揮，瞄準變散' : c.role === ROLE.SURGEON ? ' —— 醫療艙只剩預備水手' : '') + '</b>'), !left);
     return;
   }
@@ -57,6 +62,7 @@ function newsFlush(sh) {
     var gl0 = N.guns.length, list = gl0 > 5 ? N.guns.slice(0, 4).join('、') + '…' : N.guns.join('、');   // 一次太多（殉爆）⇒ 只列前四門
     note(sh, (gl0 === 1 ? N.guns[0] + ' 被打飛' : gl0 + ' 門砲被打飛：' + list) + '（砲還在 ' + sh.gunsAlive + '／' + sh.guns.length + '）'); N.guns = [];
   }
+  if (N.down) for (var r in N.down) if (N.down[r] && sh.crew.some(function (o) { return String(o.role) === r && crewAble(o); })) N.down[r] = false;   // 全倒過的職位又有人能動（軍官爬回船上歸隊）⇒ 下次全倒照常報
   var dk = sh.kills - N.k, dw = sh.wounds - N.w;
   if (N.t < 0 && (dk > 0 || dw > 0)) N.t = SIMT;                       // 第一個人倒下 ⇒ 開始數
   if (N.t >= 0 && SIMT - N.t >= NEWS_WIN) {
@@ -126,13 +132,12 @@ function gmapLegend(sh) {
 function floodSumText(sh) {
   var fl = sh.fl;
   if (!fl || sh.broken) return (sh.broken ? '斷成兩截（照公式，一定沉）' : '公式模式：看不到艙內的水（物理效果「進水」選粒子才看得到）') + '・水線下打掉 ' + (sh.inflow || 0).toLocaleString() + ' 格・下沉 ' + sh.sink.toFixed(2) + ' m';
-  var under = 0, out = 0; fl.holes.forEach(function (h) { if (!(fl.hA[h] > 0)) return; if (fl.hWet[h]) under++; if (flHoleState(fl, h) === 'out') out++; });   // 33_flood.js 破口的狀態
-  return '積水 ' + Math.round(fl.vol * RHO_W).toLocaleString() + ' 噸・破口 ' + fl.open + ' 處（水下 ' + under + (out ? '、往外流 ' + out : '') + '）・進水 ' + fl.inQ.toFixed(2) + ' m³/s' + (fl.outQ > 0.005 ? '・往外流 ' + fl.outQ.toFixed(2) + ' m³/s' : '') + '・抽水 ' + pumpNow(sh).toFixed(1) + ' 噸/分・下沉 ' + sh.sink.toFixed(2) + ' m';
+  return '積水 ' + Math.round(fl.vol * RHO_W).toLocaleString() + ' 噸・破口 ' + fl.open + ' 處（水下 ' + fl.underN + (fl.outN ? '、往外流 ' + fl.outN : '') + '）・進水 ' + flTpm(fl.inQ) + (fl.outQ > 0.005 ? '・往外流 ' + flTpm(fl.outQ) : '') + '・抽水 ' + pumpNow(sh).toFixed(1) + ' 噸／分・淨進水 ' + flNetText(fl) + '・下沉 ' + sh.sink.toFixed(2) + ' m';
 }
 /** 損壞表一行（48_damage.js；只讀，⛔ 不在這裡重掃 ⇒ 有畫面那場跟無頭的戰局一位元不差）。 */
 function dmgSumText(sh) {
   var D = sh.dmg; if (!D) return '損壞表：' + (sh.carp || sh.sm ? '還沒點名' : '這艘沒有木匠、帆匠');
-  var n = {}; D.rows.forEach(function (r) { n[r.kind] = (n[r.kind] || 0) + 1; });
+  var n = D.n;                                                          // 各種幾件：損壞表重掃時記的（48_damage.js）
   var c = (n.hole || 0) + (n.lad || 0) + (n.anchor || 0), m = (n.sail || 0) + (n.rlad || 0);
   if (!c && !m) return '損壞表：沒有要修的';
   return '損壞表：木匠 ' + c + ' 件' + (c ? '（洞 ' + (n.hole || 0) + '、梯子 ' + (n.lad || 0) + '、綁定點 ' + (n.anchor || 0) + '）' : '') + '　帆匠 ' + m + ' 件' + (m ? '（帆 ' + (n.sail || 0) + '、繩梯 ' + (n.rlad || 0) + '）' : '');

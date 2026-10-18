@@ -10,7 +10,7 @@
 //   沒有木匠 ⇒ 不掃木匠那幾種；沒有帆匠 ⇒ 不掃帆匠那幾種。兩種都沒有 ⇒ 不建表。
 // 讀數：__game.dmg(i)（每一列、各重掃了幾次）。
 /** 這艘的表（第一次用才建）。 */
-function dmgOf(sh) { return sh.dmg || (sh.dmg = { nav: -1, rig: null, comp: -1, carp: [], anc: [], sm: [], rows: [], scans: { nav: 0, rig: 0 } }); }
+function dmgOf(sh) { return sh.dmg || (sh.dmg = { nav: -1, rig: null, comp: -1, carp: [], anc: [], sm: [], rows: [], n: {}, scans: { nav: 0, rig: 0 } }); }
 /** 帆與繩的狀態：變了 ⇒ 帆匠那幾種與綁定點重掃（字串比對；每次點名一次，掃繩、帆、模型各一遍）。 */
 function dmgRigStamp(sh) {
   var d = 0, t = 0, f = 0, hp = 0, torn = 0, m = 0, k, C = sh.carp, K = sh.sm;
@@ -36,7 +36,7 @@ function dmgRows(sh) {
       D.sm = sh.sm ? smScan(sh) : [];
     }
   }
-  if (ch) D.rows = D.carp.concat(D.anc, D.sm);
+  if (ch) { D.rows = D.carp.concat(D.anc, D.sm); D.n = {}; D.rows.forEach(function (r) { D.n[r.kind] = (D.n[r.kind] || 0) + 1; }); }   // n：各種幾件（詳細資訊那一行直接讀）
   if (NV && D.comp !== (NV.refreshN || 0) && (D.carp.length || D.anc.length)) { D.comp = NV.refreshN || 0; medComps(sh); }   // 「層:區域」照沒斷的梯子連成幾群（44_medic.js）：木匠挑走得到的用；尋路刷新之後、有件要修才算
   return D.rows;
 }

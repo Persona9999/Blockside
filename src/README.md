@@ -256,7 +256,7 @@ python -I admin.py cache --all    # 每艘都比 ＝ 比對來源：雕刻作品
 | `31_sailing.js` | 航行：航速、操舵、帆裝、航跡、擦撞（船隻碰撞四檔：龍骨線／水線輪廓／船殼格子＋八叉樹 `hitSamples`／`occPyr`；摩擦 `hitFriction`） |
 | `31_drive.js` | 動力（TASK-0630）：動力源清單（帆、蒸汽機、魔法）、推力 ＝ k·v²、水阻、實際質量（含進水）⇒ 加速度；受損降輸出；受損不平衡的偏航力矩；俥鐘（橫版左下角、直版左邊那一欄按鈕上方；E／T） |
 | `32_hull.js` | 進水、傾斜、沉沒、減重上浮（`hydrostatics`／`massLost`／`liftFor`）；每半秒的 `survey`（砲、桅、繩、帆、腳下、少掉的重量）與降旗 |
-| `33_flood.js` | 進水的粒子模式（TASK-0525）：船型的水格 `flType`（`T.flc[c]`）、每艘的狀態 `flNew`（`sh.fl`）、打掉一格記待重算 `floodTouch`、破口 `flHoleRedo`、粒子與水格 `floodStep`／`flTick`、該多吃水 `floodSinkT`、傾斜 `floodTilt`、艙內水面 `P.pool`（`flMesh`／`flDraw`）、往下一層流的水幕（`flFalls`，TASK-0651）、噴進來的粒子 `flPushJets`；每個破口的狀態（`fl.hWet` 在海面下、`fl.hQ` 流量 ＋進－出；`flHoleState` ⇒ in／out／dry、`flHoleInfo` ⇒ `__game.flHoles(i)`）—— 畫面都讀這裡 |
+| `33_flood.js` | 進水的粒子模式（TASK-0525）：船型的水格 `flType`（`T.flc[c]`）、每艘的狀態 `flNew`（`sh.fl`）、打掉一格記待重算 `floodTouch`、破口 `flHoleRedo`、粒子與水格 `floodStep`／`flTick`、該多吃水 `floodSinkT`、傾斜 `floodTilt`、艙內水面 `P.pool`（`flMesh`／`flDraw`）、往下一層流的水幕（`flFalls`，TASK-0651）、噴進來的粒子 `flPushJets`；每個破口的狀態（`fl.hWet` 在海面下、`fl.hQ` 流量 ＋進－出；`flHoleState` ⇒ in／out／dry、`flHoleInfo` ⇒ `__game.flHoles(i)`）—— 畫面都讀這裡；實際抽掉的 `fl.pumpQ`、淨進水 `flNetQ`（進 − 出 − 實際抽） |
 | `35_decks.js` | 甲板（TASK-0572）：照雕刻作品的 meta 判定 `hullDecks`（甲板關聯 `kind=deck`：level、name、floor 舷弧、thick）、`deckFloor`（那一欄的地板高度）、`deckAt`（某一點站在哪一層）、`deckOfPath`（關聯路徑屬於哪一層）；沒有 meta 的舊匯出 ⇒ 各處照舊自己量 |
 | `36_rooms.js` | 空艙房與功能艙（TASK-0568）：讀雕刻作品標的艙房 `hullRooms`（關聯 meta `kind=rooms`、固定點 `<房名>.min／.max`）、每一型每一間的功能 `roomFns`（設定檔 ships[].rooms ← 船隻配置頁 `SHIP_ROOMS`）、半程式化布局 `roomLayout`、家具模型 `shipRooms`（佔位的方塊網格 `furnMesh`）、能力 `roomCap`／`roomEff`、除錯外框與名字（`?rooms=1`）；設施配員（TASK-0676）：物品寫 `furniture[].staff { 職位: 每件幾位 }`（病床 `{ surgeon: 1 }`，道具設定頁調）⇒ `staffSlots` 照房間輪著排、`hullStaff` 給船隻配置頁算這型配得到幾位 |
 | `34_shreds.js` | 帆的布片（物理開著）：撕開的洞切成布片 `shredCut`（`sh.shreds`）、每一步 `shredStep`（跟帆同一套 `clothStep`，風壓 ×`SH_KW`）、落水 `shredWet`、自己的亂數 `rndC`；畫在帆的緩衝後面（`sailBuf`） |
@@ -283,7 +283,7 @@ python -I admin.py cache --all    # 每艘都比 ＝ 比對來源：雕刻作品
 | `71_ctrl.js` | 控制器（TASK-0668 ②）：`ctrlAdd` 一份一種操作、照優先序 `ctrlDo` 一個一個問（回 true ＝ 接住）——第一人稱（fp）→ 建造（build）→ 海戰鏡頭（orbit，永遠在底下）；鍵、拖曳、兩指、滾輪、點一下、按下、抓住時的移動、每格的 `ctrlFrame`。`__game.ctrl()` 讀現在最上面的。加一種操作 ＝ 加一份，不用改 71_input.js 的事件 |
 | `71_input.js` | 輸入與選單（鍵盤 `doKey` ⇒ 66_keys.js 的動作 ⇒ `doAct`，畫面上的圓鈕直接 `doAct`、滑鼠、觸控（雙指張合縮放、雙指一起拖平移 ＝ 右鍵拖曳，`panBy`）、滑桿、彈種倍率表、主選單 ⇄ 船隻配置頁（船員滑桿、匯出匯入）⇄ 細節設定頁、重設預設值） |
 | `73_slowmo.js` | 殉爆的慢動作與特寫（TASK-0531）：`slowKick`（殉爆那一刻）、`slowTick`（每格畫面的時間倍率、特寫時間到還鏡頭）、`slowVisStep`（慢動作中只給人看的照畫面的時間走）、提示 `slowShow`；狀態 `SLOW` 在 `04_state.js` |
-| `72_floodui.js` | 停格條（`frzShow`）與進水細節頁（`floodPanel`：數字＋側視、俯視剖面 `fpDraw`；開著時 3D 的破口點 `flHoleMarks`、艙內水面透視）；破口的顏色 `flHoleCol`（出水綠、水下紅、水上橙；詳細資訊的進水圖同一套） |
+| `72_floodui.js` | 停格條（`frzShow`）與進水細節頁（`floodPanel`：數字＋側視、俯視剖面 `fpDraw`；開著時 3D 的破口點 `flHoleMarks`、艙內水面透視）；破口的顏色 `flHoleCol`（出水綠、水下紅、水上橙；詳細資訊的進水圖同一套）；流量一律噸／分（`flTpm`，跟抽水同一個單位）、淨進水 `flNetText` |
 | `74_cutaway.js` | 停格的剖面與隱藏甲板：`CUTV`、甲板切高 `deckCut`（照舷弧逐欄量、R32F 貼圖）、畫之前設 uniform `cutSet`、人藏不藏 `cutHides`、`cutToggle`／`deckCycle` |
 | `75_shipcheck.js` | 匯入檢查（`?shipcheck=<id>`；`admin.py shipcheck` 讀它寫的 JSON 出報告）。照 meta 規格表報：規格表沒有的 kind、掛錯地方的 kind；**被靜悄悄丟掉的部件**：尋路沒收的梯子與原因（`sh.ladDrop`，42_hands.js makeHands 記；兩頭判不出層、同一層、接不上走路格）—— 繩梯（頂端在桅上）只記進讀數 `ropeLadders`、不報 |
 | `76_anchor.js` | 拋錨（雙錨、左右錨、拖錨、起錨）與鐵鍊（質點鍊、碰自己的船殼與海底、畫成鏈環）；單錨的船（TASK-0635：只找到一個真的錨 ⇒ 另一舷不補、`A.single`；7／8 按鈕藏起來、按鍵不理，6 只拋這一個；整艘都沒有錨（夜隼號、風暴角號）⇒ 6／7／8 照樣顯示（🛑），按哪一顆都是停船 ⇄ 手動，不拋錨） |
@@ -565,6 +565,14 @@ Tim 2026-10-17：「船隻的主題曲 當操作船隻有主題曲時背景音�
     · 換舷：對敵那一舷的火力（砲重 × 有人操作的比例 ÷ 裝填倍率；迴旋砲、砲塔兩舷都算）不到另一舷一半 ⇒ 轉另一舷對敵（⛔ 以前要一門都開不了才換）。量過：打掉右舷八成的砲 ⇒ 15 秒內換成左舷對敵。
     · 被壓制：自己最強那一舷 < 敵艦最強那一舷的一半 ⇒ 交戰距離 × 1.4、往外拉的轉角放到 0.9 rad（回到 65% 以上才收）。量過：打掉七成的砲 ⇒ 50 秒 173 → 318 m。
     · 讓敵艦（不撞）：跟讓友船同一套（`friendAvoid` 換對象，`foeAvoid`）；優先序：讓友船 ＞ 讓敵艦 ＞ 讓開友艦的砲線（戰列、搶上風的不讓）＞ 指揮官的命令（戰列、搶上風）＞ 艦長。
+      每艘船可以有自己的防撞參數（Tim 2026-10-18：「防撞設定是否可以每艘船有獨立參數(有的船可以裝備撞角 故意撞敵船)」）：`config/game.json` 的 `ships[].cfg.avoid` ＝ `{ near, hard, t, foe }`
+      （預判近於 near m 就讓、現在近於 hard m 馬上讓、往前預判 t 秒；`foe: false` ⇒ 不讓敵艦，友船照讓）；沒寫的照預設（22 m／16 m／15 秒）⇒ 沒有 avoid 的船一位元都不差。`admin.py check` 會擋寫錯的鍵與值。
+      ⚠ 只是「不讓」：故意對準敵艦衝撞的打法（撞角當主武器）還沒有。
+    · 照武器指揮（Tim 2026-10-18：「判斷目前船的主要火力側(可能分成前 左 右 後) 然後該側火力射程 然後嘗試讓船靠近敵船讓主火力側能發揮火力」）：
+      每門砲照砲軸 ± 砲門射界（0.45 rad；迴旋砲、砲塔一律算）看對不對得到船頭、船尾、兩舷正橫（`helmCovers`）；船頭（船尾）對得到的火力比兩舷都大 ⇒ 拿那一頭對敵（`helmAspect`；持火號的 siphon）。
+      交戰距離不超過那一側武器打得到的距離（`helmAspectR`：有效射程 ＝ 最大射程 × 0.8，照火力累計到一半的那一門）⇒ 長砲（有效射程最短 715 m）比交戰距離上限 352 m 遠，舷側砲的船跟以前一位元都不差。
+      船頭（船尾）對敵（`helmSteerEnd`）：距離照「那一頭的砲口到敵艦船身」量（`helmGap`），守在射程的 0.75；航速照接近率調（對衝時兩艘都會收）；讓敵艦只往前看 3 秒。
+      被壓制要拉開、但拉開之後那一側的武器打不到 ⇒ 不拉開。指揮官排戰列時不排船頭／船尾接敵的船（各自交戰、打最近的）。
     · 決策紀錄：每個決定（打法換了、換舷、拉開、帆裝與俥鐘換成什麼）記時間與理由進戰鬥報表（`79_report.js rptHelm` ⇒ `ships[].helm`；結束畫面「📊 報表」最下面「🧭 艦長的決定」）；換舷、拉開也上方廣播。
     · 不抽 `rnd()`；船走的路變了 ⇒ 三組對拍的基準換新（cb5fd03668、64e0cee698、420cd3a4ae；同一份成品跑兩次逐字相同）。
     · ⚠ 2D 沙盒（`sb_sim.js`）的交戰操舵照舊是改之前那一條（沒有期望航速、換舷門檻）⇒ 沙盒的勝率表跟遊戲有落差，等第二期一起搬成共用的。

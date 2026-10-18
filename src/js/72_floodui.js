@@ -42,6 +42,10 @@ function floodToggle() { if (FLX) floodClose(); else floodOpen(); }
 $('frzFlood').onclick = floodToggle; $('frzX').onclick = xrayToggle;
 $('frzGo').onclick = function () { flowPause(false); frzShow(); };
 $('floodX').onclick = floodClose;
+/** 流量（模擬裡是 m³/s）⇒ 「x 噸／分」：跟抽水同一個單位（Tim 2026-10-18「抽水是否可以用跟進水一樣的單位(或是反過來 進水也用噸/分)」；抽水在設定、滑桿、HUD 都是噸／分）。 */
+function flTpm(q) { return (q * RHO_W * 60).toFixed(1) + ' 噸／分'; }
+/** 淨進水（33_flood.js fl.netQ）：「+x 噸／分」水還在變多、「−x 噸／分（在退）」。 */
+function flNetText(fl) { var t = fl.netQ * RHO_W * 60; return Math.abs(t) < 0.05 ? '0 噸／分' : t > 0 ? '+' + t.toFixed(1) + ' 噸／分' : '−' + (-t).toFixed(1) + ' 噸／分（在退）'; }
 function fuDeg(a) { return (a * 57.2958).toFixed(1) + '°'; }
 /** 填進水細節頁：兩艘各一段，畫完剖面。 */
 function floodPanel() {
@@ -54,10 +58,8 @@ function floodPanel() {
         '<div>水線下打掉 ' + (sh.inflow || 0).toLocaleString() + ' 格・下沉 ' + sh.sink.toFixed(2) + ' m・' + tilt + '</div>';
       return '<div class="fpS"><div class="fpH">' + who + '</div>' + lines + '</div>';
     }
-    var under = 0, uA = 0;
-    var outN = 0; fl.holes.forEach(function (h) { if (!(fl.hA[h] > 0)) return; if (fl.hWet[h]) { under++; uA += fl.hA[h]; } if (flHoleState(fl, h) === 'out') outN++; });   // 33_flood.js 破口的狀態
-    lines = '<div>艙內積水 <b>' + Math.round(fl.vol * RHO_W).toLocaleString() + ' 噸</b>（' + fl.vol.toFixed(1) + ' m³）・破口 ' + fl.open + ' 處 ' + fl.area.toFixed(2) + ' m²，水下 ' + under + ' 處 ' + uA.toFixed(2) + ' m²' + (outN ? '，往外流 ' + outN + ' 處' : '') + '</div>' +
-      '<div>進水 ' + fl.inQ.toFixed(2) + ' m³/s・往外流 ' + fl.outQ.toFixed(2) + ' m³/s・累計 進 ' + fl.inTot.toFixed(0) + '／出 ' + fl.outTot.toFixed(0) + '／抽掉 ' + fl.pumped.toFixed(0) + ' m³・抽水 ' + pumpNow(sh).toFixed(1) + ' 噸／分</div>' +
+    lines = '<div>艙內積水 <b>' + Math.round(fl.vol * RHO_W).toLocaleString() + ' 噸</b>（' + fl.vol.toFixed(1) + ' m³）・破口 ' + fl.open + ' 處 ' + fl.area.toFixed(2) + ' m²，水下 ' + fl.underN + ' 處 ' + fl.underA.toFixed(2) + ' m²' + (fl.outN ? '，往外流 ' + fl.outN + ' 處' : '') + '</div>' +
+      '<div>進水 ' + flTpm(fl.inQ) + '・往外流 ' + flTpm(fl.outQ) + '・抽水 ' + pumpNow(sh).toFixed(1) + ' 噸／分（實際 ' + flTpm(fl.pumpQ) + '）・<b>淨進水 ' + flNetText(fl) + '</b>・累計 進 ' + Math.round(fl.inTot * RHO_W).toLocaleString() + '／出 ' + Math.round(fl.outTot * RHO_W).toLocaleString() + '／抽掉 ' + Math.round(fl.pumped * RHO_W).toLocaleString() + ' 噸</div>' +
       '<div>下沉 ' + sh.sink.toFixed(2) + ' m（照水該 ' + fl.sinkT.toFixed(2) + '；4.2 m 開始沉）・' + tilt + '</div>' +
       '<div>水的重心：' + (Math.abs(fl.comY) < 0.05 ? '在中線' : '偏' + sideName(fl.comY > 0 ? 'S' : 'P') + ' ' + Math.abs(fl.comY).toFixed(1) + ' m') + '・' + (fl.comX >= 0 ? '偏船頭 ' : '偏船尾 ') + Math.abs(fl.comX).toFixed(1) + ' m・噴進來的水 ' + fl.J.n + ' 顆・水格 ' + fl.actN + ' 格（邊長 ' + (fl.F.c * S).toFixed(1) + ' m）</div>' +
       '<div class="fpL">側視（船頭在右）</div><canvas class="fpC" id="fpS' + k + '"></canvas><div class="fpL">俯視（船頭在右、' + sideName('P') + '在上）</div><canvas class="fpC" id="fpT' + k + '"></canvas>';

@@ -66,7 +66,7 @@ function flNew(sh) {
   return { L: L, F: F, cap: F.cap.slice(), pd: F.pd.slice(), op: F.op.slice(), ol: F.ol.slice(), A: new Float32Array(N), on: new Uint8Array(N), act: new Int32Array(4096), actN: 0, dmark: new Uint8Array(N), dirty: [],
     hA: new Float32Array(H), hX: new Float32Array(H), hY: new Float32Array(H), hZ: new Float32Array(H), hYi: new Float32Array(H), hAcc: new Float32Array(H), hmark: new Uint8Array(H), hon: new Uint8Array(H), hdirty: [], holes: [], hWet: new Uint8Array(H), hQ: new Float32Array(H),   // 每個破口上一次算的狀態（flHoleState）：hWet 在海面下、hQ 流量 m³/s（＋進水、−出水、0 沒在流）
     J: { n: 0, p: new Float32Array(L.jn * 3), v: new Float32Array(L.jn * 3), vol: new Float32Array(L.jn), life: new Float32Array(L.jn) },
-    vol: 0, area: 0, open: 0, inQ: 0, outQ: 0, inTot: 0, outTot: 0, pumped: 0, comX: 0, comY: 0, sinkT: 0, step: 0, gen: 0, mesh: null,
+    vol: 0, area: 0, open: 0, inQ: 0, outQ: 0, pumpQ: 0, netQ: 0, underN: 0, underA: 0, outN: 0, inTot: 0, outTot: 0, pumped: 0, comX: 0, comY: 0, sinkT: 0, step: 0, gen: 0, mesh: null,
     dq: new Float32Array(N), dqOn: new Uint8Array(N), dqL: [], dqT: 0, fo: new Map(),   // dq…：往下流的量（只給畫面的水幕，flFalls；⛔ 模擬不讀）；fo：每一格往下流的開口在哪（快取）
     lq: new Float32Array(N * 4), lqT: 0 };                               // lq：每一格往前後左右流了多少（只給畫面的水瀑，flSides；⛔ 模擬不讀）
 }
@@ -162,6 +162,9 @@ function wetLatch(o, under, n) {
 /** 一艘船的進水讀數（__game.flood 與進水報表 81_floodlab.js 共用同一份）。 */
 /** 破口 h 現在是進水 'in'、出水 'out'（艙內的水比洞口外面的水面高 ⇒ 往外流；Tim 2026-10-18「就是破口高於海面」），還是沒在流 'dry'（上一次 floodStep 算的，sh.fl.hQ）。
  *  Tim 2026-10-18「可以放到邏輯層嗎(知道每個破口是在進水或出水)」「這樣所有需要這個資訊的地方都能取用」：畫面（詳細資訊的進水圖、進水細節頁、透視的破口點）都讀這裡，不再各自重算海面。 */
+// 讀數都在模擬裡記好、畫面直接拿（Tim 2026-10-18「這些資訊都可以在模擬層紀錄(顯示層直接取用)」）：每次 floodStep ——
+//   inQ／outQ 進、出水，pumpQ 實際抽掉的，netQ 淨進水（＝ inQ − outQ − pumpQ；正 ⇒ 水還在變多），全是 m³/s；
+//   open／area 破口幾處、多大，underN／underA 海面下的，outN 出水的；每個破口 hWet、hQ（flHoleState）。⛔ 模擬只記、不讀。
 function flHoleState(fl, h) { var q = fl.hQ[h]; return q > 1e-6 ? 'in' : q < -1e-6 ? 'out' : 'dry'; }
 /** 每個破口（還開著的）：{ x, y, z（船的格座標）, area m², wet 在海面下, q 流量 m³/s, st 'in'｜'out'｜'dry' } —— __game.flHoles(i)。 */
 function flHoleInfo(sh) {
@@ -248,7 +251,7 @@ function flTick(sh, fl, dtc) {
   var h0 = M[1] * (F.X0 + 0.5 * c) + M[5] * (F.Y0 + 0.5 * c) + M[13], dhx = M[1] * c, dhy = M[5] * c, dhz = M[9] * c;
   function head(i) { var ix = i % NX, iy = ((i / NX) | 0) % NY, iz = (i / NXY) | 0; return h0 + ix * dhx + iy * dhy + iz * dhz + (cap[i] > 0 ? A[i] / (cap[i] * Vc) : 0) * hc; }
   // 1. 破口：外面的水面 vs 艙內在洞那裡的水面（都不低於洞）⇒ 進或出
-  var inQ = 0, outQ = 0, area = 0, open = 0;
+  var inQ = 0, outQ = 0, area = 0, open = 0, uN = 0, uA = 0, oN = 0;   // uN／uA：海面下的破口幾處、多大；oN：出水的幾處
   for (k = 0; k < fl.holes.length; k++) {
     var h = fl.holes[k], ar = fl.hA[h]; if (!(ar > 0)) { fl.hQ[h] = 0; continue; }
     area += ar; open++;
@@ -258,7 +261,7 @@ function flTick(sh, fl, dtc) {
     // 艙內在洞那裡的水面：從洞口那一格往上，一格裝了九成以上、上面那一格也有水 ⇒ 再往上（⛔ 以前九成八：滿的格常常只有九成五〜九成七（粒子撞到九成五就算滿、旁邊流拉平）⇒ 停在深處、水頭差多算 6 m）
     if (ci >= 0 && A[ci] > 1e-6) { var q = ci; while (q + NXY < N && A[q] >= cap[q] * Vc * 0.9 && A[q + NXY] > 1e-6) q += NXY; hIn = head(q); }
     var d = Math.max(hOut, P[1]) - Math.max(hIn, P[1]);
-    fl.hWet[h] = P[1] < hOut ? 1 : 0; fl.hQ[h] = 0;                     // 破口的狀態（flHoleState；底下進水／出水時填流量）
+    fl.hWet[h] = P[1] < hOut ? 1 : 0; fl.hQ[h] = 0; if (fl.hWet[h]) { uN++; uA += ar; }                     // 破口的狀態（flHoleState；底下進水／出水時填流量）
     if (d > 0.001) {
       var dv = FL_C * ar * Math.sqrt(2 * G * d) * fk * dtc; inQ += dv; fl.hQ[h] = dv / dtc;
       fl.hAcc[h] += dv;
@@ -272,13 +275,13 @@ function flTick(sh, fl, dtc) {
       }
       accFix(fl.hAcc, h, L.vj, '進水');
     } else if (d < -0.001 && ci >= 0) {
-      var ov = Math.min(FL_C * ar * Math.sqrt(2 * G * -d) * fk * dtc, A[ci]); A[ci] -= ov; outQ += ov; fl.hQ[h] = -ov / dtc;
+      var ov = Math.min(FL_C * ar * Math.sqrt(2 * G * -d) * fk * dtc, A[ci]); A[ci] -= ov; outQ += ov; fl.hQ[h] = -ov / dtc; oN++;
       if (PHX.water && ov > 0.01) wpPour(P, M4.dir(M, 0, -s, 0), ov / dtc);    // 往外流：只給人看（13_water.js，自己的亂數）
     }
   }
   if (fl.tops) { var dq = doorInflow(sh, fl, dtc, head); inQ += dq[0]; area += dq[1]; open += dq[2]; }   // 門沒了的開口（25_doors.js；沒有門的船沒有 fl.tops）
   var bk = (fl.back || 0) - (fl.back0 || 0); fl.back0 = fl.back || 0; inQ = Math.max(0, inQ - bk);   // 進不來的（flDeposit 四周都滿了）不算進水 ⇒ 讀數是真的灌進來的量
-  fl.inQ = inQ / dtc; fl.outQ = outQ / dtc; fl.inTot += inQ; fl.outTot += outQ; fl.area = area; fl.open = open;
+  fl.inQ = inQ / dtc; fl.outQ = outQ / dtc; fl.inTot += inQ; fl.outTot += outQ; fl.area = area; fl.open = open; fl.underN = uN; fl.underA = uA; fl.outN = oN;
   // 2. 水格：往下（照這一格往下通幾成）、滿了往上擠、往旁邊（照水面的世界高度；來回換方向走 ⇒ 不偏一邊）
   var n0 = fl.actN, act = fl.act, dir = fl.gen & 1, t, j;
   for (t = 0; t < n0; t++) {
@@ -303,11 +306,12 @@ function flTick(sh, fl, dtc) {
   }
   // 3. 抽水：從最低的那幾層抽（⛔ act 要重拿：上面 flAct 可能換過一條更長的陣列）
   act = fl.act;
-  var need = FL_PUMP * pumpK(sh) * fk * dtc, lowz = 1e9;
+  var need = FL_PUMP * pumpK(sh) * fk * dtc, lowz = 1e9, p0 = fl.pumped;
   for (t = 0; t < fl.actN; t++) if (A[act[t]] > 1e-7) lowz = Math.min(lowz, (act[t] / NXY) | 0);
   for (var zz = lowz; zz < lowz + 3 && need > 0 && lowz < 1e9; zz++) for (t = 0; t < fl.actN && need > 0; t++) {
     i = act[t]; if (((i / NXY) | 0) !== zz || A[i] <= 0) continue; m = Math.min(A[i], need); A[i] -= m; need -= m; fl.pumped += m;
   }
+  fl.pumpQ = (fl.pumped - p0) / dtc; fl.netQ = fl.inQ - fl.outQ - fl.pumpQ;   // 實際抽掉的（m³/s；艙裡沒水 ⇒ 比抽水機的量少）；淨進水 ＝ 進 − 出 − 實際抽（Tim 2026-10-18「實際進水速度(進水-抽水)」）
   // 4. 收掉空的格；讀數：水量、重心（公尺，離船型中線：x 往船頭、y 往格 +y 那一舷為正）
   var w = 0, mx = 0, my = 0, keep = 0, cx = sh.T.cx, cy = sh.T.cy;
   for (t = 0; t < fl.actN; t++) {
