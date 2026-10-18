@@ -138,6 +138,8 @@ if (DEBUG) window.__game = {
   cam: function (o) { camSet(o); camSet({ snap: true }); camUpdate(1); render(); },
   // 海圖（TASK-0721；08_seabed.js、32_ground.js）：載了哪幾塊、換過幾次中心、等過幾次；每艘的擱淺讀數；q ＝ [x, z] ⇒ 那一點的高度與底質
   bed: function (q) { if (!BED || !BED.A) return null; return { area: BED.A.id, site: BED.site, origin: [BED.ax, BED.az], center: [BED.cx, BED.cy], loaded: Object.keys(BED.ch).sort(), loads: BED.loads, drops: BED.drops, waits: BED.miss, meshes: Object.keys(BEDGL).length,
+    far: { tiles: BEDFAR.n, left: BEDFAR.todo ? BEDFAR.todo.length + (BEDFAR.busy ? 1 : 0) : null, kb: Math.round(BEDFAR.bytes / 1024), ms: +BEDFAR.ms.toFixed(1), drawn: Object.keys(BEDFAR.g).filter(function (k) { return !BEDGL[k]; }).length },
+    foam: { n: BEDFOAM.N, builds: BEDFOAM.builds, ms: +BEDFOAM.ms.toFixed(1), eye: CAM.eye.map(function (v) { return +v.toFixed(1); }), ground: +bedHgt(CAM.eye[0], CAM.eye[2]).toFixed(1) },
     at: q ? { h: +bedHgt(q[0], q[1]).toFixed(2), mat: bedMat(q[0], q[1]) } : undefined,
     ships: SHIPS.map(function (sh) { return { name: sh.name, px: +sh.px.toFixed(1), pz: +sh.pz.toFixed(1), keelY: sh.keelY === undefined ? null : +sh.keelY.toFixed(2), grnd: sh.grnd ? { m: sh.grnd.m, pen: +sh.grnd.pen.toFixed(2), lost: sh.grnd.lost } : null, lost: sh.grndLost || 0, av: sh.bedAv ? { t: +sh.bedAv.t.toFixed(1), d: sh.bedAv.d } : null }; }) }; },
   seaDbg: function (o) { SEA_DBG = o || {}; render(); return SEA_DBG; },   // 海面試驗場（src/tests/sea_lab.py）：{ det, an, … } 覆寫著色器的那幾格；{} ⇒ 照畫質

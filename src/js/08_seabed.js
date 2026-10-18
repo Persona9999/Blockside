@@ -12,7 +12,7 @@ var BED_MAT = { DEEP: 0, SAND: 1, REEF: 2, SHOAL: 3, ROCK: 4, BEACH: 10, LAND: 1
 var BED_CFG = Object.assign({ ring: 1, prefetch: 1, margin: 300 }, CFG.map || {});   // config/game.json map：在用幾圈、多預載幾圈、船旁邊多少公尺內一定要載好
 window.BSMAP = {                                                         // 海圖檔（<script>）載進來呼叫這兩支
   area: function (o) { if (BED && BED.wantArea === o.id) BED.gotArea = o; },
-  chunk: function (id, cx, cy, b64) { if (!BED || !BED.A || BED.A.id !== id) return; var k = bedKey(cx, cy), w = BED.pend[k]; if (w) w(b64); }
+  chunk: function (id, cx, cy, b64) { if (!BED || !BED.A || BED.A.id !== id) return; var k = bedKey(cx, cy), w = BED.pend[k], v = BED.peek[k]; if (w) w(b64); if (v) v(b64); }
 };
 function bedKey(cx, cy) { return cx + '_' + cy; }
 function bedScript(src) {
@@ -26,7 +26,7 @@ function bedScript(src) {
 function bedBoot() {
   var id = Q.get('map'); if (!id) return Promise.resolve();
   if (!/^[a-z0-9_-]+$/.test(id)) return Promise.reject(new Error('海域名稱只能是小寫英數、底線、連字號：' + id));
-  BED = { wantArea: id, A: null, ch: {}, pend: {}, idx: null, cx: null, cy: null, top: -Infinity, miss: 0, loads: 0, drops: 0 };
+  BED = { wantArea: id, A: null, ch: {}, pend: {}, peek: {}, idx: null, cx: null, cy: null, top: -Infinity, miss: 0, loads: 0, drops: 0 };
   return bedScript('maps/' + id + '/area.js').then(function () {
     var A = BED.gotArea; if (!A) throw new Error('maps/' + id + '/area.js 沒有呼叫 BSMAP.area');
     BED.A = A; BED.G = A.chunk / A.step; BED.n = A.n; BED.nx = A.x[1] - A.x[0] + 1;
@@ -43,11 +43,19 @@ function bedIdx(cx, cy) { var A = BED.A, i = cx - A.x[0], j = cy - A.y[0]; retur
 function bedLoad(cx, cy) {
   var k = bedKey(cx, cy), i = bedIdx(cx, cy);
   if (i < 0 || !BED.has[i] || BED.slot[i] || BED.pend[k]) return BED.pend[k] ? BED.pend[k].p : Promise.resolve();
-  var w = function (b64) { var C = bedDecode(b64); if (C.cx !== cx || C.cy !== cy) throw new Error('海圖塊 ' + k + ' 的檔頭寫的是 ' + C.cx + '_' + C.cy);
+  var w = function (b64) { if (BED.slot[i]) return; var C = bedDecode(b64);   // 已經有了（遠景讀同一塊的那一份檔也會叫到這裡）⇒ 不重來 if (C.cx !== cx || C.cy !== cy) throw new Error('海圖塊 ' + k + ' 的檔頭寫的是 ' + C.cx + '_' + C.cy);
     BED.slot[i] = C; BED.ch[k] = C; BED.top = Math.max(BED.top, C.max); BED.loads++; evEmit('bedChunk', cx, cy, C); };
   BED.pend[k] = w;
   w.p = bedScript('maps/' + BED.A.id + '/' + k + '.js').then(function () { delete BED.pend[k]; }, function (e) { delete BED.pend[k]; throw e; });
   return w.p;
+}
+/** 只給畫面（63_bed_gl.js 遠景）：讀一塊的檔、交回 base64 —— ⛔ 不放進 BED.slot／BED.ch（模擬照舊只查 bedLoad 載的、照船旁邊 margin 等）。 */
+function bedPeek(cx, cy) {
+  var k = bedKey(cx, cy);
+  return new Promise(function (ok, bad) {
+    BED.peek[k] = function (b64) { delete BED.peek[k]; ok(b64); };
+    bedScript('maps/' + BED.A.id + '/' + k + '.js').then(function () { if (BED.peek[k]) { delete BED.peek[k]; bad(new Error('maps/' + BED.A.id + '/' + k + '.js 沒有呼叫 BSMAP.chunk')); } }, function (e) { delete BED.peek[k]; bad(e); });
+  });
 }
 /** 解碼一塊（跟世界地圖工具 tools/export_chunks.cjs encodeChunk 一一對應；格式 src/MAP_CHUNK.md）⇒ { cx, cy, n, step, h: Int16Array（分米）, mat: Uint8Array, min, max（公尺） } */
 function bedDecode(b64) {

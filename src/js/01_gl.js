@@ -247,7 +247,7 @@ function programs() {
   P.water = VK.compile(gl,
     '#version 300 es\nlayout(location=0) in vec3 aP; uniform mat4 uVP; uniform vec2 uC;\n' + SEA_GLSL +
     'out vec3 vW; void main(){ vec2 p=uC+aP.xy; float h=seaHs(p,aP.z)*(1.0-smoothstep(900.0,1600.0,length(aP.xy))); vW=vec3(p.x,h,p.y); gl_Position=uVP*vec4(vW,1.0); }\n',
-    '#version 300 es\nprecision highp float; in vec3 vW; uniform vec3 uEye,uSun,uFog,uSky; uniform float uFogD,uDet,uAn,uNzP,uReflOn,uRefr,uFoam,uRefrD,uRefrK; uniform vec2 uView; uniform sampler2D uRefl,uScene,uSceneD; out vec4 o;\n' + SEA_GLSL + SHADOW_GLSL +
+    '#version 300 es\nprecision highp float; in vec3 vW; uniform vec3 uEye,uSun,uFog,uSky; uniform float uFogD,uDet,uAn,uNzP,uReflOn,uRefr,uFoam,uRefrD,uRefrK,uBedOn; uniform vec2 uView; uniform vec4 uBedR; uniform sampler2D uRefl,uScene,uSceneD,uBedT; out vec4 o;\n' + SEA_GLSL + SHADOW_GLSL +
     // 反射（uReflOn）：RT.R 是鏡像過來的船，照螢幕座標＋法線擾動讀，沒畫到的地方（a ＝ 0）照舊是天空。
     // 折射（uRefr）：0 不透明、1 半透明（底下的照舊混進來）、2 讀 RT.B（畫海之前的場景）：照法線擾動、照水的厚度（兩個深度相減）吸收成海的顏色。
     'float linZ(float d){ float z=d*2.0-1.0; return 5000.0/(5000.5-z*4999.5); }\n' +
@@ -292,6 +292,13 @@ function programs() {
     '   float band=smoothstep(0.12,0.4,q)*(1.0-smoothstep(1.4,2.6,q));\n' +
     '   c=mix(c,vec3(0.82,0.86,0.88)*(0.55+0.45*uSunK),clamp(arm*band,0.0,1.0)*0.75*(1.0-smoothstep(250.0,1000.0,fd)));\n' +
     '   c=mix(c,vec3(0.01,0.04,0.06),(1.0-smoothstep(0.08,0.35,q))*0.85); }\n' +
+    // 岸邊的白沫（有海圖才有，TASK-0721；63_bed_gl.js BEDFOAM）：水深 ＝ 這一點的海面（含浪）− 海底（uBedT：8 m 一格的高度，uBedR ＝ 第 0 格的世界 x、z、間距、格數）。
+    //   水邊一條亮線（< 0.7 m）＋往岸邊推的一道一道浪花（照水深的正弦、隨時間往淺處走；2 m 內），用兩層雜訊碎開；1.2 km 外淡掉。只在畫面上。
+    ' if(uBedOn>0.5){ vec2 bu=((p-uBedR.xy)/uBedR.z+0.5)/uBedR.w; if(bu.x>0.0&&bu.y>0.0&&bu.x<1.0&&bu.y<1.0){ float dep=vW.y-textureLod(uBedT,bu,0.0).r;\n' +
+    '   if(dep<2.5&&dep>-0.5){ float nz=vn(p*0.11+vec2(uSeaT*0.04,-uSeaT*0.03)); float ln=1.0-smoothstep(0.05,0.7,dep);\n' +
+    '     float sw=smoothstep(0.55,0.95,sin(dep*4.0+uSeaT*1.7+nz*5.0))*(1.0-smoothstep(0.9,2.2,dep));\n' +
+    '     float fm=clamp(ln*0.9+sw*0.75,0.0,1.0)*smoothstep(0.2,0.6,0.55*vn(p*0.45+vec2(0.0,uSeaT*0.15))+0.6*nz)*(1.0-smoothstep(400.0,1200.0,fd));\n' +
+    '     c=mix(c,vec3(0.86,0.9,0.92)*(0.55+0.45*uSunK),fm*0.85); a=mix(a,1.0,fm); } } }\n' +
     ' c=mix(c,uFog,1.0-exp(-fd*uFogD)); o=vec4(c,a); }\n');
   // 雨（天氣 × 畫質的「雨」）：整個畫面一層斜的雨絲，三層遠近（越近越粗越快）；欄位照雜湊挑哪幾欄有雨、每欄的相位亂撒。鏡頭轉的時候雨絲跟著水平滑（uYaw）。
   P.rain = VK.compile(gl, '#version 300 es\nlayout(location=0) in vec2 aP; void main(){ gl_Position=vec4(aP,0.0,1.0); }\n',
