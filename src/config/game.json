@@ -459,6 +459,17 @@
       "crew": {"top": 0, "marines": 7, "guns": {"long36": 5, "long8": 2}},
       "rooms": {"甲板-hold/艙房/proue": "medical", "甲板-hold/艙房/taverne": "workshop"},
       "names": ["皇家號"]
+    },
+    {
+      "id": "susquehanna",
+      "el": "ship-susquehanna",
+      "name": "蘇士奎哈納號",
+      "vxk": "susquehanna.vxk",
+      "work": "crest-001-susquehanna-01m-assembly",
+      "author": "crest-001",
+      "drive": "steam",
+      "cfg": {"pump": 15, "base": 10},
+      "geo": {"spar": [90, 104], "marines": [80, 200], "center": 150, "aim": 85, "aimZ": [30, 480], "deckAim": [90, 110], "rigAim": [200, 470]}
     }
   ],
   "furniture": {
