@@ -2,11 +2,11 @@
 // 一個人 ＝ 一張面向鏡頭、但永遠直立的貼圖。位置存格座標（腳底那一格的上緣），畫的時候用船的矩陣換到世界。
 // 砲要有人操作：人數 < 最少人數就不能開；裝填速度 ∝ (人數／滿編)^0.85。死傷的人不再操作；
 // 人不夠時，倖存者集中到還開得動的砲 ⇒ 其餘的砲沒人操作（HUD ○）。調度見 reassign。
-var ROLE = { GUN: 0, POWDER: 1, OFFICER: 2, MARINE: 3, TOP: 4, HELM: 5, HAND: 6, SURGEON: 7, CARPENTER: 8, SAILMAKER: 9 }, NROLE = 6;   // NROLE：貼圖照職位的列數（HAND 預備水手沒有自己那一列，畫成砲手；42_hands.js）
+var ROLE = { GUN: 0, POWDER: 1, OFFICER: 2, MARINE: 3, TOP: 4, HELM: 5, HAND: 6, SURGEON: 7, CARPENTER: 8, SAILMAKER: 9, OAR: 10 }, NROLE = 6;   // NROLE：貼圖照職位的列數（HAND 預備水手沒有自己那一列，畫成砲手；42_hands.js）
 var FR = { IDLE: 0, WORK_A: 1, WORK_B: 2, FIRE: 3, RUN_A: 4, RUN_B: 5, WOUNDED: 6, DEAD: 7 }, NFR = 8;
 // 砲班：滿編／最少照砲種表（GUNS 的 crew／min，10_ship.js）—— 兩舷各一班；24 磅長砲一班 12 人＋送藥童 ⇒ 一個人物約兩人
 // Tim 2026-10-12：砲班減一人（長砲 6 → 5、追擊砲 4 → 3），多出來的去搬火藥與彈藥（送藥手，23_powder.js）；射速照舊（裝填 ∝ 在崗／滿編）
-var ROLE_NAME = ['砲手', '送藥手', '軍官', '陸戰隊', '桅頂水手', '舵手', '水手', '船醫', '木匠'];   // 船醫（TASK-0676）：貼圖用 ART_NURSE 那一列（44_medic.js medSurgeons）
+var ROLE_NAME = ['砲手', '送藥手', '軍官', '陸戰隊', '桅頂水手', '舵手', '水手', '船醫', '木匠', '帆匠', '槳手'];   // 帆匠（47_sailmaker.js）；槳手（TASK-0691）：貼圖照砲手那一列（c.art）   // 船醫（TASK-0676）：貼圖用 ART_NURSE 那一列（44_medic.js medSurgeons）
 var ART_CAPTAIN = 6, NART = 13;                   // 貼圖的列：0–5 照職位，6 船長（每艘船第一個軍官；職位照舊是軍官），7–12 Sirius 的六位（下一行）
 var ART_NURSE = 7, ART_CARPENTER = 8, ART_COOK = 9, ART_SAILMAKER = 10, ART_NAVIGATOR = 11, ART_QUARTERMASTER = 12;   // 新職位（TASK-0676）的貼圖列；職位接上之前沒有人用
 function standZ(g, x, y, z0, z1, head) {          // (x, y) 這一柱裡，z0..z1 之間可以站的高度（腳下實心、頭上 head 格空）；沒有 ⇒ -1
@@ -91,6 +91,7 @@ function makeCrew(sh) {
     }
     if (gn.spots[1]) gn.spots[1].who.rammer = true;                  // 只給畫用：裝填時拿推彈桿的那一個（41_crew_art.js 手持物）
   });
+  oarCrew(sh, g, taken, crew, add);                                   // 槳手（TASK-0691）：每支槳 meta rowers 個，坐在槳座往船裡那一側
   // 送藥手：每一對砲（同一個 x 的兩舷）一個，從那一層的取用點搬火藥與彈藥到要裝填的砲（23_powder.js makeMonkeys／stepMonkey）
   makeMonkeys(sh, crew, taken, add);
   // spar deck 的高度：從 carronade 推；陸戰隊沿 S 那一舷（格 +y）的舷牆、軍官在後甲板、舵手在舵輪旁
@@ -132,6 +133,7 @@ function makeCrew(sh) {
     }
   });
   makeHands(sh, crew, add); carpInit(sh, crew, add); smInit(sh, crew, add);   // smInit：帆匠（47_sailmaker.js；木匠之後）   // carpInit：木匠（46_carpenter.js；要走路格 ⇒ 預備水手之後）                                          // 預備水手：最後才生（數量 0 ⇒ 跟以前一樣，rnd() 一個都不多抽）
+  crew.forEach(function (c) { if (c.role === ROLE.OAR) c.deck = sh.nav ? sh.nav.levels[Math.max(0, lvAt(sh, c.home))].key : sh.weatherDeck; });   // 槳手在哪一層（火槍只打露天那一層的：musket）   // carpInit：木匠（46_carpenter.js；要走路格 ⇒ 預備水手之後）                                          // 預備水手：最後才生（數量 0 ⇒ 跟以前一樣，rnd() 一個都不多抽）
   if (offN < CW.officers) {                                          // shelter：船長以外的軍官在預備水手待命的那一層（42_hands.js shelterSpots；沒有走路格 ⇒ 照舊站露天甲板）
     var below = shelterSpots(sh, CW.officers - offN);
     offP.slice(offN, CW.officers).forEach(function (p, k) { add(ROLE.OFFICER, below[k] || standNear(g, p[0], p[1], sz0, sz1, 14, taken), null, 1); if (below[k]) crew[crew.length - 1].below = true; });   // below：在甲板下 ⇒ 火槍打不到（musket）
@@ -142,11 +144,28 @@ function makeCrew(sh) {
   function cnt(r) { return crew.filter(function (c) { return c.role === r; }).length; }
   //   ⚠ 預設本來就有站不下的（憲法號陸戰隊 11／12、送藥手 26／27；夜隼號陸戰隊 2／12）：開戰只報玩家改過的那幾項（61_hud.js crewShortNote），全部照實列在船隻配置頁（CREW_SEEN）
   sh.crewShort = [['砲班', sh.guns.reduce(function (a, gn) { return a + gn.crewFull; }, 0), cnt(ROLE.GUN), 'guns'], ['送藥手', sh.pmWant, cnt(ROLE.POWDER), 'monkeys'], ['軍官', CW.officers, cnt(ROLE.OFFICER), 'officers'],
-    ['舵手', wheel ? CW.helm : 0, cnt(ROLE.HELM), 'helm'], ['陸戰隊', CW.marines, cnt(ROLE.MARINE), 'marines'], ['桅頂水手', CW.top * sh.masts.length, cnt(ROLE.TOP), 'top'], ['預備水手', CW.hands, cnt(ROLE.HAND), 'hands'], ['船醫', sh.surgWant || 0, cnt(ROLE.SURGEON), 'surgeon'], ['木匠', sh.carpWant || 0, cnt(ROLE.CARPENTER), 'carpenter'], ['帆匠', sh.smWant || 0, cnt(ROLE.SAILMAKER), 'sailmaker']].filter(function (r) { return r[2] < r[1]; });
+    ['舵手', wheel ? CW.helm : 0, cnt(ROLE.HELM), 'helm'], ['陸戰隊', CW.marines, cnt(ROLE.MARINE), 'marines'], ['桅頂水手', CW.top * sh.masts.length, cnt(ROLE.TOP), 'top'], ['預備水手', CW.hands, cnt(ROLE.HAND), 'hands'], ['船醫', sh.surgWant || 0, cnt(ROLE.SURGEON), 'surgeon'], ['槳手', sh.oarWant || 0, cnt(ROLE.OAR), 'oars'], ['木匠', sh.carpWant || 0, cnt(ROLE.CARPENTER), 'carpenter'], ['帆匠', sh.smWant || 0, cnt(ROLE.SAILMAKER), 'sailmaker']].filter(function (r) { return r[2] < r[1]; });
   CREW_SEEN[sh.T.id] = { n: crew.length, short: sh.crewShort, sig: crewSig(CW) };
   return crew;
 }
 function crewAble(c) { return c.st === 0; }
+/** 槳手（TASK-0691）：每支槳（模型 meta kind=oar、有槳座 pivot）meta rowers 個（至少 1）；坐在槳座往船裡那一側 ——
+ *  有固定點 seat ⇒ 從那裡排；沒有 ⇒ 從槳座往船裡 1 m（槳葉端 blade 的反方向；沒有 blade ⇒ 往中線）。多個人沿槳柄每 0.6 m 一個（長槳好幾個人划一支）。
+ *  站不下 ⇒ 少幾個就是那支槳到崗比例少幾成（開戰時廣播、匯入檢查報）。 */
+function oarCrew(sh, g, taken, crew, add) {
+  var n0 = 0;
+  sh.models.forEach(function (m) {
+    if (m.kind !== 'oar' || !m.pts.pivot) return;
+    var pv = m.pts.pivot, bl = m.pts.blade, n = oarRowers(m); n0 += n;
+    var dx = bl ? pv[0] - bl[0] : 0, dy = bl ? pv[1] - bl[1] : sh.T.cy - pv[1], dl = Math.hypot(dx, dy) || 1; dx /= dl; dy /= dl;   // 往船裡（平面）
+    var s0 = m.pts.seat || [pv[0] + dx * 10, pv[1] + dy * 10, pv[2]], z0 = Math.floor(Math.min(s0[2], pv[2])) - 14, z1 = Math.floor(Math.max(s0[2], pv[2])) + 2;
+    for (var i = 0; i < n; i++) {
+      var at = standNear(g, Math.floor(s0[0] + dx * 6 * i), Math.floor(s0[1] + dy * 6 * i), z0, z1, 14, taken, 6); if (!at) continue;
+      add(ROLE.OAR, at, null, 1); var c = crew[crew.length - 1]; c.oar = m; c.art = ROLE.GUN;
+    }
+  });
+  sh.oarWant = n0;
+}
 /** 每門砲現在有幾個人在崗（走過去的路上不算）。 */
 function manning(sh) {
   sh.guns.forEach(function (g) { g.manned = 0; });
@@ -297,14 +316,15 @@ function landIn(sh, c, lv, p, h) {
   if (r === ROLE.OFFICER) { c.below = true; return; }                  // 掉到甲板下的軍官：火槍打不到（musket）
   if (r === ROLE.HAND || r === ROLE.CARPENTER || r === ROLE.SAILMAKER) {   // 木匠、帆匠照預備水手（修的工作作廢，下一次點名重挑）
     var H = c.hand; H.lv = lv; H.legs = []; H.wp = null; H.climb = null; H.wait = rr(0.5, 1.5);
-    if (H.job && H.job.kind === 'helm' && H.job.who) H.job.who.relieved = false;   // 去補舵手的路斷了 ⇒ 那個位置重新等人
+    if (H.job && (H.job.kind === 'helm' || H.job.kind === 'oar') && H.job.who) H.job.who.relieved = false;   // 去補舵手的路斷了 ⇒ 那個位置重新等人
     if (H.job && H.job.kind !== 'staff' && H.job.kind !== 'carry') H.job = null;   // 醫療艙的工作照留：medJoin 自己看層對不對
     c.deck = NV.levels[lv].key; return;
   }
   if (c.art === undefined) c.art = r;                                    // 貼圖照原本的職位那一列
   if (r === ROLE.GUN) leaveGun(c);
   if (r === ROLE.POWDER) { (c.guns || []).forEach(function (g) { if (g.pm === c) g.pm = null; }); c.fellPm = { deck: c.deck, guns: c.guns || [], home: home0 }; c.pm = null; c.cart = false; }   // 補上來的送藥手接它的砲（handJoin）
-  if (r === ROLE.HELM) c.helmHome = home0;             // 舵手的站位：預備水手照它補（callHands）
+  if (r === ROLE.HELM) c.helmHome = home0;
+  if (r === ROLE.OAR) { c.oarHome = home0; c.oarOf = c.oar; c.oar = null; }   // 槳手的位子：預備水手照它補（callHands）             // 舵手的站位：預備水手照它補（callHands）
   c.backRole = r === ROLE.MARINE ? r : undefined;
   c.role = ROLE.HAND; c.gun = null; c.deck = NV.levels[lv].key;
   c.hand = { lv: lv, wait: rr(1, 3), legs: [], wp: null, k: 0, climb: null, job: null, to: null };
@@ -341,7 +361,7 @@ function stepCrew(sh, dt) {
 function musket(sh, c) {
   var foe = foeOf(sh), w = M4.pt(sh.M, c.pos[0], c.pos[1], c.pos[2] + 14);
   if (!foe) return;
-  var cand = foe.crew.filter(function (o) { return o.st === 0 && !o.below && (o.role !== ROLE.GUN && o.role !== ROLE.POWDER && o.role !== ROLE.HAND && o.role !== ROLE.CARPENTER && o.role !== ROLE.SAILMAKER || o.deck === foe.weatherDeck); });   // 露天的人（最上面那層砲甲板的砲班、走到那一層的預備水手也算）
+  var cand = foe.crew.filter(function (o) { return o.st === 0 && !o.below && (o.role !== ROLE.GUN && o.role !== ROLE.POWDER && o.role !== ROLE.HAND && o.role !== ROLE.CARPENTER && o.role !== ROLE.SAILMAKER && o.role !== ROLE.OAR || o.deck === foe.weatherDeck); });   // 露天的人（最上面那層砲甲板的砲班、走到那一層的預備水手也算）
   if (foe.arm) { var wL = M4.pt(foe.inv, w[0], w[1], w[2]); cand = cand.filter(function (o) { return !armBetween(foe, wL, [o.pos[0], o.pos[1], o.pos[2] + 9]); }); }   // 躲在裝甲後面（砲塔裡）的看不到（24_armor.js）
   var near = [];                                                       // 射程內的：[人, 距離 m]
   cand.forEach(function (o) { var d = len(sub(M4.pt(foe.M, o.pos[0], o.pos[1], o.pos[2]), w)); if (d <= MUSKET_R) near.push([o, d]); });

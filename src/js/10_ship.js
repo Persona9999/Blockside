@@ -52,6 +52,7 @@ function makeShip(i, team, yaw, pz, T, px) {                          // T：船
     if (foot < 0 && hm.kind === 'anchor' && rg) foot = anchorNear(T, rg[0], rg[1], rg[2], 8);   // 錨（meta kind=anchor）：掛在吊錨木上 ⇒「腳」是錨環 ring 旁的那一格（⛔ 往下找：掛在舷外、底下是海 ⇒ 開局就掉；維吉尼亞號 2026-10-15）
     var hg = (m.points || {})['hinge-a'];
     if (foot < 0 && hm.kind === 'door' && hg) foot = anchorNear(T, hg[0], hg[1], hg[2], 8);   // 門、艙蓋（TASK-0638，25_doors.js）：掛在鉸鏈旁的那一格（⛔ 往下找：艙蓋底下就是艙口 ⇒ 腳落到下一層甲板，艙口邊被打掉也不掉）
+    if (foot < 0 && hm.kind === 'oar' && pv) foot = anchorNear(T, pv[0], pv[1], pv[2], 8);   // 槳（TASK-0691）：掛在槳座（pivot）旁那一格舷緣 ⇒ 舷緣被打掉就掉（⛔ 往下找：槳伸在舷外、底下是海 ⇒ 開局就掉）
     var hang = false;
     if (foot < 0) { var z0 = fz; while (fz > 0 && !T.hullG.get(cx, cy, fz)) fz--; if (z0 - fz <= 12 || kind !== 'model') foot = VK.pack(cx, cy, fz); else hang = true; }   // 腳下那一格甲板（被打掉 ⇒ 掉下去）
     // 掛著的（吊艇架上的小艇；Tim 2026-10-14：一開場就掉）：底下 1.2 m 內沒有甲板 ⇒ 掛在吊索上（下面 hangFalls 找；吊索全斷才掉）。
