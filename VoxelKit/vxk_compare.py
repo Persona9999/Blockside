@@ -138,6 +138,9 @@ def cmp_rig(ra, rb, d):
             else:
                 if a['tris'] != b['tris']: d('sail `%s` 三角形不同' % k)
                 if not near(a['verts'], b['verts'], TOL_PT): d('sail `%s` 頂點（%d vs %d 個數）差超過 %.3f' % (k, len(a['verts']), len(b['verts']), TOL_PT))
+            # meta 也要比（2026-10-19：持火號帆段 set 1 → 3 只改了 meta ⇒ 被判「內容相同」、admin.py reimport 不換 .vxk，遊戲一直是舊的帆段）。
+            #   ⛔ 不比 bind（admin.py ropebind 匯入後才寫進 _cache 那一份，雕刻作品剛匯出的沒有 ⇒ 每次都會判不同）。
+            if ('meta' in a) != ('meta' in b) or a.get('meta') != b.get('meta'): d('%s `%s` meta：%s vs %s' % (kind[:-1], k, a.get('meta'), b.get('meta')))
     if 'models' in ra or 'models' in rb:
         ma, mb = ra.get('models', []), rb.get('models', [])
         if len(ra.get('meshes', [])) != len(rb.get('meshes', [])):
