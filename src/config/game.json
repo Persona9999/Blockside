@@ -446,6 +446,17 @@
       "cfg": {"pump": 32, "base": 13, "agile": 1},
       "geo": {"spar": [113, 141], "marines": [80, 290], "center": 160, "aim": 100, "aimZ": [55, 330], "deckAim": [90, 120], "rigAim": [160, 310]},
       "names": ["光榮號"]
+    },
+    {
+      "id": "reale",
+      "el": "ship-reale",
+      "name": "皇家號",
+      "vxk": "reale.vxk",
+      "work": "apex-one-reale-01m-assembly",
+      "author": "apex-one",
+      "cfg": {"base": 6},
+      "geo": {"spar": [30, 46], "marines": [75, 115], "center": 60, "aim": 38, "aimZ": [20, 380], "deckAim": [28, 45], "rigAim": [120, 330]},
+      "names": ["皇家號"]
     }
   ],
   "furniture": {
