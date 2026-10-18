@@ -2,7 +2,13 @@
 // 每塊一份網格（P.tri：位置、法線、顏色；照常吃陰影與霧），載進來（08_seabed.js 'bedChunk'）就排隊建、丟掉（'bedDrop'）就刪。
 //   在用的那幾圈（中心 ± ring）每 8 m 一點、預載的那一圈每 16 m；四邊往下垂 40 m 的裙邊 ⇒ 粗細不同的兩塊接在一起也看不到縫。
 //   水下的部分由海面的折射（07_gfx.js 折射：高）透出來，越深越被水的顏色蓋掉 ⇒ 礁、沙洲在淺水裡看得出顏色。
-var BEDGL = {}, BEDGL_Q = [], BEDGL_ID = null, BED_FOG = 0.4;
+// 遠景（BEDFAR）：載入的 5×5 以外也要看得到島 ⇒ 整個海域有檔的塊每塊照 32 m 抽一份粗網格（bedMesh stride 8），開戰後在背景一塊一塊讀
+//   （08_seabed.js bedPeek：⛔ 不放進模擬查的那一份；離開戰位置近的先讀），網格建好就丟掉解碼的資料。那一塊有細的（BEDGL）就畫細的、沒有才畫粗的 ⇒ 不疊在一起。
+//   多遠看得到：鏡頭的遠裁切面 5 km（03_camera.js）、地形的霧淡成 0.4 倍（BED_FOG）⇒ 晴天 4 km 外還剩一成的輪廓。
+// 岸邊的白沫（BEDFOAM）：5×5 那幾塊的高度照 8 m 一格放進一張貼圖（R16F、雙線性），海的著色器（01_gl.js）照「海面 − 海底」< 2 m 畫一圈白沫。只給人看。
+var BEDGL = {}, BEDGL_Q = [], BEDGL_ID = null, BED_FOG = 0.4, BED_FAR_ST = 8;
+var BEDFAR = { g: {}, todo: null, busy: false, n: 0, bytes: 0, ms: 0 };
+var BEDFOAM = { tex: null, dirty: true, cx: null, cy: null, ox: 0, oz: 0, sp: 8, N: 0, ms: 0, builds: 0 };
 var BED_COL = { 0: [0.33, 0.35, 0.31], 1: [0.74, 0.70, 0.52], 2: [0.46, 0.55, 0.40], 3: [0.86, 0.81, 0.62], 4: [0.40, 0.38, 0.35], 10: [0.84, 0.77, 0.57], 12: [0.43, 0.41, 0.38] };
 function bedCol(h, m) {
   if (m === BED_MAT.LAND) {                                              // 陸地：低的綠、往上變褐、很高變灰
@@ -12,8 +18,8 @@ function bedCol(h, m) {
   }
   return BED_COL[m] || BED_COL[0];
 }
-evOn('bedChunk', function (cx, cy) { BEDGL_Q.push(bedKey(cx, cy)); }, 0, true);
-evOn('bedDrop', function (cx, cy) { var k = bedKey(cx, cy), g = BEDGL[k]; if (g) { gl.deleteVertexArray(g.vao); gl.deleteBuffer(g.vb); gl.deleteBuffer(g.ib); delete BEDGL[k]; } }, 0, true);
+evOn('bedChunk', function (cx, cy) { BEDGL_Q.push(bedKey(cx, cy)); BEDFOAM.dirty = true; }, 0, true);
+evOn('bedDrop', function (cx, cy) { var k = bedKey(cx, cy), g = BEDGL[k]; BEDFOAM.dirty = true; if (g) { gl.deleteVertexArray(g.vao); gl.deleteBuffer(g.vb); gl.deleteBuffer(g.ib); delete BEDGL[k]; } }, 0, true);
 function bedLod(C) { var R = BED_CFG.ring; return Math.abs(C.cx - BED.cx) <= R && Math.abs(C.cy - BED.cy) <= R ? 2 : 4; }
 /** 一塊 ⇒ 網格（stride：每幾個取樣點取一個）。頂點：位置 3、法線 3、顏色 3（世界座標：原點 ＝ 開戰位置）。 */
 function bedMesh(C, stride) {
@@ -36,14 +42,59 @@ function bedMesh(C, stride) {
   return { V: V, I: new Uint32Array(I) };
 }
 function bedUpload(k, C, lod) {
-  var M = bedMesh(C, lod), g = BEDGL[k] || { vao: gl.createVertexArray(), vb: gl.createBuffer(), ib: gl.createBuffer() };
+  var g = bedGpu(bedMesh(C, lod), BEDGL[k]);
+  g.lod = lod; g.cx = C.cx; g.cy = C.cy; BEDGL[k] = g;
+}
+/** 網格 ⇒ GPU（g 給了就重用那一組 VAO 與緩衝區）。 */
+function bedGpu(M, g) {
+  g = g || { vao: gl.createVertexArray(), vb: gl.createBuffer(), ib: gl.createBuffer() };
   gl.bindVertexArray(g.vao); gl.bindBuffer(gl.ARRAY_BUFFER, g.vb); gl.bufferData(gl.ARRAY_BUFFER, M.V, gl.STATIC_DRAW);
   gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 36, 0);
   gl.enableVertexAttribArray(1); gl.vertexAttribPointer(1, 3, gl.FLOAT, false, 36, 12);
   gl.enableVertexAttribArray(2); gl.vertexAttribPointer(2, 3, gl.FLOAT, false, 36, 24);
   gl.disableVertexAttribArray(3);
   gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, g.ib); gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, M.I, gl.STATIC_DRAW); gl.bindVertexArray(null);
-  g.n = M.I.length; g.lod = lod; g.cx = C.cx; g.cy = C.cy; BEDGL[k] = g;
+  g.n = M.I.length; return g;
+}
+/** 遠景：每格最多做一塊 —— 那一塊現在載著（BED.ch）就直接抽，沒有就讀檔（bedPeek，同時只讀一塊）。 */
+function bedFarStep() {
+  var F = BEDFAR;
+  if (!F.todo) {                                                         // 第一次：有檔的塊，離開戰位置近的先
+    var A = BED.A, sx = BED.ax / A.chunk - 0.5, sy = BED.az / A.chunk - 0.5;
+    F.todo = A.chunks.filter(function (c) { return c[2]; }).sort(function (a, b) { return Math.hypot(a[0] - sx, a[1] - sy) - Math.hypot(b[0] - sx, b[1] - sy) || a[1] - b[1] || a[0] - b[0]; });
+  }
+  if (F.busy || !F.todo.length) return;
+  var c = F.todo.shift(), k = bedKey(c[0], c[1]);
+  if (BED.ch[k]) { bedFarPut(k, BED.ch[k], 0); return; }
+  F.busy = true;
+  bedPeek(c[0], c[1]).then(function (b64) { F.busy = false; var t0 = performance.now(), C = bedDecode(b64); bedFarPut(k, C, performance.now() - t0); },
+    function (e) { F.busy = false; console.warn('遠景：' + e.message); });
+}
+function bedFarPut(k, C, ms) {
+  if (!BED || !BED.A || BEDFAR.g[k]) return;
+  var t0 = performance.now(), M = bedMesh(C, BED_FAR_ST), g = bedGpu(M, null);
+  BEDFAR.g[k] = g; BEDFAR.n++; BEDFAR.bytes += M.V.byteLength + M.I.byteLength; BEDFAR.ms += ms + performance.now() - t0;
+}
+/** 白沫的高度貼圖：中心 ± (ring＋prefetch) 那幾塊，每 2 個取樣點（8 m）一格；沒載的、深海塊 ⇒ deep。換中心、載進來、丟掉之後重建。 */
+function bedFoamTex() {
+  var Fm = BEDFOAM, A = BED.A;
+  if (BED.cx === null || !Fm.dirty && Fm.cx === BED.cx && Fm.cy === BED.cy) return;
+  var t0 = performance.now(), R = BED_CFG.ring + BED_CFG.prefetch, n = A.n, sk = 2, per = (n - 1) / sk, W = (2 * R + 1) * per, D = new Float32Array(W * W).fill(A.deep);
+  for (var cj = 0; cj <= 2 * R; cj++) for (var ci = 0; ci <= 2 * R; ci++) {
+    var C = BED.ch[bedKey(BED.cx - R + ci, BED.cy - R + cj)]; if (!C) continue;
+    for (var j = 0; j < per; j++) { var r = (cj * per + j) * W + ci * per, s = j * sk * n; for (var i = 0; i < per; i++) D[r + i] = C.h[s + i * sk] / 10; }
+  }
+  if (!Fm.tex) { Fm.tex = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, Fm.tex); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE); }
+  gl.bindTexture(gl.TEXTURE_2D, Fm.tex); gl.texImage2D(gl.TEXTURE_2D, 0, gl.R16F, W, W, 0, gl.RED, gl.FLOAT, D); gl.bindTexture(gl.TEXTURE_2D, null);
+  Fm.dirty = false; Fm.cx = BED.cx; Fm.cy = BED.cy; Fm.N = W; Fm.sp = A.step * sk; Fm.ox = (BED.cx - R) * A.chunk - BED.ax; Fm.oz = (BED.cy - R) * A.chunk - BED.az;
+  Fm.ms = performance.now() - t0; Fm.builds++;
+}
+/** 海的著色器（60_render.js 畫海那一段）：白沫的高度貼圖接第 10 號；沒有海圖 ⇒ uBedOn 0（整段跳過）。 */
+function bedWaterU(u) {
+  var on = !!(BED && BED.A && BEDFOAM.tex);
+  gl.uniform1f(u.uBedOn, on ? 1 : 0);
+  gl.activeTexture(gl.TEXTURE10); gl.bindTexture(gl.TEXTURE_2D, on ? BEDFOAM.tex : DUMMY); gl.uniform1i(u.uBedT, 10); gl.activeTexture(gl.TEXTURE0);
+  if (on) gl.uniform4f(u.uBedR, BEDFOAM.ox, BEDFOAM.oz, BEDFOAM.sp, BEDFOAM.N);
 }
 /** 畫（60_render.js：帆之後、折射複製之前）。每格最多建 2 塊（新載的、粗細要換的）⇒ 換中心那一下不會卡一大格。 */
 function bedDraw() {
@@ -51,11 +102,14 @@ function bedDraw() {
   var built = 0;
   while (BEDGL_Q.length && built < 2) { var k = BEDGL_Q.shift(), C = BED.ch[k]; if (C) { bedUpload(k, C, bedLod(C)); built++; } }
   Object.keys(BEDGL).forEach(function (k2) { var g = BEDGL[k2], C2 = BED.ch[k2]; if (C2 && built < 2 && g.lod !== bedLod(C2)) { bedUpload(k2, C2, bedLod(C2)); built++; } });
+  if (!built) bedFarStep();                                              // 遠景：這一格沒在建細的才做
+  bedFoamTex();
   gl.useProgram(P.tri.prog); setCommon(P.tri); cutSet(P.tri, null);
   gl.uniform1f(P.tri.u.uFogD, WX.fog * BED_FOG);                         // 霧淡一點：島要從幾公里外就看得到（船照原本的霧）
   gl.uniform1f(P.tri.u.uLit, 1); if (P.tri.u.uGlow) gl.uniform1f(P.tri.u.uGlow, 0);
   gl.uniformMatrix4fv(P.tri.u.uModel, false, BEDGL_ID || (BEDGL_ID = M4.ident()));
   gl.vertexAttrib2f(3, 0, 0);                                            // 金屬度（P.tri aM）：地形不是金屬
   Object.keys(BEDGL).forEach(function (k3) { var g = BEDGL[k3]; gl.bindVertexArray(g.vao); gl.drawElements(gl.TRIANGLES, g.n, gl.UNSIGNED_INT, 0); });
+  Object.keys(BEDFAR.g).forEach(function (k4) { if (BEDGL[k4]) return; var g = BEDFAR.g[k4]; gl.bindVertexArray(g.vao); gl.drawElements(gl.TRIANGLES, g.n, gl.UNSIGNED_INT, 0); });   // 遠景：細的沒有的那幾塊
   gl.bindVertexArray(null);
 }

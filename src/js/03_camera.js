@@ -26,6 +26,8 @@ function renderLerp(on, a) {
     sh.M = M; sh.inv = M4.inv(M); sh.yaw = sh.yawP + dy * a; sh.center = shipCenter(sh);
   });
 }
+/** 有海圖（08_seabed.js）：鏡頭不鑽進地裡 —— 眼睛至少在那一點的地面／海底上 2 m（TASK-0721）。只動畫面，模擬不讀 CAM。 */
+function camBed(e) { if (BED && BED.A) { var b = bedHgt(e[0], e[2]) + 2; if (e[1] < b) e[1] = b; } return e; }
 function camUpdate(dt) {
   if (FP.on && fpCam()) return;                                        // 第一人稱：鏡頭在船長的眼睛（81_fps.js）
   // 我艦→敵艦（預設，mode 4）：注視點 ＝ 我艦中心（略高），鏡頭在我艦背對敵艦的那一側 ⇒ 畫面中間是我艦、敵艦在它後方；
@@ -36,8 +38,9 @@ function camUpdate(dt) {
     var o4 = camPan(m4), y4 = a4 + Math.PI + CAM.aoff, t4 = [c4[0] + o4[0], c4[1] + 4, c4[2] + o4[2]];
     var e4 = [t4[0] + Math.cos(y4) * Math.cos(CAM.pitch) * CAM.dist, t4[1] + Math.sin(CAM.pitch) * CAM.dist, t4[2] + Math.sin(y4) * Math.cos(CAM.pitch) * CAM.dist];
     var e4s = seaH(e4[0], e4[2], SIMT) + 1.5; if (e4[1] < e4s) e4[1] = e4s;          // 鏡頭不鑽到浪底下
+    camBed(e4);
     var k4 = CAM.snap ? 1 : 1 - Math.exp(-dt * 4); CAM.snap = false;
-    CAM.eye = lerp3(CAM.eye, e4, k4); CAM.look = lerp3(CAM.look || t4, t4, k4); CAM.trMe = CAM.trYaw = null;
+    CAM.eye = camBed(lerp3(CAM.eye, e4, k4)); CAM.look = lerp3(CAM.look || t4, t4, k4); CAM.trMe = CAM.trYaw = null;
     var pr4 = M4.persp(0.9, CAM.w / CAM.h, 0.5, 5000); CAM.vp = M4.mul(pr4, M4.lookAt(CAM.eye, CAM.look, [0, 1, 0])); CAM.inv = M4.inv(CAM.vp);
     return;
   }
@@ -59,14 +62,15 @@ function camUpdate(dt) {
   var tgt = CAM.tgt, dist = CAM.dist, yaw = CAM.yaw, pitch = CAM.pitch, eye;
   if (CAM.mode === 1 && CAM.follow) {
     var b = CAM.follow, vd = norm(b.v);
-    eye = add(sub(b.p, mul(vd, 9)), [0, 2.2, 0]); tgt = add(b.p, mul(vd, 25));
-    CAM.eye = lerp3(CAM.eye, eye, 1 - Math.exp(-dt * 10)); CAM.look = lerp3(CAM.look || tgt, tgt, 1 - Math.exp(-dt * 10));
+    eye = camBed(add(sub(b.p, mul(vd, 9)), [0, 2.2, 0])); tgt = add(b.p, mul(vd, 25));
+    CAM.eye = camBed(lerp3(CAM.eye, eye, 1 - Math.exp(-dt * 10))); CAM.look = lerp3(CAM.look || tgt, tgt, 1 - Math.exp(-dt * 10));
   } else {
     if (CAM.mode >= 1 && CAM.mode <= 3) { var sh = camShip(); if (sh) tgt = add(shipCenter(sh), camPan(sh)); }   // 追砲彈沒有在追的 ⇒ 跟看我艦一樣
     eye = [tgt[0] + Math.cos(yaw) * Math.cos(pitch) * dist, tgt[1] + Math.sin(pitch) * dist, tgt[2] + Math.sin(yaw) * Math.cos(pitch) * dist];
     var eys = seaH(eye[0], eye[2], SIMT) + 1.5; if (eye[1] < eys) eye[1] = eys;
+    camBed(eye);
     var k = CAM.snap ? 1 : 1 - Math.exp(-dt * 6); CAM.snap = false;
-    CAM.eye = lerp3(CAM.eye, eye, k); CAM.look = lerp3(CAM.look || tgt, tgt, k);
+    CAM.eye = camBed(lerp3(CAM.eye, eye, k)); CAM.look = lerp3(CAM.look || tgt, tgt, k);
   }
   var proj = M4.persp(0.9, CAM.w / CAM.h, 0.5, 5000), view = M4.lookAt(CAM.eye, CAM.look, [0, 1, 0]);
   CAM.vp = M4.mul(proj, view); CAM.inv = M4.inv(CAM.vp);

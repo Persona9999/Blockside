@@ -242,7 +242,7 @@ python -I admin.py cache --all    # 每艘都比 ＝ 比對來源：雕刻作品
 | `06_cache.js` | 船型快取（IndexedDB）：`cacheGet`／`cachePut`、快取鍵（`.vxk` 原文與頁面 JS 的雜湊） |
 | `07_gfx.js` | 畫質設定：`GFX`（陰影／反射／折射／海面細緻度／解析度／反鋸齒）、低中高三檔 `GFX_PRESET`、`gfxLevel`（對不上 ⇒ 自訂）、網址參數 |
 | `08_sea.js` | 海浪：`WAVES`（四道浪）、水面高度 `seaH`、著色器用的同一組 `SEA_GLSL`、船跟著浪起伏與搖晃 `stepWaves` |
-| `08_seabed.js` | 海圖（TASK-0721；格式 `src/MAP_CHUNK.md`）：`?map=<海域>&site=<k>` ⇒ 讀 `maps/<海域>/area.js`、一塊一檔載進來（`bedBoot`／`bedLoad`／`bedDecode`），焦點走進別塊換中心（`bedFocus`），模擬每一步前看船旁邊的塊載好了沒（`bedWait`）；查詢 `bedHgt`／`bedMat`／`bedGrad`。沒有 `?map` ⇒ `BED` ＝ null，每一處都走原本那一條 |
+| `08_seabed.js` | 海圖（TASK-0721；格式 `src/MAP_CHUNK.md`）：`?map=<海域>&site=<k>` ⇒ 讀 `maps/<海域>/area.js`、一塊一檔載進來（`bedBoot`／`bedLoad`／`bedDecode`），焦點走進別塊換中心（`bedFocus`），模擬每一步前看船旁邊的塊載好了沒（`bedWait`）；查詢 `bedHgt`／`bedMat`／`bedGrad`；`bedPeek` 只給畫面（遠景讀檔，不放進模擬查的那一份）。沒有 `?map` ⇒ `BED` ＝ null，每一處都走原本那一條 |
 | `08_weather.js` | 天氣：`WEATHERS`（晴／暴風雨的每個係數）、`setWeather`、開砲散布 `wxSpread`、閃電 `wxBolt`；會變的風 `stepWind`／`WIND_SPD`／`windKnots` |
 | `09_phx.js` | 物理效果分級：`PHX`（帆與繩／碎木／煙與水花／船邊水花／進水／帆的碰撞／船隻碰撞／船隻摩擦／碰撞傷害）、全開高中低四檔 `PHX_PRESET`、`phxLevel`（對不上 ⇒ 自訂）、帆與繩每一檔的細緻度 `RIG_LV`／`rigLv`、網址參數 |
 | `10_ship.js` | 開一艘船：模型（照 meta 認種類）、砲（模型＋固定點）、繩與帆的錨、桅、船員（`makeShip`）；模型照 x 分桶（`modelIndex`） |
@@ -284,7 +284,7 @@ python -I admin.py cache --all    # 每艘都比 ＝ 比對來源：雕刻作品
 | `60_render.js` | 畫一格：畫質管線（`targets` 場景與解析的 framebuffer、`shadowPass` 陰影圖、`reflPass` 反射、折射複製、最後縮放貼到畫布）、海面網格 `seaGrid` |
 | `61_hud.js` | HUD、砲列、左下羅盤、上方廣播（`note`／`newsGun`／`newsFlush`）；詳細資訊旁那張圖「砲位｜損壞｜進水」切換（`GMAP_MODE`，預設砲位；損壞 ⇒ `gmapDmg` 畫 48_damage.js 的損壞表、`dmgSumText` 一行件數；進水 ⇒ `gmapFlood` 畫艙內的水（沿高度加總）與破口（水下紅、水上橙）、`floodSumText` 一行讀數，公式模式只寫水線下打掉幾格） |
 | `62_simview.js` | 模擬物件給人看的那一半（TASK-0669 第二段；從 21_gunnery、24_armor、25_doors、31_drive、36_rooms、51_captain 搬來，內容沒改）：裝甲的網格與畫法（`armorMesh`／`armDraw`／`armSmDraw`／`armRemesh`／`armDispose`）、模型網格（`buildMeshes`；家具 `furnMesh` 只算三角形與佔格，第一次畫到才 `meshGpu` 上傳）、門的開關演出（`doorsAnim`）、俥鐘與詳細資訊那一行（`driveText`／`teleDraw`…）、空艙房的除錯外框與名字（`roomLines`／`roomLabels`）、砲長選單（`capOptions`）。訂閱：`armorShip`（開船：每塊裝甲掛網格與平滑面）、`armCell`／`cell`（打掉一格：附近的區重建）、`pieceNew`／`pieceGone`（碎塊的網格）、`phys`（物理開關的按鈕）—— 都是 view，無頭時不建。⛔ 模擬物件身上還掛著畫的狀態（`sh.rs`、`a.rs`、`pc.rs`）：模擬檔不讀它們，無頭時不存在 |
-| `63_bed_gl.js` | 陸地與海底的畫法（TASK-0721）：每塊一份網格（P.tri；在用的 8 m、預載的 16 m、裙邊蓋接縫），照底質與高度上色、霧淡一點（`bedDraw`） |
+| `63_bed_gl.js` | 陸地與海底的畫法（TASK-0721）：每塊一份網格（P.tri；在用的 8 m、預載的 16 m、裙邊蓋接縫），照底質與高度上色、霧淡一點（`bedDraw`）；遠景：整個海域每塊 32 m 一份粗網格，細的沒有的那幾塊才畫（`bedFarStep`）；岸邊白沫的高度貼圖（`bedFoamTex`、`bedWaterU`；海的著色器照水深 < 2 m 畫） |
 | `63_flood_gl.js` | 艙內進水的畫法（TASK-0669 從 33_flood.js 後半整段搬來）：深度吸光、水面（`flMesh`）、水幕、側面、`flDraw`／`flGL`／`flPushJets`；只讀 33_flood.js 的 `sh.fl` |
 | `64_cfgkit.js` | 設定頁的共用框架（TASK-0670）：`cfgKit`（一頁那一排按鈕：按兩下回到預設、全部回到預設彈窗、匯出、匯入、狀態列；元素照前綴 `pR`／`pRA`／`pE`／`pI`／`pF`／`pSt`）、`cfgSliders`／`cfgSnap`（照描述表生滑桿、夾範圍對齊刻度）、`cfgAdm`（開發後台那一列：postMessage 給設定後台）、`cfgHead`／`cfgMine`（匯出檔的檔頭）、`cfgPage`（只寫描述就生整頁；新的設定頁用）。船隻配置、砲、道具、鍵位四頁都接在這裡 |
 | `66_keys.js` | 鍵位（Tim 2026-10-17：「整理一套系統去管理鍵位(然後要分不同模式 目前還有建造模式 第一人稱)」）：動作表 `KEY_ACTS`（id、模式 battle／fps／build、正式名稱、圓鈕圖示 ico、預設鍵、按住）；三層 ＝ 程式的 def → 設定檔 `keys`（開發後台 `?admin=keys`）→ 玩家（存檔 `keys`）。`keyAct(模式, 鍵)` ⇒ 動作（71_input.js `doAct`、81_fps.js `fpKey`、82_build.js `bldKey` 都照它）；畫面上寫鍵一律 `keyPaint`（`[data-act]` 點了 ＝ 做那個海戰動作、`[data-kl]` 只寫鍵、`kbd[data-ico]`、`span.kn`），字串裡用 `keyName`／`keyWord`。主選單「鍵位設定…」：分頁 ＝ 模式，撞鍵 ⇒ 對調（第一人稱與建造算同一組）；Esc、方向鍵、Tab、F1–F12 固定。戰鬥數字鍵：1 彈藥、2 自動操舵、3 左錨、4 雙錨、5 右錨 |
