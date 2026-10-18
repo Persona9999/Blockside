@@ -37,6 +37,7 @@
     "dmg36l": [10, 300, 140],
     "dmg8l": [10, 300, 45],
     "dmgpr": [10, 300, 25],
+    "dmgsf": [10, 300, 30],
     "box": [1, 8, 2],
     "carry": [1, 6, 1],
     "wind": [0.25, 3, 1],
@@ -68,6 +69,8 @@
     "lim": [0, 400],
     "k": [[100, 10, 100], [160, 10, 100], [50, 100, 100]]
   },
+  "fire": {"k": [40, 150, 120], "r": 12},
+
   "guns": {
     "long": {"code": "24l", "name": "24 磅長砲", "short": "長砲", "V": 175, "reload": 1, "big": false, "crew": 5, "min": 3, "mass": 2.5, "shot": 10.9},
     "long32": {"code": "32l", "name": "32 磅長砲", "short": "32 磅長砲", "V": 172, "reload": 1.15, "big": true, "crew": 6, "min": 4, "mass": 2.9, "shot": 14.5},
@@ -164,6 +167,19 @@
       "crew": 1,
       "min": 1,
       "mass": 0.15, "shot": 1
+    },
+    "siphon": {
+      "code": "siphon",
+      "name": "希臘火 siphon（青銅壓力泵＋噴管）",
+      "short": "希臘火",
+      "V": 26,
+      "reload": 0.35,
+      "big": false,
+      "hole": 0.3,
+      "crew": 3,
+      "min": 2,
+      "mass": 1.2, "shot": 6,
+      "ammo": "greekfire", "close": true, "weapon": "siphon"
     },
     "brooke64": {
       "code": "64b",
@@ -470,6 +486,18 @@
       "drive": "steam",
       "cfg": {"pump": 15, "base": 10},
       "geo": {"spar": [90, 104], "marines": [80, 200], "center": 150, "aim": 85, "aimZ": [30, 480], "deckAim": [90, 110], "rigAim": [200, 470]}
+    },
+    {
+      "id": "dromon",
+      "el": "ship-dromon",
+      "name": "持火號",
+      "vxk": "dromon.vxk",
+      "work": "erina-dromon-01m-assembly",
+      "author": "erina",
+      "cfg": {"upwind": 1.2},
+      "geo": {"spar": [21, 30], "marines": [42, 96], "center": 30, "aim": 18, "aimZ": [8, 230], "deckAim": [18, 30], "rigAim": [60, 210]},
+      "crew": {"officers": 2, "top": 0, "marines": 12, "marineGap": 18},
+      "names": ["持火號"]
     }
   ],
   "furniture": {

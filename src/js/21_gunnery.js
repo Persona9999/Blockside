@@ -4,6 +4,8 @@
 //   模型有 muzzle-a／b／c ⇒ 輪流從那幾根砲管出彈。burst ＝ 1 的砲一個亂數都不多抽 ⇒ 別的船戰局不變。
 function fireGun(sh, g, target, ammo) {
   if (sh.struck || !g.alive || g.reload > 0 || gunRate(g) <= 0) return false;      // 砲要有人操作；降旗了就不開（排在齊射裡還沒開的也一樣）
+  if (g.ammoFix >= 0) ammo = g.ammoFix;                                // 固定彈種（10_ship.js gunAmmoFix；TASK-0693）：希臘火 siphon、弩砲、投石機 ⇒ 不管選哪一種都打自己的
+  if (GUNS[g.type].close && !gunInRange(sh, g, target)) return false;    // 短射程的武器（砲種表 close：希臘火）⇒ 打不到就不開（⛔ 開了只是噴進海裡）
   if (!bears(sh, g, target)) return false;                            // 目標不在這門砲的砲門射界 ⇒ 不開（呼叫端先用 gunTarget 挑好這門打得到的點）
   if (g.mt && mountBusy(g)) return false;                              // 迴旋砲換砲門的途中不能開（TASK-0626）
   if (!mountFireOk(g)) return false;                                   // 砲塔的砲口不在能開火的角度裡（fire；TASK-0636）
@@ -11,7 +13,7 @@ function fireGun(sh, g, target, ammo) {
   var GS = GUNS[g.type], r = fireShot(sh, g, target, ammo, g.muzs ? g.muzs[0] : g.muz);
   g.reload = sh.reloadT * GS.reload * rr(0.9, 1.1); g.firedAt = SIMT; sh.fired++;
   g.needCart = true;                                                // 下一發要從砲旁的藥箱拿一份火藥與彈藥（沒有 ⇒ 等送藥手，23_powder.js）
-  shotFx(sh, g, r.mw, r.dir);
+  if (ammo === AMMO_GF) { evEmit('gfJet', r.mw, r.dir, sh.vel); sfx('splash', r.mw, 0.5); } else shotFx(sh, g, r.mw, r.dir);   // 希臘火：噴口一道火舌（28_fire.js），沒有砲聲、沒有後座
   if ((GS.burst || 1) > 1) { g.burstLeft = GS.burst - 1; g.burstK = 1; g.burstAmmo = ammo; g.burstT = SIMT + (GS.burstGap || 0.15); }   // 連發：同一份彈藥再打 burst − 1 發
   return true;
 }
@@ -42,6 +44,9 @@ function selfBlock(sh, g, target) {
   }
   return false;
 }
+/** 這門砲照初速與最大仰角（fireShot 夾在 0.26 rad）打得到多遠（m，水平）：R ＝ V² sin(2θ)／g；9 成當安全餘量。 */
+function gunMaxR(GS) { return 0.9 * GS.V * GS.V * Math.sin(0.52) / G; }
+function gunInRange(sh, g, target) { var mw = M4.pt(sh.M, g.muz[0], g.muz[1], g.muz[2]); return Math.hypot(target[0] - mw[0], target[2] - mw[2]) <= gunMaxR(GUNS[g.type]); }
 /** 一發砲彈：從 muz（格座標的砲口）照 target 算仰角、前置量、散布，放進 BALLS。回：{ mw 世界的砲口, dir 出膛方向 }。 */
 function fireShot(sh, g, target, ammo, muz) {
   var mw = M4.pt(sh.M, muz[0], muz[1], muz[2]);
@@ -61,7 +66,8 @@ function fireShot(sh, g, target, ammo, muz) {
   el = clamp(el + gauss() * spread, -0.17, 0.26); az += gauss() * spread;
   var dir = [Math.cos(el) * Math.cos(az), Math.sin(el), Math.cos(el) * Math.sin(az)];
   var b = { p: mw.slice(), v: add(mul(dir, V * rr(0.985, 1.015)), sh.vel), owner: sh.i, ammo: ammo, trav: 0, alive: true, age: 0, bounced: false, big: GS.big, hole: GS.hole, dmg: DMG[g.type], m: GS.shot };   // dmg：每發傷害（砲種，細節設定）；hole：洞的倍率（4 磅彈小）；m：彈重 kg（能量，TASK-0621）
-  if (ammo === 2) b.ph = BALLS.length * 2.39996 % 6.28319;           // 鏈彈的起始角（csBar）：照場上第幾顆彈錯開（黃金角），⛔ 不抽亂數
+  if (ammo === 2) b.ph = BALLS.length * 2.39996 % 6.28319;
+  if (ammo === AMMO_GF) b.gf = true;                                  // 希臘火（28_fire.js）：一團火，碰到什麼就潑開，⛔ 不穿透           // 鏈彈的起始角（csBar）：照場上第幾顆彈錯開（黃金角），⛔ 不抽亂數
   windShot(sh, b, dx, dz); BALLS.push(b); rptShot(sh, g, b);         // rptShot：戰鬥報表記是哪一門開的（79_report.js；只讀）
   return { mw: mw, dir: dir };
 }
@@ -257,6 +263,7 @@ function stepBall(b, dt) {
   var sp = len(b.v), steps = Math.max(1, Math.ceil(sp * dt / 0.05)), h = dt / steps, top = SEA_K > 0 ? 1.15 * SEA_K * WX.sea : 0, near = null;
   for (var s = 0; s < steps && b.alive; s++) {
     b.v[1] -= G * h;
+    if (b.gf && (s & 7) === 0) evEmit('gfTrail', b.p.slice(), b.v.slice());   // 希臘火：零星火星（只是演出）
     b.p[0] += b.v[0] * h; b.p[1] += b.v[1] * h; b.p[2] += b.v[2] * h; b.trav += len(b.v) * h;
     var sea = b.p[1] < top ? seaH(b.p[0], b.p[2], SIMT) : -1e9;         // 水面跟著浪（08_sea.js）；比最高的浪還高 ⇒ 不用算
     if (b.p[1] < sea) {
@@ -264,6 +271,7 @@ function stepBall(b, dt) {
       if (!b.wet && b.ammo === 0 && !b.bounced && ang < 0.11 && spd > 90) {   // 打水漂：低角度的實心彈會跳一下
         b.v[1] = -b.v[1] * 0.45; b.v[0] *= 0.7; b.v[2] *= 0.7; b.p[1] = sea + 0.01; b.bounced = true; splash(b.p, false); continue;
       }
+      if (b.ammo === AMMO_GF) { splash(b.p, false); evEmit('gfBurst', b.p.slice(), [0, 0, 0]); b.alive = false; return; }   // 希臘火落水：只有演出（28_fire.js；海上的火還沒做）
       if (!b.wet) {                                                     // 一落水：爆裂彈、鏈彈、彈重 < uwMin 的實心彈 ⇒ 沒了；大口徑實心彈 ⇒ 繼續在水裡走（TASK-0642）
         splash(b.p, true);
         if (!(b.ammo === 0 && shotM(b) >= PEN.uwMin)) { b.alive = false; return; }
@@ -284,6 +292,7 @@ function stepBall(b, dt) {
         if (sh.i !== b.owner && !b.hitOnce) { SHIPS[b.owner].hits++; ffHit(sh, b); windHit(b); rptHit(b, sh, hm.gun ? 'gun' : 'model'); b.hitOnce = true; }
         (b.hitM = b.hitM || []).push(hm);
         damageModel(sh, hm, b.v, b.dmg * ammoK(b.ammo, VS_GUN), L);         // L：碰到的那一點（帶裝甲的砲 ⇒ 看是不是砲口，24_armor.js armMuzzle）
+        if (b.ammo === AMMO_GF) { gfSplash(sh, L, b); b.alive = false; return; }   // 希臘火打到模型：扣過血再潑開（28_fire.js）
         if (b.ammo === 1) { var kM = PEN_SK * shellK(b); explode(b.p.slice(), sh, 0); blastModels(sh, L, 22 * kM, b.p, b.hitM, b.dmg); crewHurt(sh, L, 13 * kM, 30 * kM, null, '爆炸', crewBase(b)); b.alive = false; return; }   // 直接打中的那一門已經扣過，不再吃爆風；半徑照裝藥（TASK-0621）
         b.v = mul(b.v, b.ammo === 2 ? 0.5 : 0.55);
         if (len(b.v) < 30) { ballToDebris(b); return; }
@@ -299,6 +308,7 @@ function stepBall(b, dt) {
         for (var q = -CS_HALF; q <= CS_HALF + 1e-6 && !hitL; q += CS_HALF / 4) { var Lq = [L[0] + wL[0] * q, L[1] + wL[1] * q, L[2] + wL[2] * q]; if (sh.grid.get(Lq[0] | 0, Lq[1] | 0, Lq[2] | 0)) hitL = Lq; else if (sh.arm && (ah = armAt(sh, Lq))) hitL = Lq; }
         if (!hitL) continue;                                              // 橫掃是以彈心為中心 ⇒ 照彈心那一點咬
       }
+      if (b.ammo === AMMO_GF) { if (sh.i !== b.owner && !b.hitOnce) { SHIPS[b.owner].hits++; ffHit(sh, b); windHit(b); rptHit(b, sh, 'hull'); } gfSplash(sh, L, b); b.alive = false; return; }   // 希臘火打到船殼：不開洞，潑開燒人、燒帆與細繩（28_fire.js）
       impact(b, sh, L, ah);
       if (!b.alive) return;
     }
