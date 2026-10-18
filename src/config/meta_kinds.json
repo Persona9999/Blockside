@@ -4,7 +4,7 @@
   "kinds": {
     "gun": { "name": "砲", "on": ["model"], "keys": ["gun", "mount", "arc", "fire", "rate", "cone", "pivot", "ports", "runin", "deck", "side", "port", "barrels", "weapon", "ammo", "safe"], "need": [], "use": ["muzzle", "breech", "pivot", "train", "trunnion"], "doc": "§4", "game": ["10_ship.js", "21_gunnery.js", "27_turret.js"] },
     "powder": { "name": "火藥桶", "on": ["model"], "keys": ["powder_lb", "store"], "need": [], "use": [], "doc": "§8", "game": ["23_powder.js"], "mk": true, "block": "station", "safe": true, "noFall": true },
-    "magazine": { "name": "彈藥庫", "on": ["link"], "keys": ["powder_lb", "pos", "hoist", "material"], "need": [], "use": ["blast", "door"], "doc": "§8", "game": ["23_powder.js"], "refs": { "hoist": { "to": ["ladders#"] } } },
+    "magazine": { "name": "彈藥庫", "on": ["link"], "keys": ["powder_lb", "pos", "hoist", "material"], "need": [], "use": ["blast", "door"], "doc": "§8", "game": ["23_powder.js"], "refs": { "hoist": { "to": ["ladders#"], "list": true } } },
     "yard": { "name": "帆桁", "on": ["model"], "keys": ["mast", "yard", "sail", "length_ft", "diameter_in", "pivot_anchor", "turn_axis", "rotate_z_deg", "rig"], "need": ["pivot"], "use": ["arm-P", "arm-S", "earing-P", "earing-S", "sling", "fore"], "doc": "§5", "game": ["10_ship.js", "31_sailing.js", "30_rig_physics.js"], "mk": true },
     "sail": { "name": "帆", "on": ["sail"], "keys": ["mast", "sail", "set"], "need": [], "use": [], "doc": "§9.1", "game": ["31_sailing.js"] },
     "flag": { "name": "旗", "on": ["sail"], "keys": ["flag", "mast", "team"], "need": [], "use": [], "doc": "§9.1", "game": ["31_sailing.js", "77_colours.js"] },
