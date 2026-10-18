@@ -40,7 +40,7 @@ function spinShip(sh) {
   var L = [];
   sh.models.forEach(function (m) {
     var t = m.meta || {}; if (!t.spin) return;
-    if (m.hang || m.kind === 'door' || !SPIN_SRC[t.spin]) return;          // 匯入檢查會報（spinIssues）
+    if (m.hang || kindProp(m.kind, 'anim') || !SPIN_SRC[t.spin]) return;          // 匯入檢查會報（spinIssues）
     var A = spinAxis(m); if (!A) return;
     var lo = spinNum(t.spin_min, -Infinity), hi = spinNum(t.spin_max, Infinity); if (lo > hi) return;
     m.spinB = { src: t.spin, rate: t.spin_mode === 'rate', k: spinNum(t.spin_k, 1), lo: lo, hi: hi, lag: Math.max(0, spinNum(t.spin_lag, SPIN_LAG)), p: A[0], ax: A[1], deg: 0 };
@@ -64,7 +64,7 @@ function spinIssues(sh, add) {
   sh.models.forEach(function (m) {
     var t = m.meta || {}; if (!t.spin) return;
     if (!SPIN_SRC[t.spin]) add('warn', '轉動', m.path, 'meta spin=' + t.spin + ' 不認得 ⇒ 不轉', 'spin 寫 ' + Object.keys(SPIN_SRC).join('｜') + '（造船規格 §9.8）');
-    else if (m.hang || m.kind === 'door') add('warn', '轉動', m.path, (m.hang ? '掛著擺的小艇' : '門') + '已經自己在轉 ⇒ spin 不收', '拿掉 spin，或換一個模型');
+    else if (m.hang || kindProp(m.kind, 'anim')) add('warn', '轉動', m.path, (m.hang ? '掛著擺的小艇' : '門') + '已經自己在轉 ⇒ spin 不收', '拿掉 spin，或換一個模型');
     else if (!spinAxis(m)) add('warn', '轉動', m.path, '找不到轉軸 ⇒ 不轉', '登記固定點 spin-a／spin-b，或 meta spin_pivot_*＋spin_axis_*（造船規格 §9.8）');
     else if (spinNum(t.spin_min, -Infinity) > spinNum(t.spin_max, Infinity)) add('warn', '轉動', m.path, 'spin_min ' + t.spin_min + ' > spin_max ' + t.spin_max + ' ⇒ 不轉', '上下限對調');
     if (t.spin_mode && t.spin_mode !== 'angle' && t.spin_mode !== 'rate') add('warn', '轉動', m.path, 'spin_mode=' + t.spin_mode + ' 不認得 ⇒ 照 angle', 'spin_mode 寫 angle｜rate');

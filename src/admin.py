@@ -1038,6 +1038,11 @@ def act_metaspec(doc_path=None):
         for g in v.get('game') or []:
             if not os.path.exists(os.path.join(HERE, 'js', g)):
                 E.append('規格表 %s：game 的 %s 不存在' % (k, g))
+        for f, ok, what in (('hpK', lambda x: isnum(x) and 0 < x <= 20, '0～20 的數字'), ('block', lambda x: x in (True, False, 'station'), 'true／false／"station"'),
+                            ('clear', lambda x: isinstance(x, bool), 'true／false'), ('safe', lambda x: isinstance(x, bool), 'true／false'),
+                            ('noFall', lambda x: isinstance(x, bool), 'true／false'), ('anim', lambda x: isinstance(x, bool), 'true／false')):   # 遊戲屬性（TASK-0672 ②；js/00_config.js kindProp）
+            if f in v and not ok(v[f]):
+                E.append('規格表 %s：%s 要是 %s' % (k, f, what))
     log.append('① 規格表：%d 個 kind' % len(K))
     seen = {}
     for sh in load()['ships']:
