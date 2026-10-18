@@ -148,6 +148,7 @@ if (DEBUG) window.__game = {
   lab: function (o) { return uwLab(o); },
   /** 沙盒進水報表（81_floodlab.js，TASK-0654）：o 同網址 ?lab=flood 的參數 ⇒ 每 every 秒一筆讀數＋接縫分類＋截圖。⛔ 會重開一局。 */
   floodLab: function (o) { return floodLab(o); },
+  flHoles: function (i) { var sh = SHIPS[i || 0]; return sh.fl ? flHoleInfo(sh) : null; },   // 每個破口：在不在海面下、流量、進水／出水／沒在流（33_flood.js flHoleState）
   floodView: function (o) { return floodView(o); },                   // 換鏡頭再拍一張（81_floodlab.js）
   /** 環境音試聽（02_ambient.js，TASK-0663）：q ＝ 'sec=10&cases=名字:w:sea:rain:hold;…' ⇒ Promise<[{ name, peak, rmsDb, wav }]>（src/tests/ambient_lab.py 經 DevTools 呼叫）。 */
   ambLab: function (q) { return ambLab(new URLSearchParams(q || '')); },

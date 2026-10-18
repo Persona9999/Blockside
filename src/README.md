@@ -256,7 +256,7 @@ python -I admin.py cache --all    # 每艘都比 ＝ 比對來源：雕刻作品
 | `31_sailing.js` | 航行：航速、操舵、帆裝、航跡、擦撞（船隻碰撞四檔：龍骨線／水線輪廓／船殼格子＋八叉樹 `hitSamples`／`occPyr`；摩擦 `hitFriction`） |
 | `31_drive.js` | 動力（TASK-0630）：動力源清單（帆、蒸汽機、魔法）、推力 ＝ k·v²、水阻、實際質量（含進水）⇒ 加速度；受損降輸出；受損不平衡的偏航力矩；俥鐘（橫版左下角、直版左邊那一欄按鈕上方；E／T） |
 | `32_hull.js` | 進水、傾斜、沉沒、減重上浮（`hydrostatics`／`massLost`／`liftFor`）；每半秒的 `survey`（砲、桅、繩、帆、腳下、少掉的重量）與降旗 |
-| `33_flood.js` | 進水的粒子模式（TASK-0525）：船型的水格 `flType`（`T.flc[c]`）、每艘的狀態 `flNew`（`sh.fl`）、打掉一格記待重算 `floodTouch`、破口 `flHoleRedo`、粒子與水格 `floodStep`／`flTick`、該多吃水 `floodSinkT`、傾斜 `floodTilt`、艙內水面 `P.pool`（`flMesh`／`flDraw`）、往下一層流的水幕（`flFalls`，TASK-0651）、噴進來的粒子 `flPushJets` |
+| `33_flood.js` | 進水的粒子模式（TASK-0525）：船型的水格 `flType`（`T.flc[c]`）、每艘的狀態 `flNew`（`sh.fl`）、打掉一格記待重算 `floodTouch`、破口 `flHoleRedo`、粒子與水格 `floodStep`／`flTick`、該多吃水 `floodSinkT`、傾斜 `floodTilt`、艙內水面 `P.pool`（`flMesh`／`flDraw`）、往下一層流的水幕（`flFalls`，TASK-0651）、噴進來的粒子 `flPushJets`；每個破口的狀態（`fl.hWet` 在海面下、`fl.hQ` 流量 ＋進－出；`flHoleState` ⇒ in／out／dry、`flHoleInfo` ⇒ `__game.flHoles(i)`）—— 畫面都讀這裡 |
 | `35_decks.js` | 甲板（TASK-0572）：照雕刻作品的 meta 判定 `hullDecks`（甲板關聯 `kind=deck`：level、name、floor 舷弧、thick）、`deckFloor`（那一欄的地板高度）、`deckAt`（某一點站在哪一層）、`deckOfPath`（關聯路徑屬於哪一層）；沒有 meta 的舊匯出 ⇒ 各處照舊自己量 |
 | `36_rooms.js` | 空艙房與功能艙（TASK-0568）：讀雕刻作品標的艙房 `hullRooms`（關聯 meta `kind=rooms`、固定點 `<房名>.min／.max`）、每一型每一間的功能 `roomFns`（設定檔 ships[].rooms ← 船隻配置頁 `SHIP_ROOMS`）、半程式化布局 `roomLayout`、家具模型 `shipRooms`（佔位的方塊網格 `furnMesh`）、能力 `roomCap`／`roomEff`、除錯外框與名字（`?rooms=1`）；設施配員（TASK-0676）：物品寫 `furniture[].staff { 職位: 每件幾位 }`（病床 `{ surgeon: 1 }`，道具設定頁調）⇒ `staffSlots` 照房間輪著排、`hullStaff` 給船隻配置頁算這型配得到幾位 |
 | `34_shreds.js` | 帆的布片（物理開著）：撕開的洞切成布片 `shredCut`（`sh.shreds`）、每一步 `shredStep`（跟帆同一套 `clothStep`，風壓 ×`SH_KW`）、落水 `shredWet`、自己的亂數 `rndC`；畫在帆的緩衝後面（`sailBuf`） |
@@ -272,7 +272,7 @@ python -I admin.py cache --all    # 每艘都比 ＝ 比對來源：雕刻作品
 | `54_helm.js` | 艦長：開船（第一期）—— 要哪一舷對敵、航向、期望航速（`helmThink`／`helmSteer`），航速調節挑帆裝與俥鐘（`helmGovern`），讓敵艦（`foeAvoid`），決策紀錄（`helmSay` ⇒ 戰鬥報表）；電腦與我艦的自動駕駛共用（見下面「艦長：開船」）；照指揮官的命令開（TASK-0679）：戰列的排頭 `helmLead`、跟隨 `helmFollow`、搶上風 `helmGauge`（搶風角度 `helmBeat`、頂風改搶風 `helmNoGo`） |
 | `55_tune.js` | 可調參數表（TASK-0687）：指揮官／艦長影響戰局的常數集中登記（`TUNE_DEF`：預設、上下限、說明），每一方可各自覆寫（`TUNE.blue／red`）；讀的地方用 `tuneV(隊, 鍵)`、艦長性格表那幾項用 `tuneH(艘, H, 鍵)`、指揮官（跟 2D 沙盒共用）從 `view.tune` 進 `mem.tn` 再 `cmdTune`。遊戲平常兩方都是 null ⇒ 一位元都不差 |
 | `60_render.js` | 畫一格：畫質管線（`targets` 場景與解析的 framebuffer、`shadowPass` 陰影圖、`reflPass` 反射、折射複製、最後縮放貼到畫布）、海面網格 `seaGrid` |
-| `61_hud.js` | HUD、砲列、左下羅盤、上方廣播（`note`／`newsGun`／`newsFlush`）；詳細資訊旁那張圖「砲位｜損壞」切換（`GMAP_MODE`，預設砲位；損壞 ⇒ `gmapDmg` 畫 48_damage.js 的損壞表、`dmgSumText` 一行件數） |
+| `61_hud.js` | HUD、砲列、左下羅盤、上方廣播（`note`／`newsGun`／`newsFlush`）；詳細資訊旁那張圖「砲位｜損壞｜進水」切換（`GMAP_MODE`，預設砲位；損壞 ⇒ `gmapDmg` 畫 48_damage.js 的損壞表、`dmgSumText` 一行件數；進水 ⇒ `gmapFlood` 畫艙內的水（沿高度加總）與破口（水下紅、水上橙）、`floodSumText` 一行讀數，公式模式只寫水線下打掉幾格） |
 | `62_simview.js` | 模擬物件給人看的那一半（TASK-0669 第二段；從 21_gunnery、24_armor、25_doors、31_drive、36_rooms、51_captain 搬來，內容沒改）：裝甲的網格與畫法（`armorMesh`／`armDraw`／`armSmDraw`／`armRemesh`／`armDispose`）、模型網格（`buildMeshes`；家具 `furnMesh` 只算三角形與佔格，第一次畫到才 `meshGpu` 上傳）、門的開關演出（`doorsAnim`）、俥鐘與詳細資訊那一行（`driveText`／`teleDraw`…）、空艙房的除錯外框與名字（`roomLines`／`roomLabels`）、砲長選單（`capOptions`）。訂閱：`armorShip`（開船：每塊裝甲掛網格與平滑面）、`armCell`／`cell`（打掉一格：附近的區重建）、`pieceNew`／`pieceGone`（碎塊的網格）、`phys`（物理開關的按鈕）—— 都是 view，無頭時不建。⛔ 模擬物件身上還掛著畫的狀態（`sh.rs`、`a.rs`、`pc.rs`）：模擬檔不讀它們，無頭時不存在 |
 | `63_flood_gl.js` | 艙內進水的畫法（TASK-0669 從 33_flood.js 後半整段搬來）：深度吸光、水面（`flMesh`）、水幕、側面、`flDraw`／`flGL`／`flPushJets`；只讀 33_flood.js 的 `sh.fl` |
 | `64_cfgkit.js` | 設定頁的共用框架（TASK-0670）：`cfgKit`（一頁那一排按鈕：按兩下回到預設、全部回到預設彈窗、匯出、匯入、狀態列；元素照前綴 `pR`／`pRA`／`pE`／`pI`／`pF`／`pSt`）、`cfgSliders`／`cfgSnap`（照描述表生滑桿、夾範圍對齊刻度）、`cfgAdm`（開發後台那一列：postMessage 給設定後台）、`cfgHead`／`cfgMine`（匯出檔的檔頭）、`cfgPage`（只寫描述就生整頁；新的設定頁用）。船隻配置、砲、道具、鍵位四頁都接在這裡 |
@@ -283,7 +283,7 @@ python -I admin.py cache --all    # 每艘都比 ＝ 比對來源：雕刻作品
 | `71_ctrl.js` | 控制器（TASK-0668 ②）：`ctrlAdd` 一份一種操作、照優先序 `ctrlDo` 一個一個問（回 true ＝ 接住）——第一人稱（fp）→ 建造（build）→ 海戰鏡頭（orbit，永遠在底下）；鍵、拖曳、兩指、滾輪、點一下、按下、抓住時的移動、每格的 `ctrlFrame`。`__game.ctrl()` 讀現在最上面的。加一種操作 ＝ 加一份，不用改 71_input.js 的事件 |
 | `71_input.js` | 輸入與選單（鍵盤 `doKey` ⇒ 66_keys.js 的動作 ⇒ `doAct`，畫面上的圓鈕直接 `doAct`、滑鼠、觸控（雙指張合縮放、雙指一起拖平移 ＝ 右鍵拖曳，`panBy`）、滑桿、彈種倍率表、主選單 ⇄ 船隻配置頁（船員滑桿、匯出匯入）⇄ 細節設定頁、重設預設值） |
 | `73_slowmo.js` | 殉爆的慢動作與特寫（TASK-0531）：`slowKick`（殉爆那一刻）、`slowTick`（每格畫面的時間倍率、特寫時間到還鏡頭）、`slowVisStep`（慢動作中只給人看的照畫面的時間走）、提示 `slowShow`；狀態 `SLOW` 在 `04_state.js` |
-| `72_floodui.js` | 停格條（`frzShow`）與進水細節頁（`floodPanel`：數字＋側視、俯視剖面 `fpDraw`；開著時 3D 的破口點 `flHoleMarks`、艙內水面透視） |
+| `72_floodui.js` | 停格條（`frzShow`）與進水細節頁（`floodPanel`：數字＋側視、俯視剖面 `fpDraw`；開著時 3D 的破口點 `flHoleMarks`、艙內水面透視）；破口的顏色 `flHoleCol`（出水綠、水下紅、水上橙；詳細資訊的進水圖同一套） |
 | `74_cutaway.js` | 停格的剖面與隱藏甲板：`CUTV`、甲板切高 `deckCut`（照舷弧逐欄量、R32F 貼圖）、畫之前設 uniform `cutSet`、人藏不藏 `cutHides`、`cutToggle`／`deckCycle` |
 | `75_shipcheck.js` | 匯入檢查（`?shipcheck=<id>`；`admin.py shipcheck` 讀它寫的 JSON 出報告）。照 meta 規格表報：規格表沒有的 kind、掛錯地方的 kind；**被靜悄悄丟掉的部件**：尋路沒收的梯子與原因（`sh.ladDrop`，42_hands.js makeHands 記；兩頭判不出層、同一層、接不上走路格）—— 繩梯（頂端在桅上）只記進讀數 `ropeLadders`、不報 |
 | `76_anchor.js` | 拋錨（雙錨、左右錨、拖錨、起錨）與鐵鍊（質點鍊、碰自己的船殼與海底、畫成鏈環）；單錨的船（TASK-0635：只找到一個真的錨 ⇒ 另一舷不補、`A.single`；7／8 按鈕藏起來、按鍵不理，6 只拋這一個；整艘都沒有錨（夜隼號、風暴角號）⇒ 6／7／8 照樣顯示（🛑），按哪一顆都是停船 ⇄ 手動，不拋錨） |

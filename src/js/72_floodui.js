@@ -55,8 +55,8 @@ function floodPanel() {
       return '<div class="fpS"><div class="fpH">' + who + '</div>' + lines + '</div>';
     }
     var under = 0, uA = 0;
-    fl.holes.forEach(function (h) { if (!(fl.hA[h] > 0)) return; var P = M4.pt(sh.M, fl.hX[h], fl.hY[h], fl.hZ[h]); if (P[1] < seaH(P[0], P[2], SIMT)) { under++; uA += fl.hA[h]; } });
-    lines = '<div>艙內積水 <b>' + Math.round(fl.vol * RHO_W).toLocaleString() + ' 噸</b>（' + fl.vol.toFixed(1) + ' m³）・破口 ' + fl.open + ' 處 ' + fl.area.toFixed(2) + ' m²，水下 ' + under + ' 處 ' + uA.toFixed(2) + ' m²</div>' +
+    var outN = 0; fl.holes.forEach(function (h) { if (!(fl.hA[h] > 0)) return; if (fl.hWet[h]) { under++; uA += fl.hA[h]; } if (flHoleState(fl, h) === 'out') outN++; });   // 33_flood.js 破口的狀態
+    lines = '<div>艙內積水 <b>' + Math.round(fl.vol * RHO_W).toLocaleString() + ' 噸</b>（' + fl.vol.toFixed(1) + ' m³）・破口 ' + fl.open + ' 處 ' + fl.area.toFixed(2) + ' m²，水下 ' + under + ' 處 ' + uA.toFixed(2) + ' m²' + (outN ? '，往外流 ' + outN + ' 處' : '') + '</div>' +
       '<div>進水 ' + fl.inQ.toFixed(2) + ' m³/s・往外流 ' + fl.outQ.toFixed(2) + ' m³/s・累計 進 ' + fl.inTot.toFixed(0) + '／出 ' + fl.outTot.toFixed(0) + '／抽掉 ' + fl.pumped.toFixed(0) + ' m³・抽水 ' + pumpNow(sh).toFixed(1) + ' 噸／分</div>' +
       '<div>下沉 ' + sh.sink.toFixed(2) + ' m（照水該 ' + fl.sinkT.toFixed(2) + '；4.2 m 開始沉）・' + tilt + '</div>' +
       '<div>水的重心：' + (Math.abs(fl.comY) < 0.05 ? '在中線' : '偏' + sideName(fl.comY > 0 ? 'S' : 'P') + ' ' + Math.abs(fl.comY).toFixed(1) + ' m') + '・' + (fl.comX >= 0 ? '偏船頭 ' : '偏船尾 ') + Math.abs(fl.comX).toFixed(1) + ' m・噴進來的水 ' + fl.J.n + ' 顆・水格 ' + fl.actN + ' 格（邊長 ' + (fl.F.c * S).toFixed(1) + ' m）</div>' +
@@ -67,6 +67,8 @@ function floodPanel() {
   requestAnimationFrame(function () { if (FLX) SHIPS.forEach(function (sh, k) { if (sh.fl && !sh.broken && $('fpS' + k)) { fpDraw($('fpS' + k), sh, 0); fpDraw($('fpT' + k), sh, 1); } }); });
 }
 window.addEventListener('resize', function () { if (FLX) floodPanel(); });
+/** 破口的顏色（進水細節頁、詳細資訊的進水圖同一套；33_flood.js flHoleState）：出水綠、在海面下紅、海面上橙。 */
+function flHoleCol(fl, h) { return flHoleState(fl, h) === 'out' ? 'rgba(62,224,122,0.95)' : fl.hWet[h] ? 'rgba(255,60,50,0.95)' : 'rgba(255,170,40,0.85)'; }
 /** 剖面：view 0 側視（x × z，沿船寬加總）、1 俯視（x × y，沿高度加總）。灰 ＝ 艙內空間、藍 ＝ 水（越滿越深）、紅點 ＝ 水下的破口、橙點 ＝ 水上的、青線 ＝ 外面的水面、虛線 ＝ 設計水線。 */
 function fpDraw(cv, sh, view) {
   var fl = sh.fl, F = fl.F, c = F.c, NX = F.NX, NY = F.NY, NZ = F.NZ, NXY = NX * NY, Vc = Math.pow(c * S, 3), A = fl.A, cap = fl.cap;
@@ -98,8 +100,8 @@ function fpDraw(cv, sh, view) {
   }
   fl.holes.forEach(function (hh) {
     if (!(fl.hA[hh] > 0)) return;
-    var P = M4.pt(M, fl.hX[hh], fl.hY[hh], fl.hZ[hh]), wet = P[1] < seaH(P[0], P[2], SIMT), r = Math.max(1.5 * dpr, Math.sqrt(fl.hA[hh]) / 2 / (c * S) * cw * 1.3);   // 照洞的實際大小（⛔ 固定像素 ⇒ 手機上的剖面整排紅點糊成一條）
-    g.fillStyle = wet ? 'rgba(255,60,50,0.95)' : 'rgba(255,170,40,0.85)'; g.beginPath(); g.arc(px(fl.hX[hh]), pv(view ? fl.hY[hh] : fl.hZ[hh]), r, 0, 6.2832); g.fill();
+    var r = Math.max(1.5 * dpr, Math.sqrt(fl.hA[hh]) / 2 / (c * S) * cw * 1.3);   // 照洞的實際大小（⛔ 固定像素 ⇒ 手機上的剖面整排紅點糊成一條）
+    g.fillStyle = flHoleCol(fl, hh); g.beginPath(); g.arc(px(fl.hX[hh]), pv(view ? fl.hY[hh] : fl.hZ[hh]), r, 0, 6.2832); g.fill();
   });
 }
 /** 透視開著：破口在 3D 裡畫成點（不做深度測試 ⇒ 隔著船殼看得到；60_render.js 瞄準圈那一批）。水下的紅、照洞的大小；水上的橙、小而淡。 */
@@ -108,8 +110,9 @@ function flHoleMarks(pushPt) {
     var fl = sh.fl; if (!fl || sh.broken || sh.sinkingFinal || sh.sunk) return;
     fl.holes.forEach(function (h) {
       if (!(fl.hA[h] > 0)) return;
-      var P = M4.pt(sh.M, fl.hX[h], fl.hY[h], fl.hZ[h]), wet = P[1] < seaH(P[0], P[2], SIMT);
-      if (wet) pushPt(P, 0.25 + Math.sqrt(fl.hA[h]) * 0.8, [1, 0.25, 0.2], 0.95); else pushPt(P, 0.12 + Math.sqrt(fl.hA[h]) * 0.25, [1, 0.65, 0.15], 0.45);
+      var P = M4.pt(sh.M, fl.hX[h], fl.hY[h], fl.hZ[h]), st = flHoleState(fl, h);
+      if (st === 'out') pushPt(P, 0.2 + Math.sqrt(fl.hA[h]) * 0.6, [0.25, 0.88, 0.48], 0.9);   // 出水 ⇒ 綠
+      else if (fl.hWet[h]) pushPt(P, 0.25 + Math.sqrt(fl.hA[h]) * 0.8, [1, 0.25, 0.2], 0.95); else pushPt(P, 0.12 + Math.sqrt(fl.hA[h]) * 0.25, [1, 0.65, 0.15], 0.45);
     });
   });
 }
