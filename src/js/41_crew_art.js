@@ -221,6 +221,7 @@ function crewFrame(sh, c) {
   if (c.role === ROLE.MARINE || c.role === ROLE.TOP) return c.fireT > 0 && !sh.struck && !sh.sunk ? FR.FIRE : c.role === ROLE.TOP ? (Math.floor(c.t * 0.7) & 1 ? FR.WORK_B : FR.IDLE) : FR.IDLE;
   if (c.role === ROLE.OFFICER) return sh.salvoT && SIMT - sh.salvoT < 1.2 ? FR.FIRE : FR.IDLE;
   if (c.role === ROLE.HELM) return FR.WORK_B;
+  if (c.role === ROLE.OAR) return c.oar && c.oar.swM && sh.drive ? (sh.drive.oph < 0.5 ? FR.WORK_A : FR.WORK_B) : FR.IDLE;   // 槳手：照划槳的節奏（31_drive.js oarAnim；拉 ＝ WORK_A、回槳 ＝ WORK_B）
   return FR.IDLE;
 }
 /** 傷員的動（Tim 2026-10-18：「讓受傷倒地的水手 稍微搖晃一下(不然跟死亡很像) 參考rimworld的演出」）：只給畫面、不碰 rnd() ⇒ { lean, bob, sy } 疊在姿勢上。

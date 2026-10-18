@@ -529,6 +529,10 @@ function callHands(sh) {
     var hh = function (c) { return c.helmHome || c.home; }, lvh = lvAt(sh, hh(hd[0]));
     if (NV.reach.indexOf(lvh) >= 0) for (var j = 0; j < hn; j++) need.push({ kind: 'helm', key: '', lv: lvh, n: 1, x: hh(hd[j])[0], spot: hh(hd[j]), pri: 1, who: hd[j] });
   }
+  sh.crew.forEach(function (c) {                                      // 槳手（TASK-0691）：倒下、掉下去的那一位 ⇒ 派一個走到他的位子接那支槳（同舵手；槳斷了就不補）
+    var m = c.role === ROLE.OAR && !crewAble(c) ? c.oar : c.oarHome ? c.oarOf : null; if (!m || c.relieved || !m.alive || m.moved) return;
+    var hm = c.oarHome || c.home, lvo = lvAt(sh, hm); if (NV.reach.indexOf(lvo) >= 0) need.push({ kind: 'oar', key: '', lv: lvo, n: 1, x: hm[0], spot: hm, pri: 1, who: c, oar: m });
+  });
   if (pumpUrgent(sh)) { pumpNeeds(sh, need); medNeeds(sh, need); }     // 積水多（45_pumps.js pumpUrgent）⇒ 抽水機排在醫療艙前面（同 pri 1、sort 不換相對順序）
   else { medNeeds(sh, need); pumpNeeds(sh, need); }                    // 醫療艙的人手、等著被搬的傷員（44_medic.js）；人力抽水機：艙裡有水才要人（45_pumps.js）
   need.sort(function (a, b) { return a.pri - b.pri; });
@@ -539,8 +543,8 @@ function callHands(sh) {
       var c = idle[bi], H = c.hand, legs = handRoute(sh, H.lv, q.lv, c.pos[0], q.x, handReg(sh, c), q.cell !== undefined ? NV.levels[q.lv].N.reg[q.cell] : q.reg);   // cell：要走到的那一點（醫療艙；照它那一塊找路）；reg：補砲班、送藥手要到的那一塊（needReg）
       idle.splice(bi, 1); if (!legs) continue;
       if (q.cell !== undefined) legs.push({ w: q.lv, to: q.cell });
-      if (q.kind === 'helm') { var si = navSnap(NV.levels[q.lv].N, q.spot, 4); if (si < 0) continue; legs.push({ w: q.lv, to: si }); q.who.relieved = true; }
-      H.job = { kind: q.kind, key: q.key, deck: q.deck, side: q.side, lv: q.lv, reg: q.reg, spot: q.spot, med: q.med, who: q.who, bed: q.bed, pump: q.pump }; medTake(q);
+      if (q.kind === 'helm' || q.kind === 'oar') { var si = navSnap(NV.levels[q.lv].N, q.spot, 4); if (si < 0) continue; legs.push({ w: q.lv, to: si }); q.who.relieved = true; }
+      H.job = { kind: q.kind, key: q.key, deck: q.deck, side: q.side, lv: q.lv, reg: q.reg, spot: q.spot, med: q.med, who: q.who, bed: q.bed, pump: q.pump, oar: q.oar }; medTake(q);
       H.legs = legs; H.wp = null; c.moving = false; NV.called++;
     }
   });
@@ -559,6 +563,7 @@ function handJoin(sh, c) {
   })) { tlgEv(sh, c, 'void', { job: J.kind, why: '這裡走得到的活砲一門都沒有' }); H.job = null; H.wait = 4; return; }
   c.walk = null; c.moving = false; c.home = c.pos.slice(); c.hand = null; NV.joined++;
   if (J.kind === 'gun') { c.role = ROLE.GUN; c.deck = J.deck; c.side = J.side; c.gun = null; return; }
+  if (J.kind === 'oar') { c.role = ROLE.OAR; c.oar = J.oar; c.deck = NV.levels[J.lv].key; c.art = ROLE.GUN; if (J.who) { J.who.oarHome = undefined; J.who.oarOf = null; } return; }   // 接那支槳（TASK-0691）；自己是掉下去的那個槳手、爬回來補自己 ⇒ 之後倒下照常有人補
   if (J.kind === 'helm') { c.role = ROLE.HELM; c.deck = sh.weatherDeck; c.face = -1; c.helmHome = undefined; c.relieved = false; return; }   // 自己是掉下去的那個舵手、爬回來補自己 ⇒ 之後倒下照常有人補
   var dead = deadPm(sh, J.deck, J.lv, J.reg);
   var fell = dead ? null : sh.crew.filter(function (o) { return o.fellPm && o.fellPm.deck === J.deck; })[0];   // 從甲板破洞掉下去的送藥手（40_crew.js landIn）：接它的砲
