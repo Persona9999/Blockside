@@ -116,7 +116,7 @@ function panel(sh, title) {
 }
 /** 旁邊那張圖的圖說：砲位（預設）、損壞或進水（GMAP_MODE；Tim 2026-10-18「在開啟船體詳細資訊頁上加一個toggle 切換顯示炮位或是船隻損壞情況」「在炮位 損壞之外 加一個切換顯示進水」）。 */
 function gmapLegend(sh) {
-  if (GMAP_MODE === 'flood') return '<div class="dmgsum">' + floodSumText(sh) + '</div><div class="legend">進水圖：<b style="color:#3a9ae6">■</b> 艙內的水（上下整柱加起來，越滿越深） <b style="color:#ff3c32">●</b> 水下的破口 <b style="color:#ffaa28">●</b> 水上的破口（大小照洞的面積）</div>';
+  if (GMAP_MODE === 'flood') return '<div class="dmgsum">' + floodSumText(sh) + '</div><div class="legend">進水圖：<b style="color:#3a9ae6">■</b> 艙內的水（上下整柱加起來，越滿越深） <b style="color:#ff3c32">●</b> 水下的破口 <b style="color:#ffaa28">●</b> 水上的破口 <b style="color:#3ee07a">●</b> 水往外流的破口（大小照洞的面積）</div>';
   if (GMAP_MODE !== 'dmg') return '<div class="legend">砲位圖：● 好 ◌ 裝填 ○ 開不了 △ 等火藥 ≈ 泡水 ✕ 毀｜<b style="color:#7be37b">綠</b> 滿編 <b style="color:#f0d264">黃</b> 不足 <b style="color:#9a9a9a">灰</b> 沒人｜最上層在船內、越下層越外</div>';
   var C = GMAP_DMG;
   return '<div class="dmgsum">' + dmgSumText(sh) + '</div><div class="legend">損壞圖：<b style="color:' + C.chan + '">■</b> 通道斷了 <b style="color:' + C.hole + '">■</b> 甲板破洞 <b style="color:' + C.lad + '">H</b> 梯子 <b style="color:' + C.anc + '">◆</b> 帆的綁定點 ' +
@@ -126,11 +126,9 @@ function gmapLegend(sh) {
 function floodSumText(sh) {
   var fl = sh.fl;
   if (!fl || sh.broken) return (sh.broken ? '斷成兩截（照公式，一定沉）' : '公式模式：看不到艙內的水（物理效果「進水」選粒子才看得到）') + '・水線下打掉 ' + (sh.inflow || 0).toLocaleString() + ' 格・下沉 ' + sh.sink.toFixed(2) + ' m';
-  var under = 0; fl.holes.forEach(function (h) { if (fl.hA[h] > 0 && gmapHoleWet(sh, h)) under++; });
-  return '積水 ' + Math.round(fl.vol * RHO_W).toLocaleString() + ' 噸・破口 ' + fl.open + ' 處（水下 ' + under + '）・進水 ' + fl.inQ.toFixed(2) + ' m³/s・抽水 ' + pumpNow(sh).toFixed(1) + ' 噸/分・下沉 ' + sh.sink.toFixed(2) + ' m';
+  var under = 0, out = 0; fl.holes.forEach(function (h) { if (!(fl.hA[h] > 0)) return; if (fl.hWet[h]) under++; if (flHoleState(fl, h) === 'out') out++; });   // 33_flood.js 破口的狀態
+  return '積水 ' + Math.round(fl.vol * RHO_W).toLocaleString() + ' 噸・破口 ' + fl.open + ' 處（水下 ' + under + (out ? '、往外流 ' + out : '') + '）・進水 ' + fl.inQ.toFixed(2) + ' m³/s' + (fl.outQ > 0.005 ? '・往外流 ' + fl.outQ.toFixed(2) + ' m³/s' : '') + '・抽水 ' + pumpNow(sh).toFixed(1) + ' 噸/分・下沉 ' + sh.sink.toFixed(2) + ' m';
 }
-/** 破口 h 現在在水下嗎（照那一點的世界水面）。 */
-function gmapHoleWet(sh, h) { var fl = sh.fl, P = M4.pt(sh.M, fl.hX[h], fl.hY[h], fl.hZ[h]); return P[1] < seaH(P[0], P[2], SIMT); }
 /** 損壞表一行（48_damage.js；只讀，⛔ 不在這裡重掃 ⇒ 有畫面那場跟無頭的戰局一位元不差）。 */
 function dmgSumText(sh) {
   var D = sh.dmg; if (!D) return '損壞表：' + (sh.carp || sh.sm ? '還沒點名' : '這艘沒有木匠、帆匠');
@@ -270,7 +268,7 @@ function fleetHud(me) {
 //   砲的符號與顏色跟下方 HUD（gunCell）同一套：形狀 ＝ 裝填（● 好 ◌ 裝填中 ○ 開不了 △ 等火藥 ≈ 泡水 ✕ 毀）、顏色 ＝ 人手（綠 滿編、黃 不足、灰 沒人、紅 毀、藍 泡水）；
 //   不寫「左舷／右舷」（Tim 2026-10-14 拿掉：船頭朝上 ⇒ 左右就是左右舷）。
 // 進水（GMAP_MODE ＝ 'flood'；Tim 2026-10-18「在炮位 損壞之外 加一個切換顯示進水」）：同停格的進水細節頁的俯視剖面（72_floodui.js fpDraw view 1）—— 艙內的水沿高度加總、越滿越藍；
-//   破口照洞的大小（水下紅、水上橙）。公式模式沒有艙內的水 ⇒ 圖上不畫、卡片寫水線下打掉幾格。⛔ 只讀模擬。
+//   破口照洞的大小（水下紅、水上橙、水往外流綠）。公式模式沒有艙內的水 ⇒ 圖上不畫、卡片寫水線下打掉幾格。⛔ 只讀模擬。
 // 損壞（GMAP_MODE ＝ 'dmg'；卡片標題的「砲位｜損壞｜進水」切換，預設砲位）：同一張俯視圖上畫全船的損壞表（48_damage.js sh.dmg.rows，只讀）——
 //   甲板破洞（每個走路點一小格；通道斷了深紅、其他橘紅）、梯子（H）、帆的綁定點（◆）、帆（橫過船寬一條：白的長度 ＝ 剩下的血量，繩斷了標 ✂）、繩梯（⋮，梯腳）、
 //   倒掉的桅（✕）；木匠、帆匠在哪（點），正在修的那一件外面一圈白。
@@ -362,8 +360,8 @@ function gmapFlood(g, sh, scr, s) {
   }
   fl.holes.forEach(function (h) {
     if (!(fl.hA[h] > 0)) return;
-    var P = scr(fl.hX[h], fl.hY[h]), wet = gmapHoleWet(sh, h), r = Math.max(1.5, Math.sqrt(fl.hA[h]) / 2 / S * s * 1.3);
-    g.fillStyle = wet ? 'rgba(255,60,50,0.95)' : 'rgba(255,170,40,0.85)'; g.beginPath(); g.arc(P[0], P[1], r, 0, 6.2832); g.fill();
+    var P = scr(fl.hX[h], fl.hY[h]), r = Math.max(1.5, Math.sqrt(fl.hA[h]) / 2 / S * s * 1.3);
+    g.fillStyle = flHoleCol(fl, h); g.beginPath(); g.arc(P[0], P[1], r, 0, 6.2832); g.fill();
   });
 }
 /** 帆橫過船寬的範圍（帆的頂點 y 的最小、最大；算一次）。 */

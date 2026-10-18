@@ -64,7 +64,7 @@ function flNew(sh) {
   var L = FL_LV[FLOOD_LV]; if (!L) return null;
   var F = flType(sh.T, L.c), N = F.N, H = 2 * F.NX * F.NZ;
   return { L: L, F: F, cap: F.cap.slice(), pd: F.pd.slice(), op: F.op.slice(), ol: F.ol.slice(), A: new Float32Array(N), on: new Uint8Array(N), act: new Int32Array(4096), actN: 0, dmark: new Uint8Array(N), dirty: [],
-    hA: new Float32Array(H), hX: new Float32Array(H), hY: new Float32Array(H), hZ: new Float32Array(H), hYi: new Float32Array(H), hAcc: new Float32Array(H), hmark: new Uint8Array(H), hon: new Uint8Array(H), hdirty: [], holes: [],
+    hA: new Float32Array(H), hX: new Float32Array(H), hY: new Float32Array(H), hZ: new Float32Array(H), hYi: new Float32Array(H), hAcc: new Float32Array(H), hmark: new Uint8Array(H), hon: new Uint8Array(H), hdirty: [], holes: [], hWet: new Uint8Array(H), hQ: new Float32Array(H),   // 每個破口上一次算的狀態（flHoleState）：hWet 在海面下、hQ 流量 m³/s（＋進水、−出水、0 沒在流）
     J: { n: 0, p: new Float32Array(L.jn * 3), v: new Float32Array(L.jn * 3), vol: new Float32Array(L.jn), life: new Float32Array(L.jn) },
     vol: 0, area: 0, open: 0, inQ: 0, outQ: 0, inTot: 0, outTot: 0, pumped: 0, comX: 0, comY: 0, sinkT: 0, step: 0, gen: 0, mesh: null,
     dq: new Float32Array(N), dqOn: new Uint8Array(N), dqL: [], dqT: 0, fo: new Map(),   // dq…：往下流的量（只給畫面的水幕，flFalls；⛔ 模擬不讀）；fo：每一格往下流的開口在哪（快取）
@@ -160,6 +160,14 @@ function wetLatch(o, under, n) {
   return 0;
 }
 /** 一艘船的進水讀數（__game.flood 與進水報表 81_floodlab.js 共用同一份）。 */
+/** 破口 h 現在是進水 'in'、出水 'out'（艙內的水比洞口外面的水面高 ⇒ 往外流；Tim 2026-10-18「就是破口高於海面」），還是沒在流 'dry'（上一次 floodStep 算的，sh.fl.hQ）。
+ *  Tim 2026-10-18「可以放到邏輯層嗎(知道每個破口是在進水或出水)」「這樣所有需要這個資訊的地方都能取用」：畫面（詳細資訊的進水圖、進水細節頁、透視的破口點）都讀這裡，不再各自重算海面。 */
+function flHoleState(fl, h) { var q = fl.hQ[h]; return q > 1e-6 ? 'in' : q < -1e-6 ? 'out' : 'dry'; }
+/** 每個破口（還開著的）：{ x, y, z（船的格座標）, area m², wet 在海面下, q 流量 m³/s, st 'in'｜'out'｜'dry' } —— __game.flHoles(i)。 */
+function flHoleInfo(sh) {
+  var fl = sh.fl; if (!fl) return null;
+  return fl.holes.filter(function (h) { return fl.hA[h] > 0; }).map(function (h) { return { x: +fl.hX[h].toFixed(1), y: +fl.hY[h].toFixed(1), z: +fl.hZ[h].toFixed(1), area: +fl.hA[h].toFixed(3), wet: !!fl.hWet[h], q: +fl.hQ[h].toFixed(3), st: flHoleState(fl, h) }; });
+}
 function flReadout(sh) {
   var fl = sh.fl;
   var cells = 0; for (var t = 0; t < fl.actN; t++) if (fl.A[fl.act[t]] > 0) cells++;
@@ -242,7 +250,7 @@ function flTick(sh, fl, dtc) {
   // 1. 破口：外面的水面 vs 艙內在洞那裡的水面（都不低於洞）⇒ 進或出
   var inQ = 0, outQ = 0, area = 0, open = 0;
   for (k = 0; k < fl.holes.length; k++) {
-    var h = fl.holes[k], ar = fl.hA[h]; if (!(ar > 0)) continue;
+    var h = fl.holes[k], ar = fl.hA[h]; if (!(ar > 0)) { fl.hQ[h] = 0; continue; }
     area += ar; open++;
     var side = (h / (NX * F.NZ)) | 0, s = side ? 1 : -1, P = M4.pt(M, fl.hX[h], fl.hY[h], fl.hZ[h]), hOut = seaH(P[0], P[2], SIMT);
     var ci = flCell(F, fl.hX[h], fl.hYi[h] + s * 0.5 * c, fl.hZ[h]), hIn = -1e9;
@@ -250,8 +258,9 @@ function flTick(sh, fl, dtc) {
     // 艙內在洞那裡的水面：從洞口那一格往上，一格裝了九成以上、上面那一格也有水 ⇒ 再往上（⛔ 以前九成八：滿的格常常只有九成五〜九成七（粒子撞到九成五就算滿、旁邊流拉平）⇒ 停在深處、水頭差多算 6 m）
     if (ci >= 0 && A[ci] > 1e-6) { var q = ci; while (q + NXY < N && A[q] >= cap[q] * Vc * 0.9 && A[q + NXY] > 1e-6) q += NXY; hIn = head(q); }
     var d = Math.max(hOut, P[1]) - Math.max(hIn, P[1]);
+    fl.hWet[h] = P[1] < hOut ? 1 : 0; fl.hQ[h] = 0;                     // 破口的狀態（flHoleState；底下進水／出水時填流量）
     if (d > 0.001) {
-      var dv = FL_C * ar * Math.sqrt(2 * G * d) * fk * dtc; inQ += dv;
+      var dv = FL_C * ar * Math.sqrt(2 * G * d) * fk * dtc; inQ += dv; fl.hQ[h] = dv / dtc;
       fl.hAcc[h] += dv;
       var sp = Math.sqrt(2 * G * d) / S;                                        // 噴進來的速度（格／秒）
       for (var nJ = 0; fl.hAcc[h] >= L.vj && nJ < ACC_CAP * 16; nJ++) {  // 防呆：一步最多 4096 份（≈ 80 m³ 以上才會碰到；00_core.js accFix）
@@ -263,7 +272,7 @@ function flTick(sh, fl, dtc) {
       }
       accFix(fl.hAcc, h, L.vj, '進水');
     } else if (d < -0.001 && ci >= 0) {
-      var ov = Math.min(FL_C * ar * Math.sqrt(2 * G * -d) * fk * dtc, A[ci]); A[ci] -= ov; outQ += ov;
+      var ov = Math.min(FL_C * ar * Math.sqrt(2 * G * -d) * fk * dtc, A[ci]); A[ci] -= ov; outQ += ov; fl.hQ[h] = -ov / dtc;
       if (PHX.water && ov > 0.01) wpPour(P, M4.dir(M, 0, -s, 0), ov / dtc);    // 往外流：只給人看（13_water.js，自己的亂數）
     }
   }
