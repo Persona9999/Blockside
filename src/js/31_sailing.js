@@ -45,7 +45,9 @@ function waterline(T) {
   T.bowHalf = hi >= lo ? (hi - lo) / 2 + 3 : 20;
 }
 /** 電腦想保持的交戰距離（m）：開局距離夾在 90～220 m（以前距離只有 90／140／220 三檔、開局就在這個距離）。 */
-function aiRange() { return clamp(DIST, 90, 220); }
+function aiRange(sh) { var R = clamp(DIST, 90, 220), c = sh ? closeRange(sh) : 0; return c ? Math.min(R, c) : R; }
+/** 短射程武器（砲種表 close：希臘火 siphon）還在 ⇒ 電腦要靠到它射程的八成才打得到（TASK-0693）；沒有 ⇒ 0（照主選單距離）。 */
+function closeRange(sh) { var r = 0; (sh.guns || []).forEach(function (g) { if (g.alive && GUNS[g.type].close) { var m = 0.8 * gunMaxR(GUNS[g.type]); if (!r || m < r) r = m; } }); return r; }
 function fwd(yaw) { return [Math.cos(yaw), 0, -Math.sin(yaw)]; }          // 船頭（格 +x）在世界的方向；yaw 變大 ＝ 往格 −y（左舷 P）那一側轉 ＝ 畫面上的左轉
 function sideName(side) { return side === 'S' ? '右舷' : '左舷'; }        // 模型的 S（格 +y）＝ 右舷（shipBaseMatrix 照雕刻引擎的手性）
 var SAILSETS = ['全收', '收帆', '戰鬥帆', '滿帆'];
