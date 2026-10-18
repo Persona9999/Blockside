@@ -147,11 +147,78 @@ function helmGap(sh, foe, asp) {
   var x = clamp(Math.round(T.wl0 + (T.wl1 - T.wl0) * t), 0, T.hullTW - 1), hb = (T.hullHB[T.zw * T.hullTW + x] || 20) * S;
   return Math.max(0, Math.hypot(p[0] - K[0][0] - ux * t, p[2] - K[0][2] - uz * t) - hb);
 }
+// ───────── 繞側（Tim 2026-10-18：「目前AI不會用船頭的希臘火」「自動開火會發射希臘火 但是AI友艦不會」——量過 3 對 3 seed 11：持火號直線衝向敵方戰列，
+//   10 秒內被三艘的舷側打掉 53 人與 siphon，整場只開 1 發）─────────
+// 船頭／船尾接敵的船（helmSteerEnd）接近時避開敵艦的舷側火力：
+//   威脅（helmThreat）＝ 每艘還在的敵艦（HELM_FLANK_R 內）對得到那一點的固定砲火力（helmGunW × 連發數 burst；迴旋砲哪裡都一樣、不影響挑哪裡，不算）；
+//     敵艦到那一點的連線隔著我方友艦（friendInLine）⇒ 那艘不算（砲彈先打到友艦）。⛔ helmGunW 本身不改 ⇒ 舷側砲的船戰局不變。
+//   我現在的位置、照現在的方位直接衝到射程邊上那一點（HELM_FLANK_END × 射程）都 ≤ HELM_FLANK_K × 候選裡最大 ⇒ 直接衝（照舊）。否則比三種路（一路上取 HELM_FLANK_PATH 點的平均威脅）：
+//   · 直接衝；
+//   · 繞：繞著敵艦 HELM_FLANK_N 個方位（敵艦的格座標，0 ＝ 它的船頭）的切入點 W(θ) ＝ 敵艦中心 ＋ Rw ×（θ 方向）＋ 敵艦航速 × 前置時間
+//     （Rw ＝ clamp(0.7 × 距離, 1.5 × 射程, 距離) ⇒ 一邊繞一邊收近）；終點本身要 ≤ HELM_FLANK_K × 最大，上一次挑的打八折（遲滯）；
+//   · 躲到友艦後面（離敵艦那一側 HELM_SHELTER_D m）：比另外兩條的 HELM_SHELTER_K 倍還安全才去。
+//   ⛔ 只看終點 ⇒ 開局挑了要橫過三叉戟號船頭三管速射砲的那一點，5 秒死 43 人；照路的平均 ⇒ 開局先躲到友艦後面，5 秒死 6 人（3 對 3 seed 11）。
+//   航向對準 W（船尾接敵反過來）；繞 ⇒ 航速照原本那一套（照離敵艦船身的距離、煞得住）；躲 ⇒ 照離掩護點的距離。
+// 不繞：附近（HELM_FLANK_R）只有一艘敵艦 ⇒ 直接衝（單挑時繞只會追著它轉過來的舷側跑，量過 siphon 52 → 0 發）；交叉火網（兩艘以上）才繞、才躲。
+//   敵艦本身也是船頭／船尾接敵（helmAspect 不是 'side'：另一艘持火號、撞角船）⇒ 照舊正面對衝（⛔ 兩艘都繞 ⇒ 互相繞圈）；已經在射程裡（gap ≤ HELM_FLANK_IN × 射程）。
+// 每 HELM_FLANK_DT 秒重算一次（快取 sh.flk）。只有船頭／船尾接敵的船會跑到這裡 ⇒ 舷側砲的船一行都不多算、戰局不變。
+var HELM_FLANK_DT = 1, HELM_FLANK_K = 0.3, HELM_FLANK_IN = 1.2, HELM_FLANK_R = 600, HELM_FLANK_N = 36, HELM_FLANK_LEAD = 10, HELM_FLANK_END = 1.5, HELM_SHELTER_D = 35, HELM_SHELTER_K = 0.7, HELM_FLANK_PATH = 5;
+/** 敵艦 o 的固定砲對得到世界點 P 的火力（FK：我方友艦的龍骨線；隔著友艦 ⇒ 不算 —— 砲彈會先打到友艦）。 */
+function helmThreatOf(o, P, FK) {
+  if (FK && FK.length && friendInLine(FK, o.center, P)) return 0;
+  var L = toLocal(o, P), a = Math.atan2(L[1] - o.T.cy, L[0] - o.T.cx), w = 0;
+  o.guns.forEach(function (g) { if (g.alive && !g.mt && helmCovers(g, a)) w += helmGunW(g) * ((GUNS[g.type] || {}).burst || 1); });   // 連發的砲 × 一份打幾發（⛔ 只照砲重 ⇒ 三叉戟號船頭的三管速射砲看起來很弱，持火號照直線衝它的船頭、10 秒死 53 人）
+  return w;
+}
+/** 世界點 P 被幾艘敵艦的舷側對著（加總；見上）。 */
+function helmThreat(sh, P, FK) {
+  var w = 0;
+  SHIPS.forEach(function (o) { if (isFoe(sh, o) && !isOut(o) && o.M && Math.hypot(o.px - P[0], o.pz - P[2]) < HELM_FLANK_R) w += helmThreatOf(o, P, FK); });
+  return w;
+}
+/** 要不要繞、繞去哪：{ k: 'flank'｜'shelter', w: [x, z] 要去的點（世界）, th 方位（rad，敵艦格座標；掩護 ⇒ 0）, me 我現在的威脅, mx 繞一圈的候選裡最大 } 或 null（直接衝）。 */
+function helmFlank(sh, foe, reach, gap, d) {
+  var near = SHIPS.filter(function (o) { return isFoe(sh, o) && !isOut(o) && Math.hypot(o.px - sh.px, o.pz - sh.pz) < HELM_FLANK_R; }).length;
+  if (near < 2 || helmAspect(foe) !== 'side' || gap <= HELM_FLANK_IN * reach) { sh.flk = null; return null; }   // 一對一 ⇒ 直接衝（煞得住）：⛔ 繞 ⇒ 單挑憲法號時它一直轉舷側對著我、繞到 120 秒 siphon 0 發、死 51 人（直接衝：52 發中 52、死 19）
+  var F = sh.flk; if (F && F.foe === foe.i && SIMT - F.t < HELM_FLANK_DT) return F.w ? F : null;
+  var FK = friendKeels(sh), me = [sh.px, 0, sh.pz], Lm = toLocal(foe, me), th0 = Math.atan2(Lm[1] - foe.T.cy, Lm[0] - foe.T.cx), tme = helmThreat(sh, me, FK);
+  function ring(th, R) { var u = M4.dir(foe.M, Math.cos(th), Math.sin(th), 0), ul = Math.hypot(u[0], u[2]) || 1; return [foe.px + u[0] / ul * R, foe.pz + u[2] / ul * R]; }
+  var Rw = clamp(0.7 * d, 1.5 * reach, Math.max(d, 1.5 * reach)), C = [], mx = 0;
+  for (var k = 0; k < HELM_FLANK_N; k++) {
+    var th = -Math.PI + 2 * Math.PI * k / HELM_FLANK_N, b = ring(th, Rw), T = Math.min(HELM_FLANK_LEAD, Math.hypot(b[0] - sh.px, b[1] - sh.pz) / Math.max(3, Math.abs(sh.spd)));
+    var w = [b[0] + foe.vel[0] * T, b[1] + foe.vel[2] * T], t = helmThreat(sh, [w[0], 0, w[1]], FK);
+    C.push({ th: th, w: w, t: t }); if (t > mx) mx = t;
+  }
+  var e = ring(th0, HELM_FLANK_END * reach), tend = helmThreat(sh, [e[0], 0, e[1]], FK), lim = HELM_FLANK_K * mx;   // 照現在的方位直接衝到射程邊上那一點的威脅
+  function path(w) { var c = 0; for (var q = 1; q <= HELM_FLANK_PATH; q++) { var f = q / HELM_FLANK_PATH; c += helmThreat(sh, [sh.px + (w[0] - sh.px) * f, 0, sh.pz + (w[1] - sh.pz) * f], FK); } return c / HELM_FLANK_PATH; }   // 一路上的平均威脅（⛔ 只看終點 ⇒ 開局挑了要橫過三叉戟號船頭砲的那一點，5 秒死 43 人）
+  var nf = { foe: foe.i, t: SIMT, k: null, w: null, th: 0, me: tme, mx: mx };
+  if (mx > 0 && (tme > lim || tend > lim)) {
+    var pd = path(e), best = null;                                       // 直接衝那一條路
+    C.forEach(function (c) {
+      if (c.t > lim) return;
+      c.p = path(c.w); var keep = F && F.foe === foe.i && F.k === 'flank' && Math.abs(Math.atan2(Math.sin(c.th - F.th), Math.cos(c.th - F.th))) < 1e-6;
+      c.s = c.p * (keep ? 0.8 : 1);                                       // 上一次挑的打八折（遲滯：⛔ 每秒換 ⇒ 敵艦一轉就左右換邊）
+      if (!best || c.s < best.s) best = c;
+    });
+    var sb = null;                                                       // 躲到友艦後面（離敵艦那一側 HELM_SHELTER_D m）
+    friendsOf(sh).forEach(function (f) {
+      if (isOut(f)) return;
+      var ux = f.px - foe.px, uz = f.pz - foe.pz, ul = Math.hypot(ux, uz) || 1, q = [f.px + ux / ul * HELM_SHELTER_D + f.vel[0] * 3, f.pz + uz / ul * HELM_SHELTER_D + f.vel[2] * 3];
+      var pq = path(q); if (!sb || pq < sb.p) sb = { w: q, p: pq };
+    });
+    if (sb && sb.p < HELM_SHELTER_K * Math.min(pd, best ? best.p : Infinity)) { nf.k = 'shelter'; nf.w = sb.w; }
+    else if (best && best.p < pd) { nf.k = 'flank'; nf.w = best.w; nf.th = best.th; }   // 繞的那條路比直接衝安全才繞
+  }
+  sh.flk = nf;
+  return nf.w ? nf : null;
+}
 function helmSteerEnd(sh, foe, asp, d, dx, dz) {
   if (helmRamDef(sh.T)) return helmSteerRam(sh, foe, d, dx, dz);
   var reach = helmAspectR(sh, asp), gap = helmGap(sh, foe, asp), hold = HELM_END_HOLD * reach, vf = (foe.vel[0] * dx + foe.vel[2] * dz) / d, bow = asp === 'B';   // vf：敵艦沿連線離開我的速度
   // 遠了照敵艦的航速往前估（截住它）；兩倍射程內直接對準它 —— ⛔ 一路往前估 10 秒 ⇒ 貼到憲法號旁邊 4 m 時對準的是它前面 40 m，敵艦落在 siphon 的射界（±26°）外，120 秒只開 1 發（量過）
   var T = gap > 2 * reach ? Math.min(HELM_END_LEAD, d / Math.max(1, Math.abs(sh.spd))) : 0, tx = dx + foe.vel[0] * T, tz = dz + foe.vel[2] * T;
+  var fk = helmFlank(sh, foe, reach, gap, d);                           // 敵艦的舷側對著我 ⇒ 先繞到它船頭／船尾那一側（helmFlank）
+  if (fk) { tx = fk.w[0] - sh.px; tz = fk.w[1] - sh.pz; }
   var yaw = bow ? Math.atan2(-tz, tx) : Math.atan2(tz, -tx), v, m;           // fwd(yaw) ＝ (cos, −sin)
   var canBack = sh.cfg.base > 0 && sh.drive && sh.drive.cap > 0.05;
   var vc = Math.max(0, sh.spd - vf), room = gap - hold;                 // vc：現在的接近速度（自己往前、扣掉敵艦沿連線離開的）；room：離守住的距離還有多遠
@@ -163,16 +230,18 @@ function helmSteerEnd(sh, foe, asp, d, dx, dz) {
     if (v < 0) { v = canBack ? Math.max(-HELM_BACK_V, v) : HELM_VMIN; m = canBack ? 'back' : bow ? 'bow' : 'stern'; }
     else { v = Math.max(HELM_VMIN, v); m = !bow ? 'stern' : gap > reach ? 'close' : 'bow'; }
   }
+  if (fk && fk.k === 'shelter') { var ds = Math.hypot(tx, tz); v = clamp(ds / 6, HELM_VMIN, 9); m = 'shelter'; }   // 掩護：照離掩護點的距離（到了就慢慢跟著友艦）
+  else if (fk && m !== 'back') m = 'flank';
   // 要大轉向（目標離船頭 ／ 船尾 > HELM_END_TURN）而且有動力 ⇒ 先慢下來（HELM_TURN_V）再轉：槳的差動轉向、慢速時迴轉半徑小。
   //   ⛔ 照全速轉 ⇒ 兩艘持火號擦身而過之後各以 7.7 節、每秒 3.6° 掉頭（迴轉半徑 64 m），掉頭要 50 秒，越離越遠（量過 30 秒拉開到 170 m）
-  var F = fwd(sh.yaw), off = Math.acos(clamp((F[0] * dx + F[2] * dz) / d * (bow ? 1 : -1), -1, 1));
-  if (canBack && off > HELM_END_TURN && v > HELM_TURN_V) { v = HELM_TURN_V; m = 'turn'; }
-  sh.endDbg = { gap: +gap.toFixed(1), reach: +reach.toFixed(1), v: v === Infinity ? 'inf' : +v.toFixed(2) };   // 讀數（__game.ships()[i].endDbg）
+  var tl = fk ? Math.hypot(tx, tz) || 1 : d, F = fwd(sh.yaw), off = Math.acos(clamp((F[0] * (fk ? tx : dx) + F[2] * (fk ? tz : dz)) / tl * (bow ? 1 : -1), -1, 1));   // 繞側 ⇒ 照切入點量（⛔ 照敵艦量 ⇒ 繞側時敵艦本來就不在船頭，一路被壓成 2 m/s）
+  if (canBack && off > HELM_END_TURN && v > HELM_TURN_V && gap < 2 * reach) { v = HELM_TURN_V; m = 'turn'; }   // 只在近處（兩倍射程內）：⛔ 遠處也壓到 2 m/s ⇒ 艦隊戰裡敵艦照 4 m/s 走，持火號慢到轉不過來，30 秒目標都在船頭 100° 外、越拉越遠（量過 3 對 3 seed 11）
+  sh.endDbg = { gap: +gap.toFixed(1), reach: +reach.toFixed(1), v: v === Infinity ? 'inf' : +v.toFixed(2), flank: fk ? Math.round(fk.th * 57.3) : null };   // 讀數（__game.ships()[i].endDbg）
   sh.hEndT = SIMT;                                                       // 這一步是船頭／船尾接敵（helmEndOn：讓敵艦、避開頂風照它）
   if (m !== sh.hMode && SIMT - (sh.hModeT || -1e9) >= HELM_MODE_T) {
     sh.hMode = m; sh.hModeT = SIMT;
     helmSay(sh, 'mode', HELM_MODE[m] + '：' + HELM_ASP_NAME[asp] + '的砲口離敵艦船身 ' + gap.toFixed(0) + ' m、武器打得到 ' + reach.toFixed(0) + ' m —— '
-      + (m === 'close' ? '靠過去' : m === 'back' ? '太近、倒退' : m === 'turn' ? '它離' + HELM_ASP_NAME[asp] + ' ' + Math.round(off * 57.3) + '°、先慢下來轉過去' : m === 'bow' ? '對準它、守在 ' + hold.toFixed(0) + ' m' : '背對它、守在 ' + hold.toFixed(0) + ' m'), false);
+      + (m === 'shelter' ? '敵艦的舷側對著我（威脅 ' + fk.me.toFixed(1) + '／最多 ' + fk.mx.toFixed(1) + '）、直接衝與繞過去都要挨打 —— 先躲到友艦後面' : m === 'flank' ? '它的舷側對著我（威脅 ' + fk.me.toFixed(1) + '／最多 ' + fk.mx.toFixed(1) + '）、繞到它' + (Math.abs(fk.th) < Math.PI / 2 ? '船頭' : '船尾') + '那一側（離它中線 ' + Math.round(Math.abs(Math.abs(fk.th) < Math.PI / 2 ? fk.th : Math.PI - Math.abs(fk.th)) * 57.3) + '°）再靠過去' : m === 'close' ? '靠過去' : m === 'back' ? '太近、倒退' : m === 'turn' ? '它離' + HELM_ASP_NAME[asp] + ' ' + Math.round(off * 57.3) + '°、先慢下來轉過去' : m === 'bow' ? '對準它、守在 ' + hold.toFixed(0) + ' m' : '背對它、守在 ' + hold.toFixed(0) + ' m'), false);
   }
   return { yaw: yaw, v: v };
 }
@@ -215,7 +284,7 @@ function helmSteerRam(sh, foe, d, dx, dz) {
   if (m !== sh.hMode && SIMT - (sh.hModeT || -1e9) >= HELM_MODE_T) { sh.hMode = m; sh.hModeT = SIMT; helmSay(sh, 'mode', HELM_MODE[m] + '：距離 ' + d.toFixed(0) + ' m —— ' + (m === 'ram' ? '對準它、全速衝' : canBack ? '船頭對著它倒車退開' : '背對它全速拉開'), false); }
   return { yaw: yaw, v: v };
 }
-var HELM_MODE = { approach: '接近', swap: '換舷', evade: '拉開', back: '倒退', abeam: '守正橫', cruise: '巡航', lead: '戰列排頭', line: '戰列跟隨', gauge: '搶上風', close: '船頭接近', bow: '船頭對敵', stern: '船尾對敵', turn: '轉向對敵', ram: '衝撞', ramback: '撞完拉開' }, HELM_MODE_T = 4;
+var HELM_MODE = { approach: '接近', swap: '換舷', evade: '拉開', back: '倒退', abeam: '守正橫', cruise: '巡航', lead: '戰列排頭', line: '戰列跟隨', gauge: '搶上風', close: '船頭接近', bow: '船頭對敵', stern: '船尾對敵', turn: '轉向對敵', flank: '繞側', shelter: '友艦掩護', ram: '衝撞', ramback: '撞完拉開' }, HELM_MODE_T = 4;
 /** 指揮官的命令改了打法（排頭、跟隨、搶上風）⇒ 記一筆（跟 helmSteer 的打法同一格 sh.hMode、同一個間隔）。 */
 function helmMode(sh, m, text) { if (m !== sh.hMode && SIMT - (sh.hModeT || -1e9) >= HELM_MODE_T) { sh.hMode = m; sh.hModeT = SIMT; helmSay(sh, 'mode', HELM_MODE[m] + '：' + text, false); } }
 /** 戰列的排頭（TASK-0679；指揮官 mode 'lead'，53_commander.js cmdLine）：照「整條戰列」開 ——
