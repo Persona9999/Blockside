@@ -436,5 +436,6 @@ yieldUI().then(function () {                                        // 先讓主
   } else {
     // 選單後面先擺好兩艘船當背景
     reset();
+    if (Q.get('start') === '1') startWhenReady();                       // 外部開戰（70_flow.js）：跳過主選單
   }
 }).catch(function (e) { glFail('載入失敗：' + (e && e.message || e)); console.error(e); });

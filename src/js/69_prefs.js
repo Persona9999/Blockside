@@ -9,7 +9,7 @@
 // 格式帶版本號（v）；看不懂的版本、壞掉的 JSON ⇒ 整份不套；型別不對、界外的值 ⇒ 那一項不套（界外的夾回範圍）。
 // 什麼時候存：每秒比一次（跟上次存的不一樣才寫）＋ 關頁、切到背景時。全部回到預設 ⇒ 刪掉那一筆。
 var PREFS_KEY = 'ame_constitution_broadside.prefs', PREFS_VER = 1;
-var PREF_Q = ['wdir', 'wspd', 'ship', 'blue', 'red', 'hard', 'flood', 'ballast', 'gunw', 'speed', 'agile', 'upwind', 'base', 'pump', 'gunhp', 'sailhp', 'crewhp', 'crewdeath', 'powderhp', 'blast', 'blastv', 'dmg24', 'dmg32l', 'dmg32', 'dmg18', 'dmg12', 'dmg18l', 'dmg6', 'dmg3c', 'dmgtr',
+var PREF_Q = ['mode', 'start', 'wdir', 'wspd', 'ship', 'blue', 'red', 'hard', 'flood', 'ballast', 'gunw', 'speed', 'agile', 'upwind', 'base', 'pump', 'gunhp', 'sailhp', 'crewhp', 'crewdeath', 'powderhp', 'blast', 'blastv', 'dmg24', 'dmg32l', 'dmg32', 'dmg18', 'dmg12', 'dmg18l', 'dmg6', 'dmg3c', 'dmgtr',
   'box', 'carry', 'hands', 'drown', 'heal', 'musket', 'sailfix', 'wind', 'windcap', 'inertia', 'turninert', 'sailtq', 'ammo', 'strike', 'cap', 'phys', 'sail', 'play', 'stall', 'funspeed', 'funagile', 'funstall', 'funpowder', 'funhard', 'sea',
   'gfx', 'g_shadow', 'g_refl', 'g_refr', 'g_sea', 'g_res', 'g_aa', 'phx', 'p_rig', 'p_rigfar', 'p_debris', 'p_fx', 'weather', 'g_rain', 'g_drops', 'g_dropspl', 'g_shships', 'g_masks', 'g_deco', 'dist', 'field', 'reinf', 'cmd', 'gauge', 'blue', 'red', 'slowmo', 'dbg', 'slowcam', 'roomfn', 'navre', 'gcrew', 'smoke', 'pslow', 'pslowb', 'ramv', 'ramk', 'rame', 'ramside', 'debcap'];          // 會蓋過存檔的網址參數（04_state.js、05_hull.js 讀的那些）
 var DMG_Q = { long: 'dmg24', long32: 'dmg32l', carr: 'dmg32', chase: 'dmg18', long4: 'dmg4', long12: 'dmg12', long18: 'dmg18l', long6: 'dmg6', chase3: 'dmg3c', trident: 'dmgtr', dahl9: 'dmg9d', brooke64: 'dmg64b', brooke7: 'dmg7b', dahl11: 'dmg11d', long36: 'dmg36l', long8: 'dmg8l', pierrier: 'dmgpr' };
@@ -145,7 +145,7 @@ var PREF_ITEMS = [
   prefNum('ramside', prefLim('ramside'), false, function () { return RAM.side; }, function (x) { RAM.side = x; }),
   prefBool('slowcam', true, function () { return SLOW.cam; }, function (x) { SLOW.cam = x; }),   // ⚠ 以前只讀不存（存的那一行被併進註解裡）⇒ 改了下次打開又回預設；現在照描述表存
   prefAny('sail', function (o) { if (SAIL !== CFG.menu.sail) o.sail = SAIL; }, function (p) { if (!Q.has('sail') && (p.sail === 'auto' || p.sail === 'manual' || p.sail === 'off')) SAIL = p.sail; }),
-  prefAny('mode', function (o) { if (MODE !== CFG.menu.mode) o.mode = MODE; }, function (p) { if (Object.prototype.hasOwnProperty.call(MODE_RULES, p.mode) && MODE_RULES[p.mode].menu) flowMode(p.mode); }),
+  prefAny('mode', function (o) { if (MODE !== CFG.menu.mode) o.mode = MODE; }, function (p) { if (!MODE_Q && Object.prototype.hasOwnProperty.call(MODE_RULES, p.mode) && MODE_RULES[p.mode].menu) flowMode(p.mode); }),   // MODE_Q：網址給了玩法（04_modes.js）⇒ 照網址
   prefAny('auto', function (o) { if (LAST_MODE === MODE && AUTOFIRE !== modeRule('autoFire')) o.auto = AUTOFIRE; },   // 換了模式還沒開局 ⇒ 開局時會照模式重套（70_flow.js reset），這時的值不算數
     function (p) { if (typeof p.auto === 'boolean') { AUTOFIRE = p.auto; LAST_MODE = MODE; } }),   // 存了自動開砲 ⇒ 開局不再照模式套預設
   prefAny('field', function (o) { if (FIELD_N !== MAX_SHIPS) o.field = FIELD_N; }, function (p) { if (!Q.has('field') && typeof p.field === 'number' && isFinite(p.field)) FIELD_N = clamp(Math.round(p.field), 2, MAX_SHIPS); }),   // 候補（52_fleet.js）
