@@ -76,8 +76,9 @@ function vxAvoid(sh) {
 var BEDAV_LOOK = [40, 80, 130, 190], BEDAV_CLR = 1.5, BEDAV_TRY = [30, -30, 60, -60, 90, -90, 135, -135, 180];
 function bedAvoid(sh) {
   if (!BED || sh.sinkingFinal) return null;
-  var need = (sh.keelY !== undefined ? -sh.keelY : 6) + BEDAV_CLR;
-  function clear(yaw) { var F = fwd(yaw); for (var i = 0; i < BEDAV_LOOK.length; i++) { var d = BEDAV_LOOK[i]; if (bedHgt(sh.px + F[0] * d, sh.pz + F[2] * d) > -need) return d; } return Infinity; }
+  var lv = function (x, z) { return VX ? vxH(x, z) : 0; };             // 那一點的水面（大漩渦：漏斗；⛔ 照 0 ⇒ 漏斗裡的船吃水算成 200 m，到處都「淺」）
+  var need = (sh.keelY !== undefined ? lv(sh.px, sh.pz) - sh.keelY : 6) + BEDAV_CLR;
+  function clear(yaw) { var F = fwd(yaw); for (var i = 0; i < BEDAV_LOOK.length; i++) { var d = BEDAV_LOOK[i], x = sh.px + F[0] * d, z = sh.pz + F[2] * d; if (bedHgt(x, z) - lv(x, z) > -need) return d; } return Infinity; }
   var c0 = clear(sh.yaw); if (c0 === Infinity) return null;
   var best = sh.yaw + Math.PI, bd = -1;
   for (var i = 0; i < BEDAV_TRY.length && bd !== Infinity; i++) { var y = sh.yaw + BEDAV_TRY[i] * Math.PI / 180, c = clear(y); if (c > bd) { bd = c; best = y; } }

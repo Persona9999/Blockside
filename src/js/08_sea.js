@@ -41,11 +41,12 @@ var VX = null;
 /** 開局（70_flow.js reset）、換天氣（setWeather）、天氣設定頁改了：照天氣的 vortex 建漩渦；天氣沒有 vortex ⇒ null。
  *  vortex：r 半徑（m）、depth 深度（m）、width 寬窄（rc ／ r）、v 水流（節）、inflow 往中心吸（切向的幾成）、eye 眼（m，最多 0.8 r）。 */
 function vxInit() {
-  var o = WX.vortex; if (!o) { VX = null; return; }
+  var o = WX.vortex; if (!o) { VX = null; bedVxSync(); return; }   // 海圖照漩渦重烤（08_seabed.js；沒有海圖、漩渦沒變 ⇒ 什麼都不做）
   var rv = o.r, rc = o.width * rv;
   VX = { rv: rv, rc2: rc * rc, D: o.depth, V: o.v / 1.9438, IN: o.inflow, re: Math.min(o.eye, 0.8 * rv), pull: o.pull, gulp: o.gulp || 0, hold: o.hold || 0, eyeSuck: o.eyeSuck || 0, grav: o.grav, suck: o.suck, suckR: o.suckR, suckP: o.suckP, turn: o.turn, spin: (o.spin || 0) * Math.PI / 180 };
   VX.De = o.eyeDepth; VX.re2 = VX.re * VX.re; VX.trap = VX.re;   // 逃不掉的範圍 ＝ 眼（Tim：「逃不掉範圍 不用特別設定」；31_drive.js 上坡減免只在這一圈外）   // 眼的喉部：再往下 De（寬 ＝ 眼的半徑）
   VX.r0min = 3 * VX.re;                           // 開局最近離中心多遠（52_fleet.js vxPlace：照主選單的距離排；Tim「起始可以在漩渦中」）          // 開局那一圈（52_fleet.js vxPlace；Tim「起始可以在漩渦中」）：最近是眼的 3 倍（電腦避開眼的那一圈是 2.5 倍，54_helm.js vxAvoid）
+  bedVxSync();
 }
 /** 眼把船往下拖（TASK-0683；Tim 2026-10-17：「漩渦中心是否可以不要強制沈船(或天氣候台可以開關是否沉 但希望是像進水一樣慢慢沉 不要直接判定沉船(會秒切下一台船)」）：
  *  船在眼裡 ⇒ 每秒多吃水 VX.pull 公尺（sh.vxSink；32_hull.js 加在吃水上，粒子模式也一樣 ⇒ 砲門壓到水下照樣進水）；吃到 4.2 m 跟進水同一條線開始沉。
