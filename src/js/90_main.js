@@ -116,6 +116,12 @@ if (DEBUG) window.__game = {
   /** 改一間的擺法（v：null ＝ 空著、{ type } ＝ 自動擺滿、{ type, items } ＝ 自訂）⇒ 照驗過的擺上去的結果。 */
   roomSet: function (id, name, v) { (SHIP_ROOMS[id] = SHIP_ROOMS[id] || {})[name] = v; if (SLIDERS_SHOW) SLIDERS_SHOW(); var T = HULLT[id], r = T && hullRooms(T).filter(function (x) { return x.name === name; })[0]; return r ? roomItems(T, r, roomPlan(id, name)) : null; },
   /** 打第 i 艘那一間的第 k 件物品 dmg 點（跟砲同一套 damageModel；歸零 ⇒ 飛出去）⇒ 那一間打完的讀數。 */
+  blow: function (i, name, sp) {   // 打掉第 i 艘名字含 name 的第一個模型（照 21_gunnery.js blowModel 的演出：blowStyle；TASK-0751）；sp ＝ 砲彈速度 m/s（預設 400，從 +y 舷打過來）⇒ 回 FLY 那一筆的初速與角速度
+    var sh = SHIPS[i || 0], m = sh.models.filter(function (o) { return o.alive && (o.name === name || o.path.indexOf(name) >= 0); })[0]; if (!m) return null;
+    blowModel(sh, m, M4.dir(sh.M, 0, -(sp || 400), 0), false); var f = FLY[FLY.length - 1];
+    return { path: m.path, kind: m.kind, style: blowStyle(m), v: f.v.map(function (x) { return +x.toFixed(2); }), w: f.w.map(function (x) { return +x.toFixed(2); }), shipV: sh.vel.map(function (x) { return +x.toFixed(2); }) };
+  },
+  flyState: function () { return FLY.map(function (f) { return { t: +f.t.toFixed(2), y: +f.c[1].toFixed(2), rest: !!f.rest, wet: f.wet, land: !!f.land }; }); },
   furnHit: function (i, name, k, dmg) { var sh = SHIPS[i], o = sh.rooms.filter(function (r) { return r.name === name; })[0], m = o.furn[k]; damageModel(sh, m, [0, 5, 0], dmg); var B = roomBuffNow(o); return { item: m.item, hp: m.hp, alive: m.alive, buff: buffText(B), cap: +roomCap(o).toFixed(2), eff: +roomEff(o).toFixed(2) }; },
   roomPlace: function (id, name, type, items, p) { var T = HULLT[id], r = hullRooms(T).filter(function (x) { return x.name === name; })[0]; return placeOk(roomGrid(T, r), type, items, p); },
   med: function (i) { return medInfo(SHIPS[i || 0]); },
