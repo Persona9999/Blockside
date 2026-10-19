@@ -10,22 +10,27 @@ function fireGun(sh, g, target, ammo) {
   if (g.mt && mountBusy(g)) return false;                              // 迴旋砲換砲門的途中不能開（TASK-0626）
   if (!mountFireOk(g)) return false;                                   // 砲塔的砲口不在能開火的角度裡（fire；TASK-0636）
   if (g.safe && selfBlock(sh, g, target)) { sh.selfBlk = (sh.selfBlk || 0) + 1; return false; }   // 標了 safe 的砲：砲線上有自己的砲塔、砲、火藥桶 ⇒ 先不開（等砲線清了；裝填不浪費）；selfBlk：擋了幾次（讀數）
-  var GS = GUNS[g.type], r = fireShot(sh, g, target, ammo, g.muzs ? g.muzs[0] : g.muz);
+  var mz0 = g.muzs ? g.muzs[0] : g.muz;                                // 這一發從哪個砲口出（多管砲：第一根）
+  if (wetAt(sh, mz0)) { sh.wetShot = (sh.wetShot || 0) + 1; return false; }   // 砲口這一刻在海面下（照浪、33_flood.js wetAt；TASK-0719，Tim 2026-10-19：「炮口在水下就無法開炮」）⇒ 不開、裝填不浪費；泡水的遲滯照舊（43_swim.js gunWet：每 2 秒、連兩次 ⇒ HUD 的 ≈、藥濕、砲班離開）；wetShot 只是讀數（__game.ports）
+  var GS = GUNS[g.type], r = fireShot(sh, g, target, ammo, mz0);
   g.reload = sh.reloadT * GS.reload * rr(0.9, 1.1); g.reload0 = g.reload; g.firedAt = SIMT; sh.fired++;   // reload0：這一輪裝填要多久（武器演出的進度 gunPhase，26_gunanim.js）
   g.needCart = true;                                                // 下一發要從砲旁的藥箱拿一份火藥與彈藥（沒有 ⇒ 等送藥手，23_powder.js）
   if (ammo === AMMO_GF) { evEmit('gfJet', r.mw, r.dir, sh.vel); sfx('splash', r.mw, 0.5); } else if (ammoQuiet(ammo)) boltFx(sh, r.mw); else shotFx(sh, g, r.mw, r.dir);   // 希臘火：噴口一道火舌（28_fire.js），沒有砲聲、沒有後座；弩箭、火箭、石彈：只有弓弦／投臂一響
   if ((GS.burst || 1) > 1) { g.burstLeft = GS.burst - 1; g.burstK = 1; g.burstAmmo = ammo; g.burstT = SIMT + (GS.burstGap || 0.15); }   // 連發：同一份彈藥再打 burst − 1 發
   return true;
 }
-/** 連發剩下的那幾發（每一步、每艘；50_sim.js）：到時間就照現在的瞄準點再打一發；砲沒了、泡水、沒人、降旗 ⇒ 剩下的作廢。 */
+/** 連發剩下的那幾發（每一步、每艘；50_sim.js）：到時間就照現在的瞄準點再打一發；砲沒了、泡水、沒人、降旗 ⇒ 剩下的作廢；輪到的那根砲管的砲口這一刻在海面下 ⇒ 那一發跳過（TASK-0719）。 */
 function burstStep(sh) {
   for (var i = 0; i < sh.guns.length; i++) {
     var g = sh.guns[i]; if (!(g.burstLeft > 0) || SIMT < g.burstT) continue;
     if (sh.struck || sh.sunk || !g.alive || g.wet || gunRate(g) <= 0) { g.burstLeft = 0; continue; }
-    var t = gunTarget(sh, g, aimPoint(sh));
+    var t = gunTarget(sh, g, aimPoint(sh)), mzk = g.muzs ? g.muzs[g.burstK % g.muzs.length] : g.muz;   // 這一發輪到的那一根砲管
     if (t && bears(sh, g, t) && mountFireOk(g) && !(g.safe && selfBlock(sh, g, t))) {
-      var r = fireShot(sh, g, t, g.burstAmmo, g.muzs ? g.muzs[g.burstK % g.muzs.length] : g.muz); sh.fired++;
-      if (g.burstAmmo === AMMO_GF) evEmit('gfJet', r.mw, r.dir, sh.vel); else if (ammoQuiet(g.burstAmmo)) boltFx(sh, r.mw); else shotFx(sh, g, r.mw, r.dir);   // 希臘火連發（Tim 2026-10-18：「siphon 是否可以改成連射(參考速射炮) 先設定為10連發」）：每一發一道火舌，同第一發（⛔ shotFx ⇒ 砲煙＋砲聲）
+      if (wetAt(sh, mzk)) sh.wetShot = (sh.wetShot || 0) + 1;            // 這一根的砲口在海面下（TASK-0719）⇒ 這一發不開（跟射界外那一發一樣跳過：照樣 burstK++、burstLeft--）
+      else {
+        var r = fireShot(sh, g, t, g.burstAmmo, mzk); sh.fired++;
+        if (g.burstAmmo === AMMO_GF) evEmit('gfJet', r.mw, r.dir, sh.vel); else if (ammoQuiet(g.burstAmmo)) boltFx(sh, r.mw); else shotFx(sh, g, r.mw, r.dir);   // 希臘火連發（Tim 2026-10-18：「siphon 是否可以改成連射(參考速射炮) 先設定為10連發」）：每一發一道火舌，同第一發（⛔ shotFx ⇒ 砲煙＋砲聲）
+      }
     }
     g.burstK++; g.burstLeft--; g.burstT = SIMT + (GUNS[g.type].burstGap || 0.15);
   }

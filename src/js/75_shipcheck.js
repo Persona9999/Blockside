@@ -59,7 +59,7 @@ function shipCheck(id) {
     var IX = T.ids || idIndex(T.h);
     if (IX.none) add('warn', '物件 id', '—', IX.none + ' 件關聯／模型沒有 id ⇒ 別的部件指名不到它', 'python -I admin.py ids --id ' + id);
     IX.dup.forEach(function (d) { var j = d.indexOf('：'); add('error', '物件 id', d.slice(0, j), 'id 撞號：' + d.slice(j + 1) + ' ⇒ 指名它的只會找到第一件', '改回唯一（admin.py ids 發號不會撞；多半是手改或複製出來的）'); });
-    [T.h.parts, T.rig.models].forEach(function (A) {
+    [T.h.parts, T.rig.models, T.decoAll].forEach(function (A) {          // decoAll：裝飾在載入時就從 rig.models 拿掉了（05_hull.js decoSplit）⇒ 另外看（砲門蓋板的 lid_of，TASK-0719）
       (A || []).forEach(function (q) {
         var mt = q.meta || {}, K = Object.prototype.hasOwnProperty.call(META_KINDS, mt.kind) ? META_KINDS[mt.kind] : null, RF = K && K.refs; if (!RF) return;
         Object.keys(RF).forEach(function (f) {
@@ -76,8 +76,8 @@ function shipCheck(id) {
     R.info.ids = Object.keys(IX.by).length + ' 件有 id' + (IX.none ? '、' + IX.none + ' 件沒有' : '');
     var RG = sh.ropes.filter(function (r) { return r.guess; });            // 繩端照外框猜綁到模型上（10_ship.js linkRopes：作品的 ends 沒寫綁哪個模型才猜）
     if (RG.length) add('warn', '物件 id', RG.slice(0, 3).map(function (r) { return r.name; }).join('、') + (RG.length > 3 ? ' 等 ' + RG.length + ' 條' : ''), '繩端是照位置猜綁到模型上的（作品沒寫綁哪個模型）⇒ 模型一換、一搬就可能綁錯', '雕刻端把繩端綁到模型的固定點（ends 寫 model:<模型>/<固定點>）');
-    // ── 裝飾（TASK-0682；05_hull.js decoSplit）：模型 meta deco=1 ⇒ 載入時拿掉（畫質「裝飾」開著才畫）—— 不算重量、不被打 ──
-    (T.decoAll || []).forEach(function (m) { var k = m.meta && m.meta.kind; if (k) add('warn', '裝飾', m.name, '標了 deco 又有 kind=' + k + ' ⇒ 載入時整個拿掉，那個功能在遊戲裡就沒了', '有功能的模型不標 deco（造船規格 §9.9）'); });
+    // ── 裝飾（TASK-0682；05_hull.js decoSplit）：模型 meta deco=1 ⇒ 載入時拿掉（畫質「裝飾」開著才畫）—— 不算重量、不被打；規格表標 deco 的 kind（砲門蓋板 portlid）本身就是裝飾 ⇒ 不報 ──
+    (T.decoAll || []).forEach(function (m) { var k = m.meta && m.meta.kind; if (k && !kindProp(k, 'deco')) add('warn', '裝飾', m.name, '標了 deco 又有 kind=' + k + ' ⇒ 載入時整個拿掉，那個功能在遊戲裡就沒了', '有功能的模型不標 deco（造船規格 §9.9）'); });
     (T.h.parts || []).forEach(function (q) { if (isDeco(q)) add('warn', '裝飾', q.path, '關聯標了 deco ⇒ 遊戲不拿掉（格子是船的一部分：重量、命中照算）；只有外部模型能隱藏', '做成外部模型再標 deco（造船規格 §9.9）'); });
     R.info.deco = T.decoN ? T.decoN + ' 個模型' + (GFX.deco ? '（畫質「裝飾」開：畫 ' + T.decos.length + ' 個）' : '（畫質「裝飾」關：載入時就沒有）') + '；不算重量、不被打' : '';
     // ── 模型 ──
@@ -224,6 +224,7 @@ function shipCheck(id) {
     });
     if (T.turDeck) R.info.turrets += '；會轉的甲板（腳下是砲塔自己的格）：有';
     R.info.doors = doorsSummary(sh);                                    // 門、艙蓋（TASK-0638）
+    portsIssues(sh, add); R.info.ports = portsSummary(sh);             // 砲門蓋板（TASK-0719；62_ports.js）：鉸鏈、lid_of、關的方向、關上時穿不穿過縮回去的砲、貼不貼船殼
     R.info.spins = spinSummary(sh);                                     // 照參數轉的子物件（TASK-0640）
     (T.armBad || []).forEach(function (b) { add(b.lv, '裝甲', b.where, b.msg, b.fix); });
     (T.ancBad || []).forEach(function (b) { add(b.lv, '錨', b.where, b.msg, b.fix); });   // 錨的關聯拆不出來（76_anchor.js anchorParts）
