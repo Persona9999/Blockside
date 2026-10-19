@@ -307,6 +307,7 @@ if (DEBUG) window.__game = {
     stations: sh.stations.map(function (st) { return { name: st.name, at: st.at, kegs: st.kegs.filter(function (m) { return m.alive; }).length }; }) }; },
   /** 預備水手的讀數（42_hands.js）：走得到的甲板（走路格幾點、分成幾片）、梯子（兩頭在哪一層、爬過幾次）、人在哪一層、在做什麼、派了幾次、補上幾個。 */
   /** 走路格上一點是第幾層、哪一塊（42_hands.js navRegAt）；給兩點 ⇒ 再回直線走的人走不走得到（navReach）—— 量的時候用。 */
+  riglog: function () { return rlgData(); },   // 帆繩記錄（85_riglog.js；?riglog=1 或設定面板的開關）
   crewlog: function () { return tlgData(); },   // 測試模式的船員記錄（83_testlog.js；?test=1 或設定面板的開關）
   navReg: function (i, p, q) { var sh = SHIPS[i || 0]; return q ? { a: navRegAt(sh, p), b: navRegAt(sh, q), reach: navReach(sh, p, q) } : navRegAt(sh, p); },
   hands: function (i) {
@@ -358,6 +359,13 @@ if (DEBUG) window.__game = {
   /** 帆的碰撞（TASK-0603）只數不推：每艘每面張著的帆，第一輪找到幾個接觸（三角形 × 碰到的船殼格／模型面／繩段）＝ 這一刻還穿著多少；量完把帆放回原樣。 */
   ccCount: function () { var keep = CC_PASS; CC_PASS = [1, 1]; var out = SHIPS.map(function (sh) { var n = 0, lk = 0, sails = 0; (sh.cl || []).forEach(function (c, k) { if (!c || sh.sails[k].furled || !c.p || c.hidden || c.gone || !c.T.mi) return; var p = Float32Array.from(c.p), q = Float32Array.from(c.q), w = c.contactWarm, cur = c.ccCur; c.ccCur = 0; clothContacts(sh, c); n += c.contactStats ? c.contactStats.first : 0; lk += c.contactStats ? c.contactStats.unsatisfiedPins : 0; sails++; c.p.set(p); c.q.set(q); c.contactWarm = w; c.ccCur = cur; }); return { hull: sh.T.id, sails: sails, contacts: n, locked: lk }; }); CC_PASS = keep; return out; },
   prof: function (reset) { var r = { cloth: +PROF.cloth.toFixed(1), rope: +PROF.rope.toFixed(1), shred: +PROF.shred.toFixed(1), buf: +PROF.buf.toFixed(1), cc: +PROF.cc.toFixed(1), ccN: PROF.ccN, ccHit: PROF.ccHit, ccQ: PROF.ccQ, ccMax: +PROF.ccMax.toFixed(1), flVis: FL_VISN ? +(FL_VISMS / FL_VISN).toFixed(3) : 0, flVisN: FL_VISN, perStep: +PHYS_MS.toFixed(3) }; if (reset) PROF = { cloth: 0, rope: 0, shred: 0, buf: 0, cc: 0, ccN: 0, ccHit: 0, ccQ: 0, ccMax: 0, ccGeo: 0 }; return r; },   // cc／ccN／ccHit：帆的碰撞（TASK-0603）
+  /** 帆的命中判定（21_gunnery.js cutRig；只量不動）：第 i 艘第 k 面帆，彈點 L（格座標）照布現在的形狀算不算打中（cloth；沒在模擬 ⇒ null）、照作品的帆形算不算（work）。chain ⇒ 鏈彈的距離。 */
+  sailHit: function (i, k, L, chain) {
+    var sh = SHIPS[i || 0], s = sh.sails[k], v = s.verts, sb = s.bb, rb = chain ? 8 : 4, rs2 = chain ? 64 : 16, cl = clothLive(sh, s);
+    var y0 = s.yards && s.yards[0], aH = y0 ? y0.rot : 0, aF = s.footYard ? s.footYard.rot : 0, a = aF + (aH - aF) * clamp((L[2] - sb[2]) / Math.max(1, sb[5] - sb[2]), 0, 1), Ls = y0 && a ? rotZ(L, y0.piv, -a) : L, w = false;
+    for (var j = 0; j < v.length; j += chain ? 9 : 3) { var dx = v[j] - Ls[0], dy = v[j + 1] - Ls[1], dz = v[j + 2] - Ls[2]; if (dx * dx + dy * dy + dz * dz < rs2) { w = true; break; } }
+    return { cloth: cl ? clothNear(cl, L, rb) : null, work: w };
+  },
   /** 帆與繩的讀數：每面帆最鼓的那一點離雕刻作品形狀多遠（格）、還綁著幾個點、垂下來的繩幾條。 */
   cloth: function (i) {
     var sh = SHIPS[i || 0];
