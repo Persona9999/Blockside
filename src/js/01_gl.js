@@ -296,6 +296,8 @@ function programs() {
     //   水邊一條亮線（< 0.5 m）＋往岸邊推的一道一道浪花（照水深的正弦、隨時間往淺處走；1.5 m 內 —— 2 m 內 ⇒ 大片淺礁坪整片都是條紋），用兩層雜訊碎開；1.2 km 外淡掉。只在畫面上。
     //   亮線照「旁邊一格（8 m）內最淺的」⇒ 峭壁腳下（水深一下子 10 m 以上、< 2 m 的那一圈不到一格）也有一圈浪花拍岸。
     ' if(uBedOn>0.5){ vec2 bu=((p-uBedR.xy)/uBedR.z+0.5)/uBedR.w; if(bu.x>0.0&&bu.y>0.0&&bu.x<1.0&&bu.y<1.0){ float dep=vW.y-textureLod(uBedT,bu,0.0).r;\n' +
+    // 淺水看得見底（Tim 2026-10-19 珊瑚礁的顏色）：中畫質的海面是一層 86% 不透明的顏色（高畫質才照水深透出水下）⇒ 水深 0.5～8 m 那一段照水深變透（最透 0.4），礁、沙洲的顏色透得出來；低畫質照舊不透
+    '   if(uRefr>0.5&&uRefr<1.5&&dep>0.0) a=min(a,mix(0.4,a,smoothstep(0.5,8.0,dep)));\n' +
     '   float dn=dep; if(dep<60.0){ vec2 e=vec2(1.0/uBedR.w,0.0); dn=min(dep,vW.y-max(max(textureLod(uBedT,bu+e.xy,0.0).r,textureLod(uBedT,bu-e.xy,0.0).r),max(textureLod(uBedT,bu+e.yx,0.0).r,textureLod(uBedT,bu-e.yx,0.0).r))); }\n' +
     '   if(dn<0.5||dep<1.6&&dep>-0.5){ float nz=vn(p*0.11+vec2(uSeaT*0.04,-uSeaT*0.03)); float ln=1.0-smoothstep(0.05,0.5,dn);\n' +
     '     float sw=smoothstep(0.7,0.97,sin(dep*4.0+uSeaT*1.7+nz*5.0))*(1.0-smoothstep(0.6,1.6,dep));\n' +
