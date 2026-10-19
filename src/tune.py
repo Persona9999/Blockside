@@ -155,7 +155,7 @@ class Pool:
         self.ws = [Worker(k, chrome, url, idle) for k in range(n)]; self.job_timeout = job_timeout; self.log = log
         self.n_done = 0; self.sim_s = 0.0; self.t0 = time.time()
 
-    def run(self, jobs):
+    def run(self, jobs, on_done=None):
         q = queue.Queue(); res = [None] * len(jobs); lock = threading.Lock()
         for i, j in enumerate(jobs): q.put((i, j, 0))
 
@@ -174,11 +174,15 @@ class Pool:
                         time.sleep(0.5)
                     with lock:
                         res[i] = d; self.n_done += 1; self.sim_s += d['res']['t']
+                        if on_done: on_done(j, d)                       # 一場打完就寫（⛔ 整批跑完才寫 ⇒ 2026-10-18 白天那輪中途停掉，跑了一個多小時一筆都沒留下）
                 except Exception as e:
                     self.log('⚠ 工作者 %d、工作 %s（第 %d 次）：%s ⇒ 重開' % (w.k, j['id'], tries + 1, str(e)[:200]))
                     w.stop()
                     if tries < 2: q.put((i, j, tries + 1))
-                    else: self.log('✗ 工作 %s 放棄' % j['id'])
+                    else:
+                        self.log('✗ 工作 %s 放棄' % j['id'])
+                        if on_done:
+                            with lock: on_done(j, None)                 # 放棄的那場也留一列（以前整批寫時 res 是 None 也照寫）
 
         T = [threading.Thread(target=loop, args=(w,), daemon=True) for w in self.ws]
         for t in T: t.start()
@@ -244,6 +248,9 @@ class Out:
     def log(self, s):
         line = time.strftime('%H:%M:%S ') + s; print(line, flush=True); self.lf.write(line + '\n'); self.lf.flush()
 
+    def match1(self, j, d):
+        self.matches([j], [d])
+
     def matches(self, jobs, res):
         for j, d in zip(jobs, res):
             self.mf.write(json.dumps({'job': {k: j[k] for k in ('id', 'side', 'scen', 'n', 'tune', 'p')}, 'score': score(j, d), 'res': d and d['res'], 'applied': d and d['tune']}, ensure_ascii=False) + '\n')
@@ -262,8 +269,8 @@ def get_def(pool):
 
 def cmd_bench(a, pool, out):
     jobs = scen_jobs(a.suite, a.seeds, a.seed0, None, a.hz, a.tmax, 'bench')
-    t0 = time.time(); res = pool.run(jobs); dt = time.time() - t0
-    out.matches(jobs, res); S = summarize(jobs, res)
+    t0 = time.time(); res = pool.run(jobs, out.match1); dt = time.time() - t0
+    S = summarize(jobs, res)
     sim = sum(d['res']['t'] for d in res if d)
     out.log('基準對基準：%d 場（缺 %d）、%.0f 秒、每小時 %.0f 場、模擬 %.0f 秒（%.1f 倍速 × %d 工作者）；分數平均 %+.3f ± %.3f（應該在 0 附近）、藍贏 %d／紅贏 %d'
             % (S['n'], S['missing'], dt, S['n'] / dt * 3600, sim, sim / dt / len(pool.ws), len(pool.ws), S['mean'], S['se'],
@@ -294,7 +301,7 @@ def cmd_run(a, pool, out):
         jobs = []; owner = []
         for ci, c in enumerate(cands):
             J = scen_jobs(a.suite, a.seeds, seed0, c, a.hz, a.tmax, 'g%d-c%d' % (g, ci)); jobs += J; owner += [ci] * len(J)
-        t0 = time.time(); res = pool.run(jobs); out.matches(jobs, res)
+        t0 = time.time(); res = pool.run(jobs, out.match1)
         F = []
         for ci in range(lam):
             S = summarize([j for j, o in zip(jobs, owner) if o == ci], [d for d, o in zip(res, owner) if o == ci]); F.append(S)
@@ -316,7 +323,7 @@ def cmd_run(a, pool, out):
 
 def cmd_check(a, pool, out):
     P = json.load(open(a.params, encoding='utf-8')); cand = P.get(a.key) if a.key in P else P
-    jobs = scen_jobs(a.suite, a.seeds, a.seed0, cand, a.hz, a.tmax, 'check'); res = pool.run(jobs); out.matches(jobs, res); S = summarize(jobs, res)
+    jobs = scen_jobs(a.suite, a.seeds, a.seed0, cand, a.hz, a.tmax, 'check'); res = pool.run(jobs, out.match1); S = summarize(jobs, res)
     out.log('驗證（種子 %d–%d，沒用來調的）：%d 場（缺 %d）分數 %+.3f ± %.3f（95%% 約 ±%.3f）、候選贏 %d／輸 %d'
             % (a.seed0, a.seed0 + a.seeds - 1, S['n'], S['missing'], S['mean'], S['se'], 1.96 * S['se'], S['win'], S['lose']))
     for si, sc in enumerate(SUITES[a.suite]):
