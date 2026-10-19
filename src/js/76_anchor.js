@@ -18,18 +18,18 @@
 //   有海圖（?map，08_seabed.js BED）⇒ 錨落在那一點真的海底（bedHgt），水深上限 ANC_DEPTH（比它深 ⇒ 照以前，在水線下 ANC_DEPTH 咬住）；海底高出水面（岸上）⇒ 水深 0、錨落在地上。
 //   水深 d ⇒ 錨鏈孔離錨最遠 √(鍊長² − d²)（淺 ⇒ 鍊子平躺的多，繞錨的圈大）、下沉 ANC_FALL·√(d／ANC_DEPTH) 秒（最少 0.35 倍）、起錨時鍊子收到剩 d 就離底（淺 ⇒ 晚一點才拔起來）。
 //   錨被拖著走（拖錨、起錨）⇒ 照新的那一點重量水深。
-//   大漩渦（08_sea.js VX）⇒ 不看海圖，照以前：錨在那一點漏斗的水面下 ANC_DEPTH 咬住 —— 漏斗的水面深到 −200 m 以下、海圖的深海才 −150 m，兩個量對不起來（Tim 2026-10-18「漩渦內拋錨會飛到天上」那一條）。
+//   大漩渦（08_sea.js VX）⇒ 水深從那一點漏斗的水面量（Tim 2026-10-18「漩渦內拋錨會飛到天上」那一條）；有海圖 ⇒ 海圖已經照漩渦烤過（08_seabed.js bedVxBake：漏斗內是深海、外面水深照海圖），一樣照真的海底。
 //   沒有海圖 ⇒ 水深一律 ANC_DEPTH，每一步的數字跟以前一樣（戰局逐位元組不變）。
 var ANC_DEPTH = 20, ANC_CHAIN = 36, ANC_REACH = Math.sqrt(ANC_CHAIN * ANC_CHAIN - ANC_DEPTH * ANC_DEPTH), ANC_FALL = 4, ANC_WEIGH = 8, ANC_DRAG = 8, ANC_DRAGX = 2.5, ANC_PIVOT = 0.06, ANC_YAWMAX = 0.5, ANC_HAUL = 1;   // 公尺、秒、rad/s、m/s（ANC_DEPTH ＝ 水深上限）
-/** 錨在 (x, z) 會落到多低（世界 y）：大漩渦 ⇒ 漏斗的水面下 ANC_DEPTH；有海圖 ⇒ 真的海底，最深到水線下 ANC_DEPTH（岸上 ⇒ 地面）；都沒有 ⇒ −ANC_DEPTH。 */
+/** 錨在 (x, z) 會落到多低（世界 y）：水面（大漩渦 ＝ 漏斗那一點、其他 ＝ 0）下 ANC_DEPTH；有海圖 ⇒ 真的海底，最深到那裡（岸上 ⇒ 地面）。 */
+function anchorLv(x, z) { return VX ? vxH(x, z) : 0; }
 function anchorFloor(x, z) {
-  if (VX) return vxH(x, z) - ANC_DEPTH;
-  if (BED && BED.A) return Math.max(bedHgt(x, z), -ANC_DEPTH);
-  return -ANC_DEPTH;
+  var lv = anchorLv(x, z);
+  return BED && BED.A ? Math.max(bedHgt(x, z), lv - ANC_DEPTH) : lv - ANC_DEPTH;
 }
 /** 照錨現在的落點（a.A）定水深 a.dep 與鍊子拉得多遠 a.reach（拋下去、被拖著走之後都重量）。 */
 function anchorSeat(a) {
-  var d = VX ? ANC_DEPTH : Math.max(0, -anchorFloor(a.A[0], a.A[1]));   // 水面：大漩渦 ＝ 漏斗那一點（落點就在它下面 ANC_DEPTH）、其他 ＝ 0
+  var d = BED && BED.A ? Math.max(0, anchorLv(a.A[0], a.A[1]) - anchorFloor(a.A[0], a.A[1])) : ANC_DEPTH;   // 水深 ＝ 那一點的水面 − 落點；沒有海圖 ⇒ 剛好 ANC_DEPTH（⛔ 大漩渦裡相減一次會差一點點浮點 ⇒ 戰局不再逐位元組相同）
   a.dep = d; a.reach = Math.sqrt(ANC_CHAIN * ANC_CHAIN - d * d);
 }
 /** 下沉要幾秒：水深上限那麼深 ⇒ ANC_FALL（跟以前一樣），淺 ⇒ 照 √ 比例短，最少 0.35 倍。 */
@@ -160,7 +160,7 @@ function anchorStep(sh, dt, px0, pz0) {
     var a = A[k], nm = A.single ? '錨' : k === 'P' ? '左錨' : '右錨';
     if (a.st === 'up') return;
     if (!anchorAlive(sh, a)) { a.broken = true; a.st = 'up'; a.A = null; chainCut(sh, a); if (sh.i === PLAYER_I) note(sh, nm + '被打壞了，鍊子斷了'); return; }
-    if (a.st === 'drop' && SIMT >= a.t) { a.st = 'down'; if (sh.i === PLAYER_I) note(sh, nm + '落底咬住了' + (BED && BED.A && !VX ? '（水深 ' + (a.dep >= ANC_DEPTH ? ANC_DEPTH + ' m 以上，鍊子只放到這麼深' : a.dep.toFixed(1) + ' m') + '）' : '')); }   // 有海圖 ⇒ 報水深
+    if (a.st === 'drop' && SIMT >= a.t) { a.st = 'down'; if (sh.i === PLAYER_I) note(sh, nm + '落底咬住了' + (BED && BED.A ? '（水深 ' + (a.dep >= ANC_DEPTH ? ANC_DEPTH + ' m 以上，鍊子只放到這麼深' : a.dep.toFixed(1) + ' m') + '）' : '')); }   // 有海圖 ⇒ 報水深
     if (a.st === 'weigh' && SIMT >= a.t) { a.st = 'up'; a.A = null; if (sh.i === PLAYER_I) note(sh, nm + '起好了'); return; }
     if (a.st !== 'down' && a.st !== 'weigh') return;
     if (anchorFree(a)) { if (!a.free) { a.free = true; if (sh.i === PLAYER_I) note(sh, nm + '離底了，船可以走了'); } return; }   // 錨拔起來了 ⇒ 不再拴著船（鍊子照收、錨照吊上來）
@@ -375,6 +375,6 @@ function csBuf() {
 /** HUD 一段：兩個錨的狀態。 */
 function anchorText(sh) {
   var A = sh.anc; if (!A) return '';
-  var w = { up: '', drop: '下沉中', down: '咬住', weigh: '起錨中' }, dp = BED && BED.A && !VX;   // 有海圖 ⇒ 咬住的錨後面寫水深
+  var w = { up: '', drop: '下沉中', down: '咬住', weigh: '起錨中' }, dp = BED && BED.A;   // 有海圖 ⇒ 咬住的錨後面寫水深
   return ['P', 'S'].map(function (k) { var a = A[k], nm = A.single ? '錨' : k === 'P' ? '左錨' : '右錨'; return a.broken ? nm + '×' : w[a.st] ? nm + w[a.st] + (dp && a.st === 'down' && a.dep !== undefined ? ' ' + (a.dep >= ANC_DEPTH ? '≥' + ANC_DEPTH : a.dep.toFixed(1)) + ' m' : '') : ''; }).filter(Boolean).join('　');
 }

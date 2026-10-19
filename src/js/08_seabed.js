@@ -7,7 +7,13 @@
 //   ⛔ 模擬只讀載好的塊：每一步之前看每艘船 margin 公尺內的塊都載好了沒（bedWait）—— 沒有 ⇒ 這一步先不走（畫面迴圈）⇒ 戰局跟載入快慢無關。
 //   快轉、無頭（?demo）沒有畫面迴圈可以等 ⇒ 開戰前整個海域一次載完（bedBoot）。
 // 查詢（模擬用）：bedHgt(x, z) 海底／地面高度（m，海面 0、水下是負的；雙線性）、bedMat(x, z) 底質（BED_MAT）、bedGrad(x, z) 坡度。海域外、深海塊 ⇒ 深海 area.deep。
+// 大漩渦（08_sea.js VX；Tim 2026-10-19：「漏斗內當深海、外面照海圖」）：漏斗的水面深到 −200 m 以下、海圖的深海才 −150 m ⇒ 以前船在漏斗裡每一步都判擱淺、被拆格。
+//   解碼時（bedVxBake）把漩渦烤進每一塊的高度：h' ＝ vxH ＋ w·h ＋ (1 − w)·deep —— 離中心 BED_VX_IN·r 以內 w ＝ 0（那一點的水面下 |deep|，底質當深海）、
+//   BED_VX_OUT·r 以外 w ＝ 1（水面下幾公尺照海圖；地形跟著漏斗的尾巴一起往下移，離中心 3 km 只移不到 2 m）、中間平滑接上。
+//   ⇒ 模擬（擱淺、砲彈打到海底、艦長避淺、錨）跟畫面（海底網格、白沫、樹）讀的是同一份，不用各自改。原始高度留在 C.h0／C.mat0；換天氣（vxInit）⇒ bedVxSync 重烤。
+//   沒有漩渦 ⇒ C.h 就是解碼的那一份（戰局逐位元組不變）。⚠ 遠景的粗塊建完網格就丟資料 ⇒ 開戰後才換天氣的話，遠景照舊（離中心 ≥ 2.5 km，漩渦在那裡只差幾公尺）。
 var BED = null;
+var BED_VX_IN = 1.5, BED_VX_OUT = 2.5;                                   // 漩渦半徑 r 的幾倍：以內全是深海、以外全照海圖
 var BED_MAT = { DEEP: 0, SAND: 1, REEF: 2, SHOAL: 3, ROCK: 4, BEACH: 10, LAND: 11, CLIFF: 12 };
 var BED_CFG = Object.assign({ ring: 1, prefetch: 1, margin: 300 }, CFG.map || {});   // config/game.json map：在用幾圈、多預載幾圈、船旁邊多少公尺內一定要載好
 window.BSMAP = {                                                         // 海圖檔（<script>）載進來呼叫這兩支（?map=@host ⇒ 收到外面那一頁回的也照樣叫）
@@ -112,7 +118,38 @@ function bedDecode(b64) {
     for (k = 0; k < sa.length;) { v = u(); c = u(); sa.fill(v, k, k + c); k += c; }
     if (tg === 1) { fo = sa; foN = sn; } else { vg = sa; vgN = sn; }
   }
-  return { cx: cx, cy: cy, n: n, step: step, h: h, mat: mat, min: mn / 10, max: mx / 10, fo: fo, foN: foN, vg: vg, vgN: vgN };
+  var C = { cx: cx, cy: cy, n: n, step: step, h: h, mat: mat, h0: h, mat0: mat, min: mn / 10, max: mx / 10, min0: mn / 10, max0: mx / 10, fo: fo, foN: foN, vg: vg, vgN: vgN, vxk: 'none' };
+  bedVxBake(C);
+  return C;
+}
+/** 現在的漩渦（沒有 ⇒ 'none'）：烤過的塊記著它，變了才重烤。 */
+function bedVxKey() { return VX ? [VX.rv, VX.rc2, VX.D, VX.De, VX.re2].join(',') : 'none'; }
+/** 把漩渦烤進一塊的高度與底質（上面的說明）；沒有漩渦 ⇒ 換回原始的那一份。 */
+function bedVxBake(C) {
+  var key = bedVxKey(); if (C.vxk === key) return false;
+  C.vxk = key;
+  if (!VX || !BED || !BED.A) { C.h = C.h0; C.mat = C.mat0; C.min = C.min0; C.max = C.max0; return true; }
+  var A = BED.A, n = C.n, N = n * n, h = new Int16Array(N), mat = new Uint8Array(C.mat0), mn = 1e9, mx = -1e9;
+  var ox = C.cx * A.chunk - BED.ax, oz = C.cy * A.chunk - BED.az, r0 = BED_VX_IN * VX.rv, r1 = BED_VX_OUT * VX.rv;
+  for (var j = 0; j < n; j++) for (var i = 0; i < n; i++) {
+    var o = j * n + i, x = ox + i * C.step, z = oz + j * C.step, w = bedSmooth(r0, r1, Math.hypot(x, z));
+    var v = Math.round((vxH(x, z) + w * C.h0[o] / 10 + (1 - w) * A.deep) * 10);
+    h[o] = Math.max(-32768, Math.min(32767, v)); if (w < 0.5) mat[o] = BED_MAT.DEEP;
+    if (h[o] < mn) mn = h[o]; if (h[o] > mx) mx = h[o];
+  }
+  C.h = h; C.mat = mat; C.min = mn / 10; C.max = mx / 10;
+  return true;
+}
+/** smoothstep（a ⇒ 0、b ⇒ 1）。 */
+function bedSmooth(a, b, x) { var t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); }
+/** 換了天氣（08_sea.js vxInit 叫）：載好的塊照新的漩渦重烤；有變 ⇒ 重算 BED.top、再發一次 'bedChunk'（海底網格、白沫、樹照新的高度重建）。 */
+function bedVxSync() {
+  if (!BED || !BED.A || !BED.slot) return;
+  var re = [];
+  BED.slot.forEach(function (C) { if (C && bedVxBake(C)) re.push(C); });
+  if (!re.length) return;
+  BED.top = -Infinity; BED.slot.forEach(function (C) { if (C) BED.top = Math.max(BED.top, C.max); });
+  re.forEach(function (C) { evEmit('bedChunk', C.cx, C.cy, C); });
 }
 /** 焦點（世界座標）⇒ 換中心：要的塊（中心 ± ring＋prefetch）載進來、不要的（也不在任何船旁邊）丟掉。first ⇒ 回傳等全部載好的 Promise。畫面迴圈每格叫（90_main.js）。 */
 function bedFocus(fx, fz, first) {
@@ -166,7 +203,7 @@ function bedCell(x, z) {
 }
 /** 海底／地面高度（m；海面 0）。 */
 function bedHgt(x, z) {
-  var q = bedCell(x, z); if (!q) return BED.A.deep;
+  var q = bedCell(x, z); if (!q) return BED.A.deep + (VX ? vxH(x, z) : 0);   // 大漩渦：深海也在那一點的水面下（bedVxBake）
   var C = q.C, n = C.n, i = Math.min(n - 2, Math.floor(q.u)), j = Math.min(n - 2, Math.floor(q.v)), fu = q.u - i, fv = q.v - j, h = C.h, o = j * n + i;
   return ((h[o] * (1 - fu) + h[o + 1] * fu) * (1 - fv) + (h[o + n] * (1 - fu) + h[o + n + 1] * fu) * fv) / 10;
 }
