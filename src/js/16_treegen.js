@@ -79,6 +79,56 @@ var TREE_SPECIES = {
     leaf: { kind: 'cluster', per: [3, 4], size: [0.42, 0.62], flat: 1, stretch: 2.3, jit: 0.35, col: [0.17, 0.31, 0.20], vary: 0.1, along: 0.55 },   // 松針：枝尖一束一束（沿枝的方向拉長 stretch 倍、jit 抖得少）
     place: { spacing: 10, alt: [260, 520, 1800, 2400], slopeMax: 0.8, mats: { 11: 1, 12: 0.3 }, dens: 1, forest: 1, clump: 60, scale: [0.8, 1.15] },
     variants: 4
+  },
+  // ── 2026-10-19 第二批（Tim：「接著新增更多植物吧」）：大王椰子、木棉、柱狀仙人掌、樹蕨、扇葉棕櫚 ──
+  royalpalm: {
+    name: '大王椰子',                                                   // Roystonea：光滑灰白的柱狀樹幹（中段鼓起）、頂上一截綠色的葉鞘（crownshaft）、羽狀葉不留枯葉；平原、谷地、疏林
+    height: [15, 24],
+    trunk: { r: [0.26, 0.32], taper: 0.75, bend: 0.015, segs: 12, sides: [9, 5], lean: 0.03, col: [0.68, 0.66, 0.62], top: 1, flare: 1.4, bulge: [0.45, 0.22], shaft: [0.14, [0.34, 0.5, 0.24]] },   // bulge：[在樹幹的哪裡, 粗幾成]；shaft：[頂上幾成, 顏色]（葉鞘）
+    levels: [],
+    leaf: { kind: 'frond', n: [13, 17], len: [3.6, 4.6], w: 0.6, hang: 0.45, droop: [0.7, 1.1], rise: [5, 70], dead: 0, segs: [10, 4], col: [0.27, 0.42, 0.14], vary: 0.1, deadCol: [0.47, 0.37, 0.22], nuts: [0, 0], nutCol: [0, 0, 0] },
+    place: { spacing: 22, alt: [3, 10, 300, 600], slopeMax: 0.3, mats: { 11: 1 }, dens: 0.3, forest: -0.4, clump: 150, scale: [0.85, 1.15], shell: 0 },
+    variants: 4
+  },
+  ceiba: {
+    name: '木棉（吉貝）',                                               // Ceiba pentandra：冒出林子的巨樹 —— 板根、灰白樹幹、高處幾乎水平攤開的寬樹冠
+    height: [24, 34],
+    trunk: { r: [0.7, 0.95], taper: 0.45, bend: 0.06, segs: 7, sides: [9, 5], lean: 0.04, col: [0.56, 0.54, 0.49], top: 0.7, crown: 0.42 },
+    roots: { n: [5, 7], from: [0.02, 0.07], reach: [2.0, 3.6], arch: -0.3, r: 0.55, segs: 3, sides: [4, 3] },   // 板根：低、短、粗（arch 負的 ⇒ 幾乎直的斜下去）
+    levels: [
+      { n: [5, 7], from: [0.75, 1.0], angle: [68, 85], len: [0.75, 1.0], r: 0.45, bend: 0.12, up: 0.06, segs: 4, sides: [6, 4] },
+      { n: [3, 4], from: [0.35, 0.95], angle: [30, 55], len: [0.4, 0.6], r: 0.5, bend: 0.2, up: 0.08, segs: 3, sides: [4, 0] }
+    ],
+    leaf: { kind: 'cluster', per: [2, 3], size: [1.8, 2.6], flat: 0.45, col: [0.24, 0.40, 0.16], vary: 0.12, along: 0.4 },
+    place: { spacing: 70, alt: [5, 20, 400, 700], slopeMax: 0.4, mats: { 11: 1 }, dens: 0.5, forest: 0.3, clump: 200, scale: [0.85, 1.15], shell: 0 },
+    variants: 4
+  },
+  cactus: {
+    name: '柱狀仙人掌',                                                 // Pilosocereus／Stenocereus（乾的島、背風坡、石灰岩地）：從低處分出好幾根往上長的稜柱，柱頭圓的
+    height: [2.6, 4.6],
+    trunk: { r: [0.16, 0.2], taper: 0.95, bend: 0.04, segs: 2, sides: [10, 6], lean: 0.06, col: [0.42, 0.55, 0.40], top: 0.22, crown: 0.75, ribs: 0.12 },   // ribs：稜（相鄰兩邊一凸一凹幾成）
+    levels: [{ n: [3, 7], from: [0.3, 1.0], angle: [55, 80], len: [0.75, 1.05], r: 0.85, taper: 0.85, bend: 0.03, up: 1.0, segs: 4, sides: [10, 6], ribs: 0.12 }],   // taper：枝尖剩幾成粗（沒寫 ＝ 0.35）
+    leaf: { kind: 'cap' },
+    place: { spacing: 9, alt: [2, 6, 450, 800], slopeMax: 0.8, mats: { 11: 1, 12: 0.7, 10: 0.3 }, dens: 0.18, forest: -0.95, clump: 40, scale: [0.75, 1.25], shell: 0, view: 600 },
+    variants: 5
+  },
+  treefern: {
+    name: '樹蕨',                                                       // Cyathea（大安地列斯群島濕潤的山地、雲霧林）：細的深色樹幹、頂上一圈羽狀蕨葉、下面掛一圈枯葉
+    height: [3.5, 7],
+    trunk: { r: [0.09, 0.12], taper: 0.85, bend: 0.06, segs: 6, sides: [6, 4], lean: 0.12, col: [0.25, 0.19, 0.14], top: 1 },
+    levels: [],
+    leaf: { kind: 'frond', n: [10, 14], len: [1.8, 2.7], w: 0.75, hang: 0.25, droop: [1.0, 1.5], rise: [10, 60], dead: 0.3, segs: [10, 4], col: [0.25, 0.46, 0.15], vary: 0.12, deadCol: [0.42, 0.30, 0.17], nuts: [0, 0], nutCol: [0, 0, 0] },
+    place: { spacing: 7, alt: [350, 650, 1800, 2400], slopeMax: 0.9, mats: { 11: 1 }, dens: 0.55, forest: 0.8, clump: 45, scale: [0.85, 1.2] },
+    variants: 4
+  },
+  thatchpalm: {
+    name: '扇葉棕櫚',                                                   // Coccothrinax／Thrinax（茅草棕、銀棕；沿岸的石灰岩地、沙地）：細的樹幹、頂上一團圓扇形的葉
+    height: [3, 7],
+    trunk: { r: [0.08, 0.11], taper: 0.85, bend: 0.05, segs: 6, sides: [6, 4], lean: [0.05, 0.2], up: 0.1, col: [0.52, 0.47, 0.40], top: 1 },
+    levels: [],
+    leaf: { kind: 'fan', n: [11, 16], stalk: [0.7, 1.2], r: [0.55, 0.8], arc: 270, rays: [16, 8], rise: [15, 75], cup: 0.25, col: [0.33, 0.47, 0.30], vary: 0.1 },   // fan：葉柄長 stalk、扇的半徑 r、張開幾度 arc、幾根肋 rays（細／低模）、往上捲 cup
+    place: { spacing: 10, alt: [1, 3, 80, 200], slopeMax: 0.5, mats: { 10: 0.5, 11: 1, 12: 0.6 }, dens: 0.25, forest: -0.4, clump: 60, scale: [0.85, 1.2], shell: 0, view: 900 },
+    variants: 4
   }
 };
 
@@ -113,7 +163,7 @@ function treeSkel(sp, seed, v) {
       d = treeNorm([d[0] + (R() - 0.5) * 2 * b, d[1] + (R() - 0.5) * 2 * b + (L.up || 0) / segs, d[2] + (R() - 0.5) * 2 * b]);
       p = [p[0] + d[0] * len / segs, p[1] + d[1] * len / segs, p[2] + d[2] * len / segs]; pts.push(p);
     }
-    var me = out.br.length, r1 = r0 * (lv < 0 ? T.taper : 0.35);
+    var me = out.br.length, r1 = r0 * (L.taper != null ? L.taper : 0.35);   // 樹幹照 trunk.taper；分枝沒寫 ⇒ 0.35（仙人掌的柱子寫 0.85）
     out.br.push({ pts: pts, r0: r0, r1: r1, lv: lv, par: par, len: len });
     var nx = lv + 1;
     if (nx >= S.levels.length) { out.tips.push({ p: p, d: d, br: me, len: len }); return; }
@@ -154,21 +204,24 @@ function treeMesh(K, lod) {
   var M = { S: S, K: K, lod: lod, R: R, V: V, I: I, vert: vert };
   K.br.forEach(function (b) {
     var L = treeLv(S, b.lv), sides = L.sides[lod]; if (!sides) return;
-    treeTube(M, b.pts, b.r0, b.r1, sides, S.trunk.col, 0.9 + 0.2 * R(), b.lv, L.flare);
+    treeTube(M, b.pts, b.r0, b.r1, sides, S.trunk.col, 0.9 + 0.2 * R(), b.lv, L);
   });
   TREE_LEAF[S.leaf.kind](M);
   return { V: new Float32Array(V), I: new Uint16Array(I), h: Math.max(K.h, top), w: w };
 }
-/** 一根管子（枝幹、根、花梗）：折線 P、半徑 r0 ⇒ r1、sides 邊；kc 深淺；lv 決定搖晃權重（−1 樹幹根部最暗）；flare ＝ 根部粗幾倍。 */
-function treeTube(M, P, r0, r1, sides, col, kc, lv, flare) {
-  var n = P.length, base = M.V.length / 10, K = M.K;
+/** 一根管子（枝幹、根、花梗）：折線 P、半徑 r0 ⇒ r1、sides 邊；kc 深淺；lv 決定搖晃權重（−1 樹幹根部最暗）；
+ *  L（那一層的參數，可以沒有）：flare 根部粗幾倍、bulge [位置, 粗幾成]（大王椰子中段鼓起）、shaft [頂上幾成, 顏色]（葉鞘）、ribs 稜（相鄰兩邊一凸一凹）。 */
+function treeTube(M, P, r0, r1, sides, col, kc, lv, L) {
+  var n = P.length, base = M.V.length / 10, K = M.K, flare = L && L.flare, bg = L && L.bulge, sh = L && L.shaft, rb = L && L.ribs || 0;
   for (var i = 0; i < n; i++) {
     var d = treeNorm(i < n - 1 ? [P[i + 1][0] - P[i][0], P[i + 1][1] - P[i][1], P[i + 1][2] - P[i][2]] : [P[i][0] - P[i - 1][0], P[i][1] - P[i - 1][1], P[i][2] - P[i - 1][2]]);
     var B = treePerp(d), t = i / (n - 1), r = (r0 + (r1 - r0) * t) * (flare ? 1 + (flare - 1) * Math.pow(1 - t, 5) : 1);
+    if (bg) r *= 1 + bg[1] * Math.exp(-((t - bg[0]) / 0.18) * ((t - bg[0]) / 0.18));
+    var cc = col; if (sh && t > 1 - sh[0]) { cc = sh[1]; r *= 1.08; }
     var sw = Math.min(1, Math.max(0, (P[i][1] / K.h) * 0.6 + (lv + 1) * 0.15)), dk = lv === -1 && i === 0 ? 0.75 : 1;
     for (var s = 0; s < sides; s++) {
-      var a = s / sides * 6.2832, nn = [B[0][0] * Math.cos(a) + B[1][0] * Math.sin(a), B[0][1] * Math.cos(a) + B[1][1] * Math.sin(a), B[0][2] * Math.cos(a) + B[1][2] * Math.sin(a)];
-      M.vert([P[i][0] + nn[0] * r, P[i][1] + nn[1] * r, P[i][2] + nn[2] * r], nn, [col[0] * kc * dk, col[1] * kc * dk, col[2] * kc * dk], sw);
+      var a = s / sides * 6.2832, nn = [B[0][0] * Math.cos(a) + B[1][0] * Math.sin(a), B[0][1] * Math.cos(a) + B[1][1] * Math.sin(a), B[0][2] * Math.cos(a) + B[1][2] * Math.sin(a)], rs = r * (1 + (s % 2 ? -rb : rb));
+      M.vert([P[i][0] + nn[0] * rs, P[i][1] + nn[1] * rs, P[i][2] + nn[2] * rs], nn, [cc[0] * kc * dk, cc[1] * kc * dk, cc[2] * kc * dk], sw);
     }
   }
   for (i = 0; i < n - 1; i++) for (s = 0; s < sides; s++) {
@@ -265,6 +318,31 @@ var TREE_LEAF = {
       }
     }
   },
+  /** 扇葉（扇葉棕櫚）：從樹幹頂一圈長出 n 片（照黃金角轉；越外面越平、越垂）；一片 ＝ 一根葉柄 ＋ 葉柄末端一面圓扇（arc 度、rays 根肋 ⇒ 一片片三角形，
+   *  細的那一份肋尖一長一短 ⇒ 扇緣裂開）；扇面往上捲一點（cup）、兩側往下垂。中間一顆球蓋住葉柄的根。 */
+  fan: function (M) {
+    var K = M.K, Lf = M.S.leaf, R = M.R, lod = M.lod, c = K.tips[0].p, n = Math.round(treeIn(R, Lf.n) * (lod ? 0.6 : 1)), nr = Lf.rays[lod], A = Lf.arc * Math.PI / 180;
+    for (var f = 0; f < n; f++) {
+      var u = (f + 0.5) / n, az = f * 2.39996 + (R() - 0.5) * 0.5, el = (Lf.rise[1] + (Lf.rise[0] - Lf.rise[1]) * u + (R() - 0.5) * 12) * Math.PI / 180;
+      var d = [Math.cos(az) * Math.cos(el), Math.sin(el), Math.sin(az) * Math.cos(el)], sl = treeIn(R, Lf.stalk), E = [c[0] + d[0] * sl, c[1] + d[1] * sl, c[2] + d[2] * sl];
+      var k = 1 + (R() - 0.5) * 2 * Lf.vary, col = [Lf.col[0] * k, Lf.col[1] * k, Lf.col[2] * k], rr = treeIn(R, Lf.r);
+      var s = treeNorm(treeCross([Math.cos(az), 0, Math.sin(az)], [0, 1, 0])), fw = treeNorm([d[0], d[1] * 0.5 + 0.15, d[2]]), nm = treeNorm(treeCross(fw, s));
+      if (nm[1] < 0) nm = [-nm[0], -nm[1], -nm[2]];
+      if (!lod) treeTube(M, [c, E], 0.025, 0.018, 3, [col[0] * 0.8, col[1] * 0.8, col[2] * 0.8], 1, 0, null);
+      var pts = [];
+      for (var q = 0; q <= nr; q++) {
+        var ph = -A / 2 + A * q / nr, cph = Math.cos(ph), sph = Math.sin(ph), ext = !lod && q % 2 ? 0.8 : 1, cu = Lf.cup * rr * Math.abs(sph), dr = 0.18 * rr * (1 - cph);
+        pts.push([E[0] + rr * ext * (cph * fw[0] + sph * s[0]) + nm[0] * cu, E[1] + rr * ext * (cph * fw[1] + sph * s[1]) + nm[1] * cu - dr, E[2] + rr * ext * (cph * fw[2] + sph * s[2]) + nm[2] * cu]);
+      }
+      for (q = 0; q < nr; q++) treeTri(M, E, pts[q], pts[q + 1], col, [0.5, 0.9, 0.9], 0.5);
+    }
+    treeBall(M, [c[0], c[1] - 0.05, c[2]], 0.17, 1.2, [0.42, 0.38, 0.28], 0.3, null);
+  },
+  /** 柱頭（仙人掌）：每個枝尖（含樹幹頂）一顆圓的蓋子，半徑 ＝ 那一根在尖端的粗。 */
+  cap: function (M) {
+    var K = M.K, col = M.S.trunk.col;
+    K.tips.forEach(function (t) { var b = K.br[t.br]; treeBall(M, t.p, b.r1 * 1.05, 0.9, [col[0] * 0.97, col[1] * 0.97, col[2] * 0.97], 0.3, null); });
+  },
   /** 蓮座葉（龍舌蘭）：從地面一圈長出 n 片厚葉（裡面的直立、外面的攤開往下彎）；一片 ＝ 一根中線 ＋ 兩邊往上翹的邊（槽形）、尖端收成一點；邊緣偏黃。
    *  stalk.v 列的那幾棵抽一根花梗：管子往上、上半截伸出一圈短枝、枝尖一簇黃花。 */
   rosette: function (M) {
@@ -286,11 +364,11 @@ var TREE_LEAF = {
     var St = Lf.stalk; if (!St || St.v.indexOf(K.v) < 0) return;
     var H = K.h * treeIn(R, St.h), P2 = [c], q = c.slice(), dd = [(R() - 0.5) * 0.12, 1, (R() - 0.5) * 0.12];
     for (s = 1; s <= 5; s++) { dd = treeNorm([dd[0] + (R() - 0.5) * 0.06, dd[1], dd[2] + (R() - 0.5) * 0.06]); q = [q[0] + dd[0] * H / 5, q[1] + dd[1] * H / 5, q[2] + dd[2] * H / 5]; P2.push(q); }
-    treeTube(M, P2, St.r, St.r * 0.4, lod ? 3 : 5, St.col, 1, 0, 0);
+    treeTube(M, P2, St.r, St.r * 0.4, lod ? 3 : 5, St.col, 1, 0, null);
     var na = Math.round(treeIn(R, St.arms));
     for (var a = 0; a < na; a++) {
       var t = 0.62 + 0.36 * a / na, o = treeAt(P2, t), ang = a * 2.39996, al = (0.75 - 0.4 * (t - 0.62) / 0.36) * K.h * 0.5, e = [o[0] + Math.cos(ang) * al, o[1] + al * 0.35, o[2] + Math.sin(ang) * al];
-      if (!lod) treeTube(M, [o, e], St.r * 0.4, St.r * 0.25, 3, St.col, 1, 0, 0);
+      if (!lod) treeTube(M, [o, e], St.r * 0.4, St.r * 0.25, 3, St.col, 1, 0, null);
       treeBall(M, [e[0], e[1] + 0.08, e[2]], 0.16 + 0.08 * R(), 0.8, St.flower, 0.6, null);
     }
   }
