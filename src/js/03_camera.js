@@ -1,5 +1,5 @@
 // ───────────────────────── 鏡頭 ─────────────────────────
-var CAM = { yaw: 2.2, pitch: 0.24, dist: 175, tgt: [0, 6, 0], eye: [0, 0, 0], vp: null, inv: null, mode: 4, follow: null, hold: 0, w: 1, h: 1, track: true, aoff: 0, pan: [0, 0], see: null };
+var CAM = { fogK: 1, yaw: 2.2, pitch: 0.24, dist: 175, tgt: [0, 6, 0], eye: [0, 0, 0], vp: null, inv: null, mode: 4, follow: null, hold: 0, w: 1, h: 1, track: true, aoff: 0, pan: [0, 0], see: null };
 /** 跟船的鏡頭看哪一艘：看敵艦（2）⇒ 我艦的目標；看我艦（3）⇒ CAM.see（詳細資訊的「🎥 看這艘」；Tim 2026-10-14）或我艦；追砲彈沒在追（1）⇒ 我艦。 */
 function camShip() {
   var me = SHIPS[PLAYER_I];
@@ -28,8 +28,47 @@ function renderLerp(on, a) {
 }
 /** 有海圖（08_seabed.js）：鏡頭不鑽進地裡 —— 眼睛至少在那一點的地面／海底上 2 m（TASK-0721）。只動畫面，模擬不讀 CAM。 */
 function camBed(e) { if (BED && BED.A) { var b = bedHgt(e[0], e[2]) + 2; if (e[1] < b) e[1] = b; } return e; }
+// 轉場（Blocksail 地球儀 ⇄ 海戰，只有 ?map=@host；Tim 2026-10-19：「地球儀模式時攝影機拉近 … 逐漸靠近海面後就轉場戰鬥」「返回地球儀時也用轉場 鏡頭變成俯瞰 然後拉遠變回地球儀」）
+//   CAM.tr ＝ { dir: 'in' | 'out', t, dur, H, hold }：
+//   'in'  開戰時停在世界原點正上方 H 公尺、往下俯視（畫面上方 ＝ 平常的鏡頭水平朝的方向 ⇒ 降下去不用轉；'started' 帶這個方位角 hdg，地球儀轉過來對齊海岸線）；hold 到外面那一頁說 'go'，dur 秒降到平常的鏡頭。
+//   'out' 從現在的鏡頭 dur 秒拉成我艦正上方 H 公尺俯視（方向不轉）、停住；到了 ⇒ 告訴外面那一頁 'left'（我艦在哪、hdg），地球儀接著拉遠。
+//   只換畫面用的眼睛與矩陣：平常的鏡頭照樣每格算（CAM.trSave 存著、下一格先換回來）⇒ 降完接得上；模擬不讀 CAM。
 function camUpdate(dt) {
-  if (FP.on && fpCam()) return;                                        // 第一人稱：鏡頭在船長的眼睛（81_fps.js）
+  if (CAM.trSave) { CAM.eye = CAM.trSave[0]; CAM.look = CAM.trSave[1]; CAM.trSave = null; }
+  camMove(dt);
+  if (CAM.tr) camTrans(dt);
+}
+function camTrans(dt) {
+  var T = CAM.tr, me = SHIPS[PLAYER_I];
+  if (!T.hold) T.t = Math.min(T.dur, T.t + Math.min(dt, 0.05));
+  var u = T.dur ? T.t / T.dur : 1, s = u * u * (3 - 2 * u), c;
+  if (T.dir === 'in') { c = [0, 0, 0]; s = 1 - s; }                       // s：1 ＝ 正上方、0 ＝ 平常的鏡頭
+  else { if (!T.c) T.c = me ? shipCenter(me).slice() : [0, 0, 0]; c = T.c; }
+  var eN = CAM.eye, lN = CAM.look || c, h0 = Math.max(eN[1], 5);
+  if (!T.f) { var fx = lN[0] - eN[0], fz = lN[2] - eN[2], fl = Math.hypot(fx, fz); T.f = fl > 1e-3 ? [fx / fl, fz / fl] : [0, -1]; }   // 平常的鏡頭朝哪（水平）：正上方時畫面上方就是這個方向 ⇒ 升降不轉；地球儀轉過來對齊（camTransHdg）
+  var eye = [eN[0] + (c[0] - eN[0]) * s, h0 * Math.pow(T.H / h0, s), eN[2] + (c[2] - eN[2]) * s];   // 高度照比例變（像地球儀的縮放）
+  var look = [lN[0] + (c[0] - lN[0]) * s, lN[1] * (1 - s), lN[2] + (c[2] - lN[2]) * s];
+  var up = [T.f[0] * s, 1 - s, T.f[1] * s], uL = Math.hypot(up[0], up[1], up[2]); up[0] /= uL; up[1] /= uL; up[2] /= uL;   // 越往上越朝鏡頭的水平方向 ⇒ 正上方時畫面上方 ＝ 那個方向
+  if (s > 0.999) { eye[0] = c[0]; eye[2] = c[2] + 0.01; }
+  CAM.fogK = 1 - s * (1 - Math.min(1, 0.3 / (0.0016 * T.H)));           // 拉高時霧淡掉：正上方時從那個高度往下看大約剩兩成五（照原本的霧，1,200 m 就八成五是霧，看不到海）
+  CAM.trSave = [CAM.eye, CAM.look]; CAM.eye = eye; CAM.look = look;
+  var proj = M4.persp(0.9, CAM.w / CAM.h, 0.5, Math.max(5000, T.H * 1.5));
+  CAM.vp = M4.mul(proj, M4.lookAt(eye, look, up)); CAM.inv = M4.inv(CAM.vp);
+  if (T.t >= T.dur && !T.hold) {
+    if (T.dir === 'in') { CAM.tr = null; CAM.fogK = 1; $('stage').classList.remove('trans'); }
+    else if (!T.said) { T.said = true; bedHostSay('left', { x: c[0], z: c[2], hdg: camTransHdg() }); }
+  }
+}
+/** 轉場時正上方那一張「畫面上方」的方位角（度；北 0、順時針，東 ＝ +x、北 ＝ −z）⇒ 地球儀照這個轉。還沒算 ⇒ 0。 */
+function camTransHdg() { var f = CAM.tr && CAM.tr.f; return f ? (Math.atan2(f[0], -f[1]) * 180 / Math.PI + 360) % 360 : 0; }
+/** 外面那一頁叫的（08_seabed.js bedHostMsg）：'in' 開戰時先停在正上方；'go' 開始降；'out' 拉上去。 */
+function camTransSet(dir, o) {
+  if (dir === 'go') { if (CAM.tr && CAM.tr.dir === 'in') CAM.tr.hold = false; return; }
+  CAM.tr = Object.assign({ dir: dir, t: 0, dur: dir === 'in' ? 2.6 : 2.2, H: BED && BED.A && BED.A.trH || 1200, hold: dir === 'in' }, o || {});   // 多高：海域的 trH（外面那一頁照離岸多遠給 ⇒ 看得到海岸線）
+  $('stage').classList.add('trans');                                     // 介面先藏起來（降完才回來）
+}
+function camMove(dt) {
+  if (FP.on && fpCam()) return;                                       // 第一人稱：鏡頭在船長的眼睛（81_fps.js）
   // 我艦→敵艦（預設，mode 4）：注視點 ＝ 我艦中心（略高），鏡頭在我艦背對敵艦的那一側 ⇒ 畫面中間是我艦、敵艦在它後方；
   // 兩艘繞著彼此轉時鏡頭跟著轉。拖曳改的是相對這條視線的角度（aoff）與俯仰，滾輪改遠近。沒有敵艦 ⇒ 看船頭方向。
   if (CAM.mode === 4 && SHIPS.length) {

@@ -10,8 +10,8 @@
 var BED = null;
 var BED_MAT = { DEEP: 0, SAND: 1, REEF: 2, SHOAL: 3, ROCK: 4, BEACH: 10, LAND: 11, CLIFF: 12 };
 var BED_CFG = Object.assign({ ring: 1, prefetch: 1, margin: 300 }, CFG.map || {});   // config/game.json map：在用幾圈、多預載幾圈、船旁邊多少公尺內一定要載好
-window.BSMAP = {                                                         // 海圖檔（<script>）載進來呼叫這兩支
-  area: function (o) { if (BED && BED.wantArea === o.id) BED.gotArea = o; },
+window.BSMAP = {                                                         // 海圖檔（<script>）載進來呼叫這兩支（?map=@host ⇒ 收到外面那一頁回的也照樣叫）
+  area: function (o) { if (BED && (BED.host || BED.wantArea === o.id)) BED.gotArea = o; },
   chunk: function (id, cx, cy, b64) { if (!BED || !BED.A || BED.A.id !== id) return; var k = bedKey(cx, cy), w = BED.pend[k], v = BED.peek[k]; if (w) w(b64); if (v) v(b64); }
 };
 function bedKey(cx, cy) { return cx + '_' + cy; }
@@ -22,13 +22,44 @@ function bedScript(src) {
     document.head.appendChild(s);
   });
 }
+// ?map=@host：海圖不讀檔，跟開這一頁的那一頁要（Blocksail 地球儀「就地開戰」：iframe 的父頁或 window.open 的開啟者，照世界地圖當場生成）。
+//   這一頁 ⇒ 那一頁：{ bsmap: 'need', what: 'area' | 'chunk', cx, cy, peek }（peek ＝ 遠景要的，可以晚一點）
+//   那一頁 ⇒ 這一頁：{ bsmap: 'area', area }、{ bsmap: 'chunk', cx, cy, b64 }（跟檔案裡 BSMAP.area／BSMAP.chunk 的參數一樣）、{ bsmap: 'error', what, cx, cy, msg }
+//   轉場（03_camera.js camTrans）：這一頁 ⇒ 那一頁 'started'（開戰了、鏡頭停在正上方）、'left'（拉到正上方了；x、z ＝ 我艦在世界的哪裡）；
+//                                兩個都帶 hdg ＝ 正上方那一張畫面上方朝哪（度，北 0 順時針）⇒ 地球儀轉過來對齊海岸線；
+//                                那一頁 ⇒ 這一頁 'go'（地球儀淡進來了 ⇒ 降下去）、'leave'（要回地球儀 ⇒ 拉上去）
+//   只收 BED.host 送來的訊息。
+function bedGet(cx, cy, peek) {                                          // cx ＝ null ⇒ area.js
+  if (!BED.host) return bedScript(cx == null ? 'maps/' + BED.wantArea + '/area.js' : 'maps/' + BED.A.id + '/' + bedKey(cx, cy) + '.js');
+  return new Promise(function (ok, bad) {
+    var k = cx == null ? 'area' : bedKey(cx, cy) + (peek ? '+' : '');
+    (BED.ask[k] = BED.ask[k] || []).push([ok, bad]);
+    BED.host.postMessage({ bsmap: 'need', what: cx == null ? 'area' : 'chunk', cx: cx, cy: cy, peek: !!peek }, '*');
+  });
+}
+function bedHostMsg(e) {
+  var d = e.data; if (!BED || !BED.host || e.source !== BED.host || !d || !d.bsmap) return;
+  var ks = d.bsmap === 'area' || d.what === 'area' ? ['area'] : [bedKey(d.cx, d.cy), bedKey(d.cx, d.cy) + '+'], err = d.bsmap === 'error' ? new Error('海圖：' + (d.msg || '要不到')) : null;
+  if (d.bsmap === 'go' || d.bsmap === 'leave') { camTransSet(d.bsmap === 'go' ? 'go' : 'out'); return; }
+  if (d.bsmap === 'area') BSMAP.area(d.area);
+  else if (d.bsmap === 'chunk' && BED.A) BSMAP.chunk(BED.A.id, d.cx, d.cy, d.b64);
+  ks.forEach(function (k) { var L = BED.ask[k]; delete BED.ask[k]; (L || []).forEach(function (f) { if (err) f[1](err); else f[0](); }); });
+}
+/** 告訴外面那一頁（只有 ?map=@host）：'started' ＝ 開戰了（鏡頭停在正上方）、'left' ＝ 拉到正上方了 —— 畫好兩格才送（地球儀照這個淡進／淡出）。 */
+function bedHostSay(what, o) {
+  if (!BED || !BED.host) return;
+  requestAnimationFrame(function () { requestAnimationFrame(function () { BED.host.postMessage(Object.assign({ bsmap: what }, (typeof o === 'function' ? o() : o) || {}), '*'); }); });   // o 可以是函式：送的那一刻才算
+}
 /** 開機（90_main.js 跟船一起等）：有 ?map ⇒ 讀海域、定原點；快轉／無頭 ⇒ 整個海域載完，不然 ⇒ 開戰位置附近先載好。 */
 function bedBoot() {
   var id = Q.get('map'); if (!id) return Promise.resolve();
-  if (!/^[a-z0-9_-]+$/.test(id)) return Promise.reject(new Error('海域名稱只能是小寫英數、底線、連字號：' + id));
-  BED = { wantArea: id, A: null, ch: {}, pend: {}, peek: {}, idx: null, cx: null, cy: null, top: -Infinity, miss: 0, loads: 0, drops: 0 };
-  return bedScript('maps/' + id + '/area.js').then(function () {
-    var A = BED.gotArea; if (!A) throw new Error('maps/' + id + '/area.js 沒有呼叫 BSMAP.area');
+  var host = id === '@host' ? (window.parent !== window ? window.parent : window.opener) : null;
+  if (id === '@host' && !host) return Promise.reject(new Error('?map=@host 要開在 Blocksail 的頁面裡（iframe 或 window.open）'));
+  if (!host && !/^[a-z0-9_-]+$/.test(id)) return Promise.reject(new Error('海域名稱只能是小寫英數、底線、連字號：' + id));
+  BED = { wantArea: id, host: host, ask: {}, A: null, ch: {}, pend: {}, peek: {}, idx: null, cx: null, cy: null, top: -Infinity, miss: 0, loads: 0, drops: 0 };
+  if (host) window.addEventListener('message', bedHostMsg);
+  return bedGet(null).then(function () {
+    var A = BED.gotArea; if (!A) throw new Error((host ? '外面那一頁' : 'maps/' + id + '/area.js') + ' 沒有給 BSMAP.area');
     BED.A = A; BED.G = A.chunk / A.step; BED.n = A.n; BED.nx = A.x[1] - A.x[0] + 1;
     BED.has = new Uint8Array(BED.nx * (A.y[1] - A.y[0] + 1));            // 這一塊有沒有檔（0 ＝ 深海或海域外）
     A.chunks.forEach(function (c) { var i = bedIdx(c[0], c[1]); if (i >= 0) BED.has[i] = c[2] ? 1 : 0; });
@@ -46,7 +77,7 @@ function bedLoad(cx, cy) {
   var w = function (b64) { if (BED.slot[i]) return; var C = bedDecode(b64);   // 已經有了（遠景讀同一塊的那一份檔也會叫到這裡）⇒ 不重來 if (C.cx !== cx || C.cy !== cy) throw new Error('海圖塊 ' + k + ' 的檔頭寫的是 ' + C.cx + '_' + C.cy);
     BED.slot[i] = C; BED.ch[k] = C; BED.top = Math.max(BED.top, C.max); BED.loads++; evEmit('bedChunk', cx, cy, C); };
   BED.pend[k] = w;
-  w.p = bedScript('maps/' + BED.A.id + '/' + k + '.js').then(function () { delete BED.pend[k]; }, function (e) { delete BED.pend[k]; throw e; });
+  w.p = bedGet(cx, cy).then(function () { delete BED.pend[k]; }, function (e) { delete BED.pend[k]; throw e; });
   return w.p;
 }
 /** 只給畫面（63_bed_gl.js 遠景）：讀一塊的檔、交回 base64 —— ⛔ 不放進 BED.slot／BED.ch（模擬照舊只查 bedLoad 載的、照船旁邊 margin 等）。 */
@@ -54,7 +85,7 @@ function bedPeek(cx, cy) {
   var k = bedKey(cx, cy);
   return new Promise(function (ok, bad) {
     BED.peek[k] = function (b64) { delete BED.peek[k]; ok(b64); };
-    bedScript('maps/' + BED.A.id + '/' + k + '.js').then(function () { if (BED.peek[k]) { delete BED.peek[k]; bad(new Error('maps/' + BED.A.id + '/' + k + '.js 沒有呼叫 BSMAP.chunk')); } }, function (e) { delete BED.peek[k]; bad(e); });
+    bedGet(cx, cy, true).then(function () { if (BED.peek[k]) { delete BED.peek[k]; bad(new Error('海圖塊 ' + k + ' 沒有呼叫 BSMAP.chunk')); } }, function (e) { delete BED.peek[k]; bad(e); });
   });
 }
 /** 解碼一塊（跟世界地圖工具 tools/export_chunks.cjs encodeChunk 一一對應；格式 src/MAP_CHUNK.md）⇒ { cx, cy, n, step, h: Int16Array（分米）, mat: Uint8Array, min, max（公尺） } */

@@ -29,7 +29,7 @@ function flowMode(m) { MODE = m; }
 
 /** ?start=1（外部開戰用：Blocksail 的「一鍵開戰」，2026-10-18）：主選單的艦隊都載好 ⇒ 直接開戰、不停在主選單（90_main.js 載完呼叫）。
  *  其他照網址：?blue=…&red=…（或 ?ship=我艦,敵艦）、?mode=、?weather=、?dist=…；帶了這些 ⇒ 這一場不寫存檔（69_prefs.js PREF_Q）。 */
-function startWhenReady() { Promise.all(fleetHulls().map(loadHull)).then(function () { if (!RUNNING && fleetHulls().every(function (h) { return HULLT[h]; })) start(); }).catch(function (e) { console.error(e); }); }
+function startWhenReady() { Promise.all(fleetHulls().map(loadHull)).then(function () { if (!RUNNING && fleetHulls().every(function (h) { return HULLT[h]; })) { start(); if (BED && BED.host) { camTransSet('in'); bedHostSay('started', function () { return { hdg: camTransHdg() }; }); } } }).catch(function (e) { console.error(e); }); }
 function start() {
   initAudio(); if (AC && AC.state === 'suspended') AC.resume();
   $('cover').style.display = 'none'; $('end').className = '';

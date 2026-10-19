@@ -29,6 +29,8 @@
   :root{ --sa-t:env(safe-area-inset-top, 0px); --sa-r:env(safe-area-inset-right, 0px); --sa-b:env(safe-area-inset-bottom, 0px); --sa-l:env(safe-area-inset-left, 0px); }
   @media (orientation:landscape){ :root{ --sa-b:0px; } }
   #stage{ position:fixed; top:var(--sa-t); right:var(--sa-r); bottom:var(--sa-b); left:var(--sa-l); }
+  /* 轉場（?map=@host，03_camera.js camTrans）：鏡頭從正上方降下來／拉上去的時候介面先藏起來 */
+  #stage.trans > :not(#cv){ opacity:0 !important; pointer-events:none !important; transition:opacity .4s; }
   canvas{ position:absolute; inset:0; width:100%; height:100%; display:block; cursor:crosshair; touch-action:none; }   /* 手機：拖曳 ＝ 轉鏡頭、雙指張合 ＝ 縮放、雙指一起拖 ＝ 平移（⛔ 不關 ⇒ 瀏覽器拿去捲頁面） */
   .hud{ position:absolute; pointer-events:none; font-size:13px; line-height:1.5; text-shadow:0 1px 2px #000; }
   .panel{ background:var(--panel); border:1px solid rgba(255,255,255,.12); border-radius:8px; padding:8px 12px; }

@@ -340,7 +340,7 @@ function setCommon(p) {
   if (u.uFog) gl.uniform3fv(u.uFog, HORIZON);
   if (u.uSky) gl.uniform3fv(u.uSky, SKY);
   if (u.uGround) gl.uniform3fv(u.uGround, GROUND);
-  if (u.uFogD) gl.uniform1f(u.uFogD, WX.fog);                   // 霧（天氣：晴 0.0016、暴風雨 0.0042）
+  if (u.uFogD) gl.uniform1f(u.uFogD, WX.fog * CAM.fogK);        // 霧（天氣：晴 0.0016、暴風雨 0.0042）；CAM.fogK：轉場拉高時淡掉（03_camera.js camTrans）
   if (u.uWater) gl.uniform1f(u.uWater, 0.0);
   if (u.uTint) gl.uniform1f(u.uTint, 0.0);
   if (u.uSeaK) gl.uniform1f(u.uSeaK, SEA_K * WX.sea);                  // 浪（08_sea.js）：大小、時間（模擬時間 ⇒ 暫停時浪也停）

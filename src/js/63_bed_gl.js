@@ -96,6 +96,27 @@ function bedWaterU(u) {
   gl.activeTexture(gl.TEXTURE10); gl.bindTexture(gl.TEXTURE_2D, on ? BEDFOAM.tex : DUMMY); gl.uniform1i(u.uBedT, 10); gl.activeTexture(gl.TEXTURE0);
   if (on) gl.uniform4f(u.uBedR, BEDFOAM.ox, BEDFOAM.oz, BEDFOAM.sp, BEDFOAM.N);
 }
+// 遠海（轉場拉高時；Tim 2026-10-19：「海面問題可以額外貼一張圖嗎」「拉進後就隱藏這張海面色的填充圖」）：
+//   海面網格只有 4 km 半徑、深海塊沒有網格 ⇒ 從 10 km 往下看是中間一個圓、外面空的。⇒ 海之後畫一大片平面（鏡頭正下方 ±40 km、海面下 0.5 m），
+//   顏色照海從高處看的顏色＋同一套霧：網格以內海面在它前面（照常畫，看得到海底），網格以外它蓋掉水下的東西（海底、空的），陸地照樣在它上面。
+//   只在鏡頭高於 BEDSEA_H（3 km）畫：3 km 以下畫面四角都在網格裡（16:9 ⇒ 0.99 × 高度），本來就被蓋住 ⇒ 關掉不會跳。平常的海戰鏡頭不會到這麼高。
+var BEDSEA = { prog: null, vao: null, u: null, col: [0.11, 0.25, 0.31] }, BEDSEA_H = 3000;
+function bedSeaDraw() {
+  if (!BED || !BED.A || CAM.eye[1] < BEDSEA_H) return;
+  var S = BEDSEA;
+  if (!S.prog) {
+    S.prog = VK.compile(gl,
+      '#version 300 es\nlayout(location=0) in vec2 aP; uniform mat4 uVP; uniform vec3 uEye; out vec3 vW; void main(){ vW=vec3(uEye.x+aP.x*40000.0,-0.5,uEye.z+aP.y*40000.0); gl_Position=uVP*vec4(vW,1.0); }\n',
+      '#version 300 es\nprecision highp float; in vec3 vW; uniform vec3 uEye,uFog,uCol; uniform float uFogD; out vec4 o; void main(){ float fd=length(vW-uEye); o=vec4(mix(uCol,uFog,1.0-exp(-fd*uFogD)),1.0); }\n');
+    S.vao = gl.createVertexArray(); var vb = gl.createBuffer();
+    gl.bindVertexArray(S.vao); gl.bindBuffer(gl.ARRAY_BUFFER, vb); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, 1, 1, -1, -1, 1, 1, -1, 1]), gl.STATIC_DRAW);
+    gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0); gl.bindVertexArray(null);
+  }
+  var cf = gl.isEnabled(gl.CULL_FACE); gl.disable(gl.BLEND); gl.disable(gl.CULL_FACE);
+  gl.useProgram(S.prog.prog); setCommon(S.prog); gl.uniform3fv(S.prog.u.uCol, S.col);
+  gl.bindVertexArray(S.vao); gl.drawArrays(gl.TRIANGLES, 0, 6); gl.bindVertexArray(null);
+  if (cf) gl.enable(gl.CULL_FACE);
+}
 /** 畫（60_render.js：帆之後、折射複製之前）。每格最多建 2 塊（新載的、粗細要換的）⇒ 換中心那一下不會卡一大格。 */
 function bedDraw() {
   if (!BED || !BED.A) return;
@@ -105,7 +126,7 @@ function bedDraw() {
   if (!built) bedFarStep();                                              // 遠景：這一格沒在建細的才做
   bedFoamTex();
   gl.useProgram(P.tri.prog); setCommon(P.tri); cutSet(P.tri, null);
-  gl.uniform1f(P.tri.u.uFogD, WX.fog * BED_FOG);                         // 霧淡一點：島要從幾公里外就看得到（船照原本的霧）
+  gl.uniform1f(P.tri.u.uFogD, WX.fog * BED_FOG * CAM.fogK);                         // 霧淡一點：島要從幾公里外就看得到（船照原本的霧）
   gl.uniform1f(P.tri.u.uLit, 1); if (P.tri.u.uGlow) gl.uniform1f(P.tri.u.uGlow, 0);
   gl.uniformMatrix4fv(P.tri.u.uModel, false, BEDGL_ID || (BEDGL_ID = M4.ident()));
   gl.vertexAttrib2f(3, 0, 0);                                            // 金屬度（P.tri aM）：地形不是金屬
