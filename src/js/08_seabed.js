@@ -31,7 +31,7 @@ function bedScript(src) {
 // ?map=@host：海圖不讀檔，跟開這一頁的那一頁要（Blocksail 地球儀「就地開戰」：iframe 的父頁或 window.open 的開啟者，照世界地圖當場生成）。
 //   這一頁 ⇒ 那一頁：{ bsmap: 'need', what: 'area' | 'chunk', cx, cy, peek }（peek ＝ 遠景要的，可以晚一點）
 //   那一頁 ⇒ 這一頁：{ bsmap: 'area', area }、{ bsmap: 'chunk', cx, cy, b64, coarse? }（跟檔案裡 BSMAP.area／BSMAP.chunk 的參數一樣；coarse ＝ 回 peek 的粗塊，只給遠景）、{ bsmap: 'error', what, cx, cy, msg }
-//   轉場（03_camera.js camTrans）：這一頁 ⇒ 那一頁 'started'（開戰了、鏡頭停在正上方）、'left'（拉到正上方了；x、z ＝ 我艦在世界的哪裡）；
+//   轉場（03_camera.js camTrans）：這一頁 ⇒ 那一頁 'started'（開戰了、鏡頭停在正上方）、'left'（拉到正上方了；x、z ＝ 我艦在世界的哪裡、shipHdg ＝ 我艦船頭朝哪）；
 //                                兩個都帶 hdg ＝ 正上方那一張畫面上方朝哪（度，北 0 順時針）⇒ 地球儀轉過來對齊海岸線；
 //                                那一頁 ⇒ 這一頁 'go'（地球儀淡進來了 ⇒ 降下去）、'leave'（要回地球儀 ⇒ 拉上去）
 //   只收 BED.host 送來的訊息。

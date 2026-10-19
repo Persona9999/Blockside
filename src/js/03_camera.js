@@ -56,7 +56,7 @@ function camTrans(dt) {
   CAM.vp = M4.mul(proj, M4.lookAt(eye, look, up)); CAM.inv = M4.inv(CAM.vp);
   if (T.t >= T.dur && !T.hold) {
     if (T.dir === 'in') { CAM.tr = null; CAM.fogK = 1; $('stage').classList.remove('trans'); }
-    else if (!T.said) { T.said = true; bedHostSay('left', { x: c[0], z: c[2], hdg: camTransHdg() }); }
+    else if (!T.said) { T.said = true; bedHostSay('left', { x: c[0], z: c[2], hdg: camTransHdg(), shipHdg: me ? (Math.atan2(Math.cos(me.yaw), Math.sin(me.yaw)) * 180 / Math.PI + 360) % 360 : null }); }   // shipHdg：我艦船頭的方位角（fwd(yaw) ＝ [cos, 0, −sin] ⇒ 東 cos、北 sin）
   }
 }
 /** 轉場時正上方那一張「畫面上方」的方位角（度；北 0、順時針，東 ＝ +x、北 ＝ −z）⇒ 地球儀照這個轉。還沒算 ⇒ 0。 */

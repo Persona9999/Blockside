@@ -138,6 +138,7 @@ function teamDown(team) { var L = teamShips(team); return L.length > 0 && L.ever
  *  spec：[{ team, hull }]，一對一 ＝ [我艦, 敵艦]；SHIPS 照這個順序建（i ＝ 序號；我艦是 0）。艘數超過 MAX_SHIPS ⇒ 截掉。 */
 var FLEET_GAP = 70;                                                       // 同一邊並排的兩艘，中心左右隔多遠（m；船寬 13 m）
 var FLEET_DBG = null;                                                     // ?debug=1 的 __game.fleet([...])：直接給一串（蓋過主選單的編成）
+var SPAWN_HDG = Q.has('hdg') && isFinite(+Q.get('hdg')) ? +Q.get('hdg') : null;   // ?hdg=：玩法規則 origin（航海）的我艦開局船頭朝哪 —— 羅盤度數（0 ＝ 北 ＝ −z、90 ＝ 東 ＝ +x）；別的玩法不看
 /** 主選單的編成（FLEET_SET，05_hull.js）⇒ 一串：我艦、敵方第一艘、我方其他、敵方其他（一對一 ＝ [我艦, 敵艦]，跟以前同一個順序）。 */
 /** 艦名（TASK-0552）：照編成的順序（我艦、敵方第一艘、我方其他、敵方其他；候補也在裡面）發 —— 那一型的艦名池（05_hull.js names）裡第一個還沒用的，
  *  用完拿公共池 SHIP_NAMES_PUB，再用完 ⇒ 原名＋序號。同一場（兩邊合起來）不重名；只看編成 ⇒ 重開同一場名字不變、不抽 rnd()。 */
@@ -285,7 +286,8 @@ function spawnFleet(spec) {
   spec.forEach(function (f, i) {
     var blue = f.team === 'blue', off = X[f.team][k[f.team]++];        // 兩邊第 j 艘站同一個 x ⇒ 各自對著對面那一艘
     var T = HULLT[f.hull], bow = (T.wl1 - T.cx) * S;                    // 船的原點（x ＝ T.cx）到船頭的距離
-    var sh = makeShip(i, f.team, blue ? Math.PI / 2 : -Math.PI / 2, blue ? DIST / 2 + bow : -DIST / 2 - bow, T, off); sh.name = f.name; SHIPS.push(sh);
+    var o0 = i === 0 && modeRule('origin'), yaw = o0 && SPAWN_HDG !== null ? Math.PI / 2 - SPAWN_HDG / 57.2958 : blue ? Math.PI / 2 : -Math.PI / 2;   // 玩法規則 origin（04_modes.js；航海）：我艦停在原點、船頭照 ?hdg=
+    var sh = makeShip(i, f.team, yaw, o0 ? 0 : blue ? DIST / 2 + bow : -DIST / 2 - bow, T, o0 ? 0 : off); sh.name = f.name; SHIPS.push(sh);
     coreSpawned(sh, corePreFor(f.team, k[f.team] - 1));                 // 戰前狀態（57_core.js；沒帶 ⇒ 只記開局人數）
   });
   if (VX) vxPlace(SHIPS);                                                // 大漩渦（08_sea.js）：改成沿著漏斗那一圈排
