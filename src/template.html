@@ -637,11 +637,14 @@
       <div class="row note">浪是物理的一部分：船跟著浪起伏、縱搖、橫搖（長浪才搖得動整艘船），砲彈打到浪頭就落水，打低的砲會被浪擋掉；碎片、落水的人、斷開的船跟著浪浮沉。0 ＝ 平靜的海。</div>
       <div class="row slide"><label for="stall">頂風失速</label><input type="range" id="stall" step="0.05" aria-label="頂風失速"><span id="stallV"></span></div>
       <div class="row note">只管手動操舵（電腦照舊）：風從船頭兩側 60° 以內吹來 ⇒ 帆被吹回來、船慢下來，太慢舵就不靈、船頭被風推回原本那一舷。帶著速度才搶得過風；往下風轉一圈永遠轉得過去。0 ＝ 不會失速（頂風只是慢）、100% ＝ 寫實。</div>
+      <div class="row slide"><label for="helmlost">舵壞了的操舵</label><input type="range" id="helmlost" step="0.05" aria-label="舵或舵輪被打壞後的操舵性能"><span id="helmlostV"></span></div>
+      <div class="row note">舵輪或舵被打掉之後還轉得了多少（乘在最大轉向率上；舵輪、舵兩樣都沒了也只乘一次）：船員改用舵柄、滑車或調帆硬轉。寫實 25%；娛樂再乘下面的「舵壞了的操舵」加成（預設 ×2 ⇒ 50%），最多 100%。</div>
       <h3>娛樂加成</h3>
       <div class="row slide"><label for="funspeed">航速</label><input type="range" id="funspeed" step="0.05" aria-label="娛樂加成：航速"><span id="funspeedV"></span></div>
       <div class="row slide"><label for="funagile">靈活性</label><input type="range" id="funagile" step="0.05" aria-label="娛樂加成：靈活性"><span id="funagileV"></span></div>
       <div class="row slide"><label for="funstall">頂風失速</label><input type="range" id="funstall" step="0.05" aria-label="娛樂加成：頂風失速"><span id="funstallV"></span></div>
       <div class="row slide"><label for="funpowder">火藥血量</label><input type="range" id="funpowder" step="0.01" aria-label="娛樂加成：火藥血量"><span id="funpowderV"></span></div>
+      <div class="row slide"><label for="funhelm">舵壞了的操舵</label><input type="range" id="funhelm" step="0.05" aria-label="娛樂加成：舵壞了的操舵"><span id="funhelmV"></span></div>
       <div class="row slide"><label for="funhard">鐵甲硬度</label><input type="range" id="funhard" step="0.05" aria-label="娛樂加成：鐵甲硬度"><span id="funhardV"></span></div>
       <div class="row note">主選單的玩法選「娛樂」時，在上面的設定之外再乘這幾個（寫實 ＝ 都乘 1）。兩艘都套。</div>
       <h3>砲</h3>

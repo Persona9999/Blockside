@@ -48,10 +48,9 @@ function cmdView(side) {
 function cmdRollFields(v, s) {
   var gP = 0, gS = 0; s.guns.forEach(function (g) { if (!g.alive) return; if (g.mt || g.side === 'P') gP++; if (g.mt || g.side === 'S') gS++; });
   var SPK = s.cfg.speed * playK('speed') * WX.speed, dk = (1 - clamp(s.sink / 9, 0, 0.8)) * (s.struck ? 0.15 : 1);
-  var wheel = s.models.some(function (m) { return m.kind === 'wheel' && m.alive; }), rud = s.models.filter(function (m) { return m.kind === 'rudder'; }), rudK = rud.length && !rud.some(function (m) { return m.alive; }) ? 0.12 : 1;
   v.gP = gP; v.gS = gS; v.gT = s.guns.length; v.nc = s.crew0 || 1; v.sail = s.sailFrac === undefined ? 1 : s.sailFrac;
   v.vs = VMAX * SPK * Math.sqrt(WIND_SPD) * dk; v.vb = (s.cfg.base || 0) / 1.9438 * dk; v.up = s.cfg.upwind || 1;
-  v.ag = s.cfg.agile * playK('agile') * WX.agile * (wheel ? 1 : 0.35) * rudK; v.spk = SPK || 1;
+  v.ag = s.cfg.agile * playK('agile') * WX.agile * helmK(s); v.spk = SPK || 1;
   return v;
 }
 function cmdTick() {

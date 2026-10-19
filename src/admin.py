@@ -1401,7 +1401,7 @@ def act_metaspec(doc_path=None):
         for f, ok, what in (('hpK', lambda x: isnum(x) and 0 < x <= 20, '0～20 的數字'), ('block', lambda x: x in (True, False, 'station'), 'true／false／"station"'),
                             ('clear', lambda x: isinstance(x, bool), 'true／false'), ('safe', lambda x: isinstance(x, bool), 'true／false'),
                             ('noFall', lambda x: isinstance(x, bool), 'true／false'), ('anim', lambda x: isinstance(x, bool), 'true／false'),
-                            ('deco', lambda x: isinstance(x, bool), 'true／false')):   # 遊戲屬性（TASK-0672 ②；js/00_config.js kindProp）；deco ＝ kind 本身就是裝飾（TASK-0719 砲門蓋板，js/05_hull.js isDeco）
+                            ('deco', lambda x: isinstance(x, bool), 'true／false'), ('blow', lambda x: x in ('fly', 'fall'), 'fly／fall')):   # 遊戲屬性（TASK-0672 ②；js/00_config.js kindProp）；deco ＝ kind 本身就是裝飾（TASK-0719 砲門蓋板，js/05_hull.js isDeco）
             if f in v and not ok(v[f]):
                 E.append('規格表 %s：%s 要是 %s' % (k, f, what))
         for f, sp in (v.get('refs') or {}).items():          # 指名別的部件（TASK-0715）：鍵要在 keys、to 指的 kind 要在規格表（<kind># ＝ 那一類關聯裡的一座）
