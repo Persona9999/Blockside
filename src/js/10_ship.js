@@ -270,10 +270,15 @@ function childRopes(sh) {
   sh.cRopes = out.sort(function (a, b) { return a.d - b.d; });
 }
 /** 子繩的兩端放回母繩現在的形狀上（沿母繩的長度比，同雕刻的 rope:母繩/比例）；中間的點照兩端之間的比例內插（子繩是拉直的）。
- *  開局、帆桁帶著繩轉（30_rig_physics.js yardRopes）、小艇擺（swingHangs）之後叫。母繩斷了 ⇒ 不動（子繩照 linkRopes 跟著斷）。 */
+ *  開局、帆桁帶著繩轉（30_rig_physics.js yardRopes）、小艇擺（swingHangs）之後叫。母繩斷了 ⇒ 不動（子繩照 linkRopes 跟著斷）。
+ *  只重算母繩動過的（TASK-0673：小艇一擺就整艘重綁 ⇒ 憲法號單步 20–29 ms）：c.k ＝ 上次用的 [母繩 0 的 pts, 母繩 1 的 pts, 自己的 pts]（斷了記 null）——
+ *  繩的形狀一律整份換成新的陣列（沒有原地改的）⇒ 三個都是同一個物件 ＝ 算出來跟上次一樣 ⇒ 跳過；跟每次全部重算逐點相同。 */
 function childBind(sh) {
   (sh.cRopes || []).forEach(function (c) {
     var r = sh.ropes[c.j]; if (!r || r.dead) return;
+    var q0 = c.e[0] && sh.ropes[c.e[0].p], q1 = c.e[1] && sh.ropes[c.e[1].p], k0 = q0 && !q0.dead ? q0.pts : null, k1 = q1 && !q1.dead ? q1.pts : null;
+    if (c.k && c.k[0] === k0 && c.k[1] === k1 && c.k[2] === r.pts) return;
+    c.k = [k0, k1, r.pts];
     var src = r.pts0 || r.pts, n = src.length / 3; if (n < 2) return;
     var P = [0, 1].map(function (e) {
       var x = c.e[e], q = x && sh.ropes[x.p]; if (!q || q.dead) return null;
@@ -282,7 +287,7 @@ function childBind(sh) {
     if (!P[0] && !P[1]) return;
     var A = P[0] || [src[0], src[1], src[2]], B = P[1] || [src[n * 3 - 3], src[n * 3 - 2], src[n * 3 - 1]], out = new Float32Array(n * 3);
     for (var i = 0; i < n; i++) { var t = i / (n - 1); out[i * 3] = A[0] + (B[0] - A[0]) * t; out[i * 3 + 1] = A[1] + (B[1] - A[1]) * t; out[i * 3 + 2] = A[2] + (B[2] - A[2]) * t; }
-    r.pts = out; r.bb = ropeBox(out);
+    r.pts = out; r.bb = ropeBox(out); c.k[2] = out;
   });
 }
 /** 折線 L（xyz 攤平）上沿長度比 t 的那一點（同雕刻 SCP_SculptRopes.PointAt）。 */
