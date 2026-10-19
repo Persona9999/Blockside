@@ -544,10 +544,13 @@ function blowModel(sh, m, vel, drop, at) {
   m.alive = false;
   if (kindProp(m.kind, 'anim') || m.spinB) { m.sw = 0; m.swM = null; }                           // 照參數轉的（26_spin.js）同一個理由：轉角只是畫面。門：開關只是演出（25_doors.js）⇒ 照關著的樣子飛出去（落水的水花抽戰局的亂數：⛔ 照開著的角度 ⇒ 演出開關會改戰局）
   var M0 = M4.mul(sh.M, modelLocal(m)), c0 = M4.pt(sh.M, m.c[0], m.c[1], m.c[2]);
-  var vd = norm(vel), sp = drop ? 0 : clamp(len(vel) * 0.07, 5, 16);
-  FLY.push({ T: sh.T, mesh: m.mesh, M0: M0, c0: c0, c: c0.slice(), R: M4.ident(), t: 0, wet: false,
-    v: add(drop ? [0, -0.5, 0] : add(mul(vd, sp), [gauss() * 2, rr(4, 9), gauss() * 2]), sh.vel),
-    w: drop ? [gauss() * 0.4, 0, gauss() * 0.4] : [gauss() * 4, gauss() * 4, gauss() * 4] });
+  var vd = norm(vel), sp = drop ? 0 : clamp(len(vel) * 0.07, 5, 16), f;
+  if (!drop && blowStyle(m) === 'fall') {                               // 被打斷、照重力掉下去（帆桁；blowStyle）
+    var a1 = gauss(), a2 = rr(4, 9), a3 = gauss(), w1 = gauss(), w2 = gauss(), w3 = gauss();   // ⛔ 亂數照「飛」那一套的次數與順序抽（戰局的亂數；只是用法不同）⇒ 戰局逐字不變
+    f = { v: add(add(mul(vd, clamp(len(vel) * 0.004, 0.3, 1.5)), [a1 * 0.3, (a2 - 6.5) * 0.08, a3 * 0.3]), sh.vel), w: [w1 * 0.3, w2 * 0.3, w3 * 0.3], sh: sh, land: true };
+  } else f = { v: add(drop ? [0, -0.5, 0] : add(mul(vd, sp), [gauss() * 2, rr(4, 9), gauss() * 2]), sh.vel),
+    w: drop ? [gauss() * 0.4, 0, gauss() * 0.4] : [gauss() * 4, gauss() * 4, gauss() * 4] };
+  FLY.push(Object.assign({ T: sh.T, mesh: m.mesh, M0: M0, c0: c0, c: c0.slice(), R: M4.ident(), t: 0, wet: false }, f));
   sh.guns.forEach(function (g) { if (g.model === m) g.alive = false; });
   sh.ropes.forEach(function (r) { if (!r.dead && r.mods && r.mods.indexOf(m.k) >= 0) { r.dead = true; sh.rigDirty = true; } });
   if (m.yk) sh.rigDirty = true;                                          // 帆桁飛了 ⇒ 收在它上面的那一捲不畫（30_rig_physics.js furlLost；只是畫面旗標，物理關著也要重做）
@@ -600,8 +603,17 @@ function blastModels(sh, L, r, w, skip, dmg) {
 }
 /** 對人的基準傷害：1.4 × 每發傷害 × 彈種對人倍率（24 磅實心 ⇒ 140 ⇒ 碎木錐裡約 85% 當場陣亡，跟以前一樣）。 */
 function crewBase(b) { return 1.4 * b.dmg * ammoK(b.ammo, VS_CREW); }
+/** 被打飛怎麼演（Tim 2026-10-20「物件可以標meta設定該如何演出被打飛(預設就是目前的) 然後標記一下橫桁的演出meta」；TASK-0751）：
+ *  'fly'（預設，跟以前一樣）＝ 往打的方向噴出去、往上拋、亂翻；'fall' ＝ 被打斷：只帶一點砲彈的推力、照重力掉、慢慢翻，掉到船上就停在船上跟著船走。
+ *  模型 meta blow=fly｜fall 先看，沒有 ⇒ 規格表 config/meta_kinds.json 那個 kind 的 blow（帆桁 yard ＝ fall），都沒有 ⇒ fly。
+ *  ⛔ 只是演出：FLY 只給人看（落水的水花是畫面的亂數），戰局不讀它。 */
+function blowStyle(m) { var b = m.meta && m.meta.blow; return b === 'fly' || b === 'fall' ? b : kindProp(m.kind, 'blow', 'fly'); }
 function stepFly(f, dt) {
   f.t += dt;
+  if (f.rest) {                                                          // 停在船上（'fall' 掉到甲板、桅樓上）：跟著船走；船沉了照樣跟著下去
+    f.M = M4.mul(f.sh.M, f.Ml); f.c = M4.pt(f.sh.M, f.cl[0], f.cl[1], f.cl[2]);
+    return f.t < 600 && f.c[1] > (VX ? vxH(f.c[0], f.c[2]) : 0) - 25;
+  }
   f.v[1] -= G * dt;
   if (f.c[1] < seaH(f.c[0], f.c[2], SIMT)) {
     if (!f.wet) { f.wet = true; splash(f.c, true); }
@@ -610,6 +622,10 @@ function stepFly(f, dt) {
   f.c = add(f.c, mul(f.v, dt));
   var a = len(f.w) * dt; if (a > 0) f.R = M4.mul(rotM(f.w, a), f.R);
   f.M = M4.mul(M4.mul(M4.mul(trans(f.c[0], f.c[1], f.c[2]), f.R), trans(-f.c0[0], -f.c0[1], -f.c0[2])), f.M0);
+  if (f.land && !f.wet && f.c0[1] - f.c[1] > 1.5 && !f.sh.sunk) {        // 'fall'：中心掉過 1.5 m 之後碰到船的格 ⇒ 停在那裡（⛔ 一開始就判 ⇒ 帆桁貼著桅，馬上停在原地）
+    var L = M4.pt(f.sh.inv, f.c[0], f.c[1], f.c[2]);
+    if (f.sh.grid.get(Math.floor(L[0]), Math.floor(L[1]), Math.floor(L[2]))) { f.rest = true; f.Ml = M4.mul(f.sh.inv, f.M); f.cl = L; }
+  }
   return f.t < 25 && f.c[1] > (VX ? vxH(f.c[0], f.c[2]) : 0) - 25;   // 大漩渦：照漏斗那裡的水面算多深（⛔ 照 0 ⇒ 漏斗裡漂著的一出現就拿掉）
 }
 function meshTris(m) {
