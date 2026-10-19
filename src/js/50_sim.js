@@ -56,6 +56,7 @@ function aiSecond(sh, foe, dt) {
 }
 
 // ───────────────────────── 一步 ─────────────────────────
+var VIEW_HOLD = false, VIEW_ACC = 0;                                // 只給人看的推進（viewStep）：畫面一格補好幾步時只在最後一步推一次（90_main.js frame 設 VIEW_HOLD）；快轉、無頭照舊每一步推
 function simStep() {
   if (PF) PF.t = performance.now();                                 // 逐幀分段計時（?debug=1，00_core.js）
   SIMT += DT;
@@ -89,7 +90,7 @@ function simStep() {
   for (i = 0; i < PIECES.length; i++) if (!stepPiece(PIECES[i], DT)) { evEmit('pieceGone', PIECES[i]); PIECES.splice(i--, 1); }
   for (i = 0; i < FLY.length; i++) if (!stepFly(FLY[i], DT)) FLY.splice(i--, 1);
   if (PF) pfLap('pieces');
-  if (!FLAB_HIDE) evEmit(SLOW_VIS ? 'viewStepSlow' : 'viewStep', DT);   // FLAB_HIDE：擬真沙盒只看俯視圖時不推（84_fleetlab.js；只給人看的，不改戰局）             // 只給人看的推進：碎木、煙囪排煙、粒子、船邊水花（各自的亂數；00_events.js）；殉爆慢動作中（73_slowmo.js）只推船邊水花，其餘照畫面的時間走
+  if (!FLAB_HIDE) { if (SLOW_VIS) evEmit('viewStepSlow', DT); else { VIEW_ACC += DT; if (!VIEW_HOLD) { evEmit('viewStep', VIEW_ACC); VIEW_ACC = 0; } } }   // VIEW_HOLD：這一格畫面後面還要補步（90_main.js frame）⇒ 先累著、最後一步一次推（照 dt 生、照 dt 走 ⇒ 量一樣；補 3 步不再推 3 次）   // FLAB_HIDE：擬真沙盒只看俯視圖時不推（84_fleetlab.js；只給人看的，不改戰局）             // 只給人看的推進：碎木、煙囪排煙、粒子、船邊水花（各自的亂數；00_events.js）；殉爆慢動作中（73_slowmo.js）只推船邊水花，其餘照畫面的時間走
   if (PF) pfLap('water');                       // 船邊水花（13_water.js；只給人看、自己的亂數）
   if (PHYS) { var pt0 = performance.now(); SHIPS.forEach(function (sh) { if (sh.sink < 40) physStep(sh); }); clothContactsRun(); PHYS_MS = PHYS_MS * 0.98 + (performance.now() - pt0) * 0.02; }   // 讀數只看、不回寫模擬
   if (PF) pfLap('phys');

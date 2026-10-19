@@ -183,7 +183,7 @@ function burnQuench(sh, B, i, x, y, z) {
 function burnTint(sh, B, x, y, z, col, force) {
   if (!force && B.tint >= Math.ceil(BURN.tintMax / everySteps(BURN.tick))) return;
   var o = sh.grid.get(x, y, z); if (!o || o === col) return;
-  B.tint++; sh.grid.set(x, y, z, col); evEmit('cell', sh, x, y, z);
+  B.tint++; sh.grid.set(x, y, z, col); evEmit('cell', sh, x, y, z, true);   // true：只換色（62_simview.js：不是平滑格 ⇒ 平滑面不重建）
 }
 /** 拿掉第 i 格（最後一格補到它的位置）。 */
 function burnDrop(B, i) {

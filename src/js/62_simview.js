@@ -59,7 +59,10 @@ function armDispose(sh) {
 }
 
 // ── 船殼與碎塊（20_shatter.js、22_pieces.js）──
-evOn('cell', function (sh, x, y, z) { sh.rs.touch(x, y, z); if (sh.smD) smTouch(sh, x, y, z); }, 0, true);   // 打掉船殼的一格（20_shatter.js removeVoxel）：附近的區重建
+evOn('cell', function (sh, x, y, z, tint) {   // 打掉船殼的一格（20_shatter.js removeVoxel）：附近的區重建；tint ＝ 只換色（燒焦，49_burn.js burnTint、57_core.js）
+  sh.rs.touch(x, y, z);
+  if (sh.smD && !(tint && !((sh.smO && sh.smO.SG) || sh.T.smG).get(x, y, z))) smTouch(sh, x, y, z);   // 換色的不是平滑格 ⇒ 平滑面一點都不變（形狀只看有沒有格、顏色只取平滑格自己的）⇒ 不重建（光榮號燒木甲板：一格換色就重建一整區 64³，每格畫面 3 區 ≈ 20 ms）
+}, 0, true);
 evOn('pieceNew', function (pc) { pc.rs = new VK.RegionSet(gl, pc.grid, QIDX); rsAllDirty(pc.rs); }, 0, true);   // 網格分批建（60_render.js remesh；⛔ buildAll ⇒ 十萬格的半截船那一格卡上百 ms）
 evOn('pieceGone', function (pc) { if (pc.rs) pc.rs.dispose(); }, 0, true);   // 沉下去、漂走（50_sim.js step）
 
