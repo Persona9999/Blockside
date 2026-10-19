@@ -281,10 +281,22 @@ function boxMesh(boxes, mats) {
 }
 var FURN_MATS = [[0.42, 0.28, 0.16], [0.82, 0.78, 0.66], [0.93, 0.92, 0.88], [0.7, 0.16, 0.14], [0.22, 0.22, 0.24]];   // 木頭、帆布床墊、枕頭（檯面）、藥箱的紅蓋、鐵（抽水機）
 /** 那一型的物品網格（每種物品兩個方向各一份，第一次用到才做、接在 T.meshes 後面）⇒ 網格的索引。 */
+/** 雕好的道具模型（37_furnmodels.js FURN_MODEL；TASK-0569）⇒ 網格：比外框（FURN[item].size）小 ⇒ 在地板上置中；ax ＝ 'y'（轉 90°）⇒ x、y 對調，
+ *  對調是鏡射 ⇒ 每個三角形的繞向也對調（不然法線朝裡）。沒有模型 ⇒ null（照舊拼方塊）。 */
+function furnModelMesh(item, ax) {
+  var M = typeof FURN_MODEL !== 'undefined' && FURN_MODEL[item]; if (!M) return null;
+  var f = FURN[item], dx = Math.max(0, (f.size[0] - M.size[0]) / 2), dy = Math.max(0, (f.size[1] - M.size[1]) / 2), v = M.verts, V = new Array(v.length), t = M.tris.slice();
+  for (var i = 0; i < v.length; i += 3) {
+    var x = v[i] + dx, y = v[i + 1] + dy;
+    V[i] = ax === 'y' ? y : x; V[i + 1] = ax === 'y' ? x : y; V[i + 2] = v[i + 2];
+  }
+  if (ax === 'y') for (i = 0; i < t.length; i += 3) { var s = t[i + 1]; t[i + 1] = t[i + 2]; t[i + 2] = s; }
+  return { verts: V, tris: t, tmat: M.tmat, mats: M.mats };
+}
 function furnMesh(T, item, ax) {
   T.furn = T.furn || {}; var key = item + ax;
   if (T.furn[key] === undefined) {
-    var m = boxMesh(furnBoxes(item, ax), FURN_MATS);
+    var m = furnModelMesh(item, ax) || boxMesh(furnBoxes(item, ax), FURN_MATS);
     T.meshes.push({ tri: meshTris(m), occ: meshOcc(m) }); T.furn[key] = T.meshes.length - 1;   // GPU 那一半第一次畫到才上傳（62_simview.js meshGpu；TASK-0669）
   }
   return T.furn[key];
