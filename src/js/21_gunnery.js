@@ -135,9 +135,33 @@ function broadsideAt(sh, ammo, on, aim, guns) {
   if (k) { sh.salvo++; sh.salvoT = SIMT; sh.salvo2 = (sh.salvo2 || 0) + 1; }
   return k;
 }
+/** 每門砲現在打不打得到（Tim 2026-10-19：「炮可以射擊到敵人時 是否可以有額外標示(單門判定目前開炮是否能打中)」「判定不放在UI 而是在船或炮上 UI只是取用避免重複計算」）——
+ *  瞄準點 w（F 單發那一套：有敵艦或點了瞄準點 ⇒ aimPoint）記在船上 sh.ga；每門砲記兩個：
+ *    g.aimT ＝ gunTarget 挑的點（含玩家手動時「射程裡打不到 ⇒ 照射界挑」的退路；null ＝ 這門對不到）—— F 單發、兩舷金線、射界外照它；
+ *    g.aimHit ＝ 射界＋射程都對得到的點（gunTarget 前兩段；null ＝ 現在開也打不中）—— HUD 每門砲的金框照它（只看位置：裝填、人手照舊看符號的形狀與顏色）。
+ *  多久算一次：模擬時間每 GUN_AIM_DT 秒、或瞄準的東西換了（換敵艦、點了別的點、瞄準模式、手動／自動）才重算 ⇒ HUD 每一格只讀；按 F ⇒ 先強制重算（開火照最新的）。
+ *  ⛔ 不抽亂數（aimPoint 的瞄準模式照中心點、modeAim rand false）⇒ 誰叫、叫幾次都不動戰局。 */
+var GUN_AIM_DT = 0.1;
+function gunAims(sh, force) {
+  var foe = foeOf(sh), w = foe || (sh.aim && sh.aimOn) ? aimPoint(sh) : null, mf = manualFire(sh);
+  var key = (foe ? foe.i : -1) + '|' + (sh.aim ? sh.aim.join(',') : '') + '|' + (sh.aimOn ? 1 : 0) + '|' + (sh.pMode || '') + '|' + (mf ? 1 : 0) + '|' + (handAim(sh) ? 1 : 0) + '|' + (sh.struck ? 1 : 0);
+  var A = sh.ga; if (!force && A && A.key === key && SIMT >= A.t && SIMT - A.t < GUN_AIM_DT) return A;
+  A = sh.ga = { t: SIMT, key: key, w: w };
+  sh.guns.forEach(function (g) {
+    var hit = null, t = null;
+    if (w && !sh.struck && g.alive && !g.wet) {
+      var b = bears(sh, g, w);
+      hit = b && gunInRange(sh, g, w) ? w : gunTargetIn(sh, g, w, true);
+      t = hit || (mf ? (b ? w : gunTargetIn(sh, g, w, false)) : null);   // ＝ gunTarget(sh, g, w)
+    }
+    g.aimHit = hit; g.aimT = t;
+  });
+  return A;
+}
 /** 單發（F；Tim 2026-10-18：「沒有目標時也開一發(可以對空開炮) 有目標時優先開能打到目標的」）：照 fireOneList 的順序一門一門試，開成一發就停
  *  （⛔ 只試第一門 ⇒ 那門剛好被 safe 擋住、砲塔還沒轉到，就整發沒了）。回：開成了沒。 */
 function fireOne(sh, ammo) {
+  gunAims(sh, true);                                                   // 開火照最新的（HUD 讀的那一份最多舊 GUN_AIM_DT 秒）
   var L = fireOneList(sh);
   for (var i = 0; i < L.length; i++) if (fireGun(sh, L[i].g, L[i].t || skyPoint(sh, L[i].g), ammo)) return true;
   return false;
@@ -148,9 +172,9 @@ function fireOneList(sh) {
   if (sh.struck) return [];
   var ready = sh.guns.filter(function (g) { return g.alive && g.reload <= 0 && gunRate(g) > 0 && !(g.mt && mountBusy(g)) && mountFireOk(g); });
   if (!ready.length) return [];
-  var tgt = foeOf(sh) || (sh.aim && sh.aimOn) ? aimPoint(sh) : null, hit = [], rest = [];
+  var tgt = gunAims(sh).w, hit = [], rest = [];                        // 每門打哪裡：砲上那一份（gunAims；⛔ 這裡再叫 gunTarget ⇒ HUD 每一格又算一次）
   ready.forEach(function (g) {
-    var m = M4.pt(sh.M, g.muz[0], g.muz[1], g.muz[2]), t = tgt ? gunTarget(sh, g, tgt) : null;
+    var m = M4.pt(sh.M, g.muz[0], g.muz[1], g.muz[2]), t = tgt ? g.aimT : null;
     if (t) hit.push({ g: g, t: t, d: len(sub(m, tgt)) });
     else { var a = gunAxis(sh, g), d = tgt ? -((tgt[0] - m[0]) * a[0] + (tgt[2] - m[2]) * a[2]) / (Math.hypot(tgt[0] - m[0], tgt[2] - m[2]) || 1) : 0; rest.push({ g: g, t: null, d: d }); }   // d：砲軸跟往瞄準點那條線的夾角（−cos，小 ＝ 對得比較準）
   });
