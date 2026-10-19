@@ -537,19 +537,21 @@ function gunIdle(sh) {
     });
   });
 }
-/** 閒著的組裡離 (x, lv) 最近的砲手 ⇒ 變成預備水手（同 toHand；⛔ 不叫它：它的 rr() 抽戰局的亂數）；沒有 ⇒ null。 */
+/** 閒著的組裡離 (x, lv) 最近的砲手 ⇒ 變成預備水手（同 toHand；⛔ 不叫它：它的 rr() 抽戰局的亂數）；沒有 ⇒ null。
+ *  調過去就留在那一舷（Tim 2026-10-19「之後試『調過去就留在那一舷』」）：調過一次的（c.idleMoved）不再調；剛收回來的組（back 還沒到）不調 ——
+ *  ⛔ 不擋 ⇒ 船一轉，兩舷輪流閒著，人在兩舷之間來回搬（量過：3 對 3 seed 11 三叉戟號 120 秒調了 105 人次）。 */
 function idleTake(sh, x, lv0) {
   var I = sh.idleG, NV = sh.nav, best = null, bd = 1e9, blv = -1; if (!I) return null;
   sh.crew.forEach(function (c) {
-    if (c.role !== ROLE.GUN || !crewAble(c) || c.walk) return;
-    var R = I[c.deck + c.side]; if (!R || !R.on) return;
+    if (c.role !== ROLE.GUN || !crewAble(c) || c.walk || c.idleMoved) return;
+    var R = I[c.deck + c.side]; if (!R || !R.on || R.back > SIMT) return;
     var lv = lvAt(sh, c.pos); if (lv < 0 || !NV.levels[lv]) return;
     var d = Math.abs(c.pos[0] - x) + 150 * Math.abs(lv - lv0); if (d < bd) { bd = d; best = c; blv = lv; }
   });
   if (!best) return null;
   var c = best, key = c.deck + c.side;
   leaveGun(c); if (c.art === undefined) c.art = c.role;
-  c.role = ROLE.HAND; c.gun = null; c.walk = null; c.moving = false; c.deck = NV.levels[blv].key; c.idleFrom = key;
+  c.role = ROLE.HAND; c.gun = null; c.walk = null; c.moving = false; c.deck = NV.levels[blv].key; c.idleFrom = key; c.idleMoved = true;
   c.hand = { lv: blv, wait: 0, legs: [], wp: null, k: 0, climb: null, job: null, to: null };
   sh.idleN = (sh.idleN || 0) + 1;
   return c;
