@@ -152,6 +152,7 @@ if (DEBUG) window.__game = {
   ctrl: function () { return { top: ctrlTop(), list: CTRLS.map(function (c) { return c.name + (c.on() ? '' : '（關）'); }) }; },   // 控制器（71_ctrl.js）：現在最上面的、由上往下
   predict: function (b) { return ballPredict(b); },
   cam: function (o) { camSet(o); camSet({ snap: true }); camUpdate(1); render(); },
+  trees: function (sp, n, at) { return treeFind(sp, n, at); },   // 找樹（63_trees.js treeFind）：那一種最靠近 at（[x, z]；沒給 ⇒ 鏡頭）的 n 棵
   // 海圖（TASK-0721；08_seabed.js、32_ground.js）：載了哪幾塊、換過幾次中心、等過幾次；每艘的擱淺讀數；q ＝ [x, z] ⇒ 那一點的高度與底質
   bed: function (q) { if (!BED || !BED.A) return null; return { area: BED.A.id, site: BED.site, origin: [BED.ax, BED.az], center: [BED.cx, BED.cy], loaded: Object.keys(BED.ch).sort(), loads: BED.loads, drops: BED.drops, waits: BED.miss, meshes: Object.keys(BEDGL).length,
     trees: treeStat(),

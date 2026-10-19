@@ -1,23 +1,82 @@
 // ───────────────────────── 樹（程序生成；只給人看，Tim 2026-10-19） ─────────────────────────
 // Tim：「嘗試用程序生成樹木吧(需要是通用架構) 樹本身也是透過程序生成(定義跟 枝幹 樹葉等) 讓樹有隨機性 然後可以支援不同樹種(保留擴充性 先做一種就好)」
-// 樹種一張表（TREE_SPECIES）：一棵樹 ＝ 樹幹 ＋ 一層一層的枝（每一層從上一層的枝幹長出來）＋ 長在最後一層枝尖的樹葉。
-//   加一種樹 ＝ 在表裡加一筆（形狀全在參數裡，程式不分樹種）；樹葉的長法照 leaf.kind 分派（TREE_LEAF；現在只有 cluster ＝ 一團一團的葉簇）。
-// treeSkel(種, 種子) ⇒ 骨架（枝幹的折線、半徑、枝尖）；treeMesh(骨架, 細度) ⇒ 網格：
-//   細度 0 ＝ 細的（近景）、1 ＝ 低模（中景：枝少一層、葉簇併成每根枝一大團、管子邊數少）；遠景的貼圖由 63_trees.js 照細的那一份拍。
+//      「接著嘗試加入新樹種(椰子樹) 以及其他加勒比海常見植物吧」（TASK-0725）
+// 樹種一張表（TREE_SPECIES）：一棵樹 ＝ 樹幹 ＋ 一層一層的枝（每一層從上一層的枝幹長出來）＋（選用）支柱根 ＋ 樹葉。
+//   加一種樹 ＝ 在表裡加一筆（形狀全在參數裡，程式不分樹種）；樹葉的長法照 leaf.kind 分派（TREE_LEAF）：
+//   cluster ＝ 一團一團的葉簇（長在最後一層枝尖）、frond ＝ 棕櫚的羽狀葉（從樹幹頂一圈長出來、往下垂）、rosette ＝ 蓮座葉（龍舌蘭：從地面一圈長出來）。
+// treeSkel(種, 種子, 第幾棵) ⇒ 骨架（枝幹的折線、半徑、枝尖）；treeMesh(骨架, 細度) ⇒ 網格：
+//   細度 0 ＝ 細的（近景）、1 ＝ 低模（中景：枝少一層、葉子少、管子邊數少）；遠景的貼圖由 63_trees.js 照細的那一份拍。
 // 同一個骨架出兩種細度 ⇒ 換細度時輪廓不跳。亂數一律 treeRng（自己的種子）：⛔ 不抽戰局的 rnd()（樹只給人看，開不開樹戰局逐位元組相同）。
 // 網格：頂點 10 個 float ＝ 位置 3、法線 3、顏色 3、搖晃權重 1（0 ＝ 樹根不動、1 ＝ 葉尖晃最多）；索引 Uint16。模型座標：樹根在原點、y 朝上、單位公尺。
+// place（63_trees.js 照它擺）：spacing 公尺一個候選點；alt ＝ 海拔帶 [開始長, 長滿, 開始變少, 沒有]（公尺，中間照直線漸變）；slopeMax 坡度（tan）；
+//   mats ＝ 底質 ⇒ 權重（BED_MAT：1 淺海沙底、10 沙灘、11 陸地、12 岩壁；沒寫 ＝ 不長）；dens 最密幾成；
+//   forest ＝ 跟林地覆蓋走多少（1 ＝ 只長在林子裡、0 ＝ 不管、負的 ＝ 避開林子）；clump ＝ 一叢一叢的大小（公尺）；patch ＝ [片的大小, 門檻]（成片長、片外沒有）；
+//   scale 放大；face 1 ＝ 往下坡（通常是海）歪；shell 0 ＝ 不算進遠處的樹冠殼（太矮）；view ＝ 超過幾公尺就不畫（小植物）。
 var TREE_SPECIES = {
   broadleaf: {
-    name: '闊葉樹',                                                     // 加勒比海島上的熱帶闊葉林（海葡萄、桃花心木那一類的輪廓）：矮壯、樹冠寬
+    name: '闊葉樹',                                                     // 加勒比海島上的熱帶闊葉林（桃花心木那一類的輪廓）：矮壯、樹冠寬
     height: [8, 14],                                                    // 樹幹（含樹冠）高，公尺（每棵隨機）
     trunk: { r: [0.22, 0.34], taper: 0.45, bend: 0.12, segs: 6, sides: [7, 4], lean: 0.08, col: [0.33, 0.25, 0.17], top: 0.62 },   // top：樹幹長到總高的幾成（上面是樹冠）
     levels: [                                                           // 分枝：n 枝、長在母枝的 from 那一段、跟母枝夾 angle 度、長 len × 母枝長、粗 r × 母枝在那裡的粗、up 往上翹
       { n: [4, 6], from: [0.45, 1.0], angle: [38, 62], len: [0.55, 0.75], r: 0.55, bend: 0.18, up: 0.25, segs: 4, sides: [5, 3] },
       { n: [3, 4], from: [0.35, 0.95], angle: [28, 52], len: [0.45, 0.65], r: 0.5, bend: 0.22, up: 0.12, segs: 3, sides: [3, 0] }   // sides 0 ＝ 低模不畫這一層
     ],
-    leaf: { kind: 'cluster', per: [2, 3], size: [1.3, 2.1], flat: 0.7, col: [0.21, 0.37, 0.14], vary: 0.14, along: 0.35 },   // 每個枝尖 per 團、團的半徑 size 公尺、扁一點（flat）、along：沿最後一段往回也長
-    place: { spacing: 9, hMin: 2.5, hMax: 650, slopeMax: 0.65, mats: [11], forest: 0.55, scale: [0.8, 1.2] },   // 63_trees.js：每 spacing 公尺一個候選點；海拔、坡度（tan）、底質（11 ＝ LAND）；forest ＝ 林地佔幾成（照雜訊成片）
+    leaf: { kind: 'cluster', per: [2, 3], size: [1.3, 2.1], flat: 0.7, col: [0.21, 0.37, 0.14], vary: 0.14, along: 0.35 },   // 每個枝尖 per 團、團的半徑 size 公尺、扁一點（flat）、along：沿最後一段往回也長；（選用）stretch 沿枝拉長、jit 位置抖幾倍、tint 換色
+    place: { spacing: 9, alt: [2.5, 8.5, 500, 750], slopeMax: 0.65, mats: { 11: 1 }, dens: 1, forest: 1, clump: 60, scale: [0.8, 1.2] },
     variants: 6                                                         // 每種先生幾棵不同的（實例照位置挑一棵、再轉、再縮放）
+  },
+  palm: {
+    name: '椰子樹',                                                     // Cocos nucifera：細長、彎的樹幹往海那一側歪，頂上一圈羽狀葉往下垂；沙灘與海邊低地
+    height: [9, 16],
+    trunk: { r: [0.16, 0.21], taper: 0.72, bend: 0.035, segs: 10, sides: [8, 5], lean: [0.3, 0.65], up: 0.55, flare: 1.6, col: [0.58, 0.52, 0.42], top: 1 },   // lean [a, b] ＝ 往模型 +x 歪（擺的時候轉到下坡）、up 往上彎回來、flare 樹根粗幾倍
+    levels: [],
+    leaf: { kind: 'frond', n: [15, 21], len: [3.6, 5.0], w: 0.62, hang: 0.55, droop: [0.9, 1.5], rise: [8, 62], dead: 0.14, segs: [10, 4], col: [0.29, 0.42, 0.14], vary: 0.12, deadCol: [0.47, 0.37, 0.22], nuts: [2, 7], nutCol: [0.40, 0.38, 0.13] },
+    place: { spacing: 13, alt: [0.5, 1.4, 14, 40], slopeMax: 0.35, mats: { 10: 1, 11: 0.55 }, dens: 0.62, forest: -0.35, clump: 90, scale: [0.85, 1.15], face: 1 },
+    variants: 6
+  },
+  seagrape: {
+    name: '海葡萄',                                                     // Coccoloba uvifera：沙灘後面的矮灌木，圓葉、有幾團轉紅
+    height: [2.6, 4.4],
+    trunk: { r: [0.08, 0.12], taper: 0.5, bend: 0.3, segs: 3, sides: [5, 3], lean: 0.35, col: [0.42, 0.35, 0.29], top: 0.3, crown: 0.75 },   // crown：第一層枝的長 ＝ 總高 × crown（沒寫 ＝ 照樹冠那一段）
+    levels: [{ n: [3, 5], from: [0.05, 1.0], angle: [48, 78], len: [0.8, 1.2], r: 0.75, bend: 0.3, up: 0.12, segs: 3, sides: [4, 0] }],
+    leaf: { kind: 'cluster', per: [1, 2], size: [0.85, 1.3], flat: 0.72, col: [0.35, 0.47, 0.18], vary: 0.18, along: 0.5, tint: [0.16, [0.52, 0.30, 0.16]] },   // tint：[幾成的葉團, 顏色]
+    place: { spacing: 6, alt: [0.7, 1.5, 6, 14], slopeMax: 0.45, mats: { 10: 1, 11: 0.45 }, dens: 0.5, forest: -0.2, clump: 35, scale: [0.8, 1.25], view: 700 },
+    variants: 4
+  },
+  mangrove: {
+    name: '紅樹',                                                       // Rhizophora mangle：海邊平坦的淺水與泥灘，一圈支柱根插進水裡、深綠樹冠，成片長
+    height: [5, 8],
+    trunk: { r: [0.12, 0.17], taper: 0.5, bend: 0.15, segs: 4, sides: [6, 4], lean: 0.1, col: [0.36, 0.31, 0.26], top: 0.48 },
+    roots: { n: [8, 12], from: [0.1, 0.32], reach: [1.3, 2.7], arch: 0.45, r: 0.32, segs: 4, sides: [4, 3] },   // 支柱根：從樹幹 from 那一段往外拱 reach 公尺插進地面
+    levels: [
+      { n: [5, 7], from: [0.3, 1.0], angle: [42, 72], len: [0.5, 0.75], r: 0.55, bend: 0.2, up: 0.15, segs: 3, sides: [4, 3] },
+      { n: [2, 3], from: [0.4, 0.95], angle: [30, 50], len: [0.45, 0.6], r: 0.5, bend: 0.25, up: 0.1, segs: 2, sides: [3, 0] }
+    ],
+    leaf: { kind: 'cluster', per: [2, 3], size: [1.0, 1.5], flat: 0.62, col: [0.18, 0.35, 0.14], vary: 0.1, along: 0.35 },
+    place: { spacing: 5, alt: [-0.8, -0.4, 0.6, 1.5], slopeMax: 0.08, mats: { 1: 1, 10: 0.8, 11: 0.8 }, dens: 0.9, forest: 0, clump: 25, patch: [380, 0.6], scale: [0.85, 1.2] },
+    variants: 4
+  },
+  agave: {
+    name: '龍舌蘭',                                                     // Agave：乾的坡地、岩地上一叢蓮座葉；少數抽出高高的花梗、頂上一簇一簇黃花
+    height: [0.9, 1.4],                                                 // 葉長
+    trunk: { r: [0.1, 0.1], taper: 1, bend: 0, segs: 1, sides: [0, 0], lean: 0, col: [0.4, 0.4, 0.3], top: 0.05 },
+    levels: [],
+    leaf: { kind: 'rosette', n: [16, 24], len: [0.75, 1.1], w: 0.18, rise: [14, 80], droop: 0.45, col: [0.45, 0.57, 0.48], vary: 0.1, edge: [0.70, 0.66, 0.38],
+            stalk: { v: [2], h: [3.2, 4.4], r: 0.07, col: [0.48, 0.43, 0.27], arms: [6, 9], flower: [0.80, 0.66, 0.20] } },   // stalk.v：第幾棵抽花梗
+    place: { spacing: 7, alt: [3, 12, 700, 1100], slopeMax: 0.95, mats: { 11: 1, 12: 0.6 }, dens: 0.4, forest: -0.85, clump: 30, scale: [0.8, 1.3], shell: 0, view: 380 },
+    variants: 5
+  },
+  pine: {
+    name: '加勒比松',                                                   // Pinus caribaea：高地（古巴、伊斯帕尼奧拉、巴哈馬的松林）；筆直的樹幹、上半截稀疏的樹冠
+    height: [15, 23],
+    trunk: { r: [0.2, 0.3], taper: 0.3, bend: 0.05, segs: 7, sides: [7, 4], lean: 0.04, col: [0.39, 0.25, 0.18], top: 0.96, crown: 0.24 },
+    levels: [
+      { n: [9, 13], from: [0.5, 1.0], angle: [68, 95], len: [0.55, 1.0], r: 0.35, bend: 0.15, up: 0.32, segs: 3, sides: [4, 3] },
+      { n: [2, 3], from: [0.4, 1.0], angle: [25, 45], len: [0.35, 0.55], r: 0.5, bend: 0.2, up: 0.25, segs: 2, sides: [3, 0] }
+    ],
+    leaf: { kind: 'cluster', per: [3, 4], size: [0.42, 0.62], flat: 1, stretch: 2.3, jit: 0.35, col: [0.17, 0.31, 0.20], vary: 0.1, along: 0.55 },   // 松針：枝尖一束一束（沿枝的方向拉長 stretch 倍、jit 抖得少）
+    place: { spacing: 10, alt: [260, 520, 1800, 2400], slopeMax: 0.8, mats: { 11: 1, 12: 0.3 }, dens: 1, forest: 1, clump: 60, scale: [0.8, 1.15] },
+    variants: 4
   }
 };
 
@@ -34,15 +93,19 @@ function treePerp(d) {
   var u = treeNorm([a[1] * d[2] - a[2] * d[1], a[2] * d[0] - a[0] * d[2], a[0] * d[1] - a[1] * d[0]]);
   return [u, [d[1] * u[2] - d[2] * u[1], d[2] * u[0] - d[0] * u[2], d[0] * u[1] - d[1] * u[0]]];
 }
+function treeCross(a, b) { return [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]]; }
+/** 骨架的第 lv 層參數：−1 樹幹、−2 支柱根、0… 分枝。 */
+function treeLv(S, lv) { return lv === -1 ? S.trunk : lv === -2 ? S.roots : S.levels[lv]; }
 
-/** 骨架：{ sp, h, br: [{ pts, r0, r1, lv, par }], tips: [{ p, d, br }] }。lv −1 ＝ 樹幹；par ＝ 母枝在 br 裡的編號。 */
-function treeSkel(sp, seed) {
-  var S = TREE_SPECIES[sp], R = treeRng(seed), h = treeIn(R, S.height), out = { sp: sp, h: h, br: [], tips: [] }, T = S.trunk;
-  var lean = [(R() - 0.5) * 2 * T.lean, 1, (R() - 0.5) * 2 * T.lean];
+/** 骨架：{ sp, v, h, br: [{ pts, r0, r1, lv, par }], tips: [{ p, d, br }] }。lv −1 ＝ 樹幹、−2 ＝ 支柱根；par ＝ 母枝在 br 裡的編號。 */
+function treeSkel(sp, seed, v) {
+  var S = TREE_SPECIES[sp], R = treeRng(seed), h = treeIn(R, S.height), out = { sp: sp, v: v | 0, h: h, br: [], tips: [] }, T = S.trunk;
+  var lean = T.lean && T.lean.length ? [treeIn(R, T.lean), 1, (R() - 0.5) * 0.2] : [(R() - 0.5) * 2 * T.lean, 1, (R() - 0.5) * 2 * T.lean];
   grow(-1, [0, 0, 0], treeNorm(lean), h * T.top, treeIn(R, T.r), -1);
+  if (S.roots) roots();
   return out;
   function grow(lv, p0, dir, len, r0, par) {
-    var L = lv < 0 ? T : S.levels[lv], segs = L.segs, pts = [p0], d = dir, p = p0;
+    var L = treeLv(S, lv), segs = L.segs, pts = [p0], d = dir, p = p0;
     for (var s = 1; s <= segs; s++) {
       var b = L.bend;
       d = treeNorm([d[0] + (R() - 0.5) * 2 * b, d[1] + (R() - 0.5) * 2 * b + (L.up || 0) / segs, d[2] + (R() - 0.5) * 2 * b]);
@@ -60,8 +123,19 @@ function treeSkel(sp, seed) {
       var az = az0 + k * 2.39996 + (R() - 0.5) * 0.6, an = treeIn(R, C.angle) * Math.PI / 180, B = treePerp(pd), ca = Math.cos(az), sa = Math.sin(az);
       var side = [B[0][0] * ca + B[1][0] * sa, B[0][1] * ca + B[1][1] * sa, B[0][2] * ca + B[1][2] * sa];
       var cd = treeNorm([pd[0] * Math.cos(an) + side[0] * Math.sin(an), pd[1] * Math.cos(an) + side[1] * Math.sin(an) + C.up, pd[2] * Math.cos(an) + side[2] * Math.sin(an)]);
-      var cl = (lv < 0 ? h * (1 - T.top) * 1.6 : len) * treeIn(R, C.len) * (1 - 0.3 * f);
+      var cl = (lv < 0 ? (T.crown ? h * T.crown : h * (1 - T.top) * 1.6) : len) * treeIn(R, C.len) * (1 - 0.3 * f);
       grow(nx, at, cd, cl, rr * C.r, me);
+    }
+  }
+  // 支柱根：從樹幹 from 那一段（照總高）往外一圈拱出去、插進地面（二次曲線：起點 → 往外往上的控制點 → 地面）
+  function roots() {
+    var Rt = S.roots, tr = out.br[0], n = Math.round(treeIn(R, Rt.n)), az0 = R() * 6.2832;
+    for (var k = 0; k < n; k++) {
+      var f = treeIn(R, Rt.from), s0 = treeAt(tr.pts, f / T.top), az = az0 + k * 6.2832 / n + (R() - 0.5) * 0.5, ox = Math.cos(az), oz = Math.sin(az), re = treeIn(R, Rt.reach);
+      var c = [s0[0] + ox * re * 0.45, s0[1] + Rt.arch * s0[1] + 0.25, s0[2] + oz * re * 0.45], e = [s0[0] + ox * re, -0.15 - 0.25 * R(), s0[2] + oz * re], pts = [];
+      for (var s = 0; s <= Rt.segs; s++) { var t = s / Rt.segs, a = (1 - t) * (1 - t), b = 2 * t * (1 - t), cc = t * t; pts.push([a * s0[0] + b * c[0] + cc * e[0], a * s0[1] + b * c[1] + cc * e[1], a * s0[2] + b * c[2] + cc * e[2]]); }
+      var r0 = (tr.r0 + (tr.r1 - tr.r0) * f / T.top) * Rt.r;
+      out.br.push({ pts: pts, r0: r0, r1: r0 * 0.8, lv: -2, par: 0, len: re });
     }
   }
 }
@@ -71,61 +145,151 @@ function treeAt(pts, f) {
   return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
 }
 
-/** 骨架 ⇒ 網格。lod 0 細、1 低模。⇒ { V: Float32Array（10 個一組）, I: Uint16Array, h, w（樹冠半寬，遠景貼圖的框用） }。 */
+/** 骨架 ⇒ 網格。lod 0 細、1 低模。⇒ { V: Float32Array（10 個一組）, I: Uint16Array, h（最高點）, w（最寬的半寬，遠景貼圖的框用） }。 */
 function treeMesh(K, lod) {
-  var S = TREE_SPECIES[K.sp], R = treeRng(K.br.length * 7919 + Math.round(K.h * 100) + lod), V = [], I = [], w = 0;
-  function vert(p, n, c, sw) { V.push(p[0], p[1], p[2], n[0], n[1], n[2], c[0], c[1], c[2], sw); w = Math.max(w, Math.abs(p[0]), Math.abs(p[2])); return V.length / 10 - 1; }
+  var S = TREE_SPECIES[K.sp], R = treeRng(K.br.length * 7919 + Math.round(K.h * 100) + lod), V = [], I = [], w = 0, top = 0;
+  function vert(p, n, c, sw) { V.push(p[0], p[1], p[2], n[0], n[1], n[2], c[0], c[1], c[2], sw); w = Math.max(w, Math.abs(p[0]), Math.abs(p[2])); top = Math.max(top, p[1]); return V.length / 10 - 1; }
+  var M = { S: S, K: K, lod: lod, R: R, V: V, I: I, vert: vert };
   K.br.forEach(function (b) {
-    var L = b.lv < 0 ? S.trunk : S.levels[b.lv], sides = L.sides[lod]; if (!sides) return;
-    var P = b.pts, n = P.length, base = V.length / 10, col = S.trunk.col, kc = 0.9 + 0.2 * R();
-    for (var i = 0; i < n; i++) {
-      var d = treeNorm(i < n - 1 ? [P[i + 1][0] - P[i][0], P[i + 1][1] - P[i][1], P[i + 1][2] - P[i][2]] : [P[i][0] - P[i - 1][0], P[i][1] - P[i - 1][1], P[i][2] - P[i - 1][2]]);
-      var B = treePerp(d), r = b.r0 + (b.r1 - b.r0) * i / (n - 1), sw = Math.min(1, Math.max(0, (P[i][1] / K.h) * 0.6 + (b.lv + 1) * 0.15)), dk = b.lv < 0 && i === 0 ? 0.75 : 1;
-      for (var s = 0; s < sides; s++) {
-        var a = s / sides * 6.2832, nn = [B[0][0] * Math.cos(a) + B[1][0] * Math.sin(a), B[0][1] * Math.cos(a) + B[1][1] * Math.sin(a), B[0][2] * Math.cos(a) + B[1][2] * Math.sin(a)];
-        vert([P[i][0] + nn[0] * r, P[i][1] + nn[1] * r, P[i][2] + nn[2] * r], nn, [col[0] * kc * dk, col[1] * kc * dk, col[2] * kc * dk], sw);
-      }
-    }
-    for (i = 0; i < n - 1; i++) for (s = 0; s < sides; s++) {
-      var a0 = base + i * sides + s, a1 = base + i * sides + (s + 1) % sides, b0 = a0 + sides, b1 = a1 + sides;
-      I.push(a0, b0, a1, a1, b0, b1);
-    }
+    var L = treeLv(S, b.lv), sides = L.sides[lod]; if (!sides) return;
+    treeTube(M, b.pts, b.r0, b.r1, sides, S.trunk.col, 0.9 + 0.2 * R(), b.lv, L.flare);
   });
-  // 樹葉：細 ⇒ 每個枝尖 per 團（沿最後一段往回也長）；低模 ⇒ 每根母枝的枝尖併成一大團（中心 ＝ 平均、半徑涵蓋）
-  var Lf = S.leaf, blobs = [];
-  if (lod === 0) K.tips.forEach(function (t) {
-    var b = K.br[t.br], m = Math.round(treeIn(R, Lf.per)) + (t.top ? 1 : 0);
-    for (var j = 0; j < m; j++) { var q = treeAt(b.pts, 1 - Lf.along * R()); blobs.push({ c: [q[0] + (R() - 0.5) * 1.2, q[1] + (R() - 0.2) * 0.8, q[2] + (R() - 0.5) * 1.2], r: treeIn(R, Lf.size) }); }
-  });
-  else {
-    var G = {};
-    K.tips.forEach(function (t) { var k = t.top ? 'top' : K.br[t.br].par; (G[k] = G[k] || []).push(t.p); });
-    Object.keys(G).forEach(function (k) {
-      var L = G[k], c = [0, 0, 0]; L.forEach(function (p) { c[0] += p[0] / L.length; c[1] += p[1] / L.length; c[2] += p[2] / L.length; });
-      var r = 0; L.forEach(function (p) { r = Math.max(r, Math.hypot(p[0] - c[0], p[1] - c[1], p[2] - c[2])); });
-      blobs.push({ c: c, r: r * 0.8 + Lf.size[1] });
-    });
-  }
-  var mid = [0, K.h * 0.7, 0];
-  blobs.forEach(function (bl) { TREE_LEAF[Lf.kind](bl, Lf, R, mid, K.h, vert, I, V); });
-  return { V: new Float32Array(V), I: new Uint16Array(I), h: K.h, w: w };
+  TREE_LEAF[S.leaf.kind](M);
+  return { V: new Float32Array(V), I: new Uint16Array(I), h: Math.max(K.h, top), w: w };
 }
-// 樹葉的長法（leaf.kind ⇒ 函式）：加一種（棕櫚葉 frond、針葉 needle…）＝ 在這裡加一個。
-var TREE_ICO = (function () {                                            // 正二十面體（12 點、20 面；葉簇的底）
+/** 一根管子（枝幹、根、花梗）：折線 P、半徑 r0 ⇒ r1、sides 邊；kc 深淺；lv 決定搖晃權重（−1 樹幹根部最暗）；flare ＝ 根部粗幾倍。 */
+function treeTube(M, P, r0, r1, sides, col, kc, lv, flare) {
+  var n = P.length, base = M.V.length / 10, K = M.K;
+  for (var i = 0; i < n; i++) {
+    var d = treeNorm(i < n - 1 ? [P[i + 1][0] - P[i][0], P[i + 1][1] - P[i][1], P[i + 1][2] - P[i][2]] : [P[i][0] - P[i - 1][0], P[i][1] - P[i - 1][1], P[i][2] - P[i - 1][2]]);
+    var B = treePerp(d), t = i / (n - 1), r = (r0 + (r1 - r0) * t) * (flare ? 1 + (flare - 1) * Math.pow(1 - t, 5) : 1);
+    var sw = Math.min(1, Math.max(0, (P[i][1] / K.h) * 0.6 + (lv + 1) * 0.15)), dk = lv === -1 && i === 0 ? 0.75 : 1;
+    for (var s = 0; s < sides; s++) {
+      var a = s / sides * 6.2832, nn = [B[0][0] * Math.cos(a) + B[1][0] * Math.sin(a), B[0][1] * Math.cos(a) + B[1][1] * Math.sin(a), B[0][2] * Math.cos(a) + B[1][2] * Math.sin(a)];
+      M.vert([P[i][0] + nn[0] * r, P[i][1] + nn[1] * r, P[i][2] + nn[2] * r], nn, [col[0] * kc * dk, col[1] * kc * dk, col[2] * kc * dk], sw);
+    }
+  }
+  for (i = 0; i < n - 1; i++) for (s = 0; s < sides; s++) {
+    var a0 = base + i * sides + s, a1 = base + i * sides + (s + 1) % sides, b0 = a0 + sides, b1 = a1 + sides;
+    M.I.push(a0, b0, a1, a1, b0, b1);
+  }
+}
+/** 一顆小球（葉簇、椰子、花）：二十面體，半徑 r、y 扁 flat；ax ＋ st ＝ 沿 ax 拉長 st 倍（松針一束一束）；法線照 out（樹冠中心往外）混一半；下半部暗一點。 */
+function treeBall(M, c, r, flat, col, sw, out, ax, st) {
+  var base = M.V.length / 10, R = M.R;
+  TREE_ICO.P.forEach(function (p) {
+    var j = 0.82 + 0.36 * R(), q = [c[0] + p[0] * r * j, c[1] + p[1] * r * j * flat, c[2] + p[2] * r * j];
+    if (ax) { var a = (p[0] * ax[0] + p[1] * ax[1] + p[2] * ax[2]) * r * j * (st - 1); q = [q[0] + ax[0] * a, q[1] + ax[1] * a, q[2] + ax[2] * a]; }
+    var n = out ? treeNorm([p[0] + out[0], p[1] * 1.2 + out[1], p[2] + out[2]]) : p, dk = 0.72 + 0.28 * (p[1] * 0.5 + 0.5);
+    M.vert(q, n, [col[0] * dk, col[1] * dk, col[2] * dk], sw);
+  });
+  for (var f = 0; f < TREE_ICO.F.length; f++) M.I.push(base + TREE_ICO.F[f]);
+}
+/** 一片三角形（兩面都畫；法線朝上那一面、再往上偏 up ⇒ 薄葉不會一面全黑）。 */
+function treeTri(M, a, b, c, col, sw, up) {
+  var n = treeNorm(treeCross([b[0] - a[0], b[1] - a[1], b[2] - a[2]], [c[0] - a[0], c[1] - a[1], c[2] - a[2]]));
+  if (n[1] < 0) n = [-n[0], -n[1], -n[2]];
+  n = treeNorm([n[0], n[1] + up, n[2]]);
+  var i0 = M.vert(a, n, col, sw[0]); M.vert(b, n, col, sw[1]); M.vert(c, n, col, sw[2]); M.I.push(i0, i0 + 1, i0 + 2);
+}
+// 樹葉的長法（leaf.kind ⇒ 函式(M)）：加一種（針葉 needle…）＝ 在這裡加一個。
+var TREE_ICO = (function () {                                            // 正二十面體（12 點、20 面；葉簇、椰子、花的底）
   var t = (1 + Math.sqrt(5)) / 2, P = [[-1, t, 0], [1, t, 0], [-1, -t, 0], [1, -t, 0], [0, -1, t], [0, 1, t], [0, -1, -t], [0, 1, -t], [t, 0, -1], [t, 0, 1], [-t, 0, -1], [-t, 0, 1]].map(treeNorm);
   var F = [0, 11, 5, 0, 5, 1, 0, 1, 7, 0, 7, 10, 0, 10, 11, 1, 5, 9, 5, 11, 4, 11, 10, 2, 10, 7, 6, 7, 1, 8, 3, 9, 4, 3, 4, 2, 3, 2, 6, 3, 6, 8, 3, 8, 9, 4, 9, 5, 2, 4, 11, 6, 2, 10, 8, 6, 7, 9, 8, 1];
   return { P: P, F: F };
 })();
 var TREE_LEAF = {
-  /** 一團葉簇：扁一點的二十面體、每個頂點抖一點；法線一半照團、一半照「從樹冠中心往外」⇒ 整個樹冠像一顆柔和的球，不是一顆一顆的硬塊；下半部暗一點（樹冠裡面的陰影）。 */
-  cluster: function (bl, Lf, R, mid, h, vert, I, V) {
-    var base = V.length / 10, k = 1 + (R() - 0.5) * 2 * Lf.vary, c0 = [Lf.col[0] * k, Lf.col[1] * (1 + (R() - 0.5) * Lf.vary), Lf.col[2] * k];
-    var out = treeNorm([bl.c[0] - mid[0], (bl.c[1] - mid[1]) * 0.6 + 0.4, bl.c[2] - mid[2]]);
-    TREE_ICO.P.forEach(function (p) {
-      var j = 0.82 + 0.36 * R(), q = [bl.c[0] + p[0] * bl.r * j, bl.c[1] + p[1] * bl.r * j * Lf.flat, bl.c[2] + p[2] * bl.r * j];
-      var n = treeNorm([p[0] + out[0], p[1] * 1.2 + out[1], p[2] + out[2]]), dk = 0.72 + 0.28 * (p[1] * 0.5 + 0.5);
-      vert(q, n, [c0[0] * dk, c0[1] * dk, c0[2] * dk], Math.min(1, 0.55 + 0.45 * bl.c[1] / h));
+  /** 葉簇：細 ⇒ 每個枝尖 per 團（沿最後一段往回也長）；低模 ⇒ 每根母枝的枝尖併成一大團（中心 ＝ 平均、半徑涵蓋）。
+   *  一團 ＝ 扁一點的二十面體、每個頂點抖一點；法線一半照團、一半照「從樹冠中心往外」⇒ 整個樹冠像一顆柔和的球；tint ＝ 有幾成的團換顏色（海葡萄轉紅的葉）。 */
+  cluster: function (M) {
+    var K = M.K, Lf = M.S.leaf, R = M.R, blobs = [];
+    if (M.lod === 0) K.tips.forEach(function (t) {
+      var b = K.br[t.br], m = Math.round(treeIn(R, Lf.per)) + (t.top ? 1 : 0);
+      for (var j = 0; j < m; j++) { var q = treeAt(b.pts, 1 - Lf.along * R()), jt = Lf.jit || 1; blobs.push({ c: [q[0] + (R() - 0.5) * 1.2 * jt, q[1] + (R() - 0.2) * 0.8 * jt, q[2] + (R() - 0.5) * 1.2 * jt], r: treeIn(R, Lf.size), ax: t.d }); }
     });
-    for (var f = 0; f < TREE_ICO.F.length; f++) I.push(base + TREE_ICO.F[f]);
+    else {
+      var G = {};
+      K.tips.forEach(function (t) { var k = t.top ? 'top' : K.br[t.br].par; (G[k] = G[k] || []).push(t.p); });
+      Object.keys(G).forEach(function (k) {
+        var L = G[k], c = [0, 0, 0]; L.forEach(function (p) { c[0] += p[0] / L.length; c[1] += p[1] / L.length; c[2] += p[2] / L.length; });
+        var r = 0; L.forEach(function (p) { r = Math.max(r, Math.hypot(p[0] - c[0], p[1] - c[1], p[2] - c[2])); });
+        blobs.push({ c: c, r: r * 0.8 + Lf.size[1] });
+      });
+    }
+    var mid = [0, K.h * 0.7, 0];
+    blobs.forEach(function (bl) {
+      var k = 1 + (R() - 0.5) * 2 * Lf.vary, c0 = [Lf.col[0] * k, Lf.col[1] * (1 + (R() - 0.5) * Lf.vary), Lf.col[2] * k];
+      if (Lf.tint && R() < Lf.tint[0]) { var tc = Lf.tint[1], m = 0.5 + 0.5 * R(); c0 = [c0[0] + (tc[0] - c0[0]) * m, c0[1] + (tc[1] - c0[1]) * m, c0[2] + (tc[2] - c0[2]) * m]; }
+      var out = treeNorm([bl.c[0] - mid[0], (bl.c[1] - mid[1]) * 0.6 + 0.4, bl.c[2] - mid[2]]);
+      treeBall(M, bl.c, bl.r, Lf.flat, c0, Math.min(1, 0.55 + 0.45 * bl.c[1] / K.h), out, Lf.stretch && bl.ax ? bl.ax : null, Lf.stretch);
+    });
+  },
+  /** 棕櫚的羽狀葉：從樹幹頂一圈長出 n 片（照黃金角轉；越晚長的越往外、越垂；最外面 dead 成是垂下來的枯葉）。
+   *  一片 ＝ 一根葉軸（往外、照 droop 一段一段往下彎）＋ 兩側的小葉：細的每段兩對三角形（底在葉軸上、尖往前往外往下 ⇒ 一根一根、中間有縫）；
+   *  低模每段兩條往下折的帶子（V 字）。葉軸最前面 12% 是光的葉柄。細的另外掛幾顆椰子；中間一顆球蓋住葉子的根。 */
+  frond: function (M) {
+    var K = M.K, Lf = M.S.leaf, R = M.R, lod = M.lod, c = K.tips[0].p, n = Math.round(treeIn(R, Lf.n) * (lod ? 0.65 : 1)), segs = Lf.segs[lod];
+    for (var f = 0; f < n; f++) {
+      var u = (f + 0.5) / n, dead = u > 1 - Lf.dead, az = f * 2.39996 + (R() - 0.5) * 0.5;
+      var el = dead ? -(48 + 25 * R()) : Lf.rise[1] + (Lf.rise[0] - Lf.rise[1]) * u / (1 - Lf.dead) + (R() - 0.5) * 14;
+      el *= Math.PI / 180;
+      var L = treeIn(R, Lf.len) * (dead ? 0.8 : u < 0.15 ? 0.78 : 1), dr = treeIn(R, Lf.droop) * (dead ? 0.25 : 1), k = 1 + (R() - 0.5) * 2 * Lf.vary;
+      var col = dead ? Lf.deadCol : [Lf.col[0] * k, Lf.col[1] * (1 + (R() - 0.5) * Lf.vary), Lf.col[2] * k];
+      var d = [Math.cos(az) * Math.cos(el), Math.sin(el), Math.sin(az) * Math.cos(el)], p = [c[0] + d[0] * 0.18, c[1] + d[1] * 0.18 - 0.1, c[2] + d[2] * 0.18], P = [p];
+      for (var s = 1; s <= segs; s++) { d = treeNorm([d[0], d[1] - dr / segs, d[2]]); p = [p[0] + d[0] * L / segs, p[1] + d[1] * L / segs, p[2] + d[2] * L / segs]; P.push(p); }
+      var side = treeNorm(treeCross([Math.cos(az), 0, Math.sin(az)], [0, 1, 0])), W = Lf.w * L / 4.3;
+      var wid = function (t) { return t < 0.12 ? 0 : W * Math.pow(Math.sin(Math.PI * Math.min(1, (t - 0.12) / 0.86)), 0.55); };
+      var edge = function (t, sg, ext) { var q = treeAt(P, Math.min(1, t)), w = wid(t) * ext; return [q[0] + side[0] * w * sg, q[1] - w * Lf.hang, q[2] + side[2] * w * sg]; };
+      if (lod === 0) {
+        for (var h2 = 0; h2 < segs * 2; h2++) {
+          var t0 = h2 / (segs * 2), t1 = (h2 + 1) / (segs * 2), tm = Math.min(1, t1 + 0.6 / segs); if (wid(t1) <= 0) continue;
+          var A = treeAt(P, t0), B = treeAt(P, t1), swA = 0.4 + 0.6 * t0, swX = 0.4 + 0.6 * tm;
+          treeTri(M, A, B, edge(tm, 1, 1), col, [swA, swA, swX], 0.6);
+          treeTri(M, A, B, edge(tm, -1, 1), col, [swA, swA, swX], 0.6);
+        }
+      } else {
+        for (s = 0; s < segs; s++) {
+          var a0 = s / segs, a1 = (s + 1) / segs, C0 = P[s], C1 = P[s + 1], sw0 = 0.4 + 0.6 * a0, sw1 = 0.4 + 0.6 * a1;
+          [1, -1].forEach(function (sg) { var E0 = edge(a0, sg, 1), E1 = edge(a1, sg, 1); treeTri(M, C0, C1, E1, col, [sw0, sw1, sw1], 0.6); treeTri(M, C0, E1, E0, col, [sw0, sw1, sw0], 0.6); });
+        }
+      }
+    }
+    treeBall(M, [c[0], c[1] - 0.12, c[2]], 0.3, 1.2, [0.40, 0.40, 0.24], 0.35, null);
+    if (lod === 0) {
+      var m = Math.round(treeIn(R, Lf.nuts)), a = R() * 6.2832;
+      for (var j = 0; j < m; j++) {
+        a += 2.39996; var kc = 0.8 + 0.4 * R(), q = [c[0] + Math.cos(a) * (0.3 + 0.12 * R()), c[1] - 0.45 - 0.3 * R(), c[2] + Math.sin(a) * (0.3 + 0.12 * R())];
+        treeBall(M, q, 0.14, 1.15, [Lf.nutCol[0] * kc, Lf.nutCol[1] * kc, Lf.nutCol[2] * kc], 0.3, null);
+      }
+    }
+  },
+  /** 蓮座葉（龍舌蘭）：從地面一圈長出 n 片厚葉（裡面的直立、外面的攤開往下彎）；一片 ＝ 一根中線 ＋ 兩邊往上翹的邊（槽形）、尖端收成一點；邊緣偏黃。
+   *  stalk.v 列的那幾棵抽一根花梗：管子往上、上半截伸出一圈短枝、枝尖一簇黃花。 */
+  rosette: function (M) {
+    var K = M.K, Lf = M.S.leaf, R = M.R, lod = M.lod, c = K.tips[0].p, n = Math.round(treeIn(R, Lf.n) * (lod ? 0.5 : 1)), segs = lod ? 2 : 4;
+    for (var f = 0; f < n; f++) {
+      var u = (f + 0.5) / n, az = f * 2.39996 + (R() - 0.5) * 0.4, el = (Lf.rise[1] + (Lf.rise[0] - Lf.rise[1]) * u + (R() - 0.5) * 10) * Math.PI / 180;
+      var L = K.h * treeIn(R, Lf.len) * (0.6 + 0.4 * u), k = 1 + (R() - 0.5) * 2 * Lf.vary, col = [Lf.col[0] * k, Lf.col[1] * k, Lf.col[2] * k], ec = [Lf.edge[0] * k, Lf.edge[1] * k, Lf.edge[2] * k];
+      var d = [Math.cos(az) * Math.cos(el), Math.sin(el), Math.sin(az) * Math.cos(el)], p = [c[0], c[1], c[2]], P = [p];
+      for (var s = 1; s <= segs; s++) { d = treeNorm([d[0], d[1] - Lf.droop * (1 - u * 0.5) / segs, d[2]]); p = [p[0] + d[0] * L / segs, p[1] + d[1] * L / segs, p[2] + d[2] * L / segs]; P.push(p); }
+      var side = treeNorm(treeCross([Math.cos(az), 0, Math.sin(az)], [0, 1, 0])), W = Lf.w * K.h;
+      for (s = 0; s < segs; s++) {
+        var w0 = W * (1 - s / segs), w1 = W * (1 - (s + 1) / segs), C0 = P[s], C1 = P[s + 1], sw0 = 0.1 * s / segs, sw1 = 0.1 * (s + 1) / segs;
+        [1, -1].forEach(function (sg) {
+          var E0 = [C0[0] + side[0] * w0 * sg, C0[1] + w0 * 0.45, C0[2] + side[2] * w0 * sg], E1 = [C1[0] + side[0] * w1 * sg, C1[1] + w1 * 0.45, C1[2] + side[2] * w1 * sg];
+          treeTri(M, C0, C1, E1, col, [sw0, sw1, sw1], 0.3); treeTri(M, C0, E1, E0, s === segs - 1 ? col : ec, [sw0, sw1, sw0], 0.3);
+        });
+      }
+    }
+    var St = Lf.stalk; if (!St || St.v.indexOf(K.v) < 0) return;
+    var H = K.h * treeIn(R, St.h), P2 = [c], q = c.slice(), dd = [(R() - 0.5) * 0.12, 1, (R() - 0.5) * 0.12];
+    for (s = 1; s <= 5; s++) { dd = treeNorm([dd[0] + (R() - 0.5) * 0.06, dd[1], dd[2] + (R() - 0.5) * 0.06]); q = [q[0] + dd[0] * H / 5, q[1] + dd[1] * H / 5, q[2] + dd[2] * H / 5]; P2.push(q); }
+    treeTube(M, P2, St.r, St.r * 0.4, lod ? 3 : 5, St.col, 1, 0, 0);
+    var na = Math.round(treeIn(R, St.arms));
+    for (var a = 0; a < na; a++) {
+      var t = 0.62 + 0.36 * a / na, o = treeAt(P2, t), ang = a * 2.39996, al = (0.75 - 0.4 * (t - 0.62) / 0.36) * K.h * 0.5, e = [o[0] + Math.cos(ang) * al, o[1] + al * 0.35, o[2] + Math.sin(ang) * al];
+      if (!lod) treeTube(M, [o, e], St.r * 0.4, St.r * 0.25, 3, St.col, 1, 0, 0);
+      treeBall(M, [e[0], e[1] + 0.08, e[2]], 0.16 + 0.08 * R(), 0.8, St.flower, 0.6, null);
+    }
   }
 };
