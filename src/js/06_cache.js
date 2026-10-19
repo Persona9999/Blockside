@@ -32,7 +32,7 @@ function cacheGet(info) {
   // 改裝船（TASK-0657）：格子存成跟原船的差 ⇒ 原船改了、差卻一樣（兩艘一起長了同樣的格）也要換鍵 ⇒ 鍵把原船那一路的內嵌原文也算進去
   var el = document.getElementById(info.el), txt = el ? el.textContent : '';
   for (var vb = info, vn = 0; vb && vb.variant_of && vn < 8; vn++) { vb = hullInfo(vb.variant_of); var ve = vb && document.getElementById(vb.el); txt += '|' + (ve ? ve.textContent : ''); }
-  var st = info.cache = { vxk: cacheFnv(txt), code: CODE_VER + (GFX.deco ? '' : '|deco0'), hit: false, why: '' };   // 畫質「裝飾」關著存的那一份沒有裝飾的網格（05_hull.js decoSplit）⇒ 兩份分開
+  var st = info.cache = { vxk: cacheFnv(txt), code: CODE_VER, hit: false, why: '' };   // 裝飾的網格一律建（05_hull.js decoSplit）⇒ 跟畫質無關、一份
   if (!CACHE_ON) { st.why = '?cache=0'; return Promise.resolve(null); }
   var t0 = performance.now();
   return cacheOpen().then(function (db) {

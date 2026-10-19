@@ -63,30 +63,21 @@ var HULL_LIST = HULL_KNOWN.filter(function (h) { return !!document.getElementByI
 var HULL_DEF = (HULL_LIST[0] || HULL_KNOWN[0]).id;                      // 預設的船：清單裡第一艘有內嵌資料的
 var HULLS = {}, HULLT = {};                                             // id → 載入中的 Promise ／ 載好的船型
 // 裝飾（TASK-0682；Tim 2026-10-17：「裝飾移除是在船隻載入時就不載入裝飾」「可以隱藏的裝飾都不算重量」）：雕刻模型 meta deco=1。
-//   載入船型時一律從 rig.models 拿掉（⇒ 不算重量、不被打、不掉下來、不抽 rnd()：開或關戰局逐項相同，07_gfx.js 的規矩）；畫質「裝飾」開著才收進 T.decos、只負責畫（60_render.js drawModels）。
-//   關著 ⇒ 只給裝飾用的網格不建、不上 GPU。HULL_DECO：那一份船型載入時的開關 —— 換了 ⇒ decoSync 丟掉、回主選單重新載入（快取鍵也帶它，06_cache.js）。
-var HULL_DECO = {};
+//   載入船型時一律從 rig.models 拿掉（⇒ 不算重量、不被打、不掉下來、不抽 rnd()：開或關戰局逐項相同，07_gfx.js 的規矩），一律收進 T.decos、網格一律建 ——
+//   畫不畫是畫面那一格的事（60_render.js drawModels 每格看 GFX.deco；砲門蓋板的演出 62_ports.js portsAnim 也看它）⇒ 切畫質立刻生效、船不重新載入。
+//   （Tim 2026-10-20：「一樣載入，只是低畫質不顯示」—— 之前關著就不建網格、切了要丟掉船型重新載入，那條路兩次害開場「載入失敗」；拿破崙號多的只有 5 份網格、3% 三角形。）
 //   規格表標 deco 的 kind（config/meta_kinds.json；TASK-0719 砲門蓋板 kind=portlid，Tim 2026-10-19：「炮門屬於裝飾物 因此相關機制在低畫質不啟用」）本身就是裝飾 ⇒ meta 不用另寫 deco=1
 //   （⛔ 照 meta deco=1：雕刻端漏寫一片 ⇒ 那片變成模擬模型（擋彈、抽亂數），光榮號的戰局悄悄跟著畫質變）。
 function isDeco(m) { var v = m && m.meta && m.meta.deco; if (m && m.meta && kindProp(m.meta.kind, 'deco')) return true; return v !== undefined && v !== null && v !== '' && v !== '0' && v !== 0 && v !== false; }
-/** 載入時拆出裝飾（buildHull 一開頭）：h.rig.models 只留不是裝飾的；回 { decos：要畫的（關著 ⇒ []）, n：作品裡有幾件, skip：只給裝飾用、這次不建的網格編號 }。 */
-function decoSplit(h, on) {
+/** 載入時拆出裝飾（buildHull 一開頭）：h.rig.models 只留不是裝飾的；回 { decos：裝飾件, n：幾件, skip：模型、裝飾都沒用到的網格編號（不建、不上 GPU） }。 */
+function decoSplit(h) {
   var ms = (h.rig && h.rig.models) || [], keep = [], deco = [], used = {}, skip = {};
   ms.forEach(function (m) { (isDeco(m) ? deco : keep).push(m); });
-  if (!deco.length) return { decos: [], all: [], n: 0, skip: null };
+  if (!deco.length) return { decos: [], n: 0, skip: null };
   h.rig.models = keep;
-  keep.forEach(function (m) { used[m.mesh] = 1; });
-  if (on) deco.forEach(function (m) { used[m.mesh] = 1; });
+  ms.forEach(function (m) { used[m.mesh] = 1; });
   (h.rig.meshes || []).forEach(function (_, k) { if (!used[k]) skip[k] = 1; });
-  return { decos: on ? deco : [], all: deco, n: deco.length, skip: skip };   // all：匯入檢查讀 meta（75_shipcheck.js）
-}
-/** 畫質「裝飾」換了（gfxShow、回主選單時叫）：載入時開關不一樣的船型丟掉、重新載入。打仗中不動（那幾艘照它載入時的樣子打完；回主選單再換）。 */
-function decoSync() {
-  if (RUNNING) return;
-  var on = !!GFX.deco, bad = Object.keys(HULL_DECO).filter(function (id) { return HULL_DECO[id] !== on; });
-  if (!bad.length) return;
-  bad.forEach(function (id) { delete HULLS[id]; delete HULLT[id]; delete HULL_DECO[id]; });
-  if (typeof pickShip === 'function') pickShip(0, 0);                   // 主選單的船重新載入（開戰鈕寫進度，71_input.js）
+  return { decos: deco, n: deco.length, skip: skip };                   // decos 匯入檢查也讀（meta、lid_of；75_shipcheck.js）
 }
 // 艦隊編成（TASK-0537）：FLEET_SET[0] ＝ 我方（第一艘是我艦）、[1] ＝ 敵方，各是一串船型；每一邊至少 1 艘、合計最多 FLEET_MAX（同時在場 FIELD_N 艘，其他的候補，52_fleet.js）。
 //   主選單編；網址 ?blue=我艦,友艦…&red=敵艦,…；舊的 ?ship=我艦,敵艦 照舊（＝ 一邊一艘；?blue／?red 給了那一邊照它）。
@@ -106,13 +97,11 @@ function loadHull(id) {
   if (HULLS[id]) return HULLS[id];
   var info = hullInfo(id);
   if (!info) return Promise.reject(new Error('沒有這艘船：' + id));
-  var t0 = performance.now(), deco = !!GFX.deco, P;
+  var t0 = performance.now();
   hullSay(info.name + '：解碼…');
-  HULL_DECO[id] = deco;
-  return (HULLS[id] = P = yieldUI().then(function () { return Promise.all([VK.loadEmbedded(info.el).then(meshPool), cacheGet(info)]); })   // 解碼與讀快取一起跑（06_cache.js）
-    .then(function (r) { return buildHull(info, r[0], t0, r[1], deco); })
-    .then(function (T) { if (HULLS[id] === P) { HULLT[id] = T; cachePut(T, info); return T; } return loadHull(id); }));   // 載到一半被 decoSync 丟掉 ⇒ 不蓋新的那一份，改等換上去的那一份
-    //   ⛔ 回舊的 T ⇒ 等它的人（90_main.js 開場那一串）接著讀 HULLT[id] 讀到 undefined ⇒「載入失敗：…(reading 'h')」（Tim 2026-10-18 手機：解析到一半點了畫質「低」，裝飾換了）
+  return (HULLS[id] = yieldUI().then(function () { return Promise.all([VK.loadEmbedded(info.el).then(meshPool), cacheGet(info)]); })   // 解碼與讀快取一起跑（06_cache.js）
+    .then(function (r) { return buildHull(info, r[0], t0, r[1]); })
+    .then(function (T) { HULLT[id] = T; cachePut(T, info); return T; }));
 }
 /**
  * meta 裡指名別的部件的路徑（TASK-0657 改裝船；Tim：「概念類似 Unity 的 nested prefab」）：原船整艘是改裝船的一條關聯（原船/…）⇒ 原船裡的 meta 互相指名用的還是原船裡的路徑
@@ -194,9 +183,9 @@ function meshPoolMesh(P, i, o) {
 function yieldUI() { return new Promise(function (r) { var ch = new MessageChannel(); ch.port1.onmessage = function () { r(); }; ch.port2.postMessage(0); }); }
 var hullSay = function () {};                                            // 90_main.js 換成寫進度的那支
 /** C：快取的記錄（06_cache.js；null ⇒ 全部現場算）。現場算的時候，要存的那幾份另外留在 T.keep，給 cachePut 存。 */
-function buildHull(info, model, t0, C, deco) {
+function buildHull(info, model, t0, C) {
   var h = model.header, t1 = performance.now();                            // 到這裡是解碼（loadEmbedded，跟讀快取一起），之後是網格化
-  var DS = decoSplit(h, deco === undefined ? !!GFX.deco : deco);          // 裝飾（TASK-0682）：在一切之前拆掉 ⇒ 之後讀 rig.models 的（重量、繩、帆、家具）都看不到它
+  var DS = decoSplit(h);                                                   // 裝飾（TASK-0682）：在一切之前拆掉 ⇒ 之後讀 rig.models 的（重量、繩、帆、家具）都看不到它
   h.metaRebased = metaRebase(h);                                           // 改裝船（TASK-0657）：原船裡的 meta 路徑照它所在的那一層往上找（見 metaRebase）
   if (C && (C.voxels !== h.voxels || C.checksum !== h.checksum)) C = null;  // 雙保險：鍵是 .vxk 原文的雜湊，格數與 checksum 也要一樣
   if (S && Math.abs(h.meters_per_voxel - S) > 1e-9) throw new Error(info.name + ' 是 ' + h.meters_per_voxel + ' 公尺一格，跟已經載入的船（' + S + '）不一樣 —— 模擬只吃同一個比例');
@@ -205,7 +194,7 @@ function buildHull(info, model, t0, C, deco) {
     sz: h.size[2], cx: (h.bbox[0] + h.bbox[3]) / 2, cy: h.size[1] / 2, hx0: h.bbox[0], hx1: h.bbox[3], zw: hullZW(h, info), geo: Object.assign({}, GEO0, info.geo), lamps: info.lamps || [], crew: Object.assign({}, CREW0, info.crew) };   // 外框：含艏斜桅與後桅帆桁
   T.ids = idIndex(h);                                                      // 物件 id（TASK-0715）：refPath 照它把 id 換成路徑
   T.cached = !!C; T.keep = C ? null : {};
-  T.decos = DS.decos; T.decoAll = DS.all; T.decoN = DS.n; T.meshSkip = DS.skip;                // 裝飾：要畫的、作品裡有幾件、這次不建的網格
+  T.decos = DS.decos; T.decoN = DS.n; T.meshSkip = DS.skip;                // 裝飾：裝飾件、幾件、沒人用的網格（不建）
   T.ms = {};                                                               // 每一段花多久（毫秒；讀數 window.__vxk.ms）
   function tm(k, f) { var a = performance.now(); f(); T.ms[k] = +(performance.now() - a).toFixed(1); }
   tm('sails', function () { T.sailRecipes = sailRecipes(T, C); });       // 帆只存配方（TASK-0602 ①；29_sailrecipe.js）⇒ 先生出頂點，下面的海面遮罩、縮圖、繩的檢查才讀得到

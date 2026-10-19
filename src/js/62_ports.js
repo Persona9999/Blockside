@@ -5,7 +5,7 @@
 //   close_deg（從模型的樣子反轉幾度關上，預設 90）；house（關之前砲沿砲軸往船裡拉幾格，只是畫面；沒寫 ⇒ 照幾何算 portHouse）。
 //   ⚠ 跟 door 相反：模型畫的是「開著」（水平往外伸）—— 這一項關掉、主選單、還沒開戰時就是這個樣子（砲推出去、蓋板開著，跟沒有蓋板的船一樣），觀測頁也不穿模。
 // 三件事，各自分開：
-//   · 戰局：一個值都不讀這裡。蓋板是裝飾（05_hull.js decoSplit 載入時從 rig.models 拿掉：不算重量、不擋彈、不抽亂數）；低畫質（裝飾 0）連載都不載 ⇒ sh.ports ＝ null、每格只多一次判斷。
+//   · 戰局：一個值都不讀這裡。蓋板是裝飾（05_hull.js decoSplit 載入時從 rig.models 拿掉：不算重量、不擋彈、不抽亂數）；一律載入；低畫質（裝飾 0）不畫也不演（portsAnim 一次判斷就回）。
 //     模擬那一條（砲口這一刻在海面下就不開）在 21_gunnery.js fireGun／burstStep（E1），跟這裡無關。
 //   · 演出（畫面那一格：90_main.js frame 的 portsAnim，只在打仗中、沒暫停時跑；⛔ 不在 step() 裡、不抽亂數、不呼叫 foeOf）：
 //     每 PORT_DT 秒（照 SIMT）照戰局現有的狀態判一次要開還是要關 —— 交戰中（射程 × PORT_RK、砲軸 ±PORT_ARC 內有還在打的敵艦，或 PORT_FIRED 秒內開過火；脫離 PORT_HOLD 秒才關）、
@@ -16,7 +16,7 @@
 //   · 打得壞（照戰局現有的狀態推，蓋板本身不吃砲彈；kaguya 2026-10-19 拍板 B 案）：鉸鏈旁那一格船殼沒了（d.foot，10_ship.js）／關上時貼著的那一圈船殼掉了 PORT_RING 格以上／
 //     蓋板沒全開（s < 1）時那門砲被打中或打飛 ⇒ 蓋板沒了（不畫）、之後 s 至少 1 ＝ 那個砲門一直開著（木匠補好船殼也不回來）。砲打飛時蓋板全開著 ⇒ 蓋板留著、一直開著（沒人關了）。
 // 畫質「砲門的開關演出」（GFX.port，低 0／中 1／高 1；07_gfx.js）：關 ⇒ 蓋板開著、砲推出去，都不動（從開切到關那一格清一次 portsOff）。
-//   組合：裝飾關 ⇒ 沒有蓋板；裝飾開、演出關 ⇒ 蓋板開著不動；兩項都開 ⇒ 演出。⛔ 沒有蓋板的砲不演後座：沒有蓋板的船連畫面都一位元不動。
+//   組合：裝飾關 ⇒ 不畫蓋板、不演（跟演出關一樣清一次 portsOff ⇒ 砲推出去、不往裡縮）；裝飾開、演出關 ⇒ 蓋板開著不動；兩項都開 ⇒ 演出。⛔ 沒有蓋板的砲不演後座：沒有蓋板的船連畫面都一位元不動。
 var PORT_DT = 0.25, PORT_SNAP = 0.5;                                   // 每 0.25 模擬秒判一次開關；兩格之間 SIMT 往回走或一次跳超過 0.5 秒（換局、宣傳片拖時間、切幕）⇒ 直接擺成該有的樣子（snap）、不演
 var PORT_UP = 0.8, PORT_RUN = 1.6, PORT_IN = 1.2, PORT_DOWN = 0.5, PORT_RANK = 0.1;   // 掀蓋、推砲出去、收砲、放蓋各幾秒（history §4.3：一人拉繩 2–3 秒、6–8 人推砲 5–10 秒，壓縮過）；依序掀起每片隔幾秒（演出的設計值；17 片排完 1.6 秒）
 var PORT_RK = 1.2, PORT_ARC = 70 * Math.PI / 180, PORT_FIRED = 15, PORT_HOLD = 10, PORT_DRY = 3;   // 交戰：射程 × 1.2、砲軸 ±70°（比 bears 的 ±26° 寬 ⇒ 敵艦還在船頭斜前方就先備好）、15 秒內開過火；脫離 10 秒才關；乾了 3 秒才准再開（暴風雨的浪一打就開開關關）
@@ -159,11 +159,11 @@ function portEngaged(sh, g, foes) {
 }
 /** 畫面那一格（90_main.js frame，只在打仗中、沒暫停時；宣傳片在 trDraw 的 render() 前叫）。不吃 dt：照 SIMT 走（慢動作、模擬速度自動跟著；往回或跳太遠 ⇒ snap）。 */
 function portsAnim() {
-  if (!GFX.port) { if (PORT_ON) portsOff(); return; }
+  if (!GFX.port || !GFX.deco) { if (PORT_ON) portsOff(); return; }   // 裝飾關 ⇒ 蓋板不畫 ⇒ 也不演
   PORT_ON = true;
   for (var i = 0; i < SHIPS.length; i++) {
     var sh = SHIPS[i];
-    if (sh.ports === undefined) sh.ports = portsBuild(sh);             // 懶建（低畫質不載蓋板 ⇒ 永遠是 null）
+    if (sh.ports === undefined) sh.ports = portsBuild(sh);             // 懶建（沒有蓋板 ⇒ null）
     if (sh.ports && sh.M) portsShip(sh, sh.ports);
   }
 }
@@ -315,21 +315,19 @@ function portsIssues(sh, add) {
 }
 /** 匯入檢查的讀數一行（75_shipcheck.js R.info.ports）。沒有蓋板 ⇒ ''。 */
 function portsSummary(sh) {
-  var all = (sh.T.decoAll || []).filter(function (m) { return m.meta && m.meta.kind === 'portlid'; }).length; if (!all) return '';
-  var D = (sh.decos || []).filter(function (d) { return d.meta.kind === 'portlid'; });
-  if (!D.length) return all + ' 片（畫質「裝飾」關：載入時就沒有、沒檢查）';
+  var D = (sh.decos || []).filter(function (d) { return d.meta.kind === 'portlid'; }); if (!D.length) return '';
   var L = [], used = []; D.forEach(function (d) { var P = portLid(sh, d); if (P.hc && P.g && used.indexOf(P.g) < 0) { used.push(P.g); L.push(P); } });
   var ns = L.filter(function (P) { return P.g.side === 'S'; }).length, hs = L.map(function (P) { return P.house; }), cs = L.map(function (P) { return Math.round(P.cdeg * 180 / Math.PI); });
   var rg = function (a) { return a.length ? Math.min.apply(null, a) + (Math.max.apply(null, a) > Math.min.apply(null, a) ? '–' + Math.max.apply(null, a) : '') : '—'; };
   var no = sh.guns.filter(function (g) { return used.indexOf(g) < 0; }).map(function (g) { var mt = g.model.meta || {}; return (mt.id || g.name.split('/').pop()) + (mt.deck ? '（' + mt.deck + '）' : ''); });
   return D.length + ' 片' + (L.length < D.length ? '（演得動的 ' + L.length + '）' : '') + '（P ' + (L.length - ns) + '、S ' + ns + '）；house ' + rg(hs) + ' 格；close ' + rg(cs) + '°'
-    + '；沒有蓋板的砲：' + (no.length ? no.join('、') : '沒有') + '；畫質「砲門的開關演出」' + (GFX.port ? '開' : '關');
+    + '；沒有蓋板的砲：' + (no.length ? no.join('、') : '沒有') + '；畫質「砲門的開關演出」' + (GFX.port && GFX.deco ? '開' : GFX.port ? '開（「裝飾」關 ⇒ 不演）' : '關');
 }
 /** 除錯（__game.ports）：每片的 s／want／gone 等。 */
 function portsDbg(sh) {
   if (!sh) return null;
   var PS = sh.ports || null;
-  return { on: !!GFX.port, want: sh.portWant === undefined ? null : sh.portWant, wetShot: sh.wetShot || 0, n: PS ? PS.L.length : 0, L: PS ? PS.L.map(function (P) {
+  return { on: !!(GFX.port && GFX.deco), want: sh.portWant === undefined ? null : sh.portWant, wetShot: sh.wetShot || 0, n: PS ? PS.L.length : 0, L: PS ? PS.L.map(function (P) {
     var v = P.g.model.vsl;
     return { gun: P.g.model.meta.id || P.g.name.split('/').pop(), side: P.g.side, rank: P.rank, s: +P.s.toFixed(3), want: P.want, gone: P.gone, dead: P.dead, house: P.house, close: Math.round(P.cdeg * 1800 / Math.PI) / 10,
       ring: P.ring.length, lost: P.ring.filter(function (p) { return !hullGp(sh.grid, p); }).length, load: +portLoad(P.g).toFixed(2), pull: v ? +Math.hypot(v[0], v[1]).toFixed(2) : 0, ang: +((P.ka || 0) * 180 / Math.PI).toFixed(1) };

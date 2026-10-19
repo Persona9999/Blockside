@@ -61,7 +61,7 @@ if (DEBUG) window.__game = {
   prefs: function (p) { if (p) prefsApply(p); return prefsSnap(); },   // 存檔：套進去（有給）⇒ 現在跟預設不一樣的那幾項（69_prefs.js；?prefs=0 時不碰瀏覽器的存檔）
   ev: function (t, off) { if (off) return evOff(t); var o = {}; for (var k in EV_SUB) if (!t || k === t) o[k] = EV_SUB[k].length; return o; },   // 事件（00_events.js）：每個事件幾個訂閱；off ⇒ 拿掉事件 t 的訂閱（反向對照：拿掉 note ⇒ 照打、沒有廣播）
   /** 砲門（TASK-0719；62_ports.js）：ports(i) ⇒ 第 i 艘每片蓋板的 s（0 關、1 開／砲縮著、2 砲推出去）、want、gone、house…；portsForce(i, 0｜1｜null) ⇒ 寫 sh.portWant（截圖、宣傳片用；null ⇒ 照規則）。 */
-  ports: function (i) { var sh = SHIPS[i || 0]; if (sh && sh.ports === undefined && GFX.port) sh.ports = portsBuild(sh); return portsDbg(sh); },
+  ports: function (i) { var sh = SHIPS[i || 0]; if (sh && sh.ports === undefined && GFX.port && GFX.deco) sh.ports = portsBuild(sh); return portsDbg(sh); },
   portsForce: function (i, v) { var sh = SHIPS[i || 0]; if (sh) sh.portWant = v === undefined ? null : v; return this.ports(i); },
   /** 畫面迴圈的反向對照（TASK-0719；⛔ ?demo、run() 不經過 frame() ⇒ 量不到畫面那一格的演出）：同步叫 n 次 frame()，每格 dt ＝ DT（loopLast 歸零）⇒ 沒有慢動作時每格剛好一步；
    *  回走了幾步、模擬秒、戰局雜湊（每艘的位置、航向、格數、下沉、命中、開火、死傷、砲剩幾門，加上砲彈、碎塊數與戰局亂數 RNG_B 的狀態；照宣傳片 director.js trHash 的 FNV-1a）。g_port＝0／1、g_deco＝0／1 要一樣。 */
@@ -431,7 +431,7 @@ programs(); geometry(); wpGL(); flGL(); rdGL(); bbSetup(); QIDX = new VK.QuadInd
 hullSay = function (s) { var go = $('go'); if (go.disabled) go.textContent = '解析' + s; };   // 解析中：開戰鈕寫進度（設定照樣能調）
 if (!HEADLESS) requestAnimationFrame(frame);                       // 無頭（00_events.js）不開畫面迴圈；解析中也畫（天、海；船載好才有）
 /** 編成裡的船全部進了 HULLT 才放行：等完一輪再照**現在的**編成看一次，還有不在的 ⇒ 再等一輪。
- *  ⛔ 只等開頭那一份名單：解析中主選單換了我艦（pickShip）、或切了畫質「裝飾」把已經載完的船丟掉（decoSync）⇒ 名單裡的都回來了，HULLT[我艦] 卻還沒有
+ *  ⛔ 只等開頭那一份名單：解析中主選單換了我艦（pickShip）⇒ 名單裡的都回來了，HULLT[我艦] 卻還沒有
  *  ⇒ 下面讀 T.h ⇒「載入失敗：Cannot read properties of undefined (reading 'h')」（Tim 2026-10-20 回報；重現：?prefs=0&cache=0&blue=dromon&red=dromon，一進主選單把我艦換成拿破崙號）。 */
 function fleetLoaded() {
   var ids = fleetHulls().concat(coreHulls());                       // coreHulls：?coreadd= 要中途加的船（57_core.js）
@@ -448,7 +448,7 @@ yieldUI().then(function () {                                        // 先讓主
     '\n設定：' + PREFS.state;
   loadSay(line); window.__vxk = { verify: chk, quads: T.pristine.quads(), masts: T.masts.length, decodeMs: +T.decodeMs.toFixed(1), meshMs: +T.meshMs.toFixed(1), ms: T.ms,
     cache: hullInfo(T.id).cache, prefs: PREFS.state,
-    deco: { on: !!GFX.deco, n: T.decoN || 0, drawn: (T.decos || []).length, meshes: T.meshes.filter(Boolean).length, tris: T.meshes.reduce(function (a, m) { return a + (m && m.n ? m.n / 3 : 0); }, 0) } };   // 裝飾（TASK-0682）：開關、作品裡幾件、這次畫幾件、建了幾份模型網格、三角形
+    deco: { on: !!GFX.deco, n: T.decoN || 0, drawn: GFX.deco ? T.decoN || 0 : 0, meshes: T.meshes.filter(Boolean).length, tris: T.meshes.reduce(function (a, m) { return a + (m && m.n ? m.n / 3 : 0); }, 0) } };   // 裝飾（TASK-0682）：開關、作品裡幾件、畫幾件（一律載入，關著 ⇒ 0）、建了幾份模型網格、三角形
   loadArt().then(function (why) { line += '\n素材：' + why; loadSay(line); window.__vxk.art = why; if (HUD_ART) hudArt(); });
   if (!chk.ok) { glFail('船體資料跟封裝檔對不上，停下來（不畫半艘船）。\n' + line); return; }
   $('go').disabled = false; $('go').textContent = '開戰';
