@@ -16,6 +16,7 @@ var MODE_BASE = {
   myReload: RELOAD,    // 我艦的裝填秒數基準（10_ship.js、52_fleet.js 換船時跟著換）
   fpLock: false,       // 固定第一人稱：🎥、Y 不能離開（81_fps.js fpBuildLock）
   build: false,        // 建造介面（82_build.js bldEnter）
+  chart: false,        // 小地圖（海圖，63_chart.js；要有 ?map）
   origin: false        // 我艦開局停在原點（海圖的開戰位置 ＝ 外面給的起點），船頭照 ?hdg=（羅盤度數；沒給 ＝ 往北）；⛔ 不照開局距離退開（52_fleet.js spawnFleet）
 };
 var MODE_RULES = {
@@ -24,7 +25,7 @@ var MODE_RULES = {
   sandbox: { name: '沙盒（敵艦不還手）', othersAct: false, judge: false, myReload: RELOAD_SANDBOX },
   build: { name: '🔨 建造', fleet: 'first', judge: false, hint: false, stopOwn: true, battleKeys: false, fpLock: true, build: true },
   // 航海（Blocksail 地球儀的「⛵ 航海」，2026-10-19；Tim：「單船、沒有敵艦，其他跟戰鬥一樣」）：只有我艦、不判勝負、停在外面給的起點（城鎮的港口外）
-  sail: { name: '⛵ 航海', fleet: 'first', judge: false, hint: false, origin: true }
+  sail: { name: '⛵ 航海', fleet: 'first', judge: false, hint: false, origin: true, chart: true }
 };
 Object.keys(MODE_RULES).forEach(function (m) { for (var k in MODE_BASE) if (!(k in MODE_RULES[m])) MODE_RULES[m][k] = MODE_BASE[k]; });
 // ?mode=<玩法>（外部開戰用：Blocksail 的開戰設定，2026-10-18）：一般遊玩也照網址選玩法（主選單有的才認；沒給 ⇒ 照設定檔、存檔）。?demo 照舊在 90_main.js 自己選。

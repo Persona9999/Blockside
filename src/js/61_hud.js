@@ -736,6 +736,7 @@ function hudFrame(dt) {
   var t = dbgOn() ? '格：' + SHIPS.map(function (s) { return s.grid.count; }).join('／') + '　四邊形：' + SHIPS.map(function (s) { return s.rs.quads(); }).join('／') + '　碎片 ' + D.n + '　粒子 ' + PT.n + '　脫落 ' + PIECES.length + (PHYS ? '　物理 ' + PHYS_MS.toFixed(2) + ' ms/步、垂繩 ' + SHIPS.map(function (s) { return s.loose.length; }).join('／') : '') + '　' + FPS.toFixed(0) + ' fps' : '';
   $('tip').textContent = t;
   drawNav(me);
+  chartDraw(me);                                                                 // 小地圖（海圖；63_chart.js，玩法規則 chart）
   teleDraw(me);                                                                  // 俥鐘（橫版左下角、直版左邊那一欄按鈕上方；31_drive.js teleDraw／teleFit）
   fpWhoHud();                                                                    // 第一人稱跟隨船員時的小標籤：職位＋工作效率（81_fps.js；TASK-0720）
 }

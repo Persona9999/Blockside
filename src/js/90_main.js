@@ -155,6 +155,7 @@ if (DEBUG) window.__game = {
   cam: function (o) { camSet(o); camSet({ snap: true }); camUpdate(1); render(); },
   trees: function (sp, n, at) { return treeFind(sp, n, at); },   // 找樹（63_trees.js treeFind）：那一種最靠近 at（[x, z]；沒給 ⇒ 鏡頭）的 n 棵
   // 海圖（TASK-0721；08_seabed.js、32_ground.js）：載了哪幾塊、換過幾次中心、等過幾次；每艘的擱淺讀數；q ＝ [x, z] ⇒ 那一點的高度與底質
+  chart: function () { return chartInfo(); },                                  // 小地圖（63_chart.js）：開了沒、範圍、吃水門檻、底圖幾塊、畫面上的位置
   bed: function (q) { if (!BED || !BED.A) return null; return { area: BED.A.id, site: BED.site, origin: [BED.ax, BED.az], center: [BED.cx, BED.cy], loaded: Object.keys(BED.ch).sort(), loads: BED.loads, drops: BED.drops, waits: BED.miss, meshes: Object.keys(BEDGL).length,
     trees: treeStat(),
     draw: { n: BEDDRAW.n, cull: BEDDRAW.cull, tris: BEDDRAW.tris },   // 上一格：畫了幾塊、視錐外剔掉幾塊、畫了幾個三角形（63_bed_gl.js bedDraw）

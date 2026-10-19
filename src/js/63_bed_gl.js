@@ -128,7 +128,7 @@ function bedFarStep() {
 function bedFarPut(k, C, ms) {
   if (!BED || !BED.A || BEDFAR.g[k]) return;
   var t0 = performance.now(), M = bedMesh(C, Math.max(1, Math.round(BED_FAR_ST * BED.A.step / C.step))), g = bedGpu(M, null);   // 32 m 一點：細的塊（4 m）每 8 點取一點，粗的（32 m）每點都取
-  g.bb = bedBox(C); BEDFAR.g[k] = g; treeFar(k, C);                    // treeFar：遠景的樹（貼圖；63_trees.js） BEDFAR.n++; BEDFAR.bytes += M.V.byteLength + M.I.byteLength; BEDFAR.ms += ms + performance.now() - t0;
+  g.bb = bedBox(C); BEDFAR.g[k] = g; treeFar(k, C); chartPut(C);                    // treeFar：遠景的樹（貼圖；63_trees.js） BEDFAR.n++; BEDFAR.bytes += M.V.byteLength + M.I.byteLength; BEDFAR.ms += ms + performance.now() - t0;
 }
 /** 白沫的高度貼圖：中心 ± (ring＋prefetch) 那幾塊，每 2 個取樣點（8 m）一格；沒載的、深海塊 ⇒ deep。換中心、載進來、丟掉之後重建。 */
 function bedFoamTex() {
