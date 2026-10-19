@@ -237,7 +237,7 @@ function spawnReserve(team) {
   });
   if (!P) P = [E[0] + dx * (R + 150), E[1] + dz * (R + 150)];
   var hx = E[0] - P[0], hz = E[1] - P[1], yaw = Math.atan2(-hz, hx);       // 船頭對著敵方中心（fwd(yaw) ＝ [cos, 0, −sin]）
-  var sh = makeShip(SHIPS.length, team, yaw, P[1], T, P[0]); sh.name = f.name;
+  var sh = makeShip(SHIPS.length, team, yaw, P[1], T, P[0]); sh.name = f.name; coreSpawned(sh, null);   // 57_core.js：記開局人數（候補不帶戰前狀態）
   SHIPS.push(sh); stepShip(sh, 0); survey(sh); pickCaptain(sh); cmdTick(); pickFoes();   // cmdTick：指揮官馬上把它排進去
   note(sh, '援軍進場' + (sh.name !== T.name ? '（' + T.name + '型）' : '') + teamTag(sh) + (RESERVE[team].length ? '（候補還有 ' + RESERVE[team].length + ' 艘）' : '（候補用完）'), true);
   crewShortNote(sh);
@@ -286,6 +286,7 @@ function spawnFleet(spec) {
     var blue = f.team === 'blue', off = X[f.team][k[f.team]++];        // 兩邊第 j 艘站同一個 x ⇒ 各自對著對面那一艘
     var T = HULLT[f.hull], bow = (T.wl1 - T.cx) * S;                    // 船的原點（x ＝ T.cx）到船頭的距離
     var sh = makeShip(i, f.team, blue ? Math.PI / 2 : -Math.PI / 2, blue ? DIST / 2 + bow : -DIST / 2 - bow, T, off); sh.name = f.name; SHIPS.push(sh);
+    coreSpawned(sh, corePreFor(f.team, k[f.team] - 1));                 // 戰前狀態（57_core.js；沒帶 ⇒ 只記開局人數）
   });
   if (VX) vxPlace(SHIPS);                                                // 大漩渦（08_sea.js）：改成沿著漏斗那一圈排
 }
