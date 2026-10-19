@@ -447,11 +447,11 @@ function gmapSailY(t) {
   return t.gmY;
 }
 /** 一門砲的符號：形狀 ＝ 裝填（● 好　◌ 裝填中　○ 開不了　△ 等火藥　≈ 泡水　✕ 毀），顏色 ＝ 人手（綠 滿編、黃 人數不足但能開（裝填慢）、灰 少於最少人數、紅 毀、藍 泡水）；受損 ⇒ 底下一條血條。 */
-function gunCell(g) {
+function gunCell(g, aim) {
   var st = !g.alive ? 'dead' : g.wet ? 'wet' : g.manned < g.crewMin ? 'none' : g.manned < g.crewFull ? 'short' : 'full';
   var k = !g.alive ? 3 : g.wet ? 5 : gunRate(g) <= 0 ? 2 : g.needCart && !(g.box > 0) ? 4 : g.reload > 0 ? 1 : 0;   // 4 ＝ 等火藥與彈藥（藥箱空了）
   var hp = !g.alive ? 0 : Math.max(0, g.model.hp / g.model.hpMax), hurt = g.alive && hp < 0.999;   // 受損 ⇒ 底下一條血條（.hp::after，寬 ＝ 剩下的血量）
-  var cls = 'g-' + st + (hurt ? ' hp' : ''), sty = hurt ? '--hp:' + Math.round(hp * 100) + '%;' : '';
+  var cls = 'g-' + st + (hurt ? ' hp' : '') + (aim ? ' aim' : ''), sty = hurt ? '--hp:' + Math.round(hp * 100) + '%;' : '';
   if (HUD_ART) return '<span class="ico ' + cls + '" style="' + sty + 'background-position:' + ((3 + (k === 4 ? 1 : k === 5 ? 2 : k)) * 100 / 7).toFixed(3) + '% 0"></span>';
   return '<span class="' + cls + ' gk' + k + '"' + (sty ? ' style="' + sty + '"' : '') + '>' + '●◌○✕△≈'[k] + '</span>';   // gk<k>：比較寬的符號（✕ △）在 HUD 的固定格子裡縮小字級（template.html）
 }
@@ -464,21 +464,23 @@ function gunDir(g) { if (g.type === 'chase') return g.ax[0] >= 0 ? 'bow' : 'ster
  *  「⚠ 射界外」改到羅盤上方那一行（Tim 2026-10-15：「射界外提示不要放在下方面板內，都改到羅盤上方的資訊」）⇒ 這裡只記 HUD_OUTARC，下方面板那一格（#guns）一律藏起來。 */
 function gunHud(me) {
   if (!foeOf(me) && !me.aim) { HUD_OUTARC = false; return; }        // 沒有敵艦也沒有瞄準點（建造模式，82_build.js）⇒ 不算（⛔ 照算 ⇒ aimPoint 拿 null 的敵艦，每一格例外）
-  var foe = foeOf(me), w = handAim(me) ? aimPoint(me) : foe && foe.center;
+  gunAims(me);                                                         // 每門打不打得到：砲上那一份（21_gunnery.js；這裡只讀）
+  function cell(g) { return gunCell(g, !!g.aimHit); }                  // 金框：這門現在開打得中（射界＋射程）
+  function on(g) { return g.alive && gunRate(g) > 0 && !!g.aimT; }
   ['P', 'S'].forEach(function (side) {
     var rows = me.decks.map(function (D) { return me.guns.filter(function (x) { return x.deck === D.key && x.side === side && gunDir(x) === 'side'; }); }).filter(function (r) { return r.length; }).reverse();
-    var on = w && me.guns.some(function (g) { return g.side === side && gunDir(g) === 'side' && g.alive && gunRate(g) > 0 && gunTarget(me, g, w); });
-    var box = $(side === 'P' ? 'gunsL' : 'gunsR'), h = rows.map(function (r) { return '<div>' + r.map(gunCell).join('') + '</div>'; }).join('');   // 左舷那一欄 rtl（template.html）⇒ 兩舷都是船頭靠羅盤、換行也從羅盤那邊接
+    var lit = me.guns.some(function (g) { return g.side === side && gunDir(g) === 'side' && on(g); });
+    var box = $(side === 'P' ? 'gunsL' : 'gunsR'), h = rows.map(function (r) { return '<div>' + r.map(cell).join('') + '</div>'; }).join('');   // 左舷那一欄 rtl（template.html）⇒ 兩舷都是船頭靠羅盤、換行也從羅盤那邊接
     if (box.innerHTML !== h) box.innerHTML = h;
-    box.classList.toggle('on', !!on);
+    box.classList.toggle('on', lit);
   });
   [['bow', 'gunsB'], ['stern', 'gunsA']].forEach(function (E) {
     var L = me.guns.filter(function (g) { return gunDir(g) === E[0]; }).sort(function (a, b) { return a.ax[1] - b.ax[1]; });   // 左舷（−y）在左
-    var on = w && L.some(function (g) { return g.alive && gunRate(g) > 0 && gunTarget(me, g, w); }), box = $(E[1]), h = L.map(gunCell).join('');
+    var lit = L.some(on), box = $(E[1]), h = L.map(cell).join('');
     if (box.innerHTML !== h) box.innerHTML = h;
-    box.style.display = L.length ? '' : 'none'; box.classList.toggle('on', !!on);
+    box.style.display = L.length ? '' : 'none'; box.classList.toggle('on', lit);
   });
-  var aw = aimPoint(me), bears = anyBears(me, aw, 'S') || anyBears(me, aw, 'P');
+  var bears = me.guns.some(on);                                        // ＝ 以前的 anyBears(aimPoint)：有一門（還在、有人操作）對得到
   HUD_OUTARC = !bears && handAim(me); var gb = $('guns'); if (gb.style.display !== 'none') gb.style.display = 'none';
 }
 /** 補給一行：送藥手還能動的／全部、等火藥的砲幾門、取用點還剩幾桶。 */
