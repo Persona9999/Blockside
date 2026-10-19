@@ -4,12 +4,15 @@
 //   海拔在 hMin～hMax、坡度（tan）≤ slopeMax、底質在 mats 裡（沙灘、峭壁、海底都不長）、落在林地才長 ——
 //   林地：海圖塊帶了林地覆蓋（Blocksail 照每座島的種子算、大陸分區平滑混合；MAP_CHUNK.md §4）⇒ 照它；沒帶（舊檔）⇒ 自己的值雜訊（250 m 一片，forest ＝ 佔幾成）；
 //   哪一棵、轉幾度、多大、顏色深淺都照那一點的雜湊 ⇒ 同一塊每次一樣、跟載入順序無關。⛔ 不抽戰局的 rnd()、不進模擬（船不會上岸、砲彈不打樹）。
-//   遠景塊（bedFarPut，32 m 一點的粗塊）也擺，間距 × TREE_FAR_SP、樹放大 —— 只畫成貼圖；那一塊細的載進來了就換細的那一份（跟地形同一套）。
-// 畫（treeDraw，接在地形後面）：離鏡頭 < TREE_LOD[0] 細的、< TREE_LOD[1] 低模、再遠 ⇒ 貼圖（樹的側面照，面向鏡頭轉，開機時從細的那一份拍成一張圖集）。
+//   遠景塊（bedFarPut，32 m 一點的粗塊）也擺，間距 × TREE_FAR_SP —— 只拿來算樹冠殼；那一塊細的載進來了就換細的那一份（跟地形同一套）。
+// 畫（treeDraw，接在地形後面）：離鏡頭 < TREE_LOD[0] 細的、< TREE_LOD[1] 低模、< TREE_SHELL[1] 貼圖（樹的側面照，面向鏡頭轉，開機時從細的那一份拍成一張圖集）。
+// 再遠 ⇒ 樹冠殼（Tim 2026-10-19：「遠距離的樹林可以改用更簡易的算法(可以參考其他遊戲)」；飛行模擬、Arma 那類大地圖的做法）：
+//   不再一棵一棵畫 —— 每塊照實際擺的樹數每 32 m 一格有幾棵（3×3 抹平 ⇒ 覆蓋 0～1），在地面上墊一層樹冠高的網格、塗樹冠的顏色（treeShell）；
+//   一塊一份靜態網格、一次 draw。交接在 TREE_SHELL（1.1～1.5 km）：殼照距離抖動淡入、貼圖用同一個抖動互補淡出 ⇒ 同一個像素只有一個，沒有一刀切的線。
 //   細的、低模照（樹種, 第幾棵）分組實例化畫（一組一次 draw）；看得到的塊換了、鏡頭動了 8 m 以上、或塊進出 ⇒ 重新分組（treeBin；塊照視錐先剔掉）。
 //   光照跟地形同一套（天光、陽光、船的陰影、霧照 BED_FOG）；葉子照風搖（搖晃權重 × 風）。樹不投影子。
 //   ?trees=0 ⇒ 不長樹。
-var TREE_LOD = [140, 650], TREE_FAR_SP = 3, TREE_FAR_K = 1.35, TREE_REBIN = 8;
+var TREE_LOD = [140, 650], TREE_SHELL = [1100, 1500], TREE_SHELL_G = 32, TREE_FAR_SP = 3, TREE_FAR_K = 1.35, TREE_REBIN = 8;
 var TREES = { on: Q.get('trees') !== '0', init: false, list: [], ch: {}, far: {}, eye: null, dirty: true, buf: [], cnt: null, bb: null, stat: { plant: 0, far: 0, d0: 0, d1: 0, d2: 0, binMs: 0, bakeMs: 0, genMs: 0, plantMs: 0 } };
 evOn('bedChunk', function (cx, cy, C) { if (TREES.on && BED && BED.A) { TREES.ch[bedKey(cx, cy)] = treePlant(C, false); TREES.dirty = true; } }, 0, true);
 evOn('bedDrop', function (cx, cy) { var k = bedKey(cx, cy); if (TREES.ch[k]) { delete TREES.ch[k]; TREES.dirty = true; } }, 0, true);
@@ -55,22 +58,49 @@ function treePlant(C, far) {
   bb[4] += 20; bb[0] -= 10; bb[2] -= 10; bb[3] += 10; bb[5] += 10;
   TREES.stat.plantMs += performance.now() - t0;
   if (far) TREES.stat.far += out.length / 8; else TREES.stat.plant += out.length / 8;
-  return { I: new Float32Array(out), n: out.length / 8, bb: bb };
+  return { I: new Float32Array(out), n: out.length / 8, bb: bb, sh: out.length ? treeShell(C, out, far, hAt) : null };
 }
 /** 林地覆蓋（海圖塊選用的段，MAP_CHUNK.md §4）在塊裡 (x, z) 公尺 ⇒ 0～1（雙線性）。 */
 function treeCover(C, x, z) {
   var m = C.foN, s = BED.A.chunk / (m - 1), u = Math.max(0, Math.min(m - 1.001, x / s)), v = Math.max(0, Math.min(m - 1.001, z / s)), i = Math.floor(u), j = Math.floor(v), fu = u - i, fv = v - j, o = j * m + i, F = C.fo;
   return ((F[o] * (1 - fu) + F[o + 1] * fu) * (1 - fv) + (F[o + m] * (1 - fu) + F[o + m + 1] * fu) * fv) / 255;
 }
-/** 遠景塊（63_bed_gl.js bedFarPut 叫）：擺粗的一份、做成一個靜態的貼圖實例緩衝區。 */
+/** 遠景塊（63_bed_gl.js bedFarPut 叫）：擺粗的一份（不留）⇒ 只留它的樹冠殼。 */
 function treeFar(k, C) {
   if (!TREES.on || TREES.far[k]) return;
-  var F = treePlant(C, true); if (!F.n) { TREES.far[k] = { n: 0 }; return; }
-  treeInit(); var D = new Float32Array(F.n * 6);
-  for (var i = 0; i < F.n; i++) { var s = F.I.subarray(i * 8, i * 8 + 8); D.set([s[0], s[1], s[2], TREES.vi[s[6]] + s[7], s[4], s[5]], i * 6); }
-  var g = { n: F.n, bb: F.bb, vao: gl.createVertexArray(), vb: gl.createBuffer() };
-  gl.bindVertexArray(g.vao); treeQuadAttr(); gl.bindBuffer(gl.ARRAY_BUFFER, g.vb); gl.bufferData(gl.ARRAY_BUFFER, D, gl.STATIC_DRAW); treeInstAttr(0); gl.bindVertexArray(null);
-  TREES.far[k] = g;
+  var F = treePlant(C, true); TREES.far[k] = F.sh || { n: 0 };
+}
+/** 樹冠殼：I ＝ 這一塊擺的樹（8 個一組，世界座標）⇒ 每 TREE_SHELL_G 公尺一點數幾棵、3×3 抹平 ⇒ 覆蓋 0～1（滿 ＝ 那一格長滿的棵數的 55%）；
+ *  覆蓋 > 0.12 ⇒ 地面 ＋ 樹冠高（樹種平均高 × 這一塊平均放大 × 0.85，照覆蓋 55～100%、每點抖 ± 10%）；其他 ⇒ 埋進地面 2 m（林子的邊斜下去）。
+ *  顏色 ＝ 樹葉的顏色、越密越暗、每點抖一點；只出四角有一角是林子的那幾格。⇒ { vao, vb, ib, n（索引數）, bb }。 */
+function treeShell(C, I, far, hAt) {
+  var A = BED.A, G = TREE_SHELL_G, m = Math.round(A.chunk / G) + 1, x0 = C.cx * A.chunk - BED.ax, z0 = C.cy * A.chunk - BED.az, cnt = new Float32Array(m * m), ss = 0, ns = 0, i, j;
+  for (var o = 0; o < I.length; o += 8) { i = Math.round((I[o] - x0) / G); j = Math.round((I[o + 2] - z0) / G); if (i < 0 || j < 0 || i >= m || j >= m) continue; cnt[j * m + i]++; ss += I[o + 4]; ns++; }
+  var S0 = TREE_SPECIES[Object.keys(TREE_SPECIES)[0]], gap = S0.place.spacing * (far ? TREE_FAR_SP : 1), full = (G / gap) * (G / gap) * 0.55;
+  var Hc = (S0.height[0] + S0.height[1]) / 2 * (ns ? ss / ns : 1) * 0.85, lc = S0.leaf.col, cov = new Float32Array(m * m), Y = new Float32Array(m * m), bb = [1e9, 1e9, 1e9, -1e9, -1e9, -1e9];
+  for (j = 0; j < m; j++) for (i = 0; i < m; i++) {
+    var sw = 0, sv = 0;
+    for (var dj = -1; dj <= 1; dj++) for (var di = -1; di <= 1; di++) { var ii = i + di, jj = j + dj; if (ii < 0 || jj < 0 || ii >= m || jj >= m) continue; var wt = di || dj ? 0.5 : 1; sw += wt; sv += wt * cnt[jj * m + ii]; }
+    var c = Math.min(1, sv / sw / full), gnd = hAt(i * G, j * G); cov[j * m + i] = c;
+    Y[j * m + i] = c > 0.12 ? gnd + Hc * (0.55 + 0.45 * c) * (0.9 + 0.2 * treeHash(C.cx * m + i, C.cy * m + j, 913)) : gnd - 2;
+  }
+  var V = new Float32Array(m * m * 9), Ix = [];
+  for (j = 0; j < m; j++) for (i = 0; i < m; i++) {
+    var k = j * m + i, q = k * 9, x = x0 + i * G, z = z0 + j * G, il = Math.max(0, i - 1), ir = Math.min(m - 1, i + 1), jl = Math.max(0, j - 1), jr = Math.min(m - 1, j + 1);
+    var gx = (Y[j * m + ir] - Y[j * m + il]) / ((ir - il) * G), gz = (Y[jr * m + i] - Y[jl * m + i]) / ((jr - jl) * G), L = Math.sqrt(gx * gx + 1 + gz * gz), t = (0.78 + 0.3 * treeHash(C.cx * m + i, C.cy * m + j, 917)) * (1.05 - 0.3 * cov[k]);
+    V[q] = x; V[q + 1] = Y[k]; V[q + 2] = z; V[q + 3] = -gx / L; V[q + 4] = 1 / L; V[q + 5] = -gz / L; V[q + 6] = lc[0] * t; V[q + 7] = lc[1] * t; V[q + 8] = lc[2] * t;
+    if (cov[k] > 0.12) { bb[0] = Math.min(bb[0], x); bb[2] = Math.min(bb[2], z); bb[3] = Math.max(bb[3], x); bb[5] = Math.max(bb[5], z); bb[1] = Math.min(bb[1], Y[k] - 30); bb[4] = Math.max(bb[4], Y[k]); }
+    if (i < m - 1 && j < m - 1 && (cov[k] > 0.12 || cov[k + 1] > 0.12 || cov[k + m] > 0.12 || cov[k + m + 1] > 0.12)) Ix.push(k, k + m, k + 1, k + 1, k + m, k + m + 1);
+  }
+  if (!Ix.length) return null;
+  bb[0] -= G; bb[2] -= G; bb[3] += G; bb[5] += G;
+  var g = { vao: gl.createVertexArray(), vb: gl.createBuffer(), ib: gl.createBuffer(), n: Ix.length, bb: bb };
+  gl.bindVertexArray(g.vao); gl.bindBuffer(gl.ARRAY_BUFFER, g.vb); gl.bufferData(gl.ARRAY_BUFFER, V, gl.STATIC_DRAW);
+  gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 36, 0);
+  gl.enableVertexAttribArray(1); gl.vertexAttribPointer(1, 3, gl.FLOAT, false, 36, 12);
+  gl.enableVertexAttribArray(2); gl.vertexAttribPointer(2, 3, gl.FLOAT, false, 36, 24);
+  gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, g.ib); gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(Ix), gl.STATIC_DRAW); gl.bindVertexArray(null);
+  return g;
 }
 
 // ── 網格、貼圖集、著色器（第一次要畫的時候建） ──
@@ -89,9 +119,15 @@ var TREE_FS = function () {
 var TREE_BB_VS = '#version 300 es\nlayout(location=0) in vec2 aQ; layout(location=4) in vec4 aI; layout(location=5) in vec2 aS; uniform mat4 uVP; uniform vec3 uEye; uniform vec4 uBB[16]; out vec2 vT; out vec3 vW; out float vK;\n' +
   'void main(){ vec4 B=uBB[int(aI.w+0.5)]; vec3 to=uEye-aI.xyz; vec3 r=normalize(vec3(to.z,0.0,-to.x)+vec3(1e-4,0.0,0.0));\n' +
   ' vec3 w=aI.xyz+r*aQ.x*B.z*aS.x+vec3(0.0,aQ.y*B.w*aS.x,0.0); vW=w; vK=aS.y; vT=vec2(B.x+(aQ.x+0.5)*B.y,aQ.y); gl_Position=uVP*vec4(w,1.0); }\n';
-var TREE_BB_FS = '#version 300 es\nprecision highp float; uniform sampler2D uTex; uniform vec3 uEye,uFog; uniform float uFogD,uSunK,uClip; in vec2 vT; in vec3 vW; in float vK; out vec4 o;\n' +
-  'void main(){ if(vW.y<uClip) discard; vec4 t=texture(uTex,vT); if(t.a<0.45) discard; vec3 col=t.rgb/t.a*vK*(0.6+0.4*uSunK);\n' +
+// 交接（TREE_SHELL）的抖動：同一個像素的門檻，殼與貼圖用同一個 ⇒ 互補（殼畫的地方貼圖不畫）
+var TREE_DITHER = 'float treeDi(vec2 p){ return fract(sin(dot(floor(p),vec2(12.9898,78.233)))*43758.5453); }\n';
+var TREE_BB_FS = '#version 300 es\nprecision highp float; uniform sampler2D uTex; uniform vec3 uEye,uFog; uniform float uFogD,uSunK,uClip; uniform vec2 uFade; in vec2 vT; in vec3 vW; in float vK; out vec4 o;\n' + TREE_DITHER +
+  'void main(){ if(vW.y<uClip) discard; if(smoothstep(uFade.x,uFade.y,length(vW.xz-uEye.xz))>treeDi(gl_FragCoord.xy)) discard; vec4 t=texture(uTex,vT); if(t.a<0.45) discard; vec3 col=t.rgb/t.a*vK*(0.6+0.4*uSunK);\n' +
   ' float fd=length(vW-uEye); o=vec4(mix(col,uFog,1.0-exp(-fd*uFogD)),1.0); }\n';
+var TREE_SH_VS = '#version 300 es\nlayout(location=0) in vec3 aP; layout(location=1) in vec3 aN; layout(location=2) in vec3 aC; uniform mat4 uVP; out vec3 vN; out vec3 vW; out vec3 vC; void main(){ vN=aN; vW=aP; vC=aC; gl_Position=uVP*vec4(aP,1.0); }\n';
+var TREE_SH_FS = '#version 300 es\nprecision highp float; in vec3 vN; in vec3 vW; in vec3 vC; uniform vec3 uSun,uEye,uFog,uSky,uGround; uniform float uFogD,uClip,uSunK; uniform vec2 uFade; out vec4 o;\n' + TREE_DITHER +
+  'void main(){ if(vW.y<uClip) discard; if(smoothstep(uFade.x,uFade.y,length(vW.xz-uEye.xz))<=treeDi(gl_FragCoord.xy)) discard; vec3 n=normalize(vN); float d=max(dot(n,uSun),0.0);\n' +
+  ' vec3 col=vC*(mix(uGround,uSky,0.6)*0.7+vec3(1.0,0.96,0.88)*d*uSunK*0.72); float fd=length(vW-uEye); o=vec4(mix(col,uFog,1.0-exp(-fd*uFogD)),1.0); }\n';
 var TREE_BAKE_VS = '#version 300 es\nlayout(location=0) in vec3 aP; layout(location=1) in vec3 aN; layout(location=2) in vec3 aC; uniform mat4 uM; out vec3 vN; out vec3 vC; void main(){ vN=aN; vC=aC; gl_Position=uM*vec4(aP,1.0); }\n';
 var TREE_BAKE_FS = '#version 300 es\nprecision highp float; in vec3 vN; in vec3 vC; out vec4 o; void main(){ vec3 n=normalize(vN); if(!gl_FrontFacing) n=-n; float d=max(dot(n,normalize(vec3(0.45,0.75,0.5))),0.0); o=vec4(vC*(0.62+0.62*d),1.0); }\n';
 
@@ -110,6 +146,7 @@ function treeInit() {
   TREES.stat.genMs = performance.now() - t0;
   TREES.prog = VK.compile(gl, TREE_VS, TREE_FS());
   TREES.bbProg = VK.compile(gl, TREE_BB_VS, TREE_BB_FS);
+  TREES.shProg = VK.compile(gl, TREE_SH_VS, TREE_SH_FS);
   TREES.ib = [gl.createBuffer(), gl.createBuffer(), gl.createBuffer()];  // 細、低模、貼圖的實例（每次分組重寫）
   TREES.quad = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, TREES.quad); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-0.5, 0, 0.5, 0, 0.5, 1, -0.5, 0, 0.5, 1, -0.5, 1]), gl.STATIC_DRAW);
   TREES.bbVao = gl.createVertexArray(); gl.bindVertexArray(TREES.bbVao); treeQuadAttr(); gl.bindBuffer(gl.ARRAY_BUFFER, TREES.ib[2]); treeInstAttr(0); gl.bindVertexArray(null);
@@ -158,9 +195,10 @@ function treeBake() {
 }
 /** 分組：看得到的塊（視錐）裡每一棵照離鏡頭多遠分到細、低模（照樹種與第幾棵分組）、貼圖 ⇒ 寫進三個實例緩衝區。 */
 function treeBin(keys, eye) {
-  var t0 = performance.now(), NL = TREES.list.length, cnt = new Int32Array(NL * 2 + 1), L0 = TREE_LOD[0] * TREE_LOD[0], L1 = TREE_LOD[1] * TREE_LOD[1], vi = TREES.vi;
-  function lodOf(I, o) { var dx = I[o] - eye[0], dy = I[o + 1] - eye[1], dz = I[o + 2] - eye[2], d = dx * dx + dy * dy + dz * dz; return d < L0 ? 0 : d < L1 ? 1 : 2; }
-  keys.forEach(function (k) { var c = TREES.ch[k], I = c.I; for (var o = 0; o < I.length; o += 8) { var l = lodOf(I, o); cnt[l < 2 ? l * NL + vi[I[o + 6]] + I[o + 7] : NL * 2]++; } });
+  var t0 = performance.now(), NL = TREES.list.length, cnt = new Int32Array(NL * 2 + 1), L0 = TREE_LOD[0] * TREE_LOD[0], L1 = TREE_LOD[1] * TREE_LOD[1], L2 = TREE_SHELL[1] * TREE_SHELL[1], vi = TREES.vi;
+  // 3 ＝ 交給樹冠殼（這一棵不畫；水平距離，跟著色器的淡入淡出同一把尺）
+  function lodOf(I, o) { var dx = I[o] - eye[0], dy = I[o + 1] - eye[1], dz = I[o + 2] - eye[2], d = dx * dx + dy * dy + dz * dz; return d < L0 ? 0 : d < L1 ? 1 : dx * dx + dz * dz < L2 ? 2 : 3; }
+  keys.forEach(function (k) { var c = TREES.ch[k], I = c.I; for (var o = 0; o < I.length; o += 8) { var l = lodOf(I, o); if (l < 3) cnt[l < 2 ? l * NL + vi[I[o + 6]] + I[o + 7] : NL * 2]++; } });
   var off = new Int32Array(cnt.length), tot = [0, 0, 0];
   for (var b = 0; b < cnt.length; b++) { var l2 = b < NL ? 0 : b < NL * 2 ? 1 : 2; off[b] = tot[l2]; tot[l2] += cnt[b]; }
   var D = [0, 1, 2].map(function (l) { var need = tot[l] * 6; if (!TREES.buf[l] || TREES.buf[l].length < need) TREES.buf[l] = new Float32Array(Math.max(need, 6) * 1.5 | 0); return TREES.buf[l]; });
@@ -168,7 +206,8 @@ function treeBin(keys, eye) {
   keys.forEach(function (k) {
     var I = TREES.ch[k].I;
     for (var o = 0; o < I.length; o += 8) {
-      var l = lodOf(I, o), cell = vi[I[o + 6]] + I[o + 7], b = l < 2 ? l * NL + cell : NL * 2, q = at[b]++ * 6, A = D[l];
+      var l = lodOf(I, o); if (l > 2) continue;
+      var cell = vi[I[o + 6]] + I[o + 7], b = l < 2 ? l * NL + cell : NL * 2, q = at[b]++ * 6, A = D[l];
       A[q] = I[o]; A[q + 1] = I[o + 1]; A[q + 2] = I[o + 2]; A[q + 3] = l < 2 ? I[o + 3] : cell; A[q + 4] = I[o + 4]; A[q + 5] = I[o + 5];
     }
   });
@@ -190,18 +229,22 @@ function treeDraw() {
     gl.bindVertexArray(g.vao); gl.bindBuffer(gl.ARRAY_BUFFER, TREES.ib[l]); treeInstAttr(TREES.off[l * NL + c]);
     gl.drawElementsInstanced(gl.TRIANGLES, g.n, gl.UNSIGNED_SHORT, 0, n);
   });
-  var P2 = TREES.bbProg; gl.useProgram(P2.prog); setCommon(P2); gl.uniform1f(P2.u.uFogD, fogD); gl.uniform4fv(P2.u.uBB, TREES.bbU);
+  var P2 = TREES.bbProg; gl.useProgram(P2.prog); setCommon(P2); gl.uniform1f(P2.u.uFogD, fogD); gl.uniform4fv(P2.u.uBB, TREES.bbU); gl.uniform2f(P2.u.uFade, TREE_SHELL[0], TREE_SHELL[1]);
   gl.activeTexture(gl.TEXTURE11); gl.bindTexture(gl.TEXTURE_2D, TREES.tex); gl.uniform1i(P2.u.uTex, 11); gl.activeTexture(gl.TEXTURE0);
   if (TREES.stat.d2) { gl.bindVertexArray(TREES.bbVao); gl.drawArraysInstanced(gl.TRIANGLES, 0, 6, TREES.stat.d2); }
-  var nf = 0;
-  farK.forEach(function (k) { var g = TREES.far[k]; if (!g.n || TREES.ch[k] || !bedSeen(PL, g.bb)) return; nf += g.n; gl.bindVertexArray(g.vao); gl.drawArraysInstanced(gl.TRIANGLES, 0, 6, g.n); });
-  TREES.stat.farDrawn = nf;
+  // 樹冠殼：細的塊用自己的、沒載細的那幾塊用遠景塊的（跟地形同一套）
+  var P3 = TREES.shProg, ns = 0, nt = 0; gl.useProgram(P3.prog); setCommon(P3); gl.uniform1f(P3.u.uFogD, fogD); gl.uniform2f(P3.u.uFade, TREE_SHELL[0], TREE_SHELL[1]);
+  function far2(b) { var dx = Math.max(Math.abs(b[0] - eye[0]), Math.abs(b[3] - eye[0])), dz = Math.max(Math.abs(b[2] - eye[2]), Math.abs(b[5] - eye[2])); return dx * dx + dz * dz; }   // 外框離鏡頭最遠的那一角（水平）
+  function shell(g) { if (!g || !g.n || !bedSeen(PL, g.bb) || far2(g.bb) < TREE_SHELL[0] * TREE_SHELL[0]) return; ns++; nt += g.n / 3; gl.bindVertexArray(g.vao); gl.drawElements(gl.TRIANGLES, g.n, gl.UNSIGNED_SHORT, 0); }
+  keys.forEach(function (k) { shell(TREES.ch[k].sh); });
+  farK.forEach(function (k) { if (!TREES.ch[k]) shell(TREES.far[k]); });
+  TREES.stat.shells = ns; TREES.stat.shellTris = nt;
   gl.bindVertexArray(null); if (cf) gl.enable(gl.CULL_FACE);
 }
 /** 讀數（__game.bed().trees）。 */
 function treeStat() {
   var S = TREES.stat;
-  return { on: TREES.on, kinds: Object.keys(TREE_SPECIES), variants: TREES.list.length, planted: S.plant, far: S.far, drawn: { full: S.d0, low: S.d1, card: S.d2, farCard: S.farDrawn || 0 },
+  return { on: TREES.on, kinds: Object.keys(TREE_SPECIES), variants: TREES.list.length, planted: S.plant, far: S.far, drawn: { full: S.d0, low: S.d1, card: S.d2, shells: S.shells || 0, shellTris: S.shellTris || 0 },
     ms: { gen: +S.genMs.toFixed(1), bake: +S.bakeMs.toFixed(1), plant: +S.plantMs.toFixed(1), bin: +S.binMs.toFixed(2) },
     tris: TREES.list.length ? { full: TREES.list[0].lod[0].n / 3, low: TREES.list[0].lod[1].n / 3 } : null };
 }
