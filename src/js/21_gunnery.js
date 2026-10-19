@@ -661,7 +661,7 @@ function ballNear(sh, L, reach) {
   sh.models.forEach(function (o) { if (o.alive && (o.rot && o.piv ? cyl(o.piv, o.bb, 10) : box(o.bb, 10))) o.nb = id; });
   return { id: id,
     ropes: sh.ropes.filter(function (rp) { return !rp.dead && box(rp.bb, 0); }),
-    sails: sh.sails.filter(function (s) { var y0 = s.yards && s.yards[0]; return !s.dead && !s.furled && (y0 ? cyl(y0.piv, s.bb, 8) : box(s.bb, 8)); }),
+    sails: sh.sails.filter(function (s) { var y0 = s.yards && s.yards[0], r = clothLive(sh, s) ? SAIL_HIT_BILLOW : 8; return !s.dead && !s.furled && (y0 ? cyl(y0.piv, s.bb, r) : box(s.bb, r)); }),   // 布在模擬 ⇒ 會鼓出外框，挑寬一點（cutRig 照布現在的形狀判）
     crew: sh.crew.filter(function (c) { var p = c.pos; return p[0] >= xa && p[0] <= xb && p[1] >= ya && p[1] <= yb && p[2] + 9 >= za && p[2] + 9 <= zb; }) };
 }
 /** 經過的繩（距離 < r 格）斷掉；鏈彈穿過帆 ⇒ 帆掉下來。ropes／sails：只看這幾條、這幾面（stepBall 先挑好的，ballNear；沒給 ⇒ 全部）。 */
@@ -684,16 +684,56 @@ function cutRig(sh, L, r, b, ropes, sails) {
     if (b.sails && b.sails.indexOf(s) >= 0) return;                    // 同一顆彈穿過一面帆要好幾個小步 ⇒ 只算一次（記帆本身：兩艘的同編號帆是不同的帆）
     // 帆跟著帆桁轉過 ⇒ 彈點轉回作品的角度再比（撕洞、布片照真正的彈點）。帆頂照自己的帆桁、帆腳照 footYard（course 沒有 ⇒ 0），中間照高度內插
     var y0 = s.yards && s.yards[0], aH = y0 ? y0.rot : 0, aF = s.footYard ? s.footYard.rot : 0, a = aF + (aH - aF) * clamp((L[2] - sb[2]) / Math.max(1, sb[5] - sb[2]), 0, 1);
-    var Ls = y0 && a ? rotZ(L, y0.piv, -a) : L;
-    if (Ls[0] < sb[0] - rb || Ls[0] > sb[3] + rb || Ls[1] < sb[1] - rb || Ls[1] > sb[4] + rb || Ls[2] < sb[2] - rb || Ls[2] > sb[5] + rb) return;
-    for (var j = 0; j < v.length; j += chain ? 9 : 3) { var dx = v[j] - Ls[0], dy = v[j + 1] - Ls[1], dz = v[j + 2] - Ls[2]; if (dx * dx + dy * dy + dz * dz < rs2) {
+    var Ls = y0 && a ? rotZ(L, y0.piv, -a) : L, hj = -1, j;
+    var cl = clothLive(sh, s);
+    if (cl) { if (clothNear(cl, L, rb)) hj = sailNearest(v, Ls); }      // 帆繩物理開著 ⇒ 照布現在的形狀（被風吹鼓、被撕的洞）判；hj 只拿來給火（從哪一點燒起來）
+    else {
+      if (Ls[0] < sb[0] - rb || Ls[0] > sb[3] + rb || Ls[1] < sb[1] - rb || Ls[1] > sb[4] + rb || Ls[2] < sb[2] - rb || Ls[2] > sb[5] + rb) return;
+      for (j = 0; j < v.length; j += chain ? 9 : 3) { var dx = v[j] - Ls[0], dy = v[j + 1] - Ls[1], dz = v[j + 2] - Ls[2]; if (dx * dx + dy * dy + dz * dz < rs2) { hj = j; break; } }
+    }
+    if (hj >= 0) { j = hj;
       if (b.ammo === AMMO_GF && BURN_PCT > 0) burnSailAt(sh, s, j / 3); else { tearCloth(sh, s, L, chain ? 7 : 3, b); if (b.fire && BURN_PCT > 0) burnSailAt(sh, s, j / 3); }   // 希臘火：帆從這一點燒起來、不撕洞（49_burn.js；火勢 0 ⇒ 照舊撕）；火箭：打個小洞、也從那一點燒起來
       s.hp -= b.dmg * ammoK(b.ammo, VS_SAIL); (b.sails = b.sails || []).push(s);
       if (s.hp <= 0) dropSail(sh, s, true); else if (chain) shredSail(sh, s, L);   // 歸零才掉；還撐得住 ⇒ 撕下幾片（鏈彈）、少一份推力
-      changed = true; break; } }
+      changed = true; }
   });
   if (changed) sh.rigDirty = true;
 }
+// 帆的命中照布現在的形狀（Tim 2026-10-19：「砲彈破壞帆 假如有開帆繩物理 會實際根據帆的變形判定命中點嗎(如果不會 希望改成會)」）：
+//   以前一律比雕刻作品的帆形（跟著帆桁轉回去比），布被風吹鼓、被撕的洞都不算 ⇒ 開或關物理同一個種子走出同一局。
+//   現在帆繩物理開著、這面布正在模擬（不是收著、掉了、還沒建）⇒ 彈點到布的三角形（粗格；三條邊有斷的那一格是洞，不算）的距離 < 鏈彈 0.8 m／實心與爆裂 0.4 m（跟以前同兩個距離）才算打中。
+//   ⚠ 代價：開或關物理打中帆的那幾發會不同（以前已經有一格：帆桁追不追風，84_fleetlab.js 開頭）；擬真沙盒是物理全關的那一種，這一格不影響它。
+var SAIL_HIT_BILLOW = 30;                                                // 布在模擬時挑帆的外框外擴幾格（ballNear；以前 8，布鼓出去會超過）
+/** 這面帆正在模擬的布（沒有 ⇒ null：關物理、收著、掉了、還沒建）。 */
+function clothLive(sh, s) { var c = PHYS && sh.cl ? sh.cl[s.k] : null; return c && c.p && !c.hidden && !c.gone && !c.loose ? c : null; }
+/** 彈點 L 離布（還連著的三角形）r 格以內？ */
+function clothNear(c, L, r) {
+  var p = c.p, T = c.T.sim, n = T.n, tr = T.tris, te = T.te, r2 = r * r, i, x0 = 1e9, x1 = -1e9, y0 = 1e9, y1 = -1e9, z0 = 1e9, z1 = -1e9;
+  for (i = 0; i < n * 3; i += 3) { if (p[i] < x0) x0 = p[i]; if (p[i] > x1) x1 = p[i]; if (p[i + 1] < y0) y0 = p[i + 1]; if (p[i + 1] > y1) y1 = p[i + 1]; if (p[i + 2] < z0) z0 = p[i + 2]; if (p[i + 2] > z1) z1 = p[i + 2]; }
+  if (L[0] < x0 - r || L[0] > x1 + r || L[1] < y0 - r || L[1] > y1 + r || L[2] < z0 - r || L[2] > z1 + r) return false;
+  for (i = 0; i < tr.length; i += 3) {
+    if (c.torn && (c.brk[te[i]] || c.brk[te[i + 1]] || c.brk[te[i + 2]])) continue;
+    if (triDist2(L, p, tr[i] * 3, tr[i + 1] * 3, tr[i + 2] * 3) < r2) return true;
+  }
+  return false;
+}
+/** 點 P 到三角形（p 裡的 a、b、c 三點）的最近距離²（Ericson, Real-Time Collision Detection 5.1.5）。 */
+function triDist2(P, p, a, b, c) {
+  var ax = p[a], ay = p[a + 1], az = p[a + 2], abx = p[b] - ax, aby = p[b + 1] - ay, abz = p[b + 2] - az, acx = p[c] - ax, acy = p[c + 1] - ay, acz = p[c + 2] - az;
+  var apx = P[0] - ax, apy = P[1] - ay, apz = P[2] - az, d1 = abx * apx + aby * apy + abz * apz, d2 = acx * apx + acy * apy + acz * apz, qx, qy, qz;
+  function at(u, w) { qx = ax + abx * u + acx * w; qy = ay + aby * u + acy * w; qz = az + abz * u + acz * w; var dx = P[0] - qx, dy = P[1] - qy, dz = P[2] - qz; return dx * dx + dy * dy + dz * dz; }
+  if (d1 <= 0 && d2 <= 0) return at(0, 0);
+  var bpx = P[0] - p[b], bpy = P[1] - p[b + 1], bpz = P[2] - p[b + 2], d3 = abx * bpx + aby * bpy + abz * bpz, d4 = acx * bpx + acy * bpy + acz * bpz;
+  if (d3 >= 0 && d4 <= d3) return at(1, 0);
+  var vc = d1 * d4 - d3 * d2; if (vc <= 0 && d1 >= 0 && d3 <= 0) return at(d1 / (d1 - d3), 0);
+  var cpx = P[0] - p[c], cpy = P[1] - p[c + 1], cpz = P[2] - p[c + 2], d5 = abx * cpx + aby * cpy + abz * cpz, d6 = acx * cpx + acy * cpy + acz * cpz;
+  if (d6 >= 0 && d5 <= d6) return at(0, 1);
+  var vb = d5 * d2 - d1 * d6; if (vb <= 0 && d2 >= 0 && d6 <= 0) return at(0, d2 / (d2 - d6));
+  var va = d3 * d6 - d5 * d4; if (va <= 0 && d4 - d3 >= 0 && d5 - d6 >= 0) { var u = (d4 - d3) / ((d4 - d3) + (d5 - d6)); return at(1 - u, u); }
+  var dn = 1 / (va + vb + vc); return at(vb * dn, vc * dn);
+}
+/** 作品的帆形裡離 Ls 最近的那一點（頂點序號 × 3；給火從哪一點燒起來）。 */
+function sailNearest(v, Ls) { var bj = 0, bd = 1e18; for (var j = 0; j < v.length; j += 3) { var dx = v[j] - Ls[0], dy = v[j + 1] - Ls[1], dz = v[j + 2] - Ls[2], d = dx * dx + dy * dy + dz * dz; if (d < bd) { bd = d; bj = j; } } return bj; }
 function segDist2(p, ax, ay, az, bx, by, bz) {
   var vx = bx - ax, vy = by - ay, vz = bz - az, wx = p[0] - ax, wy = p[1] - ay, wz = p[2] - az, l2 = vx * vx + vy * vy + vz * vz;
   var t = l2 > 0 ? clamp((wx * vx + wy * vy + wz * vz) / l2, 0, 1) : 0, dx = wx - vx * t, dy = wy - vy * t, dz = wz - vz * t;
