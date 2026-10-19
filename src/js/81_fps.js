@@ -157,7 +157,7 @@ function fpLadders(sh) {
   return shipLadders(sh.T).map(function (l) {
     var P = l.pts, mid = P.slice(1, -1).map(function (q) { return [q[0], q[1], q[2] + CLIMB_LIFT]; }), up = [P[0]].concat(mid, [P[P.length - 1]]);
     var ride = ladRideOf(sh.T, l, up[0][2], up[up.length - 1][2]);   // 繩梯綁在砲塔上（27_turret.js ladRide）
-    return { name: l.name, up: up, up0: up, rope: !!l.rope, span: ride ? null : l.span || null, ride: ride };   // 跟著轉的：梯腳不照 span（那是開局的 x 範圍）
+    return { name: l.name, up: up, up0: up, raw: P, rope: !!l.rope, span: ride ? null : l.span || null, ride: ride };   // 跟著轉的：梯腳不照 span（那是開局的 x 範圍）；raw：沒抬的固定點（樓梯不穿洞的斜坡，fpRamp）
   });
 }
 // 綁在砲塔上的繩梯（Tim 2026-10-17：「繩梯直接綁在頂部開口」「旋轉後兩端仍然連通」「也可以被拉伸(有彈性)」）：梯腳、梯頭、爬到一半的人都照 27_turret.js ladRide。
@@ -195,6 +195,12 @@ function fpTry(g, z, nx, ny, thin, up, feet) {
   var down = FP_DOWN, hi = fpStand(g, Math.floor(nx), Math.floor(ny), z, up);
   if (hi < 0) hi = fpFoot(g, z, nx, ny, up);                          // 中心那一柱是縫 ⇒ 看腳掌踩不踩得到旁邊（樓梯口圍欄與第一階之間那一格縫，量過）
   if (hi < 0 && feet !== undefined) { down = FP_FALL; hi = fpStand(g, Math.floor(nx), Math.floor(ny), z, up, down); }   // 半空、旁邊也踩不到 ⇒ 是洞：往下找（⛔ 先找 FP_FALL ⇒ 一兩格的縫也掉得進去）
+  var rp = feet === undefined ? fpRamp(nx, ny, z, true) : -1;       // 正對著樓梯、很靠近 ⇒ 梯子的線也站得住（不從踏板之間的空洞掉下去；fpRamp）；在半空不墊 ⇒ 跳得下樓梯
+  if (rp >= 0 && rp > hi) { var hr = fpTryAt(g, z, nx, ny, thin, up, rp, feet, down); if (hr !== null) return hr; }   // 斜坡上走不過去（身體的角撞到牆）⇒ 照不墊的走
+  return fpTryAt(g, z, nx, ny, thin, up, hi, feet, down);
+}
+/** fpTry 的後半：腳下定成 hi 之後，照小起伏、半空、四個角的牆判斷走不走得過去；不行 ⇒ null。 */
+function fpTryAt(g, z, nx, ny, thin, up, hi, feet, down) {
   if (hi < 0) return null;
   hi = fpFlat(g, nx, ny, hi);                                         // 小起伏：腳掌踩得到 0.2 m 以內高一點的地方 ⇒ 站在那裡
   var deep = feet !== undefined && feet - hi > FP_DOWN;                // 真的掉進洞（離下面的地板超過 0.8 m）才照腳現在的高度擋（⛔ 半空一律擋 ⇒ 格柵每下一格 0.1 m 就把前面的格條當成牆、速度歸零，量過：維吉尼亞號每 3 格停 4–5 格畫面）
@@ -286,23 +292,7 @@ function fpFrame(dt) {
     }
     FP.near = null; fpEyeZ(dt); fpUI(); return;
   }
-  if (FP.climb && FP.climb.L) {                                        // 爬跟著轉的繩梯：在開局的座標裡沿梯子走（pb），每一格照它現在的位置換過去（fpLadMap）⇒ 爬到一半砲塔轉了也不會脫手
-    var CL = FP.climb, B = CL.b, tb = B[CL.k], db = sub(tb, CL.pb), lb = len(db), sb = FP_CLIMB * dt;
-    FP.jz = FP.jv = 0; FP.v[0] = FP.v[1] = 0;
-    if (lb <= sb) { CL.pb = tb.slice(); if (++CL.k >= B.length) FP.climb = null; }
-    else CL.pb = add(CL.pb, mul(db, sb / lb));
-    c.pos = fpLadMap(sh, CL.L, CL.pb);
-    FP.near = null; fpEyeZ(dt); fpUI();
-    return;
-  }
-  if (FP.climb) {                                                      // 爬：一段一段沿梯子的線走（三維）
-    var P = FP.climb.pts, to = P[FP.climb.k], d = sub(to, c.pos), l = len(d), s = FP_CLIMB * dt;
-    FP.jz = FP.jv = 0; FP.v[0] = FP.v[1] = 0;
-    if (l <= s) { c.pos = to.slice(); if (++FP.climb.k >= P.length) FP.climb = null; }
-    else c.pos = add(c.pos, mul(d, s / l));
-    FP.near = null; fpEyeZ(dt); fpUI();
-    return;
-  }
+  if (FP.climb) { fpClimbStep(sh, dt); FP.near = null; fpEyeZ(dt); fpUI(); return; }   // 爬（E）：沿梯子的線走（fpClimbStep）
   // 輸入：鍵盤（0／1）＋虛擬搖桿（類比）；合起來長度夾到 1 ⇒ 搖桿推一半就慢慢走
   var f = m.f - m.b + FP.joy[0], r = m.r - m.l + FP.joy[1], n = Math.hypot(f, r);
   if (n > 1) { f /= n; r /= n; }
@@ -349,6 +339,7 @@ function fpFrame(dt) {
 function fpGround(g, c) {
   var x = c.pos[0], y = c.pos[1], z = Math.floor(c.pos[2]);
   for (var i = -1; i <= 1; i++) for (var j = -1; j <= 1; j++) if (g.get(Math.floor(x + i * FP_FOOT), Math.floor(y + j * FP_FOOT), z - 1)) return true;
+  if (Math.abs(fpRamp(x, y, z, false) - z) <= 1) return true;            // 站在樓梯的斜坡上（fpRamp；不看方向 ⇒ 站著轉頭不會掉下去）
   for (var dz = 1; dz <= 120; dz++) {
     var s = standZ(g, Math.floor(x), Math.floor(y), z - dz, z - dz, FP_HEAD);
     if (s >= 0) { c.pos[2] = s; FP.jz = z - s; FP.jv = 0; return true; }
@@ -356,7 +347,12 @@ function fpGround(g, c) {
   FP.flyFrom = null; fpLand(); return FP.on;                          // 一路都沒有 ⇒ 回船員旁邊（再沒有才退出）
 }
 /** 跳（空白鍵、面板的 ⤴）：站在地上才跳得起來；爬梯子、停格不行。 */
-function fpJump() { if (!FP.on || PAUSED || FP.fol || FP.mode === 2 || FP.climb || FP.jz > 0 || FP.jv > 0) return; FP.jv = Math.sqrt(2 * FP_G * FP_JUMP); }
+function fpJump() {
+  if (!FP.on || PAUSED || FP.fol || FP.mode === 2) return;
+  if (FP.climb) { fpClimbOff(fpG(FP.sh)); return; }                    // 爬到一半 ⇒ 跳下梯子（TASK-0726）
+  if (FP.jz > 0 || FP.jv > 0) return;
+  FP.jv = Math.sqrt(2 * FP_G * FP_JUMP);
+}
 /** 鏡頭的眼高（格，船的 z）：腳底絕對高度（c.pos[2] ＋ 跳起來的 FP.jz）＋ 眼高，平滑地追（FP_EZ 秒）⇒ 跨台階、頭頂變低不會一格一格跳。 */
 //   兩段分開追：腳底（FP.fz，台階、跳、落）照 FP_EZ；低頭（FP.eo，fpEye 給的眼高）低頭快、抬頭慢（FP_EZ_DN／FP_EZ_UP）——
 //   ⛔ 低頭抬頭一樣快 ⇒ 砲甲板一根梁一根梁地點頭（梁距約 1 m）；抬頭慢 ⇒ 梁之間不抬頭，走出梁區才慢慢站直。
@@ -378,6 +374,16 @@ function fpEyeZ(dt) {
  *  繩梯（ratlines，L.rope）：水平 FP_REACH_ROPE 格、高度差 FP_REACH_ROPE_Z 格內；梯腳是一整段（L.span ＝ 最低一道的前後兩端 x，沿舷牆內側）⇒ 站在那一排 shroud 旁邊哪裡都摸得到，
  *  從站的那個 x 開始爬（⛔ 只有一個點 ⇒ 一組 ratlines 前後 3–4.6 m，站在 shroud 旁邊常常離那一點 0.9 m 以上；Tim 2026-10-17「繩梯…還是不能爬(是否可以加大判定範圍?)」）。 */
 var FP_REACH_ROPE = 18, FP_REACH_ROPE_Z = 6;
+/** 正對著梯子嗎（Tim 2026-10-19「梯子判定可以只判定玩家視線內(要正對梯子 一定角度內)」；TASK-0726）：視線的水平方向跟「上梯子後要去的點」
+ *  （pts 從第二點起、第一個離自己水平 1.5 格以上的）夾角 FP_LAD_FACE（45°）內；每一點都在正上方／正下方（直梯貼著站）⇒ 算。只看水平：往下爬時低頭看艙口也算。 */
+function fpFacing(pts, p) {
+  var cy = Math.cos(FP.yaw), sy = Math.sin(FP.yaw);
+  for (var i = 1; i < pts.length; i++) {
+    var hx = pts[i][0] - p[0], hy = pts[i][1] - p[1], hl = Math.hypot(hx, hy);
+    if (hl >= 1.5) return (cy * hx + sy * hy) / hl > FP_LAD_FACE;
+  }
+  return true;
+}
 function fpNear(p) {
   var best = null, bd = 1e9;
   (FP.lads || []).forEach(function (L) {
@@ -387,7 +393,7 @@ function fpNear(p) {
         var cx = clamp(p[0], L.span[0], L.span[1]); dh = Math.hypot(cx - p[0], q[1] - p[1]);
         pts = [[cx, q[1], q[2]]].concat(pts.slice(1));
       } else dh = Math.hypot(q[0] - p[0], q[1] - p[1]);
-      if (dh < R && Math.abs(q[2] - p[2]) <= RZ && dh < bd) { bd = dh; best = { pts: pts, up: k === 0, name: L.name, L: L.ride ? L : null }; }   // L：跟著轉的繩梯（fpClimbGo 照開局的座標爬）
+      if (dh < R && Math.abs(q[2] - p[2]) <= RZ && dh < bd && fpFacing(pts, p)) { bd = dh; best = { pts: pts, up: k === 0, name: L.name, L: L.ride ? L : null, rope: L.rope }; }   // L：跟著轉的繩梯（fpClimbGo 照開局的座標爬）
     });
   });
   return best;
@@ -400,12 +406,59 @@ function fpHide(sh, c) {
   var p = fpWho().pos;                                                 // 跟隨中：看的是被跟的人身邊（自己的身體在遠處 ⇒ 照畫）
   return Math.abs(c.pos[0] - p[0]) < FP_NEAR && Math.abs(c.pos[1] - p[1]) < FP_NEAR && Math.abs(c.pos[2] - p[2]) < 12;
 }
+/** E（面板的 🪜）：整段沿梯子的線爬完（正對著梯子才摸得到，fpNear／fpFacing）。 */
 function fpClimbGo() {
   if (!FP.on || FP.fol || FP.mode === 2 || FP.climb || !FP.near || PAUSED) return;
-  var n = FP.near, L = n.L;
+  var n = FP.near, L = n.L, c = FP.c.pos;
+  FP.jz = FP.jv = 0; FP.v[0] = FP.v[1] = 0;
   if (!L) { FP.climb = { pts: n.pts, k: 0 }; return; }
-  var B = n.up ? L.up0 : L.up0.slice().reverse(), m0 = fpLadMap(FP.sh, L, B[0]), c = FP.c.pos;   // 跟著轉的繩梯：pb ＝ 自己在開局座標裡的位置（照梯子起點那一點的位移估）
-  FP.climb = { L: L, b: B, k: 0, pb: [c[0] - (m0[0] - B[0][0]), c[1] - (m0[1] - B[0][1]), c[2] - (m0[2] - B[0][2])] };
+  var B = n.up ? L.up0 : L.up0.slice().reverse(), m0 = fpLadMap(FP.sh, L, B[0]);   // 跟著轉的繩梯：pb ＝ 自己在開局座標裡的位置（照梯子起點那一點的位移估）
+  FP.climb = { L: L, pts: B, k: 0, pb: [c[0] - (m0[0] - B[0][0]), c[1] - (m0[1] - B[0][1]), c[2] - (m0[2] - B[0][2])] };
+}
+/** 爬（每一格）：一段一段沿梯子的線走（三維）；跟著轉的繩梯在開局的座標裡走（pb），每一格照它現在的位置換過去（fpLadMap）⇒ 爬到一半砲塔轉了也不會脫手。 */
+function fpClimbStep(sh, dt) {
+  var CL = FP.climb, P = CL.pts, c = FP.c, p = CL.L ? CL.pb : c.pos, to = P[CL.k], d = sub(to, p), l = len(d), s = FP_CLIMB * dt;
+  FP.jz = FP.jv = 0; FP.v[0] = FP.v[1] = 0;
+  if (l <= s) { p = to.slice(); if (++CL.k >= P.length) FP.climb = null; }
+  else p = add(p, mul(d, s / l));
+  if (CL.L) { CL.pb = p; c.pos = fpLadMap(sh, CL.L, p); } else c.pos = p;
+}
+/** 爬到一半按跳（TASK-0726；Tim 2026-10-19「除非跳起來 可以跳下樓梯」）：離開梯子，腳底換成正下方站得住的那一層（FP.jz ＝ 離它多高）、往上跳一下 ⇒ 照重力落下去。
+ *  下面一路都沒有 ⇒ 交給 fpGround（落到下一層或回船員旁邊）。 */
+function fpClimbOff(g) {
+  var c = FP.c, z = c.pos[2], zi = Math.floor(z);
+  FP.climb = null; FP.v[0] = FP.v[1] = 0;
+  var s = standZ(g, Math.floor(c.pos[0]), Math.floor(c.pos[1]), Math.max(1, zi - FP_FALL), zi, FP_HEAD);
+  if (s >= 0) { c.pos[2] = s; FP.jz = Math.max(0, z - s); } else FP.jz = 0;
+  FP.jv = Math.sqrt(2 * FP_G * FP_JUMP);
+}
+// 樓梯不穿洞（TASK-0726；Tim 2026-10-19「有空洞的樓梯爬不上去(會穿洞)」「梯子判定可以只判定玩家視線內(要正對梯子 一定角度內)」
+//   「不要強制上梯子 只是玩家正對且很靠近時 不要穿洞就好了(關閉穿洞邏輯)」）：
+//   走路照格子找腳下 ⇒ 踏板之間的空洞那一柱站不住、往下找到下一層就落下去。⇒ 梯子的線（雕刻的固定點 foot → lo → hi → head，⛔ 不抬 CLIMB_LIFT）當成一道看不見的斜坡：
+//   離那條線水平 FP_LAD_W 格內、高度跟腳差 FP_UP 格內 ⇒ 那裡多一個站得住的高度（fpRamp）。人照平常走（不強制上梯子、方向鍵照舊），只是不會從空洞掉下去。
+//   · 走進斜坡（fpTry）要正對著那一段（視線的水平方向跟那一段的水平方向，往上或往下，夾角 FP_LAD_FACE 45° 內）；已經站在斜坡上（fpGround）不看方向 ⇒ 站著轉頭看旁邊不會掉下去。
+//   · 側著走出去（不正對）⇒ 照平常的格子 ⇒ 該掉就掉；跳起來（在半空）⇒ 不墊斜坡 ⇒ 跳得下樓梯。
+//   · 只有水平 ≥ FP_LAD_RUN 格的那幾段（直梯正上正下那一段沒有坡可以走，照舊按 E）；繩梯、跟著轉的繩梯不算（不是樓梯）。
+//   · ?ladramp=0 ⇒ 不墊斜坡（以前的走法；對照用）。
+var FP_LAD_FACE = Math.cos(45 * Math.PI / 180), FP_LAD_W = 4, FP_LAD_RUN = 1.5, FP_LAD_ON = Q.get('ladramp') !== '0';
+/** (x, y) 那一柱在斜坡上的站立高度（離 z 最近、差 FP_UP 格內）；face ⇒ 只算正對著的那幾段；沒有 ⇒ −1。 */
+function fpRamp(x, y, z, face) {
+  if (!FP_LAD_ON) return -1;
+  var best = -1, cy = Math.cos(FP.yaw), sy = Math.sin(FP.yaw);
+  (FP.lads || []).forEach(function (L) {
+    if (L.rope || L.ride) return;
+    for (var i = 0; i + 1 < L.raw.length; i++) {
+      var a = L.raw[i], b = L.raw[i + 1], dx = b[0] - a[0], dy = b[1] - a[1], run = Math.hypot(dx, dy);
+      if (run < FP_LAD_RUN) continue;
+      if (face && Math.abs(cy * dx + sy * dy) / run < FP_LAD_FACE) continue;
+      var t = ((x - a[0]) * dx + (y - a[1]) * dy) / (run * run);
+      if (t < 0 || t > 1) continue;                                    // 只有那一段正上方（⛔ 夾到端點 ⇒ 端點外面水平 FP_LAD_W 格都墊成平台，梯頭外的艙口上方站得住、走到平台邊卡住，量過：憲法號 hold-main 從梯頭下不去）
+      if (Math.hypot(x - a[0] - t * dx, y - a[1] - t * dy) > FP_LAD_W) continue;
+      var s = Math.round(a[2] + t * (b[2] - a[2]));
+      if (Math.abs(s - z) <= FP_UP && (best < 0 || Math.abs(s - z) < Math.abs(best - z))) best = s;
+    }
+  });
+  return best;
 }
 /** 鏡頭（03_camera.js camUpdate 開頭）：眼睛在船長頭上、照船的矩陣（內插過的）換到世界。 */
 function fpCam() {
