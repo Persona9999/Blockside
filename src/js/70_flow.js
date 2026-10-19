@@ -2,7 +2,7 @@
 function reset() {
   END_AT = 0; END_WAIT = null;
   rngReset(); SH_STAT.cut = SH_STAT.tris = 0; FLOOD_LV = PHX.flood; WP_STAT.spray = WP_STAT.foam = 0; WP_STAT.src = {}; DEB_ACC = PT_ACC = 0; SIMT = 0; windInit(); stepWind(0); vxInit();   // 開局的風：這一場的風向、風速（08_weather.js windInit）              // 碎木、水花、進水粒子的亂數，少生的節拍跟著重設（12_effects.js、13_water.js、33_flood.js）；進水模式在這裡定（戰鬥中改了下一場生效）
-  SHIPS.forEach(function (sh) { sh.rs.dispose(); armDispose(sh); });   // armDispose：砲帶的裝甲（24_armor.js）
+  SHIPS.forEach(function (sh) { sh.rs.dispose(); armDispose(sh); glsFree(sh); });   // armDispose：砲帶的裝甲（24_armor.js）；glsFree：玻璃網格（15_smooth.js）
   PIECES.forEach(function (pc) { if (pc.rs) pc.rs.dispose(); });   // 無頭：碎塊沒掛網格（62_simview.js）
   SHIPS = []; PIECES = []; BALLS = []; EVENTS = []; FLY = []; BOOMS = []; SELFB = []; BLASTS = []; D.n = 0; PT.n = 0; WS.n = WF.n = 0; SIMT = 0; OVER = false; PAUSED = false;   // 彈種（AMMO_I）重開時保留（Tim 2026-10-12）
   clearMsgs(); fleetReset();                                          // 上方艦隊：每一場開局全折疊（61_hud.js）

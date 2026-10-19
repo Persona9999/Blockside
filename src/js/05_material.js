@@ -22,9 +22,9 @@ function hullMaterials(T, info) {
   T.matIds = [T.mat0]; T.matG = null; T.matBad = [];
   if (info.material && !MATS[info.material]) T.matBad.push(info.material + '（全船預設）');
   var n = 1 + (h && h.ids ? h.ids.length : 0), XYZ = [];
-  T.matK = new Float64Array(n); T.matT = new Float64Array(n); T.matN = new Float64Array(n); T.matM = new Float32Array(n); T.matR = new Float32Array(n);   // matM／matR：金屬度、粗糙度（TASK-0627；平滑渲染照它反光）
+  T.matK = new Float64Array(n); T.matT = new Float64Array(n); T.matN = new Float64Array(n); T.matM = new Float32Array(n); T.matR = new Float32Array(n); T.matC = new Float32Array(n);   // matM／matR：金屬度、粗糙度（TASK-0627；平滑渲染照它反光）；matC：透明度（TASK-0753 玻璃）
   if (h && h.ids) h.ids.forEach(function (id) { if (!MATS[id]) T.matBad.push(id); T.matIds.push(id); });
-  T.matIds.forEach(function (id, i) { var m = matInfo(id); T.matK[i] = m.hard; T.matT[i] = matVoxT(m); T.matM[i] = +m.metal || 0; T.matR[i] = isFinite(+m.rough) && m.rough !== undefined ? +m.rough : 0.5; XYZ.push([]); });
+  T.matIds.forEach(function (id, i) { var m = matInfo(id); T.matK[i] = m.hard; T.matT[i] = matVoxT(m); T.matM[i] = +m.metal || 0; T.matR[i] = isFinite(+m.rough) && m.rough !== undefined ? +m.rough : 0.5; T.matC[i] = clamp(+m.clear || 0, 0, 0.95); XYZ.push([]); });
   if (h && h.ids && h.runs && h.runs.length) {                            // 段落：[跟上一段結尾差幾、長度、索引]，一段 ＝ 線性索引相連的格（senate 匯出；⛔ 不跨空格 ⇒ 只走有格的地方）
     var G = new VK.Grid(T.h.size), sx = T.h.size[0], sy = T.h.size[1], at = 0, R = h.runs;
     for (var k = 0; k + 2 < R.length; k += 3) {
@@ -71,6 +71,21 @@ function hullMaterials(T, info) {
     for (var pk = 0; pk < P.length; pk += 3) { var px = P[pk], py = P[pk + 1], pz = P[pk + 2]; if (SG.get(px, py, pz) || (VG && VG.get(px, py, pz))) continue; SG.set(px, py, pz, 1); T.smN++; T.smAuto++; }
   }
   if (T.smN) { T.smG = SG; base.sm = SG; }
+  // 透明（TASK-0753；Tim 2026-10-20「新增一種透明材質標記(玻璃)」）：材質表寫了 clear 的材質（玻璃 glass）那幾格 ⇒ T.glsG（旗標）＋ base.gl：
+  //   VoxelKit 的方塊網格化不出它們的面、也不讓它們擋住旁邊格子的面；15_smooth.js glsBuild 另外畫成半透明的平面。平滑格（明寫 render=smooth）照平滑畫、不算透明。
+  //   ⛔ 只看非預設的材質層（關聯 meta material）；沒有 ⇒ T.glsG ＝ null，跟以前一樣。
+  T.glsG = null; T.glsXYZ = null; T.glsI = null; T.glsN = 0;
+  var GG = null, GP = [], GI = [];
+  for (var gi = 1; gi < T.matIds.length; gi++) {
+    if (!(T.matC[gi] > 0)) continue;
+    var Q = T.matXYZ[gi];
+    for (var qk = 0; qk < Q.length; qk += 3) {
+      var qx = Q[qk], qy = Q[qk + 1], qz = Q[qk + 2]; if (T.smG && T.smG.get(qx, qy, qz)) continue;
+      if (!GG) GG = new VK.Grid(T.h.size);
+      GG.set(qx, qy, qz, 1); GP.push(qx, qy, qz); GI.push(gi);
+    }
+  }
+  if (GG) { T.glsG = GG; base.gl = GG; T.glsXYZ = new Int16Array(GP); T.glsI = new Uint8Array(GI); T.glsN = GI.length; }
 }
 /** 那一格的硬度倍率（打掉之後照樣查得到：材質層不跟著改）。 */
 function matK(sh, x, y, z) { var T = sh.T, p = T.pmG && T.pmG.get(x, y, z); if (p) return T.pmI[p].hard; return T.matG ? T.matK[T.matG.get(x, y, z)] : T.matK[0]; }   // pmG：螺旋槳的格（24_armor.js propSetup；船殼沒有格的位置才有）

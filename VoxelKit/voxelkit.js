@@ -172,6 +172,7 @@
     this.own = new Uint8Array(this.tab.length);    // 1 ＝ 這份 Grid 自己的（可以直接寫）
     this.count = 0;
     this.sm = null;                                // 平滑渲染的旗標網格（呼叫端給；meshChunk 不出那些格的方塊面）
+    this.gl = null;                                // 透明格的旗標網格（呼叫端給；meshChunk 不出那些格的方塊面、也不讓它們擋住旁邊格子的面 ⇒ 呼叫端另外畫成半透明）
     this.cv = new Uint32Array(this.tab.length);    // 每一塊改過幾次、整份改過幾次（ver）：呼叫端記下來比 ⇒ 知道哪幾塊變了（Blockside 05_material.js voxLostT 只重數變過的塊）
     this.ver = 0;
   }
@@ -184,7 +185,7 @@
   /** 共用同一份資料的另一份網格（之後各改各的）。 */
   Grid.prototype.share = function () {
     var g = new Grid([this.sx, this.sy, this.sz]);
-    g.tab = this.tab.slice(); g.count = this.count; g.sm = this.sm;   // sm：平滑渲染的旗標（不會變 ⇒ 共用同一份）
+    g.tab = this.tab.slice(); g.count = this.count; g.sm = this.sm; g.gl = this.gl;   // sm：平滑渲染的旗標、gl：透明格的旗標（不會變 ⇒ 共用同一份）
     return g;
   };
   Grid.prototype.ci = function (cx, cy, cz) { return cx + this.nx * (cy + this.ny * cz); };
@@ -220,7 +221,7 @@
   }
 
   // ───────────────────────── 網格化（區塊內同色面合併） ─────────────────────────
-  var pad = new Uint8Array(PAD * PAD * PAD), spad = new Uint8Array(PAD * PAD * PAD), mask = new Int16Array(CH * CH);
+  var pad = new Uint8Array(PAD * PAD * PAD), spad = new Uint8Array(PAD * PAD * PAD), gpad = new Uint8Array(PAD * PAD * PAD), mask = new Int16Array(CH * CH);
   // 軸 a 的面：u、v 取讓 (u, v, a) 成右手系的兩軸
   var UAX = [1, 2, 0], VAX = [2, 0, 1], P = [0, 0, 0];
   /** 一個區塊的四邊形 ⇒ Uint16Array（每頂點 x,y,z,packed；每四邊形 4 頂點）。空 ⇒ null。 */
@@ -245,6 +246,21 @@
       if (a === 0) { lx = s; ly = p; lz = q; } else if (a === 1) { lx = p; ly = s; lz = q; } else { lx = p; ly = q; lz = s; }
       pad[(lx + 1) + (ly + 1) * PAD + (lz + 1) * PAD2] = grid.get(x0 + lx, y0 + ly, z0 + lz);
     }
+    // 透明格（grid.gl：同尺寸的旗標網格，非 0 ＝ 這一格由呼叫端另外畫成半透明）：自己不出方塊面，也不擋旁邊格子的面（⇒ 透過它看得到後面）。
+    //   18³ 裡（含鄰居一層）一格都沒有 ⇒ gp ＝ null，照沒有透明格那一條（輸出一位元不差）；先看周圍 27 塊有沒有透明格的塊，沒有就不逐格問
+    var gp = null, G = grid.gl, near = false;
+    if (G) for (var dz = -1; dz <= 1 && !near; dz++) for (var dy = -1; dy <= 1 && !near; dy++) for (var dx = -1; dx <= 1; dx++) {
+      var qx = cx + dx, qy = cy + dy, qz = cz + dz;
+      if (qx >= 0 && qy >= 0 && qz >= 0 && qx < G.nx && qy < G.ny && qz < G.nz && G.tab[G.ci(qx, qy, qz)]) { near = true; break; }
+    }
+    if (near) {
+      var any = false;
+      gpad.fill(0);
+      for (z = -1; z <= CH; z++) for (y = -1; y <= CH; y++) for (x = -1; x <= CH; x++) {
+        var gv = G.get(x0 + x, y0 + y, z0 + z); if (gv) { gpad[(x + 1) + (y + 1) * PAD + (z + 1) * PAD2] = 1; any = true; }
+      }
+      if (any) gp = gpad;
+    }
     var out = [], st = [1, PAD, PAD2];
     for (a = 0; a < 3; a++) {
       var ua = UAX[a], va = VAX[a], sa = st[a], su = st[ua], sv = st[va], B = 1 + PAD + PAD2;
@@ -254,6 +270,7 @@
           var any = false, row0 = B + d * sa;
           for (var v = 0; v < CH; v++) for (var u = 0, pi = row0 + v * sv; u < CH; u++, pi += su) {
             var col = pad[pi], m = (col && !pad[pi + off] && !(sc && spad[pi])) ? col : 0;
+            if (gp && col) m = (!gp[pi] && (!pad[pi + off] || gp[pi + off]) && !(sc && spad[pi])) ? col : 0;   // 透明格：自己不出面；旁邊是透明格 ⇒ 照空氣出面
             mask[u + v * CH] = m; if (m) any = true;
           }
           if (!any) continue;

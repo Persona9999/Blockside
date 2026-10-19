@@ -206,19 +206,24 @@ function programs() {
     ' vec3 col=b*(mix(uGround,uSky,n.y*0.5+0.5)*0.62+vec3(1.0,0.96,0.88)*max(dot(n,uSun),0.0)*0.78);\n' +
     ' col*=uLum; float fd=length(vW-uEye); o=vec4(mix(col,uFog,1.0-exp(-fd*uFogD)),1.0); }\n');
   P.tri = VK.compile(gl,
-    '#version 300 es\nlayout(location=0) in vec3 aP; layout(location=1) in vec3 aN; layout(location=2) in vec3 aC; layout(location=3) in vec2 aM; uniform mat4 uModel,uVP; out vec3 vN; out vec3 vW; out vec3 vC; out vec2 vM;\n' +
+    '#version 300 es\nlayout(location=0) in vec3 aP; layout(location=1) in vec3 aN; layout(location=2) in vec3 aC; layout(location=3) in vec3 aM; uniform mat4 uModel,uVP; out vec3 vN; out vec3 vW; out vec3 vC; out vec3 vM;\n' +
     'void main(){ vec4 w=uModel*vec4(aP,1.0); vW=w.xyz; vN=mat3(uModel)*aN; vC=aC; vM=aM; gl_Position=uVP*w; }\n',
-    '#version 300 es\nprecision highp float;\n' + SEA_GLSL + SHADOW_GLSL + CUT_GLSL + LAMP_GLSL + 'in vec3 vN; in vec3 vW; in vec3 vC; in vec2 vM; uniform vec3 uSun,uEye,uFog,uSky,uGround; uniform float uFogD,uLit,uGlow; uniform mat4 uCutInv; out vec4 o;\n' +
-    'void main(){ if(vW.y<uClip) discard; if(uCut.w>0.5 && cutOut((uCutInv*vec4(vW,1.0)).xyz)) discard; vec3 n=normalize(vN); float sd=dot(n,uSun), d=abs(sd); vec3 col=vC;\n' +
+    '#version 300 es\nprecision highp float;\n' + SEA_GLSL + SHADOW_GLSL + CUT_GLSL + LAMP_GLSL + 'in vec3 vN; in vec3 vW; in vec3 vC; in vec3 vM; uniform vec3 uSun,uEye,uFog,uSky,uGround; uniform float uFogD,uLit,uGlow,uGls; uniform mat4 uCutInv; out vec4 o;\n' +
+    'void main(){ if(vW.y<uClip) discard; if(uCut.w>0.5 && cutOut((uCutInv*vec4(vW,1.0)).xyz)) discard; vec3 n=normalize(vN); float sd=dot(n,uSun), d=abs(sd); vec3 col=vC; float ga=1.0;\n' +
     ' if(uLit>0.5){ float sk=shadowK(vW,(sd<0.0?-n:n)*(3.0-2.0*d)); d*=sk; col=vC*(mix(uGround,uSky,0.6)*0.65+vec3(1.0,0.96,0.88)*d*0.7);\n' +
     // 金屬（TASK-0627；材質表 metal／rough ⇒ 平滑渲染的頂點帶 vM）：天空／海面的反射（菲涅耳：斜看更亮）＋太陽的鏡面高光（照陰影）；vM.x 0 ⇒ 跟以前一樣
     '  if(vM.x>0.001){ vec3 v=normalize(uEye-vW), r=reflect(-v,n); float ro=clamp(vM.y,0.05,1.0), fr=0.04+0.96*pow(1.0-abs(dot(n,v)),5.0);\n' +
     '   vec3 env=mix(uFog*0.5,mix(uFog,uSky,0.55)*1.2,smoothstep(-0.2,0.35,r.y)); vec3 sp=vec3(1.0,0.96,0.88)*pow(max(dot(n,normalize(uSun+v)),0.0),mix(120.0,6.0,ro))*step(0.0,sd)*sk*(2.0-1.5*ro);\n' +
-    '   col=mix(col,col*0.35+env*mix(vec3(0.85),vC,0.4)*(0.5+0.5*fr),vM.x*(0.85-0.5*ro))+sp*vM.x; } }\n' +
+    '   col=mix(col,col*0.35+env*mix(vec3(0.85),vC,0.4)*(0.5+0.5*fr),vM.x*(0.85-0.5*ro))+sp*vM.x; }\n' +
+    // 玻璃（TASK-0753；15_smooth.js glsDraw 開 uGls，vM.z ＝ 材質表 clear）：同一套天空／海平線反射與太陽高光，法線翻向看的那一面；
+    //   反射照菲涅耳（正看淡、斜看亮）× 光滑度；alpha ＝ 1 − 透明度 ×（1 − 反射），高光蓋上去 ⇒ 正看透出後面、斜看像鏡子。uGls 0 ⇒ 整段跳過（alpha 1）
+    '  if(uGls>0.5){ vec3 v=normalize(uEye-vW), gn=dot(n,v)<0.0?-n:n, r=reflect(-v,gn); float ro=clamp(vM.y,0.02,1.0), fr=0.04+0.96*pow(1.0-max(dot(gn,v),0.0),5.0), rk=mix(0.12,1.0,fr)*(1.0-0.7*ro);\n' +
+    '   vec3 env=mix(uFog*0.5,mix(uFog,uSky,0.55)*1.2,smoothstep(-0.2,0.35,r.y)); float hs=pow(max(dot(gn,normalize(uSun+v)),0.0),mix(400.0,8.0,ro))*step(0.0,dot(gn,uSun))*sk*(2.0-1.5*ro);\n' +
+    '   col=mix(col,env,rk)+vec3(1.0,0.96,0.88)*hs; ga=clamp(1.0-vM.z*(1.0-rk)+hs,0.0,1.0); } }\n' +
     ' if(uLN>0) col+=vC*lampK(vW,n);\n' +                                 // 點光源
     // 燈籠（meta kind=lantern；drawModels 設 uGlow）：只有琥珀色的燈罩發光（色 245 ＝ 1, .71, .33）—— 金框（248，藍 0）、暗紅（128）照常受光
     ' if(uGlow>0.0) col=mix(col,vC*1.2+vec3(0.3,0.14,0.0),uGlow*step(0.9,vC.r)*step(0.2,vC.b)*step(vC.b,0.5));\n' +
-    ' float fd=length(vW-uEye); o=vec4(mix(col,uFog,1.0-exp(-fd*uFogD)),1.0); }\n');
+    ' float fd=length(vW-uEye); o=vec4(mix(col,uFog,1.0-exp(-fd*uFogD)),ga); }\n');
   // 帆：頂點法線（平滑，不是一個三角形一個平面）；法線翻向看的那一面；包覆光（背光面不死黑、明暗過渡慢）＋太陽在帆後面時布透出暖光
   // 有貼圖的帆（TASK-0579）：aT ＝ 貼圖集的 uv（11_rig_gpu.js sailBuf；u < 0 ＝ 沒有貼圖，照頂點色）；片段照貼圖取色、alpha < 0.5（已照 alpha_min 二值化）⇒ discard ＝ 洞
   P.sail = VK.compile(gl,

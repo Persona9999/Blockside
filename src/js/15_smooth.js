@@ -151,3 +151,57 @@ function smBuild(T, g, rk, reuse, pg, o) {
   m.n = idx.length; m.own = true; m.verts = V.length; m.faces = F.length;
   return m;
 }
+
+// ───────────────────────── 透明格：玻璃（TASK-0753；Tim 2026-10-20：「參考金屬 新增一種透明材質標記(玻璃) 跟金屬一樣套用光滑表面」）─────────────────────────
+// 哪幾格：材質表寫了 clear（透明度 0–0.95）的材質（玻璃 glass）⇒ T.glsG（旗標）、T.glsXYZ（座標）、T.glsI（材質索引；05_material.js）。
+//   VoxelKit 的方塊網格化不出它們的面、也不讓它們擋住旁邊格子的面（grid.gl）⇒ 窗後面的船艙、窗框照常畫出來，從玻璃看得進去。
+// 怎麼畫：玻璃格貼著空氣的每一面一個平面（不做 surface nets：窗玻璃 1 格厚，平均會把兩面黏在一起）；玻璃格之間、貼著實心格的面不畫。
+//   頂點 12 個 float ＝ 位置、法線、顏色、[金屬度, 粗糙度, 透明度]（平滑面多一個透明度）⇒ P.tri 同一支著色器：反光照平滑面那一段的天空／海平線與太陽高光（菲涅耳），
+//   uGls 開著才照透明度出 alpha（01_gl.js）。畫在不透明的東西、海、艙內的水都畫完之後（60_render.js glsDraw）：混色、不寫深度、陰影圖不畫（光照得進艙裡）。
+//   一艘一份網格（窗只有幾千格）：打掉、換色 ±1 格碰到玻璃 ⇒ 下一格整份重建。斷開漂走的那一團照方塊畫（它的網格是新建的，沒有 gl）。
+// ⛔ 只改畫面：打中、進水、重量照舊看格子（玻璃的比重、硬度在材質表）。沒有玻璃的船 ⇒ T.glsG ＝ null，整段不走。
+/** 打掉／換色 (x, y, z)：碰到玻璃（自己或 6 鄰）⇒ 這艘的玻璃網格下一格重建。 */
+function glsTouch(sh, x, y, z) {
+  var G = sh.T.glsG; if (!G || sh.glsD) return;
+  if (G.get(x, y, z) || G.get(x - 1, y, z) || G.get(x + 1, y, z) || G.get(x, y - 1, z) || G.get(x, y + 1, z) || G.get(x, y, z - 1) || G.get(x, y, z + 1)) sh.glsD = true;
+}
+/** 這艘的玻璃網格（照 sh.grid 現在的格子）⇒ sh.gls ＝ { vao, vb, n }；沒有面 ⇒ n ＝ 0。 */
+function glsBuild(sh) {
+  var T = sh.T, g = sh.grid, P = T.glsXYZ, MI = T.glsI, G = T.glsG, V = [], N = [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]];
+  for (var k = 0, j = 0; k < P.length; k += 3, j++) {
+    var x = P[k], y = P[k + 1], z = P[k + 2], col = g.get(x, y, z); if (!col) continue;
+    var r = ((col >> 5) & 7) / 7, gg = ((col >> 2) & 7) / 7, b = (col & 3) / 3, mi = MI[j], mm = T.matM[mi], mr = T.matR[mi], mc = T.matC[mi];
+    for (var f = 0; f < 6; f++) {
+      var n = N[f], nx = x + n[0], ny = y + n[1], nz = z + n[2];
+      if (g.get(nx, ny, nz)) continue;                                    // 旁邊有格（玻璃或實心）⇒ 不畫：實心那一面由方塊網格畫（玻璃不擋它）
+      var ax = f >> 1, ua = SM_UAX[ax], va = SM_VAX[ax], L = [x, y, z], q = [];
+      if (n[ax] > 0) L[ax]++;
+      for (var e = 0; e < 4; e++) { var c = SM_C4[n[ax] > 0 ? e : 3 - e], Q = L.slice(); Q[ua] += c[0]; Q[va] += c[1]; q.push(Q); }
+      [0, 1, 2, 0, 2, 3].forEach(function (i) { V.push(q[i][0], q[i][1], q[i][2], n[0], n[1], n[2], r, gg, b, mm, mr, mc); });
+    }
+  }
+  var m = sh.gls || (sh.gls = { vao: gl.createVertexArray(), vb: gl.createBuffer(), n: 0 });
+  if (!m.init) {
+    gl.bindVertexArray(m.vao); gl.bindBuffer(gl.ARRAY_BUFFER, m.vb);
+    [[0, 0, 3], [1, 3, 3], [2, 6, 3], [3, 9, 3]].forEach(function (a) { gl.enableVertexAttribArray(a[0]); gl.vertexAttribPointer(a[0], a[2], gl.FLOAT, false, 48, a[1] * 4); });   // 3：金屬度、粗糙度、透明度（P.tri 的 aM）
+    gl.bindVertexArray(null); m.init = true;
+  }
+  gl.bindBuffer(gl.ARRAY_BUFFER, m.vb); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(V), gl.DYNAMIC_DRAW);
+  m.n = V.length / 12; sh.glsD = false;
+}
+var SM_C4 = [[0, 0], [1, 0], [1, 1], [0, 1]];
+/** 重開一場（70_flow.js reset）：丟掉這艘的玻璃網格。 */
+function glsFree(sh) { if (sh.gls) { gl.deleteBuffer(sh.gls.vb); gl.deleteVertexArray(sh.gls.vao); sh.gls = null; } }
+/** 玻璃那一趟（60_render.js，海與艙內的水之後）：P.tri、uGls 1、混色（目的地的 alpha 不動）、不寫深度。由遠到近（船之間）。 */
+function glsDraw() {
+  var L = SHIPS.filter(function (sh) { return sh.T.glsG && sh.sink <= 40; }); if (!L.length) return;
+  var E = CAM.eye; L.sort(function (a, b) { return Math.hypot(b.M[12] - E[0], b.M[14] - E[2]) - Math.hypot(a.M[12] - E[0], a.M[14] - E[2]); });
+  gl.enable(gl.BLEND); gl.blendFuncSeparate(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA, gl.ZERO, gl.ONE); gl.depthMask(false); gl.disable(gl.CULL_FACE);
+  gl.useProgram(P.tri.prog); setCommon(P.tri); gl.uniform1f(P.tri.u.uLit, 1); gl.uniform1f(P.tri.u.uGls, 1); if (P.tri.u.uGlow) gl.uniform1f(P.tri.u.uGlow, 0);
+  L.forEach(function (sh) {
+    if (!sh.gls || sh.glsD) glsBuild(sh); if (!sh.gls.n) return;
+    cutSet(P.tri, sh); gl.uniformMatrix4fv(P.tri.u.uModel, false, sh.M);
+    gl.bindVertexArray(sh.gls.vao); gl.drawArrays(gl.TRIANGLES, 0, sh.gls.n);
+  });
+  cutSet(P.tri, null); gl.uniform1f(P.tri.u.uGls, 0); gl.depthMask(true); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+}
