@@ -50,7 +50,8 @@ function portLid(sh, d) {
   if (!P.hc || !g) return P;
   var bb = d.bb, ux = (bb[0] + bb[3]) / 2 - P.hc[0], uy = (bb[1] + bb[4]) / 2 - P.hc[1], ua = ux * P.ax[0] + uy * P.ax[1];
   ux -= P.ax[0] * ua; uy -= P.ax[1] * ua; var ul = Math.hypot(ux, uy);   // 鉸鏈 → 開著的蓋板中心，拿掉沿鉸鏈的那一段（hinge-a 在蓋板的一端，⛔ 直接相減 ⇒ 斜 42°）
-  P.u = ul > 0.5 ? [ux / ul, uy / ul, 0] : [g.ax[0], g.ax[1], 0];       // 往外：開著的蓋板從鉸鏈往外伸（14–17 號照 rz 轉過，⛔ 不用砲軸：1、2 號的砲往船尾偏 10°）
+  P.ul = ul;                                                          // 匯入檢查 portsIssues 的「中心在鉸鏈下面幾格」照它縮（小蓋板關上本來就低不到 3 格）
+  P.u =ul > 0.5 ? [ux / ul, uy / ul, 0] : [g.ax[0], g.ax[1], 0];       // 往外：開著的蓋板從鉸鏈往外伸（14–17 號照 rz 轉過，⛔ 不用砲軸：1、2 號的砲往船尾偏 10°）
   P.house = +mt.house > 0 ? +mt.house : portHouse(sh, P).house;
   P.ring = portRing(sh, P);
   return P;
@@ -296,9 +297,10 @@ function portsIssues(sh, add) {
     var tag = where + '（' + (P.g.model.meta.id || P.g.name.split('/').pop()) + '）', dg = Math.round(P.cdeg * 1800 / Math.PI) / 10;
     var lp = portPts(sh.T, d.mesh), Lc = portMat(P, P.cdeg), c = [0, 0, 0], np = lp.length / 3;
     for (var i = 0; i < lp.length; i += 3) { var q = M4.pt(Lc, lp[i], lp[i + 1], lp[i + 2]); c[0] += q[0] / np; c[1] += q[1] / np; c[2] += q[2] / np; }
-    var dn = P.hc[2] - c[2], inb = false;
+    // 下限 ＝ min(3, 鉸鏈到開著的蓋板中心 × 0.5)：關對了中心低 ≈ ul × sin(close)、翻反了是負的；固定 3 格 ⇒ 夜隼號 7 格高的蓋板（ul 3、close 80° ⇒ 低 2.86–3.04）關對了也報 ✗（TASK-0736）。光榮號 11 格長 ⇒ ul 5（開著的中心 5.5 − 鉸鏈格心 0.5）⇒ 下限 2.5，它的讀數 4.64–5.02（verify_portlids.json）⇒ 結果不變
+    var dn = P.hc[2] - c[2], dmin = Math.min(3, 0.5 * P.ul), inb = false;
     for (var k2 = 0; k2 <= 8 && !inb; k2++) if (sh.T.hullG.get(Math.floor(c[0] + P.u[0] * k2), Math.floor(c[1] + P.u[1] * k2), Math.floor(c[2]))) inb = true;   // 從關著的蓋板中心往外走 8 格碰到船殼 ⇒ 中心在船殼外表面的內側（⛔ 只比鉸鏈的 y：船尾外張的砲門 close 118° 本來就往裡收 2–3 格）
-    if (np && (dn < 3 || inb)) add('error', '砲門', tag, '關的方向不對：反轉 close_deg ' + dg + '° 之後蓋板中心' + (dn < 3 ? '沒在鉸鏈下面 3 格以下（低 ' + dn.toFixed(1) + ' 格）⇒ 關上時往上翻' : '在船殼外表面的內側 ⇒ 往船裡關'), 'P 舷用了 mirror=y（a→b 沒跟著反過來）⇒ 改 rotate=0,0,180−rz、at.y ＝ 401 − hinge y；往船裡 ⇒ close_deg 太大（造船規格 §9.12）');
+    if (np && (dn < dmin || inb)) add('error', '砲門', tag, '關的方向不對：反轉 close_deg ' + dg + '° 之後蓋板中心' + (dn < dmin ? '沒在鉸鏈下面 ' + dmin.toFixed(1) + ' 格以下（低 ' + dn.toFixed(1) + ' 格）⇒ 關上時往上翻' : '在船殼外表面的內側 ⇒ 往船裡關'), 'P 舷用了 mirror=y（a→b 沒跟著反過來）⇒ 改 rotate=0,0,180−rz、at.y ＝ 401 − hinge y；往船裡 ⇒ close_deg 太大（造船規格 §9.12）');
     var hc = portHits(sh, P, P.cdeg, P.house);
     if (hc) { var H = portHouse(sh, P); add('error', '砲門', tag, '關上時穿過縮回去的砲：' + hc + ' 個取樣點（house ' + P.house + ' 格）', H.min === null ? '拉 20 格還是碰到 ⇒ 擺法跑掉了（蓋板不在那門砲的砲門上）' : '加大 house：照幾何至少拉 ' + H.min + ' 格 ⇒ house=' + (Math.ceil(H.min - 1e-9) + 1) + '（再加 1 格）'); }
     var ho = portHits(sh, P, 0, 0);
