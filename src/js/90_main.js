@@ -44,6 +44,7 @@ if (DEBUG) window.__game = {
     return SHIPS.map(function (s) { return { i: s.i, team: s.team, hull: s.T.id, px: s.px, pz: s.pz, foe: s.foe ? s.foe.i : null }; });
   },
   loadHull: function (id) { return loadHull(id).then(function (T) { return T.id; }); },
+  core: { api: CORE_API, out: coreOut, preFrom: corePreFrom, add: coreAdd, pre: function (P) { CORE_PRE = P || null; return !!CORE_PRE; } },   // 海戰核心 API（TASK-0709，57_core.js；src/CORE_API.md）：pre 設下一場開局的戰前狀態（start／fleet 之後生效）
   foes: function () { return SHIPS.map(function (s) { return { i: s.i, team: s.team, foe: s.foe ? s.foe.i : null, aimOn: s.aimOn ? s.aimOn.i : null, ff: s.ff || 0, ffOut: s.ffOut || 0, ffHold: s.ffHold || 0, avoid: s.avoidN || 0, clear: s.clearN || 0, salvo: s.salvo, salvo2: s.salvo2 || 0, hits: s.hits, sunk: s.sunk, struck: s.struck, x: +s.px.toFixed(1), z: +s.pz.toFixed(1) }; }); },
   mask: function (k) { MASK_OFF = k === undefined ? -1 : k; render(); return MASK_OFF; },   // 船艙遮罩（60_render.js）：關掉第 k 艘的、畫一格
   /** 指揮官（TASK-0551）：cmd('line', 'pair') ⇒ 換兩方的策略（下一次開戰／下一次想生效）；orders() ⇒ 每艘現在的命令與目標。 */
@@ -408,7 +409,7 @@ programs(); geometry(); wpGL(); flGL(); rdGL(); bbSetup(); QIDX = new VK.QuadInd
 hullSay = function (s) { var go = $('go'); if (go.disabled) go.textContent = '解析' + s; };   // 解析中：開戰鈕寫進度（設定照樣能調）
 if (!HEADLESS) requestAnimationFrame(frame);                       // 無頭（00_events.js）不開畫面迴圈；解析中也畫（天、海；船載好才有）
 yieldUI().then(function () {                                        // 先讓主選單畫出來，再開始解析
-  return Promise.all(fleetHulls().map(loadHull).concat([bedBoot()]));   // 只載編成裡的船（預設兩艘都是憲法號 ⇒ 一份）＋海圖（?map，08_seabed.js）
+  return Promise.all(fleetHulls().concat(coreHulls()).map(loadHull).concat([bedBoot()]));   // coreHulls：?coreadd= 要中途加的船（57_core.js）   // 只載編成裡的船（預設兩艘都是憲法號 ⇒ 一份）＋海圖（?map，08_seabed.js）
 }).then(function () {
   var T = HULLT[myHull()], h = T.h, chk = T.chk;
   if (SLIDERS_SHOW) SLIDERS_SHOW();
@@ -433,10 +434,15 @@ yieldUI().then(function () {                                        // 先讓主
     // ?dump=1：每半秒記每艘的最大橫傾、開始沉／沉沒／降旗的時間，跑完寫進頁面（#dump；無頭 Chrome --dump-dom 讀，量進水模式用）
     var rec = Q.get('dump') === '1' ? SHIPS.map(function () { return { maxList: 0, maxPre: 0, maxSinkPre: 0, final: null, sunk: null, struck: null }; }) : null, downAt = { blue: null, red: null };
     var PFB = rec && Q.get('prof') === '1' ? { n: 0, ms: 0, max: 0 } : null;   // ?prof=1：物理那 6 秒每步花多久（step 整個）＋ PROF（帆的碰撞 TASK-0603 量效能用；不加這個參數 ⇒ dump 跟以前一樣）
+    var CQ = Q.get('core') === '1' ? { add: coreAddQ(), added: [] } : null;   // ?core=1：跑完寫戰後狀態（#core，57_core.js）；?coreadd=red:monitor@60 到那一秒中途加船
     var RC = rec && Q.get('ropecheck') === '1' ? SHIPS.map(function (sh) { return { hull: sh.T.id, stat: ropeAuditStatic(sh), seen: {}, float: [] }; }) : null;   // 繩的檢查（ropecheck.py）
     for (var i = 0; i < steps; i++) {
       if (phys && i === from && from > 0) setPhys(true);
       if (PFB && i === from) PROF = { cloth: 0, rope: 0, shred: 0, buf: 0, cc: 0, ccN: 0, ccHit: 0, ccQ: 0, ccMax: 0, ccGeo: 0 };
+      if (CQ) CQ.add.forEach(function (a) { if (!a.done && SIMT >= a.t) { a.done = true; var me = SHIPS.filter(function (s) { return s.team === a.team; })[0] || SHIPS[0], pre = SHIPS.map(function (s) { return [s.px, s.pz, s.yaw, s.grid.count, s.sink]; });
+        var nw = coreAdd({ team: a.team, hull: a.hull, x: me.px + 250, z: me.pz + (a.team === 'blue' ? 150 : -150) }); if (nw && rec) rec.push({ maxList: 0, maxPre: 0, maxSinkPre: 0, final: null, sunk: null, struck: null });   // ?dump 的每艘紀錄：開局就定好長度 ⇒ 加的那艘補一筆
+        var post = SHIPS.slice(0, pre.length).map(function (s) { return [s.px, s.pz, s.yaw, s.grid.count, s.sink]; });
+        CQ.added.push({ t: +SIMT.toFixed(2), hull: a.hull, team: a.team, i: nw ? nw.i : -1, ms: nw ? nw.addMs : null, same: JSON.stringify(pre) === JSON.stringify(post) }); } });
       var tb0 = PFB && i >= from ? performance.now() : 0; simStep(); if (PFB && i >= from) { var tb1 = performance.now() - tb0; PFB.n++; PFB.ms += tb1; PFB.max = Math.max(PFB.max, tb1); }
       if (i % 30 === 29 && !HEADLESS) remesh(Infinity);   // 無頭：不建網格（00_events.js）
       if (rec && i % 30 === 29) SHIPS.forEach(function (sh, k) { var r = rec[k]; r.maxList = Math.max(r.maxList, Math.abs(sh.rollA)); if (!sh.sinkingFinal) { r.maxPre = Math.max(r.maxPre, Math.abs(sh.rollA)); r.maxSinkPre = Math.max(r.maxSinkPre, sh.sink); r.maxPctPre = Math.max(r.maxPctPre || 0, floodPct(sh)); } if (sh.sinkingFinal && r.final === null) r.final = +SIMT.toFixed(1); if (sh.sunk && r.sunk === null) r.sunk = +SIMT.toFixed(1); if (sh.struck && r.struck === null) r.struck = +SIMT.toFixed(1); });
@@ -450,6 +456,7 @@ yieldUI().then(function () {                                        // 先讓主
     }
     if (!HEADLESS) remesh(Infinity); flowRun(false); $('cover').style.display = 'none';
     if (TLOG && Q.get('test') === '1') { var pre4 = document.createElement('pre'); pre4.id = 'crewlog'; document.body.appendChild(pre4); pre4.textContent = JSON.stringify(tlgData()); }   // 測試模式（83_testlog.js；src/tests/crew_log.py 讀）：另外一塊，#dump 照舊
+    if (CQ) { var pre5 = document.createElement('pre'); pre5.id = 'core'; document.body.appendChild(pre5); var CO = coreOut(); CO.added = CQ.added; pre5.textContent = JSON.stringify(CO); }
     if (RC) { var pre2 = document.createElement('pre'); pre2.id = 'ropecheck'; document.body.appendChild(pre2); pre2.textContent = JSON.stringify(RC.map(function (c) { return { hull: c.hull, stat: c.stat, float: c.float }; })); }
     if (rec) { var pre = document.createElement('pre'); pre.id = 'dump'; document.body.appendChild(pre);
       var CV = cmdView('blue').ships, pow = { blue: 0, red: 0 }; CV.forEach(function (v) { if (!v.out) pow[v.team] += cmdStrength(v); });
