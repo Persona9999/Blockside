@@ -330,6 +330,8 @@ def cmd_check(a, pool, out):
     jobs = scen_jobs(a.suite, a.seeds, a.seed0, cand, a.hz, a.tmax, 'check', a.cand_strat); res = pool.run(jobs, out.match1); S = summarize(jobs, res)
     out.log('驗證（種子 %d–%d，沒用來調的）：%d 場（缺 %d）分數 %+.3f ± %.3f（95%% 約 ±%.3f）、候選贏 %d／輸 %d'
             % (a.seed0, a.seed0 + a.seeds - 1, S['n'], S['missing'], S['mean'], S['se'], 1.96 * S['se'], S['win'], S['lose']))
+    E = [e for j, d in zip(jobs, res) if d and d['res'].get('roll') and d['res']['roll'].get(j['side']) for e in d['res']['roll'][j['side']]['errs']]
+    if E: out.log('推演的預測落差（90 秒後 預測 − 實際，TASK-0688）：%d 筆、平均 %+.3f、絕對值平均 %.3f' % (len(E), sum(e[1] - e[2] for e in E) / len(E), sum(abs(e[1] - e[2]) for e in E) / len(E)))
     for si, sc in enumerate(SUITES[a.suite]):
         J = [(j, d) for j, d in zip(jobs, res) if j['scen'] == si]; s = summarize([x[0] for x in J], [x[1] for x in J])
         out.log('  場景 %d（%d 對 %d %s %s %d m）：%+.3f ± %.3f、贏 %d／輸 %d' % (si, sc['n'], sc['n'], sc['hull'], sc['strat'], sc['dist'], s['mean'], s['se'], s['win'], s['lose']))
