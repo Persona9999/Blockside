@@ -108,7 +108,7 @@ function bedDecode(b64) {
   var fo = null, foN = 0, vg = null, vgN = 0;                            // 選用的段（MAP_CHUNK.md §4）：1 ＝ 林地覆蓋、2 ＝ 植被（每點長得出哪幾種，位元 ＝ area.vis）；不認得的記號 ⇒ 停（之後的段讀不了）
   while (p < b.length) {
     var tg = u(); if (tg !== 1 && tg !== 2) break;
-    var sn = u(), sa = tg === 1 ? new Uint8Array(sn * sn) : new Uint16Array(sn * sn);
+    var sn = u(), sa = tg === 1 ? new Uint8Array(sn * sn) : new Uint32Array(sn * sn);   // 植被：一點最多 32 種（2026-10-19 第三批之後超過 16）
     for (k = 0; k < sa.length;) { v = u(); c = u(); sa.fill(v, k, k + c); k += c; }
     if (tg === 1) { fo = sa; foN = sn; } else { vg = sa; vgN = sn; }
   }

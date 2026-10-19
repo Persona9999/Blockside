@@ -14,10 +14,10 @@
 //   好幾種混著長 ⇒ 高度、顏色照那一格各種的棵數加權；place.shell 0 的小植物不算）；
 //   一塊一份靜態網格、一次 draw。交接在 TREE_SHELL（1.1～1.5 km）：殼照距離抖動淡入、貼圖用同一個抖動互補淡出 ⇒ 同一個像素只有一個，沒有一刀切的線。
 //   細的、低模照（樹種, 第幾棵）分組實例化畫（一組一次 draw）；看得到的塊換了、鏡頭動了 8 m 以上、或塊進出 ⇒ 重新分組（treeBin；塊照視錐先剔掉）。
-//   place.view（小植物）⇒ 超過那個距離就不畫。貼圖集照格子排（每列 TREE_ATLAS_COLS 格；樹種多了不會超過貼圖的最大寬）。
+//   place.view（小植物）⇒ 超過那個距離就不畫。貼圖集照格子排（每列 TREE_ATLAS_COLS 格起跳、棵數多了加寬到接近正方形 ⇒ 寬高都不超過 2048（WebGL2 保證的貼圖大小））。
 //   光照跟地形同一套（天光、陽光、船的陰影、霧照 BED_FOG）；葉子照風搖（搖晃權重 × 風）。樹不投影子。
 //   ?trees=0 ⇒ 不長樹。
-var TREE_LOD = [140, 650], TREE_SHELL = [1100, 1500], TREE_SHELL_G = 32, TREE_FAR_SP = 3, TREE_FAR_K = 1.35, TREE_REBIN = 8, TREE_FALLBACK = 0.55, TREE_ATLAS_COLS = 8, TREE_BB_MAX = 64, TREE_VEG_JIT = 70;
+var TREE_LOD = [140, 650], TREE_SHELL = [1100, 1500], TREE_SHELL_G = 32, TREE_FAR_SP = 3, TREE_FAR_K = 1.35, TREE_REBIN = 8, TREE_FALLBACK = 0.55, TREE_ATLAS_COLS = 8, TREE_BB_MAX = 96, TREE_VEG_JIT = 70, TREE_CELL = 32;
 var TREES = { on: Q.get('trees') !== '0', init: false, list: [], ch: {}, far: {}, eye: null, dirty: true, buf: [], cnt: null, bb: null, stat: { plant: 0, far: 0, d0: 0, d1: 0, d2: 0, binMs: 0, bakeMs: 0, genMs: 0, plantMs: 0, bySp: {} } };
 evOn('bedChunk', function (cx, cy, C) { if (TREES.on && BED && BED.A) { TREES.ch[bedKey(cx, cy)] = treePlant(C, false); TREES.dirty = true; } }, 0, true);
 evOn('bedDrop', function (cx, cy) { var k = bedKey(cx, cy); if (TREES.ch[k]) { delete TREES.ch[k]; TREES.dirty = true; } }, 0, true);
@@ -37,12 +37,26 @@ function treePlant(C, far) {
     var u = Math.max(0, Math.min(n - 1.001, x / st)), v = Math.max(0, Math.min(n - 1.001, z / st)), i = Math.floor(u), j = Math.floor(v), fu = u - i, fv = v - j, o = j * n + i;
     return ((h[o] * (1 - fu) + h[o + 1] * fu) * (1 - fv) + (h[o + n] * (1 - fu) + h[o + n + 1] * fu) * fv) / 10;
   }
+  // 每 TREE_CELL 公尺一格（外擴一格）：有哪些底質（位元）、最低最高的海拔 ⇒ 每一種先照它跳過整格（底質不合、海拔帶整個在外面）的候選點；
+  //   只是提早跳過（雙線性的高度不會超出格點的最低最高、候選點的抖動 ＋ 底質取樣的四捨五入落在外擴的那一格裡）⇒ 擺出來的跟逐點查一樣
+  var CG = TREE_CELL, cn = Math.ceil(size / CG), N2 = cn * cn, cm = new Int32Array(N2), lo = new Float32Array(N2).fill(1e9), hi = new Float32Array(N2).fill(-1e9), q, qi, qj;
+  for (qj = 0; qj < n; qj++) for (qi = 0; qi < n; qi++) { q = Math.min(cn - 1, Math.floor(qj * st / CG)) * cn + Math.min(cn - 1, Math.floor(qi * st / CG)); var hv = h[qj * n + qi] / 10; cm[q] |= 1 << C.mat[qj * n + qi]; if (hv < lo[q]) lo[q] = hv; if (hv > hi[q]) hi[q] = hv; }
+  var cmD = new Int32Array(N2), loD = new Float32Array(N2), hiD = new Float32Array(N2);
+  for (qj = 0; qj < cn; qj++) for (qi = 0; qi < cn; qi++) {
+    var mk = 0, l0 = 1e9, h0 = -1e9;
+    for (var dj = -1; dj <= 1; dj++) for (var di = -1; di <= 1; di++) { var o2 = (qj + dj) * cn + qi + di; if (qi + di < 0 || qj + dj < 0 || qi + di >= cn || qj + dj >= cn) continue; mk |= cm[o2]; l0 = Math.min(l0, lo[o2]); h0 = Math.max(h0, hi[o2]); }
+    q = qj * cn + qi; cmD[q] = mk; loD[q] = l0; hiD[q] = h0;
+  }
   Object.keys(TREE_SPECIES).forEach(function (sp, si) {
     var S = TREE_SPECIES[sp], Pl = S.place, gap = Pl.spacing * (far ? TREE_FAR_SP : 1), m = Math.floor(size / gap), sd = 7001 + si * 131 + (far ? 17 : 0), fs = 7001 + (far ? 17 : 0), nk = 0;
     var vb = C.vg && A.vis ? A.vis.indexOf(sp) : -1, vs = vb >= 0 ? size / (C.vgN - 1) : 0;   // 植被段（Blocksail 照物種的分區、氣候、土壤推算，MAP_CHUNK.md §4）：這一種在不在那一點的名單裡；名單沒有這一種 ⇒ 不限
     if (far && Pl.shell === 0) return;                                   // 遠景塊只拿來算樹冠殼 ⇒ 不算進殼的小植物不擺
     var gi0 = Math.round(C.cx * size / gap), gj0 = Math.round(C.cy * size / gap), A4 = Pl.alt;
-    for (var j = 0; j < m; j++) for (var i = 0; i < m; i++) {
+    var mm = 0, ok = new Uint8Array(N2), cI = new Int32Array(m); for (q in Pl.mats) mm |= 1 << q;
+    for (q = 0; q < N2; q++) ok[q] = gap > CG / 2 || (cmD[q] & mm && hiD[q] > A4[0] && loD[q] < A4[3]) ? 1 : 0;   // 間距大過半格 ⇒ 抖動可能跨出外擴的那一格 ⇒ 不先跳
+    for (q = 0; q < m; q++) cI[q] = Math.min(cn - 1, Math.floor((q + 0.5) * gap / CG));
+    for (var j = 0; j < m; j++) for (var i = 0, row = cI[j] * cn; i < m; i++) {
+      if (!ok[row + cI[i]]) continue;
       var gi = gi0 + i, gj = gj0 + j, x = (i + 0.15 + 0.7 * treeHash(gi, gj, sd)) * gap, z = (j + 0.15 + 0.7 * treeHash(gi, gj, sd + 1)) * gap;
       var y = hAt(x, z); if (y <= A4[0] || y >= A4[3]) continue;
       var mt = C.mat[Math.min(n - 1, Math.round(z / st)) * n + Math.min(n - 1, Math.round(x / st))], wM = Pl.mats[mt]; if (!wM) continue;
@@ -62,7 +76,7 @@ function treePlant(C, far) {
       if (treeHash(gi, gj, sd + 6) * 0.55 + treeNoise(wx / Pl.clump, wz / Pl.clump, sd + 7) * 0.45 >= p) continue;
       var r = treeHash(gi, gj, sd + 2), px = wx - BED.ax, pz = wz - BED.az, sc = treeIn(function () { return r; }, Pl.scale) * (far ? TREE_FAR_K : 1);
       var rot = Pl.face && g2 > 1e-4 ? Math.atan2(gz, -gx) + (treeHash(gi, gj, sd + 3) - 0.5) * 1.4 : treeHash(gi, gj, sd + 3) * 6.2832;   // face：模型 +x（歪的那一邊）轉到下坡
-      out.push(px, y - 0.3, pz, rot, sc, 0.85 + 0.3 * treeHash(gi, gj, sd + 4), si, Math.floor(treeHash(gi, gj, sd + 5) * S.variants)); nk++;
+      out.push(px, y - (Pl.sink != null ? Pl.sink : 0.3), pz, rot, sc, 0.85 + 0.3 * treeHash(gi, gj, sd + 4), si, Math.floor(treeHash(gi, gj, sd + 5) * S.variants)); nk++;
       bb[0] = Math.min(bb[0], px); bb[2] = Math.min(bb[2], pz); bb[3] = Math.max(bb[3], px); bb[5] = Math.max(bb[5], pz); bb[1] = Math.min(bb[1], y); bb[4] = Math.max(bb[4], y);
     }
     if (!far) TREES.stat.bySp[sp] = (TREES.stat.bySp[sp] || 0) + nk;
@@ -187,9 +201,9 @@ function treeVao(M) {
 function treeQuadAttr() { gl.bindBuffer(gl.ARRAY_BUFFER, TREES.quad); gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 8, 0); for (var a = 1; a < 4; a++) gl.disableVertexAttribArray(a); gl.enableVertexAttribArray(4); gl.vertexAttribDivisor(4, 1); gl.enableVertexAttribArray(5); gl.vertexAttribDivisor(5, 1); }
 /** 實例屬性指到現在綁著的 ARRAY_BUFFER 的第 first 筆（6 個 float 一筆：x, y, z, 轉角或貼圖格, 放大, 深淺）。 */
 function treeInstAttr(first) { gl.vertexAttribPointer(4, 4, gl.FLOAT, false, 24, first * 24); gl.vertexAttribPointer(5, 2, gl.FLOAT, false, 24, first * 24 + 16); }
-/** 遠景貼圖集：每一棵（細的那一份）從側面照一張（正交投影、固定的光），128 × 256 一格、每列 TREE_ATLAS_COLS 格；alpha ＝ 有沒有東西；產生 mipmap（片段除回 alpha）。 */
+/** 遠景貼圖集：每一棵（細的那一份）從側面照一張（正交投影、固定的光），128 × 256 一格、每列 max(TREE_ATLAS_COLS, ⌈√(2 × 棵數)⌉) 格；alpha ＝ 有沒有東西；產生 mipmap（片段除回 alpha）。 */
 function treeBake() {
-  var t0 = performance.now(), N = TREES.list.length, CW = 128, CH = 256, NC = Math.min(N, TREE_ATLAS_COLS), NR = Math.ceil(N / NC), W = CW * NC, H = CH * NR;
+  var t0 = performance.now(), N = TREES.list.length, CW = 128, CH = 256, NC = Math.min(N, Math.max(TREE_ATLAS_COLS, Math.ceil(Math.sqrt(2 * N)))), NR = Math.ceil(N / NC), W = CW * NC, H = CH * NR;
   if (N > TREE_BB_MAX) throw new Error('樹種的棵數 ' + N + ' 超過貼圖集上限 TREE_BB_MAX ' + TREE_BB_MAX);
   var prevFb = gl.getParameter(gl.FRAMEBUFFER_BINDING), prevVp = gl.getParameter(gl.VIEWPORT), cf = gl.isEnabled(gl.CULL_FACE), bl = gl.isEnabled(gl.BLEND);
   var tex = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, tex); gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, W, H, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
