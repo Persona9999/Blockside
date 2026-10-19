@@ -67,10 +67,12 @@ function makeShip(i, team, yaw, pz, T, px) {                          // T：船
   sh.yards = sh.models.filter(function (m) { return m.kind === 'yard' && m.piv; });
   // 裝飾（TASK-0682；05_hull.js decoSplit）：不在 sh.models ⇒ 戰局看不到（重量、命中、殉爆、掉落都不算）。只記腳下那一格（同上面的模型：外框底往下 12 格內的甲板）：
   //   被打掉 ⇒ 不畫（⛔ 不 blowModel：那會抽 rnd()，開／關裝飾戰局就分岔）。k：燈晃的相位（lanternK）。
+  //   砲門蓋板（kind=portlid，TASK-0719；62_ports.js）：腳 ＝ 鉸鏈 hinge-a 旁 8 格內的船殼（⛔ 往下找：蓋板伸在舷外、底下是海 ⇒ 腳 −1、永遠畫，鉸鏈旁的船殼被打掉也不掉）；
+  //   pts、bb、path 給 62_ports.js 讀（鉸鏈、外框、匯入檢查的名字）。只是讀船型的格子 ⇒ 戰局不變。
   sh.decos = (T.decos || []).map(function (m, k) {
-    var b = m.bbox, cx = Math.floor((b[0] + b[3]) / 2), cy = Math.floor((b[1] + b[4]) / 2), z0 = Math.floor(b[2]) - 1, fz = z0;
+    var b = m.bbox, cx = Math.floor((b[0] + b[3]) / 2), cy = Math.floor((b[1] + b[4]) / 2), z0 = Math.floor(b[2]) - 1, fz = z0, mt = m.meta || {}, hg = mt.kind === 'portlid' && (m.points || {})['hinge-a'];
     while (fz > 0 && z0 - fz < 12 && !T.hullG.get(cx, cy, fz)) fz--;
-    return { mesh: m.mesh, origin: m.origin, meta: m.meta || {}, k: 1000 + k, foot: T.hullG.get(cx, cy, fz) ? VK.pack(cx, cy, fz) : -1 };
+    return { mesh: m.mesh, origin: m.origin, meta: mt, k: 1000 + k, foot: hg ? anchorNear(T, hg[0], hg[1], hg[2], 8) : T.hullG.get(cx, cy, fz) ? VK.pack(cx, cy, fz) : -1, pts: m.points || {}, bb: b, path: m.name };
   });
   // 砲：長砲（24 磅，兩舷各 14）、carronade（32 磅，兩舷各 12）、追擊砲（18 磅，船頭兩舷各 1）都是模型。
   // 砲軸 ＝ 固定點 muzzle − breech（格座標、水平）；砲口 ＝ muzzle 再往外 1.5 格（muzzle 在砲口內膛那一格）。

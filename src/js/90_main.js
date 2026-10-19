@@ -17,6 +17,7 @@ function frame(ts, noRaf) {                                         // noRaf：_
     if (SLOW_VIS) { if (PF) PF.t = performance.now(); slowVisStep(dt * sk); if (PF) pfLap('slowvis'); }
     SLOW_VIS = false;                                                 // 快轉（__game.run）不經過這裡 ⇒ 照常在 step() 走
     doorsAnim(dt * sk);                                               // 門的開關（25_doors.js）：只改畫面 ⇒ 在畫面這一格算、照模擬的速度走（慢動作跟著慢）
+    portsAnim();                                                      // 砲門（TASK-0719，62_ports.js）：只改畫面；自己照 SIMT 走（慢動作、模擬速度跟著）；畫質「砲門的開關演出」關、沒有蓋板的船 ⇒ 一次判斷就回
   }
   if (PF) PF.t = performance.now();
   camFollow(dt);                                                      // 追砲彈（03_camera.js）
@@ -57,6 +58,19 @@ if (DEBUG) window.__game = {
   menuFleet: function (F) { if (F) { FLEET_SET = fleetTrim(F.map(function (L) { return L.slice(); })); fleetUI(); pickShip(); } return { set: FLEET_SET, spec: fleetSpec(), html: [$('fleet0').innerHTML.length, $('fleet1').innerHTML.length] }; },
   prefs: function (p) { if (p) prefsApply(p); return prefsSnap(); },   // 存檔：套進去（有給）⇒ 現在跟預設不一樣的那幾項（69_prefs.js；?prefs=0 時不碰瀏覽器的存檔）
   ev: function (t, off) { if (off) return evOff(t); var o = {}; for (var k in EV_SUB) if (!t || k === t) o[k] = EV_SUB[k].length; return o; },   // 事件（00_events.js）：每個事件幾個訂閱；off ⇒ 拿掉事件 t 的訂閱（反向對照：拿掉 note ⇒ 照打、沒有廣播）
+  /** 砲門（TASK-0719；62_ports.js）：ports(i) ⇒ 第 i 艘每片蓋板的 s（0 關、1 開／砲縮著、2 砲推出去）、want、gone、house…；portsForce(i, 0｜1｜null) ⇒ 寫 sh.portWant（截圖、宣傳片用；null ⇒ 照規則）。 */
+  ports: function (i) { var sh = SHIPS[i || 0]; if (sh && sh.ports === undefined && GFX.port) sh.ports = portsBuild(sh); return portsDbg(sh); },
+  portsForce: function (i, v) { var sh = SHIPS[i || 0]; if (sh) sh.portWant = v === undefined ? null : v; return this.ports(i); },
+  /** 畫面迴圈的反向對照（TASK-0719；⛔ ?demo、run() 不經過 frame() ⇒ 量不到畫面那一格的演出）：同步叫 n 次 frame()，每格 dt ＝ DT（loopLast 歸零）⇒ 沒有慢動作時每格剛好一步；
+   *  回走了幾步、模擬秒、戰局雜湊（每艘的位置、航向、格數、下沉、命中、開火、死傷、砲剩幾門，加上砲彈、碎塊數與戰局亂數 RNG_B 的狀態；照宣傳片 director.js trHash 的 FNV-1a）。g_port＝0／1、g_deco＝0／1 要一樣。 */
+  tick: function (n) {
+    var s0 = Math.round(SIMT / DT), t0 = performance.now(); loopAcc = 0;
+    for (var i = 0; i < (n || 1); i++) { loopLast = 0; frame(performance.now(), true); }
+    var s = 'r' + RNG_B.s + 'b' + BALLS.length + 'p' + PIECES.length;
+    SHIPS.forEach(function (sh) { s += '|' + sh.px.toFixed(4) + ',' + sh.pz.toFixed(4) + ',' + sh.yaw.toFixed(5) + ',' + sh.grid.count + ',' + (sh.sink || 0).toFixed(4) + ',' + (sh.hits || 0) + ',' + (sh.fired || 0) + ',' + (sh.dead || 0) + ',' + sh.guns.filter(function (g) { return g.alive; }).length; });
+    var h = 2166136261; for (var k = 0; k < s.length; k++) { h ^= s.charCodeAt(k); h = Math.imul(h, 16777619); }
+    return { frames: n || 1, steps: Math.round(SIMT / DT) - s0, simt: +SIMT.toFixed(3), ms: Math.round(performance.now() - t0), hash: (h >>> 0).toString(16) };
+  },
   run: function (sec) { var n = Math.round(sec / DT); for (var i = 0; i < n; i++) { simStep(); if (i % 30 === 29) remesh(Infinity); } remesh(Infinity); camUpdate(1); render(); hudFrame(1); PF.cur = {}; return this.stats(); },   // PF.cur：快轉的不算進下一格畫面
   fire: function (ammo, aim) { var me = SHIPS[PLAYER_I]; if (aim) setAim(me, aim); return broadside(me, ammo || 0); },
   take: function (i) { return playerTakeShip(SHIPS[i]); },

@@ -66,7 +66,9 @@ var HULLS = {}, HULLT = {};                                             // id �
 //   載入船型時一律從 rig.models 拿掉（⇒ 不算重量、不被打、不掉下來、不抽 rnd()：開或關戰局逐項相同，07_gfx.js 的規矩）；畫質「裝飾」開著才收進 T.decos、只負責畫（60_render.js drawModels）。
 //   關著 ⇒ 只給裝飾用的網格不建、不上 GPU。HULL_DECO：那一份船型載入時的開關 —— 換了 ⇒ decoSync 丟掉、回主選單重新載入（快取鍵也帶它，06_cache.js）。
 var HULL_DECO = {};
-function isDeco(m) { var v = m && m.meta && m.meta.deco; return v !== undefined && v !== null && v !== '' && v !== '0' && v !== 0 && v !== false; }
+//   規格表標 deco 的 kind（config/meta_kinds.json；TASK-0719 砲門蓋板 kind=portlid，Tim 2026-10-19：「炮門屬於裝飾物 因此相關機制在低畫質不啟用」）本身就是裝飾 ⇒ meta 不用另寫 deco=1
+//   （⛔ 照 meta deco=1：雕刻端漏寫一片 ⇒ 那片變成模擬模型（擋彈、抽亂數），光榮號的戰局悄悄跟著畫質變）。
+function isDeco(m) { var v = m && m.meta && m.meta.deco; if (m && m.meta && kindProp(m.meta.kind, 'deco')) return true; return v !== undefined && v !== null && v !== '' && v !== '0' && v !== 0 && v !== false; }
 /** 載入時拆出裝飾（buildHull 一開頭）：h.rig.models 只留不是裝飾的；回 { decos：要畫的（關著 ⇒ []）, n：作品裡有幾件, skip：只給裝飾用、這次不建的網格編號 }。 */
 function decoSplit(h, on) {
   var ms = (h.rig && h.rig.models) || [], keep = [], deco = [], used = {}, skip = {};

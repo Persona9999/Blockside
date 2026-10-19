@@ -1389,7 +1389,8 @@ def act_metaspec(doc_path=None):
                 E.append('規格表 %s：game 的 %s 不存在' % (k, g))
         for f, ok, what in (('hpK', lambda x: isnum(x) and 0 < x <= 20, '0～20 的數字'), ('block', lambda x: x in (True, False, 'station'), 'true／false／"station"'),
                             ('clear', lambda x: isinstance(x, bool), 'true／false'), ('safe', lambda x: isinstance(x, bool), 'true／false'),
-                            ('noFall', lambda x: isinstance(x, bool), 'true／false'), ('anim', lambda x: isinstance(x, bool), 'true／false')):   # 遊戲屬性（TASK-0672 ②；js/00_config.js kindProp）
+                            ('noFall', lambda x: isinstance(x, bool), 'true／false'), ('anim', lambda x: isinstance(x, bool), 'true／false'),
+                            ('deco', lambda x: isinstance(x, bool), 'true／false')):   # 遊戲屬性（TASK-0672 ②；js/00_config.js kindProp）；deco ＝ kind 本身就是裝飾（TASK-0719 砲門蓋板，js/05_hull.js isDeco）
             if f in v and not ok(v[f]):
                 E.append('規格表 %s：%s 要是 %s' % (k, f, what))
         for f, sp in (v.get('refs') or {}).items():          # 指名別的部件（TASK-0715）：鍵要在 keys、to 指的 kind 要在規格表（<kind># ＝ 那一類關聯裡的一座）
@@ -1584,6 +1585,7 @@ def act_shipcheck(ids=None):
               '砲塔層（關聯 meta kind=turret；殼、上面的砲與模型、彈藥箱跟著轉，前方 front 對準瞄準方位，TASK-0659）：' + (I.get('turrets') or '—'), '',
               '砲帶的裝甲（關聯 meta kind=armor、mount；跟著砲轉、一格一格打掉，TASK-0631）：' + (I.get('armor') or '—'), '',
               '門、艙蓋（模型 meta kind=door、固定點 hinge-a／hinge-b；不擋人、打掉了開口才進水，TASK-0638）：' + (I.get('doors') or '—'), '',
+              '砲門蓋板（模型 meta kind=portlid、lid_of、固定點 hinge-a／hinge-b；本身是裝飾，交戰掀蓋推砲、沒事收砲闔蓋，只是畫面，TASK-0719）：' + (I.get('ports') or '—'), '',
               '照參數轉的子物件（模型 meta spin；舵、舵輪跟著舵角轉，只是畫面，TASK-0640）：' + (I.get('spins') or '—'), '',
               '裝飾（模型 meta deco=1；載入時拿掉、畫質「裝飾」開著才畫，不算重量、不被打，TASK-0682）：' + (I.get('deco') or '—'), '',
               '廚房（模型 meta kind=galley；廚師站在爐灶旁、預備水手當伙夫去領飯，TASK-0720）：' + (I.get('galley') or '—'), '',

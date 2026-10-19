@@ -226,13 +226,14 @@ function drawModels(prog, near) {
     cutSet(prog, sh);
     sh.models.forEach(function (m) {
       var me = sh.T.meshes[m.mesh]; if (!m.alive || !me || (m.vox && !m.moved)) return; if (!me.vao) meshGpu(me);   // m.vox：螺旋槳畫它自己的格（24_armor.js armDraw）
-      gl.uniformMatrix4fv(prog.u.uModel, false, M4.mul(sh.M, m.ancD ? M4.mul(trans(m.ancD[0], m.ancD[1], m.ancD[2]), modelLocal(m)) : modelLocal(m)));   // ancD：拋下去的模型錨，畫在鐵鍊那一端（76_anchor.js chainStep）
+      var dv = m.ancD || m.vsl;                                         // 只給畫面的位移（格座標，左乘在 modelLocal 外面 ⇒ 帆的碰撞、斷船、打飛都看不到）：錨沒有 vsl、砲沒有 ancD
+      gl.uniformMatrix4fv(prog.u.uModel, false, M4.mul(sh.M, dv ? M4.mul(trans(dv[0], dv[1], dv[2]), modelLocal(m)) : modelLocal(m)));   // ancD：拋下去的模型錨，畫在鐵鍊那一端（76_anchor.js chainStep）；vsl：砲門關上時砲往裡縮（62_ports.js，TASK-0719）
       if (prog.u.uGlow) gl.uniform1f(prog.u.uGlow, isLamp(m) ? lanternK(m) : 0);   // 取用點的火藥桶是後加的模型，沒有 meta
       gl.bindVertexArray(me.vao); gl.drawArrays(gl.TRIANGLES, 0, me.n);
     });
     (sh.decos || []).forEach(function (d) {                             // 裝飾（TASK-0682；畫質「裝飾」關著 ⇒ 載入時就沒有）：腳下那一格被打掉 ⇒ 不畫
-      var me = sh.T.meshes[d.mesh]; if (!me || (d.foot >= 0 && !hullGp(sh.grid, d.foot))) return; if (!me.vao) meshGpu(me);
-      gl.uniformMatrix4fv(prog.u.uModel, false, M4.mul(sh.M, trans(d.origin[0], d.origin[1], d.origin[2])));
+      var me = sh.T.meshes[d.mesh]; if (!me || d.gone || (d.foot >= 0 && !hullGp(sh.grid, d.foot))) return; if (!me.vao) meshGpu(me);   // gone：砲門蓋板被打掉了（62_ports.js）
+      gl.uniformMatrix4fv(prog.u.uModel, false, M4.mul(sh.M, d.L || trans(d.origin[0], d.origin[1], d.origin[2])));   // L：砲門蓋板繞鉸鏈轉過的擺法（62_ports.js；只有 kind=portlid 有、沒在動 ⇒ null ＝ 模型的樣子）
       if (prog.u.uGlow) gl.uniform1f(prog.u.uGlow, isLamp(d) ? lanternK(d) : 0);
       gl.bindVertexArray(me.vao); gl.drawArrays(gl.TRIANGLES, 0, me.n);
     });

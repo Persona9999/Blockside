@@ -11,7 +11,7 @@
 var PREFS_KEY = 'ame_constitution_broadside.prefs', PREFS_VER = 1;
 var PREF_Q = ['mode', 'start', 'wdir', 'wspd', 'ship', 'blue', 'red', 'hard', 'flood', 'ballast', 'gunw', 'speed', 'agile', 'upwind', 'base', 'pump', 'gunhp', 'sailhp', 'crewhp', 'crewdeath', 'powderhp', 'blast', 'blastv', 'dmg24', 'dmg32l', 'dmg32', 'dmg18', 'dmg12', 'dmg18l', 'dmg6', 'dmg3c', 'dmgtr', 'dmgsf', 'dmgbl', 'dmgmg',
   'box', 'carry', 'hands', 'drown', 'heal', 'musket', 'sailfix', 'burn', 'galley', 'wind', 'windcap', 'inertia', 'turninert', 'sailtq', 'ammo', 'strike', 'cap', 'phys', 'sail', 'play', 'stall', 'funspeed', 'funagile', 'funstall', 'funpowder', 'funhard', 'sea',
-  'gfx', 'g_shadow', 'g_refl', 'g_refr', 'g_sea', 'g_res', 'g_aa', 'phx', 'p_rig', 'p_rigfar', 'p_debris', 'p_fx', 'weather', 'g_rain', 'g_drops', 'g_dropspl', 'g_shships', 'g_masks', 'g_deco', 'dist', 'field', 'reinf', 'cmd', 'gauge', 'blue', 'red', 'slowmo', 'dbg', 'slowcam', 'roomfn', 'navre', 'gcrew', 'smoke', 'pslow', 'pslowb', 'ramv', 'ramk', 'rame', 'ramside', 'debcap'];          // 會蓋過存檔的網址參數（04_state.js、05_hull.js 讀的那些）
+  'gfx', 'g_shadow', 'g_refl', 'g_refr', 'g_sea', 'g_res', 'g_aa', 'phx', 'p_rig', 'p_rigfar', 'p_debris', 'p_fx', 'weather', 'g_rain', 'g_drops', 'g_dropspl', 'g_door', 'g_port', 'g_shships', 'g_masks', 'g_deco', 'dist', 'field', 'reinf', 'cmd', 'gauge', 'blue', 'red', 'slowmo', 'dbg', 'slowcam', 'roomfn', 'navre', 'gcrew', 'smoke', 'pslow', 'pslowb', 'ramv', 'ramk', 'rame', 'ramside', 'debcap'];          // 會蓋過存檔的網址參數（04_state.js、05_hull.js 讀的那些）
 var DMG_Q = { long: 'dmg24', long32: 'dmg32l', carr: 'dmg32', chase: 'dmg18', long4: 'dmg4', long12: 'dmg12', long18: 'dmg18l', long6: 'dmg6', chase3: 'dmg3c', trident: 'dmgtr', dahl9: 'dmg9d', brooke64: 'dmg64b', brooke7: 'dmg7b', dahl11: 'dmg11d', long36: 'dmg36l', long8: 'dmg8l', pierrier: 'dmgpr', siphon: 'dmgsf', ballista: 'dmgbl', mangonel: 'dmgmg' };
 var PREFS = { read: DEMO < 0 && Q.get('prefs') !== '0' && !Q.has('admin') && !Q.has('shipcheck'), write: false, state: '', last: '' };   // ?admin=rooms（設定後台嵌的那一份）、?shipcheck（匯入檢查）⇒ 不讀不存
 PREFS.write = PREFS.read && !PREF_Q.some(function (k) { return Q.has(k); }) && !LAB_FLEET;   // 擬真沙盒：讀玩家的存檔（規則跟玩家玩的同一套），⛔ 不寫回（沙盒改的距離、策略、物理檔位不能蓋掉玩家的）
@@ -126,7 +126,11 @@ var PREF_ITEMS = [
       PHYS = PHX.rig > 0;
     }),
   prefAny('gfx', function (o) { var gd = GFX_PRESET[GFX_DEFAULT]; if (GFX_ITEMS.some(function (it) { return GFX[it.k] !== gd[it.k]; })) { o.gfx = {}; GFX_ITEMS.forEach(function (it) { o.gfx[it.k] = GFX[it.k]; }); } },   // 畫質（07_gfx.js）：跟預設不一樣 ⇒ 整組存
-    function (p) { if (p.gfx && typeof p.gfx === 'object' && !Q.has('gfx')) GFX_ITEMS.forEach(function (it) { var x = prefOk(p.gfx[it.k], [0, it.opt.length - 1], true); if (x !== undefined && !Q.has('g_' + it.k)) GFX[it.k] = x; }); }),
+    function (p) {
+      if (!(p.gfx && typeof p.gfx === 'object' && !Q.has('gfx'))) return;
+      GFX_ITEMS.forEach(function (it) { var x = prefOk(p.gfx[it.k], [0, it.opt.length - 1], true); if (x !== undefined && !Q.has('g_' + it.k)) GFX[it.k] = x; });
+      if (p.gfx.port === undefined && !Q.has('g_port')) { var dx = prefOk(p.gfx.deco, [0, 1], true); GFX.port = dx !== undefined ? dx : GFX.deco; }   // 舊存檔（TASK-0719 之前）沒有「砲門」⇒ 照「裝飾」補：存「低」的讀回來還是低（⛔ 照預設檔 mid 的 1 ⇒ 主選單變「自訂」）
+    }),
   prefBool('fps', false, function () { return GFX_FPS; }, function (x) { GFX_FPS = x; }, null),
   prefAny('snd', function (o) {                                         // 聲音設定（02_music.js，TASK-0677）
     [['vsfx', 'sfx'], ['vamb', 'amb'], ['vbgm', 'bgm'], ['bgm', 'mode'], ['tune', 'tune'], ['theme', 'theme']].forEach(function (k) { if (SND[k[1]] !== SND_DEF[k[1]]) o[k[0]] = SND[k[1]]; });
