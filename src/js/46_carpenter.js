@@ -221,8 +221,8 @@ function carpFetch(sh, c, fr, cw) {
 /** 到了木工台（42_hands.js handJoin）：站 CARP_WOOD_T 秒 ⇒ 拿到滿（台上剩多少拿多少；台在這段時間被打壞 ⇒ 空手）。 */
 function carpWood(sh, c) {
   var H = c.hand, J = H.job, m = J.m;
-  if (!J.at) { if (H.lv !== J.lv) { H.job = null; H.wait = 0.5; return; } J.at = SIMT; c.home = c.pos.slice(); return; }
-  if (SIMT - J.at < CARP_WOOD_T) return;
+  if (!J.at) { if (H.lv !== J.lv) { H.job = null; H.wait = 0.5; return; } J.at = SIMT; J.T = CARP_WOOD_T / crewEff(sh, c); c.home = c.pos.slice(); return; }   // J.T：工作效率（TASK-0720，39_eff.js；沒開 ⇒ ÷ 1）到的那一刻算一次
+  if (SIMT - J.at < J.T) return;
   var get = m.alive ? Math.min(Math.max(0, (+FURN[m.item].carry || 0) - c.wood), m.wood) : 0;
   m.wood -= get; c.wood += get; sh.carp.fetch++; sh.carp.used += get;
   H.job = null; H.wait = 0.5;
@@ -237,9 +237,10 @@ function carpJoin(sh, c) {
     J.at = SIMT; c.home = c.pos.slice();
     if (t.kind === 'hole') J.area = carpHoleArea(sh, t.lv, t.hole);       // 到了才看要補多大一片（洞＋洞邊還缺格子的那一圈）
     else if (t.kind === 'anchor') J.area = carpAncCells(sh, t.a);
+    J.T = (t.kind === 'lad' ? CARP_LAD_T : t.kind === 'anchor' ? CARP_ANC_T0 + CARP_ANC_K * J.area.length : CARP_HOLE_T0 + CARP_HOLE_K * J.area.length) / crewEff(sh, c);   // 修滿要幾秒：工作效率（TASK-0720，39_eff.js；沒開 ⇒ ÷ 1）到的那一刻算一次（J.area 也是這時算的；中途效率變了不追）
     return;
   }
-  if (SIMT - J.at < (t.kind === 'lad' ? CARP_LAD_T : t.kind === 'anchor' ? CARP_ANC_T0 + CARP_ANC_K * J.area.length : CARP_HOLE_T0 + CARP_HOLE_K * J.area.length)) return;
+  if (SIMT - J.at < J.T) return;
   var W = { n: c.wood, more: false }, n = t.kind === 'lad' ? carpFixLadder(sh, t, W) : t.kind === 'anchor' ? carpFixCells(sh, J.area, W) : carpFixHole(sh, t.lv, J.area, W), K = sh.carp;   // W：身上的木材（補一格用一份；用完 ⇒ more）
   c.wood -= n;
   if (n && !W.more) { if (t.kind === 'lad') { K.lad++; note(sh, '木匠修好了梯子（' + sh.nav.ladders[t.j].name.split('/').pop() + '）'); } else if (t.kind === 'anchor') { K.anc++; note(sh, '木匠補好了帆的綁定點（' + t.sail.name + '，' + n + ' 格）'); } else { K.holes++; note(sh, '木匠補好了甲板破洞（' + (sh.nav.levels[t.lv].name || sh.nav.levels[t.lv].key) + '，' + n + ' 格）'); } }   // Tim 2026-10-18：「木匠跟帆匠修補完成可以廣播」

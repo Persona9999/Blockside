@@ -14,7 +14,7 @@
     "monitor": {"tons": 1016, "len": 52.5, "guns": 2, "gunTypes": {"dahl11": 2}, "volley": 151, "drive": "steam", "sails": 0, "crew": 66},
     "sentinel": {"tons": 1016, "len": 52.5, "guns": 8, "gunTypes": {"trident": 6, "dahl11": 2}, "volley": 200, "drive": "steam", "sails": 0, "crew": 106},
     "tidegrave": {"tons": 1729, "len": 49.5, "guns": 54, "gunTypes": {"chase": 6, "long": 48}, "volley": 572, "drive": "sail", "sails": 10, "crew": 356},
-    "gloire": {"tons": 5637, "len": 78, "guns": 36, "gunTypes": {"long32": 36}, "volley": 522, "drive": "steam", "sails": 15, "crew": 308},
+    "gloire": {"tons": 5637, "len": 78, "guns": 36, "gunTypes": {"long32": 36}, "volley": 522, "drive": "steam", "sails": 15, "crew": 309},
     "reale": {"tons": 385, "len": 54.4, "guns": 19, "gunTypes": {"long8": 2, "long36": 1, "long6": 2, "pierrier": 14}, "volley": 45, "drive": "oar", "sails": 5, "crew": 544},
     "susquehanna": {"tons": 3528, "len": 76.7, "guns": 9, "gunTypes": {"dahl11": 3, "dahl9": 6}, "volley": 471, "drive": "steam", "sails": 13, "crew": 151},
     "dromon": {"tons": 60, "len": 28.2, "guns": 5, "gunTypes": {"siphon": 1, "ballista": 3, "mangonel": 1}, "volley": 16, "drive": "oar", "sails": 3, "crew": 178}

@@ -160,6 +160,7 @@ function bbSetup() {
 }
 // ───── 手持物（Tim 2026-10-12）─────
 // 送藥手搬的時候抱著藥筒、上面一顆彈丸；陸戰隊與桅頂水手瞄準、開槍時舉平火槍；軍官與船長齊射時舉劍；裝填中的砲班每門一個人拿推彈桿往前推。
+// 廚師拿湯杓、伙夫提木桶食器（TASK-0720，45_galley.js）。
 // 立繪照舊（Tim：立繪不用改）⇒ 陸戰隊身上那把直立的槍、軍官腰上的劍還在，手持物是另外疊的一層、只在那個動作時出現。
 // 點陣圖在程式裡畫（方塊清單 ⇒ 小畫布 ⇒ 最近點取樣），1 格 ＝ 1/46 m（約水手立繪的兩個像素）；每件都朝右畫，握的地方在 pv（格）。
 // 畫的時候跟著人：手的位置（身高的比例）照人的縮放與傾斜轉，再加道具自己的角度（朝前 0、往上為正）；跟人同一個面 ⇒ 往鏡頭挪 6 cm。⛔ 只管畫、不碰 rnd()。
@@ -176,7 +177,11 @@ var ITEM_DEF = {
   canvas: { w: 26, h: 10, pv: [11, 9], r: [[1, 1, 24, 8, '#e8e2cf'], [1, 1, 24, 2, '#f6f2e4'], [1, 7, 24, 2, '#c9c1a8'], [0, 2, 1, 6, '#bdb59c'], [25, 2, 1, 6, '#bdb59c'],   // 帆匠抱的帆布：一捲 0.55 m，兩道麻繩綁著（TASK-0699）
     [6, 1, 2, 8, '#8a6a3c'], [18, 1, 2, 8, '#8a6a3c'], [0, 4, 2, 2, '#d8d0b8'], [24, 4, 2, 2, '#d8d0b8']] },
   bucket: { w: 12, h: 13, pv: [6, 2], r: [[2, 0, 8, 1, '#3b3d42'], [1, 1, 1, 2, '#3b3d42'], [10, 1, 1, 2, '#3b3d42'],   // 救火的水桶（TASK-0717）：0.26 m 的木桶、兩道鐵箍、上緣一圈水，提把在上面
-    [1, 3, 10, 10, '#8a5a2e'], [2, 3, 2, 10, '#a06c3a'], [1, 5, 10, 1, '#4a4c52'], [1, 10, 10, 1, '#4a4c52'], [1, 3, 10, 1, '#5fa8e8'], [2, 3, 8, 1, '#9fd3ff']] }
+    [1, 3, 10, 10, '#8a5a2e'], [2, 3, 2, 10, '#a06c3a'], [1, 5, 10, 1, '#4a4c52'], [1, 10, 10, 1, '#4a4c52'], [1, 3, 10, 1, '#5fa8e8'], [2, 3, 8, 1, '#9fd3ff']] },
+  ladle: { w: 30, h: 6, pv: [3, 1], r: [[0, 1, 20, 2, '#7a5230'], [0, 1, 20, 1, '#9a6c40'], [0, 1, 1, 2, '#4a2e17'], [20, 1, 4, 1, '#6a6d73'],   // 廚師的湯杓（TASK-0720）：0.65 m，木柄、鐵杓、杓裡一點燉菜；握柄尾
+    [23, 1, 7, 3, '#5d6168'], [24, 4, 5, 1, '#5d6168'], [25, 5, 3, 1, '#4a4c52'], [23, 1, 7, 1, '#9aa0a8'], [24, 2, 5, 1, '#b8862e']] },
+  kid: { w: 16, h: 12, pv: [8, 0], r: [[3, 0, 10, 1, '#3b3d42'], [2, 1, 1, 3, '#3b3d42'], [13, 1, 1, 3, '#3b3d42'],   // 伙夫提的木桶食器（mess kid，TASK-0720）：0.35 m 寬的矮木桶、兩道銅箍、上面一層燉菜，提把在上面
+    [1, 4, 14, 7, '#7a5230'], [3, 4, 2, 7, '#946a40'], [10, 4, 1, 7, '#6a4626'], [2, 11, 12, 1, '#5a3a1e'], [1, 6, 14, 1, '#c9a44a'], [1, 9, 14, 1, '#c9a44a'], [2, 4, 12, 1, '#c8a060'], [4, 4, 3, 1, '#e0c080']] }
 };
 function itemAtlas() {
   var W = 0, H = 0, k, x = 0;
@@ -201,6 +206,11 @@ function heldItem(sh, c, f) {
   if (c.role === ROLE.CARPENTER) return c.wood > 0 ? { id: 'plank', hx: 0.14, hy: 0.5, a: 0 } : null;   // 木匠：身上還有木材就抱著（46_carpenter.js）
   if (c.role === ROLE.SAILMAKER) return c.cloth > 0 ? { id: 'canvas', hx: 0.14, hy: 0.5, a: 0 } : null;   // 帆匠：身上還有帆布就抱著（47_sailmaker.js）
   if (c.hand && c.hand.job && c.hand.job.kind === 'fire') return { id: 'bucket', hx: 0.16, hy: 0.42, a: 0 };   // 救火的預備水手：提一桶水（49_burn.js；潑的水花 59_burnfx.js）
+  if (c.hand && c.hand.job && c.hand.job.kind === 'eat') return { id: 'kid', hx: 0.16, hy: 0.42, a: 0 };   // 伙夫（45_galley.js；TASK-0720）：提著全桌的木桶食器去爐灶、在爐灶旁盛飯
+  if (c.role === ROLE.COOK) {                                                       // 廚師（45_galley.js）：拿湯杓 —— 爐灶在做飯 ⇒ 舉手、杓子伸進爐上的鍋裡一攪一攪（跟 WORK 同一個節奏；面向爐灶，crewFaceAt）；不能做飯 ⇒ 杓子立著
+    if (!(f === FR.WORK_A || f === FR.WORK_B)) return { id: 'ladle', hx: 0.1, hy: 0.5, a: 1.25 };
+    var w2 = 0.5 + 0.5 * Math.sin(c.t * 6.2832 * 0.8); return { id: 'ladle', hx: 0.14 + 0.06 * w2, hy: 0.64 + 0.04 * w2, a: 0.5 + 0.25 * w2 };
+  }
   if (c.role === ROLE.MARINE || c.role === ROLE.TOP) {                              // 開槍前一秒舉槍瞄準、開完 0.4 秒放下（沙盒的敵艦、降旗、沉了不開槍）
     var aim = (c.fireT > 0 || c.shotT < 1) && !sh.struck && !sh.sunk && (modeRule('othersAct') || sh.i === PLAYER_I);
     return aim ? { id: 'musket', hx: 0.04, hy: 0.78, a: 0.04 } : null;
@@ -211,6 +221,12 @@ function heldItem(sh, c, f) {
   }
   return null;
 }
+/** 站著的人面向哪一點（格座標；沒有 ⇒ null ＝ 照 c.face 面向左右舷）：廚師面向他的爐灶、到了爐灶的伙夫也是（45_galley.js；TASK-0720）。
+ *  ⛔ c.face 只有 ±1（面向左舷或右舷）⇒ 站在爐灶船頭、船尾那一面的人從側面看會背對爐灶、湯杓朝外。只給畫面用，不碰模擬。 */
+function crewFaceAt(c) {
+  if (c.role === ROLE.COOK && c.gal) return c.gal.m.c;
+  var J = c.hand && c.hand.job; return J && J.kind === 'eat' && J.at && J.gal ? J.gal.m.c : null;
+}
 /** 這個人現在在做什麼（FR）：單圖時決定程式動作，8 欄時也是選哪一格。 */
 function crewFrame(sh, c) {
   if (c.st === 5) return c.swim && c.swim.dead ? FR.DEAD : Math.floor(c.t * 1.6) & 1 ? FR.RUN_A : FR.RUN_B;   // 在水裡：划水（43_swim.js）
@@ -219,6 +235,8 @@ function crewFrame(sh, c) {
   var ph = Math.floor(c.t * 2.5) & 1;
   if (c.walk || c.moving) return ph ? FR.RUN_A : FR.RUN_B;
   if (c.hand && c.hand.job && c.hand.job.kind === 'fire' && c.hand.job.at) return ph ? FR.WORK_A : FR.WORK_B;   // 站到火邊：彎腰潑水（跟裝填同一個前傾的節奏）
+  if (c.hand && c.hand.job && c.hand.job.kind === 'eat' && c.hand.job.at) return ph ? FR.WORK_A : FR.WORK_B;    // 伙夫到了爐灶：彎腰盛飯（45_galley.js galleyJoin）
+  if (c.role === ROLE.COOK) return c.gal && c.gal.cooking ? (ph ? FR.WORK_A : FR.WORK_B) : FR.IDLE;   // 廚師：爐灶在做飯 ⇒ 前傾攪鍋；打壞了、泡水、熄火 ⇒ 站著（45_galley.js galleyTick 的 cooking）
   if (c.role === ROLE.POWDER && c.pm && c.pm.st === 'fill') return ph ? FR.WORK_A : FR.WORK_B;   // 在取用點拿火藥與彈藥
   if (c.role === ROLE.GUN && c.gun) {
     if (SIMT - (c.gun.firedAt || -9) < 0.7) return FR.FIRE;
@@ -285,6 +303,7 @@ function drawCrew() {
       var art = c.art !== undefined && c.art < CREW_ROWS ? c.art : c.role;   // 船長那一列沒有 ⇒ 用職位那一列
       var w = c.st === 4 || c.st === 5 ? c.fw : M4.pt(sh.M, c.pos[0], c.pos[1], c.pos[2]), f = crewFrame(sh, c);
       var wt = c.walk ? (c.walk.w ? c.walk.w[c.walk.k] : c.walk.to) : c.mway && c.moving ? c.mway.w[c.mway.k] : c.hand && c.moving ? c.hand.to : null;   // 要去的那一點（預備水手：照路走、爬梯子，42_hands.js）
+      if (!wt && c.st === 0) wt = crewFaceAt(c);                                     // 站著做事、面向那件東西（廚師、伙夫面向爐灶；TASK-0720）
       var fd = c.st === 5 && (c.fv[0] || c.fv[2]) ? [c.fv[0], 0, c.fv[2]] : wt ? M4.dir(sh.M, wt[0] - c.pos[0], wt[1] - c.pos[1], 0) : mul(faceW, c.face), flip = dot(fd, right) < 0;   // 在水裡：面向游的方向（世界座標）
       var col = frames ? f : 0, u0 = col / CREW_COLS / 2, u1 = (col + 1) / CREW_COLS / 2, v0 = art / CREW_ROWS, v1 = (art + 1) / CREW_ROWS, k = n * BBS, h = CREW_H;   // 左半張是底圖（右半張遮罩）
       var ps = crewPose(sh, c, f), amp = frames ? 0.35 : 1;                            // 8 欄逐格：姿勢在圖裡，程式只疊輕的一層（不再躺、不再跪）

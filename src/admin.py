@@ -196,12 +196,18 @@ BURN_NUMS = (('tick', 0.05, 2, '一拍幾秒（每格延燒、燒穿、救火照
              ('engCrew', 0, 40, '內建消防泵幾個人搖（0 ＝ 沒有內建消防泵）'),
              ('idleArc', 0, 90, '砲閒置判斷：射界外再多幾度'), ('idleR', 1, 10, '砲閒置判斷：射程的幾倍'),
              ('idleT', 0.5, 30, '砲閒置每幾秒判斷一次'), ('idleHold', 0, 60, '連續閒置幾秒才放砲手去救火'))
+# 廚房（TASK-0720；js/45_galley.js 讀 CFG.galley，⛔ js 裡沒有第二份；加成的 % 在 lim.galley 滑桿）：(鍵, 下限, 上限, 整數?, 說明)；多的鍵、少的鍵都擋
+GALLEY_NUMS = (('cooks', 1, 4, True, '每座爐灶幾位廚師（全船上限 ＝ 船員配置 crew.cook）'), ('cookT', 1, 120, False, '一位效率 1 的廚師做好一鍋（一桌的份）要幾秒'),
+               ('stock', 1, 40, True, '爐灶旁最多放幾鍋（開戰時是滿的）'), ('mess', 1, 40, True, '一桌幾個人物（伙夫一趟領一桌的飯）'),
+               ('go', 1, 20, True, '同時最多幾個伙夫在路上或在領'), ('fetchT', 0, 30, False, '伙夫在爐灶旁盛飯要站幾秒'), ('waitT', 0, 120, False, '沒鍋可領最多等幾秒'),
+               ('hold', 0, 600, False, '吃完滿加成維持幾秒（過了就算餓、開始派伙夫）'), ('fade', 0, 600, False, '之後線性退回 1 要幾秒'),
+               ('start', 0, 1, True, '1 ＝ 開局算剛吃過'), ('douse', 0, 1, True, '1 ＝ 史實模式：敵艦進 dousR 內就熄火（不做新的，現成的照領）'), ('dousR', 50, 5000, False, '熄火距離（m）'))
 MAT_OPT = (('metal', 0, 1, '金屬度（選填；0 ＝ 不反光、1 ＝ 金屬：太陽高光＋天空反射；TASK-0627）'), ('rough', 0, 1, '粗糙度（選填；0 ＝ 鏡面、1 ＝ 很霧；沒寫 ＝ 0.5）'),
            ('pen', 1, 5000, '擊穿門檻（選填；每格板厚要幾 kJ，船殼硬度倍率 1 時；寫了 ⇒ 實心彈照能量與入射角判穿／凹／彈，TASK-0621）'))
 MAT_BOOL = (('smooth', '平滑（選填 true／false；true ⇒ 這種材質的格沒寫 render 也畫成平滑面＋金屬反光，螺旋槳整份平滑；關聯明寫 render=voxel 照方塊。Tim 2026-10-17：鐵甲、鍋爐開，包銅皮不開）'),)
 CREW = {'officers': (0, 8, True), 'helm': (0, 4, True), 'marines': (0, 60, True), 'marineGap': (5, 200, True),
         'top': (0, 8, True), 'monkeys': (0, 2, True), 'handsK': (0, 4, False), 'shelter': (0, 1, True),   # shelter：船員避開露天甲板（TASK-0637；0／1）
-        'surgeon': (0, 60, True), 'carpenter': (1, 20, True), 'sailmaker': (1, 20, True)}   # 帆匠（TASK-0699）                                           # 木匠（TASK-0676 ②）                                                                       # 船醫（TASK-0676；有醫療艙才上船）
+        'surgeon': (0, 60, True), 'carpenter': (1, 20, True), 'sailmaker': (1, 20, True), 'cook': (0, 4, True)}   # 廚師（TASK-0720；有廚房 kind=galley 的船才上船）   # 帆匠（TASK-0699）                                           # 木匠（TASK-0676 ②）                                                                       # 船醫（TASK-0676；有醫療艙才上船）
 CREW_SHIP = {'hands': (0, 120, True)}          # 只在每艘船寫（TASK-0570 船隻配置頁的預設）：預備水手人數；沒寫 ＝ lim.hands × handsK
 GUN_CREW_MAX = 8                               # 砲班滿編上限（砲旁的站位；遊戲 05_hull.js GUN_CREW_MAX）
 GEO_PAIRS = ('marines', 'aimZ', 'deckAim', 'rigAim')
@@ -307,6 +313,17 @@ def validate(cfg, prev=None):
         for f in BU:
             if f not in [x[0] for x in BURN_NUMS]:
                 err('burn.' + f, '不認得的鍵（admin.py BURN_NUMS 沒有）')
+    GA = cfg.get('galley')                                                              # 廚房（TASK-0720；js/45_galley.js）
+    if not isinstance(GA, dict):
+        err('galley', '要是物件（廚房的參數，見 admin.py GALLEY_NUMS）')
+    else:
+        for f, lo, hi, it, what in GALLEY_NUMS:
+            v = GA.get(f)
+            if not ((isint(v) if it else isnum(v)) and lo <= v <= hi):
+                err('galley.' + f, '%s（%s～%s 的%s）' % (what, lo, hi, '整數' if it else '數字'))
+        for f in GA:
+            if f not in [x[0] for x in GALLEY_NUMS]:
+                err('galley.' + f, '不認得的鍵（admin.py GALLEY_NUMS 沒有）')
     G = cfg.get('guns')
     if not isinstance(G, dict) or not G:
         err('guns', '要是非空物件')
@@ -665,7 +682,7 @@ def validate(cfg, prev=None):
                     elif not (isinstance(q.get('rgb'), list) and len(q['rgb']) == 3 and all(isnum(v) and 0 <= v <= 2 for v in q['rgb'])):
                         err(qp + '.rgb', '光色 [r, g, b]，0～2')
     if prev:
-        for sec in ('limits', 'menu', 'lim', 'guns', 'geo0', 'crew0', 'fire', 'burn'):
+        for sec in ('limits', 'menu', 'lim', 'guns', 'geo0', 'crew0', 'fire', 'burn', 'galley'):
             for k in (prev.get(sec) or {}):
                 if k not in (cfg.get(sec) or {}):
                     err(sec + '.' + k, '原本有、這份少了（遊戲會讀它）')
@@ -1569,6 +1586,7 @@ def act_shipcheck(ids=None):
               '門、艙蓋（模型 meta kind=door、固定點 hinge-a／hinge-b；不擋人、打掉了開口才進水，TASK-0638）：' + (I.get('doors') or '—'), '',
               '照參數轉的子物件（模型 meta spin；舵、舵輪跟著舵角轉，只是畫面，TASK-0640）：' + (I.get('spins') or '—'), '',
               '裝飾（模型 meta deco=1；載入時拿掉、畫質「裝飾」開著才畫，不算重量、不被打，TASK-0682）：' + (I.get('deco') or '—'), '',
+              '廚房（模型 meta kind=galley；廚師站在爐灶旁、預備水手當伙夫去領飯，TASK-0720）：' + (I.get('galley') or '—'), '',
               '額外動力（TASK-0630；輸出物件 份量；主機／軸／鍋爐 照造船規格 §9.6；槳 §9.10，TASK-0691）：' + (I.get('drive') or '—（沒有 cfg.base）'), '',
               '動力件（TASK-0653；關聯 meta kind=engine／boiler／shaft／steampipe 的格子清單，照剩幾成、通不通算）：' + (I.get('drvparts') or '—'), '',
               '會轉的體素件（螺旋槳模型 meta kind=propeller 的格子；跟著軸轉、一格一格打掉、推力照剩幾成，TASK-0653 第二段）：' + (I.get('props') or '—'), '',

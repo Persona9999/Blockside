@@ -106,12 +106,13 @@ function pumpTick(sh) {
     var mine = p.hand ? sh.crew.filter(function (c) { return c.role === ROLE.HAND && crewAble(c) && c.hand.job && c.hand.job.pump === p; }) : [];
     p.need = p.hand && wet && p.m.alive && !p.wet && p.cell !== undefined && !sh.struck ? n : 0;
     if (mine.length > p.need) mine.sort(function (a, b) { return (a.hand.job.at ? 1 : 0) - (b.hand.job.at ? 1 : 0); }).slice(0, mine.length - p.need).forEach(function (c) { c.hand.job = null; c.hand.legs = []; c.hand.wait = 1; });   // 多出來的放回去（還沒到的先放）
-    p.have = mine.filter(function (c) { return c.hand.job && c.hand.job.at; }).length;
+    var at = mine.filter(function (c) { return c.hand.job && c.hand.job.at; }); p.have = at.length;
+    var pe = p.hand && sh.effOn ? effAvg(sh, at) : 1;                   // 工作效率（TASK-0720，39_eff.js）：到崗的人平均；蒸汽、沒開 ⇒ 字面上的 1
     if (!p.m.alive) p.why = '打壞了';
     else if (p.wet) p.why = '泡在水裡';
     else if (p.hand) { if (p.cell !== undefined) { k = Math.min(1, p.have / n); p.why = !wet ? '艙裡沒水（不派人）' : p.have < n ? '人手 ' + p.have + '／' + n : ''; } }   // 走不到 ⇒ 照 pumpInit 記的原因
     else { if (stK === null) stK = pumpSteamK(sh); k = stK; p.why = k < 1 ? (k <= 0 ? '沒有蒸汽（鍋爐壞了或淹了）' : '蒸汽剩 ' + Math.round(k * 100) + '%') : ''; }
-    p.tpm = (+p.f.tpm || 0) * k * Math.max(0, p.m.hp / p.m.hpMax);   // 打傷了照剩下的血量打折
+    p.tpm = (+p.f.tpm || 0) * k * pe * Math.max(0, p.m.hp / p.m.hpMax);   // 打傷了照剩下的血量打折；pe 乘在 k 的 Math.min(1, …) 外面（⛔ 放裡面 ⇒ 人到齊時加成被封頂吃掉）
     (sum[p.it] = sum[p.it] || { v: 0, cap: +p.f.cap > 0 ? +p.f.cap : Infinity }).v += p.tpm;
   });
   P.x = Object.keys(sum).reduce(function (a, k) { return a + Math.min(sum[k].v, sum[k].cap); }, 0);

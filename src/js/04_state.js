@@ -73,6 +73,7 @@ var HANDS = Math.round(stateQnum('hands', LIM.hands));                  // 預�
 var MUSKET_R = Math.round(stateQnum('musket', LIM.musket));            // 火槍的最大射程（m）：射程內看不到人就不開槍（40_crew.js musket；TASK-0633）
 var SAILFIX_T = Math.round(stateQnum('sailfix', LIM.sailfix));         // 帆匠：補一面從滿血打到快掉的帆要幾秒（照缺的血量比例算；47_sailmaker.js；TASK-0699）
 var BURN_PCT = Math.round(stateQnum('burn', LIM.burn));                 // 火勢（%）：希臘火點著的火延燒多快（帆也是）；0 ＝ 不點火、希臘火照以前只燒人與撕帆（49_burn.js；TASK-0717）
+var GALLEY_PCT = Math.round(stateQnum('galley', LIM.galley));           // 廚房加成（%）：吃過飯的水手工作效率 ×(1 ＋ GALLEY_PCT ÷ 100)；0 ＝ 關（不開廚房、不生廚師；45_galley.js；TASK-0720）
 var HEAL_T = Math.round(stateQnum('heal', LIM.heal));                  // 醫療艙：治好一個傷員要幾秒（滿人手、沒有 buff；0 ＝ 關 ⇒ 傷員照舊 12 秒抬下去；44_medic.js）
 var NAV_RE = stateQnum('navre', LIM.navre);                              // 尋路動態更新：每幾秒看一次有沒有甲板、梯子被打壞（0 ＝ 關；42_hands.js navRefresh；TASK-0572）
 // Debug 模式（Tim 2026-10-15：「在細節設定加上Debug模式 之後用來Debug(可以加特殊功能 & 顯示額外資訊 我來幫忙查問題)」）：細節設定的勾選（存檔）、網址 ?dbg=1；?debug=1 也算開。

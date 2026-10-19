@@ -321,6 +321,9 @@
   #fpUI .fpb.down, #fpUI .fpb.on{ background:rgba(110,170,255,.45); }
   #fpAct{ position:absolute; bottom:16px; left:50%; transform:translateX(-50%); display:flex; gap:8px; }   /* 抬 16 px：圓鈕 64 px 高（⛔ bottom 0 ⇒ 底邊壓到下面那排的 ⏸ ⚙，量過） */
   /* 按鈕跟下面那一排一樣：圓鈕 .kb.hb、上面快捷鍵、下面 emoji、不寫字（Tim 2026-10-16「爬梯子 跳 跑 跟隨 都參考原本原鈕 顯示快捷鍵吧(同時不用文字 EMOJI表示) 然後統一用圓鈕吧」）*/
+  /* 跟隨中的小標籤（81_fps.js fpWhoHud；TASK-0720〔K11〕）：被跟的人的職位＋工作效率，貼在中間那排圓鈕上方；空的不顯示 */
+  #fpWho{ display:none; position:absolute; left:50%; transform:translateX(-50%); bottom:90px; padding:3px 10px; border-radius:8px; background:rgba(10,14,22,.6); color:#eee; font-size:13px; white-space:nowrap; max-width:calc(100vw - 32px); overflow:hidden; text-overflow:ellipsis; pointer-events:none; }
+  #fpUI.fol #fpWho:not(:empty){ display:block; }
   #fpNext{ display:none !important; } #fpUI.fol #fpNext{ display:flex !important; }   /* 跟隨船員（TASK-0649）：跟隨中才有「下一個」；搖桿、跳、跑、爬梯子收起來 */
   #fpUI.fol #fpJoy, #fpUI.fol #fpJump, #fpUI.fol #fpRun, #fpUI.fol #fpClimb{ display:none !important; }
   #fpUI .fpFly{ display:none !important; } #fpUI.fly:not(.fol) .fpFly{ display:flex !important; } #fpUI.fly #fpJump{ display:none !important; }   /* 浮空：跳換成按住的 ⬆ ⬇ */
@@ -330,6 +333,7 @@
     #fpUI #fpVert{ right:12px; grid-template-columns:46px; bottom:12px; }   /* 抬 12 px（⛔ 0 ⇒ 浮空時 C⬇ 碰到下面那排的 ⚙，截圖量過） */
     #fpUI .fpb{ font-size:19px; }
     #fpAct{ bottom:122px; }   /* 搖桿 112 px 高 ＋ 空一點（⛔ 108 ⇒ 跟搖桿頂疊 8 px，量過） */
+    #fpWho{ bottom:178px; }   /* 中間那排搬到上方 ⇒ 標籤跟著抬（46 px 圓鈕＋空一點） */
   }
   /* 擬真沙盒（84_fleetlab.js） */
   #flab{ display:none; } body.flab #flab{ display:flex; flex-direction:column; position:fixed; inset:0; z-index:60; background:#0e1a26; color:#e8eef5; font:13px/1.45 system-ui, "Microsoft JhengHei", sans-serif; }
@@ -398,6 +402,7 @@
     <div id="bldBar"></div>
     <div id="fpJoy"><div id="fpKnob"></div></div>
     <div id="fpAct"><span class="kb hb fpb" id="fpExit" data-kl="fpExit" data-tip="離開第一人稱（回到原本的鏡頭）"><b>Y</b><i class="em">🎥</i></span><span class="kb hb fpb" id="fpClimb" style="display:none" data-kl="fpClimb" data-tip="爬梯子"><b>E</b><i class="em">🪜</i></span><span class="kb hb fpb" id="fpRun" data-kl="fpRun" data-tip="跑"><b>Shift</b><i class="em">🏃</i></span><span class="kb hb fpb" id="fpFol" data-kl="fpFollow" title="跟隨身邊的船員（F）"><b>F</b><i class="em">👁</i></span><span class="kb hb fpb" id="fpNext" data-kl="fpNext" data-tip="跟隨下一個"><b>G</b><i class="em">⏭</i></span><span class="kb hb fpb bldOnly" id="bldMode" data-kl="bMode" title="碰撞：一般（M 換：一般 → 穿牆 → 浮空）"><b>M</b><i class="em">🚶</i></span><span class="kb hb fpb bldOnly" id="bldRot" data-kl="bRot" data-tip="轉 90°"><b>R</b><i class="em">⟳</i></span><span class="kb hb fpb bldOnly" id="bldDel" data-kl="bDel" data-tip="拆（滑鼠左鍵也行）"><b>X</b><i class="em">✖</i></span><span class="kb hb fpb bldOnly" id="bldPut" data-kl="bPut" data-tip="放（滑鼠右鍵也行）"><b>V</b><i class="em">✔</i></span></div>
+    <div id="fpWho"></div>
     <div id="fpCross"></div>
     <div id="fpVert" class="fpPad"><span style="grid-area:1/1" class="kb hb fpb" id="fpJump" data-kl="fpJump" data-tip="跳"><b>空白</b><i class="em">⤴</i></span><span style="grid-area:1/1" class="kb hb fpb fpFly" data-fp="up" data-kl="fpJump" data-tip="往上"><b>空白</b><i class="em">⬆</i></span><span style="grid-area:2/1" class="kb hb fpb fpFly" data-fp="dn" data-kl="fpDown" data-tip="往下"><b>C</b><i class="em">⬇</i></span></div>
   </div>
@@ -442,6 +447,7 @@
     <div><kbd>補</kbd> 預備水手在水線下的住艙甲板待命，也會爬梯子到處走；砲班、送藥手、舵手倒下時，最近的水手爬梯子上去補位（交戰那一舷先補）。人數在「細節設定」</div>
     <div><kbd>藥</kbd> 送藥手（每一對砲一個）從取用點搬一份火藥與彈藥到砲旁的藥箱（每門最多 2 份）；開火後要從藥箱拿一份才開始裝填，送藥手倒了就會等（△）</div>
     <div><kbd>醫</kbd> 船隻配置頁可以把空艙房設成醫療艙、擺病床：傷員被扛下去治療；走不到（梯子斷了）就不派人</div>
+    <div><kbd>食</kbd> 有廚房的船（光榮號）：廚師在爐灶做飯，預備水手輪流當伙夫去領一鍋，整桌吃過 ⇒ 工作效率 ×1.1（裝填、抽水、修補、救火、治療都快一成），一分半後慢慢退回 ×1；廚師倒下或爐灶被打壞就斷炊。詳細資訊的船員那一行寫 🍲 廚房；第一人稱跟隨船員時看得到那個人的工作效率</div>
     <div><kbd>水</kbd> 落水求生：被水淹過頭或掉進海裡的人會浮上來、往自己的船游，游到船邊（船夠慢）就爬上來當預備水手；自己的船在沉就往敵艦游，被撈上去就變成敵方船員；撐太久會溺水（「溺水時間」在細節設定）</div>
     <div><kbd>旗</kbd> 桅頂的陣營旗：藍方藍旗、紅方紅旗（被打會破）。降旗規則在「細節設定」（預設不降旗：打到沉或全員倒下）；降旗的船不再開砲</div>
     <div><kbd>血</kbd> 砲、帆、船員、火藥桶的血量，各砲種的傷害、彈種倍率與船殼硬度在「細節設定」</div>
@@ -663,6 +669,8 @@
       <div class="row slide"><label for="musket">火槍射程</label><input type="range" id="musket" step="10" aria-label="火槍的最大射程（公尺）：射程內看不到人就不開槍"><span id="musketV"></span></div>
       <div class="row slide"><label for="sailfix">補帆時間</label><input type="range" id="sailfix" step="5" aria-label="帆匠補一面從滿血打到快掉的帆要幾秒"><span id="sailfixV"></span></div>
       <div class="row slide"><label for="heal">治療時間</label><input type="range" id="heal" step="5" aria-label="醫療艙治好一個傷員要幾秒（0 ＝ 關）"><span id="healV"></span></div>
+      <div class="row slide"><label for="galley">廚房加成</label><input type="range" id="galley" step="5" aria-label="吃過飯的水手工作效率加幾成（%；0 ＝ 關）"><span id="galleyV"></span></div>
+      <div class="row note">有廚房（爐灶模型標 kind=galley，現在是光榮號）的船：廚師站在爐灶旁做飯，船員每 8 個一桌，餓了就派一個閒著的預備水手當伙夫去領一鍋（排在所有補位之後，缺人時叫回來）⇒ 整桌吃過。吃過的人裝填、送藥手裝藥包、人力抽水、治療、木匠、帆匠、救火、火槍都快這麼多；走路、爬梯不變。開局全員剛吃過。0 ＝ 關（不開廚房、不生廚師，對局跟沒有廚房一樣）。開不開廚房在開戰時決定（開戰中拉到 0 ⇒ 廚房照開、加成變 ×1）。網址 ?galley=</div>
       <div class="row slide"><label for="navre">尋路更新</label><input type="range" id="navre" step="0.5" aria-label="尋路動態更新：每幾秒看一次甲板與梯子有沒有被打壞（0 ＝ 關）"><span id="navreV"></span></div>
       <div class="row checks"><label><input type="checkbox" id="gcrew"> 砲被打飛，砲班跟著受傷</label></div>
       <div class="row note">歸零陣亡；掉到一半以下受傷倒下；一半以上照常作戰（只閃紅）。火槍一發 40～125。
@@ -795,12 +803,14 @@
 <script src="js/34_shreds.js" data-bundle="game"></script>
 <script src="js/35_decks.js" data-bundle="game"></script>
 <script src="js/36_rooms.js" data-bundle="game"></script>
+<script src="js/39_eff.js" data-bundle="game"></script>
 <script src="js/40_crew.js" data-bundle="game"></script>
 <script src="js/41_crew_art.js" data-bundle="game"></script>
 <script src="js/42_hands.js" data-bundle="game"></script>
 <script src="js/43_swim.js" data-bundle="game"></script>
 <script src="js/44_medic.js" data-bundle="game"></script>
 <script src="js/45_pumps.js" data-bundle="game"></script>
+<script src="js/45_galley.js" data-bundle="game"></script>
 <script src="js/46_carpenter.js" data-bundle="game"></script>
 <script src="js/47_sailmaker.js" data-bundle="game"></script>
 <script src="js/48_damage.js" data-bundle="game"></script>
