@@ -694,6 +694,7 @@
         "ladders": 2,
         "magazine": 3,
         "part": 6,
+        "portlid": 9,
         "powder": 101,
         "propeller": 2,
         "rudder": 2,
