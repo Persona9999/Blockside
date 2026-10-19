@@ -122,8 +122,11 @@ function flabResult(M) {
   var winner = null, judged = false;
   if (M.down.blue !== null && M.down.red === null) winner = 'red'; else if (M.down.red !== null && M.down.blue === null) winner = 'blue';
   else if (M.down.blue === null && M.down.red === null && Math.abs(pow.blue - pow.red) >= 0.05) { winner = pow.blue > pow.red ? 'blue' : 'red'; judged = true; }
-  return { winner: winner, judged: judged, t: +SIMT.toFixed(1), left: left, pow: { blue: +pow.blue.toFixed(2), red: +pow.red.toFixed(2) }, hits: hits, down: M.down,
+  var r = { winner: winner, judged: judged, t: +SIMT.toFixed(1), left: left, pow: { blue: +pow.blue.toFixed(2), red: +pow.red.toFixed(2) }, hits: hits, down: M.down,
     steps: M.steps, ms: Math.round(performance.now() - M.realT0) };
+  // 策略「推演」那一方（TASK-0688）：推了幾次、最後挑哪個、到期的預測 [時間, 預測, 實際]（56_rollout.js mem.roll）—— 只有用推演的那一方才有這一欄（別的策略結果一個字都不多）
+  ['blue', 'red'].forEach(function (tm) { var R = CMD_MEM[tm].roll; if (R) (r.roll || (r.roll = {}))[tm] = { n: R.n, pick: R.pick, errs: R.errs.slice() }; });
+  return r;
 }
 function flabFinish(M) {
   M.res = flabResult(M);
