@@ -422,8 +422,15 @@ loadSay('解碼船體…');
 programs(); geometry(); wpGL(); flGL(); rdGL(); bbSetup(); QIDX = new VK.QuadIndex(gl);
 hullSay = function (s) { var go = $('go'); if (go.disabled) go.textContent = '解析' + s; };   // 解析中：開戰鈕寫進度（設定照樣能調）
 if (!HEADLESS) requestAnimationFrame(frame);                       // 無頭（00_events.js）不開畫面迴圈；解析中也畫（天、海；船載好才有）
+/** 編成裡的船全部進了 HULLT 才放行：等完一輪再照**現在的**編成看一次，還有不在的 ⇒ 再等一輪。
+ *  ⛔ 只等開頭那一份名單：解析中主選單換了我艦（pickShip）、或切了畫質「裝飾」把已經載完的船丟掉（decoSync）⇒ 名單裡的都回來了，HULLT[我艦] 卻還沒有
+ *  ⇒ 下面讀 T.h ⇒「載入失敗：Cannot read properties of undefined (reading 'h')」（Tim 2026-10-20 回報；重現：?prefs=0&cache=0&blue=dromon&red=dromon，一進主選單把我艦換成拿破崙號）。 */
+function fleetLoaded() {
+  var ids = fleetHulls().concat(coreHulls());                       // coreHulls：?coreadd= 要中途加的船（57_core.js）
+  return Promise.all(ids.map(loadHull)).then(function () { return fleetHulls().concat(coreHulls()).every(function (id) { return HULLT[id]; }) ? null : fleetLoaded(); });
+}
 yieldUI().then(function () {                                        // 先讓主選單畫出來，再開始解析
-  return Promise.all(fleetHulls().concat(coreHulls()).map(loadHull).concat([bedBoot()]));   // coreHulls：?coreadd= 要中途加的船（57_core.js）   // 只載編成裡的船（預設兩艘都是憲法號 ⇒ 一份）＋海圖（?map，08_seabed.js）
+  return Promise.all([fleetLoaded(), bedBoot()]);                   // 只載編成裡的船（預設兩艘都是憲法號 ⇒ 一份）＋海圖（?map，08_seabed.js）
 }).then(function () {
   var T = HULLT[myHull()], h = T.h, chk = T.chk;
   if (SLIDERS_SHOW) SLIDERS_SHOW();
