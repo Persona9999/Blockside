@@ -15,7 +15,7 @@
 // 看得到的地方：結束畫面「📊 報表」的「🪢 匯出帆繩記錄」（JSON）；__game.riglog()（?debug=1）。
 var RLOG = null, RLOG_EVERY = 0.5, RLOG_FLOAT = 3, RLOG_MAX = 400000;      // RLOG_MAX：帆與繩的列數上限（超過 ⇒ 停記這兩種、事件照記，標 trunc）
 var RLOG_KEY = 'blockside_riglog';
-function rlgWanted() { if (Q.get('riglog') === '1') return true; if (Q.get('riglog') === '0') return false; try { return window.localStorage.getItem(RLOG_KEY) === '1'; } catch (e) { return false; } }
+function rlgWanted() { if (Q.get('riglog') === '1') return true; if (Q.get('riglog') === '0') return false; if (!DEBUG) return false; try { return window.localStorage.getItem(RLOG_KEY) === '1'; } catch (e) { return false; } }
 function rlgReset() { RLOG = rlgWanted() ? { v: 1, seed: SEED, from: +SIMT.toFixed(1), every: RLOG_EVERY, phys: PHYS, ships: [], ev: [], n: 0, trunc: false, seen: new WeakMap(), next: 0 } : null; }
 /** 設定面板的開關（同 83_testlog.js tlgToggle）：存在這個瀏覽器；網址帶了 ?riglog ⇒ 網址說了算，按鈕只管這一場暫停／繼續。 */
 function rlgToggle() {
@@ -108,4 +108,5 @@ function rlgSave() {
   setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
 }
 $('rigT').onclick = rlgToggle;
+if (!DEBUG) $('rigT').closest('.gsR').style.display = 'none';   // 設定面板只在 ?debug=1 顯示（Tim 2026-10-20）；沒開 debug ⇒ 存過的開關也不算（上面 rlgWanted），網址 ?riglog=1 照舊
 evOn('stepEnd', rlgTick, 2);

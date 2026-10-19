@@ -119,7 +119,7 @@ function rptShow() {
     document.body.appendChild(P);
     $('rptJ').onclick = function () { rptSave('json'); }; $('rptV').onclick = function () { rptSave('csv'); }; $('rptX').onclick = function () { P.style.display = 'none'; }; $('rptCL').onclick = tlgSave; $('rptRL').onclick = rlgSave;
   }
-  P.style.display = 'flex'; $('rptCL').style.display = TLOG ? '' : 'none';   // 測試模式才有（83_testlog.js）
+  P.style.display = 'flex'; $('rptCL').style.display = TLOG ? '' : 'none'; $('rptRL').style.display = RLOG ? '' : 'none';   // 測試模式、帆繩記錄開著才有（83_testlog.js、85_riglog.js；設定面板那兩項只在 ?debug=1 顯示）
   var I = {}; d.cols.forEach(function (c, j) { I[c] = j; });
   $('rptL').innerHTML = d.ships.map(function (s) { return '<span style="color:' + rptColor(d, s) + '">━ ' + s.i + ' ' + s.name + '</span>'; }).join('　');
   var C = $('rptC'); C.innerHTML = '';

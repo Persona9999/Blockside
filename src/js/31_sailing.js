@@ -99,6 +99,14 @@ function sideGuns(sh, side) { return sh.guns.filter(function (g) { return g.aliv
 // 航速（TASK-0630，31_drive.js）：這裡照舊算「每個動力單獨推動時的航速」—— 帆（滿帆、完好、這個風向）與額外動力（cfg.base 節）——
 //   driveStep 把它們換成推力（k·v²）、扣掉水阻、照實際質量（含進水）算加速度；最高航速 ＝ √(帆² ＋ 額外動力²) 跟以前一樣，變的是加減速與受損的偏轉。
 //   額外動力照俥鐘（sh.power ＝ 航速的比例，−1…1）；倒退時舵效反過來（像倒車）。電腦的船一直全速前進（跟以前一樣）；停船（6）照舊停。
+/** 操舵性能（乘在最大轉向率上）：舵輪或舵（模型）被打掉了 ⇒ 細節設定「舵壞了的操舵」HELM_LOST（寫實 25%）× 娛樂加成 FUN.helm（×2 ⇒ 50%），最多 100%；兩樣都沒了也只乘一次。
+ *  Tim 2026-10-20。⛔ 以前寫死：舵輪沒了 ×0.35、舵沒了 ×0.12、兩樣都沒了相乘（0.042）。電腦指揮官的估計（52_fleet.js cmdView v.ag）同一支。
+ *  ⚠ 本來就沒有舵輪模型的船（大加雷船 reale、德羅蒙船 dromon：舵柄）以前一直被當成「舵輪沒了」×0.35 ⇒ 照舊留著那個 ×0.35（那兩型的手感是照它調的），舵被打掉再乘 HELM_LOST。 */
+function helmK(sh) {
+  var whs = sh.models.filter(function (m) { return m.kind === 'wheel'; }), rud = sh.models.filter(function (m) { return m.kind === 'rudder'; });
+  var lost = (whs.length && !whs.some(function (m) { return m.alive; })) || (rud.length && !rud.some(function (m) { return m.alive; }));
+  return (whs.length ? 1 : 0.35) * (lost ? Math.min(1, HELM_LOST * playK('helm')) : 1);
+}
 function sailShip(sh, dt) {
   var F = fwd(sh.yaw), W = norm(WIND), deg = Math.acos(clamp(dot(F, W), -1, 1)) * 57.2958;
   var UP = sh.cfg.upwind || 1, dU = UP === 1 || deg <= 90 ? deg : 90 + (deg - 90) / UP;   // 逆風性能：迎風那一半的角度壓縮（1.25 ⇒ 風從船頭 52.5° 才開始失速、45° 跑得像 36° 的船…）；1 ⇒ 一位元都不動
@@ -129,9 +137,8 @@ function sailShip(sh, dt) {
   // 舵
   sh.throttle = 1;                                                      // 油門每一步重設（戰列跟隨、讓開砲線要放慢才改；下一步的目標航速才用到）
   var foe = foeOf(sh), tY = sh.yaw, rate = 0;
-  var wheel = sh.models.some(function (m) { return m.kind === 'wheel' && m.alive; });
-  var rud = sh.models.filter(function (m) { return m.kind === 'rudder'; }), rudK = rud.length && !rud.some(function (m) { return m.alive; }) ? 0.12 : 1;   // 舵是模型（夜隼號）而且被打掉了 ⇒ 只剩調帆轉向
-  var rmax = Math.max(RUD_LOW, 0.012 + 0.016 * Math.abs(sh.spd) / SPK) * (wheel ? 1 : 0.35) * rudK * (UP === 1 ? 1 : 1 + (UP - 1) * clamp((deg - 90) / 45, 0, 1)) * sh.cfg.agile * playK('agile') * WX.agile;   // 天氣：暴風雨浪大、舵難使 ×0.8。⛔ 用 sh.spd 直接算 ⇒ 調快航速連帶變得更會轉
+  var hk = helmK(sh);
+  var rmax = Math.max(RUD_LOW, 0.012 + 0.016 * Math.abs(sh.spd) / SPK) * hk * (UP === 1 ? 1 : 1 + (UP - 1) * clamp((deg - 90) / 45, 0, 1)) * sh.cfg.agile * playK('agile') * WX.agile;   // 天氣：暴風雨浪大、舵難使 ×0.8。⛔ 用 sh.spd 直接算 ⇒ 調快航速連帶變得更會轉
   if (held && Math.abs(sh.spd) < 0.6 && !sh.struck && !sh.sunk) {   // 錨咬著、船幾乎停了 ⇒ 繞錨原地轉：我艦照 A／D、電腦（或雙錨時的我艦沒按）轉舷側對敵
     var pw = sh.i === PLAYER_I ? (KEYS.l ? 1 : 0) - (KEYS.r ? 1 : 0) : 0;
     if (pw) rate = pw * ANC_PIVOT;
