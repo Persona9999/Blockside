@@ -88,7 +88,7 @@ function coreShipIn(sh, st) {
     for (var j = 0; j < st.cells.n; j++) {
       p += dv.getUint32(j * 5, true); var v = u[j * 5 + 4], x = p % sx, y = Math.floor(p / sx) % sy, z = Math.floor(p / (sx * sy));
       if (!v) removeVoxel(sh, x, y, z, false);
-      else if (G.get(x, y, z)) { G.set(x, y, z, v); evEmit('cell', sh, x, y, z); }   // 換色（燒焦）
+      else if (G.get(x, y, z)) { G.set(x, y, z, v); evEmit('cell', sh, x, y, z, true); }   // 換色（燒焦；true ⇒ 不是平滑格就不重建平滑面，62_simview.js）
       else restoreVoxel(sh, x, y, z, v);                                              // 原船沒有、上一場補上的（木匠）
     }
   }

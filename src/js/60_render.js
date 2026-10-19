@@ -219,6 +219,9 @@ function drawHulls(prog, near) {                                       // near(c
   cutSet(prog, null); vlampSet(prog, null);
   PIECES.forEach(function (pc) { if (near && !near(pc)) return; gl.uniformMatrix4fv(prog.u.uModel, false, pc.M); pc.rs.draw(); });
 }
+// 模型的世界矩陣一格只算一次（render() 每次 RFR++）：一格要畫 6–7 輪（每艘的陰影圖、反射、主畫面），持火號一艘 98 支槳 ⇒ 原本每輪每支 5 次矩陣乘法＋新陣列
+var RFR = 0, MWM = new WeakMap();
+function modelWorld(o, k, f) { var c = MWM.get(k); if (c && c.f === RFR && c.o === o.M) return c.m; var m = f(); MWM.set(k, { f: RFR, o: o.M, m: m }); return m; }   // c.o：船的矩陣換了（renderLerp 換回模擬的）⇒ 重算
 function drawModels(prog, near) {
   gl.vertexAttrib2f(3, 0, 0.5);                                         // P.tri 的 aM（金屬度、粗糙度；TASK-0627）：模型的 VAO 沒開這個屬性 ⇒ 讀這個常數 ⇒ 不反光（平滑渲染的 VAO 自己帶）
   SHIPS.forEach(function (sh) {
@@ -226,14 +229,16 @@ function drawModels(prog, near) {
     cutSet(prog, sh);
     sh.models.forEach(function (m) {
       var me = sh.T.meshes[m.mesh]; if (!m.alive || !me || (m.vox && !m.moved)) return; if (!me.vao) meshGpu(me);   // m.vox：螺旋槳畫它自己的格（24_armor.js armDraw）
-      var dv = m.ancD || m.vsl;                                         // 只給畫面的位移（格座標，左乘在 modelLocal 外面 ⇒ 帆的碰撞、斷船、打飛都看不到）：錨沒有 vsl、砲沒有 ancD
-      gl.uniformMatrix4fv(prog.u.uModel, false, M4.mul(sh.M, dv ? M4.mul(trans(dv[0], dv[1], dv[2]), modelLocal(m)) : modelLocal(m)));   // ancD：拋下去的模型錨，畫在鐵鍊那一端（76_anchor.js chainStep）；vsl：砲門關上時砲往裡縮（62_ports.js，TASK-0719）
+      gl.uniformMatrix4fv(prog.u.uModel, false, modelWorld(sh, m, function () {
+        var dv = m.ancD || m.vsl;                                       // 只給畫面的位移（格座標，左乘在 modelLocal 外面 ⇒ 帆的碰撞、斷船、打飛都看不到）：錨沒有 vsl、砲沒有 ancD
+        return M4.mul(sh.M, dv ? M4.mul(trans(dv[0], dv[1], dv[2]), modelLocal(m)) : modelLocal(m));   // ancD：拋下去的模型錨，畫在鐵鍊那一端（76_anchor.js chainStep）；vsl：砲門關上時砲往裡縮（62_ports.js，TASK-0719）
+      }));
       if (prog.u.uGlow) gl.uniform1f(prog.u.uGlow, isLamp(m) ? lanternK(m) : 0);   // 取用點的火藥桶是後加的模型，沒有 meta
       gl.bindVertexArray(me.vao); gl.drawArrays(gl.TRIANGLES, 0, me.n);
     });
     (sh.decos || []).forEach(function (d) {                             // 裝飾（TASK-0682；畫質「裝飾」關著 ⇒ 載入時就沒有）：腳下那一格被打掉 ⇒ 不畫
       var me = sh.T.meshes[d.mesh]; if (!me || d.gone || (d.foot >= 0 && !hullGp(sh.grid, d.foot))) return; if (!me.vao) meshGpu(me);   // gone：砲門蓋板被打掉了（62_ports.js）
-      gl.uniformMatrix4fv(prog.u.uModel, false, M4.mul(sh.M, d.L || trans(d.origin[0], d.origin[1], d.origin[2])));   // L：砲門蓋板繞鉸鏈轉過的擺法（62_ports.js；只有 kind=portlid 有、沒在動 ⇒ null ＝ 模型的樣子）
+      gl.uniformMatrix4fv(prog.u.uModel, false, modelWorld(sh, d, function () { return M4.mul(sh.M, d.L || trans(d.origin[0], d.origin[1], d.origin[2])); }));   // L：砲門蓋板繞鉸鏈轉過的擺法（62_ports.js；只有 kind=portlid 有、沒在動 ⇒ null ＝ 模型的樣子）
       if (prog.u.uGlow) gl.uniform1f(prog.u.uGlow, isLamp(d) ? lanternK(d) : 0);
       gl.bindVertexArray(me.vao); gl.drawArrays(gl.TRIANGLES, 0, me.n);
     });
@@ -399,7 +404,7 @@ function hullUniforms(prog) {
   gl.activeTexture(gl.TEXTURE0);
 }
 function render() {
-  resize(); var w = CAM.w, h = CAM.h;
+  resize(); var w = CAM.w, h = CAM.h; RFR++;                          // RFR：模型的世界矩陣（modelWorld）這一格重算
   // 閃電（天氣，08_weather.js）：那一格的天空與環境光拉亮、0.3 秒內退掉；雷聲照距離延後（340 m/s）。只在畫面，畫完把天色還回去
   var bolt = wxBolt(SIMT), sky0 = SKY, hor0 = HORIZON;
   if (bolt && bolt.f > 0) { SKY = lerp3(SKY, [0.82, 0.86, 0.98], bolt.f * 0.7); HORIZON = lerp3(HORIZON, [0.76, 0.79, 0.88], bolt.f * 0.6); }
