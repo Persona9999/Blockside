@@ -483,6 +483,7 @@ function shelterSpots(sh, n) {
 /** 閒著：在待命那一層 HAND_ROAM 的機會上別層；在別層 HAND_BACK 的機會回待命那一層；其餘在這一層隨便挑一點走過去。shelter ⇒ 不上露天那一層、在那一層就回去。 */
 function wander(sh, c) {
   var H = c.hand, NV = sh.nav, lv = H.lv, tl = lv, sl = shelterLv(sh);
+  if (c.idleFrom) { H.wait = 1; return; }                                // 閒著的砲班放出來的（gunIdle）：站在原地待命（⛔ 閒晃 ⇒ 回艙底那一層，敵艦一轉過來要爬梯子回砲位：3 對 3 量到開火少 16%）
   if (lv === NV.home) { if (NV.reach.length > 1 && rnd() < HAND_ROAM) { var o = NV.reach.filter(function (i) { return i !== NV.home && i !== sl && !NV.levels[i].tur; }); if (o.length) tl = o[(rnd() * o.length) | 0]; } }   // 砲塔頂（turTopLevel）不去閒晃：露天、正對著砲火，點名補位才上去
   else if ((lv === sl || NV.levels[lv].tur || rnd() < HAND_BACK) && NV.reach.indexOf(lv) >= 0) tl = NV.home;
   var fr = handReg(sh, c), N = NV.levels[tl].N, to = N.cells[(rnd() * N.cells.length) | 0];
@@ -492,13 +493,75 @@ function wander(sh, c) {
   if (!legs) return;
   H.legs = legs.concat([{ w: tl, to: to }]);
 }
+// ── 閒著的砲班當預備水手（TASK-0722；Tim 2026-10-19：「炮在檢查射程範圍(檢查範圍會比射程寬 例如炮射角度45度 射程100m 檢查範圍可能是90度 200m 內沒有合適目標時
+//    炮手轉為候補水手」「這樣候補水手就可以去補位另一邊能開火的炮」）——
+// 每 IDLE.t 秒（點名那一拍；每艘的點名本來就錯開，SURVEY_PH）每一層每一舷看一次：那一組每門還在的砲，射界外再加 IDLE.arc 度、射程 × IDLE.r 裡都沒有敵艦
+//   （迴旋砲、砲塔只看距離；那一組的砲全沒了也算）連續 IDLE.hold 秒 ⇒ 那一組閒著（sh.idleG[層＋舷].on）：砲手照樣守著砲，但算候補 ——
+//   點名（callHands）有急的缺（pri ≤ IDLE_PRI：交戰那一舷的砲、剛回來那一組的砲、救火）而預備水手不夠 ⇒ 從閒著的組裡挑離那個缺最近的砲手，變成預備水手（c.idleFrom）派過去；
+//   那一組閒著的時候點名不補它。⛔ 一閒就整組放掉 ⇒ 敵艦一轉過來那一舷要等判定＋點名＋走回砲位，量過 120 秒內「目標在射界、砲卻沒人」不減反增
+//   （單挑 seed 3：63 → 221 秒）—— 預備水手在這段時間本來就補得過來，放出去的人多半站著沒事。
+//   敵艦進到範圍 ⇒ 不閒了：放出去還在做雜事的收回來（已經在別的砲位上、正在扛傷員的不動），IDLE_BACK 秒內補那一組排在救火前面（pri 0.25）。
+//   IDLE.r 0 ⇒ 關掉（跟以前一樣：砲班一直守著自己的砲）—— ⚠ 設定檔預設關（Tim 2026-10-19）：120 秒的單挑、3 對 3 各三個種子量不到改善（戰報 bearNo 比例 8.9% → 8.7%／11.1%，人在兩舷之間來回搬），見 TASK-0722。以前只有著火才放、只放去救火（49_burn.js，014a6db）；現在跟著火無關。
+var IDLE = CFG.idle || { r: 0 }, IDLE_BACK = 30, IDLE_PRI = 0.5, IDLE_RECALL = { fire: 1, pump: 1, staff: 1 };   // 收回來的雜事：救火、抽水、醫療艙值班（⛔ carry：扛到一半的傷員丟在路上）
+/** 這門砲的範圍（射界外再加 IDLE.arc、射程 × IDLE.r）裡有沒有敵艦。 */
+function gunHot(sh, g, foes) {
+  var m = M4.pt(sh.M, g.muz[0], g.muz[1], g.muz[2]), R = gunMaxR(GUNS[g.type]) * IDLE.r, ax = g.mt ? null : gunAxis(sh, g), cone = (g.cone || 0.45) + IDLE.arc * Math.PI / 180;
+  return foes.some(function (o) {
+    var dx = o.center[0] - m[0], dz = o.center[2] - m[2]; if (dx * dx + dz * dz > R * R) return false;
+    if (!ax) return true;
+    var a = Math.atan2(dz, dx) - Math.atan2(ax[2], ax[0]); return Math.abs(Math.atan2(Math.sin(a), Math.cos(a))) < cone;
+  });
+}
+/** 每次點名（reassign、manning 之後、callHands 之前）：每 IDLE.t 秒判一次哪幾組閒著、收人（sh.idleG[層＋舷] ＝ { t0 開始閒的時間, on 閒著（候補）, back 收回來到幾秒 }）；放人在 callHands（idleTake）。 */
+function gunIdle(sh) {
+  if (!(IDLE.r > 0) || !sh.nav || sh.struck || sh.sunk) return;
+  if (!(SIMT >= (sh.idleNext || 0))) return;
+  sh.idleNext = SIMT + IDLE.t;
+  var NV = sh.nav, I = sh.idleG || (sh.idleG = {}), foes = SHIPS.filter(function (o) { return isFoe(sh, o) && !isOut(o) && o.center; });
+  sh.decks.forEach(function (D) {
+    ['S', 'P'].forEach(function (side) {
+      var key = D.key + side, R = I[key] || (I[key] = { t0: -1, on: false, back: -9 });
+      var gs = sh.guns.filter(function (g) { return g.alive && !g.wet && g.deck === D.key && g.side === side; });
+      if (!gs.some(function (g) { return gunHot(sh, g, foes); })) {
+        if (R.t0 < 0) R.t0 = SIMT;
+        if (SIMT - R.t0 >= IDLE.hold) R.on = true;
+        return;
+      }
+      R.t0 = -1; if (!R.on) return;
+      R.on = false; R.back = SIMT + IDLE_BACK;
+      sh.crew.forEach(function (c) {
+        if (c.idleFrom !== key) return;
+        c.idleFrom = undefined;
+        var J = c.role === ROLE.HAND && crewAble(c) && !c.hand.climb && c.hand.job; if (J && IDLE_RECALL[J.kind]) { c.hand.job = null; c.hand.legs = []; c.hand.wp = null; c.hand.wait = 0; }
+      });
+    });
+  });
+}
+/** 閒著的組裡離 (x, lv) 最近的砲手 ⇒ 變成預備水手（同 toHand；⛔ 不叫它：它的 rr() 抽戰局的亂數）；沒有 ⇒ null。 */
+function idleTake(sh, x, lv0) {
+  var I = sh.idleG, NV = sh.nav, best = null, bd = 1e9, blv = -1; if (!I) return null;
+  sh.crew.forEach(function (c) {
+    if (c.role !== ROLE.GUN || !crewAble(c) || c.walk) return;
+    var R = I[c.deck + c.side]; if (!R || !R.on) return;
+    var lv = lvAt(sh, c.pos); if (lv < 0 || !NV.levels[lv]) return;
+    var d = Math.abs(c.pos[0] - x) + 150 * Math.abs(lv - lv0); if (d < bd) { bd = d; best = c; blv = lv; }
+  });
+  if (!best) return null;
+  var c = best, key = c.deck + c.side;
+  leaveGun(c); if (c.art === undefined) c.art = c.role;
+  c.role = ROLE.HAND; c.gun = null; c.walk = null; c.moving = false; c.deck = NV.levels[blv].key; c.idleFrom = key;
+  c.hand = { lv: blv, wait: 0, legs: [], wp: null, k: 0, climb: null, job: null, to: null };
+  sh.idleN = (sh.idleN || 0) + 1;
+  return c;
+}
 /** 點名（每半秒，survey）：照開戰時的人數算每一格缺幾個，派最近的閒著的水手（交戰那一舷的砲班先、再來送藥手與舵手、另一舷最後）。 */
 function callHands(sh) {
   var NV = sh.nav; if (!NV || sh.struck || sh.sunk) return;
   if (NAV_RE > 0 && NV.dirty && SIMT - NV.reT >= NAV_RE) navRefresh(sh);     // 尋路動態更新（TASK-0572）
   NV.ladders.forEach(function (L) { L.q = 0; });                       // 排隊的人數每半秒重數（倒下、放棄的路不會一直佔著）
   sh.crew.forEach(function (c) { if (c.role === ROLE.HAND && crewAble(c)) c.hand.legs.forEach(function (l) { if (l.c !== undefined) NV.ladders[l.c].q++; }); });
-  var idle = sh.crew.filter(function (c) { return c.role === ROLE.HAND && crewAble(c) && !c.hand.job && !c.hand.climb; }); if (!idle.length && !(sh.galley && sh.galley.going)) return;   // 伙夫還在路上（45_galley.js）⇒ 沒有閒人也照樣算缺額：缺人就把伙夫叫回來（galleyPull）；沒有廚房 ⇒ 跟以前一樣
+  var spare = !!(sh.idleG && Object.keys(sh.idleG).some(function (k) { return sh.idleG[k].on; }));   // 有閒著的砲班（gunIdle）⇒ 急的缺可以從那裡調人（idleTake）
+  var idle = sh.crew.filter(function (c) { return c.role === ROLE.HAND && crewAble(c) && !c.hand.job && !c.hand.climb; }); if (!idle.length && !(sh.galley && sh.galley.going) && !spare) return;   // 伙夫還在路上（45_galley.js）⇒ 沒有閒人也照樣算缺額：缺人就把伙夫叫回來（galleyPull）；沒有廚房 ⇒ 跟以前一樣
   var idle0 = idle.length;
   var going = {}, need = [];
   sh.crew.forEach(function (c) { if (c.role === ROLE.HAND && crewAble(c) && c.hand.job) { var k = c.hand.job.kind + c.hand.job.key; going[k] = (going[k] || 0) + 1; } });
@@ -506,7 +569,7 @@ function callHands(sh) {
     var lv = lvOf(NV.levels, D.zr[0]); if (NV.reach.indexOf(lv) < 0) return;
     ['S', 'P'].forEach(function (side) {
       var gs = sh.guns.filter(function (g) { return g.alive && !g.wet && g.deck === D.key && g.side === side; }); if (!gs.length) return;
-      var IR = sh.burn && sh.burn.idle && sh.burn.idle[D.key + side]; if (IR && IR.on) return;   // 閒著的砲班放去救火了（49_burn.js burnIdle）⇒ 不補；敵艦進來 30 秒內補砲班排在救火前面（pri 0.25）
+      var IR = sh.idleG && sh.idleG[D.key + side]; if (IR && IR.on) return;   // 閒著的砲班（gunIdle）⇒ 不補；敵艦進來 30 秒內補砲班排在救火前面（pri 0.25）
       var want = Math.min(NV.gun0[D.key + side] || 0, gs.reduce(function (a, g) { return a + g.crewFull; }, 0));
       var have = sh.crew.filter(function (c) { return c.role === ROLE.GUN && crewAble(c) && c.deck === D.key && c.side === side; }).length;
       var n = want - have - (going['gun' + D.key + side] || 0), wx = 0, ww = 0;
@@ -541,7 +604,8 @@ function callHands(sh) {
   if (sh.galley) galleyNeeds(sh, need);                                // 伙夫領飯（45_galley.js，pri 3：所有補位之後）；沒有廚房 ⇒ 不加（sort 只比 pri、是穩定排序 ⇒ 其他的順序不變）
   need.sort(function (a, b) { return a.pri - b.pri; });
   need.forEach(function (q) {
-    for (var k = 0; k < q.n && idle.length; k++) {
+    for (var k = 0; k < q.n; k++) {
+      if (!idle.length) { var tk = spare && q.pri <= IDLE_PRI ? idleTake(sh, q.x, q.lv) : null; if (!tk) break; idle.push(tk); }   // 預備水手不夠、缺的是急的 ⇒ 從閒著的砲班調一個
       var bi = -1, bd = 1e9;
       idle.forEach(function (c, i) { var d = Math.abs(c.pos[0] - q.x) + 150 * Math.abs(c.hand.lv - q.lv); if (d < bd) { bd = d; bi = i; } });
       var c = idle[bi], H = c.hand, legs = handRoute(sh, H.lv, q.lv, c.pos[0], q.x, handReg(sh, c), q.cell !== undefined ? NV.levels[q.lv].N.reg[q.cell] : q.reg);   // cell：要走到的那一點（醫療艙；照它那一塊找路）；reg：補砲班、送藥手要到的那一塊（needReg）

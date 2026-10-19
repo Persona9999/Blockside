@@ -23,7 +23,7 @@ function rptGunState(g) { return !g.alive ? 3 : g.wet ? 5 : gunRate(g) <= 0 ? 2 
 function rptShip(sh) {
   var r = RPT.ships[sh.i];
   if (!r) r = RPT.ships[sh.i] = { id: sh.T.id, name: sh.T.name, team: sh.team, from: +SIMT.toFixed(1), crew0: sh.crew.length, out: null, taken: 0, takenOn: {}, tl: [],
-    guns: sh.guns.map(function (g) { return { name: g.name, type: g.type, side: g.side, shots: 0, hits: 0, on: {}, st: [0, 0, 0, 0, 0, 0], bear: 0, goneAt: null }; }) };
+    guns: sh.guns.map(function (g) { return { name: g.name, type: g.type, side: g.side, shots: 0, hits: 0, on: {}, st: [0, 0, 0, 0, 0, 0], bear: 0, bearNo: 0, goneAt: null }; }) };
   return r;
 }
 /** 每一步（50_sim.js 最後）：每 30 步掃砲的狀態，每 RPT_EVERY 秒記一列。 */
@@ -36,7 +36,7 @@ function rptTick() {
     if (r.out === null && isOut(sh)) r.out = +SIMT.toFixed(1);
     var foe = r.out === null ? foeOf(sh) : null;
     if (r.out === null) sh.guns.forEach(function (g, j) { var G = r.guns[j], s = rptGunState(g); if (!G) return; G.st[s] += dt; if (s === 3 && G.goneAt === null) G.goneAt = +SIMT.toFixed(1);
-      if (s === 0 && foe && foe.center && gunTarget(sh, g, foe.center)) G.bear += dt; });   // bear：可開的時間裡，目標（foeOf）在射界內的秒數（Tim 2026-10-16 查維吉尼亞號：可開 85% 幾乎都是「裝好了、敵艦不在射界」）
+      if ((s === 0 || s === 2) && foe && foe.center && gunTarget(sh, g, foe.center)) { if (s === 0) G.bear += dt; else G.bearNo += dt; } });   // bearNo：目標在射界內、砲卻沒人（人不夠）的秒數（TASK-0722：閒著的砲班放出去補位，量這一格變少沒）   // bear：可開的時間裡，目標（foeOf）在射界內的秒數（Tim 2026-10-16 查維吉尼亞號：可開 85% 幾乎都是「裝好了、敵艦不在射界」）
     if (row) r.tl.push(rptRow(sh, r));
   });
   RPT.ms += performance.now() - t0; RPT.n++;
@@ -73,7 +73,7 @@ function rptData() {
       var r = rptShip(sh), tl = r.tl.slice(), now = rptRow(sh, r); if (!tl.length || tl[tl.length - 1][0] !== now[0]) tl.push(now);
       return { i: sh.i, id: r.id, name: r.name, team: r.team, from: r.from, out: r.out, fate: sh.fate || null, crew0: r.crew0, fired: sh.fired, hits: sh.hits, taken: r.taken, takenOn: r.takenOn,
         wounds: sh.wounds, dead: sh.dead, causes: sh.causes || {}, armor: sh.armRes ? Object.assign({}, sh.armRes) : null,   // armor：打在鐵甲上的實心彈 穿／凹／彈、爆裂彈炸在外面幾發（TASK-0621）
-        guns: r.guns.map(function (G) { return { name: G.name, type: G.type, side: G.side, shots: G.shots, hits: G.hits, on: G.on, goneAt: G.goneAt, st: G.st.map(function (v) { return +v.toFixed(1); }), bear: +G.bear.toFixed(1) }; }),
+        guns: r.guns.map(function (G) { return { name: G.name, type: G.type, side: G.side, shots: G.shots, hits: G.hits, on: G.on, goneAt: G.goneAt, st: G.st.map(function (v) { return +v.toFixed(1); }), bear: +G.bear.toFixed(1), bearNo: +G.bearNo.toFixed(1) }; }),
         tl: tl, helm: r.helm || [], helmDrop: r.helmDrop || 0 };   // helm：艦長的決定（rptHelm）
     }) };
 }
