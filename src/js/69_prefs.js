@@ -10,7 +10,7 @@
 // 什麼時候存：每秒比一次（跟上次存的不一樣才寫）＋ 關頁、切到背景時。全部回到預設 ⇒ 刪掉那一筆。
 var PREFS_KEY = 'ame_constitution_broadside.prefs', PREFS_VER = 1;
 var PREF_Q = ['mode', 'start', 'wdir', 'wspd', 'ship', 'blue', 'red', 'hard', 'flood', 'ballast', 'gunw', 'speed', 'agile', 'upwind', 'base', 'pump', 'gunhp', 'sailhp', 'crewhp', 'crewdeath', 'powderhp', 'blast', 'blastv', 'dmg24', 'dmg32l', 'dmg32', 'dmg18', 'dmg12', 'dmg18l', 'dmg6', 'dmg3c', 'dmgtr', 'dmgsf', 'dmgbl', 'dmgmg',
-  'box', 'carry', 'hands', 'drown', 'heal', 'musket', 'sailfix', 'burn', 'galley', 'wind', 'windcap', 'inertia', 'turninert', 'sailtq', 'ammo', 'strike', 'cap', 'phys', 'sail', 'play', 'stall', 'funspeed', 'funagile', 'funstall', 'funpowder', 'funhard', 'sea',
+  'box', 'carry', 'hands', 'drown', 'heal', 'musket', 'sailfix', 'burn', 'galley', 'wind', 'windcap', 'inertia', 'turninert', 'sailtq', 'ammo', 'strike', 'cap', 'phys', 'sail', 'play', 'stall', 'funspeed', 'funagile', 'funstall', 'funpowder', 'funhard', 'sea', 'helmlost', 'funhelm',
   'gfx', 'g_shadow', 'g_refl', 'g_refr', 'g_sea', 'g_res', 'g_aa', 'phx', 'p_rig', 'p_rigfar', 'p_debris', 'p_fx', 'weather', 'g_rain', 'g_drops', 'g_dropspl', 'g_door', 'g_port', 'g_shships', 'g_masks', 'g_deco', 'dist', 'field', 'reinf', 'cmd', 'gauge', 'blue', 'red', 'slowmo', 'dbg', 'slowcam', 'roomfn', 'navre', 'gcrew', 'smoke', 'pslow', 'pslowb', 'ramv', 'ramk', 'rame', 'ramside', 'debcap'];          // 會蓋過存檔的網址參數（04_state.js、05_hull.js 讀的那些）
 var DMG_Q = { long: 'dmg24', long32: 'dmg32l', carr: 'dmg32', chase: 'dmg18', long4: 'dmg4', long12: 'dmg12', long18: 'dmg18l', long6: 'dmg6', chase3: 'dmg3c', trident: 'dmgtr', dahl9: 'dmg9d', brooke64: 'dmg64b', brooke7: 'dmg7b', dahl11: 'dmg11d', long36: 'dmg36l', long8: 'dmg8l', pierrier: 'dmgpr', siphon: 'dmgsf', ballista: 'dmgbl', mangonel: 'dmgmg' };
 var PREFS = { read: DEMO < 0 && Q.get('prefs') !== '0' && !Q.has('admin') && !Q.has('shipcheck'), write: false, state: '', last: '' };   // ?admin=rooms（設定後台嵌的那一份）、?shipcheck（匯入檢查）⇒ 不讀不存
@@ -93,6 +93,7 @@ var PREF_ITEMS = [
   prefNum('sailtq', prefLim('sailtq'), false, function () { return DRV_TQ; }, function (x) { DRV_TQ = x; }),
   prefAny('play', function (o) { if (PLAY !== CFG.menu.play) o.play = PLAY; }, function (p) { if (!Q.has('play') && (p.play === 'fun' || p.play === 'real')) PLAY = p.play; }),
   prefNum('stall', prefLim('stall'), false, function () { return STALL_K; }, function (x) { STALL_K = x; }),
+  prefNum('helmlost', prefLim('helmlost'), false, function () { return HELM_LOST; }, function (x) { HELM_LOST = x; }),   // 舵壞了的操舵（31_sailing.js helmK）
   prefNum('sea', prefLim('sea'), false, function () { return SEA_K; }, function (x) { SEA_K = x; }),
   prefAny('weather', function (o) { if (WX_ID !== 'clear') o.weather = WX_ID; }, function (p) { if (!Q.has('weather') && WEATHERS[p.weather]) { WX_ID = p.weather; WX = WEATHERS[WX_ID]; } }),   // 天色在 71_input.js 開頭 setWeather 套
   prefNum('funspeed', prefLim('funspeed'), false, function () { return FUN.speed; }, function (x) { FUN.speed = x; }),
@@ -100,6 +101,7 @@ var PREF_ITEMS = [
   prefNum('funstall', prefLim('funstall'), false, function () { return FUN.stall; }, function (x) { FUN.stall = x; }),
   prefNum('funpowder', prefLim('funpowder'), false, function () { return FUN.powder; }, function (x) { FUN.powder = x; }),
   prefNum('funhard', prefLim('funhard'), false, function () { return FUN.hard; }, function (x) { FUN.hard = x; }),
+  prefNum('funhelm', prefLim('funhelm'), false, function () { return FUN.helm; }, function (x) { FUN.helm = x; }),
   prefAny('dmg', function (o) { var dm = {}; Object.keys(DMG_Q).forEach(function (t) { if (DMG[t] !== LIM[DMG_Q[t]][2]) dm[t] = DMG[t]; }); if (Object.keys(dm).length) o.dmg = dm; },   // 每發傷害（砲的設定頁；網址 ?dmg24= 那幾個優先）
     function (p) { if (p.dmg && typeof p.dmg === 'object') Object.keys(DMG_Q).forEach(function (t) { if (Q.has(DMG_Q[t])) return; var x = prefOk(p.dmg[t], LIM[DMG_Q[t]], true); if (x !== undefined) DMG[t] = x; }); }),
   prefAny('wxk', function (o) { var w = wxkSnap(); if (Object.keys(w).length) o.wxk = w; }, function (p) { if (p.wxk && typeof p.wxk === 'object') wxkApply(p.wxk); }),   // 天氣設定（08_weather.js WXK_ITEMS）

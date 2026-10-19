@@ -121,6 +121,7 @@ if (DEBUG) window.__game = {
     blowModel(sh, m, M4.dir(sh.M, 0, -(sp || 400), 0), false); var f = FLY[FLY.length - 1];
     return { path: m.path, kind: m.kind, style: blowStyle(m), v: f.v.map(function (x) { return +x.toFixed(2); }), w: f.w.map(function (x) { return +x.toFixed(2); }), shipV: sh.vel.map(function (x) { return +x.toFixed(2); }) };
   },
+  helm: function (i) { var sh = SHIPS[i || 0]; return { k: +helmK(sh).toFixed(4), lost: HELM_LOST, fun: playK('helm'), wheel: sh.models.filter(function (m) { return m.kind === 'wheel'; }).map(function (m) { return m.alive; }), rudder: sh.models.filter(function (m) { return m.kind === 'rudder'; }).map(function (m) { return m.alive; }) }; },   // 操舵性能（31_sailing.js helmK：乘在最大轉向率上）
   flyState: function () { return FLY.map(function (f) { return { t: +f.t.toFixed(2), y: +f.c[1].toFixed(2), rest: !!f.rest, wet: f.wet, land: !!f.land }; }); },
   furnHit: function (i, name, k, dmg) { var sh = SHIPS[i], o = sh.rooms.filter(function (r) { return r.name === name; })[0], m = o.furn[k]; damageModel(sh, m, [0, 5, 0], dmg); var B = roomBuffNow(o); return { item: m.item, hp: m.hp, alive: m.alive, buff: buffText(B), cap: +roomCap(o).toFixed(2), eff: +roomEff(o).toFixed(2) }; },
   roomPlace: function (id, name, type, items, p) { var T = HULLT[id], r = hullRooms(T).filter(function (x) { return x.name === name; })[0]; return placeOk(roomGrid(T, r), type, items, p); },

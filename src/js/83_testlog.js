@@ -15,7 +15,7 @@
 // 看得到的地方：結束畫面「📊 報表」的「匯出船員記錄」（JSON）；__game.crewlog()（?debug=1）；?dump=1&test=1 的 #crewlog（src/tests/crew_log.py 讀它、畫成路徑圖）。
 var TLOG = null, TLOG_EVERY = 0.5, TLOG_MAX = 600000;                    // TLOG_MAX：路徑點的上限（超過 ⇒ 停記路徑、事件照記，標 trunc）
 var TLOG_KEY = 'blockside_testmode';
-function tlgWanted() { if (Q.get('test') === '1') return true; if (Q.get('test') === '0') return false; try { return window.localStorage.getItem(TLOG_KEY) === '1'; } catch (e) { return false; } }
+function tlgWanted() { if (Q.get('test') === '1') return true; if (Q.get('test') === '0') return false; if (!DEBUG) return false; try { return window.localStorage.getItem(TLOG_KEY) === '1'; } catch (e) { return false; } }
 function tlgReset() { TLOG = tlgWanted() ? { v: 1, seed: SEED, from: +SIMT.toFixed(1), every: TLOG_EVERY, ships: [], ev: [], n: 0, ms: 0, trunc: false, ids: new WeakMap(), crew: [] } : null; }
 /** 船員的固定編號與那一份（第一次看到才建；WeakMap ⇒ 不在船員物件上多掛欄位）。 */
 function tlgCrew(sh, c) {
@@ -143,5 +143,6 @@ function tlgSave() {
   setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
 }
 $('testT').onclick = tlgToggle;
+if (!DEBUG) $('testT').closest('.gsR').style.display = 'none';   // 設定面板只在 ?debug=1 顯示（Tim 2026-10-20）；沒開 debug ⇒ 存過的開關也不算（上面 tlgWanted），網址 ?test=1 照舊（src/tests/crew_log.py）
 // 訂閱（TASK-0669：模擬層只發事件，00_events.js）
 evOn('tlgEv', tlgOnEv); evOn('stepEnd', tlgTick, 1);

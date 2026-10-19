@@ -612,7 +612,9 @@ function stepFly(f, dt) {
   f.t += dt;
   if (f.rest) {                                                          // 停在船上（'fall' 掉到甲板、桅樓上）：跟著船走；船沉了照樣跟著下去
     f.M = M4.mul(f.sh.M, f.Ml); f.c = M4.pt(f.sh.M, f.cl[0], f.cl[1], f.cl[2]);
-    return f.t < 600 && f.c[1] > (VX ? vxH(f.c[0], f.c[2]) : 0) - 25;
+    if (!f.sh.grid.get(f.sup[0], f.sup[1], f.sup[2])) {                 // 撐著它的那一格沒了（桅樓被打掉、桅倒了）⇒ 從現在的位置、帶著船速繼續掉（⛔ 以前停了就一直掛在原地 ⇒ 浮在半空，Tim 2026-10-20 截圖）
+      f.rest = false; f.M0 = f.M; f.c0 = f.c.slice(); f.R = M4.ident(); f.v = f.sh.vel.slice(); f.w = [0, 0, 0];   // 從這一刻重新算：落下 1.5 m 之後碰到東西可以再停一次
+    } else return f.t < 600 && f.c[1] > (VX ? vxH(f.c[0], f.c[2]) : 0) - 25;
   }
   f.v[1] -= G * dt;
   if (f.c[1] < seaH(f.c[0], f.c[2], SIMT)) {
@@ -624,7 +626,8 @@ function stepFly(f, dt) {
   f.M = M4.mul(M4.mul(M4.mul(trans(f.c[0], f.c[1], f.c[2]), f.R), trans(-f.c0[0], -f.c0[1], -f.c0[2])), f.M0);
   if (f.land && !f.wet && f.c0[1] - f.c[1] > 1.5 && !f.sh.sunk) {        // 'fall'：中心掉過 1.5 m 之後碰到船的格 ⇒ 停在那裡（⛔ 一開始就判 ⇒ 帆桁貼著桅，馬上停在原地）
     var L = M4.pt(f.sh.inv, f.c[0], f.c[1], f.c[2]);
-    if (f.sh.grid.get(Math.floor(L[0]), Math.floor(L[1]), Math.floor(L[2]))) { f.rest = true; f.Ml = M4.mul(f.sh.inv, f.M); f.cl = L; }
+    var sup = [Math.floor(L[0]), Math.floor(L[1]), Math.floor(L[2])];
+    if (f.sh.grid.get(sup[0], sup[1], sup[2])) { f.rest = true; f.Ml = M4.mul(f.sh.inv, f.M); f.cl = L; f.sup = sup; }   // sup：撐著它的那一格（之後每一步看它還在不在）
   }
   return f.t < 25 && f.c[1] > (VX ? vxH(f.c[0], f.c[2]) : 0) - 25;   // 大漩渦：照漏斗那裡的水面算多深（⛔ 照 0 ⇒ 漏斗裡漂著的一出現就拿掉）
 }
