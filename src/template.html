@@ -132,8 +132,8 @@
   .gr{ font-family:Consolas,monospace; font-size:12px; letter-spacing:1px; white-space:nowrap; display:inline-flex; align-items:center; vertical-align:middle; }
   .gr .grd{ display:inline-block; text-align:left; line-height:1.25; }   /* 砲列：每層砲甲板一行、上下疊（61_hud.js gunRow） */
   .g-full{ color:#8fe388; } .g-short{ color:#f2c14e; } .g-none{ color:#7d838c; } .g-dead{ color:#e0574a; } .g-wet{ color:#7fc8ff; }
-  .gside .aim, .gend .aim{ text-shadow:-1px -1px 0 var(--gold), 1px -1px 0 var(--gold), -1px 1px 0 var(--gold), 1px 1px 0 var(--gold), 0 0 4px var(--gold); }   /* 這門現在開打得中（61_hud.js gunCell aim ← 21_gunnery.js gunAims；Tim 2026-10-19「炮可以射擊到敵人時 是否可以有額外標示」「高量是否可以改成圓形外框」「可以直接換框嗎」）：符號原本的黑描邊（.gside／.gend 的 text-shadow）換成金色 */
-  .gside .ico.aim, .gend .ico.aim{ filter:drop-shadow(0 0 1px var(--gold)) drop-shadow(0 0 1px var(--gold)); }   /* 圖示版（HUD 美術）：圖示外圍一圈金 */
+  .gside .aim, .gend .aim{ text-shadow:-1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000, -2px 0 0 var(--gold), 2px 0 0 var(--gold), 0 -2px 0 var(--gold), 0 2px 0 var(--gold), -2px -2px 0 var(--gold), 2px -2px 0 var(--gold), -2px 2px 0 var(--gold), 2px 2px 0 var(--gold); }   /* 這門現在開打得中（61_hud.js gunCell aim ← 21_gunnery.js gunAims；Tim 2026-10-19「炮可以射擊到敵人時 是否可以有額外標示」「高量是否可以改成圓形外框」「可以直接換框嗎」「金框會導致邊緣不明顯 是否可以改為押在原本的黑邊框外一小圈」）：黑描邊照舊（1 px）、外面再壓一圈 2 px 的金（text-shadow 前面的蓋在後面的上面）*/
+  .gside .ico.aim, .gend .ico.aim{ filter:drop-shadow(0 0 1px #000) drop-shadow(0 0 0.6px var(--gold)) drop-shadow(0 0 0.6px var(--gold)); }   /* 圖示版（HUD 美術）：先一圈黑、外面再一圈金 */
   .ico.g-full{ box-shadow:inset 0 -2px 0 #8fe388; } .ico.g-short{ box-shadow:inset 0 -2px 0 #f2c14e; } .ico.g-none{ box-shadow:inset 0 -2px 0 #7d838c; } .ico.g-dead{ box-shadow:inset 0 -2px 0 #e0574a; }
   #msg{ width:100%; font-size:var(--modeFs); font-weight:700; text-align:center; line-height:1.45; }   /* 廣播：兩邊面板中間那一欄，一則一行、最多 5 行、各自淡掉（⛔ 寬到蓋住兩邊面板） */
   #msg div{ margin:0 0 1.5px; transition:opacity .4s; }   /* 字的大小跟羅盤上方那行資訊（#modeT）一樣、跟著 --modeFs（Tim 2026-10-16；以前 7／8 px，最新那行大一號；更早 14／16 px）*/
