@@ -45,6 +45,7 @@ function treePlant(C, far) {
       var mt = C.mat[Math.min(n - 1, Math.round(z / st)) * n + Math.min(n - 1, Math.round(x / st))], wM = Pl.mats[mt]; if (!wM) continue;
       var e = Math.max(st, 4), gx = (hAt(x + e, z) - hAt(x - e, z)) / (2 * e), gz = (hAt(x, z + e) - hAt(x, z - e)) / (2 * e), g2 = gx * gx + gz * gz;
       if (g2 > Pl.slopeMax * Pl.slopeMax) continue;
+      if (Pl.flat) { var fr = Pl.flat[0], f0 = hAt(x + fr, z), f1 = hAt(x - fr, z), f2 = hAt(x, z + fr), f3 = hAt(x, z - fr); if (Math.max(y, f0, f1, f2, f3) - Math.min(y, f0, f1, f2, f3) > Pl.flat[1]) continue; }   // 要一大片平的（紅樹：泥灘、瀉湖邊；塊邊上照塊裡最近的點）
       var wx = C.cx * size + x, wz = C.cy * size + z;                     // 海域座標（往東、往南公尺）：林地的雜訊照它 ⇒ 相鄰兩塊接得起來
       // 林地覆蓋：海圖帶了（Blocksail 照島的種子算、大陸分區平滑混合）⇒ 照它；沒帶（舊的海圖檔）⇒ 自己的雜訊（250 m 一片＋70 m 細節；每一種看同一張）
       var cov = C.fo ? treeCover(C, x, z) : Math.max(0, Math.min(1, (TREE_FALLBACK - (treeNoise(wx / 250, wz / 250, fs + 5) * 0.75 + treeNoise(wx / 70, wz / 70, fs + 6) * 0.25)) / 0.04 + 0.5));
