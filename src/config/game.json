@@ -1007,7 +1007,7 @@
     "medkit": {
       "name": "藥箱",
       "type": "medical",
-      "size": [5, 4, 4],
+      "size": [4, 3, 3],
       "hp": 40,
       "buff": {"heal": 0.15}
     },
