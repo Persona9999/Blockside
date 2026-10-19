@@ -114,7 +114,16 @@
     "sailCrew": 2,
     "cutT": 8,
     "sailReach": 40,
-    "rainSail": 0.05
+    "rainSail": 0.05,
+    "wetPer": 40,
+    "hoseK": 8,
+    "hoseR": 200,
+    "hoseZ": 40,
+    "engCrew": 6,
+    "idleArc": 15,
+    "idleR": 2,
+    "idleT": 2,
+    "idleHold": 4
   },
   "guns": {
     "long": {"code": "24l", "name": "24 磅長砲", "short": "長砲", "V": 175, "reload": 1, "big": false, "crew": 5, "min": 3, "mass": 2.5, "shot": 10.9},
@@ -886,6 +895,7 @@
       "vxk": "reale.vxk",
       "work": "apex-one-reale-01m-assembly",
       "author": "apex-one",
+      "fireEngine": false,
       "cfg": {"base": 6},
       "geo": {"spar": [30, 46], "marines": [75, 115], "center": 60, "aim": 38, "aimZ": [20, 380], "deckAim": [28, 45], "rigAim": [120, 330]},
       "crew": {
@@ -953,6 +963,7 @@
       "vxk": "dromon.vxk",
       "work": "erina-dromon-01m-assembly",
       "author": "erina",
+      "fireEngine": false,
       "cfg": {"upwind": 1.2, "base": 14, "speed": 2.25, "agile": 4},
       "geo": {"spar": [21, 30], "marines": [42, 96], "center": 30, "aim": 18, "aimZ": [8, 230], "deckAim": [18, 30], "rigAim": [60, 210]},
       "crew": {"officers": 2, "top": 0, "marines": 12, "marineGap": 18},

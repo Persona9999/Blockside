@@ -190,7 +190,12 @@ BURN_NUMS = (('tick', 0.05, 2, '一拍幾秒（每格延燒、燒穿、救火照
              ('sailBurn', 0.5, 120, '火燒到之後幾秒燒穿成洞'), ('sailHp', 0, 5, '洞的面積比例 × 這個 ⇒ 扣幾成血量'), ('sailDrop', 0.05, 1, '燒掉幾成帆就掉'),
              ('sailJump', 0, 1, '燒口跳到旁邊那面帆的機率'), ('sailJumpR', 0, 100, '跳到旁邊的帆的距離（格）'),
              ('sailCrew', 0, 20, '每面著火的帆派幾個人'), ('cutT', 0, 120, '站到帆底下幾秒才潑熄／割下來'), ('sailReach', 0, 300, '帆腳離露天甲板幾格內潑得到（再高 ⇒ 割下來）'),
-             ('rainSail', 0, 5, '下雨熄掉帆火的機率／秒（暴風雨）'))
+             ('rainSail', 0, 5, '下雨熄掉帆火的機率／秒（暴風雨）'),
+             ('wetPer', 0, 2000, '潑濕：一個人（或一條水帶的一份）罩得住幾格不延燒、不重新著火'),
+             ('hoseK', 0, 100, '一條水帶滿出水 ＝ 幾個人提水桶'), ('hoseR', 0, 1000, '水帶多長（格，平面距離）'), ('hoseZ', 0, 200, '水帶上下夠得到幾格'),
+             ('engCrew', 0, 40, '內建消防泵幾個人搖（0 ＝ 沒有內建消防泵）'),
+             ('idleArc', 0, 90, '砲閒置判斷：射界外再多幾度'), ('idleR', 1, 10, '砲閒置判斷：射程的幾倍'),
+             ('idleT', 0.5, 30, '砲閒置每幾秒判斷一次'), ('idleHold', 0, 60, '連續閒置幾秒才放砲手去救火'))
 MAT_OPT = (('metal', 0, 1, '金屬度（選填；0 ＝ 不反光、1 ＝ 金屬：太陽高光＋天空反射；TASK-0627）'), ('rough', 0, 1, '粗糙度（選填；0 ＝ 鏡面、1 ＝ 很霧；沒寫 ＝ 0.5）'),
            ('pen', 1, 5000, '擊穿門檻（選填；每格板厚要幾 kJ，船殼硬度倍率 1 時；寫了 ⇒ 實心彈照能量與入射角判穿／凹／彈，TASK-0621）'))
 MAT_BOOL = (('smooth', '平滑（選填 true／false；true ⇒ 這種材質的格沒寫 render 也畫成平滑面＋金屬反光，螺旋槳整份平滑；關聯明寫 render=voxel 照方塊。Tim 2026-10-17：鐵甲、鍋爐開，包銅皮不開）'),)
@@ -592,6 +597,8 @@ def validate(cfg, prev=None):
             err(p + '.drive', '額外動力的種類：steam（蒸汽機，預設）或 magic（魔法／幽靈船）；沒有額外動力（cfg.base）就不用寫')
         if 'theme' in s and not (isinstance(s['theme'], str) and s['theme'] in THEME_IDS):
             err(p + '.theme', '主題曲的 id（js/02_music.js 的 THEMES：%s；TASK-0681）' % ('、'.join(THEME_IDS) or '—'))
+        if 'fireEngine' in s and s['fireEngine'] is not False:
+            err(p + '.fireEngine', '只能寫 false（這艘沒有內建消防泵：古代的槳帆船；沒寫 ＝ 有，49_burn.js）')
         if 'author' in s and not (isinstance(s['author'], str) and s['author'].strip()):
             err(p + '.author', '建造者（雕刻作品的作者；匯入時從 .vxk 檔頭 owner 記，沒有就不寫這個鍵）')
         if 'variant_of' in s and not (isinstance(s['variant_of'], str) and s['variant_of'] != s.get('id')):

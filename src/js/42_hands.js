@@ -505,12 +505,13 @@ function callHands(sh) {
     var lv = lvOf(NV.levels, D.zr[0]); if (NV.reach.indexOf(lv) < 0) return;
     ['S', 'P'].forEach(function (side) {
       var gs = sh.guns.filter(function (g) { return g.alive && !g.wet && g.deck === D.key && g.side === side; }); if (!gs.length) return;
+      var IR = sh.burn && sh.burn.idle && sh.burn.idle[D.key + side]; if (IR && IR.on) return;   // 閒著的砲班放去救火了（49_burn.js burnIdle）⇒ 不補；敵艦進來 30 秒內補砲班排在救火前面（pri 0.25）
       var want = Math.min(NV.gun0[D.key + side] || 0, gs.reduce(function (a, g) { return a + g.crewFull; }, 0));
       var have = sh.crew.filter(function (c) { return c.role === ROLE.GUN && crewAble(c) && c.deck === D.key && c.side === side; }).length;
       var n = want - have - (going['gun' + D.key + side] || 0), wx = 0, ww = 0;
       var gm = null, mm = -1;
       gs.forEach(function (g) { var m = Math.max(0, g.crewFull - g.manned); wx += g.muz[0] * m; ww += m; if (m > mm) { mm = m; gm = g; } });
-      if (n > 0) need.push({ kind: 'gun', key: D.key + side, deck: D.key, side: side, lv: lv, n: n, x: ww ? wx / ww : gs[0].muz[0], pri: side === sh.side ? 0 : 2, reg: gm && sh.T.armor && sh.T.armor.length ? needReg(sh, lv, gunNavAt(sh, gm)) : undefined });   // reg：缺最多人那門砲所在的那一塊（會轉裝甲的船）
+      if (n > 0) need.push({ kind: 'gun', key: D.key + side, deck: D.key, side: side, lv: lv, n: n, x: ww ? wx / ww : gs[0].muz[0], pri: side === sh.side ? 0 : IR && IR.back > SIMT ? 0.25 : 2, reg: gm && sh.T.armor && sh.T.armor.length ? needReg(sh, lv, gunNavAt(sh, gm)) : undefined });   // reg：缺最多人那門砲所在的那一塊（會轉裝甲的船）
       var ti = NV.levels.length - 1, tt = NV.levels[ti];                 // 砲塔頂上的砲（turTopLevel；哨兵號頂上的速射砲）另外算：缺幾個派幾個、派去那一層（從繩梯爬上去）——
       if (tt.tur && NV.reach.indexOf(ti) >= 0) {                         //   ⛔ 跟整組一起算 ⇒ 甲板上的砲手（走不到頂上，navReach）也算在人數裡，頂上的砲班全倒了整組照樣不缺人（量過：頂上 0／6、一個都沒派）
         var tgs = gs.filter(function (g) { var q = gunNavAt(sh, g); return q[2] >= tt.zr[0] && q[2] <= tt.zr[1]; });
