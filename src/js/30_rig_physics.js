@@ -453,11 +453,41 @@ function spawnLoose(sh, r) {
     Q.forEach(function (w, j) { p[j * 3] = w[0]; p[j * 3 + 1] = w[1]; p[j * 3 + 2] = w[2]; if (j) rest[j - 1] = len(sub(w, Q[j - 1])); });
     var o = { p: p, q: Float32Array.from(p), rest: rest, n: n, pin: new Uint8Array(n), hk: [pt[1][0], pt[2][0]], hv: [pt[1][1], pt[2][1]], col: r.col, free: 0, of: r.of || r };   // of：從哪一條繩垂下來的（帆匠修好那條 ⇒ 把垂著的收掉，47_sailmaker.js）
     o.pin[0] = o.hk[0] ? 1 : 0; o.pin[n - 1] = o.hk[1] ? 1 : 0;
-    ropePins(sh, o); sh.loose.push(o);
+    looseMark(sh, o); ropePins(sh, o); sh.loose.push(o);
   });
   if (sh.loose.length > rigLv().loose) {                                  // 太多 ⇒ 先丟已經整條鬆掉的，再丟最早的
     var drop = sh.loose.findIndex(function (o) { return !o.pin[0] && !o.pin[o.n - 1]; });
     sh.loose.splice(drop >= 0 ? drop : 0, 1);
+  }
+}
+// 釘著的那一端跟著它靠的東西走（Tim 2026-10-19 截圖：「憲法號 帆被打掉後出現浮空纜繩」「帆還沒完全掉(看起來是掉一角落)」）：
+//   量到的：上層帆的帆腳被撕掉 ⇒ sheet 放開（tethCut），另一端照舊釘在下一根帆桁的端點；之後船轉向、帆桁跟風轉（0.462 → 0.104 rad），
+//   釘點卻停在放開那一刻的位置 ⇒ 離帆桁 2.2–2.3 m 的空中（電腦對電腦 140 m、main-topsail 兩條 sheet）。以前釘住的點每一步都不動（ropeStep pin）。
+//   ⇒ 釘在帆桁上（hk 4、模型是 yard）：記下那一刻帆桁轉了多少，之後照帆桁多轉的角度繞它的軸轉（rotZ，跟 yardRopes／clothBrace 同一個轉法）；
+//     釘在母繩上（hk 2）：記下母繩最近的那一點，母繩換了形狀（帆桁轉了 yardRopes 換新的 pts）⇒ 跟著那一點。
+/** spawnLoose：兩端各記住釘在哪（帆桁的角度／母繩的第幾點）。 */
+function looseMark(sh, o) {
+  o.fy = [null, null]; o.fr = [null, null];
+  for (var e = 0; e < 2; e++) {
+    var pi = e ? o.n - 1 : 0, P = [o.p[pi * 3], o.p[pi * 3 + 1], o.p[pi * 3 + 2]];
+    if (o.hk[e] === 4) { var m = sh.models[o.hv[e]]; if (m && m.kind === 'yard' && m.piv) o.fy[e] = { P: P, a0: m.rot || 0, a: 0 }; }
+    else if (o.hk[e] === 2) {
+      var q = sh.ropes[o.hv[e]].pts, bk = 0, bd = 1e18;
+      for (var k = 0; k < q.length; k += 3) { var dx = q[k] - P[0], dy = q[k + 1] - P[1], dz = q[k + 2] - P[2], d = dx * dx + dy * dy + dz * dz; if (d < bd) { bd = d; bk = k; } }
+      o.fr[e] = { q: q, k: bk };
+    }
+  }
+}
+/** 每一步：釘著的端點照帆桁的角度、母繩的形狀搬過去（沒變就不動）。 */
+function looseFollow(sh, o) {
+  if (!o.fy) return;
+  for (var e = 0; e < 2; e++) {
+    var pi = e ? o.n - 1 : 0, j = pi * 3, w = null;
+    if (!o.pin[pi]) continue;
+    var Y = o.fy[e], R = o.fr[e];
+    if (Y) { var m = sh.models[o.hv[e]], a = (m.rot || 0) - Y.a0; if (a !== Y.a) { Y.a = a; w = rotZ(Y.P, m.piv, a); } }
+    else if (R) { var q = sh.ropes[o.hv[e]].pts; if (q !== R.q) { R.q = q; w = [q[R.k], q[R.k + 1], q[R.k + 2]]; } }
+    if (w) { o.p[j] = o.q[j] = w[0]; o.p[j + 1] = o.q[j + 1] = w[1]; o.p[j + 2] = o.q[j + 2] = w[2]; }
   }
 }
 /** 點 P（格座標）D 格內（量到格的表面）有沒有實心格。 */
@@ -541,6 +571,7 @@ function physStep(sh) {
       ropePins(sh, o);
       if (!o.pin[0] && !o.pin[o.n - 1]) { o.free += 0.1; if (o.free > 15 || underWater(sh, o.p, 0) && underWater(sh, o.p, o.n - 1)) { sh.loose.splice(i--, 1); continue; } }
     }
+    looseFollow(sh, o);                                                  // 釘著的那一端跟著帆桁、母繩走（looseMark）
     if (m > 1 && (si + i + sh.i) % m) continue;                          // 遠方：每 m 步走一次
     var t1 = DEBUG ? performance.now() : 0; ropeStep(sh, o, wl, gv, m * DT); if (DEBUG) PROF.rope += performance.now() - t1;
   }
