@@ -4,6 +4,8 @@
 //   長不長照那一點的機率 ＝ dens × 海拔帶（alt，漸入漸出）× 底質權重（mats）× 林地（forest：跟著林地走、或避開）× 成片（patch）；坡度超過 slopeMax 不長；
 //   跟「雜湊 55% ＋ clump 公尺一叢的雜訊 45%」比 ⇒ 一叢一叢、邊緣碎開（TASK-0725：沙灘上椰子樹與海葡萄、海邊淺水成片的紅樹、林子裡闊葉樹、高地松樹、乾的坡上龍舌蘭）。
 //   林地：海圖塊帶了林地覆蓋（Blocksail 照每座島的種子算、大陸分區平滑混合；MAP_CHUNK.md §4）⇒ 照它；沒帶（舊檔）⇒ 自己的值雜訊（250 m 一片，TREE_FALLBACK 成是林子）；
+//   植被（海圖塊的段 2，MAP_CHUNK.md §4；Blocksail 照物種的分區、氣候、土壤推算 —— gura 的物種系統）：有這一段、海域的 vis 名單裡有這一種 ⇒ 那一點的名單沒有它就不長；
+//     沒有這一段（舊檔、Blockside 自己的 maps）⇒ 照上面的規則（跟以前一樣）。這一段只說「能不能長」，長多密、長在哪一條等高線照樹種自己的 place。
 //   哪一棵、轉幾度（face ⇒ 往下坡歪）、多大、顏色深淺都照那一點的雜湊 ⇒ 同一塊每次一樣、跟載入順序無關。⛔ 不抽戰局的 rnd()、不進模擬（船不會上岸、砲彈不打樹）。
 //   遠景塊（bedFarPut，32 m 一點的粗塊）也擺，間距 × TREE_FAR_SP —— 只拿來算樹冠殼；那一塊細的載進來了就換細的那一份（跟地形同一套）。
 // 畫（treeDraw，接在地形後面）：離鏡頭 < TREE_LOD[0] 細的、< TREE_LOD[1] 低模、< TREE_SHELL[1] 貼圖（樹的側面照，面向鏡頭轉，開機時從細的那一份拍成一張圖集）。
@@ -15,7 +17,7 @@
 //   place.view（小植物）⇒ 超過那個距離就不畫。貼圖集照格子排（每列 TREE_ATLAS_COLS 格；樹種多了不會超過貼圖的最大寬）。
 //   光照跟地形同一套（天光、陽光、船的陰影、霧照 BED_FOG）；葉子照風搖（搖晃權重 × 風）。樹不投影子。
 //   ?trees=0 ⇒ 不長樹。
-var TREE_LOD = [140, 650], TREE_SHELL = [1100, 1500], TREE_SHELL_G = 32, TREE_FAR_SP = 3, TREE_FAR_K = 1.35, TREE_REBIN = 8, TREE_FALLBACK = 0.55, TREE_ATLAS_COLS = 8, TREE_BB_MAX = 48;
+var TREE_LOD = [140, 650], TREE_SHELL = [1100, 1500], TREE_SHELL_G = 32, TREE_FAR_SP = 3, TREE_FAR_K = 1.35, TREE_REBIN = 8, TREE_FALLBACK = 0.55, TREE_ATLAS_COLS = 8, TREE_BB_MAX = 48, TREE_VEG_JIT = 70;
 var TREES = { on: Q.get('trees') !== '0', init: false, list: [], ch: {}, far: {}, eye: null, dirty: true, buf: [], cnt: null, bb: null, stat: { plant: 0, far: 0, d0: 0, d1: 0, d2: 0, binMs: 0, bakeMs: 0, genMs: 0, plantMs: 0, bySp: {} } };
 evOn('bedChunk', function (cx, cy, C) { if (TREES.on && BED && BED.A) { TREES.ch[bedKey(cx, cy)] = treePlant(C, false); TREES.dirty = true; } }, 0, true);
 evOn('bedDrop', function (cx, cy) { var k = bedKey(cx, cy); if (TREES.ch[k]) { delete TREES.ch[k]; TREES.dirty = true; } }, 0, true);
@@ -37,6 +39,7 @@ function treePlant(C, far) {
   }
   Object.keys(TREE_SPECIES).forEach(function (sp, si) {
     var S = TREE_SPECIES[sp], Pl = S.place, gap = Pl.spacing * (far ? TREE_FAR_SP : 1), m = Math.floor(size / gap), sd = 7001 + si * 131 + (far ? 17 : 0), fs = 7001 + (far ? 17 : 0), nk = 0;
+    var vb = C.vg && A.vis ? A.vis.indexOf(sp) : -1, vs = vb >= 0 ? size / (C.vgN - 1) : 0;   // 植被段（Blocksail 照物種的分區、氣候、土壤推算，MAP_CHUNK.md §4）：這一種在不在那一點的名單裡；名單沒有這一種 ⇒ 不限
     if (far && Pl.shell === 0) return;                                   // 遠景塊只拿來算樹冠殼 ⇒ 不算進殼的小植物不擺
     var gi0 = Math.round(C.cx * size / gap), gj0 = Math.round(C.cy * size / gap), A4 = Pl.alt;
     for (var j = 0; j < m; j++) for (var i = 0; i < m; i++) {
@@ -51,6 +54,11 @@ function treePlant(C, far) {
       var cov = C.fo ? treeCover(C, x, z) : Math.max(0, Math.min(1, (TREE_FALLBACK - (treeNoise(wx / 250, wz / 250, fs + 5) * 0.75 + treeNoise(wx / 70, wz / 70, fs + 6) * 0.25)) / 0.04 + 0.5));
       var p = Pl.dens * wM * (y < A4[1] ? (y - A4[0]) / (A4[1] - A4[0]) : y > A4[2] ? (A4[3] - y) / (A4[3] - A4[2]) : 1) * (Pl.forest >= 0 ? 1 - Pl.forest + Pl.forest * cov : 1 + Pl.forest * cov);
       if (Pl.patch) p *= Math.max(0, Math.min(1, (treeNoise(wx / Pl.patch[0], wz / Pl.patch[0], sd + 8) - Pl.patch[1]) / 0.08 + 0.5));
+      if (vb >= 0) {                                                     // 查最近的那一點；位置照雜訊抖 ±TREE_VEG_JIT 公尺（每一種同一張 ⇒ 交界一叢一叢地換過去，不是 128 m 的方格）
+        var vi2 = Math.round((x + (treeNoise(wx / 90, wz / 90, 991) - 0.5) * 2 * TREE_VEG_JIT) / vs), vj2 = Math.round((z + (treeNoise(wx / 90, wz / 90, 992) - 0.5) * 2 * TREE_VEG_JIT) / vs);
+        vi2 = Math.max(0, Math.min(C.vgN - 1, vi2)); vj2 = Math.max(0, Math.min(C.vgN - 1, vj2));
+        if (!(C.vg[vj2 * C.vgN + vi2] & (1 << vb))) continue;
+      }
       if (treeHash(gi, gj, sd + 6) * 0.55 + treeNoise(wx / Pl.clump, wz / Pl.clump, sd + 7) * 0.45 >= p) continue;
       var r = treeHash(gi, gj, sd + 2), px = wx - BED.ax, pz = wz - BED.az, sc = treeIn(function () { return r; }, Pl.scale) * (far ? TREE_FAR_K : 1);
       var rot = Pl.face && g2 > 1e-4 ? Math.atan2(gz, -gx) + (treeHash(gi, gj, sd + 3) - 0.5) * 1.4 : treeHash(gi, gj, sd + 3) * 6.2832;   // face：模型 +x（歪的那一邊）轉到下坡

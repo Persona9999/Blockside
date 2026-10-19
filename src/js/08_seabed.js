@@ -105,9 +105,14 @@ function bedDecode(b64) {
     h[o] = pred + d; if (h[o] < mn) mn = h[o]; if (h[o] > mx) mx = h[o];
   }
   for (var k = 0; k < N;) { var v = u(), c = u(); mat.fill(v, k, k + c); k += c; }
-  var fo = null, foN = 0;                                                // 選用的段（MAP_CHUNK.md §4）：1 ＝ 林地覆蓋；不認得的記號 ⇒ 停（之後的段讀不了）
-  while (p < b.length) { var tg = u(); if (tg !== 1) break; foN = u(); fo = new Uint8Array(foN * foN); for (k = 0; k < fo.length;) { v = u(); c = u(); fo.fill(v, k, k + c); k += c; } }
-  return { cx: cx, cy: cy, n: n, step: step, h: h, mat: mat, min: mn / 10, max: mx / 10, fo: fo, foN: foN };
+  var fo = null, foN = 0, vg = null, vgN = 0;                            // 選用的段（MAP_CHUNK.md §4）：1 ＝ 林地覆蓋、2 ＝ 植被（每點長得出哪幾種，位元 ＝ area.vis）；不認得的記號 ⇒ 停（之後的段讀不了）
+  while (p < b.length) {
+    var tg = u(); if (tg !== 1 && tg !== 2) break;
+    var sn = u(), sa = tg === 1 ? new Uint8Array(sn * sn) : new Uint16Array(sn * sn);
+    for (k = 0; k < sa.length;) { v = u(); c = u(); sa.fill(v, k, k + c); k += c; }
+    if (tg === 1) { fo = sa; foN = sn; } else { vg = sa; vgN = sn; }
+  }
+  return { cx: cx, cy: cy, n: n, step: step, h: h, mat: mat, min: mn / 10, max: mx / 10, fo: fo, foN: foN, vg: vg, vgN: vgN };
 }
 /** 焦點（世界座標）⇒ 換中心：要的塊（中心 ± ring＋prefetch）載進來、不要的（也不在任何船旁邊）丟掉。first ⇒ 回傳等全部載好的 Promise。畫面迴圈每格叫（90_main.js）。 */
 function bedFocus(fx, fz, first) {
