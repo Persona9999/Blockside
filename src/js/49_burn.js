@@ -17,9 +17,8 @@
 //   水帶（Tim 2026-10-19「可以讓抽水機當取水點 以及加上消防泵」；史實：1795 年美國巡防艦配消防泵、50 呎皮水帶、30 呎吸水管從船邊抽海水，憲法號 1799 年用過；
 //     Newsham 消防泵 18 人每分鐘約 570 公升）：內建消防泵（主桅旁、露天甲板，engCrew 人搖；ships[].fireEngine false ⇒ 沒有：持火號、皇家號這種槳帆船）
 //     ＋玩家擺的抽水機（人力：艙裡有水要抽時先抽水；蒸汽：不用人）⇒ 每條水帶潑 hoseR 格（平面）、上下 hoseZ 格內最大的火場，滿出水 ＝ hoseK 個人提水桶。
-//   閒著的砲班（Tim 2026-10-19「射界45度 判斷到60度範圍內 射程100m 判斷到200m 都沒有敵人 視為閒置狀態 炮組可以變回後備水手去救火」「判斷頻率不要太高」）：
-//     每 idleT 秒（點名那一拍）每一層每一舷看一次：每門活著的砲，射界外再加 idleArc 度、射程 × idleR 裡都沒有敵艦 ⇒ 那一組閒著；連續 idleHold 秒 ⇒ 救火缺人時把砲手變成預備水手去救火，
-//     點名不補那一組的砲班；有敵艦進來 ⇒ 救火的放回來、那一組補砲班排在救火前面（30 秒內）。
+//   閒著的砲班（Tim 2026-10-19「炮組可以變回後備水手去救火」）：判定與放人在 42_hands.js gunIdle（TASK-0722：跟著火無關，放出來的點名照缺額派）；
+//     這裡只做一件事：已經派去救火、還在別層爬的遠的，換成甲板上剛放出來的（burnSwap）。
 // 帆：每面帆的每個頂點記火「什麼時候燒到」a、「什麼時候撲滅」x（起火那一刻沿布的邊算一次最短時間 burnDij：往上快、往下慢、每條邊照雜湊抖一點，⛔ 不抽亂數）⇒
 //   著色器照 (min(現在, x) − a) ÷ sailBurn 畫焦黃、焦黑的邊、燒紅的燒口、燒穿的洞（discard）⇒ 模擬一拍一次，畫面上照樣連續往外燒、撲滅就停在那一刻。
 //   洞的面積 ⇒ 帆的血量（推力照舊跟著血量掉，31_sailing.js）；燒掉 sailDrop 成、或一半的綁定點燒掉 ⇒ 帆掉下來（dropSail）；
@@ -228,7 +227,7 @@ function burnTick(sh) {
   });
   for (var k in mine) mine[k].forEach(burnFree);                       // 火場沒了（熄了、燒完了）
   B.spots.forEach(function (sp) { if (!sp.sail) sp.wet = sp.n ? Math.min(1, (sp.have + sp.hose) * BURN.wetPer / sp.n) : 0; });   // 潑濕（見檔頭）
-  burnIdle(sh, B, L);
+  burnSwap(sh);
   burnHurt(sh, B, dt);
 }
 function burnFree(c) { c.hand.job = null; c.hand.legs = []; c.hand.wait = 1; }
@@ -270,56 +269,17 @@ function burnHoseTick(sh, B, mine) {
   });
 }
 
-// ── 閒著的砲班去救火（見檔頭）──
-/** 這門砲的範圍（射界外再加 idleArc、射程 × idleR）裡有沒有敵艦。迴旋砲、砲塔 ⇒ 只看距離。 */
-function burnGunHot(sh, g, foes) {
-  var m = M4.pt(sh.M, g.muz[0], g.muz[1], g.muz[2]), R = gunMaxR(GUNS[g.type]) * BURN.idleR, ax = g.mt ? null : gunAxis(sh, g), cone = (g.cone || 0.45) + BURN.idleArc * Math.PI / 180;
-  return foes.some(function (o) {
-    var dx = o.center[0] - m[0], dz = o.center[2] - m[2]; if (dx * dx + dz * dz > R * R) return false;
-    if (!ax) return true;
-    var a = Math.atan2(dz, dx) - Math.atan2(ax[2], ax[0]); return Math.abs(Math.atan2(Math.sin(a), Math.cos(a))) < cone;
-  });
-}
-/** 每 idleT 秒：每一層每一舷閒不閒；閒了 idleHold 秒、救火還缺人 ⇒ 那一組的砲手變成預備水手（缺幾個放幾個）；有敵艦進來 ⇒ 救火的放回去補砲班。 */
-function burnIdle(sh, B, L) {
-  var NV = sh.nav; if (!NV || sh.struck) return;
-  var I = B.idle || (B.idle = {});
-  if (!(SIMT >= (B.idleNext || 0))) return;
-  B.idleNext = SIMT + BURN.idleT;
-  var foes = SHIPS.filter(function (o) { return isFoe(sh, o) && !isOut(o) && o.center; }), fire = B.spots.size > 0;
-  sh.decks.forEach(function (D) {
-    ['S', 'P'].forEach(function (side) {
-      var gs = sh.guns.filter(function (g) { return g.alive && !g.wet && g.deck === D.key && g.side === side; }), key = D.key + side, R = I[key] || (I[key] = { t0: -1, on: false, back: -9 });
-      var idle = fire && gs.length > 0 && !gs.some(function (g) { return burnGunHot(sh, g, foes); });   // 火都熄了 ⇒ 不算閒著（放出去的回砲位）
-      if (idle) { if (R.t0 < 0) R.t0 = SIMT; R.on = SIMT - R.t0 >= BURN.idleHold; return; }
-      R.t0 = -1; if (!R.on) return;
-      R.on = false; R.back = SIMT + 30;                                  // 敵艦進來了 ⇒ 救火的放回去；30 秒內那一組補砲班排在救火前面（42_hands.js callHands）
-      sh.crew.forEach(function (c) { if (c.idleFrom === key) { c.idleFrom = undefined; if (c.role === ROLE.HAND && c.hand.job && c.hand.job.kind === 'fire') burnFree(c); } });
-    });
-  });
-  // 放幾個：救火要的（火場照 crewShip 封頂＋水帶）− 已經站到的 − 已經放出來的。⛔ 照「還沒派到的名額」放 ⇒ 艙底的預備水手開火幾秒內就把名額占滿、
-  //   砲手一個都放不出來，而他們要爬梯子（量過：點火 30 秒還沒有一個人到）。放出來的砲手就在甲板上 ⇒ 底下把同樣多個遠的（別層）還沒到的收回來，點名照距離改派砲手（42_hands.js callHands：同一層、近的先）。
-  var want = 0, at = 0, rel = 0, far = [];
-  L.forEach(function (sp) { want += sp.want || 0; }); want = Math.min(want, BURN.crewShip);
-  (B.hoses || []).forEach(function (H) { want += H.need; });
+// ── 閒著的砲班去救火：換人（見檔頭）──
+/** 放出來的砲手（42_hands.js gunIdle）還閒著、而派去救火的有人還在別層（要爬梯子）⇒ 把那幾個遠的收回來，點名照距離改派甲板上的砲手。
+ *  ⛔ 不換 ⇒ 艙底的預備水手開火幾秒內就把名額占滿、爬梯子（量過：點火 30 秒還沒有一個人到）。 */
+function burnSwap(sh) {
+  var free = 0, far = [];
   sh.crew.forEach(function (c) {
     if (c.role !== ROLE.HAND || !crewAble(c)) return;
-    var J = c.hand.job; if (c.idleFrom) rel++;
-    if (!J || J.kind !== 'fire') return;
-    if (J.at) at++; else if (!c.idleFrom && !c.hand.climb && c.hand.lv !== J.lv) far.push(c);
+    var J = c.hand.job; if (!J) { if (c.idleFrom && !c.hand.climb) free++; return; }
+    if (J.kind === 'fire' && !J.at && !c.idleFrom && !c.hand.climb && c.hand.lv !== J.lv) far.push(c);
   });
-  var short = want - at - rel;
-  if (short > 0) sh.crew.forEach(function (c) {
-    if (short <= 0 || c.role !== ROLE.GUN || !crewAble(c) || c.walk) return;
-    var gk = c.deck + c.side, R = I[gk]; if (!R || !R.on) return;
-    var lv = lvAt(sh, c.pos); if (lv < 0 || !NV.levels[lv]) return;
-    leaveGun(c); if (c.art === undefined) c.art = c.role;              // 同 42_hands.js toHand（⛔ 不叫它：它的 rr() 抽戰局那一條亂數）
-    c.role = ROLE.HAND; c.gun = null; c.walk = null; c.moving = false; c.deck = NV.levels[lv].key; c.idleFrom = gk;
-    c.hand = { lv: lv, wait: 0, legs: [], wp: null, k: 0, climb: null, job: null, to: null };
-    short--; B.idleN = (B.idleN || 0) + 1;
-  });
-  var free = sh.crew.filter(function (c) { return c.idleFrom && c.role === ROLE.HAND && crewAble(c) && !c.hand.job; }).length;
-  far.sort(function (a, b) { return Math.abs(b.hand.lv - b.hand.job.lv) - Math.abs(a.hand.lv - a.hand.job.lv); }).slice(0, free).forEach(burnFree);   // 收回最遠（差最多層）的那幾個
+  if (free && far.length) far.sort(function (a, b) { return Math.abs(b.hand.lv - b.hand.job.lv) - Math.abs(a.hand.lv - a.hand.job.lv); }).slice(0, free).forEach(burnFree);   // 最遠（差最多層）的先收
 }
 /** 火場站哪：帆 ⇒ 帆匠那一點（帆底下、露天甲板）；船殼 ⇒ 火的那一層（不行 ⇒ 上一層：火在天花板、船殼側面）走得到、高度差 reach 格內的走路點。都沒有 ⇒ -1（沒人去）。 */
 function burnSpotNav(sh, sp) {
@@ -579,8 +539,8 @@ function burnInfo(sh) {
   });
   sh.crew.forEach(function (c) { var J = c.role === ROLE.HAND && crewAble(c) && c.hand.job; if (J && J.kind === 'fire') { crew++; if (J.at) at++; } });
   var hoses = (B.hoses || []).map(function (H) { return { name: H.name, hand: H.hand, need: H.need, have: H.have, k: +H.k.toFixed(2), tgt: H.tgt ? H.tgt.key : null }; });
-  var idle = {}; Object.keys(B.idle || {}).forEach(function (k) { if (B.idle[k].on) idle[k] = true; });
-  return { n: B.n, peak: B.maxN, ign: B.ignN, out: B.outN, gone: B.goneN, thru: B.thruN, lit: B.lit, crew: crew, at: at, spots: spots, hoses: hoses, idle: idle, idleN: B.idleN || 0,
+  var idle = {}; Object.keys(sh.idleG || {}).forEach(function (k) { if (sh.idleG[k].on) idle[k] = true; });   // 閒著的砲班（42_hands.js gunIdle）
+  return { n: B.n, peak: B.maxN, ign: B.ignN, out: B.outN, gone: B.goneN, thru: B.thruN, lit: B.lit, crew: crew, at: at, spots: spots, hoses: hoses, idle: idle, idleN: sh.idleN || 0,
     sails: sh.sails.filter(function (s) { return s.burn; }).map(function (s) { return { k: s.k, name: s.name, lit: s.burn.lit, hole: +s.burn.hf.toFixed(3), hp: Math.round(s.hp), dead: !!s.dead }; }),
     sailN: B.sailN, sailGone: B.sailGoneN, sailOut: B.sailOutN };
 }

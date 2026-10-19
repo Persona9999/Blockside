@@ -193,10 +193,10 @@ BURN_NUMS = (('tick', 0.05, 2, '一拍幾秒（每格延燒、燒穿、救火照
              ('rainSail', 0, 5, '下雨熄掉帆火的機率／秒（暴風雨）'),
              ('wetPer', 0, 2000, '潑濕：一個人（或一條水帶的一份）罩得住幾格不延燒、不重新著火'),
              ('hoseK', 0, 100, '一條水帶滿出水 ＝ 幾個人提水桶'), ('hoseR', 0, 1000, '水帶多長（格，平面距離）'), ('hoseZ', 0, 200, '水帶上下夠得到幾格'),
-             ('engCrew', 0, 40, '內建消防泵幾個人搖（0 ＝ 沒有內建消防泵）'),
-             ('idleArc', 0, 90, '砲閒置判斷：射界外再多幾度'), ('idleR', 1, 10, '砲閒置判斷：射程的幾倍'),
-             ('idleT', 0.5, 30, '砲閒置每幾秒判斷一次'), ('idleHold', 0, 60, '連續閒置幾秒才放砲手去救火'))
+             ('engCrew', 0, 40, '內建消防泵幾個人搖（0 ＝ 沒有內建消防泵）'))
 # 廚房（TASK-0720；js/45_galley.js 讀 CFG.galley，⛔ js 裡沒有第二份；加成的 % 在 lim.galley 滑桿）：(鍵, 下限, 上限, 整數?, 說明)；多的鍵、少的鍵都擋
+IDLE_NUMS = (('arc', 0, 90, '閒著的砲班（TASK-0722）：射界外再多看幾度'), ('r', 0, 10, '射程的幾倍內都沒有敵艦才算閒著（0 ＝ 關掉：砲班一直守著自己的砲）'),
+             ('t', 0.5, 30, '每幾秒判斷一次'), ('hold', 0, 120, '連續閒著幾秒才把砲手放出去當預備水手'))
 GALLEY_NUMS = (('cooks', 1, 4, True, '每座爐灶幾位廚師（全船上限 ＝ 船員配置 crew.cook）'), ('cookT', 1, 120, False, '一位效率 1 的廚師做好一鍋（一桌的份）要幾秒'),
                ('stock', 1, 40, True, '爐灶旁最多放幾鍋（開戰時是滿的）'), ('mess', 1, 40, True, '一桌幾個人物（伙夫一趟領一桌的飯）'),
                ('go', 1, 20, True, '同時最多幾個伙夫在路上或在領'), ('fetchT', 0, 30, False, '伙夫在爐灶旁盛飯要站幾秒'), ('waitT', 0, 120, False, '沒鍋可領最多等幾秒'),
@@ -324,6 +324,17 @@ def validate(cfg, prev=None):
         for f in GA:
             if f not in [x[0] for x in GALLEY_NUMS]:
                 err('galley.' + f, '不認得的鍵（admin.py GALLEY_NUMS 沒有）')
+    ID = cfg.get('idle')                                                                # 閒著的砲班當預備水手（TASK-0722；js/42_hands.js gunIdle）
+    if not isinstance(ID, dict):
+        err('idle', '要是物件（閒著的砲班的參數，見 admin.py IDLE_NUMS）')
+    else:
+        for f, lo, hi, what in IDLE_NUMS:
+            v = ID.get(f)
+            if not (isnum(v) and lo <= v <= hi):
+                err('idle.' + f, '%s（%s～%s）' % (what, lo, hi))
+        for f in ID:
+            if f not in [x[0] for x in IDLE_NUMS]:
+                err('idle.' + f, '不認得的鍵（admin.py IDLE_NUMS 沒有）')
     G = cfg.get('guns')
     if not isinstance(G, dict) or not G:
         err('guns', '要是非空物件')
@@ -682,7 +693,7 @@ def validate(cfg, prev=None):
                     elif not (isinstance(q.get('rgb'), list) and len(q['rgb']) == 3 and all(isnum(v) and 0 <= v <= 2 for v in q['rgb'])):
                         err(qp + '.rgb', '光色 [r, g, b]，0～2')
     if prev:
-        for sec in ('limits', 'menu', 'lim', 'guns', 'geo0', 'crew0', 'fire', 'burn', 'galley'):
+        for sec in ('limits', 'menu', 'lim', 'guns', 'geo0', 'crew0', 'fire', 'burn', 'galley', 'idle'):
             for k in (prev.get(sec) or {}):
                 if k not in (cfg.get(sec) or {}):
                     err(sec + '.' + k, '原本有、這份少了（遊戲會讀它）')
