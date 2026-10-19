@@ -126,12 +126,14 @@ function liftText(sh) {
   if (s && Math.abs(up) > 0.05 && dn > 0.05) s += '（減重 ' + (up >= 0 ? '+' : '−') + Math.abs(up).toFixed(1) + '・進水 −' + dn.toFixed(1) + '）';
   return s;
 }
-/** 進水 %（0–1）。 */
+/** 進水 %（0–1）。斷船、開始沉的船：沉船進水在算（33_flood.js floodVis，fl.vis）⇒ 照艙內實際的水（Tim 2026-10-19「照實際的水量算」；TASK-0617）；
+ *  沒在算（沉船進水關、同時在算的已經滿了、公式模式）⇒ 照以前寫 100%。沉沒 ⇒ 100%。 */
 function floodPct(sh) {
-  if (sh.sinkingFinal || sh.sunk) return 1;
+  var vis = sh.fl && sh.fl.vis && !sh.sunk;
+  if (sh.sunk || (sh.sinkingFinal && !vis)) return 1;
   var T = sh.T; if (!T || !T.hyd) return clamp(sh.sink / SINK_FINAL, 0, 1);
   var base = T.disp - (sh.mass0 || shipT(sh)) + massLost(sh), L0 = liftFor(T, base), W100 = base - tonsAt(T, L0 - SINK_FINAL);
-  var W = sh.fl && !sh.broken ? sh.fl.vol * RHO_W : base - tonsAt(T, L0 - sh.sink);
+  var W = sh.fl && (!sh.broken || vis) ? sh.fl.vol * RHO_W : base - tonsAt(T, L0 - sh.sink);
   return W100 > 0 ? clamp(W / W100, 0, 1) : 1;
 }
 function panel(sh, title) {
