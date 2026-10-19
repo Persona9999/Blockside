@@ -16,12 +16,12 @@ var GFX_ITEMS = [
   { k: 'drops', name: '雨滴（3D）', opt: ['關', '少（1500）', '中（3000）', '多（6000）'] },   // 只在暴風雨下：3D 空間裡的雨絲粒子（14_rain.js）
   { k: 'dropspl', name: '雨滴水花', opt: ['關', '開'] },                                    // 3D 雨滴打在海面與船上濺起的小水花
   { k: 'door', name: '門的開關演出', opt: ['關（一直關著）', '開（有人經過才開）'] },          // 門、艙蓋（TASK-0638，25_doors.js）：人照樣通過、門照樣擋水，這一項只管畫面
-  { k: 'port', name: '砲門的開關演出', opt: ['關（蓋板開著、砲推出去不動）', '開（交戰掀蓋推砲、沒事收砲闔蓋、砲口下水就關）'] },   // 砲門（TASK-0719，62_ports.js）：只有蓋板（裝飾）載進來的船才有；戰局不讀。⛔ 併進 door：門三檔都開、砲門低畫質關；只靠「裝飾」：要回主選單才生效、沒有 ?g_port= 做反向對照
+  { k: 'port', name: '砲門的開關演出', opt: ['關（蓋板開著、砲推出去不動）', '開（交戰掀蓋推砲、沒事收砲闔蓋、砲口下水就關）'] },   // 砲門（TASK-0719，62_ports.js）：有蓋板（裝飾）、畫質「裝飾」開著的船才有；戰局不讀。⛔ 併進 door：門三檔都開、砲門低畫質關；只靠「裝飾」：沒有 ?g_port= 做反向對照
   { k: 'fall', name: '艙內水幕', opt: ['關', '開（往下一層流的水畫成水幕）'] },   // 進水的粒子模式（TASK-0651，33_flood.js flFalls）：水照樣往下流，這一項只管畫面
   { k: 'pdep', name: '艙內水的深淺', opt: ['關（一片均勻的半透明）', '開（越深越不透明、貼邊淡出）'] },   // TASK-0654（33_flood.js FL_DEP_GLSL）：讀場景深度；海水折射不是「高」⇒ 有水的那幾格多複製一次深度
   { k: 'pside', name: '艙內水的側面與水瀑', opt: ['關', '開（水面邊上畫側面、兩池交界畫水瀑）'] },   // TASK-0654（33_flood.js flSides）
   { k: 'pedge', name: '艙內水的水邊', opt: ['關（直的）', '開（白沫一圈、淺的邊不規則）'] },   // TASK-0654（33_flood.js flEdgeM、FLE_GLSL）：只在水邊那一圈多算兩次雜訊
-  { k: 'deco', name: '裝飾', opt: ['關（載入船時就不載入）', '開'] },   // TASK-0682（05_hull.js decoSplit）：雕刻模型 meta deco=1 的裝飾件；不算重量、不被打、不抽亂數 ⇒ 開關不改戰局。換了要下一次載入船才生效
+  { k: 'deco', name: '裝飾', opt: ['關（不畫）', '開'] },   // TASK-0682（05_hull.js decoSplit）：雕刻模型 meta deco=1 的裝飾件；不算重量、不被打、不抽亂數 ⇒ 開關不改戰局。一律載入、只管畫不畫（60_render.js drawModels）⇒ 切了立刻生效
   // 多船（TASK-0537；60_render.js gpuSlots）：視野裡離鏡頭最近的幾艘才有自己的陰影圖／船艙遮罩（第幾檔 ＝ 幾艘）
   { k: 'shships', name: '陰影船數', opt: gfxOpts(MAX_SHIPS + 1, function (i) { return i ? String(i) : '0（只有全局）'; }) },   // 其他的船畫進一張全局陰影圖（解析度低）
   { k: 'masks', name: '船艙遮罩', opt: gfxOpts(MASK_NEAR + 1, function (i) { return i ? String(i) : '0（艙裡看得到海）'; }) }];   // 說明在畫質設定頁（template #gfxNote）
