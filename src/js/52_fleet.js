@@ -43,12 +43,25 @@ function cmdView(side) {
       lerr: s.lineErr === undefined ? null : s.lineErr, llag: s.lineLag === undefined ? null : s.lineLag, larc: s.lineArc === undefined ? null : s.lineArc, loff: s.lineOff === undefined ? null : s.lineOff, asp: helmAspect(s) };   // asp：船頭／船尾比正橫火力大 ⇒ 'B'／'A'（54_helm.js；指揮官不排進戰列）
   }) };
 }
+/** 推演（TASK-0688；56_rollout.js rollShip）要的欄位：兩舷還在的砲（迴旋砲兩邊都算）、編制砲數、船員編制、帆剩多少、滿帆側風航速（進水、降旗照樣慢）、額外動力、逆風、舵效、航速倍率。
+ *  只有策略「推演」才算（⛔ 每 3 秒每艘掃一次砲與模型；其他策略用不到 ⇒ 不加這份工）。 */
+function cmdRollFields(v, s) {
+  var gP = 0, gS = 0; s.guns.forEach(function (g) { if (!g.alive) return; if (g.mt || g.side === 'P') gP++; if (g.mt || g.side === 'S') gS++; });
+  var SPK = s.cfg.speed * playK('speed') * WX.speed, dk = (1 - clamp(s.sink / 9, 0, 0.8)) * (s.struck ? 0.15 : 1);
+  var wheel = s.models.some(function (m) { return m.kind === 'wheel' && m.alive; }), rud = s.models.filter(function (m) { return m.kind === 'rudder'; }), rudK = rud.length && !rud.some(function (m) { return m.alive; }) ? 0.12 : 1;
+  v.gP = gP; v.gS = gS; v.gT = s.guns.length; v.nc = s.crew0 || 1; v.sail = s.sailFrac === undefined ? 1 : s.sailFrac;
+  v.vs = VMAX * SPK * Math.sqrt(WIND_SPD) * dk; v.vb = (s.cfg.base || 0) / 1.9438 * dk; v.up = s.cfg.upwind || 1;
+  v.ag = s.cfg.agile * playK('agile') * WX.agile * (wheel ? 1 : 0.35) * rudK; v.spk = SPK || 1;
+  return v;
+}
 function cmdTick() {
   ORDERS = {};
   ['blue', 'red'].forEach(function (side) {
     var M = CMD_MEM[side], g0 = M.gauge ? M.gauge.st : null;
-    var o = cmdThink(cmdView(side), CMD_SIDE[side], M); for (var k in o) ORDERS[k] = o[k];
+    var V = cmdView(side); if (CMD_SIDE[side] === 'auto') V.ships.forEach(function (v) { cmdRollFields(v, SHIPS[v.id]); });
+    var o = cmdThink(V, CMD_SIDE[side], M); for (var k in o) ORDERS[k] = o[k];
     if (M.gauge && M.gauge.st !== g0) cmdGaugeSay(side, M.gauge);
+    if (M.roll && !M.roll.said) { M.roll.said = true; var fs = flagship(side); if (fs) helmSay(fs, 'roll', rollText(M.roll), M.roll.n === 1 || M.roll.prev !== M.roll.pick); }   // 推演（TASK-0688）：每一次都記進戰鬥報表，換策略（或第一次）才上方廣播
   });
 }
 function cmdReset() { CMD_MEM = { blue: {}, red: {} }; ORDERS = {}; SIGNAL = null; SHIPS.forEach(function (s) { s.wake = null; s.lineErr = s.lineLag = s.lineArc = s.lineOff = undefined; }); }

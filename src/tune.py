@@ -7,6 +7,7 @@
 #   python -I tune.py bench [--workers 4] [--suite base] [--seeds 2]        基準對基準：量每小時幾場、分數的雜訊（應該在 0 附近）
 #   python -I tune.py run   [--workers 4] [--gens 12] [--lam 10] [--sigma 0.2] [--suite base] [--seeds 1]   CMA-ES 找參數
 #   python -I tune.py check --params best.json [--workers 4] [--suite base] [--seeds 6] [--seed0 1000]     留出的種子上驗（沒用來調的）
+#   python -I tune.py check --cand-strat auto [--workers 1] ...      候選那一方換一個策略（例：auto ＝ 推演，TASK-0688）對基準照場景的策略打；--params 可以不給（覆寫全照預設）
 #   共同：--hz 20（物理步長；60 ＝ 跟遊戲逐步相同、慢 3 倍）--tmax 300（時限秒）--play fun|real --out <資料夾>（預設暫存資料夾）--html <成品>
 #         --normal：Chrome 用一般優先權（預設閒置優先權 ⇒ 有人在用電腦就讓路；Tim 2026-10-17「目前PC太卡了」「晚上休息時再慢慢跑」）
 # 量過（2026-10-17，24 核的那台、旁邊還開著別的 Chrome）：2 個工作者每小時 114 場、6 個 243–388 場（每個 3.3 倍速）、12 個 200 場（每個 1.4 倍速，CPU 滿了）⇒ 6 個左右就到頂。
@@ -210,8 +211,8 @@ class Pool:
         return self.n_done / h if h > 0 else 0
 
 
-def scen_jobs(suite, seeds, seed0, cand, hz, tmax, tag):
-    """一組參數（cand：覆寫 dict）對基準的全部工作：每個場景 × 每個種子 × 候選當藍／當紅。"""
+def scen_jobs(suite, seeds, seed0, cand, hz, tmax, tag, cstrat=None):
+    """一組參數（cand：覆寫 dict）對基準的全部工作：每個場景 × 每個種子 × 候選當藍／當紅。cstrat：候選那一方改用的策略（None ＝ 照場景）。"""
     J = []
     for si, sc in enumerate(SUITES[suite]):
         for k in range(seeds):
@@ -220,6 +221,7 @@ def scen_jobs(suite, seeds, seed0, cand, hz, tmax, tag):
                 p = {'blue': {'n': sc['n'], 'hull': sc['hull'], 'strat': sc['strat'], 'gauge': False}, 'red': {'n': sc['n'], 'hull': sc['hull'], 'strat': sc['strat'], 'gauge': False},
                      'dist': sc['dist'], 'wdir': (seed * 90) % 360, 'wspd': 1, 'seed': seed, 'hz': hz, 'tmax': tmax}
                 tune = {'blue': cand if side == 'blue' else None, 'red': cand if side == 'red' else None}
+                if cstrat: p[side]['strat'] = cstrat
                 J.append({'id': '%s-s%d-%d-%s' % (tag, si, seed, side), 'p': p, 'tune': tune, 'side': side, 'scen': si, 'n': sc['n']})
     return J
 
@@ -322,8 +324,10 @@ def cmd_run(a, pool, out):
 
 
 def cmd_check(a, pool, out):
-    P = json.load(open(a.params, encoding='utf-8')); cand = P.get(a.key) if a.key in P else P
-    jobs = scen_jobs(a.suite, a.seeds, a.seed0, cand, a.hz, a.tmax, 'check'); res = pool.run(jobs, out.match1); S = summarize(jobs, res)
+    if a.params: P = json.load(open(a.params, encoding='utf-8')); cand = P.get(a.key) if a.key in P else P
+    elif a.cand_strat: cand = None
+    else: sys.exit('check 要 --params（或 --cand-strat）')
+    jobs = scen_jobs(a.suite, a.seeds, a.seed0, cand, a.hz, a.tmax, 'check', a.cand_strat); res = pool.run(jobs, out.match1); S = summarize(jobs, res)
     out.log('驗證（種子 %d–%d，沒用來調的）：%d 場（缺 %d）分數 %+.3f ± %.3f（95%% 約 ±%.3f）、候選贏 %d／輸 %d'
             % (a.seed0, a.seed0 + a.seeds - 1, S['n'], S['missing'], S['mean'], S['se'], 1.96 * S['se'], S['win'], S['lose']))
     for si, sc in enumerate(SUITES[a.suite]):
@@ -340,6 +344,7 @@ def main():
     ap.add_argument('--gens', type=int, default=12); ap.add_argument('--lam', type=int, default=10); ap.add_argument('--sigma', type=float, default=0.2); ap.add_argument('--rseed', type=int, default=1)
     ap.add_argument('--params'); ap.add_argument('--key', default='mean'); ap.add_argument('--play', default='fun', choices=['fun', 'real'])
     ap.add_argument('--out'); ap.add_argument('--html', default=OUT_HTML); ap.add_argument('--chrome'); ap.add_argument('--job-timeout', type=int, default=1800); ap.add_argument('--normal', action='store_true')
+    ap.add_argument('--cand-strat', default=None, help='候選那一方改用的指揮官策略（free／pair／focus／line／auto）；不給 ＝ 照場景')
     a = ap.parse_args()
     if a.seeds is None: a.seeds = {'bench': 2, 'run': 1, 'check': 6}[a.cmd]
     if a.seed0 is None: a.seed0 = {'bench': 1, 'run': 1, 'check': 1000}[a.cmd]                # check 預設用 1000 起的種子：run 用的是 1 起，不重疊

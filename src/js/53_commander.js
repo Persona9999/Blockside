@@ -12,8 +12,8 @@
 //   side（排頭：交戰的那一舷 'P'／'S'）, pace（排頭：巡航的幾成）, tack（搶上風：往風軸哪一側搶，±1）} }
 //   mode：'engage' 交戰 ／ 'line' 戰列跟隨（遊戲：cmdHelmWake 跟前一艘的航跡；沙盒：cmdHelmLine）／ 'lead' 戰列的排頭（遊戲 54_helm.js helmLead；沙盒當交戰）／ 'gauge' 搶上風（helmGauge）
 // 記憶 mem：每一方一份（配對、集火的目標、戰列的順序、搶上風的進度），下一次想的時候接著用 ⇒ 不會每想一次就整個換一套；換策略、換旗號 ⇒ 除了搶上風都重來。
-var CMD_STRATS = ['free', 'pair', 'focus', 'line'];
-var CMD_NAMES = { free: '各自為戰', pair: '一對一配對', focus: '集火', line: '戰列' };
+var CMD_STRATS = ['free', 'pair', 'focus', 'line', 'auto'];
+var CMD_NAMES = { free: '各自為戰', pair: '一對一配對', focus: '集火', line: '戰列', auto: '推演' };   // 推演（TASK-0688）：每 30 秒把配對／集火／戰列各往前推 90 秒、挑最好的（56_rollout.js rollStrat）
 var CMD_LINE_GAP = 70;                                                   // 戰列：前後兩艘的中心隔多遠（m；憲法號水線長 55 m ⇒ 頭尾隔 15 m）；自動調參調出來的（TASK-0687，2026-10-18，撞在下限 70；調之前 90）
 // 搶上風（TASK-0679）：我方中心比敵方中心多上風 CMD_GAUGE_UP ⇒ 搶到；CMD_GAUGE_MAX 秒沒搶到、或敵我最近的兩艘近於 CMD_GAUGE_NEAR × 交戰距離 ⇒ 不搶了、接戰。
 //   往風軸哪一側搶：敵方中心在哪一側就往哪一側（離風軸 CMD_GAUGE_SIDE 以內不換邊 ⇒ 不會一直換舷搶風）。
@@ -35,8 +35,9 @@ function cmdThink(view, strat, mem) {
   var orders = {}, sig = view.signal || null;
   if (sig && CMD_NAMES[sig.strat]) strat = sig.strat;
   if (!CMD_NAMES[strat]) strat = 'free';
+  if (strat === 'auto') strat = typeof rollStrat === 'function' ? rollStrat(view, mem) : 'pair';   // 推演 ⇒ 這一次照挑中的那個想（56_rollout.js；玩家的旗號照樣蓋過它）
   var key = sig ? 'sig:' + strat + ':' + sig.lead + ':' + sig.focus : 'cfg:' + strat;
-  if (mem.key !== key) { var g = mem.gauge; Object.keys(mem).forEach(function (k) { delete mem[k]; }); mem.key = key; if (g) mem.gauge = g; }   // 換策略、換旗號 ⇒ 配對、集火、戰列重來（搶上風的進度留著）
+  if (mem.key !== key) { var g = mem.gauge, rl = mem.roll; Object.keys(mem).forEach(function (k) { delete mem[k]; }); mem.key = key; if (g) mem.gauge = g; if (rl) mem.roll = rl; }   // 換策略、換旗號 ⇒ 配對、集火、戰列重來（搶上風、推演的進度留著）
   mem.tn = view.tune || null;                                            // 這一方的可調參數覆寫（55_tune.js；平常 null）
   if (!own.length || !foes.length) return orders;
   if (strat === 'pair') cmdPair(own, foes, mem, orders);

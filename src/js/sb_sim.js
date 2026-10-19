@@ -60,7 +60,8 @@ function sbMasts(n) { var m = []; for (var i = 0; i < n; i++) m.push({ up: true,
 function sbPlayK(W, k) { return W.play === 'fun' ? SB_FUN[k] : 1; }
 function sbView(W, side) {
   return { t: W.t, side: side, wind: W.wind, ships: W.ships.map(function (s) {
-    return { id: s.id, team: s.team, x: s.x, z: s.z, yaw: s.yaw, spd: s.spd, hp: s.hp, guns: (s.guns.P + s.guns.S) / (s.H.guns.P + s.H.guns.S), crew: s.crew, mass: s.H.mass, len: s.H.len, out: s.out, cmd: true, tgt: s.foe ? s.foe.id : null };
+    return { id: s.id, team: s.team, x: s.x, z: s.z, yaw: s.yaw, spd: s.spd, hp: s.hp, guns: (s.guns.P + s.guns.S) / (s.H.guns.P + s.H.guns.S), crew: s.crew, mass: s.H.mass, len: s.H.len, out: s.out, cmd: true, tgt: s.foe ? s.foe.id : null,
+      gP: s.guns.P, gS: s.guns.S, gT: s.H.guns.P + s.H.guns.S, nc: s.H.crew, sail: s.sail, vs: SB_VMAX * s.H.speed * sbPlayK(W, 'speed') * Math.sqrt(W.windSpd), vb: 0, up: s.H.upwind || 1, ag: s.H.agile * sbPlayK(W, 'agile'), spk: s.H.speed * sbPlayK(W, 'speed') };   // 推演（56_rollout.js rollShip）要的欄位
   }) };
 }
 function sbThink(W) { W.orders = {}; ['blue', 'red'].forEach(function (side) { var o = cmdThink(sbView(W, side), W.cmd[side], W.mem[side]); for (var k in o) W.orders[k] = o[k]; }); }

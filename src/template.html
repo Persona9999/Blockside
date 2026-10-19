@@ -690,12 +690,12 @@
       <div class="row slide"><label for="burn">火勢</label><input type="range" id="burn" step="10" aria-label="希臘火點著的火延燒多快（%；0 ＝ 不點火）"><span id="burnV"></span></div>
       <div class="row note">希臘火潑到木頭 ⇒ 照材質的易燃性著火（橡木 0.5、松木 0.8、柚木 0.3；鐵甲、銅皮、鍋爐不燒），往鄰格延燒（往上快）、燒久了燒穿（水線下會進水；公式進水只燒焦）；帆從潑到的那一點往外燒出洞、邊緣焦黑，燒掉一半多就掉。預備水手照火場大小去潑水（降旗的船沒人救），熄了留焦痕；火場旁的人會燒傷、火藥桶會被烤。網址 ?burn=</div>
       <h3>艦隊指揮官</h3>
-      <div class="row cmds" id="cmdB" data-side="blue">我方 <button data-c="free">各自為戰</button><button data-c="pair">一對一配對</button><button data-c="focus">集火</button><button data-c="line">戰列</button></div>
-      <div class="row cmds" id="cmdR" data-side="red">敵方 <button data-c="free">各自為戰</button><button data-c="pair">一對一配對</button><button data-c="focus">集火</button><button data-c="line">戰列</button></div>
+      <div class="row cmds" id="cmdB" data-side="blue">我方 <button data-c="free">各自為戰</button><button data-c="pair">一對一配對</button><button data-c="focus">集火</button><button data-c="line">戰列</button><button data-c="auto">推演</button></div>
+      <div class="row cmds" id="cmdR" data-side="red">敵方 <button data-c="free">各自為戰</button><button data-c="pair">一對一配對</button><button data-c="focus">集火</button><button data-c="line">戰列</button><button data-c="auto">推演</button></div>
       <div class="row" id="gauges">搶上風 <button data-side="blue">我方</button><button data-side="red">敵方</button></div>
       <div class="row note">每一方一個指揮官，每 3 秒看一次局勢、替自己那一方的電腦船下命令（打哪艘、怎麼開）；你自己開的那艘不聽（觀戰時連我艦也聽）。一邊只有一艘時四種都一樣。<br>
         <b>各自為戰</b>：每艘打最近的敵艦（以前的電腦）。<b>一對一配對</b>（預設）：把敵我配成對，每艘敵艦最多分到「我方艘數 ÷ 敵方艘數」艘 ⇒ 不會三艘圍一艘、另一艘沒人管。
-        <b>集火</b>：全隊打同一艘（又弱又近的），打到它出局才換。<b>戰列</b>：旗艦帶頭，把敵方中心擺在同一舷、不換舷；其他的排成縱隊照前一艘的航跡跟（隔 90 m，前一艘在哪裡轉、後面的就在哪裡轉），全隊用同一舷。網址 ?cmd=我方,敵方（free｜pair｜focus｜line）<br>        <b>搶上風</b>（每一方各一顆，亮 ＝ 開）：開局離得遠時先全隊迎風搶到敵方上風（多 150 m）再壓過去；搶到、4 分鐘沒搶到、或敵我已經接近就照策略接戰（只搶一次）。網址 ?gauge=我方,敵方（1｜0）。<br>        對戰時按我方艦隊那一欄最上面的 🚩（或 K）可以下旗號，蓋過我方指揮官：照指揮官、各自交戰、一對一配對、集火我的目標、成戰列跟我、搶上風</div>
+        <b>集火</b>：全隊打同一艘（又弱又近的），打到它出局才換。<b>戰列</b>：旗艦帶頭，把敵方中心擺在同一舷、不換舷；其他的排成縱隊照前一艘的航跡跟（隔 90 m，前一艘在哪裡轉、後面的就在哪裡轉），全隊用同一舷。<b>推演</b>：每 30 秒把一對一配對、集火、戰列各往前推 90 秒（精簡模型：3 秒一步，只算位置、航向、照風與帆的航速、兩舷的砲與三條血），挑推完我方比敵方多剩最多戰力的那個；各候選的分數記在戰鬥報表。網址 ?cmd=我方,敵方（free｜pair｜focus｜line｜auto）<br>        <b>搶上風</b>（每一方各一顆，亮 ＝ 開）：開局離得遠時先全隊迎風搶到敵方上風（多 150 m）再壓過去；搶到、4 分鐘沒搶到、或敵我已經接近就照策略接戰（只搶一次）。網址 ?gauge=我方,敵方（1｜0）。<br>        對戰時按我方艦隊那一欄最上面的 🚩（或 K）可以下旗號，蓋過我方指揮官：照指揮官、各自交戰、一對一配對、集火我的目標、成戰列跟我、搶上風</div>
       <h3>候補</h3>
       <div class="row" id="reinfs">候補補位 <button data-r="prop">比例</button><button data-r="own">誰沉誰補</button><button data-r="alt">輪流</button></div>
       <div class="row note">編成比主選單的「同時在場」多 ⇒ 多的照編成順序排進候補；場上的船沉了、在沉或降旗 ⇒ 空出一個名額，候補從自己那一方的後面進場（船頭對著敵方）。開局每一方至少 1 艘、其他名額照比例分。<br>
@@ -822,6 +822,7 @@
 <script src="js/53_commander.js" data-bundle="game"></script>
 <script src="js/54_helm.js" data-bundle="game"></script>
 <script src="js/55_tune.js" data-bundle="game"></script>
+<script src="js/56_rollout.js" data-bundle="game"></script>
 <script src="js/59_burnfx.js" data-bundle="game"></script>
 <script src="js/60_render.js" data-bundle="game"></script>
 <script src="js/61_hud.js" data-bundle="game"></script>
