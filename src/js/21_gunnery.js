@@ -19,12 +19,14 @@ function fireGun(sh, g, target, ammo) {
   if ((GS.burst || 1) > 1) { g.burstLeft = GS.burst - 1; g.burstK = 1; g.burstAmmo = ammo; g.burstT = SIMT + (GS.burstGap || 0.15); }   // 連發：同一份彈藥再打 burst − 1 發
   return true;
 }
-/** 連發剩下的那幾發（每一步、每艘；50_sim.js）：到時間就照現在的瞄準點再打一發；砲沒了、泡水、沒人、降旗 ⇒ 剩下的作廢；輪到的那根砲管的砲口這一刻在海面下 ⇒ 那一發跳過（TASK-0719）。 */
+/** 連發剩下的那幾發（每一步、每艘；50_sim.js）：到時間就照現在的瞄準點再打一發；砲沒了、泡水、沒人、降旗 ⇒ 剩下的作廢；輪到的那根砲管的砲口這一刻在海面下 ⇒ 那一發跳過（TASK-0719）。
+ *  沒有瞄準點（海上沒有敵艦：只剩自己、或最後一艘剛沉）⇒ 照單發的退路對空打（fireOne：skyPoint）；⛔ aimPoint 沒有敵艦會讀 null.M（守法同 gunAims）。 */
 function burstStep(sh) {
   for (var i = 0; i < sh.guns.length; i++) {
     var g = sh.guns[i]; if (!(g.burstLeft > 0) || SIMT < g.burstT) continue;
     if (sh.struck || sh.sunk || !g.alive || g.wet || gunRate(g) <= 0) { g.burstLeft = 0; continue; }
-    var t = gunTarget(sh, g, aimPoint(sh)), mzk = g.muzs ? g.muzs[g.burstK % g.muzs.length] : g.muz;   // 這一發輪到的那一根砲管
+    var w = foeOf(sh) || (sh.aim && sh.aimOn) ? aimPoint(sh) : null;
+    var t = w ? gunTarget(sh, g, w) : skyPoint(sh, g), mzk = g.muzs ? g.muzs[g.burstK % g.muzs.length] : g.muz;   // 這一發輪到的那一根砲管
     if (t && bears(sh, g, t) && mountFireOk(g) && !(g.safe && selfBlock(sh, g, t))) {
       if (wetAt(sh, mzk)) sh.wetShot = (sh.wetShot || 0) + 1;            // 這一根的砲口在海面下（TASK-0719）⇒ 這一發不開（跟射界外那一發一樣跳過：照樣 burstK++、burstLeft--）
       else {
@@ -113,7 +115,8 @@ function broadside(sh, ammo, careful) {                            // careful：
   if (sh.struck) return 0;
   var k = 0, mid = 0, n = 0;
   sh.guns.forEach(function (g) { mid += g.muz[0]; n++; }); mid /= n || 1;
-  var tgt = aimPoint(sh), FK = careful ? friendKeels(sh) : [];
+  var tgt = foeOf(sh) || (sh.aim && sh.aimOn) ? aimPoint(sh) : null, FK = careful ? friendKeels(sh) : [];   // 沒有瞄準點（海上沒有敵艦）⇒ 沒有一門打得到，不齊射（⛔ aimPoint 會讀 null.M；守法同 gunAims）
+  if (!tgt) return 0;
   sh.guns.forEach(function (g) {
     if (!g.alive || g.reload > 0 || gunRate(g) <= 0 || !gunTarget(sh, g, tgt)) return;   // 兩舷都看：每一門自己判定，有機會打中敵艦的才排進齊射
     if (FK.length && friendInLine(FK, M4.pt(sh.M, g.muz[0], g.muz[1], g.muz[2]), tgt)) { sh.ffHold = (sh.ffHold || 0) + 1; return; }
