@@ -8,6 +8,7 @@
 // 岸邊的白沫（BEDFOAM）：5×5 那幾塊的高度照 8 m 一格放進一張貼圖（R16F、雙線性），海的著色器（01_gl.js）照「海面 − 海底」< 2 m 畫一圈白沫。只給人看。
 var BEDGL = {}, BEDGL_Q = [], BEDGL_ID = null, BED_FOG = 0.4, BED_FAR_ST = 8;
 var BEDFAR = { g: {}, todo: null, busy: false, n: 0, bytes: 0, ms: 0 };
+var BEDDRAW = { n: 0, cull: 0, tris: 0 };                                // 上一格畫了幾塊、剔掉幾塊、幾個三角形（__game.bed）
 var BEDFOAM = { tex: null, dirty: true, cx: null, cy: null, ox: 0, oz: 0, sp: 8, N: 0, ms: 0, builds: 0 };
 var BED_COL = { 0: [0.33, 0.35, 0.31], 1: [0.74, 0.70, 0.52], 2: [0.46, 0.55, 0.40], 3: [0.86, 0.81, 0.62], 4: [0.40, 0.38, 0.35], 10: [0.84, 0.77, 0.57], 12: [0.43, 0.41, 0.38] };
 function bedCol(h, m) {
@@ -21,10 +22,11 @@ function bedCol(h, m) {
 evOn('bedChunk', function (cx, cy) { BEDGL_Q.push(bedKey(cx, cy)); BEDFOAM.dirty = true; }, 0, true);
 evOn('bedDrop', function (cx, cy) { var k = bedKey(cx, cy), g = BEDGL[k]; BEDFOAM.dirty = true; if (g) { gl.deleteVertexArray(g.vao); gl.deleteBuffer(g.vb); gl.deleteBuffer(g.ib); delete BEDGL[k]; } }, 0, true);
 function bedLod(C) { var R = BED_CFG.ring; return Math.abs(C.cx - BED.cx) <= R && Math.abs(C.cy - BED.cy) <= R ? 2 : 4; }
-/** 一塊 ⇒ 網格（stride：每幾個取樣點取一個）。頂點：位置 3、法線 3、顏色 3（世界座標：原點 ＝ 開戰位置）。 */
+/** 一塊 ⇒ 網格（stride：每幾個取樣點取一個）。頂點：位置 3、法線 3、顏色 3（世界座標：原點 ＝ 開戰位置）。
+ *  點距照這一塊自己的 C.step（遠景塊可以是粗的：@host 的 peek 回 32 m 一點的 33×33，src/MAP_CHUNK.md §5）；塊的原點照海域的 A.chunk。 */
 function bedMesh(C, stride) {
-  var n = C.n, m = (n - 1) / stride + 1, A = BED.A, G = BED.G, st = A.step, h = C.h, nv = m * m + 4 * m, V = new Float32Array(nv * 9), I = [];
-  var ox = C.cx * G * st - BED.ax, oz = C.cy * G * st - BED.az;
+  var n = C.n, m = (n - 1) / stride + 1, A = BED.A, st = C.step, h = C.h, nv = m * m + 4 * m, V = new Float32Array(nv * 9), I = [];
+  var ox = C.cx * A.chunk - BED.ax, oz = C.cy * A.chunk - BED.az;
   function put(k, i, j, dy) {
     var o = j * n + i, y = h[o] / 10, il = Math.max(0, i - stride), ir = Math.min(n - 1, i + stride), jl = Math.max(0, j - stride), jr = Math.min(n - 1, j + stride);
     var gx = (h[j * n + ir] - h[j * n + il]) / 10 / ((ir - il) * st), gz = (h[jr * n + i] - h[jl * n + i]) / 10 / ((jr - jl) * st), L = Math.sqrt(gx * gx + 1 + gz * gz), c = bedCol(y, C.mat[o]);
@@ -43,7 +45,20 @@ function bedMesh(C, stride) {
 }
 function bedUpload(k, C, lod) {
   var g = bedGpu(bedMesh(C, lod), BEDGL[k]);
-  g.lod = lod; g.cx = C.cx; g.cy = C.cy; BEDGL[k] = g;
+  g.lod = lod; g.cx = C.cx; g.cy = C.cy; g.bb = bedBox(C); BEDGL[k] = g;
+}
+/** 一塊的外框（世界座標；高度含往下垂 40 m 的裙邊）。 */
+function bedBox(C) { var x0 = C.cx * BED.A.chunk - BED.ax, z0 = C.cy * BED.A.chunk - BED.az; return [x0, C.min - 40, z0, x0 + BED.A.chunk, C.max, z0 + BED.A.chunk]; }
+/** 視錐的六個面（從 VP 抽：每個面 a·x + b·y + c·z + d ≥ 0 在裡面）。 */
+function bedPlanes(m) {
+  var P = [], r = function (i) { return [m[i], m[4 + i], m[8 + i], m[12 + i]]; }, w = r(3);
+  [0, 1, 2].forEach(function (i) { var a = r(i); P.push([w[0] + a[0], w[1] + a[1], w[2] + a[2], w[3] + a[3]], [w[0] - a[0], w[1] - a[1], w[2] - a[2], w[3] - a[3]]); });
+  return P;
+}
+/** 外框整個在某一面外面 ⇒ 看不到（保守：只剔除確定看不到的）。 */
+function bedSeen(P, b) {
+  for (var i = 0; i < 6; i++) { var p = P[i]; if (p[0] * (p[0] > 0 ? b[3] : b[0]) + p[1] * (p[1] > 0 ? b[4] : b[1]) + p[2] * (p[2] > 0 ? b[5] : b[2]) + p[3] < 0) return false; }
+  return true;
 }
 /** 網格 ⇒ GPU（g 給了就重用那一組 VAO 與緩衝區）。 */
 function bedGpu(M, g) {
@@ -72,8 +87,8 @@ function bedFarStep() {
 }
 function bedFarPut(k, C, ms) {
   if (!BED || !BED.A || BEDFAR.g[k]) return;
-  var t0 = performance.now(), M = bedMesh(C, BED_FAR_ST), g = bedGpu(M, null);
-  BEDFAR.g[k] = g; BEDFAR.n++; BEDFAR.bytes += M.V.byteLength + M.I.byteLength; BEDFAR.ms += ms + performance.now() - t0;
+  var t0 = performance.now(), M = bedMesh(C, Math.max(1, Math.round(BED_FAR_ST * BED.A.step / C.step))), g = bedGpu(M, null);   // 32 m 一點：細的塊（4 m）每 8 點取一點，粗的（32 m）每點都取
+  g.bb = bedBox(C); BEDFAR.g[k] = g; BEDFAR.n++; BEDFAR.bytes += M.V.byteLength + M.I.byteLength; BEDFAR.ms += ms + performance.now() - t0;
 }
 /** 白沫的高度貼圖：中心 ± (ring＋prefetch) 那幾塊，每 2 個取樣點（8 m）一格；沒載的、深海塊 ⇒ deep。換中心、載進來、丟掉之後重建。 */
 function bedFoamTex() {
@@ -130,7 +145,9 @@ function bedDraw() {
   gl.uniform1f(P.tri.u.uLit, 1); if (P.tri.u.uGlow) gl.uniform1f(P.tri.u.uGlow, 0);
   gl.uniformMatrix4fv(P.tri.u.uModel, false, BEDGL_ID || (BEDGL_ID = M4.ident()));
   gl.vertexAttrib2f(3, 0, 0);                                            // 金屬度（P.tri aM）：地形不是金屬
-  Object.keys(BEDGL).forEach(function (k3) { var g = BEDGL[k3]; gl.bindVertexArray(g.vao); gl.drawElements(gl.TRIANGLES, g.n, gl.UNSIGNED_INT, 0); });
-  Object.keys(BEDFAR.g).forEach(function (k4) { if (BEDGL[k4]) return; var g = BEDFAR.g[k4]; gl.bindVertexArray(g.vao); gl.drawElements(gl.TRIANGLES, g.n, gl.UNSIGNED_INT, 0); });   // 遠景：細的沒有的那幾塊
+  var PL = bedPlanes(PASS.vp || CAM.vp), D = BEDDRAW; D.n = D.cull = D.tris = 0;   // 視錐外的塊不畫（鏡頭後面、旁邊的島；BEDDRAW ⇒ __game.bed().draw）
+  function one(g) { if (g.bb && !bedSeen(PL, g.bb)) { D.cull++; return; } D.n++; D.tris += g.n / 3; gl.bindVertexArray(g.vao); gl.drawElements(gl.TRIANGLES, g.n, gl.UNSIGNED_INT, 0); }
+  Object.keys(BEDGL).forEach(function (k3) { one(BEDGL[k3]); });
+  Object.keys(BEDFAR.g).forEach(function (k4) { if (!BEDGL[k4]) one(BEDFAR.g[k4]); });   // 遠景：細的沒有的那幾塊
   gl.bindVertexArray(null);
 }

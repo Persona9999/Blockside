@@ -54,7 +54,7 @@ maps/<海域>/<cx>_<cy>.js   BSMAP.chunk("<海域>", cx, cy, "<base64>")   一�
 
   | 方向 | 訊息 |
   |---|---|
-  | 這一頁 ⇒ 那一頁 | `{ bsmap: 'need', what: 'area' }`、`{ bsmap: 'need', what: 'chunk', cx, cy, peek }`（`peek` ＝ 遠景要的，可以晚一點） |
+  | 這一頁 ⇒ 那一頁 | `{ bsmap: 'need', what: 'area' }`、`{ bsmap: 'need', what: 'chunk', cx, cy, peek }`（`peek` ＝ 遠景要的，可以晚一點；回的塊**可以是粗的** —— 只拿來畫遠景（32 m 一點），`n`、`step` 照那一塊的檔頭，例：`step` 32、`n` 33 ⇒ 生成少約 60 倍；回的訊息帶 `coarse: 1` ⇒ 只交給遠景，⛔ 不進模擬查的那一份；沒帶 ＝ 原精度、兩邊都收） |
   | 那一頁 ⇒ 這一頁 | `{ bsmap: 'area', area }`（跟 `area.js` 同一個樣子）、`{ bsmap: 'chunk', cx, cy, b64 }`、`{ bsmap: 'error', what, cx, cy, msg }` |
   | 轉場：這一頁 ⇒ 那一頁 | `{ bsmap: 'started', hdg }`（`?start=1` 開戰了，鏡頭停在開戰位置正上方 `area.trH` 公尺，沒給 ⇒ 1,200；Blocksail 照離岸多遠給 1,200～6,000，看得到海岸線）、`{ bsmap: 'left', x, z, hdg }`（拉到我艦正上方了；`x`、`z` ＝ 我艦在世界的哪裡） |
   | 轉場：那一頁 ⇒ 這一頁 | `{ bsmap: 'go' }`（降下去）、`{ bsmap: 'leave' }`（拉上去） |

@@ -12,7 +12,7 @@ var BED_MAT = { DEEP: 0, SAND: 1, REEF: 2, SHOAL: 3, ROCK: 4, BEACH: 10, LAND: 1
 var BED_CFG = Object.assign({ ring: 1, prefetch: 1, margin: 300 }, CFG.map || {});   // config/game.json map：在用幾圈、多預載幾圈、船旁邊多少公尺內一定要載好
 window.BSMAP = {                                                         // 海圖檔（<script>）載進來呼叫這兩支（?map=@host ⇒ 收到外面那一頁回的也照樣叫）
   area: function (o) { if (BED && (BED.host || BED.wantArea === o.id)) BED.gotArea = o; },
-  chunk: function (id, cx, cy, b64) { if (!BED || !BED.A || BED.A.id !== id) return; var k = bedKey(cx, cy), w = BED.pend[k], v = BED.peek[k]; if (w) w(b64); if (v) v(b64); }
+  chunk: function (id, cx, cy, b64, coarse) { if (!BED || !BED.A || BED.A.id !== id) return; var k = bedKey(cx, cy), w = BED.pend[k], v = BED.peek[k]; if (w && !coarse) w(b64); if (v) v(b64); }   // coarse：粗的遠景塊 ⇒ 只給遠景（⛔ 不進模擬）
 };
 function bedKey(cx, cy) { return cx + '_' + cy; }
 function bedScript(src) {
@@ -24,7 +24,7 @@ function bedScript(src) {
 }
 // ?map=@host：海圖不讀檔，跟開這一頁的那一頁要（Blocksail 地球儀「就地開戰」：iframe 的父頁或 window.open 的開啟者，照世界地圖當場生成）。
 //   這一頁 ⇒ 那一頁：{ bsmap: 'need', what: 'area' | 'chunk', cx, cy, peek }（peek ＝ 遠景要的，可以晚一點）
-//   那一頁 ⇒ 這一頁：{ bsmap: 'area', area }、{ bsmap: 'chunk', cx, cy, b64 }（跟檔案裡 BSMAP.area／BSMAP.chunk 的參數一樣）、{ bsmap: 'error', what, cx, cy, msg }
+//   那一頁 ⇒ 這一頁：{ bsmap: 'area', area }、{ bsmap: 'chunk', cx, cy, b64, coarse? }（跟檔案裡 BSMAP.area／BSMAP.chunk 的參數一樣；coarse ＝ 回 peek 的粗塊，只給遠景）、{ bsmap: 'error', what, cx, cy, msg }
 //   轉場（03_camera.js camTrans）：這一頁 ⇒ 那一頁 'started'（開戰了、鏡頭停在正上方）、'left'（拉到正上方了；x、z ＝ 我艦在世界的哪裡）；
 //                                兩個都帶 hdg ＝ 正上方那一張畫面上方朝哪（度，北 0 順時針）⇒ 地球儀轉過來對齊海岸線；
 //                                那一頁 ⇒ 這一頁 'go'（地球儀淡進來了 ⇒ 降下去）、'leave'（要回地球儀 ⇒ 拉上去）
@@ -39,10 +39,10 @@ function bedGet(cx, cy, peek) {                                          // cx �
 }
 function bedHostMsg(e) {
   var d = e.data; if (!BED || !BED.host || e.source !== BED.host || !d || !d.bsmap) return;
-  var ks = d.bsmap === 'area' || d.what === 'area' ? ['area'] : [bedKey(d.cx, d.cy), bedKey(d.cx, d.cy) + '+'], err = d.bsmap === 'error' ? new Error('海圖：' + (d.msg || '要不到')) : null;
+  var ks = d.bsmap === 'area' || d.what === 'area' ? ['area'] : d.coarse ? [bedKey(d.cx, d.cy) + '+'] : [bedKey(d.cx, d.cy), bedKey(d.cx, d.cy) + '+'], err = d.bsmap === 'error' ? new Error('海圖：' + (d.msg || '要不到')) : null;
   if (d.bsmap === 'go' || d.bsmap === 'leave') { camTransSet(d.bsmap === 'go' ? 'go' : 'out'); return; }
   if (d.bsmap === 'area') BSMAP.area(d.area);
-  else if (d.bsmap === 'chunk' && BED.A) BSMAP.chunk(BED.A.id, d.cx, d.cy, d.b64);
+  else if (d.bsmap === 'chunk' && BED.A) BSMAP.chunk(BED.A.id, d.cx, d.cy, d.b64, !!d.coarse);
   ks.forEach(function (k) { var L = BED.ask[k]; delete BED.ask[k]; (L || []).forEach(function (f) { if (err) f[1](err); else f[0](); }); });
 }
 /** 告訴外面那一頁（只有 ?map=@host）：'started' ＝ 開戰了（鏡頭停在正上方）、'left' ＝ 拉到正上方了 —— 畫好兩格才送（地球儀照這個淡進／淡出）。 */
