@@ -18,6 +18,7 @@ var BED_MAT = { DEEP: 0, SAND: 1, REEF: 2, SHOAL: 3, ROCK: 4, BEACH: 10, LAND: 1
 var BED_CFG = Object.assign({ ring: 1, prefetch: 1, margin: 300 }, CFG.map || {});   // config/game.json map：在用幾圈、多預載幾圈、船旁邊多少公尺內一定要載好
 window.BSMAP = {                                                         // 海圖檔（<script>）載進來呼叫這兩支（?map=@host ⇒ 收到外面那一頁回的也照樣叫）
   area: function (o) { if (BED && (BED.host || BED.wantArea === o.id)) BED.gotArea = o; },
+  town: function (o) { if (BED && BED.A) TOWNS.pend.push(o); },          // maps/<海域>/towns.js：一座城一筆（63_towns.js townWant 讀完一起收）
   chunk: function (id, cx, cy, b64, coarse) { if (!BED || !BED.A || BED.A.id !== id) return; var k = bedKey(cx, cy), w = BED.pend[k], v = BED.peek[k]; if (w && !coarse) w(b64); if (v) v(b64); }   // coarse：粗的遠景塊 ⇒ 只給遠景（⛔ 不進模擬）
 };
 function bedKey(cx, cy) { return cx + '_' + cy; }
@@ -34,6 +35,7 @@ function bedScript(src) {
 //   轉場（03_camera.js camTrans）：這一頁 ⇒ 那一頁 'started'（開戰了、鏡頭停在正上方）、'left'（拉到正上方了；x、z ＝ 我艦在世界的哪裡、shipHdg ＝ 我艦船頭朝哪）；
 //                                兩個都帶 hdg ＝ 正上方那一張畫面上方朝哪（度，北 0 順時針）⇒ 地球儀轉過來對齊海岸線；
 //                                那一頁 ⇒ 這一頁 'go'（地球儀淡進來了 ⇒ 降下去）、'leave'（要回地球儀 ⇒ 拉上去）
+//   城鎮（area.towns 有才要；63_towns.js）：這一頁 ⇒ 那一頁 { bsmap: 'need', what: 'towns' }；那一頁 ⇒ 這一頁 { bsmap: 'towns', towns: [規劃…] }（出錯 { bsmap: 'error', what: 'towns', msg }）
 //   只收 BED.host 送來的訊息。
 function bedGet(cx, cy, peek) {                                          // cx ＝ null ⇒ area.js
   if (!BED.host) return bedScript(cx == null ? 'maps/' + BED.wantArea + '/area.js' : 'maps/' + BED.A.id + '/' + bedKey(cx, cy) + '.js');
@@ -47,6 +49,7 @@ function bedHostMsg(e) {
   var d = e.data; if (!BED || !BED.host || e.source !== BED.host || !d || !d.bsmap) return;
   var ks = d.bsmap === 'area' || d.what === 'area' ? ['area'] : d.coarse ? [bedKey(d.cx, d.cy) + '+'] : [bedKey(d.cx, d.cy), bedKey(d.cx, d.cy) + '+'], err = d.bsmap === 'error' ? new Error('海圖：' + (d.msg || '要不到')) : null;
   if (d.bsmap === 'go' || d.bsmap === 'leave') { camTransSet(d.bsmap === 'go' ? 'go' : 'out'); return; }
+  if (d.bsmap === 'towns' || (d.bsmap === 'error' && d.what === 'towns')) { townGot(d.towns || [], d.msg); return; }   // 城鎮規劃（63_towns.js；只給人看 ⇒ 不等它）
   if (d.bsmap === 'area') BSMAP.area(d.area);
   else if (d.bsmap === 'chunk' && BED.A) BSMAP.chunk(BED.A.id, d.cx, d.cy, d.b64, !!d.coarse);
   ks.forEach(function (k) { var L = BED.ask[k]; delete BED.ask[k]; (L || []).forEach(function (f) { if (err) f[1](err); else f[0](); }); });
@@ -72,6 +75,7 @@ function bedBoot() {
     BED.slot = new Array(BED.has.length);                                // 載好的塊照編號放（查詢不用字串）
     var si = Math.max(0, Math.min((A.sites || []).length - 1, +(Q.get('site') || 0) | 0)), S0 = (A.sites || [])[si];
     BED.site = si; BED.ax = S0 ? S0.x : (A.x[0] + A.x[1] + 1) * A.chunk / 2; BED.az = S0 ? S0.y : (A.y[0] + A.y[1] + 1) * A.chunk / 2;   // 世界原點在海域的哪裡（往東、往南公尺）
+    townWant();                                                          // 海域有城（area.towns）⇒ 去要規劃（63_towns.js；只給人看、不等它、無頭不要）
     if (DEMO >= 0 || HEADLESS) return Promise.all(A.chunks.filter(function (c) { return c[2]; }).map(function (c) { return bedLoad(c[0], c[1]); }));
     return bedFocus(0, 0, true);
   });

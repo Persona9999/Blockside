@@ -16,6 +16,7 @@
 //   細的、低模照（樹種, 第幾棵）分組實例化畫（一組一次 draw）；看得到的塊換了、鏡頭動了 8 m 以上、或塊進出 ⇒ 重新分組（treeBin；塊照視錐先剔掉）。
 //   place.view（小植物）⇒ 超過那個距離就不畫。貼圖集照格子排（每列 TREE_ATLAS_COLS 格起跳、棵數多了加寬到接近正方形 ⇒ 寬高都不超過 2048（WebGL2 保證的貼圖大小））。
 //   光照跟地形同一套（天光、陽光、船的陰影、霧照 BED_FOG）；葉子照風搖（搖晃權重 × 風）。樹不投影子。
+//   城鎮（63_towns.js）：高度照整過地的那一份（townHv）、規劃的 clear 裡不擺（townClr；樹與小植物都是）。
 //   ?trees=0 ⇒ 不長樹。
 var TREE_LOD = [140, 650], TREE_SHELL = [1100, 1500], TREE_SHELL_G = 32, TREE_FAR_SP = 3, TREE_FAR_K = 1.35, TREE_REBIN = 8, TREE_FALLBACK = 0.55, TREE_ATLAS_COLS = 8, TREE_BB_MAX = 96, TREE_VEG_JIT = 70, TREE_CELL = 32;
 var TREES = { on: Q.get('trees') !== '0', init: false, list: [], ch: {}, far: {}, eye: null, dirty: true, buf: [], cnt: null, bb: null, stat: { plant: 0, far: 0, d0: 0, d1: 0, d2: 0, binMs: 0, bakeMs: 0, genMs: 0, plantMs: 0, bySp: {} } };
@@ -32,7 +33,7 @@ function treeNoise(x, y, s) {
 }
 /** 一塊（解碼好的 C）⇒ 樹：{ I: Float32Array（8 個一組：x, y, z, 轉角, 放大, 深淺, 樹種, 第幾棵；世界座標）, n, bb（外框） }。 */
 function treePlant(C, far) {
-  var t0 = performance.now(), A = BED.A, size = A.chunk, st = C.step, n = C.n, h = C.h, out = [], bb = [1e9, 1e9, 1e9, -1e9, -1e9, -1e9];
+  var t0 = performance.now(), A = BED.A, size = A.chunk, st = C.step, n = C.n, h = townHv(C), tcl = !!C.tc, out = [], bb = [1e9, 1e9, 1e9, -1e9, -1e9, -1e9];
   function hAt(x, z) {                                                  // 塊裡 (x, z) 公尺的海拔（雙線性）
     var u = Math.max(0, Math.min(n - 1.001, x / st)), v = Math.max(0, Math.min(n - 1.001, z / st)), i = Math.floor(u), j = Math.floor(v), fu = u - i, fv = v - j, o = j * n + i;
     return ((h[o] * (1 - fu) + h[o + 1] * fu) * (1 - fv) + (h[o + n] * (1 - fu) + h[o + n + 1] * fu) * fv) / 10;
@@ -58,6 +59,7 @@ function treePlant(C, far) {
     for (var j = 0; j < m; j++) for (var i = 0, row = cI[j] * cn; i < m; i++) {
       if (!ok[row + cI[i]]) continue;
       var gi = gi0 + i, gj = gj0 + j, x = (i + 0.15 + 0.7 * treeHash(gi, gj, sd)) * gap, z = (j + 0.15 + 0.7 * treeHash(gi, gj, sd + 1)) * gap;
+      if (tcl && townClr(C, x, z)) continue;                            // 城鎮的建築、路、牆、碼頭那裡不長（63_towns.js；空建地照長）
       var y = hAt(x, z); if (y <= A4[0] || y >= A4[3]) continue;
       var mt = C.mat[Math.min(n - 1, Math.round(z / st)) * n + Math.min(n - 1, Math.round(x / st))], wM = Pl.mats[mt]; if (!wM) continue;
       var e = Math.max(st, 4), gx = (hAt(x + e, z) - hAt(x - e, z)) / (2 * e), gz = (hAt(x, z + e) - hAt(x, z - e)) / (2 * e), g2 = gx * gx + gz * gz;

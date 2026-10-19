@@ -9,6 +9,7 @@ Tim 2026-10-19：「可以先定一出一套通用格式（目前構想是1平�
 ```
 maps/<海域>/area.js        BSMAP.area({...})                     海域的說明（一個檔）
 maps/<海域>/<cx>_<cy>.js   BSMAP.chunk("<海域>", cx, cy, "<base64>")   一塊一檔；全是深海的塊沒有檔
+maps/<海域>/towns.js       BSMAP.town({...})                     海域裡的城鎮規劃，一座一筆（有城才有；§8）
 ```
 
 - 跟 `index.html` 放在一起（同一個網站、`file://` 也讀得到 —— 用 `<script>` 載，不用 fetch）。
@@ -35,6 +36,7 @@ maps/<海域>/<cx>_<cy>.js   BSMAP.chunk("<海域>", cx, cy, "<base64>")   一�
 | `deep` | 海域外、沒有檔的塊的高度（−150） |
 | `mat` | 底質代碼表（下面） |
 | `source` | 資料來源 |
+| `towns` | （選用）海域裡（或伸進來）的城鎮 id 清單 —— 有這一欄才讀 `towns.js`／跟外面那一頁要（§8）；沒有城的海域沒有這一欄 |
 | `vis` | （選用）植被段（§4 段 `2`）的位元順序：第 k 位 ＝ 第 k 個名字（`16_treegen.js` `TREE_SPECIES` 的 key，例 `["broadleaf","pine","palm","mangrove","seagrape","agave"]`）。照名字對 ⇒ Blocksail 加、減、換順序都不會對錯；Blockside 有、名單裡沒有的樹種 ⇒ 不限 |
 
 ## 4. 一塊（`BSC1`，base64）
@@ -59,6 +61,7 @@ maps/<海域>/<cx>_<cy>.js   BSMAP.chunk("<海域>", cx, cy, "<base64>")   一�
   |---|---|
   | 這一頁 ⇒ 那一頁 | `{ bsmap: 'need', what: 'area' }`、`{ bsmap: 'need', what: 'chunk', cx, cy, peek }`（`peek` ＝ 遠景要的，可以晚一點；回的塊**可以是粗的** —— 只拿來畫遠景（32 m 一點），`n`、`step` 照那一塊的檔頭，例：`step` 32、`n` 33 ⇒ 生成少約 60 倍；回的訊息帶 `coarse: 1` ⇒ 只交給遠景，⛔ 不進模擬查的那一份；沒帶 ＝ 原精度、兩邊都收） |
   | 那一頁 ⇒ 這一頁 | `{ bsmap: 'area', area }`（跟 `area.js` 同一個樣子）、`{ bsmap: 'chunk', cx, cy, b64 }`、`{ bsmap: 'error', what, cx, cy, msg }` |
+  | 城鎮（`area.towns` 有才要；§8） | 這一頁 ⇒ 那一頁 `{ bsmap: 'need', what: 'towns' }`；那一頁 ⇒ 這一頁 `{ bsmap: 'towns', towns: [規劃…] }`（出錯 `{ bsmap: 'error', what: 'towns', msg }`）—— 只給人看 ⇒ 不等它，到了才重建地形網格與樹 |
   | 轉場：這一頁 ⇒ 那一頁 | `{ bsmap: 'started', hdg }`（`?start=1` 開戰了，鏡頭停在開戰位置正上方 `area.trH` 公尺，沒給 ⇒ 1,200；Blocksail 照離岸多遠給 1,200～6,000，看得到海岸線）、`{ bsmap: 'left', x, z, hdg, shipHdg }`（拉到我艦正上方了；`x`、`z` ＝ 我艦在世界的哪裡、`shipHdg` ＝ 我艦船頭朝哪，度、北 0 順時針） |
   | 轉場：那一頁 ⇒ 這一頁 | `{ bsmap: 'go' }`（降下去）、`{ bsmap: 'leave' }`（拉上去） |
 
@@ -93,3 +96,16 @@ maps/<海域>/<cx>_<cy>.js   BSMAP.chunk("<海域>", cx, cy, "<base64>")   一�
 - 淺水的浪變陡、碎浪（白沫只是畫上去的，浪的形狀照舊）；鏡頭在沒載的塊上面（5×5 以外）照深海算，會鑽進遠景的地裡。
 - 碎木、落水的人、錨還不看海底（錨照舊的水深算）。
 - 擱淺的船不會因為潮水浮起來；沒有潮汐。
+
+## 8. 城鎮（`towns.js`，TASK-0740；`src/js/63_towns.js`）
+
+城鎮規劃（Blocksail 的格式 `docs/TOWN_BUILD.md` §5：路、地塊、牆、碼頭、棧橋、整地 `grade`、清樹 `clear`）⇒ 遊戲照它整地、清樹、擺建築與城牆、路著色。**只給人看**（Tim 2026-10-19：砲彈穿過、船穿過、不改戰局）：
+
+- **檔案**：`towns.js` 一行一筆 `BSMAP.town({...規劃, ox, oy, kx})`；規劃的座標以市中心為原點（往東 x、往南 y，公尺），**海域座標 ＝ (ox ＋ kx·x, oy ＋ y)**（匯出時算好：Blocksail `world/town_export.js` `townFrame`；兩邊都是當地平面、只差往東的比例 kx）。產生：`tools/export_chunks.cjs`（海域裡有城才寫，同時在 `area.js` 加 `towns`）；地球儀就地生成另開一個 Worker 生成（金斯敦約 6 秒），Blockside 用 `{ bsmap: 'need', what: 'towns' }` 要。
+- **⛔ 不碰模擬查的那一份**：整地只寫進給畫面的 `C.hv`（地形網格 `63_bed_gl.js bedMesh`、擺樹照它），`bedHgt`／擱淺／砲彈打地面照舊讀 `C.h` ⇒ 城什麼時候到都跟戰局無關（有城的海域對局 dump 也逐位元組相同）；無頭（`?demo&headless`）整段不做。`?towns=0` ⇒ 不載城。
+- **整地**：路照 `z`（路寬一半 ＋ 一個取樣點內整平）、地塊的 `grade` 照 `h`（外擴 2 m），外面照邊坡 `bank`（1 : 1.5）接回原地形；只改原本是陸地的點（岸線不變）。有城的塊在用的那幾圈每 4 m 一點（沒城照舊 8 m）。
+- **清樹**：`clear`（有建築的地塊、路、城牆、碼頭各外擴 2 m；空建地不清）每 2 m 一格的遮罩 ⇒ `63_trees.js` 擺樹與小植物時跳過。
+- **建築**：模型在 `src/js/63_towndata.js`（`TOWN_KIT`；`python -I src/townmodels.py export` 從雕刻作品匯出、`build` 產生 —— 低模、貼圖都在這一步算好），地塊照用途挑（同用途好幾種變化照 `城 id:地塊 id` 的雜湊挑），模型比地塊小 ⇒ 臨路那一邊對齊、沿路置中；底下墊石基到最低的地面。城牆（一級）門、塔照位置、兩頭收尾、中間照斷面沿曲線一節一節拉。還沒有模型的用途（砲台、碉堡）⇒ 不擺、讀數 `skip` 記幾塊。
+- **遠近四級**（`TOWN_LOD` 160／800 m、`TOWN_FAR` 2.4～3 km）：原模型 ⇒ 低模（0.4 m）⇒ 貼圖（八個方向先拍好，取最接近視線的那一張）⇒ 屋頂殼（32 m 一格）；交接帶兩邊都畫、同一個抖動互補。
+- **路**：照 `z` 鋪一條貼地的帶子（主要道路土色、街石板色、小路深土色）；廣場鋪石、碼頭石板、棧橋木板＋樁 —— 都只給人看。
+- 讀數：`?debug=1` 的 `__game.town([x, z])`：幾座城、每座的實例數與每種模型幾棟、這一格畫了幾個（近／中／貼圖／殼／石基）、三角形、毫秒；給 `[x, z]` ⇒ 那一點的畫面高度、模擬高度、清不清樹。`__game.town(null, false)` 關掉畫城（量畫一格多少 ms 用）。
