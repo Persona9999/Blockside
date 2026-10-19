@@ -10,6 +10,12 @@
 //   ⛔ 公式進水（物理效果「進水」不是粒子）：水線下的格只燒焦、不燒穿 —— 公式照「水線下少了幾格」算進水，燒掉艙裡的地板也會被當成破口（32_hull.js）。
 // 延燒：每一拍每格照熱度往 18 個鄰格試（往上 up 倍、往下 down 倍），鄰格照自己的 flammable 著；火苗竄到正上方 jumpZ 格內的下一層（天花板、上一層甲板）。
 //   每一拍 ＝ tick 秒；每艘、每格分在不同的步（相位 ＝ 著火的順序，船照 sh.i × SURVEY_PH 錯開）⇒ ⛔ 不擠在同一步。上限：每艘同時 max 格、每拍燒穿 outMax 格、換色 tintMax 格。
+//   快慢 pace（Tim 2026-10-19「希望把燃燒速度減慢 同時分散計算」）：熱度長多快、燒多久燒穿、延燒、往上竄、燒到帆、帆上的火往外燒都 × pace；
+//     潑水、下雨、泡水照真的時間 ⇒ 火慢下來、救火相對變有效。
+//   燒穿集中在每一拍的第一步（燒到了先排進 B.thq）：⛔ 每一步都拿掉幾格 ⇒ 每一步都要找一次斷開（integrity，22_pieces.js），一拍拿一批只找一次。
+//   悶燒：一格連續 BURN_STALE 次往鄰格試都是「那裡沒東西可燒」（已經在燒、燒掉了、空的、鐵、不會燒、沒露在空氣裡）⇒ 之後只試 BURN_STALE_K 成；點著一格就恢復。
+//     擲骰沒中（會燒、只是這次沒著）不算 ⇒ 火線上的格照常延燒（⛔ 連擲骰沒中也算 ⇒ 前緣也被當成悶燒，量過：點著的少四成）。
+//     量過（持火號對憲法號）：40 萬次延燒只點著 2%（火場中間的格一直在試旁邊已經在燒的格）。火線上的格照常延燒 ⇒ 樣子差不多、少試很多次。
 // 火場（spot）：3.2 × 3.2 × 1.6 m 一區 ⇒ 預備水手照火場大小派去潑水（跟抽水機同一套：32_hull.js survey burnTick → 42_hands.js callHands burnNeeds，pri 0.5 ＝ 交戰那一舷的砲班之後）；
 //   站到了 ⇒ 那一區每格每秒的熱度一起降 douse × 人數 ÷ 格數；火場旁的人燒傷（hurt）、火藥桶被烤（照舊 powderHit ⇒ 「彈藥庫起火！」）。降旗的船沒人點名 ⇒ 沒人救火。
 //   潑濕（Tim 2026-10-19「火勢幾乎無法撲滅」；史實：開戰前把甲板、吊床弄濕擋火）：火場的濕度 wet ＝ min(1, (潑水的人數 ＋ 水帶) × wetPer ÷ 格數) ⇒
@@ -28,6 +34,7 @@
 // 決定性：狀態全是第一次著火才建（sh.burn、s.burn、T.burnT、T.burnSB）；亂數只走 rngMake('fire') ⇒ 沒有希臘火的對局一位元不動（不建、不抽、不進分支）。
 //   ?burn=0 ⇒ 希臘火照舊（只燒人、撕帆、燒細繩，28_fire.js 以前那樣），對拍 4bd1003 的成品一位元不差。
 // 讀數：__game.burn(i)（DEBUG）、?dump 的 burn（著過火的船才有）、詳細資訊的「🔥 火災」圖（61_hud.js gmapFire）。
+var BURN_STALE = 6, BURN_STALE_K = 0.25, BURN_ROLL = false;   // BURN_ROLL：上一次 burnCatch 是擲骰沒中（不是沒東西可燒）
 var BURN = CFG.burn, BURN_NEVER = 1e6, BURN_EMBER = 164, BURN_CHAR1 = 68, BURN_CHAR2 = 32;   // 色碼（rgb332）：燒著 182,36,0／焦 73,36,0／焦黑 36,0,0（⛔ 不用 36、146：那是鐵的硬度 HARD）
 var RNG_FI = rngMake('fire', 0x5BE0CD19), rndFire = RNG_FI.f;      // 延燒、點燃、帆的抖動種子（⛔ 不用 rnd()：那是戰局那一條）
 var BURN_N6 = [1, 0, 0, -1, 0, 0, 0, 1, 0, 0, -1, 0, 0, 0, 1, 0, 0, -1], BURN_DIR = [], BURN_CW = [];   // 六面（有沒有露在空氣裡）；18 鄰格（面＋邊）與累加權重（往上 up、往下 down）
@@ -43,8 +50,9 @@ function burnOf(sh) {
   if (sh.burn) return sh.burn;
   var g = sh.grid, wd = sh.weatherDeck && sh.deckZ[sh.weatherDeck];
   return (sh.burn = {
-    p: [], h: [], t: [], d: [], f: [], ph: [], n: 0, seq: 0,          // 燒著的格：壓好的座標、熱度、燒了多久、燒穿要多久、易燃性、第幾步算它（相位）
+    p: [], h: [], t: [], d: [], f: [], ph: [], st: [], n: 0, seq: 0,  // 燒著的格：壓好的座標、熱度、燒了多久、燒穿要多久、易燃性、第幾步算它（相位）、連續幾次沒點著（悶燒）
     q: [],                                                             // 這一步新著的 [壓好的座標, 熱度, 易燃性]（迴圈跑完才加，⛔ 邊跑邊加 ⇒ 同一拍又燒一次）
+    thq: [],                                                           // 燒到了、等這一拍的第一步一起拿掉的格（壓好的座標；B.g 已經是 3）
     g: new VK.Grid([g.sx, g.sy, g.sz]),                                // 每格：0 沒事、1 燒著、2 熄了（焦）、3 燒穿
     spots: new Map(), spotSeq: 0,                                      // 火場（船殼的照分區、帆 'S'＋第幾面）；Map 照加進去的順序走 ⇒ 每次一樣
     sl: [],                                                            // 燒著的帆
@@ -73,7 +81,8 @@ function burnCatch(sh, B, x, y, z, h0, k) {
   var st = B.g.get(x, y, z); if (st === 1 || B.n + B.q.length / 3 >= BURN.max) return false;
   var f = +matAt(sh, x, y, z).flammable || 0; if (st === 2) f *= BURN.reK; if (!(f > 0)) return false;
   var sp = B.spots.get(burnKey(x, y, z)); if (sp && sp.wet) k *= 1 - sp.wet;            // 潑濕的那一區不容易著
-  if (!burnAir(sh, x, y, z) || rndFire() >= f * k) return false;
+  if (!burnAir(sh, x, y, z)) return false;
+  if (rndFire() >= f * k) { BURN_ROLL = true; return false; }
   B.g.set(x, y, z, 1); B.q.push(VK.pack(x, y, z), h0, f); return true;
 }
 /** 這一格有一面露在乾的空氣裡嗎：六個面有一面是空的、又不在海面下（船殼外形裡 ⇒ 看艙內的水滿了一半沒，粒子模式才有）。 */
@@ -92,7 +101,7 @@ function burnFlush(sh, B, force) {
   var NB = everySteps(BURN.tick);
   for (var i = 0; i < B.q.length; i += 3) {
     var p = B.q[i], f = B.q[i + 2], x = p & 2047, y = (p >> 11) & 1023, z = p >> 21;
-    B.p.push(p); B.h.push(B.q[i + 1]); B.t.push(0); B.f.push(f); B.ph.push(B.seq++ % NB);
+    B.p.push(p); B.h.push(B.q[i + 1]); B.t.push(0); B.f.push(f); B.ph.push(B.seq++ % NB); B.st.push(0);
     B.d.push(BURN.life * (1.5 - f) * (0.8 + 0.4 * hash3(x, y, z))); B.ignN++;
     burnTint(sh, B, x, y, z, BURN_EMBER, force);
   }
@@ -104,48 +113,61 @@ function burnFlush(sh, B, force) {
 function burnStep(sh) {
   var B = sh.burn, NB = everySteps(BURN.tick), ph = (Math.round(SIMT / DT) + sh.i * SURVEY_PH) % NB, dt = NB * DT;
   if (sh.sunk) { if (B.n || B.sl.length || B.q.length) burnClear(sh, B); return; }
-  B.tint = 0; B.out = 0;                                               // 每拍的上限分到每一步（÷ NB）：⛔ 不分 ⇒ 前面幾個相位先吃光、後面的永遠輪不到
+  B.tint = 0;                                                          // 換色的上限分到每一步（÷ NB）：⛔ 不分 ⇒ 前面幾個相位先吃光、後面的永遠輪不到
+  if (ph === 0) { burnThruAll(sh, B); B.out = 0; }                     // 燒穿：上一拍排著的一次拿掉（一拍找一次斷開）；燒穿的上限一拍一次（排的時候算）
   if (B.n) burnCells(sh, B, ph, dt, NB);
   burnFlush(sh, B, false);
   if (ph === 0) { burnSails(sh, B, dt); burnSpots(sh, B, dt); burnLit(sh, B); }
 }
 function burnCells(sh, B, ph, dt, NB) {
   var g = sh.grid, K = BURN_PCT / 100, rain = WX.rain > 0 ? BURN.rain * WX.rain * dt : 0, wz = Math.floor(sh.T.zw + (sh.sink - sh.lift - sh.bob) / S);   // wz：現在平靜時的水線（32_hull.js 同一條）
-  var outCap = Math.ceil(BURN.outMax / NB);
+  var pd = dt * BURN.pace;                                             // 火自己的時間（pace；潑水、下雨照 dt）
   for (var i = 0; i < B.n; i++) {
     if (B.ph[i] !== ph) continue;
     var p = B.p[i], x = p & 2047, y = (p >> 11) & 1023, z = p >> 21;
     if (!g.get(x, y, z)) { B.g.set(x, y, z, 3); burnDrop(B, i--); continue; }        // 被打掉了、被斷開的那一團帶走了（22_pieces.js）⇒ 這裡不燒了
-    var sp = B.spots.get(burnKey(x, y, z)), h = B.h[i] + dt * BURN.grow * B.f[i];
+    var sp = B.spots.get(burnKey(x, y, z)), h = B.h[i] + pd * BURN.grow * B.f[i];
     if (sp && (sp.have || sp.hose)) h -= dt * BURN.douse * ((sh.effOn ? sp.haveE || 0 : sp.have) + sp.hose) / Math.max(1, sp.n);   // 潑水：這一區站到的人（＋水帶）× douse，分給那一區的每一格；人照工作效率加總 haveE（TASK-0720，39_eff.js；沒開 ⇒ 人數本身），水帶不吃效率（已經換算成人數）
     if (rain && z >= B.zSky) h -= rain;                                                // 淋得到雨
     if (z <= wz + 2 && !burnAir(sh, x, y, z)) h = 0;                                   // 泡進水裡（海面下、艙裡淹了一半）
     if (h <= 0) { burnQuench(sh, B, i--, x, y, z); continue; }
-    B.h[i] = h = Math.min(1, h); B.t[i] += dt * h;
-    if (B.t[i] >= B.d[i]) { if (B.out < outCap) { burnThrough(sh, B, i--, x, y, z, wz); continue; } }   // 燒穿（超過這一步的上限 ⇒ 下一拍再說，照樣延燒）
+    B.h[i] = h = Math.min(1, h); B.t[i] += pd * h;
+    if (B.t[i] >= B.d[i]) { if (B.out < BURN.outMax) { burnThrough(sh, B, i--, x, y, z, wz); continue; } }   // 燒穿（這一拍排滿了 ⇒ 下一拍再說，照樣延燒）
     else if (B.t[i] > B.d[i] * (0.55 + 0.3 * hash3(x, z, y))) burnTint(sh, B, x, y, z, BURN_CHAR2, false);   // 燒過一半多 ⇒ 焦黑（每格照雜湊早晚不同 ⇒ 不是一整片同時變）
-    for (var k = BURN.spread * K * h * dt * (sp && sp.wet ? 1 - sp.wet : 1); k > 0; k -= 1) { if (k < 1 && rndFire() >= k) break; burnTry(sh, B, x, y, z); }
-    if (BURN.jump > 0 && rndFire() < BURN.jump * K * h * dt) burnJump(sh, B, x, y, z);
+    for (var k = BURN.spread * K * h * pd * (sp && sp.wet ? 1 - sp.wet : 1) * (B.st[i] >= BURN_STALE ? BURN_STALE_K : 1); k > 0; k -= 1) {   // 悶燒（見檔頭）⇒ 少試
+      if (k < 1 && rndFire() >= k) break;
+      BURN_ROLL = false; if (burnTry(sh, B, x, y, z)) B.st[i] = 0; else if (!BURN_ROLL) B.st[i]++;   // 擲骰沒中不算
+    }
+    if (BURN.jump > 0 && rndFire() < BURN.jump * K * h * pd) burnJump(sh, B, x, y, z);
   }
 }
-/** 往一個鄰格試（照權重挑方向：往上多、往下少）。 */
+/** 往一個鄰格試（照權重挑方向：往上多、往下少）⇒ 點著了沒。 */
 function burnTry(sh, B, x, y, z) {
   var r = rndFire() * BURN_CW[BURN_CW.length - 1], d = 0; while (BURN_CW[d] < r) d++;
-  burnCatch(sh, B, x + BURN_DIR[d * 3], y + BURN_DIR[d * 3 + 1], z + BURN_DIR[d * 3 + 2], BURN.h0, 1);
+  return burnCatch(sh, B, x + BURN_DIR[d * 3], y + BURN_DIR[d * 3 + 1], z + BURN_DIR[d * 3 + 2], BURN.h0, 1);
 }
 /** 火苗往上竄：正上方是空的 ⇒ jumpZ 格內碰到的下一格（上一層甲板的底面、橫樑）。 */
 function burnJump(sh, B, x, y, z) {
   var g = sh.grid; if (g.get(x, y, z + 1)) return;
   for (var k = 2; k <= BURN.jumpZ; k++) if (g.get(x, y, z + k)) { burnCatch(sh, B, x, y, z + k, BURN.h0, 1); return; }
 }
-/** 燒穿：照打掉格那一條（removeVoxel：進水、尋路、繩、斷開）。公式進水、水線下 ⇒ 只燒焦（見檔頭）。 */
+/** 燒穿：公式進水、水線下 ⇒ 只燒焦（見檔頭）；其他 ⇒ 不再算燒著、排進 B.thq，這一拍的第一步一起拿掉（burnThruAll）。 */
 function burnThrough(sh, B, i, x, y, z, wz) {
   B.out++;
   if (!sh.fl && z <= wz) { burnQuench(sh, B, i, x, y, z); return; }
-  B.g.set(x, y, z, 3); burnDrop(B, i);
-  if (!removeVoxel(sh, x, y, z, true)) return;
-  B.goneN++; B.chP.push(VK.pack(x, y, z)); B.chK.push(3); evEmit('burnAsh', sh, x, y, z);   // 灰燼、火星（59_burnfx.js）
-  if (z <= wz && burnSkin(sh, x, y, z)) { B.thruN++; var sp = B.spots.get(burnKey(x, y, z)); if (sp && !sp.thru) { sp.thru = true; burnNews(sh, 'thru', sp); } }
+  B.g.set(x, y, z, 3); burnDrop(B, i); B.thq.push(VK.pack(x, y, z));
+}
+/** 排著的燒穿一次拿掉：照打掉格那一條（removeVoxel：進水、尋路、繩、斷開 ⇒ 同一步的 integrity 一起找）。已經被打掉、被帶走的 ⇒ 跳過。 */
+function burnThruAll(sh, B) {
+  if (!B.thq.length) return;
+  var wz = Math.floor(sh.T.zw + (sh.sink - sh.lift - sh.bob) / S);
+  for (var k = 0; k < B.thq.length; k++) {
+    var p = B.thq[k], x = p & 2047, y = (p >> 11) & 1023, z = p >> 21;
+    if (!removeVoxel(sh, x, y, z, true)) continue;
+    B.goneN++; B.chP.push(p); B.chK.push(3); evEmit('burnAsh', sh, x, y, z);   // 灰燼、火星（59_burnfx.js）
+    if (z <= wz && burnSkin(sh, x, y, z)) { B.thruN++; var sp = B.spots.get(burnKey(x, y, z)); if (sp && !sp.thru) { sp.thru = true; burnNews(sh, 'thru', sp); } }
+  }
+  B.thq.length = 0;
 }
 /** 這一格是不是外船殼（離原本外形的半寬 4 格內；⛔ 水線下的艙內地板燒穿不算「燒穿船殼」—— 進水照粒子模式自己判破口，33_flood.js flHoleRedo）。 */
 function burnSkin(sh, x, y, z) {
@@ -166,14 +188,14 @@ function burnTint(sh, B, x, y, z, col, force) {
 /** 拿掉第 i 格（最後一格補到它的位置）。 */
 function burnDrop(B, i) {
   var j = --B.n;
-  B.p[i] = B.p[j]; B.h[i] = B.h[j]; B.t[i] = B.t[j]; B.d[i] = B.d[j]; B.f[i] = B.f[j]; B.ph[i] = B.ph[j];
-  B.p.length = B.h.length = B.t.length = B.d.length = B.f.length = B.ph.length = j;
+  B.p[i] = B.p[j]; B.h[i] = B.h[j]; B.t[i] = B.t[j]; B.d[i] = B.d[j]; B.f[i] = B.f[j]; B.ph[i] = B.ph[j]; B.st[i] = B.st[j];
+  B.p.length = B.h.length = B.t.length = B.d.length = B.f.length = B.ph.length = B.st.length = j;
 }
 /** 木匠補回一格（46_carpenter.js restoreVoxel）：新木頭 ⇒ 沒燒過。 */
 function burnForget(sh, x, y, z) { if (sh.burn.g.get(x, y, z)) sh.burn.g.set(x, y, z, 0); }
 /** 沉了：全熄（不廣播）。 */
 function burnClear(sh, B) {
-  B.p.length = B.h.length = B.t.length = B.d.length = B.f.length = B.ph.length = 0; B.n = 0; B.q.length = 0;
+  B.p.length = B.h.length = B.t.length = B.d.length = B.f.length = B.ph.length = B.st.length = 0; B.n = 0; B.q.length = 0; B.thq.length = 0;
   B.sl.slice().forEach(function (s) { burnSailOff(sh, s); });
   B.spots.forEach(function (sp) { sp.out = true; }); B.spots.clear(); B.lit = false;
 }
@@ -434,7 +456,7 @@ function burnSailAt(sh, s, q) {
 }
 /** 從 q0 沿布的邊燒過去要幾秒（Dijkstra）：洞不傳火；往上快（sailUp）、往下慢；每條邊照雜湊（salt ＝ 這一次的種子）快慢不同 ⇒ 燒口不是一個圓。 */
 function burnDij(P, F, q0, t, salt) {
-  var n = P.n, D = new Float64Array(n).fill(Infinity), done = new Uint8Array(n), HK = [], HV = [], T = BURN.sailBurn, V = BURN.sailV * BURN_PCT / 100;
+  var n = P.n, D = new Float64Array(n).fill(Infinity), done = new Uint8Array(n), HK = [], HV = [], T = BURN.sailBurn, V = BURN.sailV * BURN_PCT / 100 * BURN.pace;
   function push(k, v) {
     HK.push(k); HV.push(v);
     for (var i = HK.length - 1; i > 0;) { var j = (i - 1) >> 1; if (HK[j] <= HK[i]) break; var a = HK[i]; HK[i] = HK[j]; HK[j] = a; a = HV[i]; HV[i] = HV[j]; HV[j] = a; i = j; }
@@ -491,7 +513,7 @@ function burnSailNew(sh, B, s, P, q) {
 function burnFlames(sh, sp, dt) {
   var H = BURN.flameK * Math.sqrt(sp.n), c = sp.c, hit = null;
   for (var dz = 4; dz <= H && !hit; dz += 10) hit = burnSailNearPt(sh, c[0], c[1], c[2] + dz, 10, -1, c[2]);
-  if (hit && rndFire() < 1 - Math.exp(-dt * BURN.sailCatch * sp.heat)) burnSailAt(sh, sh.sails[hit[0]], hit[1]);
+  if (hit && rndFire() < 1 - Math.exp(-dt * BURN.pace * BURN.sailCatch * sp.heat)) burnSailAt(sh, sh.sails[hit[0]], hit[1]);
 }
 /** 帆的火熄了（潑熄、下雨）：還在燒的點停在這一刻（焦痕留著，著色器照 x 停住）。 */
 function burnSailOut(sh, s, why) {

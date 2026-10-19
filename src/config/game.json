@@ -76,7 +76,8 @@
   },
   "fire": {"k": [40, 150, 120], "r": 12, "arrow": 6, "arrowIgn": 3, "arrowSail": 4},
   "burn": {
-    "tick": 0.25,
+    "tick": 0.5,
+    "pace": 0.5,
     "ign": 10,
     "ignP": 0.6,
     "ignMax": 120,
