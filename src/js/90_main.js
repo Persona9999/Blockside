@@ -154,6 +154,7 @@ if (DEBUG) window.__game = {
   cam: function (o) { camSet(o); camSet({ snap: true }); camUpdate(1); render(); },
   // 海圖（TASK-0721；08_seabed.js、32_ground.js）：載了哪幾塊、換過幾次中心、等過幾次；每艘的擱淺讀數；q ＝ [x, z] ⇒ 那一點的高度與底質
   bed: function (q) { if (!BED || !BED.A) return null; return { area: BED.A.id, site: BED.site, origin: [BED.ax, BED.az], center: [BED.cx, BED.cy], loaded: Object.keys(BED.ch).sort(), loads: BED.loads, drops: BED.drops, waits: BED.miss, meshes: Object.keys(BEDGL).length,
+    trees: treeStat(),
     draw: { n: BEDDRAW.n, cull: BEDDRAW.cull, tris: BEDDRAW.tris },   // 上一格：畫了幾塊、視錐外剔掉幾塊、畫了幾個三角形（63_bed_gl.js bedDraw）
     far: { tiles: BEDFAR.n, left: BEDFAR.todo ? BEDFAR.todo.length + (BEDFAR.busy ? 1 : 0) : null, kb: Math.round(BEDFAR.bytes / 1024), ms: +BEDFAR.ms.toFixed(1), drawn: Object.keys(BEDFAR.g).filter(function (k) { return !BEDGL[k]; }).length },
     foam: { n: BEDFOAM.N, builds: BEDFOAM.builds, ms: +BEDFOAM.ms.toFixed(1), eye: CAM.eye.map(function (v) { return +v.toFixed(1); }), ground: +bedHgt(CAM.eye[0], CAM.eye[2]).toFixed(1) },
