@@ -622,6 +622,7 @@
         "light": 3,
         "magazine": 3,
         "part": 26,
+        "portlid": 99,
         "powder": 359,
         "rooms": 3,
         "rudder": 2,

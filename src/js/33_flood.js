@@ -103,10 +103,12 @@ function flCellRedo(sh, fl, i) {
   }
   fl.cap[i] = (it - st) / (c * c * c); fl.pd[i] = any ? p : 0;
   fl.fo.delete(i);                                                        // 水幕的開口照新的格重找（只給畫面）
+  if (fl.cutS && flGone(fl, ix)) flDrop(fl, i);                           // 斷開那一截（flCut）：那一團的格被拿走時照樣會記髒 ⇒ 重算完照舊拿掉
 }
 /** 一塊破口重算：c × c 個船殼最外的點，每點從外往裡走，先碰到還在的格 ⇒ 不通；先走到原本是空的（艙內）⇒ 通。面積 ＝ 通的點數 × S²，記下中心與艙內那一側。 */
 function flHoleRedo(sh, fl, h) {
   var F = fl.F, c = F.c, side = (h / (F.NX * F.NZ)) | 0, r = h % (F.NX * F.NZ), bx = (r / F.NZ) | 0, bz = r % F.NZ, Gd = sh.grid, B = sh.T.hullG, s = side ? 1 : -1;
+  if (fl.cutS && flGone(fl, bx)) { fl.hA[h] = 0; return; }               // 斷開那一截的船殼不算破口（flCut）
   var n = 0, sx = 0, sy = 0, sz = 0, si = 0;
   for (var dz = 0; dz < c; dz++) for (var dx = 0; dx < c; dx++) {
     var x = F.X0 + bx * c + dx, z = bz * c + dz; if (x - F.X0 >= F.nxv || z >= F.zTop) continue;
@@ -228,11 +230,38 @@ function flDeposit(sh, fl, i, v) {
  *  · 沉沒（sh.sunk）就不再跑（⛔ 以前照算 ⇒ 沉掉的船積到 8 萬噸、白耗 CPU）。 */
 function floodVis(sh, fl, dt) {
   if (!fl.keep) fl.keep = { vol: fl.vol, comX: fl.comX, comY: fl.comY };
+  if (!flVisSlot(sh, fl)) return;                                         // 同時在算的已經 FL_VIS_N 艘 ⇒ 這艘照以前（不算、不畫）
+  if (sh.broken && sh.breakX !== undefined && !fl.cutS) flCut(sh, fl);   // keep 先留 ⇒ 拿掉那一截的水不動到傾斜
   var r = RNG_F.s; RNG_F.s = fl.rsV === undefined ? (SEED ^ RNG_F.salt ^ Math.imul(0x9E3779B9, sh.i + 1)) : fl.rsV;
   var t0 = DEBUG ? performance.now() : 0; floodStep(sh, fl, dt); if (DEBUG) { FL_VISMS += performance.now() - t0; FL_VISN++; }
   fl.rsV = RNG_F.s; RNG_F.s = r; fl.vis = true;
 }
 var FL_VISMS = 0, FL_VISN = 0;
+/** 同時好幾艘在沉（TASK-0617）：同時最多算 FL_VIS_N 艘；開始沉那一刻已經有 FL_VIS_N 艘在算 ⇒ 這艘一直照以前（不算水、不畫水，讀數照公式那一套），⛔ 之後有空位也不補（半路才開始灌看起來不對）。
+ *  每艘第一次進 floodVis 時決定一次（fl.visOn），照 SHIPS 的順序 ⇒ 同一個種子每次都一樣；⛔ 不看鏡頭遠近（dump 的積水要逐字重現）。
+ *  ⛔ 輪流算（每一步算 N 艘、dt 累積起來補）省不到：花費跟灌進來的水量走、不跟步數走 ⇒ 量過八艘一起斷，每一步的總花費一樣（見 README）。 */
+var FL_VIS_N = Q.has('flvisn') ? Math.max(1, parseInt(Q.get('flvisn'), 10) || 2) : 2;   // ?flvisn=：量花費用（99 ＝ 不設上限）
+function flVisSlot(sh, fl) {
+  if (fl.visOn !== undefined) return fl.visOn;
+  var n = 0;
+  for (var k = 0; k < SHIPS.length; k++) { var o = SHIPS[k]; if (o !== sh && o.fl && o.fl.visOn && !o.sunk) n++; }
+  return fl.visOn = n < FL_VIS_N;
+}
+/** 斷成兩截（23_powder.js breakShip 記 breakX、breakSide：斷開那一團在 +x ⇒ 1）：斷開那一截整格整格拿掉 —— 沒水、裝不了水、船殼不算破口、還在飛的粒子丟掉（TASK-0617）。
+ *  那一截是 22_pieces.js 另外的一團、自己漂走沉下去 ⇒ ⛔ 不拿掉的話水照 sh.M 畫在它原本的位置（截圖量過：前彈藥庫殉爆、斷船 4 秒後整條船長都還是水）。
+ *  格整個在斷口外才算（跨斷口那一格留著 ⇒ 斷口那一帶船殼打掉的洞照樣進水）。只在 floodVis 裡（斷船之後才跑；⛔ 船的動作不讀這些）。 */
+function flGone(fl, ix) { var F = fl.F, x0 = F.X0 + ix * F.c; return fl.cutS > 0 ? x0 >= fl.cutX : x0 + F.c - 1 <= fl.cutX; }
+function flDrop(fl, i) { var c = fl.F.c; fl.A[i] = 0; fl.cap[i] = 0; fl.pd[i] = 0; for (var l = 0; l < c; l++) { fl.op[i * c + l] = 0; fl.ol[i * c + l] = -1; } fl.fo.delete(i); }
+function flCut(sh, fl) {
+  var F = fl.F, NX = F.NX, i, h; fl.cutX = sh.breakX; fl.cutS = sh.breakSide;
+  for (i = 0; i < F.N; i++) if (flGone(fl, i % NX)) flDrop(fl, i);
+  for (h = 0; h < fl.hA.length; h++) if (fl.hA[h] > 0 && flGone(fl, ((h % (NX * F.NZ)) / F.NZ) | 0)) { fl.hA[h] = 0; fl.hQ[h] = 0; }
+  var J = fl.J;
+  for (i = 0; i < J.n; i++) {
+    if (!flGone(fl, Math.floor((J.p[i * 3] - F.X0) / F.c))) continue;
+    var j = --J.n; if (i !== j) { J.p.copyWithin(i * 3, j * 3, j * 3 + 3); J.v.copyWithin(i * 3, j * 3, j * 3 + 3); J.vol[i] = J.vol[j]; J.life[i] = J.life[j]; } i--;
+  }
+}
 /** 抽水的倍率（TASK-0604）：那一型的基礎抽水量（噸／分，cfg.pump）÷ PUMP_REF。⛔ 沒有 pump（舊存檔、外部傳進來的 cfg）⇒ 1（照以前）。 */
 function pumpK(sh) { var p = sh.cfg.pump, x = sh.pumps ? sh.pumps.x : 0; return (p === undefined || !isFinite(p) ? PUMP_REF : p + x) / PUMP_REF; }   // x：甲板上擺的抽水機另外加的（45_pumps.js；沒擺 ⇒ 0 ⇒ 一位元不動）
 /** 每一步（32_hull.js stepShip，粒子模式）：粒子飛、每 ev 步算一次水格（破口進出水、往下往旁邊流、抽水、讀數）。 */
