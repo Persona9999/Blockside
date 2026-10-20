@@ -165,6 +165,7 @@ if (DEBUG) window.__game = {
   town: function (at, on) { if (on !== undefined) { TOWNS.on = !!on; render(); } return BED && BED.A ? townStat(at) : null; },   // 城鎮的讀數（63_towns.js townStat；at ＝ [x, z] ⇒ 那一點的畫面高度、模擬高度、清不清樹；on ⇒ 開關畫不畫（量畫一格多少 ms 用））
   trees: function (sp, n, at) { return treeFind(sp, n, at); },   // 找樹（63_trees.js treeFind）：那一種最靠近 at（[x, z]；沒給 ⇒ 鏡頭）的 n 棵
   // 海圖（TASK-0721；08_seabed.js、32_ground.js）：載了哪幾塊、換過幾次中心、等過幾次；每艘的擱淺讀數；q ＝ [x, z] ⇒ 那一點的高度與底質
+  inland: function (on) { if (on !== undefined) { BEDWAT.on = !!on; render(); } return BEDWAT.on; },   // 內陸水與低於海平面的乾地的遮罩一起開關（63_bed_gl.js；同一格開／關對照畫面用）
   chart: function () { return chartInfo(); },                                  // 小地圖（63_chart.js）：開了沒、範圍、吃水門檻、底圖幾塊、畫面上的位置
   flow: function () { return FLOW_ST; },                               // ?start=1 分段開戰（70_flow.js startStaged）：幾步、最久一步、每一步幾 ms、全部幾 ms
   bed: function (q) { if (!BED || !BED.A) return null; return { area: BED.A.id, site: BED.site, origin: [BED.ax, BED.az], center: [BED.cx, BED.cy], loaded: Object.keys(BED.ch).sort(), loads: BED.loads, drops: BED.drops, waits: BED.miss,
@@ -175,6 +176,8 @@ if (DEBUG) window.__game = {
     trees: treeStat(),
     draw: { n: BEDDRAW.n, cull: BEDDRAW.cull, tris: BEDDRAW.tris },   // 上一格：畫了幾塊、視錐外剔掉幾塊、畫了幾個三角形（63_bed_gl.js bedDraw）
     far: { tiles: BEDFAR.n, left: BEDFAR.todo ? BEDFAR.todo.length + BEDFAR.fly + BEDFAR.ready.length : null, fly: BEDFAR.fly, fail: BEDFAR.fail, kb: Math.round(BEDFAR.bytes / 1024), ms: +BEDFAR.ms.toFixed(1), drawn: Object.keys(BEDFAR.g).filter(function (k) { return !BEDGL[k]; }).length },
+    inland: { on: BEDWAT.on, meshes: Object.keys(BEDGL).filter(function (k) { return BEDGL[k].w; }).length, far: Object.keys(BEDFAR.g).filter(function (k) { return BEDFAR.g[k].w; }).length, n: BEDWAT.n, tris: BEDWAT.tris,   // 內陸水（63_bed_gl.js）：細的、遠景各幾塊有水面網格；上一格畫了幾塊、幾個三角形
+      dry: { on: BEDDRY.on, chunks: Object.keys(BEDDRY.c).filter(function (k) { return BEDDRY.c[k]; }).length, cells: BEDDRY.cells, builds: BEDDRY.builds, ms: BEDDRY.ms } },   // 低於海平面的乾地的遮罩：幾塊、幾格（32 m）、重建幾次
     foam: { n: BEDFOAM.N, builds: BEDFOAM.builds, ms: +BEDFOAM.ms.toFixed(1), eye: CAM.eye.map(function (v) { return +v.toFixed(1); }), ground: +bedHgt(CAM.eye[0], CAM.eye[2]).toFixed(1) },
     at: q ? { h: +bedHgt(q[0], q[1]).toFixed(2), mat: bedMat(q[0], q[1]) } : undefined,
     ships: SHIPS.map(function (sh) { return { name: sh.name, px: +sh.px.toFixed(1), pz: +sh.pz.toFixed(1), keelY: sh.keelY === undefined ? null : +sh.keelY.toFixed(2), grnd: sh.grnd ? { m: sh.grnd.m, pen: +sh.grnd.pen.toFixed(2), lost: sh.grnd.lost } : null, lost: sh.grndLost || 0, av: sh.bedAv ? { t: +sh.bedAv.t.toFixed(1), d: sh.bedAv.d } : null }; }) }; },
