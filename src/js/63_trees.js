@@ -196,15 +196,30 @@ function treeShell(C, I, far, hAt) {
 
 // ── 網格、貼圖集、著色器（第一次要畫的時候建） ──
 var TREE_VS = '#version 300 es\nlayout(location=0) in vec3 aP; layout(location=1) in vec3 aN; layout(location=2) in vec3 aC; layout(location=3) in float aW; layout(location=4) in vec4 aI; layout(location=5) in vec2 aS;\n' +
-  'uniform mat4 uVP; uniform float uT, uWind; out vec3 vN; out vec3 vW; out vec3 vC;\n' +
+  'uniform mat4 uVP; uniform float uT, uWind; out vec3 vN; out vec3 vW; out vec3 vC; out vec3 vO; out float vL;\n' +
   'void main(){ float c=cos(aI.w), s=sin(aI.w); vec3 p=aP*aS.x; p=vec3(c*p.x+s*p.z,p.y,-s*p.x+c*p.z);\n' +
-  ' float ph=aI.x*0.11+aI.z*0.07; vec2 sw=vec2(sin(uT*1.3+ph),cos(uT*1.07+ph*1.3))*aW*uWind*0.22*aS.x;\n' +
-  ' vec3 w=aI.xyz+p+vec3(sw.x,0.0,sw.y); vN=vec3(c*aN.x+s*aN.z,aN.y,-s*aN.x+c*aN.z); vW=w; vC=aC*aS.y; gl_Position=uVP*vec4(w,1.0); }\n';
+  ' float lf=step(1.5,aW), aw=aW-' + TREE_LEAF_DET.toFixed(1) + '*lf;\n' +   // 葉簇的旗標（16_treegen.js TREE_LEAF_DET）拆回搖晃權重
+  ' float ph=aI.x*0.11+aI.z*0.07; vec2 sw=vec2(sin(uT*1.3+ph),cos(uT*1.07+ph*1.3))*aw*uWind*0.22*aS.x;\n' +
+  ' vec3 w=aI.xyz+p+vec3(sw.x,0.0,sw.y); vN=vec3(c*aN.x+s*aN.z,aN.y,-s*aN.x+c*aN.z); vW=w; vC=aC*aS.y; vO=aI.xyz+p; vL=lf; gl_Position=uVP*vec4(w,1.0); }\n';
+// 葉簇近看的葉片（Tim 2026-10-20「給樹葉近距離時 一些貼圖細化 椰子樹不用」「用算法去生成 不用太細(有風格化就好 不追求寫實風)」）：
+//   只畫在葉簇（vL ＝ 1，16_treegen.js TREE_LEAF_DET）；照樹的座標（vO：不含搖晃 ⇒ 風吹時紋理黏在葉子上）切成約 0.4 m 一片的 3D 細胞（一片 ＝ 一格），
+//   每片自己的朝向（法線偏一點 ⇒ 光照一片一片亮暗）、深淺、偏黃偏藍一點；片與片的縫暗一點 ⇒ 看起來是一層一層疊的葉子，不是一顆光滑的球。
+//   16 m 內全開、42 m 淡完（貼圖遠景、低模那一段照舊）。
 var TREE_FS = function () {
-  return '#version 300 es\nprecision highp float;\n' + SHADOW_GLSL + 'in vec3 vN; in vec3 vW; in vec3 vC; uniform vec3 uSun,uEye,uFog,uSky,uGround; uniform float uFogD; out vec4 o;\n' +
-    'void main(){ if(vW.y<uClip) discard; vec3 n=normalize(vN); if(!gl_FrontFacing) n=-n; float sd=dot(n,uSun), d=max(sd,0.0)*0.8+abs(sd)*0.2;\n' +
-    ' float sk=shadowK(vW,n*1.5); vec3 col=vC*(mix(uGround,uSky,n.y*0.5+0.5)*0.7+vec3(1.0,0.96,0.88)*d*sk*0.72);\n' +
-    ' float fd=length(vW-uEye); o=vec4(mix(col,uFog,1.0-exp(-fd*uFogD)),1.0); }\n';
+  return '#version 300 es\nprecision highp float;\n' + SHADOW_GLSL + 'in vec3 vN; in vec3 vW; in vec3 vC; in vec3 vO; in float vL; uniform vec3 uSun,uEye,uFog,uSky,uGround; uniform float uFogD; out vec4 o;\n' +
+    'vec3 lh3(vec3 p){ return fract(sin(vec3(dot(p,vec3(127.1,311.7,74.7)),dot(p,vec3(269.5,183.3,246.1)),dot(p,vec3(113.5,271.9,124.6))))*43758.5453); }\n' +
+    // 3D 細胞（兩近點）：(最近那一格的編號, 第二近減最近 —— ≈ 0 是兩片的縫)；c0 ＝ 到最近那一點（片的中心）多遠
+    'vec4 leafCell(vec3 p, out float c0){ vec3 i=floor(p), f=fract(p); float d1=8.0, d2=8.0; vec3 id=i;\n' +
+    ' for(int z=-1;z<=1;z++) for(int y=-1;y<=1;y++) for(int x=-1;x<=1;x++){ vec3 g=vec3(float(x),float(y),float(z)), q=g+lh3(i+g)-f; float e=dot(q,q); if(e<d1){ d2=d1; d1=e; id=i+g; } else if(e<d2) d2=e; }\n' +
+    ' c0=sqrt(d1); return vec4(id, sqrt(d2)-c0); }\n' +
+    'void main(){ if(vW.y<uClip) discard; vec3 n=normalize(vN); if(!gl_FrontFacing) n=-n; float fd=length(vW-uEye), lk=vL*(1.0-smoothstep(16.0,42.0,fd)); vec3 tn=vec3(1.0);\n' +
+    // 一片 ＝ 中間亮、往邊上慢慢暗的鼓起（bu），縫只淡淡暗一點（e）；朝向、深淺、偏黃偏藍每片不同
+    ' if(lk>0.0){ float c0; vec4 lc=leafCell(vO*2.4,c0); vec3 r=lh3(lc.xyz+17.0)-0.5; n=normalize(n+r*0.7*lk);\n' +
+    '  float bu=1.0-smoothstep(0.1,0.75,c0), e=smoothstep(0.0,0.06,lc.w), v=(0.86+0.26*r.x)*(0.8+0.28*bu)*mix(0.85,1.0,e);\n' +
+    '  tn=mix(vec3(1.0),vec3(v*(1.0+0.10*r.y),v*(1.0+0.05*r.y),v*(1.0-0.12*r.y)),lk); }\n' +
+    ' float sd=dot(n,uSun), d=max(sd,0.0)*0.8+abs(sd)*0.2;\n' +
+    ' float sk=shadowK(vW,n*1.5); vec3 col=vC*tn*(mix(uGround,uSky,n.y*0.5+0.5)*0.7+vec3(1.0,0.96,0.88)*d*sk*0.72);\n' +
+    ' o=vec4(mix(col,uFog,1.0-exp(-fd*uFogD)),1.0); }\n';
 };
 // 貼圖：面向鏡頭（只繞 y 轉）的一張四邊形；uBB[第幾棵] ＝ (圖集 u 起點, v 起點, 世界寬, 世界高)、uCell ＝ 一格的 (u 寬, v 高)
 var TREE_BB_VS = '#version 300 es\nlayout(location=0) in vec2 aQ; layout(location=4) in vec4 aI; layout(location=5) in vec2 aS; uniform mat4 uVP; uniform vec3 uEye; uniform vec4 uBB[' + TREE_BB_MAX + ']; uniform vec2 uCell; out vec2 vT; out vec3 vW; out float vK;\n' +

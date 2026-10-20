@@ -7,7 +7,7 @@
 //   紋理細節照距離淡掉（250 m～1.8 km）⇒ 遠處只剩底色、不閃；底色挑成紋理的平均色 ⇒ 淡掉時顏色不跳。
 //   近看（Tim 2026-10-20「是否可以強化一下近看地形時的紋理(一樣用程式生成)」）：70～260 m 以內再疊一層細的 ——
 //     沙：細風紋、顆粒、海面上 0.6 m 內的濕沙（深一點、有反光）、再往上一條打上岸的海草與貝殼；草地：草叢、順一個方向的草葉紋、露土的斑塊、零星小花；
-//     岩石：裂縫網（細胞雜訊兩近點的差）、細顆粒、地衣斑；珊瑚礁：頭鼓起來、表面細紋；海底泥沙：水流沙紋。
+//     岩石：粗糙柔和的坑洞、顆粒、地衣斑（2026-10-20 拿掉裂縫網、粗一級）；珊瑚礁：頭鼓起來、表面細紋；海底泥沙：水流沙紋。
 //     凹凸：每種另外給一個微高度 hb（公尺），照螢幕導數擾動法線（Mikkelsen 的 surface gradient，不多算雜訊）⇒ 光照看得出起伏；陰影照舊用網格的法線。
 //     細的那幾層照一個像素佔幾公尺（fw）淡掉（baa：一個週期不到兩三個像素就不畫）⇒ 斜看、遠一點都不閃。
 //   在用的那幾圈（中心 ± ring）每 8 m 一點、預載的那一圈每 16 m；四邊往下垂 40 m 的裙邊 ⇒ 粗細不同的兩塊接在一起也看不到縫。
@@ -160,12 +160,15 @@ function bedFS() {
     'vec4 bcell2(vec2 p){ vec2 i=floor(p), f=fract(p); float d1=8.0, d2=8.0; vec2 id=i; for(int y=-1;y<=1;y++) for(int x=-1;x<=1;x++){ vec2 g=vec2(float(x),float(y)); vec2 q=g+vec2(bh(i+g),bh(i+g+17.3))-f; float e=dot(q,q); if(e<d1){ d2=d1; d1=e; id=i+g; } else if(e<d2) d2=e; } return vec4(sqrt(d1),sqrt(d2),bh(id+3.7),bh(id+9.1)); }\n' +
     // 每公尺 f 個週期的那一層：一個像素佔 fw 公尺 ⇒ 一個週期不到三個像素就淡掉（不閃）
     'float baa(float f, float fw){ return 1.0-smoothstep(0.3,0.6,f*fw); }\n' +
-    // 岩石（照平面座標 q、高度 yy）：水平層理（照雜訊扭）＋細雜訊；近看多中尺度的明暗斑駁、稀疏的裂縫（約 2.2 m 一塊，只有三成多的邊裂開、寬窄照雜訊）、
-    //   小坑洞（岸邊石灰岩那種蝕出來的洞，約 0.5 m 一格、一半的格子有）、細顆粒、地衣斑 ⇒ (亮度倍數, 地衣多少, 那一塊的亂數（挑地衣的顏色）, 微高度)
+    // 岩石（照平面座標 q、高度 yy）：水平層理（照雜訊扭）＋細雜訊；近看多中尺度的明暗斑駁、
+    //   坑洞（岸邊石灰岩那種蝕出來的洞，約 1 m 一格、四成的格子有；邊緣照兩層雜訊咬得粗糙、從坑心到外圈慢慢淡、坑底也有一點起伏）、顆粒（約 0.5 m）、地衣斑
+    //   ⇒ (亮度倍數, 地衣多少, 那一塊的亂數（挑地衣的顏色）, 微高度)
+    //   （Tim 2026-10-20「這個沙地就太細了(裂紋不用 紋理可以在粗一個水平)」「圓洞可以粗糙柔和一點」：拿掉裂縫網；坑洞、顆粒、地衣斑各粗一倍；坑洞淡一點、邊緣不再是一圈硬邊）
     'vec4 brock(vec2 q, float yy, float fw, float nk){ float st=sin(yy*1.1+bf(q*0.05)*7.0)*0.5+0.5, m=(0.82+0.2*st)*(0.88+0.24*bn(q*0.6+vec2(yy*0.3)));\n' +
-    ' vec4 ck=bcell2(q*0.45+vec2(bn(q*0.3),yy*0.2)); float cv=smoothstep(0.5,0.7,bn(q*0.35+ck.z*5.0)), cr=(1.0-smoothstep(0.015,0.03+0.04*bn(q*2.0),ck.y-ck.x))*cv*baa(0.9,fw), gn=(bn(q*4.3+vec2(yy))-0.5)*baa(4.3,fw);\n' +
-    ' vec3 pc=bcell(q*1.9+vec2(bn(q*0.8))*0.7); float pt=(1.0-smoothstep(0.1+0.12*pc.z,0.2+0.12*pc.z,pc.x))*step(pc.y,0.5)*baa(1.9,fw), mo=bf(q*0.22+vec2(yy*0.1));\n' +
-    ' m*=(1.0+nk*(0.18*gn+0.3*(mo-0.5)))*(1.0-nk*(0.3*cr+0.35*pt)); return vec4(m, smoothstep(0.62,0.75,bf(q*0.9+vec2(yy*0.5,3.0)))*nk, ck.z, nk*(0.06*ck.x-0.06*cr-0.06*pt+0.04*gn+0.05*st+0.08*mo)); }\n' +
+    ' vec3 ck=bcell(q*0.45+vec2(bn(q*0.3),yy*0.2)); float gn=(bn(q*2.15+vec2(yy))-0.5)*baa(2.15,fw);\n' +
+    ' vec3 pc=bcell(q*0.95+vec2(bn(q*0.4),bn(q*0.4+3.3))*0.9); float ed=pc.x+(bn(q*3.1)-0.5)*0.22+(bn(q*7.3)-0.5)*0.08*baa(7.3,fw);\n' +
+    ' float pt=(1.0-smoothstep(0.08+0.1*pc.z,0.34+0.1*pc.z,ed))*step(pc.y,0.4)*baa(0.95,fw), pf=0.8+0.4*bn(q*5.0), mo=bf(q*0.22+vec2(yy*0.1));\n' +
+    ' m*=(1.0+nk*(0.18*gn+0.3*(mo-0.5)))*(1.0-nk*0.22*pt*pf); return vec4(m, smoothstep(0.62,0.75,bf(q*0.45+vec2(yy*0.5,3.0)))*nk, ck.y, nk*(0.06*ck.x-0.07*pt*pf+0.04*gn+0.05*st+0.08*mo)); }\n' +
     'void main(){ if(vW.y<uClip) discard; vec3 n=normalize(vN); vec2 p=vW.xz; float fd=length(vW-uEye), dk=1.0-smoothstep(250.0,1800.0,fd), nk=1.0-smoothstep(70.0,260.0,fd);\n' +
     ' float fw=max(length(dFdx(p)),length(dFdy(p))), hb=0.0, wet=0.0; vec3 col=vC;\n' +
     // 陡的面（岩石用）：側面的座標 sq（照法線比較朝東西還是南北）與它一個像素佔幾公尺；sv：坡越陡越照側面（法線 y 0.85 ⇒ 0.6）
