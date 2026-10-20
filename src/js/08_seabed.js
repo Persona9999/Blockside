@@ -123,6 +123,9 @@ function bedHostSay(what, o) {
  *  點了、按快捷鍵（66_keys.js hostBack，預設 U；71_input.js doAct）⇒ 跟外面那一頁說 'back'（地球儀照它回去：跟它自己那顆「← 回到地球儀」同一條；'started' 帶 back: 1 ⇒ 地球儀就不放它那一顆、免得疊在停格條上）。 */
 function bedHostBack(host) { if ($('hostBack')) document.body.classList.add('bsHost'); }
 function bedHostBackGo() { if (BED && BED.host && RUNNING) BED.host.postMessage({ bsmap: 'back' }, '*'); }
+/** 「回主選單」交給外面那一頁（Tim 2026-10-21「Blocksail是否能override返回主選單按鈕 要回到 … Blocksail/index.html」）：?map=@host ⇒ 跟它說 'menu'
+ *  （地球儀照「回到地球儀」那條路先把船搬到開到的地方、存好，再換到 Blocksail 的主選單 index.html）；不是被嵌的 ⇒ false，照舊開這一頁的主選單。 */
+function bedHostMenuGo() { if (!BED || !BED.host) return false; BED.host.postMessage({ bsmap: 'menu' }, '*'); return true; }
 /** 開機（90_main.js 跟船一起等）：有 ?map ⇒ 讀海域、定原點；快轉／無頭 ⇒ 整個海域載完，不然 ⇒ 開戰位置附近先載好。 */
 function bedBoot() {
   var id = Q.get('map'); if (!id) return Promise.resolve();

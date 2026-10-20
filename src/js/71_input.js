@@ -115,6 +115,7 @@ function doAct(a, repeat) {
   else if (a === 'deck') deckCycle();
   else if (a === 'mute') { muted = !muted; sndApply(); gsetShow(); }
   else if (a === 'help') helpToggle();
+  else if (a === 'menu' && bedHostMenuGo()) { gsetClose(); helpClose(); }   // 被 Blocksail 嵌著（?map=@host）⇒ 回它的主選單（08_seabed.js bedHostMenuGo）
   else if (a === 'menu') { gsetClose(); helpClose(); flowRun(false); END_AT = 0; END_WAIT = null; coverShow(); $('end').className = ''; }
   else if (a === 'sailMode') sailToggle();   // 一顆切換 自動 ⇄ 手動（Tim 2026-10-15：「改成單鍵」；手動也可以直接打舵）；錨在水裡 ⇒ 先起錨（左右錨拋的也一起）
   else if ((a === 'ancAll' || a === 'ancP' || a === 'ancS') && me && !me.sunk && anchorsOf(me).noAnchor) setSailMode(SAIL === 'off' ? 'manual' : 'off');   // 整艘沒有錨（TASK-0635）：三個錨鍵都是停船 ⇄ 手動
