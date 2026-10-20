@@ -24,7 +24,7 @@
 // 低於海平面的乾地（BEDDRY；例：恩里基約湖 −40 m 的湖岸與湖）：0 m 的海面會蓋住它 ⇒ 一張遮罩（BED_DRY_SP 公尺一格、蓋整個海域的窗），海與遠海的著色器照它丟掉海面（01_gl.js BED_DRY_GLSL）。
 //   只算有「不是海（陸地 ≥ 10 或內陸水）而且地面低於 0」的點的塊：那一塊每一格裡的點全都不是海 ⇒ 遮；岸邊那一格裡有海的點 ⇒ 不遮 ⇒ 海岸照舊。
 //   沒有這種點的塊不算 ⇒ 沒有的海域整段跳過（uDryOn 0 ⇒ 畫面逐位元組不變；托爾圖加 43 塊 0 點）。
-//   另外（2026-10-21）跟海斷開的低地也遮：8 m 一格、照城鎮整過地的地面，從窗的邊上往裡淹，淹不到的低地不畫海（bedDryTex）。
+//   另外（2026-10-21）跟海斷開的低地也遮：8 m 一格、照城鎮整過地的地面，只走水格從海往裡淹，淹不到的水坑、離海超過一條岸帶的低地不畫海（bedDryTex）。
 var BEDGL = {}, BEDGL_Q = [], BEDGL_ID = null, BED_FOG = 0.4, BED_FAR_ST = 8;
 // 地形網格換過幾次（建好、換粗細、丟掉）與換的是哪一塊（外框）：陰影的靜態那一層，那一段碰到換掉的塊就重畫（60_render.js shadowPass）
 //   —— 粗的網格比細的高出幾公尺，晚一秒才重畫 ⇒ 那一整塊（1 km）的地面與樹被粗網格的影子蓋住、暗一下（Tim 2026-10-20「只動了一點點陰影就完全不同」）。
@@ -312,48 +312,72 @@ function bedDryPut(k, C, fine) {
 }
 /** 遮罩的貼圖（R8、雙線性，BED_SEA_SP 公尺一格、蓋整個海域的窗；1 ＝ 不畫海）：有塊的遮罩、地面（城鎮整地）變了、換了窗 ⇒ 重建；一格都不用遮 ⇒ 關（uDryOn 0）。
  *  兩種都遮：
- *  1. 跟海斷開的低地（Tim 2026-10-21「是否可以用遮罩或其他方式 避免海水跑到岸上太深位置(且已跟海斷開) 保留沿岸的浪」）：每一格照地形網格用的那一份高度
- *     （townHv：城鎮整過地的；圖上那兩塊是城裡被壓到快貼海面的地，浪一高就冒出來）取最近的點，低於 BED_SEA_LOW 公尺 ＝ 海水上得來的「低地」；
- *     從窗的邊上的低地往裡淹（四鄰），淹得到的才是海 ⇒ 沿岸照舊有海、有浪；淹不到的低地 ⇒ 遮，旁邊高的那一圈也遮（雙線性的交界不會在坑邊露出一條海）。
- *     沒載進來的塊當成海（遠處、窗外照舊）。
+ *  1. 跟海斷開的低地（Tim 2026-10-21「是否可以用遮罩或其他方式 避免海水跑到岸上太深位置(且已跟海斷開) 保留沿岸的浪」；圖上是城裡被整地壓到快貼海面的地）：
+ *     地面照地形網格用的那一份（townHv：城鎮整過地的），每一格取最近的點。
+ *     · 海：只走「水」的格子（地面 < BED_SEA_WET）—— 從窗邊、從沒有陸地的塊（整塊都是海，不逐格算）往裡淹（四鄰），淹得到的才是海。
+ *       ⛔ 不能走「低地」：海灘本身就低於幾公尺，走得過去的話城裡的坑都會經過海灘「連到海」（2026-10-21 第一版就是這樣，一格都沒遮到）。
+ *     · 岸：跟海連著的水邊往裡 BED_SEA_BAND 格以內、地面 < BED_SEA_LOW 的低地 ⇒ 照舊畫海（浪沖得上海灘）。
+ *     · 其他的低地（再往裡的、沒跟海連著的水坑）⇒ 遮；它旁邊高的那一圈也遮（雙線性的交界不會在坑邊露出一條海）。
+ *     只在有陸地的塊裡逐格算（沒有陸地的塊整塊當成海、跳過）⇒ 時間跟陸地的面積走，不跟整個窗。
  *  2. 以前那一種（BEDDRY.c，32 m 一格）：「不是海（陸地或內陸水）而且低於 0」的點、整格都不是海 ⇒ 遮（恩里基約湖；跟海連著的低於 0 的陸地也算）。 */
-var BED_SEA_SP = 8, BED_SEA_LOW = 4;
+var BED_SEA_SP = 8, BED_SEA_LOW = 4, BED_SEA_WET = 0, BED_SEA_BAND = 2;
 function bedDryTex() {
   var Dy = BEDDRY; if (TOWNS.ver !== Dy.tver) { Dy.tver = TOWNS.ver; Dy.dirty = true; }   // 城鎮換了 ⇒ 整地換了
   if (!Dy.dirty || Dy.tex && bedBusy()) return;
-  var t0 = performance.now(), A = BED.A, S = BED_SEA_SP, GS = A.chunk / S, G = A.chunk / BED_DRY_SP, ks = Object.keys(Dy.src);
+  var t0 = performance.now(), A = BED.A, S = BED_SEA_SP, GS = A.chunk / S, G = A.chunk / BED_DRY_SP;
   Dy.dirty = false; Dy.on = false; Dy.cells = 0; Dy.cut = 0;
-  var nx = A.x[1] - A.x[0] + 1, ny = A.y[1] - A.y[0] + 1, Wd = nx * GS, Hd = ny * GS, N = Wd * Hd, landy = false;
-  ks.forEach(function (k) { var C = Dy.src[k]; if (C && C.max0 > 0.3) landy = true; });
-  if (!landy && !Object.keys(Dy.c).some(function (k) { return Dy.c[k]; })) return;   // 沒有陸地 ⇒ 不用遮（海上的海域整段跳過，畫面逐位元組不變）
-  var low = new Uint8Array(N).fill(1), T = new Uint8Array(N);
-  ks.forEach(function (k) {                                              // 每一格的地面：照那一塊最近的取樣點（塊的點距 4 m、中等塊 8～16 m）
-    var C = Dy.src[k], c = k.split('_').map(Number), ci = c[0] - A.x[0], cj = c[1] - A.y[0]; if (!C || ci < 0 || cj < 0 || ci >= nx || cj >= ny) return;
-    var hv = townHv(C), n = C.n, f = S / C.step;
-    for (var b = 0; b < GS; b++) {
-      var j = Math.min(n - 1, Math.round((b + 0.5) * f)), row = (cj * GS + b) * Wd + ci * GS;
-      for (var a2 = 0; a2 < GS; a2++) low[row + a2] = hv[j * n + Math.min(n - 1, Math.round((a2 + 0.5) * f))] < BED_SEA_LOW * 10 ? 1 : 0;
+  var nx = A.x[1] - A.x[0] + 1, ny = A.y[1] - A.y[0] + 1, Wd = nx * GS, Hd = ny * GS, N = Wd * Hd, LC = [];
+  Object.keys(Dy.src).forEach(function (k) {                             // 有陸地的塊（地面最高 > 0）
+    var C = Dy.src[k], c = k.split('_').map(Number), ci = c[0] - A.x[0], cj = c[1] - A.y[0];
+    if (C && C.max0 > 0 && ci >= 0 && cj >= 0 && ci < nx && cj < ny) LC.push({ C: C, hv: townHv(C), ci: ci, cj: cj });
+  });
+  var old = Object.keys(Dy.c).filter(function (k) { return Dy.c[k]; });
+  if (!LC.length && !old.length) return;                                 // 沒有陸地 ⇒ 不用遮（海上的海域整段跳過，畫面逐位元組不變）
+  var inL = new Uint8Array(N), wet = new Uint8Array(N), low = new Uint8Array(N), sea = new Uint8Array(N), T = new Uint8Array(N), Q = [], qh = 0, o, x, y, q;
+  LC.forEach(function (L) {                                              // 每一格的地面：照那一塊最近的取樣點（細的塊 4 m、中等塊 8～16 m）
+    var C = L.C, hv = L.hv, n = C.n, f = S / C.step, Wl = BED_SEA_WET * 10, Ll = BED_SEA_LOW * 10;
+    for (var b2 = 0; b2 < GS; b2++) {
+      var j = Math.min(n - 1, Math.round((b2 + 0.5) * f)), row = (L.cj * GS + b2) * Wd + L.ci * GS;
+      for (var a2 = 0; a2 < GS; a2++) { var h = hv[j * n + Math.min(n - 1, Math.round((a2 + 0.5) * f))]; o = row + a2; inL[o] = 1; if (h < Ll) low[o] = 1; if (h < Wl) wet[o] = 1; }
     }
   });
-  var sea = new Uint8Array(N), Q = new Int32Array(N), qh = 0, qt = 0, o, x, y;
-  function seed(o2) { if (low[o2] && !sea[o2]) { sea[o2] = 1; Q[qt++] = o2; } }
-  for (x = 0; x < Wd; x++) { seed(x); seed((Hd - 1) * Wd + x); }
-  for (y = 0; y < Hd; y++) { seed(y * Wd); seed(y * Wd + Wd - 1); }
-  while (qh < qt) { o = Q[qh++]; x = o % Wd; if (x > 0) seed(o - 1); if (x < Wd - 1) seed(o + 1); if (o >= Wd) seed(o - Wd); if (o < N - Wd) seed(o + Wd); }
-  for (o = 0; o < N; o++) if (low[o] && !sea[o]) { T[o] = 255; Dy.cut++; }
-  if (Dy.cut) for (y = 0; y < Hd; y++) for (x = 0; x < Wd; x++) {        // 旁邊高的那一圈（八鄰）也遮
-    o = y * Wd + x; if (low[o] || T[o]) continue;
-    for (var dy = -1; dy <= 1 && !T[o]; dy++) for (var dx = -1; dx <= 1; dx++) { var X = x + dx, Y = y + dy; if (X < 0 || Y < 0 || X >= Wd || Y >= Hd) continue; var q = Y * Wd + X; if (low[q] && !sea[q]) { T[o] = 128; break; } }
-  }
-  Object.keys(Dy.c).forEach(function (k) {                               // 以前那一種（32 m 一格）⇒ 那一格蓋的 4×4 格
-    var D = Dy.c[k]; if (!D) return; var c = k.split('_').map(Number), ci = c[0] - A.x[0], cj = c[1] - A.y[0], r = BED_DRY_SP / S; if (ci < 0 || cj < 0 || ci >= nx || cj >= ny) return;
-    for (var b = 0; b < G; b++) for (var a3 = 0; a3 < G; a3++) if (D[b * G + a3]) for (var v = 0; v < r; v++) for (var u = 0; u < r; u++) T[(cj * GS + b * r + v) * Wd + ci * GS + a3 * r + u] = 255;
+  function outside(X, Y) { return X < 0 || Y < 0 || X >= Wd || Y >= Hd || !inL[Y * Wd + X]; }   // 窗外、沒有陸地的塊 ⇒ 海
+  LC.forEach(function (L) {                                              // 種子：碰到「外面」（海）的水格
+    for (var b3 = 0; b3 < GS; b3++) for (var a3 = 0; a3 < GS; a3++) {
+      x = L.ci * GS + a3; y = L.cj * GS + b3; o = y * Wd + x; if (!wet[o]) continue;
+      if (outside(x - 1, y) || outside(x + 1, y) || outside(x, y - 1) || outside(x, y + 1)) { sea[o] = 1; Q.push(o); }
+    }
   });
-  for (o = 0; o < N; o++) if (T[o]) Dy.cells++;
+  function go(o2) { if (inL[o2] && wet[o2] && !sea[o2]) { sea[o2] = 1; Q.push(o2); } }
+  while (qh < Q.length) { o = Q[qh++]; x = o % Wd; if (x > 0) go(o - 1); if (x < Wd - 1) go(o + 1); if (o >= Wd) go(o - Wd); if (o < N - Wd) go(o + Wd); }
+  // 岸：從海（連著的水格、陸地塊外面）往裡 BED_SEA_BAND 格的低地 ⇒ 照舊畫海（sea 標 2）
+  var front = Q.slice(); LC.forEach(function (L) {
+    for (var b4 = 0; b4 < GS; b4++) for (var a4 = 0; a4 < GS; a4++) {
+      x = L.ci * GS + a4; y = L.cj * GS + b4; o = y * Wd + x; if (sea[o] || !low[o]) continue;
+      if (outside(x - 1, y) || outside(x + 1, y) || outside(x, y - 1) || outside(x, y + 1)) { sea[o] = 2; front.push(o); }
+    }
+  });
+  for (var step = 0; step < BED_SEA_BAND; step++) {
+    var nf = []; front.forEach(function (o3) { var X = o3 % Wd; [X > 0 ? o3 - 1 : -1, X < Wd - 1 ? o3 + 1 : -1, o3 - Wd, o3 + Wd].forEach(function (o4) { if (o4 >= 0 && o4 < N && inL[o4] && low[o4] && !sea[o4]) { sea[o4] = 2; nf.push(o4); } }); });
+    front = nf;
+  }
+  LC.forEach(function (L) {                                              // 遮：剩下的低地；再一圈：旁邊高的（八鄰）
+    for (var b5 = 0; b5 < GS; b5++) for (var a5 = 0; a5 < GS; a5++) { o = (L.cj * GS + b5) * Wd + L.ci * GS + a5; if (low[o] && !sea[o]) { T[o] = 255; Dy.cut++; } }
+  });
+  if (Dy.cut) LC.forEach(function (L) {
+    for (var b6 = 0; b6 < GS; b6++) for (var a6 = 0; a6 < GS; a6++) {
+      x = L.ci * GS + a6; y = L.cj * GS + b6; o = y * Wd + x; if (low[o] || T[o]) continue;
+      for (var dy = -1; dy <= 1 && !T[o]; dy++) for (var dx = -1; dx <= 1; dx++) { var X2 = x + dx, Y2 = y + dy; if (X2 < 0 || Y2 < 0 || X2 >= Wd || Y2 >= Hd) continue; q = Y2 * Wd + X2; if (T[q] === 255) { T[o] = 128; break; } }
+    }
+  });
+  old.forEach(function (k) {                                             // 以前那一種（32 m 一格）⇒ 那一格蓋的 4×4 格
+    var D = Dy.c[k], c = k.split('_').map(Number), ci = c[0] - A.x[0], cj = c[1] - A.y[0], r = BED_DRY_SP / S; if (ci < 0 || cj < 0 || ci >= nx || cj >= ny) return;
+    for (var b7 = 0; b7 < G; b7++) for (var a7 = 0; a7 < G; a7++) if (D[b7 * G + a7]) for (var v = 0; v < r; v++) for (var u = 0; u < r; u++) T[(cj * GS + b7 * r + v) * Wd + ci * GS + a7 * r + u] = 255;
+  });
+  for (o = 0; o < N; o++) if (T[o]) { T[o] = 255; Dy.cells++; }
   Dy.ms = +(performance.now() - t0).toFixed(1); bedSpent(t0);
   if (!Dy.cells) return;
   if (!Dy.tex) { Dy.tex = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, Dy.tex); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE); }
-  for (o = 0; o < N; o++) if (T[o]) T[o] = 255;
   gl.bindTexture(gl.TEXTURE_2D, Dy.tex); gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1); gl.texImage2D(gl.TEXTURE_2D, 0, gl.R8, Wd, Hd, 0, gl.RED, gl.UNSIGNED_BYTE, T); gl.pixelStorei(gl.UNPACK_ALIGNMENT, 4); gl.bindTexture(gl.TEXTURE_2D, null);
   Dy.on = true; Dy.r = [A.x[0] * A.chunk - BED.ax, A.y[0] * A.chunk - BED.az, Wd * S, Hd * S];
   Dy.builds++; Dy.ms = +(performance.now() - t0).toFixed(1);
