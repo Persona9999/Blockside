@@ -614,7 +614,7 @@ function callHands(sh) {
       idle.splice(bi, 1); if (!legs) continue;
       if (q.cell !== undefined) legs.push({ w: q.lv, to: q.cell });
       if (q.kind === 'helm' || q.kind === 'oar') { var si = navSnap(NV.levels[q.lv].N, q.spot, 4); if (si < 0) continue; legs.push({ w: q.lv, to: si }); q.who.relieved = true; }
-      H.job = { kind: q.kind, key: q.key, deck: q.deck, side: q.side, lv: q.lv, reg: q.reg, spot: q.spot, med: q.med, who: q.who, bed: q.bed, pump: q.pump, oar: q.oar, fire: q.fire, mess: q.mess, gal: q.gal }; medTake(q);   // mess／gal：伙夫領飯的那一桌、那一座爐灶（45_galley.js）
+      H.job = { kind: q.kind, key: q.key, deck: q.deck, side: q.side, lv: q.lv, reg: q.reg, spot: q.spot, med: q.med, who: q.who, bed: q.bed, move: q.move, pump: q.pump, oar: q.oar, fire: q.fire, mess: q.mess, gal: q.gal }; medTake(q);   // mess／gal：伙夫領飯的那一桌、那一座爐灶（45_galley.js）
       H.legs = legs; H.wp = null; c.moving = false; NV.called++;
     }
   });

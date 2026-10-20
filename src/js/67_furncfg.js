@@ -17,6 +17,7 @@ var FURN_ITEMS = [
   { k: 'crew', name: '要幾人搖', lim: [1, 12], step: 1, unit: ' 人', int: true, has: function (f) { return furnIsPump(f) && f.power !== 'steam'; }, note: '抽水量 × 到崗 ÷ 這個數；艙裡有水才從預備水手派' },
   { k: 'cap', name: '全船上限', lim: [0, 300], step: 1, unit: ' 噸／分', int: true, has: furnIsPump, note: '同一種抽水機全船加總最多抽多少（0 ＝ 不限）' },
   { k: 'hold', name: '容納', lim: [1, 4], step: 1, unit: ' 人', int: true, has: function (f) { return f.hold !== undefined; }, note: '一張床躺幾個傷員' },
+  { k: 'battle', name: '開打時能用', lim: [0, 1], step: 1, unit: '', int: true, has: function (f) { return f.battle !== undefined; }, note: '1 ＝ 交戰中也收傷員（手術台：海員箱拼的台子）；0 ＝ 砲停了才收（醫療艙 calm 秒內海上沒人開砲）' },
   { k: 'buff.heal', name: '治療速度加成', lim: [0, 1], step: 0.05, pct: true, has: function (f) { return !!(f.buff && f.buff.heal !== undefined); }, note: '同一間加總，上限照房間類型（醫療艙 60%）' },
   { k: 'staff.surgeon', name: '配幾位船醫', lim: [0, 4], step: 1, unit: ' 人', int: true, has: function (f) { return !!(f.staff && f.staff.surgeon !== undefined); }, note: '設施配員：開戰時走得到的每一件配這麼多位船醫，站在旁邊（全船上限在船隻配置頁）' },
   { k: 'staff.carpenter', name: '配幾位木匠', lim: [1, 4], step: 1, unit: ' 人', int: true, has: function (f) { return !!(f.staff && f.staff.carpenter !== undefined); }, note: '設施配員：每張配這麼多位木匠，開戰時生在台旁（全船上限在船隻配置頁）' },
