@@ -161,8 +161,10 @@ var SHADOW_GLSL = 'uniform highp sampler2DArrayShadow uShA; uniform mat4 uShM[' 
   'uniform float uCsD[' + CSM_MAX + '], uCsO[' + CSM_MAX + '], uCsB[' + CSM_MAX + ']; uniform vec3 uCsE, uCsF;\n' +
   'float shOne(int k, vec3 w, float bz){ vec4 p=uShM[k]*vec4(w,1.0); vec3 q=p.xyz*0.5+0.5;\n' +
   '  if(q.x<0.002||q.y<0.002||q.x>0.998||q.y>0.998||q.z>0.999) return 1.0; q.z-=bz; float L=float(k);\n' +
-  '  if(uShOn<1.5) return texture(uShA,vec4(q.xy,L,q.z));\n' +
-  '  float e=uShPx*0.9; return 0.25*(texture(uShA,vec4(q.xy+vec2(-e,-e),L,q.z))+texture(uShA,vec4(q.xy+vec2(e,-e),L,q.z))+texture(uShA,vec4(q.xy+vec2(-e,e),L,q.z))+texture(uShA,vec4(q.xy+vec2(e,e),L,q.z))); }\n' +
+  // 柔邊（PCF；其他遊戲常見的做法，Tim 2026-10-20「有時候陰影會閃爍」「是否有辦法參考其他遊戲作法改善」）：每一點是硬體的 2×2 比較（雙線性）；
+  //   低 ＝ 2×2 點（相隔 1 格 ⇒ 約 3×3 格的軟邊）、高 ＝ 3×3 點（約 4×4 格）⇒ 船在格子上移動時影子的邊不會一格一格地爬
+  '  float e=uShPx; if(uShOn<1.5) return 0.25*(texture(uShA,vec4(q.xy+vec2(-0.5,-0.5)*e,L,q.z))+texture(uShA,vec4(q.xy+vec2(0.5,-0.5)*e,L,q.z))+texture(uShA,vec4(q.xy+vec2(-0.5,0.5)*e,L,q.z))+texture(uShA,vec4(q.xy+vec2(0.5,0.5)*e,L,q.z)));\n' +
+  '  float s=0.0; for(int y=-1;y<=1;y++) for(int x=-1;x<=1;x++) s+=texture(uShA,vec4(q.xy+vec2(float(x),float(y))*e,L,q.z)); return s/9.0; }\n' +
   'float shAt(int k, vec3 w, vec3 n){ return shOne(k,w+n*uCsO[k],uCsB[k]); }\n' +
   'float shadowK(vec3 w, vec3 n){ if(uShOn<0.5||uCsN<1) return uSunK; float d=dot(w-uCsE,uCsF); int k=-1;\n' +
   ' for(int i=0;i<' + CSM_MAX + ';i++){ if(i>=uCsN) break; if(d<uCsD[i]){ k=i; break; } }\n' +
