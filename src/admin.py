@@ -11,6 +11,7 @@
 #     一鍵：雙擊 Blockside 根目錄的 admin.cmd（＝ serve --open）
 #   python -I admin.py check                      驗 config/game.json
 #   python -I admin.py build                      照設定重建 ../index.html（Blockside 根目錄 ＝ GitHub Pages 的首頁）
+#   python -I admin.py build --code [--base <版>]  只重建程式（入口 index.html；船檔 ships/ 照舊）—— 沒有 VoxelKit/_cache 的機器用，船變了就擋（見「只重建程式」）
 #   python -I admin.py import --work <雕刻作品 ID> --id <船的代號> --name <名字>   匯入新船（匯出 .vxk、登記、重建）
 #   python -I admin.py metasync --id <船的代號>   只同步 meta 與固定點（作品改了 meta、加了固定點，格子不動；TASK-0572）
 #   python -I admin.py reimport --id <船的代號> [--work <作品 ID>]                 重新匯入（換新的 .vxk、印跟上一版的差別、重建）
@@ -1871,14 +1872,20 @@ def src_of(html):
     return json.loads(m.group(1)) if m else None
 
 
-def src_stamp():
-    """建置最後一步：照工作區算來源清單、接在成品的 <meta charset> 同一行後面（不多一行 ⇒ 錯誤訊息的行號照舊；charset 仍在前 1024 位元組）。"""
-    M = src_manifest(work_read)
-    html = SRC_RE.sub('', open(OUT, encoding='utf-8').read())
+def src_stamp_html(html, M):
+    """來源清單 M 接在成品的 <meta charset> 同一行後面（舊的先拿掉；不多一行 ⇒ 錯誤訊息的行號照舊；charset 仍在前 1024 位元組）。"""
+    html = SRC_RE.sub('', html)
     at = html.index('<meta charset="utf-8">') + len('<meta charset="utf-8">')
     tag = '<script type="application/json" id="%s">%s</script>' % (SRC_EL, json.dumps(M, ensure_ascii=False, sort_keys=True, separators=(',', ':')))
+    return html[:at] + tag + html[at:]
+
+
+def src_stamp():
+    """建置最後一步：照工作區算來源清單、記進成品（src_stamp_html）。"""
+    M = src_manifest(work_read)
+    html = src_stamp_html(open(OUT, encoding='utf-8').read(), M)
     with open(OUT, 'w', encoding='utf-8', newline='\n') as f:
-        f.write(html[:at] + tag + html[at:])
+        f.write(html)
     return ['✓ 成品記下來源：指紋 %s（%d 支檔；python -I src/admin.py srccheck 對得回來）' % (M['fp'], len(M['files']))]
 
 
@@ -2028,6 +2035,123 @@ def act_build(pack=True, single=False):   # pack：壓縮版（預設，TASK-058
     else:
         ships_sync(os.path.dirname(OUT), {})                 # 原格式（船內嵌）⇒ ships/ 裡的船檔都是舊的
     return log + src_stamp()
+
+
+# ───────────────────────── 只重建程式（build --code：沒有 VoxelKit/_cache 的機器；2026-10-20） ─────────────────────────
+# 拆檔之後船檔 ships/ 只跟船有關：程式、版面、設定、素材改了，船檔一個位元組都不用變 ⇒ 沒有 _cache（cache_guard 擋下、整份建置跑不了）的機器
+#   也照正式建置的同一條路重建入口：vxk_inline.py 內嵌 ⇒ js_strip_html 去註解（語法樹驗算）⇒ 記來源指紋；
+#   只差在船標籤先換掉 —— 第一艘換成成品裡現在那份船清單、其他拿掉（換行留著），跟 pack_html 拆檔寫出來的一樣（清單在第一艘前面、船標籤拿掉）。
+# 兩道關，過不了就擋（成品不動）：
+#   ① 船沒變：template 的船標籤跟設定一致；船隻清單（代號、標籤、.vxk、改裝船的原船）跟成品是照它建的那一版一樣、順序跟成品的船清單一樣；
+#      每艘 .vxk 的指紋跟成品記的一樣；清單上的船檔都在、雜湊對得上 ⇒ 船檔照舊就是對的。
+#   ② 這個做法 ＝ 正式建置：成品是照它建的那一版（成品記的來源指紋 ＝ 那一版的來源；預設試 HEAD、合併中再試 MERGE_HEAD，或 --base 指定）的來源
+#      照同一條路重做一次，要跟現在的成品逐位元組相同 —— 建置程式（vxk_inline.py、去註解、拆檔）改過、或成品不是這樣建的 ⇒ 對不上 ⇒ 要在有 _cache 的機器整份建置。
+#   都過了才照工作區的來源寫 index.html（跟現在一樣 ⇒ 不寫），最後 srccheck。
+CODE_VXK_RX = re.compile(r'<script\s+type="application/x-vxk"\s+id="([^"]+)"\s+src="([^"]+)"\s*>\s*</script>')   # 同 vxk_inline.py 的 VXK_RE
+
+
+def code_html(read, ships_tag, log=None):
+    """read（根目錄的相對路徑 ⇒ bytes｜None）讀得到的那一份來源，走正式建置同一條路、船標籤換成 ships_tag ⇒ (入口全文：去好註解、記好來源指紋, 來源清單)。"""
+    import tempfile
+    M = src_manifest(read)
+    with tempfile.TemporaryDirectory() as td:
+        for p, fp in M['files'].items():                     # template 與它引用的每一支檔照原位元組放進暫存資料夾（.vxk 不要；不存在的 optional 素材 vxk_inline 自己處理）
+            if fp.startswith('lock ') or fp == '（不存在）':
+                continue
+            f = os.path.join(td, *p.split('/'))
+            os.makedirs(os.path.dirname(f), exist_ok=True)
+            with open(f, 'wb') as fh:
+                fh.write(read(p))
+        n = [0]
+
+        def tag(mt):
+            n[0] += 1
+            return ships_tag if n[0] == 1 else ''
+        tpl = CODE_VXK_RX.sub(tag, read('src/template.html').decode('utf-8'))
+        tf, of = os.path.join(td, 'src', 'template.html'), os.path.join(td, 'index.html')
+        with open(tf, 'w', encoding='utf-8', newline='') as fh:
+            fh.write(tpl)
+        code, out = run([sys.executable, '-I', INLINE, tf, of])
+        if code != 0:
+            raise Fail(out.strip() + '\n✗ 內嵌失敗（exit %d）' % code)
+        L = js_strip_html(of)
+        if log is not None:
+            log += L
+        html = open(of, encoding='utf-8', newline='').read()
+    return src_stamp_html(html, M), M
+
+
+def code_base(fp, base=None):
+    """成品是照哪一版建的：來源指紋 ＝ fp 的那一版（--base 給的；不給 ⇒ HEAD，合併中再試 MERGE_HEAD）；都不是 ⇒ None。"""
+    revs = [base] if base else ['HEAD'] + (['MERGE_HEAD'] if run(['git', 'rev-parse', '-q', '--verify', 'MERGE_HEAD'], cwd=ROOT)[0] == 0 else [])
+    for rev in revs:
+        r = GitRead(rev + ':')
+        try:
+            if src_manifest(r)['fp'] == fp:
+                return rev
+        except Fail:
+            pass
+        finally:
+            r.close()
+    return None
+
+
+def act_build_code(base=None):
+    """build --code：只重建程式（入口 index.html；船檔 ships/ 照舊）—— 沒有 VoxelKit/_cache 的機器用；兩道關見上面。"""
+    cfg = load()
+    E = validate(cfg)
+    if E:
+        raise Fail('設定不合法，不建置：\n' + '\n'.join('  ✗ ' + e for e in E))
+    full = ' ⇒ 要整份建置：在有 VoxelKit/_cache 的機器 python -I src/admin.py build'
+    t = open(TPL, encoding='utf-8').read()
+    a, b = t.find(SHIPS_A), t.find(SHIPS_B)
+    if a < 0 or b < a or t[a + len(SHIPS_A):b] != ship_tags(cfg):
+        raise Fail('template.html 的船標籤跟 config/game.json 的船隻清單不一致' + full)
+    html0 = open(OUT, encoding='utf-8', newline='').read()
+    m, idx, have = SHIPS_TAG_RX.search(html0), ships_index(html0), src_of(html0)
+    if not m or not idx:
+        raise Fail('成品不是拆檔的（沒有船清單 #%s）⇒ --code 只換得了拆檔成品的入口' % SHIPS_EL)
+    if not have:
+        raise Fail('成品沒有來源清單 ⇒ 不知道它是照哪一版建的' + full)
+    els = [s['el'] for s in cfg['ships']]
+    if els != list(idx):
+        raise Fail('船隻清單（%s）跟成品的船清單（%s）不一樣%s' % ('、'.join(els), '、'.join(idx), full))
+    for el in idx:
+        ship_data(html0, el)                                    # 船檔都在、內容跟雜湊對得上（不然 Fail）
+    want = src_manifest(work_read)
+    vx = lambda F: {k: v for k, v in F.items() if k.endswith('.vxk')}
+    bad = sorted(k for k in set(vx(have['files'])) | set(vx(want['files'])) if have['files'].get(k) != want['files'].get(k))
+    if bad:
+        raise Fail('.vxk 的指紋跟成品記的不一樣（%s）%s' % ('、'.join(posixpath.basename(k) for k in bad), full))
+    rev = code_base(have['fp'], base)
+    if not rev:
+        raise Fail('成品的來源指紋 %s 對不到 %s 的來源 ⇒ 用 --base <版> 指定成品是照哪一版建的' % (have['fp'], base or 'HEAD／MERGE_HEAD'))
+    ships_tag = m.group(0) + '\n'
+
+    def sig(c):
+        byid = {s['id']: s['el'] for s in c['ships']}
+        return [(s['id'], s['el'], s['vxk'], byid.get(s.get('variant_of'))) for s in c['ships']]
+    r = GitRead(rev + ':')
+    try:
+        if sig(json.loads(r('src/config/game.json').decode('utf-8'))) != sig(cfg):
+            raise Fail('船隻清單（代號、標籤、.vxk、改裝船的原船）跟 %s 不一樣%s' % (rev, full))
+        h0, _ = code_html(r, ships_tag)
+    finally:
+        r.close()
+    if h0 != html0:
+        i = next((k for k in range(min(len(h0), len(html0))) if h0[k] != html0[k]), min(len(h0), len(html0)))
+        raise Fail('照 %s 的來源走同一條路重做，跟現在的成品不一樣（第 %d 行起）⇒ 建置程式改過、或成品不是這樣建的%s' % (rev, html0.count('\n', 0, i) + 1, full))
+    log = bundle_names_check() + owner_check()
+    log.append('✓ 船沒變：%d 艘的標籤、.vxk 指紋、改裝船的原船都跟 %s 一樣，船檔都在、雜湊對得上' % (len(idx), rev))
+    log.append('✓ 照 %s 的來源走同一條路重做 ⇒ 跟現在的成品逐位元組相同（這個做法 ＝ 正式建置）' % rev)
+    h1, M1 = code_html(work_read, ships_tag, log)
+    if h1 == html0:
+        log.append('· 工作區的來源跟 %s 一樣 ⇒ 成品不用換' % rev)
+    else:
+        with open(OUT, 'w', encoding='utf-8', newline='') as f:
+            f.write(h1)
+        log.append('✓ 只重建程式：入口 index.html 換了（來源指紋 %s → %s）；船檔 ships/ 照舊 %d 個' % (have['fp'], M1['fp'], len(idx)))
+    return log + act_srccheck()
 
 # ───────────────────────── 壓縮版成品（預設；build --raw ＝ 原格式。Tim 2026-10-14，TASK-0583：雕刻作品與匯出的 .vxk 格式不變，匯進遊戲才壓縮） ─────────────────────────
 # 量過（六艘、壓縮後）：格子合計約 0.87 MB，模型網格（砲、燈、舵輪…的三角形，header 的 rig.meshes）約 3.50 MB ⇒ 大頭是網格：
@@ -3271,6 +3395,8 @@ def main():
     s = sp.add_parser('build')
     s.add_argument('--raw', action='store_true', help='原格式（不壓縮、船內嵌）；預設是壓縮版：每艘船的模型網格收成它自己的池子（同一份只存一次、頂點去重＋差值），_cache 不動')
     s.add_argument('--single', action='store_true', help='壓縮版但不拆檔：船照舊內嵌在 index.html（一個檔；封存、要單一檔案的地方用）。預設拆成入口＋ships/')
+    s.add_argument('--code', action='store_true', help='只重建程式：入口 index.html 照工作區的來源重建、船檔 ships/ 照舊 —— 沒有 VoxelKit/_cache 的機器用；船變了、或照同一條路重做不出現在的成品 ⇒ 擋下')
+    s.add_argument('--base', help='--code：成品是照哪一版建的（不給 ⇒ HEAD，合併中再試 MERGE_HEAD）')
     s = sp.add_parser('snapshot', help='某一版的成品（入口＋它清單上的船檔）取出到一個資料夾：拆檔之後 git show <版本>:index.html 只拿得到入口（對拍的對照組用這個）')
     s.add_argument('rev', help='commit、分支名')
     s.add_argument('to', help='資料夾（會寫 index.html、ships/）')
@@ -3326,7 +3452,11 @@ def main():
         elif o.op == 'shipcheck':
             log = act_shipcheck(o.id)
         elif o.op == 'build':
-            log = act_build(not o.raw, o.single)
+            if o.code and (o.raw or o.single):
+                raise Fail('--code 不能跟 --raw、--single 一起用（--code 只換拆檔成品的入口）')
+            if o.base and not o.code:
+                raise Fail('--base 只給 --code 用')
+            log = act_build_code(o.base) if o.code else act_build(not o.raw, o.single)
         elif o.op == 'snapshot':
             log = act_snapshot(o.rev, o.to)
         elif o.op == 'verify':
