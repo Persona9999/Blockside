@@ -915,6 +915,7 @@ Tim 2026-10-17：「船隻的主題曲 當操作船隻有主題曲時背景音�
 - **設定存檔**（`69_prefs.js`，localStorage；Tim 2026-10-13）：細節設定、船隻設定（照船型）、砲長、選的兩艘船、彈種、自動開砲、帆與繩的物理、主選單的模式／距離／航行。只存跟預設不一樣的項目 ⇒ 之後改預設值，沒動過的玩家也吃得到。壓艙物連那艘船的 checksum 一起存，船重匯過就不套。
   - 網址參數優先：網址有的那一項照網址；網址帶了任何設定參數 ⇒ 這一場只讀不寫。
   - **從外部開戰**（Blocksail 的開戰設定，2026-10-18）：`?blue=我艦,友艦…&red=敵艦,…`（或 `?ship=我艦,敵艦`）、`?mode=pve|eve|sandbox|build|sail`（一般遊玩也認，主選單有的玩法才算；`sail` 航海只生我艦、停在原點，`?hdg=<度>` 船頭朝哪）、`?weather=clear|storm|maelstrom`、`?dist=<公尺>`，加 `?start=1` ⇒ 船載好就直接開戰、不停在主選單（70_flow.js startWhenReady）。`mode`、`start` 也在 PREF_Q 裡 ⇒ 這一場不寫存檔。`?demo` 與 `?prefs=0` 不讀不寫（縮圖不受存檔影響）。
+  - **只開選船彈窗**（Blocksail 地球儀的「🚢 選船」，2026-10-20）：`?pick=@host&cur=<現在那一型>&title=<標題>`，開在 iframe（或 window.open）裡 ⇒ 不開主選單、不載編成、不跑畫面迴圈，頁面透明、只留選船彈窗（`72_shippick.js` pickBoot／pickMeasure、template.html `html.pickonly`）。選一艘 ⇒ 載那一型、回外面那一頁 `{ bspick: 'picked', id, name, knots, draft, loa, play, img, imgU, imgV, imgM }`（img ＝ 羅盤上那張俯視圖（navImg）的 PNG data URL、imgU／imgV 船的中心在圖上哪一點、imgM 圖上一點幾公尺；knots ＝ 卡片上最快的航速；draft ＝ 開戰時吃水 m（船底最低點到水面，照開戰時的重量 liftFor）；loa ＝ 外框全長 m）；另有 `ready`、`measuring { id, name }`、`cancel`、`error { id, msg }`。
   - 格式帶版本號；看不懂的版本或壞掉的 JSON ⇒ 照預設，而且不蓋掉它（玩家動了設定才寫）；型別不對的那一項不套、界外的夾回範圍。
   - 「重設預設值」⇒ 細節設定回預設，存檔只剩主選單的選擇；全部是預設 ⇒ 刪掉那一筆。
   - 畫廊彈窗（sandbox iframe）裡碰不到 localStorage ⇒ 照預設跑，讀數寫「存不了」。

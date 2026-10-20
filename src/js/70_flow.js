@@ -29,7 +29,7 @@ function flowMode(m) { MODE = m; }
 
 /** ?start=1（外部開戰用：Blocksail 的「一鍵開戰」，2026-10-18）：主選單的艦隊都載好 ⇒ 直接開戰、不停在主選單（90_main.js 載完呼叫）。
  *  其他照網址：?blue=…&red=…（或 ?ship=我艦,敵艦）、?mode=、?weather=、?dist=…；帶了這些 ⇒ 這一場不寫存檔（69_prefs.js PREF_Q）。 */
-function startWhenReady() { Promise.all(fleetHulls().map(loadHull)).then(function () { if (!RUNNING && fleetHulls().every(function (h) { return HULLT[h]; })) { start(); if (BED && BED.host) { camTransSet('in'); bedHostSay('started', function () { return { hdg: camTransHdg() }; }); } } }).catch(function (e) { console.error(e); }); }
+function startWhenReady() { Promise.all(fleetHulls().map(loadHull)).then(function () { if (!RUNNING && fleetHulls().every(function (h) { return HULLT[h]; })) { start(); if (BED && BED.host) { camTransSet('in'); bedHostSay('started', function () { var me = SHIPS[PLAYER_I], c = me ? shipCenter(me) : null; return { hdg: camTransHdg(), x: c ? c[0] : null, z: c ? c[2] : null, shipHdg: me ? (Math.atan2(Math.cos(me.yaw), Math.sin(me.yaw)) * 180 / Math.PI + 360) % 360 : null }; }); } } }).catch(function (e) { console.error(e); }); }   // started 的 x、z、shipHdg：我艦在哪、船頭朝哪（同 'left'）⇒ 地球儀上的船移過去、轉過去，跟淡進來的那艘疊在一起
 function start() {
   initAudio(); if (AC && AC.state === 'suspended') AC.resume();
   $('cover').style.display = 'none'; $('end').className = '';

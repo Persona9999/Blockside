@@ -230,6 +230,8 @@
     #spk .spkG{ gap:6px; } #spk button.spkC{ padding:6px 9px; line-height:1.35; } #spk button.spkC b{ font-size:14px; }
   }
   @media (max-width:380px){ #spk .spkR > span{ width:2.4em; } #spk .spkR button{ padding:3px 5px; } }   /* iPhone SE（375 px）：動力那一排（五顆）也擠得進一行 */
+  /* ?pick=@host（72_shippick.js）：Blocksail 地球儀的「選船」—— 只留選船彈窗、頁面透明（後面看得到地球儀） */
+  html.pickonly, html.pickonly body, html.pickonly #stage{ background:transparent; } html.pickonly body > :not(#stage), html.pickonly #stage > :not(#spk){ display:none !important; }
   #cover button{ font:inherit; font-size:15px; margin:4px; padding:7px 16px; border-radius:6px; border:1px solid rgba(255,255,255,.25); background:rgba(255,255,255,.06); color:var(--ink); cursor:pointer; }
   #cover button.on{ background:var(--gold); color:#111; border-color:var(--gold); }
   #cover button.go{ font-size:18px; padding:9px 30px; background:#b8452e; border-color:#e06a4f; }
