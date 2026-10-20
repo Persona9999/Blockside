@@ -30,8 +30,9 @@ function renderLerp(on, a) {
 function camBed(e) { if (BED && BED.A) { var b = bedHgt(e[0], e[2]) + 2; if (e[1] < b) e[1] = b; } return e; }
 // 轉場（Blocksail 地球儀 ⇄ 海戰，只有 ?map=@host；Tim 2026-10-19：「地球儀模式時攝影機拉近 … 逐漸靠近海面後就轉場戰鬥」「返回地球儀時也用轉場 鏡頭變成俯瞰 然後拉遠變回地球儀」）
 //   CAM.tr ＝ { dir: 'in' | 'out', t, dur, H, hold }：
-//   'in'  開戰時停在世界原點正上方 H 公尺、往下俯視（畫面上方 ＝ 平常的鏡頭水平朝的方向 ⇒ 降下去不用轉；'started' 帶這個方位角 hdg，地球儀轉過來對齊海岸線）；hold 到外面那一頁說 'go'，dur 秒降到平常的鏡頭。
-//   'out' 從現在的鏡頭 dur 秒拉成我艦正上方 H 公尺俯視（方向不轉）、停住；到了 ⇒ 告訴外面那一頁 'left'（我艦在哪、hdg），地球儀接著拉遠。
+//   'in'  開戰時停在世界原點正上方 H 公尺、往下俯視、北朝上（跟地球儀那一張同一個方向 ⇒ 地球儀不用轉）；hold 到外面那一頁說 'go'，dur 秒降到平常的鏡頭，降的前六成轉到平常的鏡頭水平朝的方向。
+//   'out' 從現在的鏡頭 dur 秒拉成我艦正上方 H 公尺俯視、停住，拉的後六成轉回北朝上；到了 ⇒ 告訴外面那一頁 'left'（我艦在哪），地球儀接著拉遠。
+//   轉的那一段在這一頁（Tim 2026-10-20「移除地球儀階段的旋轉 改成在進入航海場景後才轉 離場也是先轉好再回地球儀」）；以前正上方那一張照平常的鏡頭方向、地球儀轉過來對齊。
 //   只換畫面用的眼睛與矩陣：平常的鏡頭照樣每格算（CAM.trSave 存著、下一格先換回來）⇒ 降完接得上；模擬不讀 CAM。
 function camUpdate(dt) {
   if (CAM.trSave) { CAM.eye = CAM.trSave[0]; CAM.look = CAM.trSave[1]; CAM.trSave = null; }
@@ -45,10 +46,12 @@ function camTrans(dt) {
   if (T.dir === 'in') { c = [0, 0, 0]; s = 1 - s; }                       // s：1 ＝ 正上方、0 ＝ 平常的鏡頭
   else { if (!T.c) T.c = me ? shipCenter(me).slice() : [0, 0, 0]; c = T.c; }
   var eN = CAM.eye, lN = CAM.look || c, h0 = Math.max(eN[1], 5);
-  if (!T.f) { var fx = lN[0] - eN[0], fz = lN[2] - eN[2], fl = Math.hypot(fx, fz); T.f = fl > 1e-3 ? [fx / fl, fz / fl] : [0, -1]; }   // 平常的鏡頭朝哪（水平）：正上方時畫面上方就是這個方向 ⇒ 升降不轉；地球儀轉過來對齊（camTransHdg）
+  // 畫面上方朝哪（水平）：平常的鏡頭朝的方向（每格照現在的算；方位角 aF，北 0、順時針，東 ＝ +x、北 ＝ −z）⇄ 北，照 w 轉近的那一邊（w：1 ＝ 北）
+  var fx = lN[0] - eN[0], fz = lN[2] - eN[2], aF = Math.hypot(fx, fz) > 1e-3 ? Math.atan2(fx, -fz) : 0;
+  var w = T.dir === 'in' ? 1 - camTrEase(u / 0.6) : camTrEase((u - 0.4) / 0.6), aU = aF * (1 - w), g = [Math.sin(aU), -Math.cos(aU)];
   var eye = [eN[0] + (c[0] - eN[0]) * s, h0 * Math.pow(T.H / h0, s), eN[2] + (c[2] - eN[2]) * s];   // 高度照比例變（像地球儀的縮放）
   var look = [lN[0] + (c[0] - lN[0]) * s, lN[1] * (1 - s), lN[2] + (c[2] - lN[2]) * s];
-  var up = [T.f[0] * s, 1 - s, T.f[1] * s], uL = Math.hypot(up[0], up[1], up[2]); up[0] /= uL; up[1] /= uL; up[2] /= uL;   // 越往上越朝鏡頭的水平方向 ⇒ 正上方時畫面上方 ＝ 那個方向
+  var up = [g[0] * s, 1 - s, g[1] * s], uL = Math.hypot(up[0], up[1], up[2]); up[0] /= uL; up[1] /= uL; up[2] /= uL;   // 越往上越朝 g ⇒ 正上方時畫面上方 ＝ g（交接那一張 ＝ 北）
   if (s > 0.999) { eye[0] = c[0]; eye[2] = c[2] + 0.01; }
   CAM.fogK = 1 - s * (1 - Math.min(1, 0.3 / (0.0016 * T.H)));           // 拉高時霧淡掉：正上方時從那個高度往下看大約剩兩成五（照原本的霧，1,200 m 就八成五是霧，看不到海）
   CAM.trSave = [CAM.eye, CAM.look]; CAM.eye = eye; CAM.look = look;
@@ -63,8 +66,10 @@ function camTrans(dt) {
  *  · 開戰時鏡頭還停在正上方等外面那一頁說 'go'（Tim 2026-10-20「鏡頭降下前 先暫停模擬(確保重疊)」）：地球儀照 'started' 的位置與船頭擺船；
  *  · 回地球儀（'leave' 之後鏡頭往上拉，之後這一頁就關了）：'left' 報的是鏡頭開始拉時我艦在哪 ⇒ 拉的那兩秒船還在開，淡出時地球儀上的船差一截、跳一下（Tim 同一天「fadeout之前可以先把地球儀上船的位置對齊嗎」）。 */
 function camTransHeld() { return !!(CAM.tr && (CAM.tr.dir === 'in' ? CAM.tr.hold : CAM.tr.dir === 'out')); }
-/** 轉場時正上方那一張「畫面上方」的方位角（度；北 0、順時針，東 ＝ +x、北 ＝ −z）⇒ 地球儀照這個轉。還沒算 ⇒ 0。 */
-function camTransHdg() { var f = CAM.tr && CAM.tr.f; return f ? (Math.atan2(f[0], -f[1]) * 180 / Math.PI + 360) % 360 : 0; }
+/** 轉場時正上方那一張「畫面上方」的方位角（度；北 0、順時針）—— 一律北朝上 ⇒ 0（'started'、'left' 的 hdg 照舊帶，地球儀不用轉）。 */
+function camTransHdg() { return 0; }
+/** 轉場轉向的進度：0 ⇒ 1 慢進慢出（x 超出 0～1 ⇒ 夾住）。 */
+function camTrEase(x) { x = Math.max(0, Math.min(1, x)); return x * x * (3 - 2 * x); }
 /** 外面那一頁叫的（08_seabed.js bedHostMsg）：'in' 開戰時先停在正上方；'go' 開始降；'out' 拉上去。 */
 function camTransSet(dir, o) {
   if (dir === 'go') { if (CAM.tr && CAM.tr.dir === 'in') CAM.tr.hold = false; return; }
