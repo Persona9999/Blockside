@@ -1045,6 +1045,8 @@
       "type": "medical",
       "size": [18, 8, 8],
       "hp": 150,
+      "hold": 1,
+      "battle": 1,
       "buff": {"heal": 0.3}
     },
     "medkit": {
@@ -1109,7 +1111,8 @@
       "buffCap": {"heal": 0.6},
       "staff": 1,
       "staffPer": 3,
-      "back": 0.6
+      "back": 0.6,
+      "calm": 60
     },
     "workshop": {
       "name": "木工間",
