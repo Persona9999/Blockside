@@ -172,8 +172,7 @@ function setSailMode(m) {
 }
 /** 自由鏡頭跟不跟著兩艘的中點走（預設跟；鏡頭「看敵艦／看我艦」本來就跟著那一艘）。 */
 function setCamTrack(on) {
-  camSet({ track: on, trYaw: null, trMe: null });
-  $('camT').classList.toggle('on', on);
+  camSet({ track: on, trYaw: null, trMe: null });                    // 🎥 那一顆的燈由 camSet 照 track 改
   if (RUNNING && SHIPS.length) note(SHIPS[PLAYER_I], on ? '鏡頭跟著船' : '鏡頭固定（' + keyName('camTrack') + ' 切換）');
 }
 /** 自動開砲（我艦）：觀戰預設開、其他模式預設關（reset 時照模式設）。 */

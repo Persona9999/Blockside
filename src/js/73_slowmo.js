@@ -7,7 +7,7 @@
 //   兩間接連炸 ⇒ 取比較慢的那個、從頭算。
 //   慢動作中，只給人看的（碎木、煙與水花、船邊水花：12_effects.js、13_water.js）改成每一格畫面照「畫面的 dt × 倍率」走（SLOW_VIS；step() 那邊跳過）
 //   ⇒ 火球、碎片照樣平順（⛔ 留在 step() ⇒ 0.1× 時十格才動一下）。它們不回寫模擬 ⇒ 戰局不變。
-// 特寫：殉爆那一刻鏡頭切到爆心的側面（自由鏡頭、不跟船），慢動作回到 1× 再過 SLOW_CAM_TAIL 秒，回到原本的鏡頭；中間按了換鏡頭（C）⇒ 不再切回去。
+// 特寫：殉爆那一刻鏡頭切到爆心的側面（自由鏡頭、不跟船），慢動作回到 1× 再過 SLOW_CAM_TAIL 秒，回到原本的鏡頭；中間按了換鏡頭（C）⇒ 不再切回去（只把跟船還成特寫之前的，slowCamDrop）。
 // 設定：遊戲內設定面板的「殉爆慢動作」「殉爆特寫」（跟著存檔；網址 ?slowmo=0、?slowcam=0）。狀態 SLOW 在 04_state.js（存檔在 69_prefs.js 載入時就讀）。
 var SLOW_EASE = 3.5, SLOW_CAM_TAIL = 0.8;
 /** 殉爆（23_powder.js magBoom）：w ＝ 爆心（世界）、R ＝ 爆炸半徑（格）。快轉（?demo）不切。 */
@@ -28,6 +28,14 @@ function slowOnBlast(sh, w, R) {
     SLOW.camT = SLOW.hold + SLOW_EASE + SLOW_CAM_TAIL; SLOW.camMode = 0;
   }
 }
+/** 特寫提早結束（中間換了鏡頭、70_flow.js 重開）：鏡頭照玩家現在的，只把「跟船」還成特寫之前的。
+ *  ⛔ 只丟掉存檔（Tim 2026-10-20「目前看我艦 有時候鏡頭不會跟著轉(偶發)」）：特寫關掉的跟船就一直關著 —— 換回看我艦、下一局也一樣，
+ *     🎥 那一顆還亮著，只有按兩下 V 才回來。 */
+function slowCamDrop() {
+  if (!SLOW.camSave) return;
+  var tr = SLOW.camSave.track; SLOW.camSave = null;
+  camSet({ track: tr, trYaw: null, trMe: null });
+}
 /** 每一格畫面（90_main.js frame，停格時不走）：照真實時間算現在的倍率；特寫時間到了把鏡頭還回去。回：倍率。 */
 function slowTick(dt) {
   if (SLOW.active) {
@@ -38,7 +46,7 @@ function slowTick(dt) {
   }
   if (SLOW.camSave) {
     SLOW.camT -= dt;
-    if (CAM.mode !== SLOW.camMode) SLOW.camSave = null;                                   // 中間換過鏡頭 ⇒ 照玩家的
+    if (CAM.mode !== SLOW.camMode) slowCamDrop();                                         // 中間換過鏡頭 ⇒ 照玩家的（跟船照特寫之前的）
     else if (SLOW.camT <= 0 || !SLOW.cam) {
       var s = SLOW.camSave; SLOW.camSave = null;
       camSet({ mode: s.mode, tgt: s.tgt, dist: s.dist, yaw: s.yaw, pitch: s.pitch, track: s.track });

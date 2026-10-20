@@ -8,7 +8,7 @@ function reset() {
   clearMsgs(); fleetReset();                                          // 上方艦隊：每一場開局全折疊（61_hud.js）
   rptReset(); tlgReset(); rlgReset(); if ($('rpt')) $('rpt').style.display = 'none';   // tlgReset：測試模式的船員記錄（83_testlog.js）          // 戰鬥報表（79_report.js）：每一場從頭記
   PSLOW.ts = 1; PSLOW.ms = 0;                                         // 物理減速（73_slowmo.js）：重開從 1× 起、重新量
-  SLOW.active = false; SLOW.ts = 1; SLOW.t = 0; SLOW.camSave = null; SLOW.kicks = 0;   // 殉爆的慢動作與特寫（73_slowmo.js）：⛔ 不清 ⇒ 殉爆、自爆後馬上重開，新的一局接著慢、幾秒後鏡頭被拉回上一局的爆心
+  slowCamDrop(); SLOW.active = false; SLOW.ts = 1; SLOW.t = 0; SLOW.kicks = 0;   // 殉爆的慢動作與特寫（73_slowmo.js）：⛔ 不清 ⇒ 殉爆、自爆後馬上重開，新的一局接著慢、幾秒後鏡頭被拉回上一局的爆心；slowCamDrop ⇒ 特寫關掉的跟船還回來（⛔ 只清存檔 ⇒ 新的一局鏡頭不跟船轉）
   PLAYER_I = 0;
   CORE_LOG = []; spawnFleet(fleetSpec());                                           // 編隊（52_fleet.js）：一對一 ＝ 以前那兩艘、同一個位置；船型要先載好（loadHull）
   cmdReset(); cmdTick();                                             // 指揮官（52_fleet.js、53_commander.js）：開局先想一次

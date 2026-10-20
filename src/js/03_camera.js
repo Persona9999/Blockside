@@ -87,7 +87,8 @@ function camMove(dt) {
   // 自由鏡頭的注視點照我艦平移＋繞我艦中心轉；鏡頭角度跟著被看的那艘轉（看敵艦 ⇒ 敵艦，其他 ⇒ 我艦）。
   // ⛔ 跟兩艘的中點：兩艘繞著中點轉圈 ⇒ 中點幾乎不動，看起來像沒在跟。
   // 角度慣例：鏡頭 yaw 是 (x, z) 平面上 atan2(z, x)；船頭方向的這個角 ＝ −sh.yaw ⇒ 船 yaw 增 Δ，鏡頭 yaw 減 Δ。
-  if (SHIPS.length >= 2 && CAM.track) {
+  // 只有我艦一艘（⛵ 航海、🔨 建造）也跟（Tim 2026-10-20「目前看我艦 有時候鏡頭不會跟著轉(偶發)」：以前要 2 艘以上 ⇒ 航海模式船轉、鏡頭一直不轉）。
+  if (SHIPS.length && CAM.track) {
     var me = SHIPS[PLAYER_I], mc = shipCenter(me);
     if (CAM.trMe) {
       var d0 = -(me.yaw - CAM.trMe.yaw), c0 = Math.cos(d0), s0 = Math.sin(d0), ox = CAM.tgt[0] - CAM.trMe.c[0], oz = CAM.tgt[2] - CAM.trMe.c[2];
@@ -215,4 +216,7 @@ function camSee(o) { if (!o) return; CAM.mode = 3; CAM.follow = null; CAM.pan = 
 /** 畫面大小（60_render.js resize）：場景照這個大小畫。 */
 function camSize(w, h) { CAM.w = w; CAM.h = h; }
 /** 一次寫好幾格（照給的順序一個一個寫）：慢動作的特寫與還原、第一人稱、測試場、主控台 __game.cam。 */
-function camSet(o) { for (var k in o) CAM[k] = o[k]; }
+function camSet(o) {
+  for (var k in o) CAM[k] = o[k];
+  if ('track' in o && $('camT')) $('camT').classList.toggle('on', !!o.track);   // 🎥 跟船那一顆照實際的（殉爆特寫也會關跟船 —— 以前只有 V／那一顆會改燈 ⇒ 特寫把跟船關掉、燈還亮著）
+}
