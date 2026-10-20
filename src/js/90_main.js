@@ -18,7 +18,7 @@ function frame(ts, noRaf) {                                         // noRaf：_
     if (SLOW_VIS) { if (PF) PF.t = performance.now(); slowVisStep(dt * sk); if (PF) pfLap('slowvis'); }
     SLOW_VIS = false;                                                 // 快轉（__game.run）不經過這裡 ⇒ 照常在 step() 走
     doorsAnim(dt * sk);                                               // 門的開關（25_doors.js）：只改畫面 ⇒ 在畫面這一格算、照模擬的速度走（慢動作跟著慢）
-    portsAnim();                                                      // 砲門（TASK-0719，62_ports.js）：只改畫面；自己照 SIMT 走（慢動作、模擬速度跟著）；畫質「砲門的開關演出」關、沒有蓋板的船 ⇒ 一次判斷就回
+    portsAnim();                                                      // 砲門（TASK-0719，62_ports.js）：只改畫面；自己照 SIMT 走（慢動作、模擬速度跟著）；沒有蓋板的砲演後座（recoilShip）；畫質「砲門的開關演出」關 ⇒ 一次判斷就回
   }
   if (PF) PF.t = performance.now();
   camFollow(dt);                                                      // 追砲彈（03_camera.js）
