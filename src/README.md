@@ -253,6 +253,7 @@ python -I admin.py cells --id constitution
   - 量過：夜燈號 1,820 格（船尾窗盒兩排拱窗＋兩舷 quarter gallery，直條玻璃）⇒ 平面 3,422 片；遊戲內截圖正看看得到大艙裡的船員、斜看窗面帶天空的反光。
     反向對照：引擎改完、還沒有船用玻璃 ⇒ `?demo=420&dump=1&seed=3／7&phx=full` 跟改之前逐字相同（46c325a1e4／e085f71edb）；三艘重匯之後，沒用玻璃的船 `seed=3&ship=falcon,stormkaap`（11d46611d8）、`seed=7&ship=virginia,falcon`（4055a2bcd6）跟改之前、跟當時的 dev 都逐字相同。
     憲法號 376 格、餘燼號 2,046 格（船尾 1,386＋gallery 330×2）；憲法號淡藍玻璃夾在黑窗格之間、餘燼號琥珀玻璃看得到砲甲板的船員與砲。匯入檢查 ✗ 0（三艘）。重匯的 .vxk 跟上一版只差玻璃那幾格、一個部件與檔頭 materials（vxk_compare）。
+    光榮號（2026-10-20，kaguya）460 格：圓船尾兩排各 5 扇（以前是漆在鐵甲帶裡的色 87 ⇒ 畫成光滑的鐵）；後面的牆刻穿到艙裡。重匯只差玻璃、刻掉的牆、`船尾窗玻璃` 一個部件與檔頭 materials／render（iron −356、glass ＋460）；沒用光榮號的四組 dump 跟改之前逐字相同。
   - 雕刻那側（造船規格 §9.5）：窗的玻璃做成**獨立的關聯**、meta `material=glass`。憲法號 `船尾窗玻璃`（376 格）、餘燼號 `船尾窗玻璃`（三層船尾窗 1,386 格）＋ quarter gallery 裡的 `窗玻璃`（330 格，掛在 gallery 作品底下 ⇒ 兩舷一起有）、夜燈號 `船殼-窗玻璃`（從船殼拆件 1,820 格）。
 
 匯出走 senate（`senate cmd sculpture --arg op=export --arg format=vxk --arg include=rig,models,parts,meta`，TASK-0518）；`.vxk` 不入版控（`../VoxelKit/_cache/`）。
