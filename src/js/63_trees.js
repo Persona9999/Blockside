@@ -341,6 +341,19 @@ function treeDraw() {
   TREES.stat.shells = ns; TREES.stat.shellTris = nt;
   gl.bindVertexArray(null); if (cf) gl.enable(gl.CULL_FACE);
 }
+/** 陸地的陰影（60_render.js landShadow；PASS.vp 已經換成那一層）：照主畫面上一次分好的組（treeBin：細的、低模那兩級，各自的實例緩衝）只寫深度；
+ *  不晃（uT、uWind 0：那一層不是每一格重畫）。遠處的貼圖與樹冠殼不畫（650 m 以外，陰影那一層的範圍也差不多到這裡）。⇒ 畫了幾棵。 */
+function treeDepth() {
+  if (!TREES.on || !TREES.init || !TREES.cnt || !TREES.list.length) return 0;
+  var P0 = TREES.dProg || (TREES.dProg = VK.compile(gl, TREE_VS, DEPTH_ONLY_FS)), NL = TREES.list.length, n = 0;
+  gl.useProgram(P0.prog); setCommon(P0); if (P0.u.uT) gl.uniform1f(P0.u.uT, 0); if (P0.u.uWind) gl.uniform1f(P0.u.uWind, 0);
+  for (var l = 0; l < 2; l++) TREES.list.forEach(function (T, c) {
+    var k = TREES.cnt[l * NL + c]; if (!k) return; var g = T.lod[l];
+    gl.bindVertexArray(g.vao); gl.bindBuffer(gl.ARRAY_BUFFER, TREES.ib[l]); treeInstAttr(TREES.off[l * NL + c]);
+    gl.drawElementsInstanced(gl.TRIANGLES, g.n, gl.UNSIGNED_SHORT, 0, k); n += k;
+  });
+  gl.bindVertexArray(null); return n;
+}
 /** 找樹（__game.trees(sp, n, [x, z])）：載進來的塊裡那一種最靠近 (x, z)（沒給 ⇒ 鏡頭）的 n 棵 ⇒ [[x, y, z, 轉角, 放大, 第幾棵], …]（截圖、對位置用）。 */
 function treeFind(sp, n, at) {
   var si = Object.keys(TREE_SPECIES).indexOf(sp), q = at || [CAM.eye[0], CAM.eye[2]], L = [];

@@ -276,10 +276,15 @@ function treeMesh(K, lod) {
 /** 一根管子（枝幹、根、花梗）：折線 P、半徑 r0 ⇒ r1、sides 邊；kc 深淺；lv 決定搖晃權重（−1 樹幹根部最暗）；
  *  L（那一層的參數，可以沒有）：flare 根部粗幾倍、bulge [位置, 粗幾成]（大王椰子中段鼓起）、shaft [頂上幾成, 顏色]（葉鞘）、ribs 稜（相鄰兩邊一凸一凹）、round 圓球的輪廓（土耳其頭仙人掌）。 */
 function treeTube(M, P, r0, r1, sides, col, kc, lv, L) {
-  var n = P.length, base = M.V.length / 10, K = M.K, flare = L && L.flare, rd = L && L.round, bg = L && L.bulge, sh = L && L.shaft, rb = L && L.ribs || 0;
+  var n = P.length, base = M.V.length / 10, K = M.K, flare = L && L.flare, rd = L && L.round, bg = L && L.bulge, sh = L && L.shaft, rb = L && L.ribs || 0, B = null;
   for (var i = 0; i < n; i++) {
     var d = treeNorm(i < n - 1 ? [P[i + 1][0] - P[i][0], P[i + 1][1] - P[i][1], P[i + 1][2] - P[i][2]] : [P[i][0] - P[i - 1][0], P[i][1] - P[i - 1][1], P[i][2] - P[i - 1][2]]);
-    var B = treePerp(d), t = i / (n - 1), r = (r0 + (r1 - r0) * t) * (flare ? 1 + (flare - 1) * Math.pow(1 - t, 5) : 1);
+    // 每一圈的基準沿著管子平移（上一圈的 u 投影到這一圈的切面）：以前每圈各自 treePerp ⇒ 方向的 y 跨過 0.9 那一圈換了參考軸、整圈轉一個角度
+    //   ⇒ 那一段管子扭成一個細腰（椰子樹幹往一邊歪、越往上越直，6 棵有 4 棵在根部或半腰凹一塊；Tim 2026-10-20 截圖）
+    var u0 = B && B[0], k0 = B ? u0[0] * d[0] + u0[1] * d[1] + u0[2] * d[2] : 1;
+    if (Math.abs(k0) > 0.99) B = treePerp(d);                              // 第一圈、或轉超過 80° 左右（上一圈的 u 幾乎順著這一圈）⇒ 照舊挑
+    else { var u = treeNorm([u0[0] - d[0] * k0, u0[1] - d[1] * k0, u0[2] - d[2] * k0]); B = [u, treeCross(d, u)]; }   // treePerp 也是 [u, d × u] ⇒ 三角形的方向不變
+    var t = i / (n - 1), r = (r0 + (r1 - r0) * t) * (flare ? 1 + (flare - 1) * Math.pow(1 - t, 5) : 1);
     if (rd) r *= Math.pow(Math.sin(Math.PI * (0.12 + 0.8 * t)), 0.6);
     if (bg) r *= 1 + bg[1] * Math.exp(-((t - bg[0]) / 0.18) * ((t - bg[0]) / 0.18));
     var cc = col; if (sh && t > 1 - sh[0]) { cc = sh[1]; r *= 1.08; }
