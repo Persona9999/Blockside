@@ -12,7 +12,8 @@
 //   多遠看得到：鏡頭的遠裁切面 5 km（03_camera.js）、地形的霧淡成 0.4 倍（BED_FOG）⇒ 晴天 4 km 外還剩一成的輪廓。
 // 岸邊的白沫（BEDFOAM）：5×5 那幾塊的高度照 8 m 一格放進一張貼圖（R16F、雙線性），海的著色器（01_gl.js）照「海面 − 海底」< 2 m 畫一圈白沫。只給人看。
 var BEDGL = {}, BEDGL_Q = [], BEDGL_ID = null, BED_FOG = 0.4, BED_FAR_ST = 8;
-var BEDFAR = { g: {}, todo: null, busy: false, n: 0, bytes: 0, ms: 0 };
+var BEDFAR = { g: {}, todo: null, fly: 0, inF: {}, ready: [], fail: 0, n: 0, bytes: 0, ms: 0 };   // todo：還要讀的塊 [cx, cy, 有檔, 失敗次數]；fly／inF：在路上的；ready：到了、等著建網格的
+var BED_FAR_PAR = 4;                                                     // 遠景同時跟外面那一頁要幾塊（它有 2 個 Worker；以前一次一塊 ⇒ 托爾圖加 182 塊要 4 秒，一格一格出來）
 var BEDDRAW = { n: 0, cull: 0, tris: 0 };                                // 上一格畫了幾塊、剔掉幾塊、幾個三角形（__game.bed）
 var BEDFOAM = { tex: null, dirty: true, cx: null, cy: null, ox: 0, oz: 0, sp: 8, N: 0, ms: 0, builds: 0 };
 var BED_COL = { 0: [0.30, 0.31, 0.27], 1: [0.74, 0.70, 0.52], 2: [0.66, 0.57, 0.44], 3: [0.86, 0.81, 0.62], 4: [0.40, 0.38, 0.35], 10: [0.84, 0.77, 0.57], 12: [0.45, 0.42, 0.38] };   // 2 珊瑚礁：紋理的平均色（以前是綠的）
@@ -28,6 +29,15 @@ function bedCol(h, m) {
 }
 evOn('bedChunk', function (cx, cy) { BEDGL_Q.push(bedKey(cx, cy)); BEDFOAM.dirty = true; }, 0, true);
 evOn('bedDrop', function (cx, cy) { var k = bedKey(cx, cy), g = BEDGL[k]; BEDFOAM.dirty = true; if (g) { gl.deleteVertexArray(g.vao); gl.deleteBuffer(g.vb); gl.deleteBuffer(g.ib); delete BEDGL[k]; } }, 0, true);
+evOn('bedWin', function () {                                             // 海域的窗換了（08_seabed.js bedWinApply）：窗外的遠景（網格、樹）丟掉；要讀的清單照新的窗重排
+  Object.keys(BEDFAR.g).forEach(function (k) { var c = k.split('_').map(Number); if (bedIdx(c[0], c[1]) < 0) bedFarDrop(k); });
+  BEDFAR.todo = null; BEDFAR.ready = BEDFAR.ready.filter(function (r) { return bedIdx(r[1].cx, r[1].cy) >= 0; }); BEDFOAM.dirty = true;
+}, 0, true);
+/** 丟掉一塊的遠景：網格、遠景的樹（63_trees.js）。 */
+function bedFarDrop(k) {
+  var g = BEDFAR.g[k]; if (g) { gl.deleteVertexArray(g.vao); gl.deleteBuffer(g.vb); gl.deleteBuffer(g.ib); delete BEDFAR.g[k]; }
+  var s = TREES.far[k]; if (s) { if (s.vao) { gl.deleteVertexArray(s.vao); gl.deleteBuffer(s.vb); gl.deleteBuffer(s.ib); } delete TREES.far[k]; }
+}
 function bedLod(C) {                                                     // 每幾個取樣點取一個：在用的那幾圈 8 m（有城的塊 4 m，63_towns.js）、預載那一圈 16 m —— 照公尺算 ⇒ 外圈的中等塊（16 m 一點）每點都取
   var R = BED_CFG.ring, w = Math.abs(C.cx - BED.cx) <= R && Math.abs(C.cy - BED.cy) <= R ? (townFine(C) ? 1 : 2) : 4;
   return Math.max(1, Math.round(w * BED.A.step / C.step));
@@ -114,24 +124,34 @@ function bedFS() {
     ' float sd2=dot(n,uSun), d=abs(sd2); float sk=shadowK(vW,(sd2<0.0?-n:n)*(3.0-2.0*d)); d*=sk; col=col*(mix(uGround,uSky,0.6)*0.65+vec3(1.0,0.96,0.88)*d*0.7);\n' +
     ' o=vec4(mix(col,uFog,1.0-exp(-fd*uFogD)),1.0); }\n';
 }
-/** 遠景：每格最多做一塊 —— 那一塊現在載著（BED.ch）就直接抽，沒有就讀檔（bedPeek，同時只讀一塊）。 */
-function bedFarStep() {
+/** 遠景（每格；nb ＝ 這一格最多建幾塊網格，bedDraw 這一格建過細的 ⇒ 0）：離焦點（旗艦）那一塊近的先（2026-10-20：以前照離開戰位置近的排一次就定了 ⇒ 開遠了旁邊的最後才來）。
+ *  那一塊現在載著（原精度或外圈的中等塊）⇒ 直接抽；沒有 ⇒ 讀檔（bedPeek，同時最多 BED_FAR_PAR 塊，到了先放 ready 等建）；要不到 ⇒ 放回去再要，三次都不行才放棄。 */
+function bedFarStep(nb) {
   var F = BEDFAR;
-  if (!F.todo) {                                                         // 第一次：有檔的塊，離開戰位置近的先
-    var A = BED.A, sx = BED.ax / A.chunk - 0.5, sy = BED.az / A.chunk - 0.5;
-    F.todo = A.chunks.filter(function (c) { return c[2]; }).sort(function (a, b) { return Math.hypot(a[0] - sx, a[1] - sy) - Math.hypot(b[0] - sx, b[1] - sy) || a[1] - b[1] || a[0] - b[0]; });
+  if (!F.todo) F.todo = BED.A.chunks.filter(function (c) { return c[2] && !F.g[bedKey(c[0], c[1])]; }).map(function (c) { return [c[0], c[1], 1, 0]; });   // 第一次、換過窗：有檔、還沒有遠景的
+  while (F.ready.length && nb > 0) { var r = F.ready.shift(); if (!F.g[r[0]] && bedIdx(r[1].cx, r[1].cy) >= 0) { bedFarPut(r[0], r[1], r[2]); nb--; } }
+  var fx = BED.cx == null ? 0 : BED.cx, fy = BED.cy == null ? 0 : BED.cy;
+  while (F.todo.length) {
+    var b = -1, bd = Infinity;
+    for (var i = 0; i < F.todo.length; i++) { var c = F.todo[i], kv = bedViewK(c[0], c[1]), dd = ((c[0] - fx) * (c[0] - fx) + (c[1] - fy) * (c[1] - fy)) * kv * kv; if (dd < bd) { bd = dd; b = i; } }   // 鏡頭看得到的那一邊先（bedViewK）
+    var q = F.todo[b], k = bedKey(q[0], q[1]);
+    if (F.g[k] || F.inF[k] || bedIdx(q[0], q[1]) < 0) { F.todo.splice(b, 1); continue; }   // 已經有了、在路上、窗外
+    var C = bedShowC(k);
+    if (C) { if (nb <= 0) break; F.todo.splice(b, 1); bedFarPut(k, C, 0); nb--; continue; }
+    if (F.fly >= BED_FAR_PAR) break;
+    F.todo.splice(b, 1); bedFarAsk(q, k);
   }
-  if (F.busy || !F.todo.length) return;
-  var c = F.todo.shift(), k = bedKey(c[0], c[1]);
-  if (bedShowC(k)) { bedFarPut(k, bedShowC(k), 0); return; }            // 載著（原精度或外圈的中等塊）⇒ 直接抽
-  F.busy = true;
-  bedPeek(c[0], c[1]).then(function (b64) { F.busy = false; var t0 = performance.now(), C = bedDecode(b64); bedFarPut(k, C, performance.now() - t0); },
-    function (e) { F.busy = false; console.warn('遠景：' + e.message); });
+}
+function bedFarAsk(q, k) {
+  var F = BEDFAR; F.fly++; F.inF[k] = 1;
+  bedPeek(q[0], q[1]).then(function (b64) { F.fly--; delete F.inF[k]; var t0 = performance.now(), C = bedDecode(b64); F.ready.push([k, C, performance.now() - t0]); },
+    function (e) { F.fly--; delete F.inF[k]; q[3]++; if (q[3] < 3 && F.todo) F.todo.push(q); else { F.fail++; console.warn('遠景：' + e.message); } });
 }
 function bedFarPut(k, C, ms) {
   if (!BED || !BED.A || BEDFAR.g[k]) return;
   var t0 = performance.now(), M = bedMesh(C, Math.max(1, Math.round(BED_FAR_ST * BED.A.step / C.step))), g = bedGpu(M, null);   // 32 m 一點：細的塊（4 m）每 8 點取一點，粗的（32 m）每點都取
-  g.bb = bedBox(C); BEDFAR.g[k] = g; treeFar(k, C); chartPut(C);                    // treeFar：遠景的樹（貼圖；63_trees.js） BEDFAR.n++; BEDFAR.bytes += M.V.byteLength + M.I.byteLength; BEDFAR.ms += ms + performance.now() - t0;
+  g.bb = bedBox(C); BEDFAR.g[k] = g; treeFar(k, C); chartPut(C);                    // treeFar：遠景的樹（貼圖；63_trees.js）
+  BEDFAR.n++; BEDFAR.bytes += M.V.byteLength + M.I.byteLength; BEDFAR.ms += ms + performance.now() - t0;   // （以前這三個寫在上一行的註解後面 ⇒ 讀數一直是 0）
 }
 /** 白沫的高度貼圖：中心 ± (ring＋prefetch) 那幾塊，每 2 個取樣點（8 m）一格；沒載的、深海塊 ⇒ deep。換中心、載進來、丟掉之後重建。 */
 function bedFoamTex() {
@@ -186,7 +206,7 @@ function bedDraw() {
   var built = 0;
   while (BEDGL_Q.length && built < 2) { var k = BEDGL_Q.shift(), C = bedShowC(k); if (C) { bedUpload(k, C, bedLod(C)); built++; } }
   Object.keys(BEDGL).forEach(function (k2) { var g = BEDGL[k2], C2 = bedShowC(k2); if (C2 && built < 2 && (g.lod !== bedLod(C2) || g.C !== C2)) { bedUpload(k2, C2, bedLod(C2)); built++; } });
-  if (!built) bedFarStep();                                              // 遠景：這一格沒在建細的才做
+  bedFarStep(built ? 0 : 2);                                             // 遠景：照樣要；這一格建過細的就不建遠景的網格
   bedFoamTex();
   var PB = P.bed || (P.bed = VK.compile(gl, BED_VS, bedFS()));
   gl.useProgram(PB.prog); setCommon(PB);

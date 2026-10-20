@@ -300,15 +300,24 @@ function programs() {
     // 岸邊的白沫（有海圖才有，TASK-0721；63_bed_gl.js BEDFOAM）：水深 ＝ 這一點的海面（含浪）− 海底（uBedT：8 m 一格的高度，uBedR ＝ 第 0 格的世界 x、z、間距、格數）。
     //   水邊一條亮線（< 0.5 m）＋往岸邊推的一道一道浪花（照水深的正弦、隨時間往淺處走；1.5 m 內 —— 2 m 內 ⇒ 大片淺礁坪整片都是條紋），用兩層雜訊碎開；1.2 km 外淡掉。只在畫面上。
     //   亮線照「旁邊一格（8 m）內最淺的」⇒ 峭壁腳下（水深一下子 10 m 以上、< 2 m 的那一圈不到一格）也有一圈浪花拍岸。
-    ' if(uBedOn>0.5){ vec2 bu=((p-uBedR.xy)/uBedR.z+0.5)/uBedR.w; if(bu.x>0.0&&bu.y>0.0&&bu.x<1.0&&bu.y<1.0){ float dep=vW.y-textureLod(uBedT,bu,0.0).r;\n' +
+    //   bd ＝ 這一點的水深（給最後那一段「深水看不到底」；−1 ＝ 沒有海圖、1e4 ＝ 在這張高度貼圖外面，當深海）
+    ' float bd=-1.0; if(uBedOn>0.5){ vec2 bu=((p-uBedR.xy)/uBedR.z+0.5)/uBedR.w; if(bu.x>0.0&&bu.y>0.0&&bu.x<1.0&&bu.y<1.0){ float dep=vW.y-textureLod(uBedT,bu,0.0).r; bd=dep;\n' +
     // 淺水看得見底（Tim 2026-10-19 珊瑚礁的顏色）：中畫質的海面是一層 86% 不透明的顏色（高畫質才照水深透出水下）⇒ 水深 0.5～8 m 那一段照水深變透（最透 0.4），礁、沙洲的顏色透得出來；低畫質照舊不透
     '   if(uRefr>0.5&&uRefr<1.5&&dep>0.0) a=min(a,mix(0.4,a,smoothstep(0.5,8.0,dep)));\n' +
     '   float dn=dep; if(dep<60.0){ vec2 e=vec2(1.0/uBedR.w,0.0); dn=min(dep,vW.y-max(max(textureLod(uBedT,bu+e.xy,0.0).r,textureLod(uBedT,bu-e.xy,0.0).r),max(textureLod(uBedT,bu+e.yx,0.0).r,textureLod(uBedT,bu-e.yx,0.0).r))); }\n' +
     '   if(dn<0.5||dep<1.6&&dep>-0.5){ float nz=vn(p*0.11+vec2(uSeaT*0.04,-uSeaT*0.03)); float ln=1.0-smoothstep(0.05,0.5,dn);\n' +
     '     float sw=smoothstep(0.7,0.97,sin(dep*4.0+uSeaT*1.7+nz*5.0))*(1.0-smoothstep(0.6,1.6,dep));\n' +
     '     float fm=clamp(ln*0.9+sw*0.6,0.0,1.0)*smoothstep(0.2,0.6,0.55*vn(p*0.45+vec2(0.0,uSeaT*0.15))+0.6*nz)*(1.0-smoothstep(400.0,1200.0,fd));\n' +
-    '     c=mix(c,vec3(0.86,0.9,0.92)*(0.55+0.45*uSunK),fm*0.85); a=mix(a,1.0,fm); } } }\n' +
-    ' c=mix(c,uFog,1.0-exp(-fd*uFogD)); o=vec4(c,a); }\n');
+    '     c=mix(c,vec3(0.86,0.9,0.92)*(0.55+0.45*uSunK),fm*0.85); a=mix(a,1.0,fm); } } else bd=1e4; }\n' +
+    ' c=mix(c,uFog,1.0-exp(-fd*uFogD));\n' +
+    // 深水看不到底（中畫質、有海圖；2026-10-20 Blocksail 進航海／海戰降到船旁邊：海一塊深一塊淺，直邊沿著 1 km 的海圖塊）：
+    //   中畫質的海面 86% 不透明（a），後面畫了什麼就透出 1 − a —— 有檔的塊有海底網格（深海那一段在 −150 m）⇒ 透出暗的海底；
+    //   全是深海的塊（area.chunks 第三欄 0）沒有網格 ⇒ 透出天空在地平線以下的霧色（HORIZON ＝ uFog；沒有海圖時整片海也是這樣）⇒ 塊的邊上一條直的色差（量的：暗 9～12 階）。
+    //   ⇒ 透出來的海底最多 exp(−uRefrK·水深)（跟高畫質同一個吸收），多的那一份照「後面是霧色」算進來（a 跟著加）：
+    //   水深 16 m 內 exp(−0.12·水深) ≥ 0.14 ≥ 1 − a ⇒ 一點都不變（礁、沙洲、淺灘照舊）；−150 m 只剩 1e-8 ⇒ 深海不管後面有沒有網格都跟沒有海圖時的海同一個顏色。
+    //   低畫質不透明、高畫質照水深吸收 ⇒ 本來就連續，不動；沒有海圖 ⇒ bd ＝ −1 整段跳過（算式跟以前一樣）。深水的 a 變 1 ⇒ 畫布不再透出頁面底色（以前約 8%，差 1～2 階）。
+    ' if(uRefr>0.5&&uRefr<1.5&&bd>0.0&&a<1.0){ float wd=max(0.0,1.0-exp(-uRefrK*bd)/(1.0-a)); if(wd>0.0){ float a2=a+(1.0-a)*wd; c=(a*c+(1.0-a)*wd*uFog)/a2; a=a2; } }\n' +
+    ' o=vec4(c,a); }\n');
   // 雨（天氣 × 畫質的「雨」）：整個畫面一層斜的雨絲，三層遠近（越近越粗越快）；欄位照雜湊挑哪幾欄有雨、每欄的相位亂撒。鏡頭轉的時候雨絲跟著水平滑（uYaw）。
   P.rain = VK.compile(gl, '#version 300 es\nlayout(location=0) in vec2 aP; void main(){ gl_Position=vec4(aP,0.0,1.0); }\n',
     '#version 300 es\nprecision highp float; uniform float uT,uRain,uYaw; uniform vec2 uView; out vec4 o;\n' +
