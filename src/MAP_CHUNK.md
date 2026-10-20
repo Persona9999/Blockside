@@ -63,7 +63,7 @@ maps/<海域>/towns.js       BSMAP.town({...})                     海域裡的�
   | 那一頁 ⇒ 這一頁 | `{ bsmap: 'area', area }`（跟 `area.js` 同一個樣子；多一欄 `mid` ＝ 給得出外圈的中等塊、點距幾公尺；`win` ＝ 給得出新的窗、窗的半徑幾塊）、`{ bsmap: 'chunk', cx, cy, b64, step? }`（`step` ＝ 回的是中等塊）、`{ bsmap: 'error', what, cx, cy, step?, msg }` |
   | 海域的窗（`area.win` 有才要；下面「海域跟著旗艦走」） | 這一頁 ⇒ 那一頁 `{ bsmap: 'need', what: 'win', x: [x0, x1], y: [y0, y1] }`；那一頁 ⇒ 這一頁 `{ bsmap: 'win', x, y, chunks, towns? }`（`chunks` ＝ 這個窗每一塊 `[cx, cy, 有沒有檔]`，同 `area.chunks`；`towns` ＝ 海域裡的城，新進來的接在後面）；出錯 `{ bsmap: 'error', what: 'win', msg }`（2 秒後再要） |
   | 城鎮（`area.towns` 有才要；§8） | 這一頁 ⇒ 那一頁 `{ bsmap: 'need', what: 'towns' }`；那一頁 ⇒ 這一頁 `{ bsmap: 'towns', towns: [規劃…] }`（出錯 `{ bsmap: 'error', what: 'towns', msg }`）—— 只給人看 ⇒ 不等它，到了才重建地形網格與樹 |
-  | 轉場：這一頁 ⇒ 那一頁 | `{ bsmap: 'started', hdg }`（`?start=1` 開戰了，鏡頭停在開戰位置正上方 `area.trH` 公尺，沒給 ⇒ 1,200；Blocksail 照離岸多遠給 1,200～6,000，看得到海岸線）、`{ bsmap: 'left', x, z, hdg, shipHdg }`（拉到我艦正上方了；`x`、`z` ＝ 我艦在世界的哪裡、`shipHdg` ＝ 我艦船頭朝哪，度、北 0 順時針） |
+  | 轉場：這一頁 ⇒ 那一頁 | `{ bsmap: 'started', hdg, x, z, shipHdg }`（x、z、shipHdg ＝ 我艦的中心、船頭方位角，同 `left`；`?start=1` 開戰了，鏡頭停在開戰位置正上方 `area.trH` 公尺，沒給 ⇒ 1,200；Blocksail 照離岸多遠給 1,200～6,000，看得到海岸線）、`{ bsmap: 'left', x, z, hdg, shipHdg }`（拉到我艦正上方了；`x`、`z` ＝ 我艦在世界的哪裡、`shipHdg` ＝ 我艦船頭朝哪，度、北 0 順時針） |
   | 轉場：那一頁 ⇒ 這一頁 | `{ bsmap: 'go' }`（降下去）、`{ bsmap: 'leave' }`（拉上去） |
 
   `hdg` ＝ 正上方那一張「畫面上方」朝哪（度；北 0、順時針）—— 就是平常的鏡頭水平朝的方向 ⇒ 升降時不轉，外面那一頁把地圖轉成同一個方向，海岸線對得上（Tim：「是否可以旋轉視角 讓海岸線部分能對齊」）。升降 2.6／2.2 秒、高度照比例變（像地圖縮放）；拉高時霧淡掉（1,200 m 照原本的霧八成五是霧）、遠裁切面放到高度的 1.5 倍、介面藏起來。
