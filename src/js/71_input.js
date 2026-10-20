@@ -308,7 +308,7 @@ function sliders() {
     //   跟設計水線差多少 ⇒ 開戰時浮高／吃水深幾公尺（liftFor）
     var W = hullT0(T, c), L = liftFor(T, T.disp - W.all) || 0, t0 = function (v) { return Math.round(v).toLocaleString(); };
     // 沒有帆（莫尼特號；Tim 2026-10-17「實戰中實際上是固定6節(沒有帆)」）：遊戲裡帆的推力 × sailFrac ＝ 0 ⇒ 只寫額外動力（以前照帆的公式算出順風 12.2 節）
-    var sails = T.rig.sails.some(function (s) { return !isFlag(s); }), B = +c.base || 0;
+    var sails = T.rig.sails.some(function (s) { return !isFlag(s); }), B = (+c.base || 0) * playK('speed');   // 額外動力也吃娛樂加成（31_sailing.js vB）
     el.innerHTML = '<div class="h">' + h.name + '</div>' +
       (h.author ? '建造者 <b>' + h.author + '</b><br>' : '') +   // Tim 2026-10-15：船的作者（ships[].author ← 匯入時 .vxk 檔頭的 owner）
       '排水量 <b>' + t0(W.all) + '</b> 噸<span class="n">（開戰時）</span>・設計水線 <b>' + t0(T.disp) + '</b> 噸<br>' +
@@ -317,7 +317,7 @@ function sliders() {
       (sails ? '航速 順風 <b>' + Math.hypot(kn * polar(0), B).toFixed(1) + '</b>・側順風 <b>' + Math.hypot(kn, B).toFixed(1) + '</b>（最快）・逆風 <b>' + Math.hypot(kn * polar(dz), B).toFixed(1) + '</b> 節<br>' +
         (B ? '額外動力 <b>' + B.toFixed(1) + '</b> 節<span class="n">（推力跟帆相加 ⇒ 上面三格 ＝ √(帆² ＋ 額外動力²)：不看風向與帆，頂風、收帆也走得動；帆段滿帆再加 ＝ 全速前進（開）、全收再收 ＝ 倒車）</span><br>' : '') +
         '<span class="n">標準風、滿帆；逆風 ＝ 離風 ' + Math.round(stall) + '° 時（再頂就開始失速）' + (PLAY === 'fun' ? '；含娛樂玩法的加成' : '') + '</span><br>'
-      : '航速 <b>' + B.toFixed(1) + '</b> 節<span class="n">（沒有帆：只靠額外動力，不看風向；全速前進時）</span><br>') +
+      : '航速 <b>' + B.toFixed(1) + '</b> 節<span class="n">（沒有帆：只靠額外動力，不看風向；全速前進時' + (PLAY === 'fun' ? '；含娛樂玩法的加成' : '') + '）</span><br>') +
       '砲 <b>' + hc.n + '</b> 門<span class="n">（' + gl + '）</span><br>' +
       '船員 約 <b>' + crewTotal(shipCrew(CFG_ID), hc) + '</b> 人<span class="n">（含預備水手 ' + shipCrew(CFG_ID).hands + '）</span><br>' +
       '靈活 <b>×' + (+c.agile).toFixed(2) + '</b>・船殼硬度 <b>×' + (+c.hard).toFixed(2) + '</b>・桅 <b>' + hc.masts + '</b> 根<br>' +
@@ -549,7 +549,7 @@ function sliders() {
     var fun = PLAY === 'fun' ? '（娛樂：' : '（', SPE = SPEEDK * playK('speed'), AGE = AGILK * playK('agile');   // 娛樂 ⇒ 括號裡寫乘過加成的實際值
     $('speedV').textContent = SPEEDK.toFixed(2) + '×' + fun + '最快約 ' + (VMAX * SPE * 1.944).toFixed(0) + ' 節）';
     $('agileV').textContent = AGILK.toFixed(2) + '×' + fun + '滿帆側風約 ' + ((0.012 + 0.016 * VMAX * 0.92) * AGE * 57.3).toFixed(1) + '°/秒）';
-    var BKV = K.base || 0; $('baseV').textContent = BKV ? BKV.toFixed(1) + ' 節（推力跟帆相加：實際 ＝ √(帆² ＋ 額外動力²)；不看風向、風速、帆，頂風、收帆也走得動；帆段滿帆再加 ＝ 全速前進才開、全收再收 ＝ 倒車）' : '0（沒有：照帆與風走）';
+    var BKV = K.base || 0; $('baseV').textContent = BKV ? BKV.toFixed(1) + ' 節（' + (PLAY === 'fun' ? '娛樂：實際 ' + (BKV * playK('speed')).toFixed(1) + ' 節；' : '') + '推力跟帆相加：實際 ＝ √(帆² ＋ 額外動力²)；不看風向、風速、帆，頂風、收帆也走得動；帆段滿帆再加 ＝ 全速前進才開、全收再收 ＝ 倒車）' : '0（沒有：照帆與風走）';
     var UPK = K.upwind; $('upwindV').textContent = UPK.toFixed(2) + '×（' + (UPK === 1 ? '照舊：' : '') + '風從船頭 ' + (90 - (90 - NOGO_DEG) * UPK).toFixed(0) + '° 開始失速、' + (90 - (90 - NOGO_FULL) * UPK).toFixed(0) + '° 全失速（手動操舵）；近迎風轉向最多 ×' + UPK.toFixed(2) + '）';
     var SK = STALL_K * playK('stall'), WA = WAVES.reduce(function (a, w) { return a + w.a; }, 0) * SEA_K;   // WA：幾道浪疊在一起最高的那一下（振幅）
     $('seaV').textContent = SEA_K <= 0 ? '0（平靜）' : SEA_K.toFixed(2) + '×（浪高最多約 ' + (WA * 2).toFixed(1) + ' m，主浪週期 ' + (2 * Math.PI / WAVES[0].w).toFixed(1) + ' 秒）';

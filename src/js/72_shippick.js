@@ -28,7 +28,7 @@ function spkMatch(h) {
 /** 這一型的航速（節）：[順風, 側順風, 逆風]；沒有帆 ⇒ [額外動力]。⛔ 不呼叫 shipCfg：那會替沒動過的船型建一份設定（照預設值算就好）。 */
 function spkSpeed(id, c) {
   var k = SHIP_CFG[id] || {}, g = function (key) { return k[key] !== undefined ? k[key] : cfgDefault(key, null, id); };
-  var kn = VMAX * g('speed') * playK('speed') * 1.9438, B = +g('base') || 0;
+  var kn = VMAX * g('speed') * playK('speed') * 1.9438, B = (+g('base') || 0) * playK('speed');   // 額外動力也吃娛樂加成（31_sailing.js vB）
   if (c && !c.sails) return B ? [B] : null;
   return [Math.hypot(kn * polar(0), B), Math.hypot(kn, B), Math.hypot(kn * polar(180 - NOGO_DEG), B)];
 }
