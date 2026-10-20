@@ -24,13 +24,14 @@
 // 低於海平面的乾地（BEDDRY；例：恩里基約湖 −40 m 的湖岸與湖）：0 m 的海面會蓋住它 ⇒ 一張遮罩（BED_DRY_SP 公尺一格、蓋整個海域的窗），海與遠海的著色器照它丟掉海面（01_gl.js BED_DRY_GLSL）。
 //   只算有「不是海（陸地 ≥ 10 或內陸水）而且地面低於 0」的點的塊：那一塊每一格裡的點全都不是海 ⇒ 遮；岸邊那一格裡有海的點 ⇒ 不遮 ⇒ 海岸照舊。
 //   沒有這種點的塊不算 ⇒ 沒有的海域整段跳過（uDryOn 0 ⇒ 畫面逐位元組不變；托爾圖加 43 塊 0 點）。
+//   另外（2026-10-21）跟海斷開的低地也遮：8 m 一格、照城鎮整過地的地面，從窗的邊上往裡淹，淹不到的低地不畫海（bedDryTex）。
 var BEDGL = {}, BEDGL_Q = [], BEDGL_ID = null, BED_FOG = 0.4, BED_FAR_ST = 8;
 // 地形網格換過幾次（建好、換粗細、丟掉）與換的是哪一塊（外框）：陰影的靜態那一層，那一段碰到換掉的塊就重畫（60_render.js shadowPass）
 //   —— 粗的網格比細的高出幾公尺，晚一秒才重畫 ⇒ 那一整塊（1 km）的地面與樹被粗網格的影子蓋住、暗一下（Tim 2026-10-20「只動了一點點陰影就完全不同」）。
 var BED_MESH_GEN = 0, BED_MESH_LOG = [];
 function bedMeshChanged(bb) { BED_MESH_GEN++; BED_MESH_LOG.push([BED_MESH_GEN, bb]); if (BED_MESH_LOG.length > 512) BED_MESH_LOG.splice(0, 256); }
 var BEDWAT = { on: true, n: 0, tris: 0, prog: null };                    // on：畫不畫（__game.inland）；n、tris：上一格畫了幾塊、幾個三角形
-var BEDDRY = { c: {}, tex: null, dirty: false, on: false, r: [0, 0, 1, 1], cells: 0, builds: 0, ms: 0 }, BED_DRY_SP = 32;   // c：每塊的遮罩（沒有 ⇒ null）；r：第 0 格的世界 x、z、整張多寬、多高（公尺）
+var BEDDRY = { c: {}, src: {}, hv: {}, tver: -1, tex: null, dirty: false, on: false, r: [0, 0, 1, 1], cells: 0, cut: 0, builds: 0, ms: 0 }, BED_DRY_SP = 32;   // src、hv：每塊最新的那一份與它的地面（bedDryTex 照它算跟海連不連）   // c：每塊的遮罩（沒有 ⇒ null）；r：第 0 格的世界 x、z、整張多寬、多高（公尺）
 var BEDFAR = { g: {}, todo: null, fly: 0, inF: {}, ready: [], fail: 0, n: 0, bytes: 0, ms: 0 };   // todo：還要讀的塊 [cx, cy, 有檔, 失敗次數]；fly／inF：在路上的；ready：到了、等著建網格的
 var BED_FAR_PAR = 4;                                                     // 遠景同時跟外面那一頁要幾塊（它有 2 個 Worker；以前一次一塊 ⇒ 托爾圖加 182 塊要 4 秒，一格一格出來）
 var BEDDRAW = { n: 0, cull: 0, tris: 0 };                                // 上一格畫了幾塊、剔掉幾塊、幾個三角形（__game.bed）
@@ -52,6 +53,7 @@ evOn('bedWin', function () {                                             // 海�
   Object.keys(BEDFAR.g).forEach(function (k) { var c = k.split('_').map(Number); if (bedIdx(c[0], c[1]) < 0) bedFarDrop(k); });
   BEDFAR.todo = null; BEDFAR.ready = BEDFAR.ready.filter(function (r) { return bedIdx(r[1].cx, r[1].cy) >= 0; }); BEDFOAM.dirty = true;
   Object.keys(BEDDRY.c).forEach(function (k) { var c = k.split('_').map(Number); if (bedIdx(c[0], c[1]) < 0) { if (BEDDRY.c[k]) BEDDRY.dirty = true; delete BEDDRY.c[k]; } });
+  Object.keys(BEDDRY.src).forEach(function (k) { var c = k.split('_').map(Number); if (bedIdx(c[0], c[1]) < 0) { delete BEDDRY.src[k]; delete BEDDRY.hv[k]; } });
   if (BEDDRY.on) BEDDRY.dirty = true;                                    // 遮罩照新的窗重排
 }, 0, true);
 /** 丟掉一塊的遠景：網格、遠景的樹（63_trees.js）。 */
@@ -291,6 +293,7 @@ function bedDryU(u) {
 }
 /** 一塊的遮罩（BED_DRY_SP 公尺一格，1 ＝ 不畫海）：那一塊有「不是海、地面低於 0」的點才算，每一格裡的點全都不是海 ⇒ 遮。fine ⇒ 細的那一份（換掉粗的）；不然已經算過就不算。 */
 function bedDryPut(k, C, fine) {
+  if (fine || !BEDDRY.src[k]) { var hv = townHv(C); if (BEDDRY.src[k] !== C || BEDDRY.hv[k] !== hv) { BEDDRY.src[k] = C; BEDDRY.hv[k] = hv; BEDDRY.dirty = true; } }   // 跟海連不連（bedDryTex）用的地面：細的那一份優先
   if (!fine && k in BEDDRY.c) return;
   var wd = C.wd, h = C.h0, mt = C.mat0, n = C.n, N = n * n, D = null, any = false, o;
   for (o = 0; o < N; o++) if ((mt[o] >= BED_MAT.BEACH || wd && wd[o]) && h[o] < 0) { any = true; break; }   // 內陸水的水底、陸地低於 0（漩渦烤之前的那一份：水面、陸地本來在哪）
@@ -307,21 +310,53 @@ function bedDryPut(k, C, fine) {
   if (D || BEDDRY.c[k]) BEDDRY.dirty = true;
   BEDDRY.c[k] = D;
 }
-/** 遮罩的貼圖（R8、雙線性，蓋整個海域的窗）：有塊的遮罩變了、換了窗 ⇒ 重建；一塊都沒有 ⇒ 關。 */
+/** 遮罩的貼圖（R8、雙線性，BED_SEA_SP 公尺一格、蓋整個海域的窗；1 ＝ 不畫海）：有塊的遮罩、地面（城鎮整地）變了、換了窗 ⇒ 重建；一格都不用遮 ⇒ 關（uDryOn 0）。
+ *  兩種都遮：
+ *  1. 跟海斷開的低地（Tim 2026-10-21「是否可以用遮罩或其他方式 避免海水跑到岸上太深位置(且已跟海斷開) 保留沿岸的浪」）：每一格照地形網格用的那一份高度
+ *     （townHv：城鎮整過地的；圖上那兩塊是城裡被壓到快貼海面的地，浪一高就冒出來）取最近的點，低於 BED_SEA_LOW 公尺 ＝ 海水上得來的「低地」；
+ *     從窗的邊上的低地往裡淹（四鄰），淹得到的才是海 ⇒ 沿岸照舊有海、有浪；淹不到的低地 ⇒ 遮，旁邊高的那一圈也遮（雙線性的交界不會在坑邊露出一條海）。
+ *     沒載進來的塊當成海（遠處、窗外照舊）。
+ *  2. 以前那一種（BEDDRY.c，32 m 一格）：「不是海（陸地或內陸水）而且低於 0」的點、整格都不是海 ⇒ 遮（恩里基約湖；跟海連著的低於 0 的陸地也算）。 */
+var BED_SEA_SP = 8, BED_SEA_LOW = 4;
 function bedDryTex() {
-  var Dy = BEDDRY; if (!Dy.dirty || Dy.tex && bedBusy()) return;
-  var t0 = performance.now(), A = BED.A, G = A.chunk / BED_DRY_SP, ks = Object.keys(Dy.c).filter(function (k) { return Dy.c[k]; });
-  Dy.dirty = false; Dy.on = false; Dy.cells = 0; if (!ks.length) return;
-  var nx = A.x[1] - A.x[0] + 1, ny = A.y[1] - A.y[0] + 1, W = nx * G, H = ny * G, T = new Uint8Array(W * H);
-  ks.forEach(function (k) {
-    var c = k.split('_').map(Number), i = c[0] - A.x[0], j = c[1] - A.y[0], D = Dy.c[k]; if (i < 0 || j < 0 || i >= nx || j >= ny) return;
-    for (var b = 0; b < G; b++) T.set(D.subarray(b * G, b * G + G), (j * G + b) * W + i * G);
-    for (var q = 0; q < D.length; q++) if (D[q]) Dy.cells++;
+  var Dy = BEDDRY; if (TOWNS.ver !== Dy.tver) { Dy.tver = TOWNS.ver; Dy.dirty = true; }   // 城鎮換了 ⇒ 整地換了
+  if (!Dy.dirty || Dy.tex && bedBusy()) return;
+  var t0 = performance.now(), A = BED.A, S = BED_SEA_SP, GS = A.chunk / S, G = A.chunk / BED_DRY_SP, ks = Object.keys(Dy.src);
+  Dy.dirty = false; Dy.on = false; Dy.cells = 0; Dy.cut = 0;
+  var nx = A.x[1] - A.x[0] + 1, ny = A.y[1] - A.y[0] + 1, Wd = nx * GS, Hd = ny * GS, N = Wd * Hd, landy = false;
+  ks.forEach(function (k) { var C = Dy.src[k]; if (C && C.max0 > 0.3) landy = true; });
+  if (!landy && !Object.keys(Dy.c).some(function (k) { return Dy.c[k]; })) return;   // 沒有陸地 ⇒ 不用遮（海上的海域整段跳過，畫面逐位元組不變）
+  var low = new Uint8Array(N).fill(1), T = new Uint8Array(N);
+  ks.forEach(function (k) {                                              // 每一格的地面：照那一塊最近的取樣點（塊的點距 4 m、中等塊 8～16 m）
+    var C = Dy.src[k], c = k.split('_').map(Number), ci = c[0] - A.x[0], cj = c[1] - A.y[0]; if (!C || ci < 0 || cj < 0 || ci >= nx || cj >= ny) return;
+    var hv = townHv(C), n = C.n, f = S / C.step;
+    for (var b = 0; b < GS; b++) {
+      var j = Math.min(n - 1, Math.round((b + 0.5) * f)), row = (cj * GS + b) * Wd + ci * GS;
+      for (var a2 = 0; a2 < GS; a2++) low[row + a2] = hv[j * n + Math.min(n - 1, Math.round((a2 + 0.5) * f))] < BED_SEA_LOW * 10 ? 1 : 0;
+    }
   });
+  var sea = new Uint8Array(N), Q = new Int32Array(N), qh = 0, qt = 0, o, x, y;
+  function seed(o2) { if (low[o2] && !sea[o2]) { sea[o2] = 1; Q[qt++] = o2; } }
+  for (x = 0; x < Wd; x++) { seed(x); seed((Hd - 1) * Wd + x); }
+  for (y = 0; y < Hd; y++) { seed(y * Wd); seed(y * Wd + Wd - 1); }
+  while (qh < qt) { o = Q[qh++]; x = o % Wd; if (x > 0) seed(o - 1); if (x < Wd - 1) seed(o + 1); if (o >= Wd) seed(o - Wd); if (o < N - Wd) seed(o + Wd); }
+  for (o = 0; o < N; o++) if (low[o] && !sea[o]) { T[o] = 255; Dy.cut++; }
+  if (Dy.cut) for (y = 0; y < Hd; y++) for (x = 0; x < Wd; x++) {        // 旁邊高的那一圈（八鄰）也遮
+    o = y * Wd + x; if (low[o] || T[o]) continue;
+    for (var dy = -1; dy <= 1 && !T[o]; dy++) for (var dx = -1; dx <= 1; dx++) { var X = x + dx, Y = y + dy; if (X < 0 || Y < 0 || X >= Wd || Y >= Hd) continue; var q = Y * Wd + X; if (low[q] && !sea[q]) { T[o] = 128; break; } }
+  }
+  Object.keys(Dy.c).forEach(function (k) {                               // 以前那一種（32 m 一格）⇒ 那一格蓋的 4×4 格
+    var D = Dy.c[k]; if (!D) return; var c = k.split('_').map(Number), ci = c[0] - A.x[0], cj = c[1] - A.y[0], r = BED_DRY_SP / S; if (ci < 0 || cj < 0 || ci >= nx || cj >= ny) return;
+    for (var b = 0; b < G; b++) for (var a3 = 0; a3 < G; a3++) if (D[b * G + a3]) for (var v = 0; v < r; v++) for (var u = 0; u < r; u++) T[(cj * GS + b * r + v) * Wd + ci * GS + a3 * r + u] = 255;
+  });
+  for (o = 0; o < N; o++) if (T[o]) Dy.cells++;
+  Dy.ms = +(performance.now() - t0).toFixed(1); bedSpent(t0);
+  if (!Dy.cells) return;
   if (!Dy.tex) { Dy.tex = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, Dy.tex); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE); }
-  gl.bindTexture(gl.TEXTURE_2D, Dy.tex); gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1); gl.texImage2D(gl.TEXTURE_2D, 0, gl.R8, W, H, 0, gl.RED, gl.UNSIGNED_BYTE, T); gl.pixelStorei(gl.UNPACK_ALIGNMENT, 4); gl.bindTexture(gl.TEXTURE_2D, null);
-  Dy.on = true; Dy.r = [A.x[0] * A.chunk - BED.ax, A.y[0] * A.chunk - BED.az, W * BED_DRY_SP, H * BED_DRY_SP];
-  Dy.builds++; Dy.ms = +(performance.now() - t0).toFixed(1); bedSpent(t0);
+  for (o = 0; o < N; o++) if (T[o]) T[o] = 255;
+  gl.bindTexture(gl.TEXTURE_2D, Dy.tex); gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1); gl.texImage2D(gl.TEXTURE_2D, 0, gl.R8, Wd, Hd, 0, gl.RED, gl.UNSIGNED_BYTE, T); gl.pixelStorei(gl.UNPACK_ALIGNMENT, 4); gl.bindTexture(gl.TEXTURE_2D, null);
+  Dy.on = true; Dy.r = [A.x[0] * A.chunk - BED.ax, A.y[0] * A.chunk - BED.az, Wd * S, Hd * S];
+  Dy.builds++; Dy.ms = +(performance.now() - t0).toFixed(1);
 }
 // 內陸水的著色器（第一次畫的時候建）：淡水的顏色（偏綠褐）、照水深變透（岸上的角 0 ⇒ 岸線淡出去）、菲涅耳反射天空、陽光的亮點、細的漣漪；
 //   陡的地方（瀑布的水幕：法線 y < 0.5 左右）⇒ 白的、往下流的條紋，比平的水不透明。法線照畫面上的微分算（網格只有位置＋水深）。霧照地形（BED_FOG）。
