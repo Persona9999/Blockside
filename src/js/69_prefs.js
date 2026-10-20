@@ -249,6 +249,23 @@ function prefsSave() {
     PREFS.last = s;
   } catch (e) { PREFS.write = false; PREFS.state = '存不了（' + (e && e.name || e) + '）'; }
 }
+/** 只把這幾項寫回存檔（遊戲中的畫質設定，71_input.js gfxOvClose）：網址帶了設定參數的那一場（Blocksail 地球儀開船：?mode= ?blue= …）PREFS.write 是 false ⇒ 整份不寫；
+ *  畫質頁那幾項是玩家剛剛自己改的 ⇒ 照樣存，存檔裡其他項原封不動。PREFS.write ⇒ 照平常整份存。?prefs=0、?demo、?admin ⇒ 不存。 */
+function prefsSaveOnly(keys) {
+  if (!PREFS.read) return;
+  if (PREFS.write) { prefsSave(); return; }
+  var o, part = { v: PREFS_VER };
+  try { o = JSON.parse(window.localStorage.getItem(PREFS_KEY) || 'null'); } catch (e) { return; }
+  if (!o || typeof o !== 'object') o = { v: PREFS_VER };
+  PREF_ITEMS.forEach(function (it) {
+    if (keys.indexOf(it.k) < 0) return;
+    delete o[it.k];
+    if (it.snap) it.snap(part); else { var v = it.get(); if (v !== (it.bool ? it.def : it.lim()[2])) part[it.k] = v; }
+  });
+  keys.forEach(function (k) { if (part[k] !== undefined) o[k] = part[k]; });
+  try { window.localStorage.setItem(PREFS_KEY, JSON.stringify(o)); } catch (e) { /* 存不了就算了：這一場照樣用 */ }
+}
+var PREF_GFX = ['gfx', 'shk', 'smoke', 'debcap', 'fps'];               // 畫質頁的那幾項（07_gfx.js）
 /** 細節設定的「重設預設值」：那一頁回到預設之後馬上存（船隻配置頁的不動：TASK-0570）。 */
 function prefsReset() { PREFS.last = ''; prefsSave(); }
 (function prefsLoad() {

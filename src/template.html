@@ -199,7 +199,8 @@
      （艦隊圓鈕底下的人數／砲數 .sbn 1、砲數條 #gunsL／R 1、大圓鈕 .helm 2、俥鐘 #teleBox 3）一律畫在它們上面。⇒ 4：蓋過這些、跟停格提示／進水面板（4，DOM 在前面）也蓋得過；
      設定（#gsetBg 5、#gset 6）、說明（6）、錯誤／確認彈窗（50／60）照樣在上面（主選單、結算時打開設定，點面板外照樣關得掉）。 */
   #cover{ z-index:4; position:absolute; inset:0; display:flex; align-items:flex-start; justify-content:center; overflow-y:auto; background:radial-gradient(ellipse at 50% 40%, rgba(20,30,44,.80), rgba(5,8,12,.94)); }
-  #cover .card{ max-width:680px; margin:auto; padding:22px 30px; text-align:center; }   /* margin:auto ⇒ 放得下就置中、放不下就從頂端開始捲（⛔ align-items:center 放不下會切掉上半） */
+  #cover .card{ max-width:680px; margin:auto; padding:22px 30px; text-align:center; }
+  body.gfxov #cover{ left:auto; width:min(640px,100%); background:rgba(5,8,12,.80); }   /* 遊戲中的畫質設定（js/71_input.js gfxOvOpen）：靠右、左邊看得到場景 */   /* margin:auto ⇒ 放得下就置中、放不下就從頂端開始捲（⛔ align-items:center 放不下會切掉上半） */
   #cover h1{ margin:0 0 4px; font-size:24px; letter-spacing:2px; }   /* Tim 2026-10-13：標題小一點（30 → 24；手機 24 → 19） */
   #cover .sub{ color:var(--dim); margin-bottom:14px; font-size:13px; }
   #cover select{ font:inherit; font-size:13px; max-width:100%; padding:3px 6px; border-radius:6px; border:1px solid rgba(255,255,255,.25); background:#1a212b; color:var(--ink); }
@@ -486,7 +487,7 @@
   <div id="gsetBg"></div>
   <div id="gset" class="hud panel">
     <div class="gsTop"><div class="gsT">設定<span class="note">遊戲暫停中（Esc、「繼續」或點面板外面回到戰鬥）</span></div><div class="gsR"><span class="chip big" id="gsGo">▶ 繼續</span><span class="chip big" id="restartB"><b>N</b> 重新開始</span><span class="chip big" id="menuB"><b>R</b> 回主選單</span><span class="chip big" id="boomB">💥</span><span class="chip big" id="helpB"><b>H</b> 說明</span><span class="chip big" id="gsRep">🐞 問題回報</span></div></div>
-    <div class="gsR"><span class="gsL">畫質</span><span class="chip" data-gg="low">低</span><span class="chip" data-gg="mid">中</span><span class="chip" data-gg="high">高</span><span class="note" id="gsGfx"></span></div>
+    <div class="gsR"><span class="gsL">畫質</span><span class="chip" data-gg="low">低</span><span class="chip" data-gg="mid">中</span><span class="chip" data-gg="high">高</span><span class="chip" id="gsGfxB" title="畫質設定頁（陰影細項也在這裡）：疊在遊戲上、靠右，改了馬上看得到">⚙ 畫質設定…</span><span class="note" id="gsGfx"></span></div>
     <div class="gsR"><span class="gsL">物理效果</span><span class="chip" data-gx="full">全開</span><span class="chip" data-gx="high">高</span><span class="chip" data-gx="mid">中</span><span class="chip" data-gx="low">低</span><span class="note" id="gsPhx"></span></div>
     <div class="gsR"><span class="gsL">瞄準</span><span class="chip" data-act="aim" id="aimk">🎯 換瞄準模式（<span class="kn" data-kl="aim">Q</span>）</span><span class="note">自由 → 水線 → 砲甲板 → 帆具 → 甲板人員 → 彈藥庫（現在的寫在羅盤上面）</span></div>
     <div class="gsR"><span class="chip" id="physT"><b>B</b> 帆繩物理</span><span class="chip" id="camT"><b>V</b> 鏡頭跟船</span><span class="chip" id="muteT"><b>M</b> 靜音</span><span class="chip" id="fpsT">顯示 FPS</span><span class="chip" id="fullT"><b>F11</b> 全螢幕</span><span class="note" id="gsFull"></span></div>
@@ -498,7 +499,7 @@
     <div class="gsR"><span class="gsL">物理減速</span><span class="chip" id="pslowT">計算量大時放慢</span></div>
     <div class="gsR"><span class="gsL">測試</span><span class="chip" id="testT" title="記錄整局每個船員的路徑、職位與狀態的變化、身體落在牆裡（83_testlog.js）；結束畫面「📊 報表」匯出">🧪 測試模式（記錄船員）</span><span class="note" id="testN"></span></div>
     <div class="gsR"><span class="gsL">帆繩</span><span class="chip" id="rigT" title="記錄整局每面帆的血量與狀態、布被撕的洞、斷繩、帆腳放開的繩、垂下來的繩有沒有懸空（85_riglog.js）；結束畫面「📊 報表」匯出">🪢 帆繩記錄</span><span class="note" id="rigN"></span></div>
-    <div class="note">畫質與物理的細項在主選單的「畫質設定…」「物理設定…」；血量、傷害、浪、天氣在開戰前設定；物理效果裡的「進水」（公式／粒子）下一場生效</div>
+    <div class="note">畫質的細項：上面的「畫質設定…」（主選單也有）；物理的細項在主選單的「物理設定…」；血量、傷害、浪、天氣在開戰前設定；物理效果裡的「進水」（公式／粒子）下一場生效</div>
   </div>
 
   <div id="cover">

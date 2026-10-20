@@ -6,7 +6,7 @@
 // 網址：?gfx=low|mid|high（縮圖、對拍用），單項 ?g_shadow= ?g_refl= ?g_refr= ?g_sea= ?g_res= ?g_aa= ?g_rain= ?g_drops= ?g_dropspl= ?g_door= ?g_port= ?g_deco=（數字 ＝ 第幾檔，從 0 起）。
 // 雨有兩種、各自一項：「雨」＝ 整個畫面一層的雨絲（01_gl.js P.rain）；「雨滴（3D）」＝ 3D 空間裡的雨絲粒子（14_rain.js）。高 ＝ 只開 3D（Tim 2026-10-13）；自訂可以兩種一起開。3D 雨滴打在海面與船上的水花另外一項（雨滴水花，Tim：要能開關）。
 var GFX_ITEMS = [
-  { k: 'shadow', name: '陰影', opt: ['關', '低（1024、3 段）', '高（2048、4 段、柔邊）'] },   // 照鏡頭分段（cascade，60_render.js shadowPass）：船、地形、樹、城鎮都有，船數不影響
+  { k: 'shadow', name: '陰影', opt: ['關', '低（陰影圖 2048）', '高（陰影圖 4096、柔邊）'] },   // 船、地形、樹、城鎮都有，船數不影響；畫法、分段、陰影圖大小在下面的「陰影細項」（SHK；60_render.js shadowPass）
   { k: 'refl', name: '海面反射', opt: ['關（只反射天空）', '低（船身，1/4 解析度）', '高（船身＋砲與帆，1/2 解析度）'] },
   { k: 'refr', name: '海水折射', opt: ['關（不透明）', '低（半透明）', '高（折射＋水深）'] },
   { k: 'sea', name: '海面細緻度', opt: ['低', '中', '高'] },
@@ -48,11 +48,11 @@ var DEB_LIM = [2000, 45000, 20000], DEB_CAP = DEB_LIM[2];
 var SHK_ITEMS = [   // 分段那幾項照 Unity 的 Shadows（Tim 2026-10-21 給的圖：Max Distance、Cascade Count、Split 1–3、Border 1–4、Show Cascades、Cascade splits 那一條）
   { k: 'mode', name: '畫法', val: [0, 1], opt: ['單張（一張跟著鏡頭）', '分段（cascade）'], def: 0, note: '單張：一張陰影圖罩住鏡頭看的地方，鏡頭拉越遠罩越大（格子越粗）；分段：照離鏡頭多深切幾段，近的段格子細、遠的段粗' },
   { k: 'show', name: '顯示分段', val: [0, 1], opt: ['關', '開（海平面上畫每一段的範圍與分界）'], def: 0, note: '跟 Debug 模式的陰影範圍線同一份：分段 ＝ 紅、黃、綠、青四段的框＋分界線；單張 ＝ 洋紅的框（內圈是開始淡出的地方）' },
-  { k: 'n1', name: '低：陰影圖', val: [512, 1024, 2048, 4096], def: 1024, unit: '²', note: '每一段（單張 ＝ 那一張）的陰影圖幾格見方：大 ⇒ 影子的邊細、吃顯示記憶體與時間' },
+  { k: 'n1', name: '低：陰影圖', val: [512, 1024, 2048, 4096], def: 2048, unit: '²', note: '每一段（單張 ＝ 那一張）的陰影圖幾格見方：大 ⇒ 影子的邊細、吃顯示記憶體與時間。總量有上限（兩張 4096²）：分段 3、4 段時一層最多 2048（主選單的「中」＝ 低這一檔、「高」＝ 高這一檔）' },
   { k: 'p1', name: '低：柔邊取樣', val: [4, 9], opt: ['4 點', '9 點'], def: 4 },
-  { k: 'n2', name: '高：陰影圖', val: [512, 1024, 2048, 4096], def: 2048, unit: '²' },
+  { k: 'n2', name: '高：陰影圖', val: [512, 1024, 2048, 4096], def: 4096, unit: '²' },
   { k: 'p2', name: '高：柔邊取樣', val: [4, 9], opt: ['4 點', '9 點'], def: 9 },
-  { k: 'dist', name: '最遠距離', lim: [100, 4000], step: 50, int: true, unit: ' m', def: 1500, cas: 1, note: '最後一段的遠端（離鏡頭多深）；再遠就沒有影子（最後一段的 Border 那一截淡掉）' },
+  { k: 'dist', name: '最遠距離', lim: [100, 4000], step: 50, int: true, unit: ' m', def: 1500, cas: 1, note: '最後一段的遠端；再遠就沒有影子（最後一段的交界那一截淡掉）。分界、最遠距離都從「畫面裡最近的東西」量起：鏡頭比桅頂（80 m）低 ⇒ 從鏡頭；拉高往下看 ⇒ 從看得到的最近的海面、桅頂、山頂（60_render.js csmNear）' },
   { k: 'count', name: '段數', lim: [1, 4], step: 1, int: true, unit: ' 段', def: 4, cas: 1 },
   { k: 's1', name: '分界 1', lim: [5, 1000], step: 5, int: true, unit: ' m', def: 60, cas: 1, seg: 1, note: '第 1 段到第 2 段的分界離鏡頭多深；分界要一個比一個遠、比最遠距離近（不是的話照順序夾）' },
   { k: 's2', name: '分界 2', lim: [10, 2000], step: 5, int: true, unit: ' m', def: 145, cas: 1, seg: 2 },
@@ -75,7 +75,7 @@ SHK_ITEMS.forEach(function (it) { SHK[it.k] = SHK_DEF[it.k] = it.def; });
 /** 一個值照描述表收好（按鈕 ⇒ 只收列出來的值；滑桿 ⇒ 夾進範圍、對齊一步）；不收 ⇒ undefined。 */
 function shkOk(it, v) { return it.val ? (it.val.indexOf(v) >= 0 ? v : undefined) : cfgSnap(it, v); }
 /** 存檔（69_prefs.js shk）：跟預設不一樣的那幾項；讀的時候照描述表收（網址有的那一項照網址）。 */
-function shkSnap() { var o = {}; SHK_ITEMS.forEach(function (it) { if (SHK[it.k] !== SHK_DEF[it.k]) o[it.k] = SHK[it.k]; }); return o; }
+function shkSnap() { var o = {}; SHK_ITEMS.forEach(function (it) { if (SHK[it.k] !== SHK_DEF[it.k] && !shkUrl(it.k)) o[it.k] = SHK[it.k]; }); return o; }   // 網址指定的那一項不存（不把那一場的網址變成玩家的設定）
 function shkApply(o) { SHK_ITEMS.forEach(function (it) { if (shkUrl(it.k)) return; var v = shkOk(it, o[it.k]); if (v !== undefined) SHK[it.k] = v; }); }
 function shkReset() { SHK_ITEMS.forEach(function (it) { SHK[it.k] = SHK_DEF[it.k]; }); }
 function shkUrl(k) { return Q.has('sh_' + k) || (k === 'mode' && Q.has('csm')); }

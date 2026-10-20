@@ -92,7 +92,7 @@ window.addEventListener('keydown', function (e) {
   if ($('err').style.display === 'flex') { if (e.key === 'Escape') { e.preventDefault(); $('err').style.display = 'none'; } return; }   // 報錯／問題回報彈窗開著（01_gl.js）⇒ 鍵不進遊戲（⛔ 不擋 ⇒ 在回報欄打 R 就回主選單、打 N 就重開）；Esc 關掉它
   if (/^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)) return;      // 在輸入框裡打字 ⇒ 不當成遊戲的鍵
   var k = e.key.toLowerCase(); if (e.code === 'Space') k = ' ';
-  if (k === 'escape') { e.preventDefault(); if (FP.on && fpEscEaten()) return; if (HELP.open) helpClose(); else if (FLX) floodClose(); else if (FLX3) xrayToggle(); else gsetToggle(); return; }   // 遊戲內的設定面板
+  if (k === 'escape') { e.preventDefault(); if (GFXOV.open) { gfxOvClose(); return; } if (FP.on && fpEscEaten()) return; if (HELP.open) helpClose(); else if (FLX) floodClose(); else if (FLX3) xrayToggle(); else gsetToggle(); return; }   // 遊戲內的設定面板
   ctrlDo('key', k, true, e);                                         // 第一人稱（走、爬…；P 停格、O 設定沒吃 ⇒ 往下）→ 建造（快捷欄、轉、拆、放…）→ 海戰的動作（71_ctrl.js）
 });
 /** 鍵盤按著的時候，畫面上對應的按鈕也亮成按下的顏色（Tim 2026-10-14；跟手指按住同一個 .down）；方向鍵照 A／D／W／S 的按鈕。 */
@@ -194,6 +194,20 @@ var GSET = { open: false, paused: false };
 function gsetOpen() { if (!RUNNING || GSET.open) return; helpClose(); GSET.open = true; GSET.paused = PAUSED; flowPause(true); $('gset').classList.add('on'); $('gsetBg').classList.add('on'); gsetShow(); }
 function gsetClose() { if (!GSET.open) return; GSET.open = false; flowPause(GSET.paused); $('gset').classList.remove('on'); $('gsetBg').classList.remove('on'); }
 function gsetToggle() { if (GSET.open) gsetClose(); else gsetOpen(); }
+// 遊戲中的畫質設定（Tim 2026-10-21「目前世界地圖模式無法開啟畫質設定頁 請協助加個入口」「應該說入口放這裡」＝ 設定面板（Esc）畫質那一列的「畫質設定…」）：
+//   把主選單那一層（#cover）只開畫質設定頁（GFX_PAGE ＝ 主選單的 page）、靠右半透明疊在遊戲上（template.html body.gfxov）⇒ 左邊看得到場景，改了下一格就照新的畫；
+//   打開時遊戲暫停（跟設定面板一樣），「返回」、右上角的返回、Esc ⇒ 收起來、回到設定面板，畫質那幾項寫回存檔（69_prefs.js prefsSaveOnly：地球儀開船那種網址帶參數的也存）。
+var GFXOV = { open: false, paused: false }, GFX_PAGE = null;
+function gfxOvOpen() {
+  if (!RUNNING || GFXOV.open || !GFX_PAGE) return;
+  GFXOV.paused = GSET.open ? GSET.paused : PAUSED; gsetClose(); helpClose(); flowPause(true);
+  GFXOV.open = true; document.body.classList.add('gfxov'); GFX_PAGE('gfx'); $('cover').style.display = ''; gfxShow();
+}
+function gfxOvClose() {
+  if (!GFXOV.open) return;
+  GFXOV.open = false; $('cover').style.display = 'none'; GFX_PAGE(''); document.body.classList.remove('gfxov');
+  prefsSaveOnly(PREF_GFX); flowPause(GFXOV.paused); gsetOpen();
+}
 // 不給全螢幕時那一行（Tim 2026-10-17：iPhone 照臺北狂飆那樣「加入主畫面」就是全螢幕 ——「iphone支援的操作 不用另外做功能」「純文字也可以」）：
 //   iPhone ⇒ 寫怎麼加入主畫面（iOS 自己會用網頁 App 開：沒有網址列與工具列）；別的（沒開全螢幕權限的 iframe…）照舊只說不給。
 //   已經從主畫面開（iOS 的 navigator.standalone、manifest 的 display-mode）⇒ 本來就沒有網址列：按鈕亮著、不寫原因。
@@ -220,6 +234,7 @@ function helpToggle() { if (HELP.open) helpClose(); else helpOpen(); }
 $('helpBg').onclick = helpClose; $('helpX').onclick = helpClose; $('helpB').onclick = helpOpen;
 $('gsetBg').onclick = gsetClose;                                    // 面板外點一下 ⇒ 關（不會順便瞄準、開砲：底下的東西被這一層蓋住）
 $('gsGo').onclick = gsetClose;
+$('gsGfxB').onclick = gfxOvOpen;                                     // 畫質設定…（遊戲中；見 gfxOvOpen）
 $('menuB').onclick = function () { doAct('menu'); };
 // Discord（主選單；Tim 2026-10-17）：新分頁開（從主畫面開的 ⇒ iOS 交給 Safari）。畫廊彈窗的 iframe 沒開 allow-popups ⇒ 開不了，照樣不擋遊戲。
 var DISCORD_URL = 'https://discord.gg/XuHkBFN9r';
@@ -648,6 +663,7 @@ function sliders() {
   fleetUI();                                                     // 主選單：艦隊編成
   // 細節設定那一頁：主選單 ⇄ 細節設定（同一個 #cover 裡兩張卡片，一次顯示一張）
   function page(w) { $('detail').style.display = w === 'det' ? '' : 'none'; $('gfxp').style.display = w === 'gfx' ? '' : 'none'; $('phxp').style.display = w === 'phx' ? '' : 'none'; $('shipp').style.display = w === 'ship' ? '' : 'none'; $('gunp').style.display = w === 'gun' ? '' : 'none'; $('furnp').style.display = w === 'furn' ? '' : 'none'; $('keysp').style.display = w === 'keys' ? '' : 'none'; $('sndp').style.display = w === 'snd' ? '' : 'none'; if ($('wqp')) $('wqp').style.display = w === 'wq' ? '' : 'none'; if (w !== 'keys') KEY_WAIT = null; document.querySelector('#cover .card:not(#detail):not(#gfxp):not(#phxp):not(#shipp):not(#gunp):not(#furnp):not(#keysp):not(#sndp):not(#wqp)').style.display = w ? 'none' : ''; $('cover').scrollTop = 0; $('pgX').classList.toggle('on', !!w && !ADMIN_ROOMS); }   // w：'' 主選單、'det' 細節設定、'gfx' 畫質設定、'phx' 物理設定、'ship' 船隻配置、'gun' 砲的設定、'furn' 道具設定（67_furncfg.js）
+  GFX_PAGE = page;                                               // 遊戲中的畫質設定（gfxOvOpen）也用這一支切頁
   [].forEach.call(document.querySelectorAll('#plays button'), function (b) { b.onclick = function () { setPlay(b.dataset.p); show(); }; });   // 主選單：玩法
   $('detB').onclick = function () { page('det'); };
   $('detX').onclick = function () { page(''); };
@@ -735,6 +751,7 @@ function gfxUI() {
   var dr2 = $('debR'); dr2.oninput = function () { DEB_CAP = Math.round(+dr2.value); gfxShow(); };
   [].forEach.call(document.querySelectorAll('#gfxs button[data-g], #gfxPre button'), function (b) { b.onclick = function () { gfxSet(b.dataset.g); gfxShow(); }; });
   var f = $('gfxFps'); f.checked = GFX_FPS; f.onchange = function () { GFX_FPS = f.checked; gfxShow(); };
+  [$('gfxX'), $('pgX')].forEach(function (b) { var f0 = b.onclick; b.onclick = function () { if (GFXOV.open) gfxOvClose(); else if (f0) f0.call(b); }; });   // 遊戲中打開的（gfxOvOpen）⇒ 返回 ＝ 回到遊戲的設定面板
   shkUI();                                                       // 陰影細項（07_gfx.js SHK_ITEMS）
   gfxShow();
 }
@@ -794,7 +811,7 @@ function shkStat() {
   var el = $('shkSt'); if (!el) return;
   var ch = shkSnap(), ks = Object.keys(ch);
   el.style.whiteSpace = 'pre-line';
-  el.textContent = (GFX.shadow ? '現在：' + (typeof SHM !== 'undefined' && SHM ? shadowDbgText() : '陰影還沒畫') + '（' + GFX_ITEMS[0].opt[GFX.shadow].replace(/（.*$/, '') + '：陰影圖 ' + SHK['n' + GFX.shadow] + '²）' : '陰影關著（上面「陰影」選低或高）') +
+  el.textContent = (GFX.shadow ? '現在（' + GFX_ITEMS[0].opt[GFX.shadow].replace(/（.*$/, '') + '）：' + (typeof SHM !== 'undefined' && SHM ? shadowDbgText() : '陰影還沒畫') + (SHM && SHM.n < SHK['n' + GFX.shadow] ? '（' + SHK['n' + GFX.shadow] + '² 超過總量上限 ⇒ 降成 ' + SHM.n + '²）' : '') : '陰影關著（上面「陰影」選低或高）') +
     '\n改過的：' + (ks.length ? ks.map(function (k) { return k + '=' + ch[k]; }).join('　') : '（都是預設）');
 }
 /** 物理效果（09_phx.js）：主選單的全開／高／中／低、物理設定頁每一項的按鈕。帆與繩換到「關」或從「關」換出來 ⇒ setPhys（跟 B 鍵同一支）。 */

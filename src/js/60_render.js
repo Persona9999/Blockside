@@ -126,9 +126,14 @@ function targets(w, h) {
 var CSM_STEP = 4;                                                        // 中心一步 ＝ 半寬 ÷ CSM_STEP（＝ n／8 個格子）⇒ 中心對齊格子後球還在範圍裡
 var CSM_UP = 1500, CSM_DOWN = 400, CSM_REFRESH = 1.0;                    // 深度範圍往太陽那邊多推（高山、桅頂）、往地下多推；陸地快取那一層最久多久重畫一次（秒）
 var CSM_SIMPLE = SHK.mode === 0;                                         // 單張陰影（shadowSimple）；畫質頁「陰影細項」的畫法（網址 ?csm=1 ⇒ 分段）。每一格 shadowMaps 照 SHK 更新
+// 陰影圖大小（Tim 2026-10-21「是否可以調高一下 中高畫質的陰影解析度(特別是離鏡頭近的部分)」）：中 2048、高 4096（07_gfx.js SHK n1／n2），
+//   夾在顯示卡的上限（MAX_TEXTURE_SIZE）、總量 CSM_TEXELS 以內（深度 24 位元一格佔 4 bytes：兩張 4096² ≈ 134 MB）⇒ 分段 4 段的「高」是 2048 一層（4 × 4096² ≈ 268 MB 太多）。
+var CSM_TEXELS = 2 * 4096 * 4096, CSM_MAXTEX = 0;
 function shadowMaps() {
   CSM_SIMPLE = SHK.mode === 0;
   var n = [1, SHK.n1, SHK.n2][GFX.shadow] || 1, k = CSM_SIMPLE ? 1 : Math.min(CSM_MAX, SHK.count);
+  n = Math.min(n, CSM_MAXTEX || (CSM_MAXTEX = gl.getParameter(gl.MAX_TEXTURE_SIZE) || 4096));
+  while (n > 512 && k * n * n > CSM_TEXELS) n /= 2;
   if (SHM && SHM.n === n && SHM.k === k) return;
   if (SHM) shadowFree();
   SHM = { n: n, k: k, on: false, cs: [], tex: null, st: null, stOn: false, layers: 0, gen: 0, rr: 0, splits: [], eye: new Float32Array(3), fw: new Float32Array([0, 0, -1]),
@@ -358,10 +363,12 @@ function shadowPass() {
   var ax = [[V0[0], V0[4], V0[8]], [V0[1], V0[5], V0[9]], [V0[2], V0[6], V0[10]]], sk = SUN.map(function (v) { return v.toFixed(4); }).join(',') + ';' + SHK.nrm + ',' + SHK.bias;   // 太陽方向＋沿法線推、深度偏差（畫質頁改了 ⇒ 矩陣、偏移重算）
   function dot3(a, b) { return a[0] * b[0] + a[1] * b[1] + a[2] * b[2]; }
   SHM.eye.set(E); SHM.fw.set(fw);
+  var z0 = SHM.z0 = csmNear(E, rays, dep);                                // 分段從畫面裡最近的東西開始算（見 csmNear）：分界、交界、最遠距離都從 z0 往後量
+  sp = SHM.splits = sp.map(function (v) { return v + z0; }); bs = SHM.bs = bs.map(function (v) { return v + z0; });
   var refreshed = false, sl = Math.min(400, 1 / Math.max(0.15, SUN[1] / Math.sqrt(Math.max(1e-6, 1 - SUN[1] * SUN[1]))));   // 影子拉多長（每公尺高；太陽越低越長，最多 400 倍 ⇒ 實際上限見 csmIn）
   for (var i = 0; i < k; i++) {
     var c = SHM.cs[i]; if (!c) continue;
-    var d0 = i ? bs[i - 1] : 0, d1 = sp[i], Q8 = [];
+    var d0 = i ? bs[i - 1] : z0, d1 = sp[i], Q8 = [];
     rays.forEach(function (R) { Q8.push(at(R, Math.max(d0, R.da))); Q8.push(at(R, Math.min(d1, R.db))); });
     var ce = [0, 0, 0]; Q8.forEach(function (p) { ce[0] += p[0] / 8; ce[1] += p[1] / 8; ce[2] += p[2] / 8; });
     var rad = 0; Q8.forEach(function (p) { rad = Math.max(rad, Math.hypot(p[0] - ce[0], p[1] - ce[1], p[2] - ce[2])); });
@@ -411,6 +418,26 @@ function shadowPass() {
   SHM.rr++; SHM.on = true;
   PASS.vp = null; gl.disable(gl.POLYGON_OFFSET_FILL);
   SHM.stat.ms = +(performance.now() - t0).toFixed(2); shLogTick();
+}
+/** 分段從畫面裡最近的東西開始算（Tim 2026-10-21：鏡頭拉高往下看時，第 1、2 段（離鏡頭 0–145 m）整段在鏡頭跟海之間的空中 ⇒ 最細的兩張陰影圖什麼都沒罩到，
+ *  看得到的海、船全在最粗的那兩段）⇒ 回傳 z0 ＝ 視錐裡最近、可能有東西的深度（沿鏡頭往前，公尺），再往鏡頭讓 CSM_Z0_PAD：
+ *  · 海上：四條稜碰到桅頂高度 CSM_TOP 那個平面的深度取最小（沿一條稜深度是線性的、往下最多的方向一定在角上 ⇒ 看四個角就夠；角都碰不到 ⇒ 畫面裡沒有那麼低的東西）；
+ *    鏡頭不比 CSM_TOP 高 ⇒ 0（跟以前一樣從鏡頭開始）。
+ *  · 陸地：看得到的地形塊（bedSeen）、頂（再加 CSM_TOWN_H 給房子）比 CSM_TOP 高的 ⇒ 外框八個角最近的深度（比真的地面近一點，安全）。 */
+var CSM_TOP = 80, CSM_TOWN_H = 40, CSM_Z0_PAD = 10;
+function csmNear(E, rays, dep) {
+  if (E[1] <= CSM_TOP) return 0;
+  var z = Infinity, PL = null;
+  rays.forEach(function (R) {
+    var a = R.a, b = R.b; if (b[1] >= a[1] || b[1] > CSM_TOP) return;
+    var t = Math.max(0, (a[1] - CSM_TOP) / (a[1] - b[1])); z = Math.min(z, R.da + (R.db - R.da) * t);
+  });
+  for (var key in BEDGL) {
+    var bb = BEDGL[key].bb; if (!bb || bb[4] + CSM_TOWN_H <= CSM_TOP) continue;
+    var bt = [bb[0], bb[1], bb[2], bb[3], bb[4] + CSM_TOWN_H, bb[5]]; if (!PL) PL = bedPlanes(CAM.vp); if (!bedSeen(PL, bt)) continue;
+    for (var c = 0; c < 8; c++) z = Math.min(z, Math.max(0, dep([c & 1 ? bt[3] : bt[0], c & 2 ? bt[4] : bt[1], c & 4 ? bt[5] : bt[2]])));
+  }
+  return isFinite(z) ? Math.max(0, Math.floor(z - CSM_Z0_PAD)) : 0;
 }
 /** 這一段畫哪幾個（drawHulls／drawModels／drawSails 的 near）：外接球（船 ＝ 船型的格子外框對角線的一半；斷開的那一團 30 m）
  *  1. 它跟它的影子落得到那一段的深度：球心離鏡頭的深度 ± (半徑 ＋ 影子長)，影子長 ＝ 直徑 × sl（照太陽高度，最多 400 m）跟 [d0, d1] 有重疊
@@ -500,7 +527,7 @@ function shLogTick() {
   if (land !== SHLOG.land) { SHLOG.land = land; shLog('陸地', { on: land }); }
   if (now - SHLOG.last < 1) return;
   SHLOG.last = now;
-  shLog('每秒', { mode: CSM_SIMPLE ? '單張' : '分段', n: SHM.n, cs: SHM.cs.slice(0, SHM.k).map(function (c) { return { r: c.r, C: c.C.map(function (v) { return Math.round(v); }) }; }),
+  shLog('每秒', { mode: CSM_SIMPLE ? '單張' : '分段', n: SHM.n, z0: SHM.z0 || 0, cs: SHM.cs.slice(0, SHM.k).map(function (c) { return { r: c.r, C: c.C.map(function (v) { return Math.round(v); }) }; }),
     splits: SHM.splits.map(function (v) { return Math.round(v); }), ms: SHM.stat.ms, redraws: SHM.stat.redraws, meshGen: BED_MESH_GEN });
 }
 // 陰影範圍的除錯線（Tim 2026-10-20「可以嘗試在畫面上畫debug線條(可以檢測debug模式是否開啟) 用來排查shadow分配範圍」）：Debug 模式（04_state.js dbgOn：細節設定的勾選、?dbg=1、?debug=1）開著才畫。
@@ -544,7 +571,7 @@ function shadowDebugDraw() {
 /** 除錯資訊那一行的「陰影」（61_hud.js）：模式、每一張的半寬、這一格畫陰影幾毫秒、靜態那一層／整張重畫過幾次。 */
 function shadowDbgText() {
   if (!SHM || !SHM.on) return '陰影 關';
-  return '陰影 ' + (CSM_SIMPLE ? '單張' : '分段') + ' ' + SHM.cs.slice(0, SHM.k).map(function (c) { return c.r; }).join('／') + ' m　' + SHM.stat.ms + ' ms　重畫 ' + SHM.stat.redraws;
+  return '陰影 ' + (CSM_SIMPLE ? '單張' : '分段（從 ' + Math.round(SHM.z0 || 0) + ' m 起）') + ' ' + SHM.cs.slice(0, SHM.k).map(function (c) { return c.r; }).join('／') + ' m　' + SHM.n + '²　' + SHM.stat.ms + ' ms　重畫 ' + SHM.stat.redraws;
 }
 /** 著色器的 uShM、uCsD／O／B（每一段的矩陣、遠端、沿法線推多少、深度偏差；沒用到的段 ⇒ FAR_M）。 */
 function shadowMats() {
