@@ -165,7 +165,8 @@ var SHADOW_GLSL = 'uniform highp sampler2DArrayShadow uShA; uniform mat4 uShM[' 
   //   低 ＝ 2×2 點（相隔 1 格 ⇒ 約 3×3 格的軟邊）、高 ＝ 3×3 點（約 4×4 格）⇒ 船在格子上移動時影子的邊不會一格一格地爬
   '  float e=uShPx; if(uShOn<1.5) return 0.25*(texture(uShA,vec4(q.xy+vec2(-0.5,-0.5)*e,L,q.z))+texture(uShA,vec4(q.xy+vec2(0.5,-0.5)*e,L,q.z))+texture(uShA,vec4(q.xy+vec2(-0.5,0.5)*e,L,q.z))+texture(uShA,vec4(q.xy+vec2(0.5,0.5)*e,L,q.z)));\n' +
   '  float s=0.0; for(int y=-1;y<=1;y++) for(int x=-1;x<=1;x++) s+=texture(uShA,vec4(q.xy+vec2(float(x),float(y))*e,L,q.z)); return s/9.0; }\n' +
-  'float shAt(int k, vec3 w, vec3 n){ return shOne(k,w+n*uCsO[k],uCsB[k]); }\n' +
+  // uShEdge（單張陰影，60_render.js shadowSimple）：範圍最外面那一圈（85%～98%）淡掉 ⇒ 範圍外的影子不是一刀切掉；照鏡頭分段時 0（段的範圍比要用的大一圈）
+  'uniform float uShEdge; float shAt(int k, vec3 w, vec3 n){ vec4 p=uShM[k]*vec4(w,1.0); float ed=max(abs(p.x),abs(p.y)); return mix(shOne(k,w+n*uCsO[k],uCsB[k]),1.0,uShEdge*smoothstep(0.85,0.98,ed)); }\n' +
   'float shadowK(vec3 w, vec3 n){ if(uShOn<0.5||uCsN<1) return uSunK; float d=dot(w-uCsE,uCsF); int k=-1;\n' +
   ' for(int i=0;i<' + CSM_MAX + ';i++){ if(i>=uCsN) break; if(d<uCsD[i]){ k=i; break; } }\n' +
   ' if(k<0) return uSunK; float s=shAt(k,w,n), t=smoothstep(uCsD[k]*0.88,uCsD[k],d);\n' +
@@ -390,7 +391,7 @@ function setCommon(p) {
     gl.uniform1f(u.uShOn, PASS.sh ? GFX.shadow : 0);
     gl.uniform1i(u.uShA, 4); gl.uniformMatrix4fv(u.uShM, false, SHM.mats); gl.uniform1f(u.uShPx, 1 / SHM.n);
     gl.uniform1i(u.uCsN, SHM.on ? SHM.k : 0); gl.uniform1fv(u.uCsD, SHM.csD); gl.uniform1fv(u.uCsO, SHM.csO); gl.uniform1fv(u.uCsB, SHM.csB);   // 60_render.js shadowMats
-    gl.uniform3fv(u.uCsE, SHM.eye); gl.uniform3fv(u.uCsF, SHM.fw);
+    gl.uniform3fv(u.uCsE, SHM.eye); gl.uniform3fv(u.uCsF, SHM.fw); gl.uniform1f(u.uShEdge, CSM_SIMPLE ? 1 : 0);
   }
 }
 // 水線下不染海水色（Tim 2026-10-16「莫尼特號艙內有一層水 但是實際上沒有進水」→「拿掉船身與模型的水線下水色，交給海面」）：
