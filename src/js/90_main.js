@@ -165,10 +165,12 @@ if (DEBUG) window.__game = {
   // 海圖（TASK-0721；08_seabed.js、32_ground.js）：載了哪幾塊、換過幾次中心、等過幾次；每艘的擱淺讀數；q ＝ [x, z] ⇒ 那一點的高度與底質
   chart: function () { return chartInfo(); },                                  // 小地圖（63_chart.js）：開了沒、範圍、吃水門檻、底圖幾塊、畫面上的位置
   bed: function (q) { if (!BED || !BED.A) return null; return { area: BED.A.id, site: BED.site, origin: [BED.ax, BED.az], center: [BED.cx, BED.cy], loaded: Object.keys(BED.ch).sort(), loads: BED.loads, drops: BED.drops, waits: BED.miss,
-    mid: BED.mid ? { step: BED.mid, loaded: Object.keys(BED.cm).sort(), loads: BED.mloads, lv: [1, 2].map(function (v) { var n = 0; for (var q = 0; q < BED.lv.length; q++) if (BED.lv[q] === v && BED.has[q]) n++; return n; }) } : null,   // 外圈的中等塊：載了哪幾塊、模擬讀中等／原精度的各幾塊 meshes: Object.keys(BEDGL).length,
+    mid: BED.mid ? { step: BED.mid, loaded: Object.keys(BED.cm).sort(), loads: BED.mloads, lv: [1, 2].map(function (v) { var n = 0; for (var q = 0; q < BED.lv.length; q++) if (BED.lv[q] === v && BED.has[q]) n++; return n; }) } : null,   // 外圈的中等塊：載了哪幾塊、模擬讀中等／原精度的各幾塊
+    meshes: Object.keys(BEDGL).length,                                   // （以前寫在上一行的註解後面 ⇒ 沒出來）
+    win: BED.win ? { r: BED.win, x: BED.A.x, y: BED.A.y, wins: BED.wins, ms: BED.winMs, asking: !!BED.winP } : null,   // 海域跟著旗艦走：現在的窗（塊號）、換過幾次、上次重排幾 ms、在要新的窗
     trees: treeStat(),
     draw: { n: BEDDRAW.n, cull: BEDDRAW.cull, tris: BEDDRAW.tris },   // 上一格：畫了幾塊、視錐外剔掉幾塊、畫了幾個三角形（63_bed_gl.js bedDraw）
-    far: { tiles: BEDFAR.n, left: BEDFAR.todo ? BEDFAR.todo.length + (BEDFAR.busy ? 1 : 0) : null, kb: Math.round(BEDFAR.bytes / 1024), ms: +BEDFAR.ms.toFixed(1), drawn: Object.keys(BEDFAR.g).filter(function (k) { return !BEDGL[k]; }).length },
+    far: { tiles: BEDFAR.n, left: BEDFAR.todo ? BEDFAR.todo.length + BEDFAR.fly + BEDFAR.ready.length : null, fly: BEDFAR.fly, fail: BEDFAR.fail, kb: Math.round(BEDFAR.bytes / 1024), ms: +BEDFAR.ms.toFixed(1), drawn: Object.keys(BEDFAR.g).filter(function (k) { return !BEDGL[k]; }).length },
     foam: { n: BEDFOAM.N, builds: BEDFOAM.builds, ms: +BEDFOAM.ms.toFixed(1), eye: CAM.eye.map(function (v) { return +v.toFixed(1); }), ground: +bedHgt(CAM.eye[0], CAM.eye[2]).toFixed(1) },
     at: q ? { h: +bedHgt(q[0], q[1]).toFixed(2), mat: bedMat(q[0], q[1]) } : undefined,
     ships: SHIPS.map(function (sh) { return { name: sh.name, px: +sh.px.toFixed(1), pz: +sh.pz.toFixed(1), keelY: sh.keelY === undefined ? null : +sh.keelY.toFixed(2), grnd: sh.grnd ? { m: sh.grnd.m, pen: +sh.grnd.pen.toFixed(2), lost: sh.grnd.lost } : null, lost: sh.grndLost || 0, av: sh.bedAv ? { t: +sh.bedAv.t.toFixed(1), d: sh.bedAv.d } : null }; }) }; },

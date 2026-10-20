@@ -45,12 +45,11 @@ function townGot(L, err) {
   TOWNS.ver++; TOWNS.dirty = true; TOWNS.stat.towns = TOWNS.list.length;
   TOWNS.stat.prepMs = +(performance.now() - t0).toFixed(1);
   Object.keys(Object.assign({}, BED.ch, BED.cm)).forEach(function (k) { var C = bedShowC(k); if (C && townOver(C.cx, C.cy)) evEmit('bedChunk', C.cx, C.cy, C); });   // 畫著的那一份（原精度或外圈的中等塊）
-  Object.keys(BEDFAR.g).forEach(function (k) {                          // 遠景塊：網格與樹冠殼是照舊的高度建的 ⇒ 丟掉、排回最前面重讀
+  Object.keys(BEDFAR.g).forEach(function (k) {                          // 遠景塊：網格與樹冠殼是照舊的高度建的 ⇒ 丟掉、放回去重讀（63_bed_gl.js bedFarStep 照離旗艦遠近挑）
     if (bedShowC(k)) return;
     var c = k.split('_').map(Number); if (!townOver(c[0], c[1])) return;
-    var g = BEDFAR.g[k]; gl.deleteVertexArray(g.vao); gl.deleteBuffer(g.vb); gl.deleteBuffer(g.ib); delete BEDFAR.g[k];
-    if (TREES.far[k]) { var s = TREES.far[k]; if (s.vao) { gl.deleteVertexArray(s.vao); gl.deleteBuffer(s.vb); gl.deleteBuffer(s.ib); } delete TREES.far[k]; }
-    if (BEDFAR.todo) BEDFAR.todo.unshift([c[0], c[1], 1]);
+    bedFarDrop(k);
+    if (BEDFAR.todo) BEDFAR.todo.push([c[0], c[1], 1, 0]);
   });
 }
 /** 塊 (cx, cy) 跟哪一座城的外框疊到（海域座標）。 */

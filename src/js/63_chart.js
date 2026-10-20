@@ -1,8 +1,9 @@
 // ───────────────────────── 小地圖（海圖；玩法規則 chart，04_modes.js：航海，TASK-0746 ⑤） ─────────────────────────
 // Tim 2026-10-20：「航海模式下 是否可以加一個小地圖(海圖)」「橫版畫面時 放在右下角」「直版也先放右下角」。
-// 只有畫面：海圖塊進來（08_seabed.js 'bedChunk' 細的、63_bed_gl.js bedFarPut 遠景的粗塊）就畫進一張整個海域的底圖（一塊 CHART_PX 點 ⇒ 1 km 的塊 32 m 一點，跟遠景的粗塊同一個點距），
+// 只有畫面：海圖塊進來（08_seabed.js 'bedChunk' 細的、63_bed_gl.js bedFarPut 遠景的粗塊）就畫進一張整個海域的底圖（一塊 CHART_PX 點 ⇒ 1 km 的塊 32 m 一點，跟遠景的粗塊同一個點距；
+//   海域跟著旗艦走 ⇒ 底圖跟著窗換，疊到的照搬：chartWin），
 //   細的那一份蓋過粗的；顏色照高度：陸地（沙灘、低地、山）、淺到我艦過不去（船底＋電腦讓開淺水的 BEDAV_CLR）、淺海、深海；水下的珊瑚礁、礁石另外標紅。
-// 每 6 格畫面（hudFrame）畫一次：北朝上、我艦在中間（三角形尖端 ＝ 船頭）、走過的航跡、海域原點 ⚓（地球儀的出發點 ＝ 停靠的港口）、比例尺；
+// 每 6 格畫面（hudFrame）畫一次：北朝上、我艦在中間（三角形尖端 ＝ 船頭）、走過的航跡、出發點 ⚓（開戰位置 ＝ 世界原點；停靠 ⇒ 泊位）、比例尺；
 //   右上角「＋」拉近、「−」拉遠（滾輪也行）：半徑 0.5、1、1.5（開局）、2.5、4、7 km、整個海域。
 // 位置：右下角、右邊那一排按鈕的上面（橫版、直版都是；照按鈕現在的位置算）—— ⛔ #stage 的 canvas 樣式是 inset:0 滿版 ⇒ 要先 inset:auto。⛔ 不讀不寫模擬 ⇒ 無頭不訂閱、戰局一位元不動；沒有海圖（?map）或玩法沒開 ⇒ 不建、不顯示。
 var CHART = { A: null, im: null, g: null, res: null, cv: null, box: null, zb: null, zoom: 2, trail: [], trT: -1, need: 6.5 };
@@ -17,6 +18,7 @@ function chartReady() {
   c.width = nx * CHART_PX; c.height = ny * CHART_PX;
   var g = c.getContext('2d'), d = CHART_COL.deep; g.fillStyle = 'rgb(' + d.join(',') + ')'; g.fillRect(0, 0, c.width, c.height);
   CHART.A = A; CHART.im = c; CHART.g = g; CHART.res = {}; CHART.trail = []; CHART.trT = -1; CHART.need = chartNeed();
+  CHART.x0 = A.x[0]; CHART.y0 = A.y[0]; CHART.nx = nx; CHART.ny = ny;  // 底圖蓋的範圍（塊號）：海域跟著旗艦走 ⇒ chartWin 換
   for (var k in BED.ch) chartPut(BED.ch[k]);
   for (k in BED.cm) chartPut(BED.cm[k]);                                 // 外圈的中等塊（chartPut 只收更細的 ⇒ 順序無關）
   return true;
@@ -39,7 +41,7 @@ function chartRGB(h, m) {
 function chartPut(C) {
   if (!chartReady() || !C) return;
   var k = bedKey(C.cx, C.cy); if (CHART.res[k] >= C.n) return;
-  var i0 = C.cx - CHART.A.x[0], j0 = C.cy - CHART.A.y[0]; if (i0 < 0 || j0 < 0 || i0 >= BED.nx || C.cy > CHART.A.y[1]) return;
+  var i0 = C.cx - CHART.x0, j0 = C.cy - CHART.y0; if (i0 < 0 || j0 < 0 || i0 >= CHART.nx || j0 >= CHART.ny) return;
   CHART.res[k] = C.n;
   var P = CHART_PX, img = CHART.g.createImageData(P, P), D = img.data, n = C.n;
   for (var j = 0; j < P; j++) for (var i = 0; i < P; i++) {
@@ -50,6 +52,17 @@ function chartPut(C) {
   CHART.g.putImageData(img, i0 * P, j0 * P);
 }
 evOn('bedChunk', function (cx, cy, C) { chartPut(C); }, 0, true);
+evOn('bedWin', function () { chartWin(); }, 0, true);
+/** 海域的窗換了（08_seabed.js bedWinApply）：照新的範圍換一張底圖 —— 兩個窗疊到的那一塊照搬（畫好的不重畫），新進來的先塗深海、塊到了再畫。 */
+function chartWin() {
+  if (!CHART.im || CHART.A !== BED.A) return;
+  var A = BED.A, nx = A.x[1] - A.x[0] + 1, ny = A.y[1] - A.y[0] + 1, P = CHART_PX, c = document.createElement('canvas');
+  c.width = nx * P; c.height = ny * P;
+  var g = c.getContext('2d'), d = CHART_COL.deep; g.fillStyle = 'rgb(' + d.join(',') + ')'; g.fillRect(0, 0, c.width, c.height);
+  g.drawImage(CHART.im, (CHART.x0 - A.x[0]) * P, (CHART.y0 - A.y[0]) * P);
+  var res = {}; Object.keys(CHART.res).forEach(function (k) { var q = k.split('_').map(Number); if (bedIdx(q[0], q[1]) >= 0) res[k] = CHART.res[k]; });
+  CHART.im = c; CHART.g = g; CHART.res = res; CHART.x0 = A.x[0]; CHART.y0 = A.y[0]; CHART.nx = nx; CHART.ny = ny;
+}
 /** 畫面上那一張（第一次要畫才建）：外框裡一張 canvas ＋ 右上角「＋」拉近、「−」拉遠（Tim 2026-10-20「小地圖是否可以加上縮放按鍵」）；滾輪也能縮放。 */
 function chartEl() {
   if (CHART.box) return CHART.box;
@@ -92,7 +105,7 @@ function chartDraw(me) {
   if (SIMT < CHART.trT) CHART.trail = [];
   if (SIMT - CHART.trT >= 2 || CHART.trT < 0) { CHART.trT = SIMT; CHART.trail.push([me.px, me.pz]); if (CHART.trail.length > CHART_TRAIL) CHART.trail.shift(); }
   var g = c.getContext('2d'); g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, W, W);
-  var e0 = A.x[0] * ch, s0 = A.y[0] * ch, ew = (A.x[1] + 1) * ch - e0, sw = (A.y[1] + 1) * ch - s0;   // 海域在底圖上的範圍（往東、往南公尺）
+  var e0 = CHART.x0 * ch, s0 = CHART.y0 * ch, ew = CHART.nx * ch, sw = CHART.ny * ch;                // 底圖蓋的範圍（往東、往南公尺；海域跟著旗艦走 ⇒ 現在的窗）
   var R = CHART_R[CHART.zoom], ce = BED.ax + me.px, cs = BED.az + me.pz;                            // 中心：我艦（整個海域 ⇒ 海域中心）
   if (!R) { R = Math.max(ew, sw) / 2; ce = e0 + ew / 2; cs = s0 + sw / 2; }
   var kp = CHART_PX / ch, sc = W / (2 * R);                                                          // 底圖每公尺幾點；畫面每公尺幾 px
@@ -106,7 +119,7 @@ function chartDraw(me) {
     CHART.trail.forEach(function (p, i) { var q = P(BED.ax + p[0], BED.az + p[1]); if (i) g.lineTo(q[0], q[1]); else g.moveTo(q[0], q[1]); });
     var qn = P(BED.ax + me.px, BED.az + me.pz); g.lineTo(qn[0], qn[1]); g.stroke(); g.setLineDash([]);   // 接到現在的位置
   }
-  var o = P(0, 0); g.font = '12px sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillStyle = '#f0c56a'; g.fillText('⚓', o[0], o[1]);   // 海域原點 ＝ 地球儀的出發點
+  var o = P(BED.ax, BED.az); g.font = '12px sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillStyle = '#f0c56a'; g.fillText('⚓', o[0], o[1]);   // 出發點 ＝ 開戰位置（世界原點；海域的原點對齊固定的格線之後不一定在這裡）
   var m = P(BED.ax + me.px, BED.az + me.pz), F = fwd(me.yaw), dx = F[0], dz = F[2], L = 7;           // 我艦：畫面右 ＝ 東、下 ＝ 南
   g.beginPath(); g.moveTo(m[0] + dx * L * 1.4, m[1] + dz * L * 1.4); g.lineTo(m[0] - dx * L + dz * L * 0.7, m[1] - dz * L - dx * L * 0.7); g.lineTo(m[0] - dx * L * 0.5, m[1] - dz * L * 0.5); g.lineTo(m[0] - dx * L - dz * L * 0.7, m[1] - dz * L + dx * L * 0.7); g.closePath();
   g.fillStyle = '#ffffff'; g.fill(); g.strokeStyle = '#10243a'; g.lineWidth = 1.2; g.stroke();
