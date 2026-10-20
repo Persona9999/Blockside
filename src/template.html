@@ -133,6 +133,7 @@
   .gr .grd{ display:inline-block; text-align:left; line-height:1.25; }   /* 砲列：每層砲甲板一行、上下疊（61_hud.js gunRow） */
   .g-full{ color:#8fe388; } .g-short{ color:#f2c14e; } .g-none{ color:#7d838c; } .g-dead{ color:#e0574a; } .g-wet{ color:#7fc8ff; }
   .gside .aim, .gend .aim{ position:relative; }   /* 這門現在開打得中（61_hud.js gunCell aim ← 21_gunnery.js gunAims；Tim 2026-10-19「炮可以射擊到敵人時 是否可以有額外標示」）：符號底下壓一個半透明的金色圓（Tim 2026-10-19「標示方法有問題會變成一堆點 是否可以改成一個半透明黃圓圈 壓在原本的炮指示圈下」）。⛔ 以前用 text-shadow／drop-shadow 往四周偏移描金 ⇒ 圖示版的點狀圖示每一點都被複製一圈，看起來是一堆金點 */
+  .gside .aim, .gend .aim{ text-shadow:none; -webkit-text-stroke:2px #000; paint-order:stroke fill; }   /* 金色圓上的黑描邊改成原地描（Tim 2026-10-20 截圖：「在亮黃光時 原本的三角形與圓圈會變成點狀」）：.gside／.gend 的黑描邊是四個斜角各偏 1 px 的 text-shadow ⇒ 在深色海面上糊成一圈邊看不出來，壓在金色圓上每一份都看得見 —— ◌ 的每一點長成一叢、△ 疊成鐘形。text-stroke 沿字形外框描、paint-order 先描再填 ⇒ 只露出外面 1 px、形狀不複製 */
   .gside .aim::before, .gend .aim::before{ content:''; position:absolute; left:50%; top:50%; width:calc(var(--gc) * 1.05); height:calc(var(--gc) * 1.05); transform:translate(-50%, -50%); border-radius:50%; background:rgba(232, 194, 106, .55); z-index:-1; pointer-events:none; }   /* z-index −1 ⇒ 畫在這一層（.gside 有 transform、.gend 下面給 z-index 0）的最底、符號與圖示底下；⛔ 給 .aim 自己 z-index ⇒ 圓會蓋在圖示版的貼圖（背景）上面 */
   .gend{ position:relative; z-index:0; }   /* 給上一行的金色圓一個疊放層（不然 z-index −1 會掉到羅盤那一團後面） */
   .ico.g-full{ box-shadow:inset 0 -2px 0 #8fe388; } .ico.g-short{ box-shadow:inset 0 -2px 0 #f2c14e; } .ico.g-none{ box-shadow:inset 0 -2px 0 #7d838c; } .ico.g-dead{ box-shadow:inset 0 -2px 0 #e0574a; }
