@@ -97,11 +97,11 @@ function burnLamps(sh, L, E) {
     var sp = H[j], f = 0.8 + 0.12 * Math.sin(SIMT * 9.1 + sp.ord * 1.7) + 0.08 * Math.sin(SIMT * 23.3 + sp.ord), at = [sp.c[0] + 0.5, sp.c[1] + 0.5, sp.c[2] + 0.5];
     if (V.length < VLAMP_N) V.push({ at: at, r: Math.min(36, 8 + 2.2 * Math.sqrt(sp.n)), rgb: [f, 0.42 * f, 0.12 * f], color: BURN_EMBER, ha: 0.45 });   // ha：光暈比燈籠小（lanternHalo）
     var w = M4.pt(sh.M, at[0], at[1], at[2] + 4);
-    L.push({ w: w, I: 0.8 * f * (1.6 - WX.lum) * Math.min(1, 0.4 + sp.heat), R: Math.min(14, 5 + 0.3 * Math.sqrt(sp.n)), rgb: [1, 0.5, 0.18], d: (w[0] - E[0]) * (w[0] - E[0]) + (w[1] - E[1]) * (w[1] - E[1]) + (w[2] - E[2]) * (w[2] - E[2]) });
+    L.push({ w: w, I: 0.8 * f * (1.6 - wxLum()) * Math.min(1, 0.4 + sp.heat), R: Math.min(14, 5 + 0.3 * Math.sqrt(sp.n)), rgb: [1, 0.5, 0.18], d: (w[0] - E[0]) * (w[0] - E[0]) + (w[1] - E[1]) * (w[1] - E[1]) + (w[2] - E[2]) * (w[2] - E[2]) });
   }
   B.sl.forEach(function (s, k) {
     var bb = s.bb, w = M4.pt(sh.M, (bb[0] + bb[3]) / 2, (bb[1] + bb[4]) / 2, (bb[2] + bb[5]) / 2), f = 0.85 + 0.15 * Math.sin(SIMT * 11.3 + k * 2.1);
-    L.push({ w: w, I: 0.7 * f * (1.6 - WX.lum), R: 10, rgb: [1, 0.5, 0.15], d: (w[0] - E[0]) * (w[0] - E[0]) + (w[1] - E[1]) * (w[1] - E[1]) + (w[2] - E[2]) * (w[2] - E[2]) });
+    L.push({ w: w, I: 0.7 * f * (1.6 - wxLum()), R: 10, rgb: [1, 0.5, 0.15], d: (w[0] - E[0]) * (w[0] - E[0]) + (w[1] - E[1]) * (w[1] - E[1]) + (w[2] - E[2]) * (w[2] - E[2]) });
   });
 }
 // 訂閱（TASK-0669：模擬層只發事件，00_events.js）

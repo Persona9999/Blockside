@@ -348,9 +348,12 @@ function programs() {
     '#version 300 es\nprecision highp float; in vec2 vT; in vec4 vF; uniform sampler2D uSailT; uniform float uSeaT;\n' + BURN_GLSL + 'void main(){ if(vT.x>=0.0 && texture(uSailT,vT).a<0.5) discard; if(vF.x<5e5 && bnB(vF,uSeaT)>1.0) discard; }\n');
   P.sky = VK.compile(gl,
     '#version 300 es\nlayout(location=0) in vec2 aP; uniform mat4 uInv; out vec3 vD; void main(){ vec4 a=uInv*vec4(aP,1.0,1.0); vD=a.xyz/a.w; gl_Position=vec4(aP,0.9999,1.0); }\n',
-    '#version 300 es\nprecision highp float; in vec3 vD; uniform vec3 uEye,uSun,uFog,uSky; out vec4 o;\n' +
+    '#version 300 es\nprecision highp float; in vec3 vD; uniform vec3 uEye,uSun,uFog,uSky,uSunC; uniform float uNight; out vec4 o;\n' +
     'void main(){ vec3 d=normalize(vD-uEye); float h=clamp(d.y,0.0,1.0); vec3 c=mix(uFog,uSky,pow(h,0.55)); float s=max(dot(d,uSun),0.0);\n' +
-    ' c+=vec3(1.0,0.85,0.6)*(pow(s,600.0)*3.0+pow(s,12.0)*0.18); if(d.y<0.0) c=uFog; o=vec4(c,1.0); }\n');
+    ' c+=uSunC*(pow(s,600.0)*3.0+pow(s,12.0)*0.18);\n' +
+    // 星星（世界時間的夜晚，08_weather.js TOD_NIGHT）：方向切成 420 格一點、千分之二點五的格子有一顆，亮度不一；貼近地平線淡掉
+    ' if(uNight>0.01&&d.y>0.0){ float r=fract(sin(dot(floor(d*420.0),vec3(12.9898,78.233,37.719)))*43758.5453); c+=vec3(0.9,0.92,1.0)*step(0.9975,r)*(0.4+0.6*fract(r*977.0))*uNight*smoothstep(0.0,0.25,d.y); }\n' +
+    ' if(d.y<0.0) c=uFog; o=vec4(c,1.0); }\n');
   // 破洞底下的海（TASK-0643；Tim 2026-10-16「船如果被打穿甲板跟船殼 因為海面在船範圍內被Clipping 會導致破洞可以直接看到空氣」）：
   //   海在原本的船殼外形裡一律丟掉（hullHit：船艙裡不要看起來積了一層水）⇒ 船底被打穿時，從洞往下看什麼都沒打到 ⇒ 以前看到天空在地平線以下的霧色（淺灰白）。
   //   這一趟畫在海之後（60_render.js abyssDraw）：全螢幕一個三角形、深度 0.9999、深度測試 LESS ⇒ 只落在深度還是清空值（什麼都沒畫到：海、船、天空都沒寫深度的地方）的像素；
@@ -379,8 +382,8 @@ function setCommon(p) {
   if (u.uVe) { if (VX) gl.uniform2f(u.uVe, VX.De, VX.re2); else gl.uniform2f(u.uVe, 0, 1); }   // 眼的喉部（深度、半徑²）
   if (u.uClip) gl.uniform1f(u.uClip, PASS.clip);
   if (u.uCutT) gl.uniform1i(u.uCutT, 8);                       // 剖面的切高貼圖（74_cutaway.js）：固定第 8 號
-  if (u.uSunK) gl.uniform1f(u.uSunK, WX.sun);                   // 天氣（08_weather.js）：陽光、水手與碎木的亮度、白沫
-  if (u.uLum) gl.uniform1f(u.uLum, WX.lum);
+  if (u.uSunK) gl.uniform1f(u.uSunK, wxSun());                   // 天氣（08_weather.js）：陽光、水手與碎木的亮度、白沫
+  if (u.uLum) gl.uniform1f(u.uLum, wxLum());
   if (u.uLN) { gl.uniform1i(u.uLN, LAMPS.n); if (LAMPS.n) { gl.uniform4fv(u.uLP, LAMPS.p); gl.uniform4fv(u.uLC, LAMPS.c); } }   // 點光源（60_render.js lampsUpdate；沒有 uLN 的著色器 ＝ 陰影那一趟 ⇒ 不給）
   if (u.uFoam) gl.uniform1f(u.uFoam, WX.foam);
   if (u.uNS) gl.uniform1i(u.uNS, SSLOTS.length);               // 陰影用到幾格（60_render.js gpuSlots）

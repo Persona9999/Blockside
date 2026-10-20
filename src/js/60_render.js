@@ -285,7 +285,7 @@ function lampsUpdate() {
   L.sort(function (a, b) { return a.d - b.d; });
   LAMPS.n = Math.min(LAMP_N, L.length);
   for (var i = 0; i < LAMPS.n; i++) {
-    var l = L[i], I = l.I !== undefined ? l.I : LAMP_I * l.k * (1.6 - WX.lum);   // l.I：自己給亮度的燈（玩家的燈：艙裡白天也暗，不照天色）
+    var l = L[i], I = l.I !== undefined ? l.I : LAMP_I * l.k * (1.6 - wxLum());   // l.I：自己給亮度的燈（玩家的燈：艙裡白天也暗，不照天色）
     var cl = l.rgb || [1, 0.62, 0.25];                                 // 模型的燈 ＝ 暖橘；船殼上的燈照 config 的光色
     LAMPS.p.set([l.w[0], l.w[1], l.w[2], l.R || LAMP_R], i * 4); LAMPS.c.set([cl[0] * I, cl[1] * I, cl[2] * I, 0], i * 4);
   }
@@ -295,11 +295,11 @@ function lanternK(m) { var t = SIMT * 1.7 + m.k * 2.39; return 0.8 + 0.1 * Math.
 function lanternHalo(push) {
   SHIPS.forEach(function (sh) {
     if (sh.sink > 40) return;
-    (sh.vlamps || []).forEach(function (V, j) { var k = 0.9 + 0.1 * Math.sin(SIMT * 1.3 + j); push(M4.pt(sh.M, V.at[0], V.at[1], V.at[2]), V.r * S * (2.4 + 0.4 * k) * (V.ha || 1), V.rgb, 0.18 + 0.2 * k * (1.6 - WX.lum)); });   // 船殼上的燈的光暈（照它的光色）
+    (sh.vlamps || []).forEach(function (V, j) { var k = 0.9 + 0.1 * Math.sin(SIMT * 1.3 + j); push(M4.pt(sh.M, V.at[0], V.at[1], V.at[2]), V.r * S * (2.4 + 0.4 * k) * (V.ha || 1), V.rgb, 0.18 + 0.2 * k * (1.6 - wxLum())); });   // 船殼上的燈的光暈（照它的光色）
     sh.models.forEach(function (m) {
       if (!m.alive || !isLamp(m)) return;
       var k = lanternK(m), sz = Math.max(m.bb[3] - m.bb[0], m.bb[5] - m.bb[2]) * S, q = lampAt(m);   // 燈多大（公尺）；光暈在火焰那一點
-      push(M4.pt(sh.M, q[0], q[1], q[2]), sz * (2.4 + 0.4 * k), [1, 0.6, 0.2], 0.18 + 0.2 * k * (1.6 - WX.lum));   // 天越暗越亮（暴風雨的 lum 比晴天低）
+      push(M4.pt(sh.M, q[0], q[1], q[2]), sz * (2.4 + 0.4 * k), [1, 0.6, 0.2], 0.18 + 0.2 * k * (1.6 - wxLum()));   // 天越暗越亮（暴風雨的 lum 比晴天低）
     });
   });
 }
@@ -444,7 +444,7 @@ function hullUniforms(prog) {
 function render() {
   resize(); var w = CAM.w, h = CAM.h; RFR++;                          // RFR：模型的世界矩陣（modelWorld）這一格重算
   // 閃電（天氣，08_weather.js）：那一格的天空與環境光拉亮、0.3 秒內退掉；雷聲照距離延後（340 m/s）。只在畫面，畫完把天色還回去
-  var bolt = wxBolt(SIMT), sky0 = SKY, hor0 = HORIZON;
+  var bolt = wxBolt(SIMT), sky0 = SKY, hor0 = HORIZON, tod0 = todApply();   // 世界時間（08_weather.js；有 ?tod= 才開）：太陽、天色照時刻 —— 在記下 sky0／hor0 之後套（⛔ 之前 ⇒ 結尾還原成套過的、一格一格疊上去）
   if (bolt && bolt.f > 0) { SKY = lerp3(SKY, [0.82, 0.86, 0.98], bolt.f * 0.7); HORIZON = lerp3(HORIZON, [0.76, 0.79, 0.88], bolt.f * 0.6); }
   if (bolt && bolt.n !== LAST_BOLT) { LAST_BOLT = bolt.n; if (RUNNING && !STILL) setTimeout(function () { sfx('thunder', null, 1 / (1 + bolt.d / 1500)); }, bolt.d / 340 * 1000); }
   targets(w, h); shadowMaps(); gpuSlots(); shadowGrow(); lampsUpdate();             // gpuSlots：這一格 GPU 的格給哪幾艘（視野裡最近的幾艘：畫質設定）
@@ -461,6 +461,7 @@ function render() {
   gl.enable(gl.DEPTH_TEST); gl.depthFunc(gl.LEQUAL);
   // 天
   gl.depthMask(false); gl.useProgram(P.sky.prog); setCommon(P.sky); gl.uniformMatrix4fv(P.sky.u.uInv, false, CAM.inv);
+  gl.uniform3fv(P.sky.u.uSunC, SUNC); if (P.sky.u.uNight) gl.uniform1f(P.sky.u.uNight, TOD_NIGHT);   // 太陽（夜裡是月亮）圓盤的顏色、星星（08_weather.js；沒開世界時間 ⇒ 照舊的太陽、沒有星星）
   gl.bindVertexArray(SKYVAO); gl.drawArrays(gl.TRIANGLES, 0, 3); gl.depthMask(true);
   // 船與斷開的那幾團
   // 船的矩陣是鏡射（shipBaseMatrix：照雕刻引擎的手性）⇒ 船殼的正面變成順時針；帆的著色器看 gl_FrontFacing 翻法線，也要跟著
@@ -569,7 +570,7 @@ function render() {
     gl.uniform1f(P.rain.u.uYaw, Math.atan2(CAM.look[2] - CAM.eye[2], CAM.look[0] - CAM.eye[0]));
     gl.bindVertexArray(SKYVAO); gl.drawArrays(gl.TRIANGLES, 0, 3); gl.enable(gl.DEPTH_TEST);
   }
-  SKY = sky0; HORIZON = hor0;
+  SKY = sky0; HORIZON = hor0; todRestore(tod0);
   gl.disable(gl.BLEND); gl.bindVertexArray(null);
   // 收尾：RT.A（MSAA ⇒ 先解析到 RT.B）縮放貼到畫布
   var src = RT.A.fb;

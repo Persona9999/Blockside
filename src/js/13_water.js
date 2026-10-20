@@ -235,7 +235,7 @@ function wpDrawFoam(hullU) {
 /** 水滴放進點精靈的緩衝（60_render.js 的 pushPt）：天暗的時候跟著暗。 */
 function wpPushSpray(pushPt) {
   if (!WS.n || WP_HIDE) return;
-  var b = 0.55 + 0.45 * WX.sun, c = [0.9 * b, 0.94 * b, 0.98 * b];
+  var b = 0.55 + 0.45 * wxSun(), c = [0.9 * b, 0.94 * b, 0.98 * b];
   for (var i = 0; i < WS.n; i++) { var f = WS.life[i] / WS.max[i]; pushPt([WS.p[i * 3], WS.p[i * 3 + 1], WS.p[i * 3 + 2]], WS.s[i] * (1.3 - 0.3 * f), c, WS.a[i] * Math.min(1, f * 3), -1); }
 }
 // 訂閱（TASK-0669：模擬層只發事件，00_events.js）

@@ -100,6 +100,45 @@ function setWeather(id) {
   SKY = WX.sky; HORIZON = WX.horizon; GROUND = WX.ground; vxInit();   // 大漩渦（08_sea.js）：主選單的背景也看得到
   [].forEach.call(document.querySelectorAll('#wxs button'), function (b) { b.className = b.dataset.w === WX_ID ? 'on' : ''; });
 }
+// ───────── 世界時間（Tim 2026-10-20「是否可以加一個世界模擬時間(先模擬24小時就好) 讓太陽跟著這個時間變化(會有夜晚) 然後船航行這個時間也會變」）─────────
+//   只有外面那一頁給了 ?tod=<時（0～24，可帶小數）> 才開（Blocksail 地球儀管時鐘、帶進帶出）；沒給 ⇒ 照舊固定的太陽與天色（對戰、沙盒、宣傳片的畫面一位元都不變）。
+//   現在幾點 ＝ tod ＋ 模擬時間 SIMT ÷ 3600：1:1（Tim：「我希望維持目前手感」—— 畫面上的節數就是模擬裡的速度，地球儀也照同一個節數開）；
+//     停格的模擬倍速 ×8 ⇒ 時間也 ×8。回地球儀時 'left' 帶 tod（03_camera.js camTrans）。
+//   太陽：照海域原點的緯度（BED.A.lat0；沒有 ⇒ ?lat= ⇒ 18°N）、赤緯 0（先不分季節：6 點日出、18 點日落）算方位與高度；時刻照 30 秒一步
+//     （太陽一步動 0.125° ⇒ 看不出跳；陸地那層陰影不用每一格重畫，60_render.js landShadow 的 key 有 SUN）。
+//   晨昏（太陽 −6°～10°）：天色、霧往橘紅靠；夜晚（低於 −6°）：直射光換成月亮（滿月、跟太陽相對；強度 0.14、偏藍的圓盤）、天色深藍、環境光剩三成、
+//     燈變亮（wxLum 變小 ⇒ 60_render.js lampsUpdate 的 1.6 − lum 變大）；天空有星星（01_gl.js P.sky 的 uNight）。
+//   只動畫面：天色在 render 開頭套（todApply）、結尾還原（todRestore／sky0）；陽光、亮度是倍數 TOD_SUNK、TOD_LUMK（讀的地方一律走 wxSun()、wxLum()）——
+//     ⛔ 不改 WX.sun／lum 本身（WX 就是天氣預設那個物件；改了又沒還原 ⇒ 下一格拿它當基準、越乘越暗）。模擬不讀 SUN、天色。
+var TOD0 = Q.has('tod') && isFinite(parseFloat(Q.get('tod'))) ? ((parseFloat(Q.get('tod')) % 24) + 24) % 24 : null, TOD_LAT = parseFloat(Q.get('lat'));
+var SUNC = [1, 0.85, 0.6], TOD_NIGHT = 0, TOD_SUNK = 1, TOD_LUMK = 1;  // 天空的太陽（月亮）圓盤顏色、星星多少（01_gl.js P.sky）；陽光、亮度的倍數
+/** 這一格的陽光、亮度（天氣 × 世界時間；沒開世界時間 ⇒ 就是天氣的）。 */
+function wxSun() { return WX.sun * TOD_SUNK; }
+function wxLum() { return WX.lum * TOD_LUMK; }
+/** 現在幾點（0～24）；沒開世界時間 ⇒ null。 */
+function todNow() { return TOD0 === null ? null : ((TOD0 + SIMT / 3600) % 24 + 24) % 24; }
+/** 那個時刻天體的方向（世界座標：東 ＋x、北 −z、上 ＋y）：時角 H ＝ (h − 12) × 15°、赤緯 dec、緯度 lat（弧度）。 */
+function todDir(h, lat, dec) {
+  var H = (h - 12) * Math.PI / 12, e = -Math.cos(dec) * Math.sin(H), n = Math.sin(dec) * Math.cos(lat) - Math.cos(dec) * Math.cos(H) * Math.sin(lat), u = Math.sin(dec) * Math.sin(lat) + Math.cos(dec) * Math.cos(H) * Math.cos(lat);
+  return norm([e, u, -n]);
+}
+function todSm(a, b, x) { var t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); }
+/** render 開頭（60_render.js；在記下 sky0／hor0 之後、閃電之前）：照時刻換太陽（月亮）的方向、天色、陽光與亮度的倍數 ⇒ 回傳要還原的地面色（沒開世界時間 ⇒ null）。 */
+function todApply() {
+  if (TOD0 === null) return null;
+  var h = Math.round(todNow() * 120) / 120, lat = (BED && BED.A && isFinite(BED.A.lat0) ? BED.A.lat0 : isFinite(TOD_LAT) ? TOD_LAT : 18) * Math.PI / 180;
+  var S = todDir(h, lat, 0), el = Math.asin(S[1]) * 180 / Math.PI, day = todSm(-6, 10, el), dusk = Math.max(0, 1 - Math.abs(el - 2) / 8), gr0 = GROUND;
+  if (el > -3) { SUN = S; TOD_SUNK = todSm(-1, 12, el); SUNC = [1, 0.85 - 0.25 * dusk, 0.6 - 0.35 * dusk]; }
+  else { var Mo = todDir(h + 12, lat, 0), me = Math.asin(Mo[1]) * 180 / Math.PI; SUN = Mo; TOD_SUNK = 0.25 * (1 - todSm(-6, -3, el)) * todSm(-2, 10, me); SUNC = [0.32, 0.35, 0.42]; }   // 月亮：太陽 −3° 以下才換過去（那時陽光已經是 0 ⇒ 方向換了看不出來）
+  // 夜色：環境光（天 × 地）約白天的三成、偏藍 —— 第一版只剩一成（0.03／0.04），船跟海一樣黑、整個畫面一片深藍（Tim 要「看得見的月光夜」）
+  SKY = lerp3(lerp3([0.10, 0.14, 0.26], SKY, day), [0.36, 0.38, 0.62], dusk * 0.45);
+  HORIZON = lerp3(lerp3([0.09, 0.12, 0.20], HORIZON, day), [0.86, 0.52, 0.34], dusk * 0.55);
+  GROUND = lerp3([0.08, 0.08, 0.10], GROUND, day);
+  TOD_LUMK = 0.3 + 0.7 * day; TOD_NIGHT = (1 - todSm(-12, -4, el)) * Math.min(1, WX.sun);   // 星星：太陽 −4° 以下才出來、−12° 全亮（第一版照 day ⇒ 太陽還在地平線上就有星星）；暴風雨（陽光 0.35）星星也少
+  return { gr: gr0 };
+}
+/** render 結尾：地面色還原成天氣的（天、霧由 render 自己的 sky0／hor0 還原；SUN、倍數留著：下一格 todApply 會再算）。 */
+function todRestore(s) { if (s) GROUND = s.gr; }
 /** 開砲散布的倍率：晴天 1；暴風雨 ＝ 1.25 ＋ 9 ×（橫搖角速度 ＋ 一半的縱搖角速度，rad/s）—— 船晃得越快，點火那一下差得越多。 */
 function wxSpread(sh) {
   if (!WX.aim || !sh.wv) return 1;

@@ -388,7 +388,7 @@ function flDraw() {
 }
 /** 噴進來的粒子放進點精靈的緩衝（60_render.js 的 pushPt）。 */
 function flPushJets(pushPt) {
-  var b = 0.55 + 0.45 * WX.sun, col = [0.72 * b, 0.84 * b, 0.9 * b];
+  var b = 0.55 + 0.45 * wxSun(), col = [0.72 * b, 0.84 * b, 0.9 * b];
   SHIPS.forEach(function (sh) {
     var fl = sh.fl; if (!fl || ((sh.broken || sh.sinkingFinal) && !fl.vis) || sh.sunk) return;
     var J = fl.J, M = sh.M;
