@@ -12,6 +12,7 @@
 #   python -I admin.py check                      驗 config/game.json
 #   python -I admin.py build                      照設定重建 ../index.html（Blockside 根目錄 ＝ GitHub Pages 的首頁）
 #   python -I admin.py build --code [--base <版>]  只重建程式（入口 index.html；船檔 ships/ 照舊）—— 沒有 VoxelKit/_cache 的機器用，船變了就擋（見「只重建程式」）
+#   python -I admin.py reseg                      船檔照現在的切法重切（ship_segments 改了、這台沒有 _cache 時；解回來逐位元組相同才寫，見「船檔重切」）
 #   python -I admin.py import --work <雕刻作品 ID> --id <船的代號> --name <名字>   匯入新船（匯出 .vxk、登記、重建）
 #   python -I admin.py metasync --id <船的代號>   只同步 meta 與固定點（作品改了 meta、加了固定點，格子不動；TASK-0572）
 #   python -I admin.py reimport --id <船的代號> [--work <作品 ID>]                 重新匯入（換新的 .vxk、印跟上一版的差別、重建）
@@ -2153,6 +2154,51 @@ def act_build_code(base=None):
         log.append('✓ 只重建程式：入口 index.html 換了（來源指紋 %s → %s）；船檔 ships/ 照舊 %d 個' % (have['fp'], M1['fp'], len(idx)))
     return log + act_srccheck()
 
+
+# ───────────────────────── 船檔重切（reseg：船檔分段的切法改了、這台沒有 _cache；2026-10-20） ─────────────────────────
+# 船檔裡就是建置時的原文（檔頭 JSON ＋ 格子），切法（ship_segments）只決定怎麼切 ⇒ 不用 _cache 也重切得了：
+#   照入口清單讀每艘船檔（雜湊對得上才讀）⇒ 解回原文 ⇒ 檔頭 JSON 讀進來再寫回去要逐位元組相同（不然不保證切得跟建置一樣）⇒ ship_pieces 重切
+#   ⇒ 新的一份解回來要跟原文逐位元組相同 ⇒ 才寫船檔、換入口清單上的雜湊（入口別的地方一個字都不動）；最後 srccheck。
+# 重切的 ＝ 有 _cache 的機器整份建置會寫的：同一份檔頭與格子、同一支 ship_pieces（zlib 同一版 ⇒ 逐位元組相同）。
+# 只換切法：解回來的原文不變 ⇒ 遊戲、build --code、srccheck 照舊；船的內容要變（匯入、metasync…）還是要整份建置。
+
+def act_reseg():
+    """reseg：船檔照現在的切法重切（見上面）。"""
+    html = open(OUT, encoding='utf-8', newline='').read()
+    m, idx = SHIPS_TAG_RX.search(html), ships_index(html)
+    if not m or not idx:
+        raise Fail('成品不是拆檔的（沒有船清單 #%s）⇒ 沒有船檔可以重切' % SHIPS_EL)
+    files, new, log, n0, n1 = {}, {}, [], 0, 0
+    for el, hx in idx.items():
+        f = ship_file(el)
+        raw = zlib.decompress(ship_data(html, el), -15)
+        n = struct.unpack('<I', raw[4:8])[0] if raw[:4] == b'VXK1' and len(raw) >= 8 else -1
+        if n < 0 or len(raw) < 8 + n:
+            raise Fail('%s 解開不是 VXK1（或檔頭長度對不上）' % f)
+        hb = raw[8:8 + n]
+        h = json.loads(hb.decode('utf-8'))
+        if _jb(h) != hb:
+            raise Fail('%s 的檔頭 JSON 讀進來再寫回去跟原本不一樣 ⇒ 不保證切得跟建置一樣，不重切' % f)
+        P = ship_pieces(h, raw[8 + n:])
+        if zlib.decompress(b''.join(base64.b64decode(p) for p in P), -15) != raw:
+            raise Fail('%s 重切後解回來跟原本不一樣（什麼都沒寫）' % f)
+        new[el] = ship_hash(P)
+        old = work_read(f)
+        t = ship_text(el, P, new[el])
+        n0, n1 = n0 + len(old), n1 + len(t)
+        if new[el] != hx:
+            files[f] = t
+        log.append('  %s：%d → %d 段、%d → %d KB%s' % (el, old.count(b'\n') - 2, len(P), len(old) // 1024, len(t) // 1024, '' if new[el] != hx else '（本來就是這樣切，不動）'))
+    if not files:
+        return log + ['· %d 艘的船檔本來就是現在的切法 ⇒ 什麼都沒寫' % len(idx)]
+    for f, t in files.items():
+        with open(os.path.join(ROOT, *f.split('/')), 'w', encoding='utf-8', newline='\n') as fh:
+            fh.write(t)
+    with open(OUT, 'w', encoding='utf-8', newline='') as fh:
+        fh.write(html[:m.start(1)] + json.dumps(new, separators=(',', ':')) + html[m.end(1):])
+    log.append('✓ 重切 %d 艘（解回來跟原本逐位元組相同）：船檔合計 %.2f → %.2f MB；入口只換了船清單上的雜湊' % (len(files), n0 / 1048576, n1 / 1048576))
+    return log + act_srccheck()
+
 # ───────────────────────── 壓縮版成品（預設；build --raw ＝ 原格式。Tim 2026-10-14，TASK-0583：雕刻作品與匯出的 .vxk 格式不變，匯進遊戲才壓縮） ─────────────────────────
 # 量過（六艘、壓縮後）：格子合計約 0.87 MB，模型網格（砲、燈、舵輪…的三角形，header 的 rig.meshes）約 3.50 MB ⇒ 大頭是網格：
 #   ① 同一份網格（同一門砲的模型）在幾艘船上各存一份 —— 161 種裡 55 種出現在兩艘以上 ⇒ 成品裡收成一個池子（<script id="vxk-meshes">），每艘只記編號；
@@ -2171,37 +2217,179 @@ def act_build_code(base=None):
 #   ⛔ 檔名不帶雜湊：git 打包時照路徑最後十幾個字元把同一個檔的各版排在一起找差異 ⇒ 檔名每版都換，同一艘船的新舊版排不到一起、分段省下來的又吃回去。
 #   build --single ＝ 照舊一個檔（船內嵌；封存、要單一檔案的地方用），--raw ＝ 原格式。
 #   船檔分段（同一天量的：dev 主線 287 版、291 次船檔重存裡 206 次只有檔頭變了 —— meta、繩端綁定、id；格子很少動）：
-#     一艘壓成一整條 ⇒ 改一欄也整艘重存（同一段歷史 107.9 MiB）；照結構切段、各自 base64 一行 ⇒ git 只存變了的那幾段（17.5 MiB；格子再切小只到 17.4，不切）。
-#     切法（ship_segments，切點只看結構 ⇒ 一處改了，別段一個位元組都不變）：檔頭頂層一欄一段、rig 一個子欄一段、網格池一份一段、格子一段。
+#     一艘壓成一整條 ⇒ 改一欄也整艘重存（同一段歷史 107.9 MiB）；照結構切段、各自 base64 一行 ⇒ git 只存變了的那幾段（17.5 MiB）。
 #     壓法：同一條 deflate 串流，段跟段之間 Z_FULL_FLUSH（清掉字典、對齊位元組 ⇒ 每段的壓縮位元組只看那一段；gzip --rsyncable 同一招）；
 #     每段各自 base64（⛔ 整條一起 base64 ⇒ 前面一段長度一變，後面全部錯位）。讀的時候各段解 base64、接起來 ＝ 一條普通的 deflate-raw ⇒ inflate、parse 照舊。
-#     代價：船檔合計大 3.8%（段多的小船多一點）。
+#     細切（ship_segments；同一天晚上。第一版檔頭一欄一段、格子一段 ⇒ 繩改一個數，整個 rig.ropes 那段重存 60–90 KB；改一格，整個格子那段重存 60 KB）：
+#       一段壓縮後約 SEG_T（4 KB）。檔頭頂層一欄一段、rig／mpool 一個子欄一段（同第一版）；再往下壓縮後超過 SEG_T 的才切（_vsegs）：
+#         物件一欄一段、陣列幾個元素一組（自己就超過的元素自己成段、再往下切 ⇒ 網格池的大網格 v、t 各自幾千個數一組）。
+#       格子（_gsegs）：塊的鍵一段、4096 位元組的塊幾塊一組；鏡射／改裝船的 diff 幾筆一組（索引差值、顏色各自一段）。
+#       分組照內容定切點（_cuts；content-defined chunking，rsync、restic 同一招）：元素後面切不切只看它自己的鍵 —— 繩、模型、零件看名字，
+#         數字陣列看連續三個數，塊看塊座標，diff 看格子索引 ⇒ 改了、插了一個，只動它那一組（頂多連帶隔壁一組）；照個數切的話插一條繩，後面每組都換。
+#       大小用估的（壓縮等級 6，比 9 快五倍；只定切點，出貨照樣 9）；一組實際壓起來超過 2×SEG_T ⇒ 只在那一組裡再切。
+#       量（餘燼號，每種改法隨機六處、git 打包後一版的平均）：見 src/REPO_SIZE.md §0。船檔合計比整條壓大 3.6%（第一版 3.4%）。
+#     切法改了、這台沒有 _cache ⇒ reseg（從船檔自己解回原文重切、驗算；見「船檔重切」）。⛔ 切點、壓出來的位元組都跟 zlib 版本有關：換了 zlib 的實作，船檔整份換一次。
 POOL_EL = 'vxk-meshes'                                       # 舊的共用池子（拆檔之前的成品才有；現在只拿來擋「已經壓過」）
 POOL_Q = 100
 SHIPS_EL = 'vxk-ships'                                       # 入口裡的船清單
 SHIP_RX = r'(<script type="application/x-vxk" id="[^"]+">)([^<]*)(</script>)'
 SHIP_NAME_RX = re.compile(r'^[A-Za-z0-9_-]+\.js$')
+SEG_T = 4096                                                 # 細切：一段壓縮後的目標位元組
+SEG_LV = 6                                                   # 估大小用的壓縮等級（只拿來定切點；出貨照樣 9）
+SEG_BLK = 65536                                              # 估壓縮比：每這麼多位元組一塊各自壓
 
 
 def _jb(v):
     return json.dumps(v, ensure_ascii=False, separators=(',', ':')).encode('utf-8')
 
 
-def _segs(v, path=()):
-    """_jb(v) 切成段（接起來 ＝ _jb(v)）：物件一欄一段，只往下切 rig、mpool 兩層；網格池 meshes 一份一段。"""
-    if isinstance(v, dict) and v and path in ((), ('rig',), ('mpool',)):
-        out = []
-        for j, (k, x) in enumerate(v.items()):
-            sub = _segs(x, path + (k,))
-            sub[0] = (b'{' if j == 0 else b',') + _jb(k) + b':' + sub[0]
-            out += sub
-        out[-1] += b'}'
-        return out
-    if isinstance(v, list) and v and path == ('mpool', 'meshes'):
-        out = [(b'[' if t == 0 else b',') + _jb(x) for t, x in enumerate(v)]
-        out[-1] += b']'
-        return out
-    return [_jb(v)]
+def _zn(b):
+    """估：b 壓縮後幾位元組（等級 SEG_LV；只拿來定切點）。"""
+    c = zlib.compressobj(SEG_LV, zlib.DEFLATED, -15)
+    return len(c.compress(b)) + len(c.flush())
+
+
+def _zr(parts):
+    """估：一串 bytes 接起來、每 SEG_BLK 位元組一塊各自壓 ⇒ 壓縮後／壓縮前（一組只有幾 KB：整串一起壓的比例會低估一組的大小）。"""
+    c = r = n = 0
+    blk = []
+    for p in parts:
+        blk.append(p)
+        n += len(p)
+        if n >= SEG_BLK:
+            c, r, blk, n = c + _zn(b''.join(blk)), r + n, [], 0
+    if blk:
+        c, r = c + _zn(b''.join(blk)), r + n
+    return c / r if r else 1.0
+
+
+def _cuts(keys, sizes, zs):
+    """分組（照內容定切點）：元素 i 後面是切點 ⇔ crc32(鍵 i) < 大小 i／SEG_T（平均一組 SEG_T）；這組還不到 SEG_T/4 ⇒ 不切（太碎壓不好）。
+    一組壓起來（zs(a, e) ＝ 第 a 到 e−1 個元素一段壓縮後的位元組）超過 2×SEG_T ⇒ 從組裡最像切點的地方（crc32／大小最小；一樣 ⇒ 靠中間）再切，切到不超過。
+    切不切只看那個元素自己、再切只看那一組 ⇒ 改了、插了一個元素，只動它那一組（頂多連帶隔壁一組），後面的組不會跟著錯位。回傳每組的結尾（不含）。"""
+    n = len(keys)
+    q = [zlib.crc32(k) * SEG_T / (s * 4294967296) if s > 0 else math.inf for k, s in zip(keys, sizes)]   # < 1 ⇒ 切點
+    P = [0.0]
+    for s in sizes:
+        P.append(P[-1] + s)
+    ends, a = [], 0
+    for i in range(n - 1):
+        if q[i] < 1 and P[i + 1] - P[a] >= SEG_T / 4:
+            ends.append(i + 1)
+            a = i + 1
+    out, a = [], 0
+    for e in ends + [n]:
+        st = [(a, e)]
+        while st:
+            x, y = st.pop()
+            if y - x < 2 or zs(x, y) <= 2 * SEG_T:
+                out.append(y)
+                continue
+            mid = (P[x] + P[y]) / 2
+            m = min(range(x, y - 1), key=lambda i: (q[i], abs(P[i + 1] - mid)))
+            st += [(m + 1, y), (x, m + 1)]
+        a = e
+    return out
+
+
+def _ekey(x):
+    """陣列元素的鍵（_cuts 只看它）：物件 ⇒ name／path／id（繩改了數字、換了綁定，鍵不變 ⇒ 切點不動）；
+    沒有名字的物件（網格池的網格）⇒ 各欄的名字與長度（動了頂點，鍵不變）；其他 ⇒ 整個元素。"""
+    if isinstance(x, dict):
+        for k in ('name', 'path', 'id'):
+            if isinstance(x.get(k), str):
+                return x[k].encode('utf-8')
+        return ';'.join('%s:%d' % (k, len(y)) if isinstance(y, (list, dict, str)) else k for k, y in x.items()).encode('utf-8')
+    return _jb(x)
+
+
+def _dsegs(d, sub):
+    """物件一欄一段：sub(鍵, 值) 切好的段，第一段前面接 {"鍵": 或 ,"鍵":，最後一段後面接 }。"""
+    out = []
+    for j, (k, x) in enumerate(d.items()):
+        s = sub(k, x)
+        s[0] = (b'{' if j == 0 else b',') + _jb(k) + b':' + s[0]
+        out += s
+    out[-1] += b'}'
+    return out
+
+
+def _vsegs(v):
+    """_jb(v) 切成段（接起來 ＝ _jb(v)）：壓縮後不到 SEG_T ⇒ 一段；物件 ⇒ 一欄一段（各欄再切）；
+    陣列 ⇒ 幾個元素一組（_cuts；鍵：物件看名字、數字看連續三個數），自己就超過 SEG_T 的元素自己成段、往下切（網格池的大網格 ⇒ v、t 各自分組）。"""
+    b = _jb(v)
+    if len(b) <= SEG_T or _zn(b) <= SEG_T:
+        return [b]
+    if isinstance(v, dict):
+        return _dsegs(v, lambda k, x: _vsegs(x))
+    if not isinstance(v, list) or len(v) < 2:
+        return [b]
+    if all(type(x) in (int, float) for x in v):
+        E = b[1:-1].split(b',')                              # 數字陣列：JSON 裡的逗號只當分隔
+        K = [b','.join(E[max(0, i - 2):i + 1]) for i in range(len(E))]
+        big = [False] * len(E)
+    else:
+        E = [_jb(x) for x in v]
+        K = [_ekey(x) for x in v]
+        big = [len(e) > SEG_T and _zn(e) > SEG_T for e in E]
+    r = _zr(E)
+    out, i = [], 0
+    while i < len(E):
+        if big[i]:
+            out.append(_vsegs(v[i]))
+            i += 1
+            continue
+        j = i
+        while j < len(E) and not big[j]:
+            j += 1
+        a = i
+        for e in _cuts(K[i:j], [(len(x) + 1) * r for x in E[i:j]], lambda x, y: _zn(b','.join(E[i + x:i + y]))):
+            out.append([b','.join(E[a:i + e])])
+            a = i + e
+        i = j
+    S = []
+    for t, s in enumerate(out):
+        s[0] = (b'[' if t == 0 else b',') + s[0]
+        S += s
+    S[-1] += b']'
+    return S
+
+
+def _segs(h):
+    """檔頭切段：頂層一欄一段、rig／mpool 一個子欄一段（小欄常常單獨變：checksum、exported_at…）；再往下照 _vsegs。"""
+    return _dsegs(h, lambda k, x: _dsegs(x, lambda k2, y: _vsegs(y)) if k in ('rig', 'mpool') and isinstance(x, dict) and x else _vsegs(x))
+
+
+def _gsegs(h, grid):
+    """格子那一段切段（接起來 ＝ grid）。格式照檔頭認：塊 ＝ 鍵 u16×3 × n ＋ 資料 4096 位元組 × n（鏡射 ⇒ 一半的塊、n ＝ nhalf）；
+    鏡射、改裝船後面接 diff ＝ 索引差值 u32 × nd ＋ 顏色 u8 × nd（改裝船只有 diff）；長度對不上（不認得的格式）⇒ 整段一段。
+    鍵一段；資料幾塊一組（_cuts：鍵 ＝ 塊座標，大小 ＝ 那塊各自壓的大小）；diff 幾筆一組（鍵 ＝ 格子的索引），差值、顏色照同一組切。"""
+    V, M = h.get('variant'), h.get('mirror')
+    nc, nd = (0, V['ndiff']) if V else (M['nhalf'], M['ndiff']) if M else (h.get('nchunks') or 0, 0)
+    if len(grid) != nc * 4102 + nd * 5:
+        return [grid]
+    out = [grid[:nc * 6]]
+    D = [grid[nc * 6 + i * 4096:nc * 6 + (i + 1) * 4096] for i in range(nc)]
+    if D:
+        al = [_zn(x) for x in D]
+        r = _zr(D) * nc * 4096 / sum(al)                     # 各自壓的大小 ⇒ 換算成一組裡的大小
+        a = 0
+        for e in _cuts([grid[i * 6:i * 6 + 6] for i in range(nc)], [x * r for x in al], lambda x, y: _zn(b''.join(D[x:y]))):
+            out.append(b''.join(D[a:e]))
+            a = e
+    if nd:
+        p = nc * 4102
+        dl, dc, at, K = grid[p:p + nd * 4], grid[p + nd * 4:], 0, []
+        for d in struct.unpack('<%dI' % nd, dl):
+            at += d
+            K.append(struct.pack('<Q', at))
+        E = _cuts(K, [(_zn(dl) + _zn(dc)) / nd] * nd, lambda x, y: max(_zn(dl[x * 4:y * 4]), _zn(dc[x:y])))
+        for w, X in ((4, dl), (1, dc)):
+            a = 0
+            for e in E:
+                out.append(X[a * w:e * w])
+                a = e
+    return [x for x in out if x]
 
 
 def ship_segments(h, grid):
@@ -2210,8 +2398,11 @@ def ship_segments(h, grid):
     hb = b''.join(S)
     if hb != _jb(h):
         raise Fail('檔頭切段接回去跟原本不一樣（_segs）')
+    G = _gsegs(h, grid)
+    if b''.join(G) != grid:
+        raise Fail('格子切段接回去跟原本不一樣（_gsegs）')
     S[0] = b'VXK1' + struct.pack('<I', len(hb)) + S[0]
-    return S + [grid]
+    return S + G
 
 
 def ship_pieces(h, grid):
@@ -3397,6 +3588,7 @@ def main():
     s.add_argument('--single', action='store_true', help='壓縮版但不拆檔：船照舊內嵌在 index.html（一個檔；封存、要單一檔案的地方用）。預設拆成入口＋ships/')
     s.add_argument('--code', action='store_true', help='只重建程式：入口 index.html 照工作區的來源重建、船檔 ships/ 照舊 —— 沒有 VoxelKit/_cache 的機器用；船變了、或照同一條路重做不出現在的成品 ⇒ 擋下')
     s.add_argument('--base', help='--code：成品是照哪一版建的（不給 ⇒ HEAD，合併中再試 MERGE_HEAD）')
+    sp.add_parser('reseg', help='船檔照現在的切法重切（不用 _cache：從船檔自己解回原文重切、解回來逐位元組相同才寫、換入口清單上的雜湊）—— 只有 ship_segments 的切法改了才要')
     s = sp.add_parser('snapshot', help='某一版的成品（入口＋它清單上的船檔）取出到一個資料夾：拆檔之後 git show <版本>:index.html 只拿得到入口（對拍的對照組用這個）')
     s.add_argument('rev', help='commit、分支名')
     s.add_argument('to', help='資料夾（會寫 index.html、ships/）')
@@ -3457,6 +3649,8 @@ def main():
             if o.base and not o.code:
                 raise Fail('--base 只給 --code 用')
             log = act_build_code(o.base) if o.code else act_build(not o.raw, o.single)
+        elif o.op == 'reseg':
+            log = act_reseg()
         elif o.op == 'snapshot':
             log = act_snapshot(o.rev, o.to)
         elif o.op == 'verify':
