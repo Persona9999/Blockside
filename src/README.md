@@ -2,6 +2,7 @@
 
 > 📦 2026-10-15（TASK-0586）從 ArtGallery 的 `HtmlGames/_build/ame_constitution_broadside/` 搬來（只複製檔案；之前的歷史在 ArtGallery 的 `git log -- HtmlGames/_build/ame_constitution_broadside`，114 筆）。
 > 開發用 Valhalla 裡的 `Blockside/` submodule。目錄：`src/`（這裡）、`VoxelKit/`（從 ArtGallery/VoxelKit 853b4e7 複製；`_cache/` 不入版控）、根目錄的成品 `index.html`（GitHub Pages 首頁）、`admin.html`（設定後台）、`admin.cmd`、`sandbox.html`（2D 指揮官沙盒）、`fleetlab.html`（擬真沙盒的入口，轉到 index.html?lab=fleet）。
+> ⚠ repo 變肥（成品 `index.html` 每一版都進版控，壓縮過的船 git 存不了差異；5 天 154 MiB）：原因與方案見 [`REPO_SIZE.md`](REPO_SIZE.md)（2026-10-20，還沒動手）。
 
 根目錄的 `index.html` 是由這裡的 `template.html`、`js/`、`config/game.json`，加上 `../VoxelKit/` 產生的：
 
