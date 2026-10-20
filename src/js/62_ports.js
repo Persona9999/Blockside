@@ -16,7 +16,12 @@
 //   · 打得壞（照戰局現有的狀態推，蓋板本身不吃砲彈；kaguya 2026-10-19 拍板 B 案）：鉸鏈旁那一格船殼沒了（d.foot，10_ship.js）／關上時貼著的那一圈船殼掉了 PORT_RING 格以上／
 //     蓋板沒全開（s < 1）時那門砲被打中或打飛 ⇒ 蓋板沒了（不畫）、之後 s 至少 1 ＝ 那個砲門一直開著（木匠補好船殼也不回來）。砲打飛時蓋板全開著 ⇒ 蓋板留著、一直開著（沒人關了）。
 // 畫質「砲門的開關演出」（GFX.port，低 0／中 1／高 1；07_gfx.js）：關 ⇒ 蓋板開著、砲推出去，都不動（從開切到關那一格清一次 portsOff）。
-//   組合：裝飾關 ⇒ 不畫蓋板、不演（跟演出關一樣清一次 portsOff ⇒ 砲推出去、不往裡縮）；裝飾開、演出關 ⇒ 蓋板開著不動；兩項都開 ⇒ 演出。⛔ 沒有蓋板的砲不演後座：沒有蓋板的船連畫面都一位元不動。
+//   組合：裝飾關 ⇒ 不畫蓋板、不演蓋板（清一次 portsOff）；裝飾開、演出關 ⇒ 蓋板開著不動；兩項都開 ⇒ 演出。
+// 後座（Tim 2026-10-20：「另外是否可以讓沒有炮門的炮 也有後座力呢」「不過要注意排除弩炮 投石機等(要根據meta判斷)」）：沒有蓋板（或「裝飾」關、蓋板不演）的砲，
+//   開火照同一條曲線（portLoad：GUN_SNAP 秒退到底、裝填剩 PORT_LOADQ 秒推出去）沿砲軸往船裡退 recoilDist 格 —— 只寫 m.vsl，跟蓋板那一段同一個欄位、同一個畫質項（GFX.port）。
+//   退多少（recoilDist，照模型 meta）：meta recoil（格；0 ＝ 不演）先看 ⇒ 固定彈種（meta ammo，沒寫照 weapon／gun 對到的砲種表 ammo）是弩箭、火箭、石彈（ammoQuiet）、希臘火 ⇒ 不演（沒有火藥）
+//   ⇒ 有蓋板 ⇒ 它的 house ⇒ 砲管長（固定點 muzzle → breech）× RECOIL_K、至少 PORT_HOUSE0 格；沒有固定點 ⇒ PORT_HOUSE0。
+var RECOIL_K = 0.3, RECOIL_ON = false;                                 // 砲管長的三成（蘇士奎哈納號 8 吋砲 28.5 格 ⇒ 9 格，跟照蓋板量的 house 8–9 一樣）；上一格後座開著 ⇒ 關掉那一格要清一次（recoilOff）
 var PORT_DT = 0.25, PORT_SNAP = 0.5;                                   // 每 0.25 模擬秒判一次開關；兩格之間 SIMT 往回走或一次跳超過 0.5 秒（換局、宣傳片拖時間、切幕）⇒ 直接擺成該有的樣子（snap）、不演
 var PORT_UP = 0.8, PORT_RUN = 1.6, PORT_IN = 1.2, PORT_DOWN = 0.5, PORT_RANK = 0.1;   // 掀蓋、推砲出去、收砲、放蓋各幾秒（history §4.3：一人拉繩 2–3 秒、6–8 人推砲 5–10 秒，壓縮過）；依序掀起每片隔幾秒（演出的設計值；17 片排完 1.6 秒）
 var PORT_RK = 1.2, PORT_ARC = 70 * Math.PI / 180, PORT_FIRED = 15, PORT_HOLD = 10, PORT_DRY = 3;   // 交戰：射程 × 1.2、砲軸 ±70°（比 bears 的 ±26° 寬 ⇒ 敵艦還在船頭斜前方就先備好）、15 秒內開過火；脫離 10 秒才關；乾了 3 秒才准再開（暴風雨的浪一打就開開關關）
@@ -159,13 +164,66 @@ function portEngaged(sh, g, foes) {
 }
 /** 畫面那一格（90_main.js frame，只在打仗中、沒暫停時；宣傳片在 trDraw 的 render() 前叫）。不吃 dt：照 SIMT 走（慢動作、模擬速度自動跟著；往回或跳太遠 ⇒ snap）。 */
 function portsAnim() {
-  if (!GFX.port || !GFX.deco) { if (PORT_ON) portsOff(); return; }   // 裝飾關 ⇒ 蓋板不畫 ⇒ 也不演
-  PORT_ON = true;
+  if (!GFX.port) { if (PORT_ON) portsOff(); if (RECOIL_ON) recoilOff(); return; }
+  var lids = !!GFX.deco;                                                // 裝飾關 ⇒ 蓋板不畫 ⇒ 不演蓋板；那幾門砲改走後座（recoilShip all）
+  if (!lids && PORT_ON) portsOff();
+  PORT_ON = lids; RECOIL_ON = true;
   for (var i = 0; i < SHIPS.length; i++) {
-    var sh = SHIPS[i];
+    var sh = SHIPS[i]; if (!sh.M) continue;
     if (sh.ports === undefined) sh.ports = portsBuild(sh);             // 懶建（沒有蓋板 ⇒ null）
-    if (sh.ports && sh.M) portsShip(sh, sh.ports);
+    if (lids && sh.ports) portsShip(sh, sh.ports);
+    if (sh.recoil === undefined) sh.recoil = recoilBuild(sh);          // 懶建（一門會退的砲都沒有 ⇒ null）
+    if (sh.recoil) recoilShip(sh, sh.recoil, !lids);
   }
+}
+/** 這門砲開火往裡退幾格（見檔頭「後座」）；P ＝ 它的蓋板（沒有 ⇒ null）。0 ＝ 不演。 */
+function recoilDist(g, P) {
+  var mt = g.model.meta || {};
+  if (mt.recoil !== undefined && mt.recoil !== '' && isFinite(+mt.recoil)) return Math.max(0, +mt.recoil);
+  if (g.ammoFix >= 0 && (ammoQuiet(g.ammoFix) || g.ammoFix === AMMO_GF)) return 0;   // 弩砲、投石機、希臘火：沒有火藥 ⇒ 沒有後座（同 21_gunnery.js 開火的火光、砲煙）
+  if (P) return P.house;
+  var mz = g.model.pts && g.model.pts.muzzle, br = g.model.pts && g.model.pts.breech;
+  return mz && br ? Math.max(PORT_HOUSE0, Math.round(len(sub(mz, br)) * RECOIL_K)) : PORT_HOUSE0;
+}
+/** 一艘的後座清單：A ＝ 沒有蓋板的砲（一直演）、B ＝ 有蓋板的砲（「裝飾」關、蓋板不演時才演）；一門都沒有 ⇒ null。 */
+function recoilBuild(sh) {
+  var lid = {}, A = [], B = [];
+  if (sh.ports) sh.ports.L.forEach(function (P) { lid[sh.guns.indexOf(P.g)] = P; });
+  sh.guns.forEach(function (g, k) {
+    var P = lid[k] || null, r = recoilDist(g, P); if (!(r > 0)) return;
+    (P ? B : A).push({ g: g, r: r, kr: undefined, kx: 0, ky: 0, vb: null });
+  });
+  return A.length || B.length ? { A: A, B: B, all: null, fired: -1, rest: false } : null;
+}
+/** 一艘的一格：sh.fired 沒變、而且每一門都推出去了（位移 0）⇒ 整艘跳過（開火才會讓它再動：g.firedAt 只在 fireGun 跟 sh.fired 一起改）。 */
+function recoilShip(sh, R, all) {
+  if (R.all !== all) { R.all = all; R.B.forEach(function (I) { I.kr = undefined; }); R.rest = false; }   // 換了組合 ⇒ 有蓋板那幾門的位移剛被 portsOff／portPose 動過，重寫一次
+  if (sh.fired === R.fired && R.rest) return;
+  R.fired = sh.fired;
+  var rest = true;
+  for (var j = 0; j < 2; j++) {
+    var L = j ? (all ? R.B : []) : R.A;
+    for (var i = 0; i < L.length; i++) { if (recoilPose(L[i])) rest = false; }
+  }
+  R.rest = rest;
+}
+/** 一門的位移（值變了才寫）：m.vsl ＝ −砲軸 × 退幾格 × (1 − 推出去幾成)。回傳還在動（位移不是 0）。 */
+function recoilPose(I) {
+  var g = I.g, m = g.model, r = g.alive && g.firedAt !== undefined ? I.r * (1 - portLoad(g)) : 0;   // 還沒開過火 ⇒ 推出去（開局的 reload 是亂數 0–1.2 秒，⛔ 照 portLoad ⇒ 一開場整排縮著再推出去）
+  if (r !== I.kr || (r > 0 && (g.ax[0] !== I.kx || g.ax[1] !== I.ky))) {   // 迴旋砲的砲軸會轉 ⇒ 軸變了也重算
+    I.kr = r; I.kx = g.ax[0]; I.ky = g.ax[1];
+    if (r > 0) { var v = I.vb || (I.vb = [0, 0, 0]); v[0] = -g.ax[0] * r; v[1] = -g.ax[1] * r; m.vsl = v; } else m.vsl = null;
+  }
+  return r > 0;
+}
+/** 畫質「砲門的開關演出」從開切到關：每一門砲回原姿勢（推出去）。 */
+function recoilOff() {
+  RECOIL_ON = false;
+  SHIPS.forEach(function (sh) {
+    var R = sh.recoil; if (!R) return;
+    R.A.concat(R.B).forEach(function (I) { if (I.kr !== undefined && I.g.model.vsl === I.vb) I.g.model.vsl = null; I.kr = undefined; });
+    R.all = null; R.rest = false;
+  });
 }
 /** 畫質這一項從開切到關：蓋板回模型的樣子（開著）、砲回原姿勢（推出去）⇒ 不停在動到一半；下次打開從 snap 開始。被打掉的蓋板照舊不畫。 */
 function portsOff() {
@@ -322,6 +380,20 @@ function portsSummary(sh) {
   var no = sh.guns.filter(function (g) { return used.indexOf(g) < 0; }).map(function (g) { var mt = g.model.meta || {}; return (mt.id || g.name.split('/').pop()) + (mt.deck ? '（' + mt.deck + '）' : ''); });
   return D.length + ' 片' + (L.length < D.length ? '（演得動的 ' + L.length + '）' : '') + '（P ' + (L.length - ns) + '、S ' + ns + '）；house ' + rg(hs) + ' 格；close ' + rg(cs) + '°'
     + '；沒有蓋板的砲：' + (no.length ? no.join('、') : '沒有') + '；畫質「砲門的開關演出」' + (GFX.port && GFX.deco ? '開' : GFX.port ? '開（「裝飾」關 ⇒ 不演）' : '關');
+}
+/** 匯入檢查的讀數一行（75_shipcheck.js R.info.recoil）：沒有蓋板的砲幾門演後座、退幾格；照 meta 不演的（recoil=0、弩箭／火箭／石彈／希臘火）列出來。沒有砲 ⇒ ''。 */
+function recoilSummary(sh) {
+  if (!sh.guns.length) return '';
+  var lid = []; (sh.decos || []).forEach(function (d) { if (d.meta.kind === 'portlid') { var P = portLid(sh, d); if (P.hc && P.g) lid.push(P.g); } });
+  var rs = [], no = [];
+  sh.guns.forEach(function (g) {
+    if (lid.indexOf(g) >= 0) return;
+    var r = recoilDist(g, null), mt = g.model.meta || {};
+    if (r > 0) rs.push(r); else no.push((mt.id || g.name.split('/').pop()) + '（' + (mt.recoil !== undefined && mt.recoil !== '' && isFinite(+mt.recoil) ? 'recoil=' + mt.recoil : g.type) + '）');
+  });
+  var lo = rs.length ? Math.min.apply(null, rs) : 0, hi = rs.length ? Math.max.apply(null, rs) : 0;
+  return '沒有蓋板的砲 ' + rs.length + ' 門' + (rs.length ? '（退 ' + lo + (hi > lo ? '–' + hi : '') + ' 格）' : '') + '；有蓋板的 ' + lid.length + ' 門（照 house）；不演：' + (no.length ? no.join('、') : '沒有')
+    + '；畫質「砲門的開關演出」' + (GFX.port ? '開' : '關');
 }
 /** 除錯（__game.ports）：每片的 s／want／gone 等。 */
 function portsDbg(sh) {

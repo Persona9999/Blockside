@@ -233,6 +233,7 @@ function shipCheck(id) {
     if (T.turDeck) R.info.turrets += '；會轉的甲板（腳下是砲塔自己的格）：有';
     R.info.doors = doorsSummary(sh);                                    // 門、艙蓋（TASK-0638）
     portsIssues(sh, add); R.info.ports = portsSummary(sh);             // 砲門蓋板（TASK-0719；62_ports.js）：鉸鏈、lid_of、關的方向、關上時穿不穿過縮回去的砲、貼不貼船殼
+    R.info.recoil = recoilSummary(sh);                                  // 後座（62_ports.js）：沒有蓋板的砲退幾格、照 meta 不演的
     R.info.spins = spinSummary(sh);                                     // 照參數轉的子物件（TASK-0640）
     (T.armBad || []).forEach(function (b) { add(b.lv, '裝甲', b.where, b.msg, b.fix); });
     (T.ancBad || []).forEach(function (b) { add(b.lv, '錨', b.where, b.msg, b.fix); });   // 錨的關聯拆不出來（76_anchor.js anchorParts）
