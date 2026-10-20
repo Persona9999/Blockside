@@ -162,6 +162,13 @@
   #obsB.on{ display:block; }
   #gfxItems .row{ display:flex; align-items:center; justify-content:center; flex-wrap:wrap; gap:2px; font-size:14px; } #gfxItems label{ width:6em; text-align:right; margin-right:6px; }
   #gfxItems button{ font-size:13px; padding:4px 10px; margin:2px; }
+  /* 畫質頁照分類收起來（js/07_gfx.js GFX_CATS、71_input.js gfxUI）：標題一行寫那一類現在的設定，點了展開 */
+  #gfxItems details.gcat{ border:1px solid rgba(255,255,255,.18); border-radius:6px; margin:6px 0; background:rgba(255,255,255,.03); }
+  #gfxItems details.gcat>summary{ cursor:pointer; list-style:none; display:flex; align-items:baseline; gap:10px; padding:8px 12px; text-align:left; }
+  #gfxItems details.gcat>summary::-webkit-details-marker{ display:none; }
+  #gfxItems details.gcat>summary::before{ content:'▸'; color:var(--gold); width:1em; flex:none; } #gfxItems details.gcat[open]>summary::before{ content:'▾'; }
+  #gfxItems details.gcat>summary b{ flex:none; min-width:7.5em; } #gfxItems details.gcat>summary .note{ font-size:13px; line-height:1.4; }
+  #gfxItems details.gcat[open]>summary{ border-bottom:1px solid rgba(255,255,255,.12); } #gfxItems .gcb{ padding:6px 4px 8px; }
   /* 陰影細項（畫質頁；js/07_gfx.js SHK_ITEMS，71_input.js shkUI）：按鈕列跟上面一樣；分段那一條照 Unity 的 Cascade splits（Tim 2026-10-21 給的圖），顏色跟陰影範圍線同一套 */
   #shkItems .row.bt{ display:flex; align-items:center; justify-content:center; flex-wrap:wrap; gap:2px; font-size:14px; } #shkItems .row.bt label{ width:8em; text-align:right; margin-right:6px; }
   #shkItems button{ font-size:13px; padding:4px 10px; margin:2px; } #shkItems .dim{ opacity:.4; } #shkItems h3{ margin:14px 0 4px; }

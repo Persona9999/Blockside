@@ -27,6 +27,26 @@ var GFX_ITEMS = [
   { k: 'deco', name: '裝飾', opt: ['關（不畫）', '開'] },   // TASK-0682（05_hull.js decoSplit）：雕刻模型 meta deco=1 的裝飾件；不算重量、不被打、不抽亂數 ⇒ 開關不改戰局。一律載入、只管畫不畫（60_render.js drawModels）⇒ 切了立刻生效
   // 多船（TASK-0537；60_render.js gpuSlots）：視野裡離鏡頭最近的幾艘才有船艙遮罩（第幾檔 ＝ 幾艘）；陰影船數 2026-10-20 拿掉（陰影改成照鏡頭分段，不分船）
   { k: 'masks', name: '船艙遮罩', opt: gfxOpts(MASK_NEAR + 1, function (i) { return i ? String(i) : '0（艙裡看得到海）'; }) }];   // 說明在畫質設定頁（template #gfxNote）
+// 畫質頁的分類（Tim 2026-10-21「畫質選項細節 嘗試根據分類摺疊細項吧(例如 陰影)」）：一類一個收得起來的區塊（71_input.js gfxUI，<details>），標題後面寫那一類現在的設定（gfxCatSum）。
+//   items ＝ GFX_ITEMS 的鍵（每一項都要在某一類裡）；extra：那一類另外的東西（shk ＝ 陰影細項 #shkItems、fx ＝ 煙消散與碎片上限的滑桿）。
+var GFX_CATS = [
+  { k: 'shadow', name: '陰影', items: ['shadow'], extra: 'shk' },
+  { k: 'plant', name: '植物', items: ['treed', 'plant'] },
+  { k: 'sea', name: '海面', items: ['refl', 'refr', 'sea'] },
+  { k: 'screen', name: '解析度與反鋸齒', items: ['res', 'aa'] },
+  { k: 'rain', name: '雨', items: ['rain', 'drops', 'dropspl'] },
+  { k: 'ship', name: '船', items: ['deco', 'door', 'port', 'masks'] },
+  { k: 'flood', name: '艙內進水', items: ['fall', 'pdep', 'pside', 'pedge'] },
+  { k: 'town', name: '城鎮', items: ['tlamp'] },
+  { k: 'fx', name: '煙與碎片', items: [], extra: 'fx' }];
+function gfxItem(k) { return GFX_ITEMS.filter(function (it) { return it.k === k; })[0]; }
+/** 一類的標題後面那一行：每一項現在的檔位（括號裡的說明拿掉）；陰影多寫畫法、煙與碎片寫兩個數字。 */
+function gfxCatSum(c) {
+  var L = c.items.map(function (k) { var it = gfxItem(k); return it.name + ' ' + it.opt[GFX[k]].replace(/（.*$/, ''); });
+  if (c.extra === 'shk' && GFX.shadow) L.push(SHK.mode ? '分段 ' + SHK.count + ' 段' : '單張');
+  if (c.extra === 'fx') L.push('煙 ' + SMOKE_K.toFixed(1) + '×', '碎片 ' + DEB_CAP.toLocaleString());
+  return L.join('・');
+}
 function gfxOpts(n, f) { var r = []; for (var i = 0; i < n; i++) r.push(f(i)); return r; }
 var GFX_PRESET = {
   low: { shadow: 0, refl: 0, refr: 0, sea: 0, res: 1, aa: 0, rain: 0, drops: 0, dropspl: 0, door: 1, port: 0, fall: 1, pdep: 0, pside: 1, pedge: 0, masks: 2, deco: 0, tlamp: 0, treed: 0, plant: 0 },   // 門的演出很便宜（每扇每格掃一次船員）⇒ 三檔都開；砲門跟裝飾一樣低畫質關（Tim 2026-10-19：「炮門屬於裝飾物 因此相關機制在低畫質不啟用」）
