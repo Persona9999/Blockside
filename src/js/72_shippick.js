@@ -12,7 +12,7 @@
 var SHIP_CARDS = (window.VoxelKit.embeddedJSON('ship-cards') || {}).ships || {};
 var SPK_TONS = [1000, 3000], SPK_VOLLEY = [200, 600];
 var SPK_DRIVE = [['sail', '⛵', '帆船'], ['steam', '♨️', '蒸汽'], ['oar', '🚣', '槳帆'], ['magic', '✨', '魔法']];
-var SPK = { cur: '', pick: null, f: { drive: '', tons: '', fire: '', q: '' }, open: false };   // 篩選照上一次（同一次開遊戲裡記著）；open ＝ 篩選那三排展開了沒（預設收著）
+var SPK = { cur: '', pick: null, same: false, onClose: null, f: { drive: '', tons: '', fire: '', q: '' }, open: false };   // 篩選照上一次（同一次開遊戲裡記著）；open ＝ 篩選那三排展開了沒（預設收著）
 // 篩選收起來（Tim 2026-10-20 手機截圖：「請協助調整一下 手機板選船的排版 可以調整尺寸 確保上方篩選不要佔用太多空間」「另外篩選可以折疊(預設摺疊)」）：
 //   上面只留一列「搜尋框＋篩選 ▾」，三排分類點了才展開；收著時那一顆寫有幾個篩選在用（亮金色），下面那一行寫篩了哪些 ⇒ 收著也看得出來。
 //   以前 390 px 寬的手機：三排分類各折成兩行、加搜尋，佔掉畫面四成多。
@@ -33,13 +33,13 @@ function spkSpeed(id, c) {
   return [Math.hypot(kn * polar(0), B), Math.hypot(kn, B), Math.hypot(kn * polar(180 - NOGO_DEG), B)];
 }
 function spkOpen(o) {
-  SPK.cur = o.cur; SPK.pick = o.pick;
+  SPK.cur = o.cur; SPK.pick = o.pick; SPK.same = !!o.same; SPK.onClose = o.onClose || null;   // same：點現在那一型也叫 pick；onClose(選了哪一型 | null)：關掉時叫（?pick=@host 用）
   $('spkT').textContent = o.title || '選船';
   spkFilters(); spkShow();
   $('spk').classList.add('on');
   var sb = $('spk').querySelector('input[type=search]'); if (sb && matchMedia('(pointer:fine)').matches) sb.focus();   // 手機不自動跳鍵盤
 }
-function spkClose() { $('spk').classList.remove('on'); }
+function spkClose(picked) { $('spk').classList.remove('on'); if (SPK.onClose) SPK.onClose(picked || null); }
 /** 篩選那三排＋搜尋（每次打開重畫：船隊裡有哪幾種動力照卡片算）。 */
 function spkFilters() {
   var have = {}; HULL_LIST.forEach(function (h) { var c = SHIP_CARDS[h.id]; if (c) have[c.drive] = 1; });
@@ -76,8 +76,29 @@ function spkShow() {
     return '<button class="spkC' + (h.id === cur ? ' on' : '') + '" data-id="' + h.id + '"' + (d ? ' title="' + d[2] + '"' : '') + '>' + (d ? '<span class="i">' + d[1] + '</span>' : '') + '<b>' + h.name + '</b>' + m +
       (h.author ? '<span class="m">建造者 ' + h.author + '</span>' : '') + '</button>';
   }).join('');
-  [].forEach.call($('spkG').querySelectorAll('button.spkC'), function (b) { b.onclick = function () { spkClose(); if (b.dataset.id !== cur && SPK.pick) SPK.pick(b.dataset.id); }; });
+  [].forEach.call($('spkG').querySelectorAll('button.spkC'), function (b) { b.onclick = function () { var id = b.dataset.id; spkClose(id); if ((id !== cur || SPK.same) && SPK.pick) SPK.pick(id); }; });
 }
-$('spkX').onclick = spkClose;
+$('spkX').onclick = function () { spkClose(); };
 $('spk').onclick = function (e) { if (e.target === $('spk')) spkClose(); };   // 點彈窗外面關
 window.addEventListener('keydown', function (e) { if (e.key === 'Escape' && $('spk').classList.contains('on')) { e.preventDefault(); e.stopImmediatePropagation(); spkClose(); } }, true);   // 捕獲階段：先於主選單的 Esc（關子頁）
+// ───────────────────────── ?pick=@host：只開選船彈窗（Blocksail 地球儀的「選船」；Tim 2026-10-20「加上一個選船欄位(可以直接開原本的選船介面) 只要能選一艘就好 航海時使用選取的船」） ─────────────────────────
+// 地球儀把這一頁開在 iframe 裡（?pick=@host&cur=<現在那一型>）⇒ 不開主選單、不載編成、不跑畫面迴圈（90_main.js），只開這個彈窗；頁面透明（template.html html.pickonly）。
+//   這一頁 ⇒ 外面那一頁（{ bspick: … }）：'ready' 彈窗開好了；'measuring' { id, name } 選了、在載那一型；'picked' { id, name, knots, draft, loa, play } 量好了；'cancel' 沒選就關了；'error' { id, msg }。
+//   knots ＝ 卡片上那一型最快的航速（spkSpeed：標準風、滿帆＋額外動力全速，照現在的船隻設定與玩法）⇒ 地球儀上照它開；
+//   draft ＝ 開戰時吃水多深（m：船底最低點（32_ground.js groundKeel）到水面，照開戰時的重量浮高／吃水深 liftFor，跟船隻配置頁的卡片同一套）、loa ＝ 外框全長（m，含艏斜桅）
+//   ⇒ 航海找起點要的「夠我艦吃水的水深」「我艦多長」（Blocksail presets.js BLOCKSAIL_SAIL 的 depth、r）。
+var PICK_HOST = Q.get('pick') === '@host' ? (window.parent !== window ? window.parent : window.opener) : null;
+if (PICK_HOST) document.documentElement.classList.add('pickonly');
+function pickPost(what, o) { try { PICK_HOST.postMessage(Object.assign({ bspick: what }, o || {}), '*'); } catch (e) { /* 外面那一頁關了 */ } }
+function pickBoot() {
+  spkOpen({ title: Q.get('title') || '選船', cur: Q.get('cur') || '', same: true, pick: pickMeasure, onClose: function (id) { if (!id) pickPost('cancel'); } });
+  pickPost('ready');
+}
+function pickMeasure(id) {
+  var h = hullInfo(id); pickPost('measuring', { id: id, name: h ? h.name : id });
+  loadHull(id).then(function (T) {
+    var k = SHIP_CFG[id] || {}, c = { gunw: k.gunw !== undefined ? k.gunw : cfgDefault('gunw', null, id), ballast: k.ballast !== undefined ? k.ballast : cfgDefault('ballast', T) };   // ⛔ 不呼叫 shipCfg（同 spkSpeed）
+    var L = liftFor(T, T.disp - hullT0(T, c).all) || 0, z0 = groundKeel(T).reduce(function (a, p) { return Math.min(a, p[1]); }, T.zw), v = spkSpeed(id, SHIP_CARDS[id]);
+    pickPost('picked', { id: id, name: T.name, knots: v ? +Math.max.apply(null, v).toFixed(2) : 0, draft: +((T.zw - z0) * S - L).toFixed(2), loa: +((T.hx1 - T.hx0) * S).toFixed(1), play: PLAY });
+  }, function (e) { pickPost('error', { id: id, msg: e && e.message || String(e) }); });
+}
