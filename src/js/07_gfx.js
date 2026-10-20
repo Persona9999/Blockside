@@ -41,6 +41,56 @@ function smokeK() { return SMOKE_K; }
 //   量過（16 艘、36,000 顆）：碎片的模擬每格 24 ms、畫碎片幾乎不花時間 ⇒ 上限主要省的是模擬。
 var DEB_LIM = [2000, 45000, 20000], DEB_CAP = DEB_LIM[2];
 (function () { var v = parseInt(Q.get('debcap'), 10); if (isFinite(v)) DEB_CAP = clamp(v, DEB_LIM[0], DEB_LIM[1]); })();
+// 陰影細項（Tim 2026-10-21「把陰影的詳細cascade設定放到…目前blockside的畫質設定頁」「我調整一下參數測試看看合適的初始配置」）：畫質頁的「陰影細項」那一區，
+//   不跟低／中／高走（不算進「自訂」），改了立刻生效、跟著存檔（69_prefs.js shk）。val ＝ 按鈕（值一個一個列）、lim ＝ 滑桿；低／高兩檔各自的陰影圖大小、柔邊取樣（n1 p1／n2 p2），其他兩檔共用。
+//   用在 60_render.js（shadowMaps、shadowPass、csmSplits、shadowSimple）、01_gl.js（SHADOW_GLSL、setCommon）、63_trees.js（TREE_FS 樹收影子的距離）。
+//   預設 ＝ 2026-10-20 Tim 確認不閃的那一份（單張）；分段的陸地快取預設關（快取跟主畫面差一格 ⇒ 2026-10-20 那個一閃）。網址：?csm=1 分段／?csm=0 單張，單項 ?sh_<k>=值（例 ?sh_dist=2000）。
+var SHK_ITEMS = [   // 分段那幾項照 Unity 的 Shadows（Tim 2026-10-21 給的圖：Max Distance、Cascade Count、Split 1–3、Border 1–4、Show Cascades、Cascade splits 那一條）
+  { k: 'mode', name: '畫法', val: [0, 1], opt: ['單張（一張跟著鏡頭）', '分段（cascade）'], def: 0, note: '單張：一張陰影圖罩住鏡頭看的地方，鏡頭拉越遠罩越大（格子越粗）；分段：照離鏡頭多深切幾段，近的段格子細、遠的段粗' },
+  { k: 'show', name: '顯示分段', val: [0, 1], opt: ['關', '開（海平面上畫每一段的範圍與分界）'], def: 0, note: '跟 Debug 模式的陰影範圍線同一份：分段 ＝ 紅、黃、綠、青四段的框＋分界線；單張 ＝ 洋紅的框（內圈是開始淡出的地方）' },
+  { k: 'n1', name: '低：陰影圖', val: [512, 1024, 2048, 4096], def: 1024, unit: '²', note: '每一段（單張 ＝ 那一張）的陰影圖幾格見方：大 ⇒ 影子的邊細、吃顯示記憶體與時間' },
+  { k: 'p1', name: '低：柔邊取樣', val: [4, 9], opt: ['4 點', '9 點'], def: 4 },
+  { k: 'n2', name: '高：陰影圖', val: [512, 1024, 2048, 4096], def: 2048, unit: '²' },
+  { k: 'p2', name: '高：柔邊取樣', val: [4, 9], opt: ['4 點', '9 點'], def: 9 },
+  { k: 'dist', name: '最遠距離', lim: [100, 4000], step: 50, int: true, unit: ' m', def: 1500, cas: 1, note: '最後一段的遠端（離鏡頭多深）；再遠就沒有影子（最後一段的 Border 那一截淡掉）' },
+  { k: 'count', name: '段數', lim: [1, 4], step: 1, int: true, unit: ' 段', def: 4, cas: 1 },
+  { k: 's1', name: '分界 1', lim: [5, 1000], step: 5, int: true, unit: ' m', def: 60, cas: 1, seg: 1, note: '第 1 段到第 2 段的分界離鏡頭多深；分界要一個比一個遠、比最遠距離近（不是的話照順序夾）' },
+  { k: 's2', name: '分界 2', lim: [10, 2000], step: 5, int: true, unit: ' m', def: 145, cas: 1, seg: 2 },
+  { k: 's3', name: '分界 3', lim: [20, 3000], step: 5, int: true, unit: ' m', def: 375, cas: 1, seg: 3 },
+  { k: 'b1', name: '交界 1', lim: [0, 0.5], step: 0.01, fix: 2, def: 0.12, cas: 1, seg: 1, note: '第 1 段最後這麼多（那一段長度的比例）跟下一段混，下一段也從這裡開始畫 ⇒ 兩段之間沒有縫、看不到一條線；最後一段 ＝ 淡成沒有影子的那一截' },
+  { k: 'b2', name: '交界 2', lim: [0, 0.5], step: 0.01, fix: 2, def: 0.12, cas: 1, seg: 2 },
+  { k: 'b3', name: '交界 3', lim: [0, 0.5], step: 0.01, fix: 2, def: 0.12, cas: 1, seg: 3 },
+  { k: 'b4', name: '交界 4', lim: [0, 0.5], step: 0.01, fix: 2, def: 0.12, cas: 1, seg: 4 },
+  { k: 'pad', name: '分段：範圍放大', lim: [1, 1.6], step: 0.02, fix: 2, unit: ' 倍', def: 1.22, cas: 1, note: '每一段的陰影圖罩住那一段視錐的外接球 × 這個倍數（大 ⇒ 範圍外的船、山也投得到影子，格子粗一點）' },
+  { k: 'cache', name: '分段：陸地快取', val: [0, 1], opt: ['關（每一格每一段整張重畫）', '開（陸地另存一層）'], def: 0, cas: 1, note: '開 ＝ 地形、樹、城鎮另存一層，那一段換範圍、地形換網格或滿一秒才重畫（省時間，但跟畫面可能差一格 ⇒ 2026-10-20 那個一閃）' },
+  { k: 'sR', name: '單張：範圍', lim: [0.5, 2], step: 0.05, fix: 2, unit: ' 倍', def: 1, one: 1, note: '半寬那幾級（200～1,200 m）× 這個倍數：小 ⇒ 格子細、罩得小' },
+  { k: 'ahead', name: '單張：往前推', lim: [0, 0.6], step: 0.05, fix: 2, def: 0.3, one: 1, note: '範圍的中心從鏡頭看的那一點往前推半寬的幾成（鏡頭背後、兩側也要罩到）' },
+  { k: 'edge', name: '單張：邊緣淡出', lim: [0.5, 0.95], step: 0.01, fix: 2, def: 0.85, one: 1, note: '範圍的這一圈以外（到 98%）影子淡掉，範圍外不是一刀切掉' },
+  { k: 'soft', name: '柔邊寬度', lim: [0.5, 3], step: 0.1, fix: 1, unit: ' 格', def: 1, note: '柔邊取樣每一點相隔幾格（大 ⇒ 邊更糊、格子比較看不出來）' },
+  { k: 'nrm', name: '沿法線推', lim: [0, 4], step: 0.1, fix: 1, unit: ' 格', def: 1.5, note: '收影子的那一點往外推幾格再查（小 ⇒ 影子貼緊，太小 ⇒ 平面上自己遮自己的條紋）' },
+  { k: 'bias', name: '深度偏差', lim: [0, 4], step: 0.1, fix: 1, unit: ' 格', def: 1.5, note: '比深度時讓幾格（太小 ⇒ 條紋；太大 ⇒ 影子跟物體脫開、浮起來）' },
+  { k: 'tree', name: '樹收影子到', lim: [150, 650], step: 25, int: true, unit: ' m', def: 600, note: '樹葉、樹幹收影子到離鏡頭多遠（最後四成淡掉；再遠的樹只照太陽）；650 m 外的樹是貼圖、本來就不收' }];
+var SHK = {}, SHK_DEF = {};
+SHK_ITEMS.forEach(function (it) { SHK[it.k] = SHK_DEF[it.k] = it.def; });
+/** 一個值照描述表收好（按鈕 ⇒ 只收列出來的值；滑桿 ⇒ 夾進範圍、對齊一步）；不收 ⇒ undefined。 */
+function shkOk(it, v) { return it.val ? (it.val.indexOf(v) >= 0 ? v : undefined) : cfgSnap(it, v); }
+/** 存檔（69_prefs.js shk）：跟預設不一樣的那幾項；讀的時候照描述表收（網址有的那一項照網址）。 */
+function shkSnap() { var o = {}; SHK_ITEMS.forEach(function (it) { if (SHK[it.k] !== SHK_DEF[it.k]) o[it.k] = SHK[it.k]; }); return o; }
+function shkApply(o) { SHK_ITEMS.forEach(function (it) { if (shkUrl(it.k)) return; var v = shkOk(it, o[it.k]); if (v !== undefined) SHK[it.k] = v; }); }
+function shkReset() { SHK_ITEMS.forEach(function (it) { SHK[it.k] = SHK_DEF[it.k]; }); }
+function shkUrl(k) { return Q.has('sh_' + k) || (k === 'mode' && Q.has('csm')); }
+/** 分段的遠端與交界（60_render.js shadowPass、畫質頁那一條）：far[i] ＝ 第 i 段的遠端（分界照順序夾：一個比一個遠、比最遠距離近，最後一段 ＝ 最遠距離），
+ *  bs[i] ＝ 第 i 段開始跟下一段混的地方 ＝ 遠端 − 交界 ×（那一段的長度）；下一段從 bs[i] 開始畫 ⇒ 混的那一截兩段都有。 */
+function shkSplits() {
+  var k = SHK.count, D = SHK.dist, far = [], bs = [], prev = 0;
+  for (var i = 0; i < k; i++) {
+    var f = i === k - 1 ? D : clamp(SHK['s' + (i + 1)], prev + 1, D - (k - 1 - i));
+    far.push(f); bs.push(f - SHK['b' + (i + 1)] * (f - prev)); prev = f;
+  }
+  return { far: far, bs: bs };
+}
+if (Q.has('csm')) SHK.mode = Q.get('csm') === '1' ? 1 : 0;
+SHK_ITEMS.forEach(function (it) { if (!Q.has('sh_' + it.k)) return; var v = shkOk(it, parseFloat(Q.get('sh_' + it.k))); if (v !== undefined) SHK[it.k] = v; });
 var GFX_RES = [0.5, 0.75, 1];                      // 解析度：乘在畫布的像素上（畫布 ＝ 螢幕像素，裝置像素比最多 1.5）
 function gfxSet(level) { var p = GFX_PRESET[level]; for (var k in p) GFX[k] = p[k]; }
 /** 現在的畫質是哪一檔（三檔都對不上 ⇒ custom）。 */

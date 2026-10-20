@@ -144,11 +144,11 @@ if (!gl) { glFail('這個瀏覽器沒有 WebGL2，畫不出來。'); throw new E
 var P = {};
 // 陰影（畫質；60_render.js shadowPass）：照鏡頭切成幾段距離（cascade，Tim 2026-10-20「改用其他遊戲常見的 shadow cascades 取代每艘船自己的陰影(且陸地也吃得到)」「基於Camera配置陰影」）：
 //   一段一層（太陽方向的正交投影 uShM[k]，罩住那一段視錐），船、地形、樹、城鎮都畫在裡面；全部放在同一個深度貼圖陣列 uShA（固定第 4 號）。
-//   收的那一點照離鏡頭多深（沿鏡頭往前的方向 uCsF、從 uCsE 量）挑第一個「遠端 uCsD[k] 比它深」的那一段；那一段最後 12% 跟下一段混（最後一段 ⇒ 淡成沒有影子），
+//   收的那一點照離鏡頭多深（沿鏡頭往前的方向 uCsF、從 uCsE 量）挑第一個「遠端 uCsD[k] 比它深」的那一段；從 uCsL[k] 到遠端那一截跟下一段混（畫質頁的「交界」；最後一段 ⇒ 淡成沒有影子），
 //   ⇒ 交界看不到一條線、超過陰影距離不是一刀切掉。uCsN ＝ 幾段（0 ＝ 不查）。
 //   每段自己的沿法線推出去 uCsO[k]（約 1.5 個陰影圖格子，公尺）與深度偏差 uCsB[k]（照那一段的格子大小換成公尺、再換成那一段的深度單位）
 //   ⇒ 近的那段格子細、推得少（影子貼著船身、樹根），遠的那段格子粗、推得多（⛔ 不推 ⇒ 平面上自己遮自己的條紋）。
-//   uShOn ＝ 0 關、1 低（硬體 2×2）、2 高（再 4 點柔邊）；陽光越斜推越遠（呼叫端把法線乘 1～3 倍：斜面在陰影圖上一格跨的深度大）。
+//   uShOn ＝ 0 關、1 柔邊 4 點、2 柔邊 9 點（畫質頁「低／高：柔邊取樣」），每一點相隔 uShSoft 格（「柔邊寬度」）；陽光越斜推越遠（呼叫端把法線乘 1～3 倍：斜面在陰影圖上一格跨的深度大）。
 // uClip：反射那一趟丟掉水面以下的（平常是 −10⁹）。
 // uSunK：直射光的強度（天氣；晴天 1）—— 收陰影的地方都乘 shadowK，順便乘在這裡。
 // 低於海平面的乾地（63_bed_gl.js BEDDRY；TASK-0768）：海與遠海的著色器照這張遮罩（32 m 一格、蓋整個海域的窗）丟掉 0 m 的海面 —— 恩里基約湖 −40 m 的湖岸、湖面不被海蓋住。
@@ -158,18 +158,18 @@ var BED_DRY_GLSL = 'uniform float uDryOn; uniform vec4 uDryR; uniform sampler2D 
 var DEPTH_ONLY_FS = '#version 300 es\nprecision highp float; void main(){}\n';   // 只寫深度（陰影的靜態那一層：地形、樹、城鎮拿自己的頂點著色器配這一支；60_render.js csmStatic）
 var CSM_MAX = 4, NS_MK = String(MASK_NEAR);                             // 陰影最多幾段（60_render.js CSM_N）、船艙遮罩的陣列長度照 MASK_NEAR（00_core.js）
 var SHADOW_GLSL = 'uniform highp sampler2DArrayShadow uShA; uniform mat4 uShM[' + CSM_MAX + ']; uniform float uShOn, uShPx, uClip, uSunK; uniform int uCsN;\n' +
-  'uniform float uCsD[' + CSM_MAX + '], uCsO[' + CSM_MAX + '], uCsB[' + CSM_MAX + ']; uniform vec3 uCsE, uCsF;\n' +
+  'uniform float uCsD[' + CSM_MAX + '], uCsL[' + CSM_MAX + '], uCsO[' + CSM_MAX + '], uCsB[' + CSM_MAX + ']; uniform vec3 uCsE, uCsF; uniform float uShSoft, uShE0, uShTr;\n' +
   'float shOne(int k, vec3 w, float bz){ vec4 p=uShM[k]*vec4(w,1.0); vec3 q=p.xyz*0.5+0.5;\n' +
   '  if(q.x<0.002||q.y<0.002||q.x>0.998||q.y>0.998||q.z>0.999) return 1.0; q.z-=bz; float L=float(k);\n' +
   // 柔邊（PCF；其他遊戲常見的做法，Tim 2026-10-20「有時候陰影會閃爍」「是否有辦法參考其他遊戲作法改善」）：每一點是硬體的 2×2 比較（雙線性）；
   //   低 ＝ 2×2 點（相隔 1 格 ⇒ 約 3×3 格的軟邊）、高 ＝ 3×3 點（約 4×4 格）⇒ 船在格子上移動時影子的邊不會一格一格地爬
-  '  float e=uShPx; if(uShOn<1.5) return 0.25*(texture(uShA,vec4(q.xy+vec2(-0.5,-0.5)*e,L,q.z))+texture(uShA,vec4(q.xy+vec2(0.5,-0.5)*e,L,q.z))+texture(uShA,vec4(q.xy+vec2(-0.5,0.5)*e,L,q.z))+texture(uShA,vec4(q.xy+vec2(0.5,0.5)*e,L,q.z)));\n' +
+  '  float e=uShPx*uShSoft; if(uShOn<1.5) return 0.25*(texture(uShA,vec4(q.xy+vec2(-0.5,-0.5)*e,L,q.z))+texture(uShA,vec4(q.xy+vec2(0.5,-0.5)*e,L,q.z))+texture(uShA,vec4(q.xy+vec2(-0.5,0.5)*e,L,q.z))+texture(uShA,vec4(q.xy+vec2(0.5,0.5)*e,L,q.z)));\n' +
   '  float s=0.0; for(int y=-1;y<=1;y++) for(int x=-1;x<=1;x++) s+=texture(uShA,vec4(q.xy+vec2(float(x),float(y))*e,L,q.z)); return s/9.0; }\n' +
   // uShEdge（單張陰影，60_render.js shadowSimple）：範圍最外面那一圈（85%～98%）淡掉 ⇒ 範圍外的影子不是一刀切掉；照鏡頭分段時 0（段的範圍比要用的大一圈）
-  'uniform float uShEdge; float shAt(int k, vec3 w, vec3 n){ vec4 p=uShM[k]*vec4(w,1.0); float ed=max(abs(p.x),abs(p.y)); return mix(shOne(k,w+n*uCsO[k],uCsB[k]),1.0,uShEdge*smoothstep(0.85,0.98,ed)); }\n' +
+  'uniform float uShEdge; float shAt(int k, vec3 w, vec3 n){ vec4 p=uShM[k]*vec4(w,1.0); float ed=max(abs(p.x),abs(p.y)); return mix(shOne(k,w+n*uCsO[k],uCsB[k]),1.0,uShEdge*smoothstep(uShE0,0.98,ed)); }\n' +
   'float shadowK(vec3 w, vec3 n){ if(uShOn<0.5||uCsN<1) return uSunK; float d=dot(w-uCsE,uCsF); int k=-1;\n' +
   ' for(int i=0;i<' + CSM_MAX + ';i++){ if(i>=uCsN) break; if(d<uCsD[i]){ k=i; break; } }\n' +
-  ' if(k<0) return uSunK; float s=shAt(k,w,n), t=smoothstep(uCsD[k]*0.88,uCsD[k],d);\n' +
+  ' if(k<0) return uSunK; float s=shAt(k,w,n), t=smoothstep(uCsL[k],uCsD[k],d);\n' +
   ' if(t>0.0) s=mix(s,k+1<uCsN?shAt(k+1,w,n):1.0,t); return s*uSunK; }\n';
 // 船艙遮罩（海、船邊水花的白沫共用；要有 in vec3 vW）：那一點換到船的格座標，落在原本船殼的外形裡 ⇒ 呼叫端丟掉（HULL_HIT）。
 //   遮罩照船型一層（uHullA：R8 貼圖陣列，每層 ＝ 那一型每個 (x, z) 船殼的半寬；固定第 1 號；60_render.js hullArr）；
@@ -388,10 +388,11 @@ function setCommon(p) {
   if (u.uFoam) gl.uniform1f(u.uFoam, WX.foam);
   if (u.uNM) gl.uniform1i(u.uNM, MSLOTS.length);               // 船艙遮罩、透視用到幾格
   if (u.uShOn) {                                              // 陰影圖陣列綁在第 4 號（60_render.js render 開頭綁）；每一段的矩陣、遠端、偏移一次給（沒用到的段 ＝ FAR_M）
-    gl.uniform1f(u.uShOn, PASS.sh ? GFX.shadow : 0);
+    gl.uniform1f(u.uShOn, PASS.sh && GFX.shadow ? (SHK['p' + GFX.shadow] === 9 ? 2 : 1) : 0);   // 柔邊取樣：畫質頁「低／高：柔邊取樣」（07_gfx.js SHK）
     gl.uniform1i(u.uShA, 4); gl.uniformMatrix4fv(u.uShM, false, SHM.mats); gl.uniform1f(u.uShPx, 1 / SHM.n);
-    gl.uniform1i(u.uCsN, SHM.on ? SHM.k : 0); gl.uniform1fv(u.uCsD, SHM.csD); gl.uniform1fv(u.uCsO, SHM.csO); gl.uniform1fv(u.uCsB, SHM.csB);   // 60_render.js shadowMats
+    gl.uniform1i(u.uCsN, SHM.on ? SHM.k : 0); gl.uniform1fv(u.uCsD, SHM.csD); gl.uniform1fv(u.uCsL, SHM.csL); gl.uniform1fv(u.uCsO, SHM.csO); gl.uniform1fv(u.uCsB, SHM.csB);   // 60_render.js shadowMats
     gl.uniform3fv(u.uCsE, SHM.eye); gl.uniform3fv(u.uCsF, SHM.fw); gl.uniform1f(u.uShEdge, CSM_SIMPLE ? 1 : 0);
+    gl.uniform1f(u.uShSoft, SHK.soft); gl.uniform1f(u.uShE0, SHK.edge); gl.uniform1f(u.uShTr, SHK.tree);   // 柔邊寬度、單張的邊緣淡出、樹收影子到多遠（畫質頁）
   }
 }
 // 水線下不染海水色（Tim 2026-10-16「莫尼特號艙內有一層水 但是實際上沒有進水」→「拿掉船身與模型的水線下水色，交給海面」）：

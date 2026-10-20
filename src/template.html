@@ -162,6 +162,12 @@
   #obsB.on{ display:block; }
   #gfxItems .row{ display:flex; align-items:center; justify-content:center; flex-wrap:wrap; gap:2px; font-size:14px; } #gfxItems label{ width:6em; text-align:right; margin-right:6px; }
   #gfxItems button{ font-size:13px; padding:4px 10px; margin:2px; }
+  /* 陰影細項（畫質頁；js/07_gfx.js SHK_ITEMS，71_input.js shkUI）：按鈕列跟上面一樣；分段那一條照 Unity 的 Cascade splits（Tim 2026-10-21 給的圖），顏色跟陰影範圍線同一套 */
+  #shkItems .row.bt{ display:flex; align-items:center; justify-content:center; flex-wrap:wrap; gap:2px; font-size:14px; } #shkItems .row.bt label{ width:8em; text-align:right; margin-right:6px; }
+  #shkItems button{ font-size:13px; padding:4px 10px; margin:2px; } #shkItems .dim{ opacity:.4; } #shkItems h3{ margin:14px 0 4px; }
+  #shkBar{ display:flex; height:38px; max-width:640px; margin:6px auto 2px; border:1px solid rgba(255,255,255,.4); border-radius:4px; overflow:hidden; font-size:12px; }
+  #shkBar>div{ position:relative; display:flex; flex-direction:column; align-items:center; justify-content:center; color:#111; line-height:1.15; overflow:hidden; white-space:nowrap; min-width:0; }
+  #shkBar>div>span{ position:relative; z-index:1; } #shkBar .bl{ position:absolute; top:0; bottom:0; right:0; background:repeating-linear-gradient(135deg,rgba(0,0,0,.3) 0 4px,transparent 4px 8px); }
   #phxItems .row{ display:flex; align-items:center; justify-content:center; flex-wrap:wrap; gap:2px; font-size:14px; } #phxItems label{ width:6em; text-align:right; margin-right:6px; }
   #phxItems button{ font-size:13px; padding:4px 10px; margin:2px; }
   #nav{ padding:3px; border-radius:50%; }   /* 羅盤：只剩圓盤（TASK-0566；文字搬進詳細資訊 navText），在下方中間那一欄（TASK-0567） */ #navt{ display:none; }
@@ -543,14 +549,15 @@
     <!-- 畫質設定（從主選單進；TASK-0522）：每一項的檔位在 js/07_gfx.js 的 GFX_ITEMS，按鈕由 js/71_input.js 生 -->
     <div class="card panel" id="gfxp" style="display:none">
       <h2>畫質設定</h2>
-      <div class="sub">只改畫面、不改戰局（同一個種子、同樣的設定，低與高打出來一模一樣）；改了立刻生效，跟著設定存檔。<br>網址：?gfx=low｜mid｜high，單項 ?g_shadow= ?g_refl= ?g_refr= ?g_sea= ?g_res= ?g_aa= ?g_rain= ?g_drops= ?g_dropspl= ?g_door= ?g_port= ?g_deco= ?g_shships= ?g_masks=（第幾檔，從 0 起）</div>
+      <div class="sub">只改畫面、不改戰局（同一個種子、同樣的設定，低與高打出來一模一樣）；改了立刻生效，跟著設定存檔。<br>網址：?gfx=low｜mid｜high，單項 ?g_shadow= ?g_refl= ?g_refr= ?g_sea= ?g_res= ?g_aa= ?g_rain= ?g_drops= ?g_dropspl= ?g_door= ?g_port= ?g_deco= ?g_masks=（第幾檔，從 0 起）；陰影細項 ?csm=1（分段）／?csm=0（單張）、?sh_dist= ?sh_count= ?sh_s1= ?sh_b1= …（值）</div>
       <div class="row" id="gfxPre">預設 <button data-g="low">低</button><button data-g="mid">中</button><button data-g="high">高</button>　<span id="gfxLv" class="note"></span></div>
       <div id="gfxItems"></div>
+      <div id="shkItems"></div><!-- 陰影細項（js/07_gfx.js SHK_ITEMS；Tim 2026-10-21）：按鈕、滑桿、分段那一條由 js/71_input.js shkUI 生 -->
       <div class="row checks"><label><input type="checkbox" id="gfxFps"> 顯示 FPS（畫面上方中間）</label></div>
       <div class="row note">比較吃效能的是陰影（船多畫兩趟）、反射（再畫一趟鏡像）、解析度與反鋸齒（每個像素的成本）；海面細緻度是海的網格多密、漣漪幾道。浪的大小是物理，在「細節設定」。<br>
         雨只在暴風雨下：「雨」是整個畫面一層的雨絲；「雨滴（3D）」是鏡頭周圍 3D 空間裡的雨絲（跟著風斜、會被船擋住）；「雨滴水花」是它打在海面與甲板上濺的那一下。高 ＝ 只開 3D 的多＋水花；兩種雨可以一起開。<br>
         「裝飾」是雕刻作品標成裝飾的模型（meta deco=1 的、砲門蓋板），關掉 ⇒ 不畫（船照樣載入、切了立刻生效；砲門蓋板也不演）；「砲門的開關演出」是有砲門蓋板的船（光榮號）交戰時掀蓋推砲、沒事收砲闔蓋、砲口下水就關 —— 關掉 ⇒ 蓋板開著、砲推出去不動。兩項都只改畫面。<br>
-        <span id="gfxNote"><b>陰影</b>照鏡頭分段（低 3 段、高 4 段，畫到 1.5 km）：船、地形、樹、城鎮都有，船再多也一樣。多船時（上限 8 艘）只有視野裡離鏡頭最近的幾艘有：<b>船艙遮罩</b> ＝ 幾艘的船艙裡不畫海水 —— 海面是一整片平面、會穿過船身（艙底在水線下），沒有遮罩的船，從艙口、砲門、被打穿的破洞、停格的拿掉甲板／剖面看進去，艙裡會有一層海水像淹了（遠處看不出來；船開始沉之後本來就不擋）。排不進去的船也沒有停格的「透視」。船數不超過那個數時每艘都有。</span></div>
+        <span id="gfxNote"><b>陰影</b>船、地形、樹、城鎮都有，船再多也一樣；怎麼畫（單張或照鏡頭分段）、分幾段、分界與交界在上面的「陰影細項」，低／高只差陰影圖大小與柔邊取樣。多船時（上限 8 艘）只有視野裡離鏡頭最近的幾艘有：<b>船艙遮罩</b> ＝ 幾艘的船艙裡不畫海水 —— 海面是一整片平面、會穿過船身（艙底在水線下），沒有遮罩的船，從艙口、砲門、被打穿的破洞、停格的拿掉甲板／剖面看進去，艙裡會有一層海水像淹了（遠處看不出來；船開始沉之後本來就不擋）。排不進去的船也沒有停格的「透視」。船數不超過那個數時每艘都有。</span></div>
       <div class="row"><button id="gfxX">返回</button></div>
     </div>
     <!-- 船隻配置（從主選單進；TASK-0570）：一型一份；船員的項目在 js/05_hull.js 的 CREW_ITEMS，滑桿由 js/71_input.js 生；預設值在後台管理頁（config/game.json 每艘船的 cfg、crew） -->

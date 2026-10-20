@@ -735,6 +735,7 @@ function gfxUI() {
   var dr2 = $('debR'); dr2.oninput = function () { DEB_CAP = Math.round(+dr2.value); gfxShow(); };
   [].forEach.call(document.querySelectorAll('#gfxs button[data-g], #gfxPre button'), function (b) { b.onclick = function () { gfxSet(b.dataset.g); gfxShow(); }; });
   var f = $('gfxFps'); f.checked = GFX_FPS; f.onchange = function () { GFX_FPS = f.checked; gfxShow(); };
+  shkUI();                                                       // 陰影細項（07_gfx.js SHK_ITEMS）
   gfxShow();
 }
 function gfxShow() {
@@ -745,7 +746,56 @@ function gfxShow() {
   $('debR').value = DEB_CAP; $('debV').textContent = DEB_CAP.toLocaleString() + ' 顆' + (DEB_CAP === DEB_LIM[2] ? '（預設）' : '') + '：超過時先清視野外、遠處、沉在水裡的';
   $('smokeR').value = SMOKE_K; $('smokeV').textContent = SMOKE_K.toFixed(1) + '×' + (SMOKE_K === 1 ? '（原本）' : SMOKE_K === SMOKE_LIM[2] ? '（預設）' : SMOKE_K > 1 ? '（散得快）' : '（留得久）') + '　砲煙約 ' + (2.5 / SMOKE_K).toFixed(1) + '–' + (5.5 / SMOKE_K).toFixed(1) + ' 秒';
   $('gfxLv').textContent = '現在：' + GFX_NAME[lv]; $('gfxFps').checked = GFX_FPS; $('fps').className = GFX_FPS ? 'hud on' : 'hud';
+  shkShow();
   if (typeof gsetShow === 'function') gsetShow();
+}
+/** 畫質頁的「陰影細項」（07_gfx.js SHK_ITEMS；Tim 2026-10-21「概念類似這個」＝ Unity 的 Shadows：最遠距離、段數、分界、交界、顯示分段、分段那一條）：
+ *  按鈕（val）一列、滑桿（lim）照 64_cfgkit.js 的樣子；改了立刻生效（60_render.js 每一格照 SHK 配）、跟著存檔（69_prefs.js shk）。
+ *  只對分段有用的（cas）單張時變淡、只對單張有用的（one）分段時變淡；段數以外的分界、交界藏起來。 */
+function shkUI() {
+  var box = $('shkItems');
+  box.innerHTML = '<h3>陰影細項</h3><div class="row note">不跟低／中／高走（改了不會變成「自訂」）；改了立刻生效、跟著存檔。調到滿意的，把下面「改過的」那一行告訴開發者就能變成預設。</div>' +
+    SHK_ITEMS.map(function (it) {
+      var h = it.val ? '<div class="row bt"><label>' + it.name + '</label>' + it.val.map(function (v, i) { return '<button data-shk="' + it.k + '" data-v="' + v + '">' + (it.opt ? it.opt[i] : v + (it.unit || '')) + '</button>'; }).join('') + '</div>' + (it.note ? '<div class="row note gkn">' + it.note + '</div>' : '')
+        : cfgSliders([it], 'shk-').replace('<div class="row note gkn"></div>', '').replace('<div class="row note gkn">undefined</div>', '');
+      return '<div id="shkR-' + it.k + '">' + h + '</div>' + (it.k === 'b4' ? '<div id="shkBar"></div><div class="row note" id="shkBarN"></div>' : '');
+    }).join('') + '<div class="row note" id="shkSt"></div><div class="row"><button id="shkReset">陰影細項回到預設</button></div>';
+  [].forEach.call(box.querySelectorAll('button[data-shk]'), function (b) { b.onclick = function () { SHK[b.dataset.shk] = +b.dataset.v; gfxShow(); }; });
+  SHK_ITEMS.forEach(function (it) { if (it.val) return; var r = $('shk-' + it.k); r.oninput = function () { var v = shkOk(it, +r.value); if (v !== undefined) SHK[it.k] = v; gfxShow(); }; });
+  $('shkReset').onclick = function () { shkReset(); gfxShow(); };
+  setInterval(function () { if ($('gfxp').style.display !== 'none') shkStat(); }, 500);   // 讀數（每一格幾毫秒）：頁面開著才更新
+}
+function shkFmt(it, v) { return it.val ? (it.opt ? it.opt[it.val.indexOf(v)] : v + (it.unit || '')).replace(/（.*$/, '') : (it.int ? String(v) : v.toFixed(it.fix || 2)) + (it.unit || ''); }
+function shkShow() {
+  if (!$('shkBar')) return;
+  var one = SHK.mode === 0;
+  [].forEach.call(document.querySelectorAll('#shkItems button[data-shk]'), function (b) { b.className = SHK[b.dataset.shk] === +b.dataset.v ? 'on' : ''; });
+  SHK_ITEMS.forEach(function (it) {
+    var row = $('shkR-' + it.k);
+    row.style.display = it.seg && (it.k[0] === 's' ? it.seg >= SHK.count : it.seg > SHK.count) ? 'none' : '';   // 分界 ＝ 段數 − 1 個、交界 ＝ 段數個（跟 Unity 一樣）
+    row.classList.toggle('dim', !!((it.cas && one) || (it.one && !one)));
+    if (it.val) return;
+    $('shk-' + it.k).value = SHK[it.k]; $('shk-' + it.k + 'V').textContent = cfgShown(function (v) { return shkFmt(it, v); }, SHK[it.k], SHK_DEF[it.k]);
+  });
+  // 分段那一條（Unity 的 Cascade splits）：每一段一格、寬度照那一段多長；斜線 ＝ 交界（跟下一段混的那一截；最後一段 ＝ 淡掉的那一截）
+  var o = shkSplits(), bar = $('shkBar'), prev = 0, col = SHDBG_COL;
+  bar.innerHTML = o.far.map(function (f, i) {
+    var c = col[i % 4], w = (f - prev) / SHK.dist * 100, b = (f - o.bs[i]) / Math.max(1e-6, f - prev) * 100, h;
+    h = '<div style="flex:0 0 ' + w.toFixed(3) + '%;background:rgb(' + c.map(function (v) { return Math.round(v * 200 + 30); }).join(',') + ')" title="第 ' + (i + 1) + ' 段：' + Math.round(prev) + '～' + Math.round(f) + ' m，最後 ' + Math.round(f - o.bs[i]) + ' m 跟' + (i < o.far.length - 1 ? '下一段混' : '沒有影子混（淡掉）') + '"><div class="bl" style="width:' + b.toFixed(2) + '%"></div><span>' + (i + 1) + '</span><span>' + Math.round(f - prev) + ' m</span></div>';
+    prev = f; return h;
+  }).join('');
+  bar.classList.toggle('dim', one);
+  $('shkBarN').textContent = '分段：' + o.far.map(function (f, i) { return '第 ' + (i + 1) + ' 段到 ' + Math.round(f) + ' m'; }).join('、') + (one ? '（現在是單張，這一條沒用到）' : '') +
+    '；單張的半寬：' + SIMPLE_R.map(function (r) { return Math.round(r * SHK.sR); }).join('／') + ' m（鏡頭拉越遠用越大的那一級）' + (one ? '' : '（現在是分段，沒用到）');
+  shkStat();
+}
+/** 讀數：現在畫的是什麼、每一格幾毫秒（60_render.js shadowDbgText）、改過的（照存檔那一份；告訴開發者就能當預設）。 */
+function shkStat() {
+  var el = $('shkSt'); if (!el) return;
+  var ch = shkSnap(), ks = Object.keys(ch);
+  el.style.whiteSpace = 'pre-line';
+  el.textContent = (GFX.shadow ? '現在：' + (typeof SHM !== 'undefined' && SHM ? shadowDbgText() : '陰影還沒畫') + '（' + GFX_ITEMS[0].opt[GFX.shadow].replace(/（.*$/, '') + '：陰影圖 ' + SHK['n' + GFX.shadow] + '²）' : '陰影關著（上面「陰影」選低或高）') +
+    '\n改過的：' + (ks.length ? ks.map(function (k) { return k + '=' + ch[k]; }).join('　') : '（都是預設）');
 }
 /** 物理效果（09_phx.js）：主選單的全開／高／中／低、物理設定頁每一項的按鈕。帆與繩換到「關」或從「關」換出來 ⇒ setPhys（跟 B 鍵同一支）。 */
 function phxUI() {
