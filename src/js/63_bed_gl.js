@@ -394,6 +394,23 @@ function bedDepth(PL) {
 /** 畫（60_render.js：帆之後、折射複製之前）。每格最多建 2 塊（新載的、粗細要換的）⇒ 換中心那一下不會卡一大格。 */
 function bedDraw() {
   if (!BED || !BED.A) return;
+  bedBuild();
+  var PB =P.bed || (P.bed = VK.compile(gl, BED_VS, bedFS()));
+  gl.useProgram(PB.prog); setCommon(PB);
+  gl.uniform1f(PB.u.uFogD, WX.fog * BED_FOG * CAM.fogK);                            // 霧淡一點：島要從幾公里外就看得到（船照原本的霧）
+  var PL = bedPlanes(PASS.vp || CAM.vp), D = BEDDRAW; D.n = D.cull = D.tris = 0;   // 視錐外的塊不畫（鏡頭後面、旁邊的島；BEDDRAW ⇒ __game.bed().draw）
+  function one(g) { if (g.bb && !bedSeen(PL, g.bb)) { D.cull++; return; } D.n++; D.tris += g.n / 3; gl.bindVertexArray(g.vao); gl.drawElements(gl.TRIANGLES, g.n, gl.UNSIGNED_INT, 0); }
+  Object.keys(BEDGL).forEach(function (k3) { one(BEDGL[k3]); });
+  Object.keys(BEDFAR.g).forEach(function (k4) { if (!BEDGL[k4]) one(BEDFAR.g[k4]); });   // 遠景：細的沒有的那幾塊
+  gl.bindVertexArray(null);
+}
+/** 這一格要換的地形網格（新載的、粗細要換的、遠景）：一格一次 —— 60_render.js render 在畫陰影之前先叫（Tim 2026-10-20「是某種更大範圍的陰影閃爍 且是一閃而過」）：
+ *  以前在 bedDraw（畫陰影之後）才建 ⇒ 換網格的那一格，陰影圖還是舊的粗網格、主畫面已經是細的 ⇒ 粗的在起伏處高出細的 ⇒ 那一塊（1 km）細網格整片落在影子裡一格
+ *  （淺海看得到海底 ⇒ 一大片海暗一下）。先建 ⇒ shadowPass 看到 bedMeshChanged、同一格就重畫那幾段 ⇒ 陰影與主畫面同一份網格。 */
+var BEDBUILD_RFR = -1;
+function bedBuild() {
+  if (!BED || !BED.A || BEDBUILD_RFR === RFR) return;
+  BEDBUILD_RFR = RFR;
   var built = 0, t0 = performance.now();                                 // 建網格照背景預算（08_seabed.js bedBusy：收塊、擺樹先用；用完了這一格就不建）
   while (BEDGL_Q.length && built < 2 && !bedBusy()) { var k = BEDGL_Q.shift(), C = bedShowC(k); if (C) { bedUpload(k, C, bedLod(C)); built++; bedSpent(t0); t0 = performance.now(); } }
   Object.keys(BEDGL).forEach(function (k2) {                            // 粗細要換的（換中心）、那一份換了的（原精度到了、城到了要整地）：bedLod 第一次會算整地（townHv，一塊 25～70 ms）⇒ 也算進預算
@@ -403,12 +420,4 @@ function bedDraw() {
   });
   bedFarStep(built || bedBusy() ? 0 : 2);                                // 遠景：照樣要；這一格建過細的（或預算用完了）就不建遠景的網格
   bedFoamTex(); bedDryTex();
-  var PB =P.bed || (P.bed = VK.compile(gl, BED_VS, bedFS()));
-  gl.useProgram(PB.prog); setCommon(PB);
-  gl.uniform1f(PB.u.uFogD, WX.fog * BED_FOG * CAM.fogK);                            // 霧淡一點：島要從幾公里外就看得到（船照原本的霧）
-  var PL = bedPlanes(PASS.vp || CAM.vp), D = BEDDRAW; D.n = D.cull = D.tris = 0;   // 視錐外的塊不畫（鏡頭後面、旁邊的島；BEDDRAW ⇒ __game.bed().draw）
-  function one(g) { if (g.bb && !bedSeen(PL, g.bb)) { D.cull++; return; } D.n++; D.tris += g.n / 3; gl.bindVertexArray(g.vao); gl.drawElements(gl.TRIANGLES, g.n, gl.UNSIGNED_INT, 0); }
-  Object.keys(BEDGL).forEach(function (k3) { one(BEDGL[k3]); });
-  Object.keys(BEDFAR.g).forEach(function (k4) { if (!BEDGL[k4]) one(BEDFAR.g[k4]); });   // 遠景：細的沒有的那幾塊
-  gl.bindVertexArray(null);
 }
