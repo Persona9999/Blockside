@@ -23,6 +23,7 @@ var KEY_ACTS = [
   { c: 'battle', id: 'signals', ico: '🚩', name: '旗號（對我方友艦下令）', def: 'k' }, { c: 'battle', id: 'pause', ico: '⏸', name: '停格', def: 'p' }, { c: 'battle', id: 'settings', ico: '⚙', name: '設定', def: 'o' }, { c: 'battle', id: 'help', name: '說明', def: 'h' },
   { c: 'battle', id: 'flood', ico: '📊', name: '進水圖表（停格時）', def: 'i' }, { c: 'battle', id: 'xray', ico: '🔍', name: '透視', def: 'x' }, { c: 'battle', id: 'cut', ico: '✂', name: '剖面', def: 'z' }, { c: 'battle', id: 'deck', ico: '☰', name: '隱藏甲板', def: 'l' },
   { c: 'battle', id: 'phys', name: '帆繩物理', def: 'b' }, { c: 'battle', id: 'mute', name: '靜音', def: 'm' }, { c: 'battle', id: 'restart', name: '重新開始', def: 'n' }, { c: 'battle', id: 'menu', name: '回主選單', def: '0' },
+  { c: 'battle', id: 'hostBack', ico: '🌍', name: '回到地球儀（Blocksail 地球儀開的才有）', def: 'u', host: 1 },   // Tim 2026-10-20「回到地球儀加一個快捷鍵吧(同時顯示)」；host ⇒ 設定頁只在 ?map=@host 列（08_seabed.js bedHostBack）
   // 第一人稱（81_fps.js fpKey）：走路四個鍵、轉頭 Q 按住才算（畫面上是搖桿，沒有圓鈕）
   { c: 'fps', id: 'fpFwd', name: '往前走', def: 'w', hold: 1 }, { c: 'fps', id: 'fpBack', name: '往後走', def: 's', hold: 1 }, { c: 'fps', id: 'fpLeft', name: '往左走', def: 'a', hold: 1 }, { c: 'fps', id: 'fpRight', name: '往右走', def: 'd', hold: 1 },
   { c: 'fps', id: 'fpTurnL', name: '往左轉頭', def: 'q', hold: 1 }, { c: 'fps', id: 'fpRun', ico: '🏃', name: '跑', def: 'shift', hold: 1 },
@@ -133,7 +134,7 @@ function keysShow() {
   [].forEach.call($('keysTabs').querySelectorAll('button'), function (b) { b.className = b.dataset.kc === KEY_TAB ? 'on' : ''; });
   var note = { battle: '開戰時用。方向鍵固定：← → 打舵、↑ ↓ 加帆收帆；Esc 設定；? 說明。', fps: '第一人稱開著時先問這一頁：同一個鍵在這裡有動作 ⇒ 不做海戰那一個（例 WASD 走路、不打舵）。跟「建造」那一頁一起查撞鍵（建造模式也是第一人稱）。方向鍵固定：轉頭、看上下；滑鼠拖曳也能轉頭。', build: '建造模式（也是第一人稱）時再問這一頁；跟「第一人稱」那一頁一起查撞鍵；海戰的鍵只剩停格、設定、鏡頭。' }[KEY_TAB];
   $('keysInfo').textContent = note;
-  $('keysItems').innerHTML = KEY_ACTS.filter(function (a) { return a.c === KEY_TAB; }).map(function (a) {
+  $('keysItems').innerHTML = KEY_ACTS.filter(function (a) { return a.c === KEY_TAB && (!a.host || document.body.classList.contains('bsHost')); }).map(function (a) {   // host：只有地球儀開的才有的動作
     var k = KEYS_NOW[a.id], d = KEY_DEF[a.id], w = KEY_WAIT === a.id;
     return '<div class="keyrow"><label>' + (a.ico ? '<span class="kico">' + a.ico + '</span>' : '') + a.name + (a.hold ? '<small>（按住）</small>' : '') + '</label><span class="kcap' + (w ? ' wait' : '') + '">' + (w ? '按新的鍵…（Esc 取消）' : keyLabel(k)) + '</span>' +
       '<button data-kid="' + a.id + '">' + (w ? '取消' : '改') + '</button><span class="note">' + (k === d ? '' : '改過；預設 ' + keyLabel(d)) + '</span></div>';

@@ -90,6 +90,7 @@
   #ctl b{ color:var(--gold); }
   /* 一整排（Tim 2026-10-15：「射界外搬走之後，下方面板可以改成一整排按鈕攤在下面」）：沒有底框，🎥 ⏸ ⚙ 🤖☸ ＋ 彈種 ⚫ 💣 ⛓️ 一列；每顆自己帶深色半透明底（壓在海上看得清楚） */
   #ctl.panel{ display:flex; align-items:flex-end; justify-content:center; flex-wrap:nowrap; gap:8px; background:none; border:none; box-shadow:none; padding:0; }
+  #hostBack{ display:none !important; } body.bsHost #hostBack{ display:flex !important; }   /* 🌍 回到地球儀：只有 ?map=@host（Blocksail 地球儀開的）才有（08_seabed.js bedHostBack；Tim 2026-10-20「回到地球儀 … 加到下排圓形按鈕」「用emoji的地球儀」） */
   #keys, #ammo{ display:flex; align-items:flex-end; flex-wrap:nowrap; gap:8px; } #guns{ display:none; }   /* 下排也是大圓鈕（Tim 2026-10-15：比較好按）：🎥 ⏸ ⚙ ⚓⚓ ＋ 彈種一顆（點一下換下一種、顯示現在的彈種） */
   #ammo span, .chip, .kb{ pointer-events:auto; cursor:pointer; user-select:none; -webkit-user-select:none; touch-action:manipulation; }
   .kb{ display:inline-block; margin:3px 2px 0; padding:2px 8px; border-radius:6px; border:1px solid rgba(255,255,255,.26); background:rgba(255,255,255,.07); font-size:12px; }   /* 按鍵提示就是按鈕（手機也能點） */
@@ -184,6 +185,7 @@
   /* 中等寬度（761–1100 px，平板、小筆電、手機橫拿）：一整排 15 顆 64 px ＋ 間距 8 ＝ 1072 px 放不下 ⇒ 圓鈕跟著畫面寬縮、間距 4（15 顆（各加 2 px 邊框）＋ 14 個間距 ＋ 左右各 12 ＋ 4 px 餘裕 ＝ 100vw；#keys 裡面也是間距 4）
      ⛔ 2026-10-15 1024 寬實測：沒有這段 ⇒ ◀⚓ 蓋住 🎥、彈種鈕被 ⚓▶ 蓋住 */
   @media (min-width:761px) and (max-width:1100px){ .kb.hb{ width:min(64px, calc((100vw - 114px) / 15)); height:min(64px, calc((100vw - 114px) / 15)); } .helm, #ctlRow, #ctl.panel, #keys{ gap:4px; } }
+  @media (min-width:761px) and (max-width:1200px){ body.bsHost .kb.hb{ width:min(64px, calc((100vw - 118px) / 16)); height:min(64px, calc((100vw - 118px) / 16)); } body.bsHost .helm, body.bsHost #ctlRow, body.bsHost #ctl.panel, body.bsHost #keys{ gap:4px; } }   /* 多一顆 🌍 ⇒ 16 顆：16 × 66 ＋ 15 × 8 ＝ 1176 px，1200 以下照樣縮 */
   /* 手機橫拿（矮）：艦隊圓鈕改橫排、由外往內（Tim 2026-10-15：「不然會跟按鈕重疊」—— 直排往下長，撞到兩側直立的大圓鈕 ⚓▶ ◀⚓）；
      我方從左邊往右、敵方從右邊往左；太多艘 ⇒ 往下換一排（每側最多三分之一個畫面寬） */
   @media (orientation:landscape) and (max-height:520px){ .fleet{ flex-direction:row; flex-wrap:wrap; align-content:flex-start; max-height:none; max-width:34vw; } #fleetL{ max-height:none; } #fleetR{ flex-direction:row-reverse; flex-wrap:wrap; align-items:flex-start; } }
@@ -408,7 +410,7 @@
   <div id="aimR" aria-hidden="true"><svg viewBox="-24 -24 48 48"><g class="o"><circle r="16"/><path d="M-11 0H-4M4 0H11M0 -11V-4M0 4V11"/></g><g class="k"><circle r="16"/><path d="M-11 0H-4M4 0H11M0 -11V-4M0 4V11"/></g><circle class="d" r="1.6"/></svg></div><!-- 瞄準圈（UI 層，61_hud.js aimRingUi；在 HUD 底下） -->
   <div id="botC" class="hud"><div id="navBox"><div id="modeT"></div><div id="gunsB" class="gend"></div><div id="nav" class="panel"><canvas id="navc"></canvas><div id="navt"></div><div id="gunsL" class="gside"></div><div id="gunsR" class="gside"></div></div><div id="gunsA" class="gend"></div></div>
   <div id="ctlRow"><div id="helmL" class="helm"><span class="kb hb" data-act="ruddL" data-hold="1" data-tip="左舵"><b>A</b><i class="em">⬅️</i></span><span class="kb hb" data-act="sailDn" data-hold="1" data-tip="收帆"><b>S</b><i class="em">⛵⬇</i></span><span class="kb hb" data-act="sailUp" data-hold="1" data-tip="加帆"><b>W</b><i class="em">⛵⬆</i></span><span class="kb hb" id="sailT" data-kl="sailMode" data-tip="自動操舵：亮 ＝ 自動、暗 ＝ 手動 —— 點一下切換"><b>2</b><i class="em">🤖☸</i></span><span class="kb hb" data-act="ancP" id="ancP" data-tip="拋左錨"><b>Q</b><i class="em">◀⚓</i></span></div><div id="ctl" class="panel">
-    <div id="keys"><span class="kb hb" data-act="cam" data-tip="換鏡頭"><b>C</b><i class="em">🎥</i></span><span class="kb hb" data-act="pause" id="pauseK" data-tip="停格"><b>P</b><i class="em">⏸</i></span><span class="kb hb" id="setB" data-kl="settings" data-tip="設定"><b>O</b><i class="em">⚙</i></span><span class="kb hb" data-act="ancAll" id="ancAll" data-tip="拋錨（雙錨）：兩邊都沒拋 ⇒ 一起拋；一邊在水裡 ⇒ 拋另一邊；兩邊都在水裡 ⇒ 起錨"><b>4</b><i class="em">⚓⚓</i></span></div>
+    <div id="keys"><span class="kb hb" data-act="cam" data-tip="換鏡頭"><b>C</b><i class="em">🎥</i></span><span class="kb hb" data-act="pause" id="pauseK" data-tip="停格"><b>P</b><i class="em">⏸</i></span><span class="kb hb" id="setB" data-kl="settings" data-tip="設定"><b>O</b><i class="em">⚙</i></span><span class="kb hb" data-act="ancAll" id="ancAll" data-tip="拋錨（雙錨）：兩邊都沒拋 ⇒ 一起拋；一邊在水裡 ⇒ 拋另一邊；兩邊都在水裡 ⇒ 起錨"><b>4</b><i class="em">⚓⚓</i></span><span class="kb hb" data-act="hostBack" id="hostBack" data-tip="回到地球儀"><b>U</b><i class="em">🌍</i></span></div>
     <div id="guns"></div>
     <div id="ammo"><span class="kb hb" id="ammoB" data-act="ammo" data-tip="切換彈藥"><b>R</b><i class="em"><span class="ball"></span></i></span></div>
   </div><div id="helmR" class="helm"><span class="kb hb" data-act="ancS" id="ancS" data-tip="拋右錨"><b>E</b><i class="em">⚓▶</i></span><span class="kb hb" data-act="autoFire" id="autoF" data-tip="自動開砲"><b>5</b><i class="em">🤖💥</i></span><span class="kb hb" data-act="fire1" id="fireK" data-tip="開一門砲"><b>F</b><i class="em">💥</i></span><span class="kb hb" data-act="volley" id="volleyK" data-tip="齊射"><b>空白</b><i class="em">💥💥</i></span><span class="kb hb" data-act="ruddR" data-hold="1" data-tip="右舵"><b>D</b><i class="em">➡️</i></span></div></div></div>
@@ -548,7 +550,7 @@
       <div class="row note">比較吃效能的是陰影（船多畫兩趟）、反射（再畫一趟鏡像）、解析度與反鋸齒（每個像素的成本）；海面細緻度是海的網格多密、漣漪幾道。浪的大小是物理，在「細節設定」。<br>
         雨只在暴風雨下：「雨」是整個畫面一層的雨絲；「雨滴（3D）」是鏡頭周圍 3D 空間裡的雨絲（跟著風斜、會被船擋住）；「雨滴水花」是它打在海面與甲板上濺的那一下。高 ＝ 只開 3D 的多＋水花；兩種雨可以一起開。<br>
         「裝飾」是雕刻作品標成裝飾的模型（meta deco=1 的、砲門蓋板），關掉 ⇒ 不畫（船照樣載入、切了立刻生效；砲門蓋板也不演）；「砲門的開關演出」是有砲門蓋板的船（光榮號）交戰時掀蓋推砲、沒事收砲闔蓋、砲口下水就關 —— 關掉 ⇒ 蓋板開著、砲推出去不動。兩項都只改畫面。<br>
-        <span id="gfxNote">多船時（上限 8 艘）只有視野裡離鏡頭最近的幾艘有：<b>陰影船數</b> ＝ 幾艘有自己的陰影圖（其他的船畫進一張罩住它們的全局陰影圖，比較粗；0 ＝ 全部只靠全局那一張）；<b>船艙遮罩</b> ＝ 幾艘的船艙裡不畫海水 —— 海面是一整片平面、會穿過船身（艙底在水線下），沒有遮罩的船，從艙口、砲門、被打穿的破洞、停格的拿掉甲板／剖面看進去，艙裡會有一層海水像淹了（遠處看不出來；船開始沉之後本來就不擋）。排不進去的船也沒有停格的「透視」。兩項在船數不超過那個數時都是每艘都有。</span></div>
+        <span id="gfxNote"><b>陰影</b>照鏡頭分段（低 3 段、高 4 段，畫到 1.5 km）：船、地形、樹、城鎮都有，船再多也一樣。多船時（上限 8 艘）只有視野裡離鏡頭最近的幾艘有：<b>船艙遮罩</b> ＝ 幾艘的船艙裡不畫海水 —— 海面是一整片平面、會穿過船身（艙底在水線下），沒有遮罩的船，從艙口、砲門、被打穿的破洞、停格的拿掉甲板／剖面看進去，艙裡會有一層海水像淹了（遠處看不出來；船開始沉之後本來就不擋）。排不進去的船也沒有停格的「透視」。船數不超過那個數時每艘都有。</span></div>
       <div class="row"><button id="gfxX">返回</button></div>
     </div>
     <!-- 船隻配置（從主選單進；TASK-0570）：一型一份；船員的項目在 js/05_hull.js 的 CREW_ITEMS，滑桿由 js/71_input.js 生；預設值在後台管理頁（config/game.json 每艘船的 cfg、crew） -->
