@@ -388,7 +388,7 @@ function setCommon(p) {
   if (u.uFoam) gl.uniform1f(u.uFoam, WX.foam);
   if (u.uNM) gl.uniform1i(u.uNM, MSLOTS.length);               // 船艙遮罩、透視用到幾格
   if (u.uShOn) {                                              // 陰影圖陣列綁在第 4 號（60_render.js render 開頭綁）；每一段的矩陣、遠端、偏移一次給（沒用到的段 ＝ FAR_M）
-    gl.uniform1f(u.uShOn, PASS.sh && GFX.shadow ? (SHK['p' + GFX.shadow] === 9 ? 2 : 1) : 0);   // 柔邊取樣：畫質頁「低／高：柔邊取樣」（07_gfx.js SHK）
+    gl.uniform1f(u.uShOn, PASS.sh && GFX.shadow ? (SHK['p' + Math.min(2, GFX.shadow)] === 9 ? 2 : 1) : 0);   // 柔邊取樣：畫質頁「低／高：柔邊取樣」（07_gfx.js SHK）
     gl.uniform1i(u.uShA, 4); gl.uniformMatrix4fv(u.uShM, false, SHM.mats); gl.uniform1f(u.uShPx, 1 / SHM.n);
     gl.uniform1i(u.uCsN, SHM.on ? SHM.k : 0); gl.uniform1fv(u.uCsD, SHM.csD); gl.uniform1fv(u.uCsL, SHM.csL); gl.uniform1fv(u.uCsO, SHM.csO); gl.uniform1fv(u.uCsB, SHM.csB);   // 60_render.js shadowMats
     gl.uniform3fv(u.uCsE, SHM.eye); gl.uniform3fv(u.uCsF, SHM.fw); gl.uniform1f(u.uShEdge, CSM_SIMPLE ? 1 : 0);

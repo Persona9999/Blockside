@@ -3,10 +3,10 @@
 // ⛔ 只改畫面：這裡的值一個都不能被 step() 讀到（反向對照：同一個種子，低與高跑同樣秒數，戰局讀數逐項相同）。
 //   浪的大小（SEA_K）是物理，在細節設定；這裡的「海面細緻度」只是網格多密、漣漪幾道。
 // 每一項怎麼畫在 60_render.js（管線：陰影圖 → 反射 → 場景 → 折射 → 海 → 粒子 → 縮放貼到畫布）。
-// 網址：?gfx=low|mid|high（縮圖、對拍用），單項 ?g_shadow= ?g_refl= ?g_refr= ?g_sea= ?g_res= ?g_aa= ?g_rain= ?g_drops= ?g_dropspl= ?g_door= ?g_port= ?g_deco=（數字 ＝ 第幾檔，從 0 起）。
+// 網址：?gfx=low|mid|high|ultra（縮圖、對拍用；ultra ＝ 全開），單項 ?g_shadow= ?g_refl= ?g_refr= ?g_sea= ?g_res= ?g_aa= ?g_rain= ?g_drops= ?g_dropspl= ?g_door= ?g_port= ?g_deco=（數字 ＝ 第幾檔，從 0 起）。
 // 雨有兩種、各自一項：「雨」＝ 整個畫面一層的雨絲（01_gl.js P.rain）；「雨滴（3D）」＝ 3D 空間裡的雨絲粒子（14_rain.js）。高 ＝ 只開 3D（Tim 2026-10-13）；自訂可以兩種一起開。3D 雨滴打在海面與船上的水花另外一項（雨滴水花，Tim：要能開關）。
 var GFX_ITEMS = [
-  { k: 'shadow', name: '陰影', opt: ['關', '低（陰影圖 2048）', '高（陰影圖 4096、柔邊）'] },   // 船、地形、樹、城鎮都有，船數不影響；畫法、分段、陰影圖大小在下面的「陰影細項」（SHK；60_render.js shadowPass）
+  { k: 'shadow', name: '陰影', opt: ['關', '低（陰影圖 2048）', '高（陰影圖 4096、柔邊）', '全開（同高、距離 × 1.5）'] },   // 全開（Tim 2026-10-21「可以加一檔全開畫質 繪製陰影&植物距離再多1.5倍」）：60_render.js shFar ⇒ 分段的最遠距離、單張的範圍 × 1.5   // 船、地形、樹、城鎮都有，船數不影響；畫法、分段、陰影圖大小在下面的「陰影細項」（SHK；60_render.js shadowPass）
   { k: 'refl', name: '海面反射', opt: ['關（只反射天空）', '低（船身，1/4 解析度）', '高（船身＋砲與帆，1/2 解析度）'] },
   { k: 'refr', name: '海水折射', opt: ['關（不透明）', '低（半透明）', '高（折射＋水深）'] },
   { k: 'sea', name: '海面細緻度', opt: ['低', '中', '高'] },
@@ -22,16 +22,18 @@ var GFX_ITEMS = [
   { k: 'pside', name: '艙內水的側面與水瀑', opt: ['關', '開（水面邊上畫側面、兩池交界畫水瀑）'] },   // TASK-0654（33_flood.js flSides）
   { k: 'pedge', name: '艙內水的水邊', opt: ['關（直的）', '開（白沫一圈、淺的邊不規則）'] },   // TASK-0654（33_flood.js flEdgeM、FLE_GLSL）：只在水邊那一圈多算兩次雜訊
   { k: 'tlamp', name: '城裡點光源的距離', opt: ['近（512 m）', '中（1 km）', '遠（1.5 km）'] },   // 夜裡的燈（63_towns.js townLampGrid）：分組表照幾公尺見方；每個像素最多照 8 盞不變，遠了只是多一點像素有光、重排多一點
-  { k: 'treed', name: '立體樹的距離', opt: ['近（400 m）', '中（650 m）', '遠（900 m）'] },   // Tim 2026-10-21「650m 外換成不參與陰影的貼圖和樹冠殼 這個是否可以參考畫質設定動態調節(同時可以跟陰影連動)」：63_trees.js treeDraw 照 TREE_LOD_D 換 TREE_LOD[1]、重新分組；這以內的樹投影子也收影子（收到這個距離 − 50 m，01_gl.js uShTr），外面是貼圖與樹冠殼
+  { k: 'treed', name: '立體樹的距離', opt: ['近（400 m）', '中（650 m）', '遠（900 m）', '全開（1,350 m）'] },   // 全開 ⇒ 貼圖與樹冠殼的交接也往外推 1.5 倍（63_trees.js TREE_SHELL_D）   // Tim 2026-10-21「650m 外換成不參與陰影的貼圖和樹冠殼 這個是否可以參考畫質設定動態調節(同時可以跟陰影連動)」：63_trees.js treeDraw 照 TREE_LOD_D 換 TREE_LOD[1]、重新分組；這以內的樹投影子也收影子（收到這個距離 − 50 m，01_gl.js uShTr），外面是貼圖與樹冠殼
+  { k: 'plant', name: '植物密度', opt: ['少（三成）', '中（六成）', '多（全部）'] },   // Tim 2026-10-21「中畫質就降低植物密度(60%) 低畫質降更多(30%)」   // Tim 2026-10-21「植物密度是否也能根據畫質調整」：63_trees.js treeBin 照每棵的位置雜湊留 TREE_DENS_K 那麼多（不重擺、切了下一格就重新分組）；投影子的跟著少
   { k: 'deco', name: '裝飾', opt: ['關（不畫）', '開'] },   // TASK-0682（05_hull.js decoSplit）：雕刻模型 meta deco=1 的裝飾件；不算重量、不被打、不抽亂數 ⇒ 開關不改戰局。一律載入、只管畫不畫（60_render.js drawModels）⇒ 切了立刻生效
   // 多船（TASK-0537；60_render.js gpuSlots）：視野裡離鏡頭最近的幾艘才有船艙遮罩（第幾檔 ＝ 幾艘）；陰影船數 2026-10-20 拿掉（陰影改成照鏡頭分段，不分船）
   { k: 'masks', name: '船艙遮罩', opt: gfxOpts(MASK_NEAR + 1, function (i) { return i ? String(i) : '0（艙裡看得到海）'; }) }];   // 說明在畫質設定頁（template #gfxNote）
 function gfxOpts(n, f) { var r = []; for (var i = 0; i < n; i++) r.push(f(i)); return r; }
 var GFX_PRESET = {
-  low: { shadow: 0, refl: 0, refr: 0, sea: 0, res: 1, aa: 0, rain: 0, drops: 0, dropspl: 0, door: 1, port: 0, fall: 1, pdep: 0, pside: 1, pedge: 0, masks: 2, deco: 0, tlamp: 0, treed: 0 },   // 門的演出很便宜（每扇每格掃一次船員）⇒ 三檔都開；砲門跟裝飾一樣低畫質關（Tim 2026-10-19：「炮門屬於裝飾物 因此相關機制在低畫質不啟用」）
-  mid: { shadow: 1, refl: 1, refr: 1, sea: 1, res: 2, aa: 1, rain: 1, drops: 0, dropspl: 0, door: 1, port: 1, fall: 1, pdep: 1, pside: 1, pedge: 1, masks: MASK_NEAR, deco: 1, tlamp: 1, treed: 1 },
-  high: { shadow: 2, refl: 2, refr: 2, sea: 2, res: 2, aa: 1, rain: 0, drops: 3, dropspl: 1, door: 1, port: 1, fall: 1, pdep: 1, pside: 1, pedge: 1, masks: MASK_NEAR, deco: 1, tlamp: 2, treed: 2 } };   // 最高 ＝ 每艘都有（Tim 2026-10-13「最高畫質開到 N」）
-var GFX_NAME = { low: '低', mid: '中', high: '高', custom: '自訂' }, GFX_DEFAULT = CFG.menu.gfx;   // 預設檔：config/game.json 的 menu.gfx
+  low: { shadow: 0, refl: 0, refr: 0, sea: 0, res: 1, aa: 0, rain: 0, drops: 0, dropspl: 0, door: 1, port: 0, fall: 1, pdep: 0, pside: 1, pedge: 0, masks: 2, deco: 0, tlamp: 0, treed: 0, plant: 0 },   // 門的演出很便宜（每扇每格掃一次船員）⇒ 三檔都開；砲門跟裝飾一樣低畫質關（Tim 2026-10-19：「炮門屬於裝飾物 因此相關機制在低畫質不啟用」）
+  mid: { shadow: 1, refl: 1, refr: 1, sea: 1, res: 2, aa: 1, rain: 1, drops: 0, dropspl: 0, door: 1, port: 1, fall: 1, pdep: 1, pside: 1, pedge: 1, masks: MASK_NEAR, deco: 1, tlamp: 1, treed: 1, plant: 1 },
+  high: { shadow: 2, refl: 2, refr: 2, sea: 2, res: 2, aa: 1, rain: 0, drops: 3, dropspl: 1, door: 1, port: 1, fall: 1, pdep: 1, pside: 1, pedge: 1, masks: MASK_NEAR, deco: 1, tlamp: 2, treed: 2, plant: 2 },
+  ultra: { shadow: 3, refl: 2, refr: 2, sea: 2, res: 2, aa: 1, rain: 0, drops: 3, dropspl: 1, door: 1, port: 1, fall: 1, pdep: 1, pside: 1, pedge: 1, masks: MASK_NEAR, deco: 1, tlamp: 2, treed: 3, plant: 2 } };   // 全開 ＝ 高＋陰影與立體樹的距離 × 1.5（Tim 2026-10-21）   // 最高 ＝ 每艘都有（Tim 2026-10-13「最高畫質開到 N」）
+var GFX_NAME = { low: '低', mid: '中', high: '高', ultra: '全開', custom: '自訂' }, GFX_DEFAULT = CFG.menu.gfx;   // 預設檔：config/game.json 的 menu.gfx
 var GFX = {}, GFX_FPS = false;                     // GFX_FPS：畫面右上角顯示 FPS（畫質設定頁的勾選）
 // 煙散得多快（Tim 2026-10-14）：畫質頁的一項，不跟低／中／高走（玩家自己選、不算進「自訂」）；煙的壽命 ÷ 這個倍數（12_effects.js smoke、40_crew.js 火槍）。
 //   滑桿 SMOKE_LIM（Tim 2026-10-14：用滑桿調）；預設 1.2× ＝ 比原本（砲煙 2.5–5.5 秒）快 1.2 倍。只改畫面：粒子的亂數照樣抽、戰局不讀粒子。網址 ?smoke=（倍數）。
@@ -49,7 +51,7 @@ var DEB_LIM = [2000, 45000, 20000], DEB_CAP = DEB_LIM[2];
 var SHK_ITEMS = [   // 分段那幾項照 Unity 的 Shadows（Tim 2026-10-21 給的圖：Max Distance、Cascade Count、Split 1–3、Border 1–4、Show Cascades、Cascade splits 那一條）
   { k: 'mode', name: '畫法', val: [0, 1], opt: ['單張（一張跟著鏡頭）', '分段（cascade）'], def: 0, note: '單張：一張陰影圖罩住鏡頭看的地方，鏡頭拉越遠罩越大（格子越粗）；分段：照離鏡頭多深切幾段，近的段格子細、遠的段粗' },
   { k: 'show', name: '顯示分段', val: [0, 1], opt: ['關', '開（海平面上畫每一段的範圍與分界）'], def: 0, note: '跟 Debug 模式的陰影範圍線同一份：分段 ＝ 紅、黃、綠、青四段的框＋分界線；單張 ＝ 洋紅的框（內圈是開始淡出的地方）' },
-  { k: 'n1', name: '低：陰影圖', val: [512, 1024, 2048, 4096], def: 2048, unit: '²', note: '每一段（單張 ＝ 那一張）的陰影圖幾格見方：大 ⇒ 影子的邊細、吃顯示記憶體與時間。總量有上限（兩張 4096²）：分段 3、4 段時一層最多 2048（主選單的「中」＝ 低這一檔、「高」＝ 高這一檔）' },
+  { k: 'n1', name: '低：陰影圖', val: [512, 1024, 2048, 4096], def: 2048, unit: '²', note: '每一段（單張 ＝ 那一張）的陰影圖幾格見方：大 ⇒ 影子的邊細、吃顯示記憶體與時間。總量有上限（兩張 4096²）：分段 3、4 段時一層最多 2048（主選單的「中」＝ 低這一檔、「高」「全開」＝ 高這一檔）' },
   { k: 'p1', name: '低：柔邊取樣', val: [4, 9], opt: ['4 點', '9 點'], def: 4 },
   { k: 'n2', name: '高：陰影圖', val: [512, 1024, 2048, 4096], def: 4096, unit: '²' },
   { k: 'p2', name: '高：柔邊取樣', val: [4, 9], opt: ['4 點', '9 點'], def: 9 },

@@ -129,9 +129,11 @@ var CSM_SIMPLE = SHK.mode === 0;                                         // 單�
 // 陰影圖大小（Tim 2026-10-21「是否可以調高一下 中高畫質的陰影解析度(特別是離鏡頭近的部分)」）：中 2048、高 4096（07_gfx.js SHK n1／n2），
 //   夾在顯示卡的上限（MAX_TEXTURE_SIZE）、總量 CSM_TEXELS 以內（深度 24 位元一格佔 4 bytes：兩張 4096² ≈ 134 MB）⇒ 分段 4 段的「高」是 2048 一層（4 × 4096² ≈ 268 MB 太多）。
 var CSM_TEXELS = 2 * 4096 * 4096, CSM_MAXTEX = 0;
+/** 畫質「全開」（陰影第 3 檔；Tim 2026-10-21「繪製陰影&植物距離再多1.5倍」）：分段的最遠距離、單張的範圍 × 1.5；陰影圖與柔邊照「高」。 */
+function shFar() { return GFX.shadow >= 3 ? 1.5 : 1; }
 function shadowMaps() {
   CSM_SIMPLE = SHK.mode === 0;
-  var n = [1, SHK.n1, SHK.n2][GFX.shadow] || 1, k = CSM_SIMPLE ? 1 : Math.min(CSM_MAX, SHK.count);
+  var n = [1, SHK.n1, SHK.n2, SHK.n2][GFX.shadow] || 1, k = CSM_SIMPLE ? 1 : Math.min(CSM_MAX, SHK.count);
   n = Math.min(n, CSM_MAXTEX || (CSM_MAXTEX = gl.getParameter(gl.MAX_TEXTURE_SIZE) || 4096));
   while (n > 512 && k * n * n > CSM_TEXELS) n /= 2;
   if (SHM && SHM.n === n && SHM.k === k) return;
@@ -363,7 +365,7 @@ function shadowPass() {
   var ax = [[V0[0], V0[4], V0[8]], [V0[1], V0[5], V0[9]], [V0[2], V0[6], V0[10]]], sk = SUN.map(function (v) { return v.toFixed(4); }).join(',') + ';' + SHK.nrm + ',' + SHK.bias;   // 太陽方向＋沿法線推、深度偏差（畫質頁改了 ⇒ 矩陣、偏移重算）
   function dot3(a, b) { return a[0] * b[0] + a[1] * b[1] + a[2] * b[2]; }
   SHM.eye.set(E); SHM.fw.set(fw);
-  var fit = SHK.fit ? csmFit(un, fw, SHK.dist) : [0, SHK.dist], z0 = SHM.z0 = fit[0], z1 = SHM.z1 = Math.max(z0 + 20, fit[1]), zk = (z1 - z0) / SHK.dist;   // 分段貼合畫面（見 csmFit）
+  var DD = SHK.dist * shFar(), fit = SHK.fit ? csmFit(un, fw, DD) : [0, DD], z0 = SHM.z0 = fit[0], z1 = SHM.z1 = Math.max(z0 + 20, fit[1]), zk = (z1 - z0) / SHK.dist;   // 分段貼合畫面（見 csmFit）
   sp = SHM.splits = sp.map(function (v) { return z0 + v * zk; }); bs = SHM.bs = bs.map(function (v) { return z0 + v * zk; });
   var refreshed = false, sl = Math.min(400, 1 / Math.max(0.15, SUN[1] / Math.sqrt(Math.max(1e-6, 1 - SUN[1] * SUN[1]))));   // 影子拉多長（每公尺高；太陽越低越長，最多 400 倍 ⇒ 實際上限見 csmIn）
   for (var i = 0; i < k; i++) {
@@ -485,7 +487,7 @@ function landWant() {
 var SIMPLE_R = [200, 300, 450, 650, 900, 1200], SIMPLE_DOWN = 0.8;
 function shadowSimple() {
   var c = SHM.cs[0]; if (!c) { SHM.on = false; return; }
-  var RS = SIMPLE_R.map(function (r) { return Math.round(r * SHK.sR); });
+  var RS = SIMPLE_R.map(function (r) { return Math.round(r * SHK.sR * shFar()); });
   var t0 = performance.now(), e = CAM.eye, lk = CAM.look || CAM.tgt, h = Math.hypot(lk[0] - e[0], lk[1] - e[1], lk[2] - e[2]), want = h * 2 + 150, R = RS[RS.length - 1];
   for (var i = 0; i < RS.length; i++) if (RS[i] >= want) { R = RS[i]; break; }
   var cur = SHM.simpleR, ci = RS.indexOf(cur);                     // 換級的重疊（見上）：往小換要比下一級的八成還小

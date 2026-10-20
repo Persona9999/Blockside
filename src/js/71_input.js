@@ -811,7 +811,7 @@ function shkStat() {
   var el = $('shkSt'); if (!el) return;
   var ch = shkSnap(), ks = Object.keys(ch);
   el.style.whiteSpace = 'pre-line';
-  el.textContent = (GFX.shadow ? '現在（' + GFX_ITEMS[0].opt[GFX.shadow].replace(/（.*$/, '') + '）：' + (typeof SHM !== 'undefined' && SHM ? shadowDbgText() : '陰影還沒畫') + (SHM && SHM.n < SHK['n' + GFX.shadow] ? '（' + SHK['n' + GFX.shadow] + '² 超過總量上限 ⇒ 降成 ' + SHM.n + '²）' : '') : '陰影關著（上面「陰影」選低或高）') +
+  el.textContent = (GFX.shadow ? '現在（' + GFX_ITEMS[0].opt[GFX.shadow].replace(/（.*$/, '') + '）：' + (typeof SHM !== 'undefined' && SHM ? shadowDbgText() : '陰影還沒畫') + (SHM && SHM.n < SHK['n' + Math.min(2, GFX.shadow)] ? '（' + SHK['n' + Math.min(2, GFX.shadow)] + '² 超過總量上限 ⇒ 降成 ' + SHM.n + '²）' : '') : '陰影關著（上面「陰影」選低或高）') +
     '\n改過的：' + (ks.length ? ks.map(function (k) { return k + '=' + ch[k]; }).join('　') : '（都是預設）');
 }
 /** 物理效果（09_phx.js）：主選單的全開／高／中／低、物理設定頁每一項的按鈕。帆與繩換到「關」或從「關」換出來 ⇒ setPhys（跟 B 鍵同一支）。 */

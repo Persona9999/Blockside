@@ -18,7 +18,9 @@
 //   光照跟地形同一套（天光、陽光、船的陰影、霧照 BED_FOG）；葉子照風搖（搖晃權重 × 風）。樹不投影子。
 //   城鎮（63_towns.js）：高度照整過地的那一份（townHv）、規劃的 clear 裡不擺（townClr；樹與小植物都是）。
 //   ?trees=0 ⇒ 不長樹。
-var TREE_LOD_D = [400, 650, 900];                                       // 低模到多遠：畫質的「立體樹的距離」（07_gfx.js GFX.treed；treeDraw 換了就重新分組）。⛔ 不超過 TREE_SHELL[0]（貼圖跟樹冠殼交接的地方）
+var TREE_DENS_K = [0.3, 0.6, 1];                                        // 植物密度：畫質的「植物密度」少／中／多留幾成（07_gfx.js GFX.plant；treeBin 照位置雜湊挑，跟載入順序無關）
+var TREE_LOD_D = [400, 650, 900, 1350];                                 // 低模到多遠：畫質的「立體樹的距離」（07_gfx.js GFX.treed；treeDraw 換了就重新分組）。⛔ 不超過 TREE_SHELL[0]（貼圖跟樹冠殼交接的地方）
+var TREE_SHELL_D = [[1100, 1500], [1100, 1500], [1100, 1500], [1650, 2250]];   // 貼圖 ⇒ 樹冠殼的交接：全開 × 1.5（Tim 2026-10-21「繪製陰影&植物距離再多1.5倍」）
 var TREE_LOD = [140, 650], TREE_SHELL = [1100, 1500], TREE_SHELL_G = 32, TREE_FAR_SP = 3, TREE_FAR_K = 1.35, TREE_REBIN = 8, TREE_FALLBACK = 0.55, TREE_ATLAS_COLS = 8, TREE_BB_MAX = 96, TREE_VEG_JIT = 70, TREE_CELL = 32;
 var TREES = { on: Q.get('trees') !== '0', init: false, job: null, list: [], ch: {}, far: {}, eye: null, dirty: true, buf: [], cnt: null, bb: null, stat: { plant: 0, far: 0, d0: 0, d1: 0, d2: 0, binMs: 0, bakeMs: 0, genMs: 0, plantMs: 0, bySp: {} } };
 evOn('bedChunk', function (cx, cy, C) { if (TREES.on && BED && BED.A) treeQueue(bedKey(cx, cy), C); }, 0, true);   // 有畫面迴圈 ⇒ 排隊、每格照預算擺（treePump）
@@ -314,7 +316,12 @@ function treeBin(keys, eye) {
   var t0 = performance.now(), NL = TREES.list.length, cnt = new Int32Array(NL * 2 + 1), L0 = TREE_LOD[0] * TREE_LOD[0], L1 = TREE_LOD[1] * TREE_LOD[1], L2 = TREE_SHELL[1] * TREE_SHELL[1], vi = TREES.vi;
   // 3 ＝ 交給樹冠殼（這一棵不畫；水平距離，跟著色器的淡入淡出同一把尺）；4 ＝ 超過那一種的 view（小植物）不畫
   var vw = TREES.vw;
-  function lodOf(I, o) { var dx = I[o] - eye[0], dy = I[o + 1] - eye[1], dz = I[o + 2] - eye[2], d = dx * dx + dy * dy + dz * dz; return d > vw[I[o + 6]] ? 4 : d < L0 ? 0 : d < L1 ? 1 : dx * dx + dz * dz < L2 ? 2 : 3; }
+  // 植物密度（畫質）：每一棵照位置的雜湊（0～1，同一棵每次一樣）比 dk，大的不畫（細、低模、貼圖三級一起少；樹冠殼照擺的棵數不變 ⇒ 1.1 km 外照舊是整片林子）
+  var dk = TREES.dens = TREE_DENS_K[GFX.plant] != null ? TREE_DENS_K[GFX.plant] : 1;
+  function lodOf(I, o) {
+    if (dk < 1) { var hh = Math.sin(I[o] * 12.9898 + I[o + 2] * 78.233) * 43758.5453; if (hh - Math.floor(hh) >= dk) return 4; }
+    var dx = I[o] - eye[0], dy = I[o + 1] - eye[1], dz = I[o + 2] - eye[2], d = dx * dx + dy * dy + dz * dz; return d > vw[I[o + 6]] ? 4 : d < L0 ? 0 : d < L1 ? 1 : dx * dx + dz * dz < L2 ? 2 : 3;
+  }
   keys.forEach(function (k) { var c = TREES.ch[k], I = c.I; for (var o = 0; o < I.length; o += 8) { var l = lodOf(I, o); if (l < 3) cnt[l < 2 ? l * NL + vi[I[o + 6]] + I[o + 7] : NL * 2]++; } });
   var off = new Int32Array(cnt.length), tot = [0, 0, 0];
   for (var b = 0; b < cnt.length; b++) { var l2 = b < NL ? 0 : b < NL * 2 ? 1 : 2; off[b] = tot[l2]; tot[l2] += cnt[b]; }
@@ -336,7 +343,9 @@ function treeDraw() {
   if (!TREES.on || !BED || !BED.A || PASS.vp) return;
   var keys = Object.keys(TREES.ch), farK = Object.keys(TREES.far); if (!keys.length && !farK.length) return;
   if (!treeInit()) return;                                            // 樹種的網格分好幾格建（BED_SLICE）：還沒建好 ⇒ 這一格先不畫樹
-  var L1 = TREE_LOD_D[GFX.treed]; if (L1 && L1 !== TREE_LOD[1]) { TREE_LOD[1] = L1; TREES.dirty = true; }   // 畫質的「立體樹的距離」換了 ⇒ 重新分組（陰影跟著：投影子的、收影子的都照它）
+  var L1 = TREE_LOD_D[GFX.treed], SD = TREE_SHELL_D[GFX.treed]; if (L1 && L1 !== TREE_LOD[1]) { TREE_LOD[1] = L1; TREES.dirty = true; }
+  if (SD && SD[0] !== TREE_SHELL[0]) { TREE_SHELL[0] = SD[0]; TREE_SHELL[1] = SD[1]; TREES.dirty = true; }
+  if (TREES.dens !== TREE_DENS_K[GFX.plant]) TREES.dirty = true;           // 植物密度換了 ⇒ 重新分組（treeBin）   // 畫質的「立體樹的距離」換了 ⇒ 重新分組（陰影跟著：投影子的、收影子的都照它）
   var PL = bedPlanes(CAM.vp), eye = CAM.eye, E = TREES.eye, vis = keys.filter(function (k) { var c = TREES.ch[k]; return c.n && bedSeen(PL, c.bb); }), sig = vis.join(' ');
   if (TREES.dirty || !E || sig !== TREES.sig || Math.abs(E[0] - eye[0]) + Math.abs(E[1] - eye[1]) + Math.abs(E[2] - eye[2]) > TREE_REBIN) { treeBin(vis, eye); TREES.eye = eye.slice(); TREES.dirty = false; TREES.sig = sig; }   // 看得到的塊換了、鏡頭動了 8 m 以上、塊進出 ⇒ 重新分組
   var cf = gl.isEnabled(gl.CULL_FACE); gl.disable(gl.CULL_FACE);
