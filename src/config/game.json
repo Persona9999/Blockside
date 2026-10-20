@@ -128,6 +128,7 @@
     "engCrew": 6
   },
   "idle": {"arc": 30, "r": 2, "t": 2, "hold": 4},
+  "musket": {"sigma": 0.013, "w": 0.5, "h": 1.0, "hTop": 1.6, "sway": 0.15},
   "galley": {"cooks": 1, "cookT": 6, "stock": 6, "mess": 8, "go": 4, "fetchT": 3, "waitT": 20, "hold": 90, "fade": 150, "start": 1, "douse": 0, "dousR": 600},
   "guns": {
     "long": {"code": "24l", "name": "24 磅長砲", "short": "長砲", "V": 175, "reload": 1, "big": false, "crew": 5, "min": 3, "mass": 2.5, "shot": 10.9},
@@ -1073,6 +1074,8 @@
       "type": "medical",
       "size": [18, 8, 8],
       "hp": 150,
+      "hold": 1,
+      "battle": 1,
       "buff": {"heal": 0.3}
     },
     "medkit": {
@@ -1137,7 +1140,8 @@
       "buffCap": {"heal": 0.6},
       "staff": 1,
       "staffPer": 3,
-      "back": 0.6
+      "back": 0.6,
+      "calm": 60
     },
     "workshop": {
       "name": "木工間",

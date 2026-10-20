@@ -198,6 +198,10 @@ BURN_NUMS = (('tick', 0.05, 2, '一拍幾秒（每格延燒、燒穿、救火照
 # 廚房（TASK-0720；js/45_galley.js 讀 CFG.galley，⛔ js 裡沒有第二份；加成的 % 在 lim.galley 滑桿）：(鍵, 下限, 上限, 整數?, 說明)；多的鍵、少的鍵都擋
 IDLE_NUMS = (('arc', 0, 90, '閒著的砲班（TASK-0722）：射界外再多看幾度'), ('r', 0, 10, '射程的幾倍內都沒有敵艦才算閒著（0 ＝ 關掉：砲班一直守著自己的砲）'),
              ('t', 0.5, 30, '每幾秒判斷一次'), ('hold', 0, 120, '連續閒著幾秒才把砲手放出去當預備水手'))
+# 火槍命中率（TASK-0633；js/40_crew.js musketP，沒寫的鍵照程式裡的預設；射程是另一格 lim.musket）
+MUSKET_NUMS = (('sigma', 0.001, 0.2, '散布（弧度；1811 年 Brown Bess 試射反推 0.013）'), ('w', 0.1, 3, '露出來的寬（m）'),
+               ('h', 0.1, 3, '甲板上的人露出來的高（m；舷牆後面只露上半身）'), ('hTop', 0.1, 3, '從桅頂往下看露出來的高（m）'),
+               ('sway', 0, 2, '自己的船晃的影響（秒：散布多 sway × 船轉得多快 rad/s）'))
 GALLEY_NUMS = (('cooks', 1, 4, True, '每座爐灶幾位廚師（全船上限 ＝ 船員配置 crew.cook）'), ('cookT', 1, 120, False, '一位效率 1 的廚師做好一鍋（一桌的份）要幾秒'),
                ('stock', 1, 40, True, '爐灶旁最多放幾鍋（開戰時是滿的）'), ('mess', 1, 40, True, '一桌幾個人物（伙夫一趟領一桌的飯）'),
                ('go', 1, 20, True, '同時最多幾個伙夫在路上或在領'), ('fetchT', 0, 30, False, '伙夫在爐灶旁盛飯要站幾秒'), ('waitT', 0, 120, False, '沒鍋可領最多等幾秒'),
@@ -337,6 +341,17 @@ def validate(cfg, prev=None):
         for f in ID:
             if f not in [x[0] for x in IDLE_NUMS]:
                 err('idle.' + f, '不認得的鍵（admin.py IDLE_NUMS 沒有）')
+    MK = cfg.get('musket')                                                              # 火槍命中率（TASK-0633；js/40_crew.js musketP）：選填，寫了就驗
+    if MK is not None:
+        if not isinstance(MK, dict):
+            err('musket', '要是物件（火槍命中率的參數，見 admin.py MUSKET_NUMS）')
+        else:
+            for f, lo, hi, what in MUSKET_NUMS:
+                if f in MK and not (isnum(MK[f]) and lo <= MK[f] <= hi):
+                    err('musket.' + f, '%s（%s～%s）' % (what, lo, hi))
+            for f in MK:
+                if f not in [x[0] for x in MUSKET_NUMS]:
+                    err('musket.' + f, '不認得的鍵（admin.py MUSKET_NUMS 沒有）')
     G = cfg.get('guns')
     if not isinstance(G, dict) or not G:
         err('guns', '要是非空物件')
@@ -434,7 +449,7 @@ def validate(cfg, prev=None):
     crew(cfg.get('crew0'), 'crew0', True)
     FU, RT = cfg.get('furniture') or {}, cfg.get('rooms') or {}
     for fid, f in FU.items():                            # 道具的數字（js/67_furncfg.js 調得到的那幾格；遊戲照它擺、算抽水、治療）
-        for k, lo, hi in (('tpm', 0, 120), ('crew', 1, 12), ('cap', 0, 300), ('hold', 1, 4), ('hp', 10, 1000)):
+        for k, lo, hi in (('tpm', 0, 120), ('crew', 1, 12), ('cap', 0, 300), ('hold', 1, 4), ('battle', 0, 1), ('hp', 10, 1000)):   # battle：交戰中也收傷員（手術台；js/44_medic.js）
             if isinstance(f, dict) and k in f and not (isnum(f[k]) and lo <= f[k] <= hi):
                 err('furniture.%s.%s' % (fid, k), '%s～%s 的數字' % (lo, hi))
         if isinstance(f, dict) and 'auto' in f and not (isint(f['auto']) and 1 <= f['auto'] <= 4):
@@ -448,6 +463,9 @@ def validate(cfg, prev=None):
         st = f.get('staff') if isinstance(f, dict) else None                # 設施配員（TASK-0676；js/36_rooms.js staffSlots）：{ 職位: 每件幾位 }
         if st is not None and not (isinstance(st, dict) and all(k in ('surgeon', 'carpenter', 'sailmaker') and isint(v) and (1 if k in ('carpenter', 'sailmaker') else 0) <= v <= 4 for k, v in st.items())):
             err('furniture.%s.staff' % fid, '{ surgeon: 0～4、carpenter: 1～4、sailmaker: 1～4 的整數 }（每件配幾位；木匠、帆匠每船至少一位）')
+    cm = (RT.get('medical') or {}).get('calm') if isinstance(RT.get('medical'), dict) else None   # 砲停了幾秒才開放病床（js/44_medic.js；0 ＝ 不分交戰）
+    if cm is not None and not (isnum(cm) and 0 <= cm <= 600):
+        err('rooms.medical.calm', '0～600 的數字（秒；0 ＝ 不分交戰）')
     KY = cfg.get('keys')                                  # 鍵位的出廠預設（js/66_keys.js：{ 動作: 鍵 }；動作的清單在遊戲裡 ⇒ 這裡只驗形狀，認不得的動作遊戲不收）
     if KY is not None:
         if not isinstance(KY, dict):
