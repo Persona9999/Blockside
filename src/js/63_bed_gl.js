@@ -5,6 +5,11 @@
 //   片段照世界座標算紋理（不用貼圖檔）：沙 ＝ 細顆粒＋風紋；草地 ＝ 兩種尺度的斑駁、帶一點色相；岩石 ＝ 水平層理＋雜訊；
 //   珊瑚礁 ＝ 一顆一顆的珊瑚頭（細胞雜訊，約 3 m 一顆）照實物配色 —— 赭、黃褐、橄欖褐為主，夾珊瑚藻的粉、紫，頭與頭之間是淺色的礁沙。
 //   紋理細節照距離淡掉（250 m～1.8 km）⇒ 遠處只剩底色、不閃；底色挑成紋理的平均色 ⇒ 淡掉時顏色不跳。
+//   近看（Tim 2026-10-20「是否可以強化一下近看地形時的紋理(一樣用程式生成)」）：70～260 m 以內再疊一層細的 ——
+//     沙：細風紋、顆粒、海面上 0.6 m 內的濕沙（深一點、有反光）、再往上一條打上岸的海草與貝殼；草地：草叢、順一個方向的草葉紋、露土的斑塊、零星小花；
+//     岩石：裂縫網（細胞雜訊兩近點的差）、細顆粒、地衣斑；珊瑚礁：頭鼓起來、表面細紋；海底泥沙：水流沙紋。
+//     凹凸：每種另外給一個微高度 hb（公尺），照螢幕導數擾動法線（Mikkelsen 的 surface gradient，不多算雜訊）⇒ 光照看得出起伏；陰影照舊用網格的法線。
+//     細的那幾層照一個像素佔幾公尺（fw）淡掉（baa：一個週期不到兩三個像素就不畫）⇒ 斜看、遠一點都不閃。
 //   在用的那幾圈（中心 ± ring）每 8 m 一點、預載的那一圈每 16 m；四邊往下垂 40 m 的裙邊 ⇒ 粗細不同的兩塊接在一起也看不到縫。
 //   水下的部分由海面的折射（07_gfx.js 折射：高）透出來，越深越被水的顏色蓋掉 ⇒ 礁、沙洲在淺水裡看得出顏色。
 // 遠景（BEDFAR）：載入的 5×5 以外也要看得到島 ⇒ 整個海域有檔的塊每塊照 32 m 抽一份粗網格（bedMesh stride 8），開戰後在背景一塊一塊讀
@@ -105,24 +110,61 @@ function bedFS() {
     'float bf(vec2 p){ return (bn(p)*0.5+bn(p*2.03)*0.25+bn(p*4.01)*0.125+bn(p*8.07)*0.0625)/0.9375; }\n' +
     // 細胞雜訊：(到最近一點的距離, 那一格的兩個亂數)
     'vec3 bcell(vec2 p){ vec2 i=floor(p), f=fract(p); float d=8.0; vec2 id=i; for(int y=-1;y<=1;y++) for(int x=-1;x<=1;x++){ vec2 g=vec2(float(x),float(y)); vec2 q=g+vec2(bh(i+g),bh(i+g+17.3))-f; float e=dot(q,q); if(e<d){ d=e; id=i+g; } } return vec3(sqrt(d),bh(id+3.7),bh(id+9.1)); }\n' +
-    'void main(){ if(vW.y<uClip) discard; vec3 n=normalize(vN); vec2 p=vW.xz; float fd=length(vW-uEye), dk=1.0-smoothstep(250.0,1800.0,fd); vec3 col=vC;\n' +
+    // 細胞雜訊（兩近點）：(到最近一點, 到第二近一點, 最近那一格的兩個亂數) —— 第二近減最近 ≈ 0 的地方是兩格的交界（裂縫）
+    'vec4 bcell2(vec2 p){ vec2 i=floor(p), f=fract(p); float d1=8.0, d2=8.0; vec2 id=i; for(int y=-1;y<=1;y++) for(int x=-1;x<=1;x++){ vec2 g=vec2(float(x),float(y)); vec2 q=g+vec2(bh(i+g),bh(i+g+17.3))-f; float e=dot(q,q); if(e<d1){ d2=d1; d1=e; id=i+g; } else if(e<d2) d2=e; } return vec4(sqrt(d1),sqrt(d2),bh(id+3.7),bh(id+9.1)); }\n' +
+    // 每公尺 f 個週期的那一層：一個像素佔 fw 公尺 ⇒ 一個週期不到三個像素就淡掉（不閃）
+    'float baa(float f, float fw){ return 1.0-smoothstep(0.3,0.6,f*fw); }\n' +
+    // 岩石（照平面座標 q、高度 yy）：水平層理（照雜訊扭）＋細雜訊；近看多中尺度的明暗斑駁、稀疏的裂縫（約 2.2 m 一塊，只有三成多的邊裂開、寬窄照雜訊）、
+    //   小坑洞（岸邊石灰岩那種蝕出來的洞，約 0.5 m 一格、一半的格子有）、細顆粒、地衣斑 ⇒ (亮度倍數, 地衣多少, 那一塊的亂數（挑地衣的顏色）, 微高度)
+    'vec4 brock(vec2 q, float yy, float fw, float nk){ float st=sin(yy*1.1+bf(q*0.05)*7.0)*0.5+0.5, m=(0.82+0.2*st)*(0.88+0.24*bn(q*0.6+vec2(yy*0.3)));\n' +
+    ' vec4 ck=bcell2(q*0.45+vec2(bn(q*0.3),yy*0.2)); float cv=smoothstep(0.5,0.7,bn(q*0.35+ck.z*5.0)), cr=(1.0-smoothstep(0.015,0.03+0.04*bn(q*2.0),ck.y-ck.x))*cv*baa(0.9,fw), gn=(bn(q*4.3+vec2(yy))-0.5)*baa(4.3,fw);\n' +
+    ' vec3 pc=bcell(q*1.9+vec2(bn(q*0.8))*0.7); float pt=(1.0-smoothstep(0.1+0.12*pc.z,0.2+0.12*pc.z,pc.x))*step(pc.y,0.5)*baa(1.9,fw), mo=bf(q*0.22+vec2(yy*0.1));\n' +
+    ' m*=(1.0+nk*(0.18*gn+0.3*(mo-0.5)))*(1.0-nk*(0.3*cr+0.35*pt)); return vec4(m, smoothstep(0.62,0.75,bf(q*0.9+vec2(yy*0.5,3.0)))*nk, ck.z, nk*(0.06*ck.x-0.06*cr-0.06*pt+0.04*gn+0.05*st+0.08*mo)); }\n' +
+    'void main(){ if(vW.y<uClip) discard; vec3 n=normalize(vN); vec2 p=vW.xz; float fd=length(vW-uEye), dk=1.0-smoothstep(250.0,1800.0,fd), nk=1.0-smoothstep(70.0,260.0,fd);\n' +
+    ' float fw=max(length(dFdx(p)),length(dFdy(p))), hb=0.0, wet=0.0; vec3 col=vC;\n' +
+    // 陡的面（岩石用）：側面的座標 sq（照法線比較朝東西還是南北）與它一個像素佔幾公尺；sv：坡越陡越照側面（法線 y 0.85 ⇒ 0.6）
+    ' vec2 sq=abs(n.x)>abs(n.z)?vW.zy:vW.xy; float fws=max(length(dFdx(sq)),length(dFdy(sq))), sv=smoothstep(0.85,0.6,n.y);\n' +
     ' if(dk>0.0){ vec4 w=vK; float ws=w.x+w.y+w.z+w.w; vec3 det;\n' +
-    '  if(ws<0.01) det=vC*(0.85+0.3*bn(p*0.4));\n' +
+    // 海底（深海底、沒有紋理權重的）：泥的斑駁＋水流沙紋（約 1.6 m 一道）
+    '  if(ws<0.01){ float rp=sin(dot(p,vec2(0.6,0.8))*4.0+bf(p*0.08)*5.0)*baa(0.64,fw); det=vC*(0.85+0.3*bn(p*0.4))*(1.0+0.05*rp*nk); hb=0.025*rp; }\n' +
     '  else { det=vec3(0.0);\n' +
-    // 沙：細顆粒＋風紋（照雜訊彎）
-    '   if(w.x>0.0){ float g=bn(p*1.7), r=sin(dot(p,vec2(0.8,0.6))*2.2+bf(p*0.12)*6.0)*0.5+0.5; det+=w.x*vC*(0.95+0.12*(g-0.5)+0.07*(r-0.5)); }\n' +
-    // 草地：兩種尺度的斑駁、乾的地方偏黃褐
-    '   if(w.y>0.0){ float m1=bf(p*0.06), m2=bn(p*0.8); det+=w.y*(vC*(0.8+0.4*m1)*(0.93+0.14*m2)+vec3(0.06,0.03,-0.02)*(m1-0.5)); }\n' +
-    // 岩石：水平層理（照雜訊扭）＋細雜訊
-    '   if(w.z>0.0){ float st=sin(vW.y*1.1+bf(p*0.05)*7.0)*0.5+0.5; det+=w.z*vC*(0.82+0.2*st)*(0.88+0.24*bn(p*0.6+vec2(vW.y*0.3))); }\n' +
+    // 沙：細顆粒＋風紋（照雜訊彎）；近看多一層細風紋（約 0.57 m 一道）與兩種顆粒
+    //   濕沙：海面上 wl（0.55 m 照雜訊抖 ±0.35）以下變深、有反光（wet）；水下 0.6 m 以下不算（折射那邊本來就暗）
+    //   打上岸的東西：濕沙線再往上 0.45 m 那一條，零星的貝殼（白）與海草（深褐）；其他乾沙只有很少的貝殼
+    '   if(w.x>0.0){ float g=bn(p*1.7), wf=bf(p*0.12)*6.0, r=sin(dot(p,vec2(0.8,0.6))*2.2+wf)*0.5+0.5;\n' +
+    '    float a2=baa(1.75,fw), rf=(sin(dot(p,vec2(0.74,0.67))*11.0+wf*2.3+bn(p*0.9)*2.0)*0.5+0.5-0.5)*a2, gr=(bn(p*23.0)-0.5)*baa(23.0,fw), gr2=(bn(p*61.0)-0.5)*baa(61.0,fw);\n' +
+    '    float wl=0.55+0.35*(bn(p*0.15)-0.5)*2.0, wt=(1.0-smoothstep(wl-0.25,wl+0.1,vW.y))*smoothstep(-0.6,-0.2,vW.y);\n' +
+    '    vec3 sc=vC*(0.95+0.12*(g-0.5)+0.07*(r-0.5)+nk*(0.06*rf+0.10*gr+0.08*gr2))*(1.0-0.32*wt*nk);\n' +
+    '    if(nk>0.0){ vec4 sh=bcell2(p*1.6+vec2(bn(p*0.5))*0.6); float dr=1.0-smoothstep(0.0,0.3,abs(vW.y-wl-0.45+0.25*(bn(p*0.3)-0.5)));\n' +
+    '     float sp=(1.0-smoothstep(0.05,0.1,sh.x))*step(sh.z,0.03+0.3*dr)*(1.0-wt)*nk*baa(5.0,fw);\n' +
+    '     sc=mix(sc,sh.w>0.55&&dr>0.3?vec3(0.30,0.24,0.14):vec3(0.92,0.88,0.79),sp*0.85); }\n' +
+    '    hb+=w.x*(0.05*(r-0.5)+nk*(0.018*rf+0.004*gr)*(1.0-0.7*wt)); wet+=w.x*wt*nk; det+=w.x*sc; }\n' +
+    // 草地：兩種尺度的斑駁、乾的地方偏黃褐；近看多草叢（約 1.8 m）、順一個方向的草葉紋（照雜訊彎）、被踩薄露出土的斑塊、零星的黃白小花
+    '   if(w.y>0.0){ float m1=bf(p*0.06), m2=bn(p*0.8), cl=bf(p*0.55);\n' +
+    '    vec2 q=vec2(dot(p,vec2(0.94,0.34)),dot(p,vec2(-0.34,0.94)))+vec2(bn(p*0.4),bn(p*0.4+5.7))*1.5; float bl=(bn(vec2(q.x*7.0,q.y*2.2))-0.5)*baa(7.0,fw), bl2=(bn(vec2(q.x*19.0,q.y*5.0)+3.1)-0.5)*baa(19.0,fw);\n' +
+    '    vec3 tu=bcell(p*1.3+vec2(bn(p*0.9),bn(p*0.9+4.1))*1.2); float tf=(1.0-smoothstep(0.15,0.8,tu.x+(bn(p*3.3)-0.5)*0.35))*baa(1.3,fw);\n' +
+    '    vec3 gc=(vC*(0.8+0.4*m1)*(0.93+0.14*m2)+vec3(0.06,0.03,-0.02)*(m1-0.5))*(1.0+nk*(0.3*(cl-0.5)+0.3*bl+0.2*bl2+0.22*(tf-0.5)+0.1*(tu.y-0.5)*tf));\n' +
+    '    float dy=smoothstep(0.55,0.75,bf(p*0.2+vec2(9.1,2.4)))*nk; gc=mix(gc,gc*vec3(1.18,1.06,0.62),dy*0.6);\n' +
+    '    float dz=smoothstep(0.64,0.74,bf(p*0.11+vec2(5.2,1.3)))*nk; gc=mix(gc,vec3(0.40,0.32,0.21)*(0.85+0.3*bn(p*3.1)),dz*0.85);\n' +
+    '    if(nk>0.0){ vec4 fl=bcell2(p*2.3); float fs=(1.0-smoothstep(0.05,0.09,fl.x))*step(fl.z,0.04)*(1.0-dz)*nk*baa(9.0,fw); gc=mix(gc,fl.w<0.5?vec3(0.86,0.76,0.26):vec3(0.88,0.86,0.80),fs*0.85); }\n' +
+    '    hb+=w.y*nk*(0.10*(cl-0.5)+0.025*bl+0.05*tf-0.04*dz); det+=w.y*gc; }\n' +
+    // 岩石（brock）：陡的面改照側面的座標（坡越陡越換過去，sv）⇒ 崖壁上不會被拉成直條；地衣灰綠、赭
+    '   if(w.z>0.0){ vec4 rt=brock(p,vW.y,fw,nk); if(sv>0.0) rt=mix(rt,brock(sq,vW.y,fws,nk),sv);\n' +
+    '    vec3 rc=mix(vC*rt.x,rt.z<0.5?vec3(0.60,0.62,0.52):vec3(0.64,0.50,0.32),rt.y*0.4); hb+=w.z*rt.w; det+=w.z*rc; }\n' +
     // 珊瑚礁：珊瑚頭（約 3 m 一顆）照實物配色，頭與頭之間是礁沙
-    // 每顆大小不同（c.z）、約兩成的格子空著（只有礁沙）、邊緣照雜訊咬得不規則；珊瑚藻的粉、紫偏灰（實物不艷）
+    // 每顆大小不同（c.z）、約兩成的格子空著（只有礁沙）、邊緣照雜訊咬得不規則；珊瑚藻的粉、紫偏灰（實物不艷）；近看頭鼓起來（最高 0.3 m）、表面細紋
     '   if(w.w>0.0){ vec3 c=bcell(p*0.33+vec2(bn(p*0.21),bn(p*0.21+7.3))*0.9); vec3 cc=c.y<0.3?vec3(0.62,0.48,0.30):c.y<0.52?vec3(0.50,0.44,0.28):c.y<0.66?vec3(0.70,0.58,0.36):c.y<0.8?vec3(0.66,0.50,0.50):c.y<0.9?vec3(0.52,0.43,0.50):vec3(0.86,0.80,0.66);\n' +
     '    float rr=0.16+0.26*c.z, ed=c.x+(bn(p*1.4)-0.5)*0.24; float head=(1.0-smoothstep(rr-0.06,rr+0.06,ed))*step(0.2,c.z); vec3 sd=vec3(0.82,0.77,0.62)*(0.9+0.15*bn(p*2.0));\n' +
-    '    det+=w.w*mix(sd,cc*(0.78+0.4*bn(p*2.7+c.z*13.0)),head*(0.7+0.3*c.z)); }\n' +
-    '   det/=ws; }\n' +
+    '    float po=(bn(p*9.0+c.y*31.0)-0.5)*baa(9.0,fw);\n' +
+    '    det+=w.w*mix(sd,cc*(0.78+0.4*bn(p*2.7+c.z*13.0))*(1.0+0.2*po*nk),head*(0.7+0.3*c.z)); hb+=w.w*nk*(head*0.3*sqrt(max(0.0,1.0-ed/rr))+0.015*po); }\n' +
+    '   det/=ws; hb/=ws; wet/=ws; }\n' +
     '  col=mix(vC,det,dk); }\n' +
-    ' float sd2=dot(n,uSun), d=abs(sd2); float sk=shadowK(vW,(sd2<0.0?-n:n)*(3.0-2.0*d)); d*=sk; col=col*(mix(uGround,uSky,0.6)*0.65+vec3(1.0,0.96,0.88)*d*0.7);\n' +
+    // 凹凸（近看）：法線照 hb 的螢幕導數擾動 —— 導數在分支外算（分支裡的導數沒有定義）
+    ' vec3 sx=dFdx(vW), sy=dFdy(vW), r1=cross(sy,n), r2=cross(n,sx); float hx=dFdx(hb), hy=dFdy(hb), dt=dot(sx,r1); vec3 nb=n;\n' +
+    ' if(nk>0.0){ vec3 nq=abs(dt)*n-sign(dt)*(hx*r1+hy*r2); if(dot(nq,nq)>1e-12) nb=normalize(mix(n,normalize(nq),nk)); }\n' +
+    ' float sd2=dot(nb,uSun), d=abs(sd2), sg=dot(n,uSun); float sk=shadowK(vW,(sg<0.0?-n:n)*(3.0-2.0*abs(sg))); d*=sk; col=col*(mix(uGround,uSky,0.6)*0.65+vec3(1.0,0.96,0.88)*d*0.7);\n' +
+    // 濕沙的反光：太陽的半向量，照陰影
+    ' if(wet>0.0){ vec3 hv=normalize(uSun+normalize(uEye-vW)); col+=vec3(1.0,0.96,0.88)*pow(max(dot(nb,hv),0.0),40.0)*wet*0.35*sk; }\n' +
     ' o=vec4(mix(col,uFog,1.0-exp(-fd*uFogD)),1.0); }\n';
 }
 /** 遠景（每格；nb ＝ 這一格最多建幾塊網格，bedDraw 這一格建過細的 ⇒ 0）：離焦點（旗艦）那一塊近的先（2026-10-20：以前照離開戰位置近的排一次就定了 ⇒ 開遠了旁邊的最後才來）。
