@@ -40,6 +40,7 @@
     "dmgsf": [10, 300, 30],
     "dmgbl": [10, 300, 25],
     "dmgmg": [10, 300, 60],
+    "dmgbw": [5, 300, 10],
     "box": [1, 8, 2],
     "carry": [1, 6, 1],
     "wind": [0.25, 3, 1],
@@ -329,6 +330,23 @@
       "elev": 75,
       "lob": true
     },
+    "bow": {
+      "code": "bow",
+      "name": "弓（角形複合弓，弓手）",
+      "short": "弓",
+      "V": 55,
+      "reload": 0.8,
+      "big": false,
+      "hole": 0.05,
+      "crew": 1,
+      "min": 1,
+      "mass": 0.002,
+      "shot": 0.1,
+      "ammo": "bolt",
+      "weapon": "bow",
+      "box": 3,
+      "elev": 40
+    },
     "brooke64": {
       "code": "64b",
       "name": "6.4 吋 Brooke 線膛砲",
@@ -496,7 +514,7 @@
         "ladders": 7,
         "lantern": 4,
         "magazine": 2,
-        "part": 32,
+        "part": 33,
         "portlid": 81,
         "powder": 231,
         "rooms": 7,
@@ -997,6 +1015,20 @@
         "ship": 2,
         "yard": 3
       }
+    },
+    {
+      "id": "punt",
+      "el": "ship-punt",
+      "name": "蓬特號",
+      "vxk": "punt.vxk",
+      "work": "apex-one-punt-01m-assembly",
+      "author": "apex-one",
+      "fireEngine": false,
+      "cfg": {"base": 5},
+      "geo": {"spar": [20, 33], "marines": [47, 44], "center": 35, "aim": 22, "aimZ": [8, 100], "deckAim": [18, 30], "rigAim": [45, 100]},
+      "crew": {"officers": 2, "helm": 2, "top": 0, "marines": 8, "marineGap": 14, "monkeys": 1, "handsK": 0.25},
+      "names": ["蓬特號"],
+      "idNext": {"anchor": 3, "deck": 5, "gun": 5, "ladders": 2, "magazine": 2, "oar": 31, "part": 3, "powder": 5, "rudder": 3, "ship": 2, "yard": 3}
     }
   ],
   "furniture": {

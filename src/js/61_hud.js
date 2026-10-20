@@ -461,14 +461,44 @@ function gmapSailY(t) {
   if (!t.gmY) { var v = t.verts, lo = 1e9, hi = -1e9; for (var i = 1; i < v.length; i += 3) { if (v[i] < lo) lo = v[i]; if (v[i] > hi) hi = v[i]; } t.gmY = [lo, hi]; }
   return t.gmY;
 }
-/** 一門砲的符號：形狀 ＝ 裝填（● 好　◌ 裝填中　○ 開不了　△ 等火藥　≈ 泡水　✕ 毀），顏色 ＝ 人手（綠 滿編、黃 人數不足但能開（裝填慢）、灰 少於最少人數、紅 毀、藍 泡水）；受損 ⇒ 底下一條血條。 */
+/** 砲列的圈（Tim 2026-10-20「另外是否可以讓綠色變成圓圈而非點狀」「這部分可以直接用一個白色圓圈圖片 換色達成嗎(包含外圍圓圈) 透過縮放圖片與換色」「白色圓圈圖片用程式生成」
+ *  「綠圈(標記裝填中) 黑圈(外框) 黃圈(目標在砲擊範圍)」「然後要考慮到不同解析度(且會在手機 PC上運行)」）：程式生成一個白色實心圓（hudDisc），三個圈都是它縮放＋換色出來的 ——
+ *    黑圈（外框）＋綠圈（裝填中；顏色照人手，讀 .g-* 的 color ⇒ 顏色只在 template.html 一份）：白圓原大換黑 → 縮一圈換色 → 再縮一圈換黑，
+ *      最後用「白圓挖掉更小的白圓」當遮罩把中間挖空 ⇒ 外黑邊、色圈、內黑邊；每種人手顏色一張，寫進 <style>（.ring.g-full…），格子裡置中、HUD_RING_D 格寬（跟 ● 差不多大）
+ *    黃圈（打得中，template.html .aim::before）＝ 同一個白圓當遮罩（mask）、CSS 縮到 1.05 格、底色半透明金。
+ *  不同解析度：圓是向量（SVG），照 --gc（電腦 12 px、窄螢幕 9 px）縮放、照裝置像素比（PC 1–2、手機 3）畫，哪一種都是銳利的、不用重畫。
+ *    ⛔ 量過的路：畫布點陣（64 px）⇒ 電腦 1 倍時縮到 8 px，細邊會糊；要照像素比重畫又得跟著縮放、換螢幕改。
+ *  ⛔ 以前裝填中是字型的 ◌：本身是一圈點（Tim 截圖：綠點一圈），壓在金色圓上更糊。第一次畫砲列時做一次。 */
+var HUD_RING = false, HUD_RING_D = 0.66;                                // 0.66 格 ≈ ● 連黑邊的大小（量過 0.75：比 ● 大一圈、洞太小像甜甜圈）
+var HUD_RING_EDGE = 0.11, HUD_RING_IN = 0.52;   // 白圓的直徑 ＝ 1：外黑邊 0.11（畫面上約 1 px）；色圈 1 − 2×0.11 ＝ 0.78 到 0.52；內黑邊 0.52 到 0.52 − 0.22（中間挖空）
+/** 白色實心圓（SVG，圓心在原點、直徑 100）縮到 f 倍、換成 col。 */
+function hudDisc(f, col) { return '<circle r="' + (50 * f).toFixed(2) + '" fill="' + col + '"/>'; }
+/** SVG 內容 ⇒ CSS 的 url()（viewBox −50…50 ⇒ 圓剛好填滿）。 */
+function hudSvg(body) { return 'url("data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="-50 -50 100 100">' + body + '</svg>') + '")'; }
+function hudRing() {
+  if (HUD_RING) return true;
+  var E = HUD_RING_EDGE, IN = HUD_RING_IN, D = 'calc(var(--gc) * ' + HUD_RING_D + ')';
+  var hole = '<mask id="h">' + hudDisc(1, '#fff') + hudDisc(IN - 2 * E, '#000') + '</mask>';   // 遮罩：白圓挖掉最裡面那個 ⇒ 中間透出底下（海或黃圈）
+  var css = '.ring{background:no-repeat center/' + D + ' ' + D + ';}';
+  ['full', 'short', 'none', 'dead', 'wet'].forEach(function (k) {
+    var probe = document.createElement('span'); probe.className = 'g-' + k; document.body.appendChild(probe);
+    var col = getComputedStyle(probe).color; probe.remove();
+    css += '.ring.g-' + k + '{background-image:' + hudSvg(hole + '<g mask="url(#h)">' + hudDisc(1, '#000') + hudDisc(1 - 2 * E, col) + hudDisc(IN, '#000') + '</g>') + ';}';
+  });
+  var m = hudSvg(hudDisc(1, '#fff')) + ' center/100% 100% no-repeat';   // 黃圈：白圓當遮罩，顏色、大小照 template.html 的 .aim::before
+  css += '.gside .aim::before,.gend .aim::before{-webkit-mask:' + m + ';mask:' + m + ';}';
+  var st = document.createElement('style'); st.textContent = css; document.head.appendChild(st);
+  return (HUD_RING = true);
+}
+/** 一門砲的符號：形狀 ＝ 裝填（● 好　綠圈 裝填中（hudRing）　○ 開不了　△ 等火藥　≈ 泡水　✕ 毀），顏色 ＝ 人手（綠 滿編、黃 人數不足但能開（裝填慢）、灰 少於最少人數、紅 毀、藍 泡水）；受損 ⇒ 底下一條血條。 */
 function gunCell(g, aim) {
   var st = !g.alive ? 'dead' : g.wet ? 'wet' : g.manned < g.crewMin ? 'none' : g.manned < g.crewFull ? 'short' : 'full';
   var k = !g.alive ? 3 : g.wet ? 5 : gunRate(g) <= 0 ? 2 : g.needCart && !(g.box > 0) ? 4 : g.reload > 0 ? 1 : 0;   // 4 ＝ 等火藥與彈藥（藥箱空了）
   var hp = !g.alive ? 0 : Math.max(0, g.model.hp / g.model.hpMax), hurt = g.alive && hp < 0.999;   // 受損 ⇒ 底下一條血條（.hp::after，寬 ＝ 剩下的血量）
   var cls = 'g-' + st + (hurt ? ' hp' : '') + (aim ? ' aim' : ''), sty = hurt ? '--hp:' + Math.round(hp * 100) + '%;' : '';
   if (HUD_ART) return '<span class="ico ' + cls + '" style="' + sty + 'background-position:' + ((3 + (k === 4 ? 1 : k === 5 ? 2 : k)) * 100 / 7).toFixed(3) + '% 0"></span>';
-  return '<span class="' + cls + ' gk' + k + '"' + (sty ? ' style="' + sty + '"' : '') + '>' + '●◌○✕△≈'[k] + '</span>';   // gk<k>：比較寬的符號（✕ △）在 HUD 的固定格子裡縮小字級（template.html）
+  var ring = k === 1 && hudRing();                                    // 裝填中 ⇒ 程式畫的綠圈＋黑圈（不用 ◌ 那一圈點）
+  return '<span class="' + (ring ? 'ring ' : '') + cls + ' gk' + k + '"' + (sty ? ' style="' + sty + '"' : '') + '>' + (ring ? '' : '●◌○✕△≈'[k]) + '</span>';   // gk<k>：比較寬的符號（✕ △）在 HUD 的固定格子裡縮小字級（template.html）
 }
 /** HUD 放哪：追擊砲 ⇒ 砲軸偏船頭 'bow'、偏船尾 'stern'（⛔ 只看砲軸：憲法號、餘燼號船頭的追擊砲朝兩舷外 60–75°，會被當成側舷）；
  *  其他砲 ⇒ 砲軸（格座標，+x ＝ 船頭）幾乎朝船頭／船尾才算，不然 ＝ 側舷 'side'。 */

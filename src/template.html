@@ -133,6 +133,7 @@
   .gr .grd{ display:inline-block; text-align:left; line-height:1.25; }   /* 砲列：每層砲甲板一行、上下疊（61_hud.js gunRow） */
   .g-full{ color:#8fe388; } .g-short{ color:#f2c14e; } .g-none{ color:#7d838c; } .g-dead{ color:#e0574a; } .g-wet{ color:#7fc8ff; }
   .gside .aim, .gend .aim{ position:relative; }   /* 這門現在開打得中（61_hud.js gunCell aim ← 21_gunnery.js gunAims；Tim 2026-10-19「炮可以射擊到敵人時 是否可以有額外標示」）：符號底下壓一個半透明的金色圓（Tim 2026-10-19「標示方法有問題會變成一堆點 是否可以改成一個半透明黃圓圈 壓在原本的炮指示圈下」）。⛔ 以前用 text-shadow／drop-shadow 往四周偏移描金 ⇒ 圖示版的點狀圖示每一點都被複製一圈，看起來是一堆金點 */
+  .gside .aim, .gend .aim{ text-shadow:none; -webkit-text-stroke:2px #000; paint-order:stroke fill; }   /* 金色圓上的黑描邊改成原地描（Tim 2026-10-20 截圖：「在亮黃光時 原本的三角形與圓圈會變成點狀」）：.gside／.gend 的黑描邊是四個斜角各偏 1 px 的 text-shadow ⇒ 在深色海面上糊成一圈邊看不出來，壓在金色圓上每一份都看得見 —— ◌ 的每一點長成一叢、△ 疊成鐘形。text-stroke 沿字形外框描、paint-order 先描再填 ⇒ 只露出外面 1 px、形狀不複製 */
   .gside .aim::before, .gend .aim::before{ content:''; position:absolute; left:50%; top:50%; width:calc(var(--gc) * 1.05); height:calc(var(--gc) * 1.05); transform:translate(-50%, -50%); border-radius:50%; background:rgba(232, 194, 106, .55); z-index:-1; pointer-events:none; }   /* z-index −1 ⇒ 畫在這一層（.gside 有 transform、.gend 下面給 z-index 0）的最底、符號與圖示底下；⛔ 給 .aim 自己 z-index ⇒ 圓會蓋在圖示版的貼圖（背景）上面 */
   .gend{ position:relative; z-index:0; }   /* 給上一行的金色圓一個疊放層（不然 z-index −1 會掉到羅盤那一團後面） */
   .ico.g-full{ box-shadow:inset 0 -2px 0 #8fe388; } .ico.g-short{ box-shadow:inset 0 -2px 0 #f2c14e; } .ico.g-none{ box-shadow:inset 0 -2px 0 #7d838c; } .ico.g-dead{ box-shadow:inset 0 -2px 0 #e0574a; }
@@ -433,7 +434,7 @@
     <div class="hH">畫面上的資訊</div>
     <div><kbd>🧭</kbd> 羅盤（下方中間）：跟著鏡頭轉（N ＝ 北），中間是我艦、藍箭頭 ＝ 風從哪吹來、紅點 ＝ 敵艦、金色扇形 ＝ 兩舷的射界（對得到時亮）；外圈兩環：<span style="color:#e8c26a">金 ＝ 船體還剩多少</span>、<span style="color:#4fb3ff">藍 ＝ 進水</span>（七成以上轉紅；滑鼠停著看數字）</div>
     <div><kbd>🎯</kbd> 羅盤上方：🎯 瞄準模式　🎥 鏡頭　⚠ 射界外（瞄準點對不到）；第二行 ⛵ 航速（節，倒車是 −）＋現在的帆段與帆 %（張著、還在的帆 × 血量）；物理減速放慢時後面多一個 🐢 ×倍率</div>
-    <div><kbd>砲</kbd> 羅盤兩旁是兩舷的砲（船頭、船尾砲在羅盤上下）：● 裝填好 ◌ 裝填中 △ 等火藥與彈藥 ○ 開不了 ✕ 毀 <span class="g-wet">≈ 砲口泡在水裡（不能裝填、不能開）</span>；<span class="g-full">綠 滿編</span>、<span class="g-short">黃 人數不足（照開、較慢）</span>、<span class="g-none">灰 少於最少人數</span>、<span class="g-dead">紅 毀</span>；底下的紅線 ＝ 那門砲剩下的血量</div>
+    <div><kbd>砲</kbd> 羅盤兩旁是兩舷的砲（船頭、船尾砲在羅盤上下）：● 裝填好 ○ 裝填中（綠、黃的圈）△ 等火藥與彈藥 ○ 開不了（灰的圈）✕ 毀 <span class="g-wet">≈ 砲口泡在水裡（不能裝填、不能開）</span>；<span class="g-full">綠 滿編</span>、<span class="g-short">黃 人數不足（照開、較慢）</span>、<span class="g-none">灰 少於最少人數</span>、<span class="g-dead">紅 毀</span>；底下的紅線 ＝ 那門砲剩下的血量</div>
     <div><kbd>艦</kbd> 上方兩角的艦隊圓鈕（我方左、敵方右；手機橫拿時橫排）：外圈金 ＝ 船體、內圈藍 ＝ 進水，👤 ＝ 還能動的船員、💥 ＝ 還能用的砲；點一下在中間展開那艘的詳細資訊與砲位圖，再點一下收起</div>
     <div><kbd>報</kbd> 上方廣播：砲被打飛（同一刻的併成一行）、傷亡（每 5 秒報一次陣亡與受傷人數；是 0 的不報）；船長、軍官、舵手倒下當下就報</div>
     <div class="hH">操作</div>
@@ -757,6 +758,7 @@
 <script type="application/x-vxk" id="ship-reale" src="../VoxelKit/_cache/reale.vxk"></script>
 <script type="application/x-vxk" id="ship-susquehanna" src="../VoxelKit/_cache/susquehanna.vxk"></script>
 <script type="application/x-vxk" id="ship-dromon" src="../VoxelKit/_cache/dromon.vxk"></script>
+<script type="application/x-vxk" id="ship-punt" src="../VoxelKit/_cache/punt.vxk"></script>
 <!-- ships 結束 -->
 <!-- 設定檔（TASK-0542）：各項設定的初始值與船隻清單；js/00_config.js 讀成 CFG。設定後台：python -I admin.py serve -->
 <script type="application/x-asset" id="game-config" src="config/game.json"></script>
