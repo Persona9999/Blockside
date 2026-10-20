@@ -345,7 +345,8 @@ function csmSplits(k) {
 function shadowPass() {
   if (!CAM.inv) { SHM.on = false; return; }                             // 鏡頭還沒算過（第一格）
   var t0 = performance.now(), k = SHM.k, sp = SHM.splits = csmSplits(k), I = CAM.inv, land = SHM.stOn && landWant(), now = t0 / 1000;
-  gl.enable(gl.DEPTH_TEST); gl.disable(gl.CULL_FACE); gl.enable(gl.POLYGON_OFFSET_FILL); gl.polygonOffset(1.5, 3);
+  gl.enable(gl.DEPTH_TEST); gl.depthFunc(gl.LESS); gl.depthMask(true); gl.disable(gl.BLEND); gl.disable(gl.SCISSOR_TEST);   // 照自己要的狀態畫，不靠前一個畫法留下來的（清、寫深度都要 depthMask）
+  gl.disable(gl.CULL_FACE); gl.enable(gl.POLYGON_OFFSET_FILL); gl.polygonOffset(1.5, 3);
   gl.viewport(0, 0, SHM.n, SHM.n);
   // 視錐的四條稜（近裁切面的角 ⇒ 遠裁切面的角）；鏡頭往前 ＝ 兩個面中心的連線
   function un(x, y, z) { var w = I[3] * x + I[7] * y + I[11] * z + I[15], p = M4.pt(I, x, y, z); return [p[0] / w, p[1] / w, p[2] / w]; }
@@ -366,14 +367,26 @@ function shadowPass() {
     rays.forEach(function (R) { Q8.push(at(R, Math.max(d0, R.da))); Q8.push(at(R, Math.min(d1, R.db))); });
     var ce = [0, 0, 0]; Q8.forEach(function (p) { ce[0] += p[0] / 8; ce[1] += p[1] / 8; ce[2] += p[2] / 8; });
     var rad = 0; Q8.forEach(function (p) { rad = Math.max(rad, Math.hypot(p[0] - ce[0], p[1] - ce[1], p[2] - ce[2])); });
-    var r = Math.ceil(rad * CSM_PAD), st = r / CSM_STEP, kk = ax.map(function (a) { return Math.round(dot3(ce, a) / st); });
-    var C = [0, 1, 2].map(function (j) { return ax[0][j] * kk[0] * st + ax[1][j] * kk[1] * st + ax[2][j] * kk[2] * st; });
-    var key = [r, kk.join(','), SHM.gen, sk].join('|');
+    // 遲滯（Tim 2026-10-20「有時候陰影會閃爍」）：半徑、中心能留就留 —— 需要的半寬還在上一個的 90%～100% ⇒ 半徑不換；那一段的球還整個在範圍裡（太陽方向看過去的兩個軸、
+    //   深度那一軸在半寬的一半以內）⇒ 中心不換 ⇒ 矩陣不換、靜態那一層不重畫。以前每格照取整重算，浮點的雜訊剛好壓在取整的邊上 ⇒ 兩個值來回跳。
+    var need = rad * CSM_PAD, r = c.r && need <= c.r && need >= c.r * 0.9 ? c.r : Math.ceil(need), st = r / CSM_STEP, C, key, dc = c.C;
+    if (r === c.r && c.key && Math.abs(dot3([ce[0] - dc[0], ce[1] - dc[1], ce[2] - dc[2]], ax[0])) + rad <= r && Math.abs(dot3([ce[0] - dc[0], ce[1] - dc[1], ce[2] - dc[2]], ax[1])) + rad <= r
+        && Math.abs(dot3([ce[0] - dc[0], ce[1] - dc[1], ce[2] - dc[2]], ax[2])) <= r * 0.5 && c.key.split('|')[2] === String(SHM.gen) && c.key.split('|')[3] === sk) { C = dc; key = c.key; }
+    else {
+      var kk = ax.map(function (a) { return Math.round(dot3(ce, a) / st); });
+      C = [0, 1, 2].map(function (j) { return ax[0][j] * kk[0] * st + ax[1][j] * kk[1] * st + ax[2][j] * kk[2] * st; });
+      key = [r, kk.join(','), SHM.gen, sk].join('|');
+    }
     if (key !== c.key) {
       var D = r + CSM_UP, near = D - r - CSM_UP, far = D + r + CSM_DOWN;
       c.key = key; c.dirty = true; c.r = r; c.C = C;
       c.m = M4.mul(ortho(r, near, far), M4.lookAt([C[0] + SUN[0] * D, C[1] + SUN[1] * D, C[2] + SUN[2] * D], C, up0));
       var tx = 2 * r / SHM.n; c.off = 1.5 * tx; c.bz = Math.max(0.03, 1.5 * tx) / (far - near);   // 沿法線推 1.5 格、深度偏差 1.5 格（至少 3 cm）
+    }
+    if (c.bg !== BED_MESH_GEN && !c.dirty) {                              // 地形網格換過（63_bed_gl.js bedMeshChanged）：換的那一塊碰到這一段 ⇒ 馬上重畫（⛔ 等滿一秒 ⇒ 粗網格的影子蓋在細網格上，那一整塊暗一下）
+      var Lg = BED_MESH_LOG, PLc = bedPlanes(c.m), hit = !(c.bg >= 0) || !Lg.length || Lg[0][0] > c.bg + 1;   // 記錄被截掉了 ⇒ 當成碰到
+      for (var q = Lg.length - 1; q >= 0 && !hit && Lg[q][0] > c.bg; q--) if (!Lg[q][1] || bedSeen(PLc, Lg[q][1])) hit = true;
+      if (hit) c.dirty = true; else c.bg = BED_MESH_GEN;
     }
     if (land && c.S && (c.dirty || (!refreshed && i === SHM.rr % k && now - c.t > CSM_REFRESH))) { if (!c.dirty) refreshed = true; csmStatic(c); }
     // 這一格：靜態那一層複製過來（沒有 ⇒ 清掉），再畫船。這一段沒有船、上一格也沒有、靜態那一層也沒換 ⇒ 那一層本來就對，整段跳過（省一次 n² 的複製）
@@ -414,7 +427,7 @@ function csmStatic(c) {
   gl.bindFramebuffer(gl.FRAMEBUFFER, c.S.fb); gl.clear(gl.DEPTH_BUFFER_BIT);
   PASS.vp = c.m;
   var st = { r: c.r, bed: bedDepth(bedPlanes(c.m)), trees: treeDepth(), towns: townDepth() };
-  c.dirty = false; c.t = performance.now() / 1000;
+  c.dirty = false; c.t = performance.now() / 1000; c.bg = BED_MESH_GEN;
   st.ms = +(performance.now() - t0).toFixed(2); SHM.stat.redraws++; SHM.stat.last = st;
 }
 // 有沒有陸地（載進來的網格有高過海平面的）：沒有 ⇒ 不配靜態那一份、不畫地形樹城。

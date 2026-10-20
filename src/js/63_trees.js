@@ -218,7 +218,8 @@ var TREE_FS = function () {
     '  float bu=1.0-smoothstep(0.1,0.75,c0), e=smoothstep(0.0,0.06,lc.w), v=(0.86+0.26*r.x)*(0.8+0.28*bu)*mix(0.85,1.0,e);\n' +
     '  tn=mix(vec3(1.0),vec3(v*(1.0+0.10*r.y),v*(1.0+0.05*r.y),v*(1.0-0.12*r.y)),lk); }\n' +
     ' float sd=dot(n,uSun), d=max(sd,0.0)*0.8+abs(sd)*0.2;\n' +
-    ' float sk=shadowK(vW,n*1.5); vec3 col=vC*tn*(mix(uGround,uSky,n.y*0.5+0.5)*0.7+vec3(1.0,0.96,0.88)*d*sk*0.72);\n' +
+    // 樹收的影子 350～600 m 淡掉：650 m 外是貼圖（TREE_BB_FS，不收影子）⇒ 不淡的話那一圈網格的樹（被自己的樹冠遮）暗、貼圖亮，一刀切開
+    ' float sk=mix(uSunK,shadowK(vW,n*1.5),1.0-smoothstep(350.0,600.0,fd)); vec3 col=vC*tn*(mix(uGround,uSky,n.y*0.5+0.5)*0.7+vec3(1.0,0.96,0.88)*d*sk*0.72);\n' +
     ' o=vec4(mix(col,uFog,1.0-exp(-fd*uFogD)),1.0); }\n';
 };
 // 貼圖：面向鏡頭（只繞 y 轉）的一張四邊形；uBB[第幾棵] ＝ (圖集 u 起點, v 起點, 世界寬, 世界高)、uCell ＝ 一格的 (u 寬, v 高)
@@ -357,13 +358,16 @@ function treeDraw() {
   gl.bindVertexArray(null); if (cf) gl.enable(gl.CULL_FACE);
 }
 /** 陰影的靜態那一層（60_render.js csmStatic；PASS.vp 已經換成那一段）：照主畫面上一次分好的組（treeBin：細的、低模那兩級，各自的實例緩衝）只寫深度；
- *  不晃（uT、uWind 0：那一層不是每一格重畫）。遠處的貼圖與樹冠殼不畫（650 m 以外，陰影那一層的範圍也差不多到這裡）。⇒ 畫了幾棵。 */
+ *  不晃（uT、uWind 0：那一層不是每一格重畫）。遠處的貼圖與樹冠殼不畫（650 m 以外，陰影那一層的範圍也差不多到這裡）。⇒ 畫了幾棵。
+ *  兩組一律用細的網格投影子（Tim 2026-10-20「只動了一點點陰影就完全不同」、舊版也「陰影會出現在中間(天空沒東西)」）：低模把枝尖的葉團併成一大團，比細的胖一圈；
+ *    靜態那一層最久一秒才重畫，鏡頭一動，一批樹在主畫面從低模換成細的（每 8 m 重分組）⇒ 細的葉子整個躲在陰影圖裡那團舊的低模裡 ⇒ 一整帶森林全在影子裡、下一次重畫又亮回來。
+ *    細的不會包住任何一級的葉子 ⇒ 樹換級、靜態那一層晚一點重畫都不會整帶變暗（投影子的跟收的對得上，其他遊戲也是「投影子的不能比畫面上的胖」）。 */
 function treeDepth() {
   if (!TREES.on || !TREES.init || !TREES.cnt || !TREES.list.length) return 0;
   var P0 = TREES.dProg || (TREES.dProg = VK.compile(gl, TREE_VS, DEPTH_ONLY_FS)), NL = TREES.list.length, n = 0;
   gl.useProgram(P0.prog); setCommon(P0); if (P0.u.uT) gl.uniform1f(P0.u.uT, 0); if (P0.u.uWind) gl.uniform1f(P0.u.uWind, 0);
   for (var l = 0; l < 2; l++) TREES.list.forEach(function (T, c) {
-    var k = TREES.cnt[l * NL + c]; if (!k) return; var g = T.lod[l];
+    var k = TREES.cnt[l * NL + c]; if (!k) return; var g = T.lod[0];   // 細的（見上）；實例資料兩組同一個樣子，照那一組的緩衝讀
     gl.bindVertexArray(g.vao); gl.bindBuffer(gl.ARRAY_BUFFER, TREES.ib[l]); treeInstAttr(TREES.off[l * NL + c]);
     gl.drawElementsInstanced(gl.TRIANGLES, g.n, gl.UNSIGNED_SHORT, 0, k); n += k;
   });

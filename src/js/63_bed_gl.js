@@ -25,6 +25,10 @@
 //   只算有「不是海（陸地 ≥ 10 或內陸水）而且地面低於 0」的點的塊：那一塊每一格裡的點全都不是海 ⇒ 遮；岸邊那一格裡有海的點 ⇒ 不遮 ⇒ 海岸照舊。
 //   沒有這種點的塊不算 ⇒ 沒有的海域整段跳過（uDryOn 0 ⇒ 畫面逐位元組不變；托爾圖加 43 塊 0 點）。
 var BEDGL = {}, BEDGL_Q = [], BEDGL_ID = null, BED_FOG = 0.4, BED_FAR_ST = 8;
+// 地形網格換過幾次（建好、換粗細、丟掉）與換的是哪一塊（外框）：陰影的靜態那一層，那一段碰到換掉的塊就重畫（60_render.js shadowPass）
+//   —— 粗的網格比細的高出幾公尺，晚一秒才重畫 ⇒ 那一整塊（1 km）的地面與樹被粗網格的影子蓋住、暗一下（Tim 2026-10-20「只動了一點點陰影就完全不同」）。
+var BED_MESH_GEN = 0, BED_MESH_LOG = [];
+function bedMeshChanged(bb) { BED_MESH_GEN++; BED_MESH_LOG.push([BED_MESH_GEN, bb]); if (BED_MESH_LOG.length > 512) BED_MESH_LOG.splice(0, 256); }
 var BEDWAT = { on: true, n: 0, tris: 0, prog: null };                    // on：畫不畫（__game.inland）；n、tris：上一格畫了幾塊、幾個三角形
 var BEDDRY = { c: {}, tex: null, dirty: false, on: false, r: [0, 0, 1, 1], cells: 0, builds: 0, ms: 0 }, BED_DRY_SP = 32;   // c：每塊的遮罩（沒有 ⇒ null）；r：第 0 格的世界 x、z、整張多寬、多高（公尺）
 var BEDFAR = { g: {}, todo: null, fly: 0, inF: {}, ready: [], fail: 0, n: 0, bytes: 0, ms: 0 };   // todo：還要讀的塊 [cx, cy, 有檔, 失敗次數]；fly／inF：在路上的；ready：到了、等著建網格的
@@ -43,7 +47,7 @@ function bedCol(h, m) {
   return BED_COL[m] || BED_COL[0];
 }
 evOn('bedChunk', function (cx, cy, C) { BEDGL_Q.push(bedKey(cx, cy)); BEDFOAM.dirty = true; bedDryPut(bedKey(cx, cy), C, true); }, 0, true);
-evOn('bedDrop', function (cx, cy) { var k = bedKey(cx, cy), g = BEDGL[k]; BEDFOAM.dirty = true; if (g) { gl.deleteVertexArray(g.vao); gl.deleteBuffer(g.vb); gl.deleteBuffer(g.ib); bedWatSet(g, null); delete BEDGL[k]; } }, 0, true);   // 遮罩（BEDDRY.c）留著：遠景照樣畫那一塊
+evOn('bedDrop', function (cx, cy) { var k = bedKey(cx, cy), g = BEDGL[k]; BEDFOAM.dirty = true; if (g) { bedMeshChanged(g.bb); gl.deleteVertexArray(g.vao); gl.deleteBuffer(g.vb); gl.deleteBuffer(g.ib); bedWatSet(g, null); delete BEDGL[k]; } }, 0, true);   // 遮罩（BEDDRY.c）留著：遠景照樣畫那一塊
 evOn('bedWin', function () {                                             // 海域的窗換了（08_seabed.js bedWinApply）：窗外的遠景（網格、樹）丟掉；要讀的清單照新的窗重排
   Object.keys(BEDFAR.g).forEach(function (k) { var c = k.split('_').map(Number); if (bedIdx(c[0], c[1]) < 0) bedFarDrop(k); });
   BEDFAR.todo = null; BEDFAR.ready = BEDFAR.ready.filter(function (r) { return bedIdx(r[1].cx, r[1].cy) >= 0; }); BEDFOAM.dirty = true;
@@ -52,6 +56,7 @@ evOn('bedWin', function () {                                             // 海�
 }, 0, true);
 /** 丟掉一塊的遠景：網格、遠景的樹（63_trees.js）。 */
 function bedFarDrop(k) {
+  if (BEDFAR.g[k]) bedMeshChanged(BEDFAR.g[k].bb);
   var g = BEDFAR.g[k]; if (g) { gl.deleteVertexArray(g.vao); gl.deleteBuffer(g.vb); gl.deleteBuffer(g.ib); bedWatSet(g, null); delete BEDFAR.g[k]; }
   var s = TREES.far[k]; if (s) { if (s.vao) { gl.deleteVertexArray(s.vao); gl.deleteBuffer(s.vb); gl.deleteBuffer(s.ib); } delete TREES.far[k]; }
   treeUnq(k, true);                                                     // 排著還沒擺的遠景樹冠殼（63_trees.js treePump）一起丟
@@ -85,6 +90,7 @@ function bedMesh(C, stride) {
   return { V: V, I: new Uint32Array(I) };
 }
 function bedUpload(k, C, lod) {
+  bedMeshChanged(bedBox(C));
   var g = bedGpu(bedMesh(C, lod), BEDGL[k]);
   g.lod = lod; g.C = C; g.cx = C.cx; g.cy = C.cy; g.bb = bedBox(C); BEDGL[k] = g;   // g.C：建網格用的那一份（原精度到了、或換回中等塊 ⇒ 重建）
   if (g.wC !== C) { bedWatSet(g, bedWaterMesh(C, 1)); g.wC = C; }       // 內陸水：每個取樣點一個頂點（粗細不跟著地形換；那一份換了才重建）
@@ -242,6 +248,7 @@ function bedFarAsk(q, k) {
 }
 function bedFarPut(k, C, ms) {
   if (!BED || !BED.A || BEDFAR.g[k]) return;
+  bedMeshChanged(bedBox(C));
   var t0 = performance.now(), fs = Math.max(1, Math.round(BED_FAR_ST * BED.A.step / C.step)), M = bedMesh(C, fs), g = bedGpu(M, null);   // 32 m 一點：細的塊（4 m）每 8 點取一點，粗的（32 m）每點都取
   g.bb = bedBox(C); BEDFAR.g[k] = g; treeFar(k, C); chartPut(C);                    // treeFar：遠景的樹（貼圖；63_trees.js）
   bedWatSet(g, bedWaterMesh(C, fs)); bedDryPut(k, C, false);           // 內陸水（同一個點距；窄的河取不到點就沒有）、低於海平面的乾地（細的那一份算過就不重算）
