@@ -372,6 +372,15 @@ function bedSeaDraw() {
   gl.bindVertexArray(S.vao); gl.drawArrays(gl.TRIANGLES, 0, 6); gl.bindVertexArray(null);
   if (cf) gl.enable(gl.CULL_FACE);
 }
+/** 陸地的陰影（60_render.js landShadow；PASS.vp 已經換成那一層）：地形的網格只寫深度 —— 細的、沒有細的才畫遠景塊，照陰影那一層的範圍（PL）剔除。⇒ 畫了幾塊。 */
+function bedDepth(PL) {
+  var P0 = P.bedD || (P.bedD = VK.compile(gl, BED_VS, DEPTH_ONLY_FS)), n = 0;
+  gl.useProgram(P0.prog); setCommon(P0);
+  function one(g) { if (!g || !g.n || (g.bb && !bedSeen(PL, g.bb))) return; n++; gl.bindVertexArray(g.vao); gl.drawElements(gl.TRIANGLES, g.n, gl.UNSIGNED_INT, 0); }
+  Object.keys(BEDGL).forEach(function (k) { one(BEDGL[k]); });
+  Object.keys(BEDFAR.g).forEach(function (k) { if (!BEDGL[k]) one(BEDFAR.g[k]); });
+  gl.bindVertexArray(null); return n;
+}
 /** 畫（60_render.js：帆之後、折射複製之前）。每格最多建 2 塊（新載的、粗細要換的）⇒ 換中心那一下不會卡一大格。 */
 function bedDraw() {
   if (!BED || !BED.A) return;

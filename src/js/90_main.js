@@ -175,6 +175,7 @@ if (DEBUG) window.__game = {
     pump: BED.inq ? { q: BED.inq.length, n: BED.pumped, max: +BED.pumpMax.toFixed(1) } : null,   // 收塊排隊（08_seabed.js bedPump）：還排著幾則、處理過幾則、一格最久幾 ms
     trees: treeStat(),
     draw: { n: BEDDRAW.n, cull: BEDDRAW.cull, tris: BEDDRAW.tris },   // 上一格：畫了幾塊、視錐外剔掉幾塊、畫了幾個三角形（63_bed_gl.js bedDraw）
+    landShadow: SHM ? { on: SHM.land, layer: SHM.landL, last: SHM.landStat || null } : null,   // 陸地的陰影（60_render.js landShadow）：開著沒、第幾層、上一次重畫（R、地形幾塊、樹幾棵、城幾個實例、毫秒、重畫過幾次）
     far: { tiles: BEDFAR.n, left: BEDFAR.todo ? BEDFAR.todo.length + BEDFAR.fly + BEDFAR.ready.length : null, fly: BEDFAR.fly, fail: BEDFAR.fail, kb: Math.round(BEDFAR.bytes / 1024), ms: +BEDFAR.ms.toFixed(1), drawn: Object.keys(BEDFAR.g).filter(function (k) { return !BEDGL[k]; }).length },
     inland: { on: BEDWAT.on, meshes: Object.keys(BEDGL).filter(function (k) { return BEDGL[k].w; }).length, far: Object.keys(BEDFAR.g).filter(function (k) { return BEDFAR.g[k].w; }).length, n: BEDWAT.n, tris: BEDWAT.tris,   // 內陸水（63_bed_gl.js）：細的、遠景各幾塊有水面網格；上一格畫了幾塊、幾個三角形
       dry: { on: BEDDRY.on, chunks: Object.keys(BEDDRY.c).filter(function (k) { return BEDDRY.c[k]; }).length, cells: BEDDRY.cells, builds: BEDDRY.builds, ms: BEDDRY.ms } },   // 低於海平面的乾地的遮罩：幾塊、幾格（32 m）、重建幾次

@@ -798,6 +798,22 @@ function townDraw() {
   gl.bindVertexArray(null); if (cf) gl.enable(gl.CULL_FACE);
   TOWNS.stat.d3 = ns; TOWNS.stat.tris = tris; TOWNS.stat.drawMs = +(performance.now() - t0).toFixed(2);
 }
+/** 陸地的陰影（60_render.js landShadow；PASS.vp 已經換成那一層）：照主畫面上一次分好的組（townBin：近、中那兩級，含城牆）＋石基只寫深度。
+ *  貼圖、屋頂殼、旗不畫（800 m 以外，陰影那一層的範圍也差不多到這裡）。⇒ 畫了幾個實例。 */
+function townDepth() {
+  if (!TOWNS.on || !TOWNS.list.length || !TOWNS.kit || !TOWNS.prog || !TOWNS.grp) return 0;
+  var K = TOWNS.kit, P = TOWNS.prog, G = TOWNS.grp, PD = P.dVox || (P.dVox = VK.compile(gl, TOWN_VS, DEPTH_ONLY_FS)), n = 0;
+  gl.useProgram(PD.prog); setCommon(PD);
+  for (var l = 0; l < 2; l++) K.names.forEach(function (nm, mi) {
+    var k = G.cnt[l][mi]; if (!k) return; var Mm = K.M[nm], g = Mm.lod[l];
+    gl.uniform3fv(PD.u.uC, l ? Mm.uc1 : Mm.uc0);
+    gl.bindVertexArray(g.vao); gl.bindBuffer(gl.ARRAY_BUFFER, P.ib[l]);
+    gl.vertexAttribPointer(4, 4, gl.FLOAT, false, 40, G.off[l][mi] * 40); gl.vertexAttribPointer(5, 2, gl.FLOAT, false, 40, G.off[l][mi] * 40 + 16); gl.vertexAttribPointer(6, 4, gl.FLOAT, false, 40, G.off[l][mi] * 40 + 24);
+    gl.drawElementsInstanced(gl.TRIANGLES, g.nq * 6, gl.UNSIGNED_INT, 0, k); n += k;
+  });
+  if (G.npl && P.plVao) { var PP = P.dPl || (P.dPl = VK.compile(gl, TOWN_PL_VS, DEPTH_ONLY_FS)); gl.useProgram(PP.prog); setCommon(PP); gl.bindVertexArray(P.plVao); gl.drawArraysInstanced(gl.TRIANGLES, 0, 36, G.npl); }
+  gl.bindVertexArray(null); return n;
+}
 function townBoxDist(b, e) { var dx = Math.max(b[0] - e[0], 0, e[0] - b[3]), dz = Math.max(b[2] - e[2], 0, e[2] - b[5]); return Math.sqrt(dx * dx + dz * dz); }
 function townBoxFar(b, e) { var dx = Math.max(Math.abs(b[0] - e[0]), Math.abs(b[3] - e[0])), dz = Math.max(Math.abs(b[2] - e[2]), Math.abs(b[5] - e[2])); return Math.sqrt(dx * dx + dz * dz); }
 /** 讀數（__game.town()）：幾座城、每座的雜湊與實例數、這一格畫了幾個（近、中、貼圖、殼）、三角形、毫秒；at ＝ [x, z] ⇒ 那一點的畫面高度、清不清樹。 */
