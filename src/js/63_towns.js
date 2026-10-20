@@ -39,7 +39,7 @@ var TOWNS = { on: Q.get('towns') !== '0', list: [], pend: [], ver: 0, want: 0, e
   stat: { towns: 0, lots: 0, inst: 0, walls: 0, corners: 0, snapped: 0, skip: {}, d0: 0, d1: 0, d2: 0, d3: 0, plinth: 0, tris: 0, binMs: 0, kitMs: 0, gradeMs: 0, chunks: 0, drawMs: 0 } };
 var TOWN_J0 = [0, 0, 0, 0];                                             // 建築的 aJ（不斜接、不順坡、牆基不延）
 var TOWN_USE_ALT = { commandant: ['house'], governor: ['townhall'] };   // 那一套沒有那種模型 ⇒ 用哪一種代（BUILDING_SPEC §7：fr 沒有長官的屋子；carib 有）
-var TOWN_STYLE_DEF = 'fr';                                              // 城的 style 那一套沒有那種用途 ⇒ 照 fr 那一套（第一套）；索引裡沒寫 style 的模型也算 fr（TASK-0757）
+var TOWN_STYLE_DEF = 'fr';                                              // 索引裡沒寫 style 的模型算 fr（第一套，TASK-0757）；規劃沒帶退路 styles（舊的匯出）⇒ 城的 style、再 fr
 var TOWN_COL = { main: [0.56, 0.47, 0.34], street: [0.62, 0.58, 0.50], track: [0.50, 0.42, 0.30], plaza: [0.70, 0.66, 0.58], quay: [0.58, 0.56, 0.52], pier: [0.45, 0.33, 0.22], post: [0.30, 0.22, 0.15] };
 evOn('bedChunk', function (cx, cy) {
   TOWNS.dirty = true;
@@ -108,7 +108,7 @@ function townPrep(p) {
   (p.piers || []).forEach(function (q) { q.path.forEach(function (a) { grow(E(a), q.w); }); });
   var core = p.core && p.core.ring ? p.core.ring.map(E) : null, cen = [ox, oy];
   if (core) { var sx = 0, sy = 0; core.forEach(function (q) { sx += q[0]; sy += q[1]; }); cen = [sx / core.length, sy / core.length]; }
-  return { id: p.id, name: p.name, tier: p.tier, style: p.style, seed: p.seed, p: p, ox: ox, oy: oy, kx: kx, bank: bank, E: E, box: box, roads: roads, grade: grade, clr: clr, cen: cen, D2R: D2R, inst: null, ground: null, shell: null };
+  return { id: p.id, name: p.name, tier: p.tier, style: p.style, styles: p.styles || [p.style || TOWN_STYLE_DEF, TOWN_STYLE_DEF], seed: p.seed, p: p, ox: ox, oy: oy, kx: kx, bank: bank, E: E, box: box, roads: roads, grade: grade, clr: clr, cen: cen, D2R: D2R, inst: null, ground: null, shell: null };
 }
 
 // ── 整地與清樹（每塊照 TOWNS.ver 算一次；C.h 換過（大漩渦重烤）也重算） ──
@@ -247,12 +247,12 @@ function townIdx() {
   }
   return I;
 }
-/** 地塊 l ⇒ 候選模型（townNeed、townInst 同一條路；TASK-0757）：城的 style 那一套 → fr 那一套 → 代用的用途（同樣先 style 再 fr）；
- *  特殊建築（l.src 'special'：用途就是那一種，例 galata-tower 的風格是 genoa）⇒ 不分風格。
- *  ⛔ 一般地塊不跨到別的風格：carib 的砲台不會跑進沒換風格的城（皇家港 3 塊 battery 照舊沒有模型）。沒換風格的城挑到的跟以前一樣。 */
-function townPick(I, style, l) {
+/** 地塊 l ⇒ 候選模型（townNeed、townInst 同一條路；TASK-0757、0772）：照規劃的退路 styles 一個一個找（Blocksail BSW.townStyles：城的 style → 地區文化 culture → 共用的 common → fr）
+ *  → 代用的用途（同樣照退路）；特殊建築（l.src 'special'：用途就是那一種，例 galata-tower 的風格是 genoa）⇒ 不分風格。
+ *  ⛔ 一般地塊只找退路裡的風格：carib 的砲台不會跑進退路裡沒有 carib 的城。 */
+function townPick(I, styles, l) {
   var use = l.use;
-  function by(u) { return I.byStyle[(style || TOWN_STYLE_DEF) + ':' + u] || I.byStyle[TOWN_STYLE_DEF + ':' + u]; }
+  function by(u) { for (var i = 0; i < styles.length; i++) { var L = I.byStyle[styles[i] + ':' + u]; if (L) return L; } return null; }
   function any(u) { return I.byUse[u]; }
   var alt = TOWN_USE_ALT[use] || [];
   return by(use) || alt.map(by).filter(Boolean)[0] || (l.src === 'special' ? any(use) : null);
@@ -264,7 +264,7 @@ function townNeed(I) {
   TOWNS.list.forEach(function (T) {
     (T.p.lots || []).forEach(function (l) {
       if (l.use === 'plot' || l.use === 'plaza') return;
-      add(townPick(I, T.style, l));
+      add(townPick(I, T.styles, l));
     });
     (T.p.walls || []).forEach(function (w) {
       var kit = w.kit || 'wall1'; if (!I.byUse[kit + '-section']) kit = 'wall1';
@@ -347,7 +347,7 @@ function townInst(T) {
   function W(q) { var e = T.E(q); return [e[0] - BED.ax, e[1] - BED.az]; }
   (p.lots || []).forEach(function (l) {
     if (l.use === 'plot' || l.use === 'plaza') return;
-    var L = townPick(K, T.style, l);
+    var L = townPick(K, T.styles, l);
     if (!L || !L.length) { skip[l.use] = (skip[l.use] || 0) + 1; return; }
     var nm = L[Math.floor(townHash(T.id + ':' + l.id) * L.length)], m = K.M[nm].m, th = l.rot * D2R, md = m.size[1] * m.mpv, mw = m.size[0] * m.mpv;
     var off = (l.d - md) / 2, c = W([l.at[0] + off * Math.cos(th), l.at[1] + off * Math.sin(th)]);
