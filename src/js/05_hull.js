@@ -183,6 +183,53 @@ function meshPoolMesh(P, i, o, M) {
 }
 /** 讓出一次（MessageChannel：一個新的工作 ⇒ 瀏覽器可以先畫一格、處理點擊）。⛔ 不用 setTimeout：分頁在背景時會被壓到一秒一次。 */
 function yieldUI() { return new Promise(function (r) { var ch = new MessageChannel(); ch.port1.onmessage = function () { r(); }; ch.port2.postMessage(0); }); }
+/** 船體網格分段建（沒有快取時；buildHull）：跟 VK RegionSet.buildAll 同一個順序、同一份結果（快取照它存），每做滿 8 ms 讓出一次（yieldEach），最後一次上傳。 */
+function hullMeshSliced(rs) {
+  var g = rs.grid, L = [];
+  for (var cz = 0; cz < g.nz; cz++) for (var cy = 0; cy < g.ny; cy++) for (var cx = 0; cx < g.nx; cx++) { var i = g.ci(cx, cy, cz); if (g.tab[i] !== null) L.push([cx, cy, cz, i]); }
+  return yieldEach(L, function (c) { rs.meshes.set(c[3], VK.meshChunk(g, c[0], c[1], c[2])); rs.dirtyRegions.add(rs.rkey(c[0], c[1], c[2])); }, 8).then(function () { rs.flush(); });
+}
+/** 一串步驟一口氣做完：每一步是函式；回陣列 ⇒ 那幾步插在剩下的前面先做（開局：艦隊照每艘展開、makeShip 照段展開）。
+ *  分段做（每一步之間讓出一次）見 70_flow.js flowStaged —— 兩條走同一串步驟、同一個順序。 */
+function stepsRun(L) { var Q = L.slice(); while (Q.length) { var r = Q.shift()(); if (r) Q = r.concat(Q); } }
+/** 一步做不完的迴圈（照步驟走）：f(i) 從 i0 做到 n−1，做滿 ms 毫秒就停、回「接著做」的那一步 ⇒ stepsRun／開戰分段照順序接下去 ＝ 一口氣從頭做到尾。 */
+function stepsLoop(i0, n, f, ms) {
+  return function loop() {
+    var t1 = performance.now() + ms;
+    while (i0 < n) { f(i0++); if (performance.now() >= t1) break; }
+    return i0 < n ? [loop] : null;
+  };
+}
+/** 格子 G 第 cz 層區塊（16 格高）裡的每一格 cb(x, y, z, 色)：跟 VK Grid.each 同一個順序，只是只走那一層 ⇒ cz 從 0 照順序走完 ＝ G.each（給 stepsLoop 分段走整份格子）。 */
+function gridEachZ(G, cz, cb) {
+  for (var cy = 0; cy < G.ny; cy++) for (var cx = 0; cx < G.nx; cx++) {
+    var c = G.tab[G.ci(cx, cy, cz)]; if (c === null) continue;
+    for (var li = 0; li < 4096; li++) if (c[li]) cb(cx * 16 + (li & 15), cy * 16 + ((li >> 4) & 15), cz * 16 + (li >> 8), c[li]);
+  }
+}
+/** 清單 L 一個一個做 f(項, i)，每做滿 ms 毫秒讓出一次 ⇒ Promise（全部做完；f 丟錯 ⇒ reject）。
+ *  給載入、畫面用的長工作（城鎮模型的網格…）：Blockside 開在 Blocksail 地球儀的 iframe 裡跟它同一條主執行緒 ⇒ 一段做太久地球儀的動畫就頓住（2026-10-20）。
+ *  好幾份同時要做 ⇒ 排成一列、一次只做一份的一段（YIELD_Q）：⛔ 各自讓出 ⇒ 30 份模型各排一個工作，計時器、畫面要等前面 30 段都做完（量到 0.2 s 一頓）。
+ *  ⛔ 別拿來分段跑會改戰局的東西：讓出的時候畫面迴圈會走。 */
+var YIELD_Q = [], YIELD_ON = false, YIELD_MC = null;
+function yieldEach(L, f, ms) {
+  return new Promise(function (ok, bad) { YIELD_Q.push({ L: L, f: f, ms: ms, i: 0, ok: ok, bad: bad }); yieldKick(); });
+}
+function yieldKick() {
+  if (YIELD_ON || !YIELD_Q.length) return;
+  if (!YIELD_MC) { YIELD_MC = new MessageChannel(); YIELD_MC.port1.onmessage = yieldRun; }
+  YIELD_ON = true; YIELD_MC.port2.postMessage(0);
+}
+/** 一段：排在最前面的那一份做到 ms 毫秒（至少一項）；做完 ⇒ resolve、換下一份。 */
+function yieldRun() {
+  YIELD_ON = false;
+  var J = YIELD_Q[0]; if (!J) return;
+  var t1 = performance.now() + J.ms;
+  try { while (J.i < J.L.length) { J.f(J.L[J.i], J.i); J.i++; if (performance.now() >= t1) break; } }
+  catch (e) { YIELD_Q.shift(); J.bad(e); yieldKick(); return; }
+  if (J.i >= J.L.length) { YIELD_Q.shift(); J.ok(); }
+  yieldKick();
+}
 var hullSay = function () {};                                            // 90_main.js 換成寫進度的那支
 /** C：快取的記錄（06_cache.js；null ⇒ 全部現場算）。現場算的時候，要存的那幾份另外留在 T.keep，給 cachePut 存。 */
 function buildHull(info, model, t0, C) {
@@ -199,21 +246,29 @@ function buildHull(info, model, t0, C) {
   T.decos = DS.decos; T.decoN = DS.n; T.meshSkip = DS.skip;                // 裝飾：裝飾件、幾件、沒人用的網格（不建）
   T.ms = {};                                                               // 每一段花多久（毫秒；讀數 window.__vxk.ms）
   function tm(k, f) { var a = performance.now(); f(); T.ms[k] = +(performance.now() - a).toFixed(1); }
-  tm('sails', function () { T.sailRecipes = sailRecipes(T, C); });       // 帆只存配方（TASK-0602 ①；29_sailrecipe.js）⇒ 先生出頂點，下面的海面遮罩、縮圖、繩的檢查才讀得到
-  var steps = [
+  // 帆只存配方（TASK-0602 ①；29_sailrecipe.js）⇒ 先生出頂點，下面的海面遮罩、縮圖、繩的檢查才讀得到。一面一步（沒有快取時一面約 35 ms；2026-10-20 開場切段）
+  var SR = sailRecipeInit(); T.ms.sails = 0;
+  var steps = (T.rig.sails || []).map(function (s, k) { return ['帆', function () { var a = performance.now(); sailRecipeAt(T, C, k, SR); T.ms.sails = +(T.ms.sails + performance.now() - a).toFixed(1); }]; })
+    .concat([['帆', function () { T.sailRecipes = sailRecipeEnd(T, SR); }]]).concat([
     ['格子', function () { tm('grid', function () { T.base = VK.Grid.fromModel(model); }); tm('verify', function () { T.chk = VK.verify(T.base, h); }); tm('material', function () { hullMaterials(T, info); }); tm('armor', function () { armorSetup(T); }); tm('anchor', function () { anchorParts(T); }); }],   // 材質（05_material.js）：每格的材質索引   // 格子不存快取：照解出來的比 checksum   // armorSetup：砲帶的裝甲拆出來（24_armor.js；T.hullG ＝ 船殼，T.base 照舊是整艘）；anchorParts：錨的關聯拆成模型錨（76_anchor.js，TASK-0601）
     ['模型網格', function () { tm('meshes', function () { buildMeshes(T, C && C.models); }); }],
-    ['水線與浮力', function () {
-      tm('waterline', function () { waterline(T); }); tm('hullTex', function () { hullTex(T, C && C.hb); }); tm('navImg', function () { navImg(T); sideImg(T); });
-      tm('hydro', function () { if (C) { T.hyd = C.hyd; T.disp = C.disp; } else hydrostatics(T); });
+    ['水線與浮力', function () { tm('waterline', function () { waterline(T); }); tm('hullTex', function () { hullTex(T, C && C.hb); }); }],   // 水線、海面遮罩、羅盤的船、側面圖、浮力：分四步（以前一步約 0.12 s）
+    ['水線與浮力', function () { tm('navImg', function () { navImg(T); }); }],
+    ['水線與浮力', function () { tm('sideImg', function () { sideImg(T); }); }],
+    ['水線與浮力', function () { tm('hydro', function () { if (C) { T.hyd = C.hyd; T.disp = C.disp; } else hydrostatics(T); }); }],
+    ['船體網格', function () {
+      var a = performance.now(); T.pristine = new VK.RegionSet(gl, T.hullG, QIDX);
+      if (C) { meshesFromCache(T.pristine, C.mesh); T.ms.pristine = +(performance.now() - a).toFixed(1); return; }
+      if (!BED_SLICE) { T.pristine.buildAll(); T.ms.pristine = +(performance.now() - a).toFixed(1); return; }
+      return hullMeshSliced(T.pristine).then(function () { T.ms.pristine = +(performance.now() - a).toFixed(1); });   // 沒有快取 ⇒ 分段建（一次建完約 0.22 s）
     }],
-    ['船體網格', function () { tm('pristine', function () { T.pristine = new VK.RegionSet(gl, T.hullG, QIDX); if (C) meshesFromCache(T.pristine, C.mesh); else T.pristine.buildAll(); }); smoothSetup(T); tm('armorMesh', function () { armorMesh(T); }); }],   // smoothSetup：平滑渲染的那幾格（15_smooth.js；T.ms.smooth）；合併網格照船殼 T.hullG（沒有裝甲 ＝ T.base），裝甲另建（24_armor.js armorMesh）
+    ['船體網格', function () { smoothSetup(T); tm('armorMesh', function () { armorMesh(T); }); }],   // smoothSetup：平滑渲染的那幾格（15_smooth.js；T.ms.smooth）；合併網格照船殼 T.hullG（沒有裝甲 ＝ T.base），裝甲另建（24_armor.js armorMesh）
     ['桅與帆', function () {
       tm('masts', function () { findMasts(T); }); tm('cloth', function () { teamFlagsSetup(T, info); clothSetup(T, C); });   // 陣營旗（77_colours.js）：合成的帆接在作品的帆後面
       var mt = 12 * KEG_T; (T.rig.models || []).forEach(function (m) { mt += modelT({ kind: modelKind(m) }, 1); });   // 模型的重量（砲照實、取用點 12 桶）
       T.ballast0 = Math.max(0, Math.round((T.disp - T.voxT0 - mt) / 25) * 25);   // 剛好浮在設計水線的壓艙物（滑桿一格 25 噸）
     }]
-  ];
+  ]);
   var p = Promise.resolve();
   steps.forEach(function (s, i) { p = p.then(function () { hullSay(info.name + '：' + s[0] + '（' + (i + 1) + '／' + steps.length + '）…'); return yieldUI(); }).then(s[1]); });
   return p.then(function () { T.decodeMs = t1 - t0; T.meshMs = performance.now() - t1; return T; });

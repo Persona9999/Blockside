@@ -24,7 +24,21 @@
 //   BED_VX_OUT·r 以外 w ＝ 1（水面下幾公尺照海圖；地形跟著漏斗的尾巴一起往下移，離中心 3 km 只移不到 2 m）、中間平滑接上。
 //   ⇒ 模擬（擱淺、砲彈打到海底、艦長避淺、錨）跟畫面（海底網格、白沫、樹）讀的是同一份，不用各自改。原始高度留在 C.h0／C.mat0；換天氣（vxInit）⇒ bedVxSync 重烤。
 //   沒有漩渦 ⇒ C.h 就是解碼的那一份（戰局逐位元組不變）。⚠ 遠景的粗塊建完網格就丟資料 ⇒ 開戰後才換天氣的話，遠景照舊（離中心 ≥ 2.5 km，漩渦在那裡只差幾公尺）。
-var BED = null;
+// 收塊排隊（2026-10-20；Blocksail 地球儀 → 航海／海戰的轉場要一整段動畫、邊播邊載）：Blockside 是同源 iframe、跟地球儀同一條主執行緒 ⇒ 開場一段長的工作就讓動畫頓住；
+//   以前地球儀先做好的 25 塊一口氣到、每則訊息當場解碼＋發 'bedChunk'（擺樹、整地、小地圖）⇒ 停靠金斯敦量到主執行緒整段卡 2.07 s。
+//   ⇒ ?map=@host 有畫面迴圈時（BED_SLICE）收到的塊先排隊（BED.inq），畫面迴圈每格照預算 BED_PUMP_MS 處理（bedPump：解碼、放進模擬查的那一份、發 'bedChunk'，至少一塊）；
+//   擺樹（63_trees.js treePump）照同一份預算接著做；網格（63_bed_gl.js）本來就每格限量。分頁在背景、畫面迴圈不跑 ⇒ bedPumpLate 用計時器慢慢補。
+//   ⛔ 不改戰局：要那一塊的 Promise（bedLoad／bedLoadMid ⇒ bedBoot、bedWait）照舊在「放進 BED.slot／mslot 之後」才 resolve；模擬照舊等 bedWait（要讀的那一份還沒放進去 ⇒ 這一步不走）
+//   ⇒ 排隊只影響什麼時候算好。快轉、無頭沒有畫面迴圈可以等 ⇒ 照舊收到就處理（BED_SLICE 假）。
+//   預算（BED_BG）是「這一格背景工作還剩幾 ms」：收塊、擺樹、海底網格、遠景、白沫、樹種網格、城鎮的實例共用，各自做一段就扣（bedSpent）；用完（bedBusy）⇒ 留到下一格。
+//   ⛔ 照「從這一格開始過了多久」算 ⇒ 打起來模擬一格常超過 8 ms，背景的就永遠輪不到。
+var BED = null, BED_SLICE = DEMO < 0 && !HEADLESS, BED_PUMP_MS = 8, BED_BG = 0;
+/** 這一格背景工作的預算用完了（有畫面迴圈才算；快轉、無頭 ⇒ 永遠沒用完、照舊當場做）。 */
+function bedBusy() { return BED_SLICE && BED_BG <= 0; }
+/** 背景工作照剩下的預算做到幾點（performance.now()）。 */
+function bedT1() { return BED_SLICE ? performance.now() + Math.max(0, BED_BG) : Infinity; }
+/** 扣掉一段背景工作花的時間（t0 ＝ 開始時的 performance.now()）。 */
+function bedSpent(t0) { BED_BG -= performance.now() - t0; }
 var BED_VX_IN = 1.5, BED_VX_OUT = 2.5;                                   // 漩渦半徑 r 的幾倍：以內全是深海、以外全照海圖
 var BED_WIN_SHIFT = 3;                                                   // 海域跟著旗艦走：旗艦離窗的中心幾塊就換窗（area.win 10 ⇒ 離窗邊還有 7 km）
 var BED_VIEW_BACK = 2;                                                   // 讀的先後（外圈的背景預載、遠景）：鏡頭背後那一邊當成遠一倍（Tim 2026-10-20：「外圈地圖讀取優先度 可以根據攝影機視角判斷(看到的部分優先)」）
@@ -71,8 +85,6 @@ function bedGet(cx, cy, peek, mid, bg) {                                // cx �
 }
 function bedHostMsg(e) {
   var d = e.data; if (!BED || !BED.host || e.source !== BED.host || !d || !d.bsmap) return;
-  var mid = !d.coarse && BED.mid && d.step === BED.mid, k0 = bedKey(d.cx, d.cy);   // 中等塊：回的訊息帶 step ＝ BED.mid
-  var ks = d.bsmap === 'area' || d.what === 'area' ? ['area'] : mid ? [k0 + '@'] : d.coarse ? [k0 + '+'] : [k0, k0 + '+'], err = d.bsmap === 'error' ? new Error('海圖：' + (d.msg || '要不到')) : null;
   if (d.bsmap === 'go' || d.bsmap === 'leave') { camTransSet(d.bsmap === 'go' ? 'go' : 'out'); return; }
   if (d.bsmap === 'win' || (d.bsmap === 'error' && d.what === 'win')) {   // 海域的窗（bedWinAsk 要的）
     BED.winP = null;
@@ -81,10 +93,27 @@ function bedHostMsg(e) {
   }
   if (d.bsmap === 'towns' || (d.bsmap === 'error' && d.what === 'towns')) { townGot(d.towns || [], d.msg, d.kit); return; }   // 城鎮規劃＋模型的索引（63_towns.js；只給人看 ⇒ 不等它）
   if (d.bsmap === 'townmodels' || (d.bsmap === 'error' && d.what === 'townmodels')) { townModelsGot(d.models, d.msg); return; }   // 要用到的城鎮模型（63_towns.js townModels）
+  if (d.bsmap === 'chunk' && !d.coarse && BED.inq) { BED.inq.push(d); return; }   // 收塊排隊（檔頭）：畫面迴圈每格照預算處理（bedPump）；遠景的粗塊照舊當場收（只是交回 base64，bedFarStep 自己限量）
+  bedHostTake(d);
+}
+/** 處理外面那一頁回的一則（area、chunk、error）：交給 BSMAP、再 resolve／reject 等它的（bedGet）。 */
+function bedHostTake(d) {
+  var mid = !d.coarse && BED.mid && d.step === BED.mid, k0 = bedKey(d.cx, d.cy);   // 中等塊：回的訊息帶 step ＝ BED.mid
+  var ks = d.bsmap === 'area' || d.what === 'area' ? ['area'] : mid ? [k0 + '@'] : d.coarse ? [k0 + '+'] : [k0, k0 + '+'], err = d.bsmap === 'error' ? new Error('海圖：' + (d.msg || '要不到')) : null;
   if (d.bsmap === 'area') BSMAP.area(d.area);
   else if (d.bsmap === 'chunk' && BED.A) BSMAP.chunk(BED.A.id, d.cx, d.cy, d.b64, !!d.coarse, mid);
   ks.forEach(function (k) { var L = BED.ask[k]; delete BED.ask[k]; (L || []).forEach(function (f) { if (err) f[1](err); else f[0](); }); });
 }
+/** 排著的塊（bedHostMsg）照預算處理：做到 t1（performance.now()）為止、至少一塊。畫面迴圈每格叫（90_main.js frame，跟擺樹共用一份預算）。 */
+function bedPump(t1) {
+  var Q = BED && BED.inq; if (!Q) return;
+  BED.pumpAt = performance.now(); if (!Q.length) return;
+  var t0 = BED.pumpAt;
+  do { bedHostTake(Q.shift()); BED.pumped++; } while (Q.length && performance.now() < t1);
+  BED.pumpMax = Math.max(BED.pumpMax, performance.now() - t0);
+}
+/** 畫面迴圈不跑（分頁在背景：rAF 停了）⇒ 計時器補著處理（一次一份預算）。 */
+function bedPumpLate() { if (BED.inq.length && performance.now() - BED.pumpAt > 250) bedPump(performance.now() + BED_PUMP_MS); }
 /** 告訴外面那一頁（只有 ?map=@host）：'started' ＝ 開戰了（鏡頭停在正上方）、'left' ＝ 拉到正上方了 —— 畫好兩格才送（地球儀照這個淡進／淡出）。 */
 function bedHostSay(what, o) {
   if (!BED || !BED.host) return;
@@ -98,8 +127,10 @@ function bedBoot() {
   if (!host && !/^[a-z0-9_-]+$/.test(id)) return Promise.reject(new Error('海域名稱只能是小寫英數、底線、連字號：' + id));
   BED = { wantArea: id, host: host, ask: {}, A: null, ch: {}, pend: {}, peek: {}, idx: null, cx: null, cy: null, top: -Infinity, miss: 0, loads: 0, drops: 0,
     mid: 0, cm: {}, mpend: {}, mslot: null, lv: null, mloads: 0,                     // mid：外圈的中等塊（@host 的海域帶 area.mid 才開；見 bedFocus、bedWait）
-    win: 0, winP: null, winErr: 0, wins: 0, winMs: 0 };                              // win：海域跟著旗艦走（@host 的海域帶 area.win 才開；見 bedWinAsk）
+    win: 0, winP: null, winErr: 0, wins: 0, winMs: 0,                                // win：海域跟著旗艦走（@host 的海域帶 area.win 才開；見 bedWinAsk）
+    inq: host && BED_SLICE ? [] : null, pumpAt: 0, pumped: 0, pumpMax: 0 };          // inq：收塊排隊（檔頭；bedPump）
   if (host) window.addEventListener('message', bedHostMsg);
+  if (BED.inq) setInterval(bedPumpLate, 250);
   return bedGet(null).then(function () {
     var A = BED.gotArea; if (!A) throw new Error((host ? '外面那一頁' : 'maps/' + id + '/area.js') + ' 沒有給 BSMAP.area');
     BED.A = A; BED.G = A.chunk / A.step; BED.n = A.n; BED.nx = A.x[1] - A.x[0] + 1;

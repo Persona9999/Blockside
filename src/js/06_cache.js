@@ -11,7 +11,9 @@ var CACHE_DB = 'ame_constitution_broadside', CACHE_FMT = 1, CACHE_ON = Q.get('ca
 /** FNV-1a 32 位元（字串照 UTF-16 碼位）。 */
 function cacheFnv(s) { var h = 0x811c9dc5; for (var i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return h >>> 0; }
 // 程式版本 ＝ 頁面上所有內嵌 JS 的原文（VoxelKit ＋ 遊戲本體）：改了任何一行都會換 ⇒ 寧可多清，不拿舊程式算的網格
-var CODE_VER = cacheFnv([].map.call(document.scripts, function (el) { return !el.type || /javascript/i.test(el.type) ? el.textContent : ''; }).join('\n'));
+//   載入時只收原文（字串照參照，不花時間）、第一次讀快取才算雜湊（cacheCode；2.6 MB 約 25 ms，以前算在載入頁面那一段裡 —— 2026-10-20 開場切段）⇒ 值跟以前一樣
+var CODE_SRC = [].map.call(document.scripts, function (el) { return !el.type || /javascript/i.test(el.type) ? el.textContent : ''; }), CODE_VER = null;
+function cacheCode() { if (CODE_VER === null) { CODE_VER = cacheFnv(CODE_SRC.join('\n')); CODE_SRC = null; } return CODE_VER; }
 var cacheDB = null;
 /** 開資料庫 ⇒ Promise<IDBDatabase|null>（開不了 ⇒ null；1.5 秒沒回也當開不了）。 */
 function cacheOpen() {
@@ -33,7 +35,7 @@ function cacheGet(info) {
   //   拆檔的成品：船還沒載 ⇒ 用清單上的內容雜湊（VK.embeddedKey；內嵌的照舊是原文）
   var txt = VK.embeddedKey(info.el);
   for (var vb = info, vn = 0; vb && vb.variant_of && vn < 8; vn++) { vb = hullInfo(vb.variant_of); txt += '|' + (vb ? VK.embeddedKey(vb.el) : ''); }
-  var st = info.cache = { vxk: cacheFnv(txt), code: CODE_VER, hit: false, why: '' };   // 裝飾的網格一律建（05_hull.js decoSplit）⇒ 跟畫質無關、一份
+  var st = info.cache = { vxk: cacheFnv(txt), code: cacheCode(), hit: false, why: '' };   // 裝飾的網格一律建（05_hull.js decoSplit）⇒ 跟畫質無關、一份
   if (!CACHE_ON) { st.why = '?cache=0'; return Promise.resolve(null); }
   var t0 = performance.now();
   return cacheOpen().then(function (db) {
@@ -57,6 +59,8 @@ function cacheGet(info) {
 function cachePut(T, info) {
   var st = info.cache;
   if (!CACHE_ON || st.hit || !T.keep) return;
+  // ?start=1（Blocksail 地球儀開的；2026-10-20）：寫快取（IndexedDB 的 put 當場把整份記錄複製一遍，約 0.7 s）等開完戰、轉場拉下來了才寫（最多等 CACHE_LATE_S 秒）⇒ 不卡轉場動畫
+  if (START_Q && BED_SLICE && !T.keepLate) { T.keepLate = performance.now(); cacheLater(T, info); return; }
   var g = T.base, ms = T.pristine.meshes, idx = [], n = 0;
   ms.forEach(function (m, i) { if (m) { idx.push(i, m.length); n += m.length; } });
   var all = new Uint16Array(n), o = 0;
@@ -73,6 +77,12 @@ function cachePut(T, info) {
       tx.onerror = tx.onabort = function () { st.saved = false; st.why = '存不了：' + (tx.error && tx.error.name || '?'); };
     } catch (e) { st.saved = false; st.why = '存不了：' + (e && e.name || e); }
   });
+}
+var CACHE_LATE_S = 30;
+/** cachePut 晚一點：開戰了、轉場（03_camera.js CAM.tr）結束了才寫；等太久（分頁在背景、一直沒開戰）就照寫。 */
+function cacheLater(T, info) {
+  if (RUNNING && !FLOW_STAGE && !CAM.tr || performance.now() - T.keepLate > CACHE_LATE_S * 1000) { cachePut(T, info); return; }
+  setTimeout(function () { cacheLater(T, info); }, 500);
 }
 /** 快取的船體網格 ⇒ RegionSet（跟 buildAll 同一份結果：每個區塊的四邊形，之後照樣 flush 上傳）。 */
 function meshesFromCache(rs, M) {

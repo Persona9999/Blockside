@@ -613,12 +613,22 @@ function bgmOut(ac, dest, inst) {
   var I = INSTR[inst]; if (!I.rev) return dest;
   var R = dest.__rev || (dest.__rev = { cv: null, ins: {} });
   if (!R.cv) {
-    var sr = ac.sampleRate, n = Math.round(sr * BGM_REV_S), b = ac.createBuffer(2, n, sr), s = 13579, tau = BGM_REV_S / 6.9;
-    for (var c = 0; c < 2; c++) { var x = b.getChannelData(c); for (var i = 0; i < n; i++) { s = (Math.imul(s, 1103515245) + 12345) & 0x7fffffff; x[i] = (s / 0x40000000 - 1) * Math.exp(-i / sr / tau); } }
+    var b; while (!(b = bgmRevBuf(ac))) { /* 兩個聲道照順序填（同一串亂數） */ }
     R.cv = ac.createConvolver(); R.cv.normalize = true; R.cv.buffer = b; R.cv.connect(dest);
   }
   if (!R.ins[inst]) { var n0 = ac.createGain(), sg = ac.createGain(); sg.gain.value = I.rev; n0.connect(dest); n0.connect(sg); sg.connect(R.cv); R.ins[inst] = n0; }
   return R.ins[inst];
+}
+/** 殘響（bgmOut 第一次要用才建：一段 BGM_REV_S 秒的衝擊響應＋卷積）先建好 —— 開戰分段（70_flow.js flowWarmSteps）跟第一個音分開兩步。跟第一個音建的同一份。 */
+function bgmWarm() { if (!AC || !AC.bgmBus) return; for (var k in INSTR) if (INSTR[k].rev) { bgmOut(AC, AC.bgmBus, k); return; } }
+/** 殘響的衝擊響應（bgmOut 第一次建的那一份；照同一個種子）：一個聲道一次 ⇒ 開戰分段先做（bgmRevSteps），建卷積時拿現成的。 */
+function bgmRevBuf(ac) {
+  var R = ac.bgmRev || (ac.bgmRev = { b: null, c: 0, s: 13579 }); if (R.b && R.c >= 2) return R.b;
+  var sr = ac.sampleRate, n = Math.round(sr * BGM_REV_S), tau = BGM_REV_S / 6.9;
+  if (!R.b) R.b = ac.createBuffer(2, n, sr);
+  var x = R.b.getChannelData(R.c), s = R.s; for (var i = 0; i < n; i++) { s = (Math.imul(s, 1103515245) + 12345) & 0x7fffffff; x[i] = (s / 0x40000000 - 1) * Math.exp(-i / sr / tau); }
+  R.s = s; R.c++;
+  return R.c >= 2 ? R.b : null;
 }
 /** 一個音：inst 樂器（INSTR）、f（Hz）、t（開始，秒）、d（長，秒）、vel 力度。 */
 function bgmNote(ac, dest, inst, f, t, d, vel) { INSTR[inst].note(ac, bgmOut(ac, dest, inst), f, t, d, vel); }

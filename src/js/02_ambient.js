@@ -17,7 +17,9 @@ var AMB = null, AMB_SEED = 1234567, AMB_COVER_T = 0;
 
 function ambRand() { AMB_SEED = (Math.imul(AMB_SEED, 1103515245) + 12345) & 0x7fffffff; return AMB_SEED / 0x7fffffff; }
 /** 噪音緩衝（4 秒、循環播）：kind ＝ 'white'｜'pink'（Paul Kellet 的濾波）｜'brown'（積分、漏一點）。 */
-function ambNoise(ac, kind) {
+/** 噪音的循環緩衝（4 秒）：同一個 AudioContext 每種只做一次（一種約 15～20 ms；換天氣重建環境音、開戰分段先做好 ⇒ 都拿同一份，內容照種子一樣）。 */
+function ambNoise(ac, kind) { var C = ac.ambN || (ac.ambN = {}); return C[kind] || (C[kind] = ambNoiseMake(ac, kind)); }
+function ambNoiseMake(ac, kind) {
   var n = ac.sampleRate * 4, b = ac.createBuffer(1, n, ac.sampleRate), d = b.getChannelData(0), s = kind === 'pink' ? 777 : kind === 'brown' ? 4242 : 99;
   var b0 = 0, b1 = 0, b2 = 0, br = 0, i, w, mx = 0;
   for (i = 0; i < n; i++) {

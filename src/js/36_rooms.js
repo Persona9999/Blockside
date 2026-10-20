@@ -338,24 +338,28 @@ function deckReach(T) {
   return R;
 }
 /** 開戰時：每艘船自己一份房間；照擺法擺上物品（加進 sh.models，跟砲同一套血量與命中）。 */
-function shipRooms(sh) {
-  var T = sh.T;
-  sh.rooms = hullRooms(T).map(function (r) {
-    var o = { name: r.name, deck: r.deck, min: r.min, max: r.max, door: r.door, type: null, furn: [] }, R = roomItems(T, r, roomPlan(T.id, r.name));
-    if (!R.type) return o;
-    o.type = R.type;
-    var G = roomGrid(T, r);
-    R.items.forEach(function (p, k) {
-      var f = FURN[p.it], t = itemTiles(p.it, p.r), lx = p.r ? f.size[1] : f.size[0], ly = p.r ? f.size[0] : f.size[1];
-      var at = [G.x0 + p.x * ROOM_TILE + Math.floor((t[0] * ROOM_TILE - lx) / 2), G.y0 + p.y * ROOM_TILE + Math.floor((t[1] * ROOM_TILE - ly) / 2), G.z];
-      var bb = [at[0], at[1], at[2], at[0] + lx, at[1] + ly, at[2] + f.size[2] + 1], nm = p.it + '-' + (k + 1);
-      var m = { T: T, k: sh.models.length, name: nm, path: r.name + '/' + nm, kind: 'furn', item: p.it, hold: f.hold || 0, room: o, hp: f.hp, hpMax: f.hp, mesh: furnMesh(T, p.it, p.r ? 'y' : 'x'), origin: at, bb: bb, pts: {}, meta: { kind: 'furniture', item: p.it },
-        c: [(bb[0] + bb[3]) / 2, (bb[1] + bb[4]) / 2, (bb[2] + bb[5]) / 2], foot: VK.pack(Math.floor(bb[0] + 1), Math.floor(bb[1] + 1), at[2] - 1), alive: true };
-      sh.models.push(m); o.furn.push(m);
-    });
-    return o;
+function shipRooms(sh) { stepsRun(shipRoomSteps(sh)); }
+/** shipRooms 拆成一間一步（10_ship.js makeShipSteps；?start=1 開戰分段做）：家具照順序加進 sh.models ⇒ 跟一口氣做同一份。 */
+function shipRoomSteps(sh) {
+  var T = sh.T, out = []; sh.rooms = [];
+  hullRooms(T).forEach(function (r) { out.push(function () { sh.rooms.push(shipRoom(sh, T, r)); }); });
+  return out.concat([function () { sh.roomLines = null; }]);
+}
+/** 一間：照擺法放家具（家具也是模型，加在 sh.models 後面）。 */
+function shipRoom(sh, T, r) {
+  var o = { name: r.name, deck: r.deck, min: r.min, max: r.max, door: r.door, type: null, furn: [] }, R = roomItems(T, r, roomPlan(T.id, r.name));
+  if (!R.type) return o;
+  o.type = R.type;
+  var G = roomGrid(T, r);
+  R.items.forEach(function (p, k) {
+    var f = FURN[p.it], t = itemTiles(p.it, p.r), lx = p.r ? f.size[1] : f.size[0], ly = p.r ? f.size[0] : f.size[1];
+    var at = [G.x0 + p.x * ROOM_TILE + Math.floor((t[0] * ROOM_TILE - lx) / 2), G.y0 + p.y * ROOM_TILE + Math.floor((t[1] * ROOM_TILE - ly) / 2), G.z];
+    var bb = [at[0], at[1], at[2], at[0] + lx, at[1] + ly, at[2] + f.size[2] + 1], nm = p.it + '-' + (k + 1);
+    var m = { T: T, k: sh.models.length, name: nm, path: r.name + '/' + nm, kind: 'furn', item: p.it, hold: f.hold || 0, room: o, hp: f.hp, hpMax: f.hp, mesh: furnMesh(T, p.it, p.r ? 'y' : 'x'), origin: at, bb: bb, pts: {}, meta: { kind: 'furniture', item: p.it },
+      c: [(bb[0] + bb[3]) / 2, (bb[1] + bb[4]) / 2, (bb[2] + bb[5]) / 2], foot: VK.pack(Math.floor(bb[0] + 1), Math.floor(bb[1] + 1), at[2] - 1), alive: true };
+    sh.models.push(m); o.furn.push(m);
   });
-  sh.roomLines = null;
+  return o;
 }
 /** 那一間現在的 buff（只算還在的物品）。 */
 function roomBuffNow(o) { return roomBuff(o.type, o.furn.filter(function (m) { return m.alive; }).map(function (m) { return m.item; })); }

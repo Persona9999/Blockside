@@ -366,47 +366,79 @@ function crushAfter(sh, rem, dW, e, other, v, t0, left) {
 }
 /** 開局（70_flow.js reset）先把這一場會用到的碰撞取樣建好：船隻碰撞那一檔、碰撞傷害開著再加全開那一份、格子檔的佔用金字塔。只是快取（不碰亂數、不改戰局）。
  *  Tim 2026-10-16：「碰撞精度也是物理效果中就開滿(可以測試效能占用)」—— 量過：憲法號全開取樣 24.8 萬點 93.5 ms，以前在第一次碰到的那一步現場建（那一步 96 ms）。 */
-function hitWarm() {
-  var L = [SHIPHIT_LV[PHX.shiphit], PHX.shipdmg ? SHIPHIT_LV[3] : null], seen = {};
+function hitWarm() { stepsRun(hitWarmSteps()); }
+/** hitWarm 拆成步驟（每個船型每一檔：取樣 hitSampleSteps 的那幾步、佔用金字塔各一步；70_flow.js startStaged 分段做）。照順序做 ＝ 拆之前的 hitWarm。 */
+function hitWarmSteps() {
+  var L = [SHIPHIT_LV[PHX.shiphit], PHX.shipdmg ? SHIPHIT_LV[3] : null], seen = {}, out = [];
   SHIPS.forEach(function (sh) {
     if (seen[sh.T.id]) return; seen[sh.T.id] = 1;
-    L.forEach(function (lv) { if (!lv) return; hitSamples(sh.T, lv); if (!lv.foot) occPyr(sh.T); });
+    L.forEach(function (lv) { if (!lv) return; out.push(function () { return hitSampleSteps(sh.T, lv).concat(lv.foot ? [] : [function () { occPyr(sh.T); }]); }); });
   });
+  return out;
 }
 /** 船型 T 的碰撞取樣（第一次用到才算、每個船型每一檔只算一次；HIT_PROF 記花了多久）：
  *  foot ⇒ { f0, f1 }：水線下 1 m 到水線上 4 m 那一段，每一欄 x 的 y 最小／最大（沒有 ⇒ -1）＋ 外緣點（每 2 欄取一）；
  *  stride k ⇒ Int16Array [x, y, z, …]：六個方向最外面那一格（俯視 (x,y) 的最高／最低、(x,z) 的兩舷、(y,z) 的船頭船尾），座標照 k 取一。 */
 function hitSamples(T, lv) {
   var key = lv.foot ? 'foot' : 's' + lv.stride; T.hit = T.hit || {};
-  if (T.hit[key]) return T.hit[key];
-  var t0 = performance.now(), G = T.base, sx = G.sx, sy = G.sy, sz = G.sz, out;
-  if (lv.foot) {
+  if (!T.hit[key]) stepsRun(hitSampleSteps(T, lv));
+  return T.hit[key];
+}
+/** hitSamples 拆成步驟（2026-10-20；70_flow.js startStaged 開局分段做，憲法號全開一次約 0.1 s）：foot 一步；stride ⇒ 六個方向最外面那一格（照區塊層分段）、外圍的點（三個方向各一步）、排序、八叉樹。已經有了 ⇒ []。
+ *  照順序做 ＝ 拆之前的 hitSamples（只是快取：不碰亂數、不改戰局）。 */
+function hitSampleSteps(T, lv) {
+  var key = lv.foot ? 'foot' : 's' + lv.stride; T.hit = T.hit || {};
+  if (T.hit[key]) return [];
+  var G = T.base, sx = G.sx, sy = G.sy, sz = G.sz, ms = 0, P = null, E = null;
+  function done(out, t0) { out.ms = +(ms + performance.now() - t0).toFixed(1); out.n = out.pts.length / 3; T.hit[key] = out; }
+  if (lv.foot) return [function () {
+    var t0 = performance.now(), out;
     var z0 = Math.max(0, Math.round(T.zw - 1 / S)), z1 = Math.min(sz - 1, Math.round(T.zw + 4 / S)), f0 = new Int16Array(sx).fill(-1), f1 = new Int16Array(sx).fill(-1), pts = [];
     G.each(function (x, y, z) { if (z < z0 || z > z1) return; if (f0[x] < 0 || y < f0[x]) f0[x] = y; if (y > f1[x]) f1[x] = y; });
     for (var x = 0; x < sx; x += 2) if (f0[x] >= 0) pts.push(x, f0[x], T.zw, x, f1[x], T.zw);
     out = { f0: f0, f1: f1, pts: new Int16Array(pts) };
-  } else {
+    done(out, t0);
+  }];
+  return [function () {
+    var t0 = performance.now();
     var k = lv.stride, NA = sx * sz, NB = sx * sy, NC = sy * sz;
     var ylo = new Int16Array(NA).fill(-1), yhi = new Int16Array(NA).fill(-1), zlo = new Int16Array(NB).fill(-1), zhi = new Int16Array(NB).fill(-1), xlo = new Int16Array(NC).fill(-1), xhi = new Int16Array(NC).fill(-1);
-    G.each(function (x, y, z) {
+    E = [ylo, yhi, zlo, zhi, xlo, xhi]; ms += performance.now() - t0;
+    function cell(x, y, z) {                                             // 每一格：六個方向最外面那一格（只取最大最小 ⇒ 跟走的先後無關）
       var a = x + sx * z, b = x + sx * y, c = y + sy * z;
       if (ylo[a] < 0 || y < ylo[a]) ylo[a] = y; if (y > yhi[a]) yhi[a] = y;
       if (zlo[b] < 0 || z < zlo[b]) zlo[b] = z; if (z > zhi[b]) zhi[b] = z;
       if (xlo[c] < 0 || x < xlo[c]) xlo[c] = x; if (x > xhi[c]) xhi[c] = x;
-    });
-    var seen = new Set(), P = [];
-    function add(x, y, z) { var h = x + 2048 * (y + 2048 * z); if (!seen.has(h)) { seen.add(h); P.push(x, y, z); } }
-    var i, j;
+    }
+    return [stepsLoop(0, G.nz, function (cz) { var t1 = performance.now(); gridEachZ(G, cz, cell); ms += performance.now() - t1; }, 15)];   // 整份格子照區塊層分段走（G.each 的順序）
+  }, function () {
+    var t0 = performance.now(), k = lv.stride, i, j; P = []; E.push(new Set());
+    function add(x, y, z) { var h = x + 2048 * (y + 2048 * z), seen = E[6]; if (!seen.has(h)) { seen.add(h); P.push(x, y, z); } }
+    var ylo = E[0], yhi = E[1];
     for (j = 0; j < sz; j += k) for (i = 0; i < sx; i += k) { var a2 = i + sx * j; if (ylo[a2] >= 0) { add(i, ylo[a2], j); add(i, yhi[a2], j); } }
+    ms += performance.now() - t0;
+  }, function () {
+    var t0 = performance.now(), k = lv.stride, i, j, zlo = E[2], zhi = E[3];
+    function add(x, y, z) { var h = x + 2048 * (y + 2048 * z), seen = E[6]; if (!seen.has(h)) { seen.add(h); P.push(x, y, z); } }
     for (j = 0; j < sy; j += k) for (i = 0; i < sx; i += k) { var b2 = i + sx * j; if (zlo[b2] >= 0) { add(i, j, zlo[b2]); add(i, j, zhi[b2]); } }
+    ms += performance.now() - t0;
+  }, function () {
+    var t0 = performance.now(), k = lv.stride, i, j, xlo = E[4], xhi = E[5];
+    function add(x, y, z) { var h = x + 2048 * (y + 2048 * z), seen = E[6]; if (!seen.has(h)) { seen.add(h); P.push(x, y, z); } }
     for (j = 0; j < sz; j += k) for (i = 0; i < sy; i += k) { var c2 = i + sy * j; if (xlo[c2] >= 0) { add(xlo[c2], i, j); add(xhi[c2], i, j); } }
+    E = null; ms += performance.now() - t0;
+  }, function () {
+    var t0 = performance.now(), out, i, k = lv.stride;
     // 八叉樹（Tim 2026-10-15）：點照 16³ 格塊分成葉子（點照葉子排好、各記 [a, b) 與外框），往上每 2×2×2 合成一個節點直到只剩一個根；
     //   hitCount 從根往下：節點外框換到對方座標、落在對方的空區（occPyr）⇒ 整棵子樹跳過
     var leafOf = function (u) { return (P[u] >> 4) + 128 * ((P[u + 1] >> 4) + 128 * (P[u + 2] >> 4)); };
     var idx = []; for (i = 0; i < P.length; i += 3) idx.push(i);
     idx.sort(function (u, v) { return leafOf(u) - leafOf(v) || u - v; });
-    var Q = new Int16Array(P.length), nodes = [];
+    var Q = new Int16Array(P.length);
     idx.forEach(function (u, r) { Q[r * 3] = P[u]; Q[r * 3 + 1] = P[u + 1]; Q[r * 3 + 2] = P[u + 2]; });
+    ms += performance.now() - t0; E = Q;
+  }, function () {
+    var t0 = performance.now(), out, Q = E, nodes = []; E = null;
     for (var r0 = 0; r0 < Q.length;) {
       var c0 = [Q[r0] >> 4, Q[r0 + 1] >> 4, Q[r0 + 2] >> 4], r1 = r0, lo = [1e9, 1e9, 1e9], hi = [-1, -1, -1];
       while (r1 < Q.length && (Q[r1] >> 4) === c0[0] && (Q[r1 + 1] >> 4) === c0[1] && (Q[r1 + 2] >> 4) === c0[2]) { for (var c3 = 0; c3 < 3; c3++) { lo[c3] = Math.min(lo[c3], Q[r1 + c3]); hi[c3] = Math.max(hi[c3], Q[r1 + c3] + 1); } r1 += 3; }
@@ -424,9 +456,8 @@ function hitSamples(T, lv) {
       nodes = Array.from(par.values()); depth++;
     }
     out = { pts: Q, root: nodes[0], leaves: nLeaf, depth: depth };
-  }
-  out.ms = +(performance.now() - t0).toFixed(1); out.n = out.pts.length / 3;
-  return (T.hit[key] = out);
+    done(out, t0);
+  }];
 }
 /** A 的取樣點換到 B 的格子座標落在實心裡的有幾個；s ＝ A 相對 B 往世界的 (sx, sz) 多移多少（m）。外框先篩：中心距離超過兩艘半長之和 ⇒ 0。 */
 function hitCount(A, B, lv, s, acc, any) {                              // any ⇒ 碰到第一個就停（只要知道還有沒有碰到：推開的二分搜）
