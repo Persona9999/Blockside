@@ -7,7 +7,7 @@
 // 整地（townHv；每塊海圖塊第一次要畫的時候算、城到了再重算）：路（照 z，路寬一半 ＋ 一個取樣點內整平）先、地塊的 grade（照 h，外擴 TOWN_LOT_PAD）後，
 //   外面照邊坡 1 : bank 接回原地形（|高差| ≤ 距離 ÷ bank，路最多接 TOWN_GRADE_REACH 公尺）；只改陸上的點（原本 ≤ 0 的不動 ⇒ 岸線不變）。
 // 清樹（townClr）：規劃的 clear（有建築的地塊、路、城牆、碼頭各外擴 2 m；空建地不清）每 TOWN_CLR_G 公尺一格的遮罩 ⇒ 63_trees.js 擺樹時跳過。
-// 建築（模型 63_towndata.js TOWN_KIT，src/townmodels.py 匯入時算好近、中、遠三份＋屋頂殼的資料）：照用途挑（同用途的變化照 地塊 id 的雜湊挑 ⇒ 每次一樣；特殊建築的用途就是那一種 ⇒ 只有它的模型挑得到，例：galata-tower）。
+// 建築（模型在 Blocksail 的 world/townkit/：tools/townmodels.py 匯入時算好近、中、遠三份＋屋頂殼的資料；要用到的才跟外面要，見下面 townKit 那一段）：照用途挑（同用途的變化照 地塊 id 的雜湊挑 ⇒ 每次一樣；特殊建築的用途就是那一種 ⇒ 只有它的模型挑得到，例：galata-tower）。
 //   模型 → 世界（BUILDING_SPEC §1）：a ＝ mx·mpv − 模型寬/2、b ＝ my·mpv − 模型深/2、θ ＝ lot.rot ⇒ 往東 ＝ cx ＋ a·sinθ − b·cosθ、往南 ＝ cy − a·cosθ − b·sinθ、高 ＝ h ＋ mz·mpv；
 //   模型比地塊小（金斯敦的地塊照 Lilly 的棋盤）⇒ 臨路那一邊對齊、沿路置中：cx,cy ＝ at ＋ (d − 模型深)/2 ·(cosθ, sinθ)。底下墊一塊石基（townPlinth：到四角最低的地面再下 0.3 m）。
 //   城牆（TOWN_BUILD §4）：照牆的 kit 挑一套模組（wall1～wall3 ＝ 一～三級、roman-land-inner／roman-land-outer／roman-sea ＝ 東羅馬城牆 1453；BUILDING_SPEC §6、§6.1）；
@@ -18,7 +18,7 @@
 // 布旗（模型帶 flags 的，例：加拉塔塔頂的熱那亞旗）：一塊布、照風飄，只給人看 ⇒ 見下面「布旗」那一段。
 // 路（TOWN_BUILD 第 10 節第 7 題：地形上著色）：照路的 z 鋪一條貼地的帶子（土路、石板路的顏色）；廣場、碼頭、棧橋同一份網格。
 var TOWN_LOD = [160, 800], TOWN_FAR = [2400, 3000], TOWN_BAND = [24, 60, 300], TOWN_REBIN = 8, TOWN_SHELL_G = 32, TOWN_GRADE_REACH = 12, TOWN_LOT_PAD = 2, TOWN_CLR_G = 2, TOWN_ROAD_LIFT = 0.12, TOWN_GROUND_VIEW = 1600;
-var TOWNS = { on: Q.get('towns') !== '0', list: [], pend: [], ver: 0, want: 0, err: null, kit: null, kitP: null, prog: null, dirty: true, eye: null, sig: '', buf: [], grp: null,
+var TOWNS = { on: Q.get('towns') !== '0', list: [], pend: [], ver: 0, want: 0, err: null, kit: null, kitP: null, idx: null, kitHas: null, kitRedo: false, mwait: null, prog: null, dirty: true, eye: null, sig: '', buf: [], grp: null,
   stat: { towns: 0, lots: 0, inst: 0, walls: 0, skip: {}, d0: 0, d1: 0, d2: 0, d3: 0, plinth: 0, tris: 0, binMs: 0, kitMs: 0, gradeMs: 0, chunks: 0, drawMs: 0 } };
 var TOWN_USE_ALT = { commandant: ['house'], governor: ['townhall'] };   // 沒有那種模型 ⇒ 用哪一種代（BUILDING_SPEC §7：長官的屋子還沒做）
 var TOWN_COL = { main: [0.56, 0.47, 0.34], street: [0.62, 0.58, 0.50], track: [0.50, 0.42, 0.30], plaza: [0.70, 0.66, 0.58], quay: [0.58, 0.56, 0.52], pier: [0.45, 0.33, 0.22], post: [0.30, 0.22, 0.15] };
@@ -34,14 +34,20 @@ function townWant() {
   TOWNS.want = BED.A.towns.length;
   if (BED.host) { BED.host.postMessage({ bsmap: 'need', what: 'towns' }, '*'); return; }
   TOWNS.pend = [];
-  bedScript('maps/' + BED.A.id + '/towns.js').then(function () { var L = TOWNS.pend; TOWNS.pend = []; townGot(L); }, function (e) { TOWNS.err = e.message; console.warn('城鎮：' + e.message); });
+  var dir = 'maps/' + BED.A.id + '/';
+  bedScript(dir + 'towns.js').then(function () {
+    return bedScript(dir + 'townkit/index.js').catch(function () {});   // 模型的索引（沒有 ⇒ 城照樣整地、清樹、鋪路，只是沒有建築；townKit 記 err）
+  }).then(function () { var L = TOWNS.pend; TOWNS.pend = []; townGot(L, null, window.BSTOWNKIT); }, function (e) { TOWNS.err = e.message; console.warn('城鎮：' + e.message); });
 }
-/** 一批城鎮規劃到了 ⇒ 換成海域／世界座標、要重算整地與清樹的塊重發 'bedChunk'（地形網格、樹照新的重建）、遠景重抽。 */
-function townGot(L, err) {
+/** 一批城鎮規劃到了（idx ＝ 模型的索引 BSTOWNKIT，見 townKit 上面）⇒ 換成海域／世界座標、要重算整地與清樹的塊重發 'bedChunk'（地形網格、樹照新的重建）、遠景重抽。 */
+function townGot(L, err, idx) {
   if (err) { TOWNS.err = err; console.warn('城鎮：' + err); }
+  if (idx && idx.models && !TOWNS.idx) TOWNS.idx = idx;
   if (!BED || !BED.A || !L || !L.length) return;
   var t0 = performance.now();
   L.forEach(function (p) { if (p && p.format === 'blocksail-town' && !TOWNS.list.some(function (T) { return T.id === p.id; })) TOWNS.list.push(townPrep(p)); });
+  var I = townIdx();                                                    // 新來的城要的模型解好的那一份沒有 ⇒ 丟掉重要（解到一半 ⇒ 解完再丟）
+  if (I && TOWNS.kitHas && townNeed(I).some(function (nm) { return TOWNS.kitHas.indexOf(nm) < 0; })) { if (TOWNS.kit) townKitFree(); else TOWNS.kitRedo = true; }
   TOWNS.ver++; TOWNS.dirty = true; TOWNS.stat.towns = TOWNS.list.length;
   TOWNS.stat.prepMs = +(performance.now() - t0).toFixed(1);
   Object.keys(Object.assign({}, BED.ch, BED.cm)).forEach(function (k) { var C = bedShowC(k); if (C && townOver(C.cx, C.cy)) evEmit('bedChunk', C.cx, C.cy, C); });   // 畫著的那一份（原精度或外圈的中等塊）
@@ -58,7 +64,7 @@ function townOver(cx, cy) {
   var S = BED.A.chunk, e0 = cx * S, s0 = cy * S;
   return TOWNS.list.some(function (T) { return T.box[0] < e0 + S && T.box[2] > e0 && T.box[1] < s0 + S && T.box[3] > s0; });
 }
-/** 規劃 ⇒ 一座城（海域座標的路、整地、清樹，世界座標的實例；模型的實例等 TOWN_KIT 解好才建 ⇒ townInst）。 */
+/** 規劃 ⇒ 一座城（海域座標的路、整地、清樹，世界座標的實例；模型的實例等要用到的模型解好（townKit）才建 ⇒ townInst）。 */
 function townPrep(p) {
   var ox = +p.ox || 0, oy = +p.oy || 0, kx = +p.kx || 1, D2R = Math.PI / 180, bank = +p.bank || 1.5;
   function E(q) { return [ox + kx * q[0], oy + q[1]]; }
@@ -164,7 +170,7 @@ function townGround(x, z) {
   return ((h[o] * (1 - fu) + h[o + 1] * fu) * (1 - fv) + (h[o + n] * (1 - fu) + h[o + n + 1] * fu) * fv) / 10;
 }
 
-// ── 模型（TOWN_KIT：src/townmodels.py 匯入時算好）⇒ GPU ──
+// ── 模型（Blocksail world/townkit/：tools/townmodels.py 匯入時算好）⇒ GPU ──
 /** 解一份格子（townmodels.py pack_chunks：deflate-raw 的 區塊數 u32、(cx, cy, cz) u16 × n、4096 × n）⇒ 一份網格（全部區塊的四邊形接在一起）。 */
 function townMesh(b64, size) {
   return VK.inflateRaw(VK.b64ToBytes(b64)).then(function (raw) {
@@ -182,36 +188,100 @@ function townMesh(b64, size) {
     return r;
   });
 }
-/** TOWN_KIT 全部解好（近、中各一份網格；貼圖集）⇒ TOWNS.kit。第一次要畫才做（非同步；好了才建實例）。 */
+// 模型不在這裡（Tim 2026-10-20：「城鎮資料…放在Blocksail 然後傳輸要用到的部份給Blockside就好」）：Blocksail 的 world/townkit/（tools/townmodels.py 產生）
+//   ＝ 索引 BSTOWNKIT（每個模型的用途、尺寸、地塊、屋頂、固定點、貼圖大小；小）＋ 一個模型一個檔 BSTOWNKIT_DATA[名] ＝ { g: 網格, lo: 低模, png: 八張橫排的貼圖 }。
+//   索引跟規劃一起到（外面那一頁回 'towns' 時附 kit；檔案模式 maps/<海域>/townkit/index.js）⇒ 照它挑每塊地用哪一個（townNeed）⇒ 只要那幾個（townModels）。
+//   ⛔ 照用途分組（byUse）一律照「索引裡全部的模型」分：同用途的變化照雜湊在那一份清單裡挑 ⇒ 只照收到的分，清單變短、挑到的房子就變了。
+/** 索引 ⇒ 全部名字（排序）、照用途分組。 */
+function townIdx() {
+  var I = TOWNS.idx; if (!I || !I.models) return null;
+  if (!I.names) {
+    I.names = Object.keys(I.models).sort(); I.byUse = {};
+    I.names.forEach(function (nm) { var m = I.models[nm], k = m.use !== 'wall' ? m.use : (m.set || 'wall' + m.tier) + '-' + m.part; (I.byUse[k] = I.byUse[k] || []).push(nm); });   // 城牆：'<套>-<型>'（同型好幾種 ⇒ 名字排序）
+  }
+  return I;
+}
+/** 收到的城會用到哪幾個模型：地塊照用途的整份候選（townInst 在裡面照雜湊挑）、城牆那一套的每一型（townWall：門、塔、斷面、收尾；沒有那一套 ⇒ 一級）。 */
+function townNeed(I) {
+  var S = {};
+  function add(L) { (L || []).forEach(function (nm) { S[nm] = 1; }); }
+  TOWNS.list.forEach(function (T) {
+    (T.p.lots || []).forEach(function (l) {
+      if (l.use === 'plot' || l.use === 'plaza') return;
+      add(I.byUse[l.use] || (TOWN_USE_ALT[l.use] || []).map(function (u) { return I.byUse[u]; }).filter(Boolean)[0]);
+    });
+    (T.p.walls || []).forEach(function (w) {
+      var kit = w.kit || 'wall1'; if (!I.byUse[kit + '-section']) kit = 'wall1';
+      ['gate', 'tower', 'section', 'end'].forEach(function (pt) { add(I.byUse[kit + '-' + pt]); });
+    });
+  });
+  return Object.keys(S).sort();
+}
+/** 那幾個模型的網格與貼圖 ⇒ Promise<{ 名: { g, lo, png } }>：@host 跟外面那一頁要（{ bsmap: 'need', what: 'townmodels', names } ⇒ { bsmap: 'townmodels', models }；
+ *  08_seabed.js 轉給 townModelsGot）；檔案模式讀 maps/<海域>/townkit/<名>.js（BSTOWNKIT_DATA）。 */
+function townModels(names) {
+  if (BED.host) return new Promise(function (ok, bad) { TOWNS.mwait = { ok: ok, bad: bad }; BED.host.postMessage({ bsmap: 'need', what: 'townmodels', names: names }, '*'); });
+  var dir = 'maps/' + BED.A.id + '/townkit/';
+  return Promise.all(names.map(function (nm) { return (window.BSTOWNKIT_DATA || {})[nm] ? null : bedScript(dir + nm + '.js'); })).then(function () {
+    var D = window.BSTOWNKIT_DATA || {}, out = {};
+    names.forEach(function (nm) { if (!D[nm]) throw new Error('檔案裡沒有模型 ' + nm); out[nm] = D[nm]; });
+    return out;
+  });
+}
+/** 外面那一頁回的模型（08_seabed.js；出錯 ⇒ err）。 */
+function townModelsGot(M, err) { var w = TOWNS.mwait; TOWNS.mwait = null; if (!w) return; if (err || !M) w.bad(new Error(err || '外面那一頁沒給模型')); else w.ok(M); }
+/** 要用到的模型解好（近、中各一份網格；收到的貼圖一個模型一列往下排成一張）⇒ TOWNS.kit。第一次要畫才做（非同步；好了才建實例）。 */
 function townKit() {
   if (TOWNS.kitP) return TOWNS.kitP;
-  var t0 = performance.now(), K = TOWN_KIT, names = Object.keys(K.models).sort(), M = {};
-  TOWNS.kitP = Promise.all(names.map(function (nm, mi) {
-    var m = K.models[nm];
-    return Promise.all([townMesh(m.g, m.size), townMesh(m.lo.g, m.lo.size)]).then(function (L) {
-      M[nm] = { nm: nm, i: mi, m: m, lod: L, uc0: [m.mpv, m.size[0] * m.mpv / 2, m.size[1] * m.mpv / 2], uc1: [m.mpv * m.lo.f, m.size[0] * m.mpv / 2, m.size[1] * m.mpv / 2] };
+  var I = townIdx();
+  if (!I) { if (!TOWNS.err) TOWNS.err = '沒有城鎮模型的索引（外面那一頁沒給 kit、或檔案模式沒有 maps/' + BED.A.id + '/townkit/index.js）'; return null; }
+  var t0 = performance.now(), names = I.names, need = townNeed(I), M = {};
+  TOWNS.kitHas = need;
+  TOWNS.kitP = townModels(need).then(function (D) {
+    return Promise.all(need.map(function (nm) {
+      var m0 = I.models[nm], d = D[nm];
+      if (!d) throw new Error('外面那一頁沒給 ' + nm);
+      return Promise.all([townMesh(d.g, m0.size), townMesh(d.lo, m0.lo.size)]).then(function (L) {
+        M[nm] = { nm: nm, i: names.indexOf(nm), m: m0, lod: L, png: d.png, uc0: [m0.mpv, m0.size[0] * m0.mpv / 2, m0.size[1] * m0.mpv / 2], uc1: [m0.mpv * m0.lo.f, m0.size[0] * m0.mpv / 2, m0.size[1] * m0.mpv / 2] };
+      });
+    }));
+  }).then(function () {
+    // 貼圖：收到的模型照名字一個一列往下排（寬 ＝ 最寬那一列、高 ＝ 加總，各取 2 的次方）；那一列的座標寫進那個模型的 im（畫貼圖照它取，townBin）
+    var aw = 1, y = 0;
+    need.forEach(function (nm) { var im = M[nm].m.im; aw = Math.max(aw, im.cw * I.views); M[nm].m = Object.assign({}, M[nm].m, { im: Object.assign({}, im, { x: 0, y: y }) }); y += im.ch; });
+    aw = 1 << Math.ceil(Math.log2(aw)); var ah = 1 << Math.ceil(Math.log2(Math.max(1, y)));
+    var tex = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, tex); gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, aw, ah, 0, gl.RGBA, gl.UNSIGNED_BYTE, null); gl.bindTexture(gl.TEXTURE_2D, null);
+    return Promise.all(need.map(function (nm) {                      // 一列一列貼（texSubImage2D 不預乘 alpha ⇒ 透明像素塗的顏色照留，mipmap 不帶黑邊）
+      return new Promise(function (ok) {
+        var im = new Image();
+        im.onload = function () { gl.bindTexture(gl.TEXTURE_2D, tex); gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, M[nm].m.im.y, gl.RGBA, gl.UNSIGNED_BYTE, im); gl.bindTexture(gl.TEXTURE_2D, null); ok(); };
+        im.onerror = function () { ok(); };
+        im.src = 'data:image/png;base64,' + M[nm].png;
+      });
+    })).then(function () {
+      gl.bindTexture(gl.TEXTURE_2D, tex);
+      gl.generateMipmap(gl.TEXTURE_2D); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE); gl.bindTexture(gl.TEXTURE_2D, null);
+      return { tex: tex, aw: aw, ah: ah };
     });
-  })).then(function () {
-    return new Promise(function (ok) {
-      var im = new Image();
-      im.onload = function () {
-        var tex = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, tex); gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, gl.RGBA, gl.UNSIGNED_BYTE, im);
-        gl.generateMipmap(gl.TEXTURE_2D); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE); gl.bindTexture(gl.TEXTURE_2D, null);
-        ok(tex);
-      };
-      im.onerror = function () { ok(null); };
-      im.src = 'data:image/png;base64,' + K.atlas.png;
-    });
-  }).then(function (tex) {
-    var byUse = {};
-    names.forEach(function (nm) { var m = K.models[nm], k = m.use !== 'wall' ? m.use : (m.set || 'wall' + m.tier) + '-' + m.part; (byUse[k] = byUse[k] || []).push(nm); });   // 城牆：'<套>-<型>'（同型好幾種 ⇒ 名字排序）
-    TOWNS.kit = { M: M, names: names, byUse: byUse, tex: tex, aw: K.atlas.w, ah: K.atlas.h, views: K.views };
+  }).then(function (A) {
+    need.forEach(function (nm) { delete M[nm].png; });
+    TOWNS.kit = { M: M, names: names, byUse: I.byUse, tex: A.tex, aw: A.aw, ah: A.ah, views: I.views };
     TOWNS.stat.kitMs = +(performance.now() - t0).toFixed(1);
-    TOWNS.stat.kitTris = names.reduce(function (o, nm) { o[nm] = [M[nm].lod[0].nq * 2, M[nm].lod[1].nq * 2]; return o; }, {});
+    TOWNS.stat.kitN = need.length + '/' + names.length;              // 要了幾個／索引裡有幾個
+    TOWNS.stat.kitTris = need.reduce(function (o, nm) { o[nm] = [M[nm].lod[0].nq * 2, M[nm].lod[1].nq * 2]; return o; }, {});
     TOWNS.list.forEach(function (T) { T.inst = null; }); TOWNS.dirty = true;
+    if (TOWNS.kitRedo) { TOWNS.kitRedo = false; townKitFree(); }   // 解的時候又來了新的城、要的模型變多 ⇒ 丟掉重要一次
   }, function (e) { TOWNS.err = '模型解不開：' + e.message; console.warn('城鎮：' + TOWNS.err); });
   return TOWNS.kitP;
+}
+/** 丟掉解好的模型（GPU 的網格、貼圖）⇒ 下一格照新的城重要。 */
+function townKitFree() {
+  var K = TOWNS.kit; TOWNS.kit = null; TOWNS.kitP = null; TOWNS.kitHas = null;
+  if (!K) return;
+  Object.keys(K.M).forEach(function (nm) { K.M[nm].lod.forEach(function (r) { gl.deleteVertexArray(r.vao); gl.deleteBuffer(r.vbo); }); });
+  if (K.tex) gl.deleteTexture(K.tex);
+  TOWNS.list.forEach(function (T) { T.inst = null; }); TOWNS.dirty = true;
 }
 
 // ── 實例（一座城建一次：建築、城牆、石基；屋頂殼、地面的帶子） ──
@@ -633,7 +703,7 @@ function townStat(at) {
   var S = TOWNS.stat, o = { on: TOWNS.on, want: TOWNS.want, err: TOWNS.err, towns: TOWNS.list.map(function (T) {
     var u = {}; (T.inst || []).forEach(function (q) { u[q.k] = (u[q.k] || 0) + 1; });
     return { id: T.id, name: T.name, tier: T.tier, seed: T.seed, ox: T.ox, oy: T.oy, lots: (T.p.lots || []).length, roads: T.roads.length, walls: (T.p.walls || []).length, inst: (T.inst || []).length, byModel: u, center: [+(T.ox - BED.ax).toFixed(1), +(T.oy - BED.az).toFixed(1)] };
-  }), kit: !!TOWNS.kit, kitMs: S.kitMs, kitTris: S.kitTris, skip: S.skip, drawn: { full: S.d0, low: S.d1, card: S.d2, shells: S.d3, plinth: S.plinth, flags: S.flags || 0 }, tris: S.tris, ms: { draw: S.drawMs, bin: S.binMs, grade: +S.gradeMs.toFixed(1), prep: S.prepMs }, gradedChunks: S.chunks };
+  }), kit: !!TOWNS.kit, kitN: S.kitN, kitMs: S.kitMs, kitTris: S.kitTris, skip: S.skip, drawn: { full: S.d0, low: S.d1, card: S.d2, shells: S.d3, plinth: S.plinth, flags: S.flags || 0 }, tris: S.tris, ms: { draw: S.drawMs, bin: S.binMs, grade: +S.gradeMs.toFixed(1), prep: S.prepMs }, gradedChunks: S.chunks };
   if (at) { var q = bedCell(at[0], at[1]); o.at = { ground: +townGround(at[0], at[1]).toFixed(2), sim: +bedHgt(at[0], at[1]).toFixed(2), clear: q ? townClr(q.C, q.u * q.C.step, q.v * q.C.step) : null }; }
   return o;
 }

@@ -47,7 +47,8 @@ function bedScript(src) {
 //   轉場（03_camera.js camTrans）：這一頁 ⇒ 那一頁 'started'（開戰了、鏡頭停在正上方）、'left'（拉到正上方了；x、z ＝ 我艦在世界的哪裡、shipHdg ＝ 我艦船頭朝哪）；
 //                                兩個都帶 hdg ＝ 正上方那一張畫面上方朝哪（度，北 0 順時針）⇒ 地球儀轉過來對齊海岸線；
 //                                那一頁 ⇒ 這一頁 'go'（地球儀淡進來了 ⇒ 降下去）、'leave'（要回地球儀 ⇒ 拉上去）
-//   城鎮（area.towns 有才要；63_towns.js）：這一頁 ⇒ 那一頁 { bsmap: 'need', what: 'towns' }；那一頁 ⇒ 這一頁 { bsmap: 'towns', towns: [規劃…] }（出錯 { bsmap: 'error', what: 'towns', msg }）
+//   城鎮（area.towns 有才要；63_towns.js）：這一頁 ⇒ 那一頁 { bsmap: 'need', what: 'towns' }；那一頁 ⇒ 這一頁 { bsmap: 'towns', towns: [規劃…], kit: 模型的索引 }（出錯 { bsmap: 'error', what: 'towns', msg }）；
+//   照索引挑好要用的模型 ⇒ { bsmap: 'need', what: 'townmodels', names: [名…] } ⇒ { bsmap: 'townmodels', models: { 名: { g, lo, png } } }（出錯 what: 'townmodels'）。模型只放在外面那一頁（Blocksail world/townkit/）。
 //   只收 BED.host 送來的訊息。
 function bedGet(cx, cy, peek, mid, bg) {                                // cx ＝ null ⇒ area.js；mid ⇒ 外圈的中等塊（BED.mid 公尺一點）；bg ⇒ 背景預載（外面那一頁排在最後）
   if (!BED.host) return bedScript(cx == null ? 'maps/' + BED.wantArea + '/area.js' : 'maps/' + BED.A.id + '/' + bedKey(cx, cy) + '.js');
@@ -64,7 +65,8 @@ function bedHostMsg(e) {
   var mid = !d.coarse && BED.mid && d.step === BED.mid, k0 = bedKey(d.cx, d.cy);   // 中等塊：回的訊息帶 step ＝ BED.mid
   var ks = d.bsmap === 'area' || d.what === 'area' ? ['area'] : mid ? [k0 + '@'] : d.coarse ? [k0 + '+'] : [k0, k0 + '+'], err = d.bsmap === 'error' ? new Error('海圖：' + (d.msg || '要不到')) : null;
   if (d.bsmap === 'go' || d.bsmap === 'leave') { camTransSet(d.bsmap === 'go' ? 'go' : 'out'); return; }
-  if (d.bsmap === 'towns' || (d.bsmap === 'error' && d.what === 'towns')) { townGot(d.towns || [], d.msg); return; }   // 城鎮規劃（63_towns.js；只給人看 ⇒ 不等它）
+  if (d.bsmap === 'towns' || (d.bsmap === 'error' && d.what === 'towns')) { townGot(d.towns || [], d.msg, d.kit); return; }   // 城鎮規劃＋模型的索引（63_towns.js；只給人看 ⇒ 不等它）
+  if (d.bsmap === 'townmodels' || (d.bsmap === 'error' && d.what === 'townmodels')) { townModelsGot(d.models, d.msg); return; }   // 要用到的城鎮模型（63_towns.js townModels）
   if (d.bsmap === 'area') BSMAP.area(d.area);
   else if (d.bsmap === 'chunk' && BED.A) BSMAP.chunk(BED.A.id, d.cx, d.cy, d.b64, !!d.coarse, mid);
   ks.forEach(function (k) { var L = BED.ask[k]; delete BED.ask[k]; (L || []).forEach(function (f) { if (err) f[1](err); else f[0](); }); });
