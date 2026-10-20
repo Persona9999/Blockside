@@ -12,7 +12,11 @@
 var SHIP_CARDS = (window.VoxelKit.embeddedJSON('ship-cards') || {}).ships || {};
 var SPK_TONS = [1000, 3000], SPK_VOLLEY = [200, 600];
 var SPK_DRIVE = [['sail', '⛵', '帆船'], ['steam', '♨️', '蒸汽'], ['oar', '🚣', '槳帆'], ['magic', '✨', '魔法']];
-var SPK = { cur: '', pick: null, f: { drive: '', tons: '', fire: '', q: '' } };   // 篩選照上一次（同一次開遊戲裡記著）
+var SPK = { cur: '', pick: null, f: { drive: '', tons: '', fire: '', q: '' }, open: false };   // 篩選照上一次（同一次開遊戲裡記著）；open ＝ 篩選那三排展開了沒（預設收著）
+// 篩選收起來（Tim 2026-10-20 手機截圖：「請協助調整一下 手機板選船的排版 可以調整尺寸 確保上方篩選不要佔用太多空間」「另外篩選可以折疊(預設摺疊)」）：
+//   上面只留一列「搜尋框＋篩選 ▾」，三排分類點了才展開；收著時那一顆寫有幾個篩選在用（亮金色），下面那一行寫篩了哪些 ⇒ 收著也看得出來。
+//   以前 390 px 寬的手機：三排分類各折成兩行、加搜尋，佔掉畫面四成多。
+var SPK_SHORT = { tons: { lo: '小船', mid: '中型', hi: '大船' }, fire: { lo: '火力輕', mid: '火力中', hi: '火力重' } };   // 下面那一行用的短名（動力照 SPK_DRIVE 的名字）
 function spkTier(v, cut) { return v === undefined ? '' : v < cut[0] ? 'lo' : v >= cut[1] ? 'hi' : 'mid'; }
 function spkMatch(h) {
   var c = SHIP_CARDS[h.id], F = SPK.f, q = F.q.trim().toLowerCase();
@@ -43,21 +47,26 @@ function spkFilters() {
     return '<div class="spkR" data-k="' + k + '"><span>' + name + '</span>' + [['', '全部']].concat(opts).map(function (o) { return '<button data-v="' + o[0] + '">' + o[1] + '</button>'; }).join('') + '</div>';
   }
   var t = function (a, b) { return a.toLocaleString() + (b ? '–' + b.toLocaleString() : ''); };
-  $('spkF').innerHTML = row('drive', '動力', SPK_DRIVE.filter(function (d) { return have[d[0]]; }).map(function (d) { return [d[0], d[1] + ' ' + d[2]]; })) +
-    row('tons', '噸位', [['lo', '小（&lt; ' + t(SPK_TONS[0]) + ' 噸）'], ['mid', '中'], ['hi', '大（≥ ' + t(SPK_TONS[1]) + ' 噸）']]) +
-    row('fire', '火力', [['lo', '輕（齊射 &lt; ' + SPK_VOLLEY[0] + ' kg）'], ['mid', '中'], ['hi', '重（≥ ' + SPK_VOLLEY[1] + ' kg）']]) +
-    '<div class="spkR"><span>搜尋</span><input type="search" placeholder="船名、建造者…" aria-label="搜尋船名或建造者"></div>';
+  $('spkF').innerHTML = '<div class="spkS"><input type="search" placeholder="搜尋船名、建造者…" aria-label="搜尋船名或建造者"><button id="spkFT" aria-controls="spkFB"></button></div><div id="spkFB">' +
+    row('drive', '動力', SPK_DRIVE.filter(function (d) { return have[d[0]]; }).map(function (d) { return [d[0], d[1] + ' ' + d[2]]; })) +
+    row('tons', '噸位', [['lo', '小 &lt; ' + t(SPK_TONS[0]) + ' 噸'], ['mid', '中'], ['hi', '大 ≥ ' + t(SPK_TONS[1]) + ' 噸']]) +   // ⛔ 全形括號、「齊射」⇒ 390 px 寬的手機一排擠不進一行
+    row('fire', '火力', [['lo', '輕 &lt; ' + SPK_VOLLEY[0] + ' kg'], ['mid', '中'], ['hi', '重 ≥ ' + SPK_VOLLEY[1] + ' kg']]) + '</div>';   // kg ＝ 齊射彈重（同卡片上的「齊射」）
   [].forEach.call($('spkF').querySelectorAll('.spkR[data-k]'), function (r) {
     [].forEach.call(r.querySelectorAll('button'), function (b) { b.onclick = function () { SPK.f[r.dataset.k] = b.dataset.v; spkShow(); }; });
   });
+  $('spkFT').onclick = function () { SPK.open = !SPK.open; spkShow(); };
   var sb = $('spkF').querySelector('input'); sb.value = SPK.f.q; sb.oninput = function () { SPK.f.q = sb.value; spkShow(); };
 }
 /** 卡片（照篩選）＋篩選鈕的亮燈。 */
 function spkShow() {
   [].forEach.call($('spkF').querySelectorAll('.spkR[data-k]'), function (r) { [].forEach.call(r.querySelectorAll('button'), function (b) { b.className = b.dataset.v === SPK.f[r.dataset.k] ? 'on' : ''; }); });
-  var cur = SPK.cur, L = HULL_LIST.filter(spkMatch), dn = {};
+  var cur = SPK.cur, L = HULL_LIST.filter(spkMatch), dn = {}, F = SPK.f;
   SPK_DRIVE.forEach(function (d) { dn[d[0]] = d; });
-  $('spkN').textContent = '顯示 ' + L.length + '／' + HULL_LIST.length + ' 艘' + (L.length ? '' : ' —— 沒有符合的船，換一個篩選') + '・航速照現在的船隻設定與玩法（' + (PLAY === 'fun' ? '娛樂' : '寫實') + '），標準風、滿帆';
+  var used = [F.drive && dn[F.drive] && dn[F.drive][2], F.tons && SPK_SHORT.tons[F.tons], F.fire && SPK_SHORT.fire[F.fire]].filter(Boolean);
+  $('spkF').classList.toggle('open', SPK.open);
+  var ft = $('spkFT'); ft.textContent = '篩選' + (used.length ? '・' + used.length : '') + (SPK.open ? ' ▴' : ' ▾'); ft.className = used.length ? 'on' : ''; ft.setAttribute('aria-expanded', SPK.open ? 'true' : 'false');
+  $('spkN').textContent = '顯示 ' + L.length + '／' + HULL_LIST.length + ' 艘' + (used.length ? '（' + used.join('・') + '）' : '') + (L.length ? '' : ' —— 沒有符合的船，換一個篩選') + '・航速：' + (PLAY === 'fun' ? '娛樂' : '寫實') + '、標準風、滿帆';
+  $('spkN').title = '航速照現在的船隻設定與玩法算（標準風、滿帆）';
   $('spkG').innerHTML = L.map(function (h) {
     var c = SHIP_CARDS[h.id], d = c && dn[c.drive];
     var m = c ? '<span class="m">' + c.tons.toLocaleString() + ' 噸・水線 ' + c.len + ' m</span><span class="m">砲 ' + c.guns + ' 門・齊射 ' + c.volley.toLocaleString() + ' kg' + (c.crew ? '・' + c.crew + ' 人' : '') + '</span>'

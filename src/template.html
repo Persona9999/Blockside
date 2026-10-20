@@ -211,13 +211,25 @@
   #spk button.on{ background:var(--gold); color:#111; border-color:var(--gold); }
   #spk button#spkX{ width:44px; height:44px; margin:0; padding:0; flex:none; font-size:24px; line-height:1; }
   #spk .spkR{ display:flex; flex-wrap:wrap; align-items:center; gap:2px; margin-top:6px; text-align:left; } #spk .spkR > span{ width:3.2em; color:var(--dim); font-size:13px; }
-  #spk input[type=search]{ flex:1; min-width:8em; font:inherit; font-size:14px; padding:4px 8px; border-radius:6px; border:1px solid rgba(255,255,255,.3); background:rgba(0,0,0,.3); color:var(--ink); }
+  /* 篩選收起來（72_shippick.js SPK.open；Tim 2026-10-20「篩選可以折疊(預設摺疊)」）：上面只有「搜尋框＋篩選 ▾」一列，三排分類（#spkFB）展開才有；有篩選在用 ⇒ 那一顆亮金色（button.on） */
+  #spk .spkS{ display:flex; align-items:center; gap:6px; margin-top:8px; } #spk #spkFT{ flex:none; margin:0; white-space:nowrap; }
+  #spk #spkFB{ display:none; } #spk #spkF.open #spkFB{ display:block; }
+  #spk input[type=search]{ flex:1; min-width:0; font:inherit; font-size:14px; padding:4px 8px; border-radius:6px; border:1px solid rgba(255,255,255,.3); background:rgba(0,0,0,.3); color:var(--ink); }
   #spk .spkN{ margin:6px 0 4px; color:var(--dim); font-size:12px; text-align:left; }
   #spk .spkG{ flex:1; min-height:0; overflow-y:auto; align-content:start; display:grid; grid-template-columns:repeat(auto-fill, minmax(190px, 1fr)); gap:8px; padding:2px; }
   #spk button.spkC{ margin:0; padding:8px 10px; text-align:left; line-height:1.45; background:rgba(255,255,255,.05); }
   #spk button.spkC b{ font-size:15px; } #spk button.spkC .i{ float:right; } #spk button.spkC .m{ display:block; color:var(--dim); font-size:12px; }
   #spk button.spkC.on{ background:rgba(232,194,106,.18); color:var(--ink); border-color:var(--gold); }
   #spk button.spkC:hover{ border-color:rgba(255,255,255,.6); }
+  /* 手機（直式窄、橫式矮；Tim 2026-10-20「手機板選船的排版 可以調整尺寸 確保上方篩選不要佔用太多空間」）：標題、✕、分類鈕、卡片都縮一號，分類一排擠得進一行；
+     搜尋框照 16 px（⛔ 小於 16 px ⇒ iPhone 點進去整頁放大） */
+  @media (max-width:760px), (max-height:520px){
+    #spk .card{ padding:10px 10px; } #spk h2{ font-size:16px; } #spk button#spkX{ width:40px; height:40px; font-size:21px; }
+    #spk button{ font-size:13px; margin:2px 1px; padding:3px 7px; } #spk .spkR{ margin-top:4px; } #spk .spkR > span{ width:2.7em; font-size:12px; }
+    #spk .spkS{ margin-top:6px; } #spk input[type=search]{ font-size:16px; padding:3px 8px; } #spk #spkFT{ padding:5px 10px; }
+    #spk .spkG{ gap:6px; } #spk button.spkC{ padding:6px 9px; line-height:1.35; } #spk button.spkC b{ font-size:14px; }
+  }
+  @media (max-width:380px){ #spk .spkR > span{ width:2.4em; } #spk .spkR button{ padding:3px 5px; } }   /* iPhone SE（375 px）：動力那一排（五顆）也擠得進一行 */
   #cover button{ font:inherit; font-size:15px; margin:4px; padding:7px 16px; border-radius:6px; border:1px solid rgba(255,255,255,.25); background:rgba(255,255,255,.06); color:var(--ink); cursor:pointer; }
   #cover button.on{ background:var(--gold); color:#111; border-color:var(--gold); }
   #cover button.go{ font-size:18px; padding:9px 30px; background:#b8452e; border-color:#e06a4f; }
