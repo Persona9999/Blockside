@@ -439,15 +439,20 @@ function landWant() {
   for (var k in BEDGL) if (BEDGL[k].C && BEDGL[k].C.max > 0.3) return true;
   return false;
 }
-/** 單張陰影（CSM_SIMPLE；Tim 2026-10-20「狀況跟之前差不多 我懷疑是cascade算法問題 是否可以先用一般陰影算法試看看」）：最一般的方向光陰影 ——
- *  一張陰影圖罩住鏡頭看的那一點往前推半個範圍的地方，半寬 R 照鏡頭離那一點多遠分五級（SIMPLE_R；跟 f7394df 陸地那一層同一套）；中心每一格對齊陰影圖的格子（太陽方向的平面）。
+/** 單張陰影（CSM_SIMPLE；Tim 2026-10-20「狀況跟之前差不多 我懷疑是cascade算法問題 是否可以先用一般陰影算法試看看」⇒「目前陰影穩定不閃了(確認是cascade原因)」）：最一般的方向光陰影 ——
+ *  一張陰影圖罩住鏡頭看的那一點往前推三成範圍的地方，半寬 R 照鏡頭離那一點多遠分級（SIMPLE_R，換級有重疊）；中心每一格對齊陰影圖的格子（太陽方向的平面）。
  *  每一格整張重畫（船、地形、樹、城都畫），⛔ 沒有靜態那一層、沒有複製、沒有遲滯 ⇒ 陰影圖跟這一格的場景一定是同一份。範圍最外面那一圈（85%～98%）淡掉（uShEdge）。 */
-var SIMPLE_R = [150, 230, 350, 520, 780];
+// 範圍（Tim 2026-10-20「陰影不能只處理攝影機範圍(要稍微大一些)」「陰影之間應該要有重疊區」）：半寬一級比一級大、往前只推三成（鏡頭背後、兩側也罩到）；
+//   換級有重疊：要的比這一級大 ⇒ 馬上換大的；要的比這一級小 ⇒ 等到比下一級的八成還小才換小的 ⇒ 鏡頭距離剛好在交界時不會一下大一下小。
+var SIMPLE_R = [200, 300, 450, 650, 900, 1200], SIMPLE_AHEAD = 0.3, SIMPLE_DOWN = 0.8;
 function shadowSimple() {
   var c = SHM.cs[0]; if (!c) { SHM.on = false; return; }
-  var t0 = performance.now(), e = CAM.eye, lk = CAM.look || CAM.tgt, h = Math.hypot(lk[0] - e[0], lk[1] - e[1], lk[2] - e[2]), want = h * 1.5 + 80, R = SIMPLE_R[SIMPLE_R.length - 1];
+  var t0 = performance.now(), e = CAM.eye, lk = CAM.look || CAM.tgt, h = Math.hypot(lk[0] - e[0], lk[1] - e[1], lk[2] - e[2]), want = h * 2 + 150, R = SIMPLE_R[SIMPLE_R.length - 1];
   for (var i = 0; i < SIMPLE_R.length; i++) if (SIMPLE_R[i] >= want) { R = SIMPLE_R[i]; break; }
-  var fx = lk[0] - e[0], fz = lk[2] - e[2], fl = Math.hypot(fx, fz), cc = fl > 1e-3 ? [lk[0] + fx / fl * R * 0.5, lk[1], lk[2] + fz / fl * R * 0.5] : [lk[0], lk[1], lk[2]];
+  var cur = SHM.simpleR, ci = SIMPLE_R.indexOf(cur);                     // 換級的重疊（見上）：往小換要比下一級的八成還小
+  if (ci >= 0 && R < cur) { var lower = SIMPLE_R[ci - 1]; if (!(lower && want < lower * SIMPLE_DOWN)) R = cur; else { R = lower; for (var i2 = ci - 1; i2 > 0 && want < SIMPLE_R[i2 - 1] * SIMPLE_DOWN; i2--) R = SIMPLE_R[i2 - 1]; } }
+  SHM.simpleR = R;
+  var fx = lk[0] - e[0], fz = lk[2] - e[2], fl = Math.hypot(fx, fz), cc = fl > 1e-3 ? [lk[0] + fx / fl * R * SIMPLE_AHEAD, lk[1], lk[2] + fz / fl * R * SIMPLE_AHEAD] : [lk[0], lk[1], lk[2]];
   var up0 = Math.abs(SUN[1]) > 0.98 ? [0, 0, 1] : [0, 1, 0], V0 = M4.lookAt([SUN[0], SUN[1], SUN[2]], [0, 0, 0], up0);
   var ax = [[V0[0], V0[4], V0[8]], [V0[1], V0[5], V0[9]], [V0[2], V0[6], V0[10]]], tx = 2 * R / SHM.n, C = [0, 0, 0];
   for (var j = 0; j < 3; j++) { var a = ax[j], s = j < 2 ? tx : R, v = Math.round((cc[0] * a[0] + cc[1] * a[1] + cc[2] * a[2]) / s) * s; C[0] += a[0] * v; C[1] += a[1] * v; C[2] += a[2] * v; }   // 右、上對齊一格；朝太陽那一軸對齊 R
