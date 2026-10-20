@@ -356,7 +356,7 @@ function treeDraw() {
   TREES.stat.shells = ns; TREES.stat.shellTris = nt;
   gl.bindVertexArray(null); if (cf) gl.enable(gl.CULL_FACE);
 }
-/** 陸地的陰影（60_render.js landShadow；PASS.vp 已經換成那一層）：照主畫面上一次分好的組（treeBin：細的、低模那兩級，各自的實例緩衝）只寫深度；
+/** 陰影的靜態那一層（60_render.js csmStatic；PASS.vp 已經換成那一段）：照主畫面上一次分好的組（treeBin：細的、低模那兩級，各自的實例緩衝）只寫深度；
  *  不晃（uT、uWind 0：那一層不是每一格重畫）。遠處的貼圖與樹冠殼不畫（650 m 以外，陰影那一層的範圍也差不多到這裡）。⇒ 畫了幾棵。 */
 function treeDepth() {
   if (!TREES.on || !TREES.init || !TREES.cnt || !TREES.list.length) return 0;

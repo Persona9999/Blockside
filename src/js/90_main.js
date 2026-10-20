@@ -57,7 +57,8 @@ if (DEBUG) window.__game = {
   signal: function (id) { if (id) sigSet(id); return { sig: SIGNAL, text: sigText(), can: sigCan() }; },
   cmdMem: function () { return JSON.parse(JSON.stringify(CMD_MEM)); },
   orders: function () { return SHIPS.map(function (s) { var o = ORDERS[s.i]; return { i: s.i, team: s.team, out: isOut(s), order: o ? o.mode + '→' + o.target + (o.leader !== undefined ? ' 跟' + o.leader : '') : null, foe: s.foe ? s.foe.i : null, station: s.station ? [Math.round(s.station[0]), Math.round(s.station[1])] : null, x: Math.round(s.px), z: Math.round(s.pz), yaw: +s.yaw.toFixed(2) }; }); },
-  gpu: function () { render(); function ix(L) { return L.map(function (s) { return s.i; }); } return { max: MAX_SHIPS, shships: GFX.shships, masks: GFX.masks, shadow: ix(SSLOTS), global: ix(SSLOTS.rest), mask: ix(MSLOTS), noMask: ix(MSLOTS.rest), glob: SHM.glob, layers: SHM.layers, shadowN: SHM.n, offG: +SHM.offG.toFixed(3), hullLayers: HULLA.key, err: gl.getError() }; },   // GPU 的格（60_render.js gpuSlots）
+  gpu: function () { render(); function ix(L) { return L.map(function (s) { return s.i; }); } return { max: MAX_SHIPS, masks: GFX.masks, mask: ix(MSLOTS), noMask: ix(MSLOTS.rest), layers: SHM.layers, shadowN: SHM.n, hullLayers: HULLA.key, err: gl.getError() }; },   // GPU 的格（60_render.js gpuSlots：船艙遮罩）
+  shadow: function () { render(); return SHM ? { on: SHM.on, n: SHM.n, k: SHM.k, land: SHM.stOn, splits: SHM.splits.map(function (v) { return +v.toFixed(1); }), cs: SHM.cs.map(function (c) { return { r: c.r, C: c.C.map(function (v) { return +v.toFixed(1); }), off: +c.off.toFixed(3), t: +c.t.toFixed(2) }; }), ms: SHM.stat.ms, redraws: SHM.stat.redraws, last: SHM.stat.last } : null; },   // 陰影（60_render.js shadowPass）：幾段、每段的遠端、範圍、這一格畫陰影花幾毫秒、靜態那一層重畫過幾次與上一次
   cut: function (o) { if (o) for (var k in o) CUTV[k] = o[k]; render(); return CUTV; },     // 剖面與隱藏甲板（74_cutaway.js）：{ half, deck }
   menuFleet: function (F) { if (F) { FLEET_SET = fleetTrim(F.map(function (L) { return L.slice(); })); fleetUI(); pickShip(); } return { set: FLEET_SET, spec: fleetSpec(), html: [$('fleet0').innerHTML.length, $('fleet1').innerHTML.length] }; },
   prefs: function (p) { if (p) prefsApply(p); return prefsSnap(); },   // 存檔：套進去（有給）⇒ 現在跟預設不一樣的那幾項（69_prefs.js；?prefs=0 時不碰瀏覽器的存檔）
@@ -175,7 +176,7 @@ if (DEBUG) window.__game = {
     pump: BED.inq ? { q: BED.inq.length, n: BED.pumped, max: +BED.pumpMax.toFixed(1) } : null,   // 收塊排隊（08_seabed.js bedPump）：還排著幾則、處理過幾則、一格最久幾 ms
     trees: treeStat(),
     draw: { n: BEDDRAW.n, cull: BEDDRAW.cull, tris: BEDDRAW.tris },   // 上一格：畫了幾塊、視錐外剔掉幾塊、畫了幾個三角形（63_bed_gl.js bedDraw）
-    landShadow: SHM ? { on: SHM.land, layer: SHM.landL, last: SHM.landStat || null } : null,   // 陸地的陰影（60_render.js landShadow）：開著沒、第幾層、上一次重畫（R、地形幾塊、樹幾棵、城幾個實例、毫秒、重畫過幾次）
+    shadow: SHM ? { land: SHM.stOn, redraws: SHM.stat.redraws, last: SHM.stat.last } : null,   // 陰影的靜態那一層（60_render.js csmStatic）：有沒有、重畫過幾次、上一次（範圍、地形幾塊、樹幾棵、城幾個實例、毫秒）；全部看 __game.shadow()
     far: { tiles: BEDFAR.n, left: BEDFAR.todo ? BEDFAR.todo.length + BEDFAR.fly + BEDFAR.ready.length : null, fly: BEDFAR.fly, fail: BEDFAR.fail, kb: Math.round(BEDFAR.bytes / 1024), ms: +BEDFAR.ms.toFixed(1), drawn: Object.keys(BEDFAR.g).filter(function (k) { return !BEDGL[k]; }).length },
     inland: { on: BEDWAT.on, meshes: Object.keys(BEDGL).filter(function (k) { return BEDGL[k].w; }).length, far: Object.keys(BEDFAR.g).filter(function (k) { return BEDFAR.g[k].w; }).length, n: BEDWAT.n, tris: BEDWAT.tris,   // 內陸水（63_bed_gl.js）：細的、遠景各幾塊有水面網格；上一格畫了幾塊、幾個三角形
       dry: { on: BEDDRY.on, chunks: Object.keys(BEDDRY.c).filter(function (k) { return BEDDRY.c[k]; }).length, cells: BEDDRY.cells, builds: BEDDRY.builds, ms: BEDDRY.ms } },   // 低於海平面的乾地的遮罩：幾塊、幾格（32 m）、重建幾次
