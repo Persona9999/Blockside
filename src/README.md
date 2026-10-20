@@ -1,7 +1,7 @@
 # Blockside（《憲法號對轟》）的重產工具
 
 > 📦 2026-10-15（TASK-0586）從 ArtGallery 的 `HtmlGames/_build/ame_constitution_broadside/` 搬來（只複製檔案；之前的歷史在 ArtGallery 的 `git log -- HtmlGames/_build/ame_constitution_broadside`，114 筆）。
-> 開發用 Valhalla 裡的 `Blockside/` submodule。目錄：`src/`（這裡）、`VoxelKit/`（從 ArtGallery/VoxelKit 853b4e7 複製；`_cache/` 不入版控）、根目錄的成品 `index.html` ＋ `ships/`（拆檔：每艘船一個檔，見下面「建置」；GitHub Pages 首頁）、`admin.html`（設定後台）、`admin.cmd`、`sandbox.html`（2D 指揮官沙盒）、`fleetlab.html`（擬真沙盒的入口，轉到 index.html?lab=fleet）。
+> 開發用 Blocksail 的 `external/Blockside`（submodule，checkout 在 `dev` 分支；Tim 2026-10-20「之後我希望Blockside開發直接在Blocksail的submodule內開發(確保同步)」）—— Valhalla 裡的 `Blockside/` 不再開發（會落後），流程見根目錄 README「分支與發版」。目錄：`src/`（這裡）、`VoxelKit/`（從 ArtGallery/VoxelKit 853b4e7 複製；`_cache/` 不入版控）、根目錄的成品 `index.html` ＋ `ships/`（拆檔：每艘船一個檔，見下面「建置」；GitHub Pages 首頁）、`admin.html`（設定後台）、`admin.cmd`、`sandbox.html`（2D 指揮官沙盒）、`fleetlab.html`（擬真沙盒的入口，轉到 index.html?lab=fleet）。
 > ⚠ repo 變肥（成品每一版都進版控，壓縮過的船 git 存不了差異；5 天 154 MiB）：原因、量法、做了什麼見 [`REPO_SIZE.md`](REPO_SIZE.md)（2026-10-20：拆檔＋船檔分段已做，見 §0）。
 
 根目錄的 `index.html` 是由這裡的 `template.html`、`js/`、`config/game.json`，加上 `../VoxelKit/` 產生的：

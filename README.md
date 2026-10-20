@@ -61,12 +61,18 @@ last_updated: 2026-10-15
 - 設定後台：雙擊 `admin.cmd`（＝ `python -I src/admin.py serve --open`，只聽本機）。
 - 船是雕刻區的作品匯出的 `.vxk`（`VoxelKit/_cache/`，不入版控；換機器 ⇒ `python -I src/admin.py cache` 從作品重新匯出、跟指紋比），內嵌在網頁裡；同一份模型（例如同一門砲）幾艘船只存一次，所以六艘船擠得進幾 MB。
 - 2026-10-15 以前在 ArtGallery 開發（`HtmlGames/_build/ame_constitution_broadside/`，歷史還在那邊的 git log）。
-- 部署：`origin`（正式）push 到 `main` ⇒ GitHub Actions（`.github/workflows/pages.yml`）上傳到 Pages；`dev`（測試站）照分支部署，見下面第 2 步。
+- 部署：正式站（Blocksail 那份叫 `release`，Valhalla 那份舊的叫 `origin`）push 到 `main` ⇒ GitHub Actions（`.github/workflows/pages.yml`）上傳到 Pages；`dev`（測試站）照分支部署，見下面第 2 步。
 - **分支與發版**（Tim 2026-10-17：「預設開發時都是先 merge 到 dev 然後 push 到 dev，dev 測試版本 ok 後再發版本到 main」）：
-  1. **開發合回 `dev`**：`dev` 分支是開發主線。改程式照施工場規則開自己的 worktree（從 `dev` 開：`git worktree add <路徑> -b <分支> heads/dev`），做完**合回 `dev`**（不是 `main`）；合併那一步在共用工作區照合併後的 `src/` 重建 `index.html` 再提交。換行一律 LF（`.gitattributes`），新 worktree 不用轉換；成品裡記著它是照哪些來源建的，`python -I src/admin.py srccheck` 對得回來（裝了鉤子 ⇒ 提交到 `dev`／`main`、推到 `dev`／`main` 前自動檢查，見 `src/README.md`）。
+  0. **開發用的工作副本在 Blocksail 的 `external/Blockside`**（Tim 2026-10-20：「之後我希望Blockside開發直接在Blocksail的submodule內開發(確保同步)」）：
+     - submodule checkout 在 `dev` 分支（不是 detached），它就是「共用工作區」；worktree 從它開：`git -C <Blocksail>/external/Blockside worktree add <路徑> -b <分支> heads/dev`。
+     - 船的 `.vxk`（`VoxelKit/_cache/`）也放在這一份。
+     - Valhalla 裡的 `Blockside/` 不再開發，只會落後。之前從它開的 worktree：分支推上 `dev` 遠端，或在這一份 `git fetch` 那個 repo 的分支再合。
+     - 這一份的遠端：`origin` 和 `dev` 都是測試站那個 repo（`.gitmodules` 記的網址），正式站叫 `release`。
+  1. **開發合回 `dev`**：`dev` 分支是開發主線。改程式照施工場規則開自己的 worktree（從 `dev` 開，見上一條），做完**合回 `dev`**（不是 `main`）；合併那一步在共用工作區（Blocksail 的 `external/Blockside`）照合併後的 `src/` 重建 `index.html` 再提交。換行一律 LF（`.gitattributes`），新 worktree 不用轉換；成品裡記著它是照哪些來源建的，`python -I src/admin.py srccheck` 對得回來（裝了鉤子 ⇒ 提交到 `dev`／`main`、推到 `dev`／`main` 前自動檢查，見 `src/README.md`）。
   2. **推測試站**：`git push dev heads/dev:dev` —— `dev` 遠端的 Pages 設成「Deploy from a branch：`dev`／root」（Tim 2026-10-17 改的），推上去就部署，不走 `pages.yml`。⚠ 遠端和分支都叫 `dev`，只寫 `dev` 時 git 會報 `refname 'dev' is ambiguous` ⇒ 本機分支一律寫 `heads/dev`。⛔ 不用再把 `main` 推到 `dev` 遠端：測試站照 `dev` 分支部署，推 `main` 不會更新它。
-  3. **發版**：Tim 在測試站驗過、說要發 ⇒ 共用工作區 `git switch main`、`git merge --ff-only heads/dev`（快轉不了就停下來問），再 `git push origin main` ⇒ 正式的 Pages；做完 `git switch dev` 切回開發主線。
-  - ⛔ 推之前先 fetch、列出要推的提交（測試：`git log dev/dev..heads/dev`；發版：`git log origin/main..main`）。**底下有別人還沒推的提交 ⇒ 一起推**（Tim 2026-10-20：「需要push時 一起推(包含別人commit的改動)」），回報時點名是誰的哪幾筆；⛔ 不另做一份只含自己那筆的提交去推、不 force push。發版（推 `origin` 的 `main`）照舊只在 Tim 說要發的時候。
-  - 遠端：`dev` ＝ 開發用、公開但不宣傳的測試環境；`origin` ＝ 正式公開；另有 `private`（之前的測試環境，不再預設）、`gitlab.com`。網址看 `git remote -v`，⛔ 不寫進文件、提交訊息。
+     **推完接著讓 Blocksail 同步**：在 Blocksail `git add external/Blockside`、提交（`chore(external): Blockside → <sha>`），Blocksail 才記得新的這一版（`tools/check_core.py` 會檢查）。推 Blocksail 的遠端照 Blocksail 的規矩（Tim 說才推）。
+  3. **發版**：Tim 在測試站驗過、說要發 ⇒ 共用工作區 `git switch main`、`git merge --ff-only heads/dev`（快轉不了就停下來問），再 `git push release main`（Valhalla 那份舊的工作副本叫 `origin`）⇒ 正式的 Pages；做完 `git switch dev` 切回開發主線。
+  - ⛔ 推之前先 fetch、列出要推的提交（測試：`git log dev/dev..heads/dev`；發版：`git log release/main..main`）。**底下有別人還沒推的提交 ⇒ 一起推**（Tim 2026-10-20：「需要push時 一起推(包含別人commit的改動)」），回報時點名是誰的哪幾筆；⛔ 不另做一份只含自己那筆的提交去推、不 force push。發版（推 `origin` 的 `main`）照舊只在 Tim 說要發的時候。
+  - 遠端：`dev` ＝ 開發用、公開但不宣傳的測試環境；`release` ＝ 正式公開（Blocksail 的 submodule 裡 `origin` 也是測試站；Valhalla 那份舊的工作副本 `origin` 才是正式）；另有 `private`（之前的測試環境，不再預設）、`gitlab.com`。網址看 `git remote -v`，⛔ 不寫進文件、提交訊息。
 
 製作：ame（遊戲）× basecamp、summit、gura（船）× Tim
