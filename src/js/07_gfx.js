@@ -22,14 +22,15 @@ var GFX_ITEMS = [
   { k: 'pside', name: '艙內水的側面與水瀑', opt: ['關', '開（水面邊上畫側面、兩池交界畫水瀑）'] },   // TASK-0654（33_flood.js flSides）
   { k: 'pedge', name: '艙內水的水邊', opt: ['關（直的）', '開（白沫一圈、淺的邊不規則）'] },   // TASK-0654（33_flood.js flEdgeM、FLE_GLSL）：只在水邊那一圈多算兩次雜訊
   { k: 'tlamp', name: '城裡點光源的距離', opt: ['近（512 m）', '中（1 km）', '遠（1.5 km）'] },   // 夜裡的燈（63_towns.js townLampGrid）：分組表照幾公尺見方；每個像素最多照 8 盞不變，遠了只是多一點像素有光、重排多一點
+  { k: 'treed', name: '立體樹的距離', opt: ['近（400 m）', '中（650 m）', '遠（900 m）'] },   // Tim 2026-10-21「650m 外換成不參與陰影的貼圖和樹冠殼 這個是否可以參考畫質設定動態調節(同時可以跟陰影連動)」：63_trees.js treeDraw 照 TREE_LOD_D 換 TREE_LOD[1]、重新分組；這以內的樹投影子也收影子（收到這個距離 − 50 m，01_gl.js uShTr），外面是貼圖與樹冠殼
   { k: 'deco', name: '裝飾', opt: ['關（不畫）', '開'] },   // TASK-0682（05_hull.js decoSplit）：雕刻模型 meta deco=1 的裝飾件；不算重量、不被打、不抽亂數 ⇒ 開關不改戰局。一律載入、只管畫不畫（60_render.js drawModels）⇒ 切了立刻生效
   // 多船（TASK-0537；60_render.js gpuSlots）：視野裡離鏡頭最近的幾艘才有船艙遮罩（第幾檔 ＝ 幾艘）；陰影船數 2026-10-20 拿掉（陰影改成照鏡頭分段，不分船）
   { k: 'masks', name: '船艙遮罩', opt: gfxOpts(MASK_NEAR + 1, function (i) { return i ? String(i) : '0（艙裡看得到海）'; }) }];   // 說明在畫質設定頁（template #gfxNote）
 function gfxOpts(n, f) { var r = []; for (var i = 0; i < n; i++) r.push(f(i)); return r; }
 var GFX_PRESET = {
-  low: { shadow: 0, refl: 0, refr: 0, sea: 0, res: 1, aa: 0, rain: 0, drops: 0, dropspl: 0, door: 1, port: 0, fall: 1, pdep: 0, pside: 1, pedge: 0, masks: 2, deco: 0, tlamp: 0 },   // 門的演出很便宜（每扇每格掃一次船員）⇒ 三檔都開；砲門跟裝飾一樣低畫質關（Tim 2026-10-19：「炮門屬於裝飾物 因此相關機制在低畫質不啟用」）
-  mid: { shadow: 1, refl: 1, refr: 1, sea: 1, res: 2, aa: 1, rain: 1, drops: 0, dropspl: 0, door: 1, port: 1, fall: 1, pdep: 1, pside: 1, pedge: 1, masks: MASK_NEAR, deco: 1, tlamp: 1 },
-  high: { shadow: 2, refl: 2, refr: 2, sea: 2, res: 2, aa: 1, rain: 0, drops: 3, dropspl: 1, door: 1, port: 1, fall: 1, pdep: 1, pside: 1, pedge: 1, masks: MASK_NEAR, deco: 1, tlamp: 2 } };   // 最高 ＝ 每艘都有（Tim 2026-10-13「最高畫質開到 N」）
+  low: { shadow: 0, refl: 0, refr: 0, sea: 0, res: 1, aa: 0, rain: 0, drops: 0, dropspl: 0, door: 1, port: 0, fall: 1, pdep: 0, pside: 1, pedge: 0, masks: 2, deco: 0, tlamp: 0, treed: 0 },   // 門的演出很便宜（每扇每格掃一次船員）⇒ 三檔都開；砲門跟裝飾一樣低畫質關（Tim 2026-10-19：「炮門屬於裝飾物 因此相關機制在低畫質不啟用」）
+  mid: { shadow: 1, refl: 1, refr: 1, sea: 1, res: 2, aa: 1, rain: 1, drops: 0, dropspl: 0, door: 1, port: 1, fall: 1, pdep: 1, pside: 1, pedge: 1, masks: MASK_NEAR, deco: 1, tlamp: 1, treed: 1 },
+  high: { shadow: 2, refl: 2, refr: 2, sea: 2, res: 2, aa: 1, rain: 0, drops: 3, dropspl: 1, door: 1, port: 1, fall: 1, pdep: 1, pside: 1, pedge: 1, masks: MASK_NEAR, deco: 1, tlamp: 2, treed: 2 } };   // 最高 ＝ 每艘都有（Tim 2026-10-13「最高畫質開到 N」）
 var GFX_NAME = { low: '低', mid: '中', high: '高', custom: '自訂' }, GFX_DEFAULT = CFG.menu.gfx;   // 預設檔：config/game.json 的 menu.gfx
 var GFX = {}, GFX_FPS = false;                     // GFX_FPS：畫面右上角顯示 FPS（畫質設定頁的勾選）
 // 煙散得多快（Tim 2026-10-14）：畫質頁的一項，不跟低／中／高走（玩家自己選、不算進「自訂」）；煙的壽命 ÷ 這個倍數（12_effects.js smoke、40_crew.js 火槍）。
@@ -52,7 +53,7 @@ var SHK_ITEMS = [   // 分段那幾項照 Unity 的 Shadows（Tim 2026-10-21 給
   { k: 'p1', name: '低：柔邊取樣', val: [4, 9], opt: ['4 點', '9 點'], def: 4 },
   { k: 'n2', name: '高：陰影圖', val: [512, 1024, 2048, 4096], def: 4096, unit: '²' },
   { k: 'p2', name: '高：柔邊取樣', val: [4, 9], opt: ['4 點', '9 點'], def: 9 },
-  { k: 'dist', name: '最遠距離', lim: [100, 4000], step: 50, int: true, unit: ' m', def: 1500, cas: 1, note: '最後一段的遠端；再遠就沒有影子（最後一段的交界那一截淡掉）。分界、最遠距離都從「畫面裡最近的東西」量起：鏡頭比桅頂（80 m）低 ⇒ 從鏡頭；拉高往下看 ⇒ 從看得到的最近的海面、桅頂、山頂（60_render.js csmNear）' },
+  { k: 'dist', name: '最遠距離', lim: [100, 4000], step: 50, int: true, unit: ' m', def: 1500, cas: 1, note: '最後一段的遠端；再遠就沒有影子（最後一段的交界那一截淡掉）。「貼合畫面」開著 ⇒ 分界照比例縮到畫面上最近到最遠有東西的那一段（下面那一條是沒縮的樣子；實際的看讀數）。樹另外只到畫質的「立體樹的距離」' },
   { k: 'count', name: '段數', lim: [1, 4], step: 1, int: true, unit: ' 段', def: 4, cas: 1 },
   { k: 's1', name: '分界 1', lim: [5, 1000], step: 5, int: true, unit: ' m', def: 60, cas: 1, seg: 1, note: '第 1 段到第 2 段的分界離鏡頭多深；分界要一個比一個遠、比最遠距離近（不是的話照順序夾）' },
   { k: 's2', name: '分界 2', lim: [10, 2000], step: 5, int: true, unit: ' m', def: 145, cas: 1, seg: 2 },
@@ -69,7 +70,8 @@ var SHK_ITEMS = [   // 分段那幾項照 Unity 的 Shadows（Tim 2026-10-21 給
   { k: 'soft', name: '柔邊寬度', lim: [0.5, 3], step: 0.1, fix: 1, unit: ' 格', def: 1, note: '柔邊取樣每一點相隔幾格（大 ⇒ 邊更糊、格子比較看不出來）' },
   { k: 'nrm', name: '沿法線推', lim: [0, 4], step: 0.1, fix: 1, unit: ' 格', def: 1.5, note: '收影子的那一點往外推幾格再查（小 ⇒ 影子貼緊，太小 ⇒ 平面上自己遮自己的條紋）' },
   { k: 'bias', name: '深度偏差', lim: [0, 4], step: 0.1, fix: 1, unit: ' 格', def: 1.5, note: '比深度時讓幾格（太小 ⇒ 條紋；太大 ⇒ 影子跟物體脫開、浮起來）' },
-  { k: 'tree', name: '樹收影子到', lim: [150, 650], step: 25, int: true, unit: ' m', def: 600, note: '樹葉、樹幹收影子到離鏡頭多遠（最後四成淡掉；再遠的樹只照太陽）；650 m 外的樹是貼圖、本來就不收' }];
+  { k: 'fit', name: '分段：貼合畫面', val: [1, 0], opt: ['開（從畫面裡最近的東西切到最遠的地面）', '關（從鏡頭切到最遠距離）'], def: 1, cas: 1, note: '開 ＝ 每一格看畫面上最近、最遠有東西的深度（SDSM 的做法），分界照比例縮進去 ⇒ 鏡頭拉高、往下看時近的段不會浪費在空中；關 ＝ 照上面的公尺數從鏡頭量' }];
+// 樹收影子到多遠：跟畫質的「立體樹的距離」連動（以前是這裡的一項「樹收影子到」）⇒ 01_gl.js setCommon uShTr ＝ 那個距離 − 50 m（最後四成淡掉）
 var SHK = {}, SHK_DEF = {};
 SHK_ITEMS.forEach(function (it) { SHK[it.k] = SHK_DEF[it.k] = it.def; });
 /** 一個值照描述表收好（按鈕 ⇒ 只收列出來的值；滑桿 ⇒ 夾進範圍、對齊一步）；不收 ⇒ undefined。 */

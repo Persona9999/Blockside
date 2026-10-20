@@ -18,6 +18,7 @@
 //   光照跟地形同一套（天光、陽光、船的陰影、霧照 BED_FOG）；葉子照風搖（搖晃權重 × 風）。樹不投影子。
 //   城鎮（63_towns.js）：高度照整過地的那一份（townHv）、規劃的 clear 裡不擺（townClr；樹與小植物都是）。
 //   ?trees=0 ⇒ 不長樹。
+var TREE_LOD_D = [400, 650, 900];                                       // 低模到多遠：畫質的「立體樹的距離」（07_gfx.js GFX.treed；treeDraw 換了就重新分組）。⛔ 不超過 TREE_SHELL[0]（貼圖跟樹冠殼交接的地方）
 var TREE_LOD = [140, 650], TREE_SHELL = [1100, 1500], TREE_SHELL_G = 32, TREE_FAR_SP = 3, TREE_FAR_K = 1.35, TREE_REBIN = 8, TREE_FALLBACK = 0.55, TREE_ATLAS_COLS = 8, TREE_BB_MAX = 96, TREE_VEG_JIT = 70, TREE_CELL = 32;
 var TREES = { on: Q.get('trees') !== '0', init: false, job: null, list: [], ch: {}, far: {}, eye: null, dirty: true, buf: [], cnt: null, bb: null, stat: { plant: 0, far: 0, d0: 0, d1: 0, d2: 0, binMs: 0, bakeMs: 0, genMs: 0, plantMs: 0, bySp: {} } };
 evOn('bedChunk', function (cx, cy, C) { if (TREES.on && BED && BED.A) treeQueue(bedKey(cx, cy), C); }, 0, true);   // 有畫面迴圈 ⇒ 排隊、每格照預算擺（treePump）
@@ -218,7 +219,7 @@ var TREE_FS = function () {
     '  float bu=1.0-smoothstep(0.1,0.75,c0), e=smoothstep(0.0,0.06,lc.w), v=(0.86+0.26*r.x)*(0.8+0.28*bu)*mix(0.85,1.0,e);\n' +
     '  tn=mix(vec3(1.0),vec3(v*(1.0+0.10*r.y),v*(1.0+0.05*r.y),v*(1.0-0.12*r.y)),lk); }\n' +
     ' float sd=dot(n,uSun), d=max(sd,0.0)*0.8+abs(sd)*0.2;\n' +
-    // 樹收的影子淡掉（預設 350～600 m；畫質頁「樹收影子到」＝ uShTr，最後四成淡掉）：650 m 外是貼圖（TREE_BB_FS，不收影子）⇒ 不淡的話那一圈網格的樹（被自己的樹冠遮）暗、貼圖亮，一刀切開
+    // 樹收的影子淡掉（到 uShTr ＝ 立體樹的距離 − 50 m，最後四成淡掉；預設 650 ⇒ 350～600 m）：再外面是貼圖（TREE_BB_FS，不收影子）⇒ 不淡的話那一圈網格的樹（被自己的樹冠遮）暗、貼圖亮，一刀切開
     ' float sk=mix(uSunK,shadowK(vW,n*1.5),1.0-smoothstep(uShTr*0.5833,uShTr,fd)); vec3 col=vC*tn*(mix(uGround,uSky,n.y*0.5+0.5)*0.7+vec3(1.0,0.96,0.88)*d*sk*0.72);\n' +
     ' o=vec4(mix(col,uFog,1.0-exp(-fd*uFogD)),1.0); }\n';
 };
@@ -335,6 +336,7 @@ function treeDraw() {
   if (!TREES.on || !BED || !BED.A || PASS.vp) return;
   var keys = Object.keys(TREES.ch), farK = Object.keys(TREES.far); if (!keys.length && !farK.length) return;
   if (!treeInit()) return;                                            // 樹種的網格分好幾格建（BED_SLICE）：還沒建好 ⇒ 這一格先不畫樹
+  var L1 = TREE_LOD_D[GFX.treed]; if (L1 && L1 !== TREE_LOD[1]) { TREE_LOD[1] = L1; TREES.dirty = true; }   // 畫質的「立體樹的距離」換了 ⇒ 重新分組（陰影跟著：投影子的、收影子的都照它）
   var PL = bedPlanes(CAM.vp), eye = CAM.eye, E = TREES.eye, vis = keys.filter(function (k) { var c = TREES.ch[k]; return c.n && bedSeen(PL, c.bb); }), sig = vis.join(' ');
   if (TREES.dirty || !E || sig !== TREES.sig || Math.abs(E[0] - eye[0]) + Math.abs(E[1] - eye[1]) + Math.abs(E[2] - eye[2]) > TREE_REBIN) { treeBin(vis, eye); TREES.eye = eye.slice(); TREES.dirty = false; TREES.sig = sig; }   // 看得到的塊換了、鏡頭動了 8 m 以上、塊進出 ⇒ 重新分組
   var cf = gl.isEnabled(gl.CULL_FACE); gl.disable(gl.CULL_FACE);
@@ -358,7 +360,7 @@ function treeDraw() {
   gl.bindVertexArray(null); if (cf) gl.enable(gl.CULL_FACE);
 }
 /** 陰影的靜態那一層（60_render.js csmStatic；PASS.vp 已經換成那一段）：照主畫面上一次分好的組（treeBin：細的、低模那兩級，各自的實例緩衝）只寫深度；
- *  不晃（uT、uWind 0：那一層不是每一格重畫）。遠處的貼圖與樹冠殼不畫（650 m 以外，陰影那一層的範圍也差不多到這裡）。⇒ 畫了幾棵。
+ *  不晃（uT、uWind 0：那一層不是每一格重畫）。遠處的貼圖與樹冠殼不畫（TREE_LOD[1] 以外：畫質的「立體樹的距離」，400／650／900 m）。⇒ 畫了幾棵。
  *  兩組一律用細的網格投影子（Tim 2026-10-20「只動了一點點陰影就完全不同」、舊版也「陰影會出現在中間(天空沒東西)」）：低模把枝尖的葉團併成一大團，比細的胖一圈；
  *    靜態那一層最久一秒才重畫，鏡頭一動，一批樹在主畫面從低模換成細的（每 8 m 重分組）⇒ 細的葉子整個躲在陰影圖裡那團舊的低模裡 ⇒ 一整帶森林全在影子裡、下一次重畫又亮回來。
  *    細的不會包住任何一級的葉子 ⇒ 樹換級、靜態那一層晚一點重畫都不會整帶變暗（投影子的跟收的對得上，其他遊戲也是「投影子的不能比畫面上的胖」）。 */

@@ -392,7 +392,7 @@ function setCommon(p) {
     gl.uniform1i(u.uShA, 4); gl.uniformMatrix4fv(u.uShM, false, SHM.mats); gl.uniform1f(u.uShPx, 1 / SHM.n);
     gl.uniform1i(u.uCsN, SHM.on ? SHM.k : 0); gl.uniform1fv(u.uCsD, SHM.csD); gl.uniform1fv(u.uCsL, SHM.csL); gl.uniform1fv(u.uCsO, SHM.csO); gl.uniform1fv(u.uCsB, SHM.csB);   // 60_render.js shadowMats
     gl.uniform3fv(u.uCsE, SHM.eye); gl.uniform3fv(u.uCsF, SHM.fw); gl.uniform1f(u.uShEdge, CSM_SIMPLE ? 1 : 0);
-    gl.uniform1f(u.uShSoft, SHK.soft); gl.uniform1f(u.uShE0, SHK.edge); gl.uniform1f(u.uShTr, SHK.tree);   // 柔邊寬度、單張的邊緣淡出、樹收影子到多遠（畫質頁）
+    gl.uniform1f(u.uShSoft, SHK.soft); gl.uniform1f(u.uShE0, SHK.edge); gl.uniform1f(u.uShTr, TREE_LOD[1] - 50);   // 柔邊寬度、單張的邊緣淡出、樹收影子到多遠（立體樹的距離 − 50 m：畫質的「立體樹的距離」）
   }
 }
 // 水線下不染海水色（Tim 2026-10-16「莫尼特號艙內有一層水 但是實際上沒有進水」→「拿掉船身與模型的水線下水色，交給海面」）：
