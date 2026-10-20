@@ -31,16 +31,21 @@ var PORT_ON = false;                                                  // 上一�
 
 /** 第一次碰到這艘船（portsAnim、__game.ports）：sh.decos 裡 kind=portlid 的蓋板配到砲。一片都沒有（或都配不到）⇒ null。
  *  鉸鏈缺、lid_of 配不到砲、兩片指同一門砲（留第一片）的那幾片不演（畫成模型的樣子；匯入檢查報 ✗，portsIssues）。 */
-function portsBuild(sh) {
-  var D = (sh.decos || []).filter(function (d) { return d.meta.kind === 'portlid'; }); if (!D.length) return null;
-  var L = [], used = [];
-  D.forEach(function (d) { var P = portLid(sh, d); if (!P.hc || !P.g || used.indexOf(P.g) >= 0) return; used.push(P.g); L.push(P); });
-  if (!L.length) return null;
-  ['S', 'P'].forEach(function (sd) {                                     // 依序掀起：每一舷照砲口的 x 從船頭往船尾（跟 10_ship.js gunOrder 同一個方向）
-    L.filter(function (P) { return P.g.side === sd; }).sort(function (a, b) { return b.g.muz[0] - a.g.muz[0]; }).forEach(function (P, k) { P.rank = k; });
+function portsBuild(sh) { var R = {}; stepsRun(portsSteps(sh, R)); return R.out; }
+/** portsBuild 拆成步驟（2026-10-20；70_flow.js 開戰分段先建好 sh.ports，一艘約 0.05～0.19 s）：蓋板一片一片、做滿 12 ms 一步（stepsLoop），最後排順序 ⇒ R.out。照順序做 ＝ 拆之前的 portsBuild。 */
+function portsSteps(sh, R) {
+  var D = (sh.decos || []).filter(function (d) { return d.meta.kind === 'portlid'; }), L = [], used = [], out = [];
+  R.out = null; if (!D.length) return out;
+  out.push(stepsLoop(0, D.length, function (i) { var P = portLid(sh, D[i]); if (!P.hc || !P.g || used.indexOf(P.g) >= 0) return; used.push(P.g); L.push(P); }, 12));
+  out.push(function () {
+    if (!L.length) return;
+    ['S', 'P'].forEach(function (sd) {                                   // 依序掀起：每一舷照砲口的 x 從船頭往船尾（跟 10_ship.js gunOrder 同一個方向）
+      L.filter(function (P) { return P.g.side === sd; }).sort(function (a, b) { return b.g.muz[0] - a.g.muz[0]; }).forEach(function (P, k) { P.rank = k; });
+    });
+    R.out = { L: L, t: null, next: 0, ph: (sh.i % 8) / 8 * PORT_DT, cnt: -1, rest: false, fired: -1, fly: -1, cntF: -1 };   // ph：每艘錯開判斷的那一格（⛔ 同一格一起判 ⇒ 8 艘光榮號那一格多 0.5 ms）；cnt：上次判斷時船殼剩幾格（沒變 ⇒ 不用重數鉸鏈與四周）；
+    // rest／fired／fly／cntF：每一片都停著了沒、上一格的開火數、FLY 的長度、船殼格數（portsShip：沒事的那一格整艘跳過）
   });
-  return { L: L, t: null, next: 0, ph: (sh.i % 8) / 8 * PORT_DT, cnt: -1, rest: false, fired: -1, fly: -1, cntF: -1 };   // ph：每艘錯開判斷的那一格（⛔ 同一格一起判 ⇒ 8 艘光榮號那一格多 0.5 ms）；cnt：上次判斷時船殼剩幾格（沒變 ⇒ 不用重數鉸鏈與四周）；
-  // rest／fired／fly／cntF：每一片都停著了沒、上一格的開火數、FLY 的長度、船殼格數（portsShip：沒事的那一格整艘跳過）
+  return out;
 }
 /** 一片蓋板（portsBuild、portsIssues、portsSummary 共用）：配到的砲 g、鉸鏈 hc（hinge-a 格心）與軸 ax、往外的水平方向 u（鉸鏈 → 開著的蓋板中心）、
  *  關的角度 cdeg（弧度）、house、關上時貼著的那一圈船殼 ring（VK.pack；portGone 數掉了幾格）。 */

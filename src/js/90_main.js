@@ -3,6 +3,8 @@ var loopLast = 0, loopAcc = 0, FPS = 60, fpsT = 0;
 function frame(ts, noRaf) {                                         // noRaf：__game.live 同步呼叫（不再排下一格，⛔ 排了 ⇒ 兩條畫面迴圈、模擬走兩倍快）
   if (LAB_FLEET) { flabFrame(ts); if (!noRaf) requestAnimationFrame(frame); return; }   // 擬真沙盒：模擬自己排（84_fleetlab.js），這裡只畫（俯視圖；看實景時才畫 3D）
   var f0 = PF ? performance.now() : 0;                                // 逐幀分段計時（?debug=1）
+  if (BED) { BED_BG = BED_PUMP_MS; var pb0 = performance.now(); bedPump(bedT1()); bedSpent(pb0); treePump(); }   // 收進來的海圖塊、擺樹：每格照同一份背景預算做（08_seabed.js、63_trees.js）—— 模擬這一格要不要等（bedWait）照放好的算
+  if (FLOW_STAGE) { loopLast = ts; if (!noRaf) requestAnimationFrame(frame); return; }   // 開戰分段做到一半（70_flow.js startStaged）：只收塊、擺樹，不畫、不走 ⇒ 不會碰到做到一半的船
   var dt = loopLast ? Math.min(0.1, (ts - loopLast) / 1000) : DT; loopLast = ts;
   FPS = FPS * 0.95 + (1 / Math.max(dt, 1e-3)) * 0.05;
   if (RUNNING && !PAUSED) {
@@ -164,10 +166,12 @@ if (DEBUG) window.__game = {
   trees: function (sp, n, at) { return treeFind(sp, n, at); },   // 找樹（63_trees.js treeFind）：那一種最靠近 at（[x, z]；沒給 ⇒ 鏡頭）的 n 棵
   // 海圖（TASK-0721；08_seabed.js、32_ground.js）：載了哪幾塊、換過幾次中心、等過幾次；每艘的擱淺讀數；q ＝ [x, z] ⇒ 那一點的高度與底質
   chart: function () { return chartInfo(); },                                  // 小地圖（63_chart.js）：開了沒、範圍、吃水門檻、底圖幾塊、畫面上的位置
+  flow: function () { return FLOW_ST; },                               // ?start=1 分段開戰（70_flow.js startStaged）：幾步、最久一步、每一步幾 ms、全部幾 ms
   bed: function (q) { if (!BED || !BED.A) return null; return { area: BED.A.id, site: BED.site, origin: [BED.ax, BED.az], center: [BED.cx, BED.cy], loaded: Object.keys(BED.ch).sort(), loads: BED.loads, drops: BED.drops, waits: BED.miss,
     mid: BED.mid ? { step: BED.mid, loaded: Object.keys(BED.cm).sort(), loads: BED.mloads, lv: [1, 2].map(function (v) { var n = 0; for (var q = 0; q < BED.lv.length; q++) if (BED.lv[q] === v && BED.has[q]) n++; return n; }) } : null,   // 外圈的中等塊：載了哪幾塊、模擬讀中等／原精度的各幾塊
     meshes: Object.keys(BEDGL).length,                                   // （以前寫在上一行的註解後面 ⇒ 沒出來）
     win: BED.win ? { r: BED.win, x: BED.A.x, y: BED.A.y, wins: BED.wins, ms: BED.winMs, asking: !!BED.winP } : null,   // 海域跟著旗艦走：現在的窗（塊號）、換過幾次、上次重排幾 ms、在要新的窗
+    pump: BED.inq ? { q: BED.inq.length, n: BED.pumped, max: +BED.pumpMax.toFixed(1) } : null,   // 收塊排隊（08_seabed.js bedPump）：還排著幾則、處理過幾則、一格最久幾 ms
     trees: treeStat(),
     draw: { n: BEDDRAW.n, cull: BEDDRAW.cull, tris: BEDDRAW.tris },   // 上一格：畫了幾塊、視錐外剔掉幾塊、畫了幾個三角形（63_bed_gl.js bedDraw）
     far: { tiles: BEDFAR.n, left: BEDFAR.todo ? BEDFAR.todo.length + BEDFAR.fly + BEDFAR.ready.length : null, fly: BEDFAR.fly, fail: BEDFAR.fail, kb: Math.round(BEDFAR.bytes / 1024), ms: +BEDFAR.ms.toFixed(1), drawn: Object.keys(BEDFAR.g).filter(function (k) { return !BEDGL[k]; }).length },
@@ -430,9 +434,12 @@ if (DEBUG) {
 var loadT0 = performance.now();
 function loadSay(s) { $('load').textContent = s; }
 loadSay('解碼船體…');
-programs(); geometry(); wpGL(); flGL(); rdGL(); bbSetup(); QIDX = new VK.QuadIndex(gl);
+// GL 的著色器、共用網格（2026-10-20）：?map=@host 開在 Blocksail 地球儀的 iframe 裡、跟它同一條主執行緒 ⇒ 載入頁面那一段（解析＋執行整包程式）越短越好；
+//   有畫面迴圈（BED_SLICE）⇒ 一樣一樣分開做、每樣之間讓出一次（yieldUI），做完才開畫面迴圈、開始載船；快轉、無頭、?pick ⇒ 照舊當場做。
+var GL_STEPS = [programs, geometry, wpGL, flGL, rdGL, bbSetup, function () { QIDX = new VK.QuadIndex(gl); }];
+var GL_READY = BED_SLICE && !PICK_HOST ? GL_STEPS.reduce(function (p, f) { return p.then(yieldUI).then(function () { f(); }); }, Promise.resolve()) : (stepsRun(GL_STEPS), Promise.resolve());
 hullSay = function (s) { var go = $('go'); if (go.disabled) go.textContent = '解析' + s; };   // 解析中：開戰鈕寫進度（設定照樣能調）
-if (!HEADLESS && !PICK_HOST) requestAnimationFrame(frame);                       // 無頭（00_events.js）不開畫面迴圈；解析中也畫（天、海；船載好才有）
+if (!HEADLESS && !PICK_HOST) GL_READY.then(function () { requestAnimationFrame(frame); });   // 無頭（00_events.js）不開畫面迴圈；解析中也畫（天、海；船載好才有）
 /** 編成裡的船全部進了 HULLT 才放行：等完一輪再照**現在的**編成看一次，還有不在的 ⇒ 再等一輪。
  *  ⛔ 只等開頭那一份名單：解析中主選單換了我艦（pickShip）⇒ 名單裡的都回來了，HULLT[我艦] 卻還沒有
  *  ⇒ 下面讀 T.h ⇒「載入失敗：Cannot read properties of undefined (reading 'h')」（Tim 2026-10-20 回報；重現：?prefs=0&cache=0&blue=dromon&red=dromon，一進主選單把我艦換成拿破崙號）。 */
@@ -441,11 +448,11 @@ function fleetLoaded() {
   return Promise.all(ids.map(loadHull)).then(function () { return fleetHulls().concat(coreHulls()).every(function (id) { return HULLT[id]; }) ? null : fleetLoaded(); });
 }
 if (PICK_HOST) pickBoot();                                          // ?pick=@host（72_shippick.js）：只開選船彈窗，不載編成、不開主選單
-else yieldUI().then(function () {                                   // 先讓主選單畫出來，再開始解析
+else GL_READY.then(yieldUI).then(function () {                     // 先讓主選單畫出來，再開始解析
   return Promise.all([fleetLoaded(), bedBoot()]);                   // 只載編成裡的船（預設兩艘都是憲法號 ⇒ 一份）＋海圖（?map，08_seabed.js）
 }).then(function () {
   var T = HULLT[myHull()], h = T.h, chk = T.chk;
-  if (SLIDERS_SHOW) SLIDERS_SHOW();
+  if (SLIDERS_SHOW && !START_Q) SLIDERS_SHOW();                     // ?start=1：主選單不會出來 ⇒ 先不重畫（回到主選單時才補，71_input.js coverShow）
   var line = '1:1 ' + T.name + ' ' + chk.voxels.toLocaleString() + ' 格 checksum ' + chk.checksum.toString(16) + (chk.ok ? '（＝ 封裝檔 header，逐格相同 ✓）' : '（✗ 跟封裝檔對不上：' + h.voxels + '／' + h.checksum.toString(16) + '）') +
     '\n合併後 ' + T.pristine.quads().toLocaleString() + ' 個四邊形、繩 ' + T.rig.ropes.length + '、帆 ' + T.rig.sails.length + '、桅 ' + T.masts.length +
     '\n解碼 ' + (T.decodeMs / 1000).toFixed(2) + ' 秒、網格化 ' + (T.meshMs / 1000).toFixed(2) + ' 秒' + cacheText(hullInfo(T.id).cache) +
@@ -503,8 +510,8 @@ else yieldUI().then(function () {                                   // 先讓主
       if (Q.get('report') === '1') { var dj = JSON.parse(pre.textContent); dj.report = rptData(); pre.textContent = JSON.stringify(dj); } }   // ?report=1：帶戰鬥報表（79_report.js；src/report.py 讀它）—— 沒帶 ⇒ 跟以前逐字相同
     window.__vxk.demo = { t: SIMT, lost: SHIPS.map(function (s) { return s.lost; }), pieces: PIECES.length, debris: D.n };
   } else {
-    // 選單後面先擺好兩艘船當背景
-    reset();
-    if (Q.get('start') === '1') startWhenReady();                       // 外部開戰（70_flow.js）：跳過主選單
+    // 選單後面先擺好兩艘船當背景；?start=1（外部開戰，70_flow.js）跳過主選單 ⇒ 不擺（開戰時 reset 本來就再擺一次；以前擺兩次、跟開戰擠在同一段卡 0.4 s）
+    if (START_Q) startWhenReady();
+    else reset();
   }
 }).catch(function (e) { glFail('載入失敗：' + (e && e.message || e)); console.error(e); });

@@ -118,26 +118,29 @@ function sailFromRecipe(R, clew) {
   return { verts: verts, tris: tris, uv: UV.concat(UV), bmeta: Array.from(bmeta), cornerIdx: cornerIdx };
 }
 /** 載入船型時：有配方的帆照配方生出來（C ＝ 快取的記錄：有就照抄，沒有就現算、留給 cachePut 存）。回：幾面。 */
-function sailRecipes(T, C) {
-  var S0 = T.rig.sails || [], out = [], n = 0, M = null;
-  S0.forEach(function (s, k) {
-    if (!s.recipe) { out.push(null); return; }
-    var g = C && C.sails && C.sails[k] && C.sails[k].name === s.name ? C.sails[k] : null;
-    if (!g) {
-      M = M || rcpRopeEnds(T.rig);
-      var clew = (s.recipe.names || []).map(function (nm) {
-        var L = M[s.name + '/' + nm]; if (!L) return null;
-        var P = T.rig.ropes[L[0].j].pts, m = P.length; return L[0].e === 0 ? [P[0], P[1], P[2]] : [P[m - 3], P[m - 2], P[m - 1]];
-      });
-      g = sailFromRecipe(s.recipe, clew);
-    }
-    if (DEBUG && s.verts && !s.verts0) s.verts0 = s.verts;               // 讀數用（__game.sailDev）：成品還帶著雕刻引擎的頂點時（原格式、改之前的成品）留著比
-    s.verts = g.verts; s.tris = g.tris; s.bmeta = g.bmeta; s.cornerIdx = g.cornerIdx;
-    if (s.texture) s.texture.uv = g.uv;
-    out.push({ name: s.name, verts: g.verts, tris: g.tris, uv: g.uv, bmeta: g.bmeta, cornerIdx: g.cornerIdx }); n++;
-  });
-  if (T.keep) T.keep.sails = n ? out : null;
-  return n;
+function sailRecipes(T, C) { var R = sailRecipeInit(); (T.rig.sails || []).forEach(function (s, k) { sailRecipeAt(T, C, k, R); }); return sailRecipeEnd(T, R); }
+/** sailRecipes 拆成一面一面（05_hull.js buildHull：每一面之間讓出一次 —— 沒有快取時一面要解約 35 ms，十幾面以前一口氣 0.57 s）。照順序做 ＝ sailRecipes。 */
+function sailRecipeInit() { return { out: [], n: 0, M: null }; }
+function sailRecipeAt(T, C, k, R) {
+  var s = (T.rig.sails || [])[k];
+  if (!s.recipe) { R.out.push(null); return; }
+  var g = C && C.sails && C.sails[k] && C.sails[k].name === s.name ? C.sails[k] : null;
+  if (!g) {
+    var M = R.M = R.M || rcpRopeEnds(T.rig);
+    var clew = (s.recipe.names || []).map(function (nm) {
+      var L = M[s.name + '/' + nm]; if (!L) return null;
+      var P = T.rig.ropes[L[0].j].pts, m = P.length; return L[0].e === 0 ? [P[0], P[1], P[2]] : [P[m - 3], P[m - 2], P[m - 1]];
+    });
+    g = sailFromRecipe(s.recipe, clew);
+  }
+  if (DEBUG && s.verts && !s.verts0) s.verts0 = s.verts;               // 讀數用（__game.sailDev）：成品還帶著雕刻引擎的頂點時（原格式、改之前的成品）留著比
+  s.verts = g.verts; s.tris = g.tris; s.bmeta = g.bmeta; s.cornerIdx = g.cornerIdx;
+  if (s.texture) s.texture.uv = g.uv;
+  R.out.push({ name: s.name, verts: g.verts, tris: g.tris, uv: g.uv, bmeta: g.bmeta, cornerIdx: g.cornerIdx }); R.n++;
+}
+function sailRecipeEnd(T, R) {
+  if (T.keep) T.keep.sails = R.n ? R.out : null;
+  return R.n;
 }
 /** 布料模板的綁定照 meta（見檔頭 ④）：n ＝ 正面的點數、P(q) ＝ 那一點的位置。回 { hk, hv, clews, clewYard, tm }：
  *  hk：0 不綁、1 格、2 繩、3 找不到靠的（帆還在就綁著）、4 模型（同 clothTemplate）；tm：帆腳被哪條繩的哪一端拉著（給 tethOf，不照距離找）。 */

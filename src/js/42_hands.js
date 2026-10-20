@@ -151,6 +151,12 @@ function navStep(N, a, d) {
   if (d >= 4 && (Z[a + NAV_DX[d]] < 0 || Z[a + NAV_DY[d] * N.nx] < 0)) return -1;
   return b;
 }
+/** 開局分段（10_ship.js makeShipSteps，makeCrew 之前）：makeHands 要的走路格一層一步先建好（同一型第一次建約 0.07 s）——
+ *  CREW_BLOCK 照 makeCrew 一開始設的那一份（crewBlockOf）、同一套 navLevels ⇒ makeHands 照鍵（高度範圍＋模型數）拿到同一份。makeHands 不建的（沒有預備水手、不會落水）⇒ []。 */
+function crewNavSteps(sh) {
+  var cw = shipCrew(sh.T.id); if (cw.hands <= 0 && DROWN_T <= 0) return [];
+  return navLevels(sh, shipLadders(sh.T)).map(function (L) { return function () { CREW_BLOCK = crewBlockOf(sh); navBuild(sh, L); }; });
+}
 /** 一層的走路格（照船型與那一層的高度記在 T 上：兩艘同型共用、重開一場不重算）。 */
 function navBuild(sh, L) {
   var T = sh.T, g = navBase(T), C = T.navC || (T.navC = {}), key = L.zr.join(',') + ':' + sh.models.length, d = L.deck;

@@ -17,9 +17,18 @@ function shipCenter(sh) { return M4.pt(sh.M, sh.T.cx, sh.T.cy, sh.T.geo.center);
 function toLocal(sh, p) { return M4.pt(sh.inv, p[0], p[1], p[2]); }
 
 function makeShip(i, team, yaw, pz, T, px) {                          // T：船型（05_hull.js）；px：編隊裡的前後位置（52_fleet.js spawnFleet；沒給 ＝ 0）
+  var M = makeShipSteps(i, team, yaw, pz, T, px); stepsRun(M.steps); return M.sh;
+}
+/** makeShip 拆成幾段（2026-10-20；?start=1 開戰分段做、每段之間讓出一次，見 70_flow.js startStaged）：
+ *  模型 ／ 帆桁、裝飾 ／ 砲、甲板、彈藥庫 ／ 取用點 ／ 艙房 ／ 繩（每 ROPE_FIX_N 條）／ 繩的固定檢查（同一型第一次分好幾步算）／ 帆 ／ 帆的繩與桅 ／
+ *  走路格（同一型第一次一層一步）／ 船員 ／ 水格（同一型第一次分四步）／ 矩陣與進水 ／ 動力。
+ *  一段一段照順序做 ＝ 一口氣做完的同一串程式（中間沒有別人碰戰局：分段時模擬不走、畫面不畫）。做完 M.sh ＝ 那艘船。 */
+function makeShipSteps(i, team, yaw, pz, T, px) {
+  var M = { sh: null, steps: null }, sh = null;
+  M.steps = [function () {                                             // 模型與砲、艙房
   var grid = T.hullG.share(), rsSet = new VK.RegionSet(gl, grid, QIDX);   // T.hullG：船殼（砲帶的裝甲另外一份，24_armor.js armorShip；沒有裝甲 ＝ T.base）
   rsSet.shareFrom(T.pristine);
-  var sh = {                                                            // cfg：船隻設定（開戰時那一型的值，04_state.js）
+  sh = {                                                            // cfg：船隻設定（開戰時那一型的值，04_state.js）
     T: T, cfg: cfgCopy(T.id), i: i, team: team, grid: grid, rs: rsSet, yaw: yaw, px: px || 0, pz: pz, sink: 0, sinkV: 0, lift: 0, liftT: 0, rollA: 0, pitchA: 0, rollV: 0, bob: 0,
     phase: rnd() * 6.28, orig: grid.count, flood: new Float32Array(T.sz * 3), lost: 0, seeds: [], impulse: [0, 0, 0],
     guns: [], ropes: [], sails: [], rigDirty: true, lines: null, tris: null, masts: [], aim: null, reloadT: i === PLAYER_I ? modeRule('myReload') : RELOAD,
@@ -64,6 +73,7 @@ function makeShip(i, team, yaw, pz, T, px) {                          // T：船
       c: [(b[0] + b[3]) / 2, (b[1] + b[4]) / 2, (b[2] + b[5]) / 2], foot: foot, alive: true,
       rot: 0, r0: (+mt.rotate_z_deg || 0) * Math.PI / 180, piv: pv, yk: mt.yard, sail: mt.sail, hang: hang };   // 帆桁：rot ＝ 在作品的角度（r0）之外又轉了多少（追風，30_rig_physics.js）
   });
+  }, function () {                                                   // 帆桁、裝飾
   sh.yards = sh.models.filter(function (m) { return m.kind === 'yard' && m.piv; });
   // 裝飾（TASK-0682；05_hull.js decoSplit）：不在 sh.models ⇒ 戰局看不到（重量、命中、殉爆、掉落都不算）。只記腳下那一格（同上面的模型：外框底往下 12 格內的甲板）：
   //   被打掉 ⇒ 不畫（⛔ 不 blowModel：那會抽 rnd()，開／關裝飾戰局就分岔）。k：燈晃的相位（lanternK）。
@@ -74,6 +84,7 @@ function makeShip(i, team, yaw, pz, T, px) {                          // T：船
     while (fz > 0 && z0 - fz < 12 && !T.hullG.get(cx, cy, fz)) fz--;
     return { mesh: m.mesh, origin: m.origin, meta: mt, k: 1000 + k, foot: hg ? anchorNear(T, hg[0], hg[1], hg[2], 8) : T.hullG.get(cx, cy, fz) ? VK.pack(cx, cy, fz) : -1, pts: m.points || {}, bb: b, path: m.name };
   });
+  }, function () {                                                   // 砲、砲塔、裝甲、門、甲板、彈藥庫
   // 砲：長砲（24 磅，兩舷各 14）、carronade（32 磅，兩舷各 12）、追擊砲（18 磅，船頭兩舷各 1）都是模型。
   // 砲軸 ＝ 固定點 muzzle − breech（格座標、水平）；砲口 ＝ muzzle 再往外 1.5 格（muzzle 在砲口內膛那一格）。
   // 程式裡的 'S'／'P' 照砲軸（+y ＝ S，跟模型名字一致）＝ 右舷／左舷（shipBaseMatrix 照雕刻引擎的手性鏡射過來）。給人看的走 sideName；A／D 照畫面的左右。
@@ -91,17 +102,29 @@ function makeShip(i, team, yaw, pz, T, px) {                          // T：船
   sh.decks = gunDecks(sh); sh.weatherDeck = sh.decks.length ? sh.decks[sh.decks.length - 1].key : null;   // 砲甲板（照砲的高度分層）；最上面那層 ＝ 露天
   sh.deckZ = {}; sh.decks.forEach(function (D) { sh.deckZ[D.key] = D.zr; });
   sh.mags = makeMags(sh);                                                // 彈藥庫（23_powder.js）
+  }, function () {                                                   // 取用點
   sh.stations = makeStations(sh);                                        // 兩層甲板的火藥與彈藥取用點（火藥桶也是模型，加在 sh.models 後面）
-  shipRooms(sh); pumpModels(sh);                                        // pumpModels：甲板上擺的抽水機（45_pumps.js；TASK-0604）；空艙房與功能艙的家具（36_rooms.js；TASK-0568）：家具也是模型 ⇒ 排在命中的分桶之前
+  }, function () {                                                   // 艙房的家具、抽水機
+  return shipRoomSteps(sh);                                              // 一間一步（36_rooms.js）
+  }, function () {                                                   // 抽水機
+  pumpModels(sh);                                                       // pumpModels：甲板上擺的抽水機（45_pumps.js；TASK-0604）；空艙房與功能艙的家具（36_rooms.js；TASK-0568）：家具也是模型 ⇒ 排在命中的分桶之前
   sh.mIdx = modelIndex(sh.models);
+  }, function () {                                                   // 繩
   // 繩與帆：兩端（帆取最高那一排）各找最近的實心格當錨 —— 錨被打掉或跟船分家 ⇒ 繩斷、帆掉
   //   會動的繩（meta anim；26_gunanim.js）寫明 model: 的那一端 ⇒ 不找格、交給 linkRopes 綁模型（⛔ 照找格 ⇒ 木塔上的弩弦兩端都貼著木塔，被綁在船上、跟不了弩砲；其他繩照舊 ⇒ 戰局不變）
-  T.rig.ropes.forEach(function (r) {
-    var n = r.pts.length / 3, mv = !!(r.meta && r.meta.anim), md = function (k) { return mv && r.ends && typeof r.ends[k] === 'string' && r.ends[k].indexOf('model:') === 0; };
-    sh.ropes.push({ pts: r.pts, col: r.color, bb: ropeBox(r.pts), a: md(0) ? -1 : anchorNear(T, r.pts[0], r.pts[1], r.pts[2], 5), b: md(1) ? -1 : anchorNear(T, r.pts[n * 3 - 3], r.pts[n * 3 - 2], r.pts[n * 3 - 1], 5), name: r.name, meta: r.meta || null });
-  });
-  linkRopes(T, sh.ropes, sh.models);
+  var RS = T.rig.ropes, out = [];                                        // 每 ROPE_FIX_N 條一步（一條兩端各找一次錨）
+  for (var a = 0; a < RS.length; a += ROPE_FIX_N) out.push(function (a0) { return function () {
+    RS.slice(a0, a0 + ROPE_FIX_N).forEach(function (r) {
+      var n = r.pts.length / 3, mv = !!(r.meta && r.meta.anim), md = function (k) { return mv && r.ends && typeof r.ends[k] === 'string' && r.ends[k].indexOf('model:') === 0; };
+      sh.ropes.push({ pts: r.pts, col: r.color, bb: ropeBox(r.pts), a: md(0) ? -1 : anchorNear(T, r.pts[0], r.pts[1], r.pts[2], 5), b: md(1) ? -1 : anchorNear(T, r.pts[n * 3 - 3], r.pts[n * 3 - 2], r.pts[n * 3 - 1], 5), name: r.name, meta: r.meta || null });
+    });
+  }; }(a));
+  return out.concat([function () { linkRopes(T, sh.ropes, sh.models); }]);
+  }, function () {                                                   // 繩的固定檢查（ropeFixCheck：同一型只算一次 ⇒ 第一次照 ropeFixSteps 分好幾步算）
+  return ropeFixSteps(T, sh.ropes, sh.models);
+  }, function () {
   ropeFixApply(sh);                                                     // 兩端都沒固定（綁在空中）的繩不生成（ropeFixCheck；匯入檢查報 ✗）
+  }, function () {                                                   // 帆與桅
   hangFalls(sh); sh.rbin = new Set();
   T.rig.sails.forEach(function (s) {
     var vz = -1e9, ax = 0, ay = 0, az = 0, k = 0, j;
@@ -111,6 +134,7 @@ function makeShip(i, team, yaw, pz, T, px) {                          // T：船
     if (s.meta && s.meta.team) { sl.as = s.truckCell >= 0 ? [s.truckCell] : []; sl.par = []; sl.a = s.truckCell; }   // 陣營旗（77_colours.js）：靠桅頂那一格（旗桿頂離格子太遠，照上下緣找會找不到）
     sh.sails.push(sl);
   });
+  }, function () {                                                   // 帆自己的繩、帆桁、桅
   // 帆自己的繩（`<帆名>.sheet-S`、`.tack-P`…）：帆腳那一端綁在帆上 ⇒ 帆掉了或被帶走，它們跟著斷
   // （⛔ 只靠繩的依靠不夠：sheet 與 tack 互相掛著、另一端綁甲板，帆沒了也還浮在半空）
   sh.sails.forEach(function (s, k) { s.k = k; s.hp = s.hpMax = SAIL_HP; s.lines = []; sh.ropes.forEach(function (r, j) { if (sailRope(r, s.name)) s.lines.push(j); }); });
@@ -127,12 +151,21 @@ function makeShip(i, team, yaw, pz, T, px) {                          // T：船
   sh.sails.forEach(function (s) { s.flag = isFlag(s); s.area = s.flag ? 0 : sailArea(s); }); sh.sailArea0 = sh.sails.reduce(function (a, s) { return a + s.area; }, 0) || 1;   // 旗不算推力（面積 0）
   applySailSet(sh);
   T.masts.forEach(function (m) { sh.masts.push({ name: m.name, x: m.x, z0: m.z0, z1: m.z1, orig: m.orig, z0top: m.z0top, up: true }); });
+  }, function () {                                                   // 船員的走路格（navBuild：同一型同一層只建一次）先一層一步建好 ⇒ makeCrew 裡的 makeHands 照鍵拿同一份（42_hands.js crewNavSteps）
+  return crewNavSteps(sh);
+  }, function () {                                                   // 船員
   sh.crew = makeCrew(sh); sh.crew0 = sh.crew.length; sh.wounded = 0; sh.dead = 0; sh.kills = 0; sh.wounds = 0; sh.causes = {};   // kills／wounds：累計（廣播傷亡用；wounded 會在傷者陣亡時減回去）
+  }, function () {                                                   // 進水的水格（flType：同一型只算一次 ⇒ 第一次照 flTypeSteps 分三步算）
+  var FL = FL_LV[FLOOD_LV]; return FL ? flTypeSteps(T, FL.c) : [];
+  }, function () {                                                   // 矩陣、進水、動力
   sh.news = { guns: [], t: -9, k: 0, w: 0, kr: {}, wr: {} };
   sh.M = shipMatrix(sh); sh.inv = M4.inv(sh.M);
   sh.fl = flNew(sh);                                                    // 進水：粒子模式（33_flood.js；公式模式 ⇒ null）
+  }, function () {
   driveInit(sh);                                                        // 動力源（帆、蒸汽機、魔法）與水阻（31_drive.js，TASK-0630）
-  return sh;
+  M.sh = sh;
+  }];
+  return M;
 }
 // 砲種（meta gun 的代碼 ⇒ 程式裡的種類）：名字、初速（m/s）、裝填倍率、彈大不大（洞大一點）、砲班滿編／最少、重量（噸，浮力用）、每發傷害（DMG 的鍵，細節設定）。
 // 長砲 24 磅、carronade 32 磅、追擊砲 18 磅是憲法號的；32 磅長砲是給餘燼號的（basecamp TASK-0519：下層砲甲板 28 門，新做一門）；4 磅砲是夜隼號的（兩舷各 6）。
@@ -506,25 +539,40 @@ function ropeEndSupport(T, models, P) {
 }
 /** 船型 T 每條繩合不合格（同一型只算一次，T.ropeFix）：合格 ⇒ null；不合格 ⇒ { ends: [{ d }, { d }] }（兩端到最近實心格表面幾格）。 */
 function ropeFixCheck(T, ropes, models) {
-  if (T.ropeFix && T.ropeFix.length === ropes.length) return T.ropeFix;
-  var S = ropes.map(function (r) { var n = r.pts.length / 3; return [0, n - 1].map(function (i) { return ropeEndSupport(T, models, [r.pts[i * 3], r.pts[i * 3 + 1], r.pts[i * 3 + 2]]); }); });
-  var ok = S.map(function (s) { return !!(s[0].k || s[1].k); });
-  var near = ropes.map(function (r, i) {                                // 每一端 0.3 m 內（同 linkRopes）有哪幾條繩
-    var n = r.pts.length / 3;
-    return [0, n - 1].map(function (q) {
-      var P = [r.pts[q * 3], r.pts[q * 3 + 1], r.pts[q * 3 + 2]], L = [];
-      ropes.forEach(function (o, j) {
-        if (j === i || P[0] < o.bb[0] - 3 || P[0] > o.bb[3] + 3 || P[1] < o.bb[1] - 3 || P[1] > o.bb[4] + 3 || P[2] < o.bb[2] - 3 || P[2] > o.bb[5] + 3) return;
-        for (var k = 0; k + 5 < o.pts.length; k += 3) if (segDist2(P, o.pts[k], o.pts[k + 1], o.pts[k + 2], o.pts[k + 3], o.pts[k + 4], o.pts[k + 5]) < 9) { L.push(j); return; }
-      });
-      return L;
-    });
+  if (!(T.ropeFix && T.ropeFix.length === ropes.length)) stepsRun(ropeFixSteps(T, ropes, models));
+  return T.ropeFix;
+}
+/** ropeFixCheck 拆成步驟（2026-10-20；同一型第一次約 0.1 s ⇒ 70_flow.js startStaged 開局分段做）：每 ROPE_FIX_N 條繩一步算兩端靠什麼、一步算兩端附近有哪幾條繩，最後一路傳、存進 T.ropeFix。
+ *  已經有了 ⇒ []。照順序做 ＝ 拆之前的 ropeFixCheck。 */
+var ROPE_FIX_N = 128;
+function ropeFixSteps(T, ropes, models) {
+  if (T.ropeFix && T.ropeFix.length === ropes.length) return [];
+  var S = [], near = [], out = [], n = ropes.length, a;
+  for (a = 0; a < n; a += ROPE_FIX_N) out.push(function (a0) { return function () {
+    for (var i = a0; i < Math.min(n, a0 + ROPE_FIX_N); i++) { var r = ropes[i], m = r.pts.length / 3; S.push([0, m - 1].map(function (q) { return ropeEndSupport(T, models, [r.pts[q * 3], r.pts[q * 3 + 1], r.pts[q * 3 + 2]]); })); }
+  }; }(a));
+  for (a = 0; a < n; a += ROPE_FIX_N) out.push(function (a0) { return function () { for (var i = a0; i < Math.min(n, a0 + ROPE_FIX_N); i++) near.push(ropeNearEnds(ropes, i)); }; }(a));
+  out.push(function () {
+    var ok = S.map(function (s) { return !!(s[0].k || s[1].k); });
+    for (var changed = true; changed;) {                                 // 掛在合格的繩上 ⇒ 也合格（一路傳）
+      changed = false;
+      ok.forEach(function (v, i) { if (!v && near[i].some(function (L) { return L.some(function (j) { return ok[j]; }); })) { ok[i] = true; changed = true; } });
+    }
+    T.ropeFix = ok.map(function (v, i) { return v ? null : { ends: S[i].map(function (s) { return { d: s.d }; }) }; });
   });
-  for (var changed = true; changed;) {                                   // 掛在合格的繩上 ⇒ 也合格（一路傳）
-    changed = false;
-    ok.forEach(function (v, i) { if (!v && near[i].some(function (L) { return L.some(function (j) { return ok[j]; }); })) { ok[i] = true; changed = true; } });
-  }
-  return (T.ropeFix = ok.map(function (v, i) { return v ? null : { ends: S[i].map(function (s) { return { d: s.d }; }) }; }));
+  return out;
+}
+/** 第 i 條繩每一端 0.3 m 內（同 linkRopes）有哪幾條繩 ⇒ [[頭那一端的], [尾那一端的]]。 */
+function ropeNearEnds(ropes, i) {
+  var r = ropes[i], n = r.pts.length / 3;
+  return [0, n - 1].map(function (q) {
+    var P = [r.pts[q * 3], r.pts[q * 3 + 1], r.pts[q * 3 + 2]], L = [];
+    ropes.forEach(function (o, j) {
+      if (j === i || P[0] < o.bb[0] - 3 || P[0] > o.bb[3] + 3 || P[1] < o.bb[1] - 3 || P[1] > o.bb[4] + 3 || P[2] < o.bb[2] - 3 || P[2] > o.bb[5] + 3) return;
+      for (var k = 0; k + 5 < o.pts.length; k += 3) if (segDist2(P, o.pts[k], o.pts[k + 1], o.pts[k + 2], o.pts[k + 3], o.pts[k + 4], o.pts[k + 5]) < 9) { L.push(j); return; }
+    });
+    return L;
+  });
 }
 /** 開一艘船（makeShip，linkRopes 之後）：不合格的繩不生成；別的繩對它的依靠拿掉（⛔ 留著 ⇒ 第一次 survey「靠的繩斷了」連帶斷）。 */
 function ropeFixApply(sh) {

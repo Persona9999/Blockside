@@ -273,23 +273,33 @@ function playerTakeShip(o) {
   playerTake(o, '改操控 ' + o.name + teamTag(o) + '（原本是 ' + me.name + '，交給電腦' + (o.team !== me.team ? '；Debug：換到另一方' : '') + '）');
   return true;
 }
-function spawnFleet(spec) {
-  var sp = fieldSplit(fleetNames(spec)); spec = sp.field; RESERVE = sp.reserve; REINF = { last: null, outQ: [] };
-  var n = { blue: 0, red: 0 }, k = { blue: 0, red: 0 };
-  spec.forEach(function (f) { n[f.team]++; });
-  function slots(m) {                                                    // 橫隊的左右位置，從中間往兩側排（第一艘 ＝ 我艦／敵方第一艘在中間）
-    var r = []; for (var q = 0; q < m; q++) r.push((q - (m - 1) / 2) * FLEET_GAP);
-    return r.sort(function (a, b) { return Math.abs(a) - Math.abs(b) || a - b; });
-  }
-  var X = { blue: slots(n.blue), red: slots(n.red) };
-  spec.forEach(function (f, i) {
-    var blue = f.team === 'blue', off = X[f.team][k[f.team]++];        // 兩邊第 j 艘站同一個 x ⇒ 各自對著對面那一艘
-    var T = HULLT[f.hull], bow = (T.wl1 - T.cx) * S;                    // 船的原點（x ＝ T.cx）到船頭的距離
-    var o0 = i === 0 && modeRule('origin'), yaw = o0 && SPAWN_HDG !== null ? Math.PI / 2 - SPAWN_HDG / 57.2958 : blue ? Math.PI / 2 : -Math.PI / 2;   // 玩法規則 origin（04_modes.js；航海）：我艦停在原點、船頭照 ?hdg=
-    var sh = makeShip(i, f.team, yaw, o0 ? 0 : blue ? DIST / 2 + bow : -DIST / 2 - bow, T, o0 ? 0 : off); sh.name = f.name; SHIPS.push(sh);
-    coreSpawned(sh, corePreFor(f.team, k[f.team] - 1));                 // 戰前狀態（57_core.js；沒帶 ⇒ 只記開局人數）
-  });
-  if (VX) vxPlace(SHIPS);                                                // 大漩渦（08_sea.js）：改成沿著漏斗那一圈排
+function spawnFleet(spec) { stepsRun(spawnSteps(spec)); }
+/** spawnFleet 拆成步驟（2026-10-20；?start=1 開戰分段做，見 70_flow.js startStaged）：分好上場／預備、排位置 ⇒ 每艘：算位置、makeShip 的那幾段（10_ship.js makeShipSteps）、
+ *  放進 SHIPS ⇒ 大漩渦重排。照順序一步一步做 ＝ 一口氣做（stepsRun）。 */
+function spawnSteps(spec) {
+  var X, k = { blue: 0, red: 0 };
+  return [function () {
+    var sp = fieldSplit(fleetNames(spec)); spec = sp.field; RESERVE = sp.reserve; REINF = { last: null, outQ: [] };
+    var n = { blue: 0, red: 0 };
+    spec.forEach(function (f) { n[f.team]++; });
+    function slots(m) {                                                  // 橫隊的左右位置，從中間往兩側排（第一艘 ＝ 我艦／敵方第一艘在中間）
+      var r = []; for (var q = 0; q < m; q++) r.push((q - (m - 1) / 2) * FLEET_GAP);
+      return r.sort(function (a, b) { return Math.abs(a) - Math.abs(b) || a - b; });
+    }
+    X = { blue: slots(n.blue), red: slots(n.red) };
+    return spec.map(function (f, i) {
+      return function () {
+        var blue = f.team === 'blue', off = X[f.team][k[f.team]++];    // 兩邊第 j 艘站同一個 x ⇒ 各自對著對面那一艘
+        var T = HULLT[f.hull], bow = (T.wl1 - T.cx) * S;                // 船的原點（x ＝ T.cx）到船頭的距離
+        var o0 = i === 0 && modeRule('origin'), yaw = o0 && SPAWN_HDG !== null ? Math.PI / 2 - SPAWN_HDG / 57.2958 : blue ? Math.PI / 2 : -Math.PI / 2;   // 玩法規則 origin（04_modes.js；航海）：我艦停在原點、船頭照 ?hdg=
+        var M = makeShipSteps(i, f.team, yaw, o0 ? 0 : blue ? DIST / 2 + bow : -DIST / 2 - bow, T, o0 ? 0 : off), j = k[f.team] - 1;
+        return M.steps.concat([function () {
+          var sh = M.sh; sh.name = f.name; SHIPS.push(sh);
+          coreSpawned(sh, corePreFor(f.team, j));                       // 戰前狀態（57_core.js；沒帶 ⇒ 只記開局人數）
+        }]);
+      };
+    }).concat([function () { if (VX) vxPlace(SHIPS); }]);               // 大漩渦（08_sea.js）：改成沿著漏斗那一圈排
+  }];
 }
 /** 大漩渦（TASK-0683）的開局：沿著照主選單距離算出來的那一圈（r0；第三版是天氣設定頁的「開局位置」、第二版是水流最快那一圈 rv）排 —— 我方在 +z 那一側、敵方 −z（兩隊隔著漏斗，像電影裡各在一邊繞著打），
  *  每一隊照編成的順序從那一側的正中往後排（後 ＝ 逆著水流 ⇒ atan2(z, x) 變大），前後隔「兩艘的半長 ＋ 30 m」；一圈排過 150° 還有 ⇒ 往外一圈（＋45 m）從頭排。船頭順著水流的切線。
