@@ -30,8 +30,9 @@ function cacheOpen() {
 /** 那艘船的快取 ⇒ Promise<記錄|null>（從不 reject）。info.cache 留讀數：key、讀了多久、為什麼沒用。 */
 function cacheGet(info) {
   // 改裝船（TASK-0657）：格子存成跟原船的差 ⇒ 原船改了、差卻一樣（兩艘一起長了同樣的格）也要換鍵 ⇒ 鍵把原船那一路的內嵌原文也算進去
-  var el = document.getElementById(info.el), txt = el ? el.textContent : '';
-  for (var vb = info, vn = 0; vb && vb.variant_of && vn < 8; vn++) { vb = hullInfo(vb.variant_of); var ve = vb && document.getElementById(vb.el); txt += '|' + (ve ? ve.textContent : ''); }
+  //   拆檔的成品：船還沒載 ⇒ 用清單上的內容雜湊（VK.embeddedKey；內嵌的照舊是原文）
+  var txt = VK.embeddedKey(info.el);
+  for (var vb = info, vn = 0; vb && vb.variant_of && vn < 8; vn++) { vb = hullInfo(vb.variant_of); txt += '|' + (vb ? VK.embeddedKey(vb.el) : ''); }
   var st = info.cache = { vxk: cacheFnv(txt), code: CODE_VER, hit: false, why: '' };   // 裝飾的網格一律建（05_hull.js decoSplit）⇒ 跟畫質無關、一份
   if (!CACHE_ON) { st.why = '?cache=0'; return Promise.resolve(null); }
   var t0 = performance.now();

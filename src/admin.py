@@ -1895,10 +1895,43 @@ def src_check_one(read, what):
     want = src_manifest(read)
     if have is None:
         return False, ['✗ %s：成品沒有來源清單（舊版 admin.py 建的，或沒有成品）⇒ python -I src/admin.py build' % what]
-    if have.get('fp') == want['fp']:
-        return True, ['✓ %s：成品照這份來源建的（指紋 %s、%d 支檔）' % (what, want['fp'], len(want['files']))]
-    return False, ['✗ %s：成品跟來源對不上（成品 %s ／ 來源 %s）⇒ python -I src/admin.py build 重建再提交：' % (what, have.get('fp'), want['fp'])] + \
-        ['    ' + x for x in src_diff(have, want)]
+    if have.get('fp') != want['fp']:
+        return False, ['✗ %s：成品跟來源對不上（成品 %s ／ 來源 %s）⇒ python -I src/admin.py build 重建再提交：' % (what, have.get('fp'), want['fp'])] + \
+            ['    ' + x for x in src_diff(have, want)]
+    html, bad = prod.decode('utf-8'), []                        # 拆檔的成品：清單上的船檔都要在、內容要跟檔名的雜湊對得上
+    idx = ships_index(html)
+    for el in idx:
+        try:
+            ship_data(html, el, read)
+        except Fail as e:
+            bad.append(str(e))
+    if bad:
+        return False, ['✗ %s：成品的船檔對不上 ⇒ python -I src/admin.py build、ships/ 跟 index.html 一起提交（git add -A ships index.html）：' % what] + ['    ' + x for x in bad]
+    return True, ['✓ %s：成品照這份來源建的（指紋 %s、%d 支檔%s）' % (what, want['fp'], len(want['files']), '；船檔 %d 個都在、雜湊對得上' % len(idx) if idx else '')]
+
+
+def act_snapshot(rev, to):
+    """某一版的成品 ⇒ 資料夾：index.html ＋ 它清單上的船檔（拆檔之前的版本只有 index.html）。"""
+    r = GitRead(rev + ':')
+    try:
+        prod = r('index.html')
+        if prod is None:
+            raise Fail('%s 沒有 index.html' % rev)
+        idx = ships_index(prod.decode('utf-8'))
+        got = {}
+        for el, h in idx.items():
+            b = r(ship_file(el))
+            if b is None:
+                raise Fail('%s 的清單上有 %s，那一版沒有這個檔' % (rev, ship_file(el)))
+            got[ship_file(el)] = b
+    finally:
+        r.close()
+    os.makedirs(to, exist_ok=True)
+    open(os.path.join(to, 'index.html'), 'wb').write(prod)
+    for rel, b in got.items():
+        os.makedirs(os.path.join(to, 'ships'), exist_ok=True)
+        open(os.path.join(to, *rel.split('/')), 'wb').write(b)
+    return ['✓ %s 的成品 ⇒ %s（index.html%s）' % (rev, to, '＋船檔 %d 個' % len(got) if got else '，一個檔')]
 
 
 def act_srccheck(staged=False, rev=None, hook=None):
@@ -1961,11 +1994,12 @@ def src_hook_commit(r):
     names = set(names.split())
     want = src_manifest(r)
     srcs = names & (set(want['files']) | {SRC_LOCK})
-    if 'index.html' not in names and not srcs:
+    prod = 'index.html' in names or any(n.startswith('ships/') for n in names)
+    if not prod and not srcs:
         return []
     code, br = run(['git', 'symbolic-ref', '--short', '-q', 'HEAD'], cwd=ROOT)
     br = br.strip()
-    if 'index.html' not in names and br not in ('dev', 'main'):
+    if not prod and br not in ('dev', 'main'):
         return ['· 成品檢查：這次只動了來源（%d 支）、成品沒重建 —— 分支 %s 上可以；合進 dev 之前要照合併後的來源重建' % (len(srcs), br or '（沒有）')]
     good, out = src_check_one(r, '這次提交（分支 %s）' % (br or '（沒有）'))
     if not good:
@@ -1973,7 +2007,7 @@ def src_hook_commit(r):
     return out
 
 
-def act_build(pack=True):   # pack：壓縮版（預設，TASK-0583）；False ＝ 原格式（build --raw）
+def act_build(pack=True, single=False):   # pack：壓縮版（預設，TASK-0583）；False ＝ 原格式（build --raw）；single：壓縮版但不拆檔（build --single）
     cfg = load()
     E = validate(cfg)
     if E:
@@ -1989,8 +2023,10 @@ def act_build(pack=True):   # pack：壓縮版（預設，TASK-0583）；False �
     if code != 0:
         raise Fail('\n'.join(log) + '\n✗ 建置失敗（exit %d）' % code)
     if pack:
-        log += pack_html(OUT)
+        log += pack_html(OUT, not single)
         log += js_strip_html(OUT)
+    else:
+        ships_sync(os.path.dirname(OUT), {})                 # 原格式（船內嵌）⇒ ships/ 裡的船檔都是舊的
     return log + src_stamp()
 
 # ───────────────────────── 壓縮版成品（預設；build --raw ＝ 原格式。Tim 2026-10-14，TASK-0583：雕刻作品與匯出的 .vxk 格式不變，匯進遊戲才壓縮） ─────────────────────────
@@ -2000,8 +2036,132 @@ def act_build(pack=True):   # pack：壓縮版（預設，TASK-0583）；False �
 #   兩招一起：網格 3.50 → 0.85 MB。格子、繩、帆照原樣。
 # 只動成品裡內嵌的那一份：_cache 的 .vxk、指紋（vxk_lock.json）不動；遊戲讀的時候還原（05_hull.js meshPool），三角形一個一個比過、對不上的那一份照原樣留在船裡。
 # ⛔ 壓縮過的成品解不回原檔（cache 會擋）：_cache 掉了要 reimport。
-POOL_EL = 'vxk-meshes'
+#
+# 拆檔（Tim 2026-10-20：「如果變成拆檔案呢(index.html變成入口)」；repo 變肥的分析見 src/REPO_SIZE.md）：
+#   以前全部船共用一個池子（#vxk-meshes），照第一次出現的順序編號 ⇒ 加一個網格，池子整份重存、後面每艘船檔頭的編號跟著位移、整艘重存
+#   （dev 主線 287 版：池子 46.7 MiB、沒換的船被連累 47.0 MiB，比真的換船的 37.2 MiB 還多）。
+#   現在每艘船帶自己的池子（header.mpool ＝ {q, meshes}，編號只在這艘船裡）⇒ 一艘船的資料只跟它自己有關；
+#   成品預設拆檔：入口 index.html 只留程式和一張清單 <script type="application/json" id="vxk-ships">{ 標籤: 雜湊 }</script>，
+#   每艘一個檔 ships/<標籤>.js（內容 VoxelKit.ship("<標籤>",[段…],"<雜湊>")，見下面「船檔分段」）；遊戲要用才用 <script> 載（voxelkit.js embeddedBytes），網址帶 ?v=<雜湊> 擋舊快取。
+#   雜湊 ＝ 內容的 sha1 前 10 碼，入口清單一份、船檔裡一份：載進來對不上 ⇒ 明說「不是同一次建置的」（舊的入口配上新的 ships/），不會悄悄混用。
+#   ⛔ 檔名不帶雜湊：git 打包時照路徑最後十幾個字元把同一個檔的各版排在一起找差異 ⇒ 檔名每版都換，同一艘船的新舊版排不到一起、分段省下來的又吃回去。
+#   build --single ＝ 照舊一個檔（船內嵌；封存、要單一檔案的地方用），--raw ＝ 原格式。
+#   船檔分段（同一天量的：dev 主線 287 版、291 次船檔重存裡 206 次只有檔頭變了 —— meta、繩端綁定、id；格子很少動）：
+#     一艘壓成一整條 ⇒ 改一欄也整艘重存（同一段歷史 107.9 MiB）；照結構切段、各自 base64 一行 ⇒ git 只存變了的那幾段（17.5 MiB；格子再切小只到 17.4，不切）。
+#     切法（ship_segments，切點只看結構 ⇒ 一處改了，別段一個位元組都不變）：檔頭頂層一欄一段、rig 一個子欄一段、網格池一份一段、格子一段。
+#     壓法：同一條 deflate 串流，段跟段之間 Z_FULL_FLUSH（清掉字典、對齊位元組 ⇒ 每段的壓縮位元組只看那一段；gzip --rsyncable 同一招）；
+#     每段各自 base64（⛔ 整條一起 base64 ⇒ 前面一段長度一變，後面全部錯位）。讀的時候各段解 base64、接起來 ＝ 一條普通的 deflate-raw ⇒ inflate、parse 照舊。
+#     代價：船檔合計大 3.8%（段多的小船多一點）。
+POOL_EL = 'vxk-meshes'                                       # 舊的共用池子（拆檔之前的成品才有；現在只拿來擋「已經壓過」）
 POOL_Q = 100
+SHIPS_EL = 'vxk-ships'                                       # 入口裡的船清單
+SHIP_RX = r'(<script type="application/x-vxk" id="[^"]+">)([^<]*)(</script>)'
+SHIP_NAME_RX = re.compile(r'^[A-Za-z0-9_-]+\.js$')
+
+
+def _jb(v):
+    return json.dumps(v, ensure_ascii=False, separators=(',', ':')).encode('utf-8')
+
+
+def _segs(v, path=()):
+    """_jb(v) 切成段（接起來 ＝ _jb(v)）：物件一欄一段，只往下切 rig、mpool 兩層；網格池 meshes 一份一段。"""
+    if isinstance(v, dict) and v and path in ((), ('rig',), ('mpool',)):
+        out = []
+        for j, (k, x) in enumerate(v.items()):
+            sub = _segs(x, path + (k,))
+            sub[0] = (b'{' if j == 0 else b',') + _jb(k) + b':' + sub[0]
+            out += sub
+        out[-1] += b'}'
+        return out
+    if isinstance(v, list) and v and path == ('mpool', 'meshes'):
+        out = [(b'[' if t == 0 else b',') + _jb(x) for t, x in enumerate(v)]
+        out[-1] += b']'
+        return out
+    return [_jb(v)]
+
+
+def ship_segments(h, grid):
+    """一艘船 ⇒ 段（bytes 的清單；接起來 ＝ b'VXK1' ＋ 檔頭長度 ＋ 檔頭 JSON ＋ 格子，跟以前整條壓的那一份原文一樣）。"""
+    S = _segs(h)
+    hb = b''.join(S)
+    if hb != _jb(h):
+        raise Fail('檔頭切段接回去跟原本不一樣（_segs）')
+    S[0] = b'VXK1' + struct.pack('<I', len(hb)) + S[0]
+    return S + [grid]
+
+
+def ship_pieces(h, grid):
+    """段 ⇒ 每段壓縮後的 base64（同一條 deflate 串流，段之間 Z_FULL_FLUSH）。"""
+    S = ship_segments(h, grid)
+    c = zlib.compressobj(9, zlib.DEFLATED, -15)
+    return [base64.b64encode(c.compress(s) + c.flush(zlib.Z_FULL_FLUSH if i < len(S) - 1 else zlib.Z_FINISH)).decode('ascii') for i, s in enumerate(S)]
+
+
+def ship_text(el, pieces, h):
+    """船檔的內容：一段一行（git 存得到差異；.gitattributes 讓 diff 不印內容）、最後是內容雜湊（載的時候跟入口清單比）。"""
+    return 'VoxelKit.ship(%s,[\n%s\n],"%s");\n' % (json.dumps(el), ',\n'.join('"%s"' % p for p in pieces), h)
+
+
+def ship_hash(pieces):
+    return hashlib.sha1('\n'.join(pieces).encode('ascii')).hexdigest()[:10]
+
+
+def ship_file(el):
+    """船檔的相對路徑（跟入口同一層的 ships/）。"""
+    return 'ships/%s.js' % el
+
+
+SHIPS_TAG_RX = re.compile(r'<script type="application/json" id="%s">(\{(?:"[^<]*)?\})</script>' % SHIPS_EL)   # 內容一定是 JSON 物件 ⇒ 程式註解裡提到這個標籤不會被當成清單
+
+
+def ships_index(html):
+    """入口的船清單 { 標籤: 雜湊 }；不是拆檔的成品 ⇒ {}。"""
+    m = SHIPS_TAG_RX.search(html)
+    return json.loads(m.group(1)) if m else {}
+
+
+def ship_data(html, el, read=None):
+    """成品裡那一艘壓縮過的位元組（deflate-raw；zlib.decompress(…, -15) 解）：內嵌的（--single、--raw）或清單指的船檔（拆檔：各段解 base64、接起來）。
+    read(相對路徑) ⇒ bytes｜None（不給 ⇒ 讀工作區）。沒有這一艘 ⇒ None；清單有、檔不在或內容跟檔名對不上 ⇒ Fail。"""
+    mt = re.search(r'<script type="application/x-vxk" id="%s">([^<]*)</script>' % re.escape(el), html)
+    if mt:
+        return base64.b64decode(mt.group(1))
+    h = ships_index(html).get(el)
+    if not h:
+        return None
+    f = ship_file(el)
+    b = (read or work_read)(f)
+    if b is None:
+        raise Fail('清單上的 %s 不在' % f)
+    t = b.decode('utf-8', 'replace').strip()
+    try:
+        if not (t.startswith('VoxelKit.ship(') and t.endswith(');')):
+            raise ValueError
+        e, P, hx = json.loads('[' + t[len('VoxelKit.ship('):-2] + ']')
+    except ValueError:
+        raise Fail('%s 的內容不是 VoxelKit.ship("<標籤>",[段…],"<雜湊>");' % f)
+    if e != el:
+        raise Fail('%s 裡面是 #%s，不是 #%s' % (f, e, el))
+    if hx != h:
+        raise Fail('%s 不是同一次建置的（入口清單要 %s，檔是 %s）' % (f, h, hx))
+    if ship_hash(P) != h:
+        raise Fail('%s 的內容跟它寫的雜湊 %s 對不上（被改過？）' % (f, h))
+    return b''.join(base64.b64decode(p) for p in P)
+
+
+def ships_sync(root, files):
+    """船檔寫進 <root>/ships/：files ＝ { 相對路徑: 內容 }；ships/ 裡不在 files 的船檔（船隻清單拿掉的船）拿掉。回 (寫了幾個, 拿掉幾個)。"""
+    d = os.path.join(root, 'ships')
+    old = [f for f in os.listdir(d) if f.endswith('.js')] if os.path.isdir(d) else []   # ships/ 只放建置寫的船檔 ⇒ 不在這次清單上的 .js 都是舊的
+    if files:
+        os.makedirs(d, exist_ok=True)
+    for rel, t in files.items():
+        with open(os.path.join(root, *rel.split('/')), 'w', encoding='utf-8', newline='\n') as f:
+            f.write(t)
+    gone = [f for f in old if 'ships/' + f not in files]
+    for f in gone:
+        os.remove(os.path.join(d, f))
+    return len(files), len(gone)
 
 
 def _deflate(b):
@@ -2225,18 +2385,18 @@ def header_unshare(h, h0):
         a[p[-1]] = json.loads(_js(b[p[-1]]))
 
 
-def _emb_header(html, el, depth=0):
-    """成品裡內嵌的那一艘 ⇒ 照遊戲的讀法還原好的檔頭（vh 照原船放回；原船自己有 vh ⇒ 先還原它的）。"""
+def _emb_header(html, el, depth=0, read=None):
+    """成品裡的那一艘（內嵌或船檔，見 ship_data）⇒ 照遊戲的讀法還原好的檔頭（vh 照原船放回；原船自己有 vh ⇒ 先還原它的）。"""
     if depth > 8:
         raise Fail('改裝船的原船鏈太長（成環？）：#%s' % el)
-    mt = re.search(r'<script type="application/x-vxk" id="%s">([^<]*)</script>' % re.escape(el), html)
-    if not mt:
+    b = ship_data(html, el, read)
+    if b is None:
         raise Fail('成品裡沒有 #%s' % el)
-    a = zlib.decompress(base64.b64decode(mt.group(1)), -15)
+    a = zlib.decompress(b, -15)
     na = struct.unpack('<I', a[4:8])[0]
     h = json.loads(a[8:8 + na].decode('utf-8'))
     if h.get('vh'):
-        header_unshare(h, _emb_header(html, h['vh']['el'], depth + 1))
+        header_unshare(h, _emb_header(html, h['vh']['el'], depth + 1, read))
     return h
 
 
@@ -2258,18 +2418,19 @@ def same_tris(a, b):
     return True
 
 
-def pack_html(path):
-    """成品（vxk_inline.py 嵌好的）⇒ 壓縮模式：每艘的網格換成池子編號、加一個池子。回傳讀數。"""
+def pack_html(path, split=True):
+    """成品（vxk_inline.py 嵌好的）⇒ 壓縮版：每艘的網格換成它自己池子（header.mpool）的編號。
+    split（預設）⇒ 船拆成 ships/<標籤>.js（分段）、入口留船清單；False（build --single）⇒ 船照舊內嵌、一個檔。回傳讀數。"""
     html = open(path, encoding='utf-8').read()
-    if 'id="%s"' % POOL_EL in html:
-        raise Fail('成品已經是壓縮模式（有 #%s）' % POOL_EL)
-    pool, where, shape, log, keep, mirrors, moved = [], {}, {}, [], 0, [], 0
+    if 'id="%s"' % POOL_EL in html or SHIPS_TAG_RX.search(html):
+        raise Fail('成品已經壓過了（有 #%s 或 #%s）' % (POOL_EL, SHIPS_EL))
+    log, keep, mirrors, moved, npool, files, index = [], 0, [], 0, 0, {}, {}
     size0 = len(html.encode('utf-8'))
     ships = load()['ships']
     byel, byid = {s['el']: s for s in ships}, {s['id']: s for s in ships}
 
     def one(mt):
-        nonlocal keep, moved
+        nonlocal keep, moved, npool
         if len(mt.group(2)) < 64:   # 程式註解裡的「<script type="application/x-vxk" id="…">base64</script>」不是船
             return mt.group(0)
         raw = zlib.decompress(base64.b64decode(mt.group(2)), -15)
@@ -2278,7 +2439,7 @@ def pack_html(path):
         rs = sail_strip(h)                                       # TASK-0602 ①：有配方的帆只留配方（遊戲照配方生帆，js/29_sailrecipe.js）
         ms = (h.get('rig') or {}).get('meshes')
         if ms:
-            out = []
+            out, pool, where, shape = [], [], {}, {}             # 池子只在這艘船裡（編號照這艘船裡第一次出現的順序）
             for m in ms:
                 key = hashlib.sha1(json.dumps(m, separators=(',', ':')).encode()).hexdigest()
                 if key not in where:
@@ -2300,7 +2461,9 @@ def pack_html(path):
                     out.append(dict(where[key]))
                     moved += 'o' in where[key]
             h['rig']['meshes'] = out
-            h['mesh_pool'] = POOL_EL
+            if pool:
+                h['mpool'] = {'q': POOL_Q, 'meshes': pool}
+                npool += len(pool)
         grid = raw[8 + n:]
         g0 = len(_deflate(grid))
         el = re.search(r'id="([^"]+)"', mt.group(1)).group(1)
@@ -2323,8 +2486,8 @@ def pack_html(path):
         return '\x00SHIP%d\x00' % (len(items) - 1)                # 檔頭共用（TASK-0667）要等每艘都處理完才比得了 ⇒ 先佔位，最後一起寫
 
     items = []
-    RX = r'(<script type="application/x-vxk" id="[^"]+">)([^<]*)(</script>)'
-    first = next(mt for mt in re.finditer(RX, html) if len(mt.group(2)) >= 64).start()   # 池子放在第一艘船前面（⛔ 照字串找第一個：voxelkit.js 的註解裡就有一模一樣的標籤 ⇒ 池子插進程式中間）
+    RX = SHIP_RX
+    first = next(mt for mt in re.finditer(RX, html) if len(mt.group(2)) >= 64).start()   # 船清單放在第一艘船前面（⛔ 照字串找第一個：voxelkit.js 的註解裡就有一模一樣的標籤 ⇒ 清單插進程式中間）
     html2 = html[:first] + '\x00POOL\x00' + html[first:]
     html2, k = re.subn(RX, one, html2)
     proc = {it['el']: it['h'] for it in items}
@@ -2346,20 +2509,25 @@ def pack_html(path):
     def emit(m):
         it = items[int(m.group(1))]
         mt = it['mt']
+        if split:                                               # 船檔：照結構分段（見上面「船檔分段」）
+            P = ship_pieces(it['h'], it['grid'])
+            hx = ship_hash(P)
+            index[it['el']] = hx
+            files[ship_file(it['el'])] = ship_text(it['el'], P, hx)
+            return ''                                           # 標籤拿掉、換行留著 ⇒ 後面的行號不變
         if not it['changed']:
             return mt.group(0)
-        hb = json.dumps(it['h'], ensure_ascii=False, separators=(',', ':')).encode('utf-8')
+        hb = _jb(it['h'])
         b = base64.b64encode(_deflate(b'VXK1' + struct.pack('<I', len(hb)) + hb + it['grid'])).decode('ascii')
         return mt.group(1) + b + mt.group(3)
     html2 = re.sub('\x00SHIP(\\d+)\x00', emit, html2)
     k = sum(1 for mt in re.finditer(RX, html) if len(mt.group(2)) >= 64)
-    pb = base64.b64encode(_deflate(json.dumps({'v': 1, 'q': POOL_Q, 'meshes': pool}, separators=(',', ':')).encode('utf-8'))).decode('ascii')
-    tag = '<script type="application/x-vxk-meshes" id="%s">%s</script>\n' % (POOL_EL, pb)
+    tag = '<script type="application/json" id="%s">%s</script>\n' % (SHIPS_EL, json.dumps(index, separators=(',', ':'))) if split else ''
     html2 = html2.replace('\x00POOL\x00', tag, 1)
-    nv, E = pack_verify(html2)                                  # 寫出去之前：照遊戲的讀法還原、跟 _cache 原檔逐個比（對不上 ⇒ 不寫，舊成品留著）
+    nv, E = pack_verify(html2, lambda rel: files[rel].encode('utf-8') if rel in files else None)   # 寫出去之前：照遊戲的讀法還原、跟 _cache 原檔逐個比（對不上 ⇒ 不寫，舊成品留著）
     if E:
         raise Fail('壓縮版還原出來跟原檔對不上（成品沒寫）：\n' + '\n'.join('  ✗ ' + e for e in E[:12]))
-    log.append('✓ 網格池：只差起點的網格共用同一格 ⇒ %d 個引用帶自己的起點（TASK-0667）' % moved)
+    log.append('✓ 網格池：每艘船自己一個，合計 %d 份；只差起點的網格共用同一格 ⇒ %d 個引用帶自己的起點（TASK-0667）' % (npool, moved))
     log.append('✓ 還原驗算：%d 艘、%d 份網格的三角形跟 _cache 原檔逐個相同，格子、繩、帆一位元組不差（有配方的帆只存配方，頂點由遊戲照配方生，不在這裡比）' % (k, nv))
     for el, M, g0, g1, V in mirrors:
         what = ('改裝船：跟原船 #%s 差 %d 格' % (V['el'], V['ndiff'])) if V else ('鏡射 y ↔ %d − y、一半 %d 塊、diff %d 格' % (M['s'], M['nhalf'], M['ndiff'])) if M else '照原樣（鏡射沒有比較小）'
@@ -2367,9 +2535,14 @@ def pack_html(path):
     for el, el0, P, dn in shared:
         log.append('  檔頭 %s：跟原船 #%s 相同的 %d 欄不存（%s）⇒ 少 %d KB（壓縮前）' % (el, el0, len(P), '、'.join('.'.join(p) for p in P[:8]) + ('…' if len(P) > 8 else ''), dn // 1024))
     open(path, 'w', encoding='utf-8', newline='').write(html2)
+    nw, ng = ships_sync(os.path.dirname(path), files)
     size1 = len(html2.encode('utf-8'))
-    log.append('✓ 壓縮模式：%d 艘、網格池 %d 份（%d KB）%s；成品 %.2f MB → %.2f MB（−%.0f%%）' % (
-        k, len(pool), len(pb) // 1024, '、照原樣留在船裡 %d 份' % keep if keep else '', size0 / 1048576, size1 / 1048576, (1 - size1 / size0) * 100))
+    sf = sum(len(t) for t in files.values())
+    log.append('✓ 壓縮版：%d 艘%s；%s' % (k, '（網格照原樣留在船裡 %d 份）' % keep if keep else '',
+        '拆檔：入口 %.2f MB ＋ ships/ %d 個檔 %.2f MB（一艘 %d–%d KB；拿掉舊的 %d 個）⇒ 合計 %.2f MB（內嵌原格式 %.2f MB）' % (
+            size1 / 1048576, nw, sf / 1048576, min(len(t) for t in files.values()) // 1024, max(len(t) for t in files.values()) // 1024, ng,
+            (size1 + sf) / 1048576, size0 / 1048576) if split else
+        '一個檔（--single）%.2f MB（內嵌原格式 %.2f MB）' % (size1 / 1048576, size0 / 1048576)))
     return log
 
 
@@ -2547,25 +2720,28 @@ def sail_strip(h):
     return n
 
 
-def pack_verify(html):
-    """壓縮版成品 ⇒ 每艘照遊戲的讀法還原（池子編號 ⇒ 池子那一格 ⇒ mesh_unpack），跟 _cache 原檔比：
-    網格的三角形逐個相同；header 其他欄位相同；格子那一段一位元組不差。回傳 (比了幾份網格, 錯誤清單)。原格式的成品 ⇒ 只比格子與 header。"""
-    m = re.search(r'<script type="application/x-vxk-meshes" id="%s">([^<]*)</script>' % POOL_EL, html)
-    P = json.loads(zlib.decompress(base64.b64decode(m.group(1)), -15)) if m else None
+def pack_verify(html, read=None):
+    """壓縮版成品 ⇒ 每艘照遊戲的讀法還原（池子編號 ⇒ 那艘船自己池子 header.mpool 的那一格 ⇒ mesh_unpack），跟 _cache 原檔比：
+    網格的三角形逐個相同；header 其他欄位相同；格子那一段一位元組不差。回傳 (比了幾份網格, 錯誤清單)。原格式的成品 ⇒ 只比格子與 header。
+    拆檔的成品：船從清單指的檔讀（read(相對路徑) ⇒ bytes｜None；不給 ⇒ 讀工作區）。"""
     n, E = 0, []
     for s in load()['ships']:
-        mt = re.search(r'<script type="application/x-vxk" id="%s">([^<]*)</script>' % re.escape(s['el']), html)
-        if not mt:
+        try:
+            dz = ship_data(html, s['el'], read)
+        except Fail as e:
+            E.append('%s：%s' % (s['id'], e))
+            continue
+        if dz is None:
             E.append('%s：成品裡沒有 #%s' % (s['id'], s['el']))
             continue
-        a = zlib.decompress(base64.b64decode(mt.group(1)), -15)
+        a = zlib.decompress(dz, -15)
         b = zlib.decompress(open(os.path.join(CACHE, s['vxk']), 'rb').read(), -15)
         na, nb = struct.unpack('<I', a[4:8])[0], struct.unpack('<I', b[4:8])[0]
         ha, hb = json.loads(a[8:8 + na].decode('utf-8')), json.loads(b[8:8 + nb].decode('utf-8'))
         ga = a[8 + na:]
         if ha.get('vh'):                                        # TASK-0667：跟原船相同的檔頭欄 ⇒ 照遊戲的讀法從原船（成品裡內嵌的那一份，還原好的）放回來
             try:
-                header_unshare(ha, _emb_header(html, ha['vh']['el']))
+                header_unshare(ha, _emb_header(html, ha['vh']['el'], read=read))
             except (Fail, KeyError, TypeError) as e:
                 E.append('%s：檔頭從原船放回來失敗（%s）' % (s['id'], e))
                 continue
@@ -2587,11 +2763,12 @@ def pack_verify(html):
         if ga != b[8 + nb:]:
             E.append('%s：格子那一段跟原檔不一樣' % s['id'])
         ma, mb = (ha.get('rig') or {}).get('meshes') or [], (hb.get('rig') or {}).get('meshes') or []
-        if ha.pop('mesh_pool', None):
-            if P is None:
-                E.append('%s：header 說有網格池，成品裡沒有 #%s' % (s['id'], POOL_EL))
-                continue
+        P = ha.pop('mpool', None)
+        if P is not None:
             ma = [mesh_unpack(pool_entry(P, x)) if isinstance(x, dict) and 'pool' in x else x for x in ma]
+        elif any(isinstance(x, dict) and 'pool' in x for x in ma):
+            E.append('%s：網格是池子編號，檔頭卻沒有 mpool' % s['id'])
+            continue
         if len(ma) != len(mb):
             E.append('%s：網格 %d 份，原檔 %d 份' % (s['id'], len(ma), len(mb)))
             continue
@@ -2617,7 +2794,7 @@ def act_verify():
     n, E = pack_verify(html)
     if E:
         raise Fail('成品跟 _cache 原檔對不上：\n' + '\n'.join('  ✗ ' + e for e in E[:20]))
-    return ['✓ 成品（%s）跟 _cache 原檔相同：%d 份網格的三角形逐個比過，格子、header 一致' % ('壓縮版' if 'id="%s"' % POOL_EL in html else '原格式', n)]
+    return ['✓ 成品（%s）跟 _cache 原檔相同：%d 份網格的三角形逐個比過，格子、header 一致' % ('拆檔' if ships_index(html) else '一個檔', n)]
 
 
 
@@ -3017,6 +3194,10 @@ def serve(port, do_open=False):
                 if not os.path.exists(OUT):
                     return self.send(404, {'ok': False, 'log': ['還沒建置成品']})
                 return self.send(200, open(OUT, 'rb').read(), 'text/html; charset=utf-8')
+            if path.startswith('/ships/') and SHIP_NAME_RX.match(path[7:]):    # 拆檔的成品：/game 那一頁照相對路徑要的船檔
+                p = os.path.join(ROOT, 'ships', path[7:])
+                if os.path.isfile(p):
+                    return self.send(200, open(p, 'rb').read(), 'text/javascript; charset=utf-8')
             if self.path == '/api/state':
                 return self.send(200, dict(act_state(), ok=True))
             self.send(404, {'ok': False, 'log': ['沒有這一頁']})
@@ -3088,7 +3269,11 @@ def main():
     s = sp.add_parser('shipcheck', help='匯入檢查：缺 meta、砲班站不滿、開場就掉的 ⇒ reports/shipcheck_<船>.md（import／reimport／metasync 之後會自動跑）')
     s.add_argument('--id', action='append', help='哪一艘（可以給好幾次）；不給 ＝ 每一艘')
     s = sp.add_parser('build')
-    s.add_argument('--raw', action='store_true', help='原格式（不壓縮）；預設是壓縮版：模型網格收成一個池子（同一份只存一次、頂點去重＋差值），_cache 不動')
+    s.add_argument('--raw', action='store_true', help='原格式（不壓縮、船內嵌）；預設是壓縮版：每艘船的模型網格收成它自己的池子（同一份只存一次、頂點去重＋差值），_cache 不動')
+    s.add_argument('--single', action='store_true', help='壓縮版但不拆檔：船照舊內嵌在 index.html（一個檔；封存、要單一檔案的地方用）。預設拆成入口＋ships/')
+    s = sp.add_parser('snapshot', help='某一版的成品（入口＋它清單上的船檔）取出到一個資料夾：拆檔之後 git show <版本>:index.html 只拿得到入口（對拍的對照組用這個）')
+    s.add_argument('rev', help='commit、分支名')
+    s.add_argument('to', help='資料夾（會寫 index.html、ships/）')
     sp.add_parser('verify', help='成品跟 _cache 原檔比（壓縮版照遊戲的讀法還原）')
     s = sp.add_parser('srccheck', help='成品跟來源對不對得上（TASK-0674）：成品裡的來源清單 vs 照工作區／暫存區／某一版重算')
     g = s.add_mutually_exclusive_group()
@@ -3141,7 +3326,9 @@ def main():
         elif o.op == 'shipcheck':
             log = act_shipcheck(o.id)
         elif o.op == 'build':
-            log = act_build(not o.raw)
+            log = act_build(not o.raw, o.single)
+        elif o.op == 'snapshot':
+            log = act_snapshot(o.rev, o.to)
         elif o.op == 'verify':
             log = act_verify()
         elif o.op == 'srccheck':

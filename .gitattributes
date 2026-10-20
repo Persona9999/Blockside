@@ -4,5 +4,7 @@
 *.cmd text eol=crlf
 # 成品與手寫的 html 照原樣（不轉換）
 *.html -text
+# 拆檔成品的船檔（ships/<標籤>.js，一段一行 base64、長的一行幾百 KB）：git diff／log -p 不印內容（存法照舊、git 照樣找差異）
+ships/*.js -diff
 *.png binary
 *.vxk binary

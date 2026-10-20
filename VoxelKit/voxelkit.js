@@ -157,11 +157,53 @@
     var e = embedded(id); if (!e) return null;
     try { return JSON.parse(new TextDecoder().decode(b64ToBytes(e.b64))); } catch (x) { return null; }
   }
-  /** <script type="application/x-vxk" id="…">base64</script>（vxk_inline.py 填進去的）⇒ 模型。 */
+  /**
+   * 拆檔的成品（Blockside admin.py build 預設；Tim 2026-10-20「index.html變成入口」）：船不內嵌，入口有一張清單（JSON、元素 id 是 vxk-ships：
+   * { 標籤: 雜湊 }；⛔ 這裡不寫出完整的標籤 —— 建置照字串找它，註解裡有一模一樣的會被當成清單），每艘一個檔 ships/<標籤>.js
+   * （內容 VoxelKit.ship("<標籤>", [段, 段, …], "<雜湊>")：同一條 deflate-raw 串流照結構切段、每段各自 base64 —— 各段解開接起來就是以前內嵌的那一份；為什麼切見 admin.py「船檔分段」）。
+   * 要用才用 <script> 載（⛔ 不用 fetch：直接開 index.html（file://）時 fetch 讀不到旁邊的檔，<script> 讀得到；同 maps/ 的海圖塊），網址帶 ?v=<雜湊> 擋舊快取；
+   * 載進來的雜湊跟清單對不上 ⇒ 不是同一次建置的（舊入口配新 ships/、或反過來）⇒ 明說、不用。
+   * 路徑照頁面自己的網址算 ⇒ 被別的頁面用 iframe 開（Blocksail 的 external/Blockside/index.html）照樣找得到它旁邊的 ships/。
+   */
+  var SHIPS = null, SHIP_DATA = {}, SHIP_HASH = {}, SHIP_P = {};
+  function shipIndex() {
+    if (!SHIPS) { var e = document.getElementById('vxk-ships'); try { SHIPS = e ? JSON.parse(e.textContent) : {}; } catch (x) { SHIPS = {}; } }
+    return SHIPS;
+  }
+  /** 船檔載進來時呼叫（ships/<標籤>.js 裡就這一行）；data ＝ base64 一整條，或一段一段的清單；h ＝ 內容雜湊。 */
+  function ship(id, data, h) { SHIP_DATA[id] = data; SHIP_HASH[id] = h; }
+  /** 這一艘有沒有資料（內嵌，或清單上有）。 */
+  function hasEmbedded(id) { return !!document.getElementById(id) || !!shipIndex()[id]; }
+  /** 這一艘資料的指紋字串（不用載）：內嵌 ⇒ 原文；拆檔 ⇒ 清單上的雜湊（內容雜湊，內容變了它一定變）。給快取當鍵（06_cache.js）。 */
+  function embeddedKey(id) { var el = document.getElementById(id), h = shipIndex()[id]; return el ? el.textContent : h ? 'ships:' + h : ''; }
+  /** base64 一整條或一段一段 ⇒ 位元組（段 ⇒ 各自解、照順序接起來）。 */
+  function piecesToBytes(d) {
+    if (typeof d === 'string') return b64ToBytes(d);
+    var P = d.map(b64ToBytes), n = 0, i; for (i = 0; i < P.length; i++) n += P[i].length;
+    var u = new Uint8Array(n); for (i = 0, n = 0; i < P.length; i++) { u.set(P[i], n); n += P[i].length; }
+    return u;
+  }
+  /** 這一艘壓縮過的位元組 ⇒ Promise（內嵌的直接給；拆檔的第一次要的時候載那個檔，同一艘只載一次）。 */
+  function embeddedBytes(id) {
+    var el = document.getElementById(id); if (el) return Promise.resolve(b64ToBytes(el.textContent));
+    var h = shipIndex()[id];
+    if (SHIP_DATA[id] && SHIP_HASH[id] === h) return Promise.resolve(piecesToBytes(SHIP_DATA[id]));
+    if (!h) return Promise.reject(new Error('找不到內嵌的 .vxk：#' + id));
+    return SHIP_P[id] || (SHIP_P[id] = new Promise(function (res, rej) {
+      var s = document.createElement('script'), src = 'ships/' + id + '.js';
+      function bad(msg) { delete SHIP_P[id]; rej(new Error(msg)); }
+      s.onload = function () {
+        if (!SHIP_DATA[id]) bad(src + ' 載進來了，裡面卻不是 #' + id);
+        else if (SHIP_HASH[id] !== h) bad(src + ' 跟這個 index.html 不是同一次建置的（清單要 ' + h + '，檔是 ' + SHIP_HASH[id] + '）⇒ 入口跟 ships/ 要同一版');
+        else res(piecesToBytes(SHIP_DATA[id]));
+      };
+      s.onerror = function () { bad('載不到 ' + src + '（成品拆檔了：搬成品要連 ships/ 一起；舊的版本用 python -I src/admin.py snapshot <版本> <資料夾> 取出）'); };
+      s.src = src + '?v=' + h; document.head.appendChild(s);
+    }));
+  }
+  /** <script type="application/x-vxk" id="…">base64</script>（vxk_inline.py 填進去的），或拆檔的船檔 ⇒ 模型。 */
   function loadEmbedded(id) {
-    var el = document.getElementById(id);
-    if (!el) return Promise.reject(new Error('找不到內嵌的 .vxk：#' + id));
-    return decode(b64ToBytes(el.textContent));
+    return embeddedBytes(id).then(decode);
   }
 
   // ───────────────────────── 稀疏網格 ─────────────────────────
@@ -539,6 +581,7 @@
   root.VoxelKit = {
     CHUNK: CH, rgb332: rgb332, hashVoxel: hashVoxel,
     b64ToBytes: b64ToBytes, inflateRaw: inflateRaw, parse: parse, decode: decode, loadEmbedded: loadEmbedded,
+    ship: ship, hasEmbedded: hasEmbedded, embeddedKey: embeddedKey, embeddedBytes: embeddedBytes,
     embeddedImage: embeddedImage, embeddedJSON: embeddedJSON,
     Grid: Grid, verify: verify, meshChunk: meshChunk, M4: M4, raycast: raycast, detached: detached,
     compile: compile, VOXEL_VS: VOXEL_VS, VOXEL_FS: VOXEL_FS, RegionSet: RegionSet, QuadIndex: QuadIndex,

@@ -59,7 +59,7 @@ function gunCrew(cw, type) { var n = cw.guns && cw.guns[type]; return n === unde
 //   餘燼號、夜隼號是 basecamp、summit 的船：她們給艦名池之前只有原名。
 var HULL_KNOWN = CFG.ships.map(function (s) { var h = { id: s.id, el: s.el, name: s.name, geo: s.geo, crew: s.crew, rooms: s.rooms, lamps: s.lamps, flags: s.flags, names: s.names && s.names.length ? s.names : [s.name] }; if (s.zw0) h.zw0 = s.zw0; if (s.material) h.material = s.material; if (s.author) h.author = s.author; if (s.drive) h.drive = s.drive; if (s.fireEngine === false) h.fireEngine = false; if (s.theme) h.theme = s.theme; if (s.variant_of) h.variant_of = s.variant_of; return h; });   // material：全船預設材質（05_material.js）；author：建造者（admin.py 匯入時從 .vxk 檔頭 owner 記；船隻配置頁顯示）
 var SHIP_NAMES_PUB = CFG.names_pub || [];
-var HULL_LIST = HULL_KNOWN.filter(function (h) { return !!document.getElementById(h.el); });
+var HULL_LIST = HULL_KNOWN.filter(function (h) { return VK.hasEmbedded(h.el); });   // 內嵌的、或拆檔成品清單上有的（voxelkit.js embeddedBytes）
 var HULL_DEF = (HULL_LIST[0] || HULL_KNOWN[0]).id;                      // 預設的船：清單裡第一艘有內嵌資料的
 var HULLS = {}, HULLT = {};                                             // id → 載入中的 Promise ／ 載好的船型
 // 裝飾（TASK-0682；Tim 2026-10-17：「裝飾移除是在船隻載入時就不載入裝飾」「可以隱藏的裝飾都不算重量」）：雕刻模型 meta deco=1。
@@ -161,23 +161,25 @@ function refPath(T, v) {
   var r = T.ids && T.ids.by[id];
   return r ? r.path + (i < 0 ? '' : '/' + v.slice(i + 1)) : '';
 }
-/** 壓縮版的成品（admin.py build 預設；--raw ＝ 原格式；TASK-0583）：header 有 mesh_pool ⇒ rig.meshes 是池子編號 { pool: i }，從 <script id=mesh_pool> 還原（池子只解一次、幾艘船共用）。
+/** 壓縮版的成品（admin.py build 預設；--raw ＝ 原格式；TASK-0583）：header 有 mpool ⇒ rig.meshes 是那艘船自己池子的編號 { pool: i }，照 header.mpool ＝ { q, meshes } 還原。
+ *  （拆檔之前全部船共用一個池子 <script id=vxk-meshes>：加一個網格就整份重存、別艘的編號跟著位移 ⇒ repo 變肥；現在一艘一個，見 admin.py「拆檔」。）
  *  池子裡一份 ＝ { v: 不重複的頂點（整數 × q，跟前一點的差值）, t: 三角形的頂點編號（跟前一個的差值）, tmat, mats }；還原成跟原本一樣的三角形（頂點去重過，法線照三角形算 ⇒ 畫出來一樣）。
  *  引用 { pool: i, o: [x, y, z] }：只差起點的網格（同一種砲擺在不同位置）共用一格，o ＝ 這一份自己的起點（整數 × q，換掉差值的第一個頂點 ⇒ 整份平移；TASK-0667）。 */
-var MESH_POOL = null, MESH_POOL_M = {};
 function meshPool(model) {
-  var h = model.header, id = h.mesh_pool; if (!id || !h.rig || !h.rig.meshes) return model;
-  if (!MESH_POOL) { var el = document.getElementById(id); if (!el) return Promise.reject(new Error('找不到網格池 #' + id)); MESH_POOL = VK.inflateRaw(VK.b64ToBytes(el.textContent)).then(function (u) { return JSON.parse(new TextDecoder().decode(u)); }); }
-  return MESH_POOL.then(function (P) { h.rig.meshes = h.rig.meshes.map(function (m) { return m && m.pool !== undefined ? meshPoolMesh(P, m.pool, m.o) : m; }); return model; });
+  var h = model.header, P = h.mpool; if (!P || !h.rig || !h.rig.meshes) return model;
+  var M = {};                                                            // 同一艘船裡同一個引用（同一門砲）只還原一次、共用
+  h.rig.meshes = h.rig.meshes.map(function (m) { return m && m.pool !== undefined ? meshPoolMesh(P, m.pool, m.o, M) : m; });
+  delete h.mpool;                                                        // 還原完就用不到了（不留在船型上佔記憶體）
+  return model;
 }
-function meshPoolMesh(P, i, o) {
+function meshPoolMesh(P, i, o, M) {
   var key = o ? i + '@' + o.join(',') : i;
-  if (MESH_POOL_M[key]) return MESH_POOL_M[key];
+  if (M[key]) return M[key];
   var e = P.meshes[i], q = P.q, v = new Array(e.v.length), t = new Array(e.t.length), x = 0, y = 0, z = 0, k, a = 0;
   if (o && e.v.length) { x = o[0] - e.v[0]; y = o[1] - e.v[1]; z = o[2] - e.v[2]; }   // 起點換成 o（整數，跟原本那一份逐點相同）
   for (k = 0; k < e.v.length; k += 3) { x += e.v[k]; y += e.v[k + 1]; z += e.v[k + 2]; v[k] = x / q; v[k + 1] = y / q; v[k + 2] = z / q; }
   for (k = 0; k < e.t.length; k++) { a += e.t[k]; t[k] = a; }
-  return (MESH_POOL_M[key] = { verts: v, tris: t, tmat: e.tmat, mats: e.mats });
+  return (M[key] = { verts: v, tris: t, tmat: e.tmat, mats: e.mats });
 }
 /** 讓出一次（MessageChannel：一個新的工作 ⇒ 瀏覽器可以先畫一格、處理點擊）。⛔ 不用 setTimeout：分頁在背景時會被壓到一秒一次。 */
 function yieldUI() { return new Promise(function (r) { var ch = new MessageChannel(); ch.port1.onmessage = function () { r(); }; ch.port2.postMessage(0); }); }

@@ -1,8 +1,8 @@
 # Blockside（《憲法號對轟》）的重產工具
 
 > 📦 2026-10-15（TASK-0586）從 ArtGallery 的 `HtmlGames/_build/ame_constitution_broadside/` 搬來（只複製檔案；之前的歷史在 ArtGallery 的 `git log -- HtmlGames/_build/ame_constitution_broadside`，114 筆）。
-> 開發用 Valhalla 裡的 `Blockside/` submodule。目錄：`src/`（這裡）、`VoxelKit/`（從 ArtGallery/VoxelKit 853b4e7 複製；`_cache/` 不入版控）、根目錄的成品 `index.html`（GitHub Pages 首頁）、`admin.html`（設定後台）、`admin.cmd`、`sandbox.html`（2D 指揮官沙盒）、`fleetlab.html`（擬真沙盒的入口，轉到 index.html?lab=fleet）。
-> ⚠ repo 變肥（成品 `index.html` 每一版都進版控，壓縮過的船 git 存不了差異；5 天 154 MiB）：原因與方案見 [`REPO_SIZE.md`](REPO_SIZE.md)（2026-10-20，還沒動手）。
+> 開發用 Valhalla 裡的 `Blockside/` submodule。目錄：`src/`（這裡）、`VoxelKit/`（從 ArtGallery/VoxelKit 853b4e7 複製；`_cache/` 不入版控）、根目錄的成品 `index.html` ＋ `ships/`（拆檔：每艘船一個檔，見下面「建置」；GitHub Pages 首頁）、`admin.html`（設定後台）、`admin.cmd`、`sandbox.html`（2D 指揮官沙盒）、`fleetlab.html`（擬真沙盒的入口，轉到 index.html?lab=fleet）。
+> ⚠ repo 變肥（成品每一版都進版控，壓縮過的船 git 存不了差異；5 天 154 MiB）：原因、量法、做了什麼見 [`REPO_SIZE.md`](REPO_SIZE.md)（2026-10-20：拆檔＋船檔分段已做，見 §0）。
 
 根目錄的 `index.html` 是由這裡的 `template.html`、`js/`、`config/game.json`，加上 `../VoxelKit/` 產生的：
 
@@ -23,9 +23,21 @@
 | `art/`（選用） | 美術素材 `crew.png`、`fx.png`、`hud.png`；規格在 TASK-0516。沒交 ⇒ 程式畫的替代品 |
 
 ```bash
-# 建置：驗 config/game.json ⇒ 船標籤照船隻清單 ⇒ vxk_inline.py 內嵌成單檔 ⇒ 壓縮（預設，TASK-0583）
-#   壓縮：模型網格收成一個池子 —— 同一份（同一門砲）幾艘船只存一次、頂點去重＋差值；雕刻作品與匯出的 .vxk 格式不變，_cache 與指紋不動，遊戲讀的時候還原（05_hull.js meshPool）。
-#   寫出去之前照遊戲的讀法還原、跟 _cache 原檔逐個比（對不上 ⇒ 不寫）。六艘：成品 9.09 MB → 5.36 MB。
+# 建置：驗 config/game.json ⇒ 船標籤照船隻清單 ⇒ vxk_inline.py 內嵌成單檔 ⇒ 壓縮（預設，TASK-0583）⇒ 拆檔（預設）
+#   壓縮：每艘船的模型網格收成它自己的池子（header.mpool）—— 同一份（同一門砲）在這艘船上只存一次、頂點去重＋差值；雕刻作品與匯出的 .vxk 格式不變，_cache 與指紋不動，遊戲讀的時候還原（05_hull.js meshPool）。
+#   寫出去之前照遊戲的讀法還原、跟 _cache 原檔逐個比（對不上 ⇒ 不寫）。六艘：成品 9.09 MB → 5.36 MB（那時是全部船共用一個池子）。
+#   拆檔（Tim 2026-10-20：「如果變成拆檔案呢(index.html變成入口)」；為什麼見 src/REPO_SIZE.md）：
+#     index.html 只當入口（程式、設定、圖＋一張船清單，元素 id vxk-ships：{ 標籤: 雜湊 }）；每艘船一個檔 ships/<標籤>.js（VoxelKit.ship("<標籤>",[段…],"<雜湊>")）。
+#     遊戲只載編成裡的船（voxelkit.js embeddedBytes 用 <script> 載 ⇒ 直接開 index.html（file://）也行；改裝船自己帶上原船）。
+#     船檔分段：同一條 deflate 串流照結構切段（檔頭一欄一段、rig 一個子欄一段、網格池一份一段、格子一段），段之間 Z_FULL_FLUSH、每段各自 base64 一行
+#       ⇒ 改一欄只有那一段的位元組變，git 只存那幾行（gzip --rsyncable 同一招）；讀的時候各段解開接起來 ＝ 一條普通的 deflate-raw，inflate、parse 照舊。
+#       量過（dev 主線 287 版、291 次船檔重存，206 次只有檔頭變了）：同一段歷史 一艘一整條 107.9 MiB ⇒ 分段 17.5 MiB（舊的共用池子＋內嵌是 132.8 MiB）；船檔大 3.8%。
+#     內容雜湊（sha1 前 10 碼）入口清單一份、船檔裡一份；載的網址帶 ?v=<雜湊> 擋舊快取；兩份對不上 ⇒ 明說「不是同一次建置的」（舊入口配新的 ships/），不會混用。
+#     一艘船沒變，它的檔一個位元組都不變。⛔ 檔名不帶雜湊：git 打包照路徑末段把同一個檔的各版排在一起找差異，檔名每版都換就排不到一起。
+#     ⛔ ships/ 跟 index.html 一起提交（git add -A ships index.html：船隻清單拿掉的船，建置時連檔一起拿掉，刪除也要提交）；srccheck、pre-commit、Pages 部署前都會檢查清單上的檔都在、雜湊對得上。
+#     要整份成品帶走（對拍的對照組、別的資料夾）：snapshot 取出某一版的入口＋船檔（⛔ git show <版>:index.html 只拿得到入口）。
+#     讀數（2026-10-20，dev 9769c46 的 18 艘）：入口 2.71 MB；船檔 18 個 5.36 MB（一艘 42–605 KB；網格池一艘一個 ⇒ 比共用池子多 1.1 MB，分段再多 3%）；
+#     開一場風暴角號對夜燈號只下載入口＋兩艘 ≈ 3.4 MB（以前整份 6.9 MB）。
 #   ＋ 格子左右鏡射＋diff（TASK-0602）：每艘照 y 找鏡面（y ↔ s − y），只存一半＋diff（另一半多出來／換色的格、該是空的要刪的格），
 #     header.mirror ＝ {s, nhalf, ndiff}；遊戲在 VoxelKit/voxelkit.js parse（unmirror）還原，之後的程式看到的塊跟原檔一位元組不差。
 #     壓起來沒有比較小 ⇒ 那艘照原樣。七艘：格子 897 → 507 KB、成品 5.70 → 5.20 MB；解碼每艘多 0–33 ms（三叉戟號 30 → 63）。
@@ -64,8 +76,12 @@ python -I admin.py build
 python -I admin.py srccheck
 # 裝提交前／推送前的成品檢查（git config core.hooksPath .githooks；.git/hooks 裡原本有鉤子 ⇒ 不裝、列出來）
 python -I admin.py hooks
-# 原格式（不壓縮）
+# 原格式（不壓縮、船內嵌、一個檔）
 python -I admin.py build --raw
+# 壓縮版但不拆檔（船內嵌、一個檔；封存、要單一檔案的地方用。一般提交用預設的拆檔）
+python -I admin.py build --single
+# 某一版的成品（入口＋它清單上的船檔）取出到資料夾（對拍的對照組；拆檔之前的版本只有 index.html）
+python -I admin.py snapshot <版本> <資料夾>
 # 成品跟 _cache 原檔比（壓縮版照遊戲的讀法還原；網格三角形逐個、格子一位元組不差）
 python -I admin.py verify
 # 設定後台（只聽本機）：http://127.0.0.1:8642/ —— 改設定、儲存並重建、匯入新船、重新匯入；--open 自動開瀏覽器，已經開著 ⇒ 只開頁面

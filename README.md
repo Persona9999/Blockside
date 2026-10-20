@@ -57,7 +57,7 @@ last_updated: 2026-10-15
 
 ## 🔧 給好奇的人
 
-- 原始碼在 `src/`（`template.html`、`js/`、`config/game.json`、`admin.py`、工具）；成品 `index.html` 由 `python -I src/admin.py build` 產生 —— ⛔ 不要直接改 `index.html`。開發說明：[`src/README.md`](src/README.md)。
+- 原始碼在 `src/`（`template.html`、`js/`、`config/game.json`、`admin.py`、工具）；成品 `index.html`（入口）＋ `ships/`（每艘船一個檔，要用才載）由 `python -I src/admin.py build` 產生 —— ⛔ 不要直接改 `index.html`；`ships/` 跟 `index.html` 一起提交（`git add -A ships index.html`），搬成品也要連 `ships/` 一起。開發說明：[`src/README.md`](src/README.md)。
 - 設定後台：雙擊 `admin.cmd`（＝ `python -I src/admin.py serve --open`，只聽本機）。
 - 船是雕刻區的作品匯出的 `.vxk`（`VoxelKit/_cache/`，不入版控；換機器 ⇒ `python -I src/admin.py cache` 從作品重新匯出、跟指紋比），內嵌在網頁裡；同一份模型（例如同一門砲）幾艘船只存一次，所以六艘船擠得進幾 MB。
 - 2026-10-15 以前在 ArtGallery 開發（`HtmlGames/_build/ame_constitution_broadside/`，歷史還在那邊的 git log）。
