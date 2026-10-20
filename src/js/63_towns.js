@@ -277,7 +277,7 @@ function townKit() {
       var m0 = I.models[nm], d = D[nm];
       if (!d) throw new Error('外面那一頁沒給 ' + nm);
       return Promise.all([townMesh(d.g, m0.size), townMesh(d.lo, m0.lo.size)]).then(function (L) {
-        M[nm] = { nm: nm, i: names.indexOf(nm), m: m0, lod: L, png: d.png, uc0: [m0.mpv, m0.size[0] * m0.mpv / 2, m0.size[1] * m0.mpv / 2], uc1: [m0.mpv * m0.lo.f, m0.size[0] * m0.mpv / 2, m0.size[1] * m0.mpv / 2] };
+        M[nm] = { nm: nm, i: names.indexOf(nm), m: m0, lod: L, png: d.png, uc0: [m0.mpv, m0.size[0] * m0.mpv / 2, m0.size[1] * m0.mpv / 2], uc1: [m0.mpv * m0.lo.f, m0.size[0] * m0.mpv / 2, m0.size[1] * m0.mpv / 2], win: townWinMesh(m0) };   // win：亮窗的窗片（夜裡的燈）
       });
     }));
   }).then(function () {
@@ -314,7 +314,7 @@ function townKit() {
 function townKitFree() {
   var K = TOWNS.kit; TOWNS.kit = null; TOWNS.kitP = null; TOWNS.kitHas = null;
   if (!K) return;
-  Object.keys(K.M).forEach(function (nm) { K.M[nm].lod.forEach(function (r) { gl.deleteVertexArray(r.vao); gl.deleteBuffer(r.vbo); }); });
+  Object.keys(K.M).forEach(function (nm) { K.M[nm].lod.concat(K.M[nm].win ? [K.M[nm].win] : []).forEach(function (r) { gl.deleteVertexArray(r.vao); gl.deleteBuffer(r.vbo); }); });
   if (K.tex) gl.deleteTexture(K.tex);
   TOWNS.list.forEach(function (T) { T.inst = null; }); TOWNS.dirty = true;
 }
@@ -710,14 +710,15 @@ var TOWN_VS = '#version 300 es\nlayout(location=0) in uvec4 aV; layout(location=
 // 交接：uIn ＝ 這一級從哪裡開始出現（抖動淡入）、uOut ＝ 到哪裡淡出 —— 同一個像素的門檻跟隔壁那一級共用 ⇒ 互補（照實例中心的距離 vD ⇒ 整棟一起換）
 var TOWN_FADE = TREE_DITHER + 'uniform vec2 uIn, uOut; bool townCut(float d){ float di=treeDi(gl_FragCoord.xy); return smoothstep(uIn.x,uIn.y,d)<=di || smoothstep(uOut.x,uOut.y,d)>di; }\n';
 var TOWN_FS = function () {
-  return '#version 300 es\nprecision highp float;\n' + SHADOW_GLSL + TOWN_FADE + 'in vec3 vL; in vec3 vW; in vec3 vN; flat in uint vC; flat in uint vF; in float vK; in float vD; uniform vec3 uSun,uEye,uFog,uSky,uGround; uniform float uFogD, uEdge; out vec4 o;\n' +
+  return '#version 300 es\nprecision highp float;\n' + SHADOW_GLSL + TLAMP_GLSL + TOWN_FADE + 'in vec3 vL; in vec3 vW; in vec3 vN; flat in uint vC; flat in uint vF; in float vK; in float vD; uniform vec3 uSun,uEye,uFog,uSky,uGround; uniform float uFogD, uEdge; out vec4 o;\n' +
     'const vec3 NT[6]=vec3[6](vec3(1,0,0),vec3(-1,0,0),vec3(0,1,0),vec3(0,-1,0),vec3(0,0,1),vec3(0,0,-1));\n' +
     'float h3(vec3 p){ return fract(sin(dot(p,vec3(12.9898,78.233,37.719)))*43758.5453); }\n' +
     'void main(){ if(vW.y<uClip) discard; if(townCut(vD)) discard; vec3 n=normalize(vN), nl=NT[int(vF)];\n' +
     ' vec3 base=vec3(float((vC>>5u)&7u)/7.0, float((vC>>2u)&7u)/7.0, float(vC&3u)/3.0); base*=0.92+0.16*h3(floor(vL-nl*0.5));\n' +
     ' vec3 f=fract(vL), e=min(f,1.0-f); float ed=min(e.x,e.y); if(vF<2u){ ed=min(e.y,e.z); } else if(vF<4u){ ed=min(e.x,e.z); }\n' +
     ' base*=mix(1.0-0.18*uEdge,1.0,smoothstep(0.0,0.09,ed));\n' +
-    ' float sd=dot(n,uSun), d=max(sd,0.0); float sk=shadowK(vW,n*1.5); vec3 col=base*vK*(mix(uGround,uSky,n.y*0.5+0.5)*0.62+vec3(1.0,0.96,0.88)*d*sk*0.78);\n' +
+    ' float sd=dot(n,uSun), d=max(sd,0.0); float sk=shadowK(vW,n*1.5); vec3 col=base*vK*(mix(uGround,uSky,n.y*0.5+0.5)*0.62+vec3(1.0,0.96,0.88)*d*sk*0.78+townLamp(vW,n));\n' +
+    ' if(vC==245u) col=mix(col,vec3(1.0,0.74,0.4)*1.7,uTLK);\n' +       // 燈籠的玻璃（色碼 245 只有燈籠用）：夜裡自己發光（夜裡的燈）
     ' float fd=length(vW-uEye); o=vec4(mix(col,uFog,1.0-exp(-fd*uFogD)),1.0); }\n';
 };
 // 貼圖（遠）：實例 aI ＝ (中心 x, 地塊 h, 中心 z, —)、aR ＝ (右手方向 x, z, 寬, 高)（照取的那一張的視線）、aU ＝ (u0, v0, u 寬, v 高)、aL ＝ 地標倍率；四邊形 aQ ∈ [−½, ½] × [0, 1]
@@ -733,16 +734,16 @@ var TOWN_PL_VS = '#version 300 es\nlayout(location=0) in vec3 aP; layout(locatio
   'void main(){ float s=sin(aI.w), c=cos(aI.w), a=aP.x*aS.x, b=aP.y*aS.y; vec3 w=vec3(aI.x+a*s-b*c, aI.y+(aP.z-0.5)*aS.z, aI.z-a*c-b*s);\n' +
   ' vN=vec3(aN.x*s-aN.y*c, aN.z, -aN.x*c-aN.y*s); vW=w; vK=aS.w; gl_Position=uVP*vec4(w,1.0); }\n';
 var TOWN_PL_FS = function () {
-  return '#version 300 es\nprecision highp float;\n' + SHADOW_GLSL + 'in vec3 vN; in vec3 vW; in float vK; uniform vec3 uSun,uEye,uFog,uSky,uGround,uCol; uniform float uFogD; out vec4 o;\n' +
-    'void main(){ if(vW.y<uClip) discard; vec3 n=normalize(vN); float d=max(dot(n,uSun),0.0), sk=shadowK(vW,n*1.5); vec3 col=uCol*vK*(0.85+0.15*fract(sin(dot(floor(vW*vec3(2.5,3.3,2.5)),vec3(12.9898,78.233,37.719)))*43758.5453))*(mix(uGround,uSky,n.y*0.5+0.5)*0.62+vec3(1.0,0.96,0.88)*d*sk*0.78);\n' +
+  return '#version 300 es\nprecision highp float;\n' + SHADOW_GLSL + TLAMP_GLSL + 'in vec3 vN; in vec3 vW; in float vK; uniform vec3 uSun,uEye,uFog,uSky,uGround,uCol; uniform float uFogD; out vec4 o;\n' +
+    'void main(){ if(vW.y<uClip) discard; vec3 n=normalize(vN); float d=max(dot(n,uSun),0.0), sk=shadowK(vW,n*1.5); vec3 col=uCol*vK*(0.85+0.15*fract(sin(dot(floor(vW*vec3(2.5,3.3,2.5)),vec3(12.9898,78.233,37.719)))*43758.5453))*(mix(uGround,uSky,n.y*0.5+0.5)*0.62+vec3(1.0,0.96,0.88)*d*sk*0.78+townLamp(vW,n));\n' +
     ' float fd=length(vW-uEye); o=vec4(mix(col,uFog,1.0-exp(-fd*uFogD)),1.0); }\n';
 };
 // 地面的帶子、屋頂殼：位置、法線、顏色（屋頂殼帶交接的抖動）
 var TOWN_GR_VS = '#version 300 es\nlayout(location=0) in vec3 aP; layout(location=1) in vec3 aN; layout(location=2) in vec3 aC; uniform mat4 uVP; out vec3 vN; out vec3 vW; out vec3 vC; void main(){ vN=aN; vW=aP; vC=aC; gl_Position=uVP*vec4(aP,1.0); }\n';
 var TOWN_GR_FS = function (fade) {
-  return '#version 300 es\nprecision highp float;\n' + SHADOW_GLSL + (fade ? TOWN_FADE : '') + 'in vec3 vN; in vec3 vW; in vec3 vC; uniform vec3 uSun,uEye,uFog,uSky,uGround; uniform float uFogD; out vec4 o;\n' +
+  return '#version 300 es\nprecision highp float;\n' + SHADOW_GLSL + TLAMP_GLSL + (fade ? TOWN_FADE : '') + 'in vec3 vN; in vec3 vW; in vec3 vC; uniform vec3 uSun,uEye,uFog,uSky,uGround; uniform float uFogD; out vec4 o;\n' +
     'void main(){ if(vW.y<uClip) discard; ' + (fade ? 'if(townCut(length(vW.xz-uEye.xz))) discard; ' : '') + 'vec3 n=normalize(vN); float d=max(dot(n,uSun),0.0), sk=' + (fade ? '1.0' : 'shadowK(vW,n*1.5)') + ';\n' +
-    ' vec3 col=vC*(0.9+0.2*fract(sin(dot(floor(vW.xz*1.3),vec2(12.9898,78.233)))*43758.5453))*(mix(uGround,uSky,n.y*0.5+0.5)*0.65+vec3(1.0,0.96,0.88)*d*sk*0.7);\n' +
+    ' vec3 col=vC*(0.9+0.2*fract(sin(dot(floor(vW.xz*1.3),vec2(12.9898,78.233)))*43758.5453))*(mix(uGround,uSky,n.y*0.5+0.5)*0.65+vec3(1.0,0.96,0.88)*d*sk*0.7+townLamp(vW,n));\n' +
     ' float fd=length(vW-uEye); o=vec4(mix(col,uFog,1.0-exp(-fd*uFogD)),1.0); }\n';
 };
 function townProgs() {
@@ -828,17 +829,20 @@ function townDraw() {
   });
   var nb = 0;                                                            // 實例、地面的帶子、屋頂殼：一格最多建一座城的一樣、照背景預算（08_seabed.js bedBusy；跟地球儀同一條主執行緒）
   TOWNS.list.forEach(function (T) {
-    if (!T.inst && !nb && !bedBusy()) { var b0 = performance.now(); T.inst = townInst(T); T.ground = townGroundMesh(T); T.groundDirty = false; townFlagFree(T); T.shDirty = true; TOWNS.dirty = true; nb++; bedSpent(b0); }
+    if (!T.inst && !nb && !bedBusy()) { var b0 = performance.now(); T.inst = townInst(T); T.ground = townGroundMesh(T); T.groundDirty = false; townFlagFree(T); T.shDirty = true; T.tlS = T.tlD = true; TOWNS.dirty = true; nb++; bedSpent(b0); }
   });
+  TL.k = TL.on ? TOD_LIT : 0;                                                        // 夜裡的燈：這一格點燈了沒（08_weather.js；陸地在城之前畫 ⇒ 用上一格的分組表，差一格看不出來）
   TOWNS.list.forEach(function (T) {
     if (!T.inst || !T.groundDirty || nb || bedBusy()) return;
-    var b0 = performance.now(), old = T.ground; T.ground = townGroundMesh(T); T.groundDirty = false; nb++;
+    var b0 = performance.now(), old = T.ground; T.ground = townGroundMesh(T); T.groundDirty = false; T.tlD = true; nb++;   // 地形塊到了 ⇒ 街燈的高度重取
     if (old) { gl.deleteVertexArray(old.vao); gl.deleteBuffer(old.vb); gl.deleteBuffer(old.ib); }
     bedSpent(b0);
   });
   var E = TOWNS.eye;
   if (TOWNS.dirty || !E || Math.abs(E[0] - eye[0]) + Math.abs(E[1] - eye[1]) + Math.abs(E[2] - eye[2]) > TOWN_REBIN) { townBin(PL, eye); TOWNS.eye = eye.slice(); TOWNS.dirty = false; }
-  TOWNS.list.forEach(function (T) { if (T.shDirty && T.inst && !nb && !bedBusy()) { var b0 = performance.now(); if (T.shell) { gl.deleteVertexArray(T.shell.vao); gl.deleteBuffer(T.shell.vb); gl.deleteBuffer(T.shell.ib); } T.shell = townShell(T); T.shDirty = false; nb++; bedSpent(b0); } });
+  TOWNS.list.forEach(function (T) { if (T.shDirty && T.inst && !nb && !bedBusy()) { var b0 = performance.now(); if (T.shell) { gl.deleteVertexArray(T.shell.vao); gl.deleteBuffer(T.shell.vb); gl.deleteBuffer(T.shell.ib); } T.shell = townShell(T); T.shDirty = false; T.tlD = true; nb++; bedSpent(b0); } });   // 城牆的高度到了 ⇒ 城塔、城門的火把跟著
+  TOWNS.list.forEach(function (T) { ['S', 'D'].forEach(function (pt) { if (T['tl' + pt] && T.inst && !nb && !bedBusy()) { var b0 = performance.now(); townLightBuild(T, pt); T['tl' + pt] = false; nb++; bedSpent(b0); } }); });   // 夜裡的燈：房子那份建一次、城牆＋街燈那份照高度重建
+  townLampGrid(eye);
   var cf = gl.isEnabled(gl.CULL_FACE); gl.disable(gl.CULL_FACE);
   var fogD = WX.fog * BED_FOG * CAM.fogK, G = TOWNS.grp, L0 = TOWN_LOD[0], L1 = TOWN_LOD[1], B = TOWN_BAND, tris = 0;
   // 近、中：一種模型一次（照實例）
@@ -859,6 +863,7 @@ function townDraw() {
     var PP = P.pl; gl.useProgram(PP.prog); setCommon(PP); gl.uniform1f(PP.u.uFogD, fogD); gl.uniform3f(PP.u.uCol, 0.62, 0.58, 0.50);
     gl.bindVertexArray(P.plVao); gl.drawArraysInstanced(gl.TRIANGLES, 0, 36, G.npl); tris += 12 * G.npl;
   }
+  tris += townPostDraw(P, eye, fogD);                                    // 街燈的柱子、燈箱（夜裡的燈；同石基那一支著色器）
   // 貼圖
   if (G.nbb && K.tex) {
     var PB = P.bb; gl.useProgram(PB.prog); setCommon(PB); gl.uniform1f(PB.u.uFogD, fogD); gl.uniform3fv(PB.u.uEye, eye);
@@ -914,8 +919,288 @@ function townBoxFar(b, e) { var dx = Math.max(Math.abs(b[0] - e[0]), Math.abs(b[
 function townStat(at) {
   var S = TOWNS.stat, o = { on: TOWNS.on, want: TOWNS.want, err: TOWNS.err, towns: TOWNS.list.map(function (T) {
     var u = {}; (T.inst || []).forEach(function (q) { u[q.k] = (u[q.k] || 0) + 1; });
-    return { id: T.id, name: T.name, tier: T.tier, seed: T.seed, ox: T.ox, oy: T.oy, lots: (T.p.lots || []).length, roads: T.roads.length, walls: (T.p.walls || []).length, inst: (T.inst || []).length, byModel: u, center: [+(T.ox - BED.ax).toFixed(1), +(T.oy - BED.az).toFixed(1)] };
-  }), kit: !!TOWNS.kit, kitN: S.kitN, kitMs: S.kitMs, kitTris: S.kitTris, skip: S.skip, drawn: { full: S.d0, low: S.d1, card: S.d2, shells: S.d3, plinth: S.plinth, flags: S.flags || 0, landmarks: S.lm || 0 }, tris: S.tris, ms: { draw: S.drawMs, bin: S.binMs, grade: +S.gradeMs.toFixed(1), prep: S.prepMs }, gradedChunks: S.chunks };
+    var tl = townLightStat(T);
+    return { id: T.id, name: T.name, tier: T.tier, seed: T.seed, ox: T.ox, oy: T.oy, lots: (T.p.lots || []).length, roads: T.roads.length, walls: (T.p.walls || []).length, inst: (T.inst || []).length, byModel: u, lights: tl, center: [+(T.ox - BED.ax).toFixed(1), +(T.oy - BED.az).toFixed(1)] };
+  }), kit: !!TOWNS.kit, kitN: S.kitN, kitMs: S.kitMs, kitTris: S.kitTris, skip: S.skip, drawn: { full: S.d0, low: S.d1, card: S.d2, shells: S.d3, plinth: S.plinth, flags: S.flags || 0, landmarks: S.lm || 0 }, tris: S.tris, ms: { draw: S.drawMs, bin: S.binMs, grade: +S.gradeMs.toFixed(1), prep: S.prepMs }, gradedChunks: S.chunks,
+    night: { lit: +TL.k.toFixed(3), win: +TOD_WIN.toFixed(3), grid: TL.stat.inGrid, full: TL.stat.full, over: TL.stat.over, gridMs: TL.stat.gridMs, cards: TL.stat.cards, glow: TL.stat.glow, glowMs: TL.stat.glowMs } };
   if (at) { var q = bedCell(at[0], at[1]); o.at = { ground: +townGround(at[0], at[1]).toFixed(2), sim: +bedHgt(at[0], at[1]).toFixed(2), clear: q ? townClr(q.C, q.u * q.C.step, q.v * q.C.step) : null }; }
   return o;
+}
+
+// ── 夜裡的燈（Tim 2026-10-20「加了夜晚後 是否可以嘗試給現有建築標記一些燈(無陰影點光源) 然後渲染時要考慮效能」「然後也可以沿著街道自動部設街燈」；只給人看） ──
+// 燈從哪來：Blocksail tools/townmodels.py 匯入時寫進索引的 lights（模型格座標）——
+//   lamp [x, y, z, 型]：0 ＝ 作品雕的燈籠（固定點 wick）、1 ＝ 門口（作品沒雕燈籠才自動補）、2 ＝ 城塔外牆的火把、3 ＝ 城門洞頂的火把；
+//   win [{ a, s, d, r }]：窗洞的形狀（薄的那一軸、往外的正負、洞外那一面、[[z0, z1, u0, u1], …]）。
+//   ＋這裡沿路擺的街燈（型 4，townPosts）。
+// 什麼時候亮：08_weather.js TOD_LIT（世界時間；太陽 3° 開始點、−5° 全亮）—— 沒開世界時間（對戰、沙盒）⇒ 0，一盞都不點、整段跳過。
+//   窗：幾成亮著照 TOD_WIN（入夜七成、半夜以後慢慢熄）；哪一扇亮照雜湊（實例的 x、z ＋ 第幾扇，GLSL twH）⇒ 同一扇整晚一致、越晚熄掉的越多；窗片與遠處的光點同一個雜湊。
+// 畫（效能）：
+//   · 點光源（不投影子）：鏡頭附近 TL_GRID × TL_GRID 格（每格 TL_CELL 公尺，鏡頭動 TL_REBIN 公尺才重排）的分組表（RGBA16UI 一格兩個像素：最多 TL_SLOT ＝ 8 盞的編號；第一版 4 盞，加拉塔近看 482 格滿了 ⇒ 光圈在格線上被切）
+//     ＋燈的資料（RGBA32F：位置、半徑；顏色 × 亮度、相位）⇒ 每個像素只讀自己那一格（TLAMP_GLSL townLamp）：燈再多，每個像素最多算 8 盞。
+//     一格超過 8 盞 ⇒ 留離格心近的（stat.full）；範圍裡超過 TL_MAX 盞 ⇒ 多的不照（stat.over）。照：建築（近、中）、石基、街燈、路、屋頂殼、陸地（63_bed_gl.js）。
+//     uTLK 0（白天）⇒ 一進函式就回 0，不讀貼圖。
+//   · 亮窗：每個模型一份窗片網格（townWinMesh；貼在洞外那一面、往外 0.08 格），照近那一級的實例畫（同一組抖動交接），加法、不寫深度 ⇒ 窗框、窗櫺照樣擋在前面。
+//   · 光點：每座城一個靜態的緩衝區（燈一點、每扇窗一點；townLightBuild），GPU 一次畫完（看板四邊形、最小 TL_PX 像素、照霧淡掉）；窗的光點在近那一級的交接帶淡入、背對鏡頭的不畫。
+//   · 燈籠的玻璃（色碼 245，只有燈籠用）夜裡自己發光（TOWN_FS）。
+//   · 窗片、光點在海、玻璃之後畫（60_render.js 叫 townGlowDraw）：加法、不寫深度的東西先畫，會被之後畫的不透明蓋掉。
+// ?townlights=0 ⇒ 整段關掉（量效能的對照組；柱子照畫）。
+// 街燈（townPosts）：路（TL_STREET 的那幾種）每隔那麼多公尺一支、左右交錯、離路邊 TL_POST_OFF；落在建築、城牆的佔地裡（外擴 0.6 m）⇒ 換另一邊、還不行就跳過；
+//   離別支 < TL_POST_GAP 公尺（路口、兩條路疊著）、站在別條路的路面上 ⇒ 跳過。位置照規劃算（每次一樣）；高度照畫面地形（townGround），那一塊還沒載 ⇒ 等下一次重建（stat miss）。
+//   柱子、燈箱用石基那一支著色器（方塊）。⛔ 不碰戰局：船、砲彈穿過去。
+var TL_GRID = 64, TL_CELL = 8, TL_SLOT = 8, TL_MAX = 1024, TL_REBIN = 4, TL_PX = 2.5;
+var TL_STREET = { main: 24, street: 30, quay: 22 }, TL_POST_OFF = 0.5, TL_POST_GAP = 10, TL_POST_H = 3.2;
+var TL_TYPE = [                                                         // 型 ⇒ r 照多遠（公尺）、k 亮度、c 光色、h 光暈半徑（公尺）
+  { r: 8, k: 2.0, c: [1, 0.62, 0.28], h: 0.9 },                         // 0 燈籠
+  { r: 9, k: 2.0, c: [1, 0.62, 0.28], h: 1.0 },                         // 1 門口
+  { r: 12, k: 2.6, c: [1, 0.48, 0.16], h: 1.5 },                        // 2 城塔的火把
+  { r: 12, k: 2.6, c: [1, 0.48, 0.16], h: 1.5 },                        // 3 城門的火把
+  { r: 11, k: 2.2, c: [1, 0.66, 0.32], h: 1.1 }];                       // 4 街燈
+var TL = { gTex: null, dTex: null, g: new Uint16Array(TL_GRID * TL_GRID * TL_SLOT), gd: new Float32Array(TL_GRID * TL_GRID * TL_SLOT), d: new Float32Array(TL_MAX * 8), a: new Float32Array([0, 0, 1 / TL_CELL, TL_GRID]),
+  on: Q.get('townlights') !== '0', k: 0, eye: null, ver: 0, gv: -1, stat: { inGrid: 0, full: 0, over: 0, gridMs: 0, cards: 0, glow: 0, glowMs: 0 } };
+// 點光源：uTLA ＝ (分組表的西北角 x、z, 1 ÷ 格寬, 格數)、uTLK ＝ 點燈了沒、uTLT ＝ 模擬時間（火光晃）
+var TLAMP_GLSL = 'uniform highp usampler2D uTLG; uniform highp sampler2D uTLD; uniform vec4 uTLA; uniform float uTLK, uTLT;\n' +
+  'vec3 townLamp(vec3 w, vec3 n){ if(uTLK<=0.0) return vec3(0.0); vec2 c=(w.xz-uTLA.xy)*uTLA.z; if(c.x<0.0||c.y<0.0||c.x>=uTLA.w||c.y>=uTLA.w) return vec3(0.0);\n' +
+  ' ivec2 q=ivec2(c); uvec4 i0=texelFetch(uTLG,ivec2(q.x*2,q.y),0), i1=texelFetch(uTLG,ivec2(q.x*2+1,q.y),0); vec3 s=vec3(0.0);\n' +
+  ' for(int k=0;k<8;k++){ uint i=k<4?i0[k]:i1[k-4]; if(i==0u) break; int j=int(i-1u)*2; vec4 P=texelFetch(uTLD,ivec2(j&63,j>>6),0), C=texelFetch(uTLD,ivec2((j+1)&63,(j+1)>>6),0);\n' +
+  '  vec3 L=P.xyz-w; float d=length(L), a=clamp(1.0-d/P.w,0.0,1.0); if(a<=0.0) continue; float fl=0.9+0.1*sin(uTLT*6.3+C.w)*sin(uTLT*2.7+C.w*1.9);\n' +
+  '  s+=C.rgb*a*a*fl*(0.3+0.7*max(dot(n,L/max(d,0.001)),0.0)); } return s*uTLK; }\n';
+// 哪一扇窗亮：實例的 x、z ＋ 第幾扇 ⇒ [0, 1)（窗片、光點同一份；整數雜湊，不吃 sin 的精度）
+var TL_HASH_GLSL = 'float twH(vec2 xz, float id){ uvec3 v=floatBitsToUint(vec3(xz,id)); uint h=v.x*0x8da6b343u^v.y*0xd8163841u^v.z*0xcb1ab31fu; h^=h>>16; h*=0x7feb352du; h^=h>>15; h*=0x846ca68bu; h^=h>>16; return float(h>>8)/16777216.0; }\n' +
+  'vec3 twCol(float h){ float v=fract(h*53.7); return mix(vec3(1.0,0.6,0.28),vec3(1.0,0.78,0.5),v)*(0.75+0.4*fract(h*91.3)); }\n';
+// 窗片：模型格座標 aP.xyz、第幾扇 aP.w；實例同近那一級（townInstAttr）
+var TOWN_WIN_VS = '#version 300 es\nlayout(location=0) in vec4 aP; layout(location=4) in vec4 aI; layout(location=5) in vec3 aS; layout(location=6) in vec4 aJ; uniform mat4 uVP; uniform vec3 uC, uEye; uniform float uTWin, uTLT;\n' +
+  'out vec3 vW; out float vD; flat out vec3 vCol;\n' + TL_HASH_GLSL +
+  'void main(){ float h=twH(aI.xz,aP.w); vW=vec3(0.0); vD=0.0; vCol=vec3(0.0); if(h>=uTWin){ gl_Position=vec4(2.0,2.0,2.0,1.0); return; }\n' +
+  ' vec3 p=aP.xyz; float s=sin(aI.w), c=cos(aI.w), a=(p.x*uC.x-uC.y)*aS.x, b=p.y*uC.x-uC.z; vec3 w=vec3(aI.x+a*s-b*c, aI.y+p.z*uC.x+aJ.z*a, aI.z-a*c-b*s);\n' +
+  ' vCol=twCol(h)*(0.94+0.06*sin(uTLT*(1.3+fract(h*7.0))+h*40.0)); vW=w; vD=length(aI.xz-uEye.xz)/aS.z; gl_Position=uVP*vec4(w,1.0); }\n';
+var TOWN_WIN_FS = function () {
+  return '#version 300 es\nprecision highp float;\n' + TOWN_FADE + 'in vec3 vW; in float vD; flat in vec3 vCol; uniform vec3 uEye; uniform float uFogD, uClip, uTLK; out vec4 o;\n' +
+    'void main(){ if(vW.y<uClip) discard; if(townCut(vD)) discard; float fd=length(vW-uEye); o=vec4(vCol*1.25*uTLK*exp(-fd*uFogD),1.0); }\n';
+};
+// 光點：四邊形 aQ ∈ [−½, ½] × [0, 1]（P.quad）；aA ＝ (位置, 半徑)、aB ＝ (顏色, 型：−1 窗)、aC ＝ 窗 (實例 x, z, 第幾扇, 地標倍率)／燈 (—, —, —, 相位)、aN ＝ 窗往外的方向
+var TOWN_GLOW_VS = '#version 300 es\nlayout(location=0) in vec2 aQ; layout(location=4) in vec4 aA; layout(location=5) in vec4 aB; layout(location=6) in vec4 aC; layout(location=7) in vec2 aN;\n' +
+  'uniform mat4 uVP; uniform vec3 uEye, uR, uU; uniform float uPx, uTLK, uTWin, uTLT, uFogD; uniform vec2 uWin; out vec2 vQ; flat out vec3 vCol;\n' + TL_HASH_GLSL +
+  'void main(){ vec3 p=aA.xyz, e=uEye-p; float d=length(e), k=uTLK; vec3 col=aB.rgb;\n' +
+  ' if(aB.w<0.0){ float h=twH(aC.xy,aC.z); if(h>=uTWin) k=0.0; col=twCol(h);\n' +
+  '  k*=smoothstep(uWin.x,uWin.y,length(aC.xy-uEye.xz)/aC.w)*smoothstep(-0.05,0.3,dot(aN,normalize(e.xz+vec2(1e-4)))); }\n' +
+  ' else k*=0.85+0.15*sin(uTLT*6.3+aC.w)*sin(uTLT*2.7+aC.w*1.9);\n' +
+  ' float s=max(aA.w,uPx*d*' + TL_PX.toFixed(2) + '); k*=pow(aA.w/s,0.3)*exp(-d*uFogD*0.5);\n' +   // 撐到最小像素 ⇒ 亮度只扣一點（第一版開根號：1.5 km 外的城只剩暗點）；自己發光的透霧比反光的遠 ⇒ 霧減半
+  ' vQ=vec2(aQ.x*2.0,aQ.y*2.0-1.0); vCol=col*k; if(k<=0.003){ gl_Position=vec4(2.0,2.0,2.0,1.0); return; }\n' +
+  ' vec3 w=p+e/max(d,0.001)*min(s*0.7,d*0.5)+(uR*vQ.x+uU*vQ.y)*s; gl_Position=uVP*vec4(w,1.0); }\n';   // 往鏡頭拉一點：光暈不被自己那面牆切一半
+var TOWN_GLOW_FS = '#version 300 es\nprecision highp float;\nin vec2 vQ; flat in vec3 vCol; out vec4 o;\n' +
+  'void main(){ float r=dot(vQ,vQ); if(r>1.0) discard; o=vec4(vCol*(exp(-r*5.0)*0.55+exp(-r*16.0)*0.9),1.0); }\n';
+
+/** setCommon（01_gl.js）：有 uTLK 的著色器 ⇒ 分組表、燈的資料（第 13、14 號，第一次建）、點燈了沒。 */
+function townLampSet(u) {
+  if (!TL.gTex) {
+    TL.gTex = gl.createTexture(); gl.activeTexture(gl.TEXTURE13); gl.bindTexture(gl.TEXTURE_2D, TL.gTex);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA16UI, TL_GRID * 2, TL_GRID, 0, gl.RGBA_INTEGER, gl.UNSIGNED_SHORT, TL.g);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+    TL.dTex = gl.createTexture(); gl.activeTexture(gl.TEXTURE14); gl.bindTexture(gl.TEXTURE_2D, TL.dTex);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA32F, 64, TL_MAX * 2 / 64, 0, gl.RGBA, gl.FLOAT, TL.d);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+    gl.activeTexture(gl.TEXTURE0);
+  }
+  gl.uniform1i(u.uTLG, 13); gl.uniform1i(u.uTLD, 14); gl.uniform4fv(u.uTLA, TL.a); gl.uniform1f(u.uTLK, TL.k); if (u.uTLT) gl.uniform1f(u.uTLT, SIMT);
+}
+/** 分組表（townDraw 每一格叫；點燈了、鏡頭動了 TL_REBIN 公尺、燈換過才重排）。 */
+function townLampGrid(eye) {
+  if (!TL.k || !TL.gTex) return;
+  var E = TL.eye; if (E && TL.gv === TL.ver && Math.abs(E[0] - eye[0]) + Math.abs(E[2] - eye[2]) < TL_REBIN) return;
+  var t0 = performance.now(), C = TL_CELL, N = TL_GRID, x0 = Math.floor(eye[0] / C) * C - N * C / 2, z0 = Math.floor(eye[2] / C) * C - N * C / 2, X1 = x0 + N * C, Z1 = z0 + N * C;
+  var G = TL.g, GD = TL.gd, D = TL.d, n = 0, full = 0, over = 0;
+  G.fill(0);
+  TOWNS.list.forEach(function (T) {
+    var L = T.tl && T.tl.lamps; if (!L) return;
+    for (var i = 0; i < L.length; i += 5) {
+      var x = L[i], y = L[i + 1], z = L[i + 2], P = TL_TYPE[L[i + 3]], R = P.r;
+      if (x + R < x0 || x - R > X1 || z + R < z0 || z - R > Z1) continue;
+      if (n >= TL_MAX) { over++; continue; }
+      var o = n * 8, id = ++n;
+      D[o] = x; D[o + 1] = y; D[o + 2] = z; D[o + 3] = R; D[o + 4] = P.c[0] * P.k; D[o + 5] = P.c[1] * P.k; D[o + 6] = P.c[2] * P.k; D[o + 7] = L[i + 4];
+      var i0 = Math.max(0, Math.floor((x - R - x0) / C)), i1 = Math.min(N - 1, Math.floor((x + R - x0) / C)), j0 = Math.max(0, Math.floor((z - R - z0) / C)), j1 = Math.min(N - 1, Math.floor((z + R - z0) / C));
+      for (var j = j0; j <= j1; j++) for (var ii = i0; ii <= i1; ii++) {
+        var ex = Math.max(x0 + ii * C - x, 0, x - (x0 + (ii + 1) * C)), ez = Math.max(z0 + j * C - z, 0, z - (z0 + (j + 1) * C));
+        if (ex * ex + ez * ez > R * R) continue;                         // 圓碰不到這一格
+        var c = (j * N + ii) * TL_SLOT, cx = x0 + (ii + 0.5) * C - x, cz = z0 + (j + 0.5) * C - z, d2 = cx * cx + cz * cz, s = -1, far = -1;
+        for (var k = 0; k < TL_SLOT; k++) { if (!G[c + k]) { s = k; break; } if (far < 0 || GD[c + k] > GD[c + far]) far = k; }
+        if (s < 0) { full++; if (GD[c + far] <= d2) continue; s = far; }   // 滿了 ⇒ 換掉離格心最遠的那一盞（新的比較近才換）
+        G[c + s] = id; GD[c + s] = d2;
+      }
+    }
+  });
+  gl.activeTexture(gl.TEXTURE13); gl.bindTexture(gl.TEXTURE_2D, TL.gTex); gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, N * 2, N, gl.RGBA_INTEGER, gl.UNSIGNED_SHORT, G);
+  var rows = Math.ceil(n * 2 / 64);
+  if (rows) { gl.activeTexture(gl.TEXTURE14); gl.bindTexture(gl.TEXTURE_2D, TL.dTex); gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, 64, rows, gl.RGBA, gl.FLOAT, D.subarray(0, rows * 256)); }
+  gl.activeTexture(gl.TEXTURE0);
+  TL.a[0] = x0; TL.a[1] = z0; TL.eye = eye.slice(); TL.gv = TL.ver;
+  TL.stat.inGrid = n; TL.stat.full = full; TL.stat.over = over; TL.stat.gridMs = +(performance.now() - t0).toFixed(2);
+}
+/** 模型的窗片網格（索引 lights.win ⇒ 每扇窗的洞，一列一個四邊形；屬性 0 ＝ (模型格 x, y, z, 第幾扇)、4～6 ＝ 實例）；沒有窗 ⇒ null。 */
+function townWinMesh(m) {
+  var W = (m.lights || {}).win; if (!W || !W.length) return null;
+  var V = [];
+  W.forEach(function (w, wi) {
+    var d = w.d + w.s * 0.08;                                            // 往外 0.08 格：不跟玻璃那一面打架
+    w.r.forEach(function (r) {
+      [[r[2], r[0]], [r[3], r[0]], [r[3], r[1]], [r[2], r[0]], [r[3], r[1]], [r[2], r[1]]].forEach(function (q) { if (w.a) V.push(q[0], d, q[1], wi); else V.push(d, q[0], q[1], wi); });
+    });
+  });
+  var g = { vao: gl.createVertexArray(), vbo: gl.createBuffer(), n: V.length / 4 };
+  gl.bindVertexArray(g.vao); gl.bindBuffer(gl.ARRAY_BUFFER, g.vbo); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(V), gl.STATIC_DRAW);
+  gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 4, gl.FLOAT, false, 16, 0);
+  [4, 5, 6].forEach(function (a) { gl.enableVertexAttribArray(a); gl.vertexAttribDivisor(a, 1); });
+  gl.bindVertexArray(null);
+  return g;
+}
+/** 城 T 的街燈位置（海域座標轉世界，照規劃算一次；見檔頭那一段）：[[x, z], …]。 */
+function townPosts(T) {
+  if (T.posts) return T.posts;
+  var out = [], ax = BED.ax, az = BED.az, IG = {}, RG = {}, PG = {}, GI = 16, GR = 32;
+  function cells(x0, z0, x1, z1, g, f) { for (var j = Math.floor(z0 / g); j <= Math.floor(z1 / g); j++) for (var i = Math.floor(x0 / g); i <= Math.floor(x1 / g); i++) f(i + ',' + j); }
+  (T.inst || []).forEach(function (q) {                                 // 佔地（建築：地塊上那一棟；城牆：半長、半厚）
+    var h = q.pl ? [q.pl[0] / 2, q.pl[1] / 2] : q.ft; if (!h) return; var R = Math.hypot(h[0], h[1]) + 1;
+    var b = { x: q.x, z: q.z, s: Math.sin(q.th), c: Math.cos(q.th), h: h };
+    cells(q.x - R, q.z - R, q.x + R, q.z + R, GI, function (k) { (IG[k] = IG[k] || []).push(b); });
+  });
+  T.roads.forEach(function (r) {
+    for (var q = 1; q < r.P.length; q++) { var a = r.P[q - 1], b = r.P[q], sg = { a: a, b: b, hw: r.w / 2, r: r }; cells(Math.min(a[0], b[0]) - r.w, Math.min(a[1], b[1]) - r.w, Math.max(a[0], b[0]) + r.w, Math.max(a[1], b[1]) + r.w, GR, function (k) { (RG[k] = RG[k] || []).push(sg); }); }
+  });
+  function inBldg(x, z) {                                               // 世界座標
+    var L = IG[Math.floor(x / GI) + ',' + Math.floor(z / GI)] || [];
+    return L.some(function (b) { var dx = x - b.x, dz = z - b.z, a = dx * b.s - dz * b.c, c = -dx * b.c - dz * b.s; return Math.abs(a) <= b.h[0] + 0.6 && Math.abs(c) <= b.h[1] + 0.6; });
+  }
+  function onRoad(x, z, own) {                                          // 海域座標：站在別條路的路面上
+    var L = RG[Math.floor(x / GR) + ',' + Math.floor(z / GR)] || [];
+    return L.some(function (sg) { return sg.r !== own && townSegDist(x, z, sg.a, sg.b) < sg.hw + 0.3; });
+  }
+  function crowded(x, z) {
+    var i0 = Math.floor(x / TL_POST_GAP), j0 = Math.floor(z / TL_POST_GAP);
+    for (var j = j0 - 1; j <= j0 + 1; j++) for (var i = i0 - 1; i <= i0 + 1; i++) if ((PG[i + ',' + j] || []).some(function (p) { return Math.hypot(p[0] - x, p[1] - z) < TL_POST_GAP; })) return true;
+    return false;
+  }
+  T.roads.forEach(function (r) {
+    var sp = TL_STREET[r.kind]; if (!sp) return;
+    var acc = sp / 2, k = townHash(T.id + ':' + r.id) < 0.5 ? 0 : 1;
+    for (var q = 1; q < r.P.length; q++) {
+      var a = r.P[q - 1], b = r.P[q], dx = b[0] - a[0], dz = b[1] - a[1], L = Math.hypot(dx, dz); if (L < 1e-6) continue;
+      var nx = -dz / L, nz = dx / L, off = r.w / 2 + TL_POST_OFF;
+      for (var t = acc; t <= L; t += sp) {
+        var px = a[0] + dx * t / L, pz = a[1] + dz * t / L, side = k++ % 2 ? 1 : -1, got = null;
+        [side, -side].some(function (sd) {
+          var x = px + nx * off * sd, z = pz + nz * off * sd;
+          if (inBldg(x - ax, z - az) || onRoad(x, z, r) || crowded(x, z)) return false;
+          got = [x, z]; return true;
+        });
+        if (got) { var kk = Math.floor(got[0] / TL_POST_GAP) + ',' + Math.floor(got[1] / TL_POST_GAP); (PG[kk] = PG[kk] || []).push(got); out.push([got[0] - ax, got[1] - az]); }
+      }
+      acc = t - L;
+    }
+  });
+  T.posts = out;
+  return out;
+}
+/** 城 T 的燈，分兩份（townDraw 照背景預算建；第一版整份一起建：君士坦丁堡一次 77 ms、每來一塊地形就重一次）：
+ *  'S' ＝ 房子的燈與窗（高度照規劃，實例建好就定了 ⇒ 建一次）、'D' ＝ 城牆的火把＋街燈（照城牆、地形的高度 ⇒ 那一塊到了、城牆有高度了就重建；量少、建得快）。
+ *  每份：點光源清單 lamps（x, y, z, 型, 相位）、光點緩衝區、（D）街燈的柱子。T.tl ＝ { S, D, lamps（兩份接起來，分組表讀）, 讀數 }。 */
+function townLightBuild(T, part) {
+  var t0 = performance.now(), K = TOWNS.kit, P = townProgs(), lamps = [], glow = [], posts = [], nWin = 0, miss = 0, dyn = part === 'D';
+  function lamp(w, ty, ph) { var Y = TL_TYPE[ty]; lamps.push(w[0], w[1], w[2], ty, ph); glow.push(w[0], w[1], w[2], Y.h, Y.c[0] * Y.k, Y.c[1] * Y.k, Y.c[2] * Y.k, ty, 0, 0, 0, ph, 0, 0); }
+  (T.inst || []).forEach(function (q) {
+    if (!!q.wall !== dyn) return;
+    var m = K.M[q.k].m, Lt = m.lights; if (!Lt) return;
+    if (!(q.y === q.y)) { miss++; return; }                              // 城牆：那一塊還沒載
+    var s = Math.sin(q.th), c = Math.cos(q.th), mpv = m.mpv, hw = m.size[0] * mpv / 2, hd = m.size[1] * mpv / 2, J = q.mj || TOWN_J0;
+    function W(v) { var a = (v[0] * mpv - hw) * q.sx, b = v[1] * mpv - hd; return [q.x + a * s - b * c, q.y + v[2] * mpv + J[2] * a, q.z - a * c - b * s]; }   // 模型 → 世界（檔頭的公式＋城牆的坡度）
+    (Lt.lamp || []).forEach(function (l, li) { lamp(W(l), l[3], townHash((q.lot || q.wall || q.k) + ':' + q.x.toFixed(1) + ':lamp' + li) * 6.2832); });
+    (Lt.win || []).forEach(function (wd, wi) {                          // 窗的光點：洞的面積中心、往外 0.15 m；大小 ≈ 洞的長邊
+      var A = 0, su = 0, sz = 0, zl = 1e9, zh = -1e9, ul = 1e9, uh = -1e9;
+      wd.r.forEach(function (r) { var ar = (r[1] - r[0]) * (r[3] - r[2]); A += ar; su += ar * (r[2] + r[3]) / 2; sz += ar * (r[0] + r[1]) / 2; zl = Math.min(zl, r[0]); zh = Math.max(zh, r[1]); ul = Math.min(ul, r[2]); uh = Math.max(uh, r[3]); });
+      if (!A) return;
+      var u = su / A, z = sz / A, w = W(wd.a ? [u, wd.d, z] : [wd.d, u, z]), mx = wd.a ? 0 : wd.s, my = wd.a ? wd.s : 0, nx = mx * s - my * c, nz = -mx * c - my * s;
+      glow.push(w[0] + nx * 0.15, w[1], w[2] + nz * 0.15, Math.max(zh - zl, uh - ul) * mpv * 0.75, 1, 1, 1, -1, q.x, q.z, wi, q.lk || 1, nx, nz); nWin++;
+    });
+  });
+  if (dyn) townPosts(T).forEach(function (p, i) {                       // 街燈：柱子（地下多埋 0.3 m）＋燈箱，燈在燈箱中間
+    var gy = townGround(p[0], p[1]); if (!(gy === gy)) { miss++; return; }
+    var top = gy + TL_POST_H;
+    posts.push(p[0], top, p[1], 0, 0.13, 0.13, TL_POST_H + 0.3, 1, p[0], top + 0.42, p[1], 0, 0.3, 0.3, 0.42, 0.9);
+    lamp([p[0], top + 0.2, p[1]], 4, townHash(T.id + ':post' + i) * 6.2832);
+  });
+  var tl = T.tl || (T.tl = { S: null, D: null, lamps: null, ms: {} });
+  townLightPartFree(tl[part]);
+  var o = tl[part] = { lamps: new Float32Array(lamps), nWin: nWin, nPost: posts.length / 16, nGlow: glow.length / 14, miss: miss, glowVao: null, glowBuf: null, postVao: null, postBuf: null, bb: null };
+  if (o.nGlow) {
+    o.glowBuf = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, o.glowBuf); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(glow), gl.STATIC_DRAW);
+    o.glowVao = gl.createVertexArray(); gl.bindVertexArray(o.glowVao);
+    gl.bindBuffer(gl.ARRAY_BUFFER, P.quad); gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 8, 0);
+    gl.bindBuffer(gl.ARRAY_BUFFER, o.glowBuf);
+    [[4, 4, 0], [5, 4, 16], [6, 4, 32], [7, 2, 48]].forEach(function (a) { gl.enableVertexAttribArray(a[0]); gl.vertexAttribDivisor(a[0], 1); gl.vertexAttribPointer(a[0], a[1], gl.FLOAT, false, 56, a[2]); });
+  }
+  if (o.nPost) {
+    var bb = [1e9, 1e9, 1e9, -1e9, -1e9, -1e9];
+    for (var k = 0; k < posts.length; k += 8) { bb[0] = Math.min(bb[0], posts[k]); bb[1] = Math.min(bb[1], posts[k + 1] - 4); bb[2] = Math.min(bb[2], posts[k + 2]); bb[3] = Math.max(bb[3], posts[k]); bb[4] = Math.max(bb[4], posts[k + 1]); bb[5] = Math.max(bb[5], posts[k + 2]); }
+    o.bb = bb;
+    o.postBuf = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, o.postBuf); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(posts), gl.STATIC_DRAW);
+    o.postVao = gl.createVertexArray(); gl.bindVertexArray(o.postVao);
+    gl.bindBuffer(gl.ARRAY_BUFFER, P.cube); gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 24, 0); gl.enableVertexAttribArray(1); gl.vertexAttribPointer(1, 3, gl.FLOAT, false, 24, 12);
+    gl.bindBuffer(gl.ARRAY_BUFFER, o.postBuf); [4, 5].forEach(function (a, q) { gl.enableVertexAttribArray(a); gl.vertexAttribDivisor(a, 1); gl.vertexAttribPointer(a, 4, gl.FLOAT, false, 32, q * 16); });
+  }
+  gl.bindVertexArray(null);
+  var a0 = tl.S ? tl.S.lamps : new Float32Array(0), a1 = tl.D ? tl.D.lamps : new Float32Array(0);
+  tl.lamps = new Float32Array(a0.length + a1.length); tl.lamps.set(a0); tl.lamps.set(a1, a0.length);
+  tl.ms[part] = +(performance.now() - t0).toFixed(1);
+  TL.ver++;
+}
+function townLightPartFree(o) {
+  if (!o) return;
+  if (o.glowVao) { gl.deleteVertexArray(o.glowVao); gl.deleteBuffer(o.glowBuf); }
+  if (o.postVao) { gl.deleteVertexArray(o.postVao); gl.deleteBuffer(o.postBuf); }
+}
+/** 讀數（townStat）：燈幾盞、窗幾扇、街燈幾支、還沒有高度的、建一份幾 ms。 */
+function townLightStat(T) {
+  var tl = T.tl; if (!tl) return null;
+  var S = tl.S || {}, D = tl.D || {};
+  return { lamps: tl.lamps.length / 5, wins: S.nWin || 0, posts: D.nPost || 0, miss: (S.miss || 0) + (D.miss || 0), ms: tl.ms };
+}
+/** 街燈的柱子、燈箱（townDraw 石基之後；白天也畫）⇒ 三角形數。 */
+function townPostDraw(P, eye, fogD) {
+  var PP = P.pl, tris = 0, on = false;
+  TOWNS.list.forEach(function (T) {
+    var tl = T.tl && T.tl.D; if (!tl || !tl.nPost || townBoxDist(tl.bb, eye) > TOWN_LOD[1]) return;
+    if (!on) { gl.useProgram(PP.prog); setCommon(PP); gl.uniform1f(PP.u.uFogD, fogD); gl.uniform3f(PP.u.uCol, 0.2, 0.17, 0.14); on = true; }
+    gl.bindVertexArray(tl.postVao); gl.drawArraysInstanced(gl.TRIANGLES, 0, 36, tl.nPost * 2); tris += 24 * tl.nPost;
+  });
+  return tris;
+}
+/** 亮窗、光點（60_render.js：海、玻璃之後；加法、不寫深度）。白天（TL.k 0）整段不畫。 */
+function townGlowDraw() {
+  TL.stat.cards = 0; TL.stat.glow = 0;
+  if (!TL.k || !TOWNS.on || !TOWNS.kit || !TOWNS.prog || PASS.vp) return;
+  var t0 = performance.now(), P = TOWNS.prog, K = TOWNS.kit, G = TOWNS.grp, eye = CAM.eye, fogD = WX.fog * BED_FOG * CAM.fogK, L0 = TOWN_LOD[0], B0 = TOWN_BAND[0];
+  var cf = gl.isEnabled(gl.CULL_FACE); gl.disable(gl.CULL_FACE);
+  gl.enable(gl.BLEND); gl.blendFunc(gl.ONE, gl.ONE); gl.depthMask(false);
+  if (G) {                                                              // 窗片：近那一級的實例
+    var PW = P.win || (P.win = VK.compile(gl, TOWN_WIN_VS, TOWN_WIN_FS())); gl.useProgram(PW.prog); setCommon(PW);
+    gl.uniform1f(PW.u.uFogD, fogD); gl.uniform3fv(PW.u.uEye, eye); gl.uniform1f(PW.u.uTWin, TOD_WIN); gl.uniform1f(PW.u.uTLK, TL.k); gl.uniform1f(PW.u.uTLT, SIMT);
+    gl.uniform2f(PW.u.uIn, -2, -1); gl.uniform2f(PW.u.uOut, L0 - B0, L0 + B0);
+    K.names.forEach(function (nm, mi) {
+      var n = G.cnt[0][mi], Mm = K.M[nm]; if (!n || !Mm.win) return;
+      gl.uniform3fv(PW.u.uC, Mm.uc0); gl.bindVertexArray(Mm.win.vao); gl.bindBuffer(gl.ARRAY_BUFFER, P.ib[0]); townInstAttr(G, 0, mi);
+      gl.drawArraysInstanced(gl.TRIANGLES, 0, Mm.win.n, n); TL.stat.cards += n;
+    });
+  }
+  var PG = P.glow || (P.glow = VK.compile(gl, TOWN_GLOW_VS, TOWN_GLOW_FS)), on = false;   // 光點：每座城一次
+  TOWNS.list.forEach(function (T) { [T.tl && T.tl.S, T.tl && T.tl.D].forEach(function (tl) {
+    if (!tl || !tl.nGlow) return;
+    if (!on) {
+      var f = norm(sub(CAM.look, CAM.eye)), r = norm([-f[2], 0, f[0]]), u = [r[1] * f[2] - r[2] * f[1], r[2] * f[0] - r[0] * f[2], r[0] * f[1] - r[1] * f[0]];   // 鏡頭的右、上
+      gl.useProgram(PG.prog); setCommon(PG); gl.uniform3fv(PG.u.uEye, eye); gl.uniform3fv(PG.u.uR, r); gl.uniform3fv(PG.u.uU, u);
+      gl.uniform1f(PG.u.uPx, 2 * Math.tan(0.45) / CAM.h); gl.uniform1f(PG.u.uTLK, TL.k); gl.uniform1f(PG.u.uTWin, TOD_WIN); gl.uniform1f(PG.u.uTLT, SIMT); gl.uniform1f(PG.u.uFogD, fogD);
+      gl.uniform2f(PG.u.uWin, L0 - B0, L0 + B0); on = true;
+    }
+    gl.bindVertexArray(tl.glowVao); gl.drawArraysInstanced(gl.TRIANGLES, 0, 6, tl.nGlow); TL.stat.glow += tl.nGlow;
+  }); });
+  gl.bindVertexArray(null); gl.depthMask(true); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA); if (cf) gl.enable(gl.CULL_FACE);
+  TL.stat.glowMs = +(performance.now() - t0).toFixed(2);
 }

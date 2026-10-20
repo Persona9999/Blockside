@@ -383,6 +383,7 @@ function setCommon(p) {
   if (u.uSunK) gl.uniform1f(u.uSunK, wxSun());                   // 天氣（08_weather.js）：陽光、水手與碎木的亮度、白沫
   if (u.uLum) gl.uniform1f(u.uLum, wxLum());
   if (u.uLN) { gl.uniform1i(u.uLN, LAMPS.n); if (LAMPS.n) { gl.uniform4fv(u.uLP, LAMPS.p); gl.uniform4fv(u.uLC, LAMPS.c); } }   // 點光源（60_render.js lampsUpdate；沒有 uLN 的著色器 ＝ 陰影那一趟 ⇒ 不給）
+  if (u.uTLG) townLampSet(u);                                  // 城裡的點光源（63_towns.js 夜裡的燈：分組表第 13 號、燈的資料第 14 號）
   if (u.uFoam) gl.uniform1f(u.uFoam, WX.foam);
   if (u.uNM) gl.uniform1i(u.uNM, MSLOTS.length);               // 船艙遮罩、透視用到幾格
   if (u.uShOn) {                                              // 陰影圖陣列綁在第 4 號（60_render.js render 開頭綁）；每一段的矩陣、遠端、偏移一次給（沒用到的段 ＝ FAR_M）
