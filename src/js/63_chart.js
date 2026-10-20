@@ -18,6 +18,7 @@ function chartReady() {
   var g = c.getContext('2d'), d = CHART_COL.deep; g.fillStyle = 'rgb(' + d.join(',') + ')'; g.fillRect(0, 0, c.width, c.height);
   CHART.A = A; CHART.im = c; CHART.g = g; CHART.res = {}; CHART.trail = []; CHART.trT = -1; CHART.need = chartNeed();
   for (var k in BED.ch) chartPut(BED.ch[k]);
+  for (k in BED.cm) chartPut(BED.cm[k]);                                 // 外圈的中等塊（chartPut 只收更細的 ⇒ 順序無關）
   return true;
 }
 /** 吃水的門檻：我艦那一型（主選單的第一艘）龍骨線最低那一點到設計水線（32_ground.js groundKeel）＋ BEDAV_CLR —— 比它淺的水畫成「過不去」。

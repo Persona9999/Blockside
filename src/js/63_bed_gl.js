@@ -28,7 +28,10 @@ function bedCol(h, m) {
 }
 evOn('bedChunk', function (cx, cy) { BEDGL_Q.push(bedKey(cx, cy)); BEDFOAM.dirty = true; }, 0, true);
 evOn('bedDrop', function (cx, cy) { var k = bedKey(cx, cy), g = BEDGL[k]; BEDFOAM.dirty = true; if (g) { gl.deleteVertexArray(g.vao); gl.deleteBuffer(g.vb); gl.deleteBuffer(g.ib); delete BEDGL[k]; } }, 0, true);
-function bedLod(C) { var R = BED_CFG.ring; return Math.abs(C.cx - BED.cx) <= R && Math.abs(C.cy - BED.cy) <= R ? (townFine(C) ? 1 : 2) : 4; }   // 有城的塊（63_towns.js）在用的那幾圈每 4 m 一點
+function bedLod(C) {                                                     // 每幾個取樣點取一個：在用的那幾圈 8 m（有城的塊 4 m，63_towns.js）、預載那一圈 16 m —— 照公尺算 ⇒ 外圈的中等塊（16 m 一點）每點都取
+  var R = BED_CFG.ring, w = Math.abs(C.cx - BED.cx) <= R && Math.abs(C.cy - BED.cy) <= R ? (townFine(C) ? 1 : 2) : 4;
+  return Math.max(1, Math.round(w * BED.A.step / C.step));
+}
 /** 一塊 ⇒ 網格（stride：每幾個取樣點取一個）。頂點：位置 3、法線 3、底色 3、紋理權重 4（世界座標：原點 ＝ 開戰位置）。
  *  高度照 townHv（63_towns.js：有城 ⇒ 整過地的那一份，只給畫面）；點距照這一塊自己的 C.step（遠景塊可以是粗的：@host 的 peek 回 32 m 一點的 33×33，src/MAP_CHUNK.md §5）；塊的原點照海域的 A.chunk。 */
 function bedMesh(C, stride) {
@@ -55,7 +58,7 @@ function bedMesh(C, stride) {
 }
 function bedUpload(k, C, lod) {
   var g = bedGpu(bedMesh(C, lod), BEDGL[k]);
-  g.lod = lod; g.cx = C.cx; g.cy = C.cy; g.bb = bedBox(C); BEDGL[k] = g;
+  g.lod = lod; g.C = C; g.cx = C.cx; g.cy = C.cy; g.bb = bedBox(C); BEDGL[k] = g;   // g.C：建網格用的那一份（原精度到了、或換回中等塊 ⇒ 重建）
 }
 /** 一塊的外框（世界座標；高度含往下垂 40 m 的裙邊）。 */
 function bedBox(C) { var x0 = C.cx * BED.A.chunk - BED.ax, z0 = C.cy * BED.A.chunk - BED.az; return [x0, C.min - 40, z0, x0 + BED.A.chunk, C.max, z0 + BED.A.chunk]; }
@@ -120,7 +123,7 @@ function bedFarStep() {
   }
   if (F.busy || !F.todo.length) return;
   var c = F.todo.shift(), k = bedKey(c[0], c[1]);
-  if (BED.ch[k]) { bedFarPut(k, BED.ch[k], 0); return; }
+  if (bedShowC(k)) { bedFarPut(k, bedShowC(k), 0); return; }            // 載著（原精度或外圈的中等塊）⇒ 直接抽
   F.busy = true;
   bedPeek(c[0], c[1]).then(function (b64) { F.busy = false; var t0 = performance.now(), C = bedDecode(b64); bedFarPut(k, C, performance.now() - t0); },
     function (e) { F.busy = false; console.warn('遠景：' + e.message); });
@@ -136,7 +139,12 @@ function bedFoamTex() {
   if (BED.cx === null || !Fm.dirty && Fm.cx === BED.cx && Fm.cy === BED.cy) return;
   var t0 = performance.now(), R = BED_CFG.ring + BED_CFG.prefetch, n = A.n, sk = 2, per = (n - 1) / sk, W = (2 * R + 1) * per, D = new Float32Array(W * W).fill(A.deep);
   for (var cj = 0; cj <= 2 * R; cj++) for (var ci = 0; ci <= 2 * R; ci++) {
-    var C = BED.ch[bedKey(BED.cx - R + ci, BED.cy - R + cj)]; if (!C) continue;
+    var C = bedShowC(bedKey(BED.cx - R + ci, BED.cy - R + cj)); if (!C) continue;
+    if (C.step !== A.step) {                                             // 外圈的中等塊（點距比 8 m 粗）：照公尺取最近的點
+      var cn = C.n, f = sk * A.step / C.step;
+      for (var j2 = 0; j2 < per; j2++) { var r2 = (cj * per + j2) * W + ci * per, s2 = Math.min(cn - 1, Math.round(j2 * f)) * cn; for (var i2 = 0; i2 < per; i2++) D[r2 + i2] = C.h[s2 + Math.min(cn - 1, Math.round(i2 * f))] / 10; }
+      continue;
+    }
     for (var j = 0; j < per; j++) { var r = (cj * per + j) * W + ci * per, s = j * sk * n; for (var i = 0; i < per; i++) D[r + i] = C.h[s + i * sk] / 10; }
   }
   if (!Fm.tex) { Fm.tex = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, Fm.tex); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE); }
@@ -176,8 +184,8 @@ function bedSeaDraw() {
 function bedDraw() {
   if (!BED || !BED.A) return;
   var built = 0;
-  while (BEDGL_Q.length && built < 2) { var k = BEDGL_Q.shift(), C = BED.ch[k]; if (C) { bedUpload(k, C, bedLod(C)); built++; } }
-  Object.keys(BEDGL).forEach(function (k2) { var g = BEDGL[k2], C2 = BED.ch[k2]; if (C2 && built < 2 && g.lod !== bedLod(C2)) { bedUpload(k2, C2, bedLod(C2)); built++; } });
+  while (BEDGL_Q.length && built < 2) { var k = BEDGL_Q.shift(), C = bedShowC(k); if (C) { bedUpload(k, C, bedLod(C)); built++; } }
+  Object.keys(BEDGL).forEach(function (k2) { var g = BEDGL[k2], C2 = bedShowC(k2); if (C2 && built < 2 && (g.lod !== bedLod(C2) || g.C !== C2)) { bedUpload(k2, C2, bedLod(C2)); built++; } });
   if (!built) bedFarStep();                                              // 遠景：這一格沒在建細的才做
   bedFoamTex();
   var PB = P.bed || (P.bed = VK.compile(gl, BED_VS, bedFS()));

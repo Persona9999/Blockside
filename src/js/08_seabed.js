@@ -6,6 +6,11 @@
 // 載入：焦點（還在打的船的中心）所在那一塊為中心、載 (2·(ring＋prefetch)＋1)² 塊（預設 5×5，其中 3×3 是「在用的」）；焦點走進別塊 ⇒ 換中心、載新的、丟太遠的。
 //   ⛔ 模擬只讀載好的塊：每一步之前看每艘船 margin 公尺內的塊都載好了沒（bedWait）—— 沒有 ⇒ 這一步先不走（畫面迴圈）⇒ 戰局跟載入快慢無關。
 //   快轉、無頭（?demo）沒有畫面迴圈可以等 ⇒ 開戰前整個海域一次載完（bedBoot）。
+// 外圈用中等塊（BED.mid；2026-10-20，Tim：「鄰近區塊用高精度 遠方用低精度加快載入」）：只有 ?map=@host 而且外面那一頁的海域帶 area.mid（點距，Blocksail 16 m）才開。
+//   開戰前只等在用的 ring 圈原精度＋外面到 ring＋prefetch 圈的中等塊（bedFocusMid；以前 5×5 全原精度）；外圈的原精度與再外一圈的中等塊在背景補（bg ⇒ 外面那一頁排在遠景後面）。
+//   模擬讀哪一份照規則、不照「先到哪一份」（bedLevels：這一步的焦點 ± ring 與船旁邊 margin ⇒ 原精度，± ring＋prefetch 其他 ⇒ 中等塊）⇒ 戰局跟載入快慢無關；
+//   ⚠ 中等塊跟原精度在共用格點上可以差到 1.5 m（生成找海岸線段的格子比較粗）、很窄的沙灘條在 16 m 一點會不見 —— 外圈 1～2.5 km 外，原精度一到畫面就換。
+//   檔案海圖、快轉、無頭、外面那一頁沒給 area.mid ⇒ 照上面舊的那一套（戰局逐位元組不變）。
 // 查詢（模擬用）：bedHgt(x, z) 海底／地面高度（m，海面 0、水下是負的；雙線性）、bedMat(x, z) 底質（BED_MAT）、bedGrad(x, z) 坡度。海域外、深海塊 ⇒ 深海 area.deep。
 // 大漩渦（08_sea.js VX；Tim 2026-10-19：「漏斗內當深海、外面照海圖」）：漏斗的水面深到 −200 m 以下、海圖的深海才 −150 m ⇒ 以前船在漏斗裡每一步都判擱淺、被拆格。
 //   解碼時（bedVxBake）把漩渦烤進每一塊的高度：h' ＝ vxH ＋ w·h ＋ (1 − w)·deep —— 離中心 BED_VX_IN·r 以內 w ＝ 0（那一點的水面下 |deep|，底質當深海）、
@@ -19,8 +24,15 @@ var BED_CFG = Object.assign({ ring: 1, prefetch: 1, margin: 300 }, CFG.map || {}
 window.BSMAP = {                                                         // 海圖檔（<script>）載進來呼叫這兩支（?map=@host ⇒ 收到外面那一頁回的也照樣叫）
   area: function (o) { if (BED && (BED.host || BED.wantArea === o.id)) BED.gotArea = o; },
   town: function (o) { if (BED && BED.A) TOWNS.pend.push(o); },          // maps/<海域>/towns.js：一座城一筆（63_towns.js townWant 讀完一起收）
-  chunk: function (id, cx, cy, b64, coarse) { if (!BED || !BED.A || BED.A.id !== id) return; var k = bedKey(cx, cy), w = BED.pend[k], v = BED.peek[k]; if (w && !coarse) w(b64); if (v) v(b64); }   // coarse：粗的遠景塊 ⇒ 只給遠景（⛔ 不進模擬）
+  chunk: function (id, cx, cy, b64, coarse, mid) {                       // coarse：粗的遠景塊 ⇒ 只給遠景（⛔ 不進模擬）；mid：外圈的中等塊（BED.mid 公尺一點，只有 @host）
+    if (!BED || !BED.A || BED.A.id !== id) return;
+    var k = bedKey(cx, cy), w = BED.pend[k], v = BED.peek[k], m = BED.mpend && BED.mpend[k];
+    if (mid) { if (m) m(b64); return; }
+    if (w && !coarse) w(b64); if (v) v(b64);
+  }
 };
+/** 那一塊畫哪一份：有原精度的畫原精度的，沒有才畫外圈的中等塊（BED.mid）。 */
+function bedShowC(k) { return BED.ch[k] || (BED.cm && BED.cm[k]) || null; }
 function bedKey(cx, cy) { return cx + '_' + cy; }
 function bedScript(src) {
   return new Promise(function (ok, bad) {
@@ -37,21 +49,24 @@ function bedScript(src) {
 //                                那一頁 ⇒ 這一頁 'go'（地球儀淡進來了 ⇒ 降下去）、'leave'（要回地球儀 ⇒ 拉上去）
 //   城鎮（area.towns 有才要；63_towns.js）：這一頁 ⇒ 那一頁 { bsmap: 'need', what: 'towns' }；那一頁 ⇒ 這一頁 { bsmap: 'towns', towns: [規劃…] }（出錯 { bsmap: 'error', what: 'towns', msg }）
 //   只收 BED.host 送來的訊息。
-function bedGet(cx, cy, peek) {                                          // cx ＝ null ⇒ area.js
+function bedGet(cx, cy, peek, mid, bg) {                                // cx ＝ null ⇒ area.js；mid ⇒ 外圈的中等塊（BED.mid 公尺一點）；bg ⇒ 背景預載（外面那一頁排在最後）
   if (!BED.host) return bedScript(cx == null ? 'maps/' + BED.wantArea + '/area.js' : 'maps/' + BED.A.id + '/' + bedKey(cx, cy) + '.js');
   return new Promise(function (ok, bad) {
-    var k = cx == null ? 'area' : bedKey(cx, cy) + (peek ? '+' : '');
+    var k = cx == null ? 'area' : bedKey(cx, cy) + (peek ? '+' : mid ? '@' : '');
     (BED.ask[k] = BED.ask[k] || []).push([ok, bad]);
-    BED.host.postMessage({ bsmap: 'need', what: cx == null ? 'area' : 'chunk', cx: cx, cy: cy, peek: !!peek }, '*');
+    var m = { bsmap: 'need', what: cx == null ? 'area' : 'chunk', cx: cx, cy: cy, peek: !!peek };
+    if (mid) m.step = BED.mid; if (bg) m.bg = 1;
+    BED.host.postMessage(m, '*');
   });
 }
 function bedHostMsg(e) {
   var d = e.data; if (!BED || !BED.host || e.source !== BED.host || !d || !d.bsmap) return;
-  var ks = d.bsmap === 'area' || d.what === 'area' ? ['area'] : d.coarse ? [bedKey(d.cx, d.cy) + '+'] : [bedKey(d.cx, d.cy), bedKey(d.cx, d.cy) + '+'], err = d.bsmap === 'error' ? new Error('海圖：' + (d.msg || '要不到')) : null;
+  var mid = !d.coarse && BED.mid && d.step === BED.mid, k0 = bedKey(d.cx, d.cy);   // 中等塊：回的訊息帶 step ＝ BED.mid
+  var ks = d.bsmap === 'area' || d.what === 'area' ? ['area'] : mid ? [k0 + '@'] : d.coarse ? [k0 + '+'] : [k0, k0 + '+'], err = d.bsmap === 'error' ? new Error('海圖：' + (d.msg || '要不到')) : null;
   if (d.bsmap === 'go' || d.bsmap === 'leave') { camTransSet(d.bsmap === 'go' ? 'go' : 'out'); return; }
   if (d.bsmap === 'towns' || (d.bsmap === 'error' && d.what === 'towns')) { townGot(d.towns || [], d.msg); return; }   // 城鎮規劃（63_towns.js；只給人看 ⇒ 不等它）
   if (d.bsmap === 'area') BSMAP.area(d.area);
-  else if (d.bsmap === 'chunk' && BED.A) BSMAP.chunk(BED.A.id, d.cx, d.cy, d.b64, !!d.coarse);
+  else if (d.bsmap === 'chunk' && BED.A) BSMAP.chunk(BED.A.id, d.cx, d.cy, d.b64, !!d.coarse, mid);
   ks.forEach(function (k) { var L = BED.ask[k]; delete BED.ask[k]; (L || []).forEach(function (f) { if (err) f[1](err); else f[0](); }); });
 }
 /** 告訴外面那一頁（只有 ?map=@host）：'started' ＝ 開戰了（鏡頭停在正上方）、'left' ＝ 拉到正上方了 —— 畫好兩格才送（地球儀照這個淡進／淡出）。 */
@@ -65,7 +80,8 @@ function bedBoot() {
   var host = id === '@host' ? (window.parent !== window ? window.parent : window.opener) : null;
   if (id === '@host' && !host) return Promise.reject(new Error('?map=@host 要開在 Blocksail 的頁面裡（iframe 或 window.open）'));
   if (!host && !/^[a-z0-9_-]+$/.test(id)) return Promise.reject(new Error('海域名稱只能是小寫英數、底線、連字號：' + id));
-  BED = { wantArea: id, host: host, ask: {}, A: null, ch: {}, pend: {}, peek: {}, idx: null, cx: null, cy: null, top: -Infinity, miss: 0, loads: 0, drops: 0 };
+  BED = { wantArea: id, host: host, ask: {}, A: null, ch: {}, pend: {}, peek: {}, idx: null, cx: null, cy: null, top: -Infinity, miss: 0, loads: 0, drops: 0,
+    mid: 0, cm: {}, mpend: {}, mslot: null, lv: null, mloads: 0 };                    // mid：外圈的中等塊（@host 的海域帶 area.mid 才開；見 bedFocus、bedWait）
   if (host) window.addEventListener('message', bedHostMsg);
   return bedGet(null).then(function () {
     var A = BED.gotArea; if (!A) throw new Error((host ? '外面那一頁' : 'maps/' + id + '/area.js') + ' 沒有給 BSMAP.area');
@@ -73,21 +89,41 @@ function bedBoot() {
     BED.has = new Uint8Array(BED.nx * (A.y[1] - A.y[0] + 1));            // 這一塊有沒有檔（0 ＝ 深海或海域外）
     A.chunks.forEach(function (c) { var i = bedIdx(c[0], c[1]); if (i >= 0) BED.has[i] = c[2] ? 1 : 0; });
     BED.slot = new Array(BED.has.length);                                // 載好的塊照編號放（查詢不用字串）
+    if (host && A.mid > A.step && A.chunk % A.mid === 0 && !(DEMO >= 0 || HEADLESS)) {   // 外圈用中等塊（Tim 2026-10-20：「鄰近區塊用高精度 遠方用低精度加快載入」）：外面那一頁說它給得出來才開
+      BED.mid = A.mid; BED.mslot = new Array(BED.has.length); BED.lv = new Uint8Array(BED.has.length);
+    }
     var si = Math.max(0, Math.min((A.sites || []).length - 1, +(Q.get('site') || 0) | 0)), S0 = (A.sites || [])[si];
     BED.site = si; BED.ax = S0 ? S0.x : (A.x[0] + A.x[1] + 1) * A.chunk / 2; BED.az = S0 ? S0.y : (A.y[0] + A.y[1] + 1) * A.chunk / 2;   // 世界原點在海域的哪裡（往東、往南公尺）
     townWant();                                                          // 海域有城（area.towns）⇒ 去要規劃（63_towns.js；只給人看、不等它、無頭不要）
     if (DEMO >= 0 || HEADLESS) return Promise.all(A.chunks.filter(function (c) { return c[2]; }).map(function (c) { return bedLoad(c[0], c[1]); }));
-    return bedFocus(0, 0, true);
+    return bedFocus(0, 0, true).then(function () { if (BED.mid) bedLevels(0, 0); });
   });
 }
 function bedIdx(cx, cy) { var A = BED.A, i = cx - A.x[0], j = cy - A.y[0]; return i < 0 || j < 0 || i >= BED.nx || cy > A.y[1] ? -1 : j * BED.nx + i; }
-function bedLoad(cx, cy) {
+function bedLoad(cx, cy, bg) {                                           // bg：背景預載（外面那一頁排在最後；只有 @host 有差）
   var k = bedKey(cx, cy), i = bedIdx(cx, cy);
   if (i < 0 || !BED.has[i] || BED.slot[i] || BED.pend[k]) return BED.pend[k] ? BED.pend[k].p : Promise.resolve();
-  var w = function (b64) { if (BED.slot[i]) return; var C = bedDecode(b64);   // 已經有了（遠景讀同一塊的那一份檔也會叫到這裡）⇒ 不重來 if (C.cx !== cx || C.cy !== cy) throw new Error('海圖塊 ' + k + ' 的檔頭寫的是 ' + C.cx + '_' + C.cy);
-    BED.slot[i] = C; BED.ch[k] = C; BED.top = Math.max(BED.top, C.max); BED.loads++; evEmit('bedChunk', cx, cy, C); };
+  var w = function (b64) {
+    if (BED.slot[i]) return;                                             // 已經有了（遠景讀同一塊的那一份檔也會叫到這裡）⇒ 不重來
+    var C = bedDecode(b64); if (C.cx !== cx || C.cy !== cy) throw new Error('海圖塊 ' + k + ' 的檔頭寫的是 ' + C.cx + '_' + C.cy);
+    BED.slot[i] = C; BED.ch[k] = C; BED.top = Math.max(BED.top, C.max); BED.loads++; evEmit('bedChunk', cx, cy, C);
+  };
   BED.pend[k] = w;
-  w.p = bedGet(cx, cy).then(function () { delete BED.pend[k]; }, function (e) { delete BED.pend[k]; throw e; });
+  w.p = bedGet(cx, cy, false, false, bg).then(function () { delete BED.pend[k]; }, function (e) { delete BED.pend[k]; throw e; });
+  return w.p;
+}
+/** 外圈的中等塊（BED.mid 公尺一點；只有 @host 的海域帶 area.mid）：放 BED.mslot／BED.cm。模擬照 bedLevels 決定讀哪一份；畫面那一塊沒有原精度的才畫它。 */
+function bedLoadMid(cx, cy, bg) {
+  var k = bedKey(cx, cy), i = bedIdx(cx, cy);
+  if (i < 0 || !BED.has[i] || BED.mslot[i] || BED.mpend[k]) return BED.mpend[k] ? BED.mpend[k].p : Promise.resolve();
+  var w = function (b64) {
+    if (BED.mslot[i]) return;
+    var C = bedDecode(b64); if (C.cx !== cx || C.cy !== cy || C.step !== BED.mid) throw new Error('海圖塊 ' + k + '（中等）的檔頭寫的是 ' + C.cx + '_' + C.cy + '、' + C.step + ' m');
+    BED.mslot[i] = C; BED.cm[k] = C; BED.top = Math.max(BED.top, C.max); BED.mloads++;
+    if (!BED.ch[k]) evEmit('bedChunk', cx, cy, C);                       // 畫面：有原精度的那一份就照舊畫它
+  };
+  BED.mpend[k] = w;
+  w.p = bedGet(cx, cy, false, true, bg).then(function () { delete BED.mpend[k]; }, function (e) { delete BED.mpend[k]; throw e; });
   return w.p;
 }
 /** 只給畫面（63_bed_gl.js 遠景）：讀一塊的檔、交回 base64 —— ⛔ 不放進 BED.slot／BED.ch（模擬照舊只查 bedLoad 載的、照船旁邊 margin 等）。 */
@@ -149,10 +185,10 @@ function bedSmooth(a, b, x) { var t = Math.max(0, Math.min(1, (x - a) / (b - a))
 /** 換了天氣（08_sea.js vxInit 叫）：載好的塊照新的漩渦重烤；有變 ⇒ 重算 BED.top、再發一次 'bedChunk'（海底網格、白沫、樹照新的高度重建）。 */
 function bedVxSync() {
   if (!BED || !BED.A || !BED.slot) return;
-  var re = [];
-  BED.slot.forEach(function (C) { if (C && bedVxBake(C)) re.push(C); });
-  if (!re.length) return;
-  BED.top = -Infinity; BED.slot.forEach(function (C) { if (C) BED.top = Math.max(BED.top, C.max); });
+  var re = [], any = false, all = BED.slot.concat(BED.mslot || []);
+  all.forEach(function (C) { if (C && bedVxBake(C)) { any = true; if (bedShowC(bedKey(C.cx, C.cy)) === C) re.push(C); } });   // 中等塊照樣重烤（模擬讀得到）；畫面只重建畫著的那一份
+  if (!any) return;
+  BED.top = -Infinity; all.forEach(function (C) { if (C) BED.top = Math.max(BED.top, C.max); });
   re.forEach(function (C) { evEmit('bedChunk', C.cx, C.cy, C); });
 }
 /** 焦點（世界座標）⇒ 換中心：要的塊（中心 ± ring＋prefetch）載進來、不要的（也不在任何船旁邊）丟掉。first ⇒ 回傳等全部載好的 Promise。畫面迴圈每格叫（90_main.js）。 */
@@ -161,6 +197,7 @@ function bedFocus(fx, fz, first) {
   if (!first && cx === BED.cx && cy === BED.cy) return null;
   BED.cx = cx; BED.cy = cy;
   var R = BED_CFG.ring + BED_CFG.prefetch, ps = [];
+  if (BED.mid) return bedFocusMid(cx, cy, R);
   for (var j = cy - R; j <= cy + R; j++) for (var i = cx - R; i <= cx + R; i++) ps.push(bedLoad(i, j));
   var keep = bedNear();
   Object.keys(BED.ch).forEach(function (k) {
@@ -168,6 +205,42 @@ function bedFocus(fx, fz, first) {
     delete BED.ch[k]; BED.slot[bedIdx(C.cx, C.cy)] = undefined; BED.drops++; evEmit('bedDrop', C.cx, C.cy);
   });
   return Promise.all(ps);
+}
+/** 外圈用中等塊（BED.mid）時的換中心：先要「這一步模擬要讀的」—— 在用的 ring 圈原精度、外面到 R 圈中等塊（回傳等它們的 Promise）；
+ *  再背景預載 —— 外圈的原精度（焦點走過去就變成在用的）、再外一圈的中等塊（焦點走過去就變成外圈）。每一種都從中心往外排。
+ *  丟：原精度超出 R 圈、中等塊超出 R＋1 圈（都不在任何船旁邊）。 */
+function bedFocusMid(cx, cy, R) {
+  var r = BED_CFG.ring, L = [];
+  for (var j = cy - R - 1; j <= cy + R + 1; j++) for (var i = cx - R - 1; i <= cx + R + 1; i++) L.push([i, j, Math.max(Math.abs(i - cx), Math.abs(j - cy)), Math.hypot(i - cx, j - cy)]);
+  L.sort(function (a, b) { return a[2] - b[2] || a[3] - b[3] || a[1] - b[1] || a[0] - b[0]; });
+  var need = [];
+  L.forEach(function (c) { if (c[2] <= r) need.push(bedLoad(c[0], c[1])); else if (c[2] <= R) need.push(bedLoadMid(c[0], c[1])); });
+  L.forEach(function (c) { if (c[2] > r && c[2] <= R) bedLoad(c[0], c[1], true).catch(bedBgErr); else if (c[2] === R + 1) bedLoadMid(c[0], c[1], true).catch(bedBgErr); });
+  var keep = bedNear();
+  Object.keys(BED.ch).forEach(function (k) {
+    var C = BED.ch[k]; if (Math.abs(C.cx - cx) <= R && Math.abs(C.cy - cy) <= R || keep[k]) return;
+    delete BED.ch[k]; BED.slot[bedIdx(C.cx, C.cy)] = undefined; BED.drops++;
+    if (BED.cm[k]) evEmit('bedChunk', C.cx, C.cy, BED.cm[k]); else evEmit('bedDrop', C.cx, C.cy);   // 還有中等塊 ⇒ 畫面換畫它
+  });
+  Object.keys(BED.cm).forEach(function (k) {
+    var C = BED.cm[k]; if (Math.abs(C.cx - cx) <= R + 1 && Math.abs(C.cy - cy) <= R + 1 || keep[k]) return;
+    delete BED.cm[k]; BED.mslot[bedIdx(C.cx, C.cy)] = undefined;
+    if (!BED.ch[k]) evEmit('bedDrop', C.cx, C.cy);
+  });
+  return Promise.all(need);
+}
+function bedBgErr(e) { console.warn('海圖背景預載：' + e.message); }
+/** 外圈用中等塊時，模擬每一步讀哪一份（BED.lv：0 ＝ 不讀（深海）、1 ＝ 中等塊、2 ＝ 原精度）——
+ *  只照「這一步」的船算：焦點 ＝ 還在打的船的中心（跟 bedFocusAuto 同一條），焦點那一塊 ± ring 圈與每艘船 margin 內 ⇒ 2，± ring＋prefetch 圈裡其他的 ⇒ 1。
+ *  ⛔ 不看哪一份已經到了：先到的背景預載不會讓模擬提早改讀原精度 ⇒ 戰局跟載入快慢無關（bedWait 等到要讀的那一份到了才走）。回傳缺的塊 [[cx, cy, lv]…]。 */
+function bedLevels(fx, fz) {
+  var A = BED.A, lv = BED.lv, r = BED_CFG.ring, R = r + BED_CFG.prefetch, miss = [];
+  var cx = Math.floor((fx + BED.ax) / A.chunk), cy = Math.floor((fz + BED.az) / A.chunk);
+  lv.fill(0);
+  for (var j = cy - R; j <= cy + R; j++) for (var i = cx - R; i <= cx + R; i++) { var q = bedIdx(i, j); if (q >= 0) lv[q] = Math.max(Math.abs(i - cx), Math.abs(j - cy)) <= r ? 2 : 1; }
+  var near = bedNear(); Object.keys(near).forEach(function (k) { var q = bedIdx(near[k][0], near[k][1]); if (q >= 0) lv[q] = 2; });
+  for (q = 0; q < lv.length; q++) if (lv[q] && BED.has[q] && !(lv[q] === 2 ? BED.slot[q] : BED.mslot[q])) miss.push([A.x[0] + q % BED.nx, A.y[0] + Math.floor(q / BED.nx), lv[q]]);
+  return miss;
 }
 /** 每艘還在的船 margin 公尺內的塊（鍵 ⇒ true）。 */
 function bedNear() {
@@ -183,6 +256,12 @@ function bedNear() {
 /** 模擬這一步可不可以走：每艘船 margin 內有檔的塊都載好了 ⇒ false；還沒 ⇒ 叫它載、回 true（畫面迴圈這一格先不走模擬）。 */
 function bedWait() {
   if (!BED || !BED.A) return false;
+  if (BED.mid) {                                                         // 外圈用中等塊：這一步要讀的每一份都到了才走（bedLevels）
+    var f = bedFocusAt(), miss = bedLevels(f[0], f[1]);
+    miss.forEach(function (c) { (c[2] === 2 ? bedLoad : bedLoadMid)(c[0], c[1]).catch(bedBgErr); });
+    if (miss.length) BED.miss++;
+    return miss.length > 0;
+  }
   var near = bedNear(), wait = false;
   Object.keys(near).forEach(function (k) {
     var c = near[k], i = bedIdx(c[0], c[1]);
@@ -194,14 +273,22 @@ function bedWait() {
 /** 焦點：還在打的船的中心（都沒了 ⇒ 鏡頭看的地方）。 */
 function bedFocusAuto() {
   if (!BED || !BED.A) return;
+  var f = bedFocusAt();
+  bedFocus(f[0], f[1], false);
+}
+function bedFocusAt() {
   var x = 0, z = 0, n = 0;
   SHIPS.forEach(function (sh) { if (!sh.sunk) { x += sh.px; z += sh.pz; n++; } });
   if (!n) { x = CAM.eye[0]; z = CAM.eye[2]; n = 1; }
-  bedFocus(x / n, z / n, false);
+  return [x / n, z / n];
 }
 // 查詢：世界 (x, z) ⇒ 那一塊的取樣格（g：海域裡第幾個取樣點，含小數）
 function bedCell(x, z) {
   var A = BED.A, gx = (x + BED.ax) / A.step, gz = (z + BED.az) / A.step, cx = Math.floor(gx / BED.G), cy = Math.floor(gz / BED.G), i = bedIdx(cx, cy);
+  if (BED.mid) {                                                         // 外圈用中等塊：照 bedLevels 定的那一份讀（⛔ 不是「有哪一份就讀哪一份」）
+    var lv = i >= 0 ? BED.lv[i] : 0, M = lv === 2 ? BED.slot[i] : lv === 1 ? BED.mslot[i] : null, s = M ? A.step / M.step : 1;
+    return M ? { C: M, u: (gx - cx * BED.G) * s, v: (gz - cy * BED.G) * s } : null;
+  }
   var C = i >= 0 ? BED.slot[i] : null;
   return C ? { C: C, u: gx - cx * BED.G, v: gz - cy * BED.G } : null;
 }

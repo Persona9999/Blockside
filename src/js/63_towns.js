@@ -43,9 +43,9 @@ function townGot(L, err) {
   L.forEach(function (p) { if (p && p.format === 'blocksail-town' && !TOWNS.list.some(function (T) { return T.id === p.id; })) TOWNS.list.push(townPrep(p)); });
   TOWNS.ver++; TOWNS.dirty = true; TOWNS.stat.towns = TOWNS.list.length;
   TOWNS.stat.prepMs = +(performance.now() - t0).toFixed(1);
-  Object.keys(BED.ch).forEach(function (k) { var C = BED.ch[k]; if (townOver(C.cx, C.cy)) evEmit('bedChunk', C.cx, C.cy, C); });
+  Object.keys(Object.assign({}, BED.ch, BED.cm)).forEach(function (k) { var C = bedShowC(k); if (C && townOver(C.cx, C.cy)) evEmit('bedChunk', C.cx, C.cy, C); });   // 畫著的那一份（原精度或外圈的中等塊）
   Object.keys(BEDFAR.g).forEach(function (k) {                          // 遠景塊：網格與樹冠殼是照舊的高度建的 ⇒ 丟掉、排回最前面重讀
-    if (BED.ch[k]) return;
+    if (bedShowC(k)) return;
     var c = k.split('_').map(Number); if (!townOver(c[0], c[1])) return;
     var g = BEDFAR.g[k]; gl.deleteVertexArray(g.vao); gl.deleteBuffer(g.vb); gl.deleteBuffer(g.ib); delete BEDFAR.g[k];
     if (TREES.far[k]) { var s = TREES.far[k]; if (s.vao) { gl.deleteVertexArray(s.vao); gl.deleteBuffer(s.vb); gl.deleteBuffer(s.ib); } delete TREES.far[k]; }
