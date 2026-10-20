@@ -227,8 +227,8 @@ var TREE_BB_VS = '#version 300 es\nlayout(location=0) in vec2 aQ; layout(locatio
   ' vec3 w=aI.xyz+r*aQ.x*B.z*aS.x+vec3(0.0,aQ.y*B.w*aS.x,0.0); vW=w; vK=aS.y; vT=vec2(B.x+(aQ.x+0.5)*uCell.x,B.y+aQ.y*uCell.y); gl_Position=uVP*vec4(w,1.0); }\n';
 // 交接（TREE_SHELL）的抖動：同一個像素的門檻，殼與貼圖用同一個 ⇒ 互補（殼畫的地方貼圖不畫）
 var TREE_DITHER = 'float treeDi(vec2 p){ return fract(sin(dot(floor(p),vec2(12.9898,78.233)))*43758.5453); }\n';
-var TREE_BB_FS = '#version 300 es\nprecision highp float; uniform sampler2D uTex; uniform vec3 uEye,uFog; uniform float uFogD,uSunK,uClip; uniform vec2 uFade; in vec2 vT; in vec3 vW; in float vK; out vec4 o;\n' + TREE_DITHER +
-  'void main(){ if(vW.y<uClip) discard; if(smoothstep(uFade.x,uFade.y,length(vW.xz-uEye.xz))>treeDi(gl_FragCoord.xy)) discard; vec4 t=texture(uTex,vT); if(t.a<0.45) discard; vec3 col=t.rgb/t.a*vK*(0.6+0.4*uSunK);\n' +
+var TREE_BB_FS = '#version 300 es\nprecision highp float; uniform sampler2D uTex; uniform vec3 uEye,uFog; uniform float uFogD,uSunK,uClip; uniform vec2 uFade; uniform vec3 uBkK; in vec2 vT; in vec3 vW; in float vK; out vec4 o;\n' + TREE_DITHER +
+  'void main(){ if(vW.y<uClip) discard; if(smoothstep(uFade.x,uFade.y,length(vW.xz-uEye.xz))>treeDi(gl_FragCoord.xy)) discard; vec4 t=texture(uTex,vT); if(t.a<0.45) discard; vec3 col=t.rgb/t.a*vK*(0.6+0.4*uSunK)*uBkK;\n' +
   ' float fd=length(vW-uEye); o=vec4(mix(col,uFog,1.0-exp(-fd*uFogD)),1.0); }\n';
 var TREE_SH_VS = '#version 300 es\nlayout(location=0) in vec3 aP; layout(location=1) in vec3 aN; layout(location=2) in vec3 aC; uniform mat4 uVP; out vec3 vN; out vec3 vW; out vec3 vC; void main(){ vN=aN; vW=aP; vC=aC; gl_Position=uVP*vec4(aP,1.0); }\n';
 var TREE_SH_FS = '#version 300 es\nprecision highp float; in vec3 vN; in vec3 vW; in vec3 vC; uniform vec3 uSun,uEye,uFog,uSky,uGround; uniform float uFogD,uClip,uSunK; uniform vec2 uFade; out vec4 o;\n' + TREE_DITHER +
@@ -356,7 +356,7 @@ function treeDraw() {
   TREES.stat.shells = ns; TREES.stat.shellTris = nt;
   gl.bindVertexArray(null); if (cf) gl.enable(gl.CULL_FACE);
 }
-/** 陸地的陰影（60_render.js landShadow；PASS.vp 已經換成那一層）：照主畫面上一次分好的組（treeBin：細的、低模那兩級，各自的實例緩衝）只寫深度；
+/** 陰影的靜態那一層（60_render.js csmStatic；PASS.vp 已經換成那一段）：照主畫面上一次分好的組（treeBin：細的、低模那兩級，各自的實例緩衝）只寫深度；
  *  不晃（uT、uWind 0：那一層不是每一格重畫）。遠處的貼圖與樹冠殼不畫（650 m 以外，陰影那一層的範圍也差不多到這裡）。⇒ 畫了幾棵。 */
 function treeDepth() {
   if (!TREES.on || !TREES.init || !TREES.cnt || !TREES.list.length) return 0;

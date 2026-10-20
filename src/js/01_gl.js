@@ -142,37 +142,32 @@ window.addEventListener('unhandledrejection', function (ev) { var r = ev.reason;
 if (!gl) { glFail('這個瀏覽器沒有 WebGL2，畫不出來。'); throw new Error('no WebGL2'); }   // 拆檔後這裡是閉包的頂層：throw ＝ 原本的 return（停下來）
 
 var P = {};
-// 陰影（畫質；60_render.js shadowPass）：每艘船一張陰影圖（太陽方向的正交投影，uShM[k]），收的那一點落在哪張就用哪張（都在 ⇒ 取暗的）；
-//   全部放在同一個深度貼圖陣列 uShA（固定第 4 號）⇒ 船再多也只佔一個貼圖單元（TASK-0537：上限 8 艘時，每艘一張 ⇒ 片段著色器 16 個單元不夠）。
-//   第 k 層 ＝ 陰影的第 k 格（60_render.js gpuSlots：視野裡最近的 GFX.shships 艘），只查前 uNS 層（0 ＝ 一層都不查）；
-//   全局（沒排進去的船，uShG 開著才查）：矩陣 uShM[MAX_SHIPS]、層 uShGL（＝ uNS，緊接在後面 ⇒ 陣列只配用到的層數）、格子大 ⇒ 沿法線推得遠 uShOffG。
-//   一對一 ⇒ 跟以前同一個值：min(2, s0, s1) ＝ min(s0, s1)（shOne 最大就是 2）。
-//   陸地（Tim 2026-10-20「是否可以在有陸地時 額外加一個全局的陰影(跟著camera)」；uShL 開著才查）：地形、樹、城鎮畫進一層跟著鏡頭的（60_render.js landShadow），
-//     矩陣 uShM[MAX_SHIPS＋1]、層 uShLL、沿法線推 uShOffL；深度的偏差 uShBL 照那一層的深度範圍換算成固定的公尺（船那幾層照舊 0.0006 —— 深度範圍短，約幾公分；
-//     陸地那一層範圍幾公里，0.0006 ⇒ 快 2 m，影子會離開樹根、牆腳）。
-//     船不畫進去（船有自己那幾層；陸地那層不是每一格重畫）。
-//   uShOn ＝ 0 關、1 低（硬體 2×2）、2 高（再 4 點柔邊）；沿法線推出去 uShOff 公尺再比（⛔ 不推 ⇒ 平面上自己遮自己的條紋）；
-//   陽光越斜推越遠（呼叫端把法線乘 1～3 倍：斜面在陰影圖上一格跨的深度大）。
+// 陰影（畫質；60_render.js shadowPass）：照鏡頭切成幾段距離（cascade，Tim 2026-10-20「改用其他遊戲常見的 shadow cascades 取代每艘船自己的陰影(且陸地也吃得到)」「基於Camera配置陰影」）：
+//   一段一層（太陽方向的正交投影 uShM[k]，罩住那一段視錐），船、地形、樹、城鎮都畫在裡面；全部放在同一個深度貼圖陣列 uShA（固定第 4 號）。
+//   收的那一點照離鏡頭多深（沿鏡頭往前的方向 uCsF、從 uCsE 量）挑第一個「遠端 uCsD[k] 比它深」的那一段；那一段最後 12% 跟下一段混（最後一段 ⇒ 淡成沒有影子），
+//   ⇒ 交界看不到一條線、超過陰影距離不是一刀切掉。uCsN ＝ 幾段（0 ＝ 不查）。
+//   每段自己的沿法線推出去 uCsO[k]（約 1.5 個陰影圖格子，公尺）與深度偏差 uCsB[k]（照那一段的格子大小換成公尺、再換成那一段的深度單位）
+//   ⇒ 近的那段格子細、推得少（影子貼著船身、樹根），遠的那段格子粗、推得多（⛔ 不推 ⇒ 平面上自己遮自己的條紋）。
+//   uShOn ＝ 0 關、1 低（硬體 2×2）、2 高（再 4 點柔邊）；陽光越斜推越遠（呼叫端把法線乘 1～3 倍：斜面在陰影圖上一格跨的深度大）。
 // uClip：反射那一趟丟掉水面以下的（平常是 −10⁹）。
 // uSunK：直射光的強度（天氣；晴天 1）—— 收陰影的地方都乘 shadowK，順便乘在這裡。
 // 低於海平面的乾地（63_bed_gl.js BEDDRY；TASK-0768）：海與遠海的著色器照這張遮罩（32 m 一格、蓋整個海域的窗）丟掉 0 m 的海面 —— 恩里基約湖 −40 m 的湖岸、湖面不被海蓋住。
 //   uDryOn ＝ 0（沒有這種地的海域、沒有海圖）⇒ 一律 false ⇒ 畫面逐位元組不變。
 var BED_DRY_GLSL = 'uniform float uDryOn; uniform vec4 uDryR; uniform sampler2D uDryT;\n' +
   'bool bedDry(vec2 p){ if(uDryOn<0.5) return false; vec2 u=(p-uDryR.xy)/uDryR.zw; return u.x>0.0&&u.y>0.0&&u.x<1.0&&u.y<1.0&&textureLod(uDryT,u,0.0).r>0.5; }\n';
-var DEPTH_ONLY_FS = '#version 300 es\nprecision highp float; void main(){}\n';   // 只寫深度（陸地的陰影：地形、樹、城鎮拿自己的頂點著色器配這一支；60_render.js landShadow）
-var NS_SH = String(MAX_SHIPS), NS_MK = String(MASK_NEAR);               // 著色器的陣列長度：陰影照 MAX_SHIPS（＋1 格全局＋1 格陸地）、船艙遮罩照 MASK_NEAR（00_core.js）
-var SHADOW_GLSL = 'uniform highp sampler2DArrayShadow uShA; uniform mat4 uShM[' + (MAX_SHIPS + 2) + ']; uniform int uNS; uniform float uShOn, uShPx, uShOff, uShG, uShGL, uShOffG, uShL, uShLL, uShOffL, uShBL, uClip, uSunK;\n' +
-  'float shOne(int k, float L, vec3 w, float bz){ vec4 p=uShM[k]*vec4(w,1.0); vec3 q=p.xyz*0.5+0.5;\n' +
-  '  if(q.x<0.002||q.y<0.002||q.x>0.998||q.y>0.998||q.z>0.999) return 2.0; q.z-=bz;\n' +
+var DEPTH_ONLY_FS = '#version 300 es\nprecision highp float; void main(){}\n';   // 只寫深度（陰影的靜態那一層：地形、樹、城鎮拿自己的頂點著色器配這一支；60_render.js csmStatic）
+var CSM_MAX = 4, NS_MK = String(MASK_NEAR);                             // 陰影最多幾段（60_render.js CSM_N）、船艙遮罩的陣列長度照 MASK_NEAR（00_core.js）
+var SHADOW_GLSL = 'uniform highp sampler2DArrayShadow uShA; uniform mat4 uShM[' + CSM_MAX + ']; uniform float uShOn, uShPx, uClip, uSunK; uniform int uCsN;\n' +
+  'uniform float uCsD[' + CSM_MAX + '], uCsO[' + CSM_MAX + '], uCsB[' + CSM_MAX + ']; uniform vec3 uCsE, uCsF;\n' +
+  'float shOne(int k, vec3 w, float bz){ vec4 p=uShM[k]*vec4(w,1.0); vec3 q=p.xyz*0.5+0.5;\n' +
+  '  if(q.x<0.002||q.y<0.002||q.x>0.998||q.y>0.998||q.z>0.999) return 1.0; q.z-=bz; float L=float(k);\n' +
   '  if(uShOn<1.5) return texture(uShA,vec4(q.xy,L,q.z));\n' +
   '  float e=uShPx*0.9; return 0.25*(texture(uShA,vec4(q.xy+vec2(-e,-e),L,q.z))+texture(uShA,vec4(q.xy+vec2(e,-e),L,q.z))+texture(uShA,vec4(q.xy+vec2(-e,e),L,q.z))+texture(uShA,vec4(q.xy+vec2(e,e),L,q.z))); }\n' +
-  // 陸地那一層：範圍最外面那一圈（離中心 80%～98%）淡掉 ⇒ 範圍外的影子不是一刀切掉
-  'float shLand(vec3 w){ vec4 p=uShM[' + (MAX_SHIPS + 1) + ']*vec4(w,1.0); vec2 q=p.xy*0.5+0.5; float ed=max(abs(q.x-0.5),abs(q.y-0.5))*2.0; if(ed>0.996) return 2.0;\n' +
-  '  return mix(min(shOne(' + (MAX_SHIPS + 1) + ',uShLL,w,uShBL),1.0),1.0,smoothstep(0.8,0.98,ed)); }\n' +
-  'float shadowK(vec3 w, vec3 n){ if(uShOn<0.5) return uSunK; vec3 p=w+n*uShOff; float m=2.0;' +
-  ' for(int k=0;k<' + NS_SH + ';k++){ if(k>=uNS) break; m=min(m,shOne(k,float(k),p,0.0006)); }' +
-  ' if(uShG>0.5) m=min(m,shOne(' + NS_SH + ',uShGL,w+n*uShOffG,0.0006));' +
-  ' if(uShL>0.5) m=min(m,shLand(w+n*uShOffL)); return min(m,1.0)*uSunK; }\n';
+  'float shAt(int k, vec3 w, vec3 n){ return shOne(k,w+n*uCsO[k],uCsB[k]); }\n' +
+  'float shadowK(vec3 w, vec3 n){ if(uShOn<0.5||uCsN<1) return uSunK; float d=dot(w-uCsE,uCsF); int k=-1;\n' +
+  ' for(int i=0;i<' + CSM_MAX + ';i++){ if(i>=uCsN) break; if(d<uCsD[i]){ k=i; break; } }\n' +
+  ' if(k<0) return uSunK; float s=shAt(k,w,n), t=smoothstep(uCsD[k]*0.88,uCsD[k],d);\n' +
+  ' if(t>0.0) s=mix(s,k+1<uCsN?shAt(k+1,w,n):1.0,t); return s*uSunK; }\n';
 // 船艙遮罩（海、船邊水花的白沫共用；要有 in vec3 vW）：那一點換到船的格座標，落在原本船殼的外形裡 ⇒ 呼叫端丟掉（HULL_HIT）。
 //   遮罩照船型一層（uHullA：R8 貼圖陣列，每層 ＝ 那一型每個 (x, z) 船殼的半寬；固定第 1 號；60_render.js hullArr）；
 //   格（60_render.js gpuSlots：視野裡最近的 GFX.masks 艘，最多 MASK_NEAR）：uInv[k]（世界 → 格）、uHullK[k] ＝ (那一型的寬, 高, 中線 y, 第幾層)、
@@ -382,18 +377,17 @@ function setCommon(p) {
   if (u.uVe) { if (VX) gl.uniform2f(u.uVe, VX.De, VX.re2); else gl.uniform2f(u.uVe, 0, 1); }   // 眼的喉部（深度、半徑²）
   if (u.uClip) gl.uniform1f(u.uClip, PASS.clip);
   if (u.uCutT) gl.uniform1i(u.uCutT, 8);                       // 剖面的切高貼圖（74_cutaway.js）：固定第 8 號
+  if (u.uBkK) gl.uniform3fv(u.uBkK, todBakeK());                  // 遠景貼圖的光照倍數（08_weather.js todBakeK：世界時間的夜晚只剩月光；沒開 ⇒ 1）
   if (u.uSunK) gl.uniform1f(u.uSunK, wxSun());                   // 天氣（08_weather.js）：陽光、水手與碎木的亮度、白沫
   if (u.uLum) gl.uniform1f(u.uLum, wxLum());
   if (u.uLN) { gl.uniform1i(u.uLN, LAMPS.n); if (LAMPS.n) { gl.uniform4fv(u.uLP, LAMPS.p); gl.uniform4fv(u.uLC, LAMPS.c); } }   // 點光源（60_render.js lampsUpdate；沒有 uLN 的著色器 ＝ 陰影那一趟 ⇒ 不給）
   if (u.uFoam) gl.uniform1f(u.uFoam, WX.foam);
-  if (u.uNS) gl.uniform1i(u.uNS, SSLOTS.length);               // 陰影用到幾格（60_render.js gpuSlots）
   if (u.uNM) gl.uniform1i(u.uNM, MSLOTS.length);               // 船艙遮罩、透視用到幾格
-  if (u.uShOn) {                                              // 陰影圖陣列綁在第 4 號（60_render.js render 開頭綁）；每一層的矩陣一次給（沒用到的 ＝ FAR_M）
+  if (u.uShOn) {                                              // 陰影圖陣列綁在第 4 號（60_render.js render 開頭綁）；每一段的矩陣、遠端、偏移一次給（沒用到的段 ＝ FAR_M）
     gl.uniform1f(u.uShOn, PASS.sh ? GFX.shadow : 0);
-    gl.uniform1i(u.uShA, 4); gl.uniformMatrix4fv(u.uShM, false, SHM.mats);
-    gl.uniform1f(u.uShPx, 1 / SHM.n); gl.uniform1f(u.uShOff, SHM.off);
-    gl.uniform1f(u.uShG, SHM.glob ? 1 : 0); gl.uniform1f(u.uShGL, SSLOTS.length); gl.uniform1f(u.uShOffG, SHM.offG);
-    if (u.uShL) { gl.uniform1f(u.uShL, SHM.land ? 1 : 0); gl.uniform1f(u.uShLL, SHM.landL); gl.uniform1f(u.uShOffL, SHM.offL); gl.uniform1f(u.uShBL, SHM.biasL); }   // 陸地那一層（60_render.js landShadow）
+    gl.uniform1i(u.uShA, 4); gl.uniformMatrix4fv(u.uShM, false, SHM.mats); gl.uniform1f(u.uShPx, 1 / SHM.n);
+    gl.uniform1i(u.uCsN, SHM.on ? SHM.k : 0); gl.uniform1fv(u.uCsD, SHM.csD); gl.uniform1fv(u.uCsO, SHM.csO); gl.uniform1fv(u.uCsB, SHM.csB);   // 60_render.js shadowMats
+    gl.uniform3fv(u.uCsE, SHM.eye); gl.uniform3fv(u.uCsF, SHM.fw);
   }
 }
 // 水線下不染海水色（Tim 2026-10-16「莫尼特號艙內有一層水 但是實際上沒有進水」→「拿掉船身與模型的水線下水色，交給海面」）：

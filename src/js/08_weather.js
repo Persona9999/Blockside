@@ -105,7 +105,7 @@ function setWeather(id) {
 //   現在幾點 ＝ tod ＋ 模擬時間 SIMT ÷ 3600：1:1（Tim：「我希望維持目前手感」—— 畫面上的節數就是模擬裡的速度，地球儀也照同一個節數開）；
 //     停格的模擬倍速 ×8 ⇒ 時間也 ×8。回地球儀時 'left' 帶 tod（03_camera.js camTrans）。
 //   太陽：照海域原點的緯度（BED.A.lat0；沒有 ⇒ ?lat= ⇒ 18°N）、赤緯 0（先不分季節：6 點日出、18 點日落）算方位與高度；時刻照 30 秒一步
-//     （太陽一步動 0.125° ⇒ 看不出跳；陸地那層陰影不用每一格重畫，60_render.js landShadow 的 key 有 SUN）。
+//     （太陽一步動 0.125° ⇒ 看不出跳；陰影的靜態那一層不用每一格重畫，60_render.js shadowPass 的 key 有 SUN）。
 //   晨昏（太陽 −6°～10°）：天色、霧往橘紅靠；夜晚（低於 −6°）：直射光換成月亮（滿月、跟太陽相對；強度 0.14、偏藍的圓盤）、天色深藍、環境光剩三成、
 //     燈變亮（wxLum 變小 ⇒ 60_render.js lampsUpdate 的 1.6 − lum 變大）；天空有星星（01_gl.js P.sky 的 uNight）。
 //   只動畫面：天色在 render 開頭套（todApply）、結尾還原（todRestore／sky0）；陽光、亮度是倍數 TOD_SUNK、TOD_LUMK（讀的地方一律走 wxSun()、wxLum()）——
@@ -139,6 +139,16 @@ function todApply() {
 }
 /** render 結尾：地面色還原成天氣的（天、霧由 render 自己的 sky0／hor0 還原；SUN、倍數留著：下一格 todApply 會再算）。 */
 function todRestore(s) { if (s) GROUND = s.gr; }
+// 遠景的貼圖（63_trees.js TREE_BB_FS 樹、63_towns.js 遠處的建築）是白天烘好的顏色，以前只乘「常數 ＋ 陽光」⇒ 夜晚還有白天七成亮、650 m 外一圈亮的
+//   （Tim 2026-10-20「夜晚時 遠處的部分會是亮的」「夜晚應該只計算月光」）。⇒ 再乘 todBakeK：現在的「天色環境光 ＋ 直射光（夜晚是月光）」÷ 白天的同一個量（每個顏色各自比），
+//   跟近景著色器同一套光（環境 mix(地, 天, 0.6) × 0.7 ＋ 直射 0.72 × 高度 × 陽光）⇒ 夜晚只剩月光那一份、偏藍。沒開世界時間 ⇒ [1, 1, 1]（畫面一位元不變）。
+var SUN_DAY = SUN.slice(), TOD_BAKE = [1, 1, 1];
+function todBakeK() {
+  if (TOD0 === null) return [1, 1, 1];
+  var C = [1.0, 0.96, 0.88], a = Math.max(SUN[1], 0) * wxSun() * 0.72, b = Math.max(SUN_DAY[1], 0) * WX.sun * 0.72;
+  for (var i = 0; i < 3; i++) TOD_BAKE[i] = ((GROUND[i] * 0.4 + SKY[i] * 0.6) * 0.7 + C[i] * a) / ((WX.ground[i] * 0.4 + WX.sky[i] * 0.6) * 0.7 + C[i] * b);
+  return TOD_BAKE;
+}
 /** 開砲散布的倍率：晴天 1；暴風雨 ＝ 1.25 ＋ 9 ×（橫搖角速度 ＋ 一半的縱搖角速度，rad/s）—— 船晃得越快，點火那一下差得越多。 */
 function wxSpread(sh) {
   if (!WX.aim || !sh.wv) return 1;

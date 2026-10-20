@@ -375,7 +375,7 @@ function bedSeaDraw() {
   gl.bindVertexArray(S.vao); gl.drawArrays(gl.TRIANGLES, 0, 6); gl.bindVertexArray(null);
   if (cf) gl.enable(gl.CULL_FACE);
 }
-/** 陸地的陰影（60_render.js landShadow；PASS.vp 已經換成那一層）：地形的網格只寫深度 —— 細的、沒有細的才畫遠景塊，照陰影那一層的範圍（PL）剔除。⇒ 畫了幾塊。 */
+/** 陰影的靜態那一層（60_render.js csmStatic；PASS.vp 已經換成那一段）：地形的網格只寫深度 —— 細的、沒有細的才畫遠景塊，照陰影那一層的範圍（PL）剔除。⇒ 畫了幾塊。 */
 function bedDepth(PL) {
   var P0 = P.bedD || (P.bedD = VK.compile(gl, BED_VS, DEPTH_ONLY_FS)), n = 0;
   gl.useProgram(P0.prog); setCommon(P0);
