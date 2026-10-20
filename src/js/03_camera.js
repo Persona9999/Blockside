@@ -59,9 +59,10 @@ function camTrans(dt) {
     else if (!T.said) { T.said = true; bedHostSay('left', { x: c[0], z: c[2], hdg: camTransHdg(), shipHdg: me ? (Math.atan2(Math.cos(me.yaw), Math.sin(me.yaw)) * 180 / Math.PI + 360) % 360 : null }); }   // shipHdg：我艦船頭的方位角（fwd(yaw) ＝ [cos, 0, −sin] ⇒ 東 cos、北 sin）
   }
 }
-/** 開戰時鏡頭還停在正上方等外面那一頁說 'go'（只有 ?map=@host）⇒ 模擬先不走（90_main.js frame；Tim 2026-10-20「鏡頭降下前 先暫停模擬(確保重疊)」）：
- *  地球儀上的船照 'started' 的位置與船頭疊到這艘上，等的那幾秒船不能先開走。 */
-function camTransHeld() { return !!(CAM.tr && CAM.tr.dir === 'in' && CAM.tr.hold); }
+/** 轉場時模擬先不走（只有 ?map=@host；90_main.js frame）——地球儀上的船要跟這艘疊在一起，船不能先開走：
+ *  · 開戰時鏡頭還停在正上方等外面那一頁說 'go'（Tim 2026-10-20「鏡頭降下前 先暫停模擬(確保重疊)」）：地球儀照 'started' 的位置與船頭擺船；
+ *  · 回地球儀（'leave' 之後鏡頭往上拉，之後這一頁就關了）：'left' 報的是鏡頭開始拉時我艦在哪 ⇒ 拉的那兩秒船還在開，淡出時地球儀上的船差一截、跳一下（Tim 同一天「fadeout之前可以先把地球儀上船的位置對齊嗎」）。 */
+function camTransHeld() { return !!(CAM.tr && (CAM.tr.dir === 'in' ? CAM.tr.hold : CAM.tr.dir === 'out')); }
 /** 轉場時正上方那一張「畫面上方」的方位角（度；北 0、順時針，東 ＝ +x、北 ＝ −z）⇒ 地球儀照這個轉。還沒算 ⇒ 0。 */
 function camTransHdg() { var f = CAM.tr && CAM.tr.f; return f ? (Math.atan2(f[0], -f[1]) * 180 / Math.PI + 360) % 360 : 0; }
 /** 外面那一頁叫的（08_seabed.js bedHostMsg）：'in' 開戰時先停在正上方；'go' 開始降；'out' 拉上去。 */
