@@ -125,6 +125,7 @@ function doAct(a, repeat) {
     else { if (SAIL === 'off') setSailMode('manual'); var nw = anchorWeighAll(me); note(me, nw ? '起錨（' + nw + '）—— 8 秒收好' : '錨都收著'); }   // 拋錨模式 ⇒ 換手動、我艦的雙錨跟著收
   }
   else if ((a === 'ancP' || a === 'ancS') && RUNNING && me && !me.sunk && !anchorsOf(me).single) { var am = anchorToggle(me, a === 'ancP' ? 'P' : 'S'); if (am) note(me, am + (/^拋/.test(am) ? '（帶著速度只拋一側 ⇒ 繞錨急轉；再按一次起錨）' : '')); }   // 左右錨（76_anchor.js）   // 航行（TASK-0567，Tim 2026-10-14：不用 Tab 循環，三個鍵直接切）
+  else if (a === 'hostBack') bedHostBackGo();                                 // 🌍 回到地球儀（只有 ?map=@host；08_seabed.js）
   else if (a === 'settings') gsetToggle();                                    // 設定（Esc 也可以）
   else if (a === 'signals') sigToggle();                                     // 旗號面板（TASK-0679）
   else if (a === 'ruddL' || a === 'ruddR') {   // 打舵：自動中一碰就換手動
