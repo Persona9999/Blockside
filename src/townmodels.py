@@ -20,7 +20,9 @@ ROOT = os.path.dirname(HERE)
 CACHE = os.path.join(ROOT, 'VoxelKit', '_cache', 'town')
 OUT = os.path.join(HERE, 'js', '63_towndata.js')
 KIT = 'summit-bourg-fr-01m'
-# 名字 ⇒ 用途、型（同一種用途的變化，遊戲照地塊的雜湊挑）；城牆模組 ⇒ part、tier
+ROMAN = 'kaguya-roman-1453'                                   # 東羅馬城牆 1453（君士坦丁堡；Blocksail docs/BUILDING_SPEC.md §6.1）
+# 名字 ⇒ 用途、型（同一種用途的變化，遊戲照地塊的雜湊挑）；城牆模組 ⇒ part（型）、套（set：規劃的牆 kit 照它挑；一級～三級 ＝ wall1～wall3）
+# 第四格（選填）＝ 雕刻作品 id（沒寫 ⇒ KIT-名字）；第五格（選填）＝ 套（沒寫 ⇒ 'wall' ＋ 名字第 5 字的級數）
 MODELS = [
     ('house-a', 'house', 'a'), ('house-b', 'house', 'b'), ('house-c', 'house', 'c'),
     ('house-a2', 'house', 'a2'), ('house-b2', 'house', 'b2'), ('house-c2', 'house', 'c2'),
@@ -28,7 +30,19 @@ MODELS = [
     ('tavern', 'tavern', 'a'), ('warehouse', 'warehouse', 'a'), ('market', 'market', 'a'),
     ('wall1-section', 'wall', 'section'), ('wall1-tower', 'wall', 'tower'), ('wall1-gate', 'wall', 'gate'),
     ('wall1-joint', 'wall', 'joint'), ('wall1-end', 'wall', 'end'),
-]
+    ('wall3-section', 'wall', 'section'), ('wall3-tower', 'wall', 'tower'), ('wall3-gate', 'wall', 'gate'), ('wall3-end', 'wall', 'end'),
+] + [('roman-%s-%s%s' % (st, part, v), 'wall', part, '%s-%s-%s%s' % (ROMAN, st, part, v), 'roman-' + st)
+     for st, parts in (('land-inner', ('section', 'tower', 'gate', 'end')), ('land-outer', ('section', 'tower', 'tower-b', 'gate', 'end')),
+                       ('sea', ('section', 'tower', 'gate', 'end')))
+     for part, v in ((p.split('-')[0], ('-' + p.split('-')[1]) if '-' in p else '') for p in parts)]
+
+
+def mwork(m):
+    return m[3] if len(m) > 3 else KIT + '-' + m[0]
+
+
+def mset(m):
+    return m[4] if len(m) > 4 else 'wall' + m[0][4]
 LO_F, LO_FILL, PPM = 4, 12, 4                                  # 低模幾格併一格、一塊至少幾格才算有東西、貼圖每公尺幾像素
 VIEWS = 8
 LIGHT = np.array([0.45, -0.35, 0.82]); LIGHT = LIGHT / np.linalg.norm(LIGHT)
@@ -44,9 +58,10 @@ def senate_export(work, out):
 
 def act_export():
     os.makedirs(CACHE, exist_ok=True)
-    for name, _, _ in MODELS:
+    for m in MODELS:
+        name = m[0]
         p = os.path.join(CACHE, name + '.vxk')
-        senate_export(KIT + '-' + name, os.path.abspath(p))
+        senate_export(mwork(m), os.path.abspath(p))
         print('匯出', name, os.path.getsize(p), 'bytes')
 
 
@@ -215,7 +230,8 @@ def roof_info(g, mpv):
 
 def act_build():
     models, cells, rows, src = {}, [], [], []
-    for name, use, var in MODELS:
+    for mm in MODELS:
+        name, use, var = mm[:3]
         p = os.path.join(CACHE, name + '.vxk')
         if not os.path.exists(p): raise SystemExit('沒有 %s ⇒ 先跑 python -I src/townmodels.py export' % p)
         h, g = read_vxk(p)
@@ -236,7 +252,8 @@ def act_build():
              'im': {'cw': cw, 'ch': ch, 'w': round(Wm, 3), 'h': round(Hm, 3)}, 'top': top, 'roof': roof, 'cover': cover,
              'pts': {k: v for k, v in sorted((h.get('points') or {}).items())}}
         if use == 'wall':
-            e['part'] = var; e['tier'] = int(name[4]); e['len'] = float(meta.get('len', 0) or 0) or round(sx * mpv, 2)
+            e['part'] = var; e['set'] = mset(mm); e['len'] = float(meta.get('len', 0) or 0) or round(sx * mpv, 2)
+            if e['set'][:4] == 'wall': e['tier'] = int(e['set'][4:])
         else:
             lot = str(meta.get('lot') or '%d,%d' % (round(sx * mpv), round(sy * mpv))).split(',')
             e['lot'] = [int(lot[0]), int(lot[1])]; e['base'] = float(meta.get('base', 0) or 0)
@@ -255,7 +272,7 @@ def act_build():
         y0 += ch
     a8 = np.clip(np.round(atlas * 255), 0, 255).astype(np.uint8)
     pb = base64.b64encode(png(a8)).decode('ascii')
-    kit = {'v': 1, 'kit': KIT, 'views': VIEWS, 'ppm': PPM, 'atlas': {'w': AW, 'h': AH, 'png': pb}, 'models': models}
+    kit = {'v': 1, 'kit': ','.join(sorted({KIT if len(m) < 4 else ROMAN for m in MODELS})), 'views': VIEWS, 'ppm': PPM, 'atlas': {'w': AW, 'h': AH, 'png': pb}, 'models': models}
     head = ('// 城鎮的建築與城牆模型（TASK-0740）—— ⛔ 不手改：python -I src/townmodels.py build 產生（說明見那支的檔頭）。\n'
             '// 來源（雕刻作品@checksum）：' + '；'.join(src) + '\n')
     body = 'var TOWN_KIT = ' + json.dumps(kit, ensure_ascii=False, separators=(',', ':'), sort_keys=True) + ';\n'

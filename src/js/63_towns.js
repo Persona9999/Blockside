@@ -10,7 +10,9 @@
 // 建築（模型 63_towndata.js TOWN_KIT，src/townmodels.py 匯入時算好近、中、遠三份＋屋頂殼的資料）：地塊照用途挑（同用途的變化照 地塊 id 的雜湊挑 ⇒ 每次一樣）。
 //   模型 → 世界（BUILDING_SPEC §1）：a ＝ mx·mpv − 模型寬/2、b ＝ my·mpv − 模型深/2、θ ＝ lot.rot ⇒ 往東 ＝ cx ＋ a·sinθ − b·cosθ、往南 ＝ cy − a·cosθ − b·sinθ、高 ＝ h ＋ mz·mpv；
 //   模型比地塊小（金斯敦的地塊照 Lilly 的棋盤）⇒ 臨路那一邊對齊、沿路置中：cx,cy ＝ at ＋ (d − 模型深)/2 ·(cosθ, sinθ)。底下墊一塊石基（townPlinth：到四角最低的地面再下 0.3 m）。
-//   城牆（一級，TOWN_BUILD §4；等級之後照規模 × 繁榮度換）：門、塔照位置、兩頭收尾，中間照斷面沿曲線一節一節拉（節數 round(L / len)、每節沿 x 縮放補滿），−y（牆外）朝離城心遠的那一邊。
+//   城牆（TOWN_BUILD §4）：照牆的 kit 挑一套模組（wall1～wall3 ＝ 一～三級、roman-land-inner／roman-land-outer／roman-sea ＝ 東羅馬城牆 1453；BUILDING_SPEC §6、§6.1）；
+//   沒寫 kit ⇒ 一級（等級之後照規模 × 繁榮度換）、寫了但沒有那一套 ⇒ 一級（stat.skip 記 'wall:<kit>'）。
+//   門、塔照位置（一套有好幾型塔 ⇒ 照順序輪流：東羅馬外牆方塔、新月塔交替）、兩頭收尾，中間照斷面沿曲線一節一節拉（節數 round(L / len)、每節沿 x 縮放補滿），−y（牆外）朝離城心遠的那一邊。
 // 遠近四級（照樹那一套；距離 TOWN_LOD、TOWN_FAR）：近 原模型、中 低模（0.4 m）、遠 貼圖（八個方向先拍好，取最接近視線的那一張）、更遠 屋頂殼（每 TOWN_SHELL_G 公尺一格的屋頂高與顏色）；
 //   每一級的交接帶兩邊都畫、用同一個抖動互補（同一個像素只有一個）。看得到的實例照視錐剔、鏡頭動了 TOWN_REBIN 公尺才重新分組（townBin）。
 // 路（TOWN_BUILD 第 10 節第 7 題：地形上著色）：照路的 z 鋪一條貼地的帶子（土路、石板路的顏色）；廣場、碼頭、棧橋同一份網格。
@@ -202,7 +204,7 @@ function townKit() {
     });
   }).then(function (tex) {
     var byUse = {};
-    names.forEach(function (nm) { var m = K.models[nm]; if (m.use !== 'wall') (byUse[m.use] = byUse[m.use] || []).push(nm); else byUse['wall' + m.tier + '-' + m.part] = [nm]; });
+    names.forEach(function (nm) { var m = K.models[nm], k = m.use !== 'wall' ? m.use : (m.set || 'wall' + m.tier) + '-' + m.part; (byUse[k] = byUse[k] || []).push(nm); });   // 城牆：'<套>-<型>'（同型好幾種 ⇒ 名字排序）
     TOWNS.kit = { M: M, names: names, byUse: byUse, tex: tex, aw: K.atlas.w, ah: K.atlas.h, views: K.views };
     TOWNS.stat.kitMs = +(performance.now() - t0).toFixed(1);
     TOWNS.stat.kitTris = names.reduce(function (o, nm) { o[nm] = [M[nm].lod[0].nq * 2, M[nm].lod[1].nq * 2]; return o; }, {});
@@ -229,7 +231,7 @@ function townInst(T) {
   TOWNS.stat.lots = TOWNS.list.reduce(function (s, T2) { return s + (T2.p.lots || []).length; }, 0);
   return out;
 }
-/** 一條城牆 ⇒ 門、塔、收尾照位置，中間斷面沿曲線拉（一級；BUILDING_SPEC §6）。 */
+/** 一條城牆 ⇒ 門、塔、收尾照位置，中間斷面沿曲線拉（照 w.kit 挑那一套；BUILDING_SPEC §6）。 */
 function townWall(T, w, out, W) {
   var K = TOWNS.kit, P = w.path.map(W); if (w.closed) P = P.concat([P[0]]);
   var cum = [0]; for (var i = 1; i < P.length; i++) cum.push(cum[i - 1] + Math.hypot(P[i][0] - P[i - 1][0], P[i][1] - P[i - 1][1]));
@@ -243,11 +245,13 @@ function townWall(T, w, out, W) {
     TOWNS.stat.walls++;
   }
   function half(nm) { var m = K.M[nm].m, pa = m.pts['wall-a'], pb = m.pts['wall-b']; return pa && pb ? (pb[0] - pa[0] + 1) * m.mpv / 2 : m.size[0] * m.mpv / 2; }
-  var gate = (K.byUse['wall1-gate'] || [])[0], tower = (K.byUse['wall1-tower'] || [])[0], sect = (K.byUse['wall1-section'] || [])[0], end = (K.byUse['wall1-end'] || [])[0];
+  var kit = w.kit || 'wall1';
+  if (!K.byUse[kit + '-section']) { TOWNS.stat.skip['wall:' + kit] = (TOWNS.stat.skip['wall:' + kit] || 0) + 1; kit = 'wall1'; }
+  var gate = (K.byUse[kit + '-gate'] || [])[0], towers = K.byUse[kit + '-tower'] || [], sect = (K.byUse[kit + '-section'] || [])[0], end = (K.byUse[kit + '-end'] || [])[0];
   if (!sect) return;
   var obs = [];                                                         // 沿牆被部件佔掉的 [t0, t1]
   (w.gates || []).forEach(function (g) { if (!gate) return; var t = proj(W(g.at)), s = at(t); put(gate, { x: s.x, z: s.z }, s.a, 1, out, true); obs.push([t - half(gate), t + half(gate)]); });
-  (w.towers || []).forEach(function (q) { if (!tower) return; var t = proj(W(q)), s = at(t); put(tower, { x: s.x, z: s.z }, s.a, 1, out, true); obs.push([t - half(tower), t + half(tower)]); });
+  (w.towers || []).forEach(function (q, i) { if (!towers.length) return; var tower = towers[i % towers.length], t = proj(W(q)), s = at(t); put(tower, { x: s.x, z: s.z }, s.a, 1, out, true); obs.push([t - half(tower), t + half(tower)]); });
   if (!w.closed && end) {                                               // 收尾：模型的 wall-a（−x 那一面）接牆身 ⇒ 起點那一頭朝外轉 180°
     var mE = K.M[end].m, lE = mE.size[0] * mE.mpv / 2, s0 = at(0), s1 = at(Ltot);
     put(end, { x: s0.x - Math.cos(s0.a) * lE, z: s0.z - Math.sin(s0.a) * lE }, s0.a + Math.PI, 1, out, false);
