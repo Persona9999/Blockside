@@ -254,7 +254,22 @@ function shipCheck(id) {
     //   同一層的送藥手去同一層、x 最近的取用點（stationFor）拿，直直走到砲尾後面放藥箱的位置（g.drop；monkeyTo 不尋路）。
     //   ✗ 那一層沒有取用點（上面那條已報 ⇒ 這裡不重報）／沒有送藥手／砲尾後面找不到放藥箱的位置 ⇒ 那門砲打完砲旁藥箱就停。
     //   ⚠ 走路格上（預備水手的尋路，42_hands.js）取用點跟放藥箱的位置不連通 ⇒ 送藥手照直線穿過艙壁、艙口去送。
-    var pw = { n: 0, ok: 0, unk: 0, far: 0, farG: '' };
+    //   兩點在不同層 ⇒ 照「層:區域」＋梯子的圖查得到 ⇒ 算走得到（報告註明幾門要走梯子；送藥手照樣直線走，這裡只判有沒有路）；查不到 ⇒ 照舊只計數。
+    var pw = { n: 0, ok: 0, lad: 0, unk: 0, far: 0, farG: '' };
+    /** 第 la 層的第 ra 塊走得到第 lb 層的第 rb 塊嗎：跟 handRoute 同一張圖（節點「層:區域」、邊 ＝ 沒斷的梯子），只判有沒有路、⛔ 不碰梯子的排隊數（L.q）。 */
+    function lvRegReach(la, ra, lb, rb) {
+      var s = la + ':' + ra, t = lb + ':' + rb, seen = {}, q = [s]; seen[s] = 1;
+      for (var k = 0; k < q.length; k++) {
+        if (q[k] === t) return true;
+        var u = q[k].split(':'), ul = +u[0], ur = +u[1];
+        NV.ladders.forEach(function (Lg) {
+          if (Lg.broken) return;
+          var v = Lg.lo === ul && Lg.ra === ur ? Lg.hi + ':' + Lg.rb : Lg.hi === ul && Lg.rb === ur ? Lg.lo + ':' + Lg.ra : null;
+          if (v && !seen[v]) { seen[v] = 1; q.push(v); }
+        });
+      }
+      return false;
+    }
     if (kegsAny && !(sh.cw.monkeys > 0)) add('warn', '火藥', '船員配置', '送藥手 0 ⇒ 每門砲打完砲旁藥箱（' + BOX_N + ' 份 × 砲種表 box）就停', '船員配置的送藥手給 1 或 2');
     if (kegsAny && sh.cw.monkeys > 0) sh.guns.forEach(function (g) {
       var deck = gunDeck(g), nm = g.model.path || g.model.name, sts = sh.stations.filter(function (st) { return st.deck === deck && !st.mag.gone; });
@@ -266,11 +281,16 @@ function shipCheck(id) {
       var d = Math.hypot(g.drop[0] - st.at[0], g.drop[1] - st.at[1]) * S;
       if (d > pw.far) { pw.far = d; pw.farG = nm; }
       var li = NV ? lvAt(sh, st.at) : -1, L = li >= 0 ? NV.levels[li] : null, N = L && L.N, a = N ? navSnap(N, st.at, 4) : -1, b = N ? navSnap(N, g.drop, 4) : -1;
-      if (!N || a < 0 || b < 0 || lvAt(sh, g.drop) !== li) { pw.unk++; return; }   // 走路格量不到（那一層沒有走路格、放藥箱的位置旁邊 4 點內沒有能走的點、兩點落在不同層）⇒ 判不了，只計數（⛔ 當成不連通 ⇒ 三叉戟號 spar 甲板 22 門誤報）
+      var lj = NV ? lvAt(sh, g.drop) : -1;
+      if (N && a >= 0 && lj >= 0 && lj !== li) {                        // 兩點落在不同層（越嶺號：取用點在主甲板的艙口、船首砲放藥箱的位置在船首平台）⇒ 照預備水手找路的那張圖（42_hands.js handRoute：「層:區域」＋沒斷的梯子）
+        var Nj = NV.levels[lj].N, bj = Nj ? navSnap(Nj, g.drop, 4) : -1;
+        if (bj >= 0 && lvRegReach(li, N.reg[a], lj, Nj.reg[bj])) { pw.ok++; pw.lad++; return; }
+      }
+      if (!N || a < 0 || b < 0 || lj !== li) { pw.unk++; return; }      // 走路格量不到（那一層沒有走路格、放藥箱的位置旁邊 4 點內沒有能走的點、兩點落在不同層而梯子接不上）⇒ 判不了，只計數（⛔ 當成不連通 ⇒ 三叉戟號 spar 甲板 22 門誤報）
       if (!navPath(N, a, b)) { add('warn', '火藥', nm, st.name + ' 跟砲尾放藥箱的位置在走路格上不連通 ⇒ 送藥手照直線穿過艙壁、艙口去送', '取用點跟砲之間留通道，或在船隻配置頁換取用點的位置'); return; }
       pw.ok++;
     });
-    R.info.powder = pw.n ? pw.ok + '／' + pw.n + ' 門走得到取用點' + (pw.unk ? '（' + pw.unk + ' 門走路格量不到、照直線走）' : '') + (pw.far ? '；最遠 ' + pw.far.toFixed(1) + ' m（' + pw.farG + '，送一趟來回約 ' + (2 * pw.far / (MONKEY_SP * S) + FILL_T).toFixed(1) + ' 秒）' : '') : '—';
+    R.info.powder = pw.n ? pw.ok + '／' + pw.n + ' 門走得到取用點' + (pw.lad ? '（其中 ' + pw.lad + ' 門跨層、走梯子）' : '') + (pw.unk ? '（' + pw.unk + ' 門走路格量不到、照直線走）' : '') + (pw.far ? '；最遠 ' + pw.far.toFixed(1) + ' m（' + pw.farG + '，送一趟來回約 ' + (2 * pw.far / (MONKEY_SP * S) + FILL_T).toFixed(1) + ' 秒）' : '') : '—';
     R.issues.sort(function (a, b) { return (a.lv === 'error' ? 0 : 1) - (b.lv === 'error' ? 0 : 1); });
     done();
   }).catch(function (e) { add('error', '載入', id, String(e && e.message || e), '—'); done(); });
