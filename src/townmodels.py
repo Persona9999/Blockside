@@ -21,7 +21,7 @@ CACHE = os.path.join(ROOT, 'VoxelKit', '_cache', 'town')
 OUT = os.path.join(HERE, 'js', '63_towndata.js')
 KIT = 'summit-bourg-fr-01m'
 ROMAN = 'kaguya-roman-1453'                                   # 東羅馬城牆 1453（君士坦丁堡；Blocksail docs/BUILDING_SPEC.md §6.1）
-GALATA_TOWER = 'kaguya-galata-tower-1453'                     # 加拉塔塔 1453（地塊帶 model: 'galata-tower' 才用；用途記 landmark ⇒ 不會被別的 tower 地塊挑到）
+GALATA_TOWER = 'kaguya-galata-tower-1453'                     # 加拉塔塔 1453（特殊建築：Blocksail world/town.js SPECIAL 的 galata-tower ⇒ 用途就是那一種，只有它挑得到）
 # 名字 ⇒ 用途、型（同一種用途的變化，遊戲照地塊的雜湊挑）；城牆模組 ⇒ part（型）、套（set：規劃的牆 kit 照它挑；一級～三級 ＝ wall1～wall3）
 # 第四格（選填）＝ 雕刻作品 id（沒寫 ⇒ KIT-名字）；第五格（選填）＝ 套（沒寫 ⇒ 'wall' ＋ 名字第 5 字的級數）
 MODELS = [
@@ -32,7 +32,7 @@ MODELS = [
     ('wall1-section', 'wall', 'section'), ('wall1-tower', 'wall', 'tower'), ('wall1-gate', 'wall', 'gate'),
     ('wall1-joint', 'wall', 'joint'), ('wall1-end', 'wall', 'end'),
     ('wall3-section', 'wall', 'section'), ('wall3-tower', 'wall', 'tower'), ('wall3-gate', 'wall', 'gate'), ('wall3-end', 'wall', 'end'),
-    ('galata-tower', 'landmark', 'a', GALATA_TOWER),
+    ('galata-tower', 'galata-tower', 'a', GALATA_TOWER),
 ] + [('roman-%s-%s%s' % (st, part, v), 'wall', part, '%s-%s-%s%s' % (ROMAN, st, part, v), 'roman-' + st)
      for st, parts in (('land-inner', ('section', 'tower', 'gate', 'end')), ('land-outer', ('section', 'tower', 'tower-b', 'gate', 'end')),
                        ('sea', ('section', 'tower', 'gate', 'end')))
@@ -230,6 +230,21 @@ def roof_info(g, mpv):
     return round(top * mpv, 2), [round(float(v), 3) for v in rgb], round(float(has.mean()), 3)
 
 
+def flags_of(h):
+    """布旗（雕刻的帆、meta kind=flag；BUILDING_SPEC §6.2）⇒ [{hoist: [上, 下], fly: [上, 下], pattern}]（模型格座標）。
+    帆的布點是 n × n（正面那一份；verts 後半是背面）、第 i 欄（0 ＝ 綁邊 → n−1 ＝ 尾）第 j 列（0 ＝ 上 → n−1 ＝ 下）⇒ 第 i·n ＋ j 點。
+    遊戲照這四個角自己拉一塊布（63_towns.js townFlags），不讀雕刻的三角形；布旗不進格子（voxelize_models 只管 rig.models）。"""
+    out = []
+    for s in (h.get('rig') or {}).get('sails') or []:
+        m = s.get('meta') or {}
+        if m.get('kind') != 'flag': continue
+        v = s['verts']; n = int(round((len(v) // 6) ** 0.5))
+        if n * n * 6 != len(v): raise SystemExit('布旗 %s：布點 %d 不是兩面 n × n' % (s.get('name'), len(v) // 3))
+        P = lambda k: [round(float(c), 2) for c in v[3 * k:3 * k + 3]]
+        out.append({'name': s.get('name'), 'hoist': [P(0), P(n - 1)], 'fly': [P(n * (n - 1)), P(n * n - 1)], 'pattern': m.get('pattern') or ''})
+    return out
+
+
 def act_build():
     models, cells, rows, src = {}, [], [], []
     for mm in MODELS:
@@ -253,6 +268,8 @@ def act_build():
              'g': gb, 'lo': {'f': LO_F, 'size': list(lo.shape[::-1]), 'n': int((lo > 0).sum()), 'g': lb},
              'im': {'cw': cw, 'ch': ch, 'w': round(Wm, 3), 'h': round(Hm, 3)}, 'top': top, 'roof': roof, 'cover': cover,
              'pts': {k: v for k, v in sorted((h.get('points') or {}).items())}}
+        fl = flags_of(h)
+        if fl: e['flags'] = fl
         if use == 'wall':
             e['part'] = var; e['set'] = mset(mm); e['len'] = float(meta.get('len', 0) or 0) or round(sx * mpv, 2)
             if e['set'][:4] == 'wall': e['tier'] = int(e['set'][4:])
