@@ -41,6 +41,7 @@
     "dmgbl": [10, 300, 25],
     "dmgmg": [10, 300, 60],
     "dmgbw": [5, 300, 10],
+    "dmgbd": [10, 300, 30],
     "box": [1, 8, 2],
     "carry": [1, 6, 1],
     "wind": [0.25, 3, 1],
@@ -346,6 +347,19 @@
       "weapon": "bow",
       "box": 3,
       "elev": 40
+    },
+    "bombardella": {
+      "code": "bombardella",
+      "name": "bombardella（鍛鐵箍砲＋後膛藥室，固定木床；1453 鄂圖曼 fusta 船首）",
+      "short": "bombardella",
+      "V": 150,
+      "reload": 0.5,
+      "big": false,
+      "hole": 0.45,
+      "crew": 2,
+      "min": 1,
+      "mass": 0.3,
+      "shot": 0.6
     },
     "brooke64": {
       "code": "64b",
@@ -1029,6 +1043,20 @@
       "crew": {"officers": 2, "helm": 2, "top": 0, "marines": 8, "marineGap": 14, "monkeys": 1, "handsK": 0.25},
       "names": ["蓬特號"],
       "idNext": {"anchor": 3, "deck": 5, "gun": 5, "ladders": 2, "magazine": 2, "oar": 31, "part": 3, "powder": 5, "rudder": 3, "ship": 2, "yard": 3}
+    },
+    {
+      "id": "fusta",
+      "el": "ship-fusta",
+      "name": "越嶺號",
+      "vxk": "fusta.vxk",
+      "work": "kotoko-fusta-01m-assembly",
+      "author": "kotoko",
+      "fireEngine": false,
+      "cfg": {"base": 6.5},
+      "geo": {"spar": [16, 26], "marines": [40, 50], "center": 30, "aim": 18, "aimZ": [10, 190], "deckAim": [16, 26], "rigAim": [80, 190]},
+      "crew": {"top": 0, "marines": 6},
+      "names": ["越嶺號"],
+      "idNext": {"anchor": 3, "deck": 4, "gun": 7, "ladders": 2, "magazine": 2, "oar": 73, "part": 5, "powder": 5, "rudder": 2, "ship": 2, "yard": 2}
     }
   ],
   "furniture": {
