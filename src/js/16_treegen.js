@@ -328,6 +328,9 @@ function treeTri(M, a, b, c, col, sw, up) {
   n = treeNorm([n[0], n[1] + up, n[2]]);
   var i0 = M.vert(a, n, col, sw[0]); M.vert(b, n, col, sw[1]); M.vert(c, n, col, sw[2]); M.I.push(i0, i0 + 1, i0 + 2);
 }
+// 葉簇近看的細節（Tim 2026-10-20：「是否可以給樹葉近距離時 一些貼圖細化 椰子樹不用」「用算法去生成 不用太細(有風格化就好 不追求寫實風)」）：
+//   葉簇（cluster）的頂點把搖晃權重加上這個數當旗標（權重本身 0～1）⇒ 著色器（63_trees.js）拆回來、只在這些頂點畫葉片；羽狀葉（椰子樹）、仙人掌、香蕉等不加 ⇒ 照舊。
+var TREE_LEAF_DET = 2;
 // 樹葉的長法（leaf.kind ⇒ 函式(M)）：加一種（針葉 needle…）＝ 在這裡加一個。
 var TREE_ICO = (function () {                                            // 正二十面體（12 點、20 面；葉簇、椰子、花的底）
   var t = (1 + Math.sqrt(5)) / 2, P = [[-1, t, 0], [1, t, 0], [-1, -t, 0], [1, -t, 0], [0, -1, t], [0, 1, t], [0, -1, -t], [0, 1, -t], [t, 0, -1], [t, 0, 1], [-t, 0, -1], [-t, 0, 1]].map(treeNorm);
@@ -357,7 +360,7 @@ var TREE_LEAF = {
       var k = 1 + (R() - 0.5) * 2 * Lf.vary, c0 = [Lf.col[0] * k, Lf.col[1] * (1 + (R() - 0.5) * Lf.vary), Lf.col[2] * k];
       if (Lf.tint && R() < Lf.tint[0]) { var tc = Lf.tint[1], m = 0.5 + 0.5 * R(); c0 = [c0[0] + (tc[0] - c0[0]) * m, c0[1] + (tc[1] - c0[1]) * m, c0[2] + (tc[2] - c0[2]) * m]; }
       var out = treeNorm([bl.c[0] - mid[0], (bl.c[1] - mid[1]) * 0.6 + 0.4, bl.c[2] - mid[2]]);
-      treeBall(M, bl.c, bl.r, Lf.flat, c0, Math.min(1, 0.55 + 0.45 * bl.c[1] / K.h), out, Lf.stretch && bl.ax ? bl.ax : null, Lf.stretch);
+      treeBall(M, bl.c, bl.r, Lf.flat, c0, Math.min(1, 0.55 + 0.45 * bl.c[1] / K.h) + TREE_LEAF_DET, out, Lf.stretch && bl.ax ? bl.ax : null, Lf.stretch);   // ＋TREE_LEAF_DET：近看畫葉片細節（63_trees.js TREE_FS）
     });
   },
   /** 棕櫚的羽狀葉：從樹幹頂一圈長出 n 片（照黃金角轉；越晚長的越往外、越垂；最外面 dead 成是垂下來的枯葉）。
