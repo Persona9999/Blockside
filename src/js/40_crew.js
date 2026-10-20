@@ -362,7 +362,7 @@ function stepCrew(sh, dt) {
 }
 /** 火槍：打對方露天的人（spar deck、桅頂），距離越遠越難中。
  *  最大射程 MUSKET_R（細節設定「火槍射程」，04_state.js；TASK-0633：以前沒有上限、命中率保底 1% ⇒ 28 km 外照樣打死軍官）：
- *  射程內看不到人 ⇒ 不開槍（不冒煙、不抽亂數）。射程內有人 ⇒ 跟以前一樣：照原本的順序挑一個、照距離算命中（命中率曲線之後另外設計）。 */
+ *  射程內看不到人 ⇒ 不開槍（不冒煙、不抽亂數）。射程內有人 ⇒ 照原本的順序挑一個、照 musketP 算命中（一槍照舊抽一次）。 */
 function musket(sh, c) {
   var foe = foeOf(sh), w = M4.pt(sh.M, c.pos[0], c.pos[1], c.pos[2] + 14);
   if (!foe) return;
@@ -374,8 +374,25 @@ function musket(sh, c) {
   c.fireT = 0.4; sh.mkAt = SIMT;                                       // mkAt：這艘最後一次開槍（醫療艙判交戰，44_medic.js medWar）
   spawnPt(w, [WIND[0] * 0.3, 0.4, WIND[2] * 0.3], rr(1.5, 2.5) / smokeK(), [0.85, 0.85, 0.85], 0.35, 0.3, 1.4, -0.03, 0.8);
   var t = near[(rnd() * near.length) | 0], o = t[0], dist = t[1];
-  if (rnd() < clamp(0.05 * 100 / dist, 0.01, 0.12)) damageCrew(foe, o, rr(40, 125), '火槍');   // 血量 100 時約三成一槍斃命（跟以前的 0.3 對齊）
+  if (rnd() < musketP(sh, c, dist)) damageCrew(foe, o, rr(40, 125), '火槍');   // 血量 100 時約三成一槍斃命（跟以前的 0.3 對齊）
 }
+/** 火槍命中率（TASK-0633；以前 clamp(0.05 × 100 ÷ 距離, 1%, 12%)）：彈著照常態分布散開，打中露出來那一塊的機率。
+ *  散布 s ＝ 距離 × √(sigma² ＋ (sway × 自己的船轉得多快)²)（弧度；sway 秒：手跟不上甲板晃的那一下）；
+ *  露出來的 w × h 公尺（甲板上的人躲在舷牆後面只露上半身 h；桅頂往下看看得到整個人 hTop）⇒ erf(w ÷ 2√2s) × erf(h ÷ 2√2s)。
+ *  sigma 0.013：1811 年倫敦那次試射（Brown Bess 打一整排步兵大小的木板，100／200／300 碼中 53／30／23%）照板高 1.8 m 反推 0.012–0.014。
+ *  不晃的時候：10 m 95%、25 m 49%、50 m 17%、100 m 4.6%、200 m 1.2%、300 m 0.5%（桅頂往下 100 m 7.1%）。參數在設定檔 musket。 */
+var MUSKET = Object.assign({ sigma: 0.013, w: 0.5, h: 1.0, hTop: 1.6, sway: 0.15 }, CFG.musket || {});
+function musketP(sh, c, dist) {
+  var V = sh.wv, om = (V ? Math.sqrt(V.rv * V.rv + V.pv * V.pv) : 0) + Math.abs(sh.rollV || 0);   // 自己的船：浪的橫搖＋縱搖、破洞的傾斜（rad/s）
+  return musketHit(dist, c.role === ROLE.TOP ? MUSKET.hTop : MUSKET.h, om);
+}
+/** 距離 dist m、露出來 MUSKET.w × h m、自己的船轉 om rad/s ⇒ 命中率（細節設定的「火槍射程」說明也照它算）。 */
+function musketHit(dist, h, om) {
+  var sm = MUSKET.sway * om, s = dist * Math.sqrt(MUSKET.sigma * MUSKET.sigma + sm * sm), k = 1 / (2 * Math.SQRT2 * Math.max(s, 1e-6));
+  return musketErf(MUSKET.w * k) * musketErf(h * k);
+}
+/** erf（Abramowitz & Stegun 7.1.26，誤差 < 1.5e-7）；x ≥ 0。 */
+function musketErf(x) { var t = 1 / (1 + 0.3275911 * x); return 1 - ((((1.061405429 * t - 1.453152027) * t + 1.421413741) * t - 0.284496736) * t + 0.254829592) * t * Math.exp(-x * x); }
 /** 一門砲：在崗的人數決定能不能開、裝填多快。 */
 function gunRate(g) { return g.wet ? 0 : g.manned >= g.crewMin ? Math.pow(Math.min(1, g.manned / (g.crewStd || g.crewFull)), 0.85) : 0; }   // 照砲種表的人數：滿編調多 ⇒ 多的是替補、射速不再變快；調少 ⇒ 開得動但慢
 
