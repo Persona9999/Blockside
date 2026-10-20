@@ -185,7 +185,7 @@ function bedPeek(cx, cy) {
     bedGet(cx, cy, true).then(function () { if (BED.peek[k]) { delete BED.peek[k]; bad(new Error('海圖塊 ' + k + ' 沒有呼叫 BSMAP.chunk')); } }, function (e) { delete BED.peek[k]; bad(e); });
   });
 }
-/** 解碼一塊（跟世界地圖工具 tools/export_chunks.cjs encodeChunk 一一對應；格式 src/MAP_CHUNK.md）⇒ { cx, cy, n, step, h: Int16Array（分米）, mat: Uint8Array, min, max（公尺） } */
+/** 解碼一塊（跟世界地圖工具 tools/export_chunks.cjs encodeChunk 一一對應；格式 src/MAP_CHUNK.md）⇒ { cx, cy, n, step, h: Int16Array（分米）, mat: Uint8Array, min, max（公尺）, wd: Uint16Array（內陸水的水深，分米；沒有段 3 ⇒ null） } */
 function bedDecode(b64) {
   var bin = atob(b64), b = new Uint8Array(bin.length), p = 4;
   for (var i = 0; i < bin.length; i++) b[i] = bin.charCodeAt(i);
@@ -202,14 +202,20 @@ function bedDecode(b64) {
     h[o] = pred + d; if (h[o] < mn) mn = h[o]; if (h[o] > mx) mx = h[o];
   }
   for (var k = 0; k < N;) { var v = u(), c = u(); mat.fill(v, k, k + c); k += c; }
-  var fo = null, foN = 0, vg = null, vgN = 0;                            // 選用的段（MAP_CHUNK.md §4）：1 ＝ 林地覆蓋、2 ＝ 植被（每點長得出哪幾種，位元 ＝ area.vis）；不認得的記號 ⇒ 停（之後的段讀不了）
+  var fo = null, foN = 0, vg = null, vgN = 0, wd = null;                 // 選用的段（MAP_CHUNK.md §4）：1 ＝ 林地覆蓋、2 ＝ 植被（每點長得出哪幾種，位元 ＝ area.vis）、3 ＝ 內陸水；不認得的記號 ⇒ 停（之後的段讀不了）
   while (p < b.length) {
-    var tg = u(); if (tg !== 1 && tg !== 2) break;
+    var tg = u();
+    if (tg === 3) {                                                      // 內陸水（TASK-0768）：n² 個水深（分米；水面 ＝ 存的高度 ＋ 水深；0 ＝ 不是內陸水），跟高度、底質同一套點；只給畫面（63_bed_gl.js），⛔ 模擬不讀
+      wd = new Uint16Array(N);
+      for (k = 0; k < N;) { v = u(); c = u(); wd.fill(v, k, k + c); k += c; }
+      continue;
+    }
+    if (tg !== 1 && tg !== 2) break;
     var sn = u(), sa = tg === 1 ? new Uint8Array(sn * sn) : new Uint32Array(sn * sn);   // 植被：一點最多 32 種（2026-10-19 第三批之後超過 16）
     for (k = 0; k < sa.length;) { v = u(); c = u(); sa.fill(v, k, k + c); k += c; }
     if (tg === 1) { fo = sa; foN = sn; } else { vg = sa; vgN = sn; }
   }
-  var C = { cx: cx, cy: cy, n: n, step: step, h: h, mat: mat, h0: h, mat0: mat, min: mn / 10, max: mx / 10, min0: mn / 10, max0: mx / 10, fo: fo, foN: foN, vg: vg, vgN: vgN, vxk: 'none' };
+  var C = { cx: cx, cy: cy, n: n, step: step, h: h, mat: mat, h0: h, mat0: mat, min: mn / 10, max: mx / 10, min0: mn / 10, max0: mx / 10, fo: fo, foN: foN, vg: vg, vgN: vgN, wd: wd, vxk: 'none' };
   bedVxBake(C);
   return C;
 }
