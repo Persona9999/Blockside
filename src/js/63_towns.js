@@ -972,7 +972,7 @@ function townStat(at) {
 //   離別支 < TL_POST_GAP 公尺（路口、兩條路疊著）、站在別條路的路面上 ⇒ 跳過。位置照規劃算（每次一樣）；高度照畫面地形（townGround），那一塊還沒載 ⇒ 等下一次重建（stat miss）。
 //   柱子、燈箱用石基那一支著色器（方塊）。⛔ 不碰戰局：船、砲彈穿過去。
 var TL_GRIDS = [64, 128, 192], TL_GRID = 192, TL_CELL = 8, TL_SLOT = 8, TL_MAX = 4096, TL_REBIN = 4, TL_PX = 2.5;   // 格數照畫質「城裡點光源的距離」（07_gfx.js tlamp）：512 m／1 km／1.5 km 見方；貼圖照最大的配
-var TL_STREET = { main: 24, street: 30, quay: 22 }, TL_POST_OFF = 0.5, TL_POST_GAP = 10, TL_POST_H = 3.2;
+var TL_STREET = { main: 24, street: 30, quay: 22 }, TL_POST_OFF = 0.5, TL_POST_GAP = 10, TL_POST_H = 3.2, TL_POST_MINW = 3;   // TL_POST_MINW：路寬不到 3 m（門口的小徑 link-door 2 m）不立街燈（kaguya 2026-10-21：和平港一座就有八十多條，每條插滿燈）
 var TL_TYPE = [                                                         // 型 ⇒ r 照多遠（公尺）、k 亮度、c 光色、h 光暈半徑（公尺）
   { r: 8, k: 2.0, c: [1, 0.62, 0.28], h: 0.9 },                         // 0 燈籠
   { r: 9, k: 2.0, c: [1, 0.62, 0.28], h: 1.0 },                         // 1 門口
@@ -1105,7 +1105,7 @@ function townPosts(T) {
     return false;
   }
   T.roads.forEach(function (r) {
-    var sp = TL_STREET[r.kind]; if (!sp) return;
+    var sp = TL_STREET[r.kind]; if (!sp || r.w < TL_POST_MINW) return;
     var acc = sp / 2, k = townHash(T.id + ':' + r.id) < 0.5 ? 0 : 1;
     for (var q = 1; q < r.P.length; q++) {
       var a = r.P[q - 1], b = r.P[q], dx = b[0] - a[0], dz = b[1] - a[1], L = Math.hypot(dx, dz); if (L < 1e-6) continue;
