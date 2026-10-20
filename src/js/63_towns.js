@@ -26,7 +26,8 @@ var TOWN_WALL_CORNER = 30, TOWN_WALL_KMAX = 1;                         // 城牆
 var TOWNS = { on: Q.get('towns') !== '0', list: [], pend: [], ver: 0, want: 0, err: null, kit: null, kitP: null, idx: null, kitHas: null, kitRedo: false, mwait: null, prog: null, dirty: true, eye: null, sig: '', buf: [], grp: null,
   stat: { towns: 0, lots: 0, inst: 0, walls: 0, corners: 0, snapped: 0, skip: {}, d0: 0, d1: 0, d2: 0, d3: 0, plinth: 0, tris: 0, binMs: 0, kitMs: 0, gradeMs: 0, chunks: 0, drawMs: 0 } };
 var TOWN_J0 = [0, 0, 0, 0];                                             // 建築的 aJ（不斜接、不順坡、牆基不延）
-var TOWN_USE_ALT = { commandant: ['house'], governor: ['townhall'] };   // 沒有那種模型 ⇒ 用哪一種代（BUILDING_SPEC §7：長官的屋子還沒做）
+var TOWN_USE_ALT = { commandant: ['house'], governor: ['townhall'] };   // 那一套沒有那種模型 ⇒ 用哪一種代（BUILDING_SPEC §7：fr 沒有長官的屋子；carib 有）
+var TOWN_STYLE_DEF = 'fr';                                              // 城的 style 那一套沒有那種用途 ⇒ 照 fr 那一套（第一套）；索引裡沒寫 style 的模型也算 fr（TASK-0757）
 var TOWN_COL = { main: [0.56, 0.47, 0.34], street: [0.62, 0.58, 0.50], track: [0.50, 0.42, 0.30], plaza: [0.70, 0.66, 0.58], quay: [0.58, 0.56, 0.52], pier: [0.45, 0.33, 0.22], post: [0.30, 0.22, 0.15] };
 evOn('bedChunk', function () { TOWNS.dirty = true; }, 0, true);
 
@@ -202,10 +203,21 @@ function townMesh(b64, size) {
 function townIdx() {
   var I = TOWNS.idx; if (!I || !I.models) return null;
   if (!I.names) {
-    I.names = Object.keys(I.models).sort(); I.byUse = {};
+    I.names = Object.keys(I.models).sort(); I.byUse = {}; I.byStyle = {};
     I.names.forEach(function (nm) { var m = I.models[nm], k = m.use !== 'wall' ? m.use : (m.set || 'wall' + m.tier) + '-' + m.part; (I.byUse[k] = I.byUse[k] || []).push(nm); });   // 城牆：'<套>-<型>'（同型好幾種 ⇒ 名字排序）
+    I.names.forEach(function (nm) { var m = I.models[nm]; if (m.use === 'wall') return; var k = (m.style || TOWN_STYLE_DEF) + ':' + m.use; (I.byStyle[k] = I.byStyle[k] || []).push(nm); });   // 建築：'<風格>:<用途>'
   }
   return I;
+}
+/** 地塊 l ⇒ 候選模型（townNeed、townInst 同一條路；TASK-0757）：城的 style 那一套 → fr 那一套 → 代用的用途（同樣先 style 再 fr）；
+ *  特殊建築（l.src 'special'：用途就是那一種，例 galata-tower 的風格是 genoa）⇒ 不分風格。
+ *  ⛔ 一般地塊不跨到別的風格：carib 的砲台不會跑進沒換風格的城（皇家港 3 塊 battery 照舊沒有模型）。沒換風格的城挑到的跟以前一樣。 */
+function townPick(I, style, l) {
+  var use = l.use;
+  function by(u) { return I.byStyle[(style || TOWN_STYLE_DEF) + ':' + u] || I.byStyle[TOWN_STYLE_DEF + ':' + u]; }
+  function any(u) { return I.byUse[u]; }
+  var alt = TOWN_USE_ALT[use] || [];
+  return by(use) || alt.map(by).filter(Boolean)[0] || (l.src === 'special' ? any(use) : null);
 }
 /** 收到的城會用到哪幾個模型：地塊照用途的整份候選（townInst 在裡面照雜湊挑）、城牆那一套的每一型（townWall：門、塔、斷面、收尾、轉角；沒有那一套 ⇒ 一級）。 */
 function townNeed(I) {
@@ -214,7 +226,7 @@ function townNeed(I) {
   TOWNS.list.forEach(function (T) {
     (T.p.lots || []).forEach(function (l) {
       if (l.use === 'plot' || l.use === 'plaza') return;
-      add(I.byUse[l.use] || (TOWN_USE_ALT[l.use] || []).map(function (u) { return I.byUse[u]; }).filter(Boolean)[0]);
+      add(townPick(I, T.style, l));
     });
     (T.p.walls || []).forEach(function (w) {
       var kit = w.kit || 'wall1'; if (!I.byUse[kit + '-section']) kit = 'wall1';
@@ -272,7 +284,7 @@ function townKit() {
     });
   }).then(function (A) {
     need.forEach(function (nm) { delete M[nm].png; });
-    TOWNS.kit = { M: M, names: names, byUse: I.byUse, tex: A.tex, aw: A.aw, ah: A.ah, views: I.views };
+    TOWNS.kit = { M: M, names: names, byUse: I.byUse, byStyle: I.byStyle, tex: A.tex, aw: A.aw, ah: A.ah, views: I.views };
     TOWNS.stat.kitMs = +(performance.now() - t0).toFixed(1);
     TOWNS.stat.kitN = need.length + '/' + names.length;              // 要了幾個／索引裡有幾個
     TOWNS.stat.kitTris = need.reduce(function (o, nm) { o[nm] = [M[nm].lod[0].nq * 2, M[nm].lod[1].nq * 2]; return o; }, {});
@@ -297,7 +309,7 @@ function townInst(T) {
   function W(q) { var e = T.E(q); return [e[0] - BED.ax, e[1] - BED.az]; }
   (p.lots || []).forEach(function (l) {
     if (l.use === 'plot' || l.use === 'plaza') return;
-    var L = K.byUse[l.use] || (TOWN_USE_ALT[l.use] || []).map(function (u) { return K.byUse[u]; }).filter(Boolean)[0];
+    var L = townPick(K, T.style, l);
     if (!L || !L.length) { skip[l.use] = (skip[l.use] || 0) + 1; return; }
     var nm = L[Math.floor(townHash(T.id + ':' + l.id) * L.length)], m = K.M[nm].m, th = l.rot * D2R, md = m.size[1] * m.mpv, mw = m.size[0] * m.mpv;
     var off = (l.d - md) / 2, c = W([l.at[0] + off * Math.cos(th), l.at[1] + off * Math.sin(th)]);
