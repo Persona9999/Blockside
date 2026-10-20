@@ -7,17 +7,29 @@
 //   兩艘各一段：數字（積水、破口（水下幾個）、進出水、抽水、下沉、傾斜、水的重心、粒子與水格）＋ 側視、俯視的剖面（艙內的水、破口、外面的水面、設計水線）。
 //   透視：艙內的水面不做深度測試（33_flood.js flDraw）、破口畫成點（水下紅；水上橙、小而淡 —— 暴風雨打爛的船水上的洞上百個，⛔ 一樣大 ⇒ 糊成一片，flHoleMarks）。
 // 公式模式沒有艙內的水 ⇒ 只寫公式的讀數。⛔ 只讀模擬、不改（停格中沒有在走）。
-var FLX = false, FLX3 = false;
+var FLX = false, FLX3 = false, FRZ_ON = false;
 /** 每一格（90_main.js frame）：停格條顯示與否；繼續了 ⇒ 進水細節頁收起。 */
 function frzShow() {
   var on = RUNNING && PAUSED && !GSET.open && !HELP.open;
   $('frz').classList.toggle('on', on); $('msg').style.visibility = on ? 'hidden' : '';   // 停格條跟上方廣播同一個位置（⛔ 不藏 ⇒ 廣播的字透過半透明的條）
+  if (on !== FRZ_ON) { FRZ_ON = on; frzPlace(); }
   if (!on && FLX) floodClose();                                       // 繼續 ⇒ 只收 📊 圖表；🔍 透視、✂ 剖面、☰ 甲板保持（Tim 2026-10-15：「停格中可以切換的觀察模式，是否能在按下繼續後保持（這樣可以在遊戲中維持觀察狀態），除了圖表」）—— 要關 ⇒ 停格再按一次；新開一局 ⇒ obsReset（70_flow.js）
   $('frzFlood').classList.toggle('on', FLX); $('frzX').classList.toggle('on', FLX3);
   $('frzCut').classList.toggle('on', CUTV.half); $('frzDeck').classList.toggle('on', CUTV.deck > 0); $('frzDeck').textContent = deckLabel();
   var ob = $('obsB'), t = RUNNING && !PAUSED ? obsText() : '';          // 沒停格、觀察模式開著 ⇒ 下方一條提醒（⛔ 停格時停格條已經寫了；設定、說明開著也是停格）
   if (ob) { ob.classList.toggle('on', !!t); if (t && ob.textContent !== t) ob.textContent = t; }
 }
+/** 停格條跟上方那一塊（#topC：我艦的詳細資訊＋廣播）都在畫面上方正中間（Tim 2026-10-20「停格中跟船隻資訊會重疊」）：
+ *  停格條出現、而且蓋到它 ⇒ 那一塊往下挪到停格條底下 6 px；收起 ⇒ 回原位。只在停格開關、換畫面大小時算（⛔ 不每一格量：量位置會逼瀏覽器重排）。
+ *  手機（≤ 760 px）停格條本來就在 144 px 那一行、不在最上面 ⇒ 不挪。 */
+function frzPlace() {
+  var t = $('topC'), f = $('frz'); if (!t || !f) return;
+  t.style.top = '';
+  if (!FRZ_ON) return;
+  var fr = f.getBoundingClientRect(), tr = t.getBoundingClientRect();
+  if (fr.top <= tr.top + 1 && fr.bottom > tr.top) t.style.top = (f.offsetTop + f.offsetHeight + 6) + 'px';
+}
+window.addEventListener('resize', function () { if (FRZ_ON) frzPlace(); });
 /** 開著的觀察模式（透視、剖面、甲板）寫成一行；都沒開 ⇒ ''。 */
 function obsText() {
   var a = [];

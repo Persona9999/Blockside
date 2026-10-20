@@ -119,6 +119,13 @@ function bedHostSay(what, o) {
   if (!BED || !BED.host) return;
   requestAnimationFrame(function () { requestAnimationFrame(function () { BED.host.postMessage(Object.assign({ bsmap: what }, (typeof o === 'function' ? o() : o) || {}), '*'); }); });   // o 可以是函式：送的那一刻才算
 }
+/** 下排的 🌍（template.html #hostBack；Tim 2026-10-20「回到地球儀 我目前想法是 航海模式下 加到下排圓形按鈕」「用emoji的地球儀」）：只有 ?map=@host 才出現（body.bsHost），
+ *  點了 ⇒ 跟外面那一頁說 'back'（地球儀照它回去：跟它自己那顆「← 回到地球儀」同一條；'started' 帶 back: 1 ⇒ 地球儀就不放它那一顆、免得疊在停格條上）。 */
+function bedHostBack(host) {
+  var b = $('hostBack'); if (!b) return;
+  document.body.classList.add('bsHost');
+  b.addEventListener('click', function () { if (RUNNING) host.postMessage({ bsmap: 'back' }, '*'); });
+}
 /** 開機（90_main.js 跟船一起等）：有 ?map ⇒ 讀海域、定原點；快轉／無頭 ⇒ 整個海域載完，不然 ⇒ 開戰位置附近先載好。 */
 function bedBoot() {
   var id = Q.get('map'); if (!id) return Promise.resolve();
@@ -129,7 +136,7 @@ function bedBoot() {
     mid: 0, cm: {}, mpend: {}, mslot: null, lv: null, mloads: 0,                     // mid：外圈的中等塊（@host 的海域帶 area.mid 才開；見 bedFocus、bedWait）
     win: 0, winP: null, winErr: 0, wins: 0, winMs: 0,                                // win：海域跟著旗艦走（@host 的海域帶 area.win 才開；見 bedWinAsk）
     inq: host && BED_SLICE ? [] : null, pumpAt: 0, pumped: 0, pumpMax: 0 };          // inq：收塊排隊（檔頭；bedPump）
-  if (host) window.addEventListener('message', bedHostMsg);
+  if (host) { window.addEventListener('message', bedHostMsg); bedHostBack(host); }
   if (BED.inq) setInterval(bedPumpLate, 250);
   return bedGet(null).then(function () {
     var A = BED.gotArea; if (!A) throw new Error((host ? '外面那一頁' : 'maps/' + id + '/area.js') + ' 沒有給 BSMAP.area');

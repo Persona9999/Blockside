@@ -44,7 +44,7 @@ function startWhenReady() {
   Promise.all(fleetHulls().map(loadHull)).then(function () {
     if (RUNNING || FLOW_STAGE || !fleetHulls().every(function (h) { return HULLT[h]; })) return;
     return startStaged().then(function () {
-      if (BED && BED.host) { camTransSet('in'); bedHostSay('started', function () { var me = SHIPS[PLAYER_I], c = me ? shipCenter(me) : null; return { hdg: camTransHdg(), x: c ? c[0] : null, z: c ? c[2] : null, shipHdg: me ? (Math.atan2(Math.cos(me.yaw), Math.sin(me.yaw)) * 180 / Math.PI + 360) % 360 : null }; }); }   // started 的 x、z、shipHdg：我艦在哪、船頭朝哪（同 'left'）⇒ 地球儀上的船移過去、轉過去，跟淡進來的那艘疊在一起
+      if (BED && BED.host) { camTransSet('in'); bedHostSay('started', function () { var me = SHIPS[PLAYER_I], c = me ? shipCenter(me) : null; return { back: 1, hdg: camTransHdg(), x: c ? c[0] : null, z: c ? c[2] : null, shipHdg: me ? (Math.atan2(Math.cos(me.yaw), Math.sin(me.yaw)) * 180 / Math.PI + 360) % 360 : null }; }); }   // started 的 x、z、shipHdg：我艦在哪、船頭朝哪（同 'left'）⇒ 地球儀上的船移過去、轉過去，跟淡進來的那艘疊在一起
     });
   }).catch(function (e) { console.error(e); });
 }
