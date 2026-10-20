@@ -7,7 +7,7 @@
 // 整地（townHv；每塊海圖塊第一次要畫的時候算、城到了再重算）：路（照 z，路寬一半 ＋ 一個取樣點內整平）先、地塊的 grade（照 h，外擴 TOWN_LOT_PAD）後，
 //   外面照邊坡 1 : bank 接回原地形（|高差| ≤ 距離 ÷ bank，路最多接 TOWN_GRADE_REACH 公尺）；只改陸上的點（原本 ≤ 0 的不動 ⇒ 岸線不變）。
 // 清樹（townClr）：規劃的 clear（有建築的地塊、路、城牆、碼頭各外擴 2 m；空建地不清）每 TOWN_CLR_G 公尺一格的遮罩 ⇒ 63_trees.js 擺樹時跳過。
-// 建築（模型 63_towndata.js TOWN_KIT，src/townmodels.py 匯入時算好近、中、遠三份＋屋頂殼的資料）：地塊照用途挑（同用途的變化照 地塊 id 的雜湊挑 ⇒ 每次一樣）。
+// 建築（模型 63_towndata.js TOWN_KIT，src/townmodels.py 匯入時算好近、中、遠三份＋屋頂殼的資料）：地塊帶 model（模型名）⇒ 用那一個；不然照用途挑（同用途的變化照 地塊 id 的雜湊挑 ⇒ 每次一樣）。
 //   模型 → 世界（BUILDING_SPEC §1）：a ＝ mx·mpv − 模型寬/2、b ＝ my·mpv − 模型深/2、θ ＝ lot.rot ⇒ 往東 ＝ cx ＋ a·sinθ − b·cosθ、往南 ＝ cy − a·cosθ − b·sinθ、高 ＝ h ＋ mz·mpv；
 //   模型比地塊小（金斯敦的地塊照 Lilly 的棋盤）⇒ 臨路那一邊對齊、沿路置中：cx,cy ＝ at ＋ (d − 模型深)/2 ·(cosθ, sinθ)。底下墊一塊石基（townPlinth：到四角最低的地面再下 0.3 m）。
 //   城牆（TOWN_BUILD §4）：照牆的 kit 挑一套模組（wall1～wall3 ＝ 一～三級、roman-land-inner／roman-land-outer／roman-sea ＝ 東羅馬城牆 1453；BUILDING_SPEC §6、§6.1）；
@@ -220,7 +220,7 @@ function townInst(T) {
   function W(q) { var e = T.E(q); return [e[0] - BED.ax, e[1] - BED.az]; }
   (p.lots || []).forEach(function (l) {
     if (l.use === 'plot' || l.use === 'plaza') return;
-    var L = K.byUse[l.use] || (TOWN_USE_ALT[l.use] || []).map(function (u) { return K.byUse[u]; }).filter(Boolean)[0];
+    var L = l.model && K.M[l.model] ? [l.model] : K.byUse[l.use] || (TOWN_USE_ALT[l.use] || []).map(function (u) { return K.byUse[u]; }).filter(Boolean)[0];   // 地塊點名了模型（例：加拉塔塔）⇒ 用它；套件裡沒有 ⇒ 照用途挑
     if (!L || !L.length) { skip[l.use] = (skip[l.use] || 0) + 1; return; }
     var nm = L[Math.floor(townHash(T.id + ':' + l.id) * L.length)], m = K.M[nm].m, th = l.rot * D2R, md = m.size[1] * m.mpv, mw = m.size[0] * m.mpv;
     var off = (l.d - md) / 2, c = W([l.at[0] + off * Math.cos(th), l.at[1] + off * Math.sin(th)]);

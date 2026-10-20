@@ -21,6 +21,7 @@ CACHE = os.path.join(ROOT, 'VoxelKit', '_cache', 'town')
 OUT = os.path.join(HERE, 'js', '63_towndata.js')
 KIT = 'summit-bourg-fr-01m'
 ROMAN = 'kaguya-roman-1453'                                   # 東羅馬城牆 1453（君士坦丁堡；Blocksail docs/BUILDING_SPEC.md §6.1）
+GALATA_TOWER = 'kaguya-galata-tower-1453'                     # 加拉塔塔 1453（地塊帶 model: 'galata-tower' 才用；用途記 landmark ⇒ 不會被別的 tower 地塊挑到）
 # 名字 ⇒ 用途、型（同一種用途的變化，遊戲照地塊的雜湊挑）；城牆模組 ⇒ part（型）、套（set：規劃的牆 kit 照它挑；一級～三級 ＝ wall1～wall3）
 # 第四格（選填）＝ 雕刻作品 id（沒寫 ⇒ KIT-名字）；第五格（選填）＝ 套（沒寫 ⇒ 'wall' ＋ 名字第 5 字的級數）
 MODELS = [
@@ -31,6 +32,7 @@ MODELS = [
     ('wall1-section', 'wall', 'section'), ('wall1-tower', 'wall', 'tower'), ('wall1-gate', 'wall', 'gate'),
     ('wall1-joint', 'wall', 'joint'), ('wall1-end', 'wall', 'end'),
     ('wall3-section', 'wall', 'section'), ('wall3-tower', 'wall', 'tower'), ('wall3-gate', 'wall', 'gate'), ('wall3-end', 'wall', 'end'),
+    ('galata-tower', 'landmark', 'a', GALATA_TOWER),
 ] + [('roman-%s-%s%s' % (st, part, v), 'wall', part, '%s-%s-%s%s' % (ROMAN, st, part, v), 'roman-' + st)
      for st, parts in (('land-inner', ('section', 'tower', 'gate', 'end')), ('land-outer', ('section', 'tower', 'tower-b', 'gate', 'end')),
                        ('sea', ('section', 'tower', 'gate', 'end')))
@@ -272,7 +274,7 @@ def act_build():
         y0 += ch
     a8 = np.clip(np.round(atlas * 255), 0, 255).astype(np.uint8)
     pb = base64.b64encode(png(a8)).decode('ascii')
-    kit = {'v': 1, 'kit': ','.join(sorted({KIT if len(m) < 4 else ROMAN for m in MODELS})), 'views': VIEWS, 'ppm': PPM, 'atlas': {'w': AW, 'h': AH, 'png': pb}, 'models': models}
+    kit = {'v': 1, 'kit': ','.join(sorted({KIT if len(m) < 4 else (ROMAN if m[3].startswith(ROMAN) else m[3]) for m in MODELS})), 'views': VIEWS, 'ppm': PPM, 'atlas': {'w': AW, 'h': AH, 'png': pb}, 'models': models}
     head = ('// 城鎮的建築與城牆模型（TASK-0740）—— ⛔ 不手改：python -I src/townmodels.py build 產生（說明見那支的檔頭）。\n'
             '// 來源（雕刻作品@checksum）：' + '；'.join(src) + '\n')
     body = 'var TOWN_KIT = ' + json.dumps(kit, ensure_ascii=False, separators=(',', ':'), sort_keys=True) + ';\n'
