@@ -239,6 +239,55 @@ function navImg(T) {
   T.navImg = cv; T.navU = ((T.cy / C) | 0) - x0 + 0.5; T.navV = (H - 1 - ((T.cx / C) | 0)) - y0 + 0.5;
   T.navX0 = x0; T.navY0 = y0; T.navGH = H;                               // 圖上 (u, v) ⇒ 格 (x, y) ＝ ((H − y0 − v)·C, (x0 + u)·C)：砲位圖（61_hud.js gmapDraw）照它把砲放上去   // 船的中心（格的 cx, cy）在圖上的位置 ⇒ 羅盤照它對準圓心
 }
+/** 整艘船的俯視圖（Blocksail 地球儀上的船；Tim 2026-10-20「船的Icon包含帆(整艘船的俯瞰圖)」）：船殼的格（同 navImg）＋ 模型（帆桁、砲、舵輪…，origin ＋ 網格）＋ 帆（作品裡的形狀，旗不算），
+ *  從上往下看、每一點取最高的那一層（z 緩衝；網格的三角形照像素中心填，比一點還小的照頂點點上去 ⇒ 側立的帆不會整片漏掉）；船頭朝上、右舷在右，同 navImg。
+ *  亮度照高度（同 navImg：水線 0.62 ⇒ 高 80 格 1）× 網格面朝上多少（0.75 ～ 1）。只有 ?pick=@host 選船時才算（72_shippick.js pickMeasure；不放進載入）。
+ *  C：幾格一點（預設 2 ＝ 0.2 m）。回 { cv, u, v, m }：u、v ＝ 船的中心（格的 cx、cy）在圖上哪一點，m ＝ 一點幾公尺。 */
+function topImg(T, C) {
+  C = C || 2;
+  var G = T.base, L = [], i, j, k;                                         // L：[頂點, 三角形, 每個三角形的顏色（0～1）或 null, 單色, 位移]
+  (T.rig.models || []).forEach(function (m) { var M = T.rig.meshes && T.rig.meshes[m.mesh]; if (M && M.verts && M.tris) L.push([M.verts, M.tris, M.tmat ? function (t) { return M.mats[M.tmat[t]] || [0.5, 0.5, 0.5]; } : null, [0.5, 0.5, 0.5], m.origin || [0, 0, 0]]); });
+  (T.rig.sails || []).forEach(function (sl) { if (!isFlag(sl) && sl.verts && sl.tris) L.push([sl.verts, sl.tris, null, sl.color || [0.9, 0.88, 0.82], [0, 0, 0]]); });
+  var x0 = 0, x1 = G.sx, y0 = 0, y1 = G.sy;                                 // 範圍：船殼的格＋所有網格（帆桁、帆可能伸出格子外）
+  L.forEach(function (q) { var V = q[0], o = q[4]; for (i = 0; i < V.length; i += 3) { var x = V[i] + o[0], y = V[i + 1] + o[1]; if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; } });
+  x0 = Math.floor(x0); y0 = Math.floor(y0); x1 = Math.ceil(x1); y1 = Math.ceil(y1);
+  var W = Math.ceil((y1 - y0) / C) + 1, H = Math.ceil((x1 - x0) / C) + 1, zb = new Float32Array(W * H).fill(-1e9), px = new Uint8ClampedArray(W * H * 4);
+  function hk(z) { return 0.62 + 0.38 * clamp((z - T.zw) / 80, 0, 1); }
+  function put(c, r, z, R, Gc, B) { if (c < 0 || r < 0 || c >= W || r >= H) return; var p = r * W + c; if (z <= zb[p]) return; zb[p] = z; p *= 4; px[p] = R; px[p + 1] = Gc; px[p + 2] = B; px[p + 3] = 255; }
+  G.each(function (x, y, z, c) { var k2 = hk(z + 1); put(Math.floor((y + 0.5 - y0) / C), Math.floor((x1 - x - 0.5) / C), z + 1, ((c >> 5) & 7) * 255 / 7 * k2, ((c >> 2) & 7) * 255 / 7 * k2, (c & 3) * 255 / 3 * k2); });   // 格的頂面
+  L.forEach(function (q) {
+    var V = q[0], I = q[1], col = q[2], o = q[4];
+    for (var t = 0; t < I.length; t += 3) {
+      var a = I[t] * 3, b = I[t + 1] * 3, d = I[t + 2] * 3, rgb = col ? col(t / 3) : q[3];
+      var ax = V[a] + o[0], ay = V[a + 1] + o[1], az = V[a + 2] + o[2], bx = V[b] + o[0], by = V[b + 1] + o[1], bz = V[b + 2] + o[2], dx = V[d] + o[0], dy = V[d + 1] + o[1], dz = V[d + 2] + o[2];
+      var nx = (by - ay) * (dz - az) - (bz - az) * (dy - ay), ny = (bz - az) * (dx - ax) - (bx - ax) * (dz - az), nz = (bx - ax) * (dy - ay) - (by - ay) * (dx - ax), nl = Math.hypot(nx, ny, nz) || 1;
+      var f = 0.75 + 0.25 * Math.abs(nz) / nl;
+      var P = [[(ay - y0) / C, (x1 - ax) / C, az], [(by - y0) / C, (x1 - bx) / C, bz], [(dy - y0) / C, (x1 - dx) / C, dz]];
+      var area = (P[1][0] - P[0][0]) * (P[2][1] - P[0][1]) - (P[2][0] - P[0][0]) * (P[1][1] - P[0][1]);
+      if (Math.abs(area) < 0.5) {                                          // 比一點還小（或側立）⇒ 頂點、邊的中點點上去
+        for (k = 0; k < 3; k++) { var A = P[k], B2 = P[(k + 1) % 3]; [A, [(A[0] + B2[0]) / 2, (A[1] + B2[1]) / 2, (A[2] + B2[2]) / 2]].forEach(function (Q) { var kk = hk(Q[2]) * f; put(Math.floor(Q[0]), Math.floor(Q[1]), Q[2], rgb[0] * 255 * kk, rgb[1] * 255 * kk, rgb[2] * 255 * kk); }); }
+        continue;
+      }
+      var c0 = Math.max(0, Math.floor(Math.min(P[0][0], P[1][0], P[2][0]))), c1 = Math.min(W - 1, Math.ceil(Math.max(P[0][0], P[1][0], P[2][0])));
+      var r0 = Math.max(0, Math.floor(Math.min(P[0][1], P[1][1], P[2][1]))), r1 = Math.min(H - 1, Math.ceil(Math.max(P[0][1], P[1][1], P[2][1])));
+      for (var r = r0; r <= r1; r++) for (var cc = c0; cc <= c1; cc++) {
+        var X = cc + 0.5, Y = r + 0.5;
+        var w0 = ((P[1][0] - X) * (P[2][1] - Y) - (P[2][0] - X) * (P[1][1] - Y)) / area, w1 = ((P[2][0] - X) * (P[0][1] - Y) - (P[0][0] - X) * (P[2][1] - Y)) / area, w2 = 1 - w0 - w1;
+        if (w0 < -1e-4 || w1 < -1e-4 || w2 < -1e-4) continue;
+        var z = w0 * P[0][2] + w1 * P[1][2] + w2 * P[2][2], kz = hk(z) * f;
+        put(cc, r, z, rgb[0] * 255 * kz, rgb[1] * 255 * kz, rgb[2] * 255 * kz);
+      }
+    }
+  });
+  var u0 = W, u1 = -1, v0 = H, v1 = -1;
+  for (j = 0; j < H; j++) for (i = 0; i < W; i++) if (px[(j * W + i) * 4 + 3]) { if (i < u0) u0 = i; if (i > u1) u1 = i; if (j < v0) v0 = j; if (j > v1) v1 = j; }
+  if (u1 < 0) return null;
+  var cv = document.createElement('canvas'); cv.width = u1 - u0 + 1; cv.height = v1 - v0 + 1;
+  var g = cv.getContext('2d'), im = g.createImageData(cv.width, cv.height);
+  for (j = v0; j <= v1; j++) im.data.set(px.subarray((j * W + u0) * 4, (j * W + u1 + 1) * 4), (j - v0) * cv.width * 4);
+  g.putImageData(im, 0, 0);
+  return { cv: cv, u: (T.cy - y0) / C - u0, v: (x1 - T.cx) / C - v0, m: C * S };
+}
 /** 上方艦隊按鈕中間的船（TASK-0552）：從左舷看過去的側面投影（船頭朝右；每 SIDE_CELL × SIDE_CELL 格取最靠左舷那一格的顏色、越往裡越暗），
  *  帆（作品的帆面，旗不算）照每面帆的顏色畫一層墊在後面 ⇒ 認得出是帆船。載入時算一次、裁到有東西的範圍；原始格子（開戰後被打掉的不跟）。 */
 var SIDE_CELL = 4;
