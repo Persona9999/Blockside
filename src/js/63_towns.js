@@ -7,11 +7,12 @@
 // 整地（townHv；每塊海圖塊第一次要畫的時候算、城到了再重算）：路（照 z，路寬一半 ＋ 一個取樣點內整平）先、地塊的 grade（照 h，外擴 TOWN_LOT_PAD）後，
 //   外面照邊坡 1 : bank 接回原地形（|高差| ≤ 距離 ÷ bank，路最多接 TOWN_GRADE_REACH 公尺）；只改陸上的點（原本 ≤ 0 的不動 ⇒ 岸線不變）。
 // 地基（Tim 2026-10-20：「是否可以協助處理 房屋地基可能跟地面重疊導致的閃爍問題」「可以參考其他城建遊戲的作法」—— Cities: Skylines、Anno 那一類：
-//   腳下整平、地基是往下的裙邊、地面歸房子或地形其中一個，不留兩片同高的面）：
-//   · 地塊「頂著」：整完地之後再一輪，地塊外擴一格地形網格的對角線（min(取樣間距, TOWN_LOT_CELL) × √2）以內的點一律不准高過那一塊的 h（只往下壓）、往下取整到分米
-//     ⇒ 網格的三角形整片 ≤ h，斜面不會從房子、院子裡冒出來。整平只外擴 2 m、取樣 4 m ⇒ 跨地塊邊那一格一角在坡上。改完量（佔地裡每 1 m 一點、40 萬點）：高過房子底的 1.7%、最多 0.73 m（原版沒量）。
+//   腳下整平、地基是往下的裙邊、地面歸房子或地形其中一個，不留兩片同高的面）—— 地塊上歸石基（頂面 ＝ 石地坪，h − 0.01），地形一律壓到它底下：
+//   · 地塊「頂著」：整完地之後再一輪，地塊外擴一格地形網格的對角線（那一塊的取樣間距 × √2：細 4 m、外圈的中等塊 16 m；第一版上限 8 m ⇒ 2 km 外中等塊的房子還有 0.9% 的點離石面不到 10 cm）以內的點一律不准高過那一塊的 h − TOWN_LOT_SINK（只往下壓）、往下取整到分米
+//     ⇒ 網格的三角形整片在石地坪下面 ≥ 19 cm（以前地面在 h、石面在 h − 0.01，只差 1 cm，地面又被四捨五入到 ±5 cm ⇒ 院子一片石、一片草搶深度＝Tim 的截圖）；
+//     斜面不會從房子、院子裡冒出來（整平只外擴 2 m、取樣 4 m ⇒ 跨地塊邊那一格一角在坡上）。
 //     ⛔ 不能把「整平」的外擴放大：坡上相鄰兩塊 h 不同，整平範圍互相蓋到，後算的那一塊把鄰居的地抬起來（試過外擴 10 m ⇒ 高過房子底的 1/3、最多 3.2 m，房子被埋）。被壓低的地方（高的那一塊靠矮鄰居那一邊）由石基的裙邊擋住。
-//   · 石基不畫頂面（頂面在 h − 0.01，以前跟整平的地面 h 只差 1 cm、地面又被四捨五入到 ±5 cm ⇒ 院子一片石、一片草地搶深度）：只畫四面當裙邊／擋土牆，地面歸房子的地板或地形。
+//   · ⛔ 石基的頂面要畫：28ab013 拿掉過頂面（想讓院子歸地形），地勢比 h 低的地塊就變成「一圈石牆圍著一個草坑」（Tim 2026-10-20「等等 石面好像消失了」）⇒ 畫回來，改成地形讓位。
 // 清樹（townClr）：規劃的 clear（有建築的地塊、路、城牆、碼頭各外擴 2 m；空建地不清）每 TOWN_CLR_G 公尺一格的遮罩 ⇒ 63_trees.js 擺樹時跳過。
 // 建築（模型在 Blocksail 的 world/townkit/：tools/townmodels.py 匯入時算好近、中、遠三份＋屋頂殼的資料；要用到的才跟外面要，見下面 townKit 那一段）：照用途挑（同用途的變化照 地塊 id 的雜湊挑 ⇒ 每次一樣；特殊建築的用途就是那一種 ⇒ 只有它的模型挑得到，例：galata-tower）。
 //   模型 → 世界（BUILDING_SPEC §1）：a ＝ mx·mpv − 模型寬/2、b ＝ my·mpv − 模型深/2、θ ＝ lot.rot ⇒ 往東 ＝ cx ＋ a·sinθ − b·cosθ、往南 ＝ cy − a·cosθ − b·sinθ、高 ＝ h ＋ mz·mpv；
@@ -31,7 +32,7 @@
 //   每棟一個倍率 lk ＝ 長、寬、高最大的那一邊 ÷ TOWN_LM[0]（限 1..TOWN_LM[1]；城牆一律 1）⇒ 四級的距離、交接帶都乘 lk（著色器用 距離 ÷ lk 對同一組門檻）；
 //   lk > 1 的不進屋頂殼，最遠一級是它自己的貼圖（到 TOWN_FAR × lk）。一般房子 ≤ 24 m ⇒ lk 1，跟以前一位元不差。
 var TOWN_LM = [24, 4];
-var TOWN_LOD = [160, 800], TOWN_FAR = [2400, 3000], TOWN_BAND = [24, 60, 300], TOWN_REBIN = 8, TOWN_SHELL_G = 32, TOWN_GRADE_REACH = 12, TOWN_LOT_PAD = 2, TOWN_LOT_CELL = 8, TOWN_CLR_G = 2, TOWN_ROAD_LIFT = 0.12, TOWN_GROUND_VIEW = 1600;
+var TOWN_LOD = [160, 800], TOWN_FAR = [2400, 3000], TOWN_BAND = [24, 60, 300], TOWN_REBIN = 8, TOWN_SHELL_G = 32, TOWN_GRADE_REACH = 12, TOWN_LOT_PAD = 2, TOWN_LOT_CELL = 32, TOWN_LOT_SINK = 0.2, TOWN_CLR_G = 2, TOWN_ROAD_LIFT = 0.12, TOWN_GROUND_VIEW = 1600;
 var TOWN_MESH_MS = 8;                                                    // 模型網格化每段最多幾 ms 就讓出一次（townMesh；跟地球儀同一條主執行緒）
 var TOWN_WALL_CORNER = 30, TOWN_WALL_KMAX = 1;                         // 城牆：轉角件從轉幾度起擺；斜接最多切多斜（tan，1 ＝ 轉 90° 的角平分）
 var TOWNS = { on: Q.get('towns') !== '0', list: [], pend: [], ver: 0, want: 0, err: null, kit: null, kitP: null, idx: null, kitHas: null, kitRedo: false, mwait: null, prog: null, dirty: true, eye: null, sig: '', buf: [], grp: null,
@@ -98,7 +99,7 @@ function townPrep(p) {
     P.forEach(function (q) { grow(q, r.w / 2 + 4 + TOWN_GRADE_REACH); });
     return { id: r.id, kind: r.kind, w: r.w, P: P, z: z };
   });
-  var grade = (p.grade || []).map(function (g) { var R = g.ring.map(E); R.forEach(function (q) { grow(q, TOWN_LOT_PAD + TOWN_LOT_CELL + 6); }); return { h: g.h, R: R }; });
+  var grade = (p.grade || []).map(function (g) { var R = g.ring.map(E); R.forEach(function (q) { grow(q, TOWN_LOT_PAD + TOWN_LOT_CELL * 1.5 + 6); }); return { h: g.h, R: R }; });
   var clr = { rings: ((p.clear || {}).rings || []).map(function (r) { return r.map(E); }),
               paths: ((p.clear || {}).paths || []).map(function (c) { var P = c.path.map(E); return { w: c.w, P: c.closed ? P.concat([P[0]]) : P }; }) };
   clr.rings.forEach(function (R) { R.forEach(function (q) { grow(q, 4); }); });
@@ -147,7 +148,7 @@ function townHv(C) {
       }
     });
   });
-  TOWNS.list.forEach(function (T) {                                     // 地塊頂著（見檔頭「地基」）：外擴 cap 以內的點不准高過那一塊的 h ⇒ 斜面不會從房子、院子裡冒出來；只往下壓、不往上抬
+  TOWNS.list.forEach(function (T) {                                     // 地塊頂著（見檔頭「地基」）：外擴 cap 以內的點不准高過那一塊的 h − TOWN_LOT_SINK ⇒ 地形一律在石地坪底下；只往下壓、不往上抬
     if (!(T.box[0] < e0 + S && T.box[2] > e0 && T.box[1] < s0 + S && T.box[3] > s0)) return;
     T.grade.forEach(function (gr) {
       var R = gr.R, xs = R.map(function (q) { return q[0]; }), ys = R.map(function (q) { return q[1]; });
@@ -155,8 +156,8 @@ function townHv(C) {
       for (j = rj[0]; j <= rj[1]; j++) for (i = ri[0]; i <= ri[1]; i++) {
         o = j * n + i; if (h0[o] <= 0) continue;
         var x = e0 + i * st, y = s0 + j * st;
-        if (g[o] < gr.h - 0.1 || (!townPip(x, y, R) && townPolyDist(x, y, R) > cap)) continue;
-        if (g[o] > gr.h) g[o] = gr.h; fl[o] = 1;
+        var hc = gr.h - TOWN_LOT_SINK; if (g[o] < hc - 0.1 || (!townPip(x, y, R) && townPolyDist(x, y, R) > cap)) continue;
+        if (g[o] > hc) g[o] = hc; fl[o] = 1;
       }
     });
   });
@@ -776,7 +777,7 @@ function townProgs() {
   gl.bindBuffer(gl.ARRAY_BUFFER, P.ib[2]); [4, 5, 6].forEach(function (a, q) { gl.enableVertexAttribArray(a); gl.vertexAttribDivisor(a, 1); gl.vertexAttribPointer(a, 4, gl.FLOAT, false, 52, q * 16); });
   gl.enableVertexAttribArray(7); gl.vertexAttribDivisor(7, 1); gl.vertexAttribPointer(7, 1, gl.FLOAT, false, 52, 48);   // 地標倍率
   // 石基的方塊：六面 × 兩個三角形（位置、法線）
-  var V = [], F = [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, -1], [0, 0, 1]];   // 頂面排最後：石基只畫前 30 點（不畫頂面，見檔頭「地基」）；街燈的柱子畫 36 點
+  var V = [], F = [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]];
   F.forEach(function (n) {
     var u = n[0] ? [0, 1, 0] : [1, 0, 0], v = [n[1] * u[2] - n[2] * u[1], n[2] * u[0] - n[0] * u[2], n[0] * u[1] - n[1] * u[0]];
     [[-1, -1], [1, -1], [1, 1], [-1, -1], [1, 1], [-1, 1]].forEach(function (s) { for (var k = 0; k < 3; k++) V.push(n[k] * 0.5 + u[k] * s[0] * 0.5 + v[k] * s[1] * 0.5); V.push(n[0], n[1], n[2]); });
@@ -883,7 +884,7 @@ function townDraw() {
   // 石基
   if (G.npl) {
     var PP = P.pl; gl.useProgram(PP.prog); setCommon(PP); gl.uniform1f(PP.u.uFogD, fogD); gl.uniform3f(PP.u.uCol, 0.62, 0.58, 0.50);
-    gl.bindVertexArray(P.plVao); gl.drawArraysInstanced(gl.TRIANGLES, 0, 30, G.npl); tris += 10 * G.npl;   // 不畫頂面
+    gl.bindVertexArray(P.plVao); gl.drawArraysInstanced(gl.TRIANGLES, 0, 36, G.npl); tris += 12 * G.npl;
   }
   tris += townPostDraw(P, eye, fogD);                                    // 街燈的柱子、燈箱（夜裡的燈；同石基那一支著色器）
   // 貼圖
