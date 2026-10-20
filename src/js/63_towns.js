@@ -6,6 +6,12 @@
 //   規劃的座標以市中心為原點（往東 x、往南 y，公尺）；海域座標 ＝ (ox ＋ kx·x, oy ＋ y)（匯出時算好，Blocksail world/town_export.js）。
 // 整地（townHv；每塊海圖塊第一次要畫的時候算、城到了再重算）：路（照 z，路寬一半 ＋ 一個取樣點內整平）先、地塊的 grade（照 h，外擴 TOWN_LOT_PAD）後，
 //   外面照邊坡 1 : bank 接回原地形（|高差| ≤ 距離 ÷ bank，路最多接 TOWN_GRADE_REACH 公尺）；只改陸上的點（原本 ≤ 0 的不動 ⇒ 岸線不變）。
+// 地基（Tim 2026-10-20：「是否可以協助處理 房屋地基可能跟地面重疊導致的閃爍問題」「可以參考其他城建遊戲的作法」—— Cities: Skylines、Anno 那一類：
+//   腳下整平、地基是往下的裙邊、地面歸房子或地形其中一個，不留兩片同高的面）：
+//   · 地塊「頂著」：整完地之後再一輪，地塊外擴一格地形網格的對角線（min(取樣間距, TOWN_LOT_CELL) × √2）以內的點一律不准高過那一塊的 h（只往下壓）、往下取整到分米
+//     ⇒ 網格的三角形整片 ≤ h，斜面不會從房子、院子裡冒出來。整平只外擴 2 m、取樣 4 m ⇒ 跨地塊邊那一格一角在坡上。改完量（佔地裡每 1 m 一點、40 萬點）：高過房子底的 1.7%、最多 0.73 m（原版沒量）。
+//     ⛔ 不能把「整平」的外擴放大：坡上相鄰兩塊 h 不同，整平範圍互相蓋到，後算的那一塊把鄰居的地抬起來（試過外擴 10 m ⇒ 高過房子底的 1/3、最多 3.2 m，房子被埋）。被壓低的地方（高的那一塊靠矮鄰居那一邊）由石基的裙邊擋住。
+//   · 石基不畫頂面（頂面在 h − 0.01，以前跟整平的地面 h 只差 1 cm、地面又被四捨五入到 ±5 cm ⇒ 院子一片石、一片草地搶深度）：只畫四面當裙邊／擋土牆，地面歸房子的地板或地形。
 // 清樹（townClr）：規劃的 clear（有建築的地塊、路、城牆、碼頭各外擴 2 m；空建地不清）每 TOWN_CLR_G 公尺一格的遮罩 ⇒ 63_trees.js 擺樹時跳過。
 // 建築（模型在 Blocksail 的 world/townkit/：tools/townmodels.py 匯入時算好近、中、遠三份＋屋頂殼的資料；要用到的才跟外面要，見下面 townKit 那一段）：照用途挑（同用途的變化照 地塊 id 的雜湊挑 ⇒ 每次一樣；特殊建築的用途就是那一種 ⇒ 只有它的模型挑得到，例：galata-tower）。
 //   模型 → 世界（BUILDING_SPEC §1）：a ＝ mx·mpv − 模型寬/2、b ＝ my·mpv − 模型深/2、θ ＝ lot.rot ⇒ 往東 ＝ cx ＋ a·sinθ − b·cosθ、往南 ＝ cy − a·cosθ − b·sinθ、高 ＝ h ＋ mz·mpv；
@@ -25,7 +31,7 @@
 //   每棟一個倍率 lk ＝ 長、寬、高最大的那一邊 ÷ TOWN_LM[0]（限 1..TOWN_LM[1]；城牆一律 1）⇒ 四級的距離、交接帶都乘 lk（著色器用 距離 ÷ lk 對同一組門檻）；
 //   lk > 1 的不進屋頂殼，最遠一級是它自己的貼圖（到 TOWN_FAR × lk）。一般房子 ≤ 24 m ⇒ lk 1，跟以前一位元不差。
 var TOWN_LM = [24, 4];
-var TOWN_LOD = [160, 800], TOWN_FAR = [2400, 3000], TOWN_BAND = [24, 60, 300], TOWN_REBIN = 8, TOWN_SHELL_G = 32, TOWN_GRADE_REACH = 12, TOWN_LOT_PAD = 2, TOWN_CLR_G = 2, TOWN_ROAD_LIFT = 0.12, TOWN_GROUND_VIEW = 1600;
+var TOWN_LOD = [160, 800], TOWN_FAR = [2400, 3000], TOWN_BAND = [24, 60, 300], TOWN_REBIN = 8, TOWN_SHELL_G = 32, TOWN_GRADE_REACH = 12, TOWN_LOT_PAD = 2, TOWN_LOT_CELL = 8, TOWN_CLR_G = 2, TOWN_ROAD_LIFT = 0.12, TOWN_GROUND_VIEW = 1600;
 var TOWN_MESH_MS = 8;                                                    // 模型網格化每段最多幾 ms 就讓出一次（townMesh；跟地球儀同一條主執行緒）
 var TOWN_WALL_CORNER = 30, TOWN_WALL_KMAX = 1;                         // 城牆：轉角件從轉幾度起擺；斜接最多切多斜（tan，1 ＝ 轉 90° 的角平分）
 var TOWNS = { on: Q.get('towns') !== '0', list: [], pend: [], ver: 0, want: 0, err: null, kit: null, kitP: null, idx: null, kitHas: null, kitRedo: false, mwait: null, prog: null, dirty: true, eye: null, sig: '', buf: [], grp: null,
@@ -92,7 +98,7 @@ function townPrep(p) {
     P.forEach(function (q) { grow(q, r.w / 2 + 4 + TOWN_GRADE_REACH); });
     return { id: r.id, kind: r.kind, w: r.w, P: P, z: z };
   });
-  var grade = (p.grade || []).map(function (g) { var R = g.ring.map(E); R.forEach(function (q) { grow(q, TOWN_LOT_PAD + 6); }); return { h: g.h, R: R }; });
+  var grade = (p.grade || []).map(function (g) { var R = g.ring.map(E); R.forEach(function (q) { grow(q, TOWN_LOT_PAD + TOWN_LOT_CELL + 6); }); return { h: g.h, R: R }; });
   var clr = { rings: ((p.clear || {}).rings || []).map(function (r) { return r.map(E); }),
               paths: ((p.clear || {}).paths || []).map(function (c) { var P = c.path.map(E); return { w: c.w, P: c.closed ? P.concat([P[0]]) : P }; }) };
   clr.rings.forEach(function (R) { R.forEach(function (q) { grow(q, 4); }); });
@@ -111,7 +117,8 @@ function townHv(C) {
   if (C.tv === TOWNS.ver && C.tvh === C.h) return C.hv || C.h;
   C.tv = TOWNS.ver; C.tvh = C.h; C.hv = null; C.tc = null;
   if (!townOver(C.cx, C.cy)) return C.h;
-  var t0 = performance.now(), A = BED.A, S = A.chunk, st = C.step, n = C.n, e0 = C.cx * S, s0 = C.cy * S, h0 = C.h, N = n * n, g = new Float32Array(N), i, j, o;
+  var t0 = performance.now(), A = BED.A, S = A.chunk, st = C.step, n = C.n, e0 = C.cx * S, s0 = C.cy * S, h0 = C.h, N = n * n, g = new Float32Array(N), fl = new Uint8Array(N), i, j, o;
+  var cap = Math.min(st, TOWN_LOT_CELL) * 1.415 + 0.05;                  // 地塊頂著的範圍：外擴一格地形網格的對角線（見檔頭「地基」）
   for (o = 0; o < N; o++) g[o] = h0[o] / 10;
   function range(a, b, pad, lo) { return [Math.max(0, Math.ceil((a - pad - lo) / st)), Math.min(n - 1, Math.floor((b + pad - lo) / st))]; }
   function clampTo(o2, h, dd, bank) { if (h0[o2] <= 0) return; var lim = dd / bank; if (g[o2] > h + lim) g[o2] = h + lim; else if (g[o2] < h - lim) g[o2] = h - lim; }
@@ -140,8 +147,21 @@ function townHv(C) {
       }
     });
   });
+  TOWNS.list.forEach(function (T) {                                     // 地塊頂著（見檔頭「地基」）：外擴 cap 以內的點不准高過那一塊的 h ⇒ 斜面不會從房子、院子裡冒出來；只往下壓、不往上抬
+    if (!(T.box[0] < e0 + S && T.box[2] > e0 && T.box[1] < s0 + S && T.box[3] > s0)) return;
+    T.grade.forEach(function (gr) {
+      var R = gr.R, xs = R.map(function (q) { return q[0]; }), ys = R.map(function (q) { return q[1]; });
+      var ri = range(Math.min.apply(null, xs), Math.max.apply(null, xs), cap, e0), rj = range(Math.min.apply(null, ys), Math.max.apply(null, ys), cap, s0);
+      for (j = rj[0]; j <= rj[1]; j++) for (i = ri[0]; i <= ri[1]; i++) {
+        o = j * n + i; if (h0[o] <= 0) continue;
+        var x = e0 + i * st, y = s0 + j * st;
+        if (g[o] < gr.h - 0.1 || (!townPip(x, y, R) && townPolyDist(x, y, R) > cap)) continue;
+        if (g[o] > gr.h) g[o] = gr.h; fl[o] = 1;
+      }
+    });
+  });
   var hv = new Int16Array(N), ch = 0;
-  for (o = 0; o < N; o++) { hv[o] = Math.max(-32768, Math.min(32767, Math.round(g[o] * 10))); if (hv[o] !== h0[o]) ch++; }
+  for (o = 0; o < N; o++) { hv[o] = Math.max(-32768, Math.min(32767, fl[o] ? Math.floor(g[o] * 10 + 1e-4) : Math.round(g[o] * 10))); if (hv[o] !== h0[o]) ch++; }   // 平台往下取整（分米）⇒ 不會高過地塊的 h（房子的底）
   C.hv = ch ? hv : null;
   C.tc = townClrMask(C);
   TOWNS.stat.gradeMs += performance.now() - t0; TOWNS.stat.chunks++;
@@ -756,7 +776,7 @@ function townProgs() {
   gl.bindBuffer(gl.ARRAY_BUFFER, P.ib[2]); [4, 5, 6].forEach(function (a, q) { gl.enableVertexAttribArray(a); gl.vertexAttribDivisor(a, 1); gl.vertexAttribPointer(a, 4, gl.FLOAT, false, 52, q * 16); });
   gl.enableVertexAttribArray(7); gl.vertexAttribDivisor(7, 1); gl.vertexAttribPointer(7, 1, gl.FLOAT, false, 52, 48);   // 地標倍率
   // 石基的方塊：六面 × 兩個三角形（位置、法線）
-  var V = [], F = [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]];
+  var V = [], F = [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, -1], [0, 0, 1]];   // 頂面排最後：石基只畫前 30 點（不畫頂面，見檔頭「地基」）；街燈的柱子畫 36 點
   F.forEach(function (n) {
     var u = n[0] ? [0, 1, 0] : [1, 0, 0], v = [n[1] * u[2] - n[2] * u[1], n[2] * u[0] - n[0] * u[2], n[0] * u[1] - n[1] * u[0]];
     [[-1, -1], [1, -1], [1, 1], [-1, -1], [1, 1], [-1, 1]].forEach(function (s) { for (var k = 0; k < 3; k++) V.push(n[k] * 0.5 + u[k] * s[0] * 0.5 + v[k] * s[1] * 0.5); V.push(n[0], n[1], n[2]); });
@@ -861,7 +881,7 @@ function townDraw() {
   // 石基
   if (G.npl) {
     var PP = P.pl; gl.useProgram(PP.prog); setCommon(PP); gl.uniform1f(PP.u.uFogD, fogD); gl.uniform3f(PP.u.uCol, 0.62, 0.58, 0.50);
-    gl.bindVertexArray(P.plVao); gl.drawArraysInstanced(gl.TRIANGLES, 0, 36, G.npl); tris += 12 * G.npl;
+    gl.bindVertexArray(P.plVao); gl.drawArraysInstanced(gl.TRIANGLES, 0, 30, G.npl); tris += 10 * G.npl;   // 不畫頂面
   }
   tris += townPostDraw(P, eye, fogD);                                    // 街燈的柱子、燈箱（夜裡的燈；同石基那一支著色器）
   // 貼圖
@@ -922,7 +942,7 @@ function townStat(at) {
     var tl = townLightStat(T);
     return { id: T.id, name: T.name, tier: T.tier, seed: T.seed, ox: T.ox, oy: T.oy, lots: (T.p.lots || []).length, roads: T.roads.length, walls: (T.p.walls || []).length, inst: (T.inst || []).length, byModel: u, lights: tl, center: [+(T.ox - BED.ax).toFixed(1), +(T.oy - BED.az).toFixed(1)] };
   }), kit: !!TOWNS.kit, kitN: S.kitN, kitMs: S.kitMs, kitTris: S.kitTris, skip: S.skip, drawn: { full: S.d0, low: S.d1, card: S.d2, shells: S.d3, plinth: S.plinth, flags: S.flags || 0, landmarks: S.lm || 0 }, tris: S.tris, ms: { draw: S.drawMs, bin: S.binMs, grade: +S.gradeMs.toFixed(1), prep: S.prepMs }, gradedChunks: S.chunks,
-    night: { lit: +TL.k.toFixed(3), win: +TOD_WIN.toFixed(3), grid: TL.stat.inGrid, full: TL.stat.full, over: TL.stat.over, gridMs: TL.stat.gridMs, cards: TL.stat.cards, glow: TL.stat.glow, glowMs: TL.stat.glowMs } };
+    night: { lit: +TL.k.toFixed(3), win: +TOD_WIN.toFixed(3), grid: TL.stat.inGrid, range: TL.stat.range || 0, full: TL.stat.full, over: TL.stat.over, gridMs: TL.stat.gridMs, cards: TL.stat.cards, glow: TL.stat.glow, glowMs: TL.stat.glowMs } };
   if (at) { var q = bedCell(at[0], at[1]); o.at = { ground: +townGround(at[0], at[1]).toFixed(2), sim: +bedHgt(at[0], at[1]).toFixed(2), clear: q ? townClr(q.C, q.u * q.C.step, q.v * q.C.step) : null }; }
   return o;
 }
@@ -935,7 +955,8 @@ function townStat(at) {
 // 什麼時候亮：08_weather.js TOD_LIT（世界時間；太陽 3° 開始點、−5° 全亮）—— 沒開世界時間（對戰、沙盒）⇒ 0，一盞都不點、整段跳過。
 //   窗：幾成亮著照 TOD_WIN（入夜七成、半夜以後慢慢熄）；哪一扇亮照雜湊（實例的 x、z ＋ 第幾扇，GLSL twH）⇒ 同一扇整晚一致、越晚熄掉的越多；窗片與遠處的光點同一個雜湊。
 // 畫（效能）：
-//   · 點光源（不投影子）：鏡頭附近 TL_GRID × TL_GRID 格（每格 TL_CELL 公尺，鏡頭動 TL_REBIN 公尺才重排）的分組表（RGBA16UI 一格兩個像素：最多 TL_SLOT ＝ 8 盞的編號；第一版 4 盞，加拉塔近看 482 格滿了 ⇒ 光圈在格線上被切）
+//   · 點光源（不投影子）：鏡頭附近 N × N 格（N 照畫質「城裡點光源的距離」TL_GRIDS：64／128／192 ⇒ 512 m／1 km／1.5 km 見方，Tim 2026-10-20「點光源的顯示距離可以在遠一些(特別是中高畫質 可以根據畫質支援更遠距離)」；
+//     每格 TL_CELL 公尺，鏡頭動 TL_REBIN × N ÷ 64 公尺才重排；最外 4 格淡掉）的分組表（RGBA16UI 一格兩個像素：最多 TL_SLOT ＝ 8 盞的編號；第一版 4 盞，加拉塔近看 482 格滿了 ⇒ 光圈在格線上被切）
 //     ＋燈的資料（RGBA32F：位置、半徑；顏色 × 亮度、相位）⇒ 每個像素只讀自己那一格（TLAMP_GLSL townLamp）：燈再多，每個像素最多算 8 盞。
 //     一格超過 8 盞 ⇒ 留離格心近的（stat.full）；範圍裡超過 TL_MAX 盞 ⇒ 多的不照（stat.over）。照：建築（近、中）、石基、街燈、路、屋頂殼、陸地（63_bed_gl.js）。
 //     uTLK 0（白天）⇒ 一進函式就回 0，不讀貼圖。
@@ -947,7 +968,7 @@ function townStat(at) {
 // 街燈（townPosts）：路（TL_STREET 的那幾種）每隔那麼多公尺一支、左右交錯、離路邊 TL_POST_OFF；落在建築、城牆的佔地裡（外擴 0.6 m）⇒ 換另一邊、還不行就跳過；
 //   離別支 < TL_POST_GAP 公尺（路口、兩條路疊著）、站在別條路的路面上 ⇒ 跳過。位置照規劃算（每次一樣）；高度照畫面地形（townGround），那一塊還沒載 ⇒ 等下一次重建（stat miss）。
 //   柱子、燈箱用石基那一支著色器（方塊）。⛔ 不碰戰局：船、砲彈穿過去。
-var TL_GRID = 64, TL_CELL = 8, TL_SLOT = 8, TL_MAX = 1024, TL_REBIN = 4, TL_PX = 2.5;
+var TL_GRIDS = [64, 128, 192], TL_GRID = 192, TL_CELL = 8, TL_SLOT = 8, TL_MAX = 4096, TL_REBIN = 4, TL_PX = 2.5;   // 格數照畫質「城裡點光源的距離」（07_gfx.js tlamp）：512 m／1 km／1.5 km 見方；貼圖照最大的配
 var TL_STREET = { main: 24, street: 30, quay: 22 }, TL_POST_OFF = 0.5, TL_POST_GAP = 10, TL_POST_H = 3.2;
 var TL_TYPE = [                                                         // 型 ⇒ r 照多遠（公尺）、k 亮度、c 光色、h 光暈半徑（公尺）
   { r: 8, k: 2.0, c: [1, 0.62, 0.28], h: 0.9 },                         // 0 燈籠
@@ -961,9 +982,10 @@ var TL = { gTex: null, dTex: null, g: new Uint16Array(TL_GRID * TL_GRID * TL_SLO
 var TLAMP_GLSL = 'uniform highp usampler2D uTLG; uniform highp sampler2D uTLD; uniform vec4 uTLA; uniform float uTLK, uTLT;\n' +
   'vec3 townLamp(vec3 w, vec3 n){ if(uTLK<=0.0) return vec3(0.0); vec2 c=(w.xz-uTLA.xy)*uTLA.z; if(c.x<0.0||c.y<0.0||c.x>=uTLA.w||c.y>=uTLA.w) return vec3(0.0);\n' +
   ' ivec2 q=ivec2(c); uvec4 i0=texelFetch(uTLG,ivec2(q.x*2,q.y),0), i1=texelFetch(uTLG,ivec2(q.x*2+1,q.y),0); vec3 s=vec3(0.0);\n' +
+  ' float e=min(min(c.x,c.y),min(uTLA.w-c.x,uTLA.w-c.y));\n' +   // e：離分組表的邊幾格 ⇒ 最外 4 格淡掉（不在邊上一刀切）
   ' for(int k=0;k<8;k++){ uint i=k<4?i0[k]:i1[k-4]; if(i==0u) break; int j=int(i-1u)*2; vec4 P=texelFetch(uTLD,ivec2(j&63,j>>6),0), C=texelFetch(uTLD,ivec2((j+1)&63,(j+1)>>6),0);\n' +
   '  vec3 L=P.xyz-w; float d=length(L), a=clamp(1.0-d/P.w,0.0,1.0); if(a<=0.0) continue; float fl=0.9+0.1*sin(uTLT*6.3+C.w)*sin(uTLT*2.7+C.w*1.9);\n' +
-  '  s+=C.rgb*a*a*fl*(0.3+0.7*max(dot(n,L/max(d,0.001)),0.0)); } return s*uTLK; }\n';
+  '  s+=C.rgb*a*a*fl*(0.3+0.7*max(dot(n,L/max(d,0.001)),0.0)); } return s*uTLK*clamp(e*0.25,0.0,1.0); }\n';
 // 哪一扇窗亮：實例的 x、z ＋ 第幾扇 ⇒ [0, 1)（窗片、光點同一份；整數雜湊，不吃 sin 的精度）
 var TL_HASH_GLSL = 'float twH(vec2 xz, float id){ uvec3 v=floatBitsToUint(vec3(xz,id)); uint h=v.x*0x8da6b343u^v.y*0xd8163841u^v.z*0xcb1ab31fu; h^=h>>16; h*=0x7feb352du; h^=h>>15; h*=0x846ca68bu; h^=h>>16; return float(h>>8)/16777216.0; }\n' +
   'vec3 twCol(float h){ float v=fract(h*53.7); return mix(vec3(1.0,0.6,0.28),vec3(1.0,0.78,0.5),v)*(0.75+0.4*fract(h*91.3)); }\n';
@@ -1006,10 +1028,10 @@ function townLampSet(u) {
 /** 分組表（townDraw 每一格叫；點燈了、鏡頭動了 TL_REBIN 公尺、燈換過才重排）。 */
 function townLampGrid(eye) {
   if (!TL.k || !TL.gTex) return;
-  var E = TL.eye; if (E && TL.gv === TL.ver && Math.abs(E[0] - eye[0]) + Math.abs(E[2] - eye[2]) < TL_REBIN) return;
-  var t0 = performance.now(), C = TL_CELL, N = TL_GRID, x0 = Math.floor(eye[0] / C) * C - N * C / 2, z0 = Math.floor(eye[2] / C) * C - N * C / 2, X1 = x0 + N * C, Z1 = z0 + N * C;
+  var N = TL_GRIDS[GFX.tlamp] || TL_GRIDS[0], E = TL.eye; if (E && TL.gv === TL.ver && TL.gn === N && Math.abs(E[0] - eye[0]) + Math.abs(E[2] - eye[2]) < TL_REBIN * N / 64) return;   // 範圍大 ⇒ 重排的距離跟著放大
+  var t0 = performance.now(), C = TL_CELL, x0 = Math.floor(eye[0] / C) * C - N * C / 2, z0 = Math.floor(eye[2] / C) * C - N * C / 2, X1 = x0 + N * C, Z1 = z0 + N * C;
   var G = TL.g, GD = TL.gd, D = TL.d, n = 0, full = 0, over = 0;
-  G.fill(0);
+  G.fill(0, 0, N * N * TL_SLOT);
   TOWNS.list.forEach(function (T) {
     var L = T.tl && T.tl.lamps; if (!L) return;
     for (var i = 0; i < L.length; i += 5) {
@@ -1029,12 +1051,12 @@ function townLampGrid(eye) {
       }
     }
   });
-  gl.activeTexture(gl.TEXTURE13); gl.bindTexture(gl.TEXTURE_2D, TL.gTex); gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, N * 2, N, gl.RGBA_INTEGER, gl.UNSIGNED_SHORT, G);
+  gl.activeTexture(gl.TEXTURE13); gl.bindTexture(gl.TEXTURE_2D, TL.gTex); gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, N * 2, N, gl.RGBA_INTEGER, gl.UNSIGNED_SHORT, G.subarray(0, N * N * TL_SLOT));
   var rows = Math.ceil(n * 2 / 64);
   if (rows) { gl.activeTexture(gl.TEXTURE14); gl.bindTexture(gl.TEXTURE_2D, TL.dTex); gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, 64, rows, gl.RGBA, gl.FLOAT, D.subarray(0, rows * 256)); }
   gl.activeTexture(gl.TEXTURE0);
-  TL.a[0] = x0; TL.a[1] = z0; TL.eye = eye.slice(); TL.gv = TL.ver;
-  TL.stat.inGrid = n; TL.stat.full = full; TL.stat.over = over; TL.stat.gridMs = +(performance.now() - t0).toFixed(2);
+  TL.a[0] = x0; TL.a[1] = z0; TL.a[3] = N; TL.eye = eye.slice(); TL.gv = TL.ver; TL.gn = N;
+  TL.stat.inGrid = n; TL.stat.range = N * C; TL.stat.full = full; TL.stat.over = over; TL.stat.gridMs = +(performance.now() - t0).toFixed(2);
 }
 /** 模型的窗片網格（索引 lights.win ⇒ 每扇窗的洞，一列一個四邊形；屬性 0 ＝ (模型格 x, y, z, 第幾扇)、4～6 ＝ 實例）；沒有窗 ⇒ null。 */
 function townWinMesh(m) {
