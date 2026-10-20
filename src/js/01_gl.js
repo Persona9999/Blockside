@@ -377,6 +377,7 @@ function setCommon(p) {
   if (u.uVe) { if (VX) gl.uniform2f(u.uVe, VX.De, VX.re2); else gl.uniform2f(u.uVe, 0, 1); }   // 眼的喉部（深度、半徑²）
   if (u.uClip) gl.uniform1f(u.uClip, PASS.clip);
   if (u.uCutT) gl.uniform1i(u.uCutT, 8);                       // 剖面的切高貼圖（74_cutaway.js）：固定第 8 號
+  if (u.uBkK) gl.uniform3fv(u.uBkK, todBakeK());                  // 遠景貼圖的光照倍數（08_weather.js todBakeK：世界時間的夜晚只剩月光；沒開 ⇒ 1）
   if (u.uSunK) gl.uniform1f(u.uSunK, wxSun());                   // 天氣（08_weather.js）：陽光、水手與碎木的亮度、白沫
   if (u.uLum) gl.uniform1f(u.uLum, wxLum());
   if (u.uLN) { gl.uniform1i(u.uLN, LAMPS.n); if (LAMPS.n) { gl.uniform4fv(u.uLP, LAMPS.p); gl.uniform4fv(u.uLC, LAMPS.c); } }   // 點光源（60_render.js lampsUpdate；沒有 uLN 的著色器 ＝ 陰影那一趟 ⇒ 不給）

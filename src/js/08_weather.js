@@ -139,6 +139,16 @@ function todApply() {
 }
 /** render 結尾：地面色還原成天氣的（天、霧由 render 自己的 sky0／hor0 還原；SUN、倍數留著：下一格 todApply 會再算）。 */
 function todRestore(s) { if (s) GROUND = s.gr; }
+// 遠景的貼圖（63_trees.js TREE_BB_FS 樹、63_towns.js 遠處的建築）是白天烘好的顏色，以前只乘「常數 ＋ 陽光」⇒ 夜晚還有白天七成亮、650 m 外一圈亮的
+//   （Tim 2026-10-20「夜晚時 遠處的部分會是亮的」「夜晚應該只計算月光」）。⇒ 再乘 todBakeK：現在的「天色環境光 ＋ 直射光（夜晚是月光）」÷ 白天的同一個量（每個顏色各自比），
+//   跟近景著色器同一套光（環境 mix(地, 天, 0.6) × 0.7 ＋ 直射 0.72 × 高度 × 陽光）⇒ 夜晚只剩月光那一份、偏藍。沒開世界時間 ⇒ [1, 1, 1]（畫面一位元不變）。
+var SUN_DAY = SUN.slice(), TOD_BAKE = [1, 1, 1];
+function todBakeK() {
+  if (TOD0 === null) return [1, 1, 1];
+  var C = [1.0, 0.96, 0.88], a = Math.max(SUN[1], 0) * wxSun() * 0.72, b = Math.max(SUN_DAY[1], 0) * WX.sun * 0.72;
+  for (var i = 0; i < 3; i++) TOD_BAKE[i] = ((GROUND[i] * 0.4 + SKY[i] * 0.6) * 0.7 + C[i] * a) / ((WX.ground[i] * 0.4 + WX.sky[i] * 0.6) * 0.7 + C[i] * b);
+  return TOD_BAKE;
+}
 /** 開砲散布的倍率：晴天 1；暴風雨 ＝ 1.25 ＋ 9 ×（橫搖角速度 ＋ 一半的縱搖角速度，rad/s）—— 船晃得越快，點火那一下差得越多。 */
 function wxSpread(sh) {
   if (!WX.aim || !sh.wv) return 1;
