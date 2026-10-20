@@ -114,6 +114,7 @@ function chartDraw(me) {
   g.fillStyle = 'rgb(' + CHART_COL.deep.join(',') + ')'; g.fillRect(0, 0, W, W);
   g.imageSmoothingEnabled = true;
   g.drawImage(CHART.im, (ce - R - e0) * kp, (cs - R - s0) * kp, 2 * R * kp, 2 * R * kp, 0, 0, W, W);
+  chartTowns(g, P, sc, W);                                                                            // 城鎮（路、建築、城牆、圖示）
   if (CHART.trail.length > 1) {                                                                       // 航跡
     g.strokeStyle = 'rgba(255,236,170,.75)'; g.lineWidth = 1.4; g.setLineDash([3, 3]); g.beginPath();
     CHART.trail.forEach(function (p, i) { var q = P(BED.ax + p[0], BED.az + p[1]); if (i) g.lineTo(q[0], q[1]); else g.moveTo(q[0], q[1]); });
@@ -129,6 +130,42 @@ function chartDraw(me) {
   var bar = [100, 200, 500, 1000, 2000, 5000].filter(function (v) { return v * sc <= W * 0.35; }).pop() || 100, bx = 8, by = W - 9;
   g.strokeStyle = '#f3ead8'; g.lineWidth = 2; g.beginPath(); g.moveTo(bx, by - 3); g.lineTo(bx, by); g.lineTo(bx + bar * sc, by); g.lineTo(bx + bar * sc, by - 3); g.stroke();
   g.font = '10px sans-serif'; g.textAlign = 'left'; g.textBaseline = 'bottom'; g.fillStyle = '#f3ead8'; g.fillText(bar >= 1000 ? bar / 1000 + ' km' : bar + ' m', bx, by - 3);
+}
+/** 城鎮（63_towns.js TOWNS.list；Tim 2026-10-20「航海小地圖上 是否可以顯示城鎮Icon(同時好像看不到城鎮 只有地形? 可以的話也顯示城鎮)」）：
+ *  路（實際的寬、至少 1.2 px，外面一圈深色描邊；顏色 TOWN_COL）、城牆、建築（實例的佔地 pl 照屋頂的顏色 col；模型還沒到 ⇒ 地塊的框）、
+ *  市中心（T.cen）一個城鎮圖示（同 Blocksail 地球儀的 townIcon：圓底、白牆、屋頂、門）＋ 名字。座標都是海域的往東、往南（實例 ＝ 減掉 BED.ax、BED.az 的）。 */
+function chartTowns(g, P, sc, W) {
+  if (!TOWNS.list.length) return;
+  function rgb(c, k) { return 'rgb(' + c.map(function (v) { return Math.round(Math.min(1, v * (k || 1)) * 255); }).join(',') + ')'; }
+  function path(L) { g.beginPath(); L.forEach(function (q, i) { var p = P(q[0], q[1]); if (i) g.lineTo(p[0], p[1]); else g.moveTo(p[0], p[1]); }); }
+  function quad(C) { path(C); g.closePath(); g.fill(); }
+  g.lineJoin = 'round'; g.lineCap = 'round';
+  TOWNS.list.forEach(function (T) {
+    [0, 1].forEach(function (pass) {                                    // 路：先描邊、再路面
+      T.roads.forEach(function (r) { var w = Math.max(1.2, r.w * sc); path(r.P); g.lineWidth = pass ? w : w + 1.6; g.strokeStyle = pass ? rgb(TOWN_COL[r.kind] || TOWN_COL.street, 1.15) : 'rgba(30,20,10,.55)'; g.stroke(); });
+    });
+    (T.p.walls || []).forEach(function (w) { var P2 = w.path.map(T.E); if (w.closed) P2.push(P2[0]); path(P2); g.lineWidth = Math.max(1.5, (w.w || 4) * sc); g.strokeStyle = 'rgb(170,160,140)'; g.stroke(); });
+    if (T.inst) T.inst.forEach(function (q) {                           // 建築、城牆的部件：模型的 +x ＝ (sinθ, −cosθ)、+y ＝ (−cosθ, −sinθ)
+      var hw = q.pl ? q.pl[0] / 2 : q.ft ? q.ft[0] : 0, hd = q.pl ? q.pl[1] / 2 : q.ft ? q.ft[1] : 0; if (!hw) return;
+      var s = Math.sin(q.th), c = Math.cos(q.th), x = q.x + BED.ax, z = q.z + BED.az;
+      g.fillStyle = rgb(q.col || [0.6, 0.45, 0.35], q.sh || 1);
+      quad([[-1, -1], [1, -1], [1, 1], [-1, 1]].map(function (k) { var a = k[0] * hw, b = k[1] * hd; return [x + a * s - b * c, z - a * c - b * s]; }));
+    });
+    else (T.p.lots || []).forEach(function (l) {                         // 模型還沒到 ⇒ 地塊的框（空建地、廣場不畫）
+      if (l.use === 'plot' || l.use === 'plaza') return;
+      var t = l.rot * Math.PI / 180, c = Math.cos(t), s = Math.sin(t), hd = l.d / 2, hw = l.w / 2;
+      g.fillStyle = 'rgba(190,150,110,.85)'; quad([[-hd, -hw], [hd, -hw], [hd, hw], [-hd, hw]].map(function (k) { return T.E([l.at[0] + k[0] * c - k[1] * s, l.at[1] + k[0] * s + k[1] * c]); }));
+    });
+  });
+  g.font = 'bold 10px sans-serif'; g.textAlign = 'left'; g.textBaseline = 'middle';
+  TOWNS.list.forEach(function (T) {                                     // 圖示＋名字（在路、建築上面）
+    var p = P(T.cen[0], T.cen[1]), x = p[0], y = p[1] - 2; if (x < -40 || y < -20 || x > W + 40 || y > W + 20) return;
+    g.beginPath(); g.arc(x, y, 7.5, 0, 6.2832); g.fillStyle = 'rgba(5,15,25,.8)'; g.fill(); g.lineWidth = 1.2; g.strokeStyle = 'rgba(243,234,216,.9)'; g.stroke();
+    g.fillStyle = '#f3ead8'; g.fillRect(x - 3.5, y - 0.4, 7, 4.2);                                     // 牆
+    g.beginPath(); g.moveTo(x - 4.8, y); g.lineTo(x, y - 4.6); g.lineTo(x + 4.8, y); g.closePath(); g.fillStyle = '#e8c26a'; g.fill();   // 屋頂
+    g.fillStyle = '#2a1607'; g.fillRect(x - 0.9, y + 1.4, 1.8, 2.4);                                  // 門
+    if (T.name) { g.lineWidth = 3; g.strokeStyle = 'rgba(5,15,25,.85)'; g.strokeText(T.name, x + 10, y); g.fillStyle = '#f3ead8'; g.fillText(T.name, x + 10, y); }
+  });
 }
 /** 讀數（?debug=1 的 __game.chart()）：開了沒、範圍、吃水門檻、底圖畫了幾塊（細／粗）、航跡幾點、畫面上的位置。 */
 function chartInfo() {
