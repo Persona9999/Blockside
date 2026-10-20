@@ -112,6 +112,13 @@ function setWeather(id) {
 //     ⛔ 不改 WX.sun／lum 本身（WX 就是天氣預設那個物件；改了又沒還原 ⇒ 下一格拿它當基準、越乘越暗）。模擬不讀 SUN、天色。
 var TOD0 = Q.has('tod') && isFinite(parseFloat(Q.get('tod'))) ? ((parseFloat(Q.get('tod')) % 24) + 24) % 24 : null, TOD_LAT = parseFloat(Q.get('lat'));
 var SUNC = [1, 0.85, 0.6], TOD_NIGHT = 0, TOD_SUNK = 1, TOD_LUMK = 1;  // 天空的太陽（月亮）圓盤顏色、星星多少（01_gl.js P.sky）；陽光、亮度的倍數
+var TOD_LIT = 0, TOD_WIN = 0;                                          // 城裡點燈了沒（0～1：太陽 3° 開始點、−5° 全亮）、幾成的窗亮著（63_towns.js「夜裡的燈」）；沒開世界時間 ⇒ 0（白天）
+/** 幾點有幾成的窗亮著：入夜七成、半夜以後慢慢熄到一成、天亮前早起的人又點起三成（只在 TOD_LIT > 0 的時候有用）。 */
+function todWin(h) {
+  var K = [[0, 0.35], [1, 0.2], [4, 0.08], [5.5, 0.3], [7, 0.3], [17, 0.7], [21.5, 0.7], [24, 0.35]];
+  for (var i = 1; i < K.length; i++) if (h <= K[i][0]) return K[i - 1][1] + (K[i][1] - K[i - 1][1]) * (h - K[i - 1][0]) / (K[i][0] - K[i - 1][0]);
+  return K[0][1];
+}
 /** 這一格的陽光、亮度（天氣 × 世界時間；沒開世界時間 ⇒ 就是天氣的）。 */
 function wxSun() { return WX.sun * TOD_SUNK; }
 function wxLum() { return WX.lum * TOD_LUMK; }
@@ -134,6 +141,7 @@ function todApply() {
   SKY = lerp3(lerp3([0.10, 0.14, 0.26], SKY, day), [0.36, 0.38, 0.62], dusk * 0.45);
   HORIZON = lerp3(lerp3([0.09, 0.12, 0.20], HORIZON, day), [0.86, 0.52, 0.34], dusk * 0.55);
   GROUND = lerp3([0.08, 0.08, 0.10], GROUND, day);
+  TOD_LIT = 1 - todSm(-5, 3, el); TOD_WIN = todWin(h);
   TOD_LUMK = 0.3 + 0.7 * day; TOD_NIGHT = (1 - todSm(-12, -4, el)) * Math.min(1, WX.sun);   // 星星：太陽 −4° 以下才出來、−12° 全亮（第一版照 day ⇒ 太陽還在地平線上就有星星）；暴風雨（陽光 0.35）星星也少
   return { gr: gr0 };
 }

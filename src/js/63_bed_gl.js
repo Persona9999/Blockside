@@ -150,7 +150,7 @@ function bedGpu(M, g) {
 var BED_VS = '#version 300 es\nlayout(location=0) in vec3 aP; layout(location=1) in vec3 aN; layout(location=2) in vec3 aC; layout(location=3) in vec4 aK; uniform mat4 uVP; out vec3 vN; out vec3 vW; out vec3 vC; out vec4 vK;\n' +
   'void main(){ vN=aN; vW=aP; vC=aC; vK=aK; gl_Position=uVP*vec4(aP,1.0); }\n';
 function bedFS() {
-  return '#version 300 es\nprecision highp float;\n' + SHADOW_GLSL + 'in vec3 vN; in vec3 vW; in vec3 vC; in vec4 vK; uniform vec3 uSun,uEye,uFog,uSky,uGround; uniform float uFogD; out vec4 o;\n' +
+  return '#version 300 es\nprecision highp float;\n' + SHADOW_GLSL + TLAMP_GLSL + 'in vec3 vN; in vec3 vW; in vec3 vC; in vec4 vK; uniform vec3 uSun,uEye,uFog,uSky,uGround; uniform float uFogD; out vec4 o;\n' +
     'float bh(vec2 p){ p=fract(p*vec2(123.34,456.21)); p+=dot(p,p+45.32); return fract(p.x*p.y); }\n' +
     'float bn(vec2 p){ vec2 i=floor(p), f=fract(p); f=f*f*(3.0-2.0*f); return mix(mix(bh(i),bh(i+vec2(1.0,0.0)),f.x),mix(bh(i+vec2(0.0,1.0)),bh(i+vec2(1.0,1.0)),f.x),f.y); }\n' +
     'float bf(vec2 p){ return (bn(p)*0.5+bn(p*2.03)*0.25+bn(p*4.01)*0.125+bn(p*8.07)*0.0625)/0.9375; }\n' +
@@ -211,7 +211,7 @@ function bedFS() {
     // 凹凸（近看）：法線照 hb 的螢幕導數擾動 —— 導數在分支外算（分支裡的導數沒有定義）
     ' vec3 sx=dFdx(vW), sy=dFdy(vW), r1=cross(sy,n), r2=cross(n,sx); float hx=dFdx(hb), hy=dFdy(hb), dt=dot(sx,r1); vec3 nb=n;\n' +
     ' if(nk>0.0){ vec3 nq=abs(dt)*n-sign(dt)*(hx*r1+hy*r2); if(dot(nq,nq)>1e-12) nb=normalize(mix(n,normalize(nq),nk)); }\n' +
-    ' float sd2=dot(nb,uSun), d=abs(sd2), sg=dot(n,uSun); float sk=shadowK(vW,(sg<0.0?-n:n)*(3.0-2.0*abs(sg))); d*=sk; col=col*(mix(uGround,uSky,0.6)*0.65+vec3(1.0,0.96,0.88)*d*0.7);\n' +
+    ' float sd2=dot(nb,uSun), d=abs(sd2), sg=dot(n,uSun); float sk=shadowK(vW,(sg<0.0?-n:n)*(3.0-2.0*abs(sg))); d*=sk; col=col*(mix(uGround,uSky,0.6)*0.65+vec3(1.0,0.96,0.88)*d*0.7+townLamp(vW,nb));\n' +   // townLamp：城裡夜裡的燈（63_towns.js）
     // 濕沙的反光：太陽的半向量，照陰影
     ' if(wet>0.0){ vec3 hv=normalize(uSun+normalize(uEye-vW)); col+=vec3(1.0,0.96,0.88)*pow(max(dot(nb,hv),0.0),40.0)*wet*0.35*sk; }\n' +
     ' o=vec4(mix(col,uFog,1.0-exp(-fd*uFogD)),1.0); }\n';
