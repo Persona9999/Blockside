@@ -289,10 +289,15 @@
     G.bindFramebuffer.call(gl, 0x8CA8, null); G.readPixels.call(gl, 0, 0, 1, 1, 0x1908, 0x1401, px); G.bindFramebuffer.call(gl, 0x8CA8, rb);
     if (pb) G.bindBuffer.call(gl, 0x88EB, pb);
   };
-  /** Broadside camera on ship spec.ship: fixed (mode 0, no tracking), target = ship centre (or [px, y, pz]), yaw = −ship.yaw + π/2 (+ spec.yawOff). */
+  /** Broadside camera on ship spec.ship: fixed (mode 0, no tracking), target = ship centre (or [px, y, pz]), yaw = −ship.yaw + π/2 (+ spec.yawOff).
+   *  spec.sail = k ⇒ target = the centre of sail k's authored box (grid coords through sh.M; R3 close-ups of torn sails). */
   H.camFor = function (spec) {
     var sh = window.__game.ships()[spec.ship || 0], c = sh.center && spec.center !== false ? sh.center : [sh.px, spec.y === undefined ? 3 : spec.y, sh.pz];
     var tgt = [c[0], spec.y === undefined ? c[1] : spec.y, c[2]];
+    if (spec.sail !== undefined && sh.sails[spec.sail] && sh.M) {
+      var b = sh.sails[spec.sail].bb, M = sh.M, x = (b[0] + b[3]) / 2, y = (b[1] + b[4]) / 2, z = (b[2] + b[5]) / 2;
+      tgt = [M[0] * x + M[4] * y + M[8] * z + M[12], M[1] * x + M[5] * y + M[9] * z + M[13], M[2] * x + M[6] * y + M[10] * z + M[14]];
+    }
     return { mode: 0, track: false, follow: null, pan: [0, 0], tgt: tgt, dist: spec.dist || 60, yaw: -sh.yaw + Math.PI / 2 + (spec.yawOff || 0), pitch: spec.pitch === undefined ? 0.1 : spec.pitch };
   };
   H.cam = function (spec) { var o = H.camFor(spec); H.camSpec = spec; window.__game.cam(o); return o; };

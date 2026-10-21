@@ -9,8 +9,9 @@ var FITUI = { open: {} };                                                // 哪�
 /** 這一型的掛點（照原本雕的；拆空的那幾件也列）。 */
 function fitSlots(T) {
   var W = (T.fit && T.fit.was) || {}, out = [];
-  (T.rig.models || []).concat(T.decos || []).forEach(function (m) {
-    var k = fitKindOf(m); if (!k || !(m.meta && m.meta.id)) return;
+  (T.rig.models || []).concat(T.decos || [], T.hullVoxM || []).forEach(function (m) {   // hullVoxM：放回船殼的主機、鍋爐（38_fit.js fitHullVox）
+    var k = fitKindOf(m); if (!k || !(m.meta && m.meta.id) || m.fromPart) return;   // fromPart：錨的關聯載入時才拆成的模型（76_anchor.js anchorParts；換裝在那之前就做完了 ⇒ 換不了，不列）
+    if (k === 'engine' && fitOrgan(m)) return;                           // 管風琴（魔法動力源）：零件表沒有第二座、不列
     var t0 = k === 'gun' ? (W[m.name] ? W[m.name].kind : modelKind(m)) : k;
     if (k === 'gun' && GUNS[t0] && GUNS[t0].weapon) return;              // 弩砲、投石機、弓、希臘火：這一段不換
     out.push({ id: String(m.meta.id), path: m.name, k: k, t0: t0, cls: k === 'gun' ? fitClass(m) : '' });

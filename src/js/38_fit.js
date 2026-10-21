@@ -20,7 +20,8 @@
 //   座標系：ax 兩個固定點定方向（沒有 ⇒ 照作品的方向，不轉）；at 對齊點（兩邊都有 ⇒ 三軸對齊那一點；沒有 ⇒ 外框底面中心）；槳照 meta side 分左右舷（不同邊 ⇒ 鏡射）。
 //   meta：零件的（種類的參數：槳手幾人、划幅、舵角上限、葉數、轉的參數…），掛點自己的留著（id、槳的 side／bank、fits、optional）；
 //   meta 裡的座標（舵的 hinge_*、轉軸 spin_pivot_*）照零件一起挪，方向（axis_*、spin_axis_*）照一起轉。
-//   ⛔ 不當掛點：帆桁（帆裝）、火藥桶（火藥庫的存量）、門與砲門蓋板（跟船殼開口綁死）、錨（第四段：先跟主機、鍋爐一起改成模型的規則）、導纜器、齒輪、爐灶。
+//   ⛔ 不當掛點：帆桁（帆裝）、火藥桶（火藥庫的存量）、門與砲門蓋板（跟船殼開口綁死）、導纜器、齒輪、爐灶；錨的關聯（憲法號、餘燼號、三叉戟號：載入時 76_anchor.js anchorParts 才拆成模型）。
+// 第四段（TASK-0793；Tim 2026-10-21「接上」）：已經是模型的錨（kind=anchor，17 艘）。
 var FIT_PARTS = (CFG.parts && CFG.parts.guns) || {};
 var FIT_KINDS = {
   oar: { ax: ['pivot', 'blade'], at: 'pivot', side: 'side', keep: ['side', 'bank'], name: '槳' },
@@ -34,7 +35,10 @@ var FIT_KINDS = {
   capstan: { name: '絞盤' },
   binnacle: { name: '羅經櫃' },
   grating: { opt: 1, name: '格柵' },
-  deco: { opt: 1, name: '裝飾' }
+  deco: { opt: 1, name: '裝飾' },
+  engine: { at: 'core', zb: 1, vox: 1, cy: 1, keep: ['propeller'], name: '主機' },   // 第四段（TASK-0793）：自帶格子的模型（規格表 vox=hull；見 fitHullVox）。主機中心 core 水平對齊、外框底對齊（坐在同一層地板上）；meta propeller（推哪一個螺旋槳）留掛點的
+  boiler: { zb: 1, vox: 1, cy: 1, keep: ['funnel'], name: '鍋爐' },   // 外框底面中心對齊（⛔ 照煙道口 uptake：前後兩組共用一個煙道口的船（蘇士奎哈納號）⇒ 換進後面那一格的跑到前面那一組身上）；cy：對齊點在中線哪一邊（離中線 3 格以上才算）跟掛點不同 ⇒ 照中線鏡射（一舷一座、另一舷鏡像的主機、鍋爐）   // 煙道口 uptake 水平對齊（接煙囪的那一點）、外框底對齊；meta funnel（通哪一根煙囪）留掛點的
+  anchor: { ax: ['fluke-a', 'fluke-b'], at: 'ring', keep: ['hawse'], name: '錨' }   // 第四段（TASK-0793）：已經是模型的錨。錨環 ring 對齊（鐵鍊綁、掛在吊錨木上的那一點：10_ship.js 腳、76_anchor.js 鍊子從這裡出來）；兩爪 fluke-a→b 定方向；meta hawse（錨鏈孔，船殼的座標）留掛點的
 };
 var FIT_KEEP = ['id', 'kind', 'fits', 'optional'];                     // 掛點自己的 meta（換了照樣留）
 var FIT_GEO_PT = ['hinge', 'spin_pivot'], FIT_GEO_VEC = ['axis', 'spin_axis'];   // meta 裡的座標（_x／_y／_z）：點、方向
@@ -104,12 +108,12 @@ function fitLoadPart(ref) {
   return (FIT_SRC[ref] = VK.loadEmbedded(H.el).then(meshPool).then(function (model) {
     var h = model.header, m = ((h.rig && h.rig.models) || []).filter(function (q) { return q.meta && String(q.meta.id) === mid; })[0];
     if (!m) return null;
-    return fitCopyPart(m, h.rig.meshes[m.mesh], H.name);
+    return fitCopyPart(m, h.rig.meshes[m.mesh], H.name, h.size[1] / 2);
   }).catch(function () { return null; }));
 }
 /** 一件零件抄一份（外框、固定點、meta 複製；網格照參照、換色的擺放照它的 mats）。 */
-function fitCopyPart(m, me, from) {
-  return { m: { name: m.name, origin: m.origin.slice(), bbox: m.bbox.slice(), points: JSON.parse(JSON.stringify(m.points || {})), meta: Object.assign({}, m.meta), deco: isDeco(m) }, mesh: { verts: me.verts, tris: me.tris, tmat: me.tmat, mats: m.mats || me.mats }, from: from };
+function fitCopyPart(m, me, from, cy) {
+  return { m: { name: m.name, origin: m.origin.slice(), bbox: m.bbox.slice(), points: JSON.parse(JSON.stringify(m.points || {})), meta: Object.assign({}, m.meta), deco: isDeco(m), vox: m.vox || null }, mesh: { verts: me.verts, tris: me.tris, tmat: me.tmat, mats: m.mats || me.mats }, from: from, cy: cy };
 }
 /** 換裝表裡要從別艘拿的零件先載好（loadHull 在 buildHull 之前呼叫）⇒ Promise<{ '<砲種>|<類別>': 零件 }>。 */
 function fitLoad(h, F, ship) {
@@ -118,7 +122,7 @@ function fitLoad(h, F, ship) {
     var m = models.filter(function (q) { return q.meta && String(q.meta.id) === sid; })[0], t = F[sid];
     if (!m) return;
     if (t.indexOf('#') > 0) {                                             // 第二段：零件表的參照
-      if (t.split('#')[0] === ship) { var q = models.filter(function (x) { return x.meta && String(x.meta.id) === t.slice(t.indexOf('#') + 1); })[0]; if (q) own[t] = fitCopyPart(q, h.rig.meshes[q.mesh], '這艘'); }
+      if (t.split('#')[0] === ship) { var q = models.filter(function (x) { return x.meta && String(x.meta.id) === t.slice(t.indexOf('#') + 1); })[0]; if (q) own[t] = fitCopyPart(q, h.rig.meshes[q.mesh], '這艘', h.size[1] / 2); }
       else need[t] = t;
       return;
     }
@@ -151,12 +155,16 @@ function fitApply(h, F, ext) {
     }
     var P = fitRefPart(h, t, ext); if (!P) return bad('零件表沒有 ' + t);
     if (fitKindOf(P.m) !== k) return bad(t + ' 是 ' + (fitKindOf(P.m) || '別的') + '，掛點是 ' + k + '（只換同一種）');
+    if (k === 'engine' && fitOrgan(m) !== fitOrgan(P.m)) return bad(fitOrgan(m) ? '管風琴（魔法動力源）不換成蒸汽主機' : t + ' 是管風琴（魔法動力源），不換進蒸汽主機的位置');
     var fits = m.meta.fits ? String(m.meta.fits).split(',').map(function (w) { return w.trim(); }) : null;
     var have = {}; Object.keys(m.points || {}).forEach(function (n) { if (P.m.points && P.m.points[n]) have[n] = 1; });
     var fs = fitFrameK(m, K, have), fp = fitFrameK(P.m, K, have);
     if (fits) { if (fits.indexOf(t) < 0) return bad('掛點 fits=' + m.meta.fits + ' 不收 ' + t); }
     else { var why = fitTooBig(fitDims(m, rig.meshes[m.mesh], fs), fitDims(P.m, P.mesh, fp)); if (why) return bad(why); }
     var sk = K.side, mir = !!(sk && m.meta[sk] && P.m.meta && P.m.meta[sk] && m.meta[sk] !== P.m.meta[sk]);
+    if (K.cy) { var ys = fitSideY(fs.a[1] - h.size[1] / 2), yp = fitSideY(fp.a[1] - (P.cy === undefined ? h.size[1] / 2 : P.cy)); mir = ys !== 0 && yp !== 0 && ys !== yp; }
+    if (K.vox) { if (!P.m.vox) return bad(t + ' 沒有自己的格子（rig.models[].vox；python -I admin.py metasync --id ' + t.split('#')[0] + '）'); if (!m.vox) return bad('掛點沒有自己的格子（換不掉：船殼裡那一塊不知道是哪幾格）'); }
+    if (K.vox) { (R.vox0 = R.vox0 || {})[sid] = { vox: m.vox, meta: m.meta, points: m.points, bbox: m.bbox }; m.vox = fitVoxMove(P.m.vox, fitXf(fp, fs, mir), mir); }   // 格子跟著挪（只有平移：這兩種不轉）；原本的留著 ⇒ fitHullVox 放不進船殼時換回來
     fitPlace(rig, m, P, fitXf(fp, fs, mir), mir, drop);
     var mt = {}; Object.keys(P.m.meta || {}).forEach(function (q) { mt[q] = P.m.meta[q]; });
     FIT_KEEP.concat(K.keep || []).forEach(function (q) { delete mt[q]; if (m.meta[q] !== undefined) mt[q] = m.meta[q]; });
@@ -234,6 +242,138 @@ function fitMetaGeo(mt, fp, fs, mir) {
     var cs = Math.cos(fs.th), ss = Math.sin(fs.th); put(k, [u * cs - w * ss, u * ss + w * cs, v[2]]);
   });
 }
+/** 主機是不是管風琴（魔法動力源，風暴角號；meta engine=organ）。 */
+function fitOrgan(m) { return !!(m.meta && m.meta.engine === 'organ'); }
+/** 換了主機 ⇒ 額外動力全速航速的倍率（31_sailing.js：cfg.base × 這個）：推力 ∝ 航速²、功率 ＝ 推力 × 航速 ∝ 航速³ ⇒ 倍率 ＝ ∛(換後每具主機 ihp 合計 ÷ 換前)。
+ *  沒換主機、或有一具沒寫 ihp（比不了）⇒ 1（T.fit.powWhy 寫原因）。 */
+function fitPowK(T) { return (T && T.fit && T.fit.powK) || 1; }
+/** 對齊點在中線哪一邊（離中線 3 格以內 ＝ 0）。 */
+function fitSideY(dy) { return Math.abs(dy) < 3 ? 0 : dy > 0 ? 1 : -1; }
+/** 自帶格子的模型的格子（rig.models[].vox ＝ { o 外框最小角, s 大小, runs, c 顏色 }）照 X 擺（X 只有平移、或平移＋y 鏡射（mir）：這兩種不轉）：
+ *  外框兩個角照 X 換過去取最小角；鏡射 ⇒ 每一格在外框裡 y 翻過來（顏色跟著那一格）。 */
+function fitVoxMove(v, X, mir) {
+  var a = X(v.o), b = X([v.o[0] + v.s[0], v.o[1] + v.s[1], v.o[2] + v.s[2]]), o = [0, 1, 2].map(function (k) { return Math.round(Math.min(a[k], b[k])); });
+  if (!mir) return { o: o, s: v.s.slice(), runs: v.runs, c: v.c };
+  var bin = atob(v.c), sx = v.s[0], sy = v.s[1], L = [], at = 0, n = 0, k, j;
+  for (k = 0; k + 1 < v.runs.length; k += 2) { var s0 = at + v.runs[k], c = v.runs[k + 1]; for (j = 0; j < c; j++) { var i = s0 + j, z = Math.floor(i / (sx * sy)), r = i - z * sx * sy, y = Math.floor(r / sx), x = r - y * sx; L.push([x + sx * ((sy - 1 - y) + sy * z), bin.charCodeAt(n++)]); } at = s0 + c; }
+  L.sort(function (p, q) { return p[0] - q[0]; });
+  var R = [], cs = '', e = 0; k = 0;
+  while (k < L.length) { j = k; while (j + 1 < L.length && L[j + 1][0] === L[j][0] + 1) j++; R.push(L[k][0] - e, j - k + 1); e = L[j][0] + 1; k = j + 1; }
+  for (k = 0; k < L.length; k++) cs += String.fromCharCode(L[k][1]);
+  return { o: o, s: v.s.slice(), runs: R, c: btoa(cs) };
+}
+// ── 自帶格子的模型放回船殼（TASK-0793；Tim 2026-10-21「主機、鍋爐要不要改成自帶格子的模型 ⇒ 改」） ──
+// 主機、鍋爐（規格表 vox=hull）以前是關聯：格子跟船殼攤平成一份，換不掉。改成外部模型（作品裡 work sub=model，跟關聯同一份子作品、同一個位置），
+//   admin.py 匯出時把來源作品的格子寫進 rig.models[].vox（同螺旋槳；鏡像照網格判）。
+// 載入時（buildHull「格子」那一步，checksum 對完、材質之前）把它的格子放回船殼：
+//   · 格子：照 vox 寫進 T.base（顏色照它；跟船殼重疊的格 ⇒ 換成它的，跟關聯攤平時後面那一條蓋前面一樣）；
+//   · 材質、平滑：檔頭的材質層 h.materials 與 render 層照模型 meta material、render 把這幾格改掉（沒寫 ⇒ 全船預設、沒有 render），
+//     材質名照字母排（跟 senate 匯出的一樣）⇒ 之後 05_material.js 照舊讀，鐵、鍋爐的硬度、重量、自動平滑都跟關聯一樣；
+//   · 動力件：補一條關聯進 h.parts（路徑、meta、固定點照模型，cellRuns 照放進去的格）⇒ 31_drive.js 照舊數剩幾成、泡沒泡水；
+//   · 模型本身從 rig.models 拿掉（網格不建）⇒ 不算模型的重量、不當模型被打飛。
+// ⇒ 沒換裝的船，格子、材質、平滑、動力件跟改成模型之前的關聯一樣（admin.py 對拍：同一艘改之前的 .vxk）。
+// 換裝（fitApply）：掛點的 vox 換成零件的（照對齊點平移）；放進去的格跟船殼重疊超過 FIT_VOX_OVL（不含原本那一件的格：那一塊已經空出來）⇒ 不換、照原本的（T.fit.bad）。
+var FIT_VOX_OVL = 0.03;
+var HULLV_KINDS = Object.keys(META_KINDS).filter(function (k) { return META_KINDS[k].vox === 'hull'; });
+/** 檔頭的一層段落（材質 h.materials、render h.render：{ ids, runs: [跟上一段結尾差幾, 長度, 索引（1 起）] }）改掉幾格 ⇒ 新的一層（不動原本那一份）。
+ *  E ＝ [線性編號, 名字（'' ＝ 拿掉）, …]（同一格後面的蓋前面的）。名字照字母排、索引 1 起；線性編號相連而且同一種的併成一段（跟 senate 匯出的一樣）。空的 ⇒ null。
+ *  ⛔ 不整層展開成 Map（光榮號 56 萬格 ⇒ 400 ms）：舊的段落照順序走一遍、跟排好的改動合併。 */
+function fitLayerEdit(Ly, E) {
+  var old = Ly && Ly.ids && Ly.runs ? Ly : { ids: [], runs: [] }, nm = old.ids.slice(), ix = {}, i, k;
+  nm.forEach(function (id, j) { ix[id] = j + 1; });
+  var n = E.length / 2, ord = new Int32Array(n);
+  for (i = 0; i < n; i++) { ord[i] = i; if (E[2 * i + 1] && !ix[E[2 * i + 1]]) { nm.push(E[2 * i + 1]); ix[E[2 * i + 1]] = nm.length; } }
+  ord.sort(function (a, b) { return E[2 * a] - E[2 * b] || a - b; });
+  var eL = [], eV = [];                                                    // 改動：照線性編號排好、同一格留最後那一筆
+  for (k = 0; k < n; k++) { var q = ord[k], li = E[2 * q], v = E[2 * q + 1] ? ix[E[2 * q + 1]] : 0; if (eL.length && eL[eL.length - 1] === li) eV[eV.length - 1] = v; else { eL.push(li); eV.push(v); } }
+  var srt = nm.slice().sort(), re = new Int32Array(nm.length + 1);       // 索引照字母重排
+  nm.forEach(function (id, j) { re[j + 1] = srt.indexOf(id) + 1; });
+  var R = [], end = -1, cur = 0, st = 0, at = 0, e = 0;
+  function put(a, b, v) {                                                  // [a, b) 這幾格 ＝ v（照線性編號遞增送進來；接得上、同一種 ⇒ 併成一段）
+    if (!v || b <= a) return;
+    if (cur === v && end === a) { end = b; return; }
+    if (cur) { R.push(st - at, end - st, cur); at = end; }
+    cur = v; st = a; end = b;
+  }
+  var OR = old.runs, oat = 0;
+  for (k = 0; k + 2 < OR.length; k += 3) {
+    var s0 = oat + OR[k], s1 = s0 + OR[k + 1], v0 = re[OR[k + 2]], x = s0; oat = s1;
+    while (e < eL.length && eL[e] < s0) { put(eL[e], eL[e] + 1, re[eV[e]]); e++; }
+    while (e < eL.length && eL[e] < s1) { put(x, eL[e], v0); put(eL[e], eL[e] + 1, re[eV[e]]); x = eL[e] + 1; e++; }
+    put(x, s1, v0);
+  }
+  while (e < eL.length) { put(eL[e], eL[e] + 1, re[eV[e]]); e++; }
+  if (cur) R.push(st - at, end - st, cur);
+  if (!R.length) return null;
+  var used = {}; for (k = 2; k < R.length; k += 3) used[R[k]] = 1;
+  var ids = srt.filter(function (_, j) { return used[j + 1]; }), sq = {}; srt.forEach(function (id, j) { sq[j + 1] = ids.indexOf(id) + 1; });
+  for (k = 2; k < R.length; k += 3) R[k] = sq[R[k]];
+  return { ids: ids, runs: R };
+}
+/** 一件的 vox ⇒ [線性編號, 顏色, …]（在船的格子外的不收）。 */
+function fitVoxCells(v, size) {
+  var bin = atob(v.c), out = [], at = 0, n = 0, sx = v.s[0], sy = v.s[1];
+  for (var k = 0; k + 1 < v.runs.length; k += 2) {
+    var s0 = at + v.runs[k], c = v.runs[k + 1];
+    for (var j = 0; j < c; j++) {
+      var i = s0 + j, z = Math.floor(i / (sx * sy)), r = i - z * sx * sy, y = Math.floor(r / sx), x = r - y * sx;
+      x += v.o[0]; y += v.o[1]; z += v.o[2];
+      var col = bin.charCodeAt(n++);
+      if (x >= 0 && y >= 0 && z >= 0 && x < size[0] && y < size[1] && z < size[2]) out.push(x + size[0] * (y + size[1] * z), col);
+    }
+    at = s0 + c;
+  }
+  return out;
+}
+/** 放回船殼（buildHull 「格子」那一步，VK.verify 之後、hullMaterials 之前）。T.hullVox ＝ [{ path, kind, n 格, ovl 跟船殼重疊幾格 }]。 */
+function fitHullVox(T) {
+  var h = T.h, rig = T.rig, L = (rig.models || []).filter(function (m) { return m.meta && HULLV_KINDS.indexOf(m.meta.kind) >= 0 && m.vox; });
+  T.hullVox = []; if (!L.length) return;
+  var G = T.base, sz = h.size, sxy = sz[0] * sz[1], MA = [], RE = [], V0 = T.fit && T.fit.vox0 || {};
+  function xyz(li) { var z = Math.floor(li / sxy), r = li - z * sxy, y = Math.floor(r / sz[0]); return [r - y * sz[0], y, z]; }
+  var C = L.map(function (m) { return fitVoxCells(m.vox, sz); });
+  L.forEach(function (m, k) {                                             // 換了裝的：先看放不放得進去（重疊太多 ⇒ 換回原本的）：船殼 ＋ 別的主機、鍋爐（照它們現在的格；換回去的照換回去之後的）
+    var sid = String(m.meta.id), o = V0[sid]; if (!o) return;
+    var own = new Set(); fitVoxCells(o.vox, sz).forEach(function (v, i) { if (!(i & 1)) own.add(v); });
+    var oth = new Set(); C.forEach(function (A2, k2) { if (k2 !== k) for (var j = 0; j < A2.length; j += 2) oth.add(A2[j]); });
+    var A = C[k], ov = 0; for (var i = 0; i < A.length; i += 2) { var p = xyz(A[i]); if (oth.has(A[i]) || G.get(p[0], p[1], p[2]) && !own.has(A[i])) ov++; }
+    if (ov <= FIT_VOX_OVL * A.length / 2) return;
+    var d = T.fit.done.filter(function (q) { return q.slot === sid; })[0];
+    T.fit.done = T.fit.done.filter(function (q) { return q !== d; });
+    T.fit.bad.push({ slot: sid, path: m.name, to: d ? d.to : '', why: '放不進船殼：' + ov + '／' + A.length / 2 + ' 格跟船殼重疊（容許 ' + Math.round(FIT_VOX_OVL * 100) + '%）' });
+    m.vox = o.vox; m.meta = o.meta; m.points = o.points; m.bbox = o.bbox; C[k] = fitVoxCells(o.vox, sz);
+  });
+  var parts = h.parts = h.parts || [], skip = T.meshSkip = T.meshSkip || {}, used = {};
+  L.forEach(function (m, k) {
+    var A = C[k], mat = m.meta.material ? String(m.meta.material) : '', rd = m.meta.render ? String(m.meta.render) : '', idx = [], ov = 0, lo = [1e9, 1e9, 1e9], hi = [-1, -1, -1];
+    for (var i = 0; i < A.length; i += 2) {
+      var li = A[i], p = xyz(li);
+      if (G.get(p[0], p[1], p[2])) ov++;
+      G.set(p[0], p[1], p[2], A[i + 1] || 1);
+      MA.push(li, mat); RE.push(li, rd);
+      idx.push(li); for (var a = 0; a < 3; a++) { if (p[a] < lo[a]) lo[a] = p[a]; if (p[a] > hi[a]) hi[a] = p[a]; }
+    }
+    idx.sort(function (a, b) { return a - b; });
+    var runs = [], at = 0, j0 = 0;
+    while (j0 < idx.length) { var j1 = j0; while (j1 + 1 < idx.length && idx[j1 + 1] === idx[j1] + 1) j1++; runs.push(idx[j0] - at, j1 - j0 + 1); at = idx[j1] + 1; j0 = j1 + 1; }
+    var q = { path: m.name, src: m.name, box: idx.length ? lo.concat(hi) : [0, 0, 0, 0, 0, 0], meta: m.meta, points: m.points || {}, cellRuns: runs, hullVox: true };
+    parts.push(q);
+    if (T.ids && m.meta.id && T.ids.by[String(m.meta.id)] && T.ids.by[String(m.meta.id)].q === m) T.ids.by[String(m.meta.id)] = { what: 'link', q: q, path: m.name };
+    T.hullVox.push({ path: m.name, kind: m.meta.kind, n: idx.length, ovl: ov });
+  });
+  rig.models = rig.models.filter(function (m) { return L.indexOf(m) < 0; });
+  T.hullVoxM = L;                                                         // 放回船殼的模型（配置頁的掛點照它列：72_fitui.js fitSlots）
+  var E = L.filter(function (m) { return m.meta.kind === 'engine'; }), sw = E.some(function (m) { return V0[String(m.meta.id)]; });
+  if (sw && T.fit) {
+    var a0 = 0, a1 = 0, miss = [];
+    E.forEach(function (m) { var o = V0[String(m.meta.id)], i1 = +m.meta.ihp, i0 = o ? +o.meta.ihp : i1; if (!(i0 > 0 && i1 > 0)) miss.push(m.name); a0 += i0; a1 += i1; });
+    if (miss.length) T.fit.powWhy = '主機的馬力比不了（' + miss.join('、') + ' 沒寫 ihp）⇒ 航速照原本';
+    else { T.fit.powK = Math.cbrt(a1 / a0); T.fit.pow = [a0, a1]; }
+  }
+  rig.models.forEach(function (m) { used[m.mesh] = 1; }); (T.decos || []).forEach(function (m) { used[m.mesh] = 1; });
+  L.forEach(function (m) { if (!used[m.mesh]) skip[m.mesh] = 1; });     // 網格不建（同裝飾拆掉之後沒人用的）
+  h.materials = fitLayerEdit(h.materials, MA); h.render = fitLayerEdit(h.render, RE);
+}
 /** 零件表那一件（'<船 id>#<模型 id>'）⇒ fitLoad 先載好的（ext[ref]）。 */
 function fitRefPart(h, ref, ext) { return (ext || {})[ref] || null; }
 /** 掛點是哪一種（砲 ＝ 'gun'；FIT_KINDS 的鍵；不能換 ⇒ ''）。零件抄來的那一份 m.deco 已經算好。 */
@@ -247,7 +387,7 @@ function fitKindOf(m) {
 function fitFrameK(m, K, have) {
   var P = m.points || {}, b = m.bbox, th = 0;
   if (K.ax && have[K.ax[0]] && have[K.ax[1]]) { var p0 = P[K.ax[0]], p1 = P[K.ax[1]]; th = Math.atan2(p1[1] - p0[1], p1[0] - p0[0]); }
-  if (K.at && have[K.at]) return { a: P[K.at], z: P[K.at][2], th: th, sd: 0 };
+  if (K.at && have[K.at]) return { a: P[K.at], z: K.zb ? b[2] : P[K.at][2], th: th, sd: 0 };
   return { a: [(b[0] + b[3]) / 2, (b[1] + b[4]) / 2], z: b[2], th: th, sd: 0 };
 }
 function fitClsName(c) { return c === 'carriage' ? '舷側砲架' : c === 'pivot' ? '迴旋砲架' : c === 'turret' ? '旋轉砲座' : c; }
