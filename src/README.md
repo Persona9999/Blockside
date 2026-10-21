@@ -3,6 +3,7 @@
 > 📦 2026-10-15（TASK-0586）從 ArtGallery 的 `HtmlGames/_build/ame_constitution_broadside/` 搬來（只複製檔案；之前的歷史在 ArtGallery 的 `git log -- HtmlGames/_build/ame_constitution_broadside`，114 筆）。
 > 開發用 Blocksail 的 `external/Blockside`（submodule，checkout 在 `dev` 分支；Tim 2026-10-20「之後我希望Blockside開發直接在Blocksail的submodule內開發(確保同步)」）—— Valhalla 裡的 `Blockside/` 不再開發（會落後），流程見根目錄 README「分支與發版」。目錄：`src/`（這裡）、`VoxelKit/`（從 ArtGallery/VoxelKit 853b4e7 複製；`_cache/` 不入版控）、根目錄的成品 `index.html` ＋ `ships/`（拆檔：每艘船一個檔，見下面「建置」；GitHub Pages 首頁）、`admin.html`（設定後台）、`admin.cmd`、`sandbox.html`（2D 指揮官沙盒）、`fleetlab.html`（擬真沙盒的入口，轉到 index.html?lab=fleet）。
 > ⚠ repo 變肥（成品每一版都進版控，壓縮過的船 git 存不了差異；5 天 154 MiB）：原因、量法、做了什麼見 [`REPO_SIZE.md`](REPO_SIZE.md)（2026-10-20：拆檔＋船檔分段已做，見 §0）。
+> 🛠 render 管線大修（2026-10-21 起，進行中：S1–S4、R0–R2 已合進 dev，一次畫多個從 S5 起）：做到哪、量到什麼、剩下的步驟、怎麼接著做見 [`RENDER_PLAN.md`](RENDER_PLAN.md)；量測工具 `tests/render_lab/`。
 
 根目錄的 `index.html` 是由這裡的 `template.html`、`js/`、`config/game.json`，加上 `../VoxelKit/` 產生的：
 
@@ -17,6 +18,7 @@
 | `decks.py` | 量甲板的 meta（TASK-0572）：每一層甲板子作品單獨匯出 .vxk ⇒ 舷弧折線與厚度 ⇒ 印出要標在甲板關聯上的 meta（TSV，`work sub=meta file=` 直接用）。只讀 |
 | `ropecheck.py` | 繩的檢查（Tim 2026-10-14：破壞後浮空的纜線）：跑很多局無頭 Chrome（成品 `?demo=<秒>&dump=1&ropecheck=1`），每半秒記第一次浮空的繩（哪一端、原因），彙整成報告（作品本身每一端靠什麼、端點離錨 > 2 格的；打起來照原因分的浮空清單）。判斷在 `js/10_ship.js` ropesFloating；遊戲裡浮空的繩在 survey 就斷（`js/32_hull.js`）⇒ 報告應該是 0。只讀。開局另有**固定檢查**（`js/10_ship.js` `ropeFixCheck`／`ropeFixApply`；Tim 2026-10-16：「確保纜繩至少要有一端固定到帆或其他固定點(不能綁定在空中)」「不符合的直接再生成時排除 且匯入時要有錯誤報告」）：每條繩至少一端固定 —— 端點 0.15 m 內貼著實心格（量到格的表面）、在帆角、帆桁、碰到模型外框，或掛在一條合格的繩上（一路傳）；兩端都不固定 ⇒ 不生成（`r.unfixed`），別的繩與帆不再靠它（不連帶斷），匯入檢查每條報 ✗（兩端離最近的實心格多遠）。2026-10-16 量：12 艘 0 條 |
 | `tests/crew_log.py`＋`tests/crew_log_view.html` | 測試模式的船員記錄（Tim 2026-10-17：「加測試模式&專屬資訊Log 可以知道水手移動路徑等資訊(記錄一整局) 之後也可以用來排查其他Bug」）：無頭 Chrome 跑成品 `?demo=<秒>&dump=1&test=1&<q>` 讀 `#crewlog`（或 `--files` 讀遊戲裡匯出的 JSON），印摘要（走路穿過砲塔那一圈的每一筆＋那人前一次變了什麼、碰進船殼的照位置歸堆），寫 `reports/crew_log/<tag>/index.html`（不入版控）：俯看一層甲板的走路格、砲塔那一圈、每個人的路徑（時間滑桿），點一個人看他整局的事件。`--fail-on-wall` ⇒ 有人走路穿過砲塔那一圈就 exit 1。`crew_log_view.html` 直接開也行（選匯出的 JSON）。例：`python -I -X utf8 src/tests/crew_log.py --q "ship=sentinel,virginia&seed=3" --secs 300 --tag s3` |
+| `tests/render_lab/` | 畫面改動的量測與對拍（render 管線大修，2026-10-21）：無頭 Chrome 開成品，同一個種子與鏡頭量無 MSAA 截圖（逐位元組）、戰局與帆繩物理雜湊、每格 draw call／GL 呼叫／上傳量、時間；`smoke`、`playtest.py` 確認各頁面與實際玩一輪沒有新的錯。說明見那一夾的 README.md |
 | `tune.py` | 艦隊指揮官 AI 的自動調參（TASK-0687）：開 N 個無頭 Chrome（`file:///` 開成品的擬真沙盒），用 Chrome 的除錯協定（CDP，自己寫的最小 WebSocket，不加依賴）塞工作、讀結果；`bench`（基準對基準：每小時幾場、雜訊）／`run`（CMA-ES 找參數）／`check`（留出的種子驗）。見下面「自動調參」 |
 | `admin.py` | 設定檔的唯一寫入端：驗設定、改寫船標籤、建置、匯入新船、重新匯入、只同步 meta 與固定點（`metasync`：格子不動）；`serve` 開設定後台（根目錄的 `admin.html`）；`cache` 從雕刻作品重新匯出 `.vxk`、跟指紋比 |
 | `js/` | 遊戲本體，照功能分檔（下表）；建置時接成同一個閉包 |
