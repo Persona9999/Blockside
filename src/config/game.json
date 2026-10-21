@@ -45,6 +45,10 @@
     "dmg305k": [10, 1000, 760],
     "dmg150k": [10, 300, 250],
     "dmgh37": [5, 300, 15],
+    "dmg320c": [10, 1200, 920],
+    "dmg120a": [10, 300, 160],
+    "dmgh57": [5, 300, 40],
+    "dmgh47": [5, 300, 30],
     "box": [1, 8, 2],
     "carry": [1, 6, 1],
     "wind": [0.25, 3, 1],
@@ -412,6 +416,55 @@
       "shot": 0.5,
       "burst": 5,
       "burstGap": 0.6
+    },
+    "canet320": {
+      "code": "320c",
+      "name": "32 cm Canet L/38 後膛砲（1890 年式；松島號艦尾露砲台）",
+      "short": "32 cm Canet",
+      "V": 290,
+      "reload": 4.0,
+      "big": true,
+      "hole": 2.2,
+      "crew": 8,
+      "min": 5,
+      "mass": 66, "shot": 450,
+      "hpK": 1
+    },
+    "armstrong120": {
+      "code": "120a",
+      "name": "12 cm Armstrong L/40 速射砲（松島號砲列）",
+      "short": "12 cm 速射砲",
+      "V": 275,
+      "reload": 0.5,
+      "big": false,
+      "hole": 1.0,
+      "crew": 6,
+      "min": 3,
+      "mass": 2.1, "shot": 20.4
+    },
+    "hotch57": {
+      "code": "h57",
+      "name": "57 mm 哈乞開斯 6 磅速射砲",
+      "short": "57 mm 速射砲",
+      "V": 235,
+      "reload": 0.35,
+      "big": false,
+      "hole": 0.55,
+      "crew": 3,
+      "min": 2,
+      "mass": 0.37, "shot": 2.72
+    },
+    "hotch47": {
+      "code": "h47",
+      "name": "47 mm 哈乞開斯 3 磅速射砲",
+      "short": "47 mm 速射砲",
+      "V": 230,
+      "reload": 0.3,
+      "big": false,
+      "hole": 0.45,
+      "crew": 2,
+      "min": 1,
+      "mass": 0.24, "shot": 1.5
     },
     "brooke64": {
       "code": "64b",
@@ -1144,6 +1197,39 @@
         "turret": 5,
         "wheel": 2
       }
+    },
+    {
+      "id": "matsushima",
+      "el": "ship-matsushima",
+      "name": "松島號",
+      "vxk": "matsushima.vxk",
+      "work": "ridge-001-matsushima-01m-assembly",
+      "author": "ridge-001",
+      "drive": "steam",
+      "cfg": {"pump": 32, "base": 15, "agile": 0.7},
+      "geo": {"spar": [136, 175], "marines": [394, 117], "center": 120, "aim": 92, "aimZ": [45, 350], "deckAim": [85, 140], "rigAim": [170, 350]},
+      "crew": {"top": 0, "marines": 8},
+      "names": ["松島號"],
+      "idNext": {
+        "anchor": 3,
+        "binnacle": 2,
+        "boat": 5,
+        "boiler": 3,
+        "deck": 7,
+        "engine": 3,
+        "funnel": 2,
+        "gun": 28,
+        "ladders": 2,
+        "magazine": 3,
+        "part": 12,
+        "powder": 33,
+        "propeller": 3,
+        "rudder": 2,
+        "shaft": 3,
+        "ship": 2,
+        "turret": 2,
+        "wheel": 2
+      }
     }
   ],
   "furniture": {
@@ -1255,15 +1341,19 @@
   },
   "parts": {
     "guns": {
+      "armstrong120": {"carriage": "matsushima#gun-1"},
       "bombardella": {"carriage": "fusta#gun-6"},
       "brooke64": {"carriage": "virginia#gun-4"},
       "brooke7": {"pivot": "virginia#gun-9"},
+      "canet320": {"carriage": "matsushima#gun-27"},
       "carr": {"carriage": "constitution#gun-31"},
       "chase": {"carriage": "constitution#gun-1"},
       "chase3": {"carriage": "stormkaap#gun-41"},
       "dahl11": {"carriage": "monitor#gun-1", "pivot": "susquehanna#gun-7"},
       "dahl9": {"carriage": "virginia#gun-1"},
       "hotch37": {"turret": "dingyuan#gun-1"},
+      "hotch47": {"turret": "matsushima#gun-17"},
+      "hotch57": {"carriage": "matsushima#gun-13", "turret": "matsushima#gun-19"},
       "krupp150": {"carriage": "dingyuan#gun-13"},
       "krupp305": {"carriage": "dingyuan#gun-9"},
       "long": {"carriage": "constitution#gun-2"},
@@ -1331,7 +1421,8 @@
       "punt#rudder-1": "蓬特號・rudder-S",
       "punt#rudder-2": "蓬特號・rudder-P",
       "fusta#rudder-1": "越嶺號・舵",
-      "dingyuan#rudder-1": "定遠號・舵"
+      "dingyuan#rudder-1": "定遠號・舵",
+      "matsushima#rudder-1": "松島號・舵"
     },
     "propeller": {
       "virginia#propeller-1": "維吉尼亞號・螺旋槳",
@@ -1341,7 +1432,9 @@
       "susquehanna#propeller-1": "蘇士奎哈納號・明輪-S",
       "susquehanna#propeller-2": "蘇士奎哈納號・明輪-P",
       "dingyuan#propeller-1": "定遠號・螺旋槳-S",
-      "dingyuan#propeller-2": "定遠號・螺旋槳-P"
+      "dingyuan#propeller-2": "定遠號・螺旋槳-P",
+      "matsushima#propeller-1": "松島號・螺旋槳-S",
+      "matsushima#propeller-2": "松島號・螺旋槳-P"
     },
     "wheel": {
       "constitution#wheel-1": "憲法號・wheel",
