@@ -22,6 +22,7 @@ function shipCheck(id) {
     var info = hullInfo(id) || HULL_KNOWN.filter(function (h) { return h.id === id; })[0];
     if (!info) { add('error', '船型', id, '設定檔 ships 沒有這一型', 'admin.py import'); done(); return; }
     FLEET_DBG = [{ team: 'blue', hull: id }, { team: 'red', hull: 'constitution' }]; flowMode('eve'); DIST = LIM_DIST[1];
+    WIND_FIX = { rot: 0, s0: 1 };                                        // 風固定（08_weather.js windInit；陣風照種子）：⛔ 沒固定 ⇒ Math.random() ⇒ 兩艘兩秒後的位置每次不同、迴旋砲的轉角跟著變，「送藥最遠」那一欄偶爾差 0.1 m（2026-10-21 量的）
     reset(); flowRun(true);
     var sh = SHIPS[0], T = sh.T, NV = sh.nav;
     // ── 開場那一刻（還沒跑）──
@@ -79,9 +80,9 @@ function shipCheck(id) {
     R.info.ids = Object.keys(IX.by).length + ' 件有 id' + (IX.none ? '、' + IX.none + ' 件沒有' : '');
     var RG = sh.ropes.filter(function (r) { return r.guess; });            // 繩端照外框猜綁到模型上（10_ship.js linkRopes：作品的 ends 沒寫綁哪個模型才猜）
     if (RG.length) add('warn', '物件 id', RG.slice(0, 3).map(function (r) { return r.name; }).join('、') + (RG.length > 3 ? ' 等 ' + RG.length + ' 條' : ''), '繩端是照位置猜綁到模型上的（作品沒寫綁哪個模型）⇒ 模型一換、一搬就可能綁錯', '雕刻端把繩端綁到模型的固定點（ends 寫 model:<模型>/<固定點>）');
-    // ── 換裝（TASK-0714；38_fit.js）：出廠的換裝表 ships[].fit 換不成的那幾門（掛點沒有、類別不合、放不下、零件表沒有）⇒ 照原本雕的那一門 ──
-    ((T.fit && T.fit.bad) || []).forEach(function (b) { add('error', '換裝', b.slot + (b.path ? '（' + b.path + '）' : ''), '換成 ' + (GUNS[b.to] ? GUNS[b.to].name : b.to) + ' 沒換成：' + b.why + ' ⇒ 照原本雕的那一門', '改 config ships[].fit，或掛點 meta fits=；零件表 python -I admin.py parts'); });
-    if (T.fit && T.fit.done.length) R.info.fit = T.fit.done.map(function (d) { return d.slot + ' ' + d.from + '→' + d.to + '（零件：' + d.src + (d.mirror ? '、鏡射' : '') + '）'; }).join('、') + (T.fit.ropesDropped ? '；拿掉 ' + T.fit.ropesDropped + ' 條綁在零件沒有的固定點上的繩' : '');
+    // ── 換裝（TASK-0713／0714；38_fit.js）：出廠的換裝表 ships[].fit 換不成的那幾件（掛點沒有、類別不合、放不下、零件表沒有、不能拆空）⇒ 照原本雕的那一件 ──
+    ((T.fit && T.fit.bad) || []).forEach(function (b) { add('error', '換裝', b.slot + (b.path ? '（' + b.path + '）' : ''), '換成 ' + fitValName(b.to) + ' 沒換成：' + b.why + ' ⇒ 照原本雕的那一件', '改 config ships[].fit，或掛點 meta fits=；零件表 python -I admin.py parts'); });
+    if (T.fit && (T.fit.done.length || (T.fit.gone || []).length)) R.info.fit = T.fit.done.map(function (d) { return d.slot + ' ' + d.from + '→' + fitValName(d.to) + '（零件：' + d.src + (d.mirror ? '、鏡射' : '') + '）'; }).concat((T.fit.gone || []).map(function (g) { return g.slot + ' 拆掉'; })).join('、') + (T.fit.ropesDropped ? '；拿掉 ' + T.fit.ropesDropped + ' 條綁在零件沒有的固定點上的繩' : '');
     // ── 裝飾（TASK-0682；05_hull.js decoSplit）：模型 meta deco=1 ⇒ 載入時從 rig.models 拿掉（照樣載、畫質「裝飾」開著才畫）—— 不算重量、不被打；規格表標 deco 的 kind（砲門蓋板 portlid）本身就是裝飾 ⇒ 不報 ──
     (T.decos || []).forEach(function (m) { var k = m.meta && m.meta.kind; if (k && !kindProp(k, 'deco')) add('warn', '裝飾', m.name, '標了 deco 又有 kind=' + k + ' ⇒ 只是畫面、不進模擬，那個功能在遊戲裡就沒了', '有功能的模型不標 deco（造船規格 §9.9）'); });
     (T.h.parts || []).forEach(function (q) { if (isDeco(q)) add('warn', '裝飾', q.path, '關聯標了 deco ⇒ 遊戲不拿掉（格子是船的一部分：重量、命中照算）；只有外部模型能隱藏', '做成外部模型再標 deco（造船規格 §9.9）'); });

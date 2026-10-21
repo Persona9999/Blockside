@@ -15,19 +15,42 @@
 // 繩：兩端寫明 model:<掛點路徑>/<固定點> 的那一端，照同名固定點的位移挪過去（整條照離那一端的長度遞減：那一端移滿、另一端不動）；零件沒有那個固定點 ⇒ 那條繩拿掉（carronade 沒有 train ⇒ 沒有後拉滑車）。
 // 換裝表從哪來（fitOf）：出廠 ships[].fit ⊕ 玩家的 SHIP_FIT[船型]（存檔、匯出入跟船員配置一起；69_prefs.js）；
 //   艦隊裡寫 `<船型>@<掛點>=<砲種>;<掛點>=<砲種>`（網址 ?blue=constitution@gun-2=carr）⇒ 出廠 ⊕ 這一份（不看玩家存檔）⇒ 同一型兩艘可以換得不一樣：船型照「型＋換裝表」各建一份（HULLT 的鍵 ＝ 那一串）。
+// 第二段（TASK-0713；本來就是模型的零件）：槳、舵、螺旋槳、舵輪、燈、提燈、小艇、絞盤、羅經櫃、舵輪架、格柵、裝飾 —— 掛點的種類 FIT_KINDS（照 meta kind；裝飾 ＝ 沒有 kind、標了 deco）。
+//   值 ＝ 零件表那一件 '<船 id>#<模型 id>'（config parts.<kind> ＝ { 參照: 名字 }，admin.py parts 產生；同一種 kind 才收）；'*' ＝ 原本雕的；'' ＝ 拆空（燈、提燈、小艇、格柵、裝飾，或掛點 meta optional=1）。
+//   座標系：ax 兩個固定點定方向（沒有 ⇒ 照作品的方向，不轉）；at 對齊點（兩邊都有 ⇒ 三軸對齊那一點；沒有 ⇒ 外框底面中心）；槳照 meta side 分左右舷（不同邊 ⇒ 鏡射）。
+//   meta：零件的（種類的參數：槳手幾人、划幅、舵角上限、葉數、轉的參數…），掛點自己的留著（id、槳的 side／bank、fits、optional）；
+//   meta 裡的座標（舵的 hinge_*、轉軸 spin_pivot_*）照零件一起挪，方向（axis_*、spin_axis_*）照一起轉。
+//   ⛔ 不當掛點：帆桁（帆裝）、火藥桶（火藥庫的存量）、門與砲門蓋板（跟船殼開口綁死）、錨（第四段：先跟主機、鍋爐一起改成模型的規則）、導纜器、齒輪、爐灶。
 var FIT_PARTS = (CFG.parts && CFG.parts.guns) || {};
+var FIT_KINDS = {
+  oar: { ax: ['pivot', 'blade'], at: 'pivot', side: 'side', keep: ['side', 'bank'], name: '槳' },
+  rudder: { at: 'stock-top', name: '舵' },
+  propeller: { at: 'hub', name: '螺旋槳' },
+  wheel: { ax: ['hub-aft', 'hub-fore'], at: 'hub-aft', name: '舵輪' },
+  wheel_stand: { name: '舵輪架' },
+  light: { at: 'bail', opt: 1, name: '燈' },
+  lantern: { opt: 1, name: '提燈' },
+  boat: { ax: ['ring-aft', 'ring-fwd'], opt: 1, name: '小艇' },
+  capstan: { name: '絞盤' },
+  binnacle: { name: '羅經櫃' },
+  grating: { opt: 1, name: '格柵' },
+  deco: { opt: 1, name: '裝飾' }
+};
+var FIT_KEEP = ['id', 'kind', 'fits', 'optional'];                     // 掛點自己的 meta（換了照樣留）
+var FIT_GEO_PT = ['hinge', 'spin_pivot'], FIT_GEO_VEC = ['axis', 'spin_axis'];   // meta 裡的座標（_x／_y／_z）：點、方向
 var FIT_TOL = 0.15, FIT_PAD = 2;                                         // 放得下：長寬高 ≤ 掛點的 ×1.15 ＋ 2 格
 var SHIP_FIT = {};                                                       // 玩家的換裝表：船型 ⇒ { 掛點 id: 砲種 }（跟出廠的不一樣的那幾格；值 ＝ 原本雕的那一種 ⇒ 換回原樣）
 var FIT_SRC = {};                                                        // 零件來源：'<船 id>#<模型 id>' ⇒ Promise<零件|null>（同一門只載一次）
 /** 艦隊裡的一項（船型、或 船型@換裝表）⇒ 船型 id。 */
 function hullBase(key) { key = String(key); var i = key.indexOf('@'); return i < 0 ? key : key.slice(0, i); }
-/** 'gun-2=carr;gun-3=long32' ⇒ { 'gun-2': 'carr', … }（寫法不對的那一格不收）。
+/** 'gun-2=carr;oar-3=dromon#oar-7;light-1=' ⇒ { 'gun-2': 'carr', … }（寫法不對的那一格不收）。
  *  砲種認不認得、能不能換 ⇒ 留給 fitApply 判、照實報（⛔ 在這裡就丟掉 ⇒ 寫錯一個字什麼都看不到）。 */
 function fitParse(s) {
   var F = {};
-  String(s || '').split(';').forEach(function (w) { var i = w.indexOf('='), k = w.slice(0, i), t = w.slice(i + 1); if (i > 0 && ID_RX.test(k) && /^[a-z][a-z0-9_]*$/.test(t)) F[k] = t; });
+  String(s || '').split(';').forEach(function (w) { var i = w.indexOf('='), k = w.slice(0, i), t = w.slice(i + 1); if (i > 0 && ID_RX.test(k) && FIT_VAL_RX.test(t)) F[k] = t; });
   return F;
 }
+var FIT_VAL_RX = /^(?:[a-z][a-z0-9_]*(?:#[a-z0-9_.\/-]+)?|\*|)$/;          // 砲種、'<船 id>#<模型 id>'、'*'（原本）、''（拆空）
 /** 換裝表 ⇒ 一串（照掛點排；空的 ⇒ ''）。 */
 function fitSpec(F) { return Object.keys(F || {}).sort().map(function (k) { return k + '=' + F[k]; }).join(';'); }
 /** 這一項（船型或 船型@換裝表）實際用的換裝表：出廠 ⊕（玩家存檔｜寫在項目裡的那一份）。 */
@@ -81,75 +104,151 @@ function fitLoadPart(ref) {
   return (FIT_SRC[ref] = VK.loadEmbedded(H.el).then(meshPool).then(function (model) {
     var h = model.header, m = ((h.rig && h.rig.models) || []).filter(function (q) { return q.meta && String(q.meta.id) === mid; })[0];
     if (!m) return null;
-    var me = h.rig.meshes[m.mesh];
-    return { m: { name: m.name, origin: m.origin, bbox: m.bbox, points: m.points, meta: m.meta }, mesh: { verts: me.verts, tris: me.tris, tmat: me.tmat, mats: m.mats || me.mats }, from: H.name };
+    return fitCopyPart(m, h.rig.meshes[m.mesh], H.name);
   }).catch(function () { return null; }));
 }
+/** 一件零件抄一份（外框、固定點、meta 複製；網格照參照、換色的擺放照它的 mats）。 */
+function fitCopyPart(m, me, from) {
+  return { m: { name: m.name, origin: m.origin.slice(), bbox: m.bbox.slice(), points: JSON.parse(JSON.stringify(m.points || {})), meta: Object.assign({}, m.meta), deco: isDeco(m) }, mesh: { verts: me.verts, tris: me.tris, tmat: me.tmat, mats: m.mats || me.mats }, from: from };
+}
 /** 換裝表裡要從別艘拿的零件先載好（loadHull 在 buildHull 之前呼叫）⇒ Promise<{ '<砲種>|<類別>': 零件 }>。 */
-function fitLoad(h, F) {
-  var need = {}, models = (h.rig && h.rig.models) || [];
+function fitLoad(h, F, ship) {
+  var need = {}, models = (h.rig && h.rig.models) || [], own = {};
   Object.keys(F).forEach(function (sid) {
     var m = models.filter(function (q) { return q.meta && String(q.meta.id) === sid; })[0], t = F[sid];
-    if (!m || modelKind(m) === t) return;
+    if (!m) return;
+    if (t.indexOf('#') > 0) {                                             // 第二段：零件表的參照
+      if (t.split('#')[0] === ship) { var q = models.filter(function (x) { return x.meta && String(x.meta.id) === t.slice(t.indexOf('#') + 1); })[0]; if (q) own[t] = fitCopyPart(q, h.rig.meshes[q.mesh], '這艘'); }
+      else need[t] = t;
+      return;
+    }
+    if (fitKindOf(m) !== 'gun' || modelKind(m) === t) return;
     var cls = fitClass(m), k = t + '|' + cls;
     if (need[k] !== undefined || fitOwnPart(h, t, cls)) return;
     need[k] = (FIT_PARTS[t] || {})[cls] || '';
   });
-  var keys = Object.keys(need), out = {};
+  var keys = Object.keys(need), out = own;
   return Promise.all(keys.map(function (k) { return need[k] ? fitLoadPart(need[k]) : Promise.resolve(null); })).then(function (L) { keys.forEach(function (k, i) { if (L[i]) out[k] = L[i]; }); return out; });
 }
 /** 換裝（buildHull 一開頭，modelMats 之後、拆裝飾之前）：h 是這一份船型自己解出來的檔頭（改了不會影響別份）。
- *  回 { spec, done: [{ slot, path, from, to, src }], bad: [{ slot, path, to, why }] }；F 是空的 ⇒ 不做事（一位元都不動）。 */
+ *  回 { spec, done: [{ slot, path, from, to, src }], bad: [{ slot, path, to, why }], gone: [{ slot, path, kind }] }；F 是空的 ⇒ 不做事（一位元都不動）。 */
 function fitApply(h, F, ext) {
-  var R = { spec: fitSpec(F), done: [], bad: [] };
+  var R = { spec: fitSpec(F), done: [], bad: [], gone: [] };
   var keys = Object.keys(F || {}).sort(); if (!keys.length) return R;
-  var rig = h.rig, models = rig.models || [], drop = {};
+  var rig = h.rig, models = rig.models || [], drop = {}, rm = [];
   keys.forEach(function (sid) {
     var t = F[sid], m = models.filter(function (q) { return q.meta && String(q.meta.id) === sid; })[0];
     function bad(why) { R.bad.push({ slot: sid, path: m ? m.name : '', to: t, why: why }); }
     if (!m) return bad('船上沒有這個掛點');
-    if (!(m.meta && m.meta.kind === 'gun')) return bad('不是砲（這一段只換砲）');
-    var t0 = modelKind(m); if (t0 === t) return;
-    if (!GUNS[t] || GUNS[t].weapon) return bad(GUNS[t] ? '這一段只換火砲（' + GUNS[t].name + '不換）' : '砲種表沒有 ' + t);
-    if (GUNS[t0] && GUNS[t0].weapon) return bad('掛點上是' + GUNS[t0].name + '（這一段只換火砲）');
-    var cls = fitClass(m), P = fitOwnPart(h, t, cls) || (ext || {})[t + '|' + cls];
-    if (!P) return bad('零件表沒有' + fitClsName(cls) + '的' + GUNS[t].name);
-    var piv = cls !== 'carriage', fs = fitFrame(m, piv), fp = fitFrame(P.m, piv);
-    if (!fs || !fp) return bad((fs ? '零件' : '掛點') + '沒有固定點 breech、muzzle（看不出砲軸）');
-    var fits = m.meta.fits ? String(m.meta.fits).split(',').map(function (w) { return w.trim(); }) : null;
-    if (fits) { if (fits.indexOf(t) < 0) return bad('掛點 fits=' + m.meta.fits + ' 不收' + GUNS[t].name); }
-    else {
-      var ds = fitDims(m, rig.meshes[m.mesh], fs), dp = fitDims(P.m, P.mesh, fp), nm = ['長', '寬', '高'];
-      for (var j = 0; j < 3; j++) if (dp[j] > ds[j] * (1 + FIT_TOL) + FIT_PAD) return bad('放不下：' + nm[j] + ' ' + dp[j].toFixed(1) + ' 格 > 掛點的 ' + ds[j].toFixed(1) + ' 格（容許 ×' + (1 + FIT_TOL) + ' ＋' + FIT_PAD + '）');
+    if (t === '*') return;                                                // 原本雕的那一件（蓋掉出廠換裝表的那一格用）
+    var k = fitKindOf(m);
+    if (!k) return bad('這一件不是可以換的零件（' + (m.meta.kind ? 'kind=' + m.meta.kind : '沒有 kind') + '）');
+    if (k === 'gun') return fitGun(h, m, sid, t, ext, R, drop, bad);
+    var K = FIT_KINDS[k];
+    if (t === '') {                                                       // 拆空（燈、小艇、格柵、裝飾；或掛點 meta optional=1）
+      if (!(K.opt || +m.meta.optional)) return bad('這一種不能拆空');
+      rm.push(m); fitRopesOff(rig, m, drop); R.gone.push({ slot: sid, path: m.name, kind: k }); return;
     }
-    var mir = fs.sd !== 0 && fp.sd !== 0 && fs.sd !== fp.sd, X = fitXf(fp, fs, mir);
-    var V = P.mesh.verts, o = P.m.origin, W = new Array(V.length), lo = [1e9, 1e9, 1e9], hi = [-1e9, -1e9, -1e9], i, k;
-    for (i = 0; i < V.length; i += 3) { var q = X([o[0] + V[i], o[1] + V[i + 1], o[2] + V[i + 2]]); for (k = 0; k < 3; k++) { W[i + k] = q[k]; if (q[k] < lo[k]) lo[k] = q[k]; if (q[k] > hi[k]) hi[k] = q[k]; } }
-    var og = [Math.floor(lo[0]), Math.floor(lo[1]), Math.floor(lo[2])];
-    for (i = 0; i < W.length; i += 3) for (k = 0; k < 3; k++) W[i + k] -= og[k];
-    var Tr = P.mesh.tris; if (mir) { Tr = Tr.slice(); for (i = 0; i < Tr.length; i += 3) { var a = Tr[i + 1]; Tr[i + 1] = Tr[i + 2]; Tr[i + 2] = a; } }   // 鏡射 ⇒ 繞序翻過來
-    var pts = {}, old = m.points || {};
-    Object.keys(P.m.points || {}).forEach(function (n) { pts[n] = X(P.m.points[n]); });
-    // 繩：寫明綁在這個掛點某個固定點的那一端 ⇒ 照同名固定點的位移挪（零件沒有那一點 ⇒ 那條繩不要）
-    var pre = 'model:' + m.name + '/';
-    (rig.ropes || []).forEach(function (r, ri) {
-      (r.ends || []).forEach(function (e, ei) {
-        if (typeof e !== 'string' || e.indexOf(pre) !== 0) return;
-        var pn = e.slice(pre.length), a0 = old[pn], a1 = pts[pn];
-        if (!a0 || !a1) { drop[ri] = 1; return; }
-        fitRopeMove(r, ei, [a1[0] - a0[0], a1[1] - a0[1], a1[2] - a0[2]]);
-        (r.fitEnd = r.fitEnd || [false, false])[ei] = true;                   // 這一端跟著砲：開船時不找格當錨（10_ship.js），照作品寫的綁在砲上（⛔ 找格 ⇒ carronade 的砲尾貼著舷牆，兩端都被當成綁在船殼上）
-      });
-    });
-    (R.was = R.was || {})[m.name] = { kind: t0, bb: m.bbox.slice() };     // 原本雕的那一門（種類、外框）：甲板在哪、站人的高度是船的事，照原本的算（fitKind0／fitBB0）
-    var mt = Object.assign({}, m.meta); delete mt.gun; delete mt.weapon; delete mt.ammo;
-    ['gun', 'weapon', 'ammo'].forEach(function (k2) { if (P.m.meta && P.m.meta[k2] !== undefined) mt[k2] = P.m.meta[k2]; });
-    m.mesh = rig.meshes.length; rig.meshes.push({ verts: W, tris: Tr, tmat: P.mesh.tmat, mats: P.mesh.mats });
-    m.origin = og; m.bbox = [lo[0], lo[1], lo[2], hi[0], hi[1], hi[2]]; m.points = pts; m.meta = mt; delete m.mats;
-    R.done.push({ slot: sid, path: m.name, from: t0, to: t, src: P.from, mirror: mir });
+    var P = fitRefPart(h, t, ext); if (!P) return bad('零件表沒有 ' + t);
+    if (fitKindOf(P.m) !== k) return bad(t + ' 是 ' + (fitKindOf(P.m) || '別的') + '，掛點是 ' + k + '（只換同一種）');
+    var fits = m.meta.fits ? String(m.meta.fits).split(',').map(function (w) { return w.trim(); }) : null;
+    var have = {}; Object.keys(m.points || {}).forEach(function (n) { if (P.m.points && P.m.points[n]) have[n] = 1; });
+    var fs = fitFrameK(m, K, have), fp = fitFrameK(P.m, K, have);
+    if (fits) { if (fits.indexOf(t) < 0) return bad('掛點 fits=' + m.meta.fits + ' 不收 ' + t); }
+    else { var why = fitTooBig(fitDims(m, rig.meshes[m.mesh], fs), fitDims(P.m, P.mesh, fp)); if (why) return bad(why); }
+    var sk = K.side, mir = !!(sk && m.meta[sk] && P.m.meta && P.m.meta[sk] && m.meta[sk] !== P.m.meta[sk]);
+    fitPlace(rig, m, P, fitXf(fp, fs, mir), mir, drop);
+    var mt = {}; Object.keys(P.m.meta || {}).forEach(function (q) { mt[q] = P.m.meta[q]; });
+    FIT_KEEP.concat(K.keep || []).forEach(function (q) { delete mt[q]; if (m.meta[q] !== undefined) mt[q] = m.meta[q]; });
+    fitMetaGeo(mt, fp, fs, mir);
+    m.meta = mt;
+    R.done.push({ slot: sid, path: m.name, from: k, to: t, src: P.from, mirror: mir });
   });
+  if (rm.length) rig.models = rig.models.filter(function (q) { return rm.indexOf(q) < 0; });
   if (Object.keys(drop).length) { rig.ropes = rig.ropes.filter(function (r, i) { return !drop[i]; }); R.ropesDropped = Object.keys(drop).length; }
   return R;
+}
+
+/** 砲（第一段）：值 ＝ 砲種表的鍵。 */
+function fitGun(h, m, sid, t, ext, R, drop, bad) {
+  var rig = h.rig, t0 = modelKind(m); if (t0 === t) return;
+  if (!GUNS[t] || GUNS[t].weapon) return bad(GUNS[t] ? '這一段只換火砲（' + GUNS[t].name + '不換）' : '砲種表沒有 ' + t);
+  if (GUNS[t0] && GUNS[t0].weapon) return bad('掛點上是' + GUNS[t0].name + '（這一段只換火砲）');
+  var cls = fitClass(m), P = fitOwnPart(h, t, cls) || (ext || {})[t + '|' + cls];
+  if (!P) return bad('零件表沒有' + fitClsName(cls) + '的' + GUNS[t].name);
+  var piv = cls !== 'carriage', fs = fitFrame(m, piv), fp = fitFrame(P.m, piv);
+  if (!fs || !fp) return bad((fs ? '零件' : '掛點') + '沒有固定點 breech、muzzle（看不出砲軸）');
+  var fits = m.meta.fits ? String(m.meta.fits).split(',').map(function (w) { return w.trim(); }) : null;
+  if (fits) { if (fits.indexOf(t) < 0) return bad('掛點 fits=' + m.meta.fits + ' 不收' + GUNS[t].name); }
+  else { var why = fitTooBig(fitDims(m, rig.meshes[m.mesh], fs), fitDims(P.m, P.mesh, fp)); if (why) return bad(why); }
+  var mir = fs.sd !== 0 && fp.sd !== 0 && fs.sd !== fp.sd;
+  (R.was = R.was || {})[m.name] = { kind: t0, bb: m.bbox.slice() };     // 原本雕的那一門（種類、外框）：甲板在哪、站人的高度是船的事，照原本的算（fitKind0／fitBB0）
+  fitPlace(rig, m, P, fitXf(fp, fs, mir), mir, drop);
+  var mt = Object.assign({}, m.meta); delete mt.gun; delete mt.weapon; delete mt.ammo;
+  ['gun', 'weapon', 'ammo'].forEach(function (k2) { if (P.m.meta && P.m.meta[k2] !== undefined) mt[k2] = P.m.meta[k2]; });
+  m.meta = mt;
+  R.done.push({ slot: sid, path: m.name, from: t0, to: t, src: P.from, mirror: mir });
+}
+/** 長寬高（零件 dp、掛點 ds）⇒ 放不下的原因（放得下 ⇒ ''）。 */
+function fitTooBig(ds, dp) {
+  var nm = ['長', '寬', '高'];
+  for (var j = 0; j < 3; j++) if (dp[j] > ds[j] * (1 + FIT_TOL) + FIT_PAD) return '放不下：' + nm[j] + ' ' + dp[j].toFixed(1) + ' 格 > 掛點的 ' + ds[j].toFixed(1) + ' 格（容許 ×' + (1 + FIT_TOL) + ' ＋' + FIT_PAD + '）';
+  return '';
+}
+/** 把零件 P 照 X 擺到掛點 m：網格（新的一份，接在 rig.meshes 後面）、固定點、外框、起點；繩寫明綁在 m 某個固定點的那一端照同名固定點挪（零件沒有那一點 ⇒ 那條繩記進 drop）。 */
+function fitPlace(rig, m, P, X, mir, drop) {
+  var V = P.mesh.verts, o = P.m.origin, W = new Array(V.length), lo = [1e9, 1e9, 1e9], hi = [-1e9, -1e9, -1e9], i, k;
+  for (i = 0; i < V.length; i += 3) { var q = X([o[0] + V[i], o[1] + V[i + 1], o[2] + V[i + 2]]); for (k = 0; k < 3; k++) { W[i + k] = q[k]; if (q[k] < lo[k]) lo[k] = q[k]; if (q[k] > hi[k]) hi[k] = q[k]; } }
+  var og = [Math.floor(lo[0]), Math.floor(lo[1]), Math.floor(lo[2])];
+  for (i = 0; i < W.length; i += 3) for (k = 0; k < 3; k++) W[i + k] -= og[k];
+  var Tr = P.mesh.tris; if (mir) { Tr = Tr.slice(); for (i = 0; i < Tr.length; i += 3) { var a = Tr[i + 1]; Tr[i + 1] = Tr[i + 2]; Tr[i + 2] = a; } }   // 鏡射 ⇒ 繞序翻過來
+  var pts = {}, old = m.points || {};
+  Object.keys(P.m.points || {}).forEach(function (n) { pts[n] = X(P.m.points[n]); });
+  var pre = 'model:' + m.name + '/';
+  (rig.ropes || []).forEach(function (r, ri) {
+    (r.ends || []).forEach(function (e, ei) {
+      if (typeof e !== 'string' || e.indexOf(pre) !== 0) return;
+      var pn = e.slice(pre.length), a0 = old[pn], a1 = pts[pn];
+      if (!a0 || !a1) { drop[ri] = 1; return; }
+      fitRopeMove(r, ei, [a1[0] - a0[0], a1[1] - a0[1], a1[2] - a0[2]]);
+      (r.fitEnd = r.fitEnd || [false, false])[ei] = true;                   // 這一端跟著零件：開船時不找格當錨（10_ship.js），照作品寫的綁在零件上（⛔ 找格 ⇒ carronade 的砲尾貼著舷牆，兩端都被當成綁在船殼上）
+    });
+  });
+  m.mesh = rig.meshes.length; rig.meshes.push({ verts: W, tris: Tr, tmat: P.mesh.tmat, mats: P.mesh.mats });
+  m.origin = og; m.bbox = [lo[0], lo[1], lo[2], hi[0], hi[1], hi[2]]; m.points = pts; delete m.mats;
+}
+/** 拆空：寫明綁在 m 上的繩（ends model:<m>/…）一起拿掉。 */
+function fitRopesOff(rig, m, drop) {
+  var pre = 'model:' + m.name + '/';
+  (rig.ropes || []).forEach(function (r, ri) { if ((r.ends || []).some(function (e) { return typeof e === 'string' && e.indexOf(pre) === 0; })) drop[ri] = 1; });
+}
+/** meta 裡的座標（hinge_*、spin_pivot_*：點）與方向（axis_*、spin_axis_*）照零件一起挪、轉。 */
+function fitMetaGeo(mt, fp, fs, mir) {
+  var X = fitXf(fp, fs, mir);
+  function v3(k) { var x = +mt[k + '_x'], y = +mt[k + '_y'], z = +mt[k + '_z']; return isFinite(x) && isFinite(y) && isFinite(z) && mt[k + '_x'] !== undefined ? [x, y, z] : null; }
+  function put(k, p) { mt[k + '_x'] = +p[0].toFixed(4); mt[k + '_y'] = +p[1].toFixed(4); mt[k + '_z'] = +p[2].toFixed(4); }
+  FIT_GEO_PT.forEach(function (k) { var p = v3(k); if (p) put(k, X(p)); });
+  FIT_GEO_VEC.forEach(function (k) {
+    var v = v3(k); if (!v) return;
+    var cp = Math.cos(fp.th), sp = Math.sin(fp.th), u = v[0] * cp + v[1] * sp, w = -v[0] * sp + v[1] * cp; if (mir) w = -w;
+    var cs = Math.cos(fs.th), ss = Math.sin(fs.th); put(k, [u * cs - w * ss, u * ss + w * cs, v[2]]);
+  });
+}
+/** 零件表那一件（'<船 id>#<模型 id>'）⇒ fitLoad 先載好的（ext[ref]）。 */
+function fitRefPart(h, ref, ext) { return (ext || {})[ref] || null; }
+/** 掛點是哪一種（砲 ＝ 'gun'；FIT_KINDS 的鍵；不能換 ⇒ ''）。零件抄來的那一份 m.deco 已經算好。 */
+function fitKindOf(m) {
+  var k = m.meta && m.meta.kind;
+  if (k === 'gun') return 'gun';
+  if (k) return FIT_KINDS[k] && k !== 'deco' ? k : '';
+  return (m.deco !== undefined ? m.deco : isDeco(m)) ? 'deco' : '';
+}
+/** 一件的座標系（砲以外）：have ＝ 掛點與零件都有的固定點（兩邊照同一套）。 */
+function fitFrameK(m, K, have) {
+  var P = m.points || {}, b = m.bbox, th = 0;
+  if (K.ax && have[K.ax[0]] && have[K.ax[1]]) { var p0 = P[K.ax[0]], p1 = P[K.ax[1]]; th = Math.atan2(p1[1] - p0[1], p1[0] - p0[0]); }
+  if (K.at && have[K.at]) return { a: P[K.at], z: P[K.at][2], th: th, sd: 0 };
+  return { a: [(b[0] + b[3]) / 2, (b[1] + b[4]) / 2], z: b[2], th: th, sd: 0 };
 }
 function fitClsName(c) { return c === 'carriage' ? '舷側砲架' : c === 'pivot' ? '迴旋砲架' : c === 'turret' ? '旋轉砲座' : c; }
 /** 照砲的種類、外框猜甲板的地方（10_ship.js gunDecks 切層、站人的高度；40_crew.js 砲班站的高度、spar deck 的高度）：換了裝的掛點照原本雕的那一門
@@ -169,7 +268,15 @@ function fitRopeMove(r, ei, d) {
 /** 換裝的廣播（開戰時每一份船型一次；61_hud.js hudCrewShort 旁邊）：沒換成的那幾門。 */
 function fitText(T) {
   var B = T.fit && T.fit.bad; if (!B || !B.length) return '';
-  return '換裝沒換成（' + T.name + '）：' + B.map(function (b) { return b.slot + '→' + (GUNS[b.to] ? GUNS[b.to].name : b.to) + '（' + b.why + '）'; }).join('、');
+  return '換裝沒換成（' + T.name + '）：' + B.map(function (b) { return b.slot + '→' + fitValName(b.to) + '（' + b.why + '）'; }).join('、');
+}
+/** 換裝表的一個值給人看的名字。 */
+function fitValName(v) {
+  if (v === '') return '拆掉';
+  if (v === '*') return '原本的';
+  if (GUNS[v]) return GUNS[v].name;
+  var k = Object.keys(FIT_KINDS).filter(function (q) { return CFG.parts && CFG.parts[q] && CFG.parts[q][v]; })[0];
+  return k ? CFG.parts[k][v] : v;
 }
 /** 存檔／匯出：玩家的換裝表（每一型跟出廠不一樣的那幾格）。 */
 function fitSnap() { var o = {}; Object.keys(SHIP_FIT).forEach(function (id) { var d = SHIP_FIT[id]; if (d && Object.keys(d).length) o[id] = Object.assign({}, d); }); return o; }
