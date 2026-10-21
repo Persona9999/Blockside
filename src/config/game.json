@@ -1197,6 +1197,39 @@
         "turret": 5,
         "wheel": 2
       }
+    },
+    {
+      "id": "matsushima",
+      "el": "ship-matsushima",
+      "name": "松島號",
+      "vxk": "matsushima.vxk",
+      "work": "ridge-001-matsushima-01m-assembly",
+      "author": "ridge-001",
+      "drive": "steam",
+      "cfg": {"pump": 32, "base": 15, "agile": 0.7},
+      "geo": {"spar": [136, 175], "marines": [394, 117], "center": 120, "aim": 92, "aimZ": [45, 350], "deckAim": [85, 140], "rigAim": [170, 350]},
+      "crew": {"top": 0, "marines": 8},
+      "names": ["松島號"],
+      "idNext": {
+        "anchor": 3,
+        "binnacle": 2,
+        "boat": 5,
+        "boiler": 3,
+        "deck": 7,
+        "engine": 3,
+        "funnel": 2,
+        "gun": 28,
+        "ladders": 2,
+        "magazine": 3,
+        "part": 12,
+        "powder": 33,
+        "propeller": 3,
+        "rudder": 2,
+        "shaft": 3,
+        "ship": 2,
+        "turret": 2,
+        "wheel": 2
+      }
     }
   ],
   "furniture": {
@@ -1308,15 +1341,19 @@
   },
   "parts": {
     "guns": {
+      "armstrong120": {"carriage": "matsushima#gun-1"},
       "bombardella": {"carriage": "fusta#gun-6"},
       "brooke64": {"carriage": "virginia#gun-4"},
       "brooke7": {"pivot": "virginia#gun-9"},
+      "canet320": {"carriage": "matsushima#gun-27"},
       "carr": {"carriage": "constitution#gun-31"},
       "chase": {"carriage": "constitution#gun-1"},
       "chase3": {"carriage": "stormkaap#gun-41"},
       "dahl11": {"carriage": "monitor#gun-1", "pivot": "susquehanna#gun-7"},
       "dahl9": {"carriage": "virginia#gun-1"},
       "hotch37": {"turret": "dingyuan#gun-1"},
+      "hotch47": {"turret": "matsushima#gun-17"},
+      "hotch57": {"carriage": "matsushima#gun-13", "turret": "matsushima#gun-19"},
       "krupp150": {"carriage": "dingyuan#gun-13"},
       "krupp305": {"carriage": "dingyuan#gun-9"},
       "long": {"carriage": "constitution#gun-2"},
@@ -1384,7 +1421,8 @@
       "punt#rudder-1": "蓬特號・rudder-S",
       "punt#rudder-2": "蓬特號・rudder-P",
       "fusta#rudder-1": "越嶺號・舵",
-      "dingyuan#rudder-1": "定遠號・舵"
+      "dingyuan#rudder-1": "定遠號・舵",
+      "matsushima#rudder-1": "松島號・舵"
     },
     "propeller": {
       "virginia#propeller-1": "維吉尼亞號・螺旋槳",
@@ -1394,7 +1432,9 @@
       "susquehanna#propeller-1": "蘇士奎哈納號・明輪-S",
       "susquehanna#propeller-2": "蘇士奎哈納號・明輪-P",
       "dingyuan#propeller-1": "定遠號・螺旋槳-S",
-      "dingyuan#propeller-2": "定遠號・螺旋槳-P"
+      "dingyuan#propeller-2": "定遠號・螺旋槳-P",
+      "matsushima#propeller-1": "松島號・螺旋槳-S",
+      "matsushima#propeller-2": "松島號・螺旋槳-P"
     },
     "wheel": {
       "constitution#wheel-1": "憲法號・wheel",
