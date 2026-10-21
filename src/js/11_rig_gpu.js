@@ -53,7 +53,10 @@ function ropeTube(TB, P, col, w) {
  *  動、靜分兩份（render 管線大修 R1；Tim：「只有被破壞時重算網格」）：重做時只算、只傳動的那份（位置、法線：ow.sb.vbo，bufferSubData）；
  *    靜的（色、貼圖集的 uv、著火、雜訊座標：ow.sb.sbo）與索引（ow.sb.ebo）只在變的那一刻傳變的那一段（sailBuf 的 put 跟上一次每一面的樣子 ow.sb.L 比）：
  *    撕開、收好那一捲少了幾點 ⇒ 從那一面起的索引；著火、撲滅、貼圖集、陣營換了 ⇒ 那一面的靜的；畫的帆換了（藏起來、掉了、布片新增或拿掉）⇒ 從那一面起整段。
- *    整面不畫的帆（藏起來、掉了、收起來沒留那一捲）本來就不在緩衝裡：不算位置、不傳、不畫（Tim：「整張帆被破壞除外(就不用算了)」）⇒ 畫的永遠是一段、一個 owner 一個 drawElements。 */
+ *    整面不畫的帆（藏起來、掉了、收起來沒留那一捲）本來就不在緩衝裡：不算位置、不傳、不畫（Tim：「整張帆被破壞除外(就不用算了)」）⇒ 畫的永遠是一段、一個 owner 一個 drawElements。
+ *  第二層（R2；Tim「帆繩可以用骨骼動畫概念」「甚至也不用重建 可以參考著火 讓被破壞的部分變成透明」）：動的那份改由 GPU 寫（SAILK）——
+ *    CPU 每一步只把細格位置（物理的粒子就是細格點：30_rig_physics.js contact-fine ⇒ 直接抄 c.p）傳成一張浮點貼圖，GPU 照三角形表、鄰接表算法線（同樣的三角形順序、跳過撕開的）寫進 ow.sb.vbo；
+ *    索引一律是全部三角形：撕開、收好那一捲少了幾點 ⇒ 只改那幾個三角形（三角形表的「還在」、索引的三點疊成一點 ⇒ 面積 0、不出像素），不重排。著色器 P.sail／P.dsail 一字沒改；?sailk=0 照 R1。 */
 // 頂點：動的 ＝ 位置 3、法線 3；靜的 ＝ 色 3、貼圖集的 uv 2（TASK-0579；沒有貼圖 ⇒ u ＝ −1，著色器照色畫）、著火 4（TASK-0717：火燒到的時間 a、撲滅的時間 x —— 49_burn.js s.burn，
 //   沒燒過 ＝ BURN_NEVER ⇒ 著色器那一段整個跳過；雜訊座標 ＝ 作品形狀的 ((x＋y)·S, z·S) 公尺 ⇒ 布被吹動時焦痕跟著布、不會滑）。著色器（01_gl.js P.sail／P.dsail）一字沒改。
 var SBV = null, SBI = null, SBN = null, SBP = null, SBD = null, SB_STRIDE = 15, SB_DW = 6, SB_SW = 9, SAIL_UNIT = 9, SAIL_DUMMY = null;
@@ -72,8 +75,9 @@ function sailTex(T) {
 /** 這一格畫哪幾面帆、哪幾片布片：每一面叫一次 put(o, T, P, n, tris, col, tv, vc, uv, r, bF, g0)，回這一格跟著帆腳畫的繩 { td, tk }（looseBuf）。
  *  o：布（sh.cl[k]）或布片本身、T：它的模板；P：細格位置（暫存區 SBP，下一面就蓋掉）；tv：不畫的細格點（撕開的洞、收好那一捲少的）；vc：每個頂點的顏色（沒有貼圖集時的退路，
  *  30_rig_physics.js texColors）；uv＋r：貼圖集的那一格；bF：著火（s.burn）、g0：雜訊座標用的作品形狀。
- *  sailBuf（動靜分開傳）與 sailFill（?rigchk=1 對拍用的整份）共用 ⇒ 畫哪幾面、位置怎麼算只有一份。 */
-function sailWalk(ow, put) {
+ *  sailBuf（動靜分開傳）與 sailFill（?rigchk=1 對拍用的整份）共用 ⇒ 畫哪幾面、位置怎麼算只有一份。
+ *  raw（R2）：細格就是物理的粒子（sailIdent）、沒在演收帆 ⇒ P 直接是 c.p（不抄一份；put 只讀）。 */
+function sailWalk(ow, put, raw) {
   var isShip = !!ow.crew, F = isShip && PHYS && ow.shreds && ow.shreds.length ? ow.shreds : null, A = ow.T && ow.T.sailAtlas, m1 = 1;
   (ow.cl || []).forEach(function (c) { m1 = Math.max(m1, c.T.n); });
   if (F) F.forEach(function (f) { m1 = Math.max(m1, f.n); });
@@ -88,7 +92,7 @@ function sailWalk(ow, put) {
       if (keep) { P = frz ? furlFrozen(ow, c, SBP) : furlBundle(ow, c, SBP); var lost = furlLost(ow, s, c); }   // lost：靠的帆桁、格不在了的那幾點不畫（30_rig_physics.js furlLost）
       if (frz && c.tt) c.tt.forEach(function (t) { if (ow.ropes[t.j].dead || ow.tCut && ow.tCut[t.j] || lost && lost[t.i]) return; var o = t.i * 3; td.push({ t: t, x: P[o], y: P[o + 1], z: P[o + 2] }); tk += t.j + ','; });   // 帆腳的繩跟著凍結的帆腳
     }
-    if (!P) P = (PHYS || !isShip) && c.p ? (isShip && c.furlF !== null && c.furlF !== undefined ? furlDraw(c, clothFine(c, SBP), c.furlF, ow) : clothFine(c, SBP)) : c.T.p0;   // furlDraw：收帆張帆的演出（30_rig_physics.js）
+    if (!P) P = (PHYS || !isShip) && c.p ? (isShip && c.furlF !== null && c.furlF !== undefined ? furlDraw(c, clothFine(c, SBP), c.furlF, ow) : raw && sailIdent(c.T) ? c.p : clothFine(c, SBP)) : c.T.p0;   // furlDraw：收帆張帆的演出（30_rig_physics.js）
     if (isShip && PHYS && c.tt && c.p && !c.hidden && !c.gone && !c.loose) c.tt.forEach(function (t) { if (ow.ropes[t.j].dead || ow.tCut && ow.tCut[t.j]) return; var o = t.i * 3; td.push({ t: t, x: P[o], y: P[o + 1], z: P[o + 2] }); tk += t.j + ','; });   // 畫出來的帆腳（收帆演出時也是）
     put(c, c.T, P, c.T.n, c.T.tris, c.T.col, keep ? lost : c.torn ? c.tv : null, c.T.vcol, c.T.uv, A && c.T.ti !== undefined ? sailRect(ow, A, c.T.ti) : null, isShip ? ow.sails[k].burn : c.bf, c.T.p0);   // 斷開那一團帶走的帆：c.bf（22_pieces.js）
   });
@@ -129,9 +133,10 @@ function sailFill(ow) {
 }
 /** 帆的緩衝（動靜分開，見上）：動的照現在的狀態整份重算、重傳；靜的與索引跟上一次每一面的樣子（ow.sb.L）比，只重填、只傳變的那一段。
  *  ow.sb.SV／IV：靜的、索引在 CPU 的那一份（傳一段要從它拿；不夠就加大三成、GPU 那份整份重配）；gs／gi／gd：GPU 上靜的、索引、動的配了多大。
- *  算的式子、順序跟以前一模一樣（sailFill 那一份；?rigchk=1 每一格逐位元對拍）⇒ 畫出來一位元不差。tDraw／tKey／tJ／rigDirty 的副作用照舊。 */
+ *  算的式子、順序跟以前一模一樣（sailFill 那一份；?rigchk=1 每一格逐位元對拍）⇒ 畫出來一位元不差。tDraw／tKey／tJ／rigDirty 的副作用照舊。
+ *  K（R2，SAILK.on）：位置抄進 SKP、三角形表／鄰接表／索引交給 sailKUp、法線 GPU 算（只有法線跟 R1 差浮點捨入）。 */
 function sailBuf(ow) {
-  var B = ow.sb, A = ow.T && ow.T.sailAtlas, mv = 0, np = 0, nv = 0, ni = 0, s0 = -1, i0 = -1, RG = [], j;   // s0：從第幾面起靜的整段重填；i0：從第幾面起索引重填；RG：只重填靜的那幾段（頂點起點、個數）
+  var K = SAILK.on(), B = ow.sb, A = ow.T && ow.T.sailAtlas, mv = 0, np = 0, nv = 0, ni = 0, nt = 0, vm = 0, s0 = -1, i0 = -1, RG = [], KD = [], j;   // s0：從第幾面起靜的整段重填；i0：從第幾面起索引重填；RG：只重填靜的那幾段（頂點起點、個數）；R2：nt 三角形數、vm 一點最多幾個三角形共用、KD 面沒換只換了不畫哪幾點的那幾面
   if (!B) {
     B = ow.sb = { vao: gl.createVertexArray(), vbo: gl.createBuffer(), sbo: gl.createBuffer(), ebo: gl.createBuffer(), n: 0, nv: 0, L: [], SV: new Float32Array(0), IV: new Uint32Array(0), gs: 0, gi: 0, gd: 0 };
     gl.bindVertexArray(B.vao);
@@ -142,8 +147,9 @@ function sailBuf(ow) {
   // 暫存區照這一艘現在要畫的配、不夠就加大三成（TASK-0669：以前開局時 30_rig_physics.js clothSetup 照最大那一型先配 ⇒ 物理檔碰畫的緩衝）
   (ow.cl || []).forEach(function (c) { mv += c.T.n; });
   if (ow.crew && PHYS && ow.shreds) ow.shreds.forEach(function (f) { mv += f.n; });
-  if (!SBD || SBD.length < mv * SB_DW) SBD = new Float32Array(Math.ceil(Math.max(1, mv) * 1.33) * SB_DW);
-  var L = B.L, f = sailWalk(ow, put), td = f.td, tk = f.tk;
+  if (K) { if (!SKP || SKP.length < Math.ceil(Math.max(1, mv) / SAILK.W) * SAILK.W * 3) SKP = new Float32Array(Math.ceil(Math.max(1, mv) * 1.33 / SAILK.W) * SAILK.W * 3); }   // 整列整列傳 ⇒ 配到整列
+  else if (!SBD || SBD.length < mv * SB_DW) SBD = new Float32Array(Math.ceil(Math.max(1, mv) * 1.33) * SB_DW);
+  var L = B.L, f = sailWalk(ow, put, K), td = f.td, tk = f.tk;
   L.length = np;                                                         // 後面沒了的那幾面（最後一面藏起來、最舊的布片拿掉）：不畫就好（畫 B.n 個索引）
   if (ow.crew) { ow.tDraw = td; if (tk !== (ow.tKey || '')) { ow.tKey = tk; ow.tJ = {}; td.forEach(function (d) { ow.tJ[d.t.j] = 1; }); ow.rigDirty = true; } }   // 換了哪幾條 ⇒ 下一格 buildRig 重做（不畫那幾條）
   var SV = B.SV, IV = B.IV, vcap = SV.length / SB_SW;
@@ -153,21 +159,24 @@ function sailBuf(ow) {
     for (j = 0; j < RG.length; j += 2) gl.bufferSubData(gl.ARRAY_BUFFER, RG[j] * SB_SW * 4, SV, RG[j] * SB_SW, RG[j + 1] * SB_SW);
     if (s0 >= 0 && nv > L[s0].vb) gl.bufferSubData(gl.ARRAY_BUFFER, L[s0].vb * SB_SW * 4, SV, L[s0].vb * SB_SW, (nv - L[s0].vb) * SB_SW);
   }
-  if (B.gi !== IV.length) { gl.bindVertexArray(B.vao); gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, IV, gl.STATIC_DRAW); gl.bindVertexArray(null); B.gi = IV.length; }   // 索引是 VAO 的狀態 ⇒ 先綁自己的 VAO
-  else if (i0 >= 0 && ni > L[i0].ib) { gl.bindVertexArray(B.vao); gl.bufferSubData(gl.ELEMENT_ARRAY_BUFFER, L[i0].ib * 4, IV, L[i0].ib, ni - L[i0].ib); gl.bindVertexArray(null); }
-  gl.bindBuffer(gl.ARRAY_BUFFER, B.vbo);
-  if (B.gd !== vcap) { gl.bufferData(gl.ARRAY_BUFFER, vcap * SB_DW * 4, gl.DYNAMIC_DRAW); B.gd = vcap; }   // 跟靜的一樣大（加大才重配）
-  if (nv) gl.bufferSubData(gl.ARRAY_BUFFER, 0, SBD, 0, nv * SB_DW);
-  B.n = ni; B.nv = nv;
+  if (K) sailKUp(B, nv, nt, vm, s0, KD, vcap);                         // R2：三角形表、鄰接表、索引變的那一段，位置傳上去，GPU 寫動的那份
+  else {
+    if (B.gi !== IV.length) { gl.bindVertexArray(B.vao); gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, IV, gl.STATIC_DRAW); gl.bindVertexArray(null); B.gi = IV.length; }   // 索引是 VAO 的狀態 ⇒ 先綁自己的 VAO
+    else if (i0 >= 0 && ni > L[i0].ib) { gl.bindVertexArray(B.vao); gl.bufferSubData(gl.ELEMENT_ARRAY_BUFFER, L[i0].ib * 4, IV, L[i0].ib, ni - L[i0].ib); gl.bindVertexArray(null); }
+    gl.bindBuffer(gl.ARRAY_BUFFER, B.vbo);
+    if (B.gd !== vcap) { gl.bufferData(gl.ARRAY_BUFFER, vcap * SB_DW * 4, gl.DYNAMIC_DRAW); B.gd = vcap; }   // 跟靜的一樣大（加大才重配）
+    if (nv) gl.bufferSubData(gl.ARRAY_BUFFER, 0, SBD, 0, nv * SB_DW);
+  }
+  B.n = K ? nt * 3 : ni; B.nv = nv;
   if (RIG_CHK) {
-    ow.sbChk = { d: SBD.slice(0, nv * SB_DW), tk: tk };                  // 對拍用：這一次傳上去的動的那一份
-    var sc = rigStat(); sc.sbDyn = (sc.sbDyn || 0) + 1; if (s0 >= 0 || RG.length) sc.sbStat = (sc.sbStat || 0) + 1; if (i0 >= 0) sc.sbIdx = (sc.sbIdx || 0) + 1;   // 重做幾次、其中靜的、索引傳了幾次
+    ow.sbChk = { d: K ? null : SBD.slice(0, nv * SB_DW), tk: tk };      // 對拍用：這一次傳上去的動的那一份（R2：GPU 寫的，rigChk 讀回來）
+    var sc = rigStat(); sc.sbDyn = (sc.sbDyn || 0) + 1; if (s0 >= 0 || RG.length) sc.sbStat = (sc.sbStat || 0) + 1; if (K ? s0 >= 0 || KD.length : i0 >= 0) sc.sbIdx = (sc.sbIdx || 0) + 1;   // 重做幾次、其中靜的、索引傳了幾次
   }
   function put(o, T, p, n, tr, col, tv, vc, uv, r, bF, g0) {
     var q = L[np] || (L[np] = { o: null }), base = nv, j, i, x;
     if (s0 < 0 && (q.o !== o || q.T !== T || q.n !== n)) s0 = np;      // 畫的帆換了 ⇒ 從這一面起頂點全挪了：靜的、索引整段重填
     var st = s0 >= 0;
-    if (st || !sailDropSame(q.d, tv, n)) { if (i0 < 0) i0 = np; q.d = tv ? sailDropCopy(q.d, tv, n) : null; }   // 撕開、收好那一捲少了幾點 ⇒ 從這一面起索引重填（頂點不動）
+    if (st || !sailDropSame(q.d, tv, n)) { if (i0 < 0) i0 = np; q.d = tv ? sailDropCopy(q.d, tv, n) : null; if (K && !st) KD.push(np); }   // 撕開、收好那一捲少了幾點 ⇒ 從這一面起索引重填（頂點不動）；R2：只改這一面變了的那幾個三角形
     if (st || q.r !== r || q.A !== A || q.bf !== bF || bF && sailBurnNew(B.SV, base, n, bF)) {   // 著火（燒到的時間、撲滅）、貼圖集、陣營換了 ⇒ 這一面的靜的重填
       if (B.SV.length < (base + n) * SB_SW) { x = new Float32Array(Math.ceil((base + n) * 1.33) * SB_SW); x.set(B.SV.subarray(0, base * SB_SW)); B.SV = x; }
       var Z = B.SV;
@@ -181,6 +190,11 @@ function sailBuf(ow) {
       if (!st) { if (RG.length && RG[RG.length - 2] + RG[RG.length - 1] === base) RG[RG.length - 1] += n; else RG.push(base, n); }   // 挨著的併成一段
     }
     q.o = o; q.T = T; q.n = n; q.r = r; q.A = A; q.bf = bF; q.vb = base; q.ib = ni;
+    if (K) {                                                             // R2：位置照抄（只讀 p）；法線不算（GPU）、索引不排（sailKUp）
+      q.tr = tr; q.tb = nt; nt += tr.length / 3; x = sailAdj(tr, n).vm; if (x > vm) vm = x;
+      SKP.set(p.length === n * 3 ? p : p.subarray(0, n * 3), base * 3);
+      nv += n; np++; return;
+    }
     var iw = i0 >= 0, N = SBN, D = SBD;
     if (iw && B.IV.length < ni + tr.length) { x = new Uint32Array(Math.ceil((ni + tr.length) * 1.33)); x.set(B.IV.subarray(0, ni)); B.IV = x; }
     var I = B.IV;
@@ -213,6 +227,146 @@ function sailDropCopy(d, tv, n) {
 function sailBurnNew(Z, base, n, bF) {
   for (var i = 0, w = base * SB_SW + 5; i < n; i++, w += SB_SW) if (Z[w] !== bF.a[i] || Z[w + 1] !== bF.x[i]) return true;
   return false;
+}
+// ── 帆的第二層（render 管線大修 R2）：骨架的概念 —— 物理的粒子是骨頭、細格點照固定的權重跟著（現在權重全是 1：30_rig_physics.js contact-fine，粒子就是細格點）。
+//   每一步 CPU 只傳位置（SKP → 貼圖 0 號，RGB32F，一個 owner 一張、一點一格，每列 SAILK.W 點）；GPU 一次 transform feedback（P.sailK）每一點：
+//   位置照抄、法線 ＝ 它所在的每個三角形（鄰接表，跟 CPU 一樣照三角形順序）還在的那幾個的面法線加起來 ⇒ 寫進 ow.sb.vbo（跟 R1 一樣 6 個 float）⇒ P.sail／P.dsail 照舊用索引畫。
+//   三角形表（貼圖 1 號，RGBA32UI：三點、還在不在）、鄰接表（貼圖 2 號，R32UI：每點 vs 格三角形編號，空的 ＝ 0xFFFFFFFF）、索引：畫的帆換了才從那一面起重寫；
+//   撕開、收好那一捲少了幾點 ⇒ 只改變了的那幾個三角形（不在的索引三點疊成一點 ⇒ 面積 0、不出像素；跟 R1 拿掉那個三角形畫出來一樣）。
+//   位置跟 R1 一位元不差（抄的、陰影也一樣）；法線是 GPU 的 float32（R1 是 JS 的 float64 再存 float32）⇒ 打光差一點捨入。
+//   沒有 transform feedback／整數貼圖／貼圖單元不夠（編不過 ⇒ P.sailK ＝ null）或 ?sailk=0 ⇒ 照 R1。⛔ 只讀 c.p、c.tv、模板：不寫模擬的狀態。
+var SAILK_OFF = Q.get('sailk') === '0', SKP = null;
+var SAILK = {
+  W: 1024, U: [15, 16, 17], tf: null, vao: null, adj: new WeakMap(), idf: new WeakMap(), rb: null,   // U：位置、三角形表、鄰接表綁的貼圖單元（其他程式用到 14 為止）；adj／idf：模板的鄰接表、細格是不是就是粒子（只算一次）
+  on: function () { return !!P.sailK && !SAILK_OFF; },
+  /** 編 transform feedback 的程式（varyings 要在 link 之前給 ⇒ 不能用 VK.compile）；取樣器固定 U。 */
+  compile: function (vs, fs, out) {
+    if (gl.getParameter(gl.MAX_COMBINED_TEXTURE_IMAGE_UNITS) <= SAILK.U[2] || gl.getParameter(gl.MAX_VERTEX_TEXTURE_IMAGE_UNITS) < 3) throw new Error('貼圖單元不夠');
+    function sh(t, src) { var s = gl.createShader(t); gl.shaderSource(s, src); gl.compileShader(s); if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s)); return s; }
+    var p = gl.createProgram(), u = {}, n, i;
+    gl.attachShader(p, sh(gl.VERTEX_SHADER, vs)); gl.attachShader(p, sh(gl.FRAGMENT_SHADER, fs));
+    gl.transformFeedbackVaryings(p, out, gl.INTERLEAVED_ATTRIBS); gl.linkProgram(p);
+    if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(p));
+    n = gl.getProgramParameter(p, gl.ACTIVE_UNIFORMS);
+    for (i = 0; i < n; i++) { var a = gl.getActiveUniform(p, i); u[a.name] = gl.getUniformLocation(p, a.name); }
+    gl.useProgram(p); gl.uniform1i(u.uKP, SAILK.U[0]); gl.uniform1i(u.uKT, SAILK.U[1]); gl.uniform1i(u.uKA, SAILK.U[2]); gl.useProgram(null);
+    return { prog: p, u: u };
+  },
+  /** GPU 算這個 owner 的 nv 點（位置、法線）寫進 B.vbo。只在 prepRig 裡（所有趟之前）；用完 GL 狀態還原（不綁 TF、不丟光柵、VAO null）。 */
+  run: function (B, nv) {
+    var p = P.sailK, k = B.k, U = SAILK.U, j;
+    if (!SAILK.tf) { SAILK.tf = gl.createTransformFeedback(); SAILK.vao = gl.createVertexArray(); }   // 沒有頂點屬性（全從貼圖拿，gl_VertexID）
+    gl.useProgram(p.prog); gl.uniform1ui(p.u.uKV, k.vs);
+    for (j = 0; j < 3; j++) { gl.activeTexture(gl.TEXTURE0 + U[j]); gl.bindTexture(gl.TEXTURE_2D, k.tex[j]); }
+    gl.activeTexture(gl.TEXTURE0);
+    gl.enable(gl.RASTERIZER_DISCARD); gl.bindVertexArray(SAILK.vao); gl.bindTransformFeedback(gl.TRANSFORM_FEEDBACK, SAILK.tf);
+    gl.bindBufferRange(gl.TRANSFORM_FEEDBACK_BUFFER, 0, B.vbo, 0, nv * SB_DW * 4);   // ⛔ B.vbo 這時不能綁在別處（ARRAY_BUFFER、正綁著的 VAO）⇒ sailKUp 配完就解開
+    gl.beginTransformFeedback(gl.POINTS); gl.drawArrays(gl.POINTS, 0, nv); gl.endTransformFeedback();
+    gl.bindBufferBase(gl.TRANSFORM_FEEDBACK_BUFFER, 0, null); gl.bindTransformFeedback(gl.TRANSFORM_FEEDBACK, null);   // 解開 ⇒ 畫帆時 B.vbo 只是 VAO 的頂點
+    gl.bindVertexArray(null); gl.disable(gl.RASTERIZER_DISCARD);
+  }
+};
+// 每一點：位置照抄；法線 ＝ 鄰接表裡還在的三角形的 (b−a)×(c−a) 照順序加（＝ sailBuf R1 的 N，只是 float32）。kAt：一列 1024 點（SAILK.W）。
+var SAILK_VS = '#version 300 es\nuniform highp sampler2D uKP; uniform highp usampler2D uKT; uniform highp usampler2D uKA; uniform uint uKV; out vec3 kP; out vec3 kN;\n' +
+  'ivec2 kAt(uint i){ return ivec2(int(i&1023u),int(i>>10u)); }\n' +
+  'vec3 kPos(uint i){ return texelFetch(uKP,kAt(i),0).xyz; }\n' +
+  'void main(){ uint v=uint(gl_VertexID), e=v*uKV; vec3 n=vec3(0.0);\n' +
+  ' for(uint s=0u;s<uKV;s++){ uint t=texelFetch(uKA,kAt(e+s),0).r; if(t==0xFFFFFFFFu) break; uvec4 T=texelFetch(uKT,kAt(t),0); if(T.w==0u) continue;\n' +
+  '  vec3 a=kPos(T.x), u=kPos(T.y)-a, w=kPos(T.z)-a; n+=vec3(u.y*w.z-u.z*w.y,u.z*w.x-u.x*w.z,u.x*w.y-u.y*w.x); }\n' +
+  ' kP=kPos(v); kN=n; gl_Position=vec4(0.0,0.0,0.0,1.0); }\n';
+var SAILK_FS = '#version 300 es\nprecision highp float; out vec4 o; void main(){ o=vec4(0.0); }\n';
+/** 模板的細格就是物理的粒子（每點只靠自己、權重 1；粒子數 ＝ 細格數）⇒ 位置直接拿 c.p（clothFine 抄出來一樣）。 */
+function sailIdent(T) {
+  var r = SAILK.idf.get(T); if (r !== undefined) return r;
+  var mi = T.mi, mw = T.mw, i; r = !!(mi && mw && T.sim && T.sim.n === T.n);
+  for (i = 0; r && i < T.n; i++) if (mi[i * 4] !== i || mw[i * 4] !== 1 || mw[i * 4 + 1]) r = false;
+  SAILK.idf.set(T, r); return r;
+}
+/** 模板（三角形 tr、n 點）的鄰接表：每點所在的三角形（照三角形順序；一個三角形同一點出現兩次就記兩次 ＝ CPU 加兩次）。{ vm：一點最多幾個、c：每點幾個、l：每點 vm 格 }。 */
+function sailAdj(tr, n) {
+  var a = SAILK.adj.get(tr); if (a) return a;
+  var c = new Uint16Array(n), vm = 1, i, t;
+  for (i = 0; i < tr.length; i++) if (++c[tr[i]] > vm) vm = c[tr[i]];
+  var l = new Uint32Array(n * vm); c.fill(0);
+  for (t = 0; t < tr.length; t++) { i = tr[t]; l[i * vm + c[i]++] = (t / 3) | 0; }
+  a = { vm: vm, c: c, l: l }; SAILK.adj.set(tr, a); return a;
+}
+/** R2 每一次重做：畫的帆換了（s0）⇒ 從那一面起三角形表與索引重寫（鄰接表每點格數變多 ⇒ 整份）；KD 那幾面只改變了的三角形；位置傳上去；GPU 寫動的那份。
+ *  CPU 留一份（三角形表 TV、鄰接表 AV、索引 B.IV）⇒ 只傳變的那幾列。貼圖照列配（加大三成）、不夠才重配（整份傳）。 */
+function sailKUp(B, nv, nt, vm, s0, KD, vcap) {
+  var k = B.k, L = B.L, W = SAILK.W, a0 = s0, R = [Infinity, -1], j, r, x;
+  if (!k && !nv) return;                                                 // 還沒畫過帆（斷開的那一團多半沒帶帆）⇒ 不配貼圖
+  if (!k) k = B.k = { tex: [gl.createTexture(), gl.createTexture(), gl.createTexture()], rows: [0, 0, 0], TV: new Uint32Array(0), AV: new Uint32Array(0), vs: 0 };
+  if (vm > k.vs) { k.vs = vm; a0 = 0; }
+  var vs = k.vs, TV = k.TV, AV = k.AV, IV = B.IV;
+  if (TV.length < nt * 4) { x = new Uint32Array(Math.ceil(nt * 1.33 / W) * W * 4); x.set(TV); TV = k.TV = x; }
+  if (AV.length < nv * vs) { x = new Uint32Array(Math.ceil(nv * vs * 1.33 / W) * W); x.set(AV); AV = k.AV = x; }
+  if (IV.length < nt * 3) { x = new Uint32Array(Math.ceil(nt * 1.33) * 3); x.set(IV); IV = B.IV = x; }
+  if (s0 >= 0) for (j = s0; j < L.length; j++) sailKTri(L[j], TV, IV);
+  if (a0 >= 0) for (j = a0; j < L.length; j++) sailKAdj(L[j], AV, vs);
+  for (j = 0; j < KD.length; j++) sailKLive(L[KD[j]], TV, IV, R);
+  r = TV.length / 4 / W;
+  if (k.rows[1] !== r) { sailKTex(k, 1, gl.RGBA32UI, gl.RGBA_INTEGER, gl.UNSIGNED_INT, r, TV); }
+  else { if (s0 >= 0) sailKSub(k, 1, gl.RGBA_INTEGER, gl.UNSIGNED_INT, 4, TV, L[s0].tb, nt); if (R[1] >= 0) sailKSub(k, 1, gl.RGBA_INTEGER, gl.UNSIGNED_INT, 4, TV, R[0], R[1] + 1); }
+  r = AV.length / W;
+  if (k.rows[2] !== r) sailKTex(k, 2, gl.R32UI, gl.RED_INTEGER, gl.UNSIGNED_INT, r, AV);
+  else if (a0 >= 0) sailKSub(k, 2, gl.RED_INTEGER, gl.UNSIGNED_INT, 1, AV, L[a0].vb * vs, nv * vs);
+  if (B.gi !== IV.length) { gl.bindVertexArray(B.vao); gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, IV, gl.STATIC_DRAW); gl.bindVertexArray(null); B.gi = IV.length; }   // 索引是 VAO 的狀態 ⇒ 先綁自己的 VAO
+  else if (s0 >= 0 || R[1] >= 0) {
+    gl.bindVertexArray(B.vao);
+    if (s0 >= 0 && nt > L[s0].tb) gl.bufferSubData(gl.ELEMENT_ARRAY_BUFFER, L[s0].tb * 12, IV, L[s0].tb * 3, (nt - L[s0].tb) * 3);
+    if (R[1] >= 0) gl.bufferSubData(gl.ELEMENT_ARRAY_BUFFER, R[0] * 12, IV, R[0] * 3, (R[1] + 1 - R[0]) * 3);
+    gl.bindVertexArray(null);
+  }
+  r = Math.ceil(vcap / W);
+  if (k.rows[0] !== r) sailKTex(k, 0, gl.RGB32F, gl.RGB, gl.FLOAT, r, null);
+  if (nv) {                                                              // 位置：整列一次、最後不滿的那一列另一次（只傳 nv 點）
+    var full = Math.floor(nv / W), rest = nv - full * W;
+    gl.activeTexture(gl.TEXTURE0 + SAILK.U[0]); gl.bindTexture(gl.TEXTURE_2D, k.tex[0]);
+    if (full) gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, W, full, gl.RGB, gl.FLOAT, SKP, 0);
+    if (rest) gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, full, rest, 1, gl.RGB, gl.FLOAT, SKP, full * W * 3);
+    gl.activeTexture(gl.TEXTURE0);
+  }
+  if (B.gd !== vcap) { gl.bindBuffer(gl.ARRAY_BUFFER, B.vbo); gl.bufferData(gl.ARRAY_BUFFER, vcap * SB_DW * 4, gl.DYNAMIC_COPY); gl.bindBuffer(gl.ARRAY_BUFFER, null); B.gd = vcap; }
+  if (nv) SAILK.run(B, nv);
+}
+/** 一面（sailBuf 的 L[j]：vb 頂點起點、tb 三角形起點、tr、d 不畫的點）的三角形表與索引整段重寫。 */
+function sailKTri(q, TV, IV) {
+  var tr = q.tr, d = q.d, b = q.vb, w = q.tb, t;
+  for (t = 0; t < tr.length; t += 3, w++) {
+    var a = b + tr[t], e = b + tr[t + 1], c = b + tr[t + 2], on = !(d && (d[tr[t]] || d[tr[t + 1]] || d[tr[t + 2]]));
+    TV[w * 4] = a; TV[w * 4 + 1] = e; TV[w * 4 + 2] = c; TV[w * 4 + 3] = on ? 1 : 0;
+    IV[w * 3] = a; IV[w * 3 + 1] = on ? e : a; IV[w * 3 + 2] = on ? c : a;   // 不在 ⇒ 三點疊成一點
+  }
+}
+/** 一面不畫的點換了（面沒換）：只改「還在」變了的三角形；R ＝ 變了的三角形編號範圍（累計）。 */
+function sailKLive(q, TV, IV, R) {
+  var tr = q.tr, d = q.d, b = q.vb, w = q.tb, t;
+  for (t = 0; t < tr.length; t += 3, w++) {
+    var on = d && (d[tr[t]] || d[tr[t + 1]] || d[tr[t + 2]]) ? 0 : 1;
+    if (TV[w * 4 + 3] === on) continue;
+    TV[w * 4 + 3] = on; IV[w * 3 + 1] = on ? b + tr[t + 1] : b + tr[t]; IV[w * 3 + 2] = on ? b + tr[t + 2] : b + tr[t];
+    if (w < R[0]) R[0] = w; if (w > R[1]) R[1] = w;
+  }
+}
+/** 一面的鄰接表（每點 vs 格：它所在的三角形的編號，照順序；空的 0xFFFFFFFF）。 */
+function sailKAdj(q, AV, vs) {
+  var a = sailAdj(q.tr, q.n), b = q.vb, i, s;
+  for (i = 0; i < q.n; i++) for (s = 0; s < vs; s++) AV[(b + i) * vs + s] = s < a.c[i] ? q.tb + a.l[i * a.vm + s] : 0xFFFFFFFF;
+}
+/** 第 j 張貼圖重配 rows 列（data：整份；null ＝ 只配）。整數、浮點貼圖都要 NEAREST（不然不完整、texelFetch 讀到 0）。 */
+function sailKTex(k, j, ifmt, fmt, type, rows, data) {
+  gl.activeTexture(gl.TEXTURE0 + SAILK.U[j]); gl.bindTexture(gl.TEXTURE_2D, k.tex[j]);
+  gl.texImage2D(gl.TEXTURE_2D, 0, ifmt, SAILK.W, rows, 0, fmt, type, data);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+  gl.activeTexture(gl.TEXTURE0); k.rows[j] = rows;
+}
+/** 第 j 張貼圖傳 [e0, e1) 那幾格所在的整列（cp：一格幾個數）。 */
+function sailKSub(k, j, fmt, type, cp, data, e0, e1) {
+  var W = SAILK.W, r0 = Math.floor(e0 / W), r1 = Math.ceil(e1 / W); if (r1 <= r0) return;
+  gl.activeTexture(gl.TEXTURE0 + SAILK.U[j]); gl.bindTexture(gl.TEXTURE_2D, k.tex[j]);
+  gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, r0, W, r1 - r0, fmt, type, data, r0 * W * cp);
+  gl.activeTexture(gl.TEXTURE0);
 }
 /** 細格的位置：照權重從物理的粗格內插（粗格就是細格 ⇒ 原樣）。 */
 /** 垂下來的繩（物理開著才有）：模擬走過才重做（60_render.js prepRig）。暫存區 LBV 不夠就加大三成（以前每一格一份新的陣列）；
@@ -287,7 +441,7 @@ function rigChk(ow, live) {
   var K = ow.sbChk, st = rigStat(), bad = !K || !ow.sb || live && !ow.llChk;
   if (!bad) {
     var f = sailFill(ow);
-    bad = f.tk !== K.tk || !sailEq(ow.sb, K.d);
+    bad = f.tk !== K.tk || !(SAILK.on() ? sailEqK(ow.sb, st) : sailEq(ow.sb, K.d));
     if (!bad && live) { var nl = looseFill(ow, f.td); bad = !rigEq(LBV, ow.llChk, nl); }   // 先填（填的時候 LBV 可能換一份大的）才拿 LBV
   }
   st.rigChk = (st.rigChk || 0) + 1; st.rigMiss = (st.rigMiss || 0) + (bad ? 1 : 0);
@@ -301,6 +455,34 @@ function sailEq(B, D) {
     for (k = 0; k < SB_DW; k++) if (X[v * SB_STRIDE + k] !== Y[v * SB_DW + k]) return false;
     for (k = 0; k < SB_SW; k++) if (X[v * SB_STRIDE + SB_DW + k] !== Z[v * SB_SW + k]) return false;
   }
+  return true;
+}
+/** R2 對拍（sailFill 剛填好的 SBV／SBI）：索引拿掉三點疊成一點的那幾個 ＝ SBI；靜的逐位元；動的從 GPU 讀回來（同步讀，只有 ?rigchk=1）——
+ *  位置要相等（c.p 的 −0 抄過來還是 −0、clothFine 會變 +0 ⇒ 照數值比）；法線照角度記（st.nrmN 比了幾點、nrmMax 最大幾度、nrmBig 超過 NRM_BIG 度的點數；兩邊都 0 ⇒ 不算）。 */
+var NRM_BIG = 1;
+function sailEqK(B, st) {
+  var nv = SB_NV, ni = SB_NI, I = B.IV, k = 0, t, v, c;
+  if (B.nv !== nv) return false;
+  for (t = 0; t < B.n; t += 3) {
+    if (I[t] === I[t + 1] && I[t] === I[t + 2]) continue;
+    if (k >= ni || I[t] !== SBI[k] || I[t + 1] !== SBI[k + 1] || I[t + 2] !== SBI[k + 2]) return false;
+    k += 3;
+  }
+  if (k !== ni) return false;
+  var X = new Uint32Array(SBV.buffer, 0, nv * SB_STRIDE), Z = new Uint32Array(B.SV.buffer, 0, nv * SB_SW);
+  for (v = 0; v < nv; v++) for (c = 0; c < SB_SW; c++) if (X[v * SB_STRIDE + SB_DW + c] !== Z[v * SB_SW + c]) return false;
+  if (!nv) return true;
+  var D = SAILK.rb && SAILK.rb.length >= nv * SB_DW ? SAILK.rb : (SAILK.rb = new Float32Array(Math.max(1, nv) * SB_DW)), mx = st.nrmMax || 0, big = 0;
+  gl.bindBuffer(gl.COPY_READ_BUFFER, B.vbo); gl.getBufferSubData(gl.COPY_READ_BUFFER, 0, D, 0, nv * SB_DW); gl.bindBuffer(gl.COPY_READ_BUFFER, null);
+  for (v = 0; v < nv; v++) {
+    var o = v * SB_STRIDE, d = v * SB_DW;
+    if (SBV[o] !== D[d] || SBV[o + 1] !== D[d + 1] || SBV[o + 2] !== D[d + 2]) return false;
+    var ax = SBV[o + 3], ay = SBV[o + 4], az = SBV[o + 5], bx = D[d + 3], by = D[d + 4], bz = D[d + 5], la = Math.hypot(ax, ay, az), lb = Math.hypot(bx, by, bz);
+    if (!la && !lb) continue;
+    var g = la && lb ? Math.acos(Math.min(1, Math.max(-1, (ax * bx + ay * by + az * bz) / (la * lb)))) * 180 / Math.PI : 180;
+    st.nrmN = (st.nrmN || 0) + 1; if (g > mx) mx = g; if (g > NRM_BIG) big++;
+  }
+  st.nrmMax = mx; st.nrmBig = (st.nrmBig || 0) + big;
   return true;
 }
 function upload(o, data, stride, attrs) {
