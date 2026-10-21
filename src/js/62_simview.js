@@ -40,7 +40,7 @@ function armDraw(prog, sh) {
     var L = armLocal(a);
     gl.uniformMatrix4fv(prog.u.uModel, false, L ? M4.mul(sh.M, L) : sh.M);
     if (prog.u.uCutL) gl.uniformMatrix4fv(prog.u.uCutL, false, L || CUT_ID);
-    a.rs.draw();
+    rbatHull(a.rs, a.A.rs0);                                            // 沒被打到的區照船型那一塊的合併緩衝一段一次畫（60_rbatch.js，S8）
   });
   if (prog.u.uCutL) gl.uniformMatrix4fv(prog.u.uCutL, false, CUT_ID);
 }
