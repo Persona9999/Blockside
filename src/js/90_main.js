@@ -203,6 +203,8 @@ if (DEBUG) window.__game = {
   lab: function (o) { return uwLab(o); },
   /** 沙盒進水報表（81_floodlab.js，TASK-0654）：o 同網址 ?lab=flood 的參數 ⇒ 每 every 秒一筆讀數＋接縫分類＋截圖。⛔ 會重開一局。 */
   floodLab: function (o) { return floodLab(o); },
+  wrooms: function (i, o) { var T = typeof i === 'string' ? HULLT[i] : (SHIPS[i || 0] || {}).T || HULLT[myHull()], r = wrInfo(T); if (r && o && o.cabins) r.cabins = wrCabins(T); return r; },
+  wroomsLab: function (i, o) { return wroomsLab(typeof i === 'string' ? HULLT[i] : (SHIPS[i || 0] || {}).T || HULLT[myHull()], o); },   // 水的房間的報表（同 ?lab=wrooms）：讀數、艙房對照、側視與俯視圖（data URL）   // i：第幾艘或船型 id（先 loadHull）；{ cabins: 1 } ⇒ 再跟作者標的艙房比   // 水的房間（33_wrooms.js，TASK-0807）：幾間、開口、切了幾 ms、是不是快取讀回的、雜湊（⛔ rooms 是艙房，36_rooms.js）
   flHoles: function (i) { var sh = SHIPS[i || 0]; return sh.fl ? flHoleInfo(sh) : null; },   // 每個破口：在不在海面下、流量、進水／出水／沒在流（33_flood.js flHoleState）
   floodView: function (o) { return floodView(o); },                   // 換鏡頭再拍一張（81_floodlab.js）
   /** 環境音試聽（02_ambient.js，TASK-0663）：q ＝ 'sec=10&cases=名字:w:sea:rain:hold;…' ⇒ Promise<[{ name, peak, rmsDb, wav }]>（src/tests/ambient_lab.py 經 DevTools 呼叫）。 */
@@ -475,6 +477,7 @@ else GL_READY.then(yieldUI).then(function () {                     // 先讓主�
   if (Q.has('shipcheck')) { shipCheck(Q.get('shipcheck')); return; }
   if (LAB_FLEET) { flabInit(); return; }                                // 擬真沙盒（84_fleetlab.js）   // 匯入檢查（75_shipcheck.js；admin.py check 用無頭 Chrome 讀）
   if (Q.get('lab') === 'flood') { var FR = floodLab(flLabOpts()), fp = document.createElement('pre'); fp.id = 'lab'; document.body.appendChild(fp); fp.textContent = JSON.stringify(FR); uiAway(); return; }   // 沙盒進水報表（81_floodlab.js；src/tests/flood_lab.py）
+  if (Q.get('lab') === 'wrooms') { var WO = {}; ['dz', 'px'].forEach(function (k) { if (Q.has(k)) WO[k] = +Q.get(k); }); var WR = wroomsLab(T, WO), wp = document.createElement('pre'); wp.id = 'lab'; document.body.appendChild(wp); wp.textContent = JSON.stringify(WR); uiAway(); return; }   // 水的房間的報表（81_floodlab.js wroomsLab；src/tests/wrooms_lab.py 讀 #lab）
   if (Q.get('lab') === 'uw') { var LR = uwLab(labOpts()), lp = document.createElement('pre'); lp.id = 'lab'; document.body.appendChild(lp); lp.textContent = JSON.stringify(LR); uiAway(); return; }   // 落水彈道的測試場（80_lab.js；src/tests/uw_lab.py 讀 #lab）
   if (DEMO >= 0) {                                             // 快轉：電腦對電腦、固定步長；?mode= 換玩法（TASK-0668 對拍對戰、沙盒用；沒給 ＝ 觀戰）
     flowMode(Object.prototype.hasOwnProperty.call(MODE_RULES, Q.get('mode')) ? Q.get('mode') : 'eve'); reset(); flowRun(true);

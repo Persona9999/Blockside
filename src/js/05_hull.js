@@ -287,7 +287,7 @@ function buildHull(info, model, t0, C, key, F) {
       var mt = 12 * KEG_T; (T.rig.models || []).forEach(function (m) { mt += modelT({ kind: modelKind(m) }, 1); });   // 模型的重量（砲照實、取用點 12 桶）
       T.ballast0 = Math.max(0, Math.round((T.disp - T.voxT0 - mt) / 25) * 25);   // 剛好浮在設計水線的壓艙物（滑桿一格 25 噸）
     }]
-  ]);
+  ]).concat(wrSteps(T, C).map(function (f) { return ['水的房間', function () { var a = performance.now(); f(); T.ms.wrooms = +((T.ms.wrooms || 0) + performance.now() - a).toFixed(1); }]; }));   // 水的房間（33_wrooms.js，TASK-0807）：快取有就讀回，沒有分三步現算（要 T.hullG、T.wl0、T.hullHB ⇒ 排在最後）
   var p = Promise.resolve();
   steps.forEach(function (s, i) { p = p.then(function () { hullSay(info.name + '：' + s[0] + '（' + (i + 1) + '／' + steps.length + '）…'); return yieldUI(); }).then(s[1]); });
   return p.then(function () { T.decodeMs = t1 - t0; T.meshMs = performance.now() - t1; return T; });

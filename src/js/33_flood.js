@@ -30,20 +30,27 @@ function flType(T, c) {
   return K[c];
 }
 /** flType 拆成幾步（兩舷的船殼、艙內格數、實心格數（照區塊層分段）、每格的量；同一型第一次約 0.1 s ⇒ 70_flow.js startStaged 開局分段做）。已經有了 ⇒ []。照順序做 ＝ 拆之前的 flType。 */
+/** 船型 T 的船殼內側（水格 flTypeSteps 與水的房間 33_wrooms.js 共用一份；TASK-0807 從 flTypeSteps 第一步搬出來，算法一字不改）：
+ *  每個 (x, z) 兩舷船殼最外那一格 yP／yM（沒有 ⇒ −1；艙內 ＝ yM < y < yP）、範圍 x0–x1、zTop、ylo–yhi。掛在 T.flSkin；⛔ yP／yM 算完不改（兩邊共用）。 */
+function flSkin(T) {
+  if (T.flSkin) return T.flSkin;
+  var B = T.hullG, zTop = Math.min(B.sz, T.zw + 46), x0 = Math.max(0, T.wl0 - 4), x1 = Math.min(B.sx - 1, T.wl1 + 4), cy = T.cy, TW = T.hullTW, HB = T.hullHB, x, y, z;
+  var nxv = x1 - x0 + 1, yP = new Int16Array(nxv * zTop).fill(-1), yM = new Int16Array(nxv * zTop).fill(-1), ylo = 1e9, yhi = -1;
+  for (z = 0; z < Math.min(zTop, T.hullTH); z++) for (x = x0; x <= x1; x++) {
+    var hb = HB[z * TW + x]; if (!hb) continue;
+    var k = z * nxv + x - x0;
+    for (y = Math.min(B.sy - 1, Math.ceil(cy + hb)); y > cy; y--) if (B.get(x, y, z)) { yP[k] = y; break; }
+    for (y = Math.max(0, Math.floor(cy - hb - 1)); y < cy; y++) if (B.get(x, y, z)) { yM[k] = y; break; }
+    if (yP[k] < 0 || yM[k] < 0) { yP[k] = yM[k] = -1; continue; }
+    if (yM[k] < ylo) ylo = yM[k]; if (yP[k] > yhi) yhi = yP[k];
+  }
+  return T.flSkin = { B: B, zTop: zTop, x0: x0, x1: x1, nxv: nxv, yP: yP, yM: yM, ylo: ylo, yhi: yhi };
+}
 function flTypeSteps(T, c) {
   var K = T.flc || (T.flc = {}); if (K[c]) return [];
-  var B, zTop, x0, x1, cy, TW, HB, nxv, yP, yM, ylo, yhi, x, y, z, NX, NY, NZ, N, F, intC, solC, intL, solL;
+  var B, zTop, x0, x1, nxv, yP, yM, ylo, yhi, x, y, z, NX, NY, NZ, N, F, intC, solC, intL, solL;
   return [function () {
-    B = T.hullG, zTop = Math.min(B.sz, T.zw + 46), x0 = Math.max(0, T.wl0 - 4), x1 = Math.min(B.sx - 1, T.wl1 + 4), cy = T.cy, TW = T.hullTW, HB = T.hullHB;
-    nxv = x1 - x0 + 1, yP = new Int16Array(nxv * zTop).fill(-1), yM = new Int16Array(nxv * zTop).fill(-1), ylo = 1e9, yhi = -1;
-    for (z = 0; z < Math.min(zTop, T.hullTH); z++) for (x = x0; x <= x1; x++) {
-      var hb = HB[z * TW + x]; if (!hb) continue;
-      var k = z * nxv + x - x0;
-      for (y = Math.min(B.sy - 1, Math.ceil(cy + hb)); y > cy; y--) if (B.get(x, y, z)) { yP[k] = y; break; }
-      for (y = Math.max(0, Math.floor(cy - hb - 1)); y < cy; y++) if (B.get(x, y, z)) { yM[k] = y; break; }
-      if (yP[k] < 0 || yM[k] < 0) { yP[k] = yM[k] = -1; continue; }
-      if (yM[k] < ylo) ylo = yM[k]; if (yP[k] > yhi) yhi = yP[k];
-    }
+    var K0 = flSkin(T); B = K0.B; zTop = K0.zTop; x0 = K0.x0; x1 = K0.x1; nxv = K0.nxv; yP = K0.yP; yM = K0.yM; ylo = K0.ylo; yhi = K0.yhi;
   }, function () {
     NX = Math.ceil(nxv / c), NY = Math.ceil((yhi - ylo + 1) / c), NZ = Math.ceil(zTop / c), N = NX * NY * NZ;
     F = { c: c, X0: x0, Y0: ylo, NX: NX, NY: NY, NZ: NZ, N: N, nxv: nxv, zTop: zTop, yP: yP, yM: yM, cap: new Float32Array(N), pd: new Float32Array(N), op: new Float32Array(N * c), ol: new Float32Array(N * c) };   // op：每格每一層空著幾格（水照層疊上去：畫水面、flPd）；ol：那一層開著幾成（那一層沒有艙內 ⇒ −1）

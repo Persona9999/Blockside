@@ -9,6 +9,10 @@
 //   dur（秒，預設 60）、every（秒，預設 10）、fyaw、fpitch、fdist、fty（鏡頭；fty ＝ 注視點在船中心上面幾公尺，看底艙給負的；⛔ 不叫 dist／pitch：dist 是開局兩艘船的距離、pitch 是 ?cam=deck 的俯角 —— 撞名量過：dist=38 把另一艘擺到旁邊、進水整個不一樣）、cut（half ＝ 剖面、none；預設 half）、deck（拿掉幾層甲板，預設 0）、xray（1 ＝ 透視）、
 //   boom（殉爆開局，TASK-0662：彈藥庫編號，0 後、1 前、0,1 兩間；浮穩之後直接整間炸 ⇒ 沒另外給 holes 就不打預設的洞；每一筆多記 ex ＝ 艙內最高水面離海面幾公尺（flabEx），另有每秒一筆的 trace）、
 //   w（截圖寬，預設 480）、flat（1 ＝ 浪設 0）、focus（step ＝ 每一筆把鏡頭對準水面差最大的那條兩池交界；cell:x:y ＝ 固定對準那一欄最高的水面 —— 照 fpitch／fdist 拉近、鏡頭擺在往船中心那一側，fyaw 不用）。
+// 對解析解（TASK-0806；Tim 2026-10-22，進水換演算法 TASK-0804 的第一步）：hz（模擬步長 60／30／10 Hz，同 84_fleetlab.js 換 DT；量完還原）、
+//   pin（1 ＝ 浮穩之後把船的位置與姿態釘住：每一步之後照浮穩那一刻還原、重算矩陣 ⇒ 水頭只由艙內水位決定）、pump（0 ＝ 這艘不抽水）、
+//   ref（1 ＝ 另算一條參考解 flabRef：那個洞通得到的艙內空間照格與世界高度由低往高填、Torricelli 照模擬自己的係數與破口面積、1 ms 一步積分）。
+//   都不給 ⇒ 跟加之前逐位相同（只多讀幾個網址參數）。
 // ⛔ 只在 ?lab=flood 或 __game.floodLab 才跑；一般遊戲一行都不多算。
 // 鏡頭用自由鏡頭（CAM.mode 0：注視點 CAM.tgt、yaw／pitch／dist 照給的）。⛔ mode 4 是「我艦看向敵艦」：注視點固定在我艦中心上 4 m、yaw 照敵艦方向 ⇒ fyaw、對準都沒效（量過：focus 對準的點被蓋回船中心）。
 // ⚠ 要帶 seed（flood_lab.py 沒給就補 seed=3）：沒帶 ⇒ 每次開都是隨機的一局，浮穩的姿勢、洞的位置、進水都不一樣（量過：同一組參數兩次 t 38 是 130／138 m³）；
@@ -58,15 +62,19 @@ function flabMap(st, px) {
  *  ⚠ 截圖每次跑都會差一點（量過：還沒進水的 t 8 兩次就不一樣，換掉 Math.random 也一樣 ⇒ 畫面裡有別的跟真實時間走的東西）⇒ 比圖照像素差的大小比，不比位元組。 */
 function floodLab(o) {
   o = Object.assign({ holes: FLAB_HOLES, dur: 60, every: 10, yaw: 2.6, pitch: 0.42, dist: 0, cut: 'half', deck: 0, xray: false, w: 480, flat: false }, o || {});
-  var seaK = SEA_K; if (o.flat) SEA_K = 0;
+  var seaK = SEA_K, DT0 = DT; if (o.flat) SEA_K = 0;
+  if (o.hz > 0) DT = 1 / o.hz;                                           // 換模擬步長（TASK-0806）：開局之前換（同 84_fleetlab.js），量完還原
   flowMode('sandbox'); reset(); AUTOFIRE = false; flowRun(false);
   var sh = SHIPS[0], i;
   SHIPS.forEach(function (s2) { s2.sailSet = 0; s2.power = 0; s2.manual = true; s2.rudder = 0; });
   if (SHIPS[1]) { SHIPS[1].px += 3000; SHIPS[1].pz += 3000; }
   for (i = 0; i < Math.round(LAB_SETTLE / DT); i++) simStep();
   sh.M = shipMatrix(sh); sh.inv = M4.inv(sh.M); sh.center = shipCenter(sh);
+  var pin = o.pin ? flabPin(sh) : null;                                  // 釘住姿態（TASK-0806）：每一步之後還原
+  if (o.pump === 0) { sh.cfg.pump = 0; sh.pumps = null; }                // 這艘不抽水（pumpK ⇒ 0；sh.cfg 是這艘自己的一份 cfgCopy）
   var out = { hull: sh.T.id, seed: SEED, lv: FLOOD_LV, c: sh.fl ? sh.fl.F.c : null, sea: SEA_K, o: { dur: o.dur, every: o.every, cut: o.cut, deck: o.deck, xray: !!o.xray }, holes: [], rows: [] };
-  if (!sh.fl) { out.err = '進水是公式模式（物理效果的「進水」第 0 檔）⇒ 沒有艙內的水可畫；網址加 phx=mid／high／full'; SEA_K = seaK; return out; }
+  if (o.hz > 0) out.o.hz = o.hz; if (pin) out.o.pin = 1; if (o.pump === 0) out.o.pump = 0;   // 只在給了才記（⛔ 都不給 ⇒ 報表跟加之前逐位相同）
+  if (!sh.fl) { out.err = '進水是公式模式（物理效果的「進水」第 0 檔）⇒ 沒有艙內的水可畫；網址加 phx=mid／high／full'; SEA_K = seaK; DT = DT0; return out; }
   var T = sh.T, x0 = T.wl0, x1 = T.wl1;
   if (o.boom) o.boom.forEach(function (k) { var g = sh.mags[k]; if (g) magBoom(sh, g); out.holes.push({ boom: k, mag: g ? g.name : null }); });   // 殉爆開局（TASK-0662）：整間直接炸（同 __game.ignite(0, k, 'mag')）
   (o.boom && !o.holesSet ? [] : o.holes).forEach(function (hd) {
@@ -74,6 +82,7 @@ function floodLab(o) {
     var z = sk ? sk.z - hd[1] : null, r = z === null ? null : labHole(sh, x, z, hd[2], hd[3]);
     out.holes.push({ x: x, z: z, side: hd[2], r: hd[3], removed: r ? r.removed : 0 });
   });
+  var tHole = SIMT;                                                      // 參考解從打洞那一刻起算（flabRef）
   // 鏡頭：對著船中、看艙內（剖面拿掉靠鏡頭那一半）
   var cc = shipCenter(sh); camSet({ tgt: [cc[0], cc[1] + (o.ty || 0), cc[2]], trYaw: null, trMe: null });   // 注視點：船中心往上 ty 公尺（看底艙 ⇒ 負的）
   camSet({ follow: null, mode: 0, yaw: o.yaw, pitch: o.pitch, dist: o.dist > 0 ? o.dist : Math.max(60, (x1 - x0) * S * 0.95) });
@@ -83,7 +92,7 @@ function floodLab(o) {
   out.trace = [];                                                       // 每秒一筆：[t, 水 m³, 進 m³/s, 出 m³/s, 艙內最高水面 − 海面 m, 高出海面的水 m³, 下沉 m]（flabEx）
   for (var k = 0; k <= steps; k++) {
     var focusAt = null;
-    if (k) { for (i = 0; i < n; i++) { simStep(); if (i % 30 === 29) remesh(Infinity); if (i % tn === tn - 1) { var ex = flabEx(sh); out.trace.push([+SIMT.toFixed(1), +sh.fl.vol.toFixed(1), +sh.fl.inQ.toFixed(2), +sh.fl.outQ.toFixed(2), ex.max, ex.vol, +sh.sink.toFixed(2)]); } } }
+    if (k) { for (i = 0; i < n; i++) { simStep(); if (pin) pin(); if (i % 30 === 29) remesh(Infinity); if (i % tn === tn - 1) { var ex = flabEx(sh); out.trace.push([+SIMT.toFixed(1), +sh.fl.vol.toFixed(1), +sh.fl.inQ.toFixed(2), +sh.fl.outQ.toFixed(2), ex.max, ex.vol, +sh.sink.toFixed(2)]); } } }
     remesh(Infinity); camSet({ snap: true }); camUpdate(1); render();
     if (o.focus === 'step' && sh.fl.mesh && sh.fl.mesh.stat) {             // 對準水面差最大的那條兩池交界（高的那一邊），拉近再拍
       var E = sh.fl.mesh.stat.map.edge.filter(function (e) { return e[3] === 1 && e[4] > 0; }).sort(function (a, b) { return b[4] - a[4]; })[0];
@@ -108,8 +117,78 @@ function floodLab(o) {
         openAt: st.map.edge.filter(function (e) { return e[3] === 2; }).slice(0, 12).map(function (e) { return e.slice(0, 3); }) } : null,   // 懸空的邊（水邊 noise 會上的那幾邊）：[x, y, 方向] ⇒ focus=cell:x:y 拉近看
       img: flabShot(o.w), map: st ? flabMap(st, sh.fl.F.c >= 10 ? 10 : 6) : null });
   }
-  FL_SNAP = snap0; FL_STAT = stat0; SEA_K = seaK;
+  if (o.ref) out.ref = flabRef(sh, out.trace, tHole);
+  FL_SNAP = snap0; FL_STAT = stat0; SEA_K = seaK; DT = DT0;
   return out;
+}
+
+/** 釘住姿態（TASK-0806，?pin=1）：記下浮穩那一刻的位置與姿態，回一支「每一步之後照它還原、重算矩陣」的函式。
+ *  ⇒ 水頭只由艙內水位決定（下沉、傾斜、浪的起伏都不動）；只在報表裡叫，⛔ 不碰 stepShip。 */
+function flabPin(sh) {
+  var K = ['px', 'pz', 'yaw', 'sink', 'sinkV', 'lift', 'wl', 'bob', 'rollA', 'rollV', 'pitchA', 'pitchW', 'rollW'], s0 = {};
+  K.forEach(function (k) { s0[k] = sh[k]; });
+  return function () { K.forEach(function (k) { sh[k] = s0[k]; }); sh.M = M4.mul(shipMatrix(sh), M4.ident()); sh.inv = M4.inv(sh.M); sh.center = shipCenter(sh); };
+}
+
+/** 參考解（TASK-0806，?ref=1；給 TASK-0808 房間圖同一個情境對拍）：
+ *  · 水量 → 水位：艙內（flInHull）的空氣格照世界高度（格中心，1 cm 一階）由低往高加進 union-find；水位 h 時的水量 ＝ 落點那一格所在的那一塊有幾格 × S³。
+ *    ⇒ 低於 h 才連得到的地方才算（門檻、甲板：水位過了才併進來，跟平衡時水能到的地方一樣）；落點 ＝ 破口裡面那一格往下（−z）走到底。
+ *  · 進水：每塊破口照模擬自己的 Torricelli（33_flood.js flTick：FL_C × 面積 × √(2g × (max(海, 洞) − max(艙內, 洞))) × fk），1 ms 一步積分；不算抽水（要比就帶 pump=0）。
+ *  · 破口照報表最後那一刻的（flHoleInfo；釘住姿態 ⇒ 不會變）。⚠ 只比水量怎麼分配與步長，⛔ 不是「真的流體」：係數、面積都跟模擬同一份。
+ *  回 { H 海面, holes 幾塊, A m², C 係數, Vmax 灌到海面的 m³, half: { t, ref, model, pct }, full: { ref, model }（水量到 Vmax 99% 那一刻，秒；沒到 ⇒ null）, back 模擬算回海裡的 m³, rows: [[t, 參考 m³, 模擬 m³]] }。 */
+function flabRef(sh, trace, t0) {
+  var fl = sh.fl, F = fl.F, G3 = sh.grid, M = sh.M, hs = flHoleInfo(sh) || [];
+  if (!hs.length || !trace.length) return { err: '沒有破口或沒有逐秒紀錄' };
+  var C = FL_C * sh.cfg.flood / LIM.flood[2], wy = function (x, y, z) { return M[1] * x + M[5] * y + M[9] * z + M[13]; };
+  var P = hs.map(function (h) { return M4.pt(M, h.x, h.y, h.z); }), H = seaH(P[0][0], P[0][2], SIMT), A = hs.reduce(function (s, h) { return s + h.area; }, 0);
+  var big = hs.slice().sort(function (a, b) { return b.area - a.area; })[0], side = big.y < sh.T.cy ? 1 : -1;
+  // 落點：最大那塊破口往艙內走到第一個空氣格，再往下走到底
+  var lx = Math.floor(big.x), lz = Math.floor(big.z), ly = Math.floor(big.y);
+  for (var t = 0; t < 40 && (G3.get(lx, ly, lz) || !flInHull(F, lx, ly, lz)); t++) ly += side;
+  while (lz > 0 && flInHull(F, lx, ly, lz - 1) && !G3.get(lx, ly, lz - 1)) lz--;
+  // 艙內、海面以下的空氣格 ⇒ 照世界高度分桶（1 cm）
+  var NYv = F.NY * F.c, NXv = F.nxv, Z = F.zTop, n3 = NXv * NYv * Z, id = function (x, y, z) { return (z * NYv + (y - F.Y0)) * NXv + (x - F.X0); };
+  var wmin = 1e9, cells = [], hv = [];
+  for (var z = 0; z < Z; z++) for (var x = F.X0; x < F.X0 + NXv; x++) {
+    var k = z * F.nxv + x - F.X0; if (F.yP[k] < 0) continue;
+    for (var y = F.yM[k] + 1; y < F.yP[k]; y++) { if (G3.get(x, y, z)) continue; var w = wy(x + 0.5, y + 0.5, z + 0.5); if (w >= H) continue; cells.push(id(x, y, z)); hv.push(w); if (w < wmin) wmin = w; }
+  }
+  var nb = Math.ceil((H - wmin) / 0.01) + 1, cnt = new Int32Array(nb + 1), ord = new Int32Array(cells.length), i;
+  for (i = 0; i < cells.length; i++) cnt[((hv[i] - wmin) / 0.01 | 0) + 1]++;
+  for (i = 1; i <= nb; i++) cnt[i] += cnt[i - 1];
+  for (i = 0; i < cells.length; i++) ord[cnt[(hv[i] - wmin) / 0.01 | 0]++] = i;
+  var par = new Int32Array(n3).fill(-1), sz = new Int32Array(n3), Lid = id(lx, ly, lz), lvH = [], lvV = [], S3 = S * S * S, D = [1, -1, NXv, -NXv, NXv * NYv, -NXv * NYv];
+  function find(a) { while (par[a] !== a) { par[a] = par[par[a]]; a = par[a]; } return a; }
+  for (var qi = 0, b = 0; b < nb; b++) {
+    var top = wmin + (b + 1) * 0.01;
+    for (; qi < ord.length && hv[ord[qi]] < top; qi++) {
+      var c0 = cells[ord[qi]], xi = c0 % NXv, yi = ((c0 / NXv) | 0) % NYv; par[c0] = c0; sz[c0] = 1;
+      for (var d = 0; d < 6; d++) {
+        if ((d === 0 && xi === NXv - 1) || (d === 1 && xi === 0) || (d === 2 && yi === NYv - 1) || (d === 3 && yi === 0)) continue;   // ⛔ 列尾不繞到下一列
+        var c1 = c0 + D[d]; if (c1 < 0 || c1 >= n3 || par[c1] < 0) continue; var ra = find(c0), rb = find(c1); if (ra !== rb) { if (sz[ra] < sz[rb]) { var tt = ra; ra = rb; rb = tt; } par[rb] = ra; sz[ra] += sz[rb]; } }
+    }
+    if (par[Lid] >= 0) { lvH.push(Math.min(top, H)); lvV.push(sz[find(Lid)] * S3); }
+  }
+  if (!lvV.length) return { err: '落點不在海面以下的艙內', at: [lx, ly, lz] };
+  var Vmax = lvV[lvV.length - 1];
+  function lev(V) { if (V <= 0) return -1e9; var lo = 0, hi = lvV.length - 1; if (V >= lvV[hi]) return H; while (lo < hi) { var m = (lo + hi) >> 1; if (lvV[m] < V) lo = m + 1; else hi = m; } return lvH[lo]; }
+  function q(V) { var h = lev(V), s = 0; for (var j = 0; j < hs.length; j++) { var p = P[j][1], dd = Math.max(H, p) - Math.max(h, p); if (dd > 0.001) s += C * hs[j].area * Math.sqrt(2 * G * dd); } return s; }
+  // 積分（1 ms）、每一筆逐秒紀錄的時刻取樣
+  // 「灌滿」照水量判：到 Vmax 的 99% 那一刻（⛔ 不照進水量：模擬的 inQ 讀數扣掉了進不去、算回海裡的 back ⇒ 水量還在漲時 inQ 已經是 0，量過 60 Hz 387 s）
+  var V = 0, tt2 = t0, rows = [], q0 = null, fullRef = null, halfT = null, dt = 0.001;
+  for (var r = 0; r < trace.length; r++) {
+    var tEnd = trace[r][0];
+    while (tt2 < tEnd - 1e-9) { var Q = q(V); if (q0 === null && Q > 0) q0 = Q; if (fullRef === null && V >= Vmax * 0.99) fullRef = tt2 - t0; if (halfT === null && V >= Vmax / 2) halfT = tt2; V = Math.min(Vmax, V + Q * dt); tt2 += dt; }
+    rows.push([tEnd, +V.toFixed(2), trace[r][1]]);
+  }
+  var fullModel = null;
+  for (r = 0; r < trace.length; r++) if (fullModel === null && trace[r][1] >= Vmax * 0.99) fullModel = +(trace[r][0] - t0).toFixed(1);
+  var half = null;
+  if (halfT !== null) {
+    for (r = 1; r < trace.length && trace[r][0] < halfT; r++);
+    if (r < trace.length) { var a0 = trace[r - 1], a1 = trace[r], f = (halfT - a0[0]) / Math.max(1e-9, a1[0] - a0[0]), vm = a0[1] + (a1[1] - a0[1]) * f; half = { t: +(halfT - t0).toFixed(1), ref: +(Vmax / 2).toFixed(1), model: +vm.toFixed(1), pct: +((vm / (Vmax / 2) - 1) * 100).toFixed(1) }; }
+  }
+  return { H: +H.toFixed(3), holes: hs.length, A: +A.toFixed(3), C: +C.toFixed(4), land: [lx, ly, lz], cells: cells.length, Vmax: +Vmax.toFixed(1), q0: q0 === null ? null : +q0.toFixed(3), half: half, full: { ref: fullRef === null ? null : +fullRef.toFixed(1), model: fullModel }, back: +(fl.back || 0).toFixed(1), rows: rows };
 }
 
 /** 艙內水面高出海面多少（TASK-0662；Tim 2026-10-16 殉爆後艙內的水停在海面以上不退）：每一格有水的水格，水面（照 flTick head 同一套：格底 ＋ 裝了幾成 × 格高，裝超過一成照算 ⇒ 擠出來的也看得到）減那一點正上方的海面（seaH，照浪）。
@@ -157,5 +236,63 @@ function flLabOpts() {
   if (Q.has('focus')) { o.focus = Q.get('focus'); var fm = /^cell:(\d+):(\d+)$/.exec(o.focus); if (fm) { o.focus = 'step'; o.focusCell = [+fm[1], +fm[2]]; } }
   if (Q.get('xray') === '1') o.xray = true;
   if (Q.get('flat') === '1') o.flat = true;
+  if (Q.has('hz')) o.hz = +Q.get('hz');                                 // TASK-0806：模擬步長、釘住姿態、不抽水、參考解
+  if (Q.get('pin') === '1') o.pin = true;
+  if (Q.get('pump') === '0') o.pump = 0;
+  if (Q.get('ref') === '1') o.ref = true;
   return o;
+}
+
+// ── 水的房間的報表（TASK-0807；Tim 2026-10-22「可以額外加上debug資訊輸出排查（寫檔 也可以圖片化輸出模擬結果）」）──
+// ?lab=wrooms（＋ ship=<船>、cache=0 量現算；dz ＝ 每幾層一張俯視圖（預設 6）、px ＝ 一格幾像素（預設 2））⇒ 頁面上 id ＝ lab 的 pre：
+//   讀數（33_wrooms.js wrInfo）、艙房對照（wrCabins）、圖 —— 側視（每個 (x, z) 那一列最多的那一間）、俯視（每 dz 層一張：每一格照房間上色；
+//   旁邊的接口（同一層相鄰兩格不同間）紅、上下的接口（這一格跟正上方那一格不同間）黃、作者標的艙房白框）。顏色照房間編號（同一間同色，⛔ 不代表大小）。
+// src/tests/wrooms_lab.py 用無頭 Chrome 讀、寫成 reports/wrooms/<tag>/（JSON、PNG、index.html；不入版控）。?debug=1 時 __game.wroomsLab(o) 同一套。
+// ⛔ 只在 ?lab=wrooms 或 __game.wroomsLab 才跑。
+function wrColor(r) {
+  if (r < 0) return [40, 40, 44];
+  var h = (r * 0.6180339887) % 1 * 6, s = 0.6, l = r % 3 ? 0.5 : 0.62, c = (1 - Math.abs(2 * l - 1)) * s, x = c * (1 - Math.abs(h % 2 - 1)), m = l - c / 2, p = [[c, x, 0], [x, c, 0], [0, c, x], [0, x, c], [x, 0, c], [c, 0, x]][Math.floor(h) % 6];
+  return [Math.round((p[0] + m) * 255), Math.round((p[1] + m) * 255), Math.round((p[2] + m) * 255)];
+}
+/** 那一層的房間圖（nxv × ny，−1 ＝ 不是艙內的空氣）。 */
+function wrLayerLab(W, z, out) {
+  out.fill(-1); if (z < 0 || z >= W.zTop) return out;
+  for (var xi = 0; xi < W.nxv; xi++) { var k = z * W.nxv + xi; for (var i = W.rowS[k]; i < W.rowS[k + 1]; i++) { var r = W.regRoom[W.runReg[i]]; for (var y = W.ry0[i]; y <= W.ry1[i]; y++) out[xi * W.ny + y - W.ylo] = r; } }
+  return out;
+}
+function wrPaint(w, h, px, f) {                                            // f(x, y) ⇒ [r, g, b]；每一格畫成 px × px
+  var cv2 = document.createElement('canvas'); cv2.width = w * px; cv2.height = h * px;
+  var g = cv2.getContext('2d'), im = g.createImageData(cv2.width, cv2.height), D = im.data;
+  for (var y = 0; y < h; y++) for (var x = 0; x < w; x++) { var c = f(x, y); for (var dy = 0; dy < px; dy++) for (var dx = 0; dx < px; dx++) { var o = ((y * px + dy) * cv2.width + x * px + dx) * 4; D[o] = c[0]; D[o + 1] = c[1]; D[o + 2] = c[2]; D[o + 3] = 255; } }
+  g.putImageData(im, 0, 0); return { cv: cv2, g: g };
+}
+/** 俯視：第 z 層（x 往右、y 往下）。 */
+function wrSlice(T, z, px, cabins) {
+  var W = T.wrm, A = wrLayerLab(W, z, new Int32Array(W.nxv * W.ny)), U = wrLayerLab(W, z + 1, new Int32Array(W.nxv * W.ny)), NY = W.ny;
+  var P = wrPaint(W.nxv, NY, px, function (xi, yi) {
+    var i = xi * NY + yi, r = A[i]; if (r < 0) return [40, 40, 44];
+    if ((xi < W.nxv - 1 && A[i + NY] >= 0 && A[i + NY] !== r) || (yi < NY - 1 && A[i + 1] >= 0 && A[i + 1] !== r)) return [235, 40, 40];   // 旁邊的接口
+    if (U[i] >= 0 && U[i] !== r) return [245, 210, 40];                  // 上下的接口（正上方是別間）
+    return wrColor(r);
+  });
+  P.g.strokeStyle = '#fff'; P.g.lineWidth = 1;
+  (cabins || []).forEach(function (R) { if (z < R.min[2] || z > R.max[2]) return; P.g.strokeRect((R.min[0] - W.x0) * px + 0.5, (R.min[1] - W.ylo) * px + 0.5, (R.max[0] - R.min[0] + 1) * px - 1, (R.max[1] - R.min[1] + 1) * px - 1); });
+  return P.cv.toDataURL('image/png');
+}
+/** 側視：x 往右、z 往上；每個 (x, z) 那一列最多的那一間。 */
+function wrSide(T, px) {
+  var W = T.wrm, best = new Int32Array(W.nxv * W.zTop).fill(-1);
+  for (var z = 0; z < W.zTop; z++) for (var xi = 0; xi < W.nxv; xi++) {
+    var k = z * W.nxv + xi, by = {}, bn = 0;
+    for (var i = W.rowS[k]; i < W.rowS[k + 1]; i++) { var r = W.regRoom[W.runReg[i]]; by[r] = (by[r] || 0) + W.ry1[i] - W.ry0[i] + 1; if (by[r] > bn) { bn = by[r]; best[k] = r; } }
+  }
+  return wrPaint(W.nxv, W.zTop, px, function (xi, yy) { return wrColor(best[(W.zTop - 1 - yy) * W.nxv + xi]); }).cv.toDataURL('image/png');
+}
+/** 整份：o ＝ { dz, px }。 */
+function wroomsLab(T, o) {
+  o = Object.assign({ dz: 6, px: 2 }, o || {});
+  var W = T && T.wrm; if (!W) return { err: '這艘沒有水的房間（T.wrm）' };
+  var cab = hullRooms(T), out = { id: T.id, name: T.name, info: wrInfo(T), cabins: wrCabins(T), o: o, side: wrSide(T, o.px), slices: [] };
+  for (var z = 0; z < W.zTop; z += o.dz) out.slices.push({ z: z, img: wrSlice(T, z, o.px, cab) });
+  return out;
 }

@@ -1,5 +1,5 @@
 // ───────────────────────── 船型快取（IndexedDB；Tim 2026-10-13：緩存船隻解析結果，加速下次啟動） ─────────────────────────
-// 存的是載入時算一次、之後不改的東西：船體網格（每個區塊的四邊形）、模型網格（三角形＋佔用格）、海面遮罩、浮力表、帆的布模板。
+// 存的是載入時算一次、之後不改的東西：船體網格（每個區塊的四邊形）、模型網格（三角形＋佔用格）、海面遮罩、浮力表、帆的布模板、水的房間（33_wrooms.js，TASK-0807）。
 //   格子本身不存：解碼很快（憲法號約 70 ms），而且 checksum 要照解出來的格子比（VK.verify）。
 //   GPU 那一半（上傳、VAO）每次照樣做，只省 CPU 算的那一半。量過（2026-10-13，PC）：船體網格 CPU 240 ms，讀回同一份 6.8 MB 約 19 ms。
 // 一型一筆（鍵 ＝ 船的 id）；兩艘同型共用那一筆。換裝（38_fit.js）：鍵 ＝ 艦隊裡那一項（船型@換裝表），換裝表也算進 vxk 的雜湊（出廠、存檔改了 ⇒ 舊的那筆不用）。
@@ -69,7 +69,7 @@ function cachePut(T, info) {
   var all = new Uint16Array(n), o = 0;
   for (var k = 0; k < idx.length; k += 2) { all.set(ms.get(idx[k]), o); o += idx[k + 1]; }
   var rec = { fmt: CACHE_FMT, vxk: st.vxk, code: st.code, voxels: T.h.voxels, checksum: T.h.checksum, at: Date.now(), nx: g.nx, ny: g.ny,
-    mesh: { all: all, idx: new Int32Array(idx) }, models: T.keep.models, hb: T.hullHB, hyd: T.hyd, disp: T.disp, rbox: T.rbox, sails: T.keep.sails || null, cloth: T.nSail0 === undefined ? T.cloth : T.cloth.slice(0, T.nSail0) };   // 陣營旗的布不存（照設定檔每次現算）
+    mesh: { all: all, idx: new Int32Array(idx) }, models: T.keep.models, hb: T.hullHB, hyd: T.hyd, disp: T.disp, rbox: T.rbox, sails: T.keep.sails || null, wrm: T.keep.wrm || null,cloth: T.nSail0 === undefined ? T.cloth : T.cloth.slice(0, T.nSail0) };   // 陣營旗的布不存（照設定檔每次現算）
   T.keep = null;
   cacheOpen().then(function (db) {
     if (!db) return;
