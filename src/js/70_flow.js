@@ -93,7 +93,7 @@ function startStaged() {
 function flowWarmSteps() {
   var out = [];
   SHIPS.forEach(function (sh) {                                          // 同 62_ports.js portsAnim 懶建的那兩行（蓋板分好幾步建）
-    if (!GFX.port || !sh.M || sh.ports !== undefined) return;
+    if (!portOn(sh) || !sh.M || sh.ports !== undefined) return;       // 「只有我艦」⇒ 只建我艦的（別艘輪到時第一格懶建）
     var R = {}; out = out.concat(portsSteps(sh, R), [function () { if (sh.ports === undefined) sh.ports = R.out; if (sh.recoil === undefined) sh.recoil = recoilBuild(sh); }]);
   });
   if (AC) out.push(function () { ambNoise(AC, 'white'); }, function () { ambNoise(AC, 'pink'); }, function () { ambNoise(AC, 'brown'); });   // 環境音的三種噪音（02_ambient.js），再建環境音

@@ -747,7 +747,7 @@ function sliders() {
 /** 畫質（07_gfx.js）：主選單的低／中／高、畫質設定頁每一項的按鈕、顯示 FPS。改了立刻生效（render 每一格讀 GFX）。 */
 function gfxUI() {
   var box = $('gfxItems');
-  function row(it) { return '<div class="row"><label>' + it.name + '</label>' + it.opt.map(function (o, v) { return '<button data-k="' + it.k + '" data-v="' + v + '">' + o + '</button>'; }).join('') + '</div>'; }
+  function row(it) { return '<div class="row"><label>' + it.name + '</label>' + (it.ord || it.opt.map(function (o, v) { return v; })).map(function (v) { return '<button data-k="' + it.k + '" data-v="' + v + '">' + it.opt[v] + '</button>'; }).join('') + '</div>'; }   // ord：按鈕照這個順序排（值不照順序的那幾項，07_gfx.js）
   // 照分類收起來（07_gfx.js GFX_CATS；Tim 2026-10-21）：<details> 一類一塊，預設收著；陰影那一塊底下是陰影細項（#shkItems 搬進來）、煙與碎片那一塊是兩個滑桿
   var fx = '<div class="row slide"><label for="smokeR">煙消散</label><input type="range" id="smokeR" min="' + SMOKE_LIM[0] + '" max="' + SMOKE_LIM[1] + '" step="0.1" aria-label="煙散得多快（倍數；1 ＝ 原本）"><span id="smokeV"></span></div>'
     + '<div class="row slide"><label for="debR">碎片上限</label><input type="range" id="debR" min="' + DEB_LIM[0] + '" max="' + DEB_LIM[1] + '" step="1000" aria-label="畫面上最多幾顆碎片"><span id="debV"></span></div>';   // 煙：不跟三檔走（07_gfx.js SMOKE_LIM）
