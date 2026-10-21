@@ -21,7 +21,7 @@ ctrlAdd({ name: 'orbit', pri: 0, on: function () { return true; },
   key: function (k, down, e) {
     if (!down) { kbLit(k, false); keyUp(k); return true; }
     var ba = keyAct('battle', k);                                       // 海戰的動作（66_keys.js 鍵位）
-    if (!modeRule('battleKeys') && ba !== 'pause' && ba !== 'settings' && ba !== 'cam') return true;   // 玩法規則 battleKeys（04_modes.js；建造）：開砲、轉舵那些鍵不作用
+    if (!modeRule('battleKeys') && ba !== 'pause' && ba !== 'settings' && ba !== 'cam' && !(modeRule('observe') && (ba === 'cut' || ba === 'deck' || ba === 'xray'))) return true;   // 玩法規則 battleKeys（04_modes.js；建造、觀察）：開砲、轉舵那些鍵不作用；觀察照樣切剖面、甲板、透視
     if (ba) e.preventDefault();
     kbLit(k, true); doKey(k, e.repeat); return true;
   },
@@ -54,3 +54,5 @@ ctrlAdd({ name: 'build', pri: 10, on: function () { return BLD.on && FP.on; },
   mouse: function (e) { if (!BLD.on || !FP.on || !fpLocked()) return; if (e.button === 0) bldDo(true); else if (e.button === 2) bldDo(false); },
   frame: function () { bldFrame(); }
 });
+// 船隻觀察（86_inspect.js）：只有每一格（面板的開關跟著鍵、勾了的部件掛名字）；鍵、滑鼠照海戰鏡頭（繞、縮放、平移）。
+ctrlAdd({ name: 'inspect', pri: 5, on: function () { return INSP.on; }, frame: function () { inspFrame(); } });

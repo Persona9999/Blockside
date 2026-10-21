@@ -150,7 +150,7 @@ nav a.on { background: var(--acc); color: var(--acc-ink); border-color: var(--ac
     inertia: '動力：加速慣性（質量的倍率）', turninert: '動力：迴轉慣性（轉向追舵的時間倍率）', sailtq: '動力：帆的力矩（受損不平衡時船自己偏多少）', windcap: '帆的風速上限（m/s）', box: '砲旁藥箱（份）', carry: '送藥手一次搬（份）', wind: '帆的風壓', hands: '預備水手（人）', drown: '溺水時間（秒）', heal: '治療時間（秒；0 ＝ 關）', musket: '火槍射程（m）', sailfix: '補帆時間（秒）', burn: '火勢（%；希臘火點著的火延燒多快，0 ＝ 不點火）', galley: '廚房加成（%；吃過飯的水手工作效率加成，0 ＝ 關：不開廚房、不生廚師；TASK-0720）', pslowb: '物理減速門檻（模擬最多佔幾成時間）', navre: '尋路更新（秒；0 ＝ 關）', sea: '浪的大小', stall: '頂風失速',
     funspeed: '娛樂加成：航速', funagile: '娛樂加成：靈活', funstall: '娛樂加成：頂風失速', funpowder: '娛樂加成：火藥血量', funhard: '娛樂加成：鐵甲硬度（擊穿門檻的倍率；木頭不變）' };
   var LIMITS = [['maxShips', '同時在場最多（艘）', 2, 16], ['maskNear', '船艙遮罩最多（艘）', 1, 16], ['fleetMax', '編成最多（艘）', 2, 99]];
-  var MENU = [['play', '玩法', [['fun', '娛樂'], ['real', '寫實']]], ['mode', '模式', [['pve', '對戰電腦'], ['eve', '觀戰'], ['sandbox', '沙盒']]],
+  var MENU = [['play', '玩法', [['fun', '娛樂'], ['real', '寫實']]], ['mode', '模式', [['pve', '對戰電腦'], ['eve', '觀戰'], ['sandbox', '沙盒'], ['observe', '船隻觀察']]],
     ['sail', '航行', [['auto', '自動'], ['manual', '我艦手動'], ['off', '停船']]], ['gfx', '畫質', [['low', '低'], ['mid', '中'], ['high', '高']]],
     ['phx', '物理效果', [['full', '全開'], ['high', '高'], ['mid', '中'], ['low', '低']]]];
   var CREW = [['officers', '軍官（0–8，照順序：船長、大副、二副、三副、見習軍官）', 1], ['helm', '舵手（0–4）', 1], ['marines', '陸戰隊最多（人）', 1], ['marineGap', '陸戰隊間隔（格）', 1],

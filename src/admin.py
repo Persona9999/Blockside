@@ -170,7 +170,7 @@ def act_authors():
         save(cfg)
     return ['建造者（ships[].author ← .vxk 檔頭 owner）：改了 %d 艘' % n] + log
 
-MENU = {'play': ('fun', 'real'), 'mode': ('pve', 'eve', 'sandbox'), 'sail': ('auto', 'manual', 'off'),
+MENU = {'play': ('fun', 'real'), 'mode': ('pve', 'eve', 'sandbox', 'observe'), 'sail': ('auto', 'manual', 'off'),
         'gfx': ('low', 'mid', 'high', 'ultra'), 'phx': ('full', 'high', 'mid', 'low')}
 SHIP_CFG_KEYS = ('hard', 'flood', 'gunw', 'speed', 'agile', 'upwind', 'base', 'pump', 'avoid')          # 每艘船的船隻設定（壓艙物照船算，不在這裡）；avoid：防撞參數（物件，不是滑桿；js/52_fleet.js avoidCfg）
 MAT_ID = r'[a-z][a-z0-9_]{0,31}'                                                      # 材質 ID（TASK-0616）：雕刻作品關聯的 meta material 照它認

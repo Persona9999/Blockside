@@ -5,7 +5,9 @@
 // ⛔ 操作與鏡頭（第三人稱／第一人稱／建造游標）是另一條軸，不放這張表（0668 第二段：控制器）；建造的介面本身在 82_build.js。
 // 失敗處置：MODE 不在表裡（舊存檔、打錯字）⇒ 照 pve。
 var MODE_BASE = {
-  menu: true,          // 主選單有沒有這顆鈕（也是存檔認不認）
+  menu: true,          // Blockside 主選單有沒有這顆鈕（也是存檔認不認）
+  url: true,           // 網址 ?mode= 認不認（Blocksail 的海戰頁、地球儀照網址帶玩法；TASK-0776 跟 menu 拆開：建造、航海只給 Blocksail ⇒ 主選單不列、網址照認）
+  observe: false,      // 船隻觀察的面板（86_inspect.js：剖面、甲板、透視、部件清單勾選高亮）；剖面、甲板、透視的鍵在 battleKeys 關著時照樣作用
   othersAct: true,     // 我艦以外的船動不動手：電腦轉舵開砲（50_sim.js ai）、陸戰隊與桅頂開槍（40_crew.js）、舉槍的姿勢（41_crew_art.js）
   fleet: 'menu',       // 船隊：'menu' ＝ 照主選單的兩邊艦隊；'first' ＝ 只生我方第一艘（52_fleet.js fleetSpec）
   judge: true,         // 判勝負、結算（61_hud.js checkEnd）
@@ -23,13 +25,16 @@ var MODE_RULES = {
   pve: { name: '對戰電腦' },
   eve: { name: '觀戰（自動開砲）', autoFire: true },
   sandbox: { name: '沙盒（敵艦不還手）', othersAct: false, judge: false, myReload: RELOAD_SANDBOX },
-  build: { name: '🔨 建造', fleet: 'first', judge: false, hint: false, stopOwn: true, battleKeys: false, fpLock: true, build: true },
+  // 船隻觀察（TASK-0776；Tim 2026-10-21「加一個船隻觀察頁面 可以切換剖視圖 & 甲板 作為一種模式(參考 建造 航海)」）：只有我艦、停在原地、不開砲 ⇒ 觀察面板（86_inspect.js）
+  observe: { name: '🔍 船隻觀察', fleet: 'first', judge: false, hint: false, stopOwn: true, battleKeys: false, observe: true },
+  // 建造、航海只給 Blocksail（Tim 2026-10-21「Blockside入口不顯示建造&航海(這兩個是給Blocksail使用的)」）：主選單不列、存檔不認，網址 ?mode=build／sail 照認
+  build: { name: '🔨 建造', menu: false, fleet: 'first', judge: false, hint: false, stopOwn: true, battleKeys: false, fpLock: true, build: true },
   // 航海（Blocksail 地球儀的「⛵ 航海」，2026-10-19；Tim：「單船、沒有敵艦，其他跟戰鬥一樣」）：只有我艦、不判勝負、停在外面給的起點（城鎮的港口外）
-  sail: { name: '⛵ 航海', fleet: 'first', judge: false, hint: false, origin: true, chart: true }
+  sail: { name: '⛵ 航海', menu: false, fleet: 'first', judge: false, hint: false, origin: true, chart: true }
 };
 Object.keys(MODE_RULES).forEach(function (m) { for (var k in MODE_BASE) if (!(k in MODE_RULES[m])) MODE_RULES[m][k] = MODE_BASE[k]; });
-// ?mode=<玩法>（外部開戰用：Blocksail 的開戰設定，2026-10-18）：一般遊玩也照網址選玩法（主選單有的才認；沒給 ⇒ 照設定檔、存檔）。?demo 照舊在 90_main.js 自己選。
-var MODE_Q = DEMO < 0 && Object.prototype.hasOwnProperty.call(MODE_RULES, Q.get('mode')) && MODE_RULES[Q.get('mode')].menu ? Q.get('mode') : null;
+// ?mode=<玩法>（外部開戰用：Blocksail 的開戰設定，2026-10-18）：一般遊玩也照網址選玩法（表裡 url 的才認；沒給 ⇒ 照設定檔、存檔）。?demo 照舊在 90_main.js 自己選。
+var MODE_Q = DEMO < 0 && Object.prototype.hasOwnProperty.call(MODE_RULES, Q.get('mode')) && MODE_RULES[Q.get('mode')].url ? Q.get('mode') : null;
 if (MODE_Q) flowMode(MODE_Q);
 /** 現在這個玩法的規則 k。 */
 function modeRule(k) { return (MODE_RULES[MODE] || MODE_RULES.pve)[k]; }
