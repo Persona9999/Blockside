@@ -8,7 +8,8 @@ HN = importlib.util.module_from_spec(spec); sys.modules['harness'] = HN; spec.lo
 
 READY = HN.READY_GAME
 GO_READY = '!!window.__vxk && document.getElementById("go") && !document.getElementById("go").disabled'
-CHECK_BATTLE = '(function(){ var f = __game.flow(); if (!(f && f.all)) throw new Error("battle did not start"); return 1; })()'
+# 開戰了沒：照模擬時間與船數（__game.flow() 只記 ?start=1 分段開戰的進度，主選單按開戰走 start() 一口氣做完 ⇒ 一直是 null；0607026 之後）
+CHECK_BATTLE = '(function(){ var s = __game.stats(); if (!(s.ships.length && s.t > 0)) throw new Error("battle did not start (t=" + s.t + ", ships=" + s.ships.length + ")"); return 1; })()'
 INSP_ON = ('(function(){ var c = document.querySelector("#inspP input[type=checkbox][data-g]:not([data-m])"); if (!c) throw new Error("no observe-mode checkbox");'
            ' c.checked = true; c.dispatchEvent(new Event("change")); return document.querySelectorAll("#inspP input:checked").length; })()')
 VARIANTS = [

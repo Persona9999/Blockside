@@ -17,13 +17,14 @@ function armorMesh(T) {
     T.smRK.forEach(function (rk) {
       var rx = rk % nx, ry = Math.floor(rk / nx) % ny, rz = Math.floor(rk / (nx * ny));   // 區碰不到這塊的外框（±2 格：surface nets 看鄰格）⇒ 跳過
       if ((rx + 1) * SM_R < b[0] - 2 || rx * SM_R > b[3] + 2 || (ry + 1) * SM_R < b[1] - 2 || ry * SM_R > b[4] + 2 || (rz + 1) * SM_R < b[2] - 2 || rz * SM_R > b[5] + 2) return;
-      var m = smBuild(T, A.grid, rk, null, T.hullG); if (m) A.smP.set(rk, m);
+      var m = smBuild(T, A.grid, rk, null, T.hullG, undefined, true); if (m) A.smP.set(rk, m);
     });
+    smArena(A.smP);                                                     // 這塊的平滑面接成一份（15_smooth.js，S10）
   });
   (T.props || []).forEach(function (P) {                                // 會轉的體素件（螺旋槳；檔尾）：材質標 smooth（鐵甲）⇒ 整份平滑＋金屬反光（Tim 2026-10-17），方塊網格化跳過它們
     var mt = matInfo(P.mat); P.smP = P.smRK = P.smO = null;
     if (mt.smooth === true) { P.grid.sm = P.grid; P.smO = { SG: P.grid, mm: +mt.metal || 0, mr: isFinite(+mt.rough) && mt.rough !== undefined ? +mt.rough : 0.5 }; P.smRK = smRegions(T, P.grid); P.smP = new Map();
-      P.smRK.forEach(function (rk) { var m = smBuild(T, P.grid, rk, null, null, P.smO); if (m) P.smP.set(rk, m); }); }
+      P.smRK.forEach(function (rk) { var m = smBuild(T, P.grid, rk, null, null, P.smO, true); if (m) P.smP.set(rk, m); }); smArena(P.smP); }
     P.rs0 = new VK.RegionSet(gl, P.grid, QIDX); P.rs0.buildAll();
   });
 }
@@ -40,7 +41,7 @@ function armDraw(prog, sh) {
     var L = armLocal(a);
     gl.uniformMatrix4fv(prog.u.uModel, false, L ? M4.mul(sh.M, L) : sh.M);
     if (prog.u.uCutL) gl.uniformMatrix4fv(prog.u.uCutL, false, L || CUT_ID);
-    a.rs.draw();
+    rbatHull(a.rs, a.A.rs0);                                            // 沒被打到的區照船型那一塊的合併緩衝一段一次畫（60_rbatch.js，S8）
   });
   if (prog.u.uCutL) gl.uniformMatrix4fv(prog.u.uCutL, false, CUT_ID);
 }

@@ -47,9 +47,14 @@ function rbatAdd(c, o, k, ref, vao, el, off, cnt, glow, W) {
   R.cls[i] = c; R.ow[i] = o; R.slot[i] = k; R.ref[i] = ref; R.mb[i] = null; R.vao[i] = vao; R.el[i] = el; R.off[i] = off; R.cnt[i] = cnt; R.glow[i] = glow;
   R.M.set(W, i * 16); R.ni = i + 1;
 }
-// 平滑面那幾區（Map 的 forEach）：照這一個的 this 加（⛔ 每格不生閉包）
+// 平滑面那幾區（Map 的 forEach）：照這一個的 this 加（⛔ 每格不生閉包）；slot ＝ 這一項第一區在 Map 裡第幾個（0 ⇒ 這一份網格的第一項：設矩陣、燈熄）
+//   船型那一份的合併緩衝（15_smooth.js smArena，S10）：跟上一項同一個 VAO、io 接在它後面 ⇒ 併進上一項（索引數加上去）⇒ 沒被打到的連著幾區一個 drawElements。
 var RBAT_SM = { c: 2, o: 0, k: 0, ref: null, W: null };
-function rbatSmAdd(m) { var S = RBAT_SM; rbatAdd(S.c, S.o, S.k++, S.ref, m.vao, 1, 0, m.n, 0, S.W); }
+function rbatSmAdd(m) {
+  var S = RBAT_SM, R = RBAT, i = R.ni - 1, io = m.io || 0;
+  if (S.k && m.sa && R.vao[i] === m.vao && R.off[i] + R.cnt[i] * 4 === io) { R.cnt[i] += m.n; S.k++; return; }   // S.k > 0 ⇒ 上一項是這一份的
+  rbatAdd(S.c, S.o, S.k++, S.ref, m.vao, 1, io, m.n, 0, S.W);
+}
 /** 一格的表（render → frameBegin，prepRig 之後；一次 render() 一次，RFR）。判斷、順序、算式照以前的 drawModels／smDraw／armSmDraw 原樣抄。 */
 function rbatPrep() {
   var R = RBAT, ns = SHIPS.length, n = ns + PIECES.length, o, k;
@@ -201,11 +206,11 @@ function rbatDepthDraw(B, j, u, k) {
 //   ?rbgeo=1 ⇒ 照上面 τ 的排法（換了先後的一定離得夠開 ⇒ 逐位元組相同）：看到砲與蓋板交界閃 ⇒ 先試它。
 // 剖面開著（cutOn：每艘的剖面 uniform 不一樣）⇒ 照以前一個一個畫（rbatReplay）；正交的鏡頭（轉場）、?rbgeo=0 ⇒ 不換先後（只合連在一起的）。
 // 包圍盒：模型、裝飾 ＝ 網格自己的盒子（me.bb，62_simview.js 上傳時算）照這一格的世界矩陣轉（中心 ± |W|·半寬，double，再放寬 1 mm ＋ 座標的 10⁻⁶）；一格算一次。沒有盒子 ⇒ 當成跟誰都近（照以前的先後）。
-var RBAT_C = { f: -1, cap: 0, bx: null, w: null, nx: null, gm: new Map(), gn: 0, gV: [], gC: null, gG: null, gO: null, gH: null, gT: null, gS: null, gB: null, gW: null, tk: 0, tn: 0, inf: true, g: NaN };
+var RBAT_C = { f: -1, cap: 0, bx: null, w: null, nx: null, gm: new Map(), gn: 0, gV: [], gC: null, gG: null, gO: null, gH: null, gT: null, gS: null, gB: null, gW: null, gE: null, gF: null, tk: 0, tn: 0, inf: true, inf0: true, lo: false, g: NaN };
 function rbatCGrow(n) {
   var C = RBAT_C, L = Math.max(256, n, C.cap * 2);
   C.bx = new Float64Array(L * 6); C.w = new Float64Array(L); C.nx = new Int32Array(L);
-  C.gC = new Int32Array(L); C.gG = new Float64Array(L); C.gO = new Uint8Array(L); C.gH = new Int32Array(L); C.gT = new Int32Array(L); C.gS = new Int32Array(L); C.gB = new Float64Array(L * 6); C.gW = new Float64Array(L);
+  C.gC = new Int32Array(L); C.gG = new Float64Array(L); C.gO = new Uint8Array(L); C.gH = new Int32Array(L); C.gT = new Int32Array(L); C.gS = new Int32Array(L); C.gB = new Float64Array(L * 6); C.gW = new Float64Array(L); C.gE = new Uint8Array(L); C.gF = new Int32Array(L);
   C.f = -1; C.cap = L;
 }
 /** 這一格模型、裝飾的世界包圍盒（一格一次）。 */
@@ -258,52 +263,68 @@ function rbatNearG(g, i) {
   for (j = C.gH[g]; j >= 0; j = C.nx[j]) if (rbatNear(C.bx, j * 6, C.bx, i * 6, Math.max(C.w[j], wi))) return true;
   return false;
 }
-/** 畫第 g 組（P.triI，滿 INST_K 個換下一批）。 */
+/** 畫第 g 組（P.triI，滿 INST_K 個換下一批）：模型、裝飾 drawArrays；平滑面（gE）drawElements 從 gF 個 byte 起（S6：跨船的平滑面也收組）。 */
 function rbatFlush(g) {
-  var R = RBAT, C = RBAT_C, M = R.M, pal = R.pal, u = P.triI.u, K = INST_K, k = 0, i, q, s;
+  var R = RBAT, C = RBAT_C, M = R.M, pal = R.pal, u = P.triI.u, K = INST_K, k = 0, i, q, s, el = C.gE[g], off = C.gF[g];
   C.gO[g] = 0;
   if (C.gG[g] !== C.g) gl.uniform1f(u.uGlow, C.g = C.gG[g]);
   gl.bindVertexArray(C.gV[g]);
   for (i = C.gH[g]; i >= 0; i = C.nx[i]) {
     for (q = 0, s = i * 16; q < 16; q++) pal[k * 16 + q] = M[s + q];
-    if (++k === K) { gl.uniformMatrix4fv(u.uMs, false, pal, 0, k * 16); gl.drawArraysInstanced(gl.TRIANGLES, 0, C.gC[g], k); k = 0; }
-  }
-  if (k) { gl.uniformMatrix4fv(u.uMs, false, pal, 0, k * 16); gl.drawArraysInstanced(gl.TRIANGLES, 0, C.gC[g], k); }
-}
-/** 一段（[i0, i1) 的模型、裝飾，或斷開的那一團、FLY）照上面的排法收組、畫。geo ＝ false ⇒ 只合連在一起的（斷開的那一團、FLY）。 */
-function rbatGroups(i0, i1, geo, V) {
-  var R = RBAT, C = RBAT_C, i, g, H, inf = C.inf, lo = RBAT_LOOSE && geo;   // lo：不管先後（斷開的那一團、FLY 照舊只合連在一起的）
-  if (!geo) C.inf = true;
-  C.gn = 0;
-  var m = C.gm; m.clear();                                                 // 同一個 VAO 的組串成一列（gS），找自己那一組不用掃全部
-  for (i = i0; i < i1; i++) {
-    var v = R.vao[i], n = R.cnt[i], gw = R.glow[i], j0 = m.get(v);
-    if (!C.inf) C.w[i] = rbatW(V, i);
-    for (H = j0 === undefined ? -1 : j0; H >= 0 && !(C.gO[H] && C.gC[H] === n && C.gG[H] === gw); H = C.gS[H]);
-    if (!lo) for (g = 0; g < C.gn; g++) if (g !== H && C.gO[g] && rbatNearG(g, i)) rbatFlush(g);
-    C.nx[i] = -1;
-    if (H < 0) {
-      H = C.gn++; C.gV[H] = v; C.gC[H] = n; C.gG[H] = gw; C.gO[H] = 1; C.gH[H] = C.gT[H] = i; C.gW[H] = C.w[i];
-      C.gS[H] = j0 === undefined ? -1 : j0; m.set(v, H);
-      if (!C.inf) for (var q = 0; q < 6; q++) C.gB[H * 6 + q] = C.bx[i * 6 + q];   // ⛔ subarray：每組一個新物件
-    } else {
-      C.nx[C.gT[H]] = i; C.gT[H] = i;
-      if (!C.inf) { var B = C.gB, o = H * 6, b = C.bx, p = i * 6; C.gW[H] = Math.max(C.gW[H], C.w[i]); for (var j = 0; j < 3; j++) { B[o + j] = Math.min(B[o + j], b[p + j]); B[o + 3 + j] = Math.max(B[o + 3 + j], b[p + 3 + j]); } }
+    if (++k === K || C.nx[i] < 0) {
+      gl.uniformMatrix4fv(u.uMs, false, pal, 0, k * 16);
+      if (el) gl.drawElementsInstanced(gl.TRIANGLES, C.gC[g], gl.UNSIGNED_INT, off, k); else gl.drawArraysInstanced(gl.TRIANGLES, 0, C.gC[g], k);
+      k = 0;
     }
   }
+}
+/** 收組：開始一段（geo ＝ false ⇒ 只合連在一起的：斷開的那一團、FLY）→ 一項一項 rbatGAdd → rbatGEnd 把還開著的組畫掉。 */
+function rbatGBegin(geo) {
+  var C = RBAT_C;
+  C.inf0 = C.inf; C.lo = RBAT_LOOSE && geo;                                // lo：不管先後
+  if (!geo) C.inf = true;
+  C.gn = 0; C.gm.clear();
+}
+/** 第 i 項放進它那一組（同一個 VAO、畫法、起點、數量、uGlow）；照 τ 排的時候先把別組裡離它近的畫掉。 */
+function rbatGAdd(i, V) {
+  var R = RBAT, C = RBAT_C, m = C.gm, g, H, v = R.vao[i], n = R.cnt[i], gw = R.glow[i], el = R.el[i], off = R.off[i], j0 = m.get(v);   // 同一個 VAO 的組串成一列（gS），找自己那一組不用掃全部
+  if (!C.inf) C.w[i] = rbatW(V, i);
+  for (H = j0 === undefined ? -1 : j0; H >= 0 && !(C.gO[H] && C.gC[H] === n && C.gG[H] === gw && C.gE[H] === el && C.gF[H] === off); H = C.gS[H]);
+  if (!C.lo) for (g = 0; g < C.gn; g++) if (g !== H && C.gO[g] && rbatNearG(g, i)) rbatFlush(g);
+  C.nx[i] = -1;
+  if (H < 0) {
+    H = C.gn++; C.gV[H] = v; C.gC[H] = n; C.gG[H] = gw; C.gE[H] = el; C.gF[H] = off; C.gO[H] = 1; C.gH[H] = C.gT[H] = i; C.gW[H] = C.w[i];
+    C.gS[H] = j0 === undefined ? -1 : j0; m.set(v, H);
+    if (!C.inf) for (var q = 0; q < 6; q++) C.gB[H * 6 + q] = C.bx[i * 6 + q];   // ⛔ subarray：每組一個新物件
+  } else {
+    C.nx[C.gT[H]] = i; C.gT[H] = i;
+    if (!C.inf) { var B = C.gB, o = H * 6, b = C.bx, p = i * 6; C.gW[H] = Math.max(C.gW[H], C.w[i]); for (var j = 0; j < 3; j++) { B[o + j] = Math.min(B[o + j], b[p + j]); B[o + 3 + j] = Math.max(B[o + 3 + j], b[p + 3 + j]); } }
+  }
+}
+function rbatGEnd() {
+  var C = RBAT_C, g;
   for (g = 0; g < C.gn; g++) if (C.gO[g]) rbatFlush(g);
   for (g = 0; g < C.gn; g++) C.gV[g] = null;
-  m.clear(); C.inf = inf;
+  C.gm.clear(); C.inf = C.inf0;
 }
-/** 反射、主畫面的模型那一段（取代 rbatReplay(P.tri)；60_render.js drawModels）：P.triI。畫完：P.tri 綁回去、剖面關（之後的旗桿、繩、鏈彈照這個畫；P.tri 的 uGlow 沒動過 ⇒ 還是 0）。 */
+/** 一段 [i0, i1) 照上面的排法收組、畫。 */
+function rbatGroups(i0, i1, geo, V) { rbatGBegin(geo); for (var i = i0; i < i1; i++) rbatGAdd(i, V); rbatGEnd(); }
+/** 反射、主畫面的模型那一段（取代 rbatReplay(P.tri)；60_render.js drawModels）：P.triI。畫完：P.tri 綁回去、剖面關（之後的旗桿、繩、鏈彈照這個畫；P.tri 的 uGlow 沒動過 ⇒ 還是 0）。
+ *  不管先後（預設，S6）：所有船的模型、裝飾、平滑面、裝甲的平滑面一起收組 ⇒ 同型的船同一份網格（同一段平滑面）不分哪艘一次畫。
+ *    換先後只在兩個東西同一個像素深度剛好一樣時改結果（不透明、不混色）；每艘的 uniform 在這一段一樣（剖面關、uLit 1），矩陣、uGlow 照每一項 ⇒ 跨船合得起來。
+ *  ?rbgeo=1（照 τ 證明的先後，S7）、?rbgeo=0（不換先後）：一艘一艘 —— 模型、裝飾收組，平滑面照以前一區一區。 */
 function rbatColour(pd) {
-  var R = RBAT, C = RBAT_C, p = P.triI, u = p.u, M = R.M, pal = R.pal, V = PASS.vp || CAM.vp, ns = R.ns, n = R.n, o, i, e;
+  var R = RBAT, C = RBAT_C, p = P.triI, u = p.u, M = R.M, pal = R.pal, V = PASS.vp || CAM.vp, ns = R.ns, o, i, e;
   if (C.cap < R.ni) rbatCGrow(R.ni);                                      // 組、串列的陣列（不夠才加倍）
   if (RBAT_LOOSE) C.inf = true; else { rbatBoxes(); rbatTau(V); }       // 不管先後 ⇒ 不用包圍盒、τ
   C.g = NaN;
   gl.useProgram(p.prog); setCommon(p); gl.uniform1f(u.uLit, 1); cutSet(p, null);
   gl.vertexAttrib2f(3, 0, 0.5);                                           // 第 3 號屬性的常數照以前（見 rbatReplay）
-  for (o = 0; o < ns; o++) {
+  if (RBAT_LOOSE) {
+    rbatGBegin(true);
+    for (o = 0; o < ns; o++) if (R.own[o].sink <= 40) for (i = R.i0[o], e = R.i0[o + 1]; i < e; i++) rbatGAdd(i, V);
+    rbatGEnd();
+  } else for (o = 0; o < ns; o++) {
     if (R.own[o].sink > 40) continue;
     for (i = R.i0[o], e = R.i0[o + 1]; i < e && R.cls[i] < 2; i++);
     rbatGroups(R.i0[o], i, true, V);                                      // 模型、裝飾
@@ -315,16 +336,100 @@ function rbatColour(pd) {
   rbatGroups(R.i0[ns], R.ni, false, V);                                   // 斷開的那一團的模型、FLY（燈熄：glow 都是 0）
   gl.useProgram(P.tri.prog); cutSet(P.tri, null);
 }
+
+// ── 船殼的合併緩衝（arena；S8）──
+// 船型的船殼（T.pristine）、裝甲與螺旋槳（A.rs0）載入時一區一份 VBO（VoxelKit RegionSet，64³ 一區）；開戰的每艘 shareFrom 借用那幾份，被打到的區才自己建（own）。
+//   以前每艘每一趟照 Map 一區一個 drawElements（光榮號 137 區）。現在第一次畫到時把那幾份 VBO 照 Map 的順序在 GPU 上接成一份（copyBufferSubData：位元組照抄），
+//   每一趟把這艘活的 Map 切成一段一段：還在借用、在合併緩衝裡又接得上的那幾區 ⇒ 一次 drawElements；自己建的區照以前用它自己的 VAO。
+//   同一支程式、同一組 uniform、同樣的頂點位元組、同樣的三角形順序（QIDX 是絕對索引：從第 q0 個四邊形的索引開始 ＝ 頂點 4·q0）⇒ 畫面不變。
+// ⛔ 不改 VoxelKit：只讀公開的欄位（regions 的 vao／vbo／n／own、QIDX.buf／ensure）；flush 的頂點格式對不上 ⇒ 不建、照以前畫。
+//   T.pristine、A.rs0 載入後不再 flush（每艘改的是自己那一份）⇒ 一型建一次；借用的區被 flush 換成 own（Map 裡位置不變）、清空的刪掉、重新長出來的排到最後 ⇒ 每一趟照活的 Map 切，不跨格留。
+// 每型多一份 GPU 記憶體（光榮號約 5 MB；Tim 已同意）；?rbarena=0（或 ?rb=0）⇒ 照以前一區一區畫。
+var RBAT_ARENA = RBAT_ON && Q.get('rbarena') !== '0';
+var RBAT_AR = { fmt: -1, m: new Map(), A: null, s: 0, e: -1 };          // fmt：flush 的格式對不對（−1 還沒看）；m：rs0 → 合併緩衝（null ＝ 建不了）；A、s、e：這一趟正在接的那一段（第 s 到 e 個四邊形；e < 0 ＝ 沒有）
+function rbatArenaFmt() {
+  var H = RBAT_AR;
+  if (H.fmt < 0) H.fmt = /vertexAttribIPointer\(\s*0\s*,\s*4\s*,\s*\w+\.UNSIGNED_SHORT\s*,\s*8\s*,\s*0\s*\)/.test(String(VK.RegionSet.prototype.flush)) ? 1 : 0;
+  return H.fmt === 1;
+}
+/** rs0 的合併緩衝（第一次畫到才建）：{ vbo, vao, q：區的 VBO → 從第幾個四邊形起, n }；建不了 ⇒ null（之後照以前畫）。 */
+function rbatArena(rs0) {
+  var A = RBAT_AR.m.get(rs0);
+  if (A !== undefined) return A;
+  A = null;
+  var n = 0, q = new Map(), ok = rbatArenaFmt();                         // 一型只走一次 ⇒ 下面的閉包無所謂
+  rs0.regions.forEach(function (r) { if (r.own !== true || q.has(r.vbo)) ok = false; q.set(r.vbo, n); n += r.n; });
+  if (ok && n > 0 && n === rs0.quads()) {
+    QIDX.ensure(n);                                                       // 先加長（ensure 會解開現在綁的 VAO、重設同一個 buffer）⇒ 再建 VAO
+    var vbo = gl.createBuffer(), vao = gl.createVertexArray();
+    gl.bindBuffer(gl.COPY_WRITE_BUFFER, vbo); gl.bufferData(gl.COPY_WRITE_BUFFER, n * 32, gl.STATIC_DRAW);   // 一個四邊形 4 頂點 × 8 bytes
+    rs0.regions.forEach(function (r) { gl.bindBuffer(gl.COPY_READ_BUFFER, r.vbo); gl.copyBufferSubData(gl.COPY_READ_BUFFER, gl.COPY_WRITE_BUFFER, 0, q.get(r.vbo) * 32, r.n * 32); });
+    gl.bindBuffer(gl.COPY_READ_BUFFER, null); gl.bindBuffer(gl.COPY_WRITE_BUFFER, null);
+    gl.bindVertexArray(vao); gl.bindBuffer(gl.ARRAY_BUFFER, vbo);         // 格式照 VoxelKit flush 那一份
+    gl.enableVertexAttribArray(0); gl.vertexAttribIPointer(0, 4, gl.UNSIGNED_SHORT, 8, 0);
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, QIDX.buf); gl.bindVertexArray(null); gl.bindBuffer(gl.ARRAY_BUFFER, null);
+    A = { vbo: vbo, vao: vao, q: q, n: n };
+    (RBAT.gl.ar || (RBAT.gl.ar = [])).push(A);
+  }
+  RBAT_AR.m.set(rs0, A);
+  return A;
+}
+/** 畫一份 RegionSet（取代 rs.draw()：drawHulls 的船殼、armDraw 的裝甲與螺旋槳）；rs0 ＝ 它借用的那一份。畫完 VAO 解開（同 rs.draw）。 */
+function rbatHull(rs, rs0) {
+  var A = RBAT_ARENA && rs0 ? rbatArena(rs0) : null, H = RBAT_AR;
+  if (!A) { rs.draw(); return; }
+  H.A = A; H.e = -1;
+  rs.regions.forEach(rbatHullR);                                          // ⛔ 每格不生閉包
+  rbatHullEnd(); gl.bindVertexArray(null); H.A = null;
+}
+function rbatHullR(r) {                                                // 上一段畫掉那一步寫在這裡、不叫 rbatHullEnd：陰影那一趟的呼叫已經很深，再深一層量測工具就認不出是 render 裡畫的
+  var H = RBAT_AR, q = r.own ? undefined : H.A.q.get(r.vbo);
+  if (q !== undefined && q === H.e) { H.e += r.n; return; }             // 借用、又接在上一段後面 ⇒ 併進去
+  if (H.e >= 0) { gl.bindVertexArray(H.A.vao); gl.drawElements(gl.TRIANGLES, (H.e - H.s) * 6, gl.UNSIGNED_INT, H.s * 24); H.e = -1; }
+  if (q !== undefined) { H.s = q; H.e = q + r.n; return; }
+  gl.bindVertexArray(r.vao); gl.drawElements(gl.TRIANGLES, r.n * 6, gl.UNSIGNED_INT, 0);   // 自己建的區（被打到過）：照以前
+}
+function rbatHullEnd() {
+  var H = RBAT_AR; if (H.e < 0) return;
+  gl.bindVertexArray(H.A.vao); gl.drawElements(gl.TRIANGLES, (H.e - H.s) * 6, gl.UNSIGNED_INT, H.s * 24); H.e = -1;   // 一個四邊形 6 個索引 × 4 bytes
+}
+/** 除錯：每份合併緩衝跟它抄的那幾份 VBO 逐位元組比（getBufferSubData）⇒ { arenas, regions, quads, miss }。 */
+function rbatArenaCheck() {
+  var out = { arenas: 0, regions: 0, quads: 0, miss: 0 };
+  RBAT_AR.m.forEach(function (A, rs0) {
+    if (!A) return; out.arenas++;
+    var all = new Uint8Array(A.n * 32);
+    gl.bindBuffer(gl.COPY_READ_BUFFER, A.vbo); gl.getBufferSubData(gl.COPY_READ_BUFFER, 0, all);
+    rs0.regions.forEach(function (r) {
+      var one = new Uint8Array(r.n * 32), o = A.q.get(r.vbo) * 32;
+      gl.bindBuffer(gl.COPY_READ_BUFFER, r.vbo); gl.getBufferSubData(gl.COPY_READ_BUFFER, 0, one);
+      for (var j = 0; j < one.length; j++) if (one[j] !== all[o + j]) { out.miss++; break; }
+      out.regions++; out.quads += r.n;
+    });
+  });
+  gl.bindBuffer(gl.COPY_READ_BUFFER, null);
+  return out;
+}
 /** ?rbchk=1：照以前 drawModels／smDraw／armSmDraw 的迴圈與算式（每個矩陣重新乘一次）再走一遍，跟表逐項比：
  *  同一個東西、同一個順序、VAO／頂點數／uGlow 一樣（不一樣 ⇒ itemMiss）；矩陣 16 個 float 逐位元相同（不一樣 ⇒ matMiss）。只在 render() 裡、整理完馬上比（之後 renderLerp 會把 sh.M 換回去）。 */
 function rbatCheck() {
   var R = RBAT, S = R.stat, q = 0, A = R.M && new Uint32Array(R.M.buffer), o;   // R.M：第一個項目才配（主選單、還沒有船 ⇒ null，下面也不會讀到）
-  function one(c, ow, ref, me, glow, W) {
+  function one(c, ow, ref, me, glow, W, off) {
     if (q >= R.ni) { S.itemMiss++; q++; return; }
-    if (R.cls[q] !== c || R.ow[q] !== ow || R.ref[q] !== ref || R.vao[q] !== me.vao || R.off[q] !== 0 || R.cnt[q] !== me.n || R.glow[q] !== glow) S.itemMiss++;
+    if (R.cls[q] !== c || R.ow[q] !== ow || R.ref[q] !== ref || R.vao[q] !== me.vao || R.off[q] !== (off || 0) || R.cnt[q] !== me.n || R.glow[q] !== glow) S.itemMiss++;
     var w = W instanceof Float32Array ? W : new Float32Array(W), B = new Uint32Array(w.buffer, w.byteOffset, 16);
     for (var j = 0; j < 16; j++) if (A[q * 16 + j] !== B[j]) { S.matMiss++; break; }
     S.chk++; q++;
+  }
+  function sm(c, ow, ref, mp, W) {                                      // 平滑面：照以前一區一項，合併緩衝裡接得上的併成一項（同 rbatSmAdd，獨立再算一次）
+    var p = null;
+    mp.forEach(function (m) {
+      var io = m.io || 0;
+      if (p && m.sa && p.vao === m.vao && p.off + p.n * 4 === io) { p.n += m.n; return; }
+      if (p) one(c, ow, ref, p, 0, W, p.off);
+      p = { vao: m.vao, n: m.n, off: io };
+    });
+    if (p) one(c, ow, ref, p, 0, W, p.off);
   }
   SHIPS.forEach(function (sh, i) {
     if (sh.sink > 40) return;
@@ -337,8 +442,8 @@ function rbatCheck() {
       var me = sh.T.meshes[d.mesh]; if (!me || d.gone || (!GFX.deco && d.meta.kind !== 'portlid') || (d.foot >= 0 && !hullGp(sh.grid, d.foot))) return;
       one(1, i, d, me, isLamp(d) ? lanternK(d) : 0, M4.mul(sh.M, d.L || trans(d.origin[0], d.origin[1], d.origin[2])));
     });
-    if (sh.smR && sh.smR.size) sh.smR.forEach(function (m) { one(2, i, sh, m, 0, sh.M); });
-    if (sh.arm) sh.arm.forEach(function (a) { if (a.smR && a.smR.size && !(a.prop && propGone(a))) a.smR.forEach(function (m) { one(3, i, a, m, 0, armM(a)); }); });
+    if (sh.smR && sh.smR.size) sm(2, i, sh, sh.smR, sh.M);
+    if (sh.arm) sh.arm.forEach(function (a) { if (a.smR && a.smR.size && !(a.prop && propGone(a))) sm(3, i, a, a.smR, armM(a)); });
   });
   PIECES.forEach(function (pc, j) { (pc.mods || []).forEach(function (m) { var me = pc.T.meshes[m.mesh]; if (me) one(4, R.ns + j, m, me, 0, M4.mul(pc.M, m.L)); }); });
   FLY.forEach(function (f) { var me = f.T.meshes[f.mesh]; if (me && f.M) one(5, -1, f, me, 0, f.M); });
@@ -377,6 +482,7 @@ function rbatPbVerts(i, RG) {
   var R = RBAT, mp = R.ref[i] && R.ref[i].smR, a = mp && RG.get(mp), m;
   if (mp && !a) RG.set(mp, a = Array.from(mp.values()));
   m = a && a[R.slot[i]]; if (!m || m.vao !== R.vao[i]) return 0;
+  if (m.sa) return m.sa.verts;                                          // 合併緩衝（15_smooth.js smArena）：POINTS 從 0 畫 ⇒ 整份的頂點
   if (m.verts) return m.verts;
   gl.bindBuffer(gl.ARRAY_BUFFER, m.vb); return gl.getBufferParameter(gl.ARRAY_BUFFER, gl.BUFFER_SIZE) / 44;   // 一個頂點 11 個 float（15_smooth.js smBuild）
 }
@@ -450,5 +556,5 @@ function rbatProbe(neg) {
   return out;
 }
 // 除錯（?debug=1）：__rbat.stat 讀數；__rbat.check() ＝ 畫一格、那一格整理完就對拍（回 stat）；__rbatProbe() ＝ 一次畫多個的程式對拍（見上）
-if (DEBUG) window.__rbat = { stat: RBAT.stat, tab: RBAT, check: function () { var c = RBAT_CHK; RBAT_CHK = true; try { render(); } finally { RBAT_CHK = c; } return RBAT.stat; } };
+if (DEBUG) window.__rbat = { stat: RBAT.stat, tab: RBAT, check: function () { var c = RBAT_CHK; RBAT_CHK = true; try { render(); } finally { RBAT_CHK = c; } return RBAT.stat; }, arenaCheck: rbatArenaCheck };
 if (DEBUG) window.__rbatProbe = rbatProbe;
