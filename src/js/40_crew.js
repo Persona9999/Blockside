@@ -63,8 +63,9 @@ function makeCrew(sh) {
   function add(role, at, gun, face) { if (at) crew.push({ role: role, home: at, pos: at.slice(), gun: gun, face: face || 1, st: 0, t: rnd() * 10, walk: null, fireT: 0, shotT: rr(2, 6), lost: 0, hp: CREW_HP, hitT: 0 }); }
   sh.guns.forEach(function (gn) {
     var b = gn.model.bb.map(Math.floor), z0, z1, i, n = Math.min(gunCrew(sh.cw, gn.type), GUN_CREW_MAX);   // 砲班滿編（船隻配置；預設 ＝ 砲種表）
-    if (gn.type === 'chase') { z0 = b[2] - 3; z1 = b[2] + 3; }
-    else if (gn.type === 'carr') { z0 = b[2] - 6; z1 = b[2] + 3; }
+    var k0 = fitKind0(gn.model);                                        // 站的高度照原本雕的那一門（換了裝 ⇒ 底對齊，甲板還是那一層；38_fit.js）
+    if (k0 === 'chase') { z0 = b[2] - 3; z1 = b[2] + 3; }
+    else if (k0 === 'carr') { z0 = b[2] - 6; z1 = b[2] + 3; }
     else { z0 = b[2] - 8; z1 = b[2] + 3; }                            // 長砲（24、32 磅）
     var tn = gn.hd || (gn.mt && gn.mt.up);                             // 掛在砲塔上（27_turret.js）⇒ 站在砲塔底座那一層（⛔ 照砲的高度往下 8 格 ⇒ 莫尼特號兩個砲手站進砲塔底下的艙口梯井、踩在梯子上）
     if (tn) { var tb = sh.T.turrets[tn.k].box; z0 = Math.floor(tb[2]) - 1; z1 = Math.floor(tb[2]) + 3; }
@@ -98,7 +99,7 @@ function makeCrew(sh) {
   // 送藥手：每一對砲（同一個 x 的兩舷）一個，從那一層的取用點搬火藥與彈藥到要裝填的砲（23_powder.js makeMonkeys／stepMonkey）
   makeMonkeys(sh, crew, taken, add);
   // spar deck 的高度：從 carronade 推；陸戰隊沿 S 那一舷（格 +y）的舷牆、軍官在後甲板、舵手在舵輪旁
-  var carr = sh.models.filter(function (m) { return m.kind === 'carr'; }), wheel = sh.models.filter(function (m) { return m.kind === 'wheel'; })[0];
+  var carr = sh.models.filter(function (m) { return fitKind0(m) === 'carr'; }).map(function (m) { return m.was ? { bb: m.was.bb } : m; }), wheel = sh.models.filter(function (m) { return m.kind === 'wheel'; })[0];
   var GZ = sh.T.geo, CW = sh.cw, sz0 = carr.length ? Math.floor(carr[0].bb[2]) - 6 : GZ.spar ? GZ.spar[0] : 100, sz1 = carr.length || !GZ.spar ? sz0 + 9 : GZ.spar[1];   // 沒有 carronade ⇒ 船型給的高度（05_hull.js GEO0；夜隼號主甲板到後甲板）
   for (var x = HULL_X0 + GZ.marines[0]; x < HULL_X1 - GZ.marines[1] && crew.filter(function (c) { return c.role === ROLE.MARINE; }).length < CW.marines; x += CW.marineGap) {   // 每 marineGap 格一個、最多 marines 個（船員配置）
     // 從中線往外走到舷牆前一格（⛔ 從外往裡掃會先碰到舷外的 channels 平台）

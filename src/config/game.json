@@ -1106,7 +1106,18 @@
       "cap": 36,
       "autoDeck": 0
     },
-    "spump": {"name": "蒸汽抽水機", "type": "deck", "size": [10, 6, 9], "hp": 160, "role": "pump", "power": "steam", "tpm": 15, "place": "center", "cap": 60, "autoDeck": 0},
+    "spump": {
+      "name": "蒸汽抽水機",
+      "type": "deck",
+      "size": [10, 6, 9],
+      "hp": 160,
+      "role": "pump",
+      "power": "steam",
+      "tpm": 15,
+      "place": "center",
+      "cap": 60,
+      "autoDeck": 0
+    },
     "bench": {
       "name": "木工台",
       "type": "deck",
@@ -1162,5 +1173,27 @@
     "webhook": "x1:KhgbExhJRksBRgEGHx0WWkwXXG0NHwpEBAwGDUAdDgNAQ0EZSQJwWl5XXUpZUFcZRlJAW10NHjNrMCIqGi9FI0kuGDUkJTgLO0JMVBJaLBc5CRwcEWQfKEcYAgQaC0kKOx8uHAIaIyFoJiE4VjMMRy1CMw4ZAgAFIA",
     "cooldown": 60,
     "perSession": 5
+  },
+  "parts": {
+    "guns": {
+      "bombardella": {"carriage": "fusta#gun-6"},
+      "brooke64": {"carriage": "virginia#gun-4"},
+      "brooke7": {"pivot": "virginia#gun-9"},
+      "carr": {"carriage": "constitution#gun-31"},
+      "chase": {"carriage": "constitution#gun-1"},
+      "chase3": {"carriage": "stormkaap#gun-41"},
+      "dahl11": {"carriage": "monitor#gun-1", "pivot": "susquehanna#gun-7"},
+      "dahl9": {"carriage": "virginia#gun-1"},
+      "long": {"carriage": "constitution#gun-2"},
+      "long12": {"carriage": "stormkaap#gun-3"},
+      "long18": {"carriage": "phoenix#gun-1"},
+      "long32": {"carriage": "ember#gun-1"},
+      "long36": {"carriage": "reale#gun-1"},
+      "long4": {"carriage": "falcon#gun-1"},
+      "long6": {"carriage": "stormkaap#gun-1"},
+      "long8": {"carriage": "reale#gun-2"},
+      "pierrier": {"turret": "reale#gun-6"},
+      "trident": {"carriage": "tridente#gun-67"}
+    }
   }
 }
