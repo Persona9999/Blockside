@@ -361,6 +361,8 @@ function programs() {
   // 帆的陰影（TASK-0579）：貼圖的洞不投影子（同 P.sail 的 discard）；燒穿的洞也是（TASK-0717，BURN_GLSL）
   P.dsail = VK.compile(gl, '#version 300 es\nlayout(location=0) in vec3 aP; layout(location=3) in vec2 aT; layout(location=4) in vec4 aF; uniform mat4 uModel,uVP; out vec2 vT; out vec4 vF; void main(){ vT=aT; vF=aF; gl_Position=uVP*(uModel*vec4(aP,1.0)); }\n',
     '#version 300 es\nprecision highp float; in vec2 vT; in vec4 vF; uniform sampler2D uSailT; uniform float uSeaT;\n' + BURN_GLSL + 'void main(){ if(vT.x>=0.0 && texture(uSailT,vT).a<0.5) discard; if(vF.x<5e5 && bnB(vF,uSeaT)>1.0) discard; }\n');
+  // 帆的位置與法線由 GPU 算（render 管線大修 R2；11_rig_gpu.js SAILK）：transform feedback 寫進帆的動的那份。編不過 ⇒ null ⇒ 照 R1 在 CPU 算
+  try { P.sailK = SAILK.compile(SAILK_VS, SAILK_FS, ['kP', 'kN']); } catch (e) { P.sailK = null; console.warn('帆的法線改回 CPU 算：' + (e && e.message)); }
   P.sky = VK.compile(gl,
     '#version 300 es\nlayout(location=0) in vec2 aP; uniform mat4 uInv; out vec3 vD; void main(){ vec4 a=uInv*vec4(aP,1.0,1.0); vD=a.xyz/a.w; gl_Position=vec4(aP,0.9999,1.0); }\n',
     '#version 300 es\nprecision highp float; in vec3 vD; uniform vec3 uEye,uSun,uFog,uSky,uSunC; uniform float uNight; out vec4 o;\n' +
