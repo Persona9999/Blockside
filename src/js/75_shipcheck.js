@@ -22,6 +22,7 @@ function shipCheck(id) {
     var info = hullInfo(id) || HULL_KNOWN.filter(function (h) { return h.id === id; })[0];
     if (!info) { add('error', '船型', id, '設定檔 ships 沒有這一型', 'admin.py import'); done(); return; }
     FLEET_DBG = [{ team: 'blue', hull: id }, { team: 'red', hull: 'constitution' }]; flowMode('eve'); DIST = LIM_DIST[1];
+    WIND_FIX = { rot: 0, s0: 1 };                                        // 風固定（08_weather.js windInit；陣風照種子）：⛔ 沒固定 ⇒ Math.random() ⇒ 兩艘兩秒後的位置每次不同、迴旋砲的轉角跟著變，「送藥最遠」那一欄偶爾差 0.1 m（2026-10-21 量的）
     reset(); flowRun(true);
     var sh = SHIPS[0], T = sh.T, NV = sh.nav;
     // ── 開場那一刻（還沒跑）──
@@ -79,6 +80,9 @@ function shipCheck(id) {
     R.info.ids = Object.keys(IX.by).length + ' 件有 id' + (IX.none ? '、' + IX.none + ' 件沒有' : '');
     var RG = sh.ropes.filter(function (r) { return r.guess; });            // 繩端照外框猜綁到模型上（10_ship.js linkRopes：作品的 ends 沒寫綁哪個模型才猜）
     if (RG.length) add('warn', '物件 id', RG.slice(0, 3).map(function (r) { return r.name; }).join('、') + (RG.length > 3 ? ' 等 ' + RG.length + ' 條' : ''), '繩端是照位置猜綁到模型上的（作品沒寫綁哪個模型）⇒ 模型一換、一搬就可能綁錯', '雕刻端把繩端綁到模型的固定點（ends 寫 model:<模型>/<固定點>）');
+    // ── 換裝（TASK-0713／0714；38_fit.js）：出廠的換裝表 ships[].fit 換不成的那幾件（掛點沒有、類別不合、放不下、零件表沒有、不能拆空）⇒ 照原本雕的那一件 ──
+    ((T.fit && T.fit.bad) || []).forEach(function (b) { add('error', '換裝', b.slot + (b.path ? '（' + b.path + '）' : ''), '換成 ' + fitValName(b.to) + ' 沒換成：' + b.why + ' ⇒ 照原本雕的那一件', '改 config ships[].fit，或掛點 meta fits=；零件表 python -I admin.py parts'); });
+    if (T.fit && (T.fit.done.length || (T.fit.gone || []).length)) R.info.fit = T.fit.done.map(function (d) { return d.slot + ' ' + d.from + '→' + fitValName(d.to) + '（零件：' + d.src + (d.mirror ? '、鏡射' : '') + '）'; }).concat((T.fit.gone || []).map(function (g) { return g.slot + ' 拆掉'; })).join('、') + (T.fit.ropesDropped ? '；拿掉 ' + T.fit.ropesDropped + ' 條綁在零件沒有的固定點上的繩' : '');
     // ── 裝飾（TASK-0682；05_hull.js decoSplit）：模型 meta deco=1 ⇒ 載入時從 rig.models 拿掉（照樣載、畫質「裝飾」開著才畫）—— 不算重量、不被打；規格表標 deco 的 kind（砲門蓋板 portlid）本身就是裝飾 ⇒ 不報 ──
     (T.decos || []).forEach(function (m) { var k = m.meta && m.meta.kind; if (k && !kindProp(k, 'deco')) add('warn', '裝飾', m.name, '標了 deco 又有 kind=' + k + ' ⇒ 只是畫面、不進模擬，那個功能在遊戲裡就沒了', '有功能的模型不標 deco（造船規格 §9.9）'); });
     (T.h.parts || []).forEach(function (q) { if (isDeco(q)) add('warn', '裝飾', q.path, '關聯標了 deco ⇒ 遊戲不拿掉（格子是船的一部分：重量、命中照算）；只有外部模型能隱藏', '做成外部模型再標 deco（造船規格 §9.9）'); });
@@ -95,7 +99,8 @@ function shipCheck(id) {
       if (mt.kind === 'gun' && mt.weapon && !GUN_WEAPON[mt.weapon]) add('warn', '武器', m.path, 'meta weapon=' + mt.weapon + ' 砲種表沒有 ⇒ 照 gun=' + mt.gun + ' 算', 'weapon 寫砲種表有的（' + Object.keys(GUN_WEAPON).join('、') + '），或拿掉');
       if (mt.kind === 'gun' && !GUN_CODE[mt.gun] && !GUN_WEAPON[mt.weapon]) add('error', '砲', m.path, 'meta gun=' + mt.gun + ' 不認得 ⇒ 默默當成長砲', 'gun 寫砲種表有的代碼（' + Object.keys(GUN_CODE).join('、') + '）');
       if (!mt.kind && GUNS[m.kind]) add('warn', '砲', m.path, '沒有 meta ⇒ 照名字認成 ' + m.kind, 'meta kind=gun, gun=<砲種>');
-      if (!mt.kind && m.kind === 'wheel') add('warn', '舵輪', m.path, '沒有 meta ⇒ 照名字認', 'meta kind=wheel');
+      if (!mt.kind && m.kind === 'wheel') add('warn', '舵輪', m.path, '沒有 meta ⇒ 照名字認', 'meta kind=wheel');   // 只剩操舵的開關關掉時會照名字認（10_ship.js modelKind）
+      if (HELM_TQ && !mt.kind && /wheel|tiller|舵輪|舵柄/.test(m.name.split('/').pop())) add('error', '舵輪', m.path, '名字像舵輪／舵柄、沒有 meta kind ⇒ 不算操作端（打掉不影響舵效）', 'meta kind=wheel（或 tiller；造船規格 §9.8.1）');   // TASK-0777：照名字認拿掉了
       if (m.kind === 'rudder' && !m.pts['stock-top']) add(isFinite(+mt.hinge_x) ? 'warn' : 'error', '舵', m.path, isFinite(+mt.hinge_x) ? '沒有固定點 stock-top ⇒ 沿鉸鏈軸找船尾（退路）' : '沒有 stock-top、也沒有 hinge meta ⇒ 往下找、開局就掉', '舵子作品登記固定點 stock-top（舵頭；造船規格 §9）');
       if (m.kind === 'yard' && !m.piv) add('error', '帆桁', m.path, '沒有固定點 pivot ⇒ 找不到掛在哪根桅', '帆桁子作品登記 pivot（造船規格 §5）');
       if (m.kind === 'propeller' && !m.pts.hub) add('warn', '螺旋槳', m.path, '沒有固定點 hub ⇒ 推力作用點、轉軸都用外框中心', '螺旋槳子作品登記 hub（轉軸中心；造船規格 §9 propeller）');
@@ -116,7 +121,13 @@ function shipCheck(id) {
       if (!m.alive && !GUNS[m.kind] && !kindProp(m.kind, 'noFall')) add('error', '開場就掉', m.path, (mt.kind || m.kind) + ' 開場 ' + SC_SECS + ' 秒內就判成沒東西撐、掉了（腳 z ' + (m.foot >> 21) + '）', '把它接到實心上；掛著的（燈、舵）登記掛點固定點（bail、stock-top）');
     });
     // ── 動力（TASK-0630；造船規格 §9.6）：主機 → 軸 → 螺旋槳、鍋爐 ──
-    var DV = sh.drive, DC = DV && DV.C, DP = DV ? DV.P.filter(function (q) { return q.kind !== 'sail'; }) : [];
+    var DV = sh.drive, DC = DV && DV.C, DP = DV ? DV.P.filter(function (q) { return q.kind !== 'sail' && q.kind !== 'rudder'; }) : [];
+    // ── 操舵（TASK-0777，31_drive.js「操舵」）：每支舵的鏈（舵令 ⇒ 舵輪／舵柄（＋舵索）⇒ 舵）與份量；差動（兩舷都有動力）；沒有舵模型 ⇒ 看不見的舵（退路） ──
+    if (DV && DV.R) {
+      R.info.helm = DV.R.map(function (q) { return '舵令 ⇒ ' + (q.ops.length || q.lks.length ? q.ops.concat(q.lks).map(function (m) { return m.path; }).join('＋') + ' ⇒ ' : '（舵柄在舵上）⇒ ') + (q.m ? q.m.path : q.out) + ' ' + Math.round(q.w * 100) + '%'; }).join('；') +
+        (DV.dif ? '；差動：兩舷都有動力（舵令直接給兩舷，不經過舵輪）' : '');
+      if (!DV.R[0].m) add('warn', '舵', '—', '沒有舵模型 ⇒ 船尾中線一支看不見的舵（完好度照船尾那一塊格子）', '舵子作品標 meta kind=rudder、登記 stock-top（造船規格 §9.8.1）');
+    }
     if (DV && DV.kind === 'oar') { var oS = DP.filter(function (q) { return q.sg > 0; }).length; R.info.drive = '槳 ' + DP.length + ' 支（左舷 ' + (DP.length - oS) + '、右舷 ' + oS + '）、槳手 ' + sh.crew.filter(function (c) { return c.role === ROLE.OAR; }).length + '／' + (sh.oarWant || 0) + '（每支 ' + DP.map(function (q) { return q.rw0; }).filter(function (v, i, a) { return a.indexOf(v) === i; }).join('／') + ' 人）'; }
     else if (DV && DV.kind) R.info.drive = (DV.kind === 'magic' ? '魔法（作用點 ＝ 船）' : DP.map(function (q) { return (q.m ? '螺旋槳 ' + q.m.name : q.out) + ' ' + Math.round(q.w * 100) + '%'; }).join('、')) +
       (DC ? '；主機 ' + DC.E.length + '、軸 ' + DC.SH.length + '、鍋爐 ' + DC.B.reduce(function (a, c) { return a + c.b.seats.length; }, 0) + ' 座' : '');

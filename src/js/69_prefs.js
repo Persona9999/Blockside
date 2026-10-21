@@ -10,7 +10,7 @@
 // 什麼時候存：每秒比一次（跟上次存的不一樣才寫）＋ 關頁、切到背景時。全部回到預設 ⇒ 刪掉那一筆。
 var PREFS_KEY = 'ame_constitution_broadside.prefs', PREFS_VER = 1;
 var PREF_Q = ['mode', 'start', 'wdir', 'wspd', 'ship', 'blue', 'red', 'hard', 'flood', 'ballast', 'gunw', 'speed', 'agile', 'upwind', 'base', 'pump', 'gunhp', 'sailhp', 'crewhp', 'crewdeath', 'powderhp', 'blast', 'blastv', 'dmg24', 'dmg32l', 'dmg32', 'dmg18', 'dmg12', 'dmg18l', 'dmg6', 'dmg3c', 'dmgtr', 'dmgsf', 'dmgbl', 'dmgmg', 'dmgbw', 'dmgbd',
-  'box', 'carry', 'hands', 'drown', 'heal', 'musket', 'sailfix', 'burn', 'galley', 'wind', 'windcap', 'inertia', 'turninert', 'sailtq', 'ammo', 'strike', 'cap', 'phys', 'sail', 'play', 'stall', 'funspeed', 'funagile', 'funstall', 'funpowder', 'funhard', 'sea', 'helmlost', 'funhelm',
+  'box', 'carry', 'hands', 'drown', 'heal', 'musket', 'sailfix', 'burn', 'galley', 'wind', 'windcap', 'inertia', 'turninert', 'sailtq', 'ammo', 'strike', 'cap', 'phys', 'sail', 'play', 'stall', 'funspeed', 'funagile', 'funstall', 'funpowder', 'funhard', 'sea', 'helmlost', 'funhelm', 'wheelloss', 'rudderloss', 'difftq', 'funhelmloss', 'funhelmeff', 'fundiff',
   'gfx', 'g_shadow', 'g_refl', 'g_refr', 'g_sea', 'g_res', 'g_aa', 'phx', 'p_rig', 'p_rigfar', 'p_debris', 'p_fx', 'weather', 'g_rain', 'g_drops', 'g_dropspl', 'g_door', 'g_port', 'g_masks', 'g_deco', 'g_treed', 'g_plant', 'dist', 'field', 'reinf', 'cmd', 'gauge', 'blue', 'red', 'slowmo', 'dbg', 'slowcam', 'roomfn', 'navre', 'gcrew', 'smoke', 'pslow', 'pslowb', 'ramv', 'ramk', 'rame', 'ramside', 'debcap', 'csm'].concat(SHK_ITEMS.map(function (it) { return 'sh_' + it.k; }));          // 會蓋過存檔的網址參數（04_state.js、05_hull.js 讀的那些）
 var DMG_Q = { long: 'dmg24', long32: 'dmg32l', carr: 'dmg32', chase: 'dmg18', long4: 'dmg4', long12: 'dmg12', long18: 'dmg18l', long6: 'dmg6', chase3: 'dmg3c', trident: 'dmgtr', dahl9: 'dmg9d', brooke64: 'dmg64b', brooke7: 'dmg7b', dahl11: 'dmg11d', long36: 'dmg36l', long8: 'dmg8l', pierrier: 'dmgpr', siphon: 'dmgsf', ballista: 'dmgbl', mangonel: 'dmgmg', bow: 'dmgbw', bombardella: 'dmgbd', krupp305: 'dmg305k', krupp150: 'dmg150k', hotch37: 'dmgh37', canet320: 'dmg320c', armstrong120: 'dmg120a', hotch57: 'dmgh57', hotch47: 'dmgh47' };
 var PREFS = { read: DEMO < 0 && Q.get('prefs') !== '0' && !Q.has('admin') && !Q.has('shipcheck'), write: false, state: '', last: '' };   // ?admin=rooms（設定後台嵌的那一份）、?shipcheck（匯入檢查）⇒ 不讀不存
@@ -66,6 +66,7 @@ var PREF_ITEMS = [
     if (Object.keys(cfg).length) o.cfg = cfg;
     var cr = crewSnap(true); if (Object.keys(cr).length) o.crew = cr;
     var rm = roomsSnap(true); if (Object.keys(rm).length) o.rooms = rm;
+    var ft = fitSnap(); if (Object.keys(ft).length) o.fit = ft;          // 換裝表（38_fit.js；TASK-0714）：每一型跟出廠不一樣的那幾格
   }, function (p) { shipsApply(p); }),
   prefNum('gunhp', prefLim('gunhp'), true, function () { return GUN_HP; }, function (x) { GUN_HP = x; }),
   prefNum('sailhp', prefLim('sailhp'), true, function () { return SAIL_HP; }, function (x) { SAIL_HP = x; }),
@@ -94,7 +95,9 @@ var PREF_ITEMS = [
   prefNum('sailtq', prefLim('sailtq'), false, function () { return DRV_TQ; }, function (x) { DRV_TQ = x; }),
   prefAny('play', function (o) { if (PLAY !== CFG.menu.play) o.play = PLAY; }, function (p) { if (!Q.has('play') && (p.play === 'fun' || p.play === 'real')) PLAY = p.play; }),
   prefNum('stall', prefLim('stall'), false, function () { return STALL_K; }, function (x) { STALL_K = x; }),
-  prefNum('helmlost', prefLim('helmlost'), false, function () { return HELM_LOST; }, function (x) { HELM_LOST = x; }),   // 舵壞了的操舵（31_sailing.js helmK）
+  prefNum('wheelloss', prefLim('wheelloss'), false, function () { return WHEEL_LOSS; }, function (x) { WHEEL_LOSS = x; }),   // 操舵（TASK-0777，31_drive.js helmEff）：舵輪、舵被打掉的損失、差動的力矩
+  prefNum('rudderloss', prefLim('rudderloss'), false, function () { return RUDDER_LOSS; }, function (x) { RUDDER_LOSS = x; }),
+  prefNum('difftq', prefLim('difftq'), false, function () { return DIFF_K; }, function (x) { DIFF_K = x; }),
   prefNum('sea', prefLim('sea'), false, function () { return SEA_K; }, function (x) { SEA_K = x; }),
   prefAny('weather', function (o) { if (WX_ID !== 'clear') o.weather = WX_ID; }, function (p) { if (!Q.has('weather') && WEATHERS[p.weather]) { WX_ID = p.weather; WX = WEATHERS[WX_ID]; } }),   // 天色在 71_input.js 開頭 setWeather 套
   prefNum('funspeed', prefLim('funspeed'), false, function () { return FUN.speed; }, function (x) { FUN.speed = x; }),
@@ -102,7 +105,9 @@ var PREF_ITEMS = [
   prefNum('funstall', prefLim('funstall'), false, function () { return FUN.stall; }, function (x) { FUN.stall = x; }),
   prefNum('funpowder', prefLim('funpowder'), false, function () { return FUN.powder; }, function (x) { FUN.powder = x; }),
   prefNum('funhard', prefLim('funhard'), false, function () { return FUN.hard; }, function (x) { FUN.hard = x; }),
-  prefNum('funhelm', prefLim('funhelm'), false, function () { return FUN.helm; }, function (x) { FUN.helm = x; }),
+  prefNum('funhelmloss', prefLim('funhelmloss'), false, function () { return FUN.helmloss; }, function (x) { FUN.helmloss = x; }),
+  prefNum('funhelmeff', prefLim('funhelmeff'), false, function () { return FUN.helmeff; }, function (x) { FUN.helmeff = x; }),   // 娛樂加成：舵效、差動（TASK-0777）
+  prefNum('fundiff', prefLim('fundiff'), false, function () { return FUN.diff; }, function (x) { FUN.diff = x; }),   // 舊的 helmlost／funhelm 只在操舵的開關關掉時用（網址照樣給得進去），不再存
   prefAny('dmg', function (o) { var dm = {}; Object.keys(DMG_Q).forEach(function (t) { if (DMG[t] !== LIM[DMG_Q[t]][2]) dm[t] = DMG[t]; }); if (Object.keys(dm).length) o.dmg = dm; },   // 每發傷害（砲的設定頁；網址 ?dmg24= 那幾個優先）
     function (p) { if (p.dmg && typeof p.dmg === 'object') Object.keys(DMG_Q).forEach(function (t) { if (Q.has(DMG_Q[t])) return; var x = prefOk(p.dmg[t], LIM[DMG_Q[t]], true); if (x !== undefined) DMG[t] = x; }); }),
   prefAny('wxk', function (o) { var w = wxkSnap(); if (Object.keys(w).length) o.wxk = w; }, function (p) { if (p.wxk && typeof p.wxk === 'object') wxkApply(p.wxk); }),   // 天氣設定（08_weather.js WXK_ITEMS）
@@ -183,7 +188,7 @@ function prefsApply(p) {
     var x = prefOk(p[it.k], it.lim(), it.int); if (x !== undefined) it.set(x);
   });
 }
-/** 船隻配置（船隻設定 cfg ＋ 船員 crew，照船型）：存檔、匯入共用這一支。每一項各自驗；網址有的那一項不套。 */
+/** 船隻配置（船隻設定 cfg ＋ 船員 crew ＋ 艙房 rooms ＋ 換裝表 fit，照船型）：存檔、匯入共用這一支。每一項各自驗；網址有的那一項不套。 */
 function shipsApply(p) {
   function num(v, lim, int) { if (typeof v !== 'number' || !isFinite(v)) return undefined; v = clamp(v, lim[0], lim[1]); return int ? Math.round(v) : v; }
   if (p.cfg && typeof p.cfg === 'object') Object.keys(p.cfg).forEach(function (id) {
@@ -205,6 +210,7 @@ function shipsApply(p) {
     var c = SHIP_ROOMS[id] = SHIP_ROOMS[id] || {};
     Object.keys(d).forEach(function (k) { var v = roomPlanParse(d[k]); if (v !== undefined) c[k] = v; });
   });
+  if (p.fit && typeof p.fit === 'object') fitApplyPrefs(p.fit);          // 換裝表（38_fit.js）：掛點有沒有、放不放得下要船型載好才知道 ⇒ 照收，載入時 fitApply 再驗
 }
 /** 艙房的擺法 { 船型: { 房名: '' ＝ 空著｜{ type }（自動擺滿）｜{ type, items } } }：diff ＝ 只留跟設定檔的預設不一樣的（存檔）；否則每一型玩家改過的全部（匯出）。 */
 function roomsSnap(diff) {
@@ -232,12 +238,12 @@ function crewSnap(diff) {
 function shipsExport() {
   var cfg = {};
   HULL_LIST.forEach(function (h) { var c = cfgCopy(h.id), T = HULLT[h.id]; if (c.ballast === undefined || !T) { delete c.ballast; if (PREF_BALLAST[h.id]) { c.ballast = PREF_BALLAST[h.id].v; c.chk = PREF_BALLAST[h.id].chk; } } else c.chk = T.h.checksum; cfg[h.id] = c; });
-  return { game: 'ame_constitution_broadside', kind: 'ships', v: 1, at: new Date().toISOString(), cfg: cfg, crew: crewSnap(false), rooms: roomsSnap(false) };
+  return { game: 'ame_constitution_broadside', kind: 'ships', v: 1, at: new Date().toISOString(), cfg: cfg, crew: crewSnap(false), rooms: roomsSnap(false), fit: fitSnap() };
 }
 /** 匯入：看得懂才套（game／kind 對得上）；回傳套了幾型。 */
 function shipsImport(o) {
   if (!o || o.game !== 'ame_constitution_broadside' || o.kind !== 'ships') return -1;
-  var ids = {}; [o.cfg, o.crew, o.rooms].forEach(function (m) { if (m && typeof m === 'object') Object.keys(m).forEach(function (id) { if (hullInfo(id)) ids[id] = 1; }); });
+  var ids = {}; [o.cfg, o.crew, o.rooms, o.fit].forEach(function (m) { if (m && typeof m === 'object') Object.keys(m).forEach(function (id) { if (hullInfo(id)) ids[id] = 1; }); });
   shipsApply(o); return Object.keys(ids).length;
 }
 function prefsSave() {

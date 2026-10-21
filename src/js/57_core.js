@@ -50,7 +50,8 @@ function coreShipOut(sh) {
   sh.sails.forEach(function (s, k) { if (s.dead || s.hp !== s.hpMax) sails.push({ k: k, hp: Math.max(0, +(+s.hp).toFixed(2)), dead: !!s.dead }); });
   sh.ropes.forEach(function (r, k) { if (r.dead) ropes.push(k); });
   return {
-    hull: T.id, sum: T.h.checksum, name: sh.name, team: sh.team, i: sh.i, fate: fate, why: sh.fate || '',
+    hull: T.key || T.id, sum: T.h.checksum,   // hull：艦隊裡那一項（換了裝 ＝ 船型@換裝表，38_fit.js）
+    name: sh.name, team: sh.team, i: sh.i, fate: fate, why: sh.fate || '',
     at: { px: +sh.px.toFixed(2), pz: +sh.pz.toFixed(2), yaw: +sh.yaw.toFixed(4), spd: +sh.spd.toFixed(3) },
     cells: coreHullDiff(sh.grid, T.hullG),
     models: models, sails: sails, ropes: ropes,
@@ -81,7 +82,7 @@ function corePreFrom(out) {
 function coreShipIn(sh, st) {
   var T = sh.T;
   if (!st) return false;
-  if (st.hull !== T.id) { CORE_LOG.push(sh.team + '#' + sh.i + '：戰前狀態是 ' + st.hull + '，這艘是 ' + T.id + ' ⇒ 不套'); return false; }
+  if (st.hull !== (T.key || T.id)) { CORE_LOG.push(sh.team + '#' + sh.i + '：戰前狀態是 ' + st.hull + '，這艘是 ' + (T.key || T.id) + ' ⇒ 不套'); return false; }
   if (st.sum !== T.h.checksum) { CORE_LOG.push(sh.team + '#' + sh.i + ' ' + T.id + '：船型指紋 ' + st.sum + ' ≠ 現在的 ' + T.h.checksum + '（重新匯入過）⇒ 船殼差不套'); }
   else if (st.cells && st.cells.n) {
     var u = coreUnB64(st.cells.d), dv = new DataView(u.buffer), p = 0, B = T.hullG, G = sh.grid, sx = G.sx, sy = G.sy;

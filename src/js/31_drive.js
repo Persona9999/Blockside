@@ -47,6 +47,7 @@
 //   舵打一半 ⇒ 內側停、打滿 ⇒ 內側倒車一半。力矩照舊從推力的不平衡來（driveYaw）；玩家、電腦都一樣（照 sh.rudder）。
 //   划槳的畫面跟著（oarAnim）：內側那一舷的槳頻 × 同一個倍率 ⇒ 舵打一半停槳、打滿倒划。
 //   只有一舷、中線單螺旋槳 ⇒ 不作用（戰局不變）。設定檔 drive.diff: false 或網址 ?drvdiff=0 關掉。
+//   ⚠ TASK-0777 起（操舵的開關開著）差動照舵令、停俥倒車也作用、力矩另外記 ⇒ 見下面「操舵」那一段；這一段只在開關關掉時照舊。
 // ⏳ 第二版（TASK-0630 驗收）：繩帆物理開著時用布上的風壓算帆的推力（各檔一個乘數）、物件重量預先算好、風洞沙盒。
 var DRIVE_CFG = CFG.drive || {};
 var DRV_KD = +DRIVE_CFG.kDrag || 0.0615, DRV_SIDE = DRIVE_CFG.side === undefined ? 0.6 : +DRIVE_CFG.side;
@@ -265,8 +266,9 @@ function driveInit(sh) {
   var magicE = base > 0 && info.drive === 'magic' && drvParts(T).E.length > 0;   // 魔法動力源有實體（TASK-0680，Tim 2026-10-17「直接讓管風琴等於動力源」：風暴角號船長室的管風琴標 kind=engine）⇒ 也走動力件那一條；沒標 ⇒ 照舊用整艘船殼
   var chain = base > 0 && kind !== 'oar' && (!(info.drive === 'magic') || magicE) ? drvBind(sh, P.filter(function (p) { return p.kind === (magicE ? 'magic' : 'steam'); })) : null;
   var sides = {}; P.forEach(function (p) { if (p.kind === 'sail' || p.kind === 'magic') return; var dy = p.p[1] - T.cy; p.sd = p.sg || (Math.abs(dy) > DRV_SIDE_MIN ? (dy > 0 ? 1 : -1) : 0); if (p.sd) sides[p.sd] = 1; });   // 哪一舷（差動轉向）
-  sh.drive = { P: P, C: chain, kind: kind, oph: 0, ophS: [0, 0], dfk: 1, dfs: 0, dif: !!(sides[1] && sides[-1]), k: DRV_KD * Math.pow(Math.max(1, T.disp || 1), 2 / 3),
-    L: Math.max(5, ((T.wl1 || T.hx1) - (T.wl0 || T.hx0)) * S), M: null, W: 0, cap: 1, Fx: 0, drag: 0, a: 0, tq: 0, om: 0, vT: 0 };
+  var R = HELM_TQ ? helmItems(sh) : null; if (R) R.forEach(function (p) { P.push(p); });   // 操舵（TASK-0777）：舵也是動力清單的一項（見「操舵」那一段）
+  sh.drive = { P: P, R: R, C: chain, kind: kind, oph: 0, ophS: [0, 0], dfk: 1, dfs: 0, dif: !!(sides[1] && sides[-1]), k: DRV_KD * Math.pow(Math.max(1, T.disp || 1), 2 / 3),
+    L: Math.max(5, ((T.wl1 || T.hx1) - (T.wl0 || T.hx0)) * S), M: null, W: 0, cap: 1, Fx: 0, drag: 0, a: 0, tq: 0, om: 0, vT: 0, tqD: 0, dS: 0, dS1: 0, eff: 1 };
   sh.tele = TELE_FULL; sh.power = base > 0 ? TELE[sh.tele] : 0;
 }
 /** 艙內積水（噸）：粒子模式 ＝ fl.vol（還在算的時候）；其他（公式模式、斷了、開始沉）⇒ 照下沉量用浮力表換算（跟 floodPct 同一套）。 */
@@ -280,7 +282,7 @@ function shipWaterT(sh) {
 function driveSurvey(sh) {
   var D = sh.drive; if (!D) return;
   var m0 = sh.mass0 || shipT(sh);
-  D.W = shipWaterT(sh); D.M = Math.max(1, m0 - massLost(sh) + D.W);
+  D.W = shipWaterT(sh); D.M = Math.max(1, m0 - massLost(sh) + D.W); if (D.M0 === undefined) D.M0 = D.M;   // M0：開戰時的質量（操舵的轉動慣量照它校準，TASK-0777）
   var F = funnelsOf(sh.T), fu = 1;                                          // ⛔ 不用 funnelUp：它的快取由 funnelSmoke 更新、慢動作時不跑 ⇒ 戰局會跟著顯示設定變（審查 2026-10-16）
   if (F.length) { var up = 0; F.forEach(function (f) { if (f.model ? sh.models.some(function (q) { return q.path === f.model && q.alive && !q.moved; }) : f.n0 > 0 && funnelCount(sh.grid, f.p) * 2 >= f.n0) up++; }); fu = up / F.length; }
   D.fu = fu;
@@ -303,7 +305,8 @@ function driveSurvey(sh) {
   }
   var rw = D.kind === 'oar' ? oarManned(sh) : null;
   D.P.forEach(function (p) {
-    if (p.kind === 'sail') return;
+    if (p.kind === 'rudder' && !p.m && p.n0 > 0) p.ro = drvUp(driveCount(sh.grid, p.p), p.n0) ? 1 : 0;   // 看不見的舵：船尾那一塊格子剩一半以上 ＝ 還在
+    if (p.kind === 'sail' || p.kind === 'rudder') return;                // 舵的鏈每一步算（helmEff）
     p.chain = drvLinks(sh, p, C, bk, rw, cut);
     var v = drvChain(p.chain);
     p.ok = p.kind === 'magic' ? clamp(v, 0, 1) : p.kind === 'steam' ? v * (0.5 + 0.5 * fu) : v;   // 蒸汽：煙囪（排煙）照舊乘在整條鏈上
@@ -353,7 +356,8 @@ function oarManned(sh) { var M = new Map(); sh.crew.forEach(function (c) { if (c
  *  每支槳：繞槳座直立軸掃 ±stroke_deg（右舷照 +、左舷照 −，槳葉往船尾 ＝ 出力）、繞沿船身的軸抬 dip_deg ⇒ m.swM（modelLocal 照它畫）；沒人划、斷了 ⇒ 平放不動。 */
 function oarAnim(sh, D, dt) {
   var r0 = (sh.sunk || sh.struck ? 0 : (sh.power || 0)) * OAR_SPM / 60 * dt;
-  [-1, 1].forEach(function (sd, j) { var f = sd === D.dfs ? D.dfk : 1; D.ophS[j] += r0 * f; D.ophS[j] -= Math.floor(D.ophS[j]); });
+  if (HELM_TQ && D.sideF) r0 = sh.sunk || sh.struck ? 0 : OAR_SPM / 60 * dt;   // 操舵（TASK-0777）：每一舷照自己那一份推力划（推力 ∝ 槳頻² ⇒ 槳頻 ＝ ±√推力）⇒ 停俥打舵也看得到一舷前划、一舷倒划
+  [-1, 1].forEach(function (sd, j) { var f = HELM_TQ && D.sideF ? Math.sign(D.sideF[j]) * Math.sqrt(Math.abs(D.sideF[j])) : sd === D.dfs ? D.dfk : 1; D.ophS[j] += r0 * f; D.ophS[j] -= Math.floor(D.ophS[j]); });
   D.oph = D.ophS[1];
   D.P.forEach(function (p) {
     if (p.kind !== 'oar') return;
@@ -449,10 +453,12 @@ function driveStep(sh, dt, vS, vB, deg, brake) {
   }
   // 額外動力：俥鐘要的推力（比例² × 全推力），完好度合起來是上限；照每個動力源的「份數 × 完好度」分
   var cap = 0, eq = 0, ex = 0, ey = 0, ew = 0;
-  for (i = 0; i < P.length; i++) { p = P[i]; if (p.kind === 'sail') continue; cap += p.w * p.ok; ex += p.w * p.p[0]; ey += p.w * p.p[1]; ew += p.w; }
+  for (i = 0; i < P.length; i++) { p = P[i]; if (p.kind === 'sail' || p.kind === 'rudder') continue; cap += p.w * p.ok; ex += p.w * p.p[0]; ey += p.w * p.p[1]; ew += p.w; }
   D.cap = cap;
   if (ew > 0) { ex /= ew; ey /= ew; }
   var r = sh.power || 0, want = r * Math.abs(r), give = vB > 0 ? Math.sign(want) * Math.min(Math.abs(want), cap) : 0, Fe = give * k * vB * vB;
+  if (HELM_TQ) Tq += helmDiffStep(sh, D, P, give, cap, k * vB * vB, ey, vB > 0);   // 操舵（TASK-0777）：差動照舵令、停俥倒車也作用；兩舷不平衡的那一份另記在 D.tqD（見「操舵」）
+  else {
   var dif = D.dif && DRV_DIFF && give > 0 ? clamp(sh.rudder || 0, -1, 1) : 0;
   D.dfk = dif ? clamp(1 - 2 * Math.abs(dif), -0.5, 1) : 1; D.dfs = dif > 0 ? -1 : dif < 0 ? 1 : 0;   // 內側那一舷（−1 左舷、+1 右舷）出幾成 ⇒ 划槳的畫面照它（oarAnim）
   for (i = 0; i < P.length; i++) {
@@ -462,6 +468,8 @@ function driveStep(sh, dt, vS, vB, deg, brake) {
     Fx += p.F; Fabs += Math.abs(p.F);
     Tq -= (p.p[1] - ey) * S * p.F;
   }
+  }
+  if (HELM_TQ) for (i = 0; i < P.length; i++) { p = P[i]; if (p.kind === 'sail' || p.kind === 'rudder') continue; Fx += p.F; Fabs += Math.abs(p.F); }
   D.Fx = Fx; D.give = give; D.want = want;
   var Ff = k * vB * vB;                                                   // 螺旋槳轉速（畫面）：自己那一份推力 ÷ 完好時全速分到的推力 ⇒ √ ⇒ × rpm_max
   for (i = 0; i < P.length; i++) {
@@ -498,6 +506,111 @@ function driveYaw(sh, rmax) {
   var ref = (D.Fabs || 0) * D.L / 4, om = ref > 1e-6 && !D.brake && !sh.sunk ? -clamp(D.tq / ref, -1.5, 1.5) * rmax * DRV_TQ : 0;
   D.om = om;
   return om;
+}
+// ───────────────────────── 操舵（TASK-0777；Tim 2026-10-21：「請不用要rudder判斷 應該要靠meta」「這邊的規則可以規範化 參考動力元件(甚至整合成一套系統)」
+//   「希望跟動力系統整合 把轉向當成一種力(力矩) 且動力系統有左右來源時(兩邊的槳) 本身也會提供轉向力矩」） ─────────────────────────
+// 舵是動力清單的一項（sh.drive.P 裡 kind 'rudder'，也收在 D.R）：每支舵（模型 kind=rudder）一項，作用點 ＝ 舵頭 stock-top；沒有舵模型 ⇒ 一支看不見的舵在船尾中線（完好度照船尾那一塊格子，同蒸汽的退路）。
+//   份量 ＝ meta helm_share（沒寫 ⇒ 平分）⇒ 兩支舵（槳帆船）壞一支只掉一半（Tim：「有的船有兩個舵(獎帆船) 損失性能就用總數去算」）。
+//   鏈（drvChain，同動力）：舵令（出力 1）⇒ 舵輪／舵柄（模型 kind=wheel／tiller；meta rudder ＝ 舵的名字 ⇒ 只接那一支，沒寫 ⇒ 接每一支；
+//     中間節：模型 meta steer（舵索、導索器）⇒ 跟操作端算同一節：操作端或中間節壞了 ⇒ 這一節剩 1 − 舵輪的損失）⇒ 舵（還在 1、打掉 1 − 舵的損失）。
+//   損失（Tim：「歷史損失40% 娛樂多一個乘數 預設損失是歷史的一半(20%)」「舵被打掉…寫實損失 100%，娛樂另外乘一個數(50%)」「舵輪影響的是舵的性能(因此是乘算)」）：
+//     舵輪 WHEEL_LOSS（寫實 40%）、舵 RUDDER_LOSS（寫實 100%），娛樂再 × FUN.helmloss（0.5）⇒ 預設：舵輪沒了剩 80%、舵沒了剩 50%、兩樣都沒了 0.8 × 0.5 ＝ 40%。
+//     舵效（sh.drive.eff，羅盤上方 ☸）＝ Σ 份量 × 鏈 × 娛樂加成「舵效」FUN.helmeff（Tim：「娛樂模式可以有舵效加乘(參考原本的轉彎性能加乘)」；預設 ×1）；
+//     乘在舵給的轉向率上，不影響差動（差動照舵令，不經過舵輪）。沒有舵輪模型的船（舵柄畫在舵上）⇒ 鏈上沒有那一節。
+// 轉向 ＝ 力矩 ÷ 阻尼，加上轉動慣量（Tim：1「轉動慣量」）：
+//   轉動慣量 I ＝ 實際質量 M（含進水、扣掉打掉的；driveSurvey）×（迴轉半徑 drive.gyr × 水線長）²（預設 0.25 L）。
+//   阻尼 N（kN·m 每 rad/s）＝ 開戰時的 I ÷（2 × 細節設定「迴轉慣性」）⇒ 完好、沒進水時反應時間 I／N 跟以前一樣（2 秒）；進水變重 ⇒ 反應慢、打掉變輕 ⇒ 反應快。
+//   力矩（yaw 變大 ＝ 船頭往左舷為正）：
+//     · 舵 ＝ N × 舵角 × 最大轉向率 × 舵效 ⇒ 穩定的轉向率跟以前一模一樣（低速舵效 RUD_LOW 照留：Tim 2「要 確保遊戲性」；舵效 0 ⇒ 連它也沒了）；
+//     · 帆的不平衡、兩舷推力的不平衡（受損）＝ N × 比例 × 舵的最大轉向率（完好）× 細節設定「帆的力矩」；比例 ＝ D.tq（kN·m，driveStep）÷（總推力 × 水線長／4），夾 ±1.5（跟以前 driveYaw 同一把尺）。
+//       ⛔ 照力矩 ÷ N 直接算：憲法號前桅的帆全被打掉，偏轉從 5.2°/s（25 秒 62°）掉到 0.3°/s（30 秒 6°）—— 遊戲的舵效比真船快，N 照它校準 ⇒ 物理力矩除下去太小（量過）。
+//     · 差動 ＝ N × 比例 × DIFF_K × 舵的最大轉向率（完好、同一個航速）：每型換算成舵的幾成（Tim 2026-10-21 選「每型換算成舵的幾成」；「獎帆船可以單純靠動力轉彎(其他有左右側動力的船都可以)」）。
+//       比例 ＝ 兩舷推力差的力矩 D.tqD ÷ 完好、全速前進、打滿時的那個力矩（物理只管方向與受損：一舷槳斷、槳手倒下、划得慢 ⇒ 變小）；DIFF_K ＝ 細節設定「差動的力矩」（寫實預設 0.5 ⇒ 打滿 ＝ 舵的一半）× 娛樂加成「差動」FUN.diff（1.2 ⇒ 0.6）。
+//       Tim：「讓舵效跟之前的接近或好一點」「歷史模式可以貼近歷史 娛樂模式加上buff維持手感」⇒ 娛樂 0.6：五型（槳、明輪）划槳打滿都 ≥ 改之前（0.5 時 punt 慢 6%，量過）。
+//       ⛔ 照力矩 ÷ N 直接算（第一版）：轉動慣量 ∝ 質量 × 長²，大加雷 reale 舵沒了只剩 0.6°/s、蘇士奎哈納號 0.2°/s，持火號 dromon 卻比舵還快（量過）。
+//   ⇒ 轉向率每一步往 Σ力矩 ÷ N 追，時間常數 I ÷ N（舊的「轉向率追舵」換成這個；錨咬著繞錨原地轉照舊）。
+// 差動（照舵令 u ＝ 舵角 ×（倒退 −1）＝ 要往哪邊轉；Tim 3「要」：停俥、倒車也作用）：兩舷都有輸出的船（D.dif），每一舷的推力（全速的幾成，有號）：
+//   往前 ≥ DIFF_P0 ⇒ 內側 × (1 − 2|u|)，夾 −0.5（跟以前一樣）；倒車 ≤ −DIFF_P0 ⇒ 另一舷（倒車時往後推的那一舷減）× 同一個倍率；
+//   中間（停俥）⇒ 內側 − |u| × DIFF_P0、外側 ＋ |u| × DIFF_P0（一舷倒划一舷前划 ⇒ 原地轉；DIFF_P0 ＝ 0.5 ⇒ 打滿是全速打滿的 2/3）。兩段在 ±DIFF_P0 接得上（力矩一樣、只有合力跳）。
+//   力臂：槳照槳葉 blade（水推的是槳葉；四型量過槳葉離中線是槳座的 2.6 倍），螺旋槳照轉軸中心。倒退要往後超過 HELM_REV 才算（helmRev）。
+// 電腦（31_sailing.js）：要的轉向率夾在「舵 ＋ 差動打滿」的轉向率以內，舵角 ＝ 要的 ÷ 那個上限 ⇒ 舵沒了照樣靠差動轉。
+// 開關：設定檔 drive.helmTq: false 或網址 ?helmtq=0 ⇒ 全部照舊（helmK、driveYaw、只往前的差動；對拍用）。
+var HELM_TQ = DRIVE_CFG.helmTq !== false && Q.get('helmtq') !== '0';
+var HELM_GYR = +DRIVE_CFG.gyr > 0 ? +DRIVE_CFG.gyr : 0.25;
+var DIFF_P0 = +DRIVE_CFG.diffP0 > 0 ? +DRIVE_CFG.diffP0 : 0.5;           // 推力的幾成：比它小 ＝ 停俥那一段
+/** 開戰（driveInit）：舵的清單（見上）。 */
+function helmItems(sh) {
+  var T = sh.T, M = sh.models;
+  var rud = M.filter(function (m) { return m.kind === 'rudder'; }), ops = M.filter(function (m) { return m.kind === 'wheel' || m.kind === 'tiller'; });
+  var lks = M.filter(function (m) { var v = (m.meta || {}).steer; return v !== undefined && v !== '' && v !== '0' && v !== 0 && v !== false; });
+  var R = rud.length ? rud.map(function (m) { return { kind: 'rudder', m: m, p: (m.pts['stock-top'] || m.c).slice(), out: m.name }; })
+    : [{ kind: 'rudder', m: null, p: [T.wl0 + 4, T.cy, Math.max(2, T.zw - 15)], out: '船尾（看不見的舵）' }];
+  function named(m, r) { return !!r && (m.name === r || m.path === r || m.name.slice(-r.length - 1) === '/' + r); }
+  function bound(L, p) { var B = p.m ? L.filter(function (q) { return named(p.m, (q.meta || {}).rudder); }) : []; return B.length ? B : L.filter(function (q) { return !(q.meta || {}).rudder; }); }
+  var W = R.map(function (p) { var v = p.m ? +(p.m.meta || {}).helm_share : NaN; return v > 0 ? v : 1; }), sw = W.reduce(function (a, v) { return a + v; }, 0);
+  R.forEach(function (p, j) {
+    p.w = W[j] / sw; p.ok = 1; p.F = 0; p.Fy = 0; p.sd = 0; p.ops = bound(ops, p); p.lks = bound(lks, p); p.ro = 1;
+    if (!p.m) p.n0 = driveCount(T.hullG || T.base, p.p);
+  });
+  return R;
+}
+function helmLossK() { return PLAY === 'fun' ? FUN.helmloss : 1; }
+/** 舵效（每一步；31_sailing.js、52_fleet.js）：Σ 份量 × 鏈（舵令 ⇒ 舵輪／舵柄 ⇒ 舵）× 娛樂加成「舵效」。沒有清單（開關關掉）⇒ 1。 */
+function helmEff(sh) {
+  var D = sh.drive; if (!D || !D.R) return 1;
+  var k = helmLossK(), Lw = clamp(WHEEL_LOSS * k, 0, 1), Lr = clamp(RUDDER_LOSS * k, 0, 1), e = 0;
+  function up(m) { return m.alive && !m.moved; }
+  D.R.forEach(function (p) {
+    var fo = p.ops.length ? p.ops.filter(up).length / p.ops.length : 1, fl = p.lks.every(up) ? 1 : 0, ro = p.m ? (up(p.m) ? 1 : 0) : p.ro;   // 操作端並聯（照還在幾成）、舵索串聯（斷一個就傳不過去；⛔ 照比例：兩個導索器打掉一個只掉一半，量過）
+    var L = [{ name: '舵令', ok: 1, out: 1 }];
+    if (p.ops.length || p.lks.length) L.push({ name: p.ops.concat(p.lks).map(function (m) { return m.name.split('/').pop(); }).join('＋'), ok: 1 - Lw * (1 - fo * fl), out: 0 });
+    L.push({ name: p.out, ok: 1 - Lr * (1 - ro), out: 0 });
+    p.chain = L; p.ok = drvChain(L); e += p.w * p.ok;
+  });
+  D.effC = e; D.eff = e * playK('helmeff');                            // effC：只看鏈（受損）；eff：乘上娛樂加成（☸ 顯示的、轉向用的）
+  return D.eff;
+}
+/** 差動（driveStep，開關開著）：每個額外動力項的推力 p.F（照舵令，見上）；回傳不算差動的兩舷不平衡力矩（受損），
+ *  差動那一份記在 D.tqD（kN·m）、比例 D.dS ＝ D.tqD ÷ 完好全速打滿的力矩 D.tqRef、現在打滿的比例 D.dS1（電腦估上限用）、每一舷的推力 D.sideF（划槳畫面）。 */
+function helmDiffStep(sh, D, P, give, cap, Ff, ey, on) {
+  var dif = D.dif && DRV_DIFF && on, u = dif ? clamp(sh.rudder || 0, -1, 1) * (helmRev(sh) ? -1 : 1) : 0, Tq = 0, Td = 0, Td1 = 0, Tr = 0, SF = [give, give];
+  for (var i = 0; i < P.length; i++) {
+    var p = P[i]; if (p.kind === 'sail' || p.kind === 'rudder') continue;
+    var c = cap > 0 ? Ff * p.w * p.ok / cap : 0, f = helmSideF(give, cap, p.sd, u);
+    var arm = ((p.kind === 'oar' && p.m.pts.blade ? p.m.pts.blade[1] : p.p[1]) - ey) * S;   // 力臂：槳照槳葉（水推的是槳葉；量過四型槳葉離中線是槳座的 2.6 倍），螺旋槳照轉軸中心
+    p.F = f * c; p.Fy = 0;
+    Tq -= arm * give * c; Td -= arm * (f - give) * c;
+    if (dif) { Td1 -= arm * (helmSideF(give, cap, p.sd, 1) - give) * c; Tr -= arm * (helmSideF(1, 1, p.sd, 1) - 1) * Ff * p.w; }   // Tr：完好（ok 1）、全速前進、打滿
+    if (p.sd) SF[p.sd > 0 ? 1 : 0] = f;
+  }
+  Tr = Math.abs(Tr);
+  D.tqD = Td; D.tqRef = Tr; D.dS = Tr > 1e-9 ? Td / Tr : 0; D.dS1 = Tr > 1e-9 ? Math.abs(Td1) / Tr : 0; D.sideF = SF; D.dfu = u; D.dfk = 1; D.dfs = 0;
+  return Tq;
+}
+/** 一舷的推力（全速的幾成，有號）：g ＝ 俥鐘要的（夾在上限內）、sd 哪一舷、u 舵令（見上）。 */
+function helmSideF(g, cap, sd, u) {
+  if (!u || !sd) return g;
+  var a = Math.abs(u), s = u > 0 ? 1 : -1, m = clamp(1 - 2 * a, -0.5, 1);
+  if (g >= DIFF_P0) return sd === -s ? g * m : g;
+  if (g <= -DIFF_P0) return sd === s ? g * m : g;
+  return clamp(g + (sd === -s ? -a : a) * DIFF_P0, -cap, cap);
+}
+/** 倒退（舵效反過來）：開關開著 ⇒ 往後超過 HELM_REV 才算（⛔ 照 sh.spd < 0：停著時航速是一個很小的負數（__game.helm 印到小數點後三位是 0，但 sh.spd < 0 成立），就把舵與差動一起反過來 ⇒ fusta 原地轉按左舵往右轉，量過）；關著 ⇒ 照舊 sh.spd < 0。 */
+var HELM_REV = 0.1;                                                     // m/s
+function helmRev(sh) { return HELM_TQ ? sh.spd < -HELM_REV : sh.spd < 0; }
+/** 阻尼 N（kN·m 每 rad/s；見上）。 */
+function helmN(sh) { var D = sh.drive, R = HELM_GYR * D.L; return (D.M0 || D.M || 1) * R * R / (2 * DRV_TURN); }
+/** 差動打滿時的轉向率（rad/s，電腦估上限用；31_sailing.js）：rmaxB ＝ 舵完好時的最大轉向率（這個航速）。 */
+function helmDifRate(sh, rmaxB) { var D = sh.drive; return D && D.dS1 > 0 && !D.brake && !sh.sunk ? D.dS1 * DIFF_K * playK('diff') * rmaxB : 0; }
+/** 轉向率的一步（31_sailing.js，開關開著）：rate ＝ 舵（與頂風失速的推開）給的轉向率；rmaxB ＝ 舵完好時的最大轉向率（差動照它換算）；pin ＝ 停船、繞錨原地轉 ⇒ 照舊的 2 秒追。 */
+function helmYaw(sh, rate, dt, pin, rmaxB) {
+  var D = sh.drive;
+  if (pin || !D || D.M === null) { sh.yawRate += (rate - sh.yawRate) * Math.min(1, dt / (2 * DRV_TURN)); if (D) D.om = 0; return; }
+  var N = helmN(sh), R = HELM_GYR * D.L, I = (D.M || D.M0 || 1) * R * R, Tt = I / N, live = !D.brake && !sh.sunk;
+  var ref = (D.Fabs || 0) * D.L / 4, oS = live && ref > 1e-6 ? -clamp((D.tq || 0) / ref, -1.5, 1.5) * rmaxB * DRV_TQ : 0, oD = live ? -(D.dS || 0) * DIFF_K * playK('diff') * rmaxB : 0;   // 轉向率（rad/s）：帆與動力的不平衡、差動（都換算成舵的幾成）
+  if (D.R) { var we = D.R.reduce(function (a, p) { return a + p.w * p.ok; }, 0); D.R.forEach(function (p) { var arm = Math.abs(p.p[0] - sh.T.cx) * S; p.Fy = arm > 0.5 && we > 0 ? rate * N * p.w * p.ok / we / arm : 0; }); }   // 每支舵的側向力（kN；讀數）＝ 它那一份舵的力矩 ÷ 離船中心的距離
+  D.N = N; D.I = I; D.Tt = Tt; D.rmaxB = rmaxB; D.tqR = rate * N; D.tqS = oS * N; D.tqDf = oD * N; D.om = oS + oD;
+  sh.yawRate += (rate + D.om - sh.yawRate) * Math.min(1, dt / Tt);
 }
 /** 讀數（__game.drive、詳細資訊）：每個動力源的種類、完好度、推力（kN）。 */
 function driveInfo(sh) {

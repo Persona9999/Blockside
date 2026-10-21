@@ -2,7 +2,7 @@
 // 存的是載入時算一次、之後不改的東西：船體網格（每個區塊的四邊形）、模型網格（三角形＋佔用格）、海面遮罩、浮力表、帆的布模板。
 //   格子本身不存：解碼很快（憲法號約 70 ms），而且 checksum 要照解出來的格子比（VK.verify）。
 //   GPU 那一半（上傳、VAO）每次照樣做，只省 CPU 算的那一半。量過（2026-10-13，PC）：船體網格 CPU 240 ms，讀回同一份 6.8 MB 約 19 ms。
-// 一型一筆（鍵 ＝ 船的 id）；兩艘同型共用那一筆。
+// 一型一筆（鍵 ＝ 船的 id）；兩艘同型共用那一筆。換裝（38_fit.js）：鍵 ＝ 艦隊裡那一項（船型@換裝表），換裝表也算進 vxk 的雜湊（出廠、存檔改了 ⇒ 舊的那筆不用）。
 // 失效：那筆記錄的 vxk（內嵌 .vxk 原文的雜湊：basecamp 每次重匯都會變，繩／帆／模型改了也會變）、code（頁面裡 JS 原文的雜湊：
 //   產生網格的程式改了也要清）、fmt（快取格式）任何一個對不上 ⇒ 不用、現場解析完蓋掉它。
 // 存不了（畫廊彈窗的 iframe 只開 allow-scripts：不透明來源，一碰 indexedDB 就丟錯；無痕模式；配額滿）⇒ 照常現場解析，不壞。
@@ -30,19 +30,22 @@ function cacheOpen() {
   }));
 }
 /** 那艘船的快取 ⇒ Promise<記錄|null>（從不 reject）。info.cache 留讀數：key、讀了多久、為什麼沒用。 */
-function cacheGet(info) {
+function cacheGet(info, key, F) {
   // 改裝船（TASK-0657）：格子存成跟原船的差 ⇒ 原船改了、差卻一樣（兩艘一起長了同樣的格）也要換鍵 ⇒ 鍵把原船那一路的內嵌原文也算進去
   //   拆檔的成品：船還沒載 ⇒ 用清單上的內容雜湊（VK.embeddedKey；內嵌的照舊是原文）
   var txt = VK.embeddedKey(info.el);
   for (var vb = info, vn = 0; vb && vb.variant_of && vn < 8; vn++) { vb = hullInfo(vb.variant_of); txt += '|' + (vb ? VK.embeddedKey(vb.el) : ''); }
-  var st = info.cache = { vxk: cacheFnv(txt), code: cacheCode(), hit: false, why: '' };   // 裝飾的網格一律建（05_hull.js decoSplit）⇒ 跟畫質無關、一份
+  key = key === undefined ? info.id : String(key);
+  var fs = fitSpec(F); if (fs) txt += '|fit:' + fs;                        // 換了裝 ⇒ 模型網格不一樣
+  var st = { vxk: cacheFnv(txt), code: cacheCode(), hit: false, why: '', key: key };
+  if (key === info.id) info.cache = st; else (info.cacheFit = info.cacheFit || {})[key] = st;   // 讀數（90_main.js）照船型那一份；換裝的另外放   // 裝飾的網格一律建（05_hull.js decoSplit）⇒ 跟畫質無關、一份
   if (!CACHE_ON) { st.why = '?cache=0'; return Promise.resolve(null); }
   var t0 = performance.now();
   return cacheOpen().then(function (db) {
     if (!db) { st.why = '存不了（這個頁面不能用 IndexedDB）'; return null; }
     return new Promise(function (res) {
       try {
-        var q = db.transaction('hull').objectStore('hull').get(info.id);
+        var q = db.transaction('hull').objectStore('hull').get(key);
         q.onsuccess = function () {
           var r = q.result; st.readMs = performance.now() - t0;
           if (!r) st.why = '還沒有快取';
@@ -57,7 +60,7 @@ function cacheGet(info) {
 }
 /** 現場解析完的船型 ⇒ 存一筆（蓋掉舊的）。在背景做，失敗只記讀數。 */
 function cachePut(T, info) {
-  var st = info.cache;
+  var st = T.key && T.key !== info.id ? (info.cacheFit || {})[T.key] : info.cache; if (!st) return;
   if (!CACHE_ON || st.hit || !T.keep) return;
   // ?start=1（Blocksail 地球儀開的；2026-10-20）：寫快取（IndexedDB 的 put 當場把整份記錄複製一遍，約 0.7 s）等開完戰、轉場拉下來了才寫（最多等 CACHE_LATE_S 秒）⇒ 不卡轉場動畫
   if (START_Q && BED_SLICE && !T.keepLate) { T.keepLate = performance.now(); cacheLater(T, info); return; }
@@ -72,7 +75,7 @@ function cachePut(T, info) {
     if (!db) return;
     try {
       var t0 = performance.now(), tx = db.transaction('hull', 'readwrite');
-      tx.objectStore('hull').put(rec, info.id);
+      tx.objectStore('hull').put(rec, st.key || info.id);
       tx.oncomplete = function () { st.saved = true; st.saveMs = performance.now() - t0; };
       tx.onerror = tx.onabort = function () { st.saved = false; st.why = '存不了：' + (tx.error && tx.error.name || '?'); };
     } catch (e) { st.saved = false; st.why = '存不了：' + (e && e.name || e); }

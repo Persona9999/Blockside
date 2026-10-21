@@ -36,6 +36,7 @@ function makeShipSteps(i, team, yaw, pz, T, px) {
     spd: 0, spd0: true, yawRate: 0, vel: [0, 0, 0], wakeT: 0, sailFrac: 1, pos: '',
     side: 'S', manual: false, rudder: 0, sailSet: 3, power: 1, bumpT: 0
   };
+  if (T.key && T.key !== T.id) { var T0 = HULLT[T.id], c0 = SHIP_CFG[T.id]; sh.cfg.ballast = T0 && c0 && c0.ballast !== undefined && c0.ballast !== T0.ballast0 ? c0.ballast : cfgDefault('ballast', T); }   // 艦隊裡寫了換裝的那一艘（38_fit.js）：壓艙物照自己那一份的預設（換了砲 ⇒ 重量不同）；玩家在配置頁改過那一型的 ⇒ 照改的
   smoothShip(sh);                                                       // 平滑渲染的格：共用船型那一份網格（15_smooth.js）
   // 模型（砲、火藥桶、舵輪）：整個是一塊剛體 —— 被打到扣血，歸零整個飛出去（火藥桶 ⇒ 殉爆，見 23_powder.js），⛔ 不拆格。
   // 種類照 basecamp 給的 meta（TASK-0517）：{kind:'gun', gun:'24l'|'32c'|'18chase'}、{kind:'powder', powder_lb}；舵輪沒有 meta ⇒ 照名字。
@@ -69,9 +70,11 @@ function makeShipSteps(i, team, yaw, pz, T, px) {
     if (foot < 0) foot = VK.pack(cx, cy, fz);
     var hpm = kind === 'powder' ? powderHP() : DRVP[kind] && DRVP[kind].hpK > 0 ? Math.round(GUN_HP * DRVP[kind].hpK) : kindProp(kind, 'hpK') ? Math.round(GUN_HP * kindProp(kind, 'hpK')) : kind === 'model' ? 1 : Math.round(GUN_HP * (GUNS[kind] && GUNS[kind].hpK || 1));   // 細節設定的血量；整件一塊的動力件（槳）照道具設定頁的 hpK（31_drive.js DRVP）；規格表 hpK（舵輪 6 成、門 5 成）；帆桁、舵跟砲一樣；砲種表的 hpK ＝ 血量倍率（莫尼特號的鐵甲砲塔 8；Tim 2026-10-15 匯入莫尼特號：一發就打飛不像史實）
     var mt = m.meta || {};
-    return { T: T, k: k, name: m.name.split('/').pop(), path: m.name, kind: kind, hp: hpm, hpMax: hpm, mesh: m.mesh, origin: m.origin, bb: b, pts: m.points || {}, meta: mt,
+    var o = { T: T, k: k, name: m.name.split('/').pop(), path: m.name, kind: kind, hp: hpm, hpMax: hpm, mesh: m.mesh, origin: m.origin, bb: b, pts: m.points || {}, meta: mt,
       c: [(b[0] + b[3]) / 2, (b[1] + b[4]) / 2, (b[2] + b[5]) / 2], foot: foot, alive: true,
       rot: 0, r0: (+mt.rotate_z_deg || 0) * Math.PI / 180, piv: pv, yk: mt.yard, sail: mt.sail, hang: hang };   // 帆桁：rot ＝ 在作品的角度（r0）之外又轉了多少（追風，30_rig_physics.js）
+    if (T.fit && T.fit.was && T.fit.was[m.name]) o.was = T.fit.was[m.name];   // 換了裝的掛點：原本雕的那一門（38_fit.js fitKind0／fitBB0）
+    return o;
   });
   }, function () {                                                   // 帆桁、裝飾
   sh.yards = sh.models.filter(function (m) { return m.kind === 'yard' && m.piv; });
@@ -115,7 +118,7 @@ function makeShipSteps(i, team, yaw, pz, T, px) {
   var RS = T.rig.ropes, out = [];                                        // 每 ROPE_FIX_N 條一步（一條兩端各找一次錨）
   for (var a = 0; a < RS.length; a += ROPE_FIX_N) out.push(function (a0) { return function () {
     RS.slice(a0, a0 + ROPE_FIX_N).forEach(function (r) {
-      var n = r.pts.length / 3, mv = !!(r.meta && r.meta.anim), md = function (k) { return mv && r.ends && typeof r.ends[k] === 'string' && r.ends[k].indexOf('model:') === 0; };
+      var n = r.pts.length / 3, mv = !!(r.meta && r.meta.anim), md = function (k) { return (mv || (r.fitEnd && r.fitEnd[k])) && r.ends && typeof r.ends[k] === 'string' && r.ends[k].indexOf('model:') === 0; };   // fitEnd：換裝挪過的那一端（38_fit.js）跟會動的繩一樣交給 linkRopes 綁模型
       sh.ropes.push({ pts: r.pts, col: r.color, bb: ropeBox(r.pts), a: md(0) ? -1 : anchorNear(T, r.pts[0], r.pts[1], r.pts[2], 5), b: md(1) ? -1 : anchorNear(T, r.pts[n * 3 - 3], r.pts[n * 3 - 2], r.pts[n * 3 - 1], 5), name: r.name, meta: r.meta || null });
     });
   }; }(a));
@@ -220,19 +223,19 @@ function gunMuzzle(m) {                                               // ⛔ 不
 function gunOrder(a, b) { return b.muz[0] - a.muz[0] || a.muz[1] - b.muz[1]; }
 function gunDecks(sh) {
   if (hullDecks(sh.T).length) return gunDecksMeta(sh);                 // 有甲板 meta（35_decks.js）⇒ 照 meta 分；沒有 ⇒ 底下照砲的高度分（舊匯出的退路）
-  var side = sh.guns.filter(function (g) { return g.type !== 'chase'; }); if (!side.length) side = sh.guns;
-  var zs = side.map(function (g) { return Math.floor(g.model.bb[2]); }).sort(function (a, b) { return a - b; }), G = [];
+  var side = sh.guns.filter(function (g) { return fitKind0(g.model) !== 'chase'; }); if (!side.length) side = sh.guns;   // fitKind0／fitBB0：換了裝的照原本雕的那一門（38_fit.js）
+  var zs = side.map(function (g) { return Math.floor(fitBB0(g.model)[2]); }).sort(function (a, b) { return a - b; }), G = [];
   zs.forEach(function (z) { var L = G[G.length - 1]; if (L && z - L.z1 <= 10) L.z1 = z; else G.push({ z0: z, z1: z }); });
   var decks = G.map(function (L, i) { return { key: 'd' + i, z0: L.z0, z1: L.z1, guns: [] }; });
   sh.guns.forEach(function (g) {
-    var z = Math.floor(g.model.bb[2]), D = null, bd = 1e9;
+    var z = Math.floor(fitBB0(g.model)[2]), D = null, bd = 1e9;
     decks.forEach(function (d) { var dd = z < d.z0 ? d.z0 - z : z > d.z1 ? z - d.z1 : 0; if (dd < bd) { bd = dd; D = d; } });   // 在那一層的範圍裡 ⇒ 0；不在 ⇒ 最近的那一層
     g.deck = D.key; D.guns.push(g);
   });
   var low = decks.length - (decks.length > 1 ? 1 : 0);
   decks.forEach(function (D, i) {
-    var main = D.guns.filter(function (g) { return g.type !== 'chase'; })[0] || D.guns[0], a = Math.floor(main.model.bb[2]);
-    D.zr = main.type === 'carr' ? [a - 6, a + 3] : [a - 8, a + 5];
+    var main = D.guns.filter(function (g) { return fitKind0(g.model) !== 'chase'; })[0] || D.guns[0], a = Math.floor(fitBB0(main.model)[2]);
+    D.zr = fitKind0(main.model) === 'carr' ? [a - 6, a + 3] : [a - 8, a + 5];
     D.weather = i === decks.length - 1;
     D.name = D.weather && decks.length > 1 ? '上甲板' : low === 1 ? '砲甲板' : low === 2 ? (i === 0 ? '下層砲甲板' : '上層砲甲板') : '第 ' + (i + 1) + ' 層砲甲板';
   });
@@ -253,9 +256,9 @@ function gunDecksMeta(sh) {
     var zs = L.guns.map(function (g) { return Math.floor(g.model.bb[2]); });
     var D = { key: 'd' + i, z0: Math.min.apply(null, zs), z1: Math.max.apply(null, zs), guns: L.guns, meta: L.meta, name: L.meta.name, weather: i === list.length - 1 };
     L.guns.forEach(function (g) { g.deck = D.key; });
-    var nc = L.guns.filter(function (g) { return g.type !== 'chase'; }), up = function (g) { var R0 = g.model.hd && ndRoot(g.model.hd); return !!R0 && g.model.bb[2] > T.turrets[R0.k].box[2] + 3; };   // 疊在砲塔頂上、比底座高的砲（27_turret.js）不拿來切這一層的高度
-    var main = nc.filter(function (g) { return !up(g); })[0] || nc[0] || L.guns[0], a = Math.floor(main.model.bb[2]);
-    D.zr = main.type === 'carr' ? [a - 6, a + 3] : [a - 8, a + 5];
+    var nc = L.guns.filter(function (g) { return fitKind0(g.model) !== 'chase'; }), up = function (g) { var R0 = g.model.hd && ndRoot(g.model.hd); return !!R0 && g.model.bb[2] > T.turrets[R0.k].box[2] + 3; };   // 疊在砲塔頂上、比底座高的砲（27_turret.js）不拿來切這一層的高度
+    var main = nc.filter(function (g) { return !up(g); })[0] || nc[0] || L.guns[0], a = Math.floor(fitBB0(main.model)[2]);
+    D.zr = fitKind0(main.model) === 'carr' ? [a - 6, a + 3] : [a - 8, a + 5];
     return D;
   });
 }
@@ -346,7 +349,9 @@ function modelKind(m) {
   //   rudder：夜隼號的舵是模型（summit：方艉船掛在艉板外）；憲法號、餘燼號的舵是船殼的格子
   //   door：門、艙蓋（TASK-0638；25_doors.js）：血量砲的一半、不擋人、開關只是演出
   //   propeller：螺旋槳（TASK-0628／0630）：血量跟舵一樣（⛔ 一般模型 1 點 ⇒ 一發爆炸彈就把整艘的動力打掉）；照輸出轉（31_drive.js）
-  return /carronade/.test(m.name) ? 'carr' : /chase/.test(m.name) ? 'chase' : /\/砲-[SP]\d+$/.test(m.name) ? 'long' : /wheel/.test(m.name) ? 'wheel' : 'model';
+  //   wheel 照名字認（TASK-0777 拿掉：Tim 2026-10-21「請不用要rudder判斷 應該要靠meta」）：量過 19 型的舵輪都有 meta kind=wheel；照名字認反而把憲法號、炎羽號的「wheel座」（wheel_stand）、
+  //     潮墓號的兩個「wheel-fairlead」（fairlead，排在舵輪前面 ⇒ 舵手站在導索器上）也當成舵輪。只在操舵的開關關掉時照舊（?helmtq=0，對拍用）。
+  return /carronade/.test(m.name) ? 'carr' : /chase/.test(m.name) ? 'chase' : /\/砲-[SP]\d+$/.test(m.name) ? 'long' : /wheel/.test(m.name) && !HELM_TQ ? 'wheel' : 'model';
 }
 /** 模型照 x 分桶（每 16 格一桶，外框外擴 12 格登記）⇒ hitModel 只看砲彈所在那一桶（193 個模型 × 每顆砲彈每個小步全掃太貴）。
  *  桶裡照模型編號排 ⇒ 先碰到誰跟全掃一樣。 */

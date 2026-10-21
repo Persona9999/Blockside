@@ -99,7 +99,8 @@ function sideGuns(sh, side) { return sh.guns.filter(function (g) { return g.aliv
 // 航速（TASK-0630，31_drive.js）：這裡照舊算「每個動力單獨推動時的航速」—— 帆（滿帆、完好、這個風向）與額外動力（cfg.base 節）——
 //   driveStep 把它們換成推力（k·v²）、扣掉水阻、照實際質量（含進水）算加速度；最高航速 ＝ √(帆² ＋ 額外動力²) 跟以前一樣，變的是加減速與受損的偏轉。
 //   額外動力照俥鐘（sh.power ＝ 航速的比例，−1…1）；倒退時舵效反過來（像倒車）。電腦的船一直全速前進（跟以前一樣）；停船（6）照舊停。
-/** 操舵性能（乘在最大轉向率上）：舵輪或舵（模型）被打掉了 ⇒ 細節設定「舵壞了的操舵」HELM_LOST（寫實 25%）× 娛樂加成 FUN.helm（×2 ⇒ 50%），最多 100%；兩樣都沒了也只乘一次。
+/** ⚠ TASK-0777 起只在操舵的開關關掉時用（?helmtq=0）；開著 ⇒ 31_drive.js helmEff（舵令 ⇒ 舵輪 ⇒ 舵的鏈）。
+ *  操舵性能（乘在最大轉向率上）：舵輪或舵（模型）被打掉了 ⇒ 細節設定「舵壞了的操舵」HELM_LOST（寫實 25%）× 娛樂加成 FUN.helm（×2 ⇒ 50%），最多 100%；兩樣都沒了也只乘一次。
  *  Tim 2026-10-20。⛔ 以前寫死：舵輪沒了 ×0.35、舵沒了 ×0.12、兩樣都沒了相乘（0.042）。電腦指揮官的估計（52_fleet.js cmdView v.ag）同一支。
  *  本來就沒有舵輪模型的船（舵柄：德羅蒙 dromon、fusta、punt、大加雷 reale —— 2026-10-21 逐型量過 19 型，就這四型）以前一直被當成「舵輪沒了」×0.35；
  *  Tim 2026-10-21 定：平常 ×1（「大加雷、德羅蒙平時的操舵要不要從 ×0.35 改成 ×1 (改」；fusta、punt 同一個病，問過一起改）⇒ 沒有舵輪不再算壞，只看真的被打掉的舵輪或舵。 */
@@ -138,8 +139,9 @@ function sailShip(sh, dt) {
   // 舵
   sh.throttle = 1;                                                      // 油門每一步重設（戰列跟隨、讓開砲線要放慢才改；下一步的目標航速才用到）
   var foe = foeOf(sh), tY = sh.yaw, rate = 0;
-  var hk = helmK(sh);
+  var hk = HELM_TQ ? helmEff(sh) : helmK(sh);                         // 操舵（TASK-0777，31_drive.js）：開關開著 ⇒ 舵效（舵令 ⇒ 舵輪 ⇒ 舵的鏈）；關著 ⇒ 舊的 helmK
   var rmax = Math.max(RUD_LOW, 0.012 + 0.016 * Math.abs(sh.spd) / SPK) * hk * (UP === 1 ? 1 : 1 + (UP - 1) * clamp((deg - 90) / 45, 0, 1)) * sh.cfg.agile * playK('agile') * WX.agile;   // 天氣：暴風雨浪大、舵難使 ×0.8。⛔ 用 sh.spd 直接算 ⇒ 調快航速連帶變得更會轉
+  var rmaxB = HELM_TQ ? Math.max(RUD_LOW, 0.012 + 0.016 * Math.abs(sh.spd) / SPK) * (UP === 1 ? 1 : 1 + (UP - 1) * clamp((deg - 90) / 45, 0, 1)) * sh.cfg.agile * playK('agile') * WX.agile : rmax;   // 舵完好時的最大轉向率（差動照它換算，TASK-0777）
   if (held && Math.abs(sh.spd) < 0.6 && !sh.struck && !sh.sunk) {   // 錨咬著、船幾乎停了 ⇒ 繞錨原地轉：我艦照 A／D、電腦（或雙錨時的我艦沒按）轉舷側對敵
     var pw = sh.i === PLAYER_I ? (KEYS.l ? 1 : 0) - (KEYS.r ? 1 : 0) : 0;
     if (pw) rate = pw * ANC_PIVOT;
@@ -151,11 +153,11 @@ function sailShip(sh, dt) {
   else if (manual && !sh.struck && !sh.sunk) {
     var want = (KEYS.l ? 1 : 0) - (KEYS.r ? 1 : 0);                    // 舵角正 ＝ yaw 變大 ＝ 畫面上左轉
     sh.rudder += clamp(want - sh.rudder, -1.5 * dt, 1.5 * dt);
-    rate = sh.rudder * rmax * (sh.spd < 0 ? -1 : 1);                   // 倒退 ⇒ 舵效反過來（左舵 ⇒ 船尾往左、船頭往右）
+    rate = sh.rudder * rmax * (helmRev(sh) ? -1 : 1);                  // 倒退 ⇒ 舵效反過來（左舵 ⇒ 船尾往左、船頭往右）
     if (nogo > 0) {                                                     // 船頭被風推開：往讓船頭離開風的那一側（正頂風 ⇒ 照上次那一側）
       var off = -Math.sin(sh.yaw) * W[0] - Math.cos(sh.yaw) * W[2];     // d(船頭·風吹去的方向)/d(yaw)：正 ＝ yaw 變大會離開風
       if (Math.abs(off) > 0.02) sh.ironSide = off > 0 ? 1 : -1;
-      if (Math.abs(sh.rudder) > 0.3) sh.ironSide = sh.rudder * (sh.spd < 0 ? -1 : 1) > 0 ? 1 : -1;   // 有打舵 ⇒ 倒帆往舵那一側推（現實：前帆反受風，船頭往要的那一側掉；⛔ 照風推的那一側 ⇒ 往另一側打舵時舵效 0.012 抵不過 0.02，停在頂風動彈不得：Tim 2026-10-17）
+      if (Math.abs(sh.rudder) > 0.3) sh.ironSide = sh.rudder * (helmRev(sh) ? -1 : 1) > 0 ? 1 : -1;   // 有打舵 ⇒ 倒帆往舵那一側推（現實：前帆反受風，船頭往要的那一側掉；⛔ 照風推的那一側 ⇒ 往另一側打舵時舵效 0.012 抵不過 0.02，停在頂風動彈不得：Tim 2026-10-17）
       rate += (sh.ironSide || 1) * nogo * IRONS_PUSH * clamp(1 - sh.spd / (VMAX * SPK * 0.5), 0, 1);
       if (nogo > 0.5 && !(SIMT - (sh.ironsT || -99) < 20)) { sh.ironsT = SIMT; note(sh, '頂風失速：帆被吹回來了 —— 帶著速度轉過去，或往下風轉一圈'); }
     }
@@ -173,10 +175,15 @@ function sailShip(sh, dt) {
     // 大漩渦：讓船（快撞上才出手）之後、讓開砲線之前 ⇒ 離中心太近就往外（54_helm.js vxAvoid；沒有漩渦 ⇒ null）。⛔ 排在讓船前面 ⇒ 內圈的船不管旁邊的船，2 對 2 一直互撞（11 m/s）
     if (!sh.struck && !sh.sunk) { var av = bedAvoid(sh); if (av === null) av = friendAvoid(sh, hc && od.mode === 'lead' ? helmLeadAvoid(sh) : undefined); if (av === null) av = foeAvoid(sh); if (av === null) av = vxAvoid(sh); if (av === null && !hc) av = lineClear(sh); else if (hc) sh.clearing = null; if (av !== null) { tY = av; sh.avT = SIMT; } }   // avT：最後一次讓船的時刻（讀數）   // 戰列、搶上風（hc）不讓砲線（TASK-0679）：守隊形，擋到的那幾門照 friendInLine 不開（⛔ 讓 ⇒ 接近時敵艦在前方、前一艘永遠擋著後面的砲線，排頭 35 秒、紅方排頭 80 秒都在讓，隊形散掉）   // throttle 每一步重設（lineClear 要放慢才改）   // 讓友船 ＞ 讓敵艦（不撞，54_helm.js）＞ 讓開友艦的砲線（52_fleet.js；沒有友船 ⇒ null）
     var e = Math.atan2(Math.sin(tY - sh.yaw), Math.cos(tY - sh.yaw));
-    rate = clamp(e * 0.5, -rmax, rmax); sh.rudder = rmax > 0 ? rate / rmax * (sh.spd < 0 ? -1 : 1) : 0;   // 倒退 ⇒ 舵反著打（畫面上的舵角；轉向照要的轉）
+    var rmaxT = HELM_TQ ? rmax + helmDifRate(sh, rmaxB) : rmax;                // 操舵（TASK-0777）：上限 ＝ 舵 ＋ 差動打滿 ⇒ 舵沒了照樣靠兩舷的推力轉；關著 ⇒ 只有舵（跟以前一樣）
+    rate = clamp(e * 0.5, -rmaxT, rmaxT); sh.rudder = rmaxT > 0 ? rate / rmaxT * (helmRev(sh) ? -1 : 1) : 0;   // 倒退 ⇒ 舵反著打（畫面上的舵角；轉向照要的轉）
+    if (HELM_TQ) rate = rmaxT > 0 ? rate * rmax / rmaxT : 0;            //   舵那一份（差動那一份由舵令經 driveStep 的力矩給）
   }
+  if (HELM_TQ) helmYaw(sh, rate, dt, stop || (held && Math.abs(sh.spd) < 0.6), rmaxB);   // 力矩 ÷ 阻尼、轉動慣量（31_drive.js「操舵」）：舵 ＋ 帆與動力的不平衡 ＋ 差動
+  else {
   if (!stop && !(held && Math.abs(sh.spd) < 0.6)) rate += driveYaw(sh, rmax);   // 受損的不平衡（前帆被打掉、一邊的螺旋槳沒了）⇒ 船自己偏（31_drive.js）；舵照舊修得回來
   sh.yawRate += (rate - sh.yawRate) * Math.min(1, dt / (2 * DRV_TURN));   // 迴轉慣性（細節設定「迴轉慣性」，預設 1 ＝ 以前的 2 秒）
+  }
   sh.yaw += sh.yawRate * dt;
   if (VX) sh.yaw += vxSpin(sh, dt) + vxTurn(sh, dt);                  // 大漩渦：眼裡跟著漩渦自旋、繞行轉向（08_sea.js）
   F = fwd(sh.yaw);

@@ -258,6 +258,8 @@
   #cover .slide label{ width:5em; text-align:right; }
   #cover .slide input{ width:220px; accent-color:var(--gold); }
   #cover .slide span{ width:13em; text-align:left; color:var(--dim); font-size:12px; }
+  #fitItems .slide label{ width:auto; flex:0 1 11em; min-width:0; }   /* 換裝（72_fitui.js）：組名長（「24 磅長砲（甲板-gun）×28」）⇒ 標籤可以縮、選單也可以縮（⛔ 照固定寬 ⇒ 手機上整列撐出畫面兩邊） */
+  #fitItems select{ flex:0 1 14em; min-width:0; max-width:60vw; } #fitItems button{ white-space:nowrap; }
   #cover .checks{ display:flex; justify-content:center; flex-wrap:wrap; gap:4px 16px; font-size:13px; }
   #cover .checks input{ accent-color:var(--gold); vertical-align:-2px; }
   #strikeV{ color:var(--dim); font-size:12px; }
@@ -597,6 +599,12 @@
       <div id="deckItems"></div>
       <div id="roomItems"></div>
       <div class="row note" id="roomSum"></div>
+      <div class="nadm">
+      <h3>換裝</h3>
+      <div class="row note">原本雕的砲、槳、舵、燈…是掛點：換成別的型號（同一類、放得下的），序號不變。一組一起換，或按「逐一」一個一個換；換完這一型重新載入，上面的排水量、砲數、船員跟著變。</div>
+      <div id="fitItems"></div>
+      <div class="row note" id="fitSum"></div>
+      </div>
       <div id="roomEd" style="display:none">
         <button id="roomEdX2">完成</button><div class="rt" id="roomEdT"></div>
         <div class="pal" id="roomEdP"></div>
@@ -681,14 +689,19 @@
       <div class="row note">浪是物理的一部分：船跟著浪起伏、縱搖、橫搖（長浪才搖得動整艘船），砲彈打到浪頭就落水，打低的砲會被浪擋掉；碎片、落水的人、斷開的船跟著浪浮沉。0 ＝ 平靜的海。</div>
       <div class="row slide"><label for="stall">頂風失速</label><input type="range" id="stall" step="0.05" aria-label="頂風失速"><span id="stallV"></span></div>
       <div class="row note">只管手動操舵（電腦照舊）：風從船頭兩側 60° 以內吹來 ⇒ 帆被吹回來、船慢下來，太慢舵就不靈、船頭被風推回原本那一舷。帶著速度才搶得過風；往下風轉一圈永遠轉得過去。0 ＝ 不會失速（頂風只是慢）、100% ＝ 寫實。</div>
-      <div class="row slide"><label for="helmlost">舵壞了的操舵</label><input type="range" id="helmlost" step="0.05" aria-label="舵或舵輪被打壞後的操舵性能"><span id="helmlostV"></span></div>
-      <div class="row note">舵輪或舵被打掉之後還轉得了多少（乘在最大轉向率上；舵輪、舵兩樣都沒了也只乘一次）：船員改用舵柄、滑車或調帆硬轉。寫實 25%；娛樂再乘下面的「舵壞了的操舵」加成（預設 ×2 ⇒ 50%），最多 100%。</div>
+      <div class="row slide"><label for="wheelloss">舵輪壞了</label><input type="range" id="wheelloss" step="0.05" aria-label="舵輪（舵柄）被打掉的舵效損失"><span id="wheellossV"></span></div>
+      <div class="row slide"><label for="rudderloss">舵壞了</label><input type="range" id="rudderloss" step="0.05" aria-label="舵被打掉的舵效損失"><span id="rudderlossV"></span></div>
+      <div class="row note">舵效（羅盤上方 ☸）＝ 舵輪那一節 × 舵那一節：舵輪（舵柄）被打掉損失寫實 40%（改用應急的舵柄、滑車）、舵被打掉損失寫實 100%；兩支舵的船壞一支只算一半。娛樂再乘下面的「舵壞了的損失」（預設 ×0.5 ⇒ 舵輪 20%、舵 50%）。只管舵：兩舷的槳、螺旋槳照舵令差動，不經過舵輪。</div>
+      <div class="row slide"><label for="difftq">差動的力矩</label><input type="range" id="difftq" step="0.1" aria-label="兩舷推力差的轉向力矩倍率"><span id="difftqV"></span></div>
+      <div class="row note">兩舷都有動力的船（槳帆船、兩舷螺旋槳）照舵令把一舷減速、停俥時一舷倒划 ⇒ 加在轉向上：全速前進打滿 ＝ 這艘舵（完好、同一個航速）的幾成；停俥原地轉是它的 2/3，一舷槳斷、槳手倒下、划得慢照比例變小。舵沒了照樣靠它轉。</div>
       <h3>娛樂加成</h3>
       <div class="row slide"><label for="funspeed">航速</label><input type="range" id="funspeed" step="0.05" aria-label="娛樂加成：航速"><span id="funspeedV"></span></div>
       <div class="row slide"><label for="funagile">靈活性</label><input type="range" id="funagile" step="0.05" aria-label="娛樂加成：靈活性"><span id="funagileV"></span></div>
       <div class="row slide"><label for="funstall">頂風失速</label><input type="range" id="funstall" step="0.05" aria-label="娛樂加成：頂風失速"><span id="funstallV"></span></div>
       <div class="row slide"><label for="funpowder">火藥血量</label><input type="range" id="funpowder" step="0.01" aria-label="娛樂加成：火藥血量"><span id="funpowderV"></span></div>
-      <div class="row slide"><label for="funhelm">舵壞了的操舵</label><input type="range" id="funhelm" step="0.05" aria-label="娛樂加成：舵壞了的操舵"><span id="funhelmV"></span></div>
+      <div class="row slide"><label for="fundiff">差動</label><input type="range" id="fundiff" step="0.05" aria-label="娛樂加成：差動的力矩"><span id="fundiffV"></span></div>
+      <div class="row slide"><label for="funhelmeff">舵效</label><input type="range" id="funhelmeff" step="0.05" aria-label="娛樂加成：舵效"><span id="funhelmeffV"></span></div>
+      <div class="row slide"><label for="funhelmloss">舵壞了的損失</label><input type="range" id="funhelmloss" step="0.05" aria-label="娛樂加成：舵輪、舵壞了的損失乘數"><span id="funhelmlossV"></span></div>
       <div class="row slide"><label for="funhard">鐵甲硬度</label><input type="range" id="funhard" step="0.05" aria-label="娛樂加成：鐵甲硬度"><span id="funhardV"></span></div>
       <div class="row note">主選單的玩法選「娛樂」時，在上面的設定之外再乘這幾個（寫實 ＝ 都乘 1）。兩艘都套。</div>
       <h3>砲</h3>
@@ -803,6 +816,7 @@
 <script type="application/x-vxk" id="ship-dromon" src="../VoxelKit/_cache/dromon.vxk"></script>
 <script type="application/x-vxk" id="ship-punt" src="../VoxelKit/_cache/punt.vxk"></script>
 <script type="application/x-vxk" id="ship-fusta" src="../VoxelKit/_cache/fusta.vxk"></script>
+<script type="application/x-vxk" id="ship-dingyuan" src="../VoxelKit/_cache/dingyuan.vxk"></script>
 <!-- ships 結束 -->
 <!-- 設定檔（TASK-0542）：各項設定的初始值與船隻清單；js/00_config.js 讀成 CFG。設定後台：python -I admin.py serve -->
 <script type="application/x-asset" id="game-config" src="config/game.json"></script>
@@ -859,6 +873,7 @@
 <script src="js/35_decks.js" data-bundle="game"></script>
 <script src="js/36_rooms.js" data-bundle="game"></script>
 <script src="js/37_furnmodels.js" data-bundle="game"></script>
+<script src="js/38_fit.js" data-bundle="game"></script>
 <script src="js/39_eff.js" data-bundle="game"></script>
 <script src="js/40_crew.js" data-bundle="game"></script>
 <script src="js/41_crew_art.js" data-bundle="game"></script>
@@ -881,6 +896,7 @@
 <script src="js/57_core.js" data-bundle="game"></script>
 <script src="js/59_burnfx.js" data-bundle="game"></script>
 <script src="js/60_render.js" data-bundle="game"></script>
+<script src="js/60_rbatch.js" data-bundle="game"></script>
 <script src="js/61_hud.js" data-bundle="game"></script>
 <script src="js/62_simview.js" data-bundle="game"></script>
 <script src="js/62_ports.js" data-bundle="game"></script>
@@ -900,6 +916,7 @@
 <script src="js/71_input.js" data-bundle="game"></script>
 <script src="js/72_floodui.js" data-bundle="game"></script>
 <script src="js/72_shippick.js" data-bundle="game"></script>
+<script src="js/72_fitui.js" data-bundle="game"></script>
 <script src="js/73_slowmo.js" data-bundle="game"></script>
 <script src="js/74_cutaway.js" data-bundle="game"></script>
 <script src="js/75_shipcheck.js" data-bundle="game"></script>

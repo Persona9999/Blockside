@@ -31,8 +31,10 @@ evOn('armorShip', function (sh) {                                     // 開船�
   sh.arm.forEach(function (a) { if (a.rs) return; a.rs = new VK.RegionSet(gl, a.grid, QIDX); a.rs.shareFrom(a.A.rs0); smShare(a, a.A.smP); });
 }, 0, true);
 evOn('armCell', function (a, x, y, z) { a.rs.touch(x, y, z); if (a.smD) smTouch(a, x, y, z); }, 0, true);   // 打掉裝甲的一格（24_armor.js armRemove）
-/** 畫船殼那一趟（60_render.js drawHulls，cutSet 之後）：每塊照自己的矩陣畫；剖面 uCutL ＝ 裝甲 → 船的格座標（01_gl.js voxFS），畫完放回單位矩陣。 */
+/** 畫船殼那一趟（60_render.js drawHulls，cutSet 之後）：每塊照自己的矩陣畫；剖面 uCutL ＝ 裝甲 → 船的格座標（01_gl.js voxFS），畫完放回單位矩陣。
+ *  寫 uCutL ⇒ cutSet 記的「已經是關」作廢（prog.cut0，74_cutaway.js）。 */
 function armDraw(prog, sh) {
+  prog.cut0 = false;
   sh.arm.forEach(function (a) {
     if (a.prop && propGone(a)) return;                                  // 螺旋槳的模型掉了（掛的那一格被打斷）⇒ 不畫（飛出去的是模型的網格，21_gunnery.js blowModel）
     var L = armLocal(a);
@@ -42,8 +44,7 @@ function armDraw(prog, sh) {
   });
   if (prog.u.uCutL) gl.uniformMatrix4fv(prog.u.uCutL, false, CUT_ID);
 }
-/** 平滑面（drawModels，smDraw 之後）：P.tri 的剖面照世界座標換回船的格座標（uCutInv ＝ sh.inv）⇒ 轉過也切得對。 */
-function armSmDraw(prog, sh) { sh.arm.forEach(function (a) { if (a.smR && a.smR.size && !(a.prop && propGone(a))) smDraw(prog, a, armM(a)); }); }   // 螺旋槳掉了 ⇒ 不畫
+// 平滑面：模型那一段的表照 armM(a) 畫（60_rbatch.js rbatShip；螺旋槳掉了 ⇒ 不畫）；P.tri 的剖面照世界座標換回船的格座標（uCutInv ＝ sh.inv）⇒ 轉過也切得對。
 /** 重網格化（60_render.js remesh）：方塊照預算、平滑面照 sl 區；回 [剩的預算, 剩的區]。 */
 function armRemesh(sh, left, sl) {
   sh.arm.forEach(function (a) {
@@ -74,13 +75,19 @@ function buildMeshes(H, C) {      // 船型 H 的每份模型網格一個 VAO：
     if (H.meshSkip && H.meshSkip[k]) { H.meshes.push(null); keep.push(null); return; }   // 模型、裝飾都沒用到（05_hull.js decoSplit）⇒ 不建、不上 GPU
     var d = C ? C[k] : { tri: meshTris(m), occ: meshOcc(m) };
     var up = upload(null, d.tri, 9, [[0, 3, 0], [1, 3, 3], [2, 3, 6]]);
-    up.occ = d.occ; H.meshes.push(up); keep.push(d);
+    up.occ = d.occ; up.bb = meshBB(d.tri); H.meshes.push(up); keep.push(d);
   });
   if (H.keep) H.keep.models = keep;
 }
 var MESH_ATTR = [[0, 3, 0], [1, 3, 3], [2, 3, 6]];
 /** 還沒上 GPU 的網格（36_rooms.js furnMesh 只留 tri、occ）⇒ 上傳（60_render.js 畫模型前叫）。 */
-function meshGpu(me) { var u = upload(null, me.tri, 9, MESH_ATTR); me.vao = u.vao; me.vbo = u.vbo; me.n = u.n; me.tri = null; }
+function meshGpu(me) { var u = upload(null, me.tri, 9, MESH_ATTR); me.vao = u.vao; me.vbo = u.vbo; me.n = u.n; me.bb = meshBB(me.tri); me.tri = null; }
+/** 網格自己的包圍盒（模型座標；三角形展開、一個頂點 9 個 float、位置在前 3 個）⇒ [lx, ly, lz, hx, hy, hz]：反射、主畫面一次畫多個判「離得夠不夠開」用（60_rbatch.js rbatBoxes）。 */
+function meshBB(t) {
+  var b = [Infinity, Infinity, Infinity, -Infinity, -Infinity, -Infinity];
+  for (var i = 0; i < t.length; i += 9) for (var j = 0; j < 3; j++) { var v = t[i + j]; if (v < b[j]) b[j] = v; if (v > b[3 + j]) b[3 + j] = v; }
+  return b[0] <= b[3] ? b : null;
+}
 
 // ── 門（25_doors.js）──
 /** 畫面那一格（90_main.js frame）：有人經過 ⇒ 開、沒人 ⇒ 關。只寫 m.sw／spv／sax（畫，modelLocal）。 */
