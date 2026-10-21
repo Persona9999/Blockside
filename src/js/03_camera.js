@@ -188,16 +188,21 @@ evOn('playerTake', function (nw) { CAM.trMe = CAM.trYaw = null; if (CAM.see === 
 function camRigFar(sh) { return camFarM(sh, RIG_FAR[PHX.rigfar]); }
 /** 遠的船、鏡頭外的船：船員隔幾步才走一次（50_sim.js simFarM 問的；SIM_FAR 在那裡、同一個設定 PHX.rigfar；TASK-0802）。 */
 function camSimFar(sh) { return camFarM(sh, SIM_FAR[PHX.rigfar]); }
-/** 照表 F 給倍率：離鏡頭 d1 以內 1、d1–d2 m1、d2 以外 m2；整艘不在畫面裡 ⇒ 至少 off。表沒給、鏡頭還沒算過（快轉、無頭對拍）⇒ 1。 */
-function camFarM(sh, F) {
-  var e = CAM.eye, vp = CAM.vp; if (!F || !e || !vp) return 1;
+/** 這艘離鏡頭多遠、在不在畫面裡（外接球大概碰到畫面）；鏡頭還沒算過（快轉、無頭對拍）⇒ null。 */
+function camShipSee(sh) {
+  var e = CAM.eye, vp = CAM.vp; if (!e || !vp) return null;
   var B = sh.T.base, R = 0.5 * S * Math.hypot(B.sx, B.sy, B.sz), c = M4.pt(sh.M, B.sx / 2, B.sy / 2, B.sz / 2), d = Math.hypot(c[0] - e[0], c[1] - e[1], c[2] - e[2]);
-  var m = d > F.d2 ? F.m2 : d > F.d1 ? F.m1 : 1, cw = vp[3] * c[0] + vp[7] * c[1] + vp[11] * c[2] + vp[15], vis = d < R;
+  var cw = vp[3] * c[0] + vp[7] * c[1] + vp[11] * c[2] + vp[15], vis = d < R;
   if (!vis && cw > 0.1) { var k = 1 + 2 * R / cw, x = (vp[0] * c[0] + vp[4] * c[1] + vp[8] * c[2] + vp[12]) / cw, y = (vp[1] * c[0] + vp[5] * c[1] + vp[9] * c[2] + vp[13]) / cw; vis = Math.abs(x) < k && Math.abs(y) < k; }   // 外接球大概碰到畫面
-  return vis ? m : Math.max(m, F.off);
+  return { d: d, vis: vis };
 }
+/** 照表 F 給倍率：離鏡頭 d1 以內 1、d1–d2 m1、d2 以外 m2；整艘不在畫面裡 ⇒ 至少 off。表沒給、鏡頭還沒算過 ⇒ 1。 */
+function camFarM(sh, F) { var v = F ? camShipSee(sh) : null; if (!v) return 1; var m = v.d > F.d2 ? F.m2 : v.d > F.d1 ? F.m1 : 1; return v.vis ? m : Math.max(m, F.off); }
+/** 帆與繩要不要算（30_rig_physics.js physFrame 問的；TASK-0802，Tim 2026-10-22「畫面外的布凍結」）：整艘不在畫面裡 ⇒ 不算；設定「遠方帆繩、船員」照常、鏡頭還沒算過 ⇒ 照算。 */
+function camRigSeen(sh) { if (!PHX.rigfar) return true; var v = camShipSee(sh); return !v || v.vis; }
 evAnswer('rigFar', camRigFar, true);
 evAnswer('simFar', camSimFar, true);
+evAnswer('rigSeen', camRigSeen, true);
 
 // ── 鏡頭只由這一支檔寫（TASK-0669 ③；以前輸入、開局、HUD、慢動作、第一人稱、測試場 9 支檔直接寫 CAM）：其他檔要動鏡頭 ⇒ 叫下面這些；admin.py 建置擋別的檔直接寫 CAM。
 /** 開局（70_flow.js reset）：鏡頭擺到開局的位置；?cam= 給了 ⇒ 那個固定機位。 */

@@ -88,7 +88,7 @@ function shipPreMove(k, h) {
 }
 
 // ───────────────────────── 海上平靜（TASK-0799） ─────────────────────────
-// 沒有砲彈在飛、每一對還在打的敵對船都隔 CALM_R 以上 ⇒ 航行：帆與繩只算會改戰局的那一段、布照畫面格算（30_rig_physics.js physFrame）。
+// 沒有砲彈在飛、每一對還在打的敵對船都隔 CALM_R 以上 ⇒ 航行：粗步長（sailDt，TASK-0800）。（布照畫面格算一開始也只在航行，後來交戰也是 ⇒ 不看這個。）
 // 照遊戲狀態（距離、陣營、砲彈），⛔ 不照鏡頭。CALM_R 比長砲最遠的射程遠 ⇒ 敵艦開進射程之前就回到每一步都算。
 var CALM_R = 2000;                                                   // 公尺
 function seaCalm() {
@@ -166,7 +166,7 @@ function simStep() {
   if (PF) pfLap('pieces');
   if (!FLAB_HIDE) { if (SLOW_VIS) evEmit('viewStepSlow', DT); else { VIEW_ACC += DT; if (!VIEW_HOLD) { evEmit('viewStep', VIEW_ACC); VIEW_ACC = 0; } } }   // VIEW_HOLD：這一格畫面後面還要補步（90_main.js frame）⇒ 先累著、最後一步一次推（照 dt 生、照 dt 走 ⇒ 量一樣；補 3 步不再推 3 次）   // FLAB_HIDE：擬真沙盒只看俯視圖時不推（84_fleetlab.js；只給人看的，不改戰局）             // 只給人看的推進：碎木、煙囪排煙、粒子、船邊水花（各自的亂數；00_events.js）；殉爆慢動作中（73_slowmo.js）只推船邊水花，其餘照畫面的時間走
   if (PF) pfLap('water');                       // 船邊水花（13_water.js；只給人看、自己的亂數）
-  if (PHYS) { var pt0 = performance.now(); if (VIS_FRAME) SHIPS.forEach(function (sh) { if (sh.sink < 40) physGameStep(sh); }); else { SHIPS.forEach(function (sh) { if (sh.sink < 40) physStep(sh); }); clothContactsRun(); } PHYS_MS = PHYS_MS * 0.98 + (performance.now() - pt0) * 0.02; }   // 讀數只看、不回寫模擬；VIS_FRAME（航行、有畫面）⇒ 這裡只算帆桁追風那一段，布在畫面這一格算（TASK-0799）
+  if (PHYS) { var pt0 = performance.now(); if (VIS_FRAME) SHIPS.forEach(function (sh) { if (sh.sink < 40) physGameStep(sh); }); else { SHIPS.forEach(function (sh) { if (sh.sink < 40) physStep(sh); }); clothContactsRun(); } PHYS_MS = PHYS_MS * 0.98 + (performance.now() - pt0) * 0.02; }   // 讀數只看、不回寫模擬；VIS_FRAME（有畫面）⇒ 這裡只算帆桁追風那一段，布在畫面這一格算（TASK-0799）
   if (PF) pfLap('phys');
   stepPowder();                                                    // 殉爆排程（23_powder.js）
   stepBlasts();                                                    // 還沒挖完的彈坑接著挖（23_powder.js）
