@@ -18,6 +18,7 @@ var RBAT = {
   ow: null, slot: null,                                              // 哪一個 owner（FLY ＝ −1）；第幾個（sh.models／sh.decos／smR 的 Map 裡第幾個／pc.mods／FLY）
   el: null, off: null, cnt: null, vao: [],                           // 畫法：0 drawArrays、1 drawElements（UNSIGNED_INT）；索引從第幾個 byte（平滑面一區一份 ⇒ 0）；幾個頂點／索引；VAO
   glow: null, M: null,                                               // uGlow（燈：lanternK，其他 0；Float64Array ⇒ 存的就是以前傳的那個 double）；世界矩陣（第 i 個在 M[i·16 …]）
+  mb: [],                                                            // 模型、裝飾的網格（包圍盒 me.bb；反射、主畫面一次畫多個用，S7）
   ref: [],                                                           // 矩陣從誰算（m／d／sh／裝甲那一塊 a／斷開的那一團的 m／f）：?rbchk=1 對拍用
   // 每一趟（pass descriptor）：b ＝ 只畫 cs 有這一位的 owner（0 ⇒ 全畫）；depth ＝ 只寫深度
   pd: { sh: { name: 'sh', k: 0, b: 0, depth: true }, rf: { name: 'rf', k: -1, b: 0, depth: false }, mn: { name: 'mn', k: -1, b: 0, depth: false } },
@@ -27,9 +28,10 @@ var RBAT = {
 };
 var RBAT_CHK = Q.get('rbchk') === '1';                             // ?rbchk=1：每格整理完照以前的算式重算一遍、逐位元比（rbatCheck）
 // 開關（網址，像 ?lerp=0；量測工具拿同一份成品 A/B 對拍用 —— 不進設定、不進 __game）：?rb=0 全部照以前一個一個畫；?rbinst=0（或 ?inst=0）不用一次畫多個的程式；
-//   ?rbgeo=0 同一艘裡不換順序；?rbtau=<公尺> 除錯用的 τ（很大 ⇒ 全部算一群；沒給 ⇒ −1 ＝ 照算的）。照它們畫的：陰影（S5，rbatDepth）；反射、主畫面還是一個一個畫（S6／S7 起）。
+//   ?rbgeo=0 同一艘裡不換順序、?rbgeo=1 只換證明不會打平手的（τ）、不給 ⇒ 不管先後；?rbtau=<公尺> 除錯用的 τ（很大 ⇒ 全部算一群；沒給 ⇒ −1 ＝ 照算的）。照它們畫的：陰影（S5，rbatDepth）、反射與主畫面（S7，rbatColour）。
 var RBAT_ON = Q.get('rb') !== '0', RBAT_INST = RBAT_ON && Q.get('rbinst') !== '0' && Q.get('inst') !== '0', RBAT_GEO = RBAT_ON && Q.get('rbgeo') !== '0';
 var RBAT_TAU = isFinite(parseFloat(Q.get('rbtau'))) ? parseFloat(Q.get('rbtau')) : -1;
+var RBAT_LOOSE = RBAT_GEO && Q.get('rbgeo') !== '1';                  // 同一艘裡不管先後（預設；Tim 2026-10-21「驗收主要是看效能是否優化 畫面相關都由我QA」）；?rbgeo=1 ⇒ 照 τ 證明的先後（逐位元組相同）
 /** 項目的陣列加倍（整理到一半也行：前面的照抄）。 */
 function rbatGrow() {
   var R = RBAT, L = Math.max(256, R.cap * 2);
@@ -42,7 +44,7 @@ function rbatGrow() {
 function rbatAdd(c, o, k, ref, vao, el, off, cnt, glow, W) {
   var R = RBAT, i = R.ni;
   if (i >= R.cap) rbatGrow();
-  R.cls[i] = c; R.ow[i] = o; R.slot[i] = k; R.ref[i] = ref; R.vao[i] = vao; R.el[i] = el; R.off[i] = off; R.cnt[i] = cnt; R.glow[i] = glow;
+  R.cls[i] = c; R.ow[i] = o; R.slot[i] = k; R.ref[i] = ref; R.mb[i] = null; R.vao[i] = vao; R.el[i] = el; R.off[i] = off; R.cnt[i] = cnt; R.glow[i] = glow;
   R.M.set(W, i * 16); R.ni = i + 1;
 }
 // 平滑面那幾區（Map 的 forEach）：照這一個的 this 加（⛔ 每格不生閉包）
@@ -68,7 +70,7 @@ function rbatPrep() {
     rbatAdd(5, -1, k, f, me.vao, 0, 0, me.n, 0, f.M);
   }
   for (o = n; o < R.nPrev; o++) R.own[o] = null;                      // 上一格多的放掉（斷開的那一團沉了、漂走了：不留著它）
-  for (k = R.ni; k < R.niPrev; k++) R.vao[k] = R.ref[k] = null;
+  for (k = R.ni; k < R.niPrev; k++) R.vao[k] = R.ref[k] = R.mb[k] = null;
   R.nPrev = n; R.niPrev = R.ni;
   R.stat.f = RFR; R.stat.owners = n; R.stat.items = R.ni;
   if (RBAT_CHK) rbatCheck();
@@ -80,13 +82,15 @@ function rbatShip(sh, o) {
     m = L[k]; me = T.meshes[m.mesh]; if (!m.alive || !me || (m.vox && !m.moved)) continue; if (!me.vao) meshGpu(me);   // m.vox：螺旋槳畫它自己的格（24_armor.js armDraw）
     var dv = m.ancD || m.vsl;                                         // 只給畫面的位移（格座標，左乘在 modelLocal 外面 ⇒ 帆的碰撞、斷船、打飛都看不到）：錨沒有 vsl、砲沒有 ancD
     rbatAdd(0, o, k, m, me.vao, 0, 0, me.n, isLamp(m) ? lanternK(m) : 0,   // 取用點的火藥桶是後加的模型，沒有 meta
-      M4.mul(sh.M, dv ? M4.mul(trans(dv[0], dv[1], dv[2]), modelLocal(m)) : modelLocal(m)));   // ancD：拋下去的模型錨，畫在鐵鍊那一端（76_anchor.js chainStep）；vsl：砲門關上時砲往裡縮（62_ports.js，TASK-0719）
+      M4.mul(sh.M, dv ? M4.mul(trans(dv[0], dv[1], dv[2]), modelLocal(m)) : modelLocal(m)));
+    RBAT.mb[RBAT.ni - 1] = me;   // ancD：拋下去的模型錨，畫在鐵鍊那一端（76_anchor.js chainStep）；vsl：砲門關上時砲往裡縮（62_ports.js，TASK-0719）
   }
   L = sh.decos;
   if ((GFX.deco || portOn(sh)) && L) for (k = 0; k < L.length; k++) {   // 裝飾（TASK-0682；畫質「裝飾」關著 ⇒ 不畫）；砲門蓋板：「砲門的開關演出」輪到這艘 ⇒ 不看「裝飾」（62_ports.js portOn）
     var d = L[k]; me = T.meshes[d.mesh];
     if (!me || d.gone || (!GFX.deco && d.meta.kind !== 'portlid') || (d.foot >= 0 && !hullGp(sh.grid, d.foot))) continue; if (!me.vao) meshGpu(me);   // gone：砲門蓋板被打掉了；腳下那一格被打掉 ⇒ 不畫
-    rbatAdd(1, o, k, d, me.vao, 0, 0, me.n, isLamp(d) ? lanternK(d) : 0, M4.mul(sh.M, d.L || trans(d.origin[0], d.origin[1], d.origin[2])));   // L：砲門蓋板繞鉸鏈轉過的擺法（沒在動 ⇒ null ＝ 模型的樣子）
+    rbatAdd(1, o, k, d, me.vao, 0, 0, me.n, isLamp(d) ? lanternK(d) : 0, M4.mul(sh.M, d.L || trans(d.origin[0], d.origin[1], d.origin[2])));
+    RBAT.mb[RBAT.ni - 1] = me;   // L：砲門蓋板繞鉸鏈轉過的擺法（沒在動 ⇒ null ＝ 模型的樣子）
   }
   var S = RBAT_SM; S.o = o;
   if (sh.smR && sh.smR.size) { S.c = 2; S.k = 0; S.ref = sh; S.W = sh.M; sh.smR.forEach(rbatSmAdd); }   // 平滑渲染的格（15_smooth.js）：跟模型同一支著色器
@@ -185,6 +189,131 @@ function rbatDepthDraw(B, j, u, k) {
   gl.bindVertexArray(B.vao[j]);
   if (B.el[j]) gl.drawElementsInstanced(gl.TRIANGLES, B.cnt[j], gl.UNSIGNED_INT, B.off[j], k);
   else gl.drawArraysInstanced(gl.TRIANGLES, 0, B.cnt[j], k);
+}
+// ── 反射、主畫面：同一艘裡一次畫多個（render 管線大修 S7；Tim 最早問的砲門蓋板、同型的砲）──
+// 主畫面深度 LEQUAL（後畫贏）、反射 LESS（先畫贏）、不混色 ⇒ 換先後只會在「同一個像素兩個深度剛好一樣」時改結果。
+//   兩個東西的世界包圍盒相距大於 τ ⇒ 同一條視線穿過它們的兩點至少差 τ ⇒ 深度至少差 8 個 D24 的刻度 ⇒ 不可能打平手（MSAA 的每個取樣點也是）⇒ 誰先畫都一樣。
+//   τ ＝ 16·2⁻²⁴·w²／(|c2|·cosmin) ＋ 1 mm：z_ndc ＝ c1 ＋ c2／w（從這一趟的 VP 讀）；w ＝ 兩個盒子在這一趟最大的 clip w（至少近裁切面）；cosmin ＝ 視錐最斜那個角的視線跟正前方夾角的餘弦。
+// 排法（一艘一艘，照以前的順序收）：同一份網格＋同一個 uGlow 的收成一組；新來的那一個先把「別組裡有離它 τ 以內的」那幾組畫掉（畫掉的組不再開），再放進自己那一組
+//   ⇒ 離得近的兩個（可能打平手）照以前的先後；換了先後的兩個一定離得夠開。一組照放進去的順序一次畫（滿 INST_K 個換下一批）。
+//   這艘的模型、裝飾全部畫完才畫平滑面、裝甲的平滑面（照以前一區一區）；斷開的那一團、FLY 照以前的順序，只合連在一起的同一份網格。
+// 預設不管先後（RBAT_LOOSE：同一艘裡同一份網格＋同一個 uGlow 全部合一批 ⇒ 只有兩個東西在同一個像素深度剛好一樣時結果可能換；量測工具 20 組量起來畫面照舊）；
+//   ?rbgeo=1 ⇒ 照上面 τ 的排法（換了先後的一定離得夠開 ⇒ 逐位元組相同）：看到砲與蓋板交界閃 ⇒ 先試它。
+// 剖面開著（cutOn：每艘的剖面 uniform 不一樣）⇒ 照以前一個一個畫（rbatReplay）；正交的鏡頭（轉場）、?rbgeo=0 ⇒ 不換先後（只合連在一起的）。
+// 包圍盒：模型、裝飾 ＝ 網格自己的盒子（me.bb，62_simview.js 上傳時算）照這一格的世界矩陣轉（中心 ± |W|·半寬，double，再放寬 1 mm ＋ 座標的 10⁻⁶）；一格算一次。沒有盒子 ⇒ 當成跟誰都近（照以前的先後）。
+var RBAT_C = { f: -1, cap: 0, bx: null, w: null, nx: null, gm: new Map(), gn: 0, gV: [], gC: null, gG: null, gO: null, gH: null, gT: null, gS: null, gB: null, gW: null, tk: 0, tn: 0, inf: true, g: NaN };
+function rbatCGrow(n) {
+  var C = RBAT_C, L = Math.max(256, n, C.cap * 2);
+  C.bx = new Float64Array(L * 6); C.w = new Float64Array(L); C.nx = new Int32Array(L);
+  C.gC = new Int32Array(L); C.gG = new Float64Array(L); C.gO = new Uint8Array(L); C.gH = new Int32Array(L); C.gT = new Int32Array(L); C.gS = new Int32Array(L); C.gB = new Float64Array(L * 6); C.gW = new Float64Array(L);
+  C.f = -1; C.cap = L;
+}
+/** 這一格模型、裝飾的世界包圍盒（一格一次）。 */
+function rbatBoxes() {
+  var R = RBAT, C = RBAT_C, M = R.M, i, j;
+  if (C.cap < R.ni) rbatCGrow(R.ni);
+  if (C.f === R.f) return;
+  C.f = R.f;
+  for (i = 0; i < R.ni; i++) {
+    var b = R.cls[i] < 2 && R.mb[i] && R.mb[i].bb, o = i * 6;
+    if (!b) { C.bx[o] = C.bx[o + 1] = C.bx[o + 2] = -Infinity; C.bx[o + 3] = C.bx[o + 4] = C.bx[o + 5] = Infinity; continue; }
+    var s = i * 16, cx = (b[0] + b[3]) / 2, cy = (b[1] + b[4]) / 2, cz = (b[2] + b[5]) / 2, ex = (b[3] - b[0]) / 2, ey = (b[4] - b[1]) / 2, ez = (b[5] - b[2]) / 2;
+    for (j = 0; j < 3; j++) {
+      var c = M[s + j] * cx + M[s + 4 + j] * cy + M[s + 8 + j] * cz + M[s + 12 + j], e = Math.abs(M[s + j]) * ex + Math.abs(M[s + 4 + j]) * ey + Math.abs(M[s + 8 + j]) * ez;
+      var pad = 1e-3 + 1e-6 * (Math.abs(c) + e);
+      C.bx[o + j] = c - e - pad; C.bx[o + 3 + j] = c + e + pad;
+    }
+  }
+}
+/** 這一趟的 τ 係數（C.tk：τ ＝ tk·w² ＋ 1 mm；C.tn：近裁切面；C.inf：不換先後）。VP ＝ P·V（V 剛體、可能帶鏡射）：第 4 列 ＝ −V 的第 3 列、第 3 列 ＝ A·V 第 3 列 ＋ B·e4 ⇒ c1 ＝ −A、c2 ＝ B、近 ＝ B／(A − 1)。 */
+function rbatTau(V) {
+  var C = RBAT_C, r3 = Math.hypot(V[3], V[7], V[11]);
+  C.inf = !RBAT_GEO || r3 < 1e-6;                                          // ?rbgeo=0、正交（第 4 列沒有 xyz）⇒ 不換先後
+  if (C.inf) return;
+  var a = Math.abs(V[3]) >= Math.abs(V[7]) ? (Math.abs(V[3]) >= Math.abs(V[11]) ? 0 : 8) : (Math.abs(V[7]) >= Math.abs(V[11]) ? 4 : 8);   // 第 4 列最大的那一格（⇒ A 從這一格讀）
+  var A = -V[a + 2] / V[a + 3], B = V[14] + A * V[15], p0 = Math.hypot(V[0], V[4], V[8]) / r3, p1 = Math.hypot(V[1], V[5], V[9]) / r3;
+  var cosmin = 1 / Math.sqrt(1 + 1 / (p0 * p0) + 1 / (p1 * p1));
+  C.tn = B / (A - 1); C.tk = 16 * Math.pow(2, -24) / (Math.abs(B) * cosmin);
+  if (RBAT_TAU >= 0) C.tk = -1;                                             // ?rbtau=<公尺>：除錯用的固定 τ
+  if (!(C.tn > 0) || !isFinite(C.tk)) C.inf = true;                          // 讀不出來 ⇒ 不換先後
+}
+/** 第 i 項在這一趟最大的 clip w（盒子 8 個角；至少近裁切面）。 */
+function rbatW(V, i) {
+  var b = RBAT_C.bx, o = i * 6, w = V[15];
+  for (var j = 0; j < 3; j++) { var k = V[j * 4 + 3]; w += Math.max(k * b[o + j], k * b[o + 3 + j]); }
+  return isFinite(w) ? Math.max(w, RBAT_C.tn) : Infinity;
+}
+/** 兩個盒子（bx 第 i 個、第 j 個；或 gB 第 g 組）近不近：相距 ≤ τ(max w)。 */
+function rbatNear(A, a, B, b, w) {
+  var C = RBAT_C, t = C.tk < 0 ? RBAT_TAU : C.tk * w * w + 1e-3, d2 = 0;
+  if (!isFinite(t)) return true;
+  for (var j = 0; j < 3; j++) { var g = Math.max(A[a + j] - B[b + 3 + j], B[b + j] - A[a + 3 + j], 0); d2 += g * g; }
+  return !(d2 > t * t);
+}
+/** 第 g 組裡有沒有離第 i 項 τ 以內的（先看整組的盒子）。 */
+function rbatNearG(g, i) {
+  var C = RBAT_C, wi = C.w[i], j;
+  if (C.inf) return true;
+  if (!rbatNear(C.gB, g * 6, C.bx, i * 6, Math.max(C.gW[g], wi))) return false;
+  for (j = C.gH[g]; j >= 0; j = C.nx[j]) if (rbatNear(C.bx, j * 6, C.bx, i * 6, Math.max(C.w[j], wi))) return true;
+  return false;
+}
+/** 畫第 g 組（P.triI，滿 INST_K 個換下一批）。 */
+function rbatFlush(g) {
+  var R = RBAT, C = RBAT_C, M = R.M, pal = R.pal, u = P.triI.u, K = INST_K, k = 0, i, q, s;
+  C.gO[g] = 0;
+  if (C.gG[g] !== C.g) gl.uniform1f(u.uGlow, C.g = C.gG[g]);
+  gl.bindVertexArray(C.gV[g]);
+  for (i = C.gH[g]; i >= 0; i = C.nx[i]) {
+    for (q = 0, s = i * 16; q < 16; q++) pal[k * 16 + q] = M[s + q];
+    if (++k === K) { gl.uniformMatrix4fv(u.uMs, false, pal, 0, k * 16); gl.drawArraysInstanced(gl.TRIANGLES, 0, C.gC[g], k); k = 0; }
+  }
+  if (k) { gl.uniformMatrix4fv(u.uMs, false, pal, 0, k * 16); gl.drawArraysInstanced(gl.TRIANGLES, 0, C.gC[g], k); }
+}
+/** 一段（[i0, i1) 的模型、裝飾，或斷開的那一團、FLY）照上面的排法收組、畫。geo ＝ false ⇒ 只合連在一起的（斷開的那一團、FLY）。 */
+function rbatGroups(i0, i1, geo, V) {
+  var R = RBAT, C = RBAT_C, i, g, H, inf = C.inf, lo = RBAT_LOOSE && geo;   // lo：不管先後（斷開的那一團、FLY 照舊只合連在一起的）
+  if (!geo) C.inf = true;
+  C.gn = 0;
+  var m = C.gm; m.clear();                                                 // 同一個 VAO 的組串成一列（gS），找自己那一組不用掃全部
+  for (i = i0; i < i1; i++) {
+    var v = R.vao[i], n = R.cnt[i], gw = R.glow[i], j0 = m.get(v);
+    if (!C.inf) C.w[i] = rbatW(V, i);
+    for (H = j0 === undefined ? -1 : j0; H >= 0 && !(C.gO[H] && C.gC[H] === n && C.gG[H] === gw); H = C.gS[H]);
+    if (!lo) for (g = 0; g < C.gn; g++) if (g !== H && C.gO[g] && rbatNearG(g, i)) rbatFlush(g);
+    C.nx[i] = -1;
+    if (H < 0) {
+      H = C.gn++; C.gV[H] = v; C.gC[H] = n; C.gG[H] = gw; C.gO[H] = 1; C.gH[H] = C.gT[H] = i; C.gW[H] = C.w[i];
+      C.gS[H] = j0 === undefined ? -1 : j0; m.set(v, H);
+      if (!C.inf) for (var q = 0; q < 6; q++) C.gB[H * 6 + q] = C.bx[i * 6 + q];   // ⛔ subarray：每組一個新物件
+    } else {
+      C.nx[C.gT[H]] = i; C.gT[H] = i;
+      if (!C.inf) { var B = C.gB, o = H * 6, b = C.bx, p = i * 6; C.gW[H] = Math.max(C.gW[H], C.w[i]); for (var j = 0; j < 3; j++) { B[o + j] = Math.min(B[o + j], b[p + j]); B[o + 3 + j] = Math.max(B[o + 3 + j], b[p + 3 + j]); } }
+    }
+  }
+  for (g = 0; g < C.gn; g++) if (C.gO[g]) rbatFlush(g);
+  for (g = 0; g < C.gn; g++) C.gV[g] = null;
+  m.clear(); C.inf = inf;
+}
+/** 反射、主畫面的模型那一段（取代 rbatReplay(P.tri)；60_render.js drawModels）：P.triI。畫完：P.tri 綁回去、剖面關（之後的旗桿、繩、鏈彈照這個畫；P.tri 的 uGlow 沒動過 ⇒ 還是 0）。 */
+function rbatColour(pd) {
+  var R = RBAT, C = RBAT_C, p = P.triI, u = p.u, M = R.M, pal = R.pal, V = PASS.vp || CAM.vp, ns = R.ns, n = R.n, o, i, e;
+  if (C.cap < R.ni) rbatCGrow(R.ni);                                      // 組、串列的陣列（不夠才加倍）
+  if (RBAT_LOOSE) C.inf = true; else { rbatBoxes(); rbatTau(V); }       // 不管先後 ⇒ 不用包圍盒、τ
+  C.g = NaN;
+  gl.useProgram(p.prog); setCommon(p); gl.uniform1f(u.uLit, 1); cutSet(p, null);
+  gl.vertexAttrib2f(3, 0, 0.5);                                           // 第 3 號屬性的常數照以前（見 rbatReplay）
+  for (o = 0; o < ns; o++) {
+    if (R.own[o].sink > 40) continue;
+    for (i = R.i0[o], e = R.i0[o + 1]; i < e && R.cls[i] < 2; i++);
+    rbatGroups(R.i0[o], i, true, V);                                      // 模型、裝飾
+    for (; i < e; i++) {                                                  // 平滑面、裝甲的平滑面：照以前一區一區（一份網格第一區換矩陣、燈熄）
+      if (!R.slot[i]) { for (var q = 0, s = i * 16; q < 16; q++) pal[q] = M[s + q]; gl.uniformMatrix4fv(u.uMs, false, pal, 0, 16); if (C.g !== 0) gl.uniform1f(u.uGlow, C.g = 0); }
+      gl.bindVertexArray(R.vao[i]); gl.drawElementsInstanced(gl.TRIANGLES, R.cnt[i], gl.UNSIGNED_INT, R.off[i], 1);
+    }
+  }
+  rbatGroups(R.i0[ns], R.ni, false, V);                                   // 斷開的那一團的模型、FLY（燈熄：glow 都是 0）
+  gl.useProgram(P.tri.prog); cutSet(P.tri, null);
 }
 /** ?rbchk=1：照以前 drawModels／smDraw／armSmDraw 的迴圈與算式（每個矩陣重新乘一次）再走一遍，跟表逐項比：
  *  同一個東西、同一個順序、VAO／頂點數／uGlow 一樣（不一樣 ⇒ itemMiss）；矩陣 16 個 float 逐位元相同（不一樣 ⇒ matMiss）。只在 render() 裡、整理完馬上比（之後 renderLerp 會把 sh.M 換回去）。 */
