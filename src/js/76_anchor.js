@@ -323,6 +323,7 @@ function chainBuf(sh) {
   var A = sh.anc, L = [], C = [];
   if (A) ['P', 'S'].forEach(function (k) { if (A[k].ch) C.push([A[k].ch, !A[k].m]); });
   (sh.chLost || []).forEach(function (c) { C.push([c, false]); });
+  if (!C.length && !(sh.chain && sh.chain.n)) return;                 // 沒有鍊子放出去、上一份也是空的 ⇒ 不再每一格傳一份空的（60_render.js 照 n 畫）
   C.forEach(function (cc) {
     var c = cc[0], p = c.p, N = CHAIN_SEG, P = [], i;
     for (i = 0; i <= N; i++) P.push(M4.pt(sh.inv, p[i * 3], p[i * 3 + 1], p[i * 3 + 2]));

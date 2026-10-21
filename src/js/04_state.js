@@ -25,8 +25,10 @@ function stateQnum(k, lim) { var v = parseFloat(Q.get(k)); return isFinite(v) ? 
 //   娛樂 ＝ 在那之上再乘娛樂加成（航速、靈活性、頂風失速）。⇒ 兩組共用同一份滑桿，切換不會把調好的數字蓋掉。網址 ?play=real／fun
 var PLAY = Q.has('play') ? (Q.get('play') === 'real' ? 'real' : 'fun') : CFG.menu.play;   // 沒給 ⇒ 設定檔的預設（menu.play）
 var STALL_K = stateQnum('stall', LIM.stall);
-var HELM_LOST = stateQnum('helmlost', LIM.helmlost);                       // 舵或舵輪被打壞後的操舵性能（Tim 2026-10-20：寫實 25%、娛樂加成 ×2 ⇒ 50%；31_sailing.js helmK）
-var FUN = { speed: stateQnum('funspeed', LIM.funspeed), agile: stateQnum('funagile', LIM.funagile), stall: stateQnum('funstall', LIM.funstall), powder: stateQnum('funpowder', LIM.funpowder), hard: stateQnum('funhard', LIM.funhard), helm: stateQnum('funhelm', LIM.funhelm) };
+var HELM_LOST = stateQnum('helmlost', LIM.helmlost);                       // 舵或舵輪被打壞後的操舵性能（Tim 2026-10-20：寫實 25%、娛樂加成 ×2 ⇒ 50%；31_sailing.js helmK）—— 只在操舵的開關關掉時用（?helmtq=0，TASK-0777）
+var WHEEL_LOSS = stateQnum('wheelloss', LIM.wheelloss), RUDDER_LOSS = stateQnum('rudderloss', LIM.rudderloss);   // 操舵（TASK-0777，31_drive.js）：舵輪（舵柄）、舵被打掉的損失（寫實 40%、100%；娛樂再 × FUN.helmloss）
+var DIFF_K = stateQnum('difftq', LIM.difftq);                               // 差動打滿 ＝ 舵的幾成（TASK-0777，31_drive.js helmYaw；預設 0.5；Tim：槳帆船單靠兩舷推力差也轉得動）
+var FUN = { speed: stateQnum('funspeed', LIM.funspeed), agile: stateQnum('funagile', LIM.funagile), stall: stateQnum('funstall', LIM.funstall), powder: stateQnum('funpowder', LIM.funpowder), hard: stateQnum('funhard', LIM.funhard), helm: stateQnum('funhelm', LIM.funhelm), helmloss: stateQnum('funhelmloss', LIM.funhelmloss), helmeff: stateQnum('funhelmeff', LIM.funhelmeff), diff: stateQnum('fundiff', LIM.fundiff) };
 function playK(k) { return PLAY === 'fun' ? FUN[k] : 1; }
 // 船隻設定（照船型套；Tim 2026-10-12：不同船套用不同設定）：每一型一組，開戰時複製到每艘船（sh.cfg）。
 //   hard  船殼硬度倍率（越硬越難打穿、洞越小；被打的那艘照自己的）：預設 3（Tim：原本 2 ⇒ 1.5 倍）

@@ -570,7 +570,8 @@ function blowModel(sh, m, vel, drop, at) {
     for (var i = 0; i < 14; i++) spawnPt(c0, add(mul(vd, rr(3, 12)), [gauss() * 4, rr(1, 6), gauss() * 4]), rr(0.2, 0.5), [1, 0.85, 0.5], 1, 0.25, 0.1, G, 0.5, 3);
     sfx('crack', c0, 1.3);
   }
-  if (m.kind === 'wheel') note(sh, '舵輪被打飛了');
+  if (m.kind === 'wheel' || m.kind === 'tiller') note(sh, (m.kind === 'wheel' ? '舵輪' : '舵柄') + '被打飛了' + (HELM_TQ ? ' ⇒ 舵效剩 ' + Math.round(helmEff(sh) * 100) + '%' : ''));   // 舵效（TASK-0777，31_drive.js helmEff）
+  else if (m.kind === 'rudder' && HELM_TQ) note(sh, (drop ? '舵掉了' : '舵被打飛了') + ' ⇒ 舵效剩 ' + Math.round(helmEff(sh) * 100) + '%');
   else if (m.kind === 'rudder') note(sh, drop ? '舵掉了' : '舵被打飛了');
   else if (m.kind === 'yard' && !drop) note(sh, '帆桁 ' + m.name.replace('yard-', '') + ' 被打斷');
   else if (GUNS[m.kind]) newsGun(sh, m, drop);                    // 廣播（同一刻好幾門 ⇒ 併成一行，見 61_hud.js）

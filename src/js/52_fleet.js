@@ -50,7 +50,7 @@ function cmdRollFields(v, s) {
   var SPK = s.cfg.speed * playK('speed') * WX.speed, dk = (1 - clamp(s.sink / 9, 0, 0.8)) * (s.struck ? 0.15 : 1);
   v.gP = gP; v.gS = gS; v.gT = s.guns.length; v.nc = s.crew0 || 1; v.sail = s.sailFrac === undefined ? 1 : s.sailFrac;
   v.vs = VMAX * SPK * Math.sqrt(WIND_SPD) * dk; v.vb = (s.cfg.base || 0) / 1.9438 * playK('speed') * dk; v.up = s.cfg.upwind || 1;
-  v.ag = s.cfg.agile * playK('agile') * WX.agile * helmK(s); v.spk = SPK || 1;
+  v.ag = s.cfg.agile * playK('agile') * WX.agile * (HELM_TQ ? helmEff(s) : helmK(s)); v.spk = SPK || 1;   // 舵效（TASK-0777；⚠ 推演沒算差動：舵沒了的槳帆船在推演裡轉不動）
   return v;
 }
 function cmdTick() {

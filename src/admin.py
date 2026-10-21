@@ -1626,6 +1626,7 @@ def act_shipcheck(ids=None):
               '額外動力（TASK-0630；輸出物件 份量；主機／軸／鍋爐 照造船規格 §9.6；槳 §9.10，TASK-0691）：' + (I.get('drive') or '—（沒有 cfg.base）'), '',
               '動力件（TASK-0653；關聯 meta kind=engine／boiler／shaft／steampipe 的格子清單，照剩幾成、通不通算）：' + (I.get('drvparts') or '—'), '',
               '會轉的體素件（螺旋槳模型 meta kind=propeller 的格子；跟著軸轉、一格一格打掉、推力照剩幾成，TASK-0653 第二段）：' + (I.get('props') or '—'), '',
+              '操舵（TASK-0777；每支舵的鏈 舵令 ⇒ 舵輪／舵柄 meta kind=wheel／tiller（＋舵索 meta steer）⇒ 舵 kind=rudder、份量 helm_share；造船規格 §9.8.1）：' + (I.get('helm') or '—（操舵的開關關著）'), '',
               '**✗ %d　⚠ %d**' % (ne, nw), '']
         for lv, title in (('error', '## ✗ 錯誤'), ('warn', '## ⚠ 警告')):
             ks = [k for k in groups if k[0] == lv]

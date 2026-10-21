@@ -346,7 +346,9 @@ function modelKind(m) {
   //   rudder：夜隼號的舵是模型（summit：方艉船掛在艉板外）；憲法號、餘燼號的舵是船殼的格子
   //   door：門、艙蓋（TASK-0638；25_doors.js）：血量砲的一半、不擋人、開關只是演出
   //   propeller：螺旋槳（TASK-0628／0630）：血量跟舵一樣（⛔ 一般模型 1 點 ⇒ 一發爆炸彈就把整艘的動力打掉）；照輸出轉（31_drive.js）
-  return /carronade/.test(m.name) ? 'carr' : /chase/.test(m.name) ? 'chase' : /\/砲-[SP]\d+$/.test(m.name) ? 'long' : /wheel/.test(m.name) ? 'wheel' : 'model';
+  //   wheel 照名字認（TASK-0777 拿掉：Tim 2026-10-21「請不用要rudder判斷 應該要靠meta」）：量過 19 型的舵輪都有 meta kind=wheel；照名字認反而把憲法號、炎羽號的「wheel座」（wheel_stand）、
+  //     潮墓號的兩個「wheel-fairlead」（fairlead，排在舵輪前面 ⇒ 舵手站在導索器上）也當成舵輪。只在操舵的開關關掉時照舊（?helmtq=0，對拍用）。
+  return /carronade/.test(m.name) ? 'carr' : /chase/.test(m.name) ? 'chase' : /\/砲-[SP]\d+$/.test(m.name) ? 'long' : /wheel/.test(m.name) && !HELM_TQ ? 'wheel' : 'model';
 }
 /** 模型照 x 分桶（每 16 格一桶，外框外擴 12 格登記）⇒ hitModel 只看砲彈所在那一桶（193 個模型 × 每顆砲彈每個小步全掃太貴）。
  *  桶裡照模型編號排 ⇒ 先碰到誰跟全掃一樣。 */
