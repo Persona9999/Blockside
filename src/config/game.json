@@ -1235,7 +1235,8 @@
         "shaft": 3,
         "ship": 2,
         "turret": 2,
-        "wheel": 2
+        "wheel": 2,
+        "yard": 3
       }
     }
   ],
