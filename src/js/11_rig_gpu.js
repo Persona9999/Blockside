@@ -176,6 +176,7 @@ function sailBuf(ow) {
     if (nv) gl.bufferSubData(gl.ARRAY_BUFFER, 0, SBD, 0, nv * SB_DW);
   }
   B.n = K ? nt * 3 : ni; B.nv = nv;
+  B.lb = vtxBox(B.lb, K ? SKP : SBD, K ? 3 : SB_DW, nv * (K ? 3 : SB_DW));   // 這一份的頂點外框（格座標；鏡頭外的船不畫，60_rbatch.js viewVis）：布、布片、旗、鬆掉的帆都在裡面
   if (RIG_CHK) {
     ow.sbChk = { d: K ? null : SBD.slice(0, nv * SB_DW), tk: tk };      // 對拍用：這一次傳上去的動的那一份（R2：GPU 寫的，rigChk 讀回來）
     var sc = rigStat(); sc.sbDyn = (sc.sbDyn || 0) + 1; if (s0 >= 0 || RG.length) sc.sbStat = (sc.sbStat || 0) + 1; if (K ? s0 >= 0 || KD.length : i0 >= 0) sc.sbIdx = (sc.sbIdx || 0) + 1;   // 重做幾次、其中靜的、索引傳了幾次
@@ -499,7 +500,7 @@ function looseBuf(sh) {
   gl.bindBuffer(gl.ARRAY_BUFFER, o.vbo);
   if (o.cap < n) { o.cap = LBV.length; gl.bufferData(gl.ARRAY_BUFFER, o.cap * 4, gl.DYNAMIC_DRAW); }
   if (n) gl.bufferSubData(gl.ARRAY_BUFFER, 0, LBV, 0, n);
-  o.n = n / 6;
+  o.n = n / 6; o.lb = vtxBox(o.lb, LBV, 6, n);
   if (RIG_CHK) sh.llChk = LBV.slice(0, n);
 }
 // 帆與垂繩的緩衝什麼時候重做（60_render.js prepRig）：物理開著的船，照模擬每走一步重做；這一格沒走模擬（暫停、慢動作、高更新率的空格、__game.cam／cut 這種只畫一格的）
@@ -585,6 +586,19 @@ function upload(o, data, stride, attrs) {
   if (!o) { o = { vao: gl.createVertexArray(), vbo: gl.createBuffer(), n: 0 }; gl.bindVertexArray(o.vao); gl.bindBuffer(gl.ARRAY_BUFFER, o.vbo);
     attrs.forEach(function (a) { gl.enableVertexAttribArray(a[0]); gl.vertexAttribPointer(a[0], a[1], gl.FLOAT, false, stride * 4, a[2] * 4); }); gl.bindVertexArray(null); }
   gl.bindBuffer(gl.ARRAY_BUFFER, o.vbo); gl.bufferData(gl.ARRAY_BUFFER, data, gl.DYNAMIC_DRAW); o.n = data.length / stride;
+  o.lb = vtxBox(o.lb, data, stride, data.length);                         // 頂點外框（第 0 號屬性 ＝ 位置；繩、鐵鍊、旗桿這些 ⇒ 鏡頭外的船不畫，60_rbatch.js viewVis）
   return o;
+}
+/** 頂點的外框：每 st 個 float 一個頂點、前 3 個是位置，只看前 len 個 float ⇒ lb（[x0, y0, z0, x1, y1, z1]，double；沒給就建）；沒有頂點 ⇒ lb[0] ＝ Infinity。 */
+function vtxBox(lb, A, st, len) {
+  var x0 = Infinity, y0 = Infinity, z0 = Infinity, x1 = -Infinity, y1 = -Infinity, z1 = -Infinity, v;
+  for (var i = 0; i + 2 < len; i += st) {
+    v = A[i]; if (v < x0) x0 = v; if (v > x1) x1 = v;
+    v = A[i + 1]; if (v < y0) y0 = v; if (v > y1) y1 = v;
+    v = A[i + 2]; if (v < z0) z0 = v; if (v > z1) z1 = v;
+  }
+  lb = lb || new Float64Array(6);
+  lb[0] = x0; lb[1] = y0; lb[2] = z0; lb[3] = x1; lb[4] = y1; lb[5] = z1;
+  return lb;
 }
 

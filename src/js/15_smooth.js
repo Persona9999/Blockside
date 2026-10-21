@@ -214,7 +214,7 @@ var SM_C4 = [[0, 0], [1, 0], [1, 1], [0, 1]];
 function glsFree(sh) { if (sh.gls) { gl.deleteBuffer(sh.gls.vb); gl.deleteVertexArray(sh.gls.vao); sh.gls = null; } }
 /** 玻璃那一趟（60_render.js，海與艙內的水之後）：P.tri、uGls 1、混色（目的地的 alpha 不動）、不寫深度。由遠到近（船之間）。 */
 function glsDraw() {
-  var L = SHIPS.filter(function (sh) { return sh.T.glsG && sh.sink <= 40; }); if (!L.length) return;
+  var vb = RBAT.pd.mn.b, L = SHIPS.filter(function (sh, i) { return sh.T.glsG && sh.sink <= 40 && !(vb && !(RBAT.cs[i] & vb)); }); if (!L.length) return;   // vb：鏡頭外的船不畫（60_rbatch.js viewVis；玻璃在格子的外框裡）
   var E = CAM.eye; L.sort(function (a, b) { return Math.hypot(b.M[12] - E[0], b.M[14] - E[2]) - Math.hypot(a.M[12] - E[0], a.M[14] - E[2]); });
   gl.enable(gl.BLEND); gl.blendFuncSeparate(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA, gl.ZERO, gl.ONE); gl.depthMask(false); gl.disable(gl.CULL_FACE);
   gl.useProgram(P.tri.prog); setCommon(P.tri); gl.uniform1f(P.tri.u.uLit, 1); gl.uniform1f(P.tri.u.uGls, 1); if (P.tri.u.uGlow) gl.uniform1f(P.tri.u.uGlow, 0);

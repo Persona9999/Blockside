@@ -131,10 +131,11 @@ function poleBuf(sh) {
   sh.poleB = upload(sh.poleB, new Float32Array(out), 9, [[0, 3, 0], [1, 3, 3], [2, 3, 6]]);
 }
 /** 畫旗桿（模型那一趟之後，同一支著色器、受光）：反射（畫質「高」）也畫。旗面是帆，照帆畫（11_rig_gpu.js sailBuf）。 */
-function drawColours(prog) {
+function drawColours(prog, pd) {                                      // pd：哪一趟（60_rbatch.js RBAT.pd；鏡頭外的船不畫，viewVis）
   if (prog.u.uGlow) gl.uniform1f(prog.u.uGlow, 0);
-  SHIPS.forEach(function (sh) {
-    var b = sh.poleB; if (!b || !b.n || sh.sink > 40) return;
+  var vb = pd ? pd.b : 0;
+  SHIPS.forEach(function (sh, i) {
+    var b = sh.poleB; if (!b || !b.n || sh.sink > 40 || (vb && !(RBAT.cs[i] & vb))) return;
     cutSet(prog, sh); gl.uniformMatrix4fv(prog.u.uModel, false, sh.M);
     gl.bindVertexArray(b.vao); gl.drawArrays(gl.TRIANGLES, 0, b.n);
   });

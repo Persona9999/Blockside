@@ -17,6 +17,8 @@
     rs = (rs + 0x6D2B79F5) | 0; var t = Math.imul(rs ^ (rs >>> 15), 1 | rs);
     t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
   };
+  H.rsGet = function () { return rs; };              // cullsweep: replay the same random sequence for the culled and the unculled render
+  H.rsSet = function (v) { rs = v | 0; };
   var perf = window.performance, realNow = perf.now.bind(perf), realDateNow = Date.now;
   H.realNow = realNow;
   // clock modes: 'real' (untouched), 'step' (every read advances by clk.inc ms: lets time-sliced loading make progress
@@ -313,6 +315,52 @@
     var r = readCanvas(), px = r.px; H.lastPx = px;
     var s = '', CH = 0x8000; for (var i = 0; i < px.length; i += CH) s += String.fromCharCode.apply(null, px.subarray(i, i + CH));
     return { w: r.w, h: r.h, b64: btoa(s) };
+  };
+  /** Exact pixels of the reflection target RT.R (null when reflections are off). */
+  function readRefl() {
+    var gl = H.gl(), RT = window.__rbat && window.__rbat.rt ? window.__rbat.rt() : null, R = RT && RT.R; if (!R) return null;
+    var px = new Uint8Array(R.w * R.h * 4), rb = G.getParameter.call(gl, 0x8CAA), pb = G.getParameter.call(gl, 0x88ED);
+    if (pb) G.bindBuffer.call(gl, 0x88EB, null);
+    G.bindFramebuffer.call(gl, 0x8CA8, R.fb); G.readPixels.call(gl, 0, 0, R.w, R.h, 0x1908, 0x1401, px); G.bindFramebuffer.call(gl, 0x8CA8, rb);
+    if (pb) G.bindBuffer.call(gl, 0x88EB, pb);
+    return { w: R.w, h: R.h, px: px };
+  }
+  function pxCmp(a, b) {
+    if (!a || !b) return a === b ? { px: 0, max: 0 } : { px: -1, max: -1 };
+    var n = 0, mx = 0, A = a.px, B = b.px;
+    for (var i = 0; i < A.length; i += 4) { var d = Math.max(Math.abs(A[i] - B[i]), Math.abs(A[i + 1] - B[i + 1]), Math.abs(A[i + 2] - B[i + 2]), Math.abs(A[i + 3] - B[i + 3])); if (d) { n++; if (d > mx) mx = d; } }
+    return { px: n, max: mx };
+  }
+  function b64Of(px) { var s = '', CH = 0x8000; for (var i = 0; i < px.length; i += CH) s += String.fromCharCode.apply(null, px.subarray(i, i + CH)); return btoa(s); }
+  /** TASK-0813 cullsweep (off-screen ships not drawn, 60_rbatch.js viewVis): for every step, place the camera (H.camFor spec + pan = metres to
+   *  the camera's right, lift = metres up, fwd = metres toward the camera; mask: true ⇒ leave the camera alone, __game.mask()), then render
+   *  once to settle, then three times with the same random sequence: culling on, culling off, culling on again. Compares the final canvas and the reflection target
+   *  RT.R of on vs off (must be identical) and on vs on (noise). ticks = sim frames before the step (state changes along the sweep).
+   *  Returns per step: cs (per owner bits: 16 reflection drawn, 32 main drawn), cm/cr (owners culled), m/r ({px, max} on vs off), nm/nr (on vs on);
+   *  the first `keep` failing steps also carry b64 images (main on/off). */
+  H.cullSweep = function (steps, keep) {
+    var g = window.__game, rb = window.__rbat, out = [], kept = 0, c0 = rb.cull();
+    try {
+      steps.forEach(function (st, k) {
+        if (st.ticks) H.ticks(st.ticks);
+        var o = null;
+        if (!st.mask) {
+          o = H.camFor(st);
+          var yw = o.yaw, rx = -Math.sin(yw), rz = Math.cos(yw), fx = Math.cos(yw), fz = Math.sin(yw);
+          if (st.pan) { o.tgt[0] += rx * st.pan; o.tgt[2] += rz * st.pan; }
+          if (st.fwd) { o.tgt[0] += fx * st.fwd; o.tgt[2] += fz * st.fwd; }
+          if (st.lift) o.tgt[1] += st.lift;
+        }
+        function one(on) { rb.cull(on); H.rsSet(r0); if (o) g.cam(JSON.parse(JSON.stringify(o))); else g.mask(); return { m: readCanvas(), r: readRefl(), s: { cm: rb.stat.cullMn, cr: rb.stat.cullRf } }; }
+        var r0 = H.rsGet(); one(true);                    // warm-up render: the first render after sim ticks differs from the next ones (flood blend, remesh budget …)
+        var A = one(true), cs = Array.prototype.slice.call(rb.tab.cs, 0, rb.tab.n), B = one(false), C = one(true);
+        H.rsSet(r0); rb.cull(c0);
+        var e = { k: k, cs: cs, cm: A.s.cm, cr: A.s.cr, m: pxCmp(A.m, B.m), r: pxCmp(A.r, B.r), nm: pxCmp(A.m, C.m), nr: pxCmp(A.r, C.r) };
+        if ((e.m.px || e.r.px) && kept < (keep || 0)) { kept++; e.img = { w: A.m.w, h: A.m.h, on: b64Of(A.m.px), off: b64Of(B.m.px) }; }
+        out.push(e);
+      });
+    } finally { rb.cull(c0); }
+    return out;
   };
   /** Render the unchanged state again (render() only) and diff against the last H.shot(): GPU run-to-run noise (MSAA is not bit-reproducible here). */
   H.selfNoise = function (k) {

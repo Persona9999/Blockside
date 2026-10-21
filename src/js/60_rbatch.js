@@ -24,7 +24,8 @@ var RBAT = {
   pd: { sh: { name: 'sh', k: 0, b: 0, depth: true }, rf: { name: 'rf', k: -1, b: 0, depth: false }, mn: { name: 'mn', k: -1, b: 0, depth: false } },
   pal: new Float32Array(INST_MAX * 16),                              // 一次畫多個的矩陣（P.triI／P.dtriI 的 uMs）：一批最多 INST_K 個，照 16 個 float 抄 RBAT.M（長度照上限 ⇒ 不用等 programs()）
   gl: {},                                                            // 這裡建的 GL 物件（pb ＝ 對拍的分身程式與轉換回饋的緩衝）記在一處 ⇒ 以後要處理 context lost 照這裡重建
-  stat: { f: -1, owners: 0, items: 0, chk: 0, matMiss: 0, itemMiss: 0, rfCull: 0 }   // 讀數（__rbat.stat）：matMiss／itemMiss ＝ ?rbchk=1 對拍不一樣的項目數（量測工具 > 0 ⇒ 不過）；rfCull ＝ 反射這一格整件在水面下沒送的（S13）
+  stat: { f: -1, owners: 0, items: 0, chk: 0, matMiss: 0, itemMiss: 0, rfCull: 0, cullMn: 0, cullRf: 0 },   // 讀數（__rbat.stat）：matMiss／itemMiss ＝ ?rbchk=1 對拍不一樣的項目數（量測工具 > 0 ⇒ 不過）；rfCull ＝ 反射這一格整件在水面下沒送的（S13）；cullMn／cullRf ＝ 這一格主畫面、反射整個不畫的 owner 數（鏡頭外，viewVis）
+  cull: Q.get('rb') !== '0' && Q.get('cull') !== '0'                 // 鏡頭外的船不畫（viewVis，TASK-0813）：?cull=0、?rb=0 ⇒ 關；量測工具同一頁開關對拍 ⇒ __rbat.cull = false
 };
 var RBAT_CHK = Q.get('rbchk') === '1';                             // ?rbchk=1：每格整理完照以前的算式重算一遍、逐位元比（rbatCheck）
 // 開關（網址，像 ?lerp=0；量測工具拿同一份成品 A/B 對拍用 —— 不進設定、不進 __game）：?rb=0 全部照以前一個一個畫；?rbinst=0（或 ?inst=0）不用一次畫多個的程式；
@@ -296,6 +297,7 @@ function rbatNearG(g, i) {
 function rbatFlush(g) {
   var R = RBAT, C = RBAT_C, M = R.M, pal = R.pal, u = P.triI.u, K = INST_K, k = 0, i, q, s, el = C.gE[g], off = C.gF[g];
   C.gO[g] = 0;
+  if (C.gH[g] < 0) return;                                               // 只有鏡頭外那幾艘的（rbatGRes 開的、沒放項目）⇒ 什麼都不送
   if (C.gG[g] !== C.g) gl.uniform1f(u.uGlow, C.g = C.gG[g]);
   gl.bindVertexArray(C.gV[g]);
   for (i = C.gH[g]; i >= 0; i = C.nx[i]) {
@@ -328,9 +330,21 @@ function rbatGAdd(i, V) {
     C.gS[H] = j0 === undefined ? -1 : j0; m.set(v, H);
     if (!C.inf) for (var q = 0; q < 6; q++) C.gB[H * 6 + q] = C.bx[i * 6 + q];   // ⛔ subarray：每組一個新物件
   } else {
-    C.nx[C.gT[H]] = i; C.gT[H] = i;
+    if (C.gH[H] < 0) C.gH[H] = i; else C.nx[C.gT[H]] = i;               // 組是 rbatGRes 開的、還沒有項目 ⇒ 這一項是第一個
+    C.gT[H] = i;
     if (!C.inf) { var B = C.gB, o = H * 6, b = C.bx, p = i * 6; C.gW[H] = Math.max(C.gW[H], C.w[i]); for (var j = 0; j < 3; j++) { B[o + j] = Math.min(B[o + j], b[p + j]); B[o + 3 + j] = Math.max(B[o + 3 + j], b[p + 3 + j]); } }
   }
+}
+/** 鏡頭外那一艘的第 i 項（不管先後的那條，viewVis 判看不到）：它那一組照樣開（還沒有就開一個空的）、項目不放 ⇒ 組的先後跟全畫時一模一樣
+ *  ⇒ 看得到的船畫的先後不變（不同網格剛好同深度的那幾個像素也一樣），一艘船進出畫面邊緣時別艘不會閃。水面下的（S13）照 rbatGAdd 先跳過、不開組。 */
+function rbatGRes(i) {
+  var R = RBAT, C = RBAT_C, m = C.gm, v = R.vao[i], n = R.cnt[i], gw = R.glow[i], el = R.el[i], off = R.off[i], j0, H;
+  if (C.cy > -Infinity && R.mb[i] && rbatUnder(i, C.cy)) return;
+  j0 = m.get(v);
+  for (H = j0 === undefined ? -1 : j0; H >= 0 && !(C.gO[H] && C.gC[H] === n && C.gG[H] === gw && C.gE[H] === el && C.gF[H] === off); H = C.gS[H]);
+  if (H >= 0) return;
+  H = C.gn++; C.gV[H] = v; C.gC[H] = n; C.gG[H] = gw; C.gE[H] = el; C.gF[H] = off; C.gO[H] = 1; C.gH[H] = C.gT[H] = -1; C.gW[H] = 0;
+  C.gS[H] = j0 === undefined ? -1 : j0; m.set(v, H);
 }
 function rbatGEnd() {
   var C = RBAT_C, g;
@@ -356,8 +370,8 @@ function rbatGroups(i0, i1, geo, V) { rbatGBegin(geo); for (var i = i0; i < i1; 
  *    換先後只在兩個東西同一個像素深度剛好一樣時改結果（不透明、不混色）；每艘的 uniform 在這一段一樣（剖面關、uLit 1），矩陣、uGlow 照每一項 ⇒ 跨船合得起來。
  *  ?rbgeo=1（照 τ 證明的先後，S7）、?rbgeo=0（不換先後）：一艘一艘 —— 模型、裝飾收組，平滑面照以前一區一區。 */
 function rbatColour(pd) {
-  var R = RBAT, C = RBAT_C, p = P.triI, u = p.u, M = R.M, pal = R.pal, V = PASS.vp || CAM.vp, ns = R.ns, o, i, e;
-  if (C.cap < R.ni) rbatCGrow(R.ni);                                      // 組、串列的陣列（不夠才加倍）
+  var R = RBAT, C = RBAT_C, p = P.triI, u = p.u, M = R.M, pal = R.pal, V = PASS.vp || CAM.vp, ns = R.ns, b = pd.b, cs = R.cs, o, i, e;   // b：這一趟只畫 cs 有這一位的（鏡頭外的不畫，viewVis；0 ⇒ 全畫）
+  if (C.cap < R.ni) rbatCGrow(R.ni);                                    // 組、串列的陣列（不夠才加倍）
   if (RBAT_LOOSE) C.inf = true; else { rbatBoxes(); rbatTau(V); }       // 不管先後 ⇒ 不用包圍盒、τ
   C.g = NaN;
   C.cy = pd === R.pd.rf && PASS.clip > -1e8 ? PASS.clip - 0.02 : -Infinity;   // 反射：整件在水面下的不送（S13）
@@ -366,10 +380,13 @@ function rbatColour(pd) {
   gl.vertexAttrib2f(3, 0, 0.5);                                           // 第 3 號屬性的常數照以前（見 rbatReplay）
   if (RBAT_LOOSE) {
     rbatGBegin(true);
-    for (o = 0; o < ns; o++) if (R.own[o].sink <= 40) for (i = R.i0[o], e = R.i0[o + 1]; i < e; i++) rbatGAdd(i, V);
+    for (o = 0; o < ns; o++) if (R.own[o].sink <= 40) {
+      if (b && !(cs[o] & b)) { for (i = R.i0[o], e = R.i0[o + 1]; i < e; i++) rbatGRes(i); continue; }   // 鏡頭外：組照樣開（先後不變）、不放項目
+      for (i = R.i0[o], e = R.i0[o + 1]; i < e; i++) rbatGAdd(i, V);
+    }
     rbatGEnd();
   } else for (o = 0; o < ns; o++) {
-    if (R.own[o].sink > 40) continue;
+    if (R.own[o].sink > 40 || (b && !(cs[o] & b))) continue;
     for (i = R.i0[o], e = R.i0[o + 1]; i < e && R.cls[i] < 2; i++);
     rbatGroups(R.i0[o], i, true, V);                                      // 模型、裝飾
     for (; i < e; i++) {                                                  // 平滑面、裝甲的平滑面：照以前一區一區（一份網格第一區換矩陣、燈熄）
@@ -377,11 +394,89 @@ function rbatColour(pd) {
       gl.bindVertexArray(R.vao[i]); gl.drawElementsInstanced(gl.TRIANGLES, R.cnt[i], gl.UNSIGNED_INT, R.off[i], 1);
     }
   }
-  rbatGroups(R.i0[ns], R.ni, false, V);                                   // 斷開的那一團的模型、FLY（燈熄：glow 都是 0）
+  rbatGBegin(false);                                                      // 斷開的那一團的模型、FLY（燈熄：glow 都是 0；只合連在一起的 ⇒ 跳過鏡頭外那一團的，剩下的先後照舊）
+  for (i = R.i0[ns], e = R.ni; i < e; i++) { o = R.ow[i]; if (o >= 0 && b && !(cs[o] & b)) continue; rbatGAdd(i, V); }   // FLY（o ＝ −1）一定畫
+  rbatGEnd();
   C.cy = -Infinity;
   gl.useProgram(P.tri.prog); cutSet(P.tri, null);
 }
 
+// ── 鏡頭外的船不畫（TASK-0813；Tim 2026-10-22 從 TASK-0792 的延後清單選的：量到八艘近看 4080 −28～−39%、內顯 −13～−22%）──
+// 反射、主畫面：一個 owner（船、斷開的那一團）這一格畫的每一樣東西包成一個保守的世界外框；外框整個在這一趟視錐某一面的外面
+//   ⇒ 它畫的每個三角形、每條線的每個頂點都在那一面外面 ⇒ 全部被裁掉、一個片段都不寫 ⇒ 不送，畫面一樣（量測工具 cullsweep：同一頁開、關逐格比）。
+// 外框（vvOwner）＝ 格子的外框（船殼、平滑面、玻璃都在格子裡：0..sx／sy／sz 外擴 1 格）
+//   ∪ 這一份上傳的帆、繩、繩梯的管、垂繩、鐵鍊、旗桿、建造與艙房的線的頂點外框（lb：11_rig_gpu.js upload／sailBuf／looseBuf 上傳時記的，格座標）—— 這些都照 ow.M 畫
+//   ∪ 模型、裝飾、斷開的那一團的模型：網格的盒子（me.bb）照這一格表裡的世界矩陣（RBAT.M：含 ancD 拋下去的錨、vsl、砲塔、只差起點的 dt）
+//   ∪ 裝甲、砲塔、螺旋槳：那一塊的格子照 armM（跟 armDraw、armSmDraw 同一個矩陣）。外框照矩陣轉（中心 ± |W|·半寬，double），再放寬 1 mm ＋ 座標的 10⁻⁶。
+// 視錐（vvPlanes）＝ 主畫面 CAM.vp、反射 CAM.vp·MIRROR（reflPass 同一條：y 那一行變號）的六個面（正規化）；反射多一面水面（reflPass 的 PASS.clip ＝ 0：著色器丟掉 y < 0 的片段）。
+//   外框到某一面的距離 < −2 cm ⇒ 看不到。海讀反射圖時的擾動（≤ 0.035 個畫面）只是換讀反射圖哪一個像素：反射圖裡本來就沒畫到它 ⇒ 不用留邊。
+// 不剔的：陰影（看不到的船，影子照樣落進畫面）；全部船一次送的（船員：上限照船的順序排 ⇒ 少一艘別艘的人會換；碎片、粒子、光暈、浪花、鏈彈）；
+//   燈（照亮別艘）、艙內的水（網格照算、讀數要用）、FLY（沒有 owner）、第一人稱站的那一艘。
+// 判完寫在 RBAT.cs 的第 4、5 位（第 0–3 位是陰影的段：csmOwners 在這之前清、填），pd.rf.b／pd.mn.b 設成那一位
+//   ⇒ drawHulls（含裝甲）、drawSails、rbatReplay 照原本的判斷就跳過；rbatColour、drawColours、繩那一圈、玻璃另外判。render() 畫完 b 設回 0（這一格以外沒人照它畫）。
+// ?cull=0、?rb=0、__rbat.cull(false) ⇒ b ＝ 0 ＝ 以前全畫。⛔ 只畫面：外框、位元都是 RBAT 自己的，模擬不讀（camShipSee 是鏡頭自己的判斷，跟這裡無關）。
+var VV_RF = 16, VV_MN = 32, VV_PAD = 0.02;
+var VV = { pl: new Float64Array(28 * 2), L: new Float64Array(6), B: new Float64Array(6), W: new Float32Array(16) };   // pl：主畫面 6 面＋反射 7 面（每面 4 個）；L：格座標的外框；B：世界外框；W：裝甲的矩陣
+/** 這一格每個 owner 反射、主畫面看不看得到（render：shadowMats 之後、reflPass 之前；鏡頭、內插過的 sh.M、這一格的表都定了）。 */
+function viewVis() {
+  var R = RBAT, pr = R.pd.rf, pm = R.pd.mn, vp = CAM.vp, P = VV.pl, cm = 0, cr = 0, o, j;
+  R.stat.cullMn = R.stat.cullRf = 0;
+  if (!R.cull || !vp) { pr.b = pm.b = 0; return; }                         // 關著、鏡頭還沒算過 ⇒ 全畫
+  pr.b = VV_RF; pm.b = VV_MN;
+  vvPlanes(P, 0, vp, 1); vvPlanes(P, 28, vp, -1);
+  P[52] = 0; P[53] = 1; P[54] = 0; P[55] = 0;                             // 反射的第 7 面：水面 y ≥ 0（reflPass 的 PASS.clip）
+  for (o = 0; o < R.n; o++) {
+    var ow = R.own[o], v = VV_RF | VV_MN;
+    if (ow && !(ow.sink > 40) && !(FP.on && FP.sh === ow) && vvOwner(o, ow)) {
+      for (j = 0; j < 6; j++) if (vvOut(P, j * 4)) { v &= ~VV_MN; cm++; break; }
+      for (j = 0; j < 7; j++) if (vvOut(P, 28 + j * 4)) { v &= ~VV_RF; cr++; break; }
+    }
+    R.cs[o] |= v;
+  }
+  R.stat.cullMn = cm; R.stat.cullRf = cr;
+}
+/** VP 的六個面寫進 P[o..o+23]（a·x ＋ b·y ＋ c·z ＋ d ≥ 0 在裡面、正規化）；sy ＝ −1 ⇒ VP·MIRROR 的（y 那一行變號）。 */
+function vvPlanes(P, o, m, sy) {
+  for (var i = 0; i < 3; i++) for (var s = -1; s <= 1; s += 2) {
+    var a = m[3] + s * m[i], b = (m[7] + s * m[4 + i]) * sy, c = m[11] + s * m[8 + i], d = m[15] + s * m[12 + i], l = Math.hypot(a, b, c) || 1, k = o + (i * 2 + (s + 1) / 2) * 4;
+    P[k] = a / l; P[k + 1] = b / l; P[k + 2] = c / l; P[k + 3] = d / l;
+  }
+}
+/** 世界外框（VV.B）整個在第 k 面外面超過 VV_PAD。 */
+function vvOut(P, k) {
+  var B = VV.B, a = P[k], b = P[k + 1], c = P[k + 2];
+  return a * (a > 0 ? B[3] : B[0]) + b * (b > 0 ? B[4] : B[1]) + c * (c > 0 ? B[5] : B[2]) + P[k + 3] < -VV_PAD;
+}
+/** 格座標的外框 L 併進 lb（上傳時記的；沒有頂點 ⇒ 不動）。 */
+function vvUnionLb(L, x) {
+  var b = x && x.n && x.lb; if (!b || !(b[0] <= b[3])) return;
+  for (var j = 0; j < 3; j++) { if (b[j] < L[j]) L[j] = b[j]; if (b[3 + j] > L[3 + j]) L[3 + j] = b[3 + j]; }
+}
+/** 盒子 b（局部座標）照矩陣 W（從第 s 個 float 起）轉成世界外框，併進 VV.B。 */
+function vvUnionXf(W, s, b) {
+  var B = VV.B, cx = (b[0] + b[3]) / 2, cy = (b[1] + b[4]) / 2, cz = (b[2] + b[5]) / 2, ex = (b[3] - b[0]) / 2, ey = (b[4] - b[1]) / 2, ez = (b[5] - b[2]) / 2;
+  for (var j = 0; j < 3; j++) {
+    var c = W[s + j] * cx + W[s + 4 + j] * cy + W[s + 8 + j] * cz + W[s + 12 + j], e = Math.abs(W[s + j]) * ex + Math.abs(W[s + 4 + j]) * ey + Math.abs(W[s + 8 + j]) * ez;
+    var pad = 1e-3 + 1e-6 * (Math.abs(c) + e);
+    if (c - e - pad < B[j]) B[j] = c - e - pad; if (c + e + pad > B[3 + j]) B[3 + j] = c + e + pad;
+  }
+}
+/** 第 o 個 owner 這一格畫的每一樣東西的世界外框 ⇒ VV.B；算不出來（沒有格子、矩陣）⇒ false（當成看得到）。 */
+function vvOwner(o, ow) {
+  var R = RBAT, B = VV.B, L = VV.L, G = ow.grid, i, e, k;
+  if (!G || !ow.M) return false;
+  B[0] = B[1] = B[2] = Infinity; B[3] = B[4] = B[5] = -Infinity;
+  L[0] = L[1] = L[2] = -1; L[3] = G.sx + 1; L[4] = G.sy + 1; L[5] = G.sz + 1;   // 船殼、平滑面（surface nets 的點在格子外擴一格以內）、玻璃
+  vvUnionLb(L, ow.sb); vvUnionLb(L, ow.lines); vvUnionLb(L, ow.ropeT); vvUnionLb(L, ow.ll); vvUnionLb(L, ow.chain); vvUnionLb(L, ow.poleB); vvUnionLb(L, ow.bldLines); vvUnionLb(L, ow.roomLines);
+  vvUnionXf(ow.M, 0, L);
+  for (i = R.i0[o], e = R.i0[o + 1]; i < e; i++) { var me = R.mb[i]; if (me && me.bb) vvUnionXf(R.M, i * 16, me.bb); }   // 模型、裝飾、斷開的那一團的模型（平滑面的項目沒有 mb：在格子或裝甲的外框裡）
+  if (ow.arm) for (k = 0; k < ow.arm.length; k++) {                      // 裝甲、砲塔、螺旋槳（掉了的螺旋槳照算：保守）
+    var a = ow.arm[k], g = a.grid, AL = armLocal(a); if (!g) continue;
+    L[0] = L[1] = L[2] = -1; L[3] = g.sx + 1; L[4] = g.sy + 1; L[5] = g.sz + 1;
+    vvUnionXf(AL ? m4Into(VV.W, 0, ow.M, AL) : ow.M, 0, L);
+  }
+  return B[0] <= B[3];
+}
 // ── 船殼的合併緩衝（arena；S8）──
 // 船型的船殼（T.pristine）、裝甲與螺旋槳（A.rs0）載入時一區一份 VBO（VoxelKit RegionSet，64³ 一區）；開戰的每艘 shareFrom 借用那幾份，被打到的區才自己建（own）。
 //   以前每艘每一趟照 Map 一區一個 drawElements（光榮號 137 區）。現在第一次畫到時把那幾份 VBO 照 Map 的順序在 GPU 上接成一份（copyBufferSubData：位元組照抄），
@@ -601,5 +696,7 @@ function rbatProbe(neg) {
   return out;
 }
 // 除錯（?debug=1）：__rbat.stat 讀數；__rbat.check() ＝ 畫一格、那一格整理完就對拍（回 stat）；__rbatProbe() ＝ 一次畫多個的程式對拍（見上）
-if (DEBUG) window.__rbat = { stat: RBAT.stat, tab: RBAT, check: function () { var c = RBAT_CHK; RBAT_CHK = true; try { render(); } finally { RBAT_CHK = c; } return RBAT.stat; }, arenaCheck: rbatArenaCheck };
+//   __rbat.cull(v)：鏡頭外的船不畫 開／關（不給 ⇒ 只回現在的；量測工具 cullsweep 同一頁開關逐格比）；__rbat.rt() ＝ 畫面的 framebuffer（RT：讀反射圖 RT.R）
+if (DEBUG) window.__rbat = { stat: RBAT.stat, tab: RBAT, check: function () { var c = RBAT_CHK; RBAT_CHK = true; try { render(); } finally { RBAT_CHK = c; } return RBAT.stat; }, arenaCheck: rbatArenaCheck,
+  cull: function (v) { if (v !== undefined) RBAT.cull = !!v; return RBAT.cull; }, rt: function () { return RT; } };
 if (DEBUG) window.__rbatProbe = rbatProbe;
