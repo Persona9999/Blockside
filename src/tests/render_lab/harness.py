@@ -43,7 +43,7 @@ CONFIGS = {
     # frame are taken 40 ticks later while lids still swing and guns run out, with smoke, debris and holes around.
     'ports_high': {'q': GC + '&gfx=high&mode=eve', 'warm': 360, 'cam': {'ship': 0, 'dist': 45, 'pitch': 0.08}, 'ports': {'after': 1, 'mid': 40}},
     # reference without any lid: g_port=0 (no port animation) + g_deco=0 (decorations incl. lids not drawn) ⇒ what the lids cost now
-    'gc_high_nolids': {'q': GC + '&gfx=high&g_port=0&g_deco=0', 'warm': 120, 'cam': BROAD},
+    'gc_high_nolids': {'q': GC + '&gfx=high&g_port=0&g_deco=0', 'warm': 120, 'cam': BROAD},   # 名字是 S14 之前的：S14 起蓋板每艘都畫 ⇒ 這一組 ＝ 其他裝飾關、蓋板開著不動
     # lids drawn but not animated: g_port=0 (lids stay open, guns run out, no portsAnim work) with decorations on
     'gc_high_portstatic': {'q': GC + '&gfx=high&g_port=0', 'warm': 120, 'cam': BROAD},
 }
@@ -69,6 +69,7 @@ EXTRA = {
     'fleet8_close': {'q': F8 + '&gfx=high', 'warm': 120, 'cam': {'ship': 0, 'dist': 40, 'pitch': 0.1}},
     'gc_high_close': {'q': GC + '&gfx=high', 'warm': 120, 'cam': {'ship': 0, 'dist': 22, 'pitch': 0.06}},
     'gc_low_close': {'q': GC + '&gfx=low', 'warm': 120, 'cam': {'ship': 0, 'dist': 22, 'pitch': 0.06}},
+    'gc_low_lids': {'q': GC + '&gfx=low', 'warm': 120, 'cam': {'ship': 1, 'dist': 30, 'pitch': 0.06}},   # 低畫質、鏡頭對憲法號（別艘）：S14 蓋板每艘都畫的改前／改後（不在 all 裡，照名字叫）
     # first person (near 0.05); the harness never places the camera in this config
     'gc_high_fp': {'q': GC + '&gfx=high', 'warm': 120, 'cam': None, 'hook': ['__game.fp(1), 0', {'ticks': 2}]},
     # torn + burning sails + shreds + loose sails/ropes: Constitution (player) fires two chain-shot broadsides aimed at the centres of

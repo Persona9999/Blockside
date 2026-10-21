@@ -156,7 +156,7 @@ The original 9 are byte-for-byte unchanged (their warm/count hashes equal the pr
 |---|---|---|---|
 | gc_low, gc_mid, gc_high, gc_ultra | GC&gfx=… / 120 | broadside ship 0, 60 m | presets (low: no MSAA, no shadow/refl) |
 | gc_high_csm | GC&gfx=high&csm=1 / 120 | same | 4 cascades |
-| gc_high_nolids | …&g_port=0&g_deco=0 | same | no lids / decos |
+| gc_high_nolids | …&g_port=0&g_deco=0 | same | no decos; lids are drawn (open, static) since S14 — the name predates S14 |
 | gc_high_portstatic | …&g_port=0 | same | lids drawn, not animated |
 | fleet8_high | F8&gfx=high / 120 | ship 0, 130 m, pitch .22 | 8 ships |
 | ports_high | GC&gfx=high&mode=eve / 360 + ports open + 40 | ship 0, 45 m | lids swinging, guns running out, combat |

@@ -1194,14 +1194,15 @@
         "gun": 15,
         "ladders": 2,
         "magazine": 4,
-        "part": 18,
+        "part": 22,
         "powder": 42,
         "propeller": 3,
         "rudder": 2,
         "shaft": 3,
         "ship": 2,
         "turret": 5,
-        "wheel": 2
+        "wheel": 2,
+        "yard": 3
       }
     },
     {
@@ -1447,7 +1448,8 @@
       "ember#wheel-1": "餘燼號・舵輪",
       "falcon#wheel-1": "夜隼號・舵輪",
       "stormkaap#wheel-1": "風暴角號・舵輪",
-      "monitor#wheel-1": "莫尼特號・舵輪"
+      "monitor#wheel-1": "莫尼特號・舵輪",
+      "dingyuan#wheel-1": "定遠號・舵輪"
     },
     "wheel_stand": {
       "constitution#wheel_stand-1": "憲法號・wheel座",
