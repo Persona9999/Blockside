@@ -64,7 +64,7 @@ if (DEBUG) window.__game = {
   prefs: function (p) { if (p) prefsApply(p); return prefsSnap(); },   // 存檔：套進去（有給）⇒ 現在跟預設不一樣的那幾項（69_prefs.js；?prefs=0 時不碰瀏覽器的存檔）
   ev: function (t, off) { if (off) return evOff(t); var o = {}; for (var k in EV_SUB) if (!t || k === t) o[k] = EV_SUB[k].length; return o; },   // 事件（00_events.js）：每個事件幾個訂閱；off ⇒ 拿掉事件 t 的訂閱（反向對照：拿掉 note ⇒ 照打、沒有廣播）
   /** 砲門（TASK-0719；62_ports.js）：ports(i) ⇒ 第 i 艘每片蓋板的 s（0 關、1 開／砲縮著、2 砲推出去）、want、gone、house…；portsForce(i, 0｜1｜null) ⇒ 寫 sh.portWant（截圖、宣傳片用；null ⇒ 照規則）。 */
-  ports: function (i) { var sh = SHIPS[i || 0]; if (sh && sh.ports === undefined && GFX.port && GFX.deco) sh.ports = portsBuild(sh); return portsDbg(sh); },
+  ports: function (i) { var sh = SHIPS[i || 0]; if (sh && sh.ports === undefined && GFX.port) sh.ports = portsBuild(sh); return portsDbg(sh); },
   portsForce: function (i, v) { var sh = SHIPS[i || 0]; if (sh) sh.portWant = v === undefined ? null : v; return this.ports(i); },
   /** 畫面迴圈的反向對照（TASK-0719；⛔ ?demo、run() 不經過 frame() ⇒ 量不到畫面那一格的演出）：同步叫 n 次 frame()，每格 dt ＝ DT（loopLast 歸零）⇒ 沒有慢動作時每格剛好一步；
    *  回走了幾步、模擬秒、戰局雜湊（每艘的位置、航向、格數、下沉、命中、開火、死傷、砲剩幾門，加上砲彈、碎塊數與戰局亂數 RNG_B 的狀態；照宣傳片 director.js trHash 的 FNV-1a）。g_port＝0／1、g_deco＝0／1 要一樣。 */
@@ -464,7 +464,7 @@ else GL_READY.then(yieldUI).then(function () {                     // 先讓主�
     '\n設定：' + PREFS.state;
   loadSay(line); window.__vxk = { verify: chk, quads: T.pristine.quads(), masts: T.masts.length, decodeMs: +T.decodeMs.toFixed(1), meshMs: +T.meshMs.toFixed(1), ms: T.ms,
     cache: hullInfo(T.id).cache, prefs: PREFS.state,
-    deco: { on: !!GFX.deco, n: T.decoN || 0, drawn: GFX.deco ? T.decoN || 0 : 0, meshes: T.meshes.filter(Boolean).length, tris: T.meshes.reduce(function (a, m) { return a + (m && m.n ? m.n / 3 : 0); }, 0) } };   // 裝飾（TASK-0682）：開關、作品裡幾件、畫幾件（一律載入，關著 ⇒ 0）、建了幾份模型網格、三角形
+    deco: { on: !!GFX.deco, n: T.decoN || 0, drawn: GFX.deco ? T.decoN || 0 : GFX.port ? (T.decos || []).filter(function (d) { return d.meta && d.meta.kind === 'portlid'; }).length : 0, meshes: T.meshes.filter(Boolean).length, tris: T.meshes.reduce(function (a, m) { return a + (m && m.n ? m.n / 3 : 0); }, 0) } };   // 裝飾（TASK-0682）：開關、作品裡幾件、畫幾件（一律載入，關著 ⇒ 0；「砲門的開關演出」不是關 ⇒ 砲門蓋板照畫 —— 「只有我艦」時只有我艦那一艘，這裡照一艘算）、建了幾份模型網格、三角形
   loadArt().then(function (why) { line += '\n素材：' + why; loadSay(line); window.__vxk.art = why; if (HUD_ART) hudArt(); });
   if (!chk.ok) { glFail('船體資料跟封裝檔對不上，停下來（不畫半艘船）。\n' + line); return; }
   $('go').disabled = false; $('go').textContent = '開戰';

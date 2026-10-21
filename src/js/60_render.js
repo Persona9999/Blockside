@@ -262,8 +262,9 @@ function drawModels(prog, near) {
       if (prog.u.uGlow) gl.uniform1f(prog.u.uGlow, isLamp(m) ? lanternK(m) : 0);   // 取用點的火藥桶是後加的模型，沒有 meta
       gl.bindVertexArray(me.vao); gl.drawArrays(gl.TRIANGLES, 0, me.n);
     });
-    if (GFX.deco) (sh.decos || []).forEach(function (d) {               // 裝飾（TASK-0682；一律載入，畫質「裝飾」關著 ⇒ 不畫）：腳下那一格被打掉 ⇒ 不畫
-      var me = sh.T.meshes[d.mesh]; if (!me || d.gone || (d.foot >= 0 && !hullGp(sh.grid, d.foot))) return; if (!me.vao) meshGpu(me);   // gone：砲門蓋板被打掉了（62_ports.js）
+    var lid = portOn(sh);                                               // 砲門蓋板：「砲門的開關演出」輪到這艘（每艘／只有我艦）⇒ 不看「裝飾」（62_ports.js portOn）
+    if (GFX.deco || lid) (sh.decos || []).forEach(function (d) {        // 裝飾（TASK-0682；一律載入，畫質「裝飾」關著 ⇒ 不畫）：腳下那一格被打掉 ⇒ 不畫
+      var me = sh.T.meshes[d.mesh]; if (!me || d.gone || (!GFX.deco && d.meta.kind !== 'portlid') || (d.foot >= 0 && !hullGp(sh.grid, d.foot))) return; if (!me.vao) meshGpu(me);   // gone：砲門蓋板被打掉了（62_ports.js）
       gl.uniformMatrix4fv(prog.u.uModel, false, modelWorld(sh, d, function () { return M4.mul(sh.M, d.L || trans(d.origin[0], d.origin[1], d.origin[2])); }));   // L：砲門蓋板繞鉸鏈轉過的擺法（62_ports.js；只有 kind=portlid 有、沒在動 ⇒ null ＝ 模型的樣子）
       if (prog.u.uGlow) gl.uniform1f(prog.u.uGlow, isLamp(d) ? lanternK(d) : 0);
       gl.bindVertexArray(me.vao); gl.drawArrays(gl.TRIANGLES, 0, me.n);
