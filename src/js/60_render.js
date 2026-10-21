@@ -85,6 +85,7 @@ function resize() {
 // 反射：鏡頭對海面（y ＝ 0）鏡像，把船畫進 RT.R（低 1/4、高 1/2 解析度；水面以下丟掉），海照螢幕座標＋法線擾動讀。浪的起伏不進鏡像（擾動蓋過去）。
 // ⛔ 這裡不碰模擬的狀態（反向對照見 07_gfx.js）。帆與繩的緩衝（buildRig／sailBuf）一格只做一次，在所有趟之前（prepRig）。
 var RT = null, SHM = null, DUMMY = null, PASS = { vp: null, eye: null, clip: -1e9, sh: 1 }, LAST_BOLT = null;
+var REFL_VP = new Float32Array(16);                                    // 反射那一趟的 VP（reflPass：M4.mul 同一條算式寫進這一份，S11 ⇒ 每格不配置）
 var MIRROR = new Float32Array([1, 0, 0, 0, 0, -1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]), FAR_M = new Float32Array([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 10, 1]);
 function mkTex(ifmt, fmt, type, w, h, lin, cmp) {
   var t = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, t); gl.texImage2D(gl.TEXTURE_2D, 0, ifmt, w, h, 0, fmt, type, null);
@@ -618,7 +619,7 @@ function hullArr() {
 function reflPass() {
   var R = RT.R; gl.bindFramebuffer(gl.FRAMEBUFFER, R.fb); gl.viewport(0, 0, R.w, R.h);
   gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
-  PASS.vp = M4.mul(CAM.vp, MIRROR); PASS.eye = [CAM.eye[0], -CAM.eye[1], CAM.eye[2]]; PASS.clip = 0; PASS.sh = 0;
+  PASS.vp = m4Into(REFL_VP, 0, CAM.vp, MIRROR); PASS.eye = [CAM.eye[0], -CAM.eye[1], CAM.eye[2]]; PASS.clip = 0; PASS.sh = 0;
   gl.enable(gl.DEPTH_TEST); gl.enable(gl.CULL_FACE);                   // 船的矩陣是鏡射（shipBaseMatrix）、反射的鏡頭又鏡射一次 ⇒ 兩次抵銷，繞序照常（CCW）
   gl.useProgram(P.vox.prog); setCommon(P.vox); drawHulls(P.vox, RBAT.pd.rf);
   if (GFX.refl === 2) {
@@ -687,11 +688,11 @@ function mainOpaque(fr) {
   gl.enable(gl.CULL_FACE); gl.frontFace(gl.CW); gl.useProgram(P.vox.prog); setCommon(P.vox); drawHulls(P.vox, RBAT.pd.mn); gl.frontFace(gl.CCW);
   // 碎片
   var n = 0;
-  for (var i = 0; i < D.n; i++) {
-    var o = i * 3, p;
-    if (D.st[i] === 2) { var sh = SHIPS[D.ship[i]]; p = M4.pt(sh.M, D.p[o], D.p[o + 1], D.p[o + 2]); } else p = [D.p[o], D.p[o + 1], D.p[o + 2]];
-    var k = n * 9, fade = Math.min(1, D.life[i] / 1.5);
-    DINST[k] = p[0]; DINST[k + 1] = p[1]; DINST[k + 2] = p[2]; DINST[k + 3] = D.size[i] * fade;
+  for (var i = 0; i < D.n; i++) {                                     // ⛔ 每顆不配置（S11：最多 DMAX 顆）—— 黏在船上的照 M4.pt 同一條算式就地算
+    var o = i * 3, k = n * 9, fade = Math.min(1, D.life[i] / 1.5), x = D.p[o], y = D.p[o + 1], z = D.p[o + 2];
+    if (D.st[i] === 2) { var Ms = SHIPS[D.ship[i]].M; DINST[k] = Ms[0] * x + Ms[4] * y + Ms[8] * z + Ms[12]; DINST[k + 1] = Ms[1] * x + Ms[5] * y + Ms[9] * z + Ms[13]; DINST[k + 2] = Ms[2] * x + Ms[6] * y + Ms[10] * z + Ms[14]; }
+    else { DINST[k] = x; DINST[k + 1] = y; DINST[k + 2] = z; }
+    DINST[k + 3] = D.size[i] * fade;
     DINST[k + 4] = D.q[i * 4]; DINST[k + 5] = D.q[i * 4 + 1]; DINST[k + 6] = D.q[i * 4 + 2]; DINST[k + 7] = D.q[i * 4 + 3]; DINST[k + 8] = D.col[i] + D.sh[i] * 256; n++;   // 形狀放在色的 256 以上（01_gl.js P.deb）
   }
   if (n) {
@@ -768,7 +769,11 @@ function mainOverlay(fr) {
   // 粒子＋砲彈＋瞄準點
   var m = 0;
   function pushPt(p, s, c, a, ty) { if (m * 9 >= PBUF.length) return; var k = m * 9; PBUF[k] = p[0]; PBUF[k + 1] = p[1]; PBUF[k + 2] = p[2]; PBUF[k + 3] = s; PBUF[k + 4] = c[0]; PBUF[k + 5] = c[1]; PBUF[k + 6] = c[2]; PBUF[k + 7] = a; PBUF[k + 8] = ty === undefined ? -1 : ty; m++; }
-  for (var i = 0; i < PT.n; i++) { var f = PT.life[i] / PT.max[i], s = PT.s1[i] + (PT.s0[i] - PT.s1[i]) * f; pushPt([PT.p[i * 3], PT.p[i * 3 + 1], PT.p[i * 3 + 2]], s, [PT.c[i * 3], PT.c[i * 3 + 1], PT.c[i * 3 + 2]], PT.a[i] * Math.min(1, f * 3), PT.ty[i]); }
+  for (var i = 0; i < PT.n && m * 9 < PBUF.length; i++) {               // 粒子：照 pushPt 的欄位直接寫（⛔ 每顆不配置，S11；滿了 ⇒ pushPt 也是什麼都不寫）
+    var f = PT.life[i] / PT.max[i], s = PT.s1[i] + (PT.s0[i] - PT.s1[i]) * f, k = m * 9, j = i * 3, ty = PT.ty[i];
+    PBUF[k] = PT.p[j]; PBUF[k + 1] = PT.p[j + 1]; PBUF[k + 2] = PT.p[j + 2]; PBUF[k + 3] = s; PBUF[k + 4] = PT.c[j]; PBUF[k + 5] = PT.c[j + 1]; PBUF[k + 6] = PT.c[j + 2];
+    PBUF[k + 7] = PT.a[i] * Math.min(1, f * 3); PBUF[k + 8] = ty === undefined ? -1 : ty; m++;
+  }
   wpPushSpray(pushPt);                                                   // 船邊水花的水滴（13_water.js）
   flPushJets(pushPt);                                                    // 從破口噴進來的水（33_flood.js）
   rdPushSplash(pushPt);                                                  // 雨滴打在海面與船上的水花（14_rain.js）
