@@ -190,7 +190,7 @@
     if (SHIP_DATA[id] && SHIP_HASH[id] === h) return Promise.resolve(piecesToBytes(SHIP_DATA[id]));
     if (!h) return Promise.reject(new Error('找不到內嵌的 .vxk：#' + id));
     return SHIP_P[id] || (SHIP_P[id] = new Promise(function (res, rej) {
-      var s = document.createElement('script'), src = 'ships/' + id + '.js';
+      var s = document.createElement('script'), src = ((root.BS_SHELL && root.BS_SHELL.ships) || '') + 'ships/' + id + '.js';   // 外掛外殼（admin.py shell）的頁不在 Blockside 根目錄 ⇒ 船檔照它給的前綴
       function bad(msg) { delete SHIP_P[id]; rej(new Error(msg)); }
       s.onload = function () {
         if (!SHIP_DATA[id]) bad(src + ' 載進來了，裡面卻不是 #' + id);

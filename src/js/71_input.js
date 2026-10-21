@@ -100,6 +100,9 @@ function kbLit(k, on) { var a = keyAct('battle', k); if (!a) return; [].forEach.
 /** 一個鍵（鍵盤）⇒ 海戰的動作（66_keys.js keyAct：照現在的鍵位；方向鍵固定 ＝ 打舵、帆）。 */
 function doKey(k, repeat) { var a = keyAct('battle', k); if (a) doAct(a, repeat); }
 /** 一個動作（鍵盤與畫面上的圓鈕共用 ⇒ 手機也能玩；動作表在 66_keys.js KEY_ACTS）。打舵、帆是「按住」：這裡只按下，放開走 actUp。 */
+/** 外掛外殼的掛鉤（admin.py shell；2026-10-21）：別的遊戲拿這份成品套自己的外殼（標題、樣式、幾個行為）⇒ 外殼在 window.BS_SHELL 放同名函式；
+ *  有、而且沒回 false ⇒ 外殼接手了（true）；沒有外殼、沒有這一個 ⇒ false，照 Blockside 自己的做。現在的掛鉤：menu（回主選單）。 */
+function shellCall(k) { var S = window.BS_SHELL, f = S && S[k]; return typeof f === 'function' ? f() !== false : false; }
 function doAct(a, repeat) {
   if (!RUNNING) return;
   var me = SHIPS[PLAYER_I];
@@ -115,7 +118,8 @@ function doAct(a, repeat) {
   else if (a === 'deck') deckCycle();
   else if (a === 'mute') { muted = !muted; sndApply(); gsetShow(); }
   else if (a === 'help') helpToggle();
-  else if (a === 'menu' && bedHostMenuGo()) { gsetClose(); helpClose(); }   // 被 Blocksail 嵌著（?map=@host）⇒ 回它的主選單（08_seabed.js bedHostMenuGo）
+  else if (a === 'menu' && bedHostMenuGo()) { gsetClose(); helpClose(); }
+  else if (a === 'menu' && shellCall('menu')) { gsetClose(); helpClose(); }   // 外掛外殼（admin.py shell）接手：例 Blocksail 的 battle.html 直接開 ⇒ 回 Blocksail 的主選單   // 被 Blocksail 嵌著（?map=@host）⇒ 回它的主選單（08_seabed.js bedHostMenuGo）
   else if (a === 'menu') { gsetClose(); helpClose(); flowRun(false); END_AT = 0; END_WAIT = null; coverShow(); $('end').className = ''; }
   else if (a === 'sailMode') sailToggle();   // 一顆切換 自動 ⇄ 手動（Tim 2026-10-15：「改成單鍵」；手動也可以直接打舵）；錨在水裡 ⇒ 先起錨（左右錨拋的也一起）
   else if ((a === 'ancAll' || a === 'ancP' || a === 'ancS') && me && !me.sunk && anchorsOf(me).noAnchor) setSailMode(SAIL === 'off' ? 'manual' : 'off');   // 整艘沒有錨（TASK-0635）：三個錨鍵都是停船 ⇄ 手動
