@@ -914,6 +914,7 @@ CELL_KINDS = DRV_KINDS + ('ladders', 'ladder')       # 寫格子清單 parts[].c
 
 HPM_KINDS = tuple(k for k, v in meta_kinds().items() if v.get('drv') == 'hp')     # 整件一塊的動力件（規格表 drv=hp：槳）：不匯出格子，血量倍率 drvparts.<種類>.hpK（道具設定頁）
 VOXM_KINDS = tuple(k for k, v in meta_kinds().items() if v.get('drv') == 'vox')   # 會轉的體素件（TASK-0653 第二段；遊戲 24_armor.js propSetup）：規格表 drv=vox（螺旋槳）；這幾種模型匯出時多帶來源作品的格子
+HULLV_KINDS = tuple(k for k, v in meta_kinds().items() if v.get('vox') == 'hull')   # 自帶格子的模型（TASK-0793：主機、鍋爐；規格表 vox=hull）：匯出時一樣帶來源作品的格子（prop_vox），遊戲載入時放回船殼（38_fit.js fitHullVox）
 
 
 def parts_models(work):
@@ -936,12 +937,15 @@ def prop_vox(h, PM):
     meta kind ＝ VOXM_KINDS 的外部模型，在 .vxk 裡只有三角形網格 ⇒ 把來源作品的格子（senate export format=list，帶顏色）照模型的外框搬到船的格座標，
     寫進 rig.models[].vox ＝ { o: 外框最小角, s: 外框大小, runs: [跟上一段結尾差幾, 長度, …]（外框裡的線性編號 x＋sx·(y＋sy·z)）, c: 每格的顏色（base64，一格一個位元組） }。
     遊戲開局照它把螺旋槳變成自己一份格子（跟著軸轉、一格一格打掉、推力照剩幾成；24_armor.js propSetup）；沒有 vox ⇒ 照舊是模型（扣血）。
-    ⛔ 只認平移（模型 rotate 0、scale 1、沒有 mirror：來源作品格子的外框大小要跟模型的外框一樣），不然不寫。回：None ＝ header 沒變；不然 ＝ 讀數。"""
+    ⛔ 只認平移（模型 rotate 0、scale 1：來源作品格子的外框大小要跟模型的外框一樣），不然不寫。
+    自帶格子的模型（HULLV_KINDS：主機、鍋爐；TASK-0793）也走這裡；它們可以 mirror（一舷做好、另一舷鏡像）⇒ 部件清單不說有沒有翻 ⇒ 照模型的網格判（vox_flip）。
+    回：None ＝ header 沒變；不然 ＝ 讀數。"""
     log, changed = [], False
     senate = shutil.which('senate')
+    meshes = (h.get('rig') or {}).get('meshes') or []
     for m in (h.get('rig') or {}).get('models', []) or []:
         kind = (m.get('meta') or {}).get('kind')
-        if kind not in VOXM_KINDS:
+        if kind not in VOXM_KINDS + HULLV_KINDS:
             continue
         q, why, vox = PM.get(m.get('name')) or {}, '', None
         w, b = q.get('work'), m.get('bbox')
@@ -966,9 +970,15 @@ def prop_vox(h, PM):
                 o = [int(math.floor(b[a] + 1e-6)) for a in range(3)]
                 sz = [hi[a] - lo[a] + 1 for a in range(3)]
                 ext = [int(round(b[a + 3] - b[a])) for a in range(3)]
+                fl = None
                 if sz != ext:
                     why = '來源作品的格子外框 %s 跟模型外框 %s 不一樣大（有旋轉、縮放？）' % ('×'.join(map(str, sz)), '×'.join(map(str, ext)))
                 else:
+                    fl, sc = vox_flip(L, lo, sz, o, m, meshes) if kind in HULLV_KINDS else ('', None)
+                    if fl is None:
+                        why = '照模型的網格判不出有沒有鏡像（%s）' % sc
+                if not why:
+                    L = [(sz[0] - 1 - (c[0] - lo[0]) + lo[0] if 'x' in fl else c[0], sz[1] - 1 - (c[1] - lo[1]) + lo[1] if 'y' in fl else c[1], c[2], c[3]) for c in L]
                     cells = sorted(((c[0] - lo[0]) + sz[0] * ((c[1] - lo[1]) + sz[1] * (c[2] - lo[2])), c[3]) for c in L)
                     runs, cols, end, i = [], bytearray(), 0, 0
                     while i < len(cells):
@@ -984,7 +994,7 @@ def prop_vox(h, PM):
         if vox is None:
             log.append('  ⚠ %s（%s）：沒有寫格子 —— %s ⇒ 遊戲照舊當模型（扣血）' % (m.get('name'), kind, why))
         else:
-            log.append('  %s（%s）：%d 格（%s）寫進 vox' % (m.get('name'), kind, len(L), w))
+            log.append('  %s（%s）：%d 格（%s%s）寫進 vox' % (m.get('name'), kind, len(L), w, '，mirror ' + fl if fl else ''))
         if m.get('vox') != vox:
             if vox is None:
                 m.pop('vox', None)
@@ -992,6 +1002,40 @@ def prop_vox(h, PM):
                 m['vox'] = vox
             changed = True
     return log if changed else None
+
+
+def vox_flip(L, lo, sz, o, m, meshes):
+    """自帶格子的模型有沒有鏡像（TASK-0793）：來源作品的格子照「不翻／翻 y／翻 x」三種放到模型的外框，看模型網格的頂點（obj 匯出的方塊角）有幾成落在格子的角上。
+    最高的那一種要 ≥ 98%、而且比第二高多 2 個百分點以上，不然判不出來（回 None）。回 (''｜'y'｜'x', 讀數)。"""
+    M = meshes[m['mesh']] if isinstance(m.get('mesh'), int) and m['mesh'] < len(meshes) else None
+    V, og = (M or {}).get('verts') or [], m.get('origin') or [0, 0, 0]
+    if not V:
+        return None, '模型沒有網格'
+    step = max(1, len(V) // 3 // 4000)
+    P = [(V[i] + og[0], V[i + 1] + og[1], V[i + 2] + og[2]) for i in range(0, len(V) - 2, 3 * step)]
+    score, sets = {}, {}
+    for fl in ('', 'y', 'x'):
+        S = set()
+        for c in L:
+            x, y, z = c[0] - lo[0], c[1] - lo[1], c[2] - lo[2]
+            if 'x' in fl:
+                x = sz[0] - 1 - x
+            if 'y' in fl:
+                y = sz[1] - 1 - y
+            S.add((o[0] + x, o[1] + y, o[2] + z))
+        hit = 0
+        for v in P:
+            b0 = [int(math.floor(t + 1e-6)) for t in v]
+            if any((b0[0] - dx, b0[1] - dy, b0[2] - dz) in S for dx in (0, 1) for dy in (0, 1) for dz in (0, 1)):
+                hit += 1
+        score[fl], sets[fl] = hit / len(P), S
+    best = sorted(score, key=lambda k: -score[k])
+    txt = '、'.join('%s %.1f%%' % (k or '不翻', 100 * score[k]) for k in best)
+    if score[best[0]] >= 0.98 and all(sets[k] == sets[best[0]] for k in best if score[best[0]] - score[k] < 0.02):   # 對稱的件：翻不翻都一樣 ⇒ 照「不翻」那一種（一樣的格）
+        return ('' if sets[''] == sets[best[0]] else best[0]), txt
+    if score[best[0]] < 0.98 or score[best[0]] - score[best[1]] < 0.02:
+        return None, txt
+    return best[0], txt
 
 
 def drive_cells(h):
@@ -3497,7 +3541,7 @@ def vxk_guns(path, guns):
 # ── 零件表（TASK-0714；js/38_fit.js）：換裝要用的砲從哪一艘拿 ──
 # 每一種砲（砲種表的鍵；弩砲這類 weapon 不收）× 砲架類別（meta mount；沒寫 ＝ carriage）一門：照 ships 的順序、模型的順序，第一門有 id、有固定點 breech 與 muzzle 的。
 # 只記「哪一艘的哪一門」（⛔ 不把網格另存一份：船檔裡本來就有，22 種另存 ~120 KB ＝ 成品 +6%）；遊戲要用才載那艘的船檔。重匯拿掉了那一門 ⇒ check 會叫，重跑 parts。
-FIT_KINDS = ('oar', 'rudder', 'propeller', 'wheel', 'wheel_stand', 'light', 'lantern', 'boat', 'capstan', 'binnacle', 'grating', 'deco')   # js/38_fit.js FIT_KINDS（第二段：本來就是模型的零件）
+FIT_KINDS = ('oar', 'rudder', 'propeller', 'wheel', 'wheel_stand', 'light', 'lantern', 'boat', 'capstan', 'binnacle', 'grating', 'deco', 'anchor', 'engine', 'boiler')   # js/38_fit.js FIT_KINDS（第二段：本來就是模型的零件；第四段 TASK-0793：錨、自帶格子的主機與鍋爐）
 
 
 def fit_deco(mt):
@@ -3527,7 +3571,7 @@ def parts_scan(cfg):
         for m in (h.get('rig') or {}).get('models') or []:          # 第二段：每一種 kind 不同長相的每一件（網格＋換色＋固定點名字一樣的只收第一件）
             mt = m.get('meta') or {}
             k = mt.get('kind') or ('deco' if fit_deco(mt) else '')
-            if k not in FIT_KINDS or not mt.get('id'):
+            if k not in FIT_KINDS or not mt.get('id') or (k == 'engine' and mt.get('engine') == 'organ'):   # 管風琴（魔法動力源）不當零件（js/38_fit.js fitOrgan）
                 continue
             me = M[m['mesh']] if isinstance(m.get('mesh'), int) and m['mesh'] < len(M) else None
             if not me:
