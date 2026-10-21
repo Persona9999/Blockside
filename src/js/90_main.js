@@ -446,7 +446,7 @@ if (DEBUG) {
     r.hullMask = same(hullMask(T), T.hullHB);
     var H = { base: T.base, zw: T.zw }; hydrostatics(H); r.hyd = same(H.hyd, T.hyd) && H.disp === T.disp;
     r.models = (T.rig.meshes || []).map(function (m, k) {
-      var tri = meshTriFor(T, k, m), got = new Float32Array(tri.length); gl.bindBuffer(gl.ARRAY_BUFFER, T.meshes[k].vbo); gl.getBufferSubData(gl.ARRAY_BUFFER, 0, got);
+      var sf = T.meshes[k] && T.meshes[k].share, tri = sf !== undefined ? meshTriFor(T, sf, T.rig.meshes[sf]) : meshTriFor(T, k, m), got = new Float32Array(tri.length); gl.bindBuffer(gl.ARRAY_BUFFER, T.meshes[k].vbo); gl.getBufferSubData(gl.ARRAY_BUFFER, 0, got);   // 共用別份的（只差起點）⇒ 照那一份比
       return same(tri, got) && same(meshOcc(m), T.meshes[k].occ);
     }).filter(function (ok) { return !ok; }).length + ' 份不同／' + (T.rig.meshes || []).length;
     r.rbox = same(T.rig.ropes.map(function (rp) { return ropeBox(rp.pts); }), T.rbox);

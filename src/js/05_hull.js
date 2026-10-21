@@ -184,6 +184,7 @@ function refPath(T, v) {
 function meshPool(model) {
   var h = model.header, P = h.mpool; if (!P || !h.rig || !h.rig.meshes) return model;
   var M = {};                                                            // 同一艘船裡同一個引用（同一門砲）只還原一次、共用
+  h.meshShape = h.rig.meshes.map(function (m) { return m && m.pool !== undefined ? m.pool : -1; });   // 第幾個形狀（池子的那一格；只差起點的網格同一格）⇒ GPU 那一份共用（62_simview.js buildMeshes）
   h.rig.meshes = h.rig.meshes.map(function (m) { return m && m.pool !== undefined ? meshPoolMesh(P, m.pool, m.o, M) : m; });
   delete h.mpool;                                                        // 還原完就用不到了（不留在船型上佔記憶體）
   return model;
