@@ -1106,6 +1106,20 @@
       "crew": {"top": 0, "marines": 6},
       "names": ["越嶺號"],
       "idNext": {"anchor": 3, "deck": 4, "gun": 7, "ladders": 2, "magazine": 2, "oar": 73, "part": 5, "powder": 5, "rudder": 2, "ship": 2, "yard": 2}
+    },
+    {
+      "id": "dingyuan",
+      "el": "ship-dingyuan",
+      "name": "定遠號",
+      "vxk": "dingyuan.vxk",
+      "work": "trailhead-dingyuan-01m-assembly",
+      "author": "trailhead",
+      "drive": "steam",
+      "cfg": {"pump": 32, "base": 14.5, "agile": 0.7},
+      "geo": {"spar": [141, 150], "marines": [490, 260], "center": 120, "aim": 85, "aimZ": [45, 290], "deckAim": [85, 145], "rigAim": [140, 290]},
+      "crew": {"top": 0, "marines": 8},
+      "names": ["定遠號"],
+      "idNext": {"anchor": 3, "binnacle": 2, "boat": 7, "boiler": 5, "deck": 7, "engine": 3, "funnel": 3, "gun": 15, "ladders": 2, "magazine": 4, "part": 18, "powder": 42, "propeller": 3, "rudder": 2, "shaft": 3, "ship": 2, "turret": 5, "wheel": 2}
     }
   ],
   "furniture": {
