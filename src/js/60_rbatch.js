@@ -6,6 +6,7 @@
 // 畫的東西（owner）：0..ns-1 ＝ SHIPS（沉了 sink > 40 的沒有項目）、ns..n-1 ＝ PIECES；cs ＝ 陰影第 k 段畫不畫（第 k 位，60_render.js csmIn 填）。
 // 項目（item）照以前畫的順序排；FLY（飛出去的模型）沒有 owner，排在最後（i0[n] 起）。陣列不夠才加倍、之後一直重用（艦隊實驗室最多 FLEET_MAX 艘、斷開的那一團沒有上限）。
 // ⛔ 只讀模擬的狀態：表、矩陣都是 RBAT 自己的陣列；meshGpu（家具第一次畫到才上傳）照以前只給要畫的。
+// 一次畫多個（instanced；S4 起）：網址的開關（RBAT_ON／RBAT_INST／RBAT_GEO／RBAT_TAU）、uMs 的矩陣 RBAT.pal、能不能用的對拍 __rbatProbe（檔尾）；程式在 01_gl.js（P.triI／P.dtriI）。
 var RBAT = {
   f: -1,                                                             // 這張表是第幾次 render()（RFR）
   n: 0, ns: 0, own: [], nPrev: 0,                                    // owner：船、再斷開的那一團
@@ -20,9 +21,15 @@ var RBAT = {
   ref: [],                                                           // 矩陣從誰算（m／d／sh／裝甲那一塊 a／斷開的那一團的 m／f）：?rbchk=1 對拍用
   // 每一趟（pass descriptor）：b ＝ 只畫 cs 有這一位的 owner（0 ⇒ 全畫）；depth ＝ 只寫深度
   pd: { sh: { name: 'sh', k: 0, b: 0, depth: true }, rf: { name: 'rf', k: -1, b: 0, depth: false }, mn: { name: 'mn', k: -1, b: 0, depth: false } },
+  pal: new Float32Array(INST_MAX * 16),                              // 一次畫多個的矩陣（P.triI／P.dtriI 的 uMs）：一批最多 INST_K 個，照 16 個 float 抄 RBAT.M（長度照上限 ⇒ 不用等 programs()）
+  gl: {},                                                            // 這裡建的 GL 物件（pb ＝ 對拍的分身程式與轉換回饋的緩衝）記在一處 ⇒ 以後要處理 context lost 照這裡重建
   stat: { f: -1, owners: 0, items: 0, chk: 0, matMiss: 0, itemMiss: 0 }   // 讀數（__rbat.stat）：matMiss／itemMiss ＝ ?rbchk=1 對拍不一樣的項目數（量測工具 > 0 ⇒ 不過）
 };
 var RBAT_CHK = Q.get('rbchk') === '1';                             // ?rbchk=1：每格整理完照以前的算式重算一遍、逐位元比（rbatCheck）
+// 開關（網址，像 ?lerp=0；量測工具拿同一份成品 A/B 對拍用 —— 不進設定、不進 __game）：?rb=0 全部照以前一個一個畫；?rbinst=0（或 ?inst=0）不用一次畫多個的程式；
+//   ?rbgeo=0 同一艘裡不換順序；?rbtau=<公尺> 除錯用的 τ（很大 ⇒ 全部算一群；沒給 ⇒ −1 ＝ 照算的）。S4 還沒有東西照它們畫（P.triI／P.dtriI 只編、不畫）。
+var RBAT_ON = Q.get('rb') !== '0', RBAT_INST = RBAT_ON && Q.get('rbinst') !== '0' && Q.get('inst') !== '0', RBAT_GEO = RBAT_ON && Q.get('rbgeo') !== '0';
+var RBAT_TAU = isFinite(parseFloat(Q.get('rbtau'))) ? parseFloat(Q.get('rbtau')) : -1;
 /** 項目的陣列加倍（整理到一半也行：前面的照抄）。 */
 function rbatGrow() {
   var R = RBAT, L = Math.max(256, R.cap * 2);
@@ -156,5 +163,110 @@ function rbatCheck() {
   if (q !== R.ni) S.itemMiss++;
   for (o = 0; o <= R.n; o++) if (R.i0[o] > (o < R.n ? R.i0[o + 1] : R.ni)) S.itemMiss++;   // 每個 owner 的範圍接得起來
 }
-// 除錯（?debug=1）：__rbat.stat 讀數；__rbat.check() ＝ 畫一格、那一格整理完就對拍（回 stat）
+// ── 一次畫多個的程式對拍（render 管線大修 S4；?debug=1 才有 window.__rbatProbe，量測工具每一組最後叫一次；S5–S7 用 P.triI／P.dtriI 之前的閘門）──
+// P.triI／P.dtriI 只差「uModel 從 uMs[gl_InstanceID] 讀」（01_gl.js instVS）；GLSL 不保證動態索引編出一樣的算式 ⇒ 量，不猜：
+//   兩對各連一份轉換回饋（transform feedback）的分身 —— 同一串原始碼（TRI_VS＋TRI_FS 抓 gl_Position、vW、vN、vC、vM；DTRI_VS＋只寫深度 抓 gl_Position），
+//   光柵化關掉（RASTERIZER_DISCARD）、照 POINTS 畫 ⇒ 每個頂點進去一次、出來一筆。這一格表裡的每一項：舊的 uModel＋drawArrays、新的 uMs＋drawArraysInstanced，
+//   抓出來的照 Uint32 逐一比 ⇒ 每支 { items, verts, mismatch（不一樣的頂點數）, maxUlp }（量測工具：mismatch > 0 ⇒ 不過）。
+//   排法 ＝ 之後真的一次畫多個的排法：同一個 VAO 的項目照表的順序放進 uMs 的第 0、1、2…格，滿 INST_K 個換下一批（0..K−1 輪著用）；舊的照同一個順序一個一個畫。
+//   頂點數：模型、裝飾、斷開的那一團、FLY ＝ me.n；平滑面 ＝ 那一區的頂點（m.verts；共用的那一份 smShare 沒抄 ⇒ 照緩衝的大小 ÷ 44 bytes）。
+//   分身是另外連的一份 ⇒ 很強的證據、不是證明；最後照量測工具的畫面（無 MSAA 逐像素）。只在量測那台（ANGLE D3D11、RTX 2060）證過，別的後端要再跑一次。
+//   動到的 GL 狀態（程式、VAO、轉換回饋、ARRAY_BUFFER、RASTERIZER_DISCARD、畫的 framebuffer、第 3 號屬性的常數）跑完照原樣放回去；⛔ 不寫模擬、不改表。
+/** 轉換回饋的分身：同一串原始碼、連結前指定要抓的輸出（照順序接在一起）；連不起來 ⇒ null。uniform 照 VK.compile 收（setCommon 照樣能給）。 */
+function rbatTfLink(vs, fs, vary) {
+  var p = gl.createProgram(), u = {}, i, n, S = [[gl.VERTEX_SHADER, vs], [gl.FRAGMENT_SHADER, fs]].map(function (a) { var s = gl.createShader(a[0]); gl.shaderSource(s, a[1]); gl.compileShader(s); gl.attachShader(p, s); return s; });
+  gl.transformFeedbackVaryings(p, vary, gl.INTERLEAVED_ATTRIBS); gl.linkProgram(p);
+  S.forEach(function (s) { gl.deleteShader(s); });                     // 連完才放（還掛在程式上 ⇒ 程式放掉時一起放）
+  if (!gl.getProgramParameter(p, gl.LINK_STATUS)) { gl.deleteProgram(p); return null; }
+  for (i = 0, n = gl.getProgramParameter(p, gl.ACTIVE_UNIFORMS); i < n; i++) { var a = gl.getActiveUniform(p, i); u[a.name.replace(/\[0\]$/, '')] = gl.getUniformLocation(p, a.name); }
+  return { prog: p, u: u };
+}
+/** 一對分身（L 舊的、I 一次畫多個的），w ＝ 一個頂點抓幾個 float。抓不到 gl_Position（有的驅動不給）⇒ 只抓其他的（vW 一樣 ＋ 同一個 uVP ⇒ gl_Position 一樣），pos ＝ false。 */
+function rbatTfPair(vs, fs, vary) {
+  var o = { pos: true, L: rbatTfLink(vs, fs, vary), I: null, w: 0 };
+  if (!o.L && vary.length > 1) { o.pos = false; vary = vary.slice(1); o.L = rbatTfLink(vs, fs, vary); }
+  if (o.L) o.I = rbatTfLink(instVS(vs), fs, vary);
+  if (!o.L || !o.I) throw new Error('__rbatProbe：轉換回饋的分身連不起來（' + vary.join(',') + '）');
+  vary.forEach(function (v) { o.w += v === 'gl_Position' ? 4 : 3; });
+  o.L.w = o.I.w = o.w; return o;
+}
+/** 第 i 項（平滑面）那一區的頂點數；表是上一次 render() 的、那一區已經換掉（重建、smFree）⇒ 0（不比）。RG：Map ⇒ 照順序的陣列（同一份 Map 只轉一次）。 */
+function rbatPbVerts(i, RG) {
+  var R = RBAT, mp = R.ref[i] && R.ref[i].smR, a = mp && RG.get(mp), m;
+  if (mp && !a) RG.set(mp, a = Array.from(mp.values()));
+  m = a && a[R.slot[i]]; if (!m || m.vao !== R.vao[i]) return 0;
+  if (m.verts) return m.verts;
+  gl.bindBuffer(gl.ARRAY_BUFFER, m.vb); return gl.getBufferParameter(gl.ARRAY_BUFFER, gl.BUFFER_SIZE) / 44;   // 一個頂點 11 個 float（15_smooth.js smBuild）
+}
+/** 一段轉換回饋：T 這支分身把 C[c0..c1) 每一批畫一次（inst ⇒ uMs＋一次畫多個；不然 uModel 一個一個），抓到的讀進 dst ⇒ 回讀了幾個 Uint32。neg ⇒ 第一批第一個矩陣差 1 個 ULP（反向：要抓得到）。 */
+function rbatPbRun(T, inst, C, c0, c1, dst, neg) {
+  var R = RBAT, M = R.M, pal = R.pal, u = T.u, n = 0, c, j, q, b, s;
+  gl.useProgram(T.prog); setCommon(T);                                 // uVP 兩邊一樣（PASS.vp || CAM.vp）；取樣器照 setCommon 放第 4、8 號（⛔ 都在第 0 號 ⇒ 兩種取樣器同一號，畫不出來）
+  gl.beginTransformFeedback(gl.POINTS);
+  for (c = c0; c < c1; c++) {
+    b = C[c]; gl.bindVertexArray(b.vao);
+    if (inst) {
+      for (j = 0; j < b.it.length; j++) for (q = 0, s = b.it[j] * 16; q < 16; q++) pal[j * 16 + q] = M[s + q];
+      if (neg && c === c0) new Uint32Array(pal.buffer, 48, 1)[0] ^= 1;   // 平移 x 的最後一位
+      gl.uniformMatrix4fv(u.uMs, false, pal, 0, 16 * b.it.length); gl.drawArraysInstanced(gl.POINTS, 0, b.nv, b.it.length);
+    } else for (j = 0; j < b.it.length; j++) { gl.uniformMatrix4fv(u.uModel, false, M, b.it[j] * 16, 16); gl.drawArrays(gl.POINTS, 0, b.nv); }
+    n += b.nv * b.it.length;
+  }
+  gl.endTransformFeedback();
+  var e = gl.getError(); if (e) throw new Error('__rbatProbe：GL 錯誤 0x' + e.toString(16) + '（' + (inst ? '一次畫多個' : '舊的') + '那一段）');   // ⛔ 沒畫成 ⇒ 緩衝裡是上一段的，比起來會「一樣」
+  gl.getBufferSubData(gl.TRANSFORM_FEEDBACK_BUFFER, 0, dst, 0, n * T.w);
+  return n * T.w;
+}
+/** 比兩段抓到的（nw 個 Uint32，一個頂點 w 個）：不一樣的頂點數、最大差幾個 ULP（照 float 的順序把位元換成整數再相減）累加進 r。 */
+function rbatPbCmp(A, B, nw, w, r) {
+  for (var j = 0, v = -1; j < nw; j++) {
+    var a = A[j], b = B[j]; if (a === b) continue;
+    if ((j / w | 0) !== v) { v = j / w | 0; r.mismatch++; }
+    var d = Math.abs((a & 0x80000000 ? -(a & 0x7fffffff) : a) - (b & 0x80000000 ? -(b & 0x7fffffff) : b)); if (d > r.maxUlp) r.maxUlp = d;
+  }
+}
+/** window.__rbatProbe(neg)：這一格的表（上一次 render() 整理的）全部比一次（見上）。 */
+function rbatProbe(neg) {
+  var R = RBAT, out = { K: INST_K, items: 0, stale: 0, err0: 0, triI: null, dtriI: null };
+  if (!R.ni) return out;
+  var s0 = { prog: gl.getParameter(gl.CURRENT_PROGRAM), vao: gl.getParameter(gl.VERTEX_ARRAY_BINDING), tf: gl.getParameter(gl.TRANSFORM_FEEDBACK_BINDING),
+    tfb: gl.getParameter(gl.TRANSFORM_FEEDBACK_BUFFER_BINDING), ab: gl.getParameter(gl.ARRAY_BUFFER_BINDING), fb: gl.getParameter(gl.DRAW_FRAMEBUFFER_BINDING),
+    rd: gl.isEnabled(gl.RASTERIZER_DISCARD), a3: gl.getVertexAttrib(3, gl.CURRENT_VERTEX_ATTRIB) }, pb = null, i;
+  out.err0 = gl.getError();                                            // 之前留下的錯（清掉 ⇒ 下面每一段才判得準；遊戲本身不讀 getError）
+  try {
+    // 一批一批：同一個 VAO、照表的順序，滿 INST_K 個換下一批；C ＝ 每一批照第一次出現的順序
+    var G = new Map(), RG = new Map(), C = [], big = 0, sl = 0;
+    for (i = 0; i < R.ni; i++) {
+      var c = R.cls[i], vao = R.vao[i], nv = c === 2 || c === 3 ? rbatPbVerts(i, RG) : R.cnt[i], L = G.get(vao), b = L && L[L.length - 1];
+      if (!nv || !gl.isVertexArray(vao) || (b && b.nv !== nv)) { out.stale++; continue; }
+      if (!b || b.it.length === INST_K) { if (!L) G.set(vao, L = []); L.push(b = { vao: vao, nv: nv, it: [] }); C.push(b); }
+      b.it.push(i); out.items++; big = Math.max(big, b.it.length * nv); sl = Math.max(sl, b.it.length);
+    }
+    pb = R.gl.pb || (R.gl.pb = { tri: rbatTfPair(TRI_VS, TRI_FS, ['gl_Position', 'vW', 'vN', 'vC', 'vM']), dtri: rbatTfPair(DTRI_VS, DEPTH_ONLY_FS, ['gl_Position']),   // DEPTH_ONLY_FS ＝ programs() 的 NOFS（同一串）
+      tf: gl.createTransformFeedback(), buf: gl.createBuffer(), cap: 0, A: null, B: null, on: false });
+    gl.bindTransformFeedback(gl.TRANSFORM_FEEDBACK, pb.tf); gl.bindBufferBase(gl.TRANSFORM_FEEDBACK_BUFFER, 0, pb.buf); pb.on = true;
+    var cap = Math.max(big, 1 << 18) * pb.tri.w;                         // 一個緩衝：最大的一批放得下、小的湊一段（少讀回幾次）
+    if (pb.cap < cap) { gl.bufferData(gl.TRANSFORM_FEEDBACK_BUFFER, cap * 4, gl.DYNAMIC_COPY); pb.A = new Uint32Array(cap); pb.B = new Uint32Array(cap); pb.cap = cap; }
+    gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, null); gl.enable(gl.RASTERIZER_DISCARD); gl.vertexAttrib2f(3, 0, 0.5);   // aM 常數照 rbatReplay（模型的 VAO 沒開第 3 號）
+    [['triI', P.triI, pb.tri], ['dtriI', P.dtriI, pb.dtri]].forEach(function (x) {
+      var T = x[2], r = out[x[0]] = { linked: !!x[1], pos: T.pos, items: out.items, verts: 0, mismatch: 0, maxUlp: 0, slots: sl }, per = Math.floor(pb.cap / T.w), c0 = 0, c1, n;
+      while (c0 < C.length) {
+        for (c1 = c0, n = 0; c1 < C.length && (c1 === c0 || n + C[c1].nv * C[c1].it.length <= per); c1++) n += C[c1].nv * C[c1].it.length;
+        var nw = rbatPbRun(T.L, false, C, c0, c1, pb.A);
+        if (rbatPbRun(T.I, true, C, c0, c1, pb.B, neg && !c0) !== nw) throw new Error('__rbatProbe：兩段抓的數量不一樣');
+        rbatPbCmp(pb.A, pb.B, nw, T.w, r); r.verts += n; c0 = c1;
+      }
+    });
+  } finally {
+    if (gl.getParameter(gl.TRANSFORM_FEEDBACK_ACTIVE)) gl.endTransformFeedback();
+    if (pb && pb.on) { gl.bindBufferBase(gl.TRANSFORM_FEEDBACK_BUFFER, 0, null); pb.on = false; }
+    gl.bindTransformFeedback(gl.TRANSFORM_FEEDBACK, s0.tf); gl.bindBuffer(gl.TRANSFORM_FEEDBACK_BUFFER, s0.tfb);
+    if (!s0.rd) gl.disable(gl.RASTERIZER_DISCARD);
+    gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, s0.fb); gl.bindBuffer(gl.ARRAY_BUFFER, s0.ab); gl.bindVertexArray(s0.vao); gl.useProgram(s0.prog);
+    if (s0.a3 instanceof Float32Array) gl.vertexAttrib4fv(3, s0.a3);
+  }
+  return out;
+}
+// 除錯（?debug=1）：__rbat.stat 讀數；__rbat.check() ＝ 畫一格、那一格整理完就對拍（回 stat）；__rbatProbe() ＝ 一次畫多個的程式對拍（見上）
 if (DEBUG) window.__rbat = { stat: RBAT.stat, tab: RBAT, check: function () { var c = RBAT_CHK; RBAT_CHK = true; try { render(); } finally { RBAT_CHK = c; } return RBAT.stat; } };
+if (DEBUG) window.__rbatProbe = rbatProbe;
