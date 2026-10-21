@@ -32,6 +32,23 @@ function spkSpeed(id, c) {
   if (c && !c.sails) return B ? [B] : null;
   return [Math.hypot(kn * polar(0), B), Math.hypot(kn, B), Math.hypot(kn * polar(180 - NOGO_DEG), B)];
 }
+/** Blocksail 地球儀的海圖模式（TASK-0803）：這一型的穩定航速表（節）—— kn[i][j] ＝ 風速倍率 ws[i]（?wspd，1 ＝ 帆上 10 m/s）、船頭跟「風吹去的方向」夾 15·j 度（0 ＝ 正順風、180 ＝ 正頂風）；
+ *  照 31_drive.js driveSteady（帆 × 視風倍率 sailWindK ＋ 額外動力，跟 driveStep 同一條）、帆全張完好、俥鐘全速、晴天、現在的船隻設定與玩法。地球儀在表裡內插 ⇒ 推進的公式只住核心。
+ *  sail、base ＝ 帆（風速倍率 1、polar 1）、額外動力全速（節）—— 只給人看。 */
+var SPK_WS = [0.3, 0.5, 0.7, 1, 1.4, 2, 3];
+function spkChart(id, c) {
+  var k = SHIP_CFG[id] || {}, g = function (key) { return k[key] !== undefined ? k[key] : cfgDefault(key, null, id); };
+  var sp = VMAX * g('speed') * playK('speed'), vB = (+g('base') || 0) / 1.9438 * playK('speed'), up = +g('upwind') || 1, sails = !(c && !c.sails);
+  var kn = SPK_WS.map(function (ws) {
+    var row = [];
+    for (var deg = 0; deg <= 180; deg += 15) {
+      var dU = up === 1 || deg <= 90 ? deg : 90 + (deg - 90) / up, pp = polarPlay(dU), v1 = VMAX * Math.sqrt(ws) * pp * LIM.speed[2];   // v1 ＝ sh.vS1（31_sailing.js：預設航速倍率的船這個風向的航速）
+      row.push(+(driveSteady(sails ? sp * Math.sqrt(ws) * pp : 0, vB, deg, WIND_SAIL * WIND_K * ws, v1) * 1.9438).toFixed(3));
+    }
+    return row;
+  });
+  return { sail: sails ? +(sp * 1.9438).toFixed(3) : 0, base: +(vB * 1.9438).toFixed(3), ws: SPK_WS, kn: kn };
+}
 function spkOpen(o) {
   SPK.cur = o.cur; SPK.pick = o.pick; SPK.same = !!o.same; SPK.onClose = o.onClose || null;   // same：點現在那一型也叫 pick；onClose(選了哪一型 | null)：關掉時叫（?pick=@host 用）
   $('spkT').textContent = o.title || '選船';
@@ -85,6 +102,7 @@ window.addEventListener('keydown', function (e) { if (e.key === 'Escape' && $('s
 // 地球儀把這一頁開在 iframe 裡（?pick=@host&cur=<現在那一型>）⇒ 不開主選單、不載編成、不跑畫面迴圈（90_main.js），只開這個彈窗；頁面透明（template.html html.pickonly）。
 //   這一頁 ⇒ 外面那一頁（{ bspick: … }）：'ready' 彈窗開好了；'measuring' { id, name } 選了、在載那一型；'picked' { id, name, knots, draft, loa, play, img, imgU, imgV, imgM } 量好了（img ＝ 俯視圖 PNG 的 data URL）；'cancel' 沒選就關了；'error' { id, msg }。
 //   knots ＝ 卡片上那一型最快的航速（spkSpeed：標準風、滿帆＋額外動力全速，照現在的船隻設定與玩法）⇒ 地球儀上照它開；
+//   chart ＝ 海圖模式的穩定航速表（spkChart：風速 × 風向 ⇒ 節，照核心的推進公式解；TASK-0803）⇒ 地球儀照風向、風速查這一型的航速；
 //   draft ＝ 開戰時吃水多深（m：船底最低點（32_ground.js groundKeel）到水面，照開戰時的重量浮高／吃水深 liftFor，跟船隻配置頁的卡片同一套）、loa ＝ 外框全長（m，含艏斜桅）
 //   ⇒ 航海找起點要的「夠我艦吃水的水深」「我艦多長」（Blocksail presets.js BLOCKSAIL_SAIL 的 depth、r）。
 var PICK_HOST = Q.get('pick') === '@host' ? (window.parent !== window ? window.parent : window.opener) : null;
@@ -99,7 +117,7 @@ function pickMeasure(id) {
   loadHull(id).then(function (T) {
     var k = SHIP_CFG[id] || {}, c = { gunw: k.gunw !== undefined ? k.gunw : cfgDefault('gunw', null, id), ballast: k.ballast !== undefined ? k.ballast : cfgDefault('ballast', T) };   // ⛔ 不呼叫 shipCfg（同 spkSpeed）
     var L = liftFor(T, T.disp - hullT0(T, c).all) || 0, z0 = groundKeel(T).reduce(function (a, p) { return Math.min(a, p[1]); }, T.zw), v = spkSpeed(id, SHIP_CARDS[id]), TI = topImg(T, 2);
-    pickPost('picked', { id: id, name: T.name, knots: v ? +Math.max.apply(null, v).toFixed(2) : 0, draft: +((T.zw - z0) * S - L).toFixed(2), loa: +((T.hx1 - T.hx0) * S).toFixed(1), play: PLAY,
+    pickPost('picked', { id: id, name: T.name, knots: v ? +Math.max.apply(null, v).toFixed(2) : 0, chart: spkChart(id, SHIP_CARDS[id]), draft: +((T.zw - z0) * S - L).toFixed(2), loa: +((T.hx1 - T.hx0) * S).toFixed(1), play: PLAY,
       img: TI ? TI.cv.toDataURL('image/png') : null, imgU: TI && TI.u, imgV: TI && TI.v, imgM: TI && TI.m });   // 整艘船的俯視圖（05_hull.js topImg：船殼＋帆桁等模型＋帆，船頭朝上、右舷在右）：imgU／imgV ＝ 船的中心在圖上哪一點，imgM ＝ 圖上一點幾公尺 ⇒ 地球儀照實際比例尺畫
   }, function (e) { pickPost('error', { id: id, msg: e && e.message || String(e) }); });
 }

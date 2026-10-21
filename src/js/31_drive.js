@@ -420,12 +420,21 @@ function teleSet(sh, i) {
 var SAIL_AW0 = 50, SAIL_AW1 = 75;                                       // 視風離船頭幾度開始吃得到風、幾度吃滿（度）
 function sailCatch(a) { var t = clamp((a - SAIL_AW0) / (SAIL_AW1 - SAIL_AW0), 0, 1); return t * t * (3 - 2 * t); }
 function apparent(Vw, deg, v) { var r = deg / 57.2958, ax = Vw * Math.cos(r) - v, ay = Vw * Math.sin(r), l = Math.hypot(ax, ay); return [l, l > 1e-6 ? Math.acos(clamp(-ax / l, -1, 1)) * 57.2958 : 0]; }   // [視風大小, 從離船頭幾度來]
-function sailWindK(sh, v, deg) {
-  var Vw = windKnots() / 1.944; if (!(Vw > 0)) return 0;
-  var R = apparent(Vw, deg, sh.vS1 || 0), c0 = sailCatch(R[1]);
-  if (c0 < 0.02 || R[0] < 1e-3) { var v1 = sh.vS1 || 0, s = sh.spd; if (s <= v1 || Vw - v1 < 0.1) return s < Vw ? 1 : 0; var r = (Vw - s) / (Vw - v1); return clamp(r * r, 0, 1) * (s < Vw ? 1 : 0); }
-  var A = apparent(Vw, deg, sh.spd), q = A[0] / R[0];
+function sailWindK(sh, v, deg) { return sailWindKAt(windKnots() / 1.944, deg, sh.spd, sh.vS1 || 0); }
+/** 同上、不靠船：真風 Vw（m/s）、船頭跟風吹去的方向夾 deg、船速 s、視風基準 v1（sh.vS1）。 */
+function sailWindKAt(Vw, deg, s, v1) {
+  if (!(Vw > 0)) return 0;
+  var R = apparent(Vw, deg, v1), c0 = sailCatch(R[1]);
+  if (c0 < 0.02 || R[0] < 1e-3) { if (s <= v1 || Vw - v1 < 0.1) return s < Vw ? 1 : 0; var r = (Vw - s) / (Vw - v1); return clamp(r * r, 0, 1) * (s < Vw ? 1 : 0); }
+  var A = apparent(Vw, deg, s), q = A[0] / R[0];
   return clamp(q * q * sailCatch(A[1]) / c0, 0, 1);
+}
+/** 穩定航速（m/s）：driveStep 的 vT 在帆全張、完好、俥鐘全速時停在哪 —— k·v² ＝ k·vS²·sailWindKAt(v) ＋ k·vB²，照 v 二分（右邊隨 v 變小）。
+ *  Blocksail 地球儀的海圖模式照它算的表開（72_shippick.js spkChart；TASK-0803）⇒ 推進的公式只住這裡，改了地球儀跟著對。 */
+function driveSteady(vS, vB, deg, Vw, v1) {
+  var lo = 0, hi = Math.hypot(vS, vB);
+  for (var i = 0; i < 40; i++) { var v = (lo + hi) / 2; if (vS * vS * sailWindKAt(Vw, deg, v, v1) + vB * vB > v * v) lo = v; else hi = v; }
+  return (lo + hi) / 2;
 }
 function driveStep(sh, dt, vS, vB, deg, brake) {
   var D = sh.drive; if (!D) return;
