@@ -121,7 +121,7 @@ function sailShip(sh, dt) {
   else if (!stop && sh.ancMode) { sh.ancMode = false; anchorToggle(sh, 'P', false); anchorToggle(sh, 'S', false); }   // 切回 4／5 ⇒ 起錨
   var held = !!sh.anc && anchorHeld(sh);                              // 有錨咬著 ⇒ 不靠帆走、可以原地繞錨轉
   if (sh.i === PLAYER_I && !sh.sunk) sailHold(sh);
-  var BK = sh.cfg.base || 0;
+  var BK = (sh.cfg.base || 0) * fitPowK(sh.T);                          // fitPowK：換了主機（38_fit.js，TASK-0793）⇒ 照馬力比；沒換 ⇒ 1
   sh.thr = BK > 0 ? sh.power : null;                                // 額外動力：俥鐘（航速的比例；31_drive.js）
   sh.manual = manual;
   var SPK = sh.cfg.speed * playK('speed') * WX.speed;                 // 航速倍率（船隻設定 × 玩法的加成 × 天氣：暴風雨風大 ×1.15）；Tim：「原本的航速加成 可以當成對動力的加成」⇒ 推力 × SPK²（最高航速 × SPK）
