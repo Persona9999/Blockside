@@ -42,6 +42,9 @@
     "dmgmg": [10, 300, 60],
     "dmgbw": [5, 300, 10],
     "dmgbd": [10, 300, 30],
+    "dmg305k": [10, 1000, 760],
+    "dmg150k": [10, 300, 250],
+    "dmgh37": [5, 300, 15],
     "box": [1, 8, 2],
     "carry": [1, 6, 1],
     "wind": [0.25, 3, 1],
@@ -367,6 +370,48 @@
       "min": 1,
       "mass": 0.3,
       "shot": 0.6
+    },
+    "krupp305": {
+      "code": "305k",
+      "name": "30.5 cm 克虜伯 L/25 後膛砲（定遠號露砲台）",
+      "short": "30.5 cm 克虜伯",
+      "V": 200,
+      "reload": 3.0,
+      "big": true,
+      "hole": 2.1,
+      "crew": 8,
+      "min": 5,
+      "mass": 37.5,
+      "shot": 333,
+      "hpK": 1
+    },
+    "krupp150": {
+      "code": "150k",
+      "name": "15 cm 克虜伯 L/35 後膛砲（定遠號艏艉砲塔）",
+      "short": "15 cm 克虜伯",
+      "V": 210,
+      "reload": 1.6,
+      "big": false,
+      "hole": 1.2,
+      "crew": 6,
+      "min": 4,
+      "mass": 4.8,
+      "shot": 51
+    },
+    "hotch37": {
+      "code": "h37",
+      "name": "37 mm 哈乞開斯五管轉膛砲（revolving cannon）",
+      "short": "37 mm 轉膛砲",
+      "V": 160,
+      "reload": 1.0,
+      "big": false,
+      "hole": 0.3,
+      "crew": 2,
+      "min": 1,
+      "mass": 0.21,
+      "shot": 0.5,
+      "burst": 5,
+      "burstGap": 0.6
     },
     "brooke64": {
       "code": "64b",
@@ -1065,6 +1110,39 @@
       "crew": {"top": 0, "marines": 6},
       "names": ["越嶺號"],
       "idNext": {"anchor": 3, "deck": 4, "gun": 7, "ladders": 2, "magazine": 2, "oar": 73, "part": 5, "powder": 5, "rudder": 2, "ship": 2, "yard": 2}
+    },
+    {
+      "id": "dingyuan",
+      "el": "ship-dingyuan",
+      "name": "定遠號",
+      "vxk": "dingyuan.vxk",
+      "work": "trailhead-dingyuan-01m-assembly",
+      "author": "trailhead",
+      "drive": "steam",
+      "cfg": {"pump": 32, "base": 14.5, "agile": 0.7},
+      "geo": {"spar": [141, 150], "marines": [490, 260], "center": 120, "aim": 85, "aimZ": [45, 290], "deckAim": [85, 145], "rigAim": [140, 290]},
+      "crew": {"top": 0, "marines": 8},
+      "names": ["定遠號"],
+      "idNext": {
+        "anchor": 3,
+        "binnacle": 2,
+        "boat": 7,
+        "boiler": 5,
+        "deck": 7,
+        "engine": 3,
+        "funnel": 3,
+        "gun": 15,
+        "ladders": 2,
+        "magazine": 4,
+        "part": 18,
+        "powder": 42,
+        "propeller": 3,
+        "rudder": 2,
+        "shaft": 3,
+        "ship": 2,
+        "turret": 5,
+        "wheel": 2
+      }
     }
   ],
   "furniture": {
@@ -1184,6 +1262,9 @@
       "chase3": {"carriage": "stormkaap#gun-41"},
       "dahl11": {"carriage": "monitor#gun-1", "pivot": "susquehanna#gun-7"},
       "dahl9": {"carriage": "virginia#gun-1"},
+      "hotch37": {"turret": "dingyuan#gun-1"},
+      "krupp150": {"carriage": "dingyuan#gun-13"},
+      "krupp305": {"carriage": "dingyuan#gun-9"},
       "long": {"carriage": "constitution#gun-2"},
       "long12": {"carriage": "stormkaap#gun-3"},
       "long18": {"carriage": "phoenix#gun-1"},
@@ -1248,7 +1329,8 @@
       "dromon#rudder-2": "持火號・rudder-P",
       "punt#rudder-1": "蓬特號・rudder-S",
       "punt#rudder-2": "蓬特號・rudder-P",
-      "fusta#rudder-1": "越嶺號・舵"
+      "fusta#rudder-1": "越嶺號・舵",
+      "dingyuan#rudder-1": "定遠號・舵"
     },
     "propeller": {
       "virginia#propeller-1": "維吉尼亞號・螺旋槳",
@@ -1256,7 +1338,9 @@
       "monitor#propeller-1": "莫尼特號・螺旋槳",
       "gloire#propeller-1": "光榮號・螺旋槳",
       "susquehanna#propeller-1": "蘇士奎哈納號・明輪-S",
-      "susquehanna#propeller-2": "蘇士奎哈納號・明輪-P"
+      "susquehanna#propeller-2": "蘇士奎哈納號・明輪-P",
+      "dingyuan#propeller-1": "定遠號・螺旋槳-S",
+      "dingyuan#propeller-2": "定遠號・螺旋槳-P"
     },
     "wheel": {
       "constitution#wheel-1": "憲法號・wheel",
@@ -1288,7 +1372,8 @@
       "ember#boat-2": "餘燼號・小艇-P",
       "tridente#boat-1": "三叉戟號・小艇-S",
       "tridente#boat-2": "三叉戟號・小艇-P",
-      "tidegrave#boat-1": "潮墓號・工作艇"
+      "tidegrave#boat-1": "潮墓號・工作艇",
+      "dingyuan#boat-3": "定遠號・魚雷艇-S"
     },
     "capstan": {
       "constitution#capstan-1": "憲法號・capstan",
@@ -1297,7 +1382,7 @@
       "stormkaap#capstan-1": "風暴角號・絞盤",
       "phoenix#capstan-1": "炎羽號・capstan"
     },
-    "binnacle": {"ember#binnacle-1": "餘燼號・羅經櫃", "falcon#binnacle-1": "夜隼號・羅經櫃", "stormkaap#binnacle-1": "風暴角號・羅經櫃"},
+    "binnacle": {"ember#binnacle-1": "餘燼號・羅經櫃", "falcon#binnacle-1": "夜隼號・羅經櫃", "stormkaap#binnacle-1": "風暴角號・羅經櫃", "dingyuan#binnacle-1": "定遠號・羅經櫃"},
     "grating": {"constitution#grating-1": "憲法號・格柵-main", "constitution#grating-2": "憲法號・格柵-main", "stormkaap#grating-1": "風暴角號・格柵-主艙口"},
     "deco": {
       "stormkaap#model-1": "風暴角號・裝飾-砲彈架-S",

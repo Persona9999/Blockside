@@ -252,7 +252,10 @@ function drawHulls(prog, pd) {                                         // pd：�
 var RFR = 0;                                                           // 第幾次 render()（frameBegin 加一）：模型的表（60_rbatch.js rbatPrep）、地形網格（bedBuild）、陰影的紀錄照它
 /** 模型那一段：船的模型、裝飾、平滑面（15_smooth.js）、裝甲的平滑面（24_armor.js），斷開的那一團的模型，飛出去的模型 ——
  *  照這一格的表畫（60_rbatch.js：frameBegin 的 rbatPrep 整理一次、每一趟 rbatReplay 照 GL 以前的呼叫順序重播；以前每一趟自己走一遍、矩陣靠 modelWorld 快取）。 */
-function drawModels(prog, pd) { rbatReplay(prog, pd); }
+function drawModels(prog, pd) {
+  if (prog === P.tri && RBAT_INST && P.triI && !cutOn()) rbatColour(pd);   // 反射、主畫面：同一艘裡離得夠開的同一份網格一次畫（60_rbatch.js，S7）；剖面開著、?inst=0、編不起來 ⇒ 照表一個一個畫
+  else rbatReplay(prog, pd);
+}
 /** 燈（餘燼號船尾三盞燈籠 meta kind=lantern、夜燈號船首像的提燈 kind=light）：燈罩發光、光暈、點光源。 */
 function isLamp(m) { return !!(m.meta && (m.meta.kind === 'lantern' || m.meta.kind === 'light')); }
 /** 火焰在哪（船的格座標）：固定點 wick（造船規格：火焰中心）；沒有 ⇒ 模型中心。 */
