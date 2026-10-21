@@ -13,7 +13,7 @@ function frame(ts, noRaf) {                                         // noRaf：_
     loopAcc += dt * sk; var n = 0, st0 = performance.now();
     var nMax = SIM_SPEED > 1 ? Math.ceil(4 * SIM_SPEED) : 4;            // 一格畫面最多走幾步：快轉（> 1 倍）照倍率放寬，不然 60 FPS 時最多 4 倍
     if (BED) bedFocusAuto();                                            // 海圖（08_seabed.js）：焦點走進別塊 ⇒ 換中心重載
-    VIS_FRAME = PHYS && seaCalm();                                      // 航行：布照畫面格算（30_rig_physics.js physFrame；TASK-0799）—— 這一格開頭判一次，整格同一種算法
+    VIS_FRAME = PHYS;                                                   // 布照畫面格算（30_rig_physics.js physFrame；TASK-0799，交戰也是：Tim 2026-10-22）—— 這一格開頭判一次，整格同一種算法
     while (n < nMax && loopAcc >= (DT = sailDt())) { if (bedWait() || camTransHeld()) { loopAcc = 0; break; } VIEW_HOLD = loopAcc >= 2 * DT && n + 1 < nMax; simStep(); loopAcc -= DT; n++; }   // 船旁邊的海圖塊還沒載好 ⇒ 這一格先不走（戰局跟載入快慢無關）；VIEW_HOLD：後面還有步 ⇒ 只給人看的留到最後一步一次推（50_sim.js）；sailDt：每一步之前挑這一步多長（航行快轉 ⇒ 粗步長，TASK-0800）
     VIEW_HOLD = false;
     if (n) pslowMeasure((performance.now() - st0) / n);                // 一步平均幾毫秒（物理減速照它算）
@@ -72,6 +72,7 @@ if (DEBUG) window.__game = {
   portsForce: function (i, v) { var sh = SHIPS[i || 0]; if (sh) sh.portWant = v === undefined ? null : v; return this.ports(i); },
   /** 畫面迴圈的反向對照（TASK-0719；⛔ ?demo、run() 不經過 frame() ⇒ 量不到畫面那一格的演出）：同步叫 n 次 frame()，每格 dt ＝ DT（loopLast 歸零）⇒ 沒有慢動作時每格剛好一步；
    *  回走了幾步、模擬秒、戰局雜湊（每艘的位置、航向、格數、下沉、命中、開火、死傷、砲剩幾門，加上砲彈、碎塊數與戰局亂數 RNG_B 的狀態；照宣傳片 director.js trHash 的 FNV-1a）。g_port＝0／1、g_deco＝0／1 要一樣。 */
+  simFar: function () { return SHIPS.map(function (s) { return { i: s.i, m: s.simM || 1, rig: s.rigM || 1, crewN: s.crewN || 0 }; }); },   // 遠方與視線外降級（TASK-0802）：船員幾步走一次、帆布幾步、船員走過幾次
   speed: function (x) { if (x !== undefined) simSpeedSet(x); return SIM_SPEED; },   // 模擬速度（73_slowmo.js；上限照 SIM_SPEED_MAX，?simmax= 放寬）
   tick: function (n) {
     var s0 = SIM_N, t0 = performance.now(); loopAcc = 0;

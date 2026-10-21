@@ -88,7 +88,7 @@ function shipPreMove(k, h) {
 }
 
 // ───────────────────────── 海上平靜（TASK-0799） ─────────────────────────
-// 沒有砲彈在飛、每一對還在打的敵對船都隔 CALM_R 以上 ⇒ 航行：帆與繩只算會改戰局的那一段、布照畫面格算（30_rig_physics.js physFrame）。
+// 沒有砲彈在飛、每一對還在打的敵對船都隔 CALM_R 以上 ⇒ 航行：粗步長（sailDt，TASK-0800）。（布照畫面格算一開始也只在航行，後來交戰也是 ⇒ 不看這個。）
 // 照遊戲狀態（距離、陣營、砲彈），⛔ 不照鏡頭。CALM_R 比長砲最遠的射程遠 ⇒ 敵艦開進射程之前就回到每一步都算。
 var CALM_R = 2000;                                                   // 公尺
 function seaCalm() {
@@ -113,6 +113,19 @@ function sailDt() {
   return k * DT_BASE;
 }
 
+// ───────────────────────── 遠方與視線外的船降級（TASK-0802） ─────────────────────────
+// Tim 2026-10-22：「是否可以讓視線外的部分也降低模擬精度(降到30Hz甚至更低 確保關鍵模擬(砲擊)符合就好)」「遠方&視線外」⇒ 照鏡頭（03_camera.js camSimFar，跟「遠方帆繩」同一個設定）。
+// 降的：船員（走路、爬梯、送藥、救火、火槍上膛…；stepCrew 照 dt 算 ⇒ m 步走一次、dt ＝ 累積的時間），一次最多 SIM_FAR_DT 秒（15 Hz）。
+// 照舊每步的：開火、砲彈、裝填倒數（32_hull.js stepShip）、AI 瞄準、帆與動力（sailShip 推位置 ⇒ 砲彈打到船的位置照每步）。帆布本來就照鏡頭降（RIG_FAR）；局勢檢查另外分析（TASK-0812）。
+// 沒有鏡頭（?demo、無頭）⇒ 1 ⇒ 每步走、dt ＝ DT，逐位元不變。代價：鏡頭擺的地方不同，戰局可能不同（Tim：「不追求一致性」）。
+var SIM_FAR = [null, { d1: 300, m1: 2, d2: 1e9, m2: 2, off: 4 }, { d1: 200, m1: 2, d2: 400, m2: 3, off: 4 }], SIM_FAR_DT = 1 / 15;   // 照 PHX.rigfar：遠方半速 ⇒ 300 m 外 30 Hz；遠方⅓ ⇒ 200 m 外 30、400 m 外 20 Hz；看不到 ⇒ 15 Hz
+function simFarM(sh) { var m = evAsk('simFar', 1, sh); return m > 1 ? Math.max(1, Math.min(m, Math.floor(SIM_FAR_DT / DT + 1e-6))) : 1; }   // 粗步長（0.1 秒一步）⇒ 1
+function crewStep(sh) {
+  var m = sh.simM = simFarM(sh); sh.crewAcc = (sh.crewAcc || 0) + DT;
+  if (m > 1 && (SIM_N + sh.i) % m) return;                          // 錯開：各艘不在同一步補
+  stepCrew(sh, sh.crewAcc); sh.crewAcc = 0; sh.crewN = (sh.crewN || 0) + 1;
+}
+
 // ───────────────────────── 一步 ─────────────────────────
 var SIM_N = 0;                                                       // 走過幾步（只給讀數：步長會變 ⇒ ⛔ 不能拿 SIMT ÷ DT 數；__game.tick）
 var VIEW_HOLD = false, VIEW_ACC = 0;                                // 只給人看的推進（viewStep）：畫面一格補好幾步時只在最後一步推一次（90_main.js frame 設 VIEW_HOLD）；快轉、無頭照舊每一步推
@@ -134,7 +147,7 @@ function simStep() {
   if (PF) pfLap('fire');
   var nMv = shipSubSteps(), hMv = nMv === 1 ? DT : DT / nMv;       // 船的移動切小步（TASK-0797；60 Hz ⇒ 1、hMv ＝ DT）
   if (nMv > 1) shipPreMove(nMv - 1, hMv);
-  SHIPS.forEach(function (sh) { sailShip(sh, hMv); if (sh.spins) spinStep(sh, DT); stepShip(sh, DT); if (sh.anc) chainStep(sh, DT); if (PF) pfLap('ship'); stepCrew(sh, DT); if (PF) pfLap('crew'); });
+  SHIPS.forEach(function (sh) { sailShip(sh, hMv); if (sh.spins) spinStep(sh, DT); stepShip(sh, DT); if (sh.anc) chainStep(sh, DT); if (PF) pfLap('ship'); crewStep(sh); if (PF) pfLap('crew'); });
   collide(hMv);
   if (BED) SHIPS.forEach(function (sh) { groundStep(sh, hMv); });  // 擱淺（32_ground.js；有海圖才有）
   SHIPS.forEach(function (sh) {                                    // 照 SHIPS 的順序（一對一：我艦先、敵艦後 ⇒ 跟以前同一個順序抽亂數）
@@ -153,7 +166,7 @@ function simStep() {
   if (PF) pfLap('pieces');
   if (!FLAB_HIDE) { if (SLOW_VIS) evEmit('viewStepSlow', DT); else { VIEW_ACC += DT; if (!VIEW_HOLD) { evEmit('viewStep', VIEW_ACC); VIEW_ACC = 0; } } }   // VIEW_HOLD：這一格畫面後面還要補步（90_main.js frame）⇒ 先累著、最後一步一次推（照 dt 生、照 dt 走 ⇒ 量一樣；補 3 步不再推 3 次）   // FLAB_HIDE：擬真沙盒只看俯視圖時不推（84_fleetlab.js；只給人看的，不改戰局）             // 只給人看的推進：碎木、煙囪排煙、粒子、船邊水花（各自的亂數；00_events.js）；殉爆慢動作中（73_slowmo.js）只推船邊水花，其餘照畫面的時間走
   if (PF) pfLap('water');                       // 船邊水花（13_water.js；只給人看、自己的亂數）
-  if (PHYS) { var pt0 = performance.now(); if (VIS_FRAME) SHIPS.forEach(function (sh) { if (sh.sink < 40) physGameStep(sh); }); else { SHIPS.forEach(function (sh) { if (sh.sink < 40) physStep(sh); }); clothContactsRun(); } PHYS_MS = PHYS_MS * 0.98 + (performance.now() - pt0) * 0.02; }   // 讀數只看、不回寫模擬；VIS_FRAME（航行、有畫面）⇒ 這裡只算帆桁追風那一段，布在畫面這一格算（TASK-0799）
+  if (PHYS) { var pt0 = performance.now(); if (VIS_FRAME) SHIPS.forEach(function (sh) { if (sh.sink < 40) physGameStep(sh); }); else { SHIPS.forEach(function (sh) { if (sh.sink < 40) physStep(sh); }); clothContactsRun(); } PHYS_MS = PHYS_MS * 0.98 + (performance.now() - pt0) * 0.02; }   // 讀數只看、不回寫模擬；VIS_FRAME（有畫面）⇒ 這裡只算帆桁追風那一段，布在畫面這一格算（TASK-0799）
   if (PF) pfLap('phys');
   stepPowder();                                                    // 殉爆排程（23_powder.js）
   stepBlasts();                                                    // 還沒挖完的彈坑接著挖（23_powder.js）
