@@ -71,14 +71,42 @@ evOn('pieceGone', function (pc) { if (pc.rs) pc.rs.dispose(); }, 0, true);   // 
 
 // ── 模型網格（05_hull.js「模型網格」那一步；家具 36_rooms.js furnMesh 只算三角形與佔格，第一次畫到才上傳）──
 function buildMeshes(H, C) {      // 船型 H 的每份模型網格一個 VAO：三角形展開、平面法線、材質色（P.tri 畫）；C ＝ 快取的 [{ tri, occ }]（06_cache.js）
-  H.meshes = []; var keep = [];
+  H.meshes = []; var keep = [], SK = H.h && H.h.meshShape, first = {};
   (H.rig.meshes || []).forEach(function (m, k) {
     if (H.meshSkip && H.meshSkip[k]) { H.meshes.push(null); keep.push(null); return; }   // 模型、裝飾都沒用到（05_hull.js decoSplit）⇒ 不建、不上 GPU
+    var sk = meshShareKey(H, SK, k), f = sk !== null ? first[sk] : undefined;
+    if (f !== undefined) {                                               // 同一個形狀、只差起點（TASK-0795）⇒ 跟第一份共用 VAO，差的那一點（dt）畫的時候乘進矩陣（rbatShip 等 meshDtL）
+      var m0 = H.rig.meshes[f], up0 = H.meshes[f], occ = C ? C[k].occ : meshOcc(m);
+      H.meshes.push({ vao: up0.vao, vbo: up0.vbo, n: up0.n, occ: occ, bb: up0.bb, dt: [m.verts[0] - m0.verts[0], m.verts[1] - m0.verts[1], m.verts[2] - m0.verts[2]], share: f });
+      keep.push({ tri: null, occ: occ }); return;                        // 佔格照自己的網格（模擬不知道共用這回事）；bb 照共用的那一份（矩陣已經含 dt）
+    }
     var d = C ? C[k] : { tri: meshTriFor(H, k, m), occ: meshOcc(m) };   // meshTriFor：火藥桶這類 render=lathe 的換成車床式（62_lathe.js；佔格照原本的網格）
     var up = upload(null, d.tri, 9, [[0, 3, 0], [1, 3, 3], [2, 3, 6]]);
     up.occ = d.occ; up.bb = meshBB(d.tri); H.meshes.push(up); keep.push(d);
+    if (sk !== null) first[sk] = k;
   });
   if (H.keep) H.keep.models = keep;
+}
+// ── 只差起點的網格共用一份 GPU 網格（TASK-0795；Tim 2026-10-21「合批邏輯且改變像素結果 這個沒問題 我看過就ok」）──
+// 成品的網格池（admin.py pack_html，TASK-0667）把「只差起點」的網格存成同一格＋各自的起點 ⇒ 載入時還原成好幾份（meshPool：一個 (格, 起點) 一份）。
+//   火藥桶縮小 0.2 倍、擺在 0.2 格的位置 ⇒ 起點的小數 x、y 各 5 種 ⇒ 一艘 25 份一模一樣的桶 ⇒ 合批（60_rbatch.js 照 VAO 分組）分成 25 組。
+// ⇒ 同一格（h.meshShape）、同一種畫法（車床式與否、哪一種參數）的第二份起：VAO 跟第一份共用，記下差的那一點 dt（頂點 ＝ 第一份 ＋ dt），
+//   畫的時候模型矩陣右邊多乘 trans(dt)（meshDtL）⇒ 同一型的桶一個 VAO、合批一組；車床式也只算一次。
+//   ⛔ 只換畫面：佔格 occ 照自己的網格（家具擋格、站位、砲線不變）。頂點位置換成「矩陣裡加 dt」⇒ 跟原本差浮點捨入（Tim：看過就好）。
+/** 第 k 份網格共用的鍵（同一格＋畫法）；不能共用 ⇒ null。 */
+function meshShareKey(H, SK, k) {
+  if (!SK || k >= SK.length || !(SK[k] >= 0)) return null;
+  var L = latheMesh(H, k);
+  return SK[k] + '|' + (L ? 'L' + L.n + ',' + L.ax : 'V');
+}
+var MESH_DT = new Float32Array([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]), MESH_DTQ = new Float32Array(16);
+/** 同 meshDtL，配置新的一份（?rbchk=1 對拍、觀察模式的高亮：每格少數幾件）。 */
+function meshDtM(me, L) { return me && me.dt ? M4.mul(L, trans(me.dt[0], me.dt[1], me.dt[2])) : L; }
+/** 模型的局部矩陣 L ⇒ 畫這份網格用的（共用別份的 ⇒ L·trans(dt)，寫進 out（沒給 ⇒ 共用的暫存）；沒共用 ⇒ L 原樣）。 */
+function meshDtL(me, L, out) {
+  if (!me || !me.dt) return L;
+  MESH_DT[12] = me.dt[0]; MESH_DT[13] = me.dt[1]; MESH_DT[14] = me.dt[2];
+  return m4Into(out || MESH_DTQ, 0, L, MESH_DT);
 }
 var MESH_ATTR = [[0, 3, 0], [1, 3, 3], [2, 3, 6]];
 /** 還沒上 GPU 的網格（36_rooms.js furnMesh 只留 tri、occ）⇒ 上傳（60_render.js 畫模型前叫）。 */
