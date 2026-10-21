@@ -9,7 +9,29 @@
 var MATS = (CFG.materials && CFG.materials.list) || { oak: { name: '橡木', kind: 'wood', density: 0.7, hard: 1, flammable: 0.5 } };
 var MAT_DEF = CFG.materials && MATS[CFG.materials.default] ? CFG.materials.default : Object.keys(MATS)[0];
 var MAT_REF = 0.7;                                                       // VOX_T（32_hull.js）是比重 0.7 的一格
-function matInfo(id) { return MATS[id] || MATS[MAT_DEF]; }
+// 混合材質（Tim 2026-10-21：「在材質上加額外的厚度乘數」「兩種材質可以線性混和」「混合可以跟空氣(也就是降低厚度)」「強度也會是混合後的結果」）：
+//   ID 寫成 `iron*0.1`（一格裡 10% 是鐵、其他是空氣 ⇒ 1 cm 的鐵板）或 `iron*0.5+oak*0.5`（鐵板＋木襯）；成分照材質表、`air` ＝ 空氣（全 0），比例加起來 ≤ 1、沒寫滿的是空氣。
+//   顯示名 ＝「鐵甲 50%＋橡木 50%」（括起來：船隻配置頁後面還接一個「佔全船幾成」的 %）。
+//   比重、硬度、易燃、擊穿門檻 pen ＝ 各成分照比例相加（線性）；外觀（kind、metal、rough、smooth、clear）照**第一個成分** ⇒ 鐵寫在前面就照樣是光滑金屬。
+//   寫在哪都行：雕刻關聯的 meta material、ships[].material、ships[].matMap（只換這一艘遊戲裡的材質，不動作品：hullMaterials）。材質表本身的 ID 不受影響 ⇒ 沒用到的船逐位元組相同。
+var MAT_MIX = {}, MAT_AIR = { name: '空氣', kind: 'other', density: 0, hard: 0, flammable: 0 };
+function matPart(s) { var m = /^([a-z][a-z0-9_]{0,31})(?:\*(\d*\.?\d+))?$/.exec(s); if (!m) return null; var f = m[2] === undefined ? 1 : +m[2], b = m[1] === 'air' ? MAT_AIR : MATS[m[1]]; return b && f > 0 && f <= 1 ? { m: b, f: f } : null; }
+function matMix(id) {
+  if (typeof id !== 'string' || (id.indexOf('*') < 0 && id.indexOf('+') < 0)) return null;
+  if (MAT_MIX[id] !== undefined) return MAT_MIX[id];
+  var P = id.split('+').map(matPart), sum = 0, r = null;
+  if (P.every(Boolean) && P[0].m !== MAT_AIR) {
+    P.forEach(function (p) { sum += p.f; });
+    if (sum <= 1 + 1e-9) {
+      var a = P[0].m, lin = function (k) { return P.reduce(function (t, p) { return t + p.f * (+p.m[k] || 0); }, 0); };
+      r = Object.assign({}, a, { name: '「' + P.map(function (p) { return p.m.name + ' ' + +(p.f * 100).toFixed(1) + '%'; }).join('＋') + '」', density: +lin('density').toFixed(6), hard: +lin('hard').toFixed(6), flammable: +lin('flammable').toFixed(6), mix: id });
+      var pen = lin('pen'); if (pen > 0) r.pen = +pen.toFixed(3); else delete r.pen;
+    }
+  }
+  return (MAT_MIX[id] = r);
+}
+function matKnown(id) { return !!(MATS[id] || matMix(id)); }
+function matInfo(id) { return MATS[id] || matMix(id) || MATS[MAT_DEF]; }
 /** 一格幾噸（材質參數 m）。比重 0.7 ⇒ 就是 VOX_T（⛔ 不重算：0.7 ÷ 0.7 × VOX_T 不一定剛好等於 VOX_T）。 */
 function matVoxT(m) { return m.density === MAT_REF ? VOX_T : VOX_T * m.density / MAT_REF; }
 /** 船型 T 的材質（載入時算一次，05_hull.js buildHull）：
@@ -17,13 +39,14 @@ function matVoxT(m) { return m.density === MAT_REF ? VOX_T : VOX_T * m.density /
  *  T.matK[i] ＝ 硬度倍率、T.matT[i] ＝ 一格幾噸；T.matN[i] ＝ 原本幾格；T.matXYZ[i]（i ≥ 1）＝ 那幾格的座標（打掉多少照它數）；T.voxT0 ＝ 格子的總重（噸）；
  *  T.matBad ＝ 檔頭寫了、材質表沒有的 ID（照全船預設；匯入檢查報）。 */
 function hullMaterials(T, info) {
-  var h = T.h.materials, base = T.base;
-  T.mat0 = info.material && MATS[info.material] ? info.material : MAT_DEF;
+  var h = T.h.materials, base = T.base, MM = info.matMap || {}, mp = function (id) { return Object.prototype.hasOwnProperty.call(MM, id) ? MM[id] : id; };   // matMap：這一艘遊戲裡換掉的材質（混合材質；作品不動）
+  T.mat0 = info.material && matKnown(mp(info.material)) ? mp(info.material) : mp(MAT_DEF);
+  if (!matKnown(T.mat0)) T.mat0 = MAT_DEF;
   T.matIds = [T.mat0]; T.matG = null; T.matBad = [];
-  if (info.material && !MATS[info.material]) T.matBad.push(info.material + '（全船預設）');
+  if (info.material && !matKnown(mp(info.material))) T.matBad.push(mp(info.material) + '（全船預設）');
   var n = 1 + (h && h.ids ? h.ids.length : 0), XYZ = [];
   T.matK = new Float64Array(n); T.matT = new Float64Array(n); T.matN = new Float64Array(n); T.matM = new Float32Array(n); T.matR = new Float32Array(n); T.matC = new Float32Array(n);   // matM／matR：金屬度、粗糙度（TASK-0627；平滑渲染照它反光）；matC：透明度（TASK-0753 玻璃）
-  if (h && h.ids) h.ids.forEach(function (id) { if (!MATS[id]) T.matBad.push(id); T.matIds.push(id); });
+  if (h && h.ids) h.ids.forEach(function (id) { id = mp(id); if (!matKnown(id)) T.matBad.push(id); T.matIds.push(id); });
   T.matIds.forEach(function (id, i) { var m = matInfo(id); T.matK[i] = m.hard; T.matT[i] = matVoxT(m); T.matM[i] = +m.metal || 0; T.matR[i] = isFinite(+m.rough) && m.rough !== undefined ? +m.rough : 0.5; T.matC[i] = clamp(+m.clear || 0, 0, 0.95); XYZ.push([]); });
   if (h && h.ids && h.runs && h.runs.length) {                            // 段落：[跟上一段結尾差幾、長度、索引]，一段 ＝ 線性索引相連的格（senate 匯出；⛔ 不跨空格 ⇒ 只走有格的地方）
     var G = new VK.Grid(T.h.size), sx = T.h.size[0], sy = T.h.size[1], at = 0, R = h.runs;

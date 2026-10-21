@@ -377,7 +377,7 @@ function propSetup(T) {
   (T.rig.models || []).forEach(function (m, k) {
     var V = m.vox, mt = m.meta || {}; if (!V || !V.runs || !V.s || !V.o || !V.c) return;
     var G = new VK.Grid(S0), o = V.o, s = V.s, bin = atob(V.c), at = 0, i = 0, n = 0, bb = [1e9, 1e9, 1e9, -1, -1, -1];
-    var mat = MATS[mt.material] ? mt.material : MATS.iron ? 'iron' : T.mat0, pi = T.pmI.length;
+    var mat = matKnown(mt.material) ? mt.material : MATS.iron ? 'iron' : T.mat0, pi = T.pmI.length;
     T.pmG = T.pmG || new VK.Grid(S0);
     for (var r = 0; r + 1 < V.runs.length; r += 2) {
       var st = at + V.runs[r], c = V.runs[r + 1];

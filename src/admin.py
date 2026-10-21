@@ -174,6 +174,28 @@ MENU = {'play': ('fun', 'real'), 'mode': ('pve', 'eve', 'sandbox', 'observe'), '
         'gfx': ('low', 'mid', 'high', 'ultra'), 'phx': ('full', 'high', 'mid', 'low')}
 SHIP_CFG_KEYS = ('hard', 'flood', 'gunw', 'speed', 'agile', 'upwind', 'base', 'pump', 'avoid')          # 每艘船的船隻設定（壓艙物照船算，不在這裡）；avoid：防撞參數（物件，不是滑桿；js/52_fleet.js avoidCfg）
 MAT_ID = r'[a-z][a-z0-9_]{0,31}'                                                      # 材質 ID（TASK-0616）：雕刻作品關聯的 meta material 照它認
+
+def mat_mix_err(mid, mids):
+    """混合材質 ID（遊戲 05_material.js matMix；Tim 2026-10-21）：`iron*0.1`、`iron*0.5+oak*0.5`，成分是材質表的 ID 或 air、比例 0～1、加起來 ≤ 1、第一個不是 air。
+    純 ID 也收（要在 mids 裡）。回錯誤字串；對 ⇒ None。"""
+    if not isinstance(mid, str) or not mid:
+        return '要是字串'
+    if '*' not in mid and '+' not in mid:
+        return None if mid in mids else '材質表沒有 %s' % mid
+    tot = 0.0
+    for k, q in enumerate(mid.split('+')):
+        m = re.fullmatch(r'(' + MAT_ID + r')(?:\*(\d*\.?\d+))?', q)
+        if not m:
+            return '成分 %s 要寫成 <材質 ID>*<比例>' % q
+        f = 1.0 if m.group(2) is None else float(m.group(2))
+        if not 0 < f <= 1:
+            return '成分 %s 的比例要在 0～1' % q
+        if m.group(1) != 'air' and m.group(1) not in mids:
+            return '材質表沒有 %s' % m.group(1)
+        if k == 0 and m.group(1) == 'air':
+            return '第一個成分不能是 air（外觀照第一個成分）'
+        tot += f
+    return None if tot <= 1 + 1e-9 else '比例加起來 %.3g，要 ≤ 1（沒寫滿的是空氣）' % tot
 MAT_KINDS = ('wood', 'metal', 'other')                                               # 材質的分類（後台分組、之後燃燒照它）
 MAT_NUMS = (('density', 0.05, 25, '比重（一格 0.1 m ＝ 1 公升 ⇒ 每格幾 kg；橡木 0.7）'), ('hard', 0.05, 50, '硬度倍率（乘在船隻設定的船殼硬度上；橡木 1）'),
             ('flammable', 0, 1, '易燃性（0 ＝ 不會燒、1 ＝ 一點就著；著火照它點、照它燒多久，js/49_burn.js）'))
@@ -654,8 +676,17 @@ def validate(cfg, prev=None):
             err(p + '.vxk', '_cache 裡的檔名（xxx.vxk）')
         if not isinstance(s.get('work', ''), str):
             err(p + '.work', '雕刻作品 ID（字串）')
-        if 'material' in s and s['material'] not in MIDS:
-            err(p + '.material', '全船預設材質要是材質表裡的一種（%s）；沒寫 ＝ materials.default' % '、'.join(sorted(MIDS)))
+        if 'material' in s and mat_mix_err(s['material'], MIDS):
+            err(p + '.material', '全船預設材質要是材質表裡的一種（%s）或混合材質（%s）；沒寫 ＝ materials.default' % ('、'.join(sorted(MIDS)), mat_mix_err(s['material'], MIDS)))
+        if 'matMap' in s:                                # 這一艘遊戲裡換掉的材質（作品不動；05_material.js hullMaterials）：{ 作品裡的材質 ID: 換成的材質（可以是混合材質）}
+            if not (isinstance(s['matMap'], dict) and s['matMap']):
+                err(p + '.matMap', '要是 { 材質 ID: 換成的材質 }，至少一筆')
+            else:
+                for k, v in s['matMap'].items():
+                    if not re.fullmatch(MAT_ID, k):
+                        err(p + '.matMap.' + k, '鍵要是作品裡的材質 ID')
+                    elif mat_mix_err(v, MIDS):
+                        err(p + '.matMap.' + k, mat_mix_err(v, MIDS))
         if 'zw0' in s and not (isint(s['zw0']) and s['zw0'] > 0):
             err(p + '.zw0', '正整數（作品沒有水線 meta 時的設計水線）')
         if 'drive' in s and s['drive'] not in ('steam', 'magic'):

@@ -485,7 +485,6 @@
       "pine": {"name": "松木", "kind": "wood", "density": 0.5, "hard": 0.7, "flammable": 0.8},
       "teak": {"name": "柚木", "kind": "wood", "density": 0.65, "hard": 1.1, "flammable": 0.3},
       "iron": {"name": "鐵甲", "kind": "metal", "density": 7.8, "hard": 32, "pen": 230, "flammable": 0, "metal": 1, "rough": 0.35, "smooth": true},
-      "iron_hull": {"name": "鐵殼（鐵外板＋肋骨內襯的混合層）", "kind": "metal", "density": 4.25, "hard": 16.5, "flammable": 0.25, "metal": 1, "rough": 0.35, "smooth": true},
       "copper_sheath": {"name": "銅皮（包在木殼外）", "kind": "metal", "density": 0.8, "hard": 1.1, "flammable": 0, "metal": 0.7, "rough": 0.55, "smooth": false},
       "boiler": {"name": "鍋爐（鐵殼＋滿水）", "kind": "metal", "density": 0.9, "hard": 1.5, "flammable": 0, "metal": 0.85, "rough": 0.45, "smooth": true},
       "glass": {"name": "玻璃（窗）", "kind": "other", "density": 2.5, "hard": 0.3, "flammable": 0, "rough": 0.06, "clear": 0.6}
@@ -870,6 +869,7 @@
       "work": "meadow-monitor-01m-assembly",
       "cfg": {"pump": 11, "base": 6, "agile": 0.6},
       "drive": "steam",
+      "matMap": {"iron": "iron*0.86+oak*0.14"},
       "geo": {"spar": [35, 38], "marines": [60, 60], "center": 40, "aim": 33, "aimZ": [5, 70], "deckAim": [35, 45], "rigAim": [35, 64]},
       "crew": {"officers": 4, "helm": 1, "marines": 0, "top": 0, "monkeys": 1, "shelter": 1},
       "flags": [
@@ -1120,6 +1120,7 @@
       "work": "trailhead-dingyuan-01m-assembly",
       "author": "trailhead",
       "drive": "steam",
+      "matMap": {"iron_hull": "iron*0.5+oak*0.5"},
       "cfg": {"pump": 32, "base": 14.5, "agile": 0.7},
       "geo": {"spar": [141, 150], "marines": [490, 260], "center": 120, "aim": 85, "aimZ": [45, 290], "deckAim": [85, 145], "rigAim": [140, 290]},
       "crew": {"top": 0, "marines": 8},
