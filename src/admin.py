@@ -473,12 +473,16 @@ def validate(cfg, prev=None):
         G0 = cfg.get('guns') if isinstance(cfg.get('guns'), dict) else {}
         SID = {x.get('id') for x in (cfg.get('ships') or []) if isinstance(x, dict)}
         PG = PT.get('guns') if isinstance(PT, dict) else None
-        if not (isinstance(PT, dict) and set(PT) <= {'guns'} and isinstance(PG, dict)):
-            err('parts', '零件表 { guns: { 砲種: { 砲架類別: "<船 id>#<模型 id>" } } }（python -I admin.py parts 寫的，別手改）')
+        if not (isinstance(PT, dict) and set(PT) <= {'guns'} | set(FIT_KINDS) and isinstance(PG, dict)):
+            err('parts', '零件表 { guns: { 砲種: { 砲架類別: "<船 id>#<模型 id>" } }, <kind>: { "<船 id>#<模型 id>": 名字 } }（python -I admin.py parts 寫的，別手改）')
         else:
             for t, v in PG.items():
                 if t not in G0 or not isinstance(v, dict) or not all(isinstance(r, str) and r.count('#') == 1 and r.split('#')[0] in SID and ID_RE.fullmatch(r.split('#')[1]) for r in v.values()):
                     err('parts.guns.' + str(t), '砲種要在 guns 裡，值 { 砲架類別: "<船 id>#<模型 id>" }、船要在 ships 裡（python -I admin.py parts 重產）')
+            for k in set(PT) - {'guns'}:
+                v = PT[k]
+                if not (isinstance(v, dict) and all(isinstance(r, str) and r.count('#') == 1 and r.split('#')[0] in SID and isinstance(n, str) for r, n in v.items())):
+                    err('parts.' + k, '{ "<船 id>#<模型 id>": 名字 }、船要在 ships 裡（python -I admin.py parts 重產）')
     KY = cfg.get('keys')                                  # 鍵位的出廠預設（js/66_keys.js：{ 動作: 鍵 }；動作的清單在遊戲裡 ⇒ 這裡只驗形狀，認不得的動作遊戲不收）
     if KY is not None:
         if not isinstance(KY, dict):
@@ -668,8 +672,10 @@ def validate(cfg, prev=None):
             err(p + '.idNext', '物件 id 每一類的下一號 { 類別: 正整數 }（admin.py ids 寫的，TASK-0715；別手改）')
         if 'fit' in s:                                     # 出廠的換裝表（TASK-0714；js/38_fit.js）：{ 掛點的 id: 砲種 }；掛點在不在、放不放得下要載船才知道 ⇒ 匯入檢查報
             G0 = cfg.get('guns') if isinstance(cfg.get('guns'), dict) else {}
-            if not (isinstance(s['fit'], dict) and all(isinstance(k, str) and ID_RE.fullmatch(k) and v in G0 and not (G0[v] or {}).get('weapon') for k, v in s['fit'].items())):
-                err(p + '.fit', '換裝表 { 掛點的 id（例 gun-3）: 砲種（guns 的鍵；弩砲、投石機、弓、希臘火這一段不換）}（TASK-0714）')
+            def fit_ok(v):
+                return (v in G0 and not (G0[v] or {}).get('weapon')) or v in ('', '*') or (isinstance(v, str) and re.fullmatch(r'[a-z][a-z0-9_]*#[a-z0-9_./-]+', v) is not None)
+            if not (isinstance(s['fit'], dict) and all(isinstance(k, str) and ID_RE.fullmatch(k) and isinstance(v, str) and fit_ok(v) for k, v in s['fit'].items())):
+                err(p + '.fit', '換裝表 { 掛點的 id（例 gun-3）: 砲種（guns 的鍵；弩砲這類不換）｜"<船 id>#<模型 id>"（零件表 parts.<kind>）｜"*"（原本雕的）｜""（拆空）}（TASK-0713／0714）')
         for k, v in (s.get('cfg') or {}).items():
             if k not in SHIP_CFG_KEYS:
                 err(p + '.cfg.' + k, '不認得的鍵（%s）' % '、'.join(SHIP_CFG_KEYS))
@@ -1509,7 +1515,7 @@ def shipcheck_page(chrome, sid):
     import html as _html, tempfile
     prof = tempfile.mkdtemp(prefix='shipcheck_')
     try:
-        url = 'file:///' + OUT.replace('\\', '/') + '?shipcheck=' + sid
+        url = 'file:///' + OUT.replace('\\', '/') + '?shipcheck=' + sid   # 風在頁面裡固定（js/75_shipcheck.js WIND_FIX）⇒ 誰開、從哪裡開都一樣
         r = subprocess.run([chrome, '--headless=new', '--no-first-run', '--user-data-dir=' + prof, '--use-angle=swiftshader', '--enable-unsafe-swiftshader',
                             '--virtual-time-budget=300000', '--dump-dom', url], capture_output=True, timeout=900)
         ms = re.findall(r'<pre id="shipcheck">(.*?)</pre>', r.stdout.decode('utf-8', 'replace'), re.S)
@@ -3491,11 +3497,19 @@ def vxk_guns(path, guns):
 # ── 零件表（TASK-0714；js/38_fit.js）：換裝要用的砲從哪一艘拿 ──
 # 每一種砲（砲種表的鍵；弩砲這類 weapon 不收）× 砲架類別（meta mount；沒寫 ＝ carriage）一門：照 ships 的順序、模型的順序，第一門有 id、有固定點 breech 與 muzzle 的。
 # 只記「哪一艘的哪一門」（⛔ 不把網格另存一份：船檔裡本來就有，22 種另存 ~120 KB ＝ 成品 +6%）；遊戲要用才載那艘的船檔。重匯拿掉了那一門 ⇒ check 會叫，重跑 parts。
+FIT_KINDS = ('oar', 'rudder', 'propeller', 'wheel', 'wheel_stand', 'light', 'lantern', 'boat', 'capstan', 'binnacle', 'grating', 'deco')   # js/38_fit.js FIT_KINDS（第二段：本來就是模型的零件）
+
+
+def fit_deco(mt):
+    v = mt.get('deco')
+    return v not in (None, '', 0, '0', False)
+
+
 def parts_scan(cfg):
     G = cfg.get('guns') or {}
     code = {g.get('code'): k for k, g in G.items()}
     wpn = {g['weapon']: k for k, g in G.items() if g.get('weapon')}
-    out = {}
+    out, other, seen = {}, {}, {}
     for s in cfg['ships']:
         p = os.path.join(CACHE, s.get('vxk') or '')
         if not s.get('vxk') or not os.path.exists(p):
@@ -3509,7 +3523,25 @@ def parts_scan(cfg):
             if (G.get(t) or {}).get('weapon'):
                 continue
             out.setdefault(t, {}).setdefault(str(mt.get('mount') or 'carriage'), '%s#%s' % (s['id'], mt['id']))
-    return {'guns': {t: dict(sorted(v.items())) for t, v in sorted(out.items())}}
+        M = (h.get('rig') or {}).get('meshes') or []
+        for m in (h.get('rig') or {}).get('models') or []:          # 第二段：每一種 kind 不同長相的每一件（網格＋換色＋固定點名字一樣的只收第一件）
+            mt = m.get('meta') or {}
+            k = mt.get('kind') or ('deco' if fit_deco(mt) else '')
+            if k not in FIT_KINDS or not mt.get('id'):
+                continue
+            me = M[m['mesh']] if isinstance(m.get('mesh'), int) and m['mesh'] < len(M) else None
+            if not me:
+                continue
+            sig = hashlib.sha1(json.dumps([me.get('verts'), me.get('tris'), m.get('mats') or me.get('mats'), sorted((m.get('points') or {}).keys())], separators=(',', ':')).encode()).hexdigest()
+            if sig in seen.setdefault(k, set()):
+                continue
+            seen[k].add(sig)
+            other.setdefault(k, {})['%s#%s' % (s['id'], mt['id'])] = '%s・%s' % (s.get('name', s['id']), m['name'].split('/')[-1])
+    o = {'guns': {t: dict(sorted(v.items())) for t, v in sorted(out.items())}}
+    for k in FIT_KINDS:
+        if other.get(k):
+            o[k] = other[k]
+    return o
 
 
 def act_parts(check=False):
@@ -3517,6 +3549,7 @@ def act_parts(check=False):
     new, old = parts_scan(cfg), cfg.get('parts')
     G = cfg.get('guns') or {}
     lines = ['  %s（%s）：%s' % (t, (G.get(t) or {}).get('name', '?'), '、'.join('%s %s' % (c, r) for c, r in v.items())) for t, v in new['guns'].items()]
+    lines += ['  %s：%d 件' % (k, len(new[k])) for k in FIT_KINDS if k in new]
     miss = [t for t, g in G.items() if not g.get('weapon') and t not in new['guns']]
     lines += ['  （船上都沒有、換不進來：%s）' % '、'.join(miss)] if miss else []
     if new == old:
