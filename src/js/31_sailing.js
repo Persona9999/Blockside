@@ -101,11 +101,12 @@ function sideGuns(sh, side) { return sh.guns.filter(function (g) { return g.aliv
 //   額外動力照俥鐘（sh.power ＝ 航速的比例，−1…1）；倒退時舵效反過來（像倒車）。電腦的船一直全速前進（跟以前一樣）；停船（6）照舊停。
 /** 操舵性能（乘在最大轉向率上）：舵輪或舵（模型）被打掉了 ⇒ 細節設定「舵壞了的操舵」HELM_LOST（寫實 25%）× 娛樂加成 FUN.helm（×2 ⇒ 50%），最多 100%；兩樣都沒了也只乘一次。
  *  Tim 2026-10-20。⛔ 以前寫死：舵輪沒了 ×0.35、舵沒了 ×0.12、兩樣都沒了相乘（0.042）。電腦指揮官的估計（52_fleet.js cmdView v.ag）同一支。
- *  ⚠ 本來就沒有舵輪模型的船（大加雷船 reale、德羅蒙船 dromon：舵柄）以前一直被當成「舵輪沒了」×0.35 ⇒ 照舊留著那個 ×0.35（那兩型的手感是照它調的），舵被打掉再乘 HELM_LOST。 */
+ *  本來就沒有舵輪模型的船（舵柄：德羅蒙 dromon、fusta、punt、大加雷 reale —— 2026-10-21 逐型量過 19 型，就這四型）以前一直被當成「舵輪沒了」×0.35；
+ *  Tim 2026-10-21 定：平常 ×1（「大加雷、德羅蒙平時的操舵要不要從 ×0.35 改成 ×1 (改」；fusta、punt 同一個病，問過一起改）⇒ 沒有舵輪不再算壞，只看真的被打掉的舵輪或舵。 */
 function helmK(sh) {
   var whs = sh.models.filter(function (m) { return m.kind === 'wheel'; }), rud = sh.models.filter(function (m) { return m.kind === 'rudder'; });
   var lost = (whs.length && !whs.some(function (m) { return m.alive; })) || (rud.length && !rud.some(function (m) { return m.alive; }));
-  return (whs.length ? 1 : 0.35) * (lost ? Math.min(1, HELM_LOST * playK('helm')) : 1);
+  return lost ? Math.min(1, HELM_LOST * playK('helm')) : 1;
 }
 function sailShip(sh, dt) {
   var F = fwd(sh.yaw), W = norm(WIND), deg = Math.acos(clamp(dot(F, W), -1, 1)) * 57.2958;

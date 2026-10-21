@@ -608,13 +608,33 @@ function crewBase(b) { return 1.4 * b.dmg * ammoK(b.ammo, VS_CREW); }
  *  模型 meta blow=fly｜fall 先看，沒有 ⇒ 規格表 config/meta_kinds.json 那個 kind 的 blow（帆桁 yard ＝ fall），都沒有 ⇒ fly。
  *  ⛔ 只是演出：FLY 只給人看（落水的水花是畫面的亂數），戰局不讀它。 */
 function blowStyle(m) { var b = m.meta && m.meta.blow; return b === 'fly' || b === 'fall' ? b : kindProp(m.kind, 'blow', 'fly'); }
+/** 停在船上的 'fall'（帆桁）不一直卡著（Tim 2026-10-21「掉落的桅杆在船上會穿模 且卡住一直不消失 … 過一陣子消失或是滑落水 … 可以滑一點避免卡在船上 這樣穿模就還好」）：
+ *  停 FALL_SLIDE_T 秒 ⇒ 往比較近的那一舷滑（船寬方向、照船走，不看碰撞 —— 穿過舷牆只是畫面），越滑越快到 FALL_SLIDE_V；
+ *  中心滑到腳下那一欄一格都沒有（出了船舷）⇒ 帶著滑出去的速度照重力掉、落水照舊漂（不再停）；
+ *  停＋滑超過 FALL_REST_MAX 秒還在船上（例：卡在兩舷都是格子的地方）⇒ 拿掉。⛔ 只是演出：FLY 不讀也不抽戰局的亂數。 */
+var FALL_SLIDE_T = 3, FALL_SLIDE_A = 1.2, FALL_SLIDE_V = 3, FALL_REST_MAX = 30;
+function flyColFree(sh, x, y, z) { for (var k = Math.floor(z); k >= 0; k--) if (sh.grid.get(x, y, k)) return false; return true; }   // 船的格座標 (x, y) 那一欄、z 以下一格都沒有
 function stepFly(f, dt) {
   f.t += dt;
   if (f.rest) {                                                          // 停在船上（'fall' 掉到甲板、桅樓上）：跟著船走；船沉了照樣跟著下去
-    f.M = M4.mul(f.sh.M, f.Ml); f.c = M4.pt(f.sh.M, f.cl[0], f.cl[1], f.cl[2]);
-    if (!f.sh.grid.get(f.sup[0], f.sup[1], f.sup[2])) {                 // 撐著它的那一格沒了（桅樓被打掉、桅倒了）⇒ 從現在的位置、帶著船速繼續掉（⛔ 以前停了就一直掛在原地 ⇒ 浮在半空，Tim 2026-10-20 截圖）
-      f.rest = false; f.M0 = f.M; f.c0 = f.c.slice(); f.R = M4.ident(); f.v = f.sh.vel.slice(); f.w = [0, 0, 0];   // 從這一刻重新算：落下 1.5 m 之後碰到東西可以再停一次
-    } else return f.t < 600 && f.c[1] > (VX ? vxH(f.c[0], f.c[2]) : 0) - 25;
+    f.rt = (f.rt || 0) + dt;
+    if (f.rt > FALL_SLIDE_T && !f.sh.sunk) {                             // 停夠了 ⇒ 往近的那一舷滑出去
+      if (!f.sd) f.sd = f.cl[1] >= f.sh.T.cy ? 1 : -1;
+      f.sv = Math.min(FALL_SLIDE_V, (f.sv || 0) + FALL_SLIDE_A * dt);
+      var dy = f.sd * f.sv * dt / S;                                     // 格
+      f.cl = [f.cl[0], f.cl[1] + dy, f.cl[2]]; f.Ml = M4.mul(trans(0, dy, 0), f.Ml);
+      f.M = M4.mul(f.sh.M, f.Ml); f.c = M4.pt(f.sh.M, f.cl[0], f.cl[1], f.cl[2]);
+      if (flyColFree(f.sh, Math.floor(f.cl[0]), Math.floor(f.cl[1]), f.cl[2])) {   // 出了船舷 ⇒ 帶著滑的速度往下掉、往外慢慢翻，之後不再停
+        var out = M4.dir(f.sh.M, 0, f.sd * f.sv / S, 0), ax = norm(M4.dir(f.sh.M, 1, 0, 0));
+        f.rest = false; f.land = false; f.t = 0; f.M0 = f.M; f.c0 = f.c.slice(); f.R = M4.ident();
+        f.v = add(f.sh.vel, out); f.w = mul(ax, -f.sd * 0.8);
+      } else return f.rt < FALL_REST_MAX && f.c[1] > (VX ? vxH(f.c[0], f.c[2]) : 0) - 25;
+    } else {
+      f.M = M4.mul(f.sh.M, f.Ml); f.c = M4.pt(f.sh.M, f.cl[0], f.cl[1], f.cl[2]);
+      if (!f.sh.grid.get(f.sup[0], f.sup[1], f.sup[2])) {               // 撐著它的那一格沒了（桅樓被打掉、桅倒了）⇒ 從現在的位置、帶著船速繼續掉（⛔ 以前停了就一直掛在原地 ⇒ 浮在半空，Tim 2026-10-20 截圖）
+        f.rest = false; f.M0 = f.M; f.c0 = f.c.slice(); f.R = M4.ident(); f.v = f.sh.vel.slice(); f.w = [0, 0, 0];   // 從這一刻重新算：落下 1.5 m 之後碰到東西可以再停一次
+      } else return f.rt < FALL_REST_MAX && f.c[1] > (VX ? vxH(f.c[0], f.c[2]) : 0) - 25;
+    }
   }
   f.v[1] -= G * dt;
   if (f.c[1] < seaH(f.c[0], f.c[2], SIMT)) {
