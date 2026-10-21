@@ -42,6 +42,9 @@
     "dmgmg": [10, 300, 60],
     "dmgbw": [5, 300, 10],
     "dmgbd": [10, 300, 30],
+    "dmg305k": [10, 1000, 760],
+    "dmg150k": [10, 300, 250],
+    "dmgh37": [5, 300, 15],
     "box": [1, 8, 2],
     "carry": [1, 6, 1],
     "wind": [0.25, 3, 1],
@@ -367,6 +370,44 @@
       "min": 1,
       "mass": 0.3,
       "shot": 0.6
+    },
+    "krupp305": {
+      "code": "305k",
+      "name": "30.5 cm 克虜伯 L/25 後膛砲（定遠號露砲台）",
+      "short": "30.5 cm 克虜伯",
+      "V": 200,
+      "reload": 3.0,
+      "big": true,
+      "hole": 2.1,
+      "crew": 8,
+      "min": 5,
+      "mass": 37.5, "shot": 333,
+      "hpK": 1
+    },
+    "krupp150": {
+      "code": "150k",
+      "name": "15 cm 克虜伯 L/35 後膛砲（定遠號艏艉砲塔）",
+      "short": "15 cm 克虜伯",
+      "V": 210,
+      "reload": 1.6,
+      "big": false,
+      "hole": 1.2,
+      "crew": 6,
+      "min": 4,
+      "mass": 4.8, "shot": 51
+    },
+    "hotch37": {
+      "code": "h37",
+      "name": "37 mm 哈乞開斯五管轉膛砲（revolving cannon）",
+      "short": "37 mm 轉膛砲",
+      "V": 160,
+      "reload": 1.0,
+      "big": false,
+      "hole": 0.3,
+      "crew": 2,
+      "min": 1,
+      "mass": 0.21, "shot": 0.5,
+      "burst": 5, "burstGap": 0.6
     },
     "brooke64": {
       "code": "64b",
@@ -1065,6 +1106,20 @@
       "crew": {"top": 0, "marines": 6},
       "names": ["越嶺號"],
       "idNext": {"anchor": 3, "deck": 4, "gun": 7, "ladders": 2, "magazine": 2, "oar": 73, "part": 5, "powder": 5, "rudder": 2, "ship": 2, "yard": 2}
+    },
+    {
+      "id": "dingyuan",
+      "el": "ship-dingyuan",
+      "name": "定遠號",
+      "vxk": "dingyuan.vxk",
+      "work": "trailhead-dingyuan-01m-assembly",
+      "author": "trailhead",
+      "drive": "steam",
+      "cfg": {"pump": 32, "base": 14.5, "agile": 0.7},
+      "geo": {"spar": [141, 150], "marines": [490, 260], "center": 120, "aim": 85, "aimZ": [45, 290], "deckAim": [85, 145], "rigAim": [140, 290]},
+      "crew": {"top": 0, "marines": 8},
+      "names": ["定遠號"],
+      "idNext": {"anchor": 3, "binnacle": 2, "boat": 7, "boiler": 5, "deck": 7, "engine": 3, "funnel": 3, "gun": 15, "ladders": 2, "magazine": 4, "part": 18, "powder": 42, "propeller": 3, "rudder": 2, "shaft": 3, "ship": 2, "turret": 5, "wheel": 2}
     }
   ],
   "furniture": {
@@ -1106,7 +1161,18 @@
       "cap": 36,
       "autoDeck": 0
     },
-    "spump": {"name": "蒸汽抽水機", "type": "deck", "size": [10, 6, 9], "hp": 160, "role": "pump", "power": "steam", "tpm": 15, "place": "center", "cap": 60, "autoDeck": 0},
+    "spump": {
+      "name": "蒸汽抽水機",
+      "type": "deck",
+      "size": [10, 6, 9],
+      "hp": 160,
+      "role": "pump",
+      "power": "steam",
+      "tpm": 15,
+      "place": "center",
+      "cap": 60,
+      "autoDeck": 0
+    },
     "bench": {
       "name": "木工台",
       "type": "deck",
@@ -1162,5 +1228,27 @@
     "webhook": "x1:KhgbExhJRksBRgEGHx0WWkwXXG0NHwpEBAwGDUAdDgNAQ0EZSQJwWl5XXUpZUFcZRlJAW10NHjNrMCIqGi9FI0kuGDUkJTgLO0JMVBJaLBc5CRwcEWQfKEcYAgQaC0kKOx8uHAIaIyFoJiE4VjMMRy1CMw4ZAgAFIA",
     "cooldown": 60,
     "perSession": 5
+  },
+  "parts": {
+    "guns": {
+      "bombardella": {"carriage": "fusta#gun-6"},
+      "brooke64": {"carriage": "virginia#gun-4"},
+      "brooke7": {"pivot": "virginia#gun-9"},
+      "carr": {"carriage": "constitution#gun-31"},
+      "chase": {"carriage": "constitution#gun-1"},
+      "chase3": {"carriage": "stormkaap#gun-41"},
+      "dahl11": {"carriage": "monitor#gun-1", "pivot": "susquehanna#gun-7"},
+      "dahl9": {"carriage": "virginia#gun-1"},
+      "long": {"carriage": "constitution#gun-2"},
+      "long12": {"carriage": "stormkaap#gun-3"},
+      "long18": {"carriage": "phoenix#gun-1"},
+      "long32": {"carriage": "ember#gun-1"},
+      "long36": {"carriage": "reale#gun-1"},
+      "long4": {"carriage": "falcon#gun-1"},
+      "long6": {"carriage": "stormkaap#gun-1"},
+      "long8": {"carriage": "reale#gun-2"},
+      "pierrier": {"turret": "reale#gun-6"},
+      "trident": {"carriage": "tridente#gun-67"}
+    }
   }
 }

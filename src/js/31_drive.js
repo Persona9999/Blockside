@@ -595,7 +595,7 @@ function helmSideF(g, cap, sd, u) {
   if (g <= -DIFF_P0) return sd === s ? g * m : g;
   return clamp(g + (sd === -s ? -a : a) * DIFF_P0, -cap, cap);
 }
-/** 倒退（舵效反過來）：開關開著 ⇒ 往後超過 HELM_REV 才算（⛔ 照 sh.spd < 0：停著時航速 −0.0001 的雜訊就把舵與差動一起反過來 ⇒ fusta 原地轉按左舵往右轉，量過）；關著 ⇒ 照舊 sh.spd < 0。 */
+/** 倒退（舵效反過來）：開關開著 ⇒ 往後超過 HELM_REV 才算（⛔ 照 sh.spd < 0：停著時航速是一個很小的負數（__game.helm 印到小數點後三位是 0，但 sh.spd < 0 成立），就把舵與差動一起反過來 ⇒ fusta 原地轉按左舵往右轉，量過）；關著 ⇒ 照舊 sh.spd < 0。 */
 var HELM_REV = 0.1;                                                     // m/s
 function helmRev(sh) { return HELM_TQ ? sh.spd < -HELM_REV : sh.spd < 0; }
 /** 阻尼 N（kN·m 每 rad/s；見上）。 */

@@ -45,6 +45,7 @@ function hudCrewShort(sh) {
   var d = crewDefault(sh.T.id), cw = sh.cw;
   var L = (sh.crewShort || []).filter(function (r) { return r[3] === 'guns' ? Object.keys(GUNS).some(function (t) { return gunCrew(cw, t) !== gunCrew(d, t); }) : cw[r[3]] !== d[r[3]]; });
   if (L.length) note(sh, '船員站不下（' + sh.T.name + '型）：' + L.map(function (r) { return r[0] + ' ' + r[2] + '／' + r[1]; }).join('、'));
+  var ft = fitText(sh.T); if (ft) note(sh, ft);                          // 換裝沒換成的那幾門（38_fit.js；TASK-0714）
 }
 /** 落水的水手（43_swim.js）：爬回船上、爬上友艦、被敵艦撈走、撈起別艘的 ⇒ 記著，第一件起算 NEWS_WIN 秒那一艘報一行（Tim 2026-10-14：⛔ 一個一個報會洗版）。 */
 var SWIM_TXT = { back: '爬回船上', ally: '爬上友艦', foe: '被敵艦撈走', gotAlly: '撈起友艦水手', gotFoe: '撈起敵艦水手（加入我方）' };
