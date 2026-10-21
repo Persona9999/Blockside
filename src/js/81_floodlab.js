@@ -13,6 +13,7 @@
 //   pin（1 ＝ 浮穩之後把船的位置與姿態釘住：每一步之後照浮穩那一刻還原、重算矩陣 ⇒ 水頭只由艙內水位決定）、pump（0 ＝ 這艘不抽水）、
 //   ref（1 ＝ 另算一條參考解 flabRef：那個洞通得到的艙內空間照格與世界高度由低往高填、Torricelli 照模擬自己的係數與破口面積、1 ms 一步積分）。
 //   都不給 ⇒ 跟加之前逐位相同（只多讀幾個網址參數）。
+// 房間的水面（TASK-0811）：rooms（1 ＝ 照房間畫、0 ＝ 水格的；同一個種子跑兩次並排比）、roll（浮穩之後橫傾幾度，配 pin=1 停住）；給了 rooms ⇒ 每一筆多記 wr（63_wrwater_gl.js wrwMesh 的讀數）。
 // ⛔ 只在 ?lab=flood 或 __game.floodLab 才跑；一般遊戲一行都不多算。
 // 鏡頭用自由鏡頭（CAM.mode 0：注視點 CAM.tgt、yaw／pitch／dist 照給的）。⛔ mode 4 是「我艦看向敵艦」：注視點固定在我艦中心上 4 m、yaw 照敵艦方向 ⇒ fyaw、對準都沒效（量過：focus 對準的點被蓋回船中心）。
 // ⚠ 要帶 seed（flood_lab.py 沒給就補 seed=3）：沒帶 ⇒ 每次開都是隨機的一局，浮穩的姿勢、洞的位置、進水都不一樣（量過：同一組參數兩次 t 38 是 130／138 m³）；
@@ -69,12 +70,15 @@ function floodLab(o) {
   SHIPS.forEach(function (s2) { s2.sailSet = 0; s2.power = 0; s2.manual = true; s2.rudder = 0; });
   if (SHIPS[1]) { SHIPS[1].px += 3000; SHIPS[1].pz += 3000; }
   for (i = 0; i < Math.round(LAB_SETTLE / DT); i++) simStep();
+  if (o.roll !== undefined) sh.rollA = o.roll * Math.PI / 180;           // 橫傾幾度（TASK-0811；配 pin=1 才停得住）
   sh.M = shipMatrix(sh); sh.inv = M4.inv(sh.M); sh.center = shipCenter(sh);
   var pin = o.pin ? flabPin(sh) : null;                                  // 釘住姿態（TASK-0806）：每一步之後還原
+  var wrw0 = GFX.proom; if (o.rooms !== undefined) GFX.proom = o.rooms ? 1 : 0;   // 照房間畫水面（TASK-0811，畫質「艙內水面的畫法」）；量完還原
   if (o.pump === 0) { sh.cfg.pump = 0; sh.pumps = null; }                // 這艘不抽水（pumpK ⇒ 0；sh.cfg 是這艘自己的一份 cfgCopy）
   var out = { hull: sh.T.id, seed: SEED, lv: FLOOD_LV, c: sh.fl ? sh.fl.F.c : null, sea: SEA_K, o: { dur: o.dur, every: o.every, cut: o.cut, deck: o.deck, xray: !!o.xray }, holes: [], rows: [] };
   if (o.hz > 0) out.o.hz = o.hz; if (pin) out.o.pin = 1; if (o.pump === 0) out.o.pump = 0;   // 只在給了才記（⛔ 都不給 ⇒ 報表跟加之前逐位相同）
-  if (!sh.fl) { out.err = '進水是公式模式（物理效果的「進水」第 0 檔）⇒ 沒有艙內的水可畫；網址加 phx=mid／high／full'; SEA_K = seaK; DT = DT_BASE = DT0; return out; }
+  if (o.rooms !== undefined) out.o.rooms = o.rooms ? 1 : 0; if (o.roll !== undefined) out.o.roll = o.roll;
+  if (!sh.fl) { out.err = '進水是公式模式（物理效果的「進水」第 0 檔）⇒ 沒有艙內的水可畫；網址加 phx=mid／high／full'; SEA_K = seaK; DT = DT_BASE = DT0; GFX.proom = wrw0; return out; }
   var T = sh.T, x0 = T.wl0, x1 = T.wl1;
   if (o.boom) o.boom.forEach(function (k) { var g = sh.mags[k]; if (g) magBoom(sh, g); out.holes.push({ boom: k, mag: g ? g.name : null }); });   // 殉爆開局（TASK-0662）：整間直接炸（同 __game.ignite(0, k, 'mag')）
   (o.boom && !o.holesSet ? [] : o.holes).forEach(function (hd) {
@@ -116,9 +120,10 @@ function floodLab(o) {
         dhMed: dh.length ? +dh[dh.length >> 1].toFixed(2) : 0, dhMax: dh.length ? +dh[dh.length - 1].toFixed(2) : 0,
         openAt: st.map.edge.filter(function (e) { return e[3] === 2; }).slice(0, 12).map(function (e) { return e.slice(0, 3); }) } : null,   // 懸空的邊（水邊 noise 會上的那幾邊）：[x, y, 方向] ⇒ focus=cell:x:y 拉近看
       img: flabShot(o.w), map: st ? flabMap(st, sh.fl.F.c >= 10 ? 10 : 6) : null });
+    if (o.rooms !== undefined) out.rows[out.rows.length - 1].wr = sh.wrw ? sh.wrw.st : null;   // 房間水面的讀數（63_wrwater_gl.js wrwMesh：幾間、幾欄、切邊的欄、片數、水量、ms）
   }
   if (o.ref) out.ref = flabRef(sh, out.trace, tHole);
-  FL_SNAP = snap0; FL_STAT = stat0; SEA_K = seaK; DT = DT_BASE = DT0;
+  FL_SNAP = snap0; FL_STAT = stat0; SEA_K = seaK; DT = DT_BASE = DT0; GFX.proom = wrw0;
   return out;
 }
 
@@ -240,6 +245,8 @@ function flLabOpts() {
   if (Q.get('pin') === '1') o.pin = true;
   if (Q.get('pump') === '0') o.pump = 0;
   if (Q.get('ref') === '1') o.ref = true;
+  if (Q.has('rooms')) o.rooms = Q.get('rooms') === '1';                 // TASK-0811：照房間畫水面（0 ＝ 水格的，兩張並排比）、橫傾幾度
+  if (Q.has('roll')) o.roll = +Q.get('roll');
   return o;
 }
 

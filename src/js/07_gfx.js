@@ -23,6 +23,7 @@ var GFX_ITEMS = [
   { k: 'pdep', name: '艙內水的深淺', opt: ['關（一片均勻的半透明）', '開（越深越不透明、貼邊淡出）'] },   // TASK-0654（33_flood.js FL_DEP_GLSL）：讀場景深度；海水折射不是「高」⇒ 有水的那幾格多複製一次深度
   { k: 'pside', name: '艙內水的側面與水瀑', opt: ['關', '開（水面邊上畫側面、兩池交界畫水瀑）'] },   // TASK-0654（33_flood.js flSides）
   { k: 'pedge', name: '艙內水的水邊', opt: ['關（直的）', '開（白沫一圈、淺的邊不規則）'] },   // TASK-0654（33_flood.js flEdgeM、FLE_GLSL）：只在水邊那一圈多算兩次雜訊
+  { k: 'proom', name: '艙內水面的畫法', opt: ['水格（每一格一塊、相近的接成斜坡）', '房間（一間房一片、跟地球水平）'] },   // TASK-0811（63_wrwater_gl.js；Tim 2026-10-22「我希望至少水面要是平滑的(不能碎裂)」）：只換畫法，水量、戰局照舊是 33_flood.js 的
   { k: 'tlamp', name: '城裡點光源的距離', opt: ['近（512 m）', '中（1 km）', '遠（1.5 km）'] },   // 夜裡的燈（63_towns.js townLampGrid）：分組表照幾公尺見方；每個像素最多照 8 盞不變，遠了只是多一點像素有光、重排多一點
   { k: 'treed', name: '立體樹的距離', opt: ['近（400 m）', '中（650 m）', '遠（900 m）', '全開（1,350 m）'] },   // 全開 ⇒ 貼圖與樹冠殼的交接也往外推 1.5 倍（63_trees.js TREE_SHELL_D）   // Tim 2026-10-21「650m 外換成不參與陰影的貼圖和樹冠殼 這個是否可以參考畫質設定動態調節(同時可以跟陰影連動)」：63_trees.js treeDraw 照 TREE_LOD_D 換 TREE_LOD[1]、重新分組；這以內的樹投影子也收影子（收到這個距離 − 50 m，01_gl.js uShTr），外面是貼圖與樹冠殼
   { k: 'plant', name: '植物密度', opt: ['少（三成）', '中（六成）', '多（全部）'] },   // Tim 2026-10-21「中畫質就降低植物密度(60%) 低畫質降更多(30%)」   // Tim 2026-10-21「植物密度是否也能根據畫質調整」：63_trees.js treeBin 照每棵的位置雜湊留 TREE_DENS_K 那麼多（不重擺、切了下一格就重新分組）；投影子的跟著少
@@ -38,7 +39,7 @@ var GFX_CATS = [
   { k: 'screen', name: '解析度與反鋸齒', items: ['res', 'aa'] },
   { k: 'rain', name: '雨', items: ['rain', 'drops', 'dropspl'] },
   { k: 'ship', name: '船', items: ['deco', 'door', 'port', 'masks'] },
-  { k: 'flood', name: '艙內進水', items: ['fall', 'pdep', 'pside', 'pedge'] },
+  { k: 'flood', name: '艙內進水', items: ['proom', 'fall', 'pdep', 'pside', 'pedge'] },
   { k: 'town', name: '城鎮', items: ['tlamp'] },
   { k: 'fx', name: '煙與碎片', items: [], extra: 'fx' }];
 function gfxItem(k) { return GFX_ITEMS.filter(function (it) { return it.k === k; })[0]; }
@@ -51,10 +52,10 @@ function gfxCatSum(c) {
 }
 function gfxOpts(n, f) { var r = []; for (var i = 0; i < n; i++) r.push(f(i)); return r; }
 var GFX_PRESET = {
-  low: { shadow: 0, refl: 0, refr: 0, sea: 0, res: 1, aa: 0, rain: 0, drops: 0, dropspl: 0, door: 1, port: 2, fall: 1, pdep: 0, pside: 1, pedge: 0, masks: 2, deco: 0, tlamp: 0, treed: 0, plant: 0 },   // 門的演出很便宜（每扇每格掃一次船員）⇒ 每一檔都開；砲門低畫質 ＝ 只有我艦（port 2；Tim 2026-10-21，推翻 10-19 的「炮門屬於裝飾物 因此相關機制在低畫質不啟用」）⇒ 我艦演開關；蓋板每艘都畫（別艘停在開著、砲推出去；S14，Tim 發現低畫質別艘沒有蓋板）
-  mid: { shadow: 1, refl: 1, refr: 1, sea: 1, res: 2, aa: 1, rain: 1, drops: 0, dropspl: 0, door: 1, port: 1, fall: 1, pdep: 1, pside: 1, pedge: 1, masks: MASK_NEAR, deco: 1, tlamp: 1, treed: 1, plant: 1 },
-  high: { shadow: 2, refl: 2, refr: 2, sea: 2, res: 2, aa: 1, rain: 0, drops: 3, dropspl: 1, door: 1, port: 1, fall: 1, pdep: 1, pside: 1, pedge: 1, masks: MASK_NEAR, deco: 1, tlamp: 2, treed: 2, plant: 2 },
-  ultra: { shadow: 3, refl: 2, refr: 2, sea: 2, res: 2, aa: 1, rain: 0, drops: 3, dropspl: 1, door: 1, port: 1, fall: 1, pdep: 1, pside: 1, pedge: 1, masks: MASK_NEAR, deco: 1, tlamp: 2, treed: 3, plant: 2 } };   // 全開 ＝ 高＋陰影與立體樹的距離 × 1.5（Tim 2026-10-21）   // 最高 ＝ 每艘都有（Tim 2026-10-13「最高畫質開到 N」）
+  low: { shadow: 0, refl: 0, refr: 0, sea: 0, res: 1, aa: 0, rain: 0, drops: 0, dropspl: 0, door: 1, port: 2, fall: 1, pdep: 0, pside: 1, pedge: 0, proom: 1, masks: 2, deco: 0, tlamp: 0, treed: 0, plant: 0 },   // 門的演出很便宜（每扇每格掃一次船員）⇒ 每一檔都開；砲門低畫質 ＝ 只有我艦（port 2；Tim 2026-10-21，推翻 10-19 的「炮門屬於裝飾物 因此相關機制在低畫質不啟用」）⇒ 我艦演開關；蓋板每艘都畫（別艘停在開著、砲推出去；S14，Tim 發現低畫質別艘沒有蓋板）
+  mid: { shadow: 1, refl: 1, refr: 1, sea: 1, res: 2, aa: 1, rain: 1, drops: 0, dropspl: 0, door: 1, port: 1, fall: 1, pdep: 1, pside: 1, pedge: 1, proom: 1, masks: MASK_NEAR, deco: 1, tlamp: 1, treed: 1, plant: 1 },
+  high: { shadow: 2, refl: 2, refr: 2, sea: 2, res: 2, aa: 1, rain: 0, drops: 3, dropspl: 1, door: 1, port: 1, fall: 1, pdep: 1, pside: 1, pedge: 1, proom: 1, masks: MASK_NEAR, deco: 1, tlamp: 2, treed: 2, plant: 2 },
+  ultra: { shadow: 3, refl: 2, refr: 2, sea: 2, res: 2, aa: 1, rain: 0, drops: 3, dropspl: 1, door: 1, port: 1, fall: 1, pdep: 1, pside: 1, pedge: 1, proom: 1, masks: MASK_NEAR, deco: 1, tlamp: 2, treed: 3, plant: 2 } };   // 全開 ＝ 高＋陰影與立體樹的距離 × 1.5（Tim 2026-10-21）   // 最高 ＝ 每艘都有（Tim 2026-10-13「最高畫質開到 N」）
 var GFX_NAME = { low: '低', mid: '中', high: '高', ultra: '全開', custom: '自訂' }, GFX_DEFAULT = CFG.menu.gfx;   // 預設檔：config/game.json 的 menu.gfx
 var GFX = {}, GFX_FPS = false;                     // GFX_FPS：畫面右上角顯示 FPS（畫質設定頁的勾選）
 // 煙散得多快（Tim 2026-10-14）：畫質頁的一項，不跟低／中／高走（玩家自己選、不算進「自訂」）；煙的壽命 ÷ 這個倍數（12_effects.js smoke、40_crew.js 火槍）。

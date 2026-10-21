@@ -15,8 +15,7 @@ var FLE_GLSL = 'float flHs(vec2 p){ return fract(sin(dot(p,vec2(127.1,311.7)))*4
   'float flNz(vec2 p){ vec2 i=floor(p), f=fract(p); f=f*f*(3.0-2.0*f); return mix(mix(flHs(i),flHs(i+vec2(1.0,0.0)),f.x),mix(flHs(i+vec2(0.0,1.0)),flHs(i+vec2(1.0,1.0)),f.x),f.y); }\n';
 // ── 畫：艙內的水面（每一格水柱的頂，四個角照同一個世界高度擺 ⇒ 船傾斜時水面還是平的）；噴進來的粒子跟點精靈一起畫 ──
 function flGL() {
-  P.pool = VK.compile(gl,
-    '#version 300 es\nlayout(location=0) in vec4 aP; layout(location=1) in float aZ0; uniform mat4 uModel,uVP; uniform float uMix,uVox; out vec3 vW; out float vF; out vec2 vG; void main(){ vec4 w=uModel*vec4(aP.xy,mix(aZ0,aP.z,uMix),1.0); vW=w.xyz; vF=aP.w; vG=aP.xy*uVox; gl_Position=uVP*w; }\n',
+  var poolFS =                                                           // 水面的著色：水格的 P.pool、房間的 P.wpool（63_wrwater_gl.js，TASK-0811）共用
     '#version 300 es\nprecision highp float; in vec3 vW; in float vF; in vec2 vG; uniform vec3 uEye,uSun,uFog,uSky; uniform float uFogD,uSeaT,uX,uDep,uEdge; uniform vec2 uView; uniform sampler2D uSceneD; out vec4 o;\n' + SHADOW_GLSL + FL_DEP_GLSL + FLE_GLSL +
     'void main(){ vec2 r=vec2(sin(vW.x*3.1+uSeaT*2.3)+sin(vW.z*4.3-uSeaT*1.7),cos(vW.z*2.7-uSeaT*1.9)+cos(vW.x*3.7+uSeaT*2.1))*0.03; vec3 n=normalize(vec3(r.x,1.0,r.y));\n' +
     ' vec3 v=normalize(uEye-vW); float fr=0.04+0.96*pow(1.0-max(dot(n,v),0.0),5.0), sk=shadowK(vW,n);\n' +
@@ -26,7 +25,11 @@ function flGL() {
     '  float fm=smoothstep(0.1+0.45*nz,0.22+0.45*nz,vF)*(0.55+0.45*flNz(vG*11.0+uSeaT*0.3)); c=mix(c,vec3(0.8,0.88,0.88),0.6*fm); al=max(al,0.5*fm);\n' +   // 白沫自帶不透明度（⛔ 乘在 al 上 ⇒ 貼地板的薄水被深度吸光淡到快 0，白沫跟著看不見）
     '  al*=1.0-smoothstep(0.6+0.38*nz,0.68+0.38*nz,vF); if(al<0.01) discard; }\n' +
     ' if(uX>0.5) c=mix(c,vec3(0.2,0.6,0.95),0.45);\n' +
-    ' float fd=length(vW-uEye); o=vec4(mix(c,uFog,1.0-exp(-fd*uFogD)),al); }\n');
+    ' float fd=length(vW-uEye); o=vec4(mix(c,uFog,1.0-exp(-fd*uFogD)),al); }\n';
+  P.pool = VK.compile(gl,
+    '#version 300 es\nlayout(location=0) in vec4 aP; layout(location=1) in float aZ0; uniform mat4 uModel,uVP; uniform float uMix,uVox; out vec3 vW; out float vF; out vec2 vG; void main(){ vec4 w=uModel*vec4(aP.xy,mix(aZ0,aP.z,uMix),1.0); vW=w.xyz; vF=aP.w; vG=aP.xy*uVox; gl_Position=uVP*w; }\n',
+    poolFS);
+  P.wpool = VK.compile(gl, WRW_VS, poolFS);                               // 房間的水面（TASK-0811）：頂點帶世界高度、照船現在的姿態換回船上的 z
   // 水幕（flFalls）：一道 ＝ 一片直立、繞船的鉛直軸轉向鏡頭的長條；aP 軸上那一點（格座標）、aQ ＝ (左右 ±1、0 上 1 下、長度 m、寬度 m 的上一格)、aW ＝ 這一格的寬度 m
   P.fall = VK.compile(gl,
     '#version 300 es\nlayout(location=0) in vec3 aP; layout(location=1) in vec4 aQ; layout(location=2) in float aW; uniform mat4 uModel,uVP; uniform vec3 uEye; uniform float uMix; out vec3 vW; out vec2 vT; out float vL;\n' +
@@ -353,13 +356,15 @@ function flMix(me) { return FL_SNAP ? 1 : clamp((performance.now() - me.tw) / FL
 /** 畫艙內的水面（海與白沫之後；開始沉、斷了就不畫 —— 那時候海已經畫進船艙）。 */
 function flDraw() {
   if (!P.pool || FL_HIDE) return;                                           // FL_HIDE：對照用（__game.flood(i, { hide: true })）
-  var any = false, fs = [], L = [];
+  var any = false, fs = [], L = [], R = [];
   SHIPS.forEach(function (sh) {
     var fl = sh.fl; if (!fl || !fl.actN || ((sh.broken || sh.sinkingFinal) && !fl.vis) || sh.sunk) return;   // 沉船的水照畫（floodVis）
-    var me = flMesh(sh, fl); if (GFX.fall && me.fn) fs.push([sh, me]); if (me.n || me.sn) L.push([sh, me]);
+    var me = flMesh(sh, fl); if (GFX.fall && me.fn) fs.push([sh, me]);
+    if (GFX.proom && sh.T.wrm && sh.M[9] > 0.2 * S) { var wm = wrwMesh(sh); if (wm.n) R.push([sh, wm]); return; }   // 照房間畫（TASK-0811，63_wrwater_gl.js）：水格的水面、側面不畫（水幕照畫）；翻過去了 ⇒ 照舊
+    if (me.n || me.sn) L.push([sh, me]);
   });
   // 深度吸光（GFX.pdep）：要不透明場景的深度 —— 折射開到高（refr 2）⇒ 畫海之前已經複製到 RT.B（60_render.js），直接讀；其他檔 ⇒ 這裡複製一次深度（只在有水要畫的那幾格）。透視開著 ⇒ 不讀（見 FL_DEP_GLSL）。
-  var dep = GFX.pdep && !FLX3 && L.length && RT && RT.B ? 1 : 0;
+  var dep = GFX.pdep && !FLX3 && (L.length || R.length) && RT && RT.B ? 1 : 0;
   if (dep && GFX.refr !== 2) {
     gl.bindFramebuffer(gl.READ_FRAMEBUFFER, RT.A.fb); gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, RT.B.fb);
     gl.blitFramebuffer(0, 0, RT.w, RT.h, 0, 0, RT.w, RT.h, gl.DEPTH_BUFFER_BIT, gl.NEAREST);
@@ -372,6 +377,12 @@ function flDraw() {
     var sh = e[0], me = e[1]; if (!me.n) return;
     if (!on) { on = true; begin(); gl.useProgram(P.pool.prog); setCommon(P.pool); gl.uniform1f(P.pool.u.uX, FLX3 ? 1 : 0); gl.uniform1f(P.pool.u.uEdge, GFX.pedge && !FLX3 ? 1 : 0); gl.uniform1f(P.pool.u.uVox, S); depU(P.pool); }   // uVox：格 → 公尺（S 載入船型才有 ⇒ ⛔ 編著色器時還是 undefined）
     gl.uniformMatrix4fv(P.pool.u.uModel, false, sh.M); gl.uniform1f(P.pool.u.uMix, flMix(me)); gl.bindVertexArray(me.vao); gl.drawArrays(gl.TRIANGLES, 0, me.n);
+  });
+  on = false;
+  R.forEach(function (e) {                                                  // 房間的水面（TASK-0811）：同一套著色，頂點著色器照船的姿態把世界高度換回船上的 z
+    var sh = e[0], me = e[1];
+    if (!on) { on = true; begin(); gl.useProgram(P.wpool.prog); setCommon(P.wpool); gl.uniform1f(P.wpool.u.uX, FLX3 ? 1 : 0); gl.uniform1f(P.wpool.u.uEdge, 0); gl.uniform1f(P.wpool.u.uVox, S); depU(P.wpool); }
+    gl.uniformMatrix4fv(P.wpool.u.uModel, false, sh.M); gl.uniform1f(P.wpool.u.uMix, wrwMix(me)); gl.bindVertexArray(me.vao); gl.drawArrays(gl.TRIANGLES, 0, me.n);
   });
   on = false;
   L.forEach(function (e) {                                                  // 側面與水瀑（flSides，GFX.pside）
