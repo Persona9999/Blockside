@@ -374,7 +374,7 @@ function musket(sh, c) {
   var near = [];                                                       // 射程內的：[人, 距離 m]
   cand.forEach(function (o) { var d = len(sub(M4.pt(foe.M, o.pos[0], o.pos[1], o.pos[2]), w)); if (d <= MUSKET_R) near.push([o, d]); });
   if (!near.length) return;
-  c.fireT = 0.4; sh.mkAt = SIMT;                                       // mkAt：這艘最後一次開槍（醫療艙判交戰，44_medic.js medWar）
+  c.fireT = 0.4;
   spawnPt(w, [WIND[0] * 0.3, 0.4, WIND[2] * 0.3], rr(1.5, 2.5) / smokeK(), [0.85, 0.85, 0.85], 0.35, 0.3, 1.4, -0.03, 0.8);
   var t = near[(rnd() * near.length) | 0], o = t[0], dist = t[1];
   if (rnd() < musketP(sh, c, dist)) damageCrew(foe, o, rr(40, 125), '火槍');   // 血量 100 時約三成一槍斃命（跟以前的 0.3 對齊）

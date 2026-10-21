@@ -803,7 +803,7 @@
         "light": 4,
         "magazine": 3,
         "model": 9,
-        "part": 11,
+        "part": 12,
         "portlid": 63,
         "powder": 231,
         "propeller": 2,
@@ -1082,8 +1082,9 @@
       "size": [18, 8, 8],
       "hp": 150,
       "hold": 1,
-      "battle": 1,
-      "buff": {"heal": 0.3}
+      "rate": 3,
+      "doc": 1,
+      "staff": {"surgeon": 1}
     },
     "medkit": {
       "name": "藥箱",
@@ -1148,8 +1149,7 @@
       "buffCap": {"heal": 0.6},
       "staff": 1,
       "staffPer": 3,
-      "back": 0.6,
-      "calm": 60
+      "back": 0.6
     },
     "workshop": {
       "name": "木工間",

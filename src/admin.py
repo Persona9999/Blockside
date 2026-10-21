@@ -452,7 +452,7 @@ def validate(cfg, prev=None):
     crew(cfg.get('crew0'), 'crew0', True)
     FU, RT = cfg.get('furniture') or {}, cfg.get('rooms') or {}
     for fid, f in FU.items():                            # 道具的數字（js/67_furncfg.js 調得到的那幾格；遊戲照它擺、算抽水、治療）
-        for k, lo, hi in (('tpm', 0, 120), ('crew', 1, 12), ('cap', 0, 300), ('hold', 1, 4), ('battle', 0, 1), ('hp', 10, 1000)):   # battle：交戰中也收傷員（手術台；js/44_medic.js）
+        for k, lo, hi in (('tpm', 0, 120), ('crew', 1, 12), ('cap', 0, 300), ('hold', 1, 4), ('rate', 1, 10), ('doc', 0, 1), ('hp', 10, 1000)):   # rate：躺在上面治療快幾倍、doc：要船醫才收傷員（手術台；js/44_medic.js）
             if isinstance(f, dict) and k in f and not (isnum(f[k]) and lo <= f[k] <= hi):
                 err('furniture.%s.%s' % (fid, k), '%s～%s 的數字' % (lo, hi))
         if isinstance(f, dict) and 'auto' in f and not (isint(f['auto']) and 1 <= f['auto'] <= 4):
@@ -468,9 +468,6 @@ def validate(cfg, prev=None):
         st = f.get('staff') if isinstance(f, dict) else None                # 設施配員（TASK-0676；js/36_rooms.js staffSlots）：{ 職位: 每件幾位 }
         if st is not None and not (isinstance(st, dict) and all(k in ('surgeon', 'carpenter', 'sailmaker') and isint(v) and (1 if k in ('carpenter', 'sailmaker') else 0) <= v <= 4 for k, v in st.items())):
             err('furniture.%s.staff' % fid, '{ surgeon: 0～4、carpenter: 1～4、sailmaker: 1～4 的整數 }（每件配幾位；木匠、帆匠每船至少一位）')
-    cm = (RT.get('medical') or {}).get('calm') if isinstance(RT.get('medical'), dict) else None   # 砲停了幾秒才開放病床（js/44_medic.js；0 ＝ 不分交戰）
-    if cm is not None and not (isnum(cm) and 0 <= cm <= 600):
-        err('rooms.medical.calm', '0～600 的數字（秒；0 ＝ 不分交戰）')
     KY = cfg.get('keys')                                  # 鍵位的出廠預設（js/66_keys.js：{ 動作: 鍵 }；動作的清單在遊戲裡 ⇒ 這裡只驗形狀，認不得的動作遊戲不收）
     if KY is not None:
         if not isinstance(KY, dict):
@@ -3520,7 +3517,7 @@ def act_defaults(lim):
     return ['✓ 出廠預設改了 %d 項（config/game.json lim；重建之後遊戲才吃得到）：' % len(log)] + log
 
 
-FURN_KEYS = ('tpm', 'crew', 'cap', 'hold', 'hp', 'buff.heal', 'staff.surgeon', 'staff.carpenter', 'staff.sailmaker', 'auto', 'autoDeck', 'wood', 'cloth', 'carry')            # 道具設定頁（js/67_furncfg.js FURN_ITEMS）調得到的那幾格
+FURN_KEYS = ('tpm', 'crew', 'cap', 'hold', 'rate', 'doc', 'hp', 'buff.heal', 'staff.surgeon', 'staff.carpenter', 'staff.sailmaker', 'auto', 'autoDeck', 'wood', 'cloth', 'carry')            # 道具設定頁（js/67_furncfg.js FURN_ITEMS）調得到的那幾格
 DRVP_KEYS = ('lo', 'hi', 'wet', 'cell', 'hpK')                                  # 同一頁的動力件（DRV_ITEMS ⇒ config drvparts）
 
 # 問題回報的 Discord webhook（Tim 2026-10-18「那妳先把網址加密在填吧(工具直接填加密後的)」）：game.json 只存 x1:<base64url>，遊戲（js/01_gl.js hookDec）解開。
