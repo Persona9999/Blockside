@@ -91,9 +91,11 @@ function deckPlan(id, name) {
 }
 /** 那一層甲板照擺法擺上的取用點（格子）⇒ 跟 roomItems 同一個格式（auto ⇒ 照舊找的那幾處換成格子）。 */
 function deckItems(T, D, pl) {
-  if (!pl.items) { var a = deckAutoItems(T, D); benchFill(T, D, a); return { type: 'deck', items: a, bad: [], why: '', auto: true }; }   // benchFill：木工台不夠預設張數 ⇒ 自動補（46_carpenter.js）
-  var c = roomCheck(T, { grid: deckGrid(T, D) }, 'deck', pl.items); benchFill(T, D, c.items); return { type: 'deck', items: c.items, bad: c.bad, why: '' };
+  if (!pl.items) { var a = deckAutoItems(T, D), np = pumpFill(T, D, a); benchFill(T, D, a); return { type: 'deck', items: a, bad: [], why: '', auto: true, pumps: np }; }   // pumpFill：自動的那一層照 furniture[].autoDeck 擺抽水機（45_pumps.js；位置有限制 ⇒ 比木工台先擺）；benchFill：木工台不夠預設張數 ⇒ 自動補（46_carpenter.js）
+  var c = roomCheck(T, { grid: deckGrid(T, D) }, 'deck', pl.items), np2 = deckMine(T.id, deckId(D)) ? 0 : pumpFill(T, D, c.items); benchFill(T, D, c.items); return { type: 'deck', items: c.items, bad: c.bad, why: '', pumps: np2 };   // 設定檔的自訂預設（玩家沒改過）也照 autoDeck 補抽水機；玩家改過 ⇒ 照他擺的
 }
+/** 這一層甲板的擺法是不是玩家自己改過的（存檔 SHIP_ROOMS 有這一層；沒有 ⇒ 用的是設定檔的預設或自動）。 */
+function deckMine(id, name) { var S = SHIP_ROOMS[id]; return !!S && Object.prototype.hasOwnProperty.call(S, name); }
 /** 甲板的俯視格子（記在船型上）：跟 roomGrid 同一個格式，多 zt（每一格站的高度）；s：0 站不住、1 可以擺、3 砲班的位置。 */
 function deckGrid(T, D) {
   T.deckG = T.deckG || {}; var id = deckId(D); if (T.deckG[id]) return T.deckG[id];

@@ -457,6 +457,8 @@ def validate(cfg, prev=None):
                 err('furniture.%s.%s' % (fid, k), '%s～%s 的數字' % (lo, hi))
         if isinstance(f, dict) and 'auto' in f and not (isint(f['auto']) and 1 <= f['auto'] <= 4):
             err('furniture.%s.auto' % fid, '1～4 的整數（每船至少幾張）')
+        if isinstance(f, dict) and 'autoDeck' in f and not (isint(f['autoDeck']) and 0 <= f['autoDeck'] <= 4):   # 抽水機（TASK-0604；js/45_pumps.js pumpFill）：甲板是自動的時候擺幾台
+            err('furniture.%s.autoDeck' % fid, '0～4 的整數（甲板是自動的時候每船擺幾台；0 ＝ 不擺）')
         for k, lo, hi in (('wood', 0, 20000), ('cloth', 0, 20000), ('carry', 10, 2000)):   # 木工台的木材（js/46_carpenter.js）、帆布櫃的帆布（js/47_sailmaker.js）
             if isinstance(f, dict) and k in f and not (isint(f[k]) and lo <= f[k] <= hi):
                 err('furniture.%s.%s' % (fid, k), '%s～%s 的整數' % (lo, hi))
@@ -3517,7 +3519,7 @@ def act_defaults(lim):
     return ['✓ 出廠預設改了 %d 項（config/game.json lim；重建之後遊戲才吃得到）：' % len(log)] + log
 
 
-FURN_KEYS = ('tpm', 'crew', 'cap', 'hold', 'hp', 'buff.heal', 'staff.surgeon', 'staff.carpenter', 'staff.sailmaker', 'auto', 'wood', 'cloth', 'carry')            # 道具設定頁（js/67_furncfg.js FURN_ITEMS）調得到的那幾格
+FURN_KEYS = ('tpm', 'crew', 'cap', 'hold', 'hp', 'buff.heal', 'staff.surgeon', 'staff.carpenter', 'staff.sailmaker', 'auto', 'autoDeck', 'wood', 'cloth', 'carry')            # 道具設定頁（js/67_furncfg.js FURN_ITEMS）調得到的那幾格
 DRVP_KEYS = ('lo', 'hi', 'wet', 'cell', 'hpK')                                  # 同一頁的動力件（DRV_ITEMS ⇒ config drvparts）
 
 # 問題回報的 Discord webhook（Tim 2026-10-18「那妳先把網址加密在填吧(工具直接填加密後的)」）：game.json 只存 x1:<base64url>，遊戲（js/01_gl.js hookDec）解開。

@@ -1096,9 +1096,10 @@
       "tpm": 4.5,
       "crew": 4,
       "place": "well",
-      "cap": 36
+      "cap": 36,
+      "autoDeck": 0
     },
-    "spump": {"name": "蒸汽抽水機", "type": "deck", "size": [10, 6, 9], "hp": 160, "role": "pump", "power": "steam", "tpm": 15, "place": "center", "cap": 60},
+    "spump": {"name": "蒸汽抽水機", "type": "deck", "size": [10, 6, 9], "hp": 160, "role": "pump", "power": "steam", "tpm": 15, "place": "center", "cap": 60, "autoDeck": 0},
     "bench": {
       "name": "木工台",
       "type": "deck",

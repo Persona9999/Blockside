@@ -406,8 +406,8 @@ function sliders() {
     (T ? hullDeckKit(T).decks : []).forEach(function (D, i) {
       var I = deckItems(T, D, deckPlan(CFG_ID, D.id)), el = $('dk-' + i + 'V'), b = document.querySelector('#deckItems button[data-d="' + i + '"]');
       if (b) b.className = RE.d && RE.i === i ? 'on' : '';
-      var nk = I.items.filter(function (q) { return FURN[q.it].role === 'powder'; }).length, np = I.items.length - nk;   // 抽水機（45_pumps.js）另外數
-      if (el) el.textContent = (I.auto ? '自動：' : '自訂：') + '取用點 ' + nk + ' 處（每處三桶）' + (np ? '・抽水機 ' + np + ' 台' : '') + (nk ? '' : '　⚠ 這一層的送藥手沒地方拿火藥') + (I.bad.length ? '　⚠ 存的擺法有 ' + I.bad.length + ' 處擺不下（沒擺）' : '');
+      var nk = I.items.filter(function (q) { return FURN[q.it].role === 'powder'; }).length, oth = itemsText(I.items.filter(function (q) { return FURN[q.it].role !== 'powder'; }));   // 抽水機、木工台、帆布櫃照名字各數（⛔ 以前「不是火藥 ＝ 抽水機」⇒ 木工台＋帆布櫃被寫成「抽水機 2 台」）
+      if (el) el.textContent = (I.auto ? '自動：' : '自訂：') + '取用點 ' + nk + ' 處（每處三桶）' + (oth ? '・' + oth : '') + (nk ? '' : '　⚠ 這一層的送藥手沒地方拿火藥') + (I.bad.length ? '　⚠ 存的擺法有 ' + I.bad.length + ' 處擺不下（沒擺）' : '');
     });
     $('roomSum').textContent = !T ? '船型載入後列得出艙房。' : !R.length ? '這一型還沒標空艙房（造船規格 §9.2：艙房子作品的固定點 <房名>.min／.max、關聯 meta kind=rooms）。'
       : R.length + ' 間空艙房' + (Object.keys(n).length ? '：' + Object.keys(n).map(function (f) { return ROOM_FN[f].name + ' ' + n[f] + ' 間'; }).join('、') : '，都空著') + '。選了類型就自動擺滿（先擺必要件、再擺加強件、剩下的空間多擺）；「擺設…」自己擺。門口留一格走道。' + (ROOMFN_Q ? '　⚠ 網址 ?roomfn= 蓋過' : '');
@@ -427,8 +427,9 @@ function sliders() {
     var F = ROOM_FN[E.pl.type], its = E.I.items.map(function (q) { return q.it; }), B = roomBuff(E.pl.type, its), lack = roomLack(E.pl.type, its), cap = 0;
     if (!RE.it || F.items.indexOf(RE.it) < 0) RE.it = F.items[0];
     E.I.items.forEach(function (q) { cap += FURN[q.it].hold || 0; });
-    $('roomEdT').textContent = E.label + '・' + F.name + '（' + E.G.nx + '×' + E.G.ny + ' 格，一格 0.5 m）' + (E.I.auto ? (RE.d ? '・自動（照舊的取用點）' : '・自動擺滿') : '・自訂');
+    $('roomEdT').textContent = E.label + '・' + F.name + '（' + E.G.nx + '×' + E.G.ny + ' 格，一格 0.5 m）' + (E.I.auto ? (RE.d ? '・自動（照舊的取用點' + (E.I.pumps ? '＋抽水機 ' + E.I.pumps + ' 台' : '') + '）' : '・自動擺滿') : '・自訂');
     $('roomEdA').textContent = RE.d ? '回到自動' : '自動擺滿';
+    $('roomEdPm').style.display = RE.d && F.items.some(function (it) { return FURN[it] && FURN[it].role === 'pump'; }) ? '' : 'none';   // 擺滿抽水機（TASK-0604；45_pumps.js pumpFillMax）：只有甲板
     $('roomEdP').innerHTML = F.items.map(function (it) { return '<button data-it="' + it + '"' + (RE.it === it && !RE.del ? ' class="on"' : '') + '>' + FURN[it].name + '（' + furnNote(it) + '）</button>'; }).join('') +
       '<button data-rot="1">轉 90°（' + (RE.r ? '橫過船身' : '順著船身') + '）</button><button data-del="1"' + (RE.del ? ' class="on"' : '') + '>拿掉</button>';
     [].forEach.call($('roomEdP').querySelectorAll('button'), function (b) {
@@ -500,9 +501,19 @@ function sliders() {
   };
   $('roomEdA').onclick = function () {
     var E = roomEdCur(); if (!E) return;
-    if (RE.d) { roomSet(E.name, { type: 'deck' }); RE.msg = '回到自動（照舊的取用點）'; }   // 甲板的自動 ＝ 沒有 items（⇒ 開戰時照舊找、戰局跟沒改過一樣；蓋過設定檔的自訂預設）
+    if (RE.d) { roomSet(E.name, { type: 'deck' }); RE.msg = '回到自動（照舊的取用點；道具設定「每船自動擺幾台」不是 0 的抽水機也照它擺）'; }   // 甲板的自動 ＝ 沒有 items（⇒ 開戰時照舊找、戰局跟沒改過一樣；蓋過設定檔的自訂預設）
     else { roomSet(E.name, { type: E.pl.type }); RE.msg = '自動擺滿了'; }
     show();
+  };
+  // 擺滿抽水機（TASK-0604）：照位置規則（主桅旁中線；蒸汽的只有蒸汽船）把每一種擺到全船上限，扣掉別層、這一層已經擺的 ⇒ 存成這一層的自訂擺法（多的自己拿掉）
+  $('roomEdPm').onclick = function () {
+    var E = roomEdCur(); if (!E || !RE.d) return;
+    var DK = hullDeckKit(E.T).decks, cur = E.I.items.map(function (q) { return { it: q.it, x: q.x, y: q.y, r: q.r }; }), have = {};
+    function cnt(L) { L.forEach(function (q) { if (FURN[q.it] && FURN[q.it].role === 'pump') have[q.it] = (have[q.it] || 0) + 1; }); }
+    DK.forEach(function (X, k) { if (k !== RE.i) cnt(deckItems(E.T, X, deckPlan(CFG_ID, X.id)).items); }); cnt(cur);
+    var got = pumpFillMax(E.T, DK[RE.i], cur, have), n = 0, txt = Object.keys(got).filter(function (it) { return got[it]; }).map(function (it) { n += got[it]; return FURN[it].name + ' ' + got[it] + ' 台'; }).join('、');
+    if (!n) { RE.msg = '沒有再擺上抽水機（已經到全船上限，或這一層的主桅旁中線擺不下）'; roomEdShow(); return; }
+    roomSet(E.name, { type: 'deck', items: cur }); RE.msg = '擺上' + txt + '（擺到全船上限' + (got.pump ? '；人力的每台要 ' + FURN.pump.crew + ' 人搖' : '') + '，多的按「拿掉」）'; show();
   };
   $('roomEdZ').onclick = function () { var E = roomEdCur(); if (!E) return; roomSet(E.name, { type: E.pl.type, items: [] }); RE.msg = '清空了'; show(); };
   $('roomEdX').onclick = $('roomEdX2').onclick = function () { RE.i = -1; show(); };

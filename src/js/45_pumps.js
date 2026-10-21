@@ -13,6 +13,10 @@
 //   · 兩種都一樣：被打壞（模型，跟砲同一套血量）⇒ 不抽；泡在水裡（腳下那一格在海面下、或艙內的水滿了一半）⇒ 不抽。
 //     同一種加總封頂 furniture[].cap（噸／分，全船）。
 // 沒擺抽水機 ⇒ sh.pumps ＝ null：不派人、不抽 rnd()、pumpK 照舊 ⇒ 戰局一位元不動。
+// 自動擺（Tim 2026-10-21「604 GO」、出廠 0 台）：那一層甲板玩家沒改過（自動、或設定檔的自訂預設；36_rooms.js deckItems）而且是水線以上最低那層（benchDeck，跟 ?pumps= 同一層）
+//   ⇒ 每一種補到 furniture[].autoDeck 台（pumpFill：這一層已經有的先扣掉；照位置規則、離泵井最近的格先；蒸汽的只有蒸汽船；擺不下就少擺）。
+//   ⛔ 跟木工台的「每船至少」（auto）不一樣：玩家自己改過那一層（存檔有這一層）⇒ 照他擺的，拿掉就是拿掉（抽水機是加裝的，船本來的抽水在基礎量裡）。
+//   0 ⇒ 不擺（出廠；戰局跟以前一位元不差）。道具設定頁調台數；船隻配置頁甲板編輯器另有一鍵「擺滿抽水機」（擺到全船上限）。
 var PUMP_URGENT = 0.005;                                         // 積水佔設計排水量幾成算「多」（抽水機優先於醫療艙）
 var PUMP_WELL_X = 30, PUMP_WELL_Y = 12, PUMP_WET = 2;            // 格（一格 0.1 m）：主桅前後 3 m、中線兩側 1.2 m（物品的中心）；艙裡幾噸水才派人去搖
 /** 那一型的泵井在哪（格座標 x）：主桅 ＞ 桅的中間那根 ＞ 船身中段。 */
@@ -20,8 +24,11 @@ function pumpWellX(T) {
   var M = (T.masts || []).filter(function (m) { return m.name === '主桅'; })[0] || (T.masts || [])[Math.floor(((T.masts || []).length - 1) / 2)];
   return M ? M.x : Math.round((T.hx0 + T.hx1) / 2);
 }
-/** 那一型是不是蒸汽船（照船隻設定：額外動力 > 0、ships[].drive 不是 magic）。 */
-function pumpSteamShip(T) { var h = hullInfo(T.id); return shipCfg(T.id).base > 0 && !(h && h.drive === 'magic'); }
+/** 那一型是不是蒸汽船（照船隻設定：額外動力 > 0、ships[].drive 不是 magic、不是槳帆船）。
+ *  槳帆船（持火號、皇家號、平底船、福斯塔）的額外動力是槳（31_drive.js：有槳座的槳模型 ⇒ kind 'oar'）⇒ 沒有鍋爐，⛔ 以前照「base > 0」也擺得了蒸汽抽水機。 */
+function pumpSteamShip(T) { var h = hullInfo(T.id); return shipCfg(T.id).base > 0 && !(h && h.drive === 'magic') && !pumpOarShip(T); }
+/** 那一型有沒有槳（跟船隻配置頁的船員、開戰時 31_drive.js 同一條：雕刻模型 meta kind=oar、有槳座 pivot）。 */
+function pumpOarShip(T) { return ((T.rig && T.rig.models) || []).some(function (m) { return (m.meta || {}).kind === 'oar' && !!(m.points || {}).pivot; }); }
 /** 甲板格子 G（36_rooms.js deckGrid；G.T ＝ 船型）上擺抽水機 p 的位置規則：可以 ⇒ ''，不行 ⇒ 原因。 */
 function pumpPlaceWhy(G, p) {
   var f = FURN[p.it], T = G.T; if (!f || !f.place || !T) return '';
@@ -40,6 +47,23 @@ function pumpAuto(T, D, items, it, n) {
   C.sort(function (a, b) { return a[2] - b[2] || a[1] - b[1] || a[0] - b[0]; });
   for (var c = 0; c < C.length && got < n; c++) for (var r = 0; r < 2; r++) { var p = { it: it, x: C[c][0], y: C[c][1], r: r }; if (!placeOk(G, 'deck', items, p)) { items.push(p); got++; break; } }
   return got;
+}
+/** 那一型擺得了哪幾種抽水機（道具 id；蒸汽的只有蒸汽船）。 */
+function pumpKinds(T) { return Object.keys(FURN).filter(function (it) { var f = FURN[it]; return f.role === 'pump' && (f.power !== 'steam' || pumpSteamShip(T)); }); }
+/** 玩家沒改過的甲板 D（自動、或設定檔的自訂預設；36_rooms.js deckItems，items 會改）：D 是抽水機那一層（benchDeck）⇒ 每一種補到 furniture[].autoDeck 台（這一層已經有的先扣掉；見檔頭「自動擺」）。⇒ 補了幾台。 */
+function pumpFill(T, D, items) {
+  var BD = benchDeck(T), got = 0; if (!BD || deckId(BD) !== deckId(D)) return 0;
+  pumpKinds(T).forEach(function (it) {
+    var n = Math.round(+FURN[it].autoDeck || 0); if (n <= 0) return;
+    n -= items.filter(function (q) { return q.it === it; }).length; if (n > 0) got += pumpAuto(T, D, items, it, n);
+  });
+  return got;
+}
+/** 甲板編輯器的「擺滿抽水機」（71_input.js；items 會改）：每一種擺到全船上限（cap ÷ 每台抽水量；沒有上限 ⇒ 8 台）、扣掉全船已經擺的（have：道具 ⇒ 台數）。⇒ { 道具: 這次擺了幾台 }。 */
+function pumpFillMax(T, D, items, have) {
+  var o = {};
+  pumpKinds(T).forEach(function (it) { var f = FURN[it], max = f.cap > 0 && f.tpm > 0 ? Math.floor(f.cap / f.tpm + 1e-9) : 8, n = max - (have[it] || 0); o[it] = n > 0 ? pumpAuto(T, D, items, it, n) : 0; });
+  return o;
 }
 /** 開戰時（10_ship.js，shipRooms 之後）：甲板擺法裡的抽水機 ⇒ 模型（加進 sh.models，跟砲同一套血量、命中）；sh.pumps ＝ { list, ... }，沒有 ⇒ null。 */
 function pumpModels(sh) {
