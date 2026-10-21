@@ -69,6 +69,22 @@ var HULLS = {}, HULLT = {};                                             // id �
 //   規格表標 deco 的 kind（config/meta_kinds.json；TASK-0719 砲門蓋板 kind=portlid，Tim 2026-10-19：「炮門屬於裝飾物」；10-21「炮門在所有畫質下都預設顯示」⇒ 畫不畫另外看 portOn）本身就是裝飾 ⇒ meta 不用另寫 deco=1
 //   （⛔ 照 meta deco=1：雕刻端漏寫一片 ⇒ 那片變成模擬模型（擋彈、抽亂數），光榮號的戰局悄悄跟著畫質變）。
 function isDeco(m) { var v = m && m.meta && m.meta.deco; if (m && m.meta && kindProp(m.meta.kind, 'deco')) return true; return v !== undefined && v !== null && v !== '' && v !== '0' && v !== 0 && v !== false; }
+/** 換色的擺放（TASK-0584；buildHull 一開頭、decoSplit 之前）：雕刻端把「同一件零件換個配色」匯出成共用同一份網格、擺放上多一欄 mats
+ *  （跟網格的 mats 一一對應、同長度：畫這個擺放時拿它代替網格的 mats）⇒ .vxk 只存一份頂點與三角形。
+ *  這裡把它展開成一份新的網格（頂點、三角形、tmat 照參照共用同一個陣列，只換 mats）、擺放改指它 ⇒ 之後讀網格的（畫、碎片、俯視圖、重量）都不用知道有換色這回事。
+ *  同一份網格＋同一組 mats 的擺放共用一份。⛔ 長度跟網格的 mats 對不上 ⇒ 丟錯（不猜哪一個對到哪一個，畫成原色會看不出來）。回展開了幾個擺放。 */
+function modelMats(h) {
+  var ms = (h.rig && h.rig.models) || [], M = (h.rig && h.rig.meshes) || [], made = {}, n = 0;
+  ms.forEach(function (m) {
+    if (!m.mats) return;
+    var src = M[m.mesh];
+    if (!src || !src.mats || src.mats.length !== m.mats.length) throw new Error('模型 ' + m.name + ' 的換色 mats 有 ' + m.mats.length + ' 個、網格 ' + m.mesh + ' 有 ' + (src && src.mats ? src.mats.length : '（沒有）') + ' 個 —— 對不上');
+    var key = m.mesh + '|' + JSON.stringify(m.mats);
+    if (made[key] === undefined) { made[key] = M.length; M.push({ verts: src.verts, tris: src.tris, tmat: src.tmat, mats: m.mats }); }
+    m.mesh = made[key]; delete m.mats; n++;
+  });
+  return n;
+}
 /** 載入時拆出裝飾（buildHull 一開頭）：h.rig.models 只留不是裝飾的；回 { decos：裝飾件, n：幾件, skip：模型、裝飾都沒用到的網格編號（不建、不上 GPU） }。 */
 function decoSplit(h) {
   var ms = (h.rig && h.rig.models) || [], keep = [], deco = [], used = {}, skip = {};
@@ -234,6 +250,7 @@ var hullSay = function () {};                                            // 90_m
 /** C：快取的記錄（06_cache.js；null ⇒ 全部現場算）。現場算的時候，要存的那幾份另外留在 T.keep，給 cachePut 存。 */
 function buildHull(info, model, t0, C) {
   var h = model.header, t1 = performance.now();                            // 到這裡是解碼（loadEmbedded，跟讀快取一起），之後是網格化
+  modelMats(h);                                                            // 換色的擺放（TASK-0584）：展開成自己的網格（共用頂點陣列）⇒ decoSplit 數「沒用到的網格」時看得到它
   var DS = decoSplit(h);                                                   // 裝飾（TASK-0682）：在一切之前拆掉 ⇒ 之後讀 rig.models 的（重量、繩、帆、家具）都看不到它
   h.metaRebased = metaRebase(h);                                           // 改裝船（TASK-0657）：原船裡的 meta 路徑照它所在的那一層往上找（見 metaRebase）
   if (C && (C.voxels !== h.voxels || C.checksum !== h.checksum)) C = null;  // 雙保險：鍵是 .vxk 原文的雜湊，格數與 checksum 也要一樣

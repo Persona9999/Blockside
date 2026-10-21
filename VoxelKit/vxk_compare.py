@@ -159,6 +159,9 @@ def cmp_rig(ra, rb, d):
             if xa['tris'] != xb['tris'] or xa['tmat'] != xb['tmat']: d('model `%s` 網格的三角形／材質索引不同' % k)
             if not near(xa['verts'], xb['verts'], TOL_PT): d('model `%s` 網格頂點差超過 %.3f' % (k, TOL_PT))
             if not near(xa['mats'], xb['mats'], TOL_COLOR): d('model `%s` 網格材質色不同' % k)
+            # 換色的擺放（TASK-0584）：擺放上的 mats 代替網格的 mats ⇒ 比「這個擺放實際畫的色」；有沒有這一欄也要一樣（⛔ 只比網格 ⇒ 改了換色會被判「內容相同」、reimport 不換 .vxk）
+            if ('mats' in a) != ('mats' in b): d('model `%s` 換色 mats：%s vs %s' % (k, 'mats' in a, 'mats' in b))
+            elif 'mats' in a and not near(a['mats'], b['mats'], TOL_COLOR): d('model `%s` 換色 mats 不同' % k)
             cmp_meta_points('model `%s`' % k, a, b, d)
         # 去重的鍵：哪幾個模型共用一份網格要一樣
         ga = sorted(sorted(s) for s in share_a.values()); gb = sorted(sorted(s) for s in share_b.values())
