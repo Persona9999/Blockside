@@ -40,7 +40,7 @@ var TOWNS = { on: Q.get('towns') !== '0', list: [], pend: [], ver: 0, want: 0, e
 var TOWN_J0 = [0, 0, 0, 0];                                             // 建築的 aJ（不斜接、不順坡、牆基不延）
 var TOWN_USE_ALT = { commandant: ['house'], governor: ['townhall'] };   // 那一套沒有那種模型 ⇒ 用哪一種代（BUILDING_SPEC §7：fr 沒有長官的屋子；carib 有）
 var TOWN_STYLE_DEF = 'fr';                                              // 索引裡沒寫 style 的模型算 fr（第一套，TASK-0757）；規劃沒帶退路 styles（舊的匯出）⇒ 城的 style、再 fr
-var TOWN_COL = { main: [0.56, 0.47, 0.34], street: [0.62, 0.58, 0.50], track: [0.50, 0.42, 0.30], plaza: [0.70, 0.66, 0.58], quay: [0.58, 0.56, 0.52], pier: [0.45, 0.33, 0.22], post: [0.30, 0.22, 0.15] };
+var TOWN_COL = { main: [0.56, 0.47, 0.34], street: [0.62, 0.58, 0.50], track: [0.50, 0.42, 0.30], plaza: [0.70, 0.66, 0.58], quay: [0.58, 0.56, 0.52], mole: [0.52, 0.51, 0.47], pier: [0.45, 0.33, 0.22], post: [0.30, 0.22, 0.15] };
 evOn('bedChunk', function (cx, cy) {
   TOWNS.dirty = true;
   if (!BED || !BED.A) return;
@@ -573,14 +573,19 @@ function townGroundMesh(T) {
     }
   }
   (p.quay || []).forEach(function (q) { slab(q.path, q.w, 1.0, -2.5, TOWN_COL.quay); });
+  // 棧橋（Blocksail TOWN_BUILD §3.3.8 的 kind）：長碼頭 wharf、石堤 mole ＝ 實心石砌，一直到那一座沿線最深的水再深 1 m（埋進海床；不畫樁）；
+  //   其他（棧橋、T 字頭、支棧橋、skala 短棧）＝ 木板＋樁，樁一根一根伸到它底下的海床（Tim 2026-10-22「棧橋的腳可以長一點」—— 以前一律到 −4 m，深水的棧橋腳懸在水裡）；
+  //   那一塊地形還沒到（townRoadHeight 是 NaN）⇒ 伸到沿線最深的水再深 1 m（一樣埋進海床）
   (p.piers || []).forEach(function (q) {
+    var deep = -((q.depth > 0 ? q.depth : 4) + 1);
+    if (q.kind === 'wharf' || q.kind === 'mole') { slab(q.path, q.w, q.kind === 'mole' ? 2.0 : 1.0, deep, q.kind === 'mole' ? TOWN_COL.mole : TOWN_COL.quay); return; }
     slab(q.path, q.w, 1.4, 1.0, TOWN_COL.pier);
     var P = q.path.map(W);                                              // 樁：每 4 m 一對
     for (var s = 1; s < P.length; s++) {
       var a = P[s - 1], b = P[s], L = Math.hypot(b[0] - a[0], b[1] - a[1]), tx = (b[0] - a[0]) / (L || 1), tz = (b[1] - a[1]) / (L || 1);
       for (var t = 2; t < L; t += 4) [-1, 1].forEach(function (sd) {
-        var cx = a[0] + tx * t - tz * sd * (q.w / 2 - 0.3), cz = a[1] + tz * t + tx * sd * (q.w / 2 - 0.3), r = 0.18, base = V.length / 9;
-        [[-r, -r], [r, -r], [r, r], [-r, r]].forEach(function (o) { vtx(cx + o[0], 1.0, cz + o[1], TOWN_COL.post, o[0] / r, 0, o[1] / r); vtx(cx + o[0], -4, cz + o[1], TOWN_COL.post, o[0] / r, 0, o[1] / r); });
+        var cx = a[0] + tx * t - tz * sd * (q.w / 2 - 0.3), cz = a[1] + tz * t + tx * sd * (q.w / 2 - 0.3), r = 0.18, base = V.length / 9, gy = townRoadHeight(cx, cz), bot = gy === gy ? Math.min(gy - 0.5, 0.5) : deep;
+        [[-r, -r], [r, -r], [r, r], [-r, r]].forEach(function (o) { vtx(cx + o[0], 1.0, cz + o[1], TOWN_COL.post, o[0] / r, 0, o[1] / r); vtx(cx + o[0], bot, cz + o[1], TOWN_COL.post, o[0] / r, 0, o[1] / r); });
         for (var e = 0; e < 4; e++) { var i0 = base + e * 2, i1 = base + ((e + 1) % 4) * 2; I.push(i0, i1, i1 + 1, i0, i1 + 1, i0 + 1); }
       });
     }
