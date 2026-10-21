@@ -539,13 +539,14 @@ function shLogTick() {
   shLog('每秒', { mode: CSM_SIMPLE ? '單張' : '分段', n: SHM.n, z0: SHM.z0 || 0, z1: SHM.z1 || 0, cs: SHM.cs.slice(0, SHM.k).map(function (c) { return { r: c.r, C: c.C.map(function (v) { return Math.round(v); }) }; }),
     splits: SHM.splits.map(function (v) { return Math.round(v); }), ms: SHM.stat.ms, redraws: SHM.stat.redraws, meshGen: BED_MESH_GEN });
 }
-// 陰影範圍的除錯線（Tim 2026-10-20「可以嘗試在畫面上畫debug線條(可以檢測debug模式是否開啟) 用來排查shadow分配範圍」）：Debug 模式（04_state.js dbgOn：細節設定的勾選、?dbg=1、?debug=1）開著才畫。
+// 陰影範圍的除錯線（Tim 2026-10-20「可以嘗試在畫面上畫debug線條(可以檢測debug模式是否開啟) 用來排查shadow分配範圍」）：
+//   要另外帶 ?shdbg=1 才畫（Tim 2026-10-21「關掉debug模式下 陰影繪製的線條吧(改成要額外帶參數才畫 只開debug不畫)」）——只開 Debug（dbgOn）不畫；畫質頁「陰影細項」的「顯示分段」照舊也畫。
 //   每一張陰影圖罩住的範圍 ⇒ 海平面上（y 0.6 m）一個框（太陽方向的長方體跟海平面的交線）：照鏡頭分段 ⇒ 第 1～4 段 紅、黃、綠、青；單張 ⇒ 洋紅，裡面再一個 85% 的框（從那裡開始淡掉）。
 //   照鏡頭分段時另外畫「收的那邊換段」的線（離鏡頭的深度 ＝ 那一段的遠端，在海平面上是一條直線）：同一個顏色、短一點。不做深度測試 ⇒ 被地形擋住也看得到。
 //   羅盤下面那一行除錯資訊多「陰影」那一段（shadowDbgText，61_hud.js）。
-var SHDBG = { prog: null, vao: null, vb: null }, SHDBG_COL = [[1, 0.25, 0.2], [1, 0.85, 0.2], [0.3, 1, 0.3], [0.3, 0.9, 1]];
+var SHDBG = { prog: null, vao: null, vb: null }, SHDBG_COL = [[1, 0.25, 0.2], [1, 0.85, 0.2], [0.3, 1, 0.3], [0.3, 0.9, 1]], SHDBG_ON = Q.get('shdbg') === '1';
 function shadowDebugDraw() {
-  if (!(dbgOn() || SHK.show) || !SHM || !SHM.on || !SHM.cs.length) return;   // 畫質頁「陰影細項」的「顯示分段」也畫
+  if (!(SHDBG_ON || SHK.show) || !SHM || !SHM.on || !SHM.cs.length) return;   // ?shdbg=1，或畫質頁「陰影細項」的「顯示分段」
   var V = [], y0 = 0.6;
   function seg(a, b, col) { V.push(a[0], a[1], a[2], col[0], col[1], col[2], b[0], b[1], b[2], col[0], col[1], col[2]); }
   SHM.cs.forEach(function (c, i) {
