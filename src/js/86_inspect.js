@@ -8,8 +8,22 @@
 //     沒有就寫 kind；每組寫件數，展開看每一件（名字 ＝ 路徑的最後一段）。勾一組或一件 ⇒ 那幾件高亮（inspHiDraw）；勾的不多（INSP_LBL 件以內）⇒ 每一件在畫面上掛名字（#inspL）。
 // 高亮（60_render.js render，透明的都畫完之後）：同一份網格、單色、半透明，兩層 —— 先一層不做深度測試的淡色（隔著船殼、甲板看得到），
 //   再一層做深度測試的（看得到的那幾面更亮）；亮度跟著時間慢慢呼吸（找得到在哪）。只動畫面：不改模擬、不抽 rnd()。
+// 好幾種一起勾（Tim 2026-10-21「同時勾選多個部件時 是否可以自動分配不同顏色(可以在部件文字上用icon標記對應顏色來比對)」）：
+//   每一種（清單的一組）一個顏色 —— 那一組有勾到的時候從 INSP_PAL 拿還沒人用的第一個，全取消 ⇒ 放回去；同一組裡個別勾的那幾件同色。
+//   清單那一行前面一顆同色的色票（.sw）、畫面上的名字標籤也是那個顏色 ⇒ 對得起來。超過 INSP_PAL 種 ⇒ 從頭再輪（色票照樣標）。
 // 別的玩法 INSP.on false ⇒ inspHiDraw／inspFrame 第一行就回、面板藏起來。
-var INSP = { on: false, hi: new Set(), min: false, sig: '', lbl: [] }, INSP_LBL = 24, INSP_C = [1, 0.8, 0.15];
+var INSP = { on: false, hi: new Set(), min: false, sig: '', lbl: [], col: new Map(), mc: new Map() }, INSP_LBL = 24;
+var INSP_PAL = [[1, 0.8, 0.15], [0.2, 0.88, 1], [1, 0.32, 0.85], [0.4, 1, 0.35], [1, 0.48, 0.12], [0.45, 0.55, 1], [1, 0.25, 0.25], [0.2, 1, 0.78], [0.75, 0.45, 1], [0.95, 0.95, 0.95]];   // 金、青、洋紅、綠、橘、藍、紅、青綠、紫、白（第一個 ＝ 以前唯一的那個金色）
+/** 顏色 i ⇒ CSS rgb()。 */
+function inspCss(i) { var c = INSP_PAL[i % INSP_PAL.length]; return 'rgb(' + c.map(function (v) { return Math.round(v * 255); }).join(',') + ')'; }
+/** 勾選變了之後：每一組有勾到的配一個顏色（已經有的不換）、沒勾的放回去；INSP.mc ＝ 每一件勾了的模型 ⇒ 顏色。 */
+function inspColSync(GL) {
+  var used = {}, need = [];
+  INSP.mc.clear();
+  GL.forEach(function (g) { var any = g.list.some(function (m) { return INSP.hi.has(m); }); if (!any) INSP.col.delete(g.name); else if (INSP.col.has(g.name)) used[INSP.col.get(g.name)] = 1; else need.push(g); });
+  need.forEach(function (g) { var i = 0; while (used[i]) i++; INSP.col.set(g.name, i); used[i] = 1; });
+  GL.forEach(function (g) { var c = INSP.col.get(g.name); if (c !== undefined) g.list.forEach(function (m) { if (INSP.hi.has(m)) INSP.mc.set(m, c); }); });
+}
 /** 一件模型的種類名字（分組用）。 */
 function inspName(m) {
   if (m.kind === 'furn' && FURN[m.item]) return FURN[m.item].name;
@@ -40,14 +54,15 @@ function inspUI() {
   h += '<div class="lab">☰ 甲板（' + keyName('deck') + '）</div><div class="row">';
   for (var k = 0; k <= D.n; k++) h += '<button data-d="' + k + '">' + inspDeckName(D, k) + '</button>';
   h += '</div><div class="lab">部件（勾了就亮）<button id="inspC">全部取消</button></div>';
-  inspGroups(sh).forEach(function (g, gi) {
+  var GL = inspGroups(sh); inspColSync(GL);
+  function sw(c) { return c === undefined ? '' : '<span class="sw" style="background:' + inspCss(c) + '"></span>'; }   // 色票：那一種現在的高亮顏色
+  GL.forEach(function (g, gi) {
     var on = g.list.filter(function (m) { return INSP.hi.has(m); }).length, dead = g.list.filter(function (m) { return !m.alive; }).length;
-    h += '<details' + (on && on < g.list.length ? ' open' : '') + '><summary><label><input type="checkbox" data-g="' + gi + '"' + (on === g.list.length ? ' checked' : '') + '> ' + g.name + ' <i>× ' + g.list.length + (dead ? '（' + dead + ' 件沒了）' : '') + '</i></label></summary>';
-    g.list.forEach(function (m, mi) { h += '<label class="it"><input type="checkbox" data-g="' + gi + '" data-m="' + mi + '"' + (INSP.hi.has(m) ? ' checked' : '') + (m.alive ? '' : ' disabled') + '> ' + String(m.name || m.path).split('/').pop() + '</label>'; });
+    h += '<details' + (on && on < g.list.length ? ' open' : '') + '><summary><label><input type="checkbox" data-g="' + gi + '"' + (on === g.list.length ? ' checked' : '') + '> ' + sw(INSP.col.get(g.name)) + g.name + ' <i>× ' + g.list.length + (dead ? '（' + dead + ' 件沒了）' : '') + '</i></label></summary>';
+    g.list.forEach(function (m, mi) { h += '<label class="it"><input type="checkbox" data-g="' + gi + '" data-m="' + mi + '"' + (INSP.hi.has(m) ? ' checked' : '') + (m.alive ? '' : ' disabled') + '> ' + sw(INSP.mc.get(m)) + String(m.name || m.path).split('/').pop() + '</label>'; });
     h += '</details>';
   });
   box.innerHTML = h + '</div>'; box.classList.toggle('min', INSP.min);
-  var GL = inspGroups(sh);
   $('inspM').onclick = function () { INSP.min = !INSP.min; inspUI(); };
   $('inspC').onclick = function () { INSP.hi.clear(); inspUI(); };
   [].forEach.call(box.querySelectorAll('[data-v]'), function (b) { b.onclick = function () { if (b.dataset.v === 'cut') cutToggle(); else xrayToggle(); inspSync(); }; });
@@ -93,6 +108,7 @@ function inspLabels(o) {
     var p = M4.pt(q, w[0], w[1], w[2]), x = r.left + (p[0] / cw + 1) / 2 * r.width, y = r.top + (1 - p[1] / cw) / 2 * r.height;
     if (x < r.left - 40 || x > r.right + 40 || y < r.top - 20 || y > r.bottom + 20) { el.style.display = 'none'; return; }
     var t = String(m.name || m.path).split('/').pop(); if (el.textContent !== t) el.textContent = t;
+    var cc = inspCss(INSP.mc.get(m) || 0); if (el.dataset.c !== cc) { el.dataset.c = cc; el.style.color = cc; el.style.borderColor = cc; }   // 名字標籤跟那一種的高亮同色
     el.style.display = ''; el.style.left = Math.round(x) + 'px'; el.style.top = Math.round(y) + 'px';
   });
 }
@@ -106,9 +122,9 @@ function inspHiDraw() {
   gl.useProgram(P2.prog); setCommon(P2); gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA); gl.depthMask(false); gl.disable(gl.CULL_FACE);
   [[false, 0.18 + 0.12 * k], [true, 0.3 + 0.2 * k]].forEach(function (pass) {
     if (pass[0]) gl.enable(gl.DEPTH_TEST); else gl.disable(gl.DEPTH_TEST);
-    gl.uniform4f(P2.u.uC, INSP_C[0], INSP_C[1], INSP_C[2], pass[1]);
     INSP.hi.forEach(function (m) {
       var me = sh.T.meshes[m.mesh]; if (!m.alive || !me) return; if (!me.vao) meshGpu(me);
+      var C = INSP_PAL[(INSP.mc.get(m) || 0) % INSP_PAL.length]; gl.uniform4f(P2.u.uC, C[0], C[1], C[2], pass[1]);   // 每一件照它那一種的顏色（inspColSync）
       var dv = m.ancD || m.vsl; gl.uniformMatrix4fv(P2.u.uModel, false, M4.mul(sh.M, dv ? M4.mul(trans(dv[0], dv[1], dv[2]), modelLocal(m)) : modelLocal(m)));   // 跟模型同一個擺法（60_rbatch.js rbatShip 同一條算式；modelWorld 拿掉了 ⇒ 勾的那幾件現算）
       gl.bindVertexArray(me.vao); gl.drawArrays(gl.TRIANGLES, 0, me.n);
     });
