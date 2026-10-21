@@ -223,6 +223,7 @@ function flabEx(sh, room) {
 function floodView(o) {
   o = o || {};
   if (o.ty !== undefined && SHIPS[0]) { var cc = shipCenter(SHIPS[0]); camSet({ tgt: [cc[0], cc[1] + o.ty, cc[2]], trYaw: null, trMe: null }); }
+  if (o.at && SHIPS[0]) camSet({ tgt: M4.pt(SHIPS[0].M, o.at[0], o.at[1], o.at[2]), trYaw: null, trMe: null });   // 對準船上一點（格座標；TASK-0811 拉近看細波）
   var cs = { follow: null, mode: 0 }; ['yaw', 'pitch', 'dist'].forEach(function (k) { if (o[k] !== undefined) cs[k] = o[k]; }); camSet(cs);
   if (o.cut !== undefined) CUTV.half = o.cut === 'half'; if (o.deck !== undefined) CUTV.deck = o.deck | 0; if (o.xray !== undefined) FLX3 = !!o.xray;
   var snap0 = FL_SNAP; FL_SNAP = true; camSet({ snap: true }); camUpdate(1); render(); FL_SNAP = snap0;

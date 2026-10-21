@@ -15,21 +15,21 @@ var FLE_GLSL = 'float flHs(vec2 p){ return fract(sin(dot(p,vec2(127.1,311.7)))*4
   'float flNz(vec2 p){ vec2 i=floor(p), f=fract(p); f=f*f*(3.0-2.0*f); return mix(mix(flHs(i),flHs(i+vec2(1.0,0.0)),f.x),mix(flHs(i+vec2(0.0,1.0)),flHs(i+vec2(1.0,1.0)),f.x),f.y); }\n';
 // ── 畫：艙內的水面（每一格水柱的頂，四個角照同一個世界高度擺 ⇒ 船傾斜時水面還是平的）；噴進來的粒子跟點精靈一起畫 ──
 function flGL() {
-  var poolFS =                                                           // 水面的著色：水格的 P.pool、房間的 P.wpool（63_wrwater_gl.js，TASK-0811）共用
-    '#version 300 es\nprecision highp float; in vec3 vW; in float vF; in vec2 vG; uniform vec3 uEye,uSun,uFog,uSky; uniform float uFogD,uSeaT,uX,uDep,uEdge; uniform vec2 uView; uniform sampler2D uSceneD; out vec4 o;\n' + SHADOW_GLSL + FL_DEP_GLSL + FLE_GLSL +
-    'void main(){ vec2 r=vec2(sin(vW.x*3.1+uSeaT*2.3)+sin(vW.z*4.3-uSeaT*1.7),cos(vW.z*2.7-uSeaT*1.9)+cos(vW.x*3.7+uSeaT*2.1))*0.03; vec3 n=normalize(vec3(r.x,1.0,r.y));\n' +
+  function poolFS(rip) { return '' +                                    // ⛔ return 後面要接著寫（換行 ⇒ 自動補分號、回 undefined）；水面的著色：水格的 P.pool、房間的 P.wpool（63_wrwater_gl.js，TASK-0811）共用；rip ⇒ 多接細波（WRW_RIP_*；⛔ 水格那一份的字一個都不變）
+    '#version 300 es\nprecision highp float; in vec3 vW; in float vF; in vec2 vG; uniform vec3 uEye,uSun,uFog,uSky; uniform float uFogD,uSeaT,uX,uDep,uEdge; uniform vec2 uView; uniform sampler2D uSceneD; out vec4 o;\n' + (rip ? WRW_RIP_DECL : '') + SHADOW_GLSL + FL_DEP_GLSL + FLE_GLSL +
+    'void main(){ vec2 r=vec2(sin(vW.x*3.1+uSeaT*2.3)+sin(vW.z*4.3-uSeaT*1.7),cos(vW.z*2.7-uSeaT*1.9)+cos(vW.x*3.7+uSeaT*2.1))*0.03;' + (rip ? WRW_RIP_GLSL : '') + ' vec3 n=normalize(vec3(r.x,1.0,r.y));\n' +
     ' vec3 v=normalize(uEye-vW); float fr=0.04+0.96*pow(1.0-max(dot(n,v),0.0),5.0), sk=shadowK(vW,n);\n' +
     ' vec3 c=mix(vec3(0.08,0.27,0.3)*(0.45+0.55*sk),uSky*0.75,clamp(fr*0.8+0.08,0.0,1.0))+vec3(1.0,0.92,0.75)*pow(max(dot(reflect(-v,n),uSun),0.0),90.0)*(0.25+sk);\n' +
     ' float al=uX>0.5?0.62:0.78; if(uDep>0.5&&uX<0.5){ vec2 da=flDep(c,0.78); c=flDepC; al=da.x; }\n' +   // 深度吸光（TASK-0654）：關 ⇒ 一位元都不變
     ' if(uEdge>0.5&&vF>0.001){ float nz=flNz(vG*2.2+vec2(uSeaT*0.11,-uSeaT*0.07))*0.65+flNz(vG*5.3-vec2(uSeaT*0.05,uSeaT*0.13)+7.0)*0.35;\n' +   // 水邊（flEdgeM、GFX.pedge）：白沫一圈、淺的邊照 noise 吃進去；關 ⇒ 一位元都不變
     '  float fm=smoothstep(0.1+0.45*nz,0.22+0.45*nz,vF)*(0.55+0.45*flNz(vG*11.0+uSeaT*0.3)); c=mix(c,vec3(0.8,0.88,0.88),0.6*fm); al=max(al,0.5*fm);\n' +   // 白沫自帶不透明度（⛔ 乘在 al 上 ⇒ 貼地板的薄水被深度吸光淡到快 0，白沫跟著看不見）
     '  al*=1.0-smoothstep(0.6+0.38*nz,0.68+0.38*nz,vF); if(al<0.01) discard; }\n' +
-    ' if(uX>0.5) c=mix(c,vec3(0.2,0.6,0.95),0.45);\n' +
-    ' float fd=length(vW-uEye); o=vec4(mix(c,uFog,1.0-exp(-fd*uFogD)),al); }\n';
+    (rip ? WRW_RIP_FOAM : '') + ' if(uX>0.5) c=mix(c,vec3(0.2,0.6,0.95),0.45);\n' +
+    ' float fd=length(vW-uEye); o=vec4(mix(c,uFog,1.0-exp(-fd*uFogD)),al); }\n'; }
   P.pool = VK.compile(gl,
     '#version 300 es\nlayout(location=0) in vec4 aP; layout(location=1) in float aZ0; uniform mat4 uModel,uVP; uniform float uMix,uVox; out vec3 vW; out float vF; out vec2 vG; void main(){ vec4 w=uModel*vec4(aP.xy,mix(aZ0,aP.z,uMix),1.0); vW=w.xyz; vF=aP.w; vG=aP.xy*uVox; gl_Position=uVP*w; }\n',
-    poolFS);
-  P.wpool = VK.compile(gl, WRW_VS, poolFS);                               // 房間的水面（TASK-0811）：頂點帶世界高度、照船現在的姿態換回船上的 z
+    poolFS(false));
+  P.wpool = VK.compile(gl, WRW_VS, poolFS(true));                               // 房間的水面（TASK-0811）：頂點帶世界高度、照船現在的姿態換回船上的 z
   // 水幕（flFalls）：一道 ＝ 一片直立、繞船的鉛直軸轉向鏡頭的長條；aP 軸上那一點（格座標）、aQ ＝ (左右 ±1、0 上 1 下、長度 m、寬度 m 的上一格)、aW ＝ 這一格的寬度 m
   P.fall = VK.compile(gl,
     '#version 300 es\nlayout(location=0) in vec3 aP; layout(location=1) in vec4 aQ; layout(location=2) in float aW; uniform mat4 uModel,uVP; uniform vec3 uEye; uniform float uMix; out vec3 vW; out vec2 vT; out float vL;\n' +
@@ -382,6 +382,7 @@ function flDraw() {
   R.forEach(function (e) {                                                  // 房間的水面（TASK-0811）：同一套著色，頂點著色器照船的姿態把世界高度換回船上的 z
     var sh = e[0], me = e[1];
     if (!on) { on = true; begin(); gl.useProgram(P.wpool.prog); setCommon(P.wpool); gl.uniform1f(P.wpool.u.uX, FLX3 ? 1 : 0); gl.uniform1f(P.wpool.u.uEdge, 0); gl.uniform1f(P.wpool.u.uVox, S); depU(P.wpool); }
+    wrwRipples(sh, me); wrwRipU(P.wpool, sh, me);                           // 細波：粒子、水幕落進水面的漣漪（只給畫面）
     gl.uniformMatrix4fv(P.wpool.u.uModel, false, sh.M); gl.uniform1f(P.wpool.u.uMix, wrwMix(me)); gl.bindVertexArray(me.vao); gl.drawArrays(gl.TRIANGLES, 0, me.n);
   });
   on = false;

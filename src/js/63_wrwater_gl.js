@@ -71,6 +71,45 @@ function wrwBridge(sh, me) {
   me.lost = lost * S3; me.tot = tot * S3;
 }
 function wrwMix(me) { return FL_SNAP ? 1 : clamp((performance.now() - me.tw) / WRW_MS, 0, 1); }
+// ── 細波（TASK-0811 驗收第 4 條；Tim 2026-10-22「顯示上 模擬房間表面的水傾斜跟波動」）：只給畫面 ──
+//   噴進來的粒子（33_flood.js fl.J）往下掉、穿過它所在那一間的水面（wrwMesh 記的 me.hk）、水幕落到水面（fl.mesh.falls）⇒ 記一個漣漪點 [x, y（船的格座標）, 起點（SIMT）, 強度]；
+//   同一個地方 0.3 秒內只起一圈、每艘最多 WRW_RN 圈、活 WRW_RT 秒。著色器（WRW_RIP_GLSL）照點往外擴的同心圓擾動法線、波峰加一點白沫。
+//   時間照 SIMT（uSeaT）⇒ 暫停就停、慢動作就慢。⛔ 不抽 rnd()、不改水量：關掉（畫質「艙內水面的畫法」水格）戰局逐位相同。
+var WRW_RN = 24, WRW_RT = 2.2, WRW_RGAP = 0.12;
+var WRW_RIP_DECL = 'uniform vec4 uRip[' + WRW_RN + ']; uniform int uRipN; uniform vec4 uAx;\n';   // uRip ＝ (x, y（船上的公尺）, 起點秒, 強度)；uAx ＝ 船的 x、y 軸在世界 xz 上的方向
+var WRW_RIP_GLSL = ' float wrRf=0.0; for(int i=0;i<' + WRW_RN + ';i++){ if(i>=uRipN) break; vec4 q=uRip[i]; float ag=uSeaT-q.z; if(ag<0.0) continue;\n' +
+  '  float f0=0.2+0.85*ag; vec2 dv=vG-q.xy; float d=length(dv); if(d>f0+0.12) continue;\n' +
+  '  float a=q.w*exp(-1.6*ag)*(1.0-smoothstep(f0-0.04,f0+0.12,d))*exp(-2.2*max(f0-d,0.0)), ph=17.0*(d-f0);\n' +   // 波前往外 0.85 m／秒、越往裡越淡、越老越淡
+  '  vec2 gg=(d>1e-3?dv/d:vec2(0.0))*sin(ph)*a*0.32; r+=vec2(gg.x*uAx.x+gg.y*uAx.z,gg.x*uAx.y+gg.y*uAx.w); wrRf+=a*smoothstep(0.55,1.0,cos(ph)); }\n';
+var WRW_RIP_FOAM = ' c=mix(c,vec3(0.82,0.9,0.92),clamp(wrRf,0.0,1.0)*0.45);\n';
+/** 每一格畫面（flDraw）：照粒子、水幕記漣漪點（只看最多約 300 顆粒子，輪流）。 */
+function wrwRipples(sh, me) {
+  var fl = sh.fl, J = fl.J, W = sh.T.wrm, M = sh.M, C = W.c, NCK = W.NCX * W.NCY, R = me.rip || (me.rip = []), now = SIMT, HK = me.hk;
+  while (R.length && (now - R[0][2] > WRW_RT || now < R[0][2])) R.shift();   // 照時間排：最老的在前（重開一局 SIMT 歸零 ⇒ 全清）
+  if (!HK || !HK.size || now - (me.ripT === undefined ? -1 : me.ripT) < WRW_RGAP && now >= me.ripT) return;   // 整艘限速：WRW_RGAP 秒最多起一圈（⛔ 不限 ⇒ 噴流一格起好幾圈、24 圈一下就輪完，每一圈活不到半秒、看不見）
+  var done = false;
+  function add(x, y, z, amp) {
+    if (done) return;
+    var r = wrRoomAt(W, Math.floor(x), Math.floor(y), Math.floor(z)); if (r < 0) return;
+    var h = HK.get(r * NCK + Math.floor((x - W.x0) / C) * W.NCY + Math.floor((y - W.ylo) / C)); if (h === undefined) return;
+    var wy = M[1] * x + M[5] * y + M[9] * z + M[13]; if (wy > h + 0.08 || wy < h - 0.35) return;   // 剛好在水面那一帶
+    for (var k = R.length - 1; k >= 0 && now - R[k][2] < 0.3; k--) { var dx = (R[k][0] - x) * S, dy = (R[k][1] - y) * S; if (dx * dx + dy * dy < 0.25) return; }
+    R.push([x, y, now, amp]); if (R.length > WRW_RN) R.shift();
+    done = true; me.ripT = now;
+  }
+  var step = Math.max(1, Math.ceil(J.n / 300)), off = me.ripK = ((me.ripK || 0) + 1) % step;
+  for (var i = off; i < J.n; i += step) { var o = i * 3; if (J.v[o + 2] < 0) add(J.p[o], J.p[o + 1], J.p[o + 2], Math.min(1, 0.35 + 0.6 * Math.cbrt(J.vol[i]))); }
+  var FS = GFX.fall && fl.mesh && fl.mesh.fn ? fl.mesh.falls : null;     // 水幕的落點：落到水面 ⇒ 一直起波（照流量）
+  if (FS) for (var k2 = 0; k2 < FS.length; k2++) { var f = FS[k2]; add(f.x, f.y, f.z1 + 0.5, Math.min(1, 0.3 + f.r)); }
+}
+/** 畫房間的水面之前：這一艘的漣漪點、船軸（P.wpool 的 uRip、uRipN、uAx）。 */
+function wrwRipU(p, sh, me) {
+  var R = me.rip || [], A = me.ripA || (me.ripA = new Float32Array(WRW_RN * 4)), M = sh.M;
+  for (var i = 0; i < R.length; i++) { A[i * 4] = R[i][0] * S; A[i * 4 + 1] = R[i][1] * S; A[i * 4 + 2] = R[i][2]; A[i * 4 + 3] = R[i][3]; }
+  gl.uniform4fv(p.u.uRip, A); gl.uniform1i(p.u.uRipN, R.length);
+  var ax = Math.hypot(M[0], M[2]) || 1, ay = Math.hypot(M[4], M[6]) || 1;
+  gl.uniform4f(p.u.uAx, M[0] / ax, M[2] / ax, M[4] / ay, M[6] / ay);
+}
 /** 重做一艘的房間水面（到時間才做）⇒ me（vao、n 個頂點、讀數 st）。 */
 function wrwMesh(sh) {
   var T = sh.T, W = T.wrm, X = wrxOf(T), M = sh.M, NR = W.roomVox.length, NCOL = W.colRoom.length, C = W.c;
@@ -83,13 +122,13 @@ function wrwMesh(sh) {
   var wetR = [];
   for (r = 0; r < NR; r++) { var Ur = Math.round(me.U[r]); me.h[r] = Ur >= 1 ? wrLevelRoom(W, X, M, r, Ur, me.u) : NaN; if (Ur >= 1) wetR.push(r); }
   // 每一欄有水面（有水、沒滿）的世界高度 ⇒ 角（同一間房）累加
-  var tL = performance.now(), NCX1 = W.NCX + 1, NCC = NCX1 * (W.NCY + 1), CS = new Map(), cols = [], hcol = [];
+  var tL = performance.now(), NCX1 = W.NCX + 1, NCC = NCX1 * (W.NCY + 1), CS = new Map(), cols = [], hcol = [], HK = me.hk = new Map(), NCK = W.NCX * W.NCY;   // HK：(房, 欄) ⇒ 水面世界高度（細波 wrwRipples 查）
   function addC(k, v) { var e = CS.get(k); if (e) { e[0] += v; e[1]++; } else CS.set(k, [v, 1]); }
   wetR.forEach(function (r) {
     for (var j = W.roomCol0[r]; j < W.roomCol0[r + 1]; j++) {
       var u = me.u[j]; if (u <= 0 || u >= wrColCap(W, X, j)) continue;    // 沒水、滿到天花板 ⇒ 沒有水面
       var z = wrColZ(W, X, j, u), hw = M[1] * X.cx[j] + M[5] * X.cy[j] + M[9] * z + M[13], base = r * NCC + W.colCY[j] * NCX1 + W.colCX[j];
-      cols.push(j); hcol.push(hw);
+      cols.push(j); hcol.push(hw); HK.set(r * NCK + W.colCX[j] * W.NCY + W.colCY[j], hw);
       addC(base, hw); addC(base + 1, hw); addC(base + NCX1, hw); addC(base + NCX1 + 1, hw);
     }
   });
