@@ -58,13 +58,7 @@ function smFlush(sh, n) {
   return list.length;
 }
 function smFree(m) { gl.deleteBuffer(m.vb); gl.deleteBuffer(m.ib); gl.deleteVertexArray(m.vao); }
-/** 畫這艘的平滑面（drawModels 裡、cutSet 之後）。M ＝ 世界矩陣（沒給 ＝ sh.M；砲帶的裝甲給它轉過的那個，24_armor.js armSmDraw）。 */
-function smDraw(prog, sh, M) {
-  if (!sh.smR || !sh.smR.size) return;
-  gl.uniformMatrix4fv(prog.u.uModel, false, M || sh.M);
-  if (prog.u.uGlow) gl.uniform1f(prog.u.uGlow, 0);
-  sh.smR.forEach(function (m) { gl.bindVertexArray(m.vao); gl.drawElements(gl.TRIANGLES, m.n, gl.UNSIGNED_INT, 0); });
-}
+// 畫：模型那一段的表（60_rbatch.js rbatPrep 收 sh.smR／a.smR 的每一區、rbatReplay 畫：一份網格開頭設 uModel（船 sh.M；砲帶的裝甲 armM(a)）＋uGlow 0，每區一個 drawElements）。
 /** 一區的網格（g ＝ 現在的格子；reuse ＝ 這艘自己的舊緩衝，有就覆寫）⇒ { vao, vb, ib, n, own } 或 null（這一區沒有平滑面）。
  *  pg（砲帶的裝甲，24_armor.js）：只用來釘格角的另一份格子（拆出來之前貼著的船殼）—— 碰到它的格角只釘高度（z：貼著甲板、不往上縮），水平照樣平滑；它自己不出面、不算實心。
  *  ⛔ 三個方向都釘 ⇒ 圓筒底那一圈是轉 0° 時的格角階梯 ⇒ 砲塔一轉，階梯跟著轉、跟甲板上的座圈對不上，一圈鋸齒（Tim 2026-10-16：「旋轉砲塔旋轉後 會導致底下甲板出現破圖」）。

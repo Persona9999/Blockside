@@ -42,8 +42,7 @@ function armDraw(prog, sh) {
   });
   if (prog.u.uCutL) gl.uniformMatrix4fv(prog.u.uCutL, false, CUT_ID);
 }
-/** 平滑面（drawModels，smDraw 之後）：P.tri 的剖面照世界座標換回船的格座標（uCutInv ＝ sh.inv）⇒ 轉過也切得對。 */
-function armSmDraw(prog, sh) { sh.arm.forEach(function (a) { if (a.smR && a.smR.size && !(a.prop && propGone(a))) smDraw(prog, a, armM(a)); }); }   // 螺旋槳掉了 ⇒ 不畫
+// 平滑面：模型那一段的表照 armM(a) 畫（60_rbatch.js rbatShip；螺旋槳掉了 ⇒ 不畫）；P.tri 的剖面照世界座標換回船的格座標（uCutInv ＝ sh.inv）⇒ 轉過也切得對。
 /** 重網格化（60_render.js remesh）：方塊照預算、平滑面照 sl 區；回 [剩的預算, 剩的區]。 */
 function armRemesh(sh, left, sl) {
   sh.arm.forEach(function (a) {
