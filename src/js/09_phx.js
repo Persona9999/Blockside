@@ -13,7 +13,7 @@
 // 網址：?phx=full|high|mid|low，單項 ?p_rig= ?p_debris= ?p_fx= ?p_water= ?p_flood=（第幾檔，從 0 起）；舊的 ?phys=0 ＝ 帆與繩關。
 var PHX_ITEMS = [
   { k: 'rig', name: '帆與繩', opt: ['關（靜態）', '低', '中', '高'] },
-  { k: 'rigfar', name: '遠方帆繩', opt: ['照常', '遠方半速', '遠方⅓・視野外最慢'] },   // 遠處、視野外的船帆與繩少算幾步（30_rig_physics.js rigFarM；Tim 2026-10-14）
+  { k: 'rigfar', name: '遠方帆繩、船員', opt: ['照常', '遠方半速', '遠方⅓・視野外最慢'] },   // 遠處、視野外的船帆與繩少算幾步（30_rig_physics.js rigFarM；Tim 2026-10-14）、船員少走幾步（50_sim.js simFarM；TASK-0802）
   { k: 'debris', name: '碎木', opt: ['20%', '45%', '70%', '100%'] },
   { k: 'fx', name: '煙與水花', opt: ['40%', '65%', '85%', '100%'] },
   { k: 'water', name: '船邊水花', opt: ['關（原本的）', '低', '中', '高'] },
