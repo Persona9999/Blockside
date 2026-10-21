@@ -1515,7 +1515,7 @@ def shipcheck_page(chrome, sid):
     import html as _html, tempfile
     prof = tempfile.mkdtemp(prefix='shipcheck_')
     try:
-        url = 'file:///' + OUT.replace('\\', '/') + '?shipcheck=' + sid + '&wdir=0&wspd=1'   # 風固定（js/08_weather.js windInit：沒給 ⇒ Math.random() ⇒ 兩艘船兩秒後的位置每次不同、迴旋砲的轉角跟著變，「送藥最遠」那一欄偶爾差 0.1 m；2026-10-21 量的）
+        url = 'file:///' + OUT.replace('\\', '/') + '?shipcheck=' + sid   # 風在頁面裡固定（js/75_shipcheck.js WIND_FIX）⇒ 誰開、從哪裡開都一樣
         r = subprocess.run([chrome, '--headless=new', '--no-first-run', '--user-data-dir=' + prof, '--use-angle=swiftshader', '--enable-unsafe-swiftshader',
                             '--virtual-time-budget=300000', '--dump-dom', url], capture_output=True, timeout=900)
         ms = re.findall(r'<pre id="shipcheck">(.*?)</pre>', r.stdout.decode('utf-8', 'replace'), re.S)

@@ -22,6 +22,7 @@ function shipCheck(id) {
     var info = hullInfo(id) || HULL_KNOWN.filter(function (h) { return h.id === id; })[0];
     if (!info) { add('error', '船型', id, '設定檔 ships 沒有這一型', 'admin.py import'); done(); return; }
     FLEET_DBG = [{ team: 'blue', hull: id }, { team: 'red', hull: 'constitution' }]; flowMode('eve'); DIST = LIM_DIST[1];
+    WIND_FIX = { rot: 0, s0: 1 };                                        // 風固定（08_weather.js windInit；陣風照種子）：⛔ 沒固定 ⇒ Math.random() ⇒ 兩艘兩秒後的位置每次不同、迴旋砲的轉角跟著變，「送藥最遠」那一欄偶爾差 0.1 m（2026-10-21 量的）
     reset(); flowRun(true);
     var sh = SHIPS[0], T = sh.T, NV = sh.nav;
     // ── 開場那一刻（還沒跑）──
