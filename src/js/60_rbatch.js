@@ -98,9 +98,10 @@ function rbatPiece(pc, o) {
 }
 /** 照表畫模型那一段（60_render.js drawModels）：prog ＝ 這一趟的程式（P.tri／P.dtri，呼叫的人已經 useProgram＋setCommon）、pd ＝ 哪一趟。
  *  GL 的呼叫照以前的順序：aM 常數 → 每艘（cutSet；模型、裝飾：uModel、uGlow、畫；平滑面、裝甲的平滑面：一份網格開頭 uModel＋uGlow 0、每區畫）
- *  → uGlow 0、cutSet(null) → 斷開的那一團的模型（照陰影的段）→ 飛出去的模型。畫完：prog 還綁著、uGlow 0、剖面關（之後的旗桿、繩、鏈彈照這個畫）。 */
+ *  → uGlow 0、cutSet(null) → 斷開的那一團的模型（照陰影的段）→ 飛出去的模型。畫完：prog 還綁著、uGlow 0、剖面關（之後的旗桿、繩、鏈彈照這個畫）。
+ *  uGlow 只在值換了才傳（S3）：g ＝ 這一趟上次傳的（每一趟從 NaN 起 ⇒ 第一個一定傳，不靠上一趟、別人留下的）；燈不多 ⇒ 一趟幾乎只傳一兩次。 */
 function rbatReplay(prog, pd) {
-  var R = RBAT, u = prog.u, M = R.M, b = pd.b, cs = R.cs, ns = R.ns, n = R.n, o, i, e;
+  var R = RBAT, u = prog.u, M = R.M, b = pd.b, cs = R.cs, ns = R.ns, n = R.n, gu = u.uGlow, g = NaN, o, i, e;
   gl.vertexAttrib2f(3, 0, 0.5);                                         // P.tri 的 aM（金屬度、粗糙度；TASK-0627）：模型的 VAO 沒開這個屬性 ⇒ 讀這個常數 ⇒ 不反光（平滑渲染的 VAO 自己帶）
   for (o = 0; o < ns; o++) {
     var sh = R.own[o];
@@ -109,15 +110,15 @@ function rbatReplay(prog, pd) {
     for (i = R.i0[o], e = R.i0[o + 1]; i < e; i++) {
       if (R.cls[i] < 2) {
         gl.uniformMatrix4fv(u.uModel, false, M, i * 16, 16);
-        if (u.uGlow) gl.uniform1f(u.uGlow, R.glow[i]);
+        if (gu && R.glow[i] !== g) gl.uniform1f(gu, g = R.glow[i]);
         gl.bindVertexArray(R.vao[i]); gl.drawArrays(gl.TRIANGLES, 0, R.cnt[i]);
       } else {                                                          // 平滑面：一份網格（這艘的、裝甲的那一塊）第一區設矩陣、燈熄
-        if (!R.slot[i]) { gl.uniformMatrix4fv(u.uModel, false, M, i * 16, 16); if (u.uGlow) gl.uniform1f(u.uGlow, 0); }
+        if (!R.slot[i]) { gl.uniformMatrix4fv(u.uModel, false, M, i * 16, 16); if (gu && g !== 0) gl.uniform1f(gu, g = 0); }
         gl.bindVertexArray(R.vao[i]); gl.drawElements(gl.TRIANGLES, R.cnt[i], gl.UNSIGNED_INT, R.off[i]);
       }
     }
   }
-  if (u.uGlow) gl.uniform1f(u.uGlow, 0);                               // 斷開的那一團、飛出去的模型：燈熄了
+  if (gu && g !== 0) gl.uniform1f(gu, 0);                              // 斷開的那一團、飛出去的模型：燈熄了（已經是 0 ⇒ 不再傳）
   cutSet(prog, null);
   for (o = ns; o < n; o++) {                                            // 跟著斷開的那一團走的模型
     if (b && !(cs[o] & b)) continue;
