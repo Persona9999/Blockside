@@ -207,17 +207,17 @@ function gpuSlots() {
 function ortho(r, n, f) { return new Float32Array([1 / r, 0, 0, 0, 0, 1 / r, 0, 0, 0, 0, -2 / (f - n), 0, 0, 0, -(f + n) / (f - n), 1]); }
 /** 帆與繩的緩衝：一格做一次（之後陰影、反射、場景都用同一份）。 */
 function prepRig() {
-  SHIPS.concat(PIECES).forEach(function (ow) {
-    var dirty = ow.rigDirty;
+  for (var i = 0, ns = SHIPS.length, n = ns + PIECES.length; i < n; i++) {   // 船、再斷開的那一團（⛔ SHIPS.concat(PIECES)：每格一個新陣列）
+    var ow = i < ns ? SHIPS[i] : PIECES[i - ns], dirty = ow.rigDirty;
     if (dirty) buildRig(ow);
-    if (ow.sink > 40) return;
+    if (ow.sink > 40) continue;
     var tb = DEBUG ? performance.now() : 0;
     if (dirty || (PHYS && ow.crew)) sailBuf(ow);                     // 物理開著：船上的帆每一格重做；斷開的那一團是靜態的
     if (PHYS && ow.crew) looseBuf(ow);
     if (ow.anc) chainBuf(ow);                                         // 鐵鍊（76_anchor.js；跟帆繩物理開關無關）
-    if (SHIPS.indexOf(ow) >= 0) poleBuf(ow);                          // 陣營旗的旗桿（77_colours.js；旗面是帆，上面 sailBuf 一起畫）
+    if (i < ns) poleBuf(ow);                                          // 陣營旗的旗桿（77_colours.js；旗面是帆，上面 sailBuf 一起畫）
     if (DEBUG) PROF.buf += performance.now() - tb;
-  });
+  }
 }
 // 重網格化（TASK-0531）：打掉的格要重建那幾個區塊的網格（VoxelKit RegionSet：dirty 裡的區塊 → meshChunk → 那一區重新上傳）。
 //   畫面迴圈每一格最多 RM_BUDGET 塊（殉爆、斷船一次上千塊 ⇒ 那一格卡 170 ms）；先做斷開的那幾團（新建的）、再做船
@@ -240,18 +240,18 @@ function remesh(budget) {
   SHIPS.forEach(function (sh) { if (sl > 0 && sh.smD && sh.smD.size) sl -= smFlush(sh, sl); });
   SHIPS.forEach(function (sh) { if (sh.arm) { var r = armRemesh(sh, left, sl); left = r[0]; sl = r[1]; } });   // 砲帶的裝甲（24_armor.js）：船殼排完才輪到
 }
-function drawHulls(prog, near) {                                       // near(c)：只畫靠近 c 的（陰影圖用；沒給 ⇒ 全畫）
-  SHIPS.forEach(function (sh) { if (sh.sink > 40 || (near && !near(sh))) return; cutSet(prog, sh); vlampSet(prog, sh); gl.uniformMatrix4fv(prog.u.uModel, false, sh.M); sh.rs.draw(); if (sh.arm) armDraw(prog, sh); });   // cutSet：剖面與隱藏甲板（74_cutaway.js）；armDraw：砲帶的裝甲（24_armor.js，跟著砲轉）
+function drawHulls(prog, cs) {                                         // cs：陰影那一段的位元，只畫 csmIn 判進那一段的（CSMO.cs）；沒給 ⇒ 全畫
+  SHIPS.forEach(function (sh, i) { if (sh.sink > 40 || (cs && !(CSMO.cs[i] & cs))) return; cutSet(prog, sh); vlampSet(prog, sh); gl.uniformMatrix4fv(prog.u.uModel, false, sh.M); sh.rs.draw(); if (sh.arm) armDraw(prog, sh); });   // cutSet：剖面與隱藏甲板（74_cutaway.js）；armDraw：砲帶的裝甲（24_armor.js，跟著砲轉）
   cutSet(prog, null); vlampSet(prog, null);
-  PIECES.forEach(function (pc) { if (near && !near(pc)) return; gl.uniformMatrix4fv(prog.u.uModel, false, pc.M); pc.rs.draw(); });
+  PIECES.forEach(function (pc, j) { if (cs && !(CSMO.cs[CSMO.ns + j] & cs)) return; gl.uniformMatrix4fv(prog.u.uModel, false, pc.M); pc.rs.draw(); });
 }
 // 模型的世界矩陣一格只算一次（render() 每次 RFR++）：一格要畫 6–7 輪（每艘的陰影圖、反射、主畫面），持火號一艘 98 支槳 ⇒ 原本每輪每支 5 次矩陣乘法＋新陣列
 var RFR = 0, MWM = new WeakMap();
 function modelWorld(o, k, f) { var c = MWM.get(k); if (c && c.f === RFR && c.o === o.M) return c.m; var m = f(); MWM.set(k, { f: RFR, o: o.M, m: m }); return m; }   // c.o：船的矩陣換了（renderLerp 換回模擬的）⇒ 重算
-function drawModels(prog, near) {
+function drawModels(prog, cs) {                                        // cs：同 drawHulls
   gl.vertexAttrib2f(3, 0, 0.5);                                         // P.tri 的 aM（金屬度、粗糙度；TASK-0627）：模型的 VAO 沒開這個屬性 ⇒ 讀這個常數 ⇒ 不反光（平滑渲染的 VAO 自己帶）
-  SHIPS.forEach(function (sh) {
-    if (sh.sink > 40 || (near && !near(sh))) return;
+  SHIPS.forEach(function (sh, i) {
+    if (sh.sink > 40 || (cs && !(CSMO.cs[i] & cs))) return;
     cutSet(prog, sh);
     sh.models.forEach(function (m) {
       var me = sh.T.meshes[m.mesh]; if (!m.alive || !me || (m.vox && !m.moved)) return; if (!me.vao) meshGpu(me);   // m.vox：螺旋槳畫它自己的格（24_armor.js armDraw）
@@ -274,7 +274,7 @@ function drawModels(prog, near) {
   });
   if (prog.u.uGlow) gl.uniform1f(prog.u.uGlow, 0);                     // 斷開的那一團、飛出去的模型：燈熄了
   cutSet(prog, null);
-  PIECES.forEach(function (pc) { if (near && !near(pc)) return; (pc.mods || []).forEach(function (m) {      // 跟著斷開的那一團走的模型
+  PIECES.forEach(function (pc, j) { if (cs && !(CSMO.cs[CSMO.ns + j] & cs)) return; (pc.mods || []).forEach(function (m) {      // 跟著斷開的那一團走的模型
     var me = pc.T.meshes[m.mesh]; if (!me) return; if (!me.vao) meshGpu(me);
     gl.uniformMatrix4fv(prog.u.uModel, false, M4.mul(pc.M, m.L));
     gl.bindVertexArray(me.vao); gl.drawArrays(gl.TRIANGLES, 0, me.n);
@@ -329,15 +329,16 @@ function lanternHalo(push) {
     });
   });
 }
-function drawSails(prog, near) {
+function drawSails(prog, cs) {                                         // cs：同 drawHulls
   if (prog.u.uSailT) gl.uniform1i(prog.u.uSailT, SAIL_UNIT);           // 帆的貼圖集（TASK-0579；11_rig_gpu.js sailTex）：固定第 9 號
   if (prog.u.uFireT) gl.uniform1f(prog.u.uFireT, BURN.sailBurn);      // 帆燒到穿要幾秒（01_gl.js BURN_GLSL；49_burn.js）
-  SHIPS.concat(PIECES).forEach(function (ow) {
-    if (ow.sink > 40 || !ow.sb || !ow.sb.n || (near && !near(ow))) return;
+  for (var i = 0, ns = SHIPS.length, n = ns + PIECES.length; i < n; i++) {   // 船、再斷開的那一團（⛔ SHIPS.concat(PIECES)：每輪一個新陣列）；i ＝ CSMO 的順序
+    var ow = i < ns ? SHIPS[i] : PIECES[i - ns];
+    if (ow.sink > 40 || !ow.sb || !ow.sb.n || (cs && !(CSMO.cs[i] & cs))) continue;
     cutSet(prog, ow); gl.uniformMatrix4fv(prog.u.uModel, false, ow.M);
     gl.activeTexture(gl.TEXTURE0 + SAIL_UNIT); gl.bindTexture(gl.TEXTURE_2D, sailTex(ow.T)); gl.activeTexture(gl.TEXTURE0);
     gl.bindVertexArray(ow.sb.vao); gl.drawElements(gl.TRIANGLES, ow.sb.n, gl.UNSIGNED_INT, 0);
-  });
+  }
 }
 /** 每一段的遠端（離鏡頭多深，公尺）與開始跟下一段混的地方：畫質頁設的分界、交界（07_gfx.js shkSplits；預設 60／145／375／1,500 m，跟以前 practical split 0.85 的 4 段差不多）。 */
 function csmSplits() { var o = shkSplits(); SHM.bs = o.bs; return o.far; }
@@ -353,6 +354,7 @@ function shadowPass() {
   gl.enable(gl.DEPTH_TEST); gl.depthFunc(gl.LESS); gl.depthMask(true); gl.disable(gl.BLEND); gl.disable(gl.SCISSOR_TEST);   // 照自己要的狀態畫，不靠前一個畫法留下來的（清、寫深度都要 depthMask）
   gl.disable(gl.CULL_FACE); gl.enable(gl.POLYGON_OFFSET_FILL); gl.polygonOffset(1.5, 3);
   gl.viewport(0, 0, SHM.n, SHM.n);
+  csmOwners();                                                          // 每個船、斷開的那一團的外接球：這一格算一次（csmIn 每一段只查）
   if (CSM_SIMPLE) { shadowSimple(); PASS.vp = null; gl.disable(gl.POLYGON_OFFSET_FILL); return; }
   // 視錐的四條稜（近裁切面的角 ⇒ 遠裁切面的角）；鏡頭往前 ＝ 兩個面中心的連線
   function un(x, y, z) { var w = I[3] * x + I[7] * y + I[11] * z + I[15], p = M4.pt(I, x, y, z); return [p[0] / w, p[1] / w, p[2] / w]; }
@@ -399,7 +401,7 @@ function shadowPass() {
     if (land && c.S && (c.dirty || (!refreshed && i === SHM.rr % k && now - c.t > CSM_REFRESH))) { if (!c.dirty) { refreshed = true; c.why = '滿一秒'; } csmStatic(c, i); }
     // 這一格：陸地快取關著（預設）⇒ 清掉、陸地整張重畫（跟單張一樣，陰影圖跟這一格的場景一定是同一份）；
     //   開著 ⇒ 靜態那一層複製過來（沒有 ⇒ 清掉）。再畫船。這一段沒有船、上一格也沒有、靜態那一層也沒換 ⇒ 那一層本來就對，整段跳過（省一次 n² 的複製）
-    var inC = csmIn(c, ax, E, fw, d0, d1, sl), any = SHIPS.some(inC) || PIECES.some(inC), ver = land && c.S ? c.t : -1;
+    var any = csmIn(i, c, ax, E, fw, d0, d1, sl), ver = land && c.S ? c.t : -1;
     if (landA && !land) {
       gl.bindFramebuffer(gl.FRAMEBUFFER, c.F.fb); gl.clear(gl.DEPTH_BUFFER_BIT); PASS.vp = c.m;
       var t1 = performance.now(), st0 = { r: c.r, bed: bedDepth(bedPlanes(c.m)), trees: treeDepth(), towns: townDepth() };
@@ -414,9 +416,7 @@ function shadowPass() {
     if (!any) continue;
     }
     PASS.vp = c.m;
-    gl.useProgram(P.dvox.prog); setCommon(P.dvox); drawHulls(P.dvox, inC);
-    gl.useProgram(P.dtri.prog); setCommon(P.dtri); drawModels(P.dtri, inC);
-    gl.useProgram(P.dsail.prog); setCommon(P.dsail); drawSails(P.dsail, inC);   // 帆另一支：貼圖的洞不投影子（TASK-0579）
+    shadowCasters(i);
   }
   SHM.rr++; SHM.on = true;
   PASS.vp = null; gl.disable(gl.POLYGON_OFFSET_FILL);
@@ -448,20 +448,49 @@ function csmFit(un, fw, D) {
   if (!isFinite(z0)) return [0, D];                                     // 整個畫面都是天空
   return [Math.max(0, Math.floor(z0 - CSM_Z0_PAD)), Math.min(D, Math.ceil(z1 + 20))];
 }
-/** 這一段畫哪幾個（drawHulls／drawModels／drawSails 的 near）：外接球（船 ＝ 船型的格子外框對角線的一半；斷開的那一團 30 m）
+/** 第 k 段畫哪幾個（drawHulls／drawModels／drawSails 的 cs）：外接球（船 ＝ 船型的格子外框對角線的一半；斷開的那一團 30 m）
  *  1. 它跟它的影子落得到那一段的深度：球心離鏡頭的深度 ± (半徑 ＋ 影子長)，影子長 ＝ 直徑 × sl（照太陽高度，最多 400 m）跟 [d0, d1] 有重疊
  *     ⇒ 近處的船通常只進前一兩段（不畫進遠的那幾段：它的影子落不到那麼遠）；
- *  2. 太陽方向看過去碰到那一段的範圍。 */
-function csmIn(c, ax, E, fw, d0, d1, sl) {
-  return function (o) {
-    var p, R;
-    if (o.crew) { if (o.sink > 40) return false; var B = o.T.base; R = o.T.shR || (o.T.shR = 0.5 * S * Math.hypot(B.sx, B.sy, B.sz)); p = M4.pt(o.M, B.sx / 2, B.sy / 2, B.sz / 2); }
-    else { p = o.c || (o.M ? [o.M[12], o.M[13], o.M[14]] : null); R = 30; if (!p) return true; }
-    var dc = (p[0] - E[0]) * fw[0] + (p[1] - E[1]) * fw[1] + (p[2] - E[2]) * fw[2], ext = R + Math.min(400, 2 * R * sl);
-    if (dc + ext < d0 || dc - ext > d1) return false;
-    var dx = p[0] - c.C[0], dy = p[1] - c.C[1], dz = p[2] - c.C[2];
-    return Math.abs(dx * ax[0][0] + dy * ax[0][1] + dz * ax[0][2]) < c.r + R && Math.abs(dx * ax[1][0] + dy * ax[1][1] + dz * ax[1][2]) < c.r + R;
-  };
+ *  2. 太陽方向看過去碰到那一段的範圍。
+ *  每個只判一次、記在 CSMO.cs 的第 k 位；回傳這一段有沒有任何一個。 */
+function csmIn(k, c, ax, E, fw, d0, d1, sl) {
+  var O = CSMO, b = 1 << k, any = false;
+  for (var i = 0; i < O.n; i++) {
+    var st = O.st[i], hit = st === 1;
+    if (st === 2) {
+      var px = O.p[i * 3], py = O.p[i * 3 + 1], pz = O.p[i * 3 + 2], R = O.R[i];
+      var dc = (px - E[0]) * fw[0] + (py - E[1]) * fw[1] + (pz - E[2]) * fw[2], ext = R + Math.min(400, 2 * R * sl);
+      if (!(dc + ext < d0 || dc - ext > d1)) {
+        var dx = px - c.C[0], dy = py - c.C[1], dz = pz - c.C[2];
+        hit = Math.abs(dx * ax[0][0] + dy * ax[0][1] + dz * ax[0][2]) < c.r + R && Math.abs(dx * ax[1][0] + dy * ax[1][1] + dz * ax[1][2]) < c.r + R;
+      }
+    }
+    if (hit) { O.cs[i] |= b; any = true; }
+  }
+  return any;
+}
+// 陰影那一趟的「畫的東西」：船照 SHIPS、再斷開的那一團照 PIECES（drawHulls／drawModels／drawSails 照同一個順序查 cs）。外接球一格算一次（csmOwners，shadowPass 開頭；
+//   這一格的 render() 裡 sh.M、pc.c 都不動）⇒ ⛔ 以前每段一個閉包、船殼／模型／帆各叫一次，每次重算 M4.pt。st：0 不畫（沉了）、1 一定畫（斷開的那一團沒有中心）、2 照球判。
+//   陣列不夠才換大的（艦隊實驗室最多 FLEET_MAX 艘、斷開的那一團沒有上限）。
+var CSMO = { n: 0, ns: 0, st: new Uint8Array(16), cs: new Uint8Array(16), p: new Float64Array(48), R: new Float64Array(16) };
+function csmOwners() {
+  var O = CSMO, ns = SHIPS.length, n = ns + PIECES.length;
+  if (n > O.st.length) { var L = Math.max(n, O.st.length * 2); O.st = new Uint8Array(L); O.cs = new Uint8Array(L); O.p = new Float64Array(L * 3); O.R = new Float64Array(L); }
+  O.n = n; O.ns = ns;
+  for (var i = 0; i < n; i++) {
+    var o = i < ns ? SHIPS[i] : PIECES[i - ns], p, R;
+    O.cs[i] = 0; O.st[i] = 2;
+    if (o.crew) { if (o.sink > 40) { O.st[i] = 0; continue; } var B = o.T.base; R = o.T.shR || (o.T.shR = 0.5 * S * Math.hypot(B.sx, B.sy, B.sz)); p = M4.pt(o.M, B.sx / 2, B.sy / 2, B.sz / 2); }
+    else { p = o.c || (o.M ? [o.M[12], o.M[13], o.M[14]] : null); R = 30; if (!p) { O.st[i] = 1; continue; } }
+    O.p[i * 3] = p[0]; O.p[i * 3 + 1] = p[1]; O.p[i * 3 + 2] = p[2]; O.R[i] = R;   // Float64Array：存的就是算出來的那個 double
+  }
+}
+/** 一段陰影圖畫船殼、模型、帆（P.dvox、P.dtri、P.dsail；分段 shadowPass 與單張 shadowSimple 共用）：只畫 csmIn 判進第 k 段的。 */
+function shadowCasters(k) {
+  var cs = 1 << k;
+  gl.useProgram(P.dvox.prog); setCommon(P.dvox); drawHulls(P.dvox, cs);
+  gl.useProgram(P.dtri.prog); setCommon(P.dtri); drawModels(P.dtri, cs);
+  gl.useProgram(P.dsail.prog); setCommon(P.dsail); drawSails(P.dsail, cs);   // 帆另一支：貼圖的洞不投影子（TASK-0579）
 }
 /** 一段的靜態那一層：地形（63_bed_gl.js bedDepth，照那一段的範圍剔除）、樹（63_trees.js treeDepth）、城鎮的建築與城牆（63_towns.js townDepth）只寫深度。 */
 function csmStatic(c, i) {
@@ -504,10 +533,8 @@ function shadowSimple() {
   gl.bindFramebuffer(gl.FRAMEBUFFER, c.F.fb); gl.clear(gl.DEPTH_BUFFER_BIT); PASS.vp = c.m;
   var st = landWant() ? { r: R, bed: bedDepth(bedPlanes(c.m)), trees: treeDepth(), towns: townDepth() } : { r: R };
   PASS.vp = c.m;
-  var inC = csmIn(c, ax, e, [0, 0, -1], -1e9, 1e9, 0);
-  gl.useProgram(P.dvox.prog); setCommon(P.dvox); drawHulls(P.dvox, inC);
-  gl.useProgram(P.dtri.prog); setCommon(P.dtri); drawModels(P.dtri, inC);
-  gl.useProgram(P.dsail.prog); setCommon(P.dsail); drawSails(P.dsail, inC);
+  csmIn(0, c, ax, e, [0, 0, -1], -1e9, 1e9, 0);
+  shadowCasters(0);
   SHM.splits = [1e9]; SHM.bs = [1e9]; SHM.eye.set(e); SHM.fw.set([0, 0, -1]); SHM.on = true;
   st.ms = +(performance.now() - t0).toFixed(2); SHM.stat.redraws++; SHM.stat.last = st; SHM.stat.ms = st.ms;
   if (SHLOG.r !== R) { shLog('單張換範圍', { R: R, was: SHLOG.r || null, want: Math.round(want) }); SHLOG.r = R; }
@@ -642,9 +669,21 @@ function hullUniforms(prog) {
   gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D_ARRAY, HULLA.tex); gl.uniform1i(u.uHullA, 1);
   gl.activeTexture(gl.TEXTURE0);
 }
+/** 畫一格：一段一段叫（GL 的呼叫順序跟以前整支寫在一起時一樣）—— 準備（frameBegin）→ 陰影圖 → 反射 → 主畫面的不透明（mainOpaque）→ 海（mainWater）→ 半透明、粒子、雨（mainOverlay）→ 收尾（frameEnd）。
+ *  ⛔ 主畫面那幾段的函式名不帶 shadow／csm／refl（量測的工具照呼叫堆疊的名字分哪一趟；堆疊別疊太深）。 */
 function render() {
+  var fr = frameBegin();
+  if (GFX.shadow && !cutOn()) shadowPass(); else SHM.on = false;   // 剖面、隱藏甲板開著 ⇒ 不算陰影（拿掉的甲板不擋光；74_cutaway.js）
+  shadowMats();
+  gl.activeTexture(gl.TEXTURE4); gl.bindTexture(gl.TEXTURE_2D_ARRAY, SHM.tex);   // 陰影圖陣列：固定第 4 號（01_gl.js SHADOW_GLSL）
+  gl.activeTexture(gl.TEXTURE0);
+  if (RT.R) reflPass();
+  mainOpaque(fr); mainWater(fr); mainOverlay(fr); frameEnd(fr);
+}
+/** 一格的準備：畫布大小、閃電與世界時間的天色、framebuffer、陰影圖、遮罩的格、燈、帆與繩的緩衝、地形網格 ⇒ fr（之後幾段要的：畫的大小、要還原的天色）。 */
+function frameBegin() {
   resize(); var w = CAM.w, h = CAM.h; RFR++;                          // RFR：模型的世界矩陣（modelWorld）這一格重算
-  // 閃電（天氣，08_weather.js）：那一格的天空與環境光拉亮、0.3 秒內退掉；雷聲照距離延後（340 m/s）。只在畫面，畫完把天色還回去
+  // 閃電（天氣，08_weather.js）：那一格的天空與環境光拉亮、0.3 秒內退掉；雷聲照距離延後（340 m/s）。只在畫面，畫完把天色還回去（frameEnd）
   var bolt = wxBolt(SIMT), sky0 = SKY, hor0 = HORIZON, tod0 = todApply();   // 世界時間（08_weather.js；有 ?tod= 才開）：太陽、天色照時刻 —— 在記下 sky0／hor0 之後套（⛔ 之前 ⇒ 結尾還原成套過的、一格一格疊上去）
   if (bolt && bolt.f > 0) { SKY = lerp3(SKY, [0.82, 0.86, 0.98], bolt.f * 0.7); HORIZON = lerp3(HORIZON, [0.76, 0.79, 0.88], bolt.f * 0.6); }
   if (bolt && bolt.n !== LAST_BOLT) { LAST_BOLT = bolt.n; if (RUNNING && !STILL) setTimeout(function () { sfx('thunder', null, 1 / (1 + bolt.d / 1500)); }, bolt.d / 340 * 1000); }
@@ -653,11 +692,11 @@ function render() {
   prepRig();
   gl.activeTexture(gl.TEXTURE4); gl.bindTexture(gl.TEXTURE_2D_ARRAY, null); gl.activeTexture(gl.TEXTURE0);   // 畫陰影圖時不綁著它（⛔ 綁著 ⇒ 讀寫同一張）
   bedBuild();                                                            // 這一格要換的地形網格先建（63_bed_gl.js）⇒ 陰影與主畫面用同一份
-  if (GFX.shadow && !cutOn()) shadowPass(); else SHM.on = false;   // 剖面、隱藏甲板開著 ⇒ 不算陰影（拿掉的甲板不擋光；74_cutaway.js）
-  shadowMats();
-  gl.activeTexture(gl.TEXTURE4); gl.bindTexture(gl.TEXTURE_2D_ARRAY, SHM.tex);   // 陰影圖陣列：固定第 4 號（01_gl.js SHADOW_GLSL）
-  gl.activeTexture(gl.TEXTURE0);
-  if (RT.R) reflPass();
+  return { w: w, h: h, sky0: sky0, hor0: hor0, tod0: tod0 };
+}
+/** 主畫面的不透明：天、船殼、碎片、船員、模型、旗、繩、鏈彈、帆、陸地、樹、城鎮。 */
+function mainOpaque(fr) {
+  var w = fr.w, h = fr.h;
   gl.bindFramebuffer(gl.FRAMEBUFFER, RT.A.fb); gl.viewport(0, 0, w, h);
   gl.clearColor(HORIZON[0], HORIZON[1], HORIZON[2], 1); gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
   gl.enable(gl.DEPTH_TEST); gl.depthFunc(gl.LEQUAL);
@@ -686,8 +725,9 @@ function render() {
   gl.disable(gl.CULL_FACE); gl.useProgram(P.tri.prog); setCommon(P.tri);
   gl.uniform1f(P.tri.u.uLit, 1); drawModels(P.tri); drawColours(P.tri);   // 陣營旗（77_colours.js）
   gl.uniform1f(P.tri.u.uLit, 0); gl.vertexAttrib3f(1, 0, 1, 0);
-  SHIPS.concat(PIECES).forEach(function (ow) {
-    if (ow.sink > 40) return;
+  for (var j = 0, ns = SHIPS.length, no = ns + PIECES.length; j < no; j++) {   // 船、再斷開的那一團（⛔ SHIPS.concat(PIECES)：每格一個新陣列）
+    var ow = j < ns ? SHIPS[j] : PIECES[j - ns];
+    if (ow.sink > 40) continue;
     cutSet(P.tri, ow); gl.uniformMatrix4fv(P.tri.u.uModel, false, ow.M);
     if (ow.lines && ow.lines.n) { gl.bindVertexArray(ow.lines.vao); gl.drawArrays(gl.LINES, 0, ow.lines.n); }
     if (PHYS && ow.ll && ow.ll.n) { gl.bindVertexArray(ow.ll.vao); gl.drawArrays(gl.LINES, 0, ow.ll.n); }
@@ -695,7 +735,7 @@ function render() {
     if (ow.ropeT && ow.ropeT.n) { gl.bindVertexArray(ow.ropeT.vao); gl.drawArrays(gl.TRIANGLES, 0, ow.ropeT.n); }   // 繩梯的繩：管子（11_rig_gpu.js ropeTube）
     if (BLD.on && ow.bldLines && ow.bldLines.n) { gl.disable(gl.DEPTH_TEST); gl.bindVertexArray(ow.bldLines.vao); gl.drawArrays(gl.LINES, 0, ow.bldLines.n); gl.enable(gl.DEPTH_TEST); }   // 建造的預覽框（82_build.js bldLines；穿牆看得到）
     if ((ROOMS_DBG || (BLD.on && BLD.lines)) && ow.rooms && ow.rooms.length) { if (!ow.roomLines) roomLines(ow); gl.disable(gl.DEPTH_TEST); gl.bindVertexArray(ow.roomLines.vao); gl.drawArrays(gl.LINES, 0, ow.roomLines.n); gl.enable(gl.DEPTH_TEST); }   // 空艙房的外框（?rooms=1；穿過船殼看得到）
-  });
+  }
   if (BALLS.some(function (b) { return b.ammo === 2; })) {               // 鏈彈的鐵鍊（76_anchor.js csBuf；世界座標）
     var csl = csBuf(); if (csl.n) { cutSet(P.tri, null); gl.uniformMatrix4fv(P.tri.u.uModel, false, CS_ID || (CS_ID = M4.ident())); gl.bindVertexArray(csl.vao); gl.drawArrays(gl.LINES, 0, csl.n); }
   }
@@ -703,6 +743,10 @@ function render() {
   bedDraw();                                                             // 陸地與海底（63_bed_gl.js；有海圖才有）
   treeDraw();                                                            // 島上的樹（63_trees.js）
   townDraw();                                                            // 城鎮（63_towns.js；有城才有）
+}
+/** 主畫面的海：折射複製、海面、破洞底下的海、遠海、內陸水、陰影範圍的除錯線。 */
+function mainWater(fr) {
+  var w = fr.w, h = fr.h;
   // 折射（高）：畫海之前的場景複製到 RT.B（顏色＋深度），海的著色器讀它
   if (GFX.refr === 2) {
     gl.bindFramebuffer(gl.READ_FRAMEBUFFER, RT.A.fb); gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, RT.B.fb);
@@ -733,6 +777,10 @@ function render() {
   bedSeaDraw();                                                          // 遠海（63_bed_gl.js；只有海圖、鏡頭高於 3 km：轉場拉高時海面網格外面的那一圈）
   bedWaterDraw();                                                        // 內陸水：湖、河、瀑布的水幕（63_bed_gl.js；海圖塊有段 3 才有）
   shadowDebugDraw();                                                     // 陰影範圍的除錯線（Debug 模式才畫；下面 shadowDebugDraw）
+}
+/** 主畫面的半透明與最上面那幾層：白沫、艙內的水、玻璃、城裡的燈、粒子＋砲彈、3D 雨滴、雨。 */
+function mainOverlay(fr) {
+  var w = fr.w, h = fr.h;
   gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
   if (!FLX3 && !CUTV.half) wpDrawFoam(hullUniforms);                                              // 船邊水花的白沫（13_water.js）：貼著浪、不寫深度
   flDraw();                                                              // 艙內的水面（33_flood.js，粒子模式）
@@ -741,7 +789,7 @@ function render() {
   // 粒子＋砲彈＋瞄準點
   var m = 0;
   function pushPt(p, s, c, a, ty) { if (m * 9 >= PBUF.length) return; var k = m * 9; PBUF[k] = p[0]; PBUF[k + 1] = p[1]; PBUF[k + 2] = p[2]; PBUF[k + 3] = s; PBUF[k + 4] = c[0]; PBUF[k + 5] = c[1]; PBUF[k + 6] = c[2]; PBUF[k + 7] = a; PBUF[k + 8] = ty === undefined ? -1 : ty; m++; }
-  for (i = 0; i < PT.n; i++) { var f = PT.life[i] / PT.max[i], s = PT.s1[i] + (PT.s0[i] - PT.s1[i]) * f; pushPt([PT.p[i * 3], PT.p[i * 3 + 1], PT.p[i * 3 + 2]], s, [PT.c[i * 3], PT.c[i * 3 + 1], PT.c[i * 3 + 2]], PT.a[i] * Math.min(1, f * 3), PT.ty[i]); }
+  for (var i = 0; i < PT.n; i++) { var f = PT.life[i] / PT.max[i], s = PT.s1[i] + (PT.s0[i] - PT.s1[i]) * f; pushPt([PT.p[i * 3], PT.p[i * 3 + 1], PT.p[i * 3 + 2]], s, [PT.c[i * 3], PT.c[i * 3 + 1], PT.c[i * 3 + 2]], PT.a[i] * Math.min(1, f * 3), PT.ty[i]); }
   wpPushSpray(pushPt);                                                   // 船邊水花的水滴（13_water.js）
   flPushJets(pushPt);                                                    // 從破口噴進來的水（33_flood.js）
   rdPushSplash(pushPt);                                                  // 雨滴打在海面與船上的水花（14_rain.js）
@@ -774,7 +822,11 @@ function render() {
     gl.uniform1f(P.rain.u.uYaw, Math.atan2(CAM.look[2] - CAM.eye[2], CAM.look[0] - CAM.eye[0]));
     gl.bindVertexArray(SKYVAO); gl.drawArrays(gl.TRIANGLES, 0, 3); gl.enable(gl.DEPTH_TEST);
   }
-  SKY = sky0; HORIZON = hor0; todRestore(tod0);
+}
+/** 一格的收尾：天色還原（閃電、世界時間）、RT.A 解析、縮放貼到畫布。 */
+function frameEnd(fr) {
+  var w = fr.w, h = fr.h;
+  SKY = fr.sky0; HORIZON = fr.hor0; todRestore(fr.tod0);
   gl.disable(gl.BLEND); gl.bindVertexArray(null);
   // 收尾：RT.A（MSAA ⇒ 先解析到 RT.B）縮放貼到畫布
   var src = RT.A.fb;
