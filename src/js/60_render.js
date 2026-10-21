@@ -205,16 +205,17 @@ function gpuSlots() {
   MSLOTS = pick(Math.min(GFX.masks, MASK_NEAR), MSLOTS);
 }
 function ortho(r, n, f) { return new Float32Array([1 / r, 0, 0, 0, 0, 1 / r, 0, 0, 0, 0, -2 / (f - n), 0, 0, 0, -(f + n) / (f - n), 1]); }
-/** 帆與繩的緩衝：一格做一次（之後陰影、反射、場景都用同一份）。 */
+/** 帆與繩的緩衝：一格最多做一次（之後陰影、反射、場景都用同一份）；沒走模擬的那一格不重做。 */
 function prepRig() {
   SHIPS.concat(PIECES).forEach(function (ow) {
     var dirty = ow.rigDirty;
     if (dirty) buildRig(ow);
     if (ow.sink > 40) return;
-    var tb = DEBUG ? performance.now() : 0;
-    if (dirty || (PHYS && ow.crew)) sailBuf(ow);                     // 物理開著：船上的帆每一格重做；斷開的那一團是靜態的
-    if (PHYS && ow.crew) looseBuf(ow);
-    if (ow.anc) chainBuf(ow);                                         // 鐵鍊（76_anchor.js；跟帆繩物理開關無關）
+    var tb = DEBUG ? performance.now() : 0, live = PHYS && ow.crew, same = live && rigSame(ow) && !dirty;   // rigSame 每一格都比（記下重做那一刻的輸入）
+    // 這一格沒走模擬（暫停、慢動作、高更新率的空格、__game.cam）⇒ 帆與垂繩的輸入一個都沒變 ⇒ 上一份照用（11_rig_gpu.js rigSame）
+    if (dirty || (live && !same)) { sailBuf(ow); if (!live) ow.sbK = null; }   // 物理開著：船上的帆照模擬每一步重做；斷開的那一團是靜態的。沒開物理時重做的 ⇒ 之後開了一定重做
+    if (live && !same) looseBuf(ow); else if (same && RIG_CHK) rigChk(ow);   // ?rigchk=1：沒重做的那一格對拍
+    if (ow.anc) chainBuf(ow);                                         // 鐵鍊（76_anchor.js；跟帆繩物理開關無關；用內插過的 sh.inv ⇒ 每一格做）
     if (SHIPS.indexOf(ow) >= 0) poleBuf(ow);                          // 陣營旗的旗桿（77_colours.js；旗面是帆，上面 sailBuf 一起畫）
     if (DEBUG) PROF.buf += performance.now() - tb;
   });
