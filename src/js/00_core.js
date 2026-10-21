@@ -70,7 +70,8 @@ var DT = 1 / 60, G = 9.81, V0 = 175, ZW0 = 63;    // ZW0：沒有 meta 時的設
 // 三支在 DT ＝ 1/60 時都回原數（不做任何浮點運算）⇒ 60 Hz 跟改之前逐位元相同。
 var DT60 = 1 / 60;
 /** 照 60 Hz 寫的「n 步一次」換成現在步長的步數（30 Hz ⇒ 一半，最少 1）。 */
-function steps60(n) { return DT === DT60 ? n : Math.max(1, Math.round(n * DT60 / DT)); }
+function stepsAt(n, dt) { return dt === DT60 ? n : Math.max(1, Math.round(n * DT60 / dt)); }   // 60 Hz 的 n 步換成一步 dt 秒的步數（帆與繩照畫面格算時 dt ＝ 一格，TASK-0799）
+function steps60(n) { return stepsAt(n, DT); }
 /** 照 60 Hz 寫的「每一步乘 k」換成走 dt 秒的倍率（k^(dt × 60)）。 */
 function decay60(k, dt) { return dt === DT60 ? k : Math.pow(k, dt / DT60); }
 /** 每一小步的位移上限（TASK-0797；Tim 2026-10-21：「無視模擬步時長 限制每步上限位移」）：走 dt 秒、這一步要移動 dist ⇒ 切成幾小步，

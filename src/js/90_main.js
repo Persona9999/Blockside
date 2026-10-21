@@ -5,7 +5,7 @@ function frame(ts, noRaf) {                                         // noRaf：_
   var f0 = PF ? performance.now() : 0;                                // 逐幀分段計時（?debug=1）
   if (BED) { BED_BG = BED_PUMP_MS; var pb0 = performance.now(); bedPump(bedT1()); bedSpent(pb0); treePump(); }   // 收進來的海圖塊、擺樹：每格照同一份背景預算做（08_seabed.js、63_trees.js）—— 模擬這一格要不要等（bedWait）照放好的算
   if (FLOW_STAGE) { loopLast = ts; if (!noRaf) requestAnimationFrame(frame); return; }   // 開戰分段做到一半（70_flow.js startStaged）：只收塊、擺樹，不畫、不走 ⇒ 不會碰到做到一半的船
-  var dt = loopLast ? Math.min(0.1, (ts - loopLast) / 1000) : DT; loopLast = ts;
+  var dt = loopLast ? Math.min(0.1, (ts - loopLast) / 1000) : DT, hv = 0, hsv = 0; loopLast = ts;   // hv：帆與繩照畫面格算時這一格走幾秒（TASK-0799）
   FPS = FPS * 0.95 + (1 / Math.max(dt, 1e-3)) * 0.05;
   if (RUNNING && !PAUSED) {
     var sk = Math.min(slowTick(dt), pslowTick(dt)) * SIM_SPEED; SLOW_VIS = sk < 1;   // × SIM_SPEED：設定的模擬速度（< 1 ⇒ 碎木、煙、水花照慢動作那一套照畫面的時間走，不會一頓一頓）
@@ -13,16 +13,20 @@ function frame(ts, noRaf) {                                         // noRaf：_
     loopAcc += dt * sk; var n = 0, st0 = performance.now();
     var nMax = SIM_SPEED > 1 ? Math.ceil(4 * SIM_SPEED) : 4;            // 一格畫面最多走幾步：快轉（> 1 倍）照倍率放寬，不然 60 FPS 時最多 4 倍
     if (BED) bedFocusAuto();                                            // 海圖（08_seabed.js）：焦點走進別塊 ⇒ 換中心重載
+    VIS_FRAME = PHYS && seaCalm();                                      // 航行：布照畫面格算（30_rig_physics.js physFrame；TASK-0799）—— 這一格開頭判一次，整格同一種算法
     while (loopAcc >= DT && n < nMax) { if (bedWait() || camTransHeld()) { loopAcc = 0; break; } VIEW_HOLD = loopAcc >= 2 * DT && n + 1 < nMax; simStep(); loopAcc -= DT; n++; }   // 船旁邊的海圖塊還沒載好 ⇒ 這一格先不走（戰局跟載入快慢無關）；VIEW_HOLD：後面還有步 ⇒ 只給人看的留到最後一步一次推（50_sim.js）
     VIEW_HOLD = false;
     if (n) pslowMeasure((performance.now() - st0) / n);                // 一步平均幾毫秒（物理減速照它算）
     if (n === nMax) loopAcc = 0;
+    if (VIS_FRAME) { hv = Math.min(dt * Math.min(sk, 1), RIG_FAR_HC); hsv = n * DT; }   // 布走畫面的時間（快轉 ⇒ 照 ×1 飄、花費照格；慢動作照慢）；hsv：這一格模擬走了多久（落海的布片照它退）
     if (SLOW_VIS) { if (PF) PF.t = performance.now(); slowVisStep(dt * sk); if (PF) pfLap('slowvis'); }
     SLOW_VIS = false;                                                 // 快轉（__game.run）不經過這裡 ⇒ 照常在 step() 走
     doorsAnim(dt * sk);                                               // 門的開關（25_doors.js）：只改畫面 ⇒ 在畫面這一格算、照模擬的速度走（慢動作跟著慢）
     portsAnim();                                                      // 砲門（TASK-0719，62_ports.js）：只改畫面；自己照 SIMT 走（慢動作、模擬速度跟著）；沒有蓋板的砲演後座（recoilShip）；畫質「砲門的開關演出」關 ⇒ 一次判斷就回
   }
   if (PF) PF.t = performance.now();
+  if (hv > 0) { physFrame(hv, hsv); if (PF) pfLap('phys'); }
+  VIS_FRAME = false;                                                  // frame 以外（?demo、__game.run）一律整段在模擬步裡算
   camFollow(dt);                                                      // 追砲彈（03_camera.js）
   if (!PAUSED && !STILL) stepRain(dt);                                // 3D 雨滴（14_rain.js）：照畫面的時間走；停格、縮圖不動
   ambFrame();                                                         // 環境音：風、浪、暴風雨的雨（02_ambient.js；還沒有聲音 ⇒ 什麼都不做）
