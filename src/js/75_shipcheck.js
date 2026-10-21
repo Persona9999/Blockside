@@ -98,7 +98,8 @@ function shipCheck(id) {
       if (mt.kind === 'gun' && mt.weapon && !GUN_WEAPON[mt.weapon]) add('warn', '武器', m.path, 'meta weapon=' + mt.weapon + ' 砲種表沒有 ⇒ 照 gun=' + mt.gun + ' 算', 'weapon 寫砲種表有的（' + Object.keys(GUN_WEAPON).join('、') + '），或拿掉');
       if (mt.kind === 'gun' && !GUN_CODE[mt.gun] && !GUN_WEAPON[mt.weapon]) add('error', '砲', m.path, 'meta gun=' + mt.gun + ' 不認得 ⇒ 默默當成長砲', 'gun 寫砲種表有的代碼（' + Object.keys(GUN_CODE).join('、') + '）');
       if (!mt.kind && GUNS[m.kind]) add('warn', '砲', m.path, '沒有 meta ⇒ 照名字認成 ' + m.kind, 'meta kind=gun, gun=<砲種>');
-      if (!mt.kind && m.kind === 'wheel') add('warn', '舵輪', m.path, '沒有 meta ⇒ 照名字認', 'meta kind=wheel');
+      if (!mt.kind && m.kind === 'wheel') add('warn', '舵輪', m.path, '沒有 meta ⇒ 照名字認', 'meta kind=wheel');   // 只剩操舵的開關關掉時會照名字認（10_ship.js modelKind）
+      if (HELM_TQ && !mt.kind && /wheel|tiller|舵輪|舵柄/.test(m.name.split('/').pop())) add('error', '舵輪', m.path, '名字像舵輪／舵柄、沒有 meta kind ⇒ 不算操作端（打掉不影響舵效）', 'meta kind=wheel（或 tiller；造船規格 §9.8.1）');   // TASK-0777：照名字認拿掉了
       if (m.kind === 'rudder' && !m.pts['stock-top']) add(isFinite(+mt.hinge_x) ? 'warn' : 'error', '舵', m.path, isFinite(+mt.hinge_x) ? '沒有固定點 stock-top ⇒ 沿鉸鏈軸找船尾（退路）' : '沒有 stock-top、也沒有 hinge meta ⇒ 往下找、開局就掉', '舵子作品登記固定點 stock-top（舵頭；造船規格 §9）');
       if (m.kind === 'yard' && !m.piv) add('error', '帆桁', m.path, '沒有固定點 pivot ⇒ 找不到掛在哪根桅', '帆桁子作品登記 pivot（造船規格 §5）');
       if (m.kind === 'propeller' && !m.pts.hub) add('warn', '螺旋槳', m.path, '沒有固定點 hub ⇒ 推力作用點、轉軸都用外框中心', '螺旋槳子作品登記 hub（轉軸中心；造船規格 §9 propeller）');
@@ -119,7 +120,13 @@ function shipCheck(id) {
       if (!m.alive && !GUNS[m.kind] && !kindProp(m.kind, 'noFall')) add('error', '開場就掉', m.path, (mt.kind || m.kind) + ' 開場 ' + SC_SECS + ' 秒內就判成沒東西撐、掉了（腳 z ' + (m.foot >> 21) + '）', '把它接到實心上；掛著的（燈、舵）登記掛點固定點（bail、stock-top）');
     });
     // ── 動力（TASK-0630；造船規格 §9.6）：主機 → 軸 → 螺旋槳、鍋爐 ──
-    var DV = sh.drive, DC = DV && DV.C, DP = DV ? DV.P.filter(function (q) { return q.kind !== 'sail'; }) : [];
+    var DV = sh.drive, DC = DV && DV.C, DP = DV ? DV.P.filter(function (q) { return q.kind !== 'sail' && q.kind !== 'rudder'; }) : [];
+    // ── 操舵（TASK-0777，31_drive.js「操舵」）：每支舵的鏈（舵令 ⇒ 舵輪／舵柄（＋舵索）⇒ 舵）與份量；差動（兩舷都有動力）；沒有舵模型 ⇒ 看不見的舵（退路） ──
+    if (DV && DV.R) {
+      R.info.helm = DV.R.map(function (q) { return '舵令 ⇒ ' + (q.ops.length || q.lks.length ? q.ops.concat(q.lks).map(function (m) { return m.path; }).join('＋') + ' ⇒ ' : '（舵柄在舵上）⇒ ') + (q.m ? q.m.path : q.out) + ' ' + Math.round(q.w * 100) + '%'; }).join('；') +
+        (DV.dif ? '；差動：兩舷都有動力（舵令直接給兩舷，不經過舵輪）' : '');
+      if (!DV.R[0].m) add('warn', '舵', '—', '沒有舵模型 ⇒ 船尾中線一支看不見的舵（完好度照船尾那一塊格子）', '舵子作品標 meta kind=rudder、登記 stock-top（造船規格 §9.8.1）');
+    }
     if (DV && DV.kind === 'oar') { var oS = DP.filter(function (q) { return q.sg > 0; }).length; R.info.drive = '槳 ' + DP.length + ' 支（左舷 ' + (DP.length - oS) + '、右舷 ' + oS + '）、槳手 ' + sh.crew.filter(function (c) { return c.role === ROLE.OAR; }).length + '／' + (sh.oarWant || 0) + '（每支 ' + DP.map(function (q) { return q.rw0; }).filter(function (v, i, a) { return a.indexOf(v) === i; }).join('／') + ' 人）'; }
     else if (DV && DV.kind) R.info.drive = (DV.kind === 'magic' ? '魔法（作用點 ＝ 船）' : DP.map(function (q) { return (q.m ? '螺旋槳 ' + q.m.name : q.out) + ' ' + Math.round(q.w * 100) + '%'; }).join('、')) +
       (DC ? '；主機 ' + DC.E.length + '、軸 ' + DC.SH.length + '、鍋爐 ' + DC.B.reduce(function (a, c) { return a + c.b.seats.length; }, 0) + ' 座' : '');
