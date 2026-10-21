@@ -27,7 +27,7 @@ var RBAT = {
 };
 var RBAT_CHK = Q.get('rbchk') === '1';                             // ?rbchk=1：每格整理完照以前的算式重算一遍、逐位元比（rbatCheck）
 // 開關（網址，像 ?lerp=0；量測工具拿同一份成品 A/B 對拍用 —— 不進設定、不進 __game）：?rb=0 全部照以前一個一個畫；?rbinst=0（或 ?inst=0）不用一次畫多個的程式；
-//   ?rbgeo=0 同一艘裡不換順序；?rbtau=<公尺> 除錯用的 τ（很大 ⇒ 全部算一群；沒給 ⇒ −1 ＝ 照算的）。S4 還沒有東西照它們畫（P.triI／P.dtriI 只編、不畫）。
+//   ?rbgeo=0 同一艘裡不換順序；?rbtau=<公尺> 除錯用的 τ（很大 ⇒ 全部算一群；沒給 ⇒ −1 ＝ 照算的）。照它們畫的：陰影（S5，rbatDepth）；反射、主畫面還是一個一個畫（S6／S7 起）。
 var RBAT_ON = Q.get('rb') !== '0', RBAT_INST = RBAT_ON && Q.get('rbinst') !== '0' && Q.get('inst') !== '0', RBAT_GEO = RBAT_ON && Q.get('rbgeo') !== '0';
 var RBAT_TAU = isFinite(parseFloat(Q.get('rbtau'))) ? parseFloat(Q.get('rbtau')) : -1;
 /** 項目的陣列加倍（整理到一半也行：前面的照抄）。 */
@@ -132,6 +132,59 @@ function rbatReplay(prog, pd) {
     for (i = R.i0[o], e = R.i0[o + 1]; i < e; i++) { gl.uniformMatrix4fv(u.uModel, false, M, i * 16, 16); gl.bindVertexArray(R.vao[i]); gl.drawArrays(gl.TRIANGLES, 0, R.cnt[i]); }
   }
   for (i = R.i0[n], e = R.ni; i < e; i++) { gl.uniformMatrix4fv(u.uModel, false, M, i * 16, 16); gl.bindVertexArray(R.vao[i]); gl.drawArrays(gl.TRIANGLES, 0, R.cnt[i]); }
+}
+// ── 陰影一次畫多個（render 管線大修 S5）──
+// 陰影那一段只寫深度、深度測試 LESS、不混色、偏移照每個三角形自己的頂點算 ⇒ 每一格最後留下的就是最小的那個深度，誰先畫都一樣
+//   ⇒ 同一份網格（VAO＋畫法＋起點＋數量）的項目不分哪艘、哪一類（模型、裝飾含砲門蓋板、平滑面、裝甲的平滑面、斷開的那一團、飛出去的）收成一桶，一桶一次畫（P.dtriI，滿 INST_K 個換下一批）。
+// 桶一格整理一次（第一段陰影要畫時；表是這一格的）；每一段只挑 cs 有這一位的 owner、FLY 沒有 owner ⇒ 一定畫（以前也沒判；這一段有東西才會走到這裡）
+//   ⇒ 畫的項目集合跟以前一個一個畫的一模一樣，頂點的算式是 S4 對拍過的 P.dtriI ⇒ 陰影圖逐位元組相同。
+// 桶：同一個 VAO 的串成一列（same；模型一份網格一個 VAO ⇒ 幾乎都只有一桶），桶裡的項目照表的順序串起來（nx）。陣列不夠才加倍、之後一直重用（⛔ 每格不配置）。
+var RBAT_BK = { f: -1, n: 0, nPrev: 0, cap: 0, map: new Map(), vao: [], el: null, off: null, cnt: null, h: null, t: null, same: null, nx: new Int32Array(0) };
+function rbatBkGrow() {
+  var B = RBAT_BK, L = Math.max(64, B.cap * 2);
+  function cp(a, b) { if (a) b.set(a); return b; }
+  B.el = cp(B.el, new Uint8Array(L)); B.off = cp(B.off, new Int32Array(L)); B.cnt = cp(B.cnt, new Int32Array(L));
+  B.h = cp(B.h, new Int32Array(L)); B.t = cp(B.t, new Int32Array(L)); B.same = cp(B.same, new Int32Array(L)); B.cap = L;
+}
+/** 這一格的桶（一格一次；RFR 換了才重排）。 */
+function rbatBuckets() {
+  var R = RBAT, B = RBAT_BK, m = B.map, i, j;
+  if (B.f === R.f) return B;
+  B.f = R.f; B.n = 0; m.clear();
+  if (B.nx.length < R.cap) B.nx = new Int32Array(R.cap);
+  for (i = 0; i < R.ni; i++) {
+    var v = R.vao[i], el = R.el[i], off = R.off[i], cnt = R.cnt[i], j0 = m.get(v);
+    for (j = j0 === undefined ? -1 : j0; j >= 0 && !(B.el[j] === el && B.off[j] === off && B.cnt[j] === cnt); j = B.same[j]);
+    B.nx[i] = -1;
+    if (j < 0) {
+      if (B.n >= B.cap) rbatBkGrow();
+      j = B.n++; B.vao[j] = v; B.el[j] = el; B.off[j] = off; B.cnt[j] = cnt; B.h[j] = B.t[j] = i;
+      B.same[j] = j0 === undefined ? -1 : j0; m.set(v, j);
+    } else { B.nx[B.t[j]] = i; B.t[j] = i; }
+  }
+  for (j = B.n; j < B.nPrev; j++) B.vao[j] = null;                        // 上一格多的放掉（不留著已經換掉的 VAO）
+  B.nPrev = B.n;
+  return B;
+}
+/** 陰影第 pd.k 段的模型那一段（取代 drawModels(P.dtri)；60_render.js shadowCasters）：P.dtriI 一桶一次畫。 */
+function rbatDepth(pd) {
+  var R = RBAT, B = rbatBuckets(), p = P.dtriI, M = R.M, pal = R.pal, cs = R.cs, b = pd.b, K = INST_K, j, i, k, q, s, o;
+  gl.useProgram(p.prog); setCommon(p);                                  // uVP ＝ 這一段的矩陣（PASS.vp）
+  gl.vertexAttrib2f(3, 0, 0.5);                                         // 第 3 號屬性的常數照以前（rbatReplay 每一趟開頭都設；是 context 的狀態，不是 VAO 的）
+  for (j = 0; j < B.n; j++) {
+    for (k = 0, i = B.h[j]; i >= 0; i = B.nx[i]) {
+      o = R.ow[i]; if (o >= 0 && b && !(cs[o] & b)) continue;
+      for (q = 0, s = i * 16; q < 16; q++) pal[k * 16 + q] = M[s + q];
+      if (++k === K) { rbatDepthDraw(B, j, p.u, k); k = 0; }
+    }
+    if (k) rbatDepthDraw(B, j, p.u, k);
+  }
+}
+function rbatDepthDraw(B, j, u, k) {
+  gl.uniformMatrix4fv(u.uMs, false, RBAT.pal, 0, k * 16);
+  gl.bindVertexArray(B.vao[j]);
+  if (B.el[j]) gl.drawElementsInstanced(gl.TRIANGLES, B.cnt[j], gl.UNSIGNED_INT, B.off[j], k);
+  else gl.drawArraysInstanced(gl.TRIANGLES, 0, B.cnt[j], k);
 }
 /** ?rbchk=1：照以前 drawModels／smDraw／armSmDraw 的迴圈與算式（每個矩陣重新乘一次）再走一遍，跟表逐項比：
  *  同一個東西、同一個順序、VAO／頂點數／uGlow 一樣（不一樣 ⇒ itemMiss）；矩陣 16 個 float 逐位元相同（不一樣 ⇒ matMiss）。只在 render() 裡、整理完馬上比（之後 renderLerp 會把 sh.M 換回去）。 */

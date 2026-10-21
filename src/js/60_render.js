@@ -455,11 +455,12 @@ function csmOwners() {
     O.cp[i * 3] = p[0]; O.cp[i * 3 + 1] = p[1]; O.cp[i * 3 + 2] = p[2]; O.cR[i] = R;   // Float64Array：存的就是算出來的那個 double
   }
 }
-/** 一段陰影圖畫船殼、模型、帆（P.dvox、P.dtri、P.dsail；分段 shadowPass 與單張 shadowSimple 共用）：只畫 csmIn 判進第 k 段的（RBAT.pd.sh：b ＝ 第 k 位）。 */
+/** 一段陰影圖畫船殼、模型、帆（P.dvox、P.dtri（一次畫多個 ⇒ P.dtriI）、P.dsail；分段 shadowPass 與單張 shadowSimple 共用）：只畫 csmIn 判進第 k 段的（RBAT.pd.sh：b ＝ 第 k 位）。 */
 function shadowCasters(k) {
   var pd = RBAT.pd.sh; pd.k = k; pd.b = 1 << k;
   gl.useProgram(P.dvox.prog); setCommon(P.dvox); drawHulls(P.dvox, pd);
-  gl.useProgram(P.dtri.prog); setCommon(P.dtri); drawModels(P.dtri, pd);
+  if (RBAT_INST && P.dtriI) rbatDepth(pd);                              // 模型那一段一次畫多個（60_rbatch.js，S5：只寫深度 ⇒ 順序無關）；?inst=0／編不起來 ⇒ 照以前一個一個畫
+  else { gl.useProgram(P.dtri.prog); setCommon(P.dtri); drawModels(P.dtri, pd); }
   gl.useProgram(P.dsail.prog); setCommon(P.dsail); drawSails(P.dsail, pd);   // 帆另一支：貼圖的洞不投影子（TASK-0579）
 }
 /** 一段的靜態那一層：地形（63_bed_gl.js bedDepth，照那一段的範圍剔除）、樹（63_trees.js treeDepth）、城鎮的建築與城牆（63_towns.js townDepth）只寫深度。 */
