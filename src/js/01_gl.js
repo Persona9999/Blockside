@@ -1,6 +1,6 @@
 // ───────────────────────── WebGL ─────────────────────────
 var cv = $('cv'), gl = cv.getContext('webgl2', { antialias: false, preserveDrawingBuffer: true });   // 反鋸齒自己做（MSAA framebuffer，畫質設定；60_render.js targets）
-function glFail(msg) { $('load').textContent = msg; errShow(msg); }
+function glFail(msg) { bootSay(msg); errShow(msg); }
 // ── 報錯彈窗與回報（Tim 2026-10-18：「是否可以加一個彈窗(可關閉) 以及一個回報錯誤按鈕(可以填錯誤內容 然後寄email…(包含報錯訊息與玩家的回報內容)」）──
 // glFail 與沒接住的錯誤（window error／unhandledrejection）都開這個彈窗；同一則訊息只自己跳一次（關掉之後不再煩人）。
 // 「回報錯誤」⇒ 多一格讓玩家寫發生什麼事；「寄出」⇒ mailto: 打開玩家的郵件程式（⛔ 成品不准 fetch：admin.py vxk_inline 檢查）：
@@ -135,7 +135,7 @@ function errPost() {
 $('errX').onclick = function () { $('err').style.display = 'none'; };
 $('errRepB').onclick = function () { $('errRep').hidden = false; $('errSend').hidden = false; $('errCopy').hidden = false; $('errPost').hidden = !ERR_HOOK; $('errRepB').hidden = true; $('errTxt').focus(); };
 $('errSend').onclick = errMail; $('errCopy').onclick = errCopy; $('errPost').onclick = errPost;
-$('repB').onclick = $('gsRep').onclick = function () { errShow(null); };   // 主選單「問題回報…」、遊戲內設定（⚙，暫停中）「問題回報」：手動回報（沒有錯誤訊息）
+$('gsRep').onclick = function () { errShow(null); };   // 遊戲內設定（⚙，暫停中）「問題回報」：手動回報（沒有錯誤訊息）；主選單的「問題回報…」由外殼接（71_input.js）
 function errAuto(m) { m = String(m || ''); if (!m || m === 'Script error.' || /ResizeObserver/.test(m) || ERR_SEEN[m] || $('err').style.display === 'flex') return; errShow(m); }   // 跨網域的「Script error.」、ResizeObserver 的警告不跳；開著的不換掉（glFail 之後的 throw 不蓋掉那一句好懂的）
 window.addEventListener('error', function (ev) { errAuto(ev.error && ev.error.stack ? ev.error.message + '\n' + ev.error.stack : ev.message); });
 window.addEventListener('unhandledrejection', function (ev) { var r = ev.reason; errAuto(r && r.stack ? (r.message || r) + '\n' + r.stack : r); });

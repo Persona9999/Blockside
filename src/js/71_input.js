@@ -103,6 +103,12 @@ function doKey(k, repeat) { var a = keyAct('battle', k); if (a) doAct(a, repeat)
 /** 外掛外殼的掛鉤（admin.py shell；2026-10-21）：別的遊戲拿這份成品套自己的外殼（標題、樣式、幾個行為）⇒ 外殼在 window.BS_SHELL 放同名函式；
  *  有、而且沒回 false ⇒ 外殼接手了（true）；沒有外殼、沒有這一個 ⇒ false，照 Blockside 自己的做。現在的掛鉤：menu（回主選單）。 */
 function shellCall(k) { var S = window.BS_SHELL, f = S && S[k]; return typeof f === 'function' ? f() !== false : false; }
+/** 回主選單（R、設定面板的「回主選單」、結束畫面的「回選單」）：被 Blocksail 嵌著（?map=@host）⇒ 交給它（08_seabed.js bedHostMenuGo）；
+ *  外掛外殼（admin.py shell）接手 ⇒ 例 Blocksail 的 battle.html 直接開 ⇒ 回 Blocksail 的主選單；都沒有 ⇒ 停下來、發 flow:menu（Blockside 自己的主選單出來）。 */
+function menuGo() {
+  if (bedHostMenuGo() || shellCall('menu')) { gsetClose(); helpClose(); return; }
+  gsetClose(); helpClose(); flowRun(false); END_AT = 0; END_WAIT = null; evEmit('flow:menu'); $('end').className = '';
+}
 function doAct(a, repeat) {
   if (!RUNNING) return;
   var me = SHIPS[PLAYER_I];
@@ -118,9 +124,7 @@ function doAct(a, repeat) {
   else if (a === 'deck') deckCycle();
   else if (a === 'mute') { muted = !muted; sndApply(); gsetShow(); }
   else if (a === 'help') helpToggle();
-  else if (a === 'menu' && bedHostMenuGo()) { gsetClose(); helpClose(); }
-  else if (a === 'menu' && shellCall('menu')) { gsetClose(); helpClose(); }   // 外掛外殼（admin.py shell）接手：例 Blocksail 的 battle.html 直接開 ⇒ 回 Blocksail 的主選單   // 被 Blocksail 嵌著（?map=@host）⇒ 回它的主選單（08_seabed.js bedHostMenuGo）
-  else if (a === 'menu') { gsetClose(); helpClose(); flowRun(false); END_AT = 0; END_WAIT = null; coverShow(); $('end').className = ''; }
+  else if (a === 'menu') menuGo();
   else if (a === 'sailMode') sailToggle();   // 一顆切換 自動 ⇄ 手動（Tim 2026-10-15：「改成單鍵」；手動也可以直接打舵）；錨在水裡 ⇒ 先起錨（左右錨拋的也一起）
   else if ((a === 'ancAll' || a === 'ancP' || a === 'ancS') && me && !me.sunk && anchorsOf(me).noAnchor) setSailMode(SAIL === 'off' ? 'manual' : 'off');   // 整艘沒有錨（TASK-0635）：三個錨鍵都是停船 ⇄ 手動
   else if (a === 'ancAll' && me && !me.sunk) {                              // 拋錨／起錨同一顆（Tim 2026-10-15；76_anchor.js anchor6）：兩邊都沒拋 ⇒ 雙錨（拋錨模式、只有我艦）；一邊在水裡 ⇒ 拋另一邊；兩邊都在水裡 ⇒ 起錨
@@ -905,6 +909,18 @@ function pickShip(s, j, id) {
     if (SLIDERS_SHOW) SLIDERS_SHOW();
   }).catch(function (e) { go.textContent = '載不了：' + (e && e.message || e); console.error(e); });
 }
+// 外殼訂閱核心的事件（00_events.js；2026-10-21 核心與外殼拆兩包：核心不碰 #cover，主選單自己點亮、自己顯示）—— ⛔ 要在下一行 setWeather 之前訂好
+evOn('boot:say', function (s) { $('load').textContent = s; });             // 載入的字（glFail、90_main.js loadSay）
+if (BOOT.say) $('load').textContent = BOOT.say;                             // 訂閱之前就說過的（01_gl.js 開機就失敗）
+evOn('boot:hull', function (s) { var go = $('go'); if (go.disabled) go.textContent = s; });   // 解析中：開戰鈕寫進度（設定照樣能調）
+evOn('boot:loaded', function () { if (SLIDERS_SHOW && !START_Q) SLIDERS_SHOW(); });           // ?start=1：主選單不會出來 ⇒ 先不重畫（回到主選單時才補，coverShow）
+evOn('boot:ready', function () { $('go').disabled = false; $('go').textContent = '開戰'; });
+evOn('flow:start', function () { $('cover').style.display = 'none'; });   // 開戰、量測頁（70_flow.js uiAway）
+evOn('flow:menu', coverShow);                                               // 回主選單（menuGo）
+evOn('weather', function () { [].forEach.call(document.querySelectorAll('#wxs button'), function (b) { b.className = b.dataset.w === WX_ID ? 'on' : ''; }); });
+evOn('phys', function () { if ($('phxB')) phxShow(); }, 0, true);          // 物理開關（62_simview.js 那一個之後）
+evOn('pslow', function () { phxShow(); });                                  // 物理減速（73_slowmo.js pslowToggle）
+$('repB').onclick = function () { errShow(null); };                         // 主選單「問題回報…」：手動回報（沒有錯誤訊息；01_gl.js errShow）
 sliders(); setPlay(PLAY); setWeather(WX_ID);
 [].forEach.call(document.querySelectorAll('#wxs button'), function (b) { b.onclick = function () { setWeather(b.dataset.w); if (SLIDERS_SHOW) SLIDERS_SHOW(); }; });   // 主選單：天氣（08_weather.js）
 /** 主選單：同時在場（滑桿 2～MAX_SHIPS，52_fleet.js FIELD_N）；編成超過它的照候補規則進場。 */
@@ -941,7 +957,7 @@ function distShow() { var d = $('dist'); d.value = DIST; $('distV').textContent 
 setSailMode(SAIL); setCamTrack(true); $('physT').classList.toggle('on', PHYS);
 $('go').onclick = start;
 $('endC').onclick = function () { $('end').className = ''; };
-$('endR').onclick = function () { flowRun(false); $('end').className = ''; coverShow(); };
+$('endR').onclick = menuGo;
 /** 回到主選單（'menu'、結束畫面的「主選單」）：?start=1 開場時沒照載好的船型重畫主選單（90_main.js：主選單不會出來 ⇒ 不佔開場）⇒ 第一次回來才補畫。 */
 var COVER_LATE = START_Q;
 function coverShow() { $('cover').style.display = ''; if (COVER_LATE && SLIDERS_SHOW) { COVER_LATE = false; SLIDERS_SHOW(); } }

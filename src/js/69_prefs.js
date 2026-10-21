@@ -280,9 +280,7 @@ function prefsReset() { PREFS.last = ''; prefsSave(); }
   }
   if (!PREFS.write) PREFS.state += '；網址帶了設定參數 ⇒ 這一場不存';
   PREFS.last = JSON.stringify(prefsSnap());              // 套用後的樣子 ⇒ 玩家動了才寫（看不懂的存檔不會因為打開一次就被蓋掉）
-  // 主選單按鈕的亮燈照套用後的值（航行與帆的物理由 71_input.js 照變數點）
-  [].forEach.call(document.querySelectorAll('#modes button'), function (b) { b.className = b.dataset.m === MODE ? 'on' : ''; });
-  if (typeof distShow === 'function') distShow();
+  // 主選單按鈕的亮燈：外殼（71_input.js 主選單那一段）載入時照套用後的值點（玩法、距離、航行、帆的物理）
   $('autoF').classList.toggle('on', AUTOFIRE);
   if (!PREFS.write) return;
   setInterval(prefsSave, 1000);

@@ -49,11 +49,13 @@ function startWhenReady() {
   }).catch(function (e) { console.error(e); });
 }
 function start() { stepsRun(startSteps()); }
+/** 遊戲接手畫面（開戰、量測頁）⇒ 外殼收起主選單（00_events.js flow:start）。 */
+function uiAway() { evEmit('flow:start'); }
 /** 開戰拆成步驟：聲音、收起主選單 ⇒ 開局（resetSteps）⇒ 開跑、廣播、建造與第一人稱。照順序做 ＝ 拆之前的 start。 */
 function startSteps() {
   return [function () {
     initAudio(); if (AC && AC.state === 'suspended') AC.resume();
-    $('cover').style.display = 'none'; $('end').className = '';
+    uiAway(); $('end').className = '';
     if (document.activeElement && document.activeElement.blur) document.activeElement.blur();   // 不然空白鍵會再按一次「開戰」
   }].concat(resetSteps(), [function () {
     RUNNING = true;

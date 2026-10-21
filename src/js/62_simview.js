@@ -101,7 +101,7 @@ function doorsAnim(dt) {
 }
 
 // ── 物理開關（30_rig_physics.js setPhys）──
-evOn('phys', function () { $('physT').classList.toggle('on', PHYS); if ($('phxB')) phxShow(); }, 0, true);
+evOn('phys', function () { $('physT').classList.toggle('on', PHYS); }, 0, true);   // 物理設定頁（外殼）自己另外訂
 
 // ── 俥鐘與詳細資訊那一行（31_drive.js；61_hud.js 叫 driveText、teleDraw）──
 /** 詳細資訊那一行：額外動力的俥鐘與輸出。 */

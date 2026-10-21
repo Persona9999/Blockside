@@ -437,13 +437,13 @@ if (DEBUG) {
   };
 }
 var loadT0 = performance.now();
-function loadSay(s) { $('load').textContent = s; }
+function loadSay(s) { bootSay(s); }   // 主選單的那一行字（外殼；00_events.js boot:say）
 loadSay('解碼船體…');
 // GL 的著色器、共用網格（2026-10-20）：?map=@host 開在 Blocksail 地球儀的 iframe 裡、跟它同一條主執行緒 ⇒ 載入頁面那一段（解析＋執行整包程式）越短越好；
 //   有畫面迴圈（BED_SLICE）⇒ 一樣一樣分開做、每樣之間讓出一次（yieldUI），做完才開畫面迴圈、開始載船；快轉、無頭、?pick ⇒ 照舊當場做。
 var GL_STEPS = [programs, geometry, wpGL, flGL, rdGL, bbSetup, function () { QIDX = new VK.QuadIndex(gl); }];
 var GL_READY = BED_SLICE && !PICK_HOST ? GL_STEPS.reduce(function (p, f) { return p.then(yieldUI).then(function () { f(); }); }, Promise.resolve()) : (stepsRun(GL_STEPS), Promise.resolve());
-hullSay = function (s) { var go = $('go'); if (go.disabled) go.textContent = '解析' + s; };   // 解析中：開戰鈕寫進度（設定照樣能調）
+hullSay = function (s) { evEmit('boot:hull', '解析' + s); };   // 解析中：開戰鈕寫進度（設定照樣能調）
 if (!HEADLESS && !PICK_HOST) GL_READY.then(function () { requestAnimationFrame(frame); });   // 無頭（00_events.js）不開畫面迴圈；解析中也畫（天、海；船載好才有）
 /** 編成裡的船全部進了 HULLT 才放行：等完一輪再照**現在的**編成看一次，還有不在的 ⇒ 再等一輪。
  *  ⛔ 只等開頭那一份名單：解析中主選單換了我艦（pickShip）⇒ 名單裡的都回來了，HULLT[我艦] 卻還沒有
@@ -457,7 +457,7 @@ else GL_READY.then(yieldUI).then(function () {                     // 先讓主�
   return Promise.all([fleetLoaded(), bedBoot()]);                   // 只載編成裡的船（預設兩艘都是憲法號 ⇒ 一份）＋海圖（?map，08_seabed.js）
 }).then(function () {
   var T = HULLT[myHull()], h = T.h, chk = T.chk;
-  if (SLIDERS_SHOW && !START_Q) SLIDERS_SHOW();                     // ?start=1：主選單不會出來 ⇒ 先不重畫（回到主選單時才補，71_input.js coverShow）
+  evEmit('boot:loaded');                     // ?start=1：主選單不會出來 ⇒ 先不重畫（回到主選單時才補，71_input.js coverShow）
   var line = '1:1 ' + T.name + ' ' + chk.voxels.toLocaleString() + ' 格 checksum ' + chk.checksum.toString(16) + (chk.ok ? '（＝ 封裝檔 header，逐格相同 ✓）' : '（✗ 跟封裝檔對不上：' + h.voxels + '／' + h.checksum.toString(16) + '）') +
     '\n合併後 ' + T.pristine.quads().toLocaleString() + ' 個四邊形、繩 ' + T.rig.ropes.length + '、帆 ' + T.rig.sails.length + '、桅 ' + T.masts.length +
     '\n解碼 ' + (T.decodeMs / 1000).toFixed(2) + ' 秒、網格化 ' + (T.meshMs / 1000).toFixed(2) + ' 秒' + cacheText(hullInfo(T.id).cache) +
@@ -467,11 +467,11 @@ else GL_READY.then(yieldUI).then(function () {                     // 先讓主�
     deco: { on: !!GFX.deco, n: T.decoN || 0, drawn: GFX.deco ? T.decoN || 0 : GFX.port ? (T.decos || []).filter(function (d) { return d.meta && d.meta.kind === 'portlid'; }).length : 0, meshes: T.meshes.filter(Boolean).length, tris: T.meshes.reduce(function (a, m) { return a + (m && m.n ? m.n / 3 : 0); }, 0) } };   // 裝飾（TASK-0682）：開關、作品裡幾件、畫幾件（一律載入，關著 ⇒ 0；「砲門的開關演出」不是關 ⇒ 砲門蓋板照畫 —— 「只有我艦」時只有我艦那一艘，這裡照一艘算）、建了幾份模型網格、三角形
   loadArt().then(function (why) { line += '\n素材：' + why; loadSay(line); window.__vxk.art = why; if (HUD_ART) hudArt(); });
   if (!chk.ok) { glFail('船體資料跟封裝檔對不上，停下來（不畫半艘船）。\n' + line); return; }
-  $('go').disabled = false; $('go').textContent = '開戰';
+  evEmit('boot:ready');
   if (Q.has('shipcheck')) { shipCheck(Q.get('shipcheck')); return; }
   if (LAB_FLEET) { flabInit(); return; }                                // 擬真沙盒（84_fleetlab.js）   // 匯入檢查（75_shipcheck.js；admin.py check 用無頭 Chrome 讀）
-  if (Q.get('lab') === 'flood') { var FR = floodLab(flLabOpts()), fp = document.createElement('pre'); fp.id = 'lab'; document.body.appendChild(fp); fp.textContent = JSON.stringify(FR); $('cover').style.display = 'none'; return; }   // 沙盒進水報表（81_floodlab.js；src/tests/flood_lab.py）
-  if (Q.get('lab') === 'uw') { var LR = uwLab(labOpts()), lp = document.createElement('pre'); lp.id = 'lab'; document.body.appendChild(lp); lp.textContent = JSON.stringify(LR); $('cover').style.display = 'none'; return; }   // 落水彈道的測試場（80_lab.js；src/tests/uw_lab.py 讀 #lab）
+  if (Q.get('lab') === 'flood') { var FR = floodLab(flLabOpts()), fp = document.createElement('pre'); fp.id = 'lab'; document.body.appendChild(fp); fp.textContent = JSON.stringify(FR); uiAway(); return; }   // 沙盒進水報表（81_floodlab.js；src/tests/flood_lab.py）
+  if (Q.get('lab') === 'uw') { var LR = uwLab(labOpts()), lp = document.createElement('pre'); lp.id = 'lab'; document.body.appendChild(lp); lp.textContent = JSON.stringify(LR); uiAway(); return; }   // 落水彈道的測試場（80_lab.js；src/tests/uw_lab.py 讀 #lab）
   if (DEMO >= 0) {                                             // 快轉：電腦對電腦、固定步長；?mode= 換玩法（TASK-0668 對拍對戰、沙盒用；沒給 ＝ 觀戰）
     flowMode(Object.prototype.hasOwnProperty.call(MODE_RULES, Q.get('mode')) ? Q.get('mode') : 'eve'); reset(); flowRun(true);
     var steps = Math.round(DEMO / DT), phys = PHYS, from = Math.max(0, steps - 360);     // 帆與繩只畫最後那一格 ⇒ 物理只在最後 6 秒跑（不影響戰局）
@@ -499,7 +499,7 @@ else GL_READY.then(yieldUI).then(function () {                     // 先讓主�
       if (rec && i % 30 === 29) ['blue', 'red'].forEach(function (tm) { if (downAt[tm] === null && teamDown(tm)) downAt[tm] = +SIMT.toFixed(1); });
       if (RC && i % 30 === 29) SHIPS.forEach(function (sh, k) { if (sh.sink > 40) return; ropesFloating(sh).forEach(function (f) { var key = f.name + '#' + f.end; if (RC[k].seen[key]) return; RC[k].seen[key] = 1; RC[k].float.push({ t: +SIMT.toFixed(1), name: f.name, end: f.end, kind: f.kind, why: f.why, P: f.P }); }); });
     }
-    if (!HEADLESS) remesh(Infinity); flowRun(false); $('cover').style.display = 'none';
+    if (!HEADLESS) remesh(Infinity); flowRun(false); uiAway();
     if (TLOG && Q.get('test') === '1') { var pre4 = document.createElement('pre'); pre4.id = 'crewlog'; document.body.appendChild(pre4); pre4.textContent = JSON.stringify(tlgData()); }   // 測試模式（83_testlog.js；src/tests/crew_log.py 讀）：另外一塊，#dump 照舊
     if (CQ) { var pre5 = document.createElement('pre'); pre5.id = 'core'; document.body.appendChild(pre5); var CO = coreOut(); CO.added = CQ.added; pre5.textContent = JSON.stringify(CO); }
     if (RC) { var pre2 = document.createElement('pre'); pre2.id = 'ropecheck'; document.body.appendChild(pre2); pre2.textContent = JSON.stringify(RC.map(function (c) { return { hull: c.hull, stat: c.stat, float: c.float }; })); }

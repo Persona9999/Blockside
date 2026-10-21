@@ -22,7 +22,7 @@ var FLAB_MC = typeof MessageChannel !== 'undefined' ? new MessageChannel() : nul
 function flabEl(id) { return document.getElementById(id); }
 /** 載完船型（90_main.js 載入那一段）：進沙盒的畫面、關畫面那幾項物理、照網址填預設值。 */
 function flabInit() {
-  document.body.classList.add('flab'); $('cover').style.display = 'none';
+  document.body.classList.add('flab'); uiAway();
   ['rig', 'debris', 'fx', 'water', 'sinkflood', 'sailhit'].forEach(function (k) { PHX[k] = 0; }); PHX.rigfar = 0; setPhys(false);
   SAIL = 'auto'; muted = true;
   var hs = flabEl('flabHB'), hr = flabEl('flabHR');

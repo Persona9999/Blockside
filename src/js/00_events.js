@@ -59,3 +59,10 @@ function splash(p, big) { evEmit('splash', p, big); }
 function wpBump(pa, pb, A, B) { evEmit('wpBump', pa, pb, A, B); }                                // 船邊水花（13_water waterBump）
 function wpPour(P, out, rate) { evEmit('wpPour', P, out, rate); }                                 // 艙裡的水往外流（13_water waterPour）
 function ptMute(on) { evEmit('ptMute', on); }                                                     // 接下來的 spawnPt 收到也不放（參數的亂數照樣抽完；13_water PT_MUTE）
+
+// ── 核心往外殼（主選單、設定頁）講話（2026-10-21 核心與外殼拆兩包）：核心不碰 #cover，只發事件；外殼（71_input.js 主選單那一段）訂閱 ──
+// 事件：boot:say（載入的字；BOOT.say 留一份 ⇒ 晚訂閱的也讀得到）、boot:hull（解析船型的進度）、boot:loaded（編成的船型載好：重畫選單）、
+//   boot:ready（可以開戰了）、flow:start（開戰、量測頁接手畫面：收起主選單；uiAway）、flow:menu（回主選單，沒有外掛外殼接手時；menuGo）、
+//   weather（換了天氣；setWeather）、pslow（物理減速開關；pslowToggle）。⛔ 照原本的時機做 ⇒ 不標 view（無頭時原本也做）。
+var BOOT = { say: '' };
+function bootSay(s) { BOOT.say = s; evEmit('boot:say', s); }

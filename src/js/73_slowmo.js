@@ -69,7 +69,7 @@ function pslowTick(dt) {
   PSLOW.ts = want < PSLOW.ts ? want : Math.min(want, PSLOW.ts + dt / PSLOW_UP);
   return PSLOW.ts;
 }
-function pslowToggle() { PSLOW.on = !PSLOW.on; if (!PSLOW.on) PSLOW.ts = 1; gsetShow(); if (typeof phxShow === 'function') phxShow(); }
+function pslowToggle() { PSLOW.on = !PSLOW.on; if (!PSLOW.on) PSLOW.ts = 1; gsetShow(); evEmit('pslow'); }   // 物理設定頁跟著亮（外殼）
 /** 慢動作中，只給人看的效果照畫面的時間走（step() 那邊跳過）。 */
 function slowVisStep(dt) { stepDebris(dt); stepPts(dt); stepWater(dt, 'fly'); }
 /** 慢動作的提示（畫面中間）：倍率 < 0.98 才顯示。物理減速的提示在羅盤上方的航速那一行（61_hud.js；Tim 2026-10-15）。 */

@@ -13,6 +13,6 @@ var META_SPEC = window.VoxelKit.embeddedJSON('meta-kinds'), META_KINDS = (META_S
 function kindProp(kind, f, d) { var k = META_KINDS[kind]; return k && k[f] !== undefined ? k[f] : d; }
 if (!CFG || CFG.v !== 1 || !Array.isArray(CFG.ships) || !CFG.ships.length) {
   var cfgWhy = !CFG ? '沒有內嵌的設定檔（#game-config）或 JSON 壞了' : CFG.v !== 1 ? '設定檔版本 ' + CFG.v + ' 看不懂' : '設定檔裡沒有船';
-  document.getElementById('cover').textContent = '載入失敗：' + cfgWhy + '（config/game.json，重建：python -I admin.py build）';
+  document.body.textContent = '載入失敗：' + cfgWhy + '（config/game.json，重建：python -I admin.py build）';
   throw new Error(cfgWhy);
 }

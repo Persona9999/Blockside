@@ -98,7 +98,7 @@ function windKnots() { return WIND_SAIL * WIND_K * WX.wind * WIND_SPD * 1.944; }
 function setWeather(id) {
   WX_ID = WEATHERS[id] ? id : 'clear'; WX = WEATHERS[WX_ID];
   SKY = WX.sky; HORIZON = WX.horizon; GROUND = WX.ground; vxInit();   // 大漩渦（08_sea.js）：主選單的背景也看得到
-  [].forEach.call(document.querySelectorAll('#wxs button'), function (b) { b.className = b.dataset.w === WX_ID ? 'on' : ''; });
+  evEmit('weather', WX_ID);                                         // 主選單的天氣鈕跟著亮（外殼，71_input.js）
 }
 // ───────── 世界時間（Tim 2026-10-20「是否可以加一個世界模擬時間(先模擬24小時就好) 讓太陽跟著這個時間變化(會有夜晚) 然後船航行這個時間也會變」）─────────
 //   只有外面那一頁給了 ?tod=<時（0～24，可帶小數）> 才開（Blocksail 地球儀管時鐘、帶進帶出）；沒給 ⇒ 照舊固定的太陽與天色（對戰、沙盒、宣傳片的畫面一位元都不變）。

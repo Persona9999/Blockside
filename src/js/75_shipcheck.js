@@ -17,7 +17,7 @@ function shipCard(sh) {
 function shipCheck(id) {
   var R = { id: id, t: SC_SECS, issues: [], info: {} };
   function add(lv, what, where, msg, fix) { R.issues.push({ lv: lv, what: what, where: where, msg: msg, fix: fix }); }
-  function done() { var pre = document.createElement('pre'); pre.id = 'shipcheck'; document.body.appendChild(pre); pre.textContent = JSON.stringify(R); $('cover').style.display = 'none'; window.__shipcheck = R; }
+  function done() { var pre = document.createElement('pre'); pre.id = 'shipcheck'; document.body.appendChild(pre); pre.textContent = JSON.stringify(R); uiAway(); window.__shipcheck = R; }
   Promise.all([loadHull(id), loadHull('constitution')]).then(function () {
     var info = hullInfo(id) || HULL_KNOWN.filter(function (h) { return h.id === id; })[0];
     if (!info) { add('error', '船型', id, '設定檔 ships 沒有這一型', 'admin.py import'); done(); return; }
