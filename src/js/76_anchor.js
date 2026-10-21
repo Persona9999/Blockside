@@ -101,6 +101,7 @@ function anchorParts(T) {
     T.rig.models.push({ name: p.path, mesh: T.rig.meshes.length, origin: [X0, Y0, Z0], bbox: [X0 + lo[0], Y0 + lo[1], Z0 + lo[2], X0 + hi[0] + 1, Y0 + hi[1] + 1, Z0 + hi[2] + 1],
       meta: mt, points: p.points || {}, fromPart: C.length / 4 });       // fromPart：拆了幾格（匯入檢查顯示用）
     T.rig.meshes.push({ verts: verts, tris: tris, tmat: tmat, mats: mats });
+    fitAncSwap(T, T.rig.models[T.rig.models.length - 1]);             // 換裝表換了這一隻（38_fit.js；TASK-0793）⇒ 拆好的這一份換成零件表那一件
   });
 }
 function anchorAlive(sh, a) {

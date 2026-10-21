@@ -1037,7 +1037,7 @@ def prop_vox(h, PM):
 
 def vox_flip(L, lo, sz, o, m, meshes):
     """自帶格子的模型有沒有鏡像（TASK-0793）：來源作品的格子照「不翻／翻 y／翻 x」三種放到模型的外框，看模型網格的頂點（obj 匯出的方塊角）有幾成落在格子的角上。
-    最高的那一種要 ≥ 98%、而且比第二高多 2 個百分點以上，不然判不出來（回 None）。回 (''｜'y'｜'x', 讀數)。"""
+    最高的那一種要 ≥ 98%、而且比第二高多 2 個百分點以上（或者只有它 100%），不然判不出來（回 None）。回 (''｜'y'｜'x', 讀數)。"""
     M = meshes[m['mesh']] if isinstance(m.get('mesh'), int) and m['mesh'] < len(meshes) else None
     V, og = (M or {}).get('verts') or [], m.get('origin') or [0, 0, 0]
     if not V:
@@ -1064,6 +1064,8 @@ def vox_flip(L, lo, sz, o, m, meshes):
     txt = '、'.join('%s %.1f%%' % (k or '不翻', 100 * score[k]) for k in best)
     if score[best[0]] >= 0.98 and all(sets[k] == sets[best[0]] for k in best if score[best[0]] - score[k] < 0.02):   # 對稱的件：翻不翻都一樣 ⇒ 照「不翻」那一種（一樣的格）
         return ('' if sets[''] == sets[best[0]] else best[0]), txt
+    if score[best[0]] == 1 and score[best[1]] < 1:                       # 對的那一種每個頂點都落在格角上（網格就是那些格做的）⇒ 只有它 100% 就是它（松島號的主機前後幾乎對稱：不翻 100%、翻 x 99.8%）
+        return best[0], txt
     if score[best[0]] < 0.98 or score[best[0]] - score[best[1]] < 0.02:
         return None, txt
     return best[0], txt
@@ -3043,6 +3045,7 @@ def pack_html(path, split=True):
         n = struct.unpack('<I', raw[4:8])[0]
         h = json.loads(raw[8:8 + n].decode('utf-8'))
         rs = sail_strip(h)                                       # TASK-0602 ①：有配方的帆只留配方（遊戲照配方生帆，js/29_sailrecipe.js）
+        rs += vox_strip(h)                                       # TASK-0793：主機、鍋爐（自帶格子的模型）的網格拿掉（遊戲照 vox 放回船殼、網格不建）
         ms = (h.get('rig') or {}).get('meshes')
         if ms:
             out, pool, where, shape = [], [], {}, {}             # 池子只在這艘船裡（編號照這艘船裡第一次出現的順序）
@@ -3326,6 +3329,21 @@ def sail_strip(h):
     return n
 
 
+def vox_strip(h):
+    """自帶格子的模型（HULLV_KINDS：主機、鍋爐；TASK-0793，Tim 2026-10-21「全包」）：遊戲載入時照 vox 把格子放回船殼、模型拿掉、網格不建（js/38_fit.js fitHullVox），
+    網格只在換裝時拿來量長寬高、擺外框 ⇒ 那兩件改照模型的外框（bbox ＝ vox 的外框 ＝ 網格的外框，20 艘量過逐格相同）⇒ 只給這種模型用的網格換成空的。
+    別的模型也用同一份網格 ⇒ 照留。回：拿掉了幾份。_cache 的原檔照留（vox_flip 照網格判鏡像要用）。"""
+    rig = h.get('rig') or {}
+    ms, use, n = rig.get('meshes') or [], {}, 0
+    for m in rig.get('models') or []:
+        use.setdefault(m.get('mesh'), []).append(m)
+    for i, L in use.items():
+        if isinstance(i, int) and 0 <= i < len(ms) and isinstance(ms[i], dict) and ms[i].get('verts') and all((x.get('meta') or {}).get('kind') in HULLV_KINDS and x.get('vox') for x in L):
+            ms[i] = {'verts': [], 'tris': [], 'tmat': [], 'mats': ms[i].get('mats') or []}
+            n += 1
+    return n
+
+
 def pack_verify(html, read=None):
     """壓縮版成品 ⇒ 每艘照遊戲的讀法還原（池子編號 ⇒ 那艘船自己池子 header.mpool 的那一格 ⇒ mesh_unpack），跟 _cache 原檔比：
     網格的三角形逐個相同；header 其他欄位相同；格子那一段一位元組不差。回傳 (比了幾份網格, 錯誤清單)。原格式的成品 ⇒ 只比格子與 header。
@@ -3368,6 +3386,7 @@ def pack_verify(html, read=None):
                 E.append('%s：鏡射還原出 %d 塊，header 說 %s 塊' % (s['id'], nc, ha.get('nchunks')))
         if ga != b[8 + nb:]:
             E.append('%s：格子那一段跟原檔不一樣' % s['id'])
+        vox_strip(hb)                                           # 主機、鍋爐的網格：成品裡是空的 ⇒ 原檔那一份也換成空的再比
         ma, mb = (ha.get('rig') or {}).get('meshes') or [], (hb.get('rig') or {}).get('meshes') or []
         P = ha.pop('mpool', None)
         if P is not None:
