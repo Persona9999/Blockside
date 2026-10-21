@@ -21,8 +21,33 @@ function smoothSetup(T) {
   T.smP = null; T.smRK = null; if (!T.smG) return;
   var RK = T.smRK = smRegions(T, T.smG), t0 = performance.now();
   T.smP = new Map();
-  RK.forEach(function (rk) { var m = smBuild(T, T.hullG || T.base, rk, null); if (m) T.smP.set(rk, m); });   // T.hullG：船殼（砲帶的裝甲另外建，24_armor.js armorMesh）
+  RK.forEach(function (rk) { var m = smBuild(T, T.hullG || T.base, rk, null, undefined, undefined, true); if (m) T.smP.set(rk, m); });   // T.hullG：船殼（砲帶的裝甲另外建，24_armor.js armorMesh）
+  smArena(T.smP);
   T.ms.smooth = +(performance.now() - t0).toFixed(1);
+}
+// ── 船型那一份的合併緩衝（render 管線大修 S10；同 S8 船殼，60_rbatch.js rbatArena）──
+// T.smP、A.smP、P.smP（船型的平滑面，一區一份 VB／IB／VAO）建完 ⇒ 照 Map 的順序接成一份：頂點照抄、索引加上前面的頂點數（整數，不差）、每區記 io（從第幾個 byte 起）。
+//   開戰的每艘 smShare 借用（連 io）；被打到的區 smFlush 換成自己建的（io 0、own）⇒ 畫的時候（60_rbatch.js rbatSmAdd）同一個 VAO、io 接得上的幾區併成一個 drawElements。
+//   一區一份的緩衝建完就刪（記憶體不變）；SM_AR：合併緩衝的 VAO ⇒ { vao, vb, ib, verts }（__rbatProbe 照整份的頂點數比）。
+// ⛔ 船型那一份只在這裡建、不會被 smFlush 重建、smFree 只收自己建的區（15_smooth.js smFlush、62_simview.js armDispose）。?rbarena=0（或 ?rb=0）⇒ 不合，照以前一區一份。
+var SM_AR = new Map();
+function smArena(P) {
+  if (!P || !P.size) return;
+  var nv = 0, ni = 0, ok = RBAT_ARENA;
+  P.forEach(function (m) { if (!m.cpu) ok = false; else { nv += m.cpu.buf.length / 11; ni += m.cpu.idx.length; } });
+  if (!ok) { P.forEach(function (m) { m.cpu = null; }); return; }
+  var B = new Float32Array(nv * 11), I = new Uint32Array(ni), v0 = 0, i0 = 0;
+  P.forEach(function (m) {
+    var c = m.cpu, x = c.idx, k;
+    B.set(c.buf, v0 * 11); for (k = 0; k < x.length; k++) I[i0 + k] = x[k] + v0;
+    m.io = i0 * 4; v0 += c.buf.length / 11; i0 += x.length; m.cpu = null;
+  });
+  var A = { vao: gl.createVertexArray(), vb: gl.createBuffer(), ib: gl.createBuffer(), verts: nv };
+  gl.bindVertexArray(A.vao); gl.bindBuffer(gl.ARRAY_BUFFER, A.vb); gl.bufferData(gl.ARRAY_BUFFER, B, gl.STATIC_DRAW);   // 格式照 smBuild
+  [[0, 0, 3], [1, 3, 3], [2, 6, 3], [3, 9, 2]].forEach(function (a) { gl.enableVertexAttribArray(a[0]); gl.vertexAttribPointer(a[0], a[2], gl.FLOAT, false, 44, a[1] * 4); });
+  gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, A.ib); gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, I, gl.STATIC_DRAW); gl.bindVertexArray(null);
+  P.forEach(function (m) { smFree(m); m.vao = A.vao; m.vb = A.vb; m.ib = A.ib; m.sa = A; });
+  SM_AR.set(A.vao, A); (RBAT.gl.sm || (RBAT.gl.sm = [])).push(A);
 }
 /** G 有格的那幾區（16³ 的塊 ⇒ 64³ 的區）。 */
 function smRegions(T, G) {
@@ -36,7 +61,7 @@ function smoothShip(sh) { smShare(sh, sh.T.smP); }
 function smShare(o, P) {
   o.smR = null; o.smD = null; if (!P) return;
   o.smR = new Map(); o.smD = new Set();
-  P.forEach(function (m, rk) { o.smR.set(rk, { vao: m.vao, vb: m.vb, ib: m.ib, n: m.n, own: false }); });
+  P.forEach(function (m, rk) { o.smR.set(rk, { vao: m.vao, vb: m.vb, ib: m.ib, n: m.n, own: false, io: m.io || 0, sa: m.sa || null, verts: m.verts }); });   // io、sa：船型那一份的合併緩衝（smArena）
 }
 /** 打掉 (x, y, z)：±2 格碰得到的、有平滑格的區排進重建。 */
 function smTouch(sh, x, y, z) {
@@ -63,7 +88,7 @@ function smFree(m) { gl.deleteBuffer(m.vb); gl.deleteBuffer(m.ib); gl.deleteVert
  *  pg（砲帶的裝甲，24_armor.js）：只用來釘格角的另一份格子（拆出來之前貼著的船殼）—— 碰到它的格角只釘高度（z：貼著甲板、不往上縮），水平照樣平滑；它自己不出面、不算實心。
  *  ⛔ 三個方向都釘 ⇒ 圓筒底那一圈是轉 0° 時的格角階梯 ⇒ 砲塔一轉，階梯跟著轉、跟甲板上的座圈對不上，一圈鋸齒（Tim 2026-10-16：「旋轉砲塔旋轉後 會導致底下甲板出現破圖」）。
  *  o（螺旋槳）：{ SG：哪幾格算平滑（不給 ＝ T.smG）, mm, mr：整份一樣的金屬度、粗糙度（不看材質層）}。 */
-function smBuild(T, g, rk, reuse, pg, o) {
+function smBuild(T, g, rk, reuse, pg, o, keep) {                     // keep：留著 CPU 的頂點與索引（m.cpu；船型那一份，smArena 接完就丟）
   var SG = (o && o.SG) || T.smG, nx = Math.ceil(T.h.size[0] / SM_R), ny = Math.ceil(T.h.size[1] / SM_R);
   var rx = rk % nx, ry = Math.floor(rk / nx) % ny, rz = Math.floor(rk / (nx * ny)), x0 = rx * SM_R, y0 = ry * SM_R, z0 = rz * SM_R;
   var SX = T.h.size[0] + 2, SXY = SX * (T.h.size[1] + 2);
@@ -143,6 +168,7 @@ function smBuild(T, g, rk, reuse, pg, o) {
   gl.bindBuffer(gl.ARRAY_BUFFER, m.vb); gl.bufferData(gl.ARRAY_BUFFER, buf, gl.DYNAMIC_DRAW);
   gl.bindVertexArray(m.vao); gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, m.ib); gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, idx, gl.DYNAMIC_DRAW); gl.bindVertexArray(null);
   m.n = idx.length; m.own = true; m.verts = V.length; m.faces = F.length;
+  if (keep) m.cpu = { buf: buf, idx: idx };
   return m;
 }
 

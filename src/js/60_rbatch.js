@@ -47,9 +47,14 @@ function rbatAdd(c, o, k, ref, vao, el, off, cnt, glow, W) {
   R.cls[i] = c; R.ow[i] = o; R.slot[i] = k; R.ref[i] = ref; R.mb[i] = null; R.vao[i] = vao; R.el[i] = el; R.off[i] = off; R.cnt[i] = cnt; R.glow[i] = glow;
   R.M.set(W, i * 16); R.ni = i + 1;
 }
-// 平滑面那幾區（Map 的 forEach）：照這一個的 this 加（⛔ 每格不生閉包）
+// 平滑面那幾區（Map 的 forEach）：照這一個的 this 加（⛔ 每格不生閉包）；slot ＝ 這一項第一區在 Map 裡第幾個（0 ⇒ 這一份網格的第一項：設矩陣、燈熄）
+//   船型那一份的合併緩衝（15_smooth.js smArena，S10）：跟上一項同一個 VAO、io 接在它後面 ⇒ 併進上一項（索引數加上去）⇒ 沒被打到的連著幾區一個 drawElements。
 var RBAT_SM = { c: 2, o: 0, k: 0, ref: null, W: null };
-function rbatSmAdd(m) { var S = RBAT_SM; rbatAdd(S.c, S.o, S.k++, S.ref, m.vao, 1, 0, m.n, 0, S.W); }
+function rbatSmAdd(m) {
+  var S = RBAT_SM, R = RBAT, i = R.ni - 1, io = m.io || 0;
+  if (S.k && m.sa && R.vao[i] === m.vao && R.off[i] + R.cnt[i] * 4 === io) { R.cnt[i] += m.n; S.k++; return; }   // S.k > 0 ⇒ 上一項是這一份的
+  rbatAdd(S.c, S.o, S.k++, S.ref, m.vao, 1, io, m.n, 0, S.W);
+}
 /** 一格的表（render → frameBegin，prepRig 之後；一次 render() 一次，RFR）。判斷、順序、算式照以前的 drawModels／smDraw／armSmDraw 原樣抄。 */
 function rbatPrep() {
   var R = RBAT, ns = SHIPS.length, n = ns + PIECES.length, o, k;
@@ -393,12 +398,22 @@ function rbatArenaCheck() {
  *  同一個東西、同一個順序、VAO／頂點數／uGlow 一樣（不一樣 ⇒ itemMiss）；矩陣 16 個 float 逐位元相同（不一樣 ⇒ matMiss）。只在 render() 裡、整理完馬上比（之後 renderLerp 會把 sh.M 換回去）。 */
 function rbatCheck() {
   var R = RBAT, S = R.stat, q = 0, A = R.M && new Uint32Array(R.M.buffer), o;   // R.M：第一個項目才配（主選單、還沒有船 ⇒ null，下面也不會讀到）
-  function one(c, ow, ref, me, glow, W) {
+  function one(c, ow, ref, me, glow, W, off) {
     if (q >= R.ni) { S.itemMiss++; q++; return; }
-    if (R.cls[q] !== c || R.ow[q] !== ow || R.ref[q] !== ref || R.vao[q] !== me.vao || R.off[q] !== 0 || R.cnt[q] !== me.n || R.glow[q] !== glow) S.itemMiss++;
+    if (R.cls[q] !== c || R.ow[q] !== ow || R.ref[q] !== ref || R.vao[q] !== me.vao || R.off[q] !== (off || 0) || R.cnt[q] !== me.n || R.glow[q] !== glow) S.itemMiss++;
     var w = W instanceof Float32Array ? W : new Float32Array(W), B = new Uint32Array(w.buffer, w.byteOffset, 16);
     for (var j = 0; j < 16; j++) if (A[q * 16 + j] !== B[j]) { S.matMiss++; break; }
     S.chk++; q++;
+  }
+  function sm(c, ow, ref, mp, W) {                                      // 平滑面：照以前一區一項，合併緩衝裡接得上的併成一項（同 rbatSmAdd，獨立再算一次）
+    var p = null;
+    mp.forEach(function (m) {
+      var io = m.io || 0;
+      if (p && m.sa && p.vao === m.vao && p.off + p.n * 4 === io) { p.n += m.n; return; }
+      if (p) one(c, ow, ref, p, 0, W, p.off);
+      p = { vao: m.vao, n: m.n, off: io };
+    });
+    if (p) one(c, ow, ref, p, 0, W, p.off);
   }
   SHIPS.forEach(function (sh, i) {
     if (sh.sink > 40) return;
@@ -411,8 +426,8 @@ function rbatCheck() {
       var me = sh.T.meshes[d.mesh]; if (!me || d.gone || (!GFX.deco && d.meta.kind !== 'portlid') || (d.foot >= 0 && !hullGp(sh.grid, d.foot))) return;
       one(1, i, d, me, isLamp(d) ? lanternK(d) : 0, M4.mul(sh.M, d.L || trans(d.origin[0], d.origin[1], d.origin[2])));
     });
-    if (sh.smR && sh.smR.size) sh.smR.forEach(function (m) { one(2, i, sh, m, 0, sh.M); });
-    if (sh.arm) sh.arm.forEach(function (a) { if (a.smR && a.smR.size && !(a.prop && propGone(a))) a.smR.forEach(function (m) { one(3, i, a, m, 0, armM(a)); }); });
+    if (sh.smR && sh.smR.size) sm(2, i, sh, sh.smR, sh.M);
+    if (sh.arm) sh.arm.forEach(function (a) { if (a.smR && a.smR.size && !(a.prop && propGone(a))) sm(3, i, a, a.smR, armM(a)); });
   });
   PIECES.forEach(function (pc, j) { (pc.mods || []).forEach(function (m) { var me = pc.T.meshes[m.mesh]; if (me) one(4, R.ns + j, m, me, 0, M4.mul(pc.M, m.L)); }); });
   FLY.forEach(function (f) { var me = f.T.meshes[f.mesh]; if (me && f.M) one(5, -1, f, me, 0, f.M); });
@@ -451,6 +466,7 @@ function rbatPbVerts(i, RG) {
   var R = RBAT, mp = R.ref[i] && R.ref[i].smR, a = mp && RG.get(mp), m;
   if (mp && !a) RG.set(mp, a = Array.from(mp.values()));
   m = a && a[R.slot[i]]; if (!m || m.vao !== R.vao[i]) return 0;
+  if (m.sa) return m.sa.verts;                                          // 合併緩衝（15_smooth.js smArena）：POINTS 從 0 畫 ⇒ 整份的頂點
   if (m.verts) return m.verts;
   gl.bindBuffer(gl.ARRAY_BUFFER, m.vb); return gl.getBufferParameter(gl.ARRAY_BUFFER, gl.BUFFER_SIZE) / 44;   // 一個頂點 11 個 float（15_smooth.js smBuild）
 }
