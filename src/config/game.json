@@ -1236,7 +1236,8 @@
         "shaft": 3,
         "ship": 2,
         "turret": 2,
-        "wheel": 2
+        "wheel": 2,
+        "yard": 3
       }
     }
   ],
@@ -1449,7 +1450,8 @@
       "ember#wheel-1": "餘燼號・舵輪",
       "falcon#wheel-1": "夜隼號・舵輪",
       "stormkaap#wheel-1": "風暴角號・舵輪",
-      "monitor#wheel-1": "莫尼特號・舵輪"
+      "monitor#wheel-1": "莫尼特號・舵輪",
+      "dingyuan#wheel-1": "定遠號・舵輪"
     },
     "wheel_stand": {
       "constitution#wheel_stand-1": "憲法號・wheel座",
@@ -1539,7 +1541,11 @@
       "monitor#engine-1": "莫尼特號・機艙-主機",
       "gloire#engine-1": "光榮號・機艙-主機",
       "susquehanna#engine-1": "蘇士奎哈納號・主機-S",
-      "susquehanna#engine-2": "蘇士奎哈納號・主機-P"
+      "susquehanna#engine-2": "蘇士奎哈納號・主機-P",
+      "dingyuan#engine-1": "定遠號・主機",
+      "dingyuan#engine-2": "定遠號・主機-鏡像",
+      "matsushima#engine-1": "松島號・主機",
+      "matsushima#engine-2": "松島號・主機-鏡像"
     },
     "boiler": {
       "virginia#boiler-1": "維吉尼亞號・鍋爐",
@@ -1549,7 +1555,13 @@
       "monitor#boiler-2": "莫尼特號・鍋爐-鏡像",
       "gloire#boiler-1": "光榮號・機艙-鍋爐",
       "susquehanna#boiler-1": "蘇士奎哈納號・鍋爐-後",
-      "susquehanna#boiler-2": "蘇士奎哈納號・鍋爐-前"
+      "susquehanna#boiler-2": "蘇士奎哈納號・鍋爐-前",
+      "dingyuan#boiler-1": "定遠號・鍋爐-後",
+      "dingyuan#boiler-2": "定遠號・鍋爐-後-鏡像",
+      "dingyuan#boiler-3": "定遠號・鍋爐-前",
+      "dingyuan#boiler-4": "定遠號・鍋爐-前-鏡像",
+      "matsushima#boiler-1": "松島號・鍋爐",
+      "matsushima#boiler-2": "松島號・鍋爐-鏡像"
     }
   }
 }

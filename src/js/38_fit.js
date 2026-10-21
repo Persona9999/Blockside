@@ -20,8 +20,8 @@
 //   座標系：ax 兩個固定點定方向（沒有 ⇒ 照作品的方向，不轉）；at 對齊點（兩邊都有 ⇒ 三軸對齊那一點；沒有 ⇒ 外框底面中心）；槳照 meta side 分左右舷（不同邊 ⇒ 鏡射）。
 //   meta：零件的（種類的參數：槳手幾人、划幅、舵角上限、葉數、轉的參數…），掛點自己的留著（id、槳的 side／bank、fits、optional）；
 //   meta 裡的座標（舵的 hinge_*、轉軸 spin_pivot_*）照零件一起挪，方向（axis_*、spin_axis_*）照一起轉。
-//   ⛔ 不當掛點：帆桁（帆裝）、火藥桶（火藥庫的存量）、門與砲門蓋板（跟船殼開口綁死）、導纜器、齒輪、爐灶；錨的關聯（憲法號、餘燼號、三叉戟號：載入時 76_anchor.js anchorParts 才拆成模型）。
-// 第四段（TASK-0793；Tim 2026-10-21「接上」）：已經是模型的錨（kind=anchor，17 艘）。
+//   ⛔ 不當掛點：帆桁（帆裝）、火藥桶（火藥庫的存量）、門與砲門蓋板（跟船殼開口綁死）、導纜器、齒輪、爐灶。
+// 第四段（TASK-0793；Tim 2026-10-21「接上」）：已經是模型的錨（kind=anchor，17 艘）；錨的關聯（憲法號、餘燼號、三叉戟號：載入時 76_anchor.js anchorParts 才拆成模型 ⇒ 拆好再換，見 fitAncSwap）。
 var FIT_PARTS = (CFG.parts && CFG.parts.guns) || {};
 var FIT_KINDS = {
   oar: { ax: ['pivot', 'blade'], at: 'pivot', side: 'side', keep: ['side', 'bank'], name: '槳' },
@@ -77,9 +77,17 @@ function fitFrame(m, piv) {
   });
   return { a: a, z: m.bbox[2], th: th, sd: sd };
 }
+/** 網格沒有頂點（主機、鍋爐：成品裡網格拿掉了，admin.py vox_strip）⇒ 外框的 8 個角（相對 origin，跟頂點同一種寫法）；有 ⇒ 頂點。
+ *  外框 ＝ vox 的外框 ＝ 網格的外框（20 艘量過逐格相同）、這兩種不轉（沒有 ax）⇒ 量出來的長寬高、擺好的外框跟照網格的一樣。 */
+function fitVerts(m, mesh) {
+  if (mesh.verts.length || !m.bbox) return mesh.verts;
+  var b = m.bbox, o = m.origin, V = [];
+  for (var k = 0; k < 8; k++) V.push(b[k & 1 ? 3 : 0] - o[0], b[k & 2 ? 4 : 1] - o[1], b[k & 4 ? 5 : 2] - o[2]);
+  return V;
+}
 /** 砲的座標系裡的外框（長 ＝ 沿砲軸、寬、高）。 */
 function fitDims(m, mesh, f) {
-  var V = mesh.verts, o = m.origin, c = Math.cos(f.th), s = Math.sin(f.th), x0 = 1e9, x1 = -1e9, y0 = 1e9, y1 = -1e9, z0 = 1e9, z1 = -1e9;
+  var V = fitVerts(m, mesh), o = m.origin, c = Math.cos(f.th), s = Math.sin(f.th), x0 = 1e9, x1 = -1e9, y0 = 1e9, y1 = -1e9, z0 = 1e9, z1 = -1e9;
   for (var i = 0; i < V.length; i += 3) {
     var dx = o[0] + V[i] - f.a[0], dy = o[1] + V[i + 1] - f.a[1], u = dx * c + dy * s, v = -dx * s + dy * c, z = o[2] + V[i + 2];
     if (u < x0) x0 = u; if (u > x1) x1 = u; if (v < y0) y0 = v; if (v > y1) y1 = v; if (z < z0) z0 = z; if (z > z1) z1 = z;
@@ -119,7 +127,7 @@ function fitCopyPart(m, me, from, cy) {
 function fitLoad(h, F, ship) {
   var need = {}, models = (h.rig && h.rig.models) || [], own = {};
   Object.keys(F).forEach(function (sid) {
-    var m = models.filter(function (q) { return q.meta && String(q.meta.id) === sid; })[0], t = F[sid];
+    var m = models.filter(function (q) { return q.meta && String(q.meta.id) === sid; })[0] || fitAncRel(h, sid), t = F[sid];
     if (!m) return;
     if (t.indexOf('#') > 0) {                                             // 第二段：零件表的參照
       if (t.split('#')[0] === ship) { var q = models.filter(function (x) { return x.meta && String(x.meta.id) === t.slice(t.indexOf('#') + 1); })[0]; if (q) own[t] = fitCopyPart(q, h.rig.meshes[q.mesh], '這艘', h.size[1] / 2); }
@@ -143,6 +151,7 @@ function fitApply(h, F, ext) {
   keys.forEach(function (sid) {
     var t = F[sid], m = models.filter(function (q) { return q.meta && String(q.meta.id) === sid; })[0];
     function bad(why) { R.bad.push({ slot: sid, path: m ? m.name : '', to: t, why: why }); }
+    if (!m) { var ar = fitAncRel(h, sid); if (ar) return fitAncNote(ar, sid, t, ext, R); }   // 錨的關聯（anchorParts 拆好模型才擺；fitAncSwap）
     if (!m) return bad('船上沒有這個掛點');
     if (t === '*') return;                                                // 原本雕的那一件（蓋掉出廠換裝表的那一格用）
     var k = fitKindOf(m);
@@ -205,8 +214,8 @@ function fitTooBig(ds, dp) {
 }
 /** 把零件 P 照 X 擺到掛點 m：網格（新的一份，接在 rig.meshes 後面）、固定點、外框、起點；繩寫明綁在 m 某個固定點的那一端照同名固定點挪（零件沒有那一點 ⇒ 那條繩記進 drop）。 */
 function fitPlace(rig, m, P, X, mir, drop) {
-  var V = P.mesh.verts, o = P.m.origin, W = new Array(V.length), lo = [1e9, 1e9, 1e9], hi = [-1e9, -1e9, -1e9], i, k;
-  for (i = 0; i < V.length; i += 3) { var q = X([o[0] + V[i], o[1] + V[i + 1], o[2] + V[i + 2]]); for (k = 0; k < 3; k++) { W[i + k] = q[k]; if (q[k] < lo[k]) lo[k] = q[k]; if (q[k] > hi[k]) hi[k] = q[k]; } }
+  var V = P.mesh.verts, o = P.m.origin, W = new Array(V.length), lo = [1e9, 1e9, 1e9], hi = [-1e9, -1e9, -1e9], i, k, B = fitVerts(P.m, P.mesh);
+  for (i = 0; i < B.length; i += 3) { var q = X([o[0] + B[i], o[1] + B[i + 1], o[2] + B[i + 2]]); for (k = 0; k < 3; k++) { if (V.length) W[i + k] = q[k]; if (q[k] < lo[k]) lo[k] = q[k]; if (q[k] > hi[k]) hi[k] = q[k]; } }   // 網格拿掉了的（主機、鍋爐）⇒ 外框照它的 8 個角、網格照舊是空的
   var og = [Math.floor(lo[0]), Math.floor(lo[1]), Math.floor(lo[2])];
   for (i = 0; i < W.length; i += 3) for (k = 0; k < 3; k++) W[i + k] -= og[k];
   var Tr = P.mesh.tris; if (mir) { Tr = Tr.slice(); for (i = 0; i < Tr.length; i += 3) { var a = Tr[i + 1]; Tr[i + 1] = Tr[i + 2]; Tr[i + 2] = a; } }   // 鏡射 ⇒ 繞序翻過來
@@ -373,6 +382,43 @@ function fitHullVox(T) {
   rig.models.forEach(function (m) { used[m.mesh] = 1; }); (T.decos || []).forEach(function (m) { used[m.mesh] = 1; });
   L.forEach(function (m) { if (!used[m.mesh]) skip[m.mesh] = 1; });     // 網格不建（同裝飾拆掉之後沒人用的）
   h.materials = fitLayerEdit(h.materials, MA); h.render = fitLayerEdit(h.render, RE);
+}
+// ── 錨的關聯當掛點（TASK-0793；Tim 2026-10-21「713 & 793 全包」） ──
+// 憲法號、餘燼號（basecamp）、三叉戟號（gura）的錨是關聯：格子跟船殼攤平成一份，載入時 76_anchor.js anchorParts 才把那幾格從船殼（T.hullG）拿掉、外露的面做成一份模型。
+//   ⇒ 換裝表那一格的 id 是錨的關聯（檔頭 parts，meta kind=anchor、有 cells）：fitApply 先記下來（T.fit.anc[路徑]），
+//      anchorParts 拆好那一份模型之後（fitAncSwap）照模型錨同一套座標系（ring 對齊、fluke-a→b 定方向）換成零件表那一件。
+//   船殼那幾格照樣拿掉（原本的錨不在了）；T.base 照舊整艘（浮力、站位不變，同沒換的時候）；模型的重量照種類（05_hull.js modelT）⇒ 換了也一樣。
+//   ⛔ 不收進零件表：拆出來的那一份只有開局才有（檔頭沒有網格）⇒ 別艘換不到它。
+/** 錨的關聯（檔頭 parts：meta kind=anchor、id ＝ sid、有 cells）；沒有 ⇒ null。 */
+function fitAncRel(h, sid) {
+  return (h.parts || []).filter(function (p) { return p.meta && p.meta.kind === 'anchor' && String(p.meta.id) === sid && p.cells; })[0] || null;
+}
+/** fitApply：錨的關聯那一格先看值對不對、零件有沒有載到，記進 R.anc（擺放等 anchorParts 拆好模型）。 */
+function fitAncNote(p, sid, t, ext, R) {
+  function bad(why) { R.bad.push({ slot: sid, path: p.path, to: t, why: why }); }
+  if (t === '*') return;
+  if (t === '') return bad('這一種不能拆空');
+  var P = fitRefPart(null, t, ext); if (!P) return bad('零件表沒有 ' + t);
+  if (fitKindOf(P.m) !== 'anchor') return bad(t + ' 是 ' + (fitKindOf(P.m) || '別的') + '，掛點是 anchor（只換同一種）');
+  (R.anc = R.anc || {})[p.path] = { slot: sid, to: t, P: P };
+}
+/** anchorParts 拆好錨的關聯那一份模型 m 之後：換裝表有這一格 ⇒ 照第二段同一套擺上零件（放不下 ⇒ 照原本拆出來的那一份，T.fit.bad）。 */
+function fitAncSwap(T, m) {
+  var A = T.fit && T.fit.anc && T.fit.anc[m.name]; if (!A) return;
+  var K = FIT_KINDS.anchor, P = A.P, rig = T.rig, drop = {}, have = {};
+  function bad(why) { T.fit.bad.push({ slot: A.slot, path: m.name, to: A.to, why: why }); }
+  Object.keys(m.points || {}).forEach(function (n) { if (P.m.points && P.m.points[n]) have[n] = 1; });
+  var fs = fitFrameK(m, K, have), fp = fitFrameK(P.m, K, have);
+  if (m.meta.fits) { if (String(m.meta.fits).split(',').map(function (w) { return w.trim(); }).indexOf(A.to) < 0) return bad('掛點 fits=' + m.meta.fits + ' 不收 ' + A.to); }
+  else { var why = fitTooBig(fitDims(m, rig.meshes[m.mesh], fs), fitDims(P.m, P.mesh, fp)); if (why) return bad(why); }
+  fitPlace(rig, m, P, fitXf(fp, fs, false), false, drop);
+  var mt = {}; Object.keys(P.m.meta || {}).forEach(function (q) { mt[q] = P.m.meta[q]; });
+  FIT_KEEP.concat(K.keep || []).forEach(function (q) { delete mt[q]; if (m.meta[q] !== undefined) mt[q] = m.meta[q]; });
+  fitMetaGeo(mt, fp, fs, false);
+  m.meta = mt;
+  T.fit.done.push({ slot: A.slot, path: m.name, from: 'anchor', to: A.to, src: P.from, mirror: false });
+  var nd = Object.keys(drop).length;
+  if (nd) { rig.ropes = rig.ropes.filter(function (r, i) { return !drop[i]; }); T.fit.ropesDropped = (T.fit.ropesDropped || 0) + nd; }
 }
 /** 零件表那一件（'<船 id>#<模型 id>'）⇒ fitLoad 先載好的（ext[ref]）。 */
 function fitRefPart(h, ref, ext) { return (ext || {})[ref] || null; }
