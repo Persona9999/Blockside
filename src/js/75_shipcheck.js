@@ -156,6 +156,7 @@ function shipCheck(id) {
     });
     R.info.drvparts = dl.join('；');
     R.info.props = propSummary(sh);                                     // 會轉的體素件（螺旋槳；24_armor.js propSetup）
+    if (T.hullVox && T.hullVox.length) R.info.hullVox = T.hullVox.map(function (q) { return q.path + '（' + ((META_KINDS[q.kind] || {}).name || q.kind) + '，' + q.n.toLocaleString('en') + ' 格' + (q.ovl ? '，蓋掉船殼 ' + q.ovl.toLocaleString('en') + ' 格' : '') + '）'; }).join('；');   // 自帶格子的模型放回船殼（38_fit.js fitHullVox，TASK-0793）；沒有 ⇒ 不寫這一欄（舊船報表不變）
     sh.models.forEach(function (m) { if (m.meta && m.meta.kind === 'propeller' && !m.vox) add('warn', '螺旋槳', m.path, '檔頭沒有它的格子（rig.models[].vox）⇒ 照舊是模型：一發扣血、打不碎、推力不照剩幾成', 'python -I admin.py metasync --id ' + T.id + '（admin.py prop_vox：模型要平移放、不旋轉不縮放）'); });
     // ── 錨（TASK-0601）：模型錨（meta kind=anchor）＋錨環 ring、船殼的錨鏈孔 hawse-P／S（造船規格 §9 anchor）──
     var AN = anchorsOf(sh);

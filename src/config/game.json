@@ -427,7 +427,8 @@
       "hole": 2.2,
       "crew": 8,
       "min": 5,
-      "mass": 66, "shot": 450,
+      "mass": 66,
+      "shot": 450,
       "hpK": 1
     },
     "armstrong120": {
@@ -440,7 +441,8 @@
       "hole": 1.0,
       "crew": 6,
       "min": 3,
-      "mass": 2.1, "shot": 20.4
+      "mass": 2.1,
+      "shot": 20.4
     },
     "hotch57": {
       "code": "h57",
@@ -452,7 +454,8 @@
       "hole": 0.55,
       "crew": 3,
       "min": 2,
-      "mass": 0.37, "shot": 2.72
+      "mass": 0.37,
+      "shot": 2.72
     },
     "hotch47": {
       "code": "h47",
@@ -464,7 +467,8 @@
       "hole": 0.45,
       "crew": 2,
       "min": 1,
-      "mass": 0.24, "shot": 1.5
+      "mass": 0.24,
+      "shot": 1.5
     },
     "brooke64": {
       "code": "64b",
@@ -1492,6 +1496,56 @@
       "tidegrave#model-1": "潮墓號・爐灶",
       "tidegrave#model-8": "潮墓號・備用水桶-P1",
       "tidegrave#model-18": "潮墓號・繫纜柱-P"
+    },
+    "anchor": {
+      "falcon#anchor-1": "夜隼號・錨-S",
+      "stormkaap#anchor-1": "風暴角號・錨-S",
+      "stormkaap#anchor-2": "風暴角號・錨-P",
+      "nightlamp#anchor-1": "夜燈號・錨-S",
+      "nightlamp#anchor-2": "夜燈號・錨-P",
+      "phoenix#anchor-1": "炎羽號・anchor-S",
+      "phoenix#anchor-2": "炎羽號・anchor-P",
+      "virginia#anchor-1": "維吉尼亞號・錨-S",
+      "cosecha#anchor-1": "收穫號・錨-S",
+      "cosecha#anchor-2": "收穫號・錨-P",
+      "napoleon#anchor-1": "拿破崙號・錨-S",
+      "napoleon#anchor-2": "拿破崙號・錨-P",
+      "monitor#anchor-1": "莫尼特號・錨",
+      "tidegrave#anchor-1": "潮墓號・anchor-P",
+      "tidegrave#anchor-2": "潮墓號・anchor-S",
+      "gloire#anchor-1": "光榮號・錨-S",
+      "gloire#anchor-2": "光榮號・錨-P",
+      "reale#anchor-1": "皇家號・錨-S",
+      "reale#anchor-2": "皇家號・錨-P",
+      "susquehanna#anchor-1": "蘇士奎哈納號・錨-S",
+      "susquehanna#anchor-2": "蘇士奎哈納號・錨-P",
+      "dromon#anchor-1": "持火號・anchor-S",
+      "dromon#anchor-2": "持火號・anchor-P",
+      "punt#anchor-1": "蓬特號・anchor-P",
+      "fusta#anchor-1": "越嶺號・anchor-S",
+      "fusta#anchor-2": "越嶺號・anchor-P",
+      "dingyuan#anchor-1": "定遠號・錨-S",
+      "dingyuan#anchor-2": "定遠號・錨-P",
+      "matsushima#anchor-1": "松島號・錨-S",
+      "matsushima#anchor-2": "松島號・錨-P"
+    },
+    "engine": {
+      "virginia#engine-1": "維吉尼亞號・機艙",
+      "napoleon#engine-1": "拿破崙號・機艙-主機",
+      "monitor#engine-1": "莫尼特號・機艙-主機",
+      "gloire#engine-1": "光榮號・機艙-主機",
+      "susquehanna#engine-1": "蘇士奎哈納號・主機-S",
+      "susquehanna#engine-2": "蘇士奎哈納號・主機-P"
+    },
+    "boiler": {
+      "virginia#boiler-1": "維吉尼亞號・鍋爐",
+      "napoleon#boiler-1": "拿破崙號・機艙-鍋爐-後",
+      "napoleon#boiler-2": "拿破崙號・機艙-鍋爐-前",
+      "monitor#boiler-1": "莫尼特號・鍋爐",
+      "monitor#boiler-2": "莫尼特號・鍋爐-鏡像",
+      "gloire#boiler-1": "光榮號・機艙-鍋爐",
+      "susquehanna#boiler-1": "蘇士奎哈納號・鍋爐-後",
+      "susquehanna#boiler-2": "蘇士奎哈納號・鍋爐-前"
     }
   }
 }
