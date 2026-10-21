@@ -1,6 +1,6 @@
 # S0 — measurement harness v2 (Blockside render plan)
 
-Written during the 2026-10-21 render work (S0). Outputs (builds, runs, Chrome profiles) go to `reports/render_lab/` (git-ignored), so the baselines named below (`base_e991baa`, ...) are NOT in the repo: record a fresh baseline of the commit you start from before comparing (see src/RENDER_PLAN.md).
+Written during the 2026-10-21 render work (S0). Outputs (builds, runs, Chrome profiles) go to `reports/render_lab/` (git-ignored), so the baselines named below (`base_e991baa`, ...) are NOT in the repo: record a fresh baseline of the commit you start from before comparing (see task TASK-0781, section 怎麼接著做).
 
 ```
 python -I -X utf8 src/tests/render_lab/harness.py <command> ...      # run from the Blockside root; H below = reports/render_lab (RENDER_LAB_DIR overrides)      # -I: isolated; -X utf8: page text is Chinese, console is cp950

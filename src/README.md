@@ -3,7 +3,7 @@
 > 📦 2026-10-15（TASK-0586）從 ArtGallery 的 `HtmlGames/_build/ame_constitution_broadside/` 搬來（只複製檔案；之前的歷史在 ArtGallery 的 `git log -- HtmlGames/_build/ame_constitution_broadside`，114 筆）。
 > 開發用 Blocksail 的 `external/Blockside`（submodule，checkout 在 `dev` 分支；Tim 2026-10-20「之後我希望Blockside開發直接在Blocksail的submodule內開發(確保同步)」）—— Valhalla 裡的 `Blockside/` 不再開發（會落後），流程見根目錄 README「分支與發版」。目錄：`src/`（這裡）、`VoxelKit/`（從 ArtGallery/VoxelKit 853b4e7 複製；`_cache/` 不入版控）、根目錄的成品 `index.html` ＋ `ships/`（拆檔：每艘船一個檔，見下面「建置」；GitHub Pages 首頁）、`admin.html`（設定後台）、`admin.cmd`、`sandbox.html`（2D 指揮官沙盒）、`fleetlab.html`（擬真沙盒的入口，轉到 index.html?lab=fleet）。
 > ⚠ repo 變肥（成品每一版都進版控，壓縮過的船 git 存不了差異；5 天 154 MiB）：原因、量法、做了什麼見 [`REPO_SIZE.md`](REPO_SIZE.md)（2026-10-20：拆檔＋船檔分段已做，見 §0）。
-> 🛠 render 管線大修（2026-10-21 起，進行中：S1–S4、R0–R2 已合進 dev，一次畫多個從 S5 起）：做到哪、量到什麼、剩下的步驟、怎麼接著做見 [`RENDER_PLAN.md`](RENDER_PLAN.md)；量測工具 `tests/render_lab/`。
+> 🛠 render 管線大修（2026-10-21 起，進行中）：做到哪、量到什麼、剩下的步驟、每一步的設計、怎麼接著做都在任務單 TASK-0781（母單）與它的子單（`senate cmd tasks --arg index=781`）；量測工具 `tests/render_lab/`。
 
 根目錄的 `index.html` 是由這裡的 `template.html`、`js/`、`config/game.json`，加上 `../VoxelKit/` 產生的：
 
