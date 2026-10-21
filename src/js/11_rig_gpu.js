@@ -63,6 +63,8 @@ function ropeTube(TB, P, col, w) {
 var SBV = null, SBI = null, SBN = null, SBP = null, SBD = null, SB_STRIDE = 18, SB_DW = 6, SB_SW = 12, SAIL_UNIT = 9, SAIL_DUMMY = null;
 // 帆破洞的毛邊（render 管線大修 R3，TASK-0791）：?sailrag=0 ⇒ 照以前（離洞幾圈全是 SAIL_RAG_FAR、布片沒有雜訊座標、撕開只改索引）。
 var SAIL_RAG_ON = Q.get('sailrag') !== '0', SAIL_RAG_FAR = 2, SAIL_RAG_SH = 0.35, SAIL_RAG_G0 = new WeakMap();
+// 跟帆身斷開的那幾塊不畫（sailIsland；Tim 2026-10-21「完全脫離部分應該要消失(中間都被打成透明了) 可以跟火燒一起處理」）：?sailisl=0 ⇒ 照畫。
+var SAIL_ISL_ON = Q.get('sailisl') !== '0', SAIL_ISL = new WeakMap();
 /** 帆的貼圖集（30_rig_physics.js sailAtlas）⇒ GL 貼圖（第一次畫才建，記在船型上）；沒有 ⇒ 1×1 的空貼圖（取樣器一定要綁一張）。 */
 function sailTex(T) {
   if (T && T.sailAtlas && !T.sailTexGL) {
@@ -75,9 +77,10 @@ function sailTex(T) {
   if (!SAIL_DUMMY) { SAIL_DUMMY = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, SAIL_DUMMY); gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array([255, 255, 255, 255])); }
   return SAIL_DUMMY;
 }
-/** 這一格畫哪幾面帆、哪幾片布片：每一面叫一次 put(o, T, P, n, tris, col, tv, vc, uv, r, bF, g0, rg)，回這一格跟著帆腳畫的繩 { td, tk }（looseBuf）。
- *  o：布（sh.cl[k]）或布片本身、T：它的模板；P：細格位置（暫存區 SBP，下一面就蓋掉）；tv：不畫的細格點（撕開的洞、收好那一捲少的）；vc：每個頂點的顏色（沒有貼圖集時的退路，
- *  30_rig_physics.js texColors）；uv＋r：貼圖集的那一格；bF：著火（s.burn）、g0：雜訊座標用的作品形狀；rg：1 ＝ 布片（外緣整圈是撕下來的邊，sailRagH）。
+/** 這一格畫哪幾面帆、哪幾片布片：每一面叫一次 put(o, T, P, n, tris, col, tv, vc, uv, r, bF, g0, rg, th)，回這一格跟著帆腳畫的繩 { td, tk }（looseBuf）。
+ *  o：布（sh.cl[k]）或布片本身、T：它的模板；P：細格位置（暫存區 SBP，下一面就蓋掉）；tv：不畫的細格點（撕開的洞、收好那一捲少的、跟帆身斷開的那幾塊 sailIsland）；vc：每個頂點的顏色（沒有貼圖集時的退路，
+ *  30_rig_physics.js texColors）；uv＋r：貼圖集的那一格；bF：著火（s.burn）、g0：雜訊座標用的作品形狀；rg：1 ＝ 布片（外緣整圈是撕下來的邊，sailRagH）；
+ *  th：物理上的洞（撕開的、收好那一捲少的；不含 sailIsland 藏的）⇒ 毛邊照它算。
  *  sailBuf（動靜分開傳）與 sailFill（?rigchk=1 對拍用的整份）共用 ⇒ 畫哪幾面、位置怎麼算只有一份。
  *  raw（R2）：細格就是物理的粒子（sailIdent）、沒在演收帆 ⇒ P 直接是 c.p（不抄一份；put 只讀）。 */
 function sailWalk(ow, put, raw) {
@@ -97,9 +100,10 @@ function sailWalk(ow, put, raw) {
     }
     if (!P) P = (PHYS || !isShip) && c.p ? (isShip && c.furlF !== null && c.furlF !== undefined ? furlDraw(c, clothFine(c, SBP), c.furlF, ow) : raw && sailIdent(c.T) ? c.p : clothFine(c, SBP)) : c.T.p0;   // furlDraw：收帆張帆的演出（30_rig_physics.js）
     if (isShip && PHYS && c.tt && c.p && !c.hidden && !c.gone && !c.loose) c.tt.forEach(function (t) { if (ow.ropes[t.j].dead || ow.tCut && ow.tCut[t.j]) return; var o = t.i * 3; td.push({ t: t, x: P[o], y: P[o + 1], z: P[o + 2] }); tk += t.j + ','; });   // 畫出來的帆腳（收帆演出時也是）
-    put(c, c.T, P, c.T.n, c.T.tris, c.T.col, keep ? lost : c.torn ? c.tv : null, c.T.vcol, c.T.uv, A && c.T.ti !== undefined ? sailRect(ow, A, c.T.ti) : null, isShip ? ow.sails[k].burn : c.bf, c.T.p0, 0);   // 斷開那一團帶走的帆：c.bf（22_pieces.js）
+    var tv0 = keep ? lost : c.torn ? c.tv : null, bF = isShip ? ow.sails[k].burn : c.bf;   // 斷開那一團帶走的帆：c.bf（22_pieces.js）
+    put(c, c.T, P, c.T.n, c.T.tris, c.T.col, SAIL_ISL_ON ? sailIsland(c, c.T.n, c.T.tris, tv0, bF) : tv0, c.T.vcol, c.T.uv, A && c.T.ti !== undefined ? sailRect(ow, A, c.T.ti) : null, bF, c.T.p0, 0, tv0);
   });
-  if (F) F.forEach(function (f) { put(f, f.T, f.p, f.n, f.T.sim.tris, f.col, null, null, f.uv, A && f.uv && f.ti !== undefined ? sailRect(ow, A, f.ti) : null, null, SAIL_RAG_ON ? sailShredG0(f) : null, 1); });   // 布片：有貼圖的帆撕下來的照原處的圖（34_shreds.js shredCut 記 uv）
+  if (F) F.forEach(function (f) { put(f, f.T, f.p, f.n, f.T.sim.tris, f.col, null, null, f.uv, A && f.uv && f.ti !== undefined ? sailRect(ow, A, f.ti) : null, null, SAIL_RAG_ON ? sailShredG0(f) : null, 1, null); });   // 布片：有貼圖的帆撕下來的照原處的圖（34_shreds.js shredCut 記 uv）
   return { td: td, tk: tk };
 }
 /** ?rigchk=1 對拍用：以前那一份 —— 整份重填暫存區（SBV 頂點 SB_NV 個 × 15、SBI 索引 SB_NI 個），回 { td, tk }。只讀、不傳 GPU（rigChk 拿來跟 GPU 上那一份比）。 */
@@ -110,8 +114,8 @@ function sailFill(ow) {
   if (ow.crew && PHYS && ow.shreds) ow.shreds.forEach(function (f) { mv += f.n; mi += f.T.sim.tris.length; });
   if (!SBV || SBV.length < mv * SB_STRIDE) SBV = new Float32Array(Math.ceil(Math.max(1, mv) * 1.33) * SB_STRIDE);
   if (!SBI || SBI.length < mi) SBI = new Uint32Array(Math.ceil(Math.max(1, mi) * 1.33));
-  var f = sailWalk(ow, function (o, T, p, n, tr, col, tv, vc, uv, r, bF, g0, rg) {
-    var base = nv, j, i, H = SAIL_RAG_ON ? sailRagH(tr, n, tv, rg, g0) : null;
+  var f = sailWalk(ow, function (o, T, p, n, tr, col, tv, vc, uv, r, bF, g0, rg, th) {
+    var base = nv, j, i, H = SAIL_RAG_ON ? sailRagH(tr, n, th, rg, g0) : null;
     SBN.fill(0, 0, n * 3);
     for (j = 0; j < tr.length; j += 3) {
       if (tv && (tv[tr[j]] || tv[tr[j + 1]] || tv[tr[j + 2]])) continue;
@@ -176,14 +180,14 @@ function sailBuf(ow) {
     ow.sbChk = { d: K ? null : SBD.slice(0, nv * SB_DW), tk: tk };      // 對拍用：這一次傳上去的動的那一份（R2：GPU 寫的，rigChk 讀回來）
     var sc = rigStat(); sc.sbDyn = (sc.sbDyn || 0) + 1; if (s0 >= 0 || RG.length) sc.sbStat = (sc.sbStat || 0) + 1; if (K ? s0 >= 0 || KD.length : i0 >= 0) sc.sbIdx = (sc.sbIdx || 0) + 1;   // 重做幾次、其中靜的、索引傳了幾次
   }
-  function put(o, T, p, n, tr, col, tv, vc, uv, r, bF, g0, rg) {
+  function put(o, T, p, n, tr, col, tv, vc, uv, r, bF, g0, rg, th) {
     var q = L[np] || (L[np] = { o: null }), base = nv, j, i, x;
     if (s0 < 0 && (q.o !== o || q.T !== T || q.n !== n)) s0 = np;      // 畫的帆換了 ⇒ 從這一面起頂點全挪了：靜的、索引整段重填
     var st = s0 >= 0, dc = st || !sailDropSame(q.d, tv, n);
     if (dc) { if (i0 < 0) i0 = np; q.d = tv ? sailDropCopy(q.d, tv, n) : null; if (K && !st) KD.push(np); }   // 撕開、收好那一捲少了幾點 ⇒ 從這一面起索引重填（頂點不動）；R2：只改這一面變了的那幾個三角形
     if (st || dc && SAIL_RAG_ON || q.r !== r || q.A !== A || q.bf !== bF || bF && sailBurnNew(B.SV, base, n, bF)) {   // 著火（燒到的時間、撲滅）、貼圖集、陣營換了、撕開（R3：離洞幾圈）⇒ 這一面的靜的重填
       if (B.SV.length < (base + n) * SB_SW) { x = new Float32Array(Math.ceil((base + n) * 1.33) * SB_SW); x.set(B.SV.subarray(0, base * SB_SW)); B.SV = x; }
-      var Z = B.SV, H = SAIL_RAG_ON ? sailRagH(tr, n, tv, rg, g0) : null;
+      var Z = B.SV, H = SAIL_RAG_ON ? sailRagH(tr, n, th, rg, g0) : null;
       for (i = 0; i < n; i++) {
         var w = (base + i) * SB_SW, k = i * 3;
         if (vc) { Z[w] = vc[k]; Z[w + 1] = vc[k + 1]; Z[w + 2] = vc[k + 2]; } else { Z[w] = col[0]; Z[w + 1] = col[1]; Z[w + 2] = col[2]; }
@@ -276,6 +280,49 @@ function sailShredG0(f) {
   var g = SAIL_RAG_G0.get(f);
   if (!g) { g = Float32Array.from(f.p.subarray(0, f.n * 3)); SAIL_RAG_G0.set(f, g); }
   return g;
+}
+/** 跟帆身斷開的那幾塊（Tim 2026-10-21 截圖：一塊布浮在半空，四周都是洞 —— 「完全脫離部分應該要消失(中間都被打成透明了) 可以跟火燒一起處理」）：
+ *  燒穿的洞、毛邊吃掉的布只在著色器裡不畫（物理上那塊布還連著：燒不斷約束、毛邊不讀物理）⇒ 被圍起來的那一塊照樣跟著帆動、看起來浮在空中。
+ *  看得到的點 ＝ 不是物理的洞（tv）、沒燒穿（(min(現在, x) − a) ≥ 燒穿要的秒數 ⇒ 燒穿，跟 49_burn.js burnSail 的洞、著色器 bnB 不加雜訊的那一條同一把尺；
+ *    著色器的時間就是 SIMT）、毛邊開著時不在洞邊上（洞邊那一點著色器多半吃掉）。
+ *  物理上連在一起（模擬沒斷的約束 o.brk；沒有約束可讀 ⇒ 還在的三角形）的每一團裡，看得到的點照「兩點都看得到的邊」連成幾塊，留點數最多的那一塊，
+ *  其他幾塊的點併進不畫的點（三角形照舊疊成一點）。物理上就斷開的（撕成兩半）各自是一團、各留各的。回不畫的點（tv 原樣，或 tv ∪ 斷開的那幾塊）。
+ *  只在輸入換了才重算：tv 的內容、o.brk 這一份、s.burn 這一份、燒穿的點數（燒穿只會變多：撲滅停住、再點著接著燒、補帆換一份新的）⇒ 燒著的帆每次重做數一次燒穿幾點（O(n)，跟 burnSail 同一圈）。
+ *  ⛔ 只是不畫：不寫布、不寫 s.burn、沒有 rnd；推力、血量照模擬（燒掉的面積照 49_burn.js）。 */
+function sailIsland(o, n, tr, tv, bF) {
+  if (!tv && !bF) return tv;
+  var T = BURN.sailBurn, t = SIMT, nb = 0, i, j;
+  if (bF) for (i = 0; i < n; i++) if (Math.min(t, bF.x[i]) - bF.a[i] >= T) nb++;
+  var C = SAIL_ISL.get(o);
+  if (C && C.bf === bF && C.br === o.brk && C.nb === nb && sailDropSame(C.d, tv, n)) return C.out;   // brk 只在撕開（跟 tv 一起）、clothInit（換一份）改
+  var t0 = performance.now(), vis = new Uint8Array(n), pv = new Int32Array(n), pr = new Int32Array(n), a, b, c, out = tv, hide = 0;
+  function fd(P, x) { while (P[x] !== x) { P[x] = P[P[x]]; x = P[x]; } return x; }
+  function un(P, x, y) { x = fd(P, x); y = fd(P, y); if (x !== y) P[x] = y; }
+  for (i = 0; i < n; i++) { pv[i] = i; vis[i] = !(tv && tv[i]) && !(bF && Math.min(t, bF.x[i]) - bF.a[i] >= T) ? 1 : 0; }
+  if (tv && SAIL_RAG_ON) for (j = 0; j < tr.length; j += 3) { a = tr[j]; b = tr[j + 1]; c = tr[j + 2]; if (tv[a] || tv[b] || tv[c]) vis[a] = vis[b] = vis[c] = 0; }   // 洞邊（sailRagH 的 0）
+  for (j = 0; j < tr.length; j += 3) {                                   // 看得到的連著：還在的三角形、兩點都看得到的邊
+    a = tr[j]; b = tr[j + 1]; c = tr[j + 2]; if (tv && (tv[a] || tv[b] || tv[c])) continue;
+    if (vis[a] && vis[b]) un(pv, a, b); if (vis[a] && vis[c]) un(pv, a, c); if (vis[b] && vis[c]) un(pv, b, c);
+  }
+  // 物理上連著：照模擬的約束（沒斷的邊 o.T.sim.ea／eb、o.brk；細格照權重最重的那一個粒子 o.T.mi 對過去）—— 撕開時兩個洞中間夾著的那一條布，
+  //   點都在洞邊上、三角形都不畫，約束卻還沒斷 ⇒ 還掛在帆身上。沒有約束可讀（模板沒有 sim、布沒有 brk）⇒ 照還在的三角形連。
+  var S = o.T && o.T.sim, br = o.brk, mi = o.T && o.T.mi;
+  if (S && S.ea && br && mi) {
+    var pc = new Int32Array(S.n); for (i = 0; i < S.n; i++) pc[i] = i;
+    for (j = 0; j < S.ea.length; j++) if (!br[j]) un(pc, S.ea[j], S.eb[j]);
+    for (i = 0; i < n; i++) pr[i] = fd(pc, mi[i * 4]);
+  } else {
+    for (i = 0; i < n; i++) pr[i] = i;
+    for (j = 0; j < tr.length; j += 3) { a = tr[j]; b = tr[j + 1]; c = tr[j + 2]; if (tv && (tv[a] || tv[b] || tv[c])) continue; un(pr, a, b); un(pr, a, c); }
+    for (i = 0; i < n; i++) pr[i] = fd(pr, i);
+  }
+  var sz = new Int32Array(n), best = new Int32Array(Math.max(n, S ? S.n : 0)).fill(-1), bs = new Int32Array(best.length);   // best／bs 照物理的那一團（粒子或細格的編號）
+  for (i = 0; i < n; i++) if (vis[i]) sz[fd(pv, i)]++;
+  for (i = 0; i < n; i++) if (vis[i]) { var r = fd(pv, i), q = pr[i]; if (sz[r] > bs[q]) { bs[q] = sz[r]; best[q] = r; } }
+  for (i = 0; i < n; i++) if (vis[i] && fd(pv, i) !== best[pr[i]]) { if (out === tv) out = tv ? Uint8Array.from(tv) : new Uint8Array(n); out[i] = 1; hide++; }
+  SAIL_ISL.set(o, { bf: bF, br: o.brk, nb: nb, d: tv ? sailDropCopy(null, tv, n) : null, out: out });
+  if (DEBUG) { var st = rigStat(); st.islRuns = (st.islRuns || 0) + 1; st.islMs = (st.islMs || 0) + performance.now() - t0; st.islHide = (st.islHide || 0) + hide; if (hide) st.islFaces = (st.islFaces || 0) + 1; }   // 量：算了幾次、共幾毫秒、藏了幾點
+  return out;
 }
 // ── 帆的第二層（render 管線大修 R2）：骨架的概念 —— 物理的粒子是骨頭、細格點照固定的權重跟著（現在權重全是 1：30_rig_physics.js contact-fine，粒子就是細格點）。
 //   每一步 CPU 只傳位置（SKP → 貼圖 0 號，RGB32F，一個 owner 一張、一點一格，每列 SAILK.W 點）；GPU 一次 transform feedback（P.sailK）每一點：
