@@ -1194,14 +1194,15 @@
         "gun": 15,
         "ladders": 2,
         "magazine": 4,
-        "part": 18,
+        "part": 22,
         "powder": 42,
         "propeller": 3,
         "rudder": 2,
         "shaft": 3,
         "ship": 2,
         "turret": 5,
-        "wheel": 2
+        "wheel": 2,
+        "yard": 3
       }
     },
     {
