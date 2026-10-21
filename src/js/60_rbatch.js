@@ -40,12 +40,37 @@ function rbatGrow() {
   R.off = cp(R.off, new Int32Array(L)); R.cnt = cp(R.cnt, new Int32Array(L)); R.glow = cp(R.glow, new Float64Array(L)); R.M = cp(R.M, new Float32Array(L * 16));
   R.cap = L;
 }
-/** 加一個項目；W ＝ 世界矩陣（M4.mul 的 Float32Array、sh.M、f.M：照抄 16 個值 ⇒ 跟以前直接傳給 uniformMatrix4fv 的一樣）。 */
+/** 加一個項目；W ＝ 世界矩陣（sh.M、f.M、算好的：照抄 16 個值 ⇒ 跟以前直接傳給 uniformMatrix4fv 的一樣）；W ＝ null ⇒ 呼叫的人自己寫 R.M（m4Into；回傳第幾項，⛔ 要在下一次 rbatAdd 之前寫：陣列會加倍換新的）。 */
 function rbatAdd(c, o, k, ref, vao, el, off, cnt, glow, W) {
   var R = RBAT, i = R.ni;
   if (i >= R.cap) rbatGrow();
   R.cls[i] = c; R.ow[i] = o; R.slot[i] = k; R.ref[i] = ref; R.mb[i] = null; R.vao[i] = vao; R.el[i] = el; R.off[i] = off; R.cnt[i] = cnt; R.glow[i] = glow;
-  R.M.set(W, i * 16); R.ni = i + 1;
+  if (W) R.M.set(W, i * 16);
+  R.ni = i + 1; return i;
+}
+// ── 矩陣不配置（render 管線大修 S12）──
+// 以前每件每格 M4.mul 兩三次（每次一個新的 Float32Array；光榮號 8 艘一格上千個）。現在照同一條算式寫進預先配好的陣列：
+//   m4Into ＝ VK M4.mul 的算式一字不改（同樣的乘法、同樣的加法順序、double 算完存進 Float32Array 那一刻捨入）⇒ 每個值逐位元相同；?rbchk=1 每格每件跟 M4.mul 那條比。
+//   只有平移的局部矩陣（modelLocal0 走到最後那一行 trans(origin)、沒掛在砲塔上）每件留一份（m.rbL／d.rbL：只給畫面的欄位），每格比 origin（Math.fround 後）變了就重填。
+//   T(dv)·L 先進暫存（RBAT_TQ：跟以前內層 M4.mul 同一個捨入點），T(dv) ＝ 單位矩陣、平移 dv（存進 Float32Array ＝ trans 存的那個值）。
+var RBAT_TD = new Float32Array([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]), RBAT_TQ = new Float32Array(16), RBAT_AW = new Float32Array(16);
+/** out[o..o+15] ＝ a·b（VK M4.mul 的算式；out 不能是 a、b）。 */
+function m4Into(out, o, a, b) {
+  for (var c = 0; c < 4; c++) for (var r = 0; r < 4; r++)
+    out[o + c * 4 + r] = a[r] * b[c * 4] + a[4 + r] * b[c * 4 + 1] + a[8 + r] * b[c * 4 + 2] + a[12 + r] * b[c * 4 + 3];
+  return out;
+}
+/** 只有平移的局部矩陣 ＝ trans(p)：留在 x.rbL（沒有就建、p 變了就重填）。 */
+function rbatT(x, p) {
+  var L = x.rbL;
+  if (!L) { x.rbL = L = trans(p[0], p[1], p[2]); return L; }
+  if (L[12] !== Math.fround(p[0]) || L[13] !== Math.fround(p[1]) || L[14] !== Math.fround(p[2])) { L[12] = p[0]; L[13] = p[1]; L[14] = p[2]; }
+  return L;
+}
+/** 模型的局部矩陣：modelLocal(m)；只有平移的那條（modelLocal0 最後一行、沒有 m.hd）⇒ 留著的那一份。判斷照 modelLocal0 的順序（每格重判）。 */
+function rbatModelL(m) {
+  if (m.swM || m.sw || (m.spinB && m.spinB.mt) || (m.rot && m.piv) || m.hd) return modelLocal(m);
+  return rbatT(m, m.origin);
 }
 // 平滑面那幾區（Map 的 forEach）：照這一個的 this 加（⛔ 每格不生閉包）；slot ＝ 這一項第一區在 Map 裡第幾個（0 ⇒ 這一份網格的第一項：設矩陣、燈熄）
 //   船型那一份的合併緩衝（15_smooth.js smArena，S10）：跟上一項同一個 VAO、io 接在它後面 ⇒ 併進上一項（索引數加上去）⇒ 沒被打到的連著幾區一個 drawElements。
@@ -86,22 +111,25 @@ function rbatShip(sh, o) {
   for (k = 0; k < L.length; k++) {
     m = L[k]; me = T.meshes[m.mesh]; if (!m.alive || !me || (m.vox && !m.moved)) continue; if (!me.vao) meshGpu(me);   // m.vox：螺旋槳畫它自己的格（24_armor.js armDraw）
     var dv = m.ancD || m.vsl;                                         // 只給畫面的位移（格座標，左乘在 modelLocal 外面 ⇒ 帆的碰撞、斷船、打飛都看不到）：錨沒有 vsl、砲沒有 ancD
-    rbatAdd(0, o, k, m, me.vao, 0, 0, me.n, isLamp(m) ? lanternK(m) : 0,   // 取用點的火藥桶是後加的模型，沒有 meta
-      M4.mul(sh.M, dv ? M4.mul(trans(dv[0], dv[1], dv[2]), modelLocal(m)) : modelLocal(m)));
-    RBAT.mb[RBAT.ni - 1] = me;   // ancD：拋下去的模型錨，畫在鐵鍊那一端（76_anchor.js chainStep）；vsl：砲門關上時砲往裡縮（62_ports.js，TASK-0719）
+    var i = rbatAdd(0, o, k, m, me.vao, 0, 0, me.n, isLamp(m) ? lanternK(m) : 0, null), ML = rbatModelL(m);   // 取用點的火藥桶是後加的模型，沒有 meta
+    if (dv) { RBAT_TD[12] = dv[0]; RBAT_TD[13] = dv[1]; RBAT_TD[14] = dv[2]; ML = m4Into(RBAT_TQ, 0, RBAT_TD, ML); }   // ＝ M4.mul(trans(dv), L)：同一個捨入點
+    m4Into(RBAT.M, i * 16, sh.M, ML);
+    RBAT.mb[i] = me;   // ancD：拋下去的模型錨，畫在鐵鍊那一端（76_anchor.js chainStep）；vsl：砲門關上時砲往裡縮（62_ports.js，TASK-0719）
   }
   L = sh.decos;
   if ((GFX.deco || portOn(sh)) && L) for (k = 0; k < L.length; k++) {   // 裝飾（TASK-0682；畫質「裝飾」關著 ⇒ 不畫）；砲門蓋板：「砲門的開關演出」輪到這艘 ⇒ 不看「裝飾」（62_ports.js portOn）
     var d = L[k]; me = T.meshes[d.mesh];
     if (!me || d.gone || (!GFX.deco && d.meta.kind !== 'portlid') || (d.foot >= 0 && !hullGp(sh.grid, d.foot))) continue; if (!me.vao) meshGpu(me);   // gone：砲門蓋板被打掉了；腳下那一格被打掉 ⇒ 不畫
-    rbatAdd(1, o, k, d, me.vao, 0, 0, me.n, isLamp(d) ? lanternK(d) : 0, M4.mul(sh.M, d.L || trans(d.origin[0], d.origin[1], d.origin[2])));
-    RBAT.mb[RBAT.ni - 1] = me;   // L：砲門蓋板繞鉸鏈轉過的擺法（沒在動 ⇒ null ＝ 模型的樣子）
+    i = rbatAdd(1, o, k, d, me.vao, 0, 0, me.n, isLamp(d) ? lanternK(d) : 0, null);
+    m4Into(RBAT.M, i * 16, sh.M, d.L || rbatT(d, d.origin));
+    RBAT.mb[i] = me;   // L：砲門蓋板繞鉸鏈轉過的擺法（沒在動 ⇒ null ＝ 模型的樣子）
   }
   var S = RBAT_SM; S.o = o;
   if (sh.smR && sh.smR.size) { S.c = 2; S.k = 0; S.ref = sh; S.W = sh.M; sh.smR.forEach(rbatSmAdd); }   // 平滑渲染的格（15_smooth.js）：跟模型同一支著色器
   if (sh.arm) for (k = 0; k < sh.arm.length; k++) {                  // 砲帶的裝甲的平滑面（24_armor.js；螺旋槳掉了 ⇒ 不畫）
     var a = sh.arm[k]; if (!(a.smR && a.smR.size && !(a.prop && propGone(a)))) continue;
-    S.c = 3; S.k = 0; S.ref = a; S.W = armM(a); a.smR.forEach(rbatSmAdd);
+    var AL = armLocal(a);                                               // ＝ armM(a)：L ? M4.mul(sh.M, L) : sh.M（每塊一格一次；rbatSmAdd 照抄進每一項）
+    S.c = 3; S.k = 0; S.ref = a; S.W = AL ? m4Into(RBAT_AW, 0, a.sh.M, AL) : a.sh.M; a.smR.forEach(rbatSmAdd);
   }
   S.ref = S.W = null;
 }
@@ -109,7 +137,7 @@ function rbatShip(sh, o) {
 function rbatPiece(pc, o) {
   for (var k = 0, L = pc.mods; k < L.length; k++) {
     var m = L[k], me = pc.T.meshes[m.mesh]; if (!me) continue; if (!me.vao) meshGpu(me);
-    rbatAdd(4, o, k, m, me.vao, 0, 0, me.n, 0, M4.mul(pc.M, m.L));
+    m4Into(RBAT.M, rbatAdd(4, o, k, m, me.vao, 0, 0, me.n, 0, null) * 16, pc.M, m.L);
   }
 }
 /** 照表畫模型那一段（60_render.js drawModels）：prog ＝ 這一趟的程式（P.tri／P.dtri，呼叫的人已經 useProgram＋setCommon）、pd ＝ 哪一趟。
