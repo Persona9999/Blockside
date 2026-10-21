@@ -907,6 +907,7 @@
       "variant_of": "monitor",
       "cfg": {"pump": 11, "base": 6, "agile": 0.6},
       "drive": "steam",
+      "matMap": {"iron": "iron*0.69+oak*0.31"},
       "geo": {"spar": [35, 38], "marines": [60, 60], "center": 40, "aim": 33, "aimZ": [5, 70], "deckAim": [35, 45], "rigAim": [35, 64]},
       "crew": {"officers": 4, "helm": 1, "marines": 0, "top": 0, "monkeys": 1, "shelter": 1},
       "flags": [

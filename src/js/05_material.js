@@ -31,6 +31,8 @@ function matMix(id) {
   return (MAT_MIX[id] = r);
 }
 function matKnown(id) { return !!(MATS[id] || matMix(id)); }
+/** 船型 T 的 matMap 換過之後的 ID（關聯 meta 寫的是作品裡的 ID ⇒ 跟格子的材質比之前先換；24_armor.js 裝甲的材質檢查）。 */
+function matMapped(T, id) { var M = T.matMap; return M && Object.prototype.hasOwnProperty.call(M, id) ? M[id] : id; }
 function matInfo(id) { return MATS[id] || matMix(id) || MATS[MAT_DEF]; }
 /** 一格幾噸（材質參數 m）。比重 0.7 ⇒ 就是 VOX_T（⛔ 不重算：0.7 ÷ 0.7 × VOX_T 不一定剛好等於 VOX_T）。 */
 function matVoxT(m) { return m.density === MAT_REF ? VOX_T : VOX_T * m.density / MAT_REF; }
@@ -42,6 +44,7 @@ function hullMaterials(T, info) {
   var h = T.h.materials, base = T.base, MM = info.matMap || {}, mp = function (id) { return Object.prototype.hasOwnProperty.call(MM, id) ? MM[id] : id; };   // matMap：這一艘遊戲裡換掉的材質（混合材質；作品不動）
   T.mat0 = info.material && matKnown(mp(info.material)) ? mp(info.material) : mp(MAT_DEF);
   if (!matKnown(T.mat0)) T.mat0 = MAT_DEF;
+  T.matMap = info.matMap || null;
   T.matIds = [T.mat0]; T.matG = null; T.matBad = [];
   if (info.material && !matKnown(mp(info.material))) T.matBad.push(mp(info.material) + '（全船預設）');
   var n = 1 + (h && h.ids ? h.ids.length : 0), XYZ = [];

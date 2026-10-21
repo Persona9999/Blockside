@@ -46,7 +46,7 @@ function armorSetup(T) {
         G.set(x, y, z, c); T.hullG.set(x, y, z, 0); P.n++;
         var mi = MG ? MG.get(x, y, z) : 0; t += T.matT[mi];
         if (T.smG && T.smG.get(x, y, z)) P.sm++;
-        if (want && T.matIds[mi] !== want) P.badMat++;
+        if (want && T.matIds[mi] !== matMapped(T, want)) P.badMat++;
         if (x < bb[0]) bb[0] = x; if (y < bb[1]) bb[1] = y; if (z < bb[2]) bb[2] = z; if (x > bb[3]) bb[3] = x; if (y > bb[4]) bb[4] = y; if (z > bb[5]) bb[5] = z;
       }
       if (!P.n) T.armBad.push({ lv: 'warn', where: p.path, msg: '外框裡沒有格（空的裝甲）', fix: '確認關聯的外框（parts[].box）框到裝甲的格，或拿掉 kind=armor' });
@@ -68,7 +68,7 @@ function armorSetup(T) {
       G.set(x, y, z, c); T.hullG.set(x, y, z, 0); P.n++;
       var mi = MG ? MG.get(x, y, z) : 0; t += T.matT[mi];
       if (T.smG && T.smG.get(x, y, z)) P.sm++;
-      if (want && T.matIds[mi] !== want) P.badMat++;
+      if (want && T.matIds[mi] !== matMapped(T, want)) P.badMat++;
       if (x < bb[0]) bb[0] = x; if (y < bb[1]) bb[1] = y; if (z < bb[2]) bb[2] = z; if (x > bb[3]) bb[3] = x; if (y > bb[4]) bb[4] = y; if (z > bb[5]) bb[5] = z;
     }
     if (!P.n) { T.armBad.push({ lv: 'warn', where: TD.path, msg: '砲塔的外框裡沒有格（沒有殼）⇒ 只有上面的模型跟著轉', fix: '確認砲塔作品的框框到殼的格（造船規格 §4.8）' }); continue; }
