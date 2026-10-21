@@ -5,15 +5,16 @@
 //   · 剖面（74_cutaway.js CUTV.half）、透視（72_floodui.js FLX3）兩個開關；甲板：全部／拿掉到第 k 層／只剩船底（CUTV.deck，層名照 deckCut）
 //     —— 跟 Z、X、L 同一份狀態（按鍵切了，面板的鈕照著亮：inspFrame 比對 inspSig）。
 //   · 部件：我艦的模型（sh.models）照種類分組 —— 名字：道具 ＝ furniture 的名字（抽水機、病床…）、砲 ＝ 砲種表、其他 ＝ meta 規格表（config/meta_kinds.json）的 name，
-//     沒有就寫 kind；每組寫件數，展開看每一件（名字 ＝ 路徑的最後一段）。勾一組或一件 ⇒ 那幾件高亮（inspHiDraw）；勾的不多（INSP_LBL 件以內）⇒ 每一件在畫面上掛名字（#inspL）。
+//     沒有就寫 kind；每組寫件數，展開看每一件（名字 ＝ 路徑的最後一段）。勾一組或一件 ⇒ 那幾件高亮（inspHiDraw）。進來時預設全勾（Tim 2026-10-21「預設可以改成全勾」）；「全部取消」⇄「全部勾選」。
+//   「🏷 名稱」開關（Tim 2026-10-21「加個選項 勾選後在部件上顯示名稱」；預設關、這一次開著的頁面記得）：開 ⇒ 勾了的每一件在畫面上掛名字（#inspL，最多 INSP_LBL 件）。
 // 高亮（60_render.js render，透明的都畫完之後）：同一份網格、單色、半透明，兩層 —— 先一層不做深度測試的淡色（隔著船殼、甲板看得到），
 //   再一層做深度測試的（看得到的那幾面更亮）；亮度跟著時間慢慢呼吸（找得到在哪）。只動畫面：不改模擬、不抽 rnd()。
 // 好幾種一起勾（Tim 2026-10-21「同時勾選多個部件時 是否可以自動分配不同顏色(可以在部件文字上用icon標記對應顏色來比對)」）：
 //   每一種（清單的一組）一個顏色 —— 那一組有勾到的時候從 INSP_PAL 拿還沒人用的第一個，全取消 ⇒ 放回去；同一組裡個別勾的那幾件同色。
 //   清單那一行前面一顆同色的色票（.sw）、畫面上的名字標籤也是那個顏色 ⇒ 對得起來。超過 INSP_PAL 種 ⇒ 從頭再輪（色票照樣標）。
 // 別的玩法 INSP.on false ⇒ inspHiDraw／inspFrame 第一行就回、面板藏起來。
-var INSP = { on: false, hi: new Set(), min: false, sig: '', lbl: [], col: new Map(), mc: new Map() }, INSP_LBL = 24;
-var INSP_PAL = [[1, 0.8, 0.15], [0.2, 0.88, 1], [1, 0.32, 0.85], [0.4, 1, 0.35], [1, 0.48, 0.12], [0.45, 0.55, 1], [1, 0.25, 0.25], [0.2, 1, 0.78], [0.75, 0.45, 1], [0.95, 0.95, 0.95]];   // 金、青、洋紅、綠、橘、藍、紅、青綠、紫、白（第一個 ＝ 以前唯一的那個金色）
+var INSP = { on: false, hi: new Set(), min: false, sig: '', lbl: [], col: new Map(), mc: new Map(), name: false }, INSP_LBL = 400;
+var INSP_PAL = [[1, 0.8, 0.15], [0.2, 0.88, 1], [1, 0.32, 0.85], [0.4, 1, 0.35], [1, 0.48, 0.12], [0.45, 0.55, 1], [1, 0.25, 0.25], [0.2, 1, 0.78], [0.75, 0.45, 1], [0.95, 0.95, 0.95], [0.6, 0.85, 0.2], [1, 0.65, 0.65], [0.25, 0.6, 0.65], [0.85, 0.7, 0.45], [0.55, 0.75, 1], [0.9, 0.4, 0.55]];   // 金、青、洋紅、綠、橘、藍、紅、青綠、紫、白、黃綠、粉、深青、沙、淡藍、玫紅（第一個 ＝ 以前唯一的那個金色；預設全勾 ⇒ 一艘十幾種，十六色才不撞）
 /** 顏色 i ⇒ CSS rgb()。 */
 function inspCss(i) { var c = INSP_PAL[i % INSP_PAL.length]; return 'rgb(' + c.map(function (v) { return Math.round(v * 255); }).join(',') + ')'; }
 /** 勾選變了之後：每一組有勾到的配一個顏色（已經有的不換）、沒勾的放回去；INSP.mc ＝ 每一件勾了的模型 ⇒ 顏色。 */
@@ -39,7 +40,8 @@ function inspGroups(sh) {
 }
 /** 開局（70_flow.js startSteps，bldEnter 之後）：觀察玩法 ⇒ 面板打開、高亮清空；別的玩法 ⇒ 收起來。 */
 function inspEnter() {
-  INSP.on = !!modeRule('observe') && !!SHIPS[PLAYER_I]; INSP.hi.clear(); INSP.sig = '';
+  INSP.on = !!modeRule('observe') && !!SHIPS[PLAYER_I]; INSP.hi.clear(); INSP.col.clear(); INSP.sig = '';
+  if (INSP.on) SHIPS[PLAYER_I].models.forEach(function (m) { if (m.alive) INSP.hi.add(m); });   // 預設全勾
   if (INSP.on && INSP.min0 === undefined) INSP.min = INSP.min0 = !!(window.matchMedia && matchMedia('(max-width: 640px)').matches);   // 窄螢幕第一次進來先收起來（面板會蓋掉船）；之後照玩家按的
   $('inspP').style.display = INSP.on ? '' : 'none'; inspLabels(null);
   if (INSP.on) { inspUI(); note(SHIPS[PLAYER_I], '船隻觀察：右邊的面板切剖面、甲板、透視；勾部件 ⇒ 船上那幾件會亮（隔著船殼也看得到）'); }
@@ -53,25 +55,27 @@ function inspUI() {
   h += '<div class="row"><button data-v="cut">✂ 剖面（' + keyName('cut') + '）</button><button data-v="xray">🔍 透視（' + keyName('xray') + '）</button></div>';
   h += '<div class="lab">☰ 甲板（' + keyName('deck') + '）</div><div class="row">';
   for (var k = 0; k <= D.n; k++) h += '<button data-d="' + k + '">' + inspDeckName(D, k) + '</button>';
-  h += '</div><div class="lab">部件（勾了就亮）<button id="inspC">全部取消</button></div>';
   var GL = inspGroups(sh); inspColSync(GL);
+  var all = sh.models.every(function (m) { return !m.alive || INSP.hi.has(m); });
+  h += '</div><div class="lab">部件（勾了就亮）<span><button id="inspN"' + (INSP.name ? ' class="on"' : '') + '>🏷 名稱</button> <button id="inspC">' + (all ? '全部取消' : '全部勾選') + '</button></span></div>';
   function sw(c) { return c === undefined ? '' : '<span class="sw" style="background:' + inspCss(c) + '"></span>'; }   // 色票：那一種現在的高亮顏色
   GL.forEach(function (g, gi) {
-    var on = g.list.filter(function (m) { return INSP.hi.has(m); }).length, dead = g.list.filter(function (m) { return !m.alive; }).length;
-    h += '<details' + (on && on < g.list.length ? ' open' : '') + '><summary><label><input type="checkbox" data-g="' + gi + '"' + (on === g.list.length ? ' checked' : '') + '> ' + sw(INSP.col.get(g.name)) + g.name + ' <i>× ' + g.list.length + (dead ? '（' + dead + ' 件沒了）' : '') + '</i></label></summary>';
+    var on = g.list.filter(function (m) { return m.alive && INSP.hi.has(m); }).length, dead = g.list.filter(function (m) { return !m.alive; }).length, full = on > 0 && on === g.list.length - dead;   // 勾滿 ＝ 還在的每一件都勾了（⛔ 跟全部比：火藥桶 86 件沒了 3 件 ⇒ 勾整組只加得進 83 件，永遠「沒勾滿」⇒ 框不打勾、清單自己展開、再點也沒反應；Tim 2026-10-21 定遠號）
+    h += '<details' + (on && !full ? ' open' : '') + '><summary><label><input type="checkbox" data-g="' + gi + '"' + (full ? ' checked' : '') + '> ' + sw(INSP.col.get(g.name)) + g.name + ' <i>× ' + g.list.length + (dead ? '（' + dead + ' 件沒了）' : '') + '</i></label></summary>';
     g.list.forEach(function (m, mi) { h += '<label class="it"><input type="checkbox" data-g="' + gi + '" data-m="' + mi + '"' + (INSP.hi.has(m) ? ' checked' : '') + (m.alive ? '' : ' disabled') + '> ' + sw(INSP.mc.get(m)) + String(m.name || m.path).split('/').pop() + '</label>'; });
     h += '</details>';
   });
   box.innerHTML = h + '</div>'; box.classList.toggle('min', INSP.min);
   $('inspM').onclick = function () { INSP.min = !INSP.min; inspUI(); };
-  $('inspC').onclick = function () { INSP.hi.clear(); inspUI(); };
+  $('inspC').onclick = function () { if (all) INSP.hi.clear(); else sh.models.forEach(function (m) { if (m.alive) INSP.hi.add(m); }); inspUI(); };
+  $('inspN').onclick = function () { INSP.name = !INSP.name; inspUI(); };
   [].forEach.call(box.querySelectorAll('[data-v]'), function (b) { b.onclick = function () { if (b.dataset.v === 'cut') cutToggle(); else xrayToggle(); inspSync(); }; });
   [].forEach.call(box.querySelectorAll('[data-d]'), function (b) { b.onclick = function () { CUTV.deck = +b.dataset.d; obsNote(CUTV.deck ? '☰ ' + inspDeckName(D, CUTV.deck) : '☰ 甲板：全部回來'); frzShow(); inspSync(); }; });
   [].forEach.call(box.querySelectorAll('input[type=checkbox]'), function (c) {
     c.onclick = function (ev) { ev.stopPropagation(); };                // ⛔ 不擋 ⇒ 點組的勾選框也會開合 <details>
     c.onchange = function () {
       var g = GL[+c.dataset.g]; if (!g) return;
-      var L = c.dataset.m !== undefined ? [g.list[+c.dataset.m]] : g.list.filter(function (m) { return m.alive; });
+      var L = c.dataset.m !== undefined ? [g.list[+c.dataset.m]] : c.checked ? g.list.filter(function (m) { return m.alive; }) : g.list;   // 勾整組 ⇒ 還在的那幾件；取消 ⇒ 整組（勾著的時候被打掉的那件也拿掉，不然那一組一直算「有勾」、顏色放不回去）
       L.forEach(function (m) { if (c.checked) INSP.hi.add(m); else INSP.hi.delete(m); });
       inspUI();
     };
@@ -90,7 +94,7 @@ function inspFrame() {
   if (!INSP.on) return;
   inspSync();
   var sh = SHIPS[PLAYER_I], L = []; if (!sh) return;
-  if (INSP.hi.size && INSP.hi.size <= INSP_LBL) INSP.hi.forEach(function (m) { if (m.alive) L.push(m); });
+  if (INSP.name) INSP.hi.forEach(function (m) { if (m.alive && L.length < INSP_LBL) L.push(m); });
   inspLabels(L.length ? { sh: sh, list: L } : null);
 }
 /** 勾了的部件掛名字（#inspL，固定在畫面上的一層 div）：中心（格座標）× 船的矩陣 × 鏡頭 ⇒ 畫面座標；在鏡頭後面 ⇒ 不掛。o ＝ null ⇒ 全收。 */
