@@ -14,7 +14,7 @@
 //   硬度、洞的大小照材質層（裝甲的格座標就是它原本的位置 ⇒ T.matG 直接查）、碎屑照裝甲的矩陣噴；傷人、模型扣血照船的座標。砲自己的血照舊（hitModel 先看）。
 //   殉爆（23_powder.js）：彈坑碰得到 ⇒ 裝甲那幾格同一步打掉（armBlast；一塊才一萬多格，不分步）。
 // 重量：T.voxT0 已含裝甲；打掉的照材質算減重（05_material.js voxLostT）。船體 %（sh.grid.count ／ sh.orig）只看船殼 ⇒ 開戰時 100%。
-// 畫：drawHulls／drawModels 畫完船殼接著畫（armDraw／armSmDraw）；剖面照船的格座標切（方塊：uCutL ＝ 裝甲 → 船的格座標，01_gl.js voxFS；平滑面照 uCutInv 本來就是）。
+// 畫：drawHulls 畫完船殼接著畫（62_simview.js armDraw）、平滑面在模型那一段（60_rbatch.js rbatShip）；剖面照船的格座標切（方塊：uCutL ＝ 裝甲 → 船的格座標，01_gl.js voxFS；平滑面照 uCutInv 本來就是）。
 // ⛔ 沒做：裝甲不會斷開漂走（打穿成兩半也照樣跟著砲轉）、碎屑落地／雨滴／船隻擦撞／除錯的 shot・hole 不看裝甲。
 /** 船型 T：找 kind=armor 的關聯、拆出來（見檔頭）。 */
 function armorSetup(T) {

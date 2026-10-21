@@ -109,7 +109,7 @@ function inspHiDraw() {
     gl.uniform4f(P2.u.uC, INSP_C[0], INSP_C[1], INSP_C[2], pass[1]);
     INSP.hi.forEach(function (m) {
       var me = sh.T.meshes[m.mesh]; if (!m.alive || !me) return; if (!me.vao) meshGpu(me);
-      gl.uniformMatrix4fv(P2.u.uModel, false, modelWorld(sh, m, function () { var dv = m.ancD || m.vsl; return M4.mul(sh.M, dv ? M4.mul(trans(dv[0], dv[1], dv[2]), modelLocal(m)) : modelLocal(m)); }));   // 跟 drawModels 同一個擺法（同一格已經算過 ⇒ 直接拿）
+      var dv = m.ancD || m.vsl; gl.uniformMatrix4fv(P2.u.uModel, false, M4.mul(sh.M, dv ? M4.mul(trans(dv[0], dv[1], dv[2]), modelLocal(m)) : modelLocal(m)));   // 跟模型同一個擺法（60_rbatch.js rbatShip 同一條算式；modelWorld 拿掉了 ⇒ 勾的那幾件現算）
       gl.bindVertexArray(me.vao); gl.drawArrays(gl.TRIANGLES, 0, me.n);
     });
   });

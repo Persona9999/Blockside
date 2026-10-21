@@ -201,6 +201,20 @@ var BURN_GLSL = 'uniform float uFireT;\n' +
   'float bnH(vec2 q){ return fract(sin(dot(q,vec2(127.1,311.7)))*43758.5453); }\n' +
   'float bnN(vec2 p){ vec2 i=floor(p); vec2 f=fract(p); f=f*f*(3.0-2.0*f); return mix(mix(bnH(i),bnH(i+vec2(1.0,0.0)),f.x),mix(bnH(i+vec2(0.0,1.0)),bnH(i+vec2(1.0,1.0)),f.x),f.y); }\n' +
   'float bnB(vec4 F,float t){ return (min(t,F.y)-F.x)/uFireT+(bnN(F.zw*1.6)-0.5)*0.55+(bnN(F.zw*5.1)-0.5)*0.2; }\n';
+// 一次畫多個（instanced；render 管線大修 S4）：P.triI／P.dtriI ＝ P.tri／P.dtri 的頂點著色器只換「uModel 從哪裡來」—— uMs[gl_InstanceID]（第幾個就讀第幾格），
+//   算式一個字不動、片段著色器同一串（uGlow 照舊是 uniform：燈不一樣的分開畫）；屬性、VAO 不動（沒有 divisor、不加 VAO）。gl_InstanceID 每次畫都從 0 起（WebGL2 沒有 base instance）。
+//   一次最多 INST_K 個：uMs 一個 mat4 佔 4 格，留 16 格給 uVP 與其他 ⇒ 照 MAX_VERTEX_UNIFORM_VECTORS（WebGL2 最低 256 ⇒ 60；量測那台 4095 ⇒ 上限 64）。
+//   ⛔ GLSL 不保證動態索引的陣列跟單一個 uniform 編出一樣的算式 ⇒ 用之前先量：60_rbatch.js __rbatProbe（轉換回饋逐位元比）＋ 量測工具的畫面。
+//   ⛔ 不准為了對上去改 P.tri／P.dtri 的原始碼（每個用它的地方的畫面都會變）。
+var INST_MAX = 64, INST_K = 16;
+var TRI_VS = '', TRI_FS = '', DTRI_VS = '';                              // P.tri、P.dtri 的原始碼（programs() 給值：SEA_GLSL 在後面的檔）；一次畫多個、對拍的分身都拿同一串
+/** P.tri／P.dtri 的頂點著色器 ⇒ 一次畫多個的那一份：'uniform mat4 uModel,uVP;' 換成 uMs[INST_K]、main 一開頭 uModel ＝ uMs[gl_InstanceID]，其他一個字不動。
+ *  兩段各要剛好一處；不是 ⇒ 丟出去（programs() 接住 ⇒ 那一支是 null、照舊一個一個畫）。 */
+function instVS(s) {
+  var a = 'uniform mat4 uModel,uVP;', b = 'void main(){ ';
+  if (s.split(a).length !== 2 || s.split(b).length !== 2) throw new Error('instVS：「' + a + '」「' + b + '」要各剛好一處');
+  return s.replace(a, 'uniform mat4 uMs[' + INST_K + '],uVP;').replace(b, b + 'mat4 uModel=uMs[gl_InstanceID]; ');
+}
 function programs() {
   var cd = gl.createTexture(); gl.activeTexture(gl.TEXTURE8); gl.bindTexture(gl.TEXTURE_2D, cd);   // 第 8 號：剖面切高的空貼圖（見 CUT_GLSL）
   gl.texImage2D(gl.TEXTURE_2D, 0, gl.R32F, 1, 1, 0, gl.RED, gl.FLOAT, new Float32Array([1e9]));
@@ -216,9 +230,10 @@ function programs() {
     'void main(){ uint c=uint(vC+0.5); vec3 b=vec3(float((c>>5u)&7u)/7.0,float((c>>2u)&7u)/7.0,float(c&3u)/3.0); vec3 n=normalize(vN);\n' +
     ' vec3 col=b*(mix(uGround,uSky,n.y*0.5+0.5)*0.62+vec3(1.0,0.96,0.88)*max(dot(n,uSun),0.0)*0.78);\n' +
     ' col*=uLum; float fd=length(vW-uEye); o=vec4(mix(col,uFog,1.0-exp(-fd*uFogD)),1.0); }\n');
-  P.tri = VK.compile(gl,
+  TRI_VS =                                                               // 模型（P.tri；一次畫多個的 P.triI 也是這一串，見 instVS）
     '#version 300 es\nlayout(location=0) in vec3 aP; layout(location=1) in vec3 aN; layout(location=2) in vec3 aC; layout(location=3) in vec3 aM; uniform mat4 uModel,uVP; out vec3 vN; out vec3 vW; out vec3 vC; out vec3 vM;\n' +
-    'void main(){ vec4 w=uModel*vec4(aP,1.0); vW=w.xyz; vN=mat3(uModel)*aN; vC=aC; vM=aM; gl_Position=uVP*w; }\n',
+    'void main(){ vec4 w=uModel*vec4(aP,1.0); vW=w.xyz; vN=mat3(uModel)*aN; vC=aC; vM=aM; gl_Position=uVP*w; }\n';
+  TRI_FS =
     '#version 300 es\nprecision highp float;\n' + SEA_GLSL + SHADOW_GLSL + CUT_GLSL + LAMP_GLSL + 'in vec3 vN; in vec3 vW; in vec3 vC; in vec3 vM; uniform vec3 uSun,uEye,uFog,uSky,uGround; uniform float uFogD,uLit,uGlow,uGls; uniform mat4 uCutInv; out vec4 o;\n' +
     'void main(){ if(vW.y<uClip) discard; if(uCut.w>0.5 && cutOut((uCutInv*vec4(vW,1.0)).xyz)) discard; vec3 n=normalize(vN); float sd=dot(n,uSun), d=abs(sd); vec3 col=vC; float ga=1.0;\n' +
     ' if(uLit>0.5){ float sk=shadowK(vW,(sd<0.0?-n:n)*(3.0-2.0*d)); d*=sk; col=vC*(mix(uGround,uSky,0.6)*0.65+vec3(1.0,0.96,0.88)*d*0.7);\n' +
@@ -234,7 +249,8 @@ function programs() {
     ' if(uLN>0) col+=vC*lampK(vW,n);\n' +                                 // 點光源
     // 燈籠（meta kind=lantern；drawModels 設 uGlow）：只有琥珀色的燈罩發光（色 245 ＝ 1, .71, .33）—— 金框（248，藍 0）、暗紅（128）照常受光
     ' if(uGlow>0.0) col=mix(col,vC*1.2+vec3(0.3,0.14,0.0),uGlow*step(0.9,vC.r)*step(0.2,vC.b)*step(vC.b,0.5));\n' +
-    ' float fd=length(vW-uEye); o=vec4(mix(col,uFog,1.0-exp(-fd*uFogD)),ga); }\n');
+    ' float fd=length(vW-uEye); o=vec4(mix(col,uFog,1.0-exp(-fd*uFogD)),ga); }\n';
+  P.tri = VK.compile(gl, TRI_VS, TRI_FS);
   // 帆：頂點法線（平滑，不是一個三角形一個平面）；法線翻向看的那一面；包覆光（背光面不死黑、明暗過渡慢）＋太陽在帆後面時布透出暖光
   // 有貼圖的帆（TASK-0579）：aT ＝ 貼圖集的 uv（11_rig_gpu.js sailBuf；u < 0 ＝ 沒有貼圖，照頂點色）；片段照貼圖取色、alpha < 0.5（已照 alpha_min 二值化）⇒ discard ＝ 洞
   P.sail = VK.compile(gl,
@@ -340,10 +356,13 @@ function programs() {
   // 只寫深度（陰影圖）：體素照 VoxelKit 的頂點著色器、模型與帆共用一支
   var NOFS = '#version 300 es\nprecision highp float; void main(){}\n';
   P.dvox = VK.compile(gl, VK.VOXEL_VS, NOFS);
-  P.dtri = VK.compile(gl, '#version 300 es\nlayout(location=0) in vec3 aP; uniform mat4 uModel,uVP; void main(){ gl_Position=uVP*(uModel*vec4(aP,1.0)); }\n', NOFS);
+  DTRI_VS = '#version 300 es\nlayout(location=0) in vec3 aP; uniform mat4 uModel,uVP; void main(){ gl_Position=uVP*(uModel*vec4(aP,1.0)); }\n';
+  P.dtri = VK.compile(gl, DTRI_VS, NOFS);
   // 帆的陰影（TASK-0579）：貼圖的洞不投影子（同 P.sail 的 discard）；燒穿的洞也是（TASK-0717，BURN_GLSL）
   P.dsail = VK.compile(gl, '#version 300 es\nlayout(location=0) in vec3 aP; layout(location=3) in vec2 aT; layout(location=4) in vec4 aF; uniform mat4 uModel,uVP; out vec2 vT; out vec4 vF; void main(){ vT=aT; vF=aF; gl_Position=uVP*(uModel*vec4(aP,1.0)); }\n',
     '#version 300 es\nprecision highp float; in vec2 vT; in vec4 vF; uniform sampler2D uSailT; uniform float uSeaT;\n' + BURN_GLSL + 'void main(){ if(vT.x>=0.0 && texture(uSailT,vT).a<0.5) discard; if(vF.x<5e5 && bnB(vF,uSeaT)>1.0) discard; }\n');
+  // 帆的位置與法線由 GPU 算（render 管線大修 R2；11_rig_gpu.js SAILK）：transform feedback 寫進帆的動的那份。編不過 ⇒ null ⇒ 照 R1 在 CPU 算
+  try { P.sailK = SAILK.compile(SAILK_VS, SAILK_FS, ['kP', 'kN']); } catch (e) { P.sailK = null; console.warn('帆的法線改回 CPU 算：' + (e && e.message)); }
   P.sky = VK.compile(gl,
     '#version 300 es\nlayout(location=0) in vec2 aP; uniform mat4 uInv; out vec3 vD; void main(){ vec4 a=uInv*vec4(aP,1.0,1.0); vD=a.xyz/a.w; gl_Position=vec4(aP,0.9999,1.0); }\n',
     '#version 300 es\nprecision highp float; in vec3 vD; uniform vec3 uEye,uSun,uFog,uSky,uSunC; uniform float uNight; out vec4 o;\n' +
@@ -361,6 +380,10 @@ function programs() {
     '#version 300 es\nlayout(location=0) in vec2 aP; uniform mat4 uCamInv; out vec3 vD; void main(){ vec4 a=uCamInv*vec4(aP,1.0,1.0); vD=a.xyz/a.w; gl_Position=vec4(aP,0.9999,1.0); }\n',
     '#version 300 es\nprecision highp float; in vec3 vD; uniform vec3 uEye; uniform float uAbY; out vec4 o; vec3 vW;\n' + HULL_GLSL +
     'void main(){ vec3 d=normalize(vD-uEye); if(d.y>-1e-4||uEye.y<=uAbY) discard; vW=uEye+d*((uAbY-uEye.y)/d.y); if(!' + HULL_HIT + ') discard; o=vec4(vec3(0.03,0.16,0.21)*0.72,1.0); }\n');
+  // 一次畫多個（見 instVS）：編不起來（驅動不收、uniform 不夠）⇒ null ⇒ 那一支照舊一個一個畫。放最後：前面每一支程式的建立順序不變
+  INST_K = clamp(Math.floor((gl.getParameter(gl.MAX_VERTEX_UNIFORM_VECTORS) - 16) / 4), 16, INST_MAX);
+  try { P.triI = VK.compile(gl, instVS(TRI_VS), TRI_FS); } catch (e) { P.triI = null; console.warn('P.triI 沒編起來（模型照舊一個一個畫）：' + e.message); }
+  try { P.dtriI = VK.compile(gl, instVS(DTRI_VS), NOFS); } catch (e) { P.dtriI = null; console.warn('P.dtriI 沒編起來（陰影照舊一個一個畫）：' + e.message); }
 }
 function setCommon(p) {
   var u = p.u;
