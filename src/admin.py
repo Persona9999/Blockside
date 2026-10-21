@@ -13,6 +13,7 @@
 #   python -I admin.py build                      照設定重建 ../index.html（Blockside 根目錄 ＝ GitHub Pages 的首頁）
 #   python -I admin.py build --code [--base <版>]  只重建程式（入口 index.html；船檔 ships/ 照舊）—— 沒有 VoxelKit/_cache 的機器用，船變了就擋（見「只重建程式」）
 #   python -I admin.py shell <外殼設定> [--check]  外掛外殼：拿建好的成品套別的遊戲的外殼寫成另一頁（見「外掛外殼」）
+#   python -I admin.py layers [--shell]           分層讀數：模擬層直接用到上層的名字；--shell ＝ 核心直接用到外殼（主選單、設定頁；SHELL_UI）的名字、直接碰 #cover 的 DOM
 #   python -I admin.py reseg                      船檔照現在的切法重切（ship_segments 改了、這台沒有 _cache 時；解回來逐位元組相同才寫，見「船檔重切」）
 #   python -I admin.py import --work <雕刻作品 ID> --id <船的代號> --name <名字>   匯入新船（匯出 .vxk、登記、重建）
 #   python -I admin.py metasync --id <船的代號>   只同步 meta 與固定點（作品改了 meta、加了固定點，格子不動；TASK-0572）
@@ -1817,6 +1818,111 @@ def act_layers(src=None):
         log.append('  %-15s %-16s %s' % (df, nm, '  '.join('%s:%s' % (u, ','.join(map(str, L))) for u, L in sorted(U.items()))))
     n, e = sum(len(L) for U in res.values() for L in U.values()), len({(u, df) for (df, nm), U in res.items() for u in U})
     return log + ['名字 %d 個、引用 %d 次、檔對檔 %d 條' % (len(res), n, e)]
+
+
+# ───────────────────────── 核心與外殼（主選單、設定頁）的讀數（2026-10-21：核心與外殼拆兩包的第 0 步） ─────────────────────────
+# 外殼 ＝ Blockside 自己的主選單、設定頁、開發後台頁（#cover 裡的那些卡）；核心 ＝ 其他（海戰：船、海、陰影、物理、HUD、遊戲中的面板、選船彈窗 72_shippick）。
+# 目標：依賴只往下 —— 外殼叫核心 OK；核心叫外殼的名字、核心碰 #cover 裡的 DOM ⇒ 都要拆成事件（00_events.js）或外殼自己掛，拆完這兩個數字是 0。
+# 還沒搬檔之前外殼跟核心寫在同一支檔裡 ⇒ SHELL_UI：整支是外殼的檔 ⇒ None；一支檔裡的幾段 ⇒ [(起, 迄), …]：
+#   起 ＝ 那一段第一行裡的一段字（含這一行）、迄 ＝ 下一段（核心）第一行裡的一段字（不含；None ＝ 到檔尾）。用字不用行號 ⇒ 別人改了前面，行號跑掉照樣量得準；
+#   字找不到或不只一行 ⇒ 讀數停下來說哪一個（改 SHELL_UI，不要猜）。
+# 只是讀數、不擋建置（拆完才變閘門）。量法：頂層名字照作用域判（src/js_refs.cjs）；DOM 照字面掃 $('id')、getElementById('id')、querySelector(All)('…#id…')。
+SHELL_UI = {
+    '64_cfgkit.js': None,                                                      # 設定頁的共用框架（cfgSnap 之後搬進核心）
+    '65_ask.js': None,                                                         # 確認彈窗（只有設定頁在用）
+    '66_keys.js': [('function keyExport', None)],                              # 鍵位頁（鍵位資料在前面、留核心）
+    '67_furncfg.js': [('function furnExport', None)],                          # 道具頁
+    '68_guncfg.js': [('function gunsExport', None)],                           # 砲的設定頁
+    '69_prefs.js': [('/** 出廠預設值（設定後台跳轉開的', 'function prefNum')],  # 出廠預設值後台頁 admDefUI
+    '71_input.js': [('var DISCORD_URL', "$('muteT').onclick"),                 # 主選單的 Discord
+                    ('/** 主選單的玩法鈕', '/** 旗號面板（TASK-0679'),           # 主選單、sliders()（細節、船隻配置、天氣…）、畫質頁、物理頁、編成、指揮官、搶上風
+                    ('/** 細節設定：候補補位', "$('endC').onclick"),            # 候補、距離、開戰鈕
+                    ('var COVER_LATE', '// 訂閱（TASK-0669')],                  # 回到主選單 coverShow
+}
+
+
+def shell_ranges(root, files):
+    """SHELL_UI ⇒ { 檔名: [(第一行, 最後一行), …] }（1 起算、含兩端）。"""
+    out = {}
+    for f in files:
+        k = os.path.basename(f)
+        if k not in SHELL_UI:
+            continue
+        L = open(os.path.join(root, f), encoding='utf-8').read().rstrip('\n').split('\n')
+        if SHELL_UI[k] is None:
+            out[k] = [(1, len(L))]
+            continue
+
+        def at(s):
+            hit = [i + 1 for i, t in enumerate(L) if s in t]
+            if len(hit) != 1:
+                raise Fail('SHELL_UI：%s 裡「%s」%s ⇒ 改 admin.py 的 SHELL_UI' % (k, s, '找不到' if not hit else '有 %d 行（%s）' % (len(hit), ','.join(map(str, hit)))))
+            return hit[0]
+        out[k] = [(at(a), at(z) - 1 if z else len(L)) for a, z in SHELL_UI[k]]
+    return out
+
+
+def cover_ids(html):
+    """template.html 裡 <div id="cover"> 那一整塊（含它自己）的每個 id。"""
+    i = html.index('<div id="cover">')
+    depth, ids = 0, []
+    for m in re.finditer(r'<(/?)(\w+)\b[^>]*>', html[i:]):         # 每個標籤（id 照收）；div 照開關數層數，數回 0 ＝ #cover 關了
+        ids += re.findall(r'\bid="([^"]+)"', m.group(0))
+        if m.group(2) == 'div':
+            depth += -1 if m.group(1) else 1
+            if not depth:
+                break
+    return set(ids)
+
+
+DOM_RX = re.compile(r"""\$\('([\w-]+)'\)|getElementById\('([\w-]+)'\)|querySelector(?:All)?\('([^']+)'\)""")
+
+
+def act_shell_layers(src=None):
+    """核心直接叫外殼的名字、核心直接碰 #cover 裡的 DOM（照 SHELL_UI 分）⇒ 每一個：定義／元素、誰用在哪幾行。src ＝ 另一份 src 目錄（量別的版本）。"""
+    node = shutil.which('node')
+    if not node:
+        raise Fail('找不到 node（src/js_refs.cjs、js_globals.cjs 要它）')
+    root = os.path.abspath(src) if src else HERE
+    tpl = open(os.path.join(root, 'template.html'), encoding='utf-8').read()
+    files = re.findall(r'<script\s+src="(js/[^"]+)"\s+data-bundle="game"', tpl)
+    paths = [os.path.join(root, f) for f in files]
+    got = []
+    for tool in ('js_refs.cjs', 'js_globals.cjs'):
+        r = subprocess.run([node, '--expose-internals', os.path.join(HERE, tool)] + paths, capture_output=True, text=True, encoding='utf-8', cwd=root)
+        try:
+            got.append(json.loads(r.stdout.strip().splitlines()[-1]))
+        except Exception:
+            raise Fail('%s 讀不到結果：%s' % (tool, (r.stdout + r.stderr).strip()[-300:]))
+    d, g = got
+    b = os.path.basename
+    R = shell_ranges(root, files)
+    shell = lambda f, line: any(a <= line <= z for a, z in R.get(b(f), ()))
+    defl = {(b(f), nm): line for f, L in g.items() if isinstance(L, list) for nm, line in L}
+    names = {}
+    for f, nm, line, how in d['refs']:
+        df = d['defs'].get(nm)
+        if df and shell(df, defl.get((b(df), nm), 0)) and not shell(f, line):
+            names.setdefault((b(df), nm, defl.get((b(df), nm))), {}).setdefault(b(f)[:-3], set()).add(line)
+    ids, dom = cover_ids(tpl), {}
+    for f in files:
+        for n, t in enumerate(open(os.path.join(root, f), encoding='utf-8'), 1):
+            if shell(f, n):
+                continue
+            for m in DOM_RX.finditer(t):
+                for k in ([m.group(1) or m.group(2)] if not m.group(3) else re.findall(r'#([\w-]+)', m.group(3))):
+                    if k in ids:
+                        dom.setdefault((b(f), k), []).append(n)
+    log = ['外殼（SHELL_UI；%s）：%s' % (src or 'src', '、'.join('%s %s' % (k, '整支' if SHELL_UI[k] is None else ','.join('%d–%d' % ab for ab in v)) for k, v in sorted(R.items()))),
+           '核心直接叫外殼的名字（定義 ⇐ 核心的檔:行）：']
+    for (df, nm, dl), U in sorted(names.items()):
+        log.append('  %-15s %-16s @%-5s ⇐ %s' % (df, nm, dl, '  '.join('%s:%s' % (u, ','.join(map(str, sorted(L)))) for u, L in sorted(U.items()))))
+    log.append('核心直接碰 #cover 裡的 DOM（#cover 共 %d 個 id；檔 元素 ⇐ 行）：' % len(ids))
+    for (f, k), L in sorted(dom.items()):
+        log.append('  %-15s #%-12s ⇐ %s' % (f, k, ','.join(map(str, L))))
+    nn = sum(len(L) for U in names.values() for L in U.values())
+    return log + ['核心 → 外殼：名字 %d 個、引用 %d 次；碰 #cover 的 DOM：%d 處（%d 個 id、%d 支檔）—— 拆完兩個都是 0' %
+                  (len(names), nn, sum(len(L) for L in dom.values()), len({k for f, k in dom}), len({f for f, k in dom}))]
 
 
 # ───────────────────────── 成品記住來源（TASK-0674） ─────────────────────────
@@ -3692,6 +3798,7 @@ def main():
     s.add_argument('--hook', choices=['pre-commit', 'pre-push'], help='git 鉤子用（.githooks/ 裡的兩支）')
     s = sp.add_parser('layers', help='模擬層（20–54 號檔）直接用到上層的名字（TASK-0669；node 照作用域判）')
     s.add_argument('--src', help='另一份 src 目錄（量別的版本）')
+    s.add_argument('--shell', action='store_true', help='改量核心直接用到外殼（主選單、設定頁；SHELL_UI）的名字、直接碰 #cover 裡的 DOM')
     sp.add_parser('hooks', help='裝提交前／推送前的成品檢查：git config core.hooksPath .githooks（這個 repo 的每個 worktree 共用）')
     s = sp.add_parser('cache', help='_cache 缺的 .vxk 從雕刻作品重新匯出、跟指紋比；--all 每艘都比（比對來源）')
     s.add_argument('--all', action='store_true')
@@ -3754,7 +3861,7 @@ def main():
         elif o.op == 'hooks':
             log = act_hooks()
         elif o.op == 'layers':
-            log = act_layers(o.src)
+            log = act_shell_layers(o.src) if o.shell else act_layers(o.src)
         elif o.op == 'cache':
             log = act_cache(o.all)
         elif o.op == 'fmt':
