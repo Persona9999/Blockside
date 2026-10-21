@@ -95,7 +95,8 @@ Commands:
    clock (step mode while loading, frozen after start: +1/60 s before each `tick(1)`), rAF stubbed, WebGL creation hooks.
 2. `warm` ticks -> **hash_warm**, **phys warm**. `ports` step if any -> hash_ports, phys ports. `hook` steps if any -> hash_hook (last tick
    step), phys hook. Hook JS return values are kept in `result.json` `hook` (e.g. guns fired, sails lit, voxels dug).
-3. Camera: `H.cam(spec)` (fixed, mode 0, no tracking, target = ship centre or `y`, yaw = -ship.yaw + pi/2 + `yawOff`, pitch, dist) or, for
+3. Camera: `H.cam(spec)` (fixed, mode 0, no tracking, target = ship centre or `y` (or `sail: k` = the centre of sail k's authored box,
+   through sh.M), yaw = -ship.yaw + pi/2 + `yawOff`, pitch, dist) or, for
    `cam: None` (first person), `__game.mask()` only.
 4. Shots (rep 0): `shot.png` as configured (MSAA when on), self-noise (3 re-renders), then MSAA off -> `shot_noaa.png` (bit-exact),
    self-noise again, MSAA back. With `--skip-programs` the draw filter is on for exactly these renders.
@@ -167,6 +168,7 @@ The original 9 are byte-for-byte unchanged (their warm/count hashes equal the pr
 | **gc_low_close** | GC&gfx=low / 120 | same | low preset close up (lid step) |
 | **gc_high_fp** | GC&gfx=high / 120, hook `__game.fp(1)` + 2 ticks | none (first person, near 0.05) | first person |
 | **rig_torn_burn** | `ship=constitution,gloire&…&gfx=high` / 420; hook: chain broadside aimed at Gloire's main-topsail, 500 ticks, chain broadside at fore-topsail, 120 ticks, 2 set untorn sails of Gloire lit at 5 points each, 360 ticks | Gloire, 55 m, pitch .25, y 28, yawOff .5 | **torn (5 sails, 87 fine tris) + burning (2 sails, charred holes) + ~26 shreds + loose sails + ~150 loose ropes** |
+| **rig_torn_close** | as rig_torn_burn without the fire (420; chain broadside at main-topsail, 500 ticks, at fore-topsail, 120 ticks) | Gloire, 24 m, pitch .2, y 24, yawOff .5 | R3 (TASK-0791) before/after close-up of torn sail edges; not in any set |
 | **gc_high_night** | GC&gfx=high&tod=22 / 120 | ship 0, 32 m, pitch .12, yawOff -2.3 | night: moon, stars, lanterns + halos, lamps lighting the deck |
 | **pieces_fly_high** | GC&gfx=high&slowmo=0&slowcam=0 / 120; hook: Constitution's foremast dug at its foot (falls as a PIECE carrying a sail and 76 ropes), 60 ticks, after magazine blown, 45 ticks, a gun blown off, 20 ticks | ship 1, 80 m | PIECES with carried sail/ropes, FLY (~12), explosion, debris, loose sails/ropes |
 | **mixed_high** | `blue=gloire,napoleon&red=constitution,napoleon&…&gfx=high` / 120 | ship 0, 110 m, pitch .2 | 3 hull types incl. Napoleon (62 lids) |

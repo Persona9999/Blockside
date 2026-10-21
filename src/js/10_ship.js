@@ -68,7 +68,7 @@ function makeShipSteps(i, team, yaw, pz, T, px) {
     // 掛著的（吊艇架上的小艇；Tim 2026-10-14：一開場就掉）：底下 1.2 m 內沒有甲板 ⇒ 掛在吊索上（下面 hangFalls 找；吊索全斷才掉）。
     //   ⛔ 照舊往下找 ⇒ 找到海底 z 0 ⇒ 第一次 survey 就掉。foot 暫時是正下方（找到吊索之後換成吊索上端的那一格 ⇒ 吊艇架被打斷帶走時跟著走）
     if (foot < 0) foot = VK.pack(cx, cy, fz);
-    var hpm = kind === 'powder' ? powderHP() : DRVP[kind] && DRVP[kind].hpK > 0 ? Math.round(GUN_HP * DRVP[kind].hpK) : kindProp(kind, 'hpK') ? Math.round(GUN_HP * kindProp(kind, 'hpK')) : kind === 'model' ? 1 : Math.round(GUN_HP * (GUNS[kind] && GUNS[kind].hpK || 1));   // 細節設定的血量；整件一塊的動力件（槳）照道具設定頁的 hpK（31_drive.js DRVP）；規格表 hpK（舵輪 6 成、門 5 成）；帆桁、舵跟砲一樣；砲種表的 hpK ＝ 血量倍率（莫尼特號的鐵甲砲塔 8；Tim 2026-10-15 匯入莫尼特號：一發就打飛不像史實）
+    var hpm = kind === 'powder' ? powderHP() : DRVP[kind] && DRVP[kind].hpK > 0 ? Math.round(GUN_HP * DRVP[kind].hpK) : kindProp(kind, 'hpK') ? Math.round(GUN_HP * kindProp(kind, 'hpK')) : kind === 'model' ? 1 : Math.round(GUN_HP * (GUNS[kind] && GUNS[kind].hpK || 1) * gunHpK(T, kind, m.name));   // 細節設定的血量；整件一塊的動力件（槳）照道具設定頁的 hpK（31_drive.js DRVP）；規格表 hpK（舵輪 6 成、門 5 成）；帆桁、舵跟砲一樣；砲種表的 hpK ＝ 血量倍率（莫尼特號的鐵甲砲塔 8；Tim 2026-10-15 匯入莫尼特號：一發就打飛不像史實）
     var mt = m.meta || {};
     var o = { T: T, k: k, name: m.name.split('/').pop(), path: m.name, kind: kind, hp: hpm, hpMax: hpm, mesh: m.mesh, origin: m.origin, bb: b, pts: m.points || {}, meta: mt,
       c: [(b[0] + b[3]) / 2, (b[1] + b[4]) / 2, (b[2] + b[5]) / 2], foot: foot, alive: true,
@@ -340,6 +340,19 @@ function ropeAtT(L, t) {
   return [L[n * 3 - 3], L[n * 3 - 2], L[n * 3 - 1]];
 }
 /** 模型的種類：meta 優先（basecamp TASK-0517：kind／gun），沒有 meta 才照名字（舊的 .vxk；舵輪本來就沒有 meta）。 */
+/** 砲的血量加成（Tim 2026-10-21：「強化大口徑炮血量」「有砲塔的炮…目前太容易被打壞炮了 特別是有砲塔的船炮都不多」「40kg門檻」「砲塔裡的炮 額外疊成4倍」
+ *  「血量是否可以再額外隨砲的重量(口徑)做線性增長(然後重砲改為1.5倍就好)」「讓不同的炮血量不同」「或是採用開根號處理」）：
+ *  倍率 ＝ √(砲重 ÷ 24 磅長砲的 2.5 t)（下限 0.2：弓、迴旋砲這種幾公斤的不會一碰就壞）× 大口徑（砲種表 shot ≥ 40 kg）1.5 × 砲塔層 kind=turret 底下的砲 4，全部疊乘；乘在砲種表的 hpK 上。
+ *  24 磅長砲 ＝ 1（跟以前一樣）；例（砲的血量 200）：4 磅 89、32 磅 215、XI 吋 Dahlgren 722（砲塔裡 2,889）、30.5 cm Krupp 砲塔裡 4,648。
+ *  ⛔ 迴旋砲座（meta mount=turret｜pivot）不算砲塔：只是會轉的架子、沒有殼。 */
+var GUN_HP_REF = 2.5, GUN_HP_MIN = 0.2, GUN_HP_BIG = { shot: 40, k: 1.5 }, GUN_HP_TUR = 4;
+function gunHpK(T, kind, path) {
+  var g = GUNS[kind]; if (!g) return 1;
+  var k = Math.max(GUN_HP_MIN, Math.sqrt((+g.mass || GUN_HP_REF) / GUN_HP_REF));
+  if (g.shot >= GUN_HP_BIG.shot) k *= GUN_HP_BIG.k;
+  if ((T.turrets || []).some(function (t) { return path.indexOf(t.path + '/') === 0; })) k *= GUN_HP_TUR;
+  return k;
+}
 function modelKind(m) {
   var mt = m.meta || {};
   if (mt.kind === 'gun') return GUN_WEAPON[mt.weapon] || GUN_CODE[mt.gun] || 'long';   // weapon 優先（TASK-0693）；不認得的代碼 ⇒ 當長砲

@@ -201,6 +201,14 @@ var BURN_GLSL = 'uniform float uFireT;\n' +
   'float bnH(vec2 q){ return fract(sin(dot(q,vec2(127.1,311.7)))*43758.5453); }\n' +
   'float bnN(vec2 p){ vec2 i=floor(p); vec2 f=fract(p); f=f*f*(3.0-2.0*f); return mix(mix(bnH(i),bnH(i+vec2(1.0,0.0)),f.x),mix(bnH(i+vec2(0.0,1.0)),bnH(i+vec2(1.0,1.0)),f.x),f.y); }\n' +
   'float bnB(vec4 F,float t){ return (min(t,F.y)-F.x)/uFireT+(bnN(F.zw*1.6)-0.5)*0.55+(bnN(F.zw*5.1)-0.5)*0.2; }\n';
+// 帆破洞的毛邊（render 管線大修 R3，TASK-0791；Tim 2026-10-21「帆破洞邊緣可以一起做嗎(參考火燒 做出撕裂感)」）：每個頂點帶 aH ＝ (離洞幾圈, u, v)
+//   （11_rig_gpu.js sailRagH：洞邊上的點 0、隔一個三角形 1、更遠 SAIL_RAG_FAR ⇒ 整段跳過；布片的外緣 SAIL_RAG_SH；u、v ＝ 這一面攤得最開的兩個軸、以細格為單位
+//   ⇒ 布被吹動時毛邊跟著布、不會滑，毛邊大小跟著格走）。
+//   吃多深 w ＝ 慢的雜訊（兩格多一個起伏：邊有的地方咬得深、有的淺）＋ 兩層快的（半格、六分之一格：紗）；e ＝ 內插的離洞幾圈 − w：
+//   e ＜ 0 ⇒ 洞（discard，陰影那一支同一條）；0～RAG_BAND ⇒ 散開的紗：暗一點、偏黃。離洞越遠 e 越大 ⇒ 吃掉的都連著洞（不會在布中間開小孔）。
+//   ⛔ 只吃掉還在的布（不在的三角形照舊疊成一點、不畫）⇒ 洞只會變大、不會補起來；吃最深 0.74 格（平均 0.3 格），不到第二圈。
+var RAG_BAND = '0.08';
+var RAG_GLSL = 'float rgE(vec3 H){ vec2 q=H.yz; return H.x-(0.06+0.5*bnN(q*0.45)+(bnN(q*2.3+vec2(17.0,3.0))-0.5)*0.24+(bnN(q*6.5+vec2(5.0,41.0))-0.5)*0.12); }\n';
 // 一次畫多個（instanced；render 管線大修 S4）：P.triI／P.dtriI ＝ P.tri／P.dtri 的頂點著色器只換「uModel 從哪裡來」—— uMs[gl_InstanceID]（第幾個就讀第幾格），
 //   算式一個字不動、片段著色器同一串（uGlow 照舊是 uniform：燈不一樣的分開畫）；屬性、VAO 不動（沒有 divisor、不加 VAO）。gl_InstanceID 每次畫都從 0 起（WebGL2 沒有 base instance）。
 //   一次最多 INST_K 個：uMs 一個 mat4 佔 4 格，留 16 格給 uVP 與其他 ⇒ 照 MAX_VERTEX_UNIFORM_VECTORS（WebGL2 最低 256 ⇒ 60；量測那台 4095 ⇒ 上限 64）。
@@ -254,10 +262,11 @@ function programs() {
   // 帆：頂點法線（平滑，不是一個三角形一個平面）；法線翻向看的那一面；包覆光（背光面不死黑、明暗過渡慢）＋太陽在帆後面時布透出暖光
   // 有貼圖的帆（TASK-0579）：aT ＝ 貼圖集的 uv（11_rig_gpu.js sailBuf；u < 0 ＝ 沒有貼圖，照頂點色）；片段照貼圖取色、alpha < 0.5（已照 alpha_min 二值化）⇒ discard ＝ 洞
   P.sail = VK.compile(gl,
-    '#version 300 es\nlayout(location=0) in vec3 aP; layout(location=1) in vec3 aN; layout(location=2) in vec3 aC; layout(location=3) in vec2 aT; layout(location=4) in vec4 aF; uniform mat4 uModel,uVP; out vec3 vN; out vec3 vW; out vec3 vC; out vec2 vT; out vec4 vF;\n' +
-    'void main(){ vec4 w=uModel*vec4(aP,1.0); vW=w.xyz; vN=mat3(uModel)*aN; vC=aC; vT=aT; vF=aF; gl_Position=uVP*w; }\n',
-    '#version 300 es\nprecision highp float;\n' + SEA_GLSL + SHADOW_GLSL + CUT_GLSL + BURN_GLSL + 'in vec3 vN; in vec3 vW; in vec3 vC; in vec2 vT; in vec4 vF; uniform vec3 uSun,uEye,uFog,uSky,uGround; uniform float uFogD; uniform mat4 uCutInv; uniform sampler2D uSailT; out vec4 o;\n' +
+    '#version 300 es\nlayout(location=0) in vec3 aP; layout(location=1) in vec3 aN; layout(location=2) in vec3 aC; layout(location=3) in vec2 aT; layout(location=4) in vec4 aF; layout(location=5) in vec3 aH; uniform mat4 uModel,uVP; out vec3 vN; out vec3 vW; out vec3 vC; out vec2 vT; out vec4 vF; out vec3 vH;\n' +
+    'void main(){ vec4 w=uModel*vec4(aP,1.0); vW=w.xyz; vN=mat3(uModel)*aN; vC=aC; vT=aT; vF=aF; vH=aH; gl_Position=uVP*w; }\n',
+    '#version 300 es\nprecision highp float;\n' + SEA_GLSL + SHADOW_GLSL + CUT_GLSL + BURN_GLSL + RAG_GLSL + 'in vec3 vN; in vec3 vW; in vec3 vC; in vec2 vT; in vec4 vF; in vec3 vH; uniform vec3 uSun,uEye,uFog,uSky,uGround; uniform float uFogD; uniform mat4 uCutInv; uniform sampler2D uSailT; out vec4 o;\n' +
     'void main(){ if(vW.y<uClip) discard; vec3 bc=vC; if(vT.x>=0.0){ vec4 t=texture(uSailT,vT); if(t.a<0.5) discard; bc=t.rgb; }\n' +
+    ' if(vH.x<1.9){ float e=rgE(vH); if(e<0.0) discard; bc=mix(bc*vec3(0.72,0.66,0.55),bc,smoothstep(0.0,' + RAG_BAND + ',e)); }\n' +
     ' vec3 em=vec3(0.0); if(vF.x<5e5){ float b=bnB(vF,uSeaT); if(b>1.0) discard;\n' +
     '  if(b>-0.3){ bc=mix(bc,vec3(0.32,0.2,0.1),smoothstep(-0.3,0.05,b)*0.6); bc=mix(bc,vec3(0.045,0.035,0.03),smoothstep(0.05,0.8,b));\n' +
     '   if(uSeaT<vF.y && b>0.55) em=vec3(1.0,0.36,0.06)*smoothstep(0.7,0.97,b)*(1.1+0.7*bnN(vF.zw*7.0+vec2(0.0,uSeaT*2.3))); } }\n' +
@@ -358,9 +367,9 @@ function programs() {
   P.dvox = VK.compile(gl, VK.VOXEL_VS, NOFS);
   DTRI_VS = '#version 300 es\nlayout(location=0) in vec3 aP; uniform mat4 uModel,uVP; void main(){ gl_Position=uVP*(uModel*vec4(aP,1.0)); }\n';
   P.dtri = VK.compile(gl, DTRI_VS, NOFS);
-  // 帆的陰影（TASK-0579）：貼圖的洞不投影子（同 P.sail 的 discard）；燒穿的洞也是（TASK-0717，BURN_GLSL）
-  P.dsail = VK.compile(gl, '#version 300 es\nlayout(location=0) in vec3 aP; layout(location=3) in vec2 aT; layout(location=4) in vec4 aF; uniform mat4 uModel,uVP; out vec2 vT; out vec4 vF; void main(){ vT=aT; vF=aF; gl_Position=uVP*(uModel*vec4(aP,1.0)); }\n',
-    '#version 300 es\nprecision highp float; in vec2 vT; in vec4 vF; uniform sampler2D uSailT; uniform float uSeaT;\n' + BURN_GLSL + 'void main(){ if(vT.x>=0.0 && texture(uSailT,vT).a<0.5) discard; if(vF.x<5e5 && bnB(vF,uSeaT)>1.0) discard; }\n');
+  // 帆的陰影（TASK-0579）：貼圖的洞不投影子（同 P.sail 的 discard）；燒穿的洞也是（TASK-0717，BURN_GLSL）；破洞的毛邊也是（R3，RAG_GLSL）
+  P.dsail = VK.compile(gl, '#version 300 es\nlayout(location=0) in vec3 aP; layout(location=3) in vec2 aT; layout(location=4) in vec4 aF; layout(location=5) in vec3 aH; uniform mat4 uModel,uVP; out vec2 vT; out vec4 vF; out vec3 vH; void main(){ vT=aT; vF=aF; vH=aH; gl_Position=uVP*(uModel*vec4(aP,1.0)); }\n',
+    '#version 300 es\nprecision highp float; in vec2 vT; in vec4 vF; in vec3 vH; uniform sampler2D uSailT; uniform float uSeaT;\n' + BURN_GLSL + RAG_GLSL + 'void main(){ if(vT.x>=0.0 && texture(uSailT,vT).a<0.5) discard; if(vF.x<5e5 && bnB(vF,uSeaT)>1.0) discard; if(vH.x<1.9 && rgE(vH)<0.0) discard; }\n');
   // 帆的位置與法線由 GPU 算（render 管線大修 R2；11_rig_gpu.js SAILK）：transform feedback 寫進帆的動的那份。編不過 ⇒ null ⇒ 照 R1 在 CPU 算
   try { P.sailK = SAILK.compile(SAILK_VS, SAILK_FS, ['kP', 'kN']); } catch (e) { P.sailK = null; console.warn('帆的法線改回 CPU 算：' + (e && e.message)); }
   P.sky = VK.compile(gl,
