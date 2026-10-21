@@ -16,7 +16,7 @@ var GFX_ITEMS = [
   { k: 'drops', name: '雨滴（3D）', opt: ['關', '少（1500）', '中（3000）', '多（6000）'] },   // 只在暴風雨下：3D 空間裡的雨絲粒子（14_rain.js）
   { k: 'dropspl', name: '雨滴水花', opt: ['關', '開'] },                                    // 3D 雨滴打在海面與船上濺起的小水花
   { k: 'door', name: '門的開關演出', opt: ['關（一直關著）', '開（有人經過才開）'] },          // 門、艙蓋（TASK-0638，25_doors.js）：人照樣通過、門照樣擋水，這一項只管畫面
-  { k: 'port', name: '砲門的開關演出', opt: ['關（蓋板開著、砲推出去不動；「裝飾」也關 ⇒ 不畫蓋板）', '每艘（交戰掀蓋推砲、沒事收砲闔蓋、砲口下水就關）', '只有我艦（別艘照「關」）'], ord: [0, 2, 1] },   // 砲門（TASK-0719，62_ports.js portOn）：有蓋板（裝飾）的船才有；戰局不讀。輪到的船 ⇒ 蓋板不看「裝飾」一定畫、一定演；沒輪到 ⇒ 蓋板回到一般裝飾、照「裝飾」畫不畫、沒有後座。
+  { k: 'port', name: '砲門的開關演出', opt: ['關（蓋板開著、砲推出去不動）', '每艘（交戰掀蓋推砲、沒事收砲闔蓋、砲口下水就關）', '只有我艦（別艘照「關」）'], ord: [0, 2, 1] },   // 砲門（TASK-0719，62_ports.js portOn）：有蓋板（裝飾）的船才有；戰局不讀。蓋板每艘、每個畫質都畫（不看「裝飾」；60_rbatch.js rbatShip，S14）；這一項只管演不演 —— 輪到的船演，沒輪到 ⇒ 開著、砲推出去不動、沒有後座。
   //   Tim 2026-10-21「炮門在所有畫質下都預設顯示」「炮門開關選項多一個可以設定只顯示我艦(低畫質下預設這個)」「然後保留關閉(手動關)」「實際看過炮門的重要性太高了(演出差很多)」⇒ 低 ＝ 只有我艦、中以上 ＝ 每艘；關只給玩家手動選。
   //   值照加進來的先後（0 關、1 每艘 ＝ 以前的「開」、2 只有我艦）⇒ 舊存檔、?g_port=0／1 意思不變；畫質頁照 ord 排成 關／只有我艦／每艘。⛔ 併進 door：門只管門；只靠「裝飾」：沒有 ?g_port= 做反向對照
   { k: 'fall', name: '艙內水幕', opt: ['關', '開（往下一層流的水畫成水幕）'] },   // 進水的粒子模式（TASK-0651，33_flood.js flFalls）：水照樣往下流，這一項只管畫面
@@ -26,7 +26,7 @@ var GFX_ITEMS = [
   { k: 'tlamp', name: '城裡點光源的距離', opt: ['近（512 m）', '中（1 km）', '遠（1.5 km）'] },   // 夜裡的燈（63_towns.js townLampGrid）：分組表照幾公尺見方；每個像素最多照 8 盞不變，遠了只是多一點像素有光、重排多一點
   { k: 'treed', name: '立體樹的距離', opt: ['近（400 m）', '中（650 m）', '遠（900 m）', '全開（1,350 m）'] },   // 全開 ⇒ 貼圖與樹冠殼的交接也往外推 1.5 倍（63_trees.js TREE_SHELL_D）   // Tim 2026-10-21「650m 外換成不參與陰影的貼圖和樹冠殼 這個是否可以參考畫質設定動態調節(同時可以跟陰影連動)」：63_trees.js treeDraw 照 TREE_LOD_D 換 TREE_LOD[1]、重新分組；這以內的樹投影子也收影子（收到這個距離 − 50 m，01_gl.js uShTr），外面是貼圖與樹冠殼
   { k: 'plant', name: '植物密度', opt: ['少（三成）', '中（六成）', '多（全部）'] },   // Tim 2026-10-21「中畫質就降低植物密度(60%) 低畫質降更多(30%)」   // Tim 2026-10-21「植物密度是否也能根據畫質調整」：63_trees.js treeBin 照每棵的位置雜湊留 TREE_DENS_K 那麼多（不重擺、切了下一格就重新分組）；投影子的跟著少
-  { k: 'deco', name: '裝飾', opt: ['關（不畫）', '開'] },   // TASK-0682（05_hull.js decoSplit）：雕刻模型 meta deco=1 的裝飾件；不算重量、不被打、不抽亂數 ⇒ 開關不改戰局。一律載入、只管畫不畫（60_render.js drawModels）⇒ 切了立刻生效
+  { k: 'deco', name: '裝飾', opt: ['關（不畫；砲門蓋板照畫）', '開'] },   // TASK-0682（05_hull.js decoSplit）：雕刻模型 meta deco=1 的裝飾件；不算重量、不被打、不抽亂數 ⇒ 開關不改戰局。一律載入、只管畫不畫（60_render.js drawModels）⇒ 切了立刻生效
   // 多船（TASK-0537；60_render.js gpuSlots）：視野裡離鏡頭最近的幾艘才有船艙遮罩（第幾檔 ＝ 幾艘）；陰影船數 2026-10-20 拿掉（陰影改成照鏡頭分段，不分船）
   { k: 'masks', name: '船艙遮罩', opt: gfxOpts(MASK_NEAR + 1, function (i) { return i ? String(i) : '0（艙裡看得到海）'; }) }];   // 說明在畫質設定頁（template #gfxNote）
 // 畫質頁的分類（Tim 2026-10-21「畫質選項細節 嘗試根據分類摺疊細項吧(例如 陰影)」）：一類一個收得起來的區塊（71_input.js gfxUI，<details>），標題後面寫那一類現在的設定（gfxCatSum）。
@@ -51,7 +51,7 @@ function gfxCatSum(c) {
 }
 function gfxOpts(n, f) { var r = []; for (var i = 0; i < n; i++) r.push(f(i)); return r; }
 var GFX_PRESET = {
-  low: { shadow: 0, refl: 0, refr: 0, sea: 0, res: 1, aa: 0, rain: 0, drops: 0, dropspl: 0, door: 1, port: 2, fall: 1, pdep: 0, pside: 1, pedge: 0, masks: 2, deco: 0, tlamp: 0, treed: 0, plant: 0 },   // 門的演出很便宜（每扇每格掃一次船員）⇒ 每一檔都開；砲門低畫質 ＝ 只有我艦（port 2；Tim 2026-10-21，推翻 10-19 的「炮門屬於裝飾物 因此相關機制在低畫質不啟用」）⇒「裝飾」關著我艦照樣畫蓋板、演開關，別艘不畫
+  low: { shadow: 0, refl: 0, refr: 0, sea: 0, res: 1, aa: 0, rain: 0, drops: 0, dropspl: 0, door: 1, port: 2, fall: 1, pdep: 0, pside: 1, pedge: 0, masks: 2, deco: 0, tlamp: 0, treed: 0, plant: 0 },   // 門的演出很便宜（每扇每格掃一次船員）⇒ 每一檔都開；砲門低畫質 ＝ 只有我艦（port 2；Tim 2026-10-21，推翻 10-19 的「炮門屬於裝飾物 因此相關機制在低畫質不啟用」）⇒ 我艦演開關；蓋板每艘都畫（別艘停在開著、砲推出去；S14，Tim 發現低畫質別艘沒有蓋板）
   mid: { shadow: 1, refl: 1, refr: 1, sea: 1, res: 2, aa: 1, rain: 1, drops: 0, dropspl: 0, door: 1, port: 1, fall: 1, pdep: 1, pside: 1, pedge: 1, masks: MASK_NEAR, deco: 1, tlamp: 1, treed: 1, plant: 1 },
   high: { shadow: 2, refl: 2, refr: 2, sea: 2, res: 2, aa: 1, rain: 0, drops: 3, dropspl: 1, door: 1, port: 1, fall: 1, pdep: 1, pside: 1, pedge: 1, masks: MASK_NEAR, deco: 1, tlamp: 2, treed: 2, plant: 2 },
   ultra: { shadow: 3, refl: 2, refr: 2, sea: 2, res: 2, aa: 1, rain: 0, drops: 3, dropspl: 1, door: 1, port: 1, fall: 1, pdep: 1, pside: 1, pedge: 1, masks: MASK_NEAR, deco: 1, tlamp: 2, treed: 3, plant: 2 } };   // 全開 ＝ 高＋陰影與立體樹的距離 × 1.5（Tim 2026-10-21）   // 最高 ＝ 每艘都有（Tim 2026-10-13「最高畫質開到 N」）

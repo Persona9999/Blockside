@@ -16,9 +16,9 @@
 //   · 打得壞（照戰局現有的狀態推，蓋板本身不吃砲彈；kaguya 2026-10-19 拍板 B 案）：鉸鏈旁那一格船殼沒了（d.foot，10_ship.js）／關上時貼著的那一圈船殼掉了 PORT_RING 格以上／
 //     蓋板沒全開（s < 1）時那門砲被打中或打飛 ⇒ 蓋板沒了（不畫）、之後 s 至少 1 ＝ 那個砲門一直開著（木匠補好船殼也不回來）。砲打飛時蓋板全開著 ⇒ 蓋板留著、一直開著（沒人關了）。
 // 畫質「砲門的開關演出」（GFX.port：0 關、1 每艘、2 只有我艦；07_gfx.js）：一艘一艘看 portOn —— 沒輪到 ⇒ 蓋板開著、砲推出去，都不動（從演切到不演那一格清一次 portsOffShip）。
-//   組合：輪到的船 ⇒ 蓋板一定畫、一定演（不看「裝飾」：60_render.js drawModels；Tim 2026-10-21「炮門在所有畫質下都預設顯示」「實際看過炮門的重要性太高了(演出差很多)」⇒ 低畫質「裝飾」關著我艦也演）；
-//   沒輪到的船 ⇒ 蓋板回到一般裝飾：「裝飾」開 ⇒ 開著不動、「裝飾」關 ⇒ 不畫。「只有我艦」＝ SHIPS[PLAYER_I]：換船（52_fleet.js playerTake）⇒ 下一格原本那艘清回去、新的那艘 snap。
-//   （10-19 到 10-21：蓋板跟著「裝飾」走、低畫質不畫不演；「裝飾」關、演出開 ⇒ 有蓋板的砲改演後座 —— 現在碰不到這個組合，那一段拿掉了）
+//   蓋板每艘、每個畫質都畫，不看「裝飾」也不看這一項（60_rbatch.js rbatShip；render 管線大修 S14 —— Tim 2026-10-21「炮門在所有畫質下都預設顯示」「實際看過炮門的重要性太高了(演出差很多)」，之後 Tim 發現低畫質別艘沒有蓋板）；
+//   這一項只管演不演：輪到的船演，沒輪到的船停在模型的樣子（蓋板開著、砲推出去）。「只有我艦」＝ SHIPS[PLAYER_I]：換船（52_fleet.js playerTake）⇒ 下一格原本那艘清回去、新的那艘 snap。
+//   （10-19 到 10-21：蓋板跟著「裝飾」走、低畫質不畫不演；10-21 起輪到的才不看「裝飾」、沒輪到的照「裝飾」—— S14 起一律畫）
 // 後座（Tim 2026-10-20：「另外是否可以讓沒有炮門的炮 也有後座力呢」「不過要注意排除弩炮 投石機等(要根據meta判斷)」）：沒有蓋板的砲，
 //   開火照同一條曲線（portLoad：GUN_SNAP 秒退到底、裝填剩 PORT_LOADQ 秒推出去）沿砲軸往船裡退 recoilDist 格 —— 只寫 m.vsl，跟蓋板那一段同一個欄位、同一個畫質項（GFX.port）。
 //   退多少（recoilDist，照模型 meta）：meta recoil（格；0 ＝ 不演）先看 ⇒ 固定彈種（meta ammo，沒寫照 weapon／gun 對到的砲種表 ammo）是弩箭、火箭、石彈（ammoQuiet）、希臘火 ⇒ 不演（沒有火藥）
@@ -173,14 +173,14 @@ function portsAnim() {
   for (var i = 0; i < SHIPS.length; i++) {
     var sh = SHIPS[i]; if (!sh.M) continue;
     if (!portOn(sh)) { if (sh.portLive) portsOffShip(sh); continue; }   // 沒輪到（關、或「只有我艦」的別艘）：上一格還在演 ⇒ 清一次
-    sh.portLive = true;                                                // 輪到 ⇒ 蓋板一定畫（不看「裝飾」，60_render.js）⇒ 一定演
+    sh.portLive = true;                                                // 輪到 ⇒ 演（蓋板本來就每艘都畫：60_rbatch.js rbatShip，S14）
     if (sh.ports === undefined) sh.ports = portsBuild(sh);             // 懶建（沒有蓋板 ⇒ null）
     if (sh.ports) portsShip(sh, sh.ports);
     if (sh.recoil === undefined) sh.recoil = recoilBuild(sh);          // 懶建（一門會退的砲都沒有 ⇒ null）
     if (sh.recoil) recoilShip(sh, sh.recoil);
   }
 }
-/** 這艘演不演砲門與後座（畫質「砲門的開關演出」：0 關、1 每艘、2 只有我艦 SHIPS[PLAYER_I]）。蓋板畫不畫也看它（60_render.js drawModels）。 */
+/** 這艘演不演砲門與後座（畫質「砲門的開關演出」：0 關、1 每艘、2 只有我艦 SHIPS[PLAYER_I]）。蓋板畫不畫不看它（每艘都畫；60_rbatch.js rbatShip，S14）。 */
 function portOn(sh) { return GFX.port === 1 || (GFX.port === 2 && sh === SHIPS[PLAYER_I]); }
 /** 這門砲開火往裡退幾格（見檔頭「後座」；有蓋板的砲照它的 house，portPose）。0 ＝ 不演。 */
 function recoilDist(g) {
@@ -374,7 +374,7 @@ function portsSummary(sh) {
   var rg = function (a) { return a.length ? Math.min.apply(null, a) + (Math.max.apply(null, a) > Math.min.apply(null, a) ? '–' + Math.max.apply(null, a) : '') : '—'; };
   var no = sh.guns.filter(function (g) { return used.indexOf(g) < 0; }).map(function (g) { var mt = g.model.meta || {}; return (mt.id || g.name.split('/').pop()) + (mt.deck ? '（' + mt.deck + '）' : ''); });
   return D.length + ' 片' + (L.length < D.length ? '（演得動的 ' + L.length + '）' : '') + '（P ' + (L.length - ns) + '、S ' + ns + '）；house ' + rg(hs) + ' 格；close ' + rg(cs) + '°'
-    + '；沒有蓋板的砲：' + (no.length ? no.join('、') : '沒有') + '；畫質「砲門的開關演出」' + portMode() + (GFX.port === 1 ? '' : GFX.deco ? '（沒輪到的船：蓋板開著不動）' : '（沒輪到的船：「裝飾」也關 ⇒ 不畫蓋板）');
+    + '；沒有蓋板的砲：' + (no.length ? no.join('、') : '沒有') + '；畫質「砲門的開關演出」' + portMode() + (GFX.port === 1 ? '' : '（沒輪到的船：蓋板開著不動）');
 }
 /** 匯入檢查的讀數一行（75_shipcheck.js R.info.recoil）：沒有蓋板的砲幾門演後座、退幾格；照 meta 不演的（recoil=0、弩箭／火箭／石彈／希臘火）列出來。沒有砲 ⇒ ''。 */
 function recoilSummary(sh) {

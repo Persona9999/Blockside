@@ -117,7 +117,7 @@ function rbatShip(sh, o) {
     RBAT.mb[i] = me;   // ancD：拋下去的模型錨，畫在鐵鍊那一端（76_anchor.js chainStep）；vsl：砲門關上時砲往裡縮（62_ports.js，TASK-0719）
   }
   L = sh.decos;
-  if ((GFX.deco || portOn(sh)) && L) for (k = 0; k < L.length; k++) {   // 裝飾（TASK-0682；畫質「裝飾」關著 ⇒ 不畫）；砲門蓋板：「砲門的開關演出」輪到這艘 ⇒ 不看「裝飾」（62_ports.js portOn）
+  if (L) for (k = 0; k < L.length; k++) {                             // 裝飾（TASK-0682；畫質「裝飾」關著 ⇒ 不畫）；砲門蓋板：每艘、每個畫質都畫（Tim；S14）——「砲門的開關演出」（62_ports.js portOn）只管演不演，沒輪到的那艘停在模型的樣子（開著、砲推出去）
     var d = L[k]; me = T.meshes[d.mesh];
     if (!me || d.gone || (!GFX.deco && d.meta.kind !== 'portlid') || (d.foot >= 0 && !hullGp(sh.grid, d.foot))) continue; if (!me.vao) meshGpu(me);   // gone：砲門蓋板被打掉了；腳下那一格被打掉 ⇒ 不畫
     i = rbatAdd(1, o, k, d, me.vao, 0, 0, me.n, isLamp(d) ? lanternK(d) : 0, null);
@@ -483,7 +483,7 @@ function rbatCheck() {
       var dv = m.ancD || m.vsl;
       one(0, i, m, me, isLamp(m) ? lanternK(m) : 0, M4.mul(sh.M, dv ? M4.mul(trans(dv[0], dv[1], dv[2]), modelLocal(m)) : modelLocal(m)));
     });
-    if (GFX.deco || portOn(sh)) (sh.decos || []).forEach(function (d) {
+    (sh.decos || []).forEach(function (d) {
       var me = sh.T.meshes[d.mesh]; if (!me || d.gone || (!GFX.deco && d.meta.kind !== 'portlid') || (d.foot >= 0 && !hullGp(sh.grid, d.foot))) return;
       one(1, i, d, me, isLamp(d) ? lanternK(d) : 0, M4.mul(sh.M, d.L || trans(d.origin[0], d.origin[1], d.origin[2])));
     });
