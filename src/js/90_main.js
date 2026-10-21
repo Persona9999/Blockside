@@ -5,7 +5,7 @@ function frame(ts, noRaf) {                                         // noRaf：_
   var f0 = PF ? performance.now() : 0;                                // 逐幀分段計時（?debug=1）
   if (BED) { BED_BG = BED_PUMP_MS; var pb0 = performance.now(); bedPump(bedT1()); bedSpent(pb0); treePump(); }   // 收進來的海圖塊、擺樹：每格照同一份背景預算做（08_seabed.js、63_trees.js）—— 模擬這一格要不要等（bedWait）照放好的算
   if (FLOW_STAGE) { loopLast = ts; if (!noRaf) requestAnimationFrame(frame); return; }   // 開戰分段做到一半（70_flow.js startStaged）：只收塊、擺樹，不畫、不走 ⇒ 不會碰到做到一半的船
-  var dt = loopLast ? Math.min(0.1, (ts - loopLast) / 1000) : DT, hv = 0, hsv = 0; loopLast = ts;   // hv：帆與繩照畫面格算時這一格走幾秒（TASK-0799）
+  var dt = loopLast ? Math.min(0.1, (ts - loopLast) / 1000) : DT_BASE, hv = 0, hsv = 0; loopLast = ts;   // hv：帆與繩照畫面格算時這一格走幾秒（TASK-0799）
   FPS = FPS * 0.95 + (1 / Math.max(dt, 1e-3)) * 0.05;
   if (RUNNING && !PAUSED) {
     var sk = Math.min(slowTick(dt), pslowTick(dt)) * SIM_SPEED; SLOW_VIS = sk < 1;   // × SIM_SPEED：設定的模擬速度（< 1 ⇒ 碎木、煙、水花照慢動作那一套照畫面的時間走，不會一頓一頓）
@@ -14,7 +14,7 @@ function frame(ts, noRaf) {                                         // noRaf：_
     var nMax = SIM_SPEED > 1 ? Math.ceil(4 * SIM_SPEED) : 4;            // 一格畫面最多走幾步：快轉（> 1 倍）照倍率放寬，不然 60 FPS 時最多 4 倍
     if (BED) bedFocusAuto();                                            // 海圖（08_seabed.js）：焦點走進別塊 ⇒ 換中心重載
     VIS_FRAME = PHYS && seaCalm();                                      // 航行：布照畫面格算（30_rig_physics.js physFrame；TASK-0799）—— 這一格開頭判一次，整格同一種算法
-    while (loopAcc >= DT && n < nMax) { if (bedWait() || camTransHeld()) { loopAcc = 0; break; } VIEW_HOLD = loopAcc >= 2 * DT && n + 1 < nMax; simStep(); loopAcc -= DT; n++; }   // 船旁邊的海圖塊還沒載好 ⇒ 這一格先不走（戰局跟載入快慢無關）；VIEW_HOLD：後面還有步 ⇒ 只給人看的留到最後一步一次推（50_sim.js）
+    while (n < nMax && loopAcc >= (DT = sailDt())) { if (bedWait() || camTransHeld()) { loopAcc = 0; break; } VIEW_HOLD = loopAcc >= 2 * DT && n + 1 < nMax; simStep(); loopAcc -= DT; n++; }   // 船旁邊的海圖塊還沒載好 ⇒ 這一格先不走（戰局跟載入快慢無關）；VIEW_HOLD：後面還有步 ⇒ 只給人看的留到最後一步一次推（50_sim.js）；sailDt：每一步之前挑這一步多長（航行快轉 ⇒ 粗步長，TASK-0800）
     VIEW_HOLD = false;
     if (n) pslowMeasure((performance.now() - st0) / n);                // 一步平均幾毫秒（物理減速照它算）
     if (n === nMax) loopAcc = 0;
@@ -72,15 +72,16 @@ if (DEBUG) window.__game = {
   portsForce: function (i, v) { var sh = SHIPS[i || 0]; if (sh) sh.portWant = v === undefined ? null : v; return this.ports(i); },
   /** 畫面迴圈的反向對照（TASK-0719；⛔ ?demo、run() 不經過 frame() ⇒ 量不到畫面那一格的演出）：同步叫 n 次 frame()，每格 dt ＝ DT（loopLast 歸零）⇒ 沒有慢動作時每格剛好一步；
    *  回走了幾步、模擬秒、戰局雜湊（每艘的位置、航向、格數、下沉、命中、開火、死傷、砲剩幾門，加上砲彈、碎塊數與戰局亂數 RNG_B 的狀態；照宣傳片 director.js trHash 的 FNV-1a）。g_port＝0／1、g_deco＝0／1 要一樣。 */
+  speed: function (x) { if (x !== undefined) simSpeedSet(x); return SIM_SPEED; },   // 模擬速度（73_slowmo.js；上限照 SIM_SPEED_MAX，?simmax= 放寬）
   tick: function (n) {
-    var s0 = Math.round(SIMT / DT), t0 = performance.now(); loopAcc = 0;
+    var s0 = SIM_N, t0 = performance.now(); loopAcc = 0;
     for (var i = 0; i < (n || 1); i++) { loopLast = 0; frame(performance.now(), true); }
     var s = 'r' + RNG_B.s + 'b' + BALLS.length + 'p' + PIECES.length;
     SHIPS.forEach(function (sh) { s += '|' + sh.px.toFixed(4) + ',' + sh.pz.toFixed(4) + ',' + sh.yaw.toFixed(5) + ',' + sh.grid.count + ',' + (sh.sink || 0).toFixed(4) + ',' + (sh.hits || 0) + ',' + (sh.fired || 0) + ',' + (sh.dead || 0) + ',' + sh.guns.filter(function (g) { return g.alive; }).length; });
     var h = 2166136261; for (var k = 0; k < s.length; k++) { h ^= s.charCodeAt(k); h = Math.imul(h, 16777619); }
-    return { frames: n || 1, steps: Math.round(SIMT / DT) - s0, simt: +SIMT.toFixed(3), ms: Math.round(performance.now() - t0), hash: (h >>> 0).toString(16) };
+    return { frames: n || 1, steps: SIM_N - s0, simt: +SIMT.toFixed(3), ms: Math.round(performance.now() - t0), hash: (h >>> 0).toString(16) };
   },
-  run: function (sec) { var n = Math.round(sec / DT), H5 = everySteps(0.5); for (var i = 0; i < n; i++) { simStep(); if (i % H5 === H5 - 1) remesh(Infinity); } remesh(Infinity); camUpdate(1); render(); hudFrame(1); PF.cur = {}; return this.stats(); },   // PF.cur：快轉的不算進下一格畫面
+  run: function (sec) { DT = DT_BASE; var n = Math.round(sec / DT), H5 = everySteps(0.5); for (var i = 0; i < n; i++) { simStep(); if (i % H5 === H5 - 1) remesh(Infinity); } remesh(Infinity); camUpdate(1); render(); hudFrame(1); PF.cur = {}; return this.stats(); },   // PF.cur：快轉的不算進下一格畫面
   fire: function (ammo, aim) { var me = SHIPS[PLAYER_I]; if (aim) setAim(me, aim); return broadside(me, ammo || 0); },
   take: function (i) { return playerTakeShip(SHIPS[i]); },
   drive: function (i, o) { var sh = SHIPS[i || 0]; if (o && 'tele' in o) teleSet(sh, o.tele); if (o && 'power' in o) sh.power = o.power; return driveInfo(sh); },   // 動力（31_drive.js）：每個動力源的完好度、推力、力矩；{ tele: 格 } 撥俥鐘          // 改操控第 i 艘（52_fleet.js；敵艦要 Debug 模式）

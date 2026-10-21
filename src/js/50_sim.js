@@ -99,12 +99,26 @@ function seaCalm() {
   }
   return true;
 }
+// ───────────────────────── 航行粗步長（TASK-0800） ─────────────────────────
+// 海上平靜、沒有船在燒 ⇒ 一步 k × DT_BASE：k ＝ 模擬速度取整、最多到 SAIL_DT_MAX（60 Hz ⇒ ×6 以上 0.1 秒一步）；不平靜 ⇒ 回到 DT_BASE（開戰時照物理設定，70_flow.js）。
+//   ×1 照舊 DT_BASE：⛔ 0.1 秒一步時畫面一格不一定有一步 ⇒ 船上走動的人、砲演出照 10 Hz 一頓一頓（renderLerp 只內插船身）；快轉時一格畫面約一步 ⇒ ×8 每真實秒 80 步（以前 480）。
+//   著火照相位輪（49_burn.js：每一格火記著自己第幾步燒，步長一換相位就對不上、有的格永遠輪不到）⇒ 有船在燒不切。
+//   只在 k × DT_BASE 的格子上切（SIMT 是它的整數倍；不是 ⇒ 先走 DT_BASE 走到對齊）⇒ 每半秒、每 3 秒那些節拍照舊落在同一串時間上。
+//   照遊戲狀態與模擬速度（玩家的輸入），⛔ 不照鏡頭；只有畫面迴圈切（90_main.js frame，每一步之前）—— ?demo、__game.run 照 DT_BASE。
+var DT_BASE = 1 / 60, SAIL_DT_MAX = 0.1;
+function burning(sh) { var B = sh.burn; return !!B && (B.n > 0 || B.sl.length > 0 || B.q.length > 0); }
+function sailDt() {
+  var k = Math.min(Math.floor(SIM_SPEED + 1e-6), Math.floor(SAIL_DT_MAX / DT_BASE + 1e-6));
+  if (k <= 1 || Math.round(SIMT / DT_BASE) % k || !seaCalm() || SHIPS.some(burning)) return DT_BASE;
+  return k * DT_BASE;
+}
 
 // ───────────────────────── 一步 ─────────────────────────
+var SIM_N = 0;                                                       // 走過幾步（只給讀數：步長會變 ⇒ ⛔ 不能拿 SIMT ÷ DT 數；__game.tick）
 var VIEW_HOLD = false, VIEW_ACC = 0;                                // 只給人看的推進（viewStep）：畫面一格補好幾步時只在最後一步推一次（90_main.js frame 設 VIEW_HOLD）；快轉、無頭照舊每一步推
 function simStep() {
   if (PF) PF.t = performance.now();                                 // 逐幀分段計時（?debug=1，00_core.js）
-  SIMT += DT;
+  SIMT += DT; SIM_N++;
   if ((Math.round(SIMT / DT) % everySteps(CMD_EVERY_S)) === 0) cmdTick();   // 指揮官每 3 秒想一次（52_fleet.js；不抽亂數）
   pickFoes();                                                      // 每艘的目標（52_fleet.js）：這一步之內都用同一個
   stepWind(SIMT);                                                  // 風會變（08_weather.js）

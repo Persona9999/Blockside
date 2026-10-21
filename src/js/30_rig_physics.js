@@ -534,7 +534,9 @@ function rigFarM(sh) { return evAsk('rigFar', 1, sh); }   // 鏡頭外、遠的�
 // ── 照畫面格算（TASK-0799）──
 // 航行時（seaCalm：沒有敵艦在附近、沒有砲彈在飛，50_sim.js）帆布、垂下來的繩、帆的布片、帆的碰撞只給人看 ⇒ 畫面每一格算一次（90_main.js frame → physFrame），
 //   dt ＝ 這一格畫面的時間（快轉也只算畫面的那一段：×8 時布照 ×1 的速度飄 ⇒ 花費照格、不照倍數；慢動作照慢）。
-//   照舊每一模擬步算的（physGame）：帆桁追風、跟帆桁走的繩、掛著的小艇 —— 會改到打中帆桁、繩的那幾下 ⇒ 跟畫面快慢無關。
+//   照舊每一模擬步算的（physGame）：帆桁追風、掛著的小艇 —— 會改到打中帆桁的那幾下 ⇒ 跟畫面快慢無關。
+//   跟帆桁走的繩（yardRopes：每 0.1 秒、帆桁有轉才重算＋重建繩的網格）航行時也改成照畫面的 0.1 秒（×8 時每真實秒最多 10 次，不是 80 次）：
+//     船員爬帆索照繩的位置走（42_hands.js）⇒ 航行時船員的位置跟畫面走過幾格有關（Tim 2026-10-22：「會影響戰局結果 沒問題的」）；交戰回到每步、照舊。
 //   交戰（不 calm）、沒有畫面（?demo、__game.run、無頭）⇒ 整段照舊在模擬步裡（physStep），逐位元不變。
 //   ⚠ 代價：從航行進入交戰的那一刻，布的形狀跟畫面走過幾格有關 ⇒ 開戰後頭幾發打中帆的那幾下可能不同（Tim 2026-10-22：不用跟 60 Hz 完全吻合）。
 var VIS_FRAME = false, PHF_I = 0, PHF_CHK = 0;                      // VIS_FRAME：這一格畫面布照畫面格算（frame 開頭設、結尾清 ⇒ frame 以外一律 false）；PHF_I 畫面格的序號（錯開各面帆）、PHF_CHK 累到 0.1 秒做一次「每 0.1 秒」的那幾項
@@ -553,13 +555,13 @@ function physStep(sh) {
   physGame(sh, w[0], w[1], chk);
   physVis(sh, w[0], w[1], si, chk, DT, DT);
 }
-/** 航行時只走會改戰局的那一段（布在 physFrame）。 */
-function physGameStep(sh) { var w = physWind(sh); physGame(sh, w[0], w[1], Math.round(SIMT / DT) % everySteps(0.1) === 0); }
+/** 航行時只走帆桁追風、掛著的小艇（布、跟帆桁走的繩在 physFrame）。 */
+function physGameStep(sh) { var w = physWind(sh); physGame(sh, w[0], w[1], false); }
 /** 畫面這一格（90_main.js frame；VIS_FRAME）：每艘的布、垂下來的繩、布片走 h 秒（hs ＝ 這一格模擬走了多久：落海的布片照它退）。 */
 function physFrame(h, hs) {
   var pt0 = performance.now(); PHF_I++; PHF_CHK += h;
   var chk = PHF_CHK >= 0.1 - 1e-9; if (chk) PHF_CHK = 0;
-  SHIPS.forEach(function (sh) { if (sh.sink < 40) { var w = physWind(sh); physVis(sh, w[0], w[1], PHF_I, chk, h, hs); } });
+  SHIPS.forEach(function (sh) { if (sh.sink < 40) { var w = physWind(sh); if (chk && sh.yards.length) yardRopes(sh); physVis(sh, w[0], w[1], PHF_I, chk, h, hs); } });
   clothContactsRun();
   PHYS_MS = PHYS_MS * 0.98 + (performance.now() - pt0) * 0.02;
 }
