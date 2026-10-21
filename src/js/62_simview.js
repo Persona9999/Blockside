@@ -74,7 +74,7 @@ function buildMeshes(H, C) {      // 船型 H 的每份模型網格一個 VAO：
   H.meshes = []; var keep = [];
   (H.rig.meshes || []).forEach(function (m, k) {
     if (H.meshSkip && H.meshSkip[k]) { H.meshes.push(null); keep.push(null); return; }   // 模型、裝飾都沒用到（05_hull.js decoSplit）⇒ 不建、不上 GPU
-    var d = C ? C[k] : { tri: meshTris(m), occ: meshOcc(m) };
+    var d = C ? C[k] : { tri: meshTriFor(H, k, m), occ: meshOcc(m) };   // meshTriFor：火藥桶這類 render=lathe 的換成車床式（62_lathe.js；佔格照原本的網格）
     var up = upload(null, d.tri, 9, [[0, 3, 0], [1, 3, 3], [2, 3, 6]]);
     up.occ = d.occ; up.bb = meshBB(d.tri); H.meshes.push(up); keep.push(d);
   });
