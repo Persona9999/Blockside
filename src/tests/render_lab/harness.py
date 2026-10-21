@@ -1183,7 +1183,7 @@ def cmd_probe(a):
 
 
 def main():
-    ap = argparse.ArgumentParser(description='Blockside render harness (see src/tests/render_lab/README.md and NOTES.md)')
+    ap = argparse.ArgumentParser(description='Blockside render harness (see src/tests/render_lab/RENDER_LAB.md and NOTES.md)')
     sp = ap.add_subparsers(dest='cmd', required=True)
 
     def common(p, repeat=1):
