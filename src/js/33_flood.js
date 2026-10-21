@@ -281,21 +281,27 @@ function floodStep(sh, fl, dt) {
   if (!(dt > 0)) return;
   var F = fl.F, L = fl.L, J = fl.J, Vc = Math.pow(F.c * S, 3), gL = M4.dir(sh.inv, 0, -G, 0), i, o;
   // 粒子：照重力（船的座標，格／秒²）落下；碰到船體、滿的水格、出界或活太久 ⇒ 併進上一個位置的水格
+  var gl = Math.hypot(gL[0], gL[1], gL[2]);
   for (i = 0; i < J.n; i++) {
     o = i * 3;
-    var px = J.p[o], py = J.p[o + 1], pz = J.p[o + 2], c0 = flCell(F, px, py, pz);
-    J.v[o] += gL[0] * dt; J.v[o + 1] += gL[1] * dt; J.v[o + 2] += gL[2] * dt;
-    J.p[o] += J.v[o] * dt; J.p[o + 1] += J.v[o + 1] * dt; J.p[o + 2] += J.v[o + 2] * dt; J.life[i] -= dt;
-    var c1 = flCell(F, J.p[o], J.p[o + 1], J.p[o + 2]);
-    if (J.life[i] <= 0 || c1 < 0 || sh.grid.get(Math.floor(J.p[o]), Math.floor(J.p[o + 1]), Math.floor(J.p[o + 2])) || fl.A[c1] >= fl.cap[c1] * Vc * 0.95) {
-      flDeposit(sh, fl, c0 >= 0 ? c0 : c1, J.vol[i]);
-      var j = --J.n;
-      if (i !== j) { J.p.copyWithin(o, j * 3, j * 3 + 3); J.v.copyWithin(o, j * 3, j * 3 + 3); J.vol[i] = J.vol[j]; J.life[i] = J.life[j]; }
-      i--;
+    // 位移上限（TASK-0797）：每一小步最多走 1 格 ⇒ 步長變大時不會一步穿過一格厚的甲板（60 Hz ⇒ ns 1，跟以前一樣）
+    var ns = subSteps((Math.hypot(J.v[o], J.v[o + 1], J.v[o + 2]) + 0.5 * gl * dt) * dt, 1, dt), h = ns === 1 ? dt : dt / ns, gone = false;
+    for (var s = 0; s < ns && !gone; s++) {
+      var px = J.p[o], py = J.p[o + 1], pz = J.p[o + 2], c0 = flCell(F, px, py, pz);
+      J.v[o] += gL[0] * h; J.v[o + 1] += gL[1] * h; J.v[o + 2] += gL[2] * h;
+      J.p[o] += J.v[o] * h; J.p[o + 1] += J.v[o + 1] * h; J.p[o + 2] += J.v[o + 2] * h; J.life[i] -= h;
+      var c1 = flCell(F, J.p[o], J.p[o + 1], J.p[o + 2]);
+      if (J.life[i] <= 0 || c1 < 0 || sh.grid.get(Math.floor(J.p[o]), Math.floor(J.p[o + 1]), Math.floor(J.p[o + 2])) || fl.A[c1] >= fl.cap[c1] * Vc * 0.95) {
+        flDeposit(sh, fl, c0 >= 0 ? c0 : c1, J.vol[i]);
+        var j = --J.n;
+        if (i !== j) { J.p.copyWithin(o, j * 3, j * 3 + 3); J.v.copyWithin(o, j * 3, j * 3 + 3); J.vol[i] = J.vol[j]; J.life[i] = J.life[j]; }
+        i--; gone = true;
+      }
     }
   }
-  if (++fl.step % L.ev) return;
-  flTick(sh, fl, dt * L.ev);
+  var ev = steps60(L.ev);                                                        // 幾步算一次水格：照 60 Hz 的步數換（TASK-0798）
+  if (++fl.step % ev) return;
+  flTick(sh, fl, dt * ev);
 }
 function flTick(sh, fl, dtc) {
   var S3 = S * S * S, F = fl.F, L = fl.L, J = fl.J, c = F.c, NX = F.NX, NY = F.NY, NXY = NX * NY, N = F.N, A = fl.A, cap = fl.cap, pd = fl.pd, M = sh.M, Vc = Math.pow(c * S, 3), hc = c * S, fk = sh.cfg.flood / LIM.flood[2], i, k, m;   // 滑桿／預設：預設 ⇒ 物理的流量

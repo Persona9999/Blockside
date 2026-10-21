@@ -32,7 +32,8 @@ function shredCut(sh, c, old, b) {
     for (var g = 0; g < K; g++) { var s = cen[ord[g]], dx = w[0] - s[0], dy = w[1] - s[1], dz = w[2] - s[2], d = dx * dx + dy * dy + dz * dz; if (d < bd) { bd = d; bi = g; } }
     grp[bi].push(nt[q]);
   });
-  var bv = M4.dir(sh.inv, b.v[0], b.v[1], b.v[2]), bl = len(bv) || 1, HC = lv.every * DT, col = T.col;
+  var bv = M4.dir(sh.inv, b.v[0], b.v[1], b.v[2]), bl = len(bv) || 1, HC = steps60(lv.every) * DT, col = T.col;
+  if (!SUBSTEP_OFF && HC > lv.every * DT60 * 1.000001) HC /= Math.ceil(HC / (lv.every * DT60) - 1e-9);   // 初速照之後布每一小步走幾秒（shredStep 切小步那一段；60 Hz ⇒ 原本的 every × DT）
   grp.forEach(function (g) {
     if (!g.length) return;
     var map = new Map(), pos = [], lt = [], fuv = T.uv ? [] : null;   // fuv：貼圖的 uv（帆有貼圖 ⇒ 布片照原處的圖畫、洞照樣透空；TASK-0579）
@@ -63,7 +64,7 @@ function shredWet(sh, f) {
 /** 每一步（physStep 的最後）：在空中與甲板上的照布算（跟帆同一個節拍）、每 0.1 秒看落水與壽命；落水的停在海上往下沉。 */
 function shredStep(sh, wl, gv, si, chk) {
   var F = sh.shreds; if (!F || !F.length) return;
-  var go = (si + sh.i) % rigLv().every === 0, d = null, i, j;
+  var ev = steps60(rigLv().every), go = (si + sh.i) % ev === 0, d = null, i, j, hc = ev * DT, hcap = rigLv().every * DT60, ns = !SUBSTEP_OFF && hc > hcap * 1.000001 ? Math.ceil(hc / hcap - 1e-9) : 1;   // 節拍照 60 Hz 的步數換、步長變大切小步（同帆，30_rig_physics.js physStep；TASK-0797／0798）
   for (i = 0; i < F.length; i++) {
     var f = F[i];
     if (f.wet) {
@@ -72,7 +73,7 @@ function shredStep(sh, wl, gv, si, chk) {
       if (chk && (f.wet += 0.1) > SH_WET) F.splice(i--, 1);
       continue;
     }
-    if (go) clothStep(sh, f, wl, gv);
+    if (go) { if (ns === 1) clothStep(sh, f, wl, gv); else for (var cs = 0; cs < ns; cs++) clothStep(sh, f, wl, gv, hc / ns); }
     if (!chk) continue;
     f.age += 0.1;
     if (f.age > SH_LIFE) { F.splice(i--, 1); continue; }

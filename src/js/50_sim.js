@@ -55,6 +55,38 @@ function aiSecond(sh, foe, dt) {
   }
 }
 
+// ───────────────────────── 船的移動切小步（TASK-0797） ─────────────────────────
+// 步長變大（物理設定「模擬步長」、擬真沙盒降 Hz）時，船一步走得多 ⇒ 船對船碰撞、擱淺壓得比較深才判到。照位移上限：
+// 船彼此靠近（間隔 < 兩邊這一步走的 ＋ 10 m）或有海圖（會擱淺）、這一步要走超過 SHIP_CAP ⇒ 帆（移動）＋碰撞＋擱淺切成幾小步；
+// 船體、船員照舊一整步。60 Hz ⇒ 一定 1（subSteps），走原本那一條、一行都不多算。
+var SHIP_CAP = 0.5;                                                  // 公尺
+function shipSubSteps() {
+  if (!(DT > DT60 * 1.000001)) return 1;
+  var need = 0, d = SHIPS.map(function (sh) { var hl = (sh.T.wl1 - sh.T.wl0) * S / 2; return { sh: sh, hl: hl, d: (Math.hypot(sh.vel[0], sh.vel[2]) + Math.abs(sh.yawRate || 0) * hl) * DT }; });
+  for (var i = 0; i < d.length; i++) {
+    var A = d[i]; if (A.sh.sunk) continue;
+    if (BED) need = Math.max(need, A.d);
+    for (var j = i + 1; j < d.length; j++) {
+      var B = d[j]; if (B.sh.sunk) continue;
+      if (Math.hypot(A.sh.px - B.sh.px, A.sh.pz - B.sh.pz) - A.hl - B.hl < A.d + B.d + 10) need = Math.max(need, A.d + B.d);
+    }
+  }
+  return subSteps(need, SHIP_CAP, DT);
+}
+/** 只更新船的矩陣（切小步時，碰撞與擱淺要看這一小步的位置）；畫面內插的「上一步」記在 Mpre（32_hull.js stepShip 取用）。 */
+function shipPose(sh) {
+  if (!sh.Mpre) sh.Mpre = sh.M;
+  sh.M = M4.mul(shipMatrix(sh), M4.ident()); sh.inv = M4.inv(sh.M); sh.center = shipCenter(sh);
+}
+/** 前 k 小步（最後一小步在 simStep 本來那一段）：帆（移動）→ 矩陣 → 碰撞 → 擱淺。 */
+function shipPreMove(k, h) {
+  for (var s = 0; s < k; s++) {
+    SHIPS.forEach(function (sh) { sailShip(sh, h); shipPose(sh); });
+    collide(h);
+    if (BED) SHIPS.forEach(function (sh) { groundStep(sh, h); });
+  }
+}
+
 // ───────────────────────── 一步 ─────────────────────────
 var VIEW_HOLD = false, VIEW_ACC = 0;                                // 只給人看的推進（viewStep）：畫面一格補好幾步時只在最後一步推一次（90_main.js frame 設 VIEW_HOLD）；快轉、無頭照舊每一步推
 function simStep() {
@@ -73,9 +105,11 @@ function simStep() {
   }
   SHIPS.forEach(burstStep);                                        // 連發剩下的那幾發（21_gunnery.js；burst ＝ 1 的砲什麼都不做）
   if (PF) pfLap('fire');
-  SHIPS.forEach(function (sh) { sailShip(sh, DT); if (sh.spins) spinStep(sh, DT); stepShip(sh, DT); if (sh.anc) chainStep(sh, DT); if (PF) pfLap('ship'); stepCrew(sh, DT); if (PF) pfLap('crew'); });
-  collide();
-  if (BED) SHIPS.forEach(groundStep);                              // 擱淺（32_ground.js；有海圖才有）
+  var nMv = shipSubSteps(), hMv = nMv === 1 ? DT : DT / nMv;       // 船的移動切小步（TASK-0797；60 Hz ⇒ 1、hMv ＝ DT）
+  if (nMv > 1) shipPreMove(nMv - 1, hMv);
+  SHIPS.forEach(function (sh) { sailShip(sh, hMv); if (sh.spins) spinStep(sh, DT); stepShip(sh, DT); if (sh.anc) chainStep(sh, DT); if (PF) pfLap('ship'); stepCrew(sh, DT); if (PF) pfLap('crew'); });
+  collide(hMv);
+  if (BED) SHIPS.forEach(function (sh) { groundStep(sh, hMv); });  // 擱淺（32_ground.js；有海圖才有）
   SHIPS.forEach(function (sh) {                                    // 照 SHIPS 的順序（一對一：我艦先、敵艦後 ⇒ 跟以前同一個順序抽亂數）
     if (sh.i === PLAYER_I) { if (AUTOFIRE) simAi(sh, DT); }            // 自動開砲：我艦也交給電腦瞄準開火
     else if (modeRule('othersAct')) simAi(sh, DT);                // 玩法規則 othersAct（04_modes.js）：沙盒的其他船不還手

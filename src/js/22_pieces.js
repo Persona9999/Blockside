@@ -78,7 +78,16 @@ function crush(pc, r) {
     if (segDist2(w, a[0], a[1], a[2], b[0], b[1], b[2]) < 2.25) damageCrew(sh, c, 120 * rr(0.6, 1.4), '倒下的桅');   // 血量 100 時約七成壓死
   });
 }
+/** 位移上限（TASK-0797）：碎塊一小步最多走 PIECE_CAP 公尺（落水那一下不衝太深、繞斷口倒不一步轉過頭）；60 Hz ⇒ 不切。 */
+var PIECE_CAP = 0.5;
 function stepPiece(pc, dt) {
+  var r = pc.hinge ? Math.sqrt(dot(sub(pc.c, pc.pivot), sub(pc.c, pc.pivot))) : 0, d = (pc.v ? len(pc.v) : 0) + (pc.w ? len(pc.w) * r : 0);
+  var n = subSteps(d * dt, PIECE_CAP, dt, true);
+  if (n === 1) return stepPiece1(pc, dt);
+  for (var i = 0; i < n; i++) if (!stepPiece1(pc, dt / n)) return false;
+  return true;
+}
+function stepPiece1(pc, dt) {
   pc.t += dt;
   var g = [0, -G, 0];
   if (pc.hull) {                                                // 斷開的半截船：水平慢慢停下、斷口那頭往下翹（最多約 35°）、往下沉越來越快

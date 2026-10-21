@@ -267,7 +267,7 @@ function chainSolve(sh, a, c, dt) {
   }
   var rest = Math.max(c.pay / N, 0.01), dt2 = dt * dt;
   for (i = 0; i <= N; i++) {                                            // 走一步（釘住的兩端等一下直接放）
-    o = i * 3; var wet = p[o + 1] < lv(p[o], p[o + 2]), d = wet ? CH_DMPW : CH_DMPA;
+    o = i * 3; var wet = p[o + 1] < lv(p[o], p[o + 2]), d = decay60(wet ? CH_DMPW : CH_DMPA, dt);   // 阻尼是 60 Hz 一步的（TASK-0798）
     var vx = (p[o] - q[o]) * d, vy = (p[o + 1] - q[o + 1]) * d, vz = (p[o + 2] - q[o + 2]) * d;
     q[o] = p[o]; q[o + 1] = p[o + 1]; q[o + 2] = p[o + 2];
     p[o] += vx; p[o + 1] += vy - (wet ? CH_GW : G) * dt2; p[o + 2] += vz;
@@ -302,6 +302,8 @@ function chainSolve(sh, a, c, dt) {
 }
 /** 每一步（50_sim.js，stepShip 之後 ⇒ sh.M 是這一步的）：在水裡的錨各一條、斷掉的往下沉。 */
 function chainStep(sh, dt) {
+  var ns = !SUBSTEP_OFF && dt > DT60 * 1.000001 ? Math.ceil(dt / DT60 - 1e-6) : 1;            // 步長變大 ⇒ 一小步最多 60 Hz 的一步（TASK-0797；Verlet 的鍊子步長大了會甩開）
+  if (ns > 1) { for (var s = 0; s < ns; s++) chainStep(sh, dt / ns); return; }
   var A = sh.anc, t0 = performance.now();
   ['P', 'S'].forEach(function (k) {
     var a = A[k];
