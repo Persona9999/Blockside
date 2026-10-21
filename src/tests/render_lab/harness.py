@@ -77,6 +77,9 @@ EXTRA = {
     # 2 burning sails, loose sails, ~150 loose ropes.
     'rig_torn_burn': {'q': 'ship=constitution,gloire&start=1&dist=far&seed=3&gfx=high', 'warm': 420, 'cam': {'ship': 1, 'dist': 55, 'pitch': 0.25, 'y': 28, 'yawOff': 0.5},
                       'hook': [AIM_SAIL % 5, {'ticks': 500}, AIM_SAIL % 1, {'ticks': 120}, BURN_SAILS, {'ticks': 360}]},
+    # R3 (TASK-0791) before/after close-up: the same two chain-shot broadsides as rig_torn_burn (no fire), camera close on Gloire's rig
+    'rig_torn_close': {'q': 'ship=constitution,gloire&start=1&dist=far&seed=3&gfx=high', 'warm': 420, 'cam': {'ship': 1, 'dist': 24, 'pitch': 0.2, 'y': 24, 'yawOff': 0.5},
+                       'hook': [AIM_SAIL % 5, {'ticks': 500}, AIM_SAIL % 1, {'ticks': 120}]},
     # night (tod=22: moon, lanterns and hull lamps bright, lantern halos)
     'gc_high_night': {'q': GC + '&gfx=high&tod=22', 'warm': 120, 'cam': {'ship': 0, 'dist': 32, 'pitch': 0.12, 'yawOff': -2.3}},
     # pieces + FLY (slow motion off, so the sim keeps stepping after the blast): Constitution's foremast is cut at its foot (falls as a
