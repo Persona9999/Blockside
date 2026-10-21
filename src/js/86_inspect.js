@@ -129,7 +129,7 @@ function inspHiDraw() {
     INSP.hi.forEach(function (m) {
       var me = sh.T.meshes[m.mesh]; if (!m.alive || !me) return; if (!me.vao) meshGpu(me);
       var C = INSP_PAL[(INSP.mc.get(m) || 0) % INSP_PAL.length]; gl.uniform4f(P2.u.uC, C[0], C[1], C[2], pass[1]);   // 每一件照它那一種的顏色（inspColSync）
-      var dv = m.ancD || m.vsl; gl.uniformMatrix4fv(P2.u.uModel, false, M4.mul(sh.M, dv ? M4.mul(trans(dv[0], dv[1], dv[2]), modelLocal(m)) : modelLocal(m)));   // 跟模型同一個擺法（60_rbatch.js rbatShip 同一條算式；modelWorld 拿掉了 ⇒ 勾的那幾件現算）
+      var dv = m.ancD || m.vsl; gl.uniformMatrix4fv(P2.u.uModel, false, M4.mul(sh.M, dv ? M4.mul(trans(dv[0], dv[1], dv[2]), meshDtM(me, modelLocal(m))) : meshDtM(me, modelLocal(m))));   // 跟模型同一個擺法（60_rbatch.js rbatShip 同一條算式；modelWorld 拿掉了 ⇒ 勾的那幾件現算）
       gl.bindVertexArray(me.vao); gl.drawArrays(gl.TRIANGLES, 0, me.n);
     });
   });

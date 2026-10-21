@@ -83,7 +83,7 @@ function stepShip(sh, dt) {
   sh.pitchA += (pitchT - sh.pitchA) * 0.3 * dt;
   stepWaves(sh, dt);                                                            // 浪：起伏、縱搖、橫搖（08_sea.js；以前是兩條固定的正弦）
   sh.lift += (sh.liftT - sh.lift) * Math.min(1, dt / LIFT_TAU);                    // 減重上浮：慢慢浮上去（目標每半秒在 survey 量一次）
-  sh.Mp = sh.M || null; sh.yawP = sh.yawL === undefined ? sh.yaw : sh.yawL; sh.yawL = sh.yaw;   // 上一步的（畫面內插用，03_camera.js renderLerp）
+  sh.Mp = sh.Mpre || sh.M || null; sh.Mpre = null; sh.yawP = sh.yawL === undefined ? sh.yaw : sh.yawL; sh.yawL = sh.yaw;   // 上一步的（畫面內插用，03_camera.js renderLerp）；Mpre：這一步的移動切了小步（50_sim.js shipPreMove）⇒ 上一步結束時那一個
   sh.M = M4.mul(shipMatrix(sh), M4.ident()); sh.inv = M4.inv(sh.M);
   sh.center = shipCenter(sh); sh.rad2 = Math.pow(Math.max(62, (sh.T.radFlags || 0) + 2), 2);   // 陣營旗在桅頂上方的旗桿上（77_colours.js）⇒ 62 m 搆不到（⛔ 以前一發都打不到）；沒有陣營旗 ⇒ 照舊 62
   manning(sh);
@@ -95,8 +95,9 @@ function stepShip(sh, dt) {
     if (sh.effOn) { var r0 = dt * gunRate(g); sh.effRk[0] += r0 * g.eff; sh.effRk[1] += r0; }   // 讀數 rk（45_galley.js galleyInfo）：裝填的加權平均倍數
   }
 }
+var SV_PROF = { n: 0, st: 0, cf: 0, tk: 0 };                         // ?debug=1：局勢檢查分段花多少 ms（st 結構那幾項、cf 船員腳下、tk 照時間的 tick；__game.prof；TASK-0801）
 function survey(sh) {               // 每半秒量一次：砲還在不在、桅還在不在、繩與帆的錨還在不在、少掉多少重量
-  var alive = 0;
+  var alive = 0, sv0 = DEBUG ? performance.now() : 0, sv1 = 0;
   sh.models.forEach(function (m) {
     if (!m.alive) return;
     if (m.falls) { if (m.falls.every(function (j) { return sh.ropes[j].dead; })) blowModel(sh, m, [0, -1, 0], true); return; }   // 掛著的（小艇）：吊索全斷才掉（10_ship.js hangFalls）
@@ -124,12 +125,14 @@ function survey(sh) {               // 每半秒量一次：砲還在不在、�
     if (!s.dead && !s.furled && (s.as.some(function (a) { return !hullGp(sh.grid, a); }) || s.par.some(function (j) { return sh.ropes[j].dead; }) ||
         (s.yards || []).some(function (y) { return !y.alive && !y.moved; }))) dropSail(sh, s);   // 掛它的帆桁被打斷或掉了 ⇒ 帆掉
   });
+  if (DEBUG) { sv1 = performance.now(); SV_PROF.st += sv1 - sv0; sv0 = sv1; }
   sh.crew.forEach(function (c) {   // 腳下 3×3 都沒了 ⇒ 掉下去（走路中的不算：途中跨過艙口邊）
     if (c.st >= 3 || c.walk || c.moving) return;
     if (c.gun && (c.gun.hd || (c.gun.mt && c.gun.mt.up)) && c.st === 0) return;   // 在砲塔上的砲旁（27_turret.js）⇒ 跟著砲轉、當成站在砲塔上（Tim 2026-10-17：「如果直接讓水手跟著砲轉呢」；⛔ 照腳下的格 ⇒ 莫尼特號的砲班轉到砲塔底下的艙口上就掉下去，開局 4 秒砲-b 剩 0 人）
     var x = Math.floor(c.pos[0]), y = Math.floor(c.pos[1]), fz = c.inBed ? c.medBed.origin[2] : c.pos[2];   // 躺在病床上：看床底下的地板（床是模型、不是格）
     if (!countBox(sh.grid, x - 1, y - 1, fz - 1, x + 1, y + 1, fz - 1) && turDeckAt(sh, [c.pos[0], c.pos[1], fz]) < 0) fallIn(sh, c);   // 下面船裡還有一層接得住 ⇒ 落在那一層；沒有才落水（40_crew.js）；踩在砲塔自己的格上（吊籃，27_turret.js）不算懸空
   });
+  if (DEBUG) { sv1 = performance.now(); SV_PROF.cf += sv1 - sv0; sv0 = sv1; }
   if (sh.mass0 === undefined) sh.mass0 = shipT(sh);                               // 開戰時的重量（壓艙物、砲的重量照開戰時的設定）
   if (!sh.broken && !sh.sinkingFinal && !sh.sunk) sh.liftT = liftFor(sh.T, sh.T.disp - sh.mass0 + massLost(sh)) || 0;   // 斷了、開始沉 ⇒ 不再往上浮
   if (!sh.liftSet) { sh.lift = sh.liftT; sh.liftSet = true; }                    // 開戰那一刻直接放在浮的位置（不從設計水線慢慢浮過去）
@@ -140,6 +143,7 @@ function survey(sh) {               // 每半秒量一次：砲還在不在、�
   sh.able = sh.crew.filter(crewAble).length;
   sh.gunsManned = sh.guns.filter(function (g) { return g.alive && gunRate(g) > 0; }).length;
   strikeCheck(sh);
+  if (DEBUG) { SV_PROF.tk += performance.now() - sv0; SV_PROF.n++; }
 }
 /** 降旗：規則在選單設定（STRIKE），每半秒量一次。死傷 ＝ 1 − 還能動的／開戰時的人數（傷與亡都算）。
  *  全員倒下一定停（死傷門檻上限就是 100%）—— 那不是投降，是沒人能打了。 */

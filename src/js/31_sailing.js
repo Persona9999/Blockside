@@ -221,8 +221,10 @@ var SHIPHIT_LV = [null, { foot: 1 }, { stride: 3 }, { stride: 1 }];
 var SHIPFRIC_LV = [null, { n: 0.03, t: 0.01 }, { n: 0.02, t: 0.003 }, { n: 0.012, t: 0.0008 }];   // 每步扣的比例：n ＝ 正面頂著那一份、t ＝ 擦邊那一份；null ＝ 原本（不管方向 ×0.97）
 var HIT_BRUTE = false;                                                   // 除錯（__game.shipHit 第四個參數）：不走八叉樹的篩、每個點都量 ⇒ 對拍用
 var HIT_PROF = { n: 0, ms: 0, max: 0, pairs: 0, touch: 0, pts: 0, nodes: 0, ram: 0, ramN: 0, ramMax: 0 };   // ram…：撞擊事件（ramTick）花了多少 ms、幾步、最久一步   // 讀數（__game.shipHit）：量了幾次、花多少 ms（最多一步幾 ms）、外框沒篩掉的配對、貼著幾次、真的換座標的點數、走過的八叉樹節點
-function collide() {
-  if (RAM_EV.length) { var tr = performance.now(); ramTick(DT); tr = performance.now() - tr; HIT_PROF.ram += tr; HIT_PROF.ramN++; if (tr > HIT_PROF.ramMax) HIT_PROF.ramMax = tr; }                                       // 撞擊事件（物理設定「碰撞傷害」）：好幾步慢慢壓、減速、最後反彈
+var COL_DT = 1 / 60;                                                   // 這一次碰撞判定代表幾秒（摩擦照它換；TASK-0797：步長大時船的移動切小步，一小步判一次）
+function collide(dt) {
+  COL_DT = dt || DT;
+  if (RAM_EV.length) { var tr = performance.now(); ramTick(COL_DT); tr = performance.now() - tr; HIT_PROF.ram += tr; HIT_PROF.ramN++; if (tr > HIT_PROF.ramMax) HIT_PROF.ramMax = tr; }                                       // 撞擊事件（物理設定「碰撞傷害」）：好幾步慢慢壓、減速、最後反彈
   if (SHIPS.length < 2) return;
   var lv = SHIPHIT_LV[PHX.shiphit] || null;
   if (!lv) {
@@ -249,10 +251,10 @@ function collidePair(A, B, ka, kb) {
 /** 摩擦：n ＝ 從 B 指向 A 的接觸法線（水平單位向量）。原本 ⇒ 兩艘都 ×0.97。 */
 function hitFriction(A, B, n) {
   var F = SHIPFRIC_LV[PHX.shipfric];
-  if (!F) { A.spd *= 0.97; B.spd *= 0.97; return; }
+  if (!F) { var k0 = decay60(0.97, COL_DT); A.spd *= k0; B.spd *= k0; return; }   // 每 60 Hz 一步乘的那一份 ⇒ 照這一段幾秒換（TASK-0798）
   [[A, -1], [B, 1]].forEach(function (q) {
     var sh = q[0], f = fwd(sh.yaw), c = Math.max(0, q[1] * (f[0] * n[0] + f[2] * n[2]) * Math.sign(sh.spd || 1));   // 航向（倒車照反方向）裡往對方頂的那一份（0..1）
-    sh.spd *= 1 - (F.n * c + F.t * (1 - c));
+    sh.spd *= decay60(1 - (F.n * c + F.t * (1 - c)), COL_DT);
   });
 }
 // ───── 撞擊（TASK-0652；Tim 2026-10-16：「船隻的碰撞傷害(只有在相對速度夠高時才判斷) 且船隻碰撞要全高」「碰撞傷害可以開關(在物理設定)」「碰撞要全開(每格)」

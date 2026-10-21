@@ -9,7 +9,7 @@
 //   dur（秒，預設 60）、every（秒，預設 10）、fyaw、fpitch、fdist、fty（鏡頭；fty ＝ 注視點在船中心上面幾公尺，看底艙給負的；⛔ 不叫 dist／pitch：dist 是開局兩艘船的距離、pitch 是 ?cam=deck 的俯角 —— 撞名量過：dist=38 把另一艘擺到旁邊、進水整個不一樣）、cut（half ＝ 剖面、none；預設 half）、deck（拿掉幾層甲板，預設 0）、xray（1 ＝ 透視）、
 //   boom（殉爆開局，TASK-0662：彈藥庫編號，0 後、1 前、0,1 兩間；浮穩之後直接整間炸 ⇒ 沒另外給 holes 就不打預設的洞；每一筆多記 ex ＝ 艙內最高水面離海面幾公尺（flabEx），另有每秒一筆的 trace）、
 //   w（截圖寬，預設 480）、flat（1 ＝ 浪設 0）、focus（step ＝ 每一筆把鏡頭對準水面差最大的那條兩池交界；cell:x:y ＝ 固定對準那一欄最高的水面 —— 照 fpitch／fdist 拉近、鏡頭擺在往船中心那一側，fyaw 不用）。
-// 對解析解（TASK-0806；Tim 2026-10-22，進水換演算法 TASK-0804 的第一步）：hz（模擬步長 60／30／10 Hz，同 84_fleetlab.js 換 DT；量完還原）、
+// 對解析解（TASK-0806；Tim 2026-10-22，進水換演算法 TASK-0804 的第一步）：hz（模擬步長 60／30／10 Hz：開局之後換 DT、DT_BASE；量完還原）、
 //   pin（1 ＝ 浮穩之後把船的位置與姿態釘住：每一步之後照浮穩那一刻還原、重算矩陣 ⇒ 水頭只由艙內水位決定）、pump（0 ＝ 這艘不抽水）、
 //   ref（1 ＝ 另算一條參考解 flabRef：那個洞通得到的艙內空間照格與世界高度由低往高填、Torricelli 照模擬自己的係數與破口面積、1 ms 一步積分）。
 //   都不給 ⇒ 跟加之前逐位相同（只多讀幾個網址參數）。
@@ -62,9 +62,9 @@ function flabMap(st, px) {
  *  ⚠ 截圖每次跑都會差一點（量過：還沒進水的 t 8 兩次就不一樣，換掉 Math.random 也一樣 ⇒ 畫面裡有別的跟真實時間走的東西）⇒ 比圖照像素差的大小比，不比位元組。 */
 function floodLab(o) {
   o = Object.assign({ holes: FLAB_HOLES, dur: 60, every: 10, yaw: 2.6, pitch: 0.42, dist: 0, cut: 'half', deck: 0, xray: false, w: 480, flat: false }, o || {});
-  var seaK = SEA_K, DT0 = DT; if (o.flat) SEA_K = 0;
-  if (o.hz > 0) DT = 1 / o.hz;                                           // 換模擬步長（TASK-0806）：開局之前換（同 84_fleetlab.js），量完還原
+  var seaK = SEA_K; if (o.flat) SEA_K = 0;
   flowMode('sandbox'); reset(); AUTOFIRE = false; flowRun(false);
+  var DT0 = DT; if (o.hz > 0) DT = DT_BASE = 1 / o.hz;                   // 換模擬步長（TASK-0806）：⛔ 要在 reset 之後換 —— 開局照物理設定重設 DT、DT_BASE（70_flow.js resetSteps，TASK-0805）；量完還原成開局設的
   var sh = SHIPS[0], i;
   SHIPS.forEach(function (s2) { s2.sailSet = 0; s2.power = 0; s2.manual = true; s2.rudder = 0; });
   if (SHIPS[1]) { SHIPS[1].px += 3000; SHIPS[1].pz += 3000; }
@@ -74,7 +74,7 @@ function floodLab(o) {
   if (o.pump === 0) { sh.cfg.pump = 0; sh.pumps = null; }                // 這艘不抽水（pumpK ⇒ 0；sh.cfg 是這艘自己的一份 cfgCopy）
   var out = { hull: sh.T.id, seed: SEED, lv: FLOOD_LV, c: sh.fl ? sh.fl.F.c : null, sea: SEA_K, o: { dur: o.dur, every: o.every, cut: o.cut, deck: o.deck, xray: !!o.xray }, holes: [], rows: [] };
   if (o.hz > 0) out.o.hz = o.hz; if (pin) out.o.pin = 1; if (o.pump === 0) out.o.pump = 0;   // 只在給了才記（⛔ 都不給 ⇒ 報表跟加之前逐位相同）
-  if (!sh.fl) { out.err = '進水是公式模式（物理效果的「進水」第 0 檔）⇒ 沒有艙內的水可畫；網址加 phx=mid／high／full'; SEA_K = seaK; DT = DT0; return out; }
+  if (!sh.fl) { out.err = '進水是公式模式（物理效果的「進水」第 0 檔）⇒ 沒有艙內的水可畫；網址加 phx=mid／high／full'; SEA_K = seaK; DT = DT_BASE = DT0; return out; }
   var T = sh.T, x0 = T.wl0, x1 = T.wl1;
   if (o.boom) o.boom.forEach(function (k) { var g = sh.mags[k]; if (g) magBoom(sh, g); out.holes.push({ boom: k, mag: g ? g.name : null }); });   // 殉爆開局（TASK-0662）：整間直接炸（同 __game.ignite(0, k, 'mag')）
   (o.boom && !o.holesSet ? [] : o.holes).forEach(function (hd) {
@@ -118,7 +118,7 @@ function floodLab(o) {
       img: flabShot(o.w), map: st ? flabMap(st, sh.fl.F.c >= 10 ? 10 : 6) : null });
   }
   if (o.ref) out.ref = flabRef(sh, out.trace, tHole);
-  FL_SNAP = snap0; FL_STAT = stat0; SEA_K = seaK; DT = DT0;
+  FL_SNAP = snap0; FL_STAT = stat0; SEA_K = seaK; DT = DT_BASE = DT0;
   return out;
 }
 

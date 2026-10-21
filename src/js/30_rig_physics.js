@@ -401,8 +401,8 @@ function solve(ea, eb, rest, brk, p, pin, k) {
 function hitGrid(g, p, q, o) {
   if (g.get(Math.floor(p[o]), Math.floor(p[o + 1]), Math.floor(p[o + 2])) && !g.get(Math.floor(q[o]), Math.floor(q[o + 1]), Math.floor(q[o + 2]))) { p[o] = q[o]; p[o + 1] = q[o + 1]; p[o + 2] = q[o + 2]; }
 }
-function clothStep(sh, c, wl, gv) {                    // c.kw：風壓倍率（帆的布片，34_shreds.js；帆 ＝ 1）；c.ev：這一塊幾步走一次（遠方的船放大，physStep）
-  var T = c.T.sim, n = T.n, p = c.p, q = c.q, pin = c.pin, tr = T.tris, A = CACC, N = CCNT, HC = (c.ev || rigLv().every) * DT, dt2 = HC * HC, inv = 1 / (3 * HC), dmp = DAMP * DAMP, kw = KW * (c.kw || 1), i, j, x;
+function clothStep(sh, c, wl, gv, h) {                 // c.kw：風壓倍率（帆的布片，34_shreds.js；帆 ＝ 1）；c.ev：這一塊幾步走一次（遠方的船放大，physStep）；h：切小步時這一小步幾秒（TASK-0797；沒給 ＝ 一整段）
+  var T = c.T.sim, n = T.n, p = c.p, q = c.q, pin = c.pin, tr = T.tris, A = CACC, N = CCNT, HC = h || (c.ev || steps60(rigLv().every)) * DT, dt2 = HC * HC, inv = 1 / (3 * HC), dmp = DAMP * DAMP, kw = KW * (c.kw || 1), i, j, x;
   A.fill(0, 0, n * 3); N.fill(0, 0, n);
   for (j = 0; j < tr.length; j += 3) {           // 風壓：每個三角形沿法線推，大小 ∝（相對風在法線上的分量）²，相對風扣掉布自己的速度
     if (c.torn && (c.brk[T.te[j]] || c.brk[T.te[j + 1]] || c.brk[T.te[j + 2]])) continue;
@@ -507,7 +507,7 @@ function ropePins(sh, o) {
 }
 function ropeStep(sh, o, wl, gv, dt) {                 // dt：這一次走多久（遠方的船 ＝ 幾步一次 × DT；沒給 ＝ DT）
   dt = dt || DT;
-  var p = o.p, q = o.q, n = o.n, pin = o.pin, dt2 = dt * dt, dmp = dt === DT ? DAMP : Math.pow(DAMP, dt / DT), i, x;
+  var p = o.p, q = o.q, n = o.n, pin = o.pin, dt2 = dt * dt, dmp = decay60(DAMP, dt), i, x;   // DAMP 是 60 Hz 一步的（TASK-0798；⛔ 以前照現在的 DT ⇒ 步長一改每秒的阻尼就跟著變）
   for (i = 0; i < n; i++) {
     if (pin[i]) continue;
     var j = i * 3;
@@ -531,14 +531,46 @@ function underWater(sh, p, i) { return wetAt(sh, [p[i * 3], p[i * 3 + 1], p[i * 
 //   這一段本來就只管畫出來的樣子（不碰 rnd()、不改命中）⇒ 開關不改戰局。鏡頭還沒算過（快轉、無頭對拍）⇒ 照常。
 var RIG_FAR = [null, { d1: 150, m1: 2, d2: 1e9, m2: 2, off: 2 }, { d1: 100, m1: 2, d2: 200, m2: 3, off: 4 }], RIG_FAR_HC = 0.1;
 function rigFarM(sh) { return evAsk('rigFar', 1, sh); }   // 鏡頭外、遠的船降級（03_camera.js camRigFar 回答；沒有畫面 ⇒ 1 ＝ 不降級）
-function physStep(sh) {
+// ── 照畫面格算（TASK-0799）──
+// 航行時（seaCalm：沒有敵艦在附近、沒有砲彈在飛，50_sim.js）帆布、垂下來的繩、帆的布片、帆的碰撞只給人看 ⇒ 畫面每一格算一次（90_main.js frame → physFrame），
+//   dt ＝ 這一格畫面的時間（快轉也只算畫面的那一段：×8 時布照 ×1 的速度飄 ⇒ 花費照格、不照倍數；慢動作照慢）。
+//   照舊每一模擬步算的（physGame）：帆桁追風、掛著的小艇 —— 會改到打中帆桁的那幾下 ⇒ 跟畫面快慢無關。
+//   跟帆桁走的繩（yardRopes：每 0.1 秒、帆桁有轉才重算＋重建繩的網格）航行時也改成照畫面的 0.1 秒（×8 時每真實秒最多 10 次，不是 80 次）：
+//     船員爬帆索照繩的位置走（42_hands.js）⇒ 航行時船員的位置跟畫面走過幾格有關（Tim 2026-10-22：「會影響戰局結果 沒問題的」）；交戰回到每步、照舊。
+//   交戰（不 calm）、沒有畫面（?demo、__game.run、無頭）⇒ 整段照舊在模擬步裡（physStep），逐位元不變。
+//   ⚠ 代價：從航行進入交戰的那一刻，布的形狀跟畫面走過幾格有關 ⇒ 開戰後頭幾發打中帆的那幾下可能不同（Tim 2026-10-22：不用跟 60 Hz 完全吻合）。
+var VIS_FRAME = false, PHF_I = 0, PHF_CHK = 0;                      // VIS_FRAME：這一格畫面布照畫面格算（frame 開頭設、結尾清 ⇒ frame 以外一律 false）；PHF_I 畫面格的序號（錯開各面帆）、PHF_CHK 累到 0.1 秒做一次「每 0.1 秒」的那幾項
+function physWind(sh) {                                              // 相對風、重力換進船的格座標
   var W = norm(WIND), ws = WIND_SAIL * WIND_K * (1 + GUST[0] * Math.sin(SIMT * 0.9 + sh.phase) + GUST[1] * Math.sin(SIMT * 2.7 + 1.3) + GUST[2] * Math.sin(SIMT * 6.1 + sh.phase * 2)) * WX.wind * WIND_SPD;   // 陣風（不用亂數）；天氣：暴風雨 ×2.2；風速會變（08_weather.js）
   ws = Math.min(ws, WIND_CAP);                                         // 上限（細節設定「風速上限」，預設 30 m/s；Tim 2026-10-15：暴風雨裡帆被吹成螺旋、「上限可以比這個變形幅度稍微小一點就好」⇒ 只夾暴風雨陣風的峰值（沒有上限時可到 50 m/s）；晴天峰值約 23、暴風雨平常約 23 都碰不到）
-  var wl = M4.dir(sh.inv, W[0] * ws - sh.vel[0], W[1] * ws - sh.vel[1], W[2] * ws - sh.vel[2]), gv = M4.dir(sh.inv, 0, -G, 0);
-  var si = Math.round(SIMT / DT), chk = si % 6 === 0, i, ev = rigLv().every, m = sh.rigM = rigFarM(sh), evk = ev * Math.max(1, Math.min(m, Math.floor(RIG_FAR_HC / (ev * DT) + 1e-6)));   // evk：布幾步走一次（遠方放大）
-  var ccOn = PHX.sailhit > 0 && PHX.rig >= 3;                       // 帆的碰撞（09_phx.js；Tim 2026-10-15：選項、預設關、帆與繩「高」才算）
+  return [M4.dir(sh.inv, W[0] * ws - sh.vel[0], W[1] * ws - sh.vel[1], W[2] * ws - sh.vel[2]), M4.dir(sh.inv, 0, -G, 0)];
+}
+/** 會改戰局的那一段（每一模擬步）：帆桁追風、每 0.1 秒跟帆桁走的繩、掛著的小艇。 */
+function physGame(sh, wl, gv, chk) {
   if (sh.yards.length) { braceYards(sh, wl, DT); if (chk) yardRopes(sh); }
   if (sh.hangs) swingHangs(sh, gv);
+}
+function physStep(sh) {
+  var w = physWind(sh), si = Math.round(SIMT / DT), chk = si % everySteps(0.1) === 0;   // chk 每 0.1 秒
+  physGame(sh, w[0], w[1], chk);
+  physVis(sh, w[0], w[1], si, chk, DT, DT);
+}
+/** 航行時只走帆桁追風、掛著的小艇（布、跟帆桁走的繩在 physFrame）。 */
+function physGameStep(sh) { var w = physWind(sh); physGame(sh, w[0], w[1], false); }
+/** 畫面這一格（90_main.js frame；VIS_FRAME）：每艘的布、垂下來的繩、布片走 h 秒（hs ＝ 這一格模擬走了多久：落海的布片照它退）。 */
+function physFrame(h, hs) {
+  var pt0 = performance.now(); PHF_I++; PHF_CHK += h;
+  var chk = PHF_CHK >= 0.1 - 1e-9; if (chk) PHF_CHK = 0;
+  SHIPS.forEach(function (sh) { if (sh.sink < 40) { var w = physWind(sh); if (chk && sh.yards.length) yardRopes(sh); physVis(sh, w[0], w[1], PHF_I, chk, h, hs); } });
+  clothContactsRun();
+  PHYS_MS = PHYS_MS * 0.98 + (performance.now() - pt0) * 0.02;
+}
+/** 只給人看的那一段：si ＝ 第幾步（或第幾格畫面）、h ＝ 一步（一格）幾秒、hs ＝ 這一段模擬走了多久（模擬步裡 ＝ DT）。 */
+function physVis(sh, wl, gv, si, chk, h, hs) {
+  var i, ev = stepsAt(rigLv().every, h), m = sh.rigM = rigFarM(sh), evk = ev * Math.max(1, Math.min(m, Math.floor(RIG_FAR_HC / (ev * h) + 1e-6)));   // evk：布幾步走一次（遠方放大）；every 照 60 Hz 的步數換（TASK-0798）
+  // 布的一小步最多幾秒（TASK-0797）：照 60 Hz 時這塊布一步走多久（every／60 × 遠方倍率，最多 RIG_FAR_HC）⇒ 步長變大（例 0.1 秒一步）時切小步，Verlet 不炸開；60 Hz 時 hc 一定 ≤ hcap ⇒ 不切
+  var hc = evk * h, hcap = Math.min(RIG_FAR_HC, rigLv().every * DT60 * Math.max(1, m)), ns = !SUBSTEP_OFF && hc > hcap * 1.000001 ? Math.ceil(hc / hcap - 1e-9) : 1;
+  var ccOn = PHX.sailhit > 0 && PHX.rig >= 3;                       // 帆的碰撞（09_phx.js；Tim 2026-10-15：選項、預設關、帆與繩「高」才算）
   for (i = 0; i < sh.ropes.length; i++) { var r = sh.ropes[i]; if (r.dead && !r.lz) { r.lz = true; if (!r.moved && !(sh.tCut && sh.tCut[i])) spawnLoose(sh, r); } }   // tCut：帆腳被打掉時已經垂下來了（tethCut）⇒ 不生第二條
   sh.sails.forEach(function (s, k) {
     var c = sh.cl[k];
@@ -551,9 +583,9 @@ function physStep(sh) {
     c.late = false;
     if (s.furled && !s.dead) {                                       // 收帆：物理開著 ⇒ 先演一段收上去（畫面上往帆桁／綁邊收攏，FURL_IN 秒）再藏；判斷照舊立刻算收起來（s.furled：航速、命中、鏈彈）
       if (c.hidden || !c.p || c.loose) { c.hidden = true; c.furlF = null; return; }
-      c.furlF = (c.furlF === null || c.furlF === undefined ? 1 : c.furlF) - DT / FURL_IN;
+      c.furlF = (c.furlF === null || c.furlF === undefined ? 1 : c.furlF) - h / FURL_IN;
       if (c.furlF <= 0) { furlFreeze(sh, c); c.hidden = true; c.furlF = null; sh.rigDirty = true; return; }   // 演完那一格凍結下來照畫、繩留著（furlFreeze）；rigDirty：重做繩（11_rig_gpu.js buildRig）
-    } else if (c.furlF !== null && c.furlF !== undefined && !c.hidden) { c.furlF += DT / FURL_OUT; if (c.furlF >= 1) c.furlF = null; }   // 張帆（或收到一半又張）：從帆桁放下來
+    } else if (c.furlF !== null && c.furlF !== undefined && !c.hidden) { c.furlF += h / FURL_OUT; if (c.furlF >= 1) c.furlF = null; }   // 張帆（或收到一半又張）：從帆桁放下來
     var reopen = seen && c.hidden === true && !s.furled;               // 開局初次啟用不是重新張帆；makeShip 確實以 hidden:true 建立
     if (c.hidden || !c.p) { c.fz = null; var keep = c.p && c.torn ? { brk: c.brk, bbrk: c.bbrk, tv: c.tv } : null; clothInit(c); clothBrace(sh, c); c.hidden = false; if (keep) { c.brk = keep.brk; c.bbrk = keep.bbrk; c.tv = keep.tv; c.torn = true; } if (reopen) { c.furlF = 0; sh.rigDirty = true; } }   // 收帆再張：形狀重來、破洞留著；從收攏的樣子放下來（furlF 0 → 1）
     if (c.tt === undefined) { var tl = tethOf(sh, s, c); c.tt = tl.length ? tl : null; }
@@ -562,7 +594,7 @@ function physStep(sh) {
     if (chk || c.npin < 0) clothPins(sh, s, c);
     yardPins(sh, c);
     c.ev = evk;
-    if ((si + k + sh.i + 1) % evk === 0) { var t0 = DEBUG ? performance.now() : 0; clothStep(sh, c, wl, gv); if (DEBUG) PROF.cloth += performance.now() - t0; }
+    if ((si + k + sh.i + 1) % evk === 0) { var t0 = DEBUG ? performance.now() : 0; if (ns === 1) clothStep(sh, c, wl, gv, hc); else for (var cs = 0; cs < ns; cs++) clothStep(sh, c, wl, gv, hc / ns); if (DEBUG) PROF.cloth += performance.now() - t0; }
     if (ccOn && (si + k + sh.i + 1) % evk === 0 && c.p && !c.hidden && !c.gone) CC_Q.push({ sh: sh, c: c });   // 帆的碰撞（TASK-0603）：開了才排、跟布同一步；這一步全部的船走完才照時間預算解（clothContactsRun，50_sim.js）
     if (chk && c.loose && !c.npin) { c.free += 0.1; if (c.free > 12 || underWater(sh, c.p, 0) && underWater(sh, c.p, c.T.sim.n >> 1)) c.gone = true; }
   });
@@ -574,9 +606,10 @@ function physStep(sh) {
     }
     looseFollow(sh, o);                                                  // 釘著的那一端跟著帆桁、母繩走（looseMark）
     if (m > 1 && (si + i + sh.i) % m) continue;                          // 遠方：每 m 步走一次
-    var t1 = DEBUG ? performance.now() : 0; ropeStep(sh, o, wl, gv, m * DT); if (DEBUG) PROF.rope += performance.now() - t1;
+    var t1 = DEBUG ? performance.now() : 0, rns = !SUBSTEP_OFF && h > DT60 * 1.000001 ? Math.ceil(h / DT60 - 1e-6) : 1, rh = m * h / rns;   // 垂下來的繩：一小步最多 60 Hz 的一步 × 遠方倍率（TASK-0797；60 Hz ⇒ rns 1、跟以前一樣 m × DT）
+    for (var rs = 0; rs < rns; rs++) ropeStep(sh, o, wl, gv, rns === 1 ? m * h : rh); if (DEBUG) PROF.rope += performance.now() - t1;
   }
-  var t2 = DEBUG ? performance.now() : 0; shredStep(sh, wl, gv, si, chk); if (DEBUG) PROF.shred += performance.now() - t2;   // 帆的布片（34_shreds.js）
+  var t2 = DEBUG ? performance.now() : 0; shredStep(sh, wl, gv, si, chk, h, hs); if (DEBUG) PROF.shred += performance.now() - t2;   // 帆的布片（34_shreds.js）
 }
 /** 開關物理（選單、B 鍵、下方按鈕）：開 ⇒ 帆從雕刻作品那一刻的形狀開始動；之前就斷掉的繩、掉下來的帆也垂下來
  *  （被斷開的那一團帶走的、一開始就不畫的除外）。關 ⇒ 回到靜態。 */

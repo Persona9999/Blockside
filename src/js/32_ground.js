@@ -24,8 +24,9 @@ function groundKeel(T) {
   }
   return (T.keel = out);
 }
-function groundStep(sh) {
+function groundStep(sh, dt) {                                           // dt：這一次代表幾秒（TASK-0797：船的移動切小步時一小步判一次；沒給 ＝ DT）
   if (!BED || sh.sunk) return;
+  dt = dt || DT;
   var K = groundKeel(sh.T), best = 0, bp = null, low = Infinity;
   for (var k = 0; k < K.length; k++) {
     var p = M4.pt(sh.M, K[k][0], sh.T.cy, K[k][1]), pen = bedHgt(p[0], p[2]) - p[1];
@@ -36,7 +37,7 @@ function groundStep(sh) {
   if (!bp) { if (sh.grnd) sh.grnd = null; return; }
   var m = bedMat(bp[0], bp[2]), hard = GRD_HARD[m] !== undefined ? GRD_HARD[m] : 0.5, g = bedGrad(bp[0], bp[2]), gl = Math.hypot(g[0], g[1]);
   var F = fwd(sh.yaw), dir = sh.spd < 0 ? -1 : 1, up = gl > 1e-6 ? dir * (F[0] * g[0] + F[2] * g[1]) / gl : 0, v0 = Math.abs(sh.spd);
-  sh.spd *= Math.max(0, 1 - DT * (0.5 + 2.5 * best) * (1 + Math.max(0, up)));
+  sh.spd *= Math.max(0, 1 - dt * (0.5 + 2.5 * best) * (1 + Math.max(0, up)));
   if (best > 1.2 && gl > 1e-6) { var push = Math.min(0.5, (best - 1.2) * 0.25); sh.px -= g[0] / gl * push; sh.pz -= g[1] / gl * push; }
   if (!sh.grnd) {
     sh.grnd = { t: SIMT, m: m, pen: best, lost: 0 };

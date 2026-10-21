@@ -615,7 +615,14 @@ function blowStyle(m) { var b = m.meta && m.meta.blow; return b === 'fly' || b =
  *  停＋滑超過 FALL_REST_MAX 秒還在船上（例：卡在兩舷都是格子的地方）⇒ 拿掉。⛔ 只是演出：FLY 不讀也不抽戰局的亂數。 */
 var FALL_SLIDE_T = 3, FALL_SLIDE_A = 1.2, FALL_SLIDE_V = 3, FALL_REST_MAX = 30;
 function flyColFree(sh, x, y, z) { for (var k = Math.floor(z); k >= 0; k--) if (sh.grid.get(x, y, k)) return false; return true; }   // 船的格座標 (x, y) 那一欄、z 以下一格都沒有
+/** 位移上限（TASK-0797）：飛出去、掉下來的模型一小步最多走一格（S 公尺）⇒ 「掉到甲板上停住」只看終點也不會一步穿過甲板；停著的照一整步；60 Hz ⇒ 不切。 */
 function stepFly(f, dt) {
+  var n = f.rest ? 1 : subSteps(len(f.v) * dt, S, dt, true);
+  if (n === 1) return stepFly1(f, dt);
+  for (var i = 0; i < n; i++) { if (!stepFly1(f, dt / n)) return false; if (f.rest) { var left = dt - dt / n * (i + 1); if (left > 1e-9) return stepFly1(f, left); return true; } }   // 中途停住了 ⇒ 剩下的時間照停著走
+  return true;
+}
+function stepFly1(f, dt) {
   f.t += dt;
   if (f.rest) {                                                          // 停在船上（'fall' 掉到甲板、桅樓上）：跟著船走；船沉了照樣跟著下去
     f.rt = (f.rt || 0) + dt;

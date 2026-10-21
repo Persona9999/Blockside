@@ -65,6 +65,24 @@ var MAX_SHIPS = CFG.limits.maxShips, MASK_NEAR = CFG.limits.maskNear, FLEET_MAX 
 /** 每 sec 秒一次 ＝ 每幾步（照現在的步長 DT；擬真沙盒可以把物理降到 30／20／15／10 Hz）。60 Hz 時 ＝ 以前寫死的步數（3 秒 180、半秒 30）。 */
 function everySteps(sec) { return Math.max(1, Math.round(sec / DT)); }
 var DT = 1 / 60, G = 9.81, V0 = 175, ZW0 = 63;    // ZW0：沒有 meta 時的設計水線（憲法號吃水 63 格，basecamp 的下水段同一個數）；每種船的在 T.zw
+// ── 模擬步長可調（TASK-0797／0798／0805）：DT 照物理設定「模擬步長」開戰時決定（70_flow.js），擬真沙盒照沙盒的 Hz ──
+// 以前很多地方照 60 Hz 寫：「幾步一次」、「每一步乘 k 的衰減」。DT60 ＝ 那個基準；下面三支把它換到現在的步長。
+// 三支在 DT ＝ 1/60 時都回原數（不做任何浮點運算）⇒ 60 Hz 跟改之前逐位元相同。
+var DT60 = 1 / 60;
+/** 照 60 Hz 寫的「n 步一次」換成現在步長的步數（30 Hz ⇒ 一半，最少 1）。 */
+function stepsAt(n, dt) { return dt === DT60 ? n : Math.max(1, Math.round(n * DT60 / dt)); }   // 60 Hz 的 n 步換成一步 dt 秒的步數（帆與繩照畫面格算時 dt ＝ 一格，TASK-0799）
+function steps60(n) { return stepsAt(n, DT); }
+/** 照 60 Hz 寫的「每一步乘 k」換成走 dt 秒的倍率（k^(dt × 60)）。 */
+function decay60(k, dt) { return dt === DT60 ? k : Math.pow(k, dt / DT60); }
+/** 每一小步的位移上限（TASK-0797；Tim 2026-10-21：「無視模擬步時長 限制每步上限位移」）：走 dt 秒、這一步要移動 dist ⇒ 切成幾小步，
+ *  每一小步最多 cap（單位照呼叫端：公尺或格）；但不切得比 60 Hz 一步更細 ⇒ 1/60 秒一步時永遠 1（跟以前逐位元相同、不多花），
+ *  步長變大時最多切回 60 Hz 的步數 ⇒ 穿透不會比 60 Hz 更容易、花費不會比 60 Hz 更多。 */
+var SUBSTEP_OFF = DEBUG && Q.get('nosub') === '1';                     // 反向對照（?debug=1&nosub=1）：位移上限關掉 ⇒ 步長大的時候照樣一步走完
+function subSteps(dist, cap, dt, fine) {
+  if (SUBSTEP_OFF || !(dt > DT60 * 1.000001)) return 1;
+  var n = Math.ceil(dist / cap - 1e-9);
+  return Math.max(1, fine ? Math.min(n, 64) : Math.min(Math.ceil(dt / DT60 - 1e-6), n));   // fine：數量少、算得便宜的（掉落物、碎塊）⇒ 真的照上限切（最多 64 段）；⛔ 照 60 Hz 封頂 ⇒ 一格厚的甲板照樣穿（10 Hz、15 m/s 量到的）
+}
 var RELOAD = 7, RELOAD_SANDBOX = 1.6;
 var AMMO = ['實心彈', '爆裂彈', '鏈彈'];
 var S;                                            // 公尺／格（封裝檔的 header；每種船都要一樣）。中線、外框、水線…每種船各一份：sh.T（05_hull.js）
