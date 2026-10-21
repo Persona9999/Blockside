@@ -64,9 +64,9 @@ var HULL_DEF = (HULL_LIST[0] || HULL_KNOWN[0]).id;                      // 預�
 var HULLS = {}, HULLT = {};                                             // id → 載入中的 Promise ／ 載好的船型
 // 裝飾（TASK-0682；Tim 2026-10-17：「裝飾移除是在船隻載入時就不載入裝飾」「可以隱藏的裝飾都不算重量」）：雕刻模型 meta deco=1。
 //   載入船型時一律從 rig.models 拿掉（⇒ 不算重量、不被打、不掉下來、不抽 rnd()：開或關戰局逐項相同，07_gfx.js 的規矩），一律收進 T.decos、網格一律建 ——
-//   畫不畫是畫面那一格的事（60_render.js drawModels 每格看 GFX.deco；砲門蓋板的演出 62_ports.js portsAnim 也看它）⇒ 切畫質立刻生效、船不重新載入。
+//   畫不畫是畫面那一格的事（60_render.js drawModels 每格看 GFX.deco；砲門蓋板另外看「砲門的開關演出」輪不輪到這艘：輪到 ⇒ 不看「裝飾」一定畫，62_ports.js portOn）⇒ 切畫質立刻生效、船不重新載入。
 //   （Tim 2026-10-20：「一樣載入，只是低畫質不顯示」—— 之前關著就不建網格、切了要丟掉船型重新載入，那條路兩次害開場「載入失敗」；拿破崙號多的只有 5 份網格、3% 三角形。）
-//   規格表標 deco 的 kind（config/meta_kinds.json；TASK-0719 砲門蓋板 kind=portlid，Tim 2026-10-19：「炮門屬於裝飾物 因此相關機制在低畫質不啟用」）本身就是裝飾 ⇒ meta 不用另寫 deco=1
+//   規格表標 deco 的 kind（config/meta_kinds.json；TASK-0719 砲門蓋板 kind=portlid，Tim 2026-10-19：「炮門屬於裝飾物」；10-21「炮門在所有畫質下都預設顯示」⇒ 畫不畫另外看 portOn）本身就是裝飾 ⇒ meta 不用另寫 deco=1
 //   （⛔ 照 meta deco=1：雕刻端漏寫一片 ⇒ 那片變成模擬模型（擋彈、抽亂數），光榮號的戰局悄悄跟著畫質變）。
 function isDeco(m) { var v = m && m.meta && m.meta.deco; if (m && m.meta && kindProp(m.meta.kind, 'deco')) return true; return v !== undefined && v !== null && v !== '' && v !== '0' && v !== 0 && v !== false; }
 /** 載入時拆出裝飾（buildHull 一開頭）：h.rig.models 只留不是裝飾的；回 { decos：裝飾件, n：幾件, skip：模型、裝飾都沒用到的網格編號（不建、不上 GPU） }。 */

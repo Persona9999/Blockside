@@ -3,7 +3,7 @@
 // ⛔ 只改畫面：這裡的值一個都不能被 step() 讀到（反向對照：同一個種子，低與高跑同樣秒數，戰局讀數逐項相同）。
 //   浪的大小（SEA_K）是物理，在細節設定；這裡的「海面細緻度」只是網格多密、漣漪幾道。
 // 每一項怎麼畫在 60_render.js（管線：陰影圖 → 反射 → 場景 → 折射 → 海 → 粒子 → 縮放貼到畫布）。
-// 網址：?gfx=low|mid|high|ultra（縮圖、對拍用；ultra ＝ 全開），單項 ?g_shadow= ?g_refl= ?g_refr= ?g_sea= ?g_res= ?g_aa= ?g_rain= ?g_drops= ?g_dropspl= ?g_door= ?g_port= ?g_deco=（數字 ＝ 第幾檔，從 0 起）。
+// 網址：?gfx=low|mid|high|ultra（縮圖、對拍用；ultra ＝ 全開），單項 ?g_shadow= ?g_refl= ?g_refr= ?g_sea= ?g_res= ?g_aa= ?g_rain= ?g_drops= ?g_dropspl= ?g_door= ?g_port= ?g_deco=（數字 ＝ 第幾檔，從 0 起；g_port 例外：0 關、1 每艘、2 只有我艦）。
 // 雨有兩種、各自一項：「雨」＝ 整個畫面一層的雨絲（01_gl.js P.rain）；「雨滴（3D）」＝ 3D 空間裡的雨絲粒子（14_rain.js）。高 ＝ 只開 3D（Tim 2026-10-13）；自訂可以兩種一起開。3D 雨滴打在海面與船上的水花另外一項（雨滴水花，Tim：要能開關）。
 var GFX_ITEMS = [
   { k: 'shadow', name: '陰影', opt: ['關', '低（陰影圖 2048）', '高（陰影圖 4096、柔邊）', '全開（同高、距離 × 1.5）'] },   // 全開（Tim 2026-10-21「可以加一檔全開畫質 繪製陰影&植物距離再多1.5倍」）：60_render.js shFar ⇒ 分段的最遠距離、單張的範圍 × 1.5   // 船、地形、樹、城鎮都有，船數不影響；畫法、分段、陰影圖大小在下面的「陰影細項」（SHK；60_render.js shadowPass）
@@ -16,7 +16,9 @@ var GFX_ITEMS = [
   { k: 'drops', name: '雨滴（3D）', opt: ['關', '少（1500）', '中（3000）', '多（6000）'] },   // 只在暴風雨下：3D 空間裡的雨絲粒子（14_rain.js）
   { k: 'dropspl', name: '雨滴水花', opt: ['關', '開'] },                                    // 3D 雨滴打在海面與船上濺起的小水花
   { k: 'door', name: '門的開關演出', opt: ['關（一直關著）', '開（有人經過才開）'] },          // 門、艙蓋（TASK-0638，25_doors.js）：人照樣通過、門照樣擋水，這一項只管畫面
-  { k: 'port', name: '砲門的開關演出', opt: ['關（蓋板開著、砲推出去不動）', '開（交戰掀蓋推砲、沒事收砲闔蓋、砲口下水就關）'] },   // 砲門（TASK-0719，62_ports.js）：有蓋板（裝飾）、畫質「裝飾」開著的船才有；戰局不讀。⛔ 併進 door：門三檔都開、砲門低畫質關；只靠「裝飾」：沒有 ?g_port= 做反向對照
+  { k: 'port', name: '砲門的開關演出', opt: ['關（蓋板開著、砲推出去不動；「裝飾」也關 ⇒ 不畫蓋板）', '每艘（交戰掀蓋推砲、沒事收砲闔蓋、砲口下水就關）', '只有我艦（別艘照「關」）'], ord: [0, 2, 1] },   // 砲門（TASK-0719，62_ports.js portOn）：有蓋板（裝飾）的船才有；戰局不讀。輪到的船 ⇒ 蓋板不看「裝飾」一定畫、一定演；沒輪到 ⇒ 蓋板回到一般裝飾、照「裝飾」畫不畫、沒有後座。
+  //   Tim 2026-10-21「炮門在所有畫質下都預設顯示」「炮門開關選項多一個可以設定只顯示我艦(低畫質下預設這個)」「然後保留關閉(手動關)」「實際看過炮門的重要性太高了(演出差很多)」⇒ 低 ＝ 只有我艦、中以上 ＝ 每艘；關只給玩家手動選。
+  //   值照加進來的先後（0 關、1 每艘 ＝ 以前的「開」、2 只有我艦）⇒ 舊存檔、?g_port=0／1 意思不變；畫質頁照 ord 排成 關／只有我艦／每艘。⛔ 併進 door：門只管門；只靠「裝飾」：沒有 ?g_port= 做反向對照
   { k: 'fall', name: '艙內水幕', opt: ['關', '開（往下一層流的水畫成水幕）'] },   // 進水的粒子模式（TASK-0651，33_flood.js flFalls）：水照樣往下流，這一項只管畫面
   { k: 'pdep', name: '艙內水的深淺', opt: ['關（一片均勻的半透明）', '開（越深越不透明、貼邊淡出）'] },   // TASK-0654（33_flood.js FL_DEP_GLSL）：讀場景深度；海水折射不是「高」⇒ 有水的那幾格多複製一次深度
   { k: 'pside', name: '艙內水的側面與水瀑', opt: ['關', '開（水面邊上畫側面、兩池交界畫水瀑）'] },   // TASK-0654（33_flood.js flSides）
@@ -49,7 +51,7 @@ function gfxCatSum(c) {
 }
 function gfxOpts(n, f) { var r = []; for (var i = 0; i < n; i++) r.push(f(i)); return r; }
 var GFX_PRESET = {
-  low: { shadow: 0, refl: 0, refr: 0, sea: 0, res: 1, aa: 0, rain: 0, drops: 0, dropspl: 0, door: 1, port: 0, fall: 1, pdep: 0, pside: 1, pedge: 0, masks: 2, deco: 0, tlamp: 0, treed: 0, plant: 0 },   // 門的演出很便宜（每扇每格掃一次船員）⇒ 三檔都開；砲門跟裝飾一樣低畫質關（Tim 2026-10-19：「炮門屬於裝飾物 因此相關機制在低畫質不啟用」）
+  low: { shadow: 0, refl: 0, refr: 0, sea: 0, res: 1, aa: 0, rain: 0, drops: 0, dropspl: 0, door: 1, port: 2, fall: 1, pdep: 0, pside: 1, pedge: 0, masks: 2, deco: 0, tlamp: 0, treed: 0, plant: 0 },   // 門的演出很便宜（每扇每格掃一次船員）⇒ 每一檔都開；砲門低畫質 ＝ 只有我艦（port 2；Tim 2026-10-21，推翻 10-19 的「炮門屬於裝飾物 因此相關機制在低畫質不啟用」）⇒「裝飾」關著我艦照樣畫蓋板、演開關，別艘不畫
   mid: { shadow: 1, refl: 1, refr: 1, sea: 1, res: 2, aa: 1, rain: 1, drops: 0, dropspl: 0, door: 1, port: 1, fall: 1, pdep: 1, pside: 1, pedge: 1, masks: MASK_NEAR, deco: 1, tlamp: 1, treed: 1, plant: 1 },
   high: { shadow: 2, refl: 2, refr: 2, sea: 2, res: 2, aa: 1, rain: 0, drops: 3, dropspl: 1, door: 1, port: 1, fall: 1, pdep: 1, pside: 1, pedge: 1, masks: MASK_NEAR, deco: 1, tlamp: 2, treed: 2, plant: 2 },
   ultra: { shadow: 3, refl: 2, refr: 2, sea: 2, res: 2, aa: 1, rain: 0, drops: 3, dropspl: 1, door: 1, port: 1, fall: 1, pdep: 1, pside: 1, pedge: 1, masks: MASK_NEAR, deco: 1, tlamp: 2, treed: 3, plant: 2 } };   // 全開 ＝ 高＋陰影與立體樹的距離 × 1.5（Tim 2026-10-21）   // 最高 ＝ 每艘都有（Tim 2026-10-13「最高畫質開到 N」）

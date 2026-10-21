@@ -132,7 +132,7 @@ var PREF_ITEMS = [
     function (p) {
       if (!(p.gfx && typeof p.gfx === 'object' && !Q.has('gfx'))) return;
       GFX_ITEMS.forEach(function (it) { var x = prefOk(p.gfx[it.k], [0, it.opt.length - 1], true); if (x !== undefined && !Q.has('g_' + it.k)) GFX[it.k] = x; });
-      if (p.gfx.port === undefined && !Q.has('g_port')) { var dx = prefOk(p.gfx.deco, [0, 1], true); GFX.port = dx !== undefined ? dx : GFX.deco; }   // 舊存檔（TASK-0719 之前）沒有「砲門」⇒ 照「裝飾」補：存「低」的讀回來還是低（⛔ 照預設檔 mid 的 1 ⇒ 主選單變「自訂」）
+      if (p.gfx.port === undefined && !Q.has('g_port')) for (var lv in GFX_PRESET) { var pr = GFX_PRESET[lv]; if (GFX_ITEMS.every(function (it) { return it.k === 'port' || GFX[it.k] === pr[it.k]; })) { GFX.port = pr.port; break; } }   // 舊存檔（TASK-0719 之前）沒有「砲門」⇒ 其他項跟哪一檔一樣就照那一檔補（低 ＝ 只有我艦、中以上 ＝ 每艘）：存「低」的讀回來還是低（⛔ 照預設檔 mid ⇒ 變「自訂」）；都對不上 ⇒ 照預設檔
     }),
   prefBool('fps', false, function () { return GFX_FPS; }, function (x) { GFX_FPS = x; }, null),
   prefAny('snd', function (o) {                                         // 聲音設定（02_music.js，TASK-0677）
