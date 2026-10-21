@@ -57,7 +57,7 @@ function gunCrew(cw, type) { var n = cw.guns && cw.guns[type]; return n === unde
 // 艦名（TASK-0552；Tim 2026-10-14：參考歷史同級艦）：ships[].names ＝ 那一型的艦名池（第一個 ＝ 原名；沒給 ⇒ 只有原名），同一場照編成的順序發（52_fleet.js fleetNames）；
 //   池子用完拿公共池 names_pub，再用完 ⇒ 原名＋序號。憲法號：同級的 44 砲巡防艦（合眾國號、總統號），再來是照它們的設計造的 44 砲巡防艦；公共池：同時代美國海軍的巡防艦。
 //   餘燼號、夜隼號是 basecamp、summit 的船：她們給艦名池之前只有原名。
-var HULL_KNOWN = CFG.ships.map(function (s) { var h = { id: s.id, el: s.el, name: s.name, geo: s.geo, crew: s.crew, rooms: s.rooms, lamps: s.lamps, flags: s.flags, names: s.names && s.names.length ? s.names : [s.name] }; if (s.zw0) h.zw0 = s.zw0; if (s.material) h.material = s.material; if (s.author) h.author = s.author; if (s.drive) h.drive = s.drive; if (s.fireEngine === false) h.fireEngine = false; if (s.theme) h.theme = s.theme; if (s.variant_of) h.variant_of = s.variant_of; return h; });   // material：全船預設材質（05_material.js）；author：建造者（admin.py 匯入時從 .vxk 檔頭 owner 記；船隻配置頁顯示）
+var HULL_KNOWN = CFG.ships.map(function (s) { var h = { id: s.id, el: s.el, name: s.name, geo: s.geo, crew: s.crew, rooms: s.rooms, lamps: s.lamps, flags: s.flags, names: s.names && s.names.length ? s.names : [s.name] }; if (s.zw0) h.zw0 = s.zw0; if (s.material) h.material = s.material; if (s.author) h.author = s.author; if (s.drive) h.drive = s.drive; if (s.fireEngine === false) h.fireEngine = false; if (s.theme) h.theme = s.theme; if (s.variant_of) h.variant_of = s.variant_of; if (s.fit) h.fit = s.fit; return h; });   // material：全船預設材質（05_material.js）；author：建造者（admin.py 匯入時從 .vxk 檔頭 owner 記；船隻配置頁顯示）
 var SHIP_NAMES_PUB = CFG.names_pub || [];
 var HULL_LIST = HULL_KNOWN.filter(function (h) { return VK.hasEmbedded(h.el); });   // 內嵌的、或拆檔成品清單上有的（voxelkit.js embeddedBytes）
 var HULL_DEF = (HULL_LIST[0] || HULL_KNOWN[0]).id;                      // 預設的船：清單裡第一艘有內嵌資料的
@@ -106,17 +106,17 @@ function fleetTrim(F) { while (F[0].length + F[1].length > FLEET_MAX) { var s = 
 /** 編成裡用到的船型（不重複；我艦那一型第一個）。 */
 function fleetHulls() { return FLEET_SET[0].concat(FLEET_SET[1]).filter(function (id, i, a) { return a.indexOf(id) === i; }); }
 function myHull() { return FLEET_SET[0][0]; }
-function hullInfo(id) { return HULL_LIST.filter(function (h) { return h.id === id; })[0] || null; }
+function hullInfo(id) { id = hullBase(id); return HULL_LIST.filter(function (h) { return h.id === id; })[0] || null; }   // id 可以是艦隊裡的一項「船型@換裝表」（38_fit.js）
 /** 船型（解碼、網格化一次，之後都拿同一份）。分成幾步、每步之間讓出一次（Tim 2026-10-12：進到主選單之後才解析，解析完之前不能開戰、但可以調設定）；
  *  每一步開始時呼叫 hullSay（主選單的開戰鈕寫進度）。 */
 function loadHull(id) {
   if (HULLS[id]) return HULLS[id];
   var info = hullInfo(id);
   if (!info) return Promise.reject(new Error('沒有這艘船：' + id));
-  var t0 = performance.now();
+  var t0 = performance.now(), F = fitOf(id);                              // 換裝表（38_fit.js）：id 是「船型@換裝表」⇒ 照那一份；船型 ⇒ 出廠 ⊕ 玩家存檔
   hullSay(info.name + '：解碼…');
-  return (HULLS[id] = yieldUI().then(function () { return Promise.all([VK.loadEmbedded(info.el).then(meshPool), cacheGet(info)]); })   // 解碼與讀快取一起跑（06_cache.js）
-    .then(function (r) { return buildHull(info, r[0], t0, r[1]); })
+  return (HULLS[id] = yieldUI().then(function () { return Promise.all([VK.loadEmbedded(info.el).then(meshPool).then(function (model) { return fitLoad(model.header, F).then(function (X) { model.fitExt = X; return model; }); }), cacheGet(info, id, F)]); })   // 解碼與讀快取一起跑（06_cache.js）；換裝要從別艘拿的零件先載好
+    .then(function (r) { return buildHull(info, r[0], t0, r[1], id, F); })
     .then(function (T) { HULLT[id] = T; cachePut(T, info); return T; }));
 }
 /**
@@ -248,9 +248,10 @@ function yieldRun() {
 }
 var hullSay = function () {};                                            // 90_main.js 換成寫進度的那支
 /** C：快取的記錄（06_cache.js；null ⇒ 全部現場算）。現場算的時候，要存的那幾份另外留在 T.keep，給 cachePut 存。 */
-function buildHull(info, model, t0, C) {
+function buildHull(info, model, t0, C, key, F) {
   var h = model.header, t1 = performance.now();                            // 到這裡是解碼（loadEmbedded，跟讀快取一起），之後是網格化
   modelMats(h);                                                            // 換色的擺放（TASK-0584）：展開成自己的網格（共用頂點陣列）⇒ decoSplit 數「沒用到的網格」時看得到它
+  var FR = fitApply(h, F || {}, model.fitExt);                            // 換裝（38_fit.js；TASK-0714）：掛點換成零件 ⇒ 之後讀 rig.models 的全部照新的；換裝表是空的 ⇒ 不做事
   var DS = decoSplit(h);                                                   // 裝飾（TASK-0682）：在一切之前拆掉 ⇒ 之後讀 rig.models 的（重量、繩、帆、家具）都看不到它
   h.metaRebased = metaRebase(h);                                           // 改裝船（TASK-0657）：原船裡的 meta 路徑照它所在的那一層往上找（見 metaRebase）
   if (C && (C.voxels !== h.voxels || C.checksum !== h.checksum)) C = null;  // 雙保險：鍵是 .vxk 原文的雜湊，格數與 checksum 也要一樣
@@ -259,6 +260,7 @@ function buildHull(info, model, t0, C) {
   var T = { id: info.id, name: info.name, model: model, h: h, rig: h.rig || { ropes: [], sails: [] },
     sz: h.size[2], cx: (h.bbox[0] + h.bbox[3]) / 2, cy: h.size[1] / 2, hx0: h.bbox[0], hx1: h.bbox[3], zw: hullZW(h, info), geo: Object.assign({}, GEO0, info.geo), lamps: info.lamps || [], crew: Object.assign({}, CREW0, info.crew) };   // 外框：含艏斜桅與後桅帆桁
   T.ids = idIndex(h);                                                      // 物件 id（TASK-0715）：refPath 照它把 id 換成路徑
+  T.key = key === undefined ? info.id : String(key); T.fit = FR;          // 艦隊裡的那一項（船型或 船型@換裝表）、換裝的結果（38_fit.js）
   T.cached = !!C; T.keep = C ? null : {};
   T.decos = DS.decos; T.decoN = DS.n; T.meshSkip = DS.skip;                // 裝飾：裝飾件、幾件、沒人用的網格（不建）
   T.ms = {};                                                               // 每一段花多久（毫秒；讀數 window.__vxk.ms）

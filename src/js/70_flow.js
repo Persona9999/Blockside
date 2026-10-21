@@ -59,7 +59,7 @@ function startSteps() {
     if (document.activeElement && document.activeElement.blur) document.activeElement.blur();   // 不然空白鍵會再按一次「開戰」
   }].concat(resetSteps(), [function () {
     RUNNING = true;
-    var seenT = {}; SHIPS.forEach(function (sh) { if (!seenT[sh.T.id]) { seenT[sh.T.id] = 1; crewShortNote(sh); } });   // 船員站不下：每一型報一次
+    var seenT = {}; SHIPS.forEach(function (sh) { if (!seenT[sh.T.key || sh.T.id]) { seenT[sh.T.key || sh.T.id] = 1; crewShortNote(sh); } });   // 船員站不下、換裝沒換成：每一型（每一份換裝）報一次
     if (modeRule('hint')) note(SHIPS[PLAYER_I], AUTOFIRE ? '自動開砲中（' + keyName('autoFire') + ' 關掉就自己打）' : '點敵艦設瞄準點，' + keyWord('volley') + '齊射（' + keyName('autoFire') + ' 自動開砲）');
     bldEnter();                                                        // 建造（82_build.js）：進第一人稱、顯示建造介面；別的玩法 ⇒ 收起來
     inspEnter();                                                       // 船隻觀察（86_inspect.js）：觀察面板；別的玩法 ⇒ 收起來、高亮清空

@@ -23,4 +23,4 @@ python -I -X utf8 src/tests/render_lab/harness.py smoke --html reports/render_la
 python -I -X utf8 src/tests/render_lab/playtest.py reports/render_lab/builds/mine/index.html
 ```
 
-`-X utf8`：頁面的字是中文、主控台是 cp950。逐位元組只在 Chrome＋ANGLE D3D11 驗過（`--gpu default`）。怎麼用在 render 管線大修見 `src/RENDER_PLAN.md`「怎麼接著做」。
+`-X utf8`：頁面的字是中文、主控台是 cp950。逐位元組只在 Chrome＋ANGLE D3D11 驗過（`--gpu default`）。怎麼用在 render 管線大修見任務單 TASK-0781「怎麼接著做」。

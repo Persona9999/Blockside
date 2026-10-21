@@ -66,6 +66,7 @@ var PREF_ITEMS = [
     if (Object.keys(cfg).length) o.cfg = cfg;
     var cr = crewSnap(true); if (Object.keys(cr).length) o.crew = cr;
     var rm = roomsSnap(true); if (Object.keys(rm).length) o.rooms = rm;
+    var ft = fitSnap(); if (Object.keys(ft).length) o.fit = ft;          // 換裝表（38_fit.js；TASK-0714）：每一型跟出廠不一樣的那幾格
   }, function (p) { shipsApply(p); }),
   prefNum('gunhp', prefLim('gunhp'), true, function () { return GUN_HP; }, function (x) { GUN_HP = x; }),
   prefNum('sailhp', prefLim('sailhp'), true, function () { return SAIL_HP; }, function (x) { SAIL_HP = x; }),
@@ -187,7 +188,7 @@ function prefsApply(p) {
     var x = prefOk(p[it.k], it.lim(), it.int); if (x !== undefined) it.set(x);
   });
 }
-/** 船隻配置（船隻設定 cfg ＋ 船員 crew，照船型）：存檔、匯入共用這一支。每一項各自驗；網址有的那一項不套。 */
+/** 船隻配置（船隻設定 cfg ＋ 船員 crew ＋ 艙房 rooms ＋ 換裝表 fit，照船型）：存檔、匯入共用這一支。每一項各自驗；網址有的那一項不套。 */
 function shipsApply(p) {
   function num(v, lim, int) { if (typeof v !== 'number' || !isFinite(v)) return undefined; v = clamp(v, lim[0], lim[1]); return int ? Math.round(v) : v; }
   if (p.cfg && typeof p.cfg === 'object') Object.keys(p.cfg).forEach(function (id) {
@@ -209,6 +210,7 @@ function shipsApply(p) {
     var c = SHIP_ROOMS[id] = SHIP_ROOMS[id] || {};
     Object.keys(d).forEach(function (k) { var v = roomPlanParse(d[k]); if (v !== undefined) c[k] = v; });
   });
+  if (p.fit && typeof p.fit === 'object') fitApplyPrefs(p.fit);          // 換裝表（38_fit.js）：掛點有沒有、放不放得下要船型載好才知道 ⇒ 照收，載入時 fitApply 再驗
 }
 /** 艙房的擺法 { 船型: { 房名: '' ＝ 空著｜{ type }（自動擺滿）｜{ type, items } } }：diff ＝ 只留跟設定檔的預設不一樣的（存檔）；否則每一型玩家改過的全部（匯出）。 */
 function roomsSnap(diff) {
@@ -236,12 +238,12 @@ function crewSnap(diff) {
 function shipsExport() {
   var cfg = {};
   HULL_LIST.forEach(function (h) { var c = cfgCopy(h.id), T = HULLT[h.id]; if (c.ballast === undefined || !T) { delete c.ballast; if (PREF_BALLAST[h.id]) { c.ballast = PREF_BALLAST[h.id].v; c.chk = PREF_BALLAST[h.id].chk; } } else c.chk = T.h.checksum; cfg[h.id] = c; });
-  return { game: 'ame_constitution_broadside', kind: 'ships', v: 1, at: new Date().toISOString(), cfg: cfg, crew: crewSnap(false), rooms: roomsSnap(false) };
+  return { game: 'ame_constitution_broadside', kind: 'ships', v: 1, at: new Date().toISOString(), cfg: cfg, crew: crewSnap(false), rooms: roomsSnap(false), fit: fitSnap() };
 }
 /** 匯入：看得懂才套（game／kind 對得上）；回傳套了幾型。 */
 function shipsImport(o) {
   if (!o || o.game !== 'ame_constitution_broadside' || o.kind !== 'ships') return -1;
-  var ids = {}; [o.cfg, o.crew, o.rooms].forEach(function (m) { if (m && typeof m === 'object') Object.keys(m).forEach(function (id) { if (hullInfo(id)) ids[id] = 1; }); });
+  var ids = {}; [o.cfg, o.crew, o.rooms, o.fit].forEach(function (m) { if (m && typeof m === 'object') Object.keys(m).forEach(function (id) { if (hullInfo(id)) ids[id] = 1; }); });
   shipsApply(o); return Object.keys(ids).length;
 }
 function prefsSave() {
