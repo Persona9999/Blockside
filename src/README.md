@@ -126,6 +126,10 @@ python -I admin.py ids --id constitution --dry
 #   → 帆桁（網格）→ 母繩（≤ 3 格）→ 最後才照外框猜模型。匯入、重新匯入、metasync、ids 會自己跑；沒有 bind 的舊 .vxk 照同一套現場算。
 #   雕刻端對照：senate cmd sculpture --arg op=work --arg sub=ropecheck --arg work=<組裝件>（座標端猜得到的可以 fix=1 改成寫明）。
 python -I admin.py ropebind --id stormkaap
+# 零件表（TASK-0714；js/38_fit.js 換裝用）：每一種砲（砲種表的鍵；弩砲、投石機、弓、希臘火這類 weapon 不收）× 砲架類別（meta mount；沒寫 ＝ carriage）
+#   從哪一艘的哪一門拿 ⇒ config/game.json parts.guns ＝ { 砲種: { 類別: '<船 id>#<模型 id>' } }（照 ships 的順序、模型的順序，第一門有 id、有 breech／muzzle 的）。
+#   只記引用、⛔ 不另存網格（船檔裡本來就有；22 種另存 ~120 KB ＝ 成品 +6%）。重匯拿掉了那一門、或多了新的砲種 ⇒ 重跑；--check 只比（對不上 exit 1）。
+python -I admin.py parts
 # 建造者（Tim 2026-10-15）：ships[].author ＝ .vxk 檔頭的 owner（senate 匯出時寫的雕刻作品作者）—— import／reimport 會自己記；以前匯入的船補一次（不重建）⇒ 船隻配置頁船卡、後台船隻卡顯示
 python -I admin.py authors
 # 匯入檢查（import／reimport／metasync 之後會自動跑）：缺 meta、砲班站不滿、開場就掉的 ⇒ ../reports/shipcheck_<代號>.md（不入版控）
@@ -318,6 +322,7 @@ python -I admin.py cache --all    # 每艘都比 ＝ 比對來源：雕刻作品
 | `33_flood.js` | 進水的粒子模式（TASK-0525）：船型的水格 `flType`（`T.flc[c]`）、每艘的狀態 `flNew`（`sh.fl`）、打掉一格記待重算 `floodTouch`、破口 `flHoleRedo`、粒子與水格 `floodStep`／`flTick`、該多吃水 `floodSinkT`、傾斜 `floodTilt`、艙內水面 `P.pool`（`flMesh`／`flDraw`）、往下一層流的水幕（`flFalls`，TASK-0651）、噴進來的粒子 `flPushJets`；每個破口的狀態（`fl.hWet` 在海面下、`fl.hQ` 流量 ＋進－出；`flHoleState` ⇒ in／out／dry、`flHoleInfo` ⇒ `__game.flHoles(i)`）—— 畫面都讀這裡；實際抽掉的 `fl.pumpQ`、淨進水 `flNetQ`（進 − 出 − 實際抽） |
 | `35_decks.js` | 甲板（TASK-0572）：照雕刻作品的 meta 判定 `hullDecks`（甲板關聯 `kind=deck`：level、name、floor 舷弧、thick）、`deckFloor`（那一欄的地板高度）、`deckAt`（某一點站在哪一層）、`deckOfPath`（關聯路徑屬於哪一層）；沒有 meta 的舊匯出 ⇒ 各處照舊自己量 |
 | `36_rooms.js` | 空艙房與功能艙（TASK-0568）：讀雕刻作品標的艙房 `hullRooms`（關聯 meta `kind=rooms`、固定點 `<房名>.min／.max`）、每一型每一間的功能 `roomFns`（設定檔 ships[].rooms ← 船隻配置頁 `SHIP_ROOMS`）、半程式化布局 `roomLayout`、家具模型 `shipRooms`（佔位的方塊網格 `furnMesh`）、能力 `roomCap`／`roomEff`、除錯外框與名字（`?rooms=1`）；設施配員（TASK-0676）：物品寫 `furniture[].staff { 職位: 每件幾位 }`（病床 `{ surgeon: 1 }`，道具設定頁調）⇒ `staffSlots` 照房間輪著排、`hullStaff` 給船隻配置頁算這型配得到幾位 |
+| `38_fit.js` | **可換零件：掛點＋換裝表**（TASK-0713／0714；第一段只有砲）。作品裡原本雕的那一門 ＝ 掛點（路徑、序號、id 不變）；換裝表 ＝ `{ 掛點 id: 砲種 }`。載入船型時（`05_hull.js` `buildHull`，`modelMats` 之後、拆裝飾之前）`fitApply` 把掛點的模型換成零件（網格、固定點、外框、meta 的 gun／weapon／ammo）擺在掛點的座標系上 ⇒ 之後讀 `rig.models` 的（砲班站位、家具擋格、重量 ⇒ 壓艙物、命中）全部照新的。座標系：砲軸 breech → muzzle、水平對齊砲口（迴旋砲、旋轉砲座對齊 pivot）、高度對齊外框底；左右舷照 eye-aft 在砲軸哪一邊判斷要不要鏡射（繞序跟著翻）。只換同一類砲架；長寬高 ≤ 掛點的 ×1.15 ＋ 2 格（掛點 meta `fits=` 指定就只看名單）；繩寫明 `model:<掛點>/<固定點>` 的那一端照同名固定點挪、零件沒有那一點 ⇒ 那條繩拿掉。換不成 ⇒ 照原本那一門、`T.fit.bad`（開戰廣播、匯入檢查 error）。零件：這艘自己有同種同類的就用自己的，沒有照 `config parts`（`admin.py parts`）載那艘的船檔。換裝表從哪來：出廠 `ships[].fit` ⊕ 玩家的（`SHIP_FIT`，存檔與船隻配置的匯出入一起，`69_prefs.js`）；艦隊寫 `<船型>@<掛點>=<砲種>;…`（例 `?blue=constitution@gun-2=carr`）⇒ 出廠 ⊕ 那一份（不看存檔），同一型兩艘可以不一樣：船型照「型＋換裝表」各建一份（`HULLT` 的鍵、`T.key`；快取的鍵與雜湊也帶換裝表，`06_cache.js`）。照砲的種類、外框猜甲板在哪的地方（砲甲板分層、站人的高度、spar deck、陸戰隊）照原本雕的那一門（`fitKind0`／`fitBB0`）|
 | `37_furnmodels.js` | 道具的模型（`src/furnmodels.py` 產生，⛔ 不要手改）：`FURN_MODEL[item]` ＝ 外框、網格、固定點；`36_rooms.js` `furnMesh` 有模型就用（`furnModelMesh`：比外框小 ⇒ 置中、轉 90° ⇒ 鏡射＋三角形繞向對調），沒有才照舊拼方塊（`furnBoxes`） |
 | `34_shreds.js` | 帆的布片（物理開著）：撕開的洞切成布片 `shredCut`（`sh.shreds`）、每一步 `shredStep`（跟帆同一套 `clothStep`，風壓 ×`SH_KW`）、落水 `shredWet`、自己的亂數 `rndC`；畫在帆的緩衝後面（`sailBuf`） |
 | `39_eff.js` | 工作效率（TASK-0720；Tim 2026-10-19「可以加一個水手工作效率數值 基礎1 吃飯加成 可以有其他因素影響」）：每個船員一個倍數 `c.eff` ＝ `EFF_PARTS` 各項相乘、夾在 `EFF_MIN`～`EFF_MAX`（0.2～3）；這一版只有「吃過飯」一項（45_galley.js），之後的疲勞、受傷、士氣在 `EFF_PARTS` 多寫一筆（`on`／`k`／`text`）。`effInit`（開戰算一次 `sh.effOn`）、`effTick`（survey 每半秒重算，galleyTick 之後、callHands 之前）、乘點讀 `crewEff(sh, c)`／`effAvg(sh, 人)`：裝填（32_hull.js，`g.eff` ＝ 在崗砲班的平均，40_crew.js manning）、送藥手裝藥包、人力抽水、醫療、木匠、帆匠、救火、火槍、廚師做飯；⛔ 走路、爬梯、游泳、槳不乘。`effText`（第一人稱跟隨的 `#fpWho`、81_fps.js）。⛔ 沒有任何一項開著的船 ⇒ 乘的是字面上的 1 ⇒ 對局一位元不動 |

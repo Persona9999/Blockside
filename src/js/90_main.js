@@ -44,7 +44,7 @@ if (DEBUG) window.__game = {
   start: function (mode, dist) { flowMode(mode || 'pve'); DIST = dist || DIST; start(); },
   fleet: function (spec, mode) {   // 多船（TASK-0537）：spec ＝ [{ team: 'blue'|'red', hull: 'constitution'|… }]，第一艘是我艦；船型要先載好（loadHull）；null ⇒ 回到兩艘
     FLEET_DBG = spec; flowMode(mode || 'eve'); start();
-    return SHIPS.map(function (s) { return { i: s.i, team: s.team, hull: s.T.id, px: s.px, pz: s.pz, foe: s.foe ? s.foe.i : null }; });
+    return SHIPS.map(function (s) { return { i: s.i, team: s.team, hull: s.T.key || s.T.id, px: s.px, pz: s.pz, foe: s.foe ? s.foe.i : null }; });
   },
   loadHull: function (id) { return loadHull(id).then(function (T) { return T.id; }); },
   core: { api: CORE_API, out: coreOut, preFrom: corePreFrom, add: coreAdd, pre: function (P) { CORE_PRE = P || null; return !!CORE_PRE; } },   // 海戰核心 API（TASK-0709，57_core.js；src/CORE_API.md）：pre 設下一場開局的戰前狀態（start／fleet 之後生效）

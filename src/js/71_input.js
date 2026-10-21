@@ -721,18 +721,19 @@ function sliders() {
   $('sndB').onclick = function () { page('snd'); sndShow(); };   // 聲音設定（02_music.js，TASK-0677）
   $('sndX').onclick = function () { page(''); };
   $('pgX').onclick = function () { RE.i = -1; show(); page(''); };   // 右上角的返回（每一頁同一顆）
-  function shipReset(id) {                             // 一型回到預設：船員、艙房的擺法、壓艙物、性能
+  function shipReset(id) {                             // 一型回到預設：船員、艙房的擺法、換裝、壓艙物、性能
     delete SHIP_CREW[id]; delete SHIP_ROOMS[id]; delete PREF_BALLAST[id];
+    if (SHIP_FIT[id]) { delete SHIP_FIT[id]; fitDirty(id); }            // 換裝回出廠（38_fit.js）：已經載好的船型丟掉重載
     var c = shipCfg(id); SHIP_KEYS.forEach(function (k) { c[k] = k === 'ballast' ? (HULLT[id] ? HULLT[id].ballast0 : undefined) : cfgBase(k, id); });
   }
   cfgKit('ship', {                                     // 那一排按鈕（64_cfgkit.js）；這一型回到預設按兩下（Tim：編起來很花時間 ⇒ 不要一按就沒了）
-    one: { idle: '這一型回到預設', arm: function () { var hi = hullInfo(CFG_ID); return '再按一次：' + (hi ? hi.name : CFG_ID) + '的船員、艙房與性能都回到預設'; }, run: function () { shipReset(CFG_ID); } },
-    all: { title: '船隻配置全部回到預設', body: '每一型船（不只正在看的這一型）的船員、艙房擺設、壓艙物與性能都回到預設。改過的會不見；要留的話先按「匯出…」。',
+    one: { idle: '這一型回到預設', arm: function () { var hi = hullInfo(CFG_ID); return '再按一次：' + (hi ? hi.name : CFG_ID) + '的船員、艙房、換裝與性能都回到預設'; }, run: function () { shipReset(CFG_ID); } },
+    all: { title: '船隻配置全部回到預設', body: '每一型船（不只正在看的這一型）的船員、艙房擺設、換裝、壓艙物與性能都回到預設。改過的會不見；要留的話先按「匯出…」。',
       run: function () {                               // 每一型（設定檔裡的船＋存檔裡有、這份成品沒有的）
-        var ids = {}; CFG.ships.forEach(function (s) { ids[s.id] = 1; }); [SHIP_CFG, SHIP_CREW, SHIP_ROOMS, PREF_BALLAST].forEach(function (m) { Object.keys(m).forEach(function (id) { ids[id] = 1; }); });
+        var ids = {}; CFG.ships.forEach(function (s) { ids[s.id] = 1; }); [SHIP_CFG, SHIP_CREW, SHIP_ROOMS, SHIP_FIT, PREF_BALLAST].forEach(function (m) { Object.keys(m).forEach(function (id) { ids[id] = 1; }); });
         Object.keys(ids).forEach(shipReset); return '已全部回到預設（' + CFG.ships.length + ' 型船）。';
       } },
-    kind: 'ships', file: 'constitution_broadside_ships', expSay: '每一型的船員與性能', exp: function () { var o = shipsExport(); return { cfg: o.cfg, crew: o.crew, rooms: o.rooms }; },   // 69_prefs.js shipsExport
+    kind: 'ships', file: 'constitution_broadside_ships', expSay: '每一型的船員與性能', exp: function () { var o = shipsExport(); return { cfg: o.cfg, crew: o.crew, rooms: o.rooms, fit: o.fit }; },   // 69_prefs.js shipsExport（fit：換裝表，38_fit.js）
     imp: shipsImport, what: '船隻配置', unit: '型船', show: function () { put(); show(); }
   });
   $('allR').onclick = function () {                    // 主選單的全部回到預設：刪掉這台瀏覽器的存檔、重新載入 ⇒ 每一項都照程式與設定檔的預設（網址帶的參數照舊優先）
@@ -758,6 +759,7 @@ function sliders() {
   window.addEventListener('keydown', function (e) { if (!RUNNING && e.key === 'Escape' && ($('detail').style.display !== 'none' || $('gfxp').style.display !== 'none' || $('phxp').style.display !== 'none' || $('shipp').style.display !== 'none' || $('gunp').style.display !== 'none' || $('furnp').style.display !== 'none' || ($('keysp').style.display !== 'none' && !KEY_WAIT))) page(''); });   // 鍵位設定頁正在等新鍵 ⇒ Esc 是取消（66_keys.js），不關頁
   put(); if (START_Q) yieldUI().then(show); else show();                // ?start=1：主選單的說明文字與船卡（show 約 0.03 s）晚一個工作再畫（不擠在載入頁面那一段）
   SLIDERS_SHOW = function () { put(); show(); };
+  evOn('hullReload', function () { put(); show(); }, 0, true);           // 換裝改了、那一型重載好了（38_fit.js fitDirty）⇒ 卡片照新的船型畫
 }
 /** 畫質（07_gfx.js）：主選單的低／中／高、畫質設定頁每一項的按鈕、顯示 FPS。改了立刻生效（render 每一格讀 GFX）。 */
 function gfxUI() {

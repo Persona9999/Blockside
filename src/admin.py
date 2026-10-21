@@ -468,6 +468,17 @@ def validate(cfg, prev=None):
         st = f.get('staff') if isinstance(f, dict) else None                # 設施配員（TASK-0676；js/36_rooms.js staffSlots）：{ 職位: 每件幾位 }
         if st is not None and not (isinstance(st, dict) and all(k in ('surgeon', 'carpenter', 'sailmaker') and isint(v) and (1 if k in ('carpenter', 'sailmaker') else 0) <= v <= 4 for k, v in st.items())):
             err('furniture.%s.staff' % fid, '{ surgeon: 0～4、carpenter: 1～4、sailmaker: 1～4 的整數 }（每件配幾位；木匠、帆匠每船至少一位）')
+    PT = cfg.get('parts')                                 # 零件表（TASK-0714；admin.py parts 寫的）：{ guns: { 砲種: { 砲架類別: '<船 id>#<模型 id>' } } }
+    if PT is not None:
+        G0 = cfg.get('guns') if isinstance(cfg.get('guns'), dict) else {}
+        SID = {x.get('id') for x in (cfg.get('ships') or []) if isinstance(x, dict)}
+        PG = PT.get('guns') if isinstance(PT, dict) else None
+        if not (isinstance(PT, dict) and set(PT) <= {'guns'} and isinstance(PG, dict)):
+            err('parts', '零件表 { guns: { 砲種: { 砲架類別: "<船 id>#<模型 id>" } } }（python -I admin.py parts 寫的，別手改）')
+        else:
+            for t, v in PG.items():
+                if t not in G0 or not isinstance(v, dict) or not all(isinstance(r, str) and r.count('#') == 1 and r.split('#')[0] in SID and ID_RE.fullmatch(r.split('#')[1]) for r in v.values()):
+                    err('parts.guns.' + str(t), '砲種要在 guns 裡，值 { 砲架類別: "<船 id>#<模型 id>" }、船要在 ships 裡（python -I admin.py parts 重產）')
     KY = cfg.get('keys')                                  # 鍵位的出廠預設（js/66_keys.js：{ 動作: 鍵 }；動作的清單在遊戲裡 ⇒ 這裡只驗形狀，認不得的動作遊戲不收）
     if KY is not None:
         if not isinstance(KY, dict):
@@ -655,6 +666,10 @@ def validate(cfg, prev=None):
             err(p + '.variant_of', '原船的 id（改裝船，TASK-0657；字串、不能是自己）')
         if 'idNext' in s and not (isinstance(s['idNext'], dict) and all(re.fullmatch(r'[a-z][a-z0-9_]*', k) and isint(v) and v >= 1 for k, v in s['idNext'].items())):
             err(p + '.idNext', '物件 id 每一類的下一號 { 類別: 正整數 }（admin.py ids 寫的，TASK-0715；別手改）')
+        if 'fit' in s:                                     # 出廠的換裝表（TASK-0714；js/38_fit.js）：{ 掛點的 id: 砲種 }；掛點在不在、放不放得下要載船才知道 ⇒ 匯入檢查報
+            G0 = cfg.get('guns') if isinstance(cfg.get('guns'), dict) else {}
+            if not (isinstance(s['fit'], dict) and all(isinstance(k, str) and ID_RE.fullmatch(k) and v in G0 and not (G0[v] or {}).get('weapon') for k, v in s['fit'].items())):
+                err(p + '.fit', '換裝表 { 掛點的 id（例 gun-3）: 砲種（guns 的鍵；弩砲、投石機、弓、希臘火這一段不換）}（TASK-0714）')
         for k, v in (s.get('cfg') or {}).items():
             if k not in SHIP_CFG_KEYS:
                 err(p + '.cfg.' + k, '不認得的鍵（%s）' % '、'.join(SHIP_CFG_KEYS))
@@ -3472,6 +3487,46 @@ def vxk_guns(path, guns):
     return out
 
 
+# ── 零件表（TASK-0714；js/38_fit.js）：換裝要用的砲從哪一艘拿 ──
+# 每一種砲（砲種表的鍵；弩砲這類 weapon 不收）× 砲架類別（meta mount；沒寫 ＝ carriage）一門：照 ships 的順序、模型的順序，第一門有 id、有固定點 breech 與 muzzle 的。
+# 只記「哪一艘的哪一門」（⛔ 不把網格另存一份：船檔裡本來就有，22 種另存 ~120 KB ＝ 成品 +6%）；遊戲要用才載那艘的船檔。重匯拿掉了那一門 ⇒ check 會叫，重跑 parts。
+def parts_scan(cfg):
+    G = cfg.get('guns') or {}
+    code = {g.get('code'): k for k, g in G.items()}
+    wpn = {g['weapon']: k for k, g in G.items() if g.get('weapon')}
+    out = {}
+    for s in cfg['ships']:
+        p = os.path.join(CACHE, s.get('vxk') or '')
+        if not s.get('vxk') or not os.path.exists(p):
+            continue
+        h = vxk_header(open(p, 'rb').read())
+        for m in (h.get('rig') or {}).get('models') or []:
+            mt, pts = m.get('meta') or {}, m.get('points') or {}
+            if mt.get('kind') != 'gun' or not mt.get('id') or 'muzzle' not in pts or 'breech' not in pts:
+                continue
+            t = wpn.get(mt.get('weapon')) or code.get(mt.get('gun'), 'long')
+            if (G.get(t) or {}).get('weapon'):
+                continue
+            out.setdefault(t, {}).setdefault(str(mt.get('mount') or 'carriage'), '%s#%s' % (s['id'], mt['id']))
+    return {'guns': {t: dict(sorted(v.items())) for t, v in sorted(out.items())}}
+
+
+def act_parts(check=False):
+    cfg = load()
+    new, old = parts_scan(cfg), cfg.get('parts')
+    G = cfg.get('guns') or {}
+    lines = ['  %s（%s）：%s' % (t, (G.get(t) or {}).get('name', '?'), '、'.join('%s %s' % (c, r) for c, r in v.items())) for t, v in new['guns'].items()]
+    miss = [t for t, g in G.items() if not g.get('weapon') and t not in new['guns']]
+    lines += ['  （船上都沒有、換不進來：%s）' % '、'.join(miss)] if miss else []
+    if new == old:
+        return ['✓ 零件表跟 _cache 對得上（%d 種砲）' % len(new['guns'])] + lines
+    if check:
+        raise Fail('\n'.join(['✗ 零件表 config parts 跟 _cache 對不上（重匯拿掉了、或多了一種砲）⇒ python -I admin.py parts'] + lines))
+    cfg['parts'] = new
+    save(cfg)
+    return ['✓ 零件表寫進 config/game.json parts（%d 種砲；重建才吃得到）' % len(new['guns'])] + lines
+
+
 def act_state():
     cfg = load()
     code, committed = run(['git', 'show', 'HEAD:./config/game.json'])
@@ -3825,6 +3880,8 @@ def main():
     s.add_argument('--id', action='append', help='哪一艘（可以給好幾次）；不給 ＝ 每一艘')
     s = sp.add_parser('relock', help='指紋改成 _cache 現在那份')
     s.add_argument('--id', required=True)
+    s = sp.add_parser('parts', help='零件表（TASK-0714）：換裝用的砲從哪一艘拿（每一種砲 × 砲架類別一門），照 _cache 寫進 config/game.json parts；--check 只比')
+    s.add_argument('--check', action='store_true')
     sp.add_parser('authors', help='建造者：每艘船照 _cache 那份 .vxk 檔頭的 owner 記 ships[].author（補以前匯入的船；不重建）')
     s = sp.add_parser('reimport')
     s.add_argument('--id', required=True)
@@ -3874,6 +3931,8 @@ def main():
             log = act_relock(o.id)
         elif o.op == 'authors':
             log = act_authors()
+        elif o.op == 'parts':
+            log = act_parts(o.check)
         elif o.op == 'metasync':
             log = act_metasync(o.id, not o.no_build)
         elif o.op == 'ids':
