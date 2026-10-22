@@ -79,7 +79,14 @@ function floodLab(o) {
   var out = { hull: sh.T.id, seed: SEED, lv: FLOOD_LV, c: sh.fl ? sh.fl.F.c : null, sea: SEA_K, o: { dur: o.dur, every: o.every, cut: o.cut, deck: o.deck, xray: !!o.xray }, holes: [], rows: [] };
   if (o.hz > 0) out.o.hz = o.hz; if (pin) out.o.pin = 1; if (o.pump === 0) out.o.pump = 0;   // 只在給了才記（⛔ 都不給 ⇒ 報表跟加之前逐位相同）
   if (o.rooms !== undefined) out.o.rooms = o.rooms ? 1 : 0; if (o.roll !== undefined) out.o.roll = o.roll;
-  if (!sh.fl) { out.err = '進水是公式模式（物理效果的「進水」第 0 檔）⇒ 沒有艙內的水可畫；網址加 phx=mid／high／full'; SEA_K = seaK; DT = DT_BASE = DT0; GFX.proom = wrw0; return out; }
+  if (!sh.fl) {                                                         // 公式模式（物理效果的「進水」第 0 檔）：沒有艙內的水可畫 ⇒ 只記每秒水線下的洞幾格（sh.inflow，32_hull.js stepShip）、砲口（TASK-0822）；網址加 phx=mid／high／full 才有細檔
+    out.err = '進水是公式模式 ⇒ 只有 traceF（每秒 [t, 水線下的洞幾格, 下沉 m]）與 guns';
+    var evF = (o.pset || []).map(function (e) { return { t: e[0], k: e[1], v: e[2] }; }).concat((o.pbreak || []).map(function (e) { return { t: e[0], pb: e[1] }; })), t0F = SIMT, tnF = Math.max(1, Math.round(1 / DT));
+    out.events = []; out.traceF = [];
+    for (i = 0; i < Math.round(o.dur / DT); i++) { if (evF.length) flabEvents(sh, pin, evF, SIMT - t0F, out); simStep(); if (pin) pin(); if (i % tnF === tnF - 1) out.traceF.push([+SIMT.toFixed(1), sh.inflow || 0, +sh.sink.toFixed(3)]); }
+    out.guns = flabGuns(sh);
+    SEA_K = seaK; DT = DT_BASE = DT0; GFX.proom = wrw0; return out;
+  }
   var T = sh.T, x0 = T.wl0, x1 = T.wl1;
   if (o.boom) o.boom.forEach(function (k) { var g = sh.mags[k]; if (g) magBoom(sh, g); out.holes.push({ boom: k, mag: g ? g.name : null }); });   // 殉爆開局（TASK-0662）：整間直接炸（同 __game.ignite(0, k, 'mag')）
   (o.boom && !o.holesSet ? [] : o.holes).forEach(function (hd) {
@@ -89,7 +96,7 @@ function floodLab(o) {
   });
   var tHole = SIMT, holeA = function () { return [+SIMT.toFixed(1), sh.fl.holes.filter(function (h) { return sh.fl.hA[h] > 0; }).map(function (h) { return [h, +sh.fl.hA[h].toFixed(4)]; })]; };   // 參考解從打洞那一刻起算（flabRef）；holeA ＝ 那一刻每個洞的面積（參考解照當時的算）
   out.traceA = [holeA()];
-  if (o.wsim) { sh.wrs = wrsInit(sh); out.o.wsim = 1; out.wsimDoors = wsimDoors(sh); out.traceR = []; out.traceT = []; if (o.wsimo) { o.wsimo.forEach(function (k) { sh.wrs.opt[k] = true; }); out.o.wsimo = o.wsimo.join(','); } }   // 房間模擬並排跑（TASK-0808，33_wrsim.js）：同一組破口；每秒一筆 traceR ＝ [t, 水 m³, 橫傾目標, 縱傾目標, 小步數, ms]，traceT ＝ 細檔的 [t, 橫傾目標, 縱傾目標]
+  if (o.wsim) { if (!(sh.fl && sh.fl.L.room && sh.wrs)) sh.wrs = wrsInit(sh); out.o.wsim = 1; out.wsimDoors = wsimDoors(sh); out.traceR = []; out.traceT = []; if (o.wsimo) { o.wsimo.forEach(function (k) { sh.wrs.opt[k] = true; }); out.o.wsimo = o.wsimo.join(','); } }   // 房間模擬並排跑（TASK-0808，33_wrsim.js）：同一組破口；每秒一筆 traceR ＝ [t, 水 m³, 橫傾目標, 縱傾目標, 小步數, ms]，traceT ＝ 細檔的 [t, 橫傾目標, 縱傾目標]
   // 鏡頭：對著船中、看艙內（剖面拿掉靠鏡頭那一半）
   var cc = shipCenter(sh); camSet({ tgt: [cc[0], cc[1] + (o.ty || 0), cc[2]], trYaw: null, trMe: null });   // 注視點：船中心往上 ty 公尺（看底艙 ⇒ 負的）
   camSet({ follow: null, mode: 0, yaw: o.yaw, pitch: o.pitch, dist: o.dist > 0 ? o.dist : Math.max(60, (x1 - x0) * S * 0.95) });
@@ -104,7 +111,7 @@ function floodLab(o) {
   out.trace = [];                                                       // 每秒一筆：[t, 水 m³, 進 m³/s, 出 m³/s, 艙內最高水面 − 海面 m, 高出海面的水 m³, 下沉 m]（flabEx）
   for (var k = 0; k <= steps; k++) {
     var focusAt = null;
-    if (k) { for (i = 0; i < n; i++) { if (evs.length) flabEvents(sh, pin, evs, SIMT - tHole, out); simStep(); if (sh.wrs && o.wsim) { var m13 = sh.M[13]; if (pin && !sh.wrs.opt.prepin) pin(); wrsStep(sh, DT, sh.fl); if (pin) { pin(); var dzp = m13 - sh.M[13]; wdz[0] += dzp; wdz[1]++; if (Math.abs(dzp) > Math.abs(wdz[2])) wdz[2] = dzp; } } else if (pin) pin(); if (npic && ++kpic >= npic) { kpic = 0; out.wpic.push(wsimPic(sh, o.wpx)); } if (o.wsim && i % tn === tn - 1) { var rd = wrsRead(sh), tf = floodTilt(sh, sh.fl); var bq = 0; sh.wrs.br.forEach(function (bb) { if (bb.j >= 0) bq += bb.q; }); out.traceR.push([+SIMT.toFixed(1), rd.vol, rd.roll, rd.pitch, rd.sub, rd.ms, rd.hash, +bq.toFixed(4), sh.wrs.tops.map(function (tp) { return +tp.q.toFixed(4); })]); out.traceT.push([+SIMT.toFixed(1), +tf[0].toFixed(4), +tf[1].toFixed(4)]); } if (i % 30 === 29) remesh(Infinity); if (i % tn === tn - 1) { out.traceA.push(holeA()); var ex = flabEx(sh); out.trace.push([+SIMT.toFixed(1), +sh.fl.vol.toFixed(1), +sh.fl.inQ.toFixed(2), +sh.fl.outQ.toFixed(2), ex.max, ex.vol, +sh.sink.toFixed(2)]); } } }
+    if (k) { for (i = 0; i < n; i++) { if (evs.length) flabEvents(sh, pin, evs, SIMT - tHole, out); simStep(); if (sh.wrs && o.wsim && !(sh.fl && sh.fl.L.room)) { var m13 = sh.M[13]; if (pin && !sh.wrs.opt.prepin) pin(); wrsStep(sh, DT, sh.fl); if (pin) { pin(); var dzp = m13 - sh.M[13]; wdz[0] += dzp; wdz[1]++; if (Math.abs(dzp) > Math.abs(wdz[2])) wdz[2] = dzp; } } else if (pin) pin(); if (npic && ++kpic >= npic) { kpic = 0; out.wpic.push(wsimPic(sh, o.wpx)); } if (o.wsim && i % tn === tn - 1) { var rd = wrsRead(sh), tf = floodTilt(sh, sh.fl); var bq = 0; sh.wrs.br.forEach(function (bb) { if (bb.j >= 0) bq += bb.q; }); out.traceR.push([+SIMT.toFixed(1), rd.vol, rd.roll, rd.pitch, rd.sub, rd.ms, rd.hash, +bq.toFixed(4), sh.wrs.tops.map(function (tp) { return +tp.q.toFixed(4); })]); out.traceT.push([+SIMT.toFixed(1), +tf[0].toFixed(4), +tf[1].toFixed(4)]); } if (i % 30 === 29) remesh(Infinity); if (i % tn === tn - 1) { out.traceA.push(holeA()); var ex = flabEx(sh); out.trace.push([+SIMT.toFixed(1), +sh.fl.vol.toFixed(1), +sh.fl.inQ.toFixed(2), +sh.fl.outQ.toFixed(2), ex.max, ex.vol, +sh.sink.toFixed(2)]); } } }
     remesh(Infinity); camSet({ snap: true }); camUpdate(1); render();
     if (o.focus === 'step' && sh.fl.mesh && sh.fl.mesh.stat) {             // 對準水面差最大的那條兩池交界（高的那一邊），拉近再拍
       var E = sh.fl.mesh.stat.map.edge.filter(function (e) { return e[3] === 1 && e[4] > 0; }).sort(function (a, b) { return b[4] - a[4]; })[0];
@@ -128,13 +135,14 @@ function floodLab(o) {
         dhMed: dh.length ? +dh[dh.length >> 1].toFixed(2) : 0, dhMax: dh.length ? +dh[dh.length - 1].toFixed(2) : 0,
         openAt: st.map.edge.filter(function (e) { return e[3] === 2; }).slice(0, 12).map(function (e) { return e.slice(0, 3); }) } : null,   // 懸空的邊（水邊 noise 會上的那幾邊）：[x, y, 方向] ⇒ focus=cell:x:y 拉近看
       img: flabShot(o.w), map: st ? flabMap(st, sh.fl.F.c >= 10 ? 10 : 6) : null });
-    if (o.wsim) out.rows[out.rows.length - 1].wsim = wrsRead(sh);       // 房間模擬的讀數（33_wrsim.js wrsRead）
+    if (o.wsim) { out.rows[out.rows.length - 1].wsim = wrsRead(sh); if (sh.wrs.opt.bench) out.rows[out.rows.length - 1].wsim.bench = wrsBench(sh); }       // 房間模擬的讀數（33_wrsim.js wrsRead）
     if (o.rooms !== undefined) out.rows[out.rows.length - 1].wr = sh.wrw ? sh.wrw.st : null;   // 房間水面的讀數（63_wrwater_gl.js wrwMesh：幾間、幾欄、切邊的欄、片數、水量、ms）
   }
-  if (o.wsim) { var PL = sh.ports === undefined ? portsBuild(sh) : sh.ports, lidG = PL ? PL.L.map(function (P) { return P.g; }) : []; out.guns = sh.guns.map(function (g) { var P = M4.pt(sh.M, g.muz[0], g.muz[1], g.muz[2]); var w = (sh.portW || []).filter(function (q) { return q.g === g; })[0], Pb = w ? M4.pt(sh.M, w.h.cells[0], T.cy + w.h.s * 1e-3, w.h.z0) : null; return [g.name, g.side, +(P[1] - seaH(P[0], P[2], SIMT)).toFixed(2), lidG.indexOf(g) >= 0 ? 1 : 0, g.alive ? 1 : 0, w ? w.h.n : 0, Pb ? +(Pb[1] - seaH(Pb[0], Pb[2], SIMT)).toFixed(2) : null, w && w.on ? 1 : 0]; }); }   // 每門砲：名字、哪一舷、砲口比海面高幾公尺（負 ⇒ 在水下）、有沒有蓋板（62_ports.js）、還在不在、船殼上的開口幾格、開口最低那一層比海面高幾公尺、登記成進水口了沒（25_doors.js portHole／portOpen；TASK-0822）
+  if (o.wsim) out.guns = flabGuns(sh);   // 每門砲：名字、哪一舷、砲口比海面高幾公尺（負 ⇒ 在水下）、有沒有蓋板（62_ports.js）、還在不在、船殼上的開口幾格、開口最低那一層比海面高幾公尺、登記成進水口了沒（25_doors.js portHole／portOpen；TASK-0822）
   if (o.wsim && sh.guns && sh.guns.length) { var g0 = sh.guns.filter(function (q) { return q.side === 'S'; }).sort(function (a2, b2) { return Math.abs(b2.ax[1]) - Math.abs(a2.ax[1]); })[0] || sh.guns[0], T0 = sh.T, s0 = g0.ax[1] >= 0 ? 1 : -1, xg = Math.floor(g0.muz[0]), zg = Math.floor(g0.muz[2]), rowsP = [];   // 除錯：第一門右舷砲附近的船殼剖面（每一層從外往裡：# 實心、. 空；| ＝ 外形半寬那一格）
     for (var dzp = 6; dzp >= -6; dzp--) { var zp = zg + dzp, BB = T0.base || T0.hullG, hbp = null; for (var xq = xg - 6; xq <= xg + 6; xq++) for (var yq = s0 > 0 ? BB.sy - 1 : 0; s0 > 0 ? yq > T0.cy : yq < T0.cy; yq -= s0) if (BB.get(xq, yq, zp)) { if (hbp === null || (s0 > 0 ? yq > hbp : yq < hbp)) hbp = yq; break; } var yo = hbp === null ? Math.round(T0.cy) : hbp, line = ''; for (var t3 = -3; t3 < 16; t3++) { var yy = yo - s0 * t3; line += (t3 === 0 ? '|' : '') + (BB.get(xg, yy, zp) ? '#' : '.'); } rowsP.push([zp, +hbp.toFixed ? +(+hbp).toFixed(2) : hbp, line]); }
     out.portProbe = { gun: g0.name, muz: g0.muz.map(function (v) { return +v.toFixed(2); }), ax: g0.ax.map(function (v) { return +v.toFixed(3); }), cy: T0.cy, rows: rowsP }; }
+  if (sh.fl && sh.fl.msN) out.flMs = { step: +(sh.fl.ms / sh.fl.msN).toFixed(4), n: sh.fl.msN };   // 這艘進水每步平均幾 ms（33_flood.js floodStep；⚠ 白天會飄）
   if (o.wsim && pin) out.wsimDz = { mean: wdz[1] ? +(wdz[0] / wdz[1]).toFixed(5) : 0, max: +wdz[2].toFixed(5), prepin: !!sh.wrs.opt.prepin };
   if (o.ref) out.ref = flabRef(sh, out.trace, tHole, out.traceA);
   if (o.ref && o.wsim) out.refR = flabRef(sh, out.traceR, tHole, out.traceA);      // 同一個參考解對房間模擬
@@ -232,6 +240,10 @@ function flabPin(sh) {
   K.forEach(function (k) { s0[k] = sh[k]; });
   var f = function () { K.forEach(function (k) { sh[k] = s0[k]; }); sh.M = M4.mul(shipMatrix(sh), M4.ident()); sh.inv = M4.inv(sh.M); sh.center = shipCenter(sh); };
   f.s0 = s0; return f;                                                  // s0 給 flabEvents 中途改（pset）
+}
+/** 進水報表：每門砲的砲口與開口（見 floodLab 的 out.guns）。 */
+function flabGuns(sh) {
+  var T = sh.T; var PL = sh.ports === undefined ? portsBuild(sh) : sh.ports, lidG = PL ? PL.L.map(function (P) { return P.g; }) : []; return sh.guns.map(function (g) { var P = M4.pt(sh.M, g.muz[0], g.muz[1], g.muz[2]); var w = (sh.portW || []).filter(function (q) { return q.g === g; })[0], Pb = w ? M4.pt(sh.M, w.h.cells[0], T.cy + w.h.s * 1e-3, w.h.z0) : null; return [g.name, g.side, +(P[1] - seaH(P[0], P[2], SIMT)).toFixed(2), lidG.indexOf(g) >= 0 ? 1 : 0, g.alive ? 1 : 0, w ? w.h.n : 0, Pb ? +(Pb[1] - seaH(Pb[0], Pb[2], SIMT)).toFixed(2) : null, w && w.on ? 1 : 0]; });
 }
 /** 中途的事件（TASK-0808 驗收第 9、11 格；TASK-0822）：pset ＝ 打洞後 t 秒把釘住的那一格加 v（lift 公尺往上、rollA／pitchA 弧度；沒釘住 ⇒ 直接加在船上）、wkill ＝ 打洞後 t 秒打掉第幾扇門（m.alive ＝ false）、pbreak ＝ 打洞後 t 秒打掉那門砲的蓋板鉸鏈旁那一格船殼。每個只發生一次，記在 out.events。 */
 function flabEvents(sh, pin, evs, t, out) {

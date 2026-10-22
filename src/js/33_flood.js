@@ -15,7 +15,9 @@
 // 精細等級 FL_LV：c 水格邊長幾格、ev 幾步算一次水格、jn 粒子上限（每艘）、vj 每顆帶多少 m³、dn 每次最多重算幾格被打壞的水格與破口。
 // 戰局：自己的亂數 rndF（開局重設）；各檔水格不同 ⇒ 各檔是各自的一局（同一個種子各自逐字重現）。⛔ 不碰 rnd()、不讀畫面的設定。
 //   進水模式開戰時決定（FLOOD_LV，70_flow.js），戰鬥中改了下一場生效。
-var FL_LV = [null, { c: 10, ev: 4, jn: 300, vj: 0.25, dn: 120 }, { c: 7, ev: 2, jn: 800, vj: 0.08, dn: 200 }, { c: 5, ev: 2, jn: 2000, vj: 0.03, dn: 300 }];
+var FL_LV = [null, { c: 10, ev: 4, jn: 300, vj: 0.25, dn: 120 }, { c: 7, ev: 2, jn: 800, vj: 0.08, dn: 200 }, { c: 5, ev: 2, jn: 2000, vj: 0.03, dn: 300 }, { c: 5, ev: 2, jn: 0, vj: 0.03, dn: 300, room: true }];
+// 第 4 檔「房間」（TASK-0810）：破口照細檔的格（c 5）切、記；水不走水格與粒子 ⇒ flRoomStep 交給房間模擬（33_wrsim.js wrsStep），讀數（vol、comX／Y、進出、抽水）寫回 fl ⇒ 下沉與傾斜（32_hull.js）照舊讀 fl。
+//   船型沒有房間（T.wrm）⇒ wrsInit 回 null ⇒ 這一檔照細檔的水格走（jn 0：粒子直接併進水格）。
 // FL_GM 穩心高（Tim 2026-10-13：傾斜收一點）：1.1 m（巡防艦的量級）⇒ 水往低的那一舷跑（自由液面），一舷有洞積 200 噸就斜到上限 12°、兩舷都有洞也一樣；
 //   4 m ⇒ 一舷有洞 180／380／600／840 噸時 1.9°／4.7°／8.4°／12°，兩舷都有洞 1,140 噸才 3.7°（沙盒 60 秒量的；2 m、3 m 還是很快頂到上限，5 m 一舷 830 噸才 8.3°）。
 // FL_PUMP（Tim 2026-10-18「統一都改成 噸 分顯示吧」）：抽水量的設定是噸／分 ⇒ 換成 m³/s 要除海水密度（PUMP_REF 噸／分 ÷ 60 ÷ RHO_W ≈ 0.293）。
@@ -286,8 +288,11 @@ function flCut(sh, fl) {
 /** 抽水的倍率（TASK-0604）：那一型的基礎抽水量（噸／分，cfg.pump）÷ PUMP_REF。⛔ 沒有 pump（舊存檔、外部傳進來的 cfg）⇒ 1（照以前）。 */
 function pumpK(sh) { var p = sh.cfg.pump, x = sh.pumps ? sh.pumps.x : 0; return (p === undefined || !isFinite(p) ? PUMP_REF : p + x) / PUMP_REF; }   // x：甲板上擺的抽水機另外加的（45_pumps.js；沒擺 ⇒ 0 ⇒ 一位元不動）
 /** 每一步（32_hull.js stepShip，粒子模式）：粒子飛、每 ev 步算一次水格（破口進出水、往下往旁邊流、抽水、讀數）。 */
-function floodStep(sh, fl, dt) {
+/** 進水一步；牆鐘記在 fl.ms／fl.msN（每艘各記；進水報表並排比各檔的花費，TASK-0810）。 */
+function floodStep(sh, fl, dt) { var t0 = performance.now(); floodStep0(sh, fl, dt); fl.ms = (fl.ms || 0) + performance.now() - t0; fl.msN = (fl.msN | 0) + 1; }
+function floodStep0(sh, fl, dt) {
   if (!(dt > 0)) return;
+  if (fl.L.room && sh.wrs) { flRoomStep(sh, fl, dt); return; }       // 第 4 檔「房間」（TASK-0810）
   var F = fl.F, L = fl.L, J = fl.J, Vc = Math.pow(F.c * S, 3), gL = M4.dir(sh.inv, 0, -G, 0), i, o;
   // 粒子：照重力（船的座標，格／秒²）落下；碰到船體、滿的水格、出界或活太久 ⇒ 併進上一個位置的水格
   var gl = Math.hypot(gL[0], gL[1], gL[2]);
@@ -311,6 +316,39 @@ function floodStep(sh, fl, dt) {
   var ev = steps60(L.ev);                                                        // 幾步算一次水格：照 60 Hz 的步數換（TASK-0798）
   if (++fl.step % ev) return;
   flTick(sh, fl, dt * ev);
+}
+/** 第 4 檔「房間」（TASK-0810）：每一步走房間模擬（33_wrsim.js wrsStep，破口照 fl 的清單）；每 ev 步重算被打壞的破口、抽水、讀數寫回 fl（同 flTick 的欄位 ⇒ 下沉、傾斜、讀數頁照舊）。
+ *  ⛔ 水格（fl.A）不用：被打壞的水格不重算（記髒的清掉就好）；畫面照房間畫（63_flood_gl.js ⇒ 63_wrwater_gl.js wrwMesh 讀 sh.wrs）。 */
+function flRoomStep(sh, fl, dt) {
+  var s = sh.wrs, L = fl.L, F = fl.F, M = sh.M, upm = s.upm, k;
+  wrsStep(sh, dt, fl);
+  var ev = steps60(L.ev);
+  if (++fl.step % ev) return;
+  var dtc = dt * ev, fk = sh.cfg.flood / LIM.flood[2];
+  while (fl.dirty.length) fl.dmark[fl.dirty.pop()] = 0;                  // 水格不用 ⇒ 不重算
+  for (k = 0; k < L.dn && fl.hdirty.length; k++) { var hd = fl.hdirty.shift(); fl.hmark[hd] = 0; flHoleRedo(sh, fl, hd); }
+  var area = 0, open = 0, uN = 0, uA = 0, oN = 0;                       // 破口的讀數（同 flTick ①：海面下幾處、多大、出水幾處；只有砲口又在海面上的不算）
+  for (k = 0; k < fl.holes.length; k++) {
+    var h = fl.holes[k], ar = fl.hA[h]; if (!(ar > 0)) { fl.hQ[h] = 0; continue; }
+    var P = M4.pt(M, fl.hX[h], fl.hY[h], fl.hZ[h]), b = s.br.get(h), q = b && b.j >= 0 ? b.q : 0;
+    fl.hWet[h] = P[1] < seaH(P[0], P[2], SIMT) ? 1 : 0; fl.hQ[h] = q;
+    if (fl.hWet[h]) { uN++; uA += ar; }
+    if (fl.hWet[h] || fl.hPort[h] < ar - 1e-9) { area += ar; open++; }
+    if (q < -1e-6) oN++;
+  }
+  for (k = 0; k < s.tops.length; k++) { var tp = s.tops[k]; if (tp.q > 0) { area += tp.ar; open++; } }   // 門沒了的甲板開口（同 doorInflow）
+  var in0 = fl.rIn === undefined ? 0 : fl.rIn, out0 = fl.rOut === undefined ? 0 : fl.rOut;
+  fl.rIn = s.inTot; fl.rOut = s.outTot;
+  fl.inQ = (s.inTot - in0) / upm / dtc; fl.outQ = (s.outTot - out0) / upm / dtc; fl.inTot = s.inTot / upm; fl.outTot = s.outTot / upm;
+  fl.area = area; fl.open = open; fl.underN = uN; fl.underA = uA; fl.outN = oN;
+  s.pAcc = (s.pAcc || 0) + FL_PUMP * pumpK(sh) * fk * dtc * upm;        // 抽水（同 flTick ③：從最低的水抽）
+  var np = Math.floor(s.pAcc), got = np > 0 ? wrsPump(s, np) : 0; s.pAcc = got < np ? 0 : s.pAcc - np;   // 抽不到（艙裡沒水）的不存著
+  fl.pumped += got / upm; fl.pumpQ = got / upm / dtc; fl.netQ = fl.inQ - fl.outQ - fl.pumpQ;
+  flAvgStep(fl, dtc);
+  var X = s.X, u = s.su, J = s.J, cx = sh.T.cx, cy = sh.T.cy, tot = 0, mx = 0, my = 0, j;   // 水量、重心（格座標離船型中線 ⇒ 公尺；飛行中的照它現在的位置）
+  for (j = 0; j < s.n; j++) if (u[j]) { tot += u[j]; mx += u[j] * (X.cx[j] - cx); my += u[j] * (X.cy[j] - cy); }
+  for (j = 0; j < J.n; j++) { tot += J.u[j]; mx += J.u[j] * (J.p[j * 3] - cx); my += J.u[j] * (J.p[j * 3 + 1] - cy); }
+  fl.vol = tot / upm; fl.comX = tot ? mx / tot * S : 0; fl.comY = tot ? my / tot * S : 0; fl.gen++;
 }
 function flTick(sh, fl, dtc) {
   var S3 = S * S * S, F = fl.F, L = fl.L, J = fl.J, c = F.c, NX = F.NX, NY = F.NY, NXY = NX * NY, N = F.N, A = fl.A, cap = fl.cap, pd = fl.pd, M = sh.M, Vc = Math.pow(c * S, 3), hc = c * S, fk = sh.cfg.flood / LIM.flood[2], i, k, m;   // 滑桿／預設：預設 ⇒ 物理的流量

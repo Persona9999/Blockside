@@ -164,6 +164,7 @@ function makeShipSteps(i, team, yaw, pz, T, px) {
   sh.news = { guns: [], t: -9, k: 0, w: 0, kr: {}, wr: {} };
   sh.M = shipMatrix(sh); sh.inv = M4.inv(sh.M);
   sh.fl = flNew(sh);                                                    // 進水：粒子模式（33_flood.js；公式模式 ⇒ null）
+  if (sh.fl && sh.fl.L.room) sh.wrs = wrsInit(sh);                      // 第 4 檔「房間」（TASK-0810）：房間模擬（33_wrsim.js；船型沒有房間 ⇒ null ⇒ 照水格走）
   portsFloodInit(sh);                                                   // 砲口進水（25_doors.js，TASK-0822）：沒有蓋板的砲口當場登記成進水口
   }, function () {
   driveInit(sh);                                                        // 動力源（帆、蒸汽機、魔法）與水阻（31_drive.js，TASK-0630）
