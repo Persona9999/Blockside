@@ -87,6 +87,16 @@ Commands:
   (`fleetlab.html?nb=2&nr=2&go=1` -> `index.html?lab=fleet`), `sandbox` (`sandbox.html`), `admin_html` (`admin.html`; its
   `net::ERR_FILE_NOT_FOUND` under file:// is expected and present in the baseline too). Unknown URL params are harmless (the game ignores them).
   Baseline: 0 errors in every variant except admin_html (that one file:// fetch); battles print 2 console warnings (Gloire ladder decks).
+- `cullsweep --html <B.html> --out <dir> [--sweeps all|fast|a,b] [--q ..]` — TASK-0813 (off-screen owners not drawn in the main and
+  reflection passes, `60_rbatch.js viewVis`). Each sweep in `SWEEPS` loads a base config (its q / warm / ports / hook), turns MSAA off and
+  moves the camera step by step (orbit `yawOff`, `pitch` tilt, `pan` / `fwd` / `lift` of the target in metres, `ticks` sim frames between
+  steps, `mask` = game camera e.g. first person). Every step (`__H.cullSweep`) renders once to settle, then three times with the same
+  Math.random state: culling on, off (`__rbat.cull(false)`), on again; the canvas and the reflection target `RT.R` (`__rbat.rt()`) of on vs
+  off must be identical. Per sweep it prints the owners culled in main / reflection, the owner-frames culled in one pass only (main-out /
+  refl-in is the mirror-image case), DIFF steps (first two failing steps also get `_on/_off/_diff.png`), DIFF steps where nothing was
+  culled (= GPU noise) and on-vs-on noise. `eve_late` has the known sea noise (about 1,100-1,700 px off by 1, moving between runs, also in
+  steps with nothing culled); every other sweep is exact. Mutation check (2026-10-22): culling boxes that reach 40 m into the frustum is
+  caught (42 differing steps in f8_orbit, gc_pan, f8_down); 5 m is not (the boxes are loose: only box, no geometry, inside).
 - `probe` — which GL backend each `--gpu` flag set gives.
 
 ## What one config session does (run_config)

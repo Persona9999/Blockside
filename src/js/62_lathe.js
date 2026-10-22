@@ -1,6 +1,7 @@
 // ───────────────────────── 車床式的低面數網格（TASK-0795；Tim 2026-10-21） ─────────────────────────
 // Tim：「火藥桶 我在想能不能參考金屬用光滑表面節省面數」「那嘗試用 車床式低面數網格搭配平滑法線內插 處理桶子呢(一樣靠meta設定)」。
 // 為什麼不是平滑面（15_smooth.js）：surface nets 一個貼著空氣的格面換一個四邊形 ⇒ 火藥桶 3,048 面 ⇒ 6,096 個三角形；匯出的網格已經把同一平面合併成 1,948 個 ⇒ 會變 3 倍。
+// 照 meta 選算法（meshAlgo，TASK-0815；Tim 2026-10-22「可以用meta標記要套用哪種算法」）：render=lathe 車床式（這支）、render=pole 長桿式（62_pole.js）；沒標 ⇒ 照原本的方塊網格。
 // 哪幾件：模型 meta render=lathe（Tim 2026-10-21「不綁定火藥桶類型(也不用額外檢查) 而是根據模型meta … 跟金屬 玻璃一樣靠meta標記」）⇒ 不看 kind、不看圓不圓：標了就轉。
 //   一份網格只要有一個用它的模型、裝飾沒標 ⇒ 那一份照原本的（同一份網格一種畫法）；沒有 meta 的（取用點後加的火藥桶）不算數 ⇒ 跟著同一份網格的走。
 // 怎麼做（buildMeshes 建 GPU 那一份時；latheTris）：
@@ -14,17 +15,21 @@
 //   · 側面每個頂點自己的法線（徑向＋照半徑的斜率傾斜）⇒ 光照平滑內插；兩端平的蓋子、自己的法線、色照角度。
 // ⛔ 只換畫的那一份（GPU 的三角形）：佔格 occ（家具擋格、站位、砲線，10_ship.js／21_gunnery.js／40_crew.js）照原本的網格算 ⇒ 戰局不變。
 var LATHE_N = 16, LATHE_TOL = 0.15, LATHE_BINS = 360;
-/** 這件模型（或裝飾）要不要畫成車床式：true／false；沒有 meta ⇒ null（不算數）。 */
-function latheOn(m) { var mt = m && m.meta; return mt ? mt.render === 'lathe' : null; }
-/** 船型 H 的第 k 份網格畫不畫成車床式（用它的模型、裝飾全部標了 lathe，至少一件）⇒ { n：meta lathe_n（0 ＝ 照換色數）, ax：meta lathe_axis（-1 ＝ 照外框）}；不畫 ⇒ null。 */
-function latheMesh(H, k) {
-  var on = 0, n = 0, ax = -1, L = (H.rig.models || []).concat(H.decos || []);
+var MESH_ALGOS = { lathe: 1, pole: 1 };                               // meta render 認得的網格算法
+/** 這件模型（或裝飾）標的網格算法：'lathe'／'pole'；有 meta 但沒標（或不認得）⇒ ''；沒有 meta ⇒ null（不算數）。 */
+function meshAlgoOf(m) { var mt = m && m.meta; if (!mt) return null; return MESH_ALGOS[mt.render] ? mt.render : ''; }
+/** 船型 H 的第 k 份網格用哪一種算法：用它的模型、裝飾（有 meta 的）全部標同一種、至少一件 ⇒ { alg, n, ax }
+ *  （n：meta lathe_n（0 ＝ 照換色數）、ax：meta lathe_axis（-1 ＝ 照外框）—— 只有車床式用）；有一件沒標、標的不一樣 ⇒ null（照原本的）。 */
+function meshAlgo(H, k) {
+  var alg = null, n = 0, ax = -1, L = (H.rig.models || []).concat(H.decos || []);
   for (var i = 0; i < L.length; i++) {
     if (L[i].mesh !== k) continue;
-    var v = latheOn(L[i]); if (v === false) return null;
-    if (v) { on++; var q = +(L[i].meta.lathe_n), a = 'xyz'.indexOf(String(L[i].meta.lathe_axis || '')); if (q >= 6 && q <= 48) n = Math.round(q); if (a >= 0 && L[i].meta.lathe_axis) ax = a; }
+    var v = meshAlgoOf(L[i]); if (v === null) continue;
+    if (!v || (alg && v !== alg)) return null;
+    alg = v;
+    if (v === 'lathe') { var q = +(L[i].meta.lathe_n), a = 'xyz'.indexOf(String(L[i].meta.lathe_axis || '')); if (q >= 6 && q <= 48) n = Math.round(q); if (a >= 0 && L[i].meta.lathe_axis) ax = a; }
   }
-  return on ? { n: n, ax: ax } : null;
+  return alg ? { alg: alg, n: n, ax: ax } : null;
 }
 /** 一份網格（verts、tris、tmat、mats）⇒ 車床式的三角形（跟 meshTris 同一種排法：每個頂點 位置 3、法線 3、色 3）；做不出來（沒有三角形、有一層四邊沒碰到側面）⇒ null（照原本的）。
  *  N0：meta 指定的邊數（0 ＝ 照換色數）；A0：meta 指定的軸（-1 ＝ 照外框）。st（給了 ⇒ 填讀數：軸、層、段、邊數、相位）。 */
@@ -154,8 +159,8 @@ function latheTris(m, N0, st, A0) {
   if (st) { st.axis = a; st.layers = nl; st.bands = bands.length; st.rings = allB.length; st.n = N; st.stripes = C; st.phase = +ph.toFixed(4); st.tris = out.length / 27; }
   return new Float32Array(out);
 }
-/** 第 k 份網格給 GPU 的三角形（buildMeshes、90_main.js hullCheck 共用）：車床式 ⇒ latheTris；不是、量不出來 ⇒ 照原本的（meshTris）。 */
+/** 第 k 份網格給 GPU 的三角形（buildMeshes、90_main.js hullCheck 共用）：照 meta 選的算法（車床式 latheTris、長桿式 62_pole.js poleTris）；沒標、做不出來 ⇒ 照原本的（meshTris）。 */
 function meshTriFor(H, k, m) {
-  var L = latheMesh(H, k), t = L ? latheTris(m, L.n, null, L.ax) : null;
+  var L = meshAlgo(H, k), t = !L ? null : L.alg === 'lathe' ? latheTris(m, L.n, null, L.ax) : L.alg === 'pole' ? poleTris(m, null) : null;
   return t || meshTris(m);
 }

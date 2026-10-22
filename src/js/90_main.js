@@ -73,6 +73,8 @@ if (DEBUG) window.__game = {
   /** 畫面迴圈的反向對照（TASK-0719；⛔ ?demo、run() 不經過 frame() ⇒ 量不到畫面那一格的演出）：同步叫 n 次 frame()，每格 dt ＝ DT（loopLast 歸零）⇒ 沒有慢動作時每格剛好一步；
    *  回走了幾步、模擬秒、戰局雜湊（每艘的位置、航向、格數、下沉、命中、開火、死傷、砲剩幾門，加上砲彈、碎塊數與戰局亂數 RNG_B 的狀態；照宣傳片 director.js trHash 的 FNV-1a）。g_port＝0／1、g_deco＝0／1 要一樣。 */
   simFar: function () { return SHIPS.map(function (s) { return { i: s.i, m: s.simM || 1, rig: s.rigM || 1, crewN: s.crewN || 0 }; }); },   // 遠方與視線外降級（TASK-0802）：船員幾步走一次、帆布幾步、船員走過幾次
+  chartSail: function (id) { return spkChart(id || SHIPS[PLAYER_I].T.id, SHIP_CARDS[id || SHIPS[PLAYER_I].T.id]); },   // Blocksail 海圖模式算航速的那幾個數（72_shippick.js spkChart；TASK-0803）
+  wind: function (rot, s0) { if (rot !== undefined && rot !== null) { WIND_ROT = rot * Math.PI / 180; SEA_A = WIND_ROT; } if (s0 !== undefined && s0 !== null) WIND_S0 = clamp(s0, 0.3, 3); stepWind(SIMT); return { rot: +(WIND_ROT * 180 / Math.PI).toFixed(2), s0: WIND_S0, spd: +WIND_SPD.toFixed(3), knots: +windKnots().toFixed(2), to: WIND.slice() }; },   // 換風（08_weather.js；跟 ?wdir=／?wspd= 同一套，戰鬥中換；Blocksail 海圖模式量帆速曲線用，TASK-0803）
   speed: function (x) { if (x !== undefined) simSpeedSet(x); return SIM_SPEED; },   // 模擬速度（73_slowmo.js；上限照 SIM_SPEED_MAX，?simmax= 放寬）
   tick: function (n) {
     var s0 = SIM_N, t0 = performance.now(); loopAcc = 0;
@@ -198,7 +200,7 @@ if (DEBUG) window.__game = {
     shadow: SHM ? { land: SHM.stOn, redraws: SHM.stat.redraws, last: SHM.stat.last } : null,   // 陰影的靜態那一層（60_render.js csmStatic）：有沒有、重畫過幾次、上一次（範圍、地形幾塊、樹幾棵、城幾個實例、毫秒）；全部看 __game.shadow()
     far: { tiles: BEDFAR.n, left: BEDFAR.todo ? BEDFAR.todo.length + BEDFAR.fly + BEDFAR.ready.length : null, fly: BEDFAR.fly, fail: BEDFAR.fail, kb: Math.round(BEDFAR.bytes / 1024), ms: +BEDFAR.ms.toFixed(1), drawn: Object.keys(BEDFAR.g).filter(function (k) { return !BEDGL[k]; }).length },
     inland: { on: BEDWAT.on, meshes: Object.keys(BEDGL).filter(function (k) { return BEDGL[k].w; }).length, far: Object.keys(BEDFAR.g).filter(function (k) { return BEDFAR.g[k].w; }).length, n: BEDWAT.n, tris: BEDWAT.tris,   // 內陸水（63_bed_gl.js）：細的、遠景各幾塊有水面網格；上一格畫了幾塊、幾個三角形
-      dry: { on: BEDDRY.on, chunks: Object.keys(BEDDRY.c).filter(function (k) { return BEDDRY.c[k]; }).length, cells: BEDDRY.cells, cut: BEDDRY.cut, builds: BEDDRY.builds, ms: BEDDRY.ms } },   // 低於海平面的乾地的遮罩：幾塊、幾格（32 m）、重建幾次
+      dry: { on: BEDDRY.on, chunks: Object.keys(BEDDRY.c).filter(function (k) { return BEDDRY.c[k]; }).length, cells: BEDDRY.cells, cut: BEDDRY.cut, builds: BEDDRY.builds, ms: BEDDRY.ms, worker: BEDDRYW.ok } },   // 低於海平面的乾地的遮罩：幾塊、幾格（32 m）、重建幾次
     foam: { n: BEDFOAM.N, builds: BEDFOAM.builds, ms: +BEDFOAM.ms.toFixed(1), eye: CAM.eye.map(function (v) { return +v.toFixed(1); }), ground: +bedHgt(CAM.eye[0], CAM.eye[2]).toFixed(1) },
     at: q ? { h: +bedHgt(q[0], q[1]).toFixed(2), mat: bedMat(q[0], q[1]) } : undefined,
     ships: SHIPS.map(function (sh) { return { name: sh.name, px: +sh.px.toFixed(1), pz: +sh.pz.toFixed(1), keelY: sh.keelY === undefined ? null : +sh.keelY.toFixed(2), grnd: sh.grnd ? { m: sh.grnd.m, pen: +sh.grnd.pen.toFixed(2), lost: sh.grnd.lost } : null, lost: sh.grndLost || 0, av: sh.bedAv ? { t: +sh.bedAv.t.toFixed(1), d: sh.bedAv.d } : null }; }) }; },

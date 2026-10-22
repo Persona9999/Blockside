@@ -35,7 +35,8 @@ var TOWN_LM = [24, 4];
 var TOWN_LOD = [160, 800], TOWN_FAR = [2400, 3000], TOWN_BAND = [24, 60, 300], TOWN_REBIN = 8, TOWN_SHELL_G = 32, TOWN_GRADE_REACH = 12, TOWN_LOT_PAD = 2, TOWN_LOT_CELL = 32, TOWN_LOT_SINK = 0.2, TOWN_CLR_G = 2, TOWN_ROAD_LIFT = 0.12, TOWN_GROUND_VIEW = 1600;
 var TOWN_MESH_MS = 8;                                                    // 模型網格化每段最多幾 ms 就讓出一次（townMesh；跟地球儀同一條主執行緒）
 var TOWN_WALL_CORNER = 30, TOWN_WALL_KMAX = 1;                         // 城牆：轉角件從轉幾度起擺；斜接最多切多斜（tan，1 ＝ 轉 90° 的角平分）
-var TOWNS = { on: Q.get('towns') !== '0', list: [], pend: [], ver: 0, want: 0, err: null, kit: null, kitP: null, idx: null, kitHas: null, kitRedo: false, mwait: null, prog: null, dirty: true, eye: null, sig: '', buf: [], grp: null,
+var TOWN_SLAB_KMAX = 2;                                                 // 碼頭、棧橋的板：轉角斜接最多拉長幾倍（2 ＝ 轉 120°；再急就在轉角那一點變窄）
+var TOWNS = { on: Q.get('towns') !== '0', list: [], pend: [], ver: 0, want: 0, err: null, kit: null, kitP: null, idx: null, kitHas: null, kitRedo: false, mwait: null, prog: null, progJ: null, dirty: true, eye: null, sig: '', buf: [], grp: null,
   stat: { towns: 0, lots: 0, inst: 0, walls: 0, corners: 0, snapped: 0, skip: {}, d0: 0, d1: 0, d2: 0, d3: 0, plinth: 0, tris: 0, binMs: 0, kitMs: 0, gradeMs: 0, chunks: 0, drawMs: 0 } };
 var TOWN_J0 = [0, 0, 0, 0];                                             // 建築的 aJ（不斜接、不順坡、牆基不延）
 var TOWN_USE_ALT = { commandant: ['house'], governor: ['townhall'] };   // 那一套沒有那種模型 ⇒ 用哪一種代（BUILDING_SPEC §7：fr 沒有長官的屋子；carib 有）
@@ -559,18 +560,30 @@ function townGroundMesh(T) {
     [[-1, -1], [1, -1], [1, 1], [-1, 1]].forEach(function (s) { var dx = s[0] * l.d / 2, dy = s[1] * l.w / 2, c = W([l.at[0] + dx * cs - dy * sn, l.at[1] + dx * sn + dy * cs]); vtx(c[0], y, c[1], TOWN_COL.plaza); });
     I.push(base, base + 1, base + 2, base, base + 2, base + 3);
   });
-  function slab(P0, w, top, bot, col) {                                 // 一條帶子拉成有厚度的板（碼頭、棧橋的面板）
-    var P = P0.map(W);
-    for (var q = 1; q < P.length; q++) {
-      var a = P[q - 1], b = P[q], L = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1, tx = (b[0] - a[0]) / L, tz = (b[1] - a[1]) / L, hw = w / 2;
-      var C4 = [[a[0] - tz * hw, a[1] + tx * hw], [b[0] - tz * hw, b[1] + tx * hw], [b[0] + tz * hw, b[1] - tx * hw], [a[0] + tz * hw, a[1] - tx * hw]], base = V.length / 9;
-      C4.forEach(function (c) { vtx(c[0], top, c[1], col); }); I.push(base, base + 1, base + 2, base, base + 2, base + 3);
-      for (var e = 0; e < 4; e++) {                                     // 四個側面
-        var c0 = C4[e], c1 = C4[(e + 1) % 4], nx = c1[1] - c0[1], nz = -(c1[0] - c0[0]), nl = Math.hypot(nx, nz) || 1, b2 = V.length / 9, dk = [col[0] * 0.78, col[1] * 0.78, col[2] * 0.78];
-        vtx(c0[0], top, c0[1], dk, nx / nl, 0, nz / nl); vtx(c1[0], top, c1[1], dk, nx / nl, 0, nz / nl); vtx(c1[0], bot, c1[1], dk, nx / nl, 0, nz / nl); vtx(c0[0], bot, c0[1], dk, nx / nl, 0, nz / nl);
-        I.push(b2, b2 + 1, b2 + 2, b2, b2 + 2, b2 + 3);
-      }
+  // 一條帶子拉成有厚度的板（碼頭、棧橋的面板）：整條一起畫，轉角照兩段的角平分線斜接（同城牆 —— 以前一段一個長方體，轉角外側缺一角、內側疊在一起；
+  //   Tim 2026-10-22「是否可以參考城牆 平滑的轉彎」）；斜接最多拉長 TOWN_SLAB_KMAX 倍（轉超過 120° ⇒ 轉角那一點變窄，不拉出尖刺）
+  function slab(P0, w, top, bot, col) {
+    var P = [], hw = w / 2, Lf = [], Rt = [], dk = [col[0] * 0.78, col[1] * 0.78, col[2] * 0.78];
+    P0.map(W).forEach(function (c) { var l = P[P.length - 1]; if (!l || Math.hypot(c[0] - l[0], c[1] - l[1]) > 1e-3) P.push(c); });   // 重複的點拿掉（長度 0 的段沒有方向）
+    if (P.length < 2) return;
+    var Nm = [];                                                        // 每一段的左法線（沿 path 往前看的左手邊 ＝ (−tz, tx)）
+    for (var q = 1; q < P.length; q++) { var L = Math.hypot(P[q][0] - P[q - 1][0], P[q][1] - P[q - 1][1]); Nm.push([-(P[q][1] - P[q - 1][1]) / L, (P[q][0] - P[q - 1][0]) / L]); }
+    P.forEach(function (c, i) {
+      var n0 = Nm[Math.max(0, i - 1)], n1 = Nm[Math.min(Nm.length - 1, i)], mx = n0[0] + n1[0], mz = n0[1] + n1[1], ml = Math.hypot(mx, mz);
+      var m = ml > 1e-6 ? [mx / ml, mz / ml] : n0, k = hw / Math.max(m[0] * n0[0] + m[1] * n0[1], 1 / TOWN_SLAB_KMAX);
+      Lf.push([c[0] + m[0] * k, c[1] + m[1] * k]); Rt.push([c[0] - m[0] * k, c[1] - m[1] * k]);
+    });
+    function side(c0, c1) {                                             // 一面鉛直的側面（c0 → c1，法線朝外 ＝ 往前看的右手邊）
+      var nx = c1[1] - c0[1], nz = -(c1[0] - c0[0]), nl = Math.hypot(nx, nz) || 1, b2 = V.length / 9;
+      vtx(c0[0], top, c0[1], dk, nx / nl, 0, nz / nl); vtx(c1[0], top, c1[1], dk, nx / nl, 0, nz / nl); vtx(c1[0], bot, c1[1], dk, nx / nl, 0, nz / nl); vtx(c0[0], bot, c0[1], dk, nx / nl, 0, nz / nl);
+      I.push(b2, b2 + 1, b2 + 2, b2, b2 + 2, b2 + 3);
     }
+    for (var s = 1; s < P.length; s++) {
+      var base = V.length / 9;
+      [Lf[s - 1], Lf[s], Rt[s], Rt[s - 1]].forEach(function (c) { vtx(c[0], top, c[1], col); }); I.push(base, base + 1, base + 2, base, base + 2, base + 3);
+      side(Lf[s - 1], Lf[s]); side(Rt[s], Rt[s - 1]);
+    }
+    side(Rt[0], Lf[0]); side(Lf[P.length - 1], Rt[P.length - 1]);      // 兩頭的端面
   }
   (p.quay || []).forEach(function (q) { slab(q.path, q.w, 1.0, -2.5, TOWN_COL.quay); });
   // 棧橋（Blocksail TOWN_BUILD §3.3.8 的 kind）：長碼頭 wharf、石堤 mole ＝ 實心石砌，一直到那一座沿線最深的水再深 1 m（埋進海床；不畫樁）；
@@ -772,9 +785,13 @@ var TOWN_GR_FS = function (fade) {
     ' vec3 col=vC*(0.9+0.2*fract(sin(dot(floor(vW.xz*1.3),vec2(12.9898,78.233)))*43758.5453))*(mix(uGround,uSky,n.y*0.5+0.5)*0.65+vec3(1.0,0.96,0.88)*d*sk*0.7+townLamp(vW,n));\n' +
     ' float fd=length(vW-uEye); o=vec4(mix(col,uFog,1.0-exp(-fd*uFogD)),1.0); }\n';
 };
+/** 城鎮的著色器：第一次要畫時送出編譯（01_gl.js glProgStart；TASK-0816），編好之前回 null（城鎮這幾格不畫、實例也先不建）。陰影、夜裡的燈那幾支一起編（以前第一次用到才編）。 */
 function townProgs() {
   if (TOWNS.prog) return TOWNS.prog;
-  var P = { vox: VK.compile(gl, TOWN_VS, TOWN_FS()), bb: VK.compile(gl, TOWN_BB_VS, TOWN_BB_FS()), pl: VK.compile(gl, TOWN_PL_VS, TOWN_PL_FS()), gr: VK.compile(gl, TOWN_GR_VS, TOWN_GR_FS(false)), sh: VK.compile(gl, TOWN_GR_VS, TOWN_GR_FS(true)) };
+  var J = TOWNS.progJ || (TOWNS.progJ = { vox: glProgStart(TOWN_VS, TOWN_FS()), bb: glProgStart(TOWN_BB_VS, TOWN_BB_FS()), pl: glProgStart(TOWN_PL_VS, TOWN_PL_FS()), gr: glProgStart(TOWN_GR_VS, TOWN_GR_FS(false)), sh: glProgStart(TOWN_GR_VS, TOWN_GR_FS(true)), dVox: glProgStart(TOWN_VS, DEPTH_ONLY_FS), dPl: glProgStart(TOWN_PL_VS, DEPTH_ONLY_FS),
+    win: glProgStart(TOWN_WIN_VS, TOWN_WIN_FS()), glow: glProgStart(TOWN_GLOW_VS, TOWN_GLOW_FS) });
+  if (!Object.keys(J).every(function (k) { return glProgReady(J[k]); })) return null;
+  var P = {}; Object.keys(J).forEach(function (k) { P[k] = glProgEnd(J[k]); }); TOWNS.progJ = null;
   P.ib = [gl.createBuffer(), gl.createBuffer(), gl.createBuffer(), gl.createBuffer()];   // 近、中、貼圖、石基的實例（每次分組重寫）
   P.quad = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, P.quad); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-0.5, 0, 0.5, 0, 0.5, 1, -0.5, 0, 0.5, 1, -0.5, 1]), gl.STATIC_DRAW);
   P.bbVao = gl.createVertexArray(); gl.bindVertexArray(P.bbVao);
@@ -848,8 +865,9 @@ function townPlinth(q) {
 /** 畫（60_render.js：樹之後）。 */
 function townDraw() {
   if (!TOWNS.on || !TOWNS.list.length || !BED || !BED.A || PASS.vp) return;
-  if (!TOWNS.kit) { townKit(); return; }
+  if (!TOWNS.kit) { townKit(); townProgs(); return; }                 // 著色器跟模型一起開始（編譯在背景，townProgs）
   var t0 = performance.now(), K = TOWNS.kit, P = townProgs(), eye = CAM.eye, PL = bedPlanes(CAM.vp);
+  if (!P) return;
   TOWNS.list.forEach(function (T) {
     if (T.roadPending || T.roadSurface) return;
     T.roadPending = true;
@@ -929,7 +947,7 @@ function townInstAttr(G, l, mi) { var o = G.off[l][mi] * 44; gl.vertexAttribPoin
  *  貼圖、屋頂殼、旗不畫（800 m 以外，陰影那一層的範圍也差不多到這裡）。⇒ 畫了幾個實例。 */
 function townDepth() {
   if (!TOWNS.on || !TOWNS.list.length || !TOWNS.kit || !TOWNS.prog || !TOWNS.grp) return 0;
-  var K = TOWNS.kit, P = TOWNS.prog, G = TOWNS.grp, PD = P.dVox || (P.dVox = VK.compile(gl, TOWN_VS, DEPTH_ONLY_FS)), n = 0;
+  var K = TOWNS.kit, P = TOWNS.prog, G = TOWNS.grp, PD = P.dVox, n = 0;
   gl.useProgram(PD.prog); setCommon(PD);
   for (var l = 0; l < 2; l++) K.names.forEach(function (nm, mi) {
     var k = G.cnt[l][mi]; if (!k) return; var Mm = K.M[nm], g = Mm.lod[l];
@@ -938,7 +956,7 @@ function townDepth() {
     townInstAttr(G, l, mi);
     gl.drawElementsInstanced(gl.TRIANGLES, g.nq * 6, gl.UNSIGNED_INT, 0, k); n += k;
   });
-  if (G.npl && P.plVao) { var PP = P.dPl || (P.dPl = VK.compile(gl, TOWN_PL_VS, DEPTH_ONLY_FS)); gl.useProgram(PP.prog); setCommon(PP); gl.bindVertexArray(P.plVao); gl.drawArraysInstanced(gl.TRIANGLES, 0, 36, G.npl); }
+  if (G.npl && P.plVao) { var PP = P.dPl; gl.useProgram(PP.prog); setCommon(PP); gl.bindVertexArray(P.plVao); gl.drawArraysInstanced(gl.TRIANGLES, 0, 36, G.npl); }
   gl.bindVertexArray(null); return n;
 }
 function townBoxDist(b, e) { var dx = Math.max(b[0] - e[0], 0, e[0] - b[3]), dz = Math.max(b[2] - e[2], 0, e[2] - b[5]); return Math.sqrt(dx * dx + dz * dz); }
@@ -1211,7 +1229,7 @@ function townGlowDraw() {
   var cf = gl.isEnabled(gl.CULL_FACE); gl.disable(gl.CULL_FACE);
   gl.enable(gl.BLEND); gl.blendFunc(gl.ONE, gl.ONE); gl.depthMask(false);
   if (G) {                                                              // 窗片：近那一級的實例
-    var PW = P.win || (P.win = VK.compile(gl, TOWN_WIN_VS, TOWN_WIN_FS())); gl.useProgram(PW.prog); setCommon(PW);
+    var PW = P.win; gl.useProgram(PW.prog); setCommon(PW);
     gl.uniform1f(PW.u.uFogD, fogD); gl.uniform3fv(PW.u.uEye, eye); gl.uniform1f(PW.u.uTWin, TOD_WIN); gl.uniform1f(PW.u.uTLK, TL.k); gl.uniform1f(PW.u.uTLT, SIMT);
     gl.uniform2f(PW.u.uIn, -2, -1); gl.uniform2f(PW.u.uOut, L0 - B0, L0 + B0);
     K.names.forEach(function (nm, mi) {
@@ -1220,7 +1238,7 @@ function townGlowDraw() {
       gl.drawArraysInstanced(gl.TRIANGLES, 0, Mm.win.n, n); TL.stat.cards += n;
     });
   }
-  var PG = P.glow || (P.glow = VK.compile(gl, TOWN_GLOW_VS, TOWN_GLOW_FS)), on = false;   // 光點：每座城一次
+  var PG = P.glow, on = false;   // 光點：每座城一次
   TOWNS.list.forEach(function (T) { [T.tl && T.tl.S, T.tl && T.tl.D].forEach(function (tl) {
     if (!tl || !tl.nGlow) return;
     if (!on) {

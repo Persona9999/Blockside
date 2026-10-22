@@ -16,7 +16,7 @@
 # Page.addScriptToEvaluateOnNewDocument) seeds Math.random, swaps in a virtual clock, disables requestAnimationFrame and
 # instruments WebGL2. Frames are driven only through __game.tick(1) (one 60 Hz sim step + real frame() incl. render) and
 # __game.mask() (render() only).
-import argparse, base64, datetime, hashlib, json, os, re, shutil, stat, subprocess, sys, time
+import argparse, base64, datetime, hashlib, json, math, os, re, shutil, stat, subprocess, sys, time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
@@ -98,6 +98,34 @@ SETS = {'all': DEFAULT_SET, 'default': DEFAULT_SET, 'base9': BASE9, 'extra': EXT
         'stress': ['rig_torn_burn', 'gc_high_cut', 'gc_high_night', 'pieces_fly_high', 'mixed_high', 'fleet8_csm', 'eve_late_high'],
         'sails': ['gc_high', 'rig_torn_burn', 'eve_late_high', 'fleet8_high', 'pieces_fly_high', 'gc_high_close'],
         'fast': ['gc_low', 'gc_high', 'gc_high_csm', 'ports_high', 'gc_high_cut', 'rig_torn_burn', 'gc_high_night', 'pieces_fly_high']}
+# ── cullsweep (TASK-0813: off-screen ships not drawn in the main and reflection passes, 60_rbatch.js viewVis) ──
+# Each sweep loads a base config (its q / warm / ports / hook), turns MSAA off, then moves the camera step by step so ships cross the
+# screen edges (and the reflection frustum's edges), rendering every step with culling on, off and on again in the same page
+# (__H.cullSweep): main canvas and reflection target must be identical on vs off. ticks = sim frames between steps.
+def _orbit(spec, n, ticks=0, a0=0.0, a1=2 * math.pi):
+    return [dict(spec, yawOff=a0 + (a1 - a0) * i / n, ticks=ticks) for i in range(n)]
+
+
+def _ramp(spec, key, v0, v1, n, ticks=0):
+    return [dict(spec, ticks=ticks, **{key: v0 + (v1 - v0) * i / max(1, n - 1)}) for i in range(n)]
+
+
+SWEEPS = {
+    'f8_orbit': {'base': 'fleet8_high', 'steps': _orbit({'ship': 0, 'dist': 40, 'pitch': 0.1}, 48, ticks=1)},       # neighbours cross left/right
+    'f8_tilt': {'base': 'fleet8_high', 'steps': _ramp({'ship': 0, 'dist': 60, 'yawOff': 0.6}, 'pitch', -0.05, 1.35, 30)},   # ships leave top/bottom; steep look-down
+    'f8_down': {'base': 'fleet8_high', 'steps': _ramp({'ship': 3, 'dist': 30, 'pitch': 1.1, 'yawOff': 0.3}, 'fwd', -40, 60, 34)},   # ship above the top edge, its mirror image on the water
+    'f8_far': {'base': 'fleet8_high', 'steps': _orbit({'ship': 0, 'dist': 260, 'pitch': 0.08}, 36)},
+    'gc_pan': {'base': 'gc_high', 'steps': _ramp({'ship': 1, 'dist': 45, 'pitch': 0.1}, 'pan', -140, 140, 41)},
+    'gc_lift': {'base': 'gc_high', 'steps': _ramp({'ship': 0, 'dist': 50, 'pitch': 0.05, 'yawOff': 0.4}, 'lift', -30, 80, 23)},
+    'gc_inside': {'base': 'gc_high', 'steps': _orbit({'ship': 0, 'dist': 6, 'pitch': 0.02, 'y': 4}, 24)},               # camera in / at the hull (near plane)
+    'gc_cut': {'base': 'gc_high_cut', 'steps': _orbit({'ship': 0, 'dist': 45, 'pitch': 0.1}, 24)},                      # cutaway (rbatReplay path)
+    'gc_night': {'base': 'gc_high_night', 'steps': _orbit({'ship': 0, 'dist': 32, 'pitch': 0.12}, 24)},
+    'pieces': {'base': 'pieces_fly_high', 'steps': _orbit({'ship': 1, 'dist': 50, 'pitch': 0.15}, 32, ticks=1)},         # PIECES + FLY
+    'eve_late': {'base': 'eve_late_high', 'steps': _orbit({'ship': 0, 'dist': 50, 'pitch': 0.12}, 24, ticks=2)},         # loose ropes, torn sails, shreds, anchors
+    'mixed': {'base': 'mixed_high', 'steps': _orbit({'ship': 0, 'dist': 70, 'pitch': 0.15}, 32)},
+    'fp': {'base': 'gc_high_fp', 'steps': [{'mask': True, 'ticks': 1} for _ in range(6)]},                              # first person (game camera)
+}
+SWEEP_SETS = {'all': list(SWEEPS), 'fast': ['f8_orbit', 'f8_down', 'gc_pan', 'gc_inside', 'pieces']}
 PHYS_TAGS = ['warm', 'ports', 'hook', 'post_render', 'count', 'more', 'end']
 HASH_TAGS = ['hash_warm', 'hash_ports', 'hash_hook', 'hash_count', 'hash_more', 'hash_end']
 MORE_TICKS = 30
@@ -1176,6 +1204,66 @@ def cmd_smoke(a):
     return 2 if fail else 0
 
 
+def cmd_cullsweep(a):
+    """TASK-0813: frame-by-frame proof that culling off-screen owners changes no pixel (main canvas + reflection target), see SWEEPS."""
+    names = SWEEP_SETS.get(a.sweeps or 'all') or [x for x in a.sweeps.split(',') if x]
+    bad = [x for x in names if x not in SWEEPS]
+    if bad:
+        raise SystemExit('unknown sweeps: %s (have %s)' % (bad, ', '.join(SWEEPS)))
+    os.makedirs(a.out, exist_ok=True)
+    ports, lines, total_bad = ports_of(a), [], 0
+    for name in names:
+        sw = SWEEPS[name]
+        cfg = CONFIGS[sw['base']]
+        t0 = time.time()
+        with ports.open(a.gpu) as c:
+            ws = c.ws
+            q = cfg['q'] + ('&' + a.q.lstrip('&') if a.q else '')
+            url, load_s, _ = load_page(c, a.html, q, a.rseed)
+            js(ws, '__H.frozen(), 0')
+            P = cfg.get('ports')
+            if P and 'before' in P:
+                js(ws, 'for (var i = 0; i < __game.ships().length; i++) void __game.portsForce(i, %s); 0' % json.dumps(P['before']))
+            js(ws, 'JSON.stringify(__H.ticks(%d))' % cfg['warm'])
+            if P:
+                js(ws, 'for (var i = 0; i < __game.ships().length; i++) void __game.portsForce(i, %s); 0' % json.dumps(P['after']))
+                js(ws, 'JSON.stringify(__H.ticks(%d))' % P['mid'])
+            if cfg.get('hook'):
+                run_hook(ws, cfg['hook'])
+            js(ws, '__game.gfx({aa: 0}), 0')                                # exact pixels: MSAA is not bit-reproducible on this GPU
+            gfx = js(ws, '(function(){var g=__game.gfx(); return {level:g.level, refl:g.refl, w:g.w, h:g.h};})()')
+            steps, res = sw['steps'], []
+            for i in range(0, len(steps), 6):                              # a few steps per evaluation (each renders 3 times)
+                res += js(ws, '__H.cullSweep(%s, %d)' % (json.dumps(steps[i:i + 6]), 2))
+        nbad = 0
+        for e in res:
+            if e['m']['px'] or e['r']['px']:
+                nbad += 1
+                if e.get('img'):
+                    im = e.pop('img')
+                    pa, pb = os.path.join(a.out, '%s_%03d_on.png' % (name, e['k'])), os.path.join(a.out, '%s_%03d_off.png' % (name, e['k']))
+                    save_png(pa, im['w'], im['h'], im['on']); save_png(pb, im['w'], im['h'], im['off'])
+                    px_diff(pa, pb, os.path.join(a.out, '%s_%03d_diff.png' % (name, e['k'])))
+        mo_ri = sum(1 for e in res for v in e['cs'] if (v & 48) == 16)       # an owner culled in main but drawn in the reflection
+        mi_ro = sum(1 for e in res for v in e['cs'] if (v & 48) == 32)
+        both = sum(1 for e in res for v in e['cs'] if (v & 48) == 0)
+        noise = sum(1 for e in res if e['nm']['px'] or e['nr']['px'])
+        idle = sum(1 for e in res if (e['m']['px'] or e['r']['px']) and not e['cm'] and not e['cr'])   # differs although nothing was culled ⇒ GPU noise (eve_late's sea)
+        line = ('%-10s %-16s refl=%s steps %3d  culled main %4d refl %4d  (main-out/refl-in %d, main-in/refl-out %d, both-out %d)  '
+                'DIFF %d (with nothing culled %d)  noise %d  %.0fs') % (name, sw['base'], gfx.get('refl'), len(res), sum(e['cm'] for e in res), sum(e['cr'] for e in res),
+                                               mo_ri, mi_ro, both, nbad, idle, noise, time.time() - t0)
+        print(line, flush=True)
+        lines.append(line)
+        total_bad += nbad
+        with open(os.path.join(a.out, name + '.json'), 'w', encoding='utf-8', newline='\n') as f:
+            json.dump({'sweep': name, 'base': sw['base'], 'url': url, 'load_s': load_s, 'gfx': gfx, 'q_extra': a.q, 'steps': steps, 'res': res}, f)
+    lines.append('RESULT: %s (%d differing steps)' % ('EXACT' if not total_bad else 'DIFFERS', total_bad))
+    print(lines[-1])
+    with open(os.path.join(a.out, 'summary.txt'), 'w', encoding='utf-8', newline='\n') as f:
+        f.write('\n'.join(lines) + '\n')
+    return 0 if not total_bad else 2
+
+
 def cmd_probe(a):
     ports = ports_of(a)
     for k in cdp.GPU_FLAGS:
@@ -1244,11 +1332,20 @@ def main():
     p = sp.add_parser('probe')
     p.add_argument('--ports', default='')
     p.add_argument('--port', type=int, default=9361)
+    cw = sp.add_parser('cullsweep', help='TASK-0813: off-screen culling on vs off, frame by frame along camera sweeps (SWEEPS)')
+    cw.add_argument('--html', required=True)
+    cw.add_argument('--out', required=True)
+    cw.add_argument('--sweeps', default='all', help='all | fast | comma list of SWEEPS names')
+    cw.add_argument('--q', default='', help='extra query appended to every URL (e.g. inst=0)')
+    cw.add_argument('--gpu', default='default', choices=list(cdp.GPU_FLAGS))
+    cw.add_argument('--rseed', type=int, default=3)
+    cw.add_argument('--ports', default='')
+    cw.add_argument('--port', type=int, default=9361)
     a = ap.parse_args()
     if getattr(a, 'ports', None) == '':
         a.ports = None
     return {'measure': cmd_measure, 'ab': cmd_ab, 'quick': cmd_quick, 'compare': cmd_compare, 'report': cmd_report, 'probe': cmd_probe,
-            'snapshot': cmd_snapshot, 'smoke': cmd_smoke}[a.cmd](a)
+            'snapshot': cmd_snapshot, 'smoke': cmd_smoke, 'cullsweep': cmd_cullsweep}[a.cmd](a)
 
 
 if __name__ == '__main__':
