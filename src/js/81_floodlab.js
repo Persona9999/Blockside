@@ -658,3 +658,56 @@ function wdropLab(o) {
   sh.wrs = null; DT = DT_BASE = DT0;
   return out;
 }
+
+// ── 打穿的開口 vs 照現在的格子重算（TASK-0809 驗收第 4 格；Tim 2026-10-22 定半連通之後縮成比接口）──
+// ?demo=…&p_flood=4&wcmp=20,40（秒）⇒ 到那一秒，每艘有房間模擬、還沒斷的船，兩條不同源的路比「哪幾對舊房被新打穿的洞連起來、口多大」：
+//   局部（33_wrsim.js wrsLine）：打掉一格 ⇒ 穿過那一格的三條直線，兩頭各走最多 WRS_THICK 格碰到兩間不同的房 ⇒ 一條線一面 S²。
+//   照格子（這裡）：艙內（烘焙時的外皮之內）打掉的格照六個面相連分成一個一個洞；每個洞貼著哪幾間舊房、各貼幾面 ⇒ 每兩間之間的口 ＝ 兩邊貼的面數較少的那一邊（瓶頸）× S²。
+//   ⛔ 不照重切出來的新房間對回舊房比：受損後重切的房間會變多（200 ⇒ 405）、還會把幾間併成一間，對回舊房的方式一換，面積就從一對搬到另一對、一個接口記進好幾對（量過）⇒ 量到的是對應，不是開口。
+//   重切（33_wrooms.js 那一套、拿 sh.grid 整艘再切一次）只留讀數：切成幾間、併了幾對舊房（兩間舊房各有一半以上的格落在同一間新房；對照半連通）、外皮變了幾列。
+//   寫進 #wcmp（另外一塊；#dump 照舊，不帶 wcmp ⇒ 一行都不算）。
+function wrsRebakeCmp(sh) {
+  var s = sh.wrs, O = s.O, T0 = sh.T, W0 = T0.wrm, NR = W0.roomVox.length, S2 = S * S, G = sh.grid, H = T0.hullG, r, q, k, x, y, z, xi;
+  var K0 = flSkin(T0), NXV = K0.nxv, NY = K0.yhi - K0.ylo + 1, ZT = K0.zTop, pk = function (a, b) { return a < b ? a * NR + b : b * NR + a; };
+  var base = new Set(); for (q = 0; q < W0.opN.length; q++) base.add(pk(W0.opA[q], W0.opB[q]));
+  function inside(x2, y2, z2) { var xi2 = x2 - K0.x0; if (z2 < 0 || z2 >= ZT || xi2 < 0 || xi2 >= NXV) return false; var k2 = z2 * NXV + xi2; return K0.yP[k2] >= 0 && y2 > K0.yM[k2] && y2 < K0.yP[k2]; }
+  var id = function (x2, y2, z2) { return ((z2 * NXV + x2 - K0.x0) * NY + y2 - K0.ylo); };
+  var hole = new Map(), cells = [];                                       // 艙內打掉的格 ⇒ 第幾個洞（先 −1）
+  for (z = 0; z < ZT; z++) for (xi = 0; xi < NXV; xi++) { k = z * NXV + xi; x = K0.x0 + xi; if (K0.yP[k] < 0) continue;
+    for (y = K0.yM[k] + 1; y < K0.yP[k]; y++) if (H.get(x, y, z) && !G.get(x, y, z)) { hole.set(id(x, y, z), -1); cells.push(x, y, z); } }
+  var D = [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]], P = new Map(), nH = 0, big = [];
+  function row(a, b) { var key = pk(a, b), e = P.get(key); if (!e) P.set(key, e = { a: Math.min(a, b), b: Math.max(a, b), old: base.has(key) ? 1 : 0, loc: [0, 0], grid: 0, semi: 0 }); return e; }
+  for (var c = 0; c < cells.length; c += 3) {
+    if (hole.get(id(cells[c], cells[c + 1], cells[c + 2])) >= 0) continue;
+    var qu = [cells[c], cells[c + 1], cells[c + 2]], h = nH++, touch = new Map(), n = 0; hole.set(id(cells[c], cells[c + 1], cells[c + 2]), h);
+    while (qu.length) { var cz = qu.pop(), cy = qu.pop(), cx = qu.pop(); n++;
+      for (var d = 0; d < 6; d++) { var nx = cx + D[d][0], ny = cy + D[d][1], nz = cz + D[d][2];
+        if (G.get(nx, ny, nz)) continue;
+        var hk = inside(nx, ny, nz) ? id(nx, ny, nz) : -1, hv = hk >= 0 ? hole.get(hk) : undefined;
+        if (hv !== undefined) { if (hv < 0) { hole.set(hk, h); qu.push(nx, ny, nz); } continue; }
+        var ro = wrRoomAt(W0, nx, ny, nz); if (ro >= 0) touch.set(ro, (touch.get(ro) || 0) + 1); } }
+    var L = Array.from(touch.keys()); if (L.length > 1 && big.length < 12) big.push({ cells: n, rooms: L.length });
+    for (var u = 0; u < L.length; u++) for (var v = u + 1; v < L.length; v++) { var e0 = row(L[u], L[v]); e0.grid += Math.min(touch.get(L[u]), touch.get(L[v])) * S2; }
+  }
+  for (q = s.NO0; q < s.NO; q++) if (O.N[q] > 0) { var e1 = row(O.A[q], O.B[q]); e1.loc[O.T[q] ? 0 : 1] += O.N[q] * S2; if (s.semi[q]) e1.semi = 1; }
+  var T2 = Object.create(T0); T2.flSkin = null; T2.hullG = G; T2.keep = null;   // ⛔ T.keep 是船型快取那一份：不清 ⇒ 重切的結果會蓋掉同型船共用的房間
+  wrSteps(T2, null).forEach(function (f) { f(); });
+  var W1 = T2.wrm, K1 = T2.flSkin, skin = 0; for (k = 0; k < K0.yP.length; k++) if (K0.yP[k] !== K1.yP[k] || K0.yM[k] !== K1.yM[k]) skin++;
+  var cnt = []; for (r = 0; r < W1.roomVox.length; r++) cnt.push(new Map());
+  for (z = 0; z < W1.zTop; z++) for (xi = 0; xi < W1.nxv; xi++) { k = z * W1.nxv + xi; x = W1.x0 + xi;
+    for (var j = W1.rowS[k]; j < W1.rowS[k + 1]; j++) { var m = cnt[W1.regRoom[W1.runReg[j]]]; for (y = W1.ry0[j]; y <= W1.ry1[j]; y++) { var o = wrRoomAt(W0, x, y, z); if (o >= 0) m.set(o, (m.get(o) || 0) + 1); } } }
+  var land = new Int32Array(NR).fill(-1); cnt.forEach(function (mp, r2) { mp.forEach(function (nn, o2) { if (nn >= 0.5 * W0.roomVox[o2]) land[o2] = r2; }); });
+  var out = { rooms0: NR, cutIn: cells.length / 3, holes: nH, big: big, reb: { rooms: W1.roomVox.length, skin: skin, merged: 0, mergedSemi: 0 }, dyn: { ops: 0, m2: 0, semi: s.semiN },
+    sum: { both: 0, gridOnly: 0, locOnly: 0, gridM2: 0, locM2: 0, bothGridM2: 0, bothLocM2: 0 }, rows: [] };
+  for (q = s.NO0; q < s.NO; q++) if (O.N[q] > 0) { out.dyn.ops++; out.dyn.m2 += O.N[q] * S2; }
+  P.forEach(function (e) {
+    if (land[e.a] >= 0 && land[e.a] === land[e.b]) { out.reb.merged++; if (e.semi) out.reb.mergedSemi++; e.merged = 1; }
+    var lc = e.loc[0] + e.loc[1], kind = lc > 0 && e.grid > 0 ? 'both' : e.grid > 0 ? 'gridOnly' : 'locOnly';
+    out.sum[kind]++; out.sum.gridM2 += e.grid; out.sum.locM2 += lc; if (kind === 'both') { out.sum.bothGridM2 += e.grid; out.sum.bothLocM2 += lc; }
+    out.rows.push({ a: e.a, b: e.b, old: e.old, kind: kind, loc: +lc.toFixed(2), grid: +e.grid.toFixed(2), semi: e.semi, merged: e.merged || 0 });
+  });
+  out.dyn.m2 = +out.dyn.m2.toFixed(2); Object.keys(out.sum).forEach(function (k3) { out.sum[k3] = +out.sum[k3].toFixed(2); });
+  out.rows.sort(function (p1, p2) { return Math.max(p2.grid, p2.loc) - Math.max(p1.grid, p1.loc) || p1.a - p2.a || p1.b - p2.b; });
+  out.rows = out.rows.slice(0, 40);
+  return out;
+}

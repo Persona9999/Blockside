@@ -518,8 +518,10 @@ else GL_READY.then(yieldUI).then(function () {                     // 先讓主�
     var PFB = rec && Q.get('prof') === '1' ? { n: 0, ms: 0, max: 0 } : null;   // ?prof=1：物理那 6 秒每步花多久（step 整個）＋ PROF（帆的碰撞 TASK-0603 量效能用；不加這個參數 ⇒ dump 跟以前一樣）
     var CQ = Q.get('core') === '1' ? { add: coreAddQ(), added: [] } : null;   // ?core=1：跑完寫戰後狀態（#core，57_core.js）；?coreadd=red:monitor@60 到那一秒中途加船
     var RC = rec && Q.get('ropecheck') === '1' ? SHIPS.map(function (sh) { return { hull: sh.T.id, stat: ropeAuditStatic(sh), seen: {}, float: [] }; }) : null;   // 繩的檢查（ropecheck.py）
+    var WC = Q.has('wcmp') ? { t: Q.get('wcmp').split(',').map(Number).filter(function (v) { return v > 0; }).sort(function (a, b) { return a - b; }), out: [] } : null;   // ?wcmp=20,40：到那幾秒拿打穿的開口跟整艘重切比（81_floodlab.js wrsRebakeCmp；TASK-0809）
     for (var i = 0; i < steps; i++) {
       if (phys && i === from && from > 0) setPhys(true);
+      if (WC && WC.t.length && SIMT >= WC.t[0]) { WC.t.shift(); SHIPS.forEach(function (sh, k) { if (sh.wrs && !sh.broken && !sh.sinkingFinal) WC.out.push(Object.assign({ t: +SIMT.toFixed(1), k: k, hull: sh.T.id, team: sh.team }, wrsRebakeCmp(sh))); }); }
       if (PFB && i === from) PROF = { cloth: 0, rope: 0, shred: 0, buf: 0, cc: 0, ccN: 0, ccHit: 0, ccQ: 0, ccMax: 0, ccGeo: 0 };
       if (CQ) CQ.add.forEach(function (a) { if (!a.done && SIMT >= a.t) { a.done = true; var me = SHIPS.filter(function (s) { return s.team === a.team; })[0] || SHIPS[0], pre = SHIPS.map(function (s) { return [s.px, s.pz, s.yaw, s.grid.count, s.sink]; });
         var nw = coreAdd({ team: a.team, hull: a.hull, x: me.px + 250, z: me.pz + (a.team === 'blue' ? 150 : -150) }); if (nw && rec) rec.push({ maxList: 0, maxPre: 0, maxSinkPre: 0, final: null, sunk: null, struck: null });   // ?dump 的每艘紀錄：開局就定好長度 ⇒ 加的那艘補一筆
@@ -538,6 +540,7 @@ else GL_READY.then(yieldUI).then(function () {                     // 先讓主�
     }
     if (!HEADLESS) remesh(Infinity); flowRun(false); uiAway();
     if (TLOG && Q.get('test') === '1') { var pre4 = document.createElement('pre'); pre4.id = 'crewlog'; document.body.appendChild(pre4); pre4.textContent = JSON.stringify(tlgData()); }   // 測試模式（83_testlog.js；src/tests/crew_log.py 讀）：另外一塊，#dump 照舊
+    if (WC) { var pre6 = document.createElement('pre'); pre6.id = 'wcmp'; document.body.appendChild(pre6); pre6.textContent = JSON.stringify(WC.out); }   // 打穿的開口 vs 整艘重切（TASK-0809）：另外一塊，#dump 照舊
     if (CQ) { var pre5 = document.createElement('pre'); pre5.id = 'core'; document.body.appendChild(pre5); var CO = coreOut(); CO.added = CQ.added; pre5.textContent = JSON.stringify(CO); }
     if (RC) { var pre2 = document.createElement('pre'); pre2.id = 'ropecheck'; document.body.appendChild(pre2); pre2.textContent = JSON.stringify(RC.map(function (c) { return { hull: c.hull, stat: c.stat, float: c.float }; })); }
     if (rec) { var pre = document.createElement('pre'); pre.id = 'dump'; document.body.appendChild(pre);
