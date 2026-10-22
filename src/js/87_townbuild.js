@@ -27,6 +27,20 @@ function twbScreenOf(T, q) {
   return [r.left + (cx / cw + 1) / 2 * r.width, r.top + (1 - cy / cw) / 2 * r.height];
 }
 /** 畫面高度：整過地的地面（城外 ⇒ 海底／陸地），水面以下當水面（點海 ⇒ 落在水面上）。 */
+/** 測試用（__game.twbProbe）：規劃座標 q ⇒ 世界點、畫面地形（townRoadHeight：路面頂點建的時候讀的那一個）、那一區（63_towns.js T.gt）髒不髒、
+ *  畫出來的路面離這一點最近的頂點（讀 GPU 緩衝區；只看朝上的面）的高度與那個頂點位置現在的地形 ⇒ 路面有沒有沉到地形底下。 */
+function twbProbe(q) {
+  var T = twbTown(); if (!T || !BED || !BED.A) return null;
+  var w = twbToWorld(T, q), x = w[0], z = w[1], S = TOWN_GT_SZ, k = Math.floor((x + BED.ax) / S) + '_' + Math.floor((z + BED.az) / S), Q = T.gt && T.gt[k];
+  var o = { w: [+x.toFixed(2), +z.toFixed(2)], terr: +townRoadHeight(x, z).toFixed(3), lift: TOWN_ROAD_LIFT, tile: Q ? { k: k, dirty: Q.dirty, built: !!Q.g } : null, vb: null };
+  if (Q && Q.g) {
+    gl.bindBuffer(gl.ARRAY_BUFFER, Q.g.vb);
+    var V = new Float32Array(gl.getBufferParameter(gl.ARRAY_BUFFER, gl.BUFFER_SIZE) / 4), bd = 1e9, bi = -1; gl.getBufferSubData(gl.ARRAY_BUFFER, 0, V);
+    for (var i = 0; i < V.length; i += 9) { var d = Math.hypot(V[i] - x, V[i + 2] - z); if (V[i + 4] > 0.5 && d < bd) { bd = d; bi = i; } }
+    if (bi >= 0) o.vb = { y: +V[bi + 1].toFixed(3), d: +bd.toFixed(2), terr: +townRoadHeight(V[bi], V[bi + 2]).toFixed(3) };
+  }
+  return o;
+}
 function twbHeight(x, z) { var h = townGround(x, z); if (!(h === h)) h = bedHgt(x, z); return Math.max(h, 0); }
 /** 螢幕 (cx, cy) ⇒ 地面上的世界點 [x, y, z]（射線從眼睛往外每 2 m 一步、碰到地面再二分 12 次；3 km 內沒碰到 ⇒ null）。同 71_input.js inPick 的反投影。 */
 function twbGround(cx, cy) {
