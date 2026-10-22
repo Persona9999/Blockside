@@ -17,6 +17,7 @@
 //   place.view（小植物）⇒ 超過那個距離就不畫。貼圖集照格子排（每列 TREE_ATLAS_COLS 格起跳、棵數多了加寬到接近正方形 ⇒ 寬高都不超過 2048（WebGL2 保證的貼圖大小））。
 //   光照跟地形同一套（天光、陽光、船的陰影、霧照 BED_FOG）；葉子照風搖（搖晃權重 × 風）。樹不投影子。
 //   城鎮（63_towns.js）：高度照整過地的那一份（townHv）、規劃的 clear 裡不擺（townClr；樹與小植物都是）。
+//   城鎮模型標的樹（雕刻的子作品 meta kind=tree、tree=樹種；TASK-0748）：照標的位置、樹種、高度種（treeTownPut）；只給城鎮的樹種 place.town（16_treegen.js：柏樹、橄欖、果樹、懸鈴木）不照地形自己長。
 //   ?trees=0 ⇒ 不長樹。
 var TREE_DENS_K = [0.3, 0.6, 1];                                        // 植物密度：畫質的「植物密度」少／中／多留幾成（07_gfx.js GFX.plant；treeBin 照位置雜湊挑，跟載入順序無關）
 var TREE_LOD_D = [400, 650, 900, 1350];                                 // 低模到多遠：畫質的「立體樹的距離」（07_gfx.js GFX.treed；treeDraw 換了就重新分組）。⛔ 不超過 TREE_SHELL[0]（貼圖跟樹冠殼交接的地方）
@@ -50,11 +51,13 @@ function treeStep(J, t1) {
     if (!far) TREES.stat.bySp[P.sp] = (TREES.stat.bySp[P.sp] || 0) + P.nk;
     J.sp = null; J.si++;
   }
+  J.t0 = J.out.length;                                                 // 從這裡起是城鎮標的樹（treeBin：不照植物密度抽稀）
+  if (!far) treeTownPut(J);
   var out = J.out, bb = J.bb;
   bb[4] += 30; bb[0] -= 10; bb[2] -= 10; bb[3] += 10; bb[5] += 10;
   J.ms += performance.now() - t0; TREES.stat.plantMs += J.ms;
   if (far) TREES.stat.far += out.length / 8; else TREES.stat.plant += out.length / 8;
-  J.res = { I: new Float32Array(out), n: out.length / 8, bb: bb, sh: out.length ? treeShell(C, out, far, J.hAt) : null };
+  J.res = { I: new Float32Array(out), n: out.length / 8, t0: J.t0, bb: bb, sh: out.length ? treeShell(C, out, far, J.hAt) : null };
   return true;
 }
 /** 準備：整地（townHv）；每 TREE_CELL 公尺一格（外擴一格）有哪些底質（位元）、最低最高的海拔 ⇒ 每一種先照它跳過整格（底質不合、海拔帶整個在外面）的候選點；
@@ -79,6 +82,7 @@ function treePrep(J) {
 /** 第 J.si 種開始擺：候選點的間距、雜湊的種子、整格先跳過的表 ⇒ J.sp；這一種在這一塊不擺（遠景塊不算殼的小植物）⇒ false。 */
 function treeSpecies(J) {
   var C = J.C, far = J.far, A = BED.A, size = A.chunk, si = J.si, sp = J.SP[si], S = TREE_SPECIES[sp], Pl = S.place, gap = Pl.spacing * (far ? TREE_FAR_SP : 1), m = Math.floor(size / gap);
+  if (Pl.town) return false;                                            // 只種在城鎮標的位置（treeTownPut），不照地形自己長
   if (far && Pl.shell === 0) return false;                              // 遠景塊只拿來算樹冠殼 ⇒ 不算進殼的小植物不擺
   var vb = C.vg && A.vis ? A.vis.indexOf(sp) : -1, vs = vb >= 0 ? size / (C.vgN - 1) : 0;   // 植被段（Blocksail 照物種的分區、氣候、土壤推算，MAP_CHUNK.md §4）：這一種在不在那一點的名單裡；名單沒有這一種 ⇒ 不限
   var CG = TREE_CELL, cn = J.cn, N2 = J.N2, A4 = Pl.alt, mm = 0, ok = new Uint8Array(N2), cI = new Int32Array(m), q; for (q in Pl.mats) mm |= 1 << q;
@@ -116,6 +120,22 @@ function treeRow(J, P, j) {
     out.push(px, y - (Pl.sink != null ? Pl.sink : 0.3), pz, rot, sc, 0.85 + 0.3 * treeHash(gi, gj, sd + 4), si, Math.floor(treeHash(gi, gj, sd + 5) * S.variants)); P.nk++;
     bb[0] = Math.min(bb[0], px); bb[2] = Math.min(bb[2], pz); bb[3] = Math.max(bb[3], px); bb[5] = Math.max(bb[5], pz); bb[1] = Math.min(bb[1], y); bb[4] = Math.max(bb[4], y);
   }
+}
+/** 城鎮模型標的樹（雕刻作品的子作品 meta kind=tree ⇒ Blocksail tools/townmodels.py 記成樹點 ⇒ 63_towns.js townTreesSet ⇒ T.trees）：落在這一塊的照標的樹種、高度種上；
+ *  轉角、深淺、第幾棵照位置的雜湊（每次一樣）。城的實例換了 ⇒ townTreesSet 重排碰到的塊。 */
+function treeTownPut(J) {
+  if (typeof TOWNS === 'undefined' || !TOWNS.list.length) return;
+  var C = J.C, size = BED.A.chunk, x0 = C.cx * size - BED.ax, z0 = C.cy * size - BED.az, out = J.out, bb = J.bb;
+  TOWNS.list.forEach(function (T) {
+    var L = T.trees; if (!L || !L.n || L.bb[0] >= x0 + size || L.bb[2] < x0 || L.bb[1] >= z0 + size || L.bb[3] < z0) return;
+    for (var o = 0; o < L.n * 6; o += 6) {
+      var x = L.a[o], z = L.a[o + 2]; if (x < x0 || x >= x0 + size || z < z0 || z >= z0 + size) continue;
+      var si = L.a[o + 5], S = TREE_SPECIES[J.SP[si]], gi = Math.round(x * 4), gj = Math.round(z * 4), y = L.a[o + 1] - (S.place.sink != null ? S.place.sink : 0.3);
+      out.push(x, y, z, treeHash(gi, gj, 7331) * 6.2832, L.a[o + 3] / ((S.height[0] + S.height[1]) / 2), 0.85 + 0.3 * treeHash(gi, gj, 7332), si, Math.floor(treeHash(gi, gj, 7333) * S.variants));
+      bb[0] = Math.min(bb[0], x); bb[2] = Math.min(bb[2], z); bb[3] = Math.max(bb[3], x); bb[5] = Math.max(bb[5], z); bb[1] = Math.min(bb[1], y); bb[4] = Math.max(bb[4], y + L.a[o + 3]);
+      TREES.stat.town = (TREES.stat.town || 0) + 1; TREES.stat.bySp[J.SP[si]] = (TREES.stat.bySp[J.SP[si]] || 0) + 1;
+    }
+  });
 }
 // 擺樹排隊（2026-10-20；08_seabed.js 檔頭「收塊排隊」）：有畫面迴圈（BED_SLICE）⇒ 'bedChunk' 只記下來（TREE_Q；同一塊只留最新的那一份），
 //   畫面迴圈每格照背景預算擺（treePump：一塊照樹種、照列分好幾格做完；在用的塊先、遠景的樹冠殼後）；擺好之前那一塊照舊畫舊的那一份（城到了、換漩渦要重擺時不會先空一下）；
@@ -318,19 +338,19 @@ function treeBin(keys, eye) {
   var vw = TREES.vw;
   // 植物密度（畫質）：每一棵照位置的雜湊（0～1，同一棵每次一樣）比 dk，大的不畫（細、低模、貼圖三級一起少；樹冠殼照擺的棵數不變 ⇒ 1.1 km 外照舊是整片林子）
   var dk = TREES.dens = TREE_DENS_K[GFX.plant] != null ? TREE_DENS_K[GFX.plant] : 1;
-  function lodOf(I, o) {
-    if (dk < 1) { var hh = Math.sin(I[o] * 12.9898 + I[o + 2] * 78.233) * 43758.5453; if (hh - Math.floor(hh) >= dk) return 4; }
+  function lodOf(I, o, tz) {
+    if (dk < 1 && o < tz) { var hh = Math.sin(I[o] * 12.9898 + I[o + 2] * 78.233) * 43758.5453; if (hh - Math.floor(hh) >= dk) return 4; }   // 城鎮標的樹（o ≥ tz）照標的種，不抽稀
     var dx = I[o] - eye[0], dy = I[o + 1] - eye[1], dz = I[o + 2] - eye[2], d = dx * dx + dy * dy + dz * dz; return d > vw[I[o + 6]] ? 4 : d < L0 ? 0 : d < L1 ? 1 : dx * dx + dz * dz < L2 ? 2 : 3;
   }
-  keys.forEach(function (k) { var c = TREES.ch[k], I = c.I; for (var o = 0; o < I.length; o += 8) { var l = lodOf(I, o); if (l < 3) cnt[l < 2 ? l * NL + vi[I[o + 6]] + I[o + 7] : NL * 2]++; } });
+  keys.forEach(function (k) { var c = TREES.ch[k], I = c.I, tz = c.t0 != null ? c.t0 : I.length; for (var o = 0; o < I.length; o += 8) { var l = lodOf(I, o, tz); if (l < 3) cnt[l < 2 ? l * NL + vi[I[o + 6]] + I[o + 7] : NL * 2]++; } });
   var off = new Int32Array(cnt.length), tot = [0, 0, 0];
   for (var b = 0; b < cnt.length; b++) { var l2 = b < NL ? 0 : b < NL * 2 ? 1 : 2; off[b] = tot[l2]; tot[l2] += cnt[b]; }
   var D = [0, 1, 2].map(function (l) { var need = tot[l] * 6; if (!TREES.buf[l] || TREES.buf[l].length < need) TREES.buf[l] = new Float32Array(Math.max(need, 6) * 1.5 | 0); return TREES.buf[l]; });
   var at = off.slice();
   keys.forEach(function (k) {
-    var I = TREES.ch[k].I;
+    var I = TREES.ch[k].I, tz = TREES.ch[k].t0 != null ? TREES.ch[k].t0 : I.length;
     for (var o = 0; o < I.length; o += 8) {
-      var l = lodOf(I, o); if (l > 2) continue;
+      var l = lodOf(I, o, tz); if (l > 2) continue;
       var cell = vi[I[o + 6]] + I[o + 7], b = l < 2 ? l * NL + cell : NL * 2, q = at[b]++ * 6, A = D[l];
       A[q] = I[o]; A[q + 1] = I[o + 1]; A[q + 2] = I[o + 2]; A[q + 3] = l < 2 ? I[o + 3] : cell; A[q + 4] = I[o + 4]; A[q + 5] = I[o + 5];
     }
