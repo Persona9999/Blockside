@@ -397,12 +397,84 @@ function solve(ea, eb, rest, brk, p, pin, k) {
     if (wb) { p[ib] -= dx * f; p[ib + 1] -= dy * f; p[ib + 2] -= dz * f; }
   }
 }
+// ── 布的拉伸上限（TASK-0821；Tim 2026-10-22「變得太過Q彈 變形太大了」「是否可以讓布有拉伸極限」「不能像橡膠一樣」）──
+// 為什麼：距離約束一步只解 RIG_LV.it 次（高 4 次）⇒ 強風（暴風雨的風 2.2 倍、風壓 ∝ 風速²）壓上去解不回靜止長度，帆被拉成長帶、鬆手又彈回來。
+//   量過（暴風雨、兩艘憲法號、物理全開，每面帆每條邊 長度 ÷ 靜止長度）：99 百分位 1.2～3.0 倍、最大 16.7 倍。
+// 做法（迭代解完之後，clothStep 最後）：
+//   ① 每條邊超過靜止長度 ×（1 ＋ SAIL_STRETCH）⇒ 夾回來（兩端照權重分；釘住的不動）。
+//   ② 整面（long-range attachment）：每個布點沿著布（還連著的邊、照靜止長度）到最近一個綁點的距離 D（多源 Dijkstra）⇒
+//      離那個綁點的直線距離超過 D ×（1 ＋ SAIL_STRETCH）⇒ 拉回來。綁點 ＝ 現在釘住的點（帆桁、格、繩）＋ 被 sheet 拉住的帆腳；
+//      綁點、斷掉的邊、sheet 變了才重算（簽名 c.lraSig）。斷開的那一塊沿著布到不了綁點 ⇒ D 無限大 ⇒ 不拉（照樣掉下去）。
+// ⛔ 只給人看：帆的形狀不進戰局（航速照帆的狀態算，不照布）。
+var SAIL_STRETCH = DEBUG && Q.has('strain') ? +Q.get('strain') : 0.04;
+var SAIL_LIM_IT = DEBUG && Q.has('strainit') ? +Q.get('strainit') : 2;   // 每條邊最多夾幾遍（每小步）
+var SAIL_SUB = !(DEBUG && Q.get('sailsub') === '0');                      // 布切小步（clothStep；?debug=1&sailsub=0 ⇒ 照以前一步解 itn 次，對照用）   // 布最多拉長幾成（?debug=1&strain=0 ⇒ 關掉，對照用）
+/** 布的鄰接表（照結構邊 ea、eb；同一個模板只建一次）。 */
+function clothAdj(T) {
+  if (T.adjS) return T;
+  var n = T.n, cnt = new Int32Array(n + 1), e;
+  for (e = 0; e < T.ea.length; e++) { cnt[T.ea[e] + 1]++; cnt[T.eb[e] + 1]++; }
+  for (e = 0; e < n; e++) cnt[e + 1] += cnt[e];
+  var at = cnt.slice(0, n), nb = new Int32Array(cnt[n]), ed = new Int32Array(cnt[n]);
+  for (e = 0; e < T.ea.length; e++) { var a = T.ea[e], b = T.eb[e]; nb[at[a]] = b; ed[at[a]++] = e; nb[at[b]] = a; ed[at[b]++] = e; }
+  T.adjS = cnt; T.adjN = nb; T.adjE = ed; return T;
+}
+/** 綁點、斷掉的邊、sheet 的簽名（變了 ⇒ 重算 D）。 */
+function clothLraSig(sh, c) {
+  var h = 0, pin = c.pin, i;
+  for (i = 0; i < pin.length; i++) if (pin[i]) h = (h * 31 + i + 1) | 0;
+  if (c.torn) for (i = 0; i < c.brk.length; i++) if (c.brk[i]) h = (h * 17 + i + 7) | 0;
+  if (c.tt) for (i = 0; i < c.tt.length; i++) { var r = sh.ropes[c.tt[i].j]; if (!r.dead && !(sh.tCut && sh.tCut[c.tt[i].j])) h = (h * 13 + c.tt[i].i + 3) | 0; }
+  return h;
+}
+/** 多源 Dijkstra：每個布點沿著布到最近綁點的距離 c.lraD、是哪一個綁點 c.lraA（到不了 ⇒ -1）。 */
+function clothLra(sh, c) {
+  var T = clothAdj(c.T.sim), n = T.n, D = c.lraD || (c.lraD = new Float32Array(n)), A = c.lraA || (c.lraA = new Int32Array(n)), i;
+  D.fill(Infinity); A.fill(-1);
+  var hp = [], hd = [];                                                  // 二元堆積（距離、點）
+  function push(d, v) { var k = hp.length; hp.push(v); hd.push(d); while (k > 0) { var pa = (k - 1) >> 1; if (hd[pa] <= d) break; hp[k] = hp[pa]; hd[k] = hd[pa]; k = pa; } hp[k] = v; hd[k] = d; }
+  function pop() { var v = hp[0], lv = hp.pop(), ld = hd.pop(), k = 0, m = hp.length; if (m) { while (true) { var l = 2 * k + 1, r = l + 1, s = k; if (l < m && hd[l] < (s === k ? ld : hd[s])) s = l; if (r < m && hd[r] < (s === k ? ld : hd[s])) s = r; if (s === k) break; hp[k] = hp[s]; hd[k] = hd[s]; k = s; } hp[k] = lv; hd[k] = ld; } return v; }
+  function seed(v) { if (D[v] > 0) { D[v] = 0; A[v] = v; push(0, v); } }
+  for (i = 0; i < n; i++) if (c.pin[i]) seed(i);
+  if (c.tt) for (i = 0; i < c.tt.length; i++) { var r = sh.ropes[c.tt[i].j]; if (!r.dead && !(sh.tCut && sh.tCut[c.tt[i].j])) seed(c.tt[i].i); }
+  var done = new Uint8Array(n);
+  while (hp.length) {
+    var u = pop(); if (done[u]) continue; done[u] = 1;
+    for (var k = T.adjS[u]; k < T.adjS[u + 1]; k++) {
+      var e = T.adjE[k]; if (c.torn && c.brk[e]) continue;
+      var v = T.adjN[k], d = D[u] + T.rest[e];
+      if (d < D[v]) { D[v] = d; A[v] = A[u]; push(d, v); }
+    }
+  }
+}
+/** 拉伸上限（clothStep 迭代之後）：① 每條邊 ② 每個點到它的綁點（見上）。 */
+function clothLimit(sh, c) {
+  var T = c.T.sim, p = c.p, pin = c.pin, k1 = 1 + SAIL_STRETCH, ea = T.ea, eb = T.eb, rest = T.rest, brk = c.torn ? c.brk : null, e, i, pass, bad;
+  for (pass = 0, bad = 1; pass < SAIL_LIM_IT && bad; pass++) for (bad = 0, e = 0; e < ea.length; e++) {   // 相鄰的邊互相拉 ⇒ 一遍夾不完：最多 SAIL_LIM_IT 遍、沒有超過的就停
+    if (brk && brk[e]) continue;
+    var a = ea[e], b = eb[e], wa = pin[a] ? 0 : 1, wb = pin[b] ? 0 : 1; if (!(wa + wb)) continue;
+    var ia = a * 3, ib = b * 3, dx = p[ib] - p[ia], dy = p[ib + 1] - p[ia + 1], dz = p[ib + 2] - p[ia + 2], l2 = dx * dx + dy * dy + dz * dz, lm = rest[e] * k1;
+    if (l2 <= lm * lm) continue;
+    var l = Math.sqrt(l2), f = (l - lm) / l / (wa + wb); bad++;
+    if (wa) { p[ia] += dx * f; p[ia + 1] += dy * f; p[ia + 2] += dz * f; }
+    if (wb) { p[ib] -= dx * f; p[ib + 1] -= dy * f; p[ib + 2] -= dz * f; }
+  }
+  var sg = clothLraSig(sh, c);
+  if (c.lraSig !== sg || !c.lraD) { clothLra(sh, c); c.lraSig = sg; }
+  var D = c.lraD, A = c.lraA;
+  for (i = 0; i < T.n; i++) {
+    var an = A[i]; if (an < 0 || an === i || pin[i]) continue;
+    var o = i * 3, q = an * 3, x = p[o] - p[q], y = p[o + 1] - p[q + 1], z = p[o + 2] - p[q + 2], d2 = x * x + y * y + z * z, lim = D[i] * k1;
+    if (d2 <= lim * lim) continue;
+    var s = lim / Math.sqrt(d2); p[o] = p[q] + x * s; p[o + 1] = p[q + 1] + y * s; p[o + 2] = p[q + 2] + z * s;
+  }
+}
 /** 落在格子裡（甲板、船殼）⇒ 退回上一步的位置（上一步本來就在格子裡的不管：繩頭從錨格裡長出來）。 */
 function hitGrid(g, p, q, o) {
   if (g.get(Math.floor(p[o]), Math.floor(p[o + 1]), Math.floor(p[o + 2])) && !g.get(Math.floor(q[o]), Math.floor(q[o + 1]), Math.floor(q[o + 2]))) { p[o] = q[o]; p[o + 1] = q[o + 1]; p[o + 2] = q[o + 2]; }
 }
 function clothStep(sh, c, wl, gv, h) {                 // c.kw：風壓倍率（帆的布片，34_shreds.js；帆 ＝ 1）；c.ev：這一塊幾步走一次（遠方的船放大，physStep）；h：切小步時這一小步幾秒（TASK-0797；沒給 ＝ 一整段）
-  var T = c.T.sim, n = T.n, p = c.p, q = c.q, pin = c.pin, tr = T.tris, A = CACC, N = CCNT, HC = h || (c.ev || steps60(rigLv().every)) * DT, dt2 = HC * HC, inv = 1 / (3 * HC), dmp = DAMP * DAMP, kw = KW * (c.kw || 1), i, j, x;
+  var T = c.T.sim, n = T.n, p = c.p, q = c.q, pin = c.pin, tr = T.tris, A = CACC, N = CCNT, HC = h || (c.ev || steps60(rigLv().every)) * DT, inv = 1 / (3 * HC / (SAIL_SUB ? c.itn || rigLv().it : 1)), dmp = decay60(DAMP, HC), kw = KW * (c.kw || 1), i, j, x;
   A.fill(0, 0, n * 3); N.fill(0, 0, n);
   for (j = 0; j < tr.length; j += 3) {           // 風壓：每個三角形沿法線推，大小 ∝（相對風在法線上的分量）²，相對風扣掉布自己的速度
     if (c.torn && (c.brk[T.te[j]] || c.brk[T.te[j + 1]] || c.brk[T.te[j + 2]])) continue;
@@ -418,13 +490,20 @@ function clothStep(sh, c, wl, gv, h) {                 // c.kw：風壓倍率（
     A[a] += fx; A[a + 1] += fy; A[a + 2] += fz; A[b] += fx; A[b + 1] += fy; A[b + 2] += fz; A[d] += fx; A[d + 1] += fy; A[d + 2] += fz;
     N[a / 3]++; N[b / 3]++; N[d / 3]++;
   }
-  for (i = 0; i < n; i++) {
-    if (pin[i]) continue;
-    var o = i * 3, kk = N[i] ? 1 / N[i] : 0;
-    for (x = 0; x < 3; x++) { var cur = p[o + x], vel = (cur - q[o + x]) * dmp; q[o + x] = cur; p[o + x] = cur + vel + (A[o + x] * kk + gv[x]) * dt2; }
-    if (c.loose) hitGrid(sh.grid, p, q, o);
+  // 速度保留 dmp 照每秒換算（decay60；以前固定 DAMP²，是一步 1/30 秒的值 ⇒ 照畫面格算、遠方降速一步變長時每秒的衰減變弱、布更彈；一步 1/30 秒時跟以前一樣）
+  // 小步長（TASK-0821；Macklin 等 2019「Small Steps」）：以前一步走完再解 itn 次 ⇒ 張力一次只往下傳一條邊、強風下解不回來（像橡膠）；
+  //   現在同樣的花費切成 itn 小步、每小步解一次（風壓照這一步開頭算一次、每小步共用；速度保留照每秒換算 ⇒ 跟切幾步無關）。SAIL_SUB 0 ⇒ 照以前。
+  for (var it = 0, itn = c.itn || rigLv().it, sub = SAIL_SUB ? itn : 1, hs = HC / sub, d2s = hs * hs, dms = sub > 1 ? Math.pow(dmp, 1 / sub) : dmp; it < itn; it++) {
+    if (it < sub) for (i = 0; i < n; i++) {
+      if (pin[i]) continue;
+      var o = i * 3, kk = N[i] ? 1 / N[i] : 0;
+      for (x = 0; x < 3; x++) { var cur = p[o + x], vel = (cur - q[o + x]) * dms; q[o + x] = cur; p[o + x] = cur + vel + (A[o + x] * kk + gv[x]) * d2s; }
+      if (c.loose) hitGrid(sh.grid, p, q, o);
+    }
+    solve(T.ea, T.eb, T.rest, c.torn ? c.brk : null, p, pin, 1); if (it & 1) solve(T.ba, T.bb, T.brest, c.torn ? c.bbrk : null, p, pin, 0.5); if (c.tt) tethSolve(sh, c);   // c.tt：帆腳被 sheet 拉住（tethOf）
+    if (sub > 1 && SAIL_STRETCH > 0) clothLimit(sh, c);               // 拉伸上限（TASK-0821）：每小步夾一次
   }
-  for (var it = 0, itn = c.itn || rigLv().it; it < itn; it++) { solve(T.ea, T.eb, T.rest, c.torn ? c.brk : null, p, pin, 1); if (it & 1) solve(T.ba, T.bb, T.brest, c.torn ? c.bbrk : null, p, pin, 0.5); if (c.tt) tethSolve(sh, c); }   // c.tt：帆腳被 sheet 拉住（tethOf）
+  if (sub === 1 && SAIL_STRETCH > 0) clothLimit(sh, c);
 }
 /** 剛斷的繩 ⇒ 垂下來的繩：重新取樣（每段 ≤ SEG 格，原本的弧度與鬆緊照留），兩端各記著靠什麼；被打斷的從斷點分成兩段。 */
 function spawnLoose(sh, r) {

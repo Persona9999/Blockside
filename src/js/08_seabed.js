@@ -32,6 +32,7 @@
 //   ⛔ 不改戰局：要那一塊的 Promise（bedLoad／bedLoadMid ⇒ bedBoot、bedWait）照舊在「放進 BED.slot／mslot 之後」才 resolve；模擬照舊等 bedWait（要讀的那一份還沒放進去 ⇒ 這一步不走）
 //   ⇒ 排隊只影響什麼時候算好。快轉、無頭沒有畫面迴圈可以等 ⇒ 照舊收到就處理（BED_SLICE 假）。
 //   預算（BED_BG）是「這一格背景工作還剩幾 ms」：收塊、擺樹、海底網格、遠景、白沫、樹種網格、城鎮的實例共用，各自做一段就扣（bedSpent）；用完（bedBusy）⇒ 留到下一格。
+//     城鎮的實例只扣不等（63_towns.js townDraw；TASK-0819）：等的話模型解好了城還要等收塊那一批做完。
 //   ⛔ 照「從這一格開始過了多久」算 ⇒ 打起來模擬一格常超過 8 ms，背景的就永遠輪不到。
 var BED = null, BED_SLICE = DEMO < 0 && !HEADLESS, BED_PUMP_MS = 8, BED_BG = 0;
 /** 這一格背景工作的預算用完了（有畫面迴圈才算；快轉、無頭 ⇒ 永遠沒用完、照舊當場做）。 */

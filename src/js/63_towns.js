@@ -21,7 +21,7 @@
 //   沒寫 kit（生成的牆）⇒ 照規模 × 繁榮度算等級（townWallLv，TOWN_BUILD §4：0 沒有牆、1 木柵 wall1、2 土堤＋木柵 wall2、3 石牆 wall3、4 稜堡）；
 //   繁榮度 0～1 一座城一個（TOWNS.prosp[城 id]，沒有 ⇒ 網址 ?prosp=、再 TOWN_PROSP_DEF；__game.townProsp(v, id) 改了整套換）—— 存檔裡那一份（歷來最高）之後由外面那一頁給；
 //   那一級沒有模型 ⇒ 往下找有的那一級（stat.skip 記 'wall:<套>'）；寫了 kit 但沒有那一套 ⇒ 一級（stat.skip 記 'wall:<kit>'）。換等級只換模組 ⇒ 路線、門、塔的位置不動。
-//   門、塔照位置（一套有好幾型塔 ⇒ 照順序輪流：東羅馬外牆方塔、新月塔交替）、兩頭收尾，中間照斷面沿曲線一節一節拉（節數 round(L / len)、每節沿 x 縮放補滿），−y（牆外）朝離城心遠的那一邊。
+//   門、塔照位置（一套有好幾型塔 ⇒ 照順序輪流：東羅馬外牆方塔、新月塔交替）、兩頭收尾，中間照斷面沿曲線一節一節拉（節數 round(L / len)、每節沿 x 縮放補滿），−y（牆外）朝規劃寫的 out 那一側（Blocksail 算好：手寫 ＞ 照中心城區 ＞ 朝最近的城區邊界；舊的規劃沒有 ⇒ 朝離城心遠的那一邊）；水門（gate.kind water，棧橋穿牆）照城門擺。
 //   接縫（Tim 2026-10-20：「目前城市地圖的城牆 連接處會也接縫 是否可以參考其他遊戲的作法處理例如圖二的世紀帝國4城牆」）：斷面接成一條折線（每節是兩站之間的弦、相鄰兩節共用一站，路線的頂點一定是站）
 //   ⇒ 站上照兩節的角平分面斜接（著色器照 aJ 把那一節沿 x 切成梯形）、接到門／塔／轉角／收尾的那一頭照部件的端面切齊；高度照兩站的地面線性接（坡上順著走，不再一節一階），
 //   牆基（模型 z 0 那一層）往下延到腳下最低的地面；轉得急（≥ TOWN_WALL_CORNER）的頂點要有部件蓋著（同世紀帝國轉角的塔）：附近有塔 ⇒ 塔挪到轉角上（stat.snapped），
@@ -411,7 +411,9 @@ function townWall(T, w, out, W) {
   function turn(v) { var a = dir(v === 0 ? nV : v), b = dir(v + 1); return Math.atan2(Math.abs(a[0] * b[1] - a[1] * b[0]), a[0] * b[0] + a[1] * b[1]); }   // 頂點 v（閉合 0…nV−1、開放 1…nV−1）轉了幾度（弧度）
   function put(nm, c, a, sx, outward, sh) {
     var m = K.M[nm].m, hw = m.size[0] * m.mpv * sx / 2, hd = m.size[1] * m.mpv / 2;
-    if (outward && -Math.sin(a) * (c[0] - cen[0]) + Math.cos(a) * (c[1] - cen[1]) < 0) a += Math.PI;
+    // 牆外朝哪一側：規劃寫了 out（Blocksail TOWN_BUILD §4：沿路線前進、北朝上看牆外在 left／right；a 一律是前進方向 ⇒ 模型 −y 朝外 ＝ (−sin a, cos a) 是右手邊）⇒ left 就翻面；
+    //   舊的規劃沒有 ⇒ 照舊猜「離城心遠的那一側」（君士坦丁堡這樣猜反 13 段，2026-10-22）
+    if (outward && (w.out ? w.out === 'left' : -Math.sin(a) * (c[0] - cen[0]) + Math.cos(a) * (c[1] - cen[1]) < 0)) a += Math.PI;
     var q = { k: nm, x: c[0], y: NaN, z: c[1], th: a + Math.PI / 2, sx: sx, sh: sh || 0.95 + 0.1 * townHash(w.id + ':' + out.length), r: Math.hypot(hw, hd) + 2, top: m.top, pl: null, foot: 4 * hw * hd * m.cover, col: m.roof, wall: w.id, lk: 1,
               mj: [0, 0, 0, 0], ft: [hw, hd] };                          // mj ＝ 著色器的 aJ（−x、+x 那一頭的斜接、坡度、牆基往下延；後兩個 townWallY 填）、ft ＝ 半長、半厚
     out.push(q); TOWNS.stat.walls++; return q;
@@ -990,8 +992,10 @@ function townDraw() {
     townRoadSurface(T.roads).then(function (R) { T.roadSurface = R; if (T.inst) townGroundPrep(T); }, function (e) { TOWNS.err = '路面：' + e.message; console.warn(TOWNS.err); });
   });
   var nb = 0;                                                            // 實例、地面的帶子、屋頂殼：一格最多建一座城的一樣、照背景預算（08_seabed.js bedBusy；跟地球儀同一條主執行緒）
+  // 實例不等背景預算（TASK-0819；Tim 2026-10-22「照建議改」）：預算每格先被收塊、擺樹、地形網格吃光 ⇒ 模型解好了城還要等那一批做完（君士坦丁堡第二次去 1.3～2.4 s）。
+  //   建實例本來就是一格做完、不分段 ⇒ 等預算只是晚做、不是不卡；拿掉之後模型一好城就出來（0～0.1 s），最長一格沒變長（A/B 各 3 輪）。照舊一格最多一座、照舊扣預算。
   TOWNS.list.forEach(function (T) {
-    if (!T.inst && !nb && !bedBusy()) { var b0 = performance.now(); T.inst = townInst(T); townGroundPrep(T); townFlagFree(T); T.shDirty = true; T.tlS = T.tlD = true; TOWNS.dirty = true; nb++; bedSpent(b0); }
+    if (!T.inst && !nb) { var b0 = performance.now(); T.inst = townInst(T); townGroundPrep(T); townFlagFree(T); T.shDirty = true; T.tlS = T.tlD = true; TOWNS.dirty = true; nb++; bedSpent(b0); }
   });
   TL.k = TL.on ? TOD_LIT : 0;                                                        // 夜裡的燈：這一格點燈了沒（08_weather.js；陸地在城之前畫 ⇒ 用上一格的分組表，差一格看不出來）
   TOWNS.list.forEach(function (T) {                                    // 地面的帶子：一區一區（townGroundTile），離鏡頭近的先；一格最多 TOWN_GT_MAX 區、照背景預算
