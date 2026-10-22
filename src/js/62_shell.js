@@ -20,7 +20,11 @@ var SHELL_J = 8, SHELL_R = 6, SHELL_TOL = 0.6, SHELL_TW = 256;
 function shellVox(m) {
   var V = m.verts, T = m.tris, nv = V.length / 3, i, k, c = 0;
   if (!nv || !T.length) return null;
-  for (var cc = 1; cc >= 0.25 && !c; cc /= 2) { var ok = true; for (i = 0; i < V.length && ok; i++) { var q = (V[i] - V[i % 3]) / cc; if (Math.abs(q - Math.round(q)) > 1e-4) ok = false; } if (ok) c = cc; }
+  for (var ci = 0, CC = [1, 0.5, 0.25, 0.2, 0.125, 0.1]; ci < CC.length && !c; ci++) { var cc = CC[ci], ok = true; for (i = 0; i < V.length && ok; i++) { var q = (V[i] - V[i % 3]) / cc; if (Math.abs(q - Math.round(q)) > 1e-4) ok = false; } if (ok) c = cc; }
+  if (!c) {                                                              // 縮放過的模型（格不是上面那幾種大小）⇒ 最小的座標間距當一格、每個座標都要對得上
+    var mn = Infinity; for (k = 0; k < 3; k++) { var xs = []; for (i = k; i < V.length; i += 3) xs.push(V[i]); xs.sort(function (p, q) { return p - q; }); for (i = 1; i < xs.length; i++) { var dd = xs[i] - xs[i - 1]; if (dd > 1e-6 && dd < mn) mn = dd; } }
+    if (mn < Infinity) { var ok2 = true; for (i = 0; i < V.length && ok2; i++) { var q2 = (V[i] - V[i % 3]) / mn; if (Math.abs(q2 - Math.round(q2)) > 1e-3) ok2 = false; } if (ok2) c = mn; }
+  }
   if (!c) return null;
   var lo = [Infinity, Infinity, Infinity], hi = [-Infinity, -Infinity, -Infinity];
   for (i = 0; i < nv; i++) for (k = 0; k < 3; k++) { var x = V[i * 3 + k]; if (x < lo[k]) lo[k] = x; if (x > hi[k]) hi[k] = x; }
