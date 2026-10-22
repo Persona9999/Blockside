@@ -21,6 +21,7 @@ function shipCheck(id) {
   Promise.all([loadHull(id), loadHull('constitution')]).then(function () {
     var info = hullInfo(id) || HULL_KNOWN.filter(function (h) { return h.id === id; })[0];
     if (!info) { add('error', '船型', id, '設定檔 ships 沒有這一型', 'admin.py import'); done(); return; }
+    if (Q.has('ladtest')) R.ladtest = ladTest(HULLT[id], Q.get('ladtest'));   // 樓梯自檢的反向對照（75_ladcheck.js：開戰前在記憶體裡挪梯子、堵出口；admin.py ladcheck --selftest）
     FLEET_DBG = [{ team: 'blue', hull: id }, { team: 'red', hull: 'constitution' }]; flowMode('eve'); DIST = LIM_DIST[1];
     WIND_FIX = { rot: 0, s0: 1 };                                        // 風固定（08_weather.js windInit；陣風照種子）：⛔ 沒固定 ⇒ Math.random() ⇒ 兩艘兩秒後的位置每次不同、迴旋砲的轉角跟著變，「送藥最遠」那一欄偶爾差 0.1 m（2026-10-21 量的）
     reset(); flowRun(true);
@@ -210,6 +211,8 @@ function shipCheck(id) {
       if (ropeLad.length) R.info.ropeLadders = ropeLad.length + ' 座繩梯只給第一人稱爬（頂端不在甲板上 ⇒ 尋路不走）：' + ropeLad.join('、');
       if (!NV.ladders.length && NV.levels.length > 1) add('warn', '梯子', '—', '有 ' + NV.levels.length + ' 層甲板、沒有梯子', 'kind=ladders');
     }
+    R.ladcheck = ladCheck(sh); R.info.ladcheck = ladSummary(R.ladcheck);   // 樓梯自檢（TASK-0838；75_ladcheck.js）：梯口的洞、兩端站不站得住、走不走得出去 ⇒ admin.py 另寫 reports/ladcheck_<船>.md
+    R.ladcheck.forEach(function (L) { L.issues.forEach(function (i) { add(i.lv, '樓梯：' + i.what, L.name, i.msg, i.fix); }); });
     (T.roomsBad || []).forEach(function (b) { add('error', '艙房', b, '艙房標得不對', 'rooms.py check（造船規格 §9.2）'); });
     (sh.medSkip || []).forEach(function (s) { add('warn', '醫療艙', s.name, s.why, '房間所在的甲板要有梯子通到'); });
     // ── 繩、帆 ──
