@@ -258,6 +258,7 @@ function mountRot(p, c, a) { var d = M4.dir(rotM([0, 0, 1], a), p[0] - c[0], p[1
 function mountStep(sh, dt) {
   var G = sh.mounts; if ((!G && !sh.tur) || sh.sunk || sh.struck) return;
   var tgt = foeOf(sh) ? aimPoint(sh) : null, foe = aimShip(sh), L = tgt ? toLocal(sh, tgt) : foe && foe.M ? toLocal(sh, M4.pt(foe.M, foe.T.cx, foe.T.cy, foe.T.zw)) : null;   // 沒有敵艦（建造模式、只有一艘的沙盒）⇒ 不問瞄準點（⛔ aimPoint 讀 foe.M ⇒ 有迴旋砲的船每一步例外）；砲照原本的方向
+  sh.aimL = L;                                                         // 只給畫面讀（砲身上下轉 pitch，62_ports.js gelAnim；TASK-0836）—— 模擬一個值都不讀它
   if (sh.tur) turretStep(sh, dt, L);                                   // 砲塔層（27_turret.js）：砲塔、上面的砲（自己會轉、掛在砲塔上的也在那裡轉）
   if (G) G.forEach(function (g) {
     var M = g.mt; if (!g.alive || !L || M.up) return;

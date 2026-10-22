@@ -87,7 +87,7 @@ function shipCheck(id) {
     // ── 裝飾（TASK-0682；05_hull.js decoSplit）：模型 meta deco=1 ⇒ 載入時從 rig.models 拿掉（照樣載、畫質「裝飾」開著才畫）—— 不算重量、不被打；規格表標 deco 的 kind（砲門蓋板 portlid）本身就是裝飾 ⇒ 不報 ──
     (T.decos || []).forEach(function (m) { var k = m.meta && m.meta.kind; if (k && !kindProp(k, 'deco')) add('warn', '裝飾', m.name, '標了 deco 又有 kind=' + k + ' ⇒ 只是畫面、不進模擬，那個功能在遊戲裡就沒了', '有功能的模型不標 deco（造船規格 §9.9）'); });
     (T.h.parts || []).forEach(function (q) { if (isDeco(q)) add('warn', '裝飾', q.path, '關聯標了 deco ⇒ 遊戲不拿掉（格子是船的一部分：重量、命中照算）；只有外部模型能隱藏', '做成外部模型再標 deco（造船規格 §9.9）'); });
-    R.info.deco = T.decoN ? T.decoN + ' 個模型' + '（畫質「裝飾」' + (GFX.deco ? '開：畫' : '關：不畫' + (T.decos.some(function (m) { return m.meta && m.meta.kind === 'portlid'; }) ? '，砲門蓋板照畫（每艘、每個畫質都畫）' : '')) + '）' + '；不算重量、不被打' : '';
+    R.info.deco = T.decoN ? T.decoN + ' 個模型' + '（畫質「裝飾」' + (GFX.deco ? '開：畫' : '關：不畫' + (function (a) { return a.length ? '，' + a.join('、') + '照畫（每艘、每個畫質都畫）' : ''; })([['portlid', '砲門蓋板'], ['gunmount', '砲座']].filter(function (q) { return T.decos.some(function (m) { return m.meta && m.meta.kind === q[0]; }); }).map(function (q) { return q[1]; }))) + '）' + '；不算重量、不被打' : '';
     // ── 廚房（TASK-0720；45_galley.js galleyInit）：模型 meta kind=galley 的爐灶 ⇒ 那一層走得到、四周有面站得住廚師（第二個面給伙夫領飯）；走不到 ⇒ ⚠（那一座不開） ──
     var GL = sh.galley ? sh.galley.list : [];
     (sh.galleySkip || []).forEach(function (k) { if (/走不到/.test(k.why)) add('warn', '廚房', k.name, k.why + ' ⇒ 這一座不開（沒有廚師、沒人去領飯）', '爐灶四周（爐門那一面優先）留一面站得下人、從待命那一層走得到（造船規格 §9.13）'); });
@@ -249,6 +249,7 @@ function shipCheck(id) {
     R.info.doors = doorsSummary(sh);                                    // 門、艙蓋（TASK-0638）
     portsIssues(sh, add); R.info.ports = portsSummary(sh);             // 砲門蓋板（TASK-0719；62_ports.js）：鉸鏈、lid_of、關的方向、關上時穿不穿過縮回去的砲、貼不貼船殼
     R.info.recoil = recoilSummary(sh);                                  // 後座（62_ports.js）：沒有蓋板的砲退幾格、照 meta 不演的
+    R.info.gunmount = gmtSummary(sh, add);                              // 砲身與砲座拆兩件、pitch（TASK-0836；05_hull.js gmtPair、62_ports.js gelBuild）
     R.info.spins = spinSummary(sh);                                     // 照參數轉的子物件（TASK-0640）
     (T.armBad || []).forEach(function (b) { add(b.lv, '裝甲', b.where, b.msg, b.fix); });
     (T.ancBad || []).forEach(function (b) { add(b.lv, '錨', b.where, b.msg, b.fix); });   // 錨的關聯拆不出來（76_anchor.js anchorParts）

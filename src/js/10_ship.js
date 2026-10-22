@@ -74,6 +74,7 @@ function makeShipSteps(i, team, yaw, pz, T, px) {
       c: [(b[0] + b[3]) / 2, (b[1] + b[4]) / 2, (b[2] + b[5]) / 2], foot: foot, alive: true,
       rot: 0, r0: (+mt.rotate_z_deg || 0) * Math.PI / 180, piv: pv, yk: mt.yard, sail: mt.sail, hang: hang };   // 帆桁：rot ＝ 在作品的角度（r0）之外又轉了多少（追風，30_rig_physics.js）
     if (T.fit && T.fit.was && T.fit.was[m.name]) o.was = T.fit.was[m.name];   // 換了裝的掛點：原本雕的那一門（38_fit.js fitKind0／fitBB0）
+    if (m.rmesh !== undefined) { o.rmesh = m.rmesh; o.roff = m.roff; o.vpre = trans(m.roff[0], m.roff[1], m.roff[2]); }   // 有座的砲（TASK-0836；05_hull.js gmtPair）：mesh ＝ 砲身＋座（模擬）、rmesh ＝ 只有砲身（畫，60_rbatch.js：局部矩陣右乘 vpre ＝ 砲身起點 roff；pitch 的砲由 62_ports.js gelPose 換掉）
     return o;
   });
   }, function () {                                                   // 帆桁、裝飾
@@ -85,7 +86,9 @@ function makeShipSteps(i, team, yaw, pz, T, px) {
   sh.decos = (T.decos || []).map(function (m, k) {
     var b = m.bbox, cx = Math.floor((b[0] + b[3]) / 2), cy = Math.floor((b[1] + b[4]) / 2), z0 = Math.floor(b[2]) - 1, fz = z0, mt = m.meta || {}, hg = mt.kind === 'portlid' && (m.points || {})['hinge-a'];
     while (fz > 0 && z0 - fz < 12 && !T.hullG.get(cx, cy, fz)) fz--;
-    return { mesh: m.mesh, origin: m.origin, meta: mt, k: 1000 + k, foot: hg ? anchorNear(T, hg[0], hg[1], hg[2], 8) : T.hullG.get(cx, cy, fz) ? VK.pack(cx, cy, fz) : -1, pts: m.points || {}, bb: b, path: m.name };
+    var d = { mesh: m.mesh, origin: m.origin, meta: mt, k: 1000 + k, foot: hg ? anchorNear(T, hg[0], hg[1], hg[2], 8) : T.hullG.get(cx, cy, fz) ? VK.pack(cx, cy, fz) : -1, pts: m.points || {}, bb: b, path: m.name };
+    if (m.gmod !== undefined) { var gk = m.gmod ? (T.rig.models || []).indexOf(m.gmod) : -1; d.gm = gk >= 0 ? sh.models[gk] : null; d.off = m.off; d.foot = -1; d.gone = !d.gm; }   // 砲座（TASK-0836；05_hull.js gmtPair）：跟著那門砲畫（60_rbatch.js）、砲不在了就不畫；配不到 ⇒ 不畫
+    return d;
   });
   }, function () {                                                   // 砲、砲塔、裝甲、門、甲板、彈藥庫
   // 砲：長砲（24 磅，兩舷各 14）、carronade（32 磅，兩舷各 12）、追擊砲（18 磅，船頭兩舷各 1）都是模型。
