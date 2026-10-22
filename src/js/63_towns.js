@@ -104,22 +104,104 @@ function townRegradeFor(NEW) {
     if (BEDFAR.todo) BEDFAR.todo.push([c[0], c[1], 1, 0]);
   });
 }
-/** 建築模式改了一座城（87_townbuild.js：外面那一頁回的新規劃；TASK-0742）⇒ 換掉同一個 id 的那一座：舊的 GPU（地面塊、旗子、屋頂殼）放掉、
- *  跟新舊兩份疊到的塊重新整地（同 townGot 新來的城那一段）、要的模型沒解 ⇒ 重解。沒有這一座 ⇒ 照 townGot 收。
- *  ⚠ 整座城重整（君士坦丁堡約 50 塊，照背景預算分格做）—— 只重整改到的那一塊是下一步。 */
+// 建築模式改了一座城（87_townbuild.js：外面那一頁回的新規劃；TASK-0742）⇒ 換掉同一個 id 的那一座，只重建改到的範圍。
+//   以前整座重來：舊的地面分區、實例、屋頂殼、旗子當場放掉 ⇒ 整座城閃掉一格；新舊兩份外框疊到的每一塊都重新整地；路面整座重算；
+//   地面分區從零建（棧橋以外的區要等背景預算）⇒ 負載一高，路就整條不見好幾秒（Tim 2026-10-22「道路目前建造會是透明的」「看起來是道路有機會跑到地下(被地形吃掉)」；
+//   量到：套用那一格 實例 0、地面分區 null、19 塊排隊重整，之後 13 區只有 2 區棧橋建好）。
+//   ⇒ 現在（Tim「是否能避免重建全部網格(拆分成多份網格?)」）：
+//   ① 舊規劃 vs 新規劃逐項比（townDiff：路照 id、地塊照 id、整地與清樹照內容）⇒ 改到的外框 D（含整地伸出去的範圍，同 townPrep 的外框）；
+//      路、地塊、整地、清樹以外的東西變了 ⇒ 照舊整座重來。
+//   ② 只排跟 D 疊到的塊重新整地；整地快取改成照「這一塊有沒有被改到」判斷（townNewer 看 T.edits），城框裡沒改到的塊照舊能用。
+//   ③ 路變了 ⇒ 只把碰得到改到的那幾區的路送去算路面（townRoadSurface 同一支 Worker），那幾區換成新的那一份（Q.R）；其他區不動。
+//      一區裡的三角形只跟離它 半寬 ＋ 4 m 以內的路有關 ⇒ 取「外框碰得到那幾區（外擴 半寬 ＋ 6 m）」的路，算出來跟整座重算逐點相同（?townfull=1 是對照組）。
+//   ④ 舊的網格（實例、地面分區、屋頂殼、旗子、燈）留著畫，新的建好才換；改到的區每格至少建一區、不等背景預算（同棧橋）。
+//   路面在 Worker 算的時候先不整地：整地與換區一起做 ⇒ 不會先看到挖好的路基、路還沒鋪上去。
+var TOWN_FULL = Q.get('townfull') === '1';                              // ?townfull=1：照舊整座重來（增量重建的對照組）
+var TOWN_DIFF_KEYS = ['walls', 'core', 'piers', 'quay', 'style', 'styles', 'ox', 'oy', 'kx', 'bank', 'tier', 'seed'];   // 這些變了 ⇒ 整座重來（建築模式不會改它們）
+function townBoxAdd(b, c) { b[0] = Math.min(b[0], c[0]); b[1] = Math.min(b[1], c[1]); b[2] = Math.max(b[2], c[2]); b[3] = Math.max(b[3], c[3]); return b; }
+function townBoxHit(a, b) { return a[0] < b[2] && a[2] > b[0] && a[1] < b[3] && a[3] > b[1]; }
+/** 舊城 T0 ⇒ 新城 T1 改到哪裡：{ box（整地與實例，海域座標）, roads（路變了的外框；沒變 ⇒ null）}；TOWN_DIFF_KEYS 變了 ⇒ null。 */
+function townDiff(T0, T1) {
+  var a = T0.p, b = T1.p, E = T1.E, box = [1e9, 1e9, -1e9, -1e9], rb = null;
+  if (TOWN_DIFF_KEYS.some(function (k) { return JSON.stringify(a[k]) !== JSON.stringify(b[k]); })) return null;
+  function grow(B, q, r) { return townBoxAdd(B, [q[0] - r, q[1] - r, q[0] + r, q[1] + r]); }
+  function byId(L) { var m = {}; (L || []).forEach(function (o) { m[o.id] = JSON.stringify(o); }); return m; }
+  function changed(L0, L1, f) {                                          // 照 id：多的、少的、內容變了的 ⇒ f(那一份)
+    var m0 = byId(L0), m1 = byId(L1);
+    (L0 || []).forEach(function (o) { if (m1[o.id] !== m0[o.id]) f(o); });
+    (L1 || []).forEach(function (o) { if (m0[o.id] !== m1[o.id]) f(o); });
+  }
+  function bag(L0, L1, f) {                                              // 沒有 id：照內容，只在一邊的 ⇒ f(那一份)
+    var c = {}; (L0 || []).forEach(function (o) { var s = JSON.stringify(o); c[s] = (c[s] || 0) + 1; });
+    (L1 || []).forEach(function (o) { var s = JSON.stringify(o); if (c[s]) c[s]--; else f(o); });
+    (L0 || []).forEach(function (o) { var s = JSON.stringify(o); if (c[s] > 0) { c[s]--; f(o); } });
+  }
+  changed(a.roads, b.roads, function (r) {                               // 路：外框同 townPrep（半寬 ＋ 4 ＋ 整平伸出去的）
+    rb = rb || [1e9, 1e9, -1e9, -1e9];
+    r.path.forEach(function (q) { var e = E(q); grow(box, e, r.w / 2 + 4 + TOWN_GRADE_REACH); grow(rb, e, r.w / 2 + 6); });
+  });
+  changed(a.lots, b.lots, function (l) { grow(box, E(l.at), Math.hypot(l.w, l.d)); if (l.use === 'plaza') { rb = rb || [1e9, 1e9, -1e9, -1e9]; grow(rb, E(l.at), Math.hypot(l.w, l.d)); } });
+  bag(a.grade, b.grade, function (g) { g.ring.forEach(function (q) { grow(box, E(q), TOWN_LOT_PAD + TOWN_LOT_CELL * 1.5 + 6); }); });
+  var c0 = a.clear || {}, c1 = b.clear || {};
+  bag(c0.rings, c1.rings, function (R) { R.forEach(function (q) { grow(box, E(q), 4); }); });
+  bag(c0.paths, c1.paths, function (c) { c.path.forEach(function (q) { grow(box, E(q), c.w); }); });
+  return { box: box, roads: rb };
+}
+/** 外框 B 碰到的地面分區（townGroundPrep 的 TOWN_GT_SZ 一區）：['x_z', …]。 */
+function townTilesIn(B) {
+  var S = TOWN_GT_SZ, out = [];
+  if (!(B[0] <= B[2])) return out;
+  for (var z = Math.floor(B[1] / S); z <= Math.floor(B[3] / S); z++) for (var x = Math.floor(B[0] / S); x <= Math.floor(B[2] / S); x++) out.push(x + '_' + z);
+  return out;
+}
 function townReplace(p) {
   if (!BED || !BED.A || !p || p.format !== 'blocksail-town') return false;
   var i = -1; TOWNS.list.forEach(function (T, k) { if (T.id === p.id) i = k; });
   if (i < 0) { townGot([p]); return true; }
-  var old = TOWNS.list[i], T = townPrep(p);
-  if (old.gt) Object.keys(old.gt).forEach(function (k) { var g = old.gt[k].g; if (g) townGpuFree(g); });
-  townFlagFree(old);
-  if (old.shell) { gl.deleteVertexArray(old.shell.vao); gl.deleteBuffer(old.shell.vb); gl.deleteBuffer(old.shell.ib); }
-  TOWNS.list[i] = T;
+  var old = TOWNS.list[i], T = townPrep(p), D = TOWN_FULL || !old.gt || !old.roadSurface ? null : townDiff(old, T);
+  if (D && old.pend) { townBoxAdd(D.box, old.pend.box); if (old.pend.roads) D.roads = townBoxAdd(D.roads || old.pend.roads.slice(), old.pend.roads); }   // 上一次改的路面還在算 ⇒ 一起算
   var I = townIdx();
   if (I && TOWNS.kitHas && townNeed(I).some(function (nm) { return TOWNS.kitHas.indexOf(nm) < 0; })) townKitStale();
-  TOWNS.ver++; T.v = TOWNS.ver; TOWNS.dirty = true; TOWNS.stat.replaced = (TOWNS.stat.replaced || 0) + 1;
-  townRegradeFor([old, T]);
+  TOWNS.ver++; TOWNS.dirty = true; TOWNS.stat.replaced = (TOWNS.stat.replaced || 0) + 1;
+  TOWNS.list[i] = T;
+  if (!D) {                                                             // 整座重來（對照組、改了 TOWN_DIFF_KEYS、舊的那一份還沒建好）
+    if (old.gt) Object.keys(old.gt).forEach(function (k) { var g = old.gt[k].g; if (g) townGpuFree(g); });
+    townFlagFree(old);
+    if (old.shell) { gl.deleteVertexArray(old.shell.vao); gl.deleteBuffer(old.shell.vb); gl.deleteBuffer(old.shell.ib); }
+    if (old.tl) { townLightPartFree(old.tl.S); townLightPartFree(old.tl.D); }
+    T.v = TOWNS.ver; TOWNS.stat.edit = { full: true };
+    townRegradeFor([old, T]);
+    return true;
+  }
+  ['inst', 'gt', 'shell', 'flags', 'tl', 'trees', 'posts', 'roadSurface', 'v'].forEach(function (k) { T[k] = old[k]; });   // 舊的照畫
+  if (!(D.box[0] <= D.box[2]) && !D.roads) { T.edits = old.edits; T.pend = old.pend; return true; }   // 沒有差（打開建築模式時 open 回的那一份）⇒ 只換規劃
+  T.edits = (old.edits || []).concat([{ b: D.box, v: TOWNS.ver }]);
+  var st = TOWNS.stat.edit = { full: false, box: D.box.map(function (v) { return Math.round(v); }), chunks: 0, tiles: 0, roads: 0, surfMs: null };
+  function regrade() {
+    var n0 = Object.keys(TOWNS.rgq || {}).length; townRegradeFor([{ box: D.box }]); st.chunks = Object.keys(TOWNS.rgq || {}).length - n0;
+    townTilesIn(D.box).forEach(function (k) { if (T.gt[k]) T.gt[k].edit = true; });   // 改到的區：重建時不等背景預算（townDraw）
+    T.instRedo = true;                                                  // 實例照新的規劃重建（建好之前舊的照畫）
+  }
+  if (!D.roads) { regrade(); return true; }
+  var K = townTilesIn(D.roads), S = TOWN_GT_SZ, KB = K.map(function (k) { var c = k.split('_'); return [+c[0] * S, +c[1] * S, (+c[0] + 1) * S, (+c[1] + 1) * S]; });
+  var sub = T.roads.filter(function (r) {                                // 碰得到那幾區的路（半寬 ＋ 4 m：節點最遠受多遠的路影響，見 townRoadGen；再多 2 m 一格）
+    var m = r.w / 2 + 6, b = [1e9, 1e9, -1e9, -1e9]; r.P.forEach(function (q) { townBoxAdd(b, [q[0] - m, q[1] - m, q[0] + m, q[1] + m]); });
+    return KB.some(function (kb) { return townBoxHit(b, kb); });
+  });
+  var pend = T.pend = { box: D.box, roads: D.roads }, t0 = performance.now();
+  st.tiles = K.length; st.roads = sub.length;
+  townRoadSurface(sub).then(function (R) {
+    if (T.pend !== pend || TOWNS.list.indexOf(T) < 0) return;           // 又改了一次（新的那一份接手、外框併進去了）
+    T.pend = null; st.surfMs = Math.round(performance.now() - t0);
+    var tiles = {}; R.tiles.forEach(function (t) { tiles[t.x + '_' + t.z] = t; });
+    K.forEach(function (k) {
+      var c = k.split('_'), Q = T.gt[k] || (T.gt[k] = { k: k, cx: (+c[0] + 0.5) * S, cz: (+c[1] + 0.5) * S, tri: [], edge: [], plaza: [], quay: [], pier: [], g: null, dirty: true, deps: {} });
+      var t = tiles[k]; Q.R = R; Q.tri = t ? t.tri : []; Q.edge = t ? t.edge : [];
+      Q.plaza = (T.p.lots || []).filter(function (l) { if (l.use !== 'plaza') return false; var e = T.E(l.at); return Math.floor(e[0] / S) + '_' + Math.floor(e[1] / S) === k; });
+      Q.dirty = true; Q.edit = true;
+    });
+    regrade();
+  }, function (e) { TOWNS.err = '路面：' + e.message; console.warn(TOWNS.err); });
   return true;
 }
 // 規劃比地形晚到時的重新整地排隊（TASK-0819；Tim 2026-10-22「進入航海時 城市還沒載入 然後載入時會整個卡住很久」）：
@@ -136,7 +218,7 @@ function townRegrade() {
     if (n && bedBusy()) return true;
     var k = q[1]; delete Q[k];
     var C = bedShowC(k), t0 = performance.now();
-    if (C && townOver(C.cx, C.cy)) evEmit('bedChunk', C.cx, C.cy, C);    // 畫著的 ⇒ 重發（網格、樹、遮罩都照新的整地）
+    if (C) evEmit('bedChunk', C.cx, C.cy, C);                           // 畫著的 ⇒ 重發（網格、樹、遮罩都照新的整地；⛔ 不再看 townOver：建築模式拿掉的路可能在城框外，那一塊也要放回去）
     else if (BEDDRY.src[k]) bedDryRegrade(k);                            // 沒在畫、遮罩還記著 ⇒ 只替遮罩重整
     else return false;                                                   // 窗換了、都不要了
     bedSpent(t0); n++; TOWNS.stat.regraded++;
@@ -154,10 +236,11 @@ function townOver(cx, cy, L) {
   var S = BED.A.chunk, e0 = cx * S, s0 = cy * S;
   return (L || TOWNS.list).some(function (T) { return T.box[0] < e0 + S && T.box[2] > e0 && T.box[1] < s0 + S && T.box[3] > s0; });
 }
-/** 塊 C 整地（C.tv）之後有沒有新來的城疊上來（townHv 的快取還能不能用）。 */
+/** 塊 C 整地（C.tv）之後有沒有新來的城疊上來、或建築模式改到這一塊（T.edits，townReplace；townHv 的快取還能不能用）。
+ *  改到的範圍不看 T.box：拿掉一條路（復原）⇒ 那一段可能已經在新的城框外面，整過的地要放回去。 */
 function townNewer(C) {
-  var S = BED.A.chunk, e0 = C.cx * S, s0 = C.cy * S;
-  return TOWNS.list.some(function (T) { return T.v > C.tv && T.box[0] < e0 + S && T.box[2] > e0 && T.box[1] < s0 + S && T.box[3] > s0; });
+  var S = BED.A.chunk, cb = [C.cx * S, C.cy * S, (C.cx + 1) * S, (C.cy + 1) * S];
+  return TOWNS.list.some(function (T) { return (T.v > C.tv && townBoxHit(T.box, cb)) || (T.edits || []).some(function (e) { return e.v > C.tv && townBoxHit(e.b, cb); }); });
 }
 /** 規劃 ⇒ 一座城（海域座標的路、整地、清樹，世界座標的實例；模型的實例等要用到的模型解好（townKit）才建 ⇒ townInst）。 */
 function townPrep(p) {
@@ -279,8 +362,17 @@ function townPip(x, y, R) { var c = false; for (var i = 0, j = R.length - 1; i <
 function townSegDist(x, y, a, b) { var dx = b[0] - a[0], dy = b[1] - a[1], L2 = dx * dx + dy * dy, u = L2 ? Math.max(0, Math.min(1, ((x - a[0]) * dx + (y - a[1]) * dy) / L2)) : 0; return Math.hypot(x - a[0] - u * dx, y - a[1] - u * dy); }
 function townPolyDist(x, y, R) { var m = Infinity; for (var i = 0, j = R.length - 1; i < R.length; j = i++) m = Math.min(m, townSegDist(x, y, R[j], R[i])); return m; }
 /** 世界 (x, z) 的畫面高度（整過地的那一份；那一塊沒載 ⇒ NaN）—— 城牆、石基、棧橋的腳照它放。 */
+/** 世界 (x, z) 落在畫著的那一塊（08_seabed.js bedShowC：原精度載著就是原精度）的哪一格 ⇒ { C, u, v }（同 bedCell 的回傳）；那一塊沒在畫 ⇒ 照 bedCell。
+ *  ⛔ 不能直接用 bedCell：它照 bedLevels 的等級挑（離焦點 BED_NEED_FULL 外 ⇒ 中等塊、16 m 一格），而原精度塊載著就照畫（4 m 一格）
+ *  ⇒ 路面、街燈、預覽讀到的比畫出來的地形低（2026-10-23 托爾圖加量到沿新路 33 點低 0.19～1.14 m：路面被地形吃掉，Tim「看起來是道路有機會跑到地下(被地形吃掉)」）。
+ *  只給畫面用（整地後的高度 townHv 是每一塊自己的）；模擬照舊讀 bedHgt。 */
+function townCell(x, z) {
+  var S = BED.A.chunk, cx = Math.floor((x + BED.ax) / S), cy = Math.floor((z + BED.az) / S), C = bedShowC(cx + '_' + cy);
+  if (!C) return bedCell(x, z);
+  return { C: C, u: (x + BED.ax - cx * S) / C.step, v: (z + BED.az - cy * S) / C.step };
+}
 function townGround(x, z) {
-  var q = bedCell(x, z); if (!q) return NaN;
+  var q = townCell(x, z); if (!q) return NaN;
   var C = q.C, h = townHv(C), n = C.n, i = Math.min(n - 2, Math.floor(q.u)), j = Math.min(n - 2, Math.floor(q.v)), fu = q.u - i, fv = q.v - j, o = j * n + i;
   return ((h[o] * (1 - fu) + h[o + 1] * fu) * (1 - fv) + (h[o + n] * (1 - fu) + h[o + n + 1] * fu) * fv) / 10;
 }
@@ -474,9 +566,9 @@ function townKitMake(I, need, D, reuse) {
   return Promise.all(need.map(function (nm) {
     var m0 = I.models[nm], d = D[nm], R = reuse && reuse.M[nm];
     if (!d) throw new Error('外面那一頁沒給 ' + nm);
-    function put(L, win) { M[nm] = { nm: nm, i: names.indexOf(nm), m: m0, lod: L, png: d.png, uc0: [m0.mpv, m0.size[0] * m0.mpv / 2, m0.size[1] * m0.mpv / 2], uc1: [m0.mpv * m0.lo.f, m0.size[0] * m0.mpv / 2, m0.size[1] * m0.mpv / 2], win: win }; }   // win：亮窗的窗片（夜裡的燈）
-    if (R) { put(R.lod, R.win); return null; }
-    return townModelMesh(nm, d, m0).then(function (L) { put(L, townWinMesh(m0)); });
+    function put(L, win, gls) { M[nm] = { nm: nm, i: names.indexOf(nm), m: m0, lod: L, png: d.png, uc0: [m0.mpv, m0.size[0] * m0.mpv / 2, m0.size[1] * m0.mpv / 2], uc1: [m0.mpv * m0.lo.f, m0.size[0] * m0.mpv / 2, m0.size[1] * m0.mpv / 2], win: win, gls: gls }; }   // win：亮窗的窗片（夜裡的燈）；gls：玻璃（townGlsMesh）
+    if (R) { put(R.lod, R.win, R.gls); return null; }
+    return Promise.all([townModelMesh(nm, d, m0), townGlsMesh(m0, d.gls)]).then(function (A) { put(A[0], townWinMesh(m0), A[1]); });
   })).then(function () {
     // 貼圖：收到的模型照名字一個一列往下排（寬 ＝ 最寬那一列、高 ＝ 加總，各取 2 的次方）；那一列的座標寫進那個模型的 im（畫貼圖照它取，townBin）
     var aw = 1, y = 0;
@@ -511,7 +603,7 @@ function townKitSet(K) {
 }
 /** 一份模型組的 GPU 資源（網格、窗片、貼圖）；keep ＝ 換上的那一組（骨架 ⇒ 整組沿用的網格不放掉）。 */
 function townKitGpuFree(K, keep) {
-  Object.keys(K.M).forEach(function (nm) { if (keep && keep.M[nm] && keep.M[nm].lod === K.M[nm].lod) return; K.M[nm].lod.concat(K.M[nm].win ? [K.M[nm].win] : []).forEach(function (r) { gl.deleteVertexArray(r.vao); gl.deleteBuffer(r.vbo); }); });
+  Object.keys(K.M).forEach(function (nm) { if (keep && keep.M[nm] && keep.M[nm].lod === K.M[nm].lod) return; K.M[nm].lod.concat(K.M[nm].win ? [K.M[nm].win] : [], K.M[nm].gls ? [K.M[nm].gls] : []).forEach(function (r) { gl.deleteVertexArray(r.vao); gl.deleteBuffer(r.vbo); }); });
   if (K.tex) gl.deleteTexture(K.tex);
 }
 /** 要的模型變多（來了新的城、改了繁榮度）：還在解 ⇒ 解完再丟掉重要（兩段同時跟外面那一頁要，回應會對錯人）；不然 ⇒ 現在就丟。 */
@@ -531,21 +623,26 @@ function townKitFree() {
 // ── 實例（一座城建一次：建築、城牆、石基；屋頂殼、地面的帶子） ──
 /** 城 T 的實例：[{ k: 模型名, x, y, z, th（模型 +x 在平面上 ＝ (sinθ, −cosθ)）, sx（沿 x 縮放）, sh（深淺）, r（外框半徑）, pl: 石基 [w, d] 或 null, foot: 屋頂殼用的佔地 m² }]；y 是 NaN ⇒ 等那一塊載進來（townGround）。 */
 function townInst(T) {
-  var K = TOWNS.kit, p = T.p, out = [], D2R = Math.PI / 180, skip = TOWNS.stat.skip;
+  var K = TOWNS.kit, p = T.p, out = [], skip = TOWNS.stat.skip;
   function W(q) { var e = T.E(q); return [e[0] - BED.ax, e[1] - BED.az]; }
   (K.part ? [] : p.lots || []).forEach(function (l) {                  // 骨架（K.part：只解了城牆那幾套）⇒ 只有城牆
     if (l.use === 'plot' || l.use === 'plaza') return;
-    var L = townPick(K, T.styles, l);
-    if (!L || !L.length) { skip[l.use] = (skip[l.use] || 0) + 1; return; }
-    var nm = L[Math.floor(townHash(T.id + ':' + l.id) * L.length)], m = K.M[nm].m, th = l.rot * D2R, md = m.size[1] * m.mpv, mw = m.size[0] * m.mpv;
-    var off = (l.d - md) / 2, c = W([l.at[0] + off * Math.cos(th), l.at[1] + off * Math.sin(th)]);
-    var lk = Math.max(1, Math.min(TOWN_LM[1], Math.max(mw, md, m.top) / TOWN_LM[0]));
-    out.push({ k: nm, x: c[0], y: l.h, z: c[1], th: th, sx: 1, sh: 0.92 + 0.16 * townHash(l.id + '#'), r: Math.hypot(mw, md) / 2 + 2, top: m.top, pl: [mw, md], foot: mw * md * m.cover, col: m.roof, lot: l.id, lk: lk });
+    var q = townLotInst(T, K, l);
+    if (!q) { skip[l.use] = (skip[l.use] || 0) + 1; return; }
+    out.push(q);
   });
   (p.walls || []).forEach(function (w) { townWall(T, w, out, W); });
   TOWNS.stat.inst = TOWNS.list.reduce(function (s, T2) { return s + (T2 === T ? out.length : (T2.inst || []).length); }, 0);
   TOWNS.stat.lots = TOWNS.list.reduce(function (s, T2) { return s + (T2.p.lots || []).length; }, 0);
   return out;
+}
+/** 一塊地 ⇒ 一棟的實例（townInst；建築模式的預覽 townGhost 也走這一支 ⇒ 同一個地塊 id 預覽跟蓋出來的是同一棟）；那一種沒有模型 ⇒ null。 */
+function townLotInst(T, K, l) {
+  var L = townPick(K, T.styles, l); if (!L || !L.length) return null;
+  var nm = L[Math.floor(townHash(T.id + ':' + l.id) * L.length)], m = K.M[nm].m, th = l.rot * Math.PI / 180, md = m.size[1] * m.mpv, mw = m.size[0] * m.mpv;
+  var off = (l.d - md) / 2, e = T.E([l.at[0] + off * Math.cos(th), l.at[1] + off * Math.sin(th)]);
+  var lk = Math.max(1, Math.min(TOWN_LM[1], Math.max(mw, md, m.top) / TOWN_LM[0]));
+  return { k: nm, x: e[0] - BED.ax, y: l.h, z: e[1] - BED.az, th: th, sx: 1, sh: 0.92 + 0.16 * townHash(l.id + '#'), r: Math.hypot(mw, md) / 2 + 2, top: m.top, pl: [mw, md], foot: mw * md * m.cover, col: m.roof, lot: l.id, lk: lk };
 }
 /** 一條城牆 ⇒ 門、塔、轉角、收尾照位置，中間的斷面沿路線接成一條斜接的折線（照 w.kit 挑那一套；BUILDING_SPEC §6）。
  *  t ＝ 從起點沿路線量的長度（閉合的牆繞回來）；部件佔掉 [t0, t1]，兩頭的接口 p0、p1 ＝ 中心 ∓ 半長·軸（軸 ＝ 路線上兩個接口那兩點的弦 ⇒ 擺在頂點上就是角平分）。 */
@@ -657,7 +754,7 @@ function townWallY(q) {
 }
 /** 路面讀畫面地形的三角形（跟 bedMesh 的對角線一樣），不用雙線性高度把路切進坡面。 */
 function townRoadHeight(x, z) {
-  var q = bedCell(x, z); if (!q) return NaN;
+  var q = townCell(x, z); if (!q) return NaN;
   var C = q.C, h = townHv(C), n = C.n, i = Math.min(n - 2, Math.floor(q.u)), j = Math.min(n - 2, Math.floor(q.v)), u = q.u - i, v = q.v - j, o = j * n + i;
   return (u + v <= 1 ? h[o] + u * (h[o + 1] - h[o]) + v * (h[o + n] - h[o]) : h[o + n + 1] + (1 - u) * (h[o + n] - h[o + n + 1]) + (1 - v) * (h[o + 1] - h[o + n + 1])) / 10;
 }
@@ -777,7 +874,7 @@ function townGroundPrep(T) {
   var S = TOWN_GT_SZ, R = T.roadSurface, p = T.p, G = {};
   function at(x, z) { var k = x + '_' + z; return G[k] || (G[k] = { k: k, cx: (x + 0.5) * S, cz: (z + 0.5) * S, tri: [], edge: [], plaza: [], quay: [], pier: [], g: null, dirty: true, deps: {} }); }
   function tile(e, s) { return at(Math.floor(e / S), Math.floor(s / S)); }
-  if (R) R.tiles.forEach(function (t) { var q = at(t.x, t.z); q.tri = t.tri; q.edge = t.edge; });
+  if (R) R.tiles.forEach(function (t) { var q = at(t.x, t.z); q.R = R; q.tri = t.tri; q.edge = t.edge; });   // q.R：這一區照哪一份路面（建築模式只換改到的那幾區，townReplace）
   (p.lots || []).forEach(function (l) { if (l.use === 'plaza') { var c2 = T.E(l.at); tile(c2[0], c2[1]).plaza.push(l); } });
   (p.quay || []).forEach(function (q) { var c2 = T.E(q.path[0]); tile(c2[0], c2[1]).quay.push(q); });
   (p.piers || []).forEach(function (q) { var c2 = T.E(q.path[0]); tile(c2[0], c2[1]).pier.push(q); });
@@ -793,7 +890,7 @@ function townGroundDirty(T, cx, cy) {
 /** 下一個要建的區：骨架先出（TOWN_SKEL）⇒ 有棧橋、碼頭的區先；同一級離鏡頭（世界座標）近的先。 */
 function townGroundNext(T, eye) {
   var best = null, bd = Infinity;
-  Object.keys(T.gt || {}).forEach(function (k) { var q = T.gt[k]; if (!q.dirty) return; var dx = q.cx - BED.ax - eye[0], dz = q.cz - BED.az - eye[2], d = dx * dx + dz * dz + (TOWN_SKEL && !townGroundPier(q) ? 1e15 : 0); if (d < bd) { bd = d; best = q; } });
+  Object.keys(T.gt || {}).forEach(function (k) { var q = T.gt[k]; if (!q.dirty) return; var dx = q.cx - BED.ax - eye[0], dz = q.cz - BED.az - eye[2], d = dx * dx + dz * dz + (TOWN_SKEL && !townGroundPier(q) && !q.edit ? 1e15 : 0); if (d < bd) { bd = d; best = q; } });
   return best;
 }
 /** 這一區有棧橋或碼頭。 */
@@ -805,7 +902,7 @@ function townGroundTile(T, Q) {
   function W(q) { var e = T.E(q); return [e[0] - BED.ax, e[1] - BED.az]; }
   function hgt(x, z) { deps[Math.floor((x + BED.ax) / S) + '_' + Math.floor((z + BED.az) / S)] = 1; return townRoadHeight(x, z); }   // 讀過哪一塊（世界 ⇒ 海域）
   // 拓樸只算一次；地形塊或整地到了，只重取高度，不再用中心線的 z 把路埋進地裡。
-  var R = T.roadSurface, v = R ? R.v : null, Ri = R ? R.i : null, H = new Map(), N = new Map(), map = new Map();
+  var R = Q.R || T.roadSurface, v = R ? R.v : null, Ri = R ? R.i : null, H = new Map(), N = new Map(), map = new Map();
   function h(k) { var y = H.get(k); if (y === undefined) { y = hgt(v[k * 6] - BED.ax, v[k * 6 + 1] - BED.az); y = (y === y ? y : v[k * 6 + 2]) + TOWN_ROAD_LIFT; H.set(k, y); } return y; }
   function nrm(k) {                                                       // 這一點旁邊所有三角形的面法線加起來（跨區也算）
     var n = N.get(k); if (n) return n; n = [0, 0, 0];
@@ -1177,7 +1274,7 @@ function townDraw() {
   //   但規劃晚到、城範圍裡還有排著要重新整地的塊（townRegrade）⇒ 先等它們：城牆的腳讀地面（townWallY → townGround → townHv）會把還沒整的塊在這一格當場整掉
   //   （君士坦丁堡那一格 730～880 ms）；隊伍每格至少一塊、近的先，跟模型解碼同時走。
   TOWNS.list.forEach(function (T) {
-    if (!T.inst && !nb && !townRgWait(T) && (K.part || !TOWNS.kitBusy)) { var b0 = performance.now(); T.inst = townInst(T); townTreesSet(T); if (!T.gt) townGroundPrep(T); townFlagFree(T); T.shDirty = true; T.tlS = T.tlD = true; TOWNS.dirty = true; nb++; bedSpent(b0); }
+    if ((!T.inst || T.instRedo) && !nb && !townRgWait(T) && (K.part || !TOWNS.kitBusy)) { var b0 = performance.now(); T.instRedo = false; T.inst = townInst(T); if (TOWNS.stat.edit && T.edits) TOWNS.stat.edit.instMs = +(performance.now() - b0).toFixed(1); townTreesSet(T); if (!T.gt) townGroundPrep(T); townFlagFree(T); T.shDirty = true; T.tlS = T.tlD = true; TOWNS.dirty = true; nb++; bedSpent(b0); }
   });
   TL.k = TL.on ? TOD_LIT : 0;                                                        // 夜裡的燈：這一格點燈了沒（08_weather.js；陸地在城之前畫 ⇒ 用上一格的分組表，差一格看不出來）
   TOWNS.list.forEach(function (T) {                                    // 地面的帶子：一區一區（townGroundTile），離鏡頭近的先；一格最多 TOWN_GT_MAX 區、照背景預算
@@ -1186,8 +1283,8 @@ function townDraw() {
     if (TOWN_SKEL && !T.gt && !townRgWait(T)) townGroundPrep(T);
     if (!(T.inst || TOWN_SKEL) || !T.gt || (TOWN_SKEL && townRgWait(T))) return;
     for (var m = 0, Q; m < TOWN_GT_MAX && (Q = townGroundNext(T, eye)); m++) {
-      if (bedBusy() && !(TOWN_SKEL && m === 0 && townGroundPier(Q))) break;
-      var b0 = performance.now(); if (Q.g) townGpuFree(Q.g); Q.g = townGroundTile(T, Q); Q.dirty = false; T.gBuilt = true; bedSpent(b0);
+      if (bedBusy() && !(TOWN_SKEL && m === 0 && (townGroundPier(Q) || Q.edit))) break;   // 建築模式改到的區（Q.edit）同棧橋：每格至少一區
+      var b0 = performance.now(); if (Q.g) townGpuFree(Q.g); Q.g = townGroundTile(T, Q); Q.dirty = false; Q.edit = false; T.gBuilt = true; bedSpent(b0);
     }
     if (T.gBuilt && !townGroundNext(T, eye)) { T.gBuilt = false; T.tlD = true; }   // 這一批都建好了 ⇒ 街燈的高度重取（以前地面每重建一次就重取）
   });
@@ -1276,10 +1373,50 @@ function townStat(at) {
     return { id: T.id, name: T.name, tier: T.tier, seed: T.seed, ox: T.ox, oy: T.oy, lots: (T.p.lots || []).length, roads: T.roads.length, walls: (T.p.walls || []).length, inst: (T.inst || []).length, ground: T.gt ? (function () { var K = Object.keys(T.gt); return { tiles: K.length, built: K.filter(function (k) { return T.gt[k].g; }).length, dirty: K.filter(function (k) { return T.gt[k].dirty; }).length, piers: K.filter(function (k) { return townGroundPier(T.gt[k]); }).length, piersBuilt: K.filter(function (k) { return townGroundPier(T.gt[k]) && T.gt[k].g; }).length }; })() : null,   // piers：有棧橋或碼頭的區（TASK-0826 先建）
       part: T.inst ? (TOWNS.kit && TOWNS.kit.part ? 'walls' : 'all') : null, walls: (T.inst || []).filter(function (q) { return q.wall; }).length,   // 地面的帶子分區（TASK-0817）
       byModel: u, lights: tl, center: [+(T.ox - BED.ax).toFixed(1), +(T.oy - BED.az).toFixed(1)] };
-  }), kit: !!TOWNS.kit, kitPart: !!(TOWNS.kit && TOWNS.kit.part), kitN: S.kitN, kitMs: S.kitMs, skelN: S.skelN, skelMs: S.skelMs, kitMesh: { baked: S.meshBaked, live: S.meshLive, check: S.meshCheck, vk: townVkFp() }, kitTris: S.kitTris, skip: S.skip, drawn: { full: S.d0, low: S.d1, card: S.d2, shells: S.d3, plinth: S.plinth, flags: S.flags || 0, landmarks: S.lm || 0 }, tris: S.tris, ms: { draw: S.drawMs, bin: S.binMs, grade: +S.gradeMs.toFixed(1), prep: S.prepMs }, gradedChunks: S.chunks, regrade: { left: TOWNS.rgq ? Object.keys(TOWNS.rgq).length : 0, done: S.regraded },
+  }), kit: !!TOWNS.kit, kitPart: !!(TOWNS.kit && TOWNS.kit.part), kitN: S.kitN, kitMs: S.kitMs, skelN: S.skelN, skelMs: S.skelMs, kitMesh: { baked: S.meshBaked, live: S.meshLive, check: S.meshCheck, vk: townVkFp() }, kitTris: S.kitTris, skip: S.skip, gls: S.gls || 0, drawn: { full: S.d0, low: S.d1, card: S.d2, shells: S.d3, plinth: S.plinth, flags: S.flags || 0, landmarks: S.lm || 0 }, tris: S.tris, ms: { draw: S.drawMs, bin: S.binMs, grade: +S.gradeMs.toFixed(1), prep: S.prepMs }, gradedChunks: S.chunks, regrade: { left: TOWNS.rgq ? Object.keys(TOWNS.rgq).length : 0, done: S.regraded }, edit: S.edit || null,
     night: { lit: +TL.k.toFixed(3), win: +TOD_WIN.toFixed(3), grid: TL.stat.inGrid, range: TL.stat.range || 0, full: TL.stat.full, over: TL.stat.over, gridMs: TL.stat.gridMs, cards: TL.stat.cards, glow: TL.stat.glow, glowMs: TL.stat.glowMs } };
   if (at) { var q = bedCell(at[0], at[1]); o.at = { ground: +townGround(at[0], at[1]).toFixed(2), sim: +bedHgt(at[0], at[1]).toFixed(2), clear: q ? townClr(q.C, q.u * q.C.step, q.v * q.C.step) : null }; }
   return o;
+}
+
+// ── 建築模式的預覽（87_townbuild.js；TASK-0742，Tim 2026-10-22「城鎮建造是否可以加上預覽(道路&建築 在Hover狀態下顯示半透明預覽)」） ──
+//   房子：試放的那一塊照 townLotInst 挑模型（同一個地塊 id ⇒ 跟蓋出來的同一棟），用城鎮那一支著色器畫一個實例：
+//   先只寫深度、再照固定透明度混色（blendColor ＋ CONSTANT_ALPHA ⇒ 著色器不用改）⇒ 只看得到最前面那一層，不會透出屋子背面與屋裡的面。
+//   蓋不了 ⇒ 暗一點、淡一點（紅框照舊由 87_townbuild.js twbLines 畫）。⛔ 只給人看：不進 T.inst、不碰整地。
+var TOWN_GHOST_A = [0.55, 0.3];                                         // 透明度：蓋得了／蓋不了
+/** 地塊 l（規劃座標，同 townBuild 會寫進去的那一份）⇒ 預覽的實例；模型還沒解好 ⇒ null。 */
+function townGhost(T, l, ok) {
+  var K = TOWNS.kit; if (!K || K.part || !T || !BED) return null;
+  var q = townLotInst(T, K, l); if (!q) return null;
+  q.sh = ok ? 1.05 : 0.55; q.a = TOWN_GHOST_A[ok ? 0 : 1]; return q;
+}
+/** 畫預覽的實例（60_render.js 經 87_townbuild.js twbDraw；地形、樹、城之後）。 */
+function townGhostDraw(q) {
+  var K = TOWNS.kit, P = TOWNS.prog, Mm = q && K && K.M[q.k]; if (!Mm || !P) return;
+  var g = Mm.lod[0], PV = P.vox, B = TOWNS.ghost || (TOWNS.ghost = gl.createBuffer());
+  gl.bindBuffer(gl.ARRAY_BUFFER, B); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([q.x, q.y, q.z, q.th, q.sx, q.sh, 1e6, 0, 0, 0, 0]), gl.DYNAMIC_DRAW);   // aS.z 1e6 ⇒ vD ≈ 0：近那一級、不淡出
+  gl.useProgram(PV.prog); setCommon(PV); gl.uniform1f(PV.u.uFogD, WX.fog * BED_FOG * CAM.fogK); gl.uniform3fv(PV.u.uEye, CAM.eye);
+  gl.uniform1f(PV.u.uEdge, 1); gl.uniform2f(PV.u.uIn, -2, -1); gl.uniform2f(PV.u.uOut, 1e7, 2e7); gl.uniform3fv(PV.u.uC, Mm.uc0);
+  gl.bindVertexArray(g.vao); gl.bindBuffer(gl.ARRAY_BUFFER, B);
+  gl.vertexAttribPointer(4, 4, gl.FLOAT, false, 44, 0); gl.vertexAttribPointer(5, 3, gl.FLOAT, false, 44, 16); gl.vertexAttribPointer(6, 4, gl.FLOAT, false, 44, 28);
+  var cf = gl.isEnabled(gl.CULL_FACE), bs = [gl.BLEND_SRC_RGB, gl.BLEND_DST_RGB, gl.BLEND_SRC_ALPHA, gl.BLEND_DST_ALPHA].map(function (k) { return gl.getParameter(k); });
+  gl.disable(gl.CULL_FACE);
+  gl.colorMask(false, false, false, false); gl.drawElementsInstanced(gl.TRIANGLES, g.nq * 6, gl.UNSIGNED_INT, 0, 1);   // 只寫深度
+  gl.colorMask(true, true, true, true); gl.depthMask(false); gl.enable(gl.BLEND); gl.blendColor(0, 0, 0, q.a); gl.blendFunc(gl.CONSTANT_ALPHA, gl.ONE_MINUS_CONSTANT_ALPHA);
+  gl.drawElementsInstanced(gl.TRIANGLES, g.nq * 6, gl.UNSIGNED_INT, 0, 1);   // 深度相等（LEQUAL）的那一層混色
+  gl.disable(gl.BLEND); gl.blendFuncSeparate(bs[0], bs[1], bs[2], bs[3]); gl.depthMask(true); if (cf) gl.enable(gl.CULL_FACE); gl.bindVertexArray(null);
+}
+/** 測試用（__game.townDump）：城 id（沒給 ⇒ 第一座）每一區地面網格（讀 GPU：頂點、索引）與城框裡每一塊畫面高度（townHv）的雜湊
+ *  ⇒ 建築模式的增量重建 vs 重新進城整座建（或 ?townfull=1）逐位元組比（townReplace）。 */
+function townDump(id) {
+  var T = TOWNS.list.filter(function (t) { return !id || t.id === id; })[0]; if (!T || !BED || !BED.A) return null;
+  function h32(a) { var u = new Uint8Array(a.buffer, a.byteOffset, a.byteLength), h = 2166136261; for (var i = 0; i < u.length; i++) { h ^= u[i]; h = Math.imul(h, 16777619); } return (h >>> 0).toString(16); }
+  function buf(t, b, A) { gl.bindBuffer(t, b); var a = new A(gl.getBufferParameter(t, gl.BUFFER_SIZE) / A.BYTES_PER_ELEMENT); gl.getBufferSubData(t, 0, a); return a; }
+  var tiles = {}, chunks = {}, S = BED.A.chunk;
+  gl.bindVertexArray(null);
+  Object.keys(T.gt || {}).sort().forEach(function (k) { var Q = T.gt[k]; tiles[k] = Q.g ? h32(buf(gl.ARRAY_BUFFER, Q.g.vb, Float32Array)) + ':' + h32(buf(gl.ELEMENT_ARRAY_BUFFER, Q.g.ib, Uint32Array)) + (Q.dirty ? '*' : '') : Q.dirty ? 'dirty' : 'none'; });
+  Object.keys(Object.assign({}, BED.ch, BED.cm)).sort().forEach(function (k) { var C = bedShowC(k); if (C && townBoxHit(T.box, [C.cx * S, C.cy * S, (C.cx + 1) * S, (C.cy + 1) * S])) chunks[k] = h32(townHv(C)) + '@' + C.step; });
+  return { id: T.id, roads: T.roads.length, lots: (T.p.lots || []).length, inst: (T.inst || []).length, tiles: tiles, chunks: chunks };
 }
 
 // ── 夜裡的燈（Tim 2026-10-20「加了夜晚後 是否可以嘗試給現有建築標記一些燈(無陰影點光源) 然後渲染時要考慮效能」「然後也可以沿著街道自動部設街燈」；只給人看） ──
@@ -1529,6 +1666,56 @@ function townPostDraw(P, eye, fogD) {
     gl.bindVertexArray(tl.postVao); gl.drawArraysInstanced(gl.TRIANGLES, 0, 36, tl.nPost * 2); tris += 24 * tl.nPost;
   });
   return tris;
+}
+// 玻璃（Tim 2026-10-23「建築是否支援玻璃(跟船一樣的)」）：模型檔的 gls（Blocksail tools/townmodels.py glass_faces：子作品 meta material=glass 那幾格貼著空氣的面，
+//   每面 4 個 u16 ＝ 格 x、y、z、面 | 色號 << 3；面照 TOWN_GLS_FACE）；近那一級的網格不放那幾格，低模、貼圖、屋頂照舊有它（遠看是深色的窗）。
+//   ⇒ 一個模型一份平面網格（模型本地公尺：a ＝ x·mpv − 寬/2、b ＝ y·mpv − 深/2、高 ＝ z·mpv；頂點同船的玻璃 15_smooth.js glsBuild：位置、法線、色、[金屬度, 粗糙度, 透明度]，照材質表的 glass）
+//   ⇒ townGlsDraw 照近那一級的實例一棟一次畫（P.tri ＋ uGls：同船的玻璃那一段 —— 混色、不寫深度、由遠到近；60_render.js 在船的玻璃之後、亮窗之前）。只給人看。
+var TOWN_GLS_FACE = [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]];
+/** 模型檔的 gls ⇒ Promise<{ vao, vbo, n } | null>（見上）。 */
+function townGlsMesh(m0, b64) {
+  if (!b64) return Promise.resolve(null);
+  return VK.inflateRaw(VK.b64ToBytes(b64)).then(function (raw) {
+    var A = new Uint16Array(raw.buffer.slice(raw.byteOffset, raw.byteOffset + raw.byteLength)), mpv = m0.mpv, hx = m0.size[0] * mpv / 2, hy = m0.size[1] * mpv / 2;
+    var mt = matInfo('glass'), mm = +mt.metal || 0, mr = isFinite(+mt.rough) && mt.rough !== undefined ? +mt.rough : 0.06, mc = clamp(+mt.clear || 0.6, 0, 0.95);
+    var V = new Float32Array(A.length / 4 * 72), o = 0, T6 = [0, 1, 2, 0, 2, 3];
+    for (var k = 0; k + 3 < A.length; k += 4) {
+      var f = A[k + 3] & 7, col = A[k + 3] >> 3, n = TOWN_GLS_FACE[f], ax = f >> 1, ua = SM_UAX[ax], va = SM_VAX[ax], L = [A[k], A[k + 1], A[k + 2]], q = [];
+      if (n[ax] > 0) L[ax]++;
+      for (var e = 0; e < 4; e++) { var c = SM_C4[n[ax] > 0 ? e : 3 - e], Q = L.slice(); Q[ua] += c[0]; Q[va] += c[1]; q.push(Q); }
+      var r = ((col >> 5) & 7) / 7, gg = ((col >> 2) & 7) / 7, b = (col & 3) / 3;
+      for (var t = 0; t < 6; t++) { var P2 = q[T6[t]]; V[o++] = P2[0] * mpv - hx; V[o++] = P2[1] * mpv - hy; V[o++] = P2[2] * mpv; V[o++] = n[0]; V[o++] = n[1]; V[o++] = n[2]; V[o++] = r; V[o++] = gg; V[o++] = b; V[o++] = mm; V[o++] = mr; V[o++] = mc; }
+    }
+    var g = { vao: gl.createVertexArray(), vbo: gl.createBuffer(), n: o / 12 };
+    gl.bindVertexArray(g.vao); gl.bindBuffer(gl.ARRAY_BUFFER, g.vbo); gl.bufferData(gl.ARRAY_BUFFER, V, gl.STATIC_DRAW);
+    [[0, 0], [1, 3], [2, 6], [3, 9]].forEach(function (a) { gl.enableVertexAttribArray(a[0]); gl.vertexAttribPointer(a[0], 3, gl.FLOAT, false, 48, a[1] * 4); });
+    gl.bindVertexArray(null);
+    return g;
+  });
+}
+/** 玻璃那一趟（見上）：近那一級、有玻璃的實例，由遠到近一棟一次；讀數 TOWNS.stat.gls ＝ 這一格畫了幾棟。 */
+var TOWN_GLS_M = new Float32Array(16);
+function townGlsDraw() {
+  TOWNS.stat.gls = 0;
+  var K = TOWNS.kit, G = TOWNS.grp, D0 = TOWNS.buf[0];
+  if (!TOWNS.on || !K || !G || !D0 || PASS.vp) return;
+  var E = CAM.eye, L = [];
+  K.names.forEach(function (nm, mi) {
+    var Mm = K.M[nm], n = G.cnt[0][mi]; if (!n || !Mm.gls || !Mm.gls.n) return;
+    for (var j = 0; j < n; j++) { var o = (G.off[0][mi] + j) * 11; L.push({ g: Mm.gls, o: o, d: Math.hypot(D0[o] - E[0], D0[o + 2] - E[2]) }); }
+  });
+  if (!L.length) return;
+  L.sort(function (a, b) { return b.d - a.d; });
+  var cf = gl.isEnabled(gl.CULL_FACE), M = TOWN_GLS_M;
+  gl.enable(gl.BLEND); gl.blendFuncSeparate(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA, gl.ZERO, gl.ONE); gl.depthMask(false); gl.disable(gl.CULL_FACE);
+  gl.useProgram(P.tri.prog); setCommon(P.tri); gl.uniform1f(P.tri.u.uLit, 1); gl.uniform1f(P.tri.u.uGls, 1); if (P.tri.u.uGlow) gl.uniform1f(P.tri.u.uGlow, 0); cutSet(P.tri, null);
+  L.forEach(function (it) {
+    var o = it.o, s = Math.sin(D0[o + 3]), c = Math.cos(D0[o + 3]), sx = D0[o + 4];   // 實例的欄位見 townInstAttr：aI x y z θ、aS 沿 x 縮放…、aJ 斜接 ×2 坡度 牆基
+    M[0] = s * sx; M[1] = D0[o + 9] * sx; M[2] = -c * sx; M[3] = 0; M[4] = -c; M[5] = 0; M[6] = -s; M[7] = 0; M[8] = 0; M[9] = 1; M[10] = 0; M[11] = 0; M[12] = D0[o]; M[13] = D0[o + 1]; M[14] = D0[o + 2]; M[15] = 1;
+    gl.uniformMatrix4fv(P.tri.u.uModel, false, M); gl.bindVertexArray(it.g.vao); gl.drawArrays(gl.TRIANGLES, 0, it.g.n);
+  });
+  gl.bindVertexArray(null); gl.uniform1f(P.tri.u.uGls, 0); gl.depthMask(true); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA); if (cf) gl.enable(gl.CULL_FACE);
+  TOWNS.stat.gls = L.length;
 }
 /** 亮窗、光點（60_render.js：海、玻璃之後；加法、不寫深度）。白天（TL.k 0）整段不畫。 */
 function townGlowDraw() {

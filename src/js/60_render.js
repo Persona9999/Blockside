@@ -724,12 +724,7 @@ function mainOpaque(fr) {
   bedDraw();                                                             // 陸地與海底（63_bed_gl.js；有海圖才有）
   treeDraw();                                                            // 島上的樹（63_trees.js）
   townDraw();                                                            // 城鎮（63_towns.js；有城才有）
-  if (TWB.on && TWB.gl && TWB.gl.n) {                                     // 城鎮建築模式的預覽（87_townbuild.js twbLines；世界座標、穿地看得到）
-    //   ⛔ 要在地形、樹、城之後畫：關了深度測試的線不寫深度 ⇒ 畫在前面會被後畫的陸地整片蓋掉（2026-10-22 第一版放在船那一段後面，量到預覽框周圍 0 個綠像素）
-    gl.useProgram(P.tri.prog); setCommon(P.tri); gl.uniform1f(P.tri.u.uLit, 0); gl.vertexAttrib3f(1, 0, 1, 0);
-    cutSet(P.tri, null); gl.uniformMatrix4fv(P.tri.u.uModel, false, CS_ID || (CS_ID = M4.ident()));
-    gl.disable(gl.DEPTH_TEST); gl.bindVertexArray(TWB.gl.vao); gl.drawArrays(gl.LINES, 0, TWB.gl.n); gl.enable(gl.DEPTH_TEST); gl.bindVertexArray(null);
-  }
+  twbDraw();                                                             // 城鎮建築模式的預覽（87_townbuild.js：半透明的房子與路面帶、線框；⛔ 要在地形、樹、城之後）
 }
 /** 主畫面的海：折射複製、海面、破洞底下的海、遠海、內陸水、陰影範圍的除錯線。 */
 function mainWater(fr) {
@@ -772,6 +767,7 @@ function mainOverlay(fr) {
   if (!FLX3 && !CUTV.half) wpDrawFoam(hullUniforms);                                              // 船邊水花的白沫（13_water.js）：貼著浪、不寫深度
   flDraw();                                                              // 艙內的水面（33_flood.js，粒子模式）
   glsDraw();                                                             // 玻璃（15_smooth.js；TASK-0753）：半透明、不寫深度 ⇒ 不透明的、海、艙內的水都畫完才畫
+  townGlsDraw();                                                         // 城裡建築的玻璃（63_towns.js；同上那一套，近那一級才畫）
   townGlowDraw();                                                        // 城裡夜裡的燈：亮窗、光點（63_towns.js；加法、不寫深度 ⇒ 同上；白天不畫）
   inspHiDraw();                                                          // 船隻觀察勾了的部件高亮（86_inspect.js；隔著船殼看得到 ⇒ 透明的都畫完才畫；沒勾 ⇒ 一行就回）
   // 粒子＋砲彈＋瞄準點
