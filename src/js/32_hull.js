@@ -71,13 +71,15 @@ function stepShip(sh, dt) {
     if (!fl && vd) sh.sink = Math.max(0, sh.sink + vd);                         // 公式模式：被拖下去的直接加在吃水上（出了眼照樣慢慢浮回來）
     if (sh.sink > 4.2 && !sh.sinkingFinal && (fk > 0 || sh.vxSink > 0)) { sh.sinkingFinal = true; if (sh.vxSink > 0) { sh.vxEaten = true; sh.fate = '捲進漩渦'; note(sh, '被漩渦拖下去，開始沉了', true); } else note(sh, '進水太多，開始沉了'); }   // 大漩渦：跟進水同一條線（4.2 m）—— 進水速度調成 0 也照樣會被拖沉
     var gulp = VX && VX.gulp > 0 && Math.hypot(sh.px, sh.pz) < VX.re;          // 大漩渦：開始沉的船在眼裡 ⇒ 被吸下去（天氣設定頁「眼吞沉船」m/s²；Tim：「沈船會在幾秒內被吸走(沉掉)」）
-    if (sh.sinkingFinal) { sh.sinkV += (gulp ? VX.gulp : 0.06 * (sh.vxEaten ? Math.max(fk, 1) : fk)) * dt; sh.sink += sh.sinkV * dt; }
-    if (sh.sink > 9) { sh.sunk = true; sh.sunkAt = SIMT; note(sh, '沉沒', true); }   // sunkAt：結算判自爆沉沒（61_hud.js shipFate）
+    if (sh.sinkingFinal && sh.vxEaten && VX.pull > 0) { sh.sinkV = vxPullV(sh.sink); sh.sink += sh.sinkV * dt; }   // 被眼拖沉的：照同一條式子接著往下拖（08_sea.js vxPullV；Tim 2026-10-22「船體逐漸往下」）—— ⛔ 不換成眼吞沉船的加速度（1.5 秒就沉沒）
+    else if (sh.sinkingFinal) { sh.sinkV += (gulp ? VX.gulp : 0.06 * (sh.vxEaten ? Math.max(fk, 1) : fk)) * dt; sh.sink += sh.sinkV * dt; }
+    if (sh.sink > (VX && sh.vxEaten ? vxSunkAt(sh) : 9)) { sh.sunk = true; sh.sunkAt = SIMT; note(sh, '沉沒', true); }   // sunkAt：結算判自爆沉沒（61_hud.js shipFate）；被眼拖沉的 ⇒ 整艘進到水裡才算（08_sea.js vxSunkAt）
   } else { sh.sinkV = VX && VX.gulp > 0 && Math.hypot(sh.px, sh.pz) < VX.re ? sh.sinkV + VX.gulp * dt : Math.min(sh.sinkV + 0.05 * dt, 1.2); sh.sink += sh.sinkV * dt; }   // 眼裡：沉了也照樣吸（不夾 1.2 m/s）
   // 傾斜：破洞那一舷往下（格座標 +y ＝ 船體 +Z（右舷）；繞 +X 轉正角時 +Z 那邊下沉）；粒子模式照水的重心（33_flood.js floodTilt）
   var tl = fl ? floodTilt(sh, fl) : null;
   var rollT = tl ? tl[0] : clamp(Dsp / (N + 900), -1, 1) * (sh.sinkingFinal ? 0.55 : 0.21);
   var pitchT = tl ? tl[1] : -clamp(Dbs / (N + 1500), -1, 1) * 0.07;
+  if (VX && (sh.vxSink > 0 || sh.vxEaten)) pitchT += vxTip(sh, sh.vxEaten && sh.sinkingFinal ? sh.sink : sh.vxSink);   // 大漩渦的眼：先進眼那一頭往下壓（08_sea.js vxTip；Tim 2026-10-22「一端被拉下去」）
   sh.rollV += ((rollT - sh.rollA) * 0.9 - sh.rollV * 0.8) * dt;
   sh.rollA += sh.rollV * dt;
   sh.pitchA += (pitchT - sh.pitchA) * 0.3 * dt;
