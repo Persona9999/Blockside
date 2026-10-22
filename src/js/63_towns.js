@@ -39,7 +39,7 @@ var TOWN_MESH_MS = 8;                                                    // 模�
 var TOWN_WALL_CORNER = 30, TOWN_WALL_KMAX = 1;                         // 城牆：轉角件從轉幾度起擺；斜接最多切多斜（tan，1 ＝ 轉 90° 的角平分）
 var TOWN_SLAB_KMAX = 2;                                                 // 碼頭、棧橋的板：轉角斜接最多拉長幾倍（2 ＝ 轉 120°；再急就在轉角那一點變窄）
 var TOWNS = { on: Q.get('towns') !== '0', prosp: {}, list: [],pend: [], ver: 0, want: 0, err: null, kit: null, kitP: null, idx: null, kitHas: null, kitRedo: false, mwait: null, prog: null, progJ: null, dirty: true, eye: null, sig: '', buf: [], grp: null,
-  stat: { towns: 0, lots: 0, inst: 0, walls: 0, corners: 0, snapped: 0, skip: {}, d0: 0, d1: 0, d2: 0, d3: 0, plinth: 0, tris: 0, binMs: 0, kitMs: 0, meshBaked: 0, meshLive: 0, meshCheck: null, gradeMs: 0, chunks: 0, drawMs: 0 } };
+  stat: { towns: 0, lots: 0, inst: 0, walls: 0, corners: 0, snapped: 0, skip: {}, d0: 0, d1: 0, d2: 0, d3: 0, plinth: 0, tris: 0, binMs: 0, kitMs: 0, meshBaked: 0, meshLive: 0, meshCheck: null, gradeMs: 0, chunks: 0, regraded: 0, drawMs: 0 } };
 var TOWN_J0 = [0, 0, 0, 0];                                             // 建築的 aJ（不斜接、不順坡、牆基不延）
 var TOWN_USE_ALT = { commandant: ['house'], governor: ['townhall'] };   // 那一套沒有那種模型 ⇒ 用哪一種代（BUILDING_SPEC §7：fr 沒有長官的屋子；carib 有）
 var TOWN_PROSP_DEF = 0.5, TOWN_PROSP_CUT = [1 / 3, 2 / 3];               // 繁榮度沒給 ⇒ 中間；低於第一格算低、到第二格算高（TOWN_BUILD §4 的門檻〔佔位〕）
@@ -48,6 +48,7 @@ var TOWN_COL = { main: [0.56, 0.47, 0.34], street: [0.62, 0.58, 0.50], track: [0
 evOn('bedChunk', function (cx, cy) {
   TOWNS.dirty = true;
   if (!BED || !BED.A) return;
+  if (TOWNS.rgq) delete TOWNS.rgq[bedKey(cx, cy)];                       // 排著等重新整地的那一塊已經重發了（新的一份、或 townRegrade 自己）⇒ 不再做一次
   var x = cx * BED.A.chunk, z = cy * BED.A.chunk, S = BED.A.chunk;
   TOWNS.list.forEach(function (T) { if (T.box[0] < x + S && T.box[2] > x && T.box[1] < z + S && T.box[3] > z) townGroundDirty(T, cx, cy); });   // 只重建讀過這一塊的那幾區（TASK-0817）
 }, 0, true);
@@ -79,13 +80,47 @@ function townGot(L, err, idx) {
   if (I && TOWNS.kitHas && townNeed(I).some(function (nm) { return TOWNS.kitHas.indexOf(nm) < 0; })) { if (TOWNS.kit) townKitFree(); else TOWNS.kitRedo = true; }
   TOWNS.ver++; TOWNS.dirty = true; TOWNS.stat.towns = TOWNS.list.length;
   TOWNS.stat.prepMs = +(performance.now() - t0).toFixed(1);
-  Object.keys(Object.assign({}, BED.ch, BED.cm)).forEach(function (k) { var C = bedShowC(k); if (C && townOver(C.cx, C.cy)) evEmit('bedChunk', C.cx, C.cy, C); });   // 畫著的那一份（原精度或外圈的中等塊）
+  Object.keys(Object.assign({}, BED.ch, BED.cm)).forEach(function (k) {   // 畫著的那一份（原精度或外圈的中等塊）：有畫面迴圈 ⇒ 排隊（townRegrade），不然照舊當場重發
+    var C = bedShowC(k); if (!(C && townOver(C.cx, C.cy))) return;
+    if (BED_SLICE) (TOWNS.rgq || (TOWNS.rgq = {}))[k] = 1; else evEmit('bedChunk', C.cx, C.cy, C);
+  });
+  Object.keys(BEDDRY.src).forEach(function (k) {                         // 遮罩記著、現在沒在畫的那幾塊（63_bed_gl.js bedDryRegrade）：同一個隊伍
+    var C = BEDDRY.src[k]; if (bedShowC(k) || !(C && townOver(C.cx, C.cy))) return;
+    if (BED_SLICE) (TOWNS.rgq || (TOWNS.rgq = {}))[k] = 1; else bedDryRegrade(k);
+  });
   Object.keys(BEDFAR.g).forEach(function (k) {                          // 遠景塊：網格與樹冠殼是照舊的高度建的 ⇒ 丟掉、放回去重讀（63_bed_gl.js bedFarStep 照離旗艦遠近挑）
     if (bedShowC(k)) return;
     var c = k.split('_').map(Number); if (!townOver(c[0], c[1])) return;
     bedFarDrop(k);
     if (BEDFAR.todo) BEDFAR.todo.push([c[0], c[1], 1, 0]);
   });
+}
+// 規劃比地形晚到時的重新整地排隊（TASK-0819；Tim 2026-10-22「進入航海時 城市還沒載入 然後載入時會整個卡住很久」）：
+//   townGot 以前在收到規劃的那一則訊息裡，把城範圍內畫著的每一塊都重發 'bedChunk' ⇒ 每一塊當場整地（townHv 20～60 ms，第一個接手的是 63_bed_gl.js bedDryPut）
+//   ⇒ 君士坦丁堡規劃晚到（生成器改了、烘好的過期 ⇒ 現場算 26～37 s）時約 50 塊在同一則訊息裡做完：1.4 s、最長一格 2.1 s。
+//   ⇒ 有畫面迴圈（BED_SLICE）⇒ 排進 TOWNS.rgq，每格照背景預算重發（至少一塊、離鏡頭近的先；排在擺樹前面 —— 城看得到的地面先對）；
+//     快轉、無頭照舊當場重發（逐位元組照舊）。排著的那一塊先被正常的收塊重發了 ⇒ 上面的 bedChunk 監聽拿掉它。只影響畫面（整地是畫面的高度），模擬照舊。
+function townRegrade() {
+  var Q = TOWNS.rgq; if (!Q || !BED || !BED.A) return;
+  var K = Object.keys(Q); if (!K.length) { TOWNS.rgq = null; return; }
+  var S = BED.A.chunk, e = CAM.eye, n = 0;
+  function d2(k) { var c = k.split('_'), x = (+c[0] + 0.5) * S - BED.ax - e[0], z = (+c[1] + 0.5) * S - BED.az - e[2]; return x * x + z * z; }
+  K.map(function (k) { return [d2(k), k]; }).sort(function (a, b) { return a[0] - b[0]; }).some(function (q) {
+    if (n && bedBusy()) return true;
+    var k = q[1]; delete Q[k];
+    var C = bedShowC(k), t0 = performance.now();
+    if (C && townOver(C.cx, C.cy)) evEmit('bedChunk', C.cx, C.cy, C);    // 畫著的 ⇒ 重發（網格、樹、遮罩都照新的整地）
+    else if (BEDDRY.src[k]) bedDryRegrade(k);                            // 沒在畫、遮罩還記著 ⇒ 只替遮罩重整
+    else return false;                                                   // 窗換了、都不要了
+    bedSpent(t0); n++; TOWNS.stat.regraded++;
+    return false;
+  });
+}
+/** 城 T 的範圍裡還有排著要重新整地的塊（townRegrade）⇒ 先別建實例（見 townDraw）。 */
+function townRgWait(T) {
+  var Q = TOWNS.rgq; if (!Q) return false;
+  var S = BED.A.chunk;
+  return Object.keys(Q).some(function (k) { var c = k.split('_'), x = +c[0] * S, z = +c[1] * S; return T.box[0] < x + S && T.box[2] > x && T.box[1] < z + S && T.box[3] > z; });
 }
 /** 塊 (cx, cy) 跟哪一座城的外框疊到（海域座標）。 */
 function townOver(cx, cy) {
@@ -1038,8 +1073,10 @@ function townDraw() {
   var nb = 0;                                                            // 實例、地面的帶子、屋頂殼：一格最多建一座城的一樣、照背景預算（08_seabed.js bedBusy；跟地球儀同一條主執行緒）
   // 實例不等背景預算（TASK-0819；Tim 2026-10-22「照建議改」）：預算每格先被收塊、擺樹、地形網格吃光 ⇒ 模型解好了城還要等那一批做完（君士坦丁堡第二次去 1.3～2.4 s）。
   //   建實例本來就是一格做完、不分段 ⇒ 等預算只是晚做、不是不卡；拿掉之後模型一好城就出來（0～0.1 s），最長一格沒變長（A/B 各 3 輪）。照舊一格最多一座、照舊扣預算。
+  //   但規劃晚到、城範圍裡還有排著要重新整地的塊（townRegrade）⇒ 先等它們：城牆的腳讀地面（townWallY → townGround → townHv）會把還沒整的塊在這一格當場整掉
+  //   （君士坦丁堡那一格 730～880 ms）；隊伍每格至少一塊、近的先，跟模型解碼同時走。
   TOWNS.list.forEach(function (T) {
-    if (!T.inst && !nb) { var b0 = performance.now(); T.inst = townInst(T); townGroundPrep(T); townFlagFree(T); T.shDirty = true; T.tlS = T.tlD = true; TOWNS.dirty = true; nb++; bedSpent(b0); }
+    if (!T.inst && !nb && !townRgWait(T)) { var b0 = performance.now(); T.inst = townInst(T); townGroundPrep(T); townFlagFree(T); T.shDirty = true; T.tlS = T.tlD = true; TOWNS.dirty = true; nb++; bedSpent(b0); }
   });
   TL.k = TL.on ? TOD_LIT : 0;                                                        // 夜裡的燈：這一格點燈了沒（08_weather.js；陸地在城之前畫 ⇒ 用上一格的分組表，差一格看不出來）
   TOWNS.list.forEach(function (T) {                                    // 地面的帶子：一區一區（townGroundTile），離鏡頭近的先；一格最多 TOWN_GT_MAX 區、照背景預算
@@ -1133,7 +1170,7 @@ function townStat(at) {
     var tl = townLightStat(T);
     return { id: T.id, name: T.name, tier: T.tier, seed: T.seed, ox: T.ox, oy: T.oy, lots: (T.p.lots || []).length, roads: T.roads.length, walls: (T.p.walls || []).length, inst: (T.inst || []).length, ground: T.gt ? (function () { var K = Object.keys(T.gt); return { tiles: K.length, built: K.filter(function (k) { return T.gt[k].g; }).length, dirty: K.filter(function (k) { return T.gt[k].dirty; }).length }; })() : null,   // 地面的帶子分區（TASK-0817）
       byModel: u, lights: tl, center: [+(T.ox - BED.ax).toFixed(1), +(T.oy - BED.az).toFixed(1)] };
-  }), kit: !!TOWNS.kit, kitN: S.kitN, kitMs: S.kitMs, kitMesh: { baked: S.meshBaked, live: S.meshLive, check: S.meshCheck, vk: townVkFp() }, kitTris: S.kitTris, skip: S.skip, drawn: { full: S.d0, low: S.d1, card: S.d2, shells: S.d3, plinth: S.plinth, flags: S.flags || 0, landmarks: S.lm || 0 }, tris: S.tris, ms: { draw: S.drawMs, bin: S.binMs, grade: +S.gradeMs.toFixed(1), prep: S.prepMs }, gradedChunks: S.chunks,
+  }), kit: !!TOWNS.kit, kitN: S.kitN, kitMs: S.kitMs, kitMesh: { baked: S.meshBaked, live: S.meshLive, check: S.meshCheck, vk: townVkFp() }, kitTris: S.kitTris, skip: S.skip, drawn: { full: S.d0, low: S.d1, card: S.d2, shells: S.d3, plinth: S.plinth, flags: S.flags || 0, landmarks: S.lm || 0 }, tris: S.tris, ms: { draw: S.drawMs, bin: S.binMs, grade: +S.gradeMs.toFixed(1), prep: S.prepMs }, gradedChunks: S.chunks, regrade: { left: TOWNS.rgq ? Object.keys(TOWNS.rgq).length : 0, done: S.regraded },
     night: { lit: +TL.k.toFixed(3), win: +TOD_WIN.toFixed(3), grid: TL.stat.inGrid, range: TL.stat.range || 0, full: TL.stat.full, over: TL.stat.over, gridMs: TL.stat.gridMs, cards: TL.stat.cards, glow: TL.stat.glow, glowMs: TL.stat.glowMs } };
   if (at) { var q = bedCell(at[0], at[1]); o.at = { ground: +townGround(at[0], at[1]).toFixed(2), sim: +bedHgt(at[0], at[1]).toFixed(2), clear: q ? townClr(q.C, q.u * q.C.step, q.v * q.C.step) : null }; }
   return o;
