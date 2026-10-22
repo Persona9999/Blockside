@@ -421,10 +421,10 @@ function wroomsLab(T, o) {
 }
 
 // ── 高度場在 0.1 秒一步穩不穩（TASK-0808 驗收第 2 格：不切小步、深水 ⇒ 量得到發散；照 CFL 切 ⇒ 不發散）──
-// ?lab=wslosh（＋ ship=、hz=（預設 10 ⇒ 0.1 秒一步）、room ＝ 哪一間（預設：最大的那一間）、depth ＝ 水深（公尺，從那一間最低的地板算；預設 2）、
+// ?lab=wslosh（＋ ship=、hz=（預設 10 ⇒ 0.1 秒一步）、room ＝ 哪一間（預設：最大的那一間；−2 ⇒ 沒有上下兩段合併欄、最大的那一間）、depth ＝ 水深（公尺，從那一間最低的地板算；預設 2）、
 //   slope ＝ 初始水面沿船長方向的斜度（船頭比平均高幾公尺、船尾低幾公尺；預設 0.3）、dur（秒，預設 60））⇒ #lab：
-//   浮穩、釘住姿態（不再走物理）、不打洞；那一間照斜的水面裝水，只走房間模擬（沒有破口），照 CFL 切小步與 nocfl（一步一小步）各跑一次。
-//   每 0.5 秒一筆 [t, 水面對平均的 RMS m, 最高 − 平均 m, 平均 − 最低 m, 相鄰兩欄水面差最大 m, 這間的水 m³, 乾的欄, 全船的水 − 開局（單位，守恆 ⇒ 0）, 管子流量總和 m³/s, 流向跟上一筆相反的管子數, 其中接到上下兩段合併欄的：流量、翻向]（那一間有水、沒滿的欄）。
+//   浮穩、釘住姿態（不再走物理）、不打洞、開口全關（封閉的水池）；那一間照斜的水面裝水，只走房間模擬（沒有破口），照 CFL 切小步與 nocfl（一步一小步）各跑一次。
+//   每 0.5 秒一筆 [t, 水面對平均的 RMS m, 最高 − 平均 m, 平均 − 最低 m, 相鄰兩欄水面差最大 m, 這間的水 m³, 乾的欄, 全船的水 − 開局（單位，守恆 ⇒ 0）, 管子流量總和 m³/s, 流向跟上一筆相反的管子數, 其中接到上下兩段合併欄的：流量、翻向, 每一種管子 [條數, 流量, 翻向] × 兩段欄／收的滿了／地板落差／乾濕邊緣／普通]（那一間有水、沒滿的欄）。
 function wsloshLab(o) {
   o = Object.assign({ hz: 10, depth: 2, slope: 0.3, dur: 60, room: -1 }, o || {});
   flowMode('sandbox'); reset(); AUTOFIRE = false; flowRun(false);
@@ -437,11 +437,13 @@ function wsloshLab(o) {
   var out = { hull: sh.T.id, hz: o.hz, depth: o.depth, slope: o.slope, dur: o.dur, runs: {} };
   if (!W) { DT = DT_BASE = DT0; out.err = '沒有烘焙好的房間'; return out; }
   var X = wrxOf(sh.T), M = sh.M, r = o.room;
+  function gapCol(g) { for (var l = 0, seen = 0, hole = 0; l < W.colNZ[g]; l++) { var c0 = W.cnt[W.colOff[g] + l]; if (c0 && hole) return 1; if (c0) seen = 1; else if (seen) hole = 1; } return 0; }
+  if (r === -2) for (var r1 = 0, bv1 = -1; r1 < W.roomVox.length; r1++) { var ok1 = true; for (var g1 = W.roomCol0[r1]; g1 < W.roomCol0[r1 + 1] && ok1; g1++) if (gapCol(g1)) ok1 = false; if (ok1 && W.roomVox[r1] > bv1) { bv1 = W.roomVox[r1]; r = r1; } }   // room=-2 ⇒ 沒有上下兩段合併欄、最大的那一間（對照：普通的房間靜不靜得下來）
   if (r < 0) for (var r0 = 0, bv = -1; r0 < W.roomVox.length; r0++) if (W.roomVox[r0] > bv) { bv = W.roomVox[r0]; r = r0; }
   out.room = r; out.m3 = +(W.roomVox[r] * S * S * S).toFixed(1);
   ['cfl', 'nocfl'].forEach(function (mode) {
     var s = sh.wrs = wrsInit(sh), q, x0 = Infinity, x1 = -Infinity, fz = Infinity, cz = -Infinity, U0 = 0;
-    if (mode === 'nocfl') s.opt.nocfl = true;
+    if (mode === 'nocfl') s.opt.nocfl = true; (o.wsimo || []).forEach(function (k) { s.opt[k] = true; }); s.opt.onlyOp = -1;   // 開口全關 ⇒ 封閉的水池（⛔ 開著 ⇒ 水從開口流走，流量、水面不平都是排水，不是晃動）
     for (q = W.roomCol0[r]; q < W.roomCol0[r + 1]; q++) {
       x0 = Math.min(x0, X.cx[q]); x1 = Math.max(x1, X.cx[q]);
       var bq = M[1] * X.cx[q] + M[5] * X.cy[q] + M[13]; fz = Math.min(fz, bq + M[9] * s.zf[q]); cz = Math.max(cz, bq + M[9] * (W.colZ0[q] + W.colNZ[q]));
@@ -475,10 +477,17 @@ function wsloshRead(s, M, r, t, U0) {
   }
   var mean = n ? sm / n : 0, v2 = 0;
   for (q = W.roomCol0[r]; q < W.roomCol0[r + 1]; q++) if (s.u[q] && s.u[q] < s.cap[q]) v2 += (s.hw[q] - mean) * (s.hw[q] - mean);
-  if (!s.gapC) { s.gapC = new Uint8Array(s.n); for (var g = 0; g < s.n; g++) { for (var l = 0, seen = 0, hole = 0; l < W.colNZ[g]; l++) { var c0 = W.cnt[W.colOff[g] + l]; if (c0 && hole) { s.gapC[g] = 1; break; } if (c0) seen = 1; else if (seen) hole = 1; } } }   // 上下兩段的合併欄（中間有一層以上沒有艙內空氣）
+  s.gapC = s.gp;                                                         // 上下兩段的合併欄（33_wrsim.js wrsInit）
   for (var fs = 0, fo = 0, fg = 0, fgv = 0, q2 = W.roomCol0[r]; q2 < W.roomCol0[r + 1]; q2++) for (var e2 = 0; e2 < 2; e2++) { var fv = e2 ? s.fy[q2] : s.fx[q2], pv = e2 ? s.pfy : s.pfx, nq = e2 ? s.nby[q2] : s.nbx[q2], gp = nq >= 0 && (s.gapC[q2] || s.gapC[nq]); fs += Math.abs(fv); if (gp) fgv += Math.abs(fv); if (pv && pv[q2] * fv < 0) { fo++; if (gp) fg++; } }   // 管子的流量總和（m³/s；靜下來 ⇒ 0）、這半秒內最後一步跟上一筆比流向翻過來的管子數
+  var cat = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];                // 每一種管子：[條數, 流量, 翻向] × 兩段欄／收的那一欄滿了／地板有落差（> 5 cm）／乾濕邊緣（一邊不到 2 cm）／普通（照這個順序先中先算）
+  for (var q4 = W.roomCol0[r]; q4 < W.roomCol0[r + 1]; q4++) for (var e4 = 0; e4 < 2; e4++) {
+    var n4 = e4 ? s.nby[q4] : s.nbx[q4]; if (n4 < 0) continue;
+    var f4 = e4 ? s.fy[q4] : s.fx[q4], p4 = e4 ? s.pfy : s.pfx, d4a = (s.zs[q4] - s.zf[q4]) * S, d4b = (s.zs[n4] - s.zf[n4]) * S, c4;
+    if (s.gapC[q4] || s.gapC[n4]) c4 = 0; else if (s.u[q4] >= s.cap[q4] || s.u[n4] >= s.cap[n4]) c4 = 1; else if (Math.abs(s.zf[q4] - s.zf[n4]) * S > 0.05) c4 = 2; else if (Math.min(s.u[q4] ? d4a : 0, s.u[n4] ? d4b : 0) < 0.02) c4 = 3; else c4 = 4;
+    cat[c4 * 3]++; cat[c4 * 3 + 1] += Math.abs(f4); if (p4 && p4[q4] * f4 < 0) cat[c4 * 3 + 2]++;
+  }
   s.pfx = Float64Array.from(s.fx); s.pfy = Float64Array.from(s.fy);
-  return [+t.toFixed(1), n ? +Math.sqrt(v2 / n).toFixed(4) : 0, n ? +(mx - mean).toFixed(3) : 0, n ? +(mean - mn).toFixed(3) : 0, +dmax.toFixed(3), +(vr / s.upm).toFixed(2), dry, U - U0, +fs.toFixed(3), fo, +fgv.toFixed(3), fg];
+  return [+t.toFixed(1), n ? +Math.sqrt(v2 / n).toFixed(4) : 0, n ? +(mx - mean).toFixed(3) : 0, n ? +(mean - mn).toFixed(3) : 0, +dmax.toFixed(3), +(vr / s.upm).toFixed(2), dry, U - U0, +fs.toFixed(3), fo, +fgv.toFixed(3), fg, cat.map(function (v, i) { return i % 3 === 1 ? +v.toFixed(2) : v; })];
 }
 
 // ── 夾到拉平 ⇒ 不來回穿越（TASK-0808 驗收第 8 格；教科書式的單獨對照：在船上跑全部的開口，別的開口、破口、房間內的管子也在動兩邊的水位，「下一小步反過來」不全是這個開口衝過頭）──

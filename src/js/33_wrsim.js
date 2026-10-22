@@ -39,14 +39,15 @@ function wrsInit(sh) {
   var T = sh.T, W = T.wrm; if (!W) return null;
   var X = wrxOf(T), n = W.colRoom.length, C = W.c, NCK = W.NCX * W.NCY, idx = new Map(), j, k, i;
   for (j = 0; j < n; j++) idx.set(W.colRoom[j] * NCK + W.colCX[j] * W.NCY + W.colCY[j], j);
-  var nbx = new Int32Array(n).fill(-1), nby = new Int32Array(n).fill(-1), nbxm = new Int32Array(n).fill(-1), nbym = new Int32Array(n).fill(-1), cap = new Int32Array(n), zf = new Float32Array(n), ca = new Float32Array(n);
+  var nbx = new Int32Array(n).fill(-1), nby = new Int32Array(n).fill(-1), nbxm = new Int32Array(n).fill(-1), nbym = new Int32Array(n).fill(-1), cap = new Int32Array(n), zf = new Float32Array(n), ca = new Float32Array(n), gp = new Uint8Array(n);
   for (j = 0; j < n; j++) {
     var r = W.colRoom[j], cx = W.colCX[j], cy = W.colCY[j];
     if (cx + 1 < W.NCX && (k = idx.get(r * NCK + (cx + 1) * W.NCY + cy)) !== undefined) { nbx[j] = k; nbxm[k] = j; }
     if (cy + 1 < W.NCY && (k = idx.get(r * NCK + cx * W.NCY + cy + 1)) !== undefined) { nby[j] = k; nbym[k] = j; }
     cap[j] = wrColCap(W, X, j); zf[j] = wrColZ(W, X, j, 0);
     for (var d0 = 0, o0 = W.colOff[j], cm = 0; d0 < W.colNZ[j]; d0++) cm = Math.max(cm, W.cnt[o0 + d0]);
-    ca[j] = cm * S * S;                                                  // 這一欄的底面積（最寬那一層，m²）：虛擬管的寬照它（窄的邊欄流得慢 ⇒ 一小步灌不爆）
+    ca[j] = cm * S * S;
+    for (var l0 = 0, sn0 = 0, hl0 = 0; l0 < W.colNZ[j]; l0++) { var c0 = W.cnt[o0 + l0]; if (c0 && hl0) { gp[j] = 1; break; } if (c0) sn0 = 1; else if (sn0) hl0 = 1; }   // 上下兩段的合併欄（中間有一層以上沒有艙內空氣）                                                  // 這一欄的底面積（最寬那一層，m²）：虛擬管的寬照它（窄的邊欄流得慢 ⇒ 一小步灌不爆）
   }
   /** 第 r 間在 (x, y) 那一欄；那裡沒有這間的欄 ⇒ 這間最近的一欄。 */
   function colAt(r, x, y) {
@@ -79,7 +80,7 @@ function wrsInit(sh) {
     var rb = -1; for (var dz = 0; dz <= 3 && rb < 0; dz++) rb = wrRoomAt(W, Math.floor(sx), Math.floor(sy), d.zt - dz);
     if (rb >= 0) tops.push({ d: di, r: rb, j: colAt(rb, sx, sy), x: sx, y: sy, z: d.zt + 1, ar: n0 * S * S, acc: 0, q: 0 });
   });
-  return { W: W, X: X, n: n, u: new Int32Array(n), cap: cap, zf: zf, ca: ca, nbx: nbx, nby: nby, nbxm: nbxm, nbym: nbym,
+  return { W: W, X: X, n: n, u: new Int32Array(n), cap: cap, zf: zf, ca: ca, gp: gp, nbx: nbx, nby: nby, nbxm: nbxm, nbym: nbym,
     fx: new Float64Array(n), fy: new Float64Array(n), ax: new Float64Array(n), ay: new Float64Array(n), hw: new Float64Array(n), zs: new Float64Array(n), lv: new Float64Array(n), K: new Float64Array(n),
     O: O, NO: NO, oa: oa, ob: ob, ja: ja, jb: jb, up: up, oacc: new Float64Array(NO), oq: new Float32Array(NO), ost: new Int8Array(NO), odoor: odoor, tops: tops, bud: new Map(), emO: new Float64Array(NO), upO: new Float64Array(NO), mvO: new Float64Array(NO), putSeen: new Int32Array(NR), putN: 0, crO: new Int32Array(NO), xs: new Int32Array(NO), xd: new Int32Array(NO), xover: 0, xoO: new Int32Array(NO), dA: { breach: 0, open: 0, jets: 0, pipe: 0 },
     idx: idx, NCK: NCK, J: { n: 0, p: new Float32Array(3 * WRS_JN), v: new Float32Array(3 * WRS_JN), u: new Int32Array(WRS_JN), src: new Int32Array(WRS_JN), life: new Float32Array(WRS_JN), hd: new Float32Array(WRS_JN), dst: new Int32Array(WRS_JN), fr: new Int32Array(WRS_JN), wt: new Float32Array(WRS_JN) }, Jtot: 0, jet: 0, opt: {},
@@ -269,6 +270,7 @@ function wrsStep(sh, dt, fl) {
       for (var e = 0; e < 2; e++) {
         var nb = e ? s.nby[j] : s.nbx[j], f = e ? fy : fx; if (nb < 0) { f[j] = 0; continue; }
         if (u[j] === 0 && u[nb] === 0) { f[j] = 0; continue; }
+        if (s.opt.noGapPipe && (s.gp[j] || s.gp[nb])) { f[j] = 0; continue; }   // 反向對照（wsimo=noGapPipe）：接到上下兩段合併欄的管子關掉
         var hj = s.hw[j], hk = s.hw[nb], sill = Math.max(s.hw[j] - (s.zs[j] - s.zf[j]) * M[9], s.hw[nb] - (s.zs[nb] - s.zf[nb]) * M[9]), dep = Math.max(hj, hk) - sill;
         if (dep <= 0) { f[j] = 0; continue; }
         var fv = f[j] * damp + h * G * dep * (hj - hk) * Math.min(s.ca[j], s.ca[nb]) / (L * L);   // m³/s：dQ/dt ＝ g·水深·Δh·管寬 ÷ 管長；管長 ＝ 欄寬 L、管寬 ＝ 兩欄底面積小的那個 ÷ L（整欄 ⇒ L；⛔ 以前多乘一個 L）
