@@ -142,6 +142,7 @@ window.addEventListener('unhandledrejection', function (ev) { var r = ev.reason;
 if (!gl) { glFail('這個瀏覽器沒有 WebGL2，畫不出來。'); throw new Error('no WebGL2'); }   // 拆檔後這裡是閉包的頂層：throw ＝ 原本的 return（停下來）
 
 var P = {};
+var SEA_SHORE = [0.0, 3.0, 0.12];                                       // 岸邊浪變小（P.water；TASK-0818）：水深幾公尺起變小、幾公尺以上照舊；岸上海面壓低幾公尺
 // 不卡畫面的著色器（TASK-0816）：KHR_parallel_shader_compile ⇒ 先送出編譯、連結（glProgStart），每格問好了沒（glProgReady），好了才拿（glProgEnd：跟 VK.compile 一樣的 { prog, u }、編不過照樣丟錯）。
 //   以前第一次畫城鎮時一口氣編 5 支、等到編完（VK.compile 問 COMPILE_STATUS ⇒ 主執行緒等驅動）：皇家港外進航海 +4.6 秒那一格 633 ms。沒有這個擴充 ⇒ glProgReady 一律 true（照舊等）。
 var GL_PAR = gl && gl.getExtension('KHR_parallel_shader_compile');
@@ -319,10 +320,15 @@ function programs() {
     ' vec2 d=gl_PointCoord*2.0-1.0; float r=dot(d,d); if(r>1.0) discard; float a=vC.a*(1.0-r*r); o=vec4(vC.rgb*(1.0-0.25*r),a); }\n');
   // 海：跟著鏡頭的同心圓網格（60_render.js seaGrid；aP ＝ 離中心的 x、z 與那一圈的網格間距），頂點照浪位移（08_sea.js；比網格粗的浪拿掉、1 km 外放平）；
   //   法線在片段裡照解析的坡度算（seaG，遠處淡掉）＋細的漣漪 uDet 道（畫質）—— 漣漪只在畫面上，不進物理。
+  // 岸邊浪變小（TASK-0818；Tim 2026-10-22「海浪往外還會有一段 斷掉的海水在岸上 且會閃爍」）：以前浪照深海的高度一路起伏到岸上 ⇒ 平的沙灘一下被浪頭蓋住一塊、一下露出來（斷開的海、閃）。
+  //   ⇒ 照水深（海底高度貼圖 uBedT，跟岸邊白沫同一張、8 m 一格）把浪的高度與斜率縮小（vK）：水深 ≥ SEA_SHORE[1] 照舊，越淺越小，岸上（水深 ≤ SEA_SHORE[0]）平的；
+  //   岸上再壓低 SEA_SHORE[2] 公尺 ⇒ 0 m 上下的沙灘不跟平的海面搶深度。只給人看：船、浮力、模擬照舊讀 JS 的 seaH。沒有海圖、貼圖外 ⇒ 照舊（vK 1）。
   P.water = VK.compile(gl,
-    '#version 300 es\nlayout(location=0) in vec3 aP; uniform mat4 uVP; uniform vec2 uC;\n' + SEA_GLSL +
-    'out vec3 vW; void main(){ vec2 p=uC+aP.xy; float h=seaHs(p,aP.z)*(1.0-smoothstep(900.0,1600.0,length(aP.xy))); vW=vec3(p.x,h,p.y); gl_Position=uVP*vec4(vW,1.0); }\n',
-    '#version 300 es\nprecision highp float; in vec3 vW; uniform vec3 uEye,uSun,uFog,uSky; uniform float uFogD,uDet,uAn,uNzP,uReflOn,uRefr,uFoam,uRefrD,uRefrK,uBedOn; uniform vec2 uView; uniform vec4 uBedR; uniform sampler2D uRefl,uScene,uSceneD,uBedT; out vec4 o;\n' + SEA_GLSL + SHADOW_GLSL + BED_DRY_GLSL +
+    '#version 300 es\nlayout(location=0) in vec3 aP; uniform mat4 uVP; uniform vec2 uC; uniform float uBedOn; uniform vec4 uBedR; uniform sampler2D uBedT;\n' + SEA_GLSL +
+    'out vec3 vW; out float vK; void main(){ vec2 p=uC+aP.xy; float k=1.0;\n' +
+    ' if(uBedOn>0.5){ vec2 bu=((p-uBedR.xy)/uBedR.z+0.5)/uBedR.w; if(bu.x>0.0&&bu.y>0.0&&bu.x<1.0&&bu.y<1.0) k=smoothstep(' + SEA_SHORE[0].toFixed(2) + ',' + SEA_SHORE[1].toFixed(2) + ',-textureLod(uBedT,bu,0.0).r); }\n' +
+    ' float h=seaHs(p,aP.z)*(1.0-smoothstep(900.0,1600.0,length(aP.xy)))*k-(1.0-k)*' + SEA_SHORE[2].toFixed(2) + '; vK=k; vW=vec3(p.x,h,p.y); gl_Position=uVP*vec4(vW,1.0); }\n',
+    '#version 300 es\nprecision highp float; in vec3 vW; in float vK; uniform vec3 uEye,uSun,uFog,uSky; uniform float uFogD,uDet,uAn,uNzP,uReflOn,uRefr,uFoam,uRefrD,uRefrK,uBedOn; uniform vec2 uView; uniform vec4 uBedR; uniform sampler2D uRefl,uScene,uSceneD,uBedT; out vec4 o;\n' + SEA_GLSL + SHADOW_GLSL + BED_DRY_GLSL +
     // 反射（uReflOn）：RT.R 是鏡像過來的船，照螢幕座標＋法線擾動讀，沒畫到的地方（a ＝ 0）照舊是天空。
     // 折射（uRefr）：0 不透明、1 半透明（底下的照舊混進來）、2 讀 RT.B（畫海之前的場景）：照法線擾動、照水的厚度（兩個深度相減）吸收成海的顏色。
     'float linZ(float d){ float z=d*2.0-1.0; return 5000.0/(5000.5-z*4999.5); }\n' +
@@ -346,7 +352,7 @@ function programs() {
     'bool nearAny(){ for(int k=0;k<' + NS_MK + ';k++){ if(k>=uNM) break; if(nearShip(k)) return true; } return false; }\n' +
     'void main(){ if(' + HULL_HIT + ') discard; if(uXr>0.5&&nearAny()) discard; if(bedDry(vW.xz)) discard; vec2 p=vW.xz; float fd0=length(vW-uEye); float k0=1.0-smoothstep(300.0,1400.0,fd0), k1=1.0-smoothstep(60.0,260.0,fd0), k2=1.0-smoothstep(25.0,110.0,fd0);\n' +
     ' vec2 dd=fwidth(vW.xz); float fp=max(dd.x,dd.y);\n' +
-    ' vec2 g=uAn*seaGf(p,fp)+detail(p,fp);\n' +
+    ' vec2 g=uAn*seaGf(p,fp)*vK+detail(p,fp);\n' +                     // 浪的斜率照岸邊縮小（vK，見上面頂點那一段）；細浪照舊
     ' vec3 n=normalize(vec3(-g.x,1.0,-g.y)); vec3 v=normalize(uEye-vW); float fr=0.04+0.96*pow(1.0-max(dot(n,v),0.0),5.0);\n' +
     ' vec3 r=reflect(-v,n); vec3 sky=mix(uFog,uSky,clamp(r.y*1.6,0.0,1.0)); vec2 sc=gl_FragCoord.xy/uView; float sk=shadowK(vW,vec3(0.0,1.0,0.0));\n' +
     ' if(uReflOn>0.5){ vec4 rc=textureLod(uRefl,sc+n.xz*0.035,0.0); sky=mix(sky,rc.rgb,rc.a); }\n' +
