@@ -424,6 +424,8 @@ def validate(cfg, prev=None):
             err(p + '.burst', '連發：一份彈藥打幾發，1～20 的整數（沒寫 ＝ 1）')
         if 'burstGap' in g and not (isnum(g['burstGap']) and 0.02 <= g['burstGap'] <= 2):
             err(p + '.burstGap', '連發間隔：0.02～2 秒（沒寫 ＝ 0.15）')
+        if 'ammos' in g and not (isinstance(g['ammos'], list) and g['ammos'] and len(set(g['ammos'])) == len(g['ammos']) and set(g['ammos']) <= {'solid', 'shell', 'chain'}):
+            err(p + '.ammos', '打得出哪幾種彈：solid／shell／chain 的非空清單、不重複（沒寫 ＝ 三種都打；TASK-0828）')
         if 'box' in g and not (isint(g['box']) and 1 <= g['box'] <= 10):
             err(p + '.box', '彈藥量倍率：1～10 的整數（砲旁藥箱放 細節設定的份數 × 它；沒寫 ＝ 1）')
         if 'elev' in g and not (isnum(g['elev']) and 5 <= g['elev'] <= 85):

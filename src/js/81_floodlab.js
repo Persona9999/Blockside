@@ -105,13 +105,13 @@ function floodLab(o) {
   var n = Math.round(o.every / DT), steps = Math.max(1, Math.round(o.dur / o.every)), tn = Math.max(1, Math.round(1 / DT));
   var npic = o.wsim && o.wpic > 0 ? Math.max(1, Math.round(o.wpic / DT)) : 0, kpic = 0;   // 房間模擬的過程圖（wsimPic）：開局一組、之後每 wpic 秒一組
   if (npic) { sh.wrs.spillAt = []; out.wpic = [wsimPic(sh, o.wpx)]; out.o.wpic = o.wpic; }
-  var evs = (o.pset || []).map(function (e) { return { t: e[0], k: e[1], v: e[2] }; }).concat((o.wkill || []).map(function (e) { return { t: e[0], door: e[1] }; })).concat((o.pbreak || []).map(function (e) { return { t: e[0], pb: e[1] }; }));   // 中途改姿態、打掉門（TASK-0808 驗收第 9、11 格；flabEvents）
+  var evs = (o.pset || []).map(function (e) { return { t: e[0], k: e[1], v: e[2] }; }).concat((o.wkill || []).map(function (e) { return { t: e[0], door: e[1] }; })).concat((o.pbreak || []).map(function (e) { return { t: e[0], pb: e[1] }; })).concat((o.wdig || []).map(function (e) { return { t: e[0], dig: e[1] }; })).concat((o.wfill || []).map(function (e) { return { t: e[0], fill: e[1] }; }));   // 中途改姿態、打掉門（TASK-0808 驗收第 9、11 格；flabEvents）
   if (evs.length) out.events = [];
   var wdz = [0, 0, 0];                                                  // 房間模擬走那一步之前，物理把船推離釘住的姿態多少（船的 y 平移，m）：[總和, 步數, 最大]（⛔ 以前 wrsStep 在 pin 之前 ⇒ 看到的是被推了一步的船：0.1 秒一步下沉 ½·a·dt²，水越多越沉 ⇒ 10 Hz 後段往上爬；wsimo=prepin 還原舊順序對照）
   out.trace = [];                                                       // 每秒一筆：[t, 水 m³, 進 m³/s, 出 m³/s, 艙內最高水面 − 海面 m, 高出海面的水 m³, 下沉 m]（flabEx）
   for (var k = 0; k <= steps; k++) {
     var focusAt = null;
-    if (k) { for (i = 0; i < n; i++) { if (evs.length) flabEvents(sh, pin, evs, SIMT - tHole, out); simStep(); if (sh.wrs && o.wsim && !(sh.fl && sh.fl.L.room)) { var m13 = sh.M[13]; if (pin && !sh.wrs.opt.prepin) pin(); wrsStep(sh, DT, sh.fl); if (pin) { pin(); var dzp = m13 - sh.M[13]; wdz[0] += dzp; wdz[1]++; if (Math.abs(dzp) > Math.abs(wdz[2])) wdz[2] = dzp; } } else if (pin) pin(); if (npic && ++kpic >= npic) { kpic = 0; out.wpic.push(wsimPic(sh, o.wpx)); } if (o.wsim && i % tn === tn - 1) { var rd = wrsRead(sh), tf = floodTilt(sh, sh.fl); var bq = 0; sh.wrs.br.forEach(function (bb) { if (bb.j >= 0) bq += bb.q; }); out.traceR.push([+SIMT.toFixed(1), rd.vol, rd.roll, rd.pitch, rd.sub, rd.ms, rd.hash, +bq.toFixed(4), sh.wrs.tops.map(function (tp) { return +tp.q.toFixed(4); })]); out.traceT.push([+SIMT.toFixed(1), +tf[0].toFixed(4), +tf[1].toFixed(4)]); } if (i % 30 === 29) remesh(Infinity); if (i % tn === tn - 1) { out.traceA.push(holeA()); var ex = flabEx(sh); out.trace.push([+SIMT.toFixed(1), +sh.fl.vol.toFixed(1), +sh.fl.inQ.toFixed(2), +sh.fl.outQ.toFixed(2), ex.max, ex.vol, +sh.sink.toFixed(2)]); } } }
+    if (k) { for (i = 0; i < n; i++) { if (evs.length) flabEvents(sh, pin, evs, SIMT - tHole, out); simStep(); if (sh.wrs && o.wsim && !(sh.fl && sh.fl.L.room)) { var m13 = sh.M[13]; if (pin && !sh.wrs.opt.prepin) pin(); wrsStep(sh, DT, sh.fl); if (pin) { pin(); var dzp = m13 - sh.M[13]; wdz[0] += dzp; wdz[1]++; if (Math.abs(dzp) > Math.abs(wdz[2])) wdz[2] = dzp; } } else if (pin) pin(); if (npic && ++kpic >= npic) { kpic = 0; out.wpic.push(wsimPic(sh, o.wpx)); } if (o.wsim && i % tn === tn - 1 && out.wdig && out.wdig.tr) { var sW = sh.wrs, rU = function (r) { if (r < 0) return null; for (var c = 0, q = sW.W.roomCol0[r]; q < sW.W.roomCol0[r + 1]; q++) c += sW.su[q]; return +(c / sW.upm).toFixed(2); }, dm = 0; for (var q2 = sW.NO0; q2 < sW.NO; q2++) dm += sW.O.N[q2]; out.wdig.tr.push([+SIMT.toFixed(1), rU(out.wdig.up), rU(out.wdig.down), +(dm * S * S).toFixed(2)]); } if (o.wsim && i % tn === tn - 1) { var rd = wrsRead(sh), tf = floodTilt(sh, sh.fl); var bq = 0; sh.wrs.br.forEach(function (bb) { if (bb.j >= 0) bq += bb.q; }); out.traceR.push([+SIMT.toFixed(1), rd.vol, rd.roll, rd.pitch, rd.sub, rd.ms, rd.hash, +bq.toFixed(4), sh.wrs.tops.map(function (tp) { return +tp.q.toFixed(4); })]); out.traceT.push([+SIMT.toFixed(1), +tf[0].toFixed(4), +tf[1].toFixed(4)]); } if (i % 30 === 29) remesh(Infinity); if (i % tn === tn - 1) { out.traceA.push(holeA()); var ex = flabEx(sh); out.trace.push([+SIMT.toFixed(1), +sh.fl.vol.toFixed(1), +sh.fl.inQ.toFixed(2), +sh.fl.outQ.toFixed(2), ex.max, ex.vol, +sh.sink.toFixed(2)]); } } }
     remesh(Infinity); camSet({ snap: true }); camUpdate(1); render();
     if (o.focus === 'step' && sh.fl.mesh && sh.fl.mesh.stat) {             // 對準水面差最大的那條兩池交界（高的那一邊），拉近再拍
       var E = sh.fl.mesh.stat.map.edge.filter(function (e) { return e[3] === 1 && e[4] > 0; }).sort(function (a, b) { return b[4] - a[4]; })[0];
@@ -215,10 +215,10 @@ function wsimPic(sh, px) {
   eq = eq.map(function (v) { return +(v / s.upm).toFixed(2); });            // 有水的房間合計：[照海面裝得下, 高過海面, 還沒裝, 裝了]
   rooms.sort(function (a3, b3) { return b3[2] - a3[2] || b3[4] - a3[4]; });
   var ops = [];                                                           // 這一段生粒子（em）、往上溢（up）最多的開口：[開口, 類型, 下／a 房, 上／b 房, 層, m², 面中心 x, y, em m³, up m³]
-  if (s.emO) { var e0 = s.picEm || new Float64Array(s.NO), u0 = s.picUp || new Float64Array(s.NO);
+  if (s.emO) { var e0 = s.picEm || new Float64Array(s.O.T.length), u0 = s.picUp || new Float64Array(s.O.T.length);
     for (j = 0; j < s.NO; j++) { var de = s.emO[j] - e0[j], du = s.upO[j] - u0[j]; if (de > 0 || du > 0) ops.push([j, s.O.T[j] ? 'side' : 'deck', s.oa[j], s.ob[j], s.O.Z[j], +(s.O.N[j] * S * S).toFixed(2), s.O.X[j], s.O.Y[j], +(de / s.upm).toFixed(2), +(du / s.upm).toFixed(2)]); }
     ops.sort(function (a4, b4) { return (b4[8] + b4[9]) - (a4[8] + a4[9]); }); s.picEm = Float64Array.from(s.emO); s.picUp = Float64Array.from(s.upO);
-    var m0 = s.picMv || new Float64Array(s.NO), mvs = []; for (j = 0; j < s.NO; j++) { var dm = s.mvO[j] - m0[j]; if (dm) mvs.push([j, s.O.T[j] ? 'side' : 'deck', s.oa[j], s.ob[j], s.O.Z[j], +(dm / s.upm).toFixed(2)]); }   // 這一段每個開口淨搬了多少 m³（＋ a → b）
+    var m0 = s.picMv || new Float64Array(s.O.T.length), mvs = []; for (j = 0; j < s.NO; j++) { var dm = s.mvO[j] - m0[j]; if (dm) mvs.push([j, s.O.T[j] ? 'side' : 'deck', s.oa[j], s.ob[j], s.O.Z[j], +(dm / s.upm).toFixed(2)]); }   // 這一段每個開口淨搬了多少 m³（＋ a → b）
     mvs.sort(function (a5, b5) { return Math.abs(b5[5]) - Math.abs(a5[5]); }); s.picMv = Float64Array.from(s.mvO); s.picMvs = mvs.slice(0, 64); }
   var out = { t: +SIMT.toFixed(1), eq: eq, ops: ops.slice(0, 16), mvs: s.picMvs || [], side: A.cv.toDataURL('image/png'), fill: B.cv.toDataURL('image/png'), press: Pv.cv.toDataURL('image/png'), top: Cv.cv.toDataURL('image/png'), rooms: rooms.slice(0, 24), nRooms: rooms.length, spillNo: sp[-1] ? +(sp[-1] / s.upm).toFixed(2) : 0, r: wrsRead(sh) };
   if (s.spillAt) s.spillAt.length = 0;                                   // 下一段重新記
@@ -246,10 +246,36 @@ function flabGuns(sh) {
   var T = sh.T; var PL = sh.ports === undefined ? portsBuild(sh) : sh.ports, lidG = PL ? PL.L.map(function (P) { return P.g; }) : []; return sh.guns.map(function (g) { var P = M4.pt(sh.M, g.muz[0], g.muz[1], g.muz[2]); var w = (sh.portW || []).filter(function (q) { return q.g === g; })[0], Pb = w ? M4.pt(sh.M, w.h.cells[0], T.cy + w.h.s * 1e-3, w.h.z0) : null; return [g.name, g.side, +(P[1] - seaH(P[0], P[2], SIMT)).toFixed(2), lidG.indexOf(g) >= 0 ? 1 : 0, g.alive ? 1 : 0, w ? w.h.n : 0, Pb ? +(Pb[1] - seaH(Pb[0], Pb[2], SIMT)).toFixed(2) : null, w && w.on ? 1 : 0]; });
 }
 /** 中途的事件（TASK-0808 驗收第 9、11 格；TASK-0822）：pset ＝ 打洞後 t 秒把釘住的那一格加 v（lift 公尺往上、rollA／pitchA 弧度；沒釘住 ⇒ 直接加在船上）、wkill ＝ 打洞後 t 秒打掉第幾扇門（m.alive ＝ false）、pbreak ＝ 打洞後 t 秒打掉那門砲的蓋板鉸鏈旁那一格船殼。每個只發生一次，記在 out.events。 */
+/** 中途挖穿（TASK-0809，?wdig=<秒>:<半徑>:<up|down>）：第一個破口灌進去的那間（房間模擬 br），在它附近（水平 80 格內，由近到遠）找一條柱子：
+ *  從這間的天花板往上（down ⇒ 從地板往下）穿過 1–WRS_THICK 格實心就碰到另一間 ⇒ 那一段實心（半徑 r 格的柱子）全打掉 ⇒ 打穿的開口（33_wrsim.js wrsLine）。
+ *  之後每秒記兩間的水（out.wdig.tr：[秒, 這間 m³, 另一間 m³, 打穿的開口 m²]）。 */
+function flabDig(sh, e, t) {
+  var s = sh.wrs, W0 = sh.T.wrm, b = null, r = e[0], up = e[1] !== 'down', sg = up ? 1 : -1; if (!s || !W0) return { err: 'no wrs' };
+  if (e[2] >= 0) { var j0 = W0.roomCol0[e[2]], j1 = W0.roomCol0[e[2] + 1], X0 = wrxOf(sh.T), mx = 0, my = 0; for (var q0 = j0; q0 < j1; q0++) { mx += X0.cx[q0]; my += X0.cy[q0]; } b = { r: e[2], x: mx / (j1 - j0), y: my / (j1 - j0) }; }   // 指定房間 ⇒ 從它的中心找
+  else s.br.forEach(function (q) { if (!b && q.j >= 0) b = q; }); if (!b) return { err: 'no breach' };
+  var bx = Math.floor(b.x), by = Math.floor(b.y), ra = b.r, hit = null;
+  for (var k = 0; k <= 80 && !hit; k++) for (var dx = -k; dx <= k && !hit; dx++) for (var dy = -k; dy <= k && !hit; dy++) {
+    if (Math.max(Math.abs(dx), Math.abs(dy)) !== k) continue;
+    var x = bx + dx, y = by + dy, z, zr = -1;
+    for (z = 0; z < W0.zTop; z++) if (wrRoomAt(W0, x, y, z) === ra) { zr = z; if (!up) break; }   // 這間在這一柱的頂（up）／底（down）
+    if (zr < 0) continue;
+    var z0 = zr + sg, n = 0; while (n <= WRS_THICK && sh.grid.get(x, y, z0 + sg * n)) n++;
+    if (n < 1 || n > WRS_THICK) continue;
+    var rb = wrRoomAt(W0, x, y, z0 + sg * n); if (rb < 0 || rb === ra) continue;
+    hit = { x: x, y: y, z0: Math.min(z0, z0 + sg * (n - 1)), z1: Math.max(z0, z0 + sg * (n - 1)), rb: rb };
+  }
+  if (!hit) return { err: 'no column', room: ra };
+  var m = 0;
+  for (var zz = hit.z0; zz <= hit.z1 && r >= 0; zz++) for (var ex = -r; ex <= r; ex++)   // 半徑 < 0 ⇒ 只找、不挖（對照組：同樣記兩間的水）
+     for (var ey = -r; ey <= r; ey++) if (ex * ex + ey * ey <= r * r && removeVoxel(sh, hit.x + ex, hit.y + ey, zz, false)) m++;
+  return { t: +t.toFixed(2), at: [hit.x, hit.y, hit.z0, hit.z1], dir: up ? 'up' : 'down', up: ra, down: hit.rb, removed: m, tr: [] };
+}
 function flabEvents(sh, pin, evs, t, out) {
   for (var q = evs.length - 1; q >= 0; q--) {
     var e = evs[q]; if (t < e.t) continue;
     if (e.k) { if (pin) pin.s0[e.k] += e.v; else sh[e.k] += e.v; out.events.push({ t: +t.toFixed(2), set: e.k, by: e.v, now: pin ? pin.s0[e.k] : sh[e.k] }); }
+    else if (e.dig !== undefined) { var tr0 = out.wdig && out.wdig.tr; out.wdig = flabDig(sh, e.dig, t); if (tr0 && out.wdig.tr) out.wdig.tr = tr0; }
+    else if (e.fill !== undefined) { var sF = sh.wrs, rF = e.fill[0], nF = Math.round(e.fill[1] * sF.upm), jF = wrsColLow(sF, rF, sF.W.roomCol0[rF]), lF = wrsPut(sF, sh.M, jF, nF, -1e9); sF.inTot += nF - lF; out.wfill = { t: +t.toFixed(2), room: rF, m3: e.fill[1], left: +(lF / sF.upm).toFixed(2) }; if (!out.wdig) out.wdig = { up: rF, down: -1, tr: [] }; }
     else if (e.pb !== undefined) { var w = (sh.portW || []).filter(function (q) { return q.g.name === e.pb; })[0], f = w && w.P ? w.P.d.foot : -1; if (f >= 0) removeVoxel(sh, f & 2047, (f >> 11) & 1023, f >> 21, []); out.events.push({ t: +t.toFixed(2), pbreak: e.pb, lid: !!(w && w.P), foot: f }); }   // 打掉那片蓋板鉸鏈旁的那一格船殼（戰局的格；25_doors.js portsSurvey 下一次判斷就登記成進水口）
     else { var d = (sh.doors || [])[e.door]; if (d && d.m) d.m.alive = false; out.events.push({ t: +t.toFixed(2), kill: e.door, ok: !!(d && d.m) }); }
     evs.splice(q, 1);
@@ -379,6 +405,8 @@ function flLabOpts() {
   ['wpic', 'wpx'].forEach(function (k) { if (Q.has(k)) o[k] = +Q.get(k); });   // 房間模擬的過程圖：每幾秒一組、一格幾像素（wsimPic）
   if (Q.has('pset')) o.pset = Q.get('pset').split(';').filter(function (w) { return w; }).map(function (w) { var a = w.split(':'); return [+a[0], a[1], +a[2]]; });   // 中途改姿態：<秒>:<lift|rollA|pitchA>:<加多少>;…（flabEvents）
   if (Q.has('pbreak')) o.pbreak = Q.get('pbreak').split(';').filter(function (w) { return w; }).map(function (w) { var a = w.split(':'); return [+a[0], a[1]]; });   // 中途打壞砲門蓋板：<秒>:<砲的名字>;…（TASK-0822）
+  if (Q.has('wdig')) o.wdig = Q.get('wdig').split(';').filter(function (w) { return w; }).map(function (w) { var a = w.split(':'); return [+a[0], [+a[1], a[2] || 'up', a[3] === undefined ? -1 : +a[3]]]; });   // 中途挖穿第一個破口那間（或第 <房> 間）跟上（下）面那間：<秒>:<半徑>:<up|down>[:<房>]（flabDig）
+  if (Q.has('wfill')) o.wfill = Q.get('wfill').split(';').filter(function (w) { return w; }).map(function (w) { var a = w.split(':'); return [+a[0], [+a[1], +a[2]]]; });   // 中途往第 <房> 間倒水：<秒>:<房>:<m³>（房間模擬，從水面最低那一欄放）
   if (Q.has('wkill')) o.wkill = Q.get('wkill').split(';').filter(function (w) { return w; }).map(function (w) { var a = w.split(':'); return [+a[0], +a[1]]; });   // 中途打掉門：<秒>:<第幾扇>;…
   if (Q.has('wsimo')) o.wsimo = Q.get('wsimo').split(',').filter(function (w) { return w; });   // 反向對照的開關（33_wrsim.js：nocfl、noclamp、nodda、level）                              // TASK-0808：房間模擬並排跑
   return o;
