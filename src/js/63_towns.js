@@ -6,6 +6,9 @@
 //   規劃的座標以市中心為原點（往東 x、往南 y，公尺）；海域座標 ＝ (ox ＋ kx·x, oy ＋ y)（匯出時算好，Blocksail world/town_export.js）。
 // 整地（townHv；每塊海圖塊第一次要畫的時候算、城到了再重算）：路（照 z，路寬一半 ＋ 一個取樣點內整平）先、地塊的 grade（照 h，外擴 TOWN_LOT_PAD）後，
 //   外面照邊坡 1 : bank 接回原地形（|高差| ≤ 距離 ÷ bank，路最多接 TOWN_GRADE_REACH 公尺）；只改陸上的點（原本 ≤ 0 的不動 ⇒ 岸線不變）。
+// 樹（townTreesSet）：模型標了樹（Blocksail townmodels.py 的 m.trees：雕刻的子作品 meta kind=tree）⇒ 實例建好時照實例的位置換到世界、記在 T.trees ⇒ 63_trees.js 照它種遊戲自己生成的樹（風格跟島上的樹一樣）。
+//   下沉的地塊（grade 帶 pit；Blocksail 特殊建築表的 sink，例：露天蓄水池，TASK-0748）：只把地塊裡面、離邊 ≥ pit 公尺的點整到 h（地面下），外面不接邊坡、「地塊頂著」那一輪跳過
+//   ⇒ 挖下去的那一圈斜面落在離邊 pit ＋ 一個取樣點之內 ＝ 模型的池牆裡（牆厚要 ≥ pit ＋ 4 m）。
 // 地基（Tim 2026-10-20：「是否可以協助處理 房屋地基可能跟地面重疊導致的閃爍問題」「可以參考其他城建遊戲的作法」—— Cities: Skylines、Anno 那一類：
 //   腳下整平、地基是往下的裙邊、地面歸房子或地形其中一個，不留兩片同高的面）—— 地塊上歸石基（頂面 ＝ 石地坪，h − 0.01），地形一律壓到它底下：
 //   · 地塊「頂著」：整完地之後再一輪，地塊外擴一格地形網格的對角線（那一塊的取樣間距 × √2：細 4 m、外圈的中等塊 16 m；第一版上限 8 m ⇒ 2 km 外中等塊的房子還有 0.9% 的點離石面不到 10 cm）以內的點一律不准高過那一塊的 h − TOWN_LOT_SINK（只往下壓）、往下取整到分米
@@ -146,7 +149,7 @@ function townPrep(p) {
     P.forEach(function (q) { grow(q, r.w / 2 + 4 + TOWN_GRADE_REACH); });
     return { id: r.id, kind: r.kind, w: r.w, P: P, z: z };
   });
-  var grade = (p.grade || []).map(function (g) { var R = g.ring.map(E); R.forEach(function (q) { grow(q, TOWN_LOT_PAD + TOWN_LOT_CELL * 1.5 + 6); }); return { h: g.h, R: R }; });
+  var grade = (p.grade || []).map(function (g) { var R = g.ring.map(E); R.forEach(function (q) { grow(q, TOWN_LOT_PAD + TOWN_LOT_CELL * 1.5 + 6); }); return { h: g.h, R: R, pit: g.pit }; });
   var clr = { rings: ((p.clear || {}).rings || []).map(function (r) { return r.map(E); }),
               paths: ((p.clear || {}).paths || []).map(function (c) { var P = c.path.map(E); return { w: c.w, P: c.closed ? P.concat([P[0]]) : P }; }) };
   clr.rings.forEach(function (R) { R.forEach(function (q) { grow(q, 4); }); });
@@ -191,6 +194,10 @@ function townHv(C) {
       var ri = range(Math.min.apply(null, xs), Math.max.apply(null, xs), reach, e0), rj = range(Math.min.apply(null, ys), Math.max.apply(null, ys), reach, s0);
       for (j = rj[0]; j <= rj[1]; j++) for (i = ri[0]; i <= ri[1]; i++) {
         var x = e0 + i * st, y = s0 + j * st, d = townPip(x, y, R) ? 0 : townPolyDist(x, y, R);
+        if (gr.pit != null) {                                           // 下沉的地塊（蓄水池；pit ＝ 離邊幾公尺起才挖）：只挖地塊裡面、整片到 h，外面不接邊坡 ⇒ 挖的那一圈藏在模型的牆裡
+          o = j * n + i; if (d > 0 || h0[o] <= 0 || townPolyDist(x, y, R) < gr.pit) continue;
+          g[o] = gr.h; fl[o] = 1; continue;
+        }
         if (d > reach) continue;
         clampTo(j * n + i, gr.h, Math.max(0, d - TOWN_LOT_PAD), T.bank);
       }
@@ -199,6 +206,7 @@ function townHv(C) {
   TOWNS.list.forEach(function (T) {                                     // 地塊頂著（見檔頭「地基」）：外擴 cap 以內的點不准高過那一塊的 h − TOWN_LOT_SINK ⇒ 地形一律在石地坪底下；只往下壓、不往上抬
     if (!(T.box[0] < e0 + S && T.box[2] > e0 && T.box[1] < s0 + S && T.box[3] > s0)) return;
     T.grade.forEach(function (gr) {
+      if (gr.pit != null) return;                                       // 下沉的地塊：上面那一輪已經挖好；外擴那一圈不能壓（會在牆外挖出一圈溝）
       var R = gr.R, xs = R.map(function (q) { return q[0]; }), ys = R.map(function (q) { return q[1]; });
       var ri = range(Math.min.apply(null, xs), Math.max.apply(null, xs), cap, e0), rj = range(Math.min.apply(null, ys), Math.max.apply(null, ys), cap, s0);
       for (j = rj[0]; j <= rj[1]; j++) for (i = ri[0]; i <= ri[1]; i++) {
@@ -474,7 +482,7 @@ function townKitSet(K) {
   var old = TOWNS.kit; TOWNS.kit = K;
   TOWNS.grp = null;                                                     // 分組表是照上一份的模型數的 ⇒ 丟掉（影子那一關在 townDraw 重新分組之前跑；要的模型變少時 —— 城牆降級 —— 舊表會指到沒解的模型）
   TOWNS.list.forEach(function (T) {
-    if (T.inst && old) { T.inst = townInst(T); townFlagFree(T); T.shDirty = true; T.tlS = T.tlD = true; } else T.inst = null;
+    if (T.inst && old) { T.inst = townInst(T); townTreesSet(T); townFlagFree(T); T.shDirty = true; T.tlS = T.tlD = true; } else T.inst = null;
   });
   TOWNS.dirty = true;
   if (old) townKitGpuFree(old, K);
@@ -917,6 +925,31 @@ function townFlags(T) {
   });
   return out;
 }
+/** 城 T 的樹（雕刻作品的子作品標 meta kind=tree、tree=<樹種> ⇒ Blocksail tools/townmodels.py 匯入時把那一件的格子拿掉、一團一棵記成 m.trees ＝ [[格 x, 格 y, 格 z, 高 m, 寬 m, 樹種] …]）
+ *  ⇒ T.trees ＝ { a: Float32Array（6 個一組：世界 x, y（樹根）, z, 高, 寬, 樹種的號碼（TREE_SPECIES 的順序））, n, bb }；跟上一份不同 ⇒ 載進來、碰得到的塊重擺樹（63_trees.js treeTownPut）。
+ *  樹種沒有 ⇒ 闊葉樹。⛔ 不碰戰局（樹只給人看）。 */
+function townTreesSet(T) {
+  var K = TOWNS.kit, SP = Object.keys(TREE_SPECIES), a = [], bb = [1e9, 1e9, -1e9, -1e9], sig = 0;
+  (T.inst || []).forEach(function (q) {
+    var M = K && K.M[q.k], m = M && M.m; if (!m || !m.trees || !(q.y === q.y)) return;
+    var s = Math.sin(q.th), c = Math.cos(q.th), mpv = m.mpv, hw = m.size[0] * mpv / 2, hd = m.size[1] * mpv / 2;
+    m.trees.forEach(function (t) {
+      var A = (t[0] * mpv - hw) * q.sx, B = t[1] * mpv - hd, x = q.x + A * s - B * c, z = q.z - A * c - B * s, si = SP.indexOf(t[5]); if (si < 0) si = SP.indexOf('broadleaf');
+      a.push(x, q.y + t[2] * mpv, z, t[3], t[4], si); sig += x * 0.37 + z * 0.61 + si;
+      bb[0] = Math.min(bb[0], x); bb[1] = Math.min(bb[1], z); bb[2] = Math.max(bb[2], x); bb[3] = Math.max(bb[3], z);
+    });
+  });
+  sig = a.length + ':' + sig.toFixed(3);
+  var had = T.trees && T.trees.n; if (T.trees && T.trees.sig === sig) return;
+  T.trees = { a: new Float32Array(a), n: a.length / 6, bb: bb, sig: sig };
+  if ((!a.length && !had) || typeof TREES === 'undefined' || !TREES.on || !BED || !BED.A) return;
+  var size = BED.A.chunk, ob = had ? null : bb;
+  Object.keys(BED.ch).forEach(function (k) {
+    var C = BED.ch[k], x0 = C.cx * size - BED.ax, z0 = C.cy * size - BED.az;
+    if (ob && (x0 > ob[2] || x0 + size < ob[0] || z0 > ob[3] || z0 + size < ob[1])) return;   // 以前沒有樹 ⇒ 只排碰到的塊；以前有（可能挪了）⇒ 載進來的塊都排
+    treeQueue(k, C);
+  });
+}
 function townFlagFree(T) { (T.flags || []).forEach(function (F) { if (F.vao) { gl.deleteVertexArray(F.vao); gl.deleteBuffer(F.vb); } }); T.flags = null; }
 /** 一步（dt 秒、t ＝ 畫面時間）：Verlet ⇒ 釘綁邊 ⇒ 約束（綁邊那一欄不動）。 */
 function townFlagStep(F, dt, t) {
@@ -1122,7 +1155,7 @@ function townDraw() {
   //   但規劃晚到、城範圍裡還有排著要重新整地的塊（townRegrade）⇒ 先等它們：城牆的腳讀地面（townWallY → townGround → townHv）會把還沒整的塊在這一格當場整掉
   //   （君士坦丁堡那一格 730～880 ms）；隊伍每格至少一塊、近的先，跟模型解碼同時走。
   TOWNS.list.forEach(function (T) {
-    if (!T.inst && !nb && !townRgWait(T) && (K.part || !TOWNS.kitBusy)) { var b0 = performance.now(); T.inst = townInst(T); if (!T.gt) townGroundPrep(T); townFlagFree(T); T.shDirty = true; T.tlS = T.tlD = true; TOWNS.dirty = true; nb++; bedSpent(b0); }
+    if (!T.inst && !nb && !townRgWait(T) && (K.part || !TOWNS.kitBusy)) { var b0 = performance.now(); T.inst = townInst(T); townTreesSet(T); if (!T.gt) townGroundPrep(T); townFlagFree(T); T.shDirty = true; T.tlS = T.tlD = true; TOWNS.dirty = true; nb++; bedSpent(b0); }
   });
   TL.k = TL.on ? TOD_LIT : 0;                                                        // 夜裡的燈：這一格點燈了沒（08_weather.js；陸地在城之前畫 ⇒ 用上一格的分組表，差一格看不出來）
   TOWNS.list.forEach(function (T) {                                    // 地面的帶子：一區一區（townGroundTile），離鏡頭近的先；一格最多 TOWN_GT_MAX 區、照背景預算

@@ -183,6 +183,25 @@
     var u = new Uint8Array(n); for (i = 0, n = 0; i < P.length; i++) { u.set(P[i], n); n += P[i].length; }
     return u;
   }
+  /** 入口過期（TASK-0829；Tim 2026-10-22「開單並照建議做自動重載」）：船檔的雜湊跟清單對不上 ⇒ 多半是部署之前就開著的頁、或快取裡的舊入口
+   *  （測試站 index.html 是 max-age=600；Pages 不看 ?v=，舊入口要的網址照樣回新的船檔 —— 量過）⇒ 重新整理一次（瀏覽器重新整理時主頁面會向伺服器重新驗證 ⇒ 拿到新的入口）。
+   *  ⛔ 不先用 fetch 帶 cache:'reload' 換快取：成品零外部依賴（vxk_inline.py 擋這個呼叫），⛔ 也不改用 XHR 繞過那道守衛。
+   *  只試一次 ＝ sessionStorage 記住這一對雜湊（清單要的 > 檔是的）；重載後還是同一對 ⇒ 回 false、照舊報錯（⛔ 無限重整）。
+   *  不重載（回 false）：不是 http(s)（file:// 直接開的成品）、sessionStorage 讀寫失敗（隱私模式擋掉 ⇒ 記不住試過沒）。
+   *  被別的頁面用 iframe 開（Blocksail battle.html）⇒ location 是 iframe 自己的 ⇒ 只重載它。回 true ⇒ 那個 Promise 不結束（頁面要重載了）。 */
+  function staleReload(want, got) {
+    if (typeof location === 'undefined' || !/^https?:$/.test(location.protocol)) return false;
+    var key = 'vxk-stale:' + location.pathname, tag = want + '>' + got;
+    try { if (sessionStorage.getItem(key) === tag) return false; sessionStorage.setItem(key, tag); } catch (x) { return false; }
+    try {
+      var d = document.createElement('div');
+      d.textContent = '測試站剛更新（這一頁的入口是舊的）⇒ 重新載入…';
+      d.style.cssText = 'position:fixed;left:50%;top:40%;transform:translate(-50%,-50%);z-index:99999;padding:14px 22px;border-radius:10px;background:rgba(20,30,50,.92);color:#fff;font:16px sans-serif';
+      (document.body || document.documentElement).appendChild(d);
+    } catch (x) { }
+    setTimeout(function () { location.reload(); }, 600);                // 讓那一句先畫出來
+    return true;
+  }
   /** 這一艘壓縮過的位元組 ⇒ Promise（內嵌的直接給；拆檔的第一次要的時候載那個檔，同一艘只載一次）。 */
   function embeddedBytes(id) {
     var el = document.getElementById(id); if (el) return Promise.resolve(b64ToBytes(el.textContent));
@@ -194,7 +213,7 @@
       function bad(msg) { delete SHIP_P[id]; rej(new Error(msg)); }
       s.onload = function () {
         if (!SHIP_DATA[id]) bad(src + ' 載進來了，裡面卻不是 #' + id);
-        else if (SHIP_HASH[id] !== h) bad(src + ' 跟這個 index.html 不是同一次建置的（清單要 ' + h + '，檔是 ' + SHIP_HASH[id] + '）⇒ 入口跟 ships/ 要同一版');
+        else if (SHIP_HASH[id] !== h) { if (!staleReload(h, SHIP_HASH[id])) bad(src + ' 跟這個 index.html 不是同一次建置的（清單要 ' + h + '，檔是 ' + SHIP_HASH[id] + '）⇒ 入口跟 ships/ 要同一版'); }
         else res(piecesToBytes(SHIP_DATA[id]));
       };
       s.onerror = function () { bad('載不到 ' + src + '（成品拆檔了：搬成品要連 ships/ 一起；舊的版本用 python -I src/admin.py snapshot <版本> <資料夾> 取出）'); };

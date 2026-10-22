@@ -89,13 +89,20 @@ function portHole(T, g) {
   for (i = 0; i < cells.length; i += 3) { x = cells[i]; z = cells[i + 1]; if (!seen[x + ',' + (z + 1)] && yOut(z + 1) === null) return null; }   // 頭上沒有船殼 ⇒ 舷牆缺口、不是砲口
   return { s: s, cells: cells, n: cells.length / 3, z0: zmin };
 }
+/** portHole 照船型快取（TASK-0834）：它只讀船型（T.base／T.hullG、T.cy）跟砲口那一格（muz 取整的 x、z）與哪一舷 ⇒ 同一型同一個鍵只算一次（T.portHoleC）。
+ *  回的那一份同型每艘共用 ⇒ ⛔ 不准改（portOpen、portsSurvey 只讀 h.s／h.cells／h.n）。量過（8 艘同型憲法號）：每艘 54 門共約 41 ms。 */
+function portHoleT(T, g) {
+  var C = T.portHoleC || (T.portHoleC = new Map()), k = Math.floor(g.muz[0]) + ',' + Math.floor(g.muz[2]) + ',' + (g.ax[1] >= 0 ? 1 : -1);
+  if (!C.has(k)) C.set(k, portHole(T, g));
+  return C.get(k);
+}
 /** 開一艘船（10_ship.js makeShip，進水狀態建好之後）：每門砲的砲口；沒有蓋板的當場登記、有蓋板的掛著等蓋板被打壞（portsSurvey）。沒有砲口 ⇒ sh.portW 不設。 */
 function portsFloodInit(sh) {
   if (!sh.guns || !sh.guns.length) return;
   var L = [], lids = null;
   sh.guns.forEach(function (g) {
-    var h = portHole(sh.T, g); if (!h) return;
-    if (lids === null) { if (sh.ports === undefined) sh.ports = portsBuild(sh); lids = sh.ports ? sh.ports.L : []; }   // 蓋板（62_ports.js；那一支懶建的同一份）
+    var h = portHoleT(sh.T, g); if (!h) return;
+    if (lids === null) { if (sh.ports === undefined) sh.ports = portsBuildNew(sh); lids = sh.ports ? sh.ports.L : []; }   // 蓋板（62_ports.js；同一型照船型快取 portsBuildNew ＝ 那一支懶建的同一份，TASK-0834）
     var P = lids.filter(function (q) { return q.g === g; })[0] || null;
     var w = { g: g, h: h, P: P, on: false }; L.push(w);
     if (!P) portOpen(sh, w);
