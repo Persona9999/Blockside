@@ -7,12 +7,12 @@
 //   ② 兩端站不站得住：foot／head 腳下那一格是不是實心（懸空；踩在別座的洞上 ⇒ 點名那一座）、頭上 NAV_HEAD 格空不空、
 //      離那一層甲板的地板（meta floor／walk）差幾格（> NAV_DZ ⇒ 沒到甲板面）。
 //   ③ 兩端走不走得出去：每一座的洞先當成補好了（洞 ① 報過；這裡量的是補好之後還有沒有別的東西堵住），從 foot／head 起（站不住 ⇒ LDC_SNAP 格內最近站得住的一格）
-//      照走路格的規則一格一格走（頭上 NAV_HEAD 格空、高低差 ≤ NAV_DZ、不在砲與家具裡、不踩任何一座梯子的格），LDC_WALK 格內走得到那一層的走路格
+//      照走路格的規則一格一格走（頭上 NAV_HEAD 格空、高低差 ≤ NAV_DZ、不在砲與家具裡、不踩任何一座梯子的格），LDC_WALK 格內走得到離起點 LDC_OUT 格以上、那一層的走路格
 //      （42_hands.js navBuild 能走的點）才算出得去；走不到 ⇒ 報出口前方擋住的是什麼（哪幾格、屬於哪條關聯、哪座梯子、哪個模型）。
 //   ⛔ 尋路（42_hands.js makeHands）接梯子兩頭是在 5～10 點內找走路格 ⇒ 洞、堵住的出口它都接得上，只看「尋路沒收這一座」那一條看不出來（松島號 15 座全收、11 座 head 踩在洞上）。
 // 只讀：家具擺好之後量；CREW_BLOCK 換成這艘的、量完換回去 ⇒ 戰局一位元不動（只有 ?shipcheck 叫）。
 // 結果：[{ name, decks: [foot 那層, head 那層], axis, open, hole, issues: [{ lv, what, msg, fix }], map: [字串…] }]；admin.py 寫成 reports/ladcheck_<船>.md。
-var LDC_GAP = 2, LDC_TRY = 8, LDC_R = 30, LDC_OPEN_MAX = 2500, LDC_WALK = 24, LDC_SNAP = 3, LDC_FALL = 3, LDC_NEAR = 12, LDC_MAPW = 64, LDC_MAPH = 28;
+var LDC_GAP = 2, LDC_TRY = 8, LDC_OUT = 4, LDC_R = 30, LDC_OPEN_MAX = 2500, LDC_WALK = 24, LDC_SNAP = 3, LDC_FALL = 3, LDC_NEAR = 12, LDC_MAPW = 64, LDC_MAPH = 28;
 /** 量這艘的每一座梯子（繩梯除外）。 */
 function ladCheck(sh) {
   var T = sh.T, g = navBase(T), cb = CREW_BLOCK, lads = shipLadders(T).filter(function (l) { return !l.rope; }), out = [];
@@ -28,7 +28,7 @@ function ladCheck(sh) {
 }
 /** 反向對照（75_shipcheck.js 照 ?ladtest=<梯名>:<做法> 叫；開戰前、只改記憶體裡這一型的格子與固定點，⛔ 不寫回任何檔）：
  *    shift:dx,dy ＝ 那一座整座（格子＋四個點）挪 (dx, dy) 格；pillar ＝ head 正前方第 2 格立一根 NAV_HEAD 格高的柱子；
- *    box ＝ head 四周（離 2 格那一圈，梯子自己那幾柱除外）圍一圈 NAV_HEAD 格高的牆（出口整個堵死）。⇒ 讀數一行（改了什麼）。 */
+ *    box ＝ head 四周（離 2～3 格那兩圈，梯口那幾柱除外）圍 NAV_HEAD 格高的牆（出口整個堵死）。⇒ 讀數一行（改了什麼）。 */
 function ladTest(T, spec) {
   var a = String(spec).split(':'), lads = shipLadders(T).filter(function (l) { return !l.rope; }), g = T.base, k = -1;
   lads.forEach(function (l, i) { if (k < 0 && (l.name === a[0] || l.name.slice(-a[0].length - 1) === '/' + a[0])) k = i; });
@@ -46,7 +46,8 @@ function ladTest(T, spec) {
   }
   var ax = O.ax < 0 ? 0 : O.ax, sg = O.sg || 1, cols = [];
   if (a[1] === 'pillar') cols.push([H[0] + (ax ? 0 : 2 * sg), H[1] + (ax ? 2 * sg : 0)]);
-  else if (a[1] === 'box') { for (var dy = -2; dy <= 2; dy++) for (var dx = -2; dx <= 2; dx++) if (Math.max(Math.abs(dx), Math.abs(dy)) === 2 && !C.cols[H[0] + dx + g.sx * (H[1] + dy)]) cols.push([H[0] + dx, H[1] + dy]); }
+  else if (a[1] === 'box') { var oc = {}; O.cells.forEach(function (c) { oc[c[0] + g.sx * c[1]] = 1; });
+    for (var dy = -3; dy <= 3; dy++) for (var dx = -3; dx <= 3; dx++) if (Math.max(Math.abs(dx), Math.abs(dy)) >= 2 && !oc[H[0] + dx + g.sx * (H[1] + dy)]) cols.push([H[0] + dx, H[1] + dy]); }   // 兩格厚（⛔ 一格厚 ⇒ 走路格每 2 格一點，跨得過去）；梯口（開口）那幾柱不圍
   else return '不認得的做法 ' + a[1] + '（shift:dx,dy｜pillar｜box）';
   cols.forEach(function (c) { for (var h = 0; h < NAV_HEAD; h++) if (!g.get(c[0], c[1], H[2] + h)) { g.set(c[0], c[1], H[2] + h, mat); n++; } });
   return l.name + ' 的 head ' + ldcAt(H) + (a[1] === 'pillar' ? ' 正前方第 2 格立一根柱子' : ' 四周圍一圈牆') + '（' + cols.length + ' 柱、' + n + ' 格）';
@@ -151,7 +152,10 @@ function ldcWalk(g, A, P, N) {
   }
   if (!S) return { ok: false, n: 0, why: 'stand' };
   var seen = {}, q = [S], n = 0; seen[S[0] + g.sx * S[1]] = 1;
-  function goal(p) { if (!N) return n >= 30; var i = navCell(N, [p[0] + 0.5, p[1] + 0.5, p[2]]); return i >= 0 && N.ok[i] && Math.abs(N.Z[i] - p[2]) <= NAV_DZ; }
+  function goal(p) {                                                     // 離起點 LDC_OUT 格以上、落在那一層的走路格上（⛔ 只看走路格 ⇒ 起點旁的那一點就算：走路格每 2 格一點，一格厚的牆它跨得過去）
+    if (!N) return n >= 30; if (Math.max(Math.abs(p[0] - S[0]), Math.abs(p[1] - S[1])) < LDC_OUT) return false;
+    var i = navCell(N, [p[0] + 0.5, p[1] + 0.5, p[2]]); return i >= 0 && N.ok[i] && Math.abs(N.Z[i] - p[2]) <= NAV_DZ;
+  }
   for (var k = 0; k < q.length; k++) {
     var p = q[k]; n++;
     if (goal(p)) return { ok: true, at: S, n: n, snap: sd };
@@ -180,8 +184,8 @@ function ldcPartAt(T, x, y, z) {
  *  （擋住的東西：模型、別座梯子的格、關聯的實心格、沒有地板）。me ＝ 這一座的序號（自己的格不算擋）。 */
 function ldcBlockers(T, g, K, me, P, dirs, km, sm) {
   var by = {}, who = K.all.set;
-  function hit(nm, x, y, z) {
-    var o = by[nm] || (by[nm] = { who: nm, n: 0, x: [x, x], y: [y, y], z: [z, z], cells: [] });
+  function hit(nm, x, y, z, st) {
+    var o = by[nm] || (by[nm] = { who: nm, n: 0, x: [x, x], y: [y, y], z: [z, z], cells: [], st: !!st });
     o.n++; o.x = [Math.min(o.x[0], x), Math.max(o.x[1], x)]; o.y = [Math.min(o.y[0], y), Math.max(o.y[1], y)]; o.z = [Math.min(o.z[0], z), Math.max(o.z[1], z)]; o.cells.push([x, y]);
   }
   dirs.forEach(function (D) {
@@ -189,7 +193,7 @@ function ldcBlockers(T, g, K, me, P, dirs, km, sm) {
       var x = P[0] + D[0] * k + D[1] * s, y = P[1] + D[1] * k + D[0] * s, z = P[2];
       if (ldcStand(g, K.all, x, y, z) >= 0) continue;
       var m = CREW_BLOCK.filter(function (M) { var b = M.bb; return x >= Math.floor(b[0]) - 1 && x <= Math.ceil(b[3]) + 1 && y >= Math.floor(b[1]) - 1 && y <= Math.ceil(b[4]) + 1 && z >= b[2] - 3 && z <= b[5]; })[0];
-      if (m && blocked(x, y, z)) { hit('模型 ' + (m.path || m.name), x, y, z); continue; }
+      if (m && blocked(x, y, z)) { hit((m.station ? '取用點的火藥桶 ' : '模型 ') + (m.path || m.name), x, y, z, m.station); continue; }   // 取用點（23_powder.js）：遊戲擺的，不是雕刻作品
       var zs = -1, ow = -1;                                              // 站的那一格往上 NAV_HEAD 格裡的實心 ⇒ 擋住的格（牆、柱、甲板、別座梯子）
       for (var hh = 0; hh < NAV_HEAD && zs < 0; hh++) { var kk = ldcKey(g, x, y, z + hh); if (g.get(x, y, z + hh) && who[kk] !== me) { zs = z + hh; ow = who[kk] === undefined ? -1 : who[kk]; } }
       if (zs >= 0) { hit(ow >= 0 ? K.lads[ow].name + ' 的踏板' : ldcPartAt(T, x, y, zs), x, y, zs); continue; }
@@ -284,15 +288,17 @@ function ldcOne(sh, g, K, me) {
       var sd = key === 'head' ? sg : -sg, FB = ldcBlockers(T, K.gf, K, me, w.at, [[ax ? 0 : sd, ax ? sd : 0]], 2, 0).filter(function (b) { return b.who.indexOf('沒有地板') < 0; });
       if (FB.length) { FB.forEach(function (b) { b.cells.forEach(function (c) { X.push(c); }); });
         add('warn', key === 'head' ? '梯頂正前方擋住' : '梯腳正前方擋住', e.nm + ldcAt(P) + ' 往 ' + (sd > 0 ? '+' : '−') + 'xy'[ax] + ' 1–2 格：' + FB.map(function (b) { return b.who + '（x ' + ldcRng(b.x) + '、y ' + ldcRng(b.y) + '、z ' + ldcRng(b.z) + '）'; }).join('、') + ' ⇒ 走得出去，但要往旁邊繞',
-          '擋住的那幾格挪開，或梯子轉個方向／挪到正前方空的地方'); }
+          FB.every(function (b) { return b.st; }) ? '取用點是遊戲擺的（23_powder.js：彈藥庫 hoist ⇒ 桶擺在梯腳那一層）⇒ 擺桶時讓開梯子兩頭的正前方（遊戲那側），或船隻配置頁換位置；雕刻作品不用改' : '擋住的那幾格挪開，或梯子轉個方向／挪到正前方空的地方'); }
       return;
     }
     var dirs = ax < 0 ? [[1, 0], [-1, 0], [0, 1], [0, -1]] : [[ax ? 0 : (key === 'head' ? sg : -sg), ax ? (key === 'head' ? sg : -sg) : 0]];
     var B = ldcBlockers(T, K.gf, K, me, w.at || P, dirs), Bs = B.slice(0, 3).map(function (b) { b.cells.forEach(function (c) { X.push(c); }); return b.who + '（x ' + ldcRng(b.x) + '、y ' + ldcRng(b.y) + '、z ' + ldcRng(b.z) + '，' + b.n + ' 柱）'; });
     var where = (key === 'head' ? '頂端' : '底端') + (dirs.length > 1 ? '四周' : '往 ' + (dirs[0][0] ? (dirs[0][0] > 0 ? '+x' : '−x') : (dirs[0][1] > 0 ? '+y' : '−y'))) + ' 1–4 格';
-    var filled = (key === 'head' && HO.length) || e.on;
-    add('error', key === 'head' ? '梯頂出口堵住' : '梯腳出口堵住', e.nm + ldcAt(P) + (w.why === 'stand' ? ' 附近 ' + LDC_SNAP + ' 格內沒有站得住的格' : ' 起走 ' + LDC_WALK + ' 格內走不到' + (N ? '那一層的走路格' : '開闊的地方') + '（只走得到 ' + w.n + ' 格）') +
-      (filled ? '（洞當成補好了量的：補了洞還是出不去）' : '') + (Bs.length ? '；' + where + '：' + Bs.join('、') : ''),
+    var filled = (key === 'head' && HO.length) || e.on, st = B.length && B.slice(0, 3).every(function (b) { return b.st; });   // 只被取用點的桶擋住：遊戲擺的（彈藥庫 hoist ⇒ 桶擺在梯腳那一層），尋路照樣接（10 格內）⇒ ⚠、修法在遊戲那側
+    if (st) { add('warn', key === 'head' ? '梯頂出口被取用點擋住' : '梯腳出口被取用點擋住', e.nm + ldcAt(P) + (w.why === 'stand' ? ' 附近 ' + LDC_SNAP + ' 格內沒有站得住的格' : ' 起走 ' + LDC_WALK + ' 格內走不到那一層的走路格') + '：' + Bs.join('、'),
+      '取用點是遊戲擺的（23_powder.js；彈藥庫 meta hoist ⇒ 桶擺在梯腳那一層的空地）⇒ 擺桶時離梯子兩頭遠一點（遊戲那側），或船隻配置頁換取用點的位置；雕刻作品不用改'); return; }
+    add(NL ? 'error' : 'warn', key === 'head' ? '梯頂出口堵住' : '梯腳出口堵住', e.nm + ldcAt(P) + (w.why === 'stand' ? ' 附近 ' + LDC_SNAP + ' 格內沒有站得住的格' : ' 起走 ' + LDC_WALK + ' 格內走不到' + (N ? '那一層的走路格' : '開闊的地方') + '（只走得到 ' + w.n + ' 格）') +
+      (filled ? '（洞當成補好了量的：補了洞還是出不去）' : '') + (NL ? '' : '（尋路沒收這一座：只有第一人稱會走）') + (Bs.length ? '；' + where + '：' + Bs.join('、') : ''),
       Bs.length ? '把擋住的那幾格挪開或挖開（' + B.slice(0, 3).map(function (b) { return b.who; }).join('、') + '），或 ' + key + ' 挪到出得去的那一邊' : key + ' 擺在甲板上走得開的地方（四周至少一邊頭上 ' + NAV_HEAD + ' 格空、高低差 ≤ ' + NAV_DZ + ' 格）');
   });
   if (R.issues.some(function (i) { return i.what !== '格子清單' && i.what.indexOf('頭上太低') < 0; })) R.map = ldcMap(g, K, me, X);
