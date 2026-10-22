@@ -100,6 +100,7 @@ function flAct(fl, i) {
 }
 /** 打掉一格（20_shatter.js removeVoxel）：那一格所在的水格、靠近船殼的話那一塊破口，記下來待重算。 */
 function floodTouch(sh, x, y, z) {
+  if (sh.wrs) wrsVoxQ(sh, x, y, z);                                     // 房間模擬（第 4 檔）：打穿、補回的牆與甲板 ⇒ 開口（33_wrsim.js，TASK-0809）
   var fl = sh.fl, F = fl.F, c = F.c;
   if (z >= F.zTop || z < 0 || x < F.X0 || x >= F.X0 + F.nxv) return;
   var iy = ((y - F.Y0) / c) | 0, bx = ((x - F.X0) / c) | 0, bz = (z / c) | 0;
