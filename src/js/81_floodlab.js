@@ -131,6 +131,7 @@ function floodLab(o) {
     if (o.wsim) out.rows[out.rows.length - 1].wsim = wrsRead(sh);       // 房間模擬的讀數（33_wrsim.js wrsRead）
     if (o.rooms !== undefined) out.rows[out.rows.length - 1].wr = sh.wrw ? sh.wrw.st : null;   // 房間水面的讀數（63_wrwater_gl.js wrwMesh：幾間、幾欄、切邊的欄、片數、水量、ms）
   }
+  if (o.wsim) { var PL = sh.ports === undefined ? portsBuild(sh) : sh.ports, lidG = PL ? PL.L.map(function (P) { return P.g; }) : []; out.guns = sh.guns.map(function (g) { var P = M4.pt(sh.M, g.muz[0], g.muz[1], g.muz[2]); return [g.name, g.side, +(P[1] - seaH(P[0], P[2], SIMT)).toFixed(2), lidG.indexOf(g) >= 0 ? 1 : 0, g.alive ? 1 : 0]; }); }   // 每門砲：名字、哪一舷、砲口比海面高幾公尺（負 ⇒ 在水下）、有沒有蓋板（62_ports.js）、還在不在（砲口進水，TASK 新單）
   if (o.wsim && pin) out.wsimDz = { mean: wdz[1] ? +(wdz[0] / wdz[1]).toFixed(5) : 0, max: +wdz[2].toFixed(5), prepin: !!sh.wrs.opt.prepin };
   if (o.ref) out.ref = flabRef(sh, out.trace, tHole, out.traceA);
   if (o.ref && o.wsim) out.refR = flabRef(sh, out.traceR, tHole, out.traceA);      // 同一個參考解對房間模擬
