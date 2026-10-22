@@ -452,7 +452,7 @@ function gmapFlood(g, sh, scr, s) {
     g.save(); g.imageSmoothingEnabled = true; g.drawImage(img, A[0], A[1], B[0] - A[0], B[1] - A[1]); g.restore();
   }
   fl.holes.forEach(function (h) {
-    if (!(fl.hA[h] > 0)) return;
+    if (!(fl.hA[h] > 0) || (fl.hPort[h] >= fl.hA[h] - 1e-9 && !fl.hWet[h])) return;   // 只有砲口、在海面上 ⇒ 不畫成破口（TASK-0822）
     var P = scr(fl.hX[h], fl.hY[h]), r = Math.max(1.5, Math.sqrt(fl.hA[h]) / 2 / S * s * 1.3);
     g.fillStyle = flHoleCol(fl, h); g.beginPath(); g.arc(P[0], P[1], r, 0, 6.2832); g.fill();
   });
