@@ -115,14 +115,22 @@ function makeShipSteps(i, team, yaw, pz, T, px) {
   }, function () {                                                   // 繩
   // 繩與帆：兩端（帆取最高那一排）各找最近的實心格當錨 —— 錨被打掉或跟船分家 ⇒ 繩斷、帆掉
   //   會動的繩（meta anim；26_gunanim.js）寫明 model: 的那一端 ⇒ 不找格、交給 linkRopes 綁模型（⛔ 照找格 ⇒ 木塔上的弩弦兩端都貼著木塔，被綁在船上、跟不了弩砲；其他繩照舊 ⇒ 戰局不變）
-  var RS = T.rig.ropes, out = [];                                        // 每 ROPE_FIX_N 條一步（一條兩端各找一次錨）
-  for (var a = 0; a < RS.length; a += ROPE_FIX_N) out.push(function (a0) { return function () {
-    RS.slice(a0, a0 + ROPE_FIX_N).forEach(function (r) {
+  //   同一型照船型快取（TASK-0835；Tim 2026-10-22「繩的固定檢查…可能也能照船型做一份…GO」）：外框 bb、兩端的錨 a／b 只讀船型（r.pts、T.hullG、meta）⇒
+  //   同型第一艘照舊一條一條算、順手記在 T.ropeEnds；之後每艘照記的造（bb 每艘各一份）⇒ 跟照算的逐欄相同。量過（8 艘同型憲法號）：這一段每艘約 90 ms。
+  var RS = T.rig.ropes, out = [], RE = T.ropeEnds;
+  if (RE && RE.length === RS.length) return [function () {
+    RS.forEach(function (r, i) { var e = RE[i]; sh.ropes.push({ pts: r.pts, col: r.color, bb: e.bb.slice(), a: e.a, b: e.b, name: r.name, meta: r.meta || null }); });
+  }, function () { linkRopes(T, sh.ropes, sh.models); }];
+  var RE0 = new Array(RS.length);                                       // 這一艘算的 ⇒ 全部算完才掛上船型（分段開戰時半途不會被別艘拿到半份）
+  for (var a = 0; a < RS.length; a += ROPE_FIX_N) out.push(function (a0) { return function () {   // 每 ROPE_FIX_N 條一步（一條兩端各找一次錨）
+    RS.slice(a0, a0 + ROPE_FIX_N).forEach(function (r, j) {
       var n = r.pts.length / 3, mv = !!(r.meta && r.meta.anim), md = function (k) { return (mv || (r.fitEnd && r.fitEnd[k])) && r.ends && typeof r.ends[k] === 'string' && r.ends[k].indexOf('model:') === 0; };   // fitEnd：換裝挪過的那一端（38_fit.js）跟會動的繩一樣交給 linkRopes 綁模型
-      sh.ropes.push({ pts: r.pts, col: r.color, bb: ropeBox(r.pts), a: md(0) ? -1 : anchorNear(T, r.pts[0], r.pts[1], r.pts[2], 5), b: md(1) ? -1 : anchorNear(T, r.pts[n * 3 - 3], r.pts[n * 3 - 2], r.pts[n * 3 - 1], 5), name: r.name, meta: r.meta || null });
+      var o = { pts: r.pts, col: r.color, bb: ropeBox(r.pts), a: md(0) ? -1 : anchorNear(T, r.pts[0], r.pts[1], r.pts[2], 5), b: md(1) ? -1 : anchorNear(T, r.pts[n * 3 - 3], r.pts[n * 3 - 2], r.pts[n * 3 - 1], 5), name: r.name, meta: r.meta || null };
+      RE0[a0 + j] = { bb: o.bb.slice(), a: o.a, b: o.b };
+      sh.ropes.push(o);
     });
   }; }(a));
-  return out.concat([function () { linkRopes(T, sh.ropes, sh.models); }]);
+  return out.concat([function () { if (!T.ropeEnds) T.ropeEnds = RE0; linkRopes(T, sh.ropes, sh.models); }]);
   }, function () {                                                   // 繩的固定檢查（ropeFixCheck：同一型只算一次 ⇒ 第一次照 ropeFixSteps 分好幾步算）
   return ropeFixSteps(T, sh.ropes, sh.models);
   }, function () {
