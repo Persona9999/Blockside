@@ -203,20 +203,110 @@ var GSET = { open: false, paused: false };
 function gsetOpen() { if (!RUNNING || GSET.open) return; helpClose(); GSET.open = true; GSET.paused = PAUSED; flowPause(true); $('gset').classList.add('on'); $('gsetBg').classList.add('on'); gsetShow(); }
 function gsetClose() { if (!GSET.open) return; GSET.open = false; flowPause(GSET.paused); $('gset').classList.remove('on'); $('gsetBg').classList.remove('on'); }
 function gsetToggle() { if (GSET.open) gsetClose(); else gsetOpen(); }
-// 遊戲中的畫質設定（Tim 2026-10-21「目前世界地圖模式無法開啟畫質設定頁 請協助加個入口」「應該說入口放這裡」＝ 設定面板（Esc）畫質那一列的「畫質設定…」）：
-//   把主選單那一層（#cover）只開畫質設定頁（GFX_PAGE ＝ 主選單的 page）、靠右半透明疊在遊戲上（template.html body.gfxov）⇒ 左邊看得到場景，改了下一格就照新的畫；
-//   打開時遊戲暫停（跟設定面板一樣），「返回」、右上角的返回、Esc ⇒ 收起來、回到設定面板，畫質那幾項寫回存檔（69_prefs.js prefsSaveOnly：地球儀開船那種網址帶參數的也存）。
-var GFXOV = { open: false, paused: false }, GFX_PAGE = null;
+// 畫質設定（核心自己的一層 #gfxov，在 #cover 外面；TASK-0774 第 2 步）：主選單的「畫質設定…」（外殼的 page('gfx')）跟遊戲中設定面板的「畫質設定…」（gfxOvOpen）開的是同一層。
+//   遊戲中（Tim 2026-10-21「目前世界地圖模式無法開啟畫質設定頁 請協助加個入口」「應該說入口放這裡」＝ 設定面板（Esc）畫質那一列的「畫質設定…」）：
+//     靠右半透明疊在遊戲上（template.html body.gfxov）⇒ 左邊看得到場景，改了下一格就照新的畫；打開時遊戲暫停（跟設定面板一樣），
+//     「返回」、右上角的返回、Esc ⇒ 收起來、回到設定面板，畫質那幾項寫回存檔（69_prefs.js prefsSaveOnly：地球儀開船那種網址帶參數的也存）。
+//   主選單：整面蓋住主選單；返回 ⇒ 發 gfxov:back（外殼回主選單）。
+var GFXOV = { open: false, paused: false };
+/** 那一層開／關（只管顯示；主選單那一頁由外殼的 page 叫）。 */
+function gfxPanel(on) { var e = $('gfxov'); e.style.display = on ? '' : 'none'; if (on) e.scrollTop = 0; }
+function gfxPanelOn() { return $('gfxov').style.display !== 'none'; }
 function gfxOvOpen() {
-  if (!RUNNING || GFXOV.open || !GFX_PAGE) return;
+  if (!RUNNING || GFXOV.open) return;
   GFXOV.paused = GSET.open ? GSET.paused : PAUSED; gsetClose(); helpClose(); flowPause(true);
-  GFXOV.open = true; document.body.classList.add('gfxov'); GFX_PAGE('gfx'); $('cover').style.display = ''; gfxShow();
+  GFXOV.open = true; document.body.classList.add('gfxov'); gfxPanel(true); gfxShow();
 }
 function gfxOvClose() {
   if (!GFXOV.open) return;
-  GFXOV.open = false; $('cover').style.display = 'none'; GFX_PAGE(''); document.body.classList.remove('gfxov');
+  GFXOV.open = false; gfxPanel(false); document.body.classList.remove('gfxov');
   prefsSaveOnly(PREF_GFX); flowPause(GFXOV.paused); gsetOpen();
 }
+/** 返回：遊戲中打開的 ⇒ 回到遊戲的設定面板；主選單打開的 ⇒ 收起來、外殼回主選單。 */
+function gfxBack() { if (GFXOV.open) gfxOvClose(); else { gfxPanel(false); evEmit('gfxov:back'); } }
+/** 畫質頁（07_gfx.js；#gfxov 那一層）：預設的低／中／高、每一項的按鈕、陰影細項、顯示 FPS。改了立刻生效（render 每一格讀 GFX）。開機時核心自己生一次（主選單那一排是外殼的 gfxMenuUI）。 */
+function gfxUI() {
+  var box = $('gfxItems');
+  function row(it) { return '<div class="row"><label>' + it.name + '</label>' + (it.ord || it.opt.map(function (o, v) { return v; })).map(function (v) { return '<button data-k="' + it.k + '" data-v="' + v + '">' + it.opt[v] + '</button>'; }).join('') + '</div>'; }   // ord：按鈕照這個順序排（值不照順序的那幾項，07_gfx.js）
+  // 照分類收起來（07_gfx.js GFX_CATS；Tim 2026-10-21）：<details> 一類一塊，預設收著；陰影那一塊底下是陰影細項（#shkItems 搬進來）、煙與碎片那一塊是兩個滑桿
+  var fx = '<div class="row slide"><label for="smokeR">煙消散</label><input type="range" id="smokeR" min="' + SMOKE_LIM[0] + '" max="' + SMOKE_LIM[1] + '" step="0.1" aria-label="煙散得多快（倍數；1 ＝ 原本）"><span id="smokeV"></span></div>'
+    + '<div class="row slide"><label for="debR">碎片上限</label><input type="range" id="debR" min="' + DEB_LIM[0] + '" max="' + DEB_LIM[1] + '" step="1000" aria-label="畫面上最多幾顆碎片"><span id="debV"></span></div>';   // 煙：不跟三檔走（07_gfx.js SMOKE_LIM）
+  box.innerHTML = GFX_CATS.map(function (c) {
+    return '<details class="gcat" data-cat="' + c.k + '"><summary><b>' + c.name + '</b><span class="note" id="gcs-' + c.k + '"></span></summary><div class="gcb" id="gcb-' + c.k + '">' +
+      c.items.map(function (k) { return row(gfxItem(k)); }).join('') + (c.extra === 'fx' ? fx : '') + '</div></details>';
+  }).join('');
+  $('gcb-shadow').appendChild($('shkItems'));                      // 陰影細項（shkUI 底下生）收進陰影那一塊
+  [].forEach.call(box.querySelectorAll('button[data-k]'), function (b) { b.onclick = function () { GFX[b.dataset.k] = +b.dataset.v; gfxShow(); }; });
+  var sr = $('smokeR'); sr.oninput = function () { SMOKE_K = Math.round(+sr.value * 10) / 10; gfxShow(); };
+  var dr2 = $('debR'); dr2.oninput = function () { DEB_CAP = Math.round(+dr2.value); gfxShow(); };
+  [].forEach.call(document.querySelectorAll('#gfxPre button'), function (b) { b.onclick = function () { gfxSet(b.dataset.g); gfxShow(); }; });
+  var f = $('gfxFps'); f.checked = GFX_FPS; f.onchange = function () { GFX_FPS = f.checked; gfxShow(); };
+  $('gfxX').onclick = $('gfxovX').onclick = gfxBack;               // 返回（卡片最下面、右上角）
+  shkUI();                                                       // 陰影細項（07_gfx.js SHK_ITEMS）
+  gfxShow();
+}
+function gfxShow() {
+  var lv = gfxLevel();
+  [].forEach.call(document.querySelectorAll('#gfxPre button'), function (b) { b.className = b.dataset.g === lv ? 'on' : ''; });
+  [].forEach.call(document.querySelectorAll('#gfxItems button[data-k]'), function (b) { b.className = GFX[b.dataset.k] === +b.dataset.v ? 'on' : ''; });
+  $('debR').value = DEB_CAP; $('debV').textContent = DEB_CAP.toLocaleString() + ' 顆' + (DEB_CAP === DEB_LIM[2] ? '（預設）' : '') + '：超過時先清視野外、遠處、沉在水裡的';
+  $('smokeR').value = SMOKE_K; $('smokeV').textContent = SMOKE_K.toFixed(1) + '×' + (SMOKE_K === 1 ? '（原本）' : SMOKE_K === SMOKE_LIM[2] ? '（預設）' : SMOKE_K > 1 ? '（散得快）' : '（留得久）') + '　砲煙約 ' + (2.5 / SMOKE_K).toFixed(1) + '–' + (5.5 / SMOKE_K).toFixed(1) + ' 秒';
+  GFX_CATS.forEach(function (c) { var e = $('gcs-' + c.k); if (e) e.textContent = gfxCatSum(c); });   // 每一類收著時看得到的那一行
+  $('gfxLv').textContent = '現在：' + GFX_NAME[lv]; $('gfxFps').checked = GFX_FPS; $('fps').className = GFX_FPS ? 'hud on' : 'hud';
+  shkShow();
+  evEmit('cfg:gfx', lv);                                           // 外殼：主選單那一排、「畫質設定…」鈕（gfxMenuShow）
+  if (typeof gsetShow === 'function') gsetShow();
+}
+/** 畫質頁的「陰影細項」（07_gfx.js SHK_ITEMS；Tim 2026-10-21「概念類似這個」＝ Unity 的 Shadows：最遠距離、段數、分界、交界、顯示分段、分段那一條）：
+ *  按鈕（val）一列、滑桿（lim）照 64_cfgkit.js 的樣子；改了立刻生效（60_render.js 每一格照 SHK 配）、跟著存檔（69_prefs.js shk）。
+ *  只對分段有用的（cas）單張時變淡、只對單張有用的（one）分段時變淡；段數以外的分界、交界藏起來。 */
+function shkUI() {
+  var box = $('shkItems');
+  box.innerHTML = '<h3>陰影細項</h3><div class="row note">不跟低／中／高走（改了不會變成「自訂」）；改了立刻生效、跟著存檔。調到滿意的，把下面「改過的」那一行告訴開發者就能變成預設。</div>' +
+    SHK_ITEMS.map(function (it) {
+      var h = it.val ? '<div class="row bt"><label>' + it.name + '</label>' + it.val.map(function (v, i) { return '<button data-shk="' + it.k + '" data-v="' + v + '">' + (it.opt ? it.opt[i] : v + (it.unit || '')) + '</button>'; }).join('') + '</div>' + (it.note ? '<div class="row note gkn">' + it.note + '</div>' : '')
+        : cfgSliders([it], 'shk-').replace('<div class="row note gkn"></div>', '').replace('<div class="row note gkn">undefined</div>', '');
+      return '<div id="shkR-' + it.k + '">' + h + '</div>' + (it.k === 'b4' ? '<div id="shkBar"></div><div class="row note" id="shkBarN"></div>' : '');
+    }).join('') + '<div class="row note" id="shkSt"></div><div class="row"><button id="shkReset">陰影細項回到預設</button></div>';
+  [].forEach.call(box.querySelectorAll('button[data-shk]'), function (b) { b.onclick = function () { SHK[b.dataset.shk] = +b.dataset.v; gfxShow(); }; });
+  SHK_ITEMS.forEach(function (it) { if (it.val) return; var r = $('shk-' + it.k); r.oninput = function () { var v = shkOk(it, +r.value); if (v !== undefined) SHK[it.k] = v; gfxShow(); }; });
+  $('shkReset').onclick = function () { shkReset(); gfxShow(); };
+  setInterval(function () { if (gfxPanelOn()) shkStat(); }, 500);   // 讀數（每一格幾毫秒）：頁面開著才更新
+}
+function shkFmt(it, v) { return it.val ? (it.opt ? it.opt[it.val.indexOf(v)] : v + (it.unit || '')).replace(/（.*$/, '') : (it.int ? String(v) : v.toFixed(it.fix || 2)) + (it.unit || ''); }
+function shkShow() {
+  if (!$('shkBar')) return;
+  var one = SHK.mode === 0;
+  [].forEach.call(document.querySelectorAll('#shkItems button[data-shk]'), function (b) { b.className = SHK[b.dataset.shk] === +b.dataset.v ? 'on' : ''; });
+  SHK_ITEMS.forEach(function (it) {
+    var row = $('shkR-' + it.k);
+    row.style.display = it.seg && (it.k[0] === 's' ? it.seg >= SHK.count : it.seg > SHK.count) ? 'none' : '';   // 分界 ＝ 段數 − 1 個、交界 ＝ 段數個（跟 Unity 一樣）
+    row.classList.toggle('dim', !!((it.cas && one) || (it.one && !one)));
+    if (it.val) return;
+    $('shk-' + it.k).value = SHK[it.k]; $('shk-' + it.k + 'V').textContent = cfgShown(function (v) { return shkFmt(it, v); }, SHK[it.k], SHK_DEF[it.k]);
+  });
+  // 分段那一條（Unity 的 Cascade splits）：每一段一格、寬度照那一段多長；斜線 ＝ 交界（跟下一段混的那一截；最後一段 ＝ 淡掉的那一截）
+  var o = shkSplits(), bar = $('shkBar'), prev = 0, col = SHDBG_COL;
+  bar.innerHTML = o.far.map(function (f, i) {
+    var c = col[i % 4], w = (f - prev) / SHK.dist * 100, b = (f - o.bs[i]) / Math.max(1e-6, f - prev) * 100, h;
+    h = '<div style="flex:0 0 ' + w.toFixed(3) + '%;background:rgb(' + c.map(function (v) { return Math.round(v * 200 + 30); }).join(',') + ')" title="第 ' + (i + 1) + ' 段：' + Math.round(prev) + '～' + Math.round(f) + ' m，最後 ' + Math.round(f - o.bs[i]) + ' m 跟' + (i < o.far.length - 1 ? '下一段混' : '沒有影子混（淡掉）') + '"><div class="bl" style="width:' + b.toFixed(2) + '%"></div><span>' + (i + 1) + '</span><span>' + Math.round(f - prev) + ' m</span></div>';
+    prev = f; return h;
+  }).join('');
+  bar.classList.toggle('dim', one);
+  $('shkBarN').textContent = '分段：' + o.far.map(function (f, i) { return '第 ' + (i + 1) + ' 段到 ' + Math.round(f) + ' m'; }).join('、') + (one ? '（現在是單張，這一條沒用到）' : '') +
+    '；單張的半寬：' + SIMPLE_R.map(function (r) { return Math.round(r * SHK.sR); }).join('／') + ' m（鏡頭拉越遠用越大的那一級）' + (one ? '' : '（現在是分段，沒用到）');
+  shkStat();
+}
+/** 讀數：現在畫的是什麼、每一格幾毫秒（60_render.js shadowDbgText）、改過的（照存檔那一份；告訴開發者就能當預設）。 */
+function shkStat() {
+  var el = $('shkSt'); if (!el) return;
+  var ch = shkSnap(), ks = Object.keys(ch);
+  el.style.whiteSpace = 'pre-line';
+  el.textContent = (GFX.shadow ? '現在（' + GFX_ITEMS[0].opt[GFX.shadow].replace(/（.*$/, '') + '）：' + (typeof SHM !== 'undefined' && SHM ? shadowDbgText() : '陰影還沒畫') + (SHM && SHM.n < SHK['n' + Math.min(2, GFX.shadow)] ? '（' + SHK['n' + Math.min(2, GFX.shadow)] + '² 超過總量上限 ⇒ 降成 ' + SHM.n + '²）' : '') : '陰影關著（上面「陰影」選低或高）') +
+    '\n改過的：' + (ks.length ? ks.map(function (k) { return k + '=' + ch[k]; }).join('　') : '（都是預設）');
+}
+/** 物理效果的檔位改了（主選單的物理頁、遊戲中的設定面板、__game.phx）：帆與繩換到「關」或從「關」換出來 ⇒ setPhys（跟 B 鍵同一支）；發 cfg:phx（外殼的物理頁點亮）。 */
+function phxSync() { if ((PHX.rig > 0) !== PHYS) setPhys(PHX.rig > 0); evEmit('cfg:phx'); if (typeof gsetShow === 'function') gsetShow(); }
 // 不給全螢幕時那一行（Tim 2026-10-17：iPhone 照臺北狂飆那樣「加入主畫面」就是全螢幕 ——「iphone支援的操作 不用另外做功能」「純文字也可以」）：
 //   iPhone ⇒ 寫怎麼加入主畫面（iOS 自己會用網頁 App 開：沒有網址列與工具列）；別的（沒開全螢幕權限的 iframe…）照舊只說不給。
 //   已經從主畫面開（iOS 的 navigator.standalone、manifest 的 display-mode）⇒ 本來就沒有網址列：按鈕亮著、不寫原因。
@@ -270,6 +360,7 @@ $('fullT').onclick = fsToggle;
 [].forEach.call(document.querySelectorAll('#gset [data-gg]'), function (b) { b.onclick = function () { gfxSet(b.dataset.gg); gfxShow(); }; });
 [].forEach.call(document.querySelectorAll('#gset [data-gx]'), function (b) { b.onclick = function () { phxSet(b.dataset.gx); phxSync(); }; });
 $('endA').onclick = start;
+gfxUI();                                                          // 畫質那一層（核心）：開機生一次
 // 彈種一顆（#ammoB）：帶 data-k="1" ⇒ 點一下 ＝ 按 1（上面那段 [data-k] 的 click）⇒ ammoNext；⛔ 別再另外掛 onclick（會一次換兩種）
 /** 主選單的玩法鈕：照玩法規則表（04_modes.js MODE_RULES）裡 menu 的那幾份生、照表的順序（TASK-0668：加一種玩法不用改這裡）。 */
 function modeButtons() {
@@ -687,13 +778,12 @@ function sliders() {
   $('cfgShip').onclick = function () { spkOpen({ title: '船隻配置：編輯哪一型', cur: CFG_ID, pick: function (id) { CFG_ID = id; loadHull(CFG_ID).then(function () { put(); show(); }); put(); show(); } }); };
   fleetUI();                                                     // 主選單：艦隊編成
   // 細節設定那一頁：主選單 ⇄ 細節設定（同一個 #cover 裡兩張卡片，一次顯示一張）
-  function page(w) { $('detail').style.display = w === 'det' ? '' : 'none'; $('gfxp').style.display = w === 'gfx' ? '' : 'none'; $('phxp').style.display = w === 'phx' ? '' : 'none'; $('shipp').style.display = w === 'ship' ? '' : 'none'; $('gunp').style.display = w === 'gun' ? '' : 'none'; $('furnp').style.display = w === 'furn' ? '' : 'none'; $('keysp').style.display = w === 'keys' ? '' : 'none'; $('sndp').style.display = w === 'snd' ? '' : 'none'; if ($('wqp')) $('wqp').style.display = w === 'wq' ? '' : 'none'; if (w !== 'keys') KEY_WAIT = null; document.querySelector('#cover .card:not(#detail):not(#gfxp):not(#phxp):not(#shipp):not(#gunp):not(#furnp):not(#keysp):not(#sndp):not(#wqp)').style.display = w ? 'none' : ''; $('cover').scrollTop = 0; $('pgX').classList.toggle('on', !!w && !ADMIN_ROOMS); }   // w：'' 主選單、'det' 細節設定、'gfx' 畫質設定、'phx' 物理設定、'ship' 船隻配置、'gun' 砲的設定、'furn' 道具設定（67_furncfg.js）
-  GFX_PAGE = page;                                               // 遊戲中的畫質設定（gfxOvOpen）也用這一支切頁
+  function page(w) { $('detail').style.display = w === 'det' ? '' : 'none'; gfxPanel(w === 'gfx'); $('phxp').style.display = w === 'phx' ? '' : 'none'; $('shipp').style.display = w === 'ship' ? '' : 'none'; $('gunp').style.display = w === 'gun' ? '' : 'none'; $('furnp').style.display = w === 'furn' ? '' : 'none'; $('keysp').style.display = w === 'keys' ? '' : 'none'; $('sndp').style.display = w === 'snd' ? '' : 'none'; if ($('wqp')) $('wqp').style.display = w === 'wq' ? '' : 'none'; if (w !== 'keys') KEY_WAIT = null; document.querySelector('#cover .card:not(#detail):not(#gfxp):not(#phxp):not(#shipp):not(#gunp):not(#furnp):not(#keysp):not(#sndp):not(#wqp)').style.display = w ? 'none' : ''; $('cover').scrollTop = 0; $('pgX').classList.toggle('on', !!w && !ADMIN_ROOMS); }   // w：'' 主選單、'det' 細節設定、'gfx' 畫質設定、'phx' 物理設定、'ship' 船隻配置、'gun' 砲的設定、'furn' 道具設定（67_furncfg.js）
+  evOn('gfxov:back', function () { page(''); });                 // 畫質那一層（核心）在主選單按返回 ⇒ 回主選單
   [].forEach.call(document.querySelectorAll('#plays button'), function (b) { b.onclick = function () { setPlay(b.dataset.p); show(); }; });   // 主選單：玩法
   $('detB').onclick = function () { page('det'); };
   $('detX').onclick = function () { page(''); };
   $('gfxB').onclick = function () { page('gfx'); };
-  $('gfxX').onclick = function () { page(''); };
   $('phxB').onclick = function () { page('phx'); };
   $('phxX').onclick = function () { page(''); };
   $('shipB').onclick = function () { page('ship'); loadHull(CFG_ID).then(function () { put(); show(); }); };   // 船隻配置：先載那一型（砲數、桅數、壓艙物的預設要船型）
@@ -749,7 +839,7 @@ function sliders() {
     });
   };
   askUI();                                             // 確認彈窗（65_ask.js）：⛔ 要比 keysUI 先掛（鍵盤的捕獲階段照掛的先後）
-  gfxUI(); phxUI(); gunUI(); gunShow(); furnUI(page); furnShow(); keysUI(page); keysShow();
+  gfxMenuUI(); phxUI(); gunUI(); gunShow(); furnUI(page); furnShow(); keysUI(page); keysShow();
   if (ADMIN_FURN) { page('furn'); furnShow(); }
   if (ADMIN_KEYS) { page('keys'); keysShow(); }                   // 鍵位的出廠預設值（?admin=keys）：直接開鍵位設定頁（66_keys.js keysAdmUI）                   // 道具的出廠預設值（?admin=furn）：直接開道具設定頁（67_furncfg.js furnAdmUI 接存檔、重建）
   $('detR').onclick = function () {                    // 重設預設值：LIM 的第三格、降旗全不勾
@@ -761,92 +851,21 @@ function sliders() {
     STRIKE.cas = LIM.cas[2]; STRIKE.guns = STRIKE.masts = STRIKE.officers = false; CAP_SET = ['random', 'random'];
     put(); show(); prefsReset();                         // 存檔跟著清（69_prefs.js：只剩主選單的選擇）
   };
-  window.addEventListener('keydown', function (e) { if (!RUNNING && e.key === 'Escape' && ($('detail').style.display !== 'none' || $('gfxp').style.display !== 'none' || $('phxp').style.display !== 'none' || $('shipp').style.display !== 'none' || $('gunp').style.display !== 'none' || $('furnp').style.display !== 'none' || ($('keysp').style.display !== 'none' && !KEY_WAIT))) page(''); });   // 鍵位設定頁正在等新鍵 ⇒ Esc 是取消（66_keys.js），不關頁
+  window.addEventListener('keydown', function (e) { if (!RUNNING && e.key === 'Escape' && ($('detail').style.display !== 'none' || gfxPanelOn() || $('phxp').style.display !== 'none' || $('shipp').style.display !== 'none' || $('gunp').style.display !== 'none' || $('furnp').style.display !== 'none' || ($('keysp').style.display !== 'none' && !KEY_WAIT))) page(''); });   // 鍵位設定頁正在等新鍵 ⇒ Esc 是取消（66_keys.js），不關頁
   put(); if (START_Q) yieldUI().then(show); else show();                // ?start=1：主選單的說明文字與船卡（show 約 0.03 s）晚一個工作再畫（不擠在載入頁面那一段）
   SLIDERS_SHOW = function () { put(); show(); };
   evOn('hullReload', function () { put(); show(); }, 0, true);           // 換裝改了、那一型重載好了（38_fit.js fitDirty）⇒ 卡片照新的船型畫
 }
-/** 畫質（07_gfx.js）：主選單的低／中／高、畫質設定頁每一項的按鈕、顯示 FPS。改了立刻生效（render 每一格讀 GFX）。 */
-function gfxUI() {
-  var box = $('gfxItems');
-  function row(it) { return '<div class="row"><label>' + it.name + '</label>' + (it.ord || it.opt.map(function (o, v) { return v; })).map(function (v) { return '<button data-k="' + it.k + '" data-v="' + v + '">' + it.opt[v] + '</button>'; }).join('') + '</div>'; }   // ord：按鈕照這個順序排（值不照順序的那幾項，07_gfx.js）
-  // 照分類收起來（07_gfx.js GFX_CATS；Tim 2026-10-21）：<details> 一類一塊，預設收著；陰影那一塊底下是陰影細項（#shkItems 搬進來）、煙與碎片那一塊是兩個滑桿
-  var fx = '<div class="row slide"><label for="smokeR">煙消散</label><input type="range" id="smokeR" min="' + SMOKE_LIM[0] + '" max="' + SMOKE_LIM[1] + '" step="0.1" aria-label="煙散得多快（倍數；1 ＝ 原本）"><span id="smokeV"></span></div>'
-    + '<div class="row slide"><label for="debR">碎片上限</label><input type="range" id="debR" min="' + DEB_LIM[0] + '" max="' + DEB_LIM[1] + '" step="1000" aria-label="畫面上最多幾顆碎片"><span id="debV"></span></div>';   // 煙：不跟三檔走（07_gfx.js SMOKE_LIM）
-  box.innerHTML = GFX_CATS.map(function (c) {
-    return '<details class="gcat" data-cat="' + c.k + '"><summary><b>' + c.name + '</b><span class="note" id="gcs-' + c.k + '"></span></summary><div class="gcb" id="gcb-' + c.k + '">' +
-      c.items.map(function (k) { return row(gfxItem(k)); }).join('') + (c.extra === 'fx' ? fx : '') + '</div></details>';
-  }).join('');
-  $('gcb-shadow').appendChild($('shkItems'));                      // 陰影細項（shkUI 底下生）收進陰影那一塊
-  [].forEach.call(box.querySelectorAll('button[data-k]'), function (b) { b.onclick = function () { GFX[b.dataset.k] = +b.dataset.v; gfxShow(); }; });
-  var sr = $('smokeR'); sr.oninput = function () { SMOKE_K = Math.round(+sr.value * 10) / 10; gfxShow(); };
-  var dr2 = $('debR'); dr2.oninput = function () { DEB_CAP = Math.round(+dr2.value); gfxShow(); };
-  [].forEach.call(document.querySelectorAll('#gfxs button[data-g], #gfxPre button'), function (b) { b.onclick = function () { gfxSet(b.dataset.g); gfxShow(); }; });
-  var f = $('gfxFps'); f.checked = GFX_FPS; f.onchange = function () { GFX_FPS = f.checked; gfxShow(); };
-  [$('gfxX'), $('pgX')].forEach(function (b) { var f0 = b.onclick; b.onclick = function () { if (GFXOV.open) gfxOvClose(); else if (f0) f0.call(b); }; });   // 遊戲中打開的（gfxOvOpen）⇒ 返回 ＝ 回到遊戲的設定面板
-  shkUI();                                                       // 陰影細項（07_gfx.js SHK_ITEMS）
-  gfxShow();
+/** 主選單的畫質那一排（低／中／高／全開＋「畫質設定…」）：畫質頁本身是核心那一層（gfxUI）；這裡只接按鈕、照 cfg:gfx 點亮（TASK-0774）。 */
+function gfxMenuUI() {
+  [].forEach.call(document.querySelectorAll('#gfxs button[data-g]'), function (b) { b.onclick = function () { gfxSet(b.dataset.g); gfxShow(); }; });
+  gfxMenuShow(gfxLevel());
 }
-function gfxShow() {
-  var lv = gfxLevel();
-  [].forEach.call(document.querySelectorAll('#gfxs button[data-g], #gfxPre button'), function (b) { b.className = b.dataset.g === lv ? 'on' : ''; });
+function gfxMenuShow(lv) {
+  [].forEach.call(document.querySelectorAll('#gfxs button[data-g]'), function (b) { b.className = b.dataset.g === lv ? 'on' : ''; });
   var gb = $('gfxB'); gb.textContent = lv === 'custom' ? '自訂（畫質設定…）' : '畫質設定…'; gb.className = lv === 'custom' ? 'on' : '';
-  [].forEach.call(document.querySelectorAll('#gfxItems button[data-k]'), function (b) { b.className = GFX[b.dataset.k] === +b.dataset.v ? 'on' : ''; });
-  $('debR').value = DEB_CAP; $('debV').textContent = DEB_CAP.toLocaleString() + ' 顆' + (DEB_CAP === DEB_LIM[2] ? '（預設）' : '') + '：超過時先清視野外、遠處、沉在水裡的';
-  $('smokeR').value = SMOKE_K; $('smokeV').textContent = SMOKE_K.toFixed(1) + '×' + (SMOKE_K === 1 ? '（原本）' : SMOKE_K === SMOKE_LIM[2] ? '（預設）' : SMOKE_K > 1 ? '（散得快）' : '（留得久）') + '　砲煙約 ' + (2.5 / SMOKE_K).toFixed(1) + '–' + (5.5 / SMOKE_K).toFixed(1) + ' 秒';
-  GFX_CATS.forEach(function (c) { var e = $('gcs-' + c.k); if (e) e.textContent = gfxCatSum(c); });   // 每一類收著時看得到的那一行
-  $('gfxLv').textContent = '現在：' + GFX_NAME[lv]; $('gfxFps').checked = GFX_FPS; $('fps').className = GFX_FPS ? 'hud on' : 'hud';
-  shkShow();
-  if (typeof gsetShow === 'function') gsetShow();
 }
-/** 畫質頁的「陰影細項」（07_gfx.js SHK_ITEMS；Tim 2026-10-21「概念類似這個」＝ Unity 的 Shadows：最遠距離、段數、分界、交界、顯示分段、分段那一條）：
- *  按鈕（val）一列、滑桿（lim）照 64_cfgkit.js 的樣子；改了立刻生效（60_render.js 每一格照 SHK 配）、跟著存檔（69_prefs.js shk）。
- *  只對分段有用的（cas）單張時變淡、只對單張有用的（one）分段時變淡；段數以外的分界、交界藏起來。 */
-function shkUI() {
-  var box = $('shkItems');
-  box.innerHTML = '<h3>陰影細項</h3><div class="row note">不跟低／中／高走（改了不會變成「自訂」）；改了立刻生效、跟著存檔。調到滿意的，把下面「改過的」那一行告訴開發者就能變成預設。</div>' +
-    SHK_ITEMS.map(function (it) {
-      var h = it.val ? '<div class="row bt"><label>' + it.name + '</label>' + it.val.map(function (v, i) { return '<button data-shk="' + it.k + '" data-v="' + v + '">' + (it.opt ? it.opt[i] : v + (it.unit || '')) + '</button>'; }).join('') + '</div>' + (it.note ? '<div class="row note gkn">' + it.note + '</div>' : '')
-        : cfgSliders([it], 'shk-').replace('<div class="row note gkn"></div>', '').replace('<div class="row note gkn">undefined</div>', '');
-      return '<div id="shkR-' + it.k + '">' + h + '</div>' + (it.k === 'b4' ? '<div id="shkBar"></div><div class="row note" id="shkBarN"></div>' : '');
-    }).join('') + '<div class="row note" id="shkSt"></div><div class="row"><button id="shkReset">陰影細項回到預設</button></div>';
-  [].forEach.call(box.querySelectorAll('button[data-shk]'), function (b) { b.onclick = function () { SHK[b.dataset.shk] = +b.dataset.v; gfxShow(); }; });
-  SHK_ITEMS.forEach(function (it) { if (it.val) return; var r = $('shk-' + it.k); r.oninput = function () { var v = shkOk(it, +r.value); if (v !== undefined) SHK[it.k] = v; gfxShow(); }; });
-  $('shkReset').onclick = function () { shkReset(); gfxShow(); };
-  setInterval(function () { if ($('gfxp').style.display !== 'none') shkStat(); }, 500);   // 讀數（每一格幾毫秒）：頁面開著才更新
-}
-function shkFmt(it, v) { return it.val ? (it.opt ? it.opt[it.val.indexOf(v)] : v + (it.unit || '')).replace(/（.*$/, '') : (it.int ? String(v) : v.toFixed(it.fix || 2)) + (it.unit || ''); }
-function shkShow() {
-  if (!$('shkBar')) return;
-  var one = SHK.mode === 0;
-  [].forEach.call(document.querySelectorAll('#shkItems button[data-shk]'), function (b) { b.className = SHK[b.dataset.shk] === +b.dataset.v ? 'on' : ''; });
-  SHK_ITEMS.forEach(function (it) {
-    var row = $('shkR-' + it.k);
-    row.style.display = it.seg && (it.k[0] === 's' ? it.seg >= SHK.count : it.seg > SHK.count) ? 'none' : '';   // 分界 ＝ 段數 − 1 個、交界 ＝ 段數個（跟 Unity 一樣）
-    row.classList.toggle('dim', !!((it.cas && one) || (it.one && !one)));
-    if (it.val) return;
-    $('shk-' + it.k).value = SHK[it.k]; $('shk-' + it.k + 'V').textContent = cfgShown(function (v) { return shkFmt(it, v); }, SHK[it.k], SHK_DEF[it.k]);
-  });
-  // 分段那一條（Unity 的 Cascade splits）：每一段一格、寬度照那一段多長；斜線 ＝ 交界（跟下一段混的那一截；最後一段 ＝ 淡掉的那一截）
-  var o = shkSplits(), bar = $('shkBar'), prev = 0, col = SHDBG_COL;
-  bar.innerHTML = o.far.map(function (f, i) {
-    var c = col[i % 4], w = (f - prev) / SHK.dist * 100, b = (f - o.bs[i]) / Math.max(1e-6, f - prev) * 100, h;
-    h = '<div style="flex:0 0 ' + w.toFixed(3) + '%;background:rgb(' + c.map(function (v) { return Math.round(v * 200 + 30); }).join(',') + ')" title="第 ' + (i + 1) + ' 段：' + Math.round(prev) + '～' + Math.round(f) + ' m，最後 ' + Math.round(f - o.bs[i]) + ' m 跟' + (i < o.far.length - 1 ? '下一段混' : '沒有影子混（淡掉）') + '"><div class="bl" style="width:' + b.toFixed(2) + '%"></div><span>' + (i + 1) + '</span><span>' + Math.round(f - prev) + ' m</span></div>';
-    prev = f; return h;
-  }).join('');
-  bar.classList.toggle('dim', one);
-  $('shkBarN').textContent = '分段：' + o.far.map(function (f, i) { return '第 ' + (i + 1) + ' 段到 ' + Math.round(f) + ' m'; }).join('、') + (one ? '（現在是單張，這一條沒用到）' : '') +
-    '；單張的半寬：' + SIMPLE_R.map(function (r) { return Math.round(r * SHK.sR); }).join('／') + ' m（鏡頭拉越遠用越大的那一級）' + (one ? '' : '（現在是分段，沒用到）');
-  shkStat();
-}
-/** 讀數：現在畫的是什麼、每一格幾毫秒（60_render.js shadowDbgText）、改過的（照存檔那一份；告訴開發者就能當預設）。 */
-function shkStat() {
-  var el = $('shkSt'); if (!el) return;
-  var ch = shkSnap(), ks = Object.keys(ch);
-  el.style.whiteSpace = 'pre-line';
-  el.textContent = (GFX.shadow ? '現在（' + GFX_ITEMS[0].opt[GFX.shadow].replace(/（.*$/, '') + '）：' + (typeof SHM !== 'undefined' && SHM ? shadowDbgText() : '陰影還沒畫') + (SHM && SHM.n < SHK['n' + Math.min(2, GFX.shadow)] ? '（' + SHK['n' + Math.min(2, GFX.shadow)] + '² 超過總量上限 ⇒ 降成 ' + SHM.n + '²）' : '') : '陰影關著（上面「陰影」選低或高）') +
-    '\n改過的：' + (ks.length ? ks.map(function (k) { return k + '=' + ch[k]; }).join('　') : '（都是預設）');
-}
+evOn('cfg:gfx', gfxMenuShow);
 /** 物理效果（09_phx.js）：主選單的全開／高／中／低、物理設定頁每一項的按鈕。帆與繩換到「關」或從「關」換出來 ⇒ setPhys（跟 B 鍵同一支）。 */
 function phxUI() {
   var box = $('phxItems');
@@ -877,7 +896,6 @@ function ramFrom(u, v) {
 function ramRows() {
   return '<div id="ramBox">' + RAM_UI.map(function (u) { var L = LIM[u.q]; return '<div class="row slide"><label for="ram_' + u.k + '">' + u.name + '</label><input type="range" id="ram_' + u.k + '" min="' + ramPos(u, L[0]) + '" max="' + ramPos(u, L[1]) + '" step="' + (u.log ? 'any' : u.st) + '" aria-label="' + u.name + '"><span id="ram_' + u.k + 'V"></span></div>'; }).join('') + '</div>';
 }
-function phxSync() { if ((PHX.rig > 0) !== PHYS) setPhys(PHX.rig > 0); phxShow(); }
 function phxShow() {
   var lv = phxLevel();
   [].forEach.call(document.querySelectorAll('#phxs button[data-x], #phxPre button'), function (b) { b.className = b.dataset.x === lv ? 'on' : ''; });
@@ -938,6 +956,7 @@ evOn('flow:menu', coverShow);                                               // �
 evOn('weather', function () { [].forEach.call(document.querySelectorAll('#wxs button'), function (b) { b.className = b.dataset.w === WX_ID ? 'on' : ''; }); });
 evOn('phys', function () { if ($('phxB')) phxShow(); }, 0, true);          // 物理開關（62_simview.js 那一個之後）
 evOn('pslow', function () { phxShow(); });                                  // 物理減速（73_slowmo.js pslowToggle）
+evOn('cfg:phx', phxShow);                                                   // 物理檔位改了（phxSync）
 $('repB').onclick = function () { errShow(null); };                         // 主選單「問題回報…」：手動回報（沒有錯誤訊息；01_gl.js errShow）
 sliders(); setPlay(PLAY); setWeather(WX_ID);
 [].forEach.call(document.querySelectorAll('#wxs button'), function (b) { b.onclick = function () { setWeather(b.dataset.w); if (SLIDERS_SHOW) SLIDERS_SHOW(); }; });   // 主選單：天氣（08_weather.js）

@@ -1942,7 +1942,7 @@ def act_layers(src=None):
 #   字找不到或不只一行 ⇒ 讀數停下來說哪一個（改 SHELL_UI，不要猜）。
 # 只是讀數、不擋建置（拆完才變閘門）。量法：頂層名字照作用域判（src/js_refs.cjs）；DOM 照字面掃 $('id')、getElementById('id')、querySelector(All)('…#id…')。
 SHELL_UI = {
-    '64_cfgkit.js': None,                                                      # 設定頁的共用框架（cfgSnap 之後搬進核心）
+    '64_cfgkit.js': None,                                                      # 設定頁的共用框架（cfgSnap／cfgSliders／cfgShown 已搬進 00_core.js，TASK-0774 第 2 步）
     '65_ask.js': None,                                                         # 確認彈窗（只有設定頁在用）
     '66_keys.js': [('function keyExport', None)],                              # 鍵位頁（鍵位資料在前面、留核心）
     '67_furncfg.js': [('function furnExport', None)],                          # 道具頁

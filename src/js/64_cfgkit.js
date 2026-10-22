@@ -2,7 +2,7 @@
 // 船隻配置（71_input.js）、砲（68_guncfg.js）、道具（67_furncfg.js）、鍵位（66_keys.js）四頁以前各寫一份：按兩下回到預設、全部回到預設（彈窗）、
 //   匯出（Blob 下載）、匯入（讀檔）、開發後台存出廠預設（postMessage）—— 同一件事四種寫法（6ac8d2d 的 gunReset 就是其中一種有病）。現在都走這裡：
 //   · cfgKit(p, o)：一頁的那一排按鈕（元素照前綴 p：pR 這一種回到預設、pRA 全部、pE 匯出、pI 匯入、pF 檔案、pSt 狀態列）；
-//   · cfgSliders／cfgSnap：照描述表（{ k, name, lim, step, int, note }）生滑桿、把值夾進範圍對齊刻度；
+//   · cfgSliders／cfgSnap／cfgShown：照描述表（{ k, name, lim, step, int, note }）生滑桿、把值夾進範圍對齊刻度 —— 在 00_core.js（核心的畫質頁、天氣也用；TASK-0774）；
 //   · cfgAdm：開發後台那一列（存成出廠預設、重建、回後台）。
 // 新增一頁設定 ⇒ 寫描述表＋cfgPage（照描述生整頁，按鈕也在裡面）；現有四頁的版面照舊寫在 template.html，只把按鈕接到 cfgKit。
 var CFG_GAME = 'ame_constitution_broadside';                              // 匯出檔的 game（改名前的代號；舊的匯出檔照樣讀得回來 ⇒ 不改）
@@ -51,22 +51,6 @@ function cfgKit(p, o) {
     r.readAsText(f);
   };
 }
-/** 描述表的一項 ⇒ 值夾進範圍、對齊刻度（整數取整）；lim 可以傳進來（砲的傷害範圍照砲種）。不是有限的數字 ⇒ undefined。 */
-function cfgSnap(it, v, lim) {
-  if (typeof v !== 'number' || !isFinite(v)) return undefined;
-  var L = lim || it.lim; v = clamp(v, L[0], L[1]);
-  return it.int ? Math.round(v) : +(Math.round(v / it.step) * it.step).toFixed(4);
-}
-/** 描述表 ⇒ 滑桿的 HTML：每一項一列（label、range、數字）＋說明；pre ＝ 元素前綴（gk-、fk-）；wrap(it, html) 可以再包一層（道具頁要照種類藏）。 */
-function cfgSliders(items, pre, wrap) {
-  return items.map(function (it) {
-    var h = '<div class="row slide"><label for="' + pre + it.k + '">' + it.name + '</label><input type="range" id="' + pre + it.k + '"' + (it.lim ? ' min="' + it.lim[0] + '" max="' + it.lim[1] + '"' : '') + ' step="' + it.step + '" aria-label="' + it.name + '"><span id="' + pre + it.k + 'V"></span></div>' +
-      '<div class="row note gkn">' + it.note + '</div>';
-    return wrap ? wrap(it, h) : h;
-  }).join('');
-}
-/** 值 ⇒ 字（跟預設不一樣 ⇒ 後面寫「改過；預設 …」）。 */
-function cfgShown(fmt, v, d) { return fmt(v) + (v === d ? '' : '（改過；預設 ' + fmt(d) + '）'); }
 /** 開發後台那一列（?admin=furn／keys／defaults）：頁面加 .admin、「存成出廠預設」走 save()、「重建」、「回設定後台」。
  *  ⛔ 成品裡不能有 fetch（vxk_inline.py：展品零外部依賴）⇒ 送給開這一頁的設定後台（window.opener，postMessage cb-admdef），它呼叫 admin.py、把結果送回來（cb-admdef-r）。
  *  o：panel（頁面元素 id）、out（訊息框 id）、from（後台那顆按鈕的名字，找不到後台時提示）、save: (post) => 自己組要送的東西、送完照結果改預設、
