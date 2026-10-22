@@ -8,11 +8,12 @@
 //   座標：世界 (x, z) ＝ 規劃 E(q) − (BED.ax, BED.az)、E(q) ＝ (ox ＋ kx·qx, oy ＋ qy)（63_towns.js townPrep）⇒ 反過來 q ＝ ((x ＋ ax − ox) ÷ kx, z ＋ az − oy)。
 // 失敗處置：沒有 host（直接開 Blockside）、沒給 ?town、那座城還沒到 ⇒ 開不了，說一聲；回覆裡的 why 照原樣顯示。
 var TWB = { on: false, town: Q.get('town') || null, cat: 'house', item: 'house', open: 0, seq: 0, wait: {}, mx: null, my: null, moved: false, q: null, side: 0,
-  tr: null, busy: false, again: false, start: null, gl: null, msg: '', msgT: 0, framed: false, ops: 0, last: 0 };   // open：0 沒開、1 開著中、2 好了；tr：最後一則試放／找路的回覆
+  tr: null, busy: false, again: false, start: null, gl: null, msg: '', msgT: 0, framed: false, auto: false, ops: 0, last: 0, ghost: null, rib: null };   // ghost：房子的預覽實例（63_towns.js townGhost）；rib：道路預覽的路面帶（GPU）   // open：0 沒開、1 開著中、2 好了；tr：最後一則試放／找路的回覆
 var TWB_CATS = [
   { k: 'road', name: '🛣 道路', items: [{ k: 'street', name: '街', sub: '寬 5 m' }, { k: 'lane', name: '小路', sub: '寬 2.5 m' }] },
   { k: 'house', name: '🏠 房屋', items: [{ k: 'house', name: '住宅', sub: '8 × 12（轉角 8 × 10）' }] }
 ];
+var TWB_ROAD_W = { street: 5, lane: 2.5 }, TWB_RIB_STEP = 2, TWB_RIB_LIFT = 0.3, TWB_RIB_A = 0.55;   // 道路預覽：路寬（同 Blocksail world/town.js ROAD_COST）、沿路每幾公尺取一次地面高度、離地多高、透明度
 var TWB_ROUTE_MS = 120;                                                  // 找路最多多久問一次（A* 在那一頁的 Worker 算；游標一直動也不會塞滿）
 function twbOk() { return modeRule('town') && BED && BED.host && TWB.town; }
 function twbTown() { var T = null; (TOWNS.list || []).forEach(function (t) { if (t.id === TWB.town) T = t; }); return T; }
@@ -27,6 +28,22 @@ function twbScreenOf(T, q) {
   return [r.left + (cx / cw + 1) / 2 * r.width, r.top + (1 - cy / cw) / 2 * r.height];
 }
 /** 畫面高度：整過地的地面（城外 ⇒ 海底／陸地），水面以下當水面（點海 ⇒ 落在水面上）。 */
+/** 測試用（__game.twbProbe）：規劃座標 q ⇒ 世界點、畫面地形（townRoadHeight：路面頂點建的時候讀的那一個）、那一區（63_towns.js T.gt）髒不髒、
+ *  畫出來的路面離這一點最近的頂點（讀 GPU 緩衝區；只看朝上的面）的高度與那個頂點位置現在的地形 ⇒ 路面有沒有沉到地形底下。 */
+function twbProbe(q) {
+  var T = twbTown(); if (!T || !BED || !BED.A) return null;
+  var w = twbToWorld(T, q), x = w[0], z = w[1], S = TOWN_GT_SZ, k = Math.floor((x + BED.ax) / S) + '_' + Math.floor((z + BED.az) / S), Q = T.gt && T.gt[k];
+  var o = { w: [+x.toFixed(2), +z.toFixed(2)], terr: +townRoadHeight(x, z).toFixed(3), lift: TOWN_ROAD_LIFT, tile: Q ? { k: k, dirty: Q.dirty, built: !!Q.g } : null, vb: null };
+  var CS = BED.A.chunk, qc = bedCell(x, z), DC = bedShowC(Math.floor((x + BED.ax) / CS) + '_' + Math.floor((z + BED.az) / CS));   // 畫的那一塊 vs 模擬照等級讀的那一塊（63_towns.js townCell）
+  o.cell = { drawn: DC ? DC.step : null, sim: qc ? qc.C.step : null };
+  if (Q && Q.g) {
+    gl.bindBuffer(gl.ARRAY_BUFFER, Q.g.vb);
+    var V = new Float32Array(gl.getBufferParameter(gl.ARRAY_BUFFER, gl.BUFFER_SIZE) / 4), bd = 1e9, bi = -1; gl.getBufferSubData(gl.ARRAY_BUFFER, 0, V);
+    for (var i = 0; i < V.length; i += 9) { var d = Math.hypot(V[i] - x, V[i + 2] - z); if (V[i + 4] > 0.5 && d < bd) { bd = d; bi = i; } }
+    if (bi >= 0) o.vb = { y: +V[bi + 1].toFixed(3), d: +bd.toFixed(2), terr: +townRoadHeight(V[bi], V[bi + 2]).toFixed(3) };
+  }
+  return o;
+}
 function twbHeight(x, z) { var h = townGround(x, z); if (!(h === h)) h = bedHgt(x, z); return Math.max(h, 0); }
 /** 螢幕 (cx, cy) ⇒ 地面上的世界點 [x, y, z]（射線從眼睛往外每 2 m 一步、碰到地面再二分 12 次；3 km 內沒碰到 ⇒ null）。同 71_input.js inPick 的反投影。 */
 function twbGround(cx, cy) {
@@ -100,7 +117,8 @@ function twbTap(x, y, btn) {
   TWB.tr = null;
   return true;
 }
-/** 鍵：B 開關、Esc 取消起點／離開、R 換路的哪一側（自動 → 右 → 左）、U 或 Ctrl+Z 復原、1～3 選。 */
+/** 鍵：B 開關選單、Esc 取消起點／收起選單、R 換路的哪一側（自動 → 右 → 左）、Z 或 Ctrl+Z 復原、1～3 選。
+ *  ⛔ 復原不用 U：U 是 🌍 回到地球儀（66_keys.js hostBack）—— 選單預設開著 ⇒ U 給復原吃掉就永遠回不了地球儀。 */
 function twbKey(k, down, e) {
   if (!modeRule('town')) return false;
   var lk = k.length === 1 ? k.toLowerCase() : k;
@@ -109,7 +127,7 @@ function twbKey(k, down, e) {
   if (!down) return true;
   if (lk === 'Escape') { if (TWB.start) { TWB.start = null; TWB.tr = null; } else twbToggle(false); return true; }
   if (lk === 'r') { TWB.side = TWB.side === 0 ? 1 : TWB.side === 1 ? -1 : 0; TWB.moved = true; TWB.tr = null; twbMsg('貼路的哪一側：' + (TWB.side === 0 ? '跟著游標' : TWB.side > 0 ? '右側' : '左側')); return true; }
-  if (lk === 'u' || (lk === 'z' && (e.ctrlKey || e.metaKey))) { twbUndo(); return true; }
+  if (lk === 'z') { twbUndo(); return true; }
   if (lk === '1') { twbPick('road', 'street'); return true; }
   if (lk === '2') { twbPick('road', 'lane'); return true; }
   if (lk === '3') { twbPick('house', 'house'); return true; }
@@ -124,7 +142,8 @@ function twbFrame() {
     var c = T.cen || [T.ox, T.oy], x = c[0] - BED.ax, z = c[1] - BED.az;
     camSet({ mode: 0, follow: null, pan: [0, 0], tgt: [x, Math.max(0, twbHeight(x, z)), z], dist: 300, pitch: 0.95 });
   }
-  if (!TWB.on) { if (TWB.gl && TWB.gl.n) TWB.gl = upload(TWB.gl, new Float32Array(0), 6, [[0, 3, 0], [2, 3, 3]]); return; }
+  if (!TWB.auto && T && twbOk() && RUNNING && !CAM.tr) { TWB.auto = true; twbToggle(true); }   // 城鎮模式預設開著建築選單（Tim 2026-10-22「建築模式預設就開啟建築選單」）：城到了、轉場降完就開一次；之後收起來照使用者的
+  if (!TWB.on) { if (TWB.gl && TWB.gl.n) TWB.gl = upload(TWB.gl, new Float32Array(0), 6, [[0, 3, 0], [2, 3, 3]]); TWB.ghost = null; return; }
   if (TWB.moved && TWB.mx != null && T) {
     TWB.moved = false;
     var g = twbGround(TWB.mx, TWB.my);
@@ -155,6 +174,53 @@ function twbLines(T) {
     }
   }
   TWB.gl = upload(TWB.gl, new Float32Array(L), 6, [[0, 3, 0], [2, 3, 3]]);
+  // 半透明預覽（Tim 2026-10-22「城鎮建造是否可以加上預覽(道路&建築 在Hover狀態下顯示半透明預覽)」）：
+  //   房子 ⇒ 試放的那一塊照蓋上去的那一份（id：空建地照原 id、路邊照 townBuild 的 'b' ＋ (nextBuild ＋ 1)）挑同一棟模型；道路 ⇒ 路線照路寬鋪一條貼地的路面帶
+  var tr2 = TWB.tr; TWB.ghost = null; var RB = [];
+  if (T && TWB.cat === 'house' && tr2 && !tr2.road && tr2.at) {        // h：地塊頂（Blocksail mapgen_worker.js try 回的；舊的地球儀沒回 ⇒ 地塊中心的地面）
+    var cw = twbToWorld(T, tr2.at), h2 = tr2.h != null ? tr2.h : twbHeight(cw[0], cw[1]);
+    TWB.ghost = townGhost(T, { id: tr2.lot || 'b' + ((T.p.nextBuild || 0) + 1), use: TWB.item, at: tr2.at, rot: tr2.rot, w: tr2.w, d: tr2.d, h: h2 }, !!tr2.ok);
+  }
+  if (T && TWB.cat === 'road' && TWB.start && tr2 && tr2.road && tr2.path && tr2.path.length > 1) {
+    var hw = (TWB_ROAD_W[TWB.item] || TWB_ROAD_W.street) / 2, cc = tr2.ok ? [0.78, 0.74, 0.62] : [0.95, 0.32, 0.26], S2 = [];
+    for (var a = 1; a < tr2.path.length; a++) {                         // 沿路每 TWB_RIB_STEP 公尺一點（世界座標），每點的地面高度各取一次
+      var p0 = twbToWorld(T, tr2.path[a - 1]), p1 = twbToWorld(T, tr2.path[a]), n = Math.max(1, Math.ceil(Math.hypot(p1[0] - p0[0], p1[1] - p0[1]) / TWB_RIB_STEP));
+      for (var b = a === 1 ? 0 : 1; b <= n; b++) S2.push([p0[0] + (p1[0] - p0[0]) * b / n, p0[1] + (p1[1] - p0[1]) * b / n]);
+    }
+    // 高度：左、中、右三點各取一次，照畫面地形的三角形（63_towns.js townRoadHeight，同地形網格的對角線）—— ⛔ 一點一個高度（雙線性、整條橫斷面同高）
+    //   ⇒ 橫坡上那一邊、雙線性比三角形低的地方整片埋進地形（2026-10-23 量：深度測試開著一點都看不到、關掉才出現）
+    function rh(x, z) { var h = townRoadHeight(x, z); if (!(h === h)) h = twbHeight(x, z); return Math.max(h, 0) + TWB_RIB_LIFT; }
+    var E2 = S2.map(function (q, k) {                                    // 每點往兩側：照前後兩點的方向
+      var A = S2[Math.max(0, k - 1)], B = S2[Math.min(S2.length - 1, k + 1)], dx = B[0] - A[0], dz = B[1] - A[1], L2 = Math.hypot(dx, dz) || 1;
+      var lx = q[0] - dz / L2 * hw, lz = q[1] + dx / L2 * hw, rx = q[0] + dz / L2 * hw, rz = q[1] - dx / L2 * hw;
+      return [lx, rh(lx, lz), lz, q[0], rh(q[0], q[1]), q[1], rx, rh(rx, rz), rz];
+    });
+    var v = function (e, o) { RB.push(e[o], e[o + 1], e[o + 2], cc[0], cc[1], cc[2]); };
+    for (var k = 1; k < E2.length; k++) {                                // 每段兩條：左～中、中～右
+      var e0 = E2[k - 1], e1 = E2[k];
+      v(e0, 0); v(e0, 3); v(e1, 3); v(e0, 0); v(e1, 3); v(e1, 0);
+      v(e0, 3); v(e0, 6); v(e1, 6); v(e0, 3); v(e1, 6); v(e1, 3);
+    }
+  }
+  TWB.rib = upload(TWB.rib, new Float32Array(RB), 6, [[0, 3, 0], [2, 3, 3]]);
+}
+/** 畫建築模式的預覽（60_render.js mainOpaque 最後：地形、樹、城之後）：房子的半透明實例、道路的半透明路面帶（都照深度：被前面的房子、山擋住）、線框（不看深度、穿地看得到）。
+ *  ⛔ 要在地形、樹、城之後畫：關了深度測試的線不寫深度 ⇒ 畫在前面會被後畫的陸地整片蓋掉（2026-10-22 第一版放在船那一段後面，量到預覽框周圍 0 個綠像素）。 */
+function twbDraw() {
+  if (!TWB.on) return;
+  if (TWB.ghost) townGhostDraw(TWB.ghost);
+  var hasRib = TWB.rib && TWB.rib.n, hasLine = TWB.gl && TWB.gl.n; if (!hasRib && !hasLine) return;
+  gl.useProgram(P.tri.prog); setCommon(P.tri); gl.uniform1f(P.tri.u.uLit, 0); gl.uniform1f(P.tri.u.uGlow, 0); gl.vertexAttrib3f(1, 0, 1, 0); gl.vertexAttrib3f(3, 0, 0, 0);
+  cutSet(P.tri, null); gl.uniformMatrix4fv(P.tri.u.uModel, false, CS_ID || (CS_ID = M4.ident()));
+  if (hasRib) {
+    var cf = gl.isEnabled(gl.CULL_FACE), bs = [gl.BLEND_SRC_RGB, gl.BLEND_DST_RGB, gl.BLEND_SRC_ALPHA, gl.BLEND_DST_ALPHA].map(function (k) { return gl.getParameter(k); });
+    gl.disable(gl.CULL_FACE); gl.depthMask(false); gl.enable(gl.BLEND); gl.blendColor(0, 0, 0, TWB_RIB_A); gl.blendFunc(gl.CONSTANT_ALPHA, gl.ONE_MINUS_CONSTANT_ALPHA);
+    gl.enable(gl.POLYGON_OFFSET_FILL); gl.polygonOffset(-1, -4);         // 貼地往鏡頭推一點（同 63_towns.js 地面的帶子）
+    gl.bindVertexArray(TWB.rib.vao); gl.drawArrays(gl.TRIANGLES, 0, TWB.rib.n);
+    gl.disable(gl.POLYGON_OFFSET_FILL); gl.disable(gl.BLEND); gl.blendFuncSeparate(bs[0], bs[1], bs[2], bs[3]); gl.depthMask(true); if (cf) gl.enable(gl.CULL_FACE);
+  }
+  if (hasLine) { gl.disable(gl.DEPTH_TEST); gl.bindVertexArray(TWB.gl.vao); gl.drawArrays(gl.LINES, 0, TWB.gl.n); gl.enable(gl.DEPTH_TEST); }
+  gl.bindVertexArray(null);
 }
 /** 上面那一行：剛做完的訊息留 3 秒；不然照試放／找路的回覆。 */
 function twbInfo() {
@@ -167,21 +233,20 @@ function twbInfo() {
   else s = !TWB.q ? '游標移到路邊或空建地上' : !tr || tr.road ? '試放…' : tr.ok ? (tr.lot ? '空建地 ' + tr.lot : '路邊 ' + tr.w.toFixed(0) + ' × ' + tr.d + ' m') + ' —— 點一下蓋' + (TWB.side ? '（' + (TWB.side > 0 ? '右' : '左') + '側）' : '') : '蓋不了：' + (tr.why || ['?'])[0];
   if (el.textContent !== s) el.textContent = s;
 }
-/** 介面：分類分頁＋項目＋復原、離開（#twbToPlan，#stage.twb 才顯示）；🔨 那一顆只在城鎮模式（#stage.townMode）。 */
+/** 介面：分類分頁＋項目＋復原、收起（#twbP，#stage.twb 才顯示）；🔨 那一顆只在城鎮模式、選單收起來時（61_layout.js 的 town 配置）。 */
 function twbUI() {
   var P = $('twbP'); if (!P) return;
   var h = '<div id="twbTabs">' + TWB_CATS.map(function (c) { return '<button type="button" data-c="' + c.k + '"' + (c.k === TWB.cat ? ' class="on"' : '') + '>' + c.name + '</button>'; }).join('') + '</div><div id="twbItems">';
   TWB_CATS.forEach(function (c, ci) { if (c.k !== TWB.cat) return; c.items.forEach(function (it, ii) { var n = ci === 0 ? ii + 1 : 3; h += '<button type="button" class="bcard' + (it.k === TWB.item ? ' on' : '') + '" data-c="' + c.k + '" data-i="' + it.k + '"><b>' + it.name + '</b><small>' + it.sub + '（' + n + '）</small></button>'; }); });
-  h += '</div><div id="twbOps"><button type="button" id="twbUndo">↶ 復原（U）</button><button type="button" id="twbX">✕ 離開（B）</button></div>';
+  h += '</div><div id="twbOps"><button type="button" id="twbUndo">↶ 復原（Z）</button><button type="button" id="twbX">▾ 收起（B）</button></div>';
   P.innerHTML = h;
   P.querySelectorAll('#twbTabs button').forEach(function (b) { b.onclick = function () { var c = TWB_CATS.filter(function (x) { return x.k === b.dataset.c; })[0]; twbPick(c.k, c.items[0].k); }; });
   P.querySelectorAll('#twbItems button').forEach(function (b) { b.onclick = function () { twbPick(b.dataset.c, b.dataset.i); }; });
   $('twbUndo').onclick = twbUndo; $('twbX').onclick = function () { twbToggle(false); };
 }
-// 城鎮模式（04_modes.js town）：🔨 鈕、開局的 class
+// 城鎮模式（04_modes.js town）：🔨 鈕（看不看得見照 61_layout.js 的 town 配置）
 (function () {
   if (!modeRule('town')) return;
-  $('stage').classList.add('townMode');
   var k = $('twbK'); if (k) k.onclick = function () { twbToggle(); };
   twbUI();
 })();
