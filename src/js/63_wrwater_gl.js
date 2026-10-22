@@ -233,7 +233,8 @@ function wrwMesh(sh) {
       quads++;
     }
   }
-  if (FLX3 || CUTV.half) wrwSides(sh, me, cv); else me.sn = 0;           // 水的側面：只在透視、剖面畫（平常被牆擋住，⛔ 畫了會跟牆搶深度）
+  if (FLX3 && WRV_ON) { me.sn = 0; wrvCols(sh, me, cv); }                 // 透視 ⇒ 畫成一團水（體積，wrvDraw）：水面、側面都不畫
+  else if (FLX3 || CUTV.half) wrwSides(sh, me, cv); else me.sn = 0;      // 水的側面：只在透視、剖面畫（平常被牆擋住，⛔ 畫了會跟牆搶深度）
   gl.bindVertexArray(me.vao); gl.bindBuffer(gl.ARRAY_BUFFER, me.vb);
   if (q * WRW_ST > me.cap) {
     me.cap = me.buf.length; gl.bufferData(gl.ARRAY_BUFFER, me.cap * 4, gl.DYNAMIC_DRAW);
@@ -309,4 +310,103 @@ function wrwSides(sh, me, cv) {
   if (sq) gl.bufferSubData(gl.ARRAY_BUFFER, 0, SB, 0, sq * 7);
   gl.bindVertexArray(null);
   me.sn = sq;
+}
+// ── 透視的水：體積（Tim 2026-10-22：「是否可以改用 light scattering 算法去顯示透視水體 把水體空間當灰塵」「根據穿透量顯示不同深淺的藍色」）──
+//   只在透視（FLX3）：水面片、側面片都不畫，改成一團會吸光、會散射的介質（participating media）——
+//   每個像素沿視線在「有水的那幾欄」的包圍盒裡走固定步數，累加視線在水裡走了幾公尺 L；Beer–Lambert 穿透率 T ＝ e^(−WRV_SIG·L)，
+//   顏色 ＝ 背景·T ＋ (1 − T)·水的藍（L 越長越深；朝太陽那一側加一點前向散射，Henyey–Greenstein g ＝ 0.55）⇒ 薄的地方淡、厚的地方深藍。
+//   密度從哪來（⛔ 不重做 3D 網格）：
+//   · 一型船一張 3D 整數貼圖（wrvVol，T.wrvV；寬 NCX × 高 NCY × 深 zTop：一欄 WR_C 格見方、一層 0.1 m）：每一格記「屬於哪一欄、這一層這一欄有幾格空氣」，一格最多兩欄（牆在欄中間 ⇒ 兩間）。只看烘焙、不看水 ⇒ 算一次。
+//   · 每一次重做（wrwMesh，WRW_MS）一張小表（wrvCols，me.wv；每欄兩格 RGBA32F）：這一欄乾／有水面／灌滿、離那一間平均水面多高 d（起點、終點）、那一間的錨點與錨點水面的船上 z（起點、終點）。
+//   · 著色器每一步照船現在的姿態（uModel）算那一欄的水面（同 WRW_VS 的錨點算法）⇒ 水跟著船走、水面跟地球水平；兩次重做之間照 uMix 內插（同水面）。
+//   ?wrvol=0 ⇒ 透視照舊畫水面＋側面（前後對照；__game.wrwater(0, { vol: 0／1 }) 當場切）。只動畫面：不讀亂數、不改水量。
+var WRV_ON = Q.get('wrvol') !== '0', WRV_SIG = 1.4, WRV_N = 96, WRV_TW = 2048, WRV_BOX = null;
+var WRV_VS = '#version 300 es\nlayout(location=0) in vec3 aP; uniform mat4 uModel,uVP; uniform vec3 uB0,uB1; out vec3 vL; out vec3 vW;\n' +
+  'void main(){ vL=mix(uB0,uB1,aP); vec4 w=uModel*vec4(vL,1.0); vW=w.xyz; gl_Position=uVP*w; }\n';
+var WRV_FS = '#version 300 es\nprecision highp float; precision highp int; in vec3 vL; in vec3 vW; uniform highp usampler3D uVol; uniform highp sampler2D uCol;\n' +
+  'uniform mat4 uModel; uniform vec3 uEyeL,uB0,uB1,uO,uEye,uSun,uFog; uniform ivec3 uDim; uniform float uMix,uVox,uFogD,uLit,uSig; out vec4 o;\n' +
+  'vec2 wrvW(uint v,vec3 p){ if(v==0u) return vec2(0.0); int q=2*(int(v>>5u)-1); float a=float(v&31u)/(uO.z*uO.z);\n' +   // 這一欄在 p 那一點：x ＝ 有幾成是水（乾 0、灌滿 ＝ 空氣的比例、有水面 ⇒ 水面以下，±半格淡進）、y ＝ 離水面多近（±1.5 格內，水面的亮線用）
+  ' vec4 A=texelFetch(uCol,ivec2(q&' + (WRV_TW - 1) + ',q/' + WRV_TW + '),0); if(A.z<0.5) return vec2(0.0); if(A.z>1.5) return vec2(a,0.0);\n' +
+  ' vec4 B=texelFetch(uCol,ivec2((q+1)&' + (WRV_TW - 1) + ',(q+1)/' + WRV_TW + '),0); float zs=mix(B.z,B.w,uMix)+(mix(A.x,A.y,uMix)+uModel[0][1]*(B.x-p.x)+uModel[1][1]*(B.y-p.y))/uModel[2][1];\n' +
+  ' return a*vec2(clamp(zs-p.z+0.5,0.0,1.0),max(1.0-abs(zs-p.z)/1.5,0.0)); }\n' +
+  'void main(){ vec3 rd=vL-uEyeL; float tf=length(rd); rd/=tf; vec3 iv=vec3(rd.x<0.0?-1.0:1.0,rd.y<0.0?-1.0:1.0,rd.z<0.0?-1.0:1.0)/max(abs(rd),vec3(1e-6));\n' +
+  ' vec3 ta=(uB0-uEyeL)*iv, tb=(uB1-uEyeL)*iv, tn=min(ta,tb), tx=max(ta,tb); float t0=max(max(max(tn.x,tn.y),tn.z),0.0), t1=min(min(tx.x,tx.y),tx.z);\n' +
+  ' if(t1<=t0||tf<t1*0.999-0.01) discard;\n' +                                                            // 只照盒子的背面那一片算（⛔ 不靠剔除：船的矩陣把 y、z 對調 ⇒ 正反面跟著翻）；鏡頭在盒子裡也對
+  ' int n=int(min(' + WRV_N + '.0,ceil((t1-t0)/0.8))); float dt=(t1-t0)/float(n), jt=fract(52.9829189*fract(dot(gl_FragCoord.xy,vec2(0.06711056,0.00583715)))), acc=0.0, sh=0.0;\n' +   // 步距最細 0.8 格；起點照像素錯開（交錯梯度雜訊）⇒ 沒有一圈一圈的紋
+  ' for(int i=0;i<' + WRV_N + ';i++){ if(i>=n) break; vec3 p=uEyeL+rd*(t0+dt*(float(i)+jt)); vec2 h=fract(vec2(jt,jt*1.618)+float(i)*vec2(0.7548777,0.5698403))-0.5;\n' +   // 查哪一欄：水平再錯開 ±半欄（每一步不同）⇒ 0.5 m 一欄的邊變柔、不是一階一階
+  '  ivec3 c=ivec3(floor((p.x-uO.x)/uO.z+h.x),floor((p.y-uO.y)/uO.z+h.y),floor(p.z)); if(any(lessThan(c,ivec3(0)))||any(greaterThanEqual(c,uDim))) continue;\n' +
+  '  uvec2 v=texelFetch(uVol,c,0).rg; if(v.x==0u) continue; vec2 w=wrvW(v.x,p)+wrvW(v.y,p); if(w.y>0.0) sh+=w.y*dt*exp(-uSig*acc*uVox); acc+=w.x*dt; }\n' +   // sh：擦過水面那一帶的長度（照前面的水吸掉多少打折）
+  ' float L=acc*uVox, a=1.0-exp(-uSig*L); if(a<0.003) discard; float k=1.0-exp(-0.25*L);\n' +             // L：視線在水裡走了幾公尺；k：越厚越深的藍
+  ' vec3 rw=normalize(vW-uEye); float g=0.55, ph=(1.0-g*g)/pow(1.0+g*g-2.0*g*dot(rw,uSun),1.5);\n' +       // Henyey–Greenstein：看向太陽那一側亮一點
+  ' vec3 c=mix(vec3(0.4,0.75,1.0),vec3(0.01,0.1,0.35),k)*(0.72+0.28*uLit)+vec3(1.0,0.95,0.85)*0.07*ph*uLit*(1.0-0.6*k);\n' +
+  ' c=mix(c,vec3(0.75,0.88,0.95)*(0.75+0.25*uLit),0.35*(1.0-exp(-0.08*sh)));\n' +                       // 水面的亮線：從側面平平看過去最亮、從上面看只淡淡一層
+  ' o=vec4(mix(c,uFog,1.0-exp(-length(vW-uEye)*uFogD)),a); }\n';
+/** 一型船的 3D 貼圖（RG32UI）：每一格 ＝ 最多兩個 (欄號 ＋ 1) × 32 ＋ 這一層這一欄有幾格空氣（多的排前面）。太大（超過 MAX_3D_TEXTURE_SIZE）⇒ null（照舊畫水面）。 */
+function wrvVol(T) {
+  if (T.wrvV !== undefined) return T.wrvV;
+  var W = T.wrm, n = W.colRoom.length, NX = W.NCX, NY = W.NCY, NZ = W.zTop, mx = gl.getParameter(gl.MAX_3D_TEXTURE_SIZE);
+  if (NX > mx || NY > mx || NZ > mx || n >= 1 << 26) return (T.wrvV = null);
+  var D = new Uint32Array(NX * NY * NZ * 2);
+  for (var j = 0; j < n; j++) for (var d = 0; d < W.colNZ[j]; d++) {
+    var c = W.cnt[W.colOff[j] + d]; if (!c) continue;
+    var i = (((W.colZ0[j] + d) * NY + W.colCY[j]) * NX + W.colCX[j]) * 2, v = (j + 1) * 32 + c;
+    if (c > (D[i] & 31)) { D[i + 1] = D[i]; D[i] = v; } else if (c > (D[i + 1] & 31)) D[i + 1] = v;
+  }
+  var t = gl.createTexture(); gl.activeTexture(gl.TEXTURE15); gl.bindTexture(gl.TEXTURE_3D, t); gl.pixelStorei(gl.UNPACK_ALIGNMENT, 4);   // 第 15、16 號：別人沒用的單元（⛔ 綁在當下的單元 ⇒ 蓋掉別人留著的貼圖）
+  gl.texImage3D(gl.TEXTURE_3D, 0, gl.RG32UI, NX, NY, NZ, 0, gl.RG_INTEGER, gl.UNSIGNED_INT, D);
+  [gl.TEXTURE_MIN_FILTER, gl.TEXTURE_MAG_FILTER].forEach(function (p) { gl.texParameteri(gl.TEXTURE_3D, p, gl.NEAREST); });
+  [gl.TEXTURE_WRAP_S, gl.TEXTURE_WRAP_T, gl.TEXTURE_WRAP_R].forEach(function (p) { gl.texParameteri(gl.TEXTURE_3D, p, gl.CLAMP_TO_EDGE); });
+  gl.bindTexture(gl.TEXTURE_3D, null);
+  return (T.wrvV = { tex: t, nx: NX, ny: NY, nz: NZ, x0: W.x0, y0: W.ylo, c: W.c, mb: +(D.length * 4 / 1048576).toFixed(2) });
+}
+/** 每一次重做（wrwMesh）：每欄的水（me.wv 小表）＋ 有水的欄的包圍盒（格座標，b0／b1）。角 cv 存的是 d ⇒ 欄中心 ＝ 四個角平均。 */
+function wrvCols(sh, me, cv) {
+  var T = sh.T, W = T.wrm, X = wrxOf(T), C = W.c, n = W.colRoom.length, NCX1 = W.NCX + 1, NCC = NCX1 * (W.NCY + 1), AN = wrwAnchors(T), CZ = me.cz, u = me.u, V = wrvVol(T);
+  if (!V) { me.wv = null; return; }
+  var rows = Math.ceil(2 * n / WRV_TW), wv = me.wv || (me.wv = { tex: null, buf: new Float32Array(WRV_TW * rows * 4), rows: rows, b0: new Float32Array(3), b1: new Float32Array(3) });
+  var B = wv.buf, lo = [1e9, 1e9, 1e9], hi = [-1e9, -1e9, -1e9], wet = 0, full = 0;
+  B.fill(0);
+  for (var j = 0; j < n; j++) {
+    if (!(u[j] > 0)) continue;
+    var r = W.colRoom[j], o = 8 * j, cz0 = CZ[2 * r], cz1 = CZ[2 * r + 1];
+    if (u[j] >= wrColCap(W, X, j)) { B[o + 2] = 2; full++; }
+    else {
+      var b = r * NCC + W.colCY[j] * NCX1 + W.colCX[j], K = [b, b + 1, b + NCX1, b + NCX1 + 1], s0 = 0, s1 = 0, a;
+      for (a = 0; a < 4; a++) { var e = cv.get(K[a]); if (!e) break; s0 += e[0]; s1 += e[1]; }
+      if (a < 4 || !(cz1 === cz1)) continue;                                // 那一間沒有水面（量不到 1 單位、還沒算到）⇒ 當乾的
+      B[o] = s0 / 4; B[o + 1] = s1 / 4; B[o + 2] = 1;
+      B[o + 4] = AN[2 * r]; B[o + 5] = AN[2 * r + 1]; B[o + 6] = cz0 === cz0 ? cz0 : cz1; B[o + 7] = cz1;
+    }
+    wet++;
+    var x0 = W.x0 + W.colCX[j] * C, y0 = W.ylo + W.colCY[j] * C;
+    lo[0] = Math.min(lo[0], x0); hi[0] = Math.max(hi[0], x0 + C); lo[1] = Math.min(lo[1], y0); hi[1] = Math.max(hi[1], y0 + C);
+    lo[2] = Math.min(lo[2], W.colZ0[j]); hi[2] = Math.max(hi[2], W.colZ0[j] + W.colNZ[j]);
+  }
+  for (var q = 0; q < 3; q++) { wv.b0[q] = lo[q] - 0.5; wv.b1[q] = hi[q] + 0.5; }
+  gl.activeTexture(gl.TEXTURE16);
+  if (!wv.tex) {
+    wv.tex = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, wv.tex);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA32F, WRV_TW, rows, 0, gl.RGBA, gl.FLOAT, B);
+    [gl.TEXTURE_MIN_FILTER, gl.TEXTURE_MAG_FILTER].forEach(function (p) { gl.texParameteri(gl.TEXTURE_2D, p, gl.NEAREST); });
+    [gl.TEXTURE_WRAP_S, gl.TEXTURE_WRAP_T].forEach(function (p) { gl.texParameteri(gl.TEXTURE_2D, p, gl.CLAMP_TO_EDGE); });
+  } else { gl.bindTexture(gl.TEXTURE_2D, wv.tex); gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, WRV_TW, rows, gl.RGBA, gl.FLOAT, B); }
+  gl.bindTexture(gl.TEXTURE_2D, null);
+  wv.tw = me.tw; wv.wet = wet; wv.full = full;
+}
+/** 這一格畫面畫不畫體積：透視開著、這一次重做有做小表（剛按 X ⇒ 下一次重做之前照舊畫水面）。 */
+function wrvOn(sh, me) { return FLX3 && WRV_ON && !!me.wv && me.wv.tw === me.tw && me.wv.wet > 0 && !!sh.T.wrvV; }
+/** 畫一艘的體積水（flDraw；著色器已經 use、共用的 uniform 已經設好）：盒子 36 個頂點，背面那一片算整條視線。 */
+function wrvDraw(p, sh, me) {
+  if (!WRV_BOX) {
+    var F = [[0, 1, 2, 3], [4, 5, 6, 7], [0, 1, 4, 5], [2, 3, 6, 7], [0, 2, 4, 6], [1, 3, 5, 7]], Bx = [];   // 角 k ＝ (k&1, k>>1&1, k>>2&1)；每面兩個三角形
+    F.forEach(function (f) { [f[0], f[1], f[3], f[0], f[3], f[2]].forEach(function (k) { Bx.push(k & 1, (k >> 1) & 1, (k >> 2) & 1); }); });
+    WRV_BOX = gl.createVertexArray(); var vb = gl.createBuffer(); gl.bindVertexArray(WRV_BOX); gl.bindBuffer(gl.ARRAY_BUFFER, vb);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(Bx), gl.STATIC_DRAW); gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 12, 0);
+  }
+  var V = sh.T.wrvV, wv = me.wv, E = PASS.eye || CAM.eye, eL = M4.pt(M4.inv(sh.M), E[0], E[1], E[2]);
+  gl.uniformMatrix4fv(p.u.uModel, false, sh.M); gl.uniform3f(p.u.uEyeL, eL[0], eL[1], eL[2]); gl.uniform3fv(p.u.uB0, wv.b0); gl.uniform3fv(p.u.uB1, wv.b1);
+  gl.uniform3f(p.u.uO, V.x0, V.y0, V.c); gl.uniform3i(p.u.uDim, V.nx, V.ny, V.nz); gl.uniform1f(p.u.uMix, wrwMix(me));
+  gl.activeTexture(gl.TEXTURE15); gl.bindTexture(gl.TEXTURE_3D, V.tex); gl.uniform1i(p.u.uVol, 15);
+  gl.activeTexture(gl.TEXTURE16); gl.bindTexture(gl.TEXTURE_2D, wv.tex); gl.uniform1i(p.u.uCol, 16);
+  gl.bindVertexArray(WRV_BOX); gl.drawArrays(gl.TRIANGLES, 0, 36);
 }

@@ -273,7 +273,7 @@ function bedFocus(fx, fz, first) {
   if (!first && cx === BED.cx && cy === BED.cy) return null;
   BED.cx = cx; BED.cy = cy;
   var R = bedRingN(BED_CFG.ring) + bedRingN(BED_CFG.prefetch), ps = [];
-  if (BED.mid) return bedFocusMid(cx, cy, R);
+  if (BED.mid) return bedFocusMid(cx, cy, R, fx, fz);
   for (var j = cy - R; j <= cy + R; j++) for (var i = cx - R; i <= cx + R; i++) ps.push(bedLoad(i, j));
   var keep = bedNear();
   Object.keys(BED.ch).forEach(function (k) {
@@ -282,16 +282,26 @@ function bedFocus(fx, fz, first) {
   });
   return Promise.all(ps);
 }
-/** 外圈用中等塊（BED.mid）時的換中心：先要「這一步模擬要讀的」—— 在用的 ring 圈原精度、外面到 R 圈中等塊（回傳等它們的 Promise）；
- *  再背景預載 —— 外圈的原精度（焦點走過去就變成在用的）、再外一圈的中等塊（焦點走過去就變成外圈）。每一種都從中心往外排。
+/** 開場要等的（也是模擬每一步要讀的）那幾塊：焦點最近的塊角 ± m 公尺 ⇒ [x0, x1, y0, y1]（塊號）。
+ *  Tim 2026-10-22「開場要等的塊 可以縮小範圍 先試看看改成36」：原精度 ± BED_NEED_FULL、中等塊 ± BED_NEED_MID ⇒ 512 m 的塊 2×2＋6×6 ＝ 36 塊（以前照 ring 圈：原精度 5×5、中等塊到 9×9 ＝ 81 塊）。
+ *  焦點離塊角最多半塊 ⇒ 原精度至少還有半塊（256 m）、中等塊至少 1,280 m；外面照舊背景預載到 ring＋prefetch 圈。 */
+var BED_NEED_FULL = 512, BED_NEED_MID = 1536;
+function bedNeedBox(fx, fz, m) {
+  var A = BED.A, gx = Math.round((fx + BED.ax) / A.chunk), gy = Math.round((fz + BED.az) / A.chunk), h = Math.max(1, Math.ceil(m / A.chunk));
+  return [gx - h, gx + h - 1, gy - h, gy + h - 1];
+}
+function bedInBox(b, i, j) { return i >= b[0] && i <= b[1] && j >= b[2] && j <= b[3]; }
+/** 外圈用中等塊（BED.mid）時的換中心：先要「這一步模擬要讀的」—— bedNeedBox 的原精度、中等塊（回傳等它們的 Promise；原精度先、同一種裡鏡頭看得到的先 ——
+ *  Tim 2026-10-22「進入航行時優先載入視野範圍部分」）；再背景預載 —— R 圈內的原精度（焦點走過去就變成在用的）、再外一圈的中等塊。
  *  丟：原精度超出 R 圈、中等塊超出 R＋X 圈（X ＝ 1024 m 換成的塊數；都不在任何船旁邊）。 */
-function bedFocusMid(cx, cy, R) {
-  var r = bedRingN(BED_CFG.ring), X = bedRingN(1), L = [];
-  for (var j = cy - R - X; j <= cy + R + X; j++) for (var i = cx - R - X; i <= cx + R + X; i++) L.push([i, j, Math.max(Math.abs(i - cx), Math.abs(j - cy)), Math.hypot(i - cx, j - cy) * bedViewK(i, j)]);   // 同一圈裡鏡頭看得到的先
-  L.sort(function (a, b) { return a[2] - b[2] || a[3] - b[3] || a[1] - b[1] || a[0] - b[0]; });
+function bedFocusMid(cx, cy, R, fx, fz) {
+  var X = bedRingN(1), L = [], Fb = bedNeedBox(fx, fz, BED_NEED_FULL), Mb = bedNeedBox(fx, fz, BED_NEED_MID);
+  for (var j = cy - R - X; j <= cy + R + X; j++) for (var i = cx - R - X; i <= cx + R + X; i++)
+    L.push([i, j, Math.max(Math.abs(i - cx), Math.abs(j - cy)), Math.hypot(i - cx, j - cy) * bedViewK(i, j), bedInBox(Fb, i, j) ? 0 : bedInBox(Mb, i, j) ? 1 : 2]);
+  L.sort(function (a, b) { return a[4] - b[4] || a[3] - b[3] || a[1] - b[1] || a[0] - b[0]; });   // 要等的（原精度、中等塊）先，同一種裡照「離焦點 × 鏡頭看不看得到」
   var need = [];
-  L.forEach(function (c) { if (c[2] <= r) need.push(bedLoad(c[0], c[1])); else if (c[2] <= R) need.push(bedLoadMid(c[0], c[1])); });
-  L.forEach(function (c) { if (c[2] > r && c[2] <= R) bedLoad(c[0], c[1], true).catch(bedBgErr); else if (c[2] > R) bedLoadMid(c[0], c[1], true).catch(bedBgErr); });
+  L.forEach(function (c) { if (c[4] === 0) need.push(bedLoad(c[0], c[1])); else if (c[4] === 1) need.push(bedLoadMid(c[0], c[1])); });
+  L.forEach(function (c) { if (c[4] && c[2] <= R) bedLoad(c[0], c[1], true).catch(bedBgErr); else if (c[2] > R) bedLoadMid(c[0], c[1], true).catch(bedBgErr); });
   var keep = bedNear();
   Object.keys(BED.ch).forEach(function (k) {
     var C = BED.ch[k]; if (Math.abs(C.cx - cx) <= R && Math.abs(C.cy - cy) <= R || keep[k]) return;
@@ -307,13 +317,12 @@ function bedFocusMid(cx, cy, R) {
 }
 function bedBgErr(e) { console.warn('海圖背景預載：' + e.message); }
 /** 外圈用中等塊時，模擬每一步讀哪一份（BED.lv：0 ＝ 不讀（深海）、1 ＝ 中等塊、2 ＝ 原精度）——
- *  只照「這一步」的船算：焦點 ＝ 還在打的船的中心（跟 bedFocusAuto 同一條），焦點那一塊 ± ring 圈與每艘船 margin 內 ⇒ 2，± ring＋prefetch 圈裡其他的 ⇒ 1。
+ *  只照「這一步」的船算：焦點 ＝ 還在打的船的中心（跟 bedFocusAuto 同一條），bedNeedBox 的原精度那幾塊與每艘船 margin 內 ⇒ 2，中等塊那幾塊裡其他的 ⇒ 1（2026-10-22 以前照 ring／ring＋prefetch 圈）。
  *  ⛔ 不看哪一份已經到了：先到的背景預載不會讓模擬提早改讀原精度 ⇒ 戰局跟載入快慢無關（bedWait 等到要讀的那一份到了才走）。回傳缺的塊 [[cx, cy, lv]…]。 */
 function bedLevels(fx, fz) {
-  var A = BED.A, lv = BED.lv, r = bedRingN(BED_CFG.ring), R = r + bedRingN(BED_CFG.prefetch), miss = [];
-  var cx = Math.floor((fx + BED.ax) / A.chunk), cy = Math.floor((fz + BED.az) / A.chunk);
+  var A = BED.A, lv = BED.lv, Fb = bedNeedBox(fx, fz, BED_NEED_FULL), Mb = bedNeedBox(fx, fz, BED_NEED_MID), miss = [];
   lv.fill(0);
-  for (var j = cy - R; j <= cy + R; j++) for (var i = cx - R; i <= cx + R; i++) { var q = bedIdx(i, j); if (q >= 0) lv[q] = Math.max(Math.abs(i - cx), Math.abs(j - cy)) <= r ? 2 : 1; }
+  for (var j = Mb[2]; j <= Mb[3]; j++) for (var i = Mb[0]; i <= Mb[1]; i++) { var q = bedIdx(i, j); if (q >= 0) lv[q] = bedInBox(Fb, i, j) ? 2 : 1; }
   var near = bedNear(); Object.keys(near).forEach(function (k) { var q = bedIdx(near[k][0], near[k][1]); if (q >= 0) lv[q] = 2; });
   for (q = 0; q < lv.length; q++) if (lv[q] && BED.has[q] && !(lv[q] === 2 ? BED.slot[q] : BED.mslot[q])) miss.push([A.x[0] + q % BED.nx, A.y[0] + Math.floor(q / BED.nx), lv[q]]);
   return miss;
@@ -386,7 +395,7 @@ function bedViewK(cx, cy) {
   var e = CAM.eye, l = CAM.look; if (!e || !l) return 1;
   var fx = l[0] - e[0], fz = l[2] - e[2], fl = Math.hypot(fx, fz); if (fl < 1e-3 || fl < 0.2 * Math.abs(l[1] - e[1])) return 1;
   var A = BED.A, x = (cx + 0.5) * A.chunk - BED.ax - e[0], z = (cy + 0.5) * A.chunk - BED.az - e[2], d = Math.hypot(x, z);
-  if (d < 1536) return 1;                                               // 一塊半（以前 1.5 × 1024 m；照公尺 ⇒ 塊切小也一樣）
+  if (d < 768) return 1;                                                // 離鏡頭 768 m 內一律算看得到（以前 1.5 塊 ＝ 1,536 m；Tim 2026-10-22「進入航行時優先載入視野範圍部分」⇒ 開場那 36 塊裡也分得出前後）
   return (x * fx + z * fz) / (d * fl) > 0.34 ? 1 : BED_VIEW_BACK;          // cos 70°
 }
 /** 有船 margin 內的塊在窗外。 */

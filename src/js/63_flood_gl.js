@@ -30,6 +30,7 @@ function flGL() {
     '#version 300 es\nlayout(location=0) in vec4 aP; layout(location=1) in float aZ0; uniform mat4 uModel,uVP; uniform float uMix,uVox; out vec3 vW; out float vF; out vec2 vG; void main(){ vec4 w=uModel*vec4(aP.xy,mix(aZ0,aP.z,uMix),1.0); vW=w.xyz; vF=aP.w; vG=aP.xy*uVox; gl_Position=uVP*w; }\n',
     poolFS(false));
   P.wpool = VK.compile(gl, WRW_VS, poolFS(true));                               // 房間的水面（TASK-0811）：頂點帶世界高度、照船現在的姿態換回船上的 z
+  P.wvol = VK.compile(gl, WRV_VS, WRV_FS);                                      // 透視的水：體積（63_wrwater_gl.js wrvDraw）
   // 水幕（flFalls）：一道 ＝ 一片直立、繞船的鉛直軸轉向鏡頭的長條；aP 軸上那一點（格座標）、aQ ＝ (左右 ±1、0 上 1 下、長度 m、寬度 m 的上一格)、aW ＝ 這一格的寬度 m
   P.fall = VK.compile(gl,
     '#version 300 es\nlayout(location=0) in vec3 aP; layout(location=1) in vec4 aQ; layout(location=2) in float aW; uniform mat4 uModel,uVP; uniform vec3 uEye; uniform float uMix; out vec3 vW; out vec2 vT; out float vL;\n' +
@@ -360,7 +361,7 @@ function flDraw() {
   SHIPS.forEach(function (sh) {
     var fl = sh.fl; if (!fl || !fl.actN || ((sh.broken || sh.sinkingFinal) && !fl.vis) || sh.sunk) return;   // 沉船的水照畫（floodVis）
     var me = flMesh(sh, fl); if (GFX.fall && me.fn) fs.push([sh, me]);
-    if (GFX.proom && sh.T.wrm && sh.M[9] > 0.2 * S) { var wm = wrwMesh(sh); if (wm.n) R.push([sh, wm]); return; }   // 照房間畫（TASK-0811，63_wrwater_gl.js）：水格的水面、側面不畫（水幕照畫）；翻過去了 ⇒ 照舊
+    if (GFX.proom && sh.T.wrm && sh.M[9] > 0.2 * S) { var wm = wrwMesh(sh); if (wm.n || wrvOn(sh, wm)) R.push([sh, wm]); return; }   // 照房間畫（TASK-0811，63_wrwater_gl.js）：水格的水面、側面不畫（水幕照畫）；翻過去了 ⇒ 照舊；透視 ⇒ 體積（灌滿的房間沒有水面也要畫）
     if (me.n || me.sn) L.push([sh, me]);
   });
   // 深度吸光（GFX.pdep）：要不透明場景的深度 —— 折射開到高（refr 2）⇒ 畫海之前已經複製到 RT.B（60_render.js），直接讀；其他檔 ⇒ 這裡複製一次深度（只在有水要畫的那幾格）。透視開著 ⇒ 不讀（見 FL_DEP_GLSL）。
@@ -380,10 +381,16 @@ function flDraw() {
   });
   on = false;
   R.forEach(function (e) {                                                  // 房間的水面（TASK-0811）：同一套著色，頂點著色器照船的姿態把世界高度換回船上的 z
-    var sh = e[0], me = e[1];
+    var sh = e[0], me = e[1]; if (wrvOn(sh, me) || !me.n) return;          // 透視畫成體積（下一段）⇒ 水面不畫
     if (!on) { on = true; begin(); gl.useProgram(P.wpool.prog); setCommon(P.wpool); gl.uniform1f(P.wpool.u.uX, FLX3 ? 1 : 0); gl.uniform1f(P.wpool.u.uEdge, 0); gl.uniform1f(P.wpool.u.uVox, S); depU(P.wpool); }
     wrwRipples(sh, me); wrwRipU(P.wpool, sh, me);                           // 細波：粒子、水幕落進水面的漣漪（只給畫面）
     gl.uniformMatrix4fv(P.wpool.u.uModel, false, sh.M); gl.uniform1f(P.wpool.u.uMix, wrwMix(me)); gl.bindVertexArray(me.vao); gl.drawArrays(gl.TRIANGLES, 0, me.n);
+  });
+  on = false;
+  R.forEach(function (e) {                                                  // 透視的水：體積（63_wrwater_gl.js wrvDraw；只在透視）
+    var sh = e[0], me = e[1]; if (!wrvOn(sh, me)) return;
+    if (!on) { on = true; begin(); gl.useProgram(P.wvol.prog); setCommon(P.wvol); gl.uniform1f(P.wvol.u.uVox, S); gl.uniform1f(P.wvol.u.uSig, WRV_SIG); gl.uniform1f(P.wvol.u.uLit, 0.55 + 0.45 * wxSun()); }
+    wrvDraw(P.wvol, sh, me);
   });
   on = false;
   R.forEach(function (e) {                                                  // 房間的水的側面（63_wrwater_gl.js wrwSides；只在透視、剖面有）：同一支側面著色器

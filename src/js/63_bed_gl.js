@@ -317,12 +317,15 @@ var BED_SEA_SP = 8, BED_SEA_LOW = 4, BED_SEA_WET = 0, BED_SEA_BAND = 2;
 //   ⇒ 算的那一段（bedDryCalc：純函式，⛔ 不碰外面的變數 —— 它的原始碼整段送進 Worker）搬到 Worker；一次只算一份，算的時候又髒了 ⇒ 回來之後再算一次（中間進來的塊併成一次）；
 //   回來才換貼圖（算的那段時間畫舊的那一張）。每塊的地面只在換了（新的一份、城鎮整過地）才送過去（BEDDRYW.sent），Worker 自己留著、窗外的丟掉。
 //   開不了 Worker ⇒ 照舊在這一頁算（同一支 bedDryCalc ⇒ 遮罩逐位元組相同），但兩次之間至少隔 BED_DRY_GAP ms（遮罩晚一點到沒關係）。
-var BEDDRYW = { w: null, ok: null, busy: null, sent: {}, id: 0 }, BED_DRY_GAP = 500;
+//   Worker 那一條也節流（TASK-0819；Tim 2026-10-22「第1格照erina建議加節流吧」）：已經有貼圖 ⇒ 離上次建好不到 BED_DRY_GAP_W ms 先不送（dirty 留著，下一次再看）。
+//     塊改 512 m 之後塊到得更頻繁 ⇒ 君士坦丁堡進場 45 秒重建 187～203 次（一次 29～49 ms，在 Worker）；第一次（還沒有貼圖）照舊馬上送。新塊進來後遮罩最多晚這麼久跟上。
+var BEDDRYW = { w: null, ok: null, busy: null, sent: {}, id: 0 }, BED_DRY_GAP = 500, BED_DRY_GAP_W = 2000;
 function bedDryTex() {
   var Dy = BEDDRY, A = BED.A; if (TOWNS.ver !== Dy.tver) { Dy.tver = TOWNS.ver; Dy.dirty = true; }   // 城鎮換了 ⇒ 整地換了
   if (!Dy.dirty || BEDDRYW.busy) return;
   var w = bedDryWorker();
   if (!w && Dy.tex && (bedBusy() || performance.now() - (Dy.at || 0) < BED_DRY_GAP)) return;
+  if (w && Dy.tex && performance.now() - (Dy.at || 0) < BED_DRY_GAP_W) return;      // Worker 也節流（見上）
   var S = BED_SEA_SP, GS = A.chunk / S, nx = A.x[1] - A.x[0] + 1, ny = A.y[1] - A.y[0] + 1, L = [], st = {}, sent = {}, old = [], nOld = 0, t0 = performance.now();
   Dy.dirty = false;
   Object.keys(Dy.src).forEach(function (k) {                             // 有陸地的塊（地面最高 > 0）

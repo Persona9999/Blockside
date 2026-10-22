@@ -81,6 +81,8 @@ function buildMeshes(H, C) {      // 船型 H 的每份模型網格一個 VAO：
       keep.push({ tri: null, occ: occ }); return;                        // 佔格照自己的網格（模擬不知道共用這回事）；bb 照共用的那一份（矩陣已經含 dt）
     }
     var d = C ? C[k] : { tri: meshTriFor(H, k, m), occ: meshOcc(m) };   // meshTriFor：火藥桶這類 render=lathe 的換成車床式（62_lathe.js；佔格照原本的網格）
+    if (!C && d.tri.shellTex) d.tex = d.tri.shellTex;                    // 外殼式（62_shell.js）：貼圖跟著存進快取；快取讀回來的 ⇒ 照這一次排的層改頂點
+    else if (C && d.tex) shellRelayer(d.tri, d.tex);
     var up = upload(null, d.tri, 9, [[0, 3, 0], [1, 3, 3], [2, 3, 6]]);
     up.occ = d.occ; up.bb = meshBB(d.tri); H.meshes.push(up); keep.push(d);
     if (sk !== null) first[sk] = k;
@@ -97,7 +99,7 @@ function buildMeshes(H, C) {      // 船型 H 的每份模型網格一個 VAO：
 function meshShareKey(H, SK, k) {
   if (!SK || k >= SK.length || !(SK[k] >= 0)) return null;
   var L = meshAlgo(H, k);                                               // 同一格、同一種算法（62_lathe.js：車床式連參數、長桿式）才共用
-  return SK[k] + '|' + (!L ? 'V' : L.alg === 'lathe' ? 'L' + L.n + ',' + L.ax : 'P');
+  return SK[k] + '|' + (!L ? 'V' : L.alg === 'lathe' ? 'L' + L.n + ',' + L.ax : L.alg === 'pole' ? 'P' : 'S');
 }
 var MESH_DT = new Float32Array([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]), MESH_DTQ = new Float32Array(16);
 /** 同 meshDtL，配置新的一份（?rbchk=1 對拍、觀察模式的高亮：每格少數幾件）。 */
