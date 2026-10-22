@@ -53,24 +53,31 @@ function vxInit() {
  *  出了眼 ⇒ 每秒浮回 VX_RISE。pull ＝ 0（天氣設定頁）⇒ 不拖（只繞）。回這一步吃水要變多少（m）。
  *  再一次（Tim 2026-10-22：「掉到底部時 目前會一直旋轉但保持好幾秒完全沒有往下吸的感覺 直到瞬間沉沒」「希望被吸住到沉沒期間船體逐漸往下(直到完全到水中時 沉沒)」）：
  *  往下拖的速度照已經被拖了多深越來越快（vxPullV：pull × (1 ＋ 深度／VX_PULL_K)）⇒ 一進眼就看得到往下、越到後面越快；開始沉之後同一條式子接著拖（32_hull.js），
- *  ⛔ 不再換成「眼吞沉船」的加速度（以前 4.2 m 之後 1.5 秒就判沉沒）。整艘沒進水裡（vxSunkAt）才算沉沒。 */
+ *  ⛔ 不再換成「眼吞沉船」的加速度（以前 4.2 m 之後 1.5 秒就判沉沒）。整艘沒進水裡（vxSunkAt）才算沉沒。
+ *  再一次（Tim 2026-10-22：「眼往下拖 目前拖太久了 大約掉下去後就可以開始往下拖」）：pull 預設 0.3 → 0.4 m/秒、被拖的深度直接加在吃水上（32_hull.js；⛔ 粒子模式以前跟進水一起慢慢跟 ⇒ 第 1 秒只 0.07 m）；
+ *  被眼拖沉的開始沉之後也照這裡接著拖（eaten），整艘進水的判準改成「拖下去的深度 ≥ 船頂」（翹起那一頭留在水面，見 vxOffset）⇒ 進眼到沉沒約 7 秒（以前 19 秒）。 */
 var VX_RISE = 0.1, VX_PULL_K = 2;
 function vxPullV(d) { return VX.pull * (1 + Math.max(0, d) / VX_PULL_K); }
 function vxDrag(sh, dt) {
-  var v0 = sh.vxSink || 0, inEye = Math.hypot(sh.px, sh.pz) < VX.re, v = inEye && VX.pull > 0 ? v0 + vxPullV(v0) * dt : Math.max(0, v0 - VX_RISE * dt);
+  var v0 = sh.vxSink || 0, inEye = Math.hypot(sh.px, sh.pz) < VX.re, v = (inEye || sh.vxEaten) && VX.pull > 0 ? v0 + vxPullV(v0) * dt : Math.max(0, v0 - VX_RISE * dt);
   if (inEye && VX.pull > 0 && !sh.vxIn) { note(sh, '被捲進漩渦的中心 —— 船身被往下拖，快開出去！', true); if (!v0) sh.vxEnd = vxLowEnd(sh); }
   sh.vxIn = inEye && VX.pull > 0; sh.vxSink = v; return v - v0;
 }
 /** 被眼拖下去時哪一頭先下去（Tim 2026-10-22：「最好是一端被拉下去的沉沒效果更好(船頭或船尾)」）：剛進眼那一刻，船頭、船尾哪一頭的水面低 ⇒ 那一頭（−1 船頭、＋1 船尾；縱搖正 ＝ 船頭抬起）。
- *  vxTip：照被拖了多深（d）把那一頭往下壓，深到船頂（vxHullTop）時 VX_TIP。⛔ 不抽 rnd()（照水面決定）。 */
-var VX_TIP = 22 * Math.PI / 180;
+ *  vxTip：照被拖了多深（d）把那一頭往下壓，拖到船頂的 VX_TIP_D 時就到 VX_TIP（先拉那一頭、整艘後下去）。⛔ 不抽 rnd()（照水面決定）。
+ *  支點在翹起的那一頭（Tim 2026-10-22：「讓先掉下去的一角(船頭或船尾) 先被往下拉」）：縱傾是繞船中間轉 ⇒ 另外多吃水 半長 × sin 縱傾（vxOffset）
+ *  ⇒ 翹起那一頭一直留在原本的水面、只有先進眼那一頭被拉下去（22° 時那一頭比平常深約 2 × 半長 × sin 22°，憲法號約 32 m）。⛔ 繞中間 ⇒ 另一頭同時翹起十幾公尺，像整艘在翹、不像被拉。 */
+var VX_TIP = 22 * Math.PI / 180, VX_TIP_D = 0.5, VX_TIP_RATE = 1.2;
 function vxLowEnd(sh) {
   var F = fwd(sh.yaw), h = 0.4 * (sh.T.hx1 - sh.T.hx0) * S;
   return vxH(sh.px + F[0] * h, sh.pz + F[2] * h) <= vxH(sh.px - F[0] * h, sh.pz - F[2] * h) ? -1 : 1;
 }
 function vxHullTop(sh) { var z = sh.T.zw + 60; (sh.decks || []).forEach(function (D) { z = Math.max(z, D.zr[1]); }); return (z - sh.T.zw) * S + 1.5; }   // 最上層甲板 ＋ 舷牆約 1.5 m（沒有甲板資料 ⇒ 6 m）
-function vxTip(sh, d) { return (sh.vxEnd || -1) * VX_TIP * clamp(d / vxHullTop(sh), 0, 1); }
-/** 被眼拖沉的船：整艘進到水裡（最上層甲板＋舷牆，加上翹起來那一頭高出的那一段）才算沉沒（32_hull.js；⛔ 以前照一般沉船的 9 m）。 */
+function vxTip(sh, d) { return (sh.vxEnd || -1) * VX_TIP * clamp(d / (VX_TIP_D * vxHullTop(sh)), 0, 1); }
+/** 眼加在吃水上的那一份（m）：拖下去的深度 ＋ 讓翹起那一頭留在水面的那一段（半長 × |sin 縱傾|）；沒被拖 ⇒ 0。32_hull.js 每步照它的變化量加減。 */
+function vxOffset(sh) { var d = sh.vxSink || 0; return d > 0 || sh.vxEaten ? d + 0.5 * (sh.T.hx1 - sh.T.hx0) * S * Math.abs(Math.sin(sh.pitchA || 0)) : 0; }
+/** 被眼拖沉的船：整艘進到水裡（最上層甲板＋舷牆，加上翹起來那一頭高出的那一段）才算沉沒（32_hull.js；⛔ 以前照一般沉船的 9 m）。
+ *  吃水裡已經含 vxOffset 那一段 ⇒ 等於「拖下去的深度（加進水）≥ 船頂」。 */
 function vxSunkAt(sh) { return vxHullTop(sh) + 0.5 * (sh.T.hx1 - sh.T.hx0) * S * Math.abs(Math.sin(sh.pitchA || 0)); }
 /** 漩渦的水面（m，負 ＝ 往下凹）。 */
 //   ＋ 眼的喉部（Tim 2026-10-17「眼可以更深一點(後台也可調參數)」）：−De·re²／(r² ＋ re²)，re ＝ 眼的半徑 ⇒ 中心總深 D ＋ De（預設 75 ＋ 60）、眼的邊上多 De／2。

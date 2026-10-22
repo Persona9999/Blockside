@@ -22,7 +22,7 @@ WEATHERS.storm.gusts = { dir: 0.6, spd: 0.3, per: [71, 29, 11] };
 //   r 水流最快那一圈的半徑（m）、depth 中間多深（m）、width 漏斗寬窄（幾倍的 r）、v 水流最快（節）、inflow 往中心吸（切向的幾成）、eye 眼的半徑（m）、pull 眼把船往下拖（m/秒，0 ＝ 不拖）。
 //   預設（Tim 2026-10-17「半徑再放大2倍 然後更深一點 水流快一些」）：r 95 → 190、depth 28 → 75、v 6.8 → 10 節、eye 21 → 42；可以在天氣設定頁改（下面 WXK_ITEMS）。
 //   再一次（Tim：「漩渦半徑預設值可以改400(上限改1000) 深度預設150 上限300」「起始可以在漩渦中」）：r 190 → 400、depth 75 → 150；start 開局離中心（m）130 —— 兩隊在漏斗裡面開打，不在水流最快那一圈。
-WEATHERS.maelstrom = Object.assign({}, WEATHERS.storm, { name: '大漩渦', vortex: { r: 400, depth: 250, width: 0.6, v: 10, inflow: 0.2, eye: 42, eyeDepth: 100, pull: 0.3, gulp: 4, hold: 1.5, eyeSuck: 5, grav: 0.1, suck: 0.1, suckR: 90, suckP: 2, spin: 40, turn: 1, aiR: 80 } });
+WEATHERS.maelstrom = Object.assign({}, WEATHERS.storm, { name: '大漩渦', vortex: { r: 400, depth: 250, width: 0.6, v: 10, inflow: 0.2, eye: 42, eyeDepth: 100, pull: 0.4, gulp: 4, hold: 1.5, eyeSuck: 5, grav: 0.1, suck: 0.1, suckR: 90, suckP: 2, spin: 40, turn: 1, aiR: 80 } });
 //   再一次（Tim：「兩船起始距離是否可以根據實際距離」「300比起非漩渦 近了很多」「深度預設250吧(上限可以改400)」「下坡加速跟吸力 預設0.1」）：
 //   開局距離跟主選單的「距離」走（52_fleet.js vxPlace；拿掉「開局位置」start）、depth 150 → 250（上限 400）、grav／suck 0.05 → 0.1。
 // 天氣設定頁（Tim 2026-10-17：「或是開一個天氣設定頁(參考船隻設定) 可以設定不同天氣參數(大漩渦半徑 轉速 深度等放裡面)」）：
@@ -47,7 +47,7 @@ var WXK_ITEMS = [
   { k: 'hold', of: ['maelstrom'], vx: 1, name: '眼的束縛', lim: [0, 5], step: 0.1, fix: 1, unit: ' /秒', note: '眼裡船速每秒被水吃掉的比例（眼的邊上開始、一半以內全力；越大越難衝過去；0 ＝ 沒有，高速可以穿過眼）' },
   { k: 'gulp', of: ['maelstrom'], vx: 1, name: '眼吞沉船', lim: [0, 20], step: 0.5, fix: 1, unit: ' m/s²', note: '進水開始沉的船在眼裡往下吸的加速度（4 ⇒ 約 4 秒沉到看不見；0 ＝ 照一般沉船，要半分鐘）；被眼拖下去的照「眼往下拖」，沉沒之後才照這個' },
   { k: 'eyeDepth', of: ['maelstrom'], vx: 1, name: '眼的深度', lim: [0, 200], step: 5, int: true, unit: ' m', note: '眼那一段喉部再往下多深（中心總深 ＝ 深度 ＋ 這個；0 ＝ 沒有喉部）' },
-  { k: 'pull', of: ['maelstrom'], vx: 1, name: '眼往下拖', lim: [0, 1], step: 0.01, fix: 2, unit: ' m/秒', note: '0 ＝ 不拖（只繞、不會沉）；一進眼每秒往下這麼多，越深拖得越快（每深 2 m 多一倍），先進眼那一頭先下去；整艘進到水裡才算沉沒（預設約 16 秒）；出了眼每秒浮回 0.1 m' },
+  { k: 'pull', of: ['maelstrom'], vx: 1, name: '眼往下拖', lim: [0, 1], step: 0.01, fix: 2, unit: ' m/秒', note: '0 ＝ 不拖（只繞、不會沉）；一進眼每秒往下這麼多，越深拖得越快（每深 2 m 多一倍）；先進眼那一頭先被拉下去、另一頭留在水面；整艘進到水裡才算沉沒（預設約 7 秒）；出了眼每秒浮回 0.1 m' },
   { k: 'aiR', of: ['maelstrom'], vx: 1, name: '電腦避開半徑', lim: [0, 600], step: 5, int: true, unit: ' m', note: '電腦的船照現在的速度再開 8 秒會進到這一圈以內 ⇒ 往外開，開到 1.3 倍才回去打（0 ＝ 不避，只有快沉了才逃）' }];
 function wxkObj(it, w) { return it.vx ? WEATHERS[w].vortex : WEATHERS[w]; }   // vx：大漩渦那一格（vortex）裡的欄位
 function wxkGet(k) { var it = wxkItem(k); return wxkObj(it, it.of[0])[k]; }
