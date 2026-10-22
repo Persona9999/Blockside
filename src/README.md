@@ -137,6 +137,11 @@ python -I admin.py parts
 python -I admin.py authors
 # 匯入檢查（import／reimport／metasync 之後會自動跑）：缺 meta、砲班站不滿、開場就掉的 ⇒ ../reports/shipcheck_<代號>.md（不入版控）
 python -I admin.py shipcheck --id phoenix    # 不給 --id ＝ 每一艘
+# 樓梯自檢（TASK-0838；Tim 2026-10-23：松島號甲板下的樓梯偏移、梯口有洞、樓梯口被堵死）：每座梯子量梯口的洞、兩端站不站得住、走不走得出去
+#   ⇒ ../reports/ladcheck_<代號>.md（每座的座標、修法、梯口那一層的平面圖）；不給 --id ＝ 每一艘，另寫 ../reports/ladcheck.md（各船幾座有問題）。
+#   shipcheck 也會順手寫這份、它的報告多一行「樓梯自檢」讀數，每個問題也列成一筆 ✗／⚠（「樓梯：…」）。只讀：不寫卡片、不動設定。
+python -I admin.py ladcheck --id matsushima
+python -I admin.py ladcheck --selftest       # 反向對照：在記憶體裡把一座正常的梯子挪 2 格、出口前立一根柱子、head 四周圍牆 ⇒ 每一種都要報出來（exit 非 0 ＝ 沒報出來）
 # meta 規格表對拍（TASK-0672）：規格表本身、每艘船用到的 kind（沒列的、掛錯地方的）、造船規格 §9 那張 kind 表與每個 kind 的 need 固定點；不一致 ⇒ exit 非 0
 python -I admin.py metaspec                  # --doc <檔案> ＝ 不經 senate cmd doc
 # 只寫動力件與梯子的格子清單 parts[].cellRuns（meta、格子一位元不動 ⇒ 不會把作品上還沒定案的 meta 帶進來；TASK-0676 木匠照它整件還原梯子）
@@ -146,6 +151,15 @@ python -I admin.py cells --id constitution
 匯入檢查的規則在 `js/75_shipcheck.js`（成品帶 `?shipcheck=<代號>`：跟憲法號擺在最遠、固定步長跑 2 秒，結果寫進頁面）—— 遊戲自己知道缺了什麼會退回什麼，所以規則住在遊戲裡，admin.py 只用無頭 Chrome 跑、寫報告。
 ✗ 錯誤 ＝ 遊戲裡壞掉（開場就掉的模型、開場浮空的繩、斷的梯子、砲種代碼不認得…）；⚠ 警告 ＝ 能動但走退路或預設（照名字認、憲法號的水線與 geo、甲板沒 meta、砲班站不滿…）。
 反向對照：2026-10-15 重配之前的三叉戟號跑出「14 門缺 24 人」（跟 gura 在遊戲裡量的一樣），每一門都寫了同一層同一舷最近的砲隔幾 m。
+
+**樓梯自檢**（TASK-0838；`js/75_ladcheck.js`，匯入檢查量完叫）：尋路（42_hands.js makeHands）接梯子兩頭是在 5～10 點內找走路格 ⇒ 梯口有洞、出口被堵住它都接得上，「尋路沒收這一座」那一條看不出來。所以每一座（繩梯不量）另外量：
+① 梯口的洞 —— head 腳下那一層裡、梯子頂上那一塊封閉的開口，梯子沒蓋到、往下掉超過 3 格的格：head 踩在洞上 ⇒ ✗、梯頂到甲板空 3 排以上（梯子偏了）⇒ ⚠；艙口本來就比梯子寬（兩側、梯腳那一頭、一兩排的縫）只寫進「開口」那一欄。
+修法兩個都先量過再寫：整座往梯頂那一頭挪幾格（撞幾格、挪完還剩幾格洞、挪過去 foot 站不站得住、head 走不走得出去）、或那幾格補甲板（座標、z 範圍照那一層的 thick）。
+② 兩端 —— foot／head 腳下是不是實心（踩在別座的洞上會點名那一座）、頭上 1.2 m 空不空、離那一層甲板的地板（meta floor／walk）差幾格（> 3 ⇒ 沒到甲板面；尋路有收 ⇒ ✗、沒收 ⇒ ⚠）。
+③ 出口 —— 每一座的洞先當成補好了，從 foot／head 照走路格的規則一格一格走（頭上 1.2 m 空、一步高低差 ≤ 0.3 m、不踩任何一座梯子、不穿砲與家具）：24 格內走不到那一層的走路格 ⇒ ✗「出口堵住」，
+報前方擋住的是什麼（模型路徑、別座梯子的踏板、關聯路徑）；走得出去、但正前方 2 格內被擋 ⇒ ⚠「正前方擋住」（要往旁邊繞）。
+量到的（2026-10-23，21 艘）：見 `../reports/ladcheck.md`；松島號 15 座裡 11 座 head 踩在洞上（梯口比梯子長 6 排、梯子偏在一頭 —— Tim 截圖那種），主砲塔座（barbette）那座梯頂在砲座頂、出口被主砲擋住。
+反向對照（`ladcheck --selftest`）：⛔ 拿掉梯子要連格子一起動（造船規格 §9.3）—— 自檢只在記憶體裡改，照 `?shipcheck=<船>&ladtest=<梯名>:shift:dx,dy｜pillar｜box`。
 
 
 **材質**（TASK-0616；Tim 2026-10-15）：材質表在設定檔 `materials`（`default` ＋ `list`：每種 `name`、`kind`（wood／metal／other）、`density` 比重（一格 1 公升 ⇒ 每格幾 kg；橡木 0.7 ＝ 以前統一的重量）、`hard` 硬度倍率（乘在船隻設定的船殼硬度上）、`flammable` 易燃性 0–1（燃燒還沒做，先記著））；ID 英文小寫、跨船共用，後台「材質表」可以加、改、刪（還有船用到的不給刪）。
@@ -396,6 +410,7 @@ python -I admin.py cache --all    # 每艘都比 ＝ 比對來源：雕刻作品
 | `73_slowmo.js` | 殉爆的慢動作與特寫（TASK-0531）：`slowKick`（殉爆那一刻）、`slowTick`（每格畫面的時間倍率、特寫時間到還鏡頭）、`slowVisStep`（慢動作中只給人看的照畫面的時間走）、提示 `slowShow`；狀態 `SLOW` 在 `04_state.js` |
 | `72_floodui.js` | 停格條（`frzShow`）與進水細節頁（`floodPanel`：數字＋側視、俯視剖面 `fpDraw`；開著時 3D 的破口點 `flHoleMarks`、艙內水面透視）；破口的顏色 `flHoleCol`（出水綠、水下紅、水上橙；詳細資訊的進水圖同一套）；流量一律噸／分（`flTpm`，跟抽水同一個單位）、淨進水 `flNetText` |
 | `74_cutaway.js` | 停格的剖面與隱藏甲板：`CUTV`、甲板切高 `deckCut`（照舷弧逐欄量、R32F 貼圖）、畫之前設 uniform `cutSet`（「關」那一組照程式記著 `prog.cut0`：已經是關 ⇒ 不再傳；`armDraw` 寫 uCutL ⇒ 作廢）、人藏不藏 `cutHides`、`cutToggle`／`deckCycle` |
+| `75_ladcheck.js` | 樓梯自檢（TASK-0838；匯入檢查量完叫 `ladCheck`）：每座梯子的格（格子清單 cellRuns 分給最近的那一座）、梯口的開口與洞（`ldcOpen`）、兩端站不站得住、照走路格的規則走不走得出去（`ldcWalk`，洞先當成補好：`ldcFilled`）、擋住的是什麼（`ldcBlockers`）、梯口那一層的平面圖（`ldcMap`）；反向對照 `ladTest`（`?ladtest=`，只改記憶體）。`admin.py ladcheck` 寫 `reports/ladcheck_<船>.md` |
 | `75_shipcheck.js` | 匯入檢查（`?shipcheck=<id>`；`admin.py shipcheck` 讀它寫的 JSON 出報告）。照 meta 規格表報：規格表沒有的 kind、掛錯地方的 kind；**被靜悄悄丟掉的部件**：尋路沒收的梯子與原因（`sh.ladDrop`，42_hands.js makeHands 記；兩頭判不出層、同一層、接不上走路格）—— 繩梯（頂端在桅上）只記進讀數 `ropeLadders`、不報 |
 | `76_anchor.js` | 拋錨（雙錨、左右錨、拖錨、起錨）與鐵鍊（質點鍊、碰自己的船殼與海底、畫成鏈環）；單錨的船（TASK-0635：只找到一個真的錨 ⇒ 另一舷不補、`A.single`；7／8 按鈕藏起來、按鍵不理，6 只拋這一個；整艘都沒有錨（夜隼號、風暴角號）⇒ 6／7／8 照樣顯示（🛑），按哪一顆都是停船 ⇄ 手動，不拋錨） |
 | `77_colours.js` | 陣營旗（長旗＋戰鬥旗，藍方藍旗、紅方紅旗；布料，跟帆同一套）：桅頂 `mastTrucks`、自動掛 `autoFlags`、載入時生旗 `teamFlagsSetup`、貼圖挑藍紅 `sailRect`、旗桿 `poleBuf`／`drawColours` |
