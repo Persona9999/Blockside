@@ -195,8 +195,14 @@ function ammoQuiet(a) { return a === AMMO_BOLT || a === AMMO_FIRE || a === AMMO_
 //   砲種表 box（整數倍率，沒寫 ＝ 1）⇒ 砲旁藥箱放 細節設定「藥箱」份數 × box 發；送藥手一趟的每一份也算 box 發（23_powder.js）。⛔ 不是連發：每一發照樣裝填。
 function gunBoxK(type) { var k = GUNS[type] && +GUNS[type].box; return k > 1 ? Math.round(k) : 1; }
 function gunBoxCap(g) { return BOX_N * gunBoxK(g.type); }
-/** 這種砲打得出哪幾種彈（AMMO 的序號，照輪流的順序）：砲種表 ammo（固定彈種：希臘火、弩箭）⇒ 只有那一種；其他（大砲）⇒ 實心、爆裂、鏈彈。 */
-function gunAmmoList(type) { var a = GUNS[type] && GUNS[type].ammo; return a !== undefined && AMMO_NAME[a] !== undefined ? [AMMO_NAME[a]] : [0, 1, 2]; }
+/** 這種砲打得出哪幾種彈（AMMO 的序號，照輪流的順序）：砲種表 ammo（固定彈種：希臘火、弩箭）⇒ 只有那一種；
+ *  ammos（TASK-0828；Tim 2026-10-22「一些鐵甲艦是否沒有鏈彈」）⇒ 只有清單上那幾種（照砲種表寫的順序；認不得的略過）；都沒寫（大砲）⇒ 實心、爆裂、鏈彈。 */
+function gunAmmoList(type) {
+  var G0 = GUNS[type], a = G0 && G0.ammo;
+  if (a !== undefined && AMMO_NAME[a] !== undefined) return [AMMO_NAME[a]];
+  var L = G0 && Array.isArray(G0.ammos) ? G0.ammos.map(function (n) { return AMMO_NAME[n]; }).filter(function (i) { return i !== undefined; }) : [];
+  return L.length ? L : [0, 1, 2];
+}
 /** 這艘的主武器（Tim 2026-10-18：「應該只有主武器能換彈種」）：開戰時火力（砲重 ÷ 裝填倍率，跟艦長的 helmGunW 同一把尺、不看人手）加總最大的那一種砲；沒有砲 ⇒ null。快取在 sh.mainGun。
  *  換彈鍵照它的清單輪（61_hud.js ammoOf）；主武器是固定彈種的船（持火號 ⇒ 希臘火）彈種鈕直接顯示那一種。 */
 function shipMainGun(sh) {
