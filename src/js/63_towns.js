@@ -635,6 +635,7 @@ function townInst(T) {
     out.push(q);
   });
   (p.walls || []).forEach(function (w) { townWall(T, w, out, W); });
+  TOWNS.stat.under = TOWNS.stat.under || {}; TOWNS.stat.under[T.id] = { n: 0, tight: [] };   // 引水渠跨過的路（townLineUnderParts）：這一次擺了幾段、哪幾段拱跨不過去
   (p.aqueducts || []).forEach(function (a) { townWall(T, a, out, W, true); });   // 引水渠：畫法同城牆（見 townWall 的 line）
   TOWNS.stat.inst = TOWNS.list.reduce(function (s, T2) { return s + (T2 === T ? out.length : (T2.inst || []).length); }, 0);
   TOWNS.stat.lots = TOWNS.list.reduce(function (s, T2) { return s + (T2.p.lots || []).length; }, 0);
@@ -687,6 +688,7 @@ function townWall(T, w, out, W, line) {
   var parts = [];                                                       // 門、塔、轉角：{ nm, t（中心）, h（半長）, tower }
   (w.gates || []).forEach(function (g) { if (gate) parts.push({ nm: gate, t: proj(W(g.at)), h: half(gate) }); });
   (w.towers || []).forEach(function (q, i) { if (towers.length) { var nm = towers[i % towers.length]; parts.push({ nm: nm, t: proj(W(q)), h: half(nm), tower: true }); } });
+  if (line) townLineUnderParts(T, w, parts, K, sect, gate, mS, mW, Ltot);   // 引水渠跨過的路：拱心對到路上（見 townLineUnderParts）
   var cor = joint || towers[0], gap = Math.max(2 * len, 6);
   function apart(a0, a1, b0, b1) { var d = Infinity; (closed ? [0, Ltot, -Ltot] : [0]).forEach(function (sh) { d = Math.min(d, Math.max(0, b0 + sh - a1, a0 - b1 - sh)); }); return d; }   // 沿牆隔多遠（閉合 ⇒ 繞回來那一邊也算）
   function free(p, t, h) { return parts.every(function (o) { return o === p || apart(t - h, t + h, o.t - o.h, o.t + o.h) >= 0.5; }); }
@@ -704,7 +706,7 @@ function townWall(T, w, out, W, line) {
   }
   parts.forEach(function (o) {                                          // 擺：軸 ＝ 路線上兩個接口那兩點的弦
     var t = o.t, h = o.h, A = at(t - h), B = at(t + h), s = at(t), dx = B.x - A.x, dz = B.z - A.z, L = Math.hypot(dx, dz), ax = L > 0.01 ? [dx / L, dz / L] : [Math.cos(s.a), Math.sin(s.a)];
-    setLev(put(o.nm, [s.x, s.z], Math.atan2(ax[1], ax[0]), 1, true), t, t);
+    setLev(put(o.nm, [s.x, s.z], Math.atan2(ax[1], ax[0]), o.sx || 1, true), t, t);
     obs.push({ t0: t - h, t1: t + h, p0: [s.x - ax[0] * h, s.z - ax[1] * h], p1: [s.x + ax[0] * h, s.z + ax[1] * h], ax: ax });
   });
   if (!closed && end) {                                                 // 收尾：模型的 wall-a（−x 那一面）接牆身 ⇒ 起點那一頭朝外轉 180°
@@ -745,6 +747,28 @@ function townWall(T, w, out, W, line) {
       }
       q.mj[0] = kA; q.mj[1] = kB; q.ja = fl ? B : A; q.jb = fl ? A : B; setLev(q, fl ? S[k + 1] : S[k], fl ? S[k] : S[k + 1]);
     }
+  });
+}
+/** 引水渠跨過的路（TASK-0837；Tim 2026-10-23「讓城鎮支援特殊類城牆建築(引水渠) 會占用建造空間 可以跨過道路」）：規劃的 w.under ＝ 路從哪幾段底下過（[t0, t1]，沿渠線的公尺；Blocksail townLineUnder）
+ *  ⇒ 每一段擺一節斷面當部件、拱心對準那一段的中心（模型的 arch ＝ 最底那一層的開口，Blocksail tools/townmodels.py 量的；拱要左右對稱）；
+ *  路面比開口寬 ⇒ 那一節拉長（sx ＝ 跨距 ÷ 開口，最多 TOWN_ARCH_SX；前後的斷面照空檔填法自己伸縮）；kit 有 -gate 而且它的開口放得下 ⇒ 優先用它、不拉長。
+ *  兩段之間不到一節 ⇒ 併成一段；超過上限、擠到頭尾 ⇒ 照擺、記 TOWNS.stat.under[城].tight（墩會站在路上）。沒有 arch ⇒ 不動（照舊均分）。 */
+var TOWN_ARCH_SX = 1.6;                                                  // 拱最多拉長幾倍〔佔位；Blocksail tools/town_report.cjs ARCH_SX 同一個數〕
+function townLineUnderParts(T, w, parts, K, sect, gate, mS, mW, Ltot) {
+  var U = (w.under || []).map(function (u) { return [u.t[0], u.t[1]]; }).sort(function (a, b) { return a[0] - b[0]; }), st = (TOWNS.stat.under || {})[T.id] || { n: 0, tight: [] };
+  if (!U.length || !mS.arch) return;
+  var M = [];
+  U.forEach(function (u) { var l = M[M.length - 1]; if (l && u[0] - l[1] < mW) l[1] = Math.max(l[1], u[1]); else M.push(u.slice()); });
+  var op = mS.arch[1] - mS.arch[0], mG = gate && K.M[gate].m, opG = mG && mG.arch ? mG.arch[1] - mG.arch[0] : 0;
+  M.forEach(function (u) {
+    var need = u[1] - u[0], c = (u[0] + u[1]) / 2, o;
+    if (opG && need <= opG) o = { nm: gate, h: mG.size[0] * mG.mpv / 2 };
+    else { var sx = Math.max(1, need / op), cap = Math.min(sx, TOWN_ARCH_SX); o = { nm: sect, h: mW * cap / 2, sx: cap }; if (sx > TOWN_ARCH_SX) st.tight.push({ t: [+u[0].toFixed(1), +u[1].toFixed(1)], need: +need.toFixed(2), got: +(op * cap).toFixed(2) }); }
+    o.t = Math.max(o.h, Math.min(Ltot - o.h, c));
+    if (Ltot < 2 * o.h) return;
+    if (Math.abs(o.t - c) > 0.01) st.tight.push({ t: [+u[0].toFixed(1), +u[1].toFixed(1)], end: true });   // 擠到頭尾：拱心對不到路
+    if (parts.some(function (p) { return Math.max(p.t - p.h, o.t - o.h) < Math.min(p.t + p.h, o.t + o.h); })) return;   // 跟別的部件疊到（引水渠沒有門塔；保險）
+    parts.push(o); st.n++;
   });
 }
 /** 斜接：模型（轉 θ：+x ＝ (sinθ, −cosθ)、+y ＝ (−cosθ, −sinθ)）那一頭的端面要落在法線 n 的鉛直面上 ⇒ 橫過 1 m 沿 x 挪多少（著色器 a ＋＝ b·k）。 */
@@ -1386,7 +1410,7 @@ function townStat(at) {
     return { id: T.id, name: T.name, tier: T.tier, seed: T.seed, ox: T.ox, oy: T.oy, lots: (T.p.lots || []).length, roads: T.roads.length, walls: (T.p.walls || []).length, inst: (T.inst || []).length, ground: T.gt ? (function () { var K = Object.keys(T.gt); return { tiles: K.length, built: K.filter(function (k) { return T.gt[k].g; }).length, dirty: K.filter(function (k) { return T.gt[k].dirty; }).length, piers: K.filter(function (k) { return townGroundPier(T.gt[k]); }).length, piersBuilt: K.filter(function (k) { return townGroundPier(T.gt[k]) && T.gt[k].g; }).length }; })() : null,   // piers：有棧橋或碼頭的區（TASK-0826 先建）
       part: T.inst ? (TOWNS.kit && TOWNS.kit.part ? 'walls' : 'all') : null, walls: (T.inst || []).filter(function (q) { return q.wall; }).length,   // 地面的帶子分區（TASK-0817）
       byModel: u, lights: tl, center: [+(T.ox - BED.ax).toFixed(1), +(T.oy - BED.az).toFixed(1)] };
-  }), kit: !!TOWNS.kit, kitPart: !!(TOWNS.kit && TOWNS.kit.part), kitN: S.kitN, kitMs: S.kitMs, skelN: S.skelN, skelMs: S.skelMs, kitMesh: { baked: S.meshBaked, live: S.meshLive, check: S.meshCheck, vk: townVkFp() }, kitTris: S.kitTris, skip: S.skip, gls: S.gls || 0, lines: S.lines || 0, drawn: { full: S.d0, low: S.d1, card: S.d2, shells: S.d3, plinth: S.plinth, flags: S.flags || 0, landmarks: S.lm || 0 }, tris: S.tris, ms: { draw: S.drawMs, bin: S.binMs, grade: +S.gradeMs.toFixed(1), prep: S.prepMs }, gradedChunks: S.chunks, regrade: { left: TOWNS.rgq ? Object.keys(TOWNS.rgq).length : 0, done: S.regraded }, edit: S.edit || null,
+  }), kit: !!TOWNS.kit, kitPart: !!(TOWNS.kit && TOWNS.kit.part), kitN: S.kitN, kitMs: S.kitMs, skelN: S.skelN, skelMs: S.skelMs, kitMesh: { baked: S.meshBaked, live: S.meshLive, check: S.meshCheck, vk: townVkFp() }, kitTris: S.kitTris, skip: S.skip, gls: S.gls || 0, lines: S.lines || 0, under: S.under || {}, drawn: { full: S.d0, low: S.d1, card: S.d2, shells: S.d3, plinth: S.plinth, flags: S.flags || 0, landmarks: S.lm || 0 }, tris: S.tris, ms: { draw: S.drawMs, bin: S.binMs, grade: +S.gradeMs.toFixed(1), prep: S.prepMs }, gradedChunks: S.chunks, regrade: { left: TOWNS.rgq ? Object.keys(TOWNS.rgq).length : 0, done: S.regraded }, edit: S.edit || null,
     night: { lit: +TL.k.toFixed(3), win: +TOD_WIN.toFixed(3), grid: TL.stat.inGrid, range: TL.stat.range || 0, full: TL.stat.full, over: TL.stat.over, gridMs: TL.stat.gridMs, cards: TL.stat.cards, glow: TL.stat.glow, glowMs: TL.stat.glowMs } };
   if (at) { var q = bedCell(at[0], at[1]); o.at = { ground: +townGround(at[0], at[1]).toFixed(2), sim: +bedHgt(at[0], at[1]).toFixed(2), clear: q ? townClr(q.C, q.u * q.C.step, q.v * q.C.step) : null }; }
   return o;
