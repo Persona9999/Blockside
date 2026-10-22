@@ -724,12 +724,7 @@ function mainOpaque(fr) {
   bedDraw();                                                             // 陸地與海底（63_bed_gl.js；有海圖才有）
   treeDraw();                                                            // 島上的樹（63_trees.js）
   townDraw();                                                            // 城鎮（63_towns.js；有城才有）
-  if (TWB.on && TWB.gl && TWB.gl.n) {                                     // 城鎮建築模式的預覽（87_townbuild.js twbLines；世界座標、穿地看得到）
-    //   ⛔ 要在地形、樹、城之後畫：關了深度測試的線不寫深度 ⇒ 畫在前面會被後畫的陸地整片蓋掉（2026-10-22 第一版放在船那一段後面，量到預覽框周圍 0 個綠像素）
-    gl.useProgram(P.tri.prog); setCommon(P.tri); gl.uniform1f(P.tri.u.uLit, 0); gl.vertexAttrib3f(1, 0, 1, 0);
-    cutSet(P.tri, null); gl.uniformMatrix4fv(P.tri.u.uModel, false, CS_ID || (CS_ID = M4.ident()));
-    gl.disable(gl.DEPTH_TEST); gl.bindVertexArray(TWB.gl.vao); gl.drawArrays(gl.LINES, 0, TWB.gl.n); gl.enable(gl.DEPTH_TEST); gl.bindVertexArray(null);
-  }
+  twbDraw();                                                             // 城鎮建築模式的預覽（87_townbuild.js：半透明的房子與路面帶、線框；⛔ 要在地形、樹、城之後）
 }
 /** 主畫面的海：折射複製、海面、破洞底下的海、遠海、內陸水、陰影範圍的除錯線。 */
 function mainWater(fr) {
