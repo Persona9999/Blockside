@@ -11,7 +11,7 @@
 //     ⛔ 照公式那邊的抽水換算（0.004 m/s × 水線面積 ≈ 每秒 0.84 m³）⇒ 比水線附近那幾個洞進得還快，戰鬥 420 秒艙裡一滴水都留不住（量過）。
 //   · 船：艙內的水 ＝ 加上去的重量 ⇒ 照浮力表（32_hull.js liftFor）算多吃水多少，sh.sink 照它慢慢跟過去（FL_TAU 秒）；
 //     水的重心偏哪一舷 ⇒ 往那邊傾斜（穩心高 FL_GM，見下）、偏船頭船尾 ⇒ 縱傾（FL_GML）；上限跟公式一樣（開始沉之前 0.21 rad、縱傾 0.07）。
-//     開始沉（下沉 4.2 m）之後照舊加速沉下去；斷成兩截照舊（公式，一定沉）。
+//     開始沉（下沉到頂層甲板泡水、不低於 4.2 m，32_hull.js sinkLineT）之後照舊加速沉下去；斷成兩截照舊（公式，一定沉）。
 // 精細等級 FL_LV：c 水格邊長幾格、ev 幾步算一次水格、jn 粒子上限（每艘）、vj 每顆帶多少 m³、dn 每次最多重算幾格被打壞的水格與破口。
 // 戰局：自己的亂數 rndF（開局重設）；各檔水格不同 ⇒ 各檔是各自的一局（同一個種子各自逐字重現）。⛔ 不碰 rnd()、不讀畫面的設定。
 //   進水模式開戰時決定（FLOOD_LV，70_flow.js），戰鬥中改了下一場生效。
@@ -36,7 +36,7 @@ function flType(T, c) {
  *  每個 (x, z) 兩舷船殼最外那一格 yP／yM（沒有 ⇒ −1；艙內 ＝ yM < y < yP）、範圍 x0–x1、zTop、ylo–yhi。掛在 T.flSkin；⛔ yP／yM 算完不改（兩邊共用）。 */
 function flSkin(T) {
   if (T.flSkin) return T.flSkin;
-  var B = T.hullG, zTop = Math.min(B.sz, T.zw + 46), x0 = Math.max(0, T.wl0 - 4), x1 = Math.min(B.sx - 1, T.wl1 + 4), cy = T.cy, TW = T.hullTW, HB = T.hullHB, x, y, z;
+  var B = T.hullG, zTop = Math.min(B.sz, T.zw + Math.max(46, Math.round(sinkLineT(T) / S) + 4)), x0 = Math.max(0, T.wl0 - 4), x1 = Math.min(B.sx - 1, T.wl1 + 4), cy = T.cy, TW = T.hullTW, HB = T.hullHB, x, y, z;
   var nxv = x1 - x0 + 1, yP = new Int16Array(nxv * zTop).fill(-1), yM = new Int16Array(nxv * zTop).fill(-1), ylo = 1e9, yhi = -1;
   for (z = 0; z < Math.min(zTop, T.hullTH); z++) for (x = x0; x <= x1; x++) {
     var hb = HB[z * TW + x]; if (!hb) continue;
