@@ -36,7 +36,7 @@ var TOWN_LOD = [160, 800], TOWN_FAR = [2400, 3000], TOWN_BAND = [24, 60, 300], T
 var TOWN_MESH_MS = 8;                                                    // 模型網格化每段最多幾 ms 就讓出一次（townMesh；跟地球儀同一條主執行緒）
 var TOWN_WALL_CORNER = 30, TOWN_WALL_KMAX = 1;                         // 城牆：轉角件從轉幾度起擺；斜接最多切多斜（tan，1 ＝ 轉 90° 的角平分）
 var TOWN_SLAB_KMAX = 2;                                                 // 碼頭、棧橋的板：轉角斜接最多拉長幾倍（2 ＝ 轉 120°；再急就在轉角那一點變窄）
-var TOWNS = { on: Q.get('towns') !== '0', list: [], pend: [], ver: 0, want: 0, err: null, kit: null, kitP: null, idx: null, kitHas: null, kitRedo: false, mwait: null, prog: null, dirty: true, eye: null, sig: '', buf: [], grp: null,
+var TOWNS = { on: Q.get('towns') !== '0', list: [], pend: [], ver: 0, want: 0, err: null, kit: null, kitP: null, idx: null, kitHas: null, kitRedo: false, mwait: null, prog: null, progJ: null, dirty: true, eye: null, sig: '', buf: [], grp: null,
   stat: { towns: 0, lots: 0, inst: 0, walls: 0, corners: 0, snapped: 0, skip: {}, d0: 0, d1: 0, d2: 0, d3: 0, plinth: 0, tris: 0, binMs: 0, kitMs: 0, gradeMs: 0, chunks: 0, drawMs: 0 } };
 var TOWN_J0 = [0, 0, 0, 0];                                             // 建築的 aJ（不斜接、不順坡、牆基不延）
 var TOWN_USE_ALT = { commandant: ['house'], governor: ['townhall'] };   // 那一套沒有那種模型 ⇒ 用哪一種代（BUILDING_SPEC §7：fr 沒有長官的屋子；carib 有）
@@ -785,9 +785,13 @@ var TOWN_GR_FS = function (fade) {
     ' vec3 col=vC*(0.9+0.2*fract(sin(dot(floor(vW.xz*1.3),vec2(12.9898,78.233)))*43758.5453))*(mix(uGround,uSky,n.y*0.5+0.5)*0.65+vec3(1.0,0.96,0.88)*d*sk*0.7+townLamp(vW,n));\n' +
     ' float fd=length(vW-uEye); o=vec4(mix(col,uFog,1.0-exp(-fd*uFogD)),1.0); }\n';
 };
+/** 城鎮的著色器：第一次要畫時送出編譯（01_gl.js glProgStart；TASK-0816），編好之前回 null（城鎮這幾格不畫、實例也先不建）。陰影、夜裡的燈那幾支一起編（以前第一次用到才編）。 */
 function townProgs() {
   if (TOWNS.prog) return TOWNS.prog;
-  var P = { vox: VK.compile(gl, TOWN_VS, TOWN_FS()), bb: VK.compile(gl, TOWN_BB_VS, TOWN_BB_FS()), pl: VK.compile(gl, TOWN_PL_VS, TOWN_PL_FS()), gr: VK.compile(gl, TOWN_GR_VS, TOWN_GR_FS(false)), sh: VK.compile(gl, TOWN_GR_VS, TOWN_GR_FS(true)) };
+  var J = TOWNS.progJ || (TOWNS.progJ = { vox: glProgStart(TOWN_VS, TOWN_FS()), bb: glProgStart(TOWN_BB_VS, TOWN_BB_FS()), pl: glProgStart(TOWN_PL_VS, TOWN_PL_FS()), gr: glProgStart(TOWN_GR_VS, TOWN_GR_FS(false)), sh: glProgStart(TOWN_GR_VS, TOWN_GR_FS(true)), dVox: glProgStart(TOWN_VS, DEPTH_ONLY_FS), dPl: glProgStart(TOWN_PL_VS, DEPTH_ONLY_FS),
+    win: glProgStart(TOWN_WIN_VS, TOWN_WIN_FS()), glow: glProgStart(TOWN_GLOW_VS, TOWN_GLOW_FS) });
+  if (!Object.keys(J).every(function (k) { return glProgReady(J[k]); })) return null;
+  var P = {}; Object.keys(J).forEach(function (k) { P[k] = glProgEnd(J[k]); }); TOWNS.progJ = null;
   P.ib = [gl.createBuffer(), gl.createBuffer(), gl.createBuffer(), gl.createBuffer()];   // 近、中、貼圖、石基的實例（每次分組重寫）
   P.quad = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, P.quad); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-0.5, 0, 0.5, 0, 0.5, 1, -0.5, 0, 0.5, 1, -0.5, 1]), gl.STATIC_DRAW);
   P.bbVao = gl.createVertexArray(); gl.bindVertexArray(P.bbVao);
@@ -861,8 +865,9 @@ function townPlinth(q) {
 /** 畫（60_render.js：樹之後）。 */
 function townDraw() {
   if (!TOWNS.on || !TOWNS.list.length || !BED || !BED.A || PASS.vp) return;
-  if (!TOWNS.kit) { townKit(); return; }
+  if (!TOWNS.kit) { townKit(); townProgs(); return; }                 // 著色器跟模型一起開始（編譯在背景，townProgs）
   var t0 = performance.now(), K = TOWNS.kit, P = townProgs(), eye = CAM.eye, PL = bedPlanes(CAM.vp);
+  if (!P) return;
   TOWNS.list.forEach(function (T) {
     if (T.roadPending || T.roadSurface) return;
     T.roadPending = true;
@@ -942,7 +947,7 @@ function townInstAttr(G, l, mi) { var o = G.off[l][mi] * 44; gl.vertexAttribPoin
  *  貼圖、屋頂殼、旗不畫（800 m 以外，陰影那一層的範圍也差不多到這裡）。⇒ 畫了幾個實例。 */
 function townDepth() {
   if (!TOWNS.on || !TOWNS.list.length || !TOWNS.kit || !TOWNS.prog || !TOWNS.grp) return 0;
-  var K = TOWNS.kit, P = TOWNS.prog, G = TOWNS.grp, PD = P.dVox || (P.dVox = VK.compile(gl, TOWN_VS, DEPTH_ONLY_FS)), n = 0;
+  var K = TOWNS.kit, P = TOWNS.prog, G = TOWNS.grp, PD = P.dVox, n = 0;
   gl.useProgram(PD.prog); setCommon(PD);
   for (var l = 0; l < 2; l++) K.names.forEach(function (nm, mi) {
     var k = G.cnt[l][mi]; if (!k) return; var Mm = K.M[nm], g = Mm.lod[l];
@@ -951,7 +956,7 @@ function townDepth() {
     townInstAttr(G, l, mi);
     gl.drawElementsInstanced(gl.TRIANGLES, g.nq * 6, gl.UNSIGNED_INT, 0, k); n += k;
   });
-  if (G.npl && P.plVao) { var PP = P.dPl || (P.dPl = VK.compile(gl, TOWN_PL_VS, DEPTH_ONLY_FS)); gl.useProgram(PP.prog); setCommon(PP); gl.bindVertexArray(P.plVao); gl.drawArraysInstanced(gl.TRIANGLES, 0, 36, G.npl); }
+  if (G.npl && P.plVao) { var PP = P.dPl; gl.useProgram(PP.prog); setCommon(PP); gl.bindVertexArray(P.plVao); gl.drawArraysInstanced(gl.TRIANGLES, 0, 36, G.npl); }
   gl.bindVertexArray(null); return n;
 }
 function townBoxDist(b, e) { var dx = Math.max(b[0] - e[0], 0, e[0] - b[3]), dz = Math.max(b[2] - e[2], 0, e[2] - b[5]); return Math.sqrt(dx * dx + dz * dz); }
@@ -1224,7 +1229,7 @@ function townGlowDraw() {
   var cf = gl.isEnabled(gl.CULL_FACE); gl.disable(gl.CULL_FACE);
   gl.enable(gl.BLEND); gl.blendFunc(gl.ONE, gl.ONE); gl.depthMask(false);
   if (G) {                                                              // 窗片：近那一級的實例
-    var PW = P.win || (P.win = VK.compile(gl, TOWN_WIN_VS, TOWN_WIN_FS())); gl.useProgram(PW.prog); setCommon(PW);
+    var PW = P.win; gl.useProgram(PW.prog); setCommon(PW);
     gl.uniform1f(PW.u.uFogD, fogD); gl.uniform3fv(PW.u.uEye, eye); gl.uniform1f(PW.u.uTWin, TOD_WIN); gl.uniform1f(PW.u.uTLK, TL.k); gl.uniform1f(PW.u.uTLT, SIMT);
     gl.uniform2f(PW.u.uIn, -2, -1); gl.uniform2f(PW.u.uOut, L0 - B0, L0 + B0);
     K.names.forEach(function (nm, mi) {
@@ -1233,7 +1238,7 @@ function townGlowDraw() {
       gl.drawArraysInstanced(gl.TRIANGLES, 0, Mm.win.n, n); TL.stat.cards += n;
     });
   }
-  var PG = P.glow || (P.glow = VK.compile(gl, TOWN_GLOW_VS, TOWN_GLOW_FS)), on = false;   // 光點：每座城一次
+  var PG = P.glow, on = false;   // 光點：每座城一次
   TOWNS.list.forEach(function (T) { [T.tl && T.tl.S, T.tl && T.tl.D].forEach(function (tl) {
     if (!tl || !tl.nGlow) return;
     if (!on) {
