@@ -186,6 +186,9 @@ if (DEBUG) window.__game = {
   cam: function (o) { camSet(o); camSet({ snap: true }); camUpdate(1); render(); },
   townProsp: function (v, id) { var r = townProspSet(v, id); if (RUNNING) render(); return r; },   // 城牆等級試看（63_towns.js townProspSet；v ＝ 繁榮度 0～1、null 回預設，id 沒給 ⇒ 每一座；開場前只改值，開場後畫一格）⇒ [{ id, tier, prosp, lv, kits }]
   town: function (at, on) { if (on !== undefined) { TOWNS.on = !!on; render(); } return BED && BED.A ? townStat(at) : null; },   // 城鎮的讀數（63_towns.js townStat；at ＝ [x, z] ⇒ 那一點的畫面高度、模擬高度、清不清樹；on ⇒ 開關畫不畫（量畫一格多少 ms 用））
+  twb: function () { return { on: TWB.on, town: TWB.town, open: TWB.open, cat: TWB.cat, item: TWB.item, side: TWB.side, q: TWB.q, start: TWB.start, tr: TWB.tr, busy: TWB.busy, ops: TWB.ops, framed: TWB.framed, lines: TWB.gl ? TWB.gl.n : 0, info: ($('twbInfo') || {}).textContent }; },   // 城鎮建築模式的讀數（87_townbuild.js）
+  twbLots: function (use, n) { var T = twbTown(); return T ? (T.p.lots || []).filter(function (l) { return l.use === use; }).slice(0, n || 5).map(function (l) { return { id: l.id, at: l.at }; }) : null; },   // 那一種地塊的規劃座標（測建築模式用）
+  twbScreen: function (q) { var T = twbTown(); return T ? twbScreenOf(T, q) : null; },   // 規劃座標 ⇒ 螢幕座標（clientX、clientY；測建築模式用）
   trees: function (sp, n, at) { return treeFind(sp, n, at); },   // 找樹（63_trees.js treeFind）：那一種最靠近 at（[x, z]；沒給 ⇒ 鏡頭）的 n 棵
   // 海圖（TASK-0721；08_seabed.js、32_ground.js）：載了哪幾塊、換過幾次中心、等過幾次；每艘的擱淺讀數；q ＝ [x, z] ⇒ 那一點的高度與底質
   inland: function (on) { if (on !== undefined) { BEDWAT.on = !!on; render(); } return BEDWAT.on; },   // 內陸水與低於海平面的乾地的遮罩一起開關（63_bed_gl.js；同一格開／關對照畫面用）

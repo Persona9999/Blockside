@@ -85,6 +85,10 @@ function townGot(L, err, idx) {
   TOWNS.ver++; TOWNS.dirty = true; TOWNS.stat.towns = TOWNS.list.length;
   NEW.forEach(function (T) { T.v = TOWNS.ver; });
   TOWNS.stat.prepMs = +(performance.now() - t0).toFixed(1);
+  townRegradeFor(NEW);
+}
+/** 跟 L 裡的城疊到的塊重新整地、清樹（townGot 新來的城、townReplace 改過的城）。 */
+function townRegradeFor(NEW) {
   Object.keys(Object.assign({}, BED.ch, BED.cm)).forEach(function (k) {   // 畫著的那一份（原精度或外圈的中等塊）：有畫面迴圈 ⇒ 排隊（townRegrade），不然照舊當場重發
     var C = bedShowC(k); if (!(C && townOver(C.cx, C.cy, NEW))) return;
     if (BED_SLICE) (TOWNS.rgq || (TOWNS.rgq = {}))[k] = 1; else evEmit('bedChunk', C.cx, C.cy, C);
@@ -99,6 +103,24 @@ function townGot(L, err, idx) {
     bedFarDrop(k);
     if (BEDFAR.todo) BEDFAR.todo.push([c[0], c[1], 1, 0]);
   });
+}
+/** 建築模式改了一座城（87_townbuild.js：外面那一頁回的新規劃；TASK-0742）⇒ 換掉同一個 id 的那一座：舊的 GPU（地面塊、旗子、屋頂殼）放掉、
+ *  跟新舊兩份疊到的塊重新整地（同 townGot 新來的城那一段）、要的模型沒解 ⇒ 重解。沒有這一座 ⇒ 照 townGot 收。
+ *  ⚠ 整座城重整（君士坦丁堡約 50 塊，照背景預算分格做）—— 只重整改到的那一塊是下一步。 */
+function townReplace(p) {
+  if (!BED || !BED.A || !p || p.format !== 'blocksail-town') return false;
+  var i = -1; TOWNS.list.forEach(function (T, k) { if (T.id === p.id) i = k; });
+  if (i < 0) { townGot([p]); return true; }
+  var old = TOWNS.list[i], T = townPrep(p);
+  if (old.gt) Object.keys(old.gt).forEach(function (k) { var g = old.gt[k].g; if (g) townGpuFree(g); });
+  townFlagFree(old);
+  if (old.shell) { gl.deleteVertexArray(old.shell.vao); gl.deleteBuffer(old.shell.vb); gl.deleteBuffer(old.shell.ib); }
+  TOWNS.list[i] = T;
+  var I = townIdx();
+  if (I && TOWNS.kitHas && townNeed(I).some(function (nm) { return TOWNS.kitHas.indexOf(nm) < 0; })) townKitStale();
+  TOWNS.ver++; T.v = TOWNS.ver; TOWNS.dirty = true; TOWNS.stat.replaced = (TOWNS.stat.replaced || 0) + 1;
+  townRegradeFor([old, T]);
+  return true;
 }
 // 規劃比地形晚到時的重新整地排隊（TASK-0819；Tim 2026-10-22「進入航海時 城市還沒載入 然後載入時會整個卡住很久」）：
 //   townGot 以前在收到規劃的那一則訊息裡，把城範圍內畫著的每一塊都重發 'bedChunk' ⇒ 每一塊當場整地（townHv 20～60 ms，第一個接手的是 63_bed_gl.js bedDryPut）

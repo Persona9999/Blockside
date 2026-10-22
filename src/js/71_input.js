@@ -18,7 +18,7 @@ document.addEventListener('mousemove', function (e) { ctrlEach('look', e); }); /
 cv.addEventListener('pointermove', function (e) {
   if (PTRS.has(e.pointerId)) PTRS.set(e.pointerId, { x: e.clientX, y: e.clientY });
   if (PINCH && PTRS.size === 2) { ctrlDo('pinch', PINCH, pinchM(), pinchD()); return; }   // 兩指：海戰鏡頭縮放＋平移；第一人稱不動
-  if (!inDrag) return;
+  if (!inDrag) { if (e.pointerType === 'mouse' && !PTRS.size) ctrlDo('hover', e.clientX, e.clientY); return; }   // 沒按著 ⇒ 游標移動（87_townbuild.js 建築模式的預覽）
   var dx = e.clientX - inDrag.x, dy = e.clientY - inDrag.y;
   if (!inDrag.moved && Math.hypot(dx, dy) < 5) return;
   inDrag.moved = true; inDrag.x = e.clientX; inDrag.y = e.clientY;
