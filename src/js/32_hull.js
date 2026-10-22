@@ -106,7 +106,8 @@ function survey(sh) {               // 每半秒量一次：砲還在不在、�
     var f = m.foot, x = f & 2047, y = (f >> 11) & 1023, z = f >> 21;
     if (!countBox(sh.grid, x - 2, y - 2, z - 1, x + 2, y + 2, z)) blowModel(sh, m, [0, -1, 0], true);   // 腳下的甲板被打掉 ⇒ 掉下去
   });
-  if (sh.doors) doorsSurvey(sh);                                      // 門沒了 ⇒ 開口變成進水口（25_doors.js）
+  if (sh.doors) doorsSurvey(sh);
+  if (sh.portW) portsSurvey(sh);                                     // 有蓋板的砲口：蓋板被打壞 ⇒ 變成進水口（25_doors.js，TASK-0822）                                      // 門沒了 ⇒ 開口變成進水口（25_doors.js）
   sh.guns.forEach(function (g) { if (g.alive) g.alive = g.model.alive; if (g.alive) alive++; });   // 砲都是模型：模型飛了（血量歸零、腳下甲板沒了）砲就沒了
   sh.gunsAlive = alive;
   var up = 0;
