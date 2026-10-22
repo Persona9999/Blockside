@@ -180,6 +180,11 @@ var ITEM_DEF = {
     [1, 3, 10, 10, '#8a5a2e'], [2, 3, 2, 10, '#a06c3a'], [1, 5, 10, 1, '#4a4c52'], [1, 10, 10, 1, '#4a4c52'], [1, 3, 10, 1, '#5fa8e8'], [2, 3, 8, 1, '#9fd3ff']] },
   ladle: { w: 30, h: 6, pv: [3, 1], r: [[0, 1, 20, 2, '#7a5230'], [0, 1, 20, 1, '#9a6c40'], [0, 1, 1, 2, '#4a2e17'], [20, 1, 4, 1, '#6a6d73'],   // 廚師的湯杓（TASK-0720）：0.65 m，木柄、鐵杓、杓裡一點燉菜；握柄尾
     [23, 1, 7, 3, '#5d6168'], [24, 4, 5, 1, '#5d6168'], [25, 5, 3, 1, '#4a4c52'], [23, 1, 7, 1, '#9aa0a8'], [24, 2, 5, 1, '#b8862e']] },
+  hammer: { w: 16, h: 8, pv: [1, 4], r: [[0, 3, 12, 2, '#8a5a2e'], [0, 3, 12, 1, '#a87a45'], [0, 3, 1, 2, '#5a3a1e'], [11, 1, 1, 6, '#5d6168'],   // 木匠的槌子（TASK-0676，Tim 2026-10-22「木匠可以揮舞槌子 用像素風槌子」）：0.35 m 木柄、鐵槌頭（一頭平、一頭拔釘的爪）
+    [12, 0, 3, 8, '#4a4c52'], [12, 0, 3, 1, '#9aa0a8'], [15, 1, 1, 2, '#3b3d42'], [15, 5, 1, 2, '#3b3d42'], [12, 7, 3, 1, '#2b2d31']] },
+  patch: { w: 18, h: 14, pv: [2, 12], r: [[0, 0, 18, 14, '#e8e2cf'], [0, 0, 18, 2, '#f6f2e4'], [0, 12, 18, 2, '#c9c1a8'], [0, 0, 1, 14, '#bdb59c'], [17, 0, 1, 14, '#bdb59c'],   // 帆匠在縫的補丁布（TASK-0676）：攤開的一塊 0.4 m，邊上一圈針腳
+    [2, 2, 2, 1, '#8a6a3c'], [6, 2, 2, 1, '#8a6a3c'], [10, 2, 2, 1, '#8a6a3c'], [14, 2, 2, 1, '#8a6a3c'], [2, 11, 2, 1, '#8a6a3c'], [6, 11, 2, 1, '#8a6a3c'], [10, 11, 2, 1, '#8a6a3c'], [2, 5, 1, 2, '#8a6a3c'], [2, 8, 1, 2, '#8a6a3c'], [15, 5, 1, 2, '#8a6a3c']] },
+  needle: { w: 12, h: 3, pv: [2, 1], r: [[1, 1, 9, 1, '#c3cad1'], [10, 1, 2, 1, '#eef2f5'], [1, 0, 2, 3, '#8a8f96'], [0, 2, 4, 1, '#d8c79a']] },   // 帆匠的縫帆針（TASK-0676）：0.26 m 的三角針、針尾穿著麻線
   kid: { w: 16, h: 12, pv: [8, 0], r: [[3, 0, 10, 1, '#3b3d42'], [2, 1, 1, 3, '#3b3d42'], [13, 1, 1, 3, '#3b3d42'],   // 伙夫提的木桶食器（mess kid，TASK-0720）：0.35 m 寬的矮木桶、兩道銅箍、上面一層燉菜，提把在上面
     [1, 4, 14, 7, '#7a5230'], [3, 4, 2, 7, '#946a40'], [10, 4, 1, 7, '#6a4626'], [2, 11, 12, 1, '#5a3a1e'], [1, 6, 14, 1, '#c9a44a'], [1, 9, 14, 1, '#c9a44a'], [2, 4, 12, 1, '#c8a060'], [4, 4, 3, 1, '#e0c080']] }
 };
@@ -199,12 +204,37 @@ function itemAtlas() {
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
   return t;
 }
-/** 這個人手上拿什麼：{ id, hx, hy（手：往前、往上，身高的比例）, a（道具的角度：朝前 0、往上為正）}；沒有 ⇒ null。 */
+// ───── 木匠、帆匠工作時的演出（TASK-0676；Tim 2026-10-22「想讓帆匠 木匠工作時有演出」「手上能拿兩個東西嗎(目前想到木匠可以揮舞槌子) 用像素風槌子」）─────
+// 站到那一處、計時中（hand.job.at）：
+//   · 木匠（修梯子、補洞、補綁定點）：前面那隻手壓著木板、另一隻手揮槌子 —— 慢慢舉起（HAM_UP）、一下敲下去（HAM_DN）、停一下；
+//     敲到的那一刻濺幾片木屑（菱形碎片，照（船、人、第幾下）的雜湊）、叩一聲（02_audio.js 'knock'）；人前傾、敲下去那一下再壓低一點。
+//   · 帆匠（補帆、接繩、接繩梯）：抬頭看帆、舉著帆布，縫帆針一進一出。
+//   · 回木工台拿木材、回帆布櫃拿帆布：彎腰拿（跟裝填同一個節奏）。
+//   · 都面向那件東西（crewFaceAt：洞、梯子、帆、台、櫃）。
+// ⛔ 全部只在畫面那一段（drawCrew）：不碰 rnd()、不改模擬的狀態（木屑、聲音照畫面的格子出；無頭、?demo 不畫 ⇒ 戰局一位元不差）。
+var HAM_P = 0.62, HAM_UP = 0.7, HAM_DN = 0.1;                                       // 一下幾秒、舉起佔幾成、敲下去佔幾成（剩下的停著）
+/** 這個人正在做 kind 這件工作（已經站到那裡、計時中）⇒ 那件 job；不然 null。 */
+function crewAtJob(c, kind) { var J = c.st === 0 && c.hand && c.hand.job; return J && J.kind === kind && J.at ? J : null; }
+/** 木匠補的是甲板的洞 ⇒ 跪著敲（梯子、帆的綁定點在高處 ⇒ 站著）。 */
+function carpKneel(J) { return J.t && J.t.kind === 'hole'; }
+/** 槌子這一下走到哪（0..1）、槌子的角度（朝前 0、往上為正：舉起 1.6、敲下去 −0.3）。 */
+function hamPh(c) { var u = ((c.t || 0) / HAM_P) % 1; return u < 0 ? u + 1 : u; }
+function hamAng(u) { return u < HAM_UP ? -0.3 + 1.9 * Math.sin(u / HAM_UP * 1.5708) : u < HAM_UP + HAM_DN ? 1.6 - 1.9 * (u - HAM_UP) / HAM_DN : -0.3; }
+/** 這個人手上拿什麼：{ id, hx, hy（手：往前、往上，身高的比例）, a（道具的角度：朝前 0、往上為正）}、兩隻手都拿 ⇒ 陣列（先畫的在後面）；沒有 ⇒ null。 */
 function heldItem(sh, c, f) {
   if (c.st !== 0) return null;                                                      // 受傷、陣亡、墜落 ⇒ 手上的東西掉了
   if (c.role === ROLE.POWDER) return c.cart > 0 ? { id: 'carry', hx: 0.17, hy: 0.52, a: 0 } : null;
-  if (c.role === ROLE.CARPENTER) return c.wood > 0 ? { id: 'plank', hx: 0.14, hy: 0.5, a: 0 } : null;   // 木匠：身上還有木材就抱著（46_carpenter.js）
-  if (c.role === ROLE.SAILMAKER) return c.cloth > 0 ? { id: 'canvas', hx: 0.14, hy: 0.5, a: 0 } : null;   // 帆匠：身上還有帆布就抱著（47_sailmaker.js）
+  if (c.role === ROLE.CARPENTER) {                                                  // 木匠：身上還有木材就抱著（46_carpenter.js）；正在修 ⇒ 一手壓木板、一手揮槌子（見上）
+    var JR = crewAtJob(c, 'repair'); if (!JR) return c.wood > 0 ? { id: 'plank', hx: 0.14, hy: 0.5, a: 0 } : null;
+    var hu = hamPh(c), ha = hamAng(hu), hk = (ha + 0.3) / 1.9;
+    if (carpKneel(JR)) { ha = -1.1 + (ha + 0.3) * 1.42; return [{ id: 'plank', hx: 0.36, hy: 0.03, a: 0 }, { id: 'hammer', hx: 0.12 + 0.05 * hk, hy: 0.4 + 0.12 * hk, a: ha }]; }   // 補甲板的洞：跪著、木板平放在面前的甲板上、往下敲
+    return [{ id: 'plank', hx: 0.24, hy: 0.62, a: 1.35 }, { id: 'hammer', hx: 0.06 + 0.06 * hk, hy: 0.56 + 0.16 * hk, a: ha }];   // 梯子、帆的綁定點：站著、木板豎著按在面前
+  }
+  if (c.role === ROLE.SAILMAKER) {                                                  // 帆匠：身上還有帆布就抱著（47_sailmaker.js）；正在補 ⇒ 舉著帆布、針一進一出
+    if (!crewAtJob(c, 'sail')) return c.cloth > 0 ? { id: 'canvas', hx: 0.14, hy: 0.5, a: 0 } : null;
+    var sw = 0.5 + 0.5 * Math.sin((c.t || 0) * 6.2832 * 1.2);
+    return [{ id: 'patch', hx: 0.12, hy: 0.62, a: 0.25 }, { id: 'needle', hx: 0.2 + 0.1 * sw, hy: 0.78 + 0.05 * sw, a: 0.9 - 0.6 * sw }];   // 舉著補丁布、沿著邊縫（針腳那一圈）
+  }
   if (c.hand && c.hand.job && c.hand.job.kind === 'fire') return { id: 'bucket', hx: 0.16, hy: 0.42, a: 0 };   // 救火的預備水手：提一桶水（49_burn.js；潑的水花 59_burnfx.js）
   if (c.hand && c.hand.job && c.hand.job.kind === 'eat') return { id: 'kid', hx: 0.16, hy: 0.42, a: 0 };   // 伙夫（45_galley.js；TASK-0720）：提著全桌的木桶食器去爐灶、在爐灶旁盛飯
   if (c.role === ROLE.COOK) {                                                       // 廚師（45_galley.js）：拿湯杓 —— 爐灶在做飯 ⇒ 舉手、杓子伸進爐上的鍋裡一攪一攪（跟 WORK 同一個節奏；面向爐灶，crewFaceAt）；不能做飯 ⇒ 杓子立著
@@ -223,9 +253,20 @@ function heldItem(sh, c, f) {
 }
 /** 站著的人面向哪一點（格座標；沒有 ⇒ null ＝ 照 c.face 面向左右舷）：廚師面向他的爐灶、到了爐灶的伙夫也是（45_galley.js；TASK-0720）。
  *  ⛔ c.face 只有 ±1（面向左舷或右舷）⇒ 站在爐灶船頭、船尾那一面的人從側面看會背對爐灶、湯杓朝外。只給畫面用，不碰模擬。 */
-function crewFaceAt(c) {
+function crewFaceAt(c, sh) {
   if (c.role === ROLE.COOK && c.gal) return c.gal.m.c;
-  var J = c.hand && c.hand.job; return J && J.kind === 'eat' && J.at && J.gal ? J.gal.m.c : null;
+  var J = c.hand && c.hand.job; if (!J || !J.at) return null;
+  if (J.kind === 'eat') return J.gal ? J.gal.m.c : null;
+  if (J.kind === 'wood' || J.kind === 'cloth') return J.m && J.m.c;            // 木匠、帆匠到了台、櫃旁拿材料（TASK-0676）
+  if (J.kind === 'repair' && J.t && sh.nav && sh.nav.levels[J.t.lv]) return navPos(sh.nav.levels[J.t.lv].N, J.t.cell);   // 木匠：面向在修的那一處
+  if (J.kind === 'sail' && J.s) return smFace(J.s);                             // 帆匠：面向那面帆（繩梯：梯腳）
+  return null;
+}
+/** 帆匠面向哪（格座標）：帆 ＝ 頂點的平均、繩梯 ＝ 梯腳（只給畫面用，記在帆上）。 */
+function smFace(s) {
+  if (s.lad) return s.foot;
+  if (!s.smC3) { var v = s.verts, n = v.length / 3, a = [0, 0, 0]; for (var i = 0; i < v.length; i += 3) { a[0] += v[i]; a[1] += v[i + 1]; a[2] += v[i + 2]; } s.smC3 = n ? [a[0] / n, a[1] / n, a[2] / n] : [0, 0, 0]; }
+  return s.smC3;
 }
 /** 這個人現在在做什麼（FR）：單圖時決定程式動作，8 欄時也是選哪一格。 */
 function crewFrame(sh, c) {
@@ -236,7 +277,9 @@ function crewFrame(sh, c) {
   if (c.walk || c.moving) return ph ? FR.RUN_A : FR.RUN_B;
   if (c.hand && c.hand.job && c.hand.job.kind === 'fire' && c.hand.job.at) return ph ? FR.WORK_A : FR.WORK_B;   // 站到火邊：彎腰潑水（跟裝填同一個前傾的節奏）
   if (c.hand && c.hand.job && c.hand.job.kind === 'eat' && c.hand.job.at) return ph ? FR.WORK_A : FR.WORK_B;    // 伙夫到了爐灶：彎腰盛飯（45_galley.js galleyJoin）
-  if (c.role === ROLE.COOK) return c.gal && c.gal.cooking ? (ph ? FR.WORK_A : FR.WORK_B) : FR.IDLE;   // 廚師：爐灶在做飯 ⇒ 前傾攪鍋；打壞了、泡水、熄火 ⇒ 站著（45_galley.js galleyTick 的 cooking）
+  if (c.role === ROLE.COOK) return c.gal && c.gal.cooking ? (ph ? FR.WORK_A : FR.WORK_B) : FR.IDLE;
+  if (crewAtJob(c, 'repair') || crewAtJob(c, 'sail')) return FR.WORK_A;         // 木匠敲、帆匠縫（TASK-0676；姿勢見 crewPose）
+  if (crewAtJob(c, 'wood') || crewAtJob(c, 'cloth')) return ph ? FR.WORK_A : FR.WORK_B;   // 在台、櫃旁彎腰拿材料   // 廚師：爐灶在做飯 ⇒ 前傾攪鍋；打壞了、泡水、熄火 ⇒ 站著（45_galley.js galleyTick 的 cooking）
   if (c.role === ROLE.POWDER && c.pm && c.pm.st === 'fill') return ph ? FR.WORK_A : FR.WORK_B;   // 在取用點拿火藥與彈藥
   if (c.role === ROLE.GUN && c.gun) {
     if (SIMT - (c.gun.firedAt || -9) < 0.7) return FR.FIRE;
@@ -284,6 +327,11 @@ function crewPose(sh, c, f) {
     var w = 0.5 + 0.5 * Math.sin(t * P2 * 1.1); k.lean = 0.12 + 0.28 * w; k.sy = 1 - 0.1 * w; k.sx = 1 + 0.05 * w; k.bob = -0.04 * w;
     if (c.role === ROLE.HELM) { k.lean = 0.06 * Math.sin(t * 0.8); k.sy = 1; k.sx = 1; k.bob = 0; }          // 舵手：跟著舵輪輕晃
     if (c.role === ROLE.TOP) { k.lean = 0.1 * Math.sin(t * 1.3); k.sy = 1; k.sx = 1; k.bob = 0; }            // 桅頂：跟著桅晃
+    if (crewAtJob(c, 'repair')) {                                                  // 木匠敲：前傾、敲下去那一下壓低（TASK-0676）
+      var hu = hamPh(c), dn = hu < HAM_UP ? 0 : hu < HAM_UP + HAM_DN ? (hu - HAM_UP) / HAM_DN : Math.exp(-(hu - HAM_UP - HAM_DN) * 12);
+      k.lean = 0.3 + 0.12 * dn - 0.06 * (hu < HAM_UP ? hu / HAM_UP : 0); k.sy = 1 - 0.07 * dn; k.sx = 1 + 0.04 * dn; k.bob = -0.03 * dn;
+      if (carpKneel(crewAtJob(c, 'repair'))) { k.sy *= 0.72; k.sx *= 1.06; k.lean += 0.08; }   // 跪著（跟傷員跪下同一個縮法）
+    } else if (crewAtJob(c, 'sail')) { k.lean = -0.12 + 0.03 * Math.sin(t * 2.1); k.sy = 1; k.sx = 1; k.bob = 0; }   // 帆匠縫：抬頭看帆、輕輕晃
     return k;
   }
   k.sy = 1 + 0.022 * Math.sin(t * P2 * 0.32); k.lean = 0.035 * Math.sin(t * 0.9);   // 待命：呼吸、輕晃
@@ -303,7 +351,7 @@ function drawCrew() {
       var art = c.art !== undefined && c.art < CREW_ROWS ? c.art : c.role;   // 船長那一列沒有 ⇒ 用職位那一列
       var w = c.st === 4 || c.st === 5 ? c.fw : M4.pt(sh.M, c.pos[0], c.pos[1], c.pos[2]), f = crewFrame(sh, c);
       var wt = c.walk ? (c.walk.w ? c.walk.w[c.walk.k] : c.walk.to) : c.mway && c.moving ? c.mway.w[c.mway.k] : c.hand && c.moving ? c.hand.to : null;   // 要去的那一點（預備水手：照路走、爬梯子，42_hands.js）
-      if (!wt && c.st === 0) wt = crewFaceAt(c);                                     // 站著做事、面向那件東西（廚師、伙夫面向爐灶；TASK-0720）
+      if (!wt && c.st === 0) wt = crewFaceAt(c, sh);                                 // 站著做事、面向那件東西（廚師、伙夫面向爐灶；TASK-0720；木匠、帆匠面向在修的那件，TASK-0676）
       var fd = c.st === 5 && (c.fv[0] || c.fv[2]) ? [c.fv[0], 0, c.fv[2]] : wt ? M4.dir(sh.M, wt[0] - c.pos[0], wt[1] - c.pos[1], 0) : mul(faceW, c.face), flip = dot(fd, right) < 0;   // 在水裡：面向游的方向（世界座標）
       var col = frames ? f : 0, u0 = col / CREW_COLS / 2, u1 = (col + 1) / CREW_COLS / 2, v0 = art / CREW_ROWS, v1 = (art + 1) / CREW_ROWS, k = n * BBS, h = CREW_H;   // 左半張是底圖（右半張遮罩）
       var ps = crewPose(sh, c, f), amp = frames ? 0.35 : 1;                            // 8 欄逐格：姿勢在圖裡，程式只疊輕的一層（不再躺、不再跪）
@@ -321,14 +369,17 @@ function drawCrew() {
         BB[k + 4] = u0; BB[k + 6] = u1; BB[k + 10] = -lean; BB[k + 13] = dw[0]; BB[k + 14] = dw[1]; BB[k + 15] = dw[2];   // 倒下了幾度 ＝ −lean（往後倒是負的）
       }
       n++;
-      var it = c.st === 0 && ni < ITMAX ? heldItem(sh, c, f) : null;
-      if (it) {                                                                       // 手持物：在「朝右」的座標裡算（往前 x、往上 y、逆時針為正），朝左再鏡射
+      if (c.role === ROLE.CARPENTER && c.st === 0) carpHitFx(sh, c, ci, w, fd);      // 槌子敲下去那一刻：木屑＋叩一聲（TASK-0676；只給畫面）
+      var hold = c.st === 0 ? heldItem(sh, c, f) : null, its = !hold ? [] : hold.length ? hold : [hold];
+      for (var ik = 0; ik < its.length && ni < ITMAX; ik++) {                        // 手持物（兩隻手都拿 ⇒ 兩件；後面那件離鏡頭近一點，蓋在上面）：在「朝右」的座標裡算（往前 x、往上 y、逆時針為正），朝左再鏡射
+        var it = its[ik];
         var d = ITEM_DEF[it.id], uv = ITEM_UV[it.id], fh = h * FIG_K * (art === ROLE.POWDER ? 0.75 : 1), iw = d.w / ITEM_PPM, ih = d.h / ITEM_PPM;
         var pqx = (d.pv[0] + 0.5) / ITEM_PPM - iw / 2, pqy = ih - (d.pv[1] + 0.5) / ITEM_PPM;   // 握的地方在貼圖裡的位置（貼圖的轉軸是底邊中間）
         var be = -lean, cb = Math.cos(be), sb = Math.sin(be), hx = it.hx * fh * sx, hy = it.hy * fh * sy;   // 人往前傾 lean ⇒ 朝右時順時針
         var Hx = cb * hx - sb * hy, Hy = sb * hx + cb * hy + ps.bob * amp, al = it.a + be, ca = Math.cos(al), sa = Math.sin(al);
         var Bx = Hx - (ca * pqx - sa * pqy), By = Hy - (sa * pqx + ca * pqy), bx = flip ? -Bx : Bx, q = ni * BBS;
-        ITB[q] = w[0] + right[0] * bx - fw[0] * 0.06; ITB[q + 1] = w[1] + By; ITB[q + 2] = w[2] + right[2] * bx - fw[2] * 0.06; ITB[q + 3] = ih;
+        var zf = 0.06 + 0.02 * ik;
+        ITB[q] = w[0] + right[0] * bx - fw[0] * zf; ITB[q + 1] = w[1] + By; ITB[q + 2] = w[2] + right[2] * bx - fw[2] * zf; ITB[q + 3] = ih;
         ITB[q + 4] = flip ? uv[2] : uv[0]; ITB[q + 5] = uv[1]; ITB[q + 6] = flip ? uv[0] : uv[2]; ITB[q + 7] = uv[3];
         ITB[q + 8] = iw; ITB[q + 9] = 1; ITB[q + 10] = flip ? -al : al; ITB[q + 11] = 0;
         ITB[q + 12] = flash; ITB[q + 13] = 0; ITB[q + 14] = 0; ITB[q + 15] = 0; ITB[q + 16] = 0; ITB[q + 17] = 0; ITB[q + 18] = 0; ITB[q + 19] = 0; ni++;
@@ -348,3 +399,18 @@ function drawCrew() {
   ITEMS_N = ni;
 }
 var ITEMS_N = 0;                                   // 讀數：上一格畫了幾件手持物
+/** 木匠的槌子敲下去那一刻（hamPh 走過 HAM_UP ＋ HAM_DN）：那一處濺 3 片木屑、叩一聲（照畫面的格子判；第幾下記在 c.hamK，只給畫面用）。
+ *  w：人腳底的世界座標、fd：面向（世界）。木屑從面前 0.5 m、腳下高一點的地方往上、往外濺（顏色照木頭，方向照（船、人、第幾下）的雜湊，不碰 rnd()）。 */
+var HAM_CHIP = [[0.63, 0.45, 0.25], [0.75, 0.56, 0.33], [0.54, 0.38, 0.2]];
+function carpHitFx(sh, c, ci, w, fd) {
+  if (!crewAtJob(c, 'repair')) { c.hamK = undefined; return; }
+  var k = Math.floor((c.t || 0) / HAM_P - (HAM_UP + HAM_DN));
+  if (c.hamK === undefined || k <= c.hamK) { if (c.hamK === undefined) c.hamK = k; return; }   // 剛開始修那一格只記下、不濺（下一下才濺）
+  c.hamK = k; fd = norm([fd[0], 0, fd[2]]);
+  var p = [w[0] + fd[0] * 0.5, w[1] + 0.15, w[2] + fd[2] * 0.5];
+  for (var j = 0; j < 3; j++) {
+    var h1 = hash3(sh.i * 977 + ci, k, j), h2 = hash3(ci, k * 31 + j, sh.i + 5), h3 = hash3(k, j * 13, ci + 7);
+    spawnPt(p, [fd[0] * (0.4 + h1) + (h2 - 0.5) * 1.6, 1.4 + 1.6 * h3, fd[2] * (0.4 + h1) + (h1 - 0.5) * 1.6], 0.45 + 0.3 * h2, HAM_CHIP[j], 1, 0.07, 0.05, 9.8, 0.4, 4);
+  }
+  sfx('knock', p, 0.45);
+}
