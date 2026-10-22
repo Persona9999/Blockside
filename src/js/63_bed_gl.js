@@ -291,6 +291,12 @@ function bedDryU(u) {
   gl.activeTexture(gl.TEXTURE12); gl.bindTexture(gl.TEXTURE_2D, on ? BEDDRY.tex : DUMMY); gl.uniform1i(u.uDryT, 12); gl.activeTexture(gl.TEXTURE0);
   if (on) gl.uniform4fv(u.uDryR, BEDDRY.r);
 }
+/** 遮罩記著、但現在沒在畫的那一塊（換了精度、被窗擠出去）：城換了 ⇒ 照新的整地記下來（63_towns.js townRegrade 排隊叫；TASK-0819）。
+ *  以前 bedDryTex 每次都對每一塊 townHv，這種塊順手就整好了；現在 bedDryTex 只讀記下的那一份 ⇒ 要有人替它們重整。 */
+function bedDryRegrade(k) {
+  var C = BEDDRY.src[k]; if (!C) return;
+  var hv = townHv(C); if (BEDDRY.hv[k] !== hv) { BEDDRY.hv[k] = hv; BEDDRY.dirty = true; }
+}
 /** 一塊的遮罩（BED_DRY_SP 公尺一格，1 ＝ 不畫海）：那一塊有「不是海、地面低於 0」的點才算，每一格裡的點全都不是海 ⇒ 遮。fine ⇒ 細的那一份（換掉粗的）；不然已經算過就不算。 */
 function bedDryPut(k, C, fine) {
   if (fine || !BEDDRY.src[k]) { var hv = townHv(C); if (BEDDRY.src[k] !== C || BEDDRY.hv[k] !== hv) { BEDDRY.src[k] = C; BEDDRY.hv[k] = hv; BEDDRY.dirty = true; } }   // 跟海連不連（bedDryTex）用的地面：細的那一份優先
@@ -331,7 +337,9 @@ function bedDryTex() {
   Object.keys(Dy.src).forEach(function (k) {                             // 有陸地的塊（地面最高 > 0）
     var C = Dy.src[k], c = k.split('_').map(Number), ci = c[0] - A.x[0], cj = c[1] - A.y[0];
     if (!(C && C.max0 > 0 && ci >= 0 && cj >= 0 && ci < nx && cj < ny)) return;
-    var hv = townHv(C), one = { h: hv, n: C.n, step: C.step }; L.push([k, ci, cj]);
+    // 地面照 bedDryPut 記下的那一份（Dy.hv），不在這裡 townHv：規劃晚到、城換了（TOWNS.ver）⇒ 以前這一圈把還沒整地的塊在同一格全部整掉（君士坦丁堡 0.55～0.84 s；TASK-0819）。
+    //   還沒輪到重新整地的塊先用舊的地面；輪到時（63_towns.js townRegrade ⇒ 'bedChunk' ⇒ bedDryPut）記下新的、弄髒遮罩。
+    var hv = Dy.hv[k] || C.h, one = { h: hv, n: C.n, step: C.step }; L.push([k, ci, cj]);
     if (!w) { st[k] = one; return; }
     sent[k] = hv; if (BEDDRYW.sent[k] !== hv) { one.h = hv.slice(); w.postMessage({ op: 'put', k: k, c: one }, [one.h.buffer]); }
   });
