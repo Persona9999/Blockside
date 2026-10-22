@@ -8,7 +8,7 @@
 //   座標：世界 (x, z) ＝ 規劃 E(q) − (BED.ax, BED.az)、E(q) ＝ (ox ＋ kx·qx, oy ＋ qy)（63_towns.js townPrep）⇒ 反過來 q ＝ ((x ＋ ax − ox) ÷ kx, z ＋ az − oy)。
 // 失敗處置：沒有 host（直接開 Blockside）、沒給 ?town、那座城還沒到 ⇒ 開不了，說一聲；回覆裡的 why 照原樣顯示。
 var TWB = { on: false, town: Q.get('town') || null, cat: 'house', item: 'house', open: 0, seq: 0, wait: {}, mx: null, my: null, moved: false, q: null, side: 0,
-  tr: null, busy: false, again: false, start: null, gl: null, msg: '', msgT: 0, framed: false, ops: 0, last: 0 };   // open：0 沒開、1 開著中、2 好了；tr：最後一則試放／找路的回覆
+  tr: null, busy: false, again: false, start: null, gl: null, msg: '', msgT: 0, framed: false, auto: false, ops: 0, last: 0 };   // open：0 沒開、1 開著中、2 好了；tr：最後一則試放／找路的回覆
 var TWB_CATS = [
   { k: 'road', name: '🛣 道路', items: [{ k: 'street', name: '街', sub: '寬 5 m' }, { k: 'lane', name: '小路', sub: '寬 2.5 m' }] },
   { k: 'house', name: '🏠 房屋', items: [{ k: 'house', name: '住宅', sub: '8 × 12（轉角 8 × 10）' }] }
@@ -100,7 +100,8 @@ function twbTap(x, y, btn) {
   TWB.tr = null;
   return true;
 }
-/** 鍵：B 開關、Esc 取消起點／離開、R 換路的哪一側（自動 → 右 → 左）、U 或 Ctrl+Z 復原、1～3 選。 */
+/** 鍵：B 開關選單、Esc 取消起點／收起選單、R 換路的哪一側（自動 → 右 → 左）、Z 或 Ctrl+Z 復原、1～3 選。
+ *  ⛔ 復原不用 U：U 是 🌍 回到地球儀（66_keys.js hostBack）—— 選單預設開著 ⇒ U 給復原吃掉就永遠回不了地球儀。 */
 function twbKey(k, down, e) {
   if (!modeRule('town')) return false;
   var lk = k.length === 1 ? k.toLowerCase() : k;
@@ -109,7 +110,7 @@ function twbKey(k, down, e) {
   if (!down) return true;
   if (lk === 'Escape') { if (TWB.start) { TWB.start = null; TWB.tr = null; } else twbToggle(false); return true; }
   if (lk === 'r') { TWB.side = TWB.side === 0 ? 1 : TWB.side === 1 ? -1 : 0; TWB.moved = true; TWB.tr = null; twbMsg('貼路的哪一側：' + (TWB.side === 0 ? '跟著游標' : TWB.side > 0 ? '右側' : '左側')); return true; }
-  if (lk === 'u' || (lk === 'z' && (e.ctrlKey || e.metaKey))) { twbUndo(); return true; }
+  if (lk === 'z') { twbUndo(); return true; }
   if (lk === '1') { twbPick('road', 'street'); return true; }
   if (lk === '2') { twbPick('road', 'lane'); return true; }
   if (lk === '3') { twbPick('house', 'house'); return true; }
@@ -124,6 +125,7 @@ function twbFrame() {
     var c = T.cen || [T.ox, T.oy], x = c[0] - BED.ax, z = c[1] - BED.az;
     camSet({ mode: 0, follow: null, pan: [0, 0], tgt: [x, Math.max(0, twbHeight(x, z)), z], dist: 300, pitch: 0.95 });
   }
+  if (!TWB.auto && T && twbOk() && RUNNING && !CAM.tr) { TWB.auto = true; twbToggle(true); }   // 城鎮模式預設開著建築選單（Tim 2026-10-22「建築模式預設就開啟建築選單」）：城到了、轉場降完就開一次；之後收起來照使用者的
   if (!TWB.on) { if (TWB.gl && TWB.gl.n) TWB.gl = upload(TWB.gl, new Float32Array(0), 6, [[0, 3, 0], [2, 3, 3]]); return; }
   if (TWB.moved && TWB.mx != null && T) {
     TWB.moved = false;
@@ -167,21 +169,20 @@ function twbInfo() {
   else s = !TWB.q ? '游標移到路邊或空建地上' : !tr || tr.road ? '試放…' : tr.ok ? (tr.lot ? '空建地 ' + tr.lot : '路邊 ' + tr.w.toFixed(0) + ' × ' + tr.d + ' m') + ' —— 點一下蓋' + (TWB.side ? '（' + (TWB.side > 0 ? '右' : '左') + '側）' : '') : '蓋不了：' + (tr.why || ['?'])[0];
   if (el.textContent !== s) el.textContent = s;
 }
-/** 介面：分類分頁＋項目＋復原、離開（#twbToPlan，#stage.twb 才顯示）；🔨 那一顆只在城鎮模式（#stage.townMode）。 */
+/** 介面：分類分頁＋項目＋復原、收起（#twbP，#stage.twb 才顯示）；🔨 那一顆只在城鎮模式、選單收起來時（61_layout.js 的 town 配置）。 */
 function twbUI() {
   var P = $('twbP'); if (!P) return;
   var h = '<div id="twbTabs">' + TWB_CATS.map(function (c) { return '<button type="button" data-c="' + c.k + '"' + (c.k === TWB.cat ? ' class="on"' : '') + '>' + c.name + '</button>'; }).join('') + '</div><div id="twbItems">';
   TWB_CATS.forEach(function (c, ci) { if (c.k !== TWB.cat) return; c.items.forEach(function (it, ii) { var n = ci === 0 ? ii + 1 : 3; h += '<button type="button" class="bcard' + (it.k === TWB.item ? ' on' : '') + '" data-c="' + c.k + '" data-i="' + it.k + '"><b>' + it.name + '</b><small>' + it.sub + '（' + n + '）</small></button>'; }); });
-  h += '</div><div id="twbOps"><button type="button" id="twbUndo">↶ 復原（U）</button><button type="button" id="twbX">✕ 離開（B）</button></div>';
+  h += '</div><div id="twbOps"><button type="button" id="twbUndo">↶ 復原（Z）</button><button type="button" id="twbX">▾ 收起（B）</button></div>';
   P.innerHTML = h;
   P.querySelectorAll('#twbTabs button').forEach(function (b) { b.onclick = function () { var c = TWB_CATS.filter(function (x) { return x.k === b.dataset.c; })[0]; twbPick(c.k, c.items[0].k); }; });
   P.querySelectorAll('#twbItems button').forEach(function (b) { b.onclick = function () { twbPick(b.dataset.c, b.dataset.i); }; });
   $('twbUndo').onclick = twbUndo; $('twbX').onclick = function () { twbToggle(false); };
 }
-// 城鎮模式（04_modes.js town）：🔨 鈕、開局的 class
+// 城鎮模式（04_modes.js town）：🔨 鈕（看不看得見照 61_layout.js 的 town 配置）
 (function () {
   if (!modeRule('town')) return;
-  $('stage').classList.add('townMode');
   var k = $('twbK'); if (k) k.onclick = function () { twbToggle(); };
   twbUI();
 })();

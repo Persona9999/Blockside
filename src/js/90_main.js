@@ -36,7 +36,7 @@ function frame(ts, noRaf) {                                         // noRaf：_
   if (PF) pfLap('flush');
   renderLerp(true, RUNNING ? loopAcc / DT : 1);                           // 畫面內插（03_camera.js）：鏡頭、畫、HUD 用兩步之間的位置，畫完換回模擬的
   ctrlFrame(dt);                                                                  // 控制器（71_ctrl.js）：第一人稱走、爬、退出判斷（81_fps.js）、建造的準心（82_build.js）；沒開 ⇒ 什麼都不做
-  camUpdate(dt); render(); if (PF) pfLap('render'); hudFrame(dt); frzShow(); slowShow();
+  camUpdate(dt); render(); if (PF) pfLap('render'); hudFrame(dt); frzShow(); slowShow(); uiLayout();   // uiLayout：介面配置（61_layout.js；配置沒變就不動）
   renderLerp(false);                        // 停格條（72_floodui.js）
   if (PF) { pfLap('hud'); pfEnd(f0, RUNNING && !PAUSED ? n : 0); }
   if (GFX_FPS && (fpsT -= dt) <= 0) { fpsT = 0.5; $('fps').textContent = 'FPS ' + Math.round(FPS) + '　畫質 ' + GFX_NAME[gfxLevel()] + '　' + CAM.w + '×' + CAM.h + (RT && RT.s ? '　MSAA ' + RT.s + '×' : ''); }   // 畫質設定頁的「顯示 FPS」
