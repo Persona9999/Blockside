@@ -361,7 +361,7 @@ function flDraw() {
   SHIPS.forEach(function (sh) {
     var fl = sh.fl; if (!fl || !fl.actN || ((sh.broken || sh.sinkingFinal) && !fl.vis) || sh.sunk) return;   // 沉船的水照畫（floodVis）
     var me = flMesh(sh, fl); if (GFX.fall && me.fn) fs.push([sh, me]);
-    if (GFX.proom && sh.T.wrm && sh.M[9] > 0.2 * S) { var wm = wrwMesh(sh); if (wm.n || wrvOn(sh, wm)) R.push([sh, wm]); return; }   // 照房間畫（TASK-0811，63_wrwater_gl.js）：水格的水面、側面不畫（水幕照畫）；翻過去了 ⇒ 照舊；透視 ⇒ 體積（灌滿的房間沒有水面也要畫）
+    if ((GFX.proom || sh.wrs) && sh.T.wrm && sh.M[9] > 0.2 * S) { var wm = wrwMesh(sh); if (wm.n || wrvOn(sh, wm)) R.push([sh, wm]); return; }   // 照房間畫（TASK-0811，63_wrwater_gl.js）：水格的水面、側面不畫（水幕照畫）；翻過去了 ⇒ 照舊；透視 ⇒ 體積（灌滿的房間沒有水面也要畫）
     if (me.n || me.sn) L.push([sh, me]);
   });
   // 深度吸光（GFX.pdep）：要不透明場景的深度 —— 折射開到高（refr 2）⇒ 畫海之前已經複製到 RT.B（60_render.js），直接讀；其他檔 ⇒ 這裡複製一次深度（只在有水要畫的那幾格）。透視開著 ⇒ 不讀（見 FL_DEP_GLSL）。
