@@ -34,7 +34,7 @@
 //      ⛔ 以前一欄一個水位：下段灌滿時水位一跳一個甲板厚、推給鄰欄、退回來又掉下去 ⇒ 封閉的第 1 間 0.1 秒一步 90 秒不衰減 200–240 m³/s、水面 RMS 0.36 m；拆完 ⇒ 約 5 m³/s、RMS 3–5 mm（進水報表 ?lab=wslosh）。
 // 還沒做：抽水。⚠ 上段有水、下段沒滿時，對外加總的 u 會畫在下段裡（畫面一欄只有一個水面）。
 // ⛔ 只讀船的姿態、破口、門；不抽 rnd()。
-var WRS_NEWBR = 64, WRS_DAMP = 0.5, WRS_CFL = 0.45, WRS_NMAX = 32, WRS_JN = 4096, WRS_JLIFE = 6, WRS_JWAIT = 2, WRS_JRISE = 1.5;                     // WRS_NEWBR ＝ 一步最多替幾個新破口找房間（殉爆一次幾千塊，每塊最多查 1,720 格 ⇒ 分幾步做，同細檔 dn；TASK-0810）；虛擬管每秒的阻尼；一小步最多走欄寬 × WRS_CFL ÷ 波速；一步最多切幾小步；WRS_JWAIT ＝ 粒子放不下時停在落點等幾秒（秒，照秒數不照步數）；WRS_JRISE ＝ 粒子落進水池時，那一間的平均水面一秒最多漲幾公尺
+var WRS_SEA_DT = 1 / 30, WRS_NEWBR = 64, WRS_DAMP = 0.5, WRS_CFL = 0.45, WRS_NMAX = 32, WRS_JN = 4096, WRS_JLIFE = 6, WRS_JWAIT = 2, WRS_JRISE = 1.5;                     // WRS_SEA_DT ＝ 破口外面的海面幾秒重算一次（照秒數；同細檔每 2 步）；WRS_NEWBR ＝ 一步最多替幾個新破口找房間（殉爆一次幾千塊，每塊最多查 1,720 格 ⇒ 分幾步做，同細檔 dn；TASK-0810）；虛擬管每秒的阻尼；一小步最多走欄寬 × WRS_CFL ÷ 波速；一步最多切幾小步；WRS_JWAIT ＝ 粒子放不下時停在落點等幾秒（秒，照秒數不照步數）；WRS_JRISE ＝ 粒子落進水池時，那一間的平均水面一秒最多漲幾公尺
 /** 開一艘的房間模擬（要有烘焙好的房間 T.wrm）。 */
 function wrsInit(sh) {
   var T = sh.T, W0 = T.wrm; if (!W0) return null;
@@ -87,7 +87,7 @@ function wrsInit(sh) {
   });
   return { W: W, X: X, G: G, n: n, su: new Int32Array(n), u: new Int32Array(n0), cap: cap, zf: zf, ca: ca, gp: gp,
     E: { n: ea.length, a: Int32Array.from(ea), b: Int32Array.from(eb), f: new Float64Array(ea.length), ac: new Float64Array(ea.length) }, kout: new Float64Array(n), hw: new Float64Array(n), zs: new Float64Array(n), lv: new Float64Array(n), K: new Float64Array(n),
-    O: O, NO: NO, oa: oa, ob: ob, ja: ja, jb: jb, up: up, oacc: new Float64Array(NO), oq: new Float32Array(NO), ost: new Int8Array(NO), odoor: odoor, tops: tops, bud: new Map(), emO: new Float64Array(NO), upO: new Float64Array(NO), mvO: new Float64Array(NO), putSeen: new Int32Array(NR), putN: 0, crO: new Int32Array(NO), xs: new Int32Array(NO), xd: new Int32Array(NO), xk: new Uint8Array(NO), xcl: new Int32Array(128), xself: 0, xselfB: 0, xsk: new Int32Array(16), xsO: new Int32Array(NO), xover: 0, xoO: new Int32Array(NO), dA: { breach: 0, open: 0, jets: 0, pipe: 0 }, wk: { surf: 0, body: 0, open: 0, pipe: 0, put: 0, take: 0, jet: 0, dda: 0, near: 0, sort: 0 },
+    O: O, NO: NO, oa: oa, ob: ob, ja: ja, jb: jb, up: up, oacc: new Float64Array(NO), oq: new Float32Array(NO), ost: new Int8Array(NO), odoor: odoor, tops: tops, bud: new Map(), emO: new Float64Array(NO), upO: new Float64Array(NO), mvO: new Float64Array(NO), putSeen: new Int32Array(NR), putN: 0, crO: new Int32Array(NO), xs: new Int32Array(NO), xd: new Int32Array(NO), xk: new Uint8Array(NO), xcl: new Int32Array(128), xself: 0, xselfB: 0, xsk: new Int32Array(16), xsO: new Int32Array(NO), xover: 0, xoO: new Int32Array(NO), dA: { breach: 0, open: 0, jets: 0, pipe: 0 }, wk: { surf: 0, body: 0, open: 0, pipe: 0, put: 0, take: 0, jet: 0, dda: 0, near: 0, sort: 0, sea: 0 },
     idx: idx, NCK: NCK, J: { n: 0, p: new Float32Array(3 * WRS_JN), v: new Float32Array(3 * WRS_JN), u: new Int32Array(WRS_JN), src: new Int32Array(WRS_JN), life: new Float32Array(WRS_JN), hd: new Float32Array(WRS_JN), dst: new Int32Array(WRS_JN), fr: new Int32Array(WRS_JN), wt: new Float32Array(WRS_JN) }, Jtot: 0, jet: 0, opt: {},
     br: new Map(), aR: new Float64Array(NR), rl: new Float64Array(NR), rn: new Int32Array(NR), rf: new Float64Array(NR), fly: new Float64Array(NR), rFH: new Float64Array(NR).fill(-1e9), fpar: new Int32Array(NR), fa: new Float64Array(NR), fh: new Float64Array(NR), NR: NR, upm: WR_U / (S * S * S), inTot: 0, outTot: 0, sub: 0, ms: 0, steps: 0, cross: 0,
     dbg: { out: 0, noroom: 0, spill: 0, todst: 0, back: 0, undo: 0, wait: 0, over: 0, life: 0, solid: 0, water: 0, emitB: 0, emitS: 0, emitD: 0 } };
@@ -205,10 +205,26 @@ function wrsColLow(s, r, dflt) {
   for (var q = W.roomCol0[r]; q < W.roomCol0[r + 1]; q++) if (s.su[q] < s.cap[q] && s.hw[q] < bh) { bh = s.hw[q]; best = q; }
   return best >= 0 ? best : dflt;
 }
-/** 第 r 間離 (x, y)（格座標）最近的一段（給了 z ⇒ 也照離那一段的高度）。 */
+/** 第 r 間離 (x, y)（格座標）最近的一段（給了 z ⇒ 也照離那一段的高度）。從 (x, y) 那一格往外一圈一圈找（欄表 s.idx），
+ *  那一圈的格離 (x, y) 最近也比找到的遠 ⇒ 停；一樣近取編號小的 ⇒ 跟整間掃挑出來的一樣（⛔ 以前整間掃：沉船幾百顆粒子落地 ⇒ 一步二十萬次工；TASK-0810）。 */
 function wrsColNear(s, r, x, y, z) {
-  var W = s.W, X = s.X, best = -1, bd = Infinity; s.wk.near += W.roomCol0[r + 1] - W.roomCol0[r];
-  for (var q = W.roomCol0[r]; q < W.roomCol0[r + 1]; q++) { var dx = X.cx[q] - x, dy = X.cy[q] - y, dz = z === undefined ? 0 : wrsSegDz(W, q, z), dd = dx * dx + dy * dy + dz * dz; if (dd < bd) { bd = dd; best = q; } }
+  var W = s.W, X = s.X, G = s.G, C = W.c, NCX = W.NCX, NCY = W.NCY, idx = s.idx, base = r * s.NCK, best = -1, bd = Infinity, nv = 0;
+  var cx0 = clamp(Math.floor((x - W.x0) / C), 0, NCX - 1), cy0 = clamp(Math.floor((y - W.ylo) / C), 0, NCY - 1), KM = Math.max(NCX, NCY);
+  function cell(i, j) {
+    if (i < 0 || j < 0 || i >= NCX || j >= NCY) return;
+    var ax = W.x0 + i * C, ay = W.ylo + j * C, ex = x < ax ? ax - x : x > ax + C ? x - ax - C : 0, ey = y < ay ? ay - y : y > ay + C ? y - ay - C : 0;
+    if (ex * ex + ey * ey > bd) return;                                  // 這一格裡的段離得一定比找到的遠
+    var q0 = idx.get(base + i * NCY + j); if (q0 === undefined) return;
+    for (var q = G.col0[q0]; q < G.col0[q0 + 1]; q++) { nv++; var dx = X.cx[q] - x, dy = X.cy[q] - y, dz = z === undefined ? 0 : wrsSegDz(W, q, z), dd = dx * dx + dy * dy + dz * dz; if (dd < bd || (dd === bd && q < best)) { bd = dd; best = q; } }
+  }
+  for (var k = 0; k <= KM; k++) {
+    var lb = (k - 1) * C; if (k >= 2 && lb * lb > bd) break;
+    nv += 8 * k + 1;
+    if (!k) { cell(cx0, cy0); continue; }
+    for (var a = -k; a <= k; a++) { cell(cx0 + a, cy0 - k); cell(cx0 + a, cy0 + k); }
+    for (a = -k + 1; a <= k - 1; a++) { cell(cx0 - k, cy0 + a); cell(cx0 + k, cy0 + a); }
+  }
+  s.wk.near += nv;
   return best;
 }
 /** 接口 i 掛的門還在 ⇒ 擋水（⛔ 不讀開關演出：門的開關只是畫面）。 */
@@ -245,8 +261,9 @@ function wrsStep(sh, dt, fl) {
     // ① 破口
     var bkR = [], bkL = [], bst = s.bkS = (s.bkS | 0) + 1, bkN = s.bkN || (s.bkN = new Int32Array(s.NR)), bkH = s.bkH || (s.bkH = new Float64Array(s.NR)), bkJ = s.bkJ || (s.bkJ = new Int32Array(s.NR)), bkU = s.bkU || (s.bkU = new Float64Array(s.NR));
     for (k = 0; k < hs.length; k += 2) {
-      var hh2 = hs[k], br = hs[k + 1], P = M4.pt(M, fl.hX[hh2], fl.hY[hh2], fl.hZ[hh2]), hOut = seaH(P[0], P[2], SIMT), jj = br.j, bA = s.opt.fixA ? br.a0 : fl.hA[hh2];
-      var hIn = s.lv[jj];                                                 // 裡面：破口那一欄的有效水面（整間滿 ⇒ 那一塊連通水體的水壓，wrsBody）
+      var hh2 = hs[k], br = hs[k + 1], P = M4.pt(M, fl.hX[hh2], fl.hY[hh2], fl.hZ[hh2]), jj = br.j, bA = s.opt.fixA ? br.a0 : fl.hA[hh2];
+      if (br.tH === undefined || SIMT - br.tH >= WRS_SEA_DT - 1e-9) { br.hO = seaH(P[0], P[2], SIMT); br.tH = SIMT; s.wk.sea++; }   // 外面的海面：每 1/30 秒重算一次（⛔ 以前每個破口每一小步都算浪：殉爆三千塊破口 ⇒ 破口那段一步 6 ms）
+      var hOut = br.hO, hIn = s.lv[jj];                                    // 裡面：破口那一欄的有效水面（整間滿 ⇒ 那一塊連通水體的水壓，wrsBody）
       br.hOut = hOut; br.py = P[1];                                       // 下一小步算連通水體用（破口 ＝ 通海的那一頭）（wrsSurf）
       var d = Math.max(hOut, P[1]) - Math.max(hIn, P[1]), q = 0;
       if (d > 0.001) q = FL_C * bA * Math.sqrt(2 * G * d) * fk; else if (d < -0.001) q = -FL_C * bA * Math.sqrt(2 * G * -d) * fk;
@@ -409,7 +426,7 @@ function wrsPump(s, nu) {
   if (got) { s.outPump = (s.outPump || 0) + got; wrsAgg(s); }
   return got;
 }
-function wrsWork(s) { var w = s.wk; return w.surf + w.body + w.open + w.pipe + w.put + w.take + w.jet + w.dda + w.near + w.sort; }
+function wrsWork(s) { var w = s.wk; return w.surf + w.body + w.open + w.pipe + w.put + w.take + w.jet + w.dda + w.near + w.sort + w.sea; }
 /** 對外的水量（sh.wrs.u：每個烘焙的欄裝幾單位 ＝ 它每一段加起來；63_wrwater_gl.js 照它畫）。⚠ 上段有水、下段沒滿時加起來會畫在下段裡（畫面只有一個水面）。 */
 function wrsAgg(s) { var u = s.u, su = s.su, P = s.G.par; u.fill(0); for (var k = 0; k < s.n; k++) u[P[k]] += su[k]; }
 /** 第 j 段現在的有效水面（同 wrsSurf 的 lv，但照現在的水量重算那一段；整段滿 ⇒ 照這一小步開頭那一間的 lv 不變：整間的平均水面、相連水體的水壓）。 */
