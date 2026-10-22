@@ -14,7 +14,7 @@ function simAi(sh, dt) {
   sh.guns.forEach(function (g) { if (g.alive && gunRate(g) > 0 && gunTarget(sh, g, foe.center)) { if (FK.length && friendInLine(FK, M4.pt(sh.M, g.muz[0], g.muz[1], g.muz[2]), foe.center)) { held++; return; } alive++; if (g.reload <= 0) ready++; } });
   if (!ready && held) { sh.ffHold = (sh.ffHold || 0) + held; sh.aiWait = 0.3; return; }   // 對得到的都隔著友船 ⇒ 忍住、等一下再看（不每一步重算）
   if (!ready || ready < Math.ceil(alive * 0.65)) return;
-  var a = modeAim(foe, sh.aimMode || 'hull', true), t = a.t;           // 砲長選的模式裡亂挑一點（⛔ 以前固定 45% 船殼／27% 砲甲板／28% 桅，船殼瞄的是設計水線 ⇒ 敵艦浮高了還打在水面上）
+  var a = modeAim(foe, aimModeFor(sh, foe), true), t = a.t;           // 砲長選的模式（沒有帆可打 ⇒ 不瞄帆具；51_captain.js aimModeFor）裡亂挑一點（⛔ 以前固定 45% 船殼／27% 砲甲板／28% 桅，船殼瞄的是設計水線 ⇒ 敵艦浮高了還打在水面上）
   var err = Math.max(0.6, 4.5 - sh.salvo * 0.55) / S, aim = [t[0] + gauss() * err * 1.6, t[1], t[2] + gauss() * err * 0.5];
   var ammo = gunnerAmmo(sh, foe, t);                                // 照瞄準點落在哪一帶挑彈（51_captain.js）：砲長想瞄的那一點（⛔ 加了散布的 ⇒ 第一輪高度散 ±22 格，瞄砲甲板有一半落到水線那一帶、換成實心）
   if (sh.i === PLAYER_I) AMMO_AUTO = ammo;                          // 我艦自動開砲：彈種鈕跟著砲長換（Tim 2026-10-18；⛔ 不寫 AMMO_I：那是玩家自己選的、記在偏好裡）
@@ -46,7 +46,7 @@ function aiSecond(sh, foe, dt) {
       alive.push(g); if (g.reload <= 0) ready.push(g);
     });
     if (!ready.length || ready.length < Math.ceil(alive.length * 0.65)) continue;
-    var a = modeAim(o, sh.aimMode || 'hull', true), t = a.t, err = Math.max(0.6, 4.5 - sh.salvo * 0.55) / S;
+    var a = modeAim(o, aimModeFor(sh, o), true), t = a.t, err = Math.max(0.6, 4.5 - sh.salvo * 0.55) / S;
     var aim = [t[0] + gauss() * err * 1.6, t[1], t[2] + gauss() * err * 0.5];
     var tgt = M4.pt(o.M, aim[0], aim[1], aim[2]);
     var guns = ready.filter(function (g) { return withAim(sh, aim, o, function () { return gunTarget(sh, g, tgt); }); });

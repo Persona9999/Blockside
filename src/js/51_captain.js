@@ -91,8 +91,14 @@ var AMMO_TAG = [{ hull: 1, uw: 1 }, { hull: 0.6, blast: 1 }, { hull: 0.5 }, { hu
 function ammoProps(a) { var t = AMMO_TAG[a] || {}; return { gun: ammoK(a, VS_GUN), sail: ammoK(a, VS_SAIL), crew: ammoK(a, VS_CREW), hull: t.hull || 0, uw: t.uw || 0, blast: t.blast || 0 }; }
 // 瞄準點落在哪一帶 ⇒ 那一帶看重哪幾樣屬性
 var AIM_ZONE_W = { water: { hull: 1, uw: 1 }, hull: { gun: 0.6, crew: 0.4, blast: 0.3 }, deck: { crew: 1, blast: 0.5 }, rig: { sail: 1 } };
-/** 瞄準點（敵艦的格座標 t）落在哪一帶：砲甲板以下 ＝ 水線（含彈藥庫）、砲甲板（deckAim）、再往上到帆具以下 ＝ 甲板（站人的）、帆具（rigAim）以上。高度照船型（05_hull.js GEO0）。 */
-function aimZone(foe, t) { var z = t[2], G = foe.T.geo; return z < G.deckAim[0] ? 'water' : z <= G.deckAim[1] ? 'hull' : z < G.rigAim[0] ? 'deck' : 'rig'; }
+/** 瞄準點（敵艦的格座標 t）落在哪一帶：砲甲板以下 ＝ 水線（含彈藥庫）、砲甲板（deckAim）、再往上到帆具以下 ＝ 甲板（站人的）、帆具（rigAim）以上。高度照船型（05_hull.js GEO0）。
+ *  沒有帆可打（rigLive）⇒ 帆具那一帶當甲板（TASK-0828；Tim 2026-10-22「目前會對沒有桅杆(帆)的船打鏈彈」）：
+ *  ⛔ 以前照高度直接判 ⇒ 莫尼特號、哨兵號的 rigAim（35–64）跟 deckAim（35–45）重疊，瞄甲板上的人（腳下 ＋ 10 格）一高過 45 就算帆具、挑鏈彈（量過）。 */
+function aimZone(foe, t) { var z = t[2], G = foe.T.geo; return z < G.deckAim[0] ? 'water' : z <= G.deckAim[1] ? 'hull' : z < G.rigAim[0] || !rigLive(foe) ? 'deck' : 'rig'; }
+/** 這艘還有帆可打嗎（帆具模式的局勢分數 > 0：有立著的桅、帆還剩）。沒有帆的鐵甲艦（假帆面積 1、剩 0%）、只有信號桅的（定遠號、松島號）、帆都打光的 ⇒ false。 */
+function rigLive(foe) { return aimValue(foe, 'rig') > 0; }
+/** 齊射照哪個模式瞄（50_sim.js）：砲長選的；選的是帆具、這個目標卻沒有帆可打（兩舷都開的另一艘、換了目標還沒重想）⇒ 砲甲板。 */
+function aimModeFor(sh, foe) { var m = sh.aimMode || 'hull'; return m === 'rig' && !rigLive(foe) ? 'hull' : m; }
 /** 砲長照瞄準點挑彈：sh 打得出的彈種裡，照那一帶看重的屬性打分最高的（同分 ⇒ 序號小的；不抽亂數）。 */
 function gunnerAmmo(sh, foe, t) {
   var W = AIM_ZONE_W[aimZone(foe, t)], L = ammoOf(sh), best = L.length ? L[0] : 0, bs = -1e9;

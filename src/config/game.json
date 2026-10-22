@@ -232,6 +232,7 @@
     },
     "dahl9": {
       "code": "9d",
+      "ammos": ["solid", "shell"],
       "name": "9 吋 Dahlgren 滑膛砲",
       "short": "9 吋 Dahlgren",
       "V": 150,
@@ -245,6 +246,7 @@
     },
     "dahl11": {
       "code": "11d",
+      "ammos": ["solid", "shell"],
       "name": "XI 吋 Dahlgren 滑膛砲",
       "short": "XI 吋 Dahlgren",
       "V": 140,
@@ -378,6 +380,7 @@
     },
     "krupp305": {
       "code": "305k",
+      "ammos": ["solid", "shell"],
       "name": "30.5 cm 克虜伯 L/25 後膛砲（定遠號露砲台）",
       "short": "30.5 cm 克虜伯",
       "V": 200,
@@ -392,6 +395,7 @@
     },
     "krupp150": {
       "code": "150k",
+      "ammos": ["solid", "shell"],
       "name": "15 cm 克虜伯 L/35 後膛砲（定遠號艏艉砲塔）",
       "short": "15 cm 克虜伯",
       "V": 210,
@@ -405,6 +409,7 @@
     },
     "hotch37": {
       "code": "h37",
+      "ammos": ["solid", "shell"],
       "name": "37 mm 哈乞開斯五管轉膛砲（revolving cannon）",
       "short": "37 mm 轉膛砲",
       "V": 160,
@@ -420,6 +425,7 @@
     },
     "canet320": {
       "code": "320c",
+      "ammos": ["solid", "shell"],
       "name": "32 cm Canet L/38 後膛砲（1890 年式；松島號艦尾露砲台）",
       "short": "32 cm Canet",
       "V": 290,
@@ -434,6 +440,7 @@
     },
     "armstrong120": {
       "code": "120a",
+      "ammos": ["solid", "shell"],
       "name": "12 cm Armstrong L/40 速射砲（松島號砲列）",
       "short": "12 cm 速射砲",
       "V": 275,
@@ -447,6 +454,7 @@
     },
     "hotch57": {
       "code": "h57",
+      "ammos": ["solid", "shell"],
       "name": "57 mm 哈乞開斯 6 磅速射砲",
       "short": "57 mm 速射砲",
       "V": 235,
@@ -460,6 +468,7 @@
     },
     "hotch47": {
       "code": "h47",
+      "ammos": ["solid", "shell"],
       "name": "47 mm 哈乞開斯 3 磅速射砲",
       "short": "47 mm 速射砲",
       "V": 230,
@@ -473,6 +482,7 @@
     },
     "brooke64": {
       "code": "64b",
+      "ammos": ["solid", "shell"],
       "name": "6.4 吋 Brooke 線膛砲",
       "short": "6.4 吋 Brooke",
       "V": 168,
@@ -486,6 +496,7 @@
     },
     "brooke7": {
       "code": "7b",
+      "ammos": ["solid", "shell"],
       "name": "7 吋 Brooke 線膛砲",
       "short": "7 吋 Brooke",
       "V": 170,
