@@ -43,10 +43,38 @@ function portsSteps(sh, R) {
     ['S', 'P'].forEach(function (sd) {                                   // 依序掀起：每一舷照砲口的 x 從船頭往船尾（跟 10_ship.js gunOrder 同一個方向）
       L.filter(function (P) { return P.g.side === sd; }).sort(function (a, b) { return b.g.muz[0] - a.g.muz[0]; }).forEach(function (P, k) { P.rank = k; });
     });
-    R.out = { L: L, t: null, next: 0, ph: (sh.i % 8) / 8 * PORT_DT, cnt: -1, rest: false, fired: -1, fly: -1, cntF: -1 };   // ph：每艘錯開判斷的那一格（⛔ 同一格一起判 ⇒ 8 艘光榮號那一格多 0.5 ms）；cnt：上次判斷時船殼剩幾格（沒變 ⇒ 不用重數鉸鏈與四周）；
-    // rest／fired／fly／cntF：每一片都停著了沒、上一格的開火數、FLY 的長度、船殼格數（portsShip：沒事的那一格整艘跳過）
+    R.out = portsOut(sh, L);
   });
   return out;
+}
+/** 一艘的 sh.ports（portsSteps、portsBuildNew 共用）。 */
+function portsOut(sh, L) {
+  return { L: L, t: null, next: 0, ph: (sh.i % 8) / 8 * PORT_DT, cnt: -1, rest: false, fired: -1, fly: -1, cntF: -1 };   // ph：每艘錯開判斷的那一格（⛔ 同一格一起判 ⇒ 8 艘光榮號那一格多 0.5 ms）；cnt：上次判斷時船殼剩幾格（沒變 ⇒ 不用重數鉸鏈與四周）；
+  // rest／fired／fly／cntF：每一片都停著了沒、上一格的開火數、FLY 的長度、船殼格數（portsShip：沒事的那一格整艘跳過）
+}
+/** 開船時建蓋板（25_doors.js portsFloodInit；TASK-0834，Tim 2026-10-22「開單做砲口與蓋板照船型快取」）：
+ *  同一型第一艘照舊 portsBuild，把每一片的幾何（第幾件裝飾、配到第幾門砲、鉸鏈 hc、軸 ax、往外 u、ul、cdeg、house、ring、掀蓋順序 rank）存在船型上（T.portGeo；
+ *  一片都沒有 ⇒ null）；之後同型每艘只造自己那一份狀態（portLidState），幾何照存的複製 ⇒ 跟 portsBuild 逐欄相同（量過，見 TASK-0834）。
+ *  ⚠ 只給開船那一刻用：house 照砲模型「現在」的擺法量（portHits → modelLocal），戰鬥中途懶建（portsAnim、flowWarmSteps）砲塔轉過 ⇒ 照舊 portsBuild。
+ *  量過（8 艘同型憲法號）：portsBuild 每艘 90–105 ms，佔開一艘的三分之一。 */
+function portsBuildNew(sh) {
+  var T = sh.T, C = T.portGeo;
+  if (C === undefined) {
+    var o = portsBuild(sh);
+    T.portGeo = o ? o.L.map(function (P) { return { di: sh.decos.indexOf(P.d), gi: sh.guns.indexOf(P.g), cdeg: P.cdeg, hc: P.hc.slice(), ax: P.ax.slice(), ul: P.ul, u: P.u.slice(), house: P.house, ring: P.ring.slice(), rank: P.rank }; }) : null;
+    return o;
+  }
+  if (C === null) return null;
+  return portsOut(sh, C.map(function (c) {
+    var P = portLidState(sh.decos[c.di], sh.guns[c.gi], c.cdeg);       // 照 portLid 指定的順序（hc、ax、ul、u、house、ring）⇒ 物件的鍵順序也一樣
+    P.hc = c.hc.slice(); P.ax = c.ax.slice(); P.ul = c.ul; P.u = c.u.slice(); P.house = c.house; P.ring = c.ring.slice(); P.rank = c.rank;
+    return P;
+  }));
+}
+/** 一片蓋板每艘自己的那一份（portLid、portsBuildNew 共用）：開合的狀態、血量、配到的那門砲；幾何（hc、ax、u、house、ring）由呼叫的那一邊填。 */
+function portLidState(d, g, cdeg) {
+  return { d: d, g: g, hc: null, ax: null, u: null, cdeg: cdeg, house: 0, rank: 0, ring: [], s: 1, want: -1, go: 0, lastEng: -1e9, wetT: -1e9,
+    hp0: g ? g.model.hp : 0, fired0: g ? g.firedAt : undefined, gone: false, dead: false, ka: undefined, kr: undefined, kx: 0, ky: 0 };
 }
 /** 一片蓋板（portsBuild、portsIssues、portsSummary 共用）：配到的砲 g、鉸鏈 hc（hinge-a 格心）與軸 ax、往外的水平方向 u（鉸鏈 → 開著的蓋板中心）、
  *  關的角度 cdeg（弧度）、house、關上時貼著的那一圈船殼 ring（VK.pack；portGone 數掉了幾格）。 */
@@ -54,8 +82,7 @@ function portLid(sh, d) {
   var mt = d.meta, a = d.pts['hinge-a'], b = d.pts['hinge-b'], path = refPath(sh.T, mt.lid_of);
   var g = path ? sh.guns.filter(function (q) { return q.model.path === path; })[0] || null : null;   // lid_of：物件 id（或舊的路徑寫法）⇒ 路徑 ⇒ 那門砲（05_hull.js refPath；找不到 ⇒ ''）
   var cd = mt.close_deg !== undefined && mt.close_deg !== '' && isFinite(+mt.close_deg) ? +mt.close_deg : PORT_CLOSE0;
-  var P = { d: d, g: g, hc: null, ax: null, u: null, cdeg: cd * Math.PI / 180, house: 0, rank: 0, ring: [], s: 1, want: -1, go: 0, lastEng: -1e9, wetT: -1e9,
-    hp0: g ? g.model.hp : 0, fired0: g ? g.firedAt : undefined, gone: false, dead: false, ka: undefined, kr: undefined, kx: 0, ky: 0 };
+  var P = portLidState(d, g, cd * Math.PI / 180);
   if (a && b && len(sub(b, a)) > 0.5) { P.hc = a.slice(); P.ax = norm(sub(b, a)); }   // 轉軸 ＝ 固定點本身：.vxk 的固定點匯出時已經是格心（蓋板 hinge-a 0,0,0 掛在 334,284,106 ⇒ 334.5,284.5,106.5），雕刻端 check_portlids.py 也繞這一點量 close_deg、house。
   // ⛔ 照 25_doors.js 再加 0.5：轉軸偏到格角 ⇒ 關上的蓋板 S 舷高一格、P 舷往船裡一格（光榮號真的蓋板量過：P 舷 30% 落進船殼、S／P 兩舷讀數對不起來）
   if (!P.hc || !g) return P;
