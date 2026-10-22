@@ -294,7 +294,17 @@ function townPick(I, styles, l) {
   function by(u) { for (var i = 0; i < styles.length; i++) { var L = I.byStyle[styles[i] + ':' + u]; if (L) return L; } return null; }
   function any(u) { return I.byUse[u]; }
   var alt = TOWN_USE_ALT[use] || [];
-  return by(use) || alt.map(by).filter(Boolean)[0] || (l.src === 'special' ? any(use) : null);
+  return townFit(I, l, by(use) || alt.map(by).filter(Boolean)[0] || (l.src === 'special' ? any(use) : null));
+}
+/** 候選照地塊大小收窄（Blocksail TASK-0742：轉角放淺一點的房子 ⇒ 住宅多一級 8 × 10 的淺版）：模型的地塊（索引的 lot ＝ [寬, 進深] 公尺）裝得進 l（寬容 5 cm：
+ *  綁路的地塊寬是整數 − 2 cm）的那幾個裡、進深最大的那一級；一個都裝不下 ⇒ 照舊整份（手擺的小地塊）。
+ *  ⇒ 12 m 的地塊候選跟以前同一份（雜湊挑到同一棟）；10～11 m 的地塊挑淺版（以前挑 12 m 的、屋後的院子凸出地塊）。 */
+function townFit(I, l, L) {
+  if (!L || L.length < 2 || !I.models) return L;
+  var ok = L.filter(function (nm) { var lt = I.models[nm] && I.models[nm].lot; return !lt || (lt[0] <= l.w + 0.05 && lt[1] <= l.d + 0.05); });
+  if (!ok.length) return L;
+  var dmax = Math.max.apply(null, ok.map(function (nm) { var lt = I.models[nm].lot; return lt ? lt[1] : 0; }));
+  return ok.filter(function (nm) { var lt = I.models[nm].lot; return (lt ? lt[1] : 0) === dmax; });
 }
 /** 城 T 的繁榮度 0～1：__game.townProsp 給的 ⇒ 網址 ?prosp= ⇒ TOWN_PROSP_DEF。 */
 function townProsp(T) {
@@ -391,7 +401,7 @@ function townKit() {
     });
   }).then(function (A) {
     need.forEach(function (nm) { delete M[nm].png; });
-    TOWNS.kit = { M: M, names: names, byUse: I.byUse, byStyle: I.byStyle, tex: A.tex, aw: A.aw, ah: A.ah, views: I.views };
+    TOWNS.kit = { M: M, names: names, byUse: I.byUse, byStyle: I.byStyle, models: I.models, tex: A.tex, aw: A.aw, ah: A.ah, views: I.views };   // models：townPick 照地塊大小收窄要看每個候選的 lot（跟 townNeed 用同一份索引）
     TOWNS.stat.kitMs = +(performance.now() - t0).toFixed(1);
     TOWNS.stat.kitN = need.length + '/' + names.length;              // 要了幾個／索引裡有幾個
     TOWNS.stat.kitTris = need.reduce(function (o, nm) { o[nm] = [M[nm].lod[0].nq * 2, M[nm].lod[1].nq * 2]; return o; }, {});
