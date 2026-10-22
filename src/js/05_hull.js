@@ -138,7 +138,7 @@ function metaRebase(h) {
     var a = path.split('/'), pre = [];
     for (var i = a.length - 1; i >= 1; i--) pre.push(a.slice(0, i).join('/') + '/');
     Object.keys(meta).forEach(function (k) {
-      var v = meta[k]; if (k === 'kind' || k === 'id' || typeof v !== 'string' || !v || P.has(v) || ID_RX.test(v.split('#')[0])) return;   // id 寫法（TASK-0715）不是路徑   // kind 不是路徑（⛔ 以前照改：鳳凰號 kind=capstan 旁邊剛好有模型「主砲甲板/capstan」⇒ kind 變成那條路徑；TASK-0672 規格表檢查量出來的）
+      var v = meta[k]; if (k === 'kind' || k === 'id' || k === 'render' || typeof v !== 'string' || !v || P.has(v) || ID_RX.test(v.split('#')[0])) return;   // id 寫法（TASK-0715）不是路徑   // kind 不是路徑（⛔ 以前照改：鳳凰號 kind=capstan 旁邊剛好有模型「主砲甲板/capstan」⇒ kind 變成那條路徑；TASK-0672 規格表檢查量出來的）   // render 也不是（炎羽號的舵輪就叫「露天甲板/wheel」⇒ render=wheel 變成那條路徑、照原本的畫；TASK-0792）
       for (var j = 0; j < pre.length; j++) if (P.has(pre[j] + v)) { meta[k] = pre[j] + v; n++; return; }
     });
   }

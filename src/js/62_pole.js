@@ -26,8 +26,9 @@ function poleEig(A) {
   L.sort(function (x, y) { return y.l - x.l; });
   return L.map(function (x) { return x.v; });
 }
-/** 一份網格（verts、tris、tmat、mats）⇒ 長桿式的三角形（跟 meshTris 同一種排法：每個頂點 位置 3、法線 3、色 3）；做不出來 ⇒ null（照原本的）。st 給了 ⇒ 填讀數。 */
-function poleTris(m, st) {
+/** 一份網格（verts、tris、tmat、mats）⇒ 長桿式的三角形（跟 meshTris 同一種排法：每個頂點 位置 3、法線 3、色 3）；做不出來 ⇒ null（照原本的）。st 給了 ⇒ 填讀數。
+ *  62_wheel.js 用的可選參數（槳都不給 ⇒ 照以前）：E0 ＝ [桿子的方向, 截面軸一, 截面軸二] 直接給、不做 PCA；DS0／TOL0 ＝ 一片多長、簡化的誤差（網格的單位；沒給 ⇒ POLE_DS／POLE_TOL）。 */
+function poleTris(m, st, E0, DS0, TOL0) {
   var V = m.verts, Tr = m.tris, nt = Tr.length / 3, i, j, k;
   if (!nt) return null;
   function P(i2) { return [V[i2 * 3], V[i2 * 3 + 1], V[i2 * 3 + 2]]; }
@@ -46,12 +47,12 @@ function poleTris(m, st) {
   for (k = 0; k < 3; k++) mu[k] /= aw;
   var C = [[0, 0, 0], [0, 0, 0], [0, 0, 0]];
   T.forEach(function (t) { var d = sub(t.c, mu); for (var r = 0; r < 3; r++) for (var q = 0; q < 3; q++) C[r][q] += t.a * d[r] * d[q]; });
-  var E = poleEig(C), e0 = E[0], e1 = E[1], e2 = E[2];
+  var E = E0 || poleEig(C), e0 = E[0], e1 = E[1], e2 = E[2];
   if (dot(cross(e0, e1), e2) < 0) e2 = e2.map(function (x) { return -x; });   // (e0, e1, e2) 右手系
   function loc(p) { var d = sub(p, mu); return [dot(d, e0), dot(d, e1), dot(d, e2)]; }
   var t0 = Infinity, t1 = -Infinity;
   T.forEach(function (t) { t.q = t.p.map(loc); t.q.forEach(function (q) { if (q[0] < t0) t0 = q[0]; if (q[0] > t1) t1 = q[0]; }); });
-  var ns = Math.max(1, Math.ceil((t1 - t0) / POLE_DS - 1e-9)), ds = (t1 - t0) / ns;
+  var pDS = DS0 || POLE_DS, pTOL = TOL0 || POLE_TOL, ns = Math.max(1, Math.ceil((t1 - t0) / pDS - 1e-9)), ds = (t1 - t0) / ns;
   if (ns < 2) return null;
   var EX = [], CA = [];                                                 // 每一片：[u 最小, u 最大, w 最小, w 最大]；顏色 ⇒ 面積
   for (i = 0; i < ns; i++) { EX.push([Infinity, -Infinity, Infinity, -Infinity]); CA.push({}); }
@@ -97,7 +98,7 @@ function poleTris(m, st) {
       for (var q = 0; q < 4; q++) d = Math.max(d, Math.abs(BX[z][q] - (BX[b0][q] + f * (BX[b1][q] - BX[b0][q]))));
       if (d > mx) { mx = d; mi = z; }
     }
-    if (mx > POLE_TOL) { keep[mi] = 1; dp(b0, mi); dp(mi, b1); }
+    if (mx > pTOL) { keep[mi] = 1; dp(b0, mi); dp(mi, b1); }
   })(brk[k], brk[k + 1]);
   brk = Object.keys(keep).map(Number).sort(function (x, y) { return x - y; });
   // 粗細照體積校正：斜的桿子量到的外框連階梯的凸角都算進去（陡的槳胖四到七成）⇒ 每個截面的寬、厚都乘同一個 k ＝ √(原網格體積 ÷ 方框體積)（夾在 0.5～1；只縮不放）
