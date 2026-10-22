@@ -133,6 +133,11 @@ function sailShip(sh, dt) {
                                                                       //   Tim 2026-10-16：「預設設定的船航速照舊，只有比預設快的加成（娛樂 ×1.4、夜隼號 ×3）才被視風限住」
   var vB = BK > 0 && !sh.sunk && !stop && !held ? BK / 1.9438 * playK('speed') * dk : 0;   // 額外動力全速的航速（節 ⇒ m/s）× 娛樂加成（跟帆一樣：推力 × 加成²、最高航速 × 加成）；船隻設定的航速倍率、天氣（風大）不吃
   driveStep(sh, dt, vS, vB, deg, stop || held);
+  if (VX) {                                                            // 大漩渦：這艘船全力往外爬坡大約推得動多快（m/s）⇒ 54_helm.js vxShipEdge 照它算這艘船自己的邊緣
+    var vxA = 0; for (var vxi = 0; vxi < sh.sails.length; vxi++) { var vxs = sh.sails[vxi]; if (!vxs.dead) vxA += vxs.area * vxs.hp / vxs.hpMax; }   // 帆的完好度（不管收沒收）
+    sh.vxCap = VX_CAP_UP * Math.hypot(VMAX * SPK * Math.sqrt(WIND_SPD) * polarPlay(90) * vxA / sh.sailArea0, BK > 0 ? BK / 1.9438 * playK('speed') * Math.sqrt(Math.min(1, sh.drive ? sh.drive.cap : 0)) : 0)
+      * (1 - clamp(sh.sink / 9, 0, 0.8)) * (sh.struck ? 0.15 : 1);   // 能耐：橫風、帆全張時的帆速 × 完好度，加上主機；⛔ 不照現在的航向與收帆（艦長一收帆、一頂風就掉到 0 ⇒ 邊緣在 80–400 m 亂跳）；上坡最多吃掉一半推力 ⇒ × √½
+  }
   if (VX) sh.spd *= vxHold(sh, dt);                                    // 大漩渦：眼裡船速被水吃掉（08_sea.js vxHold）                       // 推力、水阻、實際質量 ⇒ 加速度 ⇒ sh.spd（31_drive.js）
   if (!stop && !held && !sh.sunk && !sh.struck && (sh.i !== PLAYER_I || SAIL === 'auto')) { var thP = sh.throttle || 1; helmGovern(sh, vS / thP, vB / thP); }   // 航速調節：艦長的期望航速 ⇒ 帆裝、俥鐘（54_helm.js；vS、vB 扣掉上一步的放慢）
   else sh.helmSpill = 1;
@@ -172,8 +177,8 @@ function sailShip(sh, dt) {
     if (!(ld && !ld.sunk)) { sh.station = null; sh.lineErr = sh.lineLag = sh.lineArc = sh.lineOff = undefined; }
     sh.throttle = sh.helmSpill || 1;                                     // 只靠帆的船：期望航速比夠用的那一段帆慢 ⇒ 放掉一點風（54_helm.js helmGovern）
     if (od && od.throttle !== undefined && !hc) sh.throttle = Math.min(sh.throttle, od.throttle);   // 指揮官給的油門（沙盒用；遊戲的排頭、跟隨照期望航速）
-    // 大漩渦：讓船（快撞上才出手）之後、讓開砲線之前 ⇒ 離中心太近就往外（54_helm.js vxAvoid；沒有漩渦 ⇒ null）。⛔ 排在讓船前面 ⇒ 內圈的船不管旁邊的船，2 對 2 一直互撞（11 m/s）
-    if (!sh.struck && !sh.sunk) { var av = bedAvoid(sh); if (av === null) av = friendAvoid(sh, hc && od.mode === 'lead' ? helmLeadAvoid(sh) : undefined); if (av === null) av = foeAvoid(sh); if (av === null) av = vxAvoid(sh); if (av === null && !hc) av = lineClear(sh); else if (hc) sh.clearing = null; if (av !== null) { tY = av; sh.avT = SIMT; } }   // avT：最後一次讓船的時刻（讀數）   // 戰列、搶上風（hc）不讓砲線（TASK-0679）：守隊形，擋到的那幾門照 friendInLine 不開（⛔ 讓 ⇒ 接近時敵艦在前方、前一艘永遠擋著後面的砲線，排頭 35 秒、紅方排頭 80 秒都在讓，隊形散掉）   // throttle 每一步重設（lineClear 要放慢才改）   // 讓友船 ＞ 讓敵艦（不撞，54_helm.js）＞ 讓開友艦的砲線（52_fleet.js；沒有友船 ⇒ null）
+    // 接管航行的順序在 54_helm.js HELM_TAKES（淺水 ＞ 逃離漩渦 ＞ 讓友船 ＞ 讓敵艦 ＞ 讓開砲線）與各模式的限制（bound）。
+    if (!sh.struck && !sh.sunk) { var av = helmTakeover(sh, { hc: hc, od: od }); if (av !== null) { tY = av; sh.avT = SIMT; } }   // 接管航行（54_helm.js HELM_TAKES：照優先級，第一個接的模式 ⇒ sh.helmMode）   // avT：最後一次讓船的時刻（讀數）   // 戰列、搶上風（hc）不讓砲線（TASK-0679）：守隊形，擋到的那幾門照 friendInLine 不開（⛔ 讓 ⇒ 接近時敵艦在前方、前一艘永遠擋著後面的砲線，排頭 35 秒、紅方排頭 80 秒都在讓，隊形散掉）   // throttle 每一步重設（lineClear 要放慢才改）   // 讓友船 ＞ 讓敵艦（不撞，54_helm.js）＞ 讓開友艦的砲線（52_fleet.js；沒有友船 ⇒ null）
     var e = Math.atan2(Math.sin(tY - sh.yaw), Math.cos(tY - sh.yaw));
     var rmaxT = HELM_TQ ? rmax + helmDifRate(sh, rmaxB) : rmax;                // 操舵（TASK-0777）：上限 ＝ 舵 ＋ 差動打滿 ⇒ 舵沒了照樣靠兩舷的推力轉；關著 ⇒ 只有舵（跟以前一樣）
     rate = clamp(e * 0.5, -rmaxT, rmaxT); sh.rudder = rmaxT > 0 ? rate / rmaxT * (helmRev(sh) ? -1 : 1) : 0;   // 倒退 ⇒ 舵反著打（畫面上的舵角；轉向照要的轉）
