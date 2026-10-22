@@ -184,6 +184,7 @@ if (DEBUG) window.__game = {
   ctrl: function () { return { top: ctrlTop(), list: CTRLS.map(function (c) { return c.name + (c.on() ? '' : '（關）'); }) }; },   // 控制器（71_ctrl.js）：現在最上面的、由上往下
   predict: function (b) { return ballPredict(b); },
   cam: function (o) { camSet(o); camSet({ snap: true }); camUpdate(1); render(); },
+  townProsp: function (v, id) { var r = townProspSet(v, id); if (RUNNING) render(); return r; },   // 城牆等級試看（63_towns.js townProspSet；v ＝ 繁榮度 0～1、null 回預設，id 沒給 ⇒ 每一座；開場前只改值，開場後畫一格）⇒ [{ id, tier, prosp, lv, kits }]
   town: function (at, on) { if (on !== undefined) { TOWNS.on = !!on; render(); } return BED && BED.A ? townStat(at) : null; },   // 城鎮的讀數（63_towns.js townStat；at ＝ [x, z] ⇒ 那一點的畫面高度、模擬高度、清不清樹；on ⇒ 開關畫不畫（量畫一格多少 ms 用））
   trees: function (sp, n, at) { return treeFind(sp, n, at); },   // 找樹（63_trees.js treeFind）：那一種最靠近 at（[x, z]；沒給 ⇒ 鏡頭）的 n 棵
   // 海圖（TASK-0721；08_seabed.js、32_ground.js）：載了哪幾塊、換過幾次中心、等過幾次；每艘的擱淺讀數；q ＝ [x, z] ⇒ 那一點的高度與底質
