@@ -69,8 +69,9 @@ function townGot(L, err, idx) {
   if (err) { TOWNS.err = err; console.warn('城鎮：' + err); }
   if (idx && idx.models && !TOWNS.idx) TOWNS.idx = idx;
   if (!BED || !BED.A || !L || !L.length) return;
-  var t0 = performance.now();
+  var t0 = performance.now(), n0 = TOWNS.list.length;
   L.forEach(function (p) { if (p && p.format === 'blocksail-town' && !TOWNS.list.some(function (T) { return T.id === p.id; })) TOWNS.list.push(townPrep(p)); });
+  if (TOWNS.list.length === n0) return;                                 // 都是已經有的（外面那一頁做好一座先送一座、最後再給整份）⇒ 不重建整地、網格、遠景
   var I = townIdx();                                                    // 新來的城要的模型解好的那一份沒有 ⇒ 丟掉重要（解到一半 ⇒ 解完再丟）
   if (I && TOWNS.kitHas && townNeed(I).some(function (nm) { return TOWNS.kitHas.indexOf(nm) < 0; })) { if (TOWNS.kit) townKitFree(); else TOWNS.kitRedo = true; }
   TOWNS.ver++; TOWNS.dirty = true; TOWNS.stat.towns = TOWNS.list.length;

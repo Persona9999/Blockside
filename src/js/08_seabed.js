@@ -14,7 +14,8 @@
 // 焦點 ＝ 旗艦（玩家開的那艘；2026-10-20，Tim：「根據玩家操作的旗艦位置判定」）：沉了／沒有 ⇒ 照舊用還在打的船的中心（bedFocusAt）。
 // 海域跟著旗艦走（BED.win；同一天，Tim：「目前規劃是要能根據船的位置動態加載地圖」）：只有 ?map=@host、外面那一頁的海域帶 area.win（窗的半徑，幾塊）才開。
 //   以前海域在開戰時就定死（開戰位置 ± 11 塊）⇒ 開出去 11 km 以外什麼都沒有（小地圖那一邊一塊空的、地形沒了）。
-//   ⇒ 海域 ＝ 旗艦那一塊 ± area.win 塊的窗（也蓋住每艘船 margin 內的塊）；旗艦離窗的中心超過 BED_WIN_SHIFT 塊、窗比 ± area.win 小、有船的 margin 出了窗
+//   半徑照畫質（bedWinR：BED_WIN_M 照公尺換塊數，area.win 是外面那一頁給得出的上限；2026-10-22 以前一律 area.win 10 塊 ＝ 21×21 km）。
+//   ⇒ 海域 ＝ 旗艦那一塊 ± bedWinR() 塊的窗（也蓋住每艘船 margin 內的塊）；旗艦離窗的中心超過 BED_WIN_SHIFT 塊、窗比 ± area.win 小、有船的 margin 出了窗
 //   ⇒ 跟外面那一頁要新的窗 { bsmap: 'need', what: 'win', x, y }，它回 { bsmap: 'win', x, y, chunks, towns? }（chunks：這個窗每一塊有沒有檔，同 area.chunks）
 //   ⇒ bedWinApply：照新的範圍重排 BED.has／slot／mslot／lv（塊號、原點都不變 ⇒ 世界座標不動、載好的塊照用），窗外的丟掉（網格、遠景、小地圖照 'bedWin' 跟著換）。
 //   ⛔ 戰局跟窗什麼時候到無關：每一步之前每艘船 margin 內的塊都要在窗裡（bedWait 等；平常船離窗邊還有好幾 km 就換了，等不到）；窗外照深海只會出現在 margin 外。
@@ -40,10 +41,15 @@ function bedT1() { return BED_SLICE ? performance.now() + Math.max(0, BED_BG) : 
 /** 扣掉一段背景工作花的時間（t0 ＝ 開始時的 performance.now()）。 */
 function bedSpent(t0) { BED_BG -= performance.now() - t0; }
 var BED_VX_IN = 1.5, BED_VX_OUT = 2.5;                                   // 漩渦半徑 r 的幾倍：以內全是深海、以外全照海圖
-var BED_WIN_SHIFT = 3;                                                   // 海域跟著旗艦走：旗艦離窗的中心幾塊就換窗（area.win 10 ⇒ 離窗邊還有 7 km）
+var BED_WIN_SHIFT = 0.3;                                                 // 海域跟著旗艦走：旗艦離窗的中心超過半徑的幾成就換窗（以前 3 塊 ／ area.win 10）
+var BED_WIN_M = [2000, 4000, 6000];                                      // 窗的半徑（公尺）照畫質的「海圖讀取範圍」（07_gfx.js chartr；Tim 2026-10-22「最高6 km 中 4km 低 2km」）
 var BED_VIEW_BACK = 2;                                                   // 讀的先後（外圈的背景預載、遠景）：鏡頭背後那一邊當成遠一倍（Tim 2026-10-20：「外圈地圖讀取優先度 可以根據攝影機視角判斷(看到的部分優先)」）
 var BED_MAT = { DEEP: 0, SAND: 1, REEF: 2, SHOAL: 3, ROCK: 4, BEACH: 10, LAND: 11, CLIFF: 12 };
 var BED_CFG = Object.assign({ ring: 1, prefetch: 1, margin: 300 }, CFG.map || {});   // config/game.json map：在用幾圈、多預載幾圈、船旁邊多少公尺內一定要載好
+// ring、prefetch 的單位是「1024 m 的一圈」（2026-10-22 以前塊一律 1024 m；Tim 同一天「一塊尺寸是否也能縮一半」⇒ Blocksail 的塊改 512 m）：
+//   照 A.chunk 換塊數（bedRingN）⇒ 1024 m 的塊（檔案海圖 maps/tortuga）照舊 1 圈、逐位元組不變；512 m 的塊 2 圈 ⇒ 公尺上一樣遠。
+var BED_RING_UNIT = 1024;
+function bedRingN(v) { return v > 0 ? Math.max(1, Math.round(v * BED_RING_UNIT / BED.A.chunk)) : 0; }
 window.BSMAP = {                                                         // 海圖檔（<script>）載進來呼叫這兩支（?map=@host ⇒ 收到外面那一頁回的也照樣叫）
   area: function (o) { if (BED && (BED.host || BED.wantArea === o.id)) BED.gotArea = o; },
   town: function (o) { if (BED && BED.A) TOWNS.pend.push(o); },          // maps/<海域>/towns.js：一座城一筆（63_towns.js townWant 讀完一起收）
@@ -266,7 +272,7 @@ function bedFocus(fx, fz, first) {
   var A = BED.A, cx = Math.floor((fx + BED.ax) / A.chunk), cy = Math.floor((fz + BED.az) / A.chunk);
   if (!first && cx === BED.cx && cy === BED.cy) return null;
   BED.cx = cx; BED.cy = cy;
-  var R = BED_CFG.ring + BED_CFG.prefetch, ps = [];
+  var R = bedRingN(BED_CFG.ring) + bedRingN(BED_CFG.prefetch), ps = [];
   if (BED.mid) return bedFocusMid(cx, cy, R);
   for (var j = cy - R; j <= cy + R; j++) for (var i = cx - R; i <= cx + R; i++) ps.push(bedLoad(i, j));
   var keep = bedNear();
@@ -278,14 +284,14 @@ function bedFocus(fx, fz, first) {
 }
 /** 外圈用中等塊（BED.mid）時的換中心：先要「這一步模擬要讀的」—— 在用的 ring 圈原精度、外面到 R 圈中等塊（回傳等它們的 Promise）；
  *  再背景預載 —— 外圈的原精度（焦點走過去就變成在用的）、再外一圈的中等塊（焦點走過去就變成外圈）。每一種都從中心往外排。
- *  丟：原精度超出 R 圈、中等塊超出 R＋1 圈（都不在任何船旁邊）。 */
+ *  丟：原精度超出 R 圈、中等塊超出 R＋X 圈（X ＝ 1024 m 換成的塊數；都不在任何船旁邊）。 */
 function bedFocusMid(cx, cy, R) {
-  var r = BED_CFG.ring, L = [];
-  for (var j = cy - R - 1; j <= cy + R + 1; j++) for (var i = cx - R - 1; i <= cx + R + 1; i++) L.push([i, j, Math.max(Math.abs(i - cx), Math.abs(j - cy)), Math.hypot(i - cx, j - cy) * bedViewK(i, j)]);   // 同一圈裡鏡頭看得到的先
+  var r = bedRingN(BED_CFG.ring), X = bedRingN(1), L = [];
+  for (var j = cy - R - X; j <= cy + R + X; j++) for (var i = cx - R - X; i <= cx + R + X; i++) L.push([i, j, Math.max(Math.abs(i - cx), Math.abs(j - cy)), Math.hypot(i - cx, j - cy) * bedViewK(i, j)]);   // 同一圈裡鏡頭看得到的先
   L.sort(function (a, b) { return a[2] - b[2] || a[3] - b[3] || a[1] - b[1] || a[0] - b[0]; });
   var need = [];
   L.forEach(function (c) { if (c[2] <= r) need.push(bedLoad(c[0], c[1])); else if (c[2] <= R) need.push(bedLoadMid(c[0], c[1])); });
-  L.forEach(function (c) { if (c[2] > r && c[2] <= R) bedLoad(c[0], c[1], true).catch(bedBgErr); else if (c[2] === R + 1) bedLoadMid(c[0], c[1], true).catch(bedBgErr); });
+  L.forEach(function (c) { if (c[2] > r && c[2] <= R) bedLoad(c[0], c[1], true).catch(bedBgErr); else if (c[2] > R) bedLoadMid(c[0], c[1], true).catch(bedBgErr); });
   var keep = bedNear();
   Object.keys(BED.ch).forEach(function (k) {
     var C = BED.ch[k]; if (Math.abs(C.cx - cx) <= R && Math.abs(C.cy - cy) <= R || keep[k]) return;
@@ -293,7 +299,7 @@ function bedFocusMid(cx, cy, R) {
     if (BED.cm[k]) evEmit('bedChunk', C.cx, C.cy, BED.cm[k]); else evEmit('bedDrop', C.cx, C.cy);   // 還有中等塊 ⇒ 畫面換畫它
   });
   Object.keys(BED.cm).forEach(function (k) {
-    var C = BED.cm[k]; if (Math.abs(C.cx - cx) <= R + 1 && Math.abs(C.cy - cy) <= R + 1 || keep[k]) return;
+    var C = BED.cm[k]; if (Math.abs(C.cx - cx) <= R + X && Math.abs(C.cy - cy) <= R + X || keep[k]) return;
     delete BED.cm[k]; BED.mslot[bedIdx(C.cx, C.cy)] = undefined;
     if (!BED.ch[k]) evEmit('bedDrop', C.cx, C.cy);
   });
@@ -304,7 +310,7 @@ function bedBgErr(e) { console.warn('海圖背景預載：' + e.message); }
  *  只照「這一步」的船算：焦點 ＝ 還在打的船的中心（跟 bedFocusAuto 同一條），焦點那一塊 ± ring 圈與每艘船 margin 內 ⇒ 2，± ring＋prefetch 圈裡其他的 ⇒ 1。
  *  ⛔ 不看哪一份已經到了：先到的背景預載不會讓模擬提早改讀原精度 ⇒ 戰局跟載入快慢無關（bedWait 等到要讀的那一份到了才走）。回傳缺的塊 [[cx, cy, lv]…]。 */
 function bedLevels(fx, fz) {
-  var A = BED.A, lv = BED.lv, r = BED_CFG.ring, R = r + BED_CFG.prefetch, miss = [];
+  var A = BED.A, lv = BED.lv, r = bedRingN(BED_CFG.ring), R = r + bedRingN(BED_CFG.prefetch), miss = [];
   var cx = Math.floor((fx + BED.ax) / A.chunk), cy = Math.floor((fz + BED.az) / A.chunk);
   lv.fill(0);
   for (var j = cy - R; j <= cy + R; j++) for (var i = cx - R; i <= cx + R; i++) { var q = bedIdx(i, j); if (q >= 0) lv[q] = Math.max(Math.abs(i - cx), Math.abs(j - cy)) <= r ? 2 : 1; }
@@ -364,12 +370,15 @@ function bedWinAsk(f) {
   BED.winP = { x: [w[0], w[1]], y: [w[2], w[3]], t: performance.now() };
   BED.host.postMessage({ bsmap: 'need', what: 'win', x: BED.winP.x, y: BED.winP.y }, '*');
 }
-/** 要的窗 [x0, x1, y0, y1]：旗艦那一塊 ± BED.win，再撐到蓋住每艘船 margin 內的塊；現在的窗還留著 ± (BED.win − BED_WIN_SHIFT) 而且蓋住每艘船 ⇒ null（不用換）。 */
+/** 窗的半徑（塊數）：畫質的「海圖讀取範圍」換成塊數，不超過外面那一頁給的 area.win。換畫質 ⇒ 下一次換窗照新的（變大 ⇒ 現在的窗不夠，馬上換）。 */
+function bedWinR() { var g = GFX.chartr != null ? GFX.chartr : BED_WIN_M.length - 1; return Math.max(1, Math.min(BED.win, Math.ceil(BED_WIN_M[g] / BED.A.chunk))); }
+/** 要的窗 [x0, x1, y0, y1]：旗艦那一塊 ± bedWinR()，再撐到蓋住每艘船 margin 內的塊；現在的窗還留著 ± (半徑 − 換窗的那幾成) 而且蓋住每艘船、也沒有比要的大一圈以上 ⇒ null（不用換）。 */
 function bedWinNeed(f) {
-  var A = BED.A, w = BED.win, m = w - BED_WIN_SHIFT, cx = Math.floor((f[0] + BED.ax) / A.chunk), cy = Math.floor((f[1] + BED.az) / A.chunk);
+  var A = BED.A, w = bedWinR(), m = w - Math.max(1, Math.round(w * BED_WIN_SHIFT)), cx = Math.floor((f[0] + BED.ax) / A.chunk), cy = Math.floor((f[1] + BED.az) / A.chunk);
   var x0 = cx - w, x1 = cx + w, y0 = cy - w, y1 = cy + w, near = bedNear(), out = false;
   Object.keys(near).forEach(function (k) { var c = near[k]; x0 = Math.min(x0, c[0]); x1 = Math.max(x1, c[0]); y0 = Math.min(y0, c[1]); y1 = Math.max(y1, c[1]); if (bedIdx(c[0], c[1]) < 0) out = true; });
-  if (!out && A.x[0] <= cx - m && A.x[1] >= cx + m && A.y[0] <= cy - m && A.y[1] >= cy + m) return null;
+  var big = (A.x[1] - A.x[0]) - (x1 - x0) > 2 || (A.y[1] - A.y[0]) - (y1 - y0) > 2;   // 窗比要的大一圈以上（開場的海域照地球儀那一頁的 ±4 km、畫質是「近」2 km；調低了畫質）⇒ 換成小的（窗外的塊、遠景丟掉）
+  if (!out && !big && A.x[0] <= cx - m && A.x[1] >= cx + m && A.y[0] <= cy - m && A.y[1] >= cy + m) return null;
   return [x0, x1, y0, y1];
 }
 /** 讀的先後（排序用的距離倍數）：塊 (cx, cy) 的中心在鏡頭水平朝向的 70° 內、或離鏡頭不到一塊半 ⇒ 1；在背後 ⇒ BED_VIEW_BACK。鏡頭幾乎正下方（轉場俯瞰）⇒ 都算 1。只排先後，⛔ 不影響要不要載。 */
@@ -377,7 +386,7 @@ function bedViewK(cx, cy) {
   var e = CAM.eye, l = CAM.look; if (!e || !l) return 1;
   var fx = l[0] - e[0], fz = l[2] - e[2], fl = Math.hypot(fx, fz); if (fl < 1e-3 || fl < 0.2 * Math.abs(l[1] - e[1])) return 1;
   var A = BED.A, x = (cx + 0.5) * A.chunk - BED.ax - e[0], z = (cy + 0.5) * A.chunk - BED.az - e[2], d = Math.hypot(x, z);
-  if (d < 1.5 * A.chunk) return 1;
+  if (d < 1536) return 1;                                               // 一塊半（以前 1.5 × 1024 m；照公尺 ⇒ 塊切小也一樣）
   return (x * fx + z * fz) / (d * fl) > 0.34 ? 1 : BED_VIEW_BACK;          // cos 70°
 }
 /** 有船 margin 內的塊在窗外。 */

@@ -64,7 +64,7 @@ function bedFarDrop(k) {
   treeUnq(k, true);                                                     // 排著還沒擺的遠景樹冠殼（63_trees.js treePump）一起丟
 }
 function bedLod(C) {                                                     // 每幾個取樣點取一個：在用的那幾圈 8 m（有城、有內陸水的塊 4 m，63_towns.js）、預載那一圈 16 m —— 照公尺算 ⇒ 外圈的中等塊（16 m 一點）每點都取
-  var R = BED_CFG.ring, w = Math.abs(C.cx - BED.cx) <= R && Math.abs(C.cy - BED.cy) <= R ? (townFine(C) || C.wd ? 1 : 2) : 4;
+  var R = bedRingN(BED_CFG.ring), w = Math.abs(C.cx - BED.cx) <= R && Math.abs(C.cy - BED.cy) <= R ? (townFine(C) || C.wd ? 1 : 2) : 4;
   return Math.max(1, Math.round(w * BED.A.step / C.step));
 }
 /** 一塊 ⇒ 網格（stride：每幾個取樣點取一個）。頂點：位置 3、法線 3、底色 3、紋理權重 4（世界座標：原點 ＝ 開戰位置）。
@@ -261,7 +261,7 @@ function bedFoamTex() {
   var Fm = BEDFOAM, A = BED.A;
   if (BED.cx === null || !Fm.dirty && Fm.cx === BED.cx && Fm.cy === BED.cy) return;
   if (Fm.tex && bedBusy()) return;                                      // 背景預算用完了 ⇒ 下一格再重建（收塊時每一塊都會弄髒它；一次約 30 ms）
-  var t0 = performance.now(), R = BED_CFG.ring + BED_CFG.prefetch, n = A.n, sk = 2, per = (n - 1) / sk, W = (2 * R + 1) * per, D = new Float32Array(W * W).fill(A.deep);
+  var t0 = performance.now(), R = bedRingN(BED_CFG.ring) + bedRingN(BED_CFG.prefetch), n = A.n, sk = 2, per = (n - 1) / sk, W = (2 * R + 1) * per, D = new Float32Array(W * W).fill(A.deep);
   for (var cj = 0; cj <= 2 * R; cj++) for (var ci = 0; ci <= 2 * R; ci++) {
     var C = bedShowC(bedKey(BED.cx - R + ci, BED.cy - R + cj)); if (!C) continue;
     if (C.step !== A.step) {                                             // 外圈的中等塊（點距比 8 m 粗）：照公尺取最近的點
