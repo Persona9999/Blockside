@@ -142,6 +142,37 @@ window.addEventListener('unhandledrejection', function (ev) { var r = ev.reason;
 if (!gl) { glFail('這個瀏覽器沒有 WebGL2，畫不出來。'); throw new Error('no WebGL2'); }   // 拆檔後這裡是閉包的頂層：throw ＝ 原本的 return（停下來）
 
 var P = {};
+// 不卡畫面的著色器（TASK-0816）：KHR_parallel_shader_compile ⇒ 先送出編譯、連結（glProgStart），每格問好了沒（glProgReady），好了才拿（glProgEnd：跟 VK.compile 一樣的 { prog, u }、編不過照樣丟錯）。
+//   以前第一次畫城鎮時一口氣編 5 支、等到編完（VK.compile 問 COMPILE_STATUS ⇒ 主執行緒等驅動）：皇家港外進航海 +4.6 秒那一格 633 ms。沒有這個擴充 ⇒ glProgReady 一律 true（照舊等）。
+var GL_PAR = gl && gl.getExtension('KHR_parallel_shader_compile');
+function glProgStart(vs, fs) {
+  var p = gl.createProgram(), S = [[gl.VERTEX_SHADER, vs], [gl.FRAGMENT_SHADER, fs]].map(function (a) { var s = gl.createShader(a[0]); gl.shaderSource(s, a[1]); gl.compileShader(s); gl.attachShader(p, s); return s; });
+  gl.linkProgram(p); return { p: p, S: S, src: [vs, fs] };
+}
+function glProgReady(J) { return !GL_PAR || gl.getProgramParameter(J.p, GL_PAR.COMPLETION_STATUS_KHR); }
+function glProgEnd(J) {
+  var p = J.p, u = {}, i, n;
+  J.S.forEach(function (s, k) { if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error('著色器編譯失敗：' + gl.getShaderInfoLog(s) + '\n' + J.src[k].split('\n').slice(0, 3).join('\n')); });
+  if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error('著色器連結失敗：' + gl.getProgramInfoLog(p));
+  for (i = 0, n = gl.getProgramParameter(p, gl.ACTIVE_UNIFORMS); i < n; i++) { var a = gl.getActiveUniform(p, i); u[a.name.replace(/\[0\]$/, '')] = gl.getUniformLocation(p, a.name); }
+  return { prog: p, u: u };
+}
+// 先送出、晚點拿（同一串原始碼）：GL_WARM ⇒ VK.compile 遇到送出過的那一串 ⇒ 直接拿（已經編好就不等）；glProgTry ⇒ 還沒編好回 null（呼叫的那一格先不畫）。
+//   GL_BATCH（programs()）：這段時間 VK.compile 只送出、回一個空的 { prog, u }，整批送完才一支一支拿 ⇒ 驅動同時編，不是一支等完再下一支。
+//   皇家港外進航海（2026-10-22，改之前）：著色器一共 5.0 秒 —— 地形 P.bed 一支 2.6 秒（第一次 bedDraw）、開機那一批 1.1 秒、城鎮 0.6 秒；都在地球儀往下飛的那幾秒裡（同一條執行緒）。
+var GL_WARM = {}, GL_BATCH = null;
+function glWarm(vs, fs) { var k = vs + '\u0000' + fs; return GL_WARM[k] || (GL_WARM[k] = glProgStart(vs, fs)); }
+function glProgTry(vs, fs) { var k = vs + '\u0000' + fs, J = glWarm(vs, fs); if (!glProgReady(J)) return null; delete GL_WARM[k]; return glProgEnd(J); }
+(function () {
+  var c0 = VK.compile;
+  VK.compile = function (g, vs, fs) {
+    if (g !== gl) return c0(g, vs, fs);
+    var k = vs + '\u0000' + fs, J = GL_WARM[k];
+    if (J) { delete GL_WARM[k]; return glProgEnd(J); }
+    if (GL_BATCH && GL_PAR) { var o = { prog: null, u: null }; GL_BATCH.push([glProgStart(vs, fs), o]); return o; }
+    return c0(g, vs, fs);
+  };
+})();
 // 陰影（畫質；60_render.js shadowPass）：照鏡頭切成幾段距離（cascade，Tim 2026-10-20「改用其他遊戲常見的 shadow cascades 取代每艘船自己的陰影(且陸地也吃得到)」「基於Camera配置陰影」）：
 //   一段一層（太陽方向的正交投影 uShM[k]，罩住那一段視錐），船、地形、樹、城鎮都畫在裡面；全部放在同一個深度貼圖陣列 uShA（固定第 4 號）。
 //   收的那一點照離鏡頭多深（沿鏡頭往前的方向 uCsF、從 uCsE 量）挑第一個「遠端 uCsD[k] 比它深」的那一段；從 uCsL[k] 到遠端那一截跟下一段混（畫質頁的「交界」；最後一段 ⇒ 淡成沒有影子），
@@ -224,6 +255,7 @@ function instVS(s) {
   return s.replace(a, 'uniform mat4 uMs[' + INST_K + '],uVP;').replace(b, b + 'mat4 uModel=uMs[gl_InstanceID]; ');
 }
 function programs() {
+  GL_BATCH = [];                                                         // 整批送出、最後才拿（見 GL_BATCH）
   var cd = gl.createTexture(); gl.activeTexture(gl.TEXTURE8); gl.bindTexture(gl.TEXTURE_2D, cd);   // 第 8 號：剖面切高的空貼圖（見 CUT_GLSL）
   gl.texImage2D(gl.TEXTURE_2D, 0, gl.R32F, 1, 1, 0, gl.RED, gl.FLOAT, new Float32Array([1e9]));
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST); gl.activeTexture(gl.TEXTURE0);
@@ -393,6 +425,12 @@ function programs() {
   INST_K = clamp(Math.floor((gl.getParameter(gl.MAX_VERTEX_UNIFORM_VECTORS) - 16) / 4), 16, INST_MAX);
   try { P.triI = VK.compile(gl, instVS(TRI_VS), TRI_FS); } catch (e) { P.triI = null; console.warn('P.triI 沒編起來（模型照舊一個一個畫）：' + e.message); }
   try { P.dtriI = VK.compile(gl, instVS(DTRI_VS), NOFS); } catch (e) { P.dtriI = null; console.warn('P.dtriI 沒編起來（陰影照舊一個一個畫）：' + e.message); }
+  var B = GL_BATCH, bad = null; GL_BATCH = null;
+  B.forEach(function (b) { try { Object.assign(b[1], glProgEnd(b[0])); } catch (e) { b[1].err = e; } });
+  if (P.triI && P.triI.err) { console.warn('P.triI 沒編起來（模型照舊一個一個畫）：' + P.triI.err.message); P.triI = null; }
+  if (P.dtriI && P.dtriI.err) { console.warn('P.dtriI 沒編起來（陰影照舊一個一個畫）：' + P.dtriI.err.message); P.dtriI = null; }
+  B.forEach(function (b) { if (b[1].err && b[1] !== P.triI && b[1] !== P.dtriI && !bad) bad = b[1].err; }); if (bad) throw bad;
+  if (Q.get('map')) { glWarm(BED_VS, bedFS()); glWarm(BED_VS, DEPTH_ONLY_FS); }   // 有海圖 ⇒ 地形那兩支先送出（第一次 bedDraw 才編 ⇒ 一格 2.6 秒）
 }
 function setCommon(p) {
   var u = p.u;

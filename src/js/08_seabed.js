@@ -117,7 +117,13 @@ function bedPumpLate() { if (BED.inq.length && performance.now() - BED.pumpAt > 
 /** 告訴外面那一頁（只有 ?map=@host）：'started' ＝ 開戰了（鏡頭停在正上方）、'left' ＝ 拉到正上方了 —— 畫好兩格才送（地球儀照這個淡進／淡出）。 */
 function bedHostSay(what, o) {
   if (!BED || !BED.host) return;
-  requestAnimationFrame(function () { requestAnimationFrame(function () { BED.host.postMessage(Object.assign({ bsmap: what }, (typeof o === 'function' ? o() : o) || {}), '*'); }); });   // o 可以是函式：送的那一刻才算
+  var n = 0;
+  (function one() {
+    requestAnimationFrame(function () {
+      if (what === 'started' && BED.A && !P.bed && ++n < 600) { one(); return; }   // 地形的著色器還在編（63_bed_gl.js bedDraw 先不畫地形）⇒ 等它好了才說：淡進來的那一張要有地形（TASK-0816）
+      requestAnimationFrame(function () { BED.host.postMessage(Object.assign({ bsmap: what }, (typeof o === 'function' ? o() : o) || {}), '*'); });   // o 可以是函式：送的那一刻才算
+    });
+  })();
 }
 /** 下排的 🌍（template.html #hostBack；Tim 2026-10-20「回到地球儀 我目前想法是 航海模式下 加到下排圓形按鈕」「用emoji的地球儀」）：只有 ?map=@host 才出現（body.bsHost），
  *  點了、按快捷鍵（66_keys.js hostBack，預設 U；71_input.js doAct）⇒ 跟外面那一頁說 'back'（地球儀照它回去：跟它自己那顆「← 回到地球儀」同一條；'started' 帶 back: 1 ⇒ 地球儀就不放它那一顆、免得疊在停格條上）。 */
