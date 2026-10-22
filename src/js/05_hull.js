@@ -329,7 +329,7 @@ function buildHull(info, model, t0, C, key, F) {
     ['水線與浮力', function () { tm('waterline', function () { waterline(T); }); tm('hullTex', function () { hullTex(T, C && C.hb); }); }],   // 水線、海面遮罩、羅盤的船、側面圖、浮力：分四步（以前一步約 0.12 s）
     ['水線與浮力', function () { tm('navImg', function () { navImg(T); }); }],
     ['水線與浮力', function () { tm('sideImg', function () { sideImg(T); }); }],
-    ['水線與浮力', function () { tm('hydro', function () { if (C) { T.hyd = C.hyd; T.disp = C.disp; } else hydrostatics(T); }); }],
+    ['水線與浮力', function () { tm('hydro', function () { T.hydTop = Math.max(60, Math.round(sinkLineT(T) / S) + 18); if (C) { T.hyd = C.hyd; T.disp = C.disp; } else hydrostatics(T); }); }],
     ['船體網格', function () {
       var a = performance.now(); T.pristine = new VK.RegionSet(gl, T.hullG, QIDX);
       if (C) { meshesFromCache(T.pristine, C.mesh); T.ms.pristine = +(performance.now() - a).toFixed(1); return; }

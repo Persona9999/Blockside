@@ -474,9 +474,9 @@ function townKitMake(I, need, D, reuse) {
   return Promise.all(need.map(function (nm) {
     var m0 = I.models[nm], d = D[nm], R = reuse && reuse.M[nm];
     if (!d) throw new Error('外面那一頁沒給 ' + nm);
-    function put(L, win) { M[nm] = { nm: nm, i: names.indexOf(nm), m: m0, lod: L, png: d.png, uc0: [m0.mpv, m0.size[0] * m0.mpv / 2, m0.size[1] * m0.mpv / 2], uc1: [m0.mpv * m0.lo.f, m0.size[0] * m0.mpv / 2, m0.size[1] * m0.mpv / 2], win: win }; }   // win：亮窗的窗片（夜裡的燈）
-    if (R) { put(R.lod, R.win); return null; }
-    return townModelMesh(nm, d, m0).then(function (L) { put(L, townWinMesh(m0)); });
+    function put(L, win, gls) { M[nm] = { nm: nm, i: names.indexOf(nm), m: m0, lod: L, png: d.png, uc0: [m0.mpv, m0.size[0] * m0.mpv / 2, m0.size[1] * m0.mpv / 2], uc1: [m0.mpv * m0.lo.f, m0.size[0] * m0.mpv / 2, m0.size[1] * m0.mpv / 2], win: win, gls: gls }; }   // win：亮窗的窗片（夜裡的燈）；gls：玻璃（townGlsMesh）
+    if (R) { put(R.lod, R.win, R.gls); return null; }
+    return Promise.all([townModelMesh(nm, d, m0), townGlsMesh(m0, d.gls)]).then(function (A) { put(A[0], townWinMesh(m0), A[1]); });
   })).then(function () {
     // 貼圖：收到的模型照名字一個一列往下排（寬 ＝ 最寬那一列、高 ＝ 加總，各取 2 的次方）；那一列的座標寫進那個模型的 im（畫貼圖照它取，townBin）
     var aw = 1, y = 0;
@@ -511,7 +511,7 @@ function townKitSet(K) {
 }
 /** 一份模型組的 GPU 資源（網格、窗片、貼圖）；keep ＝ 換上的那一組（骨架 ⇒ 整組沿用的網格不放掉）。 */
 function townKitGpuFree(K, keep) {
-  Object.keys(K.M).forEach(function (nm) { if (keep && keep.M[nm] && keep.M[nm].lod === K.M[nm].lod) return; K.M[nm].lod.concat(K.M[nm].win ? [K.M[nm].win] : []).forEach(function (r) { gl.deleteVertexArray(r.vao); gl.deleteBuffer(r.vbo); }); });
+  Object.keys(K.M).forEach(function (nm) { if (keep && keep.M[nm] && keep.M[nm].lod === K.M[nm].lod) return; K.M[nm].lod.concat(K.M[nm].win ? [K.M[nm].win] : [], K.M[nm].gls ? [K.M[nm].gls] : []).forEach(function (r) { gl.deleteVertexArray(r.vao); gl.deleteBuffer(r.vbo); }); });
   if (K.tex) gl.deleteTexture(K.tex);
 }
 /** 要的模型變多（來了新的城、改了繁榮度）：還在解 ⇒ 解完再丟掉重要（兩段同時跟外面那一頁要，回應會對錯人）；不然 ⇒ 現在就丟。 */
@@ -1276,7 +1276,7 @@ function townStat(at) {
     return { id: T.id, name: T.name, tier: T.tier, seed: T.seed, ox: T.ox, oy: T.oy, lots: (T.p.lots || []).length, roads: T.roads.length, walls: (T.p.walls || []).length, inst: (T.inst || []).length, ground: T.gt ? (function () { var K = Object.keys(T.gt); return { tiles: K.length, built: K.filter(function (k) { return T.gt[k].g; }).length, dirty: K.filter(function (k) { return T.gt[k].dirty; }).length, piers: K.filter(function (k) { return townGroundPier(T.gt[k]); }).length, piersBuilt: K.filter(function (k) { return townGroundPier(T.gt[k]) && T.gt[k].g; }).length }; })() : null,   // piers：有棧橋或碼頭的區（TASK-0826 先建）
       part: T.inst ? (TOWNS.kit && TOWNS.kit.part ? 'walls' : 'all') : null, walls: (T.inst || []).filter(function (q) { return q.wall; }).length,   // 地面的帶子分區（TASK-0817）
       byModel: u, lights: tl, center: [+(T.ox - BED.ax).toFixed(1), +(T.oy - BED.az).toFixed(1)] };
-  }), kit: !!TOWNS.kit, kitPart: !!(TOWNS.kit && TOWNS.kit.part), kitN: S.kitN, kitMs: S.kitMs, skelN: S.skelN, skelMs: S.skelMs, kitMesh: { baked: S.meshBaked, live: S.meshLive, check: S.meshCheck, vk: townVkFp() }, kitTris: S.kitTris, skip: S.skip, drawn: { full: S.d0, low: S.d1, card: S.d2, shells: S.d3, plinth: S.plinth, flags: S.flags || 0, landmarks: S.lm || 0 }, tris: S.tris, ms: { draw: S.drawMs, bin: S.binMs, grade: +S.gradeMs.toFixed(1), prep: S.prepMs }, gradedChunks: S.chunks, regrade: { left: TOWNS.rgq ? Object.keys(TOWNS.rgq).length : 0, done: S.regraded },
+  }), kit: !!TOWNS.kit, kitPart: !!(TOWNS.kit && TOWNS.kit.part), kitN: S.kitN, kitMs: S.kitMs, skelN: S.skelN, skelMs: S.skelMs, kitMesh: { baked: S.meshBaked, live: S.meshLive, check: S.meshCheck, vk: townVkFp() }, kitTris: S.kitTris, skip: S.skip, gls: S.gls || 0, drawn: { full: S.d0, low: S.d1, card: S.d2, shells: S.d3, plinth: S.plinth, flags: S.flags || 0, landmarks: S.lm || 0 }, tris: S.tris, ms: { draw: S.drawMs, bin: S.binMs, grade: +S.gradeMs.toFixed(1), prep: S.prepMs }, gradedChunks: S.chunks, regrade: { left: TOWNS.rgq ? Object.keys(TOWNS.rgq).length : 0, done: S.regraded },
     night: { lit: +TL.k.toFixed(3), win: +TOD_WIN.toFixed(3), grid: TL.stat.inGrid, range: TL.stat.range || 0, full: TL.stat.full, over: TL.stat.over, gridMs: TL.stat.gridMs, cards: TL.stat.cards, glow: TL.stat.glow, glowMs: TL.stat.glowMs } };
   if (at) { var q = bedCell(at[0], at[1]); o.at = { ground: +townGround(at[0], at[1]).toFixed(2), sim: +bedHgt(at[0], at[1]).toFixed(2), clear: q ? townClr(q.C, q.u * q.C.step, q.v * q.C.step) : null }; }
   return o;
@@ -1529,6 +1529,56 @@ function townPostDraw(P, eye, fogD) {
     gl.bindVertexArray(tl.postVao); gl.drawArraysInstanced(gl.TRIANGLES, 0, 36, tl.nPost * 2); tris += 24 * tl.nPost;
   });
   return tris;
+}
+// 玻璃（Tim 2026-10-23「建築是否支援玻璃(跟船一樣的)」）：模型檔的 gls（Blocksail tools/townmodels.py glass_faces：子作品 meta material=glass 那幾格貼著空氣的面，
+//   每面 4 個 u16 ＝ 格 x、y、z、面 | 色號 << 3；面照 TOWN_GLS_FACE）；近那一級的網格不放那幾格，低模、貼圖、屋頂照舊有它（遠看是深色的窗）。
+//   ⇒ 一個模型一份平面網格（模型本地公尺：a ＝ x·mpv − 寬/2、b ＝ y·mpv − 深/2、高 ＝ z·mpv；頂點同船的玻璃 15_smooth.js glsBuild：位置、法線、色、[金屬度, 粗糙度, 透明度]，照材質表的 glass）
+//   ⇒ townGlsDraw 照近那一級的實例一棟一次畫（P.tri ＋ uGls：同船的玻璃那一段 —— 混色、不寫深度、由遠到近；60_render.js 在船的玻璃之後、亮窗之前）。只給人看。
+var TOWN_GLS_FACE = [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]];
+/** 模型檔的 gls ⇒ Promise<{ vao, vbo, n } | null>（見上）。 */
+function townGlsMesh(m0, b64) {
+  if (!b64) return Promise.resolve(null);
+  return VK.inflateRaw(VK.b64ToBytes(b64)).then(function (raw) {
+    var A = new Uint16Array(raw.buffer.slice(raw.byteOffset, raw.byteOffset + raw.byteLength)), mpv = m0.mpv, hx = m0.size[0] * mpv / 2, hy = m0.size[1] * mpv / 2;
+    var mt = matInfo('glass'), mm = +mt.metal || 0, mr = isFinite(+mt.rough) && mt.rough !== undefined ? +mt.rough : 0.06, mc = clamp(+mt.clear || 0.6, 0, 0.95);
+    var V = new Float32Array(A.length / 4 * 72), o = 0, T6 = [0, 1, 2, 0, 2, 3];
+    for (var k = 0; k + 3 < A.length; k += 4) {
+      var f = A[k + 3] & 7, col = A[k + 3] >> 3, n = TOWN_GLS_FACE[f], ax = f >> 1, ua = SM_UAX[ax], va = SM_VAX[ax], L = [A[k], A[k + 1], A[k + 2]], q = [];
+      if (n[ax] > 0) L[ax]++;
+      for (var e = 0; e < 4; e++) { var c = SM_C4[n[ax] > 0 ? e : 3 - e], Q = L.slice(); Q[ua] += c[0]; Q[va] += c[1]; q.push(Q); }
+      var r = ((col >> 5) & 7) / 7, gg = ((col >> 2) & 7) / 7, b = (col & 3) / 3;
+      for (var t = 0; t < 6; t++) { var P2 = q[T6[t]]; V[o++] = P2[0] * mpv - hx; V[o++] = P2[1] * mpv - hy; V[o++] = P2[2] * mpv; V[o++] = n[0]; V[o++] = n[1]; V[o++] = n[2]; V[o++] = r; V[o++] = gg; V[o++] = b; V[o++] = mm; V[o++] = mr; V[o++] = mc; }
+    }
+    var g = { vao: gl.createVertexArray(), vbo: gl.createBuffer(), n: o / 12 };
+    gl.bindVertexArray(g.vao); gl.bindBuffer(gl.ARRAY_BUFFER, g.vbo); gl.bufferData(gl.ARRAY_BUFFER, V, gl.STATIC_DRAW);
+    [[0, 0], [1, 3], [2, 6], [3, 9]].forEach(function (a) { gl.enableVertexAttribArray(a[0]); gl.vertexAttribPointer(a[0], 3, gl.FLOAT, false, 48, a[1] * 4); });
+    gl.bindVertexArray(null);
+    return g;
+  });
+}
+/** 玻璃那一趟（見上）：近那一級、有玻璃的實例，由遠到近一棟一次；讀數 TOWNS.stat.gls ＝ 這一格畫了幾棟。 */
+var TOWN_GLS_M = new Float32Array(16);
+function townGlsDraw() {
+  TOWNS.stat.gls = 0;
+  var K = TOWNS.kit, G = TOWNS.grp, D0 = TOWNS.buf[0];
+  if (!TOWNS.on || !K || !G || !D0 || PASS.vp) return;
+  var E = CAM.eye, L = [];
+  K.names.forEach(function (nm, mi) {
+    var Mm = K.M[nm], n = G.cnt[0][mi]; if (!n || !Mm.gls || !Mm.gls.n) return;
+    for (var j = 0; j < n; j++) { var o = (G.off[0][mi] + j) * 11; L.push({ g: Mm.gls, o: o, d: Math.hypot(D0[o] - E[0], D0[o + 2] - E[2]) }); }
+  });
+  if (!L.length) return;
+  L.sort(function (a, b) { return b.d - a.d; });
+  var cf = gl.isEnabled(gl.CULL_FACE), M = TOWN_GLS_M;
+  gl.enable(gl.BLEND); gl.blendFuncSeparate(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA, gl.ZERO, gl.ONE); gl.depthMask(false); gl.disable(gl.CULL_FACE);
+  gl.useProgram(P.tri.prog); setCommon(P.tri); gl.uniform1f(P.tri.u.uLit, 1); gl.uniform1f(P.tri.u.uGls, 1); if (P.tri.u.uGlow) gl.uniform1f(P.tri.u.uGlow, 0); cutSet(P.tri, null);
+  L.forEach(function (it) {
+    var o = it.o, s = Math.sin(D0[o + 3]), c = Math.cos(D0[o + 3]), sx = D0[o + 4];   // 實例的欄位見 townInstAttr：aI x y z θ、aS 沿 x 縮放…、aJ 斜接 ×2 坡度 牆基
+    M[0] = s * sx; M[1] = D0[o + 9] * sx; M[2] = -c * sx; M[3] = 0; M[4] = -c; M[5] = 0; M[6] = -s; M[7] = 0; M[8] = 0; M[9] = 1; M[10] = 0; M[11] = 0; M[12] = D0[o]; M[13] = D0[o + 1]; M[14] = D0[o + 2]; M[15] = 1;
+    gl.uniformMatrix4fv(P.tri.u.uModel, false, M); gl.bindVertexArray(it.g.vao); gl.drawArrays(gl.TRIANGLES, 0, it.g.n);
+  });
+  gl.bindVertexArray(null); gl.uniform1f(P.tri.u.uGls, 0); gl.depthMask(true); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA); if (cf) gl.enable(gl.CULL_FACE);
+  TOWNS.stat.gls = L.length;
 }
 /** 亮窗、光點（60_render.js：海、玻璃之後；加法、不寫深度）。白天（TL.k 0）整段不畫。 */
 function townGlowDraw() {

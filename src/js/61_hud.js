@@ -114,7 +114,7 @@ function capText(sh) {
   return '砲長 ' + (C ? C.name : '—') + '：' + (manual ? '待命（我在瞄：' + AIM_NAME[sh.pMode || 'free'] + '）' : sh.aimMode ? '瞄' + AIM_NAME[sh.aimMode] : '觀察中');
 }
 // 進水 %（HUD；TASK-0535，Tim 2026-10-13：原本 ＝ 下沉 ÷ 9 m ⇒ 26% 時已經注定要沉、50% 就淹過船體 ⇒ 改用艙內積水算：船重＋積水 ＝ 浮力 ⇒ 100%）。
-//   浮力算到「開始沉」那條線（下沉 SINK_FINAL ＝ 4.2 m，32_hull.js；約略是甲板泡水）：W100 ＝ 船從現在的浮高再往下 4.2 m 要多吃的水（浮力表 T.hyd；
+//   浮力算到「開始沉」那條線（下沉 sinkFinalAt：頂層甲板泡水、不低於 SINK_FINAL ＝ 4.2 m，32_hull.js）：W100 ＝ 船從現在的浮高再往下那麼多要多吃的水（浮力表 T.hyd；
 //   船被打輕、浮高了 ⇒ W100 跟著變大）。粒子模式 W ＝ 艙內的積水；公式模式沒有水量 ⇒ W ＝ 現在比原本多吃的水（下沉照浮力表換算）。
 //   ⇒ 兩種模式都是開始沉那一刻 100%。只是顯示：航速照舊用下沉 ÷ 9 m（31_sailing.js，模擬）。
 var SINK_FINAL = 4.2;
@@ -132,8 +132,8 @@ function liftText(sh) {
 function floodPct(sh) {
   var vis = sh.fl && sh.fl.vis && !sh.sunk;
   if (sh.sunk || (sh.sinkingFinal && !vis)) return 1;
-  var T = sh.T; if (!T || !T.hyd) return clamp(sh.sink / SINK_FINAL, 0, 1);
-  var base = T.disp - (sh.mass0 || shipT(sh)) + massLost(sh), L0 = liftFor(T, base), W100 = base - tonsAt(T, L0 - SINK_FINAL);
+  var T = sh.T; if (!T || !T.hyd) return clamp(sh.sink / sinkFinalAt(sh), 0, 1);
+  var base = T.disp - (sh.mass0 || shipT(sh)) + massLost(sh), L0 = liftFor(T, base), W100 = base - tonsAt(T, L0 - sinkFinalAt(sh));
   var W = sh.fl && (!sh.broken || vis) ? sh.fl.vol * RHO_W : base - tonsAt(T, L0 - sh.sink);
   return W100 > 0 ? clamp(W / W100, 0, 1) : 1;
 }
