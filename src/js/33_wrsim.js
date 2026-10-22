@@ -200,8 +200,9 @@ function wrsStep(sh, dt, fl) {
   var s = sh.wrs; if (!s || !(dt > 0)) return;
   s.sh = sh;
   var t0 = performance.now(), wk0 = wrsWork(s), W = s.W, O = s.O, M = sh.M, u = s.su, n = s.n, upm = s.upm, fk = sh.cfg.flood / LIM.flood[2], L = W.c * S, D = s.dbg, i, j, k;
+  var tm = s.tm || (s.tm = { surf: 0, xc: 0, br: 0, open: 0, jet: 0, pipe: 0 }), tq = t0;   // 每一段的牆鐘（ms，累計；wrsRead tmStep）
   var dmax = wrsSurf(s, M), ns = s.opt.nocfl ? 1 : Math.min(WRS_NMAX, Math.max(1, Math.ceil(dt / (WRS_CFL * L / Math.sqrt(G * Math.max(dmax, 0.05)))))), h = dt / ns;
-  s.sub = ns; s.steps++; wrsXcheck(s);
+  tq = wrsTm(tm, 'surf', tq); s.sub = ns; s.steps++; wrsXcheck(s); tq = wrsTm(tm, 'xc', tq);
   // 破口：照細檔的破口清單（位置、面積、哪一舷），第一次碰到就找進去那一間（從破口往艙裡走）
   var hs = [];
   if (fl && s.opt.fixA && s.fixH) hs = s.fixH;                          // 反向對照（驗收第 10 格，wsimo=fixA）：破口的清單、面積停在第一次看到的那一刻（⛔ 細檔的破口面積什麼時候縮跟真實時間有關 ⇒ 兩次跑從那裡開始不同）
@@ -219,7 +220,7 @@ function wrsStep(sh, dt, fl) {
   }
   if (fl && s.opt.fixA && !s.fixH && hs.length) s.fixH = hs;
   for (var sub = 0; sub < ns; sub++) {
-    if (sub) { wrsSurf(s, M); wrsXcheck(s); }
+    if (sub) { tq = performance.now(); wrsSurf(s, M); tq = wrsTm(tm, 'surf', tq); wrsXcheck(s); tq = wrsTm(tm, 'xc', tq); }
     if (s.opt.jetsOnly) { wrsJets(sh, s, h); continue; }
     var ab = s.opt.above ? wrsAbove(s, M) : 0, ab2;                       // 除錯（wsimo=above）：每一段讓高過海面的水多了多少               // 只走粒子（進水報表 wdrop：量落點）
     // ① 破口
@@ -242,6 +243,7 @@ function wrsStep(sh, dt, fl) {
       tp.acc += FL_C * tp.ar * Math.sqrt(2 * G * dh2) * fk * h * upm; var nt = Math.floor(tp.acc); if (nt <= 0) continue;
       var lt = wrsPut(s, M, tp.j, nt, P2[1] + dh2); tp.acc = lt ? 0 : tp.acc - nt; s.inTot += nt - lt; tp.q = (nt - lt) / (h * upm);
     }
+    tq = wrsTm(tm, 'br', tq);
     if (s.opt.above) { ab2 = wrsAbove(s, M); s.dA.breach += ab2 - ab; ab = ab2; }
     // ② 開口（拆過的，wrsOpenings）：兩邊各一欄 ja／jb、水頭照有效水面 lv
     s.bud.clear();                                                        // 拉平的額度：每一對房（上游 → 下游）這一小步一份（⛔ 以前每一層的帶各夾各的 ⇒ 一扇門二十層搬二十倍）
@@ -302,36 +304,12 @@ function wrsStep(sh, dt, fl) {
       if (dself < -0.01 && !s.rn[W.colRoom[src]] && !s.rn[rD2]) s.xselfB++; else if (dself < -0.01) { s.xself++; s.xsO[i]++; if (s.opt.xdbg && (s.xdbg || (s.xdbg = [])).length < 20) s.xdbg.push({ i: i, T: O.T[i], Q0: +(Q0 * upm).toFixed(1), Qv: +(Qv * upm).toFixed(1), cu: cu === undefined ? null : +(cu * upm).toFixed(1), bu: bk >= 0 ? +(bu * upm).toFixed(1) : null, mv: mv, mvAll: mv + lf, lf: lf, hu: +hu.toFixed(4), hd: +hd.toFixed(4), cS: +wrsColA(s, src).toFixed(3), cD: +wrsColA(s, dst).toFixed(3), uS: u[src], capS: s.cap[src], uD: u[dst], capD: s.cap[dst], up: up, dself: +dself.toFixed(4) }); } }   // 驗收第 8 格的尺 ①：只算這個開口自己這一步搬的量（兩欄的水面面積），兩邊會不會反過來超過 1 cm ⇒ 這個開口自己衝過頭（夾子管的就是這一份）
       if (mv && !em) { s.xs[i] = src + 1; s.xd[i] = dst; s.xk[i] = (Qv < Q0 ? 1 : 0) | (u[src] >= s.cap[src] ? 2 : 0) | (u[dst] >= s.cap[dst] ? 4 : 0) | (O.T[i] ? 0 : 8) | (s.rn[W.colRoom[src]] ? 0 : 16) | (s.rn[rD2] ? 0 : 32) | (hd > wb ? 64 : 0); }   // 除錯：穿越照這一次搬的情況分類（1 夾子有作用、2 上游那一段滿、4 下游那一段滿、8 上下的開口、16 上游整間滿、32 下游整間滿、64 下游淹過開口）                // 驗收第 8 格的尺：下一小步讀兩邊的水面（wrsXcheck）
     }
+    tq = wrsTm(tm, 'open', tq);
     if (s.opt.above) { ab2 = wrsAbove(s, M); s.dA.open += ab2 - ab; ab = ab2; }
-    wrsJets(sh, s, h);                                                    // ④ 飛行中的粒子
+    tq = performance.now(); wrsJets(sh, s, h); tq = wrsTm(tm, 'jet', tq);                                                    // ④ 飛行中的粒子
     if (s.opt.above) { ab2 = wrsAbove(s, M); s.dA.jets += ab2 - ab; ab = ab2; }
-    // ③ 房間內：虛擬管
-    var E = s.E, ef = E.f, eac = E.ac, K = s.K, ko = s.kout, damp = Math.max(0, 1 - WRS_DAMP * h);
-    s.wk.pipe += 3 * E.n + n;   // 每一條管子 ＝ 同一間、相鄰兩欄、高度有重疊的兩段（wrsInit）
-    for (k = 0; k < E.n; k++) {
-      var ja2 = E.a[k], jb2 = E.b[k];
-      if (u[ja2] === 0 && u[jb2] === 0) { ef[k] = 0; continue; }
-      if (s.opt.noGapPipe && (s.gp[ja2] || s.gp[jb2])) { ef[k] = 0; continue; }   // 反向對照（wsimo=noGapPipe）：接到上下兩段合併欄（拆過的段）的管子關掉
-      var hj = s.hw[ja2], hk = s.hw[jb2], sill = Math.max(hj - (s.zs[ja2] - s.zf[ja2]) * M[9], hk - (s.zs[jb2] - s.zf[jb2]) * M[9]);
-      var wtop = Math.min(hj + (W.colZ0[ja2] + W.colNZ[ja2] - s.zs[ja2]) * M[9], hk + (W.colZ0[jb2] + W.colNZ[jb2] - s.zs[jb2]) * M[9]), dep = Math.min(Math.max(hj, hk), wtop) - sill;   // 管口只開在兩段高度重疊的那一截（地板高的那個到頂低的那個）
-      if (dep <= 0) { ef[k] = 0; continue; }
-      var fv = ef[k] * damp + h * G * dep * (hj - hk) * Math.min(s.ca[ja2], s.ca[jb2]) / (L * L);   // m³/s：dQ/dt ＝ g·水深·Δh·管寬 ÷ 管長；管長 ＝ 欄寬 L、管寬 ＝ 兩段底面積小的那個 ÷ L（整欄 ⇒ L；⛔ 以前多乘一個 L）
-      if ((fv > 0 && u[jb2] >= s.cap[jb2]) || (fv < 0 && u[ja2] >= s.cap[ja2])) fv = 0;   // 收的那一段滿了
-      ef[k] = fv;
-    }
-    ko.fill(0);
-    for (k = 0; k < E.n; k++) { if (ef[k] > 0) ko[E.a[k]] += ef[k]; else if (ef[k] < 0) ko[E.b[k]] -= ef[k]; }
-    for (j = 0; j < n; j++) { if (!u[j]) { K[j] = 0; continue; } var v = u[j] / upm; K[j] = ko[j] * h > v ? v / (ko[j] * h) : 1; }   // 流出照有的水縮放（不會變負）
-    for (k = 0; k < E.n; k++) {
-      var fv2 = ef[k]; if (!fv2) continue;
-      var ja3 = E.a[k], jb3 = E.b[k];
-      fv2 *= fv2 > 0 ? K[ja3] : K[jb3]; ef[k] = fv2;
-      eac[k] += fv2 * h * upm;
-      var m = eac[k] > 0 ? Math.floor(eac[k]) : Math.ceil(eac[k]);
-      if (m > 0) { m = Math.max(0, Math.min(m, u[ja3], s.cap[jb3] - u[jb3])); u[ja3] -= m; u[jb3] += m; eac[k] -= m; }
-      else if (m < 0) { m = Math.max(0, Math.min(-m, u[jb3], s.cap[ja3] - u[ja3])); u[jb3] -= m; u[ja3] += m; eac[k] += m; }
-      if (Math.abs(eac[k]) >= 1) eac[k] %= 1;                              // 搬不動的不存著
-    }
+    wrsPipes(s, M, h);                                                    // ③ 房間內：虛擬管
+    tq = wrsTm(tm, 'pipe', tq);
     if (s.opt.above) { ab2 = wrsAbove(s, M); s.dA.pipe += ab2 - ab; }
   }
   if (s.opt.level) for (var rl = 0, U0 = new Float64Array(s.NR); rl < 1; rl++) {   // 反向對照：每一步之後每間房瞬間拉平（驗收第 3 條的「房間內瞬間拉平」）
@@ -342,7 +320,50 @@ function wrsStep(sh, dt, fl) {
   var dwk = wrsWork(s) - wk0; s.wkMax = Math.max(s.wkMax || 0, dwk); s.wkLast = dwk;
   s.ms = performance.now() - t0; s.msTot = (s.msTot || 0) + s.ms; s.msMax = Math.max(s.msMax || 0, s.ms);   // 牆鐘（要開著窗格量；無頭的 performance.now 不準）
 }
+/** ③ 房間內：虛擬管（每一小步；h 秒）。同一間、相鄰兩欄、高度有重疊的兩段之間照水面差流（wrsInit 的管子 E）。 */
+function wrsPipes(s, M, h) {
+  var W = s.W, u = s.su, n = s.n, upm = s.upm, L = W.c * S, j, k;
+  var E = s.E, ef = E.f, eac = E.ac, K = s.K, ko = s.kout, damp = Math.max(0, 1 - WRS_DAMP * h);
+  s.wk.pipe += 3 * E.n + n;   // 每一條管子 ＝ 同一間、相鄰兩欄、高度有重疊的兩段（wrsInit）
+  for (k = 0; k < E.n; k++) {
+    var ja2 = E.a[k], jb2 = E.b[k];
+    if (u[ja2] === 0 && u[jb2] === 0) { ef[k] = 0; continue; }
+    if (s.opt.noGapPipe && (s.gp[ja2] || s.gp[jb2])) { ef[k] = 0; continue; }   // 反向對照（wsimo=noGapPipe）：接到上下兩段合併欄（拆過的段）的管子關掉
+    var hj = s.hw[ja2], hk = s.hw[jb2], sill = Math.max(hj - (s.zs[ja2] - s.zf[ja2]) * M[9], hk - (s.zs[jb2] - s.zf[jb2]) * M[9]);
+    var wtop = Math.min(hj + (W.colZ0[ja2] + W.colNZ[ja2] - s.zs[ja2]) * M[9], hk + (W.colZ0[jb2] + W.colNZ[jb2] - s.zs[jb2]) * M[9]), dep = Math.min(Math.max(hj, hk), wtop) - sill;   // 管口只開在兩段高度重疊的那一截（地板高的那個到頂低的那個）
+    if (dep <= 0) { ef[k] = 0; continue; }
+    var fv = ef[k] * damp + h * G * dep * (hj - hk) * Math.min(s.ca[ja2], s.ca[jb2]) / (L * L);   // m³/s：dQ/dt ＝ g·水深·Δh·管寬 ÷ 管長；管長 ＝ 欄寬 L、管寬 ＝ 兩段底面積小的那個 ÷ L（整欄 ⇒ L；⛔ 以前多乘一個 L）
+    if ((fv > 0 && u[jb2] >= s.cap[jb2]) || (fv < 0 && u[ja2] >= s.cap[ja2])) fv = 0;   // 收的那一段滿了
+    ef[k] = fv;
+  }
+  ko.fill(0);
+  for (k = 0; k < E.n; k++) { if (ef[k] > 0) ko[E.a[k]] += ef[k]; else if (ef[k] < 0) ko[E.b[k]] -= ef[k]; }
+  for (j = 0; j < n; j++) { if (!u[j]) { K[j] = 0; continue; } var v = u[j] / upm; K[j] = ko[j] * h > v ? v / (ko[j] * h) : 1; }   // 流出照有的水縮放（不會變負）
+  for (k = 0; k < E.n; k++) {
+    var fv2 = ef[k]; if (!fv2) continue;
+    var ja3 = E.a[k], jb3 = E.b[k];
+    fv2 *= fv2 > 0 ? K[ja3] : K[jb3]; ef[k] = fv2;
+    eac[k] += fv2 * h * upm;
+    var m = eac[k] > 0 ? Math.floor(eac[k]) : Math.ceil(eac[k]);
+    if (m > 0) { m = Math.max(0, Math.min(m, u[ja3], s.cap[jb3] - u[jb3])); u[ja3] -= m; u[jb3] += m; eac[k] -= m; }
+    else if (m < 0) { m = Math.max(0, Math.min(-m, u[jb3], s.cap[ja3] - u[ja3])); u[jb3] -= m; u[ja3] += m; eac[k] += m; }
+    if (Math.abs(eac[k]) >= 1) eac[k] %= 1;                              // 搬不動的不存著
+  }
+}
 /** 計算量（TASK-0808：每一步花多久改量做了幾次工 —— 決定性、不受 CPU 忙不忙、分頁凍不凍影響）：掃過幾段（wrsSurf）、水體（wrsBody）、開口、管子（每條三趟）、放水與拿水掃過的段、粒子、粒子走過的格。 */
+/** 牆鐘基準（wsimo=bench）：在現在的狀態原地重跑，20 批各 10 次取最快那一批 ⇒ 每次幾 ms。⚠ 白天機器忙時連取最快的也會差 2 倍（同一場 t 68 → 128 秒）⇒ 比快慢只能在同一場裡新舊交錯量，⛔ 不能拿兩場的數字比（2026-10-22：以為快了一倍，同一場一量舊版反而快一點）。 */
+function wrsBench(sh) {
+  var s = sh.wrs, M = sh.M, o = {};
+  function bt(f) { var best = Infinity; for (var b = 0; b < 20; b++) { var t = performance.now(); for (var k = 0; k < 10; k++) f(); best = Math.min(best, (performance.now() - t) / 10); } return +best.toFixed(4); }
+  o.surf = bt(function () { wrsSurf(s, M); });                           // 含 wrsBody
+  o.body = bt(function () { wrsBody(s, M); });
+  var E = s.E, u0 = s.su.slice(), f0 = E.f.slice(), a0 = E.ac.slice(), wk0 = s.wk.pipe;   // 管子會搬水 ⇒ 每次從同一份狀態開始、跑完還原（1/60 秒一小步）
+  o.pipe = bt(function () { s.su.set(u0); E.f.set(f0); E.ac.set(a0); wrsPipes(s, M, 1 / 60); });
+  o.copy = bt(function () { s.su.set(u0); E.f.set(f0); E.ac.set(a0); });   // 還原本身花多久（pipe 要扣掉）
+  s.su.set(u0); E.f.set(f0); E.ac.set(a0); s.wk.pipe = wk0;
+  return o;
+}
+function wrsTm(tm, k, t) { var n = performance.now(); tm[k] += n - t; return n; }
 function wrsWork(s) { var w = s.wk; return w.surf + w.body + w.open + w.pipe + w.put + w.take + w.jet + w.dda; }
 /** 對外的水量（sh.wrs.u：每個烘焙的欄裝幾單位 ＝ 它每一段加起來；63_wrwater_gl.js 照它畫）。⚠ 上段有水、下段沒滿時加起來會畫在下段裡（畫面只有一個水面）。 */
 function wrsAgg(s) { var u = s.u, su = s.su, P = s.G.par; u.fill(0); for (var k = 0; k < s.n; k++) u[P[k]] += su[k]; }
@@ -413,7 +434,7 @@ function wrsRead(sh) {
   for (var hsh = 2166136261, j3 = 0; j3 < s.n; j3++) hsh = Math.imul(hsh ^ u[j3], 16777619);   // 狀態雜湊（驗收第 10 格：兩次跑逐秒比）：每一欄的單位 ＋ 飛行中
   hsh = Math.imul(hsh ^ s.Jtot, 16777619); hsh = Math.imul(hsh ^ s.J.n, 16777619);
   var brs = []; s.br.forEach(function (b) { if (b.j >= 0) brs.push([+(b.ar || 0).toFixed(3), +b.q.toFixed(4)]); });
-  return { vol: +((tot + s.Jtot) / s.upm).toFixed(3), hash: (hsh >>> 0).toString(16), xself: s.xself, xselfB: s.xselfB, xsk: Array.from(s.xsk), wk: Object.keys(s.wk).reduce(function (o, k) { o[k] = s.steps ? Math.round(s.wk[k] / s.steps) : 0; return o; }, {}), wkStep: s.steps ? Math.round(wrsWork(s) / s.steps) : 0, wkMax: s.wkMax || 0, msStep: s.steps ? +((s.msTot || 0) / s.steps).toFixed(3) : 0, msMax: +(s.msMax || 0).toFixed(2), xdbg: s.xdbg, xover: s.xover, xcl: (function () { var L = []; for (var c = 0; c < 128; c++) if (s.xcl[c]) L.push([c, s.xcl[c]]); return L.sort(function (x, y) { return y[1] - x[1]; }); })(), xTop: (function () { var L = []; for (var q = 0; q < s.NO; q++) if (s.xoO[q]) L.push(q); L.sort(function (x, y) { return s.xoO[y] - s.xoO[x]; }); return L.slice(0, 8).map(function (q) { return [q, s.O.T[q] ? 'side' : 'deck', s.oa[q], s.ob[q], s.O.Z[q], s.xoO[q]]; }); })(), rough: rn ? +(rs / rn).toFixed(4) : 0, roughMax: +rmax.toFixed(3), cross: s.cross, first: s.first || null, br: brs, comX: +k.comX.toFixed(2), comY: +k.comY.toFixed(2), roll: +tl[0].toFixed(4), pitch: +tl[1].toFixed(4), inTot: +(s.inTot / s.upm).toFixed(3), outTot: +(s.outTot / s.upm).toFixed(3),
+  return { vol: +((tot + s.Jtot) / s.upm).toFixed(3), hash: (hsh >>> 0).toString(16), xself: s.xself, xselfB: s.xselfB, xsk: Array.from(s.xsk), wk: Object.keys(s.wk).reduce(function (o, k) { o[k] = s.steps ? Math.round(s.wk[k] / s.steps) : 0; return o; }, {}), wkStep: s.steps ? Math.round(wrsWork(s) / s.steps) : 0, wkMax: s.wkMax || 0, tmStep: s.tm && s.steps ? Object.keys(s.tm).reduce(function (o, k) { o[k] = +(s.tm[k] / s.steps).toFixed(3); return o; }, {}) : null, msStep: s.steps ? +((s.msTot || 0) / s.steps).toFixed(3) : 0, msMax: +(s.msMax || 0).toFixed(2), xdbg: s.xdbg, xover: s.xover, xcl: (function () { var L = []; for (var c = 0; c < 128; c++) if (s.xcl[c]) L.push([c, s.xcl[c]]); return L.sort(function (x, y) { return y[1] - x[1]; }); })(), xTop: (function () { var L = []; for (var q = 0; q < s.NO; q++) if (s.xoO[q]) L.push(q); L.sort(function (x, y) { return s.xoO[y] - s.xoO[x]; }); return L.slice(0, 8).map(function (q) { return [q, s.O.T[q] ? 'side' : 'deck', s.oa[q], s.ob[q], s.O.Z[q], s.xoO[q]]; }); })(), rough: rn ? +(rs / rn).toFixed(4) : 0, roughMax: +rmax.toFixed(3), cross: s.cross, first: s.first || null, br: brs, comX: +k.comX.toFixed(2), comY: +k.comY.toFixed(2), roll: +tl[0].toFixed(4), pitch: +tl[1].toFixed(4), inTot: +(s.inTot / s.upm).toFixed(3), outTot: +(s.outTot / s.upm).toFixed(3),
     cons: tot + s.Jtot - s.inTot + s.outTot, dbg: s.dbg ? Object.keys(s.dbg).reduce(function (o, k) { o[k] = +(s.dbg[k] / s.upm).toFixed(2); return o; }, {}) : null, brOut: +((s.brOut || 0) / s.upm).toFixed(2), spillR: s.spillR ? Object.keys(s.spillR).map(function (r) { return [+r, +(s.spillR[r] / s.upm).toFixed(2), +(W.roomVox[r] * S * S * S).toFixed(2)]; }) : null, crossTop: (function () { var L = []; for (var q = 0; q < s.NO; q++) if (s.crO[q]) L.push(q); L.sort(function (x, y) { return s.crO[y] - s.crO[x]; }); return L.slice(0, 8).map(function (q) { return [q, s.O.T[q] ? 'side' : 'deck', s.oa[q], s.ob[q], s.O.Z[q], s.crO[q], s.su[s.ja[q]] >= s.cap[s.ja[q]] ? 'aFull' : 'a', s.su[s.jb[q]] >= s.cap[s.jb[q]] ? 'bFull' : 'b']; }); })(), dA: s.opt.above ? Object.keys(s.dA).reduce(function (o, k) { o[k] = +(s.dA[k] / s.upm).toFixed(2); return o; }, {}) : undefined, jets: s.J.n, jetM3: +(s.Jtot / s.upm).toFixed(3), sub: s.sub, ms: +s.ms.toFixed(2), ops: [nst, nout, nin] };
 }
 /** 生一顆粒子（格座標、格／秒、單位；src ＝ 從哪一欄出來的，落點放不下時放回去；hd ＝ 上游的水頭（世界高度），落點那一間滿了照它往上溢）。滿了 ⇒ 回 false（呼叫的人直接搬）。 */
