@@ -580,10 +580,10 @@ function townRoadPage(L) {
 // 以前一座城一份網格（路面、廣場、碼頭、棧橋），地形每到一塊就整座重建：君士坦丁堡一次 130～450 ms（同一格）。
 // ⇒ 照海圖塊（BED.A.chunk，1 km）切成區：三角形照重心、外緣的側面照中點、廣場照中心、碼頭／棧橋照第一點分到區；
 //   每區記著它讀過哪幾塊的高度（deps）⇒ 那一塊到了只重建那幾區；一格最多 TOWN_GT_MAX 區、照背景預算，離鏡頭近的先。
-//   區照 TOWN_GT_SZ（500 m）切：君士坦丁堡照 1 km 切一區要 25～40 ms（路網密），進場那幾秒一格兩區就是 50～100 ms。
+//   區照 TOWN_GT_SZ（250 m）切：一區要壓在背景預算（08_seabed.js BED_PUMP_MS 8 ms）上下 —— 君士坦丁堡照 1 km 切一區 25～40 ms、500 m 最久 32 ms（路網密）。
 //   路面的分區、每一點旁邊有哪幾個三角形，跟路面一起在 Worker 算好（townRoadGen 的 tiles、ao／al）⇒ 這一頁只把廣場、碼頭、棧橋分進去。
 //   法線照「這一點旁邊所有的三角形」（跨區也算）⇒ 接縫跟整座一份時一樣。
-var TOWN_GT_MAX = 2, TOWN_GT_SZ = 500;
+var TOWN_GT_MAX = 2, TOWN_GT_SZ = 250;
 /** 分區（路面到了、城建好時各一次）：每區 { tri, edge, plaza, quay, pier, g, dirty, deps }。 */
 function townGroundPrep(T) {
   var S = TOWN_GT_SZ, R = T.roadSurface, p = T.p, G = {};
