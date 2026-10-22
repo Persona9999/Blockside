@@ -63,24 +63,30 @@ function stepShip(sh, dt) {
   var fl = sh.fl && !sh.broken ? sh.fl : null;                                   // 粒子模式（33_flood.js）：進水、下沉、傾斜照艙內的水；斷成兩截照舊用公式（一定沉）
   if (fl && !sh.sinkingFinal && !sh.sunk) floodStep(sh, fl, dt);                 // 開始沉之後不再算水（船要下去了；⛔ 照算 ⇒ 沉掉的船積到 8 萬噸、白耗 CPU）
   else if (sh.fl && PHX.sinkflood && (sh.broken || sh.sinkingFinal) && !sh.sunk) floodVis(sh, sh.fl, dt);   // 斷成兩截、開始沉 ⇒ 水照樣灌進去給人看（33_flood.js floodVis：只改畫面與讀數；沉完就停）
-  var vd = VX && !sh.sinkingFinal && !sh.sunk ? vxDrag(sh, dt) : 0;            // 大漩渦的眼：這一步被往下拖（負 ＝ 出了眼、浮回來）幾公尺（08_sea.js）
+  if (VX && (!sh.sinkingFinal || sh.vxEaten) && !sh.sunk) vxDrag(sh, dt);       // 大漩渦的眼：被往下拖多深（sh.vxSink；出了眼浮回來；被眼拖沉的沉沒之前一直拖，08_sea.js）
   if (!sh.sunk) {
-    if (fl) { if (!sh.sinkingFinal) sh.sink += (floodSinkT(sh, fl) + (sh.vxSink || 0) - sh.sink) * Math.min(1, dt / FL_TAU); }   // 大漩渦：照艙內的水 ＋ 被眼拖下去的那一份   // 照艙內的水該多吃水多少，慢慢跟過去
+    if (fl) { if (!sh.sinkingFinal) {                                           // 照艙內的水該多吃水多少，慢慢跟過去
+      if (VX) { if (sh.sinkF === undefined) sh.sinkF = sh.sink - (sh.vxOff || 0); sh.sinkF += (floodSinkT(sh, fl) - sh.sinkF) * Math.min(1, dt / FL_TAU); sh.sink = sh.sinkF + (sh.vxOff || 0); }   // 大漩渦：進水那一份照舊慢慢跟（sinkF），眼的那一份下面直接加（⛔ 一起慢慢跟 ⇒ 進眼第 1 秒只吃水 0.07 m，看起來沒在拖）
+      else sh.sink += (floodSinkT(sh, fl) - sh.sink) * Math.min(1, dt / FL_TAU);
+    } }
     else sh.sink = Math.max(0, sh.sink + Math.min(Q * 1.1e-5 - 0.004 * pumpK(sh), 0.25) * fk * dt);   // pumpK：基礎抽水量／PUMP_REF（TASK-0604；憲法號 1）   // 進水與抽水一起照滑桿縮放（⛔ 只縮進水 ⇒ 調慢之後抽水永遠贏、永遠不沉）；
                                                                               // 上限 0.25 m/s：彈藥庫殉爆打掉三十幾萬格 ⇒ 不設上限兩秒就沉完，看不到船斷開
-    if (!fl && vd) sh.sink = Math.max(0, sh.sink + vd);                         // 公式模式：被拖下去的直接加在吃水上（出了眼照樣慢慢浮回來）
+    if (VX) { var vo = vxOffset(sh); sh.sink = Math.max(0, sh.sink + vo - (sh.vxOff || 0)); sh.vxOff = vo; }   // 大漩渦：眼那一份（拖下去的深度 ＋ 讓翹起那一頭留在水面的那一段，08_sea.js vxOffset）直接加在吃水上，兩種進水模式都一樣
     if (sh.sink > 4.2 && !sh.sinkingFinal && (fk > 0 || sh.vxSink > 0)) { sh.sinkingFinal = true; if (sh.vxSink > 0) { sh.vxEaten = true; sh.fate = '捲進漩渦'; note(sh, '被漩渦拖下去，開始沉了', true); } else note(sh, '進水太多，開始沉了'); }   // 大漩渦：跟進水同一條線（4.2 m）—— 進水速度調成 0 也照樣會被拖沉
     var gulp = VX && VX.gulp > 0 && Math.hypot(sh.px, sh.pz) < VX.re;          // 大漩渦：開始沉的船在眼裡 ⇒ 被吸下去（天氣設定頁「眼吞沉船」m/s²；Tim：「沈船會在幾秒內被吸走(沉掉)」）
-    if (sh.sinkingFinal) { sh.sinkV += (gulp ? VX.gulp : 0.06 * (sh.vxEaten ? Math.max(fk, 1) : fk)) * dt; sh.sink += sh.sinkV * dt; }
-    if (sh.sink > 9) { sh.sunk = true; sh.sunkAt = SIMT; note(sh, '沉沒', true); }   // sunkAt：結算判自爆沉沒（61_hud.js shipFate）
+    if (sh.sinkingFinal && sh.vxEaten && VX.pull > 0) sh.sinkV = vxPullV(sh.vxSink);   // 被眼拖沉的：上面 vxDrag 照同一條式子接著拖（Tim 2026-10-22「船體逐漸往下」）—— ⛔ 不換成眼吞沉船的加速度（1.5 秒就沉沒）；sinkV 留給沉沒之後接著吸
+    else if (sh.sinkingFinal) { sh.sinkV += (gulp ? VX.gulp : 0.06 * (sh.vxEaten ? Math.max(fk, 1) : fk)) * dt; sh.sink += sh.sinkV * dt; }
+    if (sh.sink > (VX && sh.vxEaten ? vxSunkAt(sh) : 9)) { sh.sunk = true; sh.sunkAt = SIMT; note(sh, '沉沒', true); }   // sunkAt：結算判自爆沉沒（61_hud.js shipFate）；被眼拖沉的 ⇒ 整艘進到水裡才算（08_sea.js vxSunkAt）
   } else { sh.sinkV = VX && VX.gulp > 0 && Math.hypot(sh.px, sh.pz) < VX.re ? sh.sinkV + VX.gulp * dt : Math.min(sh.sinkV + 0.05 * dt, 1.2); sh.sink += sh.sinkV * dt; }   // 眼裡：沉了也照樣吸（不夾 1.2 m/s）
   // 傾斜：破洞那一舷往下（格座標 +y ＝ 船體 +Z（右舷）；繞 +X 轉正角時 +Z 那邊下沉）；粒子模式照水的重心（33_flood.js floodTilt）
   var tl = fl ? floodTilt(sh, fl) : null;
   var rollT = tl ? tl[0] : clamp(Dsp / (N + 900), -1, 1) * (sh.sinkingFinal ? 0.55 : 0.21);
   var pitchT = tl ? tl[1] : -clamp(Dbs / (N + 1500), -1, 1) * 0.07;
+  var vxP = VX && (sh.vxSink > 0 || sh.vxEaten);
+  if (vxP) pitchT += vxTip(sh, sh.vxSink || 0);                                // 大漩渦的眼：先進眼那一頭往下拉（08_sea.js vxTip；Tim 2026-10-22「一端被拉下去」「讓先掉下去的一角(船頭或船尾) 先被往下拉」）
   sh.rollV += ((rollT - sh.rollA) * 0.9 - sh.rollV * 0.8) * dt;
   sh.rollA += sh.rollV * dt;
-  sh.pitchA += (pitchT - sh.pitchA) * 0.3 * dt;
+  sh.pitchA += (pitchT - sh.pitchA) * (vxP ? VX_TIP_RATE : 0.3) * dt;          // 大漩渦：那一頭跟著拖下去的深度走（每秒追 VX_TIP_RATE；⛔ 照平常的 0.3 ⇒ 落後 3 秒，拉下去的感覺出不來）
   stepWaves(sh, dt);                                                            // 浪：起伏、縱搖、橫搖（08_sea.js；以前是兩條固定的正弦）
   sh.lift += (sh.liftT - sh.lift) * Math.min(1, dt / LIFT_TAU);                    // 減重上浮：慢慢浮上去（目標每半秒在 survey 量一次）
   sh.Mp = sh.Mpre || sh.M || null; sh.Mpre = null; sh.yawP = sh.yawL === undefined ? sh.yaw : sh.yawL; sh.yawL = sh.yaw;   // 上一步的（畫面內插用，03_camera.js renderLerp）；Mpre：這一步的移動切了小步（50_sim.js shipPreMove）⇒ 上一步結束時那一個

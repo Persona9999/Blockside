@@ -10,7 +10,7 @@
 // 數量：少／中／多 ＝ RD_N（Tim 2026-10-13：原本 3000／6000／12000 太密 ⇒ 減半）。12000 滴量過：每一格走 0.95 ms、填緩衝＋畫 0.87 ms。
 // ⛔ 只給人看：自己的亂數 rndR、不碰模擬的狀態（step() 讀不到）⇒ 開關不改戰局。
 var RD_N = [0, 1500, 3000, 6000], RD_R = 45, RD_TOP = 28, RD_VY = 15, RD_WK = 0.35, RD_STREAK = 0.07, RD_SPL = 0.22, RS_MAX = 900;
-var RD = { n: 0, p: null, k: null, c: [0, 0], top: 30, v: [0, -RD_VY, 0], buf: null, vao: null, vbo: null, drawn: 0 };
+var RD = { n: 0, p: null, k: null, c: [0, 0], top: 30, bot: -1, hi: 8, v: [0, -RD_VY, 0], buf: null, vao: null, vbo: null, drawn: 0 };   // bot／hi：圓柱的底、低於它才查落海（大漩渦照漏斗的水面，見 stepRain）
 var RS = { n: 0, p: new Float32Array(RS_MAX * 3), life: new Float32Array(RS_MAX) }, RD_STAT = { hitSea: 0, hitShip: 0 };
 PBUF = new Float32Array(PBUF.length + RS_MAX * 9);          // 點精靈的緩衝多留雨的水花（60_render.js 一起畫）
 var RNG_R = rngMake('rain', 0x51ED270B, true), rndR = RNG_R.f;          // 雨：固定種子（不跟 SEED；只給人看），開局照樣重設（00_core.js 亂數工廠）
@@ -30,7 +30,7 @@ function rdGL() {
 function rdSpawn(i, top) {
   var a = rndR() * 6.2832, r = RD_R * Math.sqrt(rndR()), o = i * 3;
   RD.p[o] = RD.c[0] + Math.cos(a) * r; RD.p[o + 2] = RD.c[1] + Math.sin(a) * r;
-  RD.p[o + 1] = top ? RD.top - rndR() * 3 : -1 + rndR() * (RD.top + 1); RD.k[i] = 0.88 + 0.24 * rndR();
+  RD.p[o + 1] = top ? RD.top - rndR() * 3 : RD.bot + rndR() * (RD.top - RD.bot); RD.k[i] = 0.88 + 0.24 * rndR();
 }
 function rdSplash(x, y, z) {
   if (!GFX.dropspl) return;
@@ -44,14 +44,21 @@ function stepRain(dt) {
   if (!N) { RD.n = RS.n = 0; return; }
   if (!RD.p || RD.p.length < N * 3) { RD.p = new Float32Array(N * 3); RD.k = new Float32Array(N); RD.n = 0; }
   var e = CAM.eye, l = CAM.look || CAM.tgt, dx = l[0] - e[0], dz = l[2] - e[2], dl = Math.hypot(dx, dz) || 1;
-  RD.c = [e[0] + dx / dl * RD_R * 0.6, e[2] + dz / dl * RD_R * 0.6]; RD.top = Math.max(e[1], 8) + RD_TOP;
+  RD.c = [e[0] + dx / dl * RD_R * 0.6, e[2] + dz / dl * RD_R * 0.6];
+  // 大漩渦（TASK-0683；Tim 2026-10-22：「大漩渦內(海平面下的漩渦表面) 雨會消失」）：圓柱的底、頂、查落海的高度照圓柱那一帶漏斗的水面（vxH 往外越高 ⇒ 底取內側、門檻取外側）。
+  //   ⛔ 照海面 0 ⇒ 鏡頭在 −200 m 的漏斗裡，雨還下在 −1～36 m，整片在頭頂兩百公尺的霧裡。沒有漩渦 ⇒ 底 −1、門檻 8、頂 max(鏡頭, 8) ＋ RD_TOP（跟以前一樣）。
+  var wc = 0; RD.bot = -1; RD.hi = 8;
+  if (VX) { var rc = Math.hypot(RD.c[0], RD.c[1]), ux = rc > 1e-3 ? RD.c[0] / rc : 1, uz = rc > 1e-3 ? RD.c[1] / rc : 0, rl = Math.max(0, rc - RD_R), rh = rc + RD_R;
+    wc = vxH(RD.c[0], RD.c[1]); RD.bot = vxH(ux * rl, uz * rl) - 1; RD.hi = vxH(ux * rh, uz * rh) + 8; RD.wb = seaBound() + 0.5; }
+  RD.top = Math.max(e[1], wc + 8) + RD_TOP;
   if (RD.n !== N) { RD.n = N; for (i = 0; i < N; i++) rdSpawn(i, false); }
   var wl = Math.hypot(WIND[0], WIND[2]) || 1, ws = windKnots() / 1.944 * RD_WK, vx = WIND[0] / wl * ws, vz = WIND[2] / wl * ws, R2 = RD_R * RD_R, p = RD.p, cx = RD.c[0], cz = RD.c[1];
   RD.v = [vx, -RD_VY, vz];
   for (i = 0; i < N; i++) {
     var o = i * 3, k = RD.k[i] * dt, x = p[o] + vx * k, y = p[o + 1] - RD_VY * k, z = p[o + 2] + vz * k;
     if ((x - cx) * (x - cx) + (z - cz) * (z - cz) > R2) { rdSpawn(i, false); continue; }
-    if (y < 8) { var sea = seaH(x, z, SIMT); if (y < sea) { rdSplash(x, sea, z); RD_STAT.hitSea++; rdSpawn(i, true); continue; } }
+    if (y < RD.hi && (!VX || y < vxH(x, z) + RD.wb)) { var sea = seaH(x, z, SIMT);   // 大漩渦：先拿漏斗的水面＋浪的上限篩（便宜），還在上面就不算整片浪（⛔ 不篩 ⇒ 漏斗裡每滴每格都算，3.0 ms 對暴風雨 0.8 ms）
+      if (y < sea) { rdSplash(x, sea, z); RD_STAT.hitSea++; rdSpawn(i, true); continue; } }
     var hit = false;
     for (var s = 0; s < SHIPS.length && !hit; s++) {
       var sh = SHIPS[s], cc = sh.center; if (!cc || (x - cc[0]) * (x - cc[0]) + (y - cc[1]) * (y - cc[1]) + (z - cc[2]) * (z - cc[2]) > sh.rad2) continue;

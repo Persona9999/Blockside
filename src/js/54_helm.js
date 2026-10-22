@@ -60,16 +60,79 @@ function helmRange(sh, st, noEv) {
 /** 大漩渦（TASK-0683；08_sea.js VX）：快沉了才逃離漩渦（Tim 2026-10-17：「可以讓電腦要沉沒時避開就好(因為我想模擬電影場景 在漩渦內戰鬥)」「應該說快沉沒時 觸發逃離漩渦邏輯」）——
  *  吃水（sh.sink：進水＋被眼拖下去的，32_hull.js；4.2 m 開始沉）到 VX_ESC（2.5 m）⇒ 航向順著水流往外斜 60°、帆照全速，開到 1.1 × rv（水流最快那一圈外）就交回艦長；
  *  吃水退回 VX_ESC_OK（1 m）才不再逃。其他時候 ⇒ null（照艦長的，在漩渦裡照常打，眼裡也照打）。
- *  ⛔ 以前照離中心多近就逃（0.65 × rv）：半徑 400 ⇒ 260 m 內一直往外，漏斗裡打不起來。優先序（31_sailing.js sail）：讓友船、讓敵艦（快撞上才出手）＞ 它 ＞ 讓開友艦的砲線。 */
-var VX_ESC = 2.5, VX_ESC_OK = 1, VX_ESC_OUT = 1.1;
+ *  ⛔ 以前照離中心多近就逃（0.65 × rv）：半徑 400 ⇒ 260 m 內一直往外，漏斗裡打不起來。優先序（31_sailing.js sail）：讓友船、讓敵艦（快撞上才出手）＞ 它 ＞ 讓開友艦的砲線。
+ *  再加一條邊緣（Tim 2026-10-22：「AI船會直接開到被吸進去 希望至少保持在被吸進去的邊緣(靠近極限時就要觸發逃離)」）：
+ *  照現在對地的速度往前推 VX_EDGE_LOOK 秒，會進到 VX.aiR（天氣設定頁「電腦避開半徑」）以內 ⇒ 同一個逃離航向往外開，開到 VX_EDGE_BACK 倍才交回艦長；
+ *  aiR ＝ 0 ⇒ 不看邊緣（只有快沉了才逃，跟以前一樣）。下坡衝進來的船（9 m/s）推 8 秒 ＝ 72 m ⇒ 在邊緣外就開始轉。 */
+var VX_ESC = 2.5, VX_ESC_OK = 1, VX_ESC_OUT = 1.1, VX_EDGE_LOOK = 8, VX_EDGE_BACK = 1.3;
 function vxAvoid(sh) {
   if (!VX || sh.sinkingFinal) return null;
   if (sh.sink >= VX_ESC && !sh.vxEsc) { sh.vxEsc = true; note(sh, '快撐不住了 —— 往漩渦外逃'); } else if (sh.vxEsc && sh.sink <= VX_ESC_OK) sh.vxEsc = false;
-  var r = Math.hypot(sh.px, sh.pz); if (!sh.vxEsc || r >= VX_ESC_OUT * VX.rv || r < 1e-3) return null;
-  var ux = sh.px / r, uz = sh.pz / r, b = 60 * Math.PI / 180;
-  var dx = uz * Math.cos(b) + ux * Math.sin(b), dz = -ux * Math.cos(b) + uz * Math.sin(b);   // 切線 (z, −x)／r 往外（ux, uz）轉 b
+  var r = Math.hypot(sh.px, sh.pz); if (r < 1e-3) return null;
+  if (VX.aiR > 0) {
+    var V = sh.vel || [0, 0, 0], rp = r + Math.min(0, (V[0] * sh.px + V[2] * sh.pz) / r) * VX_EDGE_LOOK, E = Math.max(VX.aiR, vxShipEdge(sh));   // 往中心的那一份速度推 VX_EDGE_LOOK 秒；邊緣取設定值與這艘船自己的較大的
+    sh.vxEdgeR = E;
+    if (!sh.vxEdge && rp < E) { sh.vxEdge = true; if (!(SIMT - (sh.vxEdgeT || -99) < 30)) { sh.vxEdgeT = SIMT; note(sh, '離漩渦的眼太近 —— 往外開'); } }   // 廣播 30 秒最多一次（在邊緣來回不洗版）
+    else if (sh.vxEdge && r >= VX_EDGE_BACK * E) sh.vxEdge = false;
+  } else sh.vxEdge = false;
+  if (!sh.vxEdge && (!sh.vxEsc || r >= VX_ESC_OUT * VX.rv)) return null;
   sh.wantV = Infinity;
-  return Math.atan2(-dz, dx);                                            // fwd(yaw) ＝ (cos yaw, −sin yaw)
+  return vxEscYaw(sh, r);
+}
+/** 這艘船自己的邊緣（m）：往內的水流（吸力漂移 ＋ 往中心吸的那一份，vxInV）小於這艘船全力往外大約推得動的 VX_CAP_K 倍（31_sailing.js sh.vxCap）的最近半徑。
+ *  ⛔ 只用設定的半徑：帆被打掉一半的餘燼號（往外 2.7–3.5 m/s）在 93 m 開始逃，44 秒被拉到 43 m 吸進眼（2 對 2 seed 3）；滿帆的照樣是設定的 80 m。 */
+var VX_CAP_UP = Math.SQRT1_2, VX_CAP_K = 0.8;
+function vxShipEdge(sh) {
+  var c = sh.vxCap; if (!(c >= 0)) return 0;
+  for (var r = VX.re; r < VX.rv; r += 5) if (vxInV(r) <= VX_CAP_K * c) return r;
+  return VX.rv;
+}
+/** 往外逃的航向（TASK-0683 2026-10-22）：從「正往外」偏 VX_ESC_TRY 度（正 ＝ 往順著水流那一側），挑第一個不頂風的（離正頂風 ≥ 頂風角 ＋ VX_ESC_WIND）；
+ *  有動力（槳、蒸汽）的船不看風 ⇒ 第一個（順水流往外斜 60°，跟以前一樣）。都頂風 ⇒ 離正頂風最遠的那個。
+ *  ⛔ 以前固定順水流往外斜 60°：剛好頂風時帆推不動，上坡的重力把船倒著拖進眼（量過：憲法號 −10 m/s 倒退，51 m → 中心 5 秒）。 */
+var VX_ESC_TRY = [30, 0, 60, -30, 80, -60, -80], VX_ESC_WIND = 15 / 57.2958;
+function vxEscYaw(sh, r) {
+  var ux = sh.px / r, uz = sh.pz / r, W = norm(WIND), a = NOGO_DEG / 57.2958 + VX_ESC_WIND, pow = sh.cfg.base > 0 && sh.drive && sh.drive.cap > 0.05, best = null, bo = -1;
+  for (var i = 0; i < VX_ESC_TRY.length; i++) {
+    var b = VX_ESC_TRY[i] / 57.2958, hx = ux * Math.cos(b) + uz * Math.sin(b), hz = uz * Math.cos(b) - ux * Math.sin(b);   // 正往外 (ux, uz) 往切線 (uz, −ux)（順水流）轉 b
+    var y = Math.atan2(-hz, hx), off = Math.acos(clamp(-(hx * W[0] + hz * W[2]), -1, 1));   // fwd(yaw) ＝ (cos yaw, −sin yaw)；off：離正頂風幾 rad
+    if (pow || off >= a) return y;
+    if (off > bo) { bo = off; best = y; }
+  }
+  return best;
+}
+/** 接管航行（TASK-0683 2026-10-22；Tim：「逃離機制是否可以通用化(接管航行的特殊機制) 不一定只用在漩渦 航行變成有多種模式的狀態機(預設 逃離漩渦 其他特殊情況) 可以有優先級」）：
+ *  艦長／指揮官定好航向之後（31_sailing.js sail），照 HELM_TAKES 的 pri 由小到大問，第一個回航向的模式接管這一步 ⇒ sh.helmMode ＝ 它的 k、sh.helmModeAt ＝ 從哪一刻開始；
+ *  都不接 ⇒ null（預設：照艦長的）。每個模式自己管進出的門檻（漩渦 sh.vxEdge／vxEsc、讓砲線 sh.clearing 都有滯後），表只管誰先。
+ *  模式：k、name（詳細資訊「自動操舵・…」）、pri、fn(sh, c) ⇒ 航向（rad）或 null；c ＝ { hc：指揮官的航向（排頭、跟隨、搶上風）, od：命令 }。
+ *  新的特殊情況 ＝ 這張表加一列（⛔ 不要再往 31_sailing.js 那一行串 if）。順序：淺水 ＞ 逃離漩渦 ＞ 讓友船 ＞ 讓敵艦 ＞ 讓砲線（以前漩渦排在讓船後面，見 vortex 那一列）；沒有漩渦時漩渦那一列回 null ⇒ 晴天、暴風雨逐位元組不變。
+ *  bound(sh, yaw) ⇒ 限制（選填）：別的模式接管時，它還在生效就把航向夾回可以接受的範圍（回原值 ＝ 不管）。接管的是誰照優先級，限制每一個都套。
+ *  例：逃離漩渦生效時讓友船、讓敵艦照樣讓，但不准往中心讓（vxBound）—— ⛔ 沒有這一格：讓船的航向正好朝中心，炎羽號從 146 m 被讓進 45 m（2 對 2 seed 3）。 */
+var HELM_TAKES = [
+  { k: 'bed', name: '避開淺水', pri: 10, fn: function (sh) { return bedAvoid(sh); } },
+  { k: 'friend', name: '讓友船', pri: 20, fn: function (sh, c) { return friendAvoid(sh, c.hc && c.od.mode === 'lead' ? helmLeadAvoid(sh) : undefined); } },
+  { k: 'foe', name: '讓敵艦', pri: 30, fn: function (sh) { return foeAvoid(sh); } },
+  // 逃離漩渦排在讓船前面（2026-10-22）：以前排後面 ⇒ 讓友船、讓敵艦的航向剛好朝中心，炎羽號被讓進 45 m；只靠 bound 壓成切線也不夠（47 m 處切線抵不過往內 3 m/s）。現在只在邊緣接管 ⇒ 不會整場不讓船
+  { k: 'vortex', name: '逃離漩渦', pri: 15, fn: function (sh) { return vxAvoid(sh); }, bound: function (sh, y) { return vxBound(sh, y); } },
+  { k: 'clear', name: '讓開砲線', pri: 50, fn: function (sh, c) { return c.hc ? null : lineClear(sh); } }   // 照指揮官的航向走的船不讓砲線（以前那一串的 !hc）
+].sort(function (a, b) { return a.pri - b.pri; });
+var HELM_TAKE_K = {}; HELM_TAKES.forEach(function (T) { HELM_TAKE_K[T.k] = T; });
+function helmTakeover(sh, c) {
+  var y = null, k = null, i;
+  for (i = 0; i < HELM_TAKES.length && y === null; i++) { y = HELM_TAKES[i].fn(sh, c); if (y !== null) k = HELM_TAKES[i].k; }
+  if (y !== null) for (i = 0; i < HELM_TAKES.length; i++) if (HELM_TAKES[i].bound && HELM_TAKES[i].k !== k) y = HELM_TAKES[i].bound(sh, y);
+  if (c.hc) sh.clearing = null;                                         // 以前那一串：照指揮官的航向 ⇒ 不記著在讓哪一艘的砲線
+  if (k !== (sh.helmMode || null)) { sh.helmMode = k; sh.helmModeAt = SIMT; }
+  return y;
+}
+/** 逃離漩渦的限制（HELM_TAKES 的 bound）：正在逃（sh.vxEdge／vxEsc）而航向有往中心的那一份 ⇒ 換成同一側的切線（往外的那一份 0）；沒有漩渦、沒在逃 ⇒ 原值。 */
+function vxBound(sh, y) {
+  if (!VX || !(sh.vxEdge || sh.vxEsc)) return y;
+  var r = Math.hypot(sh.px, sh.pz); if (r < 1e-3) return y;
+  var ux = sh.px / r, uz = sh.pz / r, fx = Math.cos(y), fz = -Math.sin(y);   // fwd(yaw) ＝ (cos yaw, −sin yaw)
+  if (fx * ux + fz * uz >= 0) return y;
+  var t = fx * uz - fz * ux >= 0 ? 1 : -1;                              // 跟原航向同一側的切線：(uz, −ux) 或反過來
+  return Math.atan2(t * ux, t * uz);                                     // fwd ＝ t·(uz, −ux) ⇒ yaw ＝ atan2(t·ux, t·uz)
 }
 /** 避開淺水與陸地（TASK-0721；有海圖才有，沒有 ⇒ null）：往前看 BEDAV_LOOK 那幾個距離，船底（32_ground.js sh.keelY）下面不到 BEDAV_CLR 公尺 ⇒
  *  從小到大試左右 30°、60°…180°，第一個整條看出去都夠深的方向；都不夠 ⇒ 看得最遠的那個。sh.bedAv ＝ 讀數（最後一次讓的時刻、前面多遠就淺了）。 */

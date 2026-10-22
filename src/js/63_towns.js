@@ -39,7 +39,7 @@ var TOWN_MESH_MS = 8;                                                    // 模�
 var TOWN_WALL_CORNER = 30, TOWN_WALL_KMAX = 1;                         // 城牆：轉角件從轉幾度起擺；斜接最多切多斜（tan，1 ＝ 轉 90° 的角平分）
 var TOWN_SLAB_KMAX = 2;                                                 // 碼頭、棧橋的板：轉角斜接最多拉長幾倍（2 ＝ 轉 120°；再急就在轉角那一點變窄）
 var TOWNS = { on: Q.get('towns') !== '0', prosp: {}, list: [],pend: [], ver: 0, want: 0, err: null, kit: null, kitP: null, idx: null, kitHas: null, kitRedo: false, mwait: null, prog: null, progJ: null, dirty: true, eye: null, sig: '', buf: [], grp: null,
-  stat: { towns: 0, lots: 0, inst: 0, walls: 0, corners: 0, snapped: 0, skip: {}, d0: 0, d1: 0, d2: 0, d3: 0, plinth: 0, tris: 0, binMs: 0, kitMs: 0, gradeMs: 0, chunks: 0, drawMs: 0 } };
+  stat: { towns: 0, lots: 0, inst: 0, walls: 0, corners: 0, snapped: 0, skip: {}, d0: 0, d1: 0, d2: 0, d3: 0, plinth: 0, tris: 0, binMs: 0, kitMs: 0, meshBaked: 0, meshLive: 0, meshCheck: null, gradeMs: 0, chunks: 0, drawMs: 0 } };
 var TOWN_J0 = [0, 0, 0, 0];                                             // 建築的 aJ（不斜接、不順坡、牆基不延）
 var TOWN_USE_ALT = { commandant: ['house'], governor: ['townhall'] };   // 那一套沒有那種模型 ⇒ 用哪一種代（BUILDING_SPEC §7：fr 沒有長官的屋子；carib 有）
 var TOWN_PROSP_DEF = 0.5, TOWN_PROSP_CUT = [1 / 3, 2 / 3];               // 繁榮度沒給 ⇒ 中間；低於第一格算低、到第二格算高（TOWN_BUILD §4 的門檻〔佔位〕）
@@ -213,8 +213,9 @@ function townGround(x, z) {
 }
 
 // ── 模型（Blocksail world/townkit/：tools/townmodels.py 匯入時算好）⇒ GPU ──
-/** 解一份格子（townmodels.py pack_chunks：deflate-raw 的 區塊數 u32、(cx, cy, cz) u16 × n、4096 × n）⇒ 一份網格（全部區塊的四邊形接在一起）。 */
-function townMesh(b64, size) {
+/** 解一份格子（townmodels.py pack_chunks：deflate-raw 的 區塊數 u32、(cx, cy, cz) u16 × n、4096 × n）⇒ 一份網格（全部區塊的四邊形照檔裡的順序接在一起；Uint16、一個四邊形 16 個）。
+ *  ⛔ 接法改了 ⇒ TOWN_MESH_FMT 加一（Blocksail tools/town_mesh_bake.cjs 照同一個接法烘，同名常數一起改）。 */
+function townMeshData(b64, size) {
   var bytes = null;
   // 分段做（05_hull.js yieldEach；全部模型排成一列）：金斯敦要的模型以前一次全部解、全部網格化 ⇒ 主執行緒卡 0.86 s
   return yieldEach([b64], function () { bytes = VK.b64ToBytes(b64); }, TOWN_MESH_MS).then(function () { return VK.inflateRaw(bytes); }).then(function (raw) {
@@ -224,13 +225,46 @@ function townMesh(b64, size) {
     return yieldEach(ch, function (c) {
       if (!c) { g = VK.Grid.fromModel({ header: { size: size, voxels: 0 }, chunks: ch.slice(1) }); return; }
       var m = VK.meshChunk(g, c.cx, c.cy, c.cz); if (m) { parts.push(m); len += m.length; }
-    }, TOWN_MESH_MS).then(function () { return townUpload(parts, len); });
+    }, TOWN_MESH_MS).then(function () { var all = new Uint16Array(len), o = 0; parts.forEach(function (m) { all.set(m, o); o += m.length; }); return all; });
   });
 }
-/** 一份模型的網格（每個區塊的四邊形）接在一起 ⇒ GPU（實例化畫，QIDX 的索引）。 */
-function townUpload(parts, len) {
-  var all = new Uint16Array(len), o = 0; parts.forEach(function (m) { all.set(m, o); o += m.length; });
-  var r = { vao: gl.createVertexArray(), vbo: gl.createBuffer(), nq: len / 16 };
+// 烘好的網格（TASK-0823；Tim 2026-10-22「模型解成網格那段…是否一樣可以預處理緩存在本地(之後打包時要包處理過的版本)」）：
+//   君士坦丁堡 27 個模型網格化 CPU 約 0.8 s，進航海那幾秒跟飛行鏡頭、收海圖塊搶主執行緒 ⇒ 牆鐘 3～10 s 城才出來。
+//   ⇒ Blocksail 照同一支網格化（VoxelKit meshChunk）、同一個接法（townMeshData）先烘好，外面那一頁回模型時附 mesh：{ fmt, vk, nq: [近, 中], z: deflate-raw（近 ‖ 中） }。
+//   fmt ＝ TOWN_MESH_FMT、vk ＝ 這份成品記的 voxelkit.js 指紋（blockside-src；admin.py src_manifest）都對得上 ⇒ 解壓直接上傳；任何一關不過、解不開 ⇒ 照舊網格化（畫面逐位元組相同，只是慢）。
+//   網址 ?townmesh=0 ⇒ 一律現場網格化；?townmesh=check ⇒ 兩條都走、逐位元組比（TOWNS.stat.meshCheck：相同幾份／不同的名字／比過的名字），畫的是現場算的那一份。
+var TOWN_MESH_FMT = 1, TOWN_MESH_Q = Q.get('townmesh');
+/** 這份成品的 voxelkit.js 指紋（成品的來源清單；直接開 src/template.html 沒有清單 ⇒ null ⇒ 一律現場網格化）。 */
+function townVkFp() {
+  if (TOWNS.vkFp === undefined) { try { TOWNS.vkFp = JSON.parse(document.getElementById('blockside-src').textContent).files['VoxelKit/voxelkit.js'] || null; } catch (e) { TOWNS.vkFp = null; } }
+  return TOWNS.vkFp;
+}
+/** 烘好的網格能不能用（格式、網格化的版本都對得上）。 */
+function townMeshOk(M) { return !!(M && M.z && M.nq && M.fmt === TOWN_MESH_FMT && M.vk && M.vk === townVkFp() && TOWN_MESH_Q !== '0'); }
+/** 烘好的網格 ⇒ Promise<[近, 中]>（Uint16Array）；四邊形數跟檔頭對不上 ⇒ reject（呼叫端照舊網格化）。 */
+function townMeshBaked(M) {
+  return VK.inflateRaw(new Uint8Array(M.z)).then(function (u) {
+    var n0 = M.nq[0] * 16, n1 = M.nq[1] * 16;
+    if (u.byteLength !== (n0 + n1) * 2 || u.byteOffset % 2) throw new Error('烘好的網格長度不對');
+    return [new Uint16Array(u.buffer, u.byteOffset, n0), new Uint16Array(u.buffer, u.byteOffset + n0 * 2, n1)];
+  });
+}
+/** 一個模型的近、中兩份網格 ⇒ Promise<[近, 中]>（GPU）：烘好的能用就用，不然（或解不開）現場網格化；?townmesh=check 兩條都走、比。 */
+function townModelMesh(nm, d, m0) {
+  var S = TOWNS.stat;
+  function live() { return Promise.all([townMeshData(d.g, m0.size), townMeshData(d.lo, m0.lo.size)]); }
+  function up(L) { return [townUpload(L[0]), townUpload(L[1])]; }
+  if (!townMeshOk(d.mesh)) { S.meshLive++; return live().then(up); }
+  if (TOWN_MESH_Q === 'check') return Promise.all([live(), townMeshBaked(d.mesh).catch(function () { return null; })]).then(function (R) {
+    var same = R[1] && [0, 1].every(function (i) { var a = R[0][i], b = R[1][i]; if (a.length !== b.length) return false; for (var j = 0; j < a.length; j++) if (a[j] !== b[j]) return false; return true; });
+    var C = S.meshCheck || (S.meshCheck = { same: 0, diff: [], names: [] }); C.names.push(nm); if (same) C.same++; else C.diff.push(nm);
+    S.meshLive++; return up(R[0]);
+  });
+  return townMeshBaked(d.mesh).then(function (L) { S.meshBaked++; return up(L); }, function (e) { console.warn('城鎮：' + nm + ' 烘好的網格解不開（' + e.message + '）⇒ 現場網格化'); S.meshLive++; return live().then(up); });
+}
+/** 一份模型的網格（每個區塊的四邊形接好的 Uint16Array）⇒ GPU（實例化畫，QIDX 的索引）。 */
+function townUpload(all) {
+  var r = { vao: gl.createVertexArray(), vbo: gl.createBuffer(), nq: all.length / 16 };
   QIDX.ensure(r.nq);                                                    // 先加長（ensure 會解開現在綁的 VAO）
   gl.bindVertexArray(r.vao); gl.bindBuffer(gl.ARRAY_BUFFER, r.vbo); gl.bufferData(gl.ARRAY_BUFFER, all, gl.STATIC_DRAW);
   gl.enableVertexAttribArray(0); gl.vertexAttribIPointer(0, 4, gl.UNSIGNED_SHORT, 8, 0);
@@ -260,7 +294,17 @@ function townPick(I, styles, l) {
   function by(u) { for (var i = 0; i < styles.length; i++) { var L = I.byStyle[styles[i] + ':' + u]; if (L) return L; } return null; }
   function any(u) { return I.byUse[u]; }
   var alt = TOWN_USE_ALT[use] || [];
-  return by(use) || alt.map(by).filter(Boolean)[0] || (l.src === 'special' ? any(use) : null);
+  return townFit(I, l, by(use) || alt.map(by).filter(Boolean)[0] || (l.src === 'special' ? any(use) : null));
+}
+/** 候選照地塊大小收窄（Blocksail TASK-0742：轉角放淺一點的房子 ⇒ 住宅多一級 8 × 10 的淺版）：模型的地塊（索引的 lot ＝ [寬, 進深] 公尺）裝得進 l（寬容 5 cm：
+ *  綁路的地塊寬是整數 − 2 cm）的那幾個裡、進深最大的那一級；一個都裝不下 ⇒ 照舊整份（手擺的小地塊）。
+ *  ⇒ 12 m 的地塊候選跟以前同一份（雜湊挑到同一棟）；10～11 m 的地塊挑淺版（以前挑 12 m 的、屋後的院子凸出地塊）。 */
+function townFit(I, l, L) {
+  if (!L || L.length < 2 || !I.models) return L;
+  var ok = L.filter(function (nm) { var lt = I.models[nm] && I.models[nm].lot; return !lt || (lt[0] <= l.w + 0.05 && lt[1] <= l.d + 0.05); });
+  if (!ok.length) return L;
+  var dmax = Math.max.apply(null, ok.map(function (nm) { var lt = I.models[nm].lot; return lt ? lt[1] : 0; }));
+  return ok.filter(function (nm) { var lt = I.models[nm].lot; return (lt ? lt[1] : 0) === dmax; });
 }
 /** 城 T 的繁榮度 0～1：__game.townProsp 給的 ⇒ 網址 ?prosp= ⇒ TOWN_PROSP_DEF。 */
 function townProsp(T) {
@@ -327,12 +371,12 @@ function townKit() {
   var I = townIdx();
   if (!I) { if (!TOWNS.err) TOWNS.err = '沒有城鎮模型的索引（外面那一頁沒給 kit、或檔案模式沒有 maps/' + BED.A.id + '/townkit/index.js）'; return null; }
   var t0 = performance.now(), names = I.names, need = townNeed(I), M = {};
-  TOWNS.kitHas = need;
+  TOWNS.kitHas = need; TOWNS.stat.meshBaked = TOWNS.stat.meshLive = 0; TOWNS.stat.meshCheck = null;   // 這一份模型組：幾個用烘好的網格、幾個現場網格化（townModelMesh）
   TOWNS.kitP = townModels(need).then(function (D) {
     return Promise.all(need.map(function (nm) {
       var m0 = I.models[nm], d = D[nm];
       if (!d) throw new Error('外面那一頁沒給 ' + nm);
-      return Promise.all([townMesh(d.g, m0.size), townMesh(d.lo, m0.lo.size)]).then(function (L) {
+      return townModelMesh(nm, d, m0).then(function (L) {
         M[nm] = { nm: nm, i: names.indexOf(nm), m: m0, lod: L, png: d.png, uc0: [m0.mpv, m0.size[0] * m0.mpv / 2, m0.size[1] * m0.mpv / 2], uc1: [m0.mpv * m0.lo.f, m0.size[0] * m0.mpv / 2, m0.size[1] * m0.mpv / 2], win: townWinMesh(m0) };   // win：亮窗的窗片（夜裡的燈）
       });
     }));
@@ -357,7 +401,7 @@ function townKit() {
     });
   }).then(function (A) {
     need.forEach(function (nm) { delete M[nm].png; });
-    TOWNS.kit = { M: M, names: names, byUse: I.byUse, byStyle: I.byStyle, tex: A.tex, aw: A.aw, ah: A.ah, views: I.views };
+    TOWNS.kit = { M: M, names: names, byUse: I.byUse, byStyle: I.byStyle, models: I.models, tex: A.tex, aw: A.aw, ah: A.ah, views: I.views };   // models：townPick 照地塊大小收窄要看每個候選的 lot（跟 townNeed 用同一份索引）
     TOWNS.stat.kitMs = +(performance.now() - t0).toFixed(1);
     TOWNS.stat.kitN = need.length + '/' + names.length;              // 要了幾個／索引裡有幾個
     TOWNS.stat.kitTris = need.reduce(function (o, nm) { o[nm] = [M[nm].lod[0].nq * 2, M[nm].lod[1].nq * 2]; return o; }, {});
@@ -1089,7 +1133,7 @@ function townStat(at) {
     var tl = townLightStat(T);
     return { id: T.id, name: T.name, tier: T.tier, seed: T.seed, ox: T.ox, oy: T.oy, lots: (T.p.lots || []).length, roads: T.roads.length, walls: (T.p.walls || []).length, inst: (T.inst || []).length, ground: T.gt ? (function () { var K = Object.keys(T.gt); return { tiles: K.length, built: K.filter(function (k) { return T.gt[k].g; }).length, dirty: K.filter(function (k) { return T.gt[k].dirty; }).length }; })() : null,   // 地面的帶子分區（TASK-0817）
       byModel: u, lights: tl, center: [+(T.ox - BED.ax).toFixed(1), +(T.oy - BED.az).toFixed(1)] };
-  }), kit: !!TOWNS.kit, kitN: S.kitN, kitMs: S.kitMs, kitTris: S.kitTris, skip: S.skip, drawn: { full: S.d0, low: S.d1, card: S.d2, shells: S.d3, plinth: S.plinth, flags: S.flags || 0, landmarks: S.lm || 0 }, tris: S.tris, ms: { draw: S.drawMs, bin: S.binMs, grade: +S.gradeMs.toFixed(1), prep: S.prepMs }, gradedChunks: S.chunks,
+  }), kit: !!TOWNS.kit, kitN: S.kitN, kitMs: S.kitMs, kitMesh: { baked: S.meshBaked, live: S.meshLive, check: S.meshCheck, vk: townVkFp() }, kitTris: S.kitTris, skip: S.skip, drawn: { full: S.d0, low: S.d1, card: S.d2, shells: S.d3, plinth: S.plinth, flags: S.flags || 0, landmarks: S.lm || 0 }, tris: S.tris, ms: { draw: S.drawMs, bin: S.binMs, grade: +S.gradeMs.toFixed(1), prep: S.prepMs }, gradedChunks: S.chunks,
     night: { lit: +TL.k.toFixed(3), win: +TOD_WIN.toFixed(3), grid: TL.stat.inGrid, range: TL.stat.range || 0, full: TL.stat.full, over: TL.stat.over, gridMs: TL.stat.gridMs, cards: TL.stat.cards, glow: TL.stat.glow, glowMs: TL.stat.glowMs } };
   if (at) { var q = bedCell(at[0], at[1]); o.at = { ground: +townGround(at[0], at[1]).toFixed(2), sim: +bedHgt(at[0], at[1]).toFixed(2), clear: q ? townClr(q.C, q.u * q.C.step, q.v * q.C.step) : null }; }
   return o;
