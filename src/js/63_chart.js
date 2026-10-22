@@ -136,27 +136,50 @@ function chartDraw(me) {
  *  市中心（T.cen）一個城鎮圖示（同 Blocksail 地球儀的 townIcon：圓底、白牆、屋頂、門）＋ 名字。座標都是海域的往東、往南（實例 ＝ 減掉 BED.ax、BED.az 的）。 */
 function chartTowns(g, P, sc, W) {
   if (!TOWNS.list.length) return;
+  var dpr = Math.min(window.devicePixelRatio || 1, 2);
+  TOWNS.list.forEach(function (T) {                                     // 路、城牆、建築：先畫進那座城的圖層（chartTownLayer），每格只貼上去
+    var L = chartTownLayer(T, sc, dpr);
+    if (!L) { chartTownDraw(g, P, sc, T); return; }
+    var p0 = P(L.e0, L.s0); g.drawImage(L.cv, p0[0] - L.pad, p0[1] - L.pad, L.cv.width / dpr, L.cv.height / dpr);
+  });
+  chartTownIcons(g, P, W);
+}
+// 城的圖層（TASK-0817）：以前每格把每座城的路、城牆、每一棟建築重畫一次 —— 君士坦丁堡（1,232 條路、12,854 個實例）一格 3 ms 起、53 秒合計 9.5 s。
+//   ⇒ 照現在的比例（sc）在一張離屏畫布上畫一次，比例、實例（模型到了、重建）換了才重畫；太大（> CHART_TOWN_MAX 點）⇒ 照舊每格直接畫。
+var CHART_TOWN_MAX = 4096;
+function chartTownLayer(T, sc, dpr) {
+  var pad = 4, b = T.box, w = Math.ceil(((b[2] - b[0]) * sc + 2 * pad) * dpr), h = Math.ceil(((b[3] - b[1]) * sc + 2 * pad) * dpr), L = T.chartL;
+  if (w > CHART_TOWN_MAX || h > CHART_TOWN_MAX) return null;
+  if (L && L.sc === sc && L.dpr === dpr && L.inst === T.inst) return L;
+  var cv = L ? L.cv : document.createElement('canvas'); cv.width = w; cv.height = h;
+  var g = cv.getContext('2d'); g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, w, h);
+  chartTownDraw(g, function (e, s) { return [(e - b[0]) * sc + pad, (s - b[1]) * sc + pad]; }, sc, T);
+  return (T.chartL = { cv: cv, sc: sc, dpr: dpr, inst: T.inst, e0: b[0], s0: b[1], pad: pad });
+}
+/** 一座城的路、城牆、建築（P：海域的往東、往南 ⇒ 畫面 px）。 */
+function chartTownDraw(g, P, sc, T) {
   function rgb(c, k) { return 'rgb(' + c.map(function (v) { return Math.round(Math.min(1, v * (k || 1)) * 255); }).join(',') + ')'; }
   function path(L) { g.beginPath(); L.forEach(function (q, i) { var p = P(q[0], q[1]); if (i) g.lineTo(p[0], p[1]); else g.moveTo(p[0], p[1]); }); }
   function quad(C) { path(C); g.closePath(); g.fill(); }
   g.lineJoin = 'round'; g.lineCap = 'round';
-  TOWNS.list.forEach(function (T) {
-    [0, 1].forEach(function (pass) {                                    // 路：先描邊、再路面
-      T.roads.forEach(function (r) { var w = Math.max(1.2, r.w * sc); path(r.P); g.lineWidth = pass ? w : w + 1.6; g.strokeStyle = pass ? rgb(TOWN_COL[r.kind] || TOWN_COL.street, 1.15) : 'rgba(30,20,10,.55)'; g.stroke(); });
-    });
-    (T.p.walls || []).forEach(function (w) { var P2 = w.path.map(T.E); if (w.closed) P2.push(P2[0]); path(P2); g.lineWidth = Math.max(1.5, (w.w || 4) * sc); g.strokeStyle = 'rgb(170,160,140)'; g.stroke(); });
-    if (T.inst) T.inst.forEach(function (q) {                           // 建築、城牆的部件：模型的 +x ＝ (sinθ, −cosθ)、+y ＝ (−cosθ, −sinθ)
-      var hw = q.pl ? q.pl[0] / 2 : q.ft ? q.ft[0] : 0, hd = q.pl ? q.pl[1] / 2 : q.ft ? q.ft[1] : 0; if (!hw) return;
-      var s = Math.sin(q.th), c = Math.cos(q.th), x = q.x + BED.ax, z = q.z + BED.az;
-      g.fillStyle = rgb(q.col || [0.6, 0.45, 0.35], q.sh || 1);
-      quad([[-1, -1], [1, -1], [1, 1], [-1, 1]].map(function (k) { var a = k[0] * hw, b = k[1] * hd; return [x + a * s - b * c, z - a * c - b * s]; }));
-    });
-    else (T.p.lots || []).forEach(function (l) {                         // 模型還沒到 ⇒ 地塊的框（空建地、廣場不畫）
-      if (l.use === 'plot' || l.use === 'plaza') return;
-      var t = l.rot * Math.PI / 180, c = Math.cos(t), s = Math.sin(t), hd = l.d / 2, hw = l.w / 2;
-      g.fillStyle = 'rgba(190,150,110,.85)'; quad([[-hd, -hw], [hd, -hw], [hd, hw], [-hd, hw]].map(function (k) { return T.E([l.at[0] + k[0] * c - k[1] * s, l.at[1] + k[0] * s + k[1] * c]); }));
-    });
+  [0, 1].forEach(function (pass) {                                    // 路：先描邊、再路面
+    T.roads.forEach(function (r) { var w = Math.max(1.2, r.w * sc); path(r.P); g.lineWidth = pass ? w : w + 1.6; g.strokeStyle = pass ? rgb(TOWN_COL[r.kind] || TOWN_COL.street, 1.15) : 'rgba(30,20,10,.55)'; g.stroke(); });
   });
+  (T.p.walls || []).forEach(function (w) { var P2 = w.path.map(T.E); if (w.closed) P2.push(P2[0]); path(P2); g.lineWidth = Math.max(1.5, (w.w || 4) * sc); g.strokeStyle = 'rgb(170,160,140)'; g.stroke(); });
+  if (T.inst) T.inst.forEach(function (q) {                           // 建築、城牆的部件：模型的 +x ＝ (sinθ, −cosθ)、+y ＝ (−cosθ, −sinθ)
+    var hw = q.pl ? q.pl[0] / 2 : q.ft ? q.ft[0] : 0, hd = q.pl ? q.pl[1] / 2 : q.ft ? q.ft[1] : 0; if (!hw) return;
+    var s = Math.sin(q.th), c = Math.cos(q.th), x = q.x + BED.ax, z = q.z + BED.az;
+    g.fillStyle = rgb(q.col || [0.6, 0.45, 0.35], q.sh || 1);
+    quad([[-1, -1], [1, -1], [1, 1], [-1, 1]].map(function (k) { var a = k[0] * hw, b = k[1] * hd; return [x + a * s - b * c, z - a * c - b * s]; }));
+  });
+  else (T.p.lots || []).forEach(function (l) {                         // 模型還沒到 ⇒ 地塊的框（空建地、廣場不畫）
+    if (l.use === 'plot' || l.use === 'plaza') return;
+    var t = l.rot * Math.PI / 180, c = Math.cos(t), s = Math.sin(t), hd = l.d / 2, hw = l.w / 2;
+    g.fillStyle = 'rgba(190,150,110,.85)'; quad([[-hd, -hw], [hd, -hw], [hd, hw], [-hd, hw]].map(function (k) { return T.E([l.at[0] + k[0] * c - k[1] * s, l.at[1] + k[0] * s + k[1] * c]); }));
+  });
+}
+/** 城鎮圖示＋名字（在路、建築上面；每格畫）。 */
+function chartTownIcons(g, P, W) {
   g.font = 'bold 10px sans-serif'; g.textAlign = 'left'; g.textBaseline = 'middle';
   TOWNS.list.forEach(function (T) {                                     // 圖示＋名字（在路、建築上面）
     var p = P(T.cen[0], T.cen[1]), x = p[0], y = p[1] - 2; if (x < -40 || y < -20 || x > W + 40 || y > W + 20) return;
