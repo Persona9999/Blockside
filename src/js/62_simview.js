@@ -96,8 +96,8 @@ function buildMeshes(H, C) {      // 船型 H 的每份模型網格一個 VAO：
 /** 第 k 份網格共用的鍵（同一格＋畫法）；不能共用 ⇒ null。 */
 function meshShareKey(H, SK, k) {
   if (!SK || k >= SK.length || !(SK[k] >= 0)) return null;
-  var L = latheMesh(H, k);
-  return SK[k] + '|' + (L ? 'L' + L.n + ',' + L.ax : 'V');
+  var L = meshAlgo(H, k);                                               // 同一格、同一種算法（62_lathe.js：車床式連參數、長桿式）才共用
+  return SK[k] + '|' + (!L ? 'V' : L.alg === 'lathe' ? 'L' + L.n + ',' + L.ax : 'P');
 }
 var MESH_DT = new Float32Array([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]), MESH_DTQ = new Float32Array(16);
 /** 同 meshDtL，配置新的一份（?rbchk=1 對拍、觀察模式的高亮：每格少數幾件）。 */
