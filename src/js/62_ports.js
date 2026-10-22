@@ -199,13 +199,62 @@ function portEngaged(sh, g, foes) {
 function portsAnim() {
   for (var i = 0; i < SHIPS.length; i++) {
     var sh = SHIPS[i]; if (!sh.M) continue;
-    if (!portOn(sh)) { if (sh.portLive) portsOffShip(sh); continue; }   // 沒輪到（關、或「只有我艦」的別艘）：上一格還在演 ⇒ 清一次
-    sh.portLive = true;                                                // 輪到 ⇒ 演（蓋板本來就每艘都畫：60_rbatch.js rbatShip，S14）
-    if (sh.ports === undefined) sh.ports = portsBuild(sh);             // 懶建（沒有蓋板 ⇒ null）
-    if (sh.ports) portsShip(sh, sh.ports);
-    if (sh.recoil === undefined) sh.recoil = recoilBuild(sh);          // 懶建（一門會退的砲都沒有 ⇒ null）
-    if (sh.recoil) recoilShip(sh, sh.recoil);
+    if (sh.gel === undefined) sh.gel = gelBuild(sh);                   // 砲身上下轉（pitch，TASK-0836）：懶建、排在後座前面（recoilPose 照 m.gel 分流）
+    if (!portOn(sh)) { if (sh.portLive) portsOffShip(sh); }            // 沒輪到（關、或「只有我艦」的別艘）：上一格還在演 ⇒ 清一次
+    else {
+      sh.portLive = true;                                              // 輪到 ⇒ 演（蓋板本來就每艘都畫：60_rbatch.js rbatShip，S14）
+      if (sh.ports === undefined) sh.ports = portsBuild(sh);           // 懶建（沒有蓋板 ⇒ null）
+      if (sh.ports) portsShip(sh, sh.ports);
+      if (sh.recoil === undefined) sh.recoil = recoilBuild(sh);        // 懶建（一門會退的砲都沒有 ⇒ null）
+      if (sh.recoil) recoilShip(sh, sh.recoil);
+    }
+    if (sh.gel) gelAnim(sh, sh.gel);                                   // 不看「砲門的開關演出」這一項；排在後座後面 ⇒ 同一格的後座一起套
   }
+}
+// 砲身上下轉（TASK-0836；Tim 2026-10-23：「同時可以考慮支援炮可以上下轉動」「上下轉動只要大型砲塔的炮支援就好 松島號主炮這種的」「然後轉動只是演出 不影響任何遊戲運算」）：
+//   標法：砲的模型 meta pitch（1 ＝ 下限 −5°、上限照砲種表的最大仰角 gunElev；「下,上」＝ 度）＋固定點 trunnion（耳軸：繞它轉）；砲身跟座要拆兩件（05_hull.js gmtPair：m.rmesh）—— 不然整門連座一起轉。
+//   角度：瞄準點（mountStep 記的 sh.aimL，船的格座標）照 shotEl 算要的仰角（跟開火同一條公式、不加散布）、扣掉船身沿砲軸的傾斜（砲手照船晃補）、夾進上下限、每秒最多轉 GEL_RATE；
+//   沒有目標、砲沒了、沉了、降旗 ⇒ 回 0。照 SIMT 走（往回、一次跳超過 PORT_SNAP ⇒ 直接擺好）。
+//   只寫畫面的欄位 m.vpre（砲身的局部矩陣右乘它，60_rbatch.js rbatBarrelL）；砲口 g.muz、砲軸、開火的仰角一個都不動 ⇒ 戰局不變。
+//   後座：有 pitch 的砲沿抬起來的砲管退（recoilPose 寫 G.rc，這裡合進 vpre）；沒有 pitch 的照舊 vsl（水平沿砲軸）。
+var GEL_RATE = 8 * Math.PI / 180, GEL_LO = -5 * Math.PI / 180;       // 每秒最多轉 8°（液壓俯仰，演出的設計值）；pitch=1 的下限 −5°
+/** pitch 的上下限（弧度）；沒標、標 0、寫壞 ⇒ null。 */
+function gelRange(v, GS) {
+  if (v === undefined || v === null || v === '' || v === 0 || v === '0') return null;
+  var a = String(v).split(',').map(Number);
+  if (a.length === 2 && isFinite(a[0]) && isFinite(a[1]) && a[0] < a[1]) return [a[0] * Math.PI / 180, a[1] * Math.PI / 180];
+  return +v === 1 ? [GEL_LO, gunElev(GS)] : null;
+}
+/** 一艘的 pitch 清單：有 pitch、拆了座（m.rmesh）、有 trunnion／breech／muzzle 的砲；一門都沒有 ⇒ null。耳軸、砲軸照網格的座標（固定點 − origin）。 */
+function gelBuild(sh) {
+  var L = [];
+  sh.guns.forEach(function (g) {
+    var m = g.model, p = m.pts || {}, rg = gelRange((m.meta || {}).pitch, GUNS[g.type]);
+    if (!rg || m.rmesh === undefined || !p.trunnion || !p.breech || !p.muzzle) return;
+    var a = norm(sub(p.muzzle, p.breech));
+    L.push(m.gel = { g: g, lo: rg[0], hi: rg[1], e: 0, rc: 0, ke: 0, krc: 0, t: null, tr: sub(p.trunnion, add(m.origin, m.roff)), a: a, k: norm([a[1], -a[0], 0]) });   // k ＝ a × z（rotM 右手 ⇒ 正的角度砲口往上）
+  });
+  return L.length ? L : null;
+}
+/** 一艘的一格：每門照瞄準點挑仰角、限速轉過去；角度或後座變了才重算 vpre。 */
+function gelAnim(sh, L) {
+  var t = SIMT, aim = sh.aimL;
+  for (var i = 0; i < L.length; i++) {
+    var G = L[i], g = G.g, m = g.model, want = 0;
+    if (aim && g.alive && !sh.sunk && !sh.struck) {
+      var mw = M4.pt(sh.M, g.muz[0], g.muz[1], g.muz[2]), tw = M4.pt(sh.M, aim[0], aim[1], aim[2]), d = Math.hypot(tw[0] - mw[0], tw[2] - mw[2]);
+      if (d > 1) { var w = M4.dir(sh.M, g.ax[0], g.ax[1], 0); want = clamp(shotEl(GUNS[g.type], d, tw[1] - mw[1]) - Math.asin(clamp(w[1] / len(w), -1, 1)), G.lo, G.hi); }
+    }
+    var snap = G.t === null || t < G.t || t - G.t > PORT_SNAP, dt = snap ? 0 : t - G.t; G.t = t;
+    G.e = snap ? want : G.e + clamp(want - G.e, -GEL_RATE * dt, GEL_RATE * dt);
+    if (G.e !== G.ke || G.rc !== G.krc) { G.ke = G.e; G.krc = G.rc; m.vpre = gelPose(G); }
+  }
+}
+/** 砲身的局部矩陣（合起來那一份的座標；05_hull.js gmtPair）：砲身起點 roff，再沿砲管往後 rc 格、繞耳軸抬 e ＝ trans(roff)·trans(tr)·rot(k, e)·trans(−tr)·trans(−a·rc)。 */
+function gelPose(G) {
+  var r = G.g.model.roff, B = trans(r[0], r[1], r[2]); if (!G.e && !G.rc) return B;
+  var tr = G.tr, P = M4.mul(M4.mul(M4.mul(B, trans(tr[0], tr[1], tr[2])), rotM(G.k, G.e)), trans(-tr[0], -tr[1], -tr[2]));
+  return G.rc ? M4.mul(P, trans(-G.a[0] * G.rc, -G.a[1] * G.rc, -G.a[2] * G.rc)) : P;
 }
 /** 這艘演不演砲門與後座（畫質「砲門的開關演出」：0 關、1 每艘、2 只有我艦 SHIPS[PLAYER_I]）。蓋板畫不畫不看它（每艘都畫；60_rbatch.js rbatShip，S14）。 */
 function portOn(sh) { return GFX.port === 1 || (GFX.port === 2 && sh === SHIPS[PLAYER_I]); }
@@ -240,7 +289,8 @@ function recoilPose(I) {
   var g = I.g, m = g.model, r = g.alive && g.firedAt !== undefined ? I.r * (1 - portLoad(g)) : 0;   // 還沒開過火 ⇒ 推出去（開局的 reload 是亂數 0–1.2 秒，⛔ 照 portLoad ⇒ 一開場整排縮著再推出去）
   if (r !== I.kr || (r > 0 && (g.ax[0] !== I.kx || g.ax[1] !== I.ky))) {   // 迴旋砲的砲軸會轉 ⇒ 軸變了也重算
     I.kr = r; I.kx = g.ax[0]; I.ky = g.ax[1];
-    if (r > 0) { var v = I.vb || (I.vb = [0, 0, 0]); v[0] = -g.ax[0] * r; v[1] = -g.ax[1] * r; m.vsl = v; } else m.vsl = null;
+    if (m.gel) m.gel.rc = r;                                           // 有 pitch 的砲（TASK-0836）：沿抬起來的砲管退 ⇒ 交給 gelAnim 合進 vpre（同一格、排在後面）
+    else if (r > 0) { var v = I.vb || (I.vb = [0, 0, 0]); v[0] = -g.ax[0] * r; v[1] = -g.ax[1] * r; m.vsl = v; } else m.vsl = null;
   }
   return r > 0;
 }
@@ -252,7 +302,7 @@ function portsOffShip(sh) {
     sh.ports.L.forEach(function (P) { P.d.L = null; P.g.model.vsl = null; P.ka = P.kr = undefined; });
   }
   var R = sh.recoil;
-  if (R) { R.L.forEach(function (I) { if (I.kr !== undefined && I.g.model.vsl === I.vb) I.g.model.vsl = null; I.kr = undefined; }); R.rest = false; }
+  if (R) { R.L.forEach(function (I) { if (I.kr !== undefined && I.g.model.vsl === I.vb) I.g.model.vsl = null; if (I.g.model.gel) I.g.model.gel.rc = 0; I.kr = undefined; }); R.rest = false; }   // gel.rc：有 pitch 的砲的後座（下一格 gelAnim 推回去）
 }
 /** 畫質「砲門的開關演出」三檔的名字（匯入檢查的讀數）。 */
 function portMode() { return ['關', '每艘', '只有我艦'][GFX.port] || '關'; }
@@ -402,6 +452,22 @@ function portsSummary(sh) {
   var no = sh.guns.filter(function (g) { return used.indexOf(g) < 0; }).map(function (g) { var mt = g.model.meta || {}; return (mt.id || g.name.split('/').pop()) + (mt.deck ? '（' + mt.deck + '）' : ''); });
   return D.length + ' 片' + (L.length < D.length ? '（演得動的 ' + L.length + '）' : '') + '（P ' + (L.length - ns) + '、S ' + ns + '）；house ' + rg(hs) + ' 格；close ' + rg(cs) + '°'
     + '；沒有蓋板的砲：' + (no.length ? no.join('、') : '沒有') + '；畫質「砲門的開關演出」' + portMode() + (GFX.port === 1 ? '' : '（沒輪到的船：蓋板開著不動）');
+}
+/** 匯入檢查（75_shipcheck.js R.info.gunmount；TASK-0836）：砲座幾件、配到幾門砲、哪幾門 pitch；配不到的座 ✗、pitch 標了卻轉不了的 ⚠。都沒有 ⇒ ''。 */
+function gmtSummary(sh, add) {
+  var D = (sh.decos || []).filter(function (d) { return d.meta.kind === 'gunmount'; }), P = [];
+  D.forEach(function (d) { if (!d.gm) add('error', '砲座', d.path, 'mount_of=' + (d.meta.mount_of || '（沒寫）') + ' 配不到砲 ⇒ 座不畫', 'meta mount_of 寫那門砲的 id（造船規格 §4.2.1）'); });
+  if (sh.gel === undefined) sh.gel = gelBuild(sh);
+  sh.guns.forEach(function (g) {
+    var m = g.model, v = (m.meta || {}).pitch; if (v === undefined || v === '' || v === 0 || v === '0') return;
+    var nm = (m.meta && m.meta.id) || m.name.split('/').pop();
+    if (m.gel) { P.push(nm + '（' + Math.round(m.gel.lo * 180 / Math.PI) + '～' + Math.round(m.gel.hi * 180 / Math.PI) + '°）'); return; }
+    add('warn', '砲身上下轉', m.path, 'pitch=' + v + ' 但' + (!gelRange(v, GUNS[g.type]) ? '寫法不認得（1 或「下,上」度）' : m.rmesh === undefined ? '砲身跟座沒拆開（整門會一起轉）' : '少固定點 trunnion／breech／muzzle') + ' ⇒ 不轉', '造船規格 §4.2.2');
+  });
+  var n = D.filter(function (d) { return d.gm; }).length, gs = [];
+  D.forEach(function (d) { if (d.gm && gs.indexOf(d.gm) < 0) gs.push(d.gm); });
+  if (!D.length && !P.length) return '';
+  return (D.length ? '座 ' + D.length + ' 件、配到 ' + gs.length + ' 門砲' + (n < D.length ? '、配不到 ' + (D.length - n) + ' 件' : '') + '（開火只退砲身）' : '沒有座') + (P.length ? '；上下轉 ' + P.length + ' 門：' + P.join('、') : '');
 }
 /** 匯入檢查的讀數一行（75_shipcheck.js R.info.recoil）：沒有蓋板的砲幾門演後座、退幾格；照 meta 不演的（recoil=0、弩箭／火箭／石彈／希臘火）列出來。沒有砲 ⇒ ''。 */
 function recoilSummary(sh) {

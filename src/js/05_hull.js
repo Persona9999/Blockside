@@ -96,6 +96,57 @@ function decoSplit(h) {
   (h.rig.meshes || []).forEach(function (_, k) { if (!used[k]) skip[k] = 1; });
   return { decos: deco, n: deco.length, skip: skip };                   // decos 匯入檢查也讀（meta、lid_of；75_shipcheck.js）
 }
+// 砲身與砲座拆兩件（TASK-0836；Tim 2026-10-23：「把一些炮跟炮身拆開(在雕刻中維持原外貌) 讓炮的後座力只讓炮身移動」「炮座應該是固定在船上的」「整門會一起飛 ok的」）：
+//   雕刻端用 work split 把座拆成子作品，每個擺放多一個雙生模型 kind=gunmount、mount_of=<砲的 id>（造船規格 §4.2.1）。座是裝飾（規格表 deco ⇒ 不算重量、不擋彈、不抽亂數）、一律畫（規格表 always）。
+//   模擬看到的砲 ＝ 砲身＋座接成一份網格（gmtMesh）、外框取聯集 ⇒ 被打中的範圍、砲班站位、外框照拆之前；打飛、斷船帶走 ⇒ 整門一起（那一份）。
+//   畫面分兩件（60_rbatch.js rbatShip）：砲身 ＝ m.rmesh（後座 vsl、pitch 的仰角只套在它上面，62_ports.js）；座 ＝ 跟著砲的擺法（modelLocal：砲塔、迴旋砲），不吃後座。
+//   固定式的砲（沒標 mount、不在砲塔上）⇒ modelLocal 就是平移 ⇒ 座固定在船上。
+/** 模型清單 models 裡指到砲 g 的座（kind=gunmount、mount_of ＝ g 的 id）。g 沒有 id ⇒ []。 */
+function gmtOf(models, g) {
+  var id = g && g.meta && g.meta.id; if (id === undefined || id === '') return [];
+  return (models || []).filter(function (q) { return q.meta && q.meta.kind === 'gunmount' && String(q.meta.mount_of) === String(id); });
+}
+/** 合起來那一份的原點：砲身與座的 origin 每一軸取小的（⛔ 照砲身的 origin：座在砲身下面、後面 ⇒ 頂點是負的，meshOcc 只收 ≥ 0 的格 ⇒ 座那一塊打不到，松島號戰局變了）。 */
+function gmtOrigin(g, ms) { var o = g.origin.slice(); ms.forEach(function (q) { for (var i = 0; i < 3; i++) o[i] = Math.min(o[i], q.origin[i]); }); return o; }
+/** 砲身 g 的網格接上座 ms 的（各自的頂點平移到 gmtOrigin：擺法跟砲一樣、只差網格起點）⇒ 一份新的 { verts, tris, tmat, mats }。 */
+function gmtMesh(meshes, g, ms) {
+  var a = meshes[g.mesh], O = gmtOrigin(g, ms), v = [], t = a.tris.slice(), tm = a.tmat.slice(), mats = a.mats.slice(), k;
+  for (k = 0; k < a.verts.length; k += 3) v.push(a.verts[k] + g.origin[0] - O[0], a.verts[k + 1] + g.origin[1] - O[1], a.verts[k + 2] + g.origin[2] - O[2]);
+  ms.forEach(function (q) {
+    var b = meshes[q.mesh], nv = v.length / 3, nm = mats.length, dx = q.origin[0] - O[0], dy = q.origin[1] - O[1], dz = q.origin[2] - O[2];
+    for (k = 0; k < b.verts.length; k += 3) v.push(b.verts[k] + dx, b.verts[k + 1] + dy, b.verts[k + 2] + dz);
+    for (k = 0; k < b.tris.length; k++) t.push(b.tris[k] + nv);
+    for (k = 0; k < b.tmat.length; k++) tm.push(b.tmat[k] + nm);
+    for (k = 0; k < b.mats.length; k++) mats.push(b.mats[k]);
+  });
+  return { verts: v, tris: t, tmat: tm, mats: mats };
+}
+/** 外框的聯集（砲身＋座）。 */
+function gmtBox(g, ms) {
+  var b = g.bbox.slice();
+  ms.forEach(function (q) { for (var i = 0; i < 3; i++) { b[i] = Math.min(b[i], q.bbox[i]); b[3 + i] = Math.max(b[3 + i], q.bbox[3 + i]); } });
+  return b;
+}
+/** 載入時配對（buildHull，decoSplit 之後）：每門有座的砲 ⇒ 模擬網格換成砲身＋座（接在 rig.meshes 後面）、m.rmesh ＝ 原本的砲身網格、外框取聯集；
+ *  每個座記 gmod（那門砲的模型物件：makeShip 照它在 rig.models 的位置找 sh.models —— ⛔ 不記索引：之後 fitHullVox 把自帶格子的主機、鍋爐從 rig.models 拿掉，索引整串位移）、
+ *  off（座的 origin − 砲的 origin）。配不到的座（mount_of 錯、砲被換裝換掉或拆空）⇒ gmod null：不畫（匯入檢查報）。
+ *  一個座都沒有 ⇒ 一行都不多做（別的船逐位元組相同）。回：配到幾門砲。 */
+function gmtPair(h, decos, FR) {
+  var D = (decos || []).filter(function (d) { return d.meta && d.meta.kind === 'gunmount'; }); if (!D.length) return 0;
+  var M = h.rig.models || [], swapped = {}, n = 0;
+  ((FR && FR.done) || []).forEach(function (r) { swapped[r.path] = 1; });
+  D.forEach(function (d) { d.gmod = null; });
+  M.forEach(function (g) {
+    if (!g.meta || g.meta.kind !== 'gun' || swapped[g.name]) return;      // 換裝換掉的砲：零件自己帶座（fitLoadPart 照 gmtMesh 接好）⇒ 原本的座不畫
+    var ms = gmtOf(D, g); if (!ms.length) return;
+    h.rig.meshes.push(gmtMesh(h.rig.meshes, g, ms));
+    if (h.meshShape) h.meshShape.push(-1);                                 // 新的這份不跟別份共用 GPU 網格（62_simview.js meshShareKey）
+    var O = gmtOrigin(g, ms);
+    g.rmesh = g.mesh; g.roff = [g.origin[0] - O[0], g.origin[1] - O[1], g.origin[2] - O[2]]; g.origin = O; g.mesh = h.rig.meshes.length - 1; g.bbox = gmtBox(g, ms); n++;   // roff：砲身網格的起點在合起來那一份裡的位置（畫砲身時右乘，60_rbatch.js）
+    ms.forEach(function (q) { q.gmod = g; q.off = [q.origin[0] - O[0], q.origin[1] - O[1], q.origin[2] - O[2]]; });
+  });
+  return n;
+}
 // 艦隊編成（TASK-0537）：FLEET_SET[0] ＝ 我方（第一艘是我艦）、[1] ＝ 敵方，各是一串船型；每一邊至少 1 艘、合計最多 FLEET_MAX（同時在場 FIELD_N 艘，其他的候補，52_fleet.js）。
 //   主選單編；網址 ?blue=我艦,友艦…&red=敵艦,…；舊的 ?ship=我艦,敵艦 照舊（＝ 一邊一艘；?blue／?red 給了那一邊照它）。
 var FLEET_SET = [[HULL_DEF], [HULL_DEF]];                                // 預設 ＝ 清單第一艘（HULL_DEF）
@@ -255,6 +306,7 @@ function buildHull(info, model, t0, C, key, F) {
   modelMats(h);                                                            // 換色的擺放（TASK-0584）：展開成自己的網格（共用頂點陣列）⇒ decoSplit 數「沒用到的網格」時看得到它
   var FR = fitApply(h, F || {}, model.fitExt);                            // 換裝（38_fit.js；TASK-0714）：掛點換成零件 ⇒ 之後讀 rig.models 的全部照新的；換裝表是空的 ⇒ 不做事
   var DS = decoSplit(h);                                                   // 裝飾（TASK-0682）：在一切之前拆掉 ⇒ 之後讀 rig.models 的（重量、繩、帆、家具）都看不到它
+  var GMN = gmtPair(h, DS.decos, FR);                                      // 砲身與砲座拆兩件（TASK-0836）：有座的砲模擬照砲身＋座、畫面分兩件；沒有座 ⇒ 不做事
   h.metaRebased = metaRebase(h);                                           // 改裝船（TASK-0657）：原船裡的 meta 路徑照它所在的那一層往上找（見 metaRebase）
   if (C && (C.voxels !== h.voxels || C.checksum !== h.checksum)) C = null;  // 雙保險：鍵是 .vxk 原文的雜湊，格數與 checksum 也要一樣
   if (S && Math.abs(h.meters_per_voxel - S) > 1e-9) throw new Error(info.name + ' 是 ' + h.meters_per_voxel + ' 公尺一格，跟已經載入的船（' + S + '）不一樣 —— 模擬只吃同一個比例');
@@ -265,6 +317,7 @@ function buildHull(info, model, t0, C, key, F) {
   T.key = key === undefined ? info.id : String(key); T.fit = FR;          // 艦隊裡的那一項（船型或 船型@換裝表）、換裝的結果（38_fit.js）
   T.cached = !!C; T.keep = C ? null : {};
   T.decos = DS.decos; T.decoN = DS.n; T.meshSkip = DS.skip;                // 裝飾：裝飾件、幾件、沒人用的網格（不建）
+  T.gmtN = GMN;                                                            // 有座的砲幾門（匯入檢查的讀數）
   T.ms = {};                                                               // 每一段花多久（毫秒；讀數 window.__vxk.ms）
   function tm(k, f) { var a = performance.now(); f(); T.ms[k] = +(performance.now() - a).toFixed(1); }
   // 帆只存配方（TASK-0602 ①；29_sailrecipe.js）⇒ 先生出頂點，下面的海面遮罩、縮圖、繩的檢查才讀得到。一面一步（沒有快取時一面約 35 ms；2026-10-20 開場切段）

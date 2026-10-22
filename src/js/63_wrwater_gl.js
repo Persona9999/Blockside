@@ -233,8 +233,8 @@ function wrwMesh(sh) {
       quads++;
     }
   }
-  if (FLX3 && WRV_ON) { me.sn = 0; wrvCols(sh, me, cv); }                 // 透視 ⇒ 畫成一團水（體積，wrvDraw）：水面、側面都不畫
-  else if (FLX3 || CUTV.half) wrwSides(sh, me, cv); else me.sn = 0;      // 水的側面：只在透視、剖面畫（平常被牆擋住，⛔ 畫了會跟牆搶深度）
+  if (FLX3 && WRV_ON) wrvCols(sh, me, cv);                               // 透視 ⇒ 畫成一團水（體積，wrvDraw）：水面、側面都不畫
+  wrwSides(sh, me, cv, !(FLX3 && WRV_ON) && (FLX3 || CUTV.half));        // 水的側面：只在透視（不是體積）、剖面畫（平常被牆擋住，⛔ 畫了會跟牆搶深度）；往低處流的那幾道（粒子，63_flood_gl.js FL_STREAM）一律記
   gl.bindVertexArray(me.vao); gl.bindBuffer(gl.ARRAY_BUFFER, me.vb);
   if (q * WRW_ST > me.cap) {
     me.cap = me.buf.length; gl.bufferData(gl.ARRAY_BUFFER, me.cap * 4, gl.DYNAMIC_DRAW);
@@ -248,7 +248,7 @@ function wrwMesh(sh) {
   gl.bindVertexArray(null);
   me.n = q;
   var Ut = 0; wetR.forEach(function (r) { Ut += Math.round(me.U[r]); });
-  me.st = { rooms: wetR.length, cols: cols.length, clip: clip, vox: vox, quads: quads, tris: q / 3, sides: me.sn / 6, m3: +(Ut / WR_U * S * S * S).toFixed(2), src: +me.tot.toFixed(2), lost: +me.lost.toFixed(3), ms: +(performance.now() - now).toFixed(2), msB: +(tB - now).toFixed(2), msL: +(tL - tB).toFixed(2) };
+  me.st = { rooms: wetR.length, cols: cols.length, clip: clip, vox: vox, quads: quads, tris: q / 3, sides: me.sn / 6, streams: me.stm ? me.stm.length / FLST_K : 0, streamsAll: me.stmAll || 0, m3: +(Ut / WR_U * S * S * S).toFixed(2), src: +me.tot.toFixed(2), lost: +me.lost.toFixed(3), ms: +(performance.now() - now).toFixed(2), msB: +(tB - now).toFixed(2), msL: +(tL - tB).toFixed(2) };
   return me;
 }
 /** 水的側面（Tim 2026-10-22「按x的透視水 是否可以顯示水的側面(不然看起來是片狀的 不像水體)」）：跟水面同一次重做，畫在 P.pside（63_flood_gl.js，水格的側面那一支著色器）。
@@ -256,7 +256,7 @@ function wrwMesh(sh) {
  *  其他（牆、別間、船殼、鄰欄乾的）⇒ 從這欄的水面往下到這一段的地板（從水面那一層往下、照格數連著有空氣的最下面那一層；⛔ 不穿過甲板到下一段）。
  *  頂 ＝ 水面的角（同一份 cv）⇒ 側面頂跟水面接得起來；滿到天花板的欄（沒有水面）⇒ 頂 ＝ 欄頂 ⇒ 灌滿的房間看起來是一整塊水。
  *  ⚠ 側面照重做那一刻的姿態換成船上的 z、不跟著水面的骨架內插（同水格的側面）。只動畫面。 */
-function wrwSides(sh, me, cv) {
+function wrwSides(sh, me, cv, wantQ) {
   var T = sh.T, W = T.wrm, X = wrxOf(T), M = sh.M, C = W.c, n = W.colRoom.length, NCX1 = W.NCX + 1, NCC = NCX1 * (W.NCY + 1), NCK = W.NCX * W.NCY, u = me.u, j, d;
   var NB = T.wrwNb;
   if (!NB) {                                                                // 同一間的鄰欄（四個方向，−1 ＝ 沒有）：一型船算一次
@@ -272,7 +272,7 @@ function wrwSides(sh, me, cv) {
   }
   function gz(x, y, hw) { return (hw - (M[1] * x + M[5] * y + M[13])) / M[9]; }
   function lev(c) { return u[c] > 0 ? M[1] * X.cx[c] + M[5] * X.cy[c] + M[9] * wrColZ(W, X, c, u[c]) + M[13] : -1e9; }   // 那一欄的水面（世界高度；滿 ⇒ 欄頂）
-  var sq = 0, SB = me.sbuf || (me.sbuf = new Float32Array(7 * 6 * 512));
+  var sq = 0, SB = me.sbuf || (me.sbuf = new Float32Array(7 * 6 * 512)), STM = me.stm = [];
   for (j = 0; j < n; j++) {
     if (u[j] <= 0) continue;
     var r = W.colRoom[j], gx = W.colCX[j], gy = W.colCY[j], x0 = W.x0 + gx * C, y0 = W.ylo + gy * C, wc = Math.min(C, W.nxv - gx * C), hc = Math.min(C, W.ny - gy * C);
@@ -295,6 +295,13 @@ function wrwSides(sh, me, cv) {
         za1 = zb1 = zlo + L;
       }
       if (za - za1 < 0.3 && zb - zb1 < 0.3) continue;
+      if (nb >= 0 && FL_STREAM) {                                          // 同一間的鄰欄比較低（有水 ⇒ 接到它的水面；乾的 ⇒ 落到它的地板）⇒ 水在往那邊流：畫粒子、不畫片（Tim 2026-10-23「柱牆顯示很突兀」）
+        if (hn <= -1e8) { var zn = wrColZ(W, X, nb, 0); za1 = Math.min(za, Math.max(zn, za1 - 40)); zb1 = Math.min(zb, Math.max(zn, zb1 - 40)); }
+        if (za - za1 < FLST_MIN && zb - zb1 < FLST_MIN) continue;
+        flStreamAdd(STM, xa, ya, za, xb, yb, zb, za1, zb1, Math.min(16, 3 + Math.round(4 * Math.max(za - za1, zb - zb1) * S)), d === 0 ? -1 : d === 1 ? 1 : 0, d === 2 ? -1 : d === 3 ? 1 : 0, 0);
+        continue;
+      }
+      if (!wantQ) continue;
       if ((sq + 6) * 7 > SB.length) { var SB2 = new Float32Array(SB.length * 2); SB2.set(SB); SB = me.sbuf = SB2; }
       var Lm = Math.max(za - za1, zb - zb1) * S, V = [[xa, ya, za, 0, 0], [xb, yb, zb, 1, 0], [xb, yb, zb1, 1, 1], [xa, ya, za, 0, 0], [xb, yb, zb1, 1, 1], [xa, ya, za1, 0, 1]];
       for (var e = 0; e < 6; e++) { var o = sq * 7, p = V[e]; SB[o] = p[0]; SB[o + 1] = p[1]; SB[o + 2] = p[2]; SB[o + 3] = p[3]; SB[o + 4] = p[4]; SB[o + 5] = Lm; SB[o + 6] = 0; sq++; }
@@ -309,7 +316,7 @@ function wrwSides(sh, me, cv) {
   if (sq * 7 > me.scap) { me.scap = SB.length; gl.bufferData(gl.ARRAY_BUFFER, me.scap * 4, gl.DYNAMIC_DRAW); }
   if (sq) gl.bufferSubData(gl.ARRAY_BUFFER, 0, SB, 0, sq * 7);
   gl.bindVertexArray(null);
-  me.sn = sq;
+  me.sn = sq; me.stmAll = STM.length / FLST_K; me.stm = flStreamCap(STM);
 }
 // ── 透視的水：體積（Tim 2026-10-22：「是否可以改用 light scattering 算法去顯示透視水體 把水體空間當灰塵」「根據穿透量顯示不同深淺的藍色」）──
 //   只在透視（FLX3）：水面片、側面片都不畫，改成一團會吸光、會散射的介質（participating media）——

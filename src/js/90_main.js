@@ -502,7 +502,7 @@ else GL_READY.then(yieldUI).then(function () {                     // 先讓主�
     '\n設定：' + PREFS.state;
   loadSay(line); window.__vxk = { verify: chk, quads: T.pristine.quads(), masts: T.masts.length, decodeMs: +T.decodeMs.toFixed(1), meshMs: +T.meshMs.toFixed(1), ms: T.ms,
     cache: hullInfo(T.id).cache, prefs: PREFS.state,
-    deco: { on: !!GFX.deco, n: T.decoN || 0, drawn: GFX.deco ? T.decoN || 0 : (T.decos || []).filter(function (d) { return d.meta && d.meta.kind === 'portlid'; }).length, meshes: T.meshes.filter(Boolean).length, tris: T.meshes.reduce(function (a, m) { return a + (m && m.n ? m.n / 3 : 0); }, 0) } };   // 裝飾（TASK-0682）：開關、作品裡幾件、畫幾件（一律載入，關著 ⇒ 只剩砲門蓋板：每艘、每個畫質都畫，S14）、建了幾份模型網格、三角形
+    deco: { on: !!GFX.deco, n: T.decoN || 0, drawn: GFX.deco ? T.decoN || 0 : (T.decos || []).filter(function (d) { return d.meta && kindProp(d.meta.kind, 'always'); }).length, meshes: T.meshes.filter(Boolean).length, tris: T.meshes.reduce(function (a, m) { return a + (m && m.n ? m.n / 3 : 0); }, 0) } };   // 裝飾（TASK-0682）：開關、作品裡幾件、畫幾件（一律載入，關著 ⇒ 只剩砲門蓋板：每艘、每個畫質都畫，S14）、建了幾份模型網格、三角形
   loadArt().then(function (why) { line += '\n素材：' + why; loadSay(line); window.__vxk.art = why; if (HUD_ART) hudArt(); });
   if (!chk.ok) { glFail('船體資料跟封裝檔對不上，停下來（不畫半艘船）。\n' + line); return; }
   evEmit('boot:ready');
