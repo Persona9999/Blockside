@@ -6,6 +6,7 @@
 //   滑鼠：拖曳（fp 轉頭 ／ orbit 繞、右鍵平移）、兩指（fp 不動 ／ orbit 縮放＋平移）、滾輪（fp 不動 ／ orbit 縮放）、點一下（fp 不瞄準 ／ orbit 點船瞄準）、
 //   按下（broadcast：每個都收 —— fp 抓住滑鼠、build 抓住時左鍵拆右鍵放）、抓住時的移動（fp 轉頭）。
 //   每一格畫面（90_main.js frame）：每個控制器的 frame（第一人稱走、爬、退出判斷；建造的準心）—— 關著也叫（它們自己收尾，例：bldFrame 拿掉 #stage.bld）。
+// 游標移動（hover：沒按著鍵、只有滑鼠）⇒ 城鎮的建築模式（87_townbuild.js，pri 8：點一下蓋、拖曳照樣繞鏡頭）。
 // 加一種操作 ＝ ctrlAdd 一份（不用改 71_input.js 的事件）。ctrlTop() ＝ 現在最上面開著的那一個（讀數；__game.ctrl）。
 var CTRLS = [];
 function ctrlAdd(c) { CTRLS.push(c); CTRLS.sort(function (a, b) { return b.pri - a.pri; }); }

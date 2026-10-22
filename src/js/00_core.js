@@ -103,4 +103,20 @@ function rotM(axis, ang) {          // 繞任意軸的 mat4
     t * x * z + s * y, t * y * z - s * x, t * z * z + c, 0, 0, 0, 0, 1]);
 }
 function trans(x, y, z) { var m = M4.ident(); m[12] = x; m[13] = y; m[14] = z; return m; }
-
+// 設定的描述表（{ k, name, lim, step, int, note }）共用的三支（TASK-0774：從 64_cfgkit.js 搬來 —— 畫質、天氣、砲、道具的資料那半都用，屬於核心；設定頁的框架留在 64_cfgkit.js）
+/** 描述表的一項 ⇒ 值夾進範圍、對齊刻度（整數取整）；lim 可以傳進來（砲的傷害範圍照砲種）。不是有限的數字 ⇒ undefined。 */
+function cfgSnap(it, v, lim) {
+  if (typeof v !== 'number' || !isFinite(v)) return undefined;
+  var L = lim || it.lim; v = clamp(v, L[0], L[1]);
+  return it.int ? Math.round(v) : +(Math.round(v / it.step) * it.step).toFixed(4);
+}
+/** 描述表 ⇒ 滑桿的 HTML：每一項一列（label、range、數字）＋說明；pre ＝ 元素前綴（gk-、fk-）；wrap(it, html) 可以再包一層（道具頁要照種類藏）。 */
+function cfgSliders(items, pre, wrap) {
+  return items.map(function (it) {
+    var h = '<div class="row slide"><label for="' + pre + it.k + '">' + it.name + '</label><input type="range" id="' + pre + it.k + '"' + (it.lim ? ' min="' + it.lim[0] + '" max="' + it.lim[1] + '"' : '') + ' step="' + it.step + '" aria-label="' + it.name + '"><span id="' + pre + it.k + 'V"></span></div>' +
+      '<div class="row note gkn">' + it.note + '</div>';
+    return wrap ? wrap(it, h) : h;
+  }).join('');
+}
+/** 值 ⇒ 字（跟預設不一樣 ⇒ 後面寫「改過；預設 …」）。 */
+function cfgShown(fmt, v, d) { return fmt(v) + (v === d ? '' : '（改過；預設 ' + fmt(d) + '）'); }

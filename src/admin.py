@@ -13,7 +13,7 @@
 #   python -I admin.py build                      照設定重建 ../index.html（Blockside 根目錄 ＝ GitHub Pages 的首頁）
 #   python -I admin.py build --code [--base <版>]  只重建程式（入口 index.html；船檔 ships/ 照舊）—— 沒有 VoxelKit/_cache 的機器用，船變了就擋（見「只重建程式」）
 #   python -I admin.py shell <外殼設定> [--check]  外掛外殼：拿建好的成品套別的遊戲的外殼寫成另一頁（見「外掛外殼」）
-#   python -I admin.py layers [--shell]           分層讀數：模擬層直接用到上層的名字；--shell ＝ 核心直接用到外殼（主選單、設定頁；SHELL_UI）的名字、直接碰 #cover 的 DOM
+#   python -I admin.py layers [--shell]           分層讀數：模擬層直接用到上層的名字；--shell ＝ 核心直接用到外殼（主選單、設定頁；SHELL_UI）的名字、直接碰 #cover 的 DOM（--shell 的兩個數字建置前會擋：都要是 0，TASK-0774）
 #   python -I admin.py reseg                      船檔照現在的切法重切（ship_segments 改了、這台沒有 _cache 時；解回來逐位元組相同才寫，見「船檔重切」）
 #   python -I admin.py import --work <雕刻作品 ID> --id <船的代號> --name <名字>   匯入新船（匯出 .vxk、登記、重建）
 #   python -I admin.py metasync --id <船的代號>   只同步 meta 與固定點（作品改了 meta、加了固定點，格子不動；TASK-0572）
@@ -1937,21 +1937,16 @@ def act_layers(src=None):
 # ───────────────────────── 核心與外殼（主選單、設定頁）的讀數（2026-10-21：核心與外殼拆兩包的第 0 步） ─────────────────────────
 # 外殼 ＝ Blockside 自己的主選單、設定頁、開發後台頁（#cover 裡的那些卡）；核心 ＝ 其他（海戰：船、海、陰影、物理、HUD、遊戲中的面板、選船彈窗 72_shippick）。
 # 目標：依賴只往下 —— 外殼叫核心 OK；核心叫外殼的名字、核心碰 #cover 裡的 DOM ⇒ 都要拆成事件（00_events.js）或外殼自己掛，拆完這兩個數字是 0。
-# 還沒搬檔之前外殼跟核心寫在同一支檔裡 ⇒ SHELL_UI：整支是外殼的檔 ⇒ None；一支檔裡的幾段 ⇒ [(起, 迄), …]：
+# SHELL_UI：整支是外殼的檔 ⇒ None；一支檔裡的幾段 ⇒ [(起, 迄), …]（第 3 步搬檔之前用過；現在外殼都是整支的檔）：
 #   起 ＝ 那一段第一行裡的一段字（含這一行）、迄 ＝ 下一段（核心）第一行裡的一段字（不含；None ＝ 到檔尾）。用字不用行號 ⇒ 別人改了前面，行號跑掉照樣量得準；
 #   字找不到或不只一行 ⇒ 讀數停下來說哪一個（改 SHELL_UI，不要猜）。
-# 只是讀數、不擋建置（拆完才變閘門）。量法：頂層名字照作用域判（src/js_refs.cjs）；DOM 照字面掃 $('id')、getElementById('id')、querySelector(All)('…#id…')。
+# 拆完了（TASK-0774 第 6 步）⇒ 建置前的閘門：act_shell_layers(gate=True)（build、build --code 都跑，跟 owner_check 一樣）；layers --shell 照舊印讀數。量法：頂層名字照作用域判（src/js_refs.cjs）；DOM 照字面掃 $('id')、getElementById('id')、querySelector(All)('…#id…')。
 SHELL_UI = {
-    '64_cfgkit.js': None,                                                      # 設定頁的共用框架（cfgSnap 之後搬進核心）
+    '64_cfgkit.js': None,                                                      # 設定頁的共用框架（cfgSnap／cfgSliders／cfgShown 已搬進 00_core.js，TASK-0774 第 2 步）
     '65_ask.js': None,                                                         # 確認彈窗（只有設定頁在用）
-    '66_keys.js': [('function keyExport', None)],                              # 鍵位頁（鍵位資料在前面、留核心）
-    '67_furncfg.js': [('function furnExport', None)],                          # 道具頁
-    '68_guncfg.js': [('function gunsExport', None)],                           # 砲的設定頁
-    '69_prefs.js': [('/** 出廠預設值（設定後台跳轉開的', 'function prefNum')],  # 出廠預設值後台頁 admDefUI
-    '71_input.js': [('var DISCORD_URL', "$('muteT').onclick"),                 # 主選單的 Discord
-                    ('/** 主選單的玩法鈕', '/** 旗號面板（TASK-0679'),           # 主選單、sliders()（細節、船隻配置、天氣…）、畫質頁、物理頁、編成、指揮官、搶上風
-                    ('/** 細節設定：候補補位', "$('endC').onclick"),            # 候補、距離、開戰鈕
-                    ('var COVER_LATE', '// 訂閱（TASK-0669')],                  # 回到主選單 coverShow
+    '71_cfgpages.js': None,                                                    # 鍵位、道具、砲、出廠預設值、聲音（BGM）的設定頁（TASK-0774 第 3 步從 66／67／68／69／02 搬來）
+    '71_pages.js': None,                                                       # sliders()（細節、船隻配置、艙房、船員、天氣…）、物理設定頁
+    '71_menu.js': None,                                                        # 主選單（玩法、編成、同時在場、指揮官、搶上風、候補、距離、開戰鈕、Discord、回主選單 coverShow）
 }
 
 
@@ -1992,8 +1987,9 @@ def cover_ids(html):
 DOM_RX = re.compile(r"""\$\('([\w-]+)'\)|getElementById\('([\w-]+)'\)|querySelector(?:All)?\('([^']+)'\)""")
 
 
-def act_shell_layers(src=None):
-    """核心直接叫外殼的名字、核心直接碰 #cover 裡的 DOM（照 SHELL_UI 分）⇒ 每一個：定義／元素、誰用在哪幾行。src ＝ 另一份 src 目錄（量別的版本）。"""
+def act_shell_layers(src=None, gate=False):
+    """核心直接叫外殼的名字、核心直接碰 #cover 裡的 DOM（照 SHELL_UI 分）⇒ 每一個：定義／元素、誰用在哪幾行。src ＝ 另一份 src 目錄（量別的版本）。
+    gate ＝ 建置前的閘門（TASK-0774 第 6 步）：有一個 ⇒ Fail（不建置）；都是 0 ⇒ 一行 ✓。"""
     node = shutil.which('node')
     if not node:
         raise Fail('找不到 node（src/js_refs.cjs、js_globals.cjs 要它）')
@@ -2035,8 +2031,12 @@ def act_shell_layers(src=None):
     for (f, k), L in sorted(dom.items()):
         log.append('  %-15s #%-12s ⇐ %s' % (f, k, ','.join(map(str, L))))
     nn = sum(len(L) for U in names.values() for L in U.values())
-    return log + ['核心 → 外殼：名字 %d 個、引用 %d 次；碰 #cover 的 DOM：%d 處（%d 個 id、%d 支檔）—— 拆完兩個都是 0' %
-                  (len(names), nn, sum(len(L) for L in dom.values()), len({k for f, k in dom}), len({f for f, k in dom}))]
+    tail = '核心 → 外殼：名字 %d 個、引用 %d 次；碰 #cover 的 DOM：%d 處（%d 個 id、%d 支檔）' % (len(names), nn, sum(len(L) for L in dom.values()), len({k for f, k in dom}), len({f for f, k in dom}))
+    if gate:
+        if names or dom:
+            raise Fail('核心不能叫外殼（TASK-0774；不建置）—— 改發事件（00_events.js）或讓外殼自己掛：\n' + '\n'.join(log[1:]) + '\n' + tail)
+        return ['✓ 核心 → 外殼：0（外殼 %s；核心不叫它們的名字、不碰 #cover 的 DOM）' % '、'.join(sorted(R))]
+    return log + [tail + '（兩個都要是 0：建置前會擋）']
 
 
 # ───────────────────────── 成品記住來源（TASK-0674） ─────────────────────────
@@ -2265,6 +2265,7 @@ def act_build(pack=True, single=False):   # pack：壓縮版（預設，TASK-058
         raise Fail('VoxelKit/_cache/ 少了 %s ⇒ 先 python -I admin.py cache（從成品解回）或 reimport' % '、'.join(miss))
     log += bundle_names_check()
     log += owner_check()
+    log += act_shell_layers(gate=True)
     code, out = run([sys.executable, '-I', INLINE, TPL, OUT])
     log.append(out.strip())
     if code != 0:
@@ -2451,7 +2452,7 @@ def act_build_code(base=None):
     if h0 != html0:
         i = next((k for k in range(min(len(h0), len(html0))) if h0[k] != html0[k]), min(len(h0), len(html0)))
         raise Fail('照 %s 的來源走同一條路重做，跟現在的成品不一樣（第 %d 行起）⇒ 建置程式改過、或成品不是這樣建的%s' % (rev, html0.count('\n', 0, i) + 1, full))
-    log = bundle_names_check() + owner_check()
+    log = bundle_names_check() + owner_check() + act_shell_layers(gate=True)
     log.append('✓ 船沒變：%d 艘的標籤、.vxk 指紋、改裝船的原船都跟 %s 一樣，船檔都在、雜湊對得上' % (len(idx), rev))
     log.append('✓ 照 %s 的來源走同一條路重做 ⇒ 跟現在的成品逐位元組相同（這個做法 ＝ 正式建置）' % rev)
     h1, M1 = code_html(work_read, ships_tag, log)

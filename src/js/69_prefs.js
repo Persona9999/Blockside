@@ -18,22 +18,6 @@ PREFS.write = PREFS.read && !PREF_Q.some(function (k) { return Q.has(k); }) && !
 // ?cmd=我方,敵方（艦隊指揮官，52_fleet.js CMD_SIDE）：放這裡 —— ⛔ 放在 52_fleet.js 那時 53_commander.js 的 CMD_NAMES 還沒定義 ⇒ 帶 ?cmd 一開就丟錯、整頁停在載入
 if (Q.has('cmd')) Q.get('cmd').split(',').forEach(function (w, i) { if (i < 2 && CMD_NAMES[w]) CMD_SIDE[i ? 'red' : 'blue'] = w; });
 if (Q.has('gauge')) Q.get('gauge').split(',').forEach(function (w, i) { if (i < 2 && (w === '1' || w === '0')) CMD_GAUGE[i ? 'red' : 'blue'] = w === '1'; });   // 搶上風（TASK-0679）：?gauge=我方,敵方（1 開／0 關）
-/** 出廠預設值（設定後台跳轉開的 ?admin=defaults；Tim 2026-10-15：「後台介面是否可以直接使用細節設定頁面的Layout(可以跳轉開啟) 只是變成套用成預設設定」「應該說用一樣的頁面去設定出廠預設值」）：
- *  開頁 ⇒ 細節設定頁（值 ＝ 這份成品裡設定檔的預設，PREFS 不讀不存）；「存成出廠預設」⇒ prefsSnap 跟預設不一樣的那幾項裡、是滑桿（LIM 有那個鍵、數字）的 ⇒ POST /api/defaults（admin.py act_defaults 只改 lim[鍵][2]）；
- *  其他（勾選、彈種倍率、砲長、主選單的選擇…）列出來、不存。存了 ⇒ 這一頁的 LIM 預設跟著換（再改從新的預設比）。「重建」⇒ /api/build。「回設定後台」⇒ 回 /。 */
-function admDefUI(page) {
-  page('det');
-  cfgAdm({ panel: 'detail', out: 'detAdmL', from: '用細節設定頁設出廠預設值…', build: 'detAdmB', back: ['detAdmX', 'detX', 'pgX'],   // 64_cfgkit.js：回設定後台 ＝ 關掉這個分頁（後台是開它的那一頁）
-    save: { id: 'detAdmS', run: function (post, out) {
-      var o = prefsSnap(), lim = {}, skip = [];
-      Object.keys(o).forEach(function (k) { if (k === 'v') return; if (LIM[k] && typeof o[k] === 'number') lim[k] = o[k]; else skip.push(k); });
-      if (!Object.keys(lim).length) { out.textContent = '（滑桿都跟出廠預設一樣，沒有要存的）' + (skip.length ? '\n不是滑桿、沒存：' + skip.join('、') : ''); return; }
-      post('save', { lim: lim }).then(function (j) {
-        if (j.ok) Object.keys(lim).forEach(function (k) { LIM[k][2] = lim[k]; });
-        if (skip.length) out.textContent += '\n不是滑桿、沒存：' + skip.join('、');
-      });
-    } } });
-}
 /** 存檔的描述表（TASK-0670：以前 prefsSnap／prefsApply 一項一項各寫一次）：每一項 ＝
  *    數字 prefNum(鍵, 範圍（函式：設定後台改了預設要讀到新的）, 整數, 讀, 寫, 網址參數)：跟範圍的第三格（預設）不一樣才存；讀的時候夾進範圍
  *    勾選 prefBool(鍵, 預設, 讀, 寫, 網址參數)：跟預設不一樣才存；讀的時候要是 true／false
