@@ -386,6 +386,12 @@ function flDraw() {
     gl.uniformMatrix4fv(P.wpool.u.uModel, false, sh.M); gl.uniform1f(P.wpool.u.uMix, wrwMix(me)); gl.bindVertexArray(me.vao); gl.drawArrays(gl.TRIANGLES, 0, me.n);
   });
   on = false;
+  R.forEach(function (e) {                                                  // 房間的水的側面（63_wrwater_gl.js wrwSides；只在透視、剖面有）：同一支側面著色器
+    var sh = e[0], me = e[1]; if (!me.sn) return;
+    if (!on) { on = true; begin(); gl.useProgram(P.pside.prog); setCommon(P.pside); gl.uniform1f(P.pside.u.uX, FLX3 ? 1 : 0); depU(P.pside); }
+    gl.uniformMatrix4fv(P.pside.u.uModel, false, sh.M); gl.bindVertexArray(me.svao); gl.drawArrays(gl.TRIANGLES, 0, me.sn);
+  });
+  on = false;
   L.forEach(function (e) {                                                  // 側面與水瀑（flSides，GFX.pside）
     var sh = e[0], me = e[1]; if (!GFX.pside || !me.sn) return;
     if (!on) { on = true; begin(); gl.useProgram(P.pside.prog); setCommon(P.pside); gl.uniform1f(P.pside.u.uX, FLX3 ? 1 : 0); depU(P.pside); }
@@ -405,6 +411,7 @@ function flPushJets(pushPt) {
     var fl = sh.fl; if (!fl || ((sh.broken || sh.sinkingFinal) && !fl.vis) || sh.sunk) return;
     var J = fl.J, M = sh.M;
     for (var i = 0; i < J.n; i++) { var o = i * 3; pushPt(M4.pt(M, J.p[o], J.p[o + 1], J.p[o + 2]), 0.12 + 0.6 * Math.cbrt(J.vol[i]), col, 0.75, -1); }
+    if (sh.wrs && sh.wrs.J.n) { var J2 = sh.wrs.J, up = sh.wrs.upm; for (var i2 = 0; i2 < J2.n; i2++) { var o2 = i2 * 3; pushPt(M4.pt(M, J2.p[o2], J2.p[o2 + 1], J2.p[o2 + 2]), 0.12 + 0.6 * Math.cbrt(J2.u[i2] / up), col, 0.75, -1); } }   // 房間模擬的粒子（TASK-0808，33_wrsim.js；進水報表 wsim=1）
     var FS = GFX.fall && !FL_HIDE && fl.mesh && fl.mesh.fn ? fl.mesh.falls : null;   // 水幕的落點：每一道每一格幾顆水花（只給畫面：Math.random，⛔ 不碰 rnd()／rndF()）
     if (FS) for (var k = 0; k < FS.length; k++) {
       var f = FS[k], n = 1 + Math.min(3, Math.round(f.r * 6)), hw = f.w / S * 0.5;

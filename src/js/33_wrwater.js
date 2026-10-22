@@ -26,8 +26,8 @@ function wrColZ(W, X, j, u) {
   var o = W.colOff[j], p = o + j, nz = W.colNZ[j], d;
   if (u <= 0) { for (d = 0; d < nz && !W.cnt[o + d]; d++); return W.colZ0[j] + Math.min(d, nz); }
   if (u >= X.pre[p + nz]) return W.colZ0[j] + nz;
-  var lo = 0, hi = nz;                                                // pre[p + lo] ≤ u < pre[p + hi]：二分找那一層
-  while (hi - lo > 1) { var m = (lo + hi) >> 1; if (X.pre[p + m] <= u) lo = m; else hi = m; }
+  var lo = 0, hi = nz;                                                // pre[p + lo] < u ≤ pre[p + hi]：二分找那一層（剛好裝滿下面那一段 ⇒ 水面在那一段的頂，⛔ 不跳到空著的甲板層上面那一段的底：TASK-0808 開口的水頭會多讀一截）
+  while (hi - lo > 1) { var m = (lo + hi) >> 1; if (X.pre[p + m] < u) lo = m; else hi = m; }
   var cap = X.pre[p + lo + 1] - X.pre[p + lo];
   return W.colZ0[j] + lo + (cap > 0 ? (u - X.pre[p + lo]) / cap : 0);
 }

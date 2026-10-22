@@ -43,9 +43,42 @@ def save(R, hull, phx, d):
             r2['map'] = mname
         rows.append(r2)
     R2 = dict(R); R2['rows'] = rows
+    if R.get('wpic'):                                                   # 房間模擬的過程圖（81_floodlab.js wsimPic）：每一組三張 ⇒ img/、另寫 wsim_<船>_<檔>.html（拖拉看過程）
+        pics = []
+        for w in R['wpic']:
+            w2 = dict(w)
+            for k in ('side', 'fill', 'press', 'top'):
+                name = 'img/wsim_%s_%s_%06.1f_%s.png' % (hull, phx, w['t'], k)
+                with open(os.path.join(d, name), 'wb') as f:
+                    f.write(base64.b64decode(w[k].split(',', 1)[1]))
+                w2[k] = name
+            pics.append(w2)
+        R2['wpic'] = pics
+        player(pics, hull, phx, d)
     with open(os.path.join(d, 'flood_%s_%s.json' % (hull, phx)), 'w', encoding='utf-8', newline='\n') as f:
         json.dump(R2, f, ensure_ascii=False, indent=1)
     return R2
+
+
+def player(pics, hull, phx, d):
+    # 一頁：拖拉（或 ←→、播放）看每一組的側視、裝了幾成、俯視；下面是那一刻的讀數與房間表
+    J = json.dumps([{'t': w['t'], 'side': w['side'], 'fill': w['fill'], 'press': w.get('press'), 'top': w['top'], 'rooms': w['rooms'], 'n': w.get('nRooms'), 'no': w.get('spillNo'),
+                     'r': {k: (w.get('r') or {}).get(k) for k in ('vol', 'inTot', 'outTot', 'brOut', 'jets', 'jetM3', 'dbg', 'sub', 'ms', 'cross', 'cons')}} for w in pics], ensure_ascii=False)
+    o = ['<!doctype html><meta charset="utf-8"><title>房間模擬過程 %s %s</title>' % (html.escape(hull), html.escape(phx)), CSS,
+         '<style>img{image-rendering:pixelated;max-width:100%}#bar{position:sticky;top:0;background:#fff;padding:6px 0}</style>',
+         '<h2>%s・%s 房間模擬過程（%d 組）</h2>' % (html.escape(hull), html.escape(phx), len(pics)),
+         '<p>側視：x 往右、z 往上；底色 ＝ 那一排最多的那一間（房間色調暗）、藍 ＝ 那一排有幾成在水面以下。裝了幾成：灰 乾、青 → 黃 一部分、紅 整間滿。俯視：x 往右、y 往下。'
+         '標記：紅十字 破口、黃點 飛行中的粒子、洋紅 這一段溢出（記成流回海裡）的落點。</p>',
+         '<div id="bar"><input id="s" type="range" min="0" max="%d" value="0" style="width:70%%"> <button id="p">播放</button> <b id="t"></b></div>' % (len(pics) - 1),
+         '<h3>側視（水）</h3><img id="iside"><h3>側視（每一間裝了幾成）</h3><img id="ifill"><h3>側視（水壓：淺黃 → 深紅 ＝ 0 → 2 m 水頭；洋紅 ＝ 水壓高過海面）</h3><img id="ipress"><h3>俯視（水）</h3><img id="itop"><pre id="info"></pre>',
+         '<script>var P=%s,s=document.getElementById("s"),tm=null;' % J,
+         'function show(i){var w=P[i];["side","fill","press","top"].forEach(function(k){document.getElementById("i"+k).src=w[k];});'
+         'document.getElementById("t").textContent="t "+w.t+" s";'
+         'document.getElementById("info").textContent="讀數 "+JSON.stringify(w.r)+"\\n沒落進房間的溢出 "+w.no+" m³\\n房間（共 "+w.n+" 間有水或溢出）[房, 容積 m³, 水 m³, 幾成, 這一段溢出 m³]\\n"+w.rooms.map(function(x){return JSON.stringify(x);}).join("\\n");}',
+         's.oninput=function(){show(+s.value);};document.onkeydown=function(e){if(e.key=="ArrowRight")s.value=Math.min(P.length-1,+s.value+1);else if(e.key=="ArrowLeft")s.value=Math.max(0,+s.value-1);else return;show(+s.value);};',
+         'document.getElementById("p").onclick=function(){if(tm){clearInterval(tm);tm=null;return;}tm=setInterval(function(){var v=(+s.value+1)%P.length;s.value=v;show(v);},400);};show(0);</script>']
+    with open(os.path.join(d, 'wsim_%s_%s.html' % (hull, phx)), 'w', encoding='utf-8', newline='\n') as f:
+        f.write('\n'.join(o))
 
 
 def table(R2):
@@ -115,6 +148,10 @@ def main():
     for hull, phx, R in res:                                            # 每秒一筆（81_floodlab.js trace／flabEx）：t、水、進、出、艙內最高水面 − 海面、高出海面的水、下沉
         if R and R.get('trace'):
             print(hull, phx, 'trace t/m3/進/出/高出/高出m3/sink:', ' '.join('%s:%s/%s/%s/%s/%s/%s' % tuple(x) for x in R['trace']))
+    for hull, phx, R in res:                                            # 房間模擬的過程（wsimPic）：每一組一行
+        for w in (R or {}).get('wpic') or []:
+            r = w.get('r') or {}
+            print(hull, phx, 'wsim t', w['t'], 'vol', r.get('vol'), 'in', r.get('inTot'), 'out', r.get('outTot'), 'jets', r.get('jets'), 'dbg', r.get('dbg'), 'top', w['rooms'][:4])
     print('寫了', os.path.join(d, 'index.html'))
 
 

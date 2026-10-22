@@ -118,9 +118,16 @@ function wrwMesh(sh) {
   if (!FL_SNAP && me.n && now - me.tw < WRW_MS) return me;
   var mix0 = me.n ? wrwMix(me) : 1, prev = me.cv, j, r;
   me.tw = now;
-  wrwBridge(sh, me); me.u.fill(0); var tB = performance.now();
-  var wetR = [];
-  for (r = 0; r < NR; r++) { var Ur = Math.round(me.U[r]); me.h[r] = Ur >= 1 ? wrLevelRoom(W, X, M, r, Ur, me.u) : NaN; if (Ur >= 1) wetR.push(r); }
+  var wetR = [], tB;
+  if (sh.wrs) {                                                             // 有房間模擬（TASK-0808，33_wrsim.js）⇒ 直接畫它每一欄的水（同一把尺；高度場 ⇒ 看得到水位差與晃動）
+    me.u.set(sh.wrs.u); me.U.fill(0); me.tot = me.lost = 0;
+    for (j = 0; j < NCOL; j++) if (me.u[j]) me.U[W.colRoom[j]] += me.u[j];
+    tB = performance.now();
+    for (r = 0; r < NR; r++) { me.h[r] = NaN; if (me.U[r] >= 1) { wetR.push(r); me.tot += me.U[r] / WR_U * S * S * S; } }
+  } else {
+    wrwBridge(sh, me); me.u.fill(0); tB = performance.now();
+    for (r = 0; r < NR; r++) { var Ur = Math.round(me.U[r]); me.h[r] = Ur >= 1 ? wrLevelRoom(W, X, M, r, Ur, me.u) : NaN; if (Ur >= 1) wetR.push(r); }
+  }
   // 每一欄有水面（有水、沒滿）的世界高度 ⇒ 角（同一間房）累加
   var tL = performance.now(), NCX1 = W.NCX + 1, NCC = NCX1 * (W.NCY + 1), CS = new Map(), cols = [], hcol = [], HK = me.hk = new Map(), NCK = W.NCX * W.NCY;   // HK：(房, 欄) ⇒ 水面世界高度（細波 wrwRipples 查）
   function addC(k, v) { var e = CS.get(k); if (e) { e[0] += v; e[1]++; } else CS.set(k, [v, 1]); }
@@ -178,6 +185,7 @@ function wrwMesh(sh) {
       quads++;
     }
   }
+  if (FLX3 || CUTV.half) wrwSides(sh, me, cv); else me.sn = 0;           // 水的側面：只在透視、剖面畫（平常被牆擋住，⛔ 畫了會跟牆搶深度）
   gl.bindVertexArray(me.vao); gl.bindBuffer(gl.ARRAY_BUFFER, me.vb);
   if (q * 7 > me.cap) {
     me.cap = me.buf.length; gl.bufferData(gl.ARRAY_BUFFER, me.cap * 4, gl.DYNAMIC_DRAW);
@@ -189,6 +197,66 @@ function wrwMesh(sh) {
   gl.bindVertexArray(null);
   me.n = q;
   var Ut = 0; wetR.forEach(function (r) { Ut += Math.round(me.U[r]); });
-  me.st = { rooms: wetR.length, cols: cols.length, clip: clip, vox: vox, quads: quads, tris: q / 3, m3: +(Ut / WR_U * S * S * S).toFixed(2), src: +me.tot.toFixed(2), lost: +me.lost.toFixed(3), ms: +(performance.now() - now).toFixed(2), msB: +(tB - now).toFixed(2), msL: +(tL - tB).toFixed(2) };
+  me.st = { rooms: wetR.length, cols: cols.length, clip: clip, vox: vox, quads: quads, tris: q / 3, sides: me.sn / 6, m3: +(Ut / WR_U * S * S * S).toFixed(2), src: +me.tot.toFixed(2), lost: +me.lost.toFixed(3), ms: +(performance.now() - now).toFixed(2), msB: +(tB - now).toFixed(2), msL: +(tL - tB).toFixed(2) };
   return me;
+}
+/** 水的側面（Tim 2026-10-22「按x的透視水 是否可以顯示水的側面(不然看起來是片狀的 不像水體)」）：跟水面同一次重做，畫在 P.pside（63_flood_gl.js，水格的側面那一支著色器）。
+ *  每一欄有水的（含滿到天花板的）往前後左右看：同一間的鄰欄也有水、水面差不到 2 cm ⇒ 水連著、不畫；同一間的鄰欄水比較低 ⇒ 從這欄的水面往下接到鄰欄的水面；
+ *  其他（牆、別間、船殼、鄰欄乾的）⇒ 從這欄的水面往下到這一段的地板（從水面那一層往下、照格數連著有空氣的最下面那一層；⛔ 不穿過甲板到下一段）。
+ *  頂 ＝ 水面的角（同一份 cv）⇒ 側面頂跟水面接得起來；滿到天花板的欄（沒有水面）⇒ 頂 ＝ 欄頂 ⇒ 灌滿的房間看起來是一整塊水。
+ *  ⚠ 側面照重做那一刻的姿態換成船上的 z、不跟著水面的骨架內插（同水格的側面）。只動畫面。 */
+function wrwSides(sh, me, cv) {
+  var T = sh.T, W = T.wrm, X = wrxOf(T), M = sh.M, C = W.c, n = W.colRoom.length, NCX1 = W.NCX + 1, NCC = NCX1 * (W.NCY + 1), NCK = W.NCX * W.NCY, u = me.u, j, d;
+  var NB = T.wrwNb;
+  if (!NB) {                                                                // 同一間的鄰欄（四個方向，−1 ＝ 沒有）：一型船算一次
+    var key = new Map(); for (j = 0; j < n; j++) key.set(W.colRoom[j] * NCK + W.colCX[j] * W.NCY + W.colCY[j], j);
+    NB = T.wrwNb = new Int32Array(4 * n).fill(-1);
+    for (j = 0; j < n; j++) {
+      var r0 = W.colRoom[j], cx = W.colCX[j], cy = W.colCY[j], k;
+      if (cx > 0 && (k = key.get(r0 * NCK + (cx - 1) * W.NCY + cy)) !== undefined) NB[4 * j] = k;
+      if (cx + 1 < W.NCX && (k = key.get(r0 * NCK + (cx + 1) * W.NCY + cy)) !== undefined) NB[4 * j + 1] = k;
+      if (cy > 0 && (k = key.get(r0 * NCK + cx * W.NCY + cy - 1)) !== undefined) NB[4 * j + 2] = k;
+      if (cy + 1 < W.NCY && (k = key.get(r0 * NCK + cx * W.NCY + cy + 1)) !== undefined) NB[4 * j + 3] = k;
+    }
+  }
+  function gz(x, y, hw) { return (hw - (M[1] * x + M[5] * y + M[13])) / M[9]; }
+  function lev(c) { return u[c] > 0 ? M[1] * X.cx[c] + M[5] * X.cy[c] + M[9] * wrColZ(W, X, c, u[c]) + M[13] : -1e9; }   // 那一欄的水面（世界高度；滿 ⇒ 欄頂）
+  var sq = 0, SB = me.sbuf || (me.sbuf = new Float32Array(7 * 6 * 512));
+  for (j = 0; j < n; j++) {
+    if (u[j] <= 0) continue;
+    var r = W.colRoom[j], gx = W.colCX[j], gy = W.colCY[j], x0 = W.x0 + gx * C, y0 = W.ylo + gy * C, wc = Math.min(C, W.nxv - gx * C), hc = Math.min(C, W.ny - gy * C);
+    var zlo = W.colZ0[j], zhi = zlo + W.colNZ[j], hj = lev(j), full = u[j] >= wrColCap(W, X, j);
+    for (d = 0; d < 4; d++) {
+      var nb = NB[4 * j + d], hn = nb >= 0 ? lev(nb) : -1e9;
+      if (nb >= 0 && hn >= hj - 0.02) continue;                            // 水連著
+      var xa, ya, xb, yb, ka, kb;                                          // 邊的兩端（格座標）與兩端的角（同水面的鍵）
+      if (d === 0) { xa = xb = x0; ya = y0; yb = y0 + hc; ka = r * NCC + gy * NCX1 + gx; kb = ka + NCX1; }
+      else if (d === 1) { xa = xb = x0 + wc; ya = y0; yb = y0 + hc; ka = r * NCC + gy * NCX1 + gx + 1; kb = ka + NCX1; }
+      else if (d === 2) { ya = yb = y0; xa = x0; xb = x0 + wc; ka = r * NCC + gy * NCX1 + gx; kb = ka + 1; }
+      else { ya = yb = y0 + hc; xa = x0; xb = x0 + wc; ka = r * NCC + (gy + 1) * NCX1 + gx; kb = ka + 1; }
+      var ca = full ? null : cv.get(ka), cb = full ? null : cv.get(kb);
+      var za = clamp(ca ? gz(xa, ya, ca[1]) : gz(xa, ya, hj), zlo, zhi), zb = clamp(cb ? gz(xb, yb, cb[1]) : gz(xb, yb, hj), zlo, zhi);
+      var za1, zb1;
+      if (nb >= 0 && hn > -1e8) { za1 = clamp(gz(xa, ya, hn), zlo, za); zb1 = clamp(gz(xb, yb, hn), zlo, zb); }   // 接到鄰欄（同一間、比較低）的水面
+      else {                                                               // 到這一段的地板：從水面那一層往下，連著有空氣的最下面那一層
+        var L = clamp(Math.floor(Math.max(za, zb) - 1e-3) - zlo, 0, W.colNZ[j] - 1), off = W.colOff[j];
+        while (L > 0 && W.cnt[off + L - 1] > 0) L--;
+        za1 = zb1 = zlo + L;
+      }
+      if (za - za1 < 0.3 && zb - zb1 < 0.3) continue;
+      if ((sq + 6) * 7 > SB.length) { var SB2 = new Float32Array(SB.length * 2); SB2.set(SB); SB = me.sbuf = SB2; }
+      var Lm = Math.max(za - za1, zb - zb1) * S, V = [[xa, ya, za, 0, 0], [xb, yb, zb, 1, 0], [xb, yb, zb1, 1, 1], [xa, ya, za, 0, 0], [xb, yb, zb1, 1, 1], [xa, ya, za1, 0, 1]];
+      for (var e = 0; e < 6; e++) { var o = sq * 7, p = V[e]; SB[o] = p[0]; SB[o + 1] = p[1]; SB[o + 2] = p[2]; SB[o + 3] = p[3]; SB[o + 4] = p[4]; SB[o + 5] = Lm; SB[o + 6] = 0; sq++; }
+    }
+  }
+  if (!me.svao) {
+    me.svao = gl.createVertexArray(); me.svb = gl.createBuffer(); me.scap = 0;
+    gl.bindVertexArray(me.svao); gl.bindBuffer(gl.ARRAY_BUFFER, me.svb);
+    gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 28, 0); gl.enableVertexAttribArray(1); gl.vertexAttribPointer(1, 4, gl.FLOAT, false, 28, 12);
+  }
+  gl.bindVertexArray(me.svao); gl.bindBuffer(gl.ARRAY_BUFFER, me.svb);
+  if (sq * 7 > me.scap) { me.scap = SB.length; gl.bufferData(gl.ARRAY_BUFFER, me.scap * 4, gl.DYNAMIC_DRAW); }
+  if (sq) gl.bufferSubData(gl.ARRAY_BUFFER, 0, SB, 0, sq * 7);
+  gl.bindVertexArray(null);
+  me.sn = sq;
 }
