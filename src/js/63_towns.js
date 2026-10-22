@@ -38,7 +38,7 @@ var TOWN_LOD = [160, 800], TOWN_FAR = [2400, 3000], TOWN_BAND = [24, 60, 300], T
 var TOWN_MESH_MS = 8;                                                    // 模型網格化每段最多幾 ms 就讓出一次（townMesh；跟地球儀同一條主執行緒）
 var TOWN_WALL_CORNER = 30, TOWN_WALL_KMAX = 1;                         // 城牆：轉角件從轉幾度起擺；斜接最多切多斜（tan，1 ＝ 轉 90° 的角平分）
 var TOWN_SLAB_KMAX = 2;                                                 // 碼頭、棧橋的板：轉角斜接最多拉長幾倍（2 ＝ 轉 120°；再急就在轉角那一點變窄）
-var TOWNS = { on: Q.get('towns') !== '0', prosp: {}, list: [],pend: [], ver: 0, want: 0, err: null, kit: null, kitP: null, idx: null, kitHas: null, kitRedo: false, mwait: null, prog: null, progJ: null, dirty: true, eye: null, sig: '', buf: [], grp: null,
+var TOWNS = { on: Q.get('towns') !== '0', prosp: {}, list: [],pend: [], ver: 0, want: 0, err: null, kit: null, kitP: null, idx: null, kitHas: null, kitRedo: false, kitBusy: false, mwait: null, prog: null, progJ: null, dirty: true, eye: null, sig: '', buf: [], grp: null,
   stat: { towns: 0, lots: 0, inst: 0, walls: 0, corners: 0, snapped: 0, skip: {}, d0: 0, d1: 0, d2: 0, d3: 0, plinth: 0, tris: 0, binMs: 0, kitMs: 0, meshBaked: 0, meshLive: 0, meshCheck: null, gradeMs: 0, chunks: 0, regraded: 0, drawMs: 0 } };
 var TOWN_J0 = [0, 0, 0, 0];                                             // 建築的 aJ（不斜接、不順坡、牆基不延）
 var TOWN_USE_ALT = { commandant: ['house'], governor: ['townhall'] };   // 那一套沒有那種模型 ⇒ 用哪一種代（BUILDING_SPEC §7：fr 沒有長官的屋子；carib 有）
@@ -75,22 +75,24 @@ function townGot(L, err, idx) {
   if (!BED || !BED.A || !L || !L.length) return;
   var t0 = performance.now(), n0 = TOWNS.list.length;
   L.forEach(function (p) { if (p && p.format === 'blocksail-town' && !TOWNS.list.some(function (T) { return T.id === p.id; })) TOWNS.list.push(townPrep(p)); });
-  if (TOWNS.list.length === n0) return;                                 // 都是已經有的（外面那一頁做好一座先送一座、最後再給整份）⇒ 不重建整地、網格、遠景
+  if (TOWNS.list.length === n0) return;
+  var NEW = TOWNS.list.slice(n0);                                       // 新來的城：只有跟它們疊到的塊要重新整地（townHv 照 T.v 判斷舊的整地還能不能用；TASK-0826）                                 // 都是已經有的（外面那一頁做好一座先送一座、最後再給整份）⇒ 不重建整地、網格、遠景
   var I = townIdx();                                                    // 新來的城要的模型解好的那一份沒有 ⇒ 丟掉重要（解到一半 ⇒ 解完再丟）
-  if (I && TOWNS.kitHas && townNeed(I).some(function (nm) { return TOWNS.kitHas.indexOf(nm) < 0; })) { if (TOWNS.kit) townKitFree(); else TOWNS.kitRedo = true; }
+  if (I && TOWNS.kitHas && townNeed(I).some(function (nm) { return TOWNS.kitHas.indexOf(nm) < 0; })) townKitStale();
   TOWNS.ver++; TOWNS.dirty = true; TOWNS.stat.towns = TOWNS.list.length;
+  NEW.forEach(function (T) { T.v = TOWNS.ver; });
   TOWNS.stat.prepMs = +(performance.now() - t0).toFixed(1);
   Object.keys(Object.assign({}, BED.ch, BED.cm)).forEach(function (k) {   // 畫著的那一份（原精度或外圈的中等塊）：有畫面迴圈 ⇒ 排隊（townRegrade），不然照舊當場重發
-    var C = bedShowC(k); if (!(C && townOver(C.cx, C.cy))) return;
+    var C = bedShowC(k); if (!(C && townOver(C.cx, C.cy, NEW))) return;
     if (BED_SLICE) (TOWNS.rgq || (TOWNS.rgq = {}))[k] = 1; else evEmit('bedChunk', C.cx, C.cy, C);
   });
   Object.keys(BEDDRY.src).forEach(function (k) {                         // 遮罩記著、現在沒在畫的那幾塊（63_bed_gl.js bedDryRegrade）：同一個隊伍
-    var C = BEDDRY.src[k]; if (bedShowC(k) || !(C && townOver(C.cx, C.cy))) return;
+    var C = BEDDRY.src[k]; if (bedShowC(k) || !(C && townOver(C.cx, C.cy, NEW))) return;
     if (BED_SLICE) (TOWNS.rgq || (TOWNS.rgq = {}))[k] = 1; else bedDryRegrade(k);
   });
   Object.keys(BEDFAR.g).forEach(function (k) {                          // 遠景塊：網格與樹冠殼是照舊的高度建的 ⇒ 丟掉、放回去重讀（63_bed_gl.js bedFarStep 照離旗艦遠近挑）
     if (bedShowC(k)) return;
-    var c = k.split('_').map(Number); if (!townOver(c[0], c[1])) return;
+    var c = k.split('_').map(Number); if (!townOver(c[0], c[1], NEW)) return;
     bedFarDrop(k);
     if (BEDFAR.todo) BEDFAR.todo.push([c[0], c[1], 1, 0]);
   });
@@ -123,9 +125,14 @@ function townRgWait(T) {
   return Object.keys(Q).some(function (k) { var c = k.split('_'), x = +c[0] * S, z = +c[1] * S; return T.box[0] < x + S && T.box[2] > x && T.box[1] < z + S && T.box[3] > z; });
 }
 /** 塊 (cx, cy) 跟哪一座城的外框疊到（海域座標）。 */
-function townOver(cx, cy) {
+function townOver(cx, cy, L) {
   var S = BED.A.chunk, e0 = cx * S, s0 = cy * S;
-  return TOWNS.list.some(function (T) { return T.box[0] < e0 + S && T.box[2] > e0 && T.box[1] < s0 + S && T.box[3] > s0; });
+  return (L || TOWNS.list).some(function (T) { return T.box[0] < e0 + S && T.box[2] > e0 && T.box[1] < s0 + S && T.box[3] > s0; });
+}
+/** 塊 C 整地（C.tv）之後有沒有新來的城疊上來（townHv 的快取還能不能用）。 */
+function townNewer(C) {
+  var S = BED.A.chunk, e0 = C.cx * S, s0 = C.cy * S;
+  return TOWNS.list.some(function (T) { return T.v > C.tv && T.box[0] < e0 + S && T.box[2] > e0 && T.box[1] < s0 + S && T.box[3] > s0; });
 }
 /** 規劃 ⇒ 一座城（海域座標的路、整地、清樹，世界座標的實例；模型的實例等要用到的模型解好（townKit）才建 ⇒ townInst）。 */
 function townPrep(p) {
@@ -151,11 +158,12 @@ function townPrep(p) {
   return { id: p.id, name: p.name, tier: p.tier, style: p.style, styles: p.styles || [p.style || TOWN_STYLE_DEF, TOWN_STYLE_DEF], seed: p.seed, p: p, ox: ox, oy: oy, kx: kx, bank: bank, E: E, box: box, roads: roads, grade: grade, clr: clr, cen: cen, D2R: D2R, inst: null, ground: null, shell: null };
 }
 
-// ── 整地與清樹（每塊照 TOWNS.ver 算一次；C.h 換過（大漩渦重烤）也重算） ──
+// ── 整地與清樹（每塊算一次；之後有新的城疊上來（T.v 比這塊整地時的 C.tv 新）、C.h 換過（大漩渦重烤）才重算） ──
+//   以前照 TOWNS.ver：來了一座城，每一塊（連跟它不相干的）的整地都失效 ⇒ 加拉塔晚到時君士坦丁堡重建實例那一格把底下約 100 塊重整一遍（TASK-0826）。
 /** 給畫面的高度（Int16 分米，同 C.h 的排法）：有城疊到 ⇒ 整過地的那一份（C.hv），沒有 ⇒ C.h 本身。順手算清樹的遮罩（C.tc）。 */
 function townHv(C) {
   if (!TOWNS.list.length || !BED || !BED.A) return C.h;
-  if (C.tv === TOWNS.ver && C.tvh === C.h) return C.hv || C.h;
+  if (C.tv != null && C.tvh === C.h && !townNewer(C)) return C.hv || C.h;
   C.tv = TOWNS.ver; C.tvh = C.h; C.hv = null; C.tc = null;
   if (!townOver(C.cx, C.cy)) return C.h;
   var t0 = performance.now(), A = BED.A, S = A.chunk, st = C.step, n = C.n, e0 = C.cx * S, s0 = C.cy * S, h0 = C.h, N = n * n, g = new Float32Array(N), fl = new Uint8Array(N), i, j, o;
@@ -364,19 +372,19 @@ function townProspSet(v, id) {
   var ids = id != null ? [id] : TOWNS.list.map(function (T) { return T.id; });
   ids.forEach(function (k) { if (v == null) delete TOWNS.prosp[k]; else TOWNS.prosp[k] = +v; });
   var I = townIdx();
-  if (I && TOWNS.kitHas && townNeed(I).some(function (nm) { return TOWNS.kitHas.indexOf(nm) < 0; })) { if (TOWNS.kit) townKitFree(); else TOWNS.kitRedo = true; }
+  if (I && TOWNS.kitHas && townNeed(I).some(function (nm) { return TOWNS.kitHas.indexOf(nm) < 0; })) townKitStale();
   TOWNS.list.forEach(function (T) { T.inst = null; }); TOWNS.dirty = true;
   return TOWNS.list.map(function (T) {
     var pr = townProsp(T);
     return { id: T.id, tier: T.tier || 1, prosp: pr, lv: townWallLv(T.tier || 1, pr), kits: I ? (T.p.walls || []).map(function (w) { return townWallKit(I, T, w, false); }) : null };
   });
 }
-/** 收到的城會用到哪幾個模型：地塊照用途的整份候選（townInst 在裡面照雜湊挑）、城牆那一套的每一型（townWall：門、塔、斷面、收尾、轉角；套照 townWallKit）。 */
-function townNeed(I) {
+/** 收到的城會用到哪幾個模型（wallsOnly ⇒ 只要城牆那幾套；townKit 骨架那一段）：地塊照用途的整份候選（townInst 在裡面照雜湊挑）、城牆那一套的每一型（townWall：門、塔、斷面、收尾、轉角；套照 townWallKit）。 */
+function townNeed(I, wallsOnly) {
   var S = {};
   function add(L) { (L || []).forEach(function (nm) { S[nm] = 1; }); }
   TOWNS.list.forEach(function (T) {
-    (T.p.lots || []).forEach(function (l) {
+    if (!wallsOnly) (T.p.lots || []).forEach(function (l) {
       if (l.use === 'plot' || l.use === 'plaza') return;
       add(townPick(I, T.styles, l));
     });
@@ -400,22 +408,46 @@ function townModels(names) {
 }
 /** 外面那一頁回的模型（08_seabed.js；出錯 ⇒ err）。 */
 function townModelsGot(M, err) { var w = TOWNS.mwait; TOWNS.mwait = null; if (!w) return; if (err || !M) w.bad(new Error(err || '外面那一頁沒給模型')); else w.ok(M); }
-/** 要用到的模型解好（近、中各一份網格；收到的貼圖一個模型一列往下排成一張）⇒ TOWNS.kit。第一次要畫才做（非同步；好了才建實例）。 */
+// 骨架先出（TASK-0826；Tim 2026-10-22「是否可以讓棧橋 城牆分開載入與顯示(且優先)」）：以前一次解整組（君士坦丁堡 28 個）⇒ 一次建全部實例 ⇒ 城牆排在全部模型後面。
+//   ⇒ 分兩段：① 只解城牆那幾套（townNeed wallsOnly）⇒ K.part ⇒ 實例只有城牆（townInst）② 解整組 ⇒ 換成完整的實例（townKitSet 當場重建、再放掉 ①，城牆不會空一格）。
+//   棧橋、碼頭在地面的帶子裡（townGroundTile）：不等完整的實例、有棧橋碼頭的區先建（townDraw、townGroundNext）。
+//   城牆那幾套就是全部（小城沒有牆、或只有牆）⇒ 只解一次。網址 ?townskel=0 ⇒ 照以前一次解整組、地面等實例。
+var TOWN_SKEL = Q.get('townskel') !== '0';
+/** 要用到的模型解好（近、中各一份網格；收到的貼圖一個模型一列往下排成一張）⇒ TOWNS.kit。第一次要畫才做（非同步；好了才建實例）；骨架先出見上。 */
 function townKit() {
   if (TOWNS.kitP) return TOWNS.kitP;
   var I = townIdx();
   if (!I) { if (!TOWNS.err) TOWNS.err = '沒有城鎮模型的索引（外面那一頁沒給 kit、或檔案模式沒有 maps/' + BED.A.id + '/townkit/index.js）'; return null; }
-  var t0 = performance.now(), names = I.names, need = townNeed(I), M = {};
-  TOWNS.kitHas = need; TOWNS.stat.meshBaked = TOWNS.stat.meshLive = 0; TOWNS.stat.meshCheck = null;   // 這一份模型組：幾個用烘好的網格、幾個現場網格化（townModelMesh）
-  TOWNS.kitP = townModels(need).then(function (D) {
-    return Promise.all(need.map(function (nm) {
-      var m0 = I.models[nm], d = D[nm];
-      if (!d) throw new Error('外面那一頁沒給 ' + nm);
-      return townModelMesh(nm, d, m0).then(function (L) {
-        M[nm] = { nm: nm, i: names.indexOf(nm), m: m0, lod: L, png: d.png, uc0: [m0.mpv, m0.size[0] * m0.mpv / 2, m0.size[1] * m0.mpv / 2], uc1: [m0.mpv * m0.lo.f, m0.size[0] * m0.mpv / 2, m0.size[1] * m0.mpv / 2], win: townWinMesh(m0) };   // win：亮窗的窗片（夜裡的燈）
-      });
-    }));
-  }).then(function () {
+  var t0 = performance.now(), need = townNeed(I), wneed = TOWN_SKEL && !TOWNS.kit ? townNeed(I, true) : [], S = TOWNS.stat, P;
+  TOWNS.kitHas = need; TOWNS.kitBusy = true; S.meshBaked = S.meshLive = 0; S.meshCheck = null; S.skelMs = null;   // mesh*：這一份模型組幾個用烘好的網格、幾個現場網格化（townModelMesh；兩段加起來）
+  function mine(K) { if (TOWNS.kitP === P) return true; townKitGpuFree(K, TOWNS.kit); return false; }   // 中途被丟掉重來（townKitFree）⇒ 這一份不要了（跟畫著的那一組共用的網格留著）
+  var D = null, part = null;                                             // 一次跟外面那一頁要整組（D）；骨架先用城牆那幾個組（part），整組沿用它們的網格（不再解一次）
+  var first = townModels(need).then(function (d) {
+    D = d; if (!(wneed.length && wneed.length < need.length)) return;
+    return townKitMake(I, wneed, D, null).then(function (K) {
+      if (!mine(K)) return; K.part = true; part = K; townKitSet(K); S.skelMs = +(performance.now() - t0).toFixed(1); S.skelN = wneed.length;
+    });
+  });
+  P = TOWNS.kitP = first.then(function () { return TOWNS.kitP === P ? townKitMake(I, need, D, part) : null; }).then(function (K) {
+    if (!K || !mine(K)) return;
+    TOWNS.kitBusy = false; townKitSet(K);
+    S.kitMs = +(performance.now() - t0).toFixed(1);
+    S.kitN = need.length + '/' + I.names.length;                       // 要了幾個／索引裡有幾個
+    S.kitTris = need.reduce(function (o, nm) { o[nm] = [K.M[nm].lod[0].nq * 2, K.M[nm].lod[1].nq * 2]; return o; }, {});
+    if (TOWNS.kitRedo) { TOWNS.kitRedo = false; townKitRestart(); }   // 解的時候又來了新的城、要的模型變多 ⇒ 再解一次（這一份照畫，見 townKitStale）
+  }, function (e) { if (TOWNS.kitP === P) TOWNS.kitBusy = false; TOWNS.err = '模型解不開：' + e.message; console.warn('城鎮：' + TOWNS.err); });
+  return TOWNS.kitP;
+}
+/** 那幾個模型（D ＝ 外面那一頁給的資料，townModels）⇒ Promise<模型組>：網格（烘好的或現場算；reuse ＝ 骨架那一組，有的直接沿用它的網格與窗片）、貼圖照名字一個一列往下排成一張。 */
+function townKitMake(I, need, D, reuse) {
+  var names = I.names, M = {};
+  return Promise.all(need.map(function (nm) {
+    var m0 = I.models[nm], d = D[nm], R = reuse && reuse.M[nm];
+    if (!d) throw new Error('外面那一頁沒給 ' + nm);
+    function put(L, win) { M[nm] = { nm: nm, i: names.indexOf(nm), m: m0, lod: L, png: d.png, uc0: [m0.mpv, m0.size[0] * m0.mpv / 2, m0.size[1] * m0.mpv / 2], uc1: [m0.mpv * m0.lo.f, m0.size[0] * m0.mpv / 2, m0.size[1] * m0.mpv / 2], win: win }; }   // win：亮窗的窗片（夜裡的燈）
+    if (R) { put(R.lod, R.win); return null; }
+    return townModelMesh(nm, d, m0).then(function (L) { put(L, townWinMesh(m0)); });
+  })).then(function () {
     // 貼圖：收到的模型照名字一個一列往下排（寬 ＝ 最寬那一列、高 ＝ 加總，各取 2 的次方）；那一列的座標寫進那個模型的 im（畫貼圖照它取，townBin）
     var aw = 1, y = 0;
     need.forEach(function (nm) { var im = M[nm].m.im; aw = Math.max(aw, im.cw * I.views); M[nm].m = Object.assign({}, M[nm].m, { im: Object.assign({}, im, { x: 0, y: y }) }); y += im.ch; });
@@ -432,26 +464,37 @@ function townKit() {
       gl.bindTexture(gl.TEXTURE_2D, tex);
       gl.generateMipmap(gl.TEXTURE_2D); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE); gl.bindTexture(gl.TEXTURE_2D, null);
-      return { tex: tex, aw: aw, ah: ah };
+      need.forEach(function (nm) { delete M[nm].png; });
+      return { M: M, names: names, byUse: I.byUse, byStyle: I.byStyle, models: I.models, tex: tex, aw: aw, ah: ah, views: I.views, part: false };   // models：townPick 照地塊大小收窄要看每個候選的 lot（跟 townNeed 用同一份索引）
     });
-  }).then(function (A) {
-    need.forEach(function (nm) { delete M[nm].png; });
-    TOWNS.kit = { M: M, names: names, byUse: I.byUse, byStyle: I.byStyle, models: I.models, tex: A.tex, aw: A.aw, ah: A.ah, views: I.views };   // models：townPick 照地塊大小收窄要看每個候選的 lot（跟 townNeed 用同一份索引）
-    TOWNS.stat.kitMs = +(performance.now() - t0).toFixed(1);
-    TOWNS.stat.kitN = need.length + '/' + names.length;              // 要了幾個／索引裡有幾個
-    TOWNS.stat.kitTris = need.reduce(function (o, nm) { o[nm] = [M[nm].lod[0].nq * 2, M[nm].lod[1].nq * 2]; return o; }, {});
-    TOWNS.list.forEach(function (T) { T.inst = null; }); TOWNS.dirty = true;
-    TOWNS.grp = null;                                                   // 分組表是照上一份的模型數的 ⇒ 丟掉（影子那一關在 townDraw 重新分組之前跑；要的模型變少時 —— 城牆降級 —— 舊表會指到沒解的模型）
-    if (TOWNS.kitRedo) { TOWNS.kitRedo = false; townKitFree(); }   // 解的時候又來了新的城、要的模型變多 ⇒ 丟掉重要一次
-  }, function (e) { TOWNS.err = '模型解不開：' + e.message; console.warn('城鎮：' + TOWNS.err); });
-  return TOWNS.kitP;
+  });
 }
+/** 換上一份模型組：有畫著的實例 ⇒ 當場照新的重建（骨架 ⇒ 完整，中間不空一格）、再放掉舊的 GPU 資源；沒有 ⇒ 下一格 townDraw 建。 */
+function townKitSet(K) {
+  var old = TOWNS.kit; TOWNS.kit = K;
+  TOWNS.grp = null;                                                     // 分組表是照上一份的模型數的 ⇒ 丟掉（影子那一關在 townDraw 重新分組之前跑；要的模型變少時 —— 城牆降級 —— 舊表會指到沒解的模型）
+  TOWNS.list.forEach(function (T) {
+    if (T.inst && old) { T.inst = townInst(T); townFlagFree(T); T.shDirty = true; T.tlS = T.tlD = true; } else T.inst = null;
+  });
+  TOWNS.dirty = true;
+  if (old) townKitGpuFree(old, K);
+}
+/** 一份模型組的 GPU 資源（網格、窗片、貼圖）；keep ＝ 換上的那一組（骨架 ⇒ 整組沿用的網格不放掉）。 */
+function townKitGpuFree(K, keep) {
+  Object.keys(K.M).forEach(function (nm) { if (keep && keep.M[nm] && keep.M[nm].lod === K.M[nm].lod) return; K.M[nm].lod.concat(K.M[nm].win ? [K.M[nm].win] : []).forEach(function (r) { gl.deleteVertexArray(r.vao); gl.deleteBuffer(r.vbo); }); });
+  if (K.tex) gl.deleteTexture(K.tex);
+}
+/** 要的模型變多（來了新的城、改了繁榮度）：還在解 ⇒ 解完再丟掉重要（兩段同時跟外面那一頁要，回應會對錯人）；不然 ⇒ 現在就丟。 */
+//   以前直接丟掉（townKitFree）⇒ 實例全部不見，等新的一組解好才回來（加拉塔晚到時君士坦丁堡的房子消失 1.7 s；TASK-0826）。
+//   ⇒ 舊的那一組與實例照畫，新的整組在背景解（不做骨架那一段）、好了 townKitSet 當場換；新來的城的實例等新的一組（townDraw：舊的一組挑不到它要的模型）。
+function townKitStale() { if (TOWNS.kitBusy) TOWNS.kitRedo = true; else if (TOWNS.kit) townKitRestart(); }
+/** 下一格 townDraw 照現在的城重解一組（舊的照畫到新的好）。 */
+function townKitRestart() { TOWNS.kitP = null; TOWNS.kitHas = null; TOWNS.kitBusy = false; }
 /** 丟掉解好的模型（GPU 的網格、貼圖）⇒ 下一格照新的城重要。 */
 function townKitFree() {
-  var K = TOWNS.kit; TOWNS.kit = null; TOWNS.kitP = null; TOWNS.kitHas = null; TOWNS.grp = null;
+  var K = TOWNS.kit; TOWNS.kit = null; TOWNS.kitP = null; TOWNS.kitHas = null; TOWNS.kitBusy = false; TOWNS.grp = null;
   if (!K) return;
-  Object.keys(K.M).forEach(function (nm) { K.M[nm].lod.concat(K.M[nm].win ? [K.M[nm].win] : []).forEach(function (r) { gl.deleteVertexArray(r.vao); gl.deleteBuffer(r.vbo); }); });
-  if (K.tex) gl.deleteTexture(K.tex);
+  townKitGpuFree(K);
   TOWNS.list.forEach(function (T) { T.inst = null; }); TOWNS.dirty = true;
 }
 
@@ -460,7 +503,7 @@ function townKitFree() {
 function townInst(T) {
   var K = TOWNS.kit, p = T.p, out = [], D2R = Math.PI / 180, skip = TOWNS.stat.skip;
   function W(q) { var e = T.E(q); return [e[0] - BED.ax, e[1] - BED.az]; }
-  (p.lots || []).forEach(function (l) {
+  (K.part ? [] : p.lots || []).forEach(function (l) {                  // 骨架（K.part：只解了城牆那幾套）⇒ 只有城牆
     if (l.use === 'plot' || l.use === 'plaza') return;
     var L = townPick(K, T.styles, l);
     if (!L || !L.length) { skip[l.use] = (skip[l.use] || 0) + 1; return; }
@@ -717,12 +760,14 @@ function townGroundDirty(T, cx, cy) {
   var k = cx + '_' + cy; if (!T.gt) return;
   Object.keys(T.gt).forEach(function (t) { var q = T.gt[t]; if (q.deps[k]) q.dirty = true; });
 }
-/** 下一個要建的區：離鏡頭（世界座標）近的先。 */
+/** 下一個要建的區：骨架先出（TOWN_SKEL）⇒ 有棧橋、碼頭的區先；同一級離鏡頭（世界座標）近的先。 */
 function townGroundNext(T, eye) {
   var best = null, bd = Infinity;
-  Object.keys(T.gt || {}).forEach(function (k) { var q = T.gt[k]; if (!q.dirty) return; var dx = q.cx - BED.ax - eye[0], dz = q.cz - BED.az - eye[2], d = dx * dx + dz * dz; if (d < bd) { bd = d; best = q; } });
+  Object.keys(T.gt || {}).forEach(function (k) { var q = T.gt[k]; if (!q.dirty) return; var dx = q.cx - BED.ax - eye[0], dz = q.cz - BED.az - eye[2], d = dx * dx + dz * dz + (TOWN_SKEL && !townGroundPier(q) ? 1e15 : 0); if (d < bd) { bd = d; best = q; } });
   return best;
 }
+/** 這一區有棧橋或碼頭。 */
+function townGroundPier(q) { return q.pier.length > 0 || q.quay.length > 0; }
 /** 城 T 的一區 ⇒ 一份網格（位置、法線、顏色）；那一區沒東西 ⇒ null。 */
 function townGroundTile(T, Q) {
   var V = [], I = [], S = BED.A.chunk, deps = {};
@@ -1063,12 +1108,13 @@ function townPlinth(q) {
 function townDraw() {
   if (!TOWNS.on || !TOWNS.list.length || !BED || !BED.A || PASS.vp) return;
   if (!TOWNS.kit) { townKit(); townProgs(); return; }                 // 著色器跟模型一起開始（編譯在背景，townProgs）
+  if (!TOWNS.kitP) townKit();                                           // 要的模型變多（townKitStale）⇒ 背景重解，這一組照畫
   var t0 = performance.now(), K = TOWNS.kit, P = townProgs(), eye = CAM.eye, PL = bedPlanes(CAM.vp);
   if (!P) return;
   TOWNS.list.forEach(function (T) {
     if (T.roadPending || T.roadSurface) return;
     T.roadPending = true;
-    townRoadSurface(T.roads).then(function (R) { T.roadSurface = R; if (T.inst) townGroundPrep(T); }, function (e) { TOWNS.err = '路面：' + e.message; console.warn(TOWNS.err); });
+    townRoadSurface(T.roads).then(function (R) { T.roadSurface = R; if (T.gt) townGroundPrep(T); }, function (e) { TOWNS.err = '路面：' + e.message; console.warn(TOWNS.err); });
   });
   var nb = 0;                                                            // 實例、地面的帶子、屋頂殼：一格最多建一座城的一樣、照背景預算（08_seabed.js bedBusy；跟地球儀同一條主執行緒）
   // 實例不等背景預算（TASK-0819；Tim 2026-10-22「照建議改」）：預算每格先被收塊、擺樹、地形網格吃光 ⇒ 模型解好了城還要等那一批做完（君士坦丁堡第二次去 1.3～2.4 s）。
@@ -1076,12 +1122,16 @@ function townDraw() {
   //   但規劃晚到、城範圍裡還有排著要重新整地的塊（townRegrade）⇒ 先等它們：城牆的腳讀地面（townWallY → townGround → townHv）會把還沒整的塊在這一格當場整掉
   //   （君士坦丁堡那一格 730～880 ms）；隊伍每格至少一塊、近的先，跟模型解碼同時走。
   TOWNS.list.forEach(function (T) {
-    if (!T.inst && !nb && !townRgWait(T)) { var b0 = performance.now(); T.inst = townInst(T); townGroundPrep(T); townFlagFree(T); T.shDirty = true; T.tlS = T.tlD = true; TOWNS.dirty = true; nb++; bedSpent(b0); }
+    if (!T.inst && !nb && !townRgWait(T) && (K.part || !TOWNS.kitBusy)) { var b0 = performance.now(); T.inst = townInst(T); if (!T.gt) townGroundPrep(T); townFlagFree(T); T.shDirty = true; T.tlS = T.tlD = true; TOWNS.dirty = true; nb++; bedSpent(b0); }
   });
   TL.k = TL.on ? TOD_LIT : 0;                                                        // 夜裡的燈：這一格點燈了沒（08_weather.js；陸地在城之前畫 ⇒ 用上一格的分組表，差一格看不出來）
   TOWNS.list.forEach(function (T) {                                    // 地面的帶子：一區一區（townGroundTile），離鏡頭近的先；一格最多 TOWN_GT_MAX 區、照背景預算
-    if (!T.inst || !T.gt) return;
-    for (var m = 0, Q; m < TOWN_GT_MAX && !bedBusy() && (Q = townGroundNext(T, eye)); m++) {
+    // 骨架先出（TASK-0826，見 townKit 上面）：地面不等實例，城範圍的地整完（townRgWait）就分區開始建；有棧橋、碼頭的區排最前（townGroundNext），而且每格至少一區、不看預算
+    //   （預算每格常被收塊、擺樹吃光 ⇒ 以前棧橋要等那一批做完）。?townskel=0 ⇒ 照舊等實例、照預算。
+    if (TOWN_SKEL && !T.gt && !townRgWait(T)) townGroundPrep(T);
+    if (!(T.inst || TOWN_SKEL) || !T.gt || (TOWN_SKEL && townRgWait(T))) return;
+    for (var m = 0, Q; m < TOWN_GT_MAX && (Q = townGroundNext(T, eye)); m++) {
+      if (bedBusy() && !(TOWN_SKEL && m === 0 && townGroundPier(Q))) break;
       var b0 = performance.now(); if (Q.g) townGpuFree(Q.g); Q.g = townGroundTile(T, Q); Q.dirty = false; T.gBuilt = true; bedSpent(b0);
     }
     if (T.gBuilt && !townGroundNext(T, eye)) { T.gBuilt = false; T.tlD = true; }   // 這一批都建好了 ⇒ 街燈的高度重取（以前地面每重建一次就重取）
@@ -1168,9 +1218,10 @@ function townStat(at) {
   var S = TOWNS.stat, o = { on: TOWNS.on, want: TOWNS.want, err: TOWNS.err, towns: TOWNS.list.map(function (T) {
     var u = {}; (T.inst || []).forEach(function (q) { u[q.k] = (u[q.k] || 0) + 1; });
     var tl = townLightStat(T);
-    return { id: T.id, name: T.name, tier: T.tier, seed: T.seed, ox: T.ox, oy: T.oy, lots: (T.p.lots || []).length, roads: T.roads.length, walls: (T.p.walls || []).length, inst: (T.inst || []).length, ground: T.gt ? (function () { var K = Object.keys(T.gt); return { tiles: K.length, built: K.filter(function (k) { return T.gt[k].g; }).length, dirty: K.filter(function (k) { return T.gt[k].dirty; }).length }; })() : null,   // 地面的帶子分區（TASK-0817）
+    return { id: T.id, name: T.name, tier: T.tier, seed: T.seed, ox: T.ox, oy: T.oy, lots: (T.p.lots || []).length, roads: T.roads.length, walls: (T.p.walls || []).length, inst: (T.inst || []).length, ground: T.gt ? (function () { var K = Object.keys(T.gt); return { tiles: K.length, built: K.filter(function (k) { return T.gt[k].g; }).length, dirty: K.filter(function (k) { return T.gt[k].dirty; }).length, piers: K.filter(function (k) { return townGroundPier(T.gt[k]); }).length, piersBuilt: K.filter(function (k) { return townGroundPier(T.gt[k]) && T.gt[k].g; }).length }; })() : null,   // piers：有棧橋或碼頭的區（TASK-0826 先建）
+      part: T.inst ? (TOWNS.kit && TOWNS.kit.part ? 'walls' : 'all') : null, walls: (T.inst || []).filter(function (q) { return q.wall; }).length,   // 地面的帶子分區（TASK-0817）
       byModel: u, lights: tl, center: [+(T.ox - BED.ax).toFixed(1), +(T.oy - BED.az).toFixed(1)] };
-  }), kit: !!TOWNS.kit, kitN: S.kitN, kitMs: S.kitMs, kitMesh: { baked: S.meshBaked, live: S.meshLive, check: S.meshCheck, vk: townVkFp() }, kitTris: S.kitTris, skip: S.skip, drawn: { full: S.d0, low: S.d1, card: S.d2, shells: S.d3, plinth: S.plinth, flags: S.flags || 0, landmarks: S.lm || 0 }, tris: S.tris, ms: { draw: S.drawMs, bin: S.binMs, grade: +S.gradeMs.toFixed(1), prep: S.prepMs }, gradedChunks: S.chunks, regrade: { left: TOWNS.rgq ? Object.keys(TOWNS.rgq).length : 0, done: S.regraded },
+  }), kit: !!TOWNS.kit, kitPart: !!(TOWNS.kit && TOWNS.kit.part), kitN: S.kitN, kitMs: S.kitMs, skelN: S.skelN, skelMs: S.skelMs, kitMesh: { baked: S.meshBaked, live: S.meshLive, check: S.meshCheck, vk: townVkFp() }, kitTris: S.kitTris, skip: S.skip, drawn: { full: S.d0, low: S.d1, card: S.d2, shells: S.d3, plinth: S.plinth, flags: S.flags || 0, landmarks: S.lm || 0 }, tris: S.tris, ms: { draw: S.drawMs, bin: S.binMs, grade: +S.gradeMs.toFixed(1), prep: S.prepMs }, gradedChunks: S.chunks, regrade: { left: TOWNS.rgq ? Object.keys(TOWNS.rgq).length : 0, done: S.regraded },
     night: { lit: +TL.k.toFixed(3), win: +TOD_WIN.toFixed(3), grid: TL.stat.inGrid, range: TL.stat.range || 0, full: TL.stat.full, over: TL.stat.over, gridMs: TL.stat.gridMs, cards: TL.stat.cards, glow: TL.stat.glow, glowMs: TL.stat.glowMs } };
   if (at) { var q = bedCell(at[0], at[1]); o.at = { ground: +townGround(at[0], at[1]).toFixed(2), sim: +bedHgt(at[0], at[1]).toFixed(2), clear: q ? townClr(q.C, q.u * q.C.step, q.v * q.C.step) : null }; }
   return o;
