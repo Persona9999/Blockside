@@ -37,6 +37,7 @@
 var WRS_DYN = 4096, WRS_VOXN = 1000, WRS_THICK = 8, WRS_SEA_DT = 1 / 30, WRS_NEWBR = 64, WRS_DAMP = 0.5, WRS_CFL = 0.45, WRS_NMAX = 32, WRS_JN = 4096, WRS_JLIFE = 6, WRS_JWAIT = 2, WRS_JRISE = 1.5;
 var WRS_VISC = Q.has('wvisc') && isFinite(+Q.get('wvisc')) ? Math.max(0, +Q.get('wvisc')) : 50;   // 房間內的黏性（1/s；Tim 2026-10-22「讓水變黏一點」「同一個大艙房中 也不會太快速的左右流動」「流入一側水位更高一些」）：虛擬管的流量每秒被拉回 0 的比例；隱式（÷ (1 + k·h)）⇒ 低 Hz 也穩。預設 50（量過 2–200：10 以上橫傾就不太變；Tim 2026-10-22「水頭變小沒問題」）；?wvisc= 調、0 ＝ 以前                     // WRS_DYN ＝ 每艘船打穿的開口最多幾個（開口表預留的空位）、WRS_VOXN ＝ 一步最多處理幾格被打掉／補回的格、WRS_THICK ＝ 牆、甲板最厚幾格算得穿（TASK-0809）；WRS_SEA_DT ＝ 破口外面的海面幾秒重算一次（照秒數；同細檔每 2 步）；WRS_NEWBR ＝ 一步最多替幾個新破口找房間（殉爆一次幾千塊，每塊最多查 1,720 格 ⇒ 分幾步做，同細檔 dn；TASK-0810）；虛擬管每秒的阻尼；一小步最多走欄寬 × WRS_CFL ÷ 波速；一步最多切幾小步；WRS_JWAIT ＝ 粒子放不下時停在落點等幾秒（秒，照秒數不照步數）；WRS_JRISE ＝ 粒子落進水池時，那一間的平均水面一秒最多漲幾公尺
 var WRS_PUTR = Q.has('wputr') && isFinite(+Q.get('wputr')) ? Math.max(0, +Q.get('wputr')) : 2;   // 放水先放在進水那一欄附近（公尺；Tim 2026-10-22「希望讓流入一側水位更高一些」）：半徑裡水面最低、沒滿的欄先裝，那一圈都裝不下才照整間最低的裝預設 2（量過 1–4 m）（⛔ 0 ＝ 以前：破口那一欄之後直接放進整間最低的欄 ⇒ 船還沒斜時是中線龍骨上，右舷進的水一瞬間在中間，沒有橫傾的力矩）。?wputr= 調
+var WRS_RING = Q.has('wring') && isFinite(+Q.get('wring')) ? Math.max(0, Math.min(6, +Q.get('wring') | 0)) : 3;   // 放水那一圈裝不下 ⇒ 半徑加倍再找，最多幾次（Tim 2026-10-23「船現在會側傾了…有辦法更明顯嗎」；預設 3 ＝ 2→4→8→16 m，量過 3 以上不再變；0 ＝ 直接照整間最低的）。?wring= 調
 /** 開一艘的房間模擬（要有烘焙好的房間 T.wrm）。 */
 function wrsInit(sh) {
   var T = sh.T, W0 = T.wrm; if (!W0) return null;
@@ -160,9 +161,10 @@ function wrsPut(s, M, j, nu, head, depth) {
   var satS = s.satS || (s.satS = new Int32Array(s.NR)), satH = s.satH || (s.satH = new Float64Array(s.NR)), hk = head > -1e8 ? head : Infinity, n1 = nu;   // 這一小步這間在水頭 satH 以下已經一格都放不進去（沒拿過水）⇒ 直接往上溢（⛔ 以前每一份都把整間走完、再掃一趟：沉船裝到海面之後幾百顆粒子落地 ⇒ 一步兩百多萬次工）
   if (!(satS[r] === s.surfN && hk <= satH[r])) {
     if (WRS_PUTR > 0) {                                                  // 先裝進水那一欄附近（WRS_PUTR）：照水面由低到高，只挑半徑裡的
-      var odL = wrsOrd(s, r, 0), RR = WRS_PUTR / S, R2 = RR * RR, xj = X.cx[j], yj = X.cy[j], pL;
+      var odL = wrsOrd(s, r, 0), RR = WRS_PUTR / S, R2, xj = X.cx[j], yj = X.cy[j], pL;
+      for (var ring = 0; ring <= WRS_RING && nu > 0; ring++, RR *= 2) { R2 = RR * RR;   // 一圈一圈往外（WRS_RING：半徑加倍幾次；0 ＝ 只有 WRS_PUTR 那一圈，裝不下就照整間最低的）
       for (pL = W.roomCol0[r]; pL < W.roomCol0[r + 1] && nu > 0; pL++) { q = odL[pL]; var ddx = X.cx[q] - xj, ddy = X.cy[q] - yj; if (ddx * ddx + ddy * ddy > R2 || u[q] >= s.cap[q]) continue; var lL = lim(q); if (u[q] < lL) { a = Math.min(nu, lL - u[q]); u[q] += a; nu -= a; } }
-      s.wk.put += pL - W.roomCol0[r];
+      s.wk.put += pL - W.roomCol0[r]; }
     }
     var od = wrsOrd(s, r, 0), pos = W.roomCol0[r], pe = W.roomCol0[r + 1], p0 = pos;   // 這間照水面由低到高排好（每一小步排一次）⇒ 往下走就是「水面最低、沒滿的那一欄」（⛔ 以前每一欄都整間掃一趟、最多九趟：殉爆幾千顆粒子落地 ⇒ 一步 258 萬次工）
     for (var it = 0; it < 8 && nu > 0; it++) {                             // 這間水面最低、沒滿的欄先裝（⛔ 以前只試一欄就放棄）；八欄之後照順序裝到滿

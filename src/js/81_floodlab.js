@@ -129,7 +129,7 @@ function floodLab(o) {
       }
     }
     var me = sh.fl.mesh, st = me && me.stat ? me.stat : null, dh = st ? st.dh.slice().sort(function (a, b) { return a - b; }) : [];
-    out.rows.push({ t: +SIMT.toFixed(1), fl: flReadout(sh), zb: flZBands(sh), zr: flZRooms(sh), ex: flabEx(sh, true), ship: { broken: !!sh.broken, final: !!sh.sinkingFinal, sunk: !!sh.sunk, sink: +sh.sink.toFixed(2), line: sinkFinalAt(sh), dry: sh.guns.filter(function (g) { return g.alive && !wetAt(sh, g.muzs ? g.muzs[0] : g.muz); }).length, guns: sh.guns.filter(function (g) { return g.alive; }).length }, focus: focusAt, cam: { eye: CAM.eye.map(function (v) { return +v.toFixed(2); }), look: (CAM.look || CAM.tgt).map(function (v) { return +v.toFixed(2); }) },
+    out.rows.push({ t: +SIMT.toFixed(1), fl: flReadout(sh), zb: flZBands(sh), zr: flZRooms(sh), wst: flWSteps(sh), ex: flabEx(sh, true), ship: { broken: !!sh.broken, final: !!sh.sinkingFinal, sunk: !!sh.sunk, sink: +sh.sink.toFixed(2), line: sinkFinalAt(sh), dry: sh.guns.filter(function (g) { return g.alive && !wetAt(sh, g.muzs ? g.muzs[0] : g.muz); }).length, guns: sh.guns.filter(function (g) { return g.alive; }).length }, focus: focusAt, cam: { eye: CAM.eye.map(function (v) { return +v.toFixed(2); }), look: (CAM.look || CAM.tgt).map(function (v) { return +v.toFixed(2); }) },
       mesh: me ? { tris: me.n / 3, quads: me.quads, ms: +(me.ms || 0).toFixed(2), falls: me.fn ? me.fn / 6 : 0, sides: me.sideN || 0, spill: me.fallN || 0, sideMax: me.sst ? +me.sst.max.toFixed(2) : 0, sideAt: me.sst ? me.sst.at : null, sideXo: me.sst ? me.sst.xo : 0, sideXf: me.sst ? me.sst.xf : 0, sideXoAt: me.sst && me.sst.xoAt ? me.sst.xoAt.slice(0, 8) : null, sideXn: me.sst ? me.sst.xn : 0, sideXoMax: me.sst ? me.sst.xoMax : 0, depBlit: FL_DEPBLIT, fst: me.fst || null } : null,
       seam: st ? { tops: st.tops, pools: st.pools, join: st.join, step: st.step, open: st.open, wall: st.wall, cutTops: st.cutTops, cutPieces: st.cutPieces, outTops: st.outTops,
         dhMed: dh.length ? +dh[dh.length >> 1].toFixed(2) : 0, dhMax: dh.length ? +dh[dh.length - 1].toFixed(2) : 0,
@@ -415,6 +415,14 @@ function flZRooms(sh) {
   else if (sh.fl && sh.fl.A) { var fl = sh.fl, F = fl.F, NXY = F.NX * F.NY; for (var t = 0; t < fl.actN; t++) { var i = fl.act[t], a = fl.A[i]; if (a <= 1e-7) continue;
     var x = F.X0 + ((i % F.NX) + 0.5) * F.c, y = F.Y0 + ((((i / F.NX) | 0) % F.NY) + 0.5) * F.c, z = (((i / NXY) | 0) + 0.5) * F.c; add(wrRoomAt(W, Math.floor(x), Math.floor(y), Math.floor(z)), a, (y - cy) * S, z * S); } }
   return Object.keys(B).map(Number).sort(function (a2, b2) { return B[b2][0] - B[a2][0] || a2 - b2; }).slice(0, 12).map(function (r) { var e = B[r]; return [r, +e[0].toFixed(1), +(e[1] / e[0]).toFixed(2), +(e[2] / e[0]).toFixed(2)]; });
+}
+/** 同一間房、相鄰兩段（模擬的管子）水面差多少（第 4 檔；Tim 2026-10-23「柱牆顯示很突兀」）：[差 > 0.3 m 的對數（畫面的側面照這個門檻畫牆）, 最大差 m, 有水的管子數]；乾的那一段照它的地板。 */
+function flWSteps(sh) {
+  var s = sh.wrs; if (!s || !sh.fl || !sh.fl.L.room) return null;
+  var W = s.W, X = s.X, M = sh.M, E = s.E, n0 = 0, big = 0, mx = 0;
+  function lev(c) { return M[1] * X.cx[c] + M[5] * X.cy[c] + M[9] * wrColZ(W, X, c, s.su[c]) + M[13]; }
+  for (var k = 0; k < E.a.length; k++) { var a = E.a[k], b = E.b[k]; if (!s.su[a] && !s.su[b]) continue; n0++; var d = Math.abs(lev(a) - lev(b)); if (d > 0.3) big++; if (d > mx) mx = d; }
+  return [big, +mx.toFixed(2), n0];
 }
 /** 艙內水面高出海面多少（TASK-0662；Tim 2026-10-16 殉爆後艙內的水停在海面以上不退）：每一格有水的水格，水面（照 flTick head 同一套：格底 ＋ 裝了幾成 × 格高，裝超過一成照算 ⇒ 擠出來的也看得到）減那一點正上方的海面（seaH，照浪）。
  *  回 { max 最高那格高出幾 m、at 那一格 [ix, iy, iz]、fill 那一格裝了幾成、n 高出 0.3 m 以上的格數、vol 高出海面的水 m³（每格只算海面以上那一截）、over 裝超過的格數、overV 裝超過的水 m³；room ⇒ 另外 roomBelow 海面以下還空著的 m³、roomWet 其中已經有水的格、nWetRoom 那幾格的格數 }。只讀。 */

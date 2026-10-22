@@ -23,6 +23,7 @@ var FL_LV = [null, { c: 10, ev: 4, jn: 300, vj: 0.25, dn: 120 }, { c: 7, ev: 2, 
 // FL_PUMP（Tim 2026-10-18「統一都改成 噸 分顯示吧」）：抽水量的設定是噸／分 ⇒ 換成 m³/s 要除海水密度（PUMP_REF 噸／分 ÷ 60 ÷ RHO_W ≈ 0.293）。
 //   ⛔ 以前寫死 0.3（把 1 m³ 當 1 噸）⇒ 設定 18 噸／分、實際抽 18.45 噸／分，進水細節頁「抽水 18.0（實際 18.4）」對不上。
 var FL_C = 1.0, FL_PUMP = PUMP_REF / 60 / RHO_W, FL_GM = 4, FL_GML = 60, FL_TAU = 2;
+var FL_ROLLK = Q.has('wroll') && isFinite(+Q.get('wroll')) ? Math.max(0, +Q.get('wroll')) : 1.4;   // 第 4 檔（房間）水造成的橫傾倍率（Tim 2026-10-23「有辦法更明顯嗎」；手感的旋鈕，不是物理）：憲法號一舷八洞 42.5 秒 1 ⇒ 2.18°、1.4 ⇒ 4.0°、2 ⇒ 6.4°（細檔 3.0°）。?wroll= 調
 var FL_HIDE = false, FLOOD_LV = 0;
 var RNG_F = rngMake('flood', 0x3C6EF372), rndF = RNG_F.f, rgF = RNG_F.r;   // 進水粒子（00_core.js 亂數工廠）
 /** 船型 T 的水格（邊長 c 格；第一次用到時算，掛在 T.flc[c]）：兩舷船殼最外那一格（yP／yM，每個 (x, z)）、每格能裝多少（cap：艙內空的比例）、往下通多少（pd：最密那一層開著的比例）。
@@ -445,5 +446,5 @@ function floodSinkT(sh, fl) {
 function floodTilt(sh, fl) {
   var k = fl.keep || fl;                                              // 開始沉之後照那一刻的水（floodVis 留的 keep）⇒ 水照樣灌給人看，船怎麼斜跟以前一模一樣
   var W = k.vol * RHO_W, D = (sh.mass0 || shipT(sh)) + W, lim = sh.sinkingFinal ? 0.55 : 0.21;
-  return [clamp(Math.atan(W * k.comY / (D * FL_GM)), -lim, lim), -clamp(Math.atan(W * k.comX / (D * FL_GML)), -0.07, 0.07)];
+  return [clamp(Math.atan(W * k.comY * (fl.L.room ? FL_ROLLK : 1) / (D * FL_GM)), -lim, lim), -clamp(Math.atan(W * k.comX / (D * FL_GML)), -0.07, 0.07)];
 }
