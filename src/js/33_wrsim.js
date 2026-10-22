@@ -34,7 +34,9 @@
 //      ⛔ 以前一欄一個水位：下段灌滿時水位一跳一個甲板厚、推給鄰欄、退回來又掉下去 ⇒ 封閉的第 1 間 0.1 秒一步 90 秒不衰減 200–240 m³/s、水面 RMS 0.36 m；拆完 ⇒ 約 5 m³/s、RMS 3–5 mm（進水報表 ?lab=wslosh）。
 // 還沒做：抽水。⚠ 上段有水、下段沒滿時，對外加總的 u 會畫在下段裡（畫面一欄只有一個水面）。
 // ⛔ 只讀船的姿態、破口、門；不抽 rnd()。
-var WRS_DYN = 4096, WRS_VOXN = 1000, WRS_THICK = 8, WRS_SEA_DT = 1 / 30, WRS_NEWBR = 64, WRS_DAMP = 0.5, WRS_CFL = 0.45, WRS_NMAX = 32, WRS_JN = 4096, WRS_JLIFE = 6, WRS_JWAIT = 2, WRS_JRISE = 1.5;                     // WRS_DYN ＝ 每艘船打穿的開口最多幾個（開口表預留的空位）、WRS_VOXN ＝ 一步最多處理幾格被打掉／補回的格、WRS_THICK ＝ 牆、甲板最厚幾格算得穿（TASK-0809）；WRS_SEA_DT ＝ 破口外面的海面幾秒重算一次（照秒數；同細檔每 2 步）；WRS_NEWBR ＝ 一步最多替幾個新破口找房間（殉爆一次幾千塊，每塊最多查 1,720 格 ⇒ 分幾步做，同細檔 dn；TASK-0810）；虛擬管每秒的阻尼；一小步最多走欄寬 × WRS_CFL ÷ 波速；一步最多切幾小步；WRS_JWAIT ＝ 粒子放不下時停在落點等幾秒（秒，照秒數不照步數）；WRS_JRISE ＝ 粒子落進水池時，那一間的平均水面一秒最多漲幾公尺
+var WRS_DYN = 4096, WRS_VOXN = 1000, WRS_THICK = 8, WRS_SEA_DT = 1 / 30, WRS_NEWBR = 64, WRS_DAMP = 0.5, WRS_CFL = 0.45, WRS_NMAX = 32, WRS_JN = 4096, WRS_JLIFE = 6, WRS_JWAIT = 2, WRS_JRISE = 1.5;
+var WRS_VISC = Q.has('wvisc') && isFinite(+Q.get('wvisc')) ? Math.max(0, +Q.get('wvisc')) : 0;   // 房間內的黏性（1/s；Tim 2026-10-22「讓水變黏一點」「同一個大艙房中 也不會太快速的左右流動」「流入一側水位更高一些」）：虛擬管的流量每秒被拉回 0 的比例；隱式（÷ (1 + k·h)）⇒ 低 Hz 也穩。?wvisc= 調                     // WRS_DYN ＝ 每艘船打穿的開口最多幾個（開口表預留的空位）、WRS_VOXN ＝ 一步最多處理幾格被打掉／補回的格、WRS_THICK ＝ 牆、甲板最厚幾格算得穿（TASK-0809）；WRS_SEA_DT ＝ 破口外面的海面幾秒重算一次（照秒數；同細檔每 2 步）；WRS_NEWBR ＝ 一步最多替幾個新破口找房間（殉爆一次幾千塊，每塊最多查 1,720 格 ⇒ 分幾步做，同細檔 dn；TASK-0810）；虛擬管每秒的阻尼；一小步最多走欄寬 × WRS_CFL ÷ 波速；一步最多切幾小步；WRS_JWAIT ＝ 粒子放不下時停在落點等幾秒（秒，照秒數不照步數）；WRS_JRISE ＝ 粒子落進水池時，那一間的平均水面一秒最多漲幾公尺
+var WRS_PUTR = Q.has('wputr') && isFinite(+Q.get('wputr')) ? Math.max(0, +Q.get('wputr')) : 0;   // 放水先放在進水那一欄附近（公尺；Tim 2026-10-22「希望讓流入一側水位更高一些」）：半徑裡水面最低、沒滿的欄先裝，那一圈都裝不下才照整間最低的裝（⛔ 0 ＝ 以前：破口那一欄之後直接放進整間最低的欄 ⇒ 船還沒斜時是中線龍骨上，右舷進的水一瞬間在中間，沒有橫傾的力矩）。?wputr= 調
 /** 開一艘的房間模擬（要有烘焙好的房間 T.wrm）。 */
 function wrsInit(sh) {
   var T = sh.T, W0 = T.wrm; if (!W0) return null;
@@ -157,6 +159,11 @@ function wrsPut(s, M, j, nu, head, depth) {
   s.putSeen[r] = s.putN;
   var satS = s.satS || (s.satS = new Int32Array(s.NR)), satH = s.satH || (s.satH = new Float64Array(s.NR)), hk = head > -1e8 ? head : Infinity, n1 = nu;   // 這一小步這間在水頭 satH 以下已經一格都放不進去（沒拿過水）⇒ 直接往上溢（⛔ 以前每一份都把整間走完、再掃一趟：沉船裝到海面之後幾百顆粒子落地 ⇒ 一步兩百多萬次工）
   if (!(satS[r] === s.surfN && hk <= satH[r])) {
+    if (WRS_PUTR > 0) {                                                  // 先裝進水那一欄附近（WRS_PUTR）：照水面由低到高，只挑半徑裡的
+      var odL = wrsOrd(s, r, 0), RR = WRS_PUTR / S, R2 = RR * RR, xj = X.cx[j], yj = X.cy[j], pL;
+      for (pL = W.roomCol0[r]; pL < W.roomCol0[r + 1] && nu > 0; pL++) { q = odL[pL]; var ddx = X.cx[q] - xj, ddy = X.cy[q] - yj; if (ddx * ddx + ddy * ddy > R2 || u[q] >= s.cap[q]) continue; var lL = lim(q); if (u[q] < lL) { a = Math.min(nu, lL - u[q]); u[q] += a; nu -= a; } }
+      s.wk.put += pL - W.roomCol0[r];
+    }
     var od = wrsOrd(s, r, 0), pos = W.roomCol0[r], pe = W.roomCol0[r + 1], p0 = pos;   // 這間照水面由低到高排好（每一小步排一次）⇒ 往下走就是「水面最低、沒滿的那一欄」（⛔ 以前每一欄都整間掃一趟、最多九趟：殉爆幾千顆粒子落地 ⇒ 一步 258 萬次工）
     for (var it = 0; it < 8 && nu > 0; it++) {                             // 這間水面最低、沒滿的欄先裝（⛔ 以前只試一欄就放棄）；八欄之後照順序裝到滿
       var best = -1;
@@ -420,7 +427,7 @@ function wrsPipes(s, M, h) {
     var hj = s.hw[ja2], hk = s.hw[jb2], sill = Math.max(hj - (s.zs[ja2] - s.zf[ja2]) * M[9], hk - (s.zs[jb2] - s.zf[jb2]) * M[9]);
     var wtop = Math.min(hj + (W.colZ0[ja2] + W.colNZ[ja2] - s.zs[ja2]) * M[9], hk + (W.colZ0[jb2] + W.colNZ[jb2] - s.zs[jb2]) * M[9]), dep = Math.min(Math.max(hj, hk), wtop) - sill;   // 管口只開在兩段高度重疊的那一截（地板高的那個到頂低的那個）
     if (dep <= 0) { ef[k] = 0; continue; }
-    var fv = ef[k] * damp + h * G * dep * (hj - hk) * Math.min(s.ca[ja2], s.ca[jb2]) / (L * L);   // m³/s：dQ/dt ＝ g·水深·Δh·管寬 ÷ 管長；管長 ＝ 欄寬 L、管寬 ＝ 兩段底面積小的那個 ÷ L（整欄 ⇒ L；⛔ 以前多乘一個 L）
+    var fv = (ef[k] * damp + h * G * dep * (hj - hk) * Math.min(s.ca[ja2], s.ca[jb2]) / (L * L)) / (1 + WRS_VISC * h);   // m³/s：dQ/dt ＝ g·水深·Δh·管寬 ÷ 管長；管長 ＝ 欄寬 L、管寬 ＝ 兩段底面積小的那個 ÷ L（整欄 ⇒ L；⛔ 以前多乘一個 L）
     if ((fv > 0 && u[jb2] >= s.cap[jb2]) || (fv < 0 && u[ja2] >= s.cap[ja2])) fv = 0;   // 收的那一段滿了
     ef[k] = fv;
   }

@@ -129,7 +129,7 @@ function floodLab(o) {
       }
     }
     var me = sh.fl.mesh, st = me && me.stat ? me.stat : null, dh = st ? st.dh.slice().sort(function (a, b) { return a - b; }) : [];
-    out.rows.push({ t: +SIMT.toFixed(1), fl: flReadout(sh), ex: flabEx(sh, true), ship: { broken: !!sh.broken, final: !!sh.sinkingFinal, sunk: !!sh.sunk }, focus: focusAt, cam: { eye: CAM.eye.map(function (v) { return +v.toFixed(2); }), look: (CAM.look || CAM.tgt).map(function (v) { return +v.toFixed(2); }) },
+    out.rows.push({ t: +SIMT.toFixed(1), fl: flReadout(sh), zb: flZBands(sh), zr: flZRooms(sh), ex: flabEx(sh, true), ship: { broken: !!sh.broken, final: !!sh.sinkingFinal, sunk: !!sh.sunk }, focus: focusAt, cam: { eye: CAM.eye.map(function (v) { return +v.toFixed(2); }), look: (CAM.look || CAM.tgt).map(function (v) { return +v.toFixed(2); }) },
       mesh: me ? { tris: me.n / 3, quads: me.quads, ms: +(me.ms || 0).toFixed(2), falls: me.fn ? me.fn / 6 : 0, sides: me.sideN || 0, spill: me.fallN || 0, sideMax: me.sst ? +me.sst.max.toFixed(2) : 0, sideAt: me.sst ? me.sst.at : null, sideXo: me.sst ? me.sst.xo : 0, sideXf: me.sst ? me.sst.xf : 0, sideXoAt: me.sst && me.sst.xoAt ? me.sst.xoAt.slice(0, 8) : null, sideXn: me.sst ? me.sst.xn : 0, sideXoMax: me.sst ? me.sst.xoMax : 0, depBlit: FL_DEPBLIT, fst: me.fst || null } : null,
       seam: st ? { tops: st.tops, pools: st.pools, join: st.join, step: st.step, open: st.open, wall: st.wall, cutTops: st.cutTops, cutPieces: st.cutPieces, outTops: st.outTops,
         dhMed: dh.length ? +dh[dh.length >> 1].toFixed(2) : 0, dhMax: dh.length ? +dh[dh.length - 1].toFixed(2) : 0,
@@ -397,6 +397,24 @@ function flabRef(sh, trace, t0, trA) {
   return { H: +H.toFixed(3), holes: hs.length, A: +A.toFixed(3), C: +C.toFixed(4), land: [lx, ly, lz], cells: cells.length, Vmax: +Vmax.toFixed(1), q0: q0 === null ? null : +q0.toFixed(3), half: half, full: { ref: fullRef === null ? null : +fullRef.toFixed(1), model: fullModel }, back: +(fl.back || 0).toFixed(1), rows: rows };
 }
 
+/** 水照高度分層（每 1 公尺一層，從船底的格算）：[層底 m, m³, 橫向重心 m（離中線，格 +y 那一舷為正）]——比細檔與房間檔的水停在哪一層、偏哪一舷（Tim 2026-10-22 橫傾 1.1° vs 3°）。
+ *  房間檔照每一段的地板 z（水在那一段裡多高不分）；細檔照水格的 z；飛行中的不算。 */
+function flZBands(sh) {
+  var B = {}, cy = sh.T.cy, k, z;
+  function add(z0, v, y) { var b = Math.floor(z0 * S); var e = B[b] || (B[b] = [0, 0]); e[0] += v; e[1] += v * y; }
+  if (sh.wrs && sh.fl && sh.fl.L.room) { var s = sh.wrs, u = s.su; for (k = 0; k < s.n; k++) if (u[k]) add(s.zf[k], u[k] / s.upm, (s.X.cy[k] - cy) * S); }
+  else if (sh.fl && sh.fl.A) { var fl = sh.fl, F = fl.F, NXY = F.NX * F.NY; for (var t = 0; t < fl.actN; t++) { var i = fl.act[t], a = fl.A[i]; if (a > 1e-7) add(((i / NXY) | 0) * F.c, a, (F.Y0 + ((((i / F.NX) | 0) % F.NY) + 0.5) * F.c - cy) * S); } }
+  return Object.keys(B).map(Number).sort(function (a2, b2) { return a2 - b2; }).map(function (b) { return [b, +B[b][0].toFixed(1), B[b][0] > 0 ? +(B[b][1] / B[b][0]).toFixed(2) : 0]; });
+}
+/** 水照烘焙的房間分（同 flZBands 的用途）：每間 [房, m³, 橫向重心 m, 水的平均高度 m]，照水量排、前 12 間；細檔照每個水格中心那一格落在哪一間（落在牆裡 ⇒ −1）。 */
+function flZRooms(sh) {
+  var W = sh.T.wrm, B = {}, cy = sh.T.cy, k; if (!W) return null;
+  function add(r, v, y, z) { var e = B[r] || (B[r] = [0, 0, 0]); e[0] += v; e[1] += v * y; e[2] += v * z; }
+  if (sh.wrs && sh.fl && sh.fl.L.room) { var s = sh.wrs, u = s.su; for (k = 0; k < s.n; k++) if (u[k]) add(s.W.colRoom[k], u[k] / s.upm, (s.X.cy[k] - cy) * S, s.zf[k] * S); }
+  else if (sh.fl && sh.fl.A) { var fl = sh.fl, F = fl.F, NXY = F.NX * F.NY; for (var t = 0; t < fl.actN; t++) { var i = fl.act[t], a = fl.A[i]; if (a <= 1e-7) continue;
+    var x = F.X0 + ((i % F.NX) + 0.5) * F.c, y = F.Y0 + ((((i / F.NX) | 0) % F.NY) + 0.5) * F.c, z = (((i / NXY) | 0) + 0.5) * F.c; add(wrRoomAt(W, Math.floor(x), Math.floor(y), Math.floor(z)), a, (y - cy) * S, z * S); } }
+  return Object.keys(B).map(Number).sort(function (a2, b2) { return B[b2][0] - B[a2][0] || a2 - b2; }).slice(0, 12).map(function (r) { var e = B[r]; return [r, +e[0].toFixed(1), +(e[1] / e[0]).toFixed(2), +(e[2] / e[0]).toFixed(2)]; });
+}
 /** 艙內水面高出海面多少（TASK-0662；Tim 2026-10-16 殉爆後艙內的水停在海面以上不退）：每一格有水的水格，水面（照 flTick head 同一套：格底 ＋ 裝了幾成 × 格高，裝超過一成照算 ⇒ 擠出來的也看得到）減那一點正上方的海面（seaH，照浪）。
  *  回 { max 最高那格高出幾 m、at 那一格 [ix, iy, iz]、fill 那一格裝了幾成、n 高出 0.3 m 以上的格數、vol 高出海面的水 m³（每格只算海面以上那一截）、over 裝超過的格數、overV 裝超過的水 m³；room ⇒ 另外 roomBelow 海面以下還空著的 m³、roomWet 其中已經有水的格、nWetRoom 那幾格的格數 }。只讀。 */
 function flabEx(sh, room) {
