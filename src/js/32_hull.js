@@ -11,9 +11,9 @@
 //   ⛔ 先做過放大倍率（Tim：不用到 4 倍）：16 倍 ⇒ 打得最爛的船整艘浮到 6.3 m；4 倍 ⇒ 浮 0.5–0.9 m —— 兩種都讓水線附近的洞全部離水，三種子 420 秒沒有一艘沉（不浮 240–350 秒沉）。
 //     又做過「總重固定、壓艙物只改每格多重」：拉桿幾乎沒感覺，而且壓艙物少了船卻沒浮高 —— 不像壓艙物。
 var VOX_T = 0.0007, KEG_T = 0.05, RHO_W = 1.025, LIFT_TAU = 3;   // 砲的重量在砲種表（GUNS，10_ship.js）
-/** 船型 T 的浮力表：T.hyd[z] ＝ 原本船殼 z 層到設計水線（T.zw）之間的體積（m³；水線上的層 ⇒ 負的），z ＝ 0 … zw＋60（水線上 6 m：粒子模式的進水要算到下沉 4.2 m 以上，33_flood.js）；T.disp ＝ 設計水線的排水量（噸）。載入時算一次。 */
+/** 船型 T 的浮力表：T.hyd[z] ＝ 原本船殼 z 層到設計水線（T.zw）之間的體積（m³；水線上的層 ⇒ 負的），z ＝ 0 … zw＋hydTop（預設 60 ＝ 水線上 6 m；開始沉的線高過 4.2 m 的船照它加高，sinkLineT：粒子模式的進水要算到下沉 4.2 m 以上，33_flood.js）；T.disp ＝ 設計水線的排水量（噸）。載入時算一次。 */
 function hydrostatics(T) {
-  var BASE = T.base, ZW = T.zw, sx = BASE.sx, top = Math.min(BASE.sz, ZW + 60), lo = new Int16Array(sx * top).fill(-1), hi = new Int16Array(sx * top), A = new Float64Array(top), z;
+  var BASE = T.base, ZW = T.zw, sx = BASE.sx, top = Math.min(BASE.sz, ZW + (T.hydTop || 60)), lo = new Int16Array(sx * top).fill(-1), hi = new Int16Array(sx * top), A = new Float64Array(top), z;
   BASE.each(function (x, y, z) { if (z >= top) return; var k = z * sx + x; if (lo[k] < 0 || y < lo[k]) lo[k] = y; if (y > hi[k]) hi[k] = y; });
   for (z = 0; z < top; z++) { var a = 0; for (var x = 0; x < sx; x++) { var k = z * sx + x; if (lo[k] >= 0) a += hi[k] - lo[k] + 1; } A[z] = a * S * S * S; }   // 那一層的體積
   var HYD = T.hyd = new Float32Array(top + 1);
@@ -54,6 +54,22 @@ function tonsAt(T, L) {
   if (z <= 0) return HYD[0] * RHO_W; if (z >= n) return HYD[n] * RHO_W;
   var i = Math.floor(z); return (HYD[i] + (HYD[i + 1] - HYD[i]) * (z - i)) * RHO_W;
 }
+/** 這型船開始沉的線（下沉幾 m）：頂層甲板泡水（Tim 2026-10-23「目前很常遇到上層炮甲板還能開炮就判定下沉」「用頂層甲板算可以嗎」）——
+ *  蓋過船中央（水線長的中點）的甲板裡最高那一層，在船中央的地板離設計水線多高（甲板 meta，35_decks.js；艏樓、艉樓沒蓋到船中央 ⇒ 不算）；
+ *  不低於 SINK_FINAL（4.2 m，以前每艘都是它，量過剛好是憲法號的上甲板；⛔ 照甲板就好 ⇒ 鐵甲艦頂層甲板只高 0.5 m，會比以前早沉）。沒有甲板 meta ⇒ SINK_FINAL。
+ *  量過（設計水線上、船中央）：tridente 8.0、松島號 7.6（船首樓）、ember 6.6、tidegrave 6.4、napoleon 5.9、nightlamp 5.8 m；其他 15 艘 ≤ 4.2 ⇒ 照舊。
+ *  跟著它的：浮力表的高度（hydTop）、進水格子的高度（33_flood.js flSkin）、沉沒的線（sinkGoneAt）、進水 %（61_hud.js floodPct）。 */
+function sinkLineT(T) {
+  if (T.sinkLine !== undefined) return T.sinkLine;
+  if (!isFinite(T.wl0) || !isFinite(T.wl1) || !T.h) return SINK_FINAL;     // 水線還沒量（waterline）⇒ 先照舊、不記
+  var xm = (T.wl0 + T.wl1) / 2, top = null;
+  hullDecks(T).forEach(function (d) { var f = deckFloor(d, xm); if (f !== null && (top === null || f > top)) top = f; });
+  T.topDeck = top === null ? null : +((top - T.zw) * S).toFixed(2);
+  return T.sinkLine = T.topDeck === null ? SINK_FINAL : Math.max(SINK_FINAL, T.topDeck);
+}
+function sinkFinalAt(sh) { return sinkLineT(sh.T); }
+/** 沉沒的線：開始沉之後再沉 4.8 m（以前 4.2 ⇒ 9 m；高的船照樣多 4.8 m，⛔ 照舊 9 m ⇒ tridente 8 m 開始沉、1 m 後就算沉沒）。 */
+function sinkGoneAt(sh) { return sinkFinalAt(sh) + (9 - SINK_FINAL); }
 function stepShip(sh, dt) {
   // 進水：水線下每個破洞的流量 ∝ √(水深)（貼著水面的洞進得慢）；抽水機每秒抽掉一點 ⇒ 小洞撐得住
   var wz = Math.min(sh.T.sz - 1, Math.floor(sh.T.zw + (sh.sink - sh.lift - sh.bob) / S)), N = 0, Q = 0, Dsp = 0, Dbs = 0;
@@ -72,11 +88,11 @@ function stepShip(sh, dt) {
     else sh.sink = Math.max(0, sh.sink + Math.min(Q * 1.1e-5 - 0.004 * pumpK(sh), 0.25) * fk * dt);   // pumpK：基礎抽水量／PUMP_REF（TASK-0604；憲法號 1）   // 進水與抽水一起照滑桿縮放（⛔ 只縮進水 ⇒ 調慢之後抽水永遠贏、永遠不沉）；
                                                                               // 上限 0.25 m/s：彈藥庫殉爆打掉三十幾萬格 ⇒ 不設上限兩秒就沉完，看不到船斷開
     if (VX) { var vo = vxOffset(sh); sh.sink = Math.max(0, sh.sink + vo - (sh.vxOff || 0)); sh.vxOff = vo; }   // 大漩渦：眼那一份（拖下去的深度 ＋ 讓翹起那一頭留在水面的那一段，08_sea.js vxOffset）直接加在吃水上，兩種進水模式都一樣
-    if (sh.sink > 4.2 && !sh.sinkingFinal && (fk > 0 || sh.vxSink > 0)) { sh.sinkingFinal = true; if (sh.vxSink > 0) { sh.vxEaten = true; sh.fate = '捲進漩渦'; note(sh, '被漩渦拖下去，開始沉了', true); } else note(sh, '進水太多，開始沉了'); }   // 大漩渦：跟進水同一條線（4.2 m）—— 進水速度調成 0 也照樣會被拖沉
+    if (sh.sink > sinkFinalAt(sh) && !sh.sinkingFinal && (fk > 0 || sh.vxSink > 0)) { sh.sinkingFinal = true; if (sh.vxSink > 0) { sh.vxEaten = true; sh.fate = '捲進漩渦'; note(sh, '被漩渦拖下去，開始沉了', true); } else note(sh, '進水太多，開始沉了'); }   // 大漩渦：跟進水同一條線（4.2 m）—— 進水速度調成 0 也照樣會被拖沉
     var gulp = VX && VX.gulp > 0 && Math.hypot(sh.px, sh.pz) < VX.re;          // 大漩渦：開始沉的船在眼裡 ⇒ 被吸下去（天氣設定頁「眼吞沉船」m/s²；Tim：「沈船會在幾秒內被吸走(沉掉)」）
     if (sh.sinkingFinal && sh.vxEaten && VX.pull > 0) sh.sinkV = vxPullV(sh.vxSink);   // 被眼拖沉的：上面 vxDrag 照同一條式子接著拖（Tim 2026-10-22「船體逐漸往下」）—— ⛔ 不換成眼吞沉船的加速度（1.5 秒就沉沒）；sinkV 留給沉沒之後接著吸
     else if (sh.sinkingFinal) { sh.sinkV += (gulp ? VX.gulp : 0.06 * (sh.vxEaten ? Math.max(fk, 1) : fk)) * dt; sh.sink += sh.sinkV * dt; }
-    if (sh.sink > (VX && sh.vxEaten ? vxSunkAt(sh) : 9)) { sh.sunk = true; sh.sunkAt = SIMT; note(sh, '沉沒', true); }   // sunkAt：結算判自爆沉沒（61_hud.js shipFate）；被眼拖沉的 ⇒ 整艘進到水裡才算（08_sea.js vxSunkAt）
+    if (sh.sink > (VX && sh.vxEaten ? vxSunkAt(sh) : sinkGoneAt(sh))) { sh.sunk = true; sh.sunkAt = SIMT; note(sh, '沉沒', true); }   // sunkAt：結算判自爆沉沒（61_hud.js shipFate）；被眼拖沉的 ⇒ 整艘進到水裡才算（08_sea.js vxSunkAt）
   } else { sh.sinkV = VX && VX.gulp > 0 && Math.hypot(sh.px, sh.pz) < VX.re ? sh.sinkV + VX.gulp * dt : Math.min(sh.sinkV + 0.05 * dt, 1.2); sh.sink += sh.sinkV * dt; }   // 眼裡：沉了也照樣吸（不夾 1.2 m/s）
   // 傾斜：破洞那一舷往下（格座標 +y ＝ 船體 +Z（右舷）；繞 +X 轉正角時 +Z 那邊下沉）；粒子模式照水的重心（33_flood.js floodTilt）
   var tl = fl ? floodTilt(sh, fl) : null;

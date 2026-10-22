@@ -767,6 +767,7 @@ function mainOverlay(fr) {
   if (!FLX3 && !CUTV.half) wpDrawFoam(hullUniforms);                                              // 船邊水花的白沫（13_water.js）：貼著浪、不寫深度
   flDraw();                                                              // 艙內的水面（33_flood.js，粒子模式）
   glsDraw();                                                             // 玻璃（15_smooth.js；TASK-0753）：半透明、不寫深度 ⇒ 不透明的、海、艙內的水都畫完才畫
+  townGlsDraw();                                                         // 城裡建築的玻璃（63_towns.js；同上那一套，近那一級才畫）
   townGlowDraw();                                                        // 城裡夜裡的燈：亮窗、光點（63_towns.js；加法、不寫深度 ⇒ 同上；白天不畫）
   inspHiDraw();                                                          // 船隻觀察勾了的部件高亮（86_inspect.js；隔著船殼看得到 ⇒ 透明的都畫完才畫；沒勾 ⇒ 一行就回）
   // 粒子＋砲彈＋瞄準點
