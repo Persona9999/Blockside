@@ -78,7 +78,7 @@ function bedScript(src) {
 //                                兩個都帶 hdg ＝ 正上方那一張畫面上方朝哪（度，北 0 順時針）⇒ 地球儀轉過來對齊海岸線；
 //                                那一頁 ⇒ 這一頁 'go'（地球儀淡進來了 ⇒ 降下去）、'leave'（要回地球儀 ⇒ 拉上去）
 //   城鎮（area.towns 有才要；63_towns.js）：這一頁 ⇒ 那一頁 { bsmap: 'need', what: 'towns' }；那一頁 ⇒ 這一頁 { bsmap: 'towns', towns: [規劃…], kit: 模型的索引 }（出錯 { bsmap: 'error', what: 'towns', msg }）；
-//   照索引挑好要用的模型 ⇒ { bsmap: 'need', what: 'townmodels', names: [名…] } ⇒ { bsmap: 'townmodels', models: { 名: { g, lo, png } } }（出錯 what: 'townmodels'）。模型只放在外面那一頁（Blocksail world/townkit/）。
+//   照索引挑好要用的模型 ⇒ { bsmap: 'need', what: 'townmodels', names: [名…] } ⇒ { bsmap: 'townmodels', models: { 名: { g, lo, png, mesh?（烘好的網格，63_towns.js townModelMesh） } } }（出錯 what: 'townmodels'）。模型只放在外面那一頁（Blocksail world/townkit/）。
 //   只收 BED.host 送來的訊息。
 function bedGet(cx, cy, peek, mid, bg) {                                // cx ＝ null ⇒ area.js；mid ⇒ 外圈的中等塊（BED.mid 公尺一點）；bg ⇒ 背景預載（外面那一頁排在最後）
   if (!BED.host) return bedScript(cx == null ? 'maps/' + BED.wantArea + '/area.js' : 'maps/' + BED.A.id + '/' + bedKey(cx, cy) + '.js');
