@@ -992,8 +992,10 @@ function townDraw() {
     townRoadSurface(T.roads).then(function (R) { T.roadSurface = R; if (T.inst) townGroundPrep(T); }, function (e) { TOWNS.err = '路面：' + e.message; console.warn(TOWNS.err); });
   });
   var nb = 0;                                                            // 實例、地面的帶子、屋頂殼：一格最多建一座城的一樣、照背景預算（08_seabed.js bedBusy；跟地球儀同一條主執行緒）
+  // 實例不等背景預算（TASK-0819；Tim 2026-10-22「照建議改」）：預算每格先被收塊、擺樹、地形網格吃光 ⇒ 模型解好了城還要等那一批做完（君士坦丁堡第二次去 1.3～2.4 s）。
+  //   建實例本來就是一格做完、不分段 ⇒ 等預算只是晚做、不是不卡；拿掉之後模型一好城就出來（0～0.1 s），最長一格沒變長（A/B 各 3 輪）。照舊一格最多一座、照舊扣預算。
   TOWNS.list.forEach(function (T) {
-    if (!T.inst && !nb && !bedBusy()) { var b0 = performance.now(); T.inst = townInst(T); townGroundPrep(T); townFlagFree(T); T.shDirty = true; T.tlS = T.tlD = true; TOWNS.dirty = true; nb++; bedSpent(b0); }
+    if (!T.inst && !nb) { var b0 = performance.now(); T.inst = townInst(T); townGroundPrep(T); townFlagFree(T); T.shDirty = true; T.tlS = T.tlD = true; TOWNS.dirty = true; nb++; bedSpent(b0); }
   });
   TL.k = TL.on ? TOD_LIT : 0;                                                        // 夜裡的燈：這一格點燈了沒（08_weather.js；陸地在城之前畫 ⇒ 用上一格的分組表，差一格看不出來）
   TOWNS.list.forEach(function (T) {                                    // 地面的帶子：一區一區（townGroundTile），離鏡頭近的先；一格最多 TOWN_GT_MAX 區、照背景預算
