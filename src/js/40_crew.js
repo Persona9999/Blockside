@@ -2,11 +2,11 @@
 // 一個人 ＝ 一張面向鏡頭、但永遠直立的貼圖。位置存格座標（腳底那一格的上緣），畫的時候用船的矩陣換到世界。
 // 砲要有人操作：人數 < 最少人數就不能開；裝填速度 ∝ (人數／滿編)^0.85。死傷的人不再操作；
 // 人不夠時，倖存者集中到還開得動的砲 ⇒ 其餘的砲沒人操作（HUD ○）。調度見 reassign。
-var ROLE = { GUN: 0, POWDER: 1, OFFICER: 2, MARINE: 3, TOP: 4, HELM: 5, HAND: 6, SURGEON: 7, CARPENTER: 8, SAILMAKER: 9, OAR: 10, COOK: 11 }, NROLE = 6;   // NROLE：貼圖照職位的列數（HAND 預備水手沒有自己那一列，畫成砲手；42_hands.js）
+var ROLE = { GUN: 0, POWDER: 1, OFFICER: 2, MARINE: 3, TOP: 4, HELM: 5, HAND: 6, SURGEON: 7, CARPENTER: 8, SAILMAKER: 9, OAR: 10, COOK: 11, NAVIGATOR: 12, QUARTERMASTER: 13 }, NROLE = 6;   // NROLE：貼圖照職位的列數（HAND 預備水手沒有自己那一列，畫成砲手；42_hands.js）
 var FR = { IDLE: 0, WORK_A: 1, WORK_B: 2, FIRE: 3, RUN_A: 4, RUN_B: 5, WOUNDED: 6, DEAD: 7 }, NFR = 8;
 // 砲班：滿編／最少照砲種表（GUNS 的 crew／min，10_ship.js）—— 兩舷各一班；24 磅長砲一班 12 人＋送藥童 ⇒ 一個人物約兩人
 // Tim 2026-10-12：砲班減一人（長砲 6 → 5、追擊砲 4 → 3），多出來的去搬火藥與彈藥（送藥手，23_powder.js）；射速照舊（裝填 ∝ 在崗／滿編）
-var ROLE_NAME = ['砲手', '送藥手', '軍官', '陸戰隊', '桅頂水手', '舵手', '水手', '船醫', '木匠', '帆匠', '槳手', '廚師'];   // 廚師（TASK-0720，45_galley.js）：貼圖用 ART_COOK 那一列   // 帆匠（47_sailmaker.js）；槳手（TASK-0691）：貼圖照砲手那一列（c.art）   // 船醫（TASK-0676）：貼圖用 ART_NURSE 那一列（44_medic.js medSurgeons）
+var ROLE_NAME = ['砲手', '送藥手', '軍官', '陸戰隊', '桅頂水手', '舵手', '水手', '船醫', '木匠', '帆匠', '槳手', '廚師', '航海士', '軍需官'];   // 廚師（TASK-0720，45_galley.js）：貼圖用 ART_COOK 那一列   // 帆匠（47_sailmaker.js）；槳手（TASK-0691）：貼圖照砲手那一列（c.art）   // 船醫（TASK-0676）：貼圖用 ART_NURSE 那一列（44_medic.js medSurgeons）
 var ART_CAPTAIN = 6, NART = 13;                   // 貼圖的列：0–5 照職位，6 船長（每艘船第一個軍官；職位照舊是軍官），7–12 Sirius 的六位（下一行）
 var ART_NURSE = 7, ART_CARPENTER = 8, ART_COOK = 9, ART_SAILMAKER = 10, ART_NAVIGATOR = 11, ART_QUARTERMASTER = 12;   // 新職位（TASK-0676）的貼圖列；職位接上之前沒有人用
 function standZ(g, x, y, z0, z1, head) {          // (x, y) 這一柱裡，z0..z1 之間可以站的高度（腳下實心、頭上 head 格空）；沒有 ⇒ -1
@@ -144,12 +144,13 @@ function makeCrew(sh) {
   }
   crew.filter(function (c) { return c.role === ROLE.OFFICER; }).forEach(function (c, k) { c.rank = k; if (!k) c.art = ART_CAPTAIN; });   // 階級照順序：船長（換貼圖）、大副、二副、三副、見習軍官（廣播用，61_hud.js newsCrew）
   medInit(sh); medSurgeons(sh, crew, add); pumpInit(sh);                                         // pumpInit：人力抽水機旁的走路點（45_pumps.js）；醫療艙走得到的床、要幾個人手（44_medic.js；沒有 ⇒ sh.med ＝ null，照舊）
-  galleyInit(sh); galleyCooks(sh, crew, add); galleyMess(sh, crew); effInit(sh);   // 廚房（TASK-0720，45_galley.js）：有 kind=galley 的爐灶才生廚師、分桌（add() 抽 rnd() ⇒ 放在最後：只有有廚房的船、只從這裡之後錯位）；工作效率（39_eff.js）
+  galleyInit(sh); galleyCooks(sh, crew, add); galleyMess(sh, crew);
+  dutyCrew(sh, crew, add, g, taken, wheel, qx, sz0, sz1); effInit(sh);   // 航海士、軍需官（TASK-0825，39_duty.js）：add() 抽 rnd() ⇒ 最後才生（人數 0 ⇒ 什麼都不做，戰局一位元不動）   // 廚房（TASK-0720，45_galley.js）：有 kind=galley 的爐灶才生廚師、分桌（add() 抽 rnd() ⇒ 放在最後：只有有廚房的船、只從這裡之後錯位）；工作效率（39_eff.js）
   // 站不下的（船隻配置頁調多了、船小）⇒ 記著，開戰時上方廣播一行（52_fleet.js crewShortNote）；⛔ 不默默少人
   function cnt(r) { return crew.filter(function (c) { return c.role === r; }).length; }
   //   ⚠ 預設本來就有站不下的（憲法號陸戰隊 11／12、送藥手 26／27；夜隼號陸戰隊 2／12）：開戰只報玩家改過的那幾項（61_hud.js crewShortNote），全部照實列在船隻配置頁（CREW_SEEN）
   sh.crewShort = [['砲班', sh.guns.reduce(function (a, gn) { return a + gn.crewFull; }, 0), cnt(ROLE.GUN), 'guns'], ['送藥手', sh.pmWant, cnt(ROLE.POWDER), 'monkeys'], ['軍官', CW.officers, cnt(ROLE.OFFICER), 'officers'],
-    ['舵手', wheel ? CW.helm : 0, cnt(ROLE.HELM), 'helm'], ['陸戰隊', CW.marines, cnt(ROLE.MARINE), 'marines'], ['桅頂水手', CW.top * sh.masts.length, cnt(ROLE.TOP), 'top'], ['預備水手', CW.hands, cnt(ROLE.HAND), 'hands'], ['船醫', sh.surgWant || 0, cnt(ROLE.SURGEON), 'surgeon'], ['槳手', sh.oarWant || 0, cnt(ROLE.OAR), 'oars'], ['木匠', sh.carpWant || 0, cnt(ROLE.CARPENTER), 'carpenter'], ['帆匠', sh.smWant || 0, cnt(ROLE.SAILMAKER), 'sailmaker'], ['廚師', sh.cookWant || 0, cnt(ROLE.COOK), 'cook']].filter(function (r) { return r[2] < r[1]; });
+    ['舵手', wheel ? CW.helm : 0, cnt(ROLE.HELM), 'helm'], ['陸戰隊', CW.marines, cnt(ROLE.MARINE), 'marines'], ['桅頂水手', CW.top * sh.masts.length, cnt(ROLE.TOP), 'top'], ['預備水手', CW.hands, cnt(ROLE.HAND), 'hands'], ['船醫', sh.surgWant || 0, cnt(ROLE.SURGEON), 'surgeon'], ['航海士', sh.navWant || 0, cnt(ROLE.NAVIGATOR), 'navigator'], ['軍需官', sh.qmWant || 0, cnt(ROLE.QUARTERMASTER), 'quartermaster'], ['槳手', sh.oarWant || 0, cnt(ROLE.OAR), 'oars'], ['木匠', sh.carpWant || 0, cnt(ROLE.CARPENTER), 'carpenter'], ['帆匠', sh.smWant || 0, cnt(ROLE.SAILMAKER), 'sailmaker'], ['廚師', sh.cookWant || 0, cnt(ROLE.COOK), 'cook']].filter(function (r) { return r[2] < r[1]; });
   CREW_SEEN[sh.T.id] = { n: crew.length, short: sh.crewShort, sig: crewSig(CW) };
   return crew;
 }

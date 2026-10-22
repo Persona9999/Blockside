@@ -550,6 +550,8 @@ function sliders() {
     v('surgeon', n ? '上限 ' + n + ' 人：病床每張配 ' + furnStaff('bed', 'surgeon') + ' 位' + (sg === null ? '' : '（這型 ' + sg + ' 位' + (sg > n ? ' ⇒ 上限截到 ' + n : '') + '；走不到的床不配）') + '；開戰就站在床旁；醫療艙要的人手先算船醫、不夠才派預備水手；有船醫的那一間治療快 50%；沒設醫療艙的船不上船' : '0（沒有：醫療艙照舊只靠預備水手）', n, d.surgeon);
     n = cw.cook; var gk = hc ? hc.galley * GALLEY.cooks : null;   // 廚師（TASK-0720，45_galley.js）：爐灶（模型 meta kind=galley）每座配 galley.cooks 位，上限截掉的照實寫
     v('cook', n ? '上限 ' + n + ' 人：爐灶每座配 ' + GALLEY.cooks + ' 位' + (gk === null ? '' : hc.galley ? '（這型 ' + hc.galley + ' 座 ⇒ ' + Math.min(n, gk) + ' 位' + (gk > n ? '，上限截到 ' + n : '') + '）' : '（這型沒有廚房 ⇒ 不上船）') + '；有廚房（kind=galley）的船才上船，開戰就站在爐灶旁做飯，預備水手輪流當伙夫去領；倒下不補 ⇒ 存糧吃完就斷炊' + (GALLEY_PCT > 0 ? '' : '　⚠ 細節設定「廚房加成」是 0 ⇒ 不開廚房') : '0（不開廚房：沒有廚師、沒人吃飯，工作效率一直是 ×1）', n, d.cook);
+    n = cw.navigator; v('navigator', n ? '1 人：站在後甲板舵輪旁；在崗 ⇒ 航速 +' + DUTY.navSpd + '%、轉向 +' + DUTY.navTurn + '%（倒下 ⇒ 還有軍官時剩 ' + Math.round(DUTY.standIn * 100) + '%）' : '沒有（航速、轉向照原本的）', n, d.navigator);   // 39_duty.js（TASK-0825）
+    n = cw.quartermaster; v('quartermaster', n ? '1 人：站在彈藥庫的取用點旁；在崗 ⇒ 送藥手裝藥包快 ' + DUTY.qmFill + '%（倒下 ⇒ 還有軍官時剩 ' + Math.round(DUTY.standIn * 100) + '%；沒有彈藥庫的船不上船）' : '沒有（送藥照原本的）', n, d.quartermaster);
     $('cr-oarR').style.display = hc && !hc.oars ? 'none' : '';   // 沒有槳的船藏起來
     $('cr-oarV').textContent = !hc ? '船型載入後才知道' : hc.rowers + ' 人：' + hc.oars + ' 支槳 × 每支 ' + hc.rk.join('–') + ' 人（照船上每支槳的設定，這一頁不調）；坐在槳座內側划；倒下時預備水手照位子補；一支槳到崗幾成就出幾成力';
     n = cw.shelter ? 1 : 0; v('shelter', n ? '開：預備水手不上露天甲板閒晃（只上去補位）、船長以外的軍官待在甲板下' : '關：預備水手偶爾上露天甲板走動、軍官站在露天甲板', n, d.shelter ? 1 : 0);

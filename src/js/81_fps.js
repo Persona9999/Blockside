@@ -117,6 +117,7 @@ function fpWho() { return FP.fol || FP.c; }
 function fpWhoText(sh, c) {
   var nm = c.role === ROLE.OFFICER && c.rank !== undefined ? officerRank(c.rank) : ROLE_NAME[c.role] || '船員', J = c.hand && c.hand.job;
   if (J && J.kind === 'eat') nm += '（伙夫：' + (J.at ? '在爐灶盛飯' : '去廚房領飯') + '）';   // 45_galley.js galleyNeeds／galleyJoin
+  nm += dutyWho(sh, c);                                                 // 航海士、軍需官在崗的加成（39_duty.js；TASK-0825）
   var e = effText(sh, c); return e ? nm + '｜工作效率 ' + e : nm;
 }
 /** 跟著 HUD 的節拍（61_hud.js hudFrame 每 6 格）刷新 #fpWho；沒在跟隨 ⇒ 空字串（template.html：空的不顯示）。只讀。 */

@@ -146,7 +146,8 @@ function sailShip(sh, dt) {
   var foe = foeOf(sh), tY = sh.yaw, rate = 0;
   var hk = HELM_TQ ? helmEff(sh) : helmK(sh);                         // 操舵（TASK-0777，31_drive.js）：開關開著 ⇒ 舵效（舵令 ⇒ 舵輪 ⇒ 舵的鏈）；關著 ⇒ 舊的 helmK
   var rmax = Math.max(RUD_LOW, 0.012 + 0.016 * Math.abs(sh.spd) / SPK) * hk * (UP === 1 ? 1 : 1 + (UP - 1) * clamp((deg - 90) / 45, 0, 1)) * sh.cfg.agile * playK('agile') * WX.agile;   // 天氣：暴風雨浪大、舵難使 ×0.8。⛔ 用 sh.spd 直接算 ⇒ 調快航速連帶變得更會轉
-  var rmaxB = HELM_TQ ? Math.max(RUD_LOW, 0.012 + 0.016 * Math.abs(sh.spd) / SPK) * (UP === 1 ? 1 : 1 + (UP - 1) * clamp((deg - 90) / 45, 0, 1)) * sh.cfg.agile * playK('agile') * WX.agile : rmax;   // 舵完好時的最大轉向率（差動照它換算，TASK-0777）
+  if (sh.navT !== undefined) rmax *= sh.navT;                          // 航海士（TASK-0825，39_duty.js）：最大轉向率 ×(1 ＋ 轉向 %)；沒有航海士的船 ⇒ 不乘
+  var rmaxB = HELM_TQ ? Math.max(RUD_LOW, 0.012 + 0.016 * Math.abs(sh.spd) / SPK) * (UP === 1 ? 1 : 1 + (UP - 1) * clamp((deg - 90) / 45, 0, 1)) * sh.cfg.agile * playK('agile') * WX.agile * (sh.navT !== undefined ? sh.navT : 1) : rmax;   // 舵完好時的最大轉向率（差動照它換算，TASK-0777）
   if (held && Math.abs(sh.spd) < 0.6 && !sh.struck && !sh.sunk) {   // 錨咬著、船幾乎停了 ⇒ 繞錨原地轉：我艦照 A／D、電腦（或雙錨時的我艦沒按）轉舷側對敵
     var pw = sh.i === PLAYER_I ? (KEYS.l ? 1 : 0) - (KEYS.r ? 1 : 0) : 0;
     if (pw) rate = pw * ANC_PIVOT;
