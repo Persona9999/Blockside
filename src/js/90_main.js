@@ -189,6 +189,7 @@ if (DEBUG) window.__game = {
   twbLots: function (use, n) { var T = twbTown(); return T ? (T.p.lots || []).filter(function (l) { return l.use === use; }).slice(0, n || 5).map(function (l) { return { id: l.id, at: l.at }; }) : null; },   // 那一種地塊的規劃座標（測建築模式用）
   twbScreen: function (q) { var T = twbTown(); return T ? twbScreenOf(T, q) : null; },
   twbProbe: function (q) { return twbProbe(q); },
+  townLines: function (id) { return townLines(id); },   // 引水渠的實例＋路（63_towns.js townLines；量墩跟路面疊多少）
   townDump: function (id) { return townDump(id); },   // 城的地面網格與整地高度的雜湊（63_towns.js townDump；增量重建 vs 整座建的對照）   // 規劃座標那一點：路面頂點高度 vs 現在的地形（87_townbuild.js twbProbe；查路面沉進地形）   // 規劃座標 ⇒ 螢幕座標（clientX、clientY；測建築模式用）
   trees: function (sp, n, at) { return treeFind(sp, n, at); },   // 找樹（63_trees.js treeFind）：那一種最靠近 at（[x, z]；沒給 ⇒ 鏡頭）的 n 棵
   // 海圖（TASK-0721；08_seabed.js、32_ground.js）：載了哪幾塊、換過幾次中心、等過幾次；每艘的擱淺讀數；q ＝ [x, z] ⇒ 那一點的高度與底質

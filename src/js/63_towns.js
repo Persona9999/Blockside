@@ -1443,6 +1443,14 @@ function townGhostDraw(q) {
   gl.drawElementsInstanced(gl.TRIANGLES, g.nq * 6, gl.UNSIGNED_INT, 0, 1);   // 深度相等（LEQUAL）的那一層混色
   gl.disable(gl.BLEND); gl.blendFuncSeparate(bs[0], bs[1], bs[2], bs[3]); gl.depthMask(true); if (cf) gl.enable(gl.CULL_FACE); gl.bindVertexArray(null);
 }
+/** 測試用（__game.townLines）：城 id 的引水渠實例（海域座標：中心、轉角、x 的倍率、半長、半厚、模型的 arch）＋ 每條路照同一套換到海域座標的中心線與寬
+ *  ⇒ 拿實例的墩（arch 兩側）去量跟路面疊多少 —— 跟規劃的 under 走不同的路（under 是 Blocksail 沿渠線取樣算的；這裡讀的是實際擺出來的實例） */
+function townLines(id) {
+  var T = TOWNS.list.filter(function (t) { return !id || t.id === id; })[0], K = TOWNS.kit; if (!T || !K) return null;
+  function W(q) { var e = T.E(q); return [e[0] - BED.ax, e[1] - BED.az]; }
+  return { id: T.id, lines: (T.inst || []).filter(function (q) { return q.line; }).map(function (q) { var m = K.M[q.k].m; return { k: q.k, x: q.x, z: q.z, th: q.th, sx: q.sx, hw: q.ft[0], hd: q.ft[1], arch: m.arch || null, len: m.size[0] * m.mpv }; }),
+    roads: T.p.roads.map(function (r) { return { id: r.id, seq: r.seq, w: r.w, path: (r.closed ? r.path.concat([r.path[0]]) : r.path).map(W) }; }) };
+}
 /** 測試用（__game.townDump）：城 id（沒給 ⇒ 第一座）每一區地面網格（讀 GPU：頂點、索引）與城框裡每一塊畫面高度（townHv）的雜湊
  *  ⇒ 建築模式的增量重建 vs 重新進城整座建（或 ?townfull=1）逐位元組比（townReplace）。 */
 function townDump(id) {
