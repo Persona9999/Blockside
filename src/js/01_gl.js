@@ -259,6 +259,7 @@ function programs() {
   var cd = gl.createTexture(); gl.activeTexture(gl.TEXTURE8); gl.bindTexture(gl.TEXTURE_2D, cd);   // 第 8 號：剖面切高的空貼圖（見 CUT_GLSL）
   gl.texImage2D(gl.TEXTURE_2D, 0, gl.R32F, 1, 1, 0, gl.RED, gl.FLOAT, new Float32Array([1e9]));
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST); gl.activeTexture(gl.TEXTURE0);
+  if (!SHELLT.tex) shellTexInit();                                       // 第 18 號：外殼式的貼圖陣列（62_shell.js；先給 1 層空的）
   P.vox = VK.compile(gl, VK.VOXEL_VS, voxFS());
   P.deb = VK.compile(gl,
     '#version 300 es\nlayout(location=0) in vec3 aP; layout(location=1) in vec3 aN; layout(location=2) in vec4 iP; layout(location=3) in vec4 iQ; layout(location=4) in float iC;\n' +
@@ -274,21 +275,22 @@ function programs() {
     '#version 300 es\nlayout(location=0) in vec3 aP; layout(location=1) in vec3 aN; layout(location=2) in vec3 aC; layout(location=3) in vec3 aM; uniform mat4 uModel,uVP; out vec3 vN; out vec3 vW; out vec3 vC; out vec3 vM;\n' +
     'void main(){ vec4 w=uModel*vec4(aP,1.0); vW=w.xyz; vN=mat3(uModel)*aN; vC=aC; vM=aM; gl_Position=uVP*w; }\n';
   TRI_FS =
-    '#version 300 es\nprecision highp float;\n' + SEA_GLSL + SHADOW_GLSL + CUT_GLSL + LAMP_GLSL + 'in vec3 vN; in vec3 vW; in vec3 vC; in vec3 vM; uniform vec3 uSun,uEye,uFog,uSky,uGround; uniform float uFogD,uLit,uGlow,uGls; uniform mat4 uCutInv; out vec4 o;\n' +
-    'void main(){ if(vW.y<uClip) discard; if(uCut.w>0.5 && cutOut((uCutInv*vec4(vW,1.0)).xyz)) discard; vec3 n=normalize(vN); float sd=dot(n,uSun), d=abs(sd); vec3 col=vC; float ga=1.0;\n' +
-    ' if(uLit>0.5){ float sk=shadowK(vW,(sd<0.0?-n:n)*(3.0-2.0*d)); d*=sk; col=vC*(mix(uGround,uSky,0.6)*0.65+vec3(1.0,0.96,0.88)*d*0.7);\n' +
+    '#version 300 es\nprecision highp float;\n' + SEA_GLSL + SHADOW_GLSL + CUT_GLSL + LAMP_GLSL + 'in vec3 vN; in vec3 vW; in vec3 vC; in vec3 vM; uniform vec3 uSun,uEye,uFog,uSky,uGround; uniform float uFogD,uLit,uGlow,uGls; uniform mat4 uCutInv; uniform highp sampler2DArray uMdlT; out vec4 o;\n' +
+    // 外殼式的貼圖（TASK-0820；62_shell.js）：頂點色欄 (−1−u, v, 層) ⇒ 照第 18 號的貼圖陣列取色（textureLod：分支裡不用隱含導數；沒有 mipmap）；其他照頂點色（bc ＝ vC ⇒ 畫面不變）
+    'void main(){ if(vW.y<uClip) discard; if(uCut.w>0.5 && cutOut((uCutInv*vec4(vW,1.0)).xyz)) discard; vec3 bc=vC; if(vC.x<-0.5) bc=textureLod(uMdlT,vec3(-vC.x-1.0,vC.y,vC.z),0.0).rgb; vec3 n=normalize(vN); float sd=dot(n,uSun), d=abs(sd); vec3 col=bc; float ga=1.0;\n' +
+    ' if(uLit>0.5){ float sk=shadowK(vW,(sd<0.0?-n:n)*(3.0-2.0*d)); d*=sk; col=bc*(mix(uGround,uSky,0.6)*0.65+vec3(1.0,0.96,0.88)*d*0.7);\n' +
     // 金屬（TASK-0627；材質表 metal／rough ⇒ 平滑渲染的頂點帶 vM）：天空／海面的反射（菲涅耳：斜看更亮）＋太陽的鏡面高光（照陰影）；vM.x 0 ⇒ 跟以前一樣
     '  if(vM.x>0.001){ vec3 v=normalize(uEye-vW), r=reflect(-v,n); float ro=clamp(vM.y,0.05,1.0), fr=0.04+0.96*pow(1.0-abs(dot(n,v)),5.0);\n' +
     '   vec3 env=mix(uFog*0.5,mix(uFog,uSky,0.55)*1.2,smoothstep(-0.2,0.35,r.y)); vec3 sp=vec3(1.0,0.96,0.88)*pow(max(dot(n,normalize(uSun+v)),0.0),mix(120.0,6.0,ro))*step(0.0,sd)*sk*(2.0-1.5*ro);\n' +
-    '   col=mix(col,col*0.35+env*mix(vec3(0.85),vC,0.4)*(0.5+0.5*fr),vM.x*(0.85-0.5*ro))+sp*vM.x; }\n' +
+    '   col=mix(col,col*0.35+env*mix(vec3(0.85),bc,0.4)*(0.5+0.5*fr),vM.x*(0.85-0.5*ro))+sp*vM.x; }\n' +
     // 玻璃（TASK-0753；15_smooth.js glsDraw 開 uGls，vM.z ＝ 材質表 clear）：同一套天空／海平線反射與太陽高光，法線翻向看的那一面；
     //   反射照菲涅耳（正看淡、斜看亮）× 光滑度；alpha ＝ 1 − 透明度 ×（1 − 反射），高光蓋上去 ⇒ 正看透出後面、斜看像鏡子。uGls 0 ⇒ 整段跳過（alpha 1）
     '  if(uGls>0.5){ vec3 v=normalize(uEye-vW), gn=dot(n,v)<0.0?-n:n, r=reflect(-v,gn); float ro=clamp(vM.y,0.02,1.0), fr=0.04+0.96*pow(1.0-max(dot(gn,v),0.0),5.0), rk=mix(0.12,1.0,fr)*(1.0-0.7*ro);\n' +
     '   vec3 env=mix(uFog*0.5,mix(uFog,uSky,0.55)*1.2,smoothstep(-0.2,0.35,r.y)); float hs=pow(max(dot(gn,normalize(uSun+v)),0.0),mix(400.0,8.0,ro))*step(0.0,dot(gn,uSun))*sk*(2.0-1.5*ro);\n' +
     '   col=mix(col,env,rk)+vec3(1.0,0.96,0.88)*hs; ga=clamp(1.0-vM.z*(1.0-rk)+hs,0.0,1.0); } }\n' +
-    ' if(uLN>0) col+=vC*lampK(vW,n);\n' +                                 // 點光源
+    ' if(uLN>0) col+=bc*lampK(vW,n);\n' +                                 // 點光源
     // 燈籠（meta kind=lantern；drawModels 設 uGlow）：只有琥珀色的燈罩發光（色 245 ＝ 1, .71, .33）—— 金框（248，藍 0）、暗紅（128）照常受光
-    ' if(uGlow>0.0) col=mix(col,vC*1.2+vec3(0.3,0.14,0.0),uGlow*step(0.9,vC.r)*step(0.2,vC.b)*step(vC.b,0.5));\n' +
+    ' if(uGlow>0.0) col=mix(col,bc*1.2+vec3(0.3,0.14,0.0),uGlow*step(0.9,bc.r)*step(0.2,bc.b)*step(bc.b,0.5));\n' +
     ' float fd=length(vW-uEye); o=vec4(mix(col,uFog,1.0-exp(-fd*uFogD)),ga); }\n';
   P.tri = VK.compile(gl, TRI_VS, TRI_FS);
   // 帆：頂點法線（平滑，不是一個三角形一個平面）；法線翻向看的那一面；包覆光（背光面不死黑、明暗過渡慢）＋太陽在帆後面時布透出暖光
@@ -450,6 +452,7 @@ function setCommon(p) {
   if (u.uVe) { if (VX) gl.uniform2f(u.uVe, VX.De, VX.re2); else gl.uniform2f(u.uVe, 0, 1); }   // 眼的喉部（深度、半徑²）
   if (u.uClip) gl.uniform1f(u.uClip, PASS.clip);
   if (u.uCutT) gl.uniform1i(u.uCutT, 8);                       // 剖面的切高貼圖（74_cutaway.js）：固定第 8 號
+  if (u.uMdlT) gl.uniform1i(u.uMdlT, 18);                      // 外殼式的貼圖陣列（62_shell.js SHELLT）：固定第 18 號
   if (u.uBkK) gl.uniform3fv(u.uBkK, todBakeK());                  // 遠景貼圖的光照倍數（08_weather.js todBakeK：世界時間的夜晚只剩月光；沒開 ⇒ 1）
   if (u.uSunK) gl.uniform1f(u.uSunK, wxSun());                   // 天氣（08_weather.js）：陽光、水手與碎木的亮度、白沫
   if (u.uLum) gl.uniform1f(u.uLum, wxLum());
