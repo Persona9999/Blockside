@@ -278,6 +278,7 @@ function flGone(fl, ix) { var F = fl.F, x0 = F.X0 + ix * F.c; return fl.cutS > 0
 function flDrop(fl, i) { var c = fl.F.c; fl.A[i] = 0; fl.cap[i] = 0; fl.pd[i] = 0; for (var l = 0; l < c; l++) { fl.op[i * c + l] = 0; fl.ol[i * c + l] = -1; } fl.fo.delete(i); }
 function flCut(sh, fl) {
   var F = fl.F, NX = F.NX, i, h; fl.cutX = sh.breakX; fl.cutS = sh.breakSide;
+  if (sh.wrs) wrsCut(sh, fl.cutX, fl.cutS);                             // 房間模擬（第 4 檔）：那一截的段清空、不再裝水（33_wrsim.js，TASK-0809）
   for (i = 0; i < F.N; i++) if (flGone(fl, i % NX)) flDrop(fl, i);
   for (h = 0; h < fl.hA.length; h++) if (fl.hA[h] > 0 && flGone(fl, ((h % (NX * F.NZ)) / F.NZ) | 0)) { fl.hA[h] = 0; fl.hQ[h] = 0; }
   var J = fl.J;

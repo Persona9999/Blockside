@@ -193,6 +193,54 @@ var TREE_SPECIES = {
             stalk: { n: [1, 4], h: [1.3, 1.7], col: [0.62, 0.55, 0.36], seed: [0.70, 0.62, 0.40] } },   // w：葉寬（公尺）；tip：葉尖的顏色；stalk.h：花莖高 ÷ 葉長
     place: { spacing: 3, alt: [0.8, 1.6, 6, 12], slopeMax: 0.5, mats: { 10: 1 }, dens: 0.55, forest: -0.6, clump: 20, scale: [0.8, 1.25], shell: 0, view: 220, sink: 0.12 },
     variants: 3
+  },
+  // ── 只種在城鎮標的位置（place.town：不照地形自己長；雕刻作品的子作品標 meta kind=tree、tree=<樹種> ⇒ 遊戲照那裡種這一種，63_towns.js townTreesSet；TASK-0748）──
+  //   Tim 2026-10-22：「樹木可以用Blocksail的生成式樹木嗎(新功能 標meta替換為遊戲內樹木 確保風格統一)」「可以標記樹的類型(也可以由妳加新種的生成式樹木)」
+  //   ⇒ 君士坦丁堡 1453 的園子、修道院、墓園用的地中海樹種。spacing 只拿來算樹冠殼的權重（城鎮的樹一棵一棵照標的點）。
+  cypress: {
+    name: '地中海柏樹',                                                 // Cupressus sempervirens（直立型）：細長的深綠色柱子 —— 東羅馬的墓園、修道院、花園邊
+    height: [12, 19],
+    trunk: { r: [0.16, 0.24], taper: 0.55, bend: 0.03, segs: 7, sides: [6, 4], lean: 0.02, col: [0.36, 0.27, 0.20], top: 0.97, crown: 0.1 },
+    levels: [{ n: [16, 22], from: [0.06, 1.0], angle: [6, 16], len: [0.7, 1.1], r: 0.4, bend: 0.06, up: 0.4, segs: 2, sides: [3, 0] }],   // 枝幾乎貼著樹幹往上長 ⇒ 窄柱
+    leaf: { kind: 'cluster', per: [3, 4], size: [0.55, 0.8], flat: 1, stretch: 2.4, jit: 0.25, col: [0.12, 0.24, 0.12], vary: 0.07, along: 0.8 },
+    place: { town: true, spacing: 6, scale: [1, 1], sink: 0.15 },
+    variants: 4
+  },
+  olive: {
+    name: '橄欖樹',                                                     // Olea europaea：矮、樹幹扭、銀綠色的葉 —— 果園、修道院的園地
+    height: [5, 8],
+    trunk: { r: [0.22, 0.32], taper: 0.4, bend: 0.35, segs: 5, sides: [6, 4], lean: 0.16, col: [0.45, 0.42, 0.36], top: 0.42, crown: 0.5 },
+    levels: [
+      { n: [3, 5], from: [0.4, 1.0], angle: [35, 62], len: [0.6, 0.85], r: 0.55, bend: 0.3, up: 0.18, segs: 3, sides: [4, 3] },
+      { n: [3, 4], from: [0.3, 0.95], angle: [30, 55], len: [0.45, 0.6], r: 0.5, bend: 0.3, up: 0.1, segs: 2, sides: [3, 0] }
+    ],
+    leaf: { kind: 'cluster', per: [2, 3], size: [0.9, 1.35], flat: 0.7, col: [0.42, 0.48, 0.34], vary: 0.08, along: 0.4 },
+    place: { town: true, spacing: 7, scale: [1, 1], sink: 0.15 },
+    variants: 5
+  },
+  fruit: {
+    name: '果樹',                                                       // 無花果、蘋果、榅桲那一類的小果樹（不分種）：矮、圓樹冠、零星的果子色 —— 菜園、蓄水池的園地
+    height: [3.5, 5.5],
+    trunk: { r: [0.12, 0.18], taper: 0.45, bend: 0.2, segs: 4, sides: [6, 4], lean: 0.08, col: [0.38, 0.30, 0.22], top: 0.4, crown: 0.55 },
+    levels: [
+      { n: [4, 5], from: [0.4, 1.0], angle: [38, 60], len: [0.55, 0.8], r: 0.55, bend: 0.2, up: 0.2, segs: 3, sides: [4, 3] },
+      { n: [2, 3], from: [0.35, 0.95], angle: [28, 50], len: [0.45, 0.6], r: 0.5, bend: 0.22, up: 0.12, segs: 2, sides: [3, 0] }
+    ],
+    leaf: { kind: 'cluster', per: [2, 3], size: [0.75, 1.15], flat: 0.75, col: [0.24, 0.42, 0.15], vary: 0.12, along: 0.4, tint: [0.12, [0.66, 0.24, 0.14]] },
+    place: { town: true, spacing: 5, scale: [1, 1], sink: 0.12 },
+    variants: 5
+  },
+  plane: {
+    name: '東方懸鈴木',                                                 // Platanus orientalis：高大、寬樹冠、斑駁的灰白樹皮 —— 拜占庭的廣場、修道院中庭、泉邊
+    height: [16, 24],
+    trunk: { r: [0.45, 0.65], taper: 0.45, bend: 0.08, segs: 6, sides: [8, 5], lean: 0.05, col: [0.62, 0.60, 0.50], top: 0.55, crown: 0.45 },
+    levels: [
+      { n: [5, 7], from: [0.4, 1.0], angle: [35, 60], len: [0.6, 0.85], r: 0.5, bend: 0.18, up: 0.2, segs: 4, sides: [5, 3] },
+      { n: [3, 4], from: [0.35, 0.95], angle: [28, 52], len: [0.45, 0.65], r: 0.5, bend: 0.22, up: 0.12, segs: 3, sides: [3, 0] }
+    ],
+    leaf: { kind: 'cluster', per: [2, 3], size: [1.6, 2.4], flat: 0.7, col: [0.25, 0.42, 0.16], vary: 0.12, along: 0.35 },
+    place: { town: true, spacing: 12, scale: [1, 1], sink: 0.3 },
+    variants: 4
   }
 };
 

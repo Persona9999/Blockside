@@ -88,7 +88,7 @@ function wrsInit(sh) {
   });
   return { W: W, X: X, G: G, n: n, su: new Int32Array(n), u: new Int32Array(n0), cap: cap, zf: zf, ca: ca, gp: gp,
     E: { n: ea.length, a: Int32Array.from(ea), b: Int32Array.from(eb), f: new Float64Array(ea.length), ac: new Float64Array(ea.length) }, kout: new Float64Array(n), hw: new Float64Array(n), zs: new Float64Array(n), lv: new Float64Array(n), K: new Float64Array(n),
-    O: O, NO: NO, NO0: NO, dl: new Map(), dop: new Map(), dynN: 0, vq: [], oa: oa, ob: ob, ja: ja, jb: jb, up: up, oacc: new Float64Array(CAP), oq: new Float32Array(CAP), ost: new Int8Array(CAP), odoor: odoor, tops: tops, bud: new Map(), emO: new Float64Array(CAP), upO: new Float64Array(CAP), mvO: new Float64Array(CAP), putSeen: new Int32Array(NR), putN: 0, crO: new Int32Array(CAP), xs: new Int32Array(CAP), xd: new Int32Array(CAP), xk: new Uint8Array(CAP), xcl: new Int32Array(128), xself: 0, xselfB: 0, xsk: new Int32Array(16), xsO: new Int32Array(CAP), xover: 0, xoO: new Int32Array(CAP), dA: { breach: 0, open: 0, jets: 0, pipe: 0 }, wk: { surf: 0, body: 0, open: 0, pipe: 0, put: 0, take: 0, jet: 0, dda: 0, near: 0, sort: 0, sea: 0, vox: 0 },
+    O: O, NO: NO, NO0: NO, semi: new Uint8Array(CAP), semiN: 0, dl: new Map(), dop: new Map(), dynN: 0, vq: [], oa: oa, ob: ob, ja: ja, jb: jb, up: up, oacc: new Float64Array(CAP), oq: new Float32Array(CAP), ost: new Int8Array(CAP), odoor: odoor, tops: tops, bud: new Map(), emO: new Float64Array(CAP), upO: new Float64Array(CAP), mvO: new Float64Array(CAP), putSeen: new Int32Array(NR), putN: 0, crO: new Int32Array(CAP), xs: new Int32Array(CAP), xd: new Int32Array(CAP), xk: new Uint8Array(CAP), xcl: new Int32Array(128), xself: 0, xselfB: 0, xsk: new Int32Array(16), xsO: new Int32Array(CAP), xover: 0, xoO: new Int32Array(CAP), dA: { breach: 0, open: 0, jets: 0, pipe: 0 }, wk: { surf: 0, body: 0, open: 0, pipe: 0, put: 0, take: 0, jet: 0, dda: 0, near: 0, sort: 0, sea: 0, vox: 0 },
     idx: idx, NCK: NCK, J: { n: 0, p: new Float32Array(3 * WRS_JN), v: new Float32Array(3 * WRS_JN), u: new Int32Array(WRS_JN), src: new Int32Array(WRS_JN), life: new Float32Array(WRS_JN), hd: new Float32Array(WRS_JN), dst: new Int32Array(WRS_JN), fr: new Int32Array(WRS_JN), wt: new Float32Array(WRS_JN) }, Jtot: 0, jet: 0, opt: {},
     br: new Map(), aR: new Float64Array(NR), rl: new Float64Array(NR), rn: new Int32Array(NR), rf: new Float64Array(NR), fly: new Float64Array(NR), rFH: new Float64Array(NR).fill(-1e9), fpar: new Int32Array(NR), fa: new Float64Array(NR), fh: new Float64Array(NR), NR: NR, upm: WR_U / (S * S * S), inTot: 0, outTot: 0, sub: 0, ms: 0, steps: 0, cross: 0,
     dbg: { out: 0, noroom: 0, spill: 0, todst: 0, back: 0, undo: 0, wait: 0, over: 0, life: 0, solid: 0, water: 0, emitB: 0, emitS: 0, emitD: 0 } };
@@ -353,6 +353,8 @@ function wrsStep(sh, dt, fl) {
           src = B; dst = A; Qv = FL_C * ar2 * Math.sqrt(2 * G * head2) * h;
         }
       }
+      if (s.semi[i] && hd > wb && !s.opt.noclamp) Qv = 1e12;            // 半連通（打大了，wrsSemi）而且下游淹過開口 ⇒ 兩間是同一個水體：不照 Torricelli 限流量，這一小步直接搬到兩邊拉平（下面的夾子）；
+                                                                          //   水位退到開口以下 ⇒ 照一般開口（落下 ⇒ 粒子）
       var Q0 = Qv;
       if (hd > wb && !s.opt.noclamp) {                                     // 下游淹過開口 ⇒ 最多搬到兩間拉平（驗收第 8 條）：這一對房這一小步剩下的額度
         var rS = W.colRoom[src], rD = W.colRoom[dst]; bk = rS * s.NR + rD; bu = s.bud.get(bk);
@@ -372,6 +374,7 @@ function wrsStep(sh, dt, fl) {
       var fall = !up && s.lv[dst] <= wb, lf = 0, em = false;                                   // 下游的水面沒淹到開口 ⇒ 自由落下（粒子）
       if (fall) {                                                          // 起點 ＝ 下游那一側的那一格（上下的：開口正下方那一格）；旁邊的照面的法線（上游那格 → 下游那格）噴出去
         var dA = dst === A, ex = dA ? O.ax[i] : O.bx[i], ey = dA ? O.ay[i] : O.by[i], nx = O.T[i] ? ex - (dA ? O.bx[i] : O.ax[i]) : 0, ny = O.T[i] ? ey - (dA ? O.by[i] : O.ay[i]) : 0;
+        var nl = Math.hypot(nx, ny); if (nl > 1) { nx /= nl; ny /= nl; }    // 打穿的開口兩頭隔好幾格（wrsLine：最多 WRS_THICK ＋ 1）⇒ 方向要除長度（⛔ 以前沒除：隔 9 格就噴 9 倍快、落到別間；烘焙的開口兩頭相鄰 ⇒ 長度 1、不變）
         var sp = O.T[i] ? Math.sqrt(2 * G * Math.max(0, hu - 0.5 * (wb + wt))) / S : 0;   // 粒子帶的水頭：那一欄的水面跟出發那一間的平均水面取低的（⛔ 照那一欄 ⇒ 從水丘噴出去的水帶著丘頂的高度，落點那一間也被墊高、高過海面）
         if (wrsEmit(s, ex + 0.5, ey + 0.5, O.Z[i] + 0.5, nx * sp, ny * sp, 0, mv, src, s.rl[W.colRoom[src]] > -1e8 ? Math.min(hu, s.rl[W.colRoom[src]]) : hu, dst, rD2)) { em = true; if (O.T[i]) D.emitS += mv; else D.emitD += mv; s.emO[i] += mv; if (s.opt.above && hu > 0.02 + seaH(M[0] * ox + M[4] * oy + M[8] * O.Z[i] + M[12], M[2] * ox + M[6] * oy + M[10] * O.Z[i] + M[14], SIMT)) { D.hiE = (D.hiE || 0) + mv; var kk = (s.su[src] >= s.cap[src] ? (s.rn[W.colRoom[src]] ? 'colFull' : (s.rFH[W.colRoom[src]] > -1e8 ? 'body' : 'bodyNone')) : 'open'); D['hi_' + kk] = (D['hi_' + kk] || 0) + mv; } } else lf = wrsPut(s, M, dst, mv, hu);
       } else lf = wrsPut(s, M, dst, mv, hu);
@@ -464,6 +467,18 @@ function wrsPump(s, nu) {
   if (got) { s.outPump = (s.outPump || 0) + got; wrsAgg(s); }
   return got;
 }
+/** 斷成兩截（33_flood.js flCut）：那一截（格 x ≥ cutX，或 cutS ≤ 0 時 ≤ cutX；照段的中心）的段 ⇒ 水回海裡（記成出）、容量 0（之後裝不進水）；那一截飛行中的水一起拿掉。
+ *  那一截的破口細檔已經關了（hA ＝ 0）。乾房間的常數重算（wrsSurf 下一小步全船算一次）。 */
+function wrsCut(sh, cutX, cutS) {
+  var s = sh.wrs, X = s.X, J = s.J, gone = function (x) { return cutS > 0 ? x >= cutX : x <= cutX; }, n0 = 0, j;
+  for (j = 0; j < s.n; j++) if (gone(X.cx[j])) { n0 += s.su[j]; s.su[j] = 0; s.cap[j] = 0; }
+  for (var i = 0; i < J.n; i++) {
+    if (!gone(J.p[i * 3])) continue;
+    var nu = J.u[i]; n0 += nu; s.Jtot -= nu; if (J.fr[i] >= 0) s.fly[J.fr[i]] -= nu;
+    var e = --J.n; if (i !== e) { J.p.copyWithin(i * 3, e * 3, e * 3 + 3); J.v.copyWithin(i * 3, e * 3, e * 3 + 3); J.u[i] = J.u[e]; J.src[i] = J.src[e]; J.life[i] = J.life[e]; J.hd[i] = J.hd[e]; J.dst[i] = J.dst[e]; J.fr[i] = J.fr[e]; J.wt[i] = J.wt[e]; } i--;
+  }
+  s.outTot += n0; s.rnD = null; s.cut = { x: cutX, side: cutS, m3: +(n0 / s.upm).toFixed(2) }; wrsAgg(s);
+}
 /** 打掉、補回一格（33_flood.js floodTouch）⇒ 排隊，下一步 wrsStep 開頭處理（殉爆一步幾萬格 ⇒ 每步最多 WRS_VOXN 格）。 */
 function wrsVoxQ(sh, x, y, z) { if (!sh.broken && !sh.sinkingFinal) sh.wrs.vq.push(x, y, z); }
 function wrsVoxRun(sh, s) {
@@ -481,8 +496,22 @@ function wrsLine(sh, s, x, y, z, ax) {
   var a = end(-1); if (!a) return; var b = end(1); if (!b) return;
   if (wrRoomAt(W0, x, y, z) >= 0) return;                                // 這一格本來就是房間裡的空氣（家具之類）⇒ 不是牆
   var key = ((ax * 4096 + a[3]) * 4096 + a[2] + 2048) * 8192 + a[1] + 4096, open = !Gd.get(x, y, z) && a[0] !== b[0], cur = s.dl.get(key);
-  if (open && cur === undefined) { var i = wrsDynOp(s, ax, a, b, z); if (i >= 0) { s.dl.set(key, i); s.O.N[i]++; } }
-  else if (!open && cur !== undefined) { s.dl.delete(key); s.O.N[cur]--; }
+  if (open && cur === undefined) { var i = wrsDynOp(s, ax, a, b, z); if (i >= 0) { s.dl.set(key, i); s.O.N[i]++; wrsSemi(s, i); } }
+  else if (!open && cur !== undefined) { s.dl.delete(key); s.O.N[cur]--; wrsSemi(s, cur); }
+}
+/** 這一對房打大了沒（Tim 2026-10-22「走半連通減少計算量」「半連通狀態可能會消失(假如破口在房間上方 但是水位退到破口以下)」）：
+ *  同烘焙合併房間的尺（33_wrooms.js）照「這一對房」加總（烘焙的＋打穿的開口；⛔ 照一個開口比：打穿的一層一個、3 m² 的洞拆成十幾層各 0.2 m²，永遠不到）——
+ *  旁邊的加起來 ≥ WR_JOIN m²、或上下的加起來 ≥ WR_THR × 兩間較大那間的地板面積 ⇒ 這一對之間的每個開口都半連通：
+ *  下游淹過開口時兩間當同一個水體（每一小步直接拉平、不照 Torricelli 算）；水位退到開口以下就回到一般開口（落下 ⇒ 粒子）。
+ *  ⛔ 不真的合併房間（木匠補回時不用拆）。烘焙時旁邊 ≥ WR_JOIN 的早就併了 ⇒ 沒打穿之前不會有半連通。 */
+function wrsSemi(s, i) {
+  var O = s.O, NR = s.NR, q, pk = function (k) { var a = O.A[k], b = O.B[k]; return a < b ? a * NR + b : b * NR + a; };
+  if (!s.pairOps) { s.pairOps = new Map(); for (q = 0; q < s.NO; q++) { var k0 = pk(q), L0 = s.pairOps.get(k0); if (!L0) s.pairOps.set(k0, L0 = []); if (L0.indexOf(q) < 0) L0.push(q); } }   // 每一對房之間的開口
+  var key = pk(i), L = s.pairOps.get(key); if (!L) s.pairOps.set(key, L = []); if (L.indexOf(i) < 0) L.push(i);
+  var side = 0, deck = 0; for (q = 0; q < L.length; q++) { var ar = O.N[L[q]] * S * S; if (O.T[L[q]]) side += ar; else deck += ar; }
+  if (!s.rFlo) { var W0 = s.sh.T.wrm; s.rFlo = new Float64Array(NR); for (var r = 0; r < NR; r++) for (var c = W0.roomCol0[r]; c < W0.roomCol0[r + 1]; c++) { for (var d = 0, cm = 0; d < W0.colNZ[c]; d++) cm = Math.max(cm, W0.cnt[W0.colOff[c] + d]); s.rFlo[r] += cm * S * S; } }   // 每間的地板面積（每一欄最寬那一層）
+  var on = !s.opt.nosemi && (side >= WR_JOIN || deck >= WR_THR * Math.max(s.rFlo[O.A[i]], s.rFlo[O.B[i]])) ? 1 : 0;   // 反向對照（wsimo=nosemi）：打大了也照一般開口
+  for (q = 0; q < L.length; q++) { if (s.semi[L[q]] !== on) s.semiN += on ? 1 : -1; s.semi[L[q]] = on; }
 }
 /** 打穿的開口：同一對房、同一層（上下的：同一個高度）一個，接在開口表後面（wrsInit 預留 WRS_DYN 個）；面數 N 照線加減（N ＝ 0 ⇒ 不流）。 */
 function wrsDynOp(s, ax, a, b, z) {
@@ -566,8 +595,8 @@ function wrsRead(sh) {
   for (var hsh = 2166136261, j3 = 0; j3 < s.n; j3++) hsh = Math.imul(hsh ^ u[j3], 16777619);   // 狀態雜湊（驗收第 10 格：兩次跑逐秒比）：每一欄的單位 ＋ 飛行中
   hsh = Math.imul(hsh ^ s.Jtot, 16777619); hsh = Math.imul(hsh ^ s.J.n, 16777619);
   var brs = []; s.br.forEach(function (b) { if (b.j >= 0) brs.push([+(b.ar || 0).toFixed(3), +b.q.toFixed(4)]); });
-  return { vol: +((tot + s.Jtot) / s.upm).toFixed(3), hash: (hsh >>> 0).toString(16), xself: s.xself, xselfB: s.xselfB, xsk: Array.from(s.xsk), wk: Object.keys(s.wk).reduce(function (o, k) { o[k] = s.steps ? Math.round(s.wk[k] / s.steps) : 0; return o; }, {}), wkStep: s.steps ? Math.round(wrsWork(s) / s.steps) : 0, wkMax: s.wkMax || 0, dyn: { ops: s.dynN, open: (function () { for (var c = 0, q = s.NO0; q < s.NO; q++) if (s.O.N[q] > 0) c++; return c; })(), m2: (function () { for (var c = 0, q = s.NO0; q < s.NO; q++) c += s.O.N[q]; return +(c * S * S).toFixed(2); })(), lines: s.dl.size, q: s.vq.length / 3, full: s.NO >= s.O.T.length }, tmStep: s.tm && s.steps ? Object.keys(s.tm).reduce(function (o, k) { o[k] = +(s.tm[k] / s.steps).toFixed(3); return o; }, {}) : null, msStep: s.steps ? +((s.msTot || 0) / s.steps).toFixed(3) : 0, msMax: +(s.msMax || 0).toFixed(2), xdbg: s.xdbg, xover: s.xover, xcl: (function () { var L = []; for (var c = 0; c < 128; c++) if (s.xcl[c]) L.push([c, s.xcl[c]]); return L.sort(function (x, y) { return y[1] - x[1]; }); })(), xTop: (function () { var L = []; for (var q = 0; q < s.NO; q++) if (s.xoO[q]) L.push(q); L.sort(function (x, y) { return s.xoO[y] - s.xoO[x]; }); return L.slice(0, 8).map(function (q) { return [q, s.O.T[q] ? 'side' : 'deck', s.oa[q], s.ob[q], s.O.Z[q], s.xoO[q]]; }); })(), rough: rn ? +(rs / rn).toFixed(4) : 0, roughMax: +rmax.toFixed(3), cross: s.cross, first: s.first || null, br: brs, comX: +k.comX.toFixed(2), comY: +k.comY.toFixed(2), roll: +tl[0].toFixed(4), pitch: +tl[1].toFixed(4), inTot: +(s.inTot / s.upm).toFixed(3), outTot: +(s.outTot / s.upm).toFixed(3),
-    cons: tot + s.Jtot - s.inTot + s.outTot, dbg: s.dbg ? Object.keys(s.dbg).reduce(function (o, k) { o[k] = +(s.dbg[k] / s.upm).toFixed(2); return o; }, {}) : null, brOut: +((s.brOut || 0) / s.upm).toFixed(2), spillR: s.spillR ? Object.keys(s.spillR).map(function (r) { return [+r, +(s.spillR[r] / s.upm).toFixed(2), +(W.roomVox[r] * S * S * S).toFixed(2)]; }) : null, crossTop: (function () { var L = []; for (var q = 0; q < s.NO; q++) if (s.crO[q]) L.push(q); L.sort(function (x, y) { return s.crO[y] - s.crO[x]; }); return L.slice(0, 8).map(function (q) { return [q, s.O.T[q] ? 'side' : 'deck', s.oa[q], s.ob[q], s.O.Z[q], s.crO[q], s.su[s.ja[q]] >= s.cap[s.ja[q]] ? 'aFull' : 'a', s.su[s.jb[q]] >= s.cap[s.jb[q]] ? 'bFull' : 'b']; }); })(), dA: s.opt.above ? Object.keys(s.dA).reduce(function (o, k) { o[k] = +(s.dA[k] / s.upm).toFixed(2); return o; }, {}) : undefined, jets: s.J.n, jetM3: +(s.Jtot / s.upm).toFixed(3), sub: s.sub, ms: +s.ms.toFixed(2), ops: [nst, nout, nin] };
+  return { vol: +((tot + s.Jtot) / s.upm).toFixed(3), hash: (hsh >>> 0).toString(16), xself: s.xself, xselfB: s.xselfB, xsk: Array.from(s.xsk), wk: Object.keys(s.wk).reduce(function (o, k) { o[k] = s.steps ? Math.round(s.wk[k] / s.steps) : 0; return o; }, {}), wkStep: s.steps ? Math.round(wrsWork(s) / s.steps) : 0, wkMax: s.wkMax || 0, cut: s.cut || null, gone: (function () { if (!s.cut) return null; for (var c = 0, q = 0; q < s.n; q++) if (!s.cap[q]) c += s.su[q]; return c; })(), dyn: { semi: s.semiN, ops: s.dynN, open: (function () { for (var c = 0, q = s.NO0; q < s.NO; q++) if (s.O.N[q] > 0) c++; return c; })(), m2: (function () { for (var c = 0, q = s.NO0; q < s.NO; q++) c += s.O.N[q]; return +(c * S * S).toFixed(2); })(), lines: s.dl.size, q: s.vq.length / 3, full: s.NO >= s.O.T.length }, tmStep: s.tm && s.steps ? Object.keys(s.tm).reduce(function (o, k) { o[k] = +(s.tm[k] / s.steps).toFixed(3); return o; }, {}) : null, msStep: s.steps ? +((s.msTot || 0) / s.steps).toFixed(3) : 0, msMax: +(s.msMax || 0).toFixed(2), xdbg: s.xdbg, xover: s.xover, xcl: (function () { var L = []; for (var c = 0; c < 128; c++) if (s.xcl[c]) L.push([c, s.xcl[c]]); return L.sort(function (x, y) { return y[1] - x[1]; }); })(), xTop: (function () { var L = []; for (var q = 0; q < s.NO; q++) if (s.xoO[q]) L.push(q); L.sort(function (x, y) { return s.xoO[y] - s.xoO[x]; }); return L.slice(0, 8).map(function (q) { return [q, s.O.T[q] ? 'side' : 'deck', s.oa[q], s.ob[q], s.O.Z[q], s.xoO[q]]; }); })(), rough: rn ? +(rs / rn).toFixed(4) : 0, roughMax: +rmax.toFixed(3), cross: s.cross, first: s.first || null, br: brs, comX: +k.comX.toFixed(2), comY: +k.comY.toFixed(2), roll: +tl[0].toFixed(4), pitch: +tl[1].toFixed(4), inTot: +(s.inTot / s.upm).toFixed(3), outTot: +(s.outTot / s.upm).toFixed(3),
+    cons: tot + s.Jtot - s.inTot + s.outTot + (s.outPump || 0), pumped: +((s.outPump || 0) / s.upm).toFixed(3), dbg: s.dbg ? Object.keys(s.dbg).reduce(function (o, k) { o[k] = +(s.dbg[k] / s.upm).toFixed(2); return o; }, {}) : null, brOut: +((s.brOut || 0) / s.upm).toFixed(2), spillR: s.spillR ? Object.keys(s.spillR).map(function (r) { return [+r, +(s.spillR[r] / s.upm).toFixed(2), +(W.roomVox[r] * S * S * S).toFixed(2)]; }) : null, crossTop: (function () { var L = []; for (var q = 0; q < s.NO; q++) if (s.crO[q]) L.push(q); L.sort(function (x, y) { return s.crO[y] - s.crO[x]; }); return L.slice(0, 8).map(function (q) { return [q, s.O.T[q] ? 'side' : 'deck', s.oa[q], s.ob[q], s.O.Z[q], s.crO[q], s.su[s.ja[q]] >= s.cap[s.ja[q]] ? 'aFull' : 'a', s.su[s.jb[q]] >= s.cap[s.jb[q]] ? 'bFull' : 'b']; }); })(), dA: s.opt.above ? Object.keys(s.dA).reduce(function (o, k) { o[k] = +(s.dA[k] / s.upm).toFixed(2); return o; }, {}) : undefined, jets: s.J.n, jetM3: +(s.Jtot / s.upm).toFixed(3), sub: s.sub, ms: +s.ms.toFixed(2), ops: [nst, nout, nin] };
 }
 /** 生一顆粒子（格座標、格／秒、單位；src ＝ 從哪一欄出來的，落點放不下時放回去；hd ＝ 上游的水頭（世界高度），落點那一間滿了照它往上溢）。滿了 ⇒ 回 false（呼叫的人直接搬）。 */
 function wrsEmit(s, x, y, z, vx, vy, vz, nu, src, hd, dst, fr) {
