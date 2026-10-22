@@ -201,8 +201,9 @@ function wrsStep(sh, dt, fl) {
     var b = s.br.get(hh);
     if (!b) {
       var F = fl.F, side = (hh / (F.NX * F.NZ)) | 0, sg = side ? 1 : -1, rr = -1, x = Math.floor(fl.hX[hh]), z = Math.floor(fl.hZ[hh]), y0 = Math.floor(fl.hYi[hh]), yf = y0;
-      for (var dy = 0; dy < 40 && rr < 0; dy++) for (var dz = 0; dz <= 2 && rr < 0; dz++) { rr = wrRoomAt(W, x, y0 + sg * dy, z + dz); yf = y0 + sg * dy; }   // 從破口往艙裡（+sg）走，碰到的第一間
-      b = { r: rr, j: rr >= 0 ? wrsColNear(s, rr, x + 0.5, yf + 0.5, z + 0.5) : -1, acc: 0, q: 0, x: x + 0.5, y: yf + 0.5, z: z + 0.5, sg: sg, a0: ar };
+      for (var dy = 0; dy < 40 && rr < 0; dy++) for (var dz = 0; dz <= 2 && rr < 0; dz++) { rr = wrRoomAt(W, x, y0 + sg * dy, z + dz); yf = y0 + sg * dy; }
+      var zf2 = z; for (var dz2 = 1; dz2 <= 40 && rr < 0; dz2++) for (var dy2 = 0; dy2 < 40 && rr < 0; dy2++) { rr = wrRoomAt(W, x, y0 + sg * dy2, z - dz2); yf = y0 + sg * dy2; zf2 = z - dz2; }   // 平著找不到（破口後面那一層不是房間：例如松島號砲廓的牆是裝甲、房間照拆掉裝甲的船殼切 ⇒ 那一層跟外面通）⇒ 往下找（水會落下去；TASK-0822）   // 從破口往艙裡（+sg）走，碰到的第一間
+      b = { r: rr, j: rr >= 0 ? wrsColNear(s, rr, x + 0.5, yf + 0.5, (rr >= 0 && zf2 < z ? zf2 : z) + 0.5) : -1, acc: 0, q: 0, x: x + 0.5, y: yf + 0.5, z: z + 0.5, sg: sg, a0: ar };
       s.br.set(hh, b);
     }
     if (b.j >= 0) hs.push(hh, b);
