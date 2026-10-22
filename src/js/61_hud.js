@@ -27,7 +27,7 @@ function hudNewsCrew(sh, c, dead, cause) {
   if (c.role === ROLE.GUN) return;
   var cap = c.art === ART_CAPTAIN, how = dead ? (cause === '落水' || cause === '溺水' ? cause : '陣亡') : '受傷倒下', why = cause && cause !== '落水' && cause !== '溺水' ? '（' + cause + '）' : '';
   if (cap) { note(sh, '<b style="color:var(--gold)">船長' + how + '！</b>' + why, true); return; }
-  if (c.role === ROLE.OFFICER || c.role === ROLE.HELM || c.role === ROLE.SURGEON || c.role === ROLE.COOK) {   // 船醫（TASK-0676）、廚師（TASK-0720，45_galley.js）：人少，當下報
+  if (c.role === ROLE.OFFICER || c.role === ROLE.HELM || c.role === ROLE.SURGEON || c.role === ROLE.COOK || c.role === ROLE.NAVIGATOR || c.role === ROLE.QUARTERMASTER) {   // 航海士、軍需官（TASK-0825）   // 船醫（TASK-0676）、廚師（TASK-0720，45_galley.js）：人少，當下報
     var left = sh.crew.filter(function (o) { return o.role === c.role && crewAble(o); }).length, nm = ROLE_NAME[c.role], off = c.role === ROLE.OFFICER;   // 軍官照階級報（大副、二副…；40_crew.js makeCrew）
     // 「全倒」只報一次（sh.news.down[職位]；newsFlush 看到那個職位又有人能動才收回）：之後倒下的同職位併進 5 秒那一行。
     //   ⛔ 不管 ⇒ 醫療艙淹了、幾位船醫一起落水（在水裡的不算能動）、一個一個溺水 ⇒ 每淹死一位都算出「還有 0 位」，連報好幾次「船醫溺水　船醫全倒」（Tim 2026-10-18 截圖：憲法號 4 次；軍官同理）。
@@ -153,7 +153,7 @@ function panel(sh, title) {
     ((sh.ancMode ? '拋錨' : sh.manual ? '手動操舵' : '自動操舵' + (sh.helmMode && HELM_TAKE_K[sh.helmMode] && !sh.struck && !sh.sunk ? '・' + HELM_TAKE_K[sh.helmMode].name : '')) +   // 接管航行的模式（54_helm.js HELM_TAKES）
     (sh.anc ? '　' + anchorText(sh) : '') + '　舵 ' + (sh.rudder > 0.05 ? '左 ' + Math.round(sh.rudder * 100) + '%' : sh.rudder < -0.05 ? '右 ' + Math.round(-sh.rudder * 100) + '%' : '正')) + '<br>' + navText(sh) + '</div><div class="pc">' +
     capText(sh) + '<br>' +
-    '船員 ' + (sh.able || 0) + '/' + sh.crew0 + '（傷 ' + sh.wounded + '　亡 ' + sh.dead + '）' + handsText(sh) + medText(sh) + pumpText(sh) + galleyText(sh) + burnText(sh) + swimText(sh) + '　' + supplyText(sh) + '<br>' +
+    '船員 ' + (sh.able || 0) + '/' + sh.crew0 + '（傷 ' + sh.wounded + '　亡 ' + sh.dead + '）' + handsText(sh) + medText(sh) + pumpText(sh) + galleyText(sh) + dutyText(sh) + burnText(sh) + swimText(sh) + '　' + supplyText(sh) + '<br>' +
     '砲 有人 ' + (sh.gunsManned || 0) + '／還在 ' + sh.gunsAlive + '／' + sh.guns.length + '　' + m + '<br>開火 ' + sh.fired + '　命中 ' + sh.hits +
     gmapLegend(sh) + '</div></div>';
 }

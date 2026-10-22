@@ -479,6 +479,7 @@ function driveStep(sh, dt, vS, vB, deg, brake) {
   }
   }
   if (HELM_TQ) for (i = 0; i < P.length; i++) { p = P[i]; if (p.kind === 'sail' || p.kind === 'rudder') continue; Fx += p.F; Fabs += Math.abs(p.F); }
+  if (sh.navF !== undefined) Fx *= sh.navF;                             // 航海士（TASK-0825，39_duty.js）：推力 ×(1 ＋ 航速 %)² ⇒ 最高航速 ×(1 ＋ 航速 %)；沒有動力 ⇒ 0 × 倍數 ＝ 0（不憑空生出動力）。沒有航海士的船 ⇒ 不乘
   D.Fx = Fx; D.give = give; D.want = want;
   var Ff = k * vB * vB;                                                   // 螺旋槳轉速（畫面）：自己那一份推力 ÷ 完好時全速分到的推力 ⇒ √ ⇒ × rpm_max
   for (i = 0; i < P.length; i++) {

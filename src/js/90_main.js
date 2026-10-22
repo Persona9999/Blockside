@@ -150,7 +150,7 @@ if (DEBUG) window.__game = {
   furnHit: function (i, name, k, dmg) { var sh = SHIPS[i], o = sh.rooms.filter(function (r) { return r.name === name; })[0], m = o.furn[k]; damageModel(sh, m, [0, 5, 0], dmg); var B = roomBuffNow(o); return { item: m.item, hp: m.hp, alive: m.alive, buff: buffText(B), cap: +roomCap(o).toFixed(2), eff: +roomEff(o).toFixed(2) }; },
   roomPlace: function (id, name, type, items, p) { var T = HULLT[id], r = hullRooms(T).filter(function (x) { return x.name === name; })[0]; return placeOk(roomGrid(T, r), type, items, p); },
   med: function (i) { return medInfo(SHIPS[i || 0]); },
-  carp: function (i) { return carpInfo(SHIPS[i || 0]); },
+  carp: function (i) { return carpInfo(SHIPS[i || 0]); }, duty: function (i) { return dutyInfo(SHIPS[i || 0]); },   // 航海士、軍需官（39_duty.js；TASK-0825）
   sm: function (i) { return smInfo(SHIPS[i || 0]); }, dmg: function (i) { return dmgInfo(SHIPS[i || 0]); },   // 損壞表（48_damage.js；只讀 —— 木匠、帆匠點名時才重掃）       // 帆匠與帆布櫃（47_sailmaker.js）   // 木匠與木工台（46_carpenter.js）
   burn: function (i) { return burnInfo(SHIPS[i || 0]); },   // 著火（49_burn.js）：燒著幾格、火場、救火的人、每面著過火的帆；沒著過火 ⇒ null
   burnAt: function (i, x, y, z) { var sh = SHIPS[i || 0], B = burnOf(sh); burnCatch(sh, B, x, y, z, 1, 1e9); burnFlush(sh, B, true); return B.n; },   // 點第 i 艘的 (x, y, z)（照樣要有一面露在乾空氣裡、材質會燒）⇒ 燒著幾格

@@ -232,13 +232,16 @@ GALLEY_NUMS = (('cooks', 1, 4, True, '每座爐灶幾位廚師（全船上限 �
                ('go', 1, 20, True, '同時最多幾個伙夫在路上或在領'), ('fetchT', 0, 30, False, '伙夫在爐灶旁盛飯要站幾秒'), ('waitT', 0, 120, False, '沒鍋可領最多等幾秒'),
                ('hold', 0, 600, False, '吃完滿加成維持幾秒（過了就算餓、開始派伙夫）'), ('fade', 0, 600, False, '之後線性退回 1 要幾秒'),
                ('start', 0, 1, True, '1 ＝ 開局算剛吃過'), ('douse', 0, 1, True, '1 ＝ 史實模式：敵艦進 dousR 內就熄火（不做新的，現成的照領）'), ('dousR', 50, 5000, False, '熄火距離（m）'))
+# 航海士、軍需官的加成（TASK-0825；js/39_duty.js 讀 CFG.duty，⛔ js 裡只有沒寫時的同一組預設）：(鍵, 下限, 上限, 說明)；多的鍵、少的鍵都擋
+DUTY_NUMS = (('navSpd', 0, 50, '航海士在崗：最高航速加幾 %（推力照平方乘；沒有動力 ⇒ 不會動）'), ('navTurn', 0, 100, '航海士在崗：最大轉向率加幾 %'),
+             ('qmFill', 0, 200, '軍需官在崗：送藥手在取用點裝藥包快幾 %'), ('standIn', 0, 1, '航海士／軍需官不在崗、還有軍官能動 ⇒ 加成剩幾成（0 ＝ 不頂替）'))
 MAT_OPT = (('metal', 0, 1, '金屬度（選填；0 ＝ 不反光、1 ＝ 金屬：太陽高光＋天空反射；TASK-0627）'), ('rough', 0, 1, '粗糙度（選填；0 ＝ 鏡面、1 ＝ 很霧；沒寫 ＝ 0.5）'),
            ('clear', 0, 0.95, '透明度（選填；0 ＝ 不透明、0.95 ＝ 幾乎看不見；寫了 ⇒ 這種材質的格畫成半透明的平面、看得到後面，反光照 rough 走同一條光滑表面（菲涅耳＋太陽高光）。TASK-0753 玻璃 glass）'),
            ('pen', 1, 5000, '擊穿門檻（選填；每格板厚要幾 kJ，船殼硬度倍率 1 時；寫了 ⇒ 實心彈照能量與入射角判穿／凹／彈，TASK-0621）'))
 MAT_BOOL = (('smooth', '平滑（選填 true／false；true ⇒ 這種材質的格沒寫 render 也畫成平滑面＋金屬反光，螺旋槳整份平滑；關聯明寫 render=voxel 照方塊。Tim 2026-10-17：鐵甲、鍋爐開，包銅皮不開）'),)
 CREW = {'officers': (0, 8, True), 'helm': (0, 4, True), 'marines': (0, 60, True), 'marineGap': (5, 200, True),
         'top': (0, 8, True), 'monkeys': (0, 2, True), 'handsK': (0, 4, False), 'shelter': (0, 1, True),   # shelter：船員避開露天甲板（TASK-0637；0／1）
-        'surgeon': (0, 60, True), 'carpenter': (1, 20, True), 'sailmaker': (1, 20, True), 'cook': (0, 4, True)}   # 廚師（TASK-0720；有廚房 kind=galley 的船才上船）   # 帆匠（TASK-0699）                                           # 木匠（TASK-0676 ②）                                                                       # 船醫（TASK-0676；有醫療艙才上船）
+        'surgeon': (0, 60, True), 'carpenter': (1, 20, True), 'sailmaker': (1, 20, True), 'cook': (0, 4, True), 'navigator': (0, 1, True), 'quartermaster': (0, 1, True)}   # 航海士、軍需官（TASK-0825，js/39_duty.js）   # 廚師（TASK-0720；有廚房 kind=galley 的船才上船）   # 帆匠（TASK-0699）                                           # 木匠（TASK-0676 ②）                                                                       # 船醫（TASK-0676；有醫療艙才上船）
 CREW_SHIP = {'hands': (0, 120, True)}          # 只在每艘船寫（TASK-0570 船隻配置頁的預設）：預備水手人數；沒寫 ＝ lim.hands × handsK
 GUN_CREW_MAX = 8                               # 砲班滿編上限（砲旁的站位；遊戲 05_hull.js GUN_CREW_MAX）
 GEO_PAIRS = ('marines', 'aimZ', 'deckAim', 'rigAim')
@@ -344,6 +347,17 @@ def validate(cfg, prev=None):
         for f in BU:
             if f not in [x[0] for x in BURN_NUMS]:
                 err('burn.' + f, '不認得的鍵（admin.py BURN_NUMS 沒有）')
+    DU = cfg.get('duty')                                                                # 航海士、軍需官（TASK-0825；js/39_duty.js）
+    if not isinstance(DU, dict):
+        err('duty', '要是物件（航海士、軍需官的加成，見 admin.py DUTY_NUMS）')
+    else:
+        for f, lo, hi, what in DUTY_NUMS:
+            x = DU.get(f)
+            if isinstance(x, bool) or not isinstance(x, (int, float)) or not lo <= x <= hi:
+                err('duty.' + f, '%s（%s～%s 的數字）' % (what, lo, hi))
+        for f in DU:
+            if f not in [x[0] for x in DUTY_NUMS]:
+                err('duty.' + f, '不認得的鍵（admin.py DUTY_NUMS 沒有）')
     GA = cfg.get('galley')                                                              # 廚房（TASK-0720；js/45_galley.js）
     if not isinstance(GA, dict):
         err('galley', '要是物件（廚房的參數，見 admin.py GALLEY_NUMS）')
@@ -767,7 +781,7 @@ def validate(cfg, prev=None):
                     elif not (isinstance(q.get('rgb'), list) and len(q['rgb']) == 3 and all(isnum(v) and 0 <= v <= 2 for v in q['rgb'])):
                         err(qp + '.rgb', '光色 [r, g, b]，0～2')
     if prev:
-        for sec in ('limits', 'menu', 'lim', 'guns', 'geo0', 'crew0', 'fire', 'burn', 'galley', 'idle'):
+        for sec in ('limits', 'menu', 'lim', 'guns', 'geo0', 'crew0', 'fire', 'burn', 'galley', 'duty', 'idle'):
             for k in (prev.get(sec) or {}):
                 if k not in (cfg.get(sec) or {}):
                     err(sec + '.' + k, '原本有、這份少了（遊戲會讀它）')
