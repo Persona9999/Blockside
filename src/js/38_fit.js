@@ -106,7 +106,9 @@ function fitXf(fp, fs, mir) {
 /** 這艘自己的那一種、同一類的砲（有 breech、muzzle 的第一門）⇒ 零件；沒有 ⇒ null。 */
 function fitOwnPart(h, type, cls) {
   var M = h.rig.meshes, m = (h.rig.models || []).filter(function (q) { return q.meta && q.meta.kind === 'gun' && modelKind(q) === type && fitClass(q) === cls && q.points && q.points.muzzle && q.points.breech; })[0];
-  return m ? { m: m, mesh: M[m.mesh], from: '這艘' } : null;
+  if (!m) return null;
+  var ms = gmtOf(h.rig.models, m);                                      // 有座的砲（TASK-0836；05_hull.js gmtPair）⇒ 零件 ＝ 砲身＋座一份（換上去的那一門整門一起退）
+  return ms.length ? { m: Object.assign({}, m, { bbox: gmtBox(m, ms), origin: gmtOrigin(m, ms) }), mesh: gmtMesh(M, m, ms), from: '這艘' } : { m: m, mesh: M[m.mesh], from: '這艘' };
 }
 /** 零件表那一門（'<船 id>#<模型 id>'）⇒ Promise<零件|null>：載那艘的船檔、拿那一門（網格複製一份；換色的擺放照它的 mats）。 */
 function fitLoadPart(ref) {
@@ -116,6 +118,8 @@ function fitLoadPart(ref) {
   return (FIT_SRC[ref] = VK.loadEmbedded(H.el).then(meshPool).then(function (model) {
     var h = model.header, m = ((h.rig && h.rig.models) || []).filter(function (q) { return q.meta && String(q.meta.id) === mid; })[0];
     if (!m) return null;
+    var ms = gmtOf(h.rig.models, m);                                    // 有座的砲（TASK-0836）⇒ 砲身＋座接成一份（座的換色不管：接的是網格原本的 mats）
+    if (ms.length) return fitCopyPart(Object.assign({}, m, { bbox: gmtBox(m, ms), origin: gmtOrigin(m, ms), mats: null }), gmtMesh(h.rig.meshes, m, ms), H.name, h.size[1] / 2);
     return fitCopyPart(m, h.rig.meshes[m.mesh], H.name, h.size[1] / 2);
   }).catch(function () { return null; }));
 }

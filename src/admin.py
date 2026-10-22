@@ -1734,6 +1734,7 @@ def act_shipcheck(ids=None):
               '門、艙蓋（模型 meta kind=door、固定點 hinge-a／hinge-b；不擋人、打掉了開口才進水，TASK-0638）：' + (I.get('doors') or '—'), '',
               '砲門蓋板（模型 meta kind=portlid、lid_of、固定點 hinge-a／hinge-b；本身是裝飾，交戰掀蓋推砲、沒事收砲闔蓋，只是畫面，TASK-0719）：' + (I.get('ports') or '—'), '',
               '後座（開火沿砲軸往裡退、裝填快好推出去；模型 meta recoil 格數，0 ＝ 不演；弩箭／火箭／石彈／希臘火不演；只是畫面）：' + (I.get('recoil') or '—'), '',
+              '砲身與砲座（座 ＝ 模型 meta kind=gunmount、mount_of；開火只退砲身、座跟著砲塔轉；砲 meta pitch ＋ 固定點 trunnion ⇒ 砲身照瞄準上下轉；只是畫面，TASK-0836）：' + (I.get('gunmount') or '—'), '',
               '照參數轉的子物件（模型 meta spin；舵、舵輪跟著舵角轉，只是畫面，TASK-0640）：' + (I.get('spins') or '—'), '',
               '裝飾（模型 meta deco=1；載入時拿掉、畫質「裝飾」開著才畫，不算重量、不被打，TASK-0682）：' + (I.get('deco') or '—'), '',
               '廚房（模型 meta kind=galley；廚師站在爐灶旁、預備水手當伙夫去領飯，TASK-0720）：' + (I.get('galley') or '—'), '',
