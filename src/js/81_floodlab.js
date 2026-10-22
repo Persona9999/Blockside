@@ -89,7 +89,7 @@ function floodLab(o) {
   });
   var tHole = SIMT, holeA = function () { return [+SIMT.toFixed(1), sh.fl.holes.filter(function (h) { return sh.fl.hA[h] > 0; }).map(function (h) { return [h, +sh.fl.hA[h].toFixed(4)]; })]; };   // 參考解從打洞那一刻起算（flabRef）；holeA ＝ 那一刻每個洞的面積（參考解照當時的算）
   out.traceA = [holeA()];
-  if (o.wsim) { sh.wrs = wrsInit(sh); out.o.wsim = 1; out.traceR = []; out.traceT = []; if (o.wsimo) { o.wsimo.forEach(function (k) { sh.wrs.opt[k] = true; }); out.o.wsimo = o.wsimo.join(','); } }   // 房間模擬並排跑（TASK-0808，33_wrsim.js）：同一組破口；每秒一筆 traceR ＝ [t, 水 m³, 橫傾目標, 縱傾目標, 小步數, ms]，traceT ＝ 細檔的 [t, 橫傾目標, 縱傾目標]
+  if (o.wsim) { sh.wrs = wrsInit(sh); out.o.wsim = 1; out.wsimDoors = wsimDoors(sh); out.traceR = []; out.traceT = []; if (o.wsimo) { o.wsimo.forEach(function (k) { sh.wrs.opt[k] = true; }); out.o.wsimo = o.wsimo.join(','); } }   // 房間模擬並排跑（TASK-0808，33_wrsim.js）：同一組破口；每秒一筆 traceR ＝ [t, 水 m³, 橫傾目標, 縱傾目標, 小步數, ms]，traceT ＝ 細檔的 [t, 橫傾目標, 縱傾目標]
   // 鏡頭：對著船中、看艙內（剖面拿掉靠鏡頭那一半）
   var cc = shipCenter(sh); camSet({ tgt: [cc[0], cc[1] + (o.ty || 0), cc[2]], trYaw: null, trMe: null });   // 注視點：船中心往上 ty 公尺（看底艙 ⇒ 負的）
   camSet({ follow: null, mode: 0, yaw: o.yaw, pitch: o.pitch, dist: o.dist > 0 ? o.dist : Math.max(60, (x1 - x0) * S * 0.95) });
@@ -205,6 +205,14 @@ function wsimPic(sh, px) {
   return out;
 }
 
+/** 門、艙蓋對到哪個開口（TASK-0808 驗收第 11 格；33_wrsim.js wrsInit 的 odoor／tops）：
+ *  { n 幾扇門, ops: [{ door 第幾扇, name, cells 開口幾格, zt, op 開口, z 層, m2, a 下面那間, b 上面那間 }], tops: [{ door, name, room, m2 }]（沒對到開口 ⇒ 通到甲板上面）}。 */
+function wsimDoors(sh) {
+  var s = sh.wrs, O = s.O, D = sh.doors || [], ops = [], k;
+  function nm(d) { var m = d && d.m; return m ? (m.ref || m.name || m.id || null) : null; }
+  for (k = 0; k < s.NO; k++) if (s.odoor[k] >= 0) { var d = D[s.odoor[k]]; ops.push({ door: s.odoor[k], name: nm(d), cells: d ? d.cells.length / 2 : 0, zt: d ? d.zt : null, op: k, z: O.Z[k], m2: +(O.N[k] * S * S).toFixed(2), a: s.oa[k], b: s.ob[k] }); }
+  return { n: D.length, ops: ops, tops: s.tops.map(function (t) { return { door: t.d, name: nm(D[t.d]), room: t.r, m2: +t.ar.toFixed(2) }; }) };
+}
 /** 釘住姿態（TASK-0806，?pin=1）：記下浮穩那一刻的位置與姿態，回一支「每一步之後照它還原、重算矩陣」的函式。
  *  ⇒ 水頭只由艙內水位決定（下沉、傾斜、浪的起伏都不動）；只在報表裡叫，⛔ 不碰 stepShip。 */
 function flabPin(sh) {

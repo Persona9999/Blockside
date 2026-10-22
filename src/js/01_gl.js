@@ -142,6 +142,7 @@ window.addEventListener('unhandledrejection', function (ev) { var r = ev.reason;
 if (!gl) { glFail('這個瀏覽器沒有 WebGL2，畫不出來。'); throw new Error('no WebGL2'); }   // 拆檔後這裡是閉包的頂層：throw ＝ 原本的 return（停下來）
 
 var P = {};
+var SEA_SHORE = [0.0, 3.0, 0.12];                                       // 岸邊浪變小（P.water；TASK-0818）：水深幾公尺起變小、幾公尺以上照舊；岸上海面壓低幾公尺
 // 不卡畫面的著色器（TASK-0816）：KHR_parallel_shader_compile ⇒ 先送出編譯、連結（glProgStart），每格問好了沒（glProgReady），好了才拿（glProgEnd：跟 VK.compile 一樣的 { prog, u }、編不過照樣丟錯）。
 //   以前第一次畫城鎮時一口氣編 5 支、等到編完（VK.compile 問 COMPILE_STATUS ⇒ 主執行緒等驅動）：皇家港外進航海 +4.6 秒那一格 633 ms。沒有這個擴充 ⇒ glProgReady 一律 true（照舊等）。
 var GL_PAR = gl && gl.getExtension('KHR_parallel_shader_compile');
@@ -259,6 +260,7 @@ function programs() {
   var cd = gl.createTexture(); gl.activeTexture(gl.TEXTURE8); gl.bindTexture(gl.TEXTURE_2D, cd);   // 第 8 號：剖面切高的空貼圖（見 CUT_GLSL）
   gl.texImage2D(gl.TEXTURE_2D, 0, gl.R32F, 1, 1, 0, gl.RED, gl.FLOAT, new Float32Array([1e9]));
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST); gl.activeTexture(gl.TEXTURE0);
+  if (!SHELLT.tex) shellTexInit();                                       // 第 18 號：外殼式的貼圖陣列（62_shell.js；先給 1 層空的）
   P.vox = VK.compile(gl, VK.VOXEL_VS, voxFS());
   P.deb = VK.compile(gl,
     '#version 300 es\nlayout(location=0) in vec3 aP; layout(location=1) in vec3 aN; layout(location=2) in vec4 iP; layout(location=3) in vec4 iQ; layout(location=4) in float iC;\n' +
@@ -274,21 +276,22 @@ function programs() {
     '#version 300 es\nlayout(location=0) in vec3 aP; layout(location=1) in vec3 aN; layout(location=2) in vec3 aC; layout(location=3) in vec3 aM; uniform mat4 uModel,uVP; out vec3 vN; out vec3 vW; out vec3 vC; out vec3 vM;\n' +
     'void main(){ vec4 w=uModel*vec4(aP,1.0); vW=w.xyz; vN=mat3(uModel)*aN; vC=aC; vM=aM; gl_Position=uVP*w; }\n';
   TRI_FS =
-    '#version 300 es\nprecision highp float;\n' + SEA_GLSL + SHADOW_GLSL + CUT_GLSL + LAMP_GLSL + 'in vec3 vN; in vec3 vW; in vec3 vC; in vec3 vM; uniform vec3 uSun,uEye,uFog,uSky,uGround; uniform float uFogD,uLit,uGlow,uGls; uniform mat4 uCutInv; out vec4 o;\n' +
-    'void main(){ if(vW.y<uClip) discard; if(uCut.w>0.5 && cutOut((uCutInv*vec4(vW,1.0)).xyz)) discard; vec3 n=normalize(vN); float sd=dot(n,uSun), d=abs(sd); vec3 col=vC; float ga=1.0;\n' +
-    ' if(uLit>0.5){ float sk=shadowK(vW,(sd<0.0?-n:n)*(3.0-2.0*d)); d*=sk; col=vC*(mix(uGround,uSky,0.6)*0.65+vec3(1.0,0.96,0.88)*d*0.7);\n' +
+    '#version 300 es\nprecision highp float;\n' + SEA_GLSL + SHADOW_GLSL + CUT_GLSL + LAMP_GLSL + 'in vec3 vN; in vec3 vW; in vec3 vC; in vec3 vM; uniform vec3 uSun,uEye,uFog,uSky,uGround; uniform float uFogD,uLit,uGlow,uGls; uniform mat4 uCutInv; uniform highp sampler2DArray uMdlT; out vec4 o;\n' +
+    // 外殼式的貼圖（TASK-0820；62_shell.js）：頂點色欄 (−1−u, v, 層) ⇒ 照第 18 號的貼圖陣列取色（textureLod：分支裡不用隱含導數；沒有 mipmap）；其他照頂點色（bc ＝ vC ⇒ 畫面不變）
+    'void main(){ if(vW.y<uClip) discard; if(uCut.w>0.5 && cutOut((uCutInv*vec4(vW,1.0)).xyz)) discard; vec3 bc=vC; if(vC.x<-0.5) bc=textureLod(uMdlT,vec3(-vC.x-1.0,vC.y,vC.z),0.0).rgb; vec3 n=normalize(vN); float sd=dot(n,uSun), d=abs(sd); vec3 col=bc; float ga=1.0;\n' +
+    ' if(uLit>0.5){ float sk=shadowK(vW,(sd<0.0?-n:n)*(3.0-2.0*d)); d*=sk; col=bc*(mix(uGround,uSky,0.6)*0.65+vec3(1.0,0.96,0.88)*d*0.7);\n' +
     // 金屬（TASK-0627；材質表 metal／rough ⇒ 平滑渲染的頂點帶 vM）：天空／海面的反射（菲涅耳：斜看更亮）＋太陽的鏡面高光（照陰影）；vM.x 0 ⇒ 跟以前一樣
     '  if(vM.x>0.001){ vec3 v=normalize(uEye-vW), r=reflect(-v,n); float ro=clamp(vM.y,0.05,1.0), fr=0.04+0.96*pow(1.0-abs(dot(n,v)),5.0);\n' +
     '   vec3 env=mix(uFog*0.5,mix(uFog,uSky,0.55)*1.2,smoothstep(-0.2,0.35,r.y)); vec3 sp=vec3(1.0,0.96,0.88)*pow(max(dot(n,normalize(uSun+v)),0.0),mix(120.0,6.0,ro))*step(0.0,sd)*sk*(2.0-1.5*ro);\n' +
-    '   col=mix(col,col*0.35+env*mix(vec3(0.85),vC,0.4)*(0.5+0.5*fr),vM.x*(0.85-0.5*ro))+sp*vM.x; }\n' +
+    '   col=mix(col,col*0.35+env*mix(vec3(0.85),bc,0.4)*(0.5+0.5*fr),vM.x*(0.85-0.5*ro))+sp*vM.x; }\n' +
     // 玻璃（TASK-0753；15_smooth.js glsDraw 開 uGls，vM.z ＝ 材質表 clear）：同一套天空／海平線反射與太陽高光，法線翻向看的那一面；
     //   反射照菲涅耳（正看淡、斜看亮）× 光滑度；alpha ＝ 1 − 透明度 ×（1 − 反射），高光蓋上去 ⇒ 正看透出後面、斜看像鏡子。uGls 0 ⇒ 整段跳過（alpha 1）
     '  if(uGls>0.5){ vec3 v=normalize(uEye-vW), gn=dot(n,v)<0.0?-n:n, r=reflect(-v,gn); float ro=clamp(vM.y,0.02,1.0), fr=0.04+0.96*pow(1.0-max(dot(gn,v),0.0),5.0), rk=mix(0.12,1.0,fr)*(1.0-0.7*ro);\n' +
     '   vec3 env=mix(uFog*0.5,mix(uFog,uSky,0.55)*1.2,smoothstep(-0.2,0.35,r.y)); float hs=pow(max(dot(gn,normalize(uSun+v)),0.0),mix(400.0,8.0,ro))*step(0.0,dot(gn,uSun))*sk*(2.0-1.5*ro);\n' +
     '   col=mix(col,env,rk)+vec3(1.0,0.96,0.88)*hs; ga=clamp(1.0-vM.z*(1.0-rk)+hs,0.0,1.0); } }\n' +
-    ' if(uLN>0) col+=vC*lampK(vW,n);\n' +                                 // 點光源
+    ' if(uLN>0) col+=bc*lampK(vW,n);\n' +                                 // 點光源
     // 燈籠（meta kind=lantern；drawModels 設 uGlow）：只有琥珀色的燈罩發光（色 245 ＝ 1, .71, .33）—— 金框（248，藍 0）、暗紅（128）照常受光
-    ' if(uGlow>0.0) col=mix(col,vC*1.2+vec3(0.3,0.14,0.0),uGlow*step(0.9,vC.r)*step(0.2,vC.b)*step(vC.b,0.5));\n' +
+    ' if(uGlow>0.0) col=mix(col,bc*1.2+vec3(0.3,0.14,0.0),uGlow*step(0.9,bc.r)*step(0.2,bc.b)*step(bc.b,0.5));\n' +
     ' float fd=length(vW-uEye); o=vec4(mix(col,uFog,1.0-exp(-fd*uFogD)),ga); }\n';
   P.tri = VK.compile(gl, TRI_VS, TRI_FS);
   // 帆：頂點法線（平滑，不是一個三角形一個平面）；法線翻向看的那一面；包覆光（背光面不死黑、明暗過渡慢）＋太陽在帆後面時布透出暖光
@@ -317,10 +320,15 @@ function programs() {
     ' vec2 d=gl_PointCoord*2.0-1.0; float r=dot(d,d); if(r>1.0) discard; float a=vC.a*(1.0-r*r); o=vec4(vC.rgb*(1.0-0.25*r),a); }\n');
   // 海：跟著鏡頭的同心圓網格（60_render.js seaGrid；aP ＝ 離中心的 x、z 與那一圈的網格間距），頂點照浪位移（08_sea.js；比網格粗的浪拿掉、1 km 外放平）；
   //   法線在片段裡照解析的坡度算（seaG，遠處淡掉）＋細的漣漪 uDet 道（畫質）—— 漣漪只在畫面上，不進物理。
+  // 岸邊浪變小（TASK-0818；Tim 2026-10-22「海浪往外還會有一段 斷掉的海水在岸上 且會閃爍」）：以前浪照深海的高度一路起伏到岸上 ⇒ 平的沙灘一下被浪頭蓋住一塊、一下露出來（斷開的海、閃）。
+  //   ⇒ 照水深（海底高度貼圖 uBedT，跟岸邊白沫同一張、8 m 一格）把浪的高度與斜率縮小（vK）：水深 ≥ SEA_SHORE[1] 照舊，越淺越小，岸上（水深 ≤ SEA_SHORE[0]）平的；
+  //   岸上再壓低 SEA_SHORE[2] 公尺 ⇒ 0 m 上下的沙灘不跟平的海面搶深度。只給人看：船、浮力、模擬照舊讀 JS 的 seaH。沒有海圖、貼圖外 ⇒ 照舊（vK 1）。
   P.water = VK.compile(gl,
-    '#version 300 es\nlayout(location=0) in vec3 aP; uniform mat4 uVP; uniform vec2 uC;\n' + SEA_GLSL +
-    'out vec3 vW; void main(){ vec2 p=uC+aP.xy; float h=seaHs(p,aP.z)*(1.0-smoothstep(900.0,1600.0,length(aP.xy))); vW=vec3(p.x,h,p.y); gl_Position=uVP*vec4(vW,1.0); }\n',
-    '#version 300 es\nprecision highp float; in vec3 vW; uniform vec3 uEye,uSun,uFog,uSky; uniform float uFogD,uDet,uAn,uNzP,uReflOn,uRefr,uFoam,uRefrD,uRefrK,uBedOn; uniform vec2 uView; uniform vec4 uBedR; uniform sampler2D uRefl,uScene,uSceneD,uBedT; out vec4 o;\n' + SEA_GLSL + SHADOW_GLSL + BED_DRY_GLSL +
+    '#version 300 es\nlayout(location=0) in vec3 aP; uniform mat4 uVP; uniform vec2 uC; uniform float uBedOn; uniform vec4 uBedR; uniform sampler2D uBedT;\n' + SEA_GLSL +
+    'out vec3 vW; out float vK; void main(){ vec2 p=uC+aP.xy; float k=1.0;\n' +
+    ' if(uBedOn>0.5){ vec2 bu=((p-uBedR.xy)/uBedR.z+0.5)/uBedR.w; if(bu.x>0.0&&bu.y>0.0&&bu.x<1.0&&bu.y<1.0) k=smoothstep(' + SEA_SHORE[0].toFixed(2) + ',' + SEA_SHORE[1].toFixed(2) + ',-textureLod(uBedT,bu,0.0).r); }\n' +
+    ' float h=seaHs(p,aP.z)*(1.0-smoothstep(900.0,1600.0,length(aP.xy)))*k-(1.0-k)*' + SEA_SHORE[2].toFixed(2) + '; vK=k; vW=vec3(p.x,h,p.y); gl_Position=uVP*vec4(vW,1.0); }\n',
+    '#version 300 es\nprecision highp float; in vec3 vW; in float vK; uniform vec3 uEye,uSun,uFog,uSky; uniform float uFogD,uDet,uAn,uNzP,uReflOn,uRefr,uFoam,uRefrD,uRefrK,uBedOn; uniform vec2 uView; uniform vec4 uBedR; uniform sampler2D uRefl,uScene,uSceneD,uBedT; out vec4 o;\n' + SEA_GLSL + SHADOW_GLSL + BED_DRY_GLSL +
     // 反射（uReflOn）：RT.R 是鏡像過來的船，照螢幕座標＋法線擾動讀，沒畫到的地方（a ＝ 0）照舊是天空。
     // 折射（uRefr）：0 不透明、1 半透明（底下的照舊混進來）、2 讀 RT.B（畫海之前的場景）：照法線擾動、照水的厚度（兩個深度相減）吸收成海的顏色。
     'float linZ(float d){ float z=d*2.0-1.0; return 5000.0/(5000.5-z*4999.5); }\n' +
@@ -344,7 +352,7 @@ function programs() {
     'bool nearAny(){ for(int k=0;k<' + NS_MK + ';k++){ if(k>=uNM) break; if(nearShip(k)) return true; } return false; }\n' +
     'void main(){ if(' + HULL_HIT + ') discard; if(uXr>0.5&&nearAny()) discard; if(bedDry(vW.xz)) discard; vec2 p=vW.xz; float fd0=length(vW-uEye); float k0=1.0-smoothstep(300.0,1400.0,fd0), k1=1.0-smoothstep(60.0,260.0,fd0), k2=1.0-smoothstep(25.0,110.0,fd0);\n' +
     ' vec2 dd=fwidth(vW.xz); float fp=max(dd.x,dd.y);\n' +
-    ' vec2 g=uAn*seaGf(p,fp)+detail(p,fp);\n' +
+    ' vec2 g=uAn*seaGf(p,fp)*vK+detail(p,fp);\n' +                     // 浪的斜率照岸邊縮小（vK，見上面頂點那一段）；細浪照舊
     ' vec3 n=normalize(vec3(-g.x,1.0,-g.y)); vec3 v=normalize(uEye-vW); float fr=0.04+0.96*pow(1.0-max(dot(n,v),0.0),5.0);\n' +
     ' vec3 r=reflect(-v,n); vec3 sky=mix(uFog,uSky,clamp(r.y*1.6,0.0,1.0)); vec2 sc=gl_FragCoord.xy/uView; float sk=shadowK(vW,vec3(0.0,1.0,0.0));\n' +
     ' if(uReflOn>0.5){ vec4 rc=textureLod(uRefl,sc+n.xz*0.035,0.0); sky=mix(sky,rc.rgb,rc.a); }\n' +
@@ -450,6 +458,7 @@ function setCommon(p) {
   if (u.uVe) { if (VX) gl.uniform2f(u.uVe, VX.De, VX.re2); else gl.uniform2f(u.uVe, 0, 1); }   // 眼的喉部（深度、半徑²）
   if (u.uClip) gl.uniform1f(u.uClip, PASS.clip);
   if (u.uCutT) gl.uniform1i(u.uCutT, 8);                       // 剖面的切高貼圖（74_cutaway.js）：固定第 8 號
+  if (u.uMdlT) gl.uniform1i(u.uMdlT, 18);                      // 外殼式的貼圖陣列（62_shell.js SHELLT）：固定第 18 號
   if (u.uBkK) gl.uniform3fv(u.uBkK, todBakeK());                  // 遠景貼圖的光照倍數（08_weather.js todBakeK：世界時間的夜晚只剩月光；沒開 ⇒ 1）
   if (u.uSunK) gl.uniform1f(u.uSunK, wxSun());                   // 天氣（08_weather.js）：陽光、水手與碎木的亮度、白沫
   if (u.uLum) gl.uniform1f(u.uLum, wxLum());

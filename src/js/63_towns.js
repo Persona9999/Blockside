@@ -18,7 +18,9 @@
 //   模型 → 世界（BUILDING_SPEC §1）：a ＝ mx·mpv − 模型寬/2、b ＝ my·mpv − 模型深/2、θ ＝ lot.rot ⇒ 往東 ＝ cx ＋ a·sinθ − b·cosθ、往南 ＝ cy − a·cosθ − b·sinθ、高 ＝ h ＋ mz·mpv；
 //   模型比地塊小（金斯敦的地塊照 Lilly 的棋盤）⇒ 臨路那一邊對齊、沿路置中：cx,cy ＝ at ＋ (d − 模型深)/2 ·(cosθ, sinθ)。底下墊一塊石基（townPlinth：到四角最低的地面再下 0.3 m）。
 //   城牆（TOWN_BUILD §4）：照牆的 kit 挑一套模組（wall1～wall3 ＝ 一～三級、roman-land-inner／roman-land-outer／roman-sea ＝ 東羅馬城牆 1453；BUILDING_SPEC §6、§6.1）；
-//   沒寫 kit ⇒ 一級（等級之後照規模 × 繁榮度換）、寫了但沒有那一套 ⇒ 一級（stat.skip 記 'wall:<kit>'）。
+//   沒寫 kit（生成的牆）⇒ 照規模 × 繁榮度算等級（townWallLv，TOWN_BUILD §4：0 沒有牆、1 木柵 wall1、2 土堤＋木柵 wall2、3 石牆 wall3、4 稜堡）；
+//   繁榮度 0～1 一座城一個（TOWNS.prosp[城 id]，沒有 ⇒ 網址 ?prosp=、再 TOWN_PROSP_DEF；__game.townProsp(v, id) 改了整套換）—— 存檔裡那一份（歷來最高）之後由外面那一頁給；
+//   那一級沒有模型 ⇒ 往下找有的那一級（stat.skip 記 'wall:<套>'）；寫了 kit 但沒有那一套 ⇒ 一級（stat.skip 記 'wall:<kit>'）。換等級只換模組 ⇒ 路線、門、塔的位置不動。
 //   門、塔照位置（一套有好幾型塔 ⇒ 照順序輪流：東羅馬外牆方塔、新月塔交替）、兩頭收尾，中間照斷面沿曲線一節一節拉（節數 round(L / len)、每節沿 x 縮放補滿），−y（牆外）朝離城心遠的那一邊。
 //   接縫（Tim 2026-10-20：「目前城市地圖的城牆 連接處會也接縫 是否可以參考其他遊戲的作法處理例如圖二的世紀帝國4城牆」）：斷面接成一條折線（每節是兩站之間的弦、相鄰兩節共用一站，路線的頂點一定是站）
 //   ⇒ 站上照兩節的角平分面斜接（著色器照 aJ 把那一節沿 x 切成梯形）、接到門／塔／轉角／收尾的那一頭照部件的端面切齊；高度照兩站的地面線性接（坡上順著走，不再一節一階），
@@ -36,11 +38,12 @@ var TOWN_LOD = [160, 800], TOWN_FAR = [2400, 3000], TOWN_BAND = [24, 60, 300], T
 var TOWN_MESH_MS = 8;                                                    // 模型網格化每段最多幾 ms 就讓出一次（townMesh；跟地球儀同一條主執行緒）
 var TOWN_WALL_CORNER = 30, TOWN_WALL_KMAX = 1;                         // 城牆：轉角件從轉幾度起擺；斜接最多切多斜（tan，1 ＝ 轉 90° 的角平分）
 var TOWN_SLAB_KMAX = 2;                                                 // 碼頭、棧橋的板：轉角斜接最多拉長幾倍（2 ＝ 轉 120°；再急就在轉角那一點變窄）
-var TOWNS = { on: Q.get('towns') !== '0', list: [], pend: [], ver: 0, want: 0, err: null, kit: null, kitP: null, idx: null, kitHas: null, kitRedo: false, mwait: null, prog: null, progJ: null, dirty: true, eye: null, sig: '', buf: [], grp: null,
+var TOWNS = { on: Q.get('towns') !== '0', prosp: {}, list: [],pend: [], ver: 0, want: 0, err: null, kit: null, kitP: null, idx: null, kitHas: null, kitRedo: false, mwait: null, prog: null, progJ: null, dirty: true, eye: null, sig: '', buf: [], grp: null,
   stat: { towns: 0, lots: 0, inst: 0, walls: 0, corners: 0, snapped: 0, skip: {}, d0: 0, d1: 0, d2: 0, d3: 0, plinth: 0, tris: 0, binMs: 0, kitMs: 0, gradeMs: 0, chunks: 0, drawMs: 0 } };
 var TOWN_J0 = [0, 0, 0, 0];                                             // 建築的 aJ（不斜接、不順坡、牆基不延）
 var TOWN_USE_ALT = { commandant: ['house'], governor: ['townhall'] };   // 那一套沒有那種模型 ⇒ 用哪一種代（BUILDING_SPEC §7：fr 沒有長官的屋子；carib 有）
-var TOWN_STYLE_DEF = 'fr';                                              // 索引裡沒寫 style 的模型算 fr（第一套，TASK-0757）；規劃沒帶退路 styles（舊的匯出）⇒ 城的 style、再 fr
+var TOWN_PROSP_DEF = 0.5, TOWN_PROSP_CUT = [1 / 3, 2 / 3];               // 繁榮度沒給 ⇒ 中間；低於第一格算低、到第二格算高（TOWN_BUILD §4 的門檻〔佔位〕）
+var TOWN_STYLE_DEF = 'fr';                                            // 索引裡沒寫 style 的模型算 fr（第一套，TASK-0757）；規劃沒帶退路 styles（舊的匯出）⇒ 城的 style、再 fr
 var TOWN_COL = { main: [0.56, 0.47, 0.34], street: [0.62, 0.58, 0.50], track: [0.50, 0.42, 0.30], plaza: [0.70, 0.66, 0.58], quay: [0.58, 0.56, 0.52], mole: [0.52, 0.51, 0.47], pier: [0.45, 0.33, 0.22], post: [0.30, 0.22, 0.15] };
 evOn('bedChunk', function (cx, cy) {
   TOWNS.dirty = true;
@@ -259,7 +262,37 @@ function townPick(I, styles, l) {
   var alt = TOWN_USE_ALT[use] || [];
   return by(use) || alt.map(by).filter(Boolean)[0] || (l.src === 'special' ? any(use) : null);
 }
-/** 收到的城會用到哪幾個模型：地塊照用途的整份候選（townInst 在裡面照雜湊挑）、城牆那一套的每一型（townWall：門、塔、斷面、收尾、轉角；沒有那一套 ⇒ 一級）。 */
+/** 城 T 的繁榮度 0～1：__game.townProsp 給的 ⇒ 網址 ?prosp= ⇒ TOWN_PROSP_DEF。 */
+function townProsp(T) {
+  var v = TOWNS.prosp[T.id]; if (v == null && Q.has('prosp')) v = parseFloat(Q.get('prosp'));
+  return isFinite(v) ? Math.max(0, Math.min(1, v)) : TOWN_PROSP_DEF;
+}
+/** 城牆等級（TOWN_BUILD §4）：村 0；鎮 1（繁榮度高 2）；城 2（低 1、高 3）；首府 3（高 4）。規劃沒寫規模 ⇒ 村。 */
+function townWallLv(tier, pr) {
+  var lo = pr < TOWN_PROSP_CUT[0], hi = pr >= TOWN_PROSP_CUT[1];
+  return tier >= 4 ? (hi ? 4 : 3) : tier === 3 ? (lo ? 1 : hi ? 3 : 2) : tier === 2 ? (hi ? 2 : 1) : 0;
+}
+/** 城 T 的牆 w 用哪一套模組（'wall1'…、'roman-sea'…）；null ＝ 不畫（0 級）。note ⇒ 那一級／那一套沒有、換掉的記進 stat.skip（只在 townWall 記，townNeed 不記）。 */
+function townWallKit(I, T, w, note) {
+  var skip = TOWNS.stat.skip;
+  function miss(k) { if (note) skip['wall:' + k] = (skip['wall:' + k] || 0) + 1; }
+  if (w.kit) { if (I.byUse[w.kit + '-section']) return w.kit; miss(w.kit); return 'wall1'; }
+  for (var lv = townWallLv(T.tier || 1, townProsp(T)); lv >= 1; lv--) { if (I.byUse['wall' + lv + '-section']) return 'wall' + lv; miss('wall' + lv); }
+  return null;
+}
+/** 改繁榮度（__game.townProsp；id 沒給 ⇒ 每一座；v 是 null ⇒ 拿掉、回到網址／預設）⇒ 要的模型變多就丟掉重要、不然只重建實例。回每座城的等級與牆用哪一套。 */
+function townProspSet(v, id) {
+  var ids = id != null ? [id] : TOWNS.list.map(function (T) { return T.id; });
+  ids.forEach(function (k) { if (v == null) delete TOWNS.prosp[k]; else TOWNS.prosp[k] = +v; });
+  var I = townIdx();
+  if (I && TOWNS.kitHas && townNeed(I).some(function (nm) { return TOWNS.kitHas.indexOf(nm) < 0; })) { if (TOWNS.kit) townKitFree(); else TOWNS.kitRedo = true; }
+  TOWNS.list.forEach(function (T) { T.inst = null; }); TOWNS.dirty = true;
+  return TOWNS.list.map(function (T) {
+    var pr = townProsp(T);
+    return { id: T.id, tier: T.tier || 1, prosp: pr, lv: townWallLv(T.tier || 1, pr), kits: I ? (T.p.walls || []).map(function (w) { return townWallKit(I, T, w, false); }) : null };
+  });
+}
+/** 收到的城會用到哪幾個模型：地塊照用途的整份候選（townInst 在裡面照雜湊挑）、城牆那一套的每一型（townWall：門、塔、斷面、收尾、轉角；套照 townWallKit）。 */
 function townNeed(I) {
   var S = {};
   function add(L) { (L || []).forEach(function (nm) { S[nm] = 1; }); }
@@ -269,7 +302,7 @@ function townNeed(I) {
       add(townPick(I, T.styles, l));
     });
     (T.p.walls || []).forEach(function (w) {
-      var kit = w.kit || 'wall1'; if (!I.byUse[kit + '-section']) kit = 'wall1';
+      var kit = townWallKit(I, T, w, false); if (!kit) return;
       Object.keys(I.byUse).forEach(function (k) { if (k.indexOf(kit + '-') === 0) add(I.byUse[k]); });   // 那一套的每一型（門、塔、斷面、收尾、轉角…；以後多一型也不漏）
     });
   });
@@ -329,13 +362,14 @@ function townKit() {
     TOWNS.stat.kitN = need.length + '/' + names.length;              // 要了幾個／索引裡有幾個
     TOWNS.stat.kitTris = need.reduce(function (o, nm) { o[nm] = [M[nm].lod[0].nq * 2, M[nm].lod[1].nq * 2]; return o; }, {});
     TOWNS.list.forEach(function (T) { T.inst = null; }); TOWNS.dirty = true;
+    TOWNS.grp = null;                                                   // 分組表是照上一份的模型數的 ⇒ 丟掉（影子那一關在 townDraw 重新分組之前跑；要的模型變少時 —— 城牆降級 —— 舊表會指到沒解的模型）
     if (TOWNS.kitRedo) { TOWNS.kitRedo = false; townKitFree(); }   // 解的時候又來了新的城、要的模型變多 ⇒ 丟掉重要一次
   }, function (e) { TOWNS.err = '模型解不開：' + e.message; console.warn('城鎮：' + TOWNS.err); });
   return TOWNS.kitP;
 }
 /** 丟掉解好的模型（GPU 的網格、貼圖）⇒ 下一格照新的城重要。 */
 function townKitFree() {
-  var K = TOWNS.kit; TOWNS.kit = null; TOWNS.kitP = null; TOWNS.kitHas = null;
+  var K = TOWNS.kit; TOWNS.kit = null; TOWNS.kitP = null; TOWNS.kitHas = null; TOWNS.grp = null;
   if (!K) return;
   Object.keys(K.M).forEach(function (nm) { K.M[nm].lod.concat(K.M[nm].win ? [K.M[nm].win] : []).forEach(function (r) { gl.deleteVertexArray(r.vao); gl.deleteBuffer(r.vbo); }); });
   if (K.tex) gl.deleteTexture(K.tex);
@@ -383,8 +417,7 @@ function townWall(T, w, out, W) {
     out.push(q); TOWNS.stat.walls++; return q;
   }
   function half(nm) { var m = K.M[nm].m, pa = m.pts['wall-a'], pb = m.pts['wall-b']; return pa && pb ? (pb[0] - pa[0] + 1) * m.mpv / 2 : m.size[0] * m.mpv / 2; }
-  var kit = w.kit || 'wall1';
-  if (!K.byUse[kit + '-section']) { TOWNS.stat.skip['wall:' + kit] = (TOWNS.stat.skip['wall:' + kit] || 0) + 1; kit = 'wall1'; }
+  var kit = townWallKit(K, T, w, true); if (!kit) return;
   var gate = (K.byUse[kit + '-gate'] || [])[0], towers = K.byUse[kit + '-tower'] || [], sect = (K.byUse[kit + '-section'] || [])[0], end = (K.byUse[kit + '-end'] || [])[0], joint = (K.byUse[kit + '-joint'] || [])[0];
   if (!sect) return;
   var mS = K.M[sect].m, len = mS.len || 2, mW = mS.size[0] * mS.mpv, shW = 0.95 + 0.1 * townHash(w.id), obs = [];   // 斷面一條牆同一個深淺（一節一個 ⇒ 每 len 公尺一條色差）
@@ -723,7 +756,7 @@ function townGpu9(V, I, bb) {
 }
 
 // ── 布旗（Tim 2026-10-20「旗幟可以改成布?(參考船隻)」；只給人看） ──
-// 模型的 flags（src/townmodels.py flags_of：雕刻的帆裡 meta kind=flag 那幾面的四個角，模型格座標；BUILDING_SPEC §6.2）⇒ 每個實例每面一塊布：
+// 模型的 flags（Blocksail tools/townmodels.py flags_of：雕刻的帆裡 meta kind=flag 那幾面的四個角，模型格座標；BUILDING_SPEC §6.2）⇒ 每個實例每面一塊布：
 //   TOWN_FLAG_N ＝ 沿飛 × 沿旗桿幾個質點；綁邊（第 0 欄）釘在旗桿上，其他照 Verlet：重力＋往風速拉的阻力（風向 ＝ WIND、風速 ＝ WIND_SAIL × 天氣，跟帆同一份）
 //   ＋陣風、擺動（畫面時間的正弦、每面差一個相位 ⇒ 不抽亂數）＋ TOWN_FLAG_IT 次距離約束（橫、直、斜）。
 //   ⛔ 不碰戰局：不讀寫模擬的狀態、不用模擬的亂數、砲彈打不到；鏡頭 TOWN_FLAG_SIM 公尺外不動（停在上一個樣子）、TOWN_LOD[1] 外不畫（貼圖那一級沒拍旗）。
