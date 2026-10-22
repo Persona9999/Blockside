@@ -129,7 +129,7 @@ function fpDraw(cv, sh, view) {
     g.stroke();
   }
   fl.holes.forEach(function (hh) {
-    if (!(fl.hA[hh] > 0)) return;
+    if (!(fl.hA[hh] > 0) || (fl.hPort[hh] >= fl.hA[hh] - 1e-9 && !fl.hWet[hh])) return;   // 只有砲口、在海面上 ⇒ 不畫成破口（TASK-0822）
     var r = Math.max(1.5 * dpr, Math.sqrt(fl.hA[hh]) / 2 / (c * S) * cw * 1.3);   // 照洞的實際大小（⛔ 固定像素 ⇒ 手機上的剖面整排紅點糊成一條）
     g.fillStyle = flHoleCol(fl, hh); g.beginPath(); g.arc(px(fl.hX[hh]), pv(view ? fl.hY[hh] : fl.hZ[hh]), r, 0, 6.2832); g.fill();
   });
@@ -139,7 +139,7 @@ function flHoleMarks(pushPt) {
   SHIPS.forEach(function (sh) {
     var fl = sh.fl; if (!fl || sh.broken || sh.sinkingFinal || sh.sunk) return;
     fl.holes.forEach(function (h) {
-      if (!(fl.hA[h] > 0)) return;
+      if (!(fl.hA[h] > 0) || (fl.hPort[h] >= fl.hA[h] - 1e-9 && !fl.hWet[h])) return;   // 只有砲口、在海面上 ⇒ 不畫（TASK-0822）
       var P = M4.pt(sh.M, fl.hX[h], fl.hY[h], fl.hZ[h]), st = flHoleState(fl, h);
       if (st === 'out') pushPt(P, 0.2 + Math.sqrt(fl.hA[h]) * 0.6, [0.25, 0.88, 0.48], 0.9);   // 出水 ⇒ 綠
       else if (fl.hWet[h]) pushPt(P, 0.25 + Math.sqrt(fl.hA[h]) * 0.8, [1, 0.25, 0.2], 0.95); else pushPt(P, 0.12 + Math.sqrt(fl.hA[h]) * 0.25, [1, 0.65, 0.15], 0.45);

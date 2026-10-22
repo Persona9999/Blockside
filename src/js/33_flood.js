@@ -85,7 +85,7 @@ function flNew(sh) {
   var L = FL_LV[FLOOD_LV]; if (!L) return null;
   var F = flType(sh.T, L.c), N = F.N, H = 2 * F.NX * F.NZ;
   return { L: L, F: F, cap: F.cap.slice(), pd: F.pd.slice(), op: F.op.slice(), ol: F.ol.slice(), A: new Float32Array(N), on: new Uint8Array(N), act: new Int32Array(4096), actN: 0, dmark: new Uint8Array(N), dirty: [],
-    hA: new Float32Array(H), hX: new Float32Array(H), hY: new Float32Array(H), hZ: new Float32Array(H), hYi: new Float32Array(H), hAcc: new Float32Array(H), hmark: new Uint8Array(H), hon: new Uint8Array(H), hdirty: [], holes: [], hWet: new Uint8Array(H), hQ: new Float32Array(H),   // 每個破口上一次算的狀態（flHoleState）：hWet 在海面下、hQ 流量 m³/s（＋進水、−出水、0 沒在流）
+    hA: new Float32Array(H), hX: new Float32Array(H), hY: new Float32Array(H), hZ: new Float32Array(H), hYi: new Float32Array(H), hAcc: new Float32Array(H), hPort: new Float32Array(H), hmark: new Uint8Array(H), hon: new Uint8Array(H), hdirty: [], holes: [], hWet: new Uint8Array(H), hQ: new Float32Array(H),   // 每個破口上一次算的狀態（flHoleState）：hWet 在海面下、hQ 流量 m³/s（＋進水、−出水、0 沒在流）
     J: { n: 0, p: new Float32Array(L.jn * 3), v: new Float32Array(L.jn * 3), vol: new Float32Array(L.jn), life: new Float32Array(L.jn) },
     vol: 0, area: 0, open: 0, inQ: 0, outQ: 0, pumpQ: 0, netQ: 0, underN: 0, underA: 0, outN: 0, avg: null, avgAcc: { t: 0, inQ: 0, outQ: 0, pumpQ: 0 }, inTot: 0, outTot: 0, pumped: 0, comX: 0, comY: 0, sinkT: 0, step: 0, gen: 0, mesh: null,
     dq: new Float32Array(N), dqOn: new Uint8Array(N), dqL: [], dqT: 0, fo: new Map(),   // dq…：往下流的量（只給畫面的水幕，flFalls；⛔ 模擬不讀）；fo：每一格往下流的開口在哪（快取）
@@ -124,17 +124,19 @@ function flCellRedo(sh, fl, i) {
   fl.fo.delete(i);                                                        // 水幕的開口照新的格重找（只給畫面）
   if (fl.cutS && flGone(fl, ix)) flDrop(fl, i);                           // 斷開那一截（flCut）：那一團的格被拿走時照樣會記髒 ⇒ 重算完照舊拿掉
 }
-/** 一塊破口重算：c × c 個船殼最外的點，每點從外往裡走，先碰到還在的格 ⇒ 不通；先走到原本是空的（艙內）⇒ 通。面積 ＝ 通的點數 × S²，記下中心與艙內那一側。 */
+/** 一塊破口重算：c × c 個船殼最外的點，每點從外往裡走，先碰到還在的格 ⇒ 不通；先走到原本是空的（艙內）⇒ 通；砲口（fl.portAt，TASK-0822）⇒ 通。面積 ＝ 通的點數 × S²，記下中心與艙內那一側。 */
 function flHoleRedo(sh, fl, h) {
   var F = fl.F, c = F.c, side = (h / (F.NX * F.NZ)) | 0, r = h % (F.NX * F.NZ), bx = (r / F.NZ) | 0, bz = r % F.NZ, Gd = sh.grid, B = sh.T.hullG, s = side ? 1 : -1;
   if (fl.cutS && flGone(fl, bx)) { fl.hA[h] = 0; return; }               // 斷開那一截的船殼不算破口（flCut）
-  var n = 0, sx = 0, sy = 0, sz = 0, si = 0;
+  var n = 0, np = 0, sx = 0, sy = 0, sz = 0, si = 0;
   for (var dz = 0; dz < c; dz++) for (var dx = 0; dx < c; dx++) {
     var x = F.X0 + bx * c + dx, z = bz * c + dz; if (x - F.X0 >= F.nxv || z >= F.zTop) continue;
+    var pk = fl.portAt ? fl.portAt.get((side * F.nxv + x - F.X0) * F.zTop + z) : undefined;   // 砲口（25_doors.js portOpen：沒有蓋板、或蓋板被打壞了）⇒ 原本就開著
+    if (pk !== undefined) { n++; np++; sx += x; sy += pk; sz += z; si += pk + s * 4; continue; }
     var k = z * F.nxv + x - F.X0, y0 = side ? F.yM[k] : F.yP[k]; if (y0 < 0) continue;
     for (var t = 0; t < 30; t++) { var y = y0 + s * t; if (Gd.get(x, y, z)) break; if (!B.get(x, y, z)) { n++; sx += x; sy += y0; sz += z; si += y; break; } }
   }
-  fl.hA[h] = n * S * S;
+  fl.hA[h] = n * S * S; fl.hPort[h] = np * S * S;                        // hPort：這一塊裡砲口那一份（整塊都是砲口、又在海面上 ⇒ 不算破口：讀數、畫面）
   if (n) { fl.hX[h] = sx / n + 0.5; fl.hY[h] = sy / n + 0.5; fl.hZ[h] = sz / n + 0.5; fl.hYi[h] = si / n + 0.5; if (!fl.hon[h]) { fl.hon[h] = 1; fl.holes.push(h); } }
 }
 /** 第 i 格的水往下流得過去幾成：從這一格最下面那層往上、到水（W 格，照層疊）淹到的那一層為止，每層開著幾成取最小（Tim 2026-10-15：「水會跑到平頂上(且高出海平面) 應該要流下去才對」）。
@@ -322,14 +324,14 @@ function flTick(sh, fl, dtc) {
   var inQ = 0, outQ = 0, area = 0, open = 0, uN = 0, uA = 0, oN = 0;   // uN／uA：海面下的破口幾處、多大；oN：出水的幾處
   for (k = 0; k < fl.holes.length; k++) {
     var h = fl.holes[k], ar = fl.hA[h]; if (!(ar > 0)) { fl.hQ[h] = 0; continue; }
-    area += ar; open++;
     var side = (h / (NX * F.NZ)) | 0, s = side ? 1 : -1, P = M4.pt(M, fl.hX[h], fl.hY[h], fl.hZ[h]), hOut = seaH(P[0], P[2], SIMT);
     var ci = flCell(F, fl.hX[h], fl.hYi[h] + s * 0.5 * c, fl.hZ[h]), hIn = -1e9;
     if (ci >= 0 && !(cap[ci] > 0.02)) { var ci2 = flCell(F, fl.hX[h], fl.hYi[h] + s * 1.5 * c, fl.hZ[h]); if (ci2 >= 0 && cap[ci2] > 0.02) ci = ci2; }   // 洞口那一格裝不了水（船殼占滿）⇒ 再往裡一格
     // 艙內在洞那裡的水面：從洞口那一格往上，一格裝了九成以上、上面那一格也有水 ⇒ 再往上（⛔ 以前九成八：滿的格常常只有九成五〜九成七（粒子撞到九成五就算滿、旁邊流拉平）⇒ 停在深處、水頭差多算 6 m）
     if (ci >= 0 && A[ci] > 1e-6) { var q = ci; while (q + NXY < N && A[q] >= cap[q] * Vc * 0.9 && A[q + NXY] > 1e-6) q += NXY; hIn = head(q); }
     var d = Math.max(hOut, P[1]) - Math.max(hIn, P[1]);
-    fl.hWet[h] = P[1] < hOut ? 1 : 0; fl.hQ[h] = 0; if (fl.hWet[h]) { uN++; uA += ar; }                     // 破口的狀態（flHoleState；底下進水／出水時填流量）
+    fl.hWet[h] = P[1] < hOut ? 1 : 0; fl.hQ[h] = 0; if (fl.hWet[h]) { uN++; uA += ar; }
+    if (fl.hWet[h] || fl.hPort[h] < ar - 1e-9) { area += ar; open++; }        // 只有砲口、在海面上 ⇒ 船殼本來就開著的口，不算破口（TASK-0822）                     // 破口的狀態（flHoleState；底下進水／出水時填流量）
     if (d > 0.001) {
       var dv = FL_C * ar * Math.sqrt(2 * G * d) * fk * dtc; inQ += dv; fl.hQ[h] = dv / dtc;
       fl.hAcc[h] += dv;

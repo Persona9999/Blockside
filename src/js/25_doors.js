@@ -57,3 +57,71 @@ function doorsSummary(sh) {
     return d.m.path + '（' + ax + '、開口 ' + d.cells.length / 2 + ' 格）';
   }).join('；');
 }
+
+// ── 砲口進水（TASK-0822；Tim 2026-10-22：「船殼上如果原本就有開口 到水線下會進水嗎(不是被打出的洞)」「例如沒有炮門的砲口」「炮門被打掉前該炮口是隔水的(即使炮門視覺上打開)」）──
+//   船殼上留給砲的開口（砲口）：沒有蓋板 ⇒ 開局就登記成進水口；有蓋板（62_ports.js）⇒ 蓋板被打壞才登記（照戰局的船殼狀態推：鉸鏈旁那一格船殼沒了、
+//   關上時貼著的那一圈船殼掉 PORT_RING 格以上；⛔ 不讀演出的開合 P.s —— 畫面上掀開、「砲門的開關演出」關或開都一樣隔水）。
+//   登記 ＝ 跟水密門一樣兩條路（doorsSurvey）：公式模式照水線下的洞算（sh.flood 每一層加上開口的格數）；粒子模式當成船殼上原本就開著的破口（33_flood.js flHoleRedo 讀 fl.portAt）⇒ 房間模擬（33_wrsim.js）照破口讀。
+var PORT_WIN = 10, PORT_SIDE = 6;                                       // 從砲口往四周找開口最多幾格（碰到邊 ⇒ 不是砲口）；船殼那一層照砲口左右幾格內最外那一格
+/** 第 g 門砲在船殼上的開口（照船型；回 { s 哪一舷（+1 ＝ +y）, cells [x, z, 船殼最外那一格的 y, …], n, z0 最低那一層 } 或 null）。
+ *  船殼那一層 ＝ 同一層、砲口左右 PORT_SIDE 格內最外那一格（整艘含裝甲 T.base；⛔ T.hullHB 照實心格子算 ⇒ 砲口那幾層自己被挖掉、裝甲的砲廓沒有外形）；
+ *  那一格往裡 4 格都沒有實心 ⇒ 開著。從砲口那一格（找不到 ⇒ 附近 2 格）往四周連（上下左右，PORT_WIN 格內）。
+ *  ⛔ 碰到範圍的邊（不是一個口）、最上面那一排頭上沒有船殼（舷牆上沒蓋的缺口、砲在甲板上）⇒ null。 */
+function portHole(T, g) {
+  var B = T.base || T.hullG, s = g.ax[1] >= 0 ? 1 : -1, X0 = Math.floor(g.muz[0]), Z0 = Math.floor(g.muz[2]), cy = Math.round(T.cy), x, z, i, plate = {};
+  function yOut(z2) {                                                  // 這一層的船殼最外那一格（砲口左右 PORT_SIDE 格內）
+    if (plate[z2] !== undefined) return plate[z2];
+    var best = null;
+    for (var x2 = X0 - PORT_SIDE; x2 <= X0 + PORT_SIDE; x2++) for (var y = s > 0 ? B.sy - 1 : 0; s > 0 ? y > cy : y < cy; y -= s) if (B.get(x2, y, z2)) { if (best === null || (s > 0 ? y > best : y < best)) best = y; break; }
+    return (plate[z2] = best);
+  }
+  function open(x2, z2) { var y = yOut(z2); if (y === null || z2 < 0) return false; for (var t = 0; t < 4; t++) if (B.get(x2, y - s * t, z2)) return false; return true; }
+  var seed = null; for (var r = 0; r <= 2 && !seed; r++) for (var dz = -r; dz <= r && !seed; dz++) for (var dx = -r; dx <= r && !seed; dx++) if (open(X0 + dx, Z0 + dz)) seed = [X0 + dx, Z0 + dz];
+  if (!seed) return null;
+  var seen = {}, st = [seed], cells = [], zmin = 1e9;
+  seen[seed[0] + ',' + seed[1]] = 1;
+  while (st.length) {
+    var c = st.pop(); x = c[0]; z = c[1];
+    if (Math.abs(x - X0) >= PORT_WIN || Math.abs(z - Z0) >= PORT_WIN) return null;
+    cells.push(x, z, yOut(z)); zmin = Math.min(zmin, z);
+    [[1, 0], [-1, 0], [0, 1], [0, -1]].forEach(function (d) { var k = (x + d[0]) + ',' + (z + d[1]); if (!seen[k] && open(x + d[0], z + d[1])) { seen[k] = 1; st.push([x + d[0], z + d[1]]); } });
+  }
+  for (i = 0; i < cells.length; i += 3) { x = cells[i]; z = cells[i + 1]; if (!seen[x + ',' + (z + 1)] && yOut(z + 1) === null) return null; }   // 頭上沒有船殼 ⇒ 舷牆缺口、不是砲口
+  return { s: s, cells: cells, n: cells.length / 3, z0: zmin };
+}
+/** 開一艘船（10_ship.js makeShip，進水狀態建好之後）：每門砲的砲口；沒有蓋板的當場登記、有蓋板的掛著等蓋板被打壞（portsSurvey）。沒有砲口 ⇒ sh.portW 不設。 */
+function portsFloodInit(sh) {
+  if (!sh.guns || !sh.guns.length) return;
+  var L = [], lids = null;
+  sh.guns.forEach(function (g) {
+    var h = portHole(sh.T, g); if (!h) return;
+    if (lids === null) { if (sh.ports === undefined) sh.ports = portsBuild(sh); lids = sh.ports ? sh.ports.L : []; }   // 蓋板（62_ports.js；那一支懶建的同一份）
+    var P = lids.filter(function (q) { return q.g === g; })[0] || null;
+    var w = { g: g, h: h, P: P, on: false }; L.push(w);
+    if (!P) portOpen(sh, w);
+  });
+  if (L.length) sh.portW = L;
+}
+/** 每半秒（32_hull.js survey）：有蓋板的砲口，蓋板被打壞了沒（照船殼的狀態；⛔ 不讀 P.s／P.gone，那是演出）⇒ 登記成進水口（只登記一次）。 */
+function portsSurvey(sh) {
+  for (var k = 0; k < sh.portW.length; k++) {
+    var w = sh.portW[k]; if (w.on || !w.P) continue;
+    var d = w.P.d, R = w.P.ring, broke = d.foot >= 0 && !hullGp(sh.grid, d.foot);
+    for (var i = 0, n = 0; !broke && i < R.length; i++) if (!hullGp(sh.grid, R[i]) && ++n >= PORT_RING) broke = true;
+    if (broke) portOpen(sh, w);
+  }
+}
+/** 砲口登記成進水口：公式模式每一層加格數（跟 doorsSurvey 同一個欄位）；粒子模式記在 fl.portAt（33_flood.js flHoleRedo 當成開著的破口）、那幾塊破口待重算。 */
+function portOpen(sh, w) {
+  w.on = true;
+  var c = w.h.cells, T = sh.T, fl = sh.fl;
+  for (var i = 0; i < c.length; i += 3) {
+    var x = c[i], z = c[i + 1];
+    if (z < T.sz) { sh.flood[z * 3] += 1; sh.flood[z * 3 + 1] += w.h.s; sh.flood[z * 3 + 2] += x > T.cx ? 1 : -1; }
+    if (!fl) continue;
+    var F = fl.F; if (z >= F.zTop || x < F.X0 || x >= F.X0 + F.nxv) continue;
+    var side = w.h.s > 0 ? 0 : 1, h = (side * F.NX + ((x - F.X0) / F.c | 0)) * F.NZ + (z / F.c | 0);
+    (fl.portAt || (fl.portAt = new Map())).set((side * F.nxv + x - F.X0) * F.zTop + z, c[i + 2]);
+    if (!fl.hmark[h]) { fl.hmark[h] = 1; fl.hdirty.push(h); }
+  }
+}
