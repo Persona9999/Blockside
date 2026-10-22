@@ -1937,21 +1937,16 @@ def act_layers(src=None):
 # ───────────────────────── 核心與外殼（主選單、設定頁）的讀數（2026-10-21：核心與外殼拆兩包的第 0 步） ─────────────────────────
 # 外殼 ＝ Blockside 自己的主選單、設定頁、開發後台頁（#cover 裡的那些卡）；核心 ＝ 其他（海戰：船、海、陰影、物理、HUD、遊戲中的面板、選船彈窗 72_shippick）。
 # 目標：依賴只往下 —— 外殼叫核心 OK；核心叫外殼的名字、核心碰 #cover 裡的 DOM ⇒ 都要拆成事件（00_events.js）或外殼自己掛，拆完這兩個數字是 0。
-# 還沒搬檔之前外殼跟核心寫在同一支檔裡 ⇒ SHELL_UI：整支是外殼的檔 ⇒ None；一支檔裡的幾段 ⇒ [(起, 迄), …]：
+# SHELL_UI：整支是外殼的檔 ⇒ None；一支檔裡的幾段 ⇒ [(起, 迄), …]（第 3 步搬檔之前用過；現在外殼都是整支的檔）：
 #   起 ＝ 那一段第一行裡的一段字（含這一行）、迄 ＝ 下一段（核心）第一行裡的一段字（不含；None ＝ 到檔尾）。用字不用行號 ⇒ 別人改了前面，行號跑掉照樣量得準；
 #   字找不到或不只一行 ⇒ 讀數停下來說哪一個（改 SHELL_UI，不要猜）。
 # 只是讀數、不擋建置（拆完才變閘門）。量法：頂層名字照作用域判（src/js_refs.cjs）；DOM 照字面掃 $('id')、getElementById('id')、querySelector(All)('…#id…')。
 SHELL_UI = {
     '64_cfgkit.js': None,                                                      # 設定頁的共用框架（cfgSnap／cfgSliders／cfgShown 已搬進 00_core.js，TASK-0774 第 2 步）
     '65_ask.js': None,                                                         # 確認彈窗（只有設定頁在用）
-    '66_keys.js': [('function keyExport', None)],                              # 鍵位頁（鍵位資料在前面、留核心）
-    '67_furncfg.js': [('function furnExport', None)],                          # 道具頁
-    '68_guncfg.js': [('function gunsExport', None)],                           # 砲的設定頁
-    '69_prefs.js': [('/** 出廠預設值（設定後台跳轉開的', 'function prefNum')],  # 出廠預設值後台頁 admDefUI
-    '71_input.js': [('var DISCORD_URL', "$('muteT').onclick"),                 # 主選單的 Discord
-                    ('/** 主選單的玩法鈕', '/** 旗號面板（TASK-0679'),           # 主選單、sliders()（細節、船隻配置、天氣…）、畫質頁、物理頁、編成、指揮官、搶上風
-                    ('/** 細節設定：候補補位', "$('endC').onclick"),            # 候補、距離、開戰鈕
-                    ('var COVER_LATE', '// 訂閱（TASK-0669')],                  # 回到主選單 coverShow
+    '71_cfgpages.js': None,                                                    # 鍵位、道具、砲、出廠預設值、聲音（BGM）的設定頁（TASK-0774 第 3 步從 66／67／68／69／02 搬來）
+    '71_pages.js': None,                                                       # sliders()（細節、船隻配置、艙房、船員、天氣…）、物理設定頁
+    '71_menu.js': None,                                                        # 主選單（玩法、編成、同時在場、指揮官、搶上風、候補、距離、開戰鈕、Discord、回主選單 coverShow）
 }
 
 

@@ -685,39 +685,13 @@ function bgmRender(o) {
   });
   return oc.startRendering().then(function (buf) { var r = audioWav(buf); r.id = tn.id; r.notes = notes; r.spb = spb; r.sec = E.len * spb; return r; });
 }
-/** 聲音設定頁＋遊戲內設定面板的「音量」（[data-snd] 滑桿兩處同一組值）：畫出現在的值。 */
+/** 遊戲內設定面板與聲音設定頁的「音量」（[data-snd] 滑桿兩處同一組值）：畫出現在的值；發 cfg:snd（外殼的聲音設定頁畫 BGM 那幾排，71_cfgpages.js bgmShow；TASK-0774）。 */
 function sndShow() {
   [].forEach.call(document.querySelectorAll('[data-snd]'), function (r) { r.value = Math.round(SND[r.dataset.snd] * 100); });
   [].forEach.call(document.querySelectorAll('[data-sndv]'), function (e) { var v = SND[e.dataset.sndv]; e.textContent = v > 0 ? Math.round(v * 100) + '%' : '關'; });
-  [].forEach.call(document.querySelectorAll('#bgmModes [data-bm]'), function (b) { b.classList.toggle('on', b.dataset.bm === SND.mode); });
-  [].forEach.call(document.querySelectorAll('#bgmTunes [data-bt]'), function (b) { b.classList.toggle('on', b.dataset.bt === SND.tune); });
-  [].forEach.call(document.querySelectorAll('#bgmThemes [data-bth]'), function (b) { b.classList.toggle('on', +b.dataset.bth === SND.theme); });
-  var nw = $('bgmNow'); if (nw) { var tn = BGM && BGM.tn, er = tn ? tuneEra(tn) : ''; nw.textContent = tn ? '正在放：' + (er ? er + '・' : '') + tn.name + '（' + tn.en + '）—— 譜：' + tn.src : '還沒放（按 ▶ 試聽，或開局後照上面的設定放）'; }
+  evEmit('cfg:snd');
 }
-/** 綁一次（71_input.js 主選單初始化時叫）：滑桿、什麼時候放、選曲、試聽、這一頁回到預設。 */
+/** 綁一次（核心開機時叫，71_input.js）：音量滑桿（遊戲內設定面板＋聲音設定頁）。BGM 那幾排是外殼的 bgmUI。 */
 function sndUI() {
-  var tb = $('bgmTunes');
-  if (tb && !tb.firstChild) {                                          // 第一列：輪播＋四首船歌（照舊）；年代篇（TASK-0718）一章一列，標題照 BGM_ERAS
-    var q = function (s) { return String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;'); };   // 出處裡有引號（總統進行曲的 Sonneck 報告名）⇒ title 要跳脫
-    var btn = function (t) { return '<button data-bt="' + t.id + '" title="' + q(t.en + '（' + t.src + '）—— ' + tuneInsts(t).map(function (k) { return INSTR[k].name; }).join('＋')) + '">' + q(t.name) + '</button><button data-bp="' + t.id + '" title="試聽 ' + q(t.name) + '">▶</button>'; };
-    var h = '曲目 <button data-bt="shuffle">輪播</button>';
-    TUNES.forEach(function (t) { if (!t.era) h += btn(t); });
-    BGM_ERAS.forEach(function (e) {
-      var r = ''; TUNES.forEach(function (t) { if (t.era === e[0]) r += btn(t); });
-      if (r) h += '<div class="row">' + e[1] + ' ' + r + '</div>';
-    });
-    tb.innerHTML = h;
-  }
-  var tt = $('bgmThemes');
-  if (tt && !tt.firstChild) {                                          // 船的主題曲（TASK-0681）：放不放＋每首的試聽
-    var h2 = '船的主題曲 <button data-bth="1">操控的船有主題曲時改放它</button><button data-bth="0">不放（照上面的曲目）</button>';
-    THEMES.forEach(function (t) { h2 += '<button data-bp="' + t.id + '" title="試聽 ' + t.name + '（' + t.src + '）">▶ ' + t.name + '</button>'; });
-    tt.innerHTML = h2;
-  }
   [].forEach.call(document.querySelectorAll('[data-snd]'), function (r) { r.oninput = function () { SND[r.dataset.snd] = clamp(+r.value / 100, 0, 1); sndApply(); sndShow(); }; });
-  [].forEach.call(document.querySelectorAll('#bgmModes [data-bm]'), function (b) { b.onclick = function () { SND.mode = b.dataset.bm; sndShow(); }; });
-  [].forEach.call(document.querySelectorAll('#bgmTunes [data-bt]'), function (b) { b.onclick = function () { SND.tune = b.dataset.bt; if (BGM && !BGM.forced && SND.tune !== 'shuffle' && BGM.tn.id !== SND.tune) BGM = null; sndShow(); }; });   // 指定了別首 ⇒ 下一格從那首開始
-  [].forEach.call(document.querySelectorAll('#bgmTunes [data-bp], #bgmThemes [data-bp]'), function (b) { b.onclick = function () { bgmPreview(b.dataset.bp); sndShow(); }; });
-  [].forEach.call(document.querySelectorAll('#bgmThemes [data-bth]'), function (b) { b.onclick = function () { SND.theme = +b.dataset.bth; sndShow(); }; });
-  var rb = $('sndR'); if (rb) rb.onclick = function () { for (var k in SND_DEF) SND[k] = SND_DEF[k]; sndApply(); sndShow(); };
 }
