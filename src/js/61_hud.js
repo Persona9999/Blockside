@@ -615,6 +615,26 @@ function gunArcs(sh, foe) {
   return { all: runs(A), on: runs(O) };
 }
 var TURN_T = 10, TURN_COL = '#7ef0c8', TURN_OFF = 0.22;   // 羅盤外圈的轉向弧：預測幾秒後的船頭、顏色（跟射界的金、風的藍、敵艦的紅分開）、起點離船頭幾 rad（約 13°，讓開航速箭頭）
+var NAVW_COL = '#1f48c8', NAVW_HALO = 'rgba(190,210,255,.5)', NAVW_GAP = 4.5;   // 羅盤的水流：深藍、底下一圈淡的（深色的海上也看得到）、轉向弧那一圈前後各空幾 px
+/** 羅盤上的水流（drawNav）：從 a 往 b（畫布 px；沿著過圓心的那條線）的波浪線（振幅 2 px、波長 9 px，尖端前 5 px 收直），b 一個實心箭頭；
+ *  離圓心 gapR px 那一圈前後各空 NAVW_GAP ⇒ 分成兩段（gapR 沒給 ⇒ 一整段）。 */
+function navWave(g, a, b, cx, cy, gapR) {
+  var L = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1, ux = (b[0] - a[0]) / L, uy = (b[1] - a[1]) / L, ra = Math.hypot(a[0] - cx, a[1] - cy), seg = [], cur = [];
+  for (var s = 0; s <= L; s += 0.75) {
+    var r = ra - s, o = 2 * Math.sin(s / 9 * 6.2832) * Math.min(1, (L - s) / 5);   // 往內每走 1 px 離圓心少 1 px（a、b 在同一條過圓心的線上）
+    if (gapR && Math.abs(r - gapR) < NAVW_GAP) { if (cur.length > 1) seg.push(cur); cur = []; continue; }
+    cur.push([a[0] + ux * s - uy * o, a[1] + uy * s + ux * o]);
+  }
+  if (cur.length > 1) seg.push(cur);
+  g.lineCap = 'round'; g.lineJoin = 'round';
+  [[NAVW_HALO, 4.5], [NAVW_COL, 2.2]].forEach(function (st) {
+    g.strokeStyle = st[0]; g.lineWidth = st[1];
+    seg.forEach(function (pts) { g.beginPath(); g.moveTo(pts[0][0], pts[0][1]); for (var i = 1; i < pts.length; i++) g.lineTo(pts[i][0], pts[i][1]); g.stroke(); });
+  });
+  g.beginPath(); g.moveTo(b[0] + ux * 6, b[1] + uy * 6); g.lineTo(b[0] - uy * 4.5, b[1] + ux * 4.5); g.lineTo(b[0] + uy * 4.5, b[1] - ux * 4.5); g.closePath();
+  g.strokeStyle = NAVW_HALO; g.lineWidth = 2; g.stroke(); g.fillStyle = NAVW_COL; g.fill();
+  g.lineCap = 'butt'; g.lineJoin = 'miter';
+}
 function drawNav(sh) {
   if (!CAM.look) return;
   var c2 = $('navc'), g = c2.getContext('2d'), dpr = Math.min(window.devicePixelRatio || 1, 2), W = 150;
@@ -660,14 +680,12 @@ function drawNav(sh) {
   });
   g.beginPath(); g.moveTo(a1[0] - hd[0] * hs + nx * hs * 0.8, a1[1] - hd[2] * hs + ny * hs * 0.8); g.lineTo(a1[0], a1[1]); g.lineTo(a1[0] - hd[0] * hs - nx * hs * 0.8, a1[1] - hd[2] * hs - ny * hs * 0.8); g.stroke();
   g.lineCap = 'butt';
-  // 洋流（TASK-0842；Tim 2026-10-23「海戰羅盤上多顯示洋流資訊」）：這艘船那裡的水流（08_sea.js seaFlow ＝ 洋流 ＋ 大漩渦）往下游的青綠虛線箭頭（同 Blocksail 地球儀的羅盤），
-  //   跟航速箭頭一樣從圈內 0.86 起往外伸（外圈是船體／進水兩圈，圈外沒地方），越快越長（0.2 ＋ 節 × 0.14 個半徑，最長 0.5）；不到 0.05 節不畫
+  // 洋流（TASK-0842；Tim 2026-10-23「海戰羅盤上多顯示洋流資訊」）：這艘船那裡的水流（08_sea.js seaFlow ＝ 洋流 ＋ 大漩渦）。
+  //   深藍的波浪線（Tim：「水流指示是否可以改為深藍色 並且分線段(虛線部分剛好不跟船隻轉向箭頭重疊)」「海流可以做成波浪線段? 然後跟風一樣由外往內」）：
+  //   跟風一樣從上游那一側的圈外往內流、尖端指往下游；從 1.26 個半徑起（外面進水那一圈的內緣在 59 px ＝ 1.28 R），越快越長（0.3 ＋ 節 × 0.14 個半徑，最長 0.6）；
+  //   轉向弧那一圈（1.07 R）前後各空 NAVW_GAP px ⇒ 分成兩段、弧從空的那裡穿過。不到 0.05 節不畫
   var cfl = seaFlow(sh.px, sh.pz), ckn = cfl ? Math.hypot(cfl[0], cfl[1]) * 1.9438 : 0;
-  if (ckn >= 0.05) {
-    var cd = [cfl[0], 0, cfl[1]], cl = Math.min(0.5, 0.2 + ckn * 0.14), c0 = P(norm(cd), 0.86), c1 = P(norm(cd), 0.86 + cl), cs = Math.hypot(c1[0] - c0[0], c1[1] - c0[1]) || 1, cx1 = (c1[0] - c0[0]) / cs, cy1 = (c1[1] - c0[1]) / cs;
-    g.setLineDash([4, 3]); g.lineCap = 'round'; line(c0, c1, '#3fd6c0', 2.5); g.setLineDash([]); g.lineCap = 'butt';
-    g.fillStyle = '#3fd6c0'; g.beginPath(); g.moveTo(c1[0] + cx1 * 5, c1[1] + cy1 * 5); g.lineTo(c1[0] - cy1 * 4, c1[1] + cx1 * 4); g.lineTo(c1[0] + cy1 * 4, c1[1] - cx1 * 4); g.closePath(); g.fill();
-  }
+  if (ckn >= 0.05) { var cu = norm([-cfl[0], 0, -cfl[1]]); navWave(g, P(cu, 1.26), P(cu, 1.26 - Math.min(0.6, 0.3 + ckn * 0.14)), cx, cy, R * 1.07); }
   // 其他船的方位（TASK-0537：全部畫，敵紅、友藍、沉了灰；一對一 ＝ 以前那一個紅點）
   SHIPS.forEach(function (o) {
     if (o === sh || !o.center || !sh.center) return;
@@ -716,7 +734,7 @@ function navText(sh) {
   var roll = (sh.rollA + (sh.rollW || 0)) * 57.2958, pitch = (sh.pitchA + (sh.pitchW || 0)) * 57.2958;
   return '航向 ' + deg3(hb) + '（' + compassName(hb) + '）' + (Math.abs(yr) > 0.0035 ? '　<span style="color:' + TURN_COL + '">' + (yr > 0 ? '左' : '右') + '轉 ' + (Math.abs(yr) * 57.2958).toFixed(1) + '°/秒</span>' : '') + '<br>' +   // yawRate 正 ＝ 畫面上左轉（31_sailing.js fwd）
     '<span style="color:#8fd3ff">風 從 ' + deg3(wb) + '（' + compassName(wb) + '）' + windKnots().toFixed(0) + ' 節</span>' + (sh.irons > 0.05 ? '　<b style="color:#ff9a7a">失速' + (sh.irons < 0.95 ? ' ' + Math.round(sh.irons * 100) + '%' : '') + '</b>' : '') + '<br>' +
-    (function (cf) { var kn = cf ? Math.hypot(cf[0], cf[1]) * 1.9438 : 0, cb = kn >= 0.05 ? bearing(cf[0], cf[1]) : 0; return kn >= 0.05 ? '<span style="color:#3fd6c0">水流 往 ' + deg3(cb) + '（' + compassName(cb) + '）' + kn.toFixed(1) + ' 節</span><br>' : ''; })(seaFlow(sh.px, sh.pz)) +   // 洋流 ＋ 大漩渦（08_sea.js seaFlow；TASK-0842）
+    (function (cf) { var kn = cf ? Math.hypot(cf[0], cf[1]) * 1.9438 : 0, cb = kn >= 0.05 ? bearing(cf[0], cf[1]) : 0; return kn >= 0.05 ? '<span style="color:#7d9bff">水流 往 ' + deg3(cb) + '（' + compassName(cb) + '）' + kn.toFixed(1) + ' 節</span><br>' : ''; })(seaFlow(sh.px, sh.pz)) +   // 洋流 ＋ 大漩渦（08_sea.js seaFlow；TASK-0842）
 
     '傾斜 ' + Math.abs(roll).toFixed(1) + '°' + (Math.abs(roll) < 0.2 ? '' : roll < 0 ? '（左低）' : '（右低）') + '　縱傾 ' + pitch.toFixed(1) + '°';
 }
