@@ -128,6 +128,25 @@ function vxFlow(x, z) {
   var ve = VX.eyeSuck > 0 && r < VX.re ? VX.eyeSuck * clamp((VX.re - r) / (0.25 * VX.re), 0, 1) * Math.min(1, r / 8) : 0;
   return [vt * (uz - VX.IN * ux) - ve * ux, vt * (-ux - VX.IN * uz) - ve * uz];
 }
+// ───────────────────────── 洋流（TASK-0842） ─────────────────────────
+// Tim 2026-10-23：「洋流機制是否也可以套用到Blockside」「同時讓漩渦天氣本身也套用洋流機制(漩渦內水流算做一種洋流給船施力)」「海戰羅盤上多顯示洋流資訊」。
+//   外面帶進來（Blocksail 地球儀照船那一點的洋流；跟 ?wdir／?wspd 同一套）：?cdir＝ 流去哪（羅盤度數，0 ＝ 北 ＝ −z、90 ＝ 東 ＋x）、?ckn ＝ 節。整片一樣、整場不變（一場幾小時、幾 km）。
+//   擬真沙盒（84_fleetlab.js）CUR_FIX 蓋過網址。沒給、或 0 節 ⇒ CUR ＝ null ⇒ 每一處都走原本那一條（逐位元組不變）。⛔ 不抽 rnd()。
+//   水流場 seaFlow ＝ 洋流 ＋ 大漩渦的 vxFlow：船（31_sailing.js：加在對地速度 sh.vel 上，船頭的航速 sh.spd 照舊是對水 ⇒ 對地 ＝ 對水 ＋ 水流）、碎片（22_pieces.js）、落水的人（43_swim.js）都照它漂。
+//   漩渦另外那幾股（吸力漂移 vxDrift、下坡加速、眼的束縛、自旋、往下拖）不是水流，照舊只有漩渦有。
+var CUR = null, CUR_FIX = null;                                        // CUR：[x, z] m/s；CUR_FIX：擬真沙盒 { dir（度）, kn }（null ⇒ 照網址）
+function curInit() {
+  var d = CUR_FIX ? CUR_FIX.dir : Q.has('cdir') ? parseFloat(Q.get('cdir')) : NaN, k = CUR_FIX ? CUR_FIX.kn : Q.has('ckn') ? parseFloat(Q.get('ckn')) : NaN;
+  if (d === null || !isFinite(d) || !(k > 0)) { CUR = null; return; }   // ⛔ isFinite(null) 是 true（沙盒空白那一格 ＝ null）⇒ 先擋 null，不然當成往北
+  var v = Math.min(k, 10) / 1.9438, a = d / 57.2958;                     // 最多 10 節（地球儀的洋流最快約 2.5）
+  CUR = [Math.sin(a) * v, -Math.cos(a) * v];
+}
+/** 那一點的水流（m/s，[x, z]）：洋流 ＋ 大漩渦；兩個都沒有 ⇒ null。只有漩渦 ⇒ 就是 vxFlow 那一個陣列（逐位元組跟以前一樣）。 */
+function seaFlow(x, z) {
+  if (!CUR) return VX ? vxFlow(x, z) : null;
+  if (!VX) return [CUR[0], CUR[1]];
+  var f = vxFlow(x, z); return [f[0] + CUR[0], f[1] + CUR[1]];
+}
 /** 順著水流的船頭方向（yaw；fwd(yaw) ＝ 切線）：開局用（52_fleet.js spawnFleet）。 */
 function vxTangentYaw(x, z) { var r = Math.hypot(x, z) || 1; return Math.atan2(x / r, z / r); }
 /** 水面高度（世界座標 x, z、時間 t）。 */
