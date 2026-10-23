@@ -38,6 +38,8 @@
 //   每棟一個倍率 lk ＝ 長、寬、高最大的那一邊 ÷ TOWN_LM[0]（限 1..TOWN_LM[1]；城牆一律 1）⇒ 四級的距離、交接帶都乘 lk（著色器用 距離 ÷ lk 對同一組門檻）；
 //   lk > 1 的不進屋頂殼，最遠一級是它自己的貼圖（到 TOWN_FAR × lk）。一般房子 ≤ 24 m ⇒ lk 1，跟以前一位元不差。
 var TOWN_LM = [24, 4];
+// 附屬的田（TASK-0862；Blocksail world/annex.js）：一格幾公尺（＝ Blocksail BSW.TOWN_CELL，街道建築格）、土的兩個顏色（壟、溝）、溝寬幾成（沿行距）
+var TOWN_ANNEX_CELL = 4, TOWN_SOIL = [[0.44, 0.34, 0.23], [0.33, 0.25, 0.17]], TOWN_FURROW = 0.4;
 var TOWN_LOD = [160, 800], TOWN_FAR = [2400, 3000], TOWN_BAND = [24, 60, 300], TOWN_REBIN = 8, TOWN_SHELL_G = 32, TOWN_GRADE_REACH = 12, TOWN_LOT_PAD = 2, TOWN_LOT_CELL = 32, TOWN_LOT_SINK = 0.2, TOWN_CLR_G = 2, TOWN_ROAD_LIFT = 0.12, TOWN_GROUND_VIEW = 1600;
 var TOWN_MESH_MS = 8;                                                    // 模型網格化每段最多幾 ms 就讓出一次（townMesh；跟地球儀同一條主執行緒）
 var TOWN_WALL_CORNER = 30, TOWN_WALL_KMAX = 1;                         // 城牆：轉角件從轉幾度起擺；斜接最多切多斜（tan，1 ＝ 轉 90° 的角平分）
@@ -259,13 +261,26 @@ function townPrep(p) {
   var grade = (p.grade || []).map(function (g) { var R = g.ring.map(E); R.forEach(function (q) { grow(q, TOWN_LOT_PAD + TOWN_LOT_CELL * 1.5 + 6); }); return { h: g.h, R: R, pit: g.pit }; });
   var clr = { rings: ((p.clear || {}).rings || []).map(function (r) { return r.map(E); }),
               paths: ((p.clear || {}).paths || []).map(function (c) { var P = c.path.map(E); return { w: c.w, P: c.closed ? P.concat([P[0]]) : P }; }) };
+  // 附屬的田（規劃的地塊帶 annex：{ cells: [[排, 從第幾欄, 到第幾欄] …], crop }；格子對齊那一塊地塊，第 0 排臨路 —— Blocksail world/annex.js）：
+  //   一列一段 ⇒ 一條長方形（地塊座標 a 沿進深、b 沿寬）；清樹（clr.rings）、鋪土（townGroundTile）、種作物（63_trees.js treeFieldPut）都照它
+  var fields = [];
+  (p.lots || []).forEach(function (l) {
+    var A = l.annex; if (!A || !A.cells || !A.cells.length) return;
+    var th = l.rot * D2R, fx = Math.cos(th), fy = Math.sin(th), Cc = TOWN_ANNEX_CELL;
+    A.cells.forEach(function (r) {
+      var a1 = l.d / 2 - Cc * r[0], a0 = a1 - Cc, b0 = -l.w / 2 + Cc * r[1], b1 = -l.w / 2 + Cc * (r[2] + 1);
+      var F = { lot: l.id, crop: A.crop, at: l.at, fx: fx, fy: fy, a0: a0, a1: a1, b0: b0, b1: b1 };
+      F.R = [[a0, b0], [a1, b0], [a1, b1], [a0, b1]].map(function (q) { return E([l.at[0] + fx * q[0] - fy * q[1], l.at[1] + fy * q[0] + fx * q[1]]); });
+      fields.push(F); clr.rings.push(F.R);
+    });
+  });
   clr.rings.forEach(function (R) { R.forEach(function (q) { grow(q, 4); }); });
   clr.paths.forEach(function (c) { c.P.forEach(function (q) { grow(q, c.w); }); });
   (p.lots || []).forEach(function (l) { grow(E(l.at), Math.hypot(l.w, l.d)); });
   (p.piers || []).forEach(function (q) { q.path.forEach(function (a) { grow(E(a), q.w); }); });
   var core = p.core && p.core.ring ? p.core.ring.map(E) : null, cen = [ox, oy];
   if (core) { var sx = 0, sy = 0; core.forEach(function (q) { sx += q[0]; sy += q[1]; }); cen = [sx / core.length, sy / core.length]; }
-  return { id: p.id, name: p.name, tier: p.tier, style: p.style, styles: p.styles || [p.style || TOWN_STYLE_DEF, TOWN_STYLE_DEF], seed: p.seed, p: p, ox: ox, oy: oy, kx: kx, bank: bank, E: E, box: box, roads: roads, grade: grade, clr: clr, cen: cen, D2R: D2R, inst: null, ground: null, shell: null };
+  return { id: p.id, name: p.name, tier: p.tier, style: p.style, styles: p.styles || [p.style || TOWN_STYLE_DEF, TOWN_STYLE_DEF], seed: p.seed, p: p, ox: ox, oy: oy, kx: kx, bank: bank, E: E, box: box, roads: roads, grade: grade, clr: clr, fields: fields, cen: cen, D2R: D2R, inst: null, ground: null, shell: null };
 }
 
 // ── 整地與清樹（每塊算一次；之後有新的城疊上來（T.v 比這塊整地時的 C.tv 新）、C.h 換過（大漩渦重烤）才重算） ──
@@ -981,11 +996,12 @@ var TOWN_GT_MAX = 2, TOWN_GT_SZ = 250;
 /** 分區（路面到了、城建好時各一次）：每區 { tri, edge, plaza, quay, pier, g, dirty, deps }。 */
 function townGroundPrep(T) {
   var S = TOWN_GT_SZ, R = T.roadSurface, p = T.p, G = {};
-  function at(x, z) { var k = x + '_' + z; return G[k] || (G[k] = { k: k, cx: (x + 0.5) * S, cz: (z + 0.5) * S, tri: [], edge: [], plaza: [], quay: [], pier: [], g: null, dirty: true, deps: {} }); }
+  function at(x, z) { var k = x + '_' + z; return G[k] || (G[k] = { k: k, cx: (x + 0.5) * S, cz: (z + 0.5) * S, tri: [], edge: [], plaza: [], quay: [], pier: [], field: [], g: null, dirty: true, deps: {} }); }
   function tile(e, s) { return at(Math.floor(e / S), Math.floor(s / S)); }
   if (R) R.tiles.forEach(function (t) { var q = at(t.x, t.z); q.R = R; q.tri = t.tri; q.edge = t.edge; });   // q.R：這一區照哪一份路面（建築模式只換改到的那幾區，townReplace）
   (p.lots || []).forEach(function (l) { if (l.use === 'plaza') { var c2 = T.E(l.at); tile(c2[0], c2[1]).plaza.push(l); } });
   (p.quay || []).forEach(function (q) { var c2 = T.E(q.path[0]); tile(c2[0], c2[1]).quay.push(q); });
+  (T.fields || []).forEach(function (F) { var c2 = [(F.R[0][0] + F.R[2][0]) / 2, (F.R[0][1] + F.R[2][1]) / 2]; tile(c2[0], c2[1]).field.push(F); });
   (p.piers || []).forEach(function (q) { var c2 = T.E(q.path[0]); tile(c2[0], c2[1]).pier.push(q); });
   if (T.gt) Object.keys(T.gt).forEach(function (k) { var g = T.gt[k].g; if (g) townGpuFree(g); });
   T.gt = G;
@@ -1053,6 +1069,19 @@ function townGroundTile(T, Q) {
       var bot = lo - 0.3, mx = (a[0] + b[0]) / 2 - cx, mz = (a[1] + b[1]) / 2 - cz, nl = Math.hypot(mx, mz) || 1, b2 = V.length / 9;
       [[a, y], [b, y], [b, bot], [a, bot]].forEach(function (p) { vtx(p[0][0], p[1], p[0][1], dk, mx / nl, 0, mz / nl); });
       I.push(b2, b2 + 1, b2 + 2, b2, b2 + 2, b2 + 3);
+    }
+  });
+  // 附屬的田（TASK-0862）：翻過的土（作物的 place.soil ＝ [壟, 溝] 換土色：麥田 ⇒ 金黃的麥茬，遠看才是一片金黃），一條壟一條溝沿進深方向（同作物的行，行距照作物的 place.field[0]）；貼著地面（每 2 m 取一次高度），高出 TOWN_ROAD_LIFT
+  (Q.field || []).forEach(function (F) {
+    var sp = TREE_SPECIES[F.crop], row = sp && sp.place.field ? sp.place.field[0] : 1, soil = sp && sp.place.soil || TOWN_SOIL, nb = Math.max(1, Math.round((F.b1 - F.b0) / row)), na = Math.max(1, Math.ceil((F.a1 - F.a0) / 2));
+    function P(a, b) { var x = F.at[0] + F.fx * a - F.fy * b, y = F.at[1] + F.fy * a + F.fx * b, w = W([x, y]), g = hgt(w[0], w[1]); return [w[0], (g === g ? g : 0) + TOWN_ROAD_LIFT, w[1]]; }
+    for (var kb = 0; kb < nb; kb++) {
+      var bA = F.b0 + (F.b1 - F.b0) * kb / nb, bB = F.b0 + (F.b1 - F.b0) * (kb + 1) / nb, bM = bA + (bB - bA) * TOWN_FURROW;   // 一行 ＝ 溝（TOWN_FURROW 成）＋ 壟
+      [[bA, bM, 1], [bM, bB, 0]].forEach(function (st) {
+        var base = V.length / 9;
+        for (var ka = 0; ka <= na; ka++) { var a = F.a0 + (F.a1 - F.a0) * ka / na, p0 = P(a, st[0]), p1 = P(a, st[1]); vtx(p0[0], p0[1], p0[2], soil[st[2]]); vtx(p1[0], p1[1], p1[2], soil[st[2]]); }
+        for (ka = 0; ka < na; ka++) { var q = base + ka * 2; I.push(q, q + 1, q + 3, q, q + 3, q + 2); }
+      });
     }
   });
   // 一條帶子拉成有厚度的板（碼頭、棧橋的面板）：整條一起畫，轉角照兩段的角平分線斜接（同城牆 —— 以前一段一個長方體，轉角外側缺一角、內側疊在一起；
@@ -1185,10 +1214,11 @@ function townTreesSet(T) {
       bb[0] = Math.min(bb[0], x); bb[1] = Math.min(bb[1], z); bb[2] = Math.max(bb[2], x); bb[3] = Math.max(bb[3], z);
     });
   });
-  sig = a.length + ':' + sig.toFixed(3);
-  var had = T.trees && T.trees.n; if (T.trees && T.trees.sig === sig) return;
-  T.trees = { a: new Float32Array(a), n: a.length / 6, bb: bb, sig: sig };
-  if ((!a.length && !had) || typeof TREES === 'undefined' || !TREES.on || !BED || !BED.A) return;
+  (T.fields || []).forEach(function (F) { F.R.forEach(function (q) { var x = q[0] - BED.ax, z = q[1] - BED.az; bb[0] = Math.min(bb[0], x); bb[1] = Math.min(bb[1], z); bb[2] = Math.max(bb[2], x); bb[3] = Math.max(bb[3], z); }); });   // 附屬的田（treeFieldPut）也照這個框重排
+  sig = a.length + ':' + sig.toFixed(3) + ':f' + (T.fields || []).length;
+  var had = T.trees && (T.trees.n || T.trees.nf); if (T.trees && T.trees.sig === sig) return;
+  T.trees = { a: new Float32Array(a), n: a.length / 6, nf: (T.fields || []).length, bb: bb, sig: sig };
+  if ((!a.length && !T.trees.nf && !had) || typeof TREES === 'undefined' || !TREES.on || !BED || !BED.A) return;
   var size = BED.A.chunk, ob = had ? null : bb;
   Object.keys(BED.ch).forEach(function (k) {
     var C = BED.ch[k], x0 = C.cx * size - BED.ax, z0 = C.cy * size - BED.az;

@@ -4,11 +4,13 @@
 // 樹種一張表（TREE_SPECIES）：一棵樹 ＝ 樹幹 ＋ 一層一層的枝（每一層從上一層的枝幹長出來）＋（選用）支柱根 ＋ 樹葉。
 //   加一種樹 ＝ 在表裡加一筆（形狀全在參數裡，程式不分樹種）；樹葉的長法照 leaf.kind 分派（TREE_LEAF）：
 //   cluster ＝ 一團一團的葉簇（長在最後一層枝尖）、frond ＝ 棕櫚的羽狀葉（從樹幹頂一圈長出來、往下垂）、rosette ＝ 蓮座葉（龍舌蘭：從地面一圈長出來）、
-//   fan ＝ 扇葉、cap ＝ 柱頭（仙人掌）、paddle ＝ 寬葉（香蕉）、pad ＝ 莖節（刺梨仙人掌）、tuft ＝ 草叢（海燕麥）。
+//   fan ＝ 扇葉、cap ＝ 柱頭（仙人掌）、paddle ＝ 寬葉（香蕉）、pad ＝ 莖節（刺梨仙人掌）、tuft ＝ 草叢（海燕麥）、cane ＝ 稈（甘蔗、玉米）、grain ＝ 穀（小麥、大麥）。
 // treeSkel(種, 種子, 第幾棵) ⇒ 骨架（枝幹的折線、半徑、枝尖）；treeMesh(骨架, 細度) ⇒ 網格：
 //   細度 0 ＝ 細的（近景）、1 ＝ 低模（中景：枝少一層、葉子少、管子邊數少）；遠景的貼圖由 63_trees.js 照細的那一份拍。
 // 同一個骨架出兩種細度 ⇒ 換細度時輪廓不跳。亂數一律 treeRng（自己的種子）：⛔ 不抽戰局的 rnd()（樹只給人看，開不開樹戰局逐位元組相同）。
 // 網格：頂點 10 個 float ＝ 位置 3、法線 3、顏色 3、搖晃權重 1（0 ＝ 樹根不動、1 ＝ 葉尖晃最多）；索引 Uint16。模型座標：樹根在原點、y 朝上、單位公尺。
+// meta（分類；Tim 2026-10-23「可以給樹種一些meta分類(出現區域等)」）：region ＝ 出現在哪些地區（'*' 到處都有、'carib' 加勒比海、'med' 地中海；可以好幾個）、
+//   type ＝ tree 樹、palm 棕櫚、shrub 灌木、succulent 多肉、grass 草、fern 蕨、mangrove 紅樹、crop 作物。遠景貼圖集照 region 分張（63_trees.js treeBakePlan：只拍用到的那幾張）。
 // place（63_trees.js 照它擺）：spacing 公尺一個候選點；alt ＝ 海拔帶 [開始長, 長滿, 開始變少, 沒有]（公尺，中間照直線漸變）；slopeMax 坡度（tan）；
 //   mats ＝ 底質 ⇒ 權重（BED_MAT：1 淺海沙底、10 沙灘、11 陸地、12 岩壁；沒寫 ＝ 不長）；dens 最密幾成；flat ＝ [R, dh]：往東西南北各 R 公尺那四點的高低差（連這一點）不超過 dh 公尺才長（要一大片平的）；
 //   forest ＝ 跟林地覆蓋走多少（1 ＝ 只長在林子裡、0 ＝ 不管、負的 ＝ 避開林子）；clump ＝ 一叢一叢的大小（公尺）；patch ＝ [片的大小, 門檻]（成片長、片外沒有）；
@@ -16,6 +18,7 @@
 var TREE_SPECIES = {
   broadleaf: {
     name: '闊葉樹',                                                     // 加勒比海島上的熱帶闊葉林（桃花心木那一類的輪廓）：矮壯、樹冠寬
+    meta: { region: ['*'], type: 'tree' },
     height: [8, 14],                                                    // 樹幹（含樹冠）高，公尺（每棵隨機）
     trunk: { r: [0.22, 0.34], taper: 0.45, bend: 0.12, segs: 6, sides: [7, 4], lean: 0.08, col: [0.33, 0.25, 0.17], top: 0.62 },   // top：樹幹長到總高的幾成（上面是樹冠）
     levels: [                                                           // 分枝：n 枝、長在母枝的 from 那一段、跟母枝夾 angle 度、長 len × 母枝長、粗 r × 母枝在那裡的粗、up 往上翹
@@ -28,6 +31,7 @@ var TREE_SPECIES = {
   },
   palm: {
     name: '椰子樹',                                                     // Cocos nucifera：細長、彎的樹幹往海那一側歪，頂上一圈羽狀葉往下垂；沙灘與海邊低地
+    meta: { region: ['carib'], type: 'palm' },
     height: [9, 16],
     trunk: { r: [0.16, 0.21], taper: 0.72, bend: 0.035, segs: 10, sides: [8, 5], lean: [0.3, 0.65], up: 0.55, flare: 1.6, col: [0.58, 0.52, 0.42], top: 1 },   // lean [a, b] ＝ 往模型 +x 歪（擺的時候轉到下坡）、up 往上彎回來、flare 樹根粗幾倍
     levels: [],
@@ -37,6 +41,7 @@ var TREE_SPECIES = {
   },
   seagrape: {
     name: '海葡萄',                                                     // Coccoloba uvifera：沙灘後面的矮灌木，圓葉、有幾團轉紅
+    meta: { region: ['carib'], type: 'shrub' },
     height: [2.6, 4.4],
     trunk: { r: [0.08, 0.12], taper: 0.5, bend: 0.3, segs: 3, sides: [5, 3], lean: 0.35, col: [0.42, 0.35, 0.29], top: 0.3, crown: 0.75 },   // crown：第一層枝的長 ＝ 總高 × crown（沒寫 ＝ 照樹冠那一段）
     levels: [{ n: [3, 5], from: [0.05, 1.0], angle: [48, 78], len: [0.8, 1.2], r: 0.75, bend: 0.3, up: 0.12, segs: 3, sides: [4, 0] }],
@@ -46,6 +51,7 @@ var TREE_SPECIES = {
   },
   mangrove: {
     name: '紅樹',                                                       // Rhizophora mangle：海邊平坦的淺水與泥灘，一圈支柱根插進水裡、深綠樹冠，成片長
+    meta: { region: ['carib'], type: 'mangrove' },
     height: [5, 8],
     trunk: { r: [0.12, 0.17], taper: 0.5, bend: 0.15, segs: 4, sides: [6, 4], lean: 0.1, col: [0.36, 0.31, 0.26], top: 0.48 },
     roots: { n: [8, 12], from: [0.1, 0.32], reach: [1.3, 2.7], arch: 0.45, r: 0.32, segs: 4, sides: [4, 3] },   // 支柱根：從樹幹 from 那一段往外拱 reach 公尺插進地面
@@ -61,6 +67,7 @@ var TREE_SPECIES = {
   },
   agave: {
     name: '龍舌蘭',                                                     // Agave：乾的坡地、岩地上一叢蓮座葉；少數抽出高高的花梗、頂上一簇一簇黃花
+    meta: { region: ['carib'], type: 'succulent' },
     height: [0.9, 1.4],                                                 // 葉長
     trunk: { r: [0.1, 0.1], taper: 1, bend: 0, segs: 1, sides: [0, 0], lean: 0, col: [0.4, 0.4, 0.3], top: 0.05 },
     levels: [],
@@ -71,6 +78,7 @@ var TREE_SPECIES = {
   },
   pine: {
     name: '加勒比松',                                                   // Pinus caribaea：高地（古巴、伊斯帕尼奧拉、巴哈馬的松林）；筆直的樹幹、上半截稀疏的樹冠
+    meta: { region: ['*'], type: 'tree' },
     height: [15, 23],
     trunk: { r: [0.2, 0.3], taper: 0.3, bend: 0.05, segs: 7, sides: [7, 4], lean: 0.04, col: [0.39, 0.25, 0.18], top: 0.96, crown: 0.24 },
     levels: [
@@ -84,6 +92,7 @@ var TREE_SPECIES = {
   // ── 2026-10-19 第二批（Tim：「接著新增更多植物吧」）：大王椰子、木棉、柱狀仙人掌、樹蕨、扇葉棕櫚 ──
   royalpalm: {
     name: '大王椰子',                                                   // Roystonea：光滑灰白的柱狀樹幹（中段鼓起）、頂上一截綠色的葉鞘（crownshaft）、羽狀葉不留枯葉；平原、谷地、疏林
+    meta: { region: ['carib'], type: 'palm' },
     height: [15, 24],
     trunk: { r: [0.26, 0.32], taper: 0.75, bend: 0.015, segs: 12, sides: [9, 5], lean: 0.03, col: [0.68, 0.66, 0.62], top: 1, flare: 1.4, bulge: [0.45, 0.22], shaft: [0.14, [0.34, 0.5, 0.24]] },   // bulge：[在樹幹的哪裡, 粗幾成]；shaft：[頂上幾成, 顏色]（葉鞘）
     levels: [],
@@ -93,6 +102,7 @@ var TREE_SPECIES = {
   },
   ceiba: {
     name: '木棉（吉貝）',                                               // Ceiba pentandra：冒出林子的巨樹 —— 板根、灰白樹幹、高處幾乎水平攤開的寬樹冠
+    meta: { region: ['carib'], type: 'tree' },
     height: [24, 34],
     trunk: { r: [0.7, 0.95], taper: 0.45, bend: 0.06, segs: 7, sides: [9, 5], lean: 0.04, col: [0.56, 0.54, 0.49], top: 0.7, crown: 0.42 },
     roots: { n: [5, 7], from: [0.02, 0.07], reach: [2.0, 3.6], arch: -0.3, r: 0.55, segs: 3, sides: [4, 3] },   // 板根：低、短、粗（arch 負的 ⇒ 幾乎直的斜下去）
@@ -106,6 +116,7 @@ var TREE_SPECIES = {
   },
   cactus: {
     name: '柱狀仙人掌',                                                 // Pilosocereus／Stenocereus（乾的島、背風坡、石灰岩地）：從低處分出好幾根往上長的稜柱，柱頭圓的
+    meta: { region: ['carib'], type: 'succulent' },
     height: [2.6, 4.6],
     trunk: { r: [0.16, 0.2], taper: 0.95, bend: 0.04, segs: 2, sides: [10, 6], lean: 0.06, col: [0.42, 0.55, 0.40], top: 0.22, crown: 0.75, ribs: 0.12 },   // ribs：稜（相鄰兩邊一凸一凹幾成）
     levels: [{ n: [3, 7], from: [0.3, 1.0], angle: [55, 80], len: [0.75, 1.05], r: 0.85, taper: 0.85, bend: 0.03, up: 1.0, segs: 4, sides: [10, 6], ribs: 0.12 }],   // taper：枝尖剩幾成粗（沒寫 ＝ 0.35）
@@ -115,6 +126,7 @@ var TREE_SPECIES = {
   },
   treefern: {
     name: '樹蕨',                                                       // Cyathea（大安地列斯群島濕潤的山地、雲霧林）：細的深色樹幹、頂上一圈羽狀蕨葉、下面掛一圈枯葉
+    meta: { region: ['carib'], type: 'fern' },
     height: [3.5, 7],
     trunk: { r: [0.09, 0.12], taper: 0.85, bend: 0.06, segs: 6, sides: [6, 4], lean: 0.12, col: [0.25, 0.19, 0.14], top: 1 },
     levels: [],
@@ -124,6 +136,7 @@ var TREE_SPECIES = {
   },
   thatchpalm: {
     name: '扇葉棕櫚',                                                   // Coccothrinax／Thrinax（茅草棕、銀棕；沿岸的石灰岩地、沙地）：細的樹幹、頂上一團圓扇形的葉
+    meta: { region: ['carib'], type: 'palm' },
     height: [3, 7],
     trunk: { r: [0.08, 0.11], taper: 0.85, bend: 0.05, segs: 6, sides: [6, 4], lean: [0.05, 0.2], up: 0.1, col: [0.52, 0.47, 0.40], top: 1 },
     levels: [],
@@ -134,6 +147,7 @@ var TREE_SPECIES = {
   // ── 2026-10-19 第三批（Tim：「接著繼續新增植物吧」）：香蕉、刺梨仙人掌、土耳其頭仙人掌、毒番石榴、愈瘡木、海燕麥 ──
   banana: {
     name: '香蕉／大蕉',                                                 // Musa（1516 年西班牙人帶進伊斯帕尼奧拉；菜園、莊園、溪谷）：綠色的假莖、頂上一圈長橢圓的大葉（被風撕成一條一條）、外圈垂著枯葉；少數掛一串果
+    meta: { region: ['carib'], type: 'crop' },
     height: [2.4, 3.8],                                                 // 假莖高
     trunk: { r: [0.15, 0.2], taper: 0.65, bend: 0.03, segs: 4, sides: [8, 5], lean: 0.05, col: [0.42, 0.45, 0.26], top: 1, flare: 1.3 },
     levels: [],
@@ -144,6 +158,7 @@ var TREE_SPECIES = {
   },
   opuntia: {
     name: '刺梨仙人掌',                                                 // Opuntia（O. dillenii、O. stricta：乾的海岸、沙地、石灰岩地）：一片一片扁的橢圓莖節接著長，頂上有紅紫的果、黃花
+    meta: { region: ['carib', 'med'], type: 'succulent' },
     height: [1.0, 1.6],
     trunk: { r: [0.05, 0.05], taper: 1, bend: 0, segs: 1, sides: [0, 0], lean: 0, col: [0.40, 0.52, 0.30], top: 0.02 },
     levels: [],
@@ -153,6 +168,7 @@ var TREE_SPECIES = {
   },
   melocactus: {
     name: '土耳其頭仙人掌',                                             // Melocactus intortus（巴哈馬南部、特克斯與凱科斯 —— 群島因它得名、波多黎各、小安地列斯；海邊的岩地）：一顆有稜的綠球、頂上一截紅色的花座
+    meta: { region: ['carib'], type: 'succulent' },
     height: [0.3, 0.45],
     trunk: { r: [0.15, 0.2], taper: 1, bend: 0.02, segs: 6, sides: [20, 10], lean: 0.03, col: [0.36, 0.52, 0.38], top: 1, ribs: 0.12, round: 1 },   // round：圓球的輪廓（上下收、中間最寬）
     levels: [],
@@ -162,6 +178,7 @@ var TREE_SPECIES = {
   },
   manchineel: {
     name: '毒番石榴',                                                   // Hippomane mancinella（「死亡小蘋果」：沙灘後面、紅樹林邊；樹汁、果子都有毒，水手上岸的第一個警告）：矮壯、亮綠的圓樹冠
+    meta: { region: ['carib'], type: 'tree' },
     height: [6, 11],
     trunk: { r: [0.18, 0.28], taper: 0.45, bend: 0.2, segs: 5, sides: [7, 4], lean: 0.15, col: [0.45, 0.40, 0.33], top: 0.45 },
     levels: [
@@ -174,6 +191,7 @@ var TREE_SPECIES = {
   },
   lignumvitae: {
     name: '愈瘡木',                                                     // Guaiacum officinale（乾的低地林；世上最硬最重的木頭之一 —— 帆船的滑車輪、軸承）：矮、彎的樹幹、深綠的密樹冠、開藍紫色的花
+    meta: { region: ['carib'], type: 'tree' },
     height: [4, 8],
     trunk: { r: [0.12, 0.2], taper: 0.5, bend: 0.3, segs: 4, sides: [6, 4], lean: 0.2, col: [0.48, 0.45, 0.40], top: 0.35, crown: 0.6 },
     levels: [
@@ -186,6 +204,7 @@ var TREE_SPECIES = {
   },
   seaoats: {
     name: '海燕麥',                                                     // Uniola paniculata（巴哈馬、古巴北岸的沙丘）：一叢一叢細長的葉往外拱，抽出幾根細莖、頂上垂著扁扁的穗
+    meta: { region: ['carib'], type: 'grass' },
     height: [0.7, 1.1],                                                 // 葉長
     trunk: { r: [0.03, 0.03], taper: 1, bend: 0, segs: 1, sides: [0, 0], lean: 0, col: [0.55, 0.50, 0.32], top: 0.02 },
     levels: [],
@@ -194,11 +213,72 @@ var TREE_SPECIES = {
     place: { spacing: 3, alt: [0.8, 1.6, 6, 12], slopeMax: 0.5, mats: { 10: 1 }, dens: 0.55, forest: -0.6, clump: 20, scale: [0.8, 1.25], shell: 0, view: 220, sink: 0.12 },
     variants: 3
   },
+  // ── 作物（TASK-0862；Tim 2026-10-23「田地我希望參考目前生成式樹木方法 去生成農作物(且農作物也可能作為野生作物長在野外)」）──
+  //   place.soil ＝ 田裡鋪的土色 [壟, 溝]（沒寫 ⇒ 翻過的褐土；麥田給金黃的麥茬）。
+//   田裡：附屬的田（Blocksail world/annex.js；規劃的地塊帶 annex：{ cells, crop }）每一格照 place.field ＝ [行距, 株距]（公尺）一行一行種（63_trees.js treeFieldPut），
+  //         行沿地塊的進深方向（從臨路那一邊往後）；田裡的不看海拔帶、底質（人種的）。
+  //   野外：有 place.town 的只種在田裡；沒有的（甘蔗、玉米）同時照地形零星長（Blocksail 物種表的 vis 指到這一種 ⇒ 海圖塊的植被段說哪裡長得了）。
+  //   數字（高、株距、密度）全是〔佔位〕：遊戲裡看過、量過幀數再定。
+  sugarcane: {
+    name: '甘蔗',                                                       // Saccharum officinarum（17～18 世紀加勒比海的 Creole 甘蔗）：一叢幾根黃綠的粗稈、一節一節，下半截葉子掉了露出稈、上半截兩側長窄長的葉往外垂；少數抽銀白的花穗
+    meta: { region: ['carib', 'med'], type: 'crop' },
+    height: [2.8, 3.8],
+    trunk: { r: [0.02, 0.02], taper: 1, bend: 0, segs: 1, sides: [0, 0], lean: 0, col: [0.66, 0.58, 0.32], top: 0.02 },
+    levels: [],
+    leaf: { kind: 'cane', stems: [5, 8], spread: [0.04, 0.14], r: [0.018, 0.024], base: 0.18, node: 0.35, nodeCol: [0.52, 0.44, 0.26], n: [5, 7], from: 0.5, len: [0.38, 0.5], w: 0.03, rise: [50, 72], droop: 1.6,
+            col: [0.30, 0.48, 0.18], tip: [0.52, 0.56, 0.30], vary: 0.1, plume: { v: [1], len: 0.9, col: [0.86, 0.84, 0.80] } },   // stems 幾根稈、spread 往外歪、node 一節多長；n 一根稈幾片葉、from 從稈的幾成高起長葉；plume.v 第幾棵抽花穗
+    place: { spacing: 14, alt: [1, 6, 350, 600], slopeMax: 0.35, mats: { 11: 1 }, dens: 0.16, forest: -0.4, clump: 18, patch: [400, 0.72], scale: [0.8, 1.15], shell: 0, view: 400, sink: 0.1, field: [1.33, 1.0] },
+    variants: 3
+  },
+  maize: {
+    name: '玉米',                                                       // Zea mays（原住民的 conuco、莊園的口糧田）：一根綠稈、兩側交互長寬長的葉往外拱下垂、稈頂一撮雄穗、中段掛一兩個苞葉包著的穗
+    meta: { region: ['carib', 'med'], type: 'crop' },
+    height: [1.8, 2.4],
+    trunk: { r: [0.02, 0.02], taper: 1, bend: 0, segs: 1, sides: [0, 0], lean: 0, col: [0.46, 0.56, 0.26], top: 0.02 },
+    levels: [],
+    leaf: { kind: 'cane', stems: [1, 1], spread: [0, 0.05], r: [0.014, 0.018], base: 0, node: 0.3, nodeCol: [0.40, 0.50, 0.22], n: [8, 11], from: 0.08, len: [0.32, 0.42], w: 0.05, rise: [40, 65], droop: 1.4,
+            col: [0.30, 0.50, 0.18], tip: [0.50, 0.56, 0.26], vary: 0.1, tassel: { n: 6, len: 0.28, col: [0.80, 0.70, 0.42] }, cob: { p: 0.85, at: [0.42, 0.58], len: 0.22, r: 0.035, col: [0.64, 0.68, 0.40] } },
+    place: { spacing: 16, alt: [1, 10, 900, 1500], slopeMax: 0.4, mats: { 11: 1 }, dens: 0.08, forest: -0.6, clump: 12, patch: [500, 0.8], scale: [0.85, 1.1], shell: 0, view: 350, sink: 0.08, field: [0.8, 0.5] },
+    variants: 3
+  },
+  wheat: {
+    name: '小麥',                                                       // Triticum aestivum（地中海的田）：一叢幾十根細稈、頂上一個緊實的金黃穗；底下幾片短葉 —— 一格種一叢（一株一株太多）
+    meta: { region: ['med'], type: 'crop' },
+    height: [0.8, 1.0],
+    trunk: { r: [0.01, 0.01], taper: 1, bend: 0, segs: 1, sides: [0, 0], lean: 0, col: [0.72, 0.64, 0.38], top: 0.02 },
+    levels: [],
+    leaf: { kind: 'grain', n: [22, 30], spread: 0.16, base: 0.18, w: 0.006, col: [0.74, 0.64, 0.36], vary: 0.08, ear: { len: 0.09, w: 0.012, nod: 0.05, col: [0.84, 0.70, 0.36] },
+            leaves: { n: [4, 6], len: 0.35, w: 0.012, col: [0.60, 0.58, 0.32] } },   // n 幾根稈、spread 往外散、base 叢的半徑；ear 穗（nod 垂幾成）；leaves 底下的短葉
+    place: { town: true, spacing: 1, scale: [0.9, 1.1], shell: 0, view: 300, sink: 0.05, field: [0.67, 0.67], soil: [[0.66, 0.56, 0.32], [0.52, 0.43, 0.25]] },   // soil：田裡的土色 [壟, 溝]（麥茬）
+    variants: 3
+  },
+  barley: {
+    name: '大麥',                                                       // Hordeum vulgare：跟小麥像，穗上有長芒、熟了往下垂，顏色淡一點
+    meta: { region: ['med'], type: 'crop' },
+    height: [0.7, 0.9],
+    trunk: { r: [0.01, 0.01], taper: 1, bend: 0, segs: 1, sides: [0, 0], lean: 0, col: [0.76, 0.70, 0.44], top: 0.02 },
+    levels: [],
+    leaf: { kind: 'grain', n: [22, 30], spread: 0.18, base: 0.18, w: 0.006, col: [0.76, 0.70, 0.44], vary: 0.08, ear: { len: 0.08, w: 0.01, nod: 0.45, col: [0.84, 0.76, 0.48], awn: { n: 8, len: 0.12, col: [0.88, 0.80, 0.54] } },
+            leaves: { n: [4, 6], len: 0.33, w: 0.012, col: [0.62, 0.60, 0.34] } },
+    place: { town: true, spacing: 1, scale: [0.9, 1.1], shell: 0, view: 300, sink: 0.05, field: [0.67, 0.67], soil: [[0.66, 0.56, 0.32], [0.52, 0.43, 0.25]] },   // soil：田裡的土色 [壟, 溝]（麥茬）
+    variants: 3
+  },
+  vegetables: {
+    name: '菜畦',                                                       // 菜園（萵苣、甘藍一類的葉菜）：從地面一圈寬葉，裡面的直立往內包（淡）、外面的往外攤（深）
+    meta: { region: ['*'], type: 'crop' },
+    height: [0.3, 0.42],
+    trunk: { r: [0.02, 0.02], taper: 1, bend: 0, segs: 1, sides: [0, 0], lean: 0, col: [0.50, 0.62, 0.34], top: 0.02 },
+    levels: [],
+    leaf: { kind: 'rosette', n: [12, 16], len: [0.7, 1.0], w: 0.38, rise: [12, 82], droop: 0.7, col: [0.30, 0.52, 0.22], edge: [0.56, 0.72, 0.38], vary: 0.12 },   // rise：外圈 ⇒ 裡圈（裡圈直立、邊的淡色 ⇒ 菜心）
+    place: { town: true, spacing: 1, scale: [0.85, 1.15], shell: 0, view: 250, sink: 0.05, field: [0.8, 0.67] },
+    variants: 3
+  },
   // ── 只種在城鎮標的位置（place.town：不照地形自己長；雕刻作品的子作品標 meta kind=tree、tree=<樹種> ⇒ 遊戲照那裡種這一種，63_towns.js townTreesSet；TASK-0748）──
   //   Tim 2026-10-22：「樹木可以用Blocksail的生成式樹木嗎(新功能 標meta替換為遊戲內樹木 確保風格統一)」「可以標記樹的類型(也可以由妳加新種的生成式樹木)」
   //   ⇒ 君士坦丁堡 1453 的園子、修道院、墓園用的地中海樹種。spacing 只拿來算樹冠殼的權重（城鎮的樹一棵一棵照標的點）。
   cypress: {
     name: '地中海柏樹',                                                 // Cupressus sempervirens（直立型）：細長的深綠色柱子 —— 東羅馬的墓園、修道院、花園邊
+    meta: { region: ['med'], type: 'tree' },
     height: [12, 19],
     trunk: { r: [0.16, 0.24], taper: 0.55, bend: 0.03, segs: 7, sides: [6, 4], lean: 0.02, col: [0.36, 0.27, 0.20], top: 0.97, crown: 0.1 },
     levels: [{ n: [16, 22], from: [0.06, 1.0], angle: [6, 16], len: [0.7, 1.1], r: 0.4, bend: 0.06, up: 0.4, segs: 2, sides: [3, 0] }],   // 枝幾乎貼著樹幹往上長 ⇒ 窄柱
@@ -208,6 +288,7 @@ var TREE_SPECIES = {
   },
   olive: {
     name: '橄欖樹',                                                     // Olea europaea：矮、樹幹扭、銀綠色的葉 —— 果園、修道院的園地
+    meta: { region: ['med'], type: 'tree' },
     height: [5, 8],
     trunk: { r: [0.22, 0.32], taper: 0.4, bend: 0.35, segs: 5, sides: [6, 4], lean: 0.16, col: [0.45, 0.42, 0.36], top: 0.42, crown: 0.5 },
     levels: [
@@ -220,6 +301,7 @@ var TREE_SPECIES = {
   },
   fruit: {
     name: '果樹',                                                       // 無花果、蘋果、榅桲那一類的小果樹（不分種）：矮、圓樹冠、零星的果子色 —— 菜園、蓄水池的園地
+    meta: { region: ['*'], type: 'tree' },
     height: [3.5, 5.5],
     trunk: { r: [0.12, 0.18], taper: 0.45, bend: 0.2, segs: 4, sides: [6, 4], lean: 0.08, col: [0.38, 0.30, 0.22], top: 0.4, crown: 0.55 },
     levels: [
@@ -232,6 +314,7 @@ var TREE_SPECIES = {
   },
   plane: {
     name: '東方懸鈴木',                                                 // Platanus orientalis：高大、寬樹冠、斑駁的灰白樹皮 —— 拜占庭的廣場、修道院中庭、泉邊
+    meta: { region: ['med'], type: 'tree' },
     height: [16, 24],
     trunk: { r: [0.45, 0.65], taper: 0.45, bend: 0.08, segs: 6, sides: [8, 5], lean: 0.05, col: [0.62, 0.60, 0.50], top: 0.55, crown: 0.45 },
     levels: [
@@ -573,6 +656,85 @@ var TREE_LEAF = {
         var e = [o[0] + ox * 0.07, o[1] - 0.09, o[2] + oz * 0.07], m2 = [o[0] + ox * 0.035, o[1] - 0.045, o[2] + oz * 0.035], wx = Math.cos(a) * 0.022, wz = Math.sin(a) * 0.022;   // 一個穗 ＝ 一片菱形（兩個三角形）
         treeTri(M, o, [m2[0] + wx, m2[1], m2[2] + wz], e, St.seed, [1, 1, 1], 0.5); treeTri(M, o, e, [m2[0] - wx, m2[1], m2[2] - wz], St.seed, [1, 1, 1], 0.5);
       }
+    }
+  },
+  /** 稈（甘蔗、玉米；TASK-0862）：從地面一叢 stems 根稈往外歪一點，稈一節一節（節深一點），上半截兩側交互長出長條葉（往外拱、往下垂）。
+   *  tassel ＝ 稈頂一撮雄穗（玉米）、cob ＝ 稈中段掛苞葉包著的穗（玉米）、plume ＝ 第幾棵（v）抽一根銀白的花穗（甘蔗）。低模：稈一根一段、葉減半、沒有穗。 */
+  cane: function (M) {
+    var K = M.K, Lf = M.S.leaf, R = M.R, lod = M.lod, T = M.S.trunk, ns = Math.round(treeIn(R, Lf.stems)), segs = lod ? 2 : 4;
+    for (var k = 0; k < ns; k++) {
+      var az = k * 2.39996 + R() * 0.6, sp = treeIn(R, Lf.spread), r0 = treeIn(R, Lf.r), H = K.h * (0.82 + 0.18 * R());
+      var base = [Math.cos(az) * Lf.base * R(), 0, Math.sin(az) * Lf.base * R()], d = treeNorm([Math.cos(az) * sp, 1, Math.sin(az) * sp]), top = [base[0] + d[0] * H, H * d[1], base[2] + d[2] * H];
+      var nn = lod ? 1 : Math.max(2, Math.round(H / Lf.node));         // 一節一段（節的顏色照雜湊深淺交替）
+      for (var s = 0; s < nn; s++) {
+        var a = treeAt([base, top], s / nn), b = treeAt([base, top], (s + 1) / nn), kc = s % 2 ? 0.86 : 1;
+        treeTube(M, [a, b], r0 * (1 - 0.3 * s / nn), r0 * (1 - 0.3 * (s + 1) / nn), lod ? 3 : 5, s % 2 ? Lf.nodeCol || T.col : T.col, kc, 0, null);
+      }
+      var nl = Math.round(treeIn(R, Lf.n) * (lod ? 0.5 : 1)), az0 = R() * 6.2832;
+      for (var f = 0; f < nl; f++) {                                     // 葉：從 from 那一段起往上，兩側交互（＋ 每片轉一點）
+        var u = nl > 1 ? f / (nl - 1) : 1, o = treeAt([base, top], Lf.from + (1 - Lf.from) * u), la = az0 + f * Math.PI + (R() - 0.5) * 0.7;
+        var L = K.h * treeIn(R, Lf.len) * (1 - 0.35 * u), el = (Lf.rise[0] + (Lf.rise[1] - Lf.rise[0]) * u + (R() - 0.5) * 12) * Math.PI / 180, kk = 1 + (R() - 0.5) * 2 * Lf.vary;
+        var dd = [Math.cos(la) * Math.cos(el), Math.sin(el), Math.sin(la) * Math.cos(el)], p = o, P = [p];
+        for (s = 1; s <= segs; s++) { dd = treeNorm([dd[0], dd[1] - Lf.droop * (0.5 + 0.5 * (1 - u)) / segs, dd[2]]); p = [p[0] + dd[0] * L / segs, p[1] + dd[1] * L / segs, p[2] + dd[2] * L / segs]; P.push(p); }
+        var sd = treeNorm(treeCross([Math.cos(la), 0, Math.sin(la)], [0, 1, 0])), W = Lf.w * (lod ? 1.5 : 1);
+        for (s = 0; s < segs; s++) {
+          var t0 = s / segs, t1 = (s + 1) / segs, w0 = W * Math.sin(Math.PI * (0.15 + 0.85 * t0)) + W * 0.25, w1 = s === segs - 1 ? 0 : W * Math.sin(Math.PI * (0.15 + 0.85 * t1)) + W * 0.25, A = P[s], B = P[s + 1];
+          var c0 = [(Lf.col[0] + (Lf.tip[0] - Lf.col[0]) * t0) * kk, (Lf.col[1] + (Lf.tip[1] - Lf.col[1]) * t0) * kk, (Lf.col[2] + (Lf.tip[2] - Lf.col[2]) * t0) * kk];
+          var A0 = [A[0] - sd[0] * w0, A[1], A[2] - sd[2] * w0], A1 = [A[0] + sd[0] * w0, A[1], A[2] + sd[2] * w0], B0 = [B[0] - sd[0] * w1, B[1], B[2] - sd[2] * w1], B1 = [B[0] + sd[0] * w1, B[1], B[2] + sd[2] * w1];
+          treeTri(M, A0, A1, B1, c0, [0.3 + 0.6 * t0, 0.3 + 0.6 * t0, 0.3 + 0.6 * t1], 0.5); if (w1 > 0) treeTri(M, A0, B1, B0, c0, [0.3 + 0.6 * t0, 0.3 + 0.6 * t1, 0.3 + 0.6 * t1], 0.5);
+        }
+      }
+      if (lod) continue;
+      if (Lf.tassel) {                                                   // 雄穗：稈頂幾根細枝往上散開
+        for (var q = 0; q < Lf.tassel.n; q++) {
+          var ta = q * 2.39996, tl = Lf.tassel.len * (0.7 + 0.3 * R()), te = [top[0] + Math.cos(ta) * tl * 0.35, top[1] + tl, top[2] + Math.sin(ta) * tl * 0.35];
+          treeTube(M, [top, te], 0.006, 0.003, 3, Lf.tassel.col, 1, 0, null);
+        }
+      }
+      if (Lf.cob && R() < Lf.cob.p) {                                    // 穗：稈中段、往外斜的一顆長橢球（苞葉的顏色）
+        var ct = treeIn(R, Lf.cob.at), co = treeAt([base, top], ct), ca = az0 + Math.PI / 2, cd = treeNorm([Math.cos(ca) * 0.5, 1, Math.sin(ca) * 0.5]), B2 = treePerp(cd), cl = Lf.cob.len;
+        treeBlob(M, [co[0] + cd[0] * cl * 0.5 + Math.cos(ca) * r0, co[1] + cd[1] * cl * 0.5, co[2] + cd[2] * cl * 0.5 + Math.sin(ca) * r0], [cd, B2[0], B2[1]], [cl * 0.5, Lf.cob.r, Lf.cob.r], Lf.cob.col, 0.3);
+      }
+      if (Lf.plume && Lf.plume.v.indexOf(K.v) >= 0 && k === 0) {        // 花穗：第一根稈頂抽一根細莖、上半截一團銀白
+        var pe = [top[0], top[1] + Lf.plume.len, top[2]];
+        treeTube(M, [top, pe], 0.008, 0.004, 3, Lf.plume.col, 1, 0, null);
+        treeBlob(M, treeAt([top, pe], 0.75), [[0, 1, 0], [1, 0, 0], [0, 0, 1]], [Lf.plume.len * 0.28, 0.07, 0.07], Lf.plume.col, 0.9);
+      }
+    }
+  },
+  /** 穀（小麥、大麥；TASK-0862）：一叢 n 根細稈（一條兩面的細帶）往上、往外散一點，頂上一個穗（兩片交叉的菱形）；awn ＝ 穗上的芒（大麥：長、往外張），
+   *  nod ＝ 穗往下垂幾成（大麥熟了會垂）；底下 leaves 片短葉。低模：稈減半、穗只有一片。 */
+  grain: function (M) {
+    var K = M.K, Lf = M.S.leaf, R = M.R, lod = M.lod, n = Math.round(treeIn(R, Lf.n) * (lod ? 0.5 : 1)), E = Lf.ear;
+    for (var k = 0; k < n; k++) {
+      var az = k * 2.39996 + R() * 0.5, sp = Lf.spread * Math.sqrt((k + 0.5) / n), H = K.h * (0.85 + 0.15 * R()), bx = Math.cos(az) * Lf.base * R(), bz = Math.sin(az) * Lf.base * R();
+      var top = [bx + Math.cos(az) * sp * H, H, bz + Math.sin(az) * sp * H], mid = [bx + Math.cos(az) * sp * H * 0.4, H * 0.55, bz + Math.sin(az) * sp * H * 0.4];
+      var sd = treeNorm([-Math.sin(az), 0, Math.cos(az)]), w = Lf.w, kk = 1 + (R() - 0.5) * 2 * Lf.vary, sc = [Lf.col[0] * kk, Lf.col[1] * kk, Lf.col[2] * kk];
+      [[[bx, 0, bz], mid], [mid, top]].forEach(function (g, gi) {   // 稈：兩段細帶
+        var a = g[0], b = g[1];
+        treeTri(M, [a[0] - sd[0] * w, a[1], a[2] - sd[2] * w], [a[0] + sd[0] * w, a[1], a[2] + sd[2] * w], [b[0] + sd[0] * w, b[1], b[2] + sd[2] * w], sc, [0.4 * gi, 0.4 * gi, 0.4 + 0.4 * gi], 0.6);
+        treeTri(M, [a[0] - sd[0] * w, a[1], a[2] - sd[2] * w], [b[0] + sd[0] * w, b[1], b[2] + sd[2] * w], [b[0] - sd[0] * w, b[1], b[2] - sd[2] * w], sc, [0.4 * gi, 0.4 + 0.4 * gi, 0.4 + 0.4 * gi], 0.6);
+      });
+      var nod = E.nod * (0.6 + 0.4 * R()), ed = treeNorm([Math.cos(az) * (sp + nod), 1 - nod * 1.4, Math.sin(az) * (sp + nod)]), el = E.len * (0.85 + 0.3 * R());
+      var e1 = [top[0] + ed[0] * el, top[1] + ed[1] * el, top[2] + ed[2] * el], em = [top[0] + ed[0] * el * 0.45, top[1] + ed[1] * el * 0.45, top[2] + ed[2] * el * 0.45], ec = [E.col[0] * kk, E.col[1] * kk, E.col[2] * kk];
+      var Bp = treePerp(ed), crosses = lod ? [Bp[0]] : [Bp[0], Bp[1]];
+      crosses.forEach(function (x) {                                   // 穗：菱形（兩個三角形），兩片交叉
+        var l = [em[0] - x[0] * E.w, em[1] - x[1] * E.w, em[2] - x[2] * E.w], r = [em[0] + x[0] * E.w, em[1] + x[1] * E.w, em[2] + x[2] * E.w];
+        treeTri(M, top, r, e1, ec, [0.8, 0.9, 1], 0.5); treeTri(M, top, e1, l, ec, [0.8, 1, 0.9], 0.5);
+      });
+      if (E.awn && !lod) for (var q = 0; q < E.awn.n; q++) {            // 芒：沿穗兩邊往外上張的細三角
+        var t = (q + 0.5) / E.awn.n, o = [top[0] + ed[0] * el * t, top[1] + ed[1] * el * t, top[2] + ed[2] * el * t], sg = q % 2 ? 1 : -1, x2 = crosses[q % crosses.length];
+        var ad = treeNorm([ed[0] + x2[0] * sg * 0.35, ed[1] + x2[1] * sg * 0.35 + 0.2, ed[2] + x2[2] * sg * 0.35]), ae = [o[0] + ad[0] * E.awn.len, o[1] + ad[1] * E.awn.len, o[2] + ad[2] * E.awn.len];
+        treeTri(M, [o[0] - sd[0] * 0.003, o[1], o[2] - sd[2] * 0.003], [o[0] + sd[0] * 0.003, o[1], o[2] + sd[2] * 0.003], ae, E.awn.col, [0.9, 0.9, 1], 0.5);
+      }
+    }
+    var nl = lod ? 0 : Math.round(treeIn(R, Lf.leaves.n));
+    for (var f = 0; f < nl; f++) {                                     // 底下的短葉：往外拱、往下垂的細長三角
+      var la = f * 2.39996 + R(), L = K.h * Lf.leaves.len * (0.7 + 0.3 * R()), p0 = [0, K.h * 0.08 * R(), 0], d1 = [Math.cos(la) * 0.6, 0.8, Math.sin(la) * 0.6];
+      var p1 = [p0[0] + d1[0] * L * 0.55, p0[1] + d1[1] * L * 0.55, p0[2] + d1[2] * L * 0.55], p2 = [p1[0] + Math.cos(la) * L * 0.45, p1[1] - L * 0.15, p1[2] + Math.sin(la) * L * 0.45];
+      var s2 = treeNorm([-Math.sin(la), 0, Math.cos(la)]), lw = Lf.leaves.w;
+      treeTri(M, [p0[0] - s2[0] * lw, p0[1], p0[2] - s2[2] * lw], [p0[0] + s2[0] * lw, p0[1], p0[2] + s2[2] * lw], p1, Lf.leaves.col, [0, 0, 0.5], 0.5);
+      treeTri(M, [p1[0] - s2[0] * lw * 0.7, p1[1], p1[2] - s2[2] * lw * 0.7], [p1[0] + s2[0] * lw * 0.7, p1[1], p1[2] + s2[2] * lw * 0.7], p2, Lf.leaves.col, [0.5, 0.5, 0.8], 0.5);
     }
   },
   /** 蓮座葉（龍舌蘭）：從地面一圈長出 n 片厚葉（裡面的直立、外面的攤開往下彎）；一片 ＝ 一根中線 ＋ 兩邊往上翹的邊（槽形）、尖端收成一點；邊緣偏黃。
