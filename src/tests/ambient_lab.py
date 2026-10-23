@@ -1,6 +1,6 @@
 # 環境音試聽（TASK-0663）：無頭 Chrome 開成品，經 DevTools 協定呼叫 ambLab（02_ambient.js：OfflineAudioContext 離線錄）⇒ 每一段寫成 WAV＋一頁可以直接播的 HTML。
 # 用法：python -I -X utf8 src/tests/ambient_lab.py --tag a [--sec 10] [--cases "名字:w:sea:rain:hold;…"]
-#   --lab hit ⇒ 碰撞與觸礁（02_audio.js hitLab，TASK-0868）：--cases "名字:I:mat:bed:slide:rub;…"、每段預設 3.5 秒、寫到 reports/hit_lab；多三欄：頻譜重心 Hz、1 kHz 以上的能量 %、150 Hz 以下的能量 %（筆電喇叭差不多放不出來）。
+#   --lab hit ⇒ 碰撞與觸礁（02_audio.js hitLab，TASK-0868）：--cases "名字:I:mat:bed:slide:rub:噸;…"、每段預設 5 秒、寫到 reports/hit_lab；多幾欄：頻譜重心 Hz、1 kHz／500 Hz 以上的能量 %、150 Hz 以下的能量 %（筆電喇叭差不多放不出來）、起音 ms（清脆 ＝ 起音硬）。
 # 寫：<out>/<tag>/<序號>_<名字>.wav、<out>/<tag>/index.html（每一段：播放器｜參數｜峰值｜RMS dB）。
 # ⛔ 不用 --dump-dom：離線錄音在音訊執行緒上跑，無頭模式的虛擬時間不等它（量過：頁面載入 3 秒就 dump、#lab 還沒寫）⇒ 改走 Runtime.evaluate（awaitPromise）。
 #   DevTools 的 WebSocket 只用標準函式庫（socket）寫最小的一段：送一個文字訊框、收到回應（可能分好幾個訊框、好幾 MB）。
@@ -67,7 +67,7 @@ def main():
     ap.add_argument('--cases', default='')
     a = ap.parse_args()
     hit = a.lab == 'hit'; fn = 'hitLab' if hit else 'ambLab'
-    a.out = a.out or (OUT_HIT if hit else OUT_DIR); a.sec = a.sec or (3.5 if hit else 10)
+    a.out = a.out or (OUT_HIT if hit else OUT_DIR); a.sec = a.sec or (5 if hit else 10)
     chrome = next(c for c in CHROME if os.path.exists(c))
     q = 'sec=%g' % a.sec + ('&cases=' + urllib.parse.quote(a.cases) if a.cases else '')
     url = 'file:///' + a.html.replace('\\', '/') + '?debug=1'               # __game 只在 debug=1 才掛（成品的程式整包在一個閉包裡，ambLab 不在 window 上）
@@ -102,9 +102,9 @@ def main():
             f.write(base64.b64decode(c['wav'].split(',', 1)[1]))
         o = c['o']
         if hit:
-            print('%-28s 峰值 %.3f  RMS %6s dB  重心 %5d Hz  1k 以上 %5.1f%%  150 Hz 以下 %5.1f%%  %s' % (c['name'], c['peak'], c['rmsDb'], c['cent'], c['hi'], c['lo'], name))
-            rows.append('<tr><td>%s</td><td><audio controls preload="none" src="%s"></audio></td><td>%s</td><td>%.3f</td><td>%s</td><td>%d</td><td>%.1f</td><td>%.1f</td></tr>' % (
-                html.escape(c['name']), name, html.escape(json.dumps(o, ensure_ascii=False)), c['peak'], c['rmsDb'], c['cent'], c['hi'], c['lo']))
+            print('%-28s 峰值 %.3f  RMS %6s dB  重心 %5d Hz  1k 以上 %5.1f%%  500 以上 %5.1f%%  150 以下 %5.1f%%  起音 %3d ms  %s' % (c['name'], c['peak'], c['rmsDb'], c['cent'], c['hi'], c['mid'], c['lo'], c['atk'], name))
+            rows.append('<tr><td>%s</td><td><audio controls preload="none" src="%s"></audio></td><td>%s</td><td>%.3f</td><td>%s</td><td>%d</td><td>%.1f</td><td>%.1f</td><td>%.1f</td><td>%d</td></tr>' % (
+                html.escape(c['name']), name, html.escape(json.dumps(o, ensure_ascii=False)), c['peak'], c['rmsDb'], c['cent'], c['hi'], c['mid'], c['lo'], c['atk']))
             continue
         print('%-14s w %-5s sea %-4s rain %s hold %s  峰值 %.3f  RMS %s dB  %s' % (c['name'], o.get('w'), o.get('sea'), o.get('rain'), o.get('hold'), c['peak'], c['rmsDb'], name))
         rows.append('<tr><td>%s</td><td><audio controls preload="none" src="%s"></audio></td><td>w %s・海況 %s・雨 %s・船艙 %s</td><td>%.3f</td><td>%s</td></tr>' % (
@@ -112,7 +112,7 @@ def main():
     with open(os.path.join(d, 'index.html'), 'w', encoding='utf-8', newline='\n') as f:
         if hit:
             f.write('<!doctype html><meta charset="utf-8"><title>碰撞音效試聽 %s</title><style>body{font:14px sans-serif;margin:16px}td,th{padding:4px 10px;border-bottom:1px solid #ccc}</style>'
-                    '<h3>碰撞與觸礁音效試聽（%s，每段 %g 秒）</h3><table><tr><th>段落</th><th>播放</th><th>參數</th><th>峰值</th><th>RMS dB</th><th>頻譜重心 Hz</th><th>1 kHz 以上 %%</th><th>150 Hz 以下 %%</th></tr>%s</table>' % (a.tag, a.tag, a.sec, ''.join(rows)))
+                    '<h3>碰撞與觸礁音效試聽（%s，每段 %g 秒）</h3><table><tr><th>段落</th><th>播放</th><th>參數</th><th>峰值</th><th>RMS dB</th><th>頻譜重心 Hz</th><th>1 kHz 以上 %%</th><th>500 Hz 以上 %%</th><th>150 Hz 以下 %%</th><th>起音 ms</th></tr>%s</table>' % (a.tag, a.tag, a.sec, ''.join(rows)))
         else:
             f.write('<!doctype html><meta charset="utf-8"><title>環境音試聽 %s</title><style>body{font:14px sans-serif;margin:16px}td,th{padding:4px 10px;border-bottom:1px solid #ccc}</style>'
                     '<h3>環境音試聽（%s，每段 %g 秒）</h3><table><tr><th>段落</th><th>播放</th><th>參數</th><th>峰值</th><th>RMS dB</th></tr>%s</table>' % (a.tag, a.tag, a.sec, ''.join(rows)))

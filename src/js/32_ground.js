@@ -62,10 +62,10 @@ function groundHit(sh, p, v, hard) {
   if (got) smoke(p, [0, 0.4, 0], 2, false);                              // 聲音在 groundSfx（以前這裡、groundPunch 各放一聲 crack）
 }
 /** 觸礁的聲音（TASK-0868；02_audio.js hitVoice）：剛碰上 ⇒ 撞一聲＋刮（長 速度 × 0.6 秒，最多 3）；還在動的每一秒 ⇒ 只刮（rub，1.15 秒：接得上下一秒）。
- *  力道 I ＝ 底的硬度 × 速度² 的對數（0.3 ⇒ 0、40 ⇒ 1：沙底 1 m/s 是 0、礁石 5 m/s 是 1）；底：珊瑚礁、礁石、岩壁 ⇒ 'rock'，其他 'sand'；材質照船底那一格（31_sailing.js hitMat）。⛔ 只讀。 */
+ *  力道 I ＝ 底的硬度 × 速度² 的對數（0.3 ⇒ 0、40 ⇒ 1：沙底 1 m/s 是 0、礁石 5 m/s 是 1）；底：珊瑚礁、礁石、岩壁 ⇒ 'rock'，其他 'sand'；材質照船底那一格（31_sailing.js hitMat）、質量照這艘船。⛔ 只讀。 */
 function groundSfx(sh, p, v, hard, m, rub) {
   var I = clamp(Math.log(Math.max(hard * v * v, 0.3) / 0.3) / Math.log(40 / 0.3), 0, 1), bed = m === BED_MAT.REEF || m === BED_MAT.ROCK || m === BED_MAT.CLIFF ? 'rock' : 'sand';
-  sfx('hit', p, I, { mat: hitMat(sh, M4.pt(sh.inv, p[0], p[1], p[2])), bed: bed, slide: rub ? 1.15 : Math.min(3, v * 0.6), rub: rub });
+  sfx('hit', p, I, { mat: hitMat(sh, M4.pt(sh.inv, p[0], p[1], p[2])), mass: sh.mass0 || shipT(sh), bed: bed, slide: rub ? 1.15 : Math.min(3, v * 0.6), rub: rub });
 }
 /** 撞破船殼（上面的說明）：撞點 p（世界）、速度 v、底質硬度 hard。回傳撞穿幾格。 */
 function groundPunch(sh, p, v, hard) {

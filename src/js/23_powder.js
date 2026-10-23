@@ -53,7 +53,10 @@ function stepPowder() {
 //   照殉爆走（慢動作與特寫照設定）：炸斷了 ⇒ 照斷船沉；沒斷 ⇒ 照破洞進水（粒子模式看得到水灌進來）、水夠了照常開始沉。
 //   ⛔ 以前每炸一間就直接標 sinkingFinal ⇒ 進水不再算（32_hull.js：開始沉之後不算水）⇒ 船照公式往下沉、艙裡一滴水都沒有（Tim 2026-10-15：「自爆好像不會進水，可以走正常殉爆流程嗎」）。
 //   不一定會沉（Tim 2026-10-15：「自爆也不一定會沉」）：⛔ 以前最後一間炸完 20 秒還沒開始沉 ⇒ 硬標開始沉；現在照物理（斷了照斷船沉、沒斷看進水）。
-//   自爆只記時間點 sh.selfAt（Tim：「自爆標記一個Flag(紀錄時間點)」）；算降旗（出局 ⇒ 換友艦、候補）；結算時 SELF_WIN 秒內沉的算「自爆沉沒」（61_hud.js shipFate）。
+//   自爆只記時間點 sh.selfAt（Tim：「自爆標記一個Flag(紀錄時間點)」）；結算時 SELF_WIN 秒內沉的算「自爆沉沒」（61_hud.js shipFate）。
+//   不直接降旗（Tim 2026-10-24：「目前海戰自爆會直接降旗 希望改成要等進水沉船才降旗(自爆只是點燃彈藥庫 不直接判降旗)」）：
+//   ⛔ 以前每炸一間就標 sh.struck ⇒ 第一間一炸就出局、換船。現在只照殉爆：開始沉（斷船、進水夠了：sinkingFinal）才出局；其他降旗規則（32_hull.js strikeCheck：死傷、砲全啞…）照常判。
+//   沒斷又沒沉（抽水跟得上；例：夜隼號下沉停在 2.8 m）⇒ 不出局、繼續作戰（Tim 2026-10-24：「自爆沒沉就繼續作戰」）。
 var SELF_GAP = [0.6, 1.8], SELFB = [];
 function canSelfDestruct() { var sh = SHIPS[PLAYER_I]; return !!(RUNNING && sh && !sh.sunk && !sh.selfD && sh.mags.some(function (m) { return !m.gone; })); }
 function selfDestruct() {
@@ -65,8 +68,9 @@ function selfDestruct() {
   return true;
 }
 function selfBoom(sh, mag) {
+  var ruled = sh.struck && !sh.broken;                                   // 自爆之前已經被降旗規則判了（32_hull.js strikeCheck）⇒ 收場那一句留它的
   magBoom(sh, mag);
-  sh.struck = true; sh.fate = '自爆' + (sh.broken ? '（船斷成兩截）' : '');   // 開始沉照殉爆的流程（magBoom：斷了才標）＋破洞進水
+  if (!ruled) sh.fate = '自爆' + (sh.broken ? '（船斷成兩截）' : '');   // 收場那一句（開始沉 ⇒「自爆、沉沒中」）；出局照殉爆的流程（magBoom：斷了 ⇒ 開始沉）＋破洞進水，⛔ 不另外標降旗
 }
 /** 一桶炸了：小爆炸＋連鎖。 */
 function kegBoom(sh, m) {
