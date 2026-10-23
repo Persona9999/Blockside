@@ -42,8 +42,8 @@ function groundStep(sh, dt) {                                           // dt：
   if (!sh.grnd) {
     sh.grnd = { t: SIMT, m: m, pen: best, lost: 0 };
     note(sh, (m === BED_MAT.REEF ? '撞上珊瑚礁' : m === BED_MAT.ROCK || m === BED_MAT.CLIFF ? '撞上礁石' : m >= BED_MAT.BEACH ? '衝上岸' : '擱淺') + '（' + v0.toFixed(1) + ' m/s）', true);
-    groundHit(sh, bp, v0, hard); groundPunch(sh, bp, v0, hard);
-  } else if (v0 > 0.8 && SIMT - sh.grnd.t >= 1) { sh.grnd.t = SIMT; groundHit(sh, bp, v0, hard); groundPunch(sh, bp, v0, hard); }
+    groundHit(sh, bp, v0, hard); groundPunch(sh, bp, v0, hard); groundSfx(sh, bp, v0, hard, m, false);
+  } else if (v0 > 0.8 && SIMT - sh.grnd.t >= 1) { sh.grnd.t = SIMT; groundHit(sh, bp, v0, hard); groundPunch(sh, bp, v0, hard); groundSfx(sh, bp, v0, hard, m, true); }
   sh.grnd.pen = best; sh.grnd.m = m;
 }
 function groundHit(sh, p, v, hard) {
@@ -59,7 +59,13 @@ function groundHit(sh, p, v, hard) {
     if (sh.grid.get(x, y, z) > 0 && removeVoxel(sh, x, y, z, true)) got++;
   }
   sh.grnd.lost += got; sh.grndLost = (sh.grndLost || 0) + got;
-  if (got) { smoke(p, [0, 0.4, 0], 2, false); sfx('crack', p, 1.2); }
+  if (got) smoke(p, [0, 0.4, 0], 2, false);                              // 聲音在 groundSfx（以前這裡、groundPunch 各放一聲 crack）
+}
+/** 觸礁的聲音（TASK-0868；02_audio.js hitVoice）：剛碰上 ⇒ 撞一聲＋刮（長 速度 × 0.6 秒，最多 3）；還在動的每一秒 ⇒ 只刮（rub，1.15 秒：接得上下一秒）。
+ *  力道 I ＝ 底的硬度 × 速度² 的對數（0.3 ⇒ 0、40 ⇒ 1：沙底 1 m/s 是 0、礁石 5 m/s 是 1）；底：珊瑚礁、礁石、岩壁 ⇒ 'rock'，其他 'sand'；材質照船底那一格（31_sailing.js hitMat）。⛔ 只讀。 */
+function groundSfx(sh, p, v, hard, m, rub) {
+  var I = clamp(Math.log(Math.max(hard * v * v, 0.3) / 0.3) / Math.log(40 / 0.3), 0, 1), bed = m === BED_MAT.REEF || m === BED_MAT.ROCK || m === BED_MAT.CLIFF ? 'rock' : 'sand';
+  sfx('hit', p, I, { mat: hitMat(sh, M4.pt(sh.inv, p[0], p[1], p[2])), bed: bed, slide: rub ? 1.15 : Math.min(3, v * 0.6), rub: rub });
 }
 /** 撞破船殼（上面的說明）：撞點 p（世界）、速度 v、底質硬度 hard。回傳撞穿幾格。 */
 function groundPunch(sh, p, v, hard) {
@@ -86,6 +92,6 @@ function groundPunch(sh, p, v, hard) {
   }
   if (sh.grnd) sh.grnd.punch = (sh.grnd.punch || 0) + got;
   sh.grndPunch = (sh.grndPunch || 0) + got;
-  if (got) { note(sh, '船底被撞破了（' + got + ' 格）', true); smoke(p, [0, 0.6, 0], 3, false); sfx('crack', p, 1.6); }
+  if (got) { note(sh, '船底被撞破了（' + got + ' 格）', true); smoke(p, [0, 0.6, 0], 3, false); }
   return got;
 }
