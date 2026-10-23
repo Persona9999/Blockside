@@ -63,6 +63,7 @@ function makeCrew(sh) {
   function add(role, at, gun, face) { if (at) crew.push({ role: role, home: at, pos: at.slice(), gun: gun, face: face || 1, st: 0, t: rnd() * 10, walk: null, fireT: 0, shotT: rr(2, 6), lost: 0, hp: CREW_HP, hitT: 0 }); }
   sh.guns.forEach(function (gn) {
     var b = gn.model.bb.map(Math.floor), z0, z1, i, n = Math.min(gunCrew(sh.cw, gn.type), GUN_CREW_MAX);   // 砲班滿編（船隻配置；預設 ＝ 砲種表）
+    var au = gunAuto(gn.model); if (au) n = Math.min(au, GUN_CREW_MAX);   // 自動裝彈機（TASK-0845）：砲班只要 autoload_crew 個人（沒標 ⇒ 照舊）
     var k0 = fitKind0(gn.model);                                        // 站的高度照原本雕的那一門（換了裝 ⇒ 底對齊，甲板還是那一層；38_fit.js）
     if (k0 === 'chase') { z0 = b[2] - 3; z1 = b[2] + 3; }
     else if (k0 === 'carr') { z0 = b[2] - 6; z1 = b[2] + 3; }
@@ -79,7 +80,7 @@ function makeCrew(sh) {
       var ex = gn.ax[0] > 0 ? 1 : -1, x0 = ex > 0 ? b[0] : b[3], cyg = Math.floor((b[1] + b[4]) / 2);
       spots = [[x0 + 10 * ex, b[1] - 3], [x0 + 10 * ex, b[4] + 3], [x0 + 4 * ex, b[1] - 3], [x0 + 4 * ex, b[4] + 3], [x0 - 3 * ex, b[1] - 2], [x0 - 3 * ex, b[4] + 2], [x0 - 6 * ex, cyg], [x0 - 10 * ex, cyg - 5]];
     }
-    gn.crewFull = n; gn.crewMin = GUNS[gn.type].min; gn.crewStd = GUNS[gn.type].crew; gn.spots = [];   // crewStd：射速照砲種表的人數算（多的人是替補，gunRate）
+    gn.crewFull = n; gn.crewMin = au || GUNS[gn.type].min; gn.crewStd = au || GUNS[gn.type].crew; gn.spots = []; if (au) gn.auto = au;   // crewStd：射速照砲種表的人數算（多的人是替補，gunRate）
     for (i = 0; i < n; i++) {
       var at = standNear(g, spots[i][0], spots[i][1], z0, z1, 14, taken);
       if (!at) continue;
@@ -399,5 +400,9 @@ function musketHit(dist, h, om) {
 /** erf（Abramowitz & Stegun 7.1.26，誤差 < 1.5e-7）；x ≥ 0。 */
 function musketErf(x) { var t = 1 / (1 + 0.3275911 * x); return 1 - ((((1.061405429 * t - 1.453152027) * t + 1.421413741) * t - 0.284496736) * t + 0.254829592) * t * Math.exp(-x * x); }
 /** 一門砲：在崗的人數決定能不能開、裝填多快。 */
+/** 自動裝彈機（TASK-0845；Tim 2026-10-23「同時可以考慮之後支援自動裝彈機的炮」）：砲模型 meta `autoload=1` ⇒ 砲班幾個人（meta `autoload_crew`，預設 1）；沒標 ⇒ 0。
+ *  標了 ⇒ makeCrew 只派這幾個人、開得動的最少人數與射速的基準人數都是它 ⇒ 人到齊就是全速裝填（gunRate 照舊：(在崗／基準)^0.85，到齊 ＝ 1），不再照砲種表的砲班人數打折。
+ *  彈藥照舊走砲旁的藥箱：有揚弾機（23_powder.js kind=hoist）⇒ 揚弾機一趟一趟直接吊進來；沒有 ⇒ 送藥手送（匯入檢查 ⚠）。沒標的砲一行都不多算。 */
+function gunAuto(m) { var v = (m.meta || {}).autoload; return !v || v === '0' || v === 'false' ? 0 : Math.max(1, Math.round(+(m.meta.autoload_crew) || 1)); }
 function gunRate(g) { return g.wet ? 0 : g.manned >= g.crewMin ? Math.pow(Math.min(1, g.manned / (g.crewStd || g.crewFull)), 0.85) : 0; }   // 照砲種表的人數：滿編調多 ⇒ 多的是替補、射速不再變快；調少 ⇒ 開得動但慢
 

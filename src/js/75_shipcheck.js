@@ -250,6 +250,9 @@ function shipCheck(id) {
     R.info.doors = doorsSummary(sh);                                    // 門、艙蓋（TASK-0638）
     portsIssues(sh, add); R.info.ports = portsSummary(sh);             // 砲門蓋板（TASK-0719；62_ports.js）：鉸鏈、lid_of、關的方向、關上時穿不穿過縮回去的砲、貼不貼船殼
     R.info.recoil = recoilSummary(sh);                                  // 後座（62_ports.js）：沒有蓋板的砲退幾格、照 meta 不演的
+    var AU = sh.guns.filter(function (g) { return g.auto; });       // 自動裝彈機（TASK-0845；40_crew.js gunAuto）：砲班幾個人、彈藥從哪來
+    R.info.autoload = AU.map(function (g) { return g.model.path + '（砲班 ' + g.auto + ' 人' + (g.ah ? '、揚弾機 ' + g.ah.name + ' 直接吊進來' : '、彈藥照舊由送藥手送到砲旁') + '）'; }).join('、');
+    AU.forEach(function (g) { if (!g.ah) add('warn', '自動裝彈機', g.model.path, 'autoload 的砲沒有揚弾機吊 ⇒ 彈藥照舊由送藥手送到砲旁（裝填照樣不靠砲班人數）', '揚弾筒 meta kind=hoist、guns 寫這門（造船規格 §9.15）'); });
     R.info.gunmount = gmtSummary(sh, add);                              // 砲身與砲座拆兩件、pitch（TASK-0836；05_hull.js gmtPair、62_ports.js gelBuild）
     R.info.spins = spinSummary(sh);                                     // 照參數轉的子物件（TASK-0640）
     (T.armBad || []).forEach(function (b) { add(b.lv, '裝甲', b.where, b.msg, b.fix); });
