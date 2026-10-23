@@ -801,25 +801,54 @@ function townRoadHeight(x, z) {
  *  產生器、⛔ 不碰外面的變數（TASK-0817）：原始碼整段送進 Worker 一口氣跑完（townRoadSurface）；開不了 Worker ⇒ 這一頁照 TOWN_MESH_MS 一段一段跑。
  *  roads ＝ [{ w, col, P, z }]（海域座標）、G ＝ 分區多寬（公尺）⇒ { v：每點 6 個（往東、往南、備援高度、顏色 rgb）, i：三角形, e：外緣（只為真正的外緣加側面）,
  *    ao／al：每一點旁邊的三角形（CSR：al[ao[k]..ao[k+1]) ＝ 那幾個三角形在 i 的位置）, tiles：[{ x, z, tri, edge }]（地面分區：三角形照重心、外緣照中點；townGroundPrep） }。
- *  君士坦丁堡（1,232 條路）以前在這一頁一段一段跑，合計 5.2 s 的主執行緒（2026-10-22 量）。 */
+ *  君士坦丁堡（1,232 條路）以前在這一頁一段一段跑，合計 5.2 s 的主執行緒（2026-10-22 量）。
+ *  窄路（寬 < 3.5 m）經過的格細分成 1 m（Tim 2026-10-23：和平港的路「出現破損」）：2 m 的格上，距離場在三角形裡是線性內插，
+ *    窄路從格點之間穿過去就只剩格點旁邊幾小塊 —— 100 m 的直路量過：寬 2 m 只鋪到 59～62%、碎成 12～36 塊，2.5 m 84～89%、1～7 塊，3 m 起 96% 以上、一塊。
+ *    細分的格：窄路的中心線 hw ＋ 3 m 內（格中心算）⇒ 那幾格的 9 個點照所有的路取最小（寬路照樣算進去）；旁邊沒細分的格在相鄰那一邊插中點、照中心扇形切，
+ *    兩邊的邊一點一點對上（沒有 T 字接縫、沒有多出來的外緣）。寬 1 m 的格上，寬 1.5 m 的路 ≈ 2 m 格上的 3 m ⇒ 最窄照這個算（各城的路最窄 2 m）。 */
 function* townRoadGen(roads, G) {
-  var nodes = new Map(), cells = new Map(), ov = [], oi = [], verts = new Map(), n = 0;
-  for (var r of roads) {
-    var hw = r.w / 2, col = r.col; if (!(hw > 0)) continue;
+  var nodes = new Map(), cells = new Map(), fine = new Set(), ov = [], oi = [], verts = new Map(), n = 0, FINE_W = 3.5, FINE_PAD = 3;
+  function GK(x, z) { return (x + 1048576) * 4194304 + z + 1048576; }   // 格點的鍵（整數公尺；±1,048 km 內不撞）⇒ 數字比字串快
+  function partsOf(r) {                                                     // 一條路每一段切成 ≤ 16 m 的小段 ⇒ [{ a, b, za, zb, L2, x0, z0, x1, z1, loX, hiX, loZ, hiZ（2 m 格的外框） }…]
+    var hw = r.w / 2, out = [];
     for (var q = 1; q < r.P.length; q++) {
       var a = r.P[q - 1], b = r.P[q], za = r.z[q - 1], zb = r.z[q], dx = b[0] - a[0], dz = b[1] - a[1], L2 = dx * dx + dz * dz;
       if (za == null || zb == null || L2 < 1e-8) continue;
-      var parts = Math.max(1, Math.ceil(Math.sqrt(L2) / 16));
-      for (var part = 0; part < parts; part++) {
-        var x0 = a[0] + dx * part / parts, z0 = a[1] + dz * part / parts, x1 = a[0] + dx * (part + 1) / parts, z1 = a[1] + dz * (part + 1) / parts;
-        var loX = 2 * Math.floor((Math.min(x0, x1) - hw - 2) / 2), hiX = 2 * Math.ceil((Math.max(x0, x1) + hw + 2) / 2), loZ = 2 * Math.floor((Math.min(z0, z1) - hw - 2) / 2), hiZ = 2 * Math.ceil((Math.max(z0, z1) + hw + 2) / 2);
-        for (var z = loZ; z <= hiZ; z += 2) for (var x = loX; x <= hiX; x += 2) {
-          var u = Math.max(0, Math.min(1, ((x - a[0]) * dx + (z - a[1]) * dz) / L2)), ex = x - a[0] - u * dx, ez = z - a[1] - u * dz, d = Math.sqrt(ex * ex + ez * ez) - hw, key = x + ':' + z, old = nodes.get(key);
-          if (!old || d < old[2]) nodes.set(key, [x, z, d, za + (zb - za) * u, col]);
-          if (x < hiX && z < hiZ) cells.set(key, [x, z]);
-        }
-        yield;
+      var np = Math.max(1, Math.ceil(Math.sqrt(L2) / 16));
+      for (var part = 0; part < np; part++) {
+        var x0 = a[0] + dx * part / np, z0 = a[1] + dz * part / np, x1 = a[0] + dx * (part + 1) / np, z1 = a[1] + dz * (part + 1) / np;
+        out.push({ a: a, b: b, za: za, zb: zb, L2: L2, x0: x0, z0: z0, x1: x1, z1: z1, loX: 2 * Math.floor((Math.min(x0, x1) - hw - 2) / 2), hiX: 2 * Math.ceil((Math.max(x0, x1) + hw + 2) / 2), loZ: 2 * Math.floor((Math.min(z0, z1) - hw - 2) / 2), hiZ: 2 * Math.ceil((Math.max(z0, z1) + hw + 2) / 2) });
       }
+    }
+    return out;
+  }
+  // ① 窄路經過的 2 m 格（那一小段的外框裡、格中心離小段 ≤ hw ＋ FINE_PAD）標成細分 ⇒ 格的 9 個點都在那條窄路的外框裡（下面一定量得到）
+  for (var r of roads) {
+    if (!(r.w > 0) || r.w >= FINE_W) continue;
+    for (var s of partsOf(r)) {
+      var sx = s.x1 - s.x0, sz = s.z1 - s.z0, S2 = sx * sx + sz * sz || 1e-12;
+      for (var z = s.loZ; z < s.hiZ; z += 2) for (var x = s.loX; x < s.hiX; x += 2) {
+        var u = Math.max(0, Math.min(1, ((x + 1 - s.x0) * sx + (z + 1 - s.z0) * sz) / S2));
+        if (Math.hypot(x + 1 - s.x0 - u * sx, z + 1 - s.z0 - u * sz) <= r.w / 2 + FINE_PAD) fine.add(GK(x, z));
+      }
+      yield;
+    }
+  }
+  // ② 距離場：2 m 的格點（全部的路）＋細分格裡的 1 m 格點（全部的路：寬路照樣要算進去，不然窄路接寬路的路口會缺一塊）
+  var PA, PB, ZA, ZB, L2, DX, DZ, HW, COL;
+  function node(x, z) {
+    var u = Math.max(0, Math.min(1, ((x - PA[0]) * DX + (z - PA[1]) * DZ) / L2)), ex = x - PA[0] - u * DX, ez = z - PA[1] - u * DZ, d = Math.sqrt(ex * ex + ez * ez) - HW, key = GK(x, z), old = nodes.get(key);
+    if (!old || d < old[2]) nodes.set(key, [x, z, d, ZA + (ZB - ZA) * u, COL]);
+  }
+  for (var r of roads) {
+    HW = r.w / 2; COL = r.col; if (!(HW > 0)) continue;
+    for (var s of partsOf(r)) {
+      PA = s.a; PB = s.b; ZA = s.za; ZB = s.zb; L2 = s.L2; DX = PB[0] - PA[0]; DZ = PB[1] - PA[1];
+      for (var z = s.loZ; z <= s.hiZ; z += 2) for (var x = s.loX; x <= s.hiX; x += 2) {
+        node(x, z);
+        if (x < s.hiX && z < s.hiZ) { var key = GK(x, z); cells.set(key, [x, z]); if (fine.size && fine.has(key)) { node(x + 1, z); node(x, z + 1); node(x + 1, z + 1); node(x + 2, z + 1); node(x + 1, z + 2); } }
+      }
+      yield;
     }
   }
   function vertex(p) {
@@ -827,7 +856,7 @@ function* townRoadGen(roads, G) {
     if (k != null) return k;
     k = ov.length / 6; ov.push(p[0], p[1], p[3], p[4][0], p[4][1], p[4][2]); verts.set(key, k); return k;
   }
-  function clip(P) {
+  function clip(P) {                                                      // P 多於 3 點（邊上插了中點）⇒ 照中心扇形切：從 C[0] 扇形切會在共線的中點那裡切出面積 0 的三角形、中點就沒接上
     var C = [];
     for (var j = 0; j < P.length; j++) {
       var a = P[j], b = P[(j + 1) % P.length], ia = a[2] <= 0, ib = b[2] <= 0;
@@ -836,20 +865,41 @@ function* townRoadGen(roads, G) {
     }
     if (C.length < 3) return;
     var ids = C.map(vertex);
+    if (P.length > 3) {
+      var m = [0, 0, 0, 0, C[0][4]]; C.forEach(function (p) { m[0] += p[0] / C.length; m[1] += p[1] / C.length; m[3] += p[3] / C.length; });
+      var im = vertex(m);
+      for (j = 0; j < C.length; j++) {
+        var b2 = C[j], c2 = C[(j + 1) % C.length], ar = (b2[1] - m[1]) * (c2[0] - m[0]) - (b2[0] - m[0]) * (c2[1] - m[1]);
+        if (ar > 1e-9) oi.push(im, ids[j], ids[(j + 1) % C.length]);
+      }
+      return;
+    }
     for (j = 1; j + 1 < C.length; j++) {
       var a = C[0], b = C[j], c = C[j + 1], area = (b[1] - a[1]) * (c[0] - a[0]) - (b[0] - a[0]) * (c[1] - a[1]);
       if (area > 1e-9) oi.push(ids[0], ids[j], ids[j + 1]);
     }
   }
+  function nd(x, z) { return nodes.get(GK(x, z)); }
   for (var q of cells.values()) {
-    var x = q[0], z = q[1], a = nodes.get(x + ':' + z), b = nodes.get((x + 2) + ':' + z), c = nodes.get(x + ':' + (z + 2)), d = nodes.get((x + 2) + ':' + (z + 2));
-    if (a && b && c && d) { clip([a, c, b]); clip([b, c, d]); }
+    var x = q[0], z = q[1], a = nd(x, z), b = nd(x + 2, z), c = nd(x, z + 2), d = nd(x + 2, z + 2);
+    if (fine.has(GK(x, z))) {                                          // 細分的格：4 個 1 m 的小格，對角線同 2 m 的格（同 bedMesh）
+      for (var j2 = 0; j2 < 2; j2++) for (var i2 = 0; i2 < 2; i2++) {
+        var fa = nd(x + i2, z + j2), fb = nd(x + i2 + 1, z + j2), fc = nd(x + i2, z + j2 + 1), fd = nd(x + i2 + 1, z + j2 + 1);
+        if (fa && fb && fc && fd) { clip([fa, fc, fb]); clip([fb, fc, fd]); }
+      }
+    } else if (a && b && c && d) {                                        // 旁邊是細分的格 ⇒ 相鄰那一邊插中點（T1 ＝ a c b：左邊 a→c、下邊 b→a；T2 ＝ b c d：上邊 c→d、右邊 d→b）
+      var mL = fine.has(GK(x - 2, z)) ? nd(x, z + 1) : null, mB = fine.has(GK(x, z - 2)) ? nd(x + 1, z) : null;
+      var mT = fine.has(GK(x, z + 2)) ? nd(x + 1, z + 2) : null, mR = fine.has(GK(x + 2, z)) ? nd(x + 2, z + 1) : null;
+      var T1 = [a]; if (mL) T1.push(mL); T1.push(c, b); if (mB) T1.push(mB);
+      var T2 = [b, c]; if (mT) T2.push(mT); T2.push(d); if (mR) T2.push(mR);
+      clip(T1); clip(T2);
+    }
     if (++n % 256 === 0) yield;
   }
   // 只為真正的外緣加側面；相鄰路、內部格線與路口都沒有內牆。
   var edges = new Map(), oe = [];
   for (var f = 0; f < oi.length; f += 3) {
-    for (var i = 0; i < 3; i++) { var a = oi[f + i], b = oi[f + (i + 1) % 3], key = Math.min(a, b) + ':' + Math.max(a, b), e = edges.get(key); if (e) e[2]++; else edges.set(key, [a, b, 1]); }
+    for (var i = 0; i < 3; i++) { var a = oi[f + i], b = oi[f + (i + 1) % 3], key = Math.min(a, b) * 2097152 + Math.max(a, b), e = edges.get(key); if (e) e[2]++; else edges.set(key, [a, b, 1]); }
     if (++n % 256 === 0) yield;
   }
   edges.forEach(function (e) { if (e[2] === 1) oe.push(e[0], e[1]); });
