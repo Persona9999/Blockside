@@ -1256,6 +1256,7 @@
         "ship": 2,
         "turret": 2,
         "wheel": 2,
+        "wheel_stand": 2,
         "yard": 3
       }
     }
