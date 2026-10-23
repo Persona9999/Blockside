@@ -258,7 +258,9 @@ function townFolkDraw(P, K, eye, PL, fogD, clock) {
   TOWNS.list.forEach(function (T) {
     var b = T.box, bx = Math.max(b[0] - BED.ax - eye[0], 0, eye[0] - (b[2] - BED.ax)), bz = Math.max(b[1] - BED.az - eye[2], 0, eye[2] - (b[3] - BED.az));
     if (Math.hypot(bx, bz) > maxD) return;                              // 整座城都在範圍外 ⇒ 連路網都不建（位置只看時間，回來時照樣接得上）
-    var G = T.folk || townFolkPrep(T, F), cb = TOWNS.folkCb || (TOWNS.folkCb = [0, 0, 0, 0, 0, 0]);
+    // 路網照背景預算（08_seabed.js bedBusy）：君士坦丁堡一次 0.13 s（2,000 位的路線）⇒ 不跟建實例、解模型擠在同一格（TASK-0866：進城那一格 0.47 s）；預算用完 ⇒ 這一格先不畫這座城的人
+    var G = T.folk; if (!G) { if (bedBusy()) return; var b0 = performance.now(); G = townFolkPrep(T, F); bedSpent(b0); }
+    var cb = TOWNS.folkCb || (TOWNS.folkCb = [0, 0, 0, 0, 0, 0]);
     G.agents.forEach(function (a) {
       var ln = G.line && a.id < G.line.n, bb = a.bb;
       if (!ln) {                                                         // 路線外框先裁到鏡頭周圍 maxD 的方框（路線可以長到好幾百公尺，遠端那一截掉進視錐不算數）⇒ 裁完是空的、太遠、整個在畫面外 ⇒ 不算
