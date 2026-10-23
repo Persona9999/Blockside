@@ -19,7 +19,10 @@
 //   城鎮（63_towns.js）：高度照整過地的那一份（townHv）、規劃的 clear 裡不擺（townClr；樹與小植物都是）。
 //   城鎮模型標的樹（雕刻的子作品 meta kind=tree、tree=樹種；TASK-0748）：照標的位置、樹種、高度種（treeTownPut）；只給城鎮的樹種 place.town（16_treegen.js：柏樹、橄欖、果樹、懸鈴木）不照地形自己長。
 //   ?trees=0 ⇒ 不長樹。
-var TREE_DENS_K = [0.3, 0.6, 1];                                        // 植物密度：畫質的「植物密度」少／中／多留幾成（07_gfx.js GFX.plant；treeBin 照位置雜湊挑，跟載入順序無關）
+// 附屬的田裡的作物（treeFieldPut）：放大幾倍、行距株距各乘幾倍（Tim 2026-10-24「基於性能考量 農田植物可以考慮放大1.5倍看看 然後降低一點密度」）——
+//   兩個一起乘 ⇒ 每一株佔的地跟植物一起變大，看起來一樣滿、株數 ÷ 2.25；鋪土的壟（63_towns.js townGroundTile）照乘過的行距。野生的作物不受管
+var TREE_FIELD_K = 1.5, TREE_FIELD_SP = 1.5;
+var TREE_DENS_K = [0.3, 0.6, 1];                                      // 植物密度：畫質的「植物密度」少／中／多留幾成（07_gfx.js GFX.plant；treeBin 照位置雜湊挑，跟載入順序無關）
 var TREE_LOD_D = [400, 650, 900, 1350];                                 // 低模到多遠：畫質的「立體樹的距離」（07_gfx.js GFX.treed；treeDraw 換了就重新分組）。⛔ 不超過 TREE_SHELL[0]（貼圖跟樹冠殼交接的地方）
 var TREE_SHELL_D = [[1100, 1500], [1100, 1500], [1100, 1500], [1650, 2250]];   // 貼圖 ⇒ 樹冠殼的交接：全開 × 1.5（Tim 2026-10-21「繪製陰影&植物距離再多1.5倍」）
 // TREE_BB_MAX：貼圖集一張最多幾格（樹種 × 第幾棵）＝ 著色器 uBB 的長度；128 ＝ 16 × 8 格 × 128 × 256 ＝ 剛好 2048²（WebGL2 保證的貼圖大小）。
@@ -155,16 +158,16 @@ function treeFieldPut(J) {
       if (Math.min.apply(null, xs) >= x0 + size || Math.max.apply(null, xs) < x0 || Math.min.apply(null, zs) >= z0 + size || Math.max.apply(null, zs) < z0) return;
       var si = J.SP.indexOf(F.crop), S = si >= 0 ? TREE_SPECIES[F.crop] : null, Fd = S && S.place.field;
       if (!Fd) { TREES.stat.fieldSkip = (TREES.stat.fieldSkip || 0) + 1; return; }
-      var nb = Math.max(1, Math.round((F.b1 - F.b0) / Fd[0])), na = Math.max(1, Math.round((F.a1 - F.a0) / Fd[1])), sk = S.place.sink != null ? S.place.sink : 0.3, sc = S.place.scale;
+      var nb = Math.max(1, Math.round((F.b1 - F.b0) / (Fd[0] * TREE_FIELD_SP))), na = Math.max(1, Math.round((F.a1 - F.a0) / (Fd[1] * TREE_FIELD_SP))), sk = (S.place.sink != null ? S.place.sink : 0.3) * TREE_FIELD_K, sc = S.place.scale;
       for (var kb = 0; kb < nb; kb++) for (var ka = 0; ka < na; ka++) {
         var b = F.b0 + (F.b1 - F.b0) * (kb + 1 - (1 - TOWN_FURROW) / 2) / nb, a = F.a0 + (F.a1 - F.a0) * (ka + 0.5) / na;   // 種在壟的中線
         var tx = F.at[0] + F.fx * a - F.fy * b, ty = F.at[1] + F.fy * a + F.fx * b, e = T.E([tx, ty]), x = e[0] - BED.ax, z = e[1] - BED.az;
-        var gi = Math.round(x * 8), gj = Math.round(z * 8), jt = Fd[1] * 0.18;
+        var gi = Math.round(x * 8), gj = Math.round(z * 8), jt = Fd[1] * TREE_FIELD_SP * 0.18;
         x += (treeHash(gi, gj, 7341) - 0.5) * 2 * jt; z += (treeHash(gi, gj, 7342) - 0.5) * 2 * jt;
         if (x < x0 || x >= x0 + size || z < z0 || z >= z0 + size) continue;
         var y = J.hAt(x - x0, z - z0) + TOWN_ROAD_LIFT - sk;              // 站在鋪的土上（townGroundTile 的土高出地面 TOWN_ROAD_LIFT；第一版種在地面 ⇒ 菜畦整株埋在土底下）
-        out.push(x, y, z, treeHash(gi, gj, 7343) * 6.2832, sc[0] + (sc[1] - sc[0]) * treeHash(gi, gj, 7344), 0.88 + 0.24 * treeHash(gi, gj, 7345), si, Math.floor(treeHash(gi, gj, 7346) * S.variants));
-        bb[0] = Math.min(bb[0], x); bb[2] = Math.min(bb[2], z); bb[3] = Math.max(bb[3], x); bb[5] = Math.max(bb[5], z); bb[1] = Math.min(bb[1], y); bb[4] = Math.max(bb[4], y + S.height[1]);
+        out.push(x, y, z, treeHash(gi, gj, 7343) * 6.2832, (sc[0] + (sc[1] - sc[0]) * treeHash(gi, gj, 7344)) * TREE_FIELD_K, 0.88 + 0.24 * treeHash(gi, gj, 7345), si, Math.floor(treeHash(gi, gj, 7346) * S.variants));
+        bb[0] = Math.min(bb[0], x); bb[2] = Math.min(bb[2], z); bb[3] = Math.max(bb[3], x); bb[5] = Math.max(bb[5], z); bb[1] = Math.min(bb[1], y); bb[4] = Math.max(bb[4], y + S.height[1] * TREE_FIELD_K);
         TREES.stat.field = (TREES.stat.field || 0) + 1; TREES.stat.bySp[F.crop] = (TREES.stat.bySp[F.crop] || 0) + 1;
       }
     });
