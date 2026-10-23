@@ -24,6 +24,21 @@ WEATHERS.storm.gusts = { dir: 0.6, spd: 0.3, per: [71, 29, 11] };
 //   沒給 ⇒ windGusts() 回天氣那一格本身 ⇒ 跟以前逐位元相同。
 var WIND_VD = Q.has('wvd') && isFinite(parseFloat(Q.get('wvd'))) ? clamp(parseFloat(Q.get('wvd')), 0, 90) : null, WIND_VS = Q.has('wvs') && isFinite(parseFloat(Q.get('wvs'))) ? clamp(parseFloat(Q.get('wvs')), 0, 0.8) : null;
 function windGusts() { var g = WX.gusts; return WIND_VD === null && WIND_VS === null ? g : { dir: WIND_VD !== null ? WIND_VD / 114.59 : g.dir, spd: WIND_VS !== null ? WIND_VS / 2 : g.spd, per: g.per }; }
+// 陰雨（TASK-0851；Tim 2026-10-23「讓地球儀海域上出現 下雨 暴風雨 天氣呢(且透過參數連動到Blockside)」）：浪、風、航速、操舵、開砲照晴天（每一個係數 1、陣風同晴天），
+//   只有天色變陰、霧濃一點、陽光弱、會下雨（雨滴、雨聲、澆熄火都照 rain）。?rain=0.1–1 ＝ 雨的大小（Blocksail 地球儀照雨量給；沒給 ＝ 0.6）：
+//   天色、霧、陽光、亮度照大小往暴風雨靠（k ＝ 0.35 ＋ 0.45 × 大小 ⇒ 最多靠到八成）。晴、暴風雨、大漩渦不讀 ?rain ⇒ 跟以前逐位元相同。
+var RAIN_Q = Q.has('rain') && isFinite(parseFloat(Q.get('rain'))) ? clamp(parseFloat(Q.get('rain')), 0.1, 1) : 0.6;
+WEATHERS.rain = (function (r) {
+  var S = WEATHERS.storm, k = 0.35 + 0.45 * r;
+  return Object.assign({}, WEATHERS.clear, { name: '陰雨', sky: lerp3(SKY, S.sky, k), horizon: lerp3(HORIZON, S.horizon, k), ground: lerp3(GROUND, S.ground, k),
+    fog: 0.0016 + (S.fog - 0.0016) * k, sun: 1 - (1 - S.sun) * k, lum: 1 - (1 - S.lum) * k, rain: r });
+})(RAIN_Q);
+// 風速是實際的（TASK-0851）：?wabs=1 ⇒ 帶進來的 ?wspd 就是帆上真正的風（Blocksail 地球儀照當地實際風速給），天氣不再另外乘風（wind）與航速（speed）的倍數 ——
+//   ⛔ 不擋的話暴風雨裡地球儀帶 20 m/s（wspd 2）進來，帆上又 × 2.2 ＝ 44 m/s。載入時、每一場開局（windInit）都把每種天氣的 wind、speed 設成 1
+//   （開局再設一次：存檔的天氣設定「暴風雨的風」是載入之後才套的）。沒給 ⇒ 照舊。
+var WIND_ABS = Q.get('wabs') === '1';
+function windAbs() { if (WIND_ABS) for (var wk in WEATHERS) { WEATHERS[wk].wind = 1; WEATHERS[wk].speed = 1; } }
+windAbs();
 // 大漩渦（TASK-0683；Tim 2026-10-17：「暴風雨+海中央大漩渦(在敵我中間)」）：暴風雨的每一格照抄，再加 vortex（08_sea.js vxInit 讀）——
 //   r 水流最快那一圈的半徑（m）、depth 中間多深（m）、width 漏斗寬窄（幾倍的 r）、v 水流最快（節）、inflow 往中心吸（切向的幾成）、eye 眼的半徑（m）、pull 眼把船往下拖（m/秒，0 ＝ 不拖）。
 //   預設（Tim 2026-10-17「半徑再放大2倍 然後更深一點 水流快一些」）：r 95 → 190、depth 28 → 75、v 6.8 → 10 節、eye 21 → 42；可以在天氣設定頁改（下面 WXK_ITEMS）。
@@ -76,6 +91,7 @@ var WIND_ROT = 0, WIND_S0 = 1, WIND_FIX = null;                        // WIND_F
 var WX_ID = WEATHERS[Q.get('weather')] ? Q.get('weather') : 'clear', WX = WEATHERS[WX_ID];
 function seedHash(k) { var x = Math.sin((SEED % 99991) * 12.9898 + k * 78.233) * 43758.5453; return x - Math.floor(x); }
 function windInit() {
+  windAbs();
   var pin = Q.has('seed') || DEMO >= 0 || !!WIND_FIX, u1 = pin ? seedHash(11) : Math.random(), u2 = pin ? seedHash(12) : Math.random();
   WIND_ROT = WIND_FIX && WIND_FIX.rot !== null ? WIND_FIX.rot * Math.PI / 180 : !WIND_FIX && Q.has('wdir') && isFinite(+Q.get('wdir')) ? +Q.get('wdir') * Math.PI / 180 : u1 * 2 * Math.PI;
   WIND_S0 = WIND_FIX && WIND_FIX.s0 !== null ? clamp(WIND_FIX.s0, 0.3, 3) : !WIND_FIX && Q.has('wspd') && isFinite(+Q.get('wspd')) ? clamp(+Q.get('wspd'), 0.3, 3) : 0.6 + 0.9 * u2;
