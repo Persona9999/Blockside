@@ -254,7 +254,28 @@ function collidePair(A, B, ka, kb) {
   A.px += n[0] * push; A.pz += n[2] * push; B.px -= n[0] * push; B.pz -= n[2] * push;
   if (!ramOn(A, B)) hitFriction(A, B, n);                              // 撞擊事件進行中 ⇒ 沿 n 的減速交給 ramTick（⛔ 兩邊都扣 ⇒ 彈力 0 也被扣到倒退：量過 −0.33 m/s）
   wpBump(pa, pb, A, B);                                                // 船邊水花（13_water.js；只給人看）
-  if (SIMT - (A.bumpT || -9) > 5) { A.bumpT = SIMT; sfx('crack', pa, 1); note(SHIPS[PLAYER_I], '兩艘擦撞'); }
+  if (SIMT - (A.bumpT || -9) > 5) { A.bumpT = SIMT; if (!ramOn(A, B)) hitSfx(A, B, n, pa); note(SHIPS[PLAYER_I], '兩艘擦撞'); }   // 撞擊事件剛開 ⇒ 聲音 ramHit 放過了
+}
+// 碰撞的聲音（TASK-0868；02_audio.js hitVoice）：兩艘各放一聲 sfx('hit', 撞點, 力道 I, { mat, mass, k: 0.75 }) —— 各照自己撞到的材質與船的質量（Tim 2026-10-23「船體材質&質量」）。⛔ 只讀：不改速度、不抽 rnd()（無頭 dump 不變）。
+//   力道 I ＝ 撞擊動能的對數：HIT_E0（50 kJ）⇒ 0、HIT_E1（30 MJ）⇒ 1 —— 兩艘 2,152 噸（憲法號、合眾國號）船頭撞舷側：0.5 m/s 215 kJ ⇒ 0.23、門檻 1.5 m/s ⇒ 0.57、4 m/s 13,781 kJ（README 量過）⇒ 0.88。動能跟 ramHit 同一條（沿接觸法線的接近速度、有效質量，½ μ du²）；撞擊事件直接給它算好的 E0。
+//   材質：撞點那一格（空的 ⇒ 半徑 2 格內最近的實心格）是金屬、而且硬度 ≥ HIT_METAL_HARD ⇒ 'metal'；其他 'wood'（銅包皮 1.1、鍋爐 1.5 這種薄的、包在裡面的照木頭；定遠號 1.25 cm 的鐵板是 4）。
+var HIT_METAL_HARD = 2, HIT_E0 = 50, HIT_E1 = 30000, HIT_NEAR = null;
+function hitMat(sh, L) {
+  if (!HIT_NEAR) { HIT_NEAR = []; for (var dz = -2; dz <= 2; dz++) for (var dy = -2; dy <= 2; dy++) for (var dx = -2; dx <= 2; dx++) HIT_NEAR.push([dx, dy, dz, dx * dx + dy * dy + dz * dz]); HIT_NEAR.sort(function (a, b) { return a[3] - b[3]; }); }
+  var x = Math.round(L[0]), y = Math.round(L[1]), z = Math.round(L[2]), m = null;
+  for (var i = 0; i < HIT_NEAR.length && !m; i++) { var o = HIT_NEAR[i]; if (sh.grid.get(x + o[0], y + o[1], z + o[2])) m = matAt(sh, x + o[0], y + o[1], z + o[2]); }
+  m = m || matAt(sh, x, y, z);
+  return m.kind === 'metal' && m.hard >= HIT_METAL_HARD ? 'metal' : 'wood';
+}
+function hitForce(E) { return clamp(Math.log(Math.max(E, HIT_E0) / HIT_E0) / Math.log(HIT_E1 / HIT_E0), 0, 1); }
+/** n ＝ 從 B 指向 A 的接觸法線、w ＝ 撞點（世界）；E（kJ）沒給 ⇒ 照兩艘現在的速度算；LA、LB ＝ 兩艘各自的撞點（格座標；沒給 ⇒ 照 w 換）。 */
+function hitSfx(A, B, n, w, E, LA, LB) {
+  if (E === undefined) {
+    var vA = A.vel || [0, 0, 0], vB = B.vel || [0, 0, 0], du = Math.max(0, (vB[0] - vA[0]) * n[0] + (vB[2] - vA[2]) * n[2]), mA = (A.mass0 || shipT(A)) / ramK(A, n), mB = (B.mass0 || shipT(B)) / ramK(B, n);
+    E = 0.5 * mA * mB / (mA + mB) * du * du;
+  }
+  var I = hitForce(E), ma = hitMat(A, LA || M4.pt(A.inv, w[0], w[1], w[2])), mb = hitMat(B, LB || M4.pt(B.inv, w[0], w[1], w[2]));
+  sfx('hit', w, I, { mat: ma, mass: A.mass0 || shipT(A), k: 0.75 }); sfx('hit', w, I, { mat: mb, mass: B.mass0 || shipT(B), k: 0.75 });   // 兩聲疊起來 ⇒ 各 × 0.75
 }
 /** 摩擦：n ＝ 從 B 指向 A 的接觸法線（水平單位向量）。原本 ⇒ 兩艘都 ×0.97。 */
 function hitFriction(A, B, n) {
@@ -301,7 +322,7 @@ function ramHit(A, B, n) {
   var e = RAM.e, Ed = E0 * (1 - e * e) * RAM.k, hA = hardAt(A, QA), hB = hardAt(B, QB), eA = Ed * hB / (hA + hB);
   RAM_EV.push({ A: A, B: B, n: n, kA: kA, kB: kB, mA: mA, mB: mB, du: du, a: du, e: e, E0: E0, Ed: Ed, bud: [eA, Ed - eA], eA: eA, eB: Ed - eA, abs: 0, d: 0,
     maxD: Math.min(10, RAM_DEPTH * Math.cbrt(Math.max(1, RAM.k))), rem: [[], []], t0: [massLost(A), massLost(B)], ts: SIMT });
-  var w = M4.pt(A.M, QA[0], QA[1], QA[2]); sfx('crack', w, 1.6); smoke(w, [0, 0.4, 0], 3, false);
+  var w = M4.pt(A.M, QA[0], QA[1], QA[2]); hitSfx(A, B, n, w, E0, QA, QB); smoke(w, [0, 0.4, 0], 3, false);
 }
 /** 撞擊事件每一步（collide 開頭；dt ＝ 一步）：壓、減速；吸收滿了 ⇒ 反彈、收尾。 */
 function ramTick(dt) {
@@ -569,7 +590,7 @@ function collideFine(A, B, lv) {
   if (!ramOn(A, B)) hitFriction(A, B, n);                              // 撞擊事件進行中 ⇒ 沿 n 的減速交給 ramTick（⛔ 兩邊都扣 ⇒ 彈力 0 也被扣到倒退：量過 −0.33 m/s）
   var w = acc.length ? M4.pt(A.M, acc[0], acc[1], acc[2]) : [(cA[0] + cB[0]) / 2, cA[1], (cA[2] + cB[2]) / 2];   // 第一個接觸點（給水花、聲音；只有 B 的點落進 A ⇒ 兩艘中心的中點）
   wpBump([w[0] + n[0] * 0.5, w[1], w[2] + n[2] * 0.5], [w[0] - n[0] * 0.5, w[1], w[2] - n[2] * 0.5], A, B);
-  if (SIMT - (A.bumpT || -9) > 5) { A.bumpT = SIMT; sfx('crack', w, 1); note(SHIPS[PLAYER_I], '兩艘擦撞'); }
+  if (SIMT - (A.bumpT || -9) > 5) { A.bumpT = SIMT; if (!ramOn(A, B)) hitSfx(A, B, n, w); note(SHIPS[PLAYER_I], '兩艘擦撞'); }   // 撞擊事件剛開 ⇒ 聲音 ramHit 放過了
 }
 /** 敵艦在哪一舷（給自動操舵用；有遲滯，不在正前／正後來回跳）。只影響操舵 —— 開火是每門砲各自看對不對得到。 */
 function chooseSide(sh) {

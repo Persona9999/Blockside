@@ -40,7 +40,10 @@ var MODE_HOOK = {
       if (from) { DOCK.cam = { mode: CAM.mode, dist: CAM.dist, yaw: CAM.yaw, pitch: CAM.pitch, track: CAM.track, aoff: CAM.aoff }; TWB.framed = false; }   // 換進來 ⇒ 鏡頭照整座城（87_townbuild.js twbFrame）；出航時還原
       twbBind();
     },
-    leave: function () { if (TWB.on) twbToggle(false); TWB.start = null; TWB.tr = null; }
+    leave: function () {
+      if (TWB.on) twbToggle(false); TWB.start = null; TWB.tr = null;
+      var el = $('twbTown'); if (el) { el.textContent = ''; el.classList.remove('on'); }   // 城名那一行（87_townbuild.js twbTitle 只在城鎮模式寫）⇒ 出航時收掉
+    }
   },
   sail: {
     handles: [],

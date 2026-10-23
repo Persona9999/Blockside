@@ -79,9 +79,22 @@ function townFolkPick(F, h, hc) {
   }
   var T = F.childShare === null || F.childShare === undefined ? W.all : hc < F.childShare ? W.kid : W.big;
   if (!T.r.length) T = W.all;
+  return townFolkCum(T, h);
+}
+/** 累積權重表 T ＝ { r: [人物號], cum: [累積], tot } ⇒ h ∈ [0, 1) 落在哪一位（二分）。 */
+function townFolkCum(T, h) {
   var x = h * T.tot, lo = 0, hi = T.r.length - 1;
   while (lo < hi) { var m = (lo + hi) >> 1; if (T.cum[m] <= x) lo = m + 1; else hi = m; }
   return T.r[lo];
+}
+/** 這座城照人口挑人（TASK-0870；Tim 2026-10-23「會跟鎮民演出有關(出現比例)」「之後就可以根據人口年齡分布 & 職業隨機生成鎮民了」）：
+ *  外面那一頁（Blocksail 地球儀的城鎮帳）在規劃上附 live.folk ＝ { 人物 id: 權重 }（年齡層、男女、職業算好的；加起來 ＝ 那座城的人口）⇒ 照它挑，
+ *  不再「前 rows 位每人一位」、不看設定檔的 child_share（小孩多少就是那座城的人口裡有多少）。沒附、全是 0、?folkpop=0 ⇒ null（照舊 townFolkPick）。 */
+function townFolkTown(T, F) {
+  var w = T.p && T.p.live && T.p.live.folk; if (!w || Q.get('folkpop') === '0') return null;
+  var t = { r: [], cum: [], tot: 0 };
+  F.people.forEach(function (p, r) { var v = +w[p.id] || 0; if (v <= 0) return; t.tot += v; t.r.push(r); t.cum.push(t.tot); });
+  return t.tot > 0 ? t : null;
 }
 /** 立繪的每一列 ⇒ 那一位的設定（設定檔照 id 找）＋ 能挑的衣色、髮色（打包好的 0xRRGGBB）。
  *  色表：那一位的 cloth／hair ⇒ 設定檔的預設 cloth／hair ⇒ 遊戲設定檔的 hairColors；cloth_k／hair_k ⇒ 亮度倍率（JS 先乘、夾 255）。
@@ -124,11 +137,12 @@ function townFolkGl(P) {
 /** 城 T 的路網與居民（第一次要畫這座城時算一次；建築模式改了路 ⇒ townReplace 不沿用 T.folk，下次重算）。 */
 function townFolkPrep(T, F) {
   var t0 = performance.now(), G = townFolkGraph(T), edges = G.edges, N = G.roadM < 8 ? 0 : Math.max(6, Math.min(TOWN_FOLK_MAX, Math.round(G.roadM / TOWN_FOLK_STEP)));
-  G.agents = [];
+  var TP = townFolkTown(T, F);                                           // 照那座城的人口挑（有附 live.folk）；沒有 ⇒ 照舊
+  G.agents = []; G.pick = TP ? 'pop' : 'cfg';
   for (var i = 0; i < N; i++) {
     var k = T.id + ':folk:' + i, target = townHash(k + ':e') * G.roadM, ei = 0;
     while (ei + 1 < edges.length && edges[ei].cum < target) ei++;
-    var a = { id: i, spd: 1.15 + 0.45 * townHash(k + ':s'), lane: (townHash(k + ':l') - 0.5) * 0.65, art: i < F.rows ? i : townFolkPick(F, townHash(k + ':a'), townHash(k + ':y')),   // 前 rows 位每個人物一位（每座城都看得到每一種、排隊用），之後照權重與兒童比例
+    var a = { id: i, spd: 1.15 + 0.45 * townHash(k + ':s'), lane: (townHash(k + ':l') - 0.5) * 0.65, art: TP ? townFolkCum(TP, townHash(k + ':a')) : i < F.rows ? i : townFolkPick(F, townHash(k + ':a'), townHash(k + ':y')),   // 前 rows 位每個人物一位（每座城都看得到每一種、排隊用），之後照權重與兒童比例
       cloth: 0, hair: 0, hgt: 0,                                         // 照這一位的設定挑（下面）
       sh: 0.94 + 0.12 * townHash(k + ':k'), ph: townHash(k + ':p') * 6.2832,
       e: ei, t: 0, dir: 1, stop: false, face: 1 };                       // e／t／dir／stop：這一格的位置（townFolkAt 照時間寫，不是狀態）；face：朝左朝右的遲滯（只是畫面）
@@ -308,7 +322,8 @@ function townFolkDraw(P, K, eye, PL, fogD, clock) {
 /** 讀數：城 T 的那一份（townStat 每座城的 folk）。 */
 function townFolkStat(T) {
   var G = T.folk; if (!G) return null;
-  return { agents: G.agents.length, edges: G.edges.length, nodes: G.nodes.length, roadM: Math.round(G.roadM), y: G.y, prepMs: G.prepMs, line: G.line,
+  var F = TOWNS.kit && TOWNS.kit.folk, kids = 0; if (F) G.agents.forEach(function (a) { if (F.people[a.art].age === 'child') kids++; });
+  return { agents: G.agents.length, edges: G.edges.length, nodes: G.nodes.length, roadM: Math.round(G.roadM), y: G.y, prepMs: G.prepMs, line: G.line, pick: G.pick, kids: G.agents.length ? +(kids / G.agents.length).toFixed(3) : null,
     sample: G.agents.slice(0, 8).map(function (a) { var e = G.edges[a.e]; return { id: a.id, art: a.art, cloth: a.cloth, hair: a.hair, legs: a.legs.length, per: +a.per.toFixed(1), t: +a.t.toFixed(2), x: +(e.ax + e.dx * a.t).toFixed(1), z: +(e.az + e.dz * a.t).toFixed(1) }; }) };
 }
 /** 讀數：全部城加起來（townStat 頂層的 folk）。 */

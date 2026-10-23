@@ -338,6 +338,8 @@
   #stage.twb #twbK{ background:#9fc7ff; color:#111; }
   #keys > #dockK.dkOff{ display:none !important; }   /* ⚓ 停靠／⛵ 出航（88_modeswitch.js dockBtn，TASK-0867）：航海時準備好了才出現 */
   #twbInfo, #twbP{ display:none; }
+  #twbTown{ display:none; }
+  #twbTown.on{ display:block; position:absolute; left:50%; top:28px; transform:translateX(-50%); padding:4px 12px; border-radius:8px; background:rgba(10,14,22,.66); color:#f3e6c4; font-size:14px; pointer-events:none; white-space:nowrap; max-width:calc(100vw - 32px); overflow:hidden; text-overflow:ellipsis; z-index:7; }   /* 城名、年份、人口（87_townbuild.js twbTitle；TASK-0871） */
   #stage.twb #twbInfo{ display:block; position:absolute; left:50%; top:64px; transform:translateX(-50%); padding:4px 12px; border-radius:8px; background:rgba(10,14,22,.66); color:#eee; font-size:13px; pointer-events:none; white-space:nowrap; max-width:calc(100vw - 32px); overflow:hidden; text-overflow:ellipsis; }
   #stage.twb #twbP{ display:flex; flex-direction:column; gap:8px; position:absolute; left:50%; bottom:92px; transform:translateX(-50%); width:min(520px, calc(100vw - 32px)); z-index:8; pointer-events:auto; }
   #twbTabs, #twbItems, #twbOps{ display:flex; flex-wrap:wrap; gap:6px; } #twbTabs button{ border-radius:14px; padding:4px 12px; } #twbTabs button.on{ background:#9fc7ff; color:#111; }
@@ -457,6 +459,7 @@
   <!-- 建造模式（82_build.js，TASK-0648；#stage.bld 才顯示）：準心下面一行說明、📦 目錄（分類分頁）；快捷欄在 #fpUI 裡 -->
   <div id="bldInfo"></div>
   <!-- 城鎮的建築模式（87_townbuild.js，TASK-0742；#stage.twb 才顯示）：上面一行說明、下面分類選單（道路、房屋）＋復原、離開 -->
+  <div id="twbTown"></div>
   <div id="twbInfo"></div>
   <div id="twbP" class="panel"></div>
   <div id="inspP" class="panel" style="display:none"><!-- 船隻觀察的面板：js/86_inspect.js inspUI 生 --></div>
