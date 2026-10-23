@@ -15,9 +15,9 @@
 //   · 側面每個頂點自己的法線（徑向＋照半徑的斜率傾斜）⇒ 光照平滑內插；兩端平的蓋子、自己的法線、色照角度。
 // ⛔ 只換畫的那一份（GPU 的三角形）：佔格 occ（家具擋格、站位、砲線，10_ship.js／21_gunnery.js／40_crew.js）照原本的網格算 ⇒ 戰局不變。
 var LATHE_N = 16, LATHE_TOL = 0.15, LATHE_BINS = 360;
-var MESH_ALGOS = { lathe: 1, pole: 1, shell: 1, wheel: 1 };                               // meta render 認得的網格算法
+var MESH_ALGOS = { lathe: 1, pole: 1, shell: 1, wheel: 1, smooth: 1 };   // smooth：平滑式（62_msmooth.js，TASK-0865）                               // meta render 認得的網格算法
 /** 這件模型（或裝飾）標的網格算法：'lathe'／'pole'／'shell'／'wheel'；有 meta 但沒標（或不認得）⇒ ''；沒有 meta ⇒ null（不算數）。 */
-function meshAlgoOf(m) { var mt = m && m.meta; if (!mt) return null; return MESH_ALGOS[mt.render] ? mt.render : ''; }
+function meshAlgoOf(m) { var mt = m && m.meta; if (!mt) return null; if (!mt.render && typeof mt.material === 'string' && matKnown(mt.material) && matInfo(mt.material).smooth === true) return 'smooth'; return MESH_ALGOS[mt.render] ? mt.render : ''; }   // 沒寫 render、材質標 smooth（iron、boiler）⇒ 平滑式（同關聯的規則 05_material.js；TASK-0865）
 /** 船型 H 的第 k 份網格用哪一種算法：用它的模型、裝飾（有 meta 的）全部標同一種、至少一件 ⇒ { alg, n, ax }
  *  （n：meta lathe_n／wheel_n（0 ＝ 照換色數／照半徑）、ax：meta lathe_axis／wheel_axis（-1 ＝ 照外框）—— 車床式、輪式用）；有一件沒標、標的不一樣 ⇒ null（照原本的）。 */
 function meshAlgo(H, k) {
@@ -161,6 +161,6 @@ function latheTris(m, N0, st, A0) {
 }
 /** 第 k 份網格給 GPU 的三角形（buildMeshes、90_main.js hullCheck 共用）：照 meta 選的算法（車床式 latheTris、長桿式 62_pole.js poleTris、外殼式 62_shell.js shellTris、輪式 62_wheel.js wheelTris）；沒標、做不出來 ⇒ 照原本的（meshTris）。 */
 function meshTriFor(H, k, m) {
-  var L = meshAlgo(H, k), t = !L ? null : L.alg === 'lathe' ? latheTris(m, L.n, null, L.ax) : L.alg === 'pole' ? poleTris(m, null) : L.alg === 'shell' ? shellTris(m, null) : L.alg === 'wheel' ? wheelTris(m, L.n, null, L.ax) : null;
+  var L = meshAlgo(H, k), t = !L ? null : L.alg === 'lathe' ? latheTris(m, L.n, null, L.ax) : L.alg === 'pole' ? poleTris(m, null) : L.alg === 'shell' ? shellTris(m, null) : L.alg === 'wheel' ? wheelTris(m, L.n, null, L.ax) : L.alg === 'smooth' ? msmTris(m, null) : null;
   return t || meshTris(m);
 }

@@ -187,6 +187,10 @@ function shipCheck(id) {
       (MMs[id] || (MMs[id] = { n: 0, lit: !!m.mm })).n++;
     });
     R.info.modelMat = Object.keys(MMs).sort().map(function (id) { var q = MMs[id]; return matInfo(id).name + '（' + id + '）' + q.n + ' 件' + (q.lit ? '' : '（metal 0 ⇒ 不反光）'); }).join('；');
+    // ── 模型的平滑網格（TASK-0865；62_msmooth.js）：meta render=smooth、或材質標 smooth ⇒ 照船殼的 surface nets 畫；每一份網格實際做一次，做不出來 ⇒ 照方塊畫、報 ⚠ ──
+    var SMK = {}, smN = 0; sh.models.concat(sh.decos || []).forEach(function (m) { var k = m.rmesh !== undefined ? m.rmesh : m.mesh, L = meshAlgo(T, k); if (!L || L.alg !== 'smooth') return; smN++; (SMK[k] || (SMK[k] = [])).push(m.path || m.name); });
+    var smT = 0; Object.keys(SMK).forEach(function (k) { var st = {}, t = (T.rig.meshes || [])[k] ? msmTris(T.rig.meshes[k], st) : null; if (!t) add('warn', '模型平滑', SMK[k][0], '平滑式做不出來（不是方塊匯出的網格，或太大）⇒ 照方塊畫', '這份網格拿掉 render=smooth／換成不標 smooth 的材質，或看 62_msmooth.js msmTris'); else smT += st.tris; });
+    if (smN) R.info.modelMat = (R.info.modelMat ? R.info.modelMat + '；' : '') + '平滑網格 ' + smN + ' 件（' + Object.keys(SMK).length + ' 份網格、' + smT.toLocaleString('en') + ' 個三角形）';
     if (smP.length && !(T.smN - T.smAuto)) add('warn', '平滑渲染', smP.map(function (p) { return p.path; }).join('、'), '關聯標了 render=smooth，檔頭卻沒有平滑的格（render 段落）⇒ 照方塊畫', 'python -I admin.py reimport --id ' + T.id + '（senate 匯出才帶 render 段落）');
     (T.h.parts || []).forEach(function (p) { var v = p.meta && p.meta.render; if (v && v !== 'smooth' && v !== 'voxel') add('warn', '平滑渲染', p.path, 'meta render=' + v + ' 不認得 ⇒ 照方塊畫', 'render 只有 voxel｜smooth（造船規格 §9.5）'); });
     sh.guns.forEach(function (g) { if (!g.alive) add('error', '開場就掉', g.name, '砲開場 ' + SC_SECS + ' 秒內就沒了', '砲腳下要有甲板'); });

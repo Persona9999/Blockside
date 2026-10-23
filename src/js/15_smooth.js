@@ -87,8 +87,25 @@ function smFree(m) { gl.deleteBuffer(m.vb); gl.deleteBuffer(m.ib); gl.deleteVert
 /** 一區的網格（g ＝ 現在的格子；reuse ＝ 這艘自己的舊緩衝，有就覆寫）⇒ { vao, vb, ib, n, own } 或 null（這一區沒有平滑面）。
  *  pg（砲帶的裝甲，24_armor.js）：只用來釘格角的另一份格子（拆出來之前貼著的船殼）—— 碰到它的格角只釘高度（z：貼著甲板、不往上縮），水平照樣平滑；它自己不出面、不算實心。
  *  ⛔ 三個方向都釘 ⇒ 圓筒底那一圈是轉 0° 時的格角階梯 ⇒ 砲塔一轉，階梯跟著轉、跟甲板上的座圈對不上，一圈鋸齒（Tim 2026-10-16：「旋轉砲塔旋轉後 會導致底下甲板出現破圖」）。
- *  o（螺旋槳）：{ SG：哪幾格算平滑（不給 ＝ T.smG）, mm, mr：整份一樣的金屬度、粗糙度（不看材質層）}。 */
+ *  o（螺旋槳）：{ SG：哪幾格算平滑（不給 ＝ T.smG）, mm, mr：整份一樣的金屬度、粗糙度（不看材質層）, rgb：格子的值 ⇒ [r, g, b]（不給 ＝ 照 rgb332 解；模型的平滑網格 62_msmooth.js 用）}。 */
 function smBuild(T, g, rk, reuse, pg, o, keep) {                     // keep：留著 CPU 的頂點與索引（m.cpu；船型那一份，smArena 接完就丟）
+  var c = smCpu(T, g, rk, pg, o);
+  if (!c) { if (reuse) smFree(reuse); return null; }
+  var buf = c.buf, idx = c.idx;
+  var m = reuse || { vao: gl.createVertexArray(), vb: gl.createBuffer(), ib: gl.createBuffer(), n: 0, own: true };
+  if (!reuse) {
+    gl.bindVertexArray(m.vao); gl.bindBuffer(gl.ARRAY_BUFFER, m.vb);
+    [[0, 0, 3], [1, 3, 3], [2, 6, 3], [3, 9, 2]].forEach(function (a) { gl.enableVertexAttribArray(a[0]); gl.vertexAttribPointer(a[0], a[2], gl.FLOAT, false, 44, a[1] * 4); });   // 3：金屬度、粗糙度（P.tri 的 aM；TASK-0627）
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, m.ib); gl.bindVertexArray(null);
+  }
+  gl.bindBuffer(gl.ARRAY_BUFFER, m.vb); gl.bufferData(gl.ARRAY_BUFFER, buf, gl.DYNAMIC_DRAW);
+  gl.bindVertexArray(m.vao); gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, m.ib); gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, idx, gl.DYNAMIC_DRAW); gl.bindVertexArray(null);
+  m.n = idx.length; m.own = true; m.verts = c.nv; m.faces = c.nf;
+  if (keep) m.cpu = { buf: buf, idx: idx };
+  return m;
+}
+/** smBuild 不碰 GPU 的那一半（TASK-0865 拆出來：模型的平滑網格 62_msmooth.js 只要三角形）⇒ { buf（每頂點 11 個 float）, idx, nv, nf } 或 null（這一區沒有平滑面）。參數同 smBuild。 */
+function smCpu(T, g, rk, pg, o) {
   var SG = (o && o.SG) || T.smG, nx = Math.ceil(T.h.size[0] / SM_R), ny = Math.ceil(T.h.size[1] / SM_R);
   var rx = rk % nx, ry = Math.floor(rk / nx) % ny, rz = Math.floor(rk / (nx * ny)), x0 = rx * SM_R, y0 = ry * SM_R, z0 = rz * SM_R;
   var SX = T.h.size[0] + 2, SXY = SX * (T.h.size[1] + 2);
@@ -109,11 +126,11 @@ function smBuild(T, g, rk, reuse, pg, o, keep) {                     // keep：�
     r = { srf: n > 0 && n < 8, pin: pin, pz: !pin && pz, o: ne ? [ox / ne, oy / ne, oz / ne] : [0, 0, 0], g: [gx, gy, gz] };   // pz：只釘高度（碰到 pg 的格角）
     info.set(k, r); return r;
   }
-  var vidx = new Map(), V = [], F = [], MG = o ? null : T.matG, MM = o ? null : T.matM, MR = o ? null : T.matR;   // V：每個頂點 [X, Y, Z, r, g, b, 面數, 金屬度, 粗糙度]；F：每個面 4 個頂點編號
+  var vidx = new Map(), V = [], F = [], MG = o ? null : T.matG, MM = o ? null : T.matM, MR = o ? null : T.matR, RGB = o && o.rgb;   // V：每個頂點 [X, Y, Z, r, g, b, 面數, 金屬度, 粗糙度]；F：每個面 4 個頂點編號
   function vert(X, Y, Z, col, mi) {
     var k = key(X, Y, Z), i = vidx.get(k);
     if (i === undefined) { i = V.length; vidx.set(k, i); V.push([X, Y, Z, 0, 0, 0, 0, 0, 0]); }
-    var v = V[i]; v[3] += ((col >> 5) & 7) / 7; v[4] += ((col >> 2) & 7) / 7; v[5] += (col & 3) / 3; v[6]++;
+    var v = V[i]; if (RGB) { var q3 = RGB(col); v[3] += q3[0]; v[4] += q3[1]; v[5] += q3[2]; } else { v[3] += ((col >> 5) & 7) / 7; v[4] += ((col >> 2) & 7) / 7; v[5] += (col & 3) / 3; } v[6]++;
     if (MM) { v[7] += MM[mi]; v[8] += MR[mi]; } else if (o) { v[7] += o.mm; v[8] += o.mr; }
     return i;
   }
@@ -137,7 +154,7 @@ function smBuild(T, g, rk, reuse, pg, o, keep) {                     // keep：�
       }
     }
   }
-  if (!F.length) { if (reuse) smFree(reuse); return null; }
+  if (!F.length) return null;
   // 頂點位置與法線：① 自己的偏移 ② 周圍同一面的格角平均 ⇒ 夾回格角 ±0.5；釘住的 ＝ 格角本身
   var buf = new Float32Array(V.length * 11);
   for (var i = 0; i < V.length; i++) {
@@ -159,17 +176,7 @@ function smBuild(T, g, rk, reuse, pg, o, keep) {                     // keep：�
   }
   var idx = new Uint32Array(F.length * 6);
   for (var j = 0; j < F.length; j++) { var Q = F[j]; idx.set([Q[0], Q[1], Q[2], Q[0], Q[2], Q[3]], j * 6); }
-  var m = reuse || { vao: gl.createVertexArray(), vb: gl.createBuffer(), ib: gl.createBuffer(), n: 0, own: true };
-  if (!reuse) {
-    gl.bindVertexArray(m.vao); gl.bindBuffer(gl.ARRAY_BUFFER, m.vb);
-    [[0, 0, 3], [1, 3, 3], [2, 6, 3], [3, 9, 2]].forEach(function (a) { gl.enableVertexAttribArray(a[0]); gl.vertexAttribPointer(a[0], a[2], gl.FLOAT, false, 44, a[1] * 4); });   // 3：金屬度、粗糙度（P.tri 的 aM；TASK-0627）
-    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, m.ib); gl.bindVertexArray(null);
-  }
-  gl.bindBuffer(gl.ARRAY_BUFFER, m.vb); gl.bufferData(gl.ARRAY_BUFFER, buf, gl.DYNAMIC_DRAW);
-  gl.bindVertexArray(m.vao); gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, m.ib); gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, idx, gl.DYNAMIC_DRAW); gl.bindVertexArray(null);
-  m.n = idx.length; m.own = true; m.verts = V.length; m.faces = F.length;
-  if (keep) m.cpu = { buf: buf, idx: idx };
-  return m;
+  return { buf: buf, idx: idx, nv: V.length, nf: F.length };
 }
 
 // ───────────────────────── 透明格：玻璃（TASK-0753；Tim 2026-10-20：「參考金屬 新增一種透明材質標記(玻璃) 跟金屬一樣套用光滑表面」）─────────────────────────
