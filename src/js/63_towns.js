@@ -639,7 +639,16 @@ function townInst(T) {
   (p.aqueducts || []).forEach(function (a) { townWall(T, a, out, W, true); });   // 引水渠：畫法同城牆（見 townWall 的 line）
   TOWNS.stat.inst = TOWNS.list.reduce(function (s, T2) { return s + (T2 === T ? out.length : (T2.inst || []).length); }, 0);
   TOWNS.stat.lots = TOWNS.list.reduce(function (s, T2) { return s + (T2.p.lots || []).length; }, 0);
+  // 地形挖洞（63_bed_gl.js BEDHOLE）：模型 meta ground=hide 的建築（擺得出來的那幾棟）、規劃寫 hide 的廣場 ⇒ 那個地塊框裡的地形不畫
+  var lotK = {}; out.forEach(function (q) { if (q.lot) lotK[q.lot] = q.k; });
+  T.holes = (p.lots || []).filter(function (l) { return l.use === 'plaza' ? !!l.hide : !!(lotK[l.id] && K.M[lotK[l.id]].m.ground === 'hide'); }).map(function (l) { return townHoleOf(T, l); });
+  bedHoleSet([].concat.apply([], TOWNS.list.map(function (T2) { return T2 === T ? T.holes : T2.holes || []; })));
   return out;
+}
+/** 地塊框 ⇒ 地形挖洞的那一格（海域座標 − BED.ax／az；E 的 x 乘 kx ⇒ 軸、半寬照它換）。 */
+function townHoleOf(T, l) {
+  var th = l.rot * Math.PI / 180, c = T.E(l.at), ux = T.kx * Math.cos(th), uz = Math.sin(th), ul = Math.hypot(ux, uz), vl = Math.hypot(T.kx * Math.sin(th), Math.cos(th));
+  return { x: c[0] - BED.ax, z: c[1] - BED.az, ux: ux / ul, uz: uz / ul, hd: l.d / 2 * ul, hw: l.w / 2 * vl, lot: l.id };
 }
 /** 一塊地 ⇒ 一棟的實例（townInst；建築模式的預覽 townGhost 也走這一支 ⇒ 同一個地塊 id 預覽跟蓋出來的是同一棟）；那一種沒有模型 ⇒ null。 */
 function townLotInst(T, K, l) {
@@ -960,10 +969,28 @@ function townGroundTile(T, Q) {
     vtx(ax - BED.ax, ha - TOWN_ROAD_LIFT - 0.03, az - BED.az, col, -dz / L, 0, dx / L);
     I.push(k, k + 1, k + 2, k, k + 2, k + 3);
   });
+  //   特殊建築底下的廣場（地基；Blocksail world/town.js ②'，Tim 2026-10-23「用廣場當地基」）：l.hole ＝ [w, d] 建築那一塊 ⇒ 只鋪外圈（不壓在建築底下、下沉的池子不蓋住）；
+  //   l.base（坡上）⇒ 四邊補石基的側面，到那一邊最低的地面再下 0.3 m（同 townPlinth）
   Q.plaza.forEach(function (l) {                                         // 廣場：整平的那一塊鋪石
-    var th = l.rot * Math.PI / 180, cs = Math.cos(th), sn = Math.sin(th), y = l.h + 0.06, base = V.length / 9;
-    [[-1, -1], [1, -1], [1, 1], [-1, 1]].forEach(function (s) { var dx = s[0] * l.d / 2, dy = s[1] * l.w / 2, c = W([l.at[0] + dx * cs - dy * sn, l.at[1] + dx * sn + dy * cs]); vtx(c[0], y, c[1], TOWN_COL.plaza); });
-    I.push(base, base + 1, base + 2, base, base + 2, base + 3);
+    var th = l.rot * Math.PI / 180, cs = Math.cos(th), sn = Math.sin(th), y = l.h + 0.06, base = V.length / 9, S4 = [[-1, -1], [1, -1], [1, 1], [-1, 1]];
+    function at(s, w, d) { return W([l.at[0] + s[0] * d / 2 * cs - s[1] * w / 2 * sn, l.at[1] + s[0] * d / 2 * sn + s[1] * w / 2 * cs]); }
+    var O = S4.map(function (s) { return at(s, l.w, l.d); }), e, k;
+    if (!l.hole) { O.forEach(function (c) { vtx(c[0], y, c[1], TOWN_COL.plaza); }); I.push(base, base + 1, base + 2, base, base + 2, base + 3); }
+    else if (l.hole[0] < l.w - 0.01 || l.hole[1] < l.d - 0.01) {        // 外擴 0 ⇒ 沒有外圈（建築自己就是鋪面）
+      var In = S4.map(function (s) { return at(s, l.hole[0], l.hole[1]); });
+      O.forEach(function (c) { vtx(c[0], y, c[1], TOWN_COL.plaza); }); In.forEach(function (c) { vtx(c[0], y, c[1], TOWN_COL.plaza); });
+      for (e = 0; e < 4; e++) { k = (e + 1) % 4; I.push(base + e, base + k, base + 4 + k, base + e, base + 4 + k, base + 4 + e); }
+    }
+    if (!l.base) return;
+    var dk = [TOWN_COL.plaza[0] * 0.78, TOWN_COL.plaza[1] * 0.78, TOWN_COL.plaza[2] * 0.78], cx = (O[0][0] + O[2][0]) / 2, cz = (O[0][1] + O[2][1]) / 2;
+    for (e = 0; e < 4; e++) {
+      var a = O[e], b = O[(e + 1) % 4], lo = Infinity;
+      for (var t = 0; t <= 1.0001; t += 0.25) { var gy = hgt(a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t); if (gy === gy) lo = Math.min(lo, gy); }
+      if (lo === Infinity || lo > y - 0.05) continue;
+      var bot = lo - 0.3, mx = (a[0] + b[0]) / 2 - cx, mz = (a[1] + b[1]) / 2 - cz, nl = Math.hypot(mx, mz) || 1, b2 = V.length / 9;
+      [[a, y], [b, y], [b, bot], [a, bot]].forEach(function (p) { vtx(p[0][0], p[1], p[0][1], dk, mx / nl, 0, mz / nl); });
+      I.push(b2, b2 + 1, b2 + 2, b2, b2 + 2, b2 + 3);
+    }
   });
   // 一條帶子拉成有厚度的板（碼頭、棧橋的面板）：整條一起畫，轉角照兩段的角平分線斜接（同城牆 —— 以前一段一個長方體，轉角外側缺一角、內側疊在一起；
   //   Tim 2026-10-22「是否可以參考城牆 平滑的轉彎」）；斜接最多拉長 TOWN_SLAB_KMAX 倍（轉超過 120° ⇒ 轉角那一點變窄，不拉出尖刺）

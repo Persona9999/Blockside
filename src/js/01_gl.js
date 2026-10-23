@@ -438,7 +438,7 @@ function programs() {
   if (P.triI && P.triI.err) { console.warn('P.triI 沒編起來（模型照舊一個一個畫）：' + P.triI.err.message); P.triI = null; }
   if (P.dtriI && P.dtriI.err) { console.warn('P.dtriI 沒編起來（陰影照舊一個一個畫）：' + P.dtriI.err.message); P.dtriI = null; }
   B.forEach(function (b) { if (b[1].err && b[1] !== P.triI && b[1] !== P.dtriI && !bad) bad = b[1].err; }); if (bad) throw bad;
-  if (Q.get('map')) { glWarm(BED_VS, bedFS()); glWarm(BED_VS, DEPTH_ONLY_FS); }   // 有海圖 ⇒ 地形那兩支先送出（第一次 bedDraw 才編 ⇒ 一格 2.6 秒）
+  if (Q.get('map')) { glWarm(BED_VS, bedFS()); glWarm(BED_VS, BED_DEPTH_FS); }   // 有海圖 ⇒ 地形那兩支先送出（陰影那一支：63_bed_gl.js 挖洞的 BED_DEPTH_FS）（第一次 bedDraw 才編 ⇒ 一格 2.6 秒）
 }
 function setCommon(p) {
   var u = p.u;
