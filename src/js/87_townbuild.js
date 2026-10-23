@@ -155,6 +155,7 @@ function twbKey(k, down, e) {
 function twbFrame() {
   if (!modeRule('town')) return;
   var T = twbTown();
+  twbTitle(T);
   if (!TWB.framed && T && !CAM.tr && RUNNING) {                         // 進城：自由鏡頭、斜俯視城中心（轉場降完之後；船在停靠處，拖曳、平移看得到）
     TWB.framed = true;                                                  //   ⛔ 不取城與船的中間：托爾圖加的棧橋離城中心四百多公尺 ⇒ 中間那一點只看得到沙灘（2026-10-22 量到）
     var c = T.cen || [T.ox, T.oy], x = c[0] - BED.ax, z = c[1] - BED.az;
@@ -248,6 +249,13 @@ function twbDraw() {
   }
   if (hasLine) { gl.disable(gl.DEPTH_TEST); gl.bindVertexArray(TWB.gl.vao); gl.drawArrays(gl.LINES, 0, TWB.gl.n); gl.enable(gl.DEPTH_TEST); }
   gl.bindVertexArray(null);
+}
+/** 城名那一行（#twbTown，城鎮模式一直在）：城名、那座城的年份（另一個時空的加標示，括號裡是遊戲現在幾年）、人口 ——
+ *  資料是外面那一頁附在規劃上的 live（Blocksail 地球儀的城鎮帳；TASK-0871，Tim 2026-10-23「讓玩家可以知道這座城鎮是另一個時空的」）；沒附 ⇒ 只有城名。 */
+function twbTitle(T) {
+  var el = $('twbTown'); if (!el) return;
+  var L = T && T.p && T.p.live, s = !T ? '' : '🏘 ' + ((L && L.name) || T.name || T.id) + (L ? '　📅 ' + L.year + ' 年' + (L.other ? '・⏳ 另一個時空（現在是 ' + L.gameYear + ' 年）' : '') + '　👥 ' + (+L.pop || 0).toLocaleString('en-US') + ' 人' : '');
+  if (el.textContent !== s) { el.textContent = s; el.classList.toggle('on', !!s); }
 }
 /** 上面那一行：剛做完的訊息留 3 秒；不然照試放／找路的回覆。 */
 function twbInfo() {
