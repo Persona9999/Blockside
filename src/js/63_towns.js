@@ -174,6 +174,7 @@ function townReplace(p) {
     return true;
   }
   ['inst', 'gt', 'shell', 'flags', 'tl', 'trees', 'posts', 'roadSurface', 'v'].forEach(function (k) { T[k] = old[k]; });   // 舊的照畫
+  if (!D.roads) T.folk = old.folk;
   if (!(D.box[0] <= D.box[2]) && !D.roads) { T.edits = old.edits; T.pend = old.pend; return true; }   // 沒有差（打開建築模式時 open 回的那一份）⇒ 只換規劃
   T.edits = (old.edits || []).concat([{ b: D.box, v: TOWNS.ver }]);
   var st = TOWNS.stat.edit = { full: false, box: D.box.map(function (v) { return Math.round(v); }), chunks: 0, tiles: 0, roads: 0, surfMs: null };
@@ -538,16 +539,18 @@ function townModelsGot(M, err) { var w = TOWNS.mwait; TOWNS.mwait = null; if (!w
 //   棧橋、碼頭在地面的帶子裡（townGroundTile）：不等完整的實例、有棧橋碼頭的區先建（townDraw、townGroundNext）。
 //   城牆那幾套就是全部（小城沒有牆、或只有牆）⇒ 只解一次。網址 ?townskel=0 ⇒ 照以前一次解整組、地面等實例。
 var TOWN_SKEL = Q.get('townskel') !== '0';
+var TOWN_FOLK = Q.get('townfolk') !== '0';                               // ?townfolk=0：不載、不畫城鎮居民（TASK-0846 對照組）
 /** 要用到的模型解好（近、中各一份網格；收到的貼圖一個模型一列往下排成一張）⇒ TOWNS.kit。第一次要畫才做（非同步；好了才建實例）；骨架先出見上。 */
 function townKit() {
   if (TOWNS.kitP) return TOWNS.kitP;
   var I = townIdx();
   if (!I) { if (!TOWNS.err) TOWNS.err = '沒有城鎮模型的索引（外面那一頁沒給 kit、或檔案模式沒有 maps/' + BED.A.id + '/townkit/index.js）'; return null; }
   var t0 = performance.now(), need = townNeed(I), wneed = TOWN_SKEL && !TOWNS.kit ? townNeed(I, true) : [], S = TOWNS.stat, P;
+  var req = need.concat(TOWN_FOLK && I.folk ? ['_folk'] : []);
   TOWNS.kitHas = need; TOWNS.kitBusy = true; S.meshBaked = S.meshLive = 0; S.meshCheck = null; S.skelMs = null;   // mesh*：這一份模型組幾個用烘好的網格、幾個現場網格化（townModelMesh；兩段加起來）
   function mine(K) { if (TOWNS.kitP === P) return true; townKitGpuFree(K, TOWNS.kit); return false; }   // 中途被丟掉重來（townKitFree）⇒ 這一份不要了（跟畫著的那一組共用的網格留著）
   var D = null, part = null;                                             // 一次跟外面那一頁要整組（D）；骨架先用城牆那幾個組（part），整組沿用它們的網格（不再解一次）
-  var first = townModels(need).then(function (d) {
+  var first = townModels(req).then(function (d) {
     D = d; if (!(wneed.length && wneed.length < need.length)) return;
     return townKitMake(I, wneed, D, null).then(function (K) {
       if (!mine(K)) return; K.part = true; part = K; townKitSet(K); S.skelMs = +(performance.now() - t0).toFixed(1); S.skelN = wneed.length;
@@ -585,12 +588,13 @@ function townKitMake(I, need, D, reuse) {
         im.onerror = function () { ok(); };
         im.src = 'data:image/png;base64,' + M[nm].png;
       });
-    })).then(function () {
+    }).concat([reuse && reuse.folk ? Promise.resolve(reuse.folk) : townFolkTex(I, D && D._folk)])).then(function (R) {
+      var folk = R[R.length - 1] || null;
       gl.bindTexture(gl.TEXTURE_2D, tex);
       gl.generateMipmap(gl.TEXTURE_2D); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE); gl.bindTexture(gl.TEXTURE_2D, null);
       need.forEach(function (nm) { delete M[nm].png; });
-      return { M: M, names: names, byUse: I.byUse, byStyle: I.byStyle, models: I.models, tex: tex, aw: aw, ah: ah, views: I.views, part: false };   // models：townPick 照地塊大小收窄要看每個候選的 lot（跟 townNeed 用同一份索引）
+      return { M: M, names: names, byUse: I.byUse, byStyle: I.byStyle, models: I.models, tex: tex, aw: aw, ah: ah, views: I.views, folk: folk, part: false };   // models：townPick 照地塊大小收窄要看每個候選的 lot（跟 townNeed 用同一份索引）
     });
   });
 }
@@ -608,6 +612,7 @@ function townKitSet(K) {
 function townKitGpuFree(K, keep) {
   Object.keys(K.M).forEach(function (nm) { if (keep && keep.M[nm] && keep.M[nm].lod === K.M[nm].lod) return; K.M[nm].lod.concat(K.M[nm].win ? [K.M[nm].win] : [], K.M[nm].gls ? [K.M[nm].gls] : []).forEach(function (r) { gl.deleteVertexArray(r.vao); gl.deleteBuffer(r.vbo); }); });
   if (K.tex) gl.deleteTexture(K.tex);
+  if (K.folk && K.folk.tex && !(keep && keep.folk === K.folk)) gl.deleteTexture(K.folk.tex);
 }
 /** 要的模型變多（來了新的城、改了繁榮度）：還在解 ⇒ 解完再丟掉重要（兩段同時跟外面那一頁要，回應會對錯人）；不然 ⇒ 現在就丟。 */
 //   以前直接丟掉（townKitFree）⇒ 實例全部不見，等新的一組解好才回來（加拉塔晚到時君士坦丁堡的房子消失 1.7 s；TASK-0826）。
@@ -1293,11 +1298,23 @@ var TOWN_GR_FS = function (fade) {
     ' vec3 col=vC*(0.9+0.2*fract(sin(dot(floor(vW.xz*1.3),vec2(12.9898,78.233)))*43758.5453))*(mix(uGround,uSky,n.y*0.5+0.5)*0.65+vec3(1.0,0.96,0.88)*d*sk*0.7+townLamp(vW,n));\n' +
     ' float fd=length(vW-uEye); o=vec4(mix(col,uFog,1.0-exp(-fd*uFogD)),1.0); }\n';
 };
+// 城鎮居民看板（TASK-0846）：四邊形 aQ ∈ [−½, ½] × [0, 1]（P.quad），實例 aI ＝ (x, y, z, 高)、aS ＝ (寬比, 高比, 前傾, 彈跳)、aU ＝ (u0, v0, u1, v1)、aC ＝ (衣色號, 髮色號, 深淺, 0)
+//   底圖與換色遮罩同 41_crew_art.js crewArt（左半底圖、右半遮罩：R ＝ 衣服、G ＝ 頭髮；底圖標記區的灰階 R/G/B ＝ L ∈ [4, 252]，L ＝ 100 還原代表色 ⇒ 乘 2.55）；吃城鎮陰影、夜裡的街燈與霧。
+var TOWN_FOLK_VS = '#version 300 es\nlayout(location=0) in vec2 aQ; layout(location=4) in vec4 aI; layout(location=5) in vec4 aS; layout(location=6) in vec4 aU; layout(location=7) in vec4 aC; uniform mat4 uVP; uniform vec3 uEye, uRight; out vec2 vUV; out vec3 vW; out float vD; flat out ivec2 vC; flat out float vK;\n' +
+  'void main(){ float h=aI.w*aS.y, w=aI.w*0.5*aS.x, x=aQ.x*w+aQ.y*aS.z*aI.w; vec3 p=aI.xyz+uRight*x+vec3(0.0,aQ.y*h+aS.w,0.0);\n' +
+  ' vUV=vec2(mix(aU.x,aU.z,aQ.x+0.5),mix(aU.w,aU.y,aQ.y)); vW=p; vD=length(aI.xz-uEye.xz); vC=ivec2(aC.xy+0.5); vK=aC.z; gl_Position=uVP*vec4(p,1.0); }\n';
+var TOWN_FOLK_FS = function () {
+  return '#version 300 es\nprecision highp float;\n' + SHADOW_GLSL + TLAMP_GLSL + TOWN_FADE + 'uniform sampler2D uTex; uniform vec3 uClothC[8], uHairC[8], uEye, uFog, uBkK; uniform float uFogD; in vec2 vUV; in vec3 vW; in float vD; flat in ivec2 vC; flat in float vK; out vec4 o;\n' +
+    'void main(){ if(vW.y<uClip) discard; if(townCut(vD)) discard; vec4 t=texture(uTex,vUV); if(t.a<0.5) discard; vec4 m=texture(uTex,vUV+vec2(0.5,0.0)); vec3 c=t.rgb;\n' +
+    ' int ci=clamp(vC.x,0,7), hi=clamp(vC.y,0,7); c=mix(c,clamp(uClothC[ci]*(t.r*2.55),0.0,1.0),m.r); c=mix(c,clamp(uHairC[hi]*(t.r*2.55),0.0,1.0),m.g);\n' +
+    ' float sk=shadowK(vW,vec3(0.0,1.2,0.0)); vec3 lit=(0.58+0.42*(0.45*uSunK+0.55*sk))*uBkK+townLamp(vW,vec3(0.0,1.0,0.0))*0.85;\n' +
+    ' vec3 col=c*vK*lit; float fd=length(vW-uEye); o=vec4(mix(col,uFog,1.0-exp(-fd*uFogD)),1.0); }\n';
+};
 /** 城鎮的著色器：第一次要畫時送出編譯（01_gl.js glProgStart；TASK-0816），編好之前回 null（城鎮這幾格不畫、實例也先不建）。陰影、夜裡的燈那幾支一起編（以前第一次用到才編）。 */
 function townProgs() {
   if (TOWNS.prog) return TOWNS.prog;
   var J = TOWNS.progJ || (TOWNS.progJ = { vox: glProgStart(TOWN_VS, TOWN_FS()), bb: glProgStart(TOWN_BB_VS, TOWN_BB_FS()), pl: glProgStart(TOWN_PL_VS, TOWN_PL_FS()), gr: glProgStart(TOWN_GR_VS, TOWN_GR_FS(false)), sh: glProgStart(TOWN_GR_VS, TOWN_GR_FS(true)), dVox: glProgStart(TOWN_VS, DEPTH_ONLY_FS), dPl: glProgStart(TOWN_PL_VS, DEPTH_ONLY_FS),
-    win: glProgStart(TOWN_WIN_VS, TOWN_WIN_FS()), glow: glProgStart(TOWN_GLOW_VS, TOWN_GLOW_FS) });
+    win: glProgStart(TOWN_WIN_VS, TOWN_WIN_FS()), glow: glProgStart(TOWN_GLOW_VS, TOWN_GLOW_FS), folk: glProgStart(TOWN_FOLK_VS, TOWN_FOLK_FS()) });
   if (!Object.keys(J).every(function (k) { return glProgReady(J[k]); })) return null;
   var P = {}; Object.keys(J).forEach(function (k) { P[k] = glProgEnd(J[k]); }); TOWNS.progJ = null;
   P.ib = [gl.createBuffer(), gl.createBuffer(), gl.createBuffer(), gl.createBuffer()];   // 近、中、貼圖、石基的實例（每次分組重寫）
@@ -1306,6 +1323,9 @@ function townProgs() {
   gl.bindBuffer(gl.ARRAY_BUFFER, P.quad); gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 8, 0);
   gl.bindBuffer(gl.ARRAY_BUFFER, P.ib[2]); [4, 5, 6].forEach(function (a, q) { gl.enableVertexAttribArray(a); gl.vertexAttribDivisor(a, 1); gl.vertexAttribPointer(a, 4, gl.FLOAT, false, 52, q * 16); });
   gl.enableVertexAttribArray(7); gl.vertexAttribDivisor(7, 1); gl.vertexAttribPointer(7, 1, gl.FLOAT, false, 52, 48);   // 地標倍率
+  P.folkBuf = gl.createBuffer(); P.folkVao = gl.createVertexArray(); gl.bindVertexArray(P.folkVao);
+  gl.bindBuffer(gl.ARRAY_BUFFER, P.quad); gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 8, 0);
+  gl.bindBuffer(gl.ARRAY_BUFFER, P.folkBuf); [4, 5, 6, 7].forEach(function (a, q) { gl.enableVertexAttribArray(a); gl.vertexAttribDivisor(a, 1); gl.vertexAttribPointer(a, 4, gl.FLOAT, false, 64, q * 16); });
   // 石基的方塊：六面 × 兩個三角形（位置、法線）
   var V = [], F = [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]];
   F.forEach(function (n) {
@@ -1452,6 +1472,8 @@ function townDraw() {
     });
   });
   TOWNS.stat.flags = nfl;
+  // 城鎮居民（沿路走動、看板換色立繪；TASK-0846）
+  tris += townFolkDraw(P, K, eye, PL, fogD, fdt, TOWNS.flagClock);
   // 屋頂殼（最遠一級：跟貼圖用同一個抖動互補）
   var PS = P.sh; gl.useProgram(PS.prog); setCommon(PS); gl.uniform1f(PS.u.uFogD, fogD); gl.uniform2f(PS.u.uIn, TOWN_FAR[0], TOWN_FAR[1]); gl.uniform2f(PS.u.uOut, 1e8, 2e8);
   var ns = 0;
@@ -1486,10 +1508,12 @@ function townStat(at) {
     var tl = townLightStat(T);
     return { id: T.id, name: T.name, tier: T.tier, seed: T.seed, ox: T.ox, oy: T.oy, lots: (T.p.lots || []).length, roads: T.roads.length, walls: (T.p.walls || []).length, inst: (T.inst || []).length, ground: T.gt ? (function () { var K = Object.keys(T.gt); return { tiles: K.length, built: K.filter(function (k) { return T.gt[k].g; }).length, dirty: K.filter(function (k) { return T.gt[k].dirty; }).length, piers: K.filter(function (k) { return townGroundPier(T.gt[k]); }).length, piersBuilt: K.filter(function (k) { return townGroundPier(T.gt[k]) && T.gt[k].g; }).length }; })() : null,   // piers：有棧橋或碼頭的區（TASK-0826 先建）
       part: T.inst ? (TOWNS.kit && TOWNS.kit.part ? 'walls' : 'all') : null, walls: (T.inst || []).filter(function (q) { return q.wall; }).length,   // 地面的帶子分區（TASK-0817）
+      folk: T.folk ? { agents: T.folk.agents.length, edges: T.folk.edges.length, nodes: T.folk.nodes.length, roadM: Math.round(T.folk.roadM), sample: T.folk.agents.slice(0, 8).map(function (a) { var e = T.folk.edges[a.e], x = e.ax + e.dx * a.t, z = e.az + e.dz * a.t; return { id: a.id, art: a.art, cloth: a.cloth, hair: a.hair, t: +a.t.toFixed(2), x: +x.toFixed(1), z: +z.toFixed(1) }; }) } : null,
       byModel: u, lights: tl, center: [+(T.ox - BED.ax).toFixed(1), +(T.oy - BED.az).toFixed(1)] };
-  }), kit: !!TOWNS.kit, kitPart: !!(TOWNS.kit && TOWNS.kit.part), kitN: S.kitN, kitMs: S.kitMs, skelN: S.skelN, skelMs: S.skelMs, kitMesh: { baked: S.meshBaked, live: S.meshLive, check: S.meshCheck, vk: townVkFp() }, kitTris: S.kitTris, skip: S.skip, gls: S.gls || 0, lines: S.lines || 0, under: S.under || {}, drawn: { full: S.d0, low: S.d1, card: S.d2, shells: S.d3, plinth: S.plinth, flags: S.flags || 0, landmarks: S.lm || 0 }, tris: S.tris, ms: { draw: S.drawMs, bin: S.binMs, grade: +S.gradeMs.toFixed(1), prep: S.prepMs }, gradedChunks: S.chunks, regrade: { left: TOWNS.rgq ? Object.keys(TOWNS.rgq).length : 0, done: S.regraded }, edit: S.edit || null,
+  }), kit: !!TOWNS.kit, kitPart: !!(TOWNS.kit && TOWNS.kit.part), kitN: S.kitN, kitMs: S.kitMs, skelN: S.skelN, skelMs: S.skelMs, kitMesh: { baked: S.meshBaked, live: S.meshLive, check: S.meshCheck, vk: townVkFp() }, kitTris: S.kitTris, skip: S.skip, gls: S.gls || 0, lines: S.lines || 0, under: S.under || {}, drawn: { full: S.d0, low: S.d1, card: S.d2, shells: S.d3, plinth: S.plinth, flags: S.flags || 0, folk: S.folk || 0, landmarks: S.lm || 0 }, folk: TOWNS.kit && TOWNS.kit.folk ? { rows: TOWNS.kit.folk.rows, names: TOWNS.kit.folk.names, cloth: TOWNS.kit.folk.clothN, hair: TOWNS.kit.folk.hairN, total: TOWNS.list.reduce(function (s, T) { return s + (T.folk ? T.folk.agents.length : 0); }, 0), drawn: S.folk || 0 } : null, tris: S.tris, ms: { draw: S.drawMs, bin: S.binMs, grade: +S.gradeMs.toFixed(1), prep: S.prepMs }, gradedChunks: S.chunks, regrade: { left: TOWNS.rgq ? Object.keys(TOWNS.rgq).length : 0, done: S.regraded }, edit: S.edit || null,
     night: { lit: +TL.k.toFixed(3), win: +TOD_WIN.toFixed(3), grid: TL.stat.inGrid, range: TL.stat.range || 0, full: TL.stat.full, over: TL.stat.over, gridMs: TL.stat.gridMs, cards: TL.stat.cards, glow: TL.stat.glow, glowMs: TL.stat.glowMs } };
-  if (at) { var q = bedCell(at[0], at[1]); o.at = { ground: +townGround(at[0], at[1]).toFixed(2), sim: +bedHgt(at[0], at[1]).toFixed(2), clear: q ? townClr(q.C, q.u * q.C.step, q.v * q.C.step) : null }; }
+  if (at === 'street' && TOWNS.list[0] && TOWNS.kit && TOWNS.kit.folk) { o.street = townFolkStreet(TOWNS.list[0], TOWNS.kit.folk); }
+  else if (Array.isArray(at)) { var q = bedCell(at[0], at[1]); o.at = { ground: +townGround(at[0], at[1]).toFixed(2), sim: +bedHgt(at[0], at[1]).toFixed(2), clear: q ? townClr(q.C, q.u * q.C.step, q.v * q.C.step) : null }; }
   return o;
 }
 
@@ -1869,4 +1893,161 @@ function townGlowDraw() {
   }); });
   gl.bindVertexArray(null); gl.depthMask(true); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA); if (cf) gl.enable(gl.CULL_FACE);
   TL.stat.glowMs = +(performance.now() - t0).toFixed(2);
+}
+
+// ── 城鎮居民（TASK-0846；Tim 2026-10-23「參考這個畫風 以及Blockside的水手顯示架構(頭髮 衣服部分區域 可換色) 讓目前Blocksail的城鎮可以顯示居民在路上走動吧 … 然後居民素材只放在Blocksail(參考城鎮建築)」；只給人看） ──
+// 素材：Blocksail world/townkit/_folk.js（tools/townfolk.py 產生：11 列角色 96×192 PNG-8，繪製時預留鮮青色頭髮＋鮮洋紅主衣標記，轉成水手同款 (L, 0, L) 與 (0, L, L)），
+//   跟著城鎮用到的模型一起向 Blocksail 索取（townKit），載入時走 41_crew_art.js 的 crewArt(im) 展開成「左半底圖｜右半遮罩」貼圖。
+// 路網與走動：每座城把 T.roads（扣掉門口短接線 link-door 與水面下的段）在交叉口切開、端點 2 m 內併成節點 ⇒ 路網圖；
+//   照總路長每 TOWN_FOLK_STEP 公尺配置一位居民（上限 TOWN_FOLK_MAX），角色列、衣服色（8 色）、髮色（HAIR_KEYS）、步速、車道偏移全照 townHash 決定（不碰模擬亂數 rnd()）；
+//   每格照畫面時間 fdt 沿邊推進，到路口優先挑不折返的相鄰邊，偶爾停步駐足；高度讀畫面地形 townRoadHeight ＋ TOWN_ROAD_LIFT，走動時帶與水手同款的微傾與步伐彈跳。
+var TOWN_FOLK_OUT = [340, 420], TOWN_FOLK_STEP = 14, TOWN_FOLK_MAX = 260;
+/** 解開 Blocksail 傳來的 _folk.js ⇒ Promise<{ tex, rows, cw, ch, names, clothU, clothN, hairN } | null>。 */
+function townFolkTex(I, d) {
+  if (!TOWN_FOLK || !d || !d.png || typeof crewArt !== 'function') return Promise.resolve(null);
+  return new Promise(function (ok) {
+    var im = new Image();
+    im.onload = function () {
+      var A = crewArt(im), tex = texFrom(A.cv, true), C = d.cloth || (I.folk && I.folk.cloth) || [], cu = new Float32Array(24);
+      for (var i = 0; i < 8; i++) { var c = C[i % Math.max(1, C.length)] || [120, 120, 120]; cu[i * 3] = c[0] / 255; cu[i * 3 + 1] = c[1] / 255; cu[i * 3 + 2] = c[2] / 255; }
+      ok({ tex: tex, rows: d.rows || 9, cw: d.cw || 96, ch: d.ch || 192, names: (I.folk && I.folk.names) || [], clothU: cu, clothN: Math.min(8, C.length || 8), hairN: Math.min(8, typeof HAIR_KEYS !== 'undefined' ? HAIR_KEYS.length : 6) });
+    };
+    im.onerror = function () { ok(null); };
+    im.src = 'data:image/png;base64,' + d.png;
+  });
+}
+/** 城 T 的路網圖與居民清單（第一次靠近這座城時算一次；建築模式改了路 ⇒ T.folk 重建）。 */
+function townFolkPrep(T, F) {
+  var ax = BED.ax, az = BED.az, R = T.roads.filter(function (r) { return r.P && r.P.length >= 2 && r.w >= 2 && r.kind !== 'link-door'; });
+  if (!R.length) R = T.roads.filter(function (r) { return r.P && r.P.length >= 2; });
+  var raw = [], pts = [];
+  R.forEach(function (r) {
+    for (var q = 1; q < r.P.length; q++) {
+      var za = r.z && r.z[q - 1], zb = r.z && r.z[q]; if ((za != null && za <= 0.05) || (zb != null && zb <= 0.05)) continue;
+      var a = [r.P[q - 1][0] - ax, r.P[q - 1][1] - az], b = [r.P[q][0] - ax, r.P[q][1] - az], L = Math.hypot(b[0] - a[0], b[1] - a[1]);
+      if (L < 1.5) continue;
+      raw.push({ a: a, b: b, w: r.w || 3, L: L }); pts.push(a, b);
+    }
+  });
+  var segs = [];
+  raw.forEach(function (s) {                                             // 別條路的頂點落在這一段中間（≤ 2.2 m）⇒ 切開，讓 T 字路口連通
+    var dx = s.b[0] - s.a[0], dz = s.b[1] - s.a[1], L2 = s.L * s.L, cuts = [0, 1];
+    pts.forEach(function (p) {
+      var u = ((p[0] - s.a[0]) * dx + (p[1] - s.a[1]) * dz) / L2; if (u <= 0.08 || u >= 0.92 || u * s.L < 1.5 || (1 - u) * s.L < 1.5) return;
+      if (Math.hypot(p[0] - (s.a[0] + dx * u), p[1] - (s.a[1] + dz * u)) <= 2.2) cuts.push(u);
+    });
+    cuts.sort(function (x, y) { return x - y; });
+    for (var i = 1; i < cuts.length; i++) {
+      var u0 = cuts[i - 1], u1 = cuts[i]; if ((u1 - u0) * s.L < 1.2 && i < cuts.length - 1) continue;
+      segs.push({ a: [s.a[0] + dx * u0, s.a[1] + dz * u0], b: [s.a[0] + dx * u1, s.a[1] + dz * u1], w: s.w });
+    }
+  });
+  var nodes = [], edges = [], Ltot = 0;
+  function nodeOf(p) {
+    for (var i = 0; i < nodes.length; i++) if (Math.hypot(nodes[i].x - p[0], nodes[i].z - p[1]) <= 2.0) return i;
+    nodes.push({ x: p[0], z: p[1], adj: [] }); return nodes.length - 1;
+  }
+  segs.forEach(function (s) {
+    var u = nodeOf(s.a), v = nodeOf(s.b); if (u === v) return;
+    var A = nodes[u], B = nodes[v], dx = B.x - A.x, dz = B.z - A.z, L = Math.hypot(dx, dz); if (L < 1.2) return;
+    var ei = edges.length, ux = dx / L, uz = dz / L;
+    Ltot += L;
+    edges.push({ a: u, b: v, ax: A.x, az: A.z, bx: B.x, bz: B.z, dx: ux, dz: uz, nx: -uz, nz: ux, L: L, w: s.w, cum: Ltot });
+    A.adj.push({ e: ei, to: v, dir: 1 }); B.adj.push({ e: ei, to: u, dir: -1 });
+  });
+  var N = Ltot < 8 ? 0 : Math.max(6, Math.min(TOWN_FOLK_MAX, Math.round(Ltot / TOWN_FOLK_STEP))), agents = [];
+  for (var i = 0; i < N; i++) {
+    var k = T.id + ':folk:' + i, target = townHash(k + ':e') * Ltot, ei = 0;
+    while (ei + 1 < edges.length && edges[ei].cum < target) ei++;
+    var e = edges[ei], dir = townHash(k + ':d') < 0.5 ? 1 : -1;
+    agents.push({ id: i, e: ei, dir: dir, t: townHash(k + ':t') * e.L, spd: 1.15 + 0.45 * townHash(k + ':s'),
+      lane: (townHash(k + ':l') - 0.5) * 0.65, art: (i < F.rows ? i : Math.floor(townHash(k + ':a') * F.rows)) % F.rows,
+      cloth: Math.floor(townHash(k + ':c') * F.clothN) % F.clothN, hair: Math.floor(townHash(k + ':h') * F.hairN) % F.hairN,
+      hgt: 1.68 + 0.16 * townHash(k + ':g'), sh: 0.94 + 0.12 * townHash(k + ':k'), ph: townHash(k + ':p') * 6.2832,
+      wait: 0, step: 0, face: dir });
+  }
+  T.folk = { nodes: nodes, edges: edges, agents: agents, roadM: Ltot };
+  return T.folk;
+}
+/** 測試用（__game.town('street')）：挑城 T 市中心最熱鬧的一段街道，把前 F.rows 位居民排在街上並回傳機位（供 __game.cam 對焦拍街景）。 */
+function townFolkStreet(T, F) {
+  var G = T.folk || townFolkPrep(T, F); if (!G.edges.length) return null;
+  var cx = T.ox - BED.ax, cz = T.oy - BED.az, bestE = G.edges[0], bestI = 0, bestSc = -1e9;
+  G.edges.forEach(function (e, idx) {
+    var mx = (e.ax + e.bx) / 2, mz = (e.az + e.bz) / 2, d = Math.hypot(mx - cx, mz - cz), sc = e.L * 0.6 - d * 0.35;
+    if (sc > bestSc && e.L >= 20 && e.w >= 3) { bestSc = sc; bestE = e; bestI = idx; }
+  });
+  var nShow = Math.min(F.rows, G.agents.length);
+  for (var k = 0; k < nShow; k++) {
+    var a = G.agents[k];
+    a.e = bestI; a.t = Math.min(bestE.L - 1.5, 4.0 + k * 1.9); a.dir = k % 2 ? 1 : -1;
+    a.lane = ((k % 3) - 1) * 0.28; a.art = k % F.rows; a.cloth = (k * 3) % F.clothN; a.hair = (k * 2) % F.hairN; a.wait = 0;
+  }
+  Object.keys(T.gt || {}).forEach(function (gk) { if (T.gt[gk].dirty) T.gt[gk].edit = true; });
+  var tx = bestE.ax + bestE.dx * 11.5, tz = bestE.az + bestE.dz * 11.5, ty = (townRoadHeight(tx, tz) || 2) + 1.3;
+  var yaw = Math.atan2(-bestE.dz, -bestE.dx) + 0.14;
+  return { tgt: [+tx.toFixed(2), +ty.toFixed(2), +tz.toFixed(2)], yaw: +yaw.toFixed(4), pitch: 0.12, dist: 11.5, mode: 0, track: false, tr: null };
+}
+/** 推進並畫出所有城鎮看得到的居民（townDraw 布旗之後）⇒ 三角形數。 */
+function townFolkDraw(P, K, eye, PL, fogD, fdt, clock) {
+  TOWNS.stat.folk = 0;
+  var F = K && K.folk; if (!TOWN_FOLK || !F || !F.tex || !P.folk) return 0;
+  var fwd = sub(CAM.look, eye), rl = Math.hypot(fwd[2], fwd[0]) || 1, rx = -fwd[2] / rl, rz = fwd[0] / rl;
+  var maxD = TOWN_FOLK_OUT[1], rows = F.rows, B = TOWNS.folkArr || (TOWNS.folkArr = new Float32Array(256 * 16)), n = 0;
+  function ensure(need) { if (B.length < need) B = TOWNS.folkArr = new Float32Array(Math.max(need, 256) * 2); }
+  TOWNS.list.forEach(function (T) {
+    var G = T.folk || townFolkPrep(T, F); if (!G.agents.length) return;
+    var b = T.box, bx = Math.max(b[0] - BED.ax - eye[0], 0, eye[0] - (b[2] - BED.ax)), bz = Math.max(b[1] - BED.az - eye[2], 0, eye[2] - (b[3] - BED.az));
+    if (Math.hypot(bx, bz) > maxD + 40) return;
+    var edges = G.edges, nodes = G.nodes;
+    G.agents.forEach(function (a) {
+      var e = edges[a.e];
+      if (fdt > 0) {
+        if (a.wait > 0) a.wait = Math.max(0, a.wait - fdt);
+        else {
+          a.t += a.dir * a.spd * fdt;
+          if (a.t > e.L || a.t < 0) {
+            var nd = nodes[a.dir > 0 ? e.b : e.a], over = a.t > e.L ? a.t - e.L : -a.t, cand = nd.adj.filter(function (c) { return c.e !== a.e; });
+            if (!cand.length) cand = nd.adj;
+            var h = townHash(T.id + ':ft:' + a.id + ':' + (++a.step)), pick = cand[Math.floor(h * cand.length)] || { e: a.e, dir: -a.dir };
+            a.e = pick.e; a.dir = pick.dir; e = edges[a.e];
+            a.t = a.dir > 0 ? Math.min(e.L, over) : Math.max(0, e.L - over);
+            if (townHash(T.id + ':fw:' + a.id + ':' + a.step) < 0.16) a.wait = 1.0 + 1.8 * h;
+          }
+        }
+      }
+      var off = (0.18 * a.dir + a.lane) * Math.max(0.3, Math.min(2.8, e.w - 1.2));
+      var x = e.ax + e.dx * a.t + e.nx * off, z = e.az + e.dz * a.t + e.nz * off;
+      var d = Math.hypot(x - eye[0], z - eye[2]); if (d > maxD) return;
+      var y = townRoadHeight(x, z); if (!(y === y) || y <= 0.05) return;
+      y += TOWN_ROAD_LIFT;
+      for (var i = 0; i < 6; i++) { var pl = PL[i]; if (pl[0] * x + pl[1] * (y + 0.9) + pl[2] * z + pl[3] < -2.2) return; }
+      var mv = (e.dx * rx + e.dz * rz) * a.dir;
+      if (mv > 0.08) a.face = 1; else if (mv < -0.08) a.face = -1;
+      var sx = 1, sy = 1, lean = 0, bob = 0;
+      if (a.wait > 0) {
+        var br = Math.sin(clock * 2.2 + a.ph); sy = 1 + 0.012 * br; sx = 1 - 0.008 * br; lean = a.face * 0.015 * br;
+      } else {
+        var w = clock * a.spd * 1.45 + a.ph, r = Math.abs(Math.sin(w * 6.2832));
+        bob = 0.065 * r; lean = a.face * (0.055 + 0.035 * Math.sin(w * 6.2832)); sy = 0.96 + 0.04 * r; sx = 1.03 - 0.03 * r;
+      }
+      ensure((n + 1) * 16);
+      var o = n++ * 16, v0 = a.art / rows, v1 = (a.art + 1) / rows;
+      B[o] = x; B[o + 1] = y; B[o + 2] = z; B[o + 3] = a.hgt;
+      B[o + 4] = sx; B[o + 5] = sy; B[o + 6] = lean; B[o + 7] = bob;
+      B[o + 8] = a.face > 0 ? 0 : 0.5; B[o + 9] = v0; B[o + 10] = a.face > 0 ? 0.5 : 0; B[o + 11] = v1;
+      B[o + 12] = a.cloth; B[o + 13] = a.hair; B[o + 14] = a.sh; B[o + 15] = a.face;
+    });
+  });
+  TOWNS.stat.folk = n;
+  if (!n) return 0;
+  var PF = P.folk; gl.useProgram(PF.prog); setCommon(PF);
+  gl.uniform1f(PF.u.uFogD, fogD); gl.uniform3fv(PF.u.uEye, eye); gl.uniform3f(PF.u.uRight, rx, 0, rz);
+  gl.uniform2f(PF.u.uIn, -2, -1); gl.uniform2f(PF.u.uOut, TOWN_FOLK_OUT[0], TOWN_FOLK_OUT[1]);
+  gl.uniform3fv(PF.u.uClothC || PF.u['uClothC[0]'], F.clothU); gl.uniform3fv(PF.u.uHairC || PF.u['uHairC[0]'], HAIR_U);
+  gl.activeTexture(gl.TEXTURE11); gl.bindTexture(gl.TEXTURE_2D, F.tex); gl.uniform1i(PF.u.uTex, 11); gl.activeTexture(gl.TEXTURE0);
+  gl.bindVertexArray(P.folkVao); gl.bindBuffer(gl.ARRAY_BUFFER, P.folkBuf);
+  gl.bufferData(gl.ARRAY_BUFFER, B.subarray(0, n * 16), gl.DYNAMIC_DRAW);
+  gl.drawArraysInstanced(gl.TRIANGLES, 0, 6, n);
+  return 2 * n;
 }
