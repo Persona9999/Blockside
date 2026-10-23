@@ -119,6 +119,32 @@ function meshBB(t) {
   for (var i = 0; i < t.length; i += 9) for (var j = 0; j < 3; j++) { var v = t[i + j]; if (v < b[j]) b[j] = v; if (v > b[3 + j]) b[3 + j] = v; }
   return b[0] <= b[3] ? b : null;
 }
+// ── 模型的材質反光（TASK-0859；Tim 2026-10-23：「然後炮門可以設定為金屬材質嗎」「模型 meta material 照材質表的 metal／rough 反光，松島號蓋板標 iron 當第一個用例」）──
+// 外部模型、裝飾的 meta material（材質表的 ID 或混合寫法；外觀照第一個成分，matInfo）⇒ 畫的時候照它的 metal／rough 反光（著色器同平滑面那一段：01_gl.js TRI_FS vM）。
+// 怎麼送進著色器：一份網格被好幾個模型共用（蓋板 10 片一份）、一次畫多個照 VAO 分組（60_rbatch.js）⇒ 有材質的換成那份網格的「材質變體」：
+//   新的 VAO，位置、法線、顏色共用原本的 vbo，第 3 號屬性（aM）接一份填好 (metal, rough, 0) 的 buffer ⇒ 跟沒材質的分在不同組，不用每次設常數屬性。
+//   一型船、一份網格、一種材質一個（T.meshMat），第一次畫到才建；佔格 occ、外框 bb、只差起點的 dt 照原本那一份。
+// ⛔ 只換畫面：重量、硬度、打中、戰局一個值都不讀它（模型的 material 不進模擬）；沒寫 material、材質表沒有、metal 0 ⇒ null ⇒ 原本那份網格，畫面不變。
+/** 模型（或裝飾）的 meta ⇒ { id, m 金屬度, r 粗糙度 }；不反光 ⇒ null。 */
+function modelMat(mt) {
+  var id = mt && mt.material; if (typeof id !== 'string' || !id || !matKnown(id)) return null;
+  var a = matInfo(id), mm = +a.metal || 0; if (!(mm > 0)) return null;
+  return { id: id, m: mm, r: isFinite(+a.rough) && a.rough !== undefined ? +a.rough : 0.5 };
+}
+/** 畫第 k 份網格用的那一份：mm（modelMat）⇒ 那份網格的材質變體；沒有 ⇒ T.meshes[k]。 */
+function meshFor(T, k, mm) {
+  var me = T.meshes[k]; if (!mm || !me) return me;
+  var V = T.meshMat || (T.meshMat = {}), key = k + '|' + mm.id;
+  if (V[key]) return V[key];
+  if (!me.vao) meshGpu(me);
+  var A = new Float32Array(me.n * 3); for (var i = 0; i < me.n; i++) { A[i * 3] = mm.m; A[i * 3 + 1] = mm.r; }
+  var vao = gl.createVertexArray(), mb = gl.createBuffer();
+  gl.bindVertexArray(vao); gl.bindBuffer(gl.ARRAY_BUFFER, me.vbo);
+  MESH_ATTR.forEach(function (a) { gl.enableVertexAttribArray(a[0]); gl.vertexAttribPointer(a[0], a[1], gl.FLOAT, false, 36, a[2] * 4); });
+  gl.bindBuffer(gl.ARRAY_BUFFER, mb); gl.bufferData(gl.ARRAY_BUFFER, A, gl.STATIC_DRAW); gl.enableVertexAttribArray(3); gl.vertexAttribPointer(3, 3, gl.FLOAT, false, 12, 0);
+  gl.bindVertexArray(null);
+  return (V[key] = { vao: vao, vbo: me.vbo, mvb: mb, n: me.n, occ: me.occ, bb: me.bb, dt: me.dt, share: me.share, lb: me.lb, mat: mm.id });
+}
 
 // ── 門（25_doors.js）──
 /** 畫面那一格（90_main.js frame）：有人經過 ⇒ 開、沒人 ⇒ 關。只寫 m.sw／spv／sax（畫，modelLocal）。 */

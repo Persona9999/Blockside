@@ -180,6 +180,13 @@ function shipCheck(id) {
       (T.smAuto ? (smP.length ? '；' : '') + '材質標平滑的金屬（' + T.matIds.filter(function (id, i) { return i && matInfo(id).smooth === true; }).map(function (id) { return matInfo(id).name; }).join('、') + '）' + T.smAuto.toLocaleString('en') + ' 格' : '') +
       ((T.props || []).some(function (P) { return P.smP; }) ? '；螺旋槳整份平滑：' + T.props.filter(function (P) { return P.smP; }).map(function (P) { return P.name + ' ' + P.n.toLocaleString('en') + ' 格'; }).join('、') : '');   // Tim 2026-10-17：金屬件光滑（05_material.js、24_armor.js propSetup）
     R.info.smoothN = T.smN;
+    // ── 模型的材質反光（TASK-0859；62_simview.js modelMat）：外部模型、裝飾的 meta material ⇒ 照材質表的 metal／rough 反光（只給畫面）；材質表沒有 ⇒ 不反光、報 ⚠ ──
+    var MMs = {}; sh.models.concat(sh.decos || []).forEach(function (m) {
+      var id = m.meta && m.meta.material; if (id === undefined || id === '') return;
+      var nm = m.path || m.name; if (typeof id !== 'string' || !matKnown(id)) { add('warn', '模型材質', nm, 'meta material=' + id + ' 材質表沒有 ⇒ 不反光', '寫材質表有的 ID 或混合寫法（造船規格 §9.5）'); return; }
+      (MMs[id] || (MMs[id] = { n: 0, lit: !!m.mm })).n++;
+    });
+    R.info.modelMat = Object.keys(MMs).sort().map(function (id) { var q = MMs[id]; return matInfo(id).name + '（' + id + '）' + q.n + ' 件' + (q.lit ? '' : '（metal 0 ⇒ 不反光）'); }).join('；');
     if (smP.length && !(T.smN - T.smAuto)) add('warn', '平滑渲染', smP.map(function (p) { return p.path; }).join('、'), '關聯標了 render=smooth，檔頭卻沒有平滑的格（render 段落）⇒ 照方塊畫', 'python -I admin.py reimport --id ' + T.id + '（senate 匯出才帶 render 段落）');
     (T.h.parts || []).forEach(function (p) { var v = p.meta && p.meta.render; if (v && v !== 'smooth' && v !== 'voxel') add('warn', '平滑渲染', p.path, 'meta render=' + v + ' 不認得 ⇒ 照方塊畫', 'render 只有 voxel｜smooth（造船規格 §9.5）'); });
     sh.guns.forEach(function (g) { if (!g.alive) add('error', '開場就掉', g.name, '砲開場 ' + SC_SECS + ' 秒內就沒了', '砲腳下要有甲板'); });

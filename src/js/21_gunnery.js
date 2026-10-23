@@ -551,7 +551,7 @@ function blowModel(sh, m, vel, drop, at) {
     f = { v: add(add(mul(vd, clamp(len(vel) * 0.004, 0.3, 1.5)), [a1 * 0.3, (a2 - 6.5) * 0.08, a3 * 0.3]), sh.vel), w: [w1 * 0.3, w2 * 0.3, w3 * 0.3], sh: sh, land: true };
   } else f = { v: add(drop ? [0, -0.5, 0] : add(mul(vd, sp), [gauss() * 2, rr(4, 9), gauss() * 2]), sh.vel),
     w: drop ? [gauss() * 0.4, 0, gauss() * 0.4] : [gauss() * 4, gauss() * 4, gauss() * 4] };
-  FLY.push(Object.assign({ T: sh.T, mesh: m.mesh, M0: M0, c0: c0, c: c0.slice(), R: M4.ident(), t: 0, wet: false }, f));
+  FLY.push(Object.assign({ T: sh.T, mesh: m.mesh, mm: m.mm, M0: M0, c0: c0, c: c0.slice(), R: M4.ident(), t: 0, wet: false }, f));
   sh.guns.forEach(function (g) { if (g.model === m) g.alive = false; });
   sh.ropes.forEach(function (r) { if (!r.dead && r.mods && r.mods.indexOf(m.k) >= 0) { r.dead = true; sh.rigDirty = true; } });
   if (m.yk) sh.rigDirty = true;                                          // 帆桁飛了 ⇒ 收在它上面的那一捲不畫（30_rig_physics.js furlLost；只是畫面旗標，物理關著也要重做）

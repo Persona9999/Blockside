@@ -1727,6 +1727,7 @@ def act_shipcheck(ids=None):
               '| %s | %s 門缺 %s 人 | %s | %s | %s | %s | %s | %s | %s | %s | %s | %s | %s |' % (I['guns'], I['gunShort']['guns'], I['gunShort']['people'], I['crew'], I['models'], I['ropes'], '%s%s' % (I['sails'], '（＋陣營旗 %d）' % I['teamFlags'] if I.get('teamFlags') else ''), I['masts'], '%s（取用點 %s）' % (I['mags'], I.get('stations', '—')), len(I['decks']), I['ladders'], I['rooms'], I.get('anchors', '—'), I['zw']), '',
               '材質（TASK-0616）：' + (I.get('materials') or '—'), '',
               '平滑渲染（關聯 meta render=smooth，TASK-0616）：' + (I.get('smooth') or '—'), '',
+              '模型的材質反光（外部模型、裝飾的 meta material，只給畫面，TASK-0859）：' + (I.get('modelMat') or '—'), '',
               '火藥（送藥手：取用點 → 砲尾藥箱）：' + (I.get('powder') or '—'), '',
               '揚弾機（關聯／模型 meta kind=hoist、guns、trip、rounds，固定點 bottom／top；送藥手送到艙底接收處、吊上砲旁藥箱，TASK-0841）：' + (I.get('hoists') or '—'), '',
               '迴旋砲／砲塔（meta mount；沒標 ＝ 固定）：' + (I.get('mounts') or '—'), '',
