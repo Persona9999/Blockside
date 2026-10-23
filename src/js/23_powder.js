@@ -533,19 +533,19 @@ function flashCheck(sh, L) {
 // 流程：那幾門砲（g.ah）的送藥手生在艙底 —— 接收處旁擺一個取用點（makeStations ahStation：三桶、彈藥庫 ＝ 離 bottom 最近的那間），
 //   揚弾手從取用點拿、送到接收處（H.buf，發；滿了 ＝ 那幾門砲藥箱的容量加起來）；揚弾機一趟吊 rounds 發，到了放進藥箱最空的那門（ahStep）。
 //   揚弾筒在轉軸上 ⇒ 砲塔轉到哪都接得上（不看角度）。一層的送藥手不再送這幾門（needGun 跳過 g.ah）。
-// 揚弾筒被打壞（關聯：外框裡的格子剩不到 AH_BROKE；模型：被打掉）⇒ 改人力，一趟 × AH_HAND（史實：松島號揚弾裝填主要靠水壓、人力補助）。
+// 揚弾筒被打壞（關聯：自己的格子剩不到 AH_BROKE —— 格子清單 parts[].cellRuns（admin.py 匯出），沒有 ⇒ 外框裡的格；模型：被打掉）⇒ 改人力，一趟 × AH_HAND（史實：松島號揚弾裝填主要靠水壓、人力補助）。
 // 沒有 kind=hoist 的船：sh.ahs ＝ null ⇒ 一行都不多算、不抽亂數、戰局逐位元組不變。
 var AH_TRIP = 8, AH_HAND = 3, AH_BROKE = 0.6;
 /** 這艘船的揚弾機（10_ship.js：makeMags 之後、makeStations 之前；取用點在 makeStations 擺）。沒有 ⇒ null。 */
 function makeAmmoHoists(sh) {
   var T = sh.T, D = [];
-  (T.h.parts || []).forEach(function (p) { if (p.meta && p.meta.kind === 'hoist') D.push({ path: p.path, meta: p.meta, pts: p.points || {}, box: p.box || null, m: null }); });
+  (T.h.parts || []).forEach(function (p) { if (p.meta && p.meta.kind === 'hoist') D.push({ path: p.path, meta: p.meta, pts: p.points || {}, box: p.box || null, runs: p.cellRuns || null, m: null }); });
   sh.models.forEach(function (m) { if (m.kind === 'hoist') D.push({ path: m.path, meta: m.meta || {}, pts: m.pts || {}, box: m.bb, m: m }); });
   if (!D.length) return null;
   return D.map(function (d, k) {
     var mt = d.meta, want = String(mt.guns === undefined || mt.guns === null ? '' : mt.guns).split(',').map(function (v) { return refPath(T, v.trim()); }).filter(Boolean);
     var guns = sh.guns.filter(function (g) { return want.indexOf(g.model.path) >= 0; }), nm = d.path.split('/').pop();
-    var H = { k: k, key: 'H' + k, path: d.path, name: nm, label: '揚弾機（' + nm + '）', want: want, guns: guns, bottom: d.pts.bottom || null, top: d.pts.top || null, m: d.m, box: d.box,
+    var H = { k: k, key: 'H' + k, path: d.path, name: nm, label: '揚弾機（' + nm + '）', want: want, guns: guns, bottom: d.pts.bottom || null, top: d.pts.top || null, m: d.m, box: d.box, cells: d.runs && d.runs.length ? drvCells(T, d.runs) : null,
       trip: +mt.trip > 0 ? +mt.trip : AH_TRIP, rounds: Math.max(1, Math.round(+mt.rounds || 1)), bk: guns.length ? gunBoxK(guns[0].type) : 1,
       cap: guns.reduce(function (a, g) { return a + gunBoxCap(g); }, 0), buf: 0, ph: 0, t: 0, load: 0, hand: false, trips: 0, lifted: 0, crew: 0, st: null, drop: null, mag: null, zr: null, n0: 0 };
     if (!H.bottom || !guns.length) return H;
@@ -561,9 +561,12 @@ function makeAmmoHoists(sh) {
     return H;
   });
 }
-/** 揚弾筒（關聯）外框裡現在有幾格實心；模型、在砲塔底下（格子在砲塔的殼裡）、沒有外框 ⇒ 0（不量，不會改人力）。 */
+/** 揚弾筒（關聯）現在剩幾格：有格子清單（parts[].cellRuns；admin.py 匯出，31_drive.js drvCells）⇒ 照它數；沒有 ⇒ 外框裡的實心格。
+ *  模型、在砲塔底下（格子在砲塔的殼裡）、沒有清單而外框不比整艘船小（子作品是整個框：松島號；同 makeMags 那一條）⇒ 0（不量，不會改人力；匯入檢查報）。 */
 function ahCells(sh, H) {
-  var B = H.box; if (H.m || !B || turOf(sh.T, H.path) >= 0) return 0;
+  if (H.m || turOf(sh.T, H.path) >= 0) return 0;
+  if (H.cells) return drvLeft(sh.grid, H.cells);
+  var B = H.box, SB = sh.T.h.bbox; if (!B || (SB && B[0] <= SB[0] && B[3] >= SB[3])) return 0;
   var g = sh.grid, n = 0;
   for (var z = Math.floor(B[2]); z <= Math.ceil(B[5]); z++) for (var y = Math.floor(B[1]); y <= Math.ceil(B[4]); y++) for (var x = Math.floor(B[0]); x <= Math.ceil(B[3]); x++) if (g.get(x, y, z)) n++;
   return n;
@@ -666,10 +669,11 @@ function ahSummary(sh, add) {
       var dd = Math.hypot(H.top[0] - R0.c[0], H.top[1] - R0.c[1]); axis = '、top 離砲塔轉軸 ' + dd.toFixed(1) + ' 格';
       if (dd > 4) add('warn', '揚弾機', H.path, 'top 離 ' + R0.path + ' 的轉軸 ' + dd.toFixed(1) + ' 格 ⇒ 揚弾筒不在轉軸上，砲塔轉了就接不上（遊戲照接得上算）', '揚弾筒從艙底沿轉軸往上（' + fix + '）');
     }
+    if (!H.m && H.bottom && H.guns.length && !H.n0 && turOf(sh.T, H.path) < 0) add('warn', '揚弾機', H.path, '揚弾筒的格子量不到（沒有格子清單、外框又是整艘船）⇒ 打壞了也不會改人力', 'python -I admin.py cells --id ' + sh.T.id + '（寫 parts[].cellRuns）');
     if (!H.top) add('warn', '揚弾機', H.path, '沒有固定點 top（砲尾接收點）⇒ 量不了在不在轉軸上', '登記固定點 top（' + fix + '）');
     var r3 = function (p) { return p.map(function (v) { return Math.round(v); }).join(','); };
     return H.path + '：吊 ' + H.guns.length + ' 門（' + H.guns.map(function (g) { return g.model.path; }).join('、') + '）、一趟 ' + H.trip + ' 秒（人力 × ' + AH_HAND + '）、一次 ' + H.rounds + ' 發' +
       (H.drop ? '、接收處 ' + r3(H.drop) : '') + (H.st ? '、取用點 ' + H.st.name + '（' + H.mag.name + '）、揚弾手 ' + H.crew + ' 個' : '（不吊）') +
-      (H.m ? '、揚弾筒是模型（被打掉 ⇒ 人力）' : H.n0 ? '、揚弾筒 ' + H.n0.toLocaleString('en') + ' 格（剩不到 ' + Math.round(AH_BROKE * 100) + '% ⇒ 人力）' : '、揚弾筒的格子量不到（不會改人力）') + axis;
+      (H.m ? '、揚弾筒是模型（被打掉 ⇒ 人力）' : H.n0 ? '、揚弾筒 ' + H.n0.toLocaleString('en') + ' 格（' + (H.cells ? '格子清單' : '外框裡的格') + '；剩不到 ' + Math.round(AH_BROKE * 100) + '% ⇒ 人力）' : '、揚弾筒的格子量不到（不會改人力）') + axis;
   }).join('；');
 }

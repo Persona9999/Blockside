@@ -21,7 +21,7 @@
 #   python -I admin.py cache                      _cache/ 缺的、跟指紋不同的 .vxk 從版控那份成品裡解回來（換機器、只改程式時用；建置也會自己做）
 #   python -I admin.py ids --id <船的代號> [--dry]  物件 id：發號、指名別的部件的 meta 換成 id、寫回雕刻作品再 metasync（TASK-0715；造船規格 §12）
 #   python -I admin.py ropebind [--id <船的代號>]   繩端綁定：成品算好每條繩兩端綁在哪、寫進 .vxk 檔頭、出報表（TASK-0716；匯入、重新匯入、metasync、ids 會自己跑）
-#   python -I admin.py cells --id <船的代號>      只寫動力件與梯子的格子清單（meta、格子不動；TASK-0676 木匠照它還原整件梯子）
+#   python -I admin.py cells --id <船的代號>      只寫動力件、梯子、揚弾筒的格子清單（meta、格子不動；TASK-0676 木匠照它還原整件梯子）
 #   python -I admin.py relock --id <船的代號>     指紋改成 _cache 現在那份（手動換過 .vxk 時；平常匯入／重新匯入／metasync 會自己更新）
 #   加 --no-build：匯入／重新匯入之後不重建
 import argparse, base64, hashlib, json, math, os, posixpath, re, shutil, socket, struct, subprocess, sys, urllib.request, webbrowser, zlib
@@ -956,7 +956,7 @@ def meta_kinds():
 
 
 DRV_KINDS = tuple(k for k, v in meta_kinds().items() if v.get('drv') == 'part')
-CELL_KINDS = DRV_KINDS + ('ladders', 'ladder')       # 寫格子清單 parts[].cellRuns 的關聯：動力件＋梯子（TASK-0676：木匠照它把整件梯子還原，Tim「可以單純是還原該子模組(梯子)」）   # 動力件（TASK-0653；遊戲 31_drive.js 照格子算剩幾成、通不通）：規格表 drv=part（主機、鍋爐、軸、蒸汽管）
+CELL_KINDS = DRV_KINDS + ('ladders', 'ladder', 'hoist')   # 揚弾筒（TASK-0841：23_powder.js 照它數剩幾成、打壞了改人力）； 寫格子清單 parts[].cellRuns 的關聯：動力件＋梯子（TASK-0676：木匠照它把整件梯子還原，Tim「可以單純是還原該子模組(梯子)」）   # 動力件（TASK-0653；遊戲 31_drive.js 照格子算剩幾成、通不通）：規格表 drv=part（主機、鍋爐、軸、蒸汽管）
 
 
 HPM_KINDS = tuple(k for k, v in meta_kinds().items() if v.get('drv') == 'hp')     # 整件一塊的動力件（規格表 drv=hp：槳）：不匯出格子，血量倍率 drvparts.<種類>.hpK（道具設定頁）
@@ -1100,7 +1100,7 @@ def drive_cells(h):
         kind = (q.get('meta') or {}).get('kind')
         if kind not in CELL_KINDS:
             continue
-        what = '動力件' if kind in DRV_KINDS else '梯子'
+        what = '動力件' if kind in DRV_KINDS else '揚弾筒' if kind == 'hoist' else '梯子'
         runs, why = None, ''
         b, w = q.get('box'), q.get('src')
         if not (b and len(b) == 6 and w):
@@ -1137,7 +1137,7 @@ def drive_cells(h):
                     end = idx[j] + 1
                     i = j + 1
         if why:
-            log.append('⚠ %s %s（%s）：%s ⇒ 不寫格子清單（%s）' % (what, q.get('path'), kind, why, '遊戲照固定點旁 ±8 格判' if what == '動力件' else '木匠只補踏板'))
+            log.append('⚠ %s %s（%s）：%s ⇒ 不寫格子清單（%s）' % (what, q.get('path'), kind, why, '遊戲照固定點旁 ±8 格判' if what == '動力件' else '遊戲照外框數、框是整艘船就不量' if what == '揚弾筒' else '木匠只補踏板'))
         if q.get('cellRuns') != runs:
             changed = True
             if runs is None:
@@ -4125,7 +4125,7 @@ def main():
     s = sp.add_parser('metasync', help='只同步 meta 與固定點（格子不動）')
     s.add_argument('--id', required=True)
     s.add_argument('--no-build', action='store_true')
-    s = sp.add_parser('cells', help='只寫動力件與梯子的格子清單（parts[].cellRuns；meta、格子不動）')
+    s = sp.add_parser('cells', help='只寫動力件、梯子、揚弾筒的格子清單（parts[].cellRuns；meta、格子不動）')
     s.add_argument('--id', required=True)
     s.add_argument('--no-build', action='store_true')
     s = sp.add_parser('ids', help='物件 id（TASK-0715；造船規格 §12）：每件關聯、模型發一個 <類別>-<序號>、指名別的部件的 meta 換成 id、寫回雕刻作品，再 metasync')
