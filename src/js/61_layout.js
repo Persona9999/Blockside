@@ -21,12 +21,12 @@ var UI_GROUPS = {
   kSet: ['setB'],                   // ⚙ 設定
   kAnc: ['ancAll'],                 // ⚓⚓ 雙錨
   kGlobe: ['hostBack'],             // 🌍 回到地球儀（另外要 body.bsHost：只有地球儀開的才有）
-  kDock: ['dockK']                  // ⚓ 停靠／⛵ 出航（88_modeswitch.js dockBtn：航海時準備好了才出現）
+  kDock: ['dockK']                  // 🏘 停靠／⛵ 出航（88_modeswitch.js dockBtn：航海時準備好了才出現）
 };
 var UI_SHIP = ['fleet', 'top', 'tele', 'tip', 'badge', 'frz', 'nav', 'helm', 'guns', 'kCam', 'kPause', 'kSet', 'kAnc', 'kGlobe'];
 var UI_LAYOUT = {
   battle: UI_SHIP,                  // 對戰電腦、觀戰、沙盒
-  sail: UI_SHIP.concat(['kDock']),  // 航海：跟海戰一樣，多 ⚓ 停靠（TASK-0867）
+  sail: UI_SHIP.concat(['kDock']),  // 航海：跟海戰一樣，多 🏘 停靠（TASK-0867）
   observe: UI_SHIP,                 // 船隻觀察：跟海戰一樣，另有觀察面板（86_inspect.js）
   fp: ['kPause', 'kSet'],           // 第一人稱：只留 ⏸、⚙（#fpUI 照 #stage.fp 出現；Tim 2026-10-16「只保留設定紐 暫停紐」）
   shipbuild: ['kPause', 'kSet'],    // 造船（第一人稱鎖定）：同第一人稱，快捷欄照 #stage.bld 出現
