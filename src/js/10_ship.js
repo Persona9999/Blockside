@@ -108,6 +108,7 @@ function makeShipSteps(i, team, yaw, pz, T, px) {
   sh.decks = gunDecks(sh); sh.weatherDeck = sh.decks.length ? sh.decks[sh.decks.length - 1].key : null;   // 砲甲板（照砲的高度分層）；最上面那層 ＝ 露天
   sh.deckZ = {}; sh.decks.forEach(function (D) { sh.deckZ[D.key] = D.zr; });
   sh.mags = makeMags(sh);                                                // 彈藥庫（23_powder.js）
+  sh.ahs = makeAmmoHoists(sh);                                           // 揚弾機（kind=hoist；23_powder.js）—— 沒有 ⇒ null、不做事
   }, function () {                                                   // 取用點
   sh.stations = makeStations(sh);                                        // 兩層甲板的火藥與彈藥取用點（火藥桶也是模型，加在 sh.models 後面）
   }, function () {                                                   // 艙房的家具、抽水機

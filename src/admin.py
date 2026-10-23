@@ -1728,6 +1728,7 @@ def act_shipcheck(ids=None):
               '材質（TASK-0616）：' + (I.get('materials') or '—'), '',
               '平滑渲染（關聯 meta render=smooth，TASK-0616）：' + (I.get('smooth') or '—'), '',
               '火藥（送藥手：取用點 → 砲尾藥箱）：' + (I.get('powder') or '—'), '',
+              '揚弾機（關聯／模型 meta kind=hoist、guns、trip、rounds，固定點 bottom／top；送藥手送到艙底接收處、吊上砲旁藥箱，TASK-0841）：' + (I.get('hoists') or '—'), '',
               '迴旋砲／砲塔（meta mount；沒標 ＝ 固定）：' + (I.get('mounts') or '—'), '',
               '砲塔層（關聯 meta kind=turret；殼、上面的砲與模型、彈藥箱跟著轉，前方 front 對準瞄準方位，TASK-0659）：' + (I.get('turrets') or '—'), '',
               '砲帶的裝甲（關聯 meta kind=armor、mount；跟著砲轉、一格一格打掉，TASK-0631）：' + (I.get('armor') or '—'), '',

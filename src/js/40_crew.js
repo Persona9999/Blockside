@@ -227,7 +227,7 @@ function reassign(sh) {
   });
   if (sh.nav && sh.T.armor && sh.T.armor.length) sh.crew.forEach(function (c) {   // 送藥手同理：同一層走得到的砲全沒了、手上沒藥包 ⇒ 預備水手
     if (c.role !== ROLE.POWDER || !crewAble(c) || !c.pm || c.pm.st !== 'idle' || c.cart) return;
-    if (!sh.guns.some(function (g) { return g.alive && g.drop && gunDeck(g) === c.deck && navReach(sh, c.pos, g.drop); })) toHand(sh, c);
+    if (c.ah ? !c.ah.guns.some(function (g) { return g.alive; }) : !sh.guns.some(function (g) { return !g.ah && g.alive && g.drop && gunDeck(g) === c.deck && navReach(sh, c.pos, g.drop); })) toHand(sh, c);   // 揚弾手（23_powder.js ahMonkey）：吊的砲全沒了才改
   });
 }
 function gunDeck(g) { return g.deck; }                  // 那門砲在哪一層（10_ship.js gunDecks）

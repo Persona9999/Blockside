@@ -287,6 +287,19 @@ function makeStations(sh, auto) {
     }
     if (spot && at) build(D, h.mag, D.name + '取用點（' + h.L.name.split('/').pop() + ' 艙口）', spot, at);
   }
+  /** 揚弾機（kind=hoist；下面 makeAmmoHoists）艙底接收處旁的取用點：桶擺在接收處那一層 9×9 的空地（不蓋到接收處），揚弾手在這裡拿、送到接收處。
+   *  擺得下 ⇒ 那幾門砲認這座揚弾機（g.ah）；擺不下 ⇒ 不認，照舊由那一層的送藥手送到砲旁（匯入檢查報 ✗）。 */
+  function ahStation(H) {
+    var b = H.bottom, d = H.drop, spot = null, r, dx, dy;
+    for (r = 0; r <= 40 && !spot; r++) for (dy = -r; dy <= r && !spot; dy++) for (dx = -r; dx <= r && !spot; dx++) {
+      if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue;
+      var x = Math.floor(b[0]) + dx - 4, y = Math.floor(b[1]) + dy - 4, z = standZ(BASE, x + 4, y + 4, H.zr[0], H.zr[1], 8);
+      if (z >= 0 && !(d[0] > x - 2 && d[0] < x + 11 && d[1] > y - 2 && d[1] < y + 11) && clear(x, y, z)) spot = [x, y, z];
+    }
+    if (!spot) return;
+    var n = out.length; build({ key: H.key, name: H.label }, H.mag, H.label + '取用點', spot); H.st = out[n];
+    H.guns.forEach(function (g) { g.ah = H; });
+  }
   sh.decks.forEach(function (D) {
     var deck = D.key, zr = D.zr, pl = auto ? null : deckPlan(T.id, deckId(D));
     if (pl && pl.items) {                                               // 玩家擺的（驗過：格子、砲班的位置、地面）
@@ -307,6 +320,7 @@ function makeStations(sh, auto) {
       if (spot) build(D, mag, D.name + A.tag + '取用點', spot);
     }); });
   });
+  if (!auto) (sh.ahs || []).forEach(function (H) { if (H.drop && H.mag) ahStation(H); });   // 揚弾機（沒有 ⇒ 不做事）
   return out;
   // 砲塔裡的彈藥箱（TASK-0659；Tim 2026-10-16：「砲塔內也要可以放彈藥箱」）：桶就是彈藥箱自己的（不另外擺），送藥手站在箱子旁、砲塔裡站得住、不在砲裡的一格；
   //   取用點跟著砲塔轉（27_turret.js turRiders：st.tur）。照開局的擺法找（砲塔座標 ＝ 開局的船的格座標）。
@@ -368,6 +382,8 @@ function makeMonkeys(sh, crew, taken, add) {
       var dropY = foreAft ? Math.floor(br[1]) : Math.floor(br[1] - sg * 7);
       g.drop = standNear(BASE, dropX, dropY, zr[0], zr[1], 12, {}) || (g.spots.length ? g.spots[g.spots.length - 1].at : null);
     });
+    var H = gs[0].ah && gs.every(function (g) { return g.ah === gs[0].ah; }) ? gs[0].ah : null;   // 揚弾機吊上去的那一對 ⇒ 送藥手在艙底（取用點 → 接收處，ahMonkey）
+    if (H) { ahCrew(sh, H, gs, crew, taken, add); return; }
     // Fore/aft guns: the muzzle can be outside the deck. Spawn behind the breech.
     if (Math.abs(gs[0].ax[0]) > Math.abs(gs[0].ax[1]) && gs[0].model.pts.breech)
       x = Math.round(gs[0].model.pts.breech[0] - (gs[0].ax[0] > 0 ? 6 : -6));
@@ -395,7 +411,7 @@ function incoming(sh, c, g) {
 function needGun(sh, c) {
   var best = null, bs = 1e9;
   sh.guns.forEach(function (g) {
-    if (!g.alive || !g.drop || gunDeck(g) !== c.deck || g.box >= gunBoxCap(g) || (g.pm && g.pm !== c && crewAble(g.pm))) return;
+    if (g.ah || !g.alive || !g.drop || gunDeck(g) !== c.deck || g.box >= gunBoxCap(g) || (g.pm && g.pm !== c && crewAble(g.pm))) return;
     if (g.box + incoming(sh, c, g) * gunBoxK(g.type) >= gunBoxCap(g)) return;   // incoming 是份數 ⇒ × box 換成發
     if (!navReach(sh, c.pos, g.drop)) return;                          // 照直線走（monkeyTo）⇒ 隔著砲塔那一圈的砲不送（42_hands.js；Tim 2026-10-17「水手會穿進去」）
     var s = g.box / gunBoxK(g.type) * 10 + (g.needCart ? 0 : 5) + (g.pm === c ? 0 : 3) + (gunRate(g) > 0 ? 0 : 20) + Math.abs(g.muz[0] - c.pos[0]) / 40;
@@ -445,6 +461,7 @@ function monkeyTo(sh, c, to, dt) {
 }
 function stepMonkey(sh, c, dt) {
   var P = c.pm; if (!P) return;
+  if (c.ah) { ahMonkey(sh, c, dt); return; }                           // 揚弾機的送藥手（艙底）
   if (sh.struck || sh.sunk) { c.moving = false; return; }
   if (P.st === 'idle') {
     var g = needGun(sh, c), st = g && stationFor(sh, c, g);
@@ -506,4 +523,153 @@ function flashCheck(sh, L) {
     note(sh, '<b style="color:#ff9a7a">火光竄下' + magTag(st.mag) + '彈藥庫的艙口！</b>', true);
     near.forEach(function (m) { powderHit(sh, m, FLASH_DMG * BLAST_K); });
   });
+}
+
+// ───────────────────────── 揚弾機（Tim 2026-10-23）─────────────────────────
+// Tim：「彈藥從艙底經過轉盤中間吊上砲 可以加新機制去處理這個嗎(同時可以考慮之後支援自動裝彈機的炮)」
+//   「送彈藥可以不送到炮本身而是一個接收處(艙底) 然後在吊上去裝填」。
+// 標法（雕刻作品的關聯或模型 meta）：kind=hoist、guns=<砲的物件 id，逗號分開>、trip=一趟幾秒（吊上去＋放下來；沒寫 ⇒ AH_TRIP）、rounds=一次吊幾發（沒寫 ⇒ 1）；
+//   固定點 bottom ＝ 艙底接收處（踩的那一格空氣）、top ＝ 砲尾接收點（只給匯入檢查量：在不在砲塔的轉軸上）。
+// 流程：那幾門砲（g.ah）的送藥手生在艙底 —— 接收處旁擺一個取用點（makeStations ahStation：三桶、彈藥庫 ＝ 離 bottom 最近的那間），
+//   揚弾手從取用點拿、送到接收處（H.buf，發；滿了 ＝ 那幾門砲藥箱的容量加起來）；揚弾機一趟吊 rounds 發，到了放進藥箱最空的那門（ahStep）。
+//   揚弾筒在轉軸上 ⇒ 砲塔轉到哪都接得上（不看角度）。一層的送藥手不再送這幾門（needGun 跳過 g.ah）。
+// 揚弾筒被打壞（關聯：外框裡的格子剩不到 AH_BROKE；模型：被打掉）⇒ 改人力，一趟 × AH_HAND（史實：松島號揚弾裝填主要靠水壓、人力補助）。
+// 沒有 kind=hoist 的船：sh.ahs ＝ null ⇒ 一行都不多算、不抽亂數、戰局逐位元組不變。
+var AH_TRIP = 8, AH_HAND = 3, AH_BROKE = 0.6;
+/** 這艘船的揚弾機（10_ship.js：makeMags 之後、makeStations 之前；取用點在 makeStations 擺）。沒有 ⇒ null。 */
+function makeAmmoHoists(sh) {
+  var T = sh.T, D = [];
+  (T.h.parts || []).forEach(function (p) { if (p.meta && p.meta.kind === 'hoist') D.push({ path: p.path, meta: p.meta, pts: p.points || {}, box: p.box || null, m: null }); });
+  sh.models.forEach(function (m) { if (m.kind === 'hoist') D.push({ path: m.path, meta: m.meta || {}, pts: m.pts || {}, box: m.bb, m: m }); });
+  if (!D.length) return null;
+  return D.map(function (d, k) {
+    var mt = d.meta, want = String(mt.guns === undefined || mt.guns === null ? '' : mt.guns).split(',').map(function (v) { return refPath(T, v.trim()); }).filter(Boolean);
+    var guns = sh.guns.filter(function (g) { return want.indexOf(g.model.path) >= 0; }), nm = d.path.split('/').pop();
+    var H = { k: k, key: 'H' + k, path: d.path, name: nm, label: '揚弾機（' + nm + '）', want: want, guns: guns, bottom: d.pts.bottom || null, top: d.pts.top || null, m: d.m, box: d.box,
+      trip: +mt.trip > 0 ? +mt.trip : AH_TRIP, rounds: Math.max(1, Math.round(+mt.rounds || 1)), bk: guns.length ? gunBoxK(guns[0].type) : 1,
+      cap: guns.reduce(function (a, g) { return a + gunBoxCap(g); }, 0), buf: 0, ph: 0, t: 0, load: 0, hand: false, trips: 0, lifted: 0, crew: 0, st: null, drop: null, mag: null, zr: null, n0: 0 };
+    if (!H.bottom || !guns.length) return H;
+    var b = H.bottom, z0 = Math.floor(b[2]), r, dx, dy;
+    H.zr = [z0 - 3, z0 + 3]; sh.deckZ[H.key] = H.zr;                   // 揚弾手走路的高度（monkeyTo 照 sh.deckZ[c.deck]）
+    for (r = 0; r <= 6 && !H.drop; r++) for (dy = -r; dy <= r && !H.drop; dy++) for (dx = -r; dx <= r && !H.drop; dx++) {   // 接收處：bottom 旁站得住的一格
+      if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue;
+      var x = Math.floor(b[0]) + dx, y = Math.floor(b[1]) + dy, z = standZ(T.base, x, y, H.zr[0], H.zr[1], 8);
+      if (z >= 0) H.drop = [x + 0.5, y + 0.5, z];
+    }
+    var bd = 1e9; sh.mags.forEach(function (m) { if (m.tur >= 0) return; var dd = len(sub(m.blast, b)); if (dd < bd) { bd = dd; H.mag = m; } });   // 取用點算哪一間的（殉爆、火光竄下去）
+    H.n0 = ahCells(sh, H);
+    return H;
+  });
+}
+/** 揚弾筒（關聯）外框裡現在有幾格實心；模型、在砲塔底下（格子在砲塔的殼裡）、沒有外框 ⇒ 0（不量，不會改人力）。 */
+function ahCells(sh, H) {
+  var B = H.box; if (H.m || !B || turOf(sh.T, H.path) >= 0) return 0;
+  var g = sh.grid, n = 0;
+  for (var z = Math.floor(B[2]); z <= Math.ceil(B[5]); z++) for (var y = Math.floor(B[1]); y <= Math.ceil(B[4]); y++) for (var x = Math.floor(B[0]); x <= Math.ceil(B[3]); x++) if (g.get(x, y, z)) n++;
+  return n;
+}
+/** 揚弾筒壞了沒（壞了 ⇒ 改人力）。 */
+function ahBroken(sh, H) { return H.m ? !H.m.alive : H.n0 > 0 && ahCells(sh, H) < H.n0 * AH_BROKE; }
+/** 每一步（32_hull.js stepShip，裝填之前）：0 ＝ 停在艙底、1 ＝ 吊上去、2 ＝ 放下來。一趟開始時看要不要改人力。 */
+function ahStep(sh, dt) {
+  sh.ahs.forEach(function (H) {
+    if (!H.st) return;                                                  // 接不上（沒有取用點）⇒ 砲照舊由那一層的送藥手送
+    if (H.ph === 0) {
+      var need = H.guns.reduce(function (a, g) { return a + (g.alive ? Math.max(0, gunBoxCap(g) - g.box) : 0); }, 0);
+      if (!need || H.buf < 1) return;
+      H.load = Math.min(H.rounds, Math.floor(H.buf), need); H.buf -= H.load;
+      H.hand = ahBroken(sh, H); H.ph = 1; H.t = H.trip * (H.hand ? AH_HAND : 1) / 2;
+      return;
+    }
+    if ((H.t -= dt) > 0) return;
+    if (H.ph === 2) { H.ph = 0; return; }
+    while (H.load > 0) {                                                // 到了：一發一發放進藥箱最空的那門
+      var to = null; H.guns.forEach(function (g) { if (g.alive && g.box < gunBoxCap(g) && (!to || g.box < to.box)) to = g; });
+      if (!to) break;
+      to.box++; H.load--; H.lifted++;
+    }
+    H.buf += H.load; H.load = 0;                                        // 放不下的（砲在半路被打掉）跟著放下來
+    H.trips++; H.ph = 2; H.t = H.trip * (H.hand ? AH_HAND : 1) / 2;
+  });
+}
+/** 揚弾手（makeMonkeys：整對砲都是同一座揚弾機吊的 ⇒ 那一對的送藥手改生在接收處旁）。 */
+function ahCrew(sh, H, gs, crew, taken, add) {
+  sh.pmWant += sh.cw.monkeys;
+  for (var m = 0; m < sh.cw.monkeys; m++) {
+    var at = standNear(sh.T.base, Math.floor(H.drop[0]), Math.floor(H.drop[1]), H.zr[0], H.zr[1], 12, taken, 8); if (!at) continue;
+    add(ROLE.POWDER, at, null, 1);
+    var c = crew[crew.length - 1]; c.deck = H.key; c.guns = gs; c.ah = H; c.pm = { st: 'idle', t: 0 }; c.cart = false; H.crew++;
+  }
+}
+/** 別的揚弾手已經要送到接收處的發數。 */
+function ahIncoming(sh, c, H) {
+  var n = 0;
+  sh.crew.forEach(function (o) { if (o !== c && o.ah === H && o.role === ROLE.POWDER && o.pm && o.pm.st !== 'idle' && crewAble(o)) n += o.pm.st === 'carry' ? o.cart || 0 : CARRY_N; });
+  return n * H.bk;
+}
+/** 揚弾手：取用點 → 接收處（跟 stepMonkey 同一套走法、拿法；放進接收處 ＝ H.buf）。 */
+function ahMonkey(sh, c, dt) {
+  var P = c.pm, H = c.ah;
+  if (sh.struck || sh.sunk) { c.moving = false; return; }
+  if (P.st === 'idle') {
+    if (H.st.mag.gone || !H.guns.some(function (g) { return g.alive; }) || H.buf + ahIncoming(sh, c, H) >= H.cap) { monkeyTo(sh, c, c.home, dt); return; }
+    P.st = 'fetch'; P.src = H.st; P.g = null; P.at = slotFor(sh, c, H.st);
+  }
+  if (P.st === 'fetch') {
+    if (P.src.mag.gone) { P.st = 'idle'; return; }
+    if (monkeyTo(sh, c, P.at, dt)) { P.st = 'fill'; P.t = FILL_T; }
+    return;
+  }
+  if (P.st === 'fill') { c.moving = false; if ((P.t -= sh.qmK !== undefined ? dt * crewEff(sh, c) * sh.qmK : dt * crewEff(sh, c)) <= 0) { c.cart = CARRY_N; P.st = 'carry'; } return; }
+  if (P.st === 'carry') {
+    if (!c.cart) { P.st = 'idle'; return; }
+    if (monkeyTo(sh, c, H.drop, dt)) { H.buf = Math.min(H.cap, H.buf + c.cart * H.bk); c.cart = 0; P.st = 'idle'; }
+  }
+}
+/** 點名（42_hands.js callHands）：揚弾手倒了 ⇒ 派預備水手走到接收處那一層接（kind ahpm）。 */
+function ahNeeds(sh, NV, need, going) {
+  sh.ahs.forEach(function (H) {
+    if (!H.st || !H.crew || H.st.mag.gone || !H.guns.some(function (g) { return g.alive; })) return;
+    var lv = lvAt(sh, H.drop); if (lv < 0 || NV.reach.indexOf(lv) < 0) return;
+    var n = (NV.pm0[H.key] || 0) - sh.crew.filter(function (c) { return c.role === ROLE.POWDER && crewAble(c) && c.ah === H; }).length - (going['ahpm' + H.key] || 0);
+    if (n > 0) need.push({ kind: 'ahpm', key: H.key, deck: H.key, lv: lv, n: n, x: H.drop[0], pri: 1, reg: needReg(sh, lv, H.drop) });
+  });
+}
+/** 到了（42_hands.js handJoin）：換成揚弾手、接倒下那位的家。不在那一層（路斷了）⇒ 作廢。 */
+function ahJoin(sh, c) {
+  var Hd = c.hand, J = Hd.job, H = sh.ahs[+J.key.slice(1)];
+  if (Hd.lv !== J.lv) { Hd.job = null; Hd.wait = 1; return; }
+  var dead = sh.crew.filter(function (o) { return o.role === ROLE.POWDER && o.ah === H && !crewAble(o) && !o.relieved; })[0];
+  c.walk = null; c.moving = false; c.home = c.pos.slice(); c.hand = null; sh.nav.joined++;
+  c.role = ROLE.POWDER; c.deck = H.key; c.ah = H; c.pm = { st: 'idle', t: 0 }; c.cart = false; c.guns = dead ? dead.guns : H.guns;
+  if (dead) { dead.relieved = true; c.home = dead.home.slice(); }
+}
+/** 匯入檢查的讀數（75_shipcheck.js；有問題的 add 進去）：每座 ＝ 吊哪幾門、一趟幾秒、一次幾發、接收處、取用點、揚弾手幾個、筒的格子、top 離砲塔轉軸幾格。 */
+function ahSummary(sh, add) {
+  if (!sh.ahs) return '';
+  return sh.ahs.map(function (H) {
+    var fix = '造船規格 §9.15';
+    if (!H.bottom) add('error', '揚弾機', H.path, '沒有固定點 bottom（艙底接收處）⇒ 不吊，砲照舊由那一層的送藥手送', '揚弾機登記固定點 bottom（踩的那一格空氣；' + fix + '）');
+    if (!H.want.length) add('error', '揚弾機', H.path, 'meta 沒寫 guns ⇒ 不知道吊給哪幾門', 'meta guns=<砲的物件 id，逗號分開>（' + fix + '）');
+    else if (H.guns.length < H.want.length) add('error', '揚弾機', H.path, 'guns 有 ' + (H.want.length - H.guns.length) + ' 門找不到（不是砲、或指不到）', 'guns 寫砲模型的物件 id（' + fix + '）');
+    if (H.bottom && H.guns.length && !H.drop) add('error', '揚弾機', H.path, 'bottom 旁 6 格內站不住（接收處）⇒ 不吊', 'bottom 擺在艙底的地板上（' + fix + '）');
+    else if (H.drop && !H.mag) add('error', '揚弾機', H.path, '船上沒有不在砲塔裡的彈藥庫 ⇒ 接收處旁不擺取用點、不吊', '彈藥庫 kind=magazine（造船規格 §8）');
+    else if (H.drop && !H.st) add('error', '揚弾機', H.path, '接收處旁 4 m 內擺不下取用點（9×9 格平地、頭上 0.8 m 空、不碰砲、不蓋到接收處）⇒ 不吊，砲照舊由那一層的送藥手送', '艙底接收處旁留一塊空地（' + fix + '）');
+    if (H.st && !H.crew) add('error', '揚弾機', H.path, '接收處旁站不下揚弾手（或船員配置的送藥手 0；那一對砲有別的砲不是這座吊的 ⇒ 送藥手照舊在砲甲板）⇒ 吊不上去', '接收處旁留站位；吊的那幾門砲同一對兩舷都給這座吊（' + fix + '）');
+    var NV = sh.nav, RA = H.st && H.crew && NV ? navRegAt(sh, H.drop) : null;   // 揚弾手倒了 ⇒ 預備水手走梯子下去補（ahNeeds）：接收處那一塊要有梯子接到
+    if (RA && !NV.ladders.some(function (L) { return !L.broken && ((L.lo === RA[0] && L.ra === RA[1]) || (L.hi === RA[0] && L.rb === RA[1])); }))
+      add('warn', '揚弾機', H.path, '接收處那一塊（走路格上）沒有梯子接到 ⇒ 揚弾手倒了沒人補', '接收處擺在有梯子通到的那一塊，或加梯子（kind=ladders；造船規格 §9.3）');
+    if (H.guns.some(function (g) { return g.type !== H.guns[0].type; })) add('warn', '揚弾機', H.path, '吊的砲不是同一種 ⇒ 一份照第一門的砲種表 box 算', '一座揚弾機只吊同一種砲');
+    var R0 = null; H.guns.forEach(function (g) { var N = g.model.hd || (g.mt && g.mt.up); if (N && !R0) R0 = ndRoot(N); });
+    var axis = '';
+    if (R0 && H.top && turOf(sh.T, H.path) < 0) {                        // 揚弾筒固定在船體、砲在砲塔上 ⇒ top 要在轉軸上才接得上（遊戲照接得上算）
+      var dd = Math.hypot(H.top[0] - R0.c[0], H.top[1] - R0.c[1]); axis = '、top 離砲塔轉軸 ' + dd.toFixed(1) + ' 格';
+      if (dd > 4) add('warn', '揚弾機', H.path, 'top 離 ' + R0.path + ' 的轉軸 ' + dd.toFixed(1) + ' 格 ⇒ 揚弾筒不在轉軸上，砲塔轉了就接不上（遊戲照接得上算）', '揚弾筒從艙底沿轉軸往上（' + fix + '）');
+    }
+    if (!H.top) add('warn', '揚弾機', H.path, '沒有固定點 top（砲尾接收點）⇒ 量不了在不在轉軸上', '登記固定點 top（' + fix + '）');
+    var r3 = function (p) { return p.map(function (v) { return Math.round(v); }).join(','); };
+    return H.path + '：吊 ' + H.guns.length + ' 門（' + H.guns.map(function (g) { return g.model.path; }).join('、') + '）、一趟 ' + H.trip + ' 秒（人力 × ' + AH_HAND + '）、一次 ' + H.rounds + ' 發' +
+      (H.drop ? '、接收處 ' + r3(H.drop) : '') + (H.st ? '、取用點 ' + H.st.name + '（' + H.mag.name + '）、揚弾手 ' + H.crew + ' 個' : '（不吊）') +
+      (H.m ? '、揚弾筒是模型（被打掉 ⇒ 人力）' : H.n0 ? '、揚弾筒 ' + H.n0.toLocaleString('en') + ' 格（剩不到 ' + Math.round(AH_BROKE * 100) + '% ⇒ 人力）' : '、揚弾筒的格子量不到（不會改人力）') + axis;
+  }).join('；');
 }

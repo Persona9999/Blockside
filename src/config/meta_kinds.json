@@ -50,6 +50,7 @@
     "shaft": { "name": "軸", "on": ["link"], "keys": ["material"], "need": ["aft", "fwd"], "use": [], "doc": "§9.6", "game": ["31_drive.js"], "drv": "part" },
     "steampipe": { "name": "蒸汽管", "on": ["link"], "keys": ["material"], "need": ["from", "to"], "use": [], "doc": "§9.6", "game": ["31_drive.js"], "drv": "part" },
     "turret": { "name": "砲塔層", "on": ["link"], "keys": ["arc", "fire", "rate", "material"], "need": [], "use": ["front", "pivot"], "doc": "§4.8", "game": ["27_turret.js"] },
+    "hoist": { "name": "揚弾機（艙底接收處 → 砲旁藥箱）", "on": ["link", "model"], "keys": ["guns", "trip", "rounds"], "need": ["bottom"], "use": ["top"], "doc": "§9.15", "game": ["23_powder.js"], "mk": true, "refs": { "guns": { "to": ["gun"], "list": true } } },
     "armor": { "name": "跟著砲轉的裝甲", "on": ["link"], "keys": ["mount_of", "mount", "material", "render"], "need": [], "use": [], "doc": "§4.7", "game": ["24_armor.js"], "refs": { "mount_of": { "to": ["gun"], "old": "mount" } } }
   }
 }
