@@ -273,6 +273,51 @@ var TREE_SPECIES = {
     place: { town: true, spacing: 1, scale: [0.85, 1.15], shell: 0, view: 250, sink: 0.05, field: [0.8, 0.67] },
     variants: 3
   },
+  tobacco: {
+    name: '菸草',                                                       // Nicotiana tabacum（17～18 世紀聖多明哥、古巴的菸草園）：一根直稈，交互長出大片橢圓的淡綠葉（下面的大、往外攤，上面的小、往上），少數頂上一簇粉紅的花（多數打頂摘掉了）
+    meta: { region: ['carib'], type: 'crop' },
+    height: [1.3, 1.8],
+    trunk: { r: [0.02, 0.02], taper: 1, bend: 0, segs: 1, sides: [0, 0], lean: 0, col: [0.48, 0.56, 0.30], top: 0.02 },
+    levels: [],
+    leaf: { kind: 'cane', stems: [1, 1], spread: [0, 0.04], r: [0.016, 0.02], base: 0, node: 0.25, nodeCol: [0.44, 0.52, 0.28], n: [10, 14], from: 0.06, len: [0.3, 0.4], w: 0.14, rise: [20, 58], droop: 0.9,
+            col: [0.38, 0.54, 0.22], tip: [0.52, 0.60, 0.30], vary: 0.1, plume: { v: [2], len: 0.18, col: [0.96, 0.76, 0.82] } },   // w：葉的半寬（公尺）；plume：第三棵沒打頂、抽一簇粉紅花
+    place: { town: true, spacing: 1, scale: [0.85, 1.15], shell: 0, view: 300, sink: 0.05, field: [1.0, 0.6] },
+    variants: 3
+  },
+  indigo: {
+    name: '靛藍',                                                       // Indigofera suffruticosa（聖多明哥的靛坊田）：齊腰的小灌木，細枝很多、羽狀的小葉細碎，深藍綠；枝尖零星粉紅的小花
+    meta: { region: ['carib'], type: 'crop' },
+    height: [0.9, 1.3],
+    trunk: { r: [0.015, 0.02], taper: 0.6, bend: 0.25, segs: 2, sides: [3, 0], lean: 0.1, col: [0.40, 0.36, 0.28], top: 0.3, crown: 0.8 },
+    levels: [
+      { n: [5, 7], from: [0.1, 1.0], angle: [22, 42], len: [0.6, 0.9], r: 0.7, bend: 0.25, up: 0.25, segs: 2, sides: [3, 0] }
+    ],
+    leaf: { kind: 'cluster', per: [1, 2], size: [0.16, 0.24], flat: 0.75, col: [0.22, 0.40, 0.27], vary: 0.1, along: 0.6, tint: [0.1, [0.66, 0.38, 0.46]] },   // tint：枝尖的小花
+    place: { town: true, spacing: 1, scale: [0.85, 1.15], shell: 0, view: 250, sink: 0.05, field: [0.8, 0.5] },
+    variants: 3
+  },
+  cotton: {
+    name: '棉花',                                                       // Gossypium hirsutum／barbadense（小安地列斯、聖多明哥的棉田）：分枝的灌木，寬的裂葉、綠裡夾著一顆顆裂開的白棉鈴
+    meta: { region: ['carib', 'med'], type: 'crop' },
+    height: [1.0, 1.4],
+    trunk: { r: [0.018, 0.024], taper: 0.6, bend: 0.2, segs: 2, sides: [3, 0], lean: 0.08, col: [0.44, 0.34, 0.26], top: 0.45, crown: 0.7 },
+    levels: [
+      { n: [4, 6], from: [0.2, 1.0], angle: [30, 55], len: [0.55, 0.85], r: 0.7, bend: 0.2, up: 0.15, segs: 2, sides: [3, 0] }
+    ],
+    leaf: { kind: 'cluster', per: [2, 3], size: [0.15, 0.22], flat: 0.8, col: [0.24, 0.40, 0.17], vary: 0.1, along: 0.5, tint: [0.32, [0.95, 0.94, 0.90]] },   // tint：幾成的團換成白棉鈴
+    place: { town: true, spacing: 1, scale: [0.85, 1.15], shell: 0, view: 250, sink: 0.05, field: [1.0, 0.6] },
+    variants: 3
+  },
+  cassava: {
+    name: '木薯',                                                       // Manihot esculenta（原住民的 conuco、莊園的口糧田）：一根細長、一節一節的灰褐木稈，頂上一把長葉柄撐開的掌狀深裂葉（像一把小傘）
+    meta: { region: ['carib'], type: 'crop' },
+    height: [1.6, 2.3],
+    trunk: { r: [0.018, 0.024], taper: 0.7, bend: 0.25, segs: 3, sides: [4, 3], lean: 0.12, col: [0.56, 0.50, 0.42], top: 0.85 },
+    levels: [],
+    leaf: { kind: 'fan', n: [9, 13], stalk: [0.22, 0.36], r: [0.15, 0.2], arc: 300, rays: [7, 5], rise: [-5, 55], cup: 0.1, col: [0.20, 0.38, 0.16], vary: 0.12, knob: [0.03, [0.50, 0.30, 0.24]] },   // rays 7 ＋ 肋尖一長一短 ⇒ 掌狀裂葉；knob：頂上的小芽（沒寫 ⇒ 扇葉棕櫚那顆 17 cm 的棕球）
+    place: { town: true, spacing: 1, scale: [0.85, 1.15], shell: 0, view: 300, sink: 0.05, field: [1.0, 0.9] },
+    variants: 3
+  },
   // ── 只種在城鎮標的位置（place.town：不照地形自己長；雕刻作品的子作品標 meta kind=tree、tree=<樹種> ⇒ 遊戲照那裡種這一種，63_towns.js townTreesSet；TASK-0748）──
   //   Tim 2026-10-22：「樹木可以用Blocksail的生成式樹木嗎(新功能 標meta替換為遊戲內樹木 確保風格統一)」「可以標記樹的類型(也可以由妳加新種的生成式樹木)」
   //   ⇒ 君士坦丁堡 1453 的園子、修道院、墓園用的地中海樹種。spacing 只拿來算樹冠殼的權重（城鎮的樹一棵一棵照標的點）。
@@ -551,7 +596,8 @@ var TREE_LEAF = {
       }
       for (q = 0; q < nr; q++) treeTri(M, E, pts[q], pts[q + 1], col, [0.5, 0.9, 0.9], 0.5);
     }
-    treeBall(M, [c[0], c[1] - 0.05, c[2]], 0.17, 1.2, [0.42, 0.38, 0.28], 0.3, null);
+    var kb = Lf.knob || [0.17, [0.42, 0.38, 0.28]];                      // 頂上那顆球：[半徑, 顏色]（木薯是小芽）
+    treeBall(M, [c[0], c[1] - 0.05, c[2]], kb[0], 1.2, kb[1], 0.3, null);
   },
   /** 柱頭（仙人掌）：每個枝尖（含樹幹頂）一顆圓的蓋子，半徑 ＝ 那一根在尖端的粗 × r（沒寫 1.05）；flat 上下拉長（沒寫 0.9）；col 沒寫 ＝ 樹幹色（土耳其頭仙人掌：紅色的花座）。 */
   cap: function (M) {
