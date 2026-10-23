@@ -148,27 +148,33 @@ function treeTownPut(J) {
 }
 /** 附屬的田（TASK-0862；63_towns.js townPrep 的 T.fields：一列一段一條長方形，地塊座標 a 沿進深、b 沿寬）：落在這一塊的照作物的 place.field ＝ [行距, 株距]
  *  一行一行種（行沿進深；行距那一邊對齊鋪土的壟，63_towns.js townGroundTile）；高度照整過地的那一份（J.hAt）；抖動、轉角、大小、深淺、第幾棵照位置的雜湊（每次一樣）。
- *  作物沒有這一種（TREE_SPECIES 沒有、或沒寫 place.field）⇒ 只鋪土不種（TREES.stat.fieldSkip）。 */
+ *  作物沒有這一種（TREE_SPECIES 沒有、或沒寫 place.field）⇒ 只鋪土不種（TREES.stat.fieldSkip）。
+ *  地標雕好的田（63_towns.js townTreesSet 的 T.lmf：F.lm，原點 o、沿行 ua × la、跨行 ub × lb，世界座標）⇒ 同一套行距株距、高度照模型的土面（F.y；不照地形）；
+ *    比半個行距（株距）還窄的長方形（小屋、柱礎壓掉的缺角）不種，面積照算（TREES.stat.lmThin）。 */
 function treeFieldPut(J) {
   if (typeof TOWNS === 'undefined' || !TOWNS.list.length) return;
   var C = J.C, size = BED.A.chunk, x0 = C.cx * size - BED.ax, z0 = C.cy * size - BED.az, out = J.out, bb = J.bb;
   TOWNS.list.forEach(function (T) {
-    (T.fields || []).forEach(function (F) {
+    (T.fields || []).concat(T.lmf || []).forEach(function (F) {
       var xs = F.R.map(function (q) { return q[0] - BED.ax; }), zs = F.R.map(function (q) { return q[1] - BED.az; });
       if (Math.min.apply(null, xs) >= x0 + size || Math.max.apply(null, xs) < x0 || Math.min.apply(null, zs) >= z0 + size || Math.max.apply(null, zs) < z0) return;
       var si = J.SP.indexOf(F.crop), S = si >= 0 ? TREE_SPECIES[F.crop] : null, Fd = S && S.place.field;
       if (!Fd) { TREES.stat.fieldSkip = (TREES.stat.fieldSkip || 0) + 1; return; }
-      var nb = Math.max(1, Math.round((F.b1 - F.b0) / (Fd[0] * TREE_FIELD_SP))), na = Math.max(1, Math.round((F.a1 - F.a0) / (Fd[1] * TREE_FIELD_SP))), sk = (S.place.sink != null ? S.place.sink : 0.3) * TREE_FIELD_K, sc = S.place.scale;
+      var lb = F.lm ? F.lb : F.b1 - F.b0, la = F.lm ? F.la : F.a1 - F.a0;   // 跨行（行距那一邊）、沿行（株距那一邊）多長
+      if (F.lm && (lb < Fd[0] * TREE_FIELD_SP / 2 || la < Fd[1] * TREE_FIELD_SP / 2)) { TREES.stat.lmThin = (TREES.stat.lmThin || 0) + 1; return; }
+      var nb = Math.max(1, Math.round(lb / (Fd[0] * TREE_FIELD_SP))), na = Math.max(1, Math.round(la / (Fd[1] * TREE_FIELD_SP))), sk = (S.place.sink != null ? S.place.sink : 0.3) * TREE_FIELD_K, sc = S.place.scale;
       for (var kb = 0; kb < nb; kb++) for (var ka = 0; ka < na; ka++) {
-        var b = F.b0 + (F.b1 - F.b0) * (kb + 1 - (1 - TOWN_FURROW) / 2) / nb, a = F.a0 + (F.a1 - F.a0) * (ka + 0.5) / na;   // 種在壟的中線
-        var tx = F.at[0] + F.fx * a - F.fy * b, ty = F.at[1] + F.fy * a + F.fx * b, e = T.E([tx, ty]), x = e[0] - BED.ax, z = e[1] - BED.az;
+        var b = lb * (kb + 1 - (1 - TOWN_FURROW) / 2) / nb, a = la * (ka + 0.5) / na, x, z;   // 種在壟的中線
+        if (F.lm) { x = F.o[0] + F.ua[0] * a + F.ub[0] * b; z = F.o[1] + F.ua[1] * a + F.ub[1] * b; }
+        else { var tx = F.at[0] + F.fx * (F.a0 + a) - F.fy * (F.b0 + b), ty = F.at[1] + F.fy * (F.a0 + a) + F.fx * (F.b0 + b), e = T.E([tx, ty]); x = e[0] - BED.ax; z = e[1] - BED.az; }
         var gi = Math.round(x * 8), gj = Math.round(z * 8), jt = Fd[1] * TREE_FIELD_SP * 0.18;
         x += (treeHash(gi, gj, 7341) - 0.5) * 2 * jt; z += (treeHash(gi, gj, 7342) - 0.5) * 2 * jt;
         if (x < x0 || x >= x0 + size || z < z0 || z >= z0 + size) continue;
-        var y = J.hAt(x - x0, z - z0) + TOWN_ROAD_LIFT - sk;              // 站在鋪的土上（townGroundTile 的土高出地面 TOWN_ROAD_LIFT；第一版種在地面 ⇒ 菜畦整株埋在土底下）
+        var y = (F.lm ? F.y : J.hAt(x - x0, z - z0) + TOWN_ROAD_LIFT) - sk;   // 附屬的田：站在鋪的土上（townGroundTile 的土高出地面 TOWN_ROAD_LIFT；第一版種在地面 ⇒ 菜畦整株埋在土底下）；地標的田：模型的土面
         out.push(x, y, z, treeHash(gi, gj, 7343) * 6.2832, (sc[0] + (sc[1] - sc[0]) * treeHash(gi, gj, 7344)) * TREE_FIELD_K, 0.88 + 0.24 * treeHash(gi, gj, 7345), si, Math.floor(treeHash(gi, gj, 7346) * S.variants));
         bb[0] = Math.min(bb[0], x); bb[2] = Math.min(bb[2], z); bb[3] = Math.max(bb[3], x); bb[5] = Math.max(bb[5], z); bb[1] = Math.min(bb[1], y); bb[4] = Math.max(bb[4], y + S.height[1] * TREE_FIELD_K);
-        TREES.stat.field = (TREES.stat.field || 0) + 1; TREES.stat.bySp[F.crop] = (TREES.stat.bySp[F.crop] || 0) + 1;
+        if (F.lm) TREES.stat.lmField = (TREES.stat.lmField || 0) + 1; else TREES.stat.field = (TREES.stat.field || 0) + 1;
+        TREES.stat.bySp[F.crop] = (TREES.stat.bySp[F.crop] || 0) + 1;
       }
     });
   });
@@ -476,7 +482,7 @@ function treeFind(sp, n, at) {
 function treeStat() {
   var S = TREES.stat;
   return { on: TREES.on, kinds: Object.keys(TREE_SPECIES), variants: TREES.list.length, planted: S.plant, bySp: S.bySp, far: S.far, drawn: { full: S.d0, low: S.d1, card: S.d2, shells: S.shells || 0, shellTris: S.shellTris || 0 },
-    pages: TREES.pages ? TREES.pages.map(function (P) { return P.key + ':' + P.cells.length + (P.tex ? '（拍了）' : ''); }) : null, field: S.field || 0, fieldSkip: S.fieldSkip || 0,   // 貼圖集分張（照 meta.region）、附屬的田種了幾株
+    pages: TREES.pages ? TREES.pages.map(function (P) { return P.key + ':' + P.cells.length + (P.tex ? '（拍了）' : ''); }) : null, field: S.field || 0, fieldSkip: S.fieldSkip || 0, lmField: S.lmField || 0, lmThin: S.lmThin || 0,   // 貼圖集分張（照 meta.region）、附屬的田種了幾株
     ms: { gen: +S.genMs.toFixed(1), bake: +S.bakeMs.toFixed(1), plant: +S.plantMs.toFixed(1), bin: +S.binMs.toFixed(2) },
     tris: TREES.init ? Object.keys(TREE_SPECIES).reduce(function (o, sp, si) { var T = TREES.list[TREES.vi[si]]; o[sp] = [T.lod[0].n / 3, T.lod[1].n / 3]; return o; }, {}) : null };
 }

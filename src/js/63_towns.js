@@ -7,6 +7,7 @@
 // 整地（townHv；每塊海圖塊第一次要畫的時候算、城到了再重算）：路（照 z，路寬一半 ＋ 一個取樣點內整平）先、地塊的 grade（照 h，外擴 TOWN_LOT_PAD）後，
 //   外面照邊坡 1 : bank 接回原地形（|高差| ≤ 距離 ÷ bank，路最多接 TOWN_GRADE_REACH 公尺）；只改陸上的點（原本 ≤ 0 的不動 ⇒ 岸線不變）。
 // 樹（townTreesSet）：模型標了樹（Blocksail townmodels.py 的 m.trees：雕刻的子作品 meta kind=tree）⇒ 實例建好時照實例的位置換到世界、記在 T.trees ⇒ 63_trees.js 照它種遊戲自己生成的樹（風格跟島上的樹一樣）。
+//   模型雕好的田（m.fields：子作品 meta kind=field；地標兼任農莊，TASK-0862）⇒ 同一支換到世界、記在 T.lmf ⇒ 63_trees.js treeFieldPut 照地塊帶的作物種。
 //   下沉的地塊（grade 帶 pit；Blocksail 特殊建築表的 sink，例：露天蓄水池，TASK-0748）：只把地塊裡面、離邊 ≥ pit 公尺的點整到 h（地面下），外面不接邊坡、「地塊頂著」那一輪跳過
 //   ⇒ 挖下去的那一圈斜面落在離邊 pit ＋ 一個取樣點之內 ＝ 模型的池牆裡（牆厚要 ≥ pit ＋ 4 m）。
 // 地基（Tim 2026-10-20：「是否可以協助處理 房屋地基可能跟地面重疊導致的閃爍問題」「可以參考其他城建遊戲的作法」—— Cities: Skylines、Anno 那一類：
@@ -1205,22 +1206,36 @@ function townFlags(T) {
 }
 /** 城 T 的樹（雕刻作品的子作品標 meta kind=tree、tree=<樹種> ⇒ Blocksail tools/townmodels.py 匯入時把那一件的格子拿掉、一團一棵記成 m.trees ＝ [[格 x, 格 y, 格 z, 高 m, 寬 m, 樹種] …]）
  *  ⇒ T.trees ＝ { a: Float32Array（6 個一組：世界 x, y（樹根）, z, 高, 寬, 樹種的號碼（TREE_SPECIES 的順序））, n, bb }；跟上一份不同 ⇒ 載進來、碰得到的塊重擺樹（63_trees.js treeTownPut）。
- *  樹種沒有 ⇒ 闊葉樹。⛔ 不碰戰局（樹只給人看）。 */
+ *  樹種沒有 ⇒ 闊葉樹。⛔ 不碰戰局（樹只給人看）。
+ *  地標兼任的田（TASK-0862；Blocksail 特殊建築表的 prod ⇒ 規劃那一塊地塊帶 annex：{ crop, fixed }、沒有 cells；模型雕好的菜畦標 meta kind=field ⇒ townmodels.py 把壟拿掉、
+ *    記成 m.fields ＝ [[格 x0, 格 y0, 格 x1, 格 y1, 格 z（土面）, 行沿哪一軸（0 ＝ 模型 x、1 ＝ y）] …]）⇒ 一塊一條長方形換到世界記在 T.lmf（63_trees.js treeFieldPut 跟附屬的田一起種）；
+ *    地塊沒帶作物（沒登記兼任）⇒ 不種（土照模型留著）。 */
 function townTreesSet(T) {
-  var K = TOWNS.kit, SP = Object.keys(TREE_SPECIES), a = [], bb = [1e9, 1e9, -1e9, -1e9], sig = 0;
+  var K = TOWNS.kit, SP = Object.keys(TREE_SPECIES), a = [], bb = [1e9, 1e9, -1e9, -1e9], sig = 0, lmf = [], crop = {};
+  (T.p.lots || []).forEach(function (l) { if (l.annex && l.annex.fixed && l.annex.crop) crop[l.id] = l.annex.crop; });
   (T.inst || []).forEach(function (q) {
-    var M = K && K.M[q.k], m = M && M.m; if (!m || !m.trees || !(q.y === q.y)) return;
+    var M = K && K.M[q.k], m = M && M.m; if (!m || !(m.trees || m.fields) || !(q.y === q.y)) return;
     var s = Math.sin(q.th), c = Math.cos(q.th), mpv = m.mpv, hw = m.size[0] * mpv / 2, hd = m.size[1] * mpv / 2;
-    m.trees.forEach(function (t) {
+    (m.trees || []).forEach(function (t) {
       var A = (t[0] * mpv - hw) * q.sx, B = t[1] * mpv - hd, x = q.x + A * s - B * c, z = q.z - A * c - B * s, si = SP.indexOf(t[5]); if (si < 0) si = SP.indexOf('broadleaf');
       a.push(x, q.y + t[2] * mpv, z, t[3], t[4], si); sig += x * 0.37 + z * 0.61 + si;
       bb[0] = Math.min(bb[0], x); bb[1] = Math.min(bb[1], z); bb[2] = Math.max(bb[2], x); bb[3] = Math.max(bb[3], z);
     });
+    var cr = q.lot && crop[q.lot]; if (!cr || !m.fields) return;
+    var ux = [s * q.sx, -c * q.sx], uy = [-c, -s];                    // 模型 +x、+y 各走 1 m ⇒ 世界 (x, z) 走多少（同上面樹的公式）
+    m.fields.forEach(function (r) {
+      var A = (r[0] * mpv - hw) * q.sx, B = r[1] * mpv - hd, o = [q.x + A * s - B * c, q.z - A * c - B * s], lx = (r[2] - r[0]) * mpv, ly = (r[3] - r[1]) * mpv;
+      var F = r[5] ? { ua: uy, la: ly, ub: ux, lb: lx } : { ua: ux, la: lx, ub: uy, lb: ly };   // a ＝ 沿行（株距）、b ＝ 跨行（行距）
+      F.lm = true; F.lot = q.lot; F.crop = cr; F.o = o; F.y = q.y + r[4] * mpv;
+      F.R = [[0, 0], [F.la, 0], [F.la, F.lb], [0, F.lb]].map(function (p) { return [o[0] + F.ua[0] * p[0] + F.ub[0] * p[1] + BED.ax, o[1] + F.ua[1] * p[0] + F.ub[1] * p[1] + BED.az]; });   // 同附屬的田：海域座標
+      lmf.push(F); sig += o[0] * 0.13 + o[1] * 0.29;
+    });
   });
-  (T.fields || []).forEach(function (F) { F.R.forEach(function (q) { var x = q[0] - BED.ax, z = q[1] - BED.az; bb[0] = Math.min(bb[0], x); bb[1] = Math.min(bb[1], z); bb[2] = Math.max(bb[2], x); bb[3] = Math.max(bb[3], z); }); });   // 附屬的田（treeFieldPut）也照這個框重排
-  sig = a.length + ':' + sig.toFixed(3) + ':f' + (T.fields || []).length;
+  T.lmf = lmf;
+  (T.fields || []).concat(lmf).forEach(function (F) { F.R.forEach(function (q) { var x = q[0] - BED.ax, z = q[1] - BED.az; bb[0] = Math.min(bb[0], x); bb[1] = Math.min(bb[1], z); bb[2] = Math.max(bb[2], x); bb[3] = Math.max(bb[3], z); }); });   // 附屬的田、地標的田（treeFieldPut）也照這個框重排
+  sig = a.length + ':' + sig.toFixed(3) + ':f' + (T.fields || []).length + ':l' + lmf.length;
   var had = T.trees && (T.trees.n || T.trees.nf); if (T.trees && T.trees.sig === sig) return;
-  T.trees = { a: new Float32Array(a), n: a.length / 6, nf: (T.fields || []).length, bb: bb, sig: sig };
+  T.trees = { a: new Float32Array(a), n: a.length / 6, nf: (T.fields || []).length + lmf.length, bb: bb, sig: sig };
   if ((!a.length && !T.trees.nf && !had) || typeof TREES === 'undefined' || !TREES.on || !BED || !BED.A) return;
   var size = BED.A.chunk, ob = had ? null : bb;
   Object.keys(BED.ch).forEach(function (k) {
