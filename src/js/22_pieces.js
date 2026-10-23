@@ -113,7 +113,8 @@ function stepPiece1(pc, dt) {
     if (pc.c[1] < sea) {
       var float = sea + (pc.t < 40 ? -0.6 : -0.6 - (pc.t - 40) * 0.8);                     // 浮在水面 40 秒，之後慢慢沉
       pc.v[1] += ((float - pc.c[1]) * 3 - pc.v[1] * 2.5) * dt + G * dt;
-      if (VX) { var cf = vxFlow(pc.c[0], pc.c[2]), dk = 1 - 1.6 * dt; pc.v = [cf[0] + (pc.v[0] - cf[0]) * dk, pc.v[1] * dk, cf[1] + (pc.v[2] - cf[1]) * dk]; }   // 大漩渦（08_sea.js）：水平的阻力照「對水」的速度 ⇒ 漂著的碎片跟著水流繞
+      var cf = seaFlow(pc.c[0], pc.c[2]);                                 // 水流（08_sea.js seaFlow：洋流 ＋ 大漩渦；TASK-0842）
+      if (cf) { var dk = 1 - 1.6 * dt; pc.v = [cf[0] + (pc.v[0] - cf[0]) * dk, pc.v[1] * dk, cf[1] + (pc.v[2] - cf[1]) * dk]; }   // 大漩渦（08_sea.js）：水平的阻力照「對水」的速度 ⇒ 漂著的碎片跟著水流繞
       else pc.v = mul(pc.v, 1 - 1.6 * dt);
       pc.w = mul(pc.w, 1 - 1.8 * dt);
       if (!pc.wet) { pc.wet = true; for (var k = 0; k < Math.min(6, 1 + pc.n / 8000); k++) splash(add(pc.c, [gauss() * 4, 0, gauss() * 4]), true); } }

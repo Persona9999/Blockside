@@ -158,7 +158,7 @@ function bedGpu(M, g) {
 var BED_VS = '#version 300 es\nlayout(location=0) in vec3 aP; layout(location=1) in vec3 aN; layout(location=2) in vec3 aC; layout(location=3) in vec4 aK; uniform mat4 uVP; out vec3 vN; out vec3 vW; out vec3 vC; out vec4 vK;\n' +
   'void main(){ vN=aN; vW=aP; vC=aC; vK=aK; gl_Position=uVP*vec4(aP,1.0); }\n';
 function bedFS() {
-  return '#version 300 es\nprecision highp float;\n' + SHADOW_GLSL + TLAMP_GLSL + 'in vec3 vN; in vec3 vW; in vec3 vC; in vec4 vK; uniform vec3 uSun,uEye,uFog,uSky,uGround; uniform float uFogD; out vec4 o;\n' +
+  return '#version 300 es\nprecision highp float;\n' + SHADOW_GLSL + TLAMP_GLSL + BED_HOLE_GLSL + 'in vec3 vN; in vec3 vW; in vec3 vC; in vec4 vK; uniform vec3 uSun,uEye,uFog,uSky,uGround; uniform float uFogD; out vec4 o;\n' +
     'float bh(vec2 p){ p=fract(p*vec2(123.34,456.21)); p+=dot(p,p+45.32); return fract(p.x*p.y); }\n' +
     'float bn(vec2 p){ vec2 i=floor(p), f=fract(p); f=f*f*(3.0-2.0*f); return mix(mix(bh(i),bh(i+vec2(1.0,0.0)),f.x),mix(bh(i+vec2(0.0,1.0)),bh(i+vec2(1.0,1.0)),f.x),f.y); }\n' +
     'float bf(vec2 p){ return (bn(p)*0.5+bn(p*2.03)*0.25+bn(p*4.01)*0.125+bn(p*8.07)*0.0625)/0.9375; }\n' +
@@ -177,7 +177,7 @@ function bedFS() {
     ' vec3 pc=bcell(q*0.95+vec2(bn(q*0.4),bn(q*0.4+3.3))*0.9); float ed=pc.x+(bn(q*3.1)-0.5)*0.22+(bn(q*7.3)-0.5)*0.08*baa(7.3,fw);\n' +
     ' float pt=(1.0-smoothstep(0.08+0.1*pc.z,0.34+0.1*pc.z,ed))*step(pc.y,0.4)*baa(0.95,fw), pf=0.8+0.4*bn(q*5.0), mo=bf(q*0.22+vec2(yy*0.1));\n' +
     ' m*=(1.0+nk*(0.18*gn+0.3*(mo-0.5)))*(1.0-nk*0.22*pt*pf); return vec4(m, smoothstep(0.62,0.75,bf(q*0.45+vec2(yy*0.5,3.0)))*nk, ck.y, nk*(0.06*ck.x-0.07*pt*pf+0.04*gn+0.05*st+0.08*mo)); }\n' +
-    'void main(){ if(vW.y<uClip) discard; vec3 n=normalize(vN); vec2 p=vW.xz; float fd=length(vW-uEye), dk=1.0-smoothstep(250.0,1800.0,fd), nk=1.0-smoothstep(70.0,260.0,fd);\n' +
+    'void main(){ if(vW.y<uClip) discard; if(bedHole(vW.xz)) discard; vec3 n=normalize(vN); vec2 p=vW.xz; float fd=length(vW-uEye), dk=1.0-smoothstep(250.0,1800.0,fd), nk=1.0-smoothstep(70.0,260.0,fd);\n' +
     ' float fw=max(length(dFdx(p)),length(dFdy(p))), hb=0.0, wet=0.0; vec3 col=vC;\n' +
     // 陡的面（岩石用）：側面的座標 sq（照法線比較朝東西還是南北）與它一個像素佔幾公尺；sv：坡越陡越照側面（法線 y 0.85 ⇒ 0.6）
     ' vec2 sq=abs(n.x)>abs(n.z)?vW.zy:vW.xy; float fws=max(length(dFdx(sq)),length(dFdy(sq))), sv=smoothstep(0.85,0.6,n.y);\n' +
@@ -283,6 +283,26 @@ function bedWaterU(u) {
   gl.activeTexture(gl.TEXTURE10); gl.bindTexture(gl.TEXTURE_2D, on ? BEDFOAM.tex : DUMMY); gl.uniform1i(u.uBedT, 10); gl.activeTexture(gl.TEXTURE0);
   if (on) gl.uniform4f(u.uBedR, BEDFOAM.ox, BEDFOAM.oz, BEDFOAM.sp, BEDFOAM.N);
   bedDryU(u);
+}
+// 地形挖洞（BEDHOLE；Tim 2026-10-23「細格地形限制 是否可以讓建築meta決定是否顯示下方地形(建築可以往下挖坑)」「同時廣場也支援」）：
+//   城鎮的地塊框（63_towns.js townHoles：模型 meta ground=hide 的建築、規劃寫 hide 的廣場）裡面的地形不畫 —— 遠近每一層（細的、遠景塊）、陰影那一支都丟
+//   ⇒ 地面由模型自己給（池底、坑、台地）；只給人看（模擬查的地形照舊）。框 ＝ 中心、沿 d 的單位向量、半深、半寬（海域座標 − BED.ax／az）；最多 BED_HOLE_N 個（多了 ⇒ 離鏡頭近的先）。
+var BEDHOLE = { list: [], a: null, b: null }, BED_HOLE_N = 32;
+var BED_HOLE_GLSL = 'uniform vec4 uHoleA[' + BED_HOLE_N + ']; uniform vec4 uHoleB[' + BED_HOLE_N + ']; uniform int uHoleN;\n' +
+  'bool bedHole(vec2 p){ for(int i=0;i<' + BED_HOLE_N + ';i++){ if(i>=uHoleN) break; vec4 a=uHoleA[i]; vec2 d=p-a.xy, u=uHoleB[i].xy; if(abs(dot(d,u))<a.z && abs(d.x*u.y-d.y*u.x)<a.w) return true; } return false; }\n';
+var BED_DEPTH_FS = '#version 300 es\nprecision highp float; in vec3 vW;\n' + BED_HOLE_GLSL + 'void main(){ if(bedHole(vW.xz)) discard; }\n';   // 地形的陰影：挖了洞的地方也不擋光（不然坑底被看不見的地面遮暗）
+/** 63_towns.js 建好實例時叫：list ＝ [{ x, z, ux, uz, hd, hw }…]；換了 ⇒ 那幾格的陰影重畫。 */
+function bedHoleSet(list) {
+  var old = BEDHOLE.list; BEDHOLE.list = list || [];
+  old.concat(BEDHOLE.list).forEach(function (h) { var r = h.hd + h.hw; bedMeshChanged([h.x - r, -1e4, h.z - r, h.x + r, 1e4, h.z + r]); });
+}
+function bedHoleU(u) {
+  if (!u.uHoleN) return;
+  var L = BEDHOLE.list, e = CAM.eye;
+  if (L.length > BED_HOLE_N) L = L.slice().sort(function (a, b) { return Math.hypot(a.x - e[0], a.z - e[2]) - Math.hypot(b.x - e[0], b.z - e[2]); }).slice(0, BED_HOLE_N);
+  var A = BEDHOLE.a || (BEDHOLE.a = new Float32Array(4 * BED_HOLE_N)), B = BEDHOLE.b || (BEDHOLE.b = new Float32Array(4 * BED_HOLE_N));
+  L.forEach(function (h, i) { A[4 * i] = h.x; A[4 * i + 1] = h.z; A[4 * i + 2] = h.hd; A[4 * i + 3] = h.hw; B[4 * i] = h.ux; B[4 * i + 1] = h.uz; });
+  gl.uniform1i(u.uHoleN, L.length); if (L.length) { gl.uniform4fv(u.uHoleA, A); gl.uniform4fv(u.uHoleB, B); }
 }
 /** 低於海平面的乾地的遮罩（01_gl.js BED_DRY_GLSL）：接第 12 號；沒有 ⇒ uDryOn 0（整段跳過）。海、遠海兩支著色器都叫。 */
 function bedDryU(u) {
@@ -507,8 +527,8 @@ function bedSeaDraw() {
 }
 /** 陰影的靜態那一層（60_render.js csmStatic；PASS.vp 已經換成那一段）：地形的網格只寫深度 —— 細的、沒有細的才畫遠景塊，照陰影那一層的範圍（PL）剔除。⇒ 畫了幾塊。 */
 function bedDepth(PL) {
-  var P0 = P.bedD || (P.bedD = VK.compile(gl, BED_VS, DEPTH_ONLY_FS)), n = 0;
-  gl.useProgram(P0.prog); setCommon(P0);
+  var P0 = P.bedD || (P.bedD = VK.compile(gl, BED_VS, BED_DEPTH_FS)), n = 0;
+  gl.useProgram(P0.prog); setCommon(P0); bedHoleU(P0.u);
   function one(g) { if (!g || !g.n || (g.bb && !bedSeen(PL, g.bb))) return; n++; gl.bindVertexArray(g.vao); gl.drawElements(gl.TRIANGLES, g.n, gl.UNSIGNED_INT, 0); }
   Object.keys(BEDGL).forEach(function (k) { one(BEDGL[k]); });
   Object.keys(BEDFAR.g).forEach(function (k) { if (!BEDGL[k]) one(BEDFAR.g[k]); });
@@ -520,7 +540,7 @@ function bedDraw() {
   bedBuild();
   var PB = P.bed || (P.bed = glProgTry(BED_VS, bedFS()));                // 開機時先送出編譯（01_gl.js programs）；還沒編好 ⇒ 這一格不畫地形（TASK-0816：以前在這裡等 2.6 秒）
   if (!PB) return;
-  gl.useProgram(PB.prog); setCommon(PB);
+  gl.useProgram(PB.prog); setCommon(PB); bedHoleU(PB.u);
   gl.uniform1f(PB.u.uFogD, WX.fog * BED_FOG * CAM.fogK);                            // 霧淡一點：島要從幾公里外就看得到（船照原本的霧）
   var PL = bedPlanes(PASS.vp || CAM.vp), D = BEDDRAW; D.n = D.cull = D.tris = 0;   // 視錐外的塊不畫（鏡頭後面、旁邊的島；BEDDRAW ⇒ __game.bed().draw）
   function one(g) { if (g.bb && !bedSeen(PL, g.bb)) { D.cull++; return; } D.n++; D.tris += g.n / 3; gl.bindVertexArray(g.vao); gl.drawElements(gl.TRIANGLES, g.n, gl.UNSIGNED_INT, 0); }

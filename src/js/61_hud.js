@@ -660,6 +660,14 @@ function drawNav(sh) {
   });
   g.beginPath(); g.moveTo(a1[0] - hd[0] * hs + nx * hs * 0.8, a1[1] - hd[2] * hs + ny * hs * 0.8); g.lineTo(a1[0], a1[1]); g.lineTo(a1[0] - hd[0] * hs - nx * hs * 0.8, a1[1] - hd[2] * hs - ny * hs * 0.8); g.stroke();
   g.lineCap = 'butt';
+  // 洋流（TASK-0842；Tim 2026-10-23「海戰羅盤上多顯示洋流資訊」）：這艘船那裡的水流（08_sea.js seaFlow ＝ 洋流 ＋ 大漩渦）往下游的青綠虛線箭頭（同 Blocksail 地球儀的羅盤），
+  //   跟航速箭頭一樣從圈內 0.86 起往外伸（外圈是船體／進水兩圈，圈外沒地方），越快越長（0.2 ＋ 節 × 0.14 個半徑，最長 0.5）；不到 0.05 節不畫
+  var cfl = seaFlow(sh.px, sh.pz), ckn = cfl ? Math.hypot(cfl[0], cfl[1]) * 1.9438 : 0;
+  if (ckn >= 0.05) {
+    var cd = [cfl[0], 0, cfl[1]], cl = Math.min(0.5, 0.2 + ckn * 0.14), c0 = P(norm(cd), 0.86), c1 = P(norm(cd), 0.86 + cl), cs = Math.hypot(c1[0] - c0[0], c1[1] - c0[1]) || 1, cx1 = (c1[0] - c0[0]) / cs, cy1 = (c1[1] - c0[1]) / cs;
+    g.setLineDash([4, 3]); g.lineCap = 'round'; line(c0, c1, '#3fd6c0', 2.5); g.setLineDash([]); g.lineCap = 'butt';
+    g.fillStyle = '#3fd6c0'; g.beginPath(); g.moveTo(c1[0] + cx1 * 5, c1[1] + cy1 * 5); g.lineTo(c1[0] - cy1 * 4, c1[1] + cx1 * 4); g.lineTo(c1[0] + cy1 * 4, c1[1] - cx1 * 4); g.closePath(); g.fill();
+  }
   // 其他船的方位（TASK-0537：全部畫，敵紅、友藍、沉了灰；一對一 ＝ 以前那一個紅點）
   SHIPS.forEach(function (o) {
     if (o === sh || !o.center || !sh.center) return;
@@ -708,6 +716,8 @@ function navText(sh) {
   var roll = (sh.rollA + (sh.rollW || 0)) * 57.2958, pitch = (sh.pitchA + (sh.pitchW || 0)) * 57.2958;
   return '航向 ' + deg3(hb) + '（' + compassName(hb) + '）' + (Math.abs(yr) > 0.0035 ? '　<span style="color:' + TURN_COL + '">' + (yr > 0 ? '左' : '右') + '轉 ' + (Math.abs(yr) * 57.2958).toFixed(1) + '°/秒</span>' : '') + '<br>' +   // yawRate 正 ＝ 畫面上左轉（31_sailing.js fwd）
     '<span style="color:#8fd3ff">風 從 ' + deg3(wb) + '（' + compassName(wb) + '）' + windKnots().toFixed(0) + ' 節</span>' + (sh.irons > 0.05 ? '　<b style="color:#ff9a7a">失速' + (sh.irons < 0.95 ? ' ' + Math.round(sh.irons * 100) + '%' : '') + '</b>' : '') + '<br>' +
+    (function (cf) { var kn = cf ? Math.hypot(cf[0], cf[1]) * 1.9438 : 0, cb = kn >= 0.05 ? bearing(cf[0], cf[1]) : 0; return kn >= 0.05 ? '<span style="color:#3fd6c0">水流 往 ' + deg3(cb) + '（' + compassName(cb) + '）' + kn.toFixed(1) + ' 節</span><br>' : ''; })(seaFlow(sh.px, sh.pz)) +   // 洋流 ＋ 大漩渦（08_sea.js seaFlow；TASK-0842）
+
     '傾斜 ' + Math.abs(roll).toFixed(1) + '°' + (Math.abs(roll) < 0.2 ? '' : roll < 0 ? '（左低）' : '（右低）') + '　縱傾 ' + pitch.toFixed(1) + '°';
 }
 /** P 那顆按鈕：停格中寫「繼續」、平常寫「停格」（Tim 2026-10-14）。 */
