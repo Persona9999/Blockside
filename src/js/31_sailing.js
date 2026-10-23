@@ -255,7 +255,7 @@ function collidePair(A, B, ka, kb) {
   wpBump(pa, pb, A, B);                                                // 船邊水花（13_water.js；只給人看）
   if (SIMT - (A.bumpT || -9) > 5) { A.bumpT = SIMT; if (!ramOn(A, B)) hitSfx(A, B, n, pa); note(SHIPS[PLAYER_I], '兩艘擦撞'); }   // 撞擊事件剛開 ⇒ 聲音 ramHit 放過了
 }
-// 碰撞的聲音（TASK-0868；02_audio.js hitVoice）：sfx('hit', 撞點, 力道 I, { mat })；兩艘撞到的材質不一樣 ⇒ 兩聲都放。⛔ 只讀：不改速度、不抽 rnd()（無頭 dump 不變）。
+// 碰撞的聲音（TASK-0868；02_audio.js hitVoice）：兩艘各放一聲 sfx('hit', 撞點, 力道 I, { mat, mass, k: 0.75 }) —— 各照自己撞到的材質與船的質量（Tim 2026-10-23「船體材質&質量」）。⛔ 只讀：不改速度、不抽 rnd()（無頭 dump 不變）。
 //   力道 I ＝ 撞擊動能的對數：HIT_E0（50 kJ）⇒ 0、HIT_E1（30 MJ）⇒ 1 —— 兩艘 2,152 噸（憲法號、合眾國號）船頭撞舷側：0.5 m/s 215 kJ ⇒ 0.23、門檻 1.5 m/s ⇒ 0.57、4 m/s 13,781 kJ（README 量過）⇒ 0.88。動能跟 ramHit 同一條（沿接觸法線的接近速度、有效質量，½ μ du²）；撞擊事件直接給它算好的 E0。
 //   材質：撞點那一格（空的 ⇒ 半徑 2 格內最近的實心格）是金屬、而且硬度 ≥ HIT_METAL_HARD ⇒ 'metal'；其他 'wood'（銅包皮 1.1、鍋爐 1.5 這種薄的、包在裡面的照木頭；定遠號 1.25 cm 的鐵板是 4）。
 var HIT_METAL_HARD = 2, HIT_E0 = 50, HIT_E1 = 30000, HIT_NEAR = null;
@@ -274,7 +274,7 @@ function hitSfx(A, B, n, w, E, LA, LB) {
     E = 0.5 * mA * mB / (mA + mB) * du * du;
   }
   var I = hitForce(E), ma = hitMat(A, LA || M4.pt(A.inv, w[0], w[1], w[2])), mb = hitMat(B, LB || M4.pt(B.inv, w[0], w[1], w[2]));
-  sfx('hit', w, I, { mat: ma }); if (mb !== ma) sfx('hit', w, I, { mat: mb });
+  sfx('hit', w, I, { mat: ma, mass: A.mass0 || shipT(A), k: 0.75 }); sfx('hit', w, I, { mat: mb, mass: B.mass0 || shipT(B), k: 0.75 });   // 兩聲疊起來 ⇒ 各 × 0.75
 }
 /** 摩擦：n ＝ 從 B 指向 A 的接觸法線（水平單位向量）。原本 ⇒ 兩艘都 ×0.97。 */
 function hitFriction(A, B, n) {

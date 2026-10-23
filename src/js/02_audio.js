@@ -24,10 +24,10 @@ function noiseMake(ac) {
 }
 var HIT_LOG = [];                                                        // 最近 32 聲碰撞（__game.hitLog；只記、不管有沒有聲音）
 function sfxPlay(kind, at, vol, opt) {
-  if (kind === 'hit') { HIT_LOG.push({ t: +SIMT.toFixed(2), I: +(vol || 0).toFixed(3), mat: (opt || {}).mat, bed: (opt || {}).bed || null, slide: (opt || {}).slide || 0, rub: !!(opt || {}).rub }); if (HIT_LOG.length > 32) HIT_LOG.shift(); }
+  if (kind === 'hit') { HIT_LOG.push({ t: +SIMT.toFixed(2), I: +(vol || 0).toFixed(3), mat: (opt || {}).mat, mass: Math.round((opt || {}).mass || 0), bed: (opt || {}).bed || null, slide: (opt || {}).slide || 0, rub: !!(opt || {}).rub }); if (HIT_LOG.length > 32) HIT_LOG.shift(); }
   if (!AC || muted) return;
   if (kind === 'boom' || kind === 'blast') SND_FIGHT = AC.currentTime;     // 開砲、爆炸 ⇒ 交戰中（02_music.js：BGM「交戰時小聲一點」那一檔 × BGM_DUCK）
-  var dist = at ? len(sub(at, CAM.eye)) : 0, v = (kind === 'hit' ? hitLoud(vol || 0) : vol || 1) / (1 + dist / 70);   // hit 的 vol 是力道（0–1），音量照它換（hitLoud）
+  var dist = at ? len(sub(at, CAM.eye)) : 0, v = (kind === 'hit' ? hitLoud(vol || 0) * ((opt || {}).k || 1) : vol || 1) / (1 + dist / 70);   // hit 的 vol 是力道（0–1），音量照它換（hitLoud）
   if (v < 0.01) return;
   var now = AC.currentTime, rec = SFX_RECENT[kind] || (SFX_RECENT[kind] = []);
   while (SFX_END.length && SFX_END[0] < now) SFX_END.shift();
@@ -55,65 +55,73 @@ function sfxEnd(e) { var k = SFX_END.length; while (k > 0 && SFX_END[k - 1] > e)
 
 // ───── 碰撞與觸礁（TASK-0868；Tim 2026-10-23：「希望可以更沉悶一些 另外木頭跟金屬材質可以用兩種音效(都用合成音)」「不直接用音檔 且根據撞擊力道變化音效」「觸礁也是」）─────
 // 以前擦撞、撞擊事件、觸礁都放 crack（雜音過 900–1800 Hz 帶通、0.35 秒 ＝ 砲彈打中木頭那一聲）⇒ 脆；音量固定 1／1.2／1.6，跟力道、材質無關。
-// 現在 sfx('hit', 撞點, 力道 I（0–1）, { mat, bed, slide, rub })，全部現場合成，整串最後過一個低通（悶；HIT_LP）：
-//   · 共同：一聲往下掉的低頻（木 75 Hz、金屬 62 Hz 起，力道越大越低）＋ 一段低通的衝擊雜音（力道越大越亮一點、越長）。
-//     ⚠ 只有低頻 ⇒ 筆電喇叭放不出來（第一版量過：頻譜重心 83–173 Hz）⇒ 聽得到的那一層是下面 150–600 Hz 的共鳴，低頻只當底。
-//   · 木頭 'wood'：四個木板的共鳴（150–190 Hz × 1、1.62、2.35、3.1 的正弦，0.1–0.4 秒就沒了：木頭吸振）＋ 一段帶通的粗糙聲 ＋ 重撞時散在半秒裡的幾粒悶的碎裂聲（⌊I² × 7⌋ 粒）＋ I > 0.6 船身受力的低沉嘎吱。
-//   · 金屬 'metal'：鐵板那種不成倍數的分音（150–180 Hz × 1、1.59、2.14、2.83、3.71；每個兩支差 0.4% 的正弦 ⇒ 會拍），餘響 0.7–2.7 秒；力道越大分音越多。
-//   · 觸礁 bed 'rock'（礁石、珊瑚、岩壁）：再加一段刮擦（帶通雜音一段接一段、中心頻率每段亂跳），長 slide 秒；'sand'（沙、泥、岸）：只加一段很低、很長的沙沙聲。
-//   力道 → 音量：hitLoud；力道怎麼算在發聲的那一邊（31_sailing.js hitSfx：撞擊動能；32_ground.js groundSfx：底的硬度 × 速度²）。
+// 現在 sfx('hit', 撞點, 力道 I（0–1）, { mat, mass, k, bed, slide, rub })，全部現場合成，整串最後過兩級低通（24 dB／八度；HIT_LP）：
+//   第二版（Tim 2026-10-23「聽起來還是很清脆」）：第一版的木頭是四個 150–600 Hz、起音 4 ms 的正弦 ＝ 木魚、木琴的做法 —— 頻譜重心低（224–311 Hz）照樣清脆，
+//   清脆的是「有音高」＋「起音硬」，不是頻率高。⇒ 拿掉有音高的短正弦、主體換成低通雜音、起音 12–30 ms、低通壓到 260–640 Hz。
+//   · 共同：底 ＝ 往下掉的低頻正弦（木 68 Hz、金屬 58 Hz 起，力道越大越低）；身體 ＝ 放慢一半的低通雜音（220–420 Hz 起）＋ 一段寬頻帶通的「咚」（190–240 Hz、Q 0.7：沒有音高；筆電喇叭聽得到的主要是這一層）。
+//   · 木頭 'wood'：很快就沒了（0.15–0.5 秒）；重撞加幾粒悶的壓碎聲（⌊I² × 5⌋ 粒、低通 380 Hz）、I > 0.6 船身受力的低沉嘎吱。
+//   · 金屬 'metal'：再加鐵殼的低嗡（78–92 Hz × 1、1.59、2.14，每個兩支差 0.6% ⇒ 會拍；起音 25–30 ms、餘響 0.9–2.9 秒）⇒ 嗡、不是噹。
+//   · 長度（Tim 2026-10-23「持續時間可以長一點(根據撞擊力道)」）：上面寫的秒數再 × (0.9 ＋ 1.1 I)；I > 0.2 再加一段低沉的尾聲（低通 140 Hz 雜音，0.4 ＋ 2 I 秒）。
+//   · 船的質量 mass（噸；Tim 2026-10-23「聲音可以根據船體質量變化」「船體材質&質量」）：大小 z ＝ ln(噸 ÷ 10) ÷ ln 500（10 噸 ⇒ 0、5,000 噸 ⇒ 1；憲法號 2,155 噸 0.86）——
+//     頻率 × (1.8 − 0.8 z)（小艇高、大船低）、長度再 × (0.45 ＋ 0.55 z)、低通 × (1.3 − 0.3 z)、音量 × (0.7 ＋ 0.3 z)。上面寫的 Hz、秒都是 z ＝ 1 的值。
+//   · 觸礁 bed 'rock'（礁石、珊瑚、岩壁）：再加一段刮擦（帶通雜音一段接一段、160–360 Hz 亂跳），長 slide 秒；'sand'（沙、泥、岸）：只加一段很低、很長的沙沙聲。
+//   力道 → 音量：hitLoud × k（k：撞船時兩艘各一聲 ⇒ 0.75）；力道怎麼算在發聲的那一邊（31_sailing.js hitSfx：撞擊動能；32_ground.js groundSfx：底的硬度 × 速度²）。
 //   R ＝ 亂數（遊戲用 Math.random；hitLab 用固定種子 ⇒ 每次錄的一樣）。⛔ 只是聲音：不抽模擬的 rnd()。
-var HIT_LP = { wood: [520, 700], metal: [800, 1000] };                  // 整串最後的低通：基準 ＋ 力道 × 增量（Hz）
-function hitLoud(I) { return 0.5 + 1.1 * clamp(I, 0, 1); }
-/** 合成一聲碰撞（ac 可以是 OfflineAudioContext）：t 開始、I 力道、v 音量、o ＝ { mat, bed, slide }。回傳從 t 起響幾秒。 */
+var HIT_LP = { wood: [260, 260], metal: [320, 320] };                   // 整串最後的低通：基準 ＋ 力道 × 增量（Hz；大小 z ＝ 1 的值）
+function hitLoud(I) { return 0.6 + 1.2 * clamp(I, 0, 1); }
+function hitSize(mass) { return clamp(Math.log(Math.max(10, mass || 2000) / 10) / Math.log(500), 0, 1); }
+/** 合成一聲碰撞（ac 可以是 OfflineAudioContext）：t 開始、I 力道、v 音量、o ＝ { mat, mass, bed, slide, rub }。回傳從 t 起響幾秒。 */
 function hitVoice(ac, out, t, I, v, o, R) {
   I = clamp(I, 0, 1);
-  var metal = o.mat === 'metal', nb = noiseBuf || noiseMake(ac), dur = 0, Lp = HIT_LP[metal ? 'metal' : 'wood'], lp = ac.createBiquadFilter(), bus = ac.createGain();
-  lp.type = 'lowpass'; lp.frequency.value = Lp[0] + Lp[1] * I; lp.Q.value = 0.4; bus.gain.value = v; lp.connect(bus); bus.connect(out);
+  var z = hitSize(o.mass), fk = 1.8 - 0.8 * z, dk = (0.45 + 0.55 * z) * (0.9 + 1.1 * I);   // 小艇：高、短；大船：低、長；撞得越重越長
+  var metal = o.mat === 'metal', nb = noiseBuf || noiseMake(ac), dur = 0, Lp = HIT_LP[metal ? 'metal' : 'wood'], lp = ac.createBiquadFilter(), lp2 = ac.createBiquadFilter(), bus = ac.createGain();
+  lp.type = lp2.type = 'lowpass'; lp.frequency.value = lp2.frequency.value = (Lp[0] + Lp[1] * I) * (1.3 - 0.3 * z); lp.Q.value = lp2.Q.value = 0.5; bus.gain.value = v * (0.7 + 0.3 * z);
+  lp.connect(lp2); lp2.connect(bus); bus.connect(out);
   function env(p, a, at, d, t0) { p.setValueAtTime(0.0001, t0); p.exponentialRampToValueAtTime(a, t0 + at); p.exponentialRampToValueAtTime(0.0001, t0 + at + d); }
-  function tone(type, f0, f1, a, d, dt) {
+  function tone(type, f0, f1, a, at, d, dt) {
     var t0 = t + (dt || 0), s = ac.createOscillator(), g = ac.createGain();
-    s.type = type; s.frequency.setValueAtTime(f0, t0); s.frequency.exponentialRampToValueAtTime(f1, t0 + d); env(g.gain, a, 0.004, d, t0);
-    s.connect(g); g.connect(lp); s.start(t0); s.stop(t0 + d + 0.05); dur = Math.max(dur, (dt || 0) + d + 0.05);
+    f0 *= fk; f1 *= fk; d *= dk;
+    s.type = type; s.frequency.setValueAtTime(f0, t0); s.frequency.exponentialRampToValueAtTime(f1, t0 + at + d); env(g.gain, a, at, d, t0);
+    s.connect(g); g.connect(lp); s.start(t0); s.stop(t0 + at + d + 0.05); dur = Math.max(dur, (dt || 0) + at + d + 0.05);
   }
   function hiss(type, f0, f1, Q, a, at, d, dt, rate) {
     var t0 = t + (dt || 0), s = ac.createBufferSource(), f = ac.createBiquadFilter(), g = ac.createGain();
+    f0 *= fk; f1 *= fk; d *= dk;
     s.buffer = nb; s.playbackRate.value = rate || 1; f.type = type; f.Q.value = Q; f.frequency.setValueAtTime(f0, t0); f.frequency.exponentialRampToValueAtTime(f1, t0 + at + d);
     env(g.gain, a, at, d, t0); s.connect(f); f.connect(g); g.connect(lp); s.start(t0, R() * 1.5); s.stop(t0 + at + d + 0.05); dur = Math.max(dur, (dt || 0) + at + d + 0.05);
   }
   if (!o.rub) {                                                          // rub：觸礁之後還在動，只刮、不再撞一聲（32_ground.js groundSfx）
-    var f0 = (metal ? 62 : 75) * (1 - 0.3 * I) * (0.94 + 0.12 * R());
-    tone('sine', f0 * 1.7, f0, metal ? 0.38 : 0.3, 0.2 + 0.45 * I);                // 悶的那一聲（低到筆電喇叭放不太出來 ⇒ 只當底，聽得到的在下面的共鳴）
-    hiss('lowpass', 350 + 800 * I, 160, 0.7, 1.2, 0.003, 0.08 + 0.25 * I);         // 衝擊雜音
+    var f0 = (metal ? 58 : 68) * (1 - 0.25 * I) * (0.94 + 0.12 * R());
+    tone('sine', f0 * 1.4, f0, metal ? 0.45 : 0.35, 0.012, 0.25 + 0.5 * I);                       // 底：往下掉的低頻（起音 12 ms ⇒ 一團、不是一記敲擊）
+    hiss('lowpass', 220 + 200 * I, 90, 1.1, 1.6, 0.015, 0.18 + 0.4 * I, 0, 0.5);    // 身體：放慢一半的低通雜音（更暗）
+    hiss('bandpass', 190 + 50 * R(), 130, 0.7, 1.5, 0.02, 0.15 + 0.35 * I, 0, 0.5);   // 船殼的「咚」：寬頻帶通、沒有音高
     if (metal) {
-      var fb = (150 + 30 * R()) * (1 - 0.2 * I), dm = 0.7 + 2 * I;
-      [1, 1.59, 2.14, 2.83, 3.71].slice(0, 2 + Math.round(3 * I)).forEach(function (r, k) {   // 鐵板的分音（不成倍數；兩支差 0.4% ⇒ 會拍）
-        var a = 0.3 / (1 + 0.5 * k), d = dm / (1 + 0.35 * k);
-        tone('sine', fb * r, fb * r * 0.995, a, d); tone('sine', fb * r * 1.004, fb * r * 0.999, a * 0.7, d * 0.9);
+      var fb = (78 + 14 * R()) * (1 - 0.15 * I), dm = 0.9 + 2 * I;
+      [1, 1.59, 2.14].slice(0, 2 + Math.round(I)).forEach(function (r, k) {   // 鐵殼的低嗡（不成倍數；兩支差 0.6% ⇒ 會拍）
+        var a = 0.22 / (1 + 0.6 * k), d = dm / (1 + 0.4 * k);
+        tone('sine', fb * r, fb * r * 0.995, a, 0.025, d); tone('sine', fb * r * 1.006, fb * r * 0.999, a * 0.7, 0.03, d * 0.9);
       });
-      hiss('bandpass', 500 + 300 * R(), 350, 3, 0.5 + 0.4 * I, 0.002, 0.08 + 0.1 * I);   // 鐵板撞上的那一下（短、不亮）
     } else {
-      var fw = (150 + 40 * R()) * (1 - 0.15 * I);
-      [1, 1.62, 2.35, 3.1].forEach(function (r, k) { tone('sine', fw * r * 1.03, fw * r, 0.6 / (1 + 0.5 * k), (0.15 + 0.25 * I) / (1 + 0.3 * k)); });   // 木板的共鳴（短：木頭吸振）
-      hiss('bandpass', fw * 2, fw * 1.6, 4, 1.2, 0.002, 0.1 + 0.2 * I);            // 木頭的粗糙
-      for (var c = Math.floor(I * I * 7); c > 0; c--) hiss('bandpass', 300 + 500 * R(), 220, 1.5, 0.8 + 0.6 * I, 0.002, 0.04 + 0.08 * R(), 0.03 + 0.5 * I * R());   // 碎裂（悶的）
-      if (I > 0.6) tone('sawtooth', 52 + 10 * R(), 40, 0.12 * (I - 0.6) / 0.4, 0.6 + 0.8 * I, 0.08);   // 船身受力的嘎吱
+      for (var c = Math.floor(I * I * 5); c > 0; c--) hiss('lowpass', 380, 200, 0.7, 0.5 + 0.5 * I, 0.008, 0.05 + 0.08 * R(), 0.04 + 0.5 * I * R(), 0.6);   // 壓碎（悶的）
+      if (I > 0.6) tone('sawtooth', 52 + 10 * R(), 40, 0.12 * (I - 0.6) / 0.4, 0.05, 0.6 + 0.8 * I, 0.08);   // 船身受力的嘎吱
     }
+    if (I > 0.2) hiss('lowpass', 140, 70, 0.7, 0.7 * (I - 0.2) / 0.8 + 0.15, 0.08, 0.4 + 2 * I, 0.05, 0.4);   // 尾聲：船身與海水的低沉餘震（力道越大越長、越大聲）
   }
   var sl = Math.min(3, o.slide || 0);
-  if (o.bed === 'rock' && sl > 0) for (var k = 0, n = Math.ceil(sl / 0.12); k < n; k++) hiss('bandpass', 220 + 380 * R(), 180 + 250 * R(), 2.5, (1 + 0.8 * I) * (1 - 0.5 * k / n), 0.03, 0.12 + 0.1 * R(), 0.05 + k * 0.12, 0.7);   // 刮過礁石
-  if (o.bed === 'sand' && sl > 0) hiss('lowpass', 300, 140, 0.5, 1 + 0.6 * I, 0.08, sl, 0.03, 0.5);   // 擦過沙底
+  if (o.bed === 'rock' && sl > 0) for (var k = 0, n = Math.ceil(sl / 0.12); k < n; k++) hiss('bandpass', 160 + 200 * R(), 130 + 150 * R(), 1.5, (1.2 + 0.8 * I) * (1 - 0.5 * k / n), 0.04, 0.12 + 0.1 * R(), 0.05 + k * 0.12 / dk, 0.5);   // 刮過礁石（每段 0.12 秒照真的時間排，不跟著大小伸縮）
+  if (o.bed === 'sand' && sl > 0) hiss('lowpass', 220, 110, 0.5, 1.2 + 0.6 * I, 0.1, sl / dk, 0.03, 0.5);   // 擦過沙底（長度 ＝ slide 秒，不跟著大小伸縮）
   return dur;
 }
-/** 試聽集（__game.hitLab；src/tests/ambient_lab.py --lab hit）：每段 sec 秒、跟遊戲同一個限制器；含舊的 crack 當對照。?cases=名字:I:mat:bed:slide:rub;… 換掉（I < 0 ＝ 舊的 crack、音量 −I）。
- *  回 Promise<[{ name, peak, rmsDb, wav, cent（頻譜重心 Hz）, hi（1 kHz 以上的能量佔幾 %）, lo（150 Hz 以下佔幾 %） }]>。 */
-var HIT_CASES = [['舊 crack 擦撞 ×1', -1], ['舊 crack 觸礁 ×1.2', -1.2], ['舊 crack 撞擊 ×1.6', -1.6],
+/** 試聽集（__game.hitLab；src/tests/ambient_lab.py --lab hit）：每段 sec 秒、跟遊戲同一個限制器；含舊的 crack 當對照。?cases=名字:I:mat:bed:slide:rub:噸;… 換掉（I < 0 ＝ 舊的 crack、音量 −I）。
+ *  回 Promise<[{ name, peak, rmsDb, wav, cent（頻譜重心 Hz）, hi（1 kHz 以上的能量佔幾 %）, mid（500 Hz 以上）, lo（150 Hz 以下）, atk（起音：5 ms 的 RMS 從峰值的 10% 爬到峰值幾 ms） }]>。 */
+var HIT_CASES = [['舊 crack 擦撞 ×1', -1], ['舊 crack 觸礁 ×1.2', -1.2], ['舊 crack 撞擊 ×1.6', -1.6],   // 第 7 欄 ＝ 船的質量（噸；沒寫 ＝ 2,155：憲法號）
   ['木 輕碰 I0', 0, 'wood'], ['木 I0.3', 0.3, 'wood'], ['木 I0.6', 0.6, 'wood'], ['木 重撞 I1', 1, 'wood'],
   ['鐵 輕碰 I0', 0, 'metal'], ['鐵 I0.3', 0.3, 'metal'], ['鐵 I0.6', 0.6, 'metal'], ['鐵 重撞 I1', 1, 'metal'],
-  ['木撞鐵 I0.6（兩聲）', 0.6, 'wood+metal'], ['木船觸礁 2 m/s', 0.61, 'wood', 'rock', 1.2], ['木船觸礁 5 m/s', 0.99, 'wood', 'rock', 3],   // 觸礁的力道照 32_ground.js groundSfx 算（礁石硬度 1.5、沙底 0.25；滑 ＝ 速度 × 0.6 秒）
+  ['小艇 30 噸 木 I0.6', 0.6, 'wood', '', 0, 0, 30], ['小船 300 噸 木 I0.6', 0.6, 'wood', '', 0, 0, 300], ['鐵甲艦 7,000 噸 鐵 I0.6', 0.6, 'metal', '', 0, 0, 7000],
+  ['木撞鐵 I0.6（兩聲、各 ×0.75）', 0.6, 'wood+metal'], ['木船觸礁 2 m/s', 0.61, 'wood', 'rock', 1.2], ['木船觸礁 5 m/s', 0.99, 'wood', 'rock', 3],   // 觸礁的力道照 32_ground.js groundSfx 算（礁石硬度 1.5、沙底 0.25；滑 ＝ 速度 × 0.6 秒）
   ['鐵船觸礁 3 m/s', 0.78, 'metal', 'rock', 1.8], ['木船擱淺沙底 2 m/s', 0.25, 'wood', 'sand', 1.2], ['木船壓著礁石往前 2 m/s（每秒一段）', 0.61, 'wood', 'rock', 1.15, 1]];
 function hitLab(q) {
-  var sec = +(q.get('sec') || 3.5), cs = q.has('cases') ? q.get('cases').split(';').filter(function (s) { return s; }).map(function (s) { var a = s.split(':'); return [a[0], +a[1], a[2], a[3], +a[4] || 0, +a[5] || 0]; }) : HIT_CASES, out = [];
+  var sec = +(q.get('sec') || 5), cs = q.has('cases') ? q.get('cases').split(';').filter(function (s) { return s; }).map(function (s) { var a = s.split(':'); return [a[0], +a[1], a[2], a[3], +a[4] || 0, +a[5] || 0, +a[6] || 0]; }) : HIT_CASES, out = [];
   return cs.reduce(function (pr, c) { return pr.then(function () { return hitRender(sec, c).then(function (r) { r.name = c[0]; out.push(r); }); }); }, Promise.resolve()).then(function () { return out; });
 }
 function hitRender(sec, c) {
@@ -125,11 +133,11 @@ function hitRender(sec, c) {
     var src = oc.createBufferSource(), f = oc.createBiquadFilter(), g = oc.createGain(), a = 1.4 * -c[1], t = 0.05;
     src.buffer = noiseBuf || noiseMake(oc); src.playbackRate.value = 0.6 + R() * 0.5; f.type = 'bandpass'; f.frequency.value = 900 + R() * 900; f.Q.value = 0.8;
     src.connect(f); f.connect(g); g.connect(mg); g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(a, t + 0.01); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.35); src.start(t, R()); src.stop(t + 0.4);
-  } else (c[2] || 'wood').split('+').forEach(function (m) { hitVoice(oc, mg, 0.05, c[1], hitLoud(c[1]), { mat: m, bed: c[3], slide: c[4], rub: !!c[5] }, R); });
-  return oc.startRendering().then(function (buf) { var r = audioWav(buf), sp = audioSpec(buf.getChannelData(0), sr); r.cent = sp.cent; r.hi = sp.hi; r.lo = sp.lo; r.o = { I: c[1], mat: c[2] || '', bed: c[3] || '', slide: c[4] || 0, rub: c[5] ? 1 : 0 }; return r; });
+  } else (c[2] || 'wood').split('+').forEach(function (m) { hitVoice(oc, mg, 0.05, c[1], hitLoud(c[1]) * (/\+/.test(c[2]) ? 0.75 : 1), { mat: m, mass: c[6] || 2155, bed: c[3], slide: c[4], rub: !!c[5] }, R); });
+  return oc.startRendering().then(function (buf) { var r = audioWav(buf), sp = audioSpec(buf.getChannelData(0), sr); r.cent = sp.cent; r.hi = sp.hi; r.mid = sp.mid; r.lo = sp.lo; r.atk = sp.atk; r.o = { I: c[1], mat: c[2] || '', mass: c[6] || 2155, bed: c[3] || '', slide: c[4] || 0, rub: c[5] ? 1 : 0 }; return r; });
 }
 /** 頻譜重心（Hz）與 1 kHz 以上的能量佔比（%）：2048 點、漢寧窗、半重疊，整段的功率加起來（hitLab 讀數）。 */
-function audioSpec(x, sr) {   // 另回 lo ＝ 150 Hz 以下佔幾 %（筆電喇叭差不多放不出來的那一段）
+function audioSpec(x, sr) {   // 另回 lo ＝ 150 Hz 以下佔幾 %（筆電喇叭差不多放不出來的那一段）、mid ＝ 500 Hz 以上、atk ＝ 起音幾 ms（清脆＝起音硬）
   var N = 2048, P = new Float64Array(N / 2), re = new Float64Array(N), im = new Float64Array(N), i, j, k;
   for (var o = 0; o + N <= x.length; o += N / 2) {
     for (i = 0; i < N; i++) { re[i] = x[o + i] * (0.5 - 0.5 * Math.cos(2 * Math.PI * i / (N - 1))); im[i] = 0; }
@@ -140,9 +148,12 @@ function audioSpec(x, sr) {   // 另回 lo ＝ 150 Hz 以下佔幾 %（筆電喇
     }
     for (k = 0; k < N / 2; k++) P[k] += re[k] * re[k] + im[k] * im[k];
   }
-  var tot = 0, m = 0, hi = 0, lo = 0;
-  for (k = 1; k < N / 2; k++) { var fq = k * sr / N; tot += P[k]; m += P[k] * fq; if (fq >= 1000) hi += P[k]; if (fq < 150) lo += P[k]; }
-  return { cent: tot ? Math.round(m / tot) : 0, hi: tot ? +(100 * hi / tot).toFixed(1) : 0, lo: tot ? +(100 * lo / tot).toFixed(1) : 0 };
+  var tot = 0, m = 0, hi = 0, lo = 0, md = 0;
+  for (k = 1; k < N / 2; k++) { var fq = k * sr / N; tot += P[k]; m += P[k] * fq; if (fq >= 1000) hi += P[k]; if (fq >= 500) md += P[k]; if (fq < 150) lo += P[k]; }
+  var W = Math.round(sr * 0.005), E = [], pk = 0, ip = 0;
+  for (o = 0; o + W <= x.length; o += W) { var ss = 0; for (i = 0; i < W; i++) ss += x[o + i] * x[o + i]; E.push(Math.sqrt(ss / W)); if (E[E.length - 1] > pk) { pk = E[E.length - 1]; ip = E.length - 1; } }
+  var i0 = 0; while (i0 < ip && E[i0] < 0.1 * pk) i0++;
+  return { cent: tot ? Math.round(m / tot) : 0, hi: tot ? +(100 * hi / tot).toFixed(1) : 0, mid: tot ? +(100 * md / tot).toFixed(1) : 0, lo: tot ? +(100 * lo / tot).toFixed(1) : 0, atk: (ip - i0) * 5 };
 }
 
 /** 離線錄好的 AudioBuffer ⇒ { peak, rmsDb, wav（data URL，16 位元雙聲道） }（02_ambient.js ambRender、02_music.js bgmRender 共用）。 */
