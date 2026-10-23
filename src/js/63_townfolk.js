@@ -14,35 +14,45 @@
 var TOWN_FOLK = Q.get('townfolk') !== '0';                               // ?townfolk=0：不載、不畫城鎮居民（對照組）
 var TOWN_FOLK_OUT = [160, 200], TOWN_FOLK_STEP = 14, TOWN_FOLK_MAX = 2000, TOWN_FOLK_HOPS = 8, TOWN_FOLK_SCALE = 1.5;   // SCALE：身高倍率（Tim 2026-10-23「鎮民尺寸可以放大到1.5倍」；0846 是 1.68～1.84 m）；MAX：0846 是 260（金斯敦 34.5 km 的路 ⇒ 133 m 才一位）；畫面外的不算位置 ⇒ 照路長配、上限只防極端
 
-// 看板：四邊形 aQ ∈ [−½, ½] × [0, 1]（P.quad），實例 aI ＝ (x, y, z, 高)、aS ＝ (寬比, 高比, 前傾, 彈跳)、aU ＝ (u0, v0, u1, v1)、aC ＝ (衣色號, 髮色號, 深淺, 0)
+// 看板：四邊形 aQ ∈ [−½, ½] × [0, 1]（P.quad），實例 aI ＝ (x, y, z, 高)、aS ＝ (寬比, 高比, 前傾, 彈跳)、aU ＝ (u0, v0, u1, v1)、aC ＝ (衣色, 髮色, 深淺, 0)
+//   衣色、髮色打包成 0xRRGGBB 的整數（float32 到 2^24 都是整數，不失真）—— TASK-0849 每個角色可以覆寫自己的換色 ⇒ 不再用 8 格的色表。
 //   底圖與換色遮罩同 41_crew_art.js crewArt（左半底圖、右半遮罩：R ＝ 衣服、G ＝ 頭髮；底圖標記區的灰階 R/G/B ＝ L ∈ [4, 252]，L ＝ 100 還原代表色 ⇒ 乘 2.55）；吃城鎮陰影、夜裡的街燈與霧。
 var TOWN_FOLK_VS = '#version 300 es\nlayout(location=0) in vec2 aQ; layout(location=4) in vec4 aI; layout(location=5) in vec4 aS; layout(location=6) in vec4 aU; layout(location=7) in vec4 aC; uniform mat4 uVP; uniform vec3 uEye, uRight; out vec2 vUV; out vec3 vW; out float vD; flat out ivec2 vC; flat out float vK;\n' +
   'void main(){ float h=aI.w*aS.y, w=aI.w*0.5*aS.x, x=aQ.x*w+aQ.y*aS.z*aI.w; vec3 p=aI.xyz+uRight*x+vec3(0.0,aQ.y*h+aS.w,0.0);\n' +
   ' vUV=vec2(mix(aU.x,aU.z,aQ.x+0.5),mix(aU.w,aU.y,aQ.y)); vW=p; vD=length(aI.xz-uEye.xz); vC=ivec2(aC.xy+0.5); vK=aC.z; gl_Position=uVP*vec4(p,1.0); }\n';
 var TOWN_FOLK_FS = function () {
-  return '#version 300 es\nprecision highp float;\n' + SHADOW_GLSL + TLAMP_GLSL + TOWN_FADE + 'uniform sampler2D uTex; uniform vec3 uClothC[8], uHairC[8], uEye, uFog, uBkK; uniform float uFogD; in vec2 vUV; in vec3 vW; in float vD; flat in ivec2 vC; flat in float vK; out vec4 o;\n' +
+  return '#version 300 es\nprecision highp float;\n' + SHADOW_GLSL + TLAMP_GLSL + TOWN_FADE + 'uniform sampler2D uTex; uniform vec3 uEye, uFog, uBkK; uniform float uFogD; in vec2 vUV; in vec3 vW; in float vD; flat in ivec2 vC; flat in float vK; out vec4 o;\n' +
+    'vec3 rgbOf(int v){ return vec3(float((v>>16)&255),float((v>>8)&255),float(v&255))/255.0; }\n' +
     'void main(){ if(vW.y<uClip) discard; if(townCut(vD)) discard; vec4 t=texture(uTex,vUV); if(t.a<0.5) discard; vec4 m=texture(uTex,vUV+vec2(0.5,0.0)); vec3 c=t.rgb;\n' +
-    ' int ci=clamp(vC.x,0,7), hi=clamp(vC.y,0,7); c=mix(c,clamp(uClothC[ci]*(t.r*2.55),0.0,1.0),m.r); c=mix(c,clamp(uHairC[hi]*(t.r*2.55),0.0,1.0),m.g);\n' +
+    ' c=mix(c,clamp(rgbOf(vC.x)*(t.r*2.55),0.0,1.0),m.r); c=mix(c,clamp(rgbOf(vC.y)*(t.r*2.55),0.0,1.0),m.g);\n' +
     ' float sk=shadowK(vW,vec3(0.0,1.2,0.0)); vec3 lit=(0.58+0.42*(0.45*uSunK+0.55*sk))*uBkK+townLamp(vW,vec3(0.0,1.0,0.0))*0.85;\n' +
     ' vec3 col=c*vK*lit; float fd=length(vW-uEye); o=vec4(mix(col,uFog,1.0-exp(-fd*uFogD)),1.0); }\n';
 };
 
 /** townKit 跟外面那一頁多要的那一份（索引有 folk 才要）。 */
 function townFolkNeed(I) { return TOWN_FOLK && I.folk ? ['_folk'] : []; }
-/** 解開 Blocksail 傳來的 _folk.js ⇒ Promise<{ tex, rows, names, clothU, clothN, hairN } | null>；reuse ＝ 換一組模型時沿用的那一組（貼圖不重做）。 */
+/** 解開 Blocksail 傳來的 _folk.js ⇒ Promise<{ tex, rows, names, pal } | null>；pal[角色列] ＝ 那個角色能挑的衣色、髮色（townFolkColours）；reuse ＝ 換一組模型時沿用的那一組（貼圖不重做）。 */
 function townFolkTex(I, d, reuse) {
   if (reuse && reuse.folk) return Promise.resolve(reuse.folk);
   if (!TOWN_FOLK || !d || !d.png) return Promise.resolve(null);
   return new Promise(function (ok) {
     var im = new Image();
     im.onload = function () {
-      var A = crewArt(im), C = d.cloth || I.folk.cloth || [], cu = new Float32Array(24);
-      for (var i = 0; i < 8; i++) { var c = C[i % Math.max(1, C.length)] || [120, 120, 120]; cu[i * 3] = c[0] / 255; cu[i * 3 + 1] = c[1] / 255; cu[i * 3 + 2] = c[2] / 255; }
-      ok({ tex: texFrom(A.cv, true), rows: d.rows || 9, names: I.folk.names || [], clothU: cu, clothN: Math.min(8, C.length || 8), hairN: Math.min(8, HAIR_KEYS.length) });   // 著色器的衣色、髮色表各 8 格
+      var A = crewArt(im), rows = d.rows || 9;
+      ok({ tex: texFrom(A.cv, true), rows: rows, names: I.folk.names || [], pal: townFolkColours(d.cloth || I.folk.cloth, d.over || I.folk.over, rows) });
     };
     im.onerror = function () { ok(null); };
     im.src = 'data:image/png;base64,' + d.png;
   });
+}
+/** 每個角色能挑的衣色、髮色（打包好的 0xRRGGBB）：預設 ＝ Blocksail 的 CLOTH_COLORS 與遊戲設定檔的 hairColors；
+ *  over[角色列]（Blocksail tools/townfolk.py FOLK_OVERRIDE）寫了 cloth／hair ⇒ 換成那幾色，cloth_k／hair_k ⇒ 亮度倍率（生圖的那一區明暗不一致時調）。 */
+function townFolkColours(cloth, over, rows) {
+  var C0 = cloth && cloth.length ? cloth : [[120, 120, 120]], H0 = HAIR_KEYS.map(function (k) { return HAIR_COLORS[k]; });
+  function pack(L, k) { return L.map(function (c) { return [0, 1, 2].reduce(function (v, j) { return v * 256 + Math.max(0, Math.min(255, Math.round(c[j] * k))); }, 0); }); }
+  var P = [];
+  for (var r = 0; r < rows; r++) { var o = (over && over[r]) || {}; P.push({ cloth: pack(o.cloth || C0, o.cloth_k || 1), hair: pack(o.hair || H0, o.hair_k || 1), over: Object.keys(o).length > 0 }); }
+  return P;
 }
 /** 丟掉模型組 K 時一起丟貼圖（keep 還在用同一份 ⇒ 留著）。 */
 function townFolkFree(K, keep) { if (K.folk && K.folk.tex && !(keep && keep.folk === K.folk)) gl.deleteTexture(K.folk.tex); }
@@ -61,9 +71,10 @@ function townFolkPrep(T, F) {
     var k = T.id + ':folk:' + i, target = townHash(k + ':e') * G.roadM, ei = 0;
     while (ei + 1 < edges.length && edges[ei].cum < target) ei++;
     var a = { id: i, spd: 1.15 + 0.45 * townHash(k + ':s'), lane: (townHash(k + ':l') - 0.5) * 0.65, art: (i < F.rows ? i : Math.floor(townHash(k + ':a') * F.rows)) % F.rows,
-      cloth: Math.floor(townHash(k + ':c') * F.clothN) % F.clothN, hair: Math.floor(townHash(k + ':h') * F.hairN) % F.hairN,
+      cloth: 0, hair: 0,                                                 // 照這個角色的 pal 挑（下面）
       hgt: (1.68 + 0.16 * townHash(k + ':g')) * TOWN_FOLK_SCALE, sh: 0.94 + 0.12 * townHash(k + ':k'), ph: townHash(k + ':p') * 6.2832,
       e: ei, t: 0, dir: 1, stop: false, face: 1 };                       // e／t／dir／stop：這一格的位置（townFolkAt 照時間寫，不是狀態）；face：朝左朝右的遲滯（只是畫面）
+    var pal = F.pal[a.art]; a.cloth = Math.floor(townHash(k + ':c') * pal.cloth.length) % pal.cloth.length; a.hair = Math.floor(townHash(k + ':h') * pal.hair.length) % pal.hair.length;
     townFolkRoute(G, a, k, townHash(k + ':d') < 0.5 ? 1 : -1);
     G.agents.push(a);
   }
@@ -193,7 +204,8 @@ function townFolkDraw(P, K, eye, PL, fogD, clock) {
       B[o] = x; B[o + 1] = y; B[o + 2] = z; B[o + 3] = a.hgt;
       B[o + 4] = sx; B[o + 5] = sy; B[o + 6] = lean; B[o + 7] = bob;
       B[o + 8] = a.face > 0 ? 0 : 0.5; B[o + 9] = v0; B[o + 10] = a.face > 0 ? 0.5 : 0; B[o + 11] = v1;
-      B[o + 12] = a.cloth; B[o + 13] = a.hair; B[o + 14] = a.sh; B[o + 15] = a.face;
+      var pc = F.pal[a.art];                                             // 排隊（測試用）⇒ 每位錯開衣色，截圖看得到整張色表
+      B[o + 12] = pc.cloth[ln ? (a.id * 3) % pc.cloth.length : a.cloth]; B[o + 13] = pc.hair[a.hair]; B[o + 14] = a.sh; B[o + 15] = a.face;
     });
   });
   TOWNS.stat.folk = n; TOWNS.stat.folkPos = npos;                       // folkPos：這一格算了幾位的位置（外框過了、還沒照實際位置剔）
@@ -201,7 +213,6 @@ function townFolkDraw(P, K, eye, PL, fogD, clock) {
   var PF = P.folk; gl.useProgram(PF.prog); setCommon(PF);
   gl.uniform1f(PF.u.uFogD, fogD); gl.uniform3fv(PF.u.uEye, eye); gl.uniform3f(PF.u.uRight, rx, 0, rz);
   gl.uniform2f(PF.u.uIn, -2, -1); gl.uniform2f(PF.u.uOut, TOWN_FOLK_OUT[0], TOWN_FOLK_OUT[1]);
-  gl.uniform3fv(PF.u.uClothC || PF.u['uClothC[0]'], F.clothU); gl.uniform3fv(PF.u.uHairC || PF.u['uHairC[0]'], HAIR_U.subarray(0, 24));
   gl.activeTexture(gl.TEXTURE11); gl.bindTexture(gl.TEXTURE_2D, F.tex); gl.uniform1i(PF.u.uTex, 11); gl.activeTexture(gl.TEXTURE0);
   gl.bindVertexArray(P.folkVao); gl.bindBuffer(gl.ARRAY_BUFFER, P.folkBuf);
   gl.bufferData(gl.ARRAY_BUFFER, B.subarray(0, n * 16), gl.DYNAMIC_DRAW);
@@ -219,5 +230,5 @@ function townFolkStat(T) {
 /** 讀數：全部城加起來（townStat 頂層的 folk）。 */
 function townFolkSum() {
   var F = TOWNS.kit && TOWNS.kit.folk; if (!F) return null;
-  return { rows: F.rows, names: F.names, cloth: F.clothN, hair: F.hairN, total: TOWNS.list.reduce(function (s, T) { return s + (T.folk ? T.folk.agents.length : 0); }, 0), pos: TOWNS.stat.folkPos || 0, drawn: TOWNS.stat.folk || 0, ms: TOWNS.stat.folkMs || 0, clock: +(TOWNS.flagClock || 0).toFixed(3) };   // clock：位置照的那個畫面時間
+  return { rows: F.rows, names: F.names, cloth: F.pal.map(function (p) { return p.cloth.length; }), hair: F.pal.map(function (p) { return p.hair.length; }), over: F.pal.map(function (p, i) { return p.over ? F.names[i] || i : null; }).filter(function (v) { return v !== null; }), total: TOWNS.list.reduce(function (s, T) { return s + (T.folk ? T.folk.agents.length : 0); }, 0), pos: TOWNS.stat.folkPos || 0, drawn: TOWNS.stat.folk || 0, ms: TOWNS.stat.folkMs || 0, clock: +(TOWNS.flagClock || 0).toFixed(3) };   // clock：位置照的那個畫面時間
 }
