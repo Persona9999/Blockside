@@ -588,7 +588,7 @@ function townKitMake(I, need, D, reuse) {
         im.onerror = function () { ok(); };
         im.src = 'data:image/png;base64,' + M[nm].png;
       });
-    }).concat([townFolkTex(I, D && D._folk, reuse)])).then(function (R) {
+    }).concat([townFolkTex(I, D, reuse)])).then(function (R) {
       var folk = R[R.length - 1] || null;
       gl.bindTexture(gl.TEXTURE_2D, tex);
       gl.generateMipmap(gl.TEXTURE_2D); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
