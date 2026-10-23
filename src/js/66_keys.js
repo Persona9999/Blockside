@@ -23,7 +23,8 @@ var KEY_ACTS = [
   { c: 'battle', id: 'signals', ico: '🚩', name: '旗號（對我方友艦下令）', def: 'k' }, { c: 'battle', id: 'pause', ico: '⏸', name: '停格', def: 'p' }, { c: 'battle', id: 'settings', ico: '⚙', name: '設定', def: 'o' }, { c: 'battle', id: 'help', name: '說明', def: 'h' },
   { c: 'battle', id: 'flood', ico: '📊', name: '進水圖表（停格時）', def: 'i' }, { c: 'battle', id: 'xray', ico: '🔍', name: '透視', def: 'x' }, { c: 'battle', id: 'cut', ico: '✂', name: '剖面', def: 'z' }, { c: 'battle', id: 'deck', ico: '☰', name: '隱藏甲板', def: 'l' },
   { c: 'battle', id: 'phys', name: '帆繩物理', def: 'b' }, { c: 'battle', id: 'mute', name: '靜音', def: 'm' }, { c: 'battle', id: 'restart', name: '重新開始', def: 'n' }, { c: 'battle', id: 'menu', name: '回主選單', def: '0' },
-  { c: 'battle', id: 'hostBack', ico: '🌍', name: '回到地球儀（Blocksail 地球儀開的才有）', def: 'u', host: 1 },   // Tim 2026-10-20「回到地球儀加一個快捷鍵吧(同時顯示)」；host ⇒ 設定頁只在 ?map=@host 列（08_seabed.js bedHostBack）
+  { c: 'battle', id: 'hostBack', ico: '🌍', name: '回到地球儀（Blocksail 地球儀開的才有）', def: 'u', host: 1 },
+  { c: 'battle', id: 'dock', ico: '⚓', name: '停靠／出航（Blocksail：航海在城鎮範圍裡 ⇒ 停靠；城鎮 ⇒ 出航）', def: 'j', host: 1 },   // TASK-0867（88_modeswitch.js dockAct）   // Tim 2026-10-20「回到地球儀加一個快捷鍵吧(同時顯示)」；host ⇒ 設定頁只在 ?map=@host 列（08_seabed.js bedHostBack）
   // 第一人稱（81_fps.js fpKey）：走路四個鍵、轉頭 Q 按住才算（畫面上是搖桿，沒有圓鈕）
   { c: 'fps', id: 'fpFwd', name: '往前走', def: 'w', hold: 1 }, { c: 'fps', id: 'fpBack', name: '往後走', def: 's', hold: 1 }, { c: 'fps', id: 'fpLeft', name: '往左走', def: 'a', hold: 1 }, { c: 'fps', id: 'fpRight', name: '往右走', def: 'd', hold: 1 },
   { c: 'fps', id: 'fpTurnL', name: '往左轉頭', def: 'q', hold: 1 }, { c: 'fps', id: 'fpRun', ico: '🏃', name: '跑', def: 'shift', hold: 1 },

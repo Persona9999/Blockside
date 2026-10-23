@@ -336,6 +336,7 @@
   #bldInfo, #bldBar{ display:none; }
   /* 城鎮的建築模式（87_townbuild.js，TASK-0742）：🔨 城鎮模式常駐、當開關（開著亮底；61_layout.js 的 town 配置）；面板與說明只在建築模式開著 */
   #stage.twb #twbK{ background:#9fc7ff; color:#111; }
+  #keys > #dockK.dkOff{ display:none !important; }   /* ⚓ 停靠／⛵ 出航（88_modeswitch.js dockBtn，TASK-0867）：航海時準備好了才出現 */
   #twbInfo, #twbP{ display:none; }
   #twbTown{ display:none; }
   #twbTown.on{ display:block; position:absolute; left:50%; top:28px; transform:translateX(-50%); padding:4px 12px; border-radius:8px; background:rgba(10,14,22,.66); color:#f3e6c4; font-size:14px; pointer-events:none; white-space:nowrap; max-width:calc(100vw - 32px); overflow:hidden; text-overflow:ellipsis; z-index:7; }   /* 城名、年份、人口（87_townbuild.js twbTitle；TASK-0871） */
@@ -450,7 +451,7 @@
   <div id="aimR" aria-hidden="true"><svg viewBox="-24 -24 48 48"><g class="o"><circle r="16"/><path d="M-11 0H-4M4 0H11M0 -11V-4M0 4V11"/></g><g class="k"><circle r="16"/><path d="M-11 0H-4M4 0H11M0 -11V-4M0 4V11"/></g><circle class="d" r="1.6"/></svg></div><!-- 瞄準圈（UI 層，61_hud.js aimRingUi；在 HUD 底下） -->
   <div id="botC" class="hud"><div id="navBox"><div id="modeT"></div><div id="gunsB" class="gend"></div><div id="nav" class="panel"><canvas id="navc"></canvas><div id="navt"></div><div id="gunsL" class="gside"></div><div id="gunsR" class="gside"></div></div><div id="gunsA" class="gend"></div></div>
   <div id="ctlRow"><div id="helmL" class="helm"><span class="kb hb" data-act="ruddL" data-hold="1" data-tip="左舵"><b>A</b><i class="em">⬅️</i></span><span class="kb hb" data-act="sailDn" data-hold="1" data-tip="收帆"><b>S</b><i class="em">⛵⬇</i></span><span class="kb hb" data-act="sailUp" data-hold="1" data-tip="加帆"><b>W</b><i class="em">⛵⬆</i></span><span class="kb hb" id="sailT" data-kl="sailMode" data-tip="自動操舵：亮 ＝ 自動、暗 ＝ 手動 —— 點一下切換"><b>2</b><i class="em">🤖☸</i></span><span class="kb hb" data-act="ancP" id="ancP" data-tip="拋左錨"><b>Q</b><i class="em">◀⚓</i></span></div><div id="ctl" class="panel">
-    <div id="keys"><span class="kb hb uiOff" id="twbK" data-tip="建築模式（鋪路、蓋房子）"><b>B</b><i class="em">🔨</i></span><span class="kb hb" data-act="cam" id="camK" data-tip="換鏡頭"><b>C</b><i class="em">🎥</i></span><span class="kb hb" data-act="pause" id="pauseK" data-tip="停格"><b>P</b><i class="em">⏸</i></span><span class="kb hb" id="setB" data-kl="settings" data-tip="設定"><b>O</b><i class="em">⚙</i></span><span class="kb hb" data-act="ancAll" id="ancAll" data-tip="拋錨（雙錨）：兩邊都沒拋 ⇒ 一起拋；一邊在水裡 ⇒ 拋另一邊；兩邊都在水裡 ⇒ 起錨"><b>4</b><i class="em">⚓⚓</i></span><span class="kb hb" data-act="hostBack" id="hostBack" data-tip="回到地球儀"><b>U</b><i class="em">🌍</i></span></div>
+    <div id="keys"><span class="kb hb uiOff" id="twbK" data-tip="建築模式（鋪路、蓋房子）"><b>B</b><i class="em">🔨</i></span><span class="kb hb" data-act="cam" id="camK" data-tip="換鏡頭"><b>C</b><i class="em">🎥</i></span><span class="kb hb" data-act="pause" id="pauseK" data-tip="停格"><b>P</b><i class="em">⏸</i></span><span class="kb hb" id="setB" data-kl="settings" data-tip="設定"><b>O</b><i class="em">⚙</i></span><span class="kb hb" data-act="ancAll" id="ancAll" data-tip="拋錨（雙錨）：兩邊都沒拋 ⇒ 一起拋；一邊在水裡 ⇒ 拋另一邊；兩邊都在水裡 ⇒ 起錨"><b>4</b><i class="em">⚓⚓</i></span><span class="kb hb" data-act="hostBack" id="hostBack" data-tip="回到地球儀"><b>U</b><i class="em">🌍</i></span><span class="kb hb dkOff" data-act="dock" id="dockK" data-tip="停靠"><b>J</b><i class="em">⚓</i></span></div>
     <div id="guns"></div>
     <div id="ammo"><span class="kb hb" id="ammoB" data-act="ammo" data-tip="切換彈藥"><b>R</b><i class="em"><span class="ball"></span></i></span></div>
   </div><div id="helmR" class="helm"><span class="kb hb" data-act="ancS" id="ancS" data-tip="拋右錨"><b>E</b><i class="em">⚓▶</i></span><span class="kb hb" data-act="autoFire" id="autoF" data-tip="自動開砲"><b>5</b><i class="em">🤖💥</i></span><span class="kb hb" data-act="fire1" id="fireK" data-tip="開一門砲"><b>F</b><i class="em">💥</i></span><span class="kb hb" data-act="volley" id="volleyK" data-tip="齊射"><b>空白</b><i class="em">💥💥</i></span><span class="kb hb" data-act="ruddR" data-hold="1" data-tip="右舵"><b>D</b><i class="em">➡️</i></span></div></div></div>
@@ -971,6 +972,7 @@
 <script src="js/82_build.js" data-bundle="game"></script>
 <script src="js/86_inspect.js" data-bundle="game"></script>
 <script src="js/87_townbuild.js" data-bundle="game"></script>
+<script src="js/88_modeswitch.js" data-bundle="game"></script>
 <script src="js/83_testlog.js" data-bundle="game"></script>
 <script src="js/85_riglog.js" data-bundle="game"></script>
 <script src="js/84_fleetlab.js" data-bundle="game"></script>

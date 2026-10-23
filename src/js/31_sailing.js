@@ -115,8 +115,8 @@ function sailShip(sh, dt) {
   sh.sailFrac = sh.sails.reduce(function (a, s) { return a + (s.dead || s.furled ? 0 : s.area * s.hp / s.hpMax); }, 0) / sh.sailArea0;   // 被打中還沒掉的帆：照剩下的血量算推力
   sh.pos = pointName(deg);
   // 拋錨模式（6）只管我艦：SAIL 是玩家的航行模式（全域），sail() 每艘都跑 ⇒ 不限 PLAYER_I 的話，友艦、敵艦也跟著拋雙錨、停在原地（Tim 2026-10-15「應該只控制我艦」）。
-  var stop = (SAIL === 'off' || modeRule('stopOwn')) && sh.i === PLAYER_I,   // 玩法規則 stopOwn（04_modes.js；建造）：停在原地（跟拋錨模式同一條）
-      manual = SAIL === 'manual' && sh.i === PLAYER_I;
+  var stop = (SAIL === 'off' || modeRule('stopOwn') || dockHold(sh)) && sh.i === PLAYER_I,   // 玩法規則 stopOwn（04_modes.js；建造）：停在原地（跟拋錨模式同一條）；自動停靠到了（88_modeswitch.js）⇒ 兩錨都下
+      manual = SAIL === 'manual' && sh.i === PLAYER_I && !dockOn(sh);     // 自動停靠／出航中（88_modeswitch.js）⇒ 走艦長那一段（航向、期望航速照航道）
   if (stop && !sh.ancMode && !sh.struck && !sh.sunk) { sh.ancMode = true; anchorToggle(sh, 'P', true); anchorToggle(sh, 'S', true); }   // 6 拋錨（雙錨，我艦；76_anchor.js）
   else if (!stop && sh.ancMode) { sh.ancMode = false; anchorToggle(sh, 'P', false); anchorToggle(sh, 'S', false); }   // 切回 4／5 ⇒ 起錨
   var held = !!sh.anc && anchorHeld(sh);                              // 有錨咬著 ⇒ 不靠帆走、可以原地繞錨轉
@@ -139,7 +139,7 @@ function sailShip(sh, dt) {
       * (1 - clamp(sh.sink / 9, 0, 0.8)) * (sh.struck ? 0.15 : 1);   // 能耐：橫風、帆全張時的帆速 × 完好度，加上主機；⛔ 不照現在的航向與收帆（艦長一收帆、一頂風就掉到 0 ⇒ 邊緣在 80–400 m 亂跳）；上坡最多吃掉一半推力 ⇒ × √½
   }
   if (VX) sh.spd *= vxHold(sh, dt);                                    // 大漩渦：眼裡船速被水吃掉（08_sea.js vxHold）                       // 推力、水阻、實際質量 ⇒ 加速度 ⇒ sh.spd（31_drive.js）
-  if (!stop && !held && !sh.sunk && !sh.struck && (sh.i !== PLAYER_I || SAIL === 'auto')) { var thP = sh.throttle || 1; helmGovern(sh, vS / thP, vB / thP); }   // 航速調節：艦長的期望航速 ⇒ 帆裝、俥鐘（54_helm.js；vS、vB 扣掉上一步的放慢）
+  if (!stop && !held && !sh.sunk && !sh.struck && (sh.i !== PLAYER_I || SAIL === 'auto' || dockOn(sh))) { var thP = sh.throttle || 1; helmGovern(sh, vS / thP, vB / thP); }   // 航速調節：艦長的期望航速 ⇒ 帆裝、俥鐘（54_helm.js；vS、vB 扣掉上一步的放慢）
   else sh.helmSpill = 1;
   // 舵
   sh.throttle = 1;                                                      // 油門每一步重設（戰列跟隨、讓開砲線要放慢才改；下一步的目標航速才用到）
@@ -149,7 +149,7 @@ function sailShip(sh, dt) {
   if (sh.navT !== undefined) rmax *= sh.navT;                          // 航海士（TASK-0825，39_duty.js）：最大轉向率 ×(1 ＋ 轉向 %)；沒有航海士的船 ⇒ 不乘
   var rmaxB = HELM_TQ ? Math.max(RUD_LOW, 0.012 + 0.016 * Math.abs(sh.spd) / SPK) * (UP === 1 ? 1 : 1 + (UP - 1) * clamp((deg - 90) / 45, 0, 1)) * sh.cfg.agile * playK('agile') * WX.agile * (sh.navT !== undefined ? sh.navT : 1) : rmax;   // 舵完好時的最大轉向率（差動照它換算，TASK-0777）
   if (held && Math.abs(sh.spd) < 0.6 && !sh.struck && !sh.sunk) {   // 錨咬著、船幾乎停了 ⇒ 繞錨原地轉：我艦照 A／D、電腦（或雙錨時的我艦沒按）轉舷側對敵
-    var pw = sh.i === PLAYER_I ? (KEYS.l ? 1 : 0) - (KEYS.r ? 1 : 0) : 0;
+    var pw = sh.i === PLAYER_I ? (KEYS.l ? 1 : 0) - (KEYS.r ? 1 : 0) || dockPivot(sh) : 0;   // 自動停靠到了 ⇒ 繞錨轉到停好的船頭（88_modeswitch.js）
     if (pw) rate = pw * ANC_PIVOT;
     else if (sh.i !== PLAYER_I && foe) { var ps = sideGuns(sh, sh.side) || !sideGuns(sh, sh.side === 'S' ? 'P' : 'S') ? sh.side : sh.side === 'S' ? 'P' : 'S', pg = ps === 'P' ? 1 : -1, pdx = foe.px - sh.px, pdz = foe.pz - sh.pz, pd = Math.hypot(pdx, pdz) || 1;
       var pe = (pg > 0 ? Math.atan2(-pdx / pd, -pdz / pd) : Math.atan2(pdx / pd, pdz / pd)) - sh.yaw; pe = Math.atan2(Math.sin(pe), Math.cos(pe)); rate = clamp(pe * 0.5, -ANC_PIVOT, ANC_PIVOT); }
@@ -171,15 +171,15 @@ function sailShip(sh, dt) {
     // 艦長（54_helm.js）：要哪一舷對敵（一舷火力不到另一舷一半 ⇒ 轉另一舷；⛔ 以前要一門都開不了才換）、航向（敵艦在那一舷正橫 ＋ 距離修正）、期望航速（下一步 helmGovern 換成帆裝與俥鐘）
     // 指揮官的命令（53_commander.js；TASK-0679）先問：戰列跟隨（照排頭的航跡）、戰列的排頭、搶上風 ⇒ 航向與期望航速照命令；都不是 ⇒ 艦長自己的交戰操舵
     var od = ORDERS[sh.i], ok = !sh.struck && !sh.sunk, ld = ok && od && od.mode === 'line' ? SHIPS[od.leader] : null;
-    var hc = ld && !ld.sunk ? helmFollow(sh, ld, od) : ok && od && od.mode === 'gauge' ? helmGauge(sh, od) : ok && od && od.mode === 'lead' ? helmLead(sh, od) : null;
+    var hc = dockOn(sh) ? dockHelm(sh) : ld && !ld.sunk ? helmFollow(sh, ld, od) : ok && od && od.mode === 'gauge' ? helmGauge(sh, od) : ok && od && od.mode === 'lead' ? helmLead(sh, od) : null;
     if (hc) { tY = hc.yaw; sh.wantV = hc.v; }
     else if (ok && foe) { var hs = helmSteer(sh, foe); tY = hs.yaw; sh.wantV = hs.v; } else sh.wantV = null;
-    if (ok && (hc || foe)) tY = helmIrons(sh, tY);                        // 避開頂風、速度不夠就順風繞（54_helm.js；讓船在下面，照舊優先）
+    if (ok && (hc || foe) && !dockOn(sh)) tY = helmIrons(sh, tY);       // 自動停靠／出航照航道走（逆風靠小艇拖帶，88_modeswitch.js dockTow）                        // 避開頂風、速度不夠就順風繞（54_helm.js；讓船在下面，照舊優先）
     if (!(ld && !ld.sunk)) { sh.station = null; sh.lineErr = sh.lineLag = sh.lineArc = sh.lineOff = undefined; }
     sh.throttle = sh.helmSpill || 1;                                     // 只靠帆的船：期望航速比夠用的那一段帆慢 ⇒ 放掉一點風（54_helm.js helmGovern）
     if (od && od.throttle !== undefined && !hc) sh.throttle = Math.min(sh.throttle, od.throttle);   // 指揮官給的油門（沙盒用；遊戲的排頭、跟隨照期望航速）
     // 接管航行的順序在 54_helm.js HELM_TAKES（淺水 ＞ 逃離漩渦 ＞ 讓友船 ＞ 讓敵艦 ＞ 讓開砲線）與各模式的限制（bound）。
-    if (!sh.struck && !sh.sunk) { var av = helmTakeover(sh, { hc: hc, od: od }); if (av !== null) { tY = av; sh.avT = SIMT; } }   // 接管航行（54_helm.js HELM_TAKES：照優先級，第一個接的模式 ⇒ sh.helmMode）   // avT：最後一次讓船的時刻（讀數）   // 戰列、搶上風（hc）不讓砲線（TASK-0679）：守隊形，擋到的那幾門照 friendInLine 不開（⛔ 讓 ⇒ 接近時敵艦在前方、前一艘永遠擋著後面的砲線，排頭 35 秒、紅方排頭 80 秒都在讓，隊形散掉）   // throttle 每一步重設（lineClear 要放慢才改）   // 讓友船 ＞ 讓敵艦（不撞，54_helm.js）＞ 讓開友艦的砲線（52_fleet.js；沒有友船 ⇒ null）
+    if (!sh.struck && !sh.sunk && !dockOn(sh)) { var av = helmTakeover(sh, { hc: hc, od: od }); if (av !== null) { tY = av; sh.avT = SIMT; } }   // 接管航行（54_helm.js HELM_TAKES：照優先級，第一個接的模式 ⇒ sh.helmMode）   // avT：最後一次讓船的時刻（讀數）   // 戰列、搶上風（hc）不讓砲線（TASK-0679）：守隊形，擋到的那幾門照 friendInLine 不開（⛔ 讓 ⇒ 接近時敵艦在前方、前一艘永遠擋著後面的砲線，排頭 35 秒、紅方排頭 80 秒都在讓，隊形散掉）   // throttle 每一步重設（lineClear 要放慢才改）   // 讓友船 ＞ 讓敵艦（不撞，54_helm.js）＞ 讓開友艦的砲線（52_fleet.js；沒有友船 ⇒ null）
     var e = Math.atan2(Math.sin(tY - sh.yaw), Math.cos(tY - sh.yaw));
     var rmaxT = HELM_TQ ? rmax + helmDifRate(sh, rmaxB) : rmax;                // 操舵（TASK-0777）：上限 ＝ 舵 ＋ 差動打滿 ⇒ 舵沒了照樣靠兩舷的推力轉；關著 ⇒ 只有舵（跟以前一樣）
     rate = clamp(e * 0.5, -rmaxT, rmaxT); sh.rudder = rmaxT > 0 ? rate / rmaxT * (helmRev(sh) ? -1 : 1) : 0;   // 倒退 ⇒ 舵反著打（畫面上的舵角；轉向照要的轉）
@@ -192,6 +192,7 @@ function sailShip(sh, dt) {
   }
   sh.yaw += sh.yawRate * dt;
   if (VX) sh.yaw += vxSpin(sh, dt) + vxTurn(sh, dt);                  // 大漩渦：眼裡跟著漩渦自旋、繞行轉向（08_sea.js）
+  if (dockOn(sh)) dockTow(sh, dt);                                     // 自動停靠／出航：小艇拖帶（88_modeswitch.js）
   F = fwd(sh.yaw);
   sh.vel = mul(F, sh.spd);
   var cf = seaFlow(sh.px, sh.pz);                                    // 水流（08_sea.js seaFlow：洋流 ＋ 大漩渦；TASK-0842）⇒ 對地 ＝ 對水 ＋ 水流

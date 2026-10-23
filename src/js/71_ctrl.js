@@ -22,7 +22,7 @@ ctrlAdd({ name: 'orbit', pri: 0, on: function () { return true; },
   key: function (k, down, e) {
     if (!down) { kbLit(k, false); keyUp(k); return true; }
     var ba = keyAct('battle', k);                                       // 海戰的動作（66_keys.js 鍵位）
-    if (!modeRule('battleKeys') && ba !== 'pause' && ba !== 'settings' && ba !== 'cam' && ba !== 'hostBack' && !(modeRule('observe') && (ba === 'cut' || ba === 'deck' || ba === 'xray'))) return true;   // 玩法規則 battleKeys（04_modes.js；建造、觀察）：開砲、轉舵那些鍵不作用（🌍 回到地球儀照樣作用：城鎮模式只剩 ⚙ 與 🌍）；觀察照樣切剖面、甲板、透視
+    if (!modeRule('battleKeys') && ba !== 'pause' && ba !== 'settings' && ba !== 'cam' && ba !== 'hostBack' && ba !== 'dock' && !(modeRule('observe') && (ba === 'cut' || ba === 'deck' || ba === 'xray'))) return true;   // 玩法規則 battleKeys（04_modes.js；建造、觀察）：開砲、轉舵那些鍵不作用（🌍 回到地球儀照樣作用：城鎮模式只剩 ⚙ 與 🌍）；觀察照樣切剖面、甲板、透視
     if (ba) e.preventDefault();
     kbLit(k, true); doKey(k, e.repeat); return true;
   },
