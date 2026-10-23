@@ -327,7 +327,7 @@ var TREE_SPECIES = {
     height: [12, 19],
     trunk: { r: [0.16, 0.24], taper: 0.55, bend: 0.03, segs: 7, sides: [6, 4], lean: 0.02, col: [0.36, 0.27, 0.20], top: 0.97, crown: 0.1 },
     levels: [{ n: [16, 22], from: [0.06, 1.0], angle: [6, 16], len: [0.7, 1.1], r: 0.4, bend: 0.06, up: 0.4, segs: 2, sides: [3, 0] }],   // 枝幾乎貼著樹幹往上長 ⇒ 窄柱
-    leaf: { kind: 'cluster', per: [3, 4], size: [0.55, 0.8], flat: 1, stretch: 2.4, jit: 0.25, col: [0.12, 0.24, 0.12], vary: 0.07, along: 0.8 },
+    leaf: { kind: 'cluster', per: [3, 4], size: [0.55, 0.8], flat: 1, stretch: 2.4, jit: 0.25, col: [0.12, 0.24, 0.12], vary: 0.07, along: 0.8, low: 'column' },   // low：低模併成一根直立的橢球（不是一顆圓球）
     place: { town: true, spacing: 6, scale: [1, 1], sink: 0.15 },
     variants: 4
   },
@@ -528,6 +528,11 @@ var TREE_LEAF = {
       Object.keys(G).forEach(function (k) {
         var L = G[k], c = [0, 0, 0]; L.forEach(function (p) { c[0] += p[0] / L.length; c[1] += p[1] / L.length; c[2] += p[2] / L.length; });
         var r = 0; L.forEach(function (p) { r = Math.max(r, Math.hypot(p[0] - c[0], p[1] - c[1], p[2] - c[2])); });
+        if (Lf.low === 'column') {                                       // 柱狀（柏樹）：一層枝全掛在樹幹上 ⇒ 全部枝尖併成一團；照球算就是一顆直徑跟樹高差不多的圓球（Tim 2026-10-24 截圖：君堡遺跡的柏樹近看細柱、遠一點變圓球）
+          var rh = 0, rv = 0; L.forEach(function (p) { rh = Math.max(rh, Math.hypot(p[0] - c[0], p[2] - c[2])); rv = Math.max(rv, Math.abs(p[1] - c[1])); });
+          var rr = rh * 0.8 + Lf.size[1]; blobs.push({ c: c, r: rr, ax: [0, 1, 0], st: Math.max(1, (rv + Lf.size[1]) / rr - Lf.flat + 1) });   // 沿 y 拉長到枝尖的高度範圍
+          return;
+        }
         blobs.push({ c: c, r: r * 0.8 + Lf.size[1] });
       });
     }
@@ -536,7 +541,7 @@ var TREE_LEAF = {
       var k = 1 + (R() - 0.5) * 2 * Lf.vary, c0 = [Lf.col[0] * k, Lf.col[1] * (1 + (R() - 0.5) * Lf.vary), Lf.col[2] * k];
       if (Lf.tint && R() < Lf.tint[0]) { var tc = Lf.tint[1], m = 0.5 + 0.5 * R(); c0 = [c0[0] + (tc[0] - c0[0]) * m, c0[1] + (tc[1] - c0[1]) * m, c0[2] + (tc[2] - c0[2]) * m]; }
       var out = treeNorm([bl.c[0] - mid[0], (bl.c[1] - mid[1]) * 0.6 + 0.4, bl.c[2] - mid[2]]);
-      treeBall(M, bl.c, bl.r, Lf.flat, c0, Math.min(1, 0.55 + 0.45 * bl.c[1] / K.h) + TREE_LEAF_DET, out, Lf.stretch && bl.ax ? bl.ax : null, Lf.stretch);   // ＋TREE_LEAF_DET：近看畫葉片細節（63_trees.js TREE_FS）
+      treeBall(M, bl.c, bl.r, Lf.flat, c0, Math.min(1, 0.55 + 0.45 * bl.c[1] / K.h) + TREE_LEAF_DET, out, bl.st ? bl.ax : Lf.stretch && bl.ax ? bl.ax : null, bl.st || Lf.stretch);   // ＋TREE_LEAF_DET：近看畫葉片細節（63_trees.js TREE_FS）
     });
   },
   /** 棕櫚的羽狀葉：從樹幹頂一圈長出 n 片（照黃金角轉；越晚長的越往外、越垂；最外面 dead 成是垂下來的枯葉）。
