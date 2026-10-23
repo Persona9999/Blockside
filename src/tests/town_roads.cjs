@@ -7,6 +7,7 @@ const c = { Q: new URLSearchParams(), TREE_DITHER:'', evOn: (n, f) => { events[n
 vm.createContext(c); vm.runInContext(source, c);
 c.BED = { ax: 0, az: 0, A: { chunk: 64 } }; c.TOWN_GT_SZ = 8;   // 地面分區照 8 m（路口跨好幾區）
 c.townGpu9 = (V, I, bb) => ({ V, I, bb }); c.townGpuFree = () => {};
+c.bedShowC = () => null;   // 08_seabed.js 的「畫著的那一塊」：沒有 ⇒ townCell 照 bedCell（aeb8aec 起 townCell 先問它；這裡沒載海床 ⇒ 下面的 bedCell 假的那一份）
 function road(P, w = 4) { return { P, z: P.map(() => 2), w, kind: 'street' }; }
 function surface(roads) { return c.townRoadSurface(roads); }
 // townRoadGen 的輸出是攤平的：v 每點 6 個（往東、往南、備援高度、rgb）、i 每三個一個三角形（TASK-0817）
@@ -27,6 +28,15 @@ for (let x=-2.7031; x<2.8; x+=.3137) for(let z=-2.713; z<3.8; z+=.29317) {
   if(z>2.7 && Math.abs(x)>1.7) continue;
   const n = contains(R,x,z); assert.equal(n,1,`junction gap/overlap at ${x},${z}`);
 }
+// 窄路（寬 < 3.5 m）經過的格細分成 1 m（Tim 2026-10-23：和平港的路「出現破損」—— 2 m 格上斜 30° 寬 2 m 的路只鋪到六成、碎成 20 段）：
+//   路面裡每一點剛好一個三角形（沒有斷、沒有疊）；接寬路的 T 字路口（細分的格接沒細分的格）同樣沒有縫、沒有疊
+//   ⚠ 取樣點的起點、步長要錯開格線（contains 是嚴格在裡面：落在三角形的邊上兩邊都不算 ⇒ 假的 0；第一版步長 .31 從 −13.1 起 ⇒ 踩到 x ＝ −10、x ＋ z ＝ −12，舊程式一樣報）
+const th = Math.PI/6, ux = Math.cos(th), uz = Math.sin(th), nar = road([[.3,.7],[.3+40*ux,.7+40*uz]], 2), NR = await surface([nar]);
+assert(area(NR) > .98*(40*2+Math.PI), 'narrow road area ' + area(NR).toFixed(1));
+for (let s=.5137; s<39.5; s+=.3719) for (const o of [-.6131,.0173,.5927]) { const x=.3+s*ux-o*uz, z=.7+s*uz+o*ux; assert.equal(contains(NR,x,z),1,`narrow road gap/overlap at ${x.toFixed(3)},${z.toFixed(3)}`); }
+const TN = [road([[-14.3,.4],[14.1,.4]],6), road([[.6,.4],[.6+20*Math.cos(1.2),.4+20*Math.sin(1.2)]],2)], RN = await surface(TN);
+for (let x=-13.1037; x<13; x+=.3137) for (let z=-2.4113; z<3.2; z+=.29317) assert.equal(contains(RN,x,z),1,`wide road next to narrow gap/overlap at ${x.toFixed(3)},${z.toFixed(3)}`);
+for (let s=3.6137; s<19; s+=.3719) for (const o of [-.6131,.0173,.5927]) { const x=.6+s*Math.cos(1.2)-o*Math.sin(1.2), z=.4+s*Math.sin(1.2)+o*Math.cos(1.2); assert.equal(contains(RN,x,z),1,`narrow branch gap/overlap at ${x.toFixed(3)},${z.toFixed(3)}`); }
 const cases = [road([[0,0],[10,0],[10,10]]), road([[0,0],[10,0],[.5,1]]), road([[0,0],[0,0],[10,0]]), road([[0,0],[10,0],[10,10],[0,10],[0,0]])];
 for (const r of cases) { const s=await surface([r]); assert(s.i.length>0); assert([...s.v].every(Number.isFinite)); tris(s).forEach(f=>assert.equal(new Set(f).size,3)); }
 // A broad cell has a saddle: bilinear interpolation is below its rendered upper triangle.
