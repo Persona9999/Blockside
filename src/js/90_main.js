@@ -189,6 +189,9 @@ if (DEBUG) window.__game = {
   twbLots: function (use, n) { var T = twbTown(); return T ? (T.p.lots || []).filter(function (l) { return l.use === use; }).slice(0, n || 5).map(function (l) { return { id: l.id, at: l.at }; }) : null; },   // 那一種地塊的規劃座標（測建築模式用）
   twbScreen: function (q) { var T = twbTown(); return T ? twbScreenOf(T, q) : null; },
   twbProbe: function (q) { return twbProbe(q); },
+  townHit: function (cx, cy) { var h = townHitAt(cx, cy); return h ? { town: h.T.id, lot: h.lot ? h.lot.id : null, use: h.use, name: h.name, k: h.q.k, t: h.t, pt: h.pt } : null; },   // 螢幕那一點點到哪一棟（63_towns.js townHitAt；不看地形擋不擋）
+  twbSel: function () { var h = TWB.sel; return h ? { town: h.T.id, lot: h.lot ? h.lot.id : null, use: h.use, name: h.name, k: h.q.k } : null; },   // 建築模式選著的那一棟
+  twbMenu: function () { return TWB_CATS.map(function (c) { return { k: c.k, name: c.name, items: c.items.map(function (it) { return it.k; }) }; }); },   // 建築模式的選單（open 回的 menu 換過沒）
   townLines: function (id) { return townLines(id); },   // 引水渠的實例＋路（63_towns.js townLines；量墩跟路面疊多少）
   townDump: function (id) { return townDump(id); },   // 城的地面網格與整地高度的雜湊（63_towns.js townDump；增量重建 vs 整座建的對照）   // 規劃座標那一點：路面頂點高度 vs 現在的地形（87_townbuild.js twbProbe；查路面沉進地形）   // 規劃座標 ⇒ 螢幕座標（clientX、clientY；測建築模式用）
   trees: function (sp, n, at) { return treeFind(sp, n, at); },   // 找樹（63_trees.js treeFind）：那一種最靠近 at（[x, z]；沒給 ⇒ 鏡頭）的 n 棵

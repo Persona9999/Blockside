@@ -512,6 +512,7 @@ function townNeed(I, wallsOnly) {
       if (l.use === 'plot' || l.use === 'plaza') return;
       add(townPick(I, T.styles, l));
     });
+    if (!wallsOnly) (TOWNS.wantUse || []).forEach(function (u) { add(townPick(I, T.styles, { use: u })); });   // 建築模式選單裡的那幾種（還沒蓋也先要：預覽要畫得出來；TASK-0869，townWantSet）
     (T.p.walls || []).forEach(function (w) {
       var kit = townWallKit(I, T, w, false); if (!kit) return;
       Object.keys(I.byUse).forEach(function (k) { if (k.indexOf(kit + '-') === 0) add(I.byUse[k]); });   // 那一套的每一型（門、塔、斷面、收尾、轉角…；以後多一型也不漏）
@@ -658,7 +659,8 @@ function townHoleOf(T, l) {
 /** 一塊地 ⇒ 一棟的實例（townInst；建築模式的預覽 townGhost 也走這一支 ⇒ 同一個地塊 id 預覽跟蓋出來的是同一棟）；那一種沒有模型 ⇒ null。 */
 function townLotInst(T, K, l) {
   var L = townPick(K, T.styles, l); if (!L || !L.length) return null;
-  var nm = L[Math.floor(townHash(T.id + ':' + l.id) * L.length)], m = K.M[nm].m, th = l.rot * Math.PI / 180, md = m.size[1] * m.mpv, mw = m.size[0] * m.mpv;
+  var nm = L[Math.floor(townHash(T.id + ':' + l.id) * L.length)]; if (!K.M[nm]) return null;   // 剛蓋的那一種模型還在路上（townReplace 叫了 townKitStale）⇒ 這一格先不擺
+  var m = K.M[nm].m, th = l.rot * Math.PI / 180, md = m.size[1] * m.mpv, mw = m.size[0] * m.mpv;
   var off = (l.d - md) / 2, e = T.E([l.at[0] + off * Math.cos(th), l.at[1] + off * Math.sin(th)]);
   var lk = Math.max(1, Math.min(TOWN_LM[1], Math.max(mw, md, m.top) / TOWN_LM[0]));
   return { k: nm, x: e[0] - BED.ax, y: l.h, z: e[1] - BED.az, th: th, sx: 1, sh: 0.92 + 0.16 * townHash(l.id + '#'), r: Math.hypot(mw, md) / 2 + 2, top: m.top, pl: [mw, md], foot: mw * md * m.cover, col: m.roof, lot: l.id, lk: lk };
@@ -1537,6 +1539,49 @@ function townGhostDraw(q) {
   gl.colorMask(true, true, true, true); gl.depthMask(false); gl.enable(gl.BLEND); gl.blendColor(0, 0, 0, q.a); gl.blendFunc(gl.CONSTANT_ALPHA, gl.ONE_MINUS_CONSTANT_ALPHA);
   gl.drawElementsInstanced(gl.TRIANGLES, g.nq * 6, gl.UNSIGNED_INT, 0, 1);   // 深度相等（LEQUAL）的那一層混色
   gl.disable(gl.BLEND); gl.blendFuncSeparate(bs[0], bs[1], bs[2], bs[3]); gl.depthMask(true); if (cf) gl.enable(gl.CULL_FACE); gl.bindVertexArray(null);
+}
+// ── 點到哪一棟（通用接口；TASK-0869，Tim 2026-10-23「建築模式希望可以在點擊建築後可以顯示該建築名稱(點擊跟建築互動會是之後遊戲內功能 可以把點擊建築判定接口通用化)」）──
+//   townHitAt(cx, cy, tMax) ⇒ { T, q（實例）, lot（規劃的那一塊）, m（模型的索引那一筆）, name, use, t（離眼睛幾公尺）, pt（碰到的世界點）}｜null
+//     射線（townRayOf：螢幕那一點 ⇒ 眼睛出發的方向）對每一棟擺出來的建築的外框（那棟模型的長方體：寬 × 進深 × 模型頂，照實例的位置、轉向、高度倍率）取最先碰到的；
+//     tMax ＝ 射線先碰到地面的距離（87_townbuild.js twbGround）⇒ 山、地形擋在前面就不算點到後面那一棟。⛔ 不讀 GPU、不看格子：點到屋簷底下的空處也算那一棟。
+//     城牆、引水渠的實例沒有地塊 ⇒ 不算（要點城牆再加一種外框）。之後的互動（進屋、買賣、看產量…）都從這一支拿「點到誰」，名字照 townLotName。
+//   townLotName(T, l, m) ⇒ 給人看的名字：手擺的地塊有 name（史料的名字）⇒「那個（模型的名字）」；不然模型的名字（Blocksail townmodels.py：作品標題括號前那一段）；都沒有 ⇒ 用途 key。
+function townRayOf(cx, cy) {
+  var r = cv.getBoundingClientRect(), nx = (cx - r.left) / r.width * 2 - 1, ny = 1 - (cy - r.top) / r.height * 2, bq = CAM.inv;
+  var w0 = bq[3] * nx + bq[7] * ny - bq[11] + bq[15], w1 = bq[3] * nx + bq[7] * ny + bq[11] + bq[15];
+  var p0 = mul(M4.pt(CAM.inv, nx, ny, -1), 1 / w0), p1 = mul(M4.pt(CAM.inv, nx, ny, 1), 1 / w1);
+  return [p0, norm(sub(p1, p0))];
+}
+function townHitAt(cx, cy, tMax) {
+  var K = TOWNS.kit; if (!K || !CAM.inv || !BED) return null;
+  var R = townRayOf(cx, cy), o = R[0], d = R[1], lim = tMax == null ? 3000 : tMax, best = null;
+  TOWNS.list.forEach(function (T) {
+    (T.inst || []).forEach(function (q) {
+      if (!q.lot || !q.pl) return;
+      var c = Math.cos(q.th), s = Math.sin(q.th), ox = o[0] - q.x, oz = o[2] - q.z;   // 模型自己的軸：進深沿 th（地塊 rot：臨路那一邊，townLotInst）、寬垂直它
+      var O = [ox * c + oz * s, -ox * s + oz * c, o[1]], V = [d[0] * c + d[2] * s, -d[0] * s + d[2] * c, d[1]];
+      var lo = [-q.pl[1] / 2, -q.pl[0] / 2, q.y], hi = [q.pl[1] / 2, q.pl[0] / 2, q.y + q.top * q.sh], t0 = 0, t1 = Math.min(lim, best ? best.t : lim);
+      for (var i = 0; i < 3; i++) {
+        if (Math.abs(V[i]) < 1e-9) { if (O[i] < lo[i] || O[i] > hi[i]) return; continue; }
+        var a = (lo[i] - O[i]) / V[i], b = (hi[i] - O[i]) / V[i]; if (a > b) { var w = a; a = b; b = w; }
+        if (a > t0) t0 = a; if (b < t1) t1 = b; if (t0 > t1) return;
+      }
+      best = { T: T, q: q, t: t0 };
+    });
+  });
+  if (!best) return null;
+  var l = (best.T.p.lots || []).filter(function (x) { return x.id === best.q.lot; })[0] || null, m = K.M[best.q.k] ? K.M[best.q.k].m : null;
+  return { T: best.T, q: best.q, lot: l, m: m, name: townLotName(best.T, l, m), use: l ? l.use : m && m.use, t: +best.t.toFixed(2), pt: [o[0] + d[0] * best.t, o[1] + d[1] * best.t, o[2] + d[2] * best.t] };
+}
+function townLotName(T, l, m) {
+  var mn = m && m.name ? m.name : null, ln = l && l.name ? String(l.name).replace('(', '（').split('（')[0].trim() : null;
+  return ln ? ln + (mn && mn !== ln ? '（' + mn + '）' : '') : mn || (l ? l.use : '?');
+}
+/** 建築模式選單裡的用途（87_townbuild.js twbMenuSet）：要的模型變多 ⇒ 重解一次模型組（同 townReplace）。 */
+function townWantSet(uses) {
+  TOWNS.wantUse = (uses || []).slice();
+  var I = townIdx();
+  if (I && TOWNS.kitHas && townNeed(I).some(function (nm) { return TOWNS.kitHas.indexOf(nm) < 0; })) townKitStale();
 }
 /** 測試用（__game.townLines）：城 id 的引水渠實例（海域座標：中心、轉角、x 的倍率、半長、半厚、模型的 arch）＋ 每條路照同一套換到海域座標的中心線與寬
  *  ⇒ 拿實例的墩（arch 兩側）去量跟路面疊多少 —— 跟規劃的 under 走不同的路（under 是 Blocksail 沿渠線取樣算的；這裡讀的是實際擺出來的實例） */
