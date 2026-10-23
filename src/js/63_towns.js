@@ -1082,13 +1082,14 @@ function townGroundTile(T, Q) {
     }
   });
   // 路接地塊的樓梯（Blocksail world/town.js roadStairs，TASK-0861）：path ＝ [路那一頭, 地塊那一頭]、z ＝ 兩頭的高、n 階、寬 w ⇒ 一階一個實心的方塊（頂面、四個側面），
-  //   第 k 階頂 ＝ z0 ＋ (k＋1)·(z1 − z0)／n（最後一階 ＝ 地塊的 h）；底往下到那一階四角最低的地面再 0.3 m（同石基）—— 往上走的不整地（坡上挖溝不好看），往下走的規劃另外整到低的那一頭
+  //   往上走：第 k 階頂 ＝ z0 ＋ (k＋1)·(z1 − z0)／n（最後一階 ＝ 地塊的 h）；往下走：第 k 階頂 ＝ z0 ＋ k·(z1 − z0)／n（第一階跟路面齊、最後一級落到地塊上）
+  //   ⇒ 兩種都是那一段的直線斜坡在踏面底下（往下走的規劃把那一段路面拉成這條斜線，地形照它整）；底往下到那一階四角最低的地面再 0.3 m（同石基）
   (Q.stair || []).forEach(function (st) {
     var A = W(st.path[0]), B = W(st.path[1]), dx = B[0] - A[0], dz = B[1] - A[1], L = Math.hypot(dx, dz), n = Math.max(1, st.n | 0); if (L < 0.05) return;
     var ux = dx / L, uz = dz / L, hw = st.w / 2, z0 = st.z[0], z1 = st.z[1], col = TOWN_COL.plaza, dk = [col[0] * 0.78, col[1] * 0.78, col[2] * 0.78];
     function P(a, b) { return [A[0] + ux * a - uz * b, A[1] + uz * a + ux * b]; }
     for (var k = 0; k < n; k++) {
-      var a0 = L * k / n, a1 = L * (k + 1) / n, top = z0 + (z1 - z0) * (k + 1) / n + 0.02, C = [P(a0, -hw), P(a1, -hw), P(a1, hw), P(a0, hw)], lo = Infinity;
+      var a0 = L * k / n, a1 = L * (k + 1) / n, top = z0 + (z1 - z0) * (k + (z1 > z0 ? 1 : 0)) / n + 0.02, C = [P(a0, -hw), P(a1, -hw), P(a1, hw), P(a0, hw)], lo = Infinity;
       C.forEach(function (c) { var g = hgt(c[0], c[1]); if (g === g) lo = Math.min(lo, g); });
       var bot = Math.min(lo === Infinity ? Math.min(z0, z1) : lo, top) - 0.3, b0 = V.length / 9;
       C.forEach(function (c) { vtx(c[0], top, c[1], col); }); I.push(b0, b0 + 1, b0 + 2, b0, b0 + 2, b0 + 3);
