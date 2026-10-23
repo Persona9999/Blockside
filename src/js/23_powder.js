@@ -56,6 +56,7 @@ function stepPowder() {
 //   自爆只記時間點 sh.selfAt（Tim：「自爆標記一個Flag(紀錄時間點)」）；結算時 SELF_WIN 秒內沉的算「自爆沉沒」（61_hud.js shipFate）。
 //   不直接降旗（Tim 2026-10-24：「目前海戰自爆會直接降旗 希望改成要等進水沉船才降旗(自爆只是點燃彈藥庫 不直接判降旗)」）：
 //   ⛔ 以前每炸一間就標 sh.struck ⇒ 第一間一炸就出局、換船。現在只照殉爆：開始沉（斷船、進水夠了：sinkingFinal）才出局；其他降旗規則（32_hull.js strikeCheck：死傷、砲全啞…）照常判。
+//   沒斷又沒沉（抽水跟得上；例：夜隼號下沉停在 2.8 m）⇒ 不出局、繼續作戰（Tim 2026-10-24：「自爆沒沉就繼續作戰」）。
 var SELF_GAP = [0.6, 1.8], SELFB = [];
 function canSelfDestruct() { var sh = SHIPS[PLAYER_I]; return !!(RUNNING && sh && !sh.sunk && !sh.selfD && sh.mags.some(function (m) { return !m.gone; })); }
 function selfDestruct() {
