@@ -29,6 +29,7 @@
 //   ⇒ 站上照兩節的角平分面斜接（著色器照 aJ 把那一節沿 x 切成梯形）、接到門／塔／轉角／收尾的那一頭照部件的端面切齊；高度照兩站的地面線性接（坡上順著走，不再一節一階），
 //   牆基（模型 z 0 那一層）往下延到腳下最低的地面；轉得急（≥ TOWN_WALL_CORNER）的頂點要有部件蓋著（同世紀帝國轉角的塔）：附近有塔 ⇒ 塔挪到轉角上（stat.snapped），
 //   沒有 ⇒ 擺一件轉角（那一套的 joint；沒有 ⇒ 第一型塔；stat.corners）。會改到手擺的塔（君士坦丁堡新擺 6、加拉塔新擺 7〔22 → 29 座〕、挪 9 座）⇒ Tim 2026-10-20 選保留。
+//   城門那一筆帶 model ⇒ 那一門改用 '<套>-gate-<model>'（kaguya 2026-10-23：君士坦丁堡的金門 'golden'，連兩座大理石塔 70 m 寬）；這種自帶塔的門蓋到的塔不擺（stat.towerInGate）。
 // 遠近四級（照樹那一套；距離 TOWN_LOD、TOWN_FAR）：近 原模型、中 低模（0.4 m）、遠 貼圖（八個方向先拍好，取最接近視線的那一張）、更遠 屋頂殼（每 TOWN_SHELL_G 公尺一格的屋頂高與顏色）；
 //   每一級的交接帶兩邊都畫、用同一個抖動互補（同一個像素只有一個）。看得到的實例照視錐剔、鏡頭動了 TOWN_REBIN 公尺才重新分組（townBin）。
 // 布旗（模型帶 flags 的，例：加拉塔塔頂的熱那亞旗）：一塊布、照風飄，只給人看 ⇒ 見下面「布旗」那一段。
@@ -700,8 +701,16 @@ function townWall(T, w, out, W, line) {
   if (!sect) return;
   var mS = K.M[sect].m, len = mS.len || 2, mW = mS.size[0] * mS.mpv, shW = 0.95 + 0.1 * townHash(w.id), obs = [];   // 斷面一條牆同一個深淺（一節一個 ⇒ 每 len 公尺一條色差）
   var parts = [];                                                       // 門、塔、轉角：{ nm, t（中心）, h（半長）, tower }
-  (w.gates || []).forEach(function (g) { if (gate) parts.push({ nm: gate, t: proj(W(g.at)), h: half(gate) }); });
-  (w.towers || []).forEach(function (q, i) { if (towers.length) { var nm = towers[i % towers.length]; parts.push({ nm: nm, t: proj(W(q)), h: half(nm), tower: true }); } });
+  (w.gates || []).forEach(function (g) {                                 // 城門那一筆帶 model（例：君士坦丁堡的金門 'golden'）⇒ 用那一套的 '<套>-gate-<model>'；沒載到就照舊用一般的門
+    var nm = g.model && K.M[kit + '-gate-' + g.model] ? kit + '-gate-' + g.model : gate;
+    if (nm) parts.push({ nm: nm, t: proj(W(g.at)), h: half(nm), own: nm !== gate });
+  });
+  (w.towers || []).forEach(function (q, i) {                              // 塔跟自帶塔的城門（own）重疊 ⇒ 不擺（金門的兩座大理石塔就是內牆第 9、10 座）
+    if (!towers.length) return;
+    var nm = towers[i % towers.length], t = proj(W(q)), h = half(nm);
+    if (parts.some(function (o) { return o.own && apart(t - h, t + h, o.t - o.h, o.t + o.h) < 0.5; })) { TOWNS.stat.towerInGate = (TOWNS.stat.towerInGate || 0) + 1; return; }
+    parts.push({ nm: nm, t: t, h: h, tower: true });
+  });
   if (line) townLineUnderParts(T, w, parts, K, sect, gate, mS, mW, Ltot);   // 引水渠跨過的路：拱心對到路上（見 townLineUnderParts）
   var cor = joint || towers[0], gap = Math.max(2 * len, 6);
   function apart(a0, a1, b0, b1) { var d = Infinity; (closed ? [0, Ltot, -Ltot] : [0]).forEach(function (sh) { d = Math.min(d, Math.max(0, b0 + sh - a1, a0 - b1 - sh)); }); return d; }   // 沿牆隔多遠（閉合 ⇒ 繞回來那一邊也算）
