@@ -18,6 +18,12 @@ var WEATHERS = {
 //   航速 ∝ √WIND_SPD（31_sailing.js）、帆上的風 × WIND_SPD（30_rig_physics.js）。浪的方向不跟：湧浪是開局那陣風吹出來的（08_sea.js 建一次）。
 WEATHERS.clear.gusts = { dir: 0.2, spd: 0.15, per: [233, 97, 41] };
 WEATHERS.storm.gusts = { dir: 0.6, spd: 0.3, per: [71, 29, 11] };
+// 風晃多大由外面給（TASK-0848；Tim 2026-10-23：「之後海戰轉風向可能要限制在一個範圍內變化」「變化範圍 風速等也可以從外部傳資料」）：
+//   ?wvd=度 ＝ 風向離開局最多偏幾度（0–90）、?wvs=成 ＝ 風速倍率最多變幾成（0–0.8；0.3 ＝ 0.7–1.3 倍）。Blocksail 地球儀照船那一格、那個月的風況給。
+//   三道正弦的權重和是 1、每道 sin(ωt＋φ) − sin φ 最多 ±2 ⇒ dir ＝ 度 ÷ 57.3 ÷ 2、spd ＝ 成 ÷ 2（晴天的 0.2／0.15 ＝ 23°／三成、暴風雨的 0.6／0.3 ＝ 69°／六成）；週期照天氣。
+//   沒給 ⇒ windGusts() 回天氣那一格本身 ⇒ 跟以前逐位元相同。
+var WIND_VD = Q.has('wvd') && isFinite(parseFloat(Q.get('wvd'))) ? clamp(parseFloat(Q.get('wvd')), 0, 90) : null, WIND_VS = Q.has('wvs') && isFinite(parseFloat(Q.get('wvs'))) ? clamp(parseFloat(Q.get('wvs')), 0, 0.8) : null;
+function windGusts() { var g = WX.gusts; return WIND_VD === null && WIND_VS === null ? g : { dir: WIND_VD !== null ? WIND_VD / 114.59 : g.dir, spd: WIND_VS !== null ? WIND_VS / 2 : g.spd, per: g.per }; }
 // 大漩渦（TASK-0683；Tim 2026-10-17：「暴風雨+海中央大漩渦(在敵我中間)」）：暴風雨的每一格照抄，再加 vortex（08_sea.js vxInit 讀）——
 //   r 水流最快那一圈的半徑（m）、depth 中間多深（m）、width 漏斗寬窄（幾倍的 r）、v 水流最快（節）、inflow 往中心吸（切向的幾成）、eye 眼的半徑（m）、pull 眼把船往下拖（m/秒，0 ＝ 不拖）。
 //   預設（Tim 2026-10-17「半徑再放大2倍 然後更深一點 水流快一些」）：r 95 → 190、depth 28 → 75、v 6.8 → 10 節、eye 21 → 42；可以在天氣設定頁改（下面 WXK_ITEMS）。
@@ -77,7 +83,7 @@ function windInit() {
 }
 /** 每一步（50_sim.js step 開頭、70_flow.js 開局）：照模擬時間算現在的風，改 WIND 與 WIND_SPD；風向轉了 20° 以上、風速變了三成以上 ⇒ 上方廣播（15 秒內不重複）。 */
 function stepWind(t) {
-  var g = WX.gusts, wt = [0.6, 0.3, 0.1], da = 0, ds = 0;
+  var g = windGusts(), wt = [0.6, 0.3, 0.1], da = 0, ds = 0;
   for (var i = 0; i < 3; i++) {
     var om = 2 * Math.PI / g.per[i], p1 = seedHash(i) * 6.2832, p2 = seedHash(i + 7) * 6.2832;
     da += wt[i] * (Math.sin(om * t + p1) - Math.sin(p1)); ds += wt[i] * (Math.sin(om * 1.37 * t + p2) - Math.sin(p2));
