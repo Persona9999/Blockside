@@ -180,6 +180,13 @@ function shipCheck(id) {
       (T.smAuto ? (smP.length ? '；' : '') + '材質標平滑的金屬（' + T.matIds.filter(function (id, i) { return i && matInfo(id).smooth === true; }).map(function (id) { return matInfo(id).name; }).join('、') + '）' + T.smAuto.toLocaleString('en') + ' 格' : '') +
       ((T.props || []).some(function (P) { return P.smP; }) ? '；螺旋槳整份平滑：' + T.props.filter(function (P) { return P.smP; }).map(function (P) { return P.name + ' ' + P.n.toLocaleString('en') + ' 格'; }).join('、') : '');   // Tim 2026-10-17：金屬件光滑（05_material.js、24_armor.js propSetup）
     R.info.smoothN = T.smN;
+    // ── 模型的材質反光（TASK-0859；62_simview.js modelMat）：外部模型、裝飾的 meta material ⇒ 照材質表的 metal／rough 反光（只給畫面）；材質表沒有 ⇒ 不反光、報 ⚠ ──
+    var MMs = {}; sh.models.concat(sh.decos || []).forEach(function (m) {
+      var id = m.meta && m.meta.material; if (id === undefined || id === '') return;
+      var nm = m.path || m.name; if (typeof id !== 'string' || !matKnown(id)) { add('warn', '模型材質', nm, 'meta material=' + id + ' 材質表沒有 ⇒ 不反光', '寫材質表有的 ID 或混合寫法（造船規格 §9.5）'); return; }
+      (MMs[id] || (MMs[id] = { n: 0, lit: !!m.mm })).n++;
+    });
+    R.info.modelMat = Object.keys(MMs).sort().map(function (id) { var q = MMs[id]; return matInfo(id).name + '（' + id + '）' + q.n + ' 件' + (q.lit ? '' : '（metal 0 ⇒ 不反光）'); }).join('；');
     if (smP.length && !(T.smN - T.smAuto)) add('warn', '平滑渲染', smP.map(function (p) { return p.path; }).join('、'), '關聯標了 render=smooth，檔頭卻沒有平滑的格（render 段落）⇒ 照方塊畫', 'python -I admin.py reimport --id ' + T.id + '（senate 匯出才帶 render 段落）');
     (T.h.parts || []).forEach(function (p) { var v = p.meta && p.meta.render; if (v && v !== 'smooth' && v !== 'voxel') add('warn', '平滑渲染', p.path, 'meta render=' + v + ' 不認得 ⇒ 照方塊畫', 'render 只有 voxel｜smooth（造船規格 §9.5）'); });
     sh.guns.forEach(function (g) { if (!g.alive) add('error', '開場就掉', g.name, '砲開場 ' + SC_SECS + ' 秒內就沒了', '砲腳下要有甲板'); });
@@ -236,6 +243,7 @@ function shipCheck(id) {
     if (!sh.mags.length) add('error', '彈藥庫', '—', '沒有 kind=magazine ⇒ 沒有取用點：砲打完砲旁藥箱（' + BOX_N + ' 份 × 砲種表 box）就停、也不會殉爆', '彈藥庫的關聯 meta kind=magazine, powder_lb ＋ 裡面的火藥桶模型（造船規格 §8）');
     sh.mags.forEach(function (m) { if (!m.kegs.length) add('error', '彈藥庫', m.name, '裡面沒有火藥桶模型 ⇒ 這一間不會殉爆' + (kegsAny ? '' : '、整艘沒有取用點（砲打完藥箱就停）'), '彈藥庫子作品裡掛火藥桶模型 meta kind=powder, powder_lb（造船規格 §8）'); });
     R.info.stations = sh.stations.length;
+    R.info.hoists = ahSummary(sh, add);                                 // 揚弾機（kind=hoist；23_powder.js）：送藥手送到艙底接收處、吊上砲旁藥箱
     R.info.mounts = (sh.mounts || []).map(function (g) { var M = g.mt, dg = function (a) { return Math.round(a * 57.2958); };   // 迴旋砲、砲塔（TASK-0626）
       return g.model.path + '（' + (M.ports ? '換砲門 ' + M.ports.map(dg).join('／') + '°' : '砲塔 ' + dg(M.arc[0]) + '～' + dg(M.arc[M.arc.length - 1]) + '°' + (M.fire && (M.fire[0] !== M.arc[0] || M.fire[M.fire.length - 1] !== M.arc[M.arc.length - 1]) ? '（開火 ' + dg(M.fire[0]) + '～' + dg(M.fire[M.fire.length - 1]) + '°）' : '')) + '、' + dg(M.rate) + '°／秒）'; }).join('、');
     // ── 砲帶的裝甲（TASK-0631；24_armor.js）：關聯 meta kind=armor、mount=<砲模型的路徑> ⇒ 跟著那門砲轉、一格一格打掉 ──
@@ -249,6 +257,9 @@ function shipCheck(id) {
     R.info.doors = doorsSummary(sh);                                    // 門、艙蓋（TASK-0638）
     portsIssues(sh, add); R.info.ports = portsSummary(sh);             // 砲門蓋板（TASK-0719；62_ports.js）：鉸鏈、lid_of、關的方向、關上時穿不穿過縮回去的砲、貼不貼船殼
     R.info.recoil = recoilSummary(sh);                                  // 後座（62_ports.js）：沒有蓋板的砲退幾格、照 meta 不演的
+    var AU = sh.guns.filter(function (g) { return g.auto; });       // 自動裝彈機（TASK-0845；40_crew.js gunAuto）：砲班幾個人、彈藥從哪來
+    R.info.autoload = AU.map(function (g) { return g.model.path + '（砲班 ' + g.auto + ' 人' + (g.ah ? '、揚弾機 ' + g.ah.name + ' 直接吊進來' : '、彈藥照舊由送藥手送到砲旁') + '）'; }).join('、');
+    AU.forEach(function (g) { if (!g.ah) add('warn', '自動裝彈機', g.model.path, 'autoload 的砲沒有揚弾機吊 ⇒ 彈藥照舊由送藥手送到砲旁（裝填照樣不靠砲班人數）', '揚弾筒 meta kind=hoist、guns 寫這門（造船規格 §9.15）'); });
     R.info.gunmount = gmtSummary(sh, add);                              // 砲身與砲座拆兩件、pitch（TASK-0836；05_hull.js gmtPair、62_ports.js gelBuild）
     R.info.spins = spinSummary(sh);                                     // 照參數轉的子物件（TASK-0640）
     (T.armBad || []).forEach(function (b) { add(b.lv, '裝甲', b.where, b.msg, b.fix); });
@@ -265,13 +276,13 @@ function shipCheck(id) {
       var gin = (a.g ? [a.g] : a.nd && a.nd.isTur ? a.nd.guns : []).some(function (g) { var b = g.model.pts.breech || g.model.c; return Math.hypot(b[0] - c[0], b[1] - c[1]) < rin; });   // 砲尾在圈裡 ⇒ 砲班要進得去；開放的砲盾（TASK-0661：砲班站在盾後、圈外）不用
       if (!ins.length && gin) add('warn', '裝甲', a.A.mount, '會轉的裝甲掃過的那一圈是牆（船員、第一人稱都走不穿）⇒ 圈裡沒有梯子通得到 ＝ 砲塔進不去（砲班只能待在開局的位置）', '在圈裡（離轉軸不到 ' + rin.toFixed(1) + ' 格）放一座梯子（kind=ladders）通到下一層的艙口，或頂上開艙口加梯子；⛔ 不開側門（造船規格：砲塔是封閉的一圈）');
     });
-    if (kegsAny) sh.decks.forEach(function (D) { if (!sh.stations.some(function (st) { return st.deck === D.key; })) add('error', '取用點', D.name, '這一層砲甲板找不到取用點（9×9 格平地、頭上 8 格空、不碰砲）⇒ 這一層的砲打完藥箱就停', '甲板留一塊空地，或在船隻配置頁擺取用點'); });
+    if (kegsAny) sh.decks.forEach(function (D) { if (!sh.stations.some(function (st) { return st.deck === D.key; }) && sh.guns.some(function (g) { return gunDeck(g) === D.key && !g.ah; })) add('error', '取用點', D.name, '這一層砲甲板找不到取用點（9×9 格平地、頭上 8 格空、不碰砲）⇒ 這一層的砲打完藥箱就停', '甲板留一塊空地，或在船隻配置頁擺取用點'); });
     // ── 每門砲拿不拿得到火藥（Tim 2026-10-15：「檢查炮是否有可以到達的火藥桶」）：照送藥手的走法（23_powder.js stepMonkey）——
     //   同一層的送藥手去同一層、x 最近的取用點（stationFor）拿，直直走到砲尾後面放藥箱的位置（g.drop；monkeyTo 不尋路）。
     //   ✗ 那一層沒有取用點（上面那條已報 ⇒ 這裡不重報）／沒有送藥手／砲尾後面找不到放藥箱的位置 ⇒ 那門砲打完砲旁藥箱就停。
     //   ⚠ 走路格上（預備水手的尋路，42_hands.js）取用點跟放藥箱的位置不連通 ⇒ 送藥手照直線穿過艙壁、艙口去送。
     //   兩點在不同層 ⇒ 照「層:區域」＋梯子的圖查得到 ⇒ 算走得到（報告註明幾門要走梯子；送藥手照樣直線走，這裡只判有沒有路）；查不到 ⇒ 照舊只計數。
-    var pw = { n: 0, ok: 0, lad: 0, unk: 0, far: 0, farG: '' };
+    var pw = { n: 0, ok: 0, lad: 0, unk: 0, ah: 0, far: 0, farG: '' };
     /** 第 la 層的第 ra 塊走得到第 lb 層的第 rb 塊嗎：跟 handRoute 同一張圖（節點「層:區域」、邊 ＝ 沒斷的梯子），只判有沒有路、⛔ 不碰梯子的排隊數（L.q）。 */
     function lvRegReach(la, ra, lb, rb) {
       var s = la + ':' + ra, t = lb + ':' + rb, seen = {}, q = [s]; seen[s] = 1;
@@ -290,6 +301,7 @@ function shipCheck(id) {
     if (kegsAny && sh.cw.monkeys > 0) sh.guns.forEach(function (g) {
       var deck = gunDeck(g), nm = g.model.path || g.model.name, sts = sh.stations.filter(function (st) { return st.deck === deck && !st.mag.gone; });
       pw.n++;
+      if (g.ah) { pw.ok++; pw.ah++; return; }                             // 揚弾機吊上去（上面 R.info.hoists 報）
       if (!sts.length) return;
       if (!g.drop) { add('error', '火藥', nm, '砲尾後面找不到放藥箱的位置 ⇒ 送藥手不送這門、打完砲旁藥箱就停', '砲尾後面（往中線 0.7 m）留一塊站得住的地方'); return; }
       if (!sh.crew.some(function (c) { return c.pm && c.deck === deck; })) { add('error', '火藥', nm, '這一層沒有送藥手（站不下）⇒ 打完砲旁藥箱就停', '那一層兩舷砲中間靠中線留站位'); return; }
@@ -306,7 +318,7 @@ function shipCheck(id) {
       if (!navPath(N, a, b)) { add('warn', '火藥', nm, st.name + ' 跟砲尾放藥箱的位置在走路格上不連通 ⇒ 送藥手照直線穿過艙壁、艙口去送', '取用點跟砲之間留通道，或在船隻配置頁換取用點的位置'); return; }
       pw.ok++;
     });
-    R.info.powder = pw.n ? pw.ok + '／' + pw.n + ' 門走得到取用點' + (pw.lad ? '（其中 ' + pw.lad + ' 門跨層、走梯子）' : '') + (pw.unk ? '（' + pw.unk + ' 門走路格量不到、照直線走）' : '') + (pw.far ? '；最遠 ' + pw.far.toFixed(1) + ' m（' + pw.farG + '，送一趟來回約 ' + (2 * pw.far / (MONKEY_SP * S) + FILL_T).toFixed(1) + ' 秒）' : '') : '—';
+    R.info.powder = pw.n ? pw.ok + '／' + pw.n + ' 門走得到取用點' + (pw.lad ? '（其中 ' + pw.lad + ' 門跨層、走梯子）' : '') + (pw.ah ? '（其中 ' + pw.ah + ' 門由揚弾機從艙底吊上去）' : '') + (pw.unk ? '（' + pw.unk + ' 門走路格量不到、照直線走）' : '') + (pw.far ? '；最遠 ' + pw.far.toFixed(1) + ' m（' + pw.farG + '，送一趟來回約 ' + (2 * pw.far / (MONKEY_SP * S) + FILL_T).toFixed(1) + ' 秒）' : '') : '—';
     R.issues.sort(function (a, b) { return (a.lv === 'error' ? 0 : 1) - (b.lv === 'error' ? 0 : 1); });
     done();
   }).catch(function (e) { add('error', '載入', id, String(e && e.message || e), '—'); done(); });

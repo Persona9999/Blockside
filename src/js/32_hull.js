@@ -109,6 +109,7 @@ function stepShip(sh, dt) {
   sh.M = M4.mul(shipMatrix(sh), M4.ident()); sh.inv = M4.inv(sh.M);
   sh.center = shipCenter(sh); sh.rad2 = Math.pow(Math.max(62, (sh.T.radFlags || 0) + 2), 2);   // 陣營旗在桅頂上方的旗桿上（77_colours.js）⇒ 62 m 搆不到（⛔ 以前一發都打不到）；沒有陣營旗 ⇒ 照舊 62
   manning(sh);
+  if (sh.ahs) ahStep(sh, dt);                                       // 揚弾機把份數吊進砲旁藥箱（23_powder.js）—— 沒有 ⇒ 不做事
   for (var i = 0; i < sh.guns.length; i++) {
     var g = sh.guns[i]; if (!(g.reload > 0)) continue;
     if (g.needCart && !sh.mags.length && gunRate(g) > 0) g.needCart = false;   // 這艘一間彈藥庫都沒有（作品漏標；夜燈號 2026-10-15）⇒ 不等送藥手（⛔ 等 ⇒ 每門打完開局藥箱那 2 發就永遠在等，整舷一排 △）；彈藥庫被打掉的照舊要等

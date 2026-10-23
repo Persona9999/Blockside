@@ -83,7 +83,7 @@ function stepSwim(sh, c, dt) {
   if (S2.t > S2.life) { drown(sh, c); return; }
   if (w[1] < top - 0.05) { w[1] = Math.min(top, w[1] + SWIM_UP * dt); c.fv = [0, 1, 0]; return; }
   w[1] = top + 0.06 * Math.sin(c.t * 2.4);
-  if (VX) { var cf = vxFlow(w[0], w[2]); w[0] += cf[0] * dt; w[2] += cf[1] * dt; }   // 大漩渦（08_sea.js）：浮在水面就跟著水流漂（游的速度另外加在下面）
+  var cf = seaFlow(w[0], w[2]); if (cf) { w[0] += cf[0] * dt; w[2] += cf[1] * dt; }   // 大漩渦（08_sea.js）：浮在水面就跟著水流漂（游的速度另外加在下面）
   var dst = S2.no.indexOf(sh) < 0 && boardPoint(sh, w) ? sh : null;   // 自己的船優先，上不去才往別艘（友船先、再敵船；照 SHIPS 的順序 ⇒ 一對一 ＝ 以前的敵艦）
   if (!dst) swimOthers(sh).some(function (o) { if (S2.no.indexOf(o) < 0 && boardPoint(o, w)) { dst = o; return true; } return false; });
   if (!dst) { c.fv = [0, 0, 0]; return; }

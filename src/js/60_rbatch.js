@@ -102,7 +102,7 @@ function rbatPrep() {
   }
   R.i0[n] = R.ni;
   for (k = 0; k < FLY.length; k++) {                                  // 飛出去的模型（燈熄了、不看陰影的段：以前就沒判）
-    var f = FLY[k], me = f.T.meshes[f.mesh]; if (!me || !f.M) continue; if (!me.vao) meshGpu(me);
+    var f = FLY[k], me = meshFor(f.T, f.mesh, f.mm); if (!me || !f.M) continue; if (!me.vao) meshGpu(me);
     R.mb[rbatAdd(5, -1, k, f, me.vao, 0, 0, me.n, 0, meshDtL(me, f.M))] = me;   // meshDtL：共用別份網格的（只差起點，62_simview.js）⇒ 矩陣右邊乘 trans(dt)       // mb：反射判整件在水面下（S13）
   }
   for (o = n; o < R.nPrev; o++) R.own[o] = null;                      // 上一格多的放掉（斷開的那一團沉了、漂走了：不留著它）
@@ -115,7 +115,7 @@ function rbatPrep() {
 function rbatShip(sh, o) {
   var T = sh.T, L = sh.models, k, m, me;
   for (k = 0; k < L.length; k++) {
-    m = L[k]; me = T.meshes[m.rmesh !== undefined ? m.rmesh : m.mesh]; if (!m.alive || !me || (m.vox && !m.moved)) continue; if (!me.vao) meshGpu(me);   // m.vox：螺旋槳畫它自己的格（24_armor.js armDraw）；m.rmesh：有座的砲只畫砲身（座在下面的裝飾，TASK-0836）
+    m = L[k]; me = meshFor(T, m.rmesh !== undefined ? m.rmesh : m.mesh, m.mm); if (!m.alive || !me || (m.vox && !m.moved)) continue; if (!me.vao) meshGpu(me);   // m.vox：螺旋槳畫它自己的格（24_armor.js armDraw）；m.rmesh：有座的砲只畫砲身（座在下面的裝飾，TASK-0836）
     var dv = m.ancD || m.vsl;                                         // 只給畫面的位移（格座標，左乘在 modelLocal 外面 ⇒ 帆的碰撞、斷船、打飛都看不到）：錨沒有 vsl、砲沒有 ancD
     var i = rbatAdd(0, o, k, m, me.vao, 0, 0, me.n, isLamp(m) ? lanternK(m) : 0, null), ML = meshDtL(me, rbatBarrelL(m, rbatModelL(m)));   // 取用點的火藥桶是後加的模型，沒有 meta
     if (dv) { RBAT_TD[12] = dv[0]; RBAT_TD[13] = dv[1]; RBAT_TD[14] = dv[2]; ML = m4Into(RBAT_TQ, 0, RBAT_TD, ML); }   // ＝ M4.mul(trans(dv), L)：同一個捨入點
@@ -124,7 +124,7 @@ function rbatShip(sh, o) {
   }
   L = sh.decos;
   if (L) for (k = 0; k < L.length; k++) {                             // 裝飾（TASK-0682；畫質「裝飾」關著 ⇒ 不畫）；砲門蓋板：每艘、每個畫質都畫（Tim；S14）——「砲門的開關演出」（62_ports.js portOn）只管演不演，沒輪到的那艘停在模型的樣子（開著、砲推出去）
-    var d = L[k]; me = T.meshes[d.mesh];
+    var d = L[k]; me = meshFor(T, d.mesh, d.mm);   // mm：meta material 的材質變體（62_simview.js meshFor，TASK-0859）
     if (!me || d.gone || (!GFX.deco && !kindProp(d.meta.kind, 'always')) || (d.foot >= 0 && !hullGp(sh.grid, d.foot)) || (d.gm && !d.gm.alive)) continue; if (!me.vao) meshGpu(me);   // gone：砲門蓋板被打掉了、砲座配不到砲；腳下那一格被打掉 ⇒ 不畫；always（規格表：蓋板、砲座）⇒ 「裝飾」關著也畫；砲座的砲打飛、斷船帶走 ⇒ 不畫（整門一起走了）
     i = rbatAdd(1, o, k, d, me.vao, 0, 0, me.n, isLamp(d) ? lanternK(d) : 0, null);
     m4Into(RBAT.M, i * 16, sh.M, meshDtL(me, d.gm ? rbatMountL(d) : d.L || rbatT(d, d.origin)));
@@ -142,7 +142,7 @@ function rbatShip(sh, o) {
 /** 斷開的那一團：跟著它走的模型。 */
 function rbatPiece(pc, o) {
   for (var k = 0, L = pc.mods; k < L.length; k++) {
-    var m = L[k], me = pc.T.meshes[m.mesh]; if (!me) continue; if (!me.vao) meshGpu(me);
+    var m = L[k], me = meshFor(pc.T, m.mesh, m.mm); if (!me) continue; if (!me.vao) meshGpu(me);
     var ip = rbatAdd(4, o, k, m, me.vao, 0, 0, me.n, 0, null);
     m4Into(RBAT.M, ip * 16, pc.M, meshDtL(me, m.L)); RBAT.mb[ip] = me;
   }
@@ -579,19 +579,19 @@ function rbatCheck() {
   SHIPS.forEach(function (sh, i) {
     if (sh.sink > 40) return;
     sh.models.forEach(function (m) {
-      var me = sh.T.meshes[m.rmesh !== undefined ? m.rmesh : m.mesh]; if (!m.alive || !me || (m.vox && !m.moved)) return;
+      var me = meshFor(sh.T, m.rmesh !== undefined ? m.rmesh : m.mesh, m.mm); if (!m.alive || !me || (m.vox && !m.moved)) return;
       var dv = m.ancD || m.vsl, ML = m.vpre ? M4.mul(modelLocal(m), m.vpre) : modelLocal(m);   // 砲身（TASK-0836）：rmesh、vpre
       one(0, i, m, me, isLamp(m) ? lanternK(m) : 0, M4.mul(sh.M, dv ? M4.mul(trans(dv[0], dv[1], dv[2]), meshDtM(me, ML)) : meshDtM(me, ML)));
     });
     (sh.decos || []).forEach(function (d) {
-      var me = sh.T.meshes[d.mesh]; if (!me || d.gone || (!GFX.deco && !kindProp(d.meta.kind, 'always')) || (d.foot >= 0 && !hullGp(sh.grid, d.foot)) || (d.gm && !d.gm.alive)) return;
+      var me = meshFor(sh.T, d.mesh, d.mm); if (!me || d.gone || (!GFX.deco && !kindProp(d.meta.kind, 'always')) || (d.foot >= 0 && !hullGp(sh.grid, d.foot)) || (d.gm && !d.gm.alive)) return;
       one(1, i, d, me, isLamp(d) ? lanternK(d) : 0, M4.mul(sh.M, meshDtM(me, d.gm ? M4.mul(modelLocal(d.gm), trans(d.off[0], d.off[1], d.off[2])) : d.L || trans(d.origin[0], d.origin[1], d.origin[2]))));   // 砲座：跟著砲（TASK-0836）
     });
     if (sh.smR && sh.smR.size) sm(2, i, sh, sh.smR, sh.M);
     if (sh.arm) sh.arm.forEach(function (a) { if (a.smR && a.smR.size && !(a.prop && propGone(a))) sm(3, i, a, a.smR, armM(a)); });
   });
-  PIECES.forEach(function (pc, j) { (pc.mods || []).forEach(function (m) { var me = pc.T.meshes[m.mesh]; if (me) one(4, R.ns + j, m, me, 0, M4.mul(pc.M, meshDtM(me, m.L))); }); });
-  FLY.forEach(function (f) { var me = f.T.meshes[f.mesh]; if (me && f.M) one(5, -1, f, me, 0, meshDtM(me, f.M)); });
+  PIECES.forEach(function (pc, j) { (pc.mods || []).forEach(function (m) { var me = meshFor(pc.T, m.mesh, m.mm); if (me) one(4, R.ns + j, m, me, 0, M4.mul(pc.M, meshDtM(me, m.L))); }); });
+  FLY.forEach(function (f) { var me = meshFor(f.T, f.mesh, f.mm); if (me && f.M) one(5, -1, f, me, 0, meshDtM(me, f.M)); });
   if (q !== R.ni) S.itemMiss++;
   for (o = 0; o <= R.n; o++) if (R.i0[o] > (o < R.n ? R.i0[o + 1] : R.ni)) S.itemMiss++;   // 每個 owner 的範圍接得起來
 }

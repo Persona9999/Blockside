@@ -72,7 +72,7 @@ function makeShipSteps(i, team, yaw, pz, T, px) {
     var mt = m.meta || {};
     var o = { T: T, k: k, name: m.name.split('/').pop(), path: m.name, kind: kind, hp: hpm, hpMax: hpm, mesh: m.mesh, origin: m.origin, bb: b, pts: m.points || {}, meta: mt,
       c: [(b[0] + b[3]) / 2, (b[1] + b[4]) / 2, (b[2] + b[5]) / 2], foot: foot, alive: true,
-      rot: 0, r0: (+mt.rotate_z_deg || 0) * Math.PI / 180, piv: pv, yk: mt.yard, sail: mt.sail, hang: hang };   // 帆桁：rot ＝ 在作品的角度（r0）之外又轉了多少（追風，30_rig_physics.js）
+      rot: 0, r0: (+mt.rotate_z_deg || 0) * Math.PI / 180, piv: pv, yk: mt.yard, sail: mt.sail, hang: hang, mm: modelMat(mt) };   // 帆桁：rot ＝ 在作品的角度（r0）之外又轉了多少（追風，30_rig_physics.js）；mm：meta material 的反光（62_simview.js modelMat，TASK-0859；只給畫面）
     if (T.fit && T.fit.was && T.fit.was[m.name]) o.was = T.fit.was[m.name];   // 換了裝的掛點：原本雕的那一門（38_fit.js fitKind0／fitBB0）
     if (m.rmesh !== undefined) { o.rmesh = m.rmesh; o.roff = m.roff; o.vpre = trans(m.roff[0], m.roff[1], m.roff[2]); }   // 有座的砲（TASK-0836；05_hull.js gmtPair）：mesh ＝ 砲身＋座（模擬）、rmesh ＝ 只有砲身（畫，60_rbatch.js：局部矩陣右乘 vpre ＝ 砲身起點 roff；pitch 的砲由 62_ports.js gelPose 換掉）
     return o;
@@ -86,7 +86,7 @@ function makeShipSteps(i, team, yaw, pz, T, px) {
   sh.decos = (T.decos || []).map(function (m, k) {
     var b = m.bbox, cx = Math.floor((b[0] + b[3]) / 2), cy = Math.floor((b[1] + b[4]) / 2), z0 = Math.floor(b[2]) - 1, fz = z0, mt = m.meta || {}, hg = mt.kind === 'portlid' && (m.points || {})['hinge-a'];
     while (fz > 0 && z0 - fz < 12 && !T.hullG.get(cx, cy, fz)) fz--;
-    var d = { mesh: m.mesh, origin: m.origin, meta: mt, k: 1000 + k, foot: hg ? anchorNear(T, hg[0], hg[1], hg[2], 8) : T.hullG.get(cx, cy, fz) ? VK.pack(cx, cy, fz) : -1, pts: m.points || {}, bb: b, path: m.name };
+    var d = { mesh: m.mesh, mm: modelMat(mt), origin: m.origin, meta: mt, k: 1000 + k, foot: hg ? anchorNear(T, hg[0], hg[1], hg[2], 8) : T.hullG.get(cx, cy, fz) ? VK.pack(cx, cy, fz) : -1, pts: m.points || {}, bb: b, path: m.name };
     if (m.gmod !== undefined) { var gk = m.gmod ? (T.rig.models || []).indexOf(m.gmod) : -1; d.gm = gk >= 0 ? sh.models[gk] : null; d.off = m.off; d.foot = -1; d.gone = !d.gm; }   // 砲座（TASK-0836；05_hull.js gmtPair）：跟著那門砲畫（60_rbatch.js）、砲不在了就不畫；配不到 ⇒ 不畫
     return d;
   });
@@ -108,6 +108,7 @@ function makeShipSteps(i, team, yaw, pz, T, px) {
   sh.decks = gunDecks(sh); sh.weatherDeck = sh.decks.length ? sh.decks[sh.decks.length - 1].key : null;   // 砲甲板（照砲的高度分層）；最上面那層 ＝ 露天
   sh.deckZ = {}; sh.decks.forEach(function (D) { sh.deckZ[D.key] = D.zr; });
   sh.mags = makeMags(sh);                                                // 彈藥庫（23_powder.js）
+  sh.ahs = makeAmmoHoists(sh);                                           // 揚弾機（kind=hoist；23_powder.js）—— 沒有 ⇒ null、不做事
   }, function () {                                                   // 取用點
   sh.stations = makeStations(sh);                                        // 兩層甲板的火藥與彈藥取用點（火藥桶也是模型，加在 sh.models 後面）
   }, function () {                                                   // 艙房的家具、抽水機

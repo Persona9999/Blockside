@@ -21,7 +21,7 @@
 #   python -I admin.py cache                      _cache/ 缺的、跟指紋不同的 .vxk 從版控那份成品裡解回來（換機器、只改程式時用；建置也會自己做）
 #   python -I admin.py ids --id <船的代號> [--dry]  物件 id：發號、指名別的部件的 meta 換成 id、寫回雕刻作品再 metasync（TASK-0715；造船規格 §12）
 #   python -I admin.py ropebind [--id <船的代號>]   繩端綁定：成品算好每條繩兩端綁在哪、寫進 .vxk 檔頭、出報表（TASK-0716；匯入、重新匯入、metasync、ids 會自己跑）
-#   python -I admin.py cells --id <船的代號>      只寫動力件與梯子的格子清單（meta、格子不動；TASK-0676 木匠照它還原整件梯子）
+#   python -I admin.py cells --id <船的代號>      只寫動力件、梯子、揚弾筒的格子清單（meta、格子不動；TASK-0676 木匠照它還原整件梯子）
 #   python -I admin.py relock --id <船的代號>     指紋改成 _cache 現在那份（手動換過 .vxk 時；平常匯入／重新匯入／metasync 會自己更新）
 #   加 --no-build：匯入／重新匯入之後不重建
 import argparse, base64, hashlib, json, math, os, posixpath, re, shutil, socket, struct, subprocess, sys, urllib.request, webbrowser, zlib
@@ -956,7 +956,7 @@ def meta_kinds():
 
 
 DRV_KINDS = tuple(k for k, v in meta_kinds().items() if v.get('drv') == 'part')
-CELL_KINDS = DRV_KINDS + ('ladders', 'ladder')       # 寫格子清單 parts[].cellRuns 的關聯：動力件＋梯子（TASK-0676：木匠照它把整件梯子還原，Tim「可以單純是還原該子模組(梯子)」）   # 動力件（TASK-0653；遊戲 31_drive.js 照格子算剩幾成、通不通）：規格表 drv=part（主機、鍋爐、軸、蒸汽管）
+CELL_KINDS = DRV_KINDS + ('ladders', 'ladder', 'hoist')   # 揚弾筒（TASK-0841：23_powder.js 照它數剩幾成、打壞了改人力）； 寫格子清單 parts[].cellRuns 的關聯：動力件＋梯子（TASK-0676：木匠照它把整件梯子還原，Tim「可以單純是還原該子模組(梯子)」）   # 動力件（TASK-0653；遊戲 31_drive.js 照格子算剩幾成、通不通）：規格表 drv=part（主機、鍋爐、軸、蒸汽管）
 
 
 HPM_KINDS = tuple(k for k, v in meta_kinds().items() if v.get('drv') == 'hp')     # 整件一塊的動力件（規格表 drv=hp：槳）：不匯出格子，血量倍率 drvparts.<種類>.hpK（道具設定頁）
@@ -1100,7 +1100,7 @@ def drive_cells(h):
         kind = (q.get('meta') or {}).get('kind')
         if kind not in CELL_KINDS:
             continue
-        what = '動力件' if kind in DRV_KINDS else '梯子'
+        what = '動力件' if kind in DRV_KINDS else '揚弾筒' if kind == 'hoist' else '梯子'
         runs, why = None, ''
         b, w = q.get('box'), q.get('src')
         if not (b and len(b) == 6 and w):
@@ -1137,7 +1137,7 @@ def drive_cells(h):
                     end = idx[j] + 1
                     i = j + 1
         if why:
-            log.append('⚠ %s %s（%s）：%s ⇒ 不寫格子清單（%s）' % (what, q.get('path'), kind, why, '遊戲照固定點旁 ±8 格判' if what == '動力件' else '木匠只補踏板'))
+            log.append('⚠ %s %s（%s）：%s ⇒ 不寫格子清單（%s）' % (what, q.get('path'), kind, why, '遊戲照固定點旁 ±8 格判' if what == '動力件' else '遊戲照外框數、框是整艘船就不量' if what == '揚弾筒' else '木匠只補踏板'))
         if q.get('cellRuns') != runs:
             changed = True
             if runs is None:
@@ -1727,13 +1727,16 @@ def act_shipcheck(ids=None):
               '| %s | %s 門缺 %s 人 | %s | %s | %s | %s | %s | %s | %s | %s | %s | %s | %s |' % (I['guns'], I['gunShort']['guns'], I['gunShort']['people'], I['crew'], I['models'], I['ropes'], '%s%s' % (I['sails'], '（＋陣營旗 %d）' % I['teamFlags'] if I.get('teamFlags') else ''), I['masts'], '%s（取用點 %s）' % (I['mags'], I.get('stations', '—')), len(I['decks']), I['ladders'], I['rooms'], I.get('anchors', '—'), I['zw']), '',
               '材質（TASK-0616）：' + (I.get('materials') or '—'), '',
               '平滑渲染（關聯 meta render=smooth，TASK-0616）：' + (I.get('smooth') or '—'), '',
+              '模型的材質反光（外部模型、裝飾的 meta material，只給畫面，TASK-0859）：' + (I.get('modelMat') or '—'), '',
               '火藥（送藥手：取用點 → 砲尾藥箱）：' + (I.get('powder') or '—'), '',
+              '揚弾機（關聯／模型 meta kind=hoist、guns、trip、rounds，固定點 bottom／top；送藥手送到艙底接收處、吊上砲旁藥箱，TASK-0841）：' + (I.get('hoists') or '—'), '',
               '迴旋砲／砲塔（meta mount；沒標 ＝ 固定）：' + (I.get('mounts') or '—'), '',
               '砲塔層（關聯 meta kind=turret；殼、上面的砲與模型、彈藥箱跟著轉，前方 front 對準瞄準方位，TASK-0659）：' + (I.get('turrets') or '—'), '',
               '砲帶的裝甲（關聯 meta kind=armor、mount；跟著砲轉、一格一格打掉，TASK-0631）：' + (I.get('armor') or '—'), '',
               '門、艙蓋（模型 meta kind=door、固定點 hinge-a／hinge-b；不擋人、打掉了開口才進水，TASK-0638）：' + (I.get('doors') or '—'), '',
               '砲門蓋板（模型 meta kind=portlid、lid_of、固定點 hinge-a／hinge-b；本身是裝飾，交戰掀蓋推砲、沒事收砲闔蓋，只是畫面，TASK-0719）：' + (I.get('ports') or '—'), '',
               '後座（開火沿砲軸往裡退、裝填快好推出去；模型 meta recoil 格數，0 ＝ 不演；弩箭／火箭／石彈／希臘火不演；只是畫面）：' + (I.get('recoil') or '—'), '',
+              '自動裝彈機（砲模型 meta autoload、autoload_crew；砲班只要那幾個人、到齊就全速裝填，彈藥從揚弾機直接吊進來，TASK-0845）：' + (I.get('autoload') or '—'), '',
               '砲身與砲座（座 ＝ 模型 meta kind=gunmount、mount_of；開火只退砲身、座跟著砲塔轉；砲 meta pitch ＋ 固定點 trunnion ⇒ 砲身照瞄準上下轉；只是畫面，TASK-0836）：' + (I.get('gunmount') or '—'), '',
               '照參數轉的子物件（模型 meta spin；舵、舵輪跟著舵角轉，只是畫面，TASK-0640）：' + (I.get('spins') or '—'), '',
               '裝飾（模型 meta deco=1；載入時拿掉、畫質「裝飾」開著才畫，不算重量、不被打，TASK-0682）：' + (I.get('deco') or '—'), '',
@@ -4124,7 +4127,7 @@ def main():
     s = sp.add_parser('metasync', help='只同步 meta 與固定點（格子不動）')
     s.add_argument('--id', required=True)
     s.add_argument('--no-build', action='store_true')
-    s = sp.add_parser('cells', help='只寫動力件與梯子的格子清單（parts[].cellRuns；meta、格子不動）')
+    s = sp.add_parser('cells', help='只寫動力件、梯子、揚弾筒的格子清單（parts[].cellRuns；meta、格子不動）')
     s.add_argument('--id', required=True)
     s.add_argument('--no-build', action='store_true')
     s = sp.add_parser('ids', help='物件 id（TASK-0715；造船規格 §12）：每件關聯、模型發一個 <類別>-<序號>、指名別的部件的 meta 換成 id、寫回雕刻作品，再 metasync')

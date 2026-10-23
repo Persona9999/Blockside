@@ -596,6 +596,7 @@ function callHands(sh) {
     var pg = wl && !dp ? sh.guns.filter(function (g) { return g.alive && g.drop && gunDeck(g) === D.key && (!g.pm || !crewAble(g.pm)); })[0] : null;   // ⛔ 沒有 ⇒ reg 空著、在原地（沒有活砲的那一塊）就接上，下一輪又被 toHand 打回來（測試模式量到：同一人 0.5 秒一輪打轉 310 次）
     if (pn > 0 && sh.stations.some(function (s) { return s.deck === D.key && !s.mag.gone; })) need.push({ kind: 'pm', key: D.key, deck: D.key, lv: lv, n: pn, x: sh.T.cx, pri: 1, reg: needReg(sh, lv, dp ? dp.home : pg && pg.drop) });
   });
+  if (sh.ahs) ahNeeds(sh, NV, need, going);                            // 揚弾手倒了（23_powder.js）—— 沒有揚弾機 ⇒ 不加
   var wheel = sh.models.filter(function (m) { return m.kind === 'wheel'; })[0], hd = sh.crew.filter(function (c) { return (c.role === ROLE.HELM && !crewAble(c) || c.helmHome) && !c.relieved; });   // helmHome：從甲板破洞掉下去的舵手（40_crew.js landIn），站位照原本的
   var hn = Math.min(hd.length, NV.helm0 - sh.crew.filter(function (c) { return c.role === ROLE.HELM && crewAble(c); }).length - (going.helm || 0));
   if (wheel && wheel.alive && hn > 0) {
@@ -637,6 +638,7 @@ function handJoin(sh, c) {
   if (J.kind === 'pump') { pumpJoin(sh, c); return; }                   // 搖抽水機（45_pumps.js）
   if (J.kind === 'fire') { burnJoin(sh, c); return; }                   // 救火（49_burn.js）
   if (J.kind === 'eat') { galleyJoin(sh, c); return; }                  // 伙夫領飯（45_galley.js；TASK-0720）
+  if (J.kind === 'ahpm') { ahJoin(sh, c); return; }                     // 揚弾手（23_powder.js）
   var hr = J.reg !== undefined ? handReg(sh, c) : -1;                   // 量不到（-1）⇒ 照以前當作到了：爬進轉過的砲塔，梯頭那一點是開局時算的、吊籃已經轉走 ⇒ snap 不到（測試模式量到：同一人被派 88 次、次次作廢）
   if (H.lv !== J.lv || (hr >= 0 && hr !== J.reg)) { tlgEv(sh, c, 'void', { job: J.kind, lv: [H.lv, J.lv], reg: [hr, J.reg === undefined ? null : J.reg] }); H.job = null; H.wait = 1; return; }   // 不在那一層、確定在別塊（路斷了）⇒ 作廢；void：測試模式記一筆（83_testlog.js）
   if ((J.kind === 'gun' || J.kind === 'pm') && sh.T.armor && sh.T.armor.length && !sh.guns.some(function (g) {   // 會轉裝甲的船：這裡走得到的活砲一門都沒有 ⇒ 不接（接了下一輪 reassign 又 toHand ⇒ 打轉）
@@ -650,6 +652,7 @@ function handJoin(sh, c) {
   var fell = dead ? null : sh.crew.filter(function (o) { return o.fellPm && o.fellPm.deck === J.deck; })[0];   // 從甲板破洞掉下去的送藥手（40_crew.js landIn）：接它的砲
   if (fell) { dead = { guns: fell.fellPm.guns, home: fell.fellPm.home }; fell.fellPm = null; }
   c.role = ROLE.POWDER; c.deck = J.deck; c.pm = { st: 'idle', t: 0 }; c.cart = false; c.guns = dead ? dead.guns : [];
+  if (c.ah) c.ah = null;                                               // 以前當過揚弾手（23_powder.js）⇒ 這次是那一層的送藥手
   if (dead) { dead.relieved = true; c.home = dead.home.slice(); }
   c.guns.forEach(function (g) { if (!g.pm || !crewAble(g.pm)) g.pm = c; });
 }

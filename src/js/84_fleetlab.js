@@ -9,7 +9,7 @@
 //   · 只看俯視圖時：不畫 3D、不建網格、模擬裡「只給人看的推進」（碎木、粒子、煙；viewStep）不推（FLAB_HIDE）；按「看實景」才建網格、畫 3D（鏡頭跟著選的那艘）。
 //   · 步長：物理 60／30／20／15／10 Hz（DT；每半秒、每 3 秒那幾件照秒數換步數 everySteps）。60 Hz ⇒ 跟遊戲逐步相同；降下來 ⇒ 同一套程式、粗一點的步，結果會不一樣（量法見 README）。
 //   · 倍速：1／4／16／64 倍或「最快」（照時間預算一直走）；模擬放在 MessageChannel 一片一片走（每片 12 ms 就讓出來）⇒ 畫面與按鈕照常回應。
-// 一場：電腦對電腦（MODE eve）、藍紅各一型 × 艘數、各自的策略與搶上風、開局距離、風向／風速（WIND_FIX；空白 ＝ 照種子）、種子、時限。
+// 一場：電腦對電腦（MODE eve）、藍紅各一型 × 艘數、各自的策略與搶上風、開局距離、風向／風速（WIND_FIX；空白 ＝ 照種子）、洋流（CUR_FIX；空白 ＝ 沒有）、種子、時限。
 //   結束：一方全沉或降旗（teamDown）⇒ 另一方贏；到時限 ⇒ 照剩下的戰力判（跟 #dump 的 pow 同一把尺：cmdStrength 加總），差 < 0.05 艘 ⇒ 和局。
 // 批次：目前這組（藍策略 對 紅策略）或四種策略兩兩，每格 N 場（一半換邊），出勝率表（跟 2D 沙盒同一個格式）。
 // 記錄（Tim 2026-10-17「沙盒可以記錄航行軌跡圖以及其他資訊方便DEBUG」）：每一場每半秒一筆（flabRec）—— 每艘 FLAB_COLS（位置、航向、節、船殼、砲、人、帆、中幾發、命令、目標、打法、離站位、站位、出局）、
@@ -34,7 +34,7 @@ function flabInit() {
   hs.value = q('hb', HULL_LIST[0].id); hr.value = q('hr', HULL_LIST[0].id);
   flabEl('flabCB').value = q('cb', 'line'); flabEl('flabCR').value = q('cr', 'pair');
   flabEl('flabGB').checked = q('gb', '0') === '1'; flabEl('flabGR').checked = q('gr', '0') === '1';
-  flabEl('flabDist').value = q('dist', 800); flabEl('flabWdir').value = q('wdir', ''); flabEl('flabWspd').value = q('wspd', '');
+  flabEl('flabDist').value = q('dist', 800); flabEl('flabWdir').value = q('wdir', ''); flabEl('flabWspd').value = q('wspd', ''); flabEl('flabCdir').value = q('cdir', ''); flabEl('flabCkn').value = q('ckn', '');
   flabEl('flabSeed').value = q('seed', 1); flabEl('flabHz').value = q('hz', 20); flabEl('flabT').value = q('tmax', 600); flabEl('flabBN').value = q('bn', 4);
   flabEl('flabGo').onclick = function () { flabStart(flabParams()); };
   flabEl('flabPause').onclick = function () { FLAB.run = !FLAB.run; this.textContent = FLAB.run ? '暫停' : '繼續'; if (FLAB.run) flabKick(); };
@@ -61,7 +61,7 @@ function flabParams() {
   function opt(id) { var v = flabEl(id).value.trim(); return v === '' || !isFinite(+v) ? null : +v; }
   return { blue: { n: Math.round(n('flabNB', 4, 1, FLEET_MAX)), hull: flabEl('flabHB').value, strat: flabEl('flabCB').value, gauge: flabEl('flabGB').checked },
     red: { n: Math.round(n('flabNR', 4, 1, FLEET_MAX)), hull: flabEl('flabHR').value, strat: flabEl('flabCR').value, gauge: flabEl('flabGR').checked },
-    dist: Math.round(n('flabDist', 800, LIM_DIST[0], LIM_DIST[1])), wdir: opt('flabWdir'), wspd: opt('flabWspd'), seed: Math.round(n('flabSeed', 1, 1, 1e9)),
+    dist: Math.round(n('flabDist', 800, LIM_DIST[0], LIM_DIST[1])), wdir: opt('flabWdir'), wspd: opt('flabWspd'), cdir: opt('flabCdir'), ckn: opt('flabCkn'), seed: Math.round(n('flabSeed', 1, 1, 1e9)),
     hz: +flabEl('flabHz').value || 20, tmax: n('flabT', 600, 30, 7200) };
 }
 /** 編成：我艦（藍第一艘）、敵方第一艘、我方其他、敵方其他（＝ 52_fleet.js fleetSpec 的順序）。 */
@@ -75,7 +75,7 @@ function flabSpec(p) {
 function flabSetup(p) {
   var ids = {}; ids[p.blue.hull] = 1; ids[p.red.hull] = 1;
   return Promise.all(Object.keys(ids).map(loadHull)).then(function () {
-    DT = 1 / p.hz; SEED = p.seed >>> 0 || 1; WIND_FIX = { rot: p.wdir, s0: p.wspd }; DIST = p.dist;
+    DT = 1 / p.hz; SEED = p.seed >>> 0 || 1; WIND_FIX = { rot: p.wdir, s0: p.wspd }; CUR_FIX = { dir: p.cdir, kn: p.ckn }; DIST = p.dist;   // 洋流（08_sea.js curInit；TASK-0842）：空白 ⇒ dir／kn ＝ null ⇒ 沒有洋流
     CMD_SIDE.blue = p.blue.strat; CMD_SIDE.red = p.red.strat; CMD_GAUGE.blue = p.blue.gauge; CMD_GAUGE.red = p.red.gauge;
     flowMode('eve'); FLEET_DBG = flabSpec(p); FIELD_N = Math.min(MAX_SHIPS, Math.max(2, FLEET_DBG.length));
     reset(); flowRun(true); SIGNAL = null;

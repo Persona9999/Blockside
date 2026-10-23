@@ -194,7 +194,8 @@ function sailShip(sh, dt) {
   if (VX) sh.yaw += vxSpin(sh, dt) + vxTurn(sh, dt);                  // 大漩渦：眼裡跟著漩渦自旋、繞行轉向（08_sea.js）
   F = fwd(sh.yaw);
   sh.vel = mul(F, sh.spd);
-  if (VX) { var cf = vxFlow(sh.px, sh.pz), vd = vxDrift(sh, dt); sh.vel[0] += cf[0] + vd[0]; sh.vel[2] += cf[1] + vd[1]; }   // ＋ 漩渦吸力的漂移（08_sea.js vxDrift）   // 大漩渦（08_sea.js）：水流帶著船走 ⇒ sh.vel 是對地的速度（砲彈帶的船速、瞄準的前置量、帆上的視風都照它）
+  var cf = seaFlow(sh.px, sh.pz);                                    // 水流（08_sea.js seaFlow：洋流 ＋ 大漩渦；TASK-0842）⇒ 對地 ＝ 對水 ＋ 水流
+  if (VX) { var vd = vxDrift(sh, dt); sh.vel[0] += cf[0] + vd[0]; sh.vel[2] += cf[1] + vd[1]; } else if (cf) { sh.vel[0] += cf[0]; sh.vel[2] += cf[1]; }   // ＋ 漩渦吸力的漂移（08_sea.js vxDrift）   // 大漩渦（08_sea.js）：水流帶著船走 ⇒ sh.vel 是對地的速度（砲彈帶的船速、瞄準的前置量、帆上的視風都照它）
   if (sh.vxEaten && sh.sinkingFinal) { sh.spd *= Math.max(0, 1 - 0.5 * dt); sh.vel = [cf[0] - 0.3 * sh.px, 0, cf[1] - 0.3 * sh.pz]; }   // 被漩渦拖沉了（32_hull.js）：自己的船速兩秒內沒了，只跟著水流、往中心拉（⛔ 不拉 ⇒ 靠原本的航速滑出眼外才沉完）
   var px0 = sh.px, pz0 = sh.pz;
   sh.px += sh.vel[0] * dt; sh.pz += sh.vel[2] * dt;
