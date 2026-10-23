@@ -115,7 +115,7 @@ function sailShip(sh, dt) {
   sh.sailFrac = sh.sails.reduce(function (a, s) { return a + (s.dead || s.furled ? 0 : s.area * s.hp / s.hpMax); }, 0) / sh.sailArea0;   // 被打中還沒掉的帆：照剩下的血量算推力
   sh.pos = pointName(deg);
   // 拋錨模式（6）只管我艦：SAIL 是玩家的航行模式（全域），sail() 每艘都跑 ⇒ 不限 PLAYER_I 的話，友艦、敵艦也跟著拋雙錨、停在原地（Tim 2026-10-15「應該只控制我艦」）。
-  var stop = (SAIL === 'off' || modeRule('stopOwn') || dockHold(sh)) && sh.i === PLAYER_I,   // 玩法規則 stopOwn（04_modes.js；建造）：停在原地（跟拋錨模式同一條）；自動停靠到了（88_modeswitch.js）⇒ 兩錨都下
+  var stop = (SAIL === 'off' || (modeRule('stopOwn') && !dockOn(sh)) || dockHold(sh)) && sh.i === PLAYER_I,   // 玩法規則 stopOwn（04_modes.js；建造）：停在原地（跟拋錨模式同一條）；自動停靠到了（88_modeswitch.js）⇒ 兩錨都下
       manual = SAIL === 'manual' && sh.i === PLAYER_I && !dockOn(sh);     // 自動停靠／出航中（88_modeswitch.js）⇒ 走艦長那一段（航向、期望航速照航道）
   if (stop && !sh.ancMode && !sh.struck && !sh.sunk) { sh.ancMode = true; anchorToggle(sh, 'P', true); anchorToggle(sh, 'S', true); }   // 6 拋錨（雙錨，我艦；76_anchor.js）
   else if (!stop && sh.ancMode) { sh.ancMode = false; anchorToggle(sh, 'P', false); anchorToggle(sh, 'S', false); }   // 切回 4／5 ⇒ 起錨
@@ -200,6 +200,7 @@ function sailShip(sh, dt) {
   if (sh.vxEaten && sh.sinkingFinal) { sh.spd *= Math.max(0, 1 - 0.5 * dt); sh.vel = [cf[0] - 0.3 * sh.px, 0, cf[1] - 0.3 * sh.pz]; }   // 被漩渦拖沉了（32_hull.js）：自己的船速兩秒內沒了，只跟著水流、往中心拉（⛔ 不拉 ⇒ 靠原本的航速滑出眼外才沉完）
   var px0 = sh.px, pz0 = sh.pz;
   sh.px += sh.vel[0] * dt; sh.pz += sh.vel[2] * dt;
+  if (dockOn(sh)) dockPull(sh, dt);                                     // 停靠的過場（88_modeswitch.js）：物理照跑、強彈簧拉回畫好的航線
   if (sh.anc) anchorStep(sh, dt, px0, pz0);                          // 錨咬著 ⇒ 錨鏈孔拉回鍊長以內、船繞錨鏈孔轉（76_anchor.js）
   shipWake(sh);                                                       // 航跡（52_fleet.js；戰列跟隨照它走）
   // 航跡：船尾留一條白沫、船頭兩側推出的浪（點精靈，不撞任何東西）；船邊水花開著 ⇒ 換成 13_water.js 的（這裡照樣抽亂數、不放進去）
