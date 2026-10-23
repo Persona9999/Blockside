@@ -12,7 +12,7 @@
 // 接進 63_towns.js 的地方：townKit／townKitMake（townFolkNeed、townFolkTex）、townKitGpuFree（townFolkFree）、townProgs（著色器 folk、townFolkGl）、
 //   townDraw 布旗之後（townFolkDraw）、townReplace（路沒改 ⇒ 沿用 T.folk）、townStat（townFolkStat、townFolkSum、'street'）。
 var TOWN_FOLK = Q.get('townfolk') !== '0';                               // ?townfolk=0：不載、不畫城鎮居民（對照組）
-var TOWN_FOLK_OUT = [160, 200], TOWN_FOLK_STEP = 14, TOWN_FOLK_MAX = 260, TOWN_FOLK_HOPS = 8;
+var TOWN_FOLK_OUT = [160, 200], TOWN_FOLK_STEP = 14, TOWN_FOLK_MAX = 2000, TOWN_FOLK_HOPS = 8, TOWN_FOLK_SCALE = 1.5;   // SCALE：身高倍率（Tim 2026-10-23「鎮民尺寸可以放大到1.5倍」；0846 是 1.68～1.84 m）；MAX：0846 是 260（金斯敦 34.5 km 的路 ⇒ 133 m 才一位）；畫面外的不算位置 ⇒ 照路長配、上限只防極端
 
 // 看板：四邊形 aQ ∈ [−½, ½] × [0, 1]（P.quad），實例 aI ＝ (x, y, z, 高)、aS ＝ (寬比, 高比, 前傾, 彈跳)、aU ＝ (u0, v0, u1, v1)、aC ＝ (衣色號, 髮色號, 深淺, 0)
 //   底圖與換色遮罩同 41_crew_art.js crewArt（左半底圖、右半遮罩：R ＝ 衣服、G ＝ 頭髮；底圖標記區的灰階 R/G/B ＝ L ∈ [4, 252]，L ＝ 100 還原代表色 ⇒ 乘 2.55）；吃城鎮陰影、夜裡的街燈與霧。
@@ -55,18 +55,19 @@ function townFolkGl(P) {
 
 /** 城 T 的路網與居民（第一次要畫這座城時算一次；建築模式改了路 ⇒ townReplace 不沿用 T.folk，下次重算）。 */
 function townFolkPrep(T, F) {
-  var G = townFolkGraph(T), edges = G.edges, N = G.roadM < 8 ? 0 : Math.max(6, Math.min(TOWN_FOLK_MAX, Math.round(G.roadM / TOWN_FOLK_STEP)));
+  var t0 = performance.now(), G = townFolkGraph(T), edges = G.edges, N = G.roadM < 8 ? 0 : Math.max(6, Math.min(TOWN_FOLK_MAX, Math.round(G.roadM / TOWN_FOLK_STEP)));
   G.agents = [];
   for (var i = 0; i < N; i++) {
     var k = T.id + ':folk:' + i, target = townHash(k + ':e') * G.roadM, ei = 0;
     while (ei + 1 < edges.length && edges[ei].cum < target) ei++;
     var a = { id: i, spd: 1.15 + 0.45 * townHash(k + ':s'), lane: (townHash(k + ':l') - 0.5) * 0.65, art: (i < F.rows ? i : Math.floor(townHash(k + ':a') * F.rows)) % F.rows,
       cloth: Math.floor(townHash(k + ':c') * F.clothN) % F.clothN, hair: Math.floor(townHash(k + ':h') * F.hairN) % F.hairN,
-      hgt: 1.68 + 0.16 * townHash(k + ':g'), sh: 0.94 + 0.12 * townHash(k + ':k'), ph: townHash(k + ':p') * 6.2832,
+      hgt: (1.68 + 0.16 * townHash(k + ':g')) * TOWN_FOLK_SCALE, sh: 0.94 + 0.12 * townHash(k + ':k'), ph: townHash(k + ':p') * 6.2832,
       e: ei, t: 0, dir: 1, stop: false, face: 1 };                       // e／t／dir／stop：這一格的位置（townFolkAt 照時間寫，不是狀態）；face：朝左朝右的遲滯（只是畫面）
     townFolkRoute(G, a, k, townHash(k + ':d') < 0.5 ? 1 : -1);
     G.agents.push(a);
   }
+  G.prepMs = +(performance.now() - t0).toFixed(1);
   T.folk = G;
   return G;
 }
@@ -109,7 +110,11 @@ function townFolkGraph(T) {
     edges.push({ a: u, b: v, ax: A.x, az: A.z, dx: ux, dz: uz, nx: -uz, nz: ux, L: L, w: s.w, cum: Ltot });   // cum：照路長挑起點那條邊
     A.adj.push({ e: ei, dir: 1 }); B.adj.push({ e: ei, dir: -1 });
   });
-  return { nodes: nodes, edges: edges, roadM: Ltot, line: null };
+  var ylo = 1e9, yhi = -1e9;                                             // 這座城的高度範圍（地塊的 h、路的 z）⇒ 路線外框的上下（看天空時不算人）
+  (T.p && T.p.lots || []).forEach(function (l) { if (l.h === l.h) { ylo = Math.min(ylo, l.h); yhi = Math.max(yhi, l.h); } });
+  R.forEach(function (r) { (r.z || []).forEach(function (z) { if (z != null) { ylo = Math.min(ylo, z); yhi = Math.max(yhi, z); } }); });
+  if (!(ylo <= yhi)) { ylo = 0; yhi = 100; }
+  return { nodes: nodes, edges: edges, roadM: Ltot, y: [ylo - 20, yhi + 25], line: null };
 }
 /** 居民 a 的固定路線與一圈的時間表：從起點那條邊照 townHash 往前走最多 TOWN_FOLK_HOPS 段（路口不折返、死巷就停），去程、終點停一下、原路回程、起點停一下。
  *  a.legs[i] ＝ { e, dir, t0, t1（邊上從第幾公尺走到第幾公尺；停步 t0 ＝ t1）, c1（這一段結束是一圈的第幾秒） }；a.per ＝ 一圈幾秒；a.off ＝ 起始時間差（大家不同步）。 */
@@ -127,7 +132,7 @@ function townFolkRoute(G, a, k, dir) {
   function stop(s) { if (!(s > 0)) return; var g = legs[legs.length - 1]; c += s; legs.push({ e: g.e, dir: g.dir, t0: g.t1, t1: g.t1, c1: c }); }
   for (var i = 0; i < hops.length; i++) { walk(hops[i], hops[i].dir); stop(i < rest.length ? rest[i] : 1.5 + 2 * townHash(k + ':end')); }   // 去程，最後一段停在終點
   for (var j = hops.length - 1; j >= 0; j--) { walk(hops[j], -hops[j].dir); stop(j > 0 ? rest[j - 1] : 1.5 + 2 * townHash(k + ':home')); }   // 原路回程，回到起點也停一下
-  var bb = [1e9, -10, 1e9, -1e9, 300, -1e9];                             // 整條路線的外框（同 bedSeen、townBoxDist 的格式；水平含車道偏移 3 m，高度先取寬 —— 建路網時地面不一定到了）
+  var bb = [1e9, G.y[0], 1e9, -1e9, G.y[1], -1e9];                       // 整條路線的外框（同 bedSeen、townBoxDist 的格式；水平含車道偏移 3 m，高度照整座城 —— 建路網時地面不一定到了）
   hops.forEach(function (p) { var e = edges[p.e], x1 = e.ax + e.dx * e.L, z1 = e.az + e.dz * e.L; bb[0] = Math.min(bb[0], e.ax - 3, x1 - 3); bb[2] = Math.min(bb[2], e.az - 3, z1 - 3); bb[3] = Math.max(bb[3], e.ax + 3, x1 + 3); bb[5] = Math.max(bb[5], e.az + 3, z1 + 3); });
   a.legs = legs; a.per = c; a.off = townHash(k + ':t') * c; a.bb = bb;
 }
@@ -156,29 +161,33 @@ function townFolkStreet(T, F, walk) {
 
 /** 畫出所有城鎮看得到的居民（townDraw 布旗之後；clock ＝ 城鎮的畫面時間）⇒ 三角形數。 */
 function townFolkDraw(P, K, eye, PL, fogD, clock) {
-  TOWNS.stat.folk = TOWNS.stat.folkPos = 0;
+  TOWNS.stat.folk = TOWNS.stat.folkPos = 0; TOWNS.stat.folkMs = 0;
   var F = K && K.folk; if (!TOWN_FOLK || !F || !P.folk) return 0;
+  var t0 = performance.now();
   var fwd = sub(CAM.look, eye), rl = Math.hypot(fwd[2], fwd[0]) || 1, rx = -fwd[2] / rl, rz = fwd[0] / rl;
   var maxD = TOWN_FOLK_OUT[1], rows = F.rows, B = TOWNS.folkArr || (TOWNS.folkArr = new Float32Array(256 * 16)), n = 0, npos = 0;
   TOWNS.list.forEach(function (T) {
     var b = T.box, bx = Math.max(b[0] - BED.ax - eye[0], 0, eye[0] - (b[2] - BED.ax)), bz = Math.max(b[1] - BED.az - eye[2], 0, eye[2] - (b[3] - BED.az));
     if (Math.hypot(bx, bz) > maxD) return;                              // 整座城都在範圍外 ⇒ 連路網都不建（位置只看時間，回來時照樣接得上）
-    var G = T.folk || townFolkPrep(T, F);
+    var G = T.folk || townFolkPrep(T, F), cb = TOWNS.folkCb || (TOWNS.folkCb = [0, 0, 0, 0, 0, 0]);
     G.agents.forEach(function (a) {
-      var ln = G.line && a.id < G.line.n;
-      if (!ln && (townBoxDist(a.bb, eye) > maxD || !bedSeen(PL, a.bb))) return;   // 整條路線都太遠、或整個在畫面外 ⇒ 不算
+      var ln = G.line && a.id < G.line.n, bb = a.bb;
+      if (!ln) {                                                         // 路線外框先裁到鏡頭周圍 maxD 的方框（路線可以長到好幾百公尺，遠端那一截掉進視錐不算數）⇒ 裁完是空的、太遠、整個在畫面外 ⇒ 不算
+        cb[0] = Math.max(bb[0], eye[0] - maxD); cb[2] = Math.max(bb[2], eye[2] - maxD); cb[3] = Math.min(bb[3], eye[0] + maxD); cb[5] = Math.min(bb[5], eye[2] + maxD); cb[1] = bb[1]; cb[4] = bb[4];
+        if (cb[0] > cb[3] || cb[2] > cb[5] || townBoxDist(cb, eye) > maxD || !bedSeen(PL, cb)) return;
+      }
       townFolkAt(G, a, clock); npos++;
       var e = G.edges[a.e], off = (0.18 * a.dir + (ln ? ((a.id % 3) - 1) * 0.28 : a.lane)) * Math.max(0.3, Math.min(2.8, e.w - 1.2));   // 靠右走（照前進方向）＋ 車道偏移
       var x = e.ax + e.dx * a.t + e.nx * off, z = e.az + e.dz * a.t + e.nz * off;
       if (Math.hypot(x - eye[0], z - eye[2]) > maxD) return;
       var y = townRoadHeight(x, z); if (!(y === y) || y <= 0.05) return;
       y += TOWN_ROAD_LIFT;
-      for (var i = 0; i < 6; i++) { var pl = PL[i]; if (pl[0] * x + pl[1] * (y + 0.9) + pl[2] * z + pl[3] < -2.2) return; }
+      for (var i = 0; i < 6; i++) { var pl = PL[i]; if (pl[0] * x + pl[1] * (y + 0.9 * TOWN_FOLK_SCALE) + pl[2] * z + pl[3] < -2.2 * TOWN_FOLK_SCALE) return; }
       var mv = (e.dx * rx + e.dz * rz) * a.dir;
       if (mv > 0.08) a.face = 1; else if (mv < -0.08) a.face = -1;
       var sx = 1, sy = 1, lean = 0, bob = 0;
       if (a.stop) { var br = Math.sin(clock * 2.2 + a.ph); sy = 1 + 0.012 * br; sx = 1 - 0.008 * br; lean = a.face * 0.015 * br; }   // 停著：呼吸
-      else { var w = clock * a.spd * 1.45 + a.ph, r = Math.abs(Math.sin(w * 6.2832)); bob = 0.065 * r; lean = a.face * (0.055 + 0.035 * Math.sin(w * 6.2832)); sy = 0.96 + 0.04 * r; sx = 1.03 - 0.03 * r; }   // 走路：彈跳、前傾（同水手）
+      else { var w = clock * a.spd * 1.45 + a.ph, r = Math.abs(Math.sin(w * 6.2832)); bob = 0.065 * TOWN_FOLK_SCALE * r; lean = a.face * (0.055 + 0.035 * Math.sin(w * 6.2832)); sy = 0.96 + 0.04 * r; sx = 1.03 - 0.03 * r; }   // 走路：彈跳、前傾（同水手）
       if (B.length < (n + 1) * 16) { var B2 = new Float32Array(B.length * 2); B2.set(B); B = TOWNS.folkArr = B2; }
       var o = n++ * 16, v0 = a.art / rows, v1 = (a.art + 1) / rows;
       B[o] = x; B[o + 1] = y; B[o + 2] = z; B[o + 3] = a.hgt;
@@ -188,7 +197,7 @@ function townFolkDraw(P, K, eye, PL, fogD, clock) {
     });
   });
   TOWNS.stat.folk = n; TOWNS.stat.folkPos = npos;                       // folkPos：這一格算了幾位的位置（外框過了、還沒照實際位置剔）
-  if (!n) return 0;
+  if (!n) { TOWNS.stat.folkMs = +(performance.now() - t0).toFixed(3); return 0; }
   var PF = P.folk; gl.useProgram(PF.prog); setCommon(PF);
   gl.uniform1f(PF.u.uFogD, fogD); gl.uniform3fv(PF.u.uEye, eye); gl.uniform3f(PF.u.uRight, rx, 0, rz);
   gl.uniform2f(PF.u.uIn, -2, -1); gl.uniform2f(PF.u.uOut, TOWN_FOLK_OUT[0], TOWN_FOLK_OUT[1]);
@@ -197,17 +206,18 @@ function townFolkDraw(P, K, eye, PL, fogD, clock) {
   gl.bindVertexArray(P.folkVao); gl.bindBuffer(gl.ARRAY_BUFFER, P.folkBuf);
   gl.bufferData(gl.ARRAY_BUFFER, B.subarray(0, n * 16), gl.DYNAMIC_DRAW);
   gl.drawArraysInstanced(gl.TRIANGLES, 0, 6, n);
+  TOWNS.stat.folkMs = +(performance.now() - t0).toFixed(3);             // CPU 這一段（算位置＋送緩衝；建路網那一格也算在裡面）
   return 2 * n;
 }
 
 /** 讀數：城 T 的那一份（townStat 每座城的 folk）。 */
 function townFolkStat(T) {
   var G = T.folk; if (!G) return null;
-  return { agents: G.agents.length, edges: G.edges.length, nodes: G.nodes.length, roadM: Math.round(G.roadM), line: G.line,
+  return { agents: G.agents.length, edges: G.edges.length, nodes: G.nodes.length, roadM: Math.round(G.roadM), y: G.y, prepMs: G.prepMs, line: G.line,
     sample: G.agents.slice(0, 8).map(function (a) { var e = G.edges[a.e]; return { id: a.id, art: a.art, cloth: a.cloth, hair: a.hair, legs: a.legs.length, per: +a.per.toFixed(1), t: +a.t.toFixed(2), x: +(e.ax + e.dx * a.t).toFixed(1), z: +(e.az + e.dz * a.t).toFixed(1) }; }) };
 }
 /** 讀數：全部城加起來（townStat 頂層的 folk）。 */
 function townFolkSum() {
   var F = TOWNS.kit && TOWNS.kit.folk; if (!F) return null;
-  return { rows: F.rows, names: F.names, cloth: F.clothN, hair: F.hairN, total: TOWNS.list.reduce(function (s, T) { return s + (T.folk ? T.folk.agents.length : 0); }, 0), pos: TOWNS.stat.folkPos || 0, drawn: TOWNS.stat.folk || 0, clock: +(TOWNS.flagClock || 0).toFixed(3) };   // clock：位置照的那個畫面時間
+  return { rows: F.rows, names: F.names, cloth: F.clothN, hair: F.hairN, total: TOWNS.list.reduce(function (s, T) { return s + (T.folk ? T.folk.agents.length : 0); }, 0), pos: TOWNS.stat.folkPos || 0, drawn: TOWNS.stat.folk || 0, ms: TOWNS.stat.folkMs || 0, clock: +(TOWNS.flagClock || 0).toFixed(3) };   // clock：位置照的那個畫面時間
 }
