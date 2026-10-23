@@ -141,7 +141,10 @@ function townFolkPrep(T, F) {
   T.folk = G;
   return G;
 }
-/** 路網圖：路段在交叉口切開（別條路的頂點落在這一段中間 ≤ 2.2 m ⇒ T 字路口也連得上）、端點 2 m 內併成節點。 */
+/** 路網圖：路段在交叉口切開（別條路的頂點落在這一段中間 ≤ 2.2 m ⇒ T 字路口也連得上）、端點 2 m 內併成節點。
+ *  找鄰居照 TOWN_FOLK_CELL 公尺的格子（TASK-0866：以前每一段掃全部端點、每個端點比全部節點 ⇒ 君士坦丁堡第一次畫那一格 2.1 s）；
+ *  切點照數值排序、併節點取編號最小的那一個 ⇒ 跟逐個掃的結果逐項相同。 */
+var TOWN_FOLK_CELL = 8;
 function townFolkGraph(T) {
   var ax = BED.ax, az = BED.az, R = T.roads.filter(function (r) { return r.P && r.P.length >= 2 && r.w >= 2 && r.kind !== 'link-door'; });
   if (!R.length) R = T.roads.filter(function (r) { return r.P && r.P.length >= 2; });
@@ -154,10 +157,13 @@ function townFolkGraph(T) {
       raw.push({ a: a, b: b, w: r.w || 3, L: L }); pts.push(a, b);
     }
   });
-  var segs = [];
+  var C = TOWN_FOLK_CELL, pg = new Map(), segs = [];
+  function cell(x) { return Math.floor(x / C); }
+  pts.forEach(function (p) { var k = cell(p[0]) + ',' + cell(p[1]), L = pg.get(k); if (L) L.push(p); else pg.set(k, [p]); });
   raw.forEach(function (s) {
     var dx = s.b[0] - s.a[0], dz = s.b[1] - s.a[1], L2 = s.L * s.L, cuts = [0, 1];
-    pts.forEach(function (p) {
+    var x0 = cell(Math.min(s.a[0], s.b[0]) - 2.2), x1 = cell(Math.max(s.a[0], s.b[0]) + 2.2), z0 = cell(Math.min(s.a[1], s.b[1]) - 2.2), z1 = cell(Math.max(s.a[1], s.b[1]) + 2.2);   // 離這一段 ≤ 2.2 m 的點一定在外框外擴 2.2 m 裡
+    for (var gx = x0; gx <= x1; gx++) for (var gz = z0; gz <= z1; gz++) (pg.get(gx + ',' + gz) || []).forEach(function (p) {
       var u = ((p[0] - s.a[0]) * dx + (p[1] - s.a[1]) * dz) / L2; if (u <= 0.08 || u >= 0.92 || u * s.L < 1.5 || (1 - u) * s.L < 1.5) return;
       if (Math.hypot(p[0] - (s.a[0] + dx * u), p[1] - (s.a[1] + dz * u)) <= 2.2) cuts.push(u);
     });
@@ -167,10 +173,16 @@ function townFolkGraph(T) {
       segs.push({ a: [s.a[0] + dx * u0, s.a[1] + dz * u0], b: [s.a[0] + dx * u1, s.a[1] + dz * u1], w: s.w });
     }
   });
-  var nodes = [], edges = [], Ltot = 0;
-  function nodeOf(p) {
-    for (var i = 0; i < nodes.length; i++) if (Math.hypot(nodes[i].x - p[0], nodes[i].z - p[1]) <= 2.0) return i;
-    nodes.push({ x: p[0], z: p[1], adj: [] }); return nodes.length - 1;
+  var nodes = [], edges = [], Ltot = 0, ng = new Map();
+  function nodeOf(p) {                                                   // 2 m 內編號最小的節點（C ≥ 2 ⇒ 前後左右一格就夠）
+    var cx = cell(p[0]), cz = cell(p[1]), best = -1;
+    for (var gx = cx - 1; gx <= cx + 1; gx++) for (var gz = cz - 1; gz <= cz + 1; gz++) (ng.get(gx + ',' + gz) || []).forEach(function (i) {
+      if ((best < 0 || i < best) && Math.hypot(nodes[i].x - p[0], nodes[i].z - p[1]) <= 2.0) best = i;
+    });
+    if (best >= 0) return best;
+    var k = cx + ',' + cz, L = ng.get(k); nodes.push({ x: p[0], z: p[1], adj: [] });
+    if (L) L.push(nodes.length - 1); else ng.set(k, [nodes.length - 1]);
+    return nodes.length - 1;
   }
   segs.forEach(function (s) {
     var u = nodeOf(s.a), v = nodeOf(s.b); if (u === v) return;
@@ -246,7 +258,9 @@ function townFolkDraw(P, K, eye, PL, fogD, clock) {
   TOWNS.list.forEach(function (T) {
     var b = T.box, bx = Math.max(b[0] - BED.ax - eye[0], 0, eye[0] - (b[2] - BED.ax)), bz = Math.max(b[1] - BED.az - eye[2], 0, eye[2] - (b[3] - BED.az));
     if (Math.hypot(bx, bz) > maxD) return;                              // 整座城都在範圍外 ⇒ 連路網都不建（位置只看時間，回來時照樣接得上）
-    var G = T.folk || townFolkPrep(T, F), cb = TOWNS.folkCb || (TOWNS.folkCb = [0, 0, 0, 0, 0, 0]);
+    // 路網照背景預算（08_seabed.js bedBusy）：君士坦丁堡一次 0.13 s（2,000 位的路線）⇒ 不跟建實例、解模型擠在同一格（TASK-0866：進城那一格 0.47 s）；預算用完 ⇒ 這一格先不畫這座城的人
+    var G = T.folk; if (!G) { if (bedBusy()) return; var b0 = performance.now(); G = townFolkPrep(T, F); bedSpent(b0); }
+    var cb = TOWNS.folkCb || (TOWNS.folkCb = [0, 0, 0, 0, 0, 0]);
     G.agents.forEach(function (a) {
       var ln = G.line && a.id < G.line.n, bb = a.bb;
       if (!ln) {                                                         // 路線外框先裁到鏡頭周圍 maxD 的方框（路線可以長到好幾百公尺，遠端那一截掉進視錐不算數）⇒ 裁完是空的、太遠、整個在畫面外 ⇒ 不算

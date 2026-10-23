@@ -8,7 +8,7 @@
 //   座標：世界 (x, z) ＝ 規劃 E(q) − (BED.ax, BED.az)、E(q) ＝ (ox ＋ kx·qx, oy ＋ qy)（63_towns.js townPrep）⇒ 反過來 q ＝ ((x ＋ ax − ox) ÷ kx, z ＋ az − oy)。
 // 失敗處置：沒有 host（直接開 Blockside）、沒給 ?town、那座城還沒到 ⇒ 開不了，說一聲；回覆裡的 why 照原樣顯示。
 var TWB = { on: false, town: Q.get('town') || null, cat: 'house', item: 'house', open: 0, seq: 0, wait: {}, mx: null, my: null, moved: false, q: null, side: 0,
-  tr: null, busy: false, again: false, start: null, gl: null, msg: '', msgT: 0, framed: false, auto: false, ops: 0, last: 0, ghost: null, rib: null };   // ghost：房子的預覽實例（63_towns.js townGhost）；rib：道路預覽的路面帶（GPU）   // open：0 沒開、1 開著中、2 好了；tr：最後一則試放／找路的回覆
+  tr: null, busy: false, again: false, start: null, gl: null, msg: '', msgT: 0, framed: false, ops: 0, last: 0, ghost: null, rib: null };   // ghost：房子的預覽實例（63_towns.js townGhost）；rib：道路預覽的路面帶（GPU）   // open：0 沒開、1 開著中、2 好了；tr：最後一則試放／找路的回覆
 var TWB_CATS = [
   { k: 'road', name: '🛣 道路', items: [{ k: 'street', name: '街', sub: '寬 5 m' }, { k: 'lane', name: '小路', sub: '寬 2.5 m' }] },
   { k: 'house', name: '🏠 房屋', items: [{ k: 'house', name: '住宅', sub: '2 × 3 格（轉角 2 × 2）' }] }   // 路邊每 4 m 一格（Blocksail TASK-0840）；轉角只剩 2 格深 ⇒ 8 × 8 的小版住宅
@@ -142,7 +142,7 @@ function twbFrame() {
     var c = T.cen || [T.ox, T.oy], x = c[0] - BED.ax, z = c[1] - BED.az;
     camSet({ mode: 0, follow: null, pan: [0, 0], tgt: [x, Math.max(0, twbHeight(x, z)), z], dist: 300, pitch: 0.95 });
   }
-  if (!TWB.auto && T && twbOk() && RUNNING && !CAM.tr) { TWB.auto = true; twbToggle(true); }   // 城鎮模式預設開著建築選單（Tim 2026-10-22「建築模式預設就開啟建築選單」）：城到了、轉場降完就開一次；之後收起來照使用者的
+  // 進城預設不開建築模式（Tim 2026-10-23「建築模式按鈕希望改成常駐的Toggle按鈕(且預設改為不開)」；10-22 那一版城到了、轉場降完就自動開一次）：按 🔨 或 B 才開
   if (!TWB.on) { if (TWB.gl && TWB.gl.n) TWB.gl = upload(TWB.gl, new Float32Array(0), 6, [[0, 3, 0], [2, 3, 3]]); TWB.ghost = null; return; }
   if (TWB.moved && TWB.mx != null && T) {
     TWB.moved = false;
@@ -233,7 +233,7 @@ function twbInfo() {
   else s = !TWB.q ? '游標移到路邊或空建地上' : !tr || tr.road ? '試放…' : tr.ok ? (tr.lot ? '空建地 ' + tr.lot : '路邊 ' + tr.w.toFixed(0) + ' × ' + tr.d + ' m') + ' —— 點一下蓋' + (TWB.side ? '（' + (TWB.side > 0 ? '右' : '左') + '側）' : '') : '蓋不了：' + (tr.why || ['?'])[0];
   if (el.textContent !== s) el.textContent = s;
 }
-/** 介面：分類分頁＋項目＋復原、收起（#twbP，#stage.twb 才顯示）；🔨 那一顆只在城鎮模式、選單收起來時（61_layout.js 的 town 配置）。 */
+/** 介面：分類分頁＋項目＋復原、收起（#twbP，#stage.twb 才顯示）；🔨 那一顆城鎮模式常駐、當開關（61_layout.js 的 town 配置）。 */
 function twbUI() {
   var P = $('twbP'); if (!P) return;
   var h = '<div id="twbTabs">' + TWB_CATS.map(function (c) { return '<button type="button" data-c="' + c.k + '"' + (c.k === TWB.cat ? ' class="on"' : '') + '>' + c.name + '</button>'; }).join('') + '</div><div id="twbItems">';

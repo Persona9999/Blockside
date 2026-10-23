@@ -84,23 +84,26 @@ function treePrep(J) {
 }
 /** 第 J.si 種開始擺：候選點的間距、雜湊的種子、整格先跳過的表 ⇒ J.sp；這一種在這一塊不擺（遠景塊不算殼的小植物）⇒ false。 */
 function treeSpecies(J) {
-  var C = J.C, far = J.far, A = BED.A, size = A.chunk, si = J.si, sp = J.SP[si], S = TREE_SPECIES[sp], Pl = S.place, gap = Pl.spacing * (far ? TREE_FAR_SP : 1), m = Math.floor(size / gap);
+  var C = J.C, far = J.far, A = BED.A, size = A.chunk, si = J.si, sp = J.SP[si], S = TREE_SPECIES[sp], Pl = S.place, gap = Pl.spacing * (far ? TREE_FAR_SP : 1);
+  //   候選點照整個海域同一張格子（第 gi 格 ＝ 海域座標 gi × gap 起）：抖動後落在這一塊裡的才擺 ⇒ 每一點恰好一塊擺、相鄰兩塊接得起來
+  //   （Tim 2026-10-23「地塊之間 樹好像有接縫」：以前每塊從自己的角起排 floor(塊 ÷ 間距) 個 ⇒ 塊尾那一截（塊 − m × 間距）沒有候選點，加上抖動留的邊 ⇒ 交界一條空帶）
+  var gi0 = Math.floor(C.cx * size / gap) - 1, gj0 = Math.floor(C.cy * size / gap) - 1, mi = Math.ceil((C.cx + 1) * size / gap) - gi0, m = Math.ceil((C.cy + 1) * size / gap) - gj0;
   if (Pl.town) return false;                                            // 只種在城鎮標的位置（treeTownPut），不照地形自己長
   if (far && Pl.shell === 0) return false;                              // 遠景塊只拿來算樹冠殼 ⇒ 不算進殼的小植物不擺
   var vb = C.vg && A.vis ? A.vis.indexOf(sp) : -1, vs = vb >= 0 ? size / (C.vgN - 1) : 0;   // 植被段（Blocksail 照物種的分區、氣候、土壤推算，MAP_CHUNK.md §4）：這一種在不在那一點的名單裡；名單沒有這一種 ⇒ 不限
-  var CG = TREE_CELL, cn = J.cn, N2 = J.N2, A4 = Pl.alt, mm = 0, ok = new Uint8Array(N2), cI = new Int32Array(m), q; for (q in Pl.mats) mm |= 1 << q;
-  for (q = 0; q < N2; q++) ok[q] = gap > CG / 2 || (J.cmD[q] & mm && J.hiD[q] > A4[0] && J.loD[q] < A4[3]) ? 1 : 0;   // 間距大過半格 ⇒ 抖動可能跨出外擴的那一格 ⇒ 不先跳
-  for (q = 0; q < m; q++) cI[q] = Math.min(cn - 1, Math.floor((q + 0.5) * gap / CG));
-  J.sp = { sp: sp, si: si, S: S, Pl: Pl, gap: gap, m: m, j: 0, nk: 0, sd: 7001 + si * 131 + (far ? 17 : 0), fs: 7001 + (far ? 17 : 0), vb: vb, vs: vs, A4: A4, ok: ok, cI: cI,
-    gi0: Math.round(C.cx * size / gap), gj0: Math.round(C.cy * size / gap) };
+  var CG = TREE_CELL, N2 = J.N2, A4 = Pl.alt, mm = 0, ok = new Uint8Array(N2), q; for (q in Pl.mats) mm |= 1 << q;
+  for (q = 0; q < N2; q++) ok[q] = J.cmD[q] & mm && J.hiD[q] > A4[0] && J.loD[q] < A4[3] ? 1 : 0;   // 照候選點真的落在哪一格查（外擴一格的表）⇒ 跳過的跟逐點查一樣
+  J.sp = { sp: sp, si: si, S: S, Pl: Pl, gap: gap, m: m, mi: mi, j: 0, nk: 0, sd: 7001 + si * 131 + (far ? 17 : 0), fs: 7001 + (far ? 17 : 0), vb: vb, vs: vs, A4: A4, ok: ok,
+    gi0: gi0, gj0: gj0, x0: C.cx * size, z0: C.cy * size };
   return true;
 }
 /** 第 P.si 種的第 j 列候選點。 */
 function treeRow(J, P, j) {
-  var C = J.C, far = J.far, size = BED.A.chunk, st = C.step, n = C.n, hAt = J.hAt, out = J.out, bb = J.bb, Pl = P.Pl, S = P.S, si = P.si, gap = P.gap, m = P.m, sd = P.sd, fs = P.fs, A4 = P.A4, vb = P.vb, vs = P.vs, ok = P.ok, cI = P.cI;
-  for (var i = 0, row = cI[j] * J.cn; i < m; i++) {
-    if (!ok[row + cI[i]]) continue;
-    var gi = P.gi0 + i, gj = P.gj0 + j, x = (i + 0.15 + 0.7 * treeHash(gi, gj, sd)) * gap, z = (j + 0.15 + 0.7 * treeHash(gi, gj, sd + 1)) * gap;
+  var C = J.C, far = J.far, size = BED.A.chunk, st = C.step, n = C.n, hAt = J.hAt, out = J.out, bb = J.bb, Pl = P.Pl, S = P.S, si = P.si, gap = P.gap, mi = P.mi, sd = P.sd, fs = P.fs, A4 = P.A4, vb = P.vb, vs = P.vs, ok = P.ok, CG = TREE_CELL, cn = J.cn;
+  for (var i = 0; i < mi; i++) {
+    var gi = P.gi0 + i, gj = P.gj0 + j, x = (gi + 0.15 + 0.7 * treeHash(gi, gj, sd)) * gap - P.x0, z = (gj + 0.15 + 0.7 * treeHash(gi, gj, sd + 1)) * gap - P.z0;
+    if (x < 0 || x >= size || z < 0 || z >= size) continue;               // 落在別塊 ⇒ 那一塊擺
+    if (!ok[Math.min(cn - 1, Math.floor(z / CG)) * cn + Math.min(cn - 1, Math.floor(x / CG))]) continue;
     if (J.tcl && townClr(C, x, z)) continue;                            // 城鎮的建築、路、牆、碼頭那裡不長（63_towns.js；空建地照長）
     var y = hAt(x, z); if (y <= A4[0] || y >= A4[3]) continue;
     var mt = C.mat[Math.min(n - 1, Math.round(z / st)) * n + Math.min(n - 1, Math.round(x / st))], wM = Pl.mats[mt]; if (!wM) continue;

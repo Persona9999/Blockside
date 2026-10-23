@@ -1,5 +1,6 @@
 # 環境音試聽（TASK-0663）：無頭 Chrome 開成品，經 DevTools 協定呼叫 ambLab（02_ambient.js：OfflineAudioContext 離線錄）⇒ 每一段寫成 WAV＋一頁可以直接播的 HTML。
 # 用法：python -I -X utf8 src/tests/ambient_lab.py --tag a [--sec 10] [--cases "名字:w:sea:rain:hold;…"]
+#   --lab hit ⇒ 碰撞與觸礁（02_audio.js hitLab，TASK-0868）：--cases "名字:I:mat:bed:slide:rub;…"、每段預設 3.5 秒、寫到 reports/hit_lab；多三欄：頻譜重心 Hz、1 kHz 以上的能量 %、150 Hz 以下的能量 %（筆電喇叭差不多放不出來）。
 # 寫：<out>/<tag>/<序號>_<名字>.wav、<out>/<tag>/index.html（每一段：播放器｜參數｜峰值｜RMS dB）。
 # ⛔ 不用 --dump-dom：離線錄音在音訊執行緒上跑，無頭模式的虛擬時間不等它（量過：頁面載入 3 秒就 dump、#lab 還沒寫）⇒ 改走 Runtime.evaluate（awaitPromise）。
 #   DevTools 的 WebSocket 只用標準函式庫（socket）寫最小的一段：送一個文字訊框、收到回應（可能分好幾個訊框、好幾 MB）。
@@ -9,6 +10,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 CHROME = [r'C:\Program Files\Google\Chrome\Application\chrome.exe', r'C:\Program Files (x86)\Google\Chrome\Application\chrome.exe']
 OUT_HTML = os.path.normpath(os.path.join(HERE, '..', '..', 'index.html'))
 OUT_DIR = os.path.normpath(os.path.join(HERE, '..', '..', 'reports', 'ambient_lab'))
+OUT_HIT = os.path.normpath(os.path.join(HERE, '..', '..', 'reports', 'hit_lab'))
 PORT = 9347
 
 
@@ -59,10 +61,13 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--html', default=OUT_HTML)
     ap.add_argument('--tag', default='run')
-    ap.add_argument('--out', default=OUT_DIR)
-    ap.add_argument('--sec', type=float, default=10)
+    ap.add_argument('--lab', default='amb', choices=['amb', 'hit'])
+    ap.add_argument('--out', default='')
+    ap.add_argument('--sec', type=float, default=0)
     ap.add_argument('--cases', default='')
     a = ap.parse_args()
+    hit = a.lab == 'hit'; fn = 'hitLab' if hit else 'ambLab'
+    a.out = a.out or (OUT_HIT if hit else OUT_DIR); a.sec = a.sec or (3.5 if hit else 10)
     chrome = next(c for c in CHROME if os.path.exists(c))
     q = 'sec=%g' % a.sec + ('&cases=' + urllib.parse.quote(a.cases) if a.cases else '')
     url = 'file:///' + a.html.replace('\\', '/') + '?debug=1'               # __game 只在 debug=1 才掛（成品的程式整包在一個閉包裡，ambLab 不在 window 上）
@@ -78,9 +83,9 @@ def main():
         page = next(t for t in tabs if t.get('type') == 'page')
         ws = WS(page['webSocketDebuggerUrl'])
         for _ in range(300):                                            # 等成品載入（__game.ambLab 掛好）
-            if ws.call('Runtime.evaluate', {'expression': 'typeof (window.__game && __game.ambLab)', 'returnByValue': True})['result']['result'].get('value') == 'function': break
+            if ws.call('Runtime.evaluate', {'expression': 'typeof (window.__game && __game.%s)' % fn, 'returnByValue': True})['result']['result'].get('value') == 'function': break
             time.sleep(0.2)
-        r = ws.call('Runtime.evaluate', {'expression': '__game.ambLab(%s).then(function (R) { return JSON.stringify(R); })' % json.dumps(q), 'awaitPromise': True, 'returnByValue': True})
+        r = ws.call('Runtime.evaluate', {'expression': '__game.%s(%s).then(function (R) { return JSON.stringify(R); })' % (fn, json.dumps(q)), 'awaitPromise': True, 'returnByValue': True})
         if 'exceptionDetails' in r.get('result', {}):
             print('頁面丟出例外：', json.dumps(r['result']['exceptionDetails'], ensure_ascii=False)[:800]); return 1
         R = json.loads(r['result']['result']['value'])
@@ -96,12 +101,21 @@ def main():
         with open(os.path.join(d, name), 'wb') as f:
             f.write(base64.b64decode(c['wav'].split(',', 1)[1]))
         o = c['o']
+        if hit:
+            print('%-28s 峰值 %.3f  RMS %6s dB  重心 %5d Hz  1k 以上 %5.1f%%  150 Hz 以下 %5.1f%%  %s' % (c['name'], c['peak'], c['rmsDb'], c['cent'], c['hi'], c['lo'], name))
+            rows.append('<tr><td>%s</td><td><audio controls preload="none" src="%s"></audio></td><td>%s</td><td>%.3f</td><td>%s</td><td>%d</td><td>%.1f</td><td>%.1f</td></tr>' % (
+                html.escape(c['name']), name, html.escape(json.dumps(o, ensure_ascii=False)), c['peak'], c['rmsDb'], c['cent'], c['hi'], c['lo']))
+            continue
         print('%-14s w %-5s sea %-4s rain %s hold %s  峰值 %.3f  RMS %s dB  %s' % (c['name'], o.get('w'), o.get('sea'), o.get('rain'), o.get('hold'), c['peak'], c['rmsDb'], name))
         rows.append('<tr><td>%s</td><td><audio controls preload="none" src="%s"></audio></td><td>w %s・海況 %s・雨 %s・船艙 %s</td><td>%.3f</td><td>%s</td></tr>' % (
             html.escape(c['name']), name, o.get('w'), o.get('sea'), o.get('rain'), o.get('hold'), c['peak'], c['rmsDb']))
     with open(os.path.join(d, 'index.html'), 'w', encoding='utf-8', newline='\n') as f:
-        f.write('<!doctype html><meta charset="utf-8"><title>環境音試聽 %s</title><style>body{font:14px sans-serif;margin:16px}td,th{padding:4px 10px;border-bottom:1px solid #ccc}</style>'
-                '<h3>環境音試聽（%s，每段 %g 秒）</h3><table><tr><th>段落</th><th>播放</th><th>參數</th><th>峰值</th><th>RMS dB</th></tr>%s</table>' % (a.tag, a.tag, a.sec, ''.join(rows)))
+        if hit:
+            f.write('<!doctype html><meta charset="utf-8"><title>碰撞音效試聽 %s</title><style>body{font:14px sans-serif;margin:16px}td,th{padding:4px 10px;border-bottom:1px solid #ccc}</style>'
+                    '<h3>碰撞與觸礁音效試聽（%s，每段 %g 秒）</h3><table><tr><th>段落</th><th>播放</th><th>參數</th><th>峰值</th><th>RMS dB</th><th>頻譜重心 Hz</th><th>1 kHz 以上 %%</th><th>150 Hz 以下 %%</th></tr>%s</table>' % (a.tag, a.tag, a.sec, ''.join(rows)))
+        else:
+            f.write('<!doctype html><meta charset="utf-8"><title>環境音試聽 %s</title><style>body{font:14px sans-serif;margin:16px}td,th{padding:4px 10px;border-bottom:1px solid #ccc}</style>'
+                    '<h3>環境音試聽（%s，每段 %g 秒）</h3><table><tr><th>段落</th><th>播放</th><th>參數</th><th>峰值</th><th>RMS dB</th></tr>%s</table>' % (a.tag, a.tag, a.sec, ''.join(rows)))
     print('寫了', os.path.join(d, 'index.html'))
 
 
