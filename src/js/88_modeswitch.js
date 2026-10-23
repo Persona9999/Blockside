@@ -23,7 +23,7 @@
 var MODE_START = ['fleet', 'origin', 'autoFire', 'hint', 'myReload', 'build', 'observe'];   // 開局才讀的規則（04_modes.js；以前只在 70_flow.js 開一場時讀）
 var DOCK_NEAR = 400, DOCK_AT = 40, DOCK_ARRIVE = 14, DOCK_PASS = 30, DOCK_HDG_OK = 3;       // 公尺：停靠處附近幾公尺的地面區要建好（佔位，Tim「動工時照 TASK-0817 的分區算」）、
                                                                                            //   換城鎮模式要離停靠處多近、到了（開始下錨）、航道上的點幾公尺內算過了；轉到停好的船頭差幾度算好
-var DOCK_VMAX = 3.2, DOCK_VMIN = 0.7, DOCK_SLOW = 200, DOCK_TOW = 0.18, DOCK_STALL = 25;   // 剩 DOCK_SLOW 公尺以內的期望航速 m/s（從 VMAX 降到 VMIN；更遠 ⇒ 全速）、小艇拖帶最多加減速 m/s²、卡住幾秒放棄
+var DOCK_VMAX = 3.2, DOCK_VMIN = 0.7, DOCK_SLOW = 200, DOCK_TOW = 0.18, DOCK_STALL = 60;   // 剩 DOCK_SLOW 公尺以內的期望航速 m/s（從 VMAX 降到 VMIN；更遠 ⇒ 全速）、小艇拖帶最多加減速 m/s²、卡住幾秒放棄
 var DOCK_LANE = 60, DOCK_SIMX = 4;                                                         // 船已經在航道上（離某一段 ≤ DOCK_LANE 公尺）⇒ 從那一段接、不先退回外面那一點；
                                                                                            //   自動開那一段模擬 ×DOCK_SIMX（73_slowmo.js 的模擬速度；玩家自己調過 ⇒ 不動）—— 航道 1～2.5 km，×1 要三、四分鐘
 var MODE_SW = {
@@ -57,7 +57,7 @@ var MODE_HOOK = {
     leave: function () { dockStop(null); }
   }
 };
-var DOCK = { towns: {}, asked: {}, here: null, run: null, cam: null, why: '', btn: '' };   // towns：{ 城: { ring, docks } }（世界座標）；here：停在哪一處；run：自動開的那一段
+var DOCK = { towns: {}, asked: {}, okd: {}, here: null, run: null, cam: null, why: '', btn: '' };   // okd：哪幾處附近擺完過   // towns：{ 城: { ring, docks } }（世界座標）；here：停在哪一處；run：自動開的那一段
 
 /** 現在能不能換到 to ⇒ null（准）或原因。 */
 function modeWhy(to, o) {
@@ -137,7 +137,8 @@ function dockReady() {
     if (inR && !T.docks.length && !best) why = '這座城沒有停靠處';
   }
   if (!best) return { why: why };
-  var lw = dockLoadedWhy(best); if (lw) return { why: lw, dock: null, wait: best };
+  var key = best.town + '/' + best.id;                                   // 那一處擺完過一次就算數（大城的地面區照收塊一直重建 ⇒ 條件時有時無，鈕會閃、按下去那一刻又不准）
+  if (!DOCK.okd[key]) { var lw = dockLoadedWhy(best); if (lw) return { why: lw, dock: null, wait: best }; DOCK.okd[key] = 1; }
   return { dock: best };
 }
 /** 換成城鎮模式的條件（MODE_SW.sail.town）：停進那一處了。 */
@@ -183,6 +184,7 @@ function dockGo(kind, d) {
 /** 停掉自動開（why ⇒ 說一聲）。 */
 function dockStop(why) {
   var R = DOCK.run; DOCK.run = null;
+  if (R) DOCK.last = { kind: R.kind, why: why || '', phase: R.phase, k: R.k, left: R.left == null ? null : Math.round(R.left), t: +SIMT.toFixed(1) };   // 讀數（__game.mode().last）：上一段自動開怎麼結束的
   if (R && R.simx && SIM_SPEED === DOCK_SIMX) simSpeedSet(1);         // 自動開時調快的模擬速度還原（玩家中途自己調過 ⇒ 照他的）
   if (R && why) { var me = SHIPS[PLAYER_I]; if (me) note(me, why); }
 }
@@ -220,7 +222,7 @@ function dockTick() {
   if (KEYS.l || KEYS.r || KEYS.sw) { dockStop(R.kind === 'in' ? '取消停靠（打舵、動帆）' : '交還操舵'); return; }
   if (R.phase === 'go') {
     var left = R.left == null ? Infinity : R.left;
-    if (left < R.best - 5) { R.best = left; R.bestT = SIMT; }
+    if (left < R.best - 5 || anchorHeld(me)) { R.best = Math.min(R.best, left); R.bestT = SIMT; }   // 錨還咬著（起錨中）不算卡住
     if (SIMT - R.bestT > DOCK_STALL) { dockStop((R.kind === 'in' ? '停靠' : '出航') + '卡住了（' + DOCK_STALL + ' 秒沒前進）—— 停在這裡、交還操舵'); return; }
     if (R.kind === 'in' && R.k === R.pts.length - 1 && left <= DOCK_ARRIVE) { R.phase = 'turn'; R.tTurn = SIMT; note(me, '到了：兩錨都下、轉到停好的船頭'); }
     else if (R.kind === 'out' && R.k === R.pts.length - 1 && left <= DOCK_PASS) dockStop('出了航道：交還操舵');
