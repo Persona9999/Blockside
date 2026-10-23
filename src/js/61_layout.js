@@ -20,17 +20,18 @@ var UI_GROUPS = {
   kPause: ['pauseK'],               // ⏸ 停格
   kSet: ['setB'],                   // ⚙ 設定
   kAnc: ['ancAll'],                 // ⚓⚓ 雙錨
-  kGlobe: ['hostBack']              // 🌍 回到地球儀（另外要 body.bsHost：只有地球儀開的才有）
+  kGlobe: ['hostBack'],             // 🌍 回到地球儀（另外要 body.bsHost：只有地球儀開的才有）
+  kDock: ['dockK']                  // ⚓ 停靠／⛵ 出航（88_modeswitch.js dockBtn：航海時準備好了才出現）
 };
 var UI_SHIP = ['fleet', 'top', 'tele', 'tip', 'badge', 'frz', 'nav', 'helm', 'guns', 'kCam', 'kPause', 'kSet', 'kAnc', 'kGlobe'];
 var UI_LAYOUT = {
   battle: UI_SHIP,                  // 對戰電腦、觀戰、沙盒
-  sail: UI_SHIP,                    // 航海：先跟海戰一樣（要藏什麼改這一行）
+  sail: UI_SHIP.concat(['kDock']),  // 航海：跟海戰一樣，多 ⚓ 停靠（TASK-0867）
   observe: UI_SHIP,                 // 船隻觀察：跟海戰一樣，另有觀察面板（86_inspect.js）
   fp: ['kPause', 'kSet'],           // 第一人稱：只留 ⏸、⚙（#fpUI 照 #stage.fp 出現；Tim 2026-10-16「只保留設定紐 暫停紐」）
   shipbuild: ['kPause', 'kSet'],    // 造船（第一人稱鎖定）：同第一人稱，快捷欄照 #stage.bld 出現
   // 城鎮（Tim 2026-10-22「建築模式預設就開啟建築選單 隱藏船隻相關操作(只保留設定按鈕 回到地球儀按鈕)」）：停格條留著（P 照樣能停格，要看得出停了）
-  town: ['kSet', 'kGlobe', 'tip', 'frz']
+  town: ['kSet', 'kGlobe', 'tip', 'frz', 'kDock']                   // ⛵ 出航（TASK-0867）
 };
 var UI = { sig: '', el: null, name: '' };
 /** 現在該用哪一份配置。 */

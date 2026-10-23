@@ -244,12 +244,14 @@ function twbUI() {
   P.querySelectorAll('#twbItems button').forEach(function (b) { b.onclick = function () { twbPick(b.dataset.c, b.dataset.i); }; });
   $('twbUndo').onclick = twbUndo; $('twbX').onclick = function () { twbToggle(false); };
 }
-// 城鎮模式（04_modes.js town）：🔨 鈕（看不看得見照 61_layout.js 的 town 配置）
-(function () {
-  if (!modeRule('town')) return;
+// 城鎮模式（04_modes.js town）：🔨 鈕（看不看得見照 61_layout.js 的 town 配置）—— 載入時是城鎮模式就綁；航海裡停靠換進城鎮模式時由 88_modeswitch.js 的 enter 綁（TASK-0867）
+function twbBind() {
+  if (TWB.bound) return;
+  TWB.bound = true;
   var k = $('twbK'); if (k) k.onclick = function () { twbToggle(); };
   twbUI();
-})();
+}
+if (modeRule('town')) twbBind();
 ctrlAdd({ name: 'town', pri: 8, on: function () { return TWB.on; },
   key: function (k, down, e) { if (!twbKey(k, down, e)) return false; e.preventDefault(); return true; },
   hover: function (x, y) { if (!TWB.on) return false; TWB.mx = x; TWB.my = y; TWB.moved = true; return true; },
