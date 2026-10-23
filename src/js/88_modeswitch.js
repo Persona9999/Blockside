@@ -10,7 +10,7 @@
 //      加一種可以換進來的玩法 ＝ MODE_HOOK 寫 enter／leave ＋ MODE_SW 加一格條件，入口不用改。
 //   ② 停靠處（Blocksail 範圍層的 dock，TOWN_BUILD §3.3）：城鎮到了就跟外面那一頁要（'docksNeed' ⇒ 'docks'；海域座標 ⇒ 減 BED.ax／az 是世界座標）。
 //      ⛔ 不寫死「一座城一個停靠處」（Tim 2026-10-23「之後有考慮支援擴充 城鎮可以有多個城區(例如君堡) 每個城區可以有自己的棧橋」）：一座城一份清單、每一處各自算。
-//   ③ 停靠鈕（航海）：我艦在那座城的範圍裡、那一處附近 DOCK_NEAR 公尺內的地面區（棧橋、碼頭的帶子）都建好、城的實例是完整那一份
+//   ③ 停靠鈕（航海）：我艦在那座城的範圍裡（或在那一處的進港航道上 —— 大城的範圍貼著海岸畫，港內水面不在範圍裡）、那一處附近 DOCK_NEAR 公尺內的地面區（棧橋、碼頭的帶子）都建好、城的實例是完整那一份
 //      （Tim「進城鎮範圍 且已經載入完城鎮資訊」「包含城牆 建築 棧橋等」「分區載入的大城只要停靠處附近那幾區…擺完」）⇒ 才出現；沒載完 ⇒ 不出現。
 //   ④ 自動停靠（Tim「照進港航道自動開進去（看得到船開過去）」）：先開到航道上接得進去的那一點（離船＋沿航道到停靠處最短）、再沿航道開到停靠處；
 //      船照常受風、浪、碰撞，靠舵轉向；航速照期望航速調帆（54_helm.js helmGovern），另外有小艇拖帶（DOCK_TOW：慢到 DOCK_VMIN 以下推一把、太快拉住 —— 史料：進出港靠小艇拖、絞錨），
@@ -129,9 +129,12 @@ function dockReady() {
   if (!BED || !BED.host) return { why: '要從 Blocksail 地球儀開' };
   var c = shipCenter(me), best = null, bd = Infinity, why = '不在城鎮範圍裡';
   for (var id in DOCK.towns) {
-    var T = DOCK.towns[id]; if (!T.docks.length || !dockInRing(T.ring, c[0], c[2])) continue;
-    why = '這座城沒有停靠處';
-    T.docks.forEach(function (d) { var dd = Math.hypot(d.at[0] - c[0], d.at[1] - c[2]); if (dd < bd) { bd = dd; best = d; } });
+    var T = DOCK.towns[id], inR = dockInRing(T.ring, c[0], c[2]);
+    T.docks.forEach(function (d) {                                       // 範圍裡、或在那一處的進港航道上（大城的範圍貼著海岸畫：君士坦丁堡停靠處外 150 m 的金角灣就不在範圍裡）
+      if (!inR && dockLaneAt(d, c) < 0) return;
+      var dd = Math.hypot(d.at[0] - c[0], d.at[1] - c[2]); if (dd < bd) { bd = dd; best = d; }
+    });
+    if (inR && !T.docks.length && !best) why = '這座城沒有停靠處';
   }
   if (!best) return { why: why };
   var lw = dockLoadedWhy(best); if (lw) return { why: lw, dock: null, wait: best };
@@ -148,13 +151,19 @@ function dockAtWhy(d) {
 }
 
 // ── 自動開：'in' 停靠（沿航道開進去 ⇒ 下錨 ⇒ 繞錨轉 ⇒ 城鎮模式）、'out' 出航（沿航道開出去 ⇒ 交還操舵） ──
-/** 航道上從哪一點接進去：離船的距離 ＋ 沿航道到停靠處最短（同 Blocksail globe.html dockCut；第一點 ＝ 停靠處本身不算，除非航道只有一點）。 */
-function dockEntry(d, c) {
-  var P = d.path, along = [0], best = P.length - 1, bc = Infinity;
-  for (var j = 0; j + 1 < P.length; j++) {                               // 已經在航道上（停靠處那一端先看）⇒ 從那一段往停靠處開（⛔ 照下面那一套：泊位前 90 m 也會先退回航道第二點）
+/** 船在那一處的航道上 ⇒ 第幾段（離那一段 ≤ DOCK_LANE 公尺；停靠處那一端先看）；不在 ⇒ −1。 */
+function dockLaneAt(d, c) {
+  var P = d.path;
+  for (var j = 0; j + 1 < P.length; j++) {
     var ax = P[j + 1][0] - P[j][0], az = P[j + 1][1] - P[j][1], L2 = ax * ax + az * az || 1, u = ((c[0] - P[j][0]) * ax + (c[2] - P[j][1]) * az) / L2;
     if (u >= 0 && u <= 1 && Math.hypot(P[j][0] + ax * u - c[0], P[j][1] + az * u - c[2]) <= DOCK_LANE) return j;
   }
+  return Math.hypot(d.at[0] - c[0], d.at[1] - c[2]) <= DOCK_LANE ? 0 : -1;
+}
+/** 航道上從哪一點接進去：離船的距離 ＋ 沿航道到停靠處最短（同 Blocksail globe.html dockCut；第一點 ＝ 停靠處本身不算，除非航道只有一點）。 */
+function dockEntry(d, c) {
+  var P = d.path, along = [0], best = P.length - 1, bc = Infinity;
+  var ln = dockLaneAt(d, c); if (ln >= 0) return ln;                    // 已經在航道上 ⇒ 從那一段往停靠處開（⛔ 照下面那一套：泊位前 90 m 也會先退回航道第二點）
   for (var k = 1; k < P.length; k++) along.push(along[k - 1] + Math.hypot(P[k][0] - P[k - 1][0], P[k][1] - P[k - 1][1]));
   for (var i = P.length > 1 ? 1 : 0; i < P.length; i++) { var v = along[i] + Math.hypot(P[i][0] - c[0], P[i][1] - c[2]); if (v < bc - 1e-9) { bc = v; best = i; } }
   return best;
