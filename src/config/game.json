@@ -557,6 +557,7 @@
       "teak": {"name": "柚木", "kind": "wood", "density": 0.65, "hard": 1.1, "flammable": 0.3},
       "iron": {"name": "鐵甲", "kind": "metal", "density": 7.8, "hard": 32, "pen": 230, "flammable": 0, "metal": 1, "rough": 0.35, "smooth": true},
       "copper_sheath": {"name": "銅皮（包在木殼外）", "kind": "metal", "density": 0.8, "hard": 1.1, "flammable": 0, "metal": 0.7, "rough": 0.55, "smooth": false},
+      "brass": {"name": "黃銅（鍍金銅件：紋章、鐘、配件）", "kind": "metal", "density": 8.5, "hard": 20, "flammable": 0, "metal": 1, "rough": 0.3, "smooth": false},
       "boiler": {"name": "鍋爐（鐵殼＋滿水）", "kind": "metal", "density": 0.9, "hard": 1.5, "flammable": 0, "metal": 0.85, "rough": 0.45, "smooth": true},
       "glass": {"name": "玻璃（窗）", "kind": "other", "density": 2.5, "hard": 0.3, "flammable": 0, "rough": 0.06, "clear": 0.6}
     }
