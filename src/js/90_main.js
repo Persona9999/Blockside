@@ -240,6 +240,8 @@ if (DEBUG) window.__game = {
   floodView: function (o) { return floodView(o); },                   // 換鏡頭再拍一張（81_floodlab.js）
   /** 環境音試聽（02_ambient.js，TASK-0663）：q ＝ 'sec=10&cases=名字:w:sea:rain:hold;…' ⇒ Promise<[{ name, peak, rmsDb, wav }]>（src/tests/ambient_lab.py 經 DevTools 呼叫）。 */
   ambLab: function (q) { return ambLab(new URLSearchParams(q || '')); },
+  hitLab: function (q) { return hitLab(new URLSearchParams(q || '')); },   // 碰撞與觸礁的試聽集（02_audio.js；src/tests/ambient_lab.py --lab hit）
+  hitLog: function () { return HIT_LOG.slice(); },                     // 最近 32 聲碰撞：時刻、力道、材質、底質（02_audio.js sfxPlay；TASK-0868）
   bgmRender: function (o) { return bgmRender(o || {}); },                // 背景音樂離線錄（02_music.js；src/tests/music_lab.py）
   bgm: function () { return { snd: JSON.parse(JSON.stringify(SND)), tune: BGM ? BGM.tn.id : null, pass: BGM ? BGM.pass : null, forced: !!(BGM && BGM.forced), bus: AC && AC.bgmBus ? +AC.bgmBus.gain.value.toFixed(4) : null, sfxBus: AC && AC.sfxBus ? +AC.sfxBus.gain.value.toFixed(4) : null, ambBus: AC && AC.ambBus ? +AC.ambBus.gain.value.toFixed(4) : null, fight: AC ? +(AC.currentTime - SND_FIGHT).toFixed(1) : null, tunes: TUNES.map(function (t) { return t.id; }), themes: THEMES.map(function (t) { return t.id; }), theme: (bgmTheme() || {}).id || null }; },   // 聲音的讀數：三條音量線、正在放哪首
   /** 遊戲裡那一份環境音現在的值（還沒有聲音 ⇒ null）：風、浪、雨的音量、風的頻率、悶掉的低通、左右、在不在船艙裡。 */
