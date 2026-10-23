@@ -1031,6 +1031,7 @@ function townGroundNext(T, eye) {
 /** 這一區有棧橋或碼頭。 */
 function townGroundPier(q) { return q.pier.length > 0 || q.quay.length > 0; }
 /** 城 T 的一區 ⇒ 一份網格（位置、法線、顏色）；那一區沒東西 ⇒ null。 */
+var TOWN_STAIR_RISE = 0.17;                                              // 樓梯一階最高（公尺；同 Blocksail town.js STAIR_RISE）
 function townGroundTile(T, Q) {
   var V = [], I = [], S = BED.A.chunk, deps = {};
   function vtx(x, y, z, c, nx, ny, nz) { V.push(x, y, z, nx == null ? 0 : nx, ny == null ? 1 : ny, nz == null ? 0 : nz, c[0], c[1], c[2]); return V.length / 9 - 1; }
@@ -1084,9 +1085,12 @@ function townGroundTile(T, Q) {
   // 路接地塊的樓梯（Blocksail world/town.js roadStairs，TASK-0861）：path ＝ [路那一頭, 地塊那一頭]、z ＝ 兩頭的高、n 階、寬 w ⇒ 一階一個實心的方塊（頂面、四個側面），
   //   往上走：第 k 階頂 ＝ z0 ＋ (k＋1)·(z1 − z0)／n（最後一階 ＝ 地塊的 h）；往下走：第 k 階頂 ＝ z0 ＋ k·(z1 − z0)／n（第一階跟路面齊、最後一級落到地塊上）
   //   ⇒ 兩種都是那一段的直線斜坡在踏面底下（往下走的規劃把那一段路面拉成這條斜線，地形照它整）；底往下到那一階四角最低的地面再 0.3 m（同石基）
+  //   路那一頭的高照整過地的路面重量（地形 ＋ TOWN_ROAD_LIFT）、階數跟著重算（一階 ≤ TOWN_STAIR_RISE）：地塊的邊坡最後套、會把它旁邊幾公尺的路面拉向地塊的高
+  //   （君士坦丁堡 gul-plaza-link-3：規劃 8.0 m、整完地 6.9 m）⇒ 照規劃的 z0 畫，樓梯頂跟路面會差一截；地形還沒到 ⇒ 照規劃
   (Q.stair || []).forEach(function (st) {
     var A = W(st.path[0]), B = W(st.path[1]), dx = B[0] - A[0], dz = B[1] - A[1], L = Math.hypot(dx, dz), n = Math.max(1, st.n | 0); if (L < 0.05) return;
-    var ux = dx / L, uz = dz / L, hw = st.w / 2, z0 = st.z[0], z1 = st.z[1], col = TOWN_COL.plaza, dk = [col[0] * 0.78, col[1] * 0.78, col[2] * 0.78];
+    var ux = dx / L, uz = dz / L, hw = st.w / 2, z1 = st.z[1], g0 = hgt(A[0], A[1]), z0 = g0 === g0 ? g0 + TOWN_ROAD_LIFT : st.z[0], col = TOWN_COL.plaza, dk = [col[0] * 0.78, col[1] * 0.78, col[2] * 0.78];
+    if (g0 === g0) { if (Math.abs(z1 - z0) < 0.05) return; n = Math.max(1, Math.ceil(Math.abs(z1 - z0) / TOWN_STAIR_RISE - 1e-9)); }
     function P(a, b) { return [A[0] + ux * a - uz * b, A[1] + uz * a + ux * b]; }
     for (var k = 0; k < n; k++) {
       var a0 = L * k / n, a1 = L * (k + 1) / n, top = z0 + (z1 - z0) * (k + (z1 > z0 ? 1 : 0)) / n + 0.02, C = [P(a0, -hw), P(a1, -hw), P(a1, hw), P(a0, hw)], lo = Infinity;
