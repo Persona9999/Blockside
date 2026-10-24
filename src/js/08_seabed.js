@@ -102,6 +102,7 @@ function bedHostMsg(e) {
   if (d.bsmap === 'towns' || (d.bsmap === 'error' && d.what === 'towns')) { townGot(d.towns || [], d.msg, d.kit); return; }   // 城鎮規劃＋模型的索引（63_towns.js；只給人看 ⇒ 不等它）
   if (d.bsmap === 'townmodels' || (d.bsmap === 'error' && d.what === 'townmodels')) { townModelsGot(d.models, d.msg); return; }
   if (d.bsmap === 'docks') { dockGot(d.docks); return; }                // 停靠處（88_modeswitch.js；TASK-0867）
+  if (d.bsmap === 'townUI') { tuiGot(d); return; }                     // 城鎮介面（89_townui.js；Blocksail TASK-0910）
   if (d.bsmap === 'townEdit' || d.bsmap === 'townSave') { twbGot(d); return; }   // townSave：建築模式的 💾 存這座城（87_townbuild.js twbSave）                    // 建築模式的回覆（87_townbuild.js；apply／undo 帶新的規劃 ⇒ townReplace）   // 要用到的城鎮模型（63_towns.js townModels）
   if (d.bsmap === 'chunk' && !d.coarse && BED.inq) { BED.inq.push(d); return; }   // 收塊排隊（檔頭）：畫面迴圈每格照預算處理（bedPump）；遠景的粗塊照舊當場收（只是交回 base64，bedFarStep 自己限量）
   bedHostTake(d);
