@@ -83,6 +83,7 @@ function medHold(sh, c) {
 function medTick(sh) {
   var M = sh.med; if (!M) return;
   var dt = SIMT - M.t, beds = 0; M.t = SIMT;
+  if (!medBusy(sh)) { medIdle(sh); return; }
   M.rooms.forEach(function (o) {
     var pt = 0; o.beds.forEach(function (m) { var w = m.med.who; if (w && w.st === 1 && w.medBed === m && m.alive) pt++; });
     o.need = pt ? Math.max(M.smin, Math.ceil(pt / M.sper)) : 0;           // 有病人才要人
@@ -108,6 +109,20 @@ function medTick(sh) {
       if (rnd() < M.back) medBack(sh, p, lv, ci); else { p.st = 3; M.out++; }
     });
   });
+  M.open = beds > 0 && sh.crew.some(function (c) { return c.role === ROLE.HAND && crewAble(c); });
+}
+/** 醫療艙有事做嗎：有一張床上登記了人（躺著、正被扛過來、或要放回去的），或有預備水手派在醫療艙。 */
+function medBusy(sh) {
+  var M = sh.med, i, j;
+  for (i = 0; i < M.rooms.length; i++) for (j = 0; j < M.rooms[i].beds.length; j++) if (M.rooms[i].beds[j].med.who) return true;
+  for (i = 0; i < sh.crew.length; i++) { var c = sh.crew[i]; if (c.role === ROLE.HAND && crewAble(c) && c.hand.job && c.hand.job.med) return true; }
+  return false;
+}
+/** 沒事做（TASK-0812；以前沒有病人也每間掃全船船員 4 次）：跟 medTick 算出來一樣 —— 不要人、沒人到、船醫照數（medNeeds 搬人時挑有船醫的那間）、還有沒有地方送。 */
+function medIdle(sh) {
+  var M = sh.med, beds = 0;
+  M.rooms.forEach(function (o) { o.need = 0; o.have = 0; o.sg = 0; o.beds.forEach(function (m) { if (m.alive) beds++; }); });
+  sh.crew.forEach(function (c) { if (c.role === ROLE.SURGEON && crewAble(c) && c.medRoom) c.medRoom.sg++; });
   M.open = beds > 0 && sh.crew.some(function (c) { return c.role === ROLE.HAND && crewAble(c); });
 }
 /** 船醫（TASK-0676；Tim 2026-10-17：「醫療倉可以直接換成護士」→「先把船醫套用上」）：開戰就站在醫療艙裡的床旁，不走動、不補位、火槍打不到（below）；
