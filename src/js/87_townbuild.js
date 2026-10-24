@@ -5,6 +5,8 @@
 //   那一頁 ⇒ 這一頁 { bsmap: 'townEdit', seq, cmd, ok, why, …, town?（apply／undo 成功 ⇒ 新的那一份規劃）}（08_seabed.js 轉給 twbGot）。
 //     cmd 'open' ⇒ 那一頁拿規劃＋取樣、照存檔重放（第一次開建築模式時要一次）；回的 menu ＝ 道路以外的分類（Blocksail town.js BUILD_MENU；舊的地球儀沒給 ⇒ 只有房屋）；'try'（q ＝ { x, y, side, use }）⇒ 吸附＋試放的框；
 //     'route'（q ＝ { from, to, kind }）⇒ 路線；'apply'（op ＝ { road }｜{ build }）、'undo' ⇒ 新的規劃 ⇒ 63_towns.js townReplace 換掉那一座城。
+//   存這座城（Blocksail TASK-0873；Tim 2026-10-24「城鎮編輯模式下存檔應該就只存該城鎮的改動」）：💾 或 Ctrl+S ⇒ { bsmap: 'need', what: 'townSave', town, seq } ⇒
+//     { bsmap: 'townSave', seq, ok, msg }（Blocksail 那一頁決定存到哪：Editor 版本 ⇒ 只寫這一座城進 world/start/；Build 版本 ⇒ 遊戲存檔）；5 秒沒回 ⇒ 說那一頁太舊、存不了
 //     生產建築（農莊、種植園；TASK-0742 第二步）：try 多帶 recipe（玩家選的；沒選 ⇒ 那一頁挑第一條能種的），回覆多 recipe、recipes（{ ok, no: [{ k, name, why }] }）、annex（田：quads 每一格外框）、note；
 //       配方那一排（#twbRcp）照回覆長、點一下換；預覽多畫田（半透明）；蓋下去的那一步帶實際用的那一條（重放同一片田）
 // 物理意義：規則全在 Blocksail world/town.js（townSnap、townBuildTry、townRoutePlan、townBuild、townAddRoad）—— ⛔ 這一支只問、只畫，不判斷蓋不蓋得了。
@@ -74,7 +76,16 @@ function twbAsk(cmd, extra, cb) {
   var s = ++TWB.seq; TWB.wait[s] = cb || null;
   BED.host.postMessage(Object.assign({ bsmap: 'need', what: 'townEdit', town: TWB.town, cmd: cmd, seq: s }, extra || {}), '*');
 }
-/** 外面那一頁的回覆（08_seabed.js）：apply／undo 成功帶新的規劃 ⇒ 換掉那一座城。 */
+/** 存這座城（💾、Ctrl+S）：那一頁照它的版本決定存到哪、回一句話。 */
+function twbSave() {
+  if (!twbOk()) { twbMsg('沒有地球儀那一頁（建築模式要從 Blocksail 進城）'); return; }
+  var s = ++TWB.seq, done = false;
+  TWB.wait[s] = function (r) { done = true; twbMsg(r.ok ? '💾 ' + (r.msg || '存了') : '沒存成：' + (r.msg || (r.why || []).join('；'))); };
+  BED.host.postMessage({ bsmap: 'need', what: 'townSave', town: TWB.town, seq: s }, '*');
+  twbMsg('存這座城…');
+  setTimeout(function () { if (!done && TWB.wait[s]) { delete TWB.wait[s]; twbMsg('地球儀那一頁沒有回（太舊的版本不能從這裡存）'); } }, 5000);
+}
+/** 外面那一頁的回覆（08_seabed.js）：apply／undo 成功帶新的規劃 ⇒ 換掉那一座城；存這座城（townSave）也走這裡。 */
 function twbGot(d) {
   var cb = TWB.wait[d.seq]; delete TWB.wait[d.seq];
   if (d.ok && d.town) { townReplace(d.town); TWB.tr = null; TWB.moved = true; }
@@ -153,7 +164,7 @@ function twbEscEaten() {
   if (TWB.start) { TWB.start = null; TWB.tr = null; twbMsg('取消鋪路'); return true; }
   return false;
 }
-/** 鍵：B 開關選單、R 換路的哪一側（自動 → 右 → 左）、Z 或 Ctrl+Z 復原、1～9 照選單的順序選（Esc 見 twbEscEaten）。
+/** 鍵：B 開關選單、R 換路的哪一側（自動 → 右 → 左）、Z 或 Ctrl+Z 復原、Ctrl+S 存這座城、1～9 照選單的順序選（Esc 見 twbEscEaten）。
  *  ⛔ 復原不用 U：U 是 🌍 回到地球儀（66_keys.js hostBack）—— 選單預設開著 ⇒ U 給復原吃掉就永遠回不了地球儀。 */
 function twbKey(k, down, e) {
   if (!modeRule('town')) return false;
@@ -162,6 +173,7 @@ function twbKey(k, down, e) {
   if (!TWB.on) return false;
   if (!down) return true;
   if (lk === 'r') { TWB.side = TWB.side === 0 ? 1 : TWB.side === 1 ? -1 : 0; TWB.moved = true; TWB.tr = null; twbMsg('貼路的哪一側：' + (TWB.side === 0 ? '跟著游標' : TWB.side > 0 ? '右側' : '左側')); return true; }
+  if (lk === 's' && e && (e.ctrlKey || e.metaKey)) { if (e.preventDefault) e.preventDefault(); if (!e.repeat) twbSave(); return true; }   // Ctrl+S（擋掉瀏覽器的另存網頁）
   if (lk === 'z') { twbUndo(); return true; }
   if (lk >= '1' && lk <= '9' && lk.length === 1) { var F = twbFlat()[+lk - 1]; if (F) { twbPick(F.c, F.i); return true; } }   // 1～9 照選單的順序（twbFlat）
   return false;                                                         // 其他的（停格、設定、鏡頭）照海戰鏡頭
@@ -310,11 +322,11 @@ function twbUI() {
   var h = '<div id="twbTabs">' + TWB_CATS.map(function (c) { return '<button type="button" data-c="' + c.k + '"' + (c.k === TWB.cat ? ' class="on"' : '') + '>' + c.name + '</button>'; }).join('') + '</div><div id="twbItems">';
   var nAll = 0;
   TWB_CATS.forEach(function (c) { c.items.forEach(function (it) { var n = ++nAll; if (c.k !== TWB.cat) return; h += '<button type="button" class="bcard' + (it.k === TWB.item ? ' on' : '') + '" data-c="' + c.k + '" data-i="' + it.k + '"><b>' + it.name + '</b><small>' + it.sub + (n <= 9 ? '（' + n + '）' : '') + '</small></button>'; }); });   // 數字鍵只到 9（twbKey）⇒ 第 10 項以後只能點（TASK-0872：工坊 8 種之後選單 12 項）
-  h += '</div><div id="twbRcp"></div><div id="twbOps"><button type="button" id="twbUndo">↶ 復原（Z）</button><button type="button" id="twbX">▾ 收起（B）</button></div>';
+  h += '</div><div id="twbRcp"></div><div id="twbOps"><button type="button" id="twbSave" title="只存這一座城的改動（Ctrl+S）">💾 存這座城</button><button type="button" id="twbUndo">↶ 復原（Z）</button><button type="button" id="twbX">▾ 收起（B）</button></div>';
   P.innerHTML = h; TWB.rcpSig = null;
   P.querySelectorAll('#twbTabs button').forEach(function (b) { b.onclick = function () { var c = TWB_CATS.filter(function (x) { return x.k === b.dataset.c; })[0]; twbPick(c.k, c.items[0].k); }; });
   P.querySelectorAll('#twbItems button').forEach(function (b) { b.onclick = function () { twbPick(b.dataset.c, b.dataset.i); }; });
-  $('twbUndo').onclick = twbUndo; $('twbX').onclick = function () { twbToggle(false); };
+  $('twbSave').onclick = twbSave; $('twbUndo').onclick = twbUndo; $('twbX').onclick = function () { twbToggle(false); };
 }
 // 城鎮模式（04_modes.js town）：🔨 鈕（看不看得見照 61_layout.js 的 town 配置）—— 載入時是城鎮模式就綁；航海裡停靠換進城鎮模式時由 88_modeswitch.js 的 enter 綁（TASK-0867）
 function twbBind() {
