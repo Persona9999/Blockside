@@ -77,6 +77,9 @@ function makeShipSteps(i, team, yaw, pz, T, px) {
     if (m.rmesh !== undefined) { o.rmesh = m.rmesh; o.roff = m.roff; o.vpre = trans(m.roff[0], m.roff[1], m.roff[2]); }   // 有座的砲（TASK-0836；05_hull.js gmtPair）：mesh ＝ 砲身＋座（模擬）、rmesh ＝ 只有砲身（畫，60_rbatch.js：局部矩陣右乘 vpre ＝ 砲身起點 roff；pitch 的砲由 62_ports.js gelPose 換掉）
     return o;
   });
+  // 坐在別的模型上的（meta rests_on ＝ 那個模型的物件 id；例：舵輪坐在舵輪座上）：那個模型被打飛 ⇒ 跟著一起飛（21_gunnery.js blowModel）、它不在了 ⇒ 掉（32_hull.js survey）。
+  //   ⛔ 只看腳下的甲板 ⇒ 舵輪座被打飛，舵輪照樣浮在原地（Tim 2026-10-24，松島號）。指不到 ⇒ null（照舊只看甲板；匯入檢查報）。
+  sh.models.forEach(function (o) { var r = o.meta.rests_on; if (r === undefined || r === '') return; var p = refPath(T, r); o.restOn = sh.models.filter(function (q) { return q !== o && q.path === p; })[0] || null; });
   }, function () {                                                   // 帆桁、裝飾
   sh.yards = sh.models.filter(function (m) { return m.kind === 'yard' && m.piv; });
   // 裝飾（TASK-0682；05_hull.js decoSplit）：不在 sh.models ⇒ 戰局看不到（重量、命中、殉爆、掉落都不算）。只記腳下那一格（同上面的模型：外框底往下 12 格內的甲板）：
