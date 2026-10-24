@@ -479,11 +479,24 @@ function townIdx() {
  *  → 代用的用途（同樣照退路）；特殊建築（l.src 'special'：用途就是那一種，例 galata-tower 的風格是 genoa）⇒ 不分風格。
  *  ⛔ 一般地塊只找退路裡的風格：carib 的砲台不會跑進退路裡沒有 carib 的城。 */
 function townPick(I, styles, l) {
-  var use = l.use;
-  function by(u) { for (var i = 0; i < styles.length; i++) { var L = I.byStyle[styles[i] + ':' + u]; if (L) return L; } return null; }
+  var use = l.use, lv = use === 'house' ? l.lvl || 1 : 0;
+  function by(u) { for (var i = 0; i < styles.length; i++) { var L = I.byStyle[styles[i] + ':' + u]; if (L && u === 'house') L = townLvl(I, L, lv || 1, l); if (L) return L; } return null; }
   function any(u) { return I.byUse[u]; }
   var alt = TOWN_USE_ALT[use] || [];
-  return townFit(I, l, by(use) || alt.map(by).filter(Boolean)[0] || (l.src === 'special' ? any(use) : null));
+  var L0 = by(use) || alt.map(by).filter(Boolean)[0] || (l.src === 'special' ? any(use) : null);
+  if (!L0 && lv > 1) { lv = 1; L0 = by(use); }                        // 那一級哪一套風格都沒有 ⇒ 低密度那一份
+  return townFit(I, l, L0);
+}
+/** 住宅照密度級篩（Blocksail TASK-0895：規劃的地塊 lvl 2 中、3 高，沒寫 ＝ 1 低；索引的 lvl 同）⇒ 同一級的那幾個；一個都沒有 ⇒ null（換下一套風格找）。
+ *  中、高密度再留裝得下的裡面最寬的那幾個（3 × 3 的地塊 12 m 寬：M-A 12 m、M-B 8 m 都裝得下、進深都是 12 m ⇒ townFit 分不出來）；低密度照舊不篩寬（現有的房子挑到的不變）。
+ *  ⛔ 不篩級的話 townFit 的「裝得下、進深最大」會把金斯敦 14～17 × 27～52 m 的手擺地塊換成 4 × 4 的高密度。地球儀的俯視圖（Blocksail world/town_top.js pick）同一條。 */
+function townLvl(I, L, lv, l) {
+  var o = L.filter(function (nm) { return (I.models[nm].lvl || 1) === lv; }); if (!o.length) return null;
+  if (lv > 1 && l && l.w) {
+    var lw = function (nm) { var lt = I.models[nm].lot; return lt ? lt[0] : 0; }, fit = o.filter(function (nm) { return lw(nm) <= l.w + 0.05; });
+    if (fit.length) { var wm = Math.max.apply(null, fit.map(lw)); o = fit.filter(function (nm) { return lw(nm) === wm; }); }
+  }
+  return o;
 }
 /** 候選照地塊大小收窄（Blocksail TASK-0742：轉角放淺一點的房子 ⇒ 住宅多一級 8 × 10 的淺版）：模型的地塊（索引的 lot ＝ [寬, 進深] 公尺）裝得進 l（寬容 5 cm：
  *  綁路的地塊寬是整數 − 2 cm）的那幾個裡、進深最大的那一級；一個都裝不下 ⇒ 照舊整份（手擺的小地塊）。
