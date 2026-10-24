@@ -897,10 +897,11 @@ function townWallJx(T, walls, W, K) {
   //   接回點離塔心多遠（沿原路線）：先 BEND，曲線切成「轉幾度 ÷ 0.85 × TOWN_WALL_JX_TURN」節之後每節要有 0.6 節長，不夠就往外推一節再量（最多推 12 節）；
   //   接回點後面半節內有原路線的頂點 ⇒ 直接接在那個頂點上（不然那裡多一節幾公尺的短節、又帶著原路線的轉角）。推不出來 ⇒ null（不改道）
   //   —— 2026-10-25：以前照「出面方向跟接回方向差幾度」估節數，斜接進來的牆（Vlanga、孔托斯卡利昂的堤）實際要轉 130～150°、曲線只有 22～33 m ⇒ 3～4 m 一節、第一彎 40～60°
-  function plan(o, c, f, tFrom, dir) {
+  //   ov ＝ 那一頭貼著別道牆走了多長（overlap）⇒ 接回點至少在那一段之後（接回在貼著的那一段裡，後面照樣疊著）
+  function plan(o, c, f, tFrom, dir, ov) {
     var len = sectLen(o), out0 = Math.max(TOWN_WALL_JX_OUT, 0.6 * len), base = f.h + out0, mt = 0.85 * TOWN_WALL_JX_TURN * Math.PI / 180;
     for (var k = 0; k <= 12; k++) {
-      var D = base + Math.max(TOWN_WALL_JX_BEND, k * len), tE = tFrom + dir * D;
+      var D = Math.max(base + Math.max(TOWN_WALL_JX_BEND, k * len), ov ? ov + (k + 0.5) * len : 0), tE = tFrom + dir * D;
       o.cum.forEach(function (cv) { var d = (cv - tE) * dir; if (d > 0 && d <= 0.5 * len) D = Math.max(D, Math.abs(cv - tFrom)); });
       if (o.closed ? D >= o.Lt / 2 : (tFrom + dir * D < 0.5 || tFrom + dir * D > o.Lt - 0.5)) return null;
       var z = bez(o, c, f, tFrom + dir * D, dir, out0), m = Math.max(1, Math.ceil(z.turn / mt), Math.round(z.acc[64] / len));
@@ -920,6 +921,14 @@ function townWallJx(T, walls, W, K) {
       if (inside([p[0] - u[1] * hs, p[1] + u[0] * hs]) && inside([p[0] + u[1] * hs, p[1] - u[0] * hs])) best = d; else if (best >= 0) break;
     }
     return best > 0.3 ? best - 0.2 : Math.min(h, hd) * SINK;
+  }
+  //   接進來的那一頭貼著接點上別道牆走了多長（Tim 2026-10-25「繼續手上的工作吧」驗到的：Vlanga 尾巴跟馬爾馬拉海牆夾 7.5°，最後 61 m 兩道並排疊著）：
+  //   從那一頭往牆身走，中線離別道牆的中線還不到兩道半厚相加 ⇒ 還貼著。正常接進來（夾角大）只有幾公尺；貼得長的 ⇒ 改道要接回在那一段之後
+  function hsOf(o) { var k = townWallKit(K, T, o.w, false), s = k && (K.byUse[k + '-section'] || [])[0]; return s && K.M[s] ? K.M[s].m.size[1] * K.M[s].m.mpv / 2 : 1; }
+  function overlap(o, e, nd) {
+    var oth = [nd.host, nd.cross].filter(Boolean).map(function (x) { return x.o; }).concat(nd.ends.map(function (x) { return x.o; })).filter(function (q) { return q !== o; }), d = 0;
+    for (var s = 1; s <= o.Lt / 2; s += 1) { var p = atOn(o, e ? o.Lt - s : s); if (!oth.some(function (q) { return projOn(q, p).d < hsOf(o) + hsOf(q); })) break; d = s; }
+    return d;
   }
   //   照弧長把曲線等分成 m 節 ⇒ [c, 出面那一點, …, 接回點]；保險：連同出塔、接回原路線那兩下有一處轉超過 TOWN_WALL_JX_TURN ＋ 10° ⇒ null
   //   —— 2026-10-25 試過「每走一節最多轉幾度、追著目標轉」：目標落在轉彎半徑裡面時會繞圈（孔托斯卡利昂的堤 80 步、轉 133°）⇒ 不用
@@ -948,10 +957,11 @@ function townWallJx(T, walls, W, K) {
         rec.pass.push({ c: c, h: hP, sk: ok ? f0.h * SINK : Math.min(fitSink(o, nd, tc, -1), fitSink(o, nd, tc, 1)) });
         nd.stat.face[o.w.id] = ok ? '穿過' : why;
       } else {
-        var tF = x.e ? o.Lt : 0, dE = x.e ? -1 : 1, ze = null, re = null, okE = false;
+        var tF = x.e ? o.Lt : 0, dE = x.e ? -1 : 1, ze = null, re = null, okE = false, ov = overlap(o, x.e, nd);
+        if (ov >= TOWN_WALL_JX_BEND) nd.stat.over = ov;                    // 讀數：貼著走了幾公尺
         if (!f0) why = '沒空面';
-        else if (skew(f0, tF, dE)) why = '角度太大';
-        else if (!(ze = plan(o, c, f0, tF, dE))) why = '轉不過來';
+        else if (ov < TOWN_WALL_JX_BEND && skew(f0, tF, dE)) why = '角度太大';   // 貼得長 ⇒ 不看出面跟原路線差幾度（有那一整段可以慢慢轉）
+        else if (!(ze = plan(o, c, f0, tF, dE, ov))) why = '轉不過來';
         else if (x.e ? blocked(o, o.Lt - ze.D, o.Lt + 1) : blocked(o, -1, ze.D)) why = '有門或建築';
         else { okE = true; re = ze.R; P = x.e ? pts(-1, o.Lt - ze.D).concat(re.slice().reverse()) : re.concat(pts(ze.D, Infinity)); }
         rec.sk[x.e] = okE ? f0.h * SINK : fitSink(o, nd, tF, dE);
