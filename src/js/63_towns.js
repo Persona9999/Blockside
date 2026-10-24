@@ -44,7 +44,8 @@ var TOWN_ANNEX_CELL = 4, TOWN_SOIL = [[0.44, 0.34, 0.23], [0.33, 0.25, 0.17]], T
 var TOWN_LOD = [160, 800], TOWN_FAR = [2400, 3000], TOWN_BAND = [24, 60, 300], TOWN_REBIN = 8, TOWN_SHELL_G = 32, TOWN_GRADE_REACH = 12, TOWN_LOT_PAD = 2, TOWN_LOT_CELL = 32, TOWN_LOT_SINK = 0.2, TOWN_CLR_G = 2, TOWN_ROAD_LIFT = 0.12, TOWN_GROUND_VIEW = 1600;
 var TOWN_MESH_MS = 8;                                                    // 模型網格化每段最多幾 ms 就讓出一次（townMesh；跟地球儀同一條主執行緒）
 var TOWN_WALL_CORNER = 30, TOWN_WALL_KMAX = 1;                         // 城牆：轉角件從轉幾度起擺；斜接最多切多斜（tan，1 ＝ 轉 90° 的角平分）
-var TOWN_WALL_JOIN_IN = 0.5;                                            // 牆接建築：牆兩側的邊都進了建築的外框之後再多伸幾公尺（townWall joinIn）
+var TOWN_WALL_JX_TOL = 1, TOWN_WALL_JX_SINK = 0.7;                     // 牆接牆（townWallJx）：牆的一頭離別道牆幾公尺內算接上；接進來的牆停在接點那件部件裡多深（部件半長的幾成）
+var TOWN_WALL_JOIN_IN = 0.5;                                          // 牆接建築：牆兩側的邊都進了建築的外框之後再多伸幾公尺（townWall joinIn）
 var TOWN_SLAB_KMAX = 2;                                                 // 碼頭、棧橋的板：轉角斜接最多拉長幾倍（2 ＝ 轉 120°；再急就在轉角那一點變窄）
 var TOWNS = { on: Q.get('towns') !== '0', prosp: {}, list: [],pend: [], ver: 0, want: 0, err: null, kit: null, kitP: null, idx: null, kitHas: null, kitRedo: false, kitBusy: false, mwait: null, prog: null, progJ: null, dirty: true, eye: null, sig: '', buf: [], grp: null,
   stat: { towns: 0, lots: 0, inst: 0, walls: 0, corners: 0, snapped: 0, skip: {}, d0: 0, d1: 0, d2: 0, d3: 0, plinth: 0, tris: 0, binMs: 0, kitMs: 0, meshBaked: 0, meshLive: 0, meshCheck: null, gradeMs: 0, chunks: 0, regraded: 0, drawMs: 0 } };
@@ -662,7 +663,8 @@ function townInst(T) {
     out.push(q);
   });
   TOWNS.stat.joins = TOWNS.stat.joins || {}; delete TOWNS.stat.joins[T.id];   // 牆接建築（townWall）：每道牆的每一段兩頭各伸進建築幾公尺
-  (p.walls || []).forEach(function (w) { townWall(T, w, out, W); });
+  var JX = townWallJx(T, p.walls || [], W, K);                          // 牆接牆的分岔（先整座城算好，每道牆照它處理兩頭與中段的接點）
+  (p.walls || []).forEach(function (w) { townWall(T, w, out, W, false, JX[w.id]); });
   TOWNS.stat.under = TOWNS.stat.under || {}; TOWNS.stat.under[T.id] = { n: 0, tight: [] };   // 引水渠跨過的路（townLineUnderParts）：這一次擺了幾段、哪幾段拱跨不過去
   (p.aqueducts || []).forEach(function (a) { townWall(T, a, out, W, true); });   // 引水渠：畫法同城牆（見 townWall 的 line）
   TOWNS.stat.inst = TOWNS.list.reduce(function (s, T2) { return s + (T2 === T ? out.length : (T2.inst || []).length); }, 0);
@@ -693,7 +695,77 @@ function townLotInst(T, K, l) {
 //   斷面一節一節接、轉角斜接、兩頭收尾、牆基往下延 —— 但 ① 模組照 w.kit（不照規模、繁榮度挑；沒有那一套 ⇒ 不畫、stat.skip 記 'line:<kit>'）
 //   ② 高度照 w.level（起點、終點渠頂的絕對海拔，沿線線性）− 模組的 deck（索引；渠頂在模型裡的高），不跟地面（townWallY）；比地面低的那一截埋進地裡
 //   ③ 沒有門、塔、轉角件（規劃裡就沒有）；實例帶 line、不算進 stat.walls（算 stat.lines）。
-function townWall(T, w, out, W, line) {
+/** 牆接牆的分岔（Tim 2026-10-24「城牆是否可以像道路一樣 支援分岔（目前分岔處無法正常連接）」「需要額外的連結處算法」）：
+ *  以前每道牆各畫各的 ⇒ 開放的牆兩頭一律收尾 ⇒ 接到別道牆的那一頭，收尾件戳進對方、對方的斷面照樣穿過去（只有剛好落在塔、門上才看不出來）。
+ *  ⇒ 一座城的牆先整批找接點（照真的城防：牆在塔處交會）：
+ *    ① 每道開放的牆兩頭 ⇒ 端點 TOWN_WALL_JX_TOL 內的併成同一個接點；接點落在別道牆的中段（離它 ≤ TOL、不在它兩頭 TOL 內）⇒ T 形，那一道是 host
+ *    ② 接點上要有一件部件：擺在 host 的那一點；沒有 host（端點對端點：L 形、接成一直線、三道以上）⇒ 擺在照 id 第一道的那一頭。
+ *       哪件 ＝ 那道牆那一套的轉角件（-joint，沒有 ⇒ 第一種塔）；那一點已經有門、塔蓋著 ⇒ 用它；附近有塔 ⇒ 挪過來（同轉角，townWall）
+ *    ③ 接進來的牆：那一頭不收尾、斷面停在部件裡（部件半長 × TOWN_WALL_JX_SINK）⇒ 端面藏在塔身裡
+ *    ④ 那一套沒有塔：T 形 ⇒ 接進來的牆伸到 host 的中線、不收尾（端面在 host 牆身裡）；兩道端點對接 ⇒ 兩頭照轉角斜接（端面 ＝ 兩道方向的角平分）
+ *  回 { <牆 id>: { ends: [起點的接點, 終點的接點]（沒接 ⇒ null）, at: [{ t, node }]（這一道要在沿線 t 擺接點的部件） } }；讀數 TOWNS.stat.wallJx[城 id]。 */
+function townWallJx(T, walls, W, K) {
+  var out = {}, L = [], nodes = [], tol = TOWN_WALL_JX_TOL;
+  walls.forEach(function (w) {
+    var P = []; w.path.map(W).forEach(function (q) { var l = P[P.length - 1]; if (!l || Math.hypot(q[0] - l[0], q[1] - l[1]) > 0.01) P.push(q); });
+    if (P.length < 2) return;
+    var closed = !!w.closed && P.length > 2;
+    if (closed && Math.hypot(P[0][0] - P[P.length - 1][0], P[0][1] - P[P.length - 1][1]) <= 0.01) P.pop();
+    if (closed) P = P.concat([P[0]]);
+    var cum = [0]; for (var i = 1; i < P.length; i++) cum.push(cum[i - 1] + Math.hypot(P[i][0] - P[i - 1][0], P[i][1] - P[i - 1][1]));
+    L.push({ w: w, P: P, cum: cum, Lt: cum[cum.length - 1], closed: closed });
+    out[w.id] = { ends: [null, null], at: [] };
+  });
+  function projOn(o, q) { var bd = Infinity, bt = 0; for (var s = 1; s < o.P.length; s++) { var a = o.P[s - 1], b = o.P[s], dx = b[0] - a[0], dy = b[1] - a[1], L2 = dx * dx + dy * dy || 1, u = Math.max(0, Math.min(1, ((q[0] - a[0]) * dx + (q[1] - a[1]) * dy) / L2)), d = Math.hypot(q[0] - a[0] - u * dx, q[1] - a[1] - u * dy); if (d < bd) { bd = d; bt = o.cum[s - 1] + u * Math.sqrt(L2); } } return { d: bd, t: bt }; }
+  function into(o, e) { var a = e ? o.P[o.P.length - 1] : o.P[0], b = e ? o.P[o.P.length - 2] : o.P[1], l = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1; return [(b[0] - a[0]) / l, (b[1] - a[1]) / l]; }   // 從接點往牆身裡的方向
+  L.forEach(function (o) {
+    if (o.closed) return;
+    [0, 1].forEach(function (e) {
+      var p = e ? o.P[o.P.length - 1] : o.P[0], nd = null;
+      nodes.forEach(function (n) { if (!nd && Math.hypot(n.p[0] - p[0], n.p[1] - p[1]) <= tol) nd = n; });
+      if (!nd) nodes.push(nd = { p: p, ends: [], host: null });
+      nd.ends.push({ o: o, e: e });
+    });
+  });
+  nodes.forEach(function (nd) {
+    L.forEach(function (o) {
+      if (nd.host || nd.ends.some(function (x) { return x.o === o; })) return;
+      var r = projOn(o, nd.p);
+      if (r.d <= tol && (o.closed || (r.t > tol && r.t < o.Lt - tol))) nd.host = { o: o, t: r.t };
+    });
+  });
+  nodes = nodes.filter(function (nd) { return nd.ends.length + (nd.host ? 1 : 0) >= 2; });
+  var st = (TOWNS.stat.wallJx = TOWNS.stat.wallJx || {})[T.id] = [];
+  nodes.forEach(function (nd) {
+    var first = nd.ends.slice().sort(function (a, b) { return a.o.w.id < b.o.w.id ? -1 : a.o.w.id > b.o.w.id ? 1 : a.e - b.e; })[0];
+    var ow = nd.host ? nd.host : { o: first.o, t: first.e ? first.o.Lt : 0 };
+    var kit = townWallKit(K, T, ow.o.w, false), nm = kit && ((K.byUse[kit + '-joint'] || [])[0] || (K.byUse[kit + '-tower'] || [])[0]);
+    nd.own = nm && K.M[nm] ? { id: ow.o.w.id, t: ow.t, nm: nm, h: townWallHalf(K, nm) } : null;
+    //   接點上已經有門、塔（任一道接上的牆上的）⇒ 那一道負責、用它的半長（不然會在另一道上再擺一座、跟門疊在一起：陸牆內牆接金角灣海牆那一點就是門）
+    nd.ends.map(function (x) { return x.o; }).concat(nd.host ? [nd.host.o] : []).forEach(function (o) {
+      if (nd.ownHas) return;
+      var k2 = townWallKit(K, T, o.w, false); if (!k2) return;
+      var gate = (K.byUse[k2 + '-gate'] || [])[0], tw = K.byUse[k2 + '-tower'] || [];
+      (o.w.gates || []).map(function (g) { return { q: W(g.at), nm: g.model && K.M[k2 + '-gate-' + g.model] ? k2 + '-gate-' + g.model : gate }; })
+        .concat((o.w.towers || []).map(function (q, i) { return { q: W(q), nm: tw.length ? tw[i % tw.length] : null }; }))
+        .forEach(function (c) {
+          if (nd.ownHas || !c.nm || !K.M[c.nm]) return;
+          var hc = townWallHalf(K, c.nm);
+          if (Math.hypot(c.q[0] - nd.p[0], c.q[1] - nd.p[1]) <= hc) { nd.own = { id: o.w.id, t: projOn(o, c.q).t, nm: c.nm, h: hc }; nd.ownHas = true; }
+        });
+    });
+    if (!nd.own && !nd.host && nd.ends.length === 2) { var ua = into(nd.ends[0].o, nd.ends[0].e), ub = into(nd.ends[1].o, nd.ends[1].e); nd.n = [ub[0] - ua[0], ub[1] - ua[1]]; }   // 斜接：一道進來的方向（−ua）＋另一道出去的方向（ub）
+    nd.ends.forEach(function (x) { out[x.o.w.id].ends[x.e] = nd; });
+    if (nd.own) out[nd.own.id].at.push({ t: nd.own.t, node: nd });
+    nd.stat = { at: [+nd.p[0].toFixed(1), +nd.p[1].toFixed(1)], kind: nd.host ? 'T' : nd.ends.length > 2 ? '多道' : '端點', walls: nd.ends.map(function (x) { return x.o.w.id + (x.e ? '尾' : '頭'); }).concat(nd.host ? [nd.host.o.w.id + '中段'] : []),
+                own: nd.own ? nd.own.id : null, nm: nd.own ? nd.own.nm : null, used: nd.own ? '?' : nd.n ? '斜接' : '伸到中線' };
+    st.push(nd.stat);
+  });
+  return out;
+}
+/** 城牆部件的半長（接口 wall-a 到 wall-b；沒有 ⇒ 模型寬的一半）—— 同 townWall 裡的 half。 */
+function townWallHalf(K, nm) { var m = K.M[nm].m, pa = m.pts['wall-a'], pb = m.pts['wall-b']; return pa && pb ? (pb[0] - pa[0] + 1) * m.mpv / 2 : m.size[0] * m.mpv / 2; }
+function townWall(T, w, out, W, line, jx) {
   var K = TOWNS.kit, P = [], closed = !!w.closed;
   w.path.map(W).forEach(function (q) { var l = P[P.length - 1]; if (!l || Math.hypot(q[0] - l[0], q[1] - l[1]) > 0.01) P.push(q); });   // 重複的點拿掉（頂點轉幾度才量得準）
   if (closed && P.length > 2 && Math.hypot(P[0][0] - P[P.length - 1][0], P[0][1] - P[P.length - 1][1]) <= 0.01) P.pop();
@@ -762,6 +834,14 @@ function townWall(T, w, out, W, line) {
   var cor = joint || towers[0], gap = Math.max(2 * len, 6);
   function apart(a0, a1, b0, b1) { var d = Infinity; (closed ? [0, Ltot, -Ltot] : [0]).forEach(function (sh) { d = Math.min(d, Math.max(0, b0 + sh - a1, a0 - b1 - sh)); }); return d; }   // 沿牆隔多遠（閉合 ⇒ 繞回來那一邊也算）
   function free(p, t, h) { return parts.every(function (o) { return o === p || apart(t - h, t + h, o.t - o.h, o.t + o.h) >= 0.5; }); }
+  (jx ? jx.at : []).forEach(function (a) {                              // 牆接牆（townWallJx）：接點要有部件 —— 已經有門、塔蓋著 ⇒ 用它；gap 內有塔 ⇒ 挪過來；都沒有 ⇒ 擺接點那一件
+    var t = a.t, nd = a.node, h = nd.own.h;
+    if (parts.some(function (o) { return apart(t, t, o.t - o.h, o.t + o.h) === 0; })) { nd.stat.used = '已有'; return; }
+    var near = parts.filter(function (o) { return o.tower && apart(t, t, o.t - o.h, o.t + o.h) < gap + h; }).sort(function (x, y) { return apart(t, t, x.t, x.t) - apart(t, t, y.t, y.t); })[0];
+    if (near && free(near, t, near.h)) { near.t = t; nd.stat.used = '挪塔'; return; }
+    parts.filter(function (o) { return o.tower && apart(t - h, t + h, o.t - o.h, o.t + o.h) < 0.5; }).forEach(function (o) { parts.splice(parts.indexOf(o), 1); });   // 擠在旁邊又挪不過來的塔讓位
+    parts.push({ nm: nd.own.nm, t: t, h: h, tower: true }); nd.stat.used = '新擺';
+  });
   if (cor) {                                                            // 轉角（轉得急的頂點）：已經有部件跨在上面 ⇒ 不動；gap 內有塔 ⇒ 塔挪到轉角上；都沒有 ⇒ 擺一件（同世紀帝國轉角的塔）
     var hc = half(cor);
     for (var v = closed ? 0 : 1; v < nV; v++) {
@@ -786,17 +866,27 @@ function townWall(T, w, out, W, line) {
     obs.push({ t0: t0, t1: t1, p0: [A.x, A.z], p1: [B.x, B.z], ax: [Math.cos(A.a), Math.sin(A.a)], ax1: [Math.cos(B.a), Math.sin(B.a)] });
     if (jSt) jSt.push({ lot: j.lot, in: [+k[0].toFixed(2), +k[1].toFixed(2)] });
   });
-  if (!closed && end) {                                                 // 收尾：模型的 wall-a（−x 那一面）接牆身 ⇒ 起點那一頭朝外轉 180°；那一頭接著建築 ⇒ 不收
+  var jE = jx && !closed ? jx.ends : [null, null], jN = [null, null];  // 牆接牆的兩頭（townWallJx）：不收尾；部件在別道牆上 ⇒ 停在部件裡（當成擋著的一段）；沒有部件、兩道對接 ⇒ 斜接的法線
+  jE.forEach(function (nd, e) {
+    if (!nd) return;
+    var tE = e ? Ltot : 0;
+    if (nd.own && nd.own.id === w.id && Math.abs(nd.own.t - tE) < 0.01) return;   // 部件就擺在這一頭（上面 jx.at）⇒ 部件自己擋著
+    if (nd.own) {
+      var sk = Math.min(Ltot / 2, nd.own.h * TOWN_WALL_JX_SINK), tA = e ? Ltot - sk : sk, A2 = at(tA), ax2 = [Math.cos(A2.a), Math.sin(A2.a)];
+      obs.push(e ? { t0: tA, t1: Ltot + 1, p0: [A2.x, A2.z], p1: [A2.x, A2.z], ax: ax2 } : { t0: -1, t1: tA, p0: [A2.x, A2.z], p1: [A2.x, A2.z], ax: ax2 });
+    } else if (nd.n) jN[e] = nd.n;
+  });
+  if (!closed && end) {                                                 // 收尾：模型的 wall-a（−x 那一面）接牆身 ⇒ 起點那一頭朝外轉 180°；那一頭接著建築、接著別道牆 ⇒ 不收
     var mE = K.M[end].m, lE = mE.size[0] * mE.mpv / 2, s0 = at(0), s1 = at(Ltot);
-    if (!J.some(function (j) { return j[0] <= 0.01; })) setLev(put(end, [s0.x - Math.cos(s0.a) * lE, s0.z - Math.sin(s0.a) * lE], s0.a + Math.PI, 1, false), 0, 0);
-    if (!J.some(function (j) { return j[1] >= Ltot - 0.01; })) setLev(put(end, [s1.x + Math.cos(s1.a) * lE, s1.z + Math.sin(s1.a) * lE], s1.a, 1, false), Ltot, Ltot);
+    if (!jE[0] && !J.some(function (j) { return j[0] <= 0.01; })) setLev(put(end, [s0.x - Math.cos(s0.a) * lE, s0.z - Math.sin(s0.a) * lE], s0.a + Math.PI, 1, false), 0, 0);
+    if (!jE[1] && !J.some(function (j) { return j[1] >= Ltot - 0.01; })) setLev(put(end, [s1.x + Math.cos(s1.a) * lE, s1.z + Math.sin(s1.a) * lE], s1.a, 1, false), Ltot, Ltot);
   }
   // 部件之間的空檔 ⇒ 一段一段（s0、s1 ＝ 兩頭的接口與端面的法線；閉合又沒有部件 ⇒ 整圈一段，起點那一站跟最後一節斜接）
   obs.sort(function (a, b) { return a.t0 - b.t0; });
-  var runs = [], tip = closed ? null : { t: 0, p: P[0], n: dir(1) };
+  var runs = [], tip = closed ? null : { t: 0, p: P[0], n: jN[0] || dir(1) };
   if (closed && obs.length) { var oL = obs.reduce(function (m, o) { return o.t1 > m.t1 ? o : m; }); tip = { t: oL.t1 - Ltot, p: oL.p1, n: oL.ax1 || oL.ax }; }
   obs.forEach(function (o) { if (tip && o.t0 > tip.t) runs.push({ t0: tip.t, t1: o.t0, s0: tip, s1: { p: o.p0, n: o.ax } }); if (!tip || o.t1 > tip.t) tip = { t: o.t1, p: o.p1, n: o.ax1 || o.ax }; });
-  if (!closed && tip.t < Ltot) runs.push({ t0: tip.t, t1: Ltot, s0: tip, s1: { p: P[nV], n: dir(nV) } });
+  if (!closed && tip.t < Ltot) runs.push({ t0: tip.t, t1: Ltot, s0: tip, s1: { p: P[nV], n: jN[1] || dir(nV) } });
   if (closed && !obs.length) runs.push({ t0: 0, t1: Ltot, s0: null, s1: null });
   runs.forEach(function (f) {
     var L = f.t1 - f.t0; if (L < len * 0.4) return;
@@ -1671,7 +1761,7 @@ function townStat(at) {
       part: T.inst ? (TOWNS.kit && TOWNS.kit.part ? 'walls' : 'all') : null, walls: (T.inst || []).filter(function (q) { return q.wall; }).length,   // 地面的帶子分區（TASK-0817）
       folk: townFolkStat(T),
       byModel: u, lights: tl, center: [+(T.ox - BED.ax).toFixed(1), +(T.oy - BED.az).toFixed(1)] };
-  }), kit: !!TOWNS.kit, kitPart: !!(TOWNS.kit && TOWNS.kit.part), kitN: S.kitN, kitMs: S.kitMs, skelN: S.skelN, skelMs: S.skelMs, kitMesh: { baked: S.meshBaked, live: S.meshLive, check: S.meshCheck, vk: townVkFp() }, kitTris: S.kitTris, skip: S.skip, gls: S.gls || 0, lines: S.lines || 0, under: S.under || {}, joins: S.joins || {}, drawn: { full: S.d0, low: S.d1, card: S.d2, shells: S.d3, plinth: S.plinth, flags: S.flags || 0, folk: S.folk || 0, landmarks: S.lm || 0, fields: S.fields || 0 }, folk: townFolkSum(), tris: S.tris, ms: { draw: S.drawMs, fields: S.fieldMs || 0, bin: S.binMs, grade: +S.gradeMs.toFixed(1), prep: S.prepMs }, gradedChunks: S.chunks, regrade: { left: TOWNS.rgq ? Object.keys(TOWNS.rgq).length : 0, done: S.regraded }, edit: S.edit || null,
+  }), kit: !!TOWNS.kit, kitPart: !!(TOWNS.kit && TOWNS.kit.part), kitN: S.kitN, kitMs: S.kitMs, skelN: S.skelN, skelMs: S.skelMs, kitMesh: { baked: S.meshBaked, live: S.meshLive, check: S.meshCheck, vk: townVkFp() }, kitTris: S.kitTris, skip: S.skip, gls: S.gls || 0, lines: S.lines || 0, under: S.under || {}, joins: S.joins || {}, wallJx: S.wallJx || {}, drawn: { full: S.d0, low: S.d1, card: S.d2, shells: S.d3, plinth: S.plinth, flags: S.flags || 0, folk: S.folk || 0, landmarks: S.lm || 0, fields: S.fields || 0 }, folk: townFolkSum(), tris: S.tris, ms: { draw: S.drawMs, fields: S.fieldMs || 0, bin: S.binMs, grade: +S.gradeMs.toFixed(1), prep: S.prepMs }, gradedChunks: S.chunks, regrade: { left: TOWNS.rgq ? Object.keys(TOWNS.rgq).length : 0, done: S.regraded }, edit: S.edit || null,
     night: { lit: +TL.k.toFixed(3), win: +TOD_WIN.toFixed(3), grid: TL.stat.inGrid, range: TL.stat.range || 0, full: TL.stat.full, over: TL.stat.over, gridMs: TL.stat.gridMs, cards: TL.stat.cards, glow: TL.stat.glow, glowMs: TL.stat.glowMs } };
   if ((at === 'street' || at === 'walk') && TOWNS.list[0] && TOWNS.kit && TOWNS.kit.folk) { o.street = townFolkStreet(TOWNS.list[0], TOWNS.kit.folk, at === 'walk'); }   // 城鎮居民的街景機位（63_townfolk.js）
   else if (Array.isArray(at)) { var q = bedCell(at[0], at[1]); o.at = { ground: +townGround(at[0], at[1]).toFixed(2), sim: +bedHgt(at[0], at[1]).toFixed(2), clear: q ? townClr(q.C, q.u * q.C.step, q.v * q.C.step) : null }; }
