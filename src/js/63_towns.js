@@ -209,6 +209,7 @@ function townReplace(p) {
       var t = tiles[k]; Q.R = R; Q.tri = t ? t.tri : []; Q.edge = t ? t.edge : [];
       Q.plaza = (T.p.lots || []).filter(function (l) { if (l.use !== 'plaza') return false; var e = T.E(l.at); return Math.floor(e[0] / S) + '_' + Math.floor(e[1] / S) === k; });
       Q.stair = (T.p.stairs || []).filter(function (q) { var e = T.E(q.path[0]); return Math.floor(e[0] / S) + '_' + Math.floor(e[1] / S) === k; });
+      Q.wlot = (T.p.lots || []).filter(function (l) { if (!l.water) return false; var e = T.E(l.at); return Math.floor(e[0] / S) + '_' + Math.floor(e[1] / S) === k; });
       Q.dirty = true; Q.edit = true;
     });
     regrade();
@@ -485,6 +486,9 @@ function townPick(I, styles, l) {
   var alt = TOWN_USE_ALT[use] || [];
   var L0 = by(use) || alt.map(by).filter(Boolean)[0] || (l.src === 'special' ? any(use) : null);
   if (!L0 && lv > 1) { lv = 1; L0 = by(use); }                        // 那一級哪一套風格都沒有 ⇒ 低密度那一份
+  //   水上版（Blocksail TASK-0899：地塊帶 water、模型的索引帶 water ＝ 模型 meta 的 d0）：水上的地塊挑水上版、陸上的挑陸上版；那一邊一個都沒有 ⇒ 照舊整份
+  //   （水上版還沒雕的種類先站在平台上用陸上版；陸上的地塊永遠不會挑到水上版 ⇒ 現有的房子挑到的不變）
+  if (L0) { var Lw = L0.filter(function (nm) { return (I.models[nm].water != null) === !!l.water; }); if (Lw.length) L0 = Lw; }
   return townFit(I, l, L0);
 }
 /** 住宅照密度級篩（Blocksail TASK-0895：規劃的地塊 lvl 2 中、3 高，沒寫 ＝ 1 低；索引的 lvl 同）⇒ 同一級的那幾個；一個都沒有 ⇒ null（換下一套風格找）。
@@ -1144,7 +1148,7 @@ var TOWN_GT_MAX = 2, TOWN_GT_SZ = 250;
 /** 分區（路面到了、城建好時各一次）：每區 { tri, edge, plaza, quay, pier, g, dirty, deps }。 */
 function townGroundPrep(T) {
   var S = TOWN_GT_SZ, R = T.roadSurface, p = T.p, G = {};
-  function at(x, z) { var k = x + '_' + z; return G[k] || (G[k] = { k: k, cx: (x + 0.5) * S, cz: (z + 0.5) * S, tri: [], edge: [], plaza: [], stair: [], quay: [], pier: [], field: [], g: null, dirty: true, deps: {} }); }
+  function at(x, z) { var k = x + '_' + z; return G[k] || (G[k] = { k: k, cx: (x + 0.5) * S, cz: (z + 0.5) * S, tri: [], edge: [], plaza: [], stair: [], quay: [], pier: [], wlot: [], field: [], g: null, dirty: true, deps: {} }); }
   function tile(e, s) { return at(Math.floor(e / S), Math.floor(s / S)); }
   if (R) R.tiles.forEach(function (t) { var q = at(t.x, t.z); q.R = R; q.tri = t.tri; q.edge = t.edge; });   // q.R：這一區照哪一份路面（建築模式只換改到的那幾區，townReplace）
   (p.lots || []).forEach(function (l) { if (l.use === 'plaza') { var c2 = T.E(l.at); tile(c2[0], c2[1]).plaza.push(l); } });
@@ -1152,6 +1156,7 @@ function townGroundPrep(T) {
   (p.stairs || []).forEach(function (q) { var c2 = T.E(q.path[0]); tile(c2[0], c2[1]).stair.push(q); });   // 路接地塊的樓梯（Blocksail town.js roadStairs）：照路那一頭分區
   (T.fields || []).forEach(function (F) { var c2 = [(F.R[0][0] + F.R[2][0]) / 2, (F.R[0][1] + F.R[2][1]) / 2]; tile(c2[0], c2[1]).field.push(F); });
   (p.piers || []).forEach(function (q) { var c2 = T.E(q.path[0]); tile(c2[0], c2[1]).pier.push(q); });
+  (p.lots || []).forEach(function (l) { if (l.water) { var c2 = T.E(l.at); tile(c2[0], c2[1]).wlot.push(l); } });   // 水上建築的平台、樁（Blocksail TASK-0899）
   if (T.gt) Object.keys(T.gt).forEach(function (k) { var g = T.gt[k].g, gf = T.gt[k].gf; if (g) townGpuFree(g); if (gf) townGpuFree(gf); });
   T.gt = G;
 }
@@ -1168,8 +1173,9 @@ function townGroundNext(T, eye) {
   return best;
 }
 /** 這一區有棧橋或碼頭。 */
-function townGroundPier(q) { return q.pier.length > 0 || q.quay.length > 0; }
+function townGroundPier(q) { return q.pier.length > 0 || q.quay.length > 0 || (q.wlot || []).length > 0; }   // 碼頭、棧橋、水上建築的平台（Blocksail TASK-0899：碼頭棧橋是路 ⇒ 跟路一樣先出）
 /** 城 T 的一區 ⇒ 一份網格（位置、法線、顏色）；那一區沒東西 ⇒ null。 */
+var TOWN_WPILE = 4;                                                      // 水上建築的樁每幾公尺一根（Blocksail TASK-0899；同棧橋每 4 m 一對）
 var TOWN_STAIR_RISE = 0.17;                                              // 樓梯一階最高（公尺；同 Blocksail town.js STAIR_RISE）
 function townGroundTile(T, Q) {
   var V = [], I = [], S = BED.A.chunk, deps = {};
@@ -1229,7 +1235,8 @@ function townGroundTile(T, Q) {
   //   （君士坦丁堡 gul-plaza-link-3：規劃 8.0 m、整完地 6.9 m）⇒ 照規劃的 z0 畫，樓梯頂跟路面會差一截；地形還沒到 ⇒ 照規劃
   (Q.stair || []).forEach(function (st) {
     var A = W(st.path[0]), B = W(st.path[1]), dx = B[0] - A[0], dz = B[1] - A[1], L = Math.hypot(dx, dz), n = Math.max(1, st.n | 0); if (L < 0.05) return;
-    var ux = dx / L, uz = dz / L, hw = st.w / 2, z1 = st.z[1], g0 = hgt(A[0], A[1]), z0 = g0 === g0 ? g0 + TOWN_ROAD_LIFT : st.z[0], col = TOWN_COL.plaza, dk = [col[0] * 0.78, col[1] * 0.78, col[2] * 0.78];
+    //   fix0（Blocksail TASK-0899：棧橋的根接在碼頭上）：下面那一頭是碼頭面、不是地面 ⇒ 照規劃的 z[0]、不重量地形
+    var ux = dx / L, uz = dz / L, hw = st.w / 2, z1 = st.z[1], g0 = st.fix0 ? NaN : hgt(A[0], A[1]), z0 = g0 === g0 ? g0 + TOWN_ROAD_LIFT : st.z[0], col = TOWN_COL.plaza, dk = [col[0] * 0.78, col[1] * 0.78, col[2] * 0.78];
     if (g0 === g0) { if (Math.abs(z1 - z0) < 0.05) return; n = Math.max(1, Math.ceil(Math.abs(z1 - z0) / TOWN_STAIR_RISE - 1e-9)); }
     function P(a, b) { return [A[0] + ux * a - uz * b, A[1] + uz * a + ux * b]; }
     for (var k = 0; k < n; k++) {
@@ -1290,22 +1297,41 @@ function townGroundTile(T, Q) {
     }
     side(Rt[0], Lf[0]); side(Lf[P.length - 1], Rt[P.length - 1]);      // 兩頭的端面
   }
-  Q.quay.forEach(function (q) { slab(q.path, q.w, 1.0, -2.5, TOWN_COL.quay); });
+  Q.quay.forEach(function (q) { slab(q.path, q.w, q.deck != null ? q.deck : 1.0, -2.5, TOWN_COL.quay); });   // 面的高照規劃的 deck（Blocksail TASK-0899 world/town.js DECK；舊規劃沒有 ⇒ 1.0）
   // 棧橋（Blocksail TOWN_BUILD §3.3.8 的 kind）：長碼頭 wharf、石堤 mole ＝ 實心石砌，一直到那一座沿線最深的水再深 1 m（埋進海床；不畫樁）；
   //   其他（棧橋、T 字頭、支棧橋、skala 短棧）＝ 木板＋樁，樁一根一根伸到它底下的海床（Tim 2026-10-22「棧橋的腳可以長一點」—— 以前一律到 −4 m，深水的棧橋腳懸在水裡）；
   //   那一塊地形還沒到（townRoadHeight 是 NaN）⇒ 伸到沿線最深的水再深 1 m（一樣埋進海床）
   Q.pier.forEach(function (q) {
     var deep = -((q.depth > 0 ? q.depth : 4) + 1);
-    if (q.kind === 'wharf' || q.kind === 'mole') { slab(q.path, q.w, q.kind === 'mole' ? 2.0 : 1.0, deep, q.kind === 'mole' ? TOWN_COL.mole : TOWN_COL.quay); return; }
-    slab(q.path, q.w, 1.4, 1.0, TOWN_COL.pier);
+    if (q.kind === 'wharf' || q.kind === 'mole') { slab(q.path, q.w, q.deck != null ? q.deck : q.kind === 'mole' ? 2.0 : 1.0, deep, q.kind === 'mole' ? TOWN_COL.mole : TOWN_COL.quay); return; }
+    var top = q.deck != null ? q.deck : 1.4;                            // 面的高照規劃的 deck（同上）；板厚 0.4、樁頂在板底
+    slab(q.path, q.w, top, top - 0.4, TOWN_COL.pier);
     var P = q.path.map(W);                                              // 樁：每 4 m 一對
     for (var s = 1; s < P.length; s++) {
       var a = P[s - 1], b = P[s], L = Math.hypot(b[0] - a[0], b[1] - a[1]), tx = (b[0] - a[0]) / (L || 1), tz = (b[1] - a[1]) / (L || 1);
       for (var t = 2; t < L; t += 4) [-1, 1].forEach(function (sd) {
         var cx = a[0] + tx * t - tz * sd * (q.w / 2 - 0.3), cz = a[1] + tz * t + tx * sd * (q.w / 2 - 0.3), r = 0.18, base = V.length / 9, gy = hgt(cx, cz), bot = gy === gy ? Math.min(gy - 0.5, 0.5) : deep;
-        [[-r, -r], [r, -r], [r, r], [-r, r]].forEach(function (o) { vtx(cx + o[0], 1.0, cz + o[1], TOWN_COL.post, o[0] / r, 0, o[1] / r); vtx(cx + o[0], bot, cz + o[1], TOWN_COL.post, o[0] / r, 0, o[1] / r); });
+        [[-r, -r], [r, -r], [r, r], [-r, r]].forEach(function (o) { vtx(cx + o[0], top - 0.4, cz + o[1], TOWN_COL.post, o[0] / r, 0, o[1] / r); vtx(cx + o[0], bot, cz + o[1], TOWN_COL.post, o[0] / r, 0, o[1] / r); });
         for (var e = 0; e < 4; e++) { var i0 = base + e * 2, i1 = base + ((e + 1) % 4) * 2; I.push(i0, i1, i1 + 1, i0, i1 + 1, i0 + 1); }
       });
+    }
+  });
+  // 水上建築（Blocksail TASK-0899 world/town.js WATER；地塊帶 water: { d0, deck, slip? }、h ＝ 平台面）：木板平台（面 ＝ h、厚 0.4 m）＋樁（每 TOWN_WPILE m 一根、伸到底下的海床再 0.5 m）；
+  //   船台那一條（背面往回 slip.len、寬 slip.w）不鋪板也不立樁 —— 模型的船台從那裡斜進水裡；地面比板底高的那幾點不立樁（以內那一段有陸地）；
+  //   模型照舊站在 h（Blocksail 不給水上地塊整地 ⇒ 海床不動、水照樣畫在平台底下）；地形還沒到 ⇒ 樁伸到 −(water.d0 以外的最深) 那一點量不到 ⇒ 到 −4 m
+  (Q.wlot || []).forEach(function (l) {
+    var th = l.rot * Math.PI / 180, cs = Math.cos(th), sn = Math.sin(th), top = l.h, sl = l.water.slip, sw = sl ? sl.w / 2 : 0, sL = sl ? sl.len : 0;
+    function pt(a, b) { return [l.at[0] + cs * a - sn * b, l.at[1] + sn * a + cs * b]; }   // 地塊座標 a（沿 rot，正面 ＋d/2）、b（橫）⇒ 規劃平面
+    function deck(a0, a1, b0, b1) { if (a1 - a0 < 0.05 || b1 - b0 < 0.05) return; var bc = (b0 + b1) / 2; slab([pt(a0, bc), pt(a1, bc)], b1 - b0, top, top - 0.4, TOWN_COL.pier); }
+    if (!sl) deck(-l.d / 2, l.d / 2, -l.w / 2, l.w / 2);
+    else { deck(-l.d / 2 + sL, l.d / 2, -l.w / 2, l.w / 2); deck(-l.d / 2, -l.d / 2 + sL, -l.w / 2, -sw); deck(-l.d / 2, -l.d / 2 + sL, sw, l.w / 2); }
+    var r = 0.2;
+    for (var a = -l.d / 2 + 0.5; a <= l.d / 2 - 0.5 + 1e-6; a += TOWN_WPILE) for (var b = -l.w / 2 + 0.5; b <= l.w / 2 - 0.5 + 1e-6; b += TOWN_WPILE) {
+      if (sl && a < -l.d / 2 + sL && Math.abs(b) < sw + r) continue;
+      var c = W(pt(a, b)), gy = hgt(c[0], c[1]); if (gy === gy && gy > top - 0.5) continue;
+      var bot = gy === gy ? gy - 0.5 : -4, base = V.length / 9;
+      [[-r, -r], [r, -r], [r, r], [-r, r]].forEach(function (o) { vtx(c[0] + o[0], top - 0.4, c[1] + o[1], TOWN_COL.post, o[0] / r, 0, o[1] / r); vtx(c[0] + o[0], bot, c[1] + o[1], TOWN_COL.post, o[0] / r, 0, o[1] / r); });
+      for (var e = 0; e < 4; e++) { var i0 = base + e * 2, i1 = base + ((e + 1) % 4) * 2; I.push(i0, i1, i1 + 1, i0, i1 + 1, i0 + 1); }
     }
   });
   Q.deps = deps;

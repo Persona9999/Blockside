@@ -166,6 +166,11 @@ function chartTownDraw(g, P, sc, T) {
   g.lineJoin = 'round'; g.lineCap = 'round';
   [0, 1].forEach(function (pass) {                                    // 路：先描邊、再路面
     T.roads.forEach(function (r) { var w = Math.max(1.2, r.w * sc); path(r.P); g.lineWidth = pass ? w : w + 1.6; g.strokeStyle = pass ? rgb(TOWN_COL[r.kind] || TOWN_COL.street, 1.15) : 'rgba(30,20,10,.55)'; g.stroke(); });
+    //   碼頭線、棧橋（Blocksail TASK-0899：碼頭棧橋是一種特殊的路 ⇒ 小地圖照路畫，Tim 2026-10-24「在小地圖顯示」）：顏色同遊戲裡的面（碼頭、石堤石色，木棧橋木色）
+    (T.p.quay || []).concat(T.p.piers || []).forEach(function (q) {
+      var c = q.kind === 'mole' ? TOWN_COL.mole : !q.kind || q.kind === 'wharf' ? TOWN_COL.quay : TOWN_COL.pier, w = Math.max(1.2, (q.w || 6) * sc);
+      path(q.path.map(T.E)); g.lineWidth = pass ? w : w + 1.6; g.strokeStyle = pass ? rgb(c, 1.15) : 'rgba(30,20,10,.55)'; g.stroke();
+    });
   });
   (T.p.walls || []).forEach(function (w) { var P2 = w.path.map(T.E); if (w.closed) P2.push(P2[0]); path(P2); g.lineWidth = Math.max(1.5, (w.w || 4) * sc); g.strokeStyle = 'rgb(170,160,140)'; g.stroke(); });
   if (T.inst) T.inst.forEach(function (q) {                           // 建築、城牆的部件：模型的 +x ＝ (sinθ, −cosθ)、+y ＝ (−cosθ, −sinθ)
