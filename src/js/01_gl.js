@@ -176,7 +176,8 @@ function glProgTry(vs, fs) { var k = vs + '\u0000' + fs, J = glWarm(vs, fs); if 
 })();
 // 陰影（畫質；60_render.js shadowPass）：照鏡頭切成幾段距離（cascade，Tim 2026-10-20「改用其他遊戲常見的 shadow cascades 取代每艘船自己的陰影(且陸地也吃得到)」「基於Camera配置陰影」）：
 //   一段一層（太陽方向的正交投影 uShM[k]，罩住那一段視錐），船、地形、樹、城鎮都畫在裡面；全部放在同一個深度貼圖陣列 uShA（固定第 4 號）。
-//   收的那一點照離鏡頭多深（沿鏡頭往前的方向 uCsF、從 uCsE 量）挑第一個「遠端 uCsD[k] 比它深」的那一段；從 uCsL[k] 到遠端那一截跟下一段混（畫質頁的「交界」；最後一段 ⇒ 淡成沒有影子），
+//   收的那一點用第一張罩得到它的圖（shSel；2026-10-24 以前照離鏡頭的深度挑段），在那張圖最外面 uCsW[k] 那一圈跟下一張混（畫質頁的「交界」）；
+//   離鏡頭的深度（沿鏡頭往前的方向 uCsF、從 uCsE 量）只管最遠距離：最後一段的 uCsL ～ uCsD 那一截淡成沒有影子（shFade）
 //   ⇒ 交界看不到一條線、超過陰影距離不是一刀切掉。uCsN ＝ 幾段（0 ＝ 不查）。
 //   每段自己的沿法線推出去 uCsO[k]（約 1.5 個陰影圖格子，公尺）與深度偏差 uCsB[k]（照那一段的格子大小換成公尺、再換成那一段的深度單位）
 //   ⇒ 近的那段格子細、推得少（影子貼著船身、樹根），遠的那段格子粗、推得多（⛔ 不推 ⇒ 平面上自己遮自己的條紋）。
@@ -199,10 +200,20 @@ var SHADOW_GLSL = 'uniform highp sampler2DArrayShadow uShA; uniform mat4 uShM[' 
   '  float s=0.0; for(int y=-1;y<=1;y++) for(int x=-1;x<=1;x++) s+=texture(uShA,vec4(q.xy+vec2(float(x),float(y))*e,L,q.z)); return s/9.0; }\n' +
   // uShEdge（單張陰影，60_render.js shadowSimple）：範圍最外面那一圈（85%～98%）淡掉 ⇒ 範圍外的影子不是一刀切掉；照鏡頭分段時 0（段的範圍比要用的大一圈）
   'uniform float uShEdge; float shAt(int k, vec3 w, vec3 n){ vec4 p=uShM[k]*vec4(w,1.0); float ed=max(abs(p.x),abs(p.y)); return mix(shOne(k,w+n*uCsO[k],uCsB[k]),1.0,uShEdge*smoothstep(uShE0,0.98,ed)); }\n' +
-  'float shadowK(vec3 w, vec3 n){ if(uShOn<0.5||uCsN<1) return uSunK; float d=dot(w-uCsE,uCsF); int k=-1;\n' +
-  ' for(int i=0;i<' + CSM_MAX + ';i++){ if(i>=uCsN) break; if(d<uCsD[i]){ k=i; break; } }\n' +
-  ' if(k<0) return uSunK; float s=shAt(k,w,n), t=smoothstep(uCsL[k],uCsD[k],d);\n' +
-  ' if(t>0.0) s=mix(s,k+1<uCsN?shAt(k+1,w,n):1.0,t); return s*uSunK; }\n';
+  // 挑段（shSel；2026-10-24 TASK-0877，60_render.js shadowPass 的 4.）：DX SDK CascadedShadowMaps11 的 map-based selection —— 第一張罩得到這一點（沿法線推出去之後；
+  //   邊上留柔邊取樣那幾格）的圖就用它。每一段的圖只罩自己那一段裁過高度帶的視錐，近的那幾張格子細 ⇒ 落在它們裡面的點一律用細的
+  //   （以前照深度挑：鏡頭拉高時第 0、1 段的圖明明罩著畫面下緣的海，那裡的點還是照深度用粗的第 2 段）；量漏的塔、山尖不在前一張裡 ⇒ 自然落到下一張，不會整塊沒影子。
+  //   t ＝ 跟下一張混多少：那一點在這張圖最外面 uCsW[k]（畫質頁的「交界」，半寬的比例）那一圈 ⇒ 越靠邊越混下一張（下一張也罩得到才混）。−1 ＝ 不收影子。
+  //   最遠距離另外照深度淡掉（shFade：最後一段的交界那一截 uCsL ～ uCsD）。陰影範圍的除錯塗色（60_render.js shadowDebugFill）用同一支。
+  'uniform float uCsW[' + CSM_MAX + '];\n' +
+  'bool shIn(int k, vec3 w, out float e){ vec4 p=uShM[k]*vec4(w,1.0); e=max(abs(p.x),abs(p.y))/(1.0-uShPx*(3.0*uShSoft+4.0)); return e<1.0 && abs(p.z)<1.0; }\n' +
+  'int shSel(vec3 w, vec3 n, out float t){ t=0.0; float e=0.0, e2; int k=-1;\n' +
+  ' for(int i=0;i<' + CSM_MAX + ';i++){ if(i>=uCsN) break; if(shIn(i,w+n*uCsO[i],e)){ k=i; break; } }\n' +
+  ' if(k<0) return -1; if(uCsW[k]>0.0) t=smoothstep(1.0-uCsW[k],1.0,e); if(t>0.0 && !(k+1<uCsN && shIn(k+1,w+n*uCsO[k+1],e2))) t=0.0; return k; }\n' +
+  'float shFade(vec3 w){ int L=uCsN-1; float d=dot(w-uCsE,uCsF); return d>=uCsD[L] ? 1.0 : (uCsL[L]<uCsD[L] ? smoothstep(uCsL[L],uCsD[L],d) : 0.0); }\n' +
+  'float shadowK(vec3 w, vec3 n){ if(uShOn<0.5||uCsN<1) return uSunK; float f=shFade(w); if(f>=1.0) return uSunK; float t; int k=shSel(w,n,t);\n' +
+  ' if(k<0) return uSunK; float s=shAt(k,w,n);\n' +
+  ' if(t>0.0) s=mix(s,shAt(k+1,w,n),t); return mix(s,1.0,f)*uSunK; }\n';
 // 船艙遮罩（海、船邊水花的白沫共用；要有 in vec3 vW）：那一點換到船的格座標，落在原本船殼的外形裡 ⇒ 呼叫端丟掉（HULL_HIT）。
 //   遮罩照船型一層（uHullA：R8 貼圖陣列，每層 ＝ 那一型每個 (x, z) 船殼的半寬；固定第 1 號；60_render.js hullArr）；
 //   格（60_render.js gpuSlots：視野裡最近的 GFX.masks 艘，最多 MASK_NEAR）：uInv[k]（世界 → 格）、uHullK[k] ＝ (那一型的寬, 高, 中線 y, 第幾層)、
@@ -469,7 +480,7 @@ function setCommon(p) {
   if (u.uShOn) {                                              // 陰影圖陣列綁在第 4 號（60_render.js render 開頭綁）；每一段的矩陣、遠端、偏移一次給（沒用到的段 ＝ FAR_M）
     gl.uniform1f(u.uShOn, PASS.sh && GFX.shadow ? (SHK['p' + Math.min(2, GFX.shadow)] === 9 ? 2 : 1) : 0);   // 柔邊取樣：畫質頁「低／高：柔邊取樣」（07_gfx.js SHK）
     gl.uniform1i(u.uShA, 4); gl.uniformMatrix4fv(u.uShM, false, SHM.mats); gl.uniform1f(u.uShPx, 1 / SHM.n);
-    gl.uniform1i(u.uCsN, SHM.on ? SHM.k : 0); gl.uniform1fv(u.uCsD, SHM.csD); gl.uniform1fv(u.uCsL, SHM.csL); gl.uniform1fv(u.uCsO, SHM.csO); gl.uniform1fv(u.uCsB, SHM.csB);   // 60_render.js shadowMats
+    gl.uniform1i(u.uCsN, SHM.on ? SHM.k : 0); gl.uniform1fv(u.uCsD, SHM.csD); gl.uniform1fv(u.uCsL, SHM.csL); gl.uniform1fv(u.uCsO, SHM.csO); gl.uniform1fv(u.uCsB, SHM.csB); gl.uniform1fv(u.uCsW, SHM.csW);   // 60_render.js shadowMats
     gl.uniform3fv(u.uCsE, SHM.eye); gl.uniform3fv(u.uCsF, SHM.fw); gl.uniform1f(u.uShEdge, CSM_SIMPLE ? 1 : 0);
     gl.uniform1f(u.uShSoft, SHK.soft); gl.uniform1f(u.uShE0, SHK.edge); gl.uniform1f(u.uShTr, TREE_LOD[1] - 50);   // 柔邊寬度、單張的邊緣淡出、樹收影子到多遠（立體樹的距離 − 50 m：畫質的「立體樹的距離」）
   }
