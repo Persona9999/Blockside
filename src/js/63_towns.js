@@ -1090,7 +1090,9 @@ function townGroundTile(T, Q) {
     I.push(k, k + 1, k + 2, k, k + 2, k + 3);
   });
   //   特殊建築底下的廣場（地基；Blocksail world/town.js ②'，Tim 2026-10-23「用廣場當地基」）：l.hole ＝ [w, d] 建築那一塊 ⇒ 只鋪外圈（不壓在建築底下、下沉的池子不蓋住）；
-  //   l.base（坡上）⇒ 四邊補石基的側面，到那一邊最低的地面再下 0.3 m（同 townPlinth）
+  //   四邊補石基的側面：那一邊的地面比鋪面低 ⇒ 到那一邊最低的地面再下 0.3 m（同 townPlinth）
+  //   以前只有規劃標了 l.base（坡上）才補 ⇒ 平地上的廣場旁邊的路、地塊整得比它低（托爾圖加的廣場：靠海那一邊的路整到 23.4 m、廣場 25.9 m），
+  //   最後一格地形網格從框裡就往下斜 ⇒ 鋪面浮在半空、底下看得到草（Tim 2026-10-24「托爾圖加廣場目前會離地漂浮(沒有地基)」）⇒ 不看 base，四邊都量；每 2 m 取一點（邊中間的低點也量得到）
   Q.plaza.forEach(function (l) {                                         // 廣場：整平的那一塊鋪石
     var th = l.rot * Math.PI / 180, cs = Math.cos(th), sn = Math.sin(th), y = l.h + 0.06, base = V.length / 9, S4 = [[-1, -1], [1, -1], [1, 1], [-1, 1]];
     function at(s, w, d) { return W([l.at[0] + s[0] * d / 2 * cs - s[1] * w / 2 * sn, l.at[1] + s[0] * d / 2 * sn + s[1] * w / 2 * cs]); }
@@ -1101,11 +1103,10 @@ function townGroundTile(T, Q) {
       O.forEach(function (c) { vtx(c[0], y, c[1], TOWN_COL.plaza); }); In.forEach(function (c) { vtx(c[0], y, c[1], TOWN_COL.plaza); });
       for (e = 0; e < 4; e++) { k = (e + 1) % 4; I.push(base + e, base + k, base + 4 + k, base + e, base + 4 + k, base + 4 + e); }
     }
-    if (!l.base) return;
     var dk = [TOWN_COL.plaza[0] * 0.78, TOWN_COL.plaza[1] * 0.78, TOWN_COL.plaza[2] * 0.78], cx = (O[0][0] + O[2][0]) / 2, cz = (O[0][1] + O[2][1]) / 2;
     for (e = 0; e < 4; e++) {
-      var a = O[e], b = O[(e + 1) % 4], lo = Infinity;
-      for (var t = 0; t <= 1.0001; t += 0.25) { var gy = hgt(a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t); if (gy === gy) lo = Math.min(lo, gy); }
+      var a = O[e], b = O[(e + 1) % 4], lo = Infinity, ns = Math.max(4, Math.ceil(Math.hypot(b[0] - a[0], b[1] - a[1]) / 2));
+      for (var t = 0; t <= ns; t++) { var gy = hgt(a[0] + (b[0] - a[0]) * t / ns, a[1] + (b[1] - a[1]) * t / ns); if (gy === gy) lo = Math.min(lo, gy); }
       if (lo === Infinity || lo > y - 0.05) continue;
       var bot = lo - 0.3, mx = (a[0] + b[0]) / 2 - cx, mz = (a[1] + b[1]) / 2 - cz, nl = Math.hypot(mx, mz) || 1, b2 = V.length / 9;
       [[a, y], [b, y], [b, bot], [a, bot]].forEach(function (p) { vtx(p[0][0], p[1], p[0][1], dk, mx / nl, 0, mz / nl); });
