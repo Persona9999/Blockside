@@ -21,7 +21,18 @@
 //   ?trees=0 ⇒ 不長樹。
 // 附屬的田裡的作物（treeFieldPut）：放大幾倍、行距株距各乘幾倍（Tim 2026-10-24「基於性能考量 農田植物可以考慮放大1.5倍看看 然後降低一點密度」）——
 //   兩個一起乘 ⇒ 每一株佔的地跟植物一起變大，看起來一樣滿、株數 ÷ 2.25；鋪土的壟（63_towns.js townGroundTile）照乘過的行距。野生的作物不受管
-var TREE_FIELD_K = 1.5, TREE_FIELD_SP = 1.5;
+//   TASK-0903（Tim 2026-10-24「作物可以整體再大一點(1.2倍) 然後密度再低一些」「菜可以大1.5倍」）：1.5 ⇒ 1.8（株數再 ÷ 1.44）；那一種的 place.fieldK 再乘在大小上（菜畦 1.25 ⇒ 1.5 倍，行距照舊 1.2 倍）
+var TREE_FIELD_K = 1.8, TREE_FIELD_SP = 1.8;
+// 田裡的作物怎麼畫（TASK-0903；Tim 2026-10-24「目前卡頓發生在君士坦丁堡的城內農田」）—— 君堡城內那一片量過：作物佔中畫質一格約 10.8 ms，其中約 8 ms 在陰影圖、每 8 m 重新分組 5～14 ms：
+//   ① 不一株一株進分組：擺的時候照（田 × TREE_FIELD_BLK 公尺一格）分塊、塊裡照（作物, 第幾棵）排好、直接存成實例緩衝的樣子（6 個 float 一株）；
+//      分組（treeBin）只照塊的外框離鏡頭多遠挑 ⇒ 超過 TREE_FIELD_VIEW 不畫、TREE_FIELD_FULL 以內細的、其他低模，一段一段整塊複製。
+//   ② 不投影子：作物另外一組（TREES.cb 起），陰影圖（treeDepth）只畫樹那兩組。收影子照舊。
+//   ③ 3D 只畫到 TREE_FIELD_VIEW 與那一種 place.view 小的那個，再遠是整片田的貼圖（treeFieldCrops 的 view 同一個 ⇒ 地面那一層照它淡入）。野生的作物照舊（照自己的 place.view、一株一株、投影子）。
+//      量過 100 m 對 300 m（①② 做完之後）：每格毫秒的差在量測的雜訊裡（同一版連跑兩次差得比這個多），100 m 那一版 100～250 m 的菜畦變成一片綠（貼圖蓋住八成五的土）、麥田沒了質感
+//      ⇒ 先放 300（＝ 照各作物自己的 view：菜 250、麥 300）；要更短改這一格。
+var TREE_FIELD_VIEW = 300, TREE_FIELD_FULL = 50, TREE_FIELD_BLK = 16;
+/** 田裡那一種作物的放大倍數（TREE_FIELD_K × place.fieldK）。 */
+function treeFieldK(S) { return TREE_FIELD_K * (S.place.fieldK || 1); }
 // 遠處的田（TASK-0879；Tim 2026-10-24「把每一塊田上的作物直接做成貼圖(目前會直接不顯示)」）：作物超過自己的 place.view 就不畫 ⇒ 以前遠一點的田只剩土。
 //   第一次要畫遠處的田起，一格拍一種作物，斜著拍一張接得起來的貼圖（treeFieldBake：TREE_FIELD_TILE[0] 行 × 差不多一樣長的株數，壟、溝、作物照田裡的排法；
 //   碰到邊的那幾株繞到對邊再畫一次 ⇒ 鋪起來接得上）⇒ 一張貼圖陣列（一種一層）；城鎮的地面多一層貼著土的網格畫它（63_towns.js townGroundTile 的 Q.gf、地標的田 T.lmg），
@@ -71,7 +82,7 @@ function treeStep(J, t1) {
   bb[4] += 30; bb[0] -= 10; bb[2] -= 10; bb[3] += 10; bb[5] += 10;
   J.ms += performance.now() - t0; TREES.stat.plantMs += J.ms;
   if (far) TREES.stat.far += out.length / 8; else TREES.stat.plant += out.length / 8;
-  J.res = { I: new Float32Array(out), n: out.length / 8, t0: J.t0, bb: bb, sh: out.length ? treeShell(C, out, far, J.hAt) : null };
+  J.res = { I: new Float32Array(out), n: out.length / 8, t0: J.t0, bb: bb, sh: out.length ? treeShell(C, out, far, J.hAt) : null, fb: J.fb || null };   // fb：田裡的作物（treeFieldPut）
   return true;
 }
 /** 準備：整地（townHv）；每 TREE_CELL 公尺一格（外擴一格）有哪些底質（位元）、最低最高的海拔 ⇒ 每一種先照它跳過整格（底質不合、海拔帶整個在外面）的候選點；
@@ -158,19 +169,22 @@ function treeTownPut(J) {
  *  一行一行種（行沿進深；行距那一邊對齊鋪土的壟，63_towns.js townGroundTile）；高度照整過地的那一份（J.hAt）；抖動、轉角、大小、深淺、第幾棵照位置的雜湊（每次一樣）。
  *  作物沒有這一種（TREE_SPECIES 沒有、或沒寫 place.field）⇒ 只鋪土不種（TREES.stat.fieldSkip）。
  *  地標雕好的田（63_towns.js townTreesSet 的 T.lmf：F.lm，原點 o、沿行 ua × la、跨行 ub × lb，世界座標）⇒ 同一套行距株距、高度照模型的土面（F.y；不照地形）；
- *    比半個行距（株距）還窄的長方形（小屋、柱礎壓掉的缺角）不種，面積照算（TREES.stat.lmThin）。 */
+ *    比半個行距（株距）還窄的長方形（小屋、柱礎壓掉的缺角）不種，面積照算（TREES.stat.lmThin）。
+ *  不進 J.out（檔頭「田裡的作物怎麼畫」）⇒ J.fb ＝ { D: Float32Array（6 個一株：x, y, z, 轉角, 放大, 深淺；照塊、再照作物與第幾棵排）, B: [{ bb, r: [作物, 第幾棵, 起點, 株數, …] }] }；這一塊沒有田 ⇒ null。 */
 function treeFieldPut(J) {
+  J.fb = null;
   if (typeof TOWNS === 'undefined' || !TOWNS.list.length) return;
-  var C = J.C, size = BED.A.chunk, x0 = C.cx * size - BED.ax, z0 = C.cy * size - BED.az, out = J.out, bb = J.bb;
+  var C = J.C, size = BED.A.chunk, x0 = C.cx * size - BED.ax, z0 = C.cy * size - BED.az, bb = J.bb, P = [], NB = 0;   // P：10 個一株（塊, 作物, 第幾棵, 6 個實例欄位, 頂的高）
   TOWNS.list.forEach(function (T) {
     (T.fields || []).concat(T.lmf || []).forEach(function (F) {
+      var blk = new Map();                                                // 這一條田碰到的格（TREE_FIELD_BLK 公尺）⇒ 第幾塊
       var xs = F.R.map(function (q) { return q[0] - BED.ax; }), zs = F.R.map(function (q) { return q[1] - BED.az; });
       if (Math.min.apply(null, xs) >= x0 + size || Math.max.apply(null, xs) < x0 || Math.min.apply(null, zs) >= z0 + size || Math.max.apply(null, zs) < z0) return;
       var si = J.SP.indexOf(F.crop), S = si >= 0 ? TREE_SPECIES[F.crop] : null, Fd = S && S.place.field;
       if (!Fd) { TREES.stat.fieldSkip = (TREES.stat.fieldSkip || 0) + 1; return; }
       var lb = F.lm ? F.lb : F.b1 - F.b0, la = F.lm ? F.la : F.a1 - F.a0;   // 跨行（行距那一邊）、沿行（株距那一邊）多長
       if (F.lm && (lb < Fd[0] * TREE_FIELD_SP / 2 || la < Fd[1] * TREE_FIELD_SP / 2)) { TREES.stat.lmThin = (TREES.stat.lmThin || 0) + 1; return; }
-      var nb = Math.max(1, Math.round(lb / (Fd[0] * TREE_FIELD_SP))), na = Math.max(1, Math.round(la / (Fd[1] * TREE_FIELD_SP))), sk = (S.place.sink != null ? S.place.sink : 0.3) * TREE_FIELD_K, sc = S.place.scale;
+      var fk = treeFieldK(S), nb = Math.max(1, Math.round(lb / (Fd[0] * TREE_FIELD_SP))), na = Math.max(1, Math.round(la / (Fd[1] * TREE_FIELD_SP))), sk = (S.place.sink != null ? S.place.sink : 0.3) * fk, sc = S.place.scale;
       for (var kb = 0; kb < nb; kb++) for (var ka = 0; ka < na; ka++) {
         var b = lb * (kb + 1 - (1 - TOWN_FURROW) / 2) / nb, a = la * (ka + 0.5) / na, x, z;   // 種在壟的中線
         if (F.lm) { x = F.o[0] + F.ua[0] * a + F.ub[0] * b; z = F.o[1] + F.ua[1] * a + F.ub[1] * b; }
@@ -179,13 +193,27 @@ function treeFieldPut(J) {
         x += (treeHash(gi, gj, 7341) - 0.5) * 2 * jt; z += (treeHash(gi, gj, 7342) - 0.5) * 2 * jt;
         if (x < x0 || x >= x0 + size || z < z0 || z >= z0 + size) continue;
         var y = (F.lm ? F.y : J.hAt(x - x0, z - z0) + TOWN_ROAD_LIFT) - sk;   // 附屬的田：站在鋪的土上（townGroundTile 的土高出地面 TOWN_ROAD_LIFT；第一版種在地面 ⇒ 菜畦整株埋在土底下）；地標的田：模型的土面
-        out.push(x, y, z, treeHash(gi, gj, 7343) * 6.2832, (sc[0] + (sc[1] - sc[0]) * treeHash(gi, gj, 7344)) * TREE_FIELD_K, 0.88 + 0.24 * treeHash(gi, gj, 7345), si, Math.floor(treeHash(gi, gj, 7346) * S.variants));
-        bb[0] = Math.min(bb[0], x); bb[2] = Math.min(bb[2], z); bb[3] = Math.max(bb[3], x); bb[5] = Math.max(bb[5], z); bb[1] = Math.min(bb[1], y); bb[4] = Math.max(bb[4], y + S.height[1] * TREE_FIELD_K);
+        var bk = Math.floor(x / TREE_FIELD_BLK) * 65536 + Math.floor(z / TREE_FIELD_BLK), b = blk.get(bk); if (b === undefined) { b = NB++; blk.set(bk, b); }
+        P.push(b, si, Math.floor(treeHash(gi, gj, 7346) * S.variants), x, y, z, treeHash(gi, gj, 7343) * 6.2832, (sc[0] + (sc[1] - sc[0]) * treeHash(gi, gj, 7344)) * fk, 0.88 + 0.24 * treeHash(gi, gj, 7345), y + S.height[1] * fk);
+        bb[0] = Math.min(bb[0], x); bb[2] = Math.min(bb[2], z); bb[3] = Math.max(bb[3], x); bb[5] = Math.max(bb[5], z); bb[1] = Math.min(bb[1], y); bb[4] = Math.max(bb[4], y + S.height[1] * fk);
         if (F.lm) TREES.stat.lmField = (TREES.stat.lmField || 0) + 1; else TREES.stat.field = (TREES.stat.field || 0) + 1;
         TREES.stat.bySp[F.crop] = (TREES.stat.bySp[F.crop] || 0) + 1;
       }
     });
   });
+  var n = P.length / 10; if (!n) return;
+  var ord = new Uint32Array(n); for (var i = 0; i < n; i++) ord[i] = i;
+  ord.sort(function (a, b) { return P[a * 10] - P[b * 10] || P[a * 10 + 1] - P[b * 10 + 1] || P[a * 10 + 2] - P[b * 10 + 2] || a - b; });   // 照塊、作物、第幾棵（同一段整段複製）；同一格照擺的順序 ⇒ 每次一樣
+  var D = new Float32Array(n * 6), B = [], cur = null;
+  for (var q = 0; q < n; q++) {
+    var o = ord[q] * 10;
+    if (!cur || cur.id !== P[o]) { cur = { id: P[o], bb: [1e9, 1e9, 1e9, -1e9, -1e9, -1e9], r: [] }; B.push(cur); }
+    var r = cur.r; if (!r.length || r[r.length - 4] !== P[o + 1] || r[r.length - 3] !== P[o + 2]) r.push(P[o + 1], P[o + 2], q, 0);
+    r[r.length - 1]++;
+    for (var j = 0; j < 6; j++) D[q * 6 + j] = P[o + 3 + j];
+    var cb = cur.bb; cb[0] = Math.min(cb[0], P[o + 3]); cb[1] = Math.min(cb[1], P[o + 4]); cb[2] = Math.min(cb[2], P[o + 5]); cb[3] = Math.max(cb[3], P[o + 3]); cb[4] = Math.max(cb[4], P[o + 9]); cb[5] = Math.max(cb[5], P[o + 5]);
+  }
+  J.fb = { D: D, B: B, n: n };
 }
 // 擺樹排隊（2026-10-20；08_seabed.js 檔頭「收塊排隊」）：有畫面迴圈（BED_SLICE）⇒ 'bedChunk' 只記下來（TREE_Q；同一塊只留最新的那一份），
 //   畫面迴圈每格照背景預算擺（treePump：一塊照樹種、照列分好幾格做完；在用的塊先、遠景的樹冠殼後）；擺好之前那一塊照舊畫舊的那一份（城到了、換漩渦要重擺時不會先空一下）；
@@ -411,7 +439,7 @@ function treeFieldCrops() {
   Object.keys(TREE_SPECIES).forEach(function (sp) {
     var S = TREE_SPECIES[sp], Fd = S.place.field; if (!Fd) return;
     var nr = TREE_FIELD_TILE[0], na = Math.max(2, Math.round(nr * Fd[0] / Fd[1]));   // 一張差不多正方形
-    at[sp] = { l: list.length, nr: nr, na: na, th: na * Fd[1] * TREE_FIELD_SP, view: S.place.view || 400 };
+    at[sp] = { l: list.length, nr: nr, na: na, th: na * Fd[1] * TREE_FIELD_SP, view: Math.min(S.place.view || 400, TREE_FIELD_VIEW) };   // view：田裡的 3D 只到 TREE_FIELD_VIEW（TASK-0903）⇒ 貼圖照它淡入
     list.push(sp);
   });
   return (TREES.fc = { list: list, at: at });
@@ -454,12 +482,12 @@ function treeFieldBake() {
  *  透明的地方補上溝、壟的土色再上傳。 */
 function treeFieldLayer(tex, l, pr, R) {
   var FC = treeFieldCrops(), sp = FC.list[l], S = TREE_SPECIES[sp], A = FC.at[sp], si = Object.keys(TREE_SPECIES).indexOf(sp), Fd = S.place.field, soil = S.place.soil || TOWN_SOIL, sc = S.place.scale, M = new Float32Array(16);
-  var rs = Fd[0] * TREE_FIELD_SP, ps = Fd[1] * TREE_FIELD_SP, Wt = A.nr * rs, Th = A.th, Hm = S.height[1] * TREE_FIELD_K * sc[1] * TREE_FIELD_COVER[1] * 1.2 + 0.5, jt = ps * 0.18, px = new Uint8Array(R * R * 4);
+  var rs = Fd[0] * TREE_FIELD_SP, ps = Fd[1] * TREE_FIELD_SP, Wt = A.nr * rs, Th = A.th, Hm = S.height[1] * treeFieldK(S) * sc[1] * TREE_FIELD_COVER[1] * 1.2 + 0.5, jt = ps * 0.18, px = new Uint8Array(R * R * 4);
   gl.framebufferTextureLayer(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, tex, 0, l);
   function plants(kk) {
     for (var kb = 0; kb < A.nr; kb++) for (var ka = 0; ka < A.na; ka++) {
       var gi = kb * 131 + l * 977, gj = ka, b = rs * (kb + 1 - (1 - TOWN_FURROW) / 2) + (treeHash(gi, gj, 7341) - 0.5) * 2 * jt, a = ps * (ka + 0.5) + (treeHash(gi, gj, 7342) - 0.5) * 2 * jt;
-      var th = treeHash(gi, gj, 7343) * 6.2832, s = (sc[0] + (sc[1] - sc[0]) * treeHash(gi, gj, 7344)) * TREE_FIELD_K * kk, g = TREES.list[TREES.vi[si] + Math.floor(treeHash(gi, gj, 7346) * S.variants)].lod[0];
+      var th = treeHash(gi, gj, 7343) * 6.2832, s = (sc[0] + (sc[1] - sc[0]) * treeHash(gi, gj, 7344)) * treeFieldK(S) * kk, g = TREES.list[TREES.vi[si] + Math.floor(treeHash(gi, gj, 7346) * S.variants)].lod[0];
       var c2 = Math.cos(th), s2 = Math.sin(th), r = (g.w || 1) * s + 0.1, rs2 = r + TREE_FIELD_SHEAR * (g.h || 1) * s;   // r：從中心往外最多幾公尺、rs2：沿行往前（斜投影）最多推到哪（碰到邊才繞到對邊再畫）
       gl.bindVertexArray(g.vao); gl.disableVertexAttribArray(4); gl.disableVertexAttribArray(5); gl.vertexAttrib4f(4, 0, 0, 0, 0); gl.vertexAttrib2f(5, 1, 1);
       for (var dz = -1; dz <= 1; dz++) for (var dx = -1; dx <= 1; dx++) {
@@ -486,9 +514,11 @@ function treeFieldLayer(tex, l, pr, R) {
   }
   gl.texSubImage3D(gl.TEXTURE_2D_ARRAY, 0, 0, 0, l, R, R, 1, gl.RGBA, gl.UNSIGNED_BYTE, px);
 }
-/** 分組：看得到的塊（視錐）裡每一棵照離鏡頭多遠分到細、低模（照樹種與第幾棵分組）、貼圖 ⇒ 寫進三個實例緩衝區。 */
+/** 分組：看得到的塊（視錐）裡每一棵照離鏡頭多遠分到細、低模（照樹種與第幾棵分組）、貼圖 ⇒ 寫進三個實例緩衝區。
+ *  分組的編號：[0, NL) 細的、[NL, 2NL) 低模、[2NL, 2NL + NP) 貼圖（照張）、[cb, cb + NL) 田裡作物細的、[cb + NL, cb + 2NL) 田裡作物低模（cb ＝ 2NL + NP ＝ TREES.cb）；
+ *  田裡的作物照塊挑（檔頭「田裡的作物怎麼畫」），接在同一個緩衝區的樹後面。 */
 function treeBin(keys, eye) {
-  var t0 = performance.now(), NL = TREES.list.length, NP = TREES.pages.length, cnt = new Int32Array(NL * 2 + NP), L0 = TREE_LOD[0] * TREE_LOD[0], L1 = TREE_LOD[1] * TREE_LOD[1], L2 = TREE_SHELL[1] * TREE_SHELL[1], vi = TREES.vi;
+  var t0 = performance.now(), NL = TREES.list.length, NP = TREES.pages.length, CB = NL * 2 + NP, cnt = new Int32Array(CB + NL * 2), L0 = TREE_LOD[0] * TREE_LOD[0], L1 = TREE_LOD[1] * TREE_LOD[1], L2 = TREE_SHELL[1] * TREE_SHELL[1], vi = TREES.vi;
   // 3 ＝ 交給樹冠殼（這一棵不畫；水平距離，跟著色器的淡入淡出同一把尺）；4 ＝ 超過那一種的 view（小植物）不畫
   var vw = TREES.vw;
   // 植物密度（畫質）：每一棵照位置的雜湊（0～1，同一棵每次一樣）比 dk，大的不畫（細、低模、貼圖三級一起少；樹冠殼照擺的棵數不變 ⇒ 1.1 km 外照舊是整片林子）
@@ -498,8 +528,18 @@ function treeBin(keys, eye) {
     var dx = I[o] - eye[0], dy = I[o + 1] - eye[1], dz = I[o + 2] - eye[2], d = dx * dx + dy * dy + dz * dz; return d > vw[I[o + 6]] ? 4 : d < L0 ? 0 : d < L1 ? 1 : dx * dx + dz * dz < L2 ? 2 : 3;
   }
   keys.forEach(function (k) { var c = TREES.ch[k], I = c.I, tz = c.t0 != null ? c.t0 : I.length; for (var o = 0; o < I.length; o += 8) { var l = lodOf(I, o, tz); if (l < 3) cnt[l < 2 ? l * NL + vi[I[o + 6]] + I[o + 7] : NL * 2 + TREES.cellPage[vi[I[o + 6]] + I[o + 7]]]++; } });
+  var FV = TREE_FIELD_VIEW * TREE_FIELD_VIEW, FF = TREE_FIELD_FULL * TREE_FIELD_FULL, sel = [], fn = [0, 0];   // 田裡的作物：挑到的塊（塊所在的那一份, 塊, 細 0／低模 1）
+  keys.forEach(function (k) {
+    var f = TREES.ch[k].fb; if (!f) return;
+    f.B.forEach(function (B) {
+      var b = B.bb, dx = Math.max(b[0] - eye[0], 0, eye[0] - b[3]), dy = Math.max(b[1] - eye[1], 0, eye[1] - b[4]), dz = Math.max(b[2] - eye[2], 0, eye[2] - b[5]), d = dx * dx + dy * dy + dz * dz;   // 外框最近的那一點
+      if (d > FV) return;
+      var l = d < FF ? 0 : 1; sel.push(f, B, l);
+      for (var r = 0; r < B.r.length; r += 4) { cnt[CB + l * NL + vi[B.r[r]] + B.r[r + 1]] += B.r[r + 3]; fn[l] += B.r[r + 3]; }
+    });
+  });
   var off = new Int32Array(cnt.length), tot = [0, 0, 0];
-  for (var b = 0; b < cnt.length; b++) { var l2 = b < NL ? 0 : b < NL * 2 ? 1 : 2; off[b] = tot[l2]; tot[l2] += cnt[b]; }
+  for (var b = 0; b < cnt.length; b++) { var l2 = b < NL ? 0 : b < NL * 2 ? 1 : b < CB ? 2 : b < CB + NL ? 0 : 1; off[b] = tot[l2]; tot[l2] += cnt[b]; }
   var D = [0, 1, 2].map(function (l) { var need = tot[l] * 6; if (!TREES.buf[l] || TREES.buf[l].length < need) TREES.buf[l] = new Float32Array(Math.max(need, 6) * 1.5 | 0); return TREES.buf[l]; });
   var at = off.slice();
   keys.forEach(function (k) {
@@ -510,8 +550,12 @@ function treeBin(keys, eye) {
       A[q] = I[o]; A[q + 1] = I[o + 1]; A[q + 2] = I[o + 2]; A[q + 3] = l < 2 ? I[o + 3] : TREES.cellSlot[cell]; A[q + 4] = I[o + 4]; A[q + 5] = I[o + 5];
     }
   });
+  for (var s = 0; s < sel.length; s += 3) {                              // 田裡的作物：一段一段整段複製（存的時候就是實例緩衝的樣子）
+    var f = sel[s], B = sel[s + 1], l = sel[s + 2], A = D[l];
+    for (var r = 0; r < B.r.length; r += 4) { var b2 = CB + l * NL + vi[B.r[r]] + B.r[r + 1], st = B.r[r + 2] * 6, m = B.r[r + 3]; A.set(f.D.subarray(st, st + m * 6), at[b2] * 6); at[b2] += m; }
+  }
   [0, 1, 2].forEach(function (l) { gl.bindBuffer(gl.ARRAY_BUFFER, TREES.ib[l]); gl.bufferData(gl.ARRAY_BUFFER, D[l].subarray(0, Math.max(6, tot[l] * 6)), gl.DYNAMIC_DRAW); });
-  TREES.cnt = cnt; TREES.off = off; TREES.stat.d0 = tot[0]; TREES.stat.d1 = tot[1]; TREES.stat.d2 = tot[2]; TREES.stat.binMs = performance.now() - t0;
+  TREES.cnt = cnt; TREES.off = off; TREES.cb = CB; TREES.stat.d0 = tot[0] - fn[0]; TREES.stat.d1 = tot[1] - fn[1]; TREES.stat.d2 = tot[2]; TREES.stat.f0 = fn[0]; TREES.stat.f1 = fn[1]; TREES.stat.binMs = performance.now() - t0;
 }
 /** 畫（60_render.js：地形 bedDraw 之後）。 */
 function treeDraw() {
@@ -521,15 +565,17 @@ function treeDraw() {
   var L1 = TREE_LOD_D[GFX.treed], SD = TREE_SHELL_D[GFX.treed]; if (L1 && L1 !== TREE_LOD[1]) { TREE_LOD[1] = L1; TREES.dirty = true; }
   if (SD && SD[0] !== TREE_SHELL[0]) { TREE_SHELL[0] = SD[0]; TREE_SHELL[1] = SD[1]; TREES.dirty = true; }
   if (TREES.dens !== TREE_DENS_K[GFX.plant]) TREES.dirty = true;           // 植物密度換了 ⇒ 重新分組（treeBin）   // 畫質的「立體樹的距離」換了 ⇒ 重新分組（陰影跟著：投影子的、收影子的都照它）
-  var PL = bedPlanes(CAM.vp), eye = CAM.eye, E = TREES.eye, vis = keys.filter(function (k) { var c = TREES.ch[k]; return c.n && bedSeen(PL, c.bb); }), sig = vis.join(' ');
+  var PL = bedPlanes(CAM.vp), eye = CAM.eye, E = TREES.eye, vis = keys.filter(function (k) { var c = TREES.ch[k]; return (c.n || c.fb) && bedSeen(PL, c.bb); }), sig = vis.join(' ');
   if (TREES.dirty || !E || sig !== TREES.sig || Math.abs(E[0] - eye[0]) + Math.abs(E[1] - eye[1]) + Math.abs(E[2] - eye[2]) > TREE_REBIN) { treeBin(vis, eye); TREES.eye = eye.slice(); TREES.dirty = false; TREES.sig = sig; }   // 看得到的塊換了、鏡頭動了 8 m 以上、塊進出 ⇒ 重新分組
   var cf = gl.isEnabled(gl.CULL_FACE); gl.disable(gl.CULL_FACE);
   var fogD = WX.fog * BED_FOG * CAM.fogK, P1 = TREES.prog, NL = TREES.list.length;
   gl.useProgram(P1.prog); setCommon(P1); gl.uniform1f(P1.u.uFogD, fogD); gl.uniform1f(P1.u.uT, performance.now() / 1000); gl.uniform1f(P1.u.uWind, Math.min(2, 0.4 + (WX.wind || 1) * 0.6));
   for (var l = 0; l < 2; l++) TREES.list.forEach(function (T, c) {
-    var n = TREES.cnt[l * NL + c]; if (!n) return; var g = T.lod[l];
-    gl.bindVertexArray(g.vao); gl.bindBuffer(gl.ARRAY_BUFFER, TREES.ib[l]); treeInstAttr(TREES.off[l * NL + c]);
-    gl.drawElementsInstanced(gl.TRIANGLES, g.n, gl.UNSIGNED_SHORT, 0, n);
+    [l * NL + c, TREES.cb + l * NL + c].forEach(function (b) {          // 樹、田裡的作物（treeBin 的分組編號）
+      var n = TREES.cnt[b]; if (!n) return; var g = T.lod[l];
+      gl.bindVertexArray(g.vao); gl.bindBuffer(gl.ARRAY_BUFFER, TREES.ib[l]); treeInstAttr(TREES.off[b]);
+      gl.drawElementsInstanced(gl.TRIANGLES, g.n, gl.UNSIGNED_SHORT, 0, n);
+    });
   });
   if (TREES.stat.d2) TREES.pages.forEach(function (Pg, p) { if (TREES.cnt[NL * 2 + p] && !Pg.tex) treeBakePage(Pg); });   // 第一次要畫到這一張 ⇒ 先拍（拍完狀態還原，下面再設貼圖那一套）
   var P2 = TREES.bbProg; gl.useProgram(P2.prog); setCommon(P2); gl.uniform1f(P2.u.uFogD, fogD); gl.uniform2f(P2.u.uFade, TREE_SHELL[0], TREE_SHELL[1]); gl.uniform1i(P2.u.uTex, 11);
@@ -553,7 +599,8 @@ function treeDraw() {
  *  不晃（uT、uWind 0：那一層不是每一格重畫）。遠處的貼圖與樹冠殼不畫（TREE_LOD[1] 以外：畫質的「立體樹的距離」，400／650／900 m）。⇒ 畫了幾棵。
  *  兩組一律用細的網格投影子（Tim 2026-10-20「只動了一點點陰影就完全不同」、舊版也「陰影會出現在中間(天空沒東西)」）：低模把枝尖的葉團併成一大團，比細的胖一圈；
  *    靜態那一層最久一秒才重畫，鏡頭一動，一批樹在主畫面從低模換成細的（每 8 m 重分組）⇒ 細的葉子整個躲在陰影圖裡那團舊的低模裡 ⇒ 一整帶森林全在影子裡、下一次重畫又亮回來。
- *    細的不會包住任何一級的葉子 ⇒ 樹換級、靜態那一層晚一點重畫都不會整帶變暗（投影子的跟收的對得上，其他遊戲也是「投影子的不能比畫面上的胖」）。 */
+ *    細的不會包住任何一級的葉子 ⇒ 樹換級、靜態那一層晚一點重畫都不會整帶變暗（投影子的跟收的對得上，其他遊戲也是「投影子的不能比畫面上的胖」）。
+ *  田裡的作物（分組編號 TREES.cb 起）不畫 ⇒ 不投影子（TASK-0903：君堡城內三萬九千株全部用細的網格畫進每格重畫的陰影圖，約 8 ms）。 */
 function treeDepth() {
   if (!TREES.on || !TREES.init || !TREES.cnt || !TREES.list.length) return 0;
   var P0 = TREES.dProg || (TREES.dProg = VK.compile(gl, TREE_VS, DEPTH_ONLY_FS)), NL = TREES.list.length, n = 0;
@@ -569,12 +616,16 @@ function treeDepth() {
 function treeFind(sp, n, at) {
   var si = Object.keys(TREE_SPECIES).indexOf(sp), q = at || [CAM.eye[0], CAM.eye[2]], L = [];
   Object.keys(TREES.ch).forEach(function (k) { var I = TREES.ch[k].I; for (var o = 0; o < I.length; o += 8) if (I[o + 6] === si) L.push([I[o], I[o + 1], I[o + 2], I[o + 3], I[o + 4], I[o + 7], (I[o] - q[0]) * (I[o] - q[0]) + (I[o + 2] - q[1]) * (I[o + 2] - q[1])]); });
+  Object.keys(TREES.ch).forEach(function (k) {                           // 田裡的作物（treeFieldPut 的塊）
+    var f = TREES.ch[k].fb; if (!f) return;
+    f.B.forEach(function (B) { for (var r = 0; r < B.r.length; r += 4) { if (B.r[r] !== si) continue; for (var o = B.r[r + 2] * 6, e = o + B.r[r + 3] * 6, D = f.D; o < e; o += 6) L.push([D[o], D[o + 1], D[o + 2], D[o + 3], D[o + 4], B.r[r + 1], (D[o] - q[0]) * (D[o] - q[0]) + (D[o + 2] - q[1]) * (D[o + 2] - q[1])]); } });
+  });
   return L.sort(function (a, b) { return a[6] - b[6]; }).slice(0, n || 5).map(function (r) { return r.slice(0, 6).map(function (v) { return +v.toFixed(2); }); });
 }
 /** 讀數（__game.bed().trees）。 */
 function treeStat() {
   var S = TREES.stat;
-  return { on: TREES.on, kinds: Object.keys(TREE_SPECIES), variants: TREES.list.length, planted: S.plant, bySp: S.bySp, far: S.far, drawn: { full: S.d0, low: S.d1, card: S.d2, shells: S.shells || 0, shellTris: S.shellTris || 0 },
+  return { on: TREES.on, kinds: Object.keys(TREE_SPECIES), variants: TREES.list.length, planted: S.plant, bySp: S.bySp, far: S.far, drawn: { full: S.d0, low: S.d1, card: S.d2, shells: S.shells || 0, shellTris: S.shellTris || 0, fieldFull: S.f0 || 0, fieldLow: S.f1 || 0 },   // fieldFull／fieldLow：田裡的作物（照塊挑，TASK-0903）
     pages: TREES.pages ? TREES.pages.map(function (P) { return P.key + ':' + P.cells.length + (P.tex ? '（拍了）' : ''); }) : null, field: S.field || 0, fieldSkip: S.fieldSkip || 0, lmField: S.lmField || 0, lmThin: S.lmThin || 0,   // 貼圖集分張（照 meta.region）、附屬的田種了幾株
     fieldCard: { on: TREE_FIELD_CARD, baked: !!TREES.ftex, crops: TREES.fc ? TREES.fc.list : null, cover: S.fieldCover || null },   // 遠處的田的貼圖（TASK-0879；cover：每一種 [蓋住幾成土, 放大幾倍]）
     ms: { gen: +S.genMs.toFixed(1), bake: +S.bakeMs.toFixed(1), fieldBake: +(S.fieldBakeMs || 0).toFixed(1), fieldBakeMax: +(S.fieldBakeMax || 0).toFixed(1), plant: +S.plantMs.toFixed(1), bin: +S.binMs.toFixed(2) },
