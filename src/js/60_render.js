@@ -388,15 +388,17 @@ function shadowPass() {
   }
   var sk = SUN.map(function (v) { return v.toFixed(4); }).join(',') + ';' + SHK.nrm + ',' + SHK.bias + ';' + (CSM_ROT ? SHM.rot || 0 : '');   // 太陽方向＋沿法線推、深度偏差（畫質頁改了 ⇒ 矩陣、偏移重算）＋轉了幾級
   SHM.eye.set(E); SHM.fw.set(fw);
-  var DD = SHK.dist * shFar(), fit = csmFit(un, fw, DD), z0 = SHM.z0 = SHK.fit ? fit[0] : 0, z1 = SHM.z1 = SHK.fit ? Math.max(z0 + 20, fit[1]) : DD, zk = (z1 - z0) / SHK.dist;   // 分段貼合畫面（見 csmFit；關著也要量高度帶）
-  sp = SHM.splits = sp.map(function (v) { return z0 + v * zk; }); bs = SHM.bs = bs.map(function (v) { return z0 + v * zk; });
+  var DD = SHK.dist * shFar(), fit = csmFit(un, fw, DD), z0 = SHM.z0 = SHK.fit ? fit[0] : 0, z1 = SHM.z1 = SHK.fit ? Math.max(z0 + 20, fit[1]) : DD, zk = shFar();   // 分段貼合畫面（見 csmFit；關著也要量高度帶）
+  // 每一段多長照畫質頁的公尺數、從 z0 起算，z1 只截掉超過的（超過的段是空的）—— ⛔ 不照比例縮進 [z0, z1]（Tim 2026-10-24：甲板上鏡頭只抬一點點解析度差很多 ——
+  //   畫面上緣碰不到海平線 ⇒ z1 從 1500 塌成 64，縮進去的第 0 段從 60 m 變 2.6 m，一格之內解析度差十倍）
+  sp = SHM.splits = sp.map(function (v, j) { return j === k - 1 ? z1 : Math.min(z1, z0 + v * zk); }); bs = SHM.bs = bs.map(function (v) { return Math.min(z1, z0 + v * zk); });
   var refreshed = false, sl = Math.min(400, 1 / Math.max(0.15, SUN[1] / Math.sqrt(Math.max(1e-6, 1 - SUN[1] * SUN[1]))));   // 影子拉多長（每公尺高；太陽越低越長，最多 400 倍 ⇒ 實際上限見 csmIn）
   var n = SHM.n, mg = n / (n - 2 * CSM_MARGIN) * SHK.pad;
   for (var i = 0; i < k; i++) {
     var c = SHM.cs[i]; if (!c) continue;
     var d0 = i ? bs[i - 1] : z0, d1 = sp[i], Q8 = [];
     rays.forEach(function (R) { Q8.push(at(R, Math.max(d0, R.da))); Q8.push(at(R, Math.min(d1, R.db))); });
-    var yb = csmBand(d0, d1), P = csmClip(Q8, yb[0], yb[1]);
+    var yb = csmBand(d0, d1), P = d1 - d0 < 1 ? [] : csmClip(Q8, yb[0], yb[1]);   // 整段在 z1 之後（前一段已經罩到畫面上最遠的地面）⇒ 空的
     if (!P.length) {                                                     // 整段在天上（或地底）：這一層不用，收的那邊往下一段找（見上 4.）
       if (c.key !== 'empty') { c.key = 'empty'; c.m = FAR_M; c.r = c.rx = c.ry = 0; c.bare = undefined; shLog('段是空的', { i: i, d0: Math.round(d0), d1: Math.round(d1), band: yb.map(Math.round) }); }
       continue;
@@ -465,7 +467,7 @@ function shadowPass() {
  *  步長從 2 m 起每步 × 1.12（最多 40 m），碰到「上面可能有的東西」那一層 ⇒ 跟上一步之間對半找到那一層（2026-10-24；以前退回上一步）；z0 再往鏡頭讓 CSM_Z0_PAD。
  *  線縫裡量漏的高東西：分段的收的那邊會落到下一張圖（01_gl.js shSel），不會沒影子。
  *  以前（csmNear，2026-10-21 早上）陸地只看地形塊的外框 ⇒ 鏡頭底下有一塊高地就整個退回 0、前兩段又在空中（Tim：「開了Cascade陰影反而變糊了一點」）。
- *  ⇒ [z0, z1]；分界、交界照畫質頁的數字（以最遠距離為全長的比例，跟 Unity 的 Cascade splits 一樣）縮放到 [z0, z1]。
+ *  ⇒ [z0, z1]；分界、交界照畫質頁的公尺數從 z0 起算、超過 z1 的截掉（shadowPass；2026-10-24 以前是照比例縮放到 [z0, z1] ⇒ z1 一跳，每一段跟著忽大忽小）。
  *  沿路每一步也記下那一點離鏡頭的深度、底下的地面高、地面＋上面可能有的東西（CSMF；TASK-0877）⇒ 每一段的高度帶（csmBand）。「貼合畫面」關著也照量（只是不縮分界）。 */
 var CSM_TOP = 80, CSM_LAND_TOP = 40, CSM_Z0_PAD = 10, CSM_FIT_NX = 8, CSM_FIT_NY = 6;
 var CSMF = { d: new Float32Array(8192), lo: new Float32Array(8192), hi: new Float32Array(8192), n: 0 };
