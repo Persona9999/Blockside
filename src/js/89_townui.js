@@ -53,7 +53,7 @@ function tuiLoad() {
 }
 /** 問城鎮資訊（每一頁都要：上面那一列、貨名 tuiGood；買賣之後城鎮金庫跟著變 ⇒ 重問）。 */
 function tuiInfo() {
-  tuiAsk('info', null, function (r) { if (r.ok) { TUI.info = r.info; TUI.goods = r.goods || {}; TUI.blds = r.blds || {}; TUI.every = r.every || 7; TUI.region = r.region || null; TUI.faction = r.faction || null; } else TUI.msg = '問不到城鎮資訊：' + (r.why || []).join('；'); tuiUI(); });
+  tuiAsk('info', null, function (r) { if (r.ok) { TUI.info = r.info; TUI.goods = r.goods || {}; TUI.blds = r.blds || {}; TUI.every = r.every || 7; TUI.region = r.region || null; TUI.faction = r.faction || null; TUI.fleets = r.fleets || []; TUI.hubs = r.hubs || []; } else TUI.msg = '問不到城鎮資訊：' + (r.why || []).join('；'); tuiUI(); });
 }
 /** 買賣（side 'buy'｜'sell'、q 桶）：一次只送一筆；回來照新的清單重畫、說成交了多少。 */
 function tuiTrade(side, g, q) {
@@ -107,6 +107,13 @@ function tuiSumHTML() {
   h += '<h4>🏗 生產建築（' + tuiNum((I.buildings || []).length) + ' 棟）</h4><p>' + bk.map(function (k) { return tuiEsc(TUI.blds[k] || k) + ' × ' + B[k]; }).join('、') + '</p>';
   var RG = TUI.region;                                                  // 這座城那一區的加總（Blocksail regionInfo：區域 ＝ 那一區的城鎮加總）
   if (RG) h += '<h4>🗺 這一區（' + RG.towns.length + ' 座：' + RG.towns.map(tuiEsc).join('、') + '）</h4><p>人口 ' + tuiNum(RG.pop) + '　勞動 ' + tuiNum(RG.labor) + '　失業 ' + tuiNum(RG.idle) + '　碼頭上 ' + tuiNum(RG.dock) + '　城鎮金庫 ' + tuiNum(RG.funds) + '　生產建築 ' + tuiNum(RG.buildings) + '</p>';
+  if (TUI.hubs && TUI.hubs.length) h += '<p class="tuiDim">⚓ 這一區的集散地：' + TUI.hubs.map(tuiEsc).join('、') + '</p>';
+  var FL = TUI.fleets || [];                                             // 船隊（Blocksail world/fleet.js；TASK-0911）：停在這裡、開過來、母港在這裡的
+  if (FL.length) h += '<h4>⛵ 船隊（' + FL.length + ' 支）</h4><table class="tuiT"><tr><th>主人</th><th>在哪</th><th>載</th><th>趟</th><th>淨賺</th></tr>' + FL.map(function (f) {
+    var where = f.at ? (f.at === TWB.town ? '停在這裡' : '停在 ' + (f.atName || f.at)) : (f.fromName || f.from) + ' ⇒ ' + (f.toName || f.to) + '（還 ' + f.left + ' 天）';
+    var gs = Object.keys(f.goods).map(function (g) { return tuiGood(g) + ' ' + tuiNum(f.goods[g], 0); }).join('、') || '空船';
+    return '<tr><td>' + tuiEsc(f.ownerName || '') + (f.home !== TWB.town ? '<span class="tuiDim">（母港 ' + tuiEsc(f.homeName || f.home) + '）</span>' : '') + '</td><td>' + tuiEsc(where) + '</td><td>' + tuiEsc(gs) + '</td><td>' + f.trips + '</td><td>' + tuiNum(f.earned, 0) + '</td></tr>';
+  }).join('') + '</table>';
   if (I.families && I.families.length) h += '<h4>👪 家族</h4><p>' + I.families.map(function (f) { return tuiEsc(f.name || f.id || f); }).join('、') + '</p>';
   return h;
 }
@@ -114,13 +121,14 @@ function tuiSumHTML() {
 function tuiFlowHTML() {
   var F = TUI.info.flow;
   if (!F) return '<p class="tuiDim">帳還沒過一天（開船讓時間走，城鎮帳每天記一次）</p>';
-  var keys = {}; ['made', 'used', 'eat'].forEach(function (k) { Object.keys(F[k] || {}).forEach(function (g) { keys[g] = 1; }); });
-  var R = Object.keys(keys).map(function (g) { var m = (F.made[g] || 0) / 1000, u = (F.used[g] || 0) / 1000, e = (F.eat[g] || 0) / 1000; return { g: g, m: m, u: u, e: e, n: m - u - e }; });
+  var K = ['made', 'used', 'eat', 'exp', 'imp'], keys = {}; K.forEach(function (k) { Object.keys(F[k] || {}).forEach(function (g) { keys[g] = 1; }); });   // exp／imp：船隊在這裡買走、運來賣掉的（Blocksail world/fleet.js）
+  var v = function (k, g) { return ((F[k] || {})[g] || 0) / 1000; }, ship = !!(F.exp || F.imp);
+  var R = Object.keys(keys).map(function (g) { var r = { g: g, m: v('made', g), u: v('used', g), e: v('eat', g), x: v('exp', g), i: v('imp', g) }; r.n = r.m - r.u - r.e - r.x + r.i; return r; });
   R.sort(function (a, b) { return Math.abs(b.n) - Math.abs(a.n) || (a.g < b.g ? -1 : 1); });
   var d = function (x) { return x ? tuiNum(x, 2) : '<span class="tuiDim">–</span>'; };
-  return '<p class="tuiDim">昨天（第 ' + TUI.info.day + ' 天）；桶。原料 ＝ 生產建築與工地吃的；鎮民吃 ＝ 鎮民買的＋城鎮補的。</p>' +
-    (R.length ? '<table class="tuiT"><tr><th>貨</th><th>產出</th><th>原料</th><th>鎮民吃</th><th>淨</th></tr>' + R.map(function (r) {
-      return '<tr><td>' + tuiEsc(tuiGood(r.g)) + '</td><td>' + d(r.m) + '</td><td>' + d(r.u) + '</td><td>' + d(r.e) + '</td><td class="' + (r.n > 0 ? 'up' : r.n < 0 ? 'dn' : '') + '">' + (r.n > 0 ? '＋' : r.n < 0 ? '−' : '') + tuiNum(Math.abs(r.n), 2) + '</td></tr>';
+  return '<p class="tuiDim">昨天（第 ' + TUI.info.day + ' 天）；桶。原料 ＝ 生產建築與工地吃的；鎮民吃 ＝ 鎮民買的＋城鎮補的' + (ship ? '；船隊運出 ＝ 船隊在這裡買走的、運來 ＝ 運到這裡賣掉的' : '') + '。</p>' +
+    (R.length ? '<table class="tuiT"><tr><th>貨</th><th>產出</th><th>原料</th><th>鎮民吃</th>' + (ship ? '<th>船隊運出</th><th>運來</th>' : '') + '<th>淨</th></tr>' + R.map(function (r) {
+      return '<tr><td>' + tuiEsc(tuiGood(r.g)) + '</td><td>' + d(r.m) + '</td><td>' + d(r.u) + '</td><td>' + d(r.e) + '</td>' + (ship ? '<td>' + d(r.x) + '</td><td>' + d(r.i) + '</td>' : '') + '<td class="' + (r.n > 0 ? 'up' : r.n < 0 ? 'dn' : '') + '">' + (r.n > 0 ? '＋' : r.n < 0 ? '−' : '') + tuiNum(Math.abs(r.n), 2) + '</td></tr>';
     }).join('') + '</table>' : '<p class="tuiDim">那一天什麼都沒產出、沒用掉</p>');
 }
 /** 庫存與價格：市場有的、或有人要的貨；照貨物表的類別分段。 */
