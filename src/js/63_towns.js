@@ -500,13 +500,18 @@ function townLvl(I, L, lv, l) {
 }
 /** 候選照地塊大小收窄（Blocksail TASK-0742：轉角放淺一點的房子 ⇒ 住宅多一級 8 × 10 的淺版）：模型的地塊（索引的 lot ＝ [寬, 進深] 公尺）裝得進 l（寬容 5 cm：
  *  綁路的地塊寬是整數 − 2 cm）的那幾個裡、進深最大的那一級；一個都裝不下 ⇒ 照舊整份（手擺的小地塊）。
- *  ⇒ 12 m 的地塊候選跟以前同一份（雜湊挑到同一棟）；10～11 m 的地塊挑淺版（以前挑 12 m 的、屋後的院子凸出地塊）。 */
+ *  ⇒ 12 m 的地塊候選跟以前同一份（雜湊挑到同一棟）；10～11 m 的地塊挑淺版（以前挑 12 m 的、屋後的院子凸出地塊）。
+ *  同一級進深裡再留最寬的那幾個（kaguya 2026-10-24，Tim「接著修和平港、皇家港疊在一起的房子」：和平港 1686 的小木屋寬 4～12 m ⇒ 9 m 寬的地塊挑 8 m 的，不是抽到 4 m 的）；
+ *    現有的那幾套同一級進深都一樣寬（住宅 8 m）⇒ 挑到的不變（六座城逐塊對過：Blocksail tools/town_foot.cjs）。 */
 function townFit(I, l, L) {
   if (!L || L.length < 2 || !I.models) return L;
   var ok = L.filter(function (nm) { var lt = I.models[nm] && I.models[nm].lot; return !lt || (lt[0] <= l.w + 0.05 && lt[1] <= l.d + 0.05); });
   if (!ok.length) return L;
-  var dmax = Math.max.apply(null, ok.map(function (nm) { var lt = I.models[nm].lot; return lt ? lt[1] : 0; }));
-  return ok.filter(function (nm) { var lt = I.models[nm].lot; return (lt ? lt[1] : 0) === dmax; });
+  function lt(nm, i) { var q = I.models[nm].lot; return q ? q[i] : 0; }
+  var dmax = Math.max.apply(null, ok.map(function (nm) { return lt(nm, 1); }));
+  ok = ok.filter(function (nm) { return lt(nm, 1) === dmax; });
+  var wmax = Math.max.apply(null, ok.map(function (nm) { return lt(nm, 0); }));
+  return ok.filter(function (nm) { return lt(nm, 0) === wmax; });
 }
 /** 城 T 的繁榮度 0～1：__game.townProsp 給的 ⇒ 網址 ?prosp= ⇒ TOWN_PROSP_DEF。 */
 function townProsp(T) {
