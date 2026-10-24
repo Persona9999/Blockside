@@ -11,7 +11,8 @@
 // 路線：每位居民第一次算路網時就照 townHash 走好一條固定的路線（起點那條邊 ＋ 最多 TOWN_FOLK_HOPS 段、路口不折返、偶爾在路口停步），
 //   之後沿路線走過去、停一下、原路走回來，一直來回 ⇒ 一圈的時間表（legs）排好，畫的時候照時間二分查到那一段。角色列、衣服色、髮色、步速、車道偏移也照 townHash。
 // 接進 63_towns.js 的地方：townKit／townKitMake（townFolkNeed、townFolkTex）、townKitGpuFree（townFolkFree）、townProgs（著色器 folk、townFolkGl）、
-//   townDraw 布旗之後（townFolkDraw）、townReplace（路沒改 ⇒ 沿用 T.folk）、townStat（townFolkStat、townFolkSum、'street'）。
+//   townDraw 布旗之後（townFolkDraw）、townReplace（路沒改 ⇒ 沿用 T.folk）、townStat（townFolkStat、townFolkSum、'street'、'work'）。
+// 建築裡的工人（TASK-0904）：同一支著色器、同一份實例陣列，站在模型的 work-* 固定點上（見下面「建築裡的工人」）。
 var TOWN_FOLK = Q.get('townfolk') !== '0';                               // ?townfolk=0：不載、不畫城鎮居民（對照組）
 var TOWN_FOLK_OUT = [160, 200], TOWN_FOLK_STEP = 14, TOWN_FOLK_MAX = 2000, TOWN_FOLK_HOPS = 8, TOWN_FOLK_SCALE = 1.36;   // SCALE：設定檔的身高（真實的公尺）× 這個 ⇒ 畫面上的身高（Tim 2026-10-23「鎮民尺寸可以放大到1.5倍」：0846 的大人畫成約 1.5 m ⇒ ×1.5 ≈ 2.25 m ≈ 1.65 m × 1.36）；MAX：0846 是 260（金斯敦 34.5 km 的路 ⇒ 133 m 才一位）；畫面外的不算位置 ⇒ 照路長配、上限只防極端
 
@@ -311,6 +312,89 @@ function townFolkStreet(T, F, walk, group) {
   return { tgt: [+tx.toFixed(2), +ty.toFixed(2), +tz.toFixed(2)], yaw: +(Math.atan2(-E.dz, -E.dx) + 0.14).toFixed(4), pitch: 0.12, dist: 11.5, mode: 0, track: false, tr: null };
 }
 
+// ── 建築裡的工人（TASK-0904；只給人看） ──
+// Tim 2026-10-24：「嘗試讓建築物內有工人工作吧(可以參考街上居民方式 以及船員工作演出 在建築上標記中做點位(也可以有多個點 讓工人偶爾走動)」
+// 點：模型的固定點 work-<組><號>（Blocksail BUILDING_SPEC §5；雕刻作品成品那一件標、townmodels.py 照舊寫進索引的 pts）＝ 站的那一格（格心；腳 ＝ 格底）；
+//   同一組（字母；沒寫 ＝ 同一組）的點彼此直線走得到 ⇒ 工人只在同一組裡換點；work-<組><號>-to（選填）＝ 站在那裡時面向哪一點。
+// 人數：規劃的 live.work ＝ { 地塊 id: 今天上了幾人 }（Blocksail 城鎮帳；那座城有帳就每個生產地塊都有一筆，0 ＝ 沒人上工）⇒ 每棟最多到點數；
+//   地塊不在 live.work 裡（不在經濟模擬裡的：過磅所、魚市、船廠；或沒有城鎮帳的 town.html）⇒ 點數的一半（無條件進位）。
+// 誰：設定檔 work 有那個用途的大人（townFolkWho）；軍事建築 ⇒ work 有 garrison 的；一個都沒有 ⇒ 那一棟不放人。同一棟照順序輪、不重複（人比立繪多才重複）。
+// 動作：站在自己的點上做工（船員那一套程式動作：照節奏前傾、上下；41_crew_art.js），偶爾停下來喘口氣；同一組有空的點 ⇒ 每一圈走過去做一陣再走回來
+//   （共用同一個空點的幾位錯開時間，不會同時站上去）。位置只照畫面時間算（同 townFolkAt）。?townwork=0 ⇒ 不畫（對照組）。
+var TOWN_WORK = Q.get('townwork') !== '0', TOWN_WORK_RE = /^work-([a-z]?)(\d+)$/, TOWN_WORK_SCALE = 1.1, TOWN_WORK_SPD = 1.1;   // SCALE：建築裡比街上（TOWN_FOLK_SCALE 1.36）小，大人約 1.9 m ⇒ 對齊 Blocksail tools/workspots.py 找點要的 2.0 m 淨空（1.2 倍在伐木場柴棚下頂到棚簷）
+var TOWN_WORK_GUARD = ['fort', 'barracks', 'watchtower', 'bastion', 'battery'];   // 這幾種用途找 work 有 garrison 的（同 townFolkWorkSite）
+function townWorkCmp(a, b) { var A = TOWN_WORK_RE.exec(a), B = TOWN_WORK_RE.exec(b); return A[1] < B[1] ? -1 : A[1] > B[1] ? 1 : +A[2] - +B[2]; }
+/** 城 T 的建築裡的工人 ⇒ T.work ＝ { inst（照哪一份實例算的；換了就重算）, list: [工人], blds: [每棟的讀數], bb }。 */
+function townWorkPrep(T, F) {
+  var t0 = performance.now(), K = TOWNS.kit, lw = T.p && T.p.live && T.p.live.work, lots = {}, list = [], blds = [];
+  (T.p.lots || []).forEach(function (l) { lots[l.id] = l; });
+  (T.inst || []).forEach(function (q) {
+    var M = K && K.M[q.k], m = M && M.m; if (!m || !m.pts || q.wall || !(q.y === q.y)) return;
+    var names = Object.keys(m.pts).filter(function (k) { return TOWN_WORK_RE.test(k); }).sort(townWorkCmp); if (!names.length) return;
+    var l = lots[q.lot] || {}, use = l.use || m.use, s = Math.sin(q.th), c = Math.cos(q.th), mpv = m.mpv, hw = m.size[0] * mpv / 2, hd = m.size[1] * mpv / 2;
+    function W(v) { var a = (v[0] * mpv - hw) * q.sx, b = v[1] * mpv - hd; return [q.x + a * s - b * c, q.y + (v[2] - 0.5) * mpv, q.z - a * c - b * s]; }   // 模型（格心）→ 世界（腳）：同 townLightBuild 的 W
+    var P = names.map(function (k) { var w = W(m.pts[k]), to = m.pts[k + '-to'], t = to ? W(to) : [q.x, 0, q.z]; return { k: k, g: TOWN_WORK_RE.exec(k)[1], x: w[0], y: w[1], z: w[2], lx: t[0] - w[0], lz: t[2] - w[2] }; });   // lx／lz：面向（沒有 -to ⇒ 朝建築中心）
+    var who = townFolkWho(F, { work: use }).filter(function (r) { return F.people[r].age !== 'child'; });
+    if (!who.length && TOWN_WORK_GUARD.indexOf(use) >= 0) who = townFolkWho(F, { work: 'garrison' });
+    var want = lw && Object.prototype.hasOwnProperty.call(lw, q.lot) ? Math.max(0, +lw[q.lot] || 0) : Math.ceil(P.length / 2), n = who.length ? Math.min(P.length, want) : 0;
+    blds.push({ lot: q.lot, use: use, k: q.k, pts: P.length, want: want, n: n, src: lw && q.lot in lw ? 'ledger' : 'half', x: +q.x.toFixed(1), y: +P[0].y.toFixed(2), z: +q.z.toFixed(1),
+      yaw: +Math.atan2(s, c).toFixed(4) });                              // yaw：鏡頭站在臨路那一邊往裡看（模型 y 0 ＝ 臨路 ⇒ 世界 (cos th, sin th)；03_camera.js 眼 ＝ 目標 ＋ (cos yaw, sin yaw) × dist）
+    if (!n) return;
+    var key = T.id + ':work:' + q.lot, off = Math.floor(townHash(key + ':a') * who.length), W0 = [];
+    for (var j = 0; j < n; j++) {
+      var k = key + ':' + j, art = who[(off + j) % who.length], pc = F.people[art];
+      W0.push({ id: list.length + j, art: art, home: j, cloth: Math.floor(townHash(k + ':c') * pc.cloth.length) % pc.cloth.length, hair: Math.floor(townHash(k + ':h') * pc.hair.length) % pc.hair.length,
+        hgt: pc.height * TOWN_WORK_SCALE * F.ch / F.hpx * (0.96 + 0.08 * townHash(k + ':g')), sh: 0.94 + 0.12 * townHash(k + ':k'), ph: townHash(k + ':p') * 6.2832,
+        hz: 0.8 + 0.6 * townHash(k + ':z'), face: townHash(k + ':f') < 0.5 ? 1 : -1, P: P, k: k });
+    }
+    var spare = {};                                                       // 同一組裡沒人當家的點 ⇒ 那一組的人輪流過去
+    P.forEach(function (p, i) { if (i >= n) (spare[p.g] || (spare[p.g] = [])).push(i); });
+    var byG = {}; W0.forEach(function (a) { var g = P[a.home].g; (byG[g] || (byG[g] = [])).push(a); });
+    Object.keys(byG).forEach(function (g) {
+      var A = byG[g], S = spare[g] || [];
+      if (!S.length) { A.forEach(function (a) { a.legs = [{ c1: 30, p: a.home, q: a.home }]; a.per = 30; a.off = 0; }); return; }   // 沒有空的點 ⇒ 守著自己那一點
+      S.forEach(function (sp, si) {                                       // 共用同一個空點的幾位：同一個圈長、一人一個時段（時段 ＝ 最長那一位來回＋做一陣＋3 秒空檔）⇒ 不會同時站上去
+        var same = A.filter(function (b, rb) { return rb % S.length === si; }); if (!same.length) return;
+        same.forEach(function (a) { var h = P[a.home], o = P[sp]; a.wt = Math.hypot(o.x - h.x, o.z - h.z) / TOWN_WORK_SPD; a.d2 = 8 + 10 * townHash(a.k + ':d2'); });
+        var slot = Math.max.apply(null, same.map(function (a) { return 2 * a.wt + a.d2; })) + 3, gk = key + ':' + g + ':' + sp;
+        var per = Math.max(same.length * slot, slot + 18 + 24 * townHash(gk + ':per')), off = townHash(gk + ':t') * per;   // 一圈至少在自己那一點做 18～42 秒
+        same.forEach(function (a, idx) {
+          var s0 = idx * slot;
+          a.legs = [{ c1: s0, p: a.home, q: a.home }, { c1: s0 + a.wt, p: a.home, q: sp }, { c1: s0 + a.wt + a.d2, p: sp, q: sp }, { c1: s0 + 2 * a.wt + a.d2, p: sp, q: a.home }, { c1: per, p: a.home, q: a.home }];
+          a.per = per; a.off = off;
+        });
+      });
+    });
+    W0.forEach(function (a) { list.push(a); });
+  });
+  var bb = [1e9, -1e9, 1e9, 1e9, -1e9, -1e9];                            // 全部工人的外框（同 bedSeen 的格式）⇒ 整座城的工人都在畫面外就不算
+  list.forEach(function (a) { a.P.forEach(function (p) { bb[0] = Math.min(bb[0], p.x - 2); bb[1] = Math.min(bb[1], p.y); bb[2] = Math.min(bb[2], p.z - 2); bb[3] = Math.max(bb[3], p.x + 2); bb[4] = Math.max(bb[4], p.y + 3); bb[5] = Math.max(bb[5], p.z + 2); }); });
+  T.work = { inst: T.inst, list: list, blds: blds, bb: bb, prepMs: +(performance.now() - t0).toFixed(2) };
+  return T.work;
+}
+/** 時間 clock 時工人 a 在哪 ⇒ a.x／y／z、a.mx／mz（這一格往哪走；停著 ＝ 0）。 */
+function townWorkAt(a, clock) {
+  var L = a.legs, u = ((clock + a.off) % a.per + a.per) % a.per, i = 0;
+  while (i < L.length - 1 && L[i].c1 <= u) i++;
+  var g = L[i], c0 = i ? L[i - 1].c1 : 0, f = g.c1 > c0 ? Math.min(1, (u - c0) / (g.c1 - c0)) : 0, p = a.P[g.p], q = a.P[g.q];
+  a.x = p.x + (q.x - p.x) * f; a.y = p.y + (q.y - p.y) * f; a.z = p.z + (q.z - p.z) * f;
+  a.at = g.p === g.q ? p : null; a.mx = a.at ? 0 : q.x - p.x; a.mz = a.at ? 0 : q.z - p.z;
+}
+/** 做工的程式動作（同 41_crew_art.js 拉繩那一種：照節奏前傾、縮一點、往下沉）；每 12 秒一格，四成的格停下來喘口氣（同街上停著的呼吸）。 */
+function townWorkPose(a, clock) {
+  var slot = Math.floor((clock + a.off) / 12);
+  if (townHash(a.k + ':rest' + slot) < 0.4) { var br = Math.sin(clock * 2.2 + a.ph); return { sx: 1 - 0.008 * br, sy: 1 + 0.012 * br, lean: 0.015 * br, bob: 0 }; }
+  var w = 0.5 + 0.5 * Math.sin((clock * a.hz + a.ph) * 6.2832);
+  return { sx: 1 + 0.05 * w, sy: 1 - 0.08 * w, lean: 0.1 + 0.22 * w, bob: -0.03 * w * TOWN_WORK_SCALE };
+}
+/** 測試用（__game.town('work') ／ 'work:<用途>'）：挑城 T 裡有工人的那一棟（給了用途就挑那一種；人最多的先）⇒ 機位（從建築外斜上方看進去）。 */
+function townWorkCam(T, F, use) {
+  var W = T.work && T.work.inst === T.inst ? T.work : townWorkPrep(T, F), best = null;
+  W.blds.forEach(function (b) { if (b.n && (!use || b.use === use) && (!best || b.n > best.n)) best = b; });
+  if (!best) return null;
+  return { lot: best.lot, use: best.use, n: best.n, cam: { tgt: [best.x, +(best.y + 1.2).toFixed(2), best.z], yaw: best.yaw, pitch: 0.42, dist: 16, mode: 0, track: false, tr: null } };
+}
+
 /** 畫出所有城鎮看得到的居民（townDraw 布旗之後；clock ＝ 城鎮的畫面時間）⇒ 三角形數。 */
 function townFolkDraw(P, K, eye, PL, fogD, clock) {
   TOWNS.stat.folk = TOWNS.stat.folkPos = 0; TOWNS.stat.folkMs = 0;
@@ -319,6 +403,17 @@ function townFolkDraw(P, K, eye, PL, fogD, clock) {
   var fwd = sub(CAM.look, eye), rl = Math.hypot(fwd[2], fwd[0]) || 1, rx = -fwd[2] / rl, rz = fwd[0] / rl;
   var maxD = TOWN_FOLK_OUT[1], SH = F.sheets, n = 0, npos = 0, NS = SH.map(function () { return 0; });   // 一組一個實例陣列（TOWNS.folkArr[組]）、一組一次 draw call
   var BA = TOWNS.folkArr && TOWNS.folkArr.length === SH.length ? TOWNS.folkArr : (TOWNS.folkArr = SH.map(function () { return new Float32Array(256 * 16); }));
+  var nwk = 0, nwkd = 0;                                                 // 建築裡的工人：算了位置的、畫了的
+  function put(pc, x, y, z, hgt, sx, sy, lean, bob, face, cloth, hair, shade) {   // 一位 ⇒ 那一組的實例陣列（16 個 float，見檔頭「看板」）
+    var sh = SH[pc.sheet]; if (!sh.tex) return;                          // 那一張解不開 ⇒ 這幾位不畫
+    var s = pc.sheet, B = BA[s], m = NS[s];
+    if (B.length < (m + 1) * 16) { var B2 = new Float32Array(B.length * 2); B2.set(B); B = BA[s] = B2; }
+    var o = m * 16, v0 = pc.row / sh.rows, v1 = (pc.row + 1) / sh.rows; NS[s] = m + 1; n++;
+    B[o] = x; B[o + 1] = y; B[o + 2] = z; B[o + 3] = hgt;
+    B[o + 4] = sx; B[o + 5] = sy; B[o + 6] = lean; B[o + 7] = bob;
+    B[o + 8] = face > 0 ? 0 : 0.5; B[o + 9] = v0; B[o + 10] = face > 0 ? 0.5 : 0; B[o + 11] = v1;
+    B[o + 12] = cloth; B[o + 13] = hair; B[o + 14] = shade; B[o + 15] = face;
+  }
   TOWNS.list.forEach(function (T) {
     var b = T.box, bx = Math.max(b[0] - BED.ax - eye[0], 0, eye[0] - (b[2] - BED.ax)), bz = Math.max(b[1] - BED.az - eye[2], 0, eye[2] - (b[3] - BED.az));
     if (Math.hypot(bx, bz) > maxD) return;                              // 整座城都在範圍外 ⇒ 連路網都不建（位置只看時間，回來時照樣接得上）
@@ -344,15 +439,25 @@ function townFolkDraw(P, K, eye, PL, fogD, clock) {
       var sx = 1, sy = 1, lean = 0, bob = 0;
       if (a.stop) { var br = Math.sin(clock * 2.2 + a.ph); sy = 1 + 0.012 * br; sx = 1 - 0.008 * br; lean = a.face * 0.015 * br; }   // 停著：呼吸
       else { var w = clock * a.spd * 1.45 + a.ph, r = Math.abs(Math.sin(w * 6.2832)); bob = 0.065 * TOWN_FOLK_SCALE * r; lean = a.face * (0.055 + 0.035 * Math.sin(w * 6.2832)); sy = 0.96 + 0.04 * r; sx = 1.03 - 0.03 * r; }   // 走路：彈跳、前傾（同水手）
-      var s = pc.sheet, B = BA[s], m = NS[s];
-      if (B.length < (m + 1) * 16) { var B2 = new Float32Array(B.length * 2); B2.set(B); B = BA[s] = B2; }
-      var o = m * 16, v0 = pc.row / sh.rows, v1 = (pc.row + 1) / sh.rows; NS[s] = m + 1; n++;
-      B[o] = x; B[o + 1] = y; B[o + 2] = z; B[o + 3] = ln ? pc.height * TOWN_FOLK_SCALE * F.ch / F.hpx : a.hgt;
-      B[o + 4] = sx; B[o + 5] = sy; B[o + 6] = lean; B[o + 7] = bob;
-      B[o + 8] = a.face > 0 ? 0 : 0.5; B[o + 9] = v0; B[o + 10] = a.face > 0 ? 0.5 : 0; B[o + 11] = v1;
-      B[o + 12] = pc.cloth[ln ? (a.id * 3) % pc.cloth.length : a.cloth]; B[o + 13] = pc.hair[ln ? a.id % pc.hair.length : a.hair]; B[o + 14] = a.sh; B[o + 15] = a.face;   // 排隊（測試用）⇒ 每位錯開衣色，截圖看得到整張色表
+      put(pc, x, y, z, ln ? pc.height * TOWN_FOLK_SCALE * F.ch / F.hpx : a.hgt, sx, sy, lean, bob, a.face,
+        pc.cloth[ln ? (a.id * 3) % pc.cloth.length : a.cloth], pc.hair[ln ? a.id % pc.hair.length : a.hair], a.sh);   // 排隊（測試用）⇒ 每位錯開衣色，截圖看得到整張色表
+    });
+    if (!TOWN_WORK || !T.inst) return;                                   // 建築裡的工人（townWorkPrep）：實例換了（建築模式、換模型組）⇒ 重算
+    var WK = T.work && T.work.inst === T.inst ? T.work : townWorkPrep(T, F); if (!WK.list.length) return;
+    if (townBoxDist(WK.bb, eye) > maxD || !bedSeen(PL, WK.bb)) return;
+    WK.list.forEach(function (a) {
+      var p0 = a.P[a.home]; if (Math.hypot(p0.x - eye[0], p0.z - eye[2]) > maxD + 20) return;
+      townWorkAt(a, clock); npos++; nwk++;
+      if (Math.hypot(a.x - eye[0], a.z - eye[2]) > maxD) return;
+      for (var i = 0; i < 6; i++) { var pl = PL[i]; if (pl[0] * a.x + pl[1] * (a.y + 0.9 * TOWN_WORK_SCALE) + pl[2] * a.z + pl[3] < -2.2 * TOWN_WORK_SCALE) return; }
+      var pc = F.people[a.art], ps, mv = a.at ? a.at.lx * rx + a.at.lz * rz : a.mx * rx + a.mz * rz;
+      if (mv > 0.08) a.face = 1; else if (mv < -0.08) a.face = -1;
+      if (a.at) ps = townWorkPose(a, clock);
+      else { var w = clock * TOWN_WORK_SPD * 1.45 + a.ph, r = Math.abs(Math.sin(w * 6.2832)); ps = { bob: 0.065 * TOWN_WORK_SCALE * r, lean: 0.055 + 0.035 * Math.sin(w * 6.2832), sy: 0.96 + 0.04 * r, sx: 1.03 - 0.03 * r }; }   // 走路：同街上
+      put(pc, a.x, a.y, a.z, a.hgt, ps.sx, ps.sy, a.face * ps.lean, ps.bob, a.face, pc.cloth[a.cloth], pc.hair[a.hair], a.sh); nwkd++;
     });
   });
+  TOWNS.stat.work = nwk; TOWNS.stat.workDrawn = nwkd;                  // 建築裡的工人：算了位置的、畫了的（也算在 folk、folkPos 裡）
   TOWNS.stat.folk = n; TOWNS.stat.folkPos = npos; TOWNS.stat.folkBySheet = NS.slice();   // folkPos：這一格算了幾位的位置（外框過了、還沒照實際位置剔）；folkBySheet：每組畫了幾位
   if (!n) { TOWNS.stat.folkMs = +(performance.now() - t0).toFixed(3); return 0; }
   var PF = P.folk; gl.useProgram(PF.prog); setCommon(PF);
@@ -374,6 +479,7 @@ function townFolkStat(T) {
   var G = T.folk; if (!G) return null;
   var F = TOWNS.kit && TOWNS.kit.folk, kids = 0; if (F) G.agents.forEach(function (a) { if (F.people[a.art].age === 'child') kids++; });
   return { agents: G.agents.length, edges: G.edges.length, nodes: G.nodes.length, roadM: Math.round(G.roadM), y: G.y, prepMs: G.prepMs, line: G.line, pick: G.pick, kids: G.agents.length ? +(kids / G.agents.length).toFixed(3) : null,
+    work: T.work ? { inst: T.work.inst === T.inst, workers: T.work.list.length, prepMs: T.work.prepMs, blds: T.work.blds } : null,   // 建築裡的工人（townWorkPrep；inst false ＝ 實例換了、下次畫時重算）
     workSites: G.agents.filter(function (a) { return a.work && F && F.sheets[F.people[a.art].sheet].name === 'workers'; }).slice(0, 24).map(function (a) { var e = G.edges[a.e]; return { id: F.people[a.art].id, lot: a.work.lot, use: a.work.use, distance: +a.work.distance.toFixed(2), x: +(e.ax + e.dx * a.t).toFixed(2), z: +(e.az + e.dz * a.t).toFixed(2) }; }),
     sample: G.agents.slice(0, 8).map(function (a) { var e = G.edges[a.e]; return { id: a.id, art: a.art, cloth: a.cloth, hair: a.hair, legs: a.legs.length, per: +a.per.toFixed(1), t: +a.t.toFixed(2), x: +(e.ax + e.dx * a.t).toFixed(1), z: +(e.az + e.dz * a.t).toFixed(1) }; }) };
 }
