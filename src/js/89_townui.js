@@ -31,8 +31,12 @@ function tuiGot(d) { var cb = TUI.wait[d.seq]; delete TUI.wait[d.seq]; if (cb) c
 /** 玩家這艘船（開船隊貨艙、算吃水用）：船型還沒載好 ⇒ null。 */
 function tuiShip() {
   var sh = SHIPS[PLAYER_I], T = sh && sh.T; if (!T) return null;
+  return Object.assign({ kind: T.id }, tuiHold(T));
+}
+/** 船型的貨艙數字：壓艙物（噸）、設計水線的水線面積（m²；量不到 ⇒ null）—— 選船（72_shippick.js 'picked'）也帶給地球儀，地球儀上的 💰 貿易照它算吃水。 */
+function tuiHold(T) {
   var wpa = T.hyd && T.zw > 0 && T.hyd.length > T.zw ? T.hyd[T.zw - 1] / S : 0;
-  return { kind: T.id, ballastT: T.ballast0 || 0, wpa: wpa > 0 ? Math.round(wpa * 10) / 10 : null };
+  return { ballastT: T.ballast0 || 0, wpa: wpa > 0 ? Math.round(wpa * 10) / 10 : null };
 }
 /** 開關：tab 給了 ⇒ 開那一頁（已經開著同一頁 ⇒ 關）；沒給 ⇒ 開上次那一頁（貿易以外的）。 */
 function tuiToggle(tab) {
