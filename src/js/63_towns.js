@@ -7,6 +7,7 @@
 // 整地（townHv；每塊海圖塊第一次要畫的時候算、城到了再重算）：路（照 z，路寬一半 ＋ 一個取樣點內整平）先、地塊的 grade（照 h，外擴 TOWN_LOT_PAD）後，
 //   外面照邊坡 1 : bank 接回原地形（|高差| ≤ 距離 ÷ bank，路最多接 TOWN_GRADE_REACH 公尺）；只改陸上的點（原本 ≤ 0 的不動 ⇒ 岸線不變）。
 // 樹（townTreesSet）：模型標了樹（Blocksail townmodels.py 的 m.trees：雕刻的子作品 meta kind=tree）⇒ 實例建好時照實例的位置換到世界、記在 T.trees ⇒ 63_trees.js 照它種遊戲自己生成的樹（風格跟島上的樹一樣）。
+//   模型雕好的田（m.fields：子作品 meta kind=field；地標兼任農莊，TASK-0862）⇒ 同一支換到世界、記在 T.lmf ⇒ 63_trees.js treeFieldPut 照地塊帶的作物種。
 //   下沉的地塊（grade 帶 pit；Blocksail 特殊建築表的 sink，例：露天蓄水池，TASK-0748）：只把地塊裡面、離邊 ≥ pit 公尺的點整到 h（地面下），外面不接邊坡、「地塊頂著」那一輪跳過
 //   ⇒ 挖下去的那一圈斜面落在離邊 pit ＋ 一個取樣點之內 ＝ 模型的池牆裡（牆厚要 ≥ pit ＋ 4 m）。
 // 地基（Tim 2026-10-20：「是否可以協助處理 房屋地基可能跟地面重疊導致的閃爍問題」「可以參考其他城建遊戲的作法」—— Cities: Skylines、Anno 那一類：
@@ -201,9 +202,10 @@ function townReplace(p) {
     T.pend = null; st.surfMs = Math.round(performance.now() - t0);
     var tiles = {}; R.tiles.forEach(function (t) { tiles[t.x + '_' + t.z] = t; });
     K.forEach(function (k) {
-      var c = k.split('_'), Q = T.gt[k] || (T.gt[k] = { k: k, cx: (+c[0] + 0.5) * S, cz: (+c[1] + 0.5) * S, tri: [], edge: [], plaza: [], quay: [], pier: [], g: null, dirty: true, deps: {} });
+      var c = k.split('_'), Q = T.gt[k] || (T.gt[k] = { k: k, cx: (+c[0] + 0.5) * S, cz: (+c[1] + 0.5) * S, tri: [], edge: [], plaza: [], stair: [], quay: [], pier: [], g: null, dirty: true, deps: {} });
       var t = tiles[k]; Q.R = R; Q.tri = t ? t.tri : []; Q.edge = t ? t.edge : [];
       Q.plaza = (T.p.lots || []).filter(function (l) { if (l.use !== 'plaza') return false; var e = T.E(l.at); return Math.floor(e[0] / S) + '_' + Math.floor(e[1] / S) === k; });
+      Q.stair = (T.p.stairs || []).filter(function (q) { var e = T.E(q.path[0]); return Math.floor(e[0] / S) + '_' + Math.floor(e[1] / S) === k; });
       Q.dirty = true; Q.edit = true;
     });
     regrade();
@@ -730,6 +732,9 @@ function townWall(T, w, out, W, line) {
     parts.push({ nm: nm, t: t, h: h, tower: true });
   });
   if (line) townLineUnderParts(T, w, parts, K, sect, gate, mS, mW, Ltot);   // 引水渠跨過的路：拱心對到路上（見 townLineUnderParts）
+  // 牆接建築（Blocksail town.js wallJoins，TASK-0861）：w.joins 的那幾段由建築代替 ⇒ 不畫斷面、不擺塔與門、不收尾；兩頭的斷面在建築外框上垂直切齊（當成擋著的部件）
+  var J = (w.joins || []).map(function (j) { var a = proj(W(j.at[0])), b = proj(W(j.at[1])); return a <= b ? [a, b] : [b, a]; }).filter(function (j) { return j[1] - j[0] > 0.01; });
+  function inJ(t0, t1) { return J.some(function (j) { return apart(t0, t1, j[0], j[1]) === 0; }); }
   var cor = joint || towers[0], gap = Math.max(2 * len, 6);
   function apart(a0, a1, b0, b1) { var d = Infinity; (closed ? [0, Ltot, -Ltot] : [0]).forEach(function (sh) { d = Math.min(d, Math.max(0, b0 + sh - a1, a0 - b1 - sh)); }); return d; }   // 沿牆隔多遠（閉合 ⇒ 繞回來那一邊也算）
   function free(p, t, h) { return parts.every(function (o) { return o === p || apart(t - h, t + h, o.t - o.h, o.t + o.h) >= 0.5; }); }
@@ -745,21 +750,23 @@ function townWall(T, w, out, W, line) {
       parts.push({ nm: cor, t: tv, h: hc }); TOWNS.stat.corners++;
     }
   }
+  if (J.length) { var nP = parts.length; parts = parts.filter(function (o) { return !inJ(o.t - o.h, o.t + o.h); }); TOWNS.stat.joined = (TOWNS.stat.joined || 0) + (nP - parts.length); }   // 落在建築裡的塔、門、轉角
   parts.forEach(function (o) {                                          // 擺：軸 ＝ 路線上兩個接口那兩點的弦
     var t = o.t, h = o.h, A = at(t - h), B = at(t + h), s = at(t), dx = B.x - A.x, dz = B.z - A.z, L = Math.hypot(dx, dz), ax = L > 0.01 ? [dx / L, dz / L] : [Math.cos(s.a), Math.sin(s.a)];
     setLev(put(o.nm, [s.x, s.z], Math.atan2(ax[1], ax[0]), o.sx || 1, true), t, t);
     obs.push({ t0: t - h, t1: t + h, p0: [s.x - ax[0] * h, s.z - ax[1] * h], p1: [s.x + ax[0] * h, s.z + ax[1] * h], ax: ax });
   });
-  if (!closed && end) {                                                 // 收尾：模型的 wall-a（−x 那一面）接牆身 ⇒ 起點那一頭朝外轉 180°
+  J.forEach(function (j) { var A = at(j[0]), B = at(j[1]); obs.push({ t0: j[0], t1: j[1], p0: [A.x, A.z], p1: [B.x, B.z], ax: [Math.cos(A.a), Math.sin(A.a)], ax1: [Math.cos(B.a), Math.sin(B.a)] }); });   // ax1：出口那一頭的方向（建築裡轉了角）
+  if (!closed && end) {                                                 // 收尾：模型的 wall-a（−x 那一面）接牆身 ⇒ 起點那一頭朝外轉 180°；那一頭接著建築 ⇒ 不收
     var mE = K.M[end].m, lE = mE.size[0] * mE.mpv / 2, s0 = at(0), s1 = at(Ltot);
-    setLev(put(end, [s0.x - Math.cos(s0.a) * lE, s0.z - Math.sin(s0.a) * lE], s0.a + Math.PI, 1, false), 0, 0);
-    setLev(put(end, [s1.x + Math.cos(s1.a) * lE, s1.z + Math.sin(s1.a) * lE], s1.a, 1, false), Ltot, Ltot);
+    if (!J.some(function (j) { return j[0] <= 0.01; })) setLev(put(end, [s0.x - Math.cos(s0.a) * lE, s0.z - Math.sin(s0.a) * lE], s0.a + Math.PI, 1, false), 0, 0);
+    if (!J.some(function (j) { return j[1] >= Ltot - 0.01; })) setLev(put(end, [s1.x + Math.cos(s1.a) * lE, s1.z + Math.sin(s1.a) * lE], s1.a, 1, false), Ltot, Ltot);
   }
   // 部件之間的空檔 ⇒ 一段一段（s0、s1 ＝ 兩頭的接口與端面的法線；閉合又沒有部件 ⇒ 整圈一段，起點那一站跟最後一節斜接）
   obs.sort(function (a, b) { return a.t0 - b.t0; });
   var runs = [], tip = closed ? null : { t: 0, p: P[0], n: dir(1) };
-  if (closed && obs.length) { var oL = obs.reduce(function (m, o) { return o.t1 > m.t1 ? o : m; }); tip = { t: oL.t1 - Ltot, p: oL.p1, n: oL.ax }; }
-  obs.forEach(function (o) { if (tip && o.t0 > tip.t) runs.push({ t0: tip.t, t1: o.t0, s0: tip, s1: { p: o.p0, n: o.ax } }); if (!tip || o.t1 > tip.t) tip = { t: o.t1, p: o.p1, n: o.ax }; });
+  if (closed && obs.length) { var oL = obs.reduce(function (m, o) { return o.t1 > m.t1 ? o : m; }); tip = { t: oL.t1 - Ltot, p: oL.p1, n: oL.ax1 || oL.ax }; }
+  obs.forEach(function (o) { if (tip && o.t0 > tip.t) runs.push({ t0: tip.t, t1: o.t0, s0: tip, s1: { p: o.p0, n: o.ax } }); if (!tip || o.t1 > tip.t) tip = { t: o.t1, p: o.p1, n: o.ax1 || o.ax }; });
   if (!closed && tip.t < Ltot) runs.push({ t0: tip.t, t1: Ltot, s0: tip, s1: { p: P[nV], n: dir(nV) } });
   if (closed && !obs.length) runs.push({ t0: 0, t1: Ltot, s0: null, s1: null });
   runs.forEach(function (f) {
@@ -1000,11 +1007,12 @@ var TOWN_GT_MAX = 2, TOWN_GT_SZ = 250;
 /** 分區（路面到了、城建好時各一次）：每區 { tri, edge, plaza, quay, pier, g, dirty, deps }。 */
 function townGroundPrep(T) {
   var S = TOWN_GT_SZ, R = T.roadSurface, p = T.p, G = {};
-  function at(x, z) { var k = x + '_' + z; return G[k] || (G[k] = { k: k, cx: (x + 0.5) * S, cz: (z + 0.5) * S, tri: [], edge: [], plaza: [], quay: [], pier: [], field: [], g: null, dirty: true, deps: {} }); }
+  function at(x, z) { var k = x + '_' + z; return G[k] || (G[k] = { k: k, cx: (x + 0.5) * S, cz: (z + 0.5) * S, tri: [], edge: [], plaza: [], stair: [], quay: [], pier: [], field: [], g: null, dirty: true, deps: {} }); }
   function tile(e, s) { return at(Math.floor(e / S), Math.floor(s / S)); }
   if (R) R.tiles.forEach(function (t) { var q = at(t.x, t.z); q.R = R; q.tri = t.tri; q.edge = t.edge; });   // q.R：這一區照哪一份路面（建築模式只換改到的那幾區，townReplace）
   (p.lots || []).forEach(function (l) { if (l.use === 'plaza') { var c2 = T.E(l.at); tile(c2[0], c2[1]).plaza.push(l); } });
   (p.quay || []).forEach(function (q) { var c2 = T.E(q.path[0]); tile(c2[0], c2[1]).quay.push(q); });
+  (p.stairs || []).forEach(function (q) { var c2 = T.E(q.path[0]); tile(c2[0], c2[1]).stair.push(q); });   // 路接地塊的樓梯（Blocksail town.js roadStairs）：照路那一頭分區
   (T.fields || []).forEach(function (F) { var c2 = [(F.R[0][0] + F.R[2][0]) / 2, (F.R[0][1] + F.R[2][1]) / 2]; tile(c2[0], c2[1]).field.push(F); });
   (p.piers || []).forEach(function (q) { var c2 = T.E(q.path[0]); tile(c2[0], c2[1]).pier.push(q); });
   if (T.gt) Object.keys(T.gt).forEach(function (k) { var g = T.gt[k].g; if (g) townGpuFree(g); });
@@ -1025,6 +1033,7 @@ function townGroundNext(T, eye) {
 /** 這一區有棧橋或碼頭。 */
 function townGroundPier(q) { return q.pier.length > 0 || q.quay.length > 0; }
 /** 城 T 的一區 ⇒ 一份網格（位置、法線、顏色）；那一區沒東西 ⇒ null。 */
+var TOWN_STAIR_RISE = 0.17;                                              // 樓梯一階最高（公尺；同 Blocksail town.js STAIR_RISE）
 function townGroundTile(T, Q) {
   var V = [], I = [], S = BED.A.chunk, deps = {};
   function vtx(x, y, z, c, nx, ny, nz) { V.push(x, y, z, nx == null ? 0 : nx, ny == null ? 1 : ny, nz == null ? 0 : nz, c[0], c[1], c[2]); return V.length / 9 - 1; }
@@ -1073,6 +1082,28 @@ function townGroundTile(T, Q) {
       var bot = lo - 0.3, mx = (a[0] + b[0]) / 2 - cx, mz = (a[1] + b[1]) / 2 - cz, nl = Math.hypot(mx, mz) || 1, b2 = V.length / 9;
       [[a, y], [b, y], [b, bot], [a, bot]].forEach(function (p) { vtx(p[0][0], p[1], p[0][1], dk, mx / nl, 0, mz / nl); });
       I.push(b2, b2 + 1, b2 + 2, b2, b2 + 2, b2 + 3);
+    }
+  });
+  // 路接地塊的樓梯（Blocksail world/town.js roadStairs，TASK-0861）：path ＝ [路那一頭, 地塊那一頭]、z ＝ 兩頭的高、n 階、寬 w ⇒ 一階一個實心的方塊（頂面、四個側面），
+  //   往上走：第 k 階頂 ＝ z0 ＋ (k＋1)·(z1 − z0)／n（最後一階 ＝ 地塊的 h）；往下走：第 k 階頂 ＝ z0 ＋ k·(z1 − z0)／n（第一階跟路面齊、最後一級落到地塊上）
+  //   ⇒ 兩種都是那一段的直線斜坡在踏面底下（往下走的規劃把那一段路面拉成這條斜線，地形照它整）；底往下到那一階四角最低的地面再 0.3 m（同石基）
+  //   路那一頭的高照整過地的路面重量（地形 ＋ TOWN_ROAD_LIFT）、階數跟著重算（一階 ≤ TOWN_STAIR_RISE）：地塊的邊坡最後套、會把它旁邊幾公尺的路面拉向地塊的高
+  //   （君士坦丁堡 gul-plaza-link-3：規劃 8.0 m、整完地 6.9 m）⇒ 照規劃的 z0 畫，樓梯頂跟路面會差一截；地形還沒到 ⇒ 照規劃
+  (Q.stair || []).forEach(function (st) {
+    var A = W(st.path[0]), B = W(st.path[1]), dx = B[0] - A[0], dz = B[1] - A[1], L = Math.hypot(dx, dz), n = Math.max(1, st.n | 0); if (L < 0.05) return;
+    var ux = dx / L, uz = dz / L, hw = st.w / 2, z1 = st.z[1], g0 = hgt(A[0], A[1]), z0 = g0 === g0 ? g0 + TOWN_ROAD_LIFT : st.z[0], col = TOWN_COL.plaza, dk = [col[0] * 0.78, col[1] * 0.78, col[2] * 0.78];
+    if (g0 === g0) { if (Math.abs(z1 - z0) < 0.05) return; n = Math.max(1, Math.ceil(Math.abs(z1 - z0) / TOWN_STAIR_RISE - 1e-9)); }
+    function P(a, b) { return [A[0] + ux * a - uz * b, A[1] + uz * a + ux * b]; }
+    for (var k = 0; k < n; k++) {
+      var a0 = L * k / n, a1 = L * (k + 1) / n, top = z0 + (z1 - z0) * (k + (z1 > z0 ? 1 : 0)) / n + 0.02, C = [P(a0, -hw), P(a1, -hw), P(a1, hw), P(a0, hw)], lo = Infinity;
+      C.forEach(function (c) { var g = hgt(c[0], c[1]); if (g === g) lo = Math.min(lo, g); });
+      var bot = Math.min(lo === Infinity ? Math.min(z0, z1) : lo, top) - 0.3, b0 = V.length / 9;
+      C.forEach(function (c) { vtx(c[0], top, c[1], col); }); I.push(b0, b0 + 1, b0 + 2, b0, b0 + 2, b0 + 3);
+      [[0, 1, 0, -1], [1, 2, 1, 0], [2, 3, 0, 1], [3, 0, -1, 0]].forEach(function (f) {   // 四個側面：右、前（往地塊）、左、後（往路）—— 法線照沿路 (a, b) 的方向
+        var p = C[f[0]], q = C[f[1]], nx = ux * f[2] - uz * f[3], nz = uz * f[2] + ux * f[3], b1 = V.length / 9;
+        [[p, top], [q, top], [q, bot], [p, bot]].forEach(function (v2) { vtx(v2[0][0], v2[1], v2[0][1], dk, nx, 0, nz); });
+        I.push(b1, b1 + 1, b1 + 2, b1, b1 + 2, b1 + 3);
+      });
     }
   });
   // 附屬的田（TASK-0862）：翻過的土（作物的 place.soil ＝ [壟, 溝] 換土色：麥田 ⇒ 金黃的麥茬，遠看才是一片金黃），一條壟一條溝沿進深方向（同作物的行，行距照作物的 place.field[0]）；貼著地面（每 2 m 取一次高度），高出 TOWN_ROAD_LIFT
@@ -1206,22 +1237,36 @@ function townFlags(T) {
 }
 /** 城 T 的樹（雕刻作品的子作品標 meta kind=tree、tree=<樹種> ⇒ Blocksail tools/townmodels.py 匯入時把那一件的格子拿掉、一團一棵記成 m.trees ＝ [[格 x, 格 y, 格 z, 高 m, 寬 m, 樹種] …]）
  *  ⇒ T.trees ＝ { a: Float32Array（6 個一組：世界 x, y（樹根）, z, 高, 寬, 樹種的號碼（TREE_SPECIES 的順序））, n, bb }；跟上一份不同 ⇒ 載進來、碰得到的塊重擺樹（63_trees.js treeTownPut）。
- *  樹種沒有 ⇒ 闊葉樹。⛔ 不碰戰局（樹只給人看）。 */
+ *  樹種沒有 ⇒ 闊葉樹。⛔ 不碰戰局（樹只給人看）。
+ *  地標兼任的田（TASK-0862；Blocksail 特殊建築表的 prod ⇒ 規劃那一塊地塊帶 annex：{ crop, fixed }、沒有 cells；模型雕好的菜畦標 meta kind=field ⇒ townmodels.py 把壟拿掉、
+ *    記成 m.fields ＝ [[格 x0, 格 y0, 格 x1, 格 y1, 格 z（土面）, 行沿哪一軸（0 ＝ 模型 x、1 ＝ y）] …]）⇒ 一塊一條長方形換到世界記在 T.lmf（63_trees.js treeFieldPut 跟附屬的田一起種）；
+ *    地塊沒帶作物（沒登記兼任）⇒ 不種（土照模型留著）。 */
 function townTreesSet(T) {
-  var K = TOWNS.kit, SP = Object.keys(TREE_SPECIES), a = [], bb = [1e9, 1e9, -1e9, -1e9], sig = 0;
+  var K = TOWNS.kit, SP = Object.keys(TREE_SPECIES), a = [], bb = [1e9, 1e9, -1e9, -1e9], sig = 0, lmf = [], crop = {};
+  (T.p.lots || []).forEach(function (l) { if (l.annex && l.annex.fixed && l.annex.crop) crop[l.id] = l.annex.crop; });
   (T.inst || []).forEach(function (q) {
-    var M = K && K.M[q.k], m = M && M.m; if (!m || !m.trees || !(q.y === q.y)) return;
+    var M = K && K.M[q.k], m = M && M.m; if (!m || !(m.trees || m.fields) || !(q.y === q.y)) return;
     var s = Math.sin(q.th), c = Math.cos(q.th), mpv = m.mpv, hw = m.size[0] * mpv / 2, hd = m.size[1] * mpv / 2;
-    m.trees.forEach(function (t) {
+    (m.trees || []).forEach(function (t) {
       var A = (t[0] * mpv - hw) * q.sx, B = t[1] * mpv - hd, x = q.x + A * s - B * c, z = q.z - A * c - B * s, si = SP.indexOf(t[5]); if (si < 0) si = SP.indexOf('broadleaf');
       a.push(x, q.y + t[2] * mpv, z, t[3], t[4], si); sig += x * 0.37 + z * 0.61 + si;
       bb[0] = Math.min(bb[0], x); bb[1] = Math.min(bb[1], z); bb[2] = Math.max(bb[2], x); bb[3] = Math.max(bb[3], z);
     });
+    var cr = q.lot && crop[q.lot]; if (!cr || !m.fields) return;
+    var ux = [s * q.sx, -c * q.sx], uy = [-c, -s];                    // 模型 +x、+y 各走 1 m ⇒ 世界 (x, z) 走多少（同上面樹的公式）
+    m.fields.forEach(function (r) {
+      var A = (r[0] * mpv - hw) * q.sx, B = r[1] * mpv - hd, o = [q.x + A * s - B * c, q.z - A * c - B * s], lx = (r[2] - r[0]) * mpv, ly = (r[3] - r[1]) * mpv;
+      var F = r[5] ? { ua: uy, la: ly, ub: ux, lb: lx } : { ua: ux, la: lx, ub: uy, lb: ly };   // a ＝ 沿行（株距）、b ＝ 跨行（行距）
+      F.lm = true; F.lot = q.lot; F.crop = cr; F.o = o; F.y = q.y + r[4] * mpv;
+      F.R = [[0, 0], [F.la, 0], [F.la, F.lb], [0, F.lb]].map(function (p) { return [o[0] + F.ua[0] * p[0] + F.ub[0] * p[1] + BED.ax, o[1] + F.ua[1] * p[0] + F.ub[1] * p[1] + BED.az]; });   // 同附屬的田：海域座標
+      lmf.push(F); sig += o[0] * 0.13 + o[1] * 0.29;
+    });
   });
-  (T.fields || []).forEach(function (F) { F.R.forEach(function (q) { var x = q[0] - BED.ax, z = q[1] - BED.az; bb[0] = Math.min(bb[0], x); bb[1] = Math.min(bb[1], z); bb[2] = Math.max(bb[2], x); bb[3] = Math.max(bb[3], z); }); });   // 附屬的田（treeFieldPut）也照這個框重排
-  sig = a.length + ':' + sig.toFixed(3) + ':f' + (T.fields || []).length;
+  T.lmf = lmf;
+  (T.fields || []).concat(lmf).forEach(function (F) { F.R.forEach(function (q) { var x = q[0] - BED.ax, z = q[1] - BED.az; bb[0] = Math.min(bb[0], x); bb[1] = Math.min(bb[1], z); bb[2] = Math.max(bb[2], x); bb[3] = Math.max(bb[3], z); }); });   // 附屬的田、地標的田（treeFieldPut）也照這個框重排
+  sig = a.length + ':' + sig.toFixed(3) + ':f' + (T.fields || []).length + ':l' + lmf.length;
   var had = T.trees && (T.trees.n || T.trees.nf); if (T.trees && T.trees.sig === sig) return;
-  T.trees = { a: new Float32Array(a), n: a.length / 6, nf: (T.fields || []).length, bb: bb, sig: sig };
+  T.trees = { a: new Float32Array(a), n: a.length / 6, nf: (T.fields || []).length + lmf.length, bb: bb, sig: sig };
   if ((!a.length && !T.trees.nf && !had) || typeof TREES === 'undefined' || !TREES.on || !BED || !BED.A) return;
   var size = BED.A.chunk, ob = had ? null : bb;
   Object.keys(BED.ch).forEach(function (k) {
