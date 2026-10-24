@@ -119,8 +119,31 @@ function stepShip(sh, dt) {
   }
 }
 var SV_PROF = { n: 0, st: 0, cf: 0, tk: 0 };                         // ?debug=1：局勢檢查分段花多少 ms（st 結構那幾項、cf 船員腳下、tk 照時間的 tick；__game.prof；TASK-0801）
+var SV_SKIP = Q.get('svskip') !== '0';                               // ?svskip=0：結構那幾項照舊每次都量（A/B 對拍用；TASK-0812）
+/** 結構那幾項的輸入戳記：還在的模型、斷的繩、接回過幾條（47_sailmaker.js smRopeBack）。打掉的格不在這裡 —— 看 sh.rbin（removeVoxel 記、survey 清）。
+ *  模型只會從在變成不在、斷的繩只有帆匠接得回來 ⇒ 兩個數加上接回的次數，沒變就是一樣都沒動。 */
+function svStamp(sh) {
+  var a = 0, b = 0, i;
+  for (i = 0; i < sh.models.length; i++) if (sh.models[i].alive) a++;
+  for (i = 0; i < sh.ropes.length; i++) if (sh.ropes[i].dead) b++;
+  return a + ':' + b + ':' + (sh.ropeBack || 0);
+}
 function survey(sh) {               // 每半秒量一次：砲還在不在、桅還在不在、繩與帆的錨還在不在、少掉多少重量
-  var alive = 0, sv0 = DEBUG ? performance.now() : 0, sv1 = 0;
+  var sv0 = DEBUG ? performance.now() : 0, sv1 = 0;
+  // 結構那幾項（TASK-0812；航行時一次約佔一半）：上一次量完什麼都沒變（量的時候自己也沒弄斷、弄掉東西），之後也沒有格被打掉、模型飛掉、繩斷或接回
+  //   ⇒ 再量一次結果一樣 ⇒ 跳過。帆照舊每次量（收著的帆張開時要看錨還在不在，便宜）。
+  var stS = SV_SKIP ? svStamp(sh) : null;
+  if (stS === null || stS !== sh.svSt || (sh.rbin && sh.rbin.size)) { svStruct(sh); sh.svSt = stS !== null && svStamp(sh) === stS ? stS : null; }
+  sh.sails.forEach(function (s) {
+    if (!s.dead && !s.furled && (s.as.some(function (a) { return !hullGp(sh.grid, a); }) || s.par.some(function (j) { return sh.ropes[j].dead; }) ||
+        (s.yards || []).some(function (y) { return !y.alive && !y.moved; }))) dropSail(sh, s);   // 掛它的帆桁被打斷或掉了 ⇒ 帆掉
+  });
+  if (DEBUG) { sv1 = performance.now(); SV_PROF.st += sv1 - sv0; sv0 = sv1; }
+  svRest(sh, sv0);
+}
+/** 結構那幾項：模型腳下、門、砲口蓋板、砲、桅、繩的錨與母繩、浮空的繩。 */
+function svStruct(sh) {
+  var alive = 0;
   sh.models.forEach(function (m) {
     if (!m.alive) return;
     if (m.restOn && !m.restOn.alive) { blowModel(sh, m, [0, -1, 0], true); return; }   // 坐著的那個模型不在了（被斷開的那一團帶走、沒經過 blowModel）⇒ 掉下去（10_ship.js restOn）
@@ -146,11 +169,10 @@ function survey(sh) {               // 每半秒量一次：砲還在不在、�
     again = false;
     sh.ropes.forEach(function (r) { if (!r.dead && !r.moved && ropeFloat(sh, r, 0, near)) { r.dead = true; sh.rigDirty = true; again = true; } });
   }
-  sh.sails.forEach(function (s) {
-    if (!s.dead && !s.furled && (s.as.some(function (a) { return !hullGp(sh.grid, a); }) || s.par.some(function (j) { return sh.ropes[j].dead; }) ||
-        (s.yards || []).some(function (y) { return !y.alive && !y.moved; }))) dropSail(sh, s);   // 掛它的帆桁被打斷或掉了 ⇒ 帆掉
-  });
-  if (DEBUG) { sv1 = performance.now(); SV_PROF.st += sv1 - sv0; sv0 = sv1; }
+}
+/** 船員腳下、重量與浮力、照時間的 tick（每次都做）。sv0：?debug=1 分段計時的起點。 */
+function svRest(sh, sv0) {
+  var sv1 = 0;
   sh.crew.forEach(function (c) {   // 腳下 3×3 都沒了 ⇒ 掉下去（走路中的不算：途中跨過艙口邊）
     if (c.st >= 3 || c.walk || c.moving) return;
     if (c.gun && (c.gun.hd || (c.gun.mt && c.gun.mt.up)) && c.st === 0) return;   // 在砲塔上的砲旁（27_turret.js）⇒ 跟著砲轉、當成站在砲塔上（Tim 2026-10-17：「如果直接讓水手跟著砲轉呢」；⛔ 照腳下的格 ⇒ 莫尼特號的砲班轉到砲塔底下的艙口上就掉下去，開局 4 秒砲-b 剩 0 人）
