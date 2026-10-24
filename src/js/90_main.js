@@ -208,6 +208,7 @@ if (DEBUG) window.__game = {
     win: BED.win ? { r: bedWinR(), max: BED.win, km: +(bedWinR() * BED.A.chunk / 1000).toFixed(2), x: BED.A.x, y: BED.A.y, wins: BED.wins, ms: BED.winMs, asking: !!BED.winP } : null,   // 海域跟著旗艦走：現在的窗（塊號）、換過幾次、上次重排幾 ms、在要新的窗
     pump: BED.inq ? { q: BED.inq.length, n: BED.pumped, max: +BED.pumpMax.toFixed(1) } : null,   // 收塊排隊（08_seabed.js bedPump）：還排著幾則、處理過幾則、一格最久幾 ms
     trees: treeStat(),
+    near: { n: BEDNEAR.n, miss: BEDNEAR.miss, ms: BEDNEAR.ms, out: BEDNEAR.out, forced: BEDNEAR.forced, hold: BEDNEAR.hold, keys: BEDNEAR.keys || null },   // 淡進來之前等的靠近船的地形網格（63_bed_gl.js BEDNEAR，TASK-0907）：幾塊、還缺幾塊、等了幾 ms、等不到照舊淡進來、不看預算建了幾塊
     draw: { n: BEDDRAW.n, cull: BEDDRAW.cull, tris: BEDDRAW.tris },   // 上一格：畫了幾塊、視錐外剔掉幾塊、畫了幾個三角形（63_bed_gl.js bedDraw）
     shadow: SHM ? { land: SHM.stOn, redraws: SHM.stat.redraws, last: SHM.stat.last } : null,   // 陰影的靜態那一層（60_render.js csmStatic）：有沒有、重畫過幾次、上一次（範圍、地形幾塊、樹幾棵、城幾個實例、毫秒）；全部看 __game.shadow()
     far: { tiles: BEDFAR.n, left: BEDFAR.todo ? BEDFAR.todo.length + BEDFAR.fly + BEDFAR.ready.length : null, fly: BEDFAR.fly, fail: BEDFAR.fail, kb: Math.round(BEDFAR.bytes / 1024), ms: +BEDFAR.ms.toFixed(1), drawn: Object.keys(BEDFAR.g).filter(function (k) { return !BEDGL[k]; }).length },

@@ -619,11 +619,46 @@ function bedDraw() {
 /** 這一格要換的地形網格（新載的、粗細要換的、遠景）：一格一次 —— 60_render.js render 在畫陰影之前先叫（Tim 2026-10-20「是某種更大範圍的陰影閃爍 且是一閃而過」）：
  *  以前在 bedDraw（畫陰影之後）才建 ⇒ 換網格的那一格，陰影圖還是舊的粗網格、主畫面已經是細的 ⇒ 粗的在起伏處高出細的 ⇒ 那一塊（1 km）細網格整片落在影子裡一格
  *  （淺海看得到海底 ⇒ 一大片海暗一下）。先建 ⇒ shadowPass 看到 bedMeshChanged、同一格就重畫那幾段 ⇒ 陰影與主畫面同一份網格。 */
+// 淡進來之前先建好靠近船的地形（TASK-0907；Tim 2026-10-25「至少確保鏡頭看到的部分以及載好」「遠距離的可以不管 但是俯瞰靠近船的部分要載好」）：
+//   以前 'started'（08_seabed.js bedHostSay，地球儀照它淡進來）只等著色器 ⇒ 君士坦丁堡城鎮模式淡進來那一刻海圖收了 81 塊、地形畫了 0 塊，城整片浮在海上。
+//   要等的 ＝ 開場要等的那幾塊（bedNeedBox：原精度 ± BED_NEED_FULL、中等塊 ± BED_NEED_MID；資料開場時就等到了）裡、俯瞰鏡頭看得到的：每一塊的網格照現在那一份建好（g.C ＝ bedShowC）。
+//   等的時候（BEDNEAR.hold）那幾塊每格至少建一塊、不看背景預算（這一頁還沒淡進來，看得到的是地球儀）；最多等 BED_NEAR_WAIT 毫秒，等不到照舊淡進來（BEDNEAR.out 記下來）。
+//   平常（換中心、新塊進來）網格也照離焦點近的先建（以前照收到的順序）。讀數：__game.bed().near
+var BEDNEAR = { hold: false, n: 0, miss: 0, ms: 0, out: false, forced: 0 }, BED_NEAR_WAIT = 15000;
+/** 淡進來之前要建好的那幾塊（塊號的鍵）；沒有海圖 ⇒ null。鏡頭照現在的（開場停在正上方那一張）。 */
+function bedNearKeys() {
+  if (!BED || !BED.A || !CAM.vp) return null;
+  var A = BED.A, f = bedFocusAt(), b = bedNeedBox(f[0], f[1], BED.mid ? BED_NEED_MID : BED_NEED_FULL), PL = bedPlanes(CAM.vp), out = [];
+  for (var j = b[2]; j <= b[3]; j++) for (var i = b[0]; i <= b[1]; i++) {
+    var q = bedIdx(i, j); if (q < 0 || !BED.has[q]) continue;            // 海域外、沒有這一塊（深海：海圖沒有這一塊、畫的是海面 ⇒ 永遠等不到；皇家港第一版等滿 15 秒）
+    var x0 = i * A.chunk - BED.ax, z0 = j * A.chunk - BED.az;
+    if (bedSeen(PL, [x0, -200, z0, x0 + A.chunk, 2000, z0 + A.chunk])) out.push(bedKey(i, j));
+  }
+  return out;
+}
+/** 那幾塊的網格都照現在那一份建好了沒（BEDNEAR.n、miss 記下來）。 */
+function bedNearReady() {
+  var K = bedNearKeys(); if (!K) return true;
+  var miss = 0; K.forEach(function (k) { var C = bedShowC(k), g = BEDGL[k]; if (!C || !g || g.C !== C) miss++; });
+  BEDNEAR.n = K.length; BEDNEAR.miss = miss; BEDNEAR.keys = K; return !miss;
+}
 var BEDBUILD_RFR = -1;
 function bedBuild() {
   if (!BED || !BED.A || BEDBUILD_RFR === RFR) return;
   BEDBUILD_RFR = RFR;
   var built = 0, t0 = performance.now();                                 // 建網格照背景預算（08_seabed.js bedBusy：收塊、擺樹先用；用完了這一格就不建）
+  if (BEDNEAR.hold) (bedNearKeys() || []).some(function (k) {           // 等淡進來：靠近船、看得到的那幾塊每格至少一塊（不看預算）
+    var C = bedShowC(k), g = BEDGL[k]; if (!C || g && g.C === C) return false;
+    bedUpload(k, C, bedLod(C)); BEDGL_Q = BEDGL_Q.filter(function (q) { return q !== k; }); built++; BEDNEAR.forced++; bedSpent(t0); t0 = performance.now();
+    return built >= 1;
+  });
+  if (BEDGL_Q.length > 1 && BED_SLICE) {                                 // 離焦點近的先（塊中心到焦點的距離）
+    var f = bedFocusAt(), ch = BED.A.chunk;
+    BEDGL_Q.sort(function (a, b) {
+      var pa = a.split('_'), pb = b.split('_'), da = Math.hypot((+pa[0] + 0.5) * ch - BED.ax - f[0], (+pa[1] + 0.5) * ch - BED.az - f[1]), db = Math.hypot((+pb[0] + 0.5) * ch - BED.ax - f[0], (+pb[1] + 0.5) * ch - BED.az - f[1]);
+      return da - db;
+    });
+  }
   while (BEDGL_Q.length && built < 2 && !bedBusy()) { var k = BEDGL_Q.shift(), C = bedShowC(k); if (C) { bedUpload(k, C, bedLod(C)); built++; bedSpent(t0); t0 = performance.now(); } }
   Object.keys(BEDGL).forEach(function (k2) {                            // 粗細要換的（換中心）、那一份換了的（原精度到了、城到了要整地）：bedLod 第一次會算整地（townHv，一塊 25～70 ms）⇒ 也算進預算
     var g = BEDGL[k2], C2 = bedShowC(k2); if (!C2 || built >= 2 || bedBusy()) return;
