@@ -51,7 +51,7 @@ var TOWNS = { on: Q.get('towns') !== '0', prosp: {}, list: [],pend: [], ver: 0, 
   stat: { towns: 0, lots: 0, inst: 0, walls: 0, corners: 0, snapped: 0, skip: {}, d0: 0, d1: 0, d2: 0, d3: 0, plinth: 0, tris: 0, binMs: 0, kitMs: 0, meshBaked: 0, meshLive: 0, meshCheck: null, gradeMs: 0, chunks: 0, regraded: 0, drawMs: 0 } };
 var TOWN_J0 = [0, 0, 0, 0];                                             // 建築的 aJ（不斜接、不順坡、牆基不延）
 var TOWN_USE_ALT = { commandant: ['house'], governor: ['townhall'],   // 那一套沒有那種模型 ⇒ 用哪一種代（BUILDING_SPEC §7：fr 沒有長官的屋子；carib 有）
-  farm: ['house'], plantation: ['commandant', 'house'] };              // 農莊、種植園（Blocksail：開場的 TASK-0862、建築模式蓋的 TASK-0742；主建築還沒雕）⇒ 農舍借住宅、種植園主的大宅借長官宅（commandant 10 × 12）〔佔位〕
+  farm: ['house'], plantation: ['commandant', 'house'] };              // 農莊、種植園（Blocksail：開場的 TASK-0862、建築模式蓋的 TASK-0742）：2026-10-24 有了共用 common 的模型（Sculpture meadow-farm-01m；照配方挑 townRecipe）⇒ 這兩條只剩退路（索引裡沒有那幾件時）
 //   ⛔ 種植園不借倉庫：倉庫 12 × 16 放不進 16 × 12 的地塊（進深多 4 m、伸出地塊後緣壓到田）—— kaguya 2026-10-24 seq 28673 同意照這一份
 var TOWN_PROSP_DEF = 0.5, TOWN_PROSP_CUT = [1 / 3, 2 / 3];               // 繁榮度沒給 ⇒ 中間；低於第一格算低、到第二格算高（TOWN_BUILD §4 的門檻〔佔位〕）
 var TOWN_STYLE_DEF = 'fr';                                            // 索引裡沒寫 style 的模型算 fr（第一套，TASK-0757）；規劃沒帶退路 styles（舊的匯出）⇒ 城的 style、再 fr
@@ -480,12 +480,22 @@ function townIdx() {
  *  ⛔ 一般地塊只找退路裡的風格：carib 的砲台不會跑進退路裡沒有 carib 的城。 */
 function townPick(I, styles, l) {
   var use = l.use, lv = use === 'house' ? l.lvl || 1 : 0;
-  function by(u) { for (var i = 0; i < styles.length; i++) { var L = I.byStyle[styles[i] + ':' + u]; if (L && u === 'house') L = townLvl(I, L, lv || 1, l); if (L) return L; } return null; }
+  function by(u) { for (var i = 0; i < styles.length; i++) { var L = I.byStyle[styles[i] + ':' + u]; if (L && u === 'house') L = townLvl(I, L, lv || 1, l); if (L) return townRecipe(I, L, l); } return null; }
   function any(u) { return I.byUse[u]; }
   var alt = TOWN_USE_ALT[use] || [];
   var L0 = by(use) || alt.map(by).filter(Boolean)[0] || (l.src === 'special' ? any(use) : null);
   if (!L0 && lv > 1) { lv = 1; L0 = by(use); }                        // 那一級哪一套風格都沒有 ⇒ 低密度那一份
   return townFit(I, l, L0);
+}
+/** 照配方篩（Blocksail 農莊、種植園；2026-10-24 Tim「做一款基礎款 並基於基礎款作微調(替換子模型) 做出幾款農莊」）：候選裡有寫 recipes（索引；成品 meta 逗號分隔）的
+ *  ⇒ 留配得上地塊 recipe 的那幾款；一款都配不上（或地塊沒寫 recipe）⇒ 留沒寫 recipes 的基礎款；連基礎款都沒有 ⇒ 照舊整份。
+ *  候選都沒寫 recipes（住宅、公共建築…）⇒ 原封不動 ⇒ 現有的挑法不變。地球儀的俯視圖（Blocksail world/town_top.js pick）同一條。 */
+function townRecipe(I, L, l) {
+  if (!L.some(function (nm) { return I.models[nm].recipes; })) return L;
+  var r = l && l.recipe, hit = r ? L.filter(function (nm) { return (I.models[nm].recipes || []).indexOf(r) >= 0; }) : [];
+  if (hit.length) return hit;
+  var base = L.filter(function (nm) { return !I.models[nm].recipes; });
+  return base.length ? base : L;
 }
 /** 住宅照密度級篩（Blocksail TASK-0895：規劃的地塊 lvl 2 中、3 高，沒寫 ＝ 1 低；索引的 lvl 同）⇒ 同一級的那幾個；一個都沒有 ⇒ null（換下一套風格找）。
  *  中、高密度再留裝得下的裡面最寬的那幾個（3 × 3 的地塊 12 m 寬：M-A 12 m、M-B 8 m 都裝得下、進深都是 12 m ⇒ townFit 分不出來）；低密度照舊不篩寬（現有的房子挑到的不變）。
