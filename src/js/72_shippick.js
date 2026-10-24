@@ -117,7 +117,7 @@ function pickMeasure(id) {
   loadHull(id).then(function (T) {
     var k = SHIP_CFG[id] || {}, c = { gunw: k.gunw !== undefined ? k.gunw : cfgDefault('gunw', null, id), ballast: k.ballast !== undefined ? k.ballast : cfgDefault('ballast', T) };   // ⛔ 不呼叫 shipCfg（同 spkSpeed）
     var L = liftFor(T, T.disp - hullT0(T, c).all) || 0, z0 = groundKeel(T).reduce(function (a, p) { return Math.min(a, p[1]); }, T.zw), v = spkSpeed(id, SHIP_CARDS[id]), TI = topImg(T, 2);
-    pickPost('picked', { id: id, name: T.name, knots: v ? +Math.max.apply(null, v).toFixed(2) : 0, chart: spkChart(id, SHIP_CARDS[id]), draft: +((T.zw - z0) * S - L).toFixed(2), loa: +((T.hx1 - T.hx0) * S).toFixed(1), play: PLAY,
-      img: TI ? TI.cv.toDataURL('image/png') : null, imgU: TI && TI.u, imgV: TI && TI.v, imgM: TI && TI.m });   // 整艘船的俯視圖（05_hull.js topImg：船殼＋帆桁等模型＋帆，船頭朝上、右舷在右）：imgU／imgV ＝ 船的中心在圖上哪一點，imgM ＝ 圖上一點幾公尺 ⇒ 地球儀照實際比例尺畫
+    pickPost('picked', Object.assign({ id: id, name: T.name, knots: v ? +Math.max.apply(null, v).toFixed(2) : 0, chart: spkChart(id, SHIP_CARDS[id]), draft: +((T.zw - z0) * S - L).toFixed(2), loa: +((T.hx1 - T.hx0) * S).toFixed(1), play: PLAY,
+      img: TI ? TI.cv.toDataURL('image/png') : null, imgU: TI && TI.u, imgV: TI && TI.v, imgM: TI && TI.m }, tuiHold(T)));   // 整艘船的俯視圖（05_hull.js topImg：船殼＋帆桁等模型＋帆，船頭朝上、右舷在右）：imgU／imgV ＝ 船的中心在圖上哪一點，imgM ＝ 圖上一點幾公尺 ⇒ 地球儀照實際比例尺畫；ballastT、wpa ＝ 貨艙（89_townui.js tuiHold；地球儀上的 💰 貿易算吃水）
   }, function (e) { pickPost('error', { id: id, msg: e && e.message || String(e) }); });
 }

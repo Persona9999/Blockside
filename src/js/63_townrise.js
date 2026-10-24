@@ -8,10 +8,11 @@
 //   工地有兩種來源（RISE.S，鍵 ＝ 城 id ＋ '/' ＋ 地塊 id）：
 //     sim  ＝ 城鎮帳的工地（Blocksail 地球儀 townUI 'sites' ⇒ { 地塊 id: 進度 ‰ }；城鎮模式每 RISE_POLL 毫秒問一次，順便帶這一頁的時刻 ⇒ 那一頁的世界時間跟上、帳往前走）；
 //          帳上不再是工地（蓋好了）⇒ 拿掉、換回原本的畫法。
+//          城鎮、家族自動蓋的（Blocksail town.js townAutoBuild）是那一頁擺上地圖的 ⇒ 問的時候帶這座城拿到的版本 av，那一頁比較新 ⇒ 回覆附新的規劃 ⇒ townReplace。
 //     demo ＝ 演出（點建築的面板「演出建造過程」、?rise=1 的面板、__game.townRise）：從 p 演到完工；演完（auto）或按停 ⇒ 換回帳上的樣子（還在蓋 ⇒ 照帳的進度）。
 //   ⛔ 只給人看：不碰規劃、城鎮帳、整地。施工本身（工天、雇工、建材）全在 Blocksail world/prod.js、auto.js。
 //   入口：網址 ?rise=1 ⇒ 左下角一塊小面板（選一棟、拉進度、播放）；點建築的資訊面板（89_townbld.js，TASK-0909）；測試用 __game.townRise（90_main.js）。
-var RISE = { S: {}, demo: null, dur: 24, panel: null, picking: false, poll: { on: true, at: 0, busy: false, n: 0, fail: 0, last: null }, stat: {} };
+var RISE = { S: {}, demo: null, dur: 24, panel: null, picking: false, poll: { on: true, at: 0, busy: false, n: 0, fail: 0, last: null, av: {}, swaps: 0 }, stat: {} };   // av：每座城拿到的規劃是那一頁自動擺放的第幾版
 var RISE_UI = Q.get('rise') === '1';                                  // 面板（見檔頭）
 var RISE_PAD = 14, RISE_TOP = 16, RISE_LAYER = 0.2;                  // RISE_LAYER：一層的格數 ≥ 每層中位數的這麼多才算「蓋到這一層」（煙囪、鐘塔那幾層不算 ⇒ 腳手架不被細細的一根拉高）                                      // 四周留白、頂上多留幾格（腳手架比蓋到的高出一截）
 var RISE_C = { dirt: 104, dirt2: 68, stone: 145, stone2: 146, pole: 136, plank: 177, brick: 164, brick2: 201, sand: 213 };   // rgb332（63_towns.js 著色器照 vC 解）
@@ -111,7 +112,9 @@ function townRiseSites(T, map) {
   if (!T) return;
   map = map || {};
   Object.keys(RISE.S).forEach(function (k) {
-    var s = RISE.S[k]; if (s.T !== T || map[s.lot] != null) return;
+    var s = RISE.S[k]; if (s.T.id !== T.id) return;
+    s.T = T;                                                              // 規劃換過（townReplace）⇒ 照新的那一份找實例
+    if (map[s.lot] != null) return;
     s.sim = null; if (RISE.demo !== s) townRiseClose(s);                    // 蓋好了（或拆了）⇒ 換回原本的畫法
   });
   Object.keys(map).forEach(function (lot) {
@@ -129,11 +132,14 @@ function townRisePoll() {
   if (T.inst !== P.inst) { P.inst = T.inst; P.at = 0; }                    // 規劃換了（建築模式剛蓋、復原）⇒ 馬上問（剛蓋的那一棟不要先完整閃一下才變工地）
   if (now - P.at < RISE_POLL) return;
   P.busy = true; P.at = now;
-  tuiAsk('sites', { tod: todNow() }, function (r) {
+  var av = P.av[T.id] != null ? P.av[T.id] : T.p && T.p.live && T.p.live.av != null ? T.p.live.av : null;
+  tuiAsk('sites', { tod: todNow(), av: av }, function (r) {
     P.busy = false; P.at = performance.now();
     if (!r.ok) { P.last = (r.why || []).join('；'); if (++P.fail >= 2) P.on = false; return; }
     P.fail = 0; P.n++; P.last = r.day != null ? '第 ' + r.day + ' 天' : null;
-    townRiseSites(T, r.sites);
+    if (r.av != null) P.av[T.id] = r.av;
+    if (r.town && townReplace(r.town)) P.swaps++;                       // 那一頁剛把自動蓋的擺上地圖 ⇒ 換規劃（新的那一棟下一次問到時才開工地：實例還沒擺）
+    townRiseSites(twbTown() || T, r.sites);
   });
 }
 
@@ -277,7 +283,7 @@ function townRiseOne(s) {
 function townRiseStat() {
   var s = RISE.demo, o = s ? townRiseOne(s) : { town: null, lot: null, model: null, p: 1, play: 0, shown: 0, total: 0, deco: 0, quads: 0, remesh: 0, meshMs: 0 };
   o.sites = Object.keys(RISE.S).map(function (k) { return townRiseOne(RISE.S[k]); });
-  o.poll = { on: RISE.poll.on, n: RISE.poll.n, fail: RISE.poll.fail, last: RISE.poll.last };
+  o.poll = { on: RISE.poll.on, n: RISE.poll.n, fail: RISE.poll.fail, last: RISE.poll.last, av: RISE.poll.av, swaps: RISE.poll.swaps };
   if (RISE.stat.err) o.err = RISE.stat.err;
   return o;
 }
