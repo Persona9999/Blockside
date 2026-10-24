@@ -186,10 +186,11 @@ function townReplace(p) {
     return true;
   }
   ['inst', 'gt', 'shell', 'flags', 'tl', 'trees', 'lmg', 'lmgSig', 'posts', 'roadSurface', 'v'].forEach(function (k) { T[k] = old[k]; });   // 舊的照畫
+  var fk = townFieldTiles(T);                                         // 附屬的田照新的規劃分回各區（建築模式蓋的農莊：以前沿用舊的那一份 ⇒ 有作物、沒有土）
   if (!D.roads) T.folk = old.folk;
   if (!(D.box[0] <= D.box[2]) && !D.roads) { T.edits = old.edits; T.pend = old.pend; return true; }   // 沒有差（打開建築模式時 open 回的那一份）⇒ 只換規劃
   T.edits = (old.edits || []).concat([{ b: D.box, v: TOWNS.ver }]);
-  var st = TOWNS.stat.edit = { full: false, box: D.box.map(function (v) { return Math.round(v); }), chunks: 0, tiles: 0, roads: 0, surfMs: null };
+  var st = TOWNS.stat.edit = { full: false, box: D.box.map(function (v) { return Math.round(v); }), chunks: 0, tiles: 0, roads: 0, surfMs: null, fieldTiles: fk.length };   // fieldTiles：田變了、重鋪土的區
   function regrade() {
     var n0 = Object.keys(TOWNS.rgq || {}).length; townRegradeFor([{ box: D.box }]); st.chunks = Object.keys(TOWNS.rgq || {}).length - n0;
     townTilesIn(D.box).forEach(function (k) { if (T.gt[k]) T.gt[k].edit = true; });   // 改到的區：重建時不等背景預算（townDraw）
@@ -1410,6 +1411,22 @@ function townGroundPrep(T) {
   (p.lots || []).forEach(function (l) { if (l.water) { var c2 = T.E(l.at); tile(c2[0], c2[1]).wlot.push(l); } });   // 水上建築的平台、樁（Blocksail TASK-0899）
   if (T.gt) Object.keys(T.gt).forEach(function (k) { var g = T.gt[k].g, gf = T.gt[k].gf; if (g) townGpuFree(g); if (gf) townGpuFree(gf); });
   T.gt = G;
+}
+/** 沿用舊的分區（townReplace 只重建改到的區）⇒ 每區要鋪土的田照 T.fields 重分（同 townGroundPrep 那一行：照田的中心分區）；
+ *  哪一區的田變了（多了、少了、挪了、換作物）⇒ 那一區 dirty、edit（重建、不等背景預算）；田落在還沒有的區 ⇒ 開一區。回傳變了的區。
+ *  Tim 2026-10-25：「目前透過建造模式建造的農田會缺少田地基底 只有作物(原本的農田有)」 */
+function townFieldTiles(T) {
+  if (!T.gt) return [];
+  var S = TOWN_GT_SZ, by = {}, out = [];
+  function sig(L) { return L.map(function (F) { return F.lot + ':' + F.crop + ':' + [F.a0, F.a1, F.b0, F.b1].map(function (v) { return v.toFixed(2); }).join(','); }).join('|'); }
+  (T.fields || []).forEach(function (F) { var k = Math.floor((F.R[0][0] + F.R[2][0]) / 2 / S) + '_' + Math.floor((F.R[0][1] + F.R[2][1]) / 2 / S); (by[k] || (by[k] = [])).push(F); });
+  Object.keys(T.gt).concat(Object.keys(by)).forEach(function (k) {
+    var L = by[k] || [], Q = T.gt[k];
+    if (!Q) { if (!L.length) return; var c = k.split('_'); Q = T.gt[k] = { k: k, cx: (+c[0] + 0.5) * S, cz: (+c[1] + 0.5) * S, tri: [], edge: [], plaza: [], stair: [], quay: [], pier: [], wlot: [], field: [], g: null, dirty: true, deps: {} }; }
+    if (sig(Q.field || []) === sig(L)) { Q.field = L; return; }
+    Q.field = L; Q.dirty = true; Q.edit = true; if (out.indexOf(k) < 0) out.push(k);
+  });
+  return out;
 }
 function townGpuFree(g) { gl.deleteVertexArray(g.vao); gl.deleteBuffer(g.vb); gl.deleteBuffer(g.ib); }
 /** 塊 (cx, cy) 到了（或整地換了）⇒ 讀過它的那幾區要重建。 */
