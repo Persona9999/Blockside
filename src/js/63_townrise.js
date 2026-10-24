@@ -9,7 +9,7 @@
 //   測試用 __game.townRise（90_main.js）。施工進度之後接 Blocksail 的營造（TASK-0891、0894）：townRiseSet(p) 就是那個接口。
 var RISE = { T: null, lot: null, nm: null, d: null, p: 1, play: 0, t0: 0, dur: 24, G: null, occ: null, mesh: null, gpu: null, cv: null, deco: [], ver: 0, panel: null, picking: false, stat: {} };
 var RISE_UI = Q.get('rise') === '1';                                  // 面板（見檔頭）
-var RISE_PAD = 14, RISE_TOP = 16;                                      // 四周留白、頂上多留幾格（腳手架比蓋到的高出一截）
+var RISE_PAD = 14, RISE_TOP = 16, RISE_LAYER = 0.2;                  // RISE_LAYER：一層的格數 ≥ 每層中位數的這麼多才算「蓋到這一層」（煙囪、鐘塔那幾層不算 ⇒ 腳手架不被細細的一根拉高）                                      // 四周留白、頂上多留幾格（腳手架比蓋到的高出一截）
 var RISE_C = { dirt: 104, dirt2: 68, stone: 145, stone2: 146, pole: 136, plank: 177, brick: 164, brick2: 201, sand: 213 };   // rgb332（63_towns.js 著色器照 vC 解）
 
 /** 一份模型的區塊表（townmodels.py pack_chunks）⇒ Promise<{ keys: [[cx, cy, cz] …], data: [Uint8Array(4096) …] }>。 */
@@ -38,9 +38,10 @@ function townRiseLoad(nm) {
     for (var v = 1; v < 257; v++) cnt[v] += cnt[v - 1];                  // 照門檻排（計數排序；同門檻照區塊表的順序）⇒ ord；at[v] ＝ 門檻 ≤ v 的有幾格
     var at = cnt.slice(1), pos = cnt.slice(0, 256), ord = new Int32Array(n);
     for (j = 0; j < n; j++) ord[pos[O[j]]++] = j;
-    var top = new Uint16Array(n + 1), foot = new Uint8Array(sx * sy), fz = new Uint16Array(sx * sy).fill(65535);
-    for (j = 0; j < n; j++) { var q = ord[j]; top[j + 1] = Math.max(top[j], Z[q] + 1); var f = X[q] + sx * Y[q]; foot[f] = 1; if (Z[q] < fz[f]) fz[f] = Z[q]; }
-    Mm.riseD = { nm: nm, sx: sx, sy: sy, sz: sz, mpv: m.mpv, n: n, X: X, Y: Y, Z: Z, C: C, O: O, ord: ord, at: at, top: top, foot: foot, fz: fz };
+    var foot = new Uint8Array(sx * sy), F = new Int32Array(sz);          // F[z] ＝ 完工時那一層幾格（腳手架的高度照它判：townRiseSet）
+    for (j = 0; j < n; j++) { foot[X[j] + sx * Y[j]] = 1; F[Z[j]]++; }
+    var L = Array.prototype.filter.call(F, function (v) { return v > 0; }).sort(function (a, b) { return a - b; }), Fmin = Math.max(1, (L[L.length >> 1] || 1) * RISE_LAYER);
+    Mm.riseD = { nm: nm, sx: sx, sy: sy, sz: sz, mpv: m.mpv, n: n, X: X, Y: Y, Z: Z, C: C, O: O, ord: ord, at: at, foot: foot, F: F, Fmin: Fmin };
     return Mm.riseD;
   });
 }
@@ -55,7 +56,7 @@ function townRiseStart(T, lot, p, play) {
   return townRiseLoad(q.k).then(function (D) {
     var sx = D.sx + RISE_PAD * 2, sy = D.sy + RISE_PAD * 2, sz = D.sz + RISE_TOP;
     RISE.T = T; RISE.lot = lot; RISE.nm = q.k; RISE.d = D; RISE.n = 0; RISE.deco = []; RISE.mesh = {}; RISE.dirtyAll = true;
-    RISE.G = new VK.Grid([sx, sy, sz]); RISE.occ = new Uint8Array(sx * sy * sz); RISE.cv = new Uint32Array(RISE.G.tab.length);
+    RISE.G = new VK.Grid([sx, sy, sz]); RISE.occ = new Uint8Array(sx * sy * sz); RISE.cv = new Uint32Array(RISE.G.tab.length); RISE.V = new Int32Array(D.sz);   // V[z] ＝ 這一步那一層畫了幾格
     RISE.p = -1; townRiseSet(p == null ? 0 : p);
     RISE.play = play > 0 ? play : 0; RISE.t0 = performance.now(); RISE.p0 = RISE.p;
     TOWNS.dirty = true;                                                   // 重新分組 ⇒ 原本那一棟不畫（townBin）
@@ -84,10 +85,12 @@ function townRiseSet(p) {
   var D = RISE.d; if (!D) return;
   p = Math.max(0, Math.min(1, p)); if (p === RISE.p) return; RISE.p = p;
   var G = RISE.G, occ = RISE.occ, P = RISE_PAD, SX = G.sx, SY = G.sy, n1 = townRiseCount(D, p), j, q, x, y, z, k;
-  for (j = RISE.n; j < n1; j++) { q = D.ord[j]; x = D.X[q] + P; y = D.Y[q] + P; z = D.Z[q]; G.set(x, y, z, D.C[q]); occ[x + SX * (y + SY * z)] = 1; }
-  for (j = RISE.n - 1; j >= n1; j--) { q = D.ord[j]; x = D.X[q] + P; y = D.Y[q] + P; z = D.Z[q]; G.set(x, y, z, 0); occ[x + SX * (y + SY * z)] = 0; }
+  var V = RISE.V;
+  for (j = RISE.n; j < n1; j++) { q = D.ord[j]; x = D.X[q] + P; y = D.Y[q] + P; z = D.Z[q]; G.set(x, y, z, D.C[q]); occ[x + SX * (y + SY * z)] = 1; V[z]++; }
+  for (j = RISE.n - 1; j >= n1; j--) { q = D.ord[j]; x = D.X[q] + P; y = D.Y[q] + P; z = D.Z[q]; G.set(x, y, z, 0); occ[x + SX * (y + SY * z)] = 0; V[z]--; }
   RISE.n = n1;
-  var old = RISE.deco, nu = townRiseDeco(D, p, n1), seen = new Set();   // 施工裝飾：這一步該有的 ⇒ 舊的拿掉（那一格沒被房子佔掉的）、新的補上（只放空格）
+  for (var hz = 0, zz = 0; zz < D.sz; zz++) if (V[zz] > 0 && D.F[zz] >= D.Fmin) hz = zz + 1;   // 蓋到哪一層（見 RISE_LAYER）
+  var old = RISE.deco, nu = townRiseDeco(D, p, hz), seen = new Set();   // 施工裝飾：這一步該有的 ⇒ 舊的拿掉（那一格沒被房子佔掉的）、新的補上（只放空格）
   for (j = 0; j < nu.length; j += 2) seen.add(nu[j]);
   for (j = 0; j < old.length; j += 2) { k = old[j]; if (!seen.has(k) && !occ[k]) G.set(k % SX, ((k / SX) | 0) % SY, (k / (SX * SY)) | 0, 0); }
   for (j = 0; j < nu.length; j += 2) { k = nu[j]; if (!occ[k]) G.set(k % SX, ((k / SX) | 0) % SY, (k / (SX * SY)) | 0, nu[j + 1]); }
@@ -97,10 +100,10 @@ function townRiseSet(p) {
 
 /** 施工裝飾（照進度現算；格的 key ＝ x ＋ SX·(y ＋ SY·z)，留白後的格座標）⇒ [key, 色, key, 色, …]。
  *  ① 地基（0～0.06）：佔地鋪一層翻開的土、外緣一圈石頭照進度沿外緣砌起來。
- *  ② 腳手架（0.04～0.95）：外框往外 2～3 格一圈立柱（每 1.5 m 一根＋四角），高 ＝ 蓋到的最高格 ＋ 1.2 m（不超過完工的頂）；每 2 m 一層 2 格寬的走板；
+ *  ② 腳手架（0.04～0.95）：外框往外 2～3 格一圈立柱（每 1.5 m 一根＋四角），高 ＝ 蓋到的那一層（hz，見 RISE_LAYER）＋ 1.2 m；每 2 m 一層 2 格寬的走板；
  *     最後一段（0.88～0.95）從上往下拆。
  *  ③ 建材堆（0～0.9）：臨路那一側的留白裡排三堆：石（打地基用，0～0.3 用完）、磚（牆，0.05～0.65）、木料（廊、屋頂，0.4～0.9）；堆高照剩下多少。 */
-function townRiseDeco(D, p, n1) {
+function townRiseDeco(D, p, hz) {
   var out = [], G = RISE.G, P = RISE_PAD, SX = G.sx, SY = G.sy, SZ = G.sz, C = RISE_C;
   function put(x, y, z, c) { if (x < 0 || y < 0 || z < 0 || x >= SX || y >= SY || z >= SZ) return; out.push(x + SX * (y + SY * z), c); }
   function hsh(a, b) { var h = (a * 374761393 + b * 668265263) | 0; h = Math.imul(h ^ (h >>> 13), 1274126177); return ((h ^ (h >>> 16)) >>> 0) / 4294967296; }
@@ -118,7 +121,7 @@ function townRiseDeco(D, p, n1) {
   }
   // ② 腳手架
   if (p > 0.04 && p < 0.95) {
-    var full = Math.min(D.sz + 12, D.top[n1] + 12), h = p > 0.88 ? Math.round(full * (0.95 - p) / 0.07) : full, x0 = P - 3, y0 = P - 3, x1 = P + D.sx + 2, y1 = P + D.sy + 2;
+    var full = Math.min(D.sz + 12, hz + 12), h = p > 0.88 ? Math.round(full * (0.95 - p) / 0.07) : full, x0 = P - 3, y0 = P - 3, x1 = P + D.sx + 2, y1 = P + D.sy + 2;
     if (h > 0) {
       var poles = [];
       function side(ax, ay, bx, by) { var L = Math.max(Math.abs(bx - ax), Math.abs(by - ay)), k = Math.max(1, Math.round(L / 15)); for (var s = 0; s <= k; s++) poles.push(Math.round(ax + (bx - ax) * s / k), Math.round(ay + (by - ay) * s / k)); }
