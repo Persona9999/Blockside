@@ -125,7 +125,6 @@ function targets(w, h) {
  *  SHM.cs[i] ＝ 第 i 段 { F（畫進 SHM.tex 第 i 層）, S（SHM.st 第 i 層）, m（矩陣）, r（半寬）, C（中心）, key, dirty, t（靜態那一層上次畫的時間）, off, bz }。
  *  gen：陣列重配過幾次（靜態那一層裡的東西跟著沒了 ⇒ 要重畫）。 */
 // 段數、最遠距離、分界、交界、範圍放大、陰影圖大小、陸地快取、單張還是分段：畫質頁的「陰影細項」（07_gfx.js SHK；Tim 2026-10-21），改了下一格就照新的配。
-var CSM_STEP = 4;                                                        // 中心一步 ＝ 半寬 ÷ CSM_STEP（＝ n／8 個格子）⇒ 中心對齊格子後球還在範圍裡
 var CSM_UP = 1500, CSM_DOWN = 400, CSM_REFRESH = 1.0;                    // 深度範圍往太陽那邊多推（高山、桅頂）、往地下多推；陸地快取那一層最久多久重畫一次（秒）
 var CSM_SIMPLE = SHK.mode === 0;                                         // 單張陰影（shadowSimple）；畫質頁「陰影細項」的畫法（網址 ?csm=1 ⇒ 分段）。每一格 shadowMaps 照 SHK 更新
 // 陰影圖大小（Tim 2026-10-21「是否可以調高一下 中高畫質的陰影解析度(特別是離鏡頭近的部分)」）：中 2048、高 4096（07_gfx.js SHK n1／n2），
@@ -141,7 +140,7 @@ function shadowMaps() {
   if (SHM && SHM.n === n && SHM.k === k) return;
   if (SHM) shadowFree();
   SHM = { n: n, k: k, on: false, cs: [], tex: null, st: null, stOn: false, layers: 0, gen: 0, rr: 0, splits: [], eye: new Float32Array(3), fw: new Float32Array([0, 0, -1]),
-    csD: new Float32Array(CSM_MAX), csL: new Float32Array(CSM_MAX), bs: [], csO: new Float32Array(CSM_MAX), csB: new Float32Array(CSM_MAX), mats: new Float32Array(CSM_MAX * 16), stat: { redraws: 0, last: null, ms: 0 } };
+    csD: new Float32Array(CSM_MAX), csL: new Float32Array(CSM_MAX), csW: new Float32Array(CSM_MAX), bs: [], csO: new Float32Array(CSM_MAX), csB: new Float32Array(CSM_MAX), mats: new Float32Array(CSM_MAX * 16), stat: { redraws: 0, last: null, ms: 0 } };
 }
 function shadowFree() {
   SHM.cs.forEach(function (c) { gl.deleteFramebuffer(c.F.fb); if (c.S) gl.deleteFramebuffer(c.S.fb); });
@@ -206,7 +205,7 @@ function gpuSlots() {
   }
   MSLOTS = pick(Math.min(GFX.masks, MASK_NEAR), MSLOTS);
 }
-function ortho(r, n, f) { return new Float32Array([1 / r, 0, 0, 0, 0, 1 / r, 0, 0, 0, 0, -2 / (f - n), 0, 0, 0, -(f + n) / (f - n), 1]); }
+function ortho(r, n, f, ry) { return new Float32Array([1 / r, 0, 0, 0, 0, 1 / (ry || r), 0, 0, 0, 0, -2 / (f - n), 0, 0, 0, -(f + n) / (f - n), 1]); }   // ry：上下的半寬另給（分段陰影的長方形；沒給 ⇒ 正方形）
 /** 帆與繩的緩衝：一格最多做一次（之後陰影、反射、場景都用同一份）；沒走模擬的那一格不重做。 */
 function prepRig() {
   for (var i = 0, ns = SHIPS.length, n = ns + PIECES.length; i < n; i++) {   // 船、再斷開的那一團（⛔ SHIPS.concat(PIECES)：每格一個新陣列）
@@ -321,10 +320,41 @@ function drawSails(prog, pd) {                                         // pd：�
 function csmSplits() { var o = shkSplits(); SHM.bs = o.bs; return o.far; }
 /** 陰影（cascade；Tim 2026-10-20「改用其他遊戲常見的 shadow cascades 取代每艘船自己的陰影(且陸地也吃得到)」「基於Camera配置陰影」）：
  *  1. 鏡頭的視錐照深度切 SHM.k 段（csmSplits：畫質頁的分界；下一段從上一段的交界開始畫 ⇒ 收的那邊混兩段的那一帶兩段都有）。
- *  2. 每段：那一段視錐（8 個角）的外接球 ⇒ 半徑只跟鏡頭的張角、那一段的深度有關（轉鏡頭不變 ⇒ 影子不會一伸一縮）；範圍 r ＝ 半徑 × 畫質頁的「範圍放大」（SHK.pad）。
- *     中心換到太陽那個方向的座標（右、上、朝太陽）、三個軸都對齊 r ÷ CSM_STEP 一步 ⇒ 鏡頭移動時影子的邊不爬不閃，中心沒換一步矩陣就不變。
- *  3. 矩陣換了（中心換一步、太陽換方向、陣列重配）⇒ 那一段的靜態那一層（陸地）要重畫；矩陣沒換但滿 CSM_REFRESH 秒（樹、城、地形塊陸續載進來）⇒ 一格最多補一段。
- *  4. 每一格每一段：靜態那一層複製過來（沒有陸地 ⇒ 清掉），再畫船殼、模型、帆、斷開的那一團 —— 只畫落在那一段範圍裡的（太陽方向看過去的投影）。 */
+ *  2. 每段的範圍（2026-10-24 重寫，TASK-0877；Tim「Shadow map會超出Camera範圍(特別是精度最高的一個)」「不同層級的Map重疊嚴重 且有時還會斷開」「是否可以參考現成的算法」）：
+ *     那一段視錐（8 個角）先用場景的高度帶裁（csmBand：csmFit 沿線量到那一段的地面最低～最高＋上面可能有的東西）—— 空中、地底收不到影子，不算；
+ *     剩下的那一塊在太陽座標裡取緊的長方形（右、上兩軸各自的半寬 rx、ry ＝ 那一塊的一半 × 邊上留 CSM_MARGIN 格 × 畫質頁的「範圍放大」SHK.pad）。
+ *     參考 DX SDK CascadedShadowMaps11 的 fit to cascade（每段只罩自己那一段視錐）＋ SDSM 照場景收緊（這裡用 CPU 沿線量代替讀深度圖）。
+ *     以前是整段視錐的外接球、正方形：球裡大半是空中與鏡頭背後，鏡頭一拉高，第 0 段只罩到海面上那層空中；高的俯視四段的球幾乎一樣大、疊在同一個地方
+ *     （同一組鏡頭量：每一點平均被 2.6～4.0 張圖罩住；Tim 2026-10-24 截圖：紅框一大半在鏡頭外）。
+ *  3. 不閃（stable cascades 的做法）：半寬走一級 2^(1/CSM_Q)（約 9%）的階梯（csmStep），要的比現在大 ⇒ 換大一級；比現在小 CSM_HYST 級以上才換小；
+ *     中心對齊陰影圖的格子（右、上兩軸各照自己的格子大小），要的那一塊還在現在的範圍裡 ⇒ 中心不動、矩陣不換；朝太陽那一軸對齊 64 m、留半個 CSM_UP／CSM_DOWN 的餘裕。
+ *     ⇒ 鏡頭平移：影子的邊不爬不閃；轉鏡頭：範圍一級一級換（換的那一格格子的位置變一次），不是每一格連續變。
+ *  4. 收的那邊（01_gl.js shSel）用第一張罩得到那一點的圖（DX SDK 的 map-based selection）：近的幾張格子細，罩到哪裡就用到哪裡（以前照深度挑段，
+ *     第 0、1 段的圖罩著畫面下緣的海也用不到）；高度帶量漏的塔、山不在前一張裡 ⇒ 落到下一張，不會整塊沒影子。在圖最外面「交界」那一圈跟下一張混。
+ *     所以每一段要畫的船只照範圍判，不照那一段的深度（csmIn 的 d0 ＝ −∞，d1 ＝ 最遠距離）。這一段裁完什麼都不剩（整段在天上）⇒ 那一層不用（FAR_M），著色器自然用下一張。
+ *  5. 矩陣換了（中心換一步、範圍換一級、太陽換方向、陣列重配）⇒ 那一段的靜態那一層（陸地）要重畫；矩陣沒換但滿 CSM_REFRESH 秒（樹、城、地形塊陸續載進來）⇒ 一格最多補一段。
+ *  6. 每一格每一段：靜態那一層複製過來（沒有陸地 ⇒ 清掉），再畫船殼、模型、帆、斷開的那一團 —— 只畫落在那一段範圍裡的（太陽方向看過去的投影）。 */
+var CSM_Q = 8, CSM_HYST = 2, CSM_MARGIN = 6;                             // 半寬一級 2^(1/8)；比現在小 2 級才換小；長方形的邊上留 6 格（柔邊取樣、沿法線推出去的那一點也要在圖裡）
+// 陰影圖的「上」跟著鏡頭轉：一圈分幾級（?csmrot=16 ⇒ 22.5° 一級；預設 0 ＝ 不轉，固定照太陽）。2026-10-24 托爾圖加 4 種鏡頭 × 8 個方位平均量：16 級只有很高的俯視（1,500 m、仰角 0.9）
+//   每一段的面積再小約 30%，其他三種差不多或略大（量化一級最多偏 17°，橫的帶子一歪外框就寬）—— 換來轉鏡頭時一圈換 16 次格子 ⇒ 不值得，預設關。
+var CSM_ROT = Q.has('csmrot') ? +Q.get('csmrot') | 0 : 0;
+/** 半寬照階梯（見上 3.）：現在的還夠、又沒大太多 ⇒ 不換；不然換成剛好夠的那一級。 */
+function csmStep(cur, need) {
+  if (cur && need <= cur && need > cur * Math.pow(2, -CSM_HYST / CSM_Q)) return cur;
+  return Math.pow(2, Math.ceil(Math.log2(Math.max(1, need)) * CSM_Q) / CSM_Q);
+}
+// 一段視錐的 12 條稜（Q8 照 rays 的順序：第 j 條線的近端 2j、遠端 2j+1；rays ＝ 左下、右下、左上、右上）
+var CSM_EDGES = [[0, 1], [2, 3], [4, 5], [6, 7], [0, 2], [2, 6], [6, 4], [4, 0], [1, 3], [3, 7], [7, 5], [5, 1]];
+/** 一段視錐裁到高度帶 [lo, hi] 剩下的那一塊的頂點（凸多面體跟兩個水平面的交：帶裡的角＋稜跟兩個面的交點）；整段都在帶外 ⇒ 空的。 */
+function csmClip(Q, lo, hi) {
+  var out = [];
+  Q.forEach(function (p) { if (p[1] >= lo && p[1] <= hi) out.push(p); });
+  CSM_EDGES.forEach(function (e) {
+    var a = Q[e[0]], b = Q[e[1]];
+    [lo, hi].forEach(function (Y) { if ((a[1] - Y) * (b[1] - Y) < 0) { var t = (Y - a[1]) / (b[1] - a[1]); out.push([a[0] + (b[0] - a[0]) * t, Y, a[2] + (b[2] - a[2]) * t]); } });
+  });
+  return out;
+}
 function shadowPass() {
   if (!CAM.inv) { SHM.on = false; return; }                             // 鏡頭還沒算過（第一格）
   var t0 = performance.now(), k = SHM.k, sp = SHM.splits = csmSplits(), bs = SHM.bs, I = CAM.inv, landA = landWant(), land = SHM.stOn && SHK.cache === 1 && landA, now = t0 / 1000;
@@ -342,33 +372,63 @@ function shadowPass() {
   function at(R, d) { var t = (d - R.da) / (R.db - R.da); return [R.a[0] + (R.b[0] - R.a[0]) * t, R.a[1] + (R.b[1] - R.a[1]) * t, R.a[2] + (R.b[2] - R.a[2]) * t]; }
   // 太陽那個方向的座標軸（跟矩陣的 lookAt 同一個 up ⇒ 對齊的格子就是陰影圖的格子）
   var up0 = Math.abs(SUN[1]) > 0.98 ? [0, 0, 1] : [0, 1, 0], V0 = M4.lookAt([SUN[0], SUN[1], SUN[2]], [0, 0, 0], up0);
-  var ax = [[V0[0], V0[4], V0[8]], [V0[1], V0[5], V0[9]], [V0[2], V0[6], V0[10]]], sk = SUN.map(function (v) { return v.toFixed(4); }).join(',') + ';' + SHK.nrm + ',' + SHK.bias;   // 太陽方向＋沿法線推、深度偏差（畫質頁改了 ⇒ 矩陣、偏移重算）
+  var ax = [[V0[0], V0[4], V0[8]], [V0[1], V0[5], V0[9]], [V0[2], V0[6], V0[10]]];
   function dot3(a, b) { return a[0] * b[0] + a[1] * b[1] + a[2] * b[2]; }
+  // 陰影圖的「上」跟著鏡頭朝向轉（view-aligned light space，TASK-0877）：每一段裁過高度帶之後在畫面上是一條橫的帶子，太陽座標的格子是斜的 ⇒ 外框比帶子大一圈、段跟段的外框互相疊；
+  //   轉到「上」＝ 鏡頭往前在太陽那個平面上的投影 ⇒ 帶子跟格子同向。轉的角度量化成 CSM_ROT 一級、偏過一級的 3/4 才換（遲滯）⇒ 轉鏡頭時一圈最多換 CSM_ROT 次（換的那一格格子的位置變一次），平移不受影響。
+  var rfx = dot3(fw, ax[0]), rfy = dot3(fw, ax[1]);
+  if (CSM_ROT && Math.hypot(rfx, rfy) > 0.05) {                           // 鏡頭幾乎順著太陽看 ⇒ 投影太短，照上一次的
+    var rth = Math.atan2(rfx, rfy), rst = Math.PI * 2 / CSM_ROT, rq = SHM.rot;
+    if (rq === undefined || Math.abs((rth - rq * rst + 3 * Math.PI) % (2 * Math.PI) - Math.PI) > rst * 0.75) rq = SHM.rot = Math.round(rth / rst);
+  }
+  if (CSM_ROT && SHM.rot) {
+    var rc = Math.cos(SHM.rot * Math.PI * 2 / CSM_ROT), rs = Math.sin(SHM.rot * Math.PI * 2 / CSM_ROT);
+    up0 = [0, 1, 2].map(function (j) { return ax[1][j] * rc + ax[0][j] * rs; }); V0 = M4.lookAt([SUN[0], SUN[1], SUN[2]], [0, 0, 0], up0);
+    ax = [[V0[0], V0[4], V0[8]], [V0[1], V0[5], V0[9]], [V0[2], V0[6], V0[10]]];
+  }
+  var sk = SUN.map(function (v) { return v.toFixed(4); }).join(',') + ';' + SHK.nrm + ',' + SHK.bias + ';' + (CSM_ROT ? SHM.rot || 0 : '');   // 太陽方向＋沿法線推、深度偏差（畫質頁改了 ⇒ 矩陣、偏移重算）＋轉了幾級
   SHM.eye.set(E); SHM.fw.set(fw);
-  var DD = SHK.dist * shFar(), fit = SHK.fit ? csmFit(un, fw, DD) : [0, DD], z0 = SHM.z0 = fit[0], z1 = SHM.z1 = Math.max(z0 + 20, fit[1]), zk = (z1 - z0) / SHK.dist;   // 分段貼合畫面（見 csmFit）
+  var DD = SHK.dist * shFar(), fit = csmFit(un, fw, DD), z0 = SHM.z0 = SHK.fit ? fit[0] : 0, z1 = SHM.z1 = SHK.fit ? Math.max(z0 + 20, fit[1]) : DD, zk = (z1 - z0) / SHK.dist;   // 分段貼合畫面（見 csmFit；關著也要量高度帶）
   sp = SHM.splits = sp.map(function (v) { return z0 + v * zk; }); bs = SHM.bs = bs.map(function (v) { return z0 + v * zk; });
   var refreshed = false, sl = Math.min(400, 1 / Math.max(0.15, SUN[1] / Math.sqrt(Math.max(1e-6, 1 - SUN[1] * SUN[1]))));   // 影子拉多長（每公尺高；太陽越低越長，最多 400 倍 ⇒ 實際上限見 csmIn）
+  var n = SHM.n, mg = n / (n - 2 * CSM_MARGIN) * SHK.pad;
   for (var i = 0; i < k; i++) {
     var c = SHM.cs[i]; if (!c) continue;
     var d0 = i ? bs[i - 1] : z0, d1 = sp[i], Q8 = [];
     rays.forEach(function (R) { Q8.push(at(R, Math.max(d0, R.da))); Q8.push(at(R, Math.min(d1, R.db))); });
-    var ce = [0, 0, 0]; Q8.forEach(function (p) { ce[0] += p[0] / 8; ce[1] += p[1] / 8; ce[2] += p[2] / 8; });
-    var rad = 0; Q8.forEach(function (p) { rad = Math.max(rad, Math.hypot(p[0] - ce[0], p[1] - ce[1], p[2] - ce[2])); });
-    // 遲滯（Tim 2026-10-20「有時候陰影會閃爍」）：半徑、中心能留就留 —— 需要的半寬還在上一個的 90%～100% ⇒ 半徑不換；那一段的球還整個在範圍裡（太陽方向看過去的兩個軸、
-    //   深度那一軸在半寬的一半以內）⇒ 中心不換 ⇒ 矩陣不換、靜態那一層不重畫。以前每格照取整重算，浮點的雜訊剛好壓在取整的邊上 ⇒ 兩個值來回跳。
-    var need = rad * SHK.pad, r = c.r && need <= c.r && need >= c.r * 0.9 ? c.r : Math.ceil(need), st = r / CSM_STEP, C, key, dc = c.C;
-    if (r === c.r && c.key && Math.abs(dot3([ce[0] - dc[0], ce[1] - dc[1], ce[2] - dc[2]], ax[0])) + rad <= r && Math.abs(dot3([ce[0] - dc[0], ce[1] - dc[1], ce[2] - dc[2]], ax[1])) + rad <= r
-        && Math.abs(dot3([ce[0] - dc[0], ce[1] - dc[1], ce[2] - dc[2]], ax[2])) <= r * 0.5 && c.key.split('|')[2] === String(SHM.gen) && c.key.split('|')[3] === sk) { C = dc; key = c.key; }
-    else {
-      var kk = ax.map(function (a) { return Math.round(dot3(ce, a) / st); });
-      C = [0, 1, 2].map(function (j) { return ax[0][j] * kk[0] * st + ax[1][j] * kk[1] * st + ax[2][j] * kk[2] * st; });
-      key = [r, kk.join(','), SHM.gen, sk].join('|');
+    var yb = csmBand(d0, d1), P = csmClip(Q8, yb[0], yb[1]);
+    if (!P.length) {                                                     // 整段在天上（或地底）：這一層不用，收的那邊往下一段找（見上 4.）
+      if (c.key !== 'empty') { c.key = 'empty'; c.m = FAR_M; c.r = c.rx = c.ry = 0; c.bare = undefined; shLog('段是空的', { i: i, d0: Math.round(d0), d1: Math.round(d1), band: yb.map(Math.round) }); }
+      continue;
     }
-    if (key !== c.key) {
-      var D = r + CSM_UP, near = D - r - CSM_UP, far = D + r + CSM_DOWN;
-      c.key = key; c.dirty = true; c.why = '範圍換了'; c.r = r; c.C = C; shLog('段換位置', { i: i, r: r, C: C.map(function (v) { return Math.round(v); }) });
-      c.m = M4.mul(ortho(r, near, far), M4.lookAt([C[0] + SUN[0] * D, C[1] + SUN[1] * D, C[2] + SUN[2] * D], C, up0));
-      var tx = 2 * r / SHM.n; c.off = SHK.nrm * tx; c.bz = Math.max(0.03, SHK.bias * tx) / (far - near);   // 沿法線推、深度偏差（畫質頁；預設各 1.5 格，偏差至少 3 cm）
+    var lx0 = 1e9, lx1 = -1e9, ly0 = 1e9, ly1 = -1e9, lz0 = 1e9, lz1 = -1e9;
+    P.forEach(function (p) {
+      var x = dot3(p, ax[0]), y = dot3(p, ax[1]), z = dot3(p, ax[2]);
+      lx0 = Math.min(lx0, x); lx1 = Math.max(lx1, x); ly0 = Math.min(ly0, y); ly1 = Math.max(ly1, y); lz0 = Math.min(lz0, z); lz1 = Math.max(lz1, z);
+    });
+    // 範圍與遲滯（見上 3.；Tim 2026-10-20「有時候陰影會閃爍」：以前每格照取整重算，浮點的雜訊剛好壓在取整的邊上 ⇒ 兩個值來回跳）
+    var hx = Math.max(4, (lx1 - lx0) / 2 * mg), hy = Math.max(4, (ly1 - ly0) / 2 * mg), mx = (lx0 + lx1) / 2, my = (ly0 + ly1) / 2;
+    var same = c.key && c.key !== 'empty' && c.gen === SHM.gen && c.sk === sk;
+    var rx = csmStep(same && c.rx, hx), ry = csmStep(same && c.ry, hy), tx = 2 * rx / n, ty = 2 * ry / n, cx, cy;
+    if (same && rx === c.rx && ry === c.ry && Math.abs(mx - c.cx) + hx <= rx && Math.abs(my - c.cy) + hy <= ry) { cx = c.cx; cy = c.cy; }
+    else { cx = Math.round(mx / tx) * tx; cy = Math.round(my / ty) * ty; }
+    // 朝太陽那一軸：長方形裡、高度帶裡的每一點都要在深度範圍內（著色器 shIn 的 |z| < 1；csmIn 的 3. 也靠這一條）⇒ 帶子上下兩個水平面在長方形四個角的深度取最低、最高
+    //   （太陽低的時候帶子沿太陽方向很長，只照裁出來那一塊會不夠）；再往太陽多推 CSM_UP（範圍外更高的山、桅頂）、往下 CSM_DOWN。
+    var sy = Math.max(0.05, ax[2][1]);
+    [-1, 1].forEach(function (a) { [-1, 1].forEach(function (b2) {
+      var x = cx + a * rx, y = cy + b2 * ry;
+      lz0 = Math.min(lz0, (yb[0] - x * ax[0][1] - y * ax[1][1]) / sy); lz1 = Math.max(lz1, (yb[1] - x * ax[0][1] - y * ax[1][1]) / sy);
+    }); });
+    var zt = same && c.zt >= lz1 + CSM_UP * 0.5 && c.zt <= lz1 + CSM_UP * 1.5 ? c.zt : Math.ceil((lz1 + CSM_UP) / 64) * 64;
+    var zb = same && c.zb <= lz0 - CSM_DOWN * 0.5 && c.zb >= lz0 - CSM_DOWN * 1.5 ? c.zb : Math.floor((lz0 - CSM_DOWN) / 64) * 64;
+    var key = [rx, ry, Math.round(cx / tx), Math.round(cy / ty), zt, zb].join('|');
+    if (key !== c.key || !same) {
+      var far = zt - zb, eye = [0, 1, 2].map(function (j) { return ax[0][j] * cx + ax[1][j] * cy + ax[2][j] * zt; }), tm = Math.max(tx, ty);
+      c.key = key; c.gen = SHM.gen; c.sk = sk; c.dirty = true; c.why = '範圍換了'; c.rx = rx; c.ry = ry; c.r = Math.max(rx, ry); c.cx = cx; c.cy = cy; c.zt = zt; c.zb = zb;
+      c.C = [0, 1, 2].map(function (j) { return ax[0][j] * cx + ax[1][j] * cy + ax[2][j] * (zt + zb) / 2; });
+      c.m = M4.mul(ortho(rx, 0, far, ry), M4.lookAt(eye, [eye[0] - SUN[0], eye[1] - SUN[1], eye[2] - SUN[2]], up0));
+      c.off = SHK.nrm * tm; c.bz = Math.max(0.03, SHK.bias * tm) / far;   // 沿法線推、深度偏差（畫質頁；預設各 1.5 格，偏差至少 3 cm；長方形照粗的那一軸的格子）
+      shLog('段換位置', { i: i, rx: Math.round(rx), ry: Math.round(ry), C: c.C.map(function (v) { return Math.round(v); }), band: yb.map(Math.round) });
     }
     if (land && c.bg !== BED_MESH_GEN && !c.dirty) {                              // 地形網格換過（63_bed_gl.js bedMeshChanged）：換的那一塊碰到這一段 ⇒ 馬上重畫（⛔ 等滿一秒 ⇒ 粗網格的影子蓋在細網格上，那一整塊暗一下）
       var Lg = BED_MESH_LOG, PLc = bedPlanes(c.m), hit = !(c.bg >= 0) || !Lg.length || Lg[0][0] > c.bg + 1;   // 記錄被截掉了 ⇒ 當成碰到
@@ -378,7 +438,7 @@ function shadowPass() {
     if (land && c.S && (c.dirty || (!refreshed && i === SHM.rr % k && now - c.t > CSM_REFRESH))) { if (!c.dirty) { refreshed = true; c.why = '滿一秒'; } csmStatic(c, i); }
     // 這一格：陸地快取關著（預設）⇒ 清掉、陸地整張重畫（跟單張一樣，陰影圖跟這一格的場景一定是同一份）；
     //   開著 ⇒ 靜態那一層複製過來（沒有 ⇒ 清掉）。再畫船。這一段沒有船、上一格也沒有、靜態那一層也沒換 ⇒ 那一層本來就對，整段跳過（省一次 n² 的複製）
-    var any = csmIn(i, c, ax, E, fw, d0, d1, sl), ver = land && c.S ? c.t : -1;
+    var any = csmIn(i, c, ax, E, fw, -1e9, sp[k - 1], sl), ver = land && c.S ? c.t : -1;   // 船只照範圍判、不照這一段的深度：這張圖罩到的點不管多深都用它（見上 4.）
     if (landA && !land) {
       gl.bindFramebuffer(gl.FRAMEBUFFER, c.F.fb); gl.clear(gl.DEPTH_BUFFER_BIT); PASS.vp = c.m;
       var t1 = performance.now(), st0 = { r: c.r, bed: bedDepth(bedPlanes(c.m)), trees: treeDepth(), towns: townDepth() };
@@ -402,19 +462,27 @@ function shadowPass() {
 /** 分段貼合畫面（Tim 2026-10-21「參考看看這個的算法呢」＝ dihara 的 cascaded-shadow-maps：PSSM＋穩定的分段＋SDSM —— 讀深度圖找畫面上最近、最遠的深度，分段只切那一段）：
  *  WebGL 讀回深度圖要等 GPU（卡一格）⇒ 在 CPU 上做：畫面上 CSM_FIT_NX × CSM_FIT_NY 條線（含四個角）沿著走，碰到「地面（bedHgt，海 ＝ 0）＋ 上面可能有的東西」
  *  （海上 CSM_TOP：桅頂；陸上 CSM_LAND_TOP：樹、房子）那一層的深度取最小 ⇒ z0；碰到地面的深度取最大（往下走到最遠距離都沒碰到 ⇒ 最遠距離）⇒ z1。往天上的線不算。
- *  步長從 2 m 起每步 × 1.12（最多 40 m），碰到之後退回上一步（寧可近一點）；z0 再往鏡頭讓 CSM_Z0_PAD。
+ *  步長從 2 m 起每步 × 1.12（最多 40 m），碰到「上面可能有的東西」那一層 ⇒ 跟上一步之間對半找到那一層（2026-10-24；以前退回上一步）；z0 再往鏡頭讓 CSM_Z0_PAD。
+ *  線縫裡量漏的高東西：分段的收的那邊會落到下一張圖（01_gl.js shSel），不會沒影子。
  *  以前（csmNear，2026-10-21 早上）陸地只看地形塊的外框 ⇒ 鏡頭底下有一塊高地就整個退回 0、前兩段又在空中（Tim：「開了Cascade陰影反而變糊了一點」）。
- *  ⇒ [z0, z1]；分界、交界照畫質頁的數字（以最遠距離為全長的比例，跟 Unity 的 Cascade splits 一樣）縮放到 [z0, z1]。 */
+ *  ⇒ [z0, z1]；分界、交界照畫質頁的數字（以最遠距離為全長的比例，跟 Unity 的 Cascade splits 一樣）縮放到 [z0, z1]。
+ *  沿路每一步也記下那一點離鏡頭的深度、底下的地面高、地面＋上面可能有的東西（CSMF；TASK-0877）⇒ 每一段的高度帶（csmBand）。「貼合畫面」關著也照量（只是不縮分界）。 */
 var CSM_TOP = 80, CSM_LAND_TOP = 40, CSM_Z0_PAD = 10, CSM_FIT_NX = 8, CSM_FIT_NY = 6;
+var CSMF = { d: new Float32Array(8192), lo: new Float32Array(8192), hi: new Float32Array(8192), n: 0 };
 function csmFit(un, fw, D) {
-  var land = !!(BED && BED.A && landWant()), z0 = Infinity, z1 = 0;
+  var land = !!(BED && BED.A && landWant()), z0 = Infinity, z1 = 0, F = CSMF; F.n = 0;
   for (var iy = 0; iy < CSM_FIT_NY; iy++) for (var ix = 0; ix < CSM_FIT_NX; ix++) {
     var a = un(-1 + 2 * ix / (CSM_FIT_NX - 1), -1 + 2 * iy / (CSM_FIT_NY - 1), -1), b = un(-1 + 2 * ix / (CSM_FIT_NX - 1), -1 + 2 * iy / (CSM_FIT_NY - 1), 1);
     var dx = b[0] - a[0], dy = b[1] - a[1], dz = b[2] - a[2], L = Math.hypot(dx, dy, dz) || 1; dx /= L; dy /= L; dz /= L;
     var cf = Math.max(1e-3, dx * fw[0] + dy * fw[1] + dz * fw[2]), tEnd = D / cf, t = 0, tp = 0, st = 2, first = -1, hit = -1;
     while (t <= tEnd) {
-      var x = a[0] + dx * t, y = a[1] + dy * t, z = a[2] + dz * t, g = land ? Math.max(0, bedHgt(x, z)) : 0;
-      if (first < 0 && y <= g + (g > 0.5 ? CSM_LAND_TOP : CSM_TOP)) first = tp;
+      var x = a[0] + dx * t, y = a[1] + dy * t, z = a[2] + dz * t, g0 = land ? bedHgt(x, z) : 0, g = Math.max(0, g0), top = g + (g > 0.5 ? CSM_LAND_TOP : CSM_TOP);
+      if (F.n < F.d.length) { F.d[F.n] = t * cf; F.lo[F.n] = Math.min(g0, 0); F.hi[F.n] = top; F.n++; }   // 地面低過海平面的乾地（−40 m 的湖岸）也算進帶裡
+      if (first < 0 && y <= top) {                                       // 碰到「上面可能有的東西」那一層：上一步跟這一步之間對半找 5 次（以前直接退回上一步：一步最多 40 m，鏡頭拉高時第 0 段整段落在空中）
+        var fa = tp, fb = t;
+        for (var fi = 0; fi < 5; fi++) { var fm = (fa + fb) / 2, gm = land ? Math.max(0, bedHgt(a[0] + dx * fm, a[2] + dz * fm)) : 0; if (a[1] + dy * fm <= gm + (gm > 0.5 ? CSM_LAND_TOP : CSM_TOP)) fb = fm; else fa = fm; }
+        first = fa;
+      }
       if (y <= g) { hit = t; break; }
       if (dy >= 0 && y > g + CSM_TOP + 2000) break;                       // 往上、早就高過所有東西 ⇒ 不會再碰到
       tp = t; t += st; st = Math.min(st * 1.12, 40);
@@ -425,13 +493,29 @@ function csmFit(un, fw, D) {
   if (!isFinite(z0)) return [0, D];                                     // 整個畫面都是天空
   return [Math.max(0, Math.floor(z0 - CSM_Z0_PAD)), Math.min(D, Math.ceil(z1 + 20))];
 }
+/** 第 [d0, d1] 那一段的高度帶（csmClip 照它裁）：csmFit 沿線記下、深度落在那一段前後 CSM_BAND_PAD 公尺內的取樣 ⇒ 地面最低 − 5 m ～ 地面＋上面可能有的東西 ＋ 10 m。
+ *  那一段一個取樣都沒有 ⇒ 用全部的取樣；連一個都沒有（不會發生：每條線至少記一步）⇒ 海面那一帶。
+ *  ⚠ 取樣是 8 × 6 條線、一步最多 40 m：線縫裡的塔、山尖可能高過帶子 ⇒ 那幾點落到下一段（01_gl.js shadowK 的退路），不會沒影子。 */
+var CSM_BAND_PAD = 60;
+function csmBand(d0, d1) {
+  var F = CSMF, lo = Infinity, hi = -Infinity, alo = Infinity, ahi = -Infinity;
+  for (var i = 0; i < F.n; i++) {
+    alo = Math.min(alo, F.lo[i]); ahi = Math.max(ahi, F.hi[i]);
+    if (F.d[i] >= d0 - CSM_BAND_PAD && F.d[i] <= d1 + CSM_BAND_PAD) { lo = Math.min(lo, F.lo[i]); hi = Math.max(hi, F.hi[i]); }
+  }
+  if (!isFinite(lo)) { lo = alo; hi = ahi; }
+  if (!isFinite(lo)) { lo = 0; hi = CSM_TOP; }
+  return [lo - 5, hi + 10];
+}
 /** 第 k 段畫哪幾個（drawHulls／drawModels／drawSails 的 pd.b）：外接球（船 ＝ 船型的格子外框對角線的一半；斷開的那一團 30 m）
- *  1. 它跟它的影子落得到那一段的深度：球心離鏡頭的深度 ± (半徑 ＋ 影子長)，影子長 ＝ 直徑 × sl（照太陽高度，最多 400 m）跟 [d0, d1] 有重疊
- *     ⇒ 近處的船通常只進前一兩段（不畫進遠的那幾段：它的影子落不到那麼遠）；
+ *  1. 它跟它的影子落得到 [d0, d1] 的深度：球心離鏡頭的深度 ± (半徑 ＋ 影子長)，影子長 ＝ 直徑 × sl（照太陽高度，最多 400 m）
+ *     （分段 2026-10-24 起 d0 ＝ −∞、d1 ＝ 最遠距離：一張圖罩到的點不管多深都用它 ⇒ 只剔掉影子落不到最遠距離以內的；單張 ⇒ 不剔）；
  *  2. 太陽方向看過去碰到那一段的範圍。
+ *  3. （分段）整個落在前面某一張圖的內圈（扣掉混下一張的「交界」那一圈與柔邊那幾格）⇒ 不畫進這一段：太陽方向看過去，影子跟它落在同一個位置，
+ *     那一塊收影子的點一定先被前面那一張罩到、用前面那一張（01_gl.js shSel）⇒ 這一張畫了也沒人讀。近處的船因此只進最前面那一兩段（2026-10-24 以前照深度剔）。
  *  每個只判一次、記在 RBAT.cs 的第 k 位（60_rbatch.js）；回傳這一段有沒有任何一個。 */
 function csmIn(k, c, ax, E, fw, d0, d1, sl) {
-  var O = RBAT, b = 1 << k, any = false;
+  var O = RBAT, b = 1 << k, any = false, mg = 1 - (3 * SHK.soft + 4) / SHM.n;
   for (var i = 0; i < O.n; i++) {
     var st = O.cst[i], hit = st === 1;
     if (st === 2) {
@@ -439,7 +523,14 @@ function csmIn(k, c, ax, E, fw, d0, d1, sl) {
       var dc = (px - E[0]) * fw[0] + (py - E[1]) * fw[1] + (pz - E[2]) * fw[2], ext = R + Math.min(400, 2 * R * sl);
       if (!(dc + ext < d0 || dc - ext > d1)) {
         var dx = px - c.C[0], dy = py - c.C[1], dz = pz - c.C[2];
-        hit = Math.abs(dx * ax[0][0] + dy * ax[0][1] + dz * ax[0][2]) < c.r + R && Math.abs(dx * ax[1][0] + dy * ax[1][1] + dz * ax[1][2]) < c.r + R;
+        hit = Math.abs(dx * ax[0][0] + dy * ax[0][1] + dz * ax[0][2]) < c.rx + R && Math.abs(dx * ax[1][0] + dy * ax[1][1] + dz * ax[1][2]) < c.ry + R;   // 長方形：右、上各自的半寬
+        if (hit && !CSM_SIMPLE) {
+          var lx = px * ax[0][0] + py * ax[0][1] + pz * ax[0][2], ly = px * ax[1][0] + py * ax[1][1] + pz * ax[1][2];
+          for (var j = 0; j < k && hit; j++) {
+            var q = SHM.cs[j], f = mg * (1 - SHK['b' + (j + 1)]);       // 第 j 張的內圈（j < k ≤ 最後一段 ⇒ 第 j 段一定有「交界」那一項）
+            if (q.key && q.key !== 'empty' && Math.abs(lx - q.cx) + R <= q.rx * f && Math.abs(ly - q.cy) + R <= q.ry * f) hit = false;
+          }
+        }
       }
     }
     if (hit) { O.cs[i] |= b; any = true; }
@@ -503,7 +594,7 @@ function shadowSimple() {
   var ax = [[V0[0], V0[4], V0[8]], [V0[1], V0[5], V0[9]], [V0[2], V0[6], V0[10]]], tx = 2 * R / SHM.n, C = [0, 0, 0];
   for (var j = 0; j < 3; j++) { var a = ax[j], s = j < 2 ? tx : R, v = Math.round((cc[0] * a[0] + cc[1] * a[1] + cc[2] * a[2]) / s) * s; C[0] += a[0] * v; C[1] += a[1] * v; C[2] += a[2] * v; }   // 右、上對齊一格；朝太陽那一軸對齊 R
   var D = R + CSM_UP, near = 0, far = D + R + CSM_DOWN;
-  c.m = M4.mul(ortho(R, near, far), M4.lookAt([C[0] + SUN[0] * D, C[1] + SUN[1] * D, C[2] + SUN[2] * D], C, up0)); c.r = R; c.C = C;
+  c.m = M4.mul(ortho(R, near, far), M4.lookAt([C[0] + SUN[0] * D, C[1] + SUN[1] * D, C[2] + SUN[2] * D], C, up0)); c.r = c.rx = c.ry = R; c.C = C; c.key = '';   // key：換回分段 ⇒ 重算
   c.off = SHK.nrm * tx; c.bz = Math.max(0.03, SHK.bias * tx) / (far - near);
   gl.bindFramebuffer(gl.FRAMEBUFFER, c.F.fb); gl.clear(gl.DEPTH_BUFFER_BIT); PASS.vp = c.m;
   var st = landWant() ? { r: R, bed: bedDepth(bedPlanes(c.m)), trees: treeDepth(), towns: townDepth() } : { r: R };
@@ -538,7 +629,7 @@ function shLogTick() {
   if (land !== SHLOG.land) { SHLOG.land = land; shLog('陸地', { on: land }); }
   if (now - SHLOG.last < 1) return;
   SHLOG.last = now;
-  shLog('每秒', { mode: CSM_SIMPLE ? '單張' : '分段', n: SHM.n, z0: SHM.z0 || 0, z1: SHM.z1 || 0, cs: SHM.cs.slice(0, SHM.k).map(function (c) { return { r: c.r, C: c.C.map(function (v) { return Math.round(v); }) }; }),
+  shLog('每秒', { mode: CSM_SIMPLE ? '單張' : '分段', n: SHM.n, z0: SHM.z0 || 0, z1: SHM.z1 || 0, cs: SHM.cs.slice(0, SHM.k).map(function (c) { return { rx: Math.round(c.rx), ry: Math.round(c.ry), C: c.C.map(function (v) { return Math.round(v); }) }; }),
     splits: SHM.splits.map(function (v) { return Math.round(v); }), ms: SHM.stat.ms, redraws: SHM.stat.redraws, meshGen: BED_MESH_GEN });
 }
 // 陰影範圍的除錯線（Tim 2026-10-20「可以嘗試在畫面上畫debug線條(可以檢測debug模式是否開啟) 用來排查shadow分配範圍」）：
@@ -580,16 +671,94 @@ function shadowDebugDraw() {
   gl.drawArrays(gl.LINES, 0, V.length / 6); gl.bindVertexArray(null);
   if (dt) gl.enable(gl.DEPTH_TEST); if (bl) gl.enable(gl.BLEND);
 }
+// 陰影範圍的除錯塗色（Tim 2026-10-24「可以優化Shadowmap Debug工具方便妳查看 目前只有提示線 我覺得可以填上半透明顏色(對應線的顏色」；TASK-0877）：同一個開關（?shdbg=1、「顯示分段」）。
+//   照 Unity 的 Show Cascades：畫完海之後，每個像素從深度還原世界座標、照著色器挑段（01_gl.js shSel、shFade，同一支）塗那一段的顏色（半透明；圖最外面混下一張的那一圈
+//   照混的比例混兩段的顏色，最遠距離淡掉的那一截跟著淡）⇒ 塗到哪個顏色，那裡就是用那一張圖；沒塗 ＝ 沒有影子（比最遠距離遠、或每一張都沒罩到）。
+//   每一張圖的邊框也照實描在地表、船、房子上（那一點剛好落在圖的邊上，寬約 1.5 個畫面像素）—— 海平面那個框（shadowDebugDraw）在陸地上會差一截，這一條不會。
+//   深度：場景（多重取樣）的深度解析到 RT.B.dep 再讀 ⇒ 開著的時候，之後讀它的（艙內的水）這一格讀到的是畫完海的深度。
+var SHFILL = { prog: null, vao: null, col: new Float32Array(CSM_MAX * 3) }, SHFILL_A = 0.3;
+function shadowDebugFill(w, h) {
+  if (!(SHDBG_ON || SHK.show) || !SHM || !SHM.on || !SHM.cs.length) return;
+  if (!SHFILL.prog) {
+    SHFILL.prog = VK.compile(gl, '#version 300 es\nvoid main(){ vec2 p=vec2(float((gl_VertexID<<1)&2),float(gl_VertexID&2)); gl_Position=vec4(p*2.0-1.0,0.0,1.0); }\n',
+      '#version 300 es\nprecision highp float;\n' + SHADOW_GLSL + 'uniform mat4 uInv; uniform highp sampler2D uDep; uniform vec2 uView; uniform vec3 uCol[' + CSM_MAX + ']; uniform float uA; out vec4 o;\n' +
+      'void main(){ vec2 uv=gl_FragCoord.xy/uView; float z=texture(uDep,uv).r; vec4 q=uInv*vec4(uv*2.0-1.0,z*2.0-1.0,1.0); vec3 w=q.xyz/q.w;\n' +
+      ' float t; int k=shSel(w,vec3(0.0),t); vec3 c=vec3(0.0); float a=0.0;\n' +
+      ' if(k>=0){ c=mix(uCol[k],uCol[min(k+1,' + (CSM_MAX - 1) + ')],t); a=uA*(1.0-shFade(w)); }\n' +
+      ' for(int i=0;i<' + CSM_MAX + ';i++){ if(i>=uCsN) break; vec4 p=uShM[i]*vec4(w,1.0); float e=max(abs(p.x),abs(p.y)), f=fwidth(e)*1.5; if(abs(p.z)<1.0 && e<1.0 && e>1.0-f){ c=uCol[i]; a=0.9; } }\n' +   // fwidth 在 discard 之前（迴圈照 uCsN，每個像素一樣）
+      ' if(z>=1.0 || a<=0.0 || uShOn<0.5) discard; o=vec4(c,a); }\n');   // uShOn：01_gl.js setCommon 看著色器有沒有用到它才給陰影那一整組（沒用到 ⇒ uCsN 一直是 0，什麼都不塗）
+    SHFILL.vao = gl.createVertexArray();
+  }
+  for (var i = 0; i < CSM_MAX; i++) SHFILL.col.set(CSM_SIMPLE ? [1, 0.3, 1] : SHDBG_COL[i % 4], i * 3);
+  gl.bindFramebuffer(gl.READ_FRAMEBUFFER, RT.A.fb); gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, RT.B.fb);
+  gl.blitFramebuffer(0, 0, w, h, 0, 0, w, h, gl.DEPTH_BUFFER_BIT, gl.NEAREST);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, RT.A.fb);
+  var dt = gl.isEnabled(gl.DEPTH_TEST), bl = gl.isEnabled(gl.BLEND);
+  gl.disable(gl.DEPTH_TEST); gl.depthMask(false); gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+  var P2 = SHFILL.prog, u = P2.u; gl.useProgram(P2.prog); setCommon(P2);
+  gl.uniformMatrix4fv(u.uInv, false, CAM.inv); gl.uniform2f(u.uView, w, h); gl.uniform3fv(u.uCol, SHFILL.col); gl.uniform1f(u.uA, SHFILL_A);
+  gl.activeTexture(gl.TEXTURE3); gl.bindTexture(gl.TEXTURE_2D, RT.B.dep); gl.uniform1i(u.uDep, 3); gl.activeTexture(gl.TEXTURE0);
+  gl.bindVertexArray(SHFILL.vao); gl.drawArrays(gl.TRIANGLES, 0, 3); gl.bindVertexArray(null);
+  gl.depthMask(true); if (dt) gl.enable(gl.DEPTH_TEST); if (!bl) gl.disable(gl.BLEND);
+}
 /** 除錯資訊那一行的「陰影」（61_hud.js）：模式、每一張的半寬、這一格畫陰影幾毫秒、靜態那一層／整張重畫過幾次。 */
 function shadowDbgText() {
   if (!SHM || !SHM.on) return '陰影 關';
-  return '陰影 ' + (CSM_SIMPLE ? '單張' : '分段（' + Math.round(SHM.z0 || 0) + '～' + Math.round(SHM.z1 || 0) + ' m）') + ' ' + SHM.cs.slice(0, SHM.k).map(function (c) { return c.r; }).join('／') + ' m　' + SHM.n + '²　' + SHM.stat.ms + ' ms　重畫 ' + SHM.stat.redraws;
+  return '陰影 ' + (CSM_SIMPLE ? '單張' : '分段（' + Math.round(SHM.z0 || 0) + '～' + Math.round(SHM.z1 || 0) + ' m）') + ' ' + SHM.cs.slice(0, SHM.k).map(function (c) { return c.rx === c.ry ? Math.round(c.r) : Math.round(c.rx) + '×' + Math.round(c.ry); }).join('／') + ' m　' + SHM.n + '²　' + SHM.stat.ms + ' ms　重畫 ' + SHM.stat.redraws;
 }
-/** 著色器的 uShM、uCsD／O／B（每一段的矩陣、遠端、沿法線推多少、深度偏差；沒用到的段 ⇒ FAR_M）。 */
+/** 陰影圖用在哪（量測與除錯；__game.shadowCover，TASK-0877）：畫面上 nx × ny 條線沿著走到地面（海 ＝ 0、陸地 bedHgt；步法同 csmFit，碰到再對半找），
+ *  每一點照著色器挑段（csmPick ＝ 01_gl.js shadowK 那一套）⇒ 每一段：用到幾點（n）、圖上被畫面裡的地面碰到的格（16 × 16 格）佔幾成（vis：這張圖有多少落在畫面裡）、
+ *  被用到的格佔幾成（used）、半寬（rx、ry）；全部：挑到的那張圖沒罩到這一點（gap：斷開）幾點、每一點平均被幾張圖罩住（over：重疊）。只看地面，船、房子不算。 */
+function shadowCover(nx, ny) {
+  if (!SHM || !SHM.on || !CAM.inv) return null;
+  nx = nx || 96; ny = ny || 54;
+  var I = CAM.inv, E = CAM.eye, F = SHM.fw, D = SHK.dist * shFar(), land = !!(BED && BED.A && landWant()), G = 16, k = SHM.k;
+  function un(x, y, z) { var w = I[3] * x + I[7] * y + I[11] * z + I[15], p = M4.pt(I, x, y, z); return [p[0] / w, p[1] / w, p[2] / w]; }
+  function gh(x, z) { return land ? Math.max(0, bedHgt(x, z)) : 0; }
+  var cs = [], tot = 0, gap = 0, over = 0, far = 0;
+  for (var i = 0; i < k; i++) { var c = SHM.cs[i]; cs.push({ n: 0, vis: new Uint8Array(G * G), used: new Uint8Array(G * G), rx: c.rx || c.r, ry: c.ry || c.r }); }
+  for (var iy = 0; iy < ny; iy++) for (var ix = 0; ix < nx; ix++) {
+    var sx = -1 + 2 * (ix + 0.5) / nx, sy = -1 + 2 * (iy + 0.5) / ny, a = un(sx, sy, -1), b = un(sx, sy, 1);
+    var dx = b[0] - a[0], dy = b[1] - a[1], dz = b[2] - a[2], L = Math.hypot(dx, dy, dz) || 1; dx /= L; dy /= L; dz /= L;
+    var cf = Math.max(1e-3, dx * F[0] + dy * F[1] + dz * F[2]), tEnd = D / cf, t = 0, tp = 0, st = 1, hit = -1;
+    while (t <= tEnd) {
+      if (a[1] + dy * t <= gh(a[0] + dx * t, a[2] + dz * t)) { hit = t; break; }
+      if (dy >= 0 && a[1] + dy * t > 3000) break;
+      tp = t; t += st; st = Math.min(st * 1.08, 20);
+    }
+    if (hit < 0) continue;
+    for (var j = 0; j < 8; j++) { var tm = (tp + hit) / 2; if (a[1] + dy * tm <= gh(a[0] + dx * tm, a[2] + dz * tm)) hit = tm; else tp = tm; }
+    var P = [a[0] + dx * hit, a[1] + dy * hit, a[2] + dz * hit], d = (P[0] - E[0]) * F[0] + (P[1] - E[1]) * F[1] + (P[2] - E[2]) * F[2];
+    tot++;
+    var in4 = [], nIn = 0;
+    for (i = 0; i < k; i++) {
+      var q = M4.pt(SHM.cs[i].m, P[0], P[1], P[2]), e = Math.max(Math.abs(q[0]), Math.abs(q[1])), ok = e < 1 && Math.abs(q[2]) < 1;
+      in4.push(ok); if (ok) { nIn++; cs[i].vis[Math.min(G - 1, (q[1] * 0.5 + 0.5) * G | 0) * G + Math.min(G - 1, (q[0] * 0.5 + 0.5) * G | 0)] = 1; }
+    }
+    over += nIn;
+    var s = csmPick(P, d);
+    if (s === -2) { far++; continue; }                                      // 比最遠距離還遠（最後一段淡掉之後）：本來就沒有影子
+    if (s < 0) { gap++; continue; }
+    cs[s].n++; var q2 = M4.pt(SHM.cs[s].m, P[0], P[1], P[2]);
+    cs[s].used[Math.min(G - 1, (q2[1] * 0.5 + 0.5) * G | 0) * G + Math.min(G - 1, (q2[0] * 0.5 + 0.5) * G | 0)] = 1;
+  }
+  function pc(u) { var n = 0; for (var x = 0; x < u.length; x++) n += u[x]; return Math.round(n / u.length * 100); }
+  return { pts: tot, gap: gap, far: far, over: tot ? +(over / tot).toFixed(2) : 0, z0: Math.round(SHM.z0 || 0), z1: Math.round(SHM.z1 || 0),
+    cs: cs.map(function (c) { return { n: c.n, vis: pc(c.vis), used: pc(c.used), rx: Math.round(c.rx), ry: Math.round(c.ry) }; }) };
+}
+/** 收的那一點用哪一段（照 01_gl.js shSel；shadowCover 用）：第一張罩得到它的圖（邊上留柔邊那幾格）；都沒罩到 ⇒ −1（斷開）；比最遠距離還遠 ⇒ −2。 */
+function csmPick(P, d) {
+  var mg = 1 - (3 * SHK.soft + 4) / SHM.n;
+  if (d >= SHM.csD[SHM.k - 1]) return -2;
+  for (var i = 0; i < SHM.k; i++) { var q = M4.pt(SHM.cs[i].m, P[0], P[1], P[2]); if (Math.max(Math.abs(q[0]), Math.abs(q[1])) < mg && Math.abs(q[2]) < 1) return i; }
+  return -1;
+}
+/** 著色器的 uShM、uCsD／L／O／B／W（每一段的矩陣、遠端、開始淡的地方、沿法線推多少、深度偏差、圖最外面混下一張的那一圈；沒用到的段 ⇒ FAR_M）。 */
 function shadowMats() {
   for (var i = 0; i < CSM_MAX; i++) {
     var c = SHM.on && i < SHM.k ? SHM.cs[i] : null;
     SHM.mats.set(c ? c.m : FAR_M, i * 16); SHM.csD[i] = c ? SHM.splits[i] : 0; SHM.csL[i] = c ? SHM.bs[i] : 0; SHM.csO[i] = c ? c.off : 0; SHM.csB[i] = c ? c.bz : 0;
+    SHM.csW[i] = c && !CSM_SIMPLE && i < SHM.k - 1 ? SHK['b' + (i + 1)] : 0;   // 畫質頁的「交界 1～3」；最後一段的「交界」照深度淡（csL）
   }
 }
 /** 破洞底下的海（TASK-0643）：畫完海之後、白沫之前。只落在深度還是清空值的像素（LESS），著色器再用 hullHit 只留海被丟掉的那一塊。⛔ 不寫深度、不混色。 */
@@ -758,6 +927,7 @@ function mainWater(fr) {
   abyssDraw();                                                           // 破洞底下的海（TASK-0643；01_gl.js P.abyss）：海在船殼外形裡被丟掉、又什麼都沒畫到的像素 ⇒ 深海色
   bedSeaDraw();                                                          // 遠海（63_bed_gl.js；只有海圖、鏡頭高於 3 km：轉場拉高時海面網格外面的那一圈）
   bedWaterDraw();                                                        // 內陸水：湖、河、瀑布的水幕（63_bed_gl.js；海圖塊有段 3 才有）
+  shadowDebugFill(w, h);                                                 // 陰影範圍的除錯塗色＋地表上的邊框（同一個開關；下面 shadowDebugFill）
   shadowDebugDraw();                                                     // 陰影範圍的除錯線（Debug 模式才畫；下面 shadowDebugDraw）
 }
 /** 主畫面的半透明與最上面那幾層：白沫、艙內的水、玻璃、城裡的燈、粒子＋砲彈、3D 雨滴、雨。 */
