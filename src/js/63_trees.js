@@ -23,11 +23,13 @@
 //   兩個一起乘 ⇒ 每一株佔的地跟植物一起變大，看起來一樣滿、株數 ÷ 2.25；鋪土的壟（63_towns.js townGroundTile）照乘過的行距。野生的作物不受管
 var TREE_FIELD_K = 1.5, TREE_FIELD_SP = 1.5;
 // 遠處的田（TASK-0879；Tim 2026-10-24「把每一塊田上的作物直接做成貼圖(目前會直接不顯示)」）：作物超過自己的 place.view 就不畫 ⇒ 以前遠一點的田只剩土。
-//   第一次要畫遠處的田的那一格，每一種作物從正上方拍一張接得起來的貼圖（treeFieldBake：TREE_FIELD_TILE[0] 行 × 差不多一樣長的株數，壟、溝、作物照田裡的排法；
+//   第一次要畫遠處的田起，一格拍一種作物，斜著拍一張接得起來的貼圖（treeFieldBake：TREE_FIELD_TILE[0] 行 × 差不多一樣長的株數，壟、溝、作物照田裡的排法；
 //   碰到邊的那幾株繞到對邊再畫一次 ⇒ 鋪起來接得上）⇒ 一張貼圖陣列（一種一層）；城鎮的地面多一層貼著土的網格畫它（63_towns.js townGroundTile 的 Q.gf、地標的田 T.lmg），
 //   照作物 view 的 TREE_FIELD_FADE 成到 10 成抖動淡入（近處照舊一株一株、到 view 才不畫）。?fieldcard=0 ⇒ 不畫（跟以前一樣只剩土）。
-//   TREE_FIELD_SHEAR：拍的時候高 y 的地方沿行往前推 y × 它（斜投影，同 45° 斜看）—— 正上方看麥子只剩細莖、整片是土；遠處的鏡頭是斜著看的，看到的是莖的側面（一片金黃）
-var TREE_FIELD_TILE = [4, 256], TREE_FIELD_FADE = [0.7, 1], TREE_FIELD_SHEAR = 1, TREE_FIELD_UNIT = 19, TREE_FIELD_CARD = Q.get('fieldcard') !== '0';
+//   TREE_FIELD_SHEAR：拍的時候高 y 的地方沿行往前推 y × 它（斜投影，1.8 ≈ 30° 斜看）—— 正上方看麥子只剩細莖、整片是土；遠處的鏡頭是斜著看的，看到的是莖、葉的側面，蓋住行間的土
+//   TREE_FIELD_COVER：[作物至少蓋住幾成土, 最多放大幾倍]（Tim 2026-10-24「精度可以低一些 不過至少看起來有作物在農田上」）——
+//     45° 那一版菜畦的葉子之間露土太多，托爾圖加 300 m 外看起來跟沒種一樣 ⇒ 拍完量一次，不夠就把作物放大重拍（treeFieldBake；讀數 __game.bed().trees.fieldCover）
+var TREE_FIELD_TILE = [4, 256], TREE_FIELD_FADE = [0.7, 1], TREE_FIELD_SHEAR = 1.8, TREE_FIELD_COVER = [0.85, 2.5], TREE_FIELD_UNIT = 19, TREE_FIELD_CARD = Q.get('fieldcard') !== '0';
 var TREE_DENS_K = [0.3, 0.6, 1];                                      // 植物密度：畫質的「植物密度」少／中／多留幾成（07_gfx.js GFX.plant；treeBin 照位置雜湊挑，跟載入順序無關）
 var TREE_LOD_D = [400, 650, 900, 1350];                                 // 低模到多遠：畫質的「立體樹的距離」（07_gfx.js GFX.treed；treeDraw 換了就重新分組）。⛔ 不超過 TREE_SHELL[0]（貼圖跟樹冠殼交接的地方）
 var TREE_SHELL_D = [[1100, 1500], [1100, 1500], [1100, 1500], [1650, 2250]];   // 貼圖 ⇒ 樹冠殼的交接：全開 × 1.5（Tim 2026-10-21「繪製陰影&植物距離再多1.5倍」）
@@ -414,31 +416,50 @@ function treeFieldCrops() {
   });
   return (TREES.fc = { list: list, at: at });
 }
-/** 拍遠處的田的貼圖陣列（檔頭「遠處的田」）⇒ TREES.ftex（綁在第 TREE_FIELD_UNIT 號）；樹種的網格還沒建好（treeInit）⇒ false。只拍一次，拍完狀態全部還原（同 treeBakePage）。
+/** 拍遠處的田的貼圖陣列（檔頭「遠處的田」）：一次叫拍一層（treeFieldLayer），拍完最後一層 ⇒ TREES.ftex（綁在第 TREE_FIELD_UNIT 號）、回 true；
+ *  還沒拍完、或樹種的網格還沒建好（treeInit）⇒ false。每次拍完狀態全部還原（同 treeBakePage）。
  *  一層：TREE_FIELD_TILE[1]² 像素 ＝ 跨行 nr 行 × 沿行 th 公尺；每一行 ＝ 溝（TOWN_FURROW 成）＋ 壟（63_towns.js townGroundTile 鋪的土同一個排法），作物種在壟的中線（同 treeFieldPut）；
- *  轉角、大小、第幾棵、抖動照格子的雜湊（每次一樣）。正交投影從正上方看（u ＝ 跨行、v ＝ 沿行；越高的越前面）。 */
+ *  轉角、大小、第幾棵、抖動照格子的雜湊（每次一樣）。斜的正交投影（u ＝ 跨行、v ＝ 沿行 ＋ 高 × TREE_FIELD_SHEAR；越高的越前面）。 */
 function treeFieldBake() {
   if (TREES.ftex) return true;
   if (!TREES.on || !TREES.init) return false;
-  var t0 = performance.now(), FC = treeFieldCrops(), N = FC.list.length, R = TREE_FIELD_TILE[1], SP = Object.keys(TREE_SPECIES), M = new Float32Array(16); if (!N) return false;
+  var t0 = performance.now(), FC = treeFieldCrops(), N = FC.list.length, R = TREE_FIELD_TILE[1]; if (!N) return false;
+  var J = TREES.fjob || (TREES.fjob = { l: 0, ms: 0, tex: null });     // 一格拍一種（量覆蓋要讀回、一種最多拍三次 ⇒ 九種一次拍完 350 ms，第一次看到田的那一格整段卡住）；拍完之前不畫
   var prevFb = gl.getParameter(gl.FRAMEBUFFER_BINDING), prevVp = gl.getParameter(gl.VIEWPORT), cf = gl.isEnabled(gl.CULL_FACE), bl = gl.isEnabled(gl.BLEND), dt = gl.isEnabled(gl.DEPTH_TEST), sc0 = gl.isEnabled(gl.SCISSOR_TEST), cc = gl.getParameter(gl.COLOR_CLEAR_VALUE), pp = gl.getParameter(gl.CURRENT_PROGRAM);
-  var tex = gl.createTexture(); gl.activeTexture(gl.TEXTURE0 + TREE_FIELD_UNIT); gl.bindTexture(gl.TEXTURE_2D_ARRAY, tex); gl.texStorage3D(gl.TEXTURE_2D_ARRAY, Math.log2(R) + 1, gl.RGBA8, R, R, N);
+  var fy = gl.getParameter(gl.UNPACK_FLIP_Y_WEBGL), pm = gl.getParameter(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL);
+  gl.activeTexture(gl.TEXTURE0 + TREE_FIELD_UNIT);
+  if (!J.tex) { J.tex = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D_ARRAY, J.tex); gl.texStorage3D(gl.TEXTURE_2D_ARRAY, Math.log2(R) + 1, gl.RGBA8, R, R, N); TREES.stat.fieldCover = {}; }
+  else gl.bindTexture(gl.TEXTURE_2D_ARRAY, J.tex);
   var rb = gl.createRenderbuffer(); gl.bindRenderbuffer(gl.RENDERBUFFER, rb); gl.renderbufferStorage(gl.RENDERBUFFER, gl.DEPTH_COMPONENT24, R, R);
   var fb = gl.createFramebuffer(); gl.bindFramebuffer(gl.FRAMEBUFFER, fb); gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.RENDERBUFFER, rb);
-  var pr = VK.compile(gl, TREE_BAKE_VS, TREE_FIELD_BAKE_FS); gl.useProgram(pr.prog); gl.disable(gl.CULL_FACE); gl.disable(gl.BLEND); gl.enable(gl.DEPTH_TEST); gl.viewport(0, 0, R, R);
-  FC.list.forEach(function (sp, l) {
-    var S = TREE_SPECIES[sp], A = FC.at[sp], si = SP.indexOf(sp), Fd = S.place.field, soil = S.place.soil || TOWN_SOIL, sc = S.place.scale;
-    var rs = Fd[0] * TREE_FIELD_SP, ps = Fd[1] * TREE_FIELD_SP, Wt = A.nr * rs, Th = A.th, Hm = S.height[1] * TREE_FIELD_K * sc[1] * 1.6 + 0.5, jt = ps * 0.18;
-    gl.framebufferTextureLayer(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, tex, 0, l);
-    gl.enable(gl.SCISSOR_TEST);                                         // 土：一行一條溝、一條壟
-    for (var kb = 0; kb < A.nr; kb++) [[0, TOWN_FURROW, 1], [TOWN_FURROW, 1, 0]].forEach(function (st) {
-      var x0 = Math.round((kb + st[0]) / A.nr * R), x1 = Math.round((kb + st[1]) / A.nr * R), c = soil[st[2]];
-      gl.scissor(x0, 0, x1 - x0, R); gl.clearColor(c[0], c[1], c[2], 1); gl.clear(gl.COLOR_BUFFER_BIT);
-    });
-    gl.disable(gl.SCISSOR_TEST); gl.clear(gl.DEPTH_BUFFER_BIT);
-    for (kb = 0; kb < A.nr; kb++) for (var ka = 0; ka < A.na; ka++) {
+  var pr = TREES.fprog || (TREES.fprog = VK.compile(gl, TREE_BAKE_VS, TREE_FIELD_BAKE_FS)); gl.useProgram(pr.prog); gl.disable(gl.CULL_FACE); gl.disable(gl.BLEND); gl.disable(gl.SCISSOR_TEST); gl.enable(gl.DEPTH_TEST); gl.viewport(0, 0, R, R);
+  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false); gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);   // 3D 貼圖從陣列上傳不准翻（別人留著開的話會丟錯）
+  treeFieldLayer(J.tex, J.l, pr, R);
+  gl.bindVertexArray(null); gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, fy); gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, pm);
+  var done = ++J.l >= N;
+  if (done) {
+    gl.generateMipmap(gl.TEXTURE_2D_ARRAY); gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR); gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_WRAP_S, gl.REPEAT); gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_WRAP_T, gl.REPEAT);
+    var ae = gl.getExtension('EXT_texture_filter_anisotropic'); if (ae) gl.texParameterf(gl.TEXTURE_2D_ARRAY, ae.TEXTURE_MAX_ANISOTROPY_EXT, Math.min(8, gl.getParameter(ae.MAX_TEXTURE_MAX_ANISOTROPY_EXT)));   // 斜著看的田（遠處幾乎都是）不糊成一片
+    gl.deleteProgram(pr.prog); TREES.fprog = null;
+  }
+  gl.activeTexture(gl.TEXTURE0);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, prevFb); gl.viewport(prevVp[0], prevVp[1], prevVp[2], prevVp[3]); gl.deleteFramebuffer(fb); gl.deleteRenderbuffer(rb);
+  if (cf) gl.enable(gl.CULL_FACE); if (bl) gl.enable(gl.BLEND); if (!dt) gl.disable(gl.DEPTH_TEST); if (sc0) gl.enable(gl.SCISSOR_TEST); gl.clearColor(cc[0], cc[1], cc[2], cc[3]); gl.useProgram(pp);
+  var ms = performance.now() - t0; J.ms += ms; TREES.stat.fieldBakeMs = J.ms; TREES.stat.fieldBakeMax = Math.max(TREES.stat.fieldBakeMax || 0, ms);
+  if (done) { TREES.ftex = J.tex; TREES.fjob = null; }
+  return done;
+}
+/** 拍第 l 種作物那一層（treeFieldBake 已經綁好畫框、程式、狀態）：作物先拍在透明底上、量蓋住幾成土 ⇒ 不到 TREE_FIELD_COVER[0] 就放大重拍（最多 TREE_FIELD_COVER[1] 倍、四次）；
+ *  透明的地方補上溝、壟的土色再上傳。 */
+function treeFieldLayer(tex, l, pr, R) {
+  var FC = treeFieldCrops(), sp = FC.list[l], S = TREE_SPECIES[sp], A = FC.at[sp], si = Object.keys(TREE_SPECIES).indexOf(sp), Fd = S.place.field, soil = S.place.soil || TOWN_SOIL, sc = S.place.scale, M = new Float32Array(16);
+  var rs = Fd[0] * TREE_FIELD_SP, ps = Fd[1] * TREE_FIELD_SP, Wt = A.nr * rs, Th = A.th, Hm = S.height[1] * TREE_FIELD_K * sc[1] * TREE_FIELD_COVER[1] * 1.2 + 0.5, jt = ps * 0.18, px = new Uint8Array(R * R * 4);
+  gl.framebufferTextureLayer(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, tex, 0, l);
+  function plants(kk) {
+    for (var kb = 0; kb < A.nr; kb++) for (var ka = 0; ka < A.na; ka++) {
       var gi = kb * 131 + l * 977, gj = ka, b = rs * (kb + 1 - (1 - TOWN_FURROW) / 2) + (treeHash(gi, gj, 7341) - 0.5) * 2 * jt, a = ps * (ka + 0.5) + (treeHash(gi, gj, 7342) - 0.5) * 2 * jt;
-      var th = treeHash(gi, gj, 7343) * 6.2832, s = (sc[0] + (sc[1] - sc[0]) * treeHash(gi, gj, 7344)) * TREE_FIELD_K, g = TREES.list[TREES.vi[si] + Math.floor(treeHash(gi, gj, 7346) * S.variants)].lod[0];
+      var th = treeHash(gi, gj, 7343) * 6.2832, s = (sc[0] + (sc[1] - sc[0]) * treeHash(gi, gj, 7344)) * TREE_FIELD_K * kk, g = TREES.list[TREES.vi[si] + Math.floor(treeHash(gi, gj, 7346) * S.variants)].lod[0];
       var c2 = Math.cos(th), s2 = Math.sin(th), r = (g.w || 1) * s + 0.1, rs2 = r + TREE_FIELD_SHEAR * (g.h || 1) * s;   // r：從中心往外最多幾公尺、rs2：沿行往前（斜投影）最多推到哪（碰到邊才繞到對邊再畫）
       gl.bindVertexArray(g.vao); gl.disableVertexAttribArray(4); gl.disableVertexAttribArray(5); gl.vertexAttrib4f(4, 0, 0, 0, 0); gl.vertexAttrib2f(5, 1, 1);
       for (var dz = -1; dz <= 1; dz++) for (var dx = -1; dx <= 1; dx++) {
@@ -449,16 +470,21 @@ function treeFieldBake() {
       }
       gl.enableVertexAttribArray(4); gl.enableVertexAttribArray(5);
     }
-  });
-  gl.bindVertexArray(null);
-  gl.generateMipmap(gl.TEXTURE_2D_ARRAY); gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR); gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-  gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_WRAP_S, gl.REPEAT); gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_WRAP_T, gl.REPEAT);
-  var ae = gl.getExtension('EXT_texture_filter_anisotropic'); if (ae) gl.texParameterf(gl.TEXTURE_2D_ARRAY, ae.TEXTURE_MAX_ANISOTROPY_EXT, Math.min(8, gl.getParameter(ae.MAX_TEXTURE_MAX_ANISOTROPY_EXT)));   // 斜著看的田（遠處幾乎都是）不糊成一片
-  gl.activeTexture(gl.TEXTURE0);
-  gl.bindFramebuffer(gl.FRAMEBUFFER, prevFb); gl.viewport(prevVp[0], prevVp[1], prevVp[2], prevVp[3]); gl.deleteFramebuffer(fb); gl.deleteRenderbuffer(rb); gl.deleteProgram(pr.prog);
-  if (cf) gl.enable(gl.CULL_FACE); if (bl) gl.enable(gl.BLEND); if (!dt) gl.disable(gl.DEPTH_TEST); if (sc0) gl.enable(gl.SCISSOR_TEST); gl.clearColor(cc[0], cc[1], cc[2], cc[3]); gl.useProgram(pp);
-  TREES.ftex = tex; TREES.stat.fieldBakeMs = performance.now() - t0;
-  return true;
+  }
+  for (var k = 1, tries = 0, cov = 0; ; tries++) {
+    gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+    plants(k);
+    gl.readPixels(0, 0, R, R, gl.RGBA, gl.UNSIGNED_BYTE, px);
+    var n = 0; for (var q = 3; q < px.length; q += 4) if (px[q] > 127) n++;
+    cov = n / (R * R); if (cov >= TREE_FIELD_COVER[0] || k >= TREE_FIELD_COVER[1] || tries >= 3) break;
+    k = Math.min(TREE_FIELD_COVER[1], k * Math.min(1.6, Math.sqrt(TREE_FIELD_COVER[0] / Math.max(cov, 0.05))));
+  }
+  TREES.stat.fieldCover[sp] = [+cov.toFixed(2), +k.toFixed(2)];
+  for (var i = 0; i < R; i++) {                                         // 土：第 i 欄落在第幾行的哪裡 ⇒ 溝（前 TOWN_FURROW 成）或壟
+    var f = i * A.nr / R, c = soil[f - Math.floor(f) < TOWN_FURROW ? 1 : 0];
+    for (var j = 0; j < R; j++) { var o = (j * R + i) * 4; if (px[o + 3] <= 127) { px[o] = c[0] * 255; px[o + 1] = c[1] * 255; px[o + 2] = c[2] * 255; } px[o + 3] = 255; }
+  }
+  gl.texSubImage3D(gl.TEXTURE_2D_ARRAY, 0, 0, 0, l, R, R, 1, gl.RGBA, gl.UNSIGNED_BYTE, px);
 }
 /** 分組：看得到的塊（視錐）裡每一棵照離鏡頭多遠分到細、低模（照樹種與第幾棵分組）、貼圖 ⇒ 寫進三個實例緩衝區。 */
 function treeBin(keys, eye) {
@@ -550,7 +576,7 @@ function treeStat() {
   var S = TREES.stat;
   return { on: TREES.on, kinds: Object.keys(TREE_SPECIES), variants: TREES.list.length, planted: S.plant, bySp: S.bySp, far: S.far, drawn: { full: S.d0, low: S.d1, card: S.d2, shells: S.shells || 0, shellTris: S.shellTris || 0 },
     pages: TREES.pages ? TREES.pages.map(function (P) { return P.key + ':' + P.cells.length + (P.tex ? '（拍了）' : ''); }) : null, field: S.field || 0, fieldSkip: S.fieldSkip || 0, lmField: S.lmField || 0, lmThin: S.lmThin || 0,   // 貼圖集分張（照 meta.region）、附屬的田種了幾株
-    fieldCard: { on: TREE_FIELD_CARD, baked: !!TREES.ftex, crops: TREES.fc ? TREES.fc.list : null },   // 遠處的田的貼圖（TASK-0879）
-    ms: { gen: +S.genMs.toFixed(1), bake: +S.bakeMs.toFixed(1), fieldBake: +(S.fieldBakeMs || 0).toFixed(1), plant: +S.plantMs.toFixed(1), bin: +S.binMs.toFixed(2) },
+    fieldCard: { on: TREE_FIELD_CARD, baked: !!TREES.ftex, crops: TREES.fc ? TREES.fc.list : null, cover: S.fieldCover || null },   // 遠處的田的貼圖（TASK-0879；cover：每一種 [蓋住幾成土, 放大幾倍]）
+    ms: { gen: +S.genMs.toFixed(1), bake: +S.bakeMs.toFixed(1), fieldBake: +(S.fieldBakeMs || 0).toFixed(1), fieldBakeMax: +(S.fieldBakeMax || 0).toFixed(1), plant: +S.plantMs.toFixed(1), bin: +S.binMs.toFixed(2) },
     tris: TREES.init ? Object.keys(TREE_SPECIES).reduce(function (o, sp, si) { var T = TREES.list[TREES.vi[si]]; o[sp] = [T.lod[0].n / 3, T.lod[1].n / 3]; return o; }, {}) : null };
 }
