@@ -306,11 +306,23 @@ function yardNear(T, P, r) {
   }
   return -1;
 }
-/** 繩的兩端各跟著哪根帆桁轉（-1 ＝ 不跟）：端點靠在帆桁上（綁在帆桁上的 brace、lift、footrope，topsail 以上的 sheet…）。
+/** 繩 r（T.rig.ropes 的一條）第 e 端跟著哪根帆桁轉（-1 ＝ 不跟）：作品寫明綁在哪（ends）優先，座標、沒寫、`sail:`、`rope:` 才照網格找（yardNear）。
+ *  寫明的：`model:` 指到帆桁 ⇒ 那根；指到別的模型 ⇒ 不跟；固定點（關聯路徑，例 `主桅/shrouds-S`）⇒ 不跟 —— 綁在桅、甲板這種不會轉的東西上。
+ *  ⛔ 只照網格：shroud 上端寫明綁在桅的固定點，可是 hounds 離帆桁的 sling 不到 3 格 ⇒ 被當成綁在帆桁上、轉帆時 shroud 頂跟著轉（basecamp 2026-10-25：21 艘裡 12 艘有，全是寫明固定點的端點 —— shroud、stay、futtock、桅頂的 halyard／lift；憲法號 58 端，轉帆 16° 舊規則帶走最多 0.25 m）。 */
+function ropeEndYard(T, r, e, P) {
+  var ref = r.ends ? r.ends[e] : null;
+  if (typeof ref === 'string' && ref.indexOf('rope:') !== 0 && ref.indexOf('sail:') !== 0 && !/^-?[\d.]+,-?[\d.]+,-?[\d.]+$/.test(ref)) {
+    var k = rcpModel(T.rig, r.frame, ref.indexOf('model:') === 0 ? ref : 'model:' + ref), m = k >= 0 && T.rig.models[k];
+    if (m) return m.meta && m.meta.kind === 'yard' ? k : -1;
+    if (ref.indexOf('model:') !== 0) return -1;                            // 固定點 ⇒ 不跟；`model:` 找不到那個模型 ⇒ 底下照網格
+  }
+  return yardNear(T, P, 3);
+}
+/** 繩的兩端各跟著哪根帆桁轉（-1 ＝ 不跟）：端點靠在帆桁上（綁在帆桁上的 brace、lift、footrope，topsail 以上的 sheet…）；作品寫明綁在哪的照寫的（ropeEndYard）。
  *  course 的 sheet 與 tack 兩端都不在帆桁上（帆腳綁甲板繩栓）⇒ 不轉，跟帆腳一起留著（clothTemplate 的 clewYard）。同一型的兩艘共用一份（T.ropeYard）。 */
 function ropeYards(sh) {
   var T = sh.T;
-  if (!T.ropeYard) T.ropeYard = T.rig.ropes.map(function (r) { var n = r.pts.length / 3; return [yardNear(T, [r.pts[0], r.pts[1], r.pts[2]], 3), yardNear(T, [r.pts[n * 3 - 3], r.pts[n * 3 - 2], r.pts[n * 3 - 1]], 3)]; });
+  if (!T.ropeYard) T.ropeYard = T.rig.ropes.map(function (r) { var n = r.pts.length / 3; return [ropeEndYard(T, r, 0, [r.pts[0], r.pts[1], r.pts[2]]), ropeEndYard(T, r, 1, [r.pts[n * 3 - 3], r.pts[n * 3 - 2], r.pts[n * 3 - 1]])]; });
   sh.ropes.forEach(function (r, j) { r.pts0 = r.pts; r.ya = T.ropeYard[j][0]; r.yb = T.ropeYard[j][1]; });
   sh.yRopes = sh.ropes.filter(function (r) { return r.ya >= 0 || r.yb >= 0; });
 }
@@ -521,7 +533,7 @@ function linkRopes(T, ropes, models) {
   });
 }
 /** 一端（第 pi 個點）的決定（見 linkRopes）。順序：砲塔的殼 → 作品寫明的（ends）→ 帆桁（照網格）→ 母繩（≤ 3 格）→ 最後才照外框猜模型。
- *  作品寫明的：model: ⇒ 那個模型（帆桁照網格先認）；rope: ⇒ 只找繩；sail:、固定點（關聯路徑）⇒ 不猜模型（帆桁、繩照找）；座標或沒寫 ⇒ 全部照找，模型放最後。
+ *  作品寫明的：model: ⇒ 那個模型（是帆桁就算帆桁）；rope: ⇒ 只找繩；固定點（關聯路徑）⇒ 不是帆桁、不猜模型（繩照找）；sail: ⇒ 不猜模型（帆桁、繩照找）；座標或沒寫 ⇒ 全部照找，模型放最後（帆桁那一格見 ropeEndYard）。
  *  ⛔ 以前模型排在母繩前面：風暴角號的側支索下端明明接在三眼滑車的繩上，卻被旁邊砲、錨的外框搶走（砲被打掉、錨拋下去支索跟著斷）；
  *     收穫號、持火號寫明綁帆角與繫索樁的帆腳索被猜到船尾燈、槳上（TASK-0716 量的，雕刻端 sub=ropecheck 對照）。 */
 function ropeDecide(T, ropes, models, i, pi, rd) {
@@ -534,7 +546,7 @@ function ropeDecide(T, ropes, models, i, pi, rd) {
   var ref = re && re.ends ? re.ends[pi ? 1 : 0] : null;
   var decl = typeof ref !== 'string' ? '' : ref.indexOf('model:') === 0 ? 'model' : ref.indexOf('rope:') === 0 ? 'rope' : ref.indexOf('sail:') === 0 ? 'sail' : /^-?[\d.]+,-?[\d.]+,-?[\d.]+$/.test(ref) ? '' : 'anchor';
   if (decl !== 'rope') {                                                   // 寫明掛在母繩上（橫繩組的每一道）⇒ 只找繩（⛔ 先找模型 ⇒ 哨兵號繩梯中間五道綁到旁邊的 XI 吋砲尾）
-    var yk = yardNear(T, P, 3);                                            // 帆桁：照網格（⛔ 照外框：轉過的帆桁外框很大，桅頂附近的 ratline 都會被當成綁在帆桁上）
+    var yk = re ? ropeEndYard(T, re, pi ? 1 : 0, P) : yardNear(T, P, 3);   // 帆桁：寫明的照寫的（固定點 ⇒ 不是帆桁），沒寫才照網格（⛔ 照外框：轉過的帆桁外框很大，桅頂附近的 ratline 都會被當成綁在帆桁上）
     if (yk >= 0) { D.k = 'yard'; D.m = key(yk); return D; }
     if (decl === 'model') {                                                // 作品寫明綁在哪個模型（ends model:<模型>/<固定點>；TASK-0715）⇒ 照它，不猜
       var nk = rcpModel(T.rig, re.frame, ref);
