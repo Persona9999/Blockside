@@ -394,7 +394,9 @@ function makeMonkeys(sh, crew, taken, add) {
     sh.pmWant += sh.cw.monkeys;                                      // 船員配置：每一對砲幾個（0 ＝ 沒有送藥手，砲旁的藥箱用完就停；2 ＝ 第二個站另一邊）
     for (var m = 0; m < sh.cw.monkeys; m++) {
       var at = standNear(BASE, x, CY + ((i + m) % 2 ? 9 : -9), zr[0], zr[1], 12, taken);
-      if (!at && gs[0].model.hd && gs[0].spots.length) {               // 架高的砲塔轉盤（定遠號的露砲台：轉盤比主甲板高 2 m、砲偏中線 5.2 m）⇒ 砲口那一欄靠中線沒有站得住的格 ⇒ 站到那門砲的砲班旁（navBase 連轉盤也算）
+      if (!at && gs[0].mt && gs[0].drop)                                // 迴旋砲在小平台上（松島號的桅樓，半徑 2 m、中間是桅、兩舷的 47 mm 把中線 ±0.9 m 那一帶佔滿）中線那一欄站不下 ⇒ 站在放藥箱的位置旁
+        at = standNear(navBase(sh.T), Math.floor(gs[0].drop[0]), Math.floor(gs[0].drop[1]), zr[0], zr[1], 12, taken, 8);   //   （跟放藥點同一塊走路格 ⇒ 點名不會因為走不到把他改成預備水手；以前不放送藥手，匯入檢查 ✗）
+      if (!at && (gs[0].model.hd || gs[0].mt) && gs[0].spots.length) {   // 架高的砲塔轉盤（定遠號的露砲台：轉盤比主甲板高 2 m、砲偏中線 5.2 m）⇒ 砲口那一欄靠中線沒有站得住的格 ⇒ 站到那門砲的砲班旁（navBase 連轉盤也算）
         var sp = gs[0].spots[gs[0].spots.length - 1].at; at = standNear(navBase(sh.T), Math.floor(sp[0]), Math.floor(sp[1]), zr[0], zr[1], 12, taken, 8);
       }
       if (!at) continue;

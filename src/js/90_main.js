@@ -289,7 +289,7 @@ if (DEBUG) window.__game = {
       var y = o.yaw * D, da = y - M.yaw, ax = M4.dir(rotM([0, 0, 1], y), M.ax0[0], M.ax0[1], 0);
       M.yaw = M.yawT = y; g.model.rot = y; g.ax = [ax[0], ax[1]];
       g.muz = mountRot(M.muz0, M.c, y); if (M.muzs0) g.muzs = M.muzs0.map(function (q) { return mountRot(q, M.c, y); });
-      if (g.drop) g.drop = mountRot(g.drop, M.c, da);
+      if (g.drop) mountDrop(sh, g, da);
       (g.spots || []).forEach(function (s) { s.at = mountRot(s.at, M.c, da); var c = s.who; if (c && c.gun === g && !c.walk && c.st === 0) { c.pos = mountRot(c.pos, M.c, da); if (c.home) c.home = mountRot(c.home, M.c, da); } });
     });
     if (o && o.shot) {

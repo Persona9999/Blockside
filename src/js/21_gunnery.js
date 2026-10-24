@@ -254,6 +254,15 @@ function mountFireOk(g) {
 }
 /** 格座標 p 繞 c 轉 a（跟 modelLocal 同一個 rotM ⇒ 砲口、站位跟畫出來的模型轉得一樣）。 */
 function mountRot(p, c, a) { var d = M4.dir(rotM([0, 0, 1], a), p[0] - c[0], p[1] - c[1], 0); return [c[0] + d[0], c[1] + d[1], p[2]]; }
+/** 放藥箱的位置（送藥手送到哪；23_powder.js g.drop）跟著砲轉 da：轉過去那一點腳下 3×3 都沒有格子（同 32_hull.js 站著的人「腳下 3×3 都沒了 ⇒ 掉下去」）、
+ *  或跟原本那一點不在走路格的同一塊（navReach：只有會轉裝甲的船才量，其他船一律算走得到）⇒ 留在原地。
+ *  ⛔ 照轉、不看地板 ⇒ 松島號桅樓的 47 mm（放藥點離轉軸 1.8 m、桅樓半徑 2 m）一轉就甩出桅樓，送藥手照直線飛過去站在海上（Tim 2026-10-24「桅杆上的送藥手取彈藥會浮空」）。
+ *  ⛔ 只看地板 ⇒ 兩門 47 mm 把桅四周那一圈切成前後兩塊，放藥點轉到另一塊 ⇒ 送藥手走不到、點名（40_crew.js reassign）把他改成預備水手 ⇒ 桅樓沒有送藥手。
+ *  轉進牆裡、障礙物上照舊轉（⛔ 擋「站不住」⇒ 皇家號舷外槳架的 4 門 pierrier 匯入檢查的讀數跟著變）。 */
+function mountDrop(sh, g, da) {
+  var p = mountRot(g.drop, g.mt.c, da), x = Math.floor(p[0]), y = Math.floor(p[1]), z = Math.floor(p[2]);
+  if (countBox(sh.grid, x - 1, y - 1, z - 1, x + 1, y + 1, z - 1) && navReach(sh, g.drop, p)) g.drop = p;
+}
 /** 每一步（50_sim.js，在開砲之前）：有迴旋的砲照瞄準點挑方向、照轉速轉；轉了 ⇒ 砲軸、砲口、站位、人跟著轉。 */
 function mountStep(sh, dt) {
   var G = sh.mounts; if ((!G && !sh.tur) || sh.sunk || sh.struck) return;
@@ -280,7 +289,7 @@ function mountStep(sh, dt) {
     var ax = M4.dir(rotM([0, 0, 1], M.yaw), M.ax0[0], M.ax0[1], 0); g.ax = [ax[0], ax[1]];
     var back = function (q) { return [q[0] - M.ax0[0] * M.sl, q[1] - M.ax0[1] * M.sl, q[2]]; };
     g.muz = mountRot(back(M.muz0), M.c, M.yaw); if (M.muzs0) g.muzs = M.muzs0.map(function (q) { return mountRot(back(q), M.c, M.yaw); });
-    if (g.drop) g.drop = mountRot(g.drop, M.c, da);
+    if (g.drop) mountDrop(sh, g, da);
     (g.spots || []).forEach(function (s) { s.at = mountRot(s.at, M.c, da); var c = s.who; if (c && c.gun === g && !c.walk && c.st === 0) { c.pos = mountRot(c.pos, M.c, da); if (c.home) c.home = mountRot(c.home, M.c, da); } });
   });
 }
