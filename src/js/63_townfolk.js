@@ -240,7 +240,12 @@ function townFolkWorkSite(T, G, p, k) {
       if (best) sites.push(best);
     });
   }
-  return sites.length ? sites[Math.floor(townHash(k + ':work') * sites.length) % sites.length] : null;
+  // 一個地塊最多四位作近距離演出；更多人仍散步，避免把人口權重全部擠到同一個門口。
+  var usage = G.workUsage || (G.workUsage = {}), available = sites.filter(function (s) { return (usage[s.lot] || 0) < 4; });
+  if (!available.length) return null;
+  var chosen = available[Math.floor(townHash(k + ':work') * available.length) % available.length];
+  usage[chosen.lot] = (usage[chosen.lot] || 0) + 1;
+  return chosen;
 }
 function townFolkRoute(G, a, k, dir) {
   if (a.work) {                                                       // 在工作建築門前的短街段往返，不穿越房屋；仍只依畫面時間。

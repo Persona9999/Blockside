@@ -29,6 +29,10 @@ const far={E:T.E,p:{lots:[{id:'far',use:'mine',at:[30,200]}]}};
 assert.equal(c.townFolkWorkSite(far,{nodes,edges,y:[0,20]},{work:['mine']},'far'),null);
 const hidden={E:T.E,p:{lots:[{id:'hidden',use:'mine',at:[30,12],hide:true}]}};
 assert.equal(c.townFolkWorkSite(hidden,{nodes,edges,y:[0,20]},{work:['mine']},'hidden'),null);
+const guardTown={E:T.E,p:{lots:[{id:'tower',use:'watchtower',at:[30,6]}]}};
+const guardGraph={nodes,edges,y:[0,20]}, guard={work:['garrison']};
+for(let i=0;i<4;i++)assert(c.townFolkWorkSite(guardTown,guardGraph,guard,'guard'+i));
+assert.equal(c.townFolkWorkSite(guardTown,guardGraph,guard,'guard4'),null,'fifth actor falls back to free route');
 const free={id:0,e:0,spd:1.4};c.townFolkRoute(G,free,'free',1);assert(free.legs.length>4,'general route still follows multiple edges');
 // Population-driven art picks may repeat; the debug lineup must still show every requested worker exactly once.
 T.folk=G;T.ox=10000;T.oy=20000;G.agents=workers.map((p,i)=>({id:i,art:0}));c.townRoadHeight=()=>3;
@@ -36,6 +40,6 @@ const F={rows:workers.length,people:workers.map(p=>({id:p.id,sheet:0})),sheets:[
 assert(c.townFolkStreet(T,F,false,'workers'));
 assert.deepEqual(Array.from(G.line.arts),workers.map((p,i)=>i));
 assert.equal(new Set(G.line.arts).size,12);c.townFolkStreet(T,F,true);assert.equal(G.line,null);
-const report={workers:rows,unmatchedFallback:true,farFallback:true,hiddenIgnored:true,deterministic:true,generalRouteUnchanged:true,uniqueWorkerLineup:12};
+const report={workers:rows,unmatchedFallback:true,farFallback:true,hiddenIgnored:true,deterministic:true,generalRouteUnchanged:true,uniqueWorkerLineup:12,workplaceCapacity:4,overflowFallsBack:true};
 if(process.argv[3])fs.writeFileSync(process.argv[3],JSON.stringify(report,null,2)+'\n');
 console.log(JSON.stringify({workers:rows.length,maxAlongStreetOffset:Math.max(...rows.map(x=>x.maxAlongStreetOffset)),negativeControls:4,deterministic:true}));
