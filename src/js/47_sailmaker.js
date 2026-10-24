@@ -228,6 +228,7 @@ function smFix(sh, s, Nd, W) {
 function smRopeBack(sh, j) {
   var r = sh.ropes[j];
   r.dead = false; r.lz = false; r.cutL = null; r.offSail = null;
+  sh.ropeBack = (sh.ropeBack || 0) + 1;                                  // 局勢檢查的結構戳記（32_hull.js svStamp）：接回一條 ⇒ 下次照量
   if (sh.tCut) delete sh.tCut[j];
   if (sh.loose) sh.loose = sh.loose.filter(function (o) { return o.of !== r; });
   sh.rigDirty = true;
