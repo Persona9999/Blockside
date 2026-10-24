@@ -10,7 +10,7 @@
 var RISE = { T: null, lot: null, nm: null, d: null, p: 1, play: 0, t0: 0, dur: 24, G: null, occ: null, mesh: null, gpu: null, cv: null, deco: [], ver: 0, panel: null, picking: false, stat: {} };
 var RISE_UI = Q.get('rise') === '1';                                  // 面板（見檔頭）
 var RISE_PAD = 14, RISE_TOP = 16;                                      // 四周留白、頂上多留幾格（腳手架比蓋到的高出一截）
-var RISE_C = { dirt: 104, dirt2: 68, stone: 145, stone2: 146, pole: 136, plank: 173, brick: 164, brick2: 201, sand: 213 };   // rgb332（63_towns.js 著色器照 vC 解）
+var RISE_C = { dirt: 104, dirt2: 68, stone: 145, stone2: 146, pole: 136, plank: 177, brick: 164, brick2: 201, sand: 213 };   // rgb332（63_towns.js 著色器照 vC 解）
 
 /** 一份模型的區塊表（townmodels.py pack_chunks）⇒ Promise<{ keys: [[cx, cy, cz] …], data: [Uint8Array(4096) …] }>。 */
 function townRiseChunks(b64) {
@@ -73,6 +73,9 @@ function townRiseStop() {
 }
 /** 城 T 的地塊 lot 現在擺出來的那一棟（實例會因為換模型組重建 ⇒ 每次照地塊 id 找）。 */
 function townRiseInst(T, lot) { if (!T || !T.inst) return null; for (var i = 0; i < T.inst.length; i++) if (T.inst[i].lot === lot) return T.inst[i]; return null; }
+/** 演的那一棟的石基（63_towns.js townBin）：地基那一段（RISE_PLINTH）做完才出現。 */
+var RISE_PLINTH = 0.03;
+function townRisePlinth() { return RISE.p >= RISE_PLINTH; }
 /** 分組時跳過演的那一棟（63_towns.js townBin）。 */
 function townRiseHides(T, q) { return RISE.T === T && q.lot != null && q.lot === RISE.lot; }
 
@@ -89,6 +92,7 @@ function townRiseSet(p) {
   for (j = 0; j < old.length; j += 2) { k = old[j]; if (!seen.has(k) && !occ[k]) G.set(k % SX, ((k / SX) | 0) % SY, (k / (SX * SY)) | 0, 0); }
   for (j = 0; j < nu.length; j += 2) { k = nu[j]; if (!occ[k]) G.set(k % SX, ((k / SX) | 0) % SY, (k / (SX * SY)) | 0, nu[j + 1]); }
   RISE.deco = nu;
+  if ((p >= RISE_PLINTH) !== (RISE.pl === true)) { RISE.pl = p >= RISE_PLINTH; TOWNS.dirty = true; }   // 石基出現／拿掉 ⇒ 重新分組
 }
 
 /** 施工裝飾（照進度現算；格的 key ＝ x ＋ SX·(y ＋ SY·z)，留白後的格座標）⇒ [key, 色, key, 色, …]。
