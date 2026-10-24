@@ -123,6 +123,7 @@ function survey(sh) {               // 每半秒量一次：砲還在不在、�
   var alive = 0, sv0 = DEBUG ? performance.now() : 0, sv1 = 0;
   sh.models.forEach(function (m) {
     if (!m.alive) return;
+    if (m.restOn && !m.restOn.alive) { blowModel(sh, m, [0, -1, 0], true); return; }   // 坐著的那個模型不在了（被斷開的那一團帶走、沒經過 blowModel）⇒ 掉下去（10_ship.js restOn）
     if (m.falls) { if (m.falls.every(function (j) { return sh.ropes[j].dead; })) blowModel(sh, m, [0, -1, 0], true); return; }   // 掛著的（小艇）：吊索全斷才掉（10_ship.js hangFalls）
     var f = m.foot, x = f & 2047, y = (f >> 11) & 1023, z = f >> 21;
     if (!countBox(sh.grid, x - 2, y - 2, z - 1, x + 2, y + 2, z)) blowModel(sh, m, [0, -1, 0], true);   // 腳下的甲板被打掉 ⇒ 掉下去

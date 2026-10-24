@@ -562,6 +562,7 @@ function blowModel(sh, m, vel, drop, at) {
     w: drop ? [gauss() * 0.4, 0, gauss() * 0.4] : [gauss() * 4, gauss() * 4, gauss() * 4] };
   FLY.push(Object.assign({ T: sh.T, mesh: m.mesh, mm: m.mm, M0: M0, c0: c0, c: c0.slice(), R: M4.ident(), t: 0, wet: false }, f));
   sh.guns.forEach(function (g) { if (g.model === m) g.alive = false; });
+  sh.models.forEach(function (q) { if (q.restOn === m && q.alive) blowModel(sh, q, vel, drop, at); });   // 坐在它上面的（meta rests_on：舵輪 ⇒ 舵輪座）一起飛（10_ship.js）；沒有人寫 rests_on 的船一個亂數都不多抽
   sh.ropes.forEach(function (r) { if (!r.dead && r.mods && r.mods.indexOf(m.k) >= 0) { r.dead = true; sh.rigDirty = true; } });
   if (m.yk) sh.rigDirty = true;                                          // 帆桁飛了 ⇒ 收在它上面的那一捲不畫（30_rig_physics.js furlLost；只是畫面旗標，物理關著也要重做）
   if (!drop && m.kind !== 'powder') {
