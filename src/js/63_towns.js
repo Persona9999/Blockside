@@ -44,6 +44,7 @@ var TOWN_ANNEX_CELL = 4, TOWN_SOIL = [[0.44, 0.34, 0.23], [0.33, 0.25, 0.17]], T
 var TOWN_LOD = [160, 800], TOWN_FAR = [2400, 3000], TOWN_BAND = [24, 60, 300], TOWN_REBIN = 8, TOWN_SHELL_G = 32, TOWN_GRADE_REACH = 12, TOWN_LOT_PAD = 2, TOWN_LOT_CELL = 32, TOWN_LOT_SINK = 0.2, TOWN_CLR_G = 2, TOWN_ROAD_LIFT = 0.12, TOWN_GROUND_VIEW = 1600;
 var TOWN_MESH_MS = 8;                                                    // 模型網格化每段最多幾 ms 就讓出一次（townMesh；跟地球儀同一條主執行緒）
 var TOWN_WALL_CORNER = 30, TOWN_WALL_KMAX = 1;                         // 城牆：轉角件從轉幾度起擺；斜接最多切多斜（tan，1 ＝ 轉 90° 的角平分）
+var TOWN_WALL_JOIN_IN = 0.5;                                            // 牆接建築：牆兩側的邊都進了建築的外框之後再多伸幾公尺（townWall joinIn）
 var TOWN_SLAB_KMAX = 2;                                                 // 碼頭、棧橋的板：轉角斜接最多拉長幾倍（2 ＝ 轉 120°；再急就在轉角那一點變窄）
 var TOWNS = { on: Q.get('towns') !== '0', prosp: {}, list: [],pend: [], ver: 0, want: 0, err: null, kit: null, kitP: null, idx: null, kitHas: null, kitRedo: false, kitBusy: false, mwait: null, prog: null, progJ: null, dirty: true, eye: null, sig: '', buf: [], grp: null,
   stat: { towns: 0, lots: 0, inst: 0, walls: 0, corners: 0, snapped: 0, skip: {}, d0: 0, d1: 0, d2: 0, d3: 0, plinth: 0, tris: 0, binMs: 0, kitMs: 0, meshBaked: 0, meshLive: 0, meshCheck: null, gradeMs: 0, chunks: 0, regraded: 0, drawMs: 0 } };
@@ -171,7 +172,8 @@ function townReplace(p) {
   TOWNS.ver++; TOWNS.dirty = true; TOWNS.stat.replaced = (TOWNS.stat.replaced || 0) + 1;
   TOWNS.list[i] = T;
   if (!D) {                                                             // 整座重來（對照組、改了 TOWN_DIFF_KEYS、舊的那一份還沒建好）
-    if (old.gt) Object.keys(old.gt).forEach(function (k) { var g = old.gt[k].g; if (g) townGpuFree(g); });
+    if (old.gt) Object.keys(old.gt).forEach(function (k) { var g = old.gt[k].g, gf = old.gt[k].gf; if (g) townGpuFree(g); if (gf) townGpuFree(gf); });
+    if (old.lmg) townGpuFree(old.lmg);
     townFlagFree(old);
     if (old.shell) { gl.deleteVertexArray(old.shell.vao); gl.deleteBuffer(old.shell.vb); gl.deleteBuffer(old.shell.ib); }
     if (old.tl) { townLightPartFree(old.tl.S); townLightPartFree(old.tl.D); }
@@ -179,7 +181,7 @@ function townReplace(p) {
     townRegradeFor([old, T]);
     return true;
   }
-  ['inst', 'gt', 'shell', 'flags', 'tl', 'trees', 'posts', 'roadSurface', 'v'].forEach(function (k) { T[k] = old[k]; });   // 舊的照畫
+  ['inst', 'gt', 'shell', 'flags', 'tl', 'trees', 'lmg', 'lmgSig', 'posts', 'roadSurface', 'v'].forEach(function (k) { T[k] = old[k]; });   // 舊的照畫
   if (!D.roads) T.folk = old.folk;
   if (!(D.box[0] <= D.box[2]) && !D.roads) { T.edits = old.edits; T.pend = old.pend; return true; }   // 沒有差（打開建築模式時 open 回的那一份）⇒ 只換規劃
   T.edits = (old.edits || []).concat([{ b: D.box, v: TOWNS.ver }]);
@@ -659,6 +661,7 @@ function townInst(T) {
     if (!q) { skip[l.use] = (skip[l.use] || 0) + 1; return; }
     out.push(q);
   });
+  TOWNS.stat.joins = TOWNS.stat.joins || {}; delete TOWNS.stat.joins[T.id];   // 牆接建築（townWall）：每道牆的每一段兩頭各伸進建築幾公尺
   (p.walls || []).forEach(function (w) { townWall(T, w, out, W); });
   TOWNS.stat.under = TOWNS.stat.under || {}; TOWNS.stat.under[T.id] = { n: 0, tight: [] };   // 引水渠跨過的路（townLineUnderParts）：這一次擺了幾段、哪幾段拱跨不過去
   (p.aqueducts || []).forEach(function (a) { townWall(T, a, out, W, true); });   // 引水渠：畫法同城牆（見 townWall 的 line）
@@ -733,8 +736,29 @@ function townWall(T, w, out, W, line) {
   });
   if (line) townLineUnderParts(T, w, parts, K, sect, gate, mS, mW, Ltot);   // 引水渠跨過的路：拱心對到路上（見 townLineUnderParts）
   // 牆接建築（Blocksail town.js wallJoins，TASK-0861）：w.joins 的那幾段由建築代替 ⇒ 不畫斷面、不擺塔與門、不收尾；兩頭的斷面在建築外框上垂直切齊（當成擋著的部件）
-  var J = (w.joins || []).map(function (j) { var a = proj(W(j.at[0])), b = proj(W(j.at[1])); return a <= b ? [a, b] : [b, a]; }).filter(function (j) { return j[1] - j[0] > 0.01; });
+  var J = (w.joins || []).map(function (j) { var a = proj(W(j.at[0])), b = proj(W(j.at[1])), r = a <= b ? [a, b] : [b, a]; r.lot = j.lot; return r; }).filter(function (j) { return j[1] - j[0] > 0.01; });
   function inJ(t0, t1) { return J.some(function (j) { return apart(t0, t1, j[0], j[1]) === 0; }); }
+  // 疊進建築（Tim 2026-10-24「目前城牆可以連接建築 但目前會出現接縫 希望能優化(參考城牆之間連接方式) 可以稍微疊進建築一點」）：
+  //   牆接牆 ⇒ 斷面接在塔、門的 wall-a／wall-b，那一點在部件的外框裡（wall3 的塔 1.2 m）⇒ 牆兩側的邊都落在塔身裡，看不到端面；
+  //   牆接建築以前在外框上垂直切齊 ⇒ 斜著撞上牆面（加拉塔堡 9.8°）、圓塔的弧面，牆的一側或兩側的邊露在外面 ⇒ 一道楔形的縫
+  //   ⇒ 那一頭往建築裡伸：伸到牆兩側的邊（± 斷面半厚）都進了外框（地塊框；那一點不在框上 ⇒ 接在圓塔身上，半徑 ＝ 它離地塊中心多遠 —— Blocksail 特殊建築的 join.r），再多伸 TOWN_WALL_JOIN_IN；
+  //   開放的牆從建築裡起頭、閉合的牆在起點切開的那一頭 ⇒ 外面沒有牆、不伸；最多伸到那一段的一半；一直進不去（擦過框角）⇒ 只伸 TOWN_WALL_JOIN_IN
+  var hS = mS.size[1] * mS.mpv / 2, lotOf = {}; (T.p.lots || []).forEach(function (l) { lotOf[l.id] = l; });
+  function joinIn(j) {                                                  // ⇒ [進的那一頭往裡伸幾公尺, 出的那一頭]
+    var l = lotOf[j.lot]; if (!l) return [0, 0];
+    var H = townHoleOf(T, l), lim = (j[1] - j[0]) / 2;
+    function rect(p) { var dx = p[0] - H.x, dz = p[1] - H.z; return Math.max(Math.abs(dx * H.ux + dz * H.uz) - H.hd, Math.abs(-dx * H.uz + dz * H.ux) - H.hw); }   // ≤ 0 ⇒ 在框裡
+    return [[j[0], 1], [j[1], -1]].map(function (e) {
+      if (e[0] <= 0.01 || e[0] >= Ltot - 0.01) return 0;
+      var s0 = at(e[0]), R = Math.abs(rect([s0.x, s0.z])) > 0.05 ? Math.hypot(s0.x - H.x, s0.z - H.z) : 0;
+      function inside(x, z) { return R ? Math.hypot(x - H.x, z - H.z) <= R : rect([x, z]) <= 0.001; }
+      for (var s = 0; s <= lim; s += 0.05) {
+        var q = at(e[0] + e[1] * s), nx = -Math.sin(q.a), nz = Math.cos(q.a);
+        if (inside(q.x + nx * hS, q.z + nz * hS) && inside(q.x - nx * hS, q.z - nz * hS)) return Math.min(lim, s + TOWN_WALL_JOIN_IN);
+      }
+      return Math.min(lim, TOWN_WALL_JOIN_IN);
+    });
+  }
   var cor = joint || towers[0], gap = Math.max(2 * len, 6);
   function apart(a0, a1, b0, b1) { var d = Infinity; (closed ? [0, Ltot, -Ltot] : [0]).forEach(function (sh) { d = Math.min(d, Math.max(0, b0 + sh - a1, a0 - b1 - sh)); }); return d; }   // 沿牆隔多遠（閉合 ⇒ 繞回來那一邊也算）
   function free(p, t, h) { return parts.every(function (o) { return o === p || apart(t - h, t + h, o.t - o.h, o.t + o.h) >= 0.5; }); }
@@ -756,7 +780,12 @@ function townWall(T, w, out, W, line) {
     setLev(put(o.nm, [s.x, s.z], Math.atan2(ax[1], ax[0]), o.sx || 1, true), t, t);
     obs.push({ t0: t - h, t1: t + h, p0: [s.x - ax[0] * h, s.z - ax[1] * h], p1: [s.x + ax[0] * h, s.z + ax[1] * h], ax: ax });
   });
-  J.forEach(function (j) { var A = at(j[0]), B = at(j[1]); obs.push({ t0: j[0], t1: j[1], p0: [A.x, A.z], p1: [B.x, B.z], ax: [Math.cos(A.a), Math.sin(A.a)], ax1: [Math.cos(B.a), Math.sin(B.a)] }); });   // ax1：出口那一頭的方向（建築裡轉了角）
+  var jSt = J.length && !line ? (TOWNS.stat.joins[T.id] = TOWNS.stat.joins[T.id] || {})[w.id] = [] : null;   // 讀數：每一段兩頭各伸進去幾公尺
+  J.forEach(function (j) {                                              // ax1：出口那一頭的方向（建築裡轉了角）
+    var k = joinIn(j), t0 = j[0] + k[0], t1 = j[1] - k[1], A = at(t0), B = at(t1);
+    obs.push({ t0: t0, t1: t1, p0: [A.x, A.z], p1: [B.x, B.z], ax: [Math.cos(A.a), Math.sin(A.a)], ax1: [Math.cos(B.a), Math.sin(B.a)] });
+    if (jSt) jSt.push({ lot: j.lot, in: [+k[0].toFixed(2), +k[1].toFixed(2)] });
+  });
   if (!closed && end) {                                                 // 收尾：模型的 wall-a（−x 那一面）接牆身 ⇒ 起點那一頭朝外轉 180°；那一頭接著建築 ⇒ 不收
     var mE = K.M[end].m, lE = mE.size[0] * mE.mpv / 2, s0 = at(0), s1 = at(Ltot);
     if (!J.some(function (j) { return j[0] <= 0.01; })) setLev(put(end, [s0.x - Math.cos(s0.a) * lE, s0.z - Math.sin(s0.a) * lE], s0.a + Math.PI, 1, false), 0, 0);
@@ -1015,7 +1044,7 @@ function townGroundPrep(T) {
   (p.stairs || []).forEach(function (q) { var c2 = T.E(q.path[0]); tile(c2[0], c2[1]).stair.push(q); });   // 路接地塊的樓梯（Blocksail town.js roadStairs）：照路那一頭分區
   (T.fields || []).forEach(function (F) { var c2 = [(F.R[0][0] + F.R[2][0]) / 2, (F.R[0][1] + F.R[2][1]) / 2]; tile(c2[0], c2[1]).field.push(F); });
   (p.piers || []).forEach(function (q) { var c2 = T.E(q.path[0]); tile(c2[0], c2[1]).pier.push(q); });
-  if (T.gt) Object.keys(T.gt).forEach(function (k) { var g = T.gt[k].g; if (g) townGpuFree(g); });
+  if (T.gt) Object.keys(T.gt).forEach(function (k) { var g = T.gt[k].g, gf = T.gt[k].gf; if (g) townGpuFree(g); if (gf) townGpuFree(gf); });
   T.gt = G;
 }
 function townGpuFree(g) { gl.deleteVertexArray(g.vao); gl.deleteBuffer(g.vb); gl.deleteBuffer(g.ib); }
@@ -1062,7 +1091,9 @@ function townGroundTile(T, Q) {
     I.push(k, k + 1, k + 2, k, k + 2, k + 3);
   });
   //   特殊建築底下的廣場（地基；Blocksail world/town.js ②'，Tim 2026-10-23「用廣場當地基」）：l.hole ＝ [w, d] 建築那一塊 ⇒ 只鋪外圈（不壓在建築底下、下沉的池子不蓋住）；
-  //   l.base（坡上）⇒ 四邊補石基的側面，到那一邊最低的地面再下 0.3 m（同 townPlinth）
+  //   四邊補石基的側面：那一邊的地面比鋪面低 ⇒ 到那一邊最低的地面再下 0.3 m（同 townPlinth）
+  //   以前只有規劃標了 l.base（坡上）才補 ⇒ 平地上的廣場旁邊的路、地塊整得比它低（托爾圖加的廣場：靠海那一邊的路整到 23.4 m、廣場 25.9 m），
+  //   最後一格地形網格從框裡就往下斜 ⇒ 鋪面浮在半空、底下看得到草（Tim 2026-10-24「托爾圖加廣場目前會離地漂浮(沒有地基)」）⇒ 不看 base，四邊都量；每 2 m 取一點（邊中間的低點也量得到）
   Q.plaza.forEach(function (l) {                                         // 廣場：整平的那一塊鋪石
     var th = l.rot * Math.PI / 180, cs = Math.cos(th), sn = Math.sin(th), y = l.h + 0.06, base = V.length / 9, S4 = [[-1, -1], [1, -1], [1, 1], [-1, 1]];
     function at(s, w, d) { return W([l.at[0] + s[0] * d / 2 * cs - s[1] * w / 2 * sn, l.at[1] + s[0] * d / 2 * sn + s[1] * w / 2 * cs]); }
@@ -1073,11 +1104,10 @@ function townGroundTile(T, Q) {
       O.forEach(function (c) { vtx(c[0], y, c[1], TOWN_COL.plaza); }); In.forEach(function (c) { vtx(c[0], y, c[1], TOWN_COL.plaza); });
       for (e = 0; e < 4; e++) { k = (e + 1) % 4; I.push(base + e, base + k, base + 4 + k, base + e, base + 4 + k, base + 4 + e); }
     }
-    if (!l.base) return;
     var dk = [TOWN_COL.plaza[0] * 0.78, TOWN_COL.plaza[1] * 0.78, TOWN_COL.plaza[2] * 0.78], cx = (O[0][0] + O[2][0]) / 2, cz = (O[0][1] + O[2][1]) / 2;
     for (e = 0; e < 4; e++) {
-      var a = O[e], b = O[(e + 1) % 4], lo = Infinity;
-      for (var t = 0; t <= 1.0001; t += 0.25) { var gy = hgt(a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t); if (gy === gy) lo = Math.min(lo, gy); }
+      var a = O[e], b = O[(e + 1) % 4], lo = Infinity, ns = Math.max(4, Math.ceil(Math.hypot(b[0] - a[0], b[1] - a[1]) / 2));
+      for (var t = 0; t <= ns; t++) { var gy = hgt(a[0] + (b[0] - a[0]) * t / ns, a[1] + (b[1] - a[1]) * t / ns); if (gy === gy) lo = Math.min(lo, gy); }
       if (lo === Infinity || lo > y - 0.05) continue;
       var bot = lo - 0.3, mx = (a[0] + b[0]) / 2 - cx, mz = (a[1] + b[1]) / 2 - cz, nl = Math.hypot(mx, mz) || 1, b2 = V.length / 9;
       [[a, y], [b, y], [b, bot], [a, bot]].forEach(function (p) { vtx(p[0][0], p[1], p[0][1], dk, mx / nl, 0, mz / nl); });
@@ -1107,6 +1137,9 @@ function townGroundTile(T, Q) {
     }
   });
   // 附屬的田（TASK-0862）：翻過的土（作物的 place.soil ＝ [壟, 溝] 換土色：麥田 ⇒ 金黃的麥茬，遠看才是一片金黃），一條壟一條溝沿進深方向（同作物的行，行距照作物的 place.field[0]）；貼著地面（每 2 m 取一次高度），高出 TOWN_ROAD_LIFT
+  //   遠處的田（TASK-0879；63_trees.js 檔頭「遠處的田」）：同一塊田、同一套點再一份網格 ⇒ Q.gf（位置、貼圖座標 u 照第幾行 ÷ 一張的行數、v 照沿行的公尺 ÷ 一張多長、第幾層、那一種的 view）
+  var VF = [], IF = [], FC = TREE_FIELD_CARD && TREES.on ? treeFieldCrops() : null;
+  if (Q.gf) { townGpuFree(Q.gf); Q.gf = null; }
   (Q.field || []).forEach(function (F) {
     var sp = TREE_SPECIES[F.crop], row = sp && sp.place.field ? sp.place.field[0] * TREE_FIELD_SP : 1, soil = sp && sp.place.soil || TOWN_SOIL, nb = Math.max(1, Math.round((F.b1 - F.b0) / row)), na = Math.max(1, Math.ceil((F.a1 - F.a0) / 2));
     function P(a, b) { var x = F.at[0] + F.fx * a - F.fy * b, y = F.at[1] + F.fy * a + F.fx * b, w = W([x, y]), g = hgt(w[0], w[1]); return [w[0], (g === g ? g : 0) + TOWN_ROAD_LIFT, w[1]]; }
@@ -1118,7 +1151,12 @@ function townGroundTile(T, Q) {
         for (ka = 0; ka < na; ka++) { var q = base + ka * 2; I.push(q, q + 1, q + 3, q, q + 3, q + 2); }
       });
     }
+    var A = FC && FC.at[F.crop]; if (!A) return;
+    var fb = VF.length / 7;
+    for (kb = 0; kb <= nb; kb++) for (var kc = 0; kc <= na; kc++) { var ac = F.a0 + (F.a1 - F.a0) * kc / na, pc = P(ac, F.b0 + (F.b1 - F.b0) * kb / nb); VF.push(pc[0], pc[1], pc[2], kb / A.nr, (ac - F.a0) / A.th, A.l, A.view); }
+    for (kb = 0; kb < nb; kb++) for (kc = 0; kc < na; kc++) { var q2 = fb + kb * (na + 1) + kc; IF.push(q2, q2 + 1, q2 + na + 2, q2, q2 + na + 2, q2 + na + 1); }
   });
+  Q.gf = IF.length ? townGpuField(VF, IF) : null;
   // 一條帶子拉成有厚度的板（碼頭、棧橋的面板）：整條一起畫，轉角照兩段的角平分線斜接（同城牆 —— 以前一段一個長方體，轉角外側缺一角、內側疊在一起；
   //   Tim 2026-10-22「是否可以參考城牆 平滑的轉彎」）；斜接最多拉長 TOWN_SLAB_KMAX 倍（轉超過 120° ⇒ 轉角那一點變窄，不拉出尖刺）
   function slab(P0, w, top, bot, col) {
@@ -1188,6 +1226,29 @@ function townShell(T) {
   var bb = [1e9, 1e9, 1e9, -1e9, -1e9, -1e9];
   for (var k2 = 0; k2 < V.length; k2 += 9) { bb[0] = Math.min(bb[0], V[k2]); bb[1] = Math.min(bb[1], V[k2 + 1]); bb[2] = Math.min(bb[2], V[k2 + 2]); bb[3] = Math.max(bb[3], V[k2]); bb[4] = Math.max(bb[4], V[k2 + 1]); bb[5] = Math.max(bb[5], V[k2 + 2]); }
   return townGpu9(new Float32Array(V), new Uint32Array(I), bb);
+}
+/** 地標雕好的田（townTreesSet 的 T.lmf）遠處那一層（TASK-0879）：一塊長方形一個平的四邊形、高 ＝ 模型的土面；行數同 treeFieldPut（比半個行距、株距還窄的不畫，同那邊不種）⇒ townGpuField 或 null。 */
+function townLmCard(lmf) {
+  var FC = TREE_FIELD_CARD && TREES.on ? treeFieldCrops() : null, V = [], I = []; if (!FC) return null;
+  lmf.forEach(function (F) {
+    var A = FC.at[F.crop], Fd = A && TREE_SPECIES[F.crop].place.field; if (!A || F.lb < Fd[0] * TREE_FIELD_SP / 2 || F.la < Fd[1] * TREE_FIELD_SP / 2) return;
+    var nb = Math.max(1, Math.round(F.lb / (Fd[0] * TREE_FIELD_SP))), b0 = V.length / 7;
+    [[0, 0], [F.la, 0], [F.la, F.lb], [0, F.lb]].forEach(function (p) { V.push(F.o[0] + F.ua[0] * p[0] + F.ub[0] * p[1], F.y, F.o[1] + F.ua[1] * p[0] + F.ub[1] * p[1], p[1] / F.lb * nb / A.nr, p[0] / A.th, A.l, A.view); });
+    I.push(b0, b0 + 1, b0 + 2, b0, b0 + 2, b0 + 3);
+  });
+  return I.length ? townGpuField(V, I) : null;
+}
+/** 遠處的田那一層（TASK-0879）：7 個 float 一點（位置、貼圖 u v 層、view）⇒ { vao, vb, ib, n, bb, v0（裡面最小的 view × TREE_FIELD_FADE[0]：整份都比它近 ⇒ 不用畫） }。 */
+function townGpuField(V, I) {
+  var bb = [1e9, 1e9, 1e9, -1e9, -1e9, -1e9], v0 = Infinity;
+  for (var k = 0; k < V.length; k += 7) { for (var j = 0; j < 3; j++) { bb[j] = Math.min(bb[j], V[k + j]); bb[j + 3] = Math.max(bb[j + 3], V[k + j]); } v0 = Math.min(v0, V[k + 6]); }
+  var g = { vao: gl.createVertexArray(), vb: gl.createBuffer(), ib: gl.createBuffer(), n: I.length, bb: bb, v0: v0 * TREE_FIELD_FADE[0] };
+  gl.bindVertexArray(g.vao); gl.bindBuffer(gl.ARRAY_BUFFER, g.vb); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(V), gl.STATIC_DRAW);
+  gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 28, 0);
+  gl.enableVertexAttribArray(1); gl.vertexAttribPointer(1, 3, gl.FLOAT, false, 28, 12);
+  gl.enableVertexAttribArray(2); gl.vertexAttribPointer(2, 1, gl.FLOAT, false, 28, 24);
+  gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, g.ib); gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint32Array(I), gl.STATIC_DRAW); gl.bindVertexArray(null);
+  return g;
 }
 function townGpu9(V, I, bb) {
   var g = { vao: gl.createVertexArray(), vb: gl.createBuffer(), ib: gl.createBuffer(), n: I.length, bb: bb };
@@ -1265,6 +1326,7 @@ function townTreesSet(T) {
   T.lmf = lmf;
   (T.fields || []).concat(lmf).forEach(function (F) { F.R.forEach(function (q) { var x = q[0] - BED.ax, z = q[1] - BED.az; bb[0] = Math.min(bb[0], x); bb[1] = Math.min(bb[1], z); bb[2] = Math.max(bb[2], x); bb[3] = Math.max(bb[3], z); }); });   // 附屬的田、地標的田（treeFieldPut）也照這個框重排
   sig = a.length + ':' + sig.toFixed(3) + ':f' + (T.fields || []).length + ':l' + lmf.length;
+  if (T.lmgSig !== sig) { if (T.lmg) townGpuFree(T.lmg); T.lmg = townLmCard(lmf); T.lmgSig = sig; }   // 地標的田遠處那一層（TASK-0879）
   var had = T.trees && (T.trees.n || T.trees.nf); if (T.trees && T.trees.sig === sig) return;
   T.trees = { a: new Float32Array(a), n: a.length / 6, nf: (T.fields || []).length + lmf.length, bb: bb, sig: sig };
   if ((!a.length && !T.trees.nf && !had) || typeof TREES === 'undefined' || !TREES.on || !BED || !BED.A) return;
@@ -1385,11 +1447,20 @@ var TOWN_GR_FS = function (fade) {
     ' vec3 col=vC*(0.9+0.2*fract(sin(dot(floor(vW.xz*1.3),vec2(12.9898,78.233)))*43758.5453))*(mix(uGround,uSky,n.y*0.5+0.5)*0.65+vec3(1.0,0.96,0.88)*d*sk*0.7+townLamp(vW,n));\n' +
     ' float fd=length(vW-uEye); o=vec4(mix(col,uFog,1.0-exp(-fd*uFogD)),1.0); }\n';
 };
+// 遠處的田（TASK-0879；63_trees.js 檔頭「遠處的田」）：貼圖陣列（第 TREE_FIELD_UNIT 號）照 (u, v, 層) 取色；照那一種的 view 的 TREE_FIELD_FADE 抖動淡入（uFK）；
+//   光照、雜訊、影子、夜裡的燈同上面地面的帶子（法線朝上）⇒ 交接時跟鋪的土同一個亮度
+var TOWN_FC_VS = '#version 300 es\nlayout(location=0) in vec3 aP; layout(location=1) in vec3 aT; layout(location=2) in float aV; uniform mat4 uVP; out vec3 vW; out vec3 vT; out float vV; void main(){ vW=aP; vT=aT; vV=aV; gl_Position=uVP*vec4(aP,1.0); }\n';
+var TOWN_FC_FS = function () {
+  return '#version 300 es\nprecision highp float; precision highp sampler2DArray;\n' + SHADOW_GLSL + TLAMP_GLSL + TREE_DITHER + 'in vec3 vW; in vec3 vT; in float vV; uniform sampler2DArray uFT; uniform vec2 uFK; uniform vec3 uSun,uEye,uFog,uSky,uGround; uniform float uFogD; out vec4 o;\n' +
+    'void main(){ if(vW.y<uClip) discard; float fd=length(vW-uEye); if(smoothstep(vV*uFK.x,vV*uFK.y,fd)<=treeDi(gl_FragCoord.xy)) discard; vec3 n=vec3(0.0,1.0,0.0); float d=max(uSun.y,0.0), sk=shadowK(vW,n*1.5);\n' +
+    ' vec3 col=texture(uFT,vT).rgb*(0.9+0.2*fract(sin(dot(floor(vW.xz*1.3),vec2(12.9898,78.233)))*43758.5453))*(uSky*0.65+vec3(1.0,0.96,0.88)*d*sk*0.7+townLamp(vW,n));\n' +
+    ' o=vec4(mix(col,uFog,1.0-exp(-fd*uFogD)),1.0); }\n';
+};
 /** 城鎮的著色器：第一次要畫時送出編譯（01_gl.js glProgStart；TASK-0816），編好之前回 null（城鎮這幾格不畫、實例也先不建）。陰影、夜裡的燈那幾支一起編（以前第一次用到才編）。 */
 function townProgs() {
   if (TOWNS.prog) return TOWNS.prog;
   var J = TOWNS.progJ || (TOWNS.progJ = { vox: glProgStart(TOWN_VS, TOWN_FS()), bb: glProgStart(TOWN_BB_VS, TOWN_BB_FS()), pl: glProgStart(TOWN_PL_VS, TOWN_PL_FS()), gr: glProgStart(TOWN_GR_VS, TOWN_GR_FS(false)), sh: glProgStart(TOWN_GR_VS, TOWN_GR_FS(true)), dVox: glProgStart(TOWN_VS, DEPTH_ONLY_FS), dPl: glProgStart(TOWN_PL_VS, DEPTH_ONLY_FS),
-    win: glProgStart(TOWN_WIN_VS, TOWN_WIN_FS()), glow: glProgStart(TOWN_GLOW_VS, TOWN_GLOW_FS), folk: glProgStart(TOWN_FOLK_VS, TOWN_FOLK_FS()) });   // folk：城鎮居民的看板（63_townfolk.js）
+    win: glProgStart(TOWN_WIN_VS, TOWN_WIN_FS()), glow: glProgStart(TOWN_GLOW_VS, TOWN_GLOW_FS), folk: glProgStart(TOWN_FOLK_VS, TOWN_FOLK_FS()), fc: glProgStart(TOWN_FC_VS, TOWN_FC_FS()) });   // folk：城鎮居民的看板（63_townfolk.js）；fc：遠處的田（TASK-0879）
   if (!Object.keys(J).every(function (k) { return glProgReady(J[k]); })) return null;
   var P = {}; Object.keys(J).forEach(function (k) { P[k] = glProgEnd(J[k]); }); TOWNS.progJ = null;
   P.ib = [gl.createBuffer(), gl.createBuffer(), gl.createBuffer(), gl.createBuffer()];   // 近、中、貼圖、石基的實例（每次分組重寫）
@@ -1532,6 +1603,7 @@ function townDraw() {
   var PG = P.gr; gl.useProgram(PG.prog); setCommon(PG); gl.uniform1f(PG.u.uFogD, fogD);
   gl.enable(gl.POLYGON_OFFSET_FILL); gl.polygonOffset(-1, -4);
   TOWNS.list.forEach(function (T) { Object.keys(T.gt || {}).forEach(function (k) { var g = T.gt[k].g; if (!g || !bedSeen(PL, g.bb) || townBoxDist(g.bb, eye) > TOWN_GROUND_VIEW) return; gl.bindVertexArray(g.vao); gl.drawElements(gl.TRIANGLES, g.n, gl.UNSIGNED_INT, 0); tris += g.n / 3; }); });
+  tris += townFieldDraw(P, PL, eye, fogD);                               // 遠處的田（貼在土上：再往鏡頭推一點）
   gl.disable(gl.POLYGON_OFFSET_FILL);
   // 布旗（同一支著色器；近、中那兩級的距離內才畫，鏡頭附近才動）
   var now = performance.now() / 1000, fdt = Math.min(0.1, Math.max(0, now - (TOWNS.flagT || now))), nfl = 0; TOWNS.flagT = now; TOWNS.flagClock = (TOWNS.flagClock || 0) + fdt;
@@ -1553,6 +1625,22 @@ function townDraw() {
   TOWNS.list.forEach(function (T) { var g = T.shell; if (!g || !bedSeen(PL, g.bb) || townBoxFar(g.bb, eye) < TOWN_FAR[0]) return; ns++; gl.bindVertexArray(g.vao); gl.drawElements(gl.TRIANGLES, g.n, gl.UNSIGNED_INT, 0); tris += g.n / 3; });
   gl.bindVertexArray(null); if (cf) gl.enable(gl.CULL_FACE);
   TOWNS.stat.d3 = ns; TOWNS.stat.tris = tris; TOWNS.stat.drawMs = +(performance.now() - t0).toFixed(2);
+}
+/** 遠處的田（TASK-0879）：地面那幾區的 Q.gf、地標的田 T.lmg 裡看得到、而且有一部分遠過淡入起點（g.v0；照鏡頭的高度算進去）的那幾份 ⇒ 第一次有要畫的才拍貼圖（treeFieldBake）、一份一次 draw。
+ *  呼叫時 polygonOffset 已經開著（地面的帶子那一段）⇒ 這裡推得比帶子再前面一點、畫完換回去。⇒ 畫了幾個三角形。 */
+function townFieldDraw(P, PL, eye, fogD) {
+  var S = TOWNS.stat; S.fields = 0; S.fieldMs = 0; if (!TREE_FIELD_CARD || !P.fc) return 0;
+  var t0 = performance.now(), gs = [];
+  function want(g) { return g && bedSeen(PL, g.bb) && townBoxDist(g.bb, eye) <= TOWN_GROUND_VIEW && townBoxFar(g.bb, eye) + Math.abs(eye[1] - g.bb[1]) >= g.v0; }
+  TOWNS.list.forEach(function (T) { Object.keys(T.gt || {}).forEach(function (k) { var g = T.gt[k].gf; if (want(g)) gs.push(g); }); if (want(T.lmg)) gs.push(T.lmg); });
+  if (!gs.length || !treeFieldBake()) return 0;
+  var PF = P.fc, tris = 0; gl.useProgram(PF.prog); setCommon(PF); gl.uniform1f(PF.u.uFogD, fogD); gl.uniform2f(PF.u.uFK, TREE_FIELD_FADE[0], TREE_FIELD_FADE[1]); gl.uniform1i(PF.u.uFT, TREE_FIELD_UNIT);
+  gl.activeTexture(gl.TEXTURE0 + TREE_FIELD_UNIT); gl.bindTexture(gl.TEXTURE_2D_ARRAY, TREES.ftex); gl.activeTexture(gl.TEXTURE0);
+  gl.polygonOffset(-2, -8);
+  gs.forEach(function (g) { gl.bindVertexArray(g.vao); gl.drawElements(gl.TRIANGLES, g.n, gl.UNSIGNED_INT, 0); tris += g.n / 3; });
+  gl.polygonOffset(-1, -4); gl.useProgram(P.gr.prog);                  // 後面的布旗接著用地面帶子那一支（uniform 還在）
+  S.fields = gs.length; S.fieldMs = +(performance.now() - t0).toFixed(2);
+  return tris;
 }
 /** 近、中那兩級的實例欄位（townBin 寫的 11 欄：aI x y z θ、aS 沿 x 縮放 深淺 地標倍率、aJ 斜接 ×2 坡度 牆基）⇒ 第 mi 種模型那一段；主畫面與陰影那一趟共用（版面只寫在這裡）。 */
 function townInstAttr(G, l, mi) { var o = G.off[l][mi] * 44; gl.vertexAttribPointer(4, 4, gl.FLOAT, false, 44, o); gl.vertexAttribPointer(5, 3, gl.FLOAT, false, 44, o + 16); gl.vertexAttribPointer(6, 4, gl.FLOAT, false, 44, o + 28); }
@@ -1583,7 +1671,7 @@ function townStat(at) {
       part: T.inst ? (TOWNS.kit && TOWNS.kit.part ? 'walls' : 'all') : null, walls: (T.inst || []).filter(function (q) { return q.wall; }).length,   // 地面的帶子分區（TASK-0817）
       folk: townFolkStat(T),
       byModel: u, lights: tl, center: [+(T.ox - BED.ax).toFixed(1), +(T.oy - BED.az).toFixed(1)] };
-  }), kit: !!TOWNS.kit, kitPart: !!(TOWNS.kit && TOWNS.kit.part), kitN: S.kitN, kitMs: S.kitMs, skelN: S.skelN, skelMs: S.skelMs, kitMesh: { baked: S.meshBaked, live: S.meshLive, check: S.meshCheck, vk: townVkFp() }, kitTris: S.kitTris, skip: S.skip, gls: S.gls || 0, lines: S.lines || 0, under: S.under || {}, drawn: { full: S.d0, low: S.d1, card: S.d2, shells: S.d3, plinth: S.plinth, flags: S.flags || 0, folk: S.folk || 0, landmarks: S.lm || 0 }, folk: townFolkSum(), tris: S.tris, ms: { draw: S.drawMs, bin: S.binMs, grade: +S.gradeMs.toFixed(1), prep: S.prepMs }, gradedChunks: S.chunks, regrade: { left: TOWNS.rgq ? Object.keys(TOWNS.rgq).length : 0, done: S.regraded }, edit: S.edit || null,
+  }), kit: !!TOWNS.kit, kitPart: !!(TOWNS.kit && TOWNS.kit.part), kitN: S.kitN, kitMs: S.kitMs, skelN: S.skelN, skelMs: S.skelMs, kitMesh: { baked: S.meshBaked, live: S.meshLive, check: S.meshCheck, vk: townVkFp() }, kitTris: S.kitTris, skip: S.skip, gls: S.gls || 0, lines: S.lines || 0, under: S.under || {}, joins: S.joins || {}, drawn: { full: S.d0, low: S.d1, card: S.d2, shells: S.d3, plinth: S.plinth, flags: S.flags || 0, folk: S.folk || 0, landmarks: S.lm || 0, fields: S.fields || 0 }, folk: townFolkSum(), tris: S.tris, ms: { draw: S.drawMs, fields: S.fieldMs || 0, bin: S.binMs, grade: +S.gradeMs.toFixed(1), prep: S.prepMs }, gradedChunks: S.chunks, regrade: { left: TOWNS.rgq ? Object.keys(TOWNS.rgq).length : 0, done: S.regraded }, edit: S.edit || null,
     night: { lit: +TL.k.toFixed(3), win: +TOD_WIN.toFixed(3), grid: TL.stat.inGrid, range: TL.stat.range || 0, full: TL.stat.full, over: TL.stat.over, gridMs: TL.stat.gridMs, cards: TL.stat.cards, glow: TL.stat.glow, glowMs: TL.stat.glowMs } };
   if ((at === 'street' || at === 'walk') && TOWNS.list[0] && TOWNS.kit && TOWNS.kit.folk) { o.street = townFolkStreet(TOWNS.list[0], TOWNS.kit.folk, at === 'walk'); }   // 城鎮居民的街景機位（63_townfolk.js）
   else if (Array.isArray(at)) { var q = bedCell(at[0], at[1]); o.at = { ground: +townGround(at[0], at[1]).toFixed(2), sim: +bedHgt(at[0], at[1]).toFixed(2), clear: q ? townClr(q.C, q.u * q.C.step, q.v * q.C.step) : null }; }
