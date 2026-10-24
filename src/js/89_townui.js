@@ -31,8 +31,12 @@ function tuiGot(d) { var cb = TUI.wait[d.seq]; delete TUI.wait[d.seq]; if (cb) c
 /** 玩家這艘船（開船隊貨艙、算吃水用）：船型還沒載好 ⇒ null。 */
 function tuiShip() {
   var sh = SHIPS[PLAYER_I], T = sh && sh.T; if (!T) return null;
+  return Object.assign({ kind: T.id }, tuiHold(T));
+}
+/** 船型的貨艙數字：壓艙物（噸）、設計水線的水線面積（m²；量不到 ⇒ null）—— 選船（72_shippick.js 'picked'）也帶給地球儀，地球儀上的 💰 貿易照它算吃水。 */
+function tuiHold(T) {
   var wpa = T.hyd && T.zw > 0 && T.hyd.length > T.zw ? T.hyd[T.zw - 1] / S : 0;
-  return { kind: T.id, ballastT: T.ballast0 || 0, wpa: wpa > 0 ? Math.round(wpa * 10) / 10 : null };
+  return { ballastT: T.ballast0 || 0, wpa: wpa > 0 ? Math.round(wpa * 10) / 10 : null };
 }
 /** 開關：tab 給了 ⇒ 開那一頁（已經開著同一頁 ⇒ 關）；沒給 ⇒ 開上次那一頁（貿易以外的）。 */
 function tuiToggle(tab) {
@@ -63,7 +67,7 @@ function tuiTrade(side, g, q) {
     TUI.busy = false;
     if (!r.ok && !r.res) { TUI.msg = (side === 'buy' ? '買不了：' : '賣不了：') + (r.why || []).join('；'); tuiUI(); return; }
     var R = r.res; if (r.list) TUI.list = r.list;
-    TUI.msg = R.q > 0 ? (side === 'buy' ? '買了 ' + tuiNum(R.q, R.q % 1 ? 2 : 0) + ' 桶' + tuiGood(g) + '，付 ' + tuiNum(R.pay, 2) + '（含關稅 ' + tuiNum(R.fee, 2) + '）' : '賣了 ' + tuiNum(R.q, R.q % 1 ? 2 : 0) + ' 桶' + tuiGood(g) + '，拿到 ' + tuiNum(R.pay, 2) + '（扣關稅 ' + tuiNum(R.fee, 2) + '）') : (side === 'buy' ? '沒買到' : '沒賣掉');
+    TUI.msg = R.q > 0 ? (side === 'buy' ? '買了 ' + tuiNum(Math.floor(R.q)) + ' 桶' + tuiGood(g) + '，付 ' + tuiNum(R.pay, 2) + '（含關稅 ' + tuiNum(R.fee, 2) + '）' : '賣了 ' + tuiNum(Math.floor(R.q)) + ' 桶' + tuiGood(g) + '，拿到 ' + tuiNum(R.pay, 2) + '（扣關稅 ' + tuiNum(R.fee, 2) + '）') : (side === 'buy' ? '沒買到' : '沒賣掉');
     if (R.why && R.why.length) TUI.msg += '（' + R.why.join('；') + '）';
     tuiUI(); tuiInfo();
   });
@@ -204,7 +208,7 @@ function tuiTradeHTML() {
   if (!L.rows.length) h += '<p class="tuiDim">船上空的，城鎮市場也是空的</p>';
   else h += '<table class="tuiT tuiTr"><tr><th>貨</th><th>城鎮</th><th>船上</th><th>買一桶</th><th>賣一桶</th><th></th></tr>' + L.rows.map(function (r) {
     var b1 = r.canBuy >= 1, bAll = Math.floor(r.canBuy), s1 = r.ship >= 1 && r.canSell >= 1;
-    return '<tr><td>' + tuiEsc(r.name) + '</td><td>' + tuiNum(r.town, 1) + '</td><td>' + (r.ship ? tuiNum(r.ship, r.ship % 1 ? 2 : 0) : '<span class="tuiDim">–</span>') + '</td><td>' + (r.buy == null ? '<span class="tuiDim">–</span>' : tuiNum(r.buy, 2)) + '</td><td>' + tuiNum(r.sell, 2) + '</td><td class="ops">' +
+    return '<tr><td>' + tuiEsc(r.name) + '</td><td>' + tuiNum(Math.floor(r.town)) + '</td><td>' + (r.ship >= 1 ? tuiNum(Math.floor(r.ship)) : '<span class="tuiDim">–</span>') + '</td><td>' + (r.buy == null ? '<span class="tuiDim">–</span>' : tuiNum(r.buy, 2)) + '</td><td>' + tuiNum(r.sell, 2) + '</td><td class="ops">' +
       btn('buy', r.g, 1, '買 1', b1) + btn('buy', r.g, 10, '買 10', r.canBuy >= 10) + btn('buy', r.g, bAll, '買到滿', bAll >= 1) + btn('sell', r.g, 1, '賣 1', s1) + btn('sell', r.g, r.ship, '全賣', r.ship > 0 && r.canSell > 0) + '</td></tr>';
   }).join('') + '</table>';
   var D = L.load;
