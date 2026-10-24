@@ -53,6 +53,7 @@ var TOWN_SLAB_KMAX = 2;                                                 // 碼�
 var TOWNS = { on: Q.get('towns') !== '0', prosp: {}, list: [],pend: [], ver: 0, want: 0, err: null, kit: null, kitP: null, idx: null, kitHas: null, kitRedo: false, kitBusy: false, mwait: null, prog: null, progJ: null, dirty: true, eye: null, sig: '', buf: [], grp: null,
   stat: { towns: 0, lots: 0, inst: 0, walls: 0, corners: 0, snapped: 0, skip: {}, d0: 0, d1: 0, d2: 0, d3: 0, plinth: 0, tris: 0, binMs: 0, kitMs: 0, meshBaked: 0, meshLive: 0, meshCheck: null, gradeMs: 0, chunks: 0, regraded: 0, drawMs: 0 } };
 var TOWN_J0 = [0, 0, 0, 0];                                             // 建築的 aJ（不斜接、不順坡、牆基不延）
+var TOWN_BERTH_STRIP = 0.49;                                          // 泊位地塊的前緣在棧橋中線、往裡「棧橋寬一半 ＋ 這麼多」是預留區的前緣（Blocksail world/town.js STRIP_GAP − LOT_GAP / 2）⇒ 棧橋邊 ＝ berth.over − 這個
 var TOWN_USE_ALT = { commandant: ['house'], governor: ['townhall'],   // 那一套沒有那種模型 ⇒ 用哪一種代（BUILDING_SPEC §7：fr 沒有長官的屋子；carib 有）
   farm: ['house'], plantation: ['commandant', 'house'] };              // 農莊、種植園（Blocksail：開場的 TASK-0862、建築模式蓋的 TASK-0742）：2026-10-24 有了共用 common 的模型（Sculpture meadow-farm-01m；照配方挑 townRecipe）⇒ 這兩條只剩退路（索引裡沒有那幾件時）
 //   ⛔ 種植園不借倉庫：倉庫 12 × 16 放不進 16 × 12 的地塊（進深多 4 m、伸出地塊後緣壓到田）—— kaguya 2026-10-24 seq 28673 同意照這一份
@@ -484,7 +485,7 @@ function townIdx() {
  *  → 代用的用途（同樣照退路）；特殊建築（l.src 'special'：用途就是那一種，例 galata-tower 的風格是 genoa）⇒ 不分風格。
  *  ⛔ 一般地塊只找退路裡的風格：carib 的砲台不會跑進退路裡沒有 carib 的城。 */
 function townPick(I, styles, l) {
-  var use = l.use, lv = use === 'house' ? l.lvl || 1 : 0;
+  var use = l.use === 'berth' && l.berth ? 'berth-' + l.berth.cls : l.use, lv = use === 'house' ? l.lvl || 1 : 0;   // 泊位建築（Blocksail TASK-0906）：地塊 use 'berth' ⇒ 照級挑 'berth-<級>' 的模型
   function by(u) { for (var i = 0; i < styles.length; i++) { var L = I.byStyle[styles[i] + ':' + u]; if (L && u === 'house') L = townLvl(I, L, lv || 1, l); if (L) return townRecipe(I, L, l); } return null; }
   function any(u) { return I.byUse[u]; }
   var alt = TOWN_USE_ALT[use] || [];
@@ -722,9 +723,11 @@ function townLotInst(T, K, l) {
   var L = townPick(K, T.styles, l); if (!L || !L.length) return null;
   var nm = L[Math.floor(townHash(T.id + ':' + l.id) * L.length)]; if (!K.M[nm]) return null;   // 剛蓋的那一種模型還在路上（townReplace 叫了 townKitStale）⇒ 這一格先不擺
   var m = K.M[nm].m, th = l.rot * Math.PI / 180, md = m.size[1] * m.mpv, mw = m.size[0] * m.mpv;
-  var off = (l.d - md) / 2, e = T.E([l.at[0] + off * Math.cos(th), l.at[1] + off * Math.sin(th)]);
+  //   泊位建築（Blocksail TASK-0906，BUILDING_SPEC §6.21）：地塊的前緣在棧橋中線、棧橋邊在 berth.over − TOWN_BERTH_STRIP；模型的棧橋邊在 y ＝ edge ⇒ 往水那一邊推到兩條對齊；
+  //   模型的棧橋面在 z ＝ deckz ⇒ 往下放（護舷、梯子伸到水裡）；不墊石基（底下是水，船停的地方）
+  var bt = l.berth && m.edge != null, off = (l.d - md) / 2 - (bt ? Math.max(0, l.berth.over - TOWN_BERTH_STRIP - m.edge) : 0), e = T.E([l.at[0] + off * Math.cos(th), l.at[1] + off * Math.sin(th)]);
   var lk = Math.max(1, Math.min(TOWN_LM[1], Math.max(mw, md, m.top) / TOWN_LM[0]));
-  return { k: nm, x: e[0] - BED.ax, y: l.h, z: e[1] - BED.az, th: th, sx: 1, sh: 0.92 + 0.16 * townHash(l.id + '#'), r: Math.hypot(mw, md) / 2 + 2, top: m.top, pl: [mw, md], foot: mw * md * m.cover, col: m.roof, lot: l.id, lk: lk };
+  return { k: nm, x: e[0] - BED.ax, y: l.h - (bt ? m.deckz || 0 : 0), z: e[1] - BED.az, th: th, sx: 1, sh: 0.92 + 0.16 * townHash(l.id + '#'), r: Math.hypot(mw, md) / 2 + 2, top: m.top, pl: bt ? null : [mw, md], foot: mw * md * m.cover, col: m.roof, lot: l.id, lk: lk };
 }
 /** 一條城牆 ⇒ 門、塔、轉角、收尾照位置，中間的斷面沿路線接成一條斜接的折線（照 w.kit 挑那一套；BUILDING_SPEC §6）。
  *  t ＝ 從起點沿路線量的長度（閉合的牆繞回來）；部件佔掉 [t0, t1]，兩頭的接口 p0、p1 ＝ 中心 ∓ 半長·軸（軸 ＝ 路線上兩個接口那兩點的弦 ⇒ 擺在頂點上就是角平分）。 */
