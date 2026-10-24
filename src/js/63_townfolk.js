@@ -365,6 +365,7 @@ function townFolkStat(T) {
   var G = T.folk; if (!G) return null;
   var F = TOWNS.kit && TOWNS.kit.folk, kids = 0; if (F) G.agents.forEach(function (a) { if (F.people[a.art].age === 'child') kids++; });
   return { agents: G.agents.length, edges: G.edges.length, nodes: G.nodes.length, roadM: Math.round(G.roadM), y: G.y, prepMs: G.prepMs, line: G.line, pick: G.pick, kids: G.agents.length ? +(kids / G.agents.length).toFixed(3) : null,
+    workSites: G.agents.filter(function (a) { return a.work && F && F.sheets[F.people[a.art].sheet].name === 'workers'; }).slice(0, 24).map(function (a) { var e = G.edges[a.e]; return { id: F.people[a.art].id, lot: a.work.lot, use: a.work.use, distance: +a.work.distance.toFixed(2), x: +(e.ax + e.dx * a.t).toFixed(2), z: +(e.az + e.dz * a.t).toFixed(2) }; }),
     sample: G.agents.slice(0, 8).map(function (a) { var e = G.edges[a.e]; return { id: a.id, art: a.art, cloth: a.cloth, hair: a.hair, legs: a.legs.length, per: +a.per.toFixed(1), t: +a.t.toFixed(2), x: +(e.ax + e.dx * a.t).toFixed(1), z: +(e.az + e.dz * a.t).toFixed(1) }; }) };
 }
 /** 讀數：全部城加起來（townStat 頂層的 folk）。 */
