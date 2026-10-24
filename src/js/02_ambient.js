@@ -80,8 +80,15 @@ function ambBuild(ac, dest, rain) {
   return A;
 }
 /** 照參數設目標值：p ＝ { w（風 0–1.5）, pan（−1–1）, sea（海況倍率）, hgt（鏡頭離海面 m）, rain（0–1）, hold（0／1）, vol（總音量） }；tc ＝ 時間常數（0 ⇒ 立刻）。 */
+//   目標值跟上次設的差不到 AMB_SET_EPS（相對）⇒ 不再設（TASK-0905：每格對 8～10 個參數 setTargetAtTime，60 fps 下約佔 2%、畫面忙的時候最多 1.75 s／6 s
+//   —— 單獨重現不會越來越慢，是跟音訊執行緒搶鎖的樣子；鏡頭不動、風不變的時候目標值本來就一樣）。tc 0（立刻）照設。
+var AMB_SET_EPS = 0.005;
 function ambSet(A, p, t, tc) {
-  function to(par, v) { if (tc > 0) par.setTargetAtTime(v, t, tc); else par.setValueAtTime(v, t); }
+  var lv = A.lv || (A.lv = new Map());                                  // 每個參數上次設的目標值
+  function to(par, v) {
+    var o = lv.get(par); if (tc > 0 && o !== undefined && Math.abs(v - o) <= AMB_SET_EPS * Math.max(Math.abs(o), 1e-3)) return;
+    lv.set(par, v); if (tc > 0) par.setTargetAtTime(v, t, tc); else par.setValueAtTime(v, t);
+  }
   var w = clamp(p.w, 0, 1.6), vol = p.vol, sea = Math.pow(Math.max(p.sea, 0), 0.8), hatt = 1 / (1 + Math.max(0, p.hgt) / 30);
   to(A.wg.gain, vol * AMB_WIND_G * (0.04 + 0.3 * Math.pow(w, 1.5)));
   to(A.wbp.frequency, AMB_WIND_F0 + AMB_WIND_FK * w);

@@ -891,7 +891,9 @@ function townWallProf(at, Ltot, closed, hS, pins) {
   function arr() { var a = new Float32Array(n + 1); a.fill(NaN); return a; }
   function ix(i) { return closed ? ((i % n) + n) % n : i; }
   function ok(i) { return closed || (i >= 0 && i <= n); }
-  function memo(f) { var A = arr(); return function (i) { var k = ix(i); if (A[k] === A[k]) return A[k]; var v = f(k); if (v === v) A[k] = v; return v; }; }
+  // 記住：算好的值一直記；算不出來（地面還沒到 ⇒ NaN）的也記，但只在同一個 TOWNS.bedV 裡算數（新的一塊地形來了 ⇒ 再算一次；同 townWallY 的 q.bad）
+  //   TASK-0905：以前 NaN 不記 ⇒ 每來一塊地形，每段還沒高度的牆把平滑的窗整段重算（窗裡套窗），君士坦丁堡進城那 20 秒合計 3.8 s、單格最多 524 ms
+  function memo(f) { var A = arr(), V = new Float64Array(n + 1).fill(-1); return function (i) { var k = ix(i); if (A[k] === A[k]) return A[k]; var bv = TOWNS.bedV || 0; if (V[k] === bv) return NaN; var v = f(k); if (v === v) A[k] = v; else V[k] = bv; return v; }; }
   function avg(fn, r) { return function (i) {                         // 開放的牆在兩頭左右對稱地縮窗（不然長坡上的端點會浮起、埋下去半個窗的坡）
     var r2 = closed ? r : Math.min(r, i, n - i), s = 0, c = 0;
     for (var j = i - r2; j <= i + r2; j++) { var v = fn(j); if (!(v === v)) return NaN; s += v; c++; }
