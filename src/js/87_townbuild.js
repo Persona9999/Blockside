@@ -5,11 +5,13 @@
 //   那一頁 ⇒ 這一頁 { bsmap: 'townEdit', seq, cmd, ok, why, …, town?（apply／undo 成功 ⇒ 新的那一份規劃）}（08_seabed.js 轉給 twbGot）。
 //     cmd 'open' ⇒ 那一頁拿規劃＋取樣、照存檔重放（第一次開建築模式時要一次）；回的 menu ＝ 道路以外的分類（Blocksail town.js BUILD_MENU；舊的地球儀沒給 ⇒ 只有房屋）；'try'（q ＝ { x, y, side, use }）⇒ 吸附＋試放的框；
 //     'route'（q ＝ { from, to, kind }）⇒ 路線；'apply'（op ＝ { road }｜{ build }）、'undo' ⇒ 新的規劃 ⇒ 63_towns.js townReplace 換掉那一座城。
+//     生產建築（農莊、種植園；TASK-0742 第二步）：try 多帶 recipe（玩家選的；沒選 ⇒ 那一頁挑第一條能種的），回覆多 recipe、recipes（{ ok, no: [{ k, name, why }] }）、annex（田：quads 每一格外框）、note；
+//       配方那一排（#twbRcp）照回覆長、點一下換；預覽多畫田（半透明）；蓋下去的那一步帶實際用的那一條（重放同一片田）
 // 物理意義：規則全在 Blocksail world/town.js（townSnap、townBuildTry、townRoutePlan、townBuild、townAddRoad）—— ⛔ 這一支只問、只畫，不判斷蓋不蓋得了。
 //   座標：世界 (x, z) ＝ 規劃 E(q) − (BED.ax, BED.az)、E(q) ＝ (ox ＋ kx·qx, oy ＋ qy)（63_towns.js townPrep）⇒ 反過來 q ＝ ((x ＋ ax − ox) ÷ kx, z ＋ az − oy)。
 // 失敗處置：沒有 host（直接開 Blockside）、沒給 ?town、那座城還沒到 ⇒ 開不了，說一聲；回覆裡的 why 照原樣顯示。
 var TWB = { on: false, town: Q.get('town') || null, cat: 'house', item: 'house', open: 0, seq: 0, wait: {}, mx: null, my: null, moved: false, q: null, side: 0,
-  tr: null, busy: false, again: false, start: null, gl: null, msg: '', msgT: 0, framed: false, ops: 0, last: 0, ghost: null, rib: null, sel: null };   // sel：點到的那一棟（townHitAt 的回覆；再點一下、Esc、換項目 ⇒ 放掉）   // ghost：房子的預覽實例（63_towns.js townGhost）；rib：道路預覽的路面帶（GPU）   // open：0 沒開、1 開著中、2 好了；tr：最後一則試放／找路的回覆
+  tr: null, busy: false, again: false, start: null, gl: null, msg: '', msgT: 0, framed: false, ops: 0, last: 0, ghost: null, rib: null, sel: null, recipe: null, rcpSig: '' };   // recipe：生產建築玩家選的配方（換項目 ⇒ 放掉）   // sel：點到的那一棟（townHitAt 的回覆；再點一下、Esc、換項目 ⇒ 放掉）   // ghost：房子的預覽實例（63_towns.js townGhost）；rib：道路預覽的路面帶（GPU）   // open：0 沒開、1 開著中、2 好了；tr：最後一則試放／找路的回覆
 var TWB_CATS = [
   { k: 'road', name: '🛣 道路', items: [{ k: 'street', name: '街', sub: '寬 5 m' }, { k: 'lane', name: '小路', sub: '寬 2.5 m' }] },
   { k: 'house', name: '🏠 房屋', items: [{ k: 'house', name: '住宅', sub: '2 × 3 格（轉角 2 × 2）' }] }   // 路邊每 4 m 一格（Blocksail TASK-0840）；轉角只剩 2 格深 ⇒ 8 × 8 的小版住宅
@@ -91,7 +93,19 @@ function twbToggle(on) {
   }
   twbUI();
 }
-function twbPick(cat, item) { TWB.cat = cat; TWB.item = item; TWB.start = null; TWB.tr = null; TWB.moved = true; TWB.sel = null; twbUI(); }
+function twbPick(cat, item) { TWB.cat = cat; TWB.item = item; TWB.start = null; TWB.tr = null; TWB.moved = true; TWB.sel = null; TWB.recipe = null; twbUI(); }
+/** 配方那一排（生產建築）：照最後一則試放的 recipes —— 能種的可以點（點了 ⇒ 重問試放）、種不了的灰掉、滑上去看原因；不是生產建築 ⇒ 空的。 */
+function twbRcpUI() {
+  var el = $('twbRcp'); if (!el) return;
+  var tr = TWB.tr, R = tr && !tr.road && tr.recipes, sig = R ? tr.recipe + '|' + R.ok.map(function (x) { return x.k; }).join(',') + '|' + R.no.map(function (x) { return x.k; }).join(',') : '';
+  if (sig === TWB.rcpSig) return;
+  TWB.rcpSig = sig;
+  if (!R) { el.innerHTML = ''; return; }
+  var esc = function (t) { return String(t).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); };
+  el.innerHTML = '<span>種：</span>' + R.ok.map(function (x) { return '<button type="button" data-k="' + x.k + '"' + (x.k === tr.recipe ? ' class="on"' : '') + '>' + esc(x.name) + '</button>'; }).join('') +
+    R.no.map(function (x) { return '<button type="button" disabled title="' + esc(x.why) + '">' + esc(x.name) + '</button>'; }).join('');
+  el.querySelectorAll('button[data-k]').forEach(function (b) { b.onclick = function () { TWB.recipe = b.dataset.k; TWB.tr = null; TWB.moved = true; TWB.rcpSig = ''; }; });
+}
 function twbUndo() { if (!TWB.on || TWB.open !== 2) return; twbAsk('undo', null, function (r) { twbMsg(r.ok ? '復原了一步（還有 ' + (r.ops || []).length + ' 步）' : (r.why || []).join('；')); }); }
 /** 試放／找路：一次只問一則；回來之前游標又動了 ⇒ 回來再問一次（最新的那個位置）。 */
 function twbQuery() {
@@ -103,7 +117,7 @@ function twbQuery() {
   TWB.busy = true; TWB.again = false; TWB.last = performance.now();
   var q = TWB.q.slice(), done = function (r) { TWB.busy = false; r.q = q; r.road = road; TWB.tr = r; if (TWB.again) twbQuery(); };
   if (road) twbAsk('route', { q: { from: TWB.start, to: q, kind: TWB.item } }, done);
-  else twbAsk('try', { q: { x: q[0], y: q[1], side: TWB.side, use: TWB.item } }, done);
+  else twbAsk('try', { q: { x: q[0], y: q[1], side: TWB.side, use: TWB.item, recipe: TWB.recipe } }, done);
 }
 /** 點一下：房屋 ⇒ 試放過就蓋；道路 ⇒ 第一下起點（要在路上：那一頁吸）、之後照預覽的路線鋪。右鍵 ⇒ 取消起點。 */
 function twbTap(x, y, btn) {
@@ -126,7 +140,8 @@ function twbTap(x, y, btn) {
   }
   if (!tr || tr.road || !tr.ok) { twbMsg(tr && tr.why ? '蓋不了：' + tr.why.join('；') : '等試放…'); return true; }
   var op = { build: tr.lot ? { lot: tr.lot, use: TWB.item } : { on: tr.on, use: TWB.item } };
-  twbAsk('apply', { op: op }, function (r) { twbMsg(r.ok ? '蓋好了：' + (r.lot || '') : '蓋不了：' + (r.why || []).join('；')); });
+  if (tr.recipe) op.build.recipe = tr.recipe;                           // 生產建築：試放實際用的那一條（重放照它長同一片田）
+  twbAsk('apply', { op: op }, function (r) { twbMsg(r.ok ? '蓋好了：' + (r.lot || '') + (tr.annex ? '（田 ' + tr.annex.area + ' m²）' : '') : '蓋不了：' + (r.why || []).join('；')); });
   TWB.tr = null;
   return true;
 }
@@ -172,6 +187,7 @@ function twbFrame() {
   } else if (TWB.again && !TWB.busy) twbQuery();
   twbLines(T);
   twbInfo();
+  twbRcpUI();
 }
 /** 預覽線框（世界座標）：房屋 ⇒ 那一塊的外框（綠 ＝ 蓋得了、紅 ＝ 蓋不了）；道路 ⇒ 起點的十字、路線（綠／紅；還沒回 ⇒ 起點到游標的直線，黃）。 */
 function twbLines(T) {
@@ -186,6 +202,11 @@ function twbLines(T) {
       var col = tr.ok ? G : R;
       for (var i = 0; i < 4; i++) { seg(C[i], C[(i + 1) % 4], col); seg(C[i], [C[i][0], C[i][1] + 6, C[i][2]], col); seg([C[i][0], C[i][1] + 6, C[i][2]], [C[(i + 1) % 4][0], C[(i + 1) % 4][1] + 6, C[(i + 1) % 4][2]], col); }
       var f = P3([tr.at[0] + ux * hd, tr.at[1] + uy * hd], 0.6), f2 = P3([tr.at[0] + ux * (hd + 3), tr.at[1] + uy * (hd + 3)], 0.6); seg(f, f2, col);   // 門口朝路那一邊
+      if (tr.annex && tr.annex.quads) {                                  // 田的外緣（每一格的邊只出現一次的那幾條；不看深度 ⇒ 樹後面也看得到）：一格一段、照兩端各自的地面
+        var EC = {}, ek = function (p) { return p[0].toFixed(2) + ',' + p[1].toFixed(2); };
+        tr.annex.quads.forEach(function (Qd) { for (var e = 0; e < 4; e++) { var a = Qd[e], b = Qd[(e + 1) % 4], k = [ek(a), ek(b)].sort().join('|'); EC[k] = EC[k] ? null : [a, b]; } });
+        Object.keys(EC).forEach(function (k) { if (EC[k]) seg(P3(EC[k][0], 0.5), P3(EC[k][1], 0.5), col); });
+      }
     } else if (TWB.cat === 'road' && TWB.start) {
       var s0 = P3(TWB.start, 0.6); seg([s0[0] - 3, s0[1], s0[2]], [s0[0] + 3, s0[1], s0[2]], Y); seg([s0[0], s0[1], s0[2] - 3], [s0[0], s0[1], s0[2] + 3], Y); seg(s0, [s0[0], s0[1] + 8, s0[2]], Y);
       if (tr && tr.road && tr.path && tr.path.length > 1) { var c2 = tr.ok ? G : R; for (var j = 1; j < tr.path.length; j++) seg(P3(tr.path[j - 1], 0.6), P3(tr.path[j], 0.6), c2); }
@@ -230,6 +251,14 @@ function twbLines(T) {
       v(e0, 3); v(e0, 6); v(e1, 6); v(e0, 3); v(e1, 6); v(e1, 3);
     }
   }
+  //   田（生產建築）：每一格一塊半透明的地面（同路面帶那一套，照四個角各自的地形高）—— 綠黃 ＝ 蓋得了、紅 ＝ 蓋不了
+  if (T && TWB.cat !== 'road' && tr2 && !tr2.road && tr2.annex && tr2.annex.quads && !TWB.sel) {
+    var fc = tr2.ok ? [0.66, 0.8, 0.36] : [0.95, 0.32, 0.26];
+    tr2.annex.quads.forEach(function (Qd) {
+      var W4 = Qd.map(function (q) { var w = twbToWorld(T, q); return [w[0], twbHeight(w[0], w[1]) + TWB_RIB_LIFT, w[1]]; });
+      [0, 1, 2, 0, 2, 3].forEach(function (k) { RB.push(W4[k][0], W4[k][1], W4[k][2], fc[0], fc[1], fc[2]); });
+    });
+  }
   TWB.rib = upload(TWB.rib, new Float32Array(RB), 6, [[0, 3, 0], [2, 3, 3]]);
 }
 /** 畫建築模式的預覽（60_render.js mainOpaque 最後：地形、樹、城之後）：房子的半透明實例、道路的半透明路面帶（都照深度：被前面的房子、山擋住）、線框（不看深度、穿地看得到）。
@@ -266,17 +295,23 @@ function twbInfo() {
   else if (TWB.open === 1) s = '打開城鎮…';
   else if (TWB.open !== 2) s = '建築模式開不了';
   else if (TWB.cat === 'road') s = !TWB.start ? '點一下既有的路當起點' : !tr || !tr.road ? '找路線…' : tr.ok ? '路線 ' + Math.round(tr.len) + ' m、' + tr.gold + ' 金 —— 點一下鋪（右鍵取消）' : '鋪不了：' + (tr.why || []).join('；');
-  else s = !TWB.q ? '游標移到路邊或空建地上' : !tr || tr.road ? '試放…' : tr.ok ? (tr.lot ? '空建地 ' + tr.lot : '路邊 ' + tr.w.toFixed(0) + ' × ' + tr.d + ' m') + ' —— 點一下蓋' + (TWB.side ? '（' + (TWB.side > 0 ? '右' : '左') + '側）' : '') : '蓋不了：' + (tr.why || ['?'])[0];
+  else s = !TWB.q ? '游標移到路邊或空建地上' : !tr || tr.road ? '試放…' : tr.ok ? (tr.lot ? '空建地 ' + tr.lot : '路邊 ' + tr.w.toFixed(0) + ' × ' + tr.d + ' m') + twbFieldTxt(tr) + ' —— 點一下蓋' + (TWB.side ? '（' + (TWB.side > 0 ? '右' : '左') + '側）' : '') : '蓋不了：' + (tr.why || ['?'])[0];
   if (el.textContent !== s) el.textContent = s;
+}
+/** 生產建築那一段說明：＋田幾 m²（種什麼；長不滿上限、要放寬路邊也說）＋ 換配方的那一句。 */
+function twbFieldTxt(tr) {
+  if (!tr.recipe) return '';
+  var nm = ((tr.recipes && tr.recipes.ok || []).filter(function (x) { return x.k === tr.recipe; })[0] || { name: tr.recipe }).name, A = tr.annex;
+  return '＋田 ' + (A ? A.area + ' m²' + (A.stop === 'short' ? '（長不滿）' : '') + (A.front === 'relaxed' ? '（貼到路邊）' : '') : '?') + '、種' + nm + (tr.note ? '（' + tr.note + '）' : '');
 }
 /** 介面：分類分頁＋項目＋復原、收起（#twbP，#stage.twb 才顯示）；🔨 那一顆城鎮模式常駐、當開關（61_layout.js 的 town 配置）。 */
 function twbUI() {
   var P = $('twbP'); if (!P) return;
   var h = '<div id="twbTabs">' + TWB_CATS.map(function (c) { return '<button type="button" data-c="' + c.k + '"' + (c.k === TWB.cat ? ' class="on"' : '') + '>' + c.name + '</button>'; }).join('') + '</div><div id="twbItems">';
   var nAll = 0;
-  TWB_CATS.forEach(function (c) { c.items.forEach(function (it) { var n = ++nAll; if (c.k !== TWB.cat) return; h += '<button type="button" class="bcard' + (it.k === TWB.item ? ' on' : '') + '" data-c="' + c.k + '" data-i="' + it.k + '"><b>' + it.name + '</b><small>' + it.sub + '（' + n + '）</small></button>'; }); });
-  h += '</div><div id="twbOps"><button type="button" id="twbUndo">↶ 復原（Z）</button><button type="button" id="twbX">▾ 收起（B）</button></div>';
-  P.innerHTML = h;
+  TWB_CATS.forEach(function (c) { c.items.forEach(function (it) { var n = ++nAll; if (c.k !== TWB.cat) return; h += '<button type="button" class="bcard' + (it.k === TWB.item ? ' on' : '') + '" data-c="' + c.k + '" data-i="' + it.k + '"><b>' + it.name + '</b><small>' + it.sub + (n <= 9 ? '（' + n + '）' : '') + '</small></button>'; }); });   // 數字鍵只到 9（twbKey）⇒ 第 10 項以後只能點（TASK-0872：工坊 8 種之後選單 12 項）
+  h += '</div><div id="twbRcp"></div><div id="twbOps"><button type="button" id="twbUndo">↶ 復原（Z）</button><button type="button" id="twbX">▾ 收起（B）</button></div>';
+  P.innerHTML = h; TWB.rcpSig = null;
   P.querySelectorAll('#twbTabs button').forEach(function (b) { b.onclick = function () { var c = TWB_CATS.filter(function (x) { return x.k === b.dataset.c; })[0]; twbPick(c.k, c.items[0].k); }; });
   P.querySelectorAll('#twbItems button').forEach(function (b) { b.onclick = function () { twbPick(b.dataset.c, b.dataset.i); }; });
   $('twbUndo').onclick = twbUndo; $('twbX').onclick = function () { twbToggle(false); };
