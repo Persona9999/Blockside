@@ -31,7 +31,9 @@ const hidden={E:T.E,p:{lots:[{id:'hidden',use:'mine',at:[30,12],hide:true}]}};
 assert.equal(c.townFolkWorkSite(hidden,{nodes,edges,y:[0,20]},{work:['mine']},'hidden'),null);
 const guardTown={E:T.E,p:{lots:[{id:'tower',use:'watchtower',at:[30,6]}]}};
 const guardGraph={nodes,edges,y:[0,20]}, guard={work:['garrison']};
-for(let i=0;i<4;i++)assert(c.townFolkWorkSite(guardTown,guardGraph,guard,'guard'+i));
+const guardSites=[];for(let i=0;i<4;i++){let s=c.townFolkWorkSite(guardTown,guardGraph,guard,'guard'+i);assert(s);guardSites.push(s);}
+assert.equal(new Set(guardSites.map(s=>s.t)).size,4,'each nearby actor has its own patrol slot');
+for(let i=1;i<4;i++)assert(guardSites[i].t-guardSites[i].patrol>guardSites[i-1].t+guardSites[i-1].patrol,'patrol intervals do not overlap');
 assert.equal(c.townFolkWorkSite(guardTown,guardGraph,guard,'guard4'),null,'fifth actor falls back to free route');
 const free={id:0,e:0,spd:1.4};c.townFolkRoute(G,free,'free',1);assert(free.legs.length>4,'general route still follows multiple edges');
 // Population-driven art picks may repeat; the debug lineup must still show every requested worker exactly once.
@@ -42,4 +44,4 @@ assert.deepEqual(Array.from(G.line.arts),workers.map((p,i)=>i));
 assert.equal(new Set(G.line.arts).size,12);c.townFolkStreet(T,F,true);assert.equal(G.line,null);
 const report={workers:rows,unmatchedFallback:true,farFallback:true,hiddenIgnored:true,deterministic:true,generalRouteUnchanged:true,uniqueWorkerLineup:12,workplaceCapacity:4,overflowFallsBack:true};
 if(process.argv[3])fs.writeFileSync(process.argv[3],JSON.stringify(report,null,2)+'\n');
-console.log(JSON.stringify({workers:rows.length,maxAlongStreetOffset:Math.max(...rows.map(x=>x.maxAlongStreetOffset)),negativeControls:4,deterministic:true}));
+console.log(JSON.stringify({workers:rows.length,maxAlongStreetOffset:Math.max(...rows.map(x=>x.maxAlongStreetOffset)),negativeControls:5,deterministic:true,nonoverlappingWorkSlots:true}));

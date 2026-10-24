@@ -241,15 +241,19 @@ function townFolkWorkSite(T, G, p, k) {
     });
   }
   // 一個地塊最多四位作近距離演出；更多人仍散步，避免把人口權重全部擠到同一個門口。
-  var usage = G.workUsage || (G.workUsage = {}), available = sites.filter(function (s) { return (usage[s.lot] || 0) < 4; });
+  var usage = G.workUsage || (G.workUsage = {});
+  function room(s) { var e = G.edges[s.e]; return Math.max(1, Math.min(4, Math.floor((Math.min(e.L, s.t + 4) - Math.max(0, s.t - 4)) / 2))); }
+  var available = sites.filter(function (s) { return (usage[s.lot] || 0) < room(s); });
   if (!available.length) return null;
   var chosen = available[Math.floor(townHash(k + ':work') * available.length) % available.length];
-  usage[chosen.lot] = (usage[chosen.lot] || 0) + 1;
-  return chosen;
+  var slot = usage[chosen.lot] || 0; usage[chosen.lot] = slot + 1;
+  var edge = G.edges[chosen.e], lo = Math.max(0, chosen.t - 4), hi = Math.min(edge.L, chosen.t + 4), step = (hi - lo) / room(chosen);
+  return Object.assign({}, chosen, { t: lo + step * (slot + 0.5), patrol: Math.min(0.6, step * 0.25) });
 }
 function townFolkRoute(G, a, k, dir) {
   if (a.work) {                                                       // 在工作建築門前的短街段往返，不穿越房屋；仍只依畫面時間。
-    var e = G.edges[a.work.e], lo = Math.max(0, a.work.t - 4), hi = Math.min(e.L, a.work.t + 4), span = (hi - lo) / a.spd;
+    var e = G.edges[a.work.e], radius = a.work.patrol == null ? 4 : a.work.patrol;
+    var lo = Math.max(0, a.work.t - radius), hi = Math.min(e.L, a.work.t + radius), span = (hi - lo) / a.spd;
     var pause = 2 + 2 * townHash(k + ':rest'), first = dir > 0 ? lo : hi, last = dir > 0 ? hi : lo;
     a.legs = [{ e: a.work.e, dir: dir, t0: first, t1: last, c1: span },
       { e: a.work.e, dir: dir, t0: last, t1: last, c1: span + pause },
