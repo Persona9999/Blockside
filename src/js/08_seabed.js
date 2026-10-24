@@ -127,10 +127,15 @@ function bedPumpLate() { if (BED.inq.length && performance.now() - BED.pumpAt > 
 /** 告訴外面那一頁（只有 ?map=@host）：'started' ＝ 開戰了（鏡頭停在正上方）、'left' ＝ 拉到正上方了 —— 畫好兩格才送（地球儀照這個淡進／淡出）。 */
 function bedHostSay(what, o) {
   if (!BED || !BED.host) return;
-  var n = 0;
+  var n = 0, t0 = performance.now();
   (function one() {
     requestAnimationFrame(function () {
-      if (what === 'started' && BED.A && !P.bed && ++n < 600) { one(); return; }   // 地形的著色器還在編（63_bed_gl.js bedDraw 先不畫地形）⇒ 等它好了才說：淡進來的那一張要有地形（TASK-0816）
+      if (what === 'started' && BED.A) {
+        var sh = !P.bed && ++n < 600;                                    // 地形的著色器還在編（63_bed_gl.js bedDraw 先不畫地形）⇒ 等它好了才說：淡進來的那一張要有地形（TASK-0816）
+        var nr = performance.now() - t0 < BED_NEAR_WAIT && !bedNearReady();   // 俯瞰看得到、靠近船的地形網格還沒建好（63_bed_gl.js BEDNEAR；TASK-0907）
+        BEDNEAR.hold = sh || nr; if (BEDNEAR.hold) { one(); return; }
+        BEDNEAR.ms = Math.round(performance.now() - t0); BEDNEAR.out = !bedNearReady();
+      }
       requestAnimationFrame(function () { BED.host.postMessage(Object.assign({ bsmap: what }, (typeof o === 'function' ? o() : o) || {}), '*'); });   // o 可以是函式：送的那一刻才算
     });
   })();
