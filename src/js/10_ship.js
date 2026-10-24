@@ -79,7 +79,13 @@ function makeShipSteps(i, team, yaw, pz, T, px) {
   });
   // 坐在別的模型上的（meta rests_on ＝ 那個模型的物件 id；例：舵輪坐在舵輪座上）：那個模型被打飛 ⇒ 跟著一起飛（21_gunnery.js blowModel）、它不在了 ⇒ 掉（32_hull.js survey）。
   //   ⛔ 只看腳下的甲板 ⇒ 舵輪座被打飛，舵輪照樣浮在原地（Tim 2026-10-24，松島號）。指不到 ⇒ null（照舊只看甲板；匯入檢查報）。
-  sh.models.forEach(function (o) { var r = o.meta.rests_on; if (r === undefined || r === '') return; var p = refPath(T, r); o.restOn = sh.models.filter(function (q) { return q !== o && q.path === p; })[0] || null; });
+  //   舵輪沒寫 rests_on ⇒ 外框碰得到（外擴 1 格）的那一個舵輪座（kind=wheel_stand）：16 艘都是輪＋座兩件、座在輪的外框裡（共用雙舵輪 TASK-0640 拆座之後）⇒ 不用逐艘改作品（Tim 2026-10-24「綁另外15艘」）。
+  sh.models.forEach(function (o) {
+    var r = o.meta.rests_on;
+    if (r !== undefined && r !== '') { var p = refPath(T, r); o.restOn = sh.models.filter(function (q) { return q !== o && q.path === p; })[0] || null; return; }
+    if (o.meta.kind !== 'wheel') return;
+    var b = o.bb; o.restOn = sh.models.filter(function (q) { var c = q.bb; return q.meta.kind === 'wheel_stand' && c[0] <= b[3] + 1 && c[3] >= b[0] - 1 && c[1] <= b[4] + 1 && c[4] >= b[1] - 1 && c[2] <= b[5] + 1 && c[5] >= b[2] - 1; })[0] || null;
+  });
   }, function () {                                                   // 帆桁、裝飾
   sh.yards = sh.models.filter(function (m) { return m.kind === 'yard' && m.piv; });
   // 裝飾（TASK-0682；05_hull.js decoSplit）：不在 sh.models ⇒ 戰局看不到（重量、命中、殉爆、掉落都不算）。只記腳下那一格（同上面的模型：外框底往下 12 格內的甲板）：

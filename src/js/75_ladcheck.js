@@ -219,7 +219,7 @@ function ldcOne(sh, g, K, me) {
   // ── ② 兩端站不站得住、到不到甲板面 ──
   var E = { foot: { P: F, k: 0, nm: '梯腳 foot', fall: 0 }, head: { P: H, k: 1, nm: '梯頂 head', fall: 0 } };
   ['foot', 'head'].forEach(function (key) {
-    var e = E[key], P = e.P, d = dk && dk[e.k], fz = d ? deckWalk(d, P[0] + 0.5) : null;
+    var e = E[key], P = e.P, d = dk && dk[e.k], fz = d ? deckWalk(d, P[0] + 0.5, P[1] + 0.5) : null;
     if (!g.get(P[0], P[1], P[2] - 1)) { var n = 1; while (n < 60 && P[2] - 1 - n >= 0 && !g.get(P[0], P[1], P[2] - 1 - n)) n++; e.fall = n; e.on = onHole(P); }
     if (fz !== null && Math.abs(P[2] - fz) > NAV_DZ) add(NL ? 'error' : 'warn', key === 'head' ? '梯頂沒到甲板面' : '梯腳沒到甲板面', e.nm + ldcAt(P) + '，' + d.name + '在那裡的地板 z ' + fz + '（' + (P[2] > fz ? '高' : '低') + ' ' + Math.abs(P[2] - fz) + ' 格）⇒ ' + (NL ? '尋路照那一層的走路格接（' + (dk.link ? 10 : 5) + ' 點內找），人爬到' + (key === 'head' ? '頂' : '底') + '要跳 ' + Math.abs(P[2] - fz) + ' 格' : '尋路沒收這一座（預備水手、傷員不走）'),
       e.nm + ' 擺在' + d.name + '的地板上（z ' + fz + '）；它真的通到別層 ⇒ 梯子 meta ' + l.name.split('/').pop() + '.decks 指定那兩層（造船規格 §9.3）');
