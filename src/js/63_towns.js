@@ -631,7 +631,8 @@ function townKitMake(I, need, D, reuse) {
   return Promise.all(need.map(function (nm) {
     var m0 = I.models[nm], d = D[nm], R = reuse && reuse.M[nm];
     if (!d) throw new Error('外面那一頁沒給 ' + nm);
-    function put(L, win, gls) { M[nm] = { nm: nm, i: names.indexOf(nm), m: m0, lod: L, png: d.png, uc0: [m0.mpv, m0.size[0] * m0.mpv / 2, m0.size[1] * m0.mpv / 2], uc1: [m0.mpv * m0.lo.f, m0.size[0] * m0.mpv / 2, m0.size[1] * m0.mpv / 2], win: win, gls: gls }; }   // win：亮窗的窗片（夜裡的燈）；gls：玻璃（townGlsMesh）
+    var rise = d.bo ? { g: d.g, bo: d.bo } : null;                       // 建造演出（63_townrise.js）：格子＋施工順序留著，演的時候才解（沒有 bo ＝ Blocksail 還沒照 TASK-0908 重建的模型資料）
+    function put(L, win, gls) { M[nm] = { nm: nm, i: names.indexOf(nm), m: m0, lod: L, png: d.png, uc0: [m0.mpv, m0.size[0] * m0.mpv / 2, m0.size[1] * m0.mpv / 2], uc1: [m0.mpv * m0.lo.f, m0.size[0] * m0.mpv / 2, m0.size[1] * m0.mpv / 2], win: win, gls: gls, rise: rise }; }   // win：亮窗的窗片（夜裡的燈）；gls：玻璃（townGlsMesh）
     if (R) { put(R.lod, R.win, R.gls); return null; }
     return Promise.all([townModelMesh(nm, d, m0), townGlsMesh(m0, d.gls)]).then(function (A) { put(A[0], townWinMesh(m0), A[1]); });
   })).then(function () {
@@ -1897,6 +1898,7 @@ function townBin(PL, eye) {
   TOWNS.list.forEach(function (T) {
     if (!T.inst) return;
     T.inst.forEach(function (q) {
+      if (townRiseHides(T, q)) return;                                   // 建造演出中的那一棟（63_townrise.js 自己畫）
       if (!(q.y === q.y)) { if (!townWallY(q)) return; T.shDirty = true; }   // 城牆：等那一塊載進來
       var dx = q.x - eye[0], dz = q.z - eye[2], d = Math.sqrt(dx * dx + dz * dz) / (q.lk || 1); if (d > TOWN_FAR[1] + 50) return;   // d ＝ 距離 ÷ 地標倍率（一般房子 1）
       var cy = q.y + q.top / 2, r = q.r + q.top / 2;
@@ -1990,6 +1992,7 @@ function townDraw() {
       gl.drawElementsInstanced(gl.TRIANGLES, g.nq * 6, gl.UNSIGNED_INT, 0, n); tris += g.nq * 2 * n;
     });
   }
+  tris += townRiseDraw(P);                                               // 建造演出（63_townrise.js；同一支著色器，接著近那一級畫）
   // 石基
   if (G.npl) {
     var PP = P.pl; gl.useProgram(PP.prog); setCommon(PP); gl.uniform1f(PP.u.uFogD, fogD); gl.uniform3f(PP.u.uCol, 0.62, 0.58, 0.50);
@@ -2061,6 +2064,7 @@ function townDepth() {
     townInstAttr(G, l, mi);
     gl.drawElementsInstanced(gl.TRIANGLES, g.nq * 6, gl.UNSIGNED_INT, 0, k); n += k;
   });
+  n += townRiseDepth(P);                                                 // 建造演出（63_townrise.js）
   if (G.npl && P.plVao) { var PP = P.dPl; gl.useProgram(PP.prog); setCommon(PP); gl.bindVertexArray(P.plVao); gl.drawArraysInstanced(gl.TRIANGLES, 0, 36, G.npl); }
   gl.bindVertexArray(null); return n;
 }
