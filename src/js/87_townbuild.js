@@ -189,7 +189,7 @@ function twbFrame() {
     camSet({ mode: 0, follow: null, pan: [0, 0], tgt: [x, Math.max(0, twbHeight(x, z)), z], dist: 300, pitch: 0.95 });
   }
   // 進城預設不開建築模式（Tim 2026-10-23「建築模式按鈕希望改成常駐的Toggle按鈕(且預設改為不開)」；10-22 那一版城到了、轉場降完就自動開一次）：按 🔨 或 B 才開
-  if (!TWB.on) { if (TWB.gl && TWB.gl.n) TWB.gl = upload(TWB.gl, new Float32Array(0), 6, [[0, 3, 0], [2, 3, 3]]); TWB.ghost = null; return; }
+  if (!TWB.on) { TWB.ghost = null; if (tbiSelQ()) { twbLines(T); return; } if (TWB.gl && TWB.gl.n) TWB.gl = upload(TWB.gl, new Float32Array(0), 6, [[0, 3, 0], [2, 3, 3]]); if (TWB.rib && TWB.rib.n) twbLines(null); return; }   // 建築模式關著：只畫點建築的面板選著的那一棟（89_townbld.js）
   if (TWB.moved && TWB.mx != null && T) {
     TWB.moved = false;
     var g = twbGround(TWB.mx, TWB.my);
@@ -207,7 +207,7 @@ function twbLines(T) {
   function seg(a, b, c) { L.push(a[0], a[1], a[2], c[0], c[1], c[2], b[0], b[1], b[2], c[0], c[1], c[2]); }
   function P3(q, up) { var w = twbToWorld(T, q); return [w[0], twbHeight(w[0], w[1]) + (up || 0.4), w[1]]; }
   if (T) {
-    var tr = TWB.tr, G = [0.45, 1, 0.5], R = [1, 0.3, 0.25], Y = [1, 0.85, 0.3];
+    var tr = TWB.on ? TWB.tr : null, G = [0.45, 1, 0.5], R = [1, 0.3, 0.25], Y = [1, 0.85, 0.3];   // 建築模式關著 ⇒ 只畫選著的那一棟（89_townbld.js tbiSelQ）
     if (TWB.cat !== 'road' && tr && !tr.road && tr.at && !TWB.sel) {
       var th = tr.rot * Math.PI / 180, ux = Math.cos(th), uy = Math.sin(th), hd = tr.d / 2, hw = tr.w / 2, C = [];
       [[-1, -1], [1, -1], [1, 1], [-1, 1]].forEach(function (s) { C.push(P3([tr.at[0] + ux * hd * s[0] - uy * hw * s[1], tr.at[1] + uy * hd * s[0] + ux * hw * s[1]])); });
@@ -219,12 +219,12 @@ function twbLines(T) {
         tr.annex.quads.forEach(function (Qd) { for (var e = 0; e < 4; e++) { var a = Qd[e], b = Qd[(e + 1) % 4], k = [ek(a), ek(b)].sort().join('|'); EC[k] = EC[k] ? null : [a, b]; } });
         Object.keys(EC).forEach(function (k) { if (EC[k]) seg(P3(EC[k][0], 0.5), P3(EC[k][1], 0.5), col); });
       }
-    } else if (TWB.cat === 'road' && TWB.start) {
+    } else if (TWB.on && TWB.cat === 'road' && TWB.start) {
       var s0 = P3(TWB.start, 0.6); seg([s0[0] - 3, s0[1], s0[2]], [s0[0] + 3, s0[1], s0[2]], Y); seg([s0[0], s0[1], s0[2] - 3], [s0[0], s0[1], s0[2] + 3], Y); seg(s0, [s0[0], s0[1] + 8, s0[2]], Y);
       if (tr && tr.road && tr.path && tr.path.length > 1) { var c2 = tr.ok ? G : R; for (var j = 1; j < tr.path.length; j++) seg(P3(tr.path[j - 1], 0.6), P3(tr.path[j], 0.6), c2); }
       else if (TWB.q) seg(s0, P3(TWB.q, 0.6), tr && tr.road && !tr.ok ? R : Y);
     }
-    var sq = TWB.sel && TWB.sel.q;                                       // 點到的那一棟：外框（townHitAt 量的那一個長方體），黃
+    var sq = TWB.on ? TWB.sel && TWB.sel.q : tbiSelQ();                  // 點到的那一棟：外框（townHitAt 量的那一個長方體），黃
     if (sq) {
       var sc = Math.cos(sq.th), ss = Math.sin(sq.th), a2 = sq.pl[1] / 2, b2 = sq.pl[0] / 2, y0 = sq.y, y1 = sq.y + sq.top * sq.sh, B4 = [];
       [[-1, -1], [1, -1], [1, 1], [-1, 1]].forEach(function (k) { B4.push([sq.x + sc * a2 * k[0] - ss * b2 * k[1], sq.z + ss * a2 * k[0] + sc * b2 * k[1]]); });
@@ -237,7 +237,7 @@ function twbLines(T) {
   TWB.gl = upload(TWB.gl, new Float32Array(L), 6, [[0, 3, 0], [2, 3, 3]]);
   // 半透明預覽（Tim 2026-10-22「城鎮建造是否可以加上預覽(道路&建築 在Hover狀態下顯示半透明預覽)」）：
   //   房子 ⇒ 試放的那一塊照蓋上去的那一份（id：空建地照原 id、路邊照 townBuild 的 'b' ＋ (nextBuild ＋ 1)）挑同一棟模型；道路 ⇒ 路線照路寬鋪一條貼地的路面帶
-  var tr2 = TWB.tr; TWB.ghost = null; var RB = [];
+  var tr2 = TWB.on ? TWB.tr : null; TWB.ghost = null; var RB = [];
   if (T && TWB.cat !== 'road' && tr2 && !tr2.road && tr2.at && !TWB.sel) {        // h：地塊頂（Blocksail mapgen_worker.js try 回的；舊的地球儀沒回 ⇒ 地塊中心的地面）
     var cw = twbToWorld(T, tr2.at), h2 = tr2.h != null ? tr2.h : twbHeight(cw[0], cw[1]);
     TWB.ghost = townGhost(T, { id: tr2.lot || 'b' + ((T.p.nextBuild || 0) + 1), use: TWB.item, at: tr2.at, rot: tr2.rot, w: tr2.w, d: tr2.d, h: h2 }, !!tr2.ok);
@@ -276,7 +276,7 @@ function twbLines(T) {
 /** 畫建築模式的預覽（60_render.js mainOpaque 最後：地形、樹、城之後）：房子的半透明實例、道路的半透明路面帶（都照深度：被前面的房子、山擋住）、線框（不看深度、穿地看得到）。
  *  ⛔ 要在地形、樹、城之後畫：關了深度測試的線不寫深度 ⇒ 畫在前面會被後畫的陸地整片蓋掉（2026-10-22 第一版放在船那一段後面，量到預覽框周圍 0 個綠像素）。 */
 function twbDraw() {
-  if (!TWB.on) return;
+  if (!TWB.on && !tbiSelQ()) return;                                 // 建築模式關著 ⇒ 只有點建築的面板選著一棟時畫它的外框
   if (TWB.ghost) townGhostDraw(TWB.ghost);
   var hasRib = TWB.rib && TWB.rib.n, hasLine = TWB.gl && TWB.gl.n; if (!hasRib && !hasLine) return;
   gl.useProgram(P.tri.prog); setCommon(P.tri); gl.uniform1f(P.tri.u.uLit, 0); gl.uniform1f(P.tri.u.uGlow, 0); gl.vertexAttrib3f(1, 0, 1, 0); gl.vertexAttrib3f(3, 0, 0, 0);

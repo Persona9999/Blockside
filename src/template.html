@@ -366,6 +366,15 @@
   .tuiChW .tip{ position:absolute; top:22px; padding:4px 8px; border-radius:6px; background:rgba(0,0,0,.85); font-size:12px; pointer-events:none; white-space:nowrap; z-index:2; }
   #tuiPick{ font-size:12px; }
   @media (max-width: 640px){ #stage.tui #tuiP{ top:56px; bottom:178px; right:8px; width:calc(100vw - 16px); } }
+  /* 點建築的資訊面板（89_townbld.js，Blocksail TASK-0909）：左邊一塊，跟城鎮介面（右邊）可以同時開 */
+  #tbiP{ display:none; }
+  #stage.tbi #tbiP{ display:block; position:absolute; left:12px; top:64px; width:min(300px, calc(100vw - 24px)); max-height:calc(100% - 170px); overflow:auto; z-index:9; pointer-events:auto; background:rgba(14,18,24,.9); color:var(--ink); font-size:13px; font-variant-numeric:tabular-nums; }
+  .tbiH{ display:flex; align-items:baseline; gap:8px; } .tbiH b{ font-size:15px; color:#f3e6c4; } #tbiX{ margin-left:auto; border-radius:12px; padding:2px 10px; }
+  .tbiDim{ color:var(--dim); font-size:12px; margin:2px 0; } .tbiT{ margin:8px 0 2px; color:#f3e6c4; font-size:12px; }
+  .tbiR{ display:flex; justify-content:space-between; gap:12px; padding:1px 0; } .tbiR b{ font-weight:normal; }
+  .tbiS{ margin:6px 0; padding:4px 8px; border-radius:6px; background:rgba(217,164,65,.16); } .tbiBar{ height:5px; margin-top:4px; border-radius:3px; background:rgba(255,255,255,.12); overflow:hidden; } .tbiBar i{ display:block; height:100%; background:#d9a441; }
+  .tbiB{ margin-top:8px; } .tbiB button{ border-radius:14px; padding:4px 12px; } .tbiB button:disabled{ opacity:.4; }
+  @media (max-width: 640px){ #stage.tbi #tbiP{ top:56px; left:8px; width:calc(100vw - 16px); max-height:40vh; } }
   #stage.bld #bldInfo{ display:block; position:absolute; left:50%; top:calc(50% + 16px); transform:translateX(-50%); padding:3px 10px; border-radius:8px; background:rgba(10,14,22,.6); color:#eee; font-size:13px; pointer-events:none; white-space:nowrap; max-width:calc(100vw - 32px); overflow:hidden; text-overflow:ellipsis; z-index:4; }
   #stage.bld #bldBar{ display:flex; position:absolute; left:50%; transform:translateX(-50%); bottom:92px; gap:6px; pointer-events:none; }
   #bldBar .bslot{ pointer-events:auto; background:rgba(10,14,22,.55); } #bldBar .bslot.gap{ margin-left:10px; } #bldBar .bslot.on{ background:rgba(159,199,255,.92); }   /* 選中（⛔ 只有上一條 ⇒ 深色底蓋過圓鈕的 .on，只剩邊框，截圖量過） */
@@ -483,6 +492,7 @@
   <div id="twbInfo"></div>
   <div id="twbP" class="panel"></div>
   <div id="tuiP" class="panel"></div>
+  <div id="tbiP" class="panel"></div>
   <div id="inspP" class="panel" style="display:none"><!-- 船隻觀察的面板：js/86_inspect.js inspUI 生 --></div>
   <div id="inspL"></div>
   <div id="bldCat" class="panel" style="display:none"><div id="bldCatH"><b>📦 目錄</b><span class="kb" id="bldCatX">✕ 關（<span class="kn" data-kl="bCat">B</span>）</span></div><div id="bldTabs"></div><div id="bldGrid"></div></div>
@@ -996,6 +1006,7 @@
 <script src="js/87_townbuild.js" data-bundle="game"></script>
 <script src="js/88_modeswitch.js" data-bundle="game"></script>
 <script src="js/89_townui.js" data-bundle="game"></script>
+<script src="js/89_townbld.js" data-bundle="game"></script>
 <script src="js/83_testlog.js" data-bundle="game"></script>
 <script src="js/85_riglog.js" data-bundle="game"></script>
 <script src="js/84_fleetlab.js" data-bundle="game"></script>
