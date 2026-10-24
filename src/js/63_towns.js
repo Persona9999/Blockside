@@ -27,7 +27,7 @@
 //   那一級沒有模型 ⇒ 往下找有的那一級（stat.skip 記 'wall:<套>'）；寫了 kit 但沒有那一套 ⇒ 一級（stat.skip 記 'wall:<kit>'）。換等級只換模組 ⇒ 路線、門、塔的位置不動。
 //   門、塔照位置（一套有好幾型塔 ⇒ 照順序輪流：東羅馬外牆方塔、新月塔交替）、兩頭收尾，中間照斷面沿曲線一節一節拉（節數 round(L / len)、每節沿 x 縮放補滿），−y（牆外）朝規劃寫的 out 那一側（Blocksail 算好：手寫 ＞ 照中心城區 ＞ 朝最近的城區邊界；舊的規劃沒有 ⇒ 朝離城心遠的那一邊）；水門（gate.kind water，棧橋穿牆）照城門擺。
 //   接縫（Tim 2026-10-20：「目前城市地圖的城牆 連接處會也接縫 是否可以參考其他遊戲的作法處理例如圖二的世紀帝國4城牆」）：斷面接成一條折線（每節是兩站之間的弦、相鄰兩節共用一站，路線的頂點一定是站）
-//   ⇒ 站上照兩節的角平分面斜接（著色器照 aJ 把那一節沿 x 切成梯形）、接到門／塔／轉角／收尾的那一頭照部件的端面切齊；高度照兩站的地面線性接（坡上順著走，不再一節一階），
+//   ⇒ 站上照兩節的角平分面斜接（著色器照 aJ 把那一節沿 x 切成梯形）、接到門／塔／轉角／收尾的那一頭照部件的端面切齊；高度照兩站的沿線高度線性接（townWallProf：地面沿牆平滑過、門與接點釘回地面 ⇒ 小起伏不再讓城垛跟著折），
 //   牆基（模型 z 0 那一層）往下延到腳下最低的地面；轉得急（≥ TOWN_WALL_CORNER）的頂點要有部件蓋著（同世紀帝國轉角的塔）：附近有塔 ⇒ 塔挪到轉角上（stat.snapped），
 //   沒有 ⇒ 擺一件轉角（那一套的 joint；沒有 ⇒ 第一型塔；stat.corners）。會改到手擺的塔（君士坦丁堡新擺 6、加拉塔新擺 7〔22 → 29 座〕、挪 9 座）⇒ Tim 2026-10-20 選保留。
 //   城門那一筆帶 model ⇒ 那一門改用 '<套>-gate-<model>'（kaguya 2026-10-23：君士坦丁堡的金門 'golden'，連兩座大理石塔 70 m 寬）；這種自帶塔的門蓋到的塔不擺（stat.towerInGate）。
@@ -46,6 +46,9 @@ var TOWN_MESH_MS = 8;                                                    // 模�
 var TOWN_WALL_CORNER = 30, TOWN_WALL_KMAX = 1;                         // 城牆：轉角件從轉幾度起擺；斜接最多切多斜（tan，1 ＝ 轉 90° 的角平分）
 var TOWN_WALL_JX_TOL = 1, TOWN_WALL_JX_SINK = 0.7;                     // 牆接牆（townWallJx）：牆的一頭離別道牆幾公尺內算接上；接進來的牆停在接點那件部件裡多深（部件半長的幾成）
 var TOWN_WALL_JOIN_IN = 0.5;                                          // 牆接建築：牆兩側的邊都進了建築的外框之後再多伸幾公尺（townWall joinIn）
+var TOWN_WALL_JX_OUT = 4, TOWN_WALL_JX_BEND = 12;                      // 牆接塔（townWallJx）：從塔的那一面垂直出去幾公尺，再用幾公尺轉回原本的路線〔佔位〕
+// 城牆沿線的高度（townWallProf）：前後平均幾公尺、牆腳最多埋進地面幾公尺、埋太深往上抬的量往兩邊照什麼坡收（最遠幾公尺）、最後再磨圓幾公尺、門與接點釘回地面往兩邊收幾公尺〔佔位〕
+var TOWN_WALL_FLOW = { win: 16, bury: 1.5, k: 0.2, reach: 40, round: 4, pin: 16 };
 var TOWN_SLAB_KMAX = 2;                                                 // 碼頭、棧橋的板：轉角斜接最多拉長幾倍（2 ＝ 轉 120°；再急就在轉角那一點變窄）
 var TOWNS = { on: Q.get('towns') !== '0', prosp: {}, list: [],pend: [], ver: 0, want: 0, err: null, kit: null, kitP: null, idx: null, kitHas: null, kitRedo: false, kitBusy: false, mwait: null, prog: null, progJ: null, dirty: true, eye: null, sig: '', buf: [], grp: null,
   stat: { towns: 0, lots: 0, inst: 0, walls: 0, corners: 0, snapped: 0, skip: {}, d0: 0, d1: 0, d2: 0, d3: 0, plinth: 0, tris: 0, binMs: 0, kitMs: 0, meshBaked: 0, meshLive: 0, meshCheck: null, gradeMs: 0, chunks: 0, regraded: 0, drawMs: 0 } };
@@ -57,7 +60,7 @@ var TOWN_PROSP_DEF = 0.5, TOWN_PROSP_CUT = [1 / 3, 2 / 3];               // 繁�
 var TOWN_STYLE_DEF = 'fr';                                            // 索引裡沒寫 style 的模型算 fr（第一套，TASK-0757）；規劃沒帶退路 styles（舊的匯出）⇒ 城的 style、再 fr
 var TOWN_COL = { main: [0.56, 0.47, 0.34], street: [0.62, 0.58, 0.50], track: [0.50, 0.42, 0.30], plaza: [0.70, 0.66, 0.58], quay: [0.58, 0.56, 0.52], mole: [0.52, 0.51, 0.47], pier: [0.45, 0.33, 0.22], post: [0.30, 0.22, 0.15] };
 evOn('bedChunk', function (cx, cy) {
-  TOWNS.dirty = true;
+  TOWNS.dirty = true; TOWNS.bedV = (TOWNS.bedV || 0) + 1;                 // bedV：城牆高度等地面的那幾件（townWallY）有新的一塊才再試
   if (!BED || !BED.A) return;
   if (TOWNS.rgq) delete TOWNS.rgq[bedKey(cx, cy)];                       // 排著等重新整地的那一塊已經重發了（新的一份、或 townRegrade 自己）⇒ 不再做一次
   var x = cx * BED.A.chunk, z = cy * BED.A.chunk, S = BED.A.chunk;
@@ -727,31 +730,41 @@ function townLotInst(T, K, l) {
  *  以前每道牆各畫各的 ⇒ 開放的牆兩頭一律收尾 ⇒ 接到別道牆的那一頭，收尾件戳進對方、對方的斷面照樣穿過去（只有剛好落在塔、門上才看不出來）。
  *  ⇒ 一座城的牆先整批找接點（照真的城防：牆在塔處交會）：
  *    ① 每道開放的牆兩頭 ⇒ 端點 TOWN_WALL_JX_TOL 內的併成同一個接點；接點落在別道牆的中段（離它 ≤ TOL、不在它兩頭 TOL 內）⇒ T 形，那一道是 host
+ *       兩道牆的中段互穿（Tim 2026-10-24「避免城牆直接穿過另一段城牆(這裡應該像十字路口一樣 形成結合段」；交點離兩道的端點都超過 TOL）⇒ 十字接點：照 id 第一道是 host、另一道 cross
  *    ② 接點上要有一件部件：擺在 host 的那一點；沒有 host（端點對端點：L 形、接成一直線、三道以上）⇒ 擺在照 id 第一道的那一頭。
  *       哪件 ＝ 那道牆那一套的轉角件（-joint，沒有 ⇒ 第一種塔）；那一點已經有門、塔蓋著 ⇒ 用它；附近有塔 ⇒ 挪過來（同轉角，townWall）
- *    ③ 接進來的牆：那一頭不收尾、斷面停在部件裡（部件半長 × TOWN_WALL_JX_SINK）⇒ 端面藏在塔身裡
- *    ④ 那一套沒有塔：T 形 ⇒ 接進來的牆伸到 host 的中線、不收尾（端面在 host 牆身裡）；兩道端點對接 ⇒ 兩頭照轉角斜接（端面 ＝ 兩道方向的角平分）
- *  回 { <牆 id>: { ends: [起點的接點, 終點的接點]（沒接 ⇒ null）, at: [{ t, node }]（這一道要在沿線 t 擺接點的部件） } }；讀數 TOWNS.stat.wallJx[城 id]。 */
+ *    ③ 從塔的空面垂直接出去（Tim 2026-10-24「優化連接處的邏輯(有空位的話 最好從四個角往外連)」—— 選了「四個面、垂直接出」）：
+ *       塔的四面 ＝ 擺它那道牆（own）的軸 ±a、橫的 ±n；own 自己佔它往兩頭延伸的那幾面。
+ *       別的牆：穿過去的（host、cross 不是 own 的那一道）先挑一對對面都空、最順著它方向的；接進來的那一頭再挑一面空的、最順著它往牆身去的方向（照分數從高的先給）。
+ *       挑到 ⇒ 那一段路線改走：塔心 → 那一面的中心再往外 TOWN_WALL_JX_OUT（垂直出去）→ 再 TOWN_WALL_JX_BEND 公尺接回原本的路線（out[id].P）
+ *       挑不到（四面都佔了、方向差太多、牆太短）⇒ 照舊：順著原路線停在塔裡
+ *    ④ 接進來的牆：那一頭不收尾、斷面停在部件裡（那一面的半長 × TOWN_WALL_JX_SINK）⇒ 端面藏在塔身裡；穿過去的牆在塔兩邊各停一段（out[id].pass）
+ *    ⑤ 那一套沒有塔：T 形 ⇒ 接進來的牆伸到 host 的中線、不收尾（端面在 host 牆身裡）；兩道端點對接 ⇒ 兩頭照轉角斜接（端面 ＝ 兩道方向的角平分）
+ *  回 { <牆 id>: { ends: [起點的接點, 終點的接點]（沒接 ⇒ null）, at: [{ node }]（這一道要在 node.own.c 擺接點的部件；沿線位置 townWall 照改過的路線量）,
+ *    sk: [起點、終點停在塔裡多深]（0 ⇒ 照 own 的半長）, pass: [{ c, h, sk }]（穿過去的塔）, P: 改過的路線（沒改 ⇒ null） } }；讀數 TOWNS.stat.wallJx[城 id]。 */
 function townWallJx(T, walls, W, K) {
-  var out = {}, L = [], nodes = [], tol = TOWN_WALL_JX_TOL;
+  var out = {}, L = [], nodes = [], tol = TOWN_WALL_JX_TOL, SINK = TOWN_WALL_JX_SINK;
+  function dedupe(Q) { var P = []; Q.forEach(function (q) { var l = P[P.length - 1]; if (!l || Math.hypot(q[0] - l[0], q[1] - l[1]) > 0.01) P.push(q); }); return P; }
+  function cumOf(o) { o.cum = [0]; for (var i = 1; i < o.P.length; i++) o.cum.push(o.cum[i - 1] + Math.hypot(o.P[i][0] - o.P[i - 1][0], o.P[i][1] - o.P[i - 1][1])); o.Lt = o.cum[o.cum.length - 1]; }
   walls.forEach(function (w) {
-    var P = []; w.path.map(W).forEach(function (q) { var l = P[P.length - 1]; if (!l || Math.hypot(q[0] - l[0], q[1] - l[1]) > 0.01) P.push(q); });
+    var P = dedupe(w.path.map(W));
     if (P.length < 2) return;
     var closed = !!w.closed && P.length > 2;
     if (closed && Math.hypot(P[0][0] - P[P.length - 1][0], P[0][1] - P[P.length - 1][1]) <= 0.01) P.pop();
     if (closed) P = P.concat([P[0]]);
-    var cum = [0]; for (var i = 1; i < P.length; i++) cum.push(cum[i - 1] + Math.hypot(P[i][0] - P[i - 1][0], P[i][1] - P[i - 1][1]));
-    L.push({ w: w, P: P, cum: cum, Lt: cum[cum.length - 1], closed: closed });
-    out[w.id] = { ends: [null, null], at: [] };
+    var o = { w: w, P: P, closed: closed }; cumOf(o); L.push(o);
+    out[w.id] = { ends: [null, null], at: [], sk: [0, 0], pass: [], P: null };
   });
   function projOn(o, q) { var bd = Infinity, bt = 0; for (var s = 1; s < o.P.length; s++) { var a = o.P[s - 1], b = o.P[s], dx = b[0] - a[0], dy = b[1] - a[1], L2 = dx * dx + dy * dy || 1, u = Math.max(0, Math.min(1, ((q[0] - a[0]) * dx + (q[1] - a[1]) * dy) / L2)), d = Math.hypot(q[0] - a[0] - u * dx, q[1] - a[1] - u * dy); if (d < bd) { bd = d; bt = o.cum[s - 1] + u * Math.sqrt(L2); } } return { d: bd, t: bt }; }
+  function atOn(o, t) { t = o.closed ? ((t % o.Lt) + o.Lt) % o.Lt : Math.max(0, Math.min(o.Lt, t)); for (var s = 1; s < o.P.length; s++) if (t <= o.cum[s] || s === o.P.length - 1) { var l = o.cum[s] - o.cum[s - 1] || 1, u = (t - o.cum[s - 1]) / l; return [o.P[s - 1][0] + (o.P[s][0] - o.P[s - 1][0]) * u, o.P[s - 1][1] + (o.P[s][1] - o.P[s - 1][1]) * u]; } return o.P[0]; }
+  function unit(a, b) { var dx = b[0] - a[0], dz = b[1] - a[1], l = Math.hypot(dx, dz); return l > 1e-6 ? [dx / l, dz / l] : null; }
   function into(o, e) { var a = e ? o.P[o.P.length - 1] : o.P[0], b = e ? o.P[o.P.length - 2] : o.P[1], l = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1; return [(b[0] - a[0]) / l, (b[1] - a[1]) / l]; }   // 從接點往牆身裡的方向
   L.forEach(function (o) {
     if (o.closed) return;
     [0, 1].forEach(function (e) {
       var p = e ? o.P[o.P.length - 1] : o.P[0], nd = null;
       nodes.forEach(function (n) { if (!nd && Math.hypot(n.p[0] - p[0], n.p[1] - p[1]) <= tol) nd = n; });
-      if (!nd) nodes.push(nd = { p: p, ends: [], host: null });
+      if (!nd) nodes.push(nd = { p: p, ends: [], host: null, cross: null });
       nd.ends.push({ o: o, e: e });
     });
   });
@@ -762,15 +775,32 @@ function townWallJx(T, walls, W, K) {
       if (r.d <= tol && (o.closed || (r.t > tol && r.t < o.Lt - tol))) nd.host = { o: o, t: r.t };
     });
   });
-  nodes = nodes.filter(function (nd) { return nd.ends.length + (nd.host ? 1 : 0) >= 2; });
+  // 互穿：兩道牆的線段相交、交點離兩道的端點都超過 TOL（離得近的是上面的端點、T 形）
+  for (var i = 0; i < L.length; i++) for (var j = i + 1; j < L.length; j++) {
+    var A = L[i], B = L[j]; if (A.w.id > B.w.id) { A = L[j]; B = L[i]; }
+    for (var s = 1; s < A.P.length; s++) for (var k = 1; k < B.P.length; k++) {
+      var a0 = A.P[s - 1], a1 = A.P[s], b0 = B.P[k - 1], b1 = B.P[k], rx = a1[0] - a0[0], rz = a1[1] - a0[1], sx = b1[0] - b0[0], sz = b1[1] - b0[1], den = rx * sz - rz * sx;
+      if (Math.abs(den) < 1e-9) continue;
+      var u = ((b0[0] - a0[0]) * sz - (b0[1] - a0[1]) * sx) / den, v = ((b0[0] - a0[0]) * rz - (b0[1] - a0[1]) * rx) / den;
+      if (u < 0 || u > 1 || v < 0 || v > 1) continue;
+      var ta = A.cum[s - 1] + u * (A.cum[s] - A.cum[s - 1]), tb = B.cum[k - 1] + v * (B.cum[k] - B.cum[k - 1]), q = [a0[0] + u * rx, a0[1] + u * rz];
+      if (!A.closed && (ta <= tol || ta >= A.Lt - tol)) continue;
+      if (!B.closed && (tb <= tol || tb >= B.Lt - tol)) continue;
+      if (nodes.some(function (n) { return Math.hypot(n.p[0] - q[0], n.p[1] - q[1]) <= tol; })) continue;
+      nodes.push({ p: q, ends: [], host: { o: A, t: ta }, cross: { o: B, t: tb } });
+    }
+  }
+  nodes = nodes.filter(function (nd) { return nd.ends.length + (nd.host ? 1 : 0) + (nd.cross ? 1 : 0) >= 2; });
   var st = (TOWNS.stat.wallJx = TOWNS.stat.wallJx || {})[T.id] = [];
+  // 先照原本的路線定每個接點的部件（哪一道擺、擺在哪、塔心 c、四面），全部定完才改路線（改一道會挪它沿線的 t）
   nodes.forEach(function (nd) {
     var first = nd.ends.slice().sort(function (a, b) { return a.o.w.id < b.o.w.id ? -1 : a.o.w.id > b.o.w.id ? 1 : a.e - b.e; })[0];
     var ow = nd.host ? nd.host : { o: first.o, t: first.e ? first.o.Lt : 0 };
     var kit = townWallKit(K, T, ow.o.w, false), nm = kit && ((K.byUse[kit + '-joint'] || [])[0] || (K.byUse[kit + '-tower'] || [])[0]);
-    nd.own = nm && K.M[nm] ? { id: ow.o.w.id, t: ow.t, nm: nm, h: townWallHalf(K, nm) } : null;
+    nd.own = nm && K.M[nm] ? { id: ow.o.w.id, o: ow.o, t: ow.t, nm: nm, h: townWallHalf(K, nm) } : null;
     //   接點上已經有門、塔（任一道接上的牆上的）⇒ 那一道負責、用它的半長（不然會在另一道上再擺一座、跟門疊在一起：陸牆內牆接金角灣海牆那一點就是門）
-    nd.ends.map(function (x) { return x.o; }).concat(nd.host ? [nd.host.o] : []).forEach(function (o) {
+    //   有 host（T、十字）⇒ 只看穿過去的那幾道（接進來那一道的門、塔不算：拿它當接點，host 就得改道穿過別人的門）
+    (nd.host ? [nd.host.o].concat(nd.cross ? [nd.cross.o] : []) : nd.ends.map(function (x) { return x.o; })).forEach(function (o) {
       if (nd.ownHas) return;
       var k2 = townWallKit(K, T, o.w, false); if (!k2) return;
       var gate = (K.byUse[k2 + '-gate'] || [])[0], tw = K.byUse[k2 + '-tower'] || [];
@@ -779,23 +809,118 @@ function townWallJx(T, walls, W, K) {
         .forEach(function (c) {
           if (nd.ownHas || !c.nm || !K.M[c.nm]) return;
           var hc = townWallHalf(K, c.nm);
-          if (Math.hypot(c.q[0] - nd.p[0], c.q[1] - nd.p[1]) <= hc) { nd.own = { id: o.w.id, t: projOn(o, c.q).t, nm: c.nm, h: hc }; nd.ownHas = true; }
+          if (Math.hypot(c.q[0] - nd.p[0], c.q[1] - nd.p[1]) <= hc) { nd.own = { id: o.w.id, o: o, t: projOn(o, c.q).t, nm: c.nm, h: hc }; nd.ownHas = true; }
         });
     });
     if (!nd.own && !nd.host && nd.ends.length === 2) { var ua = into(nd.ends[0].o, nd.ends[0].e), ub = into(nd.ends[1].o, nd.ends[1].e); nd.n = [ub[0] - ua[0], ub[1] - ua[1]]; }   // 斜接：一道進來的方向（−ua）＋另一道出去的方向（ub）
     nd.ends.forEach(function (x) { out[x.o.w.id].ends[x.e] = nd; });
-    if (nd.own) out[nd.own.id].at.push({ t: nd.own.t, node: nd });
-    nd.stat = { at: [+nd.p[0].toFixed(1), +nd.p[1].toFixed(1)], kind: nd.host ? 'T' : nd.ends.length > 2 ? '多道' : '端點', walls: nd.ends.map(function (x) { return x.o.w.id + (x.e ? '尾' : '頭'); }).concat(nd.host ? [nd.host.o.w.id + '中段'] : []),
-                own: nd.own ? nd.own.id : null, nm: nd.own ? nd.own.nm : null, used: nd.own ? '?' : nd.n ? '斜接' : '伸到中線' };
+    nd.stat = { at: [+nd.p[0].toFixed(1), +nd.p[1].toFixed(1)], kind: nd.cross ? '十字' : nd.host ? 'T' : nd.ends.length > 2 ? '多道' : '端點',
+                walls: nd.ends.map(function (x) { return x.o.w.id + (x.e ? '尾' : '頭'); }).concat(nd.host ? [nd.host.o.w.id + '中段'] : [], nd.cross ? [nd.cross.o.w.id + '中段'] : []),
+                own: nd.own ? nd.own.id : null, nm: nd.own ? nd.own.nm : null, used: nd.own ? '?' : nd.n ? '斜接' : '伸到中線', face: {} };
     st.push(nd.stat);
+    if (!nd.own) return;
+    out[nd.own.id].at.push({ node: nd });
+    var o = nd.own.o, t = nd.own.t, h = nd.own.h, c = atOn(o, t), ax = unit(atOn(o, t - h), atOn(o, t + h)) || unit(atOn(o, t - 1), atOn(o, t + 1)) || [1, 0];
+    var hd = K.M[nd.own.nm].m.size[1] * K.M[nd.own.nm].m.mpv / 2;
+    nd.own.c = c;
+    nd.faces = [{ d: ax, h: h, used: o.closed || t < o.Lt - 0.5 }, { d: [-ax[0], -ax[1]], h: h, used: o.closed || t > 0.5 }, { d: [-ax[1], ax[0]], h: hd }, { d: [ax[1], -ax[0]], h: hd }];
+    //   接上來的其他牆（own 那一道不算）：穿過去的、接進來的那一頭
+    nd.inc = [];
+    [nd.host, nd.cross].forEach(function (x) { if (x && x.o !== o) nd.inc.push({ o: x.o, thru: true }); });
+    nd.ends.forEach(function (x) { if (x.o !== o) nd.inc.push({ o: x.o, e: x.e }); });
+  });
+  // 挑面：穿過去的先挑一對（兩面都空、最順著它的方向），再把接進來的那幾頭照分數從高的先給一面
+  nodes.forEach(function (nd) {
+    if (!nd.inc || !nd.inc.length) return;
+    var F = nd.faces, c = nd.own.c;
+    nd.inc.filter(function (x) { return x.thru; }).forEach(function (x) {
+      var tg = unit(atOn(x.o, projOn(x.o, c).t - 1), atOn(x.o, projOn(x.o, c).t + 1)) || [1, 0], best = null;
+      [[0, 1], [2, 3]].forEach(function (pr) {
+        if (F[pr[0]].used || F[pr[1]].used) return;
+        var sc = Math.abs(tg[0] * F[pr[0]].d[0] + tg[1] * F[pr[0]].d[1]);
+        if (!best || sc > best.sc) best = { sc: sc, pr: pr };
+      });
+      if (!best) return;
+      var back = tg[0] * F[best.pr[0]].d[0] + tg[1] * F[best.pr[0]].d[1] < 0 ? best.pr[0] : best.pr[1];   // 往路線後面那一面（−tg）
+      x.f = [F[back], F[back === best.pr[0] ? best.pr[1] : best.pr[0]]]; F[best.pr[0]].used = F[best.pr[1]].used = true;
+    });
+    var cand = [];
+    nd.inc.forEach(function (x) { if (x.thru) return; var u = into(x.o, x.e); F.forEach(function (f) { cand.push({ x: x, f: f, sc: u[0] * f.d[0] + u[1] * f.d[1] }); }); });
+    cand.sort(function (a, b) { return b.sc - a.sc; });
+    cand.forEach(function (q) { if (q.x.f || q.f.used || q.sc < -0.2) return; q.x.f = [q.f]; q.f.used = true; });   // 方向差超過 ~100° 不給（會從塔背面繞回來）
+  });
+  // 改路線
+  nodes.forEach(function (nd) {
+    (nd.inc || []).forEach(function (x) {
+      var o = x.o, c = nd.own.c, f0 = x.f && x.f[0], D = f0 ? f0.h + TOWN_WALL_JX_OUT + TOWN_WALL_JX_BEND : 0, rec = out[o.w.id], P = null;
+      function pts(lo, hi) { return o.P.filter(function (p, k) { return o.cum[k] > lo && o.cum[k] < hi; }); }
+      function face(f) { return [c[0] + f.d[0] * (f.h + TOWN_WALL_JX_OUT), c[1] + f.d[1] * (f.h + TOWN_WALL_JX_OUT)]; }
+      if (x.thru) {
+        var tc = projOn(o, c).t, ok = f0 && (o.closed ? tc - D > 0 && tc + D < o.Lt : tc - D > 0.5 && tc + D < o.Lt - 0.5);
+        if (ok) P = pts(-1, tc - D).concat([atOn(o, tc - D), face(x.f[0]), c, face(x.f[1]), atOn(o, tc + D)], pts(tc + D, Infinity));
+        rec.pass.push({ c: c, h: ok ? f0.h : Math.min(nd.faces[0].h, nd.faces[2].h), sk: (ok ? f0.h : Math.min(nd.faces[0].h, nd.faces[2].h)) * SINK });
+        nd.stat.face[o.w.id] = ok ? '穿過' : '沒空面';
+      } else {
+        var okE = f0 && o.Lt > D + 1;
+        if (okE) P = x.e ? pts(-1, o.Lt - D).concat([atOn(o, o.Lt - D), face(f0), c]) : [c, face(f0), atOn(o, D)].concat(pts(D, Infinity));
+        rec.sk[x.e] = okE ? f0.h * SINK : 0;
+        nd.stat.face[o.w.id + (x.e ? '尾' : '頭')] = okE ? '垂直' : '沒空面';
+      }
+      if (P) { o.P = dedupe(P); cumOf(o); rec.P = o.P; }
+    });
   });
   return out;
 }
 /** 城牆部件的半長（接口 wall-a 到 wall-b；沒有 ⇒ 模型寬的一半）—— 同 townWall 裡的 half。 */
 function townWallHalf(K, nm) { var m = K.M[nm].m, pa = m.pts['wall-a'], pb = m.pts['wall-b']; return pa && pb ? (pb[0] - pa[0] + 1) * m.mpv / 2 : m.size[0] * m.mpv / 2; }
+/** 城牆沿線的高度（Tim 2026-10-24「城牆底下高低差太大時 城牆會跟著劇烈扭曲 是否可以維持城牆本身平緩的取線(參考引水渠) 而讓地基吸收變化」）：
+ *  以前每一站各自貼地面 ⇒ 小土丘上整排城垛跟著折。現在沿牆每公尺取一點地面（中線與牆身兩側取高的）⇒
+ *    ① 前後 win 公尺平均（長坡照走、短的起伏抹平）
+ *    ② 平均線比地面低超過 bury（牆腳埋太深）的地方往上抬，抬的量往兩邊照坡度 k 收（reach 公尺內）
+ *    ③ 再前後 round 公尺平均一次（抬起來的折角磨圓）
+ *    ④ 釘點（pins：門、牆接牆的接點、牆接建築的兩頭）釘回那一點的地面，差的量往兩邊 pin 公尺線性收（兩個釘點靠得近 ⇒ 中間直接線性接）
+ *  比地面高的那一截由地基吸收（townWallY：牆基往下延到腳下最低的地面）。
+ *  回 y(t)（t ＝ 沿線公尺；閉合的繞回來）；哪一點的地面還沒載 ⇒ NaN（只記下算好的，下次再接著算）。 */
+function townWallProf(at, Ltot, closed, hS, pins) {
+  var F = TOWN_WALL_FLOW, n = Math.max(1, Math.ceil(Ltot)), st = Ltot / n;
+  function arr() { var a = new Float32Array(n + 1); a.fill(NaN); return a; }
+  function ix(i) { return closed ? ((i % n) + n) % n : i; }
+  function ok(i) { return closed || (i >= 0 && i <= n); }
+  function memo(f) { var A = arr(); return function (i) { var k = ix(i); if (A[k] === A[k]) return A[k]; var v = f(k); if (v === v) A[k] = v; return v; }; }
+  function avg(fn, r) { return function (i) {                         // 開放的牆在兩頭左右對稱地縮窗（不然長坡上的端點會浮起、埋下去半個窗的坡）
+    var r2 = closed ? r : Math.min(r, i, n - i), s = 0, c = 0;
+    for (var j = i - r2; j <= i + r2; j++) { var v = fn(j); if (!(v === v)) return NaN; s += v; c++; }
+    return s / c;
+  }; }
+  var g = memo(function (i) {                                          // 那一點的地面：中線、牆身兩側取高的（水上照海面 0）
+    var q = at(i * st), nx = -Math.sin(q.a), nz = Math.cos(q.a), v = -Infinity;
+    for (var s = -1; s <= 1; s++) v = Math.max(v, Math.max(0, townGround(q.x + nx * hS * s, q.z + nz * hS * s)));
+    return v;
+  });
+  var ys = memo(avg(g, Math.round(F.win / st))), R = Math.round(F.reach / st);
+  var lift = memo(function (i) {                                       // 往上抬多少：附近哪一點埋太深，照坡度收過來
+    var m = 0;
+    for (var j = i - R; j <= i + R; j++) { if (!ok(j)) continue; var a = g(j), b = ys(j); if (!(a === a && b === b)) return NaN; m = Math.max(m, a - F.bury - b - F.k * Math.abs(j - i) * st); }
+    return m;
+  });
+  var yf = memo(avg(function (i) { var a = ys(i), b = lift(i); return a + b; }, Math.round(F.round / st)));
+  function y0(t) { t = closed ? ((t % Ltot) + Ltot) % Ltot : Math.max(0, Math.min(Ltot, t)); var u = t / st, i = Math.min(n, Math.floor(u)), f = u - i, a = yf(i), b = f > 1e-6 ? yf(i + 1) : a; return a + (b - a) * f; }
+  function gr(t) { t = closed ? ((t % Ltot) + Ltot) % Ltot : Math.max(0, Math.min(Ltot, t)); var u = t / st, i = Math.min(n, Math.floor(u)), f = u - i, a = g(i), b = f > 1e-6 ? g(i + 1) : a; return a + (b - a) * f; }
+  var P = pins.map(function (t) { return closed ? ((t % Ltot) + Ltot) % Ltot : Math.max(0, Math.min(Ltot, t)); }).sort(function (a, b) { return a - b; }), C = P.map(function () { return NaN; });
+  function corr(k) { if (!(C[k] === C[k])) C[k] = gr(P[k]) - y0(P[k]); return C[k]; }
+  function pin(t) {                                                    // 釘點的修正：左右最近的兩個釘點
+    if (!P.length) return 0;
+    var R2 = F.pin, l = -1, r = -1, dl = Infinity, dr = Infinity;
+    P.forEach(function (p, k) { var a = t - p, b = p - t; if (closed) { a = ((a % Ltot) + Ltot) % Ltot; b = ((b % Ltot) + Ltot) % Ltot; } if (a >= 0 && a < dl) { dl = a; l = k; } if (b >= 0 && b < dr) { dr = b; r = k; } });
+    if (l >= 0 && r >= 0 && dl + dr <= 2 * R2) return dl + dr < 1e-6 ? corr(l) : (corr(l) * dr + corr(r) * dl) / (dl + dr);
+    var v = 0; if (l >= 0 && dl < R2) v += corr(l) * (1 - dl / R2); if (r >= 0 && dr < R2) v += corr(r) * (1 - dr / R2);
+    return v;
+  }
+  return function (t) { return y0(t) + pin(t); };
+}
 function townWall(T, w, out, W, line, jx) {
   var K = TOWNS.kit, P = [], closed = !!w.closed;
-  w.path.map(W).forEach(function (q) { var l = P[P.length - 1]; if (!l || Math.hypot(q[0] - l[0], q[1] - l[1]) > 0.01) P.push(q); });   // 重複的點拿掉（頂點轉幾度才量得準）
+  (jx && jx.P ? jx.P : w.path.map(W)).forEach(function (q) { var l = P[P.length - 1]; if (!l || Math.hypot(q[0] - l[0], q[1] - l[1]) > 0.01) P.push(q); });   // 重複的點拿掉（頂點轉幾度才量得準）；接點改過路線（townWallJx：從塔的那一面垂直出去）⇒ 照改過的
   if (closed && P.length > 2 && Math.hypot(P[0][0] - P[P.length - 1][0], P[0][1] - P[P.length - 1][1]) <= 0.01) P.pop();
   if (P.length < 2) return; if (P.length < 3) closed = false; if (closed) P = P.concat([P[0]]);
   var cum = [0]; for (var i = 1; i < P.length; i++) cum.push(cum[i - 1] + Math.hypot(P[i][0] - P[i - 1][0], P[i][1] - P[i - 1][1]));
@@ -819,14 +944,15 @@ function townWall(T, w, out, W, line, jx) {
   var kit = line ? (K.byUse[w.kit + '-section'] ? w.kit : null) : townWallKit(K, T, w, true);
   if (!kit) { if (line) TOWNS.stat.skip['line:' + w.kit] = (TOWNS.stat.skip['line:' + w.kit] || 0) + 1; return; }
   function lev(t) { return w.level[0] + (w.level[1] - w.level[0]) * Math.max(0, Math.min(1, t / Ltot)); }   // 引水渠：沿線那一點的渠頂（絕對海拔）
-  function setLev(q, ta, tb) { if (line && w.level) q.lev = [lev(ta), lev(tb)]; }
+  var WP = null;                                                        // 城牆沿線的高度（townWallProf；部件都定了、知道門與接點在哪才建）
+  function setLev(q, ta, tb) { if (line) { if (w.level) q.lev = [lev(ta), lev(tb)]; } else { q.wp = WP; q.tp = [ta, tb]; } }
   var gate = (K.byUse[kit + '-gate'] || [])[0], towers = K.byUse[kit + '-tower'] || [], sect = (K.byUse[kit + '-section'] || [])[0], end = (K.byUse[kit + '-end'] || [])[0], joint = (K.byUse[kit + '-joint'] || [])[0];
   if (!sect) return;
   var mS = K.M[sect].m, len = mS.len || 2, mW = mS.size[0] * mS.mpv, shW = 0.95 + 0.1 * townHash(w.id), obs = [];   // 斷面一條牆同一個深淺（一節一個 ⇒ 每 len 公尺一條色差）
   var parts = [];                                                       // 門、塔、轉角：{ nm, t（中心）, h（半長）, tower }
   (w.gates || []).forEach(function (g) {                                 // 城門那一筆帶 model（例：君士坦丁堡的金門 'golden'）⇒ 用那一套的 '<套>-gate-<model>'；沒載到就照舊用一般的門
     var nm = g.model && K.M[kit + '-gate-' + g.model] ? kit + '-gate-' + g.model : gate;
-    if (nm) parts.push({ nm: nm, t: proj(W(g.at)), h: half(nm), own: nm !== gate });
+    if (nm) parts.push({ nm: nm, t: proj(W(g.at)), h: half(nm), own: nm !== gate, gate: true });
   });
   (w.towers || []).forEach(function (q, i) {                              // 塔跟自帶塔的城門（own）重疊 ⇒ 不擺（金門的兩座大理石塔就是內牆第 9、10 座）
     if (!towers.length) return;
@@ -863,12 +989,17 @@ function townWall(T, w, out, W, line, jx) {
   function apart(a0, a1, b0, b1) { var d = Infinity; (closed ? [0, Ltot, -Ltot] : [0]).forEach(function (sh) { d = Math.min(d, Math.max(0, b0 + sh - a1, a0 - b1 - sh)); }); return d; }   // 沿牆隔多遠（閉合 ⇒ 繞回來那一邊也算）
   function free(p, t, h) { return parts.every(function (o) { return o === p || apart(t - h, t + h, o.t - o.h, o.t + o.h) >= 0.5; }); }
   (jx ? jx.at : []).forEach(function (a) {                              // 牆接牆（townWallJx）：接點要有部件 —— 已經有門、塔蓋著 ⇒ 用它；gap 內有塔 ⇒ 挪過來；都沒有 ⇒ 擺接點那一件
-    var t = a.t, nd = a.node, h = nd.own.h;
+    var nd = a.node, t = a.t = proj(nd.own.c), h = nd.own.h;            // 沿線位置照改過的路線量（別的接點可能改了這一道的路線、挪了 t）
     if (parts.some(function (o) { return apart(t, t, o.t - o.h, o.t + o.h) === 0; })) { nd.stat.used = '已有'; return; }
     var near = parts.filter(function (o) { return o.tower && apart(t, t, o.t - o.h, o.t + o.h) < gap + h; }).sort(function (x, y) { return apart(t, t, x.t, x.t) - apart(t, t, y.t, y.t); })[0];
     if (near && free(near, t, near.h)) { near.t = t; nd.stat.used = '挪塔'; return; }
     parts.filter(function (o) { return o.tower && apart(t - h, t + h, o.t - o.h, o.t + o.h) < 0.5; }).forEach(function (o) { parts.splice(parts.indexOf(o), 1); });   // 擠在旁邊又挪不過來的塔讓位
     parts.push({ nm: nd.own.nm, t: t, h: h, tower: true }); nd.stat.used = '新擺';
+  });
+  (jx ? jx.pass : []).forEach(function (p) {                            // 穿過別道牆的塔（townWallJx 的 T、十字）：這一道在塔兩邊各停一段；先當成一件部件（不擺）⇒ 自己的塔讓位、旁邊不擺轉角
+    var t = proj(p.c);
+    parts = parts.filter(function (o) { return !(o.tower && apart(t - p.h, t + p.h, o.t - o.h, o.t + o.h) < 0.5); });
+    parts.push({ nm: null, t: t, h: p.h, sk: p.sk, pass: true });
   });
   if (cor) {                                                            // 轉角（轉得急的頂點）：已經有部件跨在上面 ⇒ 不動；gap 內有塔 ⇒ 塔挪到轉角上；都沒有 ⇒ 擺一件（同世紀帝國轉角的塔）
     var hc = half(cor);
@@ -883,8 +1014,14 @@ function townWall(T, w, out, W, line, jx) {
     }
   }
   if (J.length) { var nP = parts.length; parts = parts.filter(function (o) { return !inJ(o.t - o.h, o.t + o.h); }); TOWNS.stat.joined = (TOWNS.stat.joined || 0) + (nP - parts.length); }   // 落在建築裡的塔、門、轉角
+  // 高度：門、牆接牆的接點、牆接建築的兩頭釘回地面（路從門下過、兩道牆在塔裡同高、建築站在自己的地上）
+  var pins = parts.filter(function (o) { return o.gate || o.pass; }).map(function (o) { return o.t; }).concat((jx ? jx.at : []).map(function (a) { return a.t; }));
+  (jx && !closed ? jx.ends : []).forEach(function (nd, e) { if (nd) pins.push(e ? Ltot : 0); });
+  J.forEach(function (j) { pins.push(j[0], j[1]); });
+  if (!line) WP = townWallProf(at, Ltot, closed, hS, pins);
   parts.forEach(function (o) {                                          // 擺：軸 ＝ 路線上兩個接口那兩點的弦
     var t = o.t, h = o.h, A = at(t - h), B = at(t + h), s = at(t), dx = B.x - A.x, dz = B.z - A.z, L = Math.hypot(dx, dz), ax = L > 0.01 ? [dx / L, dz / L] : [Math.cos(s.a), Math.sin(s.a)];
+    if (o.pass) { var pA = at(t - o.sk), pB = at(t + o.sk); obs.push({ t0: t - o.sk, t1: t + o.sk, p0: [pA.x, pA.z], p1: [pB.x, pB.z], ax: [Math.cos(s.a), Math.sin(s.a)] }); return; }   // 穿過去的塔：斷面停在塔裡（路線在塔的兩面之間是直的）
     setLev(put(o.nm, [s.x, s.z], Math.atan2(ax[1], ax[0]), o.sx || 1, true), t, t);
     obs.push({ t0: t - h, t1: t + h, p0: [s.x - ax[0] * h, s.z - ax[1] * h], p1: [s.x + ax[0] * h, s.z + ax[1] * h], ax: ax });
   });
@@ -898,9 +1035,9 @@ function townWall(T, w, out, W, line, jx) {
   jE.forEach(function (nd, e) {
     if (!nd) return;
     var tE = e ? Ltot : 0;
-    if (nd.own && nd.own.id === w.id && Math.abs(nd.own.t - tE) < 0.01) return;   // 部件就擺在這一頭（上面 jx.at）⇒ 部件自己擋著
-    if (nd.own) {
-      var sk = Math.min(Ltot / 2, nd.own.h * TOWN_WALL_JX_SINK), tA = e ? Ltot - sk : sk, A2 = at(tA), ax2 = [Math.cos(A2.a), Math.sin(A2.a)];
+    if (nd.own && nd.own.id === w.id && Math.abs(proj(nd.own.c) - tE) < 0.01) return;   // 部件就擺在這一頭（上面 jx.at）⇒ 部件自己擋著
+    if (nd.own) {                                                       // 停多深：從塔的那一面垂直進來 ⇒ 那一面的半長（jx.sk）；沒挑到面 ⇒ 部件的半長
+      var sk = Math.min(Ltot / 2, jx.sk[e] || nd.own.h * TOWN_WALL_JX_SINK), tA = e ? Ltot - sk : sk, A2 = at(tA), ax2 = [Math.cos(A2.a), Math.sin(A2.a)];
       obs.push(e ? { t0: tA, t1: Ltot + 1, p0: [A2.x, A2.z], p1: [A2.x, A2.z], ax: ax2 } : { t0: -1, t1: tA, p0: [A2.x, A2.z], p1: [A2.x, A2.z], ax: ax2 });
     } else if (nd.n) jN[e] = nd.n;
   });
@@ -976,6 +1113,12 @@ function townWallY(q) {
   var s = Math.sin(q.th), c = Math.cos(q.th), hw = q.ft[0], hd = q.ft[1], y, g = 0, lo = 0;
   function gnd(p) { return Math.max(0, townGround(p[0], p[1])); }
   if (q.lev) { var la = q.lev[0] - q.deck, lb = q.lev[1] - q.deck; if (!(gnd([q.x, q.z]) === gnd([q.x, q.z]))) return false; y = (la + lb) / 2; g = (lb - la) / (2 * hw); }   // 引水渠：照渠頂（見 townWall 的 line）
+  else if (q.wp) {                                                      // 城牆：照沿線的高度（townWallProf）；斷面兩頭兩站、別的部件照中心
+    if (q.bad === (TOWNS.bedV || 0)) return false;                      // 上次差的那一塊還沒來
+    var ya = q.wp(q.tp[0]), yb = q.wp(q.tp[1]);
+    if (!(ya === ya && yb === yb)) { q.bad = TOWNS.bedV || 0; return false; }
+    y = (ya + yb) / 2; g = q.ja ? (yb - ya) / (2 * hw) : 0;
+  }
   else if (q.ja) { var ya = gnd(q.ja), yb = gnd(q.jb); y = (ya + yb) / 2; g = (yb - ya) / (2 * hw); } else y = gnd([q.x, q.z]);
   if (!(y === y) || !(g === g)) return false;
   [[0, 0], [-1, -1], [1, -1], [1, 1], [-1, 1], [0, -1], [0, 1]].forEach(function (o) {
