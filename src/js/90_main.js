@@ -51,7 +51,7 @@ if (DEBUG) window.__game = {
     return SHIPS.map(function (s) { return { i: s.i, team: s.team, hull: s.T.key || s.T.id, px: s.px, pz: s.pz, foe: s.foe ? s.foe.i : null }; });
   },
   loadHull: function (id) { return loadHull(id).then(function (T) { return T.id; }); },
-  core: { api: CORE_API, out: coreOut, preFrom: corePreFrom, add: coreAdd, pre: function (P) { CORE_PRE = P || null; return !!CORE_PRE; } },   // 海戰核心 API（TASK-0709，57_core.js；src/CORE_API.md）：pre 設下一場開局的戰前狀態（start／fleet 之後生效）
+  core: { api: CORE_API, out: coreOut, preFrom: corePreFrom, add: coreAdd, mine: coreMine, pre: function (P) { CORE_PRE = P || null; return !!CORE_PRE; } },   // 海戰核心 API（TASK-0709，57_core.js；src/CORE_API.md）：pre 設下一場開局的戰前狀態（start／fleet 之後生效）
   foes: function () { return SHIPS.map(function (s) { return { i: s.i, team: s.team, foe: s.foe ? s.foe.i : null, aimOn: s.aimOn ? s.aimOn.i : null, ff: s.ff || 0, ffOut: s.ffOut || 0, ffHold: s.ffHold || 0, avoid: s.avoidN || 0, clear: s.clearN || 0, salvo: s.salvo, salvo2: s.salvo2 || 0, hits: s.hits, sunk: s.sunk, struck: s.struck, x: +s.px.toFixed(1), z: +s.pz.toFixed(1) }; }); },
   mask: function (k) { MASK_OFF = k === undefined ? -1 : k; render(); return MASK_OFF; },   // 船艙遮罩（60_render.js）：關掉第 k 艘的、畫一格
   /** 指揮官（TASK-0551）：cmd('line', 'pair') ⇒ 換兩方的策略（下一次開戰／下一次想生效）；orders() ⇒ 每艘現在的命令與目標。 */

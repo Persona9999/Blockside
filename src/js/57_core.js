@@ -64,6 +64,13 @@ function coreShipOut(sh) {
 function coreOut() {
   return { api: CORE_API, seed: SEED, t: +SIMT.toFixed(2), over: !!OVER, down: { blue: teamDown('blue'), red: teamDown('red') }, ships: SHIPS.map(coreShipOut), log: CORE_LOG.slice() };
 }
+/** 我艦的船況（Blocksail 海圖模式 ⇄ 真實航行，TASK-0803）：回地球儀時跟 'left' 一起報給外面那一頁（03_camera.js camTrans），
+ *  下一次進來外面那一頁照 #pre 帶回來。{ api, fate, why, team, pre }：pre ＝ 這艘的戰前狀態（corePreFrom 那一筆；沉了、斷了、在沉 ⇒ null）。只讀：不抽亂數。 */
+function coreMine() {
+  var me = SHIPS[PLAYER_I]; if (!me) return null;
+  var o = coreShipOut(me), P = corePreFrom({ ships: [o] });
+  return { api: CORE_API, fate: o.fate, why: o.why, team: o.team, pre: (P[o.team] || [])[0] || null };
+}
 /** 上一場的戰後狀態 ⇒ 下一場的戰前狀態：還在海上的（沒沉、沒斷、沒在沉）照每一方原本的順序排；
  *  船員：開局的人數照舊、少掉的（陣亡、傷員、游走的）這一場不在船上 —— 哪些人回來（醫好、補員）是外殼的事，改 crew[職位].out 就好。 */
 function corePreFrom(out) {

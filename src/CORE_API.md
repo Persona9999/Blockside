@@ -46,8 +46,9 @@
 ```
 
 - `corePreFrom(戰後狀態)` 直接轉：還在海上的（不是 `sunk`／`broken`／`sinking`）照每一方原本的順序排，`crew[職位].out ＝ n0 − able`。外殼要改什麼（修好幾格、補幾個人）改這一份就好。
-- 給核心的三種方法：
+- 給核心的方法：
   - 網址 `#pre=<base64url(UTF-8 JSON)>`（`?start=1` 外部開戰、`?demo` 無頭對拍都認）；太長塞不進命令列 ⇒ 開一頁小的跳轉頁 `location.replace(…)`（src 外的對拍腳本就是這樣帶的）。
+  - 地球儀（`?map=@host`）：回地球儀時 `'left'` 帶 `cond` ＝ 我艦的船況 `{ api, fate, why, team, pre }`（`coreMine`；`pre` ＝ 這艘的戰前狀態，沉了、斷了、在沉 ⇒ null）；外殼存著，下一次開航海用上面的 `#pre` 帶回來（Blocksail TASK-0803）。
   - `?debug=1` 的 `__game.core.pre(P)`，之後 `__game.start()`／`__game.fleet(…)` 那一場開局生效（`pre(null)` 清掉）。
 - 開局怎麼套（`coreShipIn`，`makeShip` 之後、第一次 `survey` 之前）：
   - 船殼差照格寫回（打掉 ⇒ `removeVoxel`；換色 ⇒ 改顏色；原船沒有 ⇒ `restoreVoxel`）：進水、尋路、破口照常更新 ⇒ 開局就從那些洞進水。
