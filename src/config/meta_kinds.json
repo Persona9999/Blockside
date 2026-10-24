@@ -21,7 +21,7 @@
     "halyard": { "name": "升降索", "on": ["rope"], "keys": [], "need": [], "use": [], "doc": "§9.1", "game": null },
     "steering": { "name": "舵索", "on": ["rope"], "keys": [], "need": [], "use": [], "doc": "§6", "game": null },
     "ratline": { "name": "繩梯的橫繩", "on": ["rope"], "keys": ["ratlines", "rung", "rungs", "climb", "foot", "head"], "need": [], "use": [], "doc": "§9", "game": ["42_hands.js"] },
-    "deck": { "name": "甲板", "on": ["link"], "keys": ["deck", "level", "name", "floor", "thick", "walk"], "need": [], "use": [], "doc": "§9.3", "game": ["35_decks.js", "36_rooms.js"] },
+    "deck": { "name": "甲板", "on": ["link"], "keys": ["deck", "level", "name", "floor", "thick", "walk", "walk_y"], "need": [], "use": [], "doc": "§9.3", "game": ["35_decks.js", "36_rooms.js"] },
     "ladders": { "name": "梯子", "on": ["link"], "keys": ["<名>.decks"], "need": ["<名>.foot", "<名>.lo", "<名>.hi", "<名>.head"], "use": [], "doc": "§9", "game": ["42_hands.js", "36_rooms.js"] },
     "rooms": { "name": "空艙房", "on": ["link"], "keys": [], "need": ["<名>.min", "<名>.max"], "use": ["<名>.door"], "doc": "§9.2", "game": ["36_rooms.js"] },
     "ship": { "name": "船殼", "on": ["link"], "keys": ["waterline_z", "crew", "material"], "need": [], "use": ["hawse-P", "hawse-S"], "doc": "§9", "game": ["05_hull.js", "75_shipcheck.js"] },
