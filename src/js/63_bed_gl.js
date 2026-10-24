@@ -35,7 +35,7 @@ var BEDDRY = { c: {}, src: {}, hv: {}, tver: -1, tex: null, dirty: false, on: fa
 var BEDFAR = { g: {}, todo: null, fly: 0, inF: {}, ready: [], fail: 0, n: 0, bytes: 0, ms: 0 };   // todo：還要讀的塊 [cx, cy, 有檔, 失敗次數]；fly／inF：在路上的；ready：到了、等著建網格的
 var BED_FAR_PAR = 4;                                                     // 遠景同時跟外面那一頁要幾塊（它有 2 個 Worker；以前一次一塊 ⇒ 托爾圖加 182 塊要 4 秒，一格一格出來）
 var BEDDRAW = { n: 0, cull: 0, tris: 0 };                                // 上一格畫了幾塊、剔掉幾塊、幾個三角形（__game.bed）
-var BEDFOAM = { tex: null, dirty: true, cx: null, cy: null, ox: 0, oz: 0, sp: 8, N: 0, ms: 0, builds: 0 };
+var BEDFOAM = { tex: null, dtex: null, dR: null, dA: null, dirty: true, cx: null, cy: null, ox: 0, oz: 0, sp: 8, N: 0, ms: 0, builds: 0 };
 var BED_COL = { 0: [0.30, 0.31, 0.27], 1: [0.74, 0.70, 0.52], 2: [0.66, 0.57, 0.44], 3: [0.86, 0.81, 0.62], 4: [0.40, 0.38, 0.35], 10: [0.84, 0.77, 0.57], 12: [0.45, 0.42, 0.38] };   // 2 珊瑚礁：紋理的平均色（以前是綠的）
 // 每種底質的紋理權重 [沙, 草地, 岩石, 礁]；全 0（深海底）⇒ 片段只照底色加一點泥的斑駁
 var BED_TEX = { 0: [0, 0, 0, 0], 1: [1, 0, 0, 0], 2: [0, 0, 0, 1], 3: [1, 0, 0, 0], 4: [0, 0, 1, 0], 10: [1, 0, 0, 0], 11: [0, 1, 0, 0], 12: [0, 0, 1, 0] };
@@ -256,7 +256,8 @@ function bedFarPut(k, C, ms) {
   bedWatSet(g, bedWaterMesh(C, fs)); bedDryPut(k, C, false);           // 內陸水（同一個點距；窄的河取不到點就沒有）、低於海平面的乾地（細的那一份算過就不重算）
   BEDFAR.n++; BEDFAR.bytes += M.V.byteLength + M.I.byteLength; BEDFAR.ms += ms + performance.now() - t0;   // （以前這三個寫在上一行的註解後面 ⇒ 讀數一直是 0）
 }
-/** 白沫的高度貼圖：中心 ± (ring＋prefetch) 那幾塊，每 2 個取樣點（8 m）一格；沒載的、深海塊 ⇒ deep。換中心、載進來、丟掉之後重建。 */
+/** 白沫的高度貼圖：中心 ± (ring＋prefetch) 那幾塊，每 2 個取樣點（8 m）一格；沒載的、深海塊 ⇒ deep。換中心、載進來、丟掉之後重建。
+ *  另外一張離岸距離場（dtex：16 m 一格、同一個範圍；bedShoreDist）給海的著色器的碎浪、沖刷。 */
 function bedFoamTex() {
   var Fm = BEDFOAM, A = BED.A;
   if (BED.cx === null || !Fm.dirty && Fm.cx === BED.cx && Fm.cy === BED.cy) return;
@@ -274,13 +275,80 @@ function bedFoamTex() {
   if (!Fm.tex) { Fm.tex = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, Fm.tex); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE); }
   gl.bindTexture(gl.TEXTURE_2D, Fm.tex); gl.texImage2D(gl.TEXTURE_2D, 0, gl.R16F, W, W, 0, gl.RED, gl.FLOAT, D); gl.bindTexture(gl.TEXTURE_2D, null);
   Fm.dirty = false; Fm.cx = BED.cx; Fm.cy = BED.cy; Fm.N = W; Fm.sp = A.step * sk; Fm.ox = (BED.cx - R) * A.chunk - BED.ax; Fm.oz = (BED.cy - R) * A.chunk - BED.az;
+  bedShoreReq(D, W);
   Fm.ms = performance.now() - t0; Fm.builds++; bedSpent(t0);
+}
+// 離岸距離場在 Worker 算（BEDSHW；跟低地遮罩 BEDDRYW 同一種做法）：640 × 640 ⇒ 兩倍粗 320 × 320，在這一頁冷跑（一場只建幾次，JIT 還沒熱）每次 15～30 ms ⇒ 換塊那一格卡。
+//   這一頁只做 2 × 2 平均、送過去；回來才換貼圖（dtex，記著算的時候的範圍 dR ⇒ 中心換了也不跟高度貼圖錯位）。算的時候又要一份 ⇒ 只留最新的那份，回來再送。
+//   還沒有 ⇒ 海的著色器碎浪、沖刷整段關（60_render.js）。開不了 Worker ⇒ 照舊在這一頁算。
+var BEDSHW = { w: null, ok: null, busy: null, next: null, id: 0, ms: 0, builds: 0 };
+function bedShoreReq(D, W) {
+  var Fm = BEDFOAM, h = W >> 1, H2 = new Float32Array(h * h), x, y, k;
+  for (y = 0; y < h; y++) for (x = 0; x < h; x++) { k = 2 * y * W + 2 * x; H2[y * h + x] = (D[k] + D[k + 1] + D[k + W] + D[k + W + 1]) * 0.25; }
+  var m = { id: ++BEDSHW.id, H: H2, h: h, sp: Fm.sp * 2, R: [Fm.ox, Fm.oz, Fm.sp, W], A: BED.A }, w = bedShoreWorker();
+  if (!w) { var t0 = performance.now(); bedShoreDone(m, bedShoreDist(H2, h, m.sp), performance.now() - t0); return; }
+  if (BEDSHW.busy) { BEDSHW.next = m; return; }
+  bedShoreSend(m);
+}
+function bedShoreSend(m) { BEDSHW.busy = m; BEDSHW.w.postMessage({ id: m.id, H: m.H, h: m.h, sp: m.sp }, [m.H.buffer]); }
+function bedShoreWorker() {
+  var W = BEDSHW; if (W.ok !== null) return W.ok ? W.w : null;
+  try {
+    var src = 'var BED_SHORE_MAX = ' + BED_SHORE_MAX + ';\n' + bedShoreDist.toString() +
+      '\nonmessage = function (e) { var m = e.data, t0 = performance.now(), S = bedShoreDist(m.H, m.h, m.sp); postMessage({ id: m.id, S: S, ms: performance.now() - t0 }, [S.buffer]); };\n';
+    W.w = new Worker(URL.createObjectURL(new Blob([src], { type: 'text/javascript' })));
+    W.w.onmessage = bedShoreMsg;
+    W.w.onerror = function (e) { if (e && e.preventDefault) e.preventDefault(); try { W.w.terminate(); } catch (x) { /* 已經停了 */ } W.w = null; W.ok = false; W.busy = W.next = null; BEDFOAM.dirty = true; };   // 掛了 ⇒ 收掉、整張重建（改在這一頁算）
+    W.ok = true;
+  } catch (e) { W.ok = false; W.w = null; }
+  return W.w;
+}
+function bedShoreMsg(e) {
+  var W = BEDSHW, m = W.busy, n = W.next; W.busy = W.next = null;
+  if (m && e.data.id === m.id && BED && BED.A === m.A) bedShoreDone(m, e.data.S, e.data.ms);   // 算的時候換了海域 ⇒ 作廢
+  if (n && BED && BED.A === n.A) bedShoreSend(n);
+}
+/** 這個海域的離岸距離場到了沒（沒有 ⇒ 碎浪、沖刷關；60_render.js、bedWaterU）。 */
+function bedShoreOn() { return !!(BED && BED.A && BEDFOAM.tex && BEDFOAM.dtex && BEDFOAM.dA === BED.A); }
+function bedShoreDone(m, S, ms) {
+  var Fm = BEDFOAM;
+  if (!Fm.dtex) { Fm.dtex = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, Fm.dtex); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE); }
+  gl.bindTexture(gl.TEXTURE_2D, Fm.dtex); gl.texImage2D(gl.TEXTURE_2D, 0, gl.R16F, m.h, m.h, 0, gl.RED, gl.FLOAT, S); gl.bindTexture(gl.TEXTURE_2D, null);
+  Fm.dR = m.R; Fm.dA = m.A; BEDSHW.ms = ms; BEDSHW.builds++;
+}
+/** 離岸距離場（Tim 2026-10-24「照離岸距離場＋碎浪＋沖刷做下去」；跟別的遊戲一樣：碎浪照它往岸上推、浪頭跟著岸線彎，梯度 ＝ 朝岸的方向）：
+ *  D ＝ 高度（W × W 格、sp 公尺一格，< 0 是海）⇒ 每一格離岸線幾公尺：海裡正、岸上負；岸線在岸邊那兩格中間（岸邊的格 ＝ 半格）；最多 BED_SHORE_MAX。
+ *  從岸邊的格（上下左右有一格是另一邊）出發掃兩趟、每格記最近那一格的相對位移（8SSEDT 的做法，歐氏距離；暴力對照逐點相同）。
+ *  ⛔ 陸地、海各掃一次、記格子編號再取餘數 ⇒ 640 × 640 要 60～78 ms（換塊那一格卡住）。只給畫面；換中心、載塊時跟高度一起重建。 */
+var BED_SHORE_MAX = 2000;
+function bedShoreDist(D, W, sp) {
+  var N = W * W, out = new Float32Array(N), ox = new Int16Array(N), oy = new Int16Array(N), d2 = new Int32Array(N), INF = 0x3fffffff, x, y, i, w;
+  for (y = 0; y < W; y++) for (x = 0; x < W; x++) {
+    i = y * W + x; w = D[i] < 0;
+    d2[i] = x > 0 && (D[i - 1] < 0) !== w || x < W - 1 && (D[i + 1] < 0) !== w || y > 0 && (D[i - W] < 0) !== w || y < W - 1 && (D[i + W] < 0) !== w ? 0 : INF;
+  }
+  function tr(i, j, dx, dy) { if (d2[j] === INF) return; var sx = ox[j] + dx, sy = oy[j] + dy, e = sx * sx + sy * sy; if (e < d2[i]) { d2[i] = e; ox[i] = sx; oy[i] = sy; } }   // j ＝ i 旁邊那一格（相對 i 是 dx、dy）
+  for (y = 0; y < W; y++) {
+    for (x = 0; x < W; x++) { i = y * W + x; if (x > 0) tr(i, i - 1, -1, 0); if (y > 0) { tr(i, i - W, 0, -1); if (x > 0) tr(i, i - W - 1, -1, -1); if (x < W - 1) tr(i, i - W + 1, 1, -1); } }
+    for (x = W - 2; x >= 0; x--) { i = y * W + x; tr(i, i + 1, 1, 0); }
+  }
+  for (y = W - 1; y >= 0; y--) {
+    for (x = W - 1; x >= 0; x--) { i = y * W + x; if (x < W - 1) tr(i, i + 1, 1, 0); if (y < W - 1) { tr(i, i + W, 0, 1); if (x < W - 1) tr(i, i + W + 1, 1, 1); if (x > 0) tr(i, i + W - 1, -1, 1); } }
+    for (x = 1; x < W; x++) { i = y * W + x; tr(i, i - 1, -1, 0); }
+  }
+  for (i = 0; i < N; i++) out[i] = (D[i] < 0 ? 1 : -1) * (d2[i] === INF ? BED_SHORE_MAX : Math.min(BED_SHORE_MAX, (Math.sqrt(d2[i]) + 0.5) * sp));
+  return out;
 }
 /** 海的著色器（60_render.js 畫海那一段）：白沫的高度貼圖接第 10 號；沒有海圖 ⇒ uBedOn 0（整段跳過）。 */
 function bedWaterU(u) {
   var on = !!(BED && BED.A && BEDFOAM.tex);
   gl.uniform1f(u.uBedOn, on ? 1 : 0);
-  gl.activeTexture(gl.TEXTURE10); gl.bindTexture(gl.TEXTURE_2D, on ? BEDFOAM.tex : DUMMY); gl.uniform1i(u.uBedT, 10); gl.activeTexture(gl.TEXTURE0);
+  gl.activeTexture(gl.TEXTURE10); gl.bindTexture(gl.TEXTURE_2D, on ? BEDFOAM.tex : DUMMY); gl.uniform1i(u.uBedT, 10);
+  if (u.uShoreT) {                                                       // 離岸距離場（第 5 號；9 是帆、10 高度、12 遮罩）：範圍照它算的時候的那一份（dR）
+    var ds = bedShoreOn(); gl.activeTexture(gl.TEXTURE5); gl.bindTexture(gl.TEXTURE_2D, ds ? BEDFOAM.dtex : DUMMY); gl.uniform1i(u.uShoreT, 5);
+    if (ds) gl.uniform4f(u.uShoreR, BEDFOAM.dR[0], BEDFOAM.dR[1], BEDFOAM.dR[2], BEDFOAM.dR[3]);
+  }
+  gl.activeTexture(gl.TEXTURE0);
   if (on) gl.uniform4f(u.uBedR, BEDFOAM.ox, BEDFOAM.oz, BEDFOAM.sp, BEDFOAM.N);
   bedDryU(u);
 }

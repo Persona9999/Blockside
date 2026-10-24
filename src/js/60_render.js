@@ -740,9 +740,15 @@ function mainWater(fr) {
   if (!SEAG || SEAG.lv !== GFX.sea) seaGrid(GFX.sea);
   gl.useProgram(P.water.prog); setCommon(P.water); gl.uniform1f(P.water.u.uDet, SEA_DBG.det !== undefined ? SEA_DBG.det : SEA_LV[GFX.sea].det); gl.uniform1f(P.water.u.uAn, SEA_DBG.an !== undefined ? SEA_DBG.an : 1);
   gl.uniform1f(P.water.u.uNzP, SEA_DBG.p !== undefined ? SEA_DBG.p : SEA_NZ_P);   // 打散重複：細漣漪每道的相位雜訊（01_gl.js detail）   // SEA_DBG：海面試驗場（src/tests/sea_lab.py，__game.seaDbg）才給；平常 {} ⇒ 照畫質
+  if (SEA_DBG.c) gl.uniform2f(P.water.u.uC, SEA_DBG.c[0], SEA_DBG.c[1]); else   // 除錯：網格中心釘在世界的 c（只挪網格、鏡頭不動 ⇒ 量畫面跟不跟著網格變）
   gl.uniform2f(P.water.u.uC, Math.round(CAM.eye[0] / SEAG.snap) * SEAG.snap, Math.round(CAM.eye[2] / SEAG.snap) * SEAG.snap);   // 中心照網格間距對齊 ⇒ 近處的頂點不在浪上滑動
   gl.uniform1f(P.water.u.uReflOn, RT.R ? 1 : 0); gl.uniform1f(P.water.u.uRefr, GFX.refr); gl.uniform2f(P.water.u.uView, w, h);
   gl.uniform1f(P.water.u.uRefrD, BED ? 1600 : 500); gl.uniform1f(P.water.u.uRefrK, BED ? 0.12 : 0.3);
+  gl.uniform1f(P.water.u.uEdge, SEA_DBG.edge !== undefined ? SEA_DBG.edge : SEA_EDGE_ON);   // 岸線照像素（01_gl.js shoreW）
+  gl.uniform1f(P.water.u.uDbgM, SEA_DBG.m || 0);   // 除錯：1 岸邊白沫、2 太陽反光、4 水面的影子、8 淺水透明 —— 加起來 ＝ 一起關
+  var sw = SEA_DBG.sw || [SEA_EDGE[1], SEA_EDGE[2], SEA_EDGE[3], SEA_SURF[2]];   // 岸線細碎、沖刷、碎浪的高度、碎浪那一圈多寬（__game.seaDbg 的 sw 可以覆寫）
+  if (!bedShoreOn()) sw = [sw[0], 0, 0, 0];                              // 離岸距離場還沒到（63_bed_gl.js BEDSHW 在 Worker 算）⇒ 碎浪、沖刷先關（⛔ 照空的貼圖 d ＝ 0 ⇒ 每一處都當岸邊、低地整片被沖刷淹）
+  gl.uniform4f(P.water.u.uSw, sw[0], sw[1], sw[2], sw[3]);
   bedWaterU(P.water.u);                                                  // 岸邊的白沫（63_bed_gl.js；沒有海圖 ⇒ 關）   // 水下透出來的東西多遠就看不到（m）、每公尺吸掉多少：有海圖 ⇒ 淺海的礁、沙洲看得出顏色（TASK-0721）；沒有 ⇒ 照舊 500 m、0.3
   gl.activeTexture(gl.TEXTURE6); gl.bindTexture(gl.TEXTURE_2D, RT.R ? RT.R.col : DUMMY); gl.uniform1i(P.water.u.uRefl, 6);
   gl.activeTexture(gl.TEXTURE7); gl.bindTexture(gl.TEXTURE_2D, RT.B.col); gl.uniform1i(P.water.u.uScene, 7);
