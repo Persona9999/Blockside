@@ -270,7 +270,7 @@ var TREE_SPECIES = {
     trunk: { r: [0.02, 0.02], taper: 1, bend: 0, segs: 1, sides: [0, 0], lean: 0, col: [0.50, 0.62, 0.34], top: 0.02 },
     levels: [],
     leaf: { kind: 'rosette', n: [12, 16], len: [0.7, 1.0], w: 0.38, rise: [12, 82], droop: 0.7, col: [0.30, 0.52, 0.22], edge: [0.56, 0.72, 0.38], vary: 0.12 },   // rise：外圈 ⇒ 裡圈（裡圈直立、邊的淡色 ⇒ 菜心）
-    place: { town: true, spacing: 1, scale: [0.85, 1.15], shell: 0, view: 250, sink: 0.05, field: [0.8, 0.67] },
+    place: { town: true, spacing: 1, scale: [0.85, 1.15], shell: 0, view: 250, sink: 0.05, field: [0.8, 0.67], fieldK: 1.25 },   // fieldK：田裡再乘的大小（Tim 2026-10-24「菜可以大1.5倍」：別的作物 1.2 倍、菜 1.5 倍；63_trees.js treeFieldK）
     variants: 3
   },
   tobacco: {
