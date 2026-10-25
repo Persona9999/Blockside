@@ -8,6 +8,7 @@ function frame(ts, noRaf) {                                         // noRaf：_
   var dt = loopLast ? Math.min(0.1, (ts - loopLast) / 1000) : DT_BASE, hv = 0, hsv = 0; loopLast = ts;   // hv：帆與繩照畫面格算時這一格走幾秒（TASK-0799）
   FPS = FPS * 0.95 + (1 / Math.max(dt, 1e-3)) * 0.05;
   if (RUNNING && !PAUSED) {
+    if (SIM_SPEED > simSpeedMax()) simSpeedSet(SIM_SPEED);              // 換了模式（航海 ×32 ⇒ 海戰上限 ×8）⇒ 照新的上限夾（73_slowmo.js）
     var sk = Math.min(slowTick(dt), pslowTick(dt)) * SIM_SPEED; SLOW_VIS = sk < 1;   // × SIM_SPEED：設定的模擬速度（< 1 ⇒ 碎木、煙、水花照慢動作那一套照畫面的時間走，不會一頓一頓）
       // 殉爆的慢動作、物理減速（73_slowmo.js）：模擬一步照舊 DT，只是每格累積的時間 × 倍率（取比較慢的）
     loopAcc += dt * sk; var n = 0, st0 = performance.now();

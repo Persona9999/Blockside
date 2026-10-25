@@ -81,9 +81,12 @@ function slowShow() {
 $('slowT').onclick = function () { SLOW.on = !SLOW.on; if (!SLOW.on) { SLOW.active = false; SLOW.ts = 1; } gsetShow(); };
 $('slowCamT').onclick = function () { SLOW.cam = !SLOW.cam; gsetShow(); };
 $('pslowT').onclick = pslowToggle;
-// 模擬速度的滑桿（設定 O）：對數刻度 10^(值／1000) ⇒ 0.05–8 倍、中間 0 ＝ 1 倍；1× 回到正常。0 倍 ＝ 暫停（P），所以最低 0.05（Tim）。
+// 模擬速度的滑桿（設定 O）：對數刻度 10^(值／1000) ⇒ 0.05–上限（simSpeedMax：航海、城鎮 32 倍、其他 8 倍）、中間 0 ＝ 1 倍；1× 回到正常。0 倍 ＝ 暫停（P），所以最低 0.05（Tim）。
+//   換了模式（70_flow.js flowMode）⇒ 照新的上限重夾（從航海 ×32 換到海戰 ⇒ ×8）
+function simSpeedMax() { return MODE === 'sail' || MODE === 'town' ? Math.max(SIM_SPEED_MAX, SIM_SPEED_MAX_SAIL) : SIM_SPEED_MAX; }
 function simSpeedSet(x) {
-  SIM_SPEED = clamp(x, SIM_SPEED_MIN, SIM_SPEED_MAX); if (Math.abs(SIM_SPEED - 1) < 0.02) SIM_SPEED = 1;
+  SIM_SPEED = clamp(x, SIM_SPEED_MIN, simSpeedMax()); if (Math.abs(SIM_SPEED - 1) < 0.02) SIM_SPEED = 1;
+  $('simSpd').max = Math.round(Math.log10(simSpeedMax()) * 1000);
   $('simSpd').value = Math.round(Math.log10(SIM_SPEED) * 1000); $('simSpdV').textContent = '×' + (SIM_SPEED < 1 ? SIM_SPEED.toFixed(2) : SIM_SPEED.toFixed(SIM_SPEED < 10 ? 1 : 0));
   $('simSpd1').classList.toggle('on', SIM_SPEED === 1);
 }
