@@ -11,7 +11,7 @@ function ffHit(sh, b) { var o = SHIPS[b.owner]; if (o && o !== sh && o.team === 
 function swimOthers(sh) { var o = SHIPS.filter(function (x) { return x !== sh; }); return o.filter(function (x) { return x.team === sh.team; }).concat(o.filter(function (x) { return x.team !== sh.team; })); }
 function teamIdx(sh) { return sh.team === 'red' ? 1 : 0; }              // 貼圖的列、羅盤的顏色：藍 0、紅 1
 function isFoe(a, b) { return !!a && !!b && a !== b && a.team !== b.team; }
-function teamShips(team) { return SHIPS.filter(function (o) { return o.team === team; }); }
+function teamShips(team) { return SHIPS.filter(function (o) { return o.team === team && !o.npc; }); }   // 往來的船（58_traffic.js）不算隊上的船
 function pickFoes() {
   SHIPS.forEach(function (sh) {
     var c = SHIPS.filter(function (o) { return isFoe(sh, o); }); if (!c.length) { sh.foe = null; return; }
@@ -39,7 +39,7 @@ function cmdView(side) {
   var W = norm(WIND);
   return { t: SIMT, side: side, wind: [W[0], W[2]], R: aiRange(), gauge: CMD_GAUGE[side], signal: sigFor(side), tune: TUNE[side], ships: SHIPS.map(function (s) {
     return { id: s.i, team: s.team, x: s.px, z: s.pz, yaw: s.yaw, spd: s.spd, hp: 1 - clamp(s.sink / sinkFinalAt(s), 0, 1), guns: s.guns.length ? (s.gunsAlive === undefined ? s.guns.length : s.gunsAlive) / s.guns.length : 0,
-      crew: s.crew0 ? s.crew.filter(crewAble).length / s.crew0 : 0, mass: s.mass0 || shipT(s), len: (s.T.wl1 - s.T.wl0) * S, out: isOut(s), cmd: !(s.i === PLAYER_I && MODE !== 'eve'), tgt: s.foe ? s.foe.i : null,
+      crew: s.crew0 ? s.crew.filter(crewAble).length / s.crew0 : 0, mass: s.mass0 || shipT(s), len: (s.T.wl1 - s.T.wl0) * S, out: isOut(s), cmd: !(s.i === PLAYER_I && MODE !== 'eve') && !s.npc, tgt: s.foe ? s.foe.i : null,
       lerr: s.lineErr === undefined ? null : s.lineErr, llag: s.lineLag === undefined ? null : s.lineLag, larc: s.lineArc === undefined ? null : s.lineArc, loff: s.lineOff === undefined ? null : s.lineOff, asp: helmAspect(s) };   // asp：船頭／船尾比正橫火力大 ⇒ 'B'／'A'（54_helm.js；指揮官不排進戰列）
   }) };
 }
@@ -266,7 +266,7 @@ function playerTake(nw, msg) {
 }
 /** 改操控 o 可不可以（詳細資訊的「⚓ 改操控這艘」、__game.take 都問它；Tim 2026-10-15：「假如是我方船艦 看著這艘按鈕旁 可以多一個切換控制這艘船」「切換控制可以直接抽成通用API(甚至可以開放切換到敵艦(Debug模式)」）：
  *  還在打、這一局還沒結束、不是我艦；友艦 ⇒ 可以；敵艦 ⇒ 只有 Debug 模式（dbgOn，04_state.js）—— 換過去就是那一方（我方、敵方照 PLAYER_I 那艘的 team 算）。 */
-function canTake(o) { var me = SHIPS[PLAYER_I]; return !!(o && me && !OVER && o !== me && !isOut(o) && (o.team === me.team || dbgOn())); }
+function canTake(o) { var me = SHIPS[PLAYER_I]; return !!(o && me && !OVER && o !== me && !isOut(o) && !o.npc && (o.team === me.team || dbgOn())); }   // 往來的船（58_traffic.js）不能換過去開
 function playerTakeShip(o) {
   if (!canTake(o)) return false;
   var me = SHIPS[PLAYER_I];

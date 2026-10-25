@@ -110,7 +110,7 @@ function vxEscYaw(sh, r) {
  *  例：逃離漩渦生效時讓友船、讓敵艦照樣讓，但不准往中心讓（vxBound）—— ⛔ 沒有這一格：讓船的航向正好朝中心，炎羽號從 146 m 被讓進 45 m（2 對 2 seed 3）。 */
 var HELM_TAKES = [
   { k: 'bed', name: '避開淺水', pri: 10, fn: function (sh) { return bedAvoid(sh); } },
-  { k: 'friend', name: '讓友船', pri: 20, fn: function (sh, c) { return friendAvoid(sh, c.hc && c.od.mode === 'lead' ? helmLeadAvoid(sh) : undefined); } },
+  { k: 'friend', name: '讓友船', pri: 20, fn: function (sh, c) { return friendAvoid(sh, c.hc && c.od && c.od.mode === 'lead' ? helmLeadAvoid(sh) : undefined); } },   // c.od：往來的船（58_traffic.js）有航向、沒有命令
   { k: 'foe', name: '讓敵艦', pri: 30, fn: function (sh) { return foeAvoid(sh); } },
   // 逃離漩渦排在讓船前面（2026-10-22）：以前排後面 ⇒ 讓友船、讓敵艦的航向剛好朝中心，炎羽號被讓進 45 m；只靠 bound 壓成切線也不夠（47 m 處切線抵不過往內 3 m/s）。現在只在邊緣接管 ⇒ 不會整場不讓船
   { k: 'vortex', name: '逃離漩渦', pri: 15, fn: function (sh) { return vxAvoid(sh); }, bound: function (sh, y) { return vxBound(sh, y); } },

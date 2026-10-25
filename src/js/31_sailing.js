@@ -171,7 +171,7 @@ function sailShip(sh, dt) {
     // 艦長（54_helm.js）：要哪一舷對敵（一舷火力不到另一舷一半 ⇒ 轉另一舷；⛔ 以前要一門都開不了才換）、航向（敵艦在那一舷正橫 ＋ 距離修正）、期望航速（下一步 helmGovern 換成帆裝與俥鐘）
     // 指揮官的命令（53_commander.js；TASK-0679）先問：戰列跟隨（照排頭的航跡）、戰列的排頭、搶上風 ⇒ 航向與期望航速照命令；都不是 ⇒ 艦長自己的交戰操舵
     var od = ORDERS[sh.i], ok = !sh.struck && !sh.sunk, ld = ok && od && od.mode === 'line' ? SHIPS[od.leader] : null;
-    var hc = dockOn(sh) ? dockHelm(sh) : ld && !ld.sunk ? helmFollow(sh, ld, od) : ok && od && od.mode === 'gauge' ? helmGauge(sh, od) : ok && od && od.mode === 'lead' ? helmLead(sh, od) : null;
+    var hc = dockOn(sh) ? dockHelm(sh) : sh.npc ? trafficHelm(sh) : ld && !ld.sunk ? helmFollow(sh, ld, od) : ok && od && od.mode === 'gauge' ? helmGauge(sh, od) : ok && od && od.mode === 'lead' ? helmLead(sh, od) : null;
     if (hc) { tY = hc.yaw; sh.wantV = hc.v; }
     else if (ok && foe) { var hs = helmSteer(sh, foe); tY = hs.yaw; sh.wantV = hs.v; } else sh.wantV = null;
     if (ok && (hc || foe) && !dockOn(sh)) tY = helmIrons(sh, tY);       // 自動停靠／出航照航道走（逆風靠小艇拖帶，88_modeswitch.js dockTow）                        // 避開頂風、速度不夠就順風繞（54_helm.js；讓船在下面，照舊優先）

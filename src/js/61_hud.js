@@ -282,8 +282,8 @@ function fleetHud(me) {
   ['L', 'R'].forEach(function (s) {
     var box = $('fleet' + s), team = s === 'L' ? pt : other(pt);
     SHIPS.forEach(function (o) {
-      if (o.team !== team) return;
-      if (o.sunk && o.sunkHud == null) o.sunkHud = SIMT;                                                      // 沉沒那一刻（模擬時間；只給 HUD 用）
+      if (o.team !== team || o.npc) return;                                // 往來的船（58_traffic.js）不列
+      if (o.sunk && o.sunkHud == null) o.sunkHud = SIMT;                                                     // 沉沒那一刻（模擬時間；只給 HUD 用）
       if (o.sunk && SIMT - o.sunkHud > SUNK_HIDE) { if (SB_EL[o.i]) { SB_EL[o.i].el.remove(); delete SB_EL[o.i]; } if (INFO_SH === o) INFO_SH = null; return; }
       var b = SB_EL[o.i]; if (!b || b.box !== box) { if (b) b.el.remove(); b = SB_EL[o.i] = sbMake(o, box); }
       sbDraw(b, o, s === 'R'); sbNums(b, o);
@@ -690,7 +690,7 @@ function drawNav(sh) {
   SHIPS.forEach(function (o) {
     if (o === sh || !o.center || !sh.center) return;
     var e = norm([o.center[0] - sh.center[0], 0, o.center[2] - sh.center[2]]), pe = P(e, 0.86);
-    g.fillStyle = o.sunk ? '#666' : isFoe(sh, o) ? '#ff6f6f' : '#6f9bff'; g.beginPath(); g.arc(pe[0], pe[1], 4.5, 0, 6.2832); g.fill();
+    g.fillStyle = o.sunk ? '#666' : o.npc ? (o.npc.kind === 'pirate' ? '#151515' : '#e8dcc0') : isFoe(sh, o) ? '#ff6f6f' : '#6f9bff';   // 往來的船（58_traffic.js）：商船米白、海盜船黑（同地球儀） g.beginPath(); g.arc(pe[0], pe[1], 4.5, 0, 6.2832); g.fill();
   });
   // 我艦：從上面俯瞰的船（05_hull.js navImg，載入時算一次；船頭朝上、右舷在右 ⇒ 只轉不翻），船長（含艏斜桅）＝ 半徑的 1.575 倍（中心到兩端約 0.79 R，還在圈裡）
   //   （⛔ 0.8 倍 ⇒ 船長寬比約 6:1，在 150 px 的圈裡細成一條線；Tim 2026-10-13：1.05 倍再放大 1.5 倍）；外面一圈我方的顏色。沒有圖 ⇒ 以前的三角形
