@@ -60,6 +60,15 @@ var FLAG_EMB = {
       if (c(0.69, 0.61, 0.04) || c(0.67, 0.67, 0.04) || c(1.31, 0.61, 0.04) || c(1.33, 0.67, 0.04) || c(0.69, 0.93, 0.04) || c(0.67, 0.87, 0.04) || c(1.31, 0.93, 0.04) || c(1.33, 0.87, 0.04)) return COL_W;   // 骨頭兩端的關節
       return null;
     } },
+  // 國旗（TASK-0974；Tim 2026-10-26「可以給不同國家的城鎮加上對應旗幟替換」）：Blocksail 往來的船照船隊主人那座城的勢力掛（sh.nation）
+  cross: { name: '白十字', ink: COL_W, res: 1,                           // 法國 1660 年代的商船旗：藍底白十字（王家海軍是白旗）
+    at: function (X, Y) { return Math.abs(X - 1) < 0.1 || Math.abs(Y - 0.5) < 0.1 ? COL_W : null; } },
+  'cross-red': { name: '紅十字', ink: COL_R, res: 1,                     // 熱那亞：白底聖喬治紅十字
+    at: function (X, Y) { return Math.abs(X - 1) < 0.1 || Math.abs(Y - 0.5) < 0.1 ? COL_R : null; } },
+  nordic: { name: '北歐十字', ink: COL_W, res: 1,                        // 丹麥：紅底白色北歐十字（豎的那一根偏旗桿）
+    at: function (X, Y) { return Math.abs(X - 0.72) < 0.11 || Math.abs(Y - 0.5) < 0.11 ? COL_W : null; } },
+  stripes: { name: '三橫條', ink: COL_W, res: 1,                         // 荷蘭：紅白藍三橫條（1660 年代已多用紅取代橘）；上面那一條 ＝ 底色
+    at: function (X, Y) { return Y < 1 / 3 ? null : Y < 2 / 3 ? COL_W : [0.13, 0.27, 0.55]; } },
   none: { name: '（沒有紋章）', ink: COL_W, res: 1, at: function () { return null; } }
 };
 //   預設旗（選單裡那幾面；Tim「旗幟可以做下拉選單 先加三四種就好」）：key ⇒ { name, field, emblem }。英國藍旗、紅旗的底色 ＝ 以前的 COL_FIELD 換成 0～255（round）⇒ 同一個位元組
@@ -68,7 +77,11 @@ var FLAG_PRESETS = [
   { k: 'gb-red', name: '英國紅旗', field: '#b81a17', emblem: 'union' },
   { k: 'spain', name: '西班牙', field: '#ece9e0', emblem: 'burgundy' },
   { k: 'ottoman', name: '鄂圖曼', field: '#b81a17', emblem: 'crescent' },
-  { k: 'pirate', name: '海盜', field: '#141414', emblem: 'skull' }
+  { k: 'pirate', name: '海盜', field: '#141414', emblem: 'skull' },
+  { k: 'france', name: '法國', field: '#1f3e8a', emblem: 'cross' },
+  { k: 'dutch', name: '荷蘭', field: '#ae1c28', emblem: 'stripes' },
+  { k: 'denmark', name: '丹麥', field: '#c8102e', emblem: 'nordic' },
+  { k: 'genoa', name: '熱那亞', field: '#ece9e0', emblem: 'cross-red' }
 ];
 var FLAG_DEF = { blue: 'gb-blue', red: 'gb-red' };
 // ⛔ 下面兩個不給初值：69_prefs.js 讀存檔時本檔還沒跑（同一個閉包，var 提升）⇒ 那時先把存檔那一格原樣放進 FLAG_PREF，teamFlag 第一次用到才解
@@ -146,8 +159,10 @@ function colourTex(kind, f, W, H) {
   return btoa(b);
 }
 /** 陣營 team 那一面旗、kind 那一種的貼圖 ⇒ { w, h, rgba }（戰鬥旗照紋章的 res 放大；長旗照舊）。 */
-function flagTex(kind, team) {
-  var f = teamFlag(team), Z = COL_SIZE[kind] || COL_SIZE.ensign, r = kind === 'pennant' ? 1 : (FLAG_EMB[f.emblem] || FLAG_EMB.none).res || 1, W = Z[4] * r, H = Z[5] * r;
+function flagTex(kind, team) { return flagTexOf(kind, teamFlag(team)); }
+/** 一面旗 f ＝ { field, emblem }、kind 那一種的貼圖（flagTex 是陣營的那一面；每艘船自己的旗 flagVariant 也用這支）。 */
+function flagTexOf(kind, f) {
+  var Z = COL_SIZE[kind] || COL_SIZE.ensign, r = kind === 'pennant' ? 1 : (FLAG_EMB[f.emblem] || FLAG_EMB.none).res || 1, W = Z[4] * r, H = Z[5] * r;
   return { w: W, h: H, rgba: colourTex(kind, f, W, H) };
 }
 /** 換旗之後：每一型已載入的船（HULLT）把陣營旗那幾份貼圖照新的旗重烘、重排貼圖集、GL 那張丟掉（下一次畫 11_rig_gpu.js 重傳）。
@@ -159,11 +174,34 @@ function flagsRetex() {
     if (T.sailAtlas) { T.sailAtlas = sailAtlas(T.rig.sails.concat(T.teamExtra || [])); if (T.sailTexGL) gl.deleteTexture(T.sailTexGL); T.sailTexGL = null; }
   });
 }
+// ── 每艘船自己的旗（TASK-0974）：sh.nation ＝ 預設旗的 key（Blocksail 往來的船照船隊主人那座城的勢力）⇒ 船上的陣營旗（合成的、替換掉的作品旗）都換成那一面；
+//    沒有 ⇒ 照陣營（藍、紅）—— 戰局、我艦都不帶 ⇒ 跟以前逐位元組相同。
+//    貼圖集：那一型第一次有船要某一面 ⇒ 每一面陣營旗多烘一份接在 teamExtra 後面（T.flagVar[旗] ＝ { 帆: 貼圖集的哪一格 }）、重排貼圖集；
+//    排過 ⇒ 每一格的位置都可能變 ⇒ 同型的船都標 rigDirty（物理關著的船帆的緩衝只在 rigDirty 時重做 —— 不標 ⇒ 舊的 UV 對到新的貼圖集，旗面錯位）。
+//    ⛔ 只換畫面：旗還是那一面帆（布料、被打、降旗照舊），不碰模擬。
+function flagVariant(T, k) {
+  var f = flagPreset(k); if (!T || !T.flagTi || !f) return null;
+  var V = T.flagVar || (T.flagVar = {}); if (V[k]) return V[k];
+  var m = {}, n = T.rig.sails.length;
+  Object.keys(T.flagTi).forEach(function (ti) { var q = T.flagTi[ti]; m[ti] = n + T.teamExtra.length; T.teamExtra.push({ texture: Object.assign({ uv: q.uv, alpha_min: 0 }, flagTexOf(q.kind, f)) }); });
+  V[k] = m;
+  if (T.sailAtlas) {
+    T.sailAtlas = sailAtlas(T.rig.sails.concat(T.teamExtra)); if (T.sailTexGL) gl.deleteTexture(T.sailTexGL); T.sailTexGL = null;
+    SHIPS.forEach(function (s) { if (s.T === T) s.rigDirty = true; });
+  }
+  return m;
+}
+/** 給一艘船掛 k 那一面旗（預設旗的 key；null ⇒ 回到陣營旗）⇒ 掛上了 true；不認得的 key ⇒ false、照陣營。 */
+function shipNation(sh, k) {
+  var m = k ? flagVariant(sh.T, k) : null;
+  sh.nation = m ? k : null; sh.flagMap = m; sh.rigDirty = true;
+  return !!m;
+}
 /** 載入船型時（05_hull.js「桅與帆」那一步、clothSetup 之前）：照設定檔的 flags 生旗（合成的帆，接在 T.rig.sails 後面）。
  *  T.nSail0 ＝ 作品自己的帆有幾面（快取只存這幾面的布料，06_cache.js）；T.teamExtra ＝ 貼圖集排在帆後面的那幾份（陣營旗紅的那份、替換作品旗的藍紅兩份；clothSetup）、
  *  T.teamTex[帆] ＝ { blue, red } 貼圖集的哪一格（sailRect）；T.poles ＝ 旗桿。 */
 function teamFlagsSetup(T, info) {
-  T.nSail0 = T.rig.sails.length; T.teamTex = {}; T.teamExtra = []; T.poles = []; T.flagSlots = [];
+  T.nSail0 = T.rig.sails.length; T.teamTex = {}; T.teamExtra = []; T.poles = []; T.flagSlots = []; T.flagTi = {}; T.flagVar = {};
   if (!COL_ON) return;
   var defs = info && info.flags || autoFlags(T); if (!defs.length) return;
   T.teamDefs = defs;
@@ -182,6 +220,7 @@ function teamFlagsSetup(T, info) {
     var nm = 'team-' + f.kind + '-' + fi, col = COL_FIELD.blue, xr = { texture: Object.assign({ uv: uv, alpha_min: 0 }, flagTex(f.kind, 'red')) };
     var sl = { name: nm, verts: verts, tris: tris, color: col, meta: { kind: 'flag', flag: pen ? 'pennant' : 'battle', team: 1 }, pins: pins, pinK: cell >= 0 ? 1 : 3, pinV: cell, truckCell: cell,
       texture: Object.assign({ uv: uv, alpha_min: 0 }, flagTex(f.kind, 'blue')) };
+    T.flagTi[T.nSail0 + add.length] = { kind: f.kind, uv: uv };          // 每艘船自己的旗（flagVariant）照這一份多烘
     red.push([T.nSail0 + add.length, xr]); add.push(sl);
     T.flagSlots.push({ o: sl, kind: f.kind, team: 'blue' }, { o: xr, kind: f.kind, team: 'red' });   // 換旗重烘（flagsRetex）
     T.poles.push({ at: a, top: top + 0.6, cell: cell });                 // 旗桿：桅頂 → 旗頭上面一點
@@ -196,15 +235,19 @@ function teamFlagsSetup(T, info) {
     var s = T.rig.sails[k], tx = s && s.texture;
     if (!tx || !tx.uv) { console.warn('陣營旗：' + T.id + ' 換不了「' + f.replace + '」' + (s ? '（作品的旗沒有貼圖 uv）' : '（找不到這面旗）')); return; }
     var kd = COL_SIZE[f.kind] ? f.kind : 'ensign', uv = tx.uv, xb = { texture: Object.assign({ uv: uv, alpha_min: 0 }, flagTex(kd, 'blue')) }, xr = { texture: Object.assign({ uv: uv, alpha_min: 0 }, flagTex(kd, 'red')) };
-    T.teamTex[k] = { blue: n + T.teamExtra.length, red: n + T.teamExtra.length + 1 };
+    T.teamTex[k] = { blue: n + T.teamExtra.length, red: n + T.teamExtra.length + 1 }; T.flagTi[k] = { kind: kd, uv: uv };
     T.teamExtra.push(xb, xr);
     T.flagSlots.push({ o: xb, kind: kd, team: 'blue' }, { o: xr, kind: kd, team: 'red' });
   });
 }
-/** 貼圖集的那一格：陣營旗照船的陣營挑藍或紅那份（船型兩隊共用）；替換掉的作品旗也一樣。 */
+/** 貼圖集的那一格：陣營旗照船的陣營挑藍或紅那份（船型兩隊共用）；替換掉的作品旗也一樣。船自己掛了旗（sh.nation ⇒ flagMap）⇒ 照那一份。 */
 function sailRect(ow, A, ti) {
   var T = ow.T, m = T && T.teamTex && T.teamTex[ti];
-  if (m) return A.rect[(ow.team || (ow.owner && ow.owner.team)) === 'red' ? m.red : m.blue];
+  if (m) {
+    var fm = ow.flagMap || (ow.owner && ow.owner.flagMap);              // 斷開的那一團（PIECES）照原本那艘
+    if (fm && fm[ti] != null && A.rect[fm[ti]]) return A.rect[fm[ti]];
+    return A.rect[(ow.team || (ow.owner && ow.owner.team)) === 'red' ? m.red : m.blue];
+  }
   return A.rect[ti];
 }
 /** 旗桿（每一格畫面；船身格座標）：桅頂那一格還在才畫。降旗旗桿照留（旗收了）。 */

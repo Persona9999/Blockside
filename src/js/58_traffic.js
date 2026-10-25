@@ -4,7 +4,8 @@
 //     「可以做半無縫載入(在靠近時 背景先載入好附近船隊的船 且有數量上限(參考海戰設定)」「避免卡住主執行緒」
 // 物理意義：
 //   ① 要：每 TRF_ASK_MS 跟外面那一頁要一次（'trafficNeed'：我艦的世界座標、現在幾點、最多幾艘）⇒ 'traffic'：
-//      [{ id, kind 'merchant'｜'pirate', hull, name, at: [e, s], hdg, to: [e, s], v（m/s）, path: [[e, s]…], dock }]（海域座標 ⇒ 減 BED.ax／az 是世界座標）。
+//      [{ id, kind 'merchant'｜'pirate', hull, name, at: [e, s], hdg, to: [e, s], v（m/s）, path: [[e, s]…], dock, flag? }]（海域座標 ⇒ 減 BED.ax／az 是世界座標）。
+//      flag（TASK-0974）：掛哪一面旗（77_colours.js 預設旗的 key，例 spain、gb-red、france、pirate）；沒給、不認得 ⇒ 照陣營旗（藍）。
 //      path（商船）：從它在精細層的位置往前的那一段航道 ⇒ 沿著航道、照自己的帆開（不照精細層的時刻表：那是平均推進速度，逆風一段只有 0.26 m/s ⇒ 停在頂風動不了；
 //      2026-10-25 金斯敦實測）。3D 的船只給人看、不寫回城鎮帳 ⇒ 跑在精細層前面不影響帳；to、v 是沒有 path 的（海盜）照航點與航速開。
 //      清單是「還留著的」範圍（外面那一頁照 TRF_KEEP 給）；離我艦 TRF_SPAWN_M 以內才生 ⇒ 生、收之間有一段緩衝，在邊上來回不會一下有一下沒有。
@@ -32,11 +33,12 @@ function trafficYaw(hdg) { return Math.PI / 2 - hdg / 57.2958; }        // 方�
 function trafficGot(d) {
   if (!trafficOk()) return;
   var W = function (q) { return [q[0] - BED.ax, q[1] - BED.az]; }, want = {}, me = SHIPS[PLAYER_I], c = me ? shipCenter(me) : [0, 0, 0];
-  (d.ships || []).forEach(function (o) { if (o && o.id && o.at) want[o.id] = { id: o.id, kind: o.kind || 'merchant', hull: o.hull, name: o.name || o.id, at: W(o.at), hdg: +o.hdg || 0, to: o.to ? W(o.to) : null, v: +o.v || 0, path: o.path && o.path.length > 1 ? o.path.map(W) : null, dock: !!o.dock }; });
+  (d.ships || []).forEach(function (o) { if (o && o.id && o.at) want[o.id] = { id: o.id, kind: o.kind || 'merchant', hull: o.hull, name: o.name || o.id, at: W(o.at), hdg: +o.hdg || 0, to: o.to ? W(o.to) : null, v: +o.v || 0, path: o.path && o.path.length > 1 ? o.path.map(W) : null, dock: !!o.dock, flag: o.flag || null }; });
   TRF.want = want;
   trafficShips().forEach(function (sh) {                              // 還在 ⇒ 換航點；沒了 ⇒ 收
     var w = want[sh.npc.id]; if (!w) { trafficDrop(sh); return; }
     sh.npc.to = w.to; sh.npc.v = w.v; sh.npc.path = w.path; trafficDock(sh, w.dock);
+    if ((sh.nation || null) !== w.flag) shipNation(sh, w.flag);        // 旗（TASK-0974）：船隊主人那座城換了勢力（轉手）⇒ 跟著換
   });
   if (TRF.build && !want[TRF.build.id]) { trafficFree(TRF.build.M.sh); TRF.build = null; }   // 做到一半就不要了（第一段之後才有 M.sh）
   var have = {}; trafficShips().forEach(function (s) { have[s.npc.id] = 1; }); if (TRF.build) have[TRF.build.id] = 1;
@@ -126,6 +128,7 @@ function trafficPlace(B) {
   if (!w || !trafficOk() || trafficShips().length >= trafficMax()) { trafficFree(sh); return; }
   sh.i = SHIPS.length; sh.name = w.name; sh.npc = { id: w.id, kind: w.kind, to: w.to, v: w.v, path: w.path, dock: false };
   SHIPS.push(sh);
+  if (w.flag) shipNation(sh, w.flag);                                    // 掛船隊主人那一國的旗（77_colours.js；外面那一頁給預設旗的 key，不認得 ⇒ 照陣營旗）
   coreSpawned(sh, null); stepShip(sh, 0); survey(sh); pickCaptain(sh); cmdTick(); pickFoes();
   if (!w.dock && (w.path || w.v > 0)) sh.spd = w.path ? VMAX * TRF_V0 : Math.min(w.v, VMAX);   // 照船隊的航速開出來（⛔ 從 0 起步 ⇒ 生出來那幾十秒停在海上）；沿航道的照自己的帆
   trafficDock(sh, w.dock);

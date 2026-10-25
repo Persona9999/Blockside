@@ -209,6 +209,7 @@ if (DEBUG) window.__game = {
   //   兩陣營的旗（77_colours.js；TASK-0950）：o ＝ { blue?, red? }，每一個是預設旗的 key 或 { field: '#rrggbb', emblem } ⇒ 換（已載入的船型重烘旗面）；
   //   回現在的兩面、換了幾邊（n）、選得到的預設旗與紋章 —— Blocksail 之後照國家、玩家的旗叫這一支
   flags: function (o) { var n = o ? flagSet(o) : 0; return { blue: teamFlag('blue'), red: teamFlag('red'), n: n, presets: FLAG_PRESETS.map(function (p) { return { k: p.k, name: p.name, field: p.field, emblem: p.emblem }; }), emblems: Object.keys(FLAG_EMB) }; },
+  nation: function (i, k) { var sh = SHIPS[i]; if (!sh) return null; if (k !== undefined) shipNation(sh, k); return { nation: sh.nation || null, map: sh.flagMap || null, variants: Object.keys(sh.T.flagVar || {}), atlas: sh.T.sailAtlas ? [sh.T.sailAtlas.w, sh.T.sailAtlas.h] : null }; },   // 一艘船掛哪一面旗（77_colours.js shipNation；TASK-0974）：給 k ⇒ 換（null ⇒ 回到陣營旗）
   townRise: function (a, b, c) {   // 建造演出與工地（63_townrise.js；TASK-0908、0912）：(城 id, 地塊 id, 進度[, 播放秒數[, 演完自己換回去]]) ⇒ 開始；('set', p)；('stop')；('stat') ⇒ 讀數；('sites', 城 id, { 地塊 id: ‰ }) ⇒ 照帳的工地（測試用，同 townUI 'sites' 的回覆）
     if (a === 'set') { if (RISE.demo) townRiseSet(RISE.demo, b); return townRiseStat(); } if (a === 'sites') { townRiseSites(TOWNS.list.filter(function (t) { return t.id === b; })[0], c); return townRiseStat(); } if (a === 'stop') { townRiseStop(); return townRiseStat(); } if (a === 'stat') return townRiseStat();
     var T = TOWNS.list.filter(function (t) { return t.id === a; })[0]; return townRiseStart(T, b, c || 0, arguments[3] || 0, arguments[4]);
