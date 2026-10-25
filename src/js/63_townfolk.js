@@ -318,6 +318,8 @@ function townFolkStreet(T, F, walk, group) {
 //   同一組（字母；沒寫 ＝ 同一組）的點彼此直線走得到 ⇒ 工人只在同一組裡換點；work-<組><號>-to（選填）＝ 站在那裡時面向哪一點。
 // 人數：規劃的 live.work ＝ { 地塊 id: 今天上了幾人 }（Blocksail 城鎮帳；那座城有帳就每個生產地塊都有一筆，0 ＝ 沒人上工）⇒ 每棟最多到點數；
 //   地塊不在 live.work 裡（不在經濟模擬裡的：過磅所、魚市、船廠；或沒有城鎮帳的 town.html）⇒ 點數的一半（無條件進位）。
+// 工地（63_townrise.js；TASK-0912）：房子還沒蓋好 ⇒ 不用模型的點；帳上的工地 ⇒ 點換成腳手架最上面那一層走板、牆腳（townRiseWorkPts），人數 ＝ 帳上今天上了幾人（townUI 'sites' 的 crew），
+//   誰 ＝ 設定檔 work 有 build 的；演出的那一棟沒人。走板升一層、人數變了 ⇒ 重擺（T.work.sk ＝ townRiseWorkSig）。
 // 誰：設定檔 work 有那個用途的大人（townFolkWho）；軍事建築 ⇒ work 有 garrison 的；一個都沒有 ⇒ 那一棟不放人。同一棟照順序輪、不重複（人比立繪多才重複）。
 // 動作：站在自己的點上做工（船員那一套程式動作：照節奏前傾、上下；41_crew_art.js），偶爾停下來喘口氣；同一組有空的點 ⇒ 每一圈走過去做一陣再走回來
 //   （共用同一個空點的幾位錯開時間，不會同時站上去）。位置只照畫面時間算（同 townFolkAt）。?townwork=0 ⇒ 不畫（對照組）。
@@ -329,15 +331,18 @@ function townWorkPrep(T, F) {
   var t0 = performance.now(), K = TOWNS.kit, lw = T.p && T.p.live && T.p.live.work, lots = {}, list = [], blds = [];
   (T.p.lots || []).forEach(function (l) { lots[l.id] = l; });
   (T.inst || []).forEach(function (q) {
-    var M = K && K.M[q.k], m = M && M.m; if (!m || !m.pts || q.wall || !(q.y === q.y)) return;
-    var names = Object.keys(m.pts).filter(function (k) { return TOWN_WORK_RE.test(k); }).sort(townWorkCmp); if (!names.length) return;
-    var l = lots[q.lot] || {}, use = l.use || m.use, s = Math.sin(q.th), c = Math.cos(q.th), mpv = m.mpv, hw = m.size[0] * mpv / 2, hd = m.size[1] * mpv / 2;
+    var M = K && K.M[q.k], m = M && M.m; if (!m || q.wall || !(q.y === q.y)) return;
+    var rs = townRiseHides(T, q);                                        // 工地（63_townrise.js）：房子還沒蓋好 ⇒ 不用模型的點；帳上的工地 ⇒ 建築工站腳手架、牆腳（演出那一棟 ⇒ 沒人）
+    if (rs && (rs.sim == null || !rs.crew)) return;
+    var names = rs ? [] : Object.keys(m.pts || {}).filter(function (k) { return TOWN_WORK_RE.test(k); }).sort(townWorkCmp); if (!rs && !names.length) return;
+    var l = lots[q.lot] || {}, use = rs ? 'build' : l.use || m.use, s = Math.sin(q.th), c = Math.cos(q.th), mpv = m.mpv, hw = m.size[0] * mpv / 2, hd = m.size[1] * mpv / 2;
     function W(v) { var a = (v[0] * mpv - hw) * q.sx, b = v[1] * mpv - hd; return [q.x + a * s - b * c, q.y + (v[2] - 0.5) * mpv, q.z - a * c - b * s]; }   // 模型（格心）→ 世界（腳）：同 townLightBuild 的 W
-    var P = names.map(function (k) { var w = W(m.pts[k]), to = m.pts[k + '-to'], t = to ? W(to) : [q.x, 0, q.z]; return { k: k, g: TOWN_WORK_RE.exec(k)[1], x: w[0], y: w[1], z: w[2], lx: t[0] - w[0], lz: t[2] - w[2] }; });   // lx／lz：面向（沒有 -to ⇒ 朝建築中心）
+    var P = rs ? townRiseWorkPts(rs).map(function (p) { var w = W(p.v), t = W(p.to); return { k: p.k, g: p.g, x: w[0], y: w[1], z: w[2], lx: t[0] - w[0], lz: t[2] - w[2] }; })
+      : names.map(function (k) { var w = W(m.pts[k]), to = m.pts[k + '-to'], t = to ? W(to) : [q.x, 0, q.z]; return { k: k, g: TOWN_WORK_RE.exec(k)[1], x: w[0], y: w[1], z: w[2], lx: t[0] - w[0], lz: t[2] - w[2] }; });   // lx／lz：面向（沒有 -to ⇒ 朝建築中心）
     var who = townFolkWho(F, { work: use }).filter(function (r) { return F.people[r].age !== 'child'; });
     if (!who.length && TOWN_WORK_GUARD.indexOf(use) >= 0) who = townFolkWho(F, { work: 'garrison' });
-    var want = lw && Object.prototype.hasOwnProperty.call(lw, q.lot) ? Math.max(0, +lw[q.lot] || 0) : Math.ceil(P.length / 2), n = who.length ? Math.min(P.length, want) : 0;
-    blds.push({ lot: q.lot, use: use, k: q.k, pts: P.length, want: want, n: n, src: lw && q.lot in lw ? 'ledger' : 'half', x: +q.x.toFixed(1), y: +P[0].y.toFixed(2), z: +q.z.toFixed(1),
+    var want = rs ? rs.crew : lw && Object.prototype.hasOwnProperty.call(lw, q.lot) ? Math.max(0, +lw[q.lot] || 0) : Math.ceil(P.length / 2), n = who.length ? Math.min(P.length, want) : 0;
+    blds.push({ lot: q.lot, use: use, k: q.k, pts: P.length, want: want, n: n, src: rs ? 'site' : lw && q.lot in lw ? 'ledger' : 'half', x: +q.x.toFixed(1), y: +P[0].y.toFixed(2), z: +q.z.toFixed(1),
       yaw: +Math.atan2(s, c).toFixed(4) });                              // yaw：鏡頭站在臨路那一邊往裡看（模型 y 0 ＝ 臨路 ⇒ 世界 (cos th, sin th)；03_camera.js 眼 ＝ 目標 ＋ (cos yaw, sin yaw) × dist）
     if (!n) return;
     var key = T.id + ':work:' + q.lot, off = Math.floor(townHash(key + ':a') * who.length), W0 = [];
@@ -369,7 +374,7 @@ function townWorkPrep(T, F) {
   });
   var bb = [1e9, -1e9, 1e9, 1e9, -1e9, -1e9];                            // 全部工人的外框（同 bedSeen 的格式）⇒ 整座城的工人都在畫面外就不算
   list.forEach(function (a) { a.P.forEach(function (p) { bb[0] = Math.min(bb[0], p.x - 2); bb[1] = Math.min(bb[1], p.y); bb[2] = Math.min(bb[2], p.z - 2); bb[3] = Math.max(bb[3], p.x + 2); bb[4] = Math.max(bb[4], p.y + 3); bb[5] = Math.max(bb[5], p.z + 2); }); });
-  T.work = { inst: T.inst, list: list, blds: blds, bb: bb, prepMs: +(performance.now() - t0).toFixed(2) };
+  T.work = { inst: T.inst, sk: townRiseWorkSig(T), list: list, blds: blds, bb: bb, prepMs: +(performance.now() - t0).toFixed(2) };
   return T.work;
 }
 /** 時間 clock 時工人 a 在哪 ⇒ a.x／y／z、a.mx／mz（這一格往哪走；停著 ＝ 0）。 */
@@ -389,7 +394,7 @@ function townWorkPose(a, clock) {
 }
 /** 測試用（__game.town('work') ／ 'work:<用途>'）：挑城 T 裡有工人的那一棟（給了用途就挑那一種；人最多的先）⇒ 機位（從建築外斜上方看進去）。 */
 function townWorkCam(T, F, use) {
-  var W = T.work && T.work.inst === T.inst ? T.work : townWorkPrep(T, F), best = null;
+  var W = T.work && T.work.inst === T.inst && T.work.sk === townRiseWorkSig(T) ? T.work : townWorkPrep(T, F), best = null;
   W.blds.forEach(function (b) { if (b.n && (!use || b.use === use) && (!best || b.n > best.n)) best = b; });
   if (!best) return null;
   return { lot: best.lot, use: best.use, n: best.n, cam: { tgt: [best.x, +(best.y + 1.2).toFixed(2), best.z], yaw: best.yaw, pitch: 0.42, dist: 16, mode: 0, track: false, tr: null } };
@@ -443,7 +448,7 @@ function townFolkDraw(P, K, eye, PL, fogD, clock) {
         pc.cloth[ln ? (a.id * 3) % pc.cloth.length : a.cloth], pc.hair[ln ? a.id % pc.hair.length : a.hair], a.sh);   // 排隊（測試用）⇒ 每位錯開衣色，截圖看得到整張色表
     });
     if (!TOWN_WORK || !T.inst) return;                                   // 建築裡的工人（townWorkPrep）：實例換了（建築模式、換模型組）⇒ 重算
-    var WK = T.work && T.work.inst === T.inst ? T.work : townWorkPrep(T, F); if (!WK.list.length) return;
+    var WK = T.work && T.work.inst === T.inst && T.work.sk === townRiseWorkSig(T) ? T.work : townWorkPrep(T, F); if (!WK.list.length) return;
     if (townBoxDist(WK.bb, eye) > maxD || !bedSeen(PL, WK.bb)) return;
     WK.list.forEach(function (a) {
       var p0 = a.P[a.home]; if (Math.hypot(p0.x - eye[0], p0.z - eye[2]) > maxD + 20) return;
