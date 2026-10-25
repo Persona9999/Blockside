@@ -73,7 +73,7 @@ var TREE_SPECIES = {
     levels: [],
     leaf: { kind: 'rosette', n: [16, 24], len: [0.75, 1.1], w: 0.18, rise: [14, 80], droop: 0.45, col: [0.45, 0.57, 0.48], vary: 0.1, edge: [0.70, 0.66, 0.38],
             stalk: { v: [2], h: [3.2, 4.4], r: 0.07, col: [0.48, 0.43, 0.27], arms: [6, 9], flower: [0.80, 0.66, 0.20] } },   // stalk.v：第幾棵抽花梗
-    place: { spacing: 7, alt: [3, 12, 700, 1100], slopeMax: 0.95, mats: { 11: 1, 12: 0.6 }, dens: 0.4, forest: -0.85, clump: 30, scale: [0.8, 1.3], shell: 0, view: 380 },
+    place: { spacing: 7, alt: [3, 12, 700, 1100], slopeMax: 0.95, mats: { 11: 1, 12: 0.6 }, dens: 0.4, forest: -0.85, clump: 30, scale: [0.8, 1.3], shell: 0, view: 380, field: [1.6, 1.4] },   // field：龍舌蘭園（Blocksail 配方 sisal，TASK-0929）一行一行種
     variants: 5
   },
   pine: {
@@ -369,6 +369,30 @@ var TREE_SPECIES = {
     leaf: { kind: 'cluster', per: [2, 3], size: [1.6, 2.4], flat: 0.7, col: [0.25, 0.42, 0.16], vary: 0.12, along: 0.35 },
     place: { town: true, spacing: 12, scale: [1, 1], sink: 0.3 },
     variants: 4
+  },
+  // ── 生產鏈的作物（Blocksail TASK-0917 配方、TASK-0929 長相）：加在表的最後 ⇒ 前面每一種的種子（表裡第幾種）不變、長相不變 ──
+  hemp: {
+    name: '大麻（纖維麻）',                                             // Cannabis sativa（溫帶的麻田：撒得密 ⇒ 細高的一根稈、下半截葉子掉光、上半截交互長窄的掌狀小葉，頂上一小撮淡黃的雄花）
+    meta: { region: ['med'], type: 'crop' },
+    height: [2.0, 2.8],
+    trunk: { r: [0.012, 0.016], taper: 1, bend: 0, segs: 1, sides: [0, 0], lean: 0, col: [0.50, 0.54, 0.30], top: 0.02 },
+    levels: [],
+    leaf: { kind: 'cane', stems: [1, 1], spread: [0, 0.04], r: [0.011, 0.015], base: 0, node: 0.22, nodeCol: [0.42, 0.48, 0.24], n: [10, 14], from: 0.4, len: [0.14, 0.2], w: 0.035, rise: [30, 62], droop: 0.6,
+            col: [0.22, 0.40, 0.15], tip: [0.34, 0.48, 0.20], vary: 0.1, tassel: { n: 4, len: 0.16, col: [0.66, 0.64, 0.38] } },
+    place: { town: true, spacing: 1, scale: [0.85, 1.15], shell: 0, view: 300, sink: 0.05, field: [0.5, 0.4] },
+    variants: 3
+  },
+  grape: {
+    name: '葡萄',                                                       // Vitis vinifera（地中海的杯狀修剪 gobelet：不搭架，一株一根扭曲的老幹、齊胸高分出幾根枝，葉間掛紫黑的果串）
+    meta: { region: ['med'], type: 'crop' },
+    height: [1.1, 1.5],
+    trunk: { r: [0.04, 0.06], taper: 0.6, bend: 0.35, segs: 3, sides: [4, 3], lean: 0.15, col: [0.36, 0.28, 0.20], top: 0.5, crown: 0.6 },
+    levels: [
+      { n: [4, 6], from: [0.5, 1.0], angle: [35, 65], len: [0.5, 0.8], r: 0.5, bend: 0.35, up: 0.2, segs: 2, sides: [3, 0] }
+    ],
+    leaf: { kind: 'cluster', per: [2, 3], size: [0.16, 0.24], flat: 0.75, col: [0.26, 0.44, 0.16], vary: 0.12, along: 0.5, tint: [0.16, [0.30, 0.12, 0.28]] },   // tint：幾成的團換成紫黑的果串
+    place: { town: true, spacing: 1, scale: [0.85, 1.15], shell: 0, view: 250, sink: 0.05, field: [1.6, 1.3], fieldK: 0.65, soil: [[0.55, 0.43, 0.31], [0.45, 0.35, 0.25]] },   // fieldK：田裡整體 × 1.8（TREE_FIELD_K）⇒ 葡萄再 × 0.65（量過：不縮的話一顆顆葉團塞滿整片、看不到行）；soil：石多的淺褐土
+    variants: 3
   }
 };
 
