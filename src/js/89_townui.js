@@ -18,6 +18,20 @@ var TUI_CAT = { food: '糧食', raw: '原料', cash: '經濟作物', goods: '製
 function tuiOk() { return modeRule('town') && BED && BED.host && TWB.town; }
 function tuiEsc(t) { return String(t).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
 function tuiNum(x, d) { x = +x || 0; return x.toLocaleString('en-US', { minimumFractionDigits: d || 0, maximumFractionDigits: d || 0 }); }
+/** 貨物、家常菜的圖示（Blocksail img/goods/<key>.png、img/dishes/<id>.png —— battle.html 跟 img/ 同一層；TASK-0914）：沒有圖 ⇒ 拿掉，只剩名字。 */
+function tuiIcon(dir, k) { return '<img src="img/' + dir + '/' + encodeURIComponent(k) + '.png" alt="" style="width:22px;height:22px;object-fit:contain;vertical-align:middle;margin-right:5px" onerror="this.remove()">'; }
+/** 昨天吃了什麼（份的比例）：家裡的灶每一道菜（'eat:<貨>' ＝ 直接吃那一種）＋服務建築供的（餐館、酒館、教堂；Blocksail world/food.js foodDay 的 dish、served）。 */
+function tuiEatHTML(F) {
+  var D = F.dish || {}, sv = F.served || 0, tot = sv, rows = [];
+  Object.keys(D).forEach(function (k) { if (D[k] > 0) { tot += D[k]; rows.push({ k: k, q: D[k] }); } });
+  if (sv > 0) rows.push({ k: '', q: sv });
+  if (!(tot > 0)) return '';
+  rows.sort(function (a, b) { return b.q - a.q || (a.k < b.k ? -1 : 1); });
+  return '<table class="tuiT"><tr><th>吃的</th><th>份</th><th>比例</th></tr>' + rows.map(function (x) {
+    var g = x.k.indexOf('eat:') === 0 ? x.k.slice(4) : null, nm = !x.k ? '⛪ 服務建築供的（教堂的彌撒…）' : g ? tuiIcon('goods', g) + tuiEsc(tuiGood(g)) : tuiIcon('dishes', x.k) + tuiEsc(TUI.dishes[x.k] || x.k);
+    return '<tr><td>' + nm + '</td><td>' + tuiNum(x.q / 1000) + '</td><td>' + (x.q * 100 / tot).toFixed(1) + '%</td></tr>';
+  }).join('') + '</table>';
+}
 function tuiGood(g) { var X = TUI.goods[g]; if (X && X.name) return X.name; var R = TUI.list && TUI.list.rows.filter(function (r) { return r.g === g; })[0]; return R ? R.name : g; }
 /** 跟外面那一頁要（cb(回覆)）；5 秒沒回 ⇒ cb({ ok: false, why }）。 */
 function tuiAsk(cmd, extra, cb) {
@@ -57,7 +71,7 @@ function tuiLoad() {
 }
 /** 問城鎮資訊（每一頁都要：上面那一列、貨名 tuiGood；買賣之後城鎮金庫跟著變 ⇒ 重問）。 */
 function tuiInfo() {
-  tuiAsk('info', null, function (r) { if (r.ok) { TUI.info = r.info; TUI.goods = r.goods || {}; TUI.blds = r.blds || {}; TUI.every = r.every || 7; TUI.region = r.region || null; TUI.faction = r.faction || null; TUI.fleets = r.fleets || []; TUI.hubs = r.hubs || []; } else TUI.msg = '問不到城鎮資訊：' + (r.why || []).join('；'); tuiUI(); });
+  tuiAsk('info', null, function (r) { if (r.ok) { TUI.info = r.info; TUI.goods = r.goods || {}; TUI.blds = r.blds || {}; TUI.every = r.every || 7; TUI.region = r.region || null; TUI.faction = r.faction || null; TUI.fleets = r.fleets || []; TUI.hubs = r.hubs || []; TUI.dishes = r.dishes || {}; } else TUI.msg = '問不到城鎮資訊：' + (r.why || []).join('；'); tuiUI(); });
 }
 /** 買賣（side 'buy'｜'sell'、q 桶）：一次只送一筆；回來照新的清單重畫、說成交了多少。 */
 function tuiTrade(side, g, q) {
@@ -103,12 +117,14 @@ function tuiSumHTML() {
   h += '<div class="tuiTiles">' + [['👥 人口', tuiNum(I.pop.total)], ['💪 勞動人口', tuiNum(I.pop.labor)], ['🔧 有工作', tuiNum(jt)], ['🪑 失業', tuiNum(E.idle || 0)], ['📢 缺工', tuiNum(E.short || 0)], ['⚓ 碼頭上等船', tuiNum(E.dock || 0)],
     ['💰 城鎮金庫', tuiNum(I.funds)], ['👛 鎮民金庫', tuiNum(I.folkFunds)], ['🛡 士兵', tuiNum(I.guard.now) + ' / ' + tuiNum(I.guard.cap)]].map(function (x) { return '<div><small>' + x[0] + '</small><b>' + x[1] + '</b></div>'; }).join('') + '</div>';
   var F = I.fed;
-  if (F) { var eat = F.eat || {}, LV = ['荒年糧', '主糧', '家常', '佳餚']; h += '<h4>🍞 昨天吃飯（份）</h4><p>' + [3, 2, 1, 0].map(function (k) { return LV[k] + ' ' + tuiNum((eat[k] || 0) / 1000); }).join('　') + (F.relief ? '　（城鎮免費補了 ' + tuiNum(F.relief / 1000) + ' 份）' : '') + (F.famine ? '　⚠ 飢荒' : '') + '</p>'; }   // 等級照 Blocksail world/food.js FOOD_LEVELS
+  if (F) { var eat = F.eat || {}, LV = ['荒年糧', '主糧', '家常', '佳餚']; h += '<h4>🍞 昨天吃飯（份）</h4><p>' + [3, 2, 1, 0].map(function (k) { return LV[k] + ' ' + tuiNum((eat[k] || 0) / 1000); }).join('　') + (F.relief ? '　（城鎮免費補了 ' + tuiNum(F.relief / 1000) + ' 份）' : '') + (F.famine ? '　⚠ 飢荒' : '') + '</p>' + tuiEatHTML(F); }   // 等級照 Blocksail world/food.js FOOD_LEVELS；底下每一道吃了幾成（Tim 2026-10-25「城鎮是否可以顯示鎮民的消耗食物百分比」）
+  var SV = I.svc || {}, SVI = { faith: '⛪' };                             // 服務建築的滿意度（Blocksail world/food.js serveDay；TASK-0914）：昨天想來／來了幾人次、滿意度、收的錢
+  Object.keys(SV).forEach(function (k) { var Q = SV[k]; h += '<h4>' + (SVI[k] || '🙂') + ' ' + tuiEsc(Q.name || k) + '（昨天）</h4><p>來了 ' + tuiNum(Q.got) + '／想來 ' + tuiNum(Q.want) + ' 人次　滿意度 ' + Math.round((Q.sat || 0) * 100) + '%　捐獻 ' + tuiNum(Q.paid, 2) + '</p>'; });
   var ks = Object.keys(J).sort(function (a, b) { return J[b] - J[a]; });
   h += '<h4>🔧 崗位（今天分到幾人）</h4>' + (ks.length ? '<table class="tuiT"><tr><th>工作</th><th>人</th></tr>' + ks.map(function (k) { return '<tr><td>' + tuiEsc(TUI_JOB[k] || TUI.blds[k] || k) + '</td><td>' + tuiNum(J[k]) + '</td></tr>'; }).join('') + '</table>' : '<p class="tuiDim">還沒有人上工（帳還沒過一天）</p>');
   var B = {}; (I.buildings || []).forEach(function (b) { B[b.type] = (B[b.type] || 0) + 1; });
   var bk = Object.keys(B).sort(function (a, b) { return B[b] - B[a]; });
-  h += '<h4>🏗 生產建築（' + tuiNum((I.buildings || []).length) + ' 棟）</h4><p>' + bk.map(function (k) { return tuiEsc(TUI.blds[k] || k) + ' × ' + B[k]; }).join('、') + '</p>';
+  h += '<h4>🏗 建築（生產、公職、服務；' + tuiNum((I.buildings || []).length) + ' 棟）</h4><p>' + bk.map(function (k) { return tuiEsc(TUI.blds[k] || k) + ' × ' + B[k]; }).join('、') + '</p>';
   var RG = TUI.region;                                                  // 這座城那一區的加總（Blocksail regionInfo：區域 ＝ 那一區的城鎮加總）
   if (RG) h += '<h4>🗺 這一區（' + RG.towns.length + ' 座：' + RG.towns.map(tuiEsc).join('、') + '）</h4><p>人口 ' + tuiNum(RG.pop) + '　勞動 ' + tuiNum(RG.labor) + '　失業 ' + tuiNum(RG.idle) + '　碼頭上 ' + tuiNum(RG.dock) + '　城鎮金庫 ' + tuiNum(RG.funds) + '　生產建築 ' + tuiNum(RG.buildings) + '</p>';
   if (TUI.hubs && TUI.hubs.length) h += '<p class="tuiDim">⚓ 這一區的集散地：' + TUI.hubs.map(tuiEsc).join('、') + '</p>';
@@ -208,7 +224,7 @@ function tuiTradeHTML() {
   if (!L.rows.length) h += '<p class="tuiDim">船上空的，城鎮市場也是空的</p>';
   else h += '<table class="tuiT tuiTr"><tr><th>貨</th><th>城鎮</th><th>船上</th><th>買一桶</th><th>賣一桶</th><th></th></tr>' + L.rows.map(function (r) {
     var b1 = r.canBuy >= 1, bAll = Math.floor(r.canBuy), s1 = r.ship >= 1 && r.canSell >= 1;
-    return '<tr><td>' + tuiEsc(r.name) + '</td><td>' + tuiNum(Math.floor(r.town)) + '</td><td>' + (r.ship >= 1 ? tuiNum(Math.floor(r.ship)) : '<span class="tuiDim">–</span>') + '</td><td>' + (r.buy == null ? '<span class="tuiDim">–</span>' : tuiNum(r.buy, 2)) + '</td><td>' + tuiNum(r.sell, 2) + '</td><td class="ops">' +
+    return '<tr><td>' + tuiIcon('goods', r.g) + tuiEsc(r.name) + '</td><td>' + tuiNum(Math.floor(r.town)) + '</td><td>' + (r.ship >= 1 ? tuiNum(Math.floor(r.ship)) : '<span class="tuiDim">–</span>') + '</td><td>' + (r.buy == null ? '<span class="tuiDim">–</span>' : tuiNum(r.buy, 2)) + '</td><td>' + tuiNum(r.sell, 2) + '</td><td class="ops">' +
       btn('buy', r.g, 1, '買 1', b1) + btn('buy', r.g, 10, '買 10', r.canBuy >= 10) + btn('buy', r.g, bAll, '買到滿', bAll >= 1) + btn('sell', r.g, 1, '賣 1', s1) + btn('sell', r.g, r.ship, '全賣', r.ship > 0 && r.canSell > 0) + '</td></tr>';
   }).join('') + '</table>';
   var D = L.load;
