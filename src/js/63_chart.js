@@ -5,6 +5,7 @@
 //   細的那一份蓋過粗的；顏色照高度：陸地（沙灘、低地、山）、淺到我艦過不去（船底＋電腦讓開淺水的 BEDAV_CLR）、淺海、深海；水下的珊瑚礁、礁石另外標紅。
 // 每 6 格畫面（hudFrame）畫一次：北朝上、我艦在中間（三角形尖端 ＝ 船頭）、走過的航跡、出發點 ⚓（開戰位置 ＝ 世界原點；停靠 ⇒ 泊位）、比例尺；
 //   右上角「＋」拉近、「−」拉遠（滾輪也行）：半徑 0.5、1、1.5（開局）、2.5、4、7 km、整個海域。
+//   ⇒ 最外圈會落在海域窗外的那幾級跳過（chartLvOk；窗照畫質「海圖讀取範圍」：近只到 1.5 km、中到 2.5 km、遠到 4 km，再拉遠 ＝ 整個海域）。
 // 位置：右下角、右邊那一排按鈕的上面（橫版、直版都是；照按鈕現在的位置算）—— ⛔ #stage 的 canvas 樣式是 inset:0 滿版 ⇒ 要先 inset:auto。⛔ 不讀不寫模擬 ⇒ 無頭不訂閱、戰局一位元不動；沒有海圖（?map）或玩法沒開 ⇒ 不建、不顯示。
 var CHART = { A: null, im: null, g: null, res: null, cv: null, box: null, zb: null, zoom: 2, trail: [], trT: -1, need: 6.5 };
 if (Q.has('chartz') && isFinite(+Q.get('chartz'))) CHART.zoom = Math.max(0, Math.min(6, Math.round(+Q.get('chartz'))));   // ?chartz=0..6：開局的範圍（量測、截圖用）
@@ -87,10 +88,24 @@ function chartEl() {
   CHART.cv = c; CHART.zb = z.children;
   return (CHART.box = b);
 }
-/** 換範圍：d −1 拉近、+1 拉遠（到頭就停）。 */
+/** 這一級看得到的範圍都在海域的窗裡嗎（Tim 2026-10-25：「小地圖問題是有一個縮放階級下 最外圈完全不會載入」「縮放的級數跟著海域窗走」）：
+ *  窗跟著旗艦走（08_seabed.js bedWinNeed）只保證旗艦那一塊 ± m 塊（m ＝ 半徑 − 換窗的那幾成）在窗裡 ⇒ 半徑超過 m 塊的那一級，最外圈落在窗外、永遠不會載入 ⇒ 跳過；
+ *  ⛔ 量的（「中」窗 ±4 km、開場的窗西 8 塊東 7 塊）：4 km 那一級北、東各一排在窗外，7 km 那一級 26 排。整個海域（0）＝ 窗本身 ⇒ 一定可以；海域不跟著旗艦走（沒有 BED.win）⇒ 每一級都可以。 */
+function chartLvOk(z) {
+  var R = CHART_R[z]; if (!R || !BED || !BED.A || !BED.win) return true;
+  var w = bedWinR(), m = w - Math.max(1, Math.round(w * BED_WIN_SHIFT));
+  return R <= m * BED.A.chunk;
+}
+/** 換範圍：d −1 拉近、+1 拉遠（到頭就停；跳過最外圈會落在窗外的那幾級）；d 0 ⇒ 現在這一級不行（換了畫質）就往近的挪。 */
 function chartZoom(d) {
-  CHART.zoom = Math.max(0, Math.min(CHART_R.length - 1, CHART.zoom + d)); HUDN = 0;
-  if (CHART.zb) { CHART.zb[0].disabled = CHART.zoom === 0; CHART.zb[1].disabled = CHART.zoom === CHART_R.length - 1; [].forEach.call(CHART.zb, function (k) { k.style.opacity = k.disabled ? '.4' : '1'; }); }
+  var z = CHART.zoom;
+  if (d) { for (var q = z + d; q >= 0 && q < CHART_R.length; q += d) if (chartLvOk(q)) { z = q; break; } }
+  else while (z > 0 && !chartLvOk(z)) z--;
+  if (z !== CHART.zoom) { CHART.zoom = z; HUDN = 0; }
+  if (CHART.zb) {
+    var lo = true, hi = true; for (var q2 = 0; q2 < CHART_R.length; q2++) if (chartLvOk(q2)) { if (q2 < z) lo = false; if (q2 > z) hi = false; }
+    CHART.zb[0].disabled = lo; CHART.zb[1].disabled = hi; [].forEach.call(CHART.zb, function (k) { k.style.opacity = k.disabled ? '.4' : '1'; });
+  }
 }
 /** 每 6 格畫面（61_hud.js hudFrame）：沒開就藏起來。 */
 function chartDraw(me) {
@@ -98,6 +113,7 @@ function chartDraw(me) {
   if (!on) { if (CHART.box && CHART.box.style.display !== 'none') CHART.box.style.display = 'none'; return; }
   var bx0 = chartEl(), c = CHART.cv, A = CHART.A, ch = A.chunk, port = innerHeight > innerWidth, W = port ? 132 : 176, dpr = Math.min(window.devicePixelRatio || 1, 2);
   if (bx0.style.display === 'none') { bx0.style.display = 'block'; chartZoom(0); }
+  else if (!chartLvOk(CHART.zoom)) chartZoom(0);                       // 畫質換成窗比較小的 ⇒ 這一級的最外圈落在窗外 ⇒ 往近的挪
   if (c.width !== W * dpr) { c.width = c.height = W * dpr; c.style.width = c.style.height = W + 'px'; }
   // 右下角、右邊那一排按鈕的上面：跟 c 橫向重疊的按鈕裡最高的那一個的頂 ⇒ 底
   var top = innerHeight - 8;
