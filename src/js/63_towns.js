@@ -728,7 +728,9 @@ function townLotInst(T, K, l) {
   //   模型的棧橋面在 z ＝ deckz ⇒ 往下放（護舷、梯子伸到水裡）；不墊石基（底下是水，船停的地方）
   var bt = l.berth && m.edge != null, off = (l.d - md) / 2 - (bt ? Math.max(0, l.berth.over - TOWN_BERTH_STRIP - m.edge) : 0), e = T.E([l.at[0] + off * Math.cos(th), l.at[1] + off * Math.sin(th)]);
   var lk = Math.max(1, Math.min(TOWN_LM[1], Math.max(mw, md, m.top) / TOWN_LM[0]));
-  return { k: nm, x: e[0] - BED.ax, y: l.h - (bt ? m.deckz || 0 : 0), z: e[1] - BED.az, th: th, sx: 1, sh: 0.92 + 0.16 * townHash(l.id + '#'), r: Math.hypot(mw, md) / 2 + 2, top: m.top, pl: bt ? null : [mw, md], foot: mw * md * m.cover, col: m.roof, lot: l.id, lk: lk };
+  //   水上版的模型（Blocksail TASK-0963 漁場：棧橋尾端的小船、下水梯伸到平台面以下）同泊位建築：模型的平台面在 z ＝ deckz ⇒ 往下放；底下是水 ⇒ 不墊石基（nb）
+  var wm = !!(l.water && m.water != null);
+  return { k: nm, x: e[0] - BED.ax, y: l.h - (bt || wm ? m.deckz || 0 : 0), nb: wm, z: e[1] - BED.az, th: th, sx: 1, sh: 0.92 + 0.16 * townHash(l.id + '#'), r: Math.hypot(mw, md) / 2 + 2, top: m.top, pl: bt ? null : [mw, md], foot: mw * md * m.cover, col: m.roof, lot: l.id, lk: lk };
 }
 /** 一條城牆 ⇒ 門、塔、轉角、收尾照位置，中間的斷面沿路線接成一條斜接的折線（照 w.kit 挑那一套；BUILDING_SPEC §6）。
  *  t ＝ 從起點沿路線量的長度（閉合的牆繞回來）；部件佔掉 [t0, t1]，兩頭的接口 p0、p1 ＝ 中心 ∓ 半長·軸（軸 ＝ 路線上兩個接口那兩點的弦 ⇒ 擺在頂點上就是角平分）。 */
@@ -1604,20 +1606,27 @@ function townGroundTile(T, Q) {
   // 水上建築（Blocksail TASK-0899 world/town.js WATER；地塊帶 water: { d0, deck, slip? }、h ＝ 平台面）：木板平台（面 ＝ h、厚 0.4 m）＋樁（每 TOWN_WPILE m 一根、伸到底下的海床再 0.5 m）；
   //   船台那一條（背面往回 slip.len、寬 slip.w）不鋪板也不立樁 —— 模型的船台從那裡斜進水裡；地面比板底高的那幾點不立樁（以內那一段有陸地）；
   //   模型照舊站在 h（Blocksail 不給水上地塊整地 ⇒ 海床不動、水照樣畫在平台底下）；地形還沒到 ⇒ 樁伸到 −(water.d0 以外的最深) 那一點量不到 ⇒ 到 −4 m
+  //   窄棧橋（Blocksail TASK-0963 water.jetty { len, w }：漁場）：背面往回 jetty.len 那一段只鋪中間 jetty.w、樁只立在那一條的兩緣（每 TOWN_WPILE m 一對）、兩旁是水
   (Q.wlot || []).forEach(function (l) {
-    var th = l.rot * Math.PI / 180, cs = Math.cos(th), sn = Math.sin(th), top = l.h, sl = l.water.slip, sw = sl ? sl.w / 2 : 0, sL = sl ? sl.len : 0;
+    var th = l.rot * Math.PI / 180, cs = Math.cos(th), sn = Math.sin(th), top = l.h, sl = l.water.slip, sw = sl ? sl.w / 2 : 0, sL = sl ? sl.len : 0, jt = l.water.jetty, jw = jt ? jt.w / 2 : 0, jL = jt ? jt.len : 0;
     function pt(a, b) { return [l.at[0] + cs * a - sn * b, l.at[1] + sn * a + cs * b]; }   // 地塊座標 a（沿 rot，正面 ＋d/2）、b（橫）⇒ 規劃平面
     function deck(a0, a1, b0, b1) { if (a1 - a0 < 0.05 || b1 - b0 < 0.05) return; var bc = (b0 + b1) / 2; slab([pt(a0, bc), pt(a1, bc)], b1 - b0, top, top - 0.4, TOWN_COL.pier); }
-    if (!sl) deck(-l.d / 2, l.d / 2, -l.w / 2, l.w / 2);
-    else { deck(-l.d / 2 + sL, l.d / 2, -l.w / 2, l.w / 2); deck(-l.d / 2, -l.d / 2 + sL, -l.w / 2, -sw); deck(-l.d / 2, -l.d / 2 + sL, sw, l.w / 2); }
     var r = 0.2;
-    for (var a = -l.d / 2 + 0.5; a <= l.d / 2 - 0.5 + 1e-6; a += TOWN_WPILE) for (var b = -l.w / 2 + 0.5; b <= l.w / 2 - 0.5 + 1e-6; b += TOWN_WPILE) {
-      if (sl && a < -l.d / 2 + sL && Math.abs(b) < sw + r) continue;
-      var c = W(pt(a, b)), gy = hgt(c[0], c[1]); if (gy === gy && gy > top - 0.5) continue;
+    function pile(a, b) {
+      var c = W(pt(a, b)), gy = hgt(c[0], c[1]); if (gy === gy && gy > top - 0.5) return;
       var bot = gy === gy ? gy - 0.5 : -4, base = V.length / 9;
       [[-r, -r], [r, -r], [r, r], [-r, r]].forEach(function (o) { vtx(c[0] + o[0], top - 0.4, c[1] + o[1], TOWN_COL.post, o[0] / r, 0, o[1] / r); vtx(c[0] + o[0], bot, c[1] + o[1], TOWN_COL.post, o[0] / r, 0, o[1] / r); });
       for (var e = 0; e < 4; e++) { var i0 = base + e * 2, i1 = base + ((e + 1) % 4) * 2; I.push(i0, i1, i1 + 1, i0, i1 + 1, i0 + 1); }
     }
+    if (jt) deck(-l.d / 2 + jL, l.d / 2, -l.w / 2, l.w / 2), deck(-l.d / 2, -l.d / 2 + jL, -jw, jw);
+    else if (!sl) deck(-l.d / 2, l.d / 2, -l.w / 2, l.w / 2);
+    else { deck(-l.d / 2 + sL, l.d / 2, -l.w / 2, l.w / 2); deck(-l.d / 2, -l.d / 2 + sL, -l.w / 2, -sw); deck(-l.d / 2, -l.d / 2 + sL, sw, l.w / 2); }
+    for (var a = -l.d / 2 + 0.5; a <= l.d / 2 - 0.5 + 1e-6; a += TOWN_WPILE) for (var b = -l.w / 2 + 0.5; b <= l.w / 2 - 0.5 + 1e-6; b += TOWN_WPILE) {
+      if (sl && a < -l.d / 2 + sL && Math.abs(b) < sw + r) continue;
+      if (jt && a < -l.d / 2 + jL) continue;                           // 窄棧橋那一段另外立（下面）
+      pile(a, b);
+    }
+    if (jt) for (var aj = -l.d / 2 + 0.5; aj < -l.d / 2 + jL; aj += TOWN_WPILE) { pile(aj, -jw + r + 0.05); pile(aj, jw - r - 0.05); }
   });
   Q.deps = deps;
   if (!I.length) return null;
@@ -2009,6 +2018,7 @@ function townBin(PL, eye) {
 }
 /** 石基：地塊頂（h，略低 1 cm 不跟一樓的底面打架）往下到四角與中心最低的地面再 0.3 m；地面沒載 ⇒ null（下次分組再試）。 */
 function townPlinth(q) {
+  if (q.nb) return null;                                                // 水上版的模型（townLotInst nb）：底下是平台與樁
   var s = Math.sin(q.th), c = Math.cos(q.th), w = q.pl[0] / 2, d = q.pl[1] / 2, lo = Infinity;
   [[0, 0], [-w, -d], [w, -d], [w, d], [-w, d]].forEach(function (o) { var gy = townGround(q.x + o[0] * s - o[1] * c, q.z - o[0] * c - o[1] * s); lo = Math.min(lo, gy); });
   if (!(lo === lo) || lo === Infinity) return null;
