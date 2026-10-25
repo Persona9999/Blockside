@@ -326,23 +326,54 @@ function townFolkStreet(T, F, walk, group) {
 var TOWN_WORK = Q.get('townwork') !== '0', TOWN_WORK_RE = /^work-([a-z]?)(\d+)$/, TOWN_WORK_SCALE = 1.1, TOWN_WORK_SPD = 1.1;   // SCALE：建築裡比街上（TOWN_FOLK_SCALE 1.36）小，大人約 1.9 m ⇒ 對齊 Blocksail tools/workspots.py 找點要的 2.0 m 淨空（1.2 倍在伐木場柴棚下頂到棚簷）
 var TOWN_WORK_GUARD = ['fort', 'barracks', 'watchtower', 'bastion', 'battery'];   // 這幾種用途找 work 有 garrison 的（同 townFolkWorkSite）
 function townWorkCmp(a, b) { var A = TOWN_WORK_RE.exec(a), B = TOWN_WORK_RE.exec(b); return A[1] < B[1] ? -1 : A[1] > B[1] ? 1 : +A[2] - +B[2]; }
+// 田裡的農夫（Tim 2026-10-25「是否可以讓農田中有工作的農夫(參考其他生產建築)」）：附屬的田（63_towns.js townPrep 的 T.fields）沒有模型的點 ⇒ 照田現算，跟那一棟主建築的點一起用
+//   站在溝裡（壟與壟之間：行距照作物的 place.field，同 63_trees.js treeFieldPut 的壟中線往旁邊挪半個溝）、沿行那一段的中間，面向沿行（隨機朝前或朝後）；高度照鋪的土（同作物：地面 ＋ TOWN_ROAD_LIFT）
+//   每 TOWN_FIELD_M2 平方公尺一點、一塊地最多 TOWN_FIELD_MAX 點（候選照田、溝的順序平均挑）；同一組 'field' ⇒ 有空的點就輪流走過去（townWorkPrep 的 spare）
+var TOWN_FIELD_M2 = 150, TOWN_FIELD_MAX = 8;
+//   高度：townWorkPrep 常在田那一塊地面還沒載進來時就算（townGround ⇒ NaN）⇒ 先借主建築那一棟的 y（y0）、標 ny，townWorkAt 每一格補到地面有了為止（第一版退回 bedHgt ⇒ 遠處的田整排人埋在地底）
+function townWorkFieldPts(T, FS, key, y0) {
+  if (!FS || !FS.length) return [];
+  var cand = [], area = 0;
+  FS.forEach(function (F) {
+    var la = F.a1 - F.a0, lb = F.b1 - F.b0; area += la * lb;
+    var S = typeof TREE_SPECIES !== 'undefined' ? TREE_SPECIES[F.crop] : null, Fd = S && S.place && S.place.field;
+    var nb = Fd ? Math.max(1, Math.round(lb / (Fd[0] * TREE_FIELD_SP))) : Math.max(1, Math.round(lb / 2));
+    for (var kb = 0; kb < nb; kb++) cand.push({ F: F, a: la / 2, b: lb * (kb + TOWN_FURROW / 2) / nb });
+  });
+  var K = Math.min(TOWN_FIELD_MAX, cand.length, Math.max(1, Math.round(area / TOWN_FIELD_M2))), out = [];
+  for (var i = 0; i < K; i++) {
+    var c = cand[Math.floor((i + 0.5) * cand.length / K)], F = c.F, sg = townHash(key + ':fd' + i) < 0.5 ? 1 : -1;
+    var tx = F.at[0] + F.fx * (F.a0 + c.a) - F.fy * (F.b0 + c.b), ty = F.at[1] + F.fy * (F.a0 + c.a) + F.fx * (F.b0 + c.b), e = T.E([tx, ty]), x = e[0] - BED.ax, z = e[1] - BED.az;
+    var gy = townGround(x, z);
+    out.push({ k: 'field' + (i + 1), g: 'field', x: x, y: gy === gy ? gy + TOWN_ROAD_LIFT : y0, ny: !(gy === gy), z: z, lx: sg * T.kx * F.fx, lz: sg * F.fy });
+  }
+  return out;
+}
+/** 田裡的點還沒拿到地面高度（ny）⇒ 現在有了就補上。 */
+function townWorkFieldY(p) {
+  if (!p.ny) return;
+  var gy = townGround(p.x, p.z); if (gy === gy) { p.y = gy + TOWN_ROAD_LIFT; p.ny = false; }
+}
 /** 城 T 的建築裡的工人 ⇒ T.work ＝ { inst（照哪一份實例算的；換了就重算）, list: [工人], blds: [每棟的讀數], bb }。 */
 function townWorkPrep(T, F) {
-  var t0 = performance.now(), K = TOWNS.kit, lw = T.p && T.p.live && T.p.live.work, lots = {}, list = [], blds = [];
+  var t0 = performance.now(), K = TOWNS.kit, lw = T.p && T.p.live && T.p.live.work, lots = {}, list = [], blds = [], fl = {};
   (T.p.lots || []).forEach(function (l) { lots[l.id] = l; });
+  (T.fields || []).forEach(function (F) { (fl[F.lot] || (fl[F.lot] = [])).push(F); });   // 附屬的田照地塊分（townWorkFieldPts）
   (T.inst || []).forEach(function (q) {
     var M = K && K.M[q.k], m = M && M.m; if (!m || q.wall || !(q.y === q.y)) return;
     var rs = townRiseHides(T, q);                                        // 工地（63_townrise.js）：房子還沒蓋好 ⇒ 不用模型的點；帳上的工地 ⇒ 建築工站腳手架、牆腳（演出那一棟 ⇒ 沒人）
     if (rs && (rs.sim == null || !rs.crew)) return;
-    var names = rs ? [] : Object.keys(m.pts || {}).filter(function (k) { return TOWN_WORK_RE.test(k); }).sort(townWorkCmp); if (!rs && !names.length) return;
+    var FP = rs ? [] : townWorkFieldPts(T, fl[q.lot], T.id + ':work:' + q.lot, q.y);   // 田裡的點（工地還沒蓋好 ⇒ 沒有）
+    var names = rs ? [] : Object.keys(m.pts || {}).filter(function (k) { return TOWN_WORK_RE.test(k); }).sort(townWorkCmp); if (!rs && !names.length && !FP.length) return;
     var l = lots[q.lot] || {}, use = rs ? 'build' : l.use || m.use, s = Math.sin(q.th), c = Math.cos(q.th), mpv = m.mpv, hw = m.size[0] * mpv / 2, hd = m.size[1] * mpv / 2;
     function W(v) { var a = (v[0] * mpv - hw) * q.sx, b = v[1] * mpv - hd; return [q.x + a * s - b * c, q.y + (v[2] - 0.5) * mpv, q.z - a * c - b * s]; }   // 模型（格心）→ 世界（腳）：同 townLightBuild 的 W
     var P = rs ? townRiseWorkPts(rs).map(function (p) { var w = W(p.v), t = W(p.to); return { k: p.k, g: p.g, x: w[0], y: w[1], z: w[2], lx: t[0] - w[0], lz: t[2] - w[2] }; })
       : names.map(function (k) { var w = W(m.pts[k]), to = m.pts[k + '-to'], t = to ? W(to) : [q.x, 0, q.z]; return { k: k, g: TOWN_WORK_RE.exec(k)[1], x: w[0], y: w[1], z: w[2], lx: t[0] - w[0], lz: t[2] - w[2] }; });   // lx／lz：面向（沒有 -to ⇒ 朝建築中心）
+    if (FP.length) { var P0 = P; P = []; for (var pi = 0; pi < Math.max(P0.length, FP.length); pi++) { if (pi < FP.length) P.push(FP[pi]); if (pi < P0.length) P.push(P0[pi]); } }   // 田、主建築的點交錯 ⇒ 人少時田裡先有人、主建築也分得到
     var who = townFolkWho(F, { work: use }).filter(function (r) { return F.people[r].age !== 'child'; });
     if (!who.length && TOWN_WORK_GUARD.indexOf(use) >= 0) who = townFolkWho(F, { work: 'garrison' });
     var want = rs ? rs.crew : lw && Object.prototype.hasOwnProperty.call(lw, q.lot) ? Math.max(0, +lw[q.lot] || 0) : Math.ceil(P.length / 2), n = who.length ? Math.min(P.length, want) : 0;
-    blds.push({ lot: q.lot, use: use, k: q.k, pts: P.length, want: want, n: n, src: rs ? 'site' : lw && q.lot in lw ? 'ledger' : 'half', x: +q.x.toFixed(1), y: +P[0].y.toFixed(2), z: +q.z.toFixed(1),
+    blds.push({ lot: q.lot, use: use, k: q.k, pts: P.length, field: FP.length, want: want, n: n, src: rs ? 'site' : lw && q.lot in lw ? 'ledger' : 'half', x: +q.x.toFixed(1), y: +P[0].y.toFixed(2), z: +q.z.toFixed(1),
       yaw: +Math.atan2(s, c).toFixed(4) });                              // yaw：鏡頭站在臨路那一邊往裡看（模型 y 0 ＝ 臨路 ⇒ 世界 (cos th, sin th)；03_camera.js 眼 ＝ 目標 ＋ (cos yaw, sin yaw) × dist）
     if (!n) return;
     var key = T.id + ':work:' + q.lot, off = Math.floor(townHash(key + ':a') * who.length), W0 = [];
@@ -382,6 +413,7 @@ function townWorkAt(a, clock) {
   var L = a.legs, u = ((clock + a.off) % a.per + a.per) % a.per, i = 0;
   while (i < L.length - 1 && L[i].c1 <= u) i++;
   var g = L[i], c0 = i ? L[i - 1].c1 : 0, f = g.c1 > c0 ? Math.min(1, (u - c0) / (g.c1 - c0)) : 0, p = a.P[g.p], q = a.P[g.q];
+  townWorkFieldY(p); townWorkFieldY(q);                                  // 田裡的點：地面載進來之後補高度
   a.x = p.x + (q.x - p.x) * f; a.y = p.y + (q.y - p.y) * f; a.z = p.z + (q.z - p.z) * f;
   a.at = g.p === g.q ? p : null; a.mx = a.at ? 0 : q.x - p.x; a.mz = a.at ? 0 : q.z - p.z;
 }
