@@ -168,4 +168,5 @@ maps/<海域>/towns.js       BSMAP.town({...})                     海域裡的�
 - **這座城現在的樣子**（規劃的 `live`；TASK-0870、0871，2026-10-23）：外面那一頁（Blocksail 地球儀的城鎮帳，`docs/TOWN_SIM.md` §5.3、§5.4）送規劃的那一刻附上 `live: { name, year, gameYear, other, pop, folk }` —— 規劃本身（指紋、快取）不帶它。
   - 城鎮模式上面那一行（`87_townbuild.js twbTitle`、`#twbTown`）：城名、那座城的年份（`other` ⇒ ⏳ 另一個時空，括號裡是遊戲現在幾年）、人口；沒有 `live` ⇒ 只有城名。
   - 鎮民（`63_townfolk.js townFolkTown`）：`folk` ＝ { 人物 id: 權重 }（照那座城的年齡層、男女、職業算好的）⇒ 照它挑誰上街，不再「前幾位每人一位」、不看設定檔的 `child_share`；沒附、全是 0、`?folkpop=0` ⇒ 照舊照設定檔。讀數 `__game.town().towns[i].folk.pick`（`pop`／`cfg`）、`kids`。
+  - 野生動物（`63_townfauna.js townWildKinds`；TASK-0933）：`fauna` ＝ [物種 key…]（地球儀照 Blocksail `world/species.js` 在市中心與範圍四邊外約 1 km 查得到的陸上動物）⇒ 鏡頭附近、城外（不在地塊與路旁邊）的空地照它放幾群；沒附 ⇒ 城外沒有動物（`?wild=a,b` 測試用換成那幾種）。
 - 讀數：`?debug=1` 的 `__game.town([x, z])`：幾座城、每座的實例數與每種模型幾棟、這一格畫了幾個（近／中／貼圖／殼／石基／布旗）、三角形、毫秒；給 `[x, z]` ⇒ 那一點的畫面高度、模擬高度、清不清樹。`__game.town(null, false)` 關掉畫城（量畫一格多少 ms 用）。
