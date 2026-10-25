@@ -84,6 +84,7 @@ function shipPreMove(k, h) {
     SHIPS.forEach(function (sh) { sailShip(sh, h); shipPose(sh); });
     collide(h);
     if (BED) SHIPS.forEach(function (sh) { groundStep(sh, h); });
+    if (BED && TOWNS.list.length) SHIPS.forEach(function (sh) { quayStep(sh, h); });
   }
 }
 
@@ -150,6 +151,7 @@ function simStep() {
   SHIPS.forEach(function (sh) { sailShip(sh, hMv); if (sh.spins) spinStep(sh, DT); stepShip(sh, DT); if (sh.anc) chainStep(sh, DT); if (PF) pfLap('ship'); crewStep(sh); if (PF) pfLap('crew'); });
   collide(hMv);
   if (BED) SHIPS.forEach(function (sh) { groundStep(sh, hMv); });  // 擱淺（32_ground.js；有海圖才有）
+  if (BED && TOWNS.list.length) SHIPS.forEach(function (sh) { quayStep(sh, hMv); });   // 棧橋、海堤的碰撞（32_quay.js；有城才有）
   SHIPS.forEach(function (sh) {                                    // 照 SHIPS 的順序（一對一：我艦先、敵艦後 ⇒ 跟以前同一個順序抽亂數）
     if (sh.i === PLAYER_I) { if (AUTOFIRE) simAi(sh, DT); }            // 自動開砲：我艦也交給電腦瞄準開火
     else if (modeRule('othersAct')) simAi(sh, DT);                // 玩法規則 othersAct（04_modes.js）：沙盒的其他船不還手

@@ -115,7 +115,10 @@ function dockGot(L) {
     }) };
   });
   var T = MODE === 'town' && !DOCK.here && DOCK.towns[TWB.town], me = SHIPS[PLAYER_I];   // 直接從城鎮模式開的（?mode=town&town=）：停在那座城離我艦最近的那一處（出航要它的航道）
-  if (T && me) { var c = shipCenter(me), bd = Infinity; T.docks.forEach(function (d) { var dd = Math.hypot(d.at[0] - c[0], d.at[1] - c[2]); if (dd < bd) { bd = dd; DOCK.here = d; } }); }
+  if (T && me) {
+    var c = shipCenter(me), bd = Infinity; T.docks.forEach(function (d) { var dd = Math.hypot(d.at[0] - c[0], d.at[1] - c[2]); if (dd < bd) { bd = dd; DOCK.here = d; } });
+    if (DOCK.here && bd < MOOR_SNAP && !DOCK.run) moorAt(me, DOCK.here);   // 開場就停在泊位上（地球儀「進入城鎮」）⇒ 繫在那一處（32_quay.js）
+  }
 }
 /** 範圍照重心（多邊形的面積重心；退化 ⇒ 頂點平均）放大 k 倍。 */
 function dockGrow(R, k) {
@@ -215,7 +218,7 @@ function dockPull(sh, dt) {
   sh.px += ex * g; sh.pz += ez * g;                                     // 照船的中心拉（停靠處的 at 是船的中心）
   var dyw = Math.atan2(Math.sin(ty - sh.yaw), Math.cos(ty - sh.yaw)); sh.yaw += dyw * g; sh.yawRate = 0;
   sh.spd = R.left > 0 ? v : 0; sh.vel = mul(fwd(sh.yaw), sh.spd); R.k = k;
-  if (R.left <= 0 && Math.hypot(ex, ez) < 1 && Math.abs(dyw) < 0.02) dockStop('停好了');
+  if (R.left <= 0 && Math.hypot(ex, ez) < 1 && Math.abs(dyw) < 0.02) { dockStop('停好了'); moorAt(sh, R.d); }   // 停好了 ⇒ 繫在停靠處（32_quay.js；以前只剩兩錨，繞錨漂到棧橋外）
 }
 /** 停掉自動開（why ⇒ 說一聲）。 */
 function dockStop(why) {
@@ -269,7 +272,7 @@ function dockTick() {
     else if (R.kind === 'out' && R.k === R.pts.length - 1 && left <= DOCK_PASS) dockStop('出了航道：交還操舵');
     return;
   }
-  if (R.phase === 'turn' && anchorHeld(me) && Math.abs(me.spd) < 0.6 && (!dockPivot(me) || SIMT - R.tTurn > DOCK_TURN_T)) dockStop('停好了');   // 已經是城鎮模式（按停靠就換了）⇒ 錨照 stopOwn 留著
+  if (R.phase === 'turn' && anchorHeld(me) && Math.abs(me.spd) < 0.6 && (!dockPivot(me) || SIMT - R.tTurn > DOCK_TURN_T)) { dockStop('停好了'); me.moor = { x: null }; }   // 已經是城鎮模式（按停靠就換了）⇒ 錨照 stopOwn 留著；繫在停好的那一點（32_quay.js moorPull 第一步照當下記）
 }
 /** 下排的 🏘／⛵ 那一顆、快捷鍵（66_keys.js dock）：航海 ⇒ 停靠（自動開中 ⇒ 取消）；城鎮 ⇒ 出航。 */
 function dockAct() {

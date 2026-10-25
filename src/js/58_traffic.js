@@ -50,6 +50,7 @@ function trafficDock(sh, on) {
   sh.npc.dock = on; anchorToggle(sh, 'P', on); anchorToggle(sh, 'S', on);
   if (hasSails(sh)) { sh.sailSet = on ? 0 : 2; applySailSet(sh); }   // 直接設（⛔ setSails 會廣播「帆裝：…」）
   if (on) sh.spd = 0;
+  sh.moor = on ? { x: null } : null;                                    // 繫在停下來的那一點（32_quay.js moorPull 第一步照當下記）⇒ 風、水流推不走；出港放開
 }
 /** 艦長（31_sailing.js）：往來的船照航點開 ⇒ { yaw, v } ｜ null（停港：錨咬著）。fwd(yaw) ＝ [cos, 0, −sin] ⇒ 往 (dx, dz) ＝ atan2(−dz, dx)。
  *  有 path ⇒ 沿航道：期望航速 'cruise'（戰鬥帆）；目標往逆風那一側 ⇒ helmIrons 照舊搶風、方位換邊就換舷（之字形）。 */

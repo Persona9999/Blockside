@@ -202,6 +202,7 @@ function sailShip(sh, dt) {
   sh.px += sh.vel[0] * dt; sh.pz += sh.vel[2] * dt;
   if (dockOn(sh)) dockPull(sh, dt);                                     // 停靠的過場（88_modeswitch.js）：物理照跑、強彈簧拉回畫好的航線
   if (sh.anc) anchorStep(sh, dt, px0, pz0);                          // 錨咬著 ⇒ 錨鏈孔拉回鍊長以內、船繞錨鏈孔轉（76_anchor.js）
+  if (sh.moor) moorPull(sh, dt);                                       // 繫在泊位上（32_quay.js；停好的我艦、停港的往來船）：拉回停的那一點，風、水流推不走
   shipWake(sh);                                                       // 航跡（52_fleet.js；戰列跟隨照它走）
   // 航跡：船尾留一條白沫、船頭兩側推出的浪（點精靈，不撞任何東西）；船邊水花開著 ⇒ 換成 13_water.js 的（這裡照樣抽亂數、不放進去）
   if ((sh.wakeT -= dt) <= 0 && sh.spd > 0.4 && sh.sink < 6) {
