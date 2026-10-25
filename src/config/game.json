@@ -1316,6 +1316,36 @@
         "quartermaster": 0
       },
       "town": "carib-fort"
+    },
+    {
+      "id": "pinas",
+      "el": "ship-pinas",
+      "name": "藍鯊號",
+      "vxk": "pinas.vxk",
+      "work": "gura-pinas-01m-assembly",
+      "geo": {"spar": [61, 103], "marines": [55, 130], "center": 75, "aim": 55, "aimZ": [25, 400], "deckAim": [46, 76], "rigAim": [130, 380]},
+      "crew": {"marines": 6, "top": 1},
+      "names": ["藍鯊號"],
+      "author": "gura",
+      "idNext": {
+        "anchor": 3,
+        "binnacle": 2,
+        "boat": 2,
+        "capstan": 2,
+        "deck": 7,
+        "gun": 25,
+        "ladders": 6,
+        "light": 2,
+        "magazine": 2,
+        "part": 13,
+        "portlid": 23,
+        "powder": 33,
+        "rudder": 2,
+        "ship": 2,
+        "wheel": 2,
+        "wheel_stand": 2,
+        "yard": 11
+      }
     }
   ],
   "furniture": {
