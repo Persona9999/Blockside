@@ -33,6 +33,7 @@ function magNear(foe) {
 }
 /** 每個模式的局勢分數（0 ＝ 打了沒用）。 */
 function aimValue(foe, mode) {
+  if (foe.fixed && (mode === 'water' || mode === 'mag')) return 0;     // 堡壘、砲台（TASK-0954）：不進水、彈藥庫埋在土台裡 ⇒ 打牆（砲甲板）與人
   if (mode === 'water') return 0.6 + 2.4 * clamp(foe.lift / 1.2, 0, 1) + 0.4 * clamp(foe.sink / 4, 0, 1);
   if (mode === 'hull') return 0.2 + 0.8 * (foe.gunsManned || 0) / Math.max(1, foe.guns.length);
   if (mode === 'rig') return (foe.mastsUp || 0) / Math.max(1, foe.masts.length) * foe.sailFrac;   // 照那艘有幾根桅（夜隼號 2）

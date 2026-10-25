@@ -87,7 +87,7 @@ var QUAY_FINGER = { boat: 10, small: 28 };                             // 指形
 var QUAY_NAME = { quay: '碼頭石岸', mole: '石堤', wharf: '長碼頭', wlot: '水上建築的平台', apron: '泊位的平台', finger: '指形棧橋' };
 /** 每一步（50_sim.js，擱淺之後；dt：這一小步幾秒）：上面說明的碰撞。 */
 function quayStep(sh, dt) {
-  if (!BED || !TOWNS.list.length || sh.sunk || sh.moor || dockOn(sh)) return;
+  if (!BED || !TOWNS.list.length || sh.sunk || sh.fixed || sh.moor || dockOn(sh)) return;
   var T = sh.T, M = sh.M, o = M4.pt(M, 0, 0, 0), ex = M4.pt(M, 1, 0, 0), vs = Math.hypot(ex[0] - o[0], ex[1] - o[1], ex[2] - o[2]), H = quayHull(T, vs);
   var c = sh.center || shipCenter(sh), reach = (T.wl1 - T.wl0) * vs / 2 + 30, best = 0, bn = null, bp = null, bk = '';
   for (var t = 0; t < TOWNS.list.length; t++) {

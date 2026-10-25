@@ -27,7 +27,7 @@ function groundKeel(T) {
   return (T.keel = out);
 }
 function groundStep(sh, dt) {                                           // dt：這一次代表幾秒（TASK-0797：船的移動切小步時一小步判一次；沒給 ＝ DT）
-  if (!BED || sh.sunk) return;
+  if (!BED || sh.sunk || sh.fixed) return;                              // 堡壘（TASK-0954）站在地上：不擱淺
   dt = dt || DT;
   var K = groundKeel(sh.T), best = 0, bp = null, low = Infinity;
   for (var k = 0; k < K.length; k++) {

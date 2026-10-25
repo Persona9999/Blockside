@@ -59,7 +59,7 @@ function spkOpen(o) {
 function spkClose(picked) { $('spk').classList.remove('on'); if (SPK.onClose) SPK.onClose(picked || null); }
 /** 篩選那三排＋搜尋（每次打開重畫：船隊裡有哪幾種動力照卡片算）。 */
 function spkFilters() {
-  var have = {}; HULL_LIST.forEach(function (h) { var c = SHIP_CARDS[h.id]; if (c) have[c.drive] = 1; });
+  var have = {}; HULL_SHIPS.forEach(function (h) { var c = SHIP_CARDS[h.id]; if (c) have[c.drive] = 1; });
   function row(k, name, opts) {
     return '<div class="spkR" data-k="' + k + '"><span>' + name + '</span>' + [['', '全部']].concat(opts).map(function (o) { return '<button data-v="' + o[0] + '">' + o[1] + '</button>'; }).join('') + '</div>';
   }
@@ -77,12 +77,12 @@ function spkFilters() {
 /** 卡片（照篩選）＋篩選鈕的亮燈。 */
 function spkShow() {
   [].forEach.call($('spkF').querySelectorAll('.spkR[data-k]'), function (r) { [].forEach.call(r.querySelectorAll('button'), function (b) { b.className = b.dataset.v === SPK.f[r.dataset.k] ? 'on' : ''; }); });
-  var cur = SPK.cur, L = HULL_LIST.filter(spkMatch), dn = {}, F = SPK.f;
+  var cur = SPK.cur, L = HULL_SHIPS.filter(spkMatch), dn = {}, F = SPK.f;
   SPK_DRIVE.forEach(function (d) { dn[d[0]] = d; });
   var used = [F.drive && dn[F.drive] && dn[F.drive][2], F.tons && SPK_SHORT.tons[F.tons], F.fire && SPK_SHORT.fire[F.fire]].filter(Boolean);
   $('spkF').classList.toggle('open', SPK.open);
   var ft = $('spkFT'); ft.textContent = '篩選' + (used.length ? '・' + used.length : '') + (SPK.open ? ' ▴' : ' ▾'); ft.className = used.length ? 'on' : ''; ft.setAttribute('aria-expanded', SPK.open ? 'true' : 'false');
-  $('spkN').textContent = '顯示 ' + L.length + '／' + HULL_LIST.length + ' 艘' + (used.length ? '（' + used.join('・') + '）' : '') + (L.length ? '' : ' —— 沒有符合的船，換一個篩選') + '・航速：' + (PLAY === 'fun' ? '娛樂' : '寫實') + '、標準風、滿帆';
+  $('spkN').textContent = '顯示 ' + L.length + '／' + HULL_SHIPS.length + ' 艘' + (used.length ? '（' + used.join('・') + '）' : '') + (L.length ? '' : ' —— 沒有符合的船，換一個篩選') + '・航速：' + (PLAY === 'fun' ? '娛樂' : '寫實') + '、標準風、滿帆';
   $('spkN').title = '航速照現在的船隻設定與玩法算（標準風、滿帆）';
   $('spkG').innerHTML = L.map(function (h) {
     var c = SHIP_CARDS[h.id], d = c && dn[c.drive];

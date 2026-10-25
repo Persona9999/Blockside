@@ -71,6 +71,11 @@ function sinkFinalAt(sh) { return sinkLineT(sh.T); }
 /** 沉沒的線：開始沉之後再沉 4.8 m（以前 4.2 ⇒ 9 m；高的船照樣多 4.8 m，⛔ 照舊 9 m ⇒ tridente 8 m 開始沉、1 m 後就算沉沒）。 */
 function sinkGoneAt(sh) { return sinkFinalAt(sh) + (9 - SINK_FINAL); }
 function stepShip(sh, dt) {
+  if (sh.fixed) { sh.wl = sh.gy || 0; sh.bob = 0; } else stepFloat(sh, dt);   // 堡壘、砲台（TASK-0954）：站在地上（gy ＝ 地面高；實驗場 0 ＝ 海面）—— 不進水、不沉、不搖、不浮
+  stepPose(sh, dt);
+}
+/** 浮在水上的那一段：進水、下沉、傾斜、浪、減重上浮。 */
+function stepFloat(sh, dt) {
   // 進水：水線下每個破洞的流量 ∝ √(水深)（貼著水面的洞進得慢）；抽水機每秒抽掉一點 ⇒ 小洞撐得住
   var wz = Math.min(sh.T.sz - 1, Math.floor(sh.T.zw + (sh.sink - sh.lift - sh.bob) / S)), N = 0, Q = 0, Dsp = 0, Dbs = 0;
   for (var z = 0; z <= wz; z++) { var c = sh.flood[z * 3]; if (!c) continue; N += c; Q += c * Math.sqrt((wz - z) * S + 0.05); Dsp += sh.flood[z * 3 + 1]; Dbs += sh.flood[z * 3 + 2]; }
@@ -105,6 +110,9 @@ function stepShip(sh, dt) {
   sh.pitchA += (pitchT - sh.pitchA) * (vxP ? VX_TIP_RATE : 0.3) * dt;          // 大漩渦：那一頭跟著拖下去的深度走（每秒追 VX_TIP_RATE；⛔ 照平常的 0.3 ⇒ 落後 3 秒，拉下去的感覺出不來）
   stepWaves(sh, dt);                                                            // 浪：起伏、縱搖、橫搖（08_sea.js；以前是兩條固定的正弦）
   sh.lift += (sh.liftT - sh.lift) * Math.min(1, dt / LIFT_TAU);                    // 減重上浮：慢慢浮上去（目標每半秒在 survey 量一次）
+}
+/** 矩陣、砲班、裝填（浮的、固定的都走）。 */
+function stepPose(sh, dt) {
   sh.Mp = sh.Mpre || sh.M || null; sh.Mpre = null; sh.yawP = sh.yawL === undefined ? sh.yaw : sh.yawL; sh.yawL = sh.yaw;   // 上一步的（畫面內插用，03_camera.js renderLerp）；Mpre：這一步的移動切了小步（50_sim.js shipPreMove）⇒ 上一步結束時那一個
   sh.M = M4.mul(shipMatrix(sh), M4.ident()); sh.inv = M4.inv(sh.M);
   sh.center = shipCenter(sh); sh.rad2 = Math.pow(Math.max(62, (sh.T.radFlags || 0) + 2), 2);   // 陣營旗在桅頂上方的旗桿上（77_colours.js）⇒ 62 m 搆不到（⛔ 以前一發都打不到）；沒有陣營旗 ⇒ 照舊 62
@@ -181,10 +189,10 @@ function svRest(sh, sv0) {
   });
   if (DEBUG) { sv1 = performance.now(); SV_PROF.cf += sv1 - sv0; sv0 = sv1; }
   if (sh.mass0 === undefined) sh.mass0 = shipT(sh);                               // 開戰時的重量（壓艙物、砲的重量照開戰時的設定）
-  if (!sh.broken && !sh.sinkingFinal && !sh.sunk) sh.liftT = liftFor(sh.T, sh.T.disp - sh.mass0 + massLost(sh)) || 0;   // 斷了、開始沉 ⇒ 不再往上浮
+  if (!sh.fixed && !sh.broken && !sh.sinkingFinal && !sh.sunk) sh.liftT = liftFor(sh.T, sh.T.disp - sh.mass0 + massLost(sh)) || 0;   // 斷了、開始沉 ⇒ 不再往上浮
   if (!sh.liftSet) { sh.lift = sh.liftT; sh.liftSet = true; }                    // 開戰那一刻直接放在浮的位置（不從設計水線慢慢浮過去）
   if (sh.fl) sh.flBase = sh.T.disp - sh.mass0 + massLost(sh);                     // 粒子模式：浮力表上水以外的部分（33_flood.js floodSinkT）
-  driveSurvey(sh);                                                    // 動力：實際質量（含進水）、引擎／魔力的完好度（31_drive.js）
+  if (!sh.fixed) driveSurvey(sh);                                     // 動力：實際質量（含進水）、引擎／魔力的完好度（31_drive.js）
   drownCheck(sh);                                                     // 船殼通海了 ⇒ 被水淹過頭的人浮上來（43_swim.js）
   chooseSide(sh); reassign(sh); manning(sh); gunIdle(sh); medTick(sh); pumpTick(sh); if (sh.burn) burnTick(sh); if (sh.galley) galleyTick(sh); effTick(sh); if (sh.duty) dutyTick(sh); callHands(sh); carpTick(sh); smTick(sh);   // burnTick：每個火場要幾個人救火（49_burn.js）；galleyTick：做飯、伙夫在路上的（45_galley.js）、effTick：每個人的工作效率（39_eff.js；TASK-0720）；pumpTick：抽水機要幾個人、現在抽多少（45_pumps.js）；medTick：醫療艙治療（44_medic.js）；callHands：預備水手補位（42_hands.js）
   sh.able = sh.crew.filter(crewAble).length;
@@ -201,10 +209,11 @@ function strikeCheck(sh) {
   var why = null;
   if (sh.able === 0) why = '全員倒下';
   else if (cas >= STRIKE.cas) why = '降旗（' + pc + '）';
-  else if (STRIKE.guns && sh.silentT >= 0 && SIMT - sh.silentT >= 10) why = '降旗（砲全啞 10 秒）';
-  else if (STRIKE.masts && sh.mastsUp === 0 && cas >= 0.33) why = '降旗（桅全倒、' + pc + '）';
+  else if ((STRIKE.guns || sh.fixed) && sh.silentT >= 0 && SIMT - sh.silentT >= 10) why = sh.fixed ? '失守（砲全啞 10 秒）' : '降旗（砲全啞 10 秒）';   // 堡壘（TASK-0954）沉不了 ⇒ 砲全啞就失守，不看選單的降旗規則（⛔ 照規則 ⇒ 預設「不降旗」時要打到最後一個人倒下，躲在營房裡的那一個永遠打不到）
+  else if (STRIKE.masts && !sh.fixed && sh.mastsUp === 0 && cas >= 0.33) why = '降旗（桅全倒、' + pc + '）';
   else if (STRIKE.officers && cas >= 0.25 && !sh.crew.some(function (c) { return c.role === ROLE.OFFICER && crewAble(c); })) why = '降旗（軍官全倒、' + pc + '）';
   if (!why) return;
+  if (sh.fixed) why = why.replace('降旗', '失守');                       // 堡壘不降旗、是失守
   sh.struck = true; sh.fate = why; note(sh, why, true); strikeColors(sh);
 }
 /** 選單與結算畫面用的一句話：現在的降旗規則。 */

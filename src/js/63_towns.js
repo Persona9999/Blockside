@@ -728,7 +728,9 @@ function townLotInst(T, K, l) {
   //   模型的棧橋面在 z ＝ deckz ⇒ 往下放（護舷、梯子伸到水裡）；不墊石基（底下是水，船停的地方）
   var bt = l.berth && m.edge != null, off = (l.d - md) / 2 - (bt ? Math.max(0, l.berth.over - TOWN_BERTH_STRIP - m.edge) : 0), e = T.E([l.at[0] + off * Math.cos(th), l.at[1] + off * Math.sin(th)]);
   var lk = Math.max(1, Math.min(TOWN_LM[1], Math.max(mw, md, m.top) / TOWN_LM[0]));
-  return { k: nm, x: e[0] - BED.ax, y: l.h - (bt ? m.deckz || 0 : 0), z: e[1] - BED.az, th: th, sx: 1, sh: 0.92 + 0.16 * townHash(l.id + '#'), r: Math.hypot(mw, md) / 2 + 2, top: m.top, pl: bt ? null : [mw, md], foot: mw * md * m.cover, col: m.roof, lot: l.id, lk: lk };
+  //   水上版的模型（Blocksail TASK-0963 漁場：棧橋尾端的小船、下水梯伸到平台面以下）同泊位建築：模型的平台面在 z ＝ deckz ⇒ 往下放；底下是水 ⇒ 不墊石基（nb）
+  var wm = !!(l.water && m.water != null);
+  return { k: nm, x: e[0] - BED.ax, y: l.h - (bt || wm ? m.deckz || 0 : 0), nb: wm, z: e[1] - BED.az, th: th, sx: 1, sh: 0.92 + 0.16 * townHash(l.id + '#'), r: Math.hypot(mw, md) / 2 + 2, top: m.top, pl: bt ? null : [mw, md], foot: mw * md * m.cover, col: m.roof, lot: l.id, lk: lk };
 }
 /** 一條城牆 ⇒ 門、塔、轉角、收尾照位置，中間的斷面沿路線接成一條斜接的折線（照 w.kit 挑那一套；BUILDING_SPEC §6）。
  *  t ＝ 從起點沿路線量的長度（閉合的牆繞回來）；部件佔掉 [t0, t1]，兩頭的接口 p0、p1 ＝ 中心 ∓ 半長·軸（軸 ＝ 路線上兩個接口那兩點的弦 ⇒ 擺在頂點上就是角平分）。 */
@@ -1604,20 +1606,27 @@ function townGroundTile(T, Q) {
   // 水上建築（Blocksail TASK-0899 world/town.js WATER；地塊帶 water: { d0, deck, slip? }、h ＝ 平台面）：木板平台（面 ＝ h、厚 0.4 m）＋樁（每 TOWN_WPILE m 一根、伸到底下的海床再 0.5 m）；
   //   船台那一條（背面往回 slip.len、寬 slip.w）不鋪板也不立樁 —— 模型的船台從那裡斜進水裡；地面比板底高的那幾點不立樁（以內那一段有陸地）；
   //   模型照舊站在 h（Blocksail 不給水上地塊整地 ⇒ 海床不動、水照樣畫在平台底下）；地形還沒到 ⇒ 樁伸到 −(water.d0 以外的最深) 那一點量不到 ⇒ 到 −4 m
+  //   窄棧橋（Blocksail TASK-0963 water.jetty { len, w }：漁場）：背面往回 jetty.len 那一段只鋪中間 jetty.w、樁只立在那一條的兩緣（每 TOWN_WPILE m 一對）、兩旁是水
   (Q.wlot || []).forEach(function (l) {
-    var th = l.rot * Math.PI / 180, cs = Math.cos(th), sn = Math.sin(th), top = l.h, sl = l.water.slip, sw = sl ? sl.w / 2 : 0, sL = sl ? sl.len : 0;
+    var th = l.rot * Math.PI / 180, cs = Math.cos(th), sn = Math.sin(th), top = l.h, sl = l.water.slip, sw = sl ? sl.w / 2 : 0, sL = sl ? sl.len : 0, jt = l.water.jetty, jw = jt ? jt.w / 2 : 0, jL = jt ? jt.len : 0;
     function pt(a, b) { return [l.at[0] + cs * a - sn * b, l.at[1] + sn * a + cs * b]; }   // 地塊座標 a（沿 rot，正面 ＋d/2）、b（橫）⇒ 規劃平面
     function deck(a0, a1, b0, b1) { if (a1 - a0 < 0.05 || b1 - b0 < 0.05) return; var bc = (b0 + b1) / 2; slab([pt(a0, bc), pt(a1, bc)], b1 - b0, top, top - 0.4, TOWN_COL.pier); }
-    if (!sl) deck(-l.d / 2, l.d / 2, -l.w / 2, l.w / 2);
-    else { deck(-l.d / 2 + sL, l.d / 2, -l.w / 2, l.w / 2); deck(-l.d / 2, -l.d / 2 + sL, -l.w / 2, -sw); deck(-l.d / 2, -l.d / 2 + sL, sw, l.w / 2); }
     var r = 0.2;
-    for (var a = -l.d / 2 + 0.5; a <= l.d / 2 - 0.5 + 1e-6; a += TOWN_WPILE) for (var b = -l.w / 2 + 0.5; b <= l.w / 2 - 0.5 + 1e-6; b += TOWN_WPILE) {
-      if (sl && a < -l.d / 2 + sL && Math.abs(b) < sw + r) continue;
-      var c = W(pt(a, b)), gy = hgt(c[0], c[1]); if (gy === gy && gy > top - 0.5) continue;
+    function pile(a, b) {
+      var c = W(pt(a, b)), gy = hgt(c[0], c[1]); if (gy === gy && gy > top - 0.5) return;
       var bot = gy === gy ? gy - 0.5 : -4, base = V.length / 9;
       [[-r, -r], [r, -r], [r, r], [-r, r]].forEach(function (o) { vtx(c[0] + o[0], top - 0.4, c[1] + o[1], TOWN_COL.post, o[0] / r, 0, o[1] / r); vtx(c[0] + o[0], bot, c[1] + o[1], TOWN_COL.post, o[0] / r, 0, o[1] / r); });
       for (var e = 0; e < 4; e++) { var i0 = base + e * 2, i1 = base + ((e + 1) % 4) * 2; I.push(i0, i1, i1 + 1, i0, i1 + 1, i0 + 1); }
     }
+    if (jt) deck(-l.d / 2 + jL, l.d / 2, -l.w / 2, l.w / 2), deck(-l.d / 2, -l.d / 2 + jL, -jw, jw);
+    else if (!sl) deck(-l.d / 2, l.d / 2, -l.w / 2, l.w / 2);
+    else { deck(-l.d / 2 + sL, l.d / 2, -l.w / 2, l.w / 2); deck(-l.d / 2, -l.d / 2 + sL, -l.w / 2, -sw); deck(-l.d / 2, -l.d / 2 + sL, sw, l.w / 2); }
+    for (var a = -l.d / 2 + 0.5; a <= l.d / 2 - 0.5 + 1e-6; a += TOWN_WPILE) for (var b = -l.w / 2 + 0.5; b <= l.w / 2 - 0.5 + 1e-6; b += TOWN_WPILE) {
+      if (sl && a < -l.d / 2 + sL && Math.abs(b) < sw + r) continue;
+      if (jt && a < -l.d / 2 + jL) continue;                           // 窄棧橋那一段另外立（下面）
+      pile(a, b);
+    }
+    if (jt) for (var aj = -l.d / 2 + 0.5; aj < -l.d / 2 + jL; aj += TOWN_WPILE) { pile(aj, -jw + r + 0.05); pile(aj, jw - r - 0.05); }
   });
   Q.deps = deps;
   if (!I.length) return null;
@@ -1977,8 +1986,8 @@ function townBin(PL, eye) {
       var cy = q.y + q.top / 2, r = q.r + q.top / 2;
       for (var i = 0; i < 6; i++) { var p = PL[i]; if (p[0] * q.x + p[1] * cy + p[2] * q.z + p[3] < -r - TOWN_SH_PAD) return; }   // 視錐外 TOWN_SH_PAD 公尺內的也放進來：影子落進畫面的那幾棟（陰影照主畫面這一組畫）
       var mi = K.M[q.k].i, on0 = d < L0 + B0, on1 = d > L0 - B0 && d < L1 + B1, on2 = d > L1 - B1;
-      var rh = townRiseHides(T, q);                                     // 工地上的那一棟（63_townrise.js 自己畫：帳上的工地、演出）：格子、貼圖不畫，石基照進度（townRisePlinth）
-      if (rh) { if ((on0 || on1) && q.pl && townRisePlinth(rh)) { if (!q.pb) q.pb = townPlinth(q); if (q.pb) { npl++; vis.push(q, d, false, false, false, true); } } return; }
+      var rh = townRiseHides(T, q) || (q.lot && TOWN_UNITS[T.id + ':' + q.lot] ? { unit: true } : null);   // 換成戰鬥單位的那一棟（townFortWake）：模型不畫、石基照畫                                     // 工地上的那一棟（63_townrise.js 自己畫：帳上的工地、演出）：格子、貼圖不畫，石基照進度（townRisePlinth）
+      if (rh) { if ((on0 || on1) && q.pl && (rh.unit || townRisePlinth(rh))) { if (!q.pb) q.pb = townPlinth(q); if (q.pb) { npl++; vis.push(q, d, false, false, false, true); } } return; }
       if (q.lk > 1) nlm++;
       if (on0) cnt[0][mi]++; if (on1) cnt[1][mi]++; if (on2) nbb++;
       if ((on0 || on1) && q.pl) { if (!q.pb) q.pb = townPlinth(q); if (q.pb) npl++; }
@@ -2009,6 +2018,7 @@ function townBin(PL, eye) {
 }
 /** 石基：地塊頂（h，略低 1 cm 不跟一樓的底面打架）往下到四角與中心最低的地面再 0.3 m；地面沒載 ⇒ null（下次分組再試）。 */
 function townPlinth(q) {
+  if (q.nb) return null;                                                // 水上版的模型（townLotInst nb）：底下是平台與樁
   var s = Math.sin(q.th), c = Math.cos(q.th), w = q.pl[0] / 2, d = q.pl[1] / 2, lo = Infinity;
   [[0, 0], [-w, -d], [w, -d], [w, d], [-w, d]].forEach(function (o) { var gy = townGround(q.x + o[0] * s - o[1] * c, q.z - o[0] * c - o[1] * s); lo = Math.min(lo, gy); });
   if (!(lo === lo) || lo === Infinity) return null;
@@ -2210,7 +2220,7 @@ function townHitAt(cx, cy, tMax) {
   var R = townRayOf(cx, cy), o = R[0], d = R[1], lim = tMax == null ? 3000 : tMax, best = null;
   TOWNS.list.forEach(function (T) {
     (T.inst || []).forEach(function (q) {
-      if (!q.lot || !q.pl) return;
+      if (!q.lot || !q.pl || TOWN_UNITS[T.id + ':' + q.lot]) return;   // 換成戰鬥單位的那一棟（townFortWake）：點的是那一艘（71_input.js inPick 先射船）
       var c = Math.cos(q.th), s = Math.sin(q.th), ox = o[0] - q.x, oz = o[2] - q.z;   // 模型自己的軸：進深沿 th（地塊 rot：臨路那一邊，townLotInst）、寬垂直它
       var O = [ox * c + oz * s, -ox * s + oz * c, o[1]], V = [d[0] * c + d[2] * s, -d[0] * s + d[2] * c, d[1]];
       var lo = [-q.pl[1] / 2, -q.pl[0] / 2, q.y], hi = [q.pl[1] / 2, q.pl[0] / 2, q.y + q.top * q.sh], t0 = 0, t1 = Math.min(lim, best ? best.t : lim);
@@ -2229,6 +2239,38 @@ function townHitAt(cx, cy, tMax) {
 function townLotName(T, l, m) {
   var mn = m && m.name ? m.name : null, ln = l && l.name ? String(l.name).replace('(', '（').split('（')[0].trim() : null;
   return ln ? ln + (mn && mn !== ln ? '（' + mn + '）' : '') : mn || (l ? l.use : '?');
+}
+// ── 城裡的堡壘變成戰鬥單位（TASK-0955；Tim 2026-10-26「可以讓堡壘可以被瞄準嗎(我在和平港點堡壘沒反應)」「對堡壘開火就進入敵對狀態」「我是在航海模式」）──
+//   航海時點到一棟城鎮模型是 ships[].town 的那一種（carib-fort ⇒ fort_carib、en-fort ⇒ fort_en）⇒ 載那一座（loadHull）、放在那一棟的位置、這一棟的模型不畫（石基照畫）。
+//   先中立（玩家那一隊、sh.calm；50_sim.js 不動手）⇒ 開火或打中它 ⇒ 敵對（52_fleet.js fortProvoke）。TOWN_UNITS[城 id:地塊 id] ＝ 那一艘（城重建實例也認得）。
+//   擺法：城鎮模型 世界 ＝ (x + a·sinθ − b·cosθ, y + z·mpv, z − a·cosθ − b·sinθ)，a ＝ x·mpv − 半寬、b ＝ y·mpv − 半深（townFlags 的 W）；
+//   船 世界 ＝ (px + u·cosψ + w·sinψ, gy + S·(z − zw), pz − u·sinψ + w·cosψ)，u ＝ S·(x − cx)、w ＝ S·(y − cy)（10_ship.js shipBaseMatrix 是鏡射）⇒ 兩邊手性差一個鏡射。
+//   ⇒ 照 x 鏡射對齊（模型的 x 前後顛倒、y 不動）：ψ ＝ atan2(−cosθ, −sinθ)、e ＝ S·cx − 半寬、px ＝ x − e·sinθ、pz ＝ z + e·cosθ、gy ＝ y + S·zw。
+//   ⚠ 所以換上來的那一座跟城裡畫的那一棟前後顛倒（營房、火藥庫換邊；照 y 中線對稱的不變）—— 兩份資料的手性哪一份對要另外查（城鎮模型 vs 雕刻作品）。
+var TOWN_UNITS = {}, TOWN_FORT = null;
+function townFortHull(nm) { if (!TOWN_FORT) { TOWN_FORT = {}; HULL_LIST.forEach(function (h) { if (h.town) TOWN_FORT[h.town] = h.id; }); } return TOWN_FORT[nm] || null; }
+/** h ＝ townHitAt 的回覆。是堡壘 ⇒ 開始換（回 true：這一下點到東西了）；不是 ⇒ false。 */
+function townFortWake(h) {
+  var me = SHIPS[PLAYER_I], q = h && h.q, id = q && townFortHull(q.k), key = h && h.T.id + ':' + q.lot;
+  if (!id || !me || !modeRule('battleKeys') || modeRule('town')) return false;
+  if (TOWN_UNITS[key]) return false;
+  if (q.waking) return true;
+  if (SHIPS.length >= MAX_SHIPS) { note(me, h.name + '：場上已經 ' + SHIPS.length + ' 艘，堡壘進不來（上限 ' + MAX_SHIPS + '）'); return true; }
+  q.waking = true; note(me, h.name + '：載入中…');
+  loadHull(id).then(function (T) {
+    q.waking = false;
+    if (TOWN_UNITS[key] || SHIPS.indexOf(me) < 0) return;
+    var m = TOWNS.kit && TOWNS.kit.M[q.k] && TOWNS.kit.M[q.k].m;
+    if (!m || m.size[0] !== T.h.size[0] || m.size[1] !== T.h.size[1] || Math.abs(m.mpv - S) > 1e-9) { note(me, h.name + '：城鎮模型跟戰鬥用的那一座大小不一樣，不換（' + (m ? m.size.join('×') : '?') + ' vs ' + T.h.size.join('×') + '）'); return; }
+    var s = Math.sin(q.th), c = Math.cos(q.th), e = S * T.cx - m.size[0] * m.mpv / 2;
+    var sh = makeShip(SHIPS.length, me.team, Math.atan2(-c, -s), q.z + e * c, T, q.x - e * s);
+    sh.gy = q.y + S * T.zw; sh.calm = true; sh.townKey = key; sh.name = h.name;
+    TOWN_UNITS[key] = sh;
+    SHIPS.push(sh); coreSpawned(sh, null); stepShip(sh, 0); survey(sh); pickCaptain(sh); cmdTick(); pickFoes();
+    setAim(me, [T.cx, T.cy, T.geo.aim], sh); me.pMode = AIM_P = 'free';
+    note(me, '瞄準 ' + sh.name + ' —— 中立；開火就是對它宣戰');
+  }, function (err) { q.waking = false; note(me, h.name + '：載入失敗（' + (err && err.message || err) + '）'); });
+  return true;
 }
 /** 建築模式選單裡的用途（87_townbuild.js twbMenuSet）：要的模型變多 ⇒ 重解一次模型組（同 townReplace）。 */
 function townWantSet(uses) {

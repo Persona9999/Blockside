@@ -26,12 +26,12 @@ function flabInit() {
   ['rig', 'debris', 'fx', 'water', 'sinkflood', 'sailhit'].forEach(function (k) { PHX[k] = 0; }); PHX.rigfar = 0; setPhys(false);
   SAIL = 'auto'; muted = true;
   var hs = flabEl('flabHB'), hr = flabEl('flabHR');
-  HULL_LIST.forEach(function (h) { [hs, hr].forEach(function (s) { var o = document.createElement('option'); o.value = h.id; o.textContent = h.name; s.appendChild(o); }); });
+  HULL_SHIPS.forEach(function (h) { [hs, hr].forEach(function (s) { var o = document.createElement('option'); o.value = h.id; o.textContent = h.name; s.appendChild(o); }); });
   [flabEl('flabCB'), flabEl('flabCR')].forEach(function (s) { CMD_STRATS.forEach(function (k) { var o = document.createElement('option'); o.value = k; o.textContent = CMD_NAMES[k]; s.appendChild(o); }); });
   FLAB_HZ.forEach(function (h) { var o = document.createElement('option'); o.value = h; o.textContent = h + ' Hz'; flabEl('flabHz').appendChild(o); });
   function q(k, d) { return Q.has(k) ? Q.get(k) : d; }
   flabEl('flabNB').value = q('nb', 4); flabEl('flabNR').value = q('nr', 4);
-  hs.value = q('hb', HULL_LIST[0].id); hr.value = q('hr', HULL_LIST[0].id);
+  hs.value = q('hb', HULL_SHIPS[0].id); hr.value = q('hr', HULL_SHIPS[0].id);
   flabEl('flabCB').value = q('cb', 'line'); flabEl('flabCR').value = q('cr', 'pair');
   flabEl('flabGB').checked = q('gb', '0') === '1'; flabEl('flabGR').checked = q('gr', '0') === '1';
   flabEl('flabDist').value = q('dist', 800); flabEl('flabWdir').value = q('wdir', ''); flabEl('flabWspd').value = q('wspd', ''); flabEl('flabCdir').value = q('cdir', ''); flabEl('flabCkn').value = q('ckn', '');

@@ -1,6 +1,7 @@
 var SURVEY_PH = 7;                                                  // 定期檢查的相位：第 i 艘在第 (i × 7) mod 30 步量（TASK-0673；7 跟 30 互質 ⇒ 30 艘以內不重複）
 // ───────────────────────── 電腦 ─────────────────────────
 function simAi(sh, dt) {
+  if (sh.calm) return;                                              // 城裡中立的堡壘（52_fleet.js fortProvoke）：沒人對它開火之前不動手
   var foe = foeOf(sh);                                              // 自己的目標（52_fleet.js；一對一 ＝ 另一艘）
   if (sh.sunk || sh.struck || sh.sinkingFinal || !foe) return;
   if (foe.sunk || foe.struck || foe.sinkingFinal) return;            // 對方降旗或在沉 ⇒ 停火
