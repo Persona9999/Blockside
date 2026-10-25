@@ -13,15 +13,16 @@
 //   座標：世界 (x, z) ＝ 規劃 E(q) − (BED.ax, BED.az)、E(q) ＝ (ox ＋ kx·qx, oy ＋ qy)（63_towns.js townPrep）⇒ 反過來 q ＝ ((x ＋ ax − ox) ÷ kx, z ＋ az − oy)。
 // 失敗處置：沒有 host（直接開 Blockside）、沒給 ?town、那座城還沒到 ⇒ 開不了，說一聲；回覆裡的 why 照原樣顯示。
 var TWB = { on: false, town: Q.get('town') || null, cat: 'house', item: 'house', open: 0, seq: 0, wait: {}, mx: null, my: null, moved: false, q: null, side: 0,
-  tr: null, busy: false, again: false, start: null, gl: null, msg: '', msgT: 0, framed: false, ops: 0, last: 0, ghost: null, rib: null, sel: null, recipe: null, rcpSig: '' };   // recipe：生產建築玩家選的配方（換項目 ⇒ 放掉）   // sel：點到的那一棟（townHitAt 的回覆；再點一下、Esc、換項目 ⇒ 放掉）   // ghost：房子的預覽實例（63_towns.js townGhost）；rib：道路預覽的路面帶（GPU）   // open：0 沒開、1 開著中、2 好了；tr：最後一則試放／找路的回覆
+  tr: null, busy: false, again: false, start: null, gl: null, msg: '', msgT: 0, framed: false, ops: 0, last: 0, ghost: null, rib: null, sel: null, recipe: null, rcpOn: null, rcpSig: '' };   // recipe：生產建築玩家選的配方（換項目 ⇒ 放掉）；rcpOn：最後一則試放用的那一條（離開路邊時配方那一排照它亮）   // sel：點到的那一棟（townHitAt 的回覆；再點一下、Esc、換項目 ⇒ 放掉）   // ghost：房子的預覽實例（63_towns.js townGhost）；rib：道路預覽的路面帶（GPU）   // open：0 沒開、1 開著中、2 好了；tr：最後一則試放／找路的回覆
 var TWB_CATS = [
   { k: 'road', name: '🛣 道路', items: [{ k: 'street', name: '街', sub: '寬 5 m' }, { k: 'lane', name: '小路', sub: '寬 2.5 m' }] },
   { k: 'house', name: '🏠 房屋', items: [{ k: 'house', name: '住宅', sub: '2 × 3 格（轉角 2 × 2）' }] }   // 路邊每 4 m 一格（Blocksail TASK-0840）；轉角只剩 2 格深 ⇒ 8 × 8 的小版住宅
 ];   // 道路以外那幾類：open 回的 menu 換掉（twbMenuSet）；沒給 ⇒ 照這一份
-/** open 回的選單（Blocksail town.js BSW.townBuildMenu：[{ k, name, items: [{ use, name, sub, … }] }]）⇒ 道路之後接上；選單裡的那幾種模型先要（63_towns.js townWantSet ⇒ 預覽畫得出來）。 */
+/** open 回的選單（Blocksail town.js BSW.townBuildMenu：[{ k, name, items: [{ use, name, sub, recipes?, … }] }]）⇒ 道路之後接上；選單裡的那幾種模型先要（63_towns.js townWantSet ⇒ 預覽畫得出來）。
+ *  recipes：帶田的生產建築種得了哪幾條（[{ k, name }]；Blocksail mapgen_worker.js open 加的）⇒ 選了那一種就先列配方那一排（twbRcpUI）。 */
 function twbMenuSet(menu) {
   if (!menu || !menu.length) return;
-  TWB_CATS = [TWB_CATS[0]].concat(menu.map(function (c) { return { k: c.k, name: c.name, items: c.items.map(function (it) { return { k: it.use, name: it.name, sub: it.sub || '' }; }) }; }));
+  TWB_CATS = [TWB_CATS[0]].concat(menu.map(function (c) { return { k: c.k, name: c.name, items: c.items.map(function (it) { return { k: it.use, name: it.name, sub: it.sub || '', rcp: it.recipes || null }; }) }; }));
   if (!TWB_CATS.some(function (c) { return c.k === TWB.cat && c.items.some(function (it) { return it.k === TWB.item; }); })) { TWB.cat = 'road'; TWB.item = 'street'; }
   townWantSet([].concat.apply([], menu.map(function (c) { return c.items.map(function (it) { return it.use; }); })));
   twbUI();
@@ -104,19 +105,27 @@ function twbToggle(on) {
   }
   twbUI();
 }
-function twbPick(cat, item) { TWB.cat = cat; TWB.item = item; TWB.start = null; TWB.tr = null; TWB.moved = true; TWB.sel = null; TWB.recipe = null; twbUI(); }
-/** 配方那一排（生產建築）：照最後一則試放的 recipes —— 能種的可以點（點了 ⇒ 重問試放）、種不了的灰掉、滑上去看原因；不是生產建築 ⇒ 空的。 */
+function twbPick(cat, item) { TWB.cat = cat; TWB.item = item; TWB.start = null; TWB.tr = null; TWB.moved = true; TWB.sel = null; TWB.recipe = null; TWB.rcpOn = null; twbUI(); }
+/** 配方那一排（帶田的生產建築：農莊、種植園、葡萄園）：選了那一種就列（Tim 2026-10-25「農莊能種植的作物要在選取農莊就出現」「葡萄園 種植園也是」）。
+ *  游標在路邊、最後一則試放有 recipes ⇒ 照那一點：能種的可以點、種不了的灰掉、滑上去看原因；
+ *  不在路邊（還沒試放、離開路、游標移到面板上）⇒ 照選單的 recipes 全列、都可以點（先挑想種的，放下去那一點種不了 ⇒ Blocksail 照第一條能種的、note 說一聲）。
+ *  亮的那一顆：路邊 ⇒ 那一點實際種的；不在路邊 ⇒ 玩家點的 ＞ 最後一則試放用的 ＞ 第一條。點了 ⇒ 重問試放。不帶田的 ⇒ 空的。 */
 function twbRcpUI() {
   var el = $('twbRcp'); if (!el) return;
-  var tr = TWB.tr, R = tr && !tr.road && tr.recipes, sig = R ? tr.recipe + '|' + R.ok.map(function (x) { return x.k; }).join(',') + '|' + R.no.map(function (x) { return x.k; }).join(',') : '';
+  var tr = TWB.tr, live = tr && !tr.road && tr.recipes, it = twbItem(), R = live || (it && it.rcp ? { ok: it.rcp, no: [] } : null);
+  if (live && tr.recipe) TWB.rcpOn = tr.recipe;
+  var on = live ? tr.recipe : R ? TWB.recipe || TWB.rcpOn || (R.ok[0] && R.ok[0].k) : null;   // 路邊 ⇒ 那一點實際種的（點的那一條這裡種不了 ⇒ Blocksail 改種的那一條）
+  var sig = R ? on + '|' + R.ok.map(function (x) { return x.k; }).join(',') + '|' + R.no.map(function (x) { return x.k; }).join(',') : '';
   if (sig === TWB.rcpSig) return;
   TWB.rcpSig = sig;
   if (!R) { el.innerHTML = ''; return; }
   var esc = function (t) { return String(t).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); };
-  el.innerHTML = '<span>種：</span>' + R.ok.map(function (x) { return '<button type="button" data-k="' + x.k + '"' + (x.k === tr.recipe ? ' class="on"' : '') + '>' + esc(x.name) + '</button>'; }).join('') +
+  el.innerHTML = '<span>種：</span>' + R.ok.map(function (x) { return '<button type="button" data-k="' + x.k + '"' + (x.k === on ? ' class="on"' : '') + '>' + esc(x.name) + '</button>'; }).join('') +
     R.no.map(function (x) { return '<button type="button" disabled title="' + esc(x.why) + '">' + esc(x.name) + '</button>'; }).join('');
   el.querySelectorAll('button[data-k]').forEach(function (b) { b.onclick = function () { TWB.recipe = b.dataset.k; TWB.tr = null; TWB.moved = true; TWB.rcpSig = ''; }; });
 }
+/** 現在選的那一項（TWB_CATS 裡的 { k, name, sub, rcp }）。 */
+function twbItem() { var r = null; TWB_CATS.forEach(function (c) { if (c.k === TWB.cat) c.items.forEach(function (x) { if (x.k === TWB.item) r = x; }); }); return r; }
 function twbUndo() { if (!TWB.on || TWB.open !== 2) return; twbAsk('undo', null, function (r) { twbMsg(r.ok ? '復原了一步（還有 ' + (r.ops || []).length + ' 步）' : (r.why || []).join('；')); }); }
 /** 試放／找路：一次只問一則；回來之前游標又動了 ⇒ 回來再問一次（最新的那個位置）。 */
 function twbQuery() {
