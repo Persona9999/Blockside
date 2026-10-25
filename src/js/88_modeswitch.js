@@ -26,7 +26,9 @@ var DOCK_NEAR = 400, DOCK_ARRIVE = 14, DOCK_PASS = 30, DOCK_HDG_OK = 3, DOCK_TUR
                                                                                            //   到了（開始下錨）、航道上的點幾公尺內算過了；轉到停好的船頭差幾度算好、最多轉幾秒（風、水流推著轉不到 ⇒ 照現在的船頭停著）
 var DOCK_VMAX = 3.2, DOCK_VMIN = 0.7, DOCK_SLOW = 200, DOCK_TOW = 0.18, DOCK_STALL = 60;   // 剩 DOCK_SLOW 公尺以內的期望航速 m/s（從 VMAX 降到 VMIN；更遠 ⇒ 全速）、小艇拖帶最多加減速 m/s²、卡住幾秒放棄
 var DOCK_LANE = 60, DOCK_SIMX = 4, DOCK_RANGE_K = 2, DOCK_BACK = 60;
-var DOCK_AV = [2, 8], DOCK_AEND = 120, DOCK_ATURN = 80, DOCK_PULL = 3;                                    // 停靠的過場：航速（m/s，夾在這兩個之間）、最後幾公尺減速到 DOCK_VMIN、最後幾公尺轉到停好的船頭、拉回航線的強度（每秒）                                                         // 船已經在航道上（離某一段 ≤ DOCK_LANE 公尺）⇒ 從那一段接、不先退回外面那一點；
+var DOCK_AV = [2, 8], DOCK_AEND = 120, DOCK_ATURN = 80, DOCK_PULL = 3, DOCK_AX = 4;                       // 停靠的過場：航速（m/s，夾在這兩個之間）、最後幾公尺減速到 DOCK_VMIN、最後幾公尺轉到停好的船頭、拉回航線、過場快幾倍
+// DOCK_AX（Tim 2026-10-25「讓城鎮模式下 時間跟航海模式一樣 按照1:1時間流速(1秒等於1秒)」）：以前停靠那一段把模擬調成 ×DOCK_SIMX ⇒ 按停靠就是城鎮模式，那幾分鐘城裡的時間（太陽、鎮民）也 ×4；
+//   ⇒ 停靠過場不動模擬速度，改成過場自己沿航線走 DOCK_AX 倍快（航速與拉回航線的彈簧一起乘，看起來跟以前一樣快）。出航（航海模式）照舊 ×DOCK_SIMX。的強度（每秒）                                                         // 船已經在航道上（離某一段 ≤ DOCK_LANE 公尺）⇒ 從那一段接、不先退回外面那一點；
                                                                                            //   範圍照重心放大 DOCK_RANGE_K 倍（Tim 2026-10-24「城鎮判定範圍更大一點(可以放大兩倍範圍試試)」；同時在兩座城裡 ⇒ 照離停靠處的距離挑）；
                                                                                            //   最後一段停靠處在船後面 DOCK_BACK 公尺內 ⇒ 倒車退回去（Tim「自動停靠需要能控制船的前進後退」）
                                                                                            //   自動開那一段模擬 ×DOCK_SIMX（73_slowmo.js 的模擬速度；玩家自己調過 ⇒ 不動）—— 航道 1～2.5 km，×1 要三、四分鐘
@@ -185,8 +187,7 @@ function dockGo(kind, d) {
     var c0 = shipCenter(me), e = dockEntry(d, c0), A = [[c0[0], c0[2]]].concat(d.path.slice(0, e + 1).reverse()), cum = [0];
     for (var i = 1; i < A.length; i++) cum.push(cum[i - 1] + Math.hypot(A[i][0] - A[i - 1][0], A[i][1] - A[i - 1][1]));
     if (anchorsOf(me) && me.anc) { anchorToggle(me, 'P', false); anchorToggle(me, 'S', false); } me.ancMode = false; if (SAIL === 'off') setSailMode('manual');
-    DOCK.run = { kind: 'in', anim: true, d: d, A: A, cum: cum, L: cum[cum.length - 1], s: 0, v0: clamp(Math.max(Math.abs(me.spd), me.vCruise || 0), DOCK_AV[0], DOCK_AV[1]), y0: me.yaw, phase: 'go', k: 0, pts: A, left: cum[cum.length - 1], sail: SAIL, simx: SIM_SPEED === 1 && DOCK_SIMX > 1 };
-    if (DOCK.run.simx) simSpeedSet(DOCK_SIMX);
+    DOCK.run = { kind: 'in', anim: true, d: d, A: A, cum: cum, L: cum[cum.length - 1], s: 0, v0: clamp(Math.max(Math.abs(me.spd), me.vCruise || 0), DOCK_AV[0], DOCK_AV[1]), y0: me.yaw, phase: 'go', k: 0, pts: A, left: cum[cum.length - 1], sail: SAIL, simx: false };   // simx：城鎮模式不調模擬速度（DOCK_AX）
     note(me, '🏘 停靠 ' + dockTownName(d.town) + '：沿進港航道開進停靠處（按 ✋ 取消）');
     return null;
   }
@@ -204,13 +205,13 @@ function dockGo(kind, d) {
  *  風、碰撞、水深推不開它（Tim 2026-10-24「可以讓物理維持(讓船仍然會晃) 但是有強大的力讓船直接按照畫好的航線停靠」）。走完、拉到了 ⇒ 停住（城鎮模式的 stopOwn 下一步兩錨都下）。 */
 function dockPull(sh, dt) {
   var R = DOCK.run; if (!R || !R.anim || sh.i !== PLAYER_I) return;
-  var left = R.L - R.s, v = left < DOCK_AEND ? DOCK_VMIN + (R.v0 - DOCK_VMIN) * left / DOCK_AEND : R.v0;
+  var left = R.L - R.s, v = (left < DOCK_AEND ? DOCK_VMIN + (R.v0 - DOCK_VMIN) * left / DOCK_AEND : R.v0) * DOCK_AX;   // × DOCK_AX：過場自己快（模擬照 ×1）
   R.s = Math.min(R.L, R.s + v * dt); R.left = R.L - R.s;
   var A = R.A, k = 1; while (k < A.length - 1 && R.cum[k] < R.s) k++;
   var a = A[k - 1], b = A[k], seg = R.cum[k] - R.cum[k - 1], u = seg > 1e-6 ? (R.s - R.cum[k - 1]) / seg : 1, x = a[0] + (b[0] - a[0]) * u, z = a[1] + (b[1] - a[1]) * u;
   var ty = seg > 1e-6 ? Math.atan2(-(b[1] - a[1]), b[0] - a[0]) : sh.yaw;   // 順著路線（fwd(yaw) ＝ [cos, −sin]）
   if (R.left < DOCK_ATURN) { var w = 1 - R.left / DOCK_ATURN, dy = Math.atan2(Math.sin(R.d.yaw - ty), Math.cos(R.d.yaw - ty)); ty += dy * w * w * (3 - 2 * w); }
-  var g = Math.min(1, DOCK_PULL * dt), c = shipCenter(sh), ex = x - c[0], ez = z - c[2];
+  var g = Math.min(1, DOCK_PULL * DOCK_AX * dt), c = shipCenter(sh), ex = x - c[0], ez = z - c[2];
   sh.px += ex * g; sh.pz += ez * g;                                     // 照船的中心拉（停靠處的 at 是船的中心）
   var dyw = Math.atan2(Math.sin(ty - sh.yaw), Math.cos(ty - sh.yaw)); sh.yaw += dyw * g; sh.yawRate = 0;
   sh.spd = R.left > 0 ? v : 0; sh.vel = mul(fwd(sh.yaw), sh.spd); R.k = k;

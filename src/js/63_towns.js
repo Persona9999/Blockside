@@ -1709,9 +1709,13 @@ function townSpinMesh(Mm) {
   }, function (e) { Mm.spinErr = e.message; console.warn('城鎮：旋轉件解不開 ' + Mm.nm + '：' + e.message); });
   return null;
 }
+/** 城鎮的動畫時鐘（秒）：模擬時間 SIMT ＋ 這一格還沒走成一步的零頭（loopAcc，90_main.js）—— 旗、風車、鎮民、建築裡的工人、動物都照它
+ *  （Tim 2026-10-25「鎮民活動也跟隨時間流速(目前暫停下鎮民還會動)」：以前照 performance.now ⇒ 暫停照動、模擬調快也不跟）⇒ 暫停就停、模擬倍速跟著快慢、等海圖塊時跟模擬一起停。
+ *  開新的一局 SIMT 歸零 ⇒ 往回跳：用到差值的（旗、風車）照 0 算；鎮民、動物照絕對時間排的時間表 ⇒ 換一個位置，不會卡。 */
+function townClock() { return SIMT + loopAcc; }
 /** 畫旋轉件（townDraw：近、中兩級之後，同一支著色器）⇒ 三角形數。 */
 function townSpinDraw(PV, G, K) {
-  var now = performance.now() / 1000, dt = Math.min(0.1, Math.max(0, now - (TOWNS.spinT || now))), S = TOWNS.stat.spin = { models: 0, inst: 0, wind: null, deg: null };
+  var now = townClock(), dt = Math.min(0.1, Math.max(0, now - (TOWNS.spinT == null ? now : TOWNS.spinT))), S = TOWNS.stat.spin = { models: 0, inst: 0, wind: null, deg: null };
   TOWNS.spinT = now;
   if (!TOWN_SPIN || !G) return 0;
   var tris = 0, set = false;
@@ -1724,7 +1728,7 @@ function townSpinDraw(PV, G, K) {
     sp.forEach(function (e, j) {
       var g = L[j], f = TOWN_SPIN_SRC[e.src]; if (!g || !f) return;
       var v = f(), A = Mm.spinA || (Mm.spinA = []);
-      A[j] = ((A[j] || 0) + e.k * v * dt) % 360;                         // 角度（度）照畫面時間累加；風停 ⇒ 停在那裡
+      A[j] = ((A[j] || 0) + e.k * v * dt) % 360;                         // 角度（度）照遊戲時間（townClock：暫停就停）累加；風停 ⇒ 停在那裡
       gl.uniform4f(PV.u.uSpA, e.ax[0], e.ax[1], e.ax[2], A[j] * Math.PI / 180); gl.uniform3f(PV.u.uSpP, e.pv[0], e.pv[1], e.pv[2]);
       gl.bindVertexArray(g.vao); gl.bindBuffer(gl.ARRAY_BUFFER, TOWNS.prog.ib[0]); townInstAttr(G, 0, mi);
       gl.drawElementsInstanced(gl.TRIANGLES, g.nq * 6, gl.UNSIGNED_INT, 0, n); tris += g.nq * 2 * n;
@@ -1737,7 +1741,7 @@ function townSpinDraw(PV, G, K) {
 
 // 模型的 flags（Blocksail tools/townmodels.py flags_of：雕刻的帆裡 meta kind=flag 那幾面的四個角，模型格座標；BUILDING_SPEC §6.2）⇒ 每個實例每面一塊布：
 //   TOWN_FLAG_N ＝ 沿飛 × 沿旗桿幾個質點；綁邊（第 0 欄）釘在旗桿上，其他照 Verlet：重力＋往風速拉的阻力（風向 ＝ WIND、風速 ＝ WIND_SAIL × 天氣，跟帆同一份）
-//   ＋陣風、擺動（畫面時間的正弦、每面差一個相位 ⇒ 不抽亂數）＋ TOWN_FLAG_IT 次距離約束（橫、直、斜）。
+//   ＋陣風、擺動（遊戲時間（townClock：暫停就停）的正弦、每面差一個相位 ⇒ 不抽亂數）＋ TOWN_FLAG_IT 次距離約束（橫、直、斜）。
 //   ⛔ 不碰戰局：不讀寫模擬的狀態、不用模擬的亂數、砲彈打不到；鏡頭 TOWN_FLAG_SIM 公尺外不動（停在上一個樣子）、TOWN_LOD[1] 外不畫（貼圖那一級沒拍旗）。
 //   畫：照圖案的分界再切格（十字的邊不會被內插糊掉）、一格一色；法線翻到朝鏡頭那一面（布兩面都看得到）；用地面帶子那一支著色器（P.gr）。
 var TOWN_FLAG_N = [10, 6], TOWN_FLAG_IT = 6, TOWN_FLAG_SIM = 400, TOWN_FLAG_DT = 1 / 60, TOWN_FLAG_DRAG = 1.6, TOWN_FLAG_DAMP = 0.99;
@@ -1812,7 +1816,7 @@ function townTreesSet(T) {
   });
 }
 function townFlagFree(T) { (T.flags || []).forEach(function (F) { if (F.vao) { gl.deleteVertexArray(F.vao); gl.deleteBuffer(F.vb); } }); T.flags = null; }
-/** 一步（dt 秒、t ＝ 畫面時間）：Verlet ⇒ 釘綁邊 ⇒ 約束（綁邊那一欄不動）。 */
+/** 一步（dt 秒、t ＝ 遊戲時間（townClock：暫停就停））：Verlet ⇒ 釘綁邊 ⇒ 約束（綁邊那一欄不動）。 */
 function townFlagStep(F, dt, t) {
   var p = F.p, pp = F.pp, NU = TOWN_FLAG_N[0], NV = TOWN_FLAG_N[1], wl = Math.hypot(WIND[0], WIND[2]) || 1, wx = WIND[0] / wl, wz = WIND[2] / wl;
   var ws = WIND_SAIL * WX.wind * WIND_SPD * (1 + 0.25 * Math.sin(t * 1.3 + F.ph) + 0.1 * Math.sin(t * 3.7 + F.ph * 2)), kd = TOWN_FLAG_DRAG, dt2 = dt * dt;
@@ -2085,7 +2089,7 @@ function townDraw() {
   tris += townFieldDraw(P, PL, eye, fogD);                               // 遠處的田（貼在土上：再往鏡頭推一點）
   gl.disable(gl.POLYGON_OFFSET_FILL);
   // 布旗（同一支著色器；近、中那兩級的距離內才畫，鏡頭附近才動）
-  var now = performance.now() / 1000, fdt = Math.min(0.1, Math.max(0, now - (TOWNS.flagT || now))), nfl = 0; TOWNS.flagT = now; TOWNS.flagClock = (TOWNS.flagClock || 0) + fdt;
+  var now = townClock(), fdt = Math.min(0.1, Math.max(0, now - (TOWNS.flagT == null ? now : TOWNS.flagT))), nfl = 0; TOWNS.flagT = now; TOWNS.flagClock = now;   // 旗、鎮民、工人、動物都照遊戲的時間（townClock）
   TOWNS.list.forEach(function (T) {
     if (!T.flags) T.flags = townFlags(T);
     T.flags.forEach(function (F) {
@@ -2096,7 +2100,7 @@ function townDraw() {
     });
   });
   TOWNS.stat.flags = nfl;
-  // 城鎮居民（沿路走動、看板換色立繪；63_townfolk.js，位置只照畫面時間算）
+  // 城鎮居民（沿路走動、看板換色立繪；63_townfolk.js，位置只照遊戲時間（townClock：暫停就停）算）
   tris += townFolkDraw(P, K, eye, PL, fogD, TOWNS.flagClock);
   tris += townFaunaDraw(P, K, eye, PL, fogD, TOWNS.flagClock);           // 動物（63_townfauna.js）：同一個畫面時間
   // 屋頂殼（最遠一級：跟貼圖用同一個抖動互補）

@@ -1,7 +1,7 @@
 // ───────────────────────── 城鎮居民（TASK-0846、0849；只給人看） ─────────────────────────
 // Tim 2026-10-23：「參考這個畫風 以及Blockside的水手顯示架構(頭髮 衣服部分區域 可換色) 讓目前Blocksail的城鎮可以顯示居民在路上走動吧 … 然後居民素材只放在Blocksail(參考城鎮建築)」
 //   「把鎮民相關機制獨立成一份.js 然後整理一下相關邏輯(鎮民單純是顯示用 不用完整模擬)」
-// 只給人看：不碰模擬亂數 rnd()、模擬地形 C.h；位置只照畫面時間算（townFolkAt），不逐格推進 ⇒ 同一個時間點畫面相同，掉幀、暫停、離開又回來都不會走偏。
+// 只給人看：不碰模擬亂數 rnd()、模擬地形 C.h；位置只照遊戲時間（townClock：暫停就停）算（townFolkAt），不逐格推進 ⇒ 同一個時間點畫面相同，掉幀、暫停、離開又回來都不會走偏。
 // 效能（Tim 2026-10-23「鎮民只在攝影機附近出現 且畫面外的不模擬」）：只畫鏡頭 TOWN_FOLK_OUT 以內（跟城鎮近景那一級對齊）；
 //   每位的整條路線先算好外框（a.bb）⇒ 外框離鏡頭太遠、或整個在視錐外 ⇒ 連位置都不算；城整座太遠 ⇒ 連路網都不建。
 // 素材：Blocksail world/townkit/_folk.js（tools/townfolk.py 產生：一列一位 96×192 PNG-8，繪製時預留鮮青色頭髮＋鮮洋紅主衣標記，轉成水手同款 (L, 0, L) 與 (0, L, L)）
@@ -322,7 +322,7 @@ function townFolkStreet(T, F, walk, group) {
 //   誰 ＝ 設定檔 work 有 build 的；演出的那一棟沒人。走板升一層、人數變了 ⇒ 重擺（T.work.sk ＝ townRiseWorkSig）。
 // 誰：設定檔 work 有那個用途的大人（townFolkWho）；軍事建築 ⇒ work 有 garrison 的；一個都沒有 ⇒ 那一棟不放人。同一棟照順序輪、不重複（人比立繪多才重複）。
 // 動作：站在自己的點上做工（船員那一套程式動作：照節奏前傾、上下；41_crew_art.js），偶爾停下來喘口氣；同一組有空的點 ⇒ 每一圈走過去做一陣再走回來
-//   （共用同一個空點的幾位錯開時間，不會同時站上去）。位置只照畫面時間算（同 townFolkAt）。?townwork=0 ⇒ 不畫（對照組）。
+//   （共用同一個空點的幾位錯開時間，不會同時站上去）。位置只照遊戲時間（townClock：暫停就停）算（同 townFolkAt）。?townwork=0 ⇒ 不畫（對照組）。
 var TOWN_WORK = Q.get('townwork') !== '0', TOWN_WORK_RE = /^work-([a-z]?)(\d+)$/, TOWN_WORK_SCALE = 1.1, TOWN_WORK_SPD = 1.1;   // SCALE：建築裡比街上（TOWN_FOLK_SCALE 1.36）小，大人約 1.9 m ⇒ 對齊 Blocksail tools/workspots.py 找點要的 2.0 m 淨空（1.2 倍在伐木場柴棚下頂到棚簷）
 var TOWN_WORK_GUARD = ['fort', 'barracks', 'watchtower', 'bastion', 'battery'];   // 這幾種用途找 work 有 garrison 的（同 townFolkWorkSite）
 function townWorkCmp(a, b) { var A = TOWN_WORK_RE.exec(a), B = TOWN_WORK_RE.exec(b); return A[1] < B[1] ? -1 : A[1] > B[1] ? 1 : +A[2] - +B[2]; }
@@ -400,7 +400,7 @@ function townWorkCam(T, F, use) {
   return { lot: best.lot, use: best.use, n: best.n, cam: { tgt: [best.x, +(best.y + 1.2).toFixed(2), best.z], yaw: best.yaw, pitch: 0.42, dist: 16, mode: 0, track: false, tr: null } };
 }
 
-/** 畫出所有城鎮看得到的居民（townDraw 布旗之後；clock ＝ 城鎮的畫面時間）⇒ 三角形數。 */
+/** 畫出所有城鎮看得到的居民（townDraw 布旗之後；clock ＝ 城鎮的遊戲時間 townClock）⇒ 三角形數。 */
 function townFolkDraw(P, K, eye, PL, fogD, clock) {
   TOWNS.stat.folk = TOWNS.stat.folkPos = 0; TOWNS.stat.folkMs = 0;
   var F = K && K.folk; if (!TOWN_FOLK || !F || !P.folk) return 0;
