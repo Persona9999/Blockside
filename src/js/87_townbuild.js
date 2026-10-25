@@ -187,16 +187,23 @@ function twbKey(k, down, e) {
   if (lk >= '1' && lk <= '9' && lk.length === 1) { var F = twbFlat()[+lk - 1]; if (F) { twbPick(F.c, F.i); return true; } }   // 1～9 照選單的順序（twbFlat）
   return false;                                                         // 其他的（停格、設定、鏡頭）照海戰鏡頭
 }
-/** 每一格：第一次城到了 ⇒ 鏡頭照整座城；游標動了 ⇒ 地面點、問試放／找路；預覽線框；說明那一行。 */
+/** 進城的機位（Tim 2026-10-25「入場鏡頭不用跳到城鎮中心廣場 跳到停靠的棧橋處就ok(然後鏡頭變成自由鏡頭模式」）：
+ *  注視點 ＝ 停靠的那一處（DOCK.here.at；外面那一頁的停靠處還沒到 ⇒ 我艦，船就停在那裡），鏡頭從海那一側（航道往外海的方向）斜看進來 ⇒ 船與棧橋在畫面中間、城在後面；
+ *  自由鏡頭、不跟船（03_camera.js camMove：城鎮模式一律不跟），之後只照拖曳、平移、滾輪動。以前對著城中心、拉到 300 m 俯視。 */
+function twbFrameDock() {
+  TWB.framed = true;
+  var d = DOCK.here, me = SHIPS[PLAYER_I], mc = me ? shipCenter(me) : [0, 0, 0], x = d ? d.at[0] : mc[0], z = d ? d.at[1] : mc[2], yaw = CAM.yaw;
+  if (d && d.path && d.path.length > 1) { var q = d.path[Math.min(2, d.path.length - 1)]; if (Math.hypot(q[0] - x, q[1] - z) > 1) yaw = Math.atan2(q[1] - z, q[0] - x); }   // 往外海那一邊（camMove：眼 ＝ 注視點 ＋ (cos yaw, sin yaw) × 距離）
+  else if (d) yaw = d.yaw + Math.PI;                                    // 沒有航道 ⇒ 船尾那一邊（停靠時船頭朝內）
+  camSet({ mode: 0, follow: null, pan: [0, 0], tgt: [x, Math.max(0, twbHeight(x, z)) + 2, z], yaw: yaw, dist: 120, pitch: 0.55 });
+}
+/** 每一格：第一次城到了 ⇒ 鏡頭對著停靠處；游標動了 ⇒ 地面點、問試放／找路；預覽線框；說明那一行。 */
 function twbFrame() {
   if (!modeRule('town')) return;
   var T = twbTown();
   twbTitle(T);
-  if (!TWB.framed && T && !CAM.tr && RUNNING) {                         // 進城：自由鏡頭、斜俯視城中心（轉場降完之後；船在停靠處，拖曳、平移看得到）
-    TWB.framed = true;                                                  //   ⛔ 不取城與船的中間：托爾圖加的棧橋離城中心四百多公尺 ⇒ 中間那一點只看得到沙灘（2026-10-22 量到）
-    var c = T.cen || [T.ox, T.oy], x = c[0] - BED.ax, z = c[1] - BED.az;
-    camSet({ mode: 0, follow: null, pan: [0, 0], tgt: [x, Math.max(0, twbHeight(x, z)), z], dist: 300, pitch: 0.95 });
-  }
+  if (!TWB.framed && T && !CAM.tr && RUNNING) twbFrameDock();            // 進城：自由鏡頭、對著停靠的那一處（轉場降完之後）
+
   // 進城預設不開建築模式（Tim 2026-10-23「建築模式按鈕希望改成常駐的Toggle按鈕(且預設改為不開)」；10-22 那一版城到了、轉場降完就自動開一次）：按 🔨 或 B 才開
   if (!TWB.on) { TWB.ghost = null; if (tbiSelQ()) { twbLines(T); return; } if (TWB.gl && TWB.gl.n) TWB.gl = upload(TWB.gl, new Float32Array(0), 6, [[0, 3, 0], [2, 3, 3]]); if (TWB.rib && TWB.rib.n) twbLines(null); return; }   // 建築模式關著：只畫點建築的面板選著的那一棟（89_townbld.js）
   if (TWB.moved && TWB.mx != null && T) {
