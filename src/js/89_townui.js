@@ -127,6 +127,7 @@ function tuiSumHTML() {
   var B = {}; (I.buildings || []).forEach(function (b) { B[b.type] = (B[b.type] || 0) + 1; });
   var bk = Object.keys(B).sort(function (a, b) { return B[b] - B[a]; });
   h += '<h4>🏗 建築（生產、公職、服務；' + tuiNum((I.buildings || []).length) + ' 棟）</h4><p>' + bk.map(function (k) { return tuiEsc(TUI.blds[k] || k) + ' × ' + B[k]; }).join('、') + '</p>';
+  h += tuiRcpHTML(I);
   var RG = TUI.region;                                                  // 這座城那一區的加總（Blocksail regionInfo：區域 ＝ 那一區的城鎮加總）
   if (RG) h += '<h4>🗺 這一區（' + RG.towns.length + ' 座：' + RG.towns.map(tuiEsc).join('、') + '）</h4><p>人口 ' + tuiNum(RG.pop) + '　勞動 ' + tuiNum(RG.labor) + '　失業 ' + tuiNum(RG.idle) + '　碼頭上 ' + tuiNum(RG.dock) + '　城鎮金庫 ' + tuiNum(RG.funds) + '　生產建築 ' + tuiNum(RG.buildings) + '</p>';
   if (TUI.hubs && TUI.hubs.length) h += '<p class="tuiDim">⚓ 這一區的集散地：' + TUI.hubs.map(tuiEsc).join('、') + '</p>';
@@ -138,6 +139,22 @@ function tuiSumHTML() {
   }).join('') + '</table>';
   if (I.families && I.families.length) h += '<h4>👪 家族</h4><p>' + I.families.map(function (f) { return tuiEsc(f.name || f.id || f); }).join('、') + '</p>';
   return h;
+}
+/** 生產配方（Blocksail world/auto.js recipeDay；TASK-0947）：每一種現在跑哪幾條、最近換的（哪天、從哪條、為什麼、停工到哪天）；全部那幾座（含鎖住的原因）摺在底下。 */
+function tuiRcpHTML(I) {
+  var L = (I.buildings || []).filter(function (b) { return b.rname; }); if (!L.length) return '';
+  var fn = {}; (I.families || []).forEach(function (f) { if (f && f.id) fn[f.id] = f.name || f.id; });
+  var C = {}; L.forEach(function (b) { var c = C[b.type] || (C[b.type] = {}); c[b.rname] = (c[b.rname] || 0) + 1; });
+  var h = '<h4>🔁 生產配方（城鎮、家族各自照缺貨與原料定期重排）</h4><p>' + Object.keys(C).sort().map(function (k) { return tuiEsc(TUI.blds[k] || k) + '：' + Object.keys(C[k]).map(function (r) { return tuiEsc(r) + ' ' + C[k][r]; }).join('、'); }).join('<br>') + '</p>';
+  var row = function (b) {
+    var off = b.swUntil != null && b.swUntil > I.day ? '<span class="tuiDim">（換配方停工到第 ' + b.swUntil + ' 天）</span>' : '';   // 停工的那幾天：I.day 之後到 swUntil（含）
+    return '<tr><td>' + tuiEsc(TUI.blds[b.type] || b.type) + ' <span class="tuiDim">' + tuiEsc(b.id.slice(b.id.indexOf('/') + 1)) + '</span></td><td>' + tuiEsc(b.owner ? fn[b.owner] || b.owner : '城鎮') + '</td><td>' + tuiEsc(b.rname) + off + '</td><td>'
+      + (b.sw ? '第 ' + b.sw.day + ' 天' : b.lock ? '🔒' : '–') + '</td><td>' + tuiEsc(b.sw ? b.sw.why : b.lock || '') + '</td></tr>';
+  };
+  var head = '<table class="tuiT"><tr><th>建築</th><th>主人</th><th>現在</th><th>上次換</th><th>為什麼／鎖住</th></tr>';
+  var S = L.filter(function (b) { return b.sw; }).sort(function (a, b) { return b.sw.day - a.sw.day || (a.id < b.id ? -1 : 1); }), lk = L.filter(function (b) { return b.lock; }).length;
+  if (S.length) h += '<p class="tuiDim">最近換的（共 ' + S.length + ' 座換過）</p>' + head + S.slice(0, 8).map(row).join('') + '</table>';
+  return h + '<details><summary>全部 ' + L.length + ' 座' + (lk ? '（🔒 鎖住不換 ' + lk + ' 座）' : '') + '</summary>' + head + L.map(row).join('') + '</table></details>';
 }
 /** 產出與消耗：最近那一天每種貨 產出、原料、鎮民吃、淨（桶）；照淨值的大小排。 */
 function tuiFlowHTML() {
