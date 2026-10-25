@@ -42,7 +42,7 @@ var MODE_HOOK = {
       var d = o && o.dock;
       if (d) { TWB.town = d.town; DOCK.here = d; }
       if (d && o.go) dockGo('in', d);                                      // 船在城鎮模式裡自己滑進停靠處（過場 dockPull；31_sailing.js：自動開中不照 stopOwn 停）
-      if (from) {                                                        // 換進來 ⇒ 鏡頭照整座城（87_townbuild.js twbFrame）、不跟船（⛔ 跟著 ⇒ 船開進來那一段把鏡頭帶到海上，城不在畫面裡）；出航時還原
+      if (from) {                                                        // 換進來 ⇒ 鏡頭對著停靠處（87_townbuild.js twbFrameDock）、不跟船（⛔ 跟著 ⇒ 船開進來那一段把鏡頭帶到海上；城鎮模式 03_camera.js 本來就不跟）；出航時還原跟船的設定
         DOCK.cam = { mode: CAM.mode, dist: CAM.dist, yaw: CAM.yaw, pitch: CAM.pitch, track: CAM.track, aoff: CAM.aoff }; TWB.framed = false;
         camSet({ track: false, trYaw: null, trMe: null });
       }
