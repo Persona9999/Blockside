@@ -11,7 +11,7 @@
 var PREFS_KEY = 'ame_constitution_broadside.prefs', PREFS_VER = 1;
 var PREF_Q = ['mode', 'start', 'wdir', 'wspd', 'wvd', 'wvs', 'wabs', 'rain', 'cdir', 'ckn', 'ship', 'blue', 'red', 'hard', 'flood', 'ballast', 'gunw', 'speed', 'agile', 'upwind', 'base', 'pump', 'gunhp', 'sailhp', 'crewhp', 'crewdeath', 'powderhp', 'blast', 'blastv', 'dmg24', 'dmg32l', 'dmg32', 'dmg18', 'dmg12', 'dmg18l', 'dmg6', 'dmg3c', 'dmgtr', 'dmgsf', 'dmgbl', 'dmgmg', 'dmgbw', 'dmgbd',
   'box', 'carry', 'hands', 'drown', 'heal', 'musket', 'sailfix', 'burn', 'galley', 'wind', 'windcap', 'inertia', 'turninert', 'sailtq', 'ammo', 'strike', 'cap', 'phys', 'sail', 'play', 'stall', 'funspeed', 'funagile', 'funstall', 'funpowder', 'funhard', 'sea', 'helmlost', 'funhelm', 'wheelloss', 'rudderloss', 'difftq', 'funhelmloss', 'funhelmeff', 'fundiff',
-  'gfx', 'g_shadow', 'g_refl', 'g_refr', 'g_sea', 'g_res', 'g_aa', 'phx', 'p_rig', 'p_rigfar', 'p_debris', 'p_fx', 'weather', 'g_rain', 'g_drops', 'g_dropspl', 'g_door', 'g_port', 'g_masks', 'g_deco', 'g_treed', 'g_plant', 'dist', 'field', 'reinf', 'cmd', 'gauge', 'blue', 'red', 'slowmo', 'dbg', 'slowcam', 'roomfn', 'navre', 'gcrew', 'smoke', 'pslow', 'pslowb', 'ramv', 'ramk', 'rame', 'ramside', 'debcap', 'csm'].concat(SHK_ITEMS.map(function (it) { return 'sh_' + it.k; }));          // 會蓋過存檔的網址參數（04_state.js、05_hull.js 讀的那些）
+  'gfx', 'g_shadow', 'g_refl', 'g_refr', 'g_sea', 'g_res', 'g_aa', 'phx', 'p_rig', 'p_rigfar', 'p_debris', 'p_fx', 'weather', 'g_rain', 'g_drops', 'g_dropspl', 'g_door', 'g_port', 'g_masks', 'g_deco', 'g_treed', 'g_plant', 'dist', 'field', 'reinf', 'cmd', 'gauge', 'blue', 'red', 'slowmo', 'dbg', 'slowcam', 'roomfn', 'navre', 'gcrew', 'smoke', 'pslow', 'pslowb', 'ramv', 'ramk', 'rame', 'ramside', 'debcap', 'csm', 'flags'].concat(SHK_ITEMS.map(function (it) { return 'sh_' + it.k; }));          // 會蓋過存檔的網址參數（04_state.js、05_hull.js 讀的那些）
 var DMG_Q = { long: 'dmg24', long32: 'dmg32l', carr: 'dmg32', chase: 'dmg18', long4: 'dmg4', long12: 'dmg12', long18: 'dmg18l', long6: 'dmg6', chase3: 'dmg3c', trident: 'dmgtr', dahl9: 'dmg9d', brooke64: 'dmg64b', brooke7: 'dmg7b', dahl11: 'dmg11d', long36: 'dmg36l', long8: 'dmg8l', pierrier: 'dmgpr', siphon: 'dmgsf', ballista: 'dmgbl', mangonel: 'dmgmg', bow: 'dmgbw', bombardella: 'dmgbd', krupp305: 'dmg305k', krupp150: 'dmg150k', hotch37: 'dmgh37', canet320: 'dmg320c', armstrong120: 'dmg120a', hotch57: 'dmgh57', hotch47: 'dmgh47' };
 var PREFS = { read: DEMO < 0 && Q.get('prefs') !== '0' && !Q.has('admin') && !Q.has('shipcheck'), write: false, state: '', last: '' };   // ?admin=rooms（設定後台嵌的那一份）、?shipcheck（匯入檢查）⇒ 不讀不存
 PREFS.write = PREFS.read && !PREF_Q.some(function (k) { return Q.has(k); }) && !LAB_FLEET;   // 擬真沙盒：讀玩家的存檔（規則跟玩家玩的同一套），⛔ 不寫回（沙盒改的距離、策略、物理檔位不能蓋掉玩家的）
@@ -37,6 +37,13 @@ var PREF_ITEMS = [
       if (Array.isArray(p.fleet)) p.fleet.forEach(function (L, i) { if (i < 2 && Array.isArray(L)) { L = L.filter(function (w) { return typeof w === 'string' && hullInfo(w); }); if (L.length) FLEET_SET[i] = L; } });
       fleetTrim(FLEET_SET);
     }),
+  //   兩陣營的旗（TASK-0950；77_colours.js）：跟預設（英國藍旗、紅旗）不一樣的那一邊才存 { blue?, red? }（每一面 ＝ { field, emblem }）
+  //   ⛔ 讀的時候 77_colours.js 還沒跑 ⇒ 只把原樣放進 FLAG_PREF（teamFlag 第一次用才驗、才套）；存的時候還沒用過 ⇒ 原樣寫回
+  prefAny('flags', function (o) {
+    if (!TEAM_FLAGS) { if (FLAG_PREF) o.flags = FLAG_PREF; return; }
+    var d = {}; ['blue', 'red'].forEach(function (s) { if (JSON.stringify(TEAM_FLAGS[s]) !== JSON.stringify(flagPreset(FLAG_DEF[s]))) d[s] = TEAM_FLAGS[s]; });
+    if (d.blue || d.red) o.flags = d;
+  }, function (p) { if (p.flags && typeof p.flags === 'object' && !Q.has('flags')) FLAG_PREF = p.flags; }),
   prefAny('ships', function (o) {                                       // 船隻配置頁：船隻設定 cfg（照那一型的預設比）、船員 crew（TASK-0570）、艙房的擺法 rooms（TASK-0568）
     var cfg = {};
     Object.keys(SHIP_CFG).forEach(function (id) {

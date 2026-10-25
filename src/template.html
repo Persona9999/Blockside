@@ -252,6 +252,12 @@
   :is(#cover,#gfxov) button{ font:inherit; font-size:15px; margin:4px; padding:7px 16px; border-radius:6px; border:1px solid rgba(255,255,255,.25); background:rgba(255,255,255,.06); color:var(--ink); cursor:pointer; }
   :is(#cover,#gfxov) button.on{ background:var(--gold); color:#111; border-color:var(--gold); }
   :is(#cover,#gfxov) button.go{ font-size:18px; padding:9px 30px; background:#b8452e; border-color:#e06a4f; }
+  /* 開戰鈕左右兩側選旗（TASK-0950，js/71_menu.js flagUI；旗本身 js/77_colours.js）：旗的預覽、下拉選單、底色；窄螢幕換行 */
+  #goRow{ display:flex; flex-wrap:wrap; align-items:center; justify-content:center; gap:4px 10px; }
+  .flagpick{ display:inline-flex; align-items:center; gap:4px; }
+  .flagpick canvas{ position:static; width:36px; height:18px; cursor:default; touch-action:auto; border:1px solid rgba(255,255,255,.45); border-radius:2px; }   /* ⛔ 全域的 canvas 是 absolute（遊戲畫面）⇒ 不蓋掉會跑到畫面左上角 */
+  .flagpick select{ font:inherit; font-size:12px; max-width:7.5em; background:#1b2430; color:#e8e2d4; border:1px solid #556; border-radius:4px; padding:2px; }
+  .flagpick input[type=color]{ width:24px; height:22px; padding:0; border:1px solid #556; border-radius:4px; background:none; cursor:pointer; }
   :is(#cover,#gfxov) button:disabled{ opacity:.4; cursor:wait; }
   :is(#cover,#gfxov) #discordB{ display:inline-block; font-size:15px; margin:4px; padding:7px 18px; border-radius:6px; border:1px solid #7983f5; background:#5865f2; color:#fff; text-decoration:none; cursor:pointer; }   /* Discord 的品牌紫 */
   :is(#cover,#gfxov) #discordB:hover{ background:#4752c4; }
@@ -590,7 +596,7 @@
       <div class="row" id="wxs">天氣
         <button data-w="clear">晴</button><button data-w="rain">陰雨</button><button data-w="storm">暴風雨</button><button data-w="maelstrom">大漩渦</button>
       </div>
-      <div class="row"><button class="go" id="go" disabled>載入中…</button></div><!-- Tim 2026-10-17：開戰鈕往上搬到天氣下面、畫質上面 -->
+      <div class="row" id="goRow"><span class="flagpick" id="flag0"></span><button class="go" id="go" disabled>載入中…</button><span class="flagpick" id="flag1"></span></div><!-- Tim 2026-10-17：開戰鈕往上搬到天氣下面、畫質上面；左右兩側選我方、敵方的旗（TASK-0950，js/71_menu.js flagUI；旗本身 js/77_colours.js） -->
       <div class="row" id="gfxs">畫質
         <button data-g="low">低</button><button data-g="mid">中</button><button data-g="high">高</button><button data-g="ultra">全開</button><button id="gfxB">畫質設定…</button>
       </div>

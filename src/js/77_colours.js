@@ -20,19 +20,100 @@ var COL_FIELD = { blue: [0.1, 0.14, 0.42], red: [0.72, 0.1, 0.09] }, COL_W = [0.
 var COL_SIZE = { ensign: [7, 3.6, 14, 7, 64, 32], pennant: [16, 0.7, 24, 2, 128, 8] };   // 長、寬（公尺）、布料沿飛的方向幾格、沿旗桿幾格、貼圖寬高（px）
 var COL_ON = Q.get('colours') !== '0';                                   // ?colours=0 ⇒ 不加旗（對照用）
 var COL_POLE_W = 0.16, COL_POLE_C = [0.36, 0.27, 0.17];                   // 旗桿粗細（公尺）、顏色
-/** 旗面上 (u 沿飛的方向 0 旗桿 → 1 尾、v 沿旗桿 0 上 → 1 下) 的顏色。 */
-function colourAt(kind, team, u, v) {
-  var F = COL_FIELD[team] || COL_FIELD.blue;
-  if (kind === 'pennant') {                                              // 長旗：靠旗桿那一段白底紅十字（聖喬治），之後是陣營色
-    var hl = 0.07; if (u > hl) return F;
-    return Math.abs(u - hl / 2) < hl * 0.16 || Math.abs(v - 0.5) < 0.17 ? COL_R : COL_W;
+// ── 旗 ＝ 底色＋紋章（TASK-0950；Tim 2026-10-25「旗幟可以有底色+紋章兩部分(底色可換) 旗幟資訊就會是底色+紋章」
+//    「開戰鈕的左右側可以讓玩家選取兩陣營旗幟 把目前都用英國旗幟的部分替換掉」「之後在Blocksail也會用到 替換國家旗或是玩家自己的旗幟」）──
+//   一面旗 ＝ { field: '#rrggbb' 底色, emblem: 紋章的 key }；兩陣營各一份（teamFlag('blue'|'red')）。以前寫死的英國藍旗、紅旗 ＝ 聯合旗角＋藍底／紅底（預設 ⇒ 貼圖逐位元組相同）
+//   紋章 FLAG_EMB：at(X, Y) ⇒ 那一點的顏色｜null（null ＝ 底色）—— X 沿飛 0（旗桿）～2（尾）、Y 沿旗桿 0（上）～1（下）（旗面 2:1，圓才是圓的）；
+//     hoist(u, v, hl) ＝ 長旗靠旗桿那一段（沒寫 ⇒ 整段 ink）；ink ＝ 紋章的主色；res ＝ 戰鬥旗的貼圖放大幾倍（圖案細的要多幾點；聯合旗角 1 ＝ 以前的 64 × 32）
+//   選哪一面：網址 ?flags=<我方>,<敵方>（預設旗的 key，或 <紋章或預設旗的 key>:<底色 6 位 hex>）＞ 設定存檔 ＞ 預設；主選單開戰鈕左右兩側的選單（外殼 71_menu.js flagUI）；__game.flags({ blue, red }) 改
+//   ⇒ 已經載入的船型照新的重烘旗面（flagsRetex：只換貼圖集，布料、位置、被打都不動 ⇒ 不碰戰局）
+var FLAG_EMB = {
+  union: { name: '聯合旗角', ink: COL_R, res: 1,
+    at: function (X, Y) {                                               // 左上角四分之一是聯合旗（1801 年後：聖喬治＋聖安德魯＋聖派翠克，這裡畫成藍底、白斜十字、白邊紅十字）
+      var u = X / 2, v = Y; if (u > 0.5 || v > 0.5) return null;
+      var cu = u / 0.5, cv = v / 0.5, d1 = Math.abs(cu - cv), d2 = Math.abs(cu + cv - 1);
+      if (Math.abs(cu - 0.5) < 0.09 || Math.abs(cv - 0.5) < 0.12) return COL_R;
+      if (Math.abs(cu - 0.5) < 0.17 || Math.abs(cv - 0.5) < 0.22) return COL_W;
+      if (Math.min(d1, d2) < 0.11) return COL_W;
+      return COL_UB;
+    },
+    hoist: function (u, v, hl) { return Math.abs(u - hl / 2) < hl * 0.16 || Math.abs(v - 0.5) < 0.17 ? COL_R : COL_W; } },   // 長旗靠旗桿那一段白底紅十字（聖喬治）
+  burgundy: { name: '勃艮第十字', ink: COL_R, res: 2,                   // 西班牙（1506～1785 的海軍旗）：白底、紅色帶節的斜十字（兩根粗枝交叉）
+    at: function (X, Y) {
+      var a = (X - 2 * Y) / Math.sqrt(5), b = (X + 2 * Y - 2) / Math.sqrt(5), t1 = (2 * X + Y) / Math.sqrt(5), t2 = (2 * X - Y) / Math.sqrt(5);
+      var w1 = 0.07 + (Math.sin(t1 * 26) > 0.55 ? 0.03 : 0), w2 = 0.07 + (Math.sin(t2 * 26) > 0.55 ? 0.03 : 0);   // 枝上的節（ragged staff）
+      return Math.abs(a) < w1 || Math.abs(b) < w2 ? COL_R : null;
+    } },
+  crescent: { name: '新月與星', ink: COL_W, res: 2,                      // 鄂圖曼：紅底、白色新月＋五角星
+    at: function (X, Y) {
+      var dx = X - 0.82, dy = Y - 0.5, ex = X - 0.92;
+      if (dx * dx + dy * dy < 0.27 * 0.27 && ex * ex + dy * dy > 0.225 * 0.225) return COL_W;
+      return flagStar(X - 1.2, Y - 0.5, 0.12) ? COL_W : null;
+    } },
+  skull: { name: '骷髏與交叉骨', ink: COL_W, res: 2,                      // 海盜：黑底、白骷髏、下面兩根交叉的骨頭
+    at: function (X, Y) {
+      function c(x, y, r) { return (X - x) * (X - x) + (Y - y) * (Y - y) < r * r; }
+      function seg(ax, ay, bx, by, r) { var vx = bx - ax, vy = by - ay, t = clamp(((X - ax) * vx + (Y - ay) * vy) / (vx * vx + vy * vy), 0, 1), px = ax + vx * t - X, py = ay + vy * t - Y; return px * px + py * py < r * r; }
+      if (c(0.93, 0.35, 0.045) || c(1.07, 0.35, 0.045) || (Y > 0.43 && Y < 0.47 && Math.abs(X - 1) < 0.02)) return null;   // 眼窩、鼻樑 ⇒ 底色
+      if (c(1, 0.33, 0.16) || (Math.abs(X - 1) < 0.1 && Y > 0.33 && Y < 0.55)) return COL_W;   // 頭骨＋下顎
+      if (seg(0.7, 0.64, 1.3, 0.9, 0.035) || seg(0.7, 0.9, 1.3, 0.64, 0.035)) return COL_W;    // 交叉骨
+      if (c(0.69, 0.61, 0.04) || c(0.67, 0.67, 0.04) || c(1.31, 0.61, 0.04) || c(1.33, 0.67, 0.04) || c(0.69, 0.93, 0.04) || c(0.67, 0.87, 0.04) || c(1.31, 0.93, 0.04) || c(1.33, 0.87, 0.04)) return COL_W;   // 骨頭兩端的關節
+      return null;
+    } },
+  none: { name: '（沒有紋章）', ink: COL_W, res: 1, at: function () { return null; } }
+};
+//   預設旗（選單裡那幾面；Tim「旗幟可以做下拉選單 先加三四種就好」）：key ⇒ { name, field, emblem }。英國藍旗、紅旗的底色 ＝ 以前的 COL_FIELD 換成 0～255（round）⇒ 同一個位元組
+var FLAG_PRESETS = [
+  { k: 'gb-blue', name: '英國藍旗', field: '#1a246b', emblem: 'union' },
+  { k: 'gb-red', name: '英國紅旗', field: '#b81a17', emblem: 'union' },
+  { k: 'spain', name: '西班牙', field: '#ece9e0', emblem: 'burgundy' },
+  { k: 'ottoman', name: '鄂圖曼', field: '#b81a17', emblem: 'crescent' },
+  { k: 'pirate', name: '海盜', field: '#141414', emblem: 'skull' }
+];
+var FLAG_DEF = { blue: 'gb-blue', red: 'gb-red' };
+// ⛔ 下面兩個不給初值：69_prefs.js 讀存檔時本檔還沒跑（同一個閉包，var 提升）⇒ 那時先把存檔那一格原樣放進 FLAG_PREF，teamFlag 第一次用到才解
+var FLAG_PREF, TEAM_FLAGS;
+/** 五角星（中心 (x, y) 已經減掉、外半徑 R）：點在不在星裡（照十個頂點的多邊形）。 */
+function flagStar(x, y, R) {
+  var n = 10, inside = false;
+  for (var i = 0, j = n - 1; i < n; j = i++) {
+    var ai = -Math.PI / 2 + i * Math.PI / 5, aj = -Math.PI / 2 + j * Math.PI / 5, ri = i % 2 ? R * 0.4 : R, rj = j % 2 ? R * 0.4 : R;
+    var xi = Math.cos(ai) * ri, yi = Math.sin(ai) * ri, xj = Math.cos(aj) * rj, yj = Math.sin(aj) * rj;
+    if ((yi > y) !== (yj > y) && x < (xj - xi) * (y - yi) / (yj - yi) + xi) inside = !inside;
   }
-  if (u > 0.5 || v > 0.5) return F;                                      // 戰鬥旗：左上角四分之一是聯合旗（1801 年後：聖喬治＋聖安德魯＋聖派翠克，這裡畫成藍底、白斜十字、白邊紅十字）
-  var cu = u / 0.5, cv = v / 0.5, d1 = Math.abs(cu - cv), d2 = Math.abs(cu + cv - 1);
-  if (Math.abs(cu - 0.5) < 0.09 || Math.abs(cv - 0.5) < 0.12) return COL_R;
-  if (Math.abs(cu - 0.5) < 0.17 || Math.abs(cv - 0.5) < 0.22) return COL_W;
-  if (Math.min(d1, d2) < 0.11) return COL_W;
-  return COL_UB;
+  return inside;
+}
+/** '#rrggbb' ⇒ [r, g, b]（0～1）；不合 ⇒ null。 */
+function flagRgb(h) { var m = /^#?([0-9a-f]{6})$/i.exec(h || ''); if (!m) return null; var n = parseInt(m[1], 16); return [(n >> 16 & 255) / 255, (n >> 8 & 255) / 255, (n & 255) / 255]; }
+/** 一面旗照規矩整理（{ field, emblem }；外部給的也走這裡）⇒ 新的一份｜null。 */
+function flagOk(f) { if (!f || typeof f !== 'object' || !FLAG_EMB[f.emblem] || !flagRgb(f.field)) return null; return { field: '#' + flagRgb(f.field).map(function (c) { return ('0' + Math.round(c * 255).toString(16)).slice(-2); }).join(''), emblem: f.emblem }; }
+function flagPreset(k) { var p = FLAG_PRESETS.filter(function (q) { return q.k === k; })[0]; return p ? { field: p.field, emblem: p.emblem } : null; }
+/** 網址那一格：預設旗的 key，或 <紋章或預設旗的 key>:<底色 hex>（換底色）。 */
+function flagParse(s) { if (!s) return null; var p = flagPreset(s); if (p) return p; var a = s.split(':'), q = flagPreset(a[0]); return flagOk({ emblem: q ? q.emblem : a[0], field: '#' + (a[1] || '').replace('#', '') }); }
+/** 陣營 t（'blue' 我方｜'red' 敵方）掛哪一面旗。 */
+function teamFlag(t) {
+  if (!TEAM_FLAGS) {
+    TEAM_FLAGS = { blue: flagPreset(FLAG_DEF.blue), red: flagPreset(FLAG_DEF.red) };
+    var q = Q.has('flags') ? Q.get('flags').split(',') : null;
+    ['blue', 'red'].forEach(function (s, i) { var f = q ? flagParse(q[i]) : flagOk(FLAG_PREF && FLAG_PREF[s]); if (f) TEAM_FLAGS[s] = f; });
+  }
+  return TEAM_FLAGS[t === 'red' ? 'red' : 'blue'];
+}
+/** 換旗（選單、__game.flags、之後 Blocksail）：o ＝ { blue?, red? }（每一個 ＝ 旗或預設旗的 key）⇒ 已載入的船型重烘旗面；回換了幾邊。 */
+function flagSet(o) {
+  teamFlag('blue'); var n = 0;
+  ['blue', 'red'].forEach(function (s) { var f = o && (typeof o[s] === 'string' ? flagParse(o[s]) : flagOk(o[s])); if (f && JSON.stringify(f) !== JSON.stringify(TEAM_FLAGS[s])) { TEAM_FLAGS[s] = f; n++; } });
+  if (n) { flagsRetex(); evEmit('flags:set'); }                       // 主選單的選旗照新的重畫（外殼 71_menu.js 訂閱；核心不叫外殼的名字）
+  return n;
+}
+/** 旗面上 (u 沿飛的方向 0 旗桿 → 1 尾、v 沿旗桿 0 上 → 1 下) 的顏色；f ＝ { field, emblem }。 */
+function colourAt(kind, f, u, v) {
+  var F = flagRgb(f.field) || COL_FIELD.blue, E = FLAG_EMB[f.emblem] || FLAG_EMB.none;
+  if (kind === 'pennant') {                                              // 長旗：靠旗桿那一段畫紋章的（聯合旗角 ⇒ 白底紅十字），之後是底色
+    var hl = 0.07; if (u > hl) return F;
+    return E.hoist ? E.hoist(u, v, hl) : E.ink;
+  }
+  return E.at(u * 2, v) || F;                                            // 戰鬥旗：紋章蓋在底色上
 }
 /** 這一型的桅頂（格座標）：{ fore: [x, y, z], … }。 */
 function mastTrucks(T) {
@@ -58,17 +139,31 @@ function autoFlags(T) {
   var pm = tr.main ? 'main' : ks.slice().sort(function (a, b) { return tr[b][2] - tr[a][2]; })[0], hz = (tr[pm][2] - T.zw) * S, k = clamp(hz / 60, 0.5, 1.1);
   return ks.map(function (m) { return { kind: m === pm ? 'pennant' : 'ensign', at: tr[m], pole: 4.5 * k, scale: k, mast: m }; });
 }
-/** 一面旗的貼圖（跟 .vxk 帆的 texture 同一種格式：w×h 的 RGBA、base64）。 */
-function colourTex(kind, team, W, H) {
+/** 一面旗的貼圖（跟 .vxk 帆的 texture 同一種格式：w×h 的 RGBA、base64）；f ＝ { field, emblem }。 */
+function colourTex(kind, f, W, H) {
   var b = '';
-  for (var y = 0; y < H; y++) for (var x = 0; x < W; x++) { var c = colourAt(kind, team, (x + 0.5) / W, (y + 0.5) / H); b += String.fromCharCode(Math.round(c[0] * 255), Math.round(c[1] * 255), Math.round(c[2] * 255), 255); }
+  for (var y = 0; y < H; y++) for (var x = 0; x < W; x++) { var c = colourAt(kind, f, (x + 0.5) / W, (y + 0.5) / H); b += String.fromCharCode(Math.round(c[0] * 255), Math.round(c[1] * 255), Math.round(c[2] * 255), 255); }
   return btoa(b);
+}
+/** 陣營 team 那一面旗、kind 那一種的貼圖 ⇒ { w, h, rgba }（戰鬥旗照紋章的 res 放大；長旗照舊）。 */
+function flagTex(kind, team) {
+  var f = teamFlag(team), Z = COL_SIZE[kind] || COL_SIZE.ensign, r = kind === 'pennant' ? 1 : (FLAG_EMB[f.emblem] || FLAG_EMB.none).res || 1, W = Z[4] * r, H = Z[5] * r;
+  return { w: W, h: H, rgba: colourTex(kind, f, W, H) };
+}
+/** 換旗之後：每一型已載入的船（HULLT）把陣營旗那幾份貼圖照新的旗重烘、重排貼圖集、GL 那張丟掉（下一次畫 11_rig_gpu.js 重傳）。
+ *  T.flagSlots ＝ [{ o: 帶 texture 的那一份（合成的旗那面帆／teamExtra 那一格）, kind, team }]（teamFlagsSetup 記的）；uv、alpha_min 照舊。 */
+function flagsRetex() {
+  Object.keys(HULLT).forEach(function (id) {
+    var T = HULLT[id]; if (!T || !T.flagSlots || !T.flagSlots.length) return;
+    T.flagSlots.forEach(function (q) { q.o.texture = Object.assign({}, q.o.texture, flagTex(q.kind, q.team)); });
+    if (T.sailAtlas) { T.sailAtlas = sailAtlas(T.rig.sails.concat(T.teamExtra || [])); if (T.sailTexGL) gl.deleteTexture(T.sailTexGL); T.sailTexGL = null; }
+  });
 }
 /** 載入船型時（05_hull.js「桅與帆」那一步、clothSetup 之前）：照設定檔的 flags 生旗（合成的帆，接在 T.rig.sails 後面）。
  *  T.nSail0 ＝ 作品自己的帆有幾面（快取只存這幾面的布料，06_cache.js）；T.teamExtra ＝ 貼圖集排在帆後面的那幾份（陣營旗紅的那份、替換作品旗的藍紅兩份；clothSetup）、
  *  T.teamTex[帆] ＝ { blue, red } 貼圖集的哪一格（sailRect）；T.poles ＝ 旗桿。 */
 function teamFlagsSetup(T, info) {
-  T.nSail0 = T.rig.sails.length; T.teamTex = {}; T.teamExtra = []; T.poles = [];
+  T.nSail0 = T.rig.sails.length; T.teamTex = {}; T.teamExtra = []; T.poles = []; T.flagSlots = [];
   if (!COL_ON) return;
   var defs = info && info.flags || autoFlags(T); if (!defs.length) return;
   T.teamDefs = defs;
@@ -84,10 +179,11 @@ function teamFlagsSetup(T, info) {
       if (u === 0) pins.push(v);
     }
     for (u = 0; u < NU; u++) for (v = 0; v < NV; v++) { var p = u * (NV + 1) + v, q = p + NV + 1; tris.push(p, q, q + 1, p, q + 1, p + 1); }
-    var nm = 'team-' + f.kind + '-' + fi, col = COL_FIELD.blue;
-    red.push([T.nSail0 + add.length, { texture: { w: Z[4], h: Z[5], rgba: colourTex(f.kind, 'red', Z[4], Z[5]), uv: uv, alpha_min: 0 } }]);
-    add.push({ name: nm, verts: verts, tris: tris, color: col, meta: { kind: 'flag', flag: pen ? 'pennant' : 'battle', team: 1 }, pins: pins, pinK: cell >= 0 ? 1 : 3, pinV: cell, truckCell: cell,
-      texture: { w: Z[4], h: Z[5], rgba: colourTex(f.kind, 'blue', Z[4], Z[5]), uv: uv, alpha_min: 0 } });
+    var nm = 'team-' + f.kind + '-' + fi, col = COL_FIELD.blue, xr = { texture: Object.assign({ uv: uv, alpha_min: 0 }, flagTex(f.kind, 'red')) };
+    var sl = { name: nm, verts: verts, tris: tris, color: col, meta: { kind: 'flag', flag: pen ? 'pennant' : 'battle', team: 1 }, pins: pins, pinK: cell >= 0 ? 1 : 3, pinV: cell, truckCell: cell,
+      texture: Object.assign({ uv: uv, alpha_min: 0 }, flagTex(f.kind, 'blue')) };
+    red.push([T.nSail0 + add.length, xr]); add.push(sl);
+    T.flagSlots.push({ o: sl, kind: f.kind, team: 'blue' }, { o: xr, kind: f.kind, team: 'red' });   // 換旗重烘（flagsRetex）
     T.poles.push({ at: a, top: top + 0.6, cell: cell });                 // 旗桿：桅頂 → 旗頭上面一點
     for (var q = 0; q < verts.length; q += 3) T.radFlags = Math.max(T.radFlags || 0, Math.hypot(verts[q] - T.cx, verts[q + 1] - T.cy, verts[q + 2] - T.geo.center) * S);   // 離船心最遠多少（32_hull.js：砲彈離船心超過這個就不看這艘）
   });
@@ -99,9 +195,10 @@ function teamFlagsSetup(T, info) {
     if (k < 0) T.rig.sails.forEach(function (s, j) { if (j < T.nSail0 && s.name === f.replace) k = j; });   // 沒有 meta 的舊匯出 ⇒ 照名字
     var s = T.rig.sails[k], tx = s && s.texture;
     if (!tx || !tx.uv) { console.warn('陣營旗：' + T.id + ' 換不了「' + f.replace + '」' + (s ? '（作品的旗沒有貼圖 uv）' : '（找不到這面旗）')); return; }
-    var Z = COL_SIZE[f.kind] || COL_SIZE.ensign, uv = tx.uv;
+    var kd = COL_SIZE[f.kind] ? f.kind : 'ensign', uv = tx.uv, xb = { texture: Object.assign({ uv: uv, alpha_min: 0 }, flagTex(kd, 'blue')) }, xr = { texture: Object.assign({ uv: uv, alpha_min: 0 }, flagTex(kd, 'red')) };
     T.teamTex[k] = { blue: n + T.teamExtra.length, red: n + T.teamExtra.length + 1 };
-    T.teamExtra.push({ texture: { w: Z[4], h: Z[5], rgba: colourTex(f.kind, 'blue', Z[4], Z[5]), uv: uv, alpha_min: 0 } }, { texture: { w: Z[4], h: Z[5], rgba: colourTex(f.kind, 'red', Z[4], Z[5]), uv: uv, alpha_min: 0 } });
+    T.teamExtra.push(xb, xr);
+    T.flagSlots.push({ o: xb, kind: kd, team: 'blue' }, { o: xr, kind: kd, team: 'red' });
   });
 }
 /** 貼圖集的那一格：陣營旗照船的陣營挑藍或紅那份（船型兩隊共用）；替換掉的作品旗也一樣。 */

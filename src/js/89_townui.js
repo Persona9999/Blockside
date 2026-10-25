@@ -115,11 +115,13 @@ function tuiSumHTML() {
   var I = TUI.info, E = I.emi || {}, J = I.jobs || {}, jt = 0, h = '';
   Object.keys(J).forEach(function (k) { jt += J[k]; });
   h += '<div class="tuiTiles">' + [['👥 人口', tuiNum(I.pop.total)], ['💪 勞動人口', tuiNum(I.pop.labor)], ['🔧 有工作', tuiNum(jt)], ['🪑 失業', tuiNum(E.idle || 0)], ['📢 缺工', tuiNum(E.short || 0)], ['⚓ 碼頭上等船', tuiNum(E.dock || 0)],
-    ['💰 城鎮金庫', tuiNum(I.funds)], ['👛 鎮民金庫', tuiNum(I.folkFunds)], ['🛡 士兵', tuiNum(I.guard.now) + ' / ' + tuiNum(I.guard.cap)]].map(function (x) { return '<div><small>' + x[0] + '</small><b>' + x[1] + '</b></div>'; }).join('') + '</div>';
+    ['💰 城鎮金庫', tuiNum(I.funds)], ['👛 鎮民金庫', tuiNum(I.folkFunds)], ['🛡 士兵', tuiNum(I.guard.now) + ' / ' + tuiNum(I.guard.cap)]]
+    .concat(I.rent ? [['🏠 房租（昨天）', tuiNum(I.rent.paid, 1) + (I.rent.due > I.rent.paid ? ' / ' + tuiNum(I.rent.due, 1) : '')]] : []).map(function (x) { return '<div><small>' + x[0] + '</small><b>' + x[1] + '</b></div>'; }).join('') + '</div>';
   var F = I.fed;
   if (F) { var eat = F.eat || {}, LV = ['荒年糧', '主糧', '家常', '佳餚']; h += '<h4>🍞 昨天吃飯（份）</h4><p>' + [3, 2, 1, 0].map(function (k) { return LV[k] + ' ' + tuiNum((eat[k] || 0) / 1000); }).join('　') + (F.relief ? '　（城鎮免費補了 ' + tuiNum(F.relief / 1000) + ' 份）' : '') + (F.famine ? '　⚠ 飢荒' : '') + '</p>' + tuiEatHTML(F); }   // 等級照 Blocksail world/food.js FOOD_LEVELS；底下每一道吃了幾成（Tim 2026-10-25「城鎮是否可以顯示鎮民的消耗食物百分比」）
-  var SV = I.svc || {}, SVI = { faith: '⛪' };                             // 服務建築的滿意度（Blocksail world/food.js serveDay；TASK-0914）：昨天想來／來了幾人次、滿意度、收的錢
-  Object.keys(SV).forEach(function (k) { var Q = SV[k]; h += '<h4>' + (SVI[k] || '🙂') + ' ' + tuiEsc(Q.name || k) + '（昨天）</h4><p>來了 ' + tuiNum(Q.got) + '／想來 ' + tuiNum(Q.want) + ' 人次　滿意度 ' + Math.round((Q.sat || 0) * 100) + '%　捐獻 ' + tuiNum(Q.paid, 2) + '</p>'; });
+  if (I.rent && I.rent.skip) h += '<p class="tuiDim">🏠 昨天房租沒收滿：' + tuiEsc(I.rent.skip) + '（該收 ' + tuiNum(I.rent.due, 1) + '）</p>';   // 房租（Blocksail world/townstate.js rentDay；TASK-0946）：鎮民的錢不夠吃飯 ⇒ 不收
+  var SV = I.svc || {}, SVI = { faith: '⛪', drink: '🍺', dine: '🍲', health: '⚕' };   // 服務建築的滿意度（Blocksail world/food.js serveDay；TASK-0914、0946 酒館與醫院）：昨天想來／來了幾人次、滿意度、收的錢
+  Object.keys(SV).forEach(function (k) { var Q = SV[k]; h += '<h4>' + (SVI[k] || '🙂') + ' ' + tuiEsc(Q.name || k) + '（昨天）</h4><p>來了 ' + tuiNum(Q.got) + '／想來 ' + tuiNum(Q.want) + ' 人次　滿意度 ' + Math.round((Q.sat || 0) * 100) + '%　' + (k === 'faith' ? '捐獻' : '收入') + ' ' + tuiNum(Q.paid, 2) + '</p>'; });
   var ks = Object.keys(J).sort(function (a, b) { return J[b] - J[a]; });
   h += '<h4>🔧 崗位（今天分到幾人）</h4>' + (ks.length ? '<table class="tuiT"><tr><th>工作</th><th>人</th></tr>' + ks.map(function (k) { return '<tr><td>' + tuiEsc(TUI_JOB[k] || TUI.blds[k] || k) + '</td><td>' + tuiNum(J[k]) + '</td></tr>'; }).join('') + '</table>' : '<p class="tuiDim">還沒有人上工（帳還沒過一天）</p>');
   var B = {}; (I.buildings || []).forEach(function (b) { B[b.type] = (B[b.type] || 0) + 1; });
