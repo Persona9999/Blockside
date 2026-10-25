@@ -19,10 +19,10 @@ var TWB_CATS = [
   { k: 'house', name: '🏠 房屋', items: [{ k: 'house', name: '住宅', sub: '2 × 3 格（轉角 2 × 2）' }] }   // 路邊每 4 m 一格（Blocksail TASK-0840）；轉角只剩 2 格深 ⇒ 8 × 8 的小版住宅
 ];   // 道路以外那幾類：open 回的 menu 換掉（twbMenuSet）；沒給 ⇒ 照這一份
 /** open 回的選單（Blocksail town.js BSW.townBuildMenu：[{ k, name, items: [{ use, name, sub, recipes?, … }] }]）⇒ 道路之後接上；選單裡的那幾種模型先要（63_towns.js townWantSet ⇒ 預覽畫得出來）。
- *  recipes：帶田的生產建築種得了哪幾條（[{ k, name }]；Blocksail mapgen_worker.js open 加的）⇒ 選了那一種就先列配方那一排（twbRcpUI）。 */
+ *  recipes：帶田的生產建築種得了哪幾條、礦坑挖得了哪幾種（[{ k, name }]；Blocksail mapgen_worker.js open 加的）⇒ 選了那一種就先列配方那一排（twbRcpUI）；annex：帶不帶田（ann）。 */
 function twbMenuSet(menu) {
   if (!menu || !menu.length) return;
-  TWB_CATS = [TWB_CATS[0]].concat(menu.map(function (c) { return { k: c.k, name: c.name, items: c.items.map(function (it) { return { k: it.use, name: it.name, sub: it.sub || '', rcp: it.recipes || null }; }) }; }));
+  TWB_CATS = [TWB_CATS[0]].concat(menu.map(function (c) { return { k: c.k, name: c.name, items: c.items.map(function (it) { return { k: it.use, name: it.name, sub: it.sub || '', rcp: it.recipes || null, ann: !!it.annex }; }) }; }));
   if (!TWB_CATS.some(function (c) { return c.k === TWB.cat && c.items.some(function (it) { return it.k === TWB.item; }); })) { TWB.cat = 'road'; TWB.item = 'street'; }
   townWantSet([].concat.apply([], menu.map(function (c) { return c.items.map(function (it) { return it.use; }); })));
   twbUI();
@@ -106,7 +106,7 @@ function twbToggle(on) {
   twbUI();
 }
 function twbPick(cat, item) { TWB.cat = cat; TWB.item = item; TWB.start = null; TWB.tr = null; TWB.moved = true; TWB.sel = null; TWB.recipe = null; TWB.rcpOn = null; twbUI(); }
-/** 配方那一排（帶田的生產建築：農莊、種植園、葡萄園）：選了那一種就列（Tim 2026-10-25「農莊能種植的作物要在選取農莊就出現」「葡萄園 種植園也是」）。
+/** 配方那一排（帶田的生產建築：農莊、種植園、葡萄園 ⇒「種：」；礦坑 ⇒「產：」銅、鐵…，TASK-0742）：選了那一種就列（Tim 2026-10-25「農莊能種植的作物要在選取農莊就出現」「葡萄園 種植園也是」）。
  *  游標在路邊、最後一則試放有 recipes ⇒ 照那一點：能種的可以點、種不了的灰掉、滑上去看原因；
  *  不在路邊（還沒試放、離開路、游標移到面板上）⇒ 照選單的 recipes 全列、都可以點（先挑想種的，放下去那一點種不了 ⇒ Blocksail 照第一條能種的、note 說一聲）。
  *  亮的那一顆：路邊 ⇒ 那一點實際種的；不在路邊 ⇒ 玩家點的 ＞ 最後一則試放用的 ＞ 第一條。點了 ⇒ 重問試放。不帶田的 ⇒ 空的。 */
@@ -120,7 +120,7 @@ function twbRcpUI() {
   TWB.rcpSig = sig;
   if (!R) { el.innerHTML = ''; return; }
   var esc = function (t) { return String(t).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); };
-  el.innerHTML = '<span>種：</span>' + R.ok.map(function (x) { return '<button type="button" data-k="' + x.k + '"' + (x.k === on ? ' class="on"' : '') + '>' + esc(x.name) + '</button>'; }).join('') +
+  el.innerHTML = '<span>' + (it && !it.ann ? '產' : '種') + '：</span>' + R.ok.map(function (x) { return '<button type="button" data-k="' + x.k + '"' + (x.k === on ? ' class="on"' : '') + '>' + esc(x.name) + '</button>'; }).join('') +
     R.no.map(function (x) { return '<button type="button" disabled title="' + esc(x.why) + '">' + esc(x.name) + '</button>'; }).join('');
   el.querySelectorAll('button[data-k]').forEach(function (b) { b.onclick = function () { TWB.recipe = b.dataset.k; TWB.tr = null; TWB.moved = true; TWB.rcpSig = ''; }; });
 }
@@ -319,10 +319,13 @@ function twbInfo() {
   else s = !TWB.q ? '游標移到路邊或空建地上' : !tr || tr.road ? '試放…' : tr.ok ? (tr.lot ? '空建地 ' + tr.lot : '路邊 ' + tr.w.toFixed(0) + ' × ' + tr.d + ' m') + twbFieldTxt(tr) + ' —— 點一下蓋' + (TWB.side ? '（' + (TWB.side > 0 ? '右' : '左') + '側）' : '') : '蓋不了：' + (tr.why || ['?'])[0];
   if (el.textContent !== s) el.textContent = s;
 }
-/** 生產建築那一段說明：＋田幾 m²（種什麼；長不滿上限、要放寬路邊也說）＋ 換配方的那一句。 */
+/** 生產建築那一段說明：＋田幾 m²（種什麼；長不滿上限、要放寬路邊也說）＋ 換配方的那一句。
+ *  不帶田的（礦坑、黏土坑：試放也回 recipe）⇒ 沒有「＋田」，只說產什麼（名字照 recipes／選單；查不到名字 ⇒ 不說，黏土坑只有一條）。 */
 function twbFieldTxt(tr) {
   if (!tr.recipe) return '';
-  var nm = ((tr.recipes && tr.recipes.ok || []).filter(function (x) { return x.k === tr.recipe; })[0] || { name: tr.recipe }).name, A = tr.annex;
+  var it = twbItem(), L = (tr.recipes && tr.recipes.ok || []).concat((it && it.rcp) || []), hit = L.filter(function (x) { return x.k === tr.recipe; })[0];
+  var nm = (hit || { name: tr.recipe }).name, A = tr.annex;
+  if (!A && it && !it.ann) return hit ? '、產' + nm + (tr.note ? '（' + tr.note + '）' : '') : '';
   return '＋田 ' + (A ? A.area + ' m²' + (A.stop === 'short' ? '（長不滿）' : '') + (A.front === 'relaxed' ? '（貼到路邊）' : '') : '?') + '、種' + nm + (tr.note ? '（' + tr.note + '）' : '');
 }
 /** 介面：分類分頁＋項目＋復原、收起（#twbP，#stage.twb 才顯示）；🔨 那一顆城鎮模式常駐、當開關（61_layout.js 的 town 配置）。 */
