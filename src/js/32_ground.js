@@ -3,6 +3,7 @@
 // 船底：龍骨線上 7 點（船型的水線前後端往內 15 格之間；每一點是那一欄中線附近最低的實心格 ⇒ 船頭船尾翹起來的照實際）。
 // 每一步（50_sim.js，碰撞之後）：每一點的海底比它高多少（pen）——
 //   · 碰到 ⇒ 航速每秒扣 (0.5 ＋ 2.5 × pen)，往高處開再多扣一倍（往深處退出來比較容易）；壓進去超過 1.2 m ⇒ 沿坡往低處推（不會整艘開上岸）。
+//     但推力那個方向至少留 GRD_KEEP × 終端航速（最多 GRD_KEEP_V 0.6 m/s；往岸上再 × GRD_KEEP_UP）⇒ 擱淺了還轉得動、退得出來（2026-10-25）。
 //   · 剛碰上、或還在動（> 0.8 m/s）每一秒 ⇒ 船底那一點附近打掉 硬度 × 速度² × 1.5 格（最多 40 格；船殼破了照常進水）：
 //     珊瑚礁 1、礁石／岩壁 1.5、陸地 0.6、沙灘 0.4、沙底／沙洲 0.25 ⇒ 撞礁比擱在沙上重得多。
 //   · 撞破船殼（Tim 2026-10-19：「可以嘗試真的讓船殼撞破嗎 然後順序跟漏水調換(先撞破 才進水)」；groundPunch）：硬的底（珊瑚礁、礁石、岩壁：硬度 ≥ GRD_PUNCH_H）
@@ -12,6 +13,7 @@
 //     ⛔ 以前只有上面那一條（撞點半徑 6 格、最多 40 格）：打到的是龍骨那團實心木頭，沒通進艙內 ⇒ 粒子模式一滴水都沒進來，公式模式那 40 個「洞」抽水機抽得贏 ⇒ 撞礁之後船一點都沒下沉（2026-10-19 宣傳片量）。
 //   · 讀數：sh.grnd ＝ { t 最後一次撞的時刻, m 底質, pen 壓進去多深, lost 打掉幾格, punch 撞穿幾格 }（離開海底 ⇒ null，lost 留在 sh.grndLost、punch 留在 sh.grndPunch）。
 var GRD_HARD = { 0: 0.3, 1: 0.25, 2: 1.0, 3: 0.25, 4: 1.5, 10: 0.4, 11: 0.6, 12: 1.5 };
+var GRD_KEEP = 0.25, GRD_KEEP_V = 0.6, GRD_KEEP_UP = 0.3;               // 擱淺留一點動力脫身（groundStep）：終端航速的幾成、最多幾 m/s、往岸上推再乘幾成（設計決定）
 var GRD_OFF = null;                                                      // 撞點附近的格（照離撞點的距離排；半徑 6 格）
 var GRD_PUNCH_H = 1, GRD_PUNCH_V = 1.5, GRD_PUNCH_K = 12, GRD_PUNCH_MAX = 900, GRD_PUNCH_T = 12, GRD_COL = null;   // 硬度、m/s、格／(m/s)²、格、船板最厚幾格；GRD_COL：撞點前後的欄（照離撞點遠近排）
 function groundKeel(T) {
@@ -38,6 +40,14 @@ function groundStep(sh, dt) {                                           // dt：
   var m = bedMat(bp[0], bp[2]), hard = GRD_HARD[m] !== undefined ? GRD_HARD[m] : 0.5, g = bedGrad(bp[0], bp[2]), gl = Math.hypot(g[0], g[1]);
   var F = fwd(sh.yaw), dir = sh.spd < 0 ? -1 : 1, up = gl > 1e-6 ? dir * (F[0] * g[0] + F[2] * g[1]) / gl : 0, v0 = Math.abs(sh.spd);
   sh.spd *= Math.max(0, 1 - dt * (0.5 + 2.5 * best) * (1 + Math.max(0, up)));
+  // 留一點動力脫身（Tim 2026-10-25「可以微調一下擱淺 保留一點動力可以脫身(這樣就算進去擱淺也還能離開)」）：推力那個方向的船速至少留 GRD_KEEP × 終端航速（最多 GRD_KEEP_V），
+  //   推力往高處（岸上）⇒ 再乘 GRD_KEEP_UP。⛔ 以前照壓進去多深整個扣掉 ⇒ 推力加回來的追不上、船速 0 連船頭都轉不動（舵照船速），擱上去就出不來。
+  //   GRD_KEEP_V < 0.8 m/s（還在動、每秒再撞一次的門檻）⇒ 卡著磨出去不會一直打掉船殼。
+  var vT = sh.drive && isFinite(sh.drive.vT) ? sh.drive.vT : 0;
+  if (vT) {
+    var vd = vT > 0 ? 1 : -1, upT = gl > 1e-6 ? vd * (F[0] * g[0] + F[2] * g[1]) / gl : 0, keep = Math.min(GRD_KEEP_V, GRD_KEEP * Math.abs(vT)) * (upT > 0 ? GRD_KEEP_UP : 1);
+    if (sh.spd * vd < keep) sh.spd = vd * keep;
+  }
   if (best > 1.2 && gl > 1e-6) { var push = Math.min(0.5, (best - 1.2) * 0.25); sh.px -= g[0] / gl * push; sh.pz -= g[1] / gl * push; }
   if (!sh.grnd) {
     sh.grnd = { t: SIMT, m: m, pen: best, lost: 0 };
