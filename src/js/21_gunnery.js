@@ -333,7 +333,7 @@ function aimPoint(sh) {
  *    量過（觀戰種子 1797，第一輪對砲最慢的一格）：繩 120–160 → 12–17 ms、人 40–46 → 1–2 ms（之後再加帆與模型）。 */
 function stepBall(b, dt) {
   b.age += dt;
-  var sp = len(b.v), steps = Math.max(1, Math.ceil(sp * dt / 0.05)), h = dt / steps, top = SEA_K > 0 ? 1.15 * SEA_K * WX.sea : 0, near = null;
+  var sp = len(b.v), steps = Math.max(1, Math.ceil(sp * dt / 0.05)), h = dt / steps, top = seaTopOf(SEA_K > 0 ? 1.15 * SEA_K * WX.sea : 0), near = null;   // seaTopOf：河面比海高（08_sea.js）
   for (var s = 0; s < steps && b.alive; s++) {
     b.v[1] -= G * h;
     if (b.gf && (s & 7) === 0) evEmit('gfTrail', b.p.slice(), b.v.slice());   // 希臘火：零星火星（只是演出）
@@ -647,12 +647,12 @@ function stepFly1(f, dt) {
         var out = M4.dir(f.sh.M, 0, f.sd * f.sv / S, 0), ax = norm(M4.dir(f.sh.M, 1, 0, 0));
         f.rest = false; f.land = false; f.t = 0; f.M0 = f.M; f.c0 = f.c.slice(); f.R = M4.ident();
         f.v = add(f.sh.vel, out); f.w = mul(ax, -f.sd * 0.8);
-      } else return f.rt < FALL_REST_MAX && f.c[1] > (VX ? vxH(f.c[0], f.c[2]) : 0) - 25;
+      } else return f.rt < FALL_REST_MAX && f.c[1] > seaLv(f.c[0], f.c[2]) - 25;
     } else {
       f.M = M4.mul(f.sh.M, f.Ml); f.c = M4.pt(f.sh.M, f.cl[0], f.cl[1], f.cl[2]);
       if (!f.sh.grid.get(f.sup[0], f.sup[1], f.sup[2])) {               // 撐著它的那一格沒了（桅樓被打掉、桅倒了）⇒ 從現在的位置、帶著船速繼續掉（⛔ 以前停了就一直掛在原地 ⇒ 浮在半空，Tim 2026-10-20 截圖）
         f.rest = false; f.M0 = f.M; f.c0 = f.c.slice(); f.R = M4.ident(); f.v = f.sh.vel.slice(); f.w = [0, 0, 0];   // 從這一刻重新算：落下 1.5 m 之後碰到東西可以再停一次
-      } else return f.rt < FALL_REST_MAX && f.c[1] > (VX ? vxH(f.c[0], f.c[2]) : 0) - 25;
+      } else return f.rt < FALL_REST_MAX && f.c[1] > seaLv(f.c[0], f.c[2]) - 25;
     }
   }
   f.v[1] -= G * dt;
@@ -668,7 +668,7 @@ function stepFly1(f, dt) {
     var sup = [Math.floor(L[0]), Math.floor(L[1]), Math.floor(L[2])];
     if (f.sh.grid.get(sup[0], sup[1], sup[2])) { f.rest = true; f.Ml = M4.mul(f.sh.inv, f.M); f.cl = L; f.sup = sup; }   // sup：撐著它的那一格（之後每一步看它還在不在）
   }
-  return f.t < 25 && f.c[1] > (VX ? vxH(f.c[0], f.c[2]) : 0) - 25;   // 大漩渦：照漏斗那裡的水面算多深（⛔ 照 0 ⇒ 漏斗裡漂著的一出現就拿掉）
+  return f.t < 25 && f.c[1] > seaLv(f.c[0], f.c[2]) - 25;   // 大漩渦：照漏斗那裡的水面算多深（⛔ 照 0 ⇒ 漏斗裡漂著的一出現就拿掉）
 }
 function meshTris(m) {
   var v = m.verts, T = [];

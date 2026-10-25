@@ -22,7 +22,7 @@
 //   沒有海圖 ⇒ 水深一律 ANC_DEPTH，每一步的數字跟以前一樣（戰局逐位元組不變）。
 var ANC_DEPTH = 20, ANC_CHAIN = 36, ANC_REACH = Math.sqrt(ANC_CHAIN * ANC_CHAIN - ANC_DEPTH * ANC_DEPTH), ANC_FALL = 4, ANC_WEIGH = 8, ANC_DRAG = 8, ANC_DRAGX = 2.5, ANC_PIVOT = 0.06, ANC_YAWMAX = 0.5, ANC_HAUL = 1;   // 公尺、秒、rad/s、m/s（ANC_DEPTH ＝ 水深上限）
 /** 錨在 (x, z) 會落到多低（世界 y）：水面（大漩渦 ＝ 漏斗那一點、其他 ＝ 0）下 ANC_DEPTH；有海圖 ⇒ 真的海底，最深到那裡（岸上 ⇒ 地面）。 */
-function anchorLv(x, z) { return VX ? vxH(x, z) : 0; }
+function anchorLv(x, z) { return seaLv(x, z); }   // 水位：大漩渦的漏斗、河面（08_sea.js seaLv）
 function anchorFloor(x, z) {
   var lv = anchorLv(x, z);
   return BED && BED.A ? Math.max(bedHgt(x, z), lv - ANC_DEPTH) : lv - ANC_DEPTH;
@@ -254,7 +254,7 @@ function chainHull(sh, x, y, z, push) {
 function chainSolve(sh, a, c, dt) {
   // 水面高度（大漩渦：漏斗那裡的水面，08_sea.js vxH；Tim 2026-10-18「漩渦內拋錨會飛到天上」⛔ 照 0 ⇒ 船在 −180 m，海底 −20 m 在頭頂上，錨鏈一路掛到天上）；沒有漩渦 ⇒ 0（跟以前一樣）
   //   海底 ＝ anchorFloor（大漩渦：漏斗的水面下 ANC_DEPTH；有海圖：真的海底，最深到 −ANC_DEPTH；都沒有：−ANC_DEPTH）
-  var lv = function (x, z) { return VX ? vxH(x, z) : 0; };
+  var lv = seaLv;
   var N = CHAIN_SEG, p = c.p, q = c.q, sb = c.lost ? anchorFloor(p[N * 3], p[N * 3 + 2]) : anchorFloor(a.A[0], a.A[1]), W = null, E = null, i, o, it;   // sb：錨那一點的海底
   if (!c.lost) {
     W = M4.pt(sh.M, a.hx, a.hy, a.hz);

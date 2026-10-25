@@ -204,7 +204,8 @@ if (DEBUG) window.__game = {
   townDump: function (id) { return townDump(id); },   // 城的地面網格與整地高度的雜湊（63_towns.js townDump；增量重建 vs 整座建的對照）   // 規劃座標那一點：路面頂點高度 vs 現在的地形（87_townbuild.js twbProbe；查路面沉進地形）   // 規劃座標 ⇒ 螢幕座標（clientX、clientY；測建築模式用）
   trees: function (sp, n, at) { return treeFind(sp, n, at); },   // 找樹（63_trees.js treeFind）：那一種最靠近 at（[x, z]；沒給 ⇒ 鏡頭）的 n 棵
   // 海圖（TASK-0721；08_seabed.js、32_ground.js）：載了哪幾塊、換過幾次中心、等過幾次；每艘的擱淺讀數；q ＝ [x, z] ⇒ 那一點的高度與底質
-  inland: function (on) { if (on !== undefined) { BEDWAT.on = !!on; render(); } return BEDWAT.on; },   // 內陸水與低於海平面的乾地的遮罩一起開關（63_bed_gl.js；同一格開／關對照畫面用）
+  inland: function (on) { if (on !== undefined) { BEDWAT.on = !!on; render(); } return BEDWAT.on; },
+  river: function (x, z) { var r = bedWet(x, z), R = { n: BEDW.n, top: BEDW.top, low: BEDW.low }; if (r) Object.assign(R, { m: +r.m.toFixed(3), s: +r.s.toFixed(2), fx: +r.fx.toFixed(3), fz: +r.fz.toFixed(3), sl: r.sl, lv: +seaLv(x, z).toFixed(2), bed: +bedHgt(x, z).toFixed(2) }); return R; },   // 內陸水的模擬（08_seabed.js bedWet；TASK-0768）：那一點有幾成是河、河面、水流、坡度、水位、河床   // 內陸水與低於海平面的乾地的遮罩一起開關（63_bed_gl.js；同一格開／關對照畫面用）
   chart: function () { return chartInfo(); },                                  // 小地圖（63_chart.js）：開了沒、範圍、吃水門檻、底圖幾塊、畫面上的位置
   traffic: function () { return trafficInfo(); },                             // 往來的船（58_traffic.js）：在場幾艘、排隊、做好幾艘、收掉幾艘、建船每一段幾 ms
   flow: function () { return FLOW_ST; },                             // ?start=1 分段開戰（70_flow.js startStaged）：幾步、最久一步、每一步幾 ms、全部幾 ms

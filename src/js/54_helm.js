@@ -136,11 +136,11 @@ function vxBound(sh, y) {
 }
 /** 避開淺水與陸地（TASK-0721；有海圖才有，沒有 ⇒ null）：往前看 BEDAV_LOOK 那幾個距離，船底（32_ground.js sh.keelY）下面不到 BEDAV_CLR 公尺 ⇒
  *  從小到大試左右 30°、60°…180°，第一個整條看出去都夠深的方向；都不夠 ⇒ 看得最遠的那個。sh.bedAv ＝ 讀數（最後一次讓的時刻、前面多遠就淺了）。 */
-var BEDAV_LOOK = [40, 80, 130, 190], BEDAV_CLR = 1.5, BEDAV_TRY = [30, -30, 60, -60, 90, -90, 135, -135, 180];
+var BEDAV_LOOK = [40, 80, 130, 190], BEDAV_CLR = 1.5, BEDAV_CLR_IN = 0.5, BEDAV_TRY = [30, -30, 60, -60, 90, -90, 135, -135, 180];   // BEDAV_CLR_IN：船在河、湖裡吃水外多留的（Blocksail water.js WATER_NAV_CLR 同一個數；河窄、河道深是資料本身）
 function bedAvoid(sh) {
   if (!BED || sh.sinkingFinal) return null;
-  var lv = function (x, z) { return VX ? vxH(x, z) : 0; };             // 那一點的水面（大漩渦：漏斗；⛔ 照 0 ⇒ 漏斗裡的船吃水算成 200 m，到處都「淺」）
-  var need = (sh.keelY !== undefined ? lv(sh.px, sh.pz) - sh.keelY : 6) + BEDAV_CLR;
+  var lv = seaLv;                                                      // 那一點的水位（08_sea.js：大漩渦的漏斗、河面；⛔ 照 0 ⇒ 漏斗裡的船吃水算成 200 m、河裡的船整條河都「淺」）
+  var need = (sh.keelY !== undefined ? lv(sh.px, sh.pz) - sh.keelY : 6) + (BEDW.n && bedWet(sh.px, sh.pz) ? BEDAV_CLR_IN : BEDAV_CLR);
   function clear(yaw) { var F = fwd(yaw); for (var i = 0; i < BEDAV_LOOK.length; i++) { var d = BEDAV_LOOK[i], x = sh.px + F[0] * d, z = sh.pz + F[2] * d; if (bedHgt(x, z) - lv(x, z) > -need) return d; } return Infinity; }
   var c0 = clear(sh.yaw); if (c0 === Infinity) return null;
   var best = sh.yaw + Math.PI, bd = -1;

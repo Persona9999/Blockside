@@ -56,7 +56,7 @@ function debCull() {
  *  省時間（TASK-0531：殉爆噴一萬多顆，每步 10 ms 以上）：比最高的浪還高 ⇒ 不算 seaH；不在那艘船的格子外接球裡（格子盒的中心＋半對角線）⇒ 不換格座標查格子。結果跟全算一樣。 */
 function stepDebris(dt) {
   if (D.n > DEB_CAP) debCull();                                          // 碎片上限（畫質頁）
-  var top = SEA_K > 0 ? 1.15 * SEA_K * WX.sea : 0, sc = SHIPS.map(function (sh) { var B = sh.T.base; return { c: M4.pt(sh.M, B.sx / 2, B.sy / 2, B.sz / 2), r2: Math.pow(0.5 * S * Math.hypot(B.sx, B.sy, B.sz) + 1, 2) }; });
+  var top = seaTopOf(SEA_K > 0 ? 1.15 * SEA_K * WX.sea : 0), sc = SHIPS.map(function (sh) { var B = sh.T.base; return { c: M4.pt(sh.M, B.sx / 2, B.sy / 2, B.sz / 2), r2: Math.pow(0.5 * S * Math.hypot(B.sx, B.sy, B.sz) + 1, 2) }; });
   for (var i = 0; i < D.n; i++) {
     var st = D.st[i]; if (!st) continue;
     D.life[i] -= dt;

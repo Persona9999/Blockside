@@ -141,29 +141,55 @@ function curInit() {
   var v = Math.min(k, 10) / 1.9438, a = d / 57.2958;                     // 最多 10 節（地球儀的洋流最快約 2.5）
   CUR = [Math.sin(a) * v, -Math.cos(a) * v];
 }
-/** 那一點的水流（m/s，[x, z]）：洋流 ＋ 大漩渦；兩個都沒有 ⇒ null。只有漩渦 ⇒ 就是 vxFlow 那一個陣列（逐位元組跟以前一樣）。 */
+/** 那一點的水流（m/s，[x, z]）：洋流 ＋ 大漩渦；兩個都沒有 ⇒ null。只有漩渦 ⇒ 就是 vxFlow 那一個陣列（逐位元組跟以前一樣）。
+ *  河裡（08_seabed.js bedWet；TASK-0768）：海的那一份照「有幾成是河」淡掉、加上河的水流（順著河往下游）；沒有內陸水 ⇒ 照以前。 */
 function seaFlow(x, z) {
+  var f = seaFlow0(x, z), r = BEDW.n ? bedWet(x, z) : null;
+  if (!r) return f;
+  var k = 1 - r.m; return f ? [f[0] * k + r.fx, f[1] * k + r.fz] : [r.fx, r.fz];
+}
+function seaFlow0(x, z) {
   if (!CUR) return VX ? vxFlow(x, z) : null;
   if (!VX) return [CUR[0], CUR[1]];
   var f = vxFlow(x, z); return [f[0] + CUR[0], f[1] + CUR[1]];
 }
 /** 順著水流的船頭方向（yaw；fwd(yaw) ＝ 切線）：開局用（52_fleet.js spawnFleet）。 */
 function vxTangentYaw(x, z) { var r = Math.hypot(x, z) || 1; return Math.atan2(x / r, z / r); }
-/** 水面高度（世界座標 x, z、時間 t）。 */
+/** 水面高度（世界座標 x, z、時間 t）。
+ *  內陸水（08_seabed.js bedWet；TASK-0768）：河、湖的水面 ＋ 海那一份 ×（1 − 有幾成是河）⇒ 河裡就是河面（沒有浪）、河口跟海的浪接起來；沒有內陸水 ⇒ 照以前。 */
 function seaH(x, z, t) {
+  var h = seaH0(x, z, t), r = BEDW.n ? bedWet(x, z) : null;
+  return r ? r.s + h * (1 - r.m) : h;
+}
+function seaH0(x, z, t) {
   if (!(SEA_K > 0)) return VX ? vxH(x, z) : 0;
   var c = Math.cos(SEA_A), s = Math.sin(SEA_A), rx = c * x + s * z, rz = c * z - s * x, h = 0;
   for (var i = 0; i < WAVES.length; i++) { var w = WAVES[i]; h += w.a * Math.sin(w.kx * rx + w.kz * rz - w.w * t + w.ph); }
   h = h * SEA_K * WX.sea;                       // 天氣（08_weather.js）：暴風雨 ×2.5；晴天 ×1（逐位元組不變）
   return VX ? h + vxH(x, z) : h;                // 大漩渦：凹下去的那一份疊在浪上
 }
+/** 那一點的水位（不算浪；m）：大漩渦的漏斗、河面（bedWet）；都沒有 ⇒ 0。54_helm.js 避淺照它算吃水與水深。 */
+function seaLv(x, z) {
+  var h = VX ? vxH(x, z) : 0, r = BEDW.n ? bedWet(x, z) : null;
+  return r ? r.s + h * (1 - r.m) : h;
+}
+/** 浪頂的快篩（21_gunnery、12_effects、13_water 先比它、比它高就不算 seaH）：有內陸水 ⇒ 至少到解過的最高水面上 0.5 m。 */
+function seaTopOf(k) { return BEDW.n ? Math.max(k, BEDW.top + 0.5) : k; }
+/** 河面的坡度推力（m/s²，正 ＝ 往船頭推；31_drive.js 換成推力）：順著水流往下游的方向下坡 ⇒ 重力沿船頭的那一份 g × 坡度 × cos(船頭與水流)；不在河裡、不流 ⇒ 0。 */
+function seaSlopeAcc(sh) {
+  if (!BEDW.n) return 0;
+  var r = bedWet(sh.px, sh.pz); if (!r || !(r.sl > 0)) return 0;
+  var v = Math.hypot(r.fx, r.fz); if (!(v > 1e-6)) return 0;
+  var F = fwd(sh.yaw); return G * Math.min(r.sl, RIVER_SLOPE_MAX) * r.m * (r.fx * F[0] + r.fz * F[2]) / v;
+}
+var RIVER_SLOPE_MAX = 0.05;                     // 坡度推力最多照 5%（瀑布那一段存的是 1 ⇒ 不讓船在崖面上被推 9.8 m/s²）
 /** 水面高度的上限（m）：|seaH| 一定不超過它（TASK-0673）—— 泡水判定先比它，離海面夠遠的點不用算七道浪。
  *  振幅照 seaH 同一個加法順序加、同一個乘法順序乘 ⇒ 捨入只會讓 seaH 比它小（再多留 1e-6 m）；量不準的情況（浪 ≤ 0、天氣倍率 < 0）給 Infinity ＝ 照算。
  *  大漩渦只會往下凹 ⇒ 上限照舊；下限另外看 seaLow。 */
 var SEA_AMP = WAVES.reduce(function (s, w) { return s + w.a; }, 0);
-function seaBound() { return SEA_K > 0 && WX.sea >= 0 ? SEA_AMP * SEA_K * WX.sea + 1e-6 : Infinity; }
+function seaBound() { var b = SEA_K > 0 && WX.sea >= 0 ? SEA_AMP * SEA_K * WX.sea + 1e-6 : Infinity; return BEDW.n ? Math.max(b, BEDW.top + b) : b; }   // 內陸水：河面可以比海高很多 ⇒ 上限放到解過的最高水面（seaH 在河裡 ＝ 河面 ＋ 海那一份 × 0～1）
 /** 水面高度的下限（m）：seaH 一定不低於它。沒有漩渦 ＝ −seaBound()；有 ⇒ 再往下 D（⛔ 不扣 ⇒ 漏斗裡甲板上的水手「比最低的浪谷還低」被判成溺水，33_flood.js）。 */
-function seaLow() { var b = seaBound(); return VX ? -b - VX.D - VX.De - 1e-6 : -b; }
+function seaLow() { var b = seaBound(), lo = VX ? -b - VX.D - VX.De - 1e-6 : -b; return BEDW.n ? Math.min(lo, BEDW.low - SEA_AMP * SEA_K * Math.max(0, WX.sea) - 1e-6) : lo; }   // 內陸水：恩里基約湖 −40 m ⇒ 下限也放寬
 // 著色器用的同一組浪（常數照 WAVES 生成；uSeaK、uSeaT 在 setCommon 給）。seaH ＝ 高度，seaG ＝ 坡度（∂h/∂x, ∂h/∂z）；
 // seaHs ＝ 照網格間距 s 拿掉太短的浪（⛔ 頂點間距比波長的 1/4 還粗 ⇒ 鋸齒、浪在網格上游動）；
 // seaGf ＝ 照一個像素在海面上多寬（fp，公尺）淡掉太短的浪的坡度（⛔ 不淡 ⇒ 遠處的浪比像素還細，疊出規則的疊紋）。
@@ -196,10 +222,20 @@ var WV_K = { h: [6.25, 3.0], p: [6.25, 3.0], r: [1.44, 0.84] };
 /** 每步：船底的水面擬合平面 ⇒ 船的起伏、縱搖、橫搖（彈簧阻尼跟過去）。開戰第一步直接放在目標上（不從平的海晃過去）。 */
 function stepWaves(sh, dt) {
   var T = sh.T, Lh = (T.hx1 - T.hx0) * S, c = sh.center || [sh.px, 0, sh.pz], F = fwd(sh.yaw), Z = [Math.sin(sh.yaw), 0, Math.cos(sh.yaw)];   // Z：船體 +Z（格 +y、右舷）在世界的方向
-  var n = 0, hm = 0, su = 0, uu = 0, sw = 0, ww = 0;
+  var n = 0, hm = 0, su = 0, uu = 0, sw = 0, ww = 0, kept = BEDW.n ? [] : null, skip = false;   // kept：有內陸水 ⇒ 留著算進來的點（u, w, h），跳過了點才用
   for (var a = -2; a <= 2; a++) for (var b = -1; b <= 1; b += 2) {
-    var u = a * 0.2 * Lh, w = b * 0.1 * Lh, h = seaH(c[0] + F[0] * u + Z[0] * w, c[2] + F[2] * u + Z[2] * w, SIMT);
+    var u = a * 0.2 * Lh, w = b * 0.1 * Lh, qx = c[0] + F[0] * u + Z[0] * w, qz = c[2] + F[2] * u + Z[2] * w, h = seaH(qx, qz, SIMT);
+    if (kept && !bedWet(qx, qz) && bedHgt(qx, qz) > h) { skip = true; continue; }   // 內陸水（TASK-0768）：那一點在岸上（不是河、地面比水面高）⇒ 不算（⛔ 算 ⇒ 岸上照海面 0 m，靠岸的船整艘被拉低 —— 量到 19.8 m 的河、船 18.1 m）
+    if (kept) kept.push(u, w, h);
     hm += h; su += u * h; uu += u * u; sw += w * h; ww += w * w; n++;
+  }
+  if (skip) {                                                          // 跳過了幾點 ⇒ 剩下的點不再前後、左右對稱 ⇒ 照平均扣掉再擬合（⛔ 照原式 su／uu ⇒ 水面平的也算出一個大傾角）
+    if (!n) { hm = seaH(c[0], c[2], SIMT); n = 1; su = sw = 0; uu = ww = 1; }   // 十點都在岸上（整艘擱上岸）⇒ 照船中心那一點、不傾
+    else {
+      var mu = 0, mw = 0, mh = hm / n; for (var q = 0; q < kept.length; q += 3) { mu += kept[q]; mw += kept[q + 1]; } mu /= n; mw /= n;
+      su = sw = uu = ww = 0; for (q = 0; q < kept.length; q += 3) { var du = kept[q] - mu, dw = kept[q + 1] - mw, dh = kept[q + 2] - mh; su += du * dh; uu += du * du; sw += dw * dh; ww += dw * dw; }
+      if (!(uu > 1e-6)) { su = 0; uu = 1; } if (!(ww > 1e-6)) { sw = 0; ww = 1; }
+    }
   }
   hm /= n;
   // 大漩渦：開始沉了 ⇒ 1 秒內把水面換成船中心那一點的（Tim 2026-10-17：「沈船會在漩渦底部浮很久」「我對漩渦眼的預期是 沈船會在幾秒內被吸走(沉掉)」）——

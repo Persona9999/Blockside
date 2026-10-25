@@ -215,7 +215,8 @@ function bedPeek(cx, cy) {
     bedGet(cx, cy, true).then(function () { if (BED.peek[k]) { delete BED.peek[k]; bad(new Error('海圖塊 ' + k + ' 沒有呼叫 BSMAP.chunk')); } }, function (e) { delete BED.peek[k]; bad(e); });
   });
 }
-/** 解碼一塊（跟世界地圖工具 tools/export_chunks.cjs encodeChunk 一一對應；格式 src/MAP_CHUNK.md）⇒ { cx, cy, n, step, h: Int16Array（分米）, mat: Uint8Array, min, max（公尺）, wd: Uint16Array（內陸水的水深，分米；沒有段 3 ⇒ null） } */
+/** 解碼一塊（跟世界地圖工具 tools/export_chunks.cjs encodeChunk 一一對應；格式 src/MAP_CHUNK.md）⇒ { cx, cy, n, step, h: Int16Array（分米）, mat: Uint8Array, min, max（公尺）, wd: Uint16Array（內陸水的水深，分米；沒有段 3 ⇒ null）,
+ *   wf: [往東, 往南, 坡度]（三個 Float32Array：內陸水的水流 m/s、水面坡度；沒有段 4 ⇒ null） } */
 function bedDecode(b64) {
   var bin = atob(b64), b = new Uint8Array(bin.length), p = 4;
   for (var i = 0; i < bin.length; i++) b[i] = bin.charCodeAt(i);
@@ -232,12 +233,17 @@ function bedDecode(b64) {
     h[o] = pred + d; if (h[o] < mn) mn = h[o]; if (h[o] > mx) mx = h[o];
   }
   for (var k = 0; k < N;) { var v = u(), c = u(); mat.fill(v, k, k + c); k += c; }
-  var fo = null, foN = 0, vg = null, vgN = 0, wd = null;                 // 選用的段（MAP_CHUNK.md §4）：1 ＝ 林地覆蓋、2 ＝ 植被（每點長得出哪幾種，位元 ＝ area.vis）、3 ＝ 內陸水；不認得的記號 ⇒ 停（之後的段讀不了）
+  var fo = null, foN = 0, vg = null, vgN = 0, wd = null, wf = null;      // 選用的段（MAP_CHUNK.md §4）：1 ＝ 林地覆蓋、2 ＝ 植被（每點長得出哪幾種，位元 ＝ area.vis）、3 ＝ 內陸水、4 ＝ 內陸水的水流；不認得的記號 ⇒ 停（之後的段讀不了）
   while (p < b.length) {
     var tg = u();
-    if (tg === 3) {                                                      // 內陸水（TASK-0768）：n² 個水深（分米；水面 ＝ 存的高度 ＋ 水深；0 ＝ 不是內陸水），跟高度、底質同一套點；只給畫面（63_bed_gl.js），⛔ 模擬不讀
+    if (tg === 3) {                                                      // 內陸水（TASK-0768）：n² 個水深（分米；水面 ＝ 存的高度 ＋ 水深；0 ＝ 不是內陸水），跟高度、底質同一套點；畫面（63_bed_gl.js）＋ 模擬（bedWet）
       wd = new Uint16Array(N);
       for (k = 0; k < N;) { v = u(); c = u(); wd.fill(v, k, k + c); k += c; }
+      continue;
+    }
+    if (tg === 4 && wd) {                                                // 內陸水的水流（河；TASK-0768）：段 3 有水的點照順序，（往東, 往南 cm/s, 坡度 十萬分之一, 連續幾個）一組 ⇒ m/s、坡度
+      wf = [new Float32Array(N), new Float32Array(N), new Float32Array(N)];
+      for (k = 0; k < N && p < b.length;) { var fe = zg(u()) / 100, fz = zg(u()) / 100, fsl = u() / 1e5; c = u(); while (c > 0 && k < N) { if (wd[k]) { wf[0][k] = fe; wf[1][k] = fz; wf[2][k] = fsl; c--; } k++; } }
       continue;
     }
     if (tg !== 1 && tg !== 2) break;
@@ -245,7 +251,8 @@ function bedDecode(b64) {
     for (k = 0; k < sa.length;) { v = u(); c = u(); sa.fill(v, k, k + c); k += c; }
     if (tg === 1) { fo = sa; foN = sn; } else { vg = sa; vgN = sn; }
   }
-  var C = { cx: cx, cy: cy, n: n, step: step, h: h, mat: mat, h0: h, mat0: mat, min: mn / 10, max: mx / 10, min0: mn / 10, max0: mx / 10, fo: fo, foN: foN, vg: vg, vgN: vgN, wd: wd, vxk: 'none' };
+  var C = { cx: cx, cy: cy, n: n, step: step, h: h, mat: mat, h0: h, mat0: mat, min: mn / 10, max: mx / 10, min0: mn / 10, max0: mx / 10, fo: fo, foN: foN, vg: vg, vgN: vgN, wd: wd, wf: wf, vxk: 'none' };
+  if (wd) { BEDW.n++; for (k = 0; k < N; k++) if (wd[k]) { var ws = (h[k] + wd[k]) / 10; if (ws > BEDW.top) BEDW.top = ws; if (ws < BEDW.low) BEDW.low = ws; } }   // 內陸水的模擬（bedWet）：解過幾塊、水面最高最低
   bedVxBake(C);
   return C;
 }
@@ -447,6 +454,28 @@ function bedHgt(x, z) {
   var q = bedCell(x, z); if (!q) return BED.A.deep + (VX ? vxH(x, z) : 0);   // 大漩渦：深海也在那一點的水面下（bedVxBake）
   var C = q.C, n = C.n, i = Math.min(n - 2, Math.floor(q.u)), j = Math.min(n - 2, Math.floor(q.v)), fu = q.u - i, fv = q.v - j, h = C.h, o = j * n + i;
   return ((h[o] * (1 - fu) + h[o + 1] * fu) * (1 - fv) + (h[o + n] * (1 - fu) + h[o + n + 1] * fu) * fv) / 10;
+}
+// ── 內陸水的模擬（TASK-0768；Tim 2026-10-25「目前希望河流可以航行(吃水淺的船可以從海洋航行到內陸河)」「河流可以有坡度 流速(參考漩渦)」）──
+//   海圖塊的段 3（水深）、段 4（水流、坡度）⇒ 那一點的河面：08_sea.js seaH（船浮在河面上、落水、砲彈濺起都照它）、seaFlow（水流帶著船走）、
+//   seaLv（54_helm.js 避淺照河面算吃水）、31_drive.js 的坡度（順著河往下游、上游吃力）。
+//   BEDW.n ＝ 解過幾塊有段 3 的 ⇒ 0 ＝ 一定沒有內陸水 ⇒ 上面那幾支照以前（逐位元相同）。top／low ＝ 解過的水面最高、最低（seaBound、seaLow 照它放寬）。
+var BEDW = { n: 0, top: -Infinity, low: Infinity }, BEDW_R = { m: 0, s: 0, fx: 0, fz: 0, sl: 0 };
+/** 那一點的內陸水（照在用的那一份塊，四個角雙線性）⇒ { m（四個角裡有水的權重：1 ＝ 整格是水、0 ＝ 不是）, s（有水的角的水面 m）, fx, fz（水流 m/s；沒水的角算 0 ⇒ 岸邊淡掉）, sl（坡度）}；
+ *  四個角都沒水、沒有海圖 ⇒ null。⛔ 回的是同一個物件（BEDW_R）⇒ 拿到就用、不要留著。 */
+function bedWet(x, z) {
+  if (!BEDW.n || !BED) return null;
+  var q = bedCell(x, z); if (!q || !q.C.wd) return null;
+  var C = q.C, n = C.n, i = Math.min(n - 2, Math.floor(q.u)), j = Math.min(n - 2, Math.floor(q.v)), fu = q.u - i, fv = q.v - j, o = j * n + i, wd = C.wd, h = C.h0, F = C.wf;
+  if (!(wd[o] || wd[o + 1] || wd[o + n] || wd[o + n + 1])) return null;
+  var R = BEDW_R, m = 0, s = 0, fx = 0, fz = 0, sl = 0;
+  for (var a = 0; a < 4; a++) {
+    var k = o + (a & 1) + (a >> 1) * n; if (!wd[k]) continue;
+    var w = ((a & 1) ? fu : 1 - fu) * ((a >> 1) ? fv : 1 - fv); m += w; s += w * (h[k] + wd[k]) / 10;
+    if (F) { fx += w * F[0][k]; fz += w * F[1][k]; sl += w * F[2][k]; }
+  }
+  if (!(m > 0)) return null;
+  R.m = m; R.s = s / m; R.fx = fx; R.fz = fz; R.sl = sl / m;
+  return R;
 }
 /** 底質（最近的取樣點）。 */
 function bedMat(x, z) { var q = bedCell(x, z); if (!q) return BED_MAT.DEEP; var n = q.C.n; return q.C.mat[Math.min(n - 1, Math.round(q.v)) * n + Math.min(n - 1, Math.round(q.u))]; }
