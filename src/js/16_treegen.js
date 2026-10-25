@@ -73,7 +73,7 @@ var TREE_SPECIES = {
     levels: [],
     leaf: { kind: 'rosette', n: [16, 24], len: [0.75, 1.1], w: 0.18, rise: [14, 80], droop: 0.45, col: [0.45, 0.57, 0.48], vary: 0.1, edge: [0.70, 0.66, 0.38],
             stalk: { v: [2], h: [3.2, 4.4], r: 0.07, col: [0.48, 0.43, 0.27], arms: [6, 9], flower: [0.80, 0.66, 0.20] } },   // stalk.v：第幾棵抽花梗
-    place: { spacing: 7, alt: [3, 12, 700, 1100], slopeMax: 0.95, mats: { 11: 1, 12: 0.6 }, dens: 0.4, forest: -0.85, clump: 30, scale: [0.8, 1.3], shell: 0, view: 380, field: [1.6, 1.4] },   // field：龍舌蘭園（Blocksail 配方 sisal，TASK-0929）一行一行種
+    place: { spacing: 7, alt: [3, 12, 700, 1100], slopeMax: 0.95, mats: { 11: 1, 12: 0.6 }, dens: 0.4, forest: -0.85, clump: 30, scale: [0.8, 1.3], shell: 0, view: 380 },
     variants: 5
   },
   pine: {
@@ -370,7 +370,7 @@ var TREE_SPECIES = {
     place: { town: true, spacing: 12, scale: [1, 1], sink: 0.3 },
     variants: 4
   },
-  // ── 生產鏈的作物（Blocksail TASK-0917 配方、TASK-0929 長相）：加在表的最後 ⇒ 前面每一種的種子（表裡第幾種）不變、長相不變 ──
+  // ── 生產鏈的作物（Blocksail TASK-0917 配方、TASK-0929 長相）：麻、葡萄、龍舌蘭園；加在表的最後 ⇒ 前面每一種的種子（表裡第幾種）不變、長相不變 ──
   hemp: {
     name: '大麻（纖維麻）',                                             // Cannabis sativa（溫帶的麻田：撒得密 ⇒ 細高的一根稈、下半截葉子掉光、上半截交互長窄的掌狀小葉，頂上一小撮淡黃的雄花）
     meta: { region: ['med'], type: 'crop' },
@@ -392,6 +392,16 @@ var TREE_SPECIES = {
     ],
     leaf: { kind: 'cluster', per: [2, 3], size: [0.16, 0.24], flat: 0.75, col: [0.26, 0.44, 0.16], vary: 0.12, along: 0.5, tint: [0.16, [0.30, 0.12, 0.28]] },   // tint：幾成的團換成紫黑的果串
     place: { town: true, spacing: 1, scale: [0.85, 1.15], shell: 0, view: 250, sink: 0.05, field: [1.6, 1.3], fieldK: 0.65, soil: [[0.55, 0.43, 0.31], [0.45, 0.35, 0.25]] },   // fieldK：田裡整體 × 1.8（TREE_FIELD_K）⇒ 葡萄再 × 0.65（量過：不縮的話一顆顆葉團塞滿整片、看不到行）；soil：石多的淺褐土
+    variants: 3
+  },
+  sisal: {
+    name: '龍舌蘭（龍舌蘭園）',                                       // 種來刮纖維的龍舌蘭（加勒比的 cabuya、pita）：同野生的 agave 一叢蓮座葉，但開花前就收割 ⇒ 不抽花梗（野生那一種每五株一株抽 3～4 m 的花梗，田裡看起來像一片花梗林 —— 量過）
+    meta: { region: ['carib'], type: 'crop' },
+    height: [0.9, 1.3],
+    trunk: { r: [0.1, 0.1], taper: 1, bend: 0, segs: 1, sides: [0, 0], lean: 0, col: [0.4, 0.4, 0.3], top: 0.05 },
+    levels: [],
+    leaf: { kind: 'rosette', n: [16, 24], len: [0.75, 1.1], w: 0.16, rise: [14, 80], droop: 0.4, col: [0.42, 0.56, 0.50], vary: 0.1, edge: [0.66, 0.66, 0.42] },
+    place: { town: true, spacing: 1, scale: [0.85, 1.15], shell: 0, view: 300, sink: 0.05, field: [1.6, 1.4], fieldK: 0.75 },
     variants: 3
   }
 };
