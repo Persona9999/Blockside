@@ -711,6 +711,8 @@ def validate(cfg, prev=None):
             err(p + '.theme', '主題曲的 id（js/02_music.js 的 THEMES：%s；TASK-0681）' % ('、'.join(THEME_IDS) or '—'))
         if 'fireEngine' in s and s['fireEngine'] is not False:
             err(p + '.fireEngine', '只能寫 false（這艘沒有內建消防泵：古代的槳帆船；沒寫 ＝ 有，49_burn.js）')
+        if 'town' in s and not (s.get('fixed') is True and isinstance(s['town'], str) and re.fullmatch(r'[a-z][a-z0-9-]{0,63}', s['town'])):
+            err(p + '.town', '城鎮模型的名字（Blocksail townkit，例 carib-fort）：航海時點到這種模型的那一棟 ⇒ 換成這一座（只給 fixed 的寫；TASK-0955）')
         if 'fixed' in s and s['fixed'] is not True:
             err(p + '.fixed', '只能寫 true（固定在地上的戰鬥單位：堡壘、砲台 —— 不浮、不進水、不動，選單不列；TASK-0954）；船不用寫')
         if 'author' in s and not (isinstance(s['author'], str) and s['author'].strip()):

@@ -1287,7 +1287,8 @@
         "navigator": 0,
         "quartermaster": 0
       },
-      "material": "brick"
+      "material": "brick",
+      "town": "en-fort"
     },
     {
       "id": "fort_carib",
@@ -1313,7 +1314,8 @@
         "cook": 0,
         "navigator": 0,
         "quartermaster": 0
-      }
+      },
+      "town": "carib-fort"
     }
   ],
   "furniture": {

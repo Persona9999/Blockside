@@ -6,11 +6,20 @@
 // 瞄準點（sh.aim）是「那艘船」的格座標 ⇒ 一併記是哪艘（sh.aimOn，setAim）；換目標之前瞄的那一點不會被套到另一艘的座標上。
 // 船數上限 MAX_SHIPS（00_core.js）；GPU 的格（陰影圖、船艙遮罩、透視）只給視野裡最近的幾艘（畫質設定「陰影船數」「船艙遮罩」；60_render.js gpuSlots），其他的靠全局陰影圖。
 /** 誤擊的讀數：被友船打中幾發（sh.ff）、打中友船幾發（ffOut）。一顆彈只算一次（跟 hits 同一個 hitOnce）。 */
-function ffHit(sh, b) { var o = SHIPS[b.owner]; if (o && o !== sh && o.team === sh.team) { sh.ff = (sh.ff || 0) + 1; o.ffOut = (o.ffOut || 0) + 1; } }
+function ffHit(sh, b) { var o = SHIPS[b.owner]; if (o && sh.calm && o !== sh) fortProvoke(sh, o); if (o && o !== sh && o.team === sh.team) { sh.ff = (sh.ff || 0) + 1; o.ffOut = (o.ffOut || 0) + 1; } }
 /** 落水的人上不了自己的船 ⇒ 往哪幾艘游（43_swim.js）：友船先、再敵船，各照 SHIPS 的順序（一對一 ＝ [敵艦]）。 */
 function swimOthers(sh) { var o = SHIPS.filter(function (x) { return x !== sh; }); return o.filter(function (x) { return x.team === sh.team; }).concat(o.filter(function (x) { return x.team !== sh.team; })); }
 function teamIdx(sh) { return sh.team === 'red' ? 1 : 0; }              // 貼圖的列、羅盤的顏色：藍 0、紅 1
-function isFoe(a, b) { return !!a && !!b && a !== b && a.team !== b.team; }
+function isFoe(a, b) { return !!a && !!b && a !== b && a.team !== b.team && !((a.npc && b.fixed) || (a.fixed && b.npc)); }   // 往來的船（58_traffic.js）跟城裡的堡壘互不理會：堡壘只跟對它開火的那一方打（TASK-0955）
+// ───────────────────────── 城裡的堡壘（TASK-0955；Tim 2026-10-26「可以讓堡壘可以被瞄準嗎」「對堡壘開火就進入敵對狀態」「我是在航海模式」） ─────────────────────────
+// 航海時點到城裡的堡壘 ⇒ 換成那一座固定的戰鬥單位（63_towns.js townFortWake），先放在玩家那一隊、sh.calm ＝ 中立：不開砲、不算敵艦。
+// 誰對它開火（21_gunnery.js fireGun 瞄的是它）或打中它（ffHit）⇒ fortProvoke：換到開火那一方的對面、不再中立，下一步就照敵艦打。
+function fortProvoke(f, by) {
+  if (!f || !f.calm || !by || by === f) return;
+  f.calm = false; f.team = other(by.team); f.foe = undefined;
+  pickCaptain(f); cmdTick(); pickFoes();
+  note(f, f.name + ' 進入敵對（' + by.name + ' 對它開火）', true);
+}
 function teamShips(team) { return SHIPS.filter(function (o) { return o.team === team && !o.npc; }); }   // 往來的船（58_traffic.js）不算隊上的船
 function pickFoes() {
   SHIPS.forEach(function (sh) {
@@ -249,7 +258,7 @@ function spawnReserve(team) {
  *  一對一沒有友艦 ⇒ 不會換（照舊等結算）。 */
 function playerHandoff() {
   var me = SHIPS[PLAYER_I]; if (OVER || !me || !isOut(me)) return null;
-  var L = SHIPS.filter(function (o) { return o.team === me.team && !isOut(o); }); if (!L.length) return null;
+  var L = SHIPS.filter(function (o) { return o.team === me.team && !isOut(o) && !o.fixed; }); if (!L.length) return null;   // 堡壘不能開
   function m(o) { return o.mass0 || shipT(o); }
   L.sort(function (a, b) { return m(b) - m(a) || Math.hypot(a.px - me.px, a.pz - me.pz) - Math.hypot(b.px - me.px, b.pz - me.pz); });
   var nw = L[0];
@@ -266,7 +275,7 @@ function playerTake(nw, msg) {
 }
 /** 改操控 o 可不可以（詳細資訊的「⚓ 改操控這艘」、__game.take 都問它；Tim 2026-10-15：「假如是我方船艦 看著這艘按鈕旁 可以多一個切換控制這艘船」「切換控制可以直接抽成通用API(甚至可以開放切換到敵艦(Debug模式)」）：
  *  還在打、這一局還沒結束、不是我艦；友艦 ⇒ 可以；敵艦 ⇒ 只有 Debug 模式（dbgOn，04_state.js）—— 換過去就是那一方（我方、敵方照 PLAYER_I 那艘的 team 算）。 */
-function canTake(o) { var me = SHIPS[PLAYER_I]; return !!(o && me && !OVER && o !== me && !isOut(o) && !o.npc && (o.team === me.team || dbgOn())); }   // 往來的船（58_traffic.js）不能換過去開
+function canTake(o) { var me = SHIPS[PLAYER_I]; return !!(o && me && !OVER && o !== me && !isOut(o) && !o.npc && !o.fixed && (o.team === me.team || dbgOn())); }   // 往來的船（58_traffic.js）不能換過去開
 function playerTakeShip(o) {
   if (!canTake(o)) return false;
   var me = SHIPS[PLAYER_I];

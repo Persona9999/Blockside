@@ -194,6 +194,14 @@ if (DEBUG) window.__game = {
   twbLots: function (use, n) { var T = twbTown(); return T ? (T.p.lots || []).filter(function (l) { return l.use === use; }).slice(0, n || 5).map(function (l) { return { id: l.id, at: l.at }; }) : null; },   // 那一種地塊的規劃座標（測建築模式用）
   twbScreen: function (q) { var T = twbTown(); return T ? twbScreenOf(T, q) : null; },
   twbProbe: function (q) { return twbProbe(q); },
+  /** 城裡的堡壘（63_towns.js townFortWake；TASK-0955）：沒給 lot ⇒ 列出每座城換得了的那幾棟；給了 ⇒ 照點到它一樣換（不經螢幕座標）。 */
+  townFort: function (lot) {
+    var L = []; TOWNS.list.forEach(function (T) { (T.inst || []).forEach(function (q) { if (q.lot && townFortHull(q.k)) L.push({ T: T, q: q }); }); });
+    if (lot === undefined) return L.map(function (r) { var u = TOWN_UNITS[r.T.id + ':' + r.q.lot]; return { town: r.T.id, lot: r.q.lot, k: r.q.k, hull: townFortHull(r.q.k), x: +r.q.x.toFixed(1), y: +r.q.y.toFixed(2), z: +r.q.z.toFixed(1), th: +r.q.th.toFixed(4), unit: u ? { i: u.i, team: u.team, calm: !!u.calm, struck: u.struck } : null }; });
+    var r = L.filter(function (o) { return o.q.lot === lot; })[0]; if (!r) return null;
+    var l = (r.T.p.lots || []).filter(function (x) { return x.id === lot; })[0] || null;
+    return townFortWake({ T: r.T, q: r.q, lot: l, name: townLotName(r.T, l, TOWNS.kit.M[r.q.k].m) });
+  },
   townHit: function (cx, cy) { var h = townHitAt(cx, cy); return h ? { town: h.T.id, lot: h.lot ? h.lot.id : null, use: h.use, name: h.name, k: h.q.k, t: h.t, pt: h.pt } : null; },   // 螢幕那一點點到哪一棟（63_towns.js townHitAt；不看地形擋不擋）
   twbSel: function () { var h = TWB.sel; return h ? { town: h.T.id, lot: h.lot ? h.lot.id : null, use: h.use, name: h.name, k: h.q.k } : null; },   // 建築模式選著的那一棟
   twbMenu: function () { return TWB_CATS.map(function (c) { return { k: c.k, name: c.name, items: c.items.map(function (it) { return it.k; }) }; }); },   // 建築模式的選單（open 回的 menu 換過沒）

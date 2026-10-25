@@ -47,9 +47,11 @@ function inPick(cx, cy) {
   //   點到船 ⇒ 瞄準點設在那艘（敵艦 ⇒ 也是我的目標，52_fleet.js pickFoes；友艦 ⇒ 圈變藍、打下去照樣是誤擊）；瞄準模式回到自由。
   //   自動開砲開著 ⇒ 對得到它的那一舷交給玩家（me.hand；空白鍵齊射），另一舷照樣自動（50_sim.js aiSecond）。
   //   點到海 ⇒ 取消瞄準（手動 ⇒ 回到預設的瞄法；自動開砲 ⇒ 回到全自動）。
+  if (!hit && TOWNS.list.length && townFortWake(townHitAt(cx, cy))) { sfx('crack', null, 0.08); return; }   // 沒點到船、點到城裡的堡壘 ⇒ 換成戰鬥單位、瞄它（63_towns.js；TASK-0955）
   if (hit) {
     setAim(me, [hit.x + 0.5, hit.y + 0.5, hit.z + 0.5], on); me.pMode = AIM_P = 'free'; sfx('crack', null, 0.08);
-    if (!isFoe(me, on)) note(me, '瞄準友艦 ' + on.name + teamTag(on) + ' —— 打下去一樣會傷到它');
+    if (on.calm) note(me, '瞄準 ' + on.name + ' —— 中立；開火就是對它宣戰');
+    else if (!isFoe(me, on)) note(me, '瞄準友艦 ' + on.name + teamTag(on) + ' —— 打下去一樣會傷到它');
     else if (hit.sail) note(me, '瞄準 ' + on.name + ' 的帆');
     if (AUTOFIRE && !me.hand) { me.hand = true; note(me, '手動瞄準：這一舷你來打（' + keyWord('volley') + '齊射），另一舷照樣自動 —— 點海面回到全自動'); }
   } else if (me.aim) {
