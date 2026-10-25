@@ -1,4 +1,4 @@
-# 區塊職責：Sirius 的水手立繪（ArtGallery/RawImages/sirius_sailor_*_sprite_v1.png，白底）⇒ art/crew.png（單圖：1 欄 × 13 列，每格 96×192，只存一份）。
+# 區塊職責：Sirius 的水手立繪（ArtGallery/RawImages/sirius_sailor_*_sprite_v1.png，白底；被圍住的白底寫成了原圖的透明 —— Blocksail tools/bg_pockets.py，2026-10-25）⇒ art/crew.png（單圖：1 欄 × 13 列，每格 96×192，只存一份）。
 # 物理意義：遊戲的船員格子：列 ＝ 角色；0 砲手、1 送藥手、2 軍官、3 陸戰隊、4 桅頂水手、5 舵手、6 船長（每艘船第一個軍官畫成船長）、
 #           7–12 Sirius 2026-10-17 的六位（護士、木匠、廚師、帆匠、航海士、軍需官；新職位 TASK-0676，還沒接上的列遊戲照職位那一列畫）。
 #           人一律朝右、腳底（兩隻靴子的中心）在格子底邊正中。動作由遊戲的程式做（js/41_crew_art.js 的 crewPose），每個角色只要一張站姿。
@@ -88,7 +88,8 @@ L_STEP = 4                       # L 每 4 一階（調色盤留給其他顏色�
 
 
 def cutout(path):
-    a = np.asarray(Image.open(path).convert('RGB')).astype(np.int16)
+    src = Image.open(path)
+    a = np.asarray(src.convert('RGB')).astype(np.int16)
     mn, mx = a.min(axis=2), a.max(axis=2)
     spread = mx - mn
     cand = (mn >= 236) & (spread <= 12)
@@ -101,6 +102,8 @@ def cutout(path):
     mean_sp = ndimage.mean(spread, lab, index=idx)
     inner = [i + 1 for i in range(n) if (i + 1) not in edge and sizes[i] >= 300 and mean_mn[i] >= 249 and mean_sp[i] <= 3]
     bg |= np.isin(lab, inner)
+    if 'A' in src.getbands():
+        bg |= np.asarray(src.getchannel('A')) < 128   # 原圖的透明也是背景：被圍住的白底（Blocksail tools/bg_pockets.py 寫的）、手動擦掉的；下面照樣吃掉邊上的淺色
     lum = a.mean(axis=2)
     for _ in range(3):
         near = ndimage.binary_dilation(bg, structure=np.ones((3, 3), bool)) & ~bg
