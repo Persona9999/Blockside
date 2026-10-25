@@ -1318,6 +1318,35 @@
       "town": "carib-fort"
     },
     {
+      "id": "labelle",
+      "el": "ship-labelle",
+      "name": "拉貝爾號",
+      "vxk": "labelle.vxk",
+      "work": "ame-labelle-01m-assembly",
+      "author": "ame",
+      "geo": {"spar": [28, 42], "marines": [33, 54], "center": 45, "aim": 28, "aimZ": [5, 185], "deckAim": [28, 40], "rigAim": [55, 180]},
+      "cfg": {"pump": 2},
+      "crew": {"officers": 2, "helm": 1, "top": 0, "marines": 4, "marineGap": 14, "monkeys": 1, "handsK": 0.25, "navigator": 0},
+      "names": ["拉貝爾號"],
+      "idNext": {
+        "anchor": 3,
+        "binnacle": 3,
+        "boat": 2,
+        "deck": 6,
+        "gun": 15,
+        "ladders": 4,
+        "light": 2,
+        "magazine": 2,
+        "model": 4,
+        "part": 10,
+        "powder": 17,
+        "rudder": 2,
+        "ship": 2,
+        "tiller": 2,
+        "yard": 7
+        }
+      },
+      {
       "id": "pinas",
       "el": "ship-pinas",
       "name": "藍鯊號",
