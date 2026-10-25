@@ -1,7 +1,7 @@
 {
   "about": "選船彈窗的卡片（主選單；js/72_shippick.js）：每艘船開戰那一刻量的排水量、水線長、砲、齊射彈重、動力、帆、船員。admin.py shipcheck 產生（js/75_shipcheck.js shipCard），不要手改。",
   "ships": {
-    "constitution": {"tons": 2152, "len": 54.6, "guns": 54, "gunTypes": {"chase": 2, "long": 28, "carr": 24}, "volley": 670, "drive": "sail", "sails": 17, "crew": 351},
+    "constitution": {"tons": 2152, "len": 54.6, "guns": 54, "gunTypes": {"chase": 2, "long": 28, "carr": 24}, "volley": 670, "drive": "sail", "sails": 17, "crew": 359},
     "ember": {"tons": 3104, "len": 61.7, "guns": 90, "gunTypes": {"chase": 8, "long": 32, "long32": 32, "carr": 18}, "volley": 1139, "drive": "sail", "sails": 17, "crew": 598},
     "falcon": {"tons": 69, "len": 20.2, "guns": 12, "gunTypes": {"long4": 12}, "volley": 22, "drive": "sail", "sails": 10, "crew": 61},
     "stormkaap": {"tons": 1287, "len": 42.7, "guns": 42, "gunTypes": {"chase3": 2, "long6": 22, "long12": 18}, "volley": 159, "drive": "magic", "sails": 12, "crew": 226},
