@@ -493,6 +493,7 @@ function driveStep(sh, dt, vS, vB, deg, brake) {
   if (D.kind === 'oar' && OAR_ANIM) oarAnim(sh, D, dt);                 // 划槳（只是畫面）
   if (VX) { var Fg = D.M * vxSlopeAcc(sh); if (Fg < 0 && Fx > 0 && Math.hypot(sh.px, sh.pz) >= VX.trap) Fg = Math.max(Fg, -VX_UPHILL * Fx); Fx += Fg; }   // 大漩渦的下坡加速（08_sea.js）：重力沿著船頭的那一份當成推力（t × m/s² ＝ kN）；
   //   眼外（逃不掉的範圍 ＝ 眼）上坡最多吃掉 VX_UPHILL 的推力（Tim：「讓真的不可逃逸範圍只有中心一小圈」⛔ 不夾 ⇒ 深 250 m 時 r 164 m 往外斜 60° 終端 −11.3 節，快沉了也爬不出去）
+  if (BEDW.n) Fx += D.M * seaSlopeAcc(sh);                             // 河面的坡度（08_sea.js；TASK-0768）：順著河往下游 ⇒ 推、往上游 ⇒ 吃力（同一套換成推力；沒有內陸水 ⇒ 不加，逐位元相同）
   var vT = Fx >= 0 ? Math.sqrt(Fx / k) : -Math.sqrt(-Fx / k); D.vT = vT;   // 只靠這些推力最後會到的航速
   if (sh.spd0) { sh.spd = vT; sh.spd0 = false; }                          // 開局就在走
   var M = D.M * (DRV_INERTIA || 1);

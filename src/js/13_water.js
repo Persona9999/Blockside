@@ -58,7 +58,7 @@ function stepWater(dt, only) {
   if (!L) { WS.n = WF.n = 0; return; }
   if (only !== 'fly') SHIPS.forEach(function (sh) { wpShip(sh, dt, L); });
   if (only === 'ship') return;
-  var hmax = 1.2 * SEA_K * WX.sea + 0.1, i, o, wx = WIND[0] * WX.wind * 0.12 * dt, wz = WIND[2] * WX.wind * 0.12 * dt, kd = 1 - 0.35 * dt;
+  var hmax = seaTopOf(1.2 * SEA_K * WX.sea + 0.1), i, o, wx = WIND[0] * WX.wind * 0.12 * dt, wz = WIND[2] * WX.wind * 0.12 * dt, kd = 1 - 0.35 * dt;
   for (i = 0; i < WS.n; i++) {
     o = i * 3; WS.life[i] -= dt;
     var dead = WS.life[i] <= 0;

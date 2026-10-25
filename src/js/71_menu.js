@@ -106,3 +106,34 @@ evOn('game:api', function (G) {
   var rp = G.roomPlans; G.roomPlans = function (id, type) { return rp(id || CFG_ID, type); };   // 沒給船型 ⇒ 主選單「船隻配置」正在編的那一型
 });
 evOn('cfg:ships', function () { if (SLIDERS_SHOW) SLIDERS_SHOW(); });   // 船隻配置改了（__game.roomSet、shipsIO.imp）⇒ 主選單重畫
+/** 主選單開戰鈕左右兩側的選旗（TASK-0950）：#flag0 我方（藍方）、#flag1 敵方（紅方）各一組 —— 旗的預覽、預設旗的下拉選單（紋章＋那面旗的底色）、底色（換了只換底色、紋章照留）。
+ *  選了就換（核心 77_colours.js flagSet ⇒ 已載入的船型重烘）；存檔照 69_prefs.js 那一項。
+ *  下拉選單停在紋章、底色都一樣的那一面預設旗；底色換過、對不到任何一面 ⇒ 停在最後那一項「自訂（紋章名）」（只拿來顯示，選它不換旗）。 */
+function flagUI() {
+  [0, 1].forEach(function (s) {
+    var box = $('flag' + s); if (!box) return;
+    var team = s ? 'red' : 'blue', who = s ? '敵方' : '我方';
+    box.innerHTML = '<canvas width="48" height="24" aria-hidden="true"></canvas><select aria-label="' + who + '的旗"></select><input type="color" aria-label="' + who + '旗的底色" title="' + who + '旗的底色">';
+    var sel = box.querySelector('select'), col = box.querySelector('input');
+    sel.innerHTML = FLAG_PRESETS.map(function (p) { return '<option value="' + p.k + '">' + p.name + '</option>'; }).join('') + '<option value="" hidden></option>';
+    sel.onchange = function () { if (!sel.value) return; var o = {}; o[team] = sel.value; flagSet(o); };
+    col.oninput = function () { var o = {}; o[team] = { field: col.value, emblem: teamFlag(team).emblem }; flagSet(o); };
+  });
+  flagUIShow();
+}
+/** 選旗那兩組照現在的旗重畫（換了旗、讀了存檔）。 */
+function flagUIShow() {
+  [0, 1].forEach(function (s) {
+    var box = $('flag' + s); if (!box || !box.firstChild) return;
+    var team = s ? 'red' : 'blue', f = teamFlag(team), cv = box.querySelector('canvas'), cx = cv.getContext('2d'), W = cv.width, H = cv.height, im = cx.createImageData(W, H);
+    for (var y = 0; y < H; y++) for (var x = 0; x < W; x++) { var c = colourAt('ensign', f, (x + 0.5) / W, (y + 0.5) / H), o = (y * W + x) * 4; im.data[o] = c[0] * 255; im.data[o + 1] = c[1] * 255; im.data[o + 2] = c[2] * 255; im.data[o + 3] = 255; }
+    cx.putImageData(im, 0, 0);
+    var p = FLAG_PRESETS.filter(function (q) { return q.emblem === f.emblem && q.field === f.field; })[0], sel = box.querySelector('select');
+    sel.lastChild.textContent = '自訂（' + (FLAG_EMB[f.emblem] || FLAG_EMB.none).name + '）';
+    sel.value = p ? p.k : '';
+    box.querySelector('input').value = f.field;
+    box.title = (s ? '敵方' : '我方') + '的旗：' + (FLAG_EMB[f.emblem] || FLAG_EMB.none).name + '、底色 ' + f.field;
+  });
+}
+evOn('flags:set', flagUIShow);                                        // 換了旗（選單、__game.flags）⇒ 重畫（77_colours.js flagSet 發）
+setTimeout(flagUI, 0);                                                 // 核心 77_colours.js 在本檔後面載（預設旗、存檔解在那邊）⇒ 整包跑完才畫

@@ -197,6 +197,9 @@ if (DEBUG) window.__game = {
   twbSel: function () { var h = TWB.sel; return h ? { town: h.T.id, lot: h.lot ? h.lot.id : null, use: h.use, name: h.name, k: h.q.k } : null; },   // 建築模式選著的那一棟
   twbMenu: function () { return TWB_CATS.map(function (c) { return { k: c.k, name: c.name, items: c.items.map(function (it) { return it.k; }) }; }); },   // 建築模式的選單（open 回的 menu 換過沒）
   townSpin: function (w) { if (w !== undefined) TOWNS.spinWind = w; return TOWNS.stat.spin || null; },   // 旋轉件（63_towns.js townSpinDraw；TASK-0939）：給風速（m/s）⇒ 蓋過遊戲的風（null ⇒ 回到遊戲的風）；回上一格的讀數
+  //   兩陣營的旗（77_colours.js；TASK-0950）：o ＝ { blue?, red? }，每一個是預設旗的 key 或 { field: '#rrggbb', emblem } ⇒ 換（已載入的船型重烘旗面）；
+  //   回現在的兩面、換了幾邊（n）、選得到的預設旗與紋章 —— Blocksail 之後照國家、玩家的旗叫這一支
+  flags: function (o) { var n = o ? flagSet(o) : 0; return { blue: teamFlag('blue'), red: teamFlag('red'), n: n, presets: FLAG_PRESETS.map(function (p) { return { k: p.k, name: p.name, field: p.field, emblem: p.emblem }; }), emblems: Object.keys(FLAG_EMB) }; },
   townRise: function (a, b, c) {   // 建造演出與工地（63_townrise.js；TASK-0908、0912）：(城 id, 地塊 id, 進度[, 播放秒數[, 演完自己換回去]]) ⇒ 開始；('set', p)；('stop')；('stat') ⇒ 讀數；('sites', 城 id, { 地塊 id: ‰ }) ⇒ 照帳的工地（測試用，同 townUI 'sites' 的回覆）
     if (a === 'set') { if (RISE.demo) townRiseSet(RISE.demo, b); return townRiseStat(); } if (a === 'sites') { townRiseSites(TOWNS.list.filter(function (t) { return t.id === b; })[0], c); return townRiseStat(); } if (a === 'stop') { townRiseStop(); return townRiseStat(); } if (a === 'stat') return townRiseStat();
     var T = TOWNS.list.filter(function (t) { return t.id === a; })[0]; return townRiseStart(T, b, c || 0, arguments[3] || 0, arguments[4]);
@@ -205,7 +208,8 @@ if (DEBUG) window.__game = {
   townDump: function (id) { return townDump(id); },   // 城的地面網格與整地高度的雜湊（63_towns.js townDump；增量重建 vs 整座建的對照）   // 規劃座標那一點：路面頂點高度 vs 現在的地形（87_townbuild.js twbProbe；查路面沉進地形）   // 規劃座標 ⇒ 螢幕座標（clientX、clientY；測建築模式用）
   trees: function (sp, n, at) { return treeFind(sp, n, at); },   // 找樹（63_trees.js treeFind）：那一種最靠近 at（[x, z]；沒給 ⇒ 鏡頭）的 n 棵
   // 海圖（TASK-0721；08_seabed.js、32_ground.js）：載了哪幾塊、換過幾次中心、等過幾次；每艘的擱淺讀數；q ＝ [x, z] ⇒ 那一點的高度與底質
-  inland: function (on) { if (on !== undefined) { BEDWAT.on = !!on; render(); } return BEDWAT.on; },   // 內陸水與低於海平面的乾地的遮罩一起開關（63_bed_gl.js；同一格開／關對照畫面用）
+  inland: function (on) { if (on !== undefined) { BEDWAT.on = !!on; render(); } return BEDWAT.on; },
+  river: function (x, z) { var r = bedWet(x, z), R = { n: BEDW.n, top: BEDW.top, low: BEDW.low }; if (r) Object.assign(R, { m: +r.m.toFixed(3), s: +r.s.toFixed(2), fx: +r.fx.toFixed(3), fz: +r.fz.toFixed(3), sl: r.sl, lv: +seaLv(x, z).toFixed(2), bed: +bedHgt(x, z).toFixed(2) }); return R; },   // 內陸水的模擬（08_seabed.js bedWet；TASK-0768）：那一點有幾成是河、河面、水流、坡度、水位、河床   // 內陸水與低於海平面的乾地的遮罩一起開關（63_bed_gl.js；同一格開／關對照畫面用）
   chart: function () { return chartInfo(); },                                  // 小地圖（63_chart.js）：開了沒、範圍、吃水門檻、底圖幾塊、畫面上的位置
   traffic: function () { return trafficInfo(); },                             // 往來的船（58_traffic.js）：在場幾艘、排隊、做好幾艘、收掉幾艘、建船每一段幾 ms
   flow: function () { return FLOW_ST; },                             // ?start=1 分段開戰（70_flow.js startStaged）：幾步、最久一步、每一步幾 ms、全部幾 ms
