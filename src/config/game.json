@@ -1325,7 +1325,7 @@
       "work": "ame-labelle-01m-assembly",
       "author": "ame",
       "geo": {"spar": [28, 42], "marines": [33, 54], "center": 45, "aim": 28, "aimZ": [5, 185], "deckAim": [28, 40], "rigAim": [55, 180]},
-      "cfg": {"pump": 2, "speed": 3, "agile": 4, "upwind": 2},
+      "cfg": {"pump": 2},
       "crew": {"officers": 2, "helm": 1, "top": 0, "marines": 4, "marineGap": 14, "monkeys": 1, "handsK": 0.25, "navigator": 0},
       "names": ["拉貝爾號"],
       "idNext": {
