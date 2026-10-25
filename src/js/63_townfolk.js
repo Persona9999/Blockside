@@ -225,7 +225,7 @@ function townFolkWorkSite(T, G, p, k) {
     sites = cache[key] = [];
     var byLot = G.workLots || (G.workLots = {});
     (T.p && T.p.lots || []).forEach(function (l) {
-      var match = p.work.indexOf(l.use) >= 0 || (p.work.indexOf('garrison') >= 0 && ['fort', 'barracks', 'watchtower', 'bastion'].indexOf(l.use) >= 0);
+      var match = p.work.indexOf(l.use) >= 0 || (p.work.indexOf('garrison') >= 0 && TOWN_WORK_GUARD.indexOf(l.use) >= 0);
       if (!match || l.hide) return;
       var id = String(l.id), best = byLot[id];
       if (best === undefined) {
@@ -324,7 +324,7 @@ function townFolkStreet(T, F, walk, group) {
 // 動作：站在自己的點上做工（船員那一套程式動作：照節奏前傾、上下；41_crew_art.js），偶爾停下來喘口氣；同一組有空的點 ⇒ 每一圈走過去做一陣再走回來
 //   （共用同一個空點的幾位錯開時間，不會同時站上去）。位置只照遊戲時間（townClock：暫停就停）算（同 townFolkAt）。?townwork=0 ⇒ 不畫（對照組）。
 var TOWN_WORK = Q.get('townwork') !== '0', TOWN_WORK_RE = /^work-([a-z]?)(\d+)$/, TOWN_WORK_SCALE = 1.1, TOWN_WORK_SPD = 1.1;   // SCALE：建築裡比街上（TOWN_FOLK_SCALE 1.36）小，大人約 1.9 m ⇒ 對齊 Blocksail tools/workspots.py 找點要的 2.0 m 淨空（1.2 倍在伐木場柴棚下頂到棚簷）
-var TOWN_WORK_GUARD = ['fort', 'barracks', 'watchtower', 'bastion', 'battery'];   // 這幾種用途找 work 有 garrison 的（同 townFolkWorkSite）
+var TOWN_WORK_GUARD = ['fort', 'barracks', 'watchtower', 'bastion', 'battery', 'galata-tower', 'fort-de-la-roche', 'naval-store'];   // 這幾種用途找 work 有 garrison 的（townFolkWorkSite 同一張）；後三種 TASK-0948（Blocksail BSW.GARRISON 的軍事建築：加拉塔塔、托爾圖加岩堡、海軍倉庫）
 function townWorkCmp(a, b) { var A = TOWN_WORK_RE.exec(a), B = TOWN_WORK_RE.exec(b); return A[1] < B[1] ? -1 : A[1] > B[1] ? 1 : +A[2] - +B[2]; }
 // 田裡的農夫（Tim 2026-10-25「是否可以讓農田中有工作的農夫(參考其他生產建築)」）：附屬的田（63_towns.js townPrep 的 T.fields）沒有模型的點 ⇒ 照田現算，跟那一棟主建築的點一起用
 //   站在溝裡（壟與壟之間：行距照作物的 place.field，同 63_trees.js treeFieldPut 的壟中線往旁邊挪半個溝）、沿行那一段的中間，面向沿行（隨機朝前或朝後）；高度照鋪的土（同作物：地面 ＋ TOWN_ROAD_LIFT）
