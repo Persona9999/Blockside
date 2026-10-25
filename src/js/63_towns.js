@@ -172,10 +172,10 @@ function townReplace(p) {
   if (i < 0) { townGot([p]); return true; }
   var old = TOWNS.list[i], T = townPrep(p), D = TOWN_FULL || !old.gt || !old.roadSurface ? null : townDiff(old, T);
   if (D && old.pend) { townBoxAdd(D.box, old.pend.box); if (old.pend.roads) D.roads = townBoxAdd(D.roads || old.pend.roads.slice(), old.pend.roads); }   // 上一次改的路面還在算 ⇒ 一起算
-  var I = townIdx();
-  if (I && TOWNS.kitHas && townNeed(I).some(function (nm) { return TOWNS.kitHas.indexOf(nm) < 0; })) townKitStale();
   TOWNS.ver++; TOWNS.dirty = true; TOWNS.stat.replaced = (TOWNS.stat.replaced || 0) + 1;
   TOWNS.list[i] = T;
+  var I = townIdx();                                                    // 要的模型變多（自動蓋的擺上這座城原本沒有的種類：磨坊、鹽田…）⇒ 丟掉重要 —— ⛔ 要照換上去的那一份算（以前在換之前算 ⇒ 拿舊規劃比、永遠沒變多 ⇒ 新種類的地塊一直沒有實例）
+  if (I && TOWNS.kitHas && townNeed(I).some(function (nm) { return TOWNS.kitHas.indexOf(nm) < 0; })) townKitStale();
   if (!D) {                                                             // 整座重來（對照組、改了 TOWN_DIFF_KEYS、舊的那一份還沒建好）
     if (old.gt) Object.keys(old.gt).forEach(function (k) { var g = old.gt[k].g, gf = old.gt[k].gf; if (g) townGpuFree(g); if (gf) townGpuFree(gf); });
     if (old.lmg) townGpuFree(old.lmg);
