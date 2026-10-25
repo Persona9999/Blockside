@@ -195,6 +195,7 @@ if (DEBUG) window.__game = {
   townHit: function (cx, cy) { var h = townHitAt(cx, cy); return h ? { town: h.T.id, lot: h.lot ? h.lot.id : null, use: h.use, name: h.name, k: h.q.k, t: h.t, pt: h.pt } : null; },   // 螢幕那一點點到哪一棟（63_towns.js townHitAt；不看地形擋不擋）
   twbSel: function () { var h = TWB.sel; return h ? { town: h.T.id, lot: h.lot ? h.lot.id : null, use: h.use, name: h.name, k: h.q.k } : null; },   // 建築模式選著的那一棟
   twbMenu: function () { return TWB_CATS.map(function (c) { return { k: c.k, name: c.name, items: c.items.map(function (it) { return it.k; }) }; }); },   // 建築模式的選單（open 回的 menu 換過沒）
+  townSpin: function (w) { if (w !== undefined) TOWNS.spinWind = w; return TOWNS.stat.spin || null; },   // 旋轉件（63_towns.js townSpinDraw；TASK-0939）：給風速（m/s）⇒ 蓋過遊戲的風（null ⇒ 回到遊戲的風）；回上一格的讀數
   townRise: function (a, b, c) {   // 建造演出與工地（63_townrise.js；TASK-0908、0912）：(城 id, 地塊 id, 進度[, 播放秒數[, 演完自己換回去]]) ⇒ 開始；('set', p)；('stop')；('stat') ⇒ 讀數；('sites', 城 id, { 地塊 id: ‰ }) ⇒ 照帳的工地（測試用，同 townUI 'sites' 的回覆）
     if (a === 'set') { if (RISE.demo) townRiseSet(RISE.demo, b); return townRiseStat(); } if (a === 'sites') { townRiseSites(TOWNS.list.filter(function (t) { return t.id === b; })[0], c); return townRiseStat(); } if (a === 'stop') { townRiseStop(); return townRiseStat(); } if (a === 'stat') return townRiseStat();
     var T = TOWNS.list.filter(function (t) { return t.id === a; })[0]; return townRiseStart(T, b, c || 0, arguments[3] || 0, arguments[4]);

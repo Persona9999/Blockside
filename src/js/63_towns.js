@@ -633,7 +633,7 @@ function townKitMake(I, need, D, reuse) {
     var m0 = I.models[nm], d = D[nm], R = reuse && reuse.M[nm];
     if (!d) throw new Error('外面那一頁沒給 ' + nm);
     var rise = d.bo ? { g: d.g, bo: d.bo } : null;                       // 建造演出（63_townrise.js）：格子＋施工順序留著，演的時候才解（沒有 bo ＝ Blocksail 還沒照 TASK-0908 重建的模型資料）
-    function put(L, win, gls) { M[nm] = { nm: nm, i: names.indexOf(nm), m: m0, lod: L, png: d.png, uc0: [m0.mpv, m0.size[0] * m0.mpv / 2, m0.size[1] * m0.mpv / 2], uc1: [m0.mpv * m0.lo.f, m0.size[0] * m0.mpv / 2, m0.size[1] * m0.mpv / 2], win: win, gls: gls, rise: rise }; }   // win：亮窗的窗片（夜裡的燈）；gls：玻璃（townGlsMesh）
+    function put(L, win, gls) { M[nm] = { nm: nm, i: names.indexOf(nm), m: m0, lod: L, png: d.png, uc0: [m0.mpv, m0.size[0] * m0.mpv / 2, m0.size[1] * m0.mpv / 2], uc1: [m0.mpv * m0.lo.f, m0.size[0] * m0.mpv / 2, m0.size[1] * m0.mpv / 2], win: win, gls: gls, rise: rise, spinD: d.spin || null, spinG: R ? R.spinG : null }; }   // win：亮窗的窗片（夜裡的燈）；gls：玻璃（townGlsMesh）
     if (R) { put(R.lod, R.win, R.gls); return null; }
     return Promise.all([townModelMesh(nm, d, m0), townGlsMesh(m0, d.gls)]).then(function (A) { put(A[0], townWinMesh(m0), A[1]); });
   })).then(function () {
@@ -671,6 +671,7 @@ function townKitSet(K) {
 }
 /** 一份模型組的 GPU 資源（網格、窗片、貼圖）；keep ＝ 換上的那一組（骨架 ⇒ 整組沿用的網格不放掉）。 */
 function townKitGpuFree(K, keep) {
+  Object.keys(K.M).forEach(function (nm) { var S = K.M[nm].spinG; if (!S || (keep && keep.M[nm] && keep.M[nm].spinG === S)) return; S.forEach(function (r) { if (r) { gl.deleteVertexArray(r.vao); gl.deleteBuffer(r.vbo); } }); });   // 旋轉件（townSpinMesh）
   Object.keys(K.M).forEach(function (nm) { if (keep && keep.M[nm] && keep.M[nm].lod === K.M[nm].lod) return; K.M[nm].lod.concat(K.M[nm].win ? [K.M[nm].win] : [], K.M[nm].gls ? [K.M[nm].gls] : []).forEach(function (r) { gl.deleteVertexArray(r.vao); gl.deleteBuffer(r.vbo); }); });
   if (K.tex) gl.deleteTexture(K.tex);
   townFolkFree(K, keep);
@@ -1679,6 +1680,61 @@ function townGpu9(V, I, bb) {
 }
 
 // ── 布旗（Tim 2026-10-20「旗幟可以改成布?(參考船隻)」；只給人看） ──
+// ── 旋轉件（TASK-0939；Tim 2026-10-25「風車可以轉動嗎(不能的話是否可以改架構 支援船上螺旋槳那種轉動方式)」「先只做風車照風轉就好」
+//   「然後考慮效能 遠處的話旋轉部件可以不轉(或是看有甚麼好的做法 平衡性能跟演出)」）──
+// 標法同船（造船規格 §9.8）：Blocksail tools/townmodels.py 把關聯 meta 標了 spin 的那一件從近那一級的格子拿掉、另存（模型資料的 spin），索引的 spin ＝ [{ src, mode, k, pv, ax, n }]。
+//   pv ＝ 轉的中心（成品的格座標，連續）、ax ＝ 單位轉軸；rate ⇒ 每秒轉 k × 參數 度（右手定則）。中、遠、屋頂殼照舊含它（靜態）。
+// 畫法：近那一級分好的那一組實例（townBin：畫面外、工地上那一棟本來就不在裡面）再畫一次，換成旋轉件的網格、著色器多一個繞軸轉（uSpA ＝ 軸、角度；uSpP ＝ 中心）
+//   ⇒ 一種模型、一個旋轉件一次 draw call；淡入淡出門檻跟近那一級同一個 ⇒ 160 m（地標照倍率）外換成中那一級的靜態帆：遠處不轉、也不多畫。
+//   同一種的每一座轉得一樣（同一陣風）；陰影那一層（靜態快取）不畫它。只是畫面：不讀寫模擬的狀態。
+//   網址 ?townspin=0 ⇒ 不畫（對照組：近處少了帆）；__game.townSpin(m/s) 蓋過風速（null ＝ 照遊戲的風）。
+var TOWN_SPIN = Q.get('townspin') !== '0';
+var TOWN_SPIN_SRC = { wind: function () { return TOWNS.spinWind != null ? TOWNS.spinWind : windKnots() / 1.944; } };   // 風速 m/s（同打帆、環境音那一個）
+/** 模型 Mm 的旋轉件網格（一件一份，第一次要畫才解；解好之前 ⇒ null，那一格不畫）。 */
+function townSpinMesh(Mm) {
+  if (Mm.spinG || Mm.spinP || !Mm.spinD) return Mm.spinG;
+  var m = Mm.m;
+  Mm.spinP = Promise.all(Mm.spinD.map(townRiseChunks)).then(function (A) {
+    Mm.spinG = A.map(function (C) {
+      var G = new VK.Grid([m.size[0], m.size[1], m.size[2]]), NXY = G.nx * G.ny, parts = [], len = 0;
+      C.keys.forEach(function (k, i) { var c = C.data[i]; for (var li = 0; li < 4096; li++) if (c[li]) G.set(k[0] * 16 + (li & 15), k[1] * 16 + ((li >> 4) & 15), k[2] * 16 + (li >> 8), c[li]); });
+      for (var t = 0; t < G.tab.length; t++) {
+        if (!G.tab[t]) continue;
+        var cz = (t / NXY) | 0, cy = ((t - cz * NXY) / G.nx) | 0, q = VK.meshChunk(G, t - cz * NXY - cy * G.nx, cy, cz);
+        if (q) { parts.push(q); len += q.length; }
+      }
+      var all = new Uint16Array(len), o = 0; parts.forEach(function (a) { all.set(a, o); o += a.length; });
+      return len ? townUpload(all) : null;
+    });
+  }, function (e) { Mm.spinErr = e.message; console.warn('城鎮：旋轉件解不開 ' + Mm.nm + '：' + e.message); });
+  return null;
+}
+/** 畫旋轉件（townDraw：近、中兩級之後，同一支著色器）⇒ 三角形數。 */
+function townSpinDraw(PV, G, K) {
+  var now = performance.now() / 1000, dt = Math.min(0.1, Math.max(0, now - (TOWNS.spinT || now))), S = TOWNS.stat.spin = { models: 0, inst: 0, wind: null, deg: null };
+  TOWNS.spinT = now;
+  if (!TOWN_SPIN || !G) return 0;
+  var tris = 0, set = false;
+  K.names.forEach(function (nm, mi) {
+    var n = G.cnt[0][mi]; if (!n) return;                               // ⛔ 先看數量：K.names 是索引裡全部的名字，K.M 只有這一組解了的（沒解的 K.M[nm] 是 undefined）
+    var Mm = K.M[nm], sp = Mm.m.spin; if (!sp) return;
+    var L = townSpinMesh(Mm); if (!L) return;
+    if (!set) { set = true; gl.uniform1f(PV.u.uEdge, 1); gl.uniform2f(PV.u.uIn, -2, -1); gl.uniform2f(PV.u.uOut, TOWN_LOD[0] - TOWN_BAND[0], TOWN_LOD[0] + TOWN_BAND[0]); }
+    gl.uniform3fv(PV.u.uC, Mm.uc0);
+    sp.forEach(function (e, j) {
+      var g = L[j], f = TOWN_SPIN_SRC[e.src]; if (!g || !f) return;
+      var v = f(), A = Mm.spinA || (Mm.spinA = []);
+      A[j] = ((A[j] || 0) + e.k * v * dt) % 360;                         // 角度（度）照畫面時間累加；風停 ⇒ 停在那裡
+      gl.uniform4f(PV.u.uSpA, e.ax[0], e.ax[1], e.ax[2], A[j] * Math.PI / 180); gl.uniform3f(PV.u.uSpP, e.pv[0], e.pv[1], e.pv[2]);
+      gl.bindVertexArray(g.vao); gl.bindBuffer(gl.ARRAY_BUFFER, TOWNS.prog.ib[0]); townInstAttr(G, 0, mi);
+      gl.drawElementsInstanced(gl.TRIANGLES, g.nq * 6, gl.UNSIGNED_INT, 0, n); tris += g.nq * 2 * n;
+      S.models++; S.inst += n; S.wind = +v.toFixed(2); S.deg = +A[j].toFixed(1);
+    });
+  });
+  if (set) gl.uniform4f(PV.u.uSpA, 0, 0, 0, 0);                         // ⛔ 一定要歸零：同一支著色器接著畫工地與別的東西
+  return tris;
+}
+
 // 模型的 flags（Blocksail tools/townmodels.py flags_of：雕刻的帆裡 meta kind=flag 那幾面的四個角，模型格座標；BUILDING_SPEC §6.2）⇒ 每個實例每面一塊布：
 //   TOWN_FLAG_N ＝ 沿飛 × 沿旗桿幾個質點；綁邊（第 0 欄）釘在旗桿上，其他照 Verlet：重力＋往風速拉的阻力（風向 ＝ WIND、風速 ＝ WIND_SAIL × 天氣，跟帆同一份）
 //   ＋陣風、擺動（畫面時間的正弦、每面差一個相位 ⇒ 不抽亂數）＋ TOWN_FLAG_IT 次距離約束（橫、直、斜）。
@@ -1819,12 +1875,13 @@ function townFlagMesh(F, eye) {
 // 體素（近、中）：格座標 ⇒ 模型公尺（uC ＝ 一格幾公尺、模型中心 x、y）⇒ 地塊的轉向 ⇒ 世界；實例 aI ＝ (x, y, z, θ)、aS ＝ (沿 x 縮放, 深淺, 地標倍率 lk ⇒ vD ＝ 距離 ÷ lk)、
 //   aJ ＝ 城牆的 (−x 那一頭的斜接, +x 那一頭的斜接, 坡度, 牆基往下延)（建築都是 0）：沿 x 照 u 內插的 k ⇒ a ＋＝ b·k（切成梯形，相鄰兩節在角平分面上密合）、
 //   高 ＋＝ 坡度·a（用斜接之前的 a ⇒ 端面上每一點的高度都是那一站的高度）、z 0 那一層的底往下延；法線照這個變形的餘因子矩陣轉。
-var TOWN_VS = '#version 300 es\nlayout(location=0) in uvec4 aV; layout(location=4) in vec4 aI; layout(location=5) in vec3 aS; layout(location=6) in vec4 aJ; uniform mat4 uVP; uniform vec3 uC; uniform vec3 uEye;\n' +
+var TOWN_VS = '#version 300 es\nlayout(location=0) in uvec4 aV; layout(location=4) in vec4 aI; layout(location=5) in vec3 aS; layout(location=6) in vec4 aJ; uniform mat4 uVP; uniform vec3 uC; uniform vec3 uEye; uniform vec4 uSpA; uniform vec3 uSpP;\n' +
   'out vec3 vL; out vec3 vW; out vec3 vN; flat out uint vC; flat out uint vF; out float vK; out float vD;\n' +
   'const vec3 NT[6]=vec3[6](vec3(1,0,0),vec3(-1,0,0),vec3(0,1,0),vec3(0,-1,0),vec3(0,0,1),vec3(0,0,-1));\n' +
-  'void main(){ vec3 p=vec3(aV.xyz); vL=p; float s=sin(aI.w), c=cos(aI.w), a=(p.x*uC.x-uC.y)*aS.x, b=p.y*uC.x-uC.z;\n' +
+  'vec3 spinR(vec3 v){ float cs=cos(uSpA.w), sn=sin(uSpA.w); vec3 k=uSpA.xyz; return v*cs+cross(k,v)*sn+k*dot(k,v)*(1.0-cs); }\n' +
+  'void main(){ vec3 p=vec3(aV.xyz); vL=p; bool sp=dot(uSpA.xyz,uSpA.xyz)>0.0; if(sp) p=spinR(p-uSpP)+uSpP; float s=sin(aI.w), c=cos(aI.w), a=(p.x*uC.x-uC.y)*aS.x, b=p.y*uC.x-uC.z;\n' +
   ' float u=p.x*uC.x/(2.0*uC.y), k=mix(aJ.x,aJ.y,u), A=1.0+b*(aJ.y-aJ.x)/(2.0*uC.y*aS.x), e=a+b*k;\n' +
-  ' vec3 w=vec3(aI.x+e*s-b*c, aI.y+p.z*uC.x+aJ.z*a-(aV.z==0u?aJ.w:0.0), aI.z-e*c-b*s); uint f=aV.w&7u; vec3 m=NT[int(f)];\n' +
+  ' vec3 w=vec3(aI.x+e*s-b*c, aI.y+p.z*uC.x+aJ.z*a-(aV.z==0u?aJ.w:0.0), aI.z-e*c-b*s); uint f=aV.w&7u; vec3 m=NT[int(f)]; if(sp) m=spinR(m);\n' +
   ' m=vec3(m.x-aJ.z*m.z, A*m.y-k*m.x+k*aJ.z*m.z, A*m.z); vN=vec3(m.x*s-m.y*c, m.z, -m.x*c-m.y*s); vF=f; vC=(aV.w>>3u)&255u; vK=aS.y; vW=w; vD=length(aI.xz-uEye.xz)/aS.z; gl_Position=uVP*vec4(w,1.0); }\n';
 // 交接：uIn ＝ 這一級從哪裡開始出現（抖動淡入）、uOut ＝ 到哪裡淡出 —— 同一個像素的門檻跟隔壁那一級共用 ⇒ 互補（照實例中心的距離 vD ⇒ 整棟一起換）
 var TOWN_FADE = TREE_DITHER + 'uniform vec2 uIn, uOut; bool townCut(float d){ float di=treeDi(gl_FragCoord.xy); return smoothstep(uIn.x,uIn.y,d)<=di || smoothstep(uOut.x,uOut.y,d)>di; }\n';
@@ -2006,6 +2063,7 @@ function townDraw() {
       gl.drawElementsInstanced(gl.TRIANGLES, g.nq * 6, gl.UNSIGNED_INT, 0, n); tris += g.nq * 2 * n;
     });
   }
+  tris += townSpinDraw(PV, G, K);                                        // 旋轉件（風車的帆；近那一級才畫、才轉）
   tris += townRiseDraw(P);                                               // 建造演出（63_townrise.js；同一支著色器，接著近那一級畫）
   // 石基
   if (G.npl) {
