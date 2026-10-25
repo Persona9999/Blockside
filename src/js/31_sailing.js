@@ -110,6 +110,7 @@ function helmK(sh) {
   return lost ? Math.min(1, HELM_LOST * playK('helm')) : 1;
 }
 function sailShip(sh, dt) {
+  if (sh.fixed) { sh.spd = 0; sh.yawRate = 0; sh.vel = [0, 0, 0]; sh.pos = ''; return; }   // 堡壘、砲台（TASK-0954）：不動
   var F = fwd(sh.yaw), W = norm(WIND), deg = Math.acos(clamp(dot(F, W), -1, 1)) * 57.2958;
   var UP = sh.cfg.upwind || 1, dU = UP === 1 || deg <= 90 ? deg : 90 + (deg - 90) / UP;   // 逆風性能：迎風那一半的角度壓縮（1.25 ⇒ 風從船頭 52.5° 才開始失速、45° 跑得像 36° 的船…）；1 ⇒ 一位元都不動
   sh.sailFrac = sh.sails.reduce(function (a, s) { return a + (s.dead || s.furled ? 0 : s.area * s.hp / s.hpMax); }, 0) / sh.sailArea0;   // 被打中還沒掉的帆：照剩下的血量算推力
@@ -239,11 +240,11 @@ function collide(dt) {
   var lv = SHIPHIT_LV[PHX.shiphit] || null;
   if (!lv) {
     var K = SHIPS.map(keelPts);
-    for (var i = 0; i < SHIPS.length; i++) for (var j = i + 1; j < SHIPS.length; j++) collidePair(SHIPS[i], SHIPS[j], K[i], K[j]);
+    for (var i = 0; i < SHIPS.length; i++) for (var j = i + 1; j < SHIPS.length; j++) if (!SHIPS[i].fixed && !SHIPS[j].fixed) collidePair(SHIPS[i], SHIPS[j], K[i], K[j]);   // 堡壘（TASK-0954）不推、不被推：第一版不判
     return;
   }
   var t0 = performance.now();
-  for (var a = 0; a < SHIPS.length; a++) for (var b = a + 1; b < SHIPS.length; b++) collideFine(SHIPS[a], SHIPS[b], lv);
+  for (var a = 0; a < SHIPS.length; a++) for (var b = a + 1; b < SHIPS.length; b++) if (!SHIPS[a].fixed && !SHIPS[b].fixed) collideFine(SHIPS[a], SHIPS[b], lv);
   var ms = performance.now() - t0; HIT_PROF.n++; HIT_PROF.ms += ms; if (ms > HIT_PROF.max) HIT_PROF.max = ms;
 }
 function keelPts(sh) { var T = sh.T, r = []; for (var k = 0; k < 7; k++) r.push(M4.pt(sh.M, T.wl0 + 15 + (T.wl1 - T.wl0 - 30) * k / 6, T.cy, T.zw)); return r; }

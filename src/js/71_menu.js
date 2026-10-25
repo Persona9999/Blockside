@@ -24,8 +24,8 @@ function gfxMenuShow(lv) {
 evOn('cfg:gfx', gfxMenuShow);
 /** 玩法：娛樂／寫實（04_state.js 的 PLAY）＋主選單按鈕的亮燈。航行每一步都讀（playK）；按鈕在主選單，沒開戰時才按得到。 */
 function setPlay(p) { PLAY = p === 'real' ? 'real' : 'fun'; [].forEach.call(document.querySelectorAll('#plays button'), function (x) { x.className = x.dataset.p === PLAY ? 'on' : ''; }); }
-/** 選單列船：HULL_LIST 的每一艘。 */
-function hullOptions(sel, v) { sel.innerHTML = HULL_LIST.map(function (h) { return '<option value="' + h.id + '">' + h.name + '</option>'; }).join(''); sel.value = v; }
+/** 選單列船：HULL_SHIPS 的每一艘（堡壘不列）。 */
+function hullOptions(sel, v) { sel.innerHTML = HULL_SHIPS.map(function (h) { return '<option value="' + h.id + '">' + h.name + '</option>'; }).join(''); sel.value = v; }
 /** 主選單的艦隊編成（TASK-0537）：我方、敵方各一列，每艘一個選單；第二艘起有 ×（拿掉）；＋ 加一艘（照那一邊最後一艘的船型），合計到 MAX_SHIPS 就停用。
  *  我方第一艘 ＝ 我艦。改了就重建這兩列。 */
 function fleetUI() {

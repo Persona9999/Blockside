@@ -36,6 +36,7 @@ function makeShipSteps(i, team, yaw, pz, T, px) {
     spd: 0, spd0: true, yawRate: 0, vel: [0, 0, 0], wakeT: 0, sailFrac: 1, pos: '',
     side: 'S', manual: false, rudder: 0, sailSet: 3, power: 1, bumpT: 0
   };
+  if (T.fixed) sh.fixed = true;                                          // 堡壘、砲台（TASK-0954）：固定在地上 —— 不浮、不進水、不動（32_hull.js stepShip、31_sailing.js sailShip 照它跳過）
   if (T.key && T.key !== T.id) { var T0 = HULLT[T.id], c0 = SHIP_CFG[T.id]; sh.cfg.ballast = T0 && c0 && c0.ballast !== undefined && c0.ballast !== T0.ballast0 ? c0.ballast : cfgDefault('ballast', T); }   // 艦隊裡寫了換裝的那一艘（38_fit.js）：壓艙物照自己那一份的預設（換了砲 ⇒ 重量不同）；玩家在配置頁改過那一型的 ⇒ 照改的
   smoothShip(sh);                                                       // 平滑渲染的格：共用船型那一份網格（15_smooth.js）
   // 模型（砲、火藥桶、舵輪）：整個是一塊剛體 —— 被打到扣血，歸零整個飛出去（火藥桶 ⇒ 殉爆，見 23_powder.js），⛔ 不拆格。
@@ -180,13 +181,13 @@ function makeShipSteps(i, team, yaw, pz, T, px) {
   }, function () {                                                   // 船員
   sh.crew = makeCrew(sh); sh.crew0 = sh.crew.length; sh.wounded = 0; sh.dead = 0; sh.kills = 0; sh.wounds = 0; sh.causes = {};   // kills／wounds：累計（廣播傷亡用；wounded 會在傷者陣亡時減回去）
   }, function () {                                                   // 進水的水格（flType：同一型只算一次 ⇒ 第一次照 flTypeSteps 分三步算）
-  var FL = FL_LV[FLOOD_LV]; return FL ? flTypeSteps(T, FL.c) : [];
+  var FL = FL_LV[FLOOD_LV]; return FL && !T.fixed ? flTypeSteps(T, FL.c) : [];   // 堡壘不進水
   }, function () {                                                   // 矩陣、進水、動力
   sh.news = { guns: [], t: -9, k: 0, w: 0, kr: {}, wr: {} };
   sh.M = shipMatrix(sh); sh.inv = M4.inv(sh.M);
-  sh.fl = flNew(sh);                                                    // 進水：粒子模式（33_flood.js；公式模式 ⇒ null）
+  sh.fl = sh.fixed ? null : flNew(sh);                                  // 進水：粒子模式（33_flood.js；公式模式 ⇒ null）
   if (sh.fl && sh.fl.L.room) sh.wrs = wrsInit(sh);                      // 第 4 檔「房間」（TASK-0810）：房間模擬（33_wrsim.js；船型沒有房間 ⇒ null ⇒ 照水格走）
-  portsFloodInit(sh);                                                   // 砲口進水（25_doors.js，TASK-0822）：沒有蓋板的砲口當場登記成進水口
+  if (!sh.fixed) portsFloodInit(sh);                                    // 砲口進水（25_doors.js，TASK-0822）：沒有蓋板的砲口當場登記成進水口
   }, function () {
   driveInit(sh);                                                        // 動力源（帆、蒸汽機、魔法）與水阻（31_drive.js，TASK-0630）
   M.sh = sh;

@@ -559,7 +559,9 @@
       "copper_sheath": {"name": "銅皮（包在木殼外）", "kind": "metal", "density": 0.8, "hard": 1.1, "flammable": 0, "metal": 0.7, "rough": 0.55, "smooth": false},
       "brass": {"name": "黃銅（鍍金銅件：紋章、鐘、配件）", "kind": "metal", "density": 8.5, "hard": 20, "flammable": 0, "metal": 1, "rough": 0.3, "smooth": false},
       "boiler": {"name": "鍋爐（鐵殼＋滿水）", "kind": "metal", "density": 0.9, "hard": 1.5, "flammable": 0, "metal": 0.85, "rough": 0.45, "smooth": true},
-      "glass": {"name": "玻璃（窗）", "kind": "other", "density": 2.5, "hard": 0.3, "flammable": 0, "rough": 0.06, "clear": 0.6}
+      "glass": {"name": "玻璃（窗）", "kind": "other", "density": 2.5, "hard": 0.3, "flammable": 0, "rough": 0.06, "clear": 0.6},
+      "brick": {"name": "磚（燒磚砌體）", "kind": "other", "density": 1.9, "hard": 1.15, "flammable": 0, "rough": 0.85},
+      "stone": {"name": "石材（毛石砌體）", "kind": "other", "density": 2.4, "hard": 1.3, "flammable": 0, "rough": 0.9}
     }
   },
   "ships": [
@@ -1259,6 +1261,58 @@
         "wheel": 2,
         "wheel_stand": 2,
         "yard": 3
+      }
+    },
+    {
+      "id": "fort_en",
+      "el": "ship-fort-en",
+      "name": "英國稜堡",
+      "vxk": "fort_en.vxk",
+      "work": "trailhead-harbour-01m-fort-en",
+      "author": "trailhead",
+      "fixed": true,
+      "zw0": 1,
+      "geo": {"spar": [36, 40], "marines": [20, 20], "center": 30, "aim": 40, "aimZ": [5, 80], "deckAim": [20, 50], "rigAim": [90, 120]},
+      "crew": {
+        "officers": 2,
+        "helm": 0,
+        "marines": 0,
+        "top": 0,
+        "monkeys": 1,
+        "handsK": 0.1,
+        "surgeon": 0,
+        "carpenter": 1,
+        "sailmaker": 1,
+        "cook": 0,
+        "navigator": 0,
+        "quartermaster": 0
+      },
+      "material": "brick"
+    },
+    {
+      "id": "fort_carib",
+      "el": "ship-fort-carib",
+      "name": "加勒比稜堡",
+      "vxk": "fort_carib.vxk",
+      "work": "trailhead-harbour-01m-fort",
+      "author": "trailhead",
+      "material": "stone",
+      "fixed": true,
+      "zw0": 1,
+      "geo": {"spar": [36, 40], "marines": [20, 20], "center": 30, "aim": 40, "aimZ": [5, 80], "deckAim": [20, 50], "rigAim": [90, 120]},
+      "crew": {
+        "officers": 2,
+        "helm": 0,
+        "marines": 0,
+        "top": 0,
+        "monkeys": 1,
+        "handsK": 0.1,
+        "surgeon": 0,
+        "carpenter": 1,
+        "sailmaker": 1,
+        "cook": 0,
+        "navigator": 0,
+        "quartermaster": 0
       }
     }
   ],

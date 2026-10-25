@@ -58,10 +58,11 @@ function gunCrew(cw, type) { var n = cw.guns && cw.guns[type]; return n === unde
 // 艦名（TASK-0552；Tim 2026-10-14：參考歷史同級艦）：ships[].names ＝ 那一型的艦名池（第一個 ＝ 原名；沒給 ⇒ 只有原名），同一場照編成的順序發（52_fleet.js fleetNames）；
 //   池子用完拿公共池 names_pub，再用完 ⇒ 原名＋序號。憲法號：同級的 44 砲巡防艦（合眾國號、總統號），再來是照它們的設計造的 44 砲巡防艦；公共池：同時代美國海軍的巡防艦。
 //   餘燼號、夜隼號是 basecamp、summit 的船：她們給艦名池之前只有原名。
-var HULL_KNOWN = CFG.ships.map(function (s) { var h = { id: s.id, el: s.el, name: s.name, geo: s.geo, crew: s.crew, rooms: s.rooms, lamps: s.lamps, flags: s.flags, names: s.names && s.names.length ? s.names : [s.name] }; if (s.zw0) h.zw0 = s.zw0; if (s.material) h.material = s.material; if (s.matMap) h.matMap = s.matMap; if (s.author) h.author = s.author; if (s.drive) h.drive = s.drive; if (s.fireEngine === false) h.fireEngine = false; if (s.theme) h.theme = s.theme; if (s.variant_of) h.variant_of = s.variant_of; if (s.fit) h.fit = s.fit; return h; });   // material：全船預設材質（05_material.js）；author：建造者（admin.py 匯入時從 .vxk 檔頭 owner 記；船隻配置頁顯示）
+var HULL_KNOWN = CFG.ships.map(function (s) { var h = { id: s.id, el: s.el, name: s.name, geo: s.geo, crew: s.crew, rooms: s.rooms, lamps: s.lamps, flags: s.flags, names: s.names && s.names.length ? s.names : [s.name] }; if (s.zw0) h.zw0 = s.zw0; if (s.material) h.material = s.material; if (s.matMap) h.matMap = s.matMap; if (s.author) h.author = s.author; if (s.drive) h.drive = s.drive; if (s.fireEngine === false) h.fireEngine = false; if (s.theme) h.theme = s.theme; if (s.variant_of) h.variant_of = s.variant_of; if (s.fit) h.fit = s.fit; if (s.fixed === true) h.fixed = true; return h; });   // fixed：固定在地上的戰鬥單位（堡壘、砲台；TASK-0954）—— 不浮、不進水、不動，選單不列（HULL_SHIPS）   // material：全船預設材質（05_material.js）；author：建造者（admin.py 匯入時從 .vxk 檔頭 owner 記；船隻配置頁顯示）
 var SHIP_NAMES_PUB = CFG.names_pub || [];
 var HULL_LIST = HULL_KNOWN.filter(function (h) { return VK.hasEmbedded(h.el); });   // 內嵌的、或拆檔成品清單上有的（voxelkit.js embeddedBytes）
-var HULL_DEF = (HULL_LIST[0] || HULL_KNOWN[0]).id;                      // 預設的船：清單裡第一艘有內嵌資料的
+var HULL_SHIPS = HULL_LIST.filter(function (h) { return !h.fixed; });   // 選單、選船頁列的（堡壘不是船：只從 __game.fleet、之後的港口戰進場）
+var HULL_DEF = (HULL_SHIPS[0] || HULL_LIST[0] || HULL_KNOWN[0]).id;     // 預設的船：清單裡第一艘有內嵌資料的
 var HULLS = {}, HULLT = {};                                             // id → 載入中的 Promise ／ 載好的船型
 // 裝飾（TASK-0682；Tim 2026-10-17：「裝飾移除是在船隻載入時就不載入裝飾」「可以隱藏的裝飾都不算重量」）：雕刻模型 meta deco=1。
 //   載入船型時一律從 rig.models 拿掉（⇒ 不算重量、不被打、不掉下來、不抽 rnd()：開或關戰局逐項相同，07_gfx.js 的規矩），一律收進 T.decos、網格一律建 ——
@@ -313,6 +314,7 @@ function buildHull(info, model, t0, C, key, F) {
   S = h.meters_per_voxel;
   var T = { id: info.id, name: info.name, model: model, h: h, rig: h.rig || { ropes: [], sails: [] },
     sz: h.size[2], cx: (h.bbox[0] + h.bbox[3]) / 2, cy: h.size[1] / 2, hx0: h.bbox[0], hx1: h.bbox[3], zw: hullZW(h, info), geo: Object.assign({}, GEO0, info.geo), lamps: info.lamps || [], crew: Object.assign({}, CREW0, info.crew) };   // 外框：含艏斜桅與後桅帆桁
+  if (info.fixed) T.fixed = true;                                          // 堡壘、砲台（TASK-0954；10_ship.js makeShip ⇒ sh.fixed）
   T.ids = idIndex(h);                                                      // 物件 id（TASK-0715）：refPath 照它把 id 換成路徑
   T.key = key === undefined ? info.id : String(key); T.fit = FR;          // 艦隊裡的那一項（船型或 船型@換裝表）、換裝的結果（38_fit.js）
   T.cached = !!C; T.keep = C ? null : {};
@@ -342,7 +344,7 @@ function buildHull(info, model, t0, C, key, F) {
       var mt = 12 * KEG_T; (T.rig.models || []).forEach(function (m) { mt += modelT({ kind: modelKind(m) }, 1); });   // 模型的重量（砲照實、取用點 12 桶）
       T.ballast0 = Math.max(0, Math.round((T.disp - T.voxT0 - mt) / 25) * 25);   // 剛好浮在設計水線的壓艙物（滑桿一格 25 噸）
     }]
-  ]).concat(wrSteps(T, C).map(function (f) { return ['水的房間', function () { var a = performance.now(); f(); T.ms.wrooms = +((T.ms.wrooms || 0) + performance.now() - a).toFixed(1); }]; }));   // 水的房間（33_wrooms.js，TASK-0807）：快取有就讀回，沒有分三步現算（要 T.hullG、T.wl0、T.hullHB ⇒ 排在最後）
+  ]).concat((info.fixed ? [] : wrSteps(T, C)).map(function (f) { return ['水的房間', function () { var a = performance.now(); f(); T.ms.wrooms = +((T.ms.wrooms || 0) + performance.now() - a).toFixed(1); }]; }));   // 水的房間（33_wrooms.js，TASK-0807）：快取有就讀回，沒有分三步現算（要 T.hullG、T.wl0、T.hullHB ⇒ 排在最後）
   var p = Promise.resolve();
   steps.forEach(function (s, i) { p = p.then(function () { hullSay(info.name + '：' + s[0] + '（' + (i + 1) + '／' + steps.length + '）…'); return yieldUI(); }).then(s[1]); });
   return p.then(function () { T.decodeMs = t1 - t0; T.meshMs = performance.now() - t1; return T; });
