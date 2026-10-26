@@ -103,7 +103,7 @@ function bedHostMsg(e) {
   if (d.bsmap === 'townmodels' || (d.bsmap === 'error' && d.what === 'townmodels')) { townModelsGot(d.models, d.msg); return; }
   if (d.bsmap === 'docks') { dockGot(d.docks); return; }                // 停靠處（88_modeswitch.js；TASK-0867）
   if (d.bsmap === 'traffic') { trafficGot(d); return; }                 // 往來的船（58_traffic.js；Blocksail TASK-0911）
-  if (d.bsmap === 'clock') { wclkSet(d.rate); return; }                 // 世界時間的流速（08_weather.js WCLK；外面那一頁的時間面板，城鎮模式才照它）
+  if (d.bsmap === 'clock') { wclkSet(d.rate, d.bar); return; }          // 世界時間的流速（08_weather.js WCLK；外面那一頁的時間面板，城鎮模式才照它）；bar：城名、人口由外面那一頁畫
   if (d.bsmap === 'townUI') { tuiGot(d); return; }                     // 城鎮介面（89_townui.js；Blocksail TASK-0910）
   if (d.bsmap === 'townEdit' || d.bsmap === 'townSave') { twbGot(d); return; }   // townSave：建築模式的 💾 存這座城（87_townbuild.js twbSave）                    // 建築模式的回覆（87_townbuild.js；apply／undo 帶新的規劃 ⇒ townReplace）   // 要用到的城鎮模型（63_towns.js townModels）
   if (d.bsmap === 'chunk' && !d.coarse && BED.inq) { BED.inq.push(d); return; }   // 收塊排隊（檔頭）：畫面迴圈每格照預算處理（bedPump）；遠景的粗塊照舊當場收（只是交回 base64，bedFarStep 自己限量）

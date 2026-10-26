@@ -149,9 +149,10 @@ function wxLum() { return WX.lum * TOD_LUMK; }
 //   「城鎮模擬加速時 不加速物理模擬(主要是想看船進出港&日夜變化)」）：外面那一頁的時間面板照 'clock' 訊息給倍率 WCLK.rate（世界秒／模擬秒；暫停 ⇒ 0）。
 //   世界時間 ＝ SIMT ＋ WCLK.x（多走、少走的秒數）；物理照舊照 SIMT 走（1 倍）。太陽、天色、點燈、往來的船（58_traffic.js）照世界時間。
 //   只有城鎮模式照 WCLK.rate（wclkRate）；航海、海戰 ⇒ 1（同以前：世界時間跟著 SIMT）。沒被嵌著、沒給倍率 ⇒ 1 ⇒ 一位元不變。
-var WCLK = { rate: 1, x: 0 };
+//   WCLK.bar：外面那一頁自己畫城名、人口（跟時間面板並排；Tim 2026-10-26「是否可以改為左右並排」「城鎮就只要顯示名稱&人數」）⇒ 城名那一行（87_townbuild.js twbTitle）不畫。
+var WCLK = { rate: 1, x: 0, bar: false };
 function wclkRate() { return MODE === 'town' && BED && BED.host ? WCLK.rate : 1; }
-function wclkSet(r) { WCLK.rate = isFinite(+r) && +r >= 0 ? +r : 1; }
+function wclkSet(r, bar) { WCLK.rate = isFinite(+r) && +r >= 0 ? +r : 1; if (WCLK.bar !== !!bar) { WCLK.bar = !!bar; twbTitle(twbTown()); } }
 /** 模擬一步（50_sim.js simStep，SIMT += DT 之後）：倍率不是 1 ⇒ 多走（或少走）的那一份記在 WCLK.x。 */
 function wclkStep(dt) { var r = wclkRate(); if (r !== 1) WCLK.x += (r - 1) * dt; }
 /** 開戰以來世界時間走了幾秒。 */

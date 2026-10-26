@@ -331,10 +331,10 @@ function shipCheck(id) {
 // ── 排水量與壓艙物（?dispcheck=<船,船…>｜all；admin.py disp 讀；Tim 2026-10-26「加一個工具檢查目前所有船的空載排水量跟水線排水量 滿載排水量 因為我發現目前有些船沒有壓艙物(載一點貨物就會加深吃水)」
 //   「為了遊戲性 希望每艘船都有一個合適的載重(在載重範圍內都是替換壓艙物)」「戰艦可以參考史實 載重較低(因為裝了很多重砲)」）
 //   只載船型、不開戰：重量照開戰時同一套（hullT0：格＋砲（× 那一型的 gunw）＋火藥桶，壓艙物 0）、浮力表照 hydrostatics、吃水照 liftFor／tonsAt。
-//   每一型 ⇒ 空載（沒有壓艙物、沒有貨）、設計水線、滿載（水淹到最低砲甲板或頂層甲板 —— 取低的 —— 再往下 margin 公尺）的排水量與吃水；
-//   壓艙空間 ＝ 設計水線 − 空載（Blocksail 的貨在這個範圍內只替換壓艙石、吃水不變，world/stores.js fleetLoad；負的 ⇒ 空船就比設計水線深）。
+//   每一型 ⇒ 空載（沒有壓艙物、沒有貨）、設計水線、最深（水淹到最低砲甲板或頂層甲板 —— 取低的 —— 再往下 margin 公尺；欄位名 full／fullLine）的排水量與吃水；
+//   壓艙空間 ＝ 設計水線 − 空載；載重（cargoOf：可換壓艙）、標準排水量（沒有貨）、滿載排水量（＝ 設計水線）。負的壓艙空間 ⇒ 空船就比設計水線深。
 //   寫進頁面上 id 是 dispcheck 的 pre（JSON）。只讀，不改任何設定。
-var DISP_MARGIN = 0.3;                                                    // 滿載線比淹到最低砲甲板／頂層甲板低幾公尺（?dispmargin= 改）
+var DISP_MARGIN = 0.3;                                                    // 最深線比淹到最低砲甲板／頂層甲板低幾公尺（?dispmargin= 改）
 function dispCheck(arg) {
   var margin = Q.has('dispmargin') ? +Q.get('dispmargin') : DISP_MARGIN, out = { margin: margin, S: S, ships: [] };
   var ids = !arg || arg === 'all' ? HULL_LIST.filter(function (h) { return !h.fixed; }).map(function (h) { return h.id; }) : arg.split(',');
@@ -350,7 +350,8 @@ function dispCheck(arg) {
     out.ships.push({ id: id, name: info.name || id, guns: nGun, war: nGun >= 10, zw: T.zw, draft: +(T.zw * S).toFixed(2), len: +((((T.wl1 || T.hx1) - (T.wl0 || T.hx0))) * S).toFixed(1),
       disp: +T.disp.toFixed(1), light: +L.all.toFixed(1), vox: +L.vox.toFixed(1), gun: +L.gun.toFixed(1), keg: +L.keg.toFixed(1), gunw: c.gunw,
       ballastRaw: +ballastRaw.toFixed(1), ballast0: T.ballast0, lightLift: lightLift === null ? null : +lightLift.toFixed(2),
-      gunDeck: gunDeck, topDeck: T.topDeck === undefined ? null : T.topDeck, sinkLine: +top.toFixed(2), fullLine: +full.toFixed(2), full: +fullT.toFixed(1), tpc: +tpc.toFixed(2) });
+      gunDeck: gunDeck, topDeck: T.topDeck === undefined ? null : T.topDeck, sinkLine: +top.toFixed(2), fullLine: +full.toFixed(2), full: +fullT.toFixed(1), tpc: +tpc.toFixed(2),
+      role: T.role, cargoWant: T.cargoWant, cargoT: T.cargoT, cargoShort: T.cargoShort, dispStd: T.dispStd, dispFull: T.dispFull });   // 載重（32_hull.js cargoOf）
   }
   ids.reduce(function (p, id) { return p.then(function () { return loadHull(id); }).then(function () { one(id); }).catch(function (e) { out.ships.push({ id: id, err: String(e && e.message || e) }); }); }, Promise.resolve()).then(done);
 }
