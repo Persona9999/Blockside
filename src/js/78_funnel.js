@@ -59,7 +59,7 @@ function funnelUp(sh, f, j) {
 }
 // ───────────────────────── 建築的煙囪（TASK-0990；Tim 2026-10-26：「是否可以讓建築也支援冒煙效果(參考船隻煙囪 標meta) 然後考慮性能只讓近處建築冒煙就好 可以先挑幾個生產建築測試」）─────────────────────────
 // 哪裡：城鎮模型的固定點 smoke ＝ 煙囪口（Blocksail BUILDING_SPEC §3「遊戲從這裡冒煙（同 funnel 的 smoke）」；作者已經標好的，Blocksail tools/townmodels.py 照樣寫進索引的 pts）
-//   ⇒ 每個實例照燈的那一條公式（63_towns.js townLightBuild 的 W）換到世界；每座城一份（T.smk，T.inst 換了 ⇒ 重算）。
+//   ⇒ 每個實例照燈的那一條公式（63_towns.js townLightGen 的 W）換到世界；每座城一份（T.smk，T.inst 換了 ⇒ 重算）。
 // 先開這幾種（TSMK_USE；加一行就開）：鐵匠鋪、麵包坊、磚窯、煉鐵場、蒸餾坊、糖廠、陶坊、伐木場（炭窯）。農莊的灶、住宅的煙囪（part-chimney）先不開。
 //   濃淡〔設計〕照燒的東西：rate 每秒幾團、s0 → s1 煙團從多大長到多大（m）、life 秒、g 灰度（煤、焦炭深，木柴淺）、a 不透明。
 // 只有近處：離鏡頭水平 TSMK_NEAR 公尺內全量、到 TSMK_FAR 照距離漸少到 0；同時冒的最多 TSMK_MAX 根（最近的先）；工地（63_townrise.js townRiseHides：還在蓋）不冒。
@@ -84,7 +84,7 @@ function townSmokePts(T) {
     var E = !q.wall && K && K.M[q.k]; if (!E) return;                    // K.M 只有解好的那幾款（沒解的那一棟本來就還沒畫）
     var m = E.m, s = m.pts && m.pts.smoke, U = TSMK_USE[m.use]; if (!s || !U || !(q.y === q.y)) return;
     var sn = Math.sin(q.th), c = Math.cos(q.th), mpv = m.mpv, J = q.mj || TOWN_J0, a = (s[0] * mpv - m.size[0] * mpv / 2) * q.sx, b = s[1] * mpv - m.size[1] * mpv / 2;
-    L.push({ q: q, U: U, w: [q.x + a * sn - b * c, q.y + s[2] * mpv + J[2] * a, q.z - a * c - b * sn], acc: townHash(T.id + ':' + (q.lot || q.k) + ':smoke') });   // 公式同 townLightBuild 的 W；acc 錯開 ⇒ 不會一起冒第一團
+    L.push({ q: q, U: U, w: [q.x + a * sn - b * c, q.y + s[2] * mpv + J[2] * a, q.z - a * c - b * sn], acc: townHash(T.id + ':' + (q.lot || q.k) + ':smoke') });   // 公式同 townLightGen 的 W；acc 錯開 ⇒ 不會一起冒第一團
   });
   T.smk = { inst: T.inst, L: L };
   return L;

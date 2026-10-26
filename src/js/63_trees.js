@@ -89,7 +89,7 @@ function treeStep(J, t1) {
  *  只是提早跳過（雙線性的高度不會超出格點的最低最高、候選點的抖動 ＋ 底質取樣的四捨五入落在外擴的那一格裡）⇒ 擺出來的跟逐點查一樣。 */
 function treePrep(J) {
   var C = J.C, size = BED.A.chunk, st = C.step, n = C.n, h = C.h;
-  J.tcl = !!townClrOf(C); J.SP = Object.keys(TREE_SPECIES); J.si = 0; J.fresh = true;   // fresh：這一段剛開始 ⇒ 準備完至少再擺一列
+  J.tcm = townClrOf(C); J.tcl = !!J.tcm; J.SP = Object.keys(TREE_SPECIES); J.si = 0; J.fresh = true;   // fresh：這一段剛開始 ⇒ 準備完至少再擺一列
   J.hAt = function (x, z) {                                             // 塊裡 (x, z) 公尺的海拔（雙線性）
     var u = Math.max(0, Math.min(n - 1.001, x / st)), v = Math.max(0, Math.min(n - 1.001, z / st)), i = Math.floor(u), j = Math.floor(v), fu = u - i, fv = v - j, o = j * n + i;
     return ((h[o] * (1 - fu) + h[o + 1] * fu) * (1 - fv) + (h[o + n] * (1 - fu) + h[o + n + 1] * fu) * fv) / 10;
@@ -126,7 +126,7 @@ function treeRow(J, P, j) {
     var gi = P.gi0 + i, gj = P.gj0 + j, x = (gi + 0.15 + 0.7 * treeHash(gi, gj, sd)) * gap - P.x0, z = (gj + 0.15 + 0.7 * treeHash(gi, gj, sd + 1)) * gap - P.z0;
     if (x < 0 || x >= size || z < 0 || z >= size) continue;               // 落在別塊 ⇒ 那一塊擺
     if (!ok[Math.min(cn - 1, Math.floor(z / CG)) * cn + Math.min(cn - 1, Math.floor(x / CG))]) continue;
-    if (J.tcl && townClr(C, x, z)) continue;                            // 城鎮的建築、路、牆、碼頭那裡不長（63_towns.js；空建地照長）
+    if (J.tcl && townClrAt(J.tcm, x, z)) continue;                           // 城鎮的建築、路、牆、碼頭那裡不長（63_towns.js；空建地照長）
     var y = hAt(x, z); if (y <= A4[0] || y >= A4[3]) continue;
     var mt = C.mat[Math.min(n - 1, Math.round(z / st)) * n + Math.min(n - 1, Math.round(x / st))], wM = Pl.mats[mt]; if (!wM) continue;
     var e = Math.max(st, 4), gx = (hAt(x + e, z) - hAt(x - e, z)) / (2 * e), gz = (hAt(x, z + e) - hAt(x, z - e)) / (2 * e), g2 = gx * gx + gz * gz;
