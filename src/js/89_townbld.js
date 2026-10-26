@@ -38,6 +38,23 @@ function tbiRows(o, f) {
   ks.sort(function (a, b) { return ((by[b] || 0) - (by[a] || 0)) || ((o[b] || 0) - (o[a] || 0)); });
   return ks.length ? ks.map(function (g) { return '<div class="tbiR"><span>' + tuiIcon('goods', g) + tuiEsc(tbiGood(g)) + '</span><b>' + tuiNum(o[g] || 0, 1) + (f ? '／' + tuiNum(f[g] || 0, 1) : '') + '</b></div>'; }).join('') : '<div class="tbiDim">—</div>';
 }
+/** 服務菜單：標準配方統一每100人次，和昨天的實際消耗分開；類別列出等量替代品。 */
+function tbiServiceHTML(S) {
+  var menus = S.menus || [];
+  if (!menus.length) return '<div class="tbiT">供應菜單</div><div class="tbiDim">尚未掛載菜單</div>';
+  return '<div class="tbiT">供應菜單</div>' + menus.map(function (m) {
+    var h = '<div class="tbiT">' + (m.icon ? tuiIcon('dishes', m.icon) : '') + tuiEsc(m.name) + '</div>' +
+      '<div class="tbiDim">滿編每日最多 ' + tuiNum(m.capacity) + ' 人次・' + tuiNum(m.jobs) + ' 名工人' + (m.served == null ? '' : '・昨天 ' + tuiNum(m.served, 1) + ' 人次') + '</div>';
+    var ks = Object.keys(m.per100 || {});
+    if (!ks.length) return h + '<div class="tbiDim">不消耗物資</div>';
+    h += '<div class="tbiDim">每 100 人次消耗</div>';
+    return h + ks.map(function (g) {
+      var M = (m.alternatives || {})[g], row = '<div class="tbiR"><span>' + tuiIcon('goods', g) + tuiEsc(tbiGood(g)) + '</span><b>' + tuiNum(m.per100[g], 3) + (M ? ' 份' : ' 桶') + '</b></div>';
+      if (M && M.length) row += '<div class="tbiDim">可擇一或混用：' + M.map(function (x) { return tuiEsc(x.name) + ' ' + tuiNum(x.q, 3) + ' 桶'; }).join('／') + '</div>';
+      return row;
+    }).join('');
+  }).join('') + '<div class="tbiDim">一天只供應一道菜；實際量依需求、物資與人手調整。</div>';
+}
 function tbiUI() {
   var P = $('tbiP'); if (!P) return;
   if (!TBI.open || !TBI.hit) { P.innerHTML = ''; return; }
@@ -49,7 +66,10 @@ function tbiUI() {
   if (mk.length) html.push('<div class="tbiT">路邊的建材（剩下／總共，桶）</div>' + mk.map(function (g) { var m = b.site.mat[g]; return '<div class="tbiR"><span>' + tuiIcon('goods', g) + tuiEsc(tbiGood(g)) + '</span><b>' + tuiNum(m[0] / 1000, 1) + '／' + tuiNum(m[1] / 1000, 1) + '</b></div>'; }).join(''));
   if (b && b.live) html.push('<div class="tbiR"><span>🏠 住的人／容量</span><b>' + tuiNum(b.live.n) + '／' + tuiNum(b.live.cap) + '</b></div>');
   if (b && b.jobs) html.push('<div class="tbiR"><span>👷 工人／崗位</span><b>' + tuiNum(b.jobs.w) + '／' + tuiNum(b.jobs.need) + '</b></div>');
-  if (b && (b.made || b.used)) {
+  if (b && b.service) {
+    html.push(tbiServiceHTML(b.service));
+    if (b.service.hasDay) html.push('<div class="tbiT">昨天實際消耗（桶）</div>' + tbiRows(b.used));
+  } else if (b && (b.made || b.used)) {
     html.push('<div class="tbiT">每天產出' + (b.full ? '（實際／理論）' : '') + '</div>' + tbiRows(b.made, b.full && b.full.made));
     html.push('<div class="tbiT">每天消耗' + (b.full ? '（實際／理論）' : '') + '</div>' + tbiRows(b.used, b.full && b.full.used));
   }

@@ -58,6 +58,12 @@ function trafficOk() { return !!(BED && BED.host && RUNNING && !OVER && (MODE ==
 function trafficShips() { return SHIPS.filter(function (s) { return s.npc; }); }
 function trafficMax() { return Math.max(0, MAX_SHIPS - SHIPS.filter(function (s) { return !s.npc; }).length); }
 function trafficYaw(hdg) { return Math.PI / 2 - hdg / 57.2958; }        // 方位角（北 0、東 90）⇒ yaw（同 52_fleet.js 開局、88_modeswitch.js 停靠處）
+/** 停的、預約的泊位照這艘的寬貼平台（32_quay.js quayBerthAt，TASK-0962）⇒ 新的一份（清單那一份不動：同一格換一艘、船寬就不同）。 */
+function trafficBerthFor(sh, b) {
+  if (!b || !b.id) return b;
+  var p = quayBerthAt(sh, b.id, [b.x, b.z]);
+  return p[0] === b.x && p[1] === b.z ? b : { x: p[0], z: p[1], yaw: b.yaw, id: b.id };
+}
 
 /** 外面那一頁回的清單 ⇒ 要的、收掉不要的、排要生的（近的先、照上限）。 */
 function trafficGot(d) {
@@ -65,14 +71,14 @@ function trafficGot(d) {
   var W = function (q) { return [q[0] - BED.ax, q[1] - BED.az]; }, want = {}, me = SHIPS[PLAYER_I], c = me ? shipCenter(me) : [0, 0, 0];
   (d.ships || []).forEach(function (o) { if (o && o.id && o.at) want[o.id] = { id: o.id, kind: o.kind || 'merchant', hull: o.hull, name: o.name || o.id, at: W(o.at), hdg: +o.hdg || 0, to: o.to ? W(o.to) : null, v: +o.v || 0, path: o.path && o.path.length > 1 ? o.path.map(W) : null, dock: !!o.dock, flag: o.flag || null,
     trk: o.trk && o.trk.length > 1 ? o.trk.map(function (q) { var p = W([q[1], q[2]]); return [+q[0], p[0], p[1]]; }) : null,   // trk：照時刻表滑（⑥）
-    berth: o.berth && o.berth.at ? (function (p) { return { x: p[0], z: p[1], yaw: trafficYaw(+o.berth.hdg || 0) }; })(W(o.berth.at)) : null,   // berth：停的、預約的泊位（⑧）
+    berth: o.berth && o.berth.at ? (function (p) { return { x: p[0], z: p[1], yaw: trafficYaw(+o.berth.hdg || 0), id: o.bid || null }; })(W(o.berth.at)) : null,   // berth：停的、預約的泊位（⑧）
     pilot: o.pilot || null, entry: o.entry ? W(o.entry) : null }; });   // pilot、entry：航行管制（⑧）
   Object.keys(want).forEach(function (id) { var w = want[id]; if ((w.dock || w.pilot) && w.berth && trafficDistOff(w.berth.x, w.berth.z)) delete want[id]; });   // 別的城區的泊位（沒建）⇒ 不生、生了的收掉
   TRF.want = want;
   trafficShips().forEach(function (sh) {                              // 還在 ⇒ 換航點；沒了 ⇒ 收
     var w = want[sh.npc.id]; if (!w) { trafficDrop(sh); return; }
     var was = !!sh.npc.dock, P0 = sh.npc.path;
-    sh.npc.to = w.to; sh.npc.v = w.v; sh.npc.path = w.path; sh.npc.trk = w.trk; sh.npc.berth = w.berth; sh.npc.entry = w.entry; trafficPilot(sh, w.pilot);
+    sh.npc.to = w.to; sh.npc.v = w.v; sh.npc.path = w.path; sh.npc.trk = w.trk; sh.npc.berth = trafficBerthFor(sh, w.berth); sh.npc.entry = w.entry; trafficPilot(sh, w.pilot);
     if (w.dock && !was) trafficArrive(sh, P0); else if (!w.dock && was) trafficLeave(sh);   // 到港、出港（⑧）
     else if (w.berth && trafficMoved(sh)) trafficTowIn(sh, w.dock || sh.npc.held ? null : sh.npc.path);   // 停的、要去的那一格換了（玩家停進來、別人預約了 ⇒ 地球儀換一格）⇒ 拖過去（⛔ 以前停著的不動 ⇒ 跟換進來的船疊在一起）
     if ((sh.nation || null) !== w.flag) shipNation(sh, w.flag);        // 旗（TASK-0974）：船隊主人那座城換了勢力（轉手）⇒ 跟著換
@@ -336,6 +342,7 @@ function trafficPlace(B) {
   SHIPS.push(sh);
   if (w.flag) shipNation(sh, w.flag);                                    // 掛船隊主人那一國的旗（77_colours.js；外面那一頁給預設旗的 key，不認得 ⇒ 照陣營旗）
   coreSpawned(sh, null); stepShip(sh, 0); survey(sh); pickCaptain(sh); cmdTick(); pickFoes();
+  sh.npc.berth = trafficBerthFor(sh, w.berth);                          // 船放上場、有了 M（船寬）才貼平台
   if (!w.dock && (w.path || w.v > 0)) sh.spd = w.path ? VMAX * TRF_V0 : Math.min(w.v, VMAX);   // 照船隊的航速開出來（⛔ 從 0 起步 ⇒ 生出來那幾十秒停在海上）；沿航道的照自己的帆
   if (w.dock) trafficDock(sh, true);                                     // 停港的：生在泊位上（at ＝ 泊位）⇒ 下錨、繫上
   else if (w.pilot) trafficSails(sh, 0);                                 // 生在港內、照時刻表帶著走的（⑧）⇒ 帆收著
