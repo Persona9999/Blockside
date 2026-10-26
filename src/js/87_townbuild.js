@@ -19,10 +19,11 @@ var TWB_CATS = [
   { k: 'house', name: '🏠 房屋', items: [{ k: 'house', name: '住宅', sub: '2 × 3 格（轉角 2 × 2）' }] }   // 路邊每 4 m 一格（Blocksail TASK-0840）；轉角只剩 2 格深 ⇒ 8 × 8 的小版住宅
 ];   // 道路以外那幾類：open 回的 menu 換掉（twbMenuSet）；沒給 ⇒ 照這一份
 /** open 回的選單（Blocksail town.js BSW.townBuildMenu：[{ k, name, items: [{ use, name, sub, recipes?, … }] }]）⇒ 道路之後接上；選單裡的那幾種模型先要（63_towns.js townWantSet ⇒ 預覽畫得出來）。
+ *  goods：這種建築的配方產出哪幾種貨（[key]；Blocksail mapgen_worker.js menuRcp 加的）⇒ 按鈕名字旁邊畫貨物圖示（89_townui.js tuiIcon）。
  *  recipes：帶田的生產建築種得了哪幾條、礦坑挖得了哪幾種（[{ k, name }]；Blocksail mapgen_worker.js open 加的）⇒ 選了那一種就先列配方那一排（twbRcpUI）；annex：帶不帶田（ann）。 */
 function twbMenuSet(menu) {
   if (!menu || !menu.length) return;
-  TWB_CATS = [TWB_CATS[0]].concat(menu.map(function (c) { return { k: c.k, name: c.name, items: c.items.map(function (it) { return { k: it.use, name: it.name, sub: it.sub || '', rcp: it.recipes || null, ann: !!it.annex }; }) }; }));
+  TWB_CATS = [TWB_CATS[0]].concat(menu.map(function (c) { return { k: c.k, name: c.name, items: c.items.map(function (it) { return { k: it.use, name: it.name, sub: it.sub || '', rcp: it.recipes || null, ann: !!it.annex, goods: it.goods || null }; }) }; }));
   if (!TWB_CATS.some(function (c) { return c.k === TWB.cat && c.items.some(function (it) { return it.k === TWB.item; }); })) { TWB.cat = 'road'; TWB.item = 'street'; }
   townWantSet([].concat.apply([], menu.map(function (c) { return c.items.map(function (it) { return it.use; }); })));
   twbUI();
@@ -341,7 +342,7 @@ function twbUI() {
   var P = $('twbP'); if (!P) return;
   var h = '<div id="twbTabs">' + TWB_CATS.map(function (c) { return '<button type="button" data-c="' + c.k + '"' + (c.k === TWB.cat ? ' class="on"' : '') + '>' + c.name + '</button>'; }).join('') + '</div><div id="twbItems">';
   var nAll = 0;
-  TWB_CATS.forEach(function (c) { c.items.forEach(function (it) { var n = ++nAll; if (c.k !== TWB.cat) return; h += '<button type="button" class="bcard' + (it.k === TWB.item ? ' on' : '') + '" data-c="' + c.k + '" data-i="' + it.k + '"><b>' + it.name + '</b><small>' + it.sub + (n <= 9 ? '（' + n + '）' : '') + '</small></button>'; }); });   // 數字鍵只到 9（twbKey）⇒ 第 10 項以後只能點（TASK-0872：工坊 8 種之後選單 12 項）
+  TWB_CATS.forEach(function (c) { c.items.forEach(function (it) { var n = ++nAll; if (c.k !== TWB.cat) return; h += '<button type="button" class="bcard' + (it.k === TWB.item ? ' on' : '') + '" data-c="' + c.k + '" data-i="' + it.k + '"><b>' + it.name + (it.goods ? ' ' + it.goods.map(function (g) { return tuiIcon('goods', g); }).join('') : '') + '</b><small>' + it.sub + (n <= 9 ? '（' + n + '）' : '') + '</small></button>'; }); });   // 數字鍵只到 9（twbKey）⇒ 第 10 項以後只能點（TASK-0872：工坊 8 種之後選單 12 項）
   h += '</div><div id="twbRcp"></div><div id="twbOps"><button type="button" id="twbSave" title="只存這一座城的改動（Ctrl+S）">💾 存這座城</button><button type="button" id="twbUndo">↶ 復原（Z）</button><button type="button" id="twbX">▾ 收起（B）</button></div>';
   P.innerHTML = h; TWB.rcpSig = null;
   P.querySelectorAll('#twbTabs button').forEach(function (b) { b.onclick = function () { var c = TWB_CATS.filter(function (x) { return x.k === b.dataset.c; })[0]; twbPick(c.k, c.items[0].k); }; });
