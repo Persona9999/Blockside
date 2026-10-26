@@ -2392,9 +2392,9 @@ function townLotName(T, l, m) {
 //   航海時點到一棟城鎮模型是 ships[].town 的那一種（carib-fort ⇒ fort_carib、en-fort ⇒ fort_en）⇒ 載那一座（loadHull）、放在那一棟的位置、這一棟的模型不畫（石基照畫）。
 //   先中立（玩家那一隊、sh.calm；50_sim.js 不動手）⇒ 開火或打中它 ⇒ 敵對（52_fleet.js fortProvoke）。TOWN_UNITS[城 id:地塊 id] ＝ 那一艘（城重建實例也認得）。
 //   擺法：城鎮模型 世界 ＝ (x + a·sinθ − b·cosθ, y + z·mpv, z − a·cosθ − b·sinθ)，a ＝ x·mpv − 半寬、b ＝ y·mpv − 半深（townFlags 的 W）；
-//   船 世界 ＝ (px + u·cosψ + w·sinψ, gy + S·(z − zw), pz − u·sinψ + w·cosψ)，u ＝ S·(x − cx)、w ＝ S·(y − cy)（10_ship.js shipBaseMatrix 是鏡射）⇒ 兩邊手性差一個鏡射。
-//   ⇒ 照 x 鏡射對齊（模型的 x 前後顛倒、y 不動）：ψ ＝ atan2(−cosθ, −sinθ)、e ＝ S·cx − 半寬、px ＝ x − e·sinθ、pz ＝ z + e·cosθ、gy ＝ y + S·zw。
-//   ⚠ 所以換上來的那一座跟城裡畫的那一棟前後顛倒（營房、火藥庫換邊；照 y 中線對稱的不變）—— 兩份資料的手性哪一份對要另外查（城鎮模型 vs 雕刻作品）。
+//   船 世界 ＝ (px + u·cosψ + w·sinψ, gy + S·(z − zw), pz − u·sinψ + w·cosψ)，u ＝ S·(x − cx)、w ＝ S·(y − cy)（10_ship.js shipBaseMatrix 是鏡射）。
+//   城鎮模型的 x 是 Blocksail tools/townmodels.py 沿 x 翻過的（x ＝ 寬 − 作品的 x；Blocksail TASK-1019：以前城裡每一棟都是作品的鏡像）⇒ 兩邊同一個手性：
+//   ψ ＝ atan2(−cosθ, −sinθ)、e ＝ S·cx − 半寬、px ＝ x − e·sinθ、pz ＝ z + e·cosθ、gy ＝ y + S·zw ⇒ 每一格都疊在城裡畫的那一格上（TASK-1019 前城裡是鏡像 ⇒ 看起來前後顛倒）。
 var TOWN_UNITS = {}, TOWN_FORT = null;
 function townFortHull(nm) { if (!TOWN_FORT) { TOWN_FORT = {}; HULL_LIST.forEach(function (h) { if (h.town) TOWN_FORT[h.town] = h.id; }); } return TOWN_FORT[nm] || null; }
 /** h ＝ townHitAt 的回覆。是堡壘 ⇒ 開始換（回 true：這一下點到東西了）；不是 ⇒ false。 */

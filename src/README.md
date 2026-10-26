@@ -332,7 +332,7 @@ python -I admin.py cache --all    # 每艘都比 ＝ 比對來源：雕刻作品
   - 點到船以外、點到那種模型的一棟（71_input.js inPick ⇒ 63_towns.js townHitAt ⇒ townFortWake）⇒ 載那一座、放在那一棟的位置（地面高 `sh.gy` ＝ 實例的 y）、那一棟的模型不畫（石基照畫）、瞄準它。只在有海戰鍵、不是城鎮模式的玩法（航海、海戰）。`TOWN_UNITS[城 id:地塊 id]` 記著，城重建實例也認得。
   - 一開始中立：放在玩家那一隊、`sh.calm`（50_sim.js 不動手、不算敵艦）。對它開火（21_gunnery.js fireGun 瞄的是它）或砲彈打中它（52_fleet.js ffHit）⇒ `fortProvoke`：換到開火那一方的對面，下一步起照敵艦打。
   - 往來的船（`npc`）跟堡壘互不理會（`isFoe`）：堡壘只跟對它開火的那一方打。堡壘不能換過去開（playerHandoff、canTake）。
-  - 擺法：城鎮模型跟船的擺法手性差一個鏡射 ⇒ 照 x 鏡射對齊（公式寫在 63_towns.js townFortWake 上面）。⚠ 換上來的那一座跟城裡畫的前後顛倒（營房、火藥庫換邊；牆、稜角對稱，量過跟石基重合）。哪一份的手性對要另外查。
+  - 擺法：公式寫在 63_towns.js townFortWake 上面。城鎮模型由 Blocksail tools/townmodels.py 沿 x 翻成跟雕刻作品同一個手性（Blocksail TASK-1019，2026-10-27）⇒ 換上來的那一座跟城裡畫的那一棟逐格疊在一起（以前城裡是作品的鏡像 ⇒ 看起來營房、火藥庫換邊）。
   - 量過（2026-10-26，和平港 Fort et Maison de M. de Cussy，carib-fort，航海模式、App 內瀏覽器）：換上來的在 (−268.48, 454.45)、地面 5.79 m，換之前與之後的截圖牆、稜角、石基對得上；開火前 blue／calm、`__game.fire(0)` 之後 red、20 秒堡壘開 5 輪打中 4 發（我艦掉 257 格）、我艦打掉它 1,209 格。除錯：`__game.townFort()` 列出換得了的那幾棟、`__game.townFort('<地塊 id>')` 照點到它一樣換。
   - 沒做：離開那座城不換回（那一艘一直在 SHIPS 裡）、砲組照設定檔的 33 人（還沒接城鎮帳那一棟的兵）、射程內的堡壘自己醒（要點了才換）、砲台、岩堡、加拉塔堡（沒有砲元件）。
   - 反向對照：`?demo=60&dump=1&headless=1&seed=1`（b9a0ce01e258）、`&seed=3&blue=constitution&red=fort_en`（98bc30502be0）跟 58338aa 的成品逐字相同。
