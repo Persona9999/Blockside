@@ -22,15 +22,52 @@ function tuiNum(x, d) { x = +x || 0; return x.toLocaleString('en-US', { minimumF
 function tuiIcon(dir, k) { return '<img src="img/' + dir + '/' + encodeURIComponent(k) + '.png" alt="" style="width:22px;height:22px;object-fit:contain;vertical-align:middle;margin-right:5px" onerror="this.remove()">'; }
 /** 昨天吃了什麼（份的比例）：家裡的灶每一道菜（'eat:<貨>' ＝ 直接吃那一種）＋服務建築供的（餐館、酒館、教堂；Blocksail world/food.js foodDay 的 dish、served）。 */
 function tuiEatHTML(F) {
-  var D = F.dish || {}, sv = F.served || 0, tot = sv, rows = [];
+  var D = F.dish || {}, S = F.servedDish || {}, sv = Math.max(0, F.served || 0), tot = sv, rows = [], known = 0;
   Object.keys(D).forEach(function (k) { if (D[k] > 0) { tot += D[k]; rows.push({ k: k, q: D[k] }); } });
-  if (sv > 0) rows.push({ k: '', q: sv });
+  Object.keys(S).sort().forEach(function (k) { var q = Math.min(Math.max(0, S[k] || 0), sv - known); if (q > 0) { known += q; rows.push({ k: k, q: q, service: true }); } });
+  if (sv > known) rows.push({ k: '', q: sv - known });   // 舊存檔沒有逐菜紀錄：保留總數，不能猜成聖餐。
   if (!(tot > 0)) return '';
-  rows.sort(function (a, b) { return b.q - a.q || (a.k < b.k ? -1 : 1); });
-  return '<table class="tuiT"><tr><th>吃的</th><th>份</th><th>比例</th></tr>' + rows.map(function (x) {
-    var g = x.k.indexOf('eat:') === 0 ? x.k.slice(4) : null, nm = !x.k ? '⛪ 服務建築供的（教堂的彌撒…）' : g ? tuiIcon('goods', g) + tuiEsc(tuiGood(g)) : tuiIcon('dishes', x.k) + tuiEsc(TUI.dishes[x.k] || x.k);
+  rows.sort(function (a, b) { return b.q - a.q || (a.k < b.k ? -1 : a.k > b.k ? 1 : 0); });
+  return '<table class="tuiT"><tr><th>餐點</th><th>份</th><th>比例</th></tr>' + rows.map(function (x) {
+    var g = x.k.indexOf('eat:') === 0 ? x.k.slice(4) : null, H = !x.service && (TUI.homeMenu || []).filter(function (m) { return m.id === x.k; })[0], R = x.service && (TUI.serveDishes || {})[x.k],
+      nm = x.service ? tuiIcon('dishes', R && R.icon || x.k) + tuiEsc(R && R.name || x.k) : !x.k ? '服務餐點（舊紀錄）' : H ? tuiIcon(H.dir || 'dishes', H.icon) + tuiEsc(H.name) : g ? tuiIcon('goods', g) + tuiEsc(tuiGood(g)) : tuiIcon('dishes', x.k) + tuiEsc(TUI.dishes[x.k] || x.k);
     return '<tr><td>' + nm + '</td><td>' + tuiNum(x.q / 1000) + '</td><td>' + (x.q * 100 / tot).toFixed(1) + '%</td></tr>';
   }).join('') + '</table>';
+}
+/** 實際食材另列：只用當天保存的廚房＋供餐扣料，不能用菜單倒推或混入日用。 */
+function tuiIngredientsHTML(F) {
+  if (!F.ingredients) return '<p class="tuiDim">舊紀錄未保存食材明細，過一天後更新。</p>';
+  var all = {};
+  [F.ingredients.home, F.ingredients.service].forEach(function (o) { Object.keys(o || {}).forEach(function (g) { all[g] = (all[g] || 0) + o[g]; }); });
+  var ks = Object.keys(all).filter(function (g) { return all[g] > 0; }).sort(function (a, b) { return all[b] - all[a] || (a < b ? -1 : 1); });
+  if (!ks.length) return '<p class="tuiDim">當天沒有消耗食材。</p>';
+  return '<p class="tuiDim">廚房（含加餐、免費供應）與服務供餐合計；不含日用及單獨飲品。</p><table class="tuiT"><tr><th>食材</th><th>消耗（桶）</th></tr>' + ks.map(function (g) { return '<tr><td>' + tuiIcon('goods', g) + tuiEsc(tuiGood(g)) + '</td><td>' + tuiNum(all[g] / 1000, 3) + '</td></tr>'; }).join('') + '</table>';
+}
+/** 社會階層（Blocksail world/stores.js BSW.STRATA；TASK-1007）：每一層的人數、那一池的錢、一人平均、收入從哪來；底下摺著每一層昨天吃了什麼（同上面那張表）。
+ *  Tim 2026-10-26「統計資訊可以加上 不同階層的食物消費(吃了甚麼菜單)」；外面那一頁沒送 strata（關掉、舊版）⇒ 不畫。 */
+function tuiStrataHTML(I) {
+  var L = I.strata; if (!L || !L.length) return '';
+  var LV = ['荒年糧', '主糧', '家常', '佳餚'];
+  var src = function (o) {
+    if (!o) return '工資';
+    var t = (o.kind || []).map(function (k) { return k === 'prod' ? '城鎮的生產建築' : k === 'serve' ? '城鎮的服務建築' : k; }).concat((o.type || []).map(function (k) { return TUI.blds[k] || k; }));
+    return t.join('、') + '的分紅';
+  };
+  return '<h4>👥 社會階層</h4><table class="tuiT"><tr><th>階層</th><th>人</th><th>金庫</th><th>一人</th><th>收入</th></tr>' + L.map(function (s) {
+    return '<tr><td>' + tuiEsc(s.name) + '</td><td>' + tuiNum(s.pop) + '</td><td>' + tuiNum(s.funds) + '</td><td>' + tuiNum(s.per, 1) + '</td><td>' + tuiEsc(src(s.owns)) + '</td></tr>';
+  }).join('') + '</table>' + L.map(function (s) {
+    var F = s.fed; if (!F) return '';
+    var eat = F.eat || {};
+    return '<details><summary>🍽 ' + tuiEsc(s.name) + '昨天吃了什麼</summary><p>' + [3, 2, 1, 0].map(function (k) { return LV[k] + ' ' + tuiNum((eat[k] || 0) / 1000); }).join('　') + (F.relief ? '　（城鎮免費補了 ' + tuiNum(F.relief / 1000) + ' 份）' : '') + (F.famine ? '　⚠ 飢荒' : '') + '</p>' + tuiEatHTML(F) + '</details>';
+  }).join('');
+}
+function tuiHomeMenuHTML() {
+  var menus = TUI.homeMenu || [];
+  if (!menus.length) return '';
+  var LV = ['荒年糧', '主糧', '家常', '佳餚'];
+  return '<details><summary>🍲 城鎮廚房菜單（' + menus.length + '道）</summary><p class="tuiDim">即做即食，無額外工人；以下為每100份標準用量，實際用料見消耗食材。類別可由成員替代，餐點依價格、物資與預算選用。</p>' + menus.map(function (m) {
+    return '<p><b>' + tuiIcon(m.dir || 'dishes', m.icon) + tuiEsc(m.name) + '</b>　' + tuiEsc(LV[m.level] || '') + '<br><small>' + Object.keys(m.per100 || {}).map(function (g) { return tuiEsc(tuiGood(g)) + ' ' + tuiNum(m.per100[g], 3) + (g.charAt(0) === '@' ? ' 份類別' : ' 桶'); }).join('、') + '</small></p>';
+  }).join('') + '</details>';
 }
 function tuiGood(g) { var X = TUI.goods[g]; if (X && X.name) return X.name; var R = TUI.list && TUI.list.rows.filter(function (r) { return r.g === g; })[0]; return R ? R.name : g; }
 /** 跟外面那一頁要（cb(回覆)）；5 秒沒回 ⇒ cb({ ok: false, why }）。 */
@@ -72,7 +109,7 @@ function tuiLoad() {
 }
 /** 問城鎮資訊（每一頁都要：上面那一列、貨名 tuiGood；買賣之後城鎮金庫跟著變 ⇒ 重問）。 */
 function tuiInfo() {
-  tuiAsk('info', null, function (r) { if (r.ok) { TUI.info = r.info; TUI.goods = r.goods || {}; TUI.blds = r.blds || {}; TUI.every = r.every || 7; TUI.region = r.region || null; TUI.faction = r.faction || null; TUI.fleets = r.fleets || []; TUI.hubs = r.hubs || []; TUI.dishes = r.dishes || {}; } else TUI.msg = '問不到城鎮資訊：' + (r.why || []).join('；'); tuiUI(); });
+  tuiAsk('info', null, function (r) { if (r.ok) { TUI.info = r.info; TUI.goods = r.goods || {}; TUI.blds = r.blds || {}; TUI.every = r.every || 7; TUI.region = r.region || null; TUI.faction = r.faction || null; TUI.fleets = r.fleets || []; TUI.hubs = r.hubs || []; TUI.dishes = r.dishes || {}; TUI.serveDishes = r.serveDishes || {}; TUI.homeMenu = r.homeMenu || []; } else TUI.msg = '問不到城鎮資訊：' + (r.why || []).join('；'); tuiUI(); });
 }
 /** 買賣（side 'buy'｜'sell'、q 桶）：一次只送一筆；回來照新的清單重畫、說成交了多少。 */
 function tuiTrade(side, g, q) {
@@ -121,7 +158,9 @@ function tuiSumHTML() {
     ['💰 城鎮金庫', tuiNum(I.funds)], ['👛 鎮民金庫', tuiNum(I.folkFunds)], ['🛡 士兵', tuiNum(I.guard.now) + ' / ' + tuiNum(I.guard.cap)]]
     .concat(I.rent ? [['🏠 房租（昨天）', tuiNum(I.rent.paid, 1) + (I.rent.due > I.rent.paid ? ' / ' + tuiNum(I.rent.due, 1) : '')]] : []).map(function (x) { return '<div><small>' + x[0] + '</small><b>' + x[1] + '</b></div>'; }).join('') + '</div>';
   var F = I.fed;
-  if (F) { var eat = F.eat || {}, LV = ['荒年糧', '主糧', '家常', '佳餚']; h += '<h4>🍞 昨天吃飯（份）</h4><p>' + [3, 2, 1, 0].map(function (k) { return LV[k] + ' ' + tuiNum((eat[k] || 0) / 1000); }).join('　') + (F.relief ? '　（城鎮免費補了 ' + tuiNum(F.relief / 1000) + ' 份）' : '') + (F.famine ? '　⚠ 飢荒' : '') + '</p>' + tuiEatHTML(F); }   // 等級照 Blocksail world/food.js FOOD_LEVELS；底下每一道吃了幾成（Tim 2026-10-25「城鎮是否可以顯示鎮民的消耗食物百分比」）
+  if (F) { var eat = F.eat || {}, LV = ['荒年糧', '主糧', '家常', '佳餚']; h += '<h4>🍞 食用餐點（份）</h4><p>' + [3, 2, 1, 0].map(function (k) { return LV[k] + ' ' + tuiNum((eat[k] || 0) / 1000); }).join('　') + (F.relief ? '　（城鎮免費補了 ' + tuiNum(F.relief / 1000) + ' 份）' : '') + (F.famine ? '　⚠ 飢荒' : '') + '</p>' + (F.extra && Object.keys(F.extra).length ? '<p class="tuiDim">餐點份數與比例包含加餐。</p>' : '') + tuiEatHTML(F) + '<h4>🥕 消耗食材（桶）</h4>' + tuiIngredientsHTML(F); }   // 等級照 Blocksail world/food.js FOOD_LEVELS；底下每一道吃了幾成（Tim 2026-10-25「城鎮是否可以顯示鎮民的消耗食物百分比」）
+  h += tuiHomeMenuHTML();
+  h += tuiStrataHTML(I);
   if (I.rent && I.rent.skip) h += '<p class="tuiDim">🏠 昨天房租沒收滿：' + tuiEsc(I.rent.skip) + '（該收 ' + tuiNum(I.rent.due, 1) + '）</p>';   // 房租（Blocksail world/townstate.js rentDay；TASK-0946）：鎮民的錢不夠吃飯 ⇒ 不收
   var SV = I.svc || {}, SVI = { faith: '⛪', drink: '🍺', dine: '🍲', health: '⚕' };   // 服務建築的滿意度（Blocksail world/food.js serveDay；TASK-0914、0946 酒館與醫院）：昨天想來／來了幾人次、滿意度、收的錢
   Object.keys(SV).forEach(function (k) { var Q = SV[k]; h += '<h4>' + (SVI[k] || '🙂') + ' ' + tuiEsc(Q.name || k) + '（昨天）</h4><p>來了 ' + tuiNum(Q.got) + '／想來 ' + tuiNum(Q.want) + ' 人次　滿意度 ' + Math.round((Q.sat || 0) * 100) + '%　' + (k === 'faith' ? '捐獻' : '收入') + ' ' + tuiNum(Q.paid, 2) + '</p>'; });
@@ -282,7 +321,7 @@ function tuiTradeHTML() {
 function tuiDists() { var p = TOWNS.full[TWB.town]; return p && p.districts && p.districts.length ? p.districts : null; }
 function tuiDistHTML() {
   var D = tuiDists(); if (!D) return '<p class="tuiDim">這座城沒有分城區。</p>';
-  var cur = TOWNS.dist[TWB.town], S = (TOWNS.stat.dist || {})[TWB.town], on = TOWNS.on[TWB.town] || 0;
+  var cur = TOWNS.dist[TWB.town], S = (TOWNS.stat.dist || {})[TWB.town], on = TOWNS.onD[TWB.town] || 0;
   TUI.distSig = tuiDistSig();
   return '<p>選一區 ⇒ 鏡頭跳過去、先建那一區，建好再補隔壁的區（遠的收掉）；鏡頭拖進別區停一下也會換過去。</p>' +
     '<div class="tuiTiles">' + D.map(function (d) {
@@ -291,7 +330,7 @@ function tuiDistHTML() {
     }).join('') + '</div>' + (S ? '<p class="tuiDim">建了 ' + S.on.length + ' 區：地塊 ' + S.lots + '、路 ' + S.roads + '。</p>' : '');
 }
 /** 城區頁畫的是哪一份：焦點那一區＋建了哪幾區（換了 ⇒ 重畫；鏡頭拖進別區換焦點不經過按鈕 ⇒ 以前頁上的「現在這一區」停在舊的）。 */
-function tuiDistSig() { return (TOWNS.dist[TWB.town] || '') + ':' + (TOWNS.on[TWB.town] || 0); }
+function tuiDistSig() { return (TOWNS.dist[TWB.town] || '') + ':' + (TOWNS.onD[TWB.town] || 0); }
 /** 每一格：城區那一顆鈕在城鎮模式、外面那一頁有送城區（1～N 區）才出現；城區頁開著、焦點或建了哪幾區換了 ⇒ 重畫。 */
 function tuiDistKey() {
   var k = $('tuiDK'); if (!k) return; var v = modeRule('town') && tuiDists() ? '' : 'none'; if (k.style.display !== v) k.style.display = v;   // .kb 有自己的 display ⇒ 不用 hidden

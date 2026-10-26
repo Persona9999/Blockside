@@ -31,7 +31,7 @@ var BEDGL = {}, BEDGL_Q = [], BEDGL_ID = null, BED_FOG = 0.4, BED_FAR_ST = 8;
 var BED_MESH_GEN = 0, BED_MESH_LOG = [];
 function bedMeshChanged(bb) { BED_MESH_GEN++; BED_MESH_LOG.push([BED_MESH_GEN, bb]); if (BED_MESH_LOG.length > 512) BED_MESH_LOG.splice(0, 256); }
 var BEDWAT = { on: true, n: 0, tris: 0, prog: null };                    // on：畫不畫（__game.inland）；n、tris：上一格畫了幾塊、幾個三角形
-var BEDDRY = { c: {}, src: {}, hv: {}, tver: -1, tex: null, dirty: false, on: false, r: [0, 0, 1, 1], cells: 0, cut: 0, builds: 0, ms: 0 }, BED_DRY_SP = 32;   // src、hv：每塊最新的那一份與它的地面（bedDryTex 照它算跟海連不連）   // c：每塊的遮罩（沒有 ⇒ null）；r：第 0 格的世界 x、z、整張多寬、多高（公尺）
+var BEDDRY = { c: {}, src: {}, tver: -1, tex: null, dirty: false, on: false, r: [0, 0, 1, 1], cells: 0, cut: 0, builds: 0, ms: 0 }, BED_DRY_SP = 32;   // src：每塊最新的那一份（bedDryTex 照它的 C.h 算跟海連不連）   // c：每塊的遮罩（沒有 ⇒ null）；r：第 0 格的世界 x、z、整張多寬、多高（公尺）
 var BEDFAR = { g: {}, todo: null, fly: 0, inF: {}, ready: [], fail: 0, n: 0, bytes: 0, ms: 0 };   // todo：還要讀的塊 [cx, cy, 有檔, 失敗次數]；fly／inF：在路上的；ready：到了、等著建網格的
 var BED_FAR_PAR = 4;                                                     // 遠景同時跟外面那一頁要幾塊（它有 2 個 Worker；以前一次一塊 ⇒ 托爾圖加 182 塊要 4 秒，一格一格出來）
 var BEDDRAW = { n: 0, cull: 0, tris: 0 };                                // 上一格畫了幾塊、剔掉幾塊、幾個三角形（__game.bed）
@@ -53,7 +53,7 @@ evOn('bedWin', function () {                                             // 海�
   Object.keys(BEDFAR.g).forEach(function (k) { var c = k.split('_').map(Number); if (bedIdx(c[0], c[1]) < 0) bedFarDrop(k); });
   BEDFAR.todo = null; BEDFAR.ready = BEDFAR.ready.filter(function (r) { return bedIdx(r[1].cx, r[1].cy) >= 0; }); BEDFOAM.dirty = true;
   Object.keys(BEDDRY.c).forEach(function (k) { var c = k.split('_').map(Number); if (bedIdx(c[0], c[1]) < 0) { if (BEDDRY.c[k]) BEDDRY.dirty = true; delete BEDDRY.c[k]; } });
-  Object.keys(BEDDRY.src).forEach(function (k) { var c = k.split('_').map(Number); if (bedIdx(c[0], c[1]) < 0) { delete BEDDRY.src[k]; delete BEDDRY.hv[k]; } });
+  Object.keys(BEDDRY.src).forEach(function (k) { var c = k.split('_').map(Number); if (bedIdx(c[0], c[1]) < 0) delete BEDDRY.src[k]; });
   if (BEDDRY.on) BEDDRY.dirty = true;                                    // 遮罩照新的窗重排
 }, 0, true);
 /** 丟掉一塊的遠景：網格、遠景的樹（63_trees.js）。 */
@@ -68,9 +68,9 @@ function bedLod(C) {                                                     // 每�
   return Math.max(1, Math.round(w * BED.A.step / C.step));
 }
 /** 一塊 ⇒ 網格（stride：每幾個取樣點取一個）。頂點：位置 3、法線 3、底色 3、紋理權重 4（世界座標：原點 ＝ 開戰位置）。
- *  高度照 townHv（63_towns.js：有城 ⇒ 整過地的那一份，只給畫面）；點距照這一塊自己的 C.step（遠景塊可以是粗的：@host 的 peek 回 32 m 一點的 33×33，src/MAP_CHUNK.md §5）；塊的原點照海域的 A.chunk。 */
+ *  高度照 C.h（城鎮不整地，63_towns.js 檔頭）；點距照這一塊自己的 C.step（遠景塊可以是粗的：@host 的 peek 回 32 m 一點的 33×33，src/MAP_CHUNK.md §5）；塊的原點照海域的 A.chunk。 */
 function bedMesh(C, stride) {
-  var n = C.n, m = (n - 1) / stride + 1, A = BED.A, st = C.step, h = townHv(C), nv = m * m + 4 * m, V = new Float32Array(nv * 13), I = [];
+  var n = C.n, m = (n - 1) / stride + 1, A = BED.A, st = C.step, h = C.h, nv = m * m + 4 * m, V = new Float32Array(nv * 13), I = [];
   var ox = C.cx * A.chunk - BED.ax, oz = C.cy * A.chunk - BED.az;
   function put(k, i, j, dy) {
     var o = j * n + i, y = h[o] / 10, il = Math.max(0, i - stride), ir = Math.min(n - 1, i + stride), jl = Math.max(0, j - stride), jr = Math.min(n - 1, j + stride);
@@ -379,15 +379,9 @@ function bedDryU(u) {
   gl.activeTexture(gl.TEXTURE12); gl.bindTexture(gl.TEXTURE_2D, on ? BEDDRY.tex : DUMMY); gl.uniform1i(u.uDryT, 12); gl.activeTexture(gl.TEXTURE0);
   if (on) gl.uniform4fv(u.uDryR, BEDDRY.r);
 }
-/** 遮罩記著、但現在沒在畫的那一塊（換了精度、被窗擠出去）：城換了 ⇒ 照新的整地記下來（63_towns.js townRegrade 排隊叫；TASK-0819）。
- *  以前 bedDryTex 每次都對每一塊 townHv，這種塊順手就整好了；現在 bedDryTex 只讀記下的那一份 ⇒ 要有人替它們重整。 */
-function bedDryRegrade(k) {
-  var C = BEDDRY.src[k]; if (!C) return;
-  var hv = townHv(C); if (BEDDRY.hv[k] !== hv) { BEDDRY.hv[k] = hv; BEDDRY.dirty = true; }
-}
 /** 一塊的遮罩（BED_DRY_SP 公尺一格，1 ＝ 不畫海）：那一塊有「不是海、地面低於 0」的點才算，每一格裡的點全都不是海 ⇒ 遮。fine ⇒ 細的那一份（換掉粗的）；不然已經算過就不算。 */
 function bedDryPut(k, C, fine) {
-  if (fine || !BEDDRY.src[k]) { var hv = townHv(C); if (BEDDRY.src[k] !== C || BEDDRY.hv[k] !== hv) { BEDDRY.src[k] = C; BEDDRY.hv[k] = hv; BEDDRY.dirty = true; } }   // 跟海連不連（bedDryTex）用的地面：細的那一份優先
+  if ((fine || !BEDDRY.src[k]) && BEDDRY.src[k] !== C) { BEDDRY.src[k] = C; BEDDRY.dirty = true; }   // 跟海連不連（bedDryTex）用的地面：細的那一份優先
   if (!fine && k in BEDDRY.c) return;
   var wd = C.wd, h = C.h0, mt = C.mat0, n = C.n, N = n * n, D = null, any = false, o;
   for (o = 0; o < N; o++) if ((mt[o] >= BED_MAT.BEACH || wd && wd[o]) && h[o] < 0) { any = true; break; }   // 內陸水的水底、陸地低於 0（漩渦烤之前的那一份：水面、陸地本來在哪）
@@ -425,9 +419,7 @@ function bedDryTex() {
   Object.keys(Dy.src).forEach(function (k) {                             // 有陸地的塊（地面最高 > 0）
     var C = Dy.src[k], c = k.split('_').map(Number), ci = c[0] - A.x[0], cj = c[1] - A.y[0];
     if (!(C && C.max0 > 0 && ci >= 0 && cj >= 0 && ci < nx && cj < ny)) return;
-    // 地面照 bedDryPut 記下的那一份（Dy.hv），不在這裡 townHv：規劃晚到、城換了（TOWNS.ver）⇒ 以前這一圈把還沒整地的塊在同一格全部整掉（君士坦丁堡 0.55～0.84 s；TASK-0819）。
-    //   還沒輪到重新整地的塊先用舊的地面；輪到時（63_towns.js townRegrade ⇒ 'bedChunk' ⇒ bedDryPut）記下新的、弄髒遮罩。
-    var hv = Dy.hv[k] || C.h, one = { h: hv, n: C.n, step: C.step }; L.push([k, ci, cj]);
+    var hv = C.h, one = { h: hv, n: C.n, step: C.step }; L.push([k, ci, cj]);
     if (!w) { st[k] = one; return; }
     sent[k] = hv; if (BEDDRYW.sent[k] !== hv) { one.h = hv.slice(); w.postMessage({ op: 'put', k: k, c: one }, [one.h.buffer]); }
   });
@@ -660,7 +652,7 @@ function bedBuild() {
     });
   }
   while (BEDGL_Q.length && built < 2 && !bedBusy()) { var k = BEDGL_Q.shift(), C = bedShowC(k); if (C) { bedUpload(k, C, bedLod(C)); built++; bedSpent(t0); t0 = performance.now(); } }
-  Object.keys(BEDGL).forEach(function (k2) {                            // 粗細要換的（換中心）、那一份換了的（原精度到了、城到了要整地）：bedLod 第一次會算整地（townHv，一塊 25～70 ms）⇒ 也算進預算
+  Object.keys(BEDGL).forEach(function (k2) {                            // 粗細要換的（換中心）、那一份換了的（原精度到了）
     var g = BEDGL[k2], C2 = bedShowC(k2); if (!C2 || built >= 2 || bedBusy()) return;
     var lod = bedLod(C2); bedSpent(t0); t0 = performance.now();
     if (g.lod !== lod || g.C !== C2) { bedUpload(k2, C2, lod); built++; bedSpent(t0); t0 = performance.now(); }

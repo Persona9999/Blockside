@@ -143,6 +143,7 @@ var PREF_ITEMS = [
   }),
   prefBool('gcrew', true, function () { return GUN_CREW_HURT; }, function (x) { GUN_CREW_HURT = x; }),   // 砲被打飛 ⇒ 砲班跟著受傷（21_gunnery.js）
   prefBool('dbg', false, function () { return DBG_SET; }, function (x) { DBG_SET = x; }),   // Debug 模式（04_state.js dbgOn）
+  prefBool('trklog', false, function () { return TRR.on; }, function (x) { TRR.on = x; }),   // 記錄往來船航跡（58_trafficrec.js；除錯 log）
   prefBool('slow', true, function () { return SLOW.on; }, function (x) { SLOW.on = x; }, 'slowmo'),   // 殉爆的慢動作與特寫（73_slowmo.js）
   prefBool('pslow', false, function () { return PSLOW.on; }, function (x) { PSLOW.on = x; }),   // 物理減速（73_slowmo.js）
   prefNum('pslowb', prefLim('pslowb'), false, function () { return PSLOW.budget; }, function (x) { PSLOW.budget = Math.round(x * 100) / 100; }),

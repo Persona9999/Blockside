@@ -351,7 +351,7 @@
   #twbTabs, #twbItems, #twbOps{ display:flex; flex-wrap:wrap; gap:6px; } #twbTabs button{ border-radius:14px; padding:4px 12px; } #twbTabs button.on{ background:#9fc7ff; color:#111; }
   #twbItems .bcard{ display:flex; flex-direction:column; align-items:flex-start; min-width:110px; padding:6px 10px; } #twbItems .bcard small{ opacity:.75; font-size:11px; }
   #twbOps{ justify-content:flex-end; }
-  #twbRcp{ display:flex; flex-wrap:wrap; gap:6px; align-items:center; font-size:12px; } #twbRcp:empty{ display:none; } #twbRcp button{ border-radius:12px; padding:3px 10px; font-size:12px; } #twbRcp button.on{ background:#c9e59a; color:#111; } #twbRcp button:disabled{ background:transparent; color:#aab; border:1px dashed #667; cursor:help; }
+  #twbRcp{ display:flex; flex-wrap:wrap; gap:6px; align-items:center; font-size:12px; } #twbRcp:empty{ display:none; } #twbRcp button{ border-radius:12px; padding:3px 10px; font-size:12px; } #twbRcp button.on{ background:#c9e59a; color:#111; } .tbiRcp{ display:flex; flex-wrap:wrap; gap:6px; margin:4px 0; } .tbiRcp button{ display:inline-flex; align-items:center; border-radius:12px; padding:3px 10px; font-size:12px; } .tbiRcp button img{ width:18px !important; height:18px !important; margin-right:4px !important; } .tbiRcp button.on{ background:#c9e59a; color:#111; } .tbiRcp button.no{ background:transparent; color:#889; border:1px dashed #667; cursor:help; } .tbiRcp button.no img{ filter:grayscale(1); opacity:.45; } #twbRcp button:disabled{ background:transparent; color:#aab; border:1px dashed #667; cursor:help; } #twbRcp button{ display:inline-flex; align-items:center; } #twbRcp button img{ width:18px !important; height:18px !important; margin-right:4px !important; } #twbRcp button.no{ background:transparent; color:#889; border:1px dashed #667; cursor:help; } #twbRcp button.no img{ filter:grayscale(1); opacity:.45; } #twbRcp button.on.no{ outline:2px solid #e07060; }
   @media (max-width: 640px){ #stage.twb #twbP{ bottom:178px; } }
   /* 城鎮介面（89_townui.js，Blocksail TASK-0910）：💰 貿易、🏛 城鎮兩顆在 🔨 旁邊（61_layout.js 的 town 配置）；面板右邊一欄，開著那一顆亮底 */
   #tuiP{ display:none; }
@@ -823,6 +823,8 @@
       <div class="row" id="strikeV"></div>
       <h3>Debug</h3>
       <div class="row checks"><label><input type="checkbox" id="dbg"> Debug 模式</label></div>
+      <div class="row checks"><label><input type="checkbox" id="trklog"> 記錄往來船航跡</label> <button type="button" id="trksave">匯出航跡 log</button></div>
+      <div class="row note">查往來船進出港用：勾了才記（只記在記憶體、不畫，關著不花時間）；匯出成 traffic_log_*.ndjson（一行一筆），Blocksail tools/traffic_log.html 重組成俯視圖、tools/traffic_log.cjs 判讀。網址 ?trklog=1 ＝ 勾。</div>
       <div class="row note">查問題用：詳細資訊的「⚓ 改操控這艘」敵艦也有（換過去就是那一方）、羅盤下面多一行除錯資訊（格數、四邊形、碎片、物理 ms、FPS）。網址 ?dbg=1 ＝ 勾；?debug=1 也算開。</div>
       <div class="row"><button id="detR">重設預設值</button><button id="detX" class="on">返回</button></div>
     </div>
@@ -887,9 +889,14 @@
 <script type="application/x-vxk" id="ship-matsushima" src="../VoxelKit/_cache/matsushima.vxk"></script>
 <script type="application/x-vxk" id="ship-fort-en" src="../VoxelKit/_cache/fort_en.vxk"></script>
 <script type="application/x-vxk" id="ship-fort-carib" src="../VoxelKit/_cache/fort_carib.vxk"></script>
+<script type="application/x-vxk" id="ship-fort-es" src="../VoxelKit/_cache/fort_es.vxk"></script>
+<script type="application/x-vxk" id="ship-fort-roche" src="../VoxelKit/_cache/fort_roche.vxk"></script>
+<script type="application/x-vxk" id="ship-battery-carib" src="../VoxelKit/_cache/battery_carib.vxk"></script>
+<script type="application/x-vxk" id="ship-battery-en" src="../VoxelKit/_cache/battery_en.vxk"></script>
 <script type="application/x-vxk" id="ship-labelle" src="../VoxelKit/_cache/labelle.vxk"></script>
 <script type="application/x-vxk" id="ship-pinas" src="../VoxelKit/_cache/pinas.vxk"></script>
 <script type="application/x-vxk" id="ship-oxford" src="../VoxelKit/_cache/oxford.vxk"></script>
+<script type="application/x-vxk" id="ship-concepcion" src="../VoxelKit/_cache/concepcion.vxk"></script>
 <!-- ships 結束 -->
 <!-- 設定檔（TASK-0542）：各項設定的初始值與船隻清單；js/00_config.js 讀成 CFG。設定後台：python -I admin.py serve -->
 <script type="application/x-asset" id="game-config" src="config/game.json"></script>
@@ -973,6 +980,7 @@
 <script src="js/56_rollout.js" data-bundle="game"></script>
 <script src="js/57_core.js" data-bundle="game"></script>
 <script src="js/58_traffic.js" data-bundle="game"></script>
+<script src="js/58_trafficrec.js" data-bundle="game"></script>
 <script src="js/59_burnfx.js" data-bundle="game"></script>
 <script src="js/60_render.js" data-bundle="game"></script>
 <script src="js/60_rbatch.js" data-bundle="game"></script>

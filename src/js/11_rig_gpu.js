@@ -84,7 +84,7 @@ function sailTex(T) {
  *  sailBuf（動靜分開傳）與 sailFill（?rigchk=1 對拍用的整份）共用 ⇒ 畫哪幾面、位置怎麼算只有一份。
  *  raw（R2）：細格就是物理的粒子（sailIdent）、沒在演收帆 ⇒ P 直接是 c.p（不抄一份；put 只讀）。 */
 function sailWalk(ow, put, raw) {
-  var isShip = !!ow.crew, F = isShip && PHYS && ow.shreds && ow.shreds.length ? ow.shreds : null, A = ow.T && ow.T.sailAtlas, m1 = 1;
+  var isShip = !!ow.crew, ph = PHYS && !(isShip && rigFixed(ow)), F = isShip && ph && ow.shreds && ow.shreds.length ? ow.shreds : null, A = ow.T && ow.T.sailAtlas, m1 = 1;   // ph：照物理開著畫；繩帆固定的（30_rig_physics.js rigFixed：表演船、城鎮模式）照物理關著畫（收好那一捲、作品的形狀）
   (ow.cl || []).forEach(function (c) { m1 = Math.max(m1, c.T.n); });
   if (F) F.forEach(function (f) { m1 = Math.max(m1, f.n); });
   if (!SBN || SBN.length < m1 * 3) { SBN = new Float32Array(m1 * 3); SBP = new Float32Array(m1 * 3); }
@@ -92,14 +92,14 @@ function sailWalk(ow, put, raw) {
   (ow.cl || []).forEach(function (c, k) {
     var P;
     if (isShip) {
-      var s = ow.sails[k], keep = furlKeep(s) && (PHYS ? !c.gone && !c.loose && (!c.p || c.hidden) : true);   // 收好的帆留一捲（30_rig_physics.js furlBundle；只是畫）
-      if (!keep && (PHYS ? (!c.p || c.hidden || c.gone) : (s.dead || s.furled))) return;
-      var frz = keep && PHYS && c.fz;                                    // 物理開著、收攏演完過 ⇒ 停在演完那一刻（30_rig_physics.js furlFreeze）；沒演過（開局就收著）⇒ 照舊那一捲
+      var s = ow.sails[k], keep = furlKeep(s) && (ph ? !c.gone && !c.loose && (!c.p || c.hidden) : true);   // 收好的帆留一捲（30_rig_physics.js furlBundle；只是畫）
+      if (!keep && (ph ? (!c.p || c.hidden || c.gone) : (s.dead || s.furled))) return;
+      var frz = keep && ph && c.fz;                                    // 物理開著、收攏演完過 ⇒ 停在演完那一刻（30_rig_physics.js furlFreeze）；沒演過（開局就收著）⇒ 照舊那一捲
       if (keep) { P = frz ? furlFrozen(ow, c, SBP) : furlBundle(ow, c, SBP); var lost = furlLost(ow, s, c); }   // lost：靠的帆桁、格不在了的那幾點不畫（30_rig_physics.js furlLost）
       if (frz && c.tt) c.tt.forEach(function (t) { if (ow.ropes[t.j].dead || ow.tCut && ow.tCut[t.j] || lost && lost[t.i]) return; var o = t.i * 3; td.push({ t: t, x: P[o], y: P[o + 1], z: P[o + 2] }); tk += t.j + ','; });   // 帆腳的繩跟著凍結的帆腳
     }
-    if (!P) P = (PHYS || !isShip) && c.p ? (isShip && c.furlF !== null && c.furlF !== undefined ? furlDraw(c, clothFine(c, SBP), c.furlF, ow) : raw && sailIdent(c.T) ? c.p : clothFine(c, SBP)) : c.T.p0;   // furlDraw：收帆張帆的演出（30_rig_physics.js）
-    if (isShip && PHYS && c.tt && c.p && !c.hidden && !c.gone && !c.loose) c.tt.forEach(function (t) { if (ow.ropes[t.j].dead || ow.tCut && ow.tCut[t.j]) return; var o = t.i * 3; td.push({ t: t, x: P[o], y: P[o + 1], z: P[o + 2] }); tk += t.j + ','; });   // 畫出來的帆腳（收帆演出時也是）
+    if (!P) P = (ph || !isShip) && c.p ? (isShip && c.furlF !== null && c.furlF !== undefined ? furlDraw(c, clothFine(c, SBP), c.furlF, ow) : raw && sailIdent(c.T) ? c.p : clothFine(c, SBP)) : c.T.p0;   // furlDraw：收帆張帆的演出（30_rig_physics.js）
+    if (isShip && ph && c.tt && c.p && !c.hidden && !c.gone && !c.loose) c.tt.forEach(function (t) { if (ow.ropes[t.j].dead || ow.tCut && ow.tCut[t.j]) return; var o = t.i * 3; td.push({ t: t, x: P[o], y: P[o + 1], z: P[o + 2] }); tk += t.j + ','; });   // 畫出來的帆腳（收帆演出時也是）
     var tv0 = keep ? lost : c.torn ? c.tv : null, bF = isShip ? ow.sails[k].burn : c.bf;   // 斷開那一團帶走的帆：c.bf（22_pieces.js）
     put(c, c.T, P, c.T.n, c.T.tris, c.T.col, SAIL_ISL_ON ? sailIsland(c, c.T.n, c.T.tris, tv0, bF) : tv0, c.T.vcol, c.T.uv, A && c.T.ti !== undefined ? sailRect(ow, A, c.T.ti) : null, bF, c.T.p0, 0, tv0);
   });

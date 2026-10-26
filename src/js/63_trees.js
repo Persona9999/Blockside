@@ -16,7 +16,7 @@
 //   細的、低模照（樹種, 第幾棵）分組實例化畫（一組一次 draw）；看得到的塊換了、鏡頭動了 8 m 以上、或塊進出 ⇒ 重新分組（treeBin；塊照視錐先剔掉）。
 //   place.view（小植物）⇒ 超過那個距離就不畫。貼圖集照格子排（每列 TREE_ATLAS_COLS 格起跳、棵數多了加寬到接近正方形 ⇒ 寬高都不超過 2048（WebGL2 保證的貼圖大小））。
 //   光照跟地形同一套（天光、陽光、船的陰影、霧照 BED_FOG）；葉子照風搖（搖晃權重 × 風）。樹不投影子。
-//   城鎮（63_towns.js）：高度照整過地的那一份（townHv）、規劃的 clear 裡不擺（townClr；樹與小植物都是）。
+//   城鎮（63_towns.js）：規劃的 clear 裡不擺（townClr；樹與小植物都是）；城鎮不整地 ⇒ 高度照 C.h。
 //   城鎮模型標的樹（雕刻的子作品 meta kind=tree、tree=樹種；TASK-0748）：照標的位置、樹種、高度種（treeTownPut）；只給城鎮的樹種 place.town（16_treegen.js：柏樹、橄欖、果樹、懸鈴木）不照地形自己長。
 //   ?trees=0 ⇒ 不長樹。
 // 附屬的田裡的作物（treeFieldPut）：放大幾倍、行距株距各乘幾倍（Tim 2026-10-24「基於性能考量 農田植物可以考慮放大1.5倍看看 然後降低一點密度」）——
@@ -85,11 +85,11 @@ function treeStep(J, t1) {
   J.res = { I: new Float32Array(out), n: out.length / 8, t0: J.t0, bb: bb, sh: out.length ? treeShell(C, out, far, J.hAt) : null, fb: J.fb || null };   // fb：田裡的作物（treeFieldPut）
   return true;
 }
-/** 準備：整地（townHv）；每 TREE_CELL 公尺一格（外擴一格）有哪些底質（位元）、最低最高的海拔 ⇒ 每一種先照它跳過整格（底質不合、海拔帶整個在外面）的候選點；
+/** 準備：清樹（townClrOf）；每 TREE_CELL 公尺一格（外擴一格）有哪些底質（位元）、最低最高的海拔 ⇒ 每一種先照它跳過整格（底質不合、海拔帶整個在外面）的候選點；
  *  只是提早跳過（雙線性的高度不會超出格點的最低最高、候選點的抖動 ＋ 底質取樣的四捨五入落在外擴的那一格裡）⇒ 擺出來的跟逐點查一樣。 */
 function treePrep(J) {
-  var C = J.C, size = BED.A.chunk, st = C.step, n = C.n, h = townHv(C);
-  J.tcl = !!C.tc; J.SP = Object.keys(TREE_SPECIES); J.si = 0; J.fresh = true;   // fresh：這一段剛開始 ⇒ 準備完至少再擺一列
+  var C = J.C, size = BED.A.chunk, st = C.step, n = C.n, h = C.h;
+  J.tcm = townClrOf(C); J.tcl = !!J.tcm; J.SP = Object.keys(TREE_SPECIES); J.si = 0; J.fresh = true;   // fresh：這一段剛開始 ⇒ 準備完至少再擺一列
   J.hAt = function (x, z) {                                             // 塊裡 (x, z) 公尺的海拔（雙線性）
     var u = Math.max(0, Math.min(n - 1.001, x / st)), v = Math.max(0, Math.min(n - 1.001, z / st)), i = Math.floor(u), j = Math.floor(v), fu = u - i, fv = v - j, o = j * n + i;
     return ((h[o] * (1 - fu) + h[o + 1] * fu) * (1 - fv) + (h[o + n] * (1 - fu) + h[o + n + 1] * fu) * fv) / 10;
@@ -126,7 +126,7 @@ function treeRow(J, P, j) {
     var gi = P.gi0 + i, gj = P.gj0 + j, x = (gi + 0.15 + 0.7 * treeHash(gi, gj, sd)) * gap - P.x0, z = (gj + 0.15 + 0.7 * treeHash(gi, gj, sd + 1)) * gap - P.z0;
     if (x < 0 || x >= size || z < 0 || z >= size) continue;               // 落在別塊 ⇒ 那一塊擺
     if (!ok[Math.min(cn - 1, Math.floor(z / CG)) * cn + Math.min(cn - 1, Math.floor(x / CG))]) continue;
-    if (J.tcl && townClr(C, x, z)) continue;                            // 城鎮的建築、路、牆、碼頭那裡不長（63_towns.js；空建地照長）
+    if (J.tcl && townClrAt(J.tcm, x, z)) continue;                           // 城鎮的建築、路、牆、碼頭那裡不長（63_towns.js；空建地照長）
     var y = hAt(x, z); if (y <= A4[0] || y >= A4[3]) continue;
     var mt = C.mat[Math.min(n - 1, Math.round(z / st)) * n + Math.min(n - 1, Math.round(x / st))], wM = Pl.mats[mt]; if (!wM) continue;
     var e = Math.max(st, 4), gx = (hAt(x + e, z) - hAt(x - e, z)) / (2 * e), gz = (hAt(x, z + e) - hAt(x, z - e)) / (2 * e), g2 = gx * gx + gz * gz;

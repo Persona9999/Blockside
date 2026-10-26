@@ -166,13 +166,14 @@ function chartTowns(g, P, sc, W) {
 //   ⇒ 照現在的比例（sc）在一張離屏畫布上畫一次，比例、實例（模型到了、重建）換了才重畫；太大（> CHART_TOWN_MAX 點）⇒ 照舊每格直接畫。
 var CHART_TOWN_MAX = 4096;
 function chartTownLayer(T, sc, dpr) {
-  var pad = 4, b = T.box, w = Math.ceil(((b[2] - b[0]) * sc + 2 * pad) * dpr), h = Math.ceil(((b[3] - b[1]) * sc + 2 * pad) * dpr), L = T.chartL;
+  var R = townDistRest(T), b = R && R.box[0] <= R.box[2] ? townBoxAdd(T.box.slice(), R.box) : T.box;   // 城區（TASK-0817）：還沒建的那幾區也畫 ⇒ 圖層的範圍要包進它們
+  var pad = 4, w = Math.ceil(((b[2] - b[0]) * sc + 2 * pad) * dpr), h = Math.ceil(((b[3] - b[1]) * sc + 2 * pad) * dpr), L = T.chartL;
   if (w > CHART_TOWN_MAX || h > CHART_TOWN_MAX) return null;
-  if (L && L.sc === sc && L.dpr === dpr && L.inst === T.inst) return L;
+  if (L && L.sc === sc && L.dpr === dpr && L.inst === T.inst && L.rest === R) return L;
   var cv = L ? L.cv : document.createElement('canvas'); cv.width = w; cv.height = h;
   var g = cv.getContext('2d'); g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, w, h);
   chartTownDraw(g, function (e, s) { return [(e - b[0]) * sc + pad, (s - b[1]) * sc + pad]; }, sc, T);
-  return (T.chartL = { cv: cv, sc: sc, dpr: dpr, inst: T.inst, e0: b[0], s0: b[1], pad: pad });
+  return (T.chartL = { cv: cv, sc: sc, dpr: dpr, inst: T.inst, rest: R, e0: b[0], s0: b[1], pad: pad });
 }
 /** 一座城的路、城牆、建築（P：海域的往東、往南 ⇒ 畫面 px）。 */
 function chartTownDraw(g, P, sc, T) {
@@ -180,6 +181,15 @@ function chartTownDraw(g, P, sc, T) {
   function path(L) { g.beginPath(); L.forEach(function (q, i) { var p = P(q[0], q[1]); if (i) g.lineTo(p[0], p[1]); else g.moveTo(p[0], p[1]); }); }
   function quad(C) { path(C); g.closePath(); g.fill(); }
   g.lineJoin = 'round'; g.lineCap = 'round';
+  //   還沒建的那幾區（城區，TASK-0817；townDistRest）：路、碼頭棧橋、地塊的框先畫在底下 ⇒ 小地圖上整座城都在（以前只有建了的那幾區，其他一片空白）
+  var R = townDistRest(T);
+  if (R) {
+    [0, 1].forEach(function (pass) {
+      R.roads.forEach(function (r) { var w = Math.max(1.2, r.w * sc); path(r.path.map(T.E)); g.lineWidth = pass ? w : w + 1.6; g.strokeStyle = pass ? rgb(TOWN_COL[r.kind] || TOWN_COL.street, 1.15) : 'rgba(30,20,10,.55)'; g.stroke(); });
+      R.quay.forEach(function (q) { var c = q.kind === 'mole' ? TOWN_COL.mole : !q.kind || q.kind === 'wharf' ? TOWN_COL.quay : TOWN_COL.pier, w = Math.max(1.2, (q.w || 6) * sc); path(q.path.map(T.E)); g.lineWidth = pass ? w : w + 1.6; g.strokeStyle = pass ? rgb(c, 1.15) : 'rgba(30,20,10,.55)'; g.stroke(); });
+    });
+    R.lots.forEach(lotBox);
+  }
   [0, 1].forEach(function (pass) {                                    // 路：先描邊、再路面
     T.roads.forEach(function (r) { var w = Math.max(1.2, r.w * sc); path(r.P); g.lineWidth = pass ? w : w + 1.6; g.strokeStyle = pass ? rgb(TOWN_COL[r.kind] || TOWN_COL.street, 1.15) : 'rgba(30,20,10,.55)'; g.stroke(); });
     //   碼頭線、棧橋（Blocksail TASK-0899：碼頭棧橋是一種特殊的路 ⇒ 小地圖照路畫，Tim 2026-10-24「在小地圖顯示」）：顏色同遊戲裡的面（碼頭、石堤石色，木棧橋木色）
@@ -197,9 +207,12 @@ function chartTownDraw(g, P, sc, T) {
   });
   else (T.p.lots || []).forEach(function (l) {                         // 模型還沒到 ⇒ 地塊的框（空建地、廣場不畫）
     if (l.use === 'plot' || l.use === 'plaza') return;
+    lotBox(l);
+  });
+  function lotBox(l) {
     var t = l.rot * Math.PI / 180, c = Math.cos(t), s = Math.sin(t), hd = l.d / 2, hw = l.w / 2;
     g.fillStyle = 'rgba(190,150,110,.85)'; quad([[-hd, -hw], [hd, -hw], [hd, hw], [-hd, hw]].map(function (k) { return T.E([l.at[0] + k[0] * c - k[1] * s, l.at[1] + k[0] * s + k[1] * c]); }));
-  });
+  }
 }
 /** 城鎮圖示＋名字（在路、建築上面；每格畫）。 */
 function chartTownIcons(g, P, W) {

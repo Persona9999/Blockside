@@ -6,7 +6,7 @@
 //   made: { 貨: 桶／天 }, used: { 貨: 桶／天 }, full: { made, used }（理論：滿產、開工率 100%）, site: { p（‰）, crew, by, mat: { 貨: [剩下, 總共]（1／1000 桶）} }, note }, goods: { 貨: 名字 } }（Blocksail world/townstate.js townBld）。
 // 物理意義：⛔ 這一支不算經濟 —— 數字全照那一頁的城鎮帳；這裡只問、只畫。
 // 失敗處置：沒有 host（直接開 Blockside）⇒ 只有名稱、模型與演出鈕；那一頁沒回 ⇒ 照原樣說一聲。
-var TBI = { open: false, hit: null, b: null, goods: {}, msg: '', seq: 0 };
+var TBI = { open: false, hit: null, b: null, goods: {}, msg: '', seq: 0, rcp: null };   // rcp：那一棟能換的配方（lotRecipes 的回覆；不是生產建築 ⇒ null）
 function tbiSelQ() { return TBI.open && TBI.hit ? TBI.hit.q : null; }
 function tbiClose() { TBI.open = false; TBI.hit = null; TBI.b = null; var st = $('stage'); if (st) st.classList.remove('tbi'); }
 function tbiEscEaten() { if (!TBI.open) return false; tbiClose(); return true; }
@@ -29,6 +29,35 @@ function tbiLoad() {
     if (r.ok) { TBI.b = r.bld || null; TBI.goods = r.goods || {}; TBI.msg = ''; } else TBI.msg = '問不到這一棟的帳：' + (r.why || []).join('；');
     tbiUI();
   });
+  tbiRcpLoad();
+}
+/** 改生產配方（Tim 2026-10-26「Editor模式下 點選建築要可以切換生產菜單 非Editor模式下 只能切換玩家自己建築的菜單」）：
+ *  問那一頁這一塊地能換哪幾條（Blocksail mapgen_worker.js edit 'lotRecipes' ⇒ { list: [{ k, name, g, why? }], recipe, can: { ok, why } }）；
+ *  can 由那一頁照版本與城鎮帳的主人判（globe.html townCanOp：Editor 哪一棟都行、Build 只有玩家自己的）—— 這裡只畫：改不了 ⇒ 整排灰、說原因。 */
+function tbiRcpLoad() {
+  var h = TBI.hit; TBI.rcp = null; if (!h || !h.lot || !twbOk()) return;
+  var s = TBI.seq;
+  twbEnsure(function (ok) {
+    if (!ok || s !== TBI.seq || TBI.hit !== h) return;
+    twbAsk('lotRecipes', { q: { lot: h.lot.id } }, function (r) { if (s !== TBI.seq || TBI.hit !== h) return; TBI.rcp = r.ok ? r : null; tbiUI(); });
+  });
+}
+function tbiRcpPick(k) {
+  var h = TBI.hit, R = TBI.rcp; if (!h || !R || k === R.recipe) return;
+  TBI.msg = '換配方…'; tbiUI();
+  twbAsk('apply', { op: { recipe: { lot: h.lot.id, recipe: k, use: R.use } } }, function (r) {
+    var nm = (R.list.filter(function (x) { return x.k === k; })[0] || {}).name || k;
+    TBI.msg = r.ok ? '換成「' + nm + '」了（帳上隔天開始照它做）' : '換不了：' + (r.why || []).join('；');
+    if (TBI.hit === h) tbiLoad(); else tbiUI();
+  });
+}
+function tbiRcpHTML() {
+  var R = TBI.rcp; if (!R || !R.list || R.list.length < 2) return '';
+  var can = R.can || { ok: true }, cur = R.recipe || R.list[0].k;
+  return '<div class="tbiT">產（點一下換）</div><div class="tbiRcp">' + R.list.map(function (x) {
+    var no = !can.ok || !!x.why, cls = (x.k === cur ? 'on' : '') + (no ? ' no' : '');
+    return '<button type="button" data-k="' + x.k + '"' + (cls ? ' class="' + cls.trim() + '"' : '') + (no ? ' title="' + tuiEsc(can.ok ? x.why : can.why) + '"' : '') + '>' + (x.g ? tuiIcon('goods', x.g) : '') + tuiEsc(x.name) + '</button>';
+  }).join('') + '</div>' + (can.ok ? '' : '<div class="tbiDim">' + tuiEsc(can.why) + '</div>');
 }
 function tbiGood(g) { return TBI.goods[g] || tuiGood(g); }
 /** 一欄貨（產出或消耗）：o ＝ 實際；f ＝ 理論（滿產、開工率 100%；那一頁有給才有）⇒ 每一項寫成 實際／理論（停工時實際是 0），照理論排。 */
@@ -37,6 +66,23 @@ function tbiRows(o, f) {
   var by = f || o, ks = Object.keys(by).concat(Object.keys(o).filter(function (g) { return !(g in by); })).filter(function (g) { return o[g] > 0 || (f && f[g] > 0); });
   ks.sort(function (a, b) { return ((by[b] || 0) - (by[a] || 0)) || ((o[b] || 0) - (o[a] || 0)); });
   return ks.length ? ks.map(function (g) { return '<div class="tbiR"><span>' + tuiIcon('goods', g) + tuiEsc(tbiGood(g)) + '</span><b>' + tuiNum(o[g] || 0, 1) + (f ? '／' + tuiNum(f[g] || 0, 1) : '') + '</b></div>'; }).join('') : '<div class="tbiDim">—</div>';
+}
+/** 服務菜單：標準配方統一每100人次，和昨天的實際消耗分開；類別列出等量替代品。 */
+function tbiServiceHTML(S) {
+  var menus = S.menus || [];
+  if (!menus.length) return '<div class="tbiT">供應菜單</div><div class="tbiDim">尚未掛載菜單</div>';
+  return '<div class="tbiT">供應菜單</div>' + menus.map(function (m) {
+    var h = '<div class="tbiT">' + (m.icon ? tuiIcon('dishes', m.icon) : '') + tuiEsc(m.name) + '</div>' +
+      '<div class="tbiDim">滿編每日最多 ' + tuiNum(m.capacity) + ' 人次・' + tuiNum(m.jobs) + ' 名工人' + (m.served == null ? '' : '・昨天 ' + tuiNum(m.served, 1) + ' 人次') + '</div>';
+    var ks = Object.keys(m.per100 || {});
+    if (!ks.length) return h + '<div class="tbiDim">不消耗物資</div>';
+    h += '<div class="tbiDim">每 100 人次消耗</div>';
+    return h + ks.map(function (g) {
+      var M = (m.alternatives || {})[g], row = '<div class="tbiR"><span>' + tuiIcon('goods', g) + tuiEsc(tbiGood(g)) + '</span><b>' + tuiNum(m.per100[g], 3) + (M ? ' 份' : ' 桶') + '</b></div>';
+      if (M && M.length) row += '<div class="tbiDim">可擇一或混用：' + M.map(function (x) { return tuiEsc(x.name) + ' ' + tuiNum(x.q, 3) + ' 桶'; }).join('／') + '</div>';
+      return row;
+    }).join('');
+  }).join('') + '<div class="tbiDim">一天只供應一道菜；實際量依需求、物資與人手調整。</div>';
 }
 function tbiUI() {
   var P = $('tbiP'); if (!P) return;
@@ -49,10 +95,14 @@ function tbiUI() {
   if (mk.length) html.push('<div class="tbiT">路邊的建材（剩下／總共，桶）</div>' + mk.map(function (g) { var m = b.site.mat[g]; return '<div class="tbiR"><span>' + tuiIcon('goods', g) + tuiEsc(tbiGood(g)) + '</span><b>' + tuiNum(m[0] / 1000, 1) + '／' + tuiNum(m[1] / 1000, 1) + '</b></div>'; }).join(''));
   if (b && b.live) html.push('<div class="tbiR"><span>🏠 住的人／容量</span><b>' + tuiNum(b.live.n) + '／' + tuiNum(b.live.cap) + '</b></div>');
   if (b && b.jobs) html.push('<div class="tbiR"><span>👷 工人／崗位</span><b>' + tuiNum(b.jobs.w) + '／' + tuiNum(b.jobs.need) + '</b></div>');
-  if (b && (b.made || b.used)) {
+  if (b && b.service) {
+    html.push(tbiServiceHTML(b.service));
+    if (b.service.hasDay) html.push('<div class="tbiT">昨天實際消耗（桶）</div>' + tbiRows(b.used));
+  } else if (b && (b.made || b.used)) {
     html.push('<div class="tbiT">每天產出' + (b.full ? '（實際／理論）' : '') + '</div>' + tbiRows(b.made, b.full && b.full.made));
     html.push('<div class="tbiT">每天消耗' + (b.full ? '（實際／理論）' : '') + '</div>' + tbiRows(b.used, b.full && b.full.used));
   }
+  html.push(tbiRcpHTML());
   if (b && b.note) html.push('<div class="tbiDim">' + tuiEsc(b.note) + '</div>');
   if (!tuiOk()) html.push('<div class="tbiDim">沒有城鎮帳（要從 Blocksail 地球儀停靠進城才看得到住戶、工人、產出）</div>');
   if (TBI.msg) html.push('<div class="tbiDim">' + tuiEsc(TBI.msg) + '</div>');
@@ -60,6 +110,7 @@ function tbiUI() {
   html.push('<div class="tbiB"><button id="tbiPlay"' + (can ? '' : ' disabled title="這個模型沒有施工順序"') + '>' + (demo ? '■ 停止演出' : '▶ 演出建造過程') + '</button></div>');
   P.innerHTML = html.join('');
   $('tbiX').onclick = tbiClose;
+  P.querySelectorAll('.tbiRcp button[data-k]').forEach(function (el) { el.onclick = function () { if (!el.classList.contains('no')) tbiRcpPick(el.dataset.k); }; });
   $('tbiPlay').onclick = function () {
     if (RISE.demo && RISE.demo.T === h.T && RISE.demo.lot === h.lot.id && RISE.demo.play) { townRiseStop(); tbiUI(); return; }
     townRiseStart(h.T, h.lot.id, 0, RISE.dur, true).then(tbiUI, function (er) { TBI.msg = er.message; tbiUI(); });

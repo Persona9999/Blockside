@@ -16,6 +16,7 @@ function fireGun(sh, g, target, ammo) {
   g.reload = sh.reloadT * GS.reload * rr(0.9, 1.1); g.reload0 = g.reload; g.firedAt = SIMT; sh.fired++;   // reload0：這一輪裝填要多久（武器演出的進度 gunPhase，26_gunanim.js）
   g.needCart = true;                                                // 下一發要從砲旁的藥箱拿一份火藥與彈藥（沒有 ⇒ 等送藥手，23_powder.js）
   if (sh.aimOn && sh.aimOn.calm) fortProvoke(sh.aimOn, sh);          // 對城裡中立的堡壘開火 ⇒ 敵對（52_fleet.js；TASK-0955）
+  if (sh.aimOn && sh.aimOn.npc) trafficProvoke(sh.aimOn, sh);         // 對往來的船開火 ⇒ 變成真的船（58_traffic.js ⑨）
   if (ammo === AMMO_GF) { evEmit('gfJet', r.mw, r.dir, sh.vel); sfx('gfJet', r.mw, sh.i === PLAYER_I ? 1 : 0.8); } else if (ammoQuiet(ammo)) boltFx(sh, r.mw); else shotFx(sh, g, r.mw, r.dir);   // 希臘火：噴口一道火舌（28_fire.js），沒有砲聲、沒有後座；弩箭、火箭、石彈：只有弓弦／投臂一響
   if ((GS.burst || 1) > 1) { g.burstLeft = GS.burst - 1; g.burstK = 1; g.burstAmmo = ammo; g.burstT = SIMT + (GS.burstGap || 0.15); }   // 連發：同一份彈藥再打 burst − 1 發
   return true;

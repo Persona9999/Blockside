@@ -403,6 +403,22 @@ var TREE_SPECIES = {
     leaf: { kind: 'rosette', n: [16, 24], len: [0.75, 1.1], w: 0.16, rise: [14, 80], droop: 0.4, col: [0.42, 0.56, 0.50], vary: 0.1, edge: [0.66, 0.66, 0.42] },
     place: { town: true, spacing: 1, scale: [0.85, 1.15], shell: 0, view: 300, sink: 0.05, field: [1.6, 1.4], fieldK: 0.75 },
     variants: 3
+  },
+  // ── 可可（Blocksail 配方 cocoa 的 crop；TASK-0973）：加在表的最後 ⇒ 前面每一種的種子、長相不變 ──
+  cocoa: {
+    name: '可可',                                                       // Theobroma cacao（1660 年代牙買加、古巴東部的 cocoa walk，種在香蕉、刺桐的遮蔭下）：一根短幹，齊胸高分成一圈 3～5 根往外斜的粗枝（jorquette），深綠的大長葉成一團低而寬的樹冠；果莢直接長在樹幹與粗枝上（幹生花），黃、橙、紫紅的長卵形
+    meta: { region: ['carib'], type: 'crop' },
+    height: [3.2, 4.4],
+    trunk: { r: [0.07, 0.1], taper: 0.7, bend: 0.12, segs: 2, sides: [6, 4], lean: 0.06, col: [0.42, 0.36, 0.30], top: 0.32, crown: 0.8 },
+    levels: [
+      { n: [3, 5], from: [0.92, 1.0], angle: [32, 48], len: [0.6, 0.85], r: 0.7, bend: 0.2, up: 0.22, segs: 3, sides: [5, 3] },   // from 0.92～1：幹頂那一圈（jorquette）
+      { n: [3, 4], from: [0.5, 0.95], angle: [30, 55], len: [0.45, 0.65], r: 0.5, bend: 0.25, up: 0.12, segs: 2, sides: [3, 0] }
+    ],
+    leaf: { kind: 'cluster', per: [2, 3], size: [0.38, 0.6], flat: 0.6, col: [0.14, 0.29, 0.11], vary: 0.12, along: 0.4 },   // ⛔ 不加 tint（轉紅的嫩葉）：低模把一根枝的葉團併成一大團，抽到的整團變紅褐，田裡看起來像枯掉（量過）
+    pods: { n: [12, 18], on: [[-1, 0.25, 0.95], [0, 0.04, 0.45]], len: [0.26, 0.34], r: 0.07,
+            cols: [[0.86, 0.68, 0.16], [0.86, 0.46, 0.12], [0.54, 0.17, 0.18], [0.40, 0.52, 0.16]] },   // 幹生的果莢（treePods）：樹幹那一段、粗枝的下半截；熟的黃、橙、紫紅，未熟的綠
+    place: { town: true, spacing: 1, scale: [0.9, 1.1], shell: 0, view: 300, sink: 0.1, field: [2.0, 1.8], fieldK: 0.6 },   // fieldK：田裡整體 × 1.8 ⇒ 可可 × 0.6 ≈ 實際大小（3.5～4.8 m）；行距 3.6 m、株距 3.2 m
+    variants: 4
   }
 };
 
@@ -481,7 +497,21 @@ function treeMesh(K, lod) {
     treeTube(M, b.pts, b.r0, b.r1, sides, S.trunk.col, 0.9 + 0.2 * R(), b.lv, L);
   });
   TREE_LEAF[S.leaf.kind](M);
+  if (S.pods) treePods(M);                                              // 沒寫 pods 的樹種不抽亂數 ⇒ 長相逐位元組不變
   return { V: new Float32Array(V), I: new Uint16Array(I), h: Math.max(K.h, top), w: w };
+}
+/** 幹生的果（可可的果莢，TASK-0973）：S.pods ＝ { n 幾顆, on: [[層, 從, 到]…]（−1 樹幹、0 第一層枝；那一根的哪一段）, len 長, r 半徑, cols 顏色挑一個 }。
+ *  一顆 ＝ 一顆長橢球，貼著那根枝幹往外、往下垂（果柄很短）；低模畫一半。 */
+function treePods(M) {
+  var P = M.S.pods, K = M.K, R = M.R, n = Math.round(treeIn(R, P.n) * (M.lod ? 0.5 : 1));
+  var on = P.on.map(function (o) { return { o: o, B: K.br.filter(function (b) { return b.lv === o[0]; }) }; }).filter(function (q) { return q.B.length; });
+  if (!on.length) return;
+  for (var k = 0; k < n; k++) {
+    var q = on[Math.floor(R() * on.length)], b = q.B[Math.floor(R() * q.B.length)], f = treeIn(R, [q.o[1], q.o[2]]), p = treeAt(b.pts, f), rr = b.r0 + (b.r1 - b.r0) * f;
+    var az = R() * 6.2832, o = [Math.cos(az), 0, Math.sin(az)], L = treeIn(R, P.len), d = treeNorm([o[0] * 0.4, -1, o[2] * 0.4]), X = treePerp(d);
+    var c = [p[0] + o[0] * (rr + P.r * 0.8) + d[0] * L * 0.45, p[1] + d[1] * L * 0.45, p[2] + o[2] * (rr + P.r * 0.8) + d[2] * L * 0.45];
+    treeBlob(M, c, [d, X[0], X[1]], [L * 0.5, P.r, P.r], P.cols[Math.floor(R() * P.cols.length)], Math.min(1, 0.6 * p[1] / K.h));
+  }
 }
 /** 一根管子（枝幹、根、花梗）：折線 P、半徑 r0 ⇒ r1、sides 邊；kc 深淺；lv 決定搖晃權重（−1 樹幹根部最暗）；
  *  L（那一層的參數，可以沒有）：flare 根部粗幾倍、bulge [位置, 粗幾成]（大王椰子中段鼓起）、shaft [頂上幾成, 顏色]（葉鞘）、ribs 稜（相鄰兩邊一凸一凹）、round 圓球的輪廓（土耳其頭仙人掌）。 */

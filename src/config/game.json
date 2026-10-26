@@ -556,6 +556,7 @@
       "oak": {"name": "橡木", "kind": "wood", "density": 0.7, "hard": 1, "flammable": 0.5},
       "pine": {"name": "松木", "kind": "wood", "density": 0.5, "hard": 0.7, "flammable": 0.8},
       "teak": {"name": "柚木", "kind": "wood", "density": 0.65, "hard": 1.1, "flammable": 0.3},
+      "tidewood": {"name": "潮木", "kind": "wood", "density": 0.5, "hard": 1.3, "flammable": 0.3},
       "iron": {"name": "鐵甲", "kind": "metal", "density": 7.8, "hard": 32, "pen": 230, "flammable": 0, "metal": 1, "rough": 0.35, "smooth": true},
       "copper_sheath": {"name": "銅皮（包在木殼外）", "kind": "metal", "density": 0.8, "hard": 1.1, "flammable": 0, "metal": 0.7, "rough": 0.55, "smooth": false},
       "brass": {"name": "黃銅（鍍金銅件：紋章、鐘、配件）", "kind": "metal", "density": 8.5, "hard": 20, "flammable": 0, "metal": 1, "rough": 0.3, "smooth": false},
@@ -671,6 +672,7 @@
       "name": "夜隼號",
       "vxk": "falcon.vxk",
       "work": "summit-night-falcon-01m-assembly",
+      "material": "tidewood",
       "geo": {"spar": [28, 47], "marines": [100, 60], "center": 50, "aim": 30, "aimZ": [5, 270], "deckAim": [25, 40], "rigAim": [60, 240]},
       "cfg": {"pump": 2, "speed": 3, "agile": 5, "upwind": 3, "flood": 0.25},
       "crew": {"handsK": 0.25},
@@ -1321,6 +1323,75 @@
       "town": "carib-fort"
     },
     {
+      "id": "fort_es",
+      "el": "ship-fort-es",
+      "name": "西班牙碉堡",
+      "vxk": "fort_es.vxk",
+      "work": "basecamp-es-01m-fort",
+      "author": "basecamp",
+      "material": "stone",
+      "fixed": true,
+      "zw0": 1,
+      "geo": {"spar": [36, 40], "marines": [20, 20], "center": 30, "aim": 40, "aimZ": [5, 80], "deckAim": [20, 50], "rigAim": [90, 120]},
+      "crew": {
+        "officers": 2,
+        "helm": 0,
+        "marines": 0,
+        "top": 0,
+        "monkeys": 1,
+        "handsK": 0.1,
+        "surgeon": 0,
+        "carpenter": 1,
+        "sailmaker": 1,
+        "cook": 0,
+        "navigator": 0,
+        "quartermaster": 0
+      },
+      "town": "es-fort"
+    },
+    {
+      "id": "fort_roche",
+      "el": "ship-fort-roche",
+      "name": "岩堡",
+      "vxk": "fort_roche.vxk",
+      "work": "ame-carib-civic-01m-fort-roche",
+      "author": "ame",
+      "material": "stone",
+      "fixed": true,
+      "zw0": 1,
+      "geo": {"spar": [36, 40], "marines": [20, 20], "center": 40, "aim": 40, "aimZ": [4, 90], "deckAim": [4, 80], "rigAim": [100, 140]},
+      "crew": {"officers": 2, "helm": 0, "marines": 0, "top": 0, "monkeys": 1, "handsK": 0.1, "surgeon": 0, "carpenter": 1, "sailmaker": 1, "cook": 0, "navigator": 0, "quartermaster": 0},
+      "town": "fort-de-la-roche"
+    },
+    {
+      "id": "battery_carib",
+      "el": "ship-battery-carib",
+      "name": "加勒比砲台",
+      "vxk": "battery_carib.vxk",
+      "work": "summit-carib-01m-battery",
+      "author": "summit",
+      "material": "stone",
+      "fixed": true,
+      "zw0": 1,
+      "geo": {"spar": [36, 40], "marines": [10, 10], "center": 10, "aim": 10, "aimZ": [2, 30], "deckAim": [2, 20], "rigAim": [60, 90]},
+      "crew": {"officers": 1, "helm": 0, "marines": 0, "top": 0, "monkeys": 1, "handsK": 0.1, "surgeon": 0, "carpenter": 1, "sailmaker": 1, "cook": 0, "navigator": 0, "quartermaster": 0},
+      "town": "carib-battery"
+    },
+    {
+      "id": "battery_en",
+      "el": "ship-battery-en",
+      "name": "英國砲台",
+      "vxk": "battery_en.vxk",
+      "work": "trailhead-harbour-01m-battery-en",
+      "author": "trailhead",
+      "material": "brick",
+      "fixed": true,
+      "zw0": 1,
+      "geo": {"spar": [36, 40], "marines": [10, 10], "center": 10, "aim": 10, "aimZ": [2, 30], "deckAim": [2, 20], "rigAim": [60, 90]},
+      "crew": {"officers": 1, "helm": 0, "marines": 0, "top": 0, "monkeys": 1, "handsK": 0.1, "surgeon": 0, "carpenter": 1, "sailmaker": 1, "cook": 0, "navigator": 0, "quartermaster": 0},
+      "town": "en-battery"
+    },
+    {
       "id": "labelle",
       "role": "merchant",
       "el": "ship-labelle",
@@ -1440,6 +1511,62 @@
         "rudder": 2,
         "ship": 2,
         "yard": 11
+      }
+    },
+    {
+      "id": "concepcion",
+      "el": "ship-concepcion",
+      "name": "康塞普西翁號",
+      "vxk": "concepcion.vxk",
+      "work": "apex-two-galeon-01m-assembly",
+      "geo": {
+        "spar": [
+          115,
+          155
+        ],
+        "marines": [
+          35,
+          170
+        ],
+        "center": 110,
+        "aim": 90,
+        "aimZ": [
+          30,
+          460
+        ],
+        "deckAim": [
+          76,
+          130
+        ],
+        "rigAim": [
+          175,
+          450
+        ]
+      },
+      "names": [
+        "康塞普西翁號"
+      ],
+      "author": "apex-two",
+      "idNext": {
+        "anchor": 3,
+        "binnacle": 2,
+        "boat": 2,
+        "capstan": 2,
+        "deck": 8,
+        "door": 7,
+        "galley": 2,
+        "gun": 95,
+        "ladders": 7,
+        "light": 4,
+        "magazine": 2,
+        "part": 14,
+        "portlid": 55,
+        "powder": 121,
+        "rudder": 2,
+        "ship": 2,
+        "wheel": 2,
+        "wheel_stand": 2,
+        "yard": 12
       }
     }
   ],
