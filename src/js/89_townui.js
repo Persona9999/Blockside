@@ -22,13 +22,15 @@ function tuiNum(x, d) { x = +x || 0; return x.toLocaleString('en-US', { minimumF
 function tuiIcon(dir, k) { return '<img src="img/' + dir + '/' + encodeURIComponent(k) + '.png" alt="" style="width:22px;height:22px;object-fit:contain;vertical-align:middle;margin-right:5px" onerror="this.remove()">'; }
 /** 昨天吃了什麼（份的比例）：家裡的灶每一道菜（'eat:<貨>' ＝ 直接吃那一種）＋服務建築供的（餐館、酒館、教堂；Blocksail world/food.js foodDay 的 dish、served）。 */
 function tuiEatHTML(F) {
-  var D = F.dish || {}, sv = F.served || 0, tot = sv, rows = [];
+  var D = F.dish || {}, S = F.servedDish || {}, sv = Math.max(0, F.served || 0), tot = sv, rows = [], known = 0;
   Object.keys(D).forEach(function (k) { if (D[k] > 0) { tot += D[k]; rows.push({ k: k, q: D[k] }); } });
-  if (sv > 0) rows.push({ k: '', q: sv });
+  Object.keys(S).sort().forEach(function (k) { var q = Math.min(Math.max(0, S[k] || 0), sv - known); if (q > 0) { known += q; rows.push({ k: k, q: q, service: true }); } });
+  if (sv > known) rows.push({ k: '', q: sv - known });   // 舊存檔沒有逐菜紀錄：保留總數，不能猜成聖餐。
   if (!(tot > 0)) return '';
-  rows.sort(function (a, b) { return b.q - a.q || (a.k < b.k ? -1 : 1); });
+  rows.sort(function (a, b) { return b.q - a.q || (a.k < b.k ? -1 : a.k > b.k ? 1 : 0); });
   return '<table class="tuiT"><tr><th>吃的</th><th>份</th><th>比例</th></tr>' + rows.map(function (x) {
-    var g = x.k.indexOf('eat:') === 0 ? x.k.slice(4) : null, nm = !x.k ? '⛪ 服務建築供的（教堂的彌撒…）' : g ? tuiIcon('goods', g) + tuiEsc(tuiGood(g)) : tuiIcon('dishes', x.k) + tuiEsc(TUI.dishes[x.k] || x.k);
+    var g = x.k.indexOf('eat:') === 0 ? x.k.slice(4) : null, R = x.service && (TUI.serveDishes || {})[x.k],
+      nm = x.service ? tuiIcon('dishes', R && R.icon || x.k) + tuiEsc(R && R.name || x.k) : !x.k ? '服務餐點（舊紀錄）' : g ? tuiIcon('goods', g) + tuiEsc(tuiGood(g)) : tuiIcon('dishes', x.k) + tuiEsc(TUI.dishes[x.k] || x.k);
     return '<tr><td>' + nm + '</td><td>' + tuiNum(x.q / 1000) + '</td><td>' + (x.q * 100 / tot).toFixed(1) + '%</td></tr>';
   }).join('') + '</table>';
 }
@@ -72,7 +74,7 @@ function tuiLoad() {
 }
 /** 問城鎮資訊（每一頁都要：上面那一列、貨名 tuiGood；買賣之後城鎮金庫跟著變 ⇒ 重問）。 */
 function tuiInfo() {
-  tuiAsk('info', null, function (r) { if (r.ok) { TUI.info = r.info; TUI.goods = r.goods || {}; TUI.blds = r.blds || {}; TUI.every = r.every || 7; TUI.region = r.region || null; TUI.faction = r.faction || null; TUI.fleets = r.fleets || []; TUI.hubs = r.hubs || []; TUI.dishes = r.dishes || {}; } else TUI.msg = '問不到城鎮資訊：' + (r.why || []).join('；'); tuiUI(); });
+  tuiAsk('info', null, function (r) { if (r.ok) { TUI.info = r.info; TUI.goods = r.goods || {}; TUI.blds = r.blds || {}; TUI.every = r.every || 7; TUI.region = r.region || null; TUI.faction = r.faction || null; TUI.fleets = r.fleets || []; TUI.hubs = r.hubs || []; TUI.dishes = r.dishes || {}; TUI.serveDishes = r.serveDishes || {}; } else TUI.msg = '問不到城鎮資訊：' + (r.why || []).join('；'); tuiUI(); });
 }
 /** 買賣（side 'buy'｜'sell'、q 桶）：一次只送一筆；回來照新的清單重畫、說成交了多少。 */
 function tuiTrade(side, g, q) {
