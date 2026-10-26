@@ -145,8 +145,19 @@ function todWin(h) {
 /** 這一格的陽光、亮度（天氣 × 世界時間；沒開世界時間 ⇒ 就是天氣的）。 */
 function wxSun() { return WX.sun * TOD_SUNK; }
 function wxLum() { return WX.lum * TOD_LUMK; }
+// 世界時間的流速（Blocksail 城鎮模式；Tim 2026-10-26「停靠在城鎮時 希望上方面板保留跟外側一樣的時間流速選項 且時間流速選項多一個1秒=1秒」
+//   「城鎮模擬加速時 不加速物理模擬(主要是想看船進出港&日夜變化)」）：外面那一頁的時間面板照 'clock' 訊息給倍率 WCLK.rate（世界秒／模擬秒；暫停 ⇒ 0）。
+//   世界時間 ＝ SIMT ＋ WCLK.x（多走、少走的秒數）；物理照舊照 SIMT 走（1 倍）。太陽、天色、點燈、往來的船（58_traffic.js）照世界時間。
+//   只有城鎮模式照 WCLK.rate（wclkRate）；航海、海戰 ⇒ 1（同以前：世界時間跟著 SIMT）。沒被嵌著、沒給倍率 ⇒ 1 ⇒ 一位元不變。
+var WCLK = { rate: 1, x: 0 };
+function wclkRate() { return MODE === 'town' && BED && BED.host ? WCLK.rate : 1; }
+function wclkSet(r) { WCLK.rate = isFinite(+r) && +r >= 0 ? +r : 1; }
+/** 模擬一步（50_sim.js simStep，SIMT += DT 之後）：倍率不是 1 ⇒ 多走（或少走）的那一份記在 WCLK.x。 */
+function wclkStep(dt) { var r = wclkRate(); if (r !== 1) WCLK.x += (r - 1) * dt; }
+/** 開戰以來世界時間走了幾秒。 */
+function worldSec() { return SIMT + WCLK.x; }
 /** 現在幾點（0～24）；沒開世界時間 ⇒ null。 */
-function todNow() { return TOD0 === null ? null : ((TOD0 + SIMT / 3600) % 24 + 24) % 24; }
+function todNow() { return TOD0 === null ? null : ((TOD0 + worldSec() / 3600) % 24 + 24) % 24; }
 /** 那個時刻天體的方向（世界座標：東 ＋x、北 −z、上 ＋y）：時角 H ＝ (h − 12) × 15°、赤緯 dec、緯度 lat（弧度）。 */
 function todDir(h, lat, dec) {
   var H = (h - 12) * Math.PI / 12, e = -Math.cos(dec) * Math.sin(H), n = Math.sin(dec) * Math.cos(lat) - Math.cos(dec) * Math.cos(H) * Math.sin(lat), u = Math.sin(dec) * Math.sin(lat) + Math.cos(dec) * Math.cos(H) * Math.cos(lat);

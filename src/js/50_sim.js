@@ -133,7 +133,7 @@ var SIM_N = 0;                                                       // 走過�
 var VIEW_HOLD = false, VIEW_ACC = 0;                                // 只給人看的推進（viewStep）：畫面一格補好幾步時只在最後一步推一次（90_main.js frame 設 VIEW_HOLD）；快轉、無頭照舊每一步推
 function simStep() {
   if (PF) PF.t = performance.now();                                 // 逐幀分段計時（?debug=1，00_core.js）
-  SIMT += DT; SIM_N++;
+  SIMT += DT; SIM_N++; wclkStep(DT);                               // 世界時間的流速（08_weather.js；城鎮模式照外面那一頁的時間面板，物理照舊 1 倍）
   if ((Math.round(SIMT / DT) % everySteps(CMD_EVERY_S)) === 0) cmdTick();   // 指揮官每 3 秒想一次（52_fleet.js；不抽亂數）
   pickFoes();                                                      // 每艘的目標（52_fleet.js）：這一步之內都用同一個
   stepWind(SIMT);                                                  // 風會變（08_weather.js）
@@ -151,8 +151,8 @@ function simStep() {
   if (nMv > 1) shipPreMove(nMv - 1, hMv);
   SHIPS.forEach(function (sh) { sailShip(sh, hMv); if (sh.spins) spinStep(sh, DT); stepShip(sh, DT); if (sh.anc) chainStep(sh, DT); if (PF) pfLap('ship'); crewStep(sh); if (PF) pfLap('crew'); });
   collide(hMv);
-  if (BED) SHIPS.forEach(function (sh) { groundStep(sh, hMv); });  // 擱淺（32_ground.js；有海圖才有）
-  if (BED && TOWNS.list.length) SHIPS.forEach(function (sh) { quayStep(sh, hMv); });   // 棧橋、海堤的碰撞（32_quay.js；有城才有）
+  if (BED) SHIPS.forEach(function (sh) { if (!trafficGliding(sh)) groundStep(sh, hMv); });  // 擱淺（32_ground.js；有海圖才有）；照時刻表滑的往來船（58_traffic.js ⑥）不擱淺、棧橋不推
+  if (BED && TOWNS.list.length) SHIPS.forEach(function (sh) { if (!trafficGliding(sh)) quayStep(sh, hMv); });   // 棧橋、海堤的碰撞（32_quay.js；有城才有）
   SHIPS.forEach(function (sh) {                                    // 照 SHIPS 的順序（一對一：我艦先、敵艦後 ⇒ 跟以前同一個順序抽亂數）
     if (sh.i === PLAYER_I) { if (AUTOFIRE) simAi(sh, DT); }            // 自動開砲：我艦也交給電腦瞄準開火
     else if (modeRule('othersAct')) simAi(sh, DT);                // 玩法規則 othersAct（04_modes.js）：沙盒的其他船不還手

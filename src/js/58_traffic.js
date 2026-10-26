@@ -17,11 +17,17 @@
 //      上方艦隊列不列（61_hud.js）、隊上的船數不算它（teamShips）；羅盤上商船米白、海盜船黑。
 //   ⑤ 收（停用回收）：清單裡沒有了、或換到別的玩法 ⇒ 從 SHIPS 拿掉、後面的序號往前補、放掉網格（同 70_flow.js 清場那一行）。
 //      只在航海、城鎮（場上除了我艦都是往來的船、沒有砲彈與命令掛在它們的序號上）⇒ 序號往前補不會動到戰局。
+//   ⑥ 照時刻表滑（Tim 2026-10-26：城鎮的時間面板加速時「不加速物理模擬(主要是想看船進出港&日夜變化)」，選了「照時刻表滑」）：
+//      世界時間比物理快（城鎮模式 WCLK 倍率 > 1，08_weather.js）⇒ 照物理開跟不上時刻表（1 秒＝1 小時：船開出港要真實的幾分鐘，時刻表早就過了幾小時）
+//      ⇒ 要清單時多帶 span（往後要幾小時）、外面那一頁每艘多回 trk ＝ [[世界時間（開戰以來幾小時）, e, s]…]；這裡每一步照世界時間在 trk 上內插、直接擺船（trafficGlide：
+//      位置、船頭照走的方向轉過去，不靠帆、不靠艦長）。停港的照舊下錨；1 秒＝1 秒（倍率 1）⇒ 照舊靠物理開。要清單也照世界時間：滑的時候每 TRF_ASK_GLIDE_MS 一次。
+//   ⑦ 世界時間報給外面那一頁（'wclock'：開戰以來世界時間走了幾小時 wh）：每 TRF_CLOCK_MS 一次 ⇒ 它的時鐘跟著走、過了換日照它自己的帳一天一天推。
 //   之後（TASK-0940）：遇上海盜、玩家開火 ⇒ 換隊（team）、交給海戰。
 // 讀數：__game.traffic() ⇒ { ships, queue, built, dropped, stepMax, stepMs（每一段幾毫秒，最近 200 段）, place（放上場那一步）}
-var TRF = { want: {}, build: null, q: [], askT: 0, built: 0, dropped: 0, stepMax: 0, stepMs: [], place: [], skip: 0 };
+var TRF = { want: {}, build: null, q: [], askT: 0, clockT: 0, built: 0, dropped: 0, stepMax: 0, stepMs: [], place: [], skip: 0 };
 var TRF_ASK_MS = 2000, TRF_SPAWN_M = 6000, TRF_STARVE = 30;   // 幾毫秒要一次清單、離我艦幾公尺內才生、背景預算連續幾格用光就照樣做一段（不然一直排不到）
 var TRF_LOOK_M = 300, TRF_V0 = 0.6;                              // 沿航道開：看航道上前面幾公尺那一點；生出來的航速（VMAX 的幾成）
+var TRF_ASK_GLIDE_MS = 500, TRF_CLOCK_MS = 250, TRF_GLIDE_TURN = 3;   // 滑的時候幾毫秒要一次清單；幾毫秒報一次世界時間；船頭每秒轉過去幾成（1／秒）
 
 /** 現在可不可以有往來的船：被 Blocksail 嵌著、在跑、航海或城鎮。 */
 function trafficOk() { return !!(BED && BED.host && RUNNING && !OVER && (MODE === 'sail' || MODE === 'town')); }
@@ -33,11 +39,12 @@ function trafficYaw(hdg) { return Math.PI / 2 - hdg / 57.2958; }        // 方�
 function trafficGot(d) {
   if (!trafficOk()) return;
   var W = function (q) { return [q[0] - BED.ax, q[1] - BED.az]; }, want = {}, me = SHIPS[PLAYER_I], c = me ? shipCenter(me) : [0, 0, 0];
-  (d.ships || []).forEach(function (o) { if (o && o.id && o.at) want[o.id] = { id: o.id, kind: o.kind || 'merchant', hull: o.hull, name: o.name || o.id, at: W(o.at), hdg: +o.hdg || 0, to: o.to ? W(o.to) : null, v: +o.v || 0, path: o.path && o.path.length > 1 ? o.path.map(W) : null, dock: !!o.dock, flag: o.flag || null }; });
+  (d.ships || []).forEach(function (o) { if (o && o.id && o.at) want[o.id] = { id: o.id, kind: o.kind || 'merchant', hull: o.hull, name: o.name || o.id, at: W(o.at), hdg: +o.hdg || 0, to: o.to ? W(o.to) : null, v: +o.v || 0, path: o.path && o.path.length > 1 ? o.path.map(W) : null, dock: !!o.dock, flag: o.flag || null,
+    trk: o.trk && o.trk.length > 1 ? o.trk.map(function (q) { var p = W([q[1], q[2]]); return [+q[0], p[0], p[1]]; }) : null }; });   // trk：照時刻表滑（⑥）
   TRF.want = want;
   trafficShips().forEach(function (sh) {                              // 還在 ⇒ 換航點；沒了 ⇒ 收
     var w = want[sh.npc.id]; if (!w) { trafficDrop(sh); return; }
-    sh.npc.to = w.to; sh.npc.v = w.v; sh.npc.path = w.path; trafficDock(sh, w.dock);
+    sh.npc.to = w.to; sh.npc.v = w.v; sh.npc.path = w.path; sh.npc.trk = w.trk; trafficDock(sh, w.dock);
     if ((sh.nation || null) !== w.flag) shipNation(sh, w.flag);        // 旗（TASK-0974）：船隊主人那座城換了勢力（轉手）⇒ 跟著換
   });
   if (TRF.build && !want[TRF.build.id]) { trafficFree(TRF.build.M.sh); TRF.build = null; }   // 做到一半就不要了（第一段之後才有 M.sh）
@@ -62,6 +69,23 @@ function trafficHelm(sh) {
   var dx = to[0] - sh.px, dz = to[1] - sh.pz;
   if (Math.hypot(dx, dz) < 30) return { yaw: sh.yaw, v: Math.min(n.path ? 0.5 : n.v, 0.5) };   // 到了航點（航道的盡頭）、下一份清單還沒來 ⇒ 慢慢往前
   return { yaw: Math.atan2(-dz, dx), v: n.path ? 'cruise' : n.v > 0 ? n.v : null };
+}
+/** 照時刻表滑（⑥；31_sailing.js sailShip 開頭先問）：世界時間比物理快、這艘有 trk、沒在停港 ⇒ 照世界時間在 trk 上內插、直接擺 ⇒ true（sailShip 那一步不再照帆走）；不然 false。
+ *  船頭照走的方向轉過去（每秒 TRF_GLIDE_TURN 成；沒在動 ⇒ 不轉）；vel、spd 照這一步走了多遠（航跡、水花照它），spd 夾在 VMAX（快轉時一步走幾百公尺，水花不跟著爆）。 */
+/** 這艘正在照時刻表滑（⑥）：海圖塊不等它（08_seabed.js bedNear；快轉一步走幾百公尺 ⇒ 每一步都在等新的塊，量到世界時間慢了 25 倍）、不擱淺、棧橋不推（50_sim.js）。 */
+function trafficGliding(sh) { var n = sh.npc; return !!(n && n.trk && !n.dock && wclkRate() > 1); }
+function trafficGlide(sh, dt) {
+  var n = sh.npc, T = n && n.trk; if (!trafficGliding(sh)) return false;
+  var h = worldSec() / 3600, i = 1;
+  while (i < T.length - 1 && T[i][0] < h) i++;
+  var a = T[i - 1], b = T[i], k = clamp((h - a[0]) / Math.max(1e-9, b[0] - a[0]), 0, 1);
+  var x = a[1] + (b[1] - a[1]) * k, z = a[2] + (b[2] - a[2]) * k, dx = b[1] - a[1], dz = b[2] - a[2];
+  var px0 = sh.px, pz0 = sh.pz; sh.px = x; sh.pz = z;
+  if (Math.hypot(dx, dz) > 1) { var dy = Math.atan2(-dz, dx) - sh.yaw; dy = Math.atan2(Math.sin(dy), Math.cos(dy)); sh.yaw += dy * Math.min(1, TRF_GLIDE_TURN * dt); }
+  var v = dt > 0 ? Math.hypot(sh.px - px0, sh.pz - pz0) / dt : 0;     // 同一步切成幾小步（shipPreMove）⇒ 後面幾小步世界時間沒動、走 0 ⇒ 航速留著前一小步的
+  if (v > 0 || Math.hypot(dx, dz) <= 1) sh.spd = Math.min(v, VMAX);
+  sh.vel = mul(fwd(sh.yaw), sh.spd); sh.yawRate = 0;
+  return true;
 }
 /** 航道上「我在哪」之後 TRF_LOOK_M 公尺的那一點（把船投影到最近的那一段；清單是照精細層的位置給的 ⇒ 船跑在前面也找得到自己那一段）。 */
 function trafficAhead(sh, P) {
@@ -95,11 +119,12 @@ function trafficClear() { trafficShips().forEach(trafficDrop); if (TRF.build) tr
 /** 畫面迴圈每格叫（90_main.js frame，海圖塊、擺樹之後）：t1 ＝ 背景預算做到幾點（08_seabed.js bedT1）。 */
 function trafficPump(t1) {
   if (!trafficOk()) { if (trafficShips().length || TRF.build) trafficClear(); return; }
-  var now = performance.now(), me = SHIPS[PLAYER_I];
-  if (now - TRF.askT > TRF_ASK_MS && me) {                                // ① 要清單
+  var now = performance.now(), me = SHIPS[PLAYER_I], rate = wclkRate(), ask = rate > 1 ? TRF_ASK_GLIDE_MS : TRF_ASK_MS;
+  if (now - TRF.askT > ask && me) {                                      // ① 要清單（wh：開戰以來世界時間走了幾小時；span：照時刻表滑時往後要幾小時的 trk ＝ 兩次要清單之間的兩倍）
     TRF.askT = now; var c = shipCenter(me);
-    BED.host.postMessage({ bsmap: 'trafficNeed', x: c[0], z: c[2], tod: todNow(), max: trafficMax(), mode: MODE }, '*');
+    BED.host.postMessage({ bsmap: 'trafficNeed', x: c[0], z: c[2], tod: todNow(), wh: worldSec() / 3600, span: rate > 1 ? rate * 2 * ask / 1000 / 3600 : 0, max: trafficMax(), mode: MODE }, '*');
   }
+  if (now - TRF.clockT > TRF_CLOCK_MS) { TRF.clockT = now; BED.host.postMessage({ bsmap: 'wclock', wh: worldSec() / 3600 }, '*'); }   // ⑦ 世界時間報給外面那一頁
   if (!TRF.build) {                                                      // ② 下一艘：船型載好了才開始做
     while (TRF.q.length && trafficShips().length < trafficMax()) {
       var id = TRF.q[0], w = TRF.want[id]; if (!w) { TRF.q.shift(); continue; }
@@ -126,7 +151,7 @@ function trafficPump(t1) {
 function trafficPlace(B) {
   var w = TRF.want[B.id], sh = B.M.sh;
   if (!w || !trafficOk() || trafficShips().length >= trafficMax()) { trafficFree(sh); return; }
-  sh.i = SHIPS.length; sh.name = w.name; sh.npc = { id: w.id, kind: w.kind, to: w.to, v: w.v, path: w.path, dock: false };
+  sh.i = SHIPS.length; sh.name = w.name; sh.npc = { id: w.id, kind: w.kind, to: w.to, v: w.v, path: w.path, trk: w.trk, dock: false };
   SHIPS.push(sh);
   if (w.flag) shipNation(sh, w.flag);                                    // 掛船隊主人那一國的旗（77_colours.js；外面那一頁給預設旗的 key，不認得 ⇒ 照陣營旗）
   coreSpawned(sh, null); stepShip(sh, 0); survey(sh); pickCaptain(sh); cmdTick(); pickFoes();
@@ -137,7 +162,7 @@ function trafficPlace(B) {
 /** 讀數（__game.traffic）。 */
 function trafficInfo() {
   var me = SHIPS[PLAYER_I], c = me ? shipCenter(me) : [0, 0, 0];
-  return { ok: trafficOk(), max: trafficMax(), want: Object.keys(TRF.want).length, queue: TRF.q.slice(), building: TRF.build ? TRF.build.id : null, built: TRF.built, dropped: TRF.dropped,
+  return { ok: trafficOk(), rate: wclkRate(), wh: +(worldSec() / 3600).toFixed(4), max: trafficMax(), want: Object.keys(TRF.want).length, queue: TRF.q.slice(), building: TRF.build ? TRF.build.id : null, built: TRF.built, dropped: TRF.dropped,
     stepMax: +TRF.stepMax.toFixed(2), stepMs: TRF.stepMs.slice(), place: TRF.place.slice(),
-    ships: trafficShips().map(function (s) { return { i: s.i, id: s.npc.id, kind: s.npc.kind, hull: s.T.id, x: +s.px.toFixed(1), z: +s.pz.toFixed(1), d: Math.round(Math.hypot(s.px - c[0], s.pz - c[2])), spd: +s.spd.toFixed(2), dock: s.npc.dock, to: s.npc.to, path: s.npc.path ? s.npc.path.length : 0 }; }) };
+    ships: trafficShips().map(function (s) { return { i: s.i, id: s.npc.id, kind: s.npc.kind, hull: s.T.id, x: +s.px.toFixed(1), z: +s.pz.toFixed(1), d: Math.round(Math.hypot(s.px - c[0], s.pz - c[2])), spd: +s.spd.toFixed(2), dock: s.npc.dock, to: s.npc.to, path: s.npc.path ? s.npc.path.length : 0, trk: s.npc.trk ? s.npc.trk.length : 0 }; }) };
 }

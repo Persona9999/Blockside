@@ -59,7 +59,7 @@ function camTrans(dt) {
   CAM.vp = M4.mul(proj, M4.lookAt(eye, look, up)); CAM.inv = M4.inv(CAM.vp);
   if (T.t >= T.dur && !T.hold) {
     if (T.dir === 'in') { CAM.tr = null; CAM.fogK = 1; $('stage').classList.remove('trans'); }
-    else if (!T.said) { T.said = true; bedHostSay('left', Object.assign({ x: c[0], z: c[2], tod: todNow(), hdg: camTransHdg(), shipHdg: me ? (Math.atan2(Math.cos(me.yaw), Math.sin(me.yaw)) * 180 / Math.PI + 360) % 360 : null, cond: coreMine() }, modeReport())); }   // shipHdg：我艦船頭的方位角（fwd(yaw) ＝ [cos, 0, −sin] ⇒ 東 cos、北 sin）；mode、town、berth：現在的玩法、停在哪座城；cond：我艦的船況（57_core.js coreMine，TASK-0803）的哪一處（88_modeswitch.js；TASK-0867）
+    else if (!T.said) { T.said = true; bedHostSay('left', Object.assign({ x: c[0], z: c[2], tod: todNow(), wh: worldSec() / 3600, hdg: camTransHdg(), shipHdg: me ? (Math.atan2(Math.cos(me.yaw), Math.sin(me.yaw)) * 180 / Math.PI + 360) % 360 : null, cond: coreMine() }, modeReport())); }   // shipHdg：我艦船頭的方位角（fwd(yaw) ＝ [cos, 0, −sin] ⇒ 東 cos、北 sin）；mode、town、berth：現在的玩法、停在哪座城；cond：我艦的船況（57_core.js coreMine，TASK-0803）的哪一處（88_modeswitch.js；TASK-0867）
   }
 }
 /** 轉場時模擬先不走（只有 ?map=@host；90_main.js frame）——地球儀上的船要跟這艘疊在一起，船不能先開走：
