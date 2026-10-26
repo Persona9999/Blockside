@@ -154,7 +154,7 @@ function townDistRest(T) {
 function townDistReady(T, t0) {
   if (!T || !T.inst || T.instRedo || T.pend || !T.gt) return false;
   var rest = 0;
-  for (var k in T.gt) { var q = T.gt[k]; if (!q.dirty) continue; if (q.edit || townGroundPier(q)) return false; rest++; }
+  for (var k in T.gt) { var q = T.gt[k]; if (!q.dirty && !q.job) continue; if (q.edit || townGroundPier(q)) return false; rest++; }   // q.job：建到一半（townDraw 照段建）也算還沒好
   return !rest || performance.now() - (t0 || 0) > TOWN_DIST_WAIT * 1000;
 }
 /** 城 p 現在要哪幾區 ⇒ { list: [區的序號…]（先建的在前）, keep: 位元（這些建了就留著）}；me ＝ 旗艦。 */
@@ -1477,6 +1477,7 @@ function townRoadPage(L) {
 //   路面的分區、每一點旁邊有哪幾個三角形，跟路面一起在 Worker 算好（townRoadGen 的 tiles、ao／al）⇒ 這一頁只把廣場、碼頭、棧橋分進去。
 //   法線照「這一點旁邊所有的三角形」（跨區也算）⇒ 接縫跟整座一份時一樣。
 var TOWN_GT_MAX = 2, TOWN_GT_SZ = 250;
+var TOWN_GT_SLICE = 4;                                                   // 棧橋、改到的區不等背景預算：每格至少建幾 ms（照段建，townGroundGen；以前一整區）
 /** 分區（路面到了、城建好時各一次）：每區 { tri, edge, plaza, quay, pier, g, dirty, deps }。 */
 function townGroundPrep(T) {
   var S = TOWN_GT_SZ, R = T.roadSurface, p = T.p, G = {};
@@ -1535,10 +1536,10 @@ function townGroundDirty(T, cx, cy) {
   var k = cx + '_' + cy; if (!T.gt) return;
   Object.keys(T.gt).forEach(function (t) { var q = T.gt[t]; if (q.deps[k]) q.dirty = true; });
 }
-/** 下一個要建的區：骨架先出（TOWN_SKEL）⇒ 有棧橋、碼頭的區先；同一級離鏡頭（世界座標）近的先。 */
+/** 下一個要建的區：建到一半的那一區（q.job）先接著做；骨架先出（TOWN_SKEL）⇒ 有棧橋、碼頭的區先；同一級離鏡頭（世界座標）近的先。 */
 function townGroundNext(T, eye) {
   var best = null, bd = Infinity;
-  Object.keys(T.gt || {}).forEach(function (k) { var q = T.gt[k]; if (!q.dirty) return; var dx = q.cx - BED.ax - eye[0], dz = q.cz - BED.az - eye[2], d = dx * dx + dz * dz + (TOWN_SKEL && !townGroundPier(q) && !q.edit ? 1e15 : 0); if (d < bd) { bd = d; best = q; } });
+  Object.keys(T.gt || {}).forEach(function (k) { var q = T.gt[k]; if (!q.dirty && !q.job) return; var dx = q.cx - BED.ax - eye[0], dz = q.cz - BED.az - eye[2], d = q.job ? -1 : dx * dx + dz * dz + (TOWN_SKEL && !townGroundPier(q) && !q.edit ? 1e15 : 0); if (d < bd) { bd = d; best = q; } });
   return best;
 }
 /** 這一區有棧橋或碼頭。 */
@@ -1547,8 +1548,15 @@ function townGroundPier(q) { return q.pier.length > 0 || q.quay.length > 0 || (q
 var TOWN_WPILE = 4;                                                      // 水上建築的樁每幾公尺一根（Blocksail TASK-0899；同棧橋每 4 m 一對）
 var TOWN_ROADBED_SINK = 0.3;                                             // 路基的腳伸到地面下幾公尺（同 townPlinth 的石基；地形網格 4 m 一格 ⇒ 兩點之間的地面不會露縫）
 var TOWN_STAIR_RISE = 0.17;                                              // 樓梯一階最高（公尺；同 Blocksail town.js STAIR_RISE）
-function townGroundTile(T, Q) {
-  var V = [], I = [], S = BED.A.chunk, deps = {};
+/** 一次建完（測試、沒有背景預算時）：townGroundGen 跑到底、換上 ⇒ 回傳那一區的網格。 */
+function townGroundTile(T, Q) { var g = townGroundGen(T, Q), r; do r = g.next(); while (!r.done); townGroundPut(Q, r.value); return Q.g; }
+/** 建好的換上（舊的放掉）：{ g: 地面, gf: 遠處的田 }。 */
+function townGroundPut(Q, v) { if (Q.g) townGpuFree(Q.g); if (Q.gf) townGpuFree(Q.gf); Q.g = v.g; Q.gf = v.gf; }
+/** 城 T 的一區照段建（generator：每做幾項讓出一次 ⇒ townDraw 照背景預算一格做一段，一區不必在同一格做完；TASK-0817 第 3 格：一區最長 52 ms）
+ *  ⇒ 回傳 { g, gf }（townGroundPut 換上）；建好之前舊的照畫。 */
+function* townGroundGen(T, Q) {
+  var V = [], I = [], S = BED.A.chunk, deps = {}, nY = 0;
+  function* each(L, f, k) { for (var i = 0; i < (L || []).length; i++) { f(L[i]); if (++nY % (k || 1) === 0) yield; } }   // 一項一項做，每 k 項讓出一次
   function vtx(x, y, z, c, nx, ny, nz) { V.push(x, y, z, nx == null ? 0 : nx, ny == null ? 1 : ny, nz == null ? 0 : nz, c[0], c[1], c[2]); return V.length / 9 - 1; }
   function W(q) { var e = T.E(q); return [e[0] - BED.ax, e[1] - BED.az]; }
   function hgt(x, z) { deps[Math.floor((x + BED.ax) / S) + '_' + Math.floor((z + BED.az) / S)] = 1; return townRoadHeight(x, z); }   // 讀過哪一塊（世界 ⇒ 海域）
@@ -1567,8 +1575,8 @@ function townGroundTile(T, Q) {
     var L = Math.hypot(n[0], n[1], n[2]) || 1; n = [n[0] / L, n[1] / L, n[2] / L]; N.set(k, n); return n;
   }
   function road(k) { var o = map.get(k); if (o != null) return o; var n = nrm(k); o = vtx(v[k * 6] - BED.ax, h(k), v[k * 6 + 1] - BED.az, [v[k * 6 + 3], v[k * 6 + 4], v[k * 6 + 5]], n[0], n[1], n[2]); map.set(k, o); return o; }
-  Q.tri.forEach(function (f) { I.push(road(Ri[f]), road(Ri[f + 1]), road(Ri[f + 2])); });
-  Q.edge.forEach(function (f) {
+  yield* each(Q.tri, function (f) { I.push(road(Ri[f]), road(Ri[f + 1]), road(Ri[f + 2])); }, 24);
+  yield* each(Q.edge, function (f) {
     var ea = R.e[f], eb = R.e[f + 1], ax = v[ea * 6], az = v[ea * 6 + 1], bx = v[eb * 6], bz = v[eb * 6 + 1], dx = bx - ax, dz = bz - az, L = Math.hypot(dx, dz) || 1, k = V.length / 9;
     var col = [v[ea * 6 + 3] * 0.74, v[ea * 6 + 4] * 0.74, v[ea * 6 + 5] * 0.74], ha = h(ea), hb = h(eb), ga = gnd(ea), gb = gnd(eb);
     function foot(y, g) { return (g === g ? Math.min(g, y - TOWN_ROAD_LIFT) : y - TOWN_ROAD_LIFT) - TOWN_ROADBED_SINK; }   // 路邊（路基）：從路面到地面下 TOWN_ROADBED_SINK（貼地的那一段 ＝ 以前的路緣，藏在地裡）
@@ -1577,12 +1585,12 @@ function townGroundTile(T, Q) {
     vtx(bx - BED.ax, foot(hb, gb), bz - BED.az, col, -dz / L, 0, dx / L);
     vtx(ax - BED.ax, foot(ha, ga), az - BED.az, col, -dz / L, 0, dx / L);
     I.push(k, k + 1, k + 2, k, k + 2, k + 3);
-  });
+  }, 24);
   //   特殊建築底下的廣場（地基；Blocksail world/town.js ②'，Tim 2026-10-23「用廣場當地基」）：l.hole ＝ [w, d] 建築那一塊 ⇒ 只鋪外圈（不壓在建築底下、下沉的池子不蓋住）；
   //   四邊補石基的側面：那一邊的地面比鋪面低 ⇒ 到那一邊最低的地面再下 0.3 m（同 townPlinth）
   //   以前只有規劃標了 l.base（坡上）才補 ⇒ 平地上的廣場旁邊的路、地塊整得比它低（托爾圖加的廣場：靠海那一邊的路整到 23.4 m、廣場 25.9 m），
   //   最後一格地形網格從框裡就往下斜 ⇒ 鋪面浮在半空、底下看得到草（Tim 2026-10-24「托爾圖加廣場目前會離地漂浮(沒有地基)」）⇒ 不看 base，四邊都量；每 2 m 取一點（邊中間的低點也量得到）
-  Q.plaza.forEach(function (l) {                                         // 廣場：整平的那一塊鋪石
+  yield* each(Q.plaza, function (l) {                                         // 廣場：整平的那一塊鋪石
     var th = l.rot * Math.PI / 180, cs = Math.cos(th), sn = Math.sin(th), y = l.h + 0.06, base = V.length / 9, S4 = [[-1, -1], [1, -1], [1, 1], [-1, 1]];
     function at(s, w, d) { return W([l.at[0] + s[0] * d / 2 * cs - s[1] * w / 2 * sn, l.at[1] + s[0] * d / 2 * sn + s[1] * w / 2 * cs]); }
     var O = S4.map(function (s) { return at(s, l.w, l.d); }), e, k;
@@ -1607,7 +1615,7 @@ function townGroundTile(T, Q) {
   //   ⇒ 兩種都是那一段的直線斜坡在踏面底下（往下走的規劃把那一段路面拉成這條斜線，地形照它整）；底往下到那一階四角最低的地面再 0.3 m（同石基）
   //   路那一頭的高照整過地的路面重量（地形 ＋ TOWN_ROAD_LIFT）、階數跟著重算（一階 ≤ TOWN_STAIR_RISE）：地塊的邊坡最後套、會把它旁邊幾公尺的路面拉向地塊的高
   //   （君士坦丁堡 gul-plaza-link-3：規劃 8.0 m、整完地 6.9 m）⇒ 照規劃的 z0 畫，樓梯頂跟路面會差一截；地形還沒到 ⇒ 照規劃
-  (Q.stair || []).forEach(function (st) {
+  yield* each(Q.stair, function (st) {
     var A = W(st.path[0]), B = W(st.path[1]), dx = B[0] - A[0], dz = B[1] - A[1], L = Math.hypot(dx, dz), n = Math.max(1, st.n | 0); if (L < 0.05) return;
     //   fix0（Blocksail TASK-0899：棧橋的根接在碼頭上）：下面那一頭是碼頭面、不是地面 ⇒ 照規劃的 z[0]、不重量地形
     var ux = dx / L, uz = dz / L, hw = st.w / 2, z1 = st.z[1], g0 = st.fix0 ? NaN : hgt(A[0], A[1]), z0 = g0 === g0 ? g0 + TOWN_ROAD_LIFT : st.z[0], col = TOWN_COL.plaza, dk = [col[0] * 0.78, col[1] * 0.78, col[2] * 0.78];
@@ -1628,8 +1636,7 @@ function townGroundTile(T, Q) {
   // 附屬的田（TASK-0862）：翻過的土（作物的 place.soil ＝ [壟, 溝] 換土色：麥田 ⇒ 金黃的麥茬，遠看才是一片金黃），一條壟一條溝沿進深方向（同作物的行，行距照作物的 place.field[0]）；貼著地面（每 2 m 取一次高度），高出 TOWN_ROAD_LIFT
   //   遠處的田（TASK-0879；63_trees.js 檔頭「遠處的田」）：同一塊田、同一套點再一份網格 ⇒ Q.gf（位置、貼圖座標 u 照第幾行 ÷ 一張的行數、v 照沿行的公尺 ÷ 一張多長、第幾層、那一種的 view）
   var VF = [], IF = [], FC = TREE_FIELD_CARD && TREES.on ? treeFieldCrops() : null;
-  if (Q.gf) { townGpuFree(Q.gf); Q.gf = null; }
-  (Q.field || []).forEach(function (F) {
+  yield* each(Q.field, function (F) {
     var sp = TREE_SPECIES[F.crop], row = sp && sp.place.field ? sp.place.field[0] * TREE_FIELD_SP : 1, soil = sp && sp.place.soil || TOWN_SOIL, nb = Math.max(1, Math.round((F.b1 - F.b0) / row)), na = Math.max(1, Math.ceil((F.a1 - F.a0) / 2));
     function P(a, b) { var x = F.at[0] + F.fx * a - F.fy * b, y = F.at[1] + F.fy * a + F.fx * b, w = W([x, y]), g = hgt(w[0], w[1]); return [w[0], (g === g ? g : 0) + TOWN_ROAD_LIFT, w[1]]; }
     for (var kb = 0; kb < nb; kb++) {
@@ -1645,7 +1652,6 @@ function townGroundTile(T, Q) {
     for (kb = 0; kb <= nb; kb++) for (var kc = 0; kc <= na; kc++) { var ac = F.a0 + (F.a1 - F.a0) * kc / na, pc = P(ac, F.b0 + (F.b1 - F.b0) * kb / nb); VF.push(pc[0], pc[1], pc[2], kb / A.nr, (ac - F.a0) / A.th, A.l, A.view); }
     for (kb = 0; kb < nb; kb++) for (kc = 0; kc < na; kc++) { var q2 = fb + kb * (na + 1) + kc; IF.push(q2, q2 + 1, q2 + na + 2, q2, q2 + na + 2, q2 + na + 1); }
   });
-  Q.gf = IF.length ? townGpuField(VF, IF) : null;
   // 一條帶子拉成有厚度的板（碼頭、棧橋的面板）：整條一起畫，轉角照兩段的角平分線斜接（同城牆 —— 以前一段一個長方體，轉角外側缺一角、內側疊在一起；
   //   Tim 2026-10-22「是否可以參考城牆 平滑的轉彎」）；斜接最多拉長 TOWN_SLAB_KMAX 倍（轉超過 120° ⇒ 轉角那一點變窄，不拉出尖刺）
   function slab(P0, w, top, bot, col) {
@@ -1671,11 +1677,11 @@ function townGroundTile(T, Q) {
     }
     side(Rt[0], Lf[0]); side(Lf[P.length - 1], Rt[P.length - 1]);      // 兩頭的端面
   }
-  Q.quay.forEach(function (q) { slab(q.path, q.w, q.deck != null ? q.deck : 1.0, -2.5, TOWN_COL.quay); });   // 面的高照規劃的 deck（Blocksail TASK-0899 world/town.js DECK；舊規劃沒有 ⇒ 1.0）
+  yield* each(Q.quay, function (q) { slab(q.path, q.w, q.deck != null ? q.deck : 1.0, -2.5, TOWN_COL.quay); });   // 面的高照規劃的 deck（Blocksail TASK-0899 world/town.js DECK；舊規劃沒有 ⇒ 1.0）
   // 棧橋（Blocksail TOWN_BUILD §3.3.8 的 kind）：長碼頭 wharf、石堤 mole ＝ 實心石砌，一直到那一座沿線最深的水再深 1 m（埋進海床；不畫樁）；
   //   其他（棧橋、T 字頭、支棧橋、skala 短棧）＝ 木板＋樁，樁一根一根伸到它底下的海床（Tim 2026-10-22「棧橋的腳可以長一點」—— 以前一律到 −4 m，深水的棧橋腳懸在水裡）；
   //   那一塊地形還沒到（townRoadHeight 是 NaN）⇒ 伸到沿線最深的水再深 1 m（一樣埋進海床）
-  Q.pier.forEach(function (q) {
+  yield* each(Q.pier, function (q) {
     var deep = -((q.depth > 0 ? q.depth : 4) + 1);
     if (q.kind === 'wharf' || q.kind === 'mole') { slab(q.path, q.w, q.deck != null ? q.deck : q.kind === 'mole' ? 2.0 : 1.0, deep, q.kind === 'mole' ? TOWN_COL.mole : TOWN_COL.quay); return; }
     var top = q.deck != null ? q.deck : 1.4;                            // 面的高照規劃的 deck（同上）；板厚 0.4、樁頂在板底
@@ -1694,7 +1700,7 @@ function townGroundTile(T, Q) {
   //   船台那一條（背面往回 slip.len、寬 slip.w）不鋪板也不立樁 —— 模型的船台從那裡斜進水裡；地面比板底高的那幾點不立樁（以內那一段有陸地）；
   //   模型照舊站在 h（Blocksail 不給水上地塊整地 ⇒ 海床不動、水照樣畫在平台底下）；地形還沒到 ⇒ 樁伸到 −(water.d0 以外的最深) 那一點量不到 ⇒ 到 −4 m
   //   窄棧橋（Blocksail TASK-0963 water.jetty { len, w }：漁場）：背面往回 jetty.len 那一段只鋪中間 jetty.w、樁只立在那一條的兩緣（每 TOWN_WPILE m 一對）、兩旁是水
-  (Q.wlot || []).forEach(function (l) {
+  yield* each(Q.wlot, function (l) {
     var th = l.rot * Math.PI / 180, cs = Math.cos(th), sn = Math.sin(th), top = l.h, sl = l.water.slip, sw = sl ? sl.w / 2 : 0, sL = sl ? sl.len : 0, jt = l.water.jetty, jw = jt ? jt.w / 2 : 0, jL = jt ? jt.len : 0;
     function pt(a, b) { return [l.at[0] + cs * a - sn * b, l.at[1] + sn * a + cs * b]; }   // 地塊座標 a（沿 rot，正面 ＋d/2）、b（橫）⇒ 規劃平面
     function deck(a0, a1, b0, b1) { if (a1 - a0 < 0.05 || b1 - b0 < 0.05) return; var bc = (b0 + b1) / 2; slab([pt(a0, bc), pt(a1, bc)], b1 - b0, top, top - 0.4, TOWN_COL.pier); }
@@ -1716,10 +1722,11 @@ function townGroundTile(T, Q) {
     if (jt) for (var aj = -l.d / 2 + 0.5; aj < -l.d / 2 + jL; aj += TOWN_WPILE) { pile(aj, -jw + r + 0.05); pile(aj, jw - r - 0.05); }
   });
   Q.deps = deps;
-  if (!I.length) return null;
+  var gf = IF.length ? townGpuField(VF, IF) : null;
+  if (!I.length) return { g: null, gf: gf };
   var bb = [1e9, 1e9, 1e9, -1e9, -1e9, -1e9];
   for (var k = 0; k < V.length; k += 9) { bb[0] = Math.min(bb[0], V[k]); bb[1] = Math.min(bb[1], V[k + 1]); bb[2] = Math.min(bb[2], V[k + 2]); bb[3] = Math.max(bb[3], V[k]); bb[4] = Math.max(bb[4], V[k + 1]); bb[5] = Math.max(bb[5], V[k + 2]); }
-  return townGpu9(new Float32Array(V), new Uint32Array(I), bb);
+  return { g: townGpu9(new Float32Array(V), new Uint32Array(I), bb), gf: gf };
 }
 /** 屋頂殼：每 TOWN_SHELL_G 公尺一格（照實例的中心）⇒ 屋頂高（佔地加權的平均頂）、顏色（屋頂色加權）、覆蓋（佔地 ÷ 格面積）；覆蓋 > 0.12 的格畫成一個平頂方塊（頂＋四面往下到地塊最低的 h − 3 m）。 */
 function townShell(T) {
@@ -2148,9 +2155,16 @@ function townDraw() {
     //   （預算每格常被收塊、擺樹吃光 ⇒ 以前棧橋要等那一批做完）。?townskel=0 ⇒ 照舊等實例、照預算。
     if (TOWN_SKEL && !T.gt) townGroundPrep(T);
     if (!(T.inst || TOWN_SKEL) || !T.gt) return;
+    //   一區照段建（townGroundGen）：照背景預算做一段，沒做完 ⇒ 下一格接著（townGroundNext 先挑它）；建好才換上，舊的照畫
     for (var m = 0, Q; m < TOWN_GT_MAX && (Q = townGroundNext(T, eye)); m++) {
-      if (bedBusy() && !(TOWN_SKEL && m === 0 && (townGroundPier(Q) || Q.edit))) break;   // 建築模式改到的區（Q.edit）同棧橋：每格至少一區
-      var b0 = performance.now(); if (Q.g) townGpuFree(Q.g); Q.g = townGroundTile(T, Q); Q.dirty = false; Q.edit = false; T.gBuilt = true; bedSpent(b0);
+      var must = TOWN_SKEL && m === 0 && (townGroundPier(Q) || Q.edit);   // 建築模式改到的區（Q.edit）同棧橋：每格至少做 TOWN_GT_SLICE ms
+      if (bedBusy() && !must) break;
+      var b0 = performance.now(), t1 = BED_SLICE ? b0 + Math.max(BED_BG, must ? TOWN_GT_SLICE : 0) : Infinity, r;   // 沒有背景預算（無頭、快轉）⇒ 一次建完
+      if (!Q.job) { Q.job = townGroundGen(T, Q); Q.dirty = false; }      // 開始建就清 dirty：建到一半那一塊地形又到了（townGroundDirty）⇒ 建完再排一次
+      do r = Q.job.next(); while (!r.done && performance.now() < t1);
+      bedSpent(b0);
+      if (!r.done) break;
+      Q.job = null; townGroundPut(Q, r.value); Q.edit = false; T.gBuilt = true;
     }
     if (T.gBuilt && !townGroundNext(T, eye)) { T.gBuilt = false; T.tlD = true; }   // 這一批都建好了 ⇒ 街燈的高度重取（以前地面每重建一次就重取）
   });
