@@ -723,13 +723,23 @@ var FURL_IN = 1.2, FURL_OUT = 1.6;
  *    挑收到底（f ＝ 0）面積最小的；後面的要小 5% 以上才換（一樣小就照前面的）。
  *  ⛔ 以前固定 ①、其他綁點照原樣不動：spanker 前緣綁在桅上 ⇒ 從桅拉到兩根帆桁的三角形整片撐開（量到 13 艘裡 spanker 類 64–85%）；
  *  ⛔ 固定 ③：側邊綁在繩上的方帆往側邊收（暴風角號 fore-course 62%、拿破崙號上層方帆 19–27%）。
- *  ⛔ 舊的 T.gath 帆腳不收：收到底帆桁下面拉出兩條細長的三角形到帆腳（演完就藏所以看不出來；收好的帆留著一捲 ⇒ 看得到）。 */
+ *  ⛔ 舊的 T.gath 帆腳不收：收到底帆桁下面拉出兩條細長的三角形到帆腳（演完就藏所以看不出來；收好的帆留著一捲 ⇒ 看得到）。
+ *  帆腳綁在下帆桁上的方帆（蓬特號：上下兩根都是方帆桁、下面那根不是 boom；Tim 2026-10-26「收帆後 帆布只會被拉直」）：綁在兩根以上帆桁、
+ *    綁點平均高度在帆的下半的那幾根（gaff 除外：三角帆桁斜著跨上下）⇒ 跟 boom 一樣往上收 —— 以前兩根都是收攏點，布往上下兩根收、中間照樣撐開。 */
 function furlGath(T, sh) {
   if (T.fg) return T.fg;
   var cl = T.clew = new Uint8Array(T.n), nb = new Uint8Array(T.n), bm = new Uint8Array(T.n), i;
   for (var ti = 0; ti < T.tris.length; ti += 3) for (var e = 0; e < 3; e++) { var a = T.tris[ti + e], b = T.tris[ti + (e + 1) % 3]; if (T.hk[a] && T.hk[b]) { nb[a] = 1; nb[b] = 1; } }
   for (i = 0; i < T.n; i++) if (T.hk[i] === 2 && !nb[i]) cl[i] = 1;
-  if (sh && sh.models) for (i = 0; i < T.n; i++) if (T.hk[i] === 4 && sh.models[T.hv[i]] && sh.models[T.hv[i]].yk === 'boom') bm[i] = 1;
+  if (sh && sh.models) {
+    var yz = {}, z0 = 1e18, z1 = -1e18;                                  // yz[帆桁] ＝ [綁點高度和, 幾點]；z0／z1 帆的高度範圍（設計那一刻）
+    for (i = 0; i < T.n; i++) { var z = T.p0[i * 3 + 2]; if (z < z0) z0 = z; if (z > z1) z1 = z; if (T.hk[i] === 4) { var q = yz[T.hv[i]] || (yz[T.hv[i]] = [0, 0]); q[0] += z; q[1]++; } }
+    var twoYards = Object.keys(yz).length > 1;
+    for (i = 0; i < T.n; i++) {
+      var m = T.hk[i] === 4 ? sh.models[T.hv[i]] : null; if (!m) continue;
+      if (m.yk === 'boom' || twoYards && m.yk !== 'gaff' && yz[T.hv[i]][0] / yz[T.hv[i]][1] < (z0 + z1) / 2) bm[i] = 1;
+    }
+  }
   var yard = [], edge = [], all = [];
   for (i = 0; i < T.n; i++) { if (!T.hk[i] || cl[i] || bm[i]) continue; all.push(i); if (T.hk[i] === 4) yard.push(i); else if ((T.hk[i] === 1 || T.hk[i] === 3) && nb[i]) edge.push(i); }
   var cands = []; if (yard.length) { cands.push(yard); if (edge.length) cands.push(yard.concat(edge)); } if (!cands.length || all.length > cands[cands.length - 1].length) cands.push(all);
