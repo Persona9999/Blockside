@@ -1,11 +1,12 @@
 {
   "v": 1,
   "limits": {"maxShips": 16, "maskNear": 4, "fleetMax": 40},
+  "cargo": {"merchant": 0.4, "war": 0.15},
   "menu": {"play": "fun", "mode": "pve", "sail": "auto", "gfx": "mid", "phx": "full"},
   "lim": {
     "hard": [0.2, 7, 1],
     "flood": [0, 2, 0.35],
-    "ballast": [0, 2000, 1075],
+    "ballast": [0, 4000, 1075],
     "gunw": [0, 5, 1],
     "cas": [0.1, 1, 1],
     "speed": [0.25, 5, 1.5],
@@ -869,6 +870,7 @@
     },
     {
       "id": "cosecha",
+      "role": "merchant",
       "cfg": {"pump": 11.5},
       "el": "ship-cosecha",
       "name": "收穫號",
@@ -943,7 +945,7 @@
       "work": "meadow-monitor-01m-assembly",
       "cfg": {"pump": 11, "base": 6, "agile": 0.6},
       "drive": "steam",
-      "matMap": {"iron": "iron*0.86+oak*0.14"},
+      "material": "pine", "matMap": {"iron": "iron*0.79+oak*0.14"}, "cargoT": 130,
       "geo": {"spar": [35, 38], "marines": [60, 60], "center": 40, "aim": 33, "aimZ": [5, 70], "deckAim": [35, 45], "rigAim": [35, 64]},
       "crew": {"officers": 4, "helm": 1, "marines": 0, "top": 0, "monkeys": 1, "shelter": 1},
       "flags": [
@@ -981,7 +983,7 @@
       "variant_of": "monitor",
       "cfg": {"pump": 11, "base": 6, "agile": 0.6},
       "drive": "steam",
-      "matMap": {"iron": "iron*0.69+oak*0.31"},
+      "material": "pine", "matMap": {"iron": "iron*0.63+oak*0.31"}, "cargoT": 130,
       "geo": {"spar": [35, 38], "marines": [60, 60], "center": 40, "aim": 33, "aimZ": [5, 70], "deckAim": [35, 45], "rigAim": [35, 64]},
       "crew": {"officers": 4, "helm": 1, "marines": 0, "top": 0, "monkeys": 1, "shelter": 1},
       "flags": [
@@ -1161,6 +1163,7 @@
     },
     {
       "id": "punt",
+      "role": "merchant",
       "el": "ship-punt",
       "name": "蓬特號",
       "vxk": "punt.vxk",
@@ -1319,6 +1322,7 @@
     },
     {
       "id": "labelle",
+      "role": "merchant",
       "el": "ship-labelle",
       "name": "拉貝爾號",
       "vxk": "labelle.vxk",
@@ -1350,6 +1354,7 @@
     },
     {
       "id": "pinas",
+      "role": "merchant",
       "el": "ship-pinas",
       "name": "藍鯊號",
       "vxk": "pinas.vxk",

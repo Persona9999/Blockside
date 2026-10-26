@@ -47,10 +47,11 @@ function tuiShip() {
   var sh = SHIPS[PLAYER_I], T = sh && sh.T; if (!T) return null;
   return Object.assign({ kind: T.id }, tuiHold(T));
 }
-/** 船型的貨艙數字：壓艙物（噸）、設計水線的水線面積（m²；量不到 ⇒ null）—— 選船（72_shippick.js 'picked'）也帶給地球儀，地球儀上的 💰 貿易照它算吃水。 */
+/** 船型的貨艙數字（噸）：ballastT ＝ 可換壓艙 ＝ 載重（貨在這以內只換掉壓艙石、吃水不變；32_hull.js cargoOf）、fixedT 固定壓艙、stdT／fullT 標準／滿載排水量、
+ *  設計水線的水線面積 wpa（m²；量不到 ⇒ null）—— 選船（72_shippick.js 'picked'）也帶給地球儀，地球儀上的 💰 貿易照它算吃水。 */
 function tuiHold(T) {
-  var wpa = T.hyd && T.zw > 0 && T.hyd.length > T.zw ? T.hyd[T.zw - 1] / S : 0;
-  return { ballastT: T.ballast0 || 0, wpa: wpa > 0 ? Math.round(wpa * 10) / 10 : null };
+  var wpa = T.hyd && T.zw > 0 && T.hyd.length > T.zw ? T.hyd[T.zw - 1] / S : 0, c = T.cargoT || 0;
+  return { ballastT: c, fixedT: Math.max(0, (T.ballast0 || 0) - c), stdT: T.dispStd || 0, fullT: T.dispFull || 0, wpa: wpa > 0 ? Math.round(wpa * 10) / 10 : null };
 }
 /** 開關：tab 給了 ⇒ 開那一頁（已經開著同一頁 ⇒ 關）；沒給 ⇒ 開上次那一頁（貿易以外的）。 */
 function tuiToggle(tab) {
@@ -246,10 +247,11 @@ function tuiTradeHTML() {
     return '<tr><td>' + tuiIcon('goods', r.g) + tuiEsc(r.name) + '</td><td>' + tuiNum(Math.floor(r.town)) + '</td><td>' + (r.ship >= 1 ? tuiNum(Math.floor(r.ship)) : '<span class="tuiDim">–</span>') + '</td><td>' + (r.buy == null ? '<span class="tuiDim">–</span>' : tuiNum(r.buy, 2)) + '</td><td>' + tuiNum(r.sell, 2) + '</td><td class="ops">' +
       btn('buy', r.g, 1, '買 1', b1) + btn('buy', r.g, 10, '買 10', r.canBuy >= 10) + btn('buy', r.g, bAll, '買到滿', bAll >= 1) + btn('sell', r.g, 1, '賣 1', s1) + btn('sell', r.g, r.ship, '全賣', r.ship > 0 && r.canSell > 0) + '</td></tr>';
   }).join('') + '</table>';
-  var D = L.load;
+  var D = L.load, Hd = tuiShip();
   h += '<div class="tuiTiles"><div><small>👛 玩家金庫</small><b>' + tuiNum(L.funds, 2) + '</b></div><div><small>💰 城鎮金庫</small><b>' + tuiNum(L.townFunds) + '</b></div>' +
-    (D ? '<div><small>⚖ 貨重／壓艙物</small><b>' + tuiNum(D.cargoKg / 1000, 1) + ' / ' + tuiNum(D.ballastKg / 1000, 0) + ' 噸</b></div><div><small>🌊 吃水</small><b>' + (D.overKg > 0 ? (D.draftM != null ? '深 ' + tuiNum(D.draftM, 2) + ' m' : '多 ' + tuiNum(D.overKg / 1000, 1) + ' 噸') : '照設計水線') + '</b></div>' : '<div><small>⚖ 貨艙</small><b>還沒裝過貨</b></div>') + '</div>';
-  return h + '<p class="tuiDim">貨重在壓艙物以內 ⇒ 換掉同樣重的壓艙石、吃水不變；超過 ⇒ 吃水變深。</p>';
+    (D ? '<div><small>⚖ 貨重／載重</small><b>' + tuiNum(D.cargoKg / 1000, 1) + ' / ' + tuiNum(D.ballastKg / 1000, 0) + ' 噸</b></div><div><small>🌊 吃水</small><b>' + (D.overKg > 0 ? (D.draftM != null ? '深 ' + tuiNum(D.draftM, 2) + ' m' : '多 ' + tuiNum(D.overKg / 1000, 1) + ' 噸') : '照設計水線') + '</b></div>' : '<div><small>⚖ 貨艙</small><b>還沒裝過貨</b></div>') +
+    (Hd && Hd.fullT ? '<div><small>🚢 排水量 標準／滿載</small><b>' + tuiNum(Hd.stdT) + ' / ' + tuiNum(Hd.fullT) + ' 噸</b></div>' : '') + '</div>';
+  return h + '<p class="tuiDim">貨重在載重以內 ⇒ 換掉同樣重的壓艙石、吃水不變；超過 ⇒ 吃水變深。標準排水量 ＝ 沒有貨（壓艙石也卸掉）；滿載 ＝ 載重裝滿、在設計水線。</p>';
 }
 /** 每一格：離開城鎮模式（出航）⇒ 關掉。 */
 function tuiFrame() { if (TUI.open && !modeRule('town')) tuiClose(); }

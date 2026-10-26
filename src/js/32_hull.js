@@ -22,6 +22,16 @@ function hydrostatics(T) {
   T.disp = HYD[0] * RHO_W;                                                        // 設計水線的排水量（噸）
 }
 function modelT(m, gunw) { return m.kind === 'powder' ? KEG_T : (GUNS[m.kind] ? GUNS[m.kind].mass : 0) * gunw; }   // 模型的重量（砲乘船隻設定的倍率）
+/** 載重（Tim 2026-10-26「為了遊戲性 希望每艘船都有一個合適的載重(在載重範圍內都是替換壓艙物)」「戰艦可以參考史實 載重較低(因為裝了很多重砲)」「固定壓艙＋可換壓艙(ok」）：
+ *  設計水線的壓艙物 ballast0 分兩份 —— 可換壓艙（壓艙石：裝貨就搬掉同樣重的，吃水不變）T.cargoT ＋ 固定壓艙（鐵塊，一直在）ballast0 − cargoT。
+ *  要的載重 ＝ ships[].cargoT（明寫）｜設計水線排水量 × CFG.cargo[role]（role 沒寫 ⇒ war）；比 ballast0 多 ⇒ 只給到 ballast0、差多少記在 T.cargoShort（admin.py disp 列補法）。
+ *  標準排水量 ＝ 設計水線 − cargoT（沒有貨、壓艙石也卸掉）；滿載排水量 ＝ 設計水線（載重裝滿）。開戰照舊浮在設計水線（壓艙物照 ballast0 ＝ 固定＋可換）。 */
+function cargoOf(T, info) {
+  var K = CFG.cargo || {}, role = info && info.role === 'merchant' ? 'merchant' : 'war', want = info && info.cargoT !== undefined ? +info.cargoT : T.disp * (+K[role] || 0);
+  T.role = role; T.cargoWant = Math.max(0, Math.round(want)); T.cargoT = Math.min(T.ballast0, T.cargoWant); T.cargoShort = Math.max(0, T.cargoWant - T.ballast0);
+  var L = T.light0 || 0;                                                // 空船（格＋模型；05_hull.js）比設計水線重 ⇒ 沒有壓艙物、標準／滿載都是空船那麼重
+  T.dispStd = Math.round(Math.max(L, T.disp - T.cargoT)); T.dispFull = Math.round(Math.max(L, T.disp));
+}
 /** 開戰時的重量（噸）：格 ＋ 模型 ＋ 壓艙物。砲帶的裝甲（24_armor.js）也是格：sh.orig 只算船殼 ⇒ 加 sh.armN0（有材質層 ⇒ T.voxT0 本來就含）。 */
 function shipT(sh) { var t = (sh.T.matPlain ? (sh.arm ? sh.orig + sh.armN0 : sh.orig) * VOX_T : sh.T.voxT0) + sh.cfg.ballast; sh.models.forEach(function (m) { t += modelT(m, sh.cfg.gunw); }); return t; }
 /** 還沒開戰就算得出來的開戰時重量（船隻配置頁；Tim 2026-10-17「額外顯示實際遊戲開場的排水量(加上炮重&其他配件重)」）：跟 shipT 同一套，照船型 T 與設定 c ⇒
