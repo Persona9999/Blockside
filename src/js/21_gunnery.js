@@ -108,7 +108,7 @@ function manualFire(sh) { return sh.i === PLAYER_I && !AUTOFIRE && !sh.autoNow; 
 function shotFx(sh, g, mw, dir) {
   flash(add(mw, mul(dir, 1)), dir, 14, false); smoke(add(mw, mul(dir, 1.5)), dir, 10, false);
   sh.rollV += g.side === 'P' ? 0.0012 : -0.0012;                      // 後座：船往反方向晃一下（開火那一舷抬起；roll 正 ＝ 右舷 S 那邊往下）
-  sfx('boom', mw, sh.i === PLAYER_I ? 1 : 0.8);
+  sfx('boom', mw, sh.i === PLAYER_I ? 1 : 0.8, { gun: g.type });     // 音色照砲種、口徑（02_audio.js gunSndPar；TASK-0978）
   return true;
 }
 /** 齊射：各砲平行開火 —— 瞄準點跟著那門砲在船上的前後位置平移，整排落在對方船身上（⛔ 不是 14 發擠進同一個洞）。 */

@@ -49,7 +49,7 @@ function rptHelm(sh, kind, text) { evEmit('rptHelm', sh, kind, text); }
 function burnNews(sh, kind, a) { evEmit('burnNews', sh, kind, a); }                               // 著火的廣播（49_burn.js ⇒ 61_hud hudBurnNews）：first 起火、all 全熄、ign／out 一處、thru 燒穿水線下、sail／sailGone／sailOut／sailCut 帆
 function slowKick(sh, w, R) { evEmit('blast', sh, w, R); }                                        // 殉爆的慢動作與特寫（73_slowmo）
 function tlgEv(sh, c, kind, data) { evEmit('tlgEv', sh, c, kind, data); }                         // 測試模式的船員記錄（83_testlog）
-function sfx(kind, at, vol, o) { evEmit('sfx', kind, at, vol, o); }                               // 音效（02_audio sfxPlay；o 只有 hit 用：{ mat, bed, slide }）
+function sfx(kind, at, vol, o) { evEmit('sfx', kind, at, vol, o); }                               // 音效（02_audio sfxPlay；o：hit 用 { mat, bed, slide }、boom 用 { gun }）
 function spawnDebris(p, v, col, size, life, shape) { evEmit('debris', p, v, col, size, life, shape); }   // 特效（12_effects fx*）
 function spawnPlates(sh, removed, vd, sp, per, max, M) { evEmit('plates', sh, removed, vd, sp, per, max, M); }
 function spawnPt(p, v, life, col, a, s0, s1, grav, drag, ty) { evEmit('pt', p, v, life, col, a, s0, s1, grav, drag, ty); }

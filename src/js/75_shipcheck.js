@@ -327,3 +327,30 @@ function shipCheck(id) {
     done();
   }).catch(function (e) { add('error', '載入', id, String(e && e.message || e), '—'); done(); });
 }
+
+// ── 排水量與壓艙物（?dispcheck=<船,船…>｜all；admin.py disp 讀；Tim 2026-10-26「加一個工具檢查目前所有船的空載排水量跟水線排水量 滿載排水量 因為我發現目前有些船沒有壓艙物(載一點貨物就會加深吃水)」
+//   「為了遊戲性 希望每艘船都有一個合適的載重(在載重範圍內都是替換壓艙物)」「戰艦可以參考史實 載重較低(因為裝了很多重砲)」）
+//   只載船型、不開戰：重量照開戰時同一套（hullT0：格＋砲（× 那一型的 gunw）＋火藥桶，壓艙物 0）、浮力表照 hydrostatics、吃水照 liftFor／tonsAt。
+//   每一型 ⇒ 空載（沒有壓艙物、沒有貨）、設計水線、滿載（水淹到最低砲甲板或頂層甲板 —— 取低的 —— 再往下 margin 公尺）的排水量與吃水；
+//   壓艙空間 ＝ 設計水線 − 空載（Blocksail 的貨在這個範圍內只替換壓艙石、吃水不變，world/stores.js fleetLoad；負的 ⇒ 空船就比設計水線深）。
+//   寫進頁面上 id 是 dispcheck 的 pre（JSON）。只讀，不改任何設定。
+var DISP_MARGIN = 0.3;                                                    // 滿載線比淹到最低砲甲板／頂層甲板低幾公尺（?dispmargin= 改）
+function dispCheck(arg) {
+  var margin = Q.has('dispmargin') ? +Q.get('dispmargin') : DISP_MARGIN, out = { margin: margin, S: S, ships: [] };
+  var ids = !arg || arg === 'all' ? HULL_LIST.filter(function (h) { return !h.fixed; }).map(function (h) { return h.id; }) : arg.split(',');
+  function done() { var pre = document.createElement('pre'); pre.id = 'dispcheck'; document.body.appendChild(pre); pre.textContent = JSON.stringify(out); uiAway(); window.__dispcheck = out; }
+  function one(id) {
+    var T = HULLT[id], info = hullInfo(id) || {}, c = shipCfg(id), L = hullT0(T, { ballast: 0, gunw: c.gunw });
+    var zDeck = null, nGun = 0;                                         // 最低一門砲（不算迴旋砲、砲塔）的外框底 ＝ 那一層砲甲板的地板
+    (T.rig.models || []).forEach(function (m) { var k = modelKind(m), mt = m.meta || {}; if (!GUNS[k] || mt.mount) return; nGun++; if (zDeck === null || m.bbox[2] < zDeck) zDeck = m.bbox[2]; });
+    var gunDeck = zDeck === null ? null : +((zDeck - T.zw) * S).toFixed(2), top = sinkLineT(T), cap = Math.min(top, gunDeck === null ? Infinity : gunDeck);
+    var full = cap - margin, n = T.hyd.length - 1, fullT = T.disp - tonsAt(T, -Math.min(full, (n - T.zw) * S));   // tonsAt ＝ 比設計水線輕幾噸 ⇒ 排水量 ＝ 設計 − 它
+    var lightLift = liftFor(T, T.disp - L.all), ballastRaw = T.disp - L.all;
+    var z1 = Math.min(n - 1, T.zw), tpc = (T.hyd[Math.max(0, z1 - 1)] - T.hyd[z1]) * RHO_W / (S * 100);   // 設計水線那一層：每多吃 1 cm 幾噸
+    out.ships.push({ id: id, name: info.name || id, guns: nGun, war: nGun >= 10, zw: T.zw, draft: +(T.zw * S).toFixed(2), len: +((((T.wl1 || T.hx1) - (T.wl0 || T.hx0))) * S).toFixed(1),
+      disp: +T.disp.toFixed(1), light: +L.all.toFixed(1), vox: +L.vox.toFixed(1), gun: +L.gun.toFixed(1), keg: +L.keg.toFixed(1), gunw: c.gunw,
+      ballastRaw: +ballastRaw.toFixed(1), ballast0: T.ballast0, lightLift: lightLift === null ? null : +lightLift.toFixed(2),
+      gunDeck: gunDeck, topDeck: T.topDeck === undefined ? null : T.topDeck, sinkLine: +top.toFixed(2), fullLine: +full.toFixed(2), full: +fullT.toFixed(1), tpc: +tpc.toFixed(2) });
+  }
+  ids.reduce(function (p, id) { return p.then(function () { return loadHull(id); }).then(function () { one(id); }).catch(function (e) { out.ships.push({ id: id, err: String(e && e.message || e) }); }); }, Promise.resolve()).then(done);
+}
