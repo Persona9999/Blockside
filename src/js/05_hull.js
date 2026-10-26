@@ -58,7 +58,7 @@ function gunCrew(cw, type) { var n = cw.guns && cw.guns[type]; return n === unde
 // 艦名（TASK-0552；Tim 2026-10-14：參考歷史同級艦）：ships[].names ＝ 那一型的艦名池（第一個 ＝ 原名；沒給 ⇒ 只有原名），同一場照編成的順序發（52_fleet.js fleetNames）；
 //   池子用完拿公共池 names_pub，再用完 ⇒ 原名＋序號。憲法號：同級的 44 砲巡防艦（合眾國號、總統號），再來是照它們的設計造的 44 砲巡防艦；公共池：同時代美國海軍的巡防艦。
 //   餘燼號、夜隼號是 basecamp、summit 的船：她們給艦名池之前只有原名。
-var HULL_KNOWN = CFG.ships.map(function (s) { var h = { id: s.id, el: s.el, name: s.name, geo: s.geo, crew: s.crew, rooms: s.rooms, lamps: s.lamps, flags: s.flags, names: s.names && s.names.length ? s.names : [s.name] }; if (s.zw0) h.zw0 = s.zw0; if (s.material) h.material = s.material; if (s.matMap) h.matMap = s.matMap; if (s.author) h.author = s.author; if (s.drive) h.drive = s.drive; if (s.fireEngine === false) h.fireEngine = false; if (s.theme) h.theme = s.theme; if (s.variant_of) h.variant_of = s.variant_of; if (s.fit) h.fit = s.fit; if (s.fixed === true) h.fixed = true; if (s.town) h.town = s.town; return h; });   // town：航海時點到這種城鎮模型 ⇒ 換成這一座（63_towns.js townFortWake；TASK-0955）   // fixed：固定在地上的戰鬥單位（堡壘、砲台；TASK-0954）—— 不浮、不進水、不動，選單不列（HULL_SHIPS）   // material：全船預設材質（05_material.js）；author：建造者（admin.py 匯入時從 .vxk 檔頭 owner 記；船隻配置頁顯示）
+var HULL_KNOWN = CFG.ships.map(function (s) { var h = { id: s.id, el: s.el, name: s.name, geo: s.geo, crew: s.crew, rooms: s.rooms, lamps: s.lamps, flags: s.flags, names: s.names && s.names.length ? s.names : [s.name] }; if (s.zw0) h.zw0 = s.zw0; if (s.material) h.material = s.material; if (s.matMap) h.matMap = s.matMap; if (s.author) h.author = s.author; if (s.drive) h.drive = s.drive; if (s.fireEngine === false) h.fireEngine = false; if (s.theme) h.theme = s.theme; if (s.variant_of) h.variant_of = s.variant_of; if (s.fit) h.fit = s.fit; if (s.fixed === true) h.fixed = true; if (s.town) h.town = s.town; if (s.role) h.role = s.role; if (s.cargoT !== undefined) h.cargoT = s.cargoT; return h; });   // role、cargoT：載重（32_hull.js cargoOf）   // town：航海時點到這種城鎮模型 ⇒ 換成這一座（63_towns.js townFortWake；TASK-0955）   // fixed：固定在地上的戰鬥單位（堡壘、砲台；TASK-0954）—— 不浮、不進水、不動，選單不列（HULL_SHIPS）   // material：全船預設材質（05_material.js）；author：建造者（admin.py 匯入時從 .vxk 檔頭 owner 記；船隻配置頁顯示）
 var SHIP_NAMES_PUB = CFG.names_pub || [];
 var HULL_LIST = HULL_KNOWN.filter(function (h) { return VK.hasEmbedded(h.el); });   // 內嵌的、或拆檔成品清單上有的（voxelkit.js embeddedBytes）
 var HULL_SHIPS = HULL_LIST.filter(function (h) { return !h.fixed; });   // 選單、選船頁列的（堡壘不是船：只從 __game.fleet、之後的港口戰進場）
@@ -342,7 +342,8 @@ function buildHull(info, model, t0, C, key, F) {
     ['桅與帆', function () {
       tm('masts', function () { findMasts(T); }); tm('cloth', function () { teamFlagsSetup(T, info); clothSetup(T, C); });   // 陣營旗（77_colours.js）：合成的帆接在作品的帆後面
       var mt = 12 * KEG_T; (T.rig.models || []).forEach(function (m) { mt += modelT({ kind: modelKind(m) }, 1); });   // 模型的重量（砲照實、取用點 12 桶）
-      T.ballast0 = Math.max(0, Math.round((T.disp - T.voxT0 - mt) / 25) * 25);   // 剛好浮在設計水線的壓艙物（滑桿一格 25 噸）
+      T.light0 = T.voxT0 + mt; T.ballast0 = Math.max(0, Math.round(T.disp - T.light0));   // 剛好浮在設計水線的壓艙物（1 噸；Tim 2026-10-26「ballast0取整到 25 噸是否可以取消(至少精度要到1噸」—— 以前一格 25 噸，小船差兩三成：拉貝爾號 34.5 → 25）
+      cargoOf(T, info);                                                  // 載重 ＝ 壓艙物裡可以換成貨的那一份（32_hull.js）
     }]
   ]).concat((info.fixed ? [] : wrSteps(T, C)).map(function (f) { return ['水的房間', function () { var a = performance.now(); f(); T.ms.wrooms = +((T.ms.wrooms || 0) + performance.now() - a).toFixed(1); }]; }));   // 水的房間（33_wrooms.js，TASK-0807）：快取有就讀回，沒有分三步現算（要 T.hullG、T.wl0、T.hullHB ⇒ 排在最後）
   var p = Promise.resolve();
