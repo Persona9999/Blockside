@@ -8,6 +8,8 @@
 //   ＋ 鎮民設定檔 _people.js（誰、幾歲、做什麼、多高、換什麼色；見下面「素材與鎮民設定檔」）—— 跟著城鎮用到的模型一起向 Blocksail 索取（63_towns.js townKit ⇐ townFolkNeed），
 //   立繪載入時走 41_crew_art.js 的 crewArt(im) 展開成「左半底圖｜右半遮罩」貼圖。
 // 路網：每座城把 T.roads（扣掉門口短接線 link-door 與水面下的段）在交叉口切開、端點 2 m 內併成節點 ⇒ 路網圖；照總路長每 TOWN_FOLK_STEP 公尺一位（上限 TOWN_FOLK_MAX）。
+//   碼頭線（海堤）、棧橋的中心線也算路（Tim 2026-10-26「是否也能讓人走上棧橋」）；高度照地形，踩到碼頭、棧橋的面板或樓梯的踏面就照那一面（townFolkDeckY；
+//   Tim 2026-10-26「鎮民會陷入海堤面下 以及樓梯問題(這些概念上都是道路)」）—— 每條邊建路網時先記下碰得到哪幾塊，碰不到的邊照舊只讀地形。
 // 路線：每位居民第一次算路網時就照 townHash 走好一條固定的路線（起點那條邊 ＋ 最多 TOWN_FOLK_HOPS 段、路口不折返、偶爾在路口停步），
 //   之後沿路線走過去、停一下、原路走回來，一直來回 ⇒ 一圈的時間表（legs）排好，畫的時候照時間二分查到那一段。角色列、衣服色、髮色、步速、車道偏移也照 townHash。
 // 接進 63_towns.js 的地方：townKit／townKitMake（townFolkNeed、townFolkTex）、townKitGpuFree（townFolkFree）、townProgs（著色器 folk、townFolkGl）、
@@ -171,9 +173,72 @@ function townFolkGraph(T) {
       var za = r.z && r.z[q - 1], zb = r.z && r.z[q]; if ((za != null && za <= 0.05) || (zb != null && zb <= 0.05)) continue;   // 水面下的段（棧橋下、淹掉的路）
       var a = [r.P[q - 1][0] - ax, r.P[q - 1][1] - az], b = [r.P[q][0] - ax, r.P[q][1] - az], L = Math.hypot(b[0] - a[0], b[1] - a[1]);
       if (L < 1.5) continue;
-      raw.push({ a: a, b: b, w: r.w || 3, L: L }); pts.push(a, b);
+      raw.push({ a: a, b: b, w: r.w || 3, L: L, own: 'r' + r.id }); pts.push(a, b);
     }
   });
+  // 碼頭線（海堤）與棧橋的面（townGroundTile 的 slab）畫在地形上面 ⇒ 照地形取高度的人會陷進面板底下；樓梯的踏面也高過整好的路面。
+  //   ⇒ ① 碼頭、棧橋的中心線也是路：加進路網（人走得上棧橋），端點落在別人的面上 ⇒ 拉一條接線到那一條的中心線（棧橋的根在碼頭面上、路端伸進碼頭面）
+  //      ② 每條邊記下碰得到的面板段（e.dk）與樓梯（e.sk）⇒ 畫的時候只量那幾個（townFolkDeckY）；碰不到的邊（幾乎全部）照舊只讀地形
+  var decks = [], stairs = [];
+  function W(q) { var e = T.E(q); return [e[0] - ax, e[1] - az]; }
+  (T.p && T.p.quay || []).forEach(function (q, i) { decks.push({ own: 'q' + i, P: q.path.map(W), hw: q.w / 2, top: q.deck != null ? q.deck : 1.0 }); });   // 面的高同 townGroundTile
+  (T.p && T.p.piers || []).forEach(function (q, i) { decks.push({ own: 'p' + i, P: q.path.map(W), hw: q.w / 2, top: q.deck != null ? q.deck : q.kind === 'mole' ? 2.0 : q.kind === 'wharf' ? 1.0 : 1.4 }); });
+  (T.p && T.p.stairs || []).forEach(function (st) {
+    var A = W(st.path[0]), B = W(st.path[1]), L = Math.hypot(B[0] - A[0], B[1] - A[1]); if (L < 0.05) return;
+    stairs.push({ A: A, ux: (B[0] - A[0]) / L, uz: (B[1] - A[1]) / L, L: L, hw: st.w / 2, z: st.z, n: Math.max(1, st.n | 0), fix0: !!st.fix0, bb: [Math.min(A[0], B[0]) - st.w / 2, Math.min(A[1], B[1]) - st.w / 2, Math.max(A[0], B[0]) + st.w / 2, Math.max(A[1], B[1]) + st.w / 2] });
+  });
+  var pieces = [];
+  decks.forEach(function (d) {
+    for (var q = 1; q < d.P.length; q++) {
+      var a = d.P[q - 1], b = d.P[q], L = Math.hypot(b[0] - a[0], b[1] - a[1]); if (L < 1e-3) continue;
+      pieces.push({ ax: a[0], az: a[1], dx: (b[0] - a[0]) / L, dz: (b[1] - a[1]) / L, L: L, hw: d.hw, top: d.top, bb: [Math.min(a[0], b[0]) - d.hw, Math.min(a[1], b[1]) - d.hw, Math.max(a[0], b[0]) + d.hw, Math.max(a[1], b[1]) + d.hw] });
+      if (L >= 1.5) { raw.push({ a: a, b: b, w: 2 * d.hw, L: L, own: d.own, deck: true }); pts.push(a, b); }
+    }
+  });
+  // 找鄰居照 DS 公尺的格子（同 TOWN_FOLK_CELL 那一套）：君士坦丁堡 6,400 條邊 × 幾百段面板全比一次 ⇒ 建路網從 54 ms 變 144 ms（2026-10-26 量）
+  var DS = 16, hwMax = 0, stamp = 0;
+  function GK(x, z) { return (x + 32768) * 65536 + z + 32768; }        // 格子的鍵（DS 公尺一格；±500 km 內不撞）⇒ 數字比字串快
+  function grid(list) {
+    var m = new Map(); list.seen = new Int32Array(list.length);
+    list.forEach(function (o, i) { var b = o.bb; for (var x = Math.floor(b[0] / DS); x <= Math.floor(b[2] / DS); x++) for (var z = Math.floor(b[1] / DS); z <= Math.floor(b[3] / DS); z++) { var k = GK(x, z), L = m.get(k); if (L) L.push(i); else m.set(k, [i]); } });
+    return m;
+  }
+  function inBox(m, list, b0, b1, b2, b3) {                             // 外框碰得到的那幾個（不重複；一個都沒有 ⇒ null）
+    var out = null, st = ++stamp;
+    for (var x = Math.floor(b0 / DS); x <= Math.floor(b2 / DS); x++) for (var z = Math.floor(b1 / DS); z <= Math.floor(b3 / DS); z++) {
+      var L = m.get(GK(x, z)); if (!L) continue;
+      for (var j = 0; j < L.length; j++) { var i = L[j], o = list[i]; if (list.seen[i] === st || o.bb[0] > b2 || o.bb[2] < b0 || o.bb[1] > b3 || o.bb[3] < b1) continue; list.seen[i] = st; (out || (out = [])).push(o); }
+    }
+    return out;
+  }
+  var pg2 = grid(pieces), both = pieces.concat(stairs), bg = grid(both);   // both：邊碰得到哪幾塊一次查完（面板段有 dx、樓梯有 ux）
+  if (decks.length) {
+    var raw0 = raw.slice();                                              // 接線只接到原本的段（不接到別的接線）
+    raw0.forEach(function (s) { hwMax = Math.max(hwMax, s.w / 2); s.bb = [Math.min(s.a[0], s.b[0]), Math.min(s.a[1], s.b[1]), Math.max(s.a[0], s.b[0]), Math.max(s.a[1], s.b[1])]; });
+    var rg = grid(raw0);
+    var near = function (p, own, r) {                                    // p 到別人的段最近的一點（r 公尺內；再遠的接不上）⇒ { s, q, d }
+      var best = null;
+      (inBox(rg, raw0, p[0] - r, p[1] - r, p[0] + r, p[1] + r) || []).forEach(function (s) {
+        if (s.own === own) return;
+        var dx = s.b[0] - s.a[0], dz = s.b[1] - s.a[1], u = Math.max(0, Math.min(1, ((p[0] - s.a[0]) * dx + (p[1] - s.a[1]) * dz) / (s.L * s.L))), q = [s.a[0] + dx * u, s.a[1] + dz * u], d = Math.hypot(p[0] - q[0], p[1] - q[1]);
+        if (!best || d < best.d) best = { s: s, q: q, d: d };
+      });
+      return best;
+    };
+    var ends = [], phw = pieces.reduce(function (m, s) { return Math.max(m, s.hw); }, 0) + 0.5;   // 要接的端點：碼頭、棧橋的兩頭；路端落在面板上的
+    decks.forEach(function (d) { ends.push({ p: d.P[0], hw: d.hw, own: d.own, deck: true }, { p: d.P[d.P.length - 1], hw: d.hw, own: d.own, deck: true }); });
+    R.forEach(function (r) {
+      [r.P[0], r.P[r.P.length - 1]].forEach(function (P0) {
+        var p = [P0[0] - ax, P0[1] - az];
+        if ((inBox(pg2, pieces, p[0] - phw, p[1] - phw, p[0] + phw, p[1] + phw) || []).some(function (s) { var u = Math.max(0, Math.min(s.L, (p[0] - s.ax) * s.dx + (p[1] - s.az) * s.dz)); return Math.hypot(p[0] - s.ax - s.dx * u, p[1] - s.az - s.dz * u) <= s.hw + 0.5; })) ends.push({ p: p, hw: r.w / 2, own: 'r' + r.id, deck: false });
+      });
+    });
+    ends.forEach(function (o) {
+      var n = near(o.p, o.own, o.hw + hwMax + 0.5); if (!n || n.d <= 2.0 || (!o.deck && !n.s.deck) || n.d > o.hw + n.s.w / 2 + 0.5) return;   // 2 m 內照舊併節點；兩邊至少一邊是面板、兩邊的面疊得到才接
+      var q = n.q.slice(); q.cx = true;                                  // cx：接點 ⇒ 切那一段不受「離端點 1.5 m、u 0.08」限制（下面）
+      raw.push({ a: o.p, b: q, w: Math.min(2 * o.hw, n.s.w), L: n.d, own: o.own + '>', link: true }); pts.push(q);
+    });
+  }
   var C = TOWN_FOLK_CELL, pg = new Map(), segs = [];
   function cell(x) { return Math.floor(x / C); }
   pts.forEach(function (p) { var k = cell(p[0]) + ',' + cell(p[1]), L = pg.get(k); if (L) L.push(p); else pg.set(k, [p]); });
@@ -181,13 +246,13 @@ function townFolkGraph(T) {
     var dx = s.b[0] - s.a[0], dz = s.b[1] - s.a[1], L2 = s.L * s.L, cuts = [0, 1];
     var x0 = cell(Math.min(s.a[0], s.b[0]) - 2.2), x1 = cell(Math.max(s.a[0], s.b[0]) + 2.2), z0 = cell(Math.min(s.a[1], s.b[1]) - 2.2), z1 = cell(Math.max(s.a[1], s.b[1]) + 2.2);   // 離這一段 ≤ 2.2 m 的點一定在外框外擴 2.2 m 裡
     for (var gx = x0; gx <= x1; gx++) for (var gz = z0; gz <= z1; gz++) (pg.get(gx + ',' + gz) || []).forEach(function (p) {
-      var u = ((p[0] - s.a[0]) * dx + (p[1] - s.a[1]) * dz) / L2; if (u <= 0.08 || u >= 0.92 || u * s.L < 1.5 || (1 - u) * s.L < 1.5) return;
+      var u = ((p[0] - s.a[0]) * dx + (p[1] - s.a[1]) * dz) / L2, m = p.cx ? 1.0 : 1.5; if ((!p.cx && (u <= 0.08 || u >= 0.92)) || u * s.L < m || (1 - u) * s.L < m) return;   // 接點離端點 1 m 內 ⇒ 併進那個端點（2 m 內）
       if (Math.hypot(p[0] - (s.a[0] + dx * u), p[1] - (s.a[1] + dz * u)) <= 2.2) cuts.push(u);
     });
     cuts.sort(function (x, y) { return x - y; });
     for (var i = 1; i < cuts.length; i++) {
       var u0 = cuts[i - 1], u1 = cuts[i]; if ((u1 - u0) * s.L < 1.2 && i < cuts.length - 1) continue;
-      segs.push({ a: [s.a[0] + dx * u0, s.a[1] + dz * u0], b: [s.a[0] + dx * u1, s.a[1] + dz * u1], w: s.w });
+      segs.push({ a: [s.a[0] + dx * u0, s.a[1] + dz * u0], b: [s.a[0] + dx * u1, s.a[1] + dz * u1], w: s.w, deck: !!(s.deck || s.link) });
     }
   });
   var nodes = [], edges = [], Ltot = 0, ng = new Map();
@@ -206,14 +271,37 @@ function townFolkGraph(T) {
     var A = nodes[u], B = nodes[v], dx = B.x - A.x, dz = B.z - A.z, L = Math.hypot(dx, dz); if (L < 1.2) return;
     var ei = edges.length, ux = dx / L, uz = dz / L;
     Ltot += L;
-    edges.push({ a: u, b: v, ax: A.x, az: A.z, dx: ux, dz: uz, nx: -uz, nz: ux, L: L, w: s.w, cum: Ltot });   // cum：照路長挑起點那條邊
+    edges.push({ a: u, b: v, ax: A.x, az: A.z, dx: ux, dz: uz, nx: -uz, nz: ux, L: L, w: s.w, cum: Ltot, deck: s.deck });   // cum：照路長挑起點那條邊；deck：碼頭、棧橋、接線（排隊測試不挑）
     A.adj.push({ e: ei, dir: 1 }); B.adj.push({ e: ei, dir: -1 });
+  });
+  if (pieces.length || stairs.length) edges.forEach(function (e) {      // 這條邊碰得到的面板段、樓梯（外框外擴車道偏移最多 1.5 m）
+    var x1 = e.ax + e.dx * e.L, z1 = e.az + e.dz * e.L, b0 = Math.min(e.ax, x1) - 1.5, b1 = Math.min(e.az, z1) - 1.5, b2 = Math.max(e.ax, x1) + 1.5, b3 = Math.max(e.az, z1) + 1.5;
+    var L = inBox(bg, both, b0, b1, b2, b3); if (!L) return;
+    L.forEach(function (o) { if (o.dx != null) (e.dk || (e.dk = [])).push(o); else (e.sk || (e.sk = [])).push(o); });
   });
   var ylo = 1e9, yhi = -1e9;                                             // 這座城的高度範圍（地塊的 h、路的 z）⇒ 路線外框的上下（看天空時不算人）
   (T.p && T.p.lots || []).forEach(function (l) { if (l.h === l.h) { ylo = Math.min(ylo, l.h); yhi = Math.max(yhi, l.h); } });
   R.forEach(function (r) { (r.z || []).forEach(function (z) { if (z != null) { ylo = Math.min(ylo, z); yhi = Math.max(yhi, z); } }); });
   if (!(ylo <= yhi)) { ylo = 0; yhi = 100; }
   return { nodes: nodes, edges: edges, roadM: Ltot, y: [ylo - 20, yhi + 25], line: null };
+}
+/** 邊 e 上 (x, z) 那一點踩得到的面板、踏面最高在哪（沒有 ⇒ NaN）：碼頭、棧橋 ＝ 面的高；樓梯 ＝ 那一階的頂（算法同 townGroundTile 畫樓梯：
+ *  路那一頭照地形重量、階數跟著重算；fix0 ⇒ 照規劃）。只有 e.dk／e.sk 的邊才量。 */
+function townFolkDeckY(e, x, z) {
+  var y = NaN, i, s;
+  if (e.dk) for (i = 0; i < e.dk.length; i++) {
+    s = e.dk[i]; var u = Math.max(0, Math.min(s.L, (x - s.ax) * s.dx + (z - s.az) * s.dz));
+    if (Math.hypot(x - s.ax - s.dx * u, z - s.az - s.dz * u) <= s.hw && !(s.top <= y)) y = s.top;
+  }
+  if (e.sk) for (i = 0; i < e.sk.length; i++) {
+    s = e.sk[i]; var px = x - s.A[0], pz = z - s.A[1], a = px * s.ux + pz * s.uz;
+    if (a < 0 || a > s.L || Math.abs(pz * s.ux - px * s.uz) > s.hw) continue;
+    var z1 = s.z[1], g0 = s.fix0 ? NaN : townRoadHeight(s.A[0], s.A[1]), z0 = g0 === g0 ? g0 + TOWN_ROAD_LIFT : s.z[0], n = s.n;
+    if (g0 === g0) { if (Math.abs(z1 - z0) < 0.05) continue; n = Math.max(1, Math.ceil(Math.abs(z1 - z0) / TOWN_STAIR_RISE - 1e-9)); }
+    var k = Math.min(n - 1, Math.floor(a / s.L * n)), top = z0 + (z1 - z0) * (k + (z1 > z0 ? 1 : 0)) / n + 0.02;
+    if (!(top <= y)) y = top;
+  }
+  return y;
 }
 /** 居民 a 的固定路線與一圈的時間表：從起點那條邊照 townHash 往前走最多 TOWN_FOLK_HOPS 段（路口不折返、死巷就停），去程、終點停一下、原路回程、起點停一下。
  *  a.legs[i] ＝ { e, dir, t0, t1（邊上從第幾公尺走到第幾公尺；停步 t0 ＝ t1）, c1（這一段結束是一圈的第幾秒） }；a.per ＝ 一圈幾秒；a.off ＝ 起始時間差（大家不同步）。 */
@@ -302,7 +390,7 @@ function townFolkStreet(T, F, walk, group) {
     if (best >= 0) return;
     G.edges.forEach(function (e, i) {
       var sc = e.L * 0.6 - Math.hypot(e.ax + e.dx * e.L / 2 - cx, e.az + e.dz * e.L / 2 - cz) * 0.35;
-      if (sc > bestSc && e.L >= minL && e.w >= 3) { bestSc = sc; best = i; }
+      if (sc > bestSc && e.L >= minL && e.w >= 3 && !e.deck) { bestSc = sc; best = i; }
     });
   });
   best = Math.max(0, best);
@@ -468,8 +556,9 @@ function townFolkDraw(P, K, eye, PL, fogD, clock) {
       var e = G.edges[a.e], off = (ln ? (Math.floor(a.id / 10) % 2 ? 0.32 : -0.32) : 0.18 * a.dir + a.lane) * Math.max(0.3, Math.min(2.8, e.w - 1.2));   // 靠右走（照前進方向）＋ 車道偏移
       var x = e.ax + e.dx * a.t + e.nx * off, z = e.az + e.dz * a.t + e.nz * off;
       if (Math.hypot(x - eye[0], z - eye[2]) > maxD) return;
-      var y = townRoadHeight(x, z); if (!(y === y) || y <= 0.05) return;
-      y += TOWN_ROAD_LIFT;
+      var y = townRoadHeight(x, z), yd = e.dk || e.sk ? townFolkDeckY(e, x, z) : NaN;
+      if (yd === yd && !(yd < y + TOWN_ROAD_LIFT)) y = yd;               // 踩在碼頭、棧橋的面上或樓梯上（比整好的路面高）⇒ 照面板、踏面（棧橋底下是水也照畫）
+      else { if (!(y === y) || y <= 0.05) return; y += TOWN_ROAD_LIFT; }
       for (var i = 0; i < 6; i++) { var pl = PL[i]; if (pl[0] * x + pl[1] * (y + 0.9 * TOWN_FOLK_SCALE) + pl[2] * z + pl[3] < -2.2 * TOWN_FOLK_SCALE) return; }
       var mv = (e.dx * rx + e.dz * rz) * a.dir;
       if (mv > 0.08) a.face = 1; else if (mv < -0.08) a.face = -1;
@@ -517,6 +606,21 @@ function townFolkStat(T) {
   var F = TOWNS.kit && TOWNS.kit.folk, kids = 0; if (F) G.agents.forEach(function (a) { if (F.people[a.art].age === 'child') kids++; });
   return { agents: G.agents.length, edges: G.edges.length, nodes: G.nodes.length, roadM: Math.round(G.roadM), y: G.y, prepMs: G.prepMs, line: G.line, pick: G.pick, kids: G.agents.length ? +(kids / G.agents.length).toFixed(3) : null,
     work: T.work ? { inst: T.work.inst === T.inst, workers: T.work.list.length, prepMs: T.work.prepMs, blds: T.work.blds } : null,   // 建築裡的工人（townWorkPrep；inst false ＝ 實例換了、下次畫時重算）
+    deck: (function () {                                                 // 碼頭、棧橋、樓梯（townFolkDeckY）：deckM 碼頭、棧橋、接線的邊多長；dk／sk 碰得到面板、樓梯的邊；agents 路線走到那幾條邊的人；
+      var o = { edges: 0, deckM: 0, dk: 0, sk: 0, agents: 0, pts: 0, up: 0, upMax: 0 };   //   pts／up／upMax：那幾條邊沿中心線每 1 m 一點、地形到了又在水面上的點裡，面板／踏面比整好的路面高的點數、最多高幾公尺（＝ 以前陷進去多深）
+      G.edges.forEach(function (e) {
+        if (e.deck) { o.edges++; o.deckM += e.L; } if (e.dk) o.dk++; if (e.sk) o.sk++;
+        if (e.dk || e.sk) for (var t = 0.5; t < e.L; t += 1) {
+          var x = e.ax + e.dx * t, z = e.az + e.dz * t, y = townRoadHeight(x, z), yd = townFolkDeckY(e, x, z); if (!(y > 0.05)) continue;   // 水上的點以前不畫（不算陷）
+          o.pts++; if (yd > y + TOWN_ROAD_LIFT + 0.05) { o.up++; o.upMax = Math.max(o.upMax, yd - y - TOWN_ROAD_LIFT); }
+        }
+      });
+      var on = G.agents.filter(function (a) { return a.legs.some(function (g) { return G.edges[g.e].deck; }); });
+      o.agents = on.length;
+      o.on = on.map(function (a) { townFolkAt(G, a, TOWNS.flagClock || 0); var e = G.edges[a.e]; return e.deck ? { id: a.id, x: +(e.ax + e.dx * a.t).toFixed(1), z: +(e.az + e.dz * a.t).toFixed(1) } : null; }).filter(Boolean).slice(0, 8);   // 這一刻站在碼頭、棧橋上的（排鏡頭用）
+      o.deckM = Math.round(o.deckM); o.upMax = +o.upMax.toFixed(2);
+      return o;
+    })(),
     workSites: G.agents.filter(function (a) { return a.work && F && F.sheets[F.people[a.art].sheet].name === 'workers'; }).slice(0, 24).map(function (a) { var e = G.edges[a.e]; return { id: F.people[a.art].id, lot: a.work.lot, use: a.work.use, distance: +a.work.distance.toFixed(2), x: +(e.ax + e.dx * a.t).toFixed(2), z: +(e.az + e.dz * a.t).toFixed(2) }; }),
     sample: G.agents.slice(0, 8).map(function (a) { var e = G.edges[a.e]; return { id: a.id, art: a.art, cloth: a.cloth, hair: a.hair, legs: a.legs.length, per: +a.per.toFixed(1), t: +a.t.toFixed(2), x: +(e.ax + e.dx * a.t).toFixed(1), z: +(e.az + e.dz * a.t).toFixed(1) }; }) };
 }
