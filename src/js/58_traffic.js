@@ -74,16 +74,15 @@ function trafficGot(d) {
   TRF.q = Object.keys(want).filter(function (id) { var w = want[id]; return !have[id] && Math.hypot(w.at[0] - c[0], w.at[1] - c[2]) < TRF_SPAWN_M && HULL_LIST.some(function (h) { return h.id === w.hull; }); })
     .sort(function (a, b) { var A = want[a], B = want[b]; return Math.hypot(A.at[0] - c[0], A.at[1] - c[2]) - Math.hypot(B.at[0] - c[0], B.at[1] - c[2]) || (a < b ? -1 : 1); });
 }
-/** 城區（Blocksail TASK-0817；63_towns.js townDistView）：城鎮模式只建選中的那一區（＋邊上 TOWN_DIST_PAD）⇒ 別區的棧橋、碼頭沒建、也不擋船 ⇒
- *  泊位在那裡、停港或港內帶著走的往來船不生（⛔ 生了就浮在空的水面上，看起來像一直飄在港裡）。(x, z) ＝ 泊位的世界座標；不是城鎮模式、只有一區的城 ⇒ false。 */
+/** 城區（Blocksail TASK-0817；63_towns.js townDistView）：城只建 TOWNS.on 那幾區（航海照遠近、城鎮模式照焦點與鄰區）⇒ 別區的棧橋、碼頭沒建、也不擋船 ⇒
+ *  泊位在那裡、停港或港內帶著走的往來船不生（⛔ 生了就浮在空的水面上，看起來像一直飄在港裡）。(x, z) ＝ 泊位的世界座標；沒有城區切法（cut）的城 ⇒ false。 */
 function trafficDistOff(x, z) {
-  if (!BED || !modeRule('town')) return false;
+  if (!BED) return false;
   for (var i = 0; i < TOWNS.list.length; i++) {
-    var p = TOWNS.full[TOWNS.list[i].id], D = p && p.districts; if (!D || D.length < 2) continue;
-    var A = D.filter(function (d) { return d.id === TOWNS.dist[p.id]; })[0]; if (!A) continue;
-    var kx = +p.kx || 1, px = (x + BED.ax - (+p.ox || 0)) / kx, py = z + BED.az - (+p.oy || 0);   // 同 townDistStart
-    if (!D.some(function (d) { return townPip(px, py, d.poly) || townPolyDist(px, py, d.poly) < TRF_DIST_NEAR; })) continue;   // 不是這座城的泊位
-    return townDistAt(D, px, py) !== A && townPolyDist(px, py, A.poly) > TOWN_DIST_PAD;
+    var p = TOWNS.full[TOWNS.list[i].id], D = p && p.districts; if (!D || !p.cut) continue;
+    var q = townDistLocal(p, x, z);
+    if (!D.some(function (d) { return townPip(q[0], q[1], d.poly) || townPolyDist(q[0], q[1], d.poly) < TRF_DIST_NEAR; })) continue;   // 不是這座城的泊位
+    return !((TOWNS.on[p.id] || 0) & (1 << D.indexOf(townDistAt(D, q[0], q[1]))));
   }
   return false;
 }

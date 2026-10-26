@@ -282,11 +282,12 @@ function tuiTradeHTML() {
 function tuiDists() { var p = TOWNS.full[TWB.town]; return p && p.districts && p.districts.length ? p.districts : null; }
 function tuiDistHTML() {
   var D = tuiDists(); if (!D) return '<p class="tuiDim">這座城沒有分城區。</p>';
-  var cur = TOWNS.dist[TWB.town], S = TOWNS.stat.dist;
-  return '<p>選一區 ⇒ 鏡頭跳過去、以那一區為中心載（只建那一區＋邊上 ' + TOWN_DIST_PAD + ' m；別區的房子、路不載）。</p>' +
+  var cur = TOWNS.dist[TWB.town], S = (TOWNS.stat.dist || {})[TWB.town], on = TOWNS.on[TWB.town] || 0;
+  return '<p>選一區 ⇒ 鏡頭跳過去、先建那一區，建好再補隔壁的區（遠的收掉）；鏡頭拖進別區停一下也會換過去。</p>' +
     '<div class="tuiTiles">' + D.map(function (d) {
-      return '<div><small>' + (d.port ? '⚓ 有碼頭' : '　') + (d.id === cur ? '・現在這一區' : '') + '</small><button type="button" data-dist="' + tuiEsc(d.id) + '"' + (d.id === cur ? ' class="on"' : '') + '>' + tuiEsc(d.name) + '</button></div>';
-    }).join('') + '</div>' + (S && S.town === TWB.town ? '<p class="tuiDim">這一區建了地塊 ' + S.lots + '、路 ' + S.roads + '。</p>' : '');
+      var i = D.indexOf(d);
+      return '<div><small>' + (d.port ? '⚓ 有碼頭' : '　') + (d.id === cur ? '・現在這一區' : on & (1 << i) ? '・已載' : '') + '</small><button type="button" data-dist="' + tuiEsc(d.id) + '"' + (d.id === cur ? ' class="on"' : '') + '>' + tuiEsc(d.name) + '</button></div>';
+    }).join('') + '</div>' + (S ? '<p class="tuiDim">建了 ' + S.on.length + ' 區：地塊 ' + S.lots + '、路 ' + S.roads + '。</p>' : '');
 }
 /** 每一格：城區那一顆鈕在城鎮模式、外面那一頁有送城區（1～N 區）才出現。 */
 function tuiDistKey() { var k = $('tuiDK'); if (!k) return; var v = modeRule('town') && tuiDists() ? '' : 'none'; if (k.style.display !== v) k.style.display = v; }   // .kb 有自己的 display ⇒ 不用 hidden
