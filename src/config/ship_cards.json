@@ -23,7 +23,7 @@
     "dingyuan": {"tons": 7288, "len": 91.2, "guns": 14, "gunTypes": {"krupp150": 2, "hotch37": 8, "krupp305": 4}, "volley": 1438, "drive": "steam", "sails": 1, "crew": 128},
     "matsushima": {"tons": 4330, "len": 92.3, "guns": 27, "gunTypes": {"armstrong120": 12, "hotch37": 2, "hotch57": 6, "hotch47": 6, "canet320": 1}, "volley": 721, "drive": "steam", "sails": 1, "crew": 188},
     "labelle": {"tons": 87, "len": 17.5, "guns": 14, "gunTypes": {"pierrier": 8, "long4": 6}, "volley": 19, "drive": "sail", "sails": 8, "crew": 45},
-    "pinas": {"tons": 599, "len": 37.1, "guns": 24, "gunTypes": {"long8": 8, "long4": 4, "long12": 10, "long6": 2}, "volley": 98, "drive": "sail", "sails": 12, "crew": 150},
+    "pinas": {"tons": 599, "len": 37.1, "guns": 24, "gunTypes": {"long8": 8, "long4": 4, "long12": 10, "long6": 2}, "volley": 98, "drive": "sail", "sails": 12, "crew": 151},
     "oxford": {"tons": 287, "len": 25.9, "guns": 22, "gunTypes": {"long8": 16, "long6": 6}, "volley": 79, "drive": "sail", "sails": 11, "crew": 144}
   }
 }
