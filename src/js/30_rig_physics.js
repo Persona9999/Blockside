@@ -331,6 +331,7 @@ function clothSetup(H, C) {                            // 船型 H 的布模板�
   H.rbox = C ? C.rbox : H.rig.ropes.map(function (r) { return ropeBox(r.pts); });
   var n0 = H.nSail0 === undefined ? H.rig.sails.length : H.nSail0;      // 作品自己的帆（快取只存這幾面）；後面是陣營旗（77_colours.js teamFlagsSetup，每次現算）
   H.cloth = H.rig.sails.map(function (s, k) { if (C && k < n0 && C.cloth[k]) return C.cloth[k]; var t = clothTemplate(H, s); t.ti = k; return t; });   // ti：第幾面帆 ⇒ 貼圖集的哪一格（布片、斷開的那一團也認得）
+  if (H.flagUv) Object.keys(H.flagUv).forEach(function (k) { var t = H.cloth[k]; if (t && !t.uv) H.cloth[k] = Object.assign({}, t, { uv: Float32Array.from(H.flagUv[k].slice(0, t.n * 2)) }); });   // 堡壘自己的旗補的 uv（77_colours.js flagOwnUv）：另抄一份、不改快取的那一份
   H.sailAtlas = sailAtlas(H.rig.sails.concat(H.teamExtra || [])); H.sailTexGL = null;   // teamExtra：陣營旗紅方那份、替換作品旗的藍紅兩份（77_colours.js teamFlagsSetup；畫的時候 sailRect 挑）              // 貼圖集不進快取（照 vxk 現算；GL 貼圖第一次畫才建，11_rig_gpu.js sailTex）
   var mc = 1;                                                            // 畫帆的暫存區（SBV／SBI／SBN／SBP）由 11_rig_gpu.js sailBuf 照當下要畫的配（TASK-0669）
   H.cloth.forEach(function (C) { mc = Math.max(mc, C.sim.n); });

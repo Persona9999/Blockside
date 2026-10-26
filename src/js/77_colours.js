@@ -185,7 +185,7 @@ function flagVariant(T, k) {
   var m = {}, n = T.rig.sails.length;
   Object.keys(T.flagTi).forEach(function (ti) { var q = T.flagTi[ti]; m[ti] = n + T.teamExtra.length; T.teamExtra.push({ texture: Object.assign({ uv: q.uv, alpha_min: 0 }, flagTexOf(q.kind, f)) }); });
   V[k] = m;
-  if (T.sailAtlas) {
+  if (T.cloth) {                                                         // 布已經建好（clothSetup）⇒ 重排；堡壘原本沒有貼圖集（作品的旗沒貼圖）⇒ 這時才第一次有
     T.sailAtlas = sailAtlas(T.rig.sails.concat(T.teamExtra)); if (T.sailTexGL) gl.deleteTexture(T.sailTexGL); T.sailTexGL = null;
     SHIPS.forEach(function (s) { if (s.T === T) s.rigDirty = true; });
   }
@@ -197,12 +197,28 @@ function shipNation(sh, k) {
   sh.nation = m ? k : null; sh.flagMap = m; sh.rigDirty = true;
   return !!m;
 }
+// ── 堡壘自己的旗也能換國旗（TASK-0977；Tim 2026-10-26「是否可以讓港口堡壘也能跟著換旗 目前和平港堡壘的旗幟是白旗」）──
+//    堡壘（設定檔 fixed）作品裡的旗是白布、沒有貼圖 ⇒ 照布點的格子補 uv：布旗的布點是 n × n 兩面（Blocksail BUILDING_SPEC §6.2、tools/townmodels.py flags_of），
+//    第 i 欄（0 ＝ 綁邊 → n − 1 ＝ 尾）第 j 列（0 ＝ 上 → n − 1 ＝ 下）⇒ 第 i·n ＋ j 點、後半是背面（同一份）。
+//    登記成每艘船自己的旗那一格（T.flagTi ⇒ flagVariant 多烘一份）；沒掛國旗 ⇒ teamTex 兩隊都指回它自己（沒有貼圖 ⇒ 照原本的色畫，跟以前一樣）。
+//    uv 記在 T.flagUv[帆]，clothSetup 之後補進布的模板（快取的布沒有 uv）。
+function flagOwnUv(T) {
+  T.rig.sails.forEach(function (s, k) {
+    var m = s.meta || {}, v = s.verts; if (m.kind !== 'flag' || (s.texture && s.texture.uv) || !v) return;
+    var n = Math.round(Math.sqrt(v.length / 6)); if (n < 2 || n * n * 6 !== v.length) return;
+    var uv = [];
+    for (var f = 0; f < 2; f++) for (var i = 0; i < n; i++) for (var j = 0; j < n; j++) uv.push(i / (n - 1), j / (n - 1));
+    T.flagUv = T.flagUv || {}; T.flagUv[k] = uv;
+    T.teamTex[k] = { blue: k, red: k }; T.flagTi[k] = { kind: 'ensign', uv: uv };
+  });
+}
 /** 載入船型時（05_hull.js「桅與帆」那一步、clothSetup 之前）：照設定檔的 flags 生旗（合成的帆，接在 T.rig.sails 後面）。
  *  T.nSail0 ＝ 作品自己的帆有幾面（快取只存這幾面的布料，06_cache.js）；T.teamExtra ＝ 貼圖集排在帆後面的那幾份（陣營旗紅的那份、替換作品旗的藍紅兩份；clothSetup）、
  *  T.teamTex[帆] ＝ { blue, red } 貼圖集的哪一格（sailRect）；T.poles ＝ 旗桿。 */
 function teamFlagsSetup(T, info) {
-  T.nSail0 = T.rig.sails.length; T.teamTex = {}; T.teamExtra = []; T.poles = []; T.flagSlots = []; T.flagTi = {}; T.flagVar = {};
+  T.nSail0 = T.rig.sails.length; T.teamTex = {}; T.teamExtra = []; T.poles = []; T.flagSlots = []; T.flagTi = {}; T.flagVar = {}; T.flagUv = null;
   if (!COL_ON) return;
+  if (info && info.fixed) flagOwnUv(T);
   var defs = info && info.flags || autoFlags(T); if (!defs.length) return;
   T.teamDefs = defs;
   var add = [], red = [], repl = [];
