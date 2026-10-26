@@ -106,8 +106,12 @@ function townGot(L, err, idx) {
 //     地塊（連它的整地、清樹的環）照地塊的中心；路、棧橋、碼頭、樓梯、引水渠、住宅街區碰得到就整條建；城牆、巨鏈、中心城區整座照建（天際線、便宜 —— TASK-0817 #1 量過）。
 //   航海模式照舊整座城（沿岸開過去看得到整座）。選哪一區：TOWNS.dist[城]；沒選過 ⇒ 旗艦在哪一區（停靠的那一區）。
 //   換區（townDistGo）⇒ townReplace 換成那一區、鏡頭跳到那一區的中心、海域的窗以它為中心（bedFocusAt 看 TOWNS.focus）。
+//   自己一份規劃的城區（Blocksail TASK-0987）：規劃 id「<城>~<區>」、帶的 districts 是城的整份清單（換到它自己的當地公尺）⇒ 跟主規劃同一套濾法：
+//     選的是那一區 ⇒ 整份建；選別區 ⇒ 只剩碰得到那一區邊上的（通常一塊都沒有 ＝ 收掉）。選哪一區照城記（TOWNS.dist[城]），一座城的每一份規劃一起換。
 var TOWN_DIST_PAD = 120;                                                // 選中的那一區外面多建幾公尺（接縫不在鏡頭前面斷掉）〔佔位〕
 TOWNS.dist = {}; TOWNS.full = {}; TOWNS.distGuess = {}; TOWNS.focus = null; TOWNS.distMode = false;
+/** 規劃 id ⇒ 城的 id（自己一份規劃的城區「<城>~<區>」⇒ <城>；同 Blocksail world/areas.js townUnitCity）。 */
+function townCityOf(id) { var s = String(id || ''), i = s.indexOf('~'); return i > 0 ? s.slice(0, i) : s; }
 /** 一點（規劃的當地公尺）落在哪一區 ⇒ 那一筆；都不在 ⇒ 離它的邊最近的那一區（同 Blocksail townDistrictNear）。 */
 function townDistAt(D, x, y) {
   var best = null, bd = Infinity;
@@ -126,8 +130,8 @@ function townDistView(p) {
   var D = p && p.districts; if (!D || !D.length) return p;            // 每座城 1～N 區（Blocksail 範圍層必填；舊的規劃沒帶 ⇒ 整座）
   if (!p.distView) TOWNS.full[p.id] = p; else p = TOWNS.full[p.id] || p;   // 已經濾過的那一份 ⇒ 拿整份重濾
   if (!modeRule('town')) return p;
-  var k = TOWNS.dist[p.id], A = D.filter(function (d) { return d.id === k; })[0];
-  if (!A) { A = townDistStart(p); TOWNS.dist[p.id] = A.id; }
+  var c = townCityOf(p.id), k = TOWNS.dist[c], A = D.filter(function (d) { return d.id === k; })[0];
+  if (!A) { A = townDistStart(p); TOWNS.dist[c] = A.id; }
   var R = A.poly, near = function (q) { return townDistAt(D, q[0], q[1]) === A || townPolyDist(q[0], q[1], R) <= TOWN_DIST_PAD; };   // 歸這一區（範圍外的照最近那一區）或在它邊上 ⇒ 一區的城一塊都不濾
   var any = function (P) { return (P || []).some(near); }, keep = {};
   var o = {}; for (var key in p) o[key] = p[key];
@@ -147,7 +151,9 @@ function townDistView(p) {
 function townDistGo(id, k) {
   var p = TOWNS.full[id], d = p && (p.districts || []).filter(function (q) { return q.id === k; })[0]; if (!d || !BED) return false;
   TOWNS.dist[id] = k;
+  if (typeof TWB !== 'undefined' && TWB.open) { if (TWB.on) twbToggle(false); TWB.open = 0; }   // 建築模式開的是上一份規劃（那一頁的 EDIT 一次一份）⇒ 關掉，再開照新的那一份
   townReplace(p);
+  Object.keys(TOWNS.full).forEach(function (u) { if (u !== id && townCityOf(u) === id && TOWNS.list.some(function (T) { return T.id === u; })) townReplace(TOWNS.full[u]); });   // 同一座城別份規劃（遠的城區）跟著換：選到 ⇒ 建、沒選到 ⇒ 收
   var e = [(+p.ox || 0) + (+p.kx || 1) * d.c[0], (+p.oy || 0) + d.c[1]], x = e[0] - BED.ax, z = e[1] - BED.az, h = townGround(x, z);
   TOWNS.focus = { town: id, x: x, z: z };
   camSet({ mode: 0, follow: null, see: null, pan: [0, 0], tgt: [x, isFinite(h) ? Math.max(0, h) : 0, z], dist: Math.max(CAM.dist || 0, 500) });   // 自由鏡頭（CAM 只由 03_camera.js 寫）
@@ -158,12 +164,12 @@ function townDistGo(id, k) {
 function townDistFrame() {
   var on = !!modeRule('town');
   if (on && SHIPS[PLAYER_I]) Object.keys(TOWNS.distGuess).forEach(function (id) {   // 規劃比旗艦早到、先猜了第一區 ⇒ 照旗艦重挑
-    delete TOWNS.distGuess[id]; delete TOWNS.dist[id];
+    delete TOWNS.distGuess[id]; delete TOWNS.dist[townCityOf(id)];
     if (TOWNS.full[id] && TOWNS.list.some(function (T) { return T.id === id; })) townReplace(TOWNS.full[id]);
   });
   if (on === TOWNS.distMode) return;
   TOWNS.distMode = on; TOWNS.focus = null;
-  Object.keys(TOWNS.full).forEach(function (id) { if (on) delete TOWNS.dist[id]; if (TOWNS.list.some(function (T) { return T.id === id; })) townReplace(TOWNS.full[id]); });
+  Object.keys(TOWNS.full).forEach(function (id) { if (on) delete TOWNS.dist[townCityOf(id)]; if (TOWNS.list.some(function (T) { return T.id === id; })) townReplace(TOWNS.full[id]); });
 }
 /** 跟 L 裡的城疊到的塊重新整地、清樹（townGot 新來的城、townReplace 改過的城）。 */
 function townRegradeFor(NEW) {

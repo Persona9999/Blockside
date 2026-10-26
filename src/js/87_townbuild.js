@@ -33,7 +33,12 @@ function twbFlat() { var L = []; TWB_CATS.forEach(function (c) { c.items.forEach
 var TWB_ROAD_W = { street: 5, lane: 2.5 }, TWB_RIB_STEP = 2, TWB_RIB_LIFT = 0.3, TWB_RIB_A = 0.55;   // 道路預覽：路寬（同 Blocksail world/town.js ROAD_COST）、沿路每幾公尺取一次地面高度、離地多高、透明度
 var TWB_ROUTE_MS = 120;                                                  // 找路最多多久問一次（A* 在那一頁的 Worker 算；游標一直動也不會塞滿）
 function twbOk() { return modeRule('town') && BED && BED.host && TWB.town; }
-function twbTown() { var T = null; (TOWNS.list || []).forEach(function (t) { if (t.id === TWB.town) T = t; }); return T; }
+function twbTown() { var u = twbUnit(), T = null; (TOWNS.list || []).forEach(function (t) { if (t.id === u) T = t; }); return T; }
+/** 建築模式、城鎮介面現在對的那一份規劃（Blocksail TASK-0987）：停的城 TWB.town；選的是自己一份規劃的城區 ⇒「<城>~<區>」。 */
+function twbUnit() {
+  var c = TWB.town, p = c && TOWNS.full[c], k = c && TOWNS.dist[c], d = p && k ? (p.districts || []).filter(function (q) { return q.id === k; })[0] : null;
+  return d && d.plan && modeRule('town') ? d.plan : c;
+}
 function twbMsg(t) { TWB.msg = t || ''; TWB.msgT = performance.now(); }
 /** 規劃平面公尺 ⇔ 世界 (x, z)。 */
 function twbToWorld(T, q) { return [T.ox + T.kx * q[0] - BED.ax, T.oy + q[1] - BED.az]; }
@@ -76,14 +81,14 @@ function twbGround(cx, cy) {
 function twbAsk(cmd, extra, cb) {
   if (!twbOk()) { if (cb) cb({ ok: false, why: ['沒有地球儀那一頁（建築模式要從 Blocksail 進城）'] }); return; }
   var s = ++TWB.seq; TWB.wait[s] = cb || null;
-  BED.host.postMessage(Object.assign({ bsmap: 'need', what: 'townEdit', town: TWB.town, cmd: cmd, seq: s }, extra || {}), '*');
+  BED.host.postMessage(Object.assign({ bsmap: 'need', what: 'townEdit', town: twbUnit(), cmd: cmd, seq: s }, extra || {}), '*');   // 規劃單位（遠的城區；TASK-0987）
 }
 /** 存這座城（💾、Ctrl+S）：那一頁照它的版本決定存到哪、回一句話。 */
 function twbSave() {
   if (!twbOk()) { twbMsg('沒有地球儀那一頁（建築模式要從 Blocksail 進城）'); return; }
   var s = ++TWB.seq, done = false;
   TWB.wait[s] = function (r) { done = true; twbMsg(r.ok ? '💾 ' + (r.msg || '存了') : '沒存成：' + (r.msg || (r.why || []).join('；'))); };
-  BED.host.postMessage({ bsmap: 'need', what: 'townSave', town: TWB.town, seq: s }, '*');
+  BED.host.postMessage({ bsmap: 'need', what: 'townSave', town: twbUnit(), seq: s }, '*');
   twbMsg('存這座城…');
   setTimeout(function () { if (!done && TWB.wait[s]) { delete TWB.wait[s]; twbMsg('地球儀那一頁沒有回（太舊的版本不能從這裡存）'); } }, 5000);
 }
