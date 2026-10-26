@@ -58,7 +58,7 @@ var TRF_ASK_GLIDE_MS = 500, TRF_CLOCK_MS = 250, TRF_GLIDE_TURN = 3;   // 滑的�
 //   原地轉、拖的時候船頭每秒最多轉幾 rad；離泊位幾公尺內算已經在泊位上（直接繫）〔設計；我艦停靠的過場 DOCK_AV 2～8 m/s，往來的船照港內慢慢拖〕
 var TRF_PORT_X1 = false;                                                // 進出港時世界時間暫時 ×1（⑧）：先關掉（Tim 2026-10-26）
 var TRF_REAL_M = 30, TRF_SHOW_M = 80;                                    // 表演船（⑨）：跟玩家的船隔幾公尺內變成真的船、幾公尺外變回表演船（扣掉兩艘各半個船長）〔設計〕
-var TRF_BLEND_M = 120;                                                   // 港內同步（⑧）：離泊位幾公尺內補上 3D 泊位的差、轉船頭
+var TRF_BLEND_M = 120, TRF_CLEAR_M = 10, TRF_BLEND_K = 2.5;                                // 港內同步（⑧）：離泊位幾公尺內補上 3D 泊位的差；船頭照停好的方向直進直出多走幾公尺（船身離開棧橋）才轉
 var TRF_HARB_VE = 7.4 / 3.6, TRF_HARB_R = 4000, TRF_HARB_V0 = 0.3 / 3.6;  // 拖的速度曲線：同 Blocksail world/fleetfine.js harbV（港內航速 7.4 km/h、4 km、下限 0.3 km/h）
 var TRF_ENTRY_M = 150, TRF_IN_M = 450, TRF_OUT_M = 260, TRF_TOW_V = 2.2, TRF_TOW_VMIN = 0.6, TRF_BACK_V = 0.8, TRF_TURN_M = 60, TRF_SPIN = 0.1, TRF_YAW_RATE = 0.15, TRF_MOOR_M = 3;
 
@@ -82,15 +82,17 @@ function trafficGot(d) {
     trk: o.trk && o.trk.length > 1 ? o.trk.map(function (q) { var p = W([q[1], q[2]]); return [+q[0], p[0], p[1]]; }) : null,   // trk：照時刻表滑（⑥）
     berth: o.berth && o.berth.at ? (function (p) { return { x: p[0], z: p[1], yaw: trafficYaw(+o.berth.hdg || 0), id: o.bid || null }; })(W(o.berth.at)) : null,   // id：泊位 id（'@anchor' ＝ 港外錨地）   // berth：停的、預約的泊位（⑧）
     pilot: o.pilot || null, entry: o.entry ? W(o.entry) : null,          // pilot、entry：航行管制（⑧）
-    lane: o.lane && o.lane.length > 1 ? o.lane.map(W) : null }; });    // lane：berth 那一格的入港航線（泊位 ⇒ 入口點；換格時沿著拖，⑧）
+    lane: o.lane && o.lane.length > 1 ? o.lane.map(W) : null,          // lane：berth 那一格的入港航線（泊位 ⇒ 入口點；換格時沿著拖，⑧）
+    bat: o.bat ? W(o.bat) : null }; });                                 // bat：時刻表停的那一點跟 berth 不同（港外錨地：時刻表停在外海泊位、船停在自己那一格）
   Object.keys(want).forEach(function (id) { var w = want[id]; if ((w.dock || w.pilot) && w.berth && trafficDistOff(w.berth.x, w.berth.z)) delete want[id]; });   // 別的城區的泊位（沒建）⇒ 不生、生了的收掉
   TRF.want = want;
   trafficShips().forEach(function (sh) {                              // 還在 ⇒ 換航點；沒了 ⇒ 收
     var w = want[sh.npc.id]; if (!w) { trafficDrop(sh); return; }
     var was = !!sh.npc.dock, P0 = sh.npc.path, L0 = sh.npc.lane || null; sh.npc.lane = w.lane;
-    sh.npc.to = w.to; sh.npc.v = w.v; sh.npc.path = w.path; sh.npc.trk = w.trk; if (!was || w.dock) sh.npc.berth0 = w.berth; sh.npc.berth = trafficBerthFor(sh, w.berth); sh.npc.entry = w.entry;
+    var b0 = w.berth && w.bat ? { x: w.bat[0], z: w.bat[1], yaw: w.berth.yaw, id: w.berth.id } : w.berth;   // 時刻表的那一點（⑧ 補差的起點）
+    sh.npc.to = w.to; sh.npc.v = w.v; sh.npc.path = w.path; sh.npc.trk = w.trk; if (!was || w.dock) sh.npc.berth0 = b0; sh.npc.berth = trafficBerthFor(sh, w.berth); sh.npc.entry = w.entry;
     if (was && !w.dock) sh.npc.bOut = trafficBerthOut(sh);              // 出港：記下停的那一格（⑧ 出港那一段照它補差、轉船頭）
-    if (!w.dock) sh.npc.berth0 = w.berth;
+    if (!w.dock) sh.npc.berth0 = b0;
     trafficPilot(sh, w.pilot);
     if (w.dock && !was) trafficArrive(sh, P0, L0); else if (!w.dock && was) trafficLeave(sh);   // 到港、出港（⑧）
     else if (w.berth && trafficMoved(sh)) (function (st) { var R = st ? trafficLaneRoute(L0, w.lane) : null; trafficTowIn(sh, R || (st ? null : sh.npc.path), !!R); })(w.dock || sh.npc.held);   // 停著換格 ⇒ 沿舊、新兩條入港航線拖（⛔ 直線 ⇒ 穿過棧橋）   // 停的、要去的那一格換了（玩家停進來、別人預約了 ⇒ 地球儀換一格）⇒ 拖過去（⛔ 以前停著的不動 ⇒ 跟換進來的船疊在一起）
@@ -302,15 +304,17 @@ function trafficGlide(sh, dt) {
   return true;
 }
 /** 港內港外同步（⑧）：時刻表那一點 (x, z) 離泊位（進港 ＝ 預約的 berth0；出港 ＝ 出發那一格 bOut）多近 ⇒
- *  { ox, oz 要加的差（3D 泊位 − 時刻表泊位，照權重）, yaw 停好的船頭, w 權重：TRF_BLEND_M 外 0、泊位上 1（smoothstep）}。轉船頭的範圍照船長（半個船長 ＋ TRF_SPIN_D，至少 30 m）。 */
+ *  { ox, oz 要加的差（3D 泊位 − 時刻表泊位，照權重）, yaw 停好的船頭, w 船頭的權重 }。
+ *  船頭：離泊位 D0（半個船長 ＋ TRF_CLEAR_M）內照停好的船頭直進直出（船身還貼著棧橋）、D0～D0 ＋ D 之間轉（D ＝ 半個船長 ＋ TRF_SPIN_D，至少 30 m）、再外面照走的方向
+ *  ⛔ 一離泊位就開始轉（1 − smoothstep(d ／ 2D)）：49 m 的船還在棧橋邊就繞中心轉，船尾掃進棧橋頭 3.6 m（君士坦丁堡 large-1，Blocksail TASK-0980 log）。 */
 function trafficNear(sh, x, z) {
   var n = sh.npc, o = { ox: 0, oz: 0, yaw: 0, w: 0 }, P = null;
   if (n.pilot === 'out' && n.bOut) P = { x: n.bOut.x, z: n.bOut.z, x0: n.bOut.x0, z0: n.bOut.z0, yaw: n.bOut.yaw };
   else if (n.pilot === 'in' && n.berth && n.berth0) P = { x: n.berth.x, z: n.berth.z, x0: n.berth0.x, z0: n.berth0.z, yaw: n.berth.yaw };
   if (!P) return o;
-  var d = Math.hypot(x - P.x0, z - P.z0), sm = function (u) { u = clamp(u, 0, 1); return u * u * (3 - 2 * u); }, D = Math.max(30, (sh.T.hx1 - sh.T.hx0) * S / 2 + TRF_SPIN_D);
-  var wb = 1 - sm(d / TRF_BLEND_M); o.ox = (P.x - P.x0) * wb; o.oz = (P.z - P.z0) * wb;
-  o.w = 1 - sm(d / (2 * D)); o.yaw = P.yaw;
+  var half = (sh.T.hx1 - sh.T.hx0) * S / 2, d = Math.hypot(x - P.x0, z - P.z0), sm = function (u) { u = clamp(u, 0, 1); return u * u * (3 - 2 * u); }, D = Math.max(30, half + TRF_SPIN_D), D0 = half + TRF_CLEAR_M;
+  var off = Math.hypot(P.x - P.x0, P.z - P.z0), wb = 1 - sm(d / Math.max(TRF_BLEND_M, D0 + D, TRF_BLEND_K * off)); o.ox = (P.x - P.x0) * wb; o.oz = (P.z - P.z0) * wb;   // 差得越遠（港外錨地那一格離外海泊位幾百公尺）補的範圍越長 ⇒ 不一格跳過去
+  o.w = 1 - sm((d - D0) / D); o.yaw = P.yaw;
   return o;
 }
 /** 船現在離時刻表落後幾小時（⑧）：投影到 trk 最近的那一段、那一點的世界時間 ⇒ 現在 − 它（超前 ⇒ 0）；沒有 trk ⇒ 0。
