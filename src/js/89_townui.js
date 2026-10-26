@@ -11,7 +11,7 @@
 // 物理意義：⛔ 這一支不算經濟 —— 數字全照那一頁的城鎮帳（買賣、價格、關稅都在 Blocksail world/stores.js）；這裡只問、只畫。
 // 失敗處置：沒有 host、不是城鎮模式 ⇒ 按鈕沒反應、說一聲；5 秒沒回 ⇒ 說那一頁沒回（太舊的地球儀）；回覆的 why 照原樣顯示。
 var TUI = { region: null, open: false, tab: 'sum', seq: 0, wait: {}, info: null, goods: {}, blds: {}, every: 7, list: null, msg: '', busy: false, pick: null, charts: {}, last: 'sum', unit: 1 };   // unit：貿易一次買賣幾桶（TUI_UNITS 那四檔）
-var TUI_TABS = [{ k: 'sum', name: '📋 概況' }, { k: 'flow', name: '⚖ 產出與消耗' }, { k: 'stock', name: '📦 庫存與價格' }, { k: 'stats', name: '📈 統計報表' }, { k: 'trade', name: '💰 貿易' }];
+var TUI_TABS = [{ k: 'sum', name: '📋 概況' }, { k: 'flow', name: '⚖ 產出與消耗' }, { k: 'stock', name: '📦 庫存與價格' }, { k: 'stats', name: '📈 統計報表' }, { k: 'trade', name: '💰 貿易' }, { k: 'dist', name: '🗺 城區' }]   // 城區：外面那一頁有送城區才列（tuiDists；Blocksail TASK-0817）;
 var TUI_C = ['#3987e5', '#d95926'];                                     // 圖的兩條線：藍、橘（dataviz 參考色盤第 1、2 格的深色版；深底 #12161d 上驗過：色盲 ΔE 26.8、對比 ≥ 3）
 var TUI_JOB = { build: '營造（工地）', garrison: '士兵', forage: '野外採集' };   // 不是建築種類的崗位
 var TUI_CAT = { food: '糧食', raw: '原料', cash: '經濟作物', goods: '製品', war: '軍需', metal: '貴金屬', curio: '奇物' };
@@ -97,11 +97,11 @@ function tuiHead() {
     '<span>👥 ' + tuiNum(I.pop.total) + ' 人</span><span>💰 城鎮金庫 ' + tuiNum(I.funds) + '</span><span>第 ' + (I.day + 1) + ' 天</span>';
   return '<div id="tuiHead">' + s + '<button type="button" id="tuiX" title="關掉（Esc）">✕</button></div>';
 }
-function tuiTabs() { return '<div id="tuiTabs">' + TUI_TABS.map(function (t) { return '<button type="button" data-t="' + t.k + '"' + (t.k === TUI.tab ? ' class="on"' : '') + '>' + t.name + '</button>'; }).join('') + '</div>'; }
+function tuiTabs() { var hasD = !!tuiDists(); return '<div id="tuiTabs">' + TUI_TABS.filter(function (t) { return t.k !== 'dist' || hasD; }).map(function (t) { return '<button type="button" data-t="' + t.k + '"' + (t.k === TUI.tab ? ' class="on"' : '') + '>' + t.name + '</button>'; }).join('') + '</div>'; }
 function tuiUI() {
   var P = $('tuiP'); if (!P) return;
   if (!TUI.open) { if (P.innerHTML) P.innerHTML = ''; return; }
-  var body = TUI.tab === 'trade' ? tuiTradeHTML() : !TUI.info ? '<p class="tuiDim">問城鎮帳…</p>' : TUI.tab === 'sum' ? tuiSumHTML() : TUI.tab === 'flow' ? tuiFlowHTML() : TUI.tab === 'stock' ? tuiStockHTML() : tuiStatsHTML();
+  var body = TUI.tab === 'trade' ? tuiTradeHTML() : TUI.tab === 'dist' ? tuiDistHTML() : !TUI.info ? '<p class="tuiDim">問城鎮帳…</p>' : TUI.tab === 'sum' ? tuiSumHTML() : TUI.tab === 'flow' ? tuiFlowHTML() : TUI.tab === 'stock' ? tuiStockHTML() : tuiStatsHTML();
   var sc = P.querySelector('#tuiBody'), top = sc ? sc.scrollTop : 0;
   P.innerHTML = tuiHead() + tuiTabs() + '<div id="tuiBody">' + body + '</div>' + (TUI.msg ? '<div id="tuiMsg">' + tuiEsc(TUI.msg) + '</div>' : '');
   if (sc) P.querySelector('#tuiBody').scrollTop = top;                 // 買賣之後重畫：捲到哪留在哪
@@ -109,6 +109,7 @@ function tuiUI() {
   P.querySelectorAll('#tuiTabs button').forEach(function (b) { b.onclick = function () { if (b.dataset.t !== TUI.tab) { TUI.msg = ''; tuiToggle(b.dataset.t); } }; });
   P.querySelectorAll('button[data-side]').forEach(function (b) { b.onclick = function () { tuiTrade(b.dataset.side, b.dataset.g, +b.dataset.q); }; });
   P.querySelectorAll('button[data-u]').forEach(function (b) { b.onclick = function () { TUI.unit = +b.dataset.u; tuiUI(); }; });
+  P.querySelectorAll('button[data-dist]').forEach(function (b) { b.onclick = function () { if (townDistGo(TWB.town, b.dataset.dist)) tuiUI(); }; });
   var sel = $('tuiPick'); if (sel) sel.onchange = function () { TUI.pick = sel.value; tuiUI(); };
   P.querySelectorAll('svg.tuiCh').forEach(tuiHover);
 }
@@ -275,12 +276,27 @@ function tuiTradeHTML() {
     (Hd && Hd.fullT ? '<div><small>🚢 排水量 標準／滿載</small><b>' + tuiNum(Hd.stdT) + ' / ' + tuiNum(Hd.fullT) + ' 噸</b></div>' : '') + '</div>';
   return h + '<p class="tuiDim">貨重在載重以內 ⇒ 換掉同樣重的壓艙石、吃水不變；超過 ⇒ 吃水變深。標準排水量 ＝ 沒有貨（壓艙石也卸掉）；滿載 ＝ 載重裝滿、在設計水線。</p>';
 }
+// ───────── 城區（Blocksail TASK-0817；63_towns.js townDistView、townDistGo）─────────
+//   Tim 2026-10-26：「然後城鎮模式可以有選單切換城區」「會跳到選中的城區 並以該城區為中心加載地圖」
+/** 這座城的城區（外面那一頁送的規劃帶的 districts；1～N 區）⇒ 清單｜null（太舊的地球儀沒送） */
+function tuiDists() { var p = TOWNS.full[TWB.town]; return p && p.districts && p.districts.length ? p.districts : null; }
+function tuiDistHTML() {
+  var D = tuiDists(); if (!D) return '<p class="tuiDim">這座城沒有分城區。</p>';
+  var cur = TOWNS.dist[TWB.town], S = TOWNS.stat.dist;
+  return '<p>選一區 ⇒ 鏡頭跳過去、以那一區為中心載（只建那一區＋邊上 ' + TOWN_DIST_PAD + ' m；別區的房子、路不載）。</p>' +
+    '<div class="tuiTiles">' + D.map(function (d) {
+      return '<div><small>' + (d.port ? '⚓ 有碼頭' : '　') + (d.id === cur ? '・現在這一區' : '') + '</small><button type="button" data-dist="' + tuiEsc(d.id) + '"' + (d.id === cur ? ' class="on"' : '') + '>' + tuiEsc(d.name) + '</button></div>';
+    }).join('') + '</div>' + (S && S.town === TWB.town ? '<p class="tuiDim">這一區建了地塊 ' + S.lots + '、路 ' + S.roads + '。</p>' : '');
+}
+/** 每一格：城區那一顆鈕在城鎮模式、外面那一頁有送城區（1～N 區）才出現。 */
+function tuiDistKey() { var k = $('tuiDK'); if (!k) return; var v = modeRule('town') && tuiDists() ? '' : 'none'; if (k.style.display !== v) k.style.display = v; }   // .kb 有自己的 display ⇒ 不用 hidden
 /** 每一格：離開城鎮模式（出航）⇒ 關掉。 */
 function tuiFrame() { if (TUI.open && !modeRule('town')) tuiClose(); }
 (function () {
-  var a = $('tuiTK'), b = $('tuiK');
+  var a = $('tuiTK'), b = $('tuiK'), c = $('tuiDK');
   if (a) a.onclick = function () { tuiToggle('trade'); };
   if (b) b.onclick = function () { tuiToggle(); };
+  if (c) c.onclick = function () { tuiToggle('dist'); };
 })();
 ctrlAdd({ name: 'townui', pri: 9, on: function () { return TUI.open; },
   key: function (k, down, e) {
@@ -290,5 +306,5 @@ ctrlAdd({ name: 'townui', pri: 9, on: function () { return TUI.open; },
     if (down && !e.repeat) tuiToggle(lk === 't' ? 'trade' : null);
     e.preventDefault(); return true;
   },
-  frame: function () { tuiFrame(); }
+  frame: function () { tuiFrame(); townDistFrame(); tuiDistKey(); }
 });

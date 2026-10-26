@@ -15,7 +15,7 @@ var UI_GROUPS = {
   nav: ['navBox'],                  // 羅盤與兩舷的砲位
   helm: ['helmL', 'helmR'],         // 下排左右：舵、帆、錨、開砲
   guns: ['guns', 'ammo'],           // 下排中間的砲、彈種
-  kTown: ['twbK', 'tuiTK', 'tuiK'], // 🔨 城鎮的建築選單、💰 貿易、🏛 城鎮資訊（89_townui.js；TASK-0910）
+  kTown: ['twbK', 'tuiTK', 'tuiK', 'tuiDK'], // 🔨 城鎮的建築選單、💰 貿易、🏛 城鎮資訊（89_townui.js；TASK-0910）
   kCam: ['camK'],                   // 🎥 換鏡頭
   kPause: ['pauseK'],               // ⏸ 停格
   kSet: ['setB'],                   // ⚙ 設定

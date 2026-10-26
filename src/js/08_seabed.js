@@ -384,6 +384,7 @@ function bedFocusAuto() {
 }
 /** 焦點：旗艦（玩家開的那艘）；沉了／沒有 ⇒ 還在打的船的中心（都沒了 ⇒ 鏡頭看的地方）。 */
 function bedFocusAt() {
+  if (TOWNS.focus && modeRule('town')) return [TOWNS.focus.x, TOWNS.focus.z];   // 城鎮模式換了城區（63_towns.js townDistGo）⇒ 以那一區為中心載
   var me = SHIPS[PLAYER_I];
   if (me && !me.sunk) return [me.px, me.pz];
   var x = 0, z = 0, n = 0;
