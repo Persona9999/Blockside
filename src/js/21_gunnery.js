@@ -321,7 +321,8 @@ function anyBears(sh, w, side) { return sh.guns.some(function (g) { return g.ali
 function shipAxis(sh) { var ax = M4.dir(sh.M, 1, 0, 0); return norm([ax[0], 0, ax[2]]); }
 function aimPoint(sh) {
   var foe = foeOf(sh);
-  if (handAim(sh) && !sh.autoNow && sh.pMode && sh.pMode !== 'free') { var t = modeAim(foe, sh.pMode, false).t; return M4.pt(foe.M, t[0], t[1], t[2]); }   // 我艦手動的瞄準模式：那個模式的中心點（51_captain.js）
+  if (foe && handAim(sh) && !sh.autoNow && sh.pMode && sh.pMode !== 'free') { var t = modeAim(foe, sh.pMode, false).t; return M4.pt(foe.M, t[0], t[1], t[2]); }   // 我艦手動的瞄準模式：那個模式的中心點（51_captain.js）
+  // ↑ 瞄準模式是對敵艦的：沒有敵艦（城鎮模式點了往來的船、再切瞄準模式）⇒ 照點的那一點打（⛔ modeAim(null) 每一格丟例外）
   if (sh.aim) { var on = aimShip(sh); return M4.pt(on.M, sh.aim[0], sh.aim[1], sh.aim[2]); }   // 瞄準點是那艘的格座標
   return M4.pt(foe.M, foe.T.cx, foe.T.cy, foe.T.geo.aim);
 }
