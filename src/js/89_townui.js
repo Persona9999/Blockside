@@ -11,7 +11,7 @@
 // 物理意義：⛔ 這一支不算經濟 —— 數字全照那一頁的城鎮帳（買賣、價格、關稅都在 Blocksail world/stores.js）；這裡只問、只畫。
 // 失敗處置：沒有 host、不是城鎮模式 ⇒ 按鈕沒反應、說一聲；5 秒沒回 ⇒ 說那一頁沒回（太舊的地球儀）；回覆的 why 照原樣顯示。
 var TUI = { region: null, open: false, tab: 'sum', seq: 0, wait: {}, info: null, goods: {}, blds: {}, every: 7, list: null, msg: '', busy: false, pick: null, charts: {}, last: 'sum', unit: 1 };   // unit：貿易一次買賣幾桶（TUI_UNITS 那四檔）
-var TUI_TABS = [{ k: 'sum', name: '📋 概況' }, { k: 'flow', name: '⚖ 產出與消耗' }, { k: 'stock', name: '📦 庫存與價格' }, { k: 'stats', name: '📈 統計報表' }, { k: 'trade', name: '💰 貿易' }, { k: 'dist', name: '🗺 城區' }]   // 城區：外面那一頁有送城區才列（tuiDists；Blocksail TASK-0817）;
+var TUI_TABS = [{ k: 'sum', name: '📋 概況' }, { k: 'flow', name: '⚖ 產出與消耗' }, { k: 'stock', name: '📦 庫存與價格' }, { k: 'stats', name: '📈 統計報表' }, { k: 'trade', name: '💰 貿易' }, { k: 'dist', name: '🏙 城區' }]   // 城區：外面那一頁有送城區才列（tuiDists；Blocksail TASK-0817）;
 var TUI_C = ['#3987e5', '#d95926'];                                     // 圖的兩條線：藍、橘（dataviz 參考色盤第 1、2 格的深色版；深底 #12161d 上驗過：色盲 ΔE 26.8、對比 ≥ 3）
 var TUI_JOB = { build: '營造（工地）', garrison: '士兵', forage: '野外採集' };   // 不是建築種類的崗位
 var TUI_CAT = { food: '糧食', raw: '原料', cash: '經濟作物', goods: '製品', war: '軍需', metal: '貴金屬', curio: '奇物' };
@@ -58,11 +58,11 @@ function tuiToggle(tab) {
   if (!tuiOk()) { note(SHIPS[PLAYER_I], '城鎮介面要從 Blocksail 地球儀停靠進城'); return; }
   var t = tab || TUI.last;
   if (TUI.open && TUI.tab === t) { tuiClose(); return; }
-  TUI.open = true; TUI.tab = t; if (t !== 'trade') TUI.last = t;
-  $('stage').classList.add('tui'); $('stage').classList.toggle('tuiT', t === 'trade');
+  TUI.open = true; TUI.tab = t; if (t !== 'trade' && t !== 'dist') TUI.last = t;   // 貿易（T）、城區（D）各有自己的鍵 ⇒ I 開回城鎮資訊那幾頁
+  $('stage').classList.add('tui'); $('stage').classList.toggle('tuiT', t === 'trade'); $('stage').classList.toggle('tuiD', t === 'dist');
   tuiLoad();
 }
-function tuiClose() { TUI.open = false; var st = $('stage'); if (st) { st.classList.remove('tui'); st.classList.remove('tuiT'); } }
+function tuiClose() { TUI.open = false; var st = $('stage'); if (st) { st.classList.remove('tui'); st.classList.remove('tuiT'); st.classList.remove('tuiD'); } }
 function tuiEscEaten() { if (!TUI.open) return false; tuiClose(); return true; }
 /** 照現在那一頁問資料、畫（換頁、買賣之後都重問 ⇒ 永遠是城鎮帳現在的數字）。 */
 function tuiLoad() {
@@ -282,14 +282,21 @@ function tuiTradeHTML() {
 function tuiDists() { var p = TOWNS.full[TWB.town]; return p && p.districts && p.districts.length ? p.districts : null; }
 function tuiDistHTML() {
   var D = tuiDists(); if (!D) return '<p class="tuiDim">這座城沒有分城區。</p>';
-  var cur = TOWNS.dist[TWB.town], S = TOWNS.stat.dist;
-  return '<p>選一區 ⇒ 鏡頭跳過去、以那一區為中心載（只建那一區＋邊上 ' + TOWN_DIST_PAD + ' m；別區的房子、路不載）。</p>' +
+  var cur = TOWNS.dist[TWB.town], S = (TOWNS.stat.dist || {})[TWB.town], on = TOWNS.on[TWB.town] || 0;
+  TUI.distSig = tuiDistSig();
+  return '<p>選一區 ⇒ 鏡頭跳過去、先建那一區，建好再補隔壁的區（遠的收掉）；鏡頭拖進別區停一下也會換過去。</p>' +
     '<div class="tuiTiles">' + D.map(function (d) {
-      return '<div><small>' + (d.port ? '⚓ 有碼頭' : '　') + (d.id === cur ? '・現在這一區' : '') + '</small><button type="button" data-dist="' + tuiEsc(d.id) + '"' + (d.id === cur ? ' class="on"' : '') + '>' + tuiEsc(d.name) + '</button></div>';
-    }).join('') + '</div>' + (S && S.town === TWB.town ? '<p class="tuiDim">這一區建了地塊 ' + S.lots + '、路 ' + S.roads + '。</p>' : '');
+      var i = D.indexOf(d);
+      return '<div' + (d.id === cur ? ' class="cur"' : '') + '><small>' + (d.id === cur ? '📍 現在這一區' : on & (1 << i) ? '✓ 已載入' : '　') + (d.port ? '　⚓ 有碼頭' : '') + '</small><button type="button" data-dist="' + tuiEsc(d.id) + '"' + (d.id === cur ? ' class="on"' : '') + '>' + tuiEsc(d.name) + '</button></div>';
+    }).join('') + '</div>' + (S ? '<p class="tuiDim">建了 ' + S.on.length + ' 區：地塊 ' + S.lots + '、路 ' + S.roads + '。</p>' : '');
 }
-/** 每一格：城區那一顆鈕在城鎮模式、外面那一頁有送城區（1～N 區）才出現。 */
-function tuiDistKey() { var k = $('tuiDK'); if (!k) return; var v = modeRule('town') && tuiDists() ? '' : 'none'; if (k.style.display !== v) k.style.display = v; }   // .kb 有自己的 display ⇒ 不用 hidden
+/** 城區頁畫的是哪一份：焦點那一區＋建了哪幾區（換了 ⇒ 重畫；鏡頭拖進別區換焦點不經過按鈕 ⇒ 以前頁上的「現在這一區」停在舊的）。 */
+function tuiDistSig() { return (TOWNS.dist[TWB.town] || '') + ':' + (TOWNS.on[TWB.town] || 0); }
+/** 每一格：城區那一顆鈕在城鎮模式、外面那一頁有送城區（1～N 區）才出現；城區頁開著、焦點或建了哪幾區換了 ⇒ 重畫。 */
+function tuiDistKey() {
+  var k = $('tuiDK'); if (!k) return; var v = modeRule('town') && tuiDists() ? '' : 'none'; if (k.style.display !== v) k.style.display = v;   // .kb 有自己的 display ⇒ 不用 hidden
+  if (TUI.open && TUI.tab === 'dist' && TUI.distSig !== tuiDistSig()) tuiUI();
+}
 /** 每一格：離開城鎮模式（出航）⇒ 關掉。 */
 function tuiFrame() { if (TUI.open && !modeRule('town')) tuiClose(); }
 (function () {
@@ -302,8 +309,8 @@ ctrlAdd({ name: 'townui', pri: 9, on: function () { return TUI.open; },
   key: function (k, down, e) {
     if (!modeRule('town')) return false;
     var lk = k.length === 1 ? k.toLowerCase() : k;
-    if (lk !== 't' && lk !== 'i') return false;
-    if (down && !e.repeat) tuiToggle(lk === 't' ? 'trade' : null);
+    if (lk !== 't' && lk !== 'i' && !(lk === 'd' && tuiDists())) return false;   // D：城區頁（Tim 2026-10-26「可以加上快捷鍵」；城鎮模式的 D 右舵本來就不作用）
+    if (down && !e.repeat) tuiToggle(lk === 't' ? 'trade' : lk === 'd' ? 'dist' : null);
     e.preventDefault(); return true;
   },
   frame: function () { tuiFrame(); townDistFrame(); tuiDistKey(); }

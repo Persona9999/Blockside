@@ -106,7 +106,7 @@ function twbToggle(on) {
   TWB.on = on; TWB.start = null; TWB.tr = null; TWB.moved = true; TWB.sel = null;
   $('stage').classList.toggle('twb', on);
   if (on && TWB.open === 0) {
-    TWB.open = 1; twbMsg('打開城鎮…（第一次要取樣，可能要幾秒）');
+    TWB.open = 1; TWB.unit = twbUnit(); twbMsg('打開城鎮…（第一次要取樣，可能要幾秒）');
     twbAsk('open', null, function (r) { TWB.open = r.ok ? 2 : 0; if (r.ok) twbMenuSet(r.menu); twbMsg(r.ok ? '建築模式：' + (r.ops && r.ops.length ? '存檔裡有 ' + r.ops.length + ' 步' : '還沒改過') + (r.dropped ? '（' + r.dropped + ' 步套不上、丟掉了）' : '') : '打不開：' + (r.why || []).join('；')); });
   }
   twbUI();
@@ -206,6 +206,7 @@ function twbFrameDock() {
 /** 每一格：第一次城到了 ⇒ 鏡頭對著停靠處；游標動了 ⇒ 地面點、問試放／找路；預覽線框；說明那一行。 */
 function twbFrame() {
   if (!modeRule('town')) return;
+  if (TWB.open && TWB.unit !== twbUnit()) { if (TWB.on) twbToggle(false); TWB.open = 0; }   // 換到另一份規劃的城區（遠的城區；TASK-0987）⇒ 那一頁開的 EDIT 是上一份 ⇒ 關掉，再開照新的那一份
   var T = twbTown();
   twbTitle(T);
   if (!TWB.framed && T && !CAM.tr && RUNNING) twbFrameDock();            // 進城：自由鏡頭、對著停靠的那一處（轉場降完之後）
