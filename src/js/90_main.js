@@ -3,7 +3,7 @@ var loopLast = 0, loopAcc = 0, FPS = 60, fpsT = 0;
 function frame(ts, noRaf) {                                         // noRaf：__game.live 同步呼叫（不再排下一格，⛔ 排了 ⇒ 兩條畫面迴圈、模擬走兩倍快）
   if (LAB_FLEET) { flabFrame(ts); if (!noRaf) requestAnimationFrame(frame); return; }   // 擬真沙盒：模擬自己排（84_fleetlab.js），這裡只畫（俯視圖；看實景時才畫 3D）
   var f0 = PF ? performance.now() : 0;                                // 逐幀分段計時（?debug=1）
-  if (BED) { BED_BG = BED_PUMP_MS; var pb0 = performance.now(); bedPump(bedT1()); bedSpent(pb0); treePump(); if (!FLOW_STAGE) { var tp0 = performance.now(); trafficPump(bedT1()); bedSpent(tp0); } }   // 往來的船（58_traffic.js）：背景預算剩下的才做（建船的那十幾段）   // 收進來的海圖塊、規劃晚到要重新整地的塊、擺樹：每格照同一份背景預算做（08_seabed.js、63_towns.js、63_trees.js）—— 模擬這一格要不要等（bedWait）照放好的算
+  if (BED) { BED_BG = BED_PUMP_MS; var pb0 = performance.now(); bedPump(bedT1()); bedSpent(pb0); treePump(); if (!FLOW_STAGE) { var tp0 = performance.now(); trafficPump(bedT1()); bedSpent(tp0); trrTick(); } }   // 往來的船（58_traffic.js）：背景預算剩下的才做（建船的那十幾段）   // 收進來的海圖塊、規劃晚到要重新整地的塊、擺樹：每格照同一份背景預算做（08_seabed.js、63_towns.js、63_trees.js）—— 模擬這一格要不要等（bedWait）照放好的算
   if (FLOW_STAGE) { loopLast = ts; if (!noRaf) requestAnimationFrame(frame); return; }   // 開戰分段做到一半（70_flow.js startStaged）：只收塊、擺樹，不畫、不走 ⇒ 不會碰到做到一半的船
   var dt = loopLast ? Math.min(0.1, (ts - loopLast) / 1000) : DT_BASE, hv = 0, hsv = 0; loopLast = ts;   // hv：帆與繩照畫面格算時這一格走幾秒（TASK-0799）
   FPS = FPS * 0.95 + (1 / Math.max(dt, 1e-3)) * 0.05;
@@ -222,6 +222,7 @@ if (DEBUG) window.__game = {
   inland: function (on) { if (on !== undefined) { BEDWAT.on = !!on; render(); } return BEDWAT.on; },
   river: function (x, z) { var r = bedWet(x, z), R = { n: BEDW.n, top: BEDW.top, low: BEDW.low }; if (r) Object.assign(R, { m: +r.m.toFixed(3), s: +r.s.toFixed(2), fx: +r.fx.toFixed(3), fz: +r.fz.toFixed(3), sl: r.sl, lv: +seaLv(x, z).toFixed(2), bed: +bedHgt(x, z).toFixed(2) }); return R; },   // 內陸水的模擬（08_seabed.js bedWet；TASK-0768）：那一點有幾成是河、河面、水流、坡度、水位、河床   // 內陸水與低於海平面的乾地的遮罩一起開關（63_bed_gl.js；同一格開／關對照畫面用）
   chart: function () { return chartInfo(); },                                  // 小地圖（63_chart.js）：開了沒、範圍、吃水門檻、底圖幾塊、畫面上的位置
+  trkRec: function (op) { return trrInfo(op); },                             // 往來船的航跡記錄（58_trafficrec.js）：每艘的點、瞬移；'clear'／'on'／'off'／'show'／'hide'
   traffic: function () { return trafficInfo(); },                             // 往來的船（58_traffic.js）：在場幾艘、排隊、做好幾艘、收掉幾艘、建船每一段幾 ms
   flow: function () { return FLOW_ST; },                             // ?start=1 分段開戰（70_flow.js startStaged）：幾步、最久一步、每一步幾 ms、全部幾 ms
   bed: function (q) { if (!BED || !BED.A) return null; return { area: BED.A.id, site: BED.site, origin: [BED.ax, BED.az], center: [BED.cx, BED.cy], loaded: Object.keys(BED.ch).sort(), loads: BED.loads, drops: BED.drops, waits: BED.miss,

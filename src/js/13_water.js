@@ -93,11 +93,13 @@ function wpShip(sh, dt, L) {
   if (!Mp || sh.sink > 30 || !(dt > 0)) return;
   var R = T.wpR || (T.wpR = wpRing(T)), st = WP_RING / L.pts | 0, ds = (T.wl1 - T.wl0) * S / WP_RING * st, zc = clamp(T.zw + (sh.sink - sh.lift - sh.bob) / S, 1, T.sz - 2);
   var acc = sh.wpAcc || (sh.wpAcc = new Float32Array(WP_RING * 4 + 4)), t0 = SIMT - dt;
+  // 照時刻表滑、拖的往來船（58_traffic.js trafficKin；Blocksail TASK-0980）：城鎮快轉時一步走幾百公尺 ⇒ 船殼的點速度照 VMAX 封頂（⛔ 不封 ⇒ 推水照速度平方算，一格噴一大片水花）
+  var vk = 1; if (sh.npc && trafficKin(sh)) { var c1 = M4.pt(M, T.cx, T.cy, zc), c0 = M4.pt(Mp, T.cx, T.cy, zc), cv = Math.hypot(c1[0] - c0[0], c1[2] - c0[2]) / dt; if (cv > VMAX) vk = VMAX / cv; }
   for (var q = 0; q < WP_RING * 2; q += st) {
     var r = q * 4, P = M4.pt(M, R[r], R[r + 1], zc), P0 = M4.pt(Mp, R[r], R[r + 1], zc), h = seaH(P[0], P[2], SIMT);
     if (P[1] - h > 0.6) continue;                                                 // 這一刻那一點離開水面（浪谷）⇒ 沒碰到水
     var nw = M4.dir(M, R[r + 2], R[r + 3], 0), nl = Math.hypot(nw[0], nw[2]) || 1, nx = nw[0] / nl, nz = nw[2] / nl;
-    var vx = (P[0] - P0[0]) / dt, vy = (P[1] - P0[1]) / dt, vz = (P[2] - P0[2]) / dt, vs = (h - seaH(P[0], P[2], t0)) / dt;
+    var vx = (P[0] - P0[0]) / dt * vk, vy = (P[1] - P0[1]) / dt * vk, vz = (P[2] - P0[2]) / dt * vk, vs = (h - seaH(P[0], P[2], t0)) / dt;
     var vn = vx * nx + vz * nz, push = Math.max(0, vn - 0.35), slam = Math.max(0, vs - vy - 0.3), bw = vn > 0.2 ? 0.3 + 1.2 * (vn - 0.2) : 0;
     if (!(push > 0 || slam > 0 || bw > 0)) continue;
     acc[q] += (push * push * 2.5 + slam * slam * 25) * L.k * ds * dt; WP_SRC = push * push * 2.5 > slam * slam * 25 ? 'push' : 'slam';
