@@ -3,7 +3,7 @@
 const fs = require('node:fs'), vm = require('node:vm'), assert = require('node:assert/strict');
 const source = fs.readFileSync(require('node:path').join(__dirname, '../js/63_towns.js'), 'utf8');
 const events = {};
-const c = { Q: new URLSearchParams(), TREE_DITHER:'', evOn: (n, f) => { events[n] = f; }, performance, setTimeout, console };
+const c = { Q: new URLSearchParams(), TREE_DITHER:'', TREE_FIELD_CARD:false, evOn: (n, f) => { events[n] = f; }, performance, setTimeout, console };
 vm.createContext(c); vm.runInContext(source, c);
 c.BED = { ax: 0, az: 0, A: { chunk: 64 } }; c.TOWN_GT_SZ = 8;   // 地面分區照 8 m（路口跨好幾區）
 c.townGpu9 = (V, I, bb) => ({ V, I, bb }); c.townGpuFree = () => {};
@@ -41,7 +41,7 @@ const cases = [road([[0,0],[10,0],[10,10]]), road([[0,0],[10,0],[.5,1]]), road([
 for (const r of cases) { const s=await surface([r]); assert(s.i.length>0); assert([...s.v].every(Number.isFinite)); tris(s).forEach(f=>assert.equal(new Set(f).size,3)); }
 // A broad cell has a saddle: bilinear interpolation is below its rendered upper triangle.
 const C = { n:2, h:new Int16Array([20,100,100,20]) };
-c.bedCell = (x,z) => ({ C, u:x/4, v:z/4 }); c.townHv = C=>C.h;
+c.bedCell = (x,z) => ({ C, u:x/4, v:z/4 });
 assert.equal(c.townRoadHeight(2,2),10); assert.equal(c.townGround(2,2),6);
 // Sample a piecewise planar hill with transverse slope. The plan's old z=2 is buried.
 c.townRoadHeight = (x,z) => 7 + .18*x + .12*z;
