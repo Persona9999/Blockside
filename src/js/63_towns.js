@@ -89,7 +89,7 @@ function townGot(L, err, idx) {
   if (idx && idx.models && !TOWNS.idx) TOWNS.idx = idx;
   if (!BED || !BED.A || !L || !L.length) return;
   var t0 = performance.now(), n0 = TOWNS.list.length;
-  L.forEach(function (p) { if (p && p.format === 'blocksail-town' && !TOWNS.list.some(function (T) { return T.id === p.id; })) TOWNS.list.push(townPrep(p)); });
+  L.forEach(function (p) { if (p && p.format === 'blocksail-town' && !TOWNS.list.some(function (T) { return T.id === p.id; })) TOWNS.list.push(townPrep(townDistView(p))); });
   if (TOWNS.list.length === n0) return;
   var NEW = TOWNS.list.slice(n0);                                       // 新來的城：只有跟它們疊到的塊要重新整地（townHv 照 T.v 判斷舊的整地還能不能用；TASK-0826）                                 // 都是已經有的（外面那一頁做好一座先送一座、最後再給整份）⇒ 不重建整地、網格、遠景
   var I = townIdx();                                                    // 新來的城要的模型解好的那一份沒有 ⇒ 丟掉重要（解到一半 ⇒ 解完再丟）
@@ -98,6 +98,72 @@ function townGot(L, err, idx) {
   NEW.forEach(function (T) { T.v = TOWNS.ver; });
   TOWNS.stat.prepMs = +(performance.now() - t0).toFixed(1);
   townRegradeFor(NEW);
+}
+// ── 城區（Blocksail TASK-0817；Tim 2026-10-26「讓城有多個城區（可以距離很遠 進城不加載遠處城區）」「城鎮模式可以有選單切換城區」
+//    「會跳到選中的城區 並以該城區為中心加載地圖」「停靠時可以停靠在不同城區的碼頭（棧橋）」）──
+//   外面那一頁送的規劃帶 districts ＝ [{ id, name, c, poly, port }]（規劃的當地公尺；Blocksail world/areas.js townDistrictsXY）。
+//   城鎮模式（modeRule('town')）⇒ 只建選中的那一區＋邊上 TOWN_DIST_PAD 公尺（townDistView 濾出來的那一份當規劃，townPrep 以下一行不改）：
+//     地塊（連它的整地、清樹的環）照地塊的中心；路、棧橋、碼頭、樓梯、引水渠、住宅街區碰得到就整條建；城牆、巨鏈、中心城區整座照建（天際線、便宜 —— TASK-0817 #1 量過）。
+//   航海模式照舊整座城（沿岸開過去看得到整座）。選哪一區：TOWNS.dist[城]；沒選過 ⇒ 旗艦在哪一區（停靠的那一區）。
+//   換區（townDistGo）⇒ townReplace 換成那一區、鏡頭跳到那一區的中心、海域的窗以它為中心（bedFocusAt 看 TOWNS.focus）。
+var TOWN_DIST_PAD = 120;                                                // 選中的那一區外面多建幾公尺（接縫不在鏡頭前面斷掉）〔佔位〕
+TOWNS.dist = {}; TOWNS.full = {}; TOWNS.distGuess = {}; TOWNS.focus = null; TOWNS.distMode = false;
+/** 一點（規劃的當地公尺）落在哪一區 ⇒ 那一筆；都不在 ⇒ 離它的邊最近的那一區（同 Blocksail townDistrictNear）。 */
+function townDistAt(D, x, y) {
+  var best = null, bd = Infinity;
+  for (var i = 0; i < D.length; i++) { var R = D[i].poly; if (townPip(x, y, R)) return D[i]; var m = townPolyDist(x, y, R); if (m < bd) { bd = m; best = D[i]; } }
+  return best;
+}
+/** 旗艦在哪一區（還沒有旗艦 ⇒ 先給第一區、記在 TOWNS.distGuess，旗艦出現的那一格 townDistFrame 重挑）。 */
+function townDistStart(p) {
+  var D = p.districts, me = SHIPS[PLAYER_I]; if (!me || !BED) { TOWNS.distGuess[p.id] = 1; return D[0]; }
+  delete TOWNS.distGuess[p.id];
+  var kx = +p.kx || 1, x = (me.px + BED.ax - (+p.ox || 0)) / kx, y = me.pz + BED.az - (+p.oy || 0);
+  return townDistAt(D, x, y) || D[0];
+}
+/** 城鎮模式 ⇒ 只留選中的那一區（＋邊）的那一份規劃（淺複本；p 本身記在 TOWNS.full，換區、出航時拿它重濾）；不是城鎮模式、沒有城區 ⇒ p 本身。 */
+function townDistView(p) {
+  var D = p && p.districts; if (!D || D.length < 2) return p;
+  if (!p.distView) TOWNS.full[p.id] = p; else p = TOWNS.full[p.id] || p;   // 已經濾過的那一份 ⇒ 拿整份重濾
+  if (!modeRule('town')) return p;
+  var k = TOWNS.dist[p.id], A = D.filter(function (d) { return d.id === k; })[0];
+  if (!A) { A = townDistStart(p); TOWNS.dist[p.id] = A.id; }
+  var R = A.poly, near = function (q) { return townPip(q[0], q[1], R) || townPolyDist(q[0], q[1], R) <= TOWN_DIST_PAD; };
+  var any = function (P) { return (P || []).some(near); }, keep = {};
+  var o = {}; for (var key in p) o[key] = p[key];
+  o.lots = (p.lots || []).filter(function (l) { var on = near(l.at); if (on) keep[l.id] = 1; return on; });
+  o.grade = (p.grade || []).filter(function (g) { return g.lot ? keep[g.lot] : any(g.ring); });
+  o.roads = (p.roads || []).filter(function (r) { return any(r.path); });
+  ['piers', 'quay', 'aqueducts'].forEach(function (k) { if (p[k]) o[k] = p[k].filter(function (q) { return any(q.path); }); });
+  if (p.stairs) { var rk = {}; o.roads.forEach(function (r) { rk[r.id] = 1; }); o.stairs = p.stairs.filter(function (s) { return rk[s.road] || any(s.path); }); }
+  if (p.berths) o.berths = p.berths.filter(function (b) { return near(b.at); });
+  if (p.zones) o.zones = p.zones.filter(function (z) { return any(z.polygon); });
+  if (p.clear) o.clear = { rings: (p.clear.rings || []).filter(any), paths: (p.clear.paths || []).filter(function (c) { return any(c.path); }) };
+  o.distView = A.id;
+  TOWNS.stat.dist = { town: p.id, dist: A.id, lots: o.lots.length + '/' + (p.lots || []).length, roads: o.roads.length + '/' + (p.roads || []).length };
+  return o;
+}
+/** 換到 k 那一區：重濾、換上去；鏡頭跳到那一區的中心（自由鏡頭）、海域的窗以它為中心。⇒ 換了沒 */
+function townDistGo(id, k) {
+  var p = TOWNS.full[id], d = p && (p.districts || []).filter(function (q) { return q.id === k; })[0]; if (!d || !BED) return false;
+  TOWNS.dist[id] = k;
+  townReplace(p);
+  var e = [(+p.ox || 0) + (+p.kx || 1) * d.c[0], (+p.oy || 0) + d.c[1]], x = e[0] - BED.ax, z = e[1] - BED.az, h = townGround(x, z);
+  TOWNS.focus = { town: id, x: x, z: z };
+  camSet({ mode: 0, follow: null, see: null, pan: [0, 0], tgt: [x, isFinite(h) ? Math.max(0, h) : 0, z], dist: Math.max(CAM.dist || 0, 500) });   // 自由鏡頭（CAM 只由 03_camera.js 寫）
+  var me = SHIPS[PLAYER_I]; if (me) note(me, '🗺 ' + (p.name || id) + '・' + d.name);
+  return true;
+}
+/** 每一格：進出城鎮模式 ⇒ 帶城區的城換成那一區／整座（進城鎮模式從旗艦停的那一區開始）；出了城鎮模式 ⇒ 窗的焦點還給旗艦。 */
+function townDistFrame() {
+  var on = !!modeRule('town');
+  if (on && SHIPS[PLAYER_I]) Object.keys(TOWNS.distGuess).forEach(function (id) {   // 規劃比旗艦早到、先猜了第一區 ⇒ 照旗艦重挑
+    delete TOWNS.distGuess[id]; delete TOWNS.dist[id];
+    if (TOWNS.full[id] && TOWNS.list.some(function (T) { return T.id === id; })) townReplace(TOWNS.full[id]);
+  });
+  if (on === TOWNS.distMode) return;
+  TOWNS.distMode = on; TOWNS.focus = null;
+  Object.keys(TOWNS.full).forEach(function (id) { if (on) delete TOWNS.dist[id]; if (TOWNS.list.some(function (T) { return T.id === id; })) townReplace(TOWNS.full[id]); });
 }
 /** 跟 L 裡的城疊到的塊重新整地、清樹（townGot 新來的城、townReplace 改過的城）。 */
 function townRegradeFor(NEW) {
@@ -168,6 +234,7 @@ function townTilesIn(B) {
 }
 function townReplace(p) {
   if (!BED || !BED.A || !p || p.format !== 'blocksail-town') return false;
+  p = townDistView(p);                                                  // 城區：城鎮模式只換上選中的那一區（townDistView）
   var i = -1; TOWNS.list.forEach(function (T, k) { if (T.id === p.id) i = k; });
   if (i < 0) { townGot([p]); return true; }
   var old = TOWNS.list[i], T = townPrep(p), D = TOWN_FULL || !old.gt || !old.roadSurface ? null : townDiff(old, T);
