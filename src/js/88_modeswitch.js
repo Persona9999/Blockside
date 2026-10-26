@@ -188,6 +188,7 @@ function dockGo(kind, d) {
   var pts;
   if (kind === 'in') {                                                   // 停靠 ＝ 過場（Tim 2026-10-24「船停靠直接靠半過場動畫(就是直接無視船的物理模擬 畫好路線直接停好)」「只考慮航速就好」）
     var c0 = shipCenter(me), e = dockEntry(d, c0), A = [[c0[0], c0[2]]].concat(d.path.slice(0, e + 1).reverse()), cum = [0];
+    A[A.length - 1] = quayBerthAt(me, d.id, d.at);   // 最後一點（＝ at）：大船以上的泊位照船寬貼平台（32_quay.js，TASK-0962）；航道其他點照舊走船道中線
     for (var i = 1; i < A.length; i++) cum.push(cum[i - 1] + Math.hypot(A[i][0] - A[i - 1][0], A[i][1] - A[i - 1][1]));
     if (anchorsOf(me) && me.anc) { anchorToggle(me, 'P', false); anchorToggle(me, 'S', false); } me.ancMode = false; if (SAIL === 'off') setSailMode('manual');
     DOCK.run = { kind: 'in', anim: true, d: d, A: A, cum: cum, L: cum[cum.length - 1], s: 0, v0: clamp(Math.max(Math.abs(me.spd), me.vCruise || 0), DOCK_AV[0], DOCK_AV[1]), y0: me.yaw, phase: 'go', k: 0, pts: A, left: cum[cum.length - 1], sail: SAIL, simx: false };   // simx：城鎮模式不調模擬速度（DOCK_AX）
