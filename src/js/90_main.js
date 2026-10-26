@@ -540,6 +540,7 @@ else GL_READY.then(yieldUI).then(function () {                     // 先讓主�
   if (!chk.ok) { glFail('船體資料跟封裝檔對不上，停下來（不畫半艘船）。\n' + line); return; }
   evEmit('boot:ready');
   if (Q.has('shipcheck')) { shipCheck(Q.get('shipcheck')); return; }
+  if (Q.has('dispcheck')) { dispCheck(Q.get('dispcheck')); return; }   // 排水量與壓艙物（75_shipcheck.js；admin.py disp 用無頭 Chrome 讀）
   if (LAB_FLEET) { flabInit(); return; }                                // 擬真沙盒（84_fleetlab.js）   // 匯入檢查（75_shipcheck.js；admin.py check 用無頭 Chrome 讀）
   if (Q.get('lab') === 'flood') { var FR = floodLab(flLabOpts()), fp = document.createElement('pre'); fp.id = 'lab'; document.body.appendChild(fp); fp.textContent = JSON.stringify(FR); uiAway(); return; }   // 沙盒進水報表（81_floodlab.js；src/tests/flood_lab.py）
   if (Q.get('lab') === 'wrooms') { var WO = {}; ['dz', 'px'].forEach(function (k) { if (Q.has(k)) WO[k] = +Q.get(k); }); var WR = wroomsLab(T, WO), wp = document.createElement('pre'); wp.id = 'lab'; document.body.appendChild(wp); wp.textContent = JSON.stringify(WR); uiAway(); return; }   // 水的房間的報表（81_floodlab.js wroomsLab；src/tests/wrooms_lab.py 讀 #lab）

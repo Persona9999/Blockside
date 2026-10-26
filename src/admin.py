@@ -1623,6 +1623,76 @@ def shipcheck_page(chrome, sid, extra=''):
         shutil.rmtree(prof, ignore_errors=True)
 
 
+DISP_LOW = 0.15      # 壓艙空間不到設計水線排水量的這麼多 ⇒ ⚠（Blocksail 裝一點貨就變深）
+
+
+def act_disp(ids=None, margin=None):
+    """排水量與壓艙物（Tim 2026-10-26「加一個工具檢查目前所有船的空載排水量跟水線排水量 滿載排水量 因為我發現目前有些船沒有壓艙物(載一點貨物就會加深吃水) 需要分析如何調整」）。
+    量法住在遊戲裡（js/75_shipcheck.js dispCheck，?dispcheck=<船,…>）：重量照開戰時同一套（hullT0：格＋砲＋火藥桶）、浮力照 hydrostatics ⇒ 這裡只跑成品、寫 reports/disp.md。
+    壓艙空間 ＝ 設計水線 − 空載：Blocksail 的貨在這個範圍裡只換掉壓艙石、吃水不變（world/stores.js fleetLoad）；設定檔 ships[].cargoT（目標載重，噸）有寫 ⇒ 列缺口與兩種補法。"""
+    import html as _html, tempfile
+    cfg = load()
+    ships = {s['id']: s for s in cfg['ships']}
+    chrome = next((c for c in CHROMES if os.path.exists(c)), None)
+    if not chrome:
+        raise Fail('找不到 Chrome（' + '、'.join(CHROMES) + '）')
+    if not os.path.exists(OUT):
+        raise Fail('還沒有成品（先 build）')
+    prof = tempfile.mkdtemp(prefix='dispcheck_')
+    try:
+        url = 'file:///' + OUT.replace('\\', '/') + '?dispcheck=' + (','.join(ids) if ids else 'all') + ('&dispmargin=%g' % margin if margin is not None else '')
+        r = subprocess.run([chrome, '--headless=new', '--no-first-run', '--user-data-dir=' + prof, '--use-angle=swiftshader', '--enable-unsafe-swiftshader',
+                            '--virtual-time-budget=900000', '--dump-dom', url], capture_output=True, timeout=1800)
+        ms = re.findall(r'<pre id="dispcheck">(.*?)</pre>', r.stdout.decode('utf-8', 'replace'), re.S)
+    finally:
+        shutil.rmtree(prof, ignore_errors=True)
+    if not ms:
+        raise Fail('讀不到 ?dispcheck 的結果（無頭 Chrome 沒跑完）')
+    D = json.loads(_html.unescape(ms[-1]))     # 最後一個 ＝ 頁面寫出來的那個（第一個可能是內嵌程式裡的字串）
+    f1 = lambda v: '—' if v is None else ('{:,.1f}'.format(v) if isinstance(v, float) else '{:,}'.format(v))
+    sg = lambda v: '—' if v is None else '%+.2f' % v
+    md = ['# 排水量與壓艙物', '',
+          '> `python -I admin.py disp [--id <船>] [--margin %g]` 產生；量法在 `js/75_shipcheck.js` dispCheck（重量、浮力照遊戲同一套：格 × 材質比重、砲照砲種表 × 那一型的 gunw、火藥桶）。' % D['margin'],
+          '> **空載** ＝ 船體格子＋砲＋火藥桶（沒有壓艙物、沒有貨）；**水線** ＝ 設計水線（作品的 waterline_z）以下的排水量；**滿載** ＝ 水淹到最低一層砲甲板或船中央的頂層甲板（取低的）再往下 %g m。' % D['margin'],
+          '> **壓艙空間** ＝ 水線 − 空載 ＝ 開戰時遊戲放的壓艙物（ballast0 取整到 25 噸之前），也是 Blocksail 裡「貨只換掉壓艙石、吃水不變」的載重上限；負的 ⇒ 空船就比設計水線深。',
+          '> 空船浮高 ＝ 沒有壓艙物、沒有貨時比設計水線高幾公尺（負 ＝ 深）；滿載線、砲甲板、頂層甲板都是離設計水線幾公尺；每 cm ＝ 設計水線那一層多吃 1 cm 水要幾噸。', '',
+          '| 船 | 砲 | 設計吃水 m | 空載 t（格＋砲＋桶） | 空船浮高 m | 水線 t | 壓艙空間 t | ÷ 水線 | ballast0 | 砲甲板／頂層 m | 滿載線 m | 滿載 t | 水線上還能多載 t | 每 cm t | 目標載重 t |',
+          '|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|']
+    notes, log = [], []
+    for s in D['ships']:
+        if s.get('err'):
+            md.append('| %s | ✗ 載不進來：%s |' % (s['id'], s['err']))
+            continue
+        tgt = ships.get(s['id'], {}).get('cargoT')
+        room, k = s['ballastRaw'], s['ballastRaw'] / s['disp'] if s['disp'] else 0
+        md.append('| %s `%s` | %d | %.2f | %s（%s＋%s＋%s） | %s | %s | %s | %.0f%% | %s | %s／%s | %s | %s | %s | %.2f | %s |' % (
+            s['name'], s['id'], s['guns'], s['draft'], f1(s['light']), f1(s['vox']), f1(s['gun']), f1(s['keg']), sg(s['lightLift']), f1(s['disp']), f1(room), k * 100,
+            f1(s['ballast0']), sg(s['gunDeck']), sg(s['topDeck']), sg(s['fullLine']), f1(s['full']), f1(s['full'] - s['disp']), s['tpc'], f1(tgt) if tgt is not None else '—'))
+        w = []
+        if room <= 0:
+            w.append('✗ 壓艙空間 %s 噸：空船就比設計水線深 %.2f m ⇒ Blocksail 一裝貨就變深' % (f1(room), -(s['lightLift'] or 0)))
+        elif k < DISP_LOW:
+            w.append('⚠ 壓艙空間只有水線排水量的 %.0f%%（%s 噸）⇒ 裝一點貨就變深' % (k * 100, f1(room)))
+        if room > 0 and abs(s['ballast0'] - room) > max(5, room * 0.1):
+            w.append('⚠ 遊戲的 ballast0 取整到 25 噸：%s → %s（Blocksail 的壓艙物照 ballast0 ⇒ 差 %s 噸）' % (f1(room), f1(s['ballast0']), f1(s['ballast0'] - room)))
+        if s['fullLine'] <= 0.1:
+            w.append('⚠ 滿載線離設計水線只有 %s m（砲甲板／頂層甲板 %s／%s m）⇒ 過了設計水線幾乎沒有餘裕' % (sg(s['fullLine']), sg(s['gunDeck']), sg(s['topDeck'])))
+        if tgt is not None and tgt > room:
+            gap = tgt - room
+            cm = gap / s['tpc'] if s['tpc'] > 0 else None
+            w.append('⚠ 目標載重 %s 噸，差 %s 噸 ⇒ 補法：① 設計水線往上移約 %s cm（%s 格；滿載線剩 %s m）② 空載輕 %s 噸（格子的 %.0f%%）' % (
+                f1(float(tgt)), f1(gap), '%.0f' % cm if cm else '—', '%.1f' % (cm / (D['S'] * 100)) if cm else '—', '%.2f' % (s['fullLine'] - (cm or 0) / 100), f1(gap), gap / s['vox'] * 100 if s['vox'] else 0))
+        if w:
+            notes.append('- **%s `%s`**：' % (s['name'], s['id']) + '；'.join(w))
+        log.append('  %s：空載 %s／水線 %s／滿載 %s 噸；壓艙空間 %s 噸（%.0f%%）%s' % (s['id'], f1(s['light']), f1(s['disp']), f1(s['full']), f1(room), k * 100, '　' + w[0][:1] if w else ''))
+    md += ['', '## 要看的', ''] + (notes or ['（沒有）'])
+    os.makedirs(REPORTS, exist_ok=True)
+    p = os.path.join(REPORTS, 'disp.md')
+    with open(p, 'w', encoding='utf-8', newline='\n') as f:
+        f.write('\n'.join(md) + '\n')
+    return ['排水量與壓艙物（%d 型；滿載線 ＝ 最低砲甲板／頂層甲板再往下 %g m）：' % (len(D['ships']), D['margin'])] + log + ['⇒ ' + p]
+
+
 ROPEBIND_KIND = {'grid': '格子（旁邊 5 格內有實心格）', 'turret': '砲塔的殼', 'yard': '帆桁', 'model': '模型（作品寫明）', 'guess': '模型（照外框猜）', 'rope': '母繩', 'sail': '只靠帆角', 'none': '哪裡都不靠'}
 
 
@@ -4094,6 +4164,9 @@ def main():
     s = sp.add_parser('ladcheck', help='樓梯自檢（TASK-0838）：每座梯子的梯口有沒有洞、兩端站不站得住、走不走得出去 ⇒ reports/ladcheck_<船>.md（不給 --id ⇒ 每一艘，另寫 reports/ladcheck.md）；shipcheck 也會順手寫')
     s.add_argument('--id', action='append', help='哪一艘（可以給好幾次）；不給 ＝ 每一艘')
     s.add_argument('--selftest', action='store_true', help='反向對照：在記憶體裡把正常的梯子挪 2 格、出口前立柱子、head 四周圍牆，每一種都要報出來（admin.py LADTEST）')
+    s = sp.add_parser('disp', help='排水量與壓艙物：每一型的空載／設計水線／滿載排水量、壓艙空間（＝ Blocksail 貨只換壓艙石的上限）、ships[].cargoT 的缺口與補法 ⇒ reports/disp.md')
+    s.add_argument('--id', action='append', help='哪一艘（可以給好幾次）；不給 ＝ 每一艘（不含堡壘）')
+    s.add_argument('--margin', type=float, help='滿載線比淹到最低砲甲板／頂層甲板低幾公尺（預設 0.3）')
     s = sp.add_parser('build')
     s.add_argument('--raw', action='store_true', help='原格式（不壓縮、船內嵌）；預設是壓縮版：每艘船的模型網格收成它自己的池子（同一份只存一次、頂點去重＋差值），_cache 不動')
     s.add_argument('--single', action='store_true', help='壓縮版但不拆檔：船照舊內嵌在 index.html（一個檔；封存、要單一檔案的地方用）。預設拆成入口＋ships/')
@@ -4162,6 +4235,8 @@ def main():
             log = act_shipcheck(o.id)
         elif o.op == 'ladcheck':
             log = act_ladtest() if o.selftest else act_ladcheck(o.id)
+        elif o.op == 'disp':
+            log = act_disp(o.id, o.margin)
         elif o.op == 'build':
             if o.code and (o.raw or o.single):
                 raise Fail('--code 不能跟 --raw、--single 一起用（--code 只換拆檔成品的入口）')
