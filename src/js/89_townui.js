@@ -28,11 +28,28 @@ function tuiEatHTML(F) {
   if (sv > known) rows.push({ k: '', q: sv - known });   // 舊存檔沒有逐菜紀錄：保留總數，不能猜成聖餐。
   if (!(tot > 0)) return '';
   rows.sort(function (a, b) { return b.q - a.q || (a.k < b.k ? -1 : a.k > b.k ? 1 : 0); });
-  return '<table class="tuiT"><tr><th>吃的</th><th>份</th><th>比例</th></tr>' + rows.map(function (x) {
-    var g = x.k.indexOf('eat:') === 0 ? x.k.slice(4) : null, R = x.service && (TUI.serveDishes || {})[x.k],
-      nm = x.service ? tuiIcon('dishes', R && R.icon || x.k) + tuiEsc(R && R.name || x.k) : !x.k ? '服務餐點（舊紀錄）' : g ? tuiIcon('goods', g) + tuiEsc(tuiGood(g)) : tuiIcon('dishes', x.k) + tuiEsc(TUI.dishes[x.k] || x.k);
+  return '<table class="tuiT"><tr><th>餐點</th><th>份</th><th>比例</th></tr>' + rows.map(function (x) {
+    var g = x.k.indexOf('eat:') === 0 ? x.k.slice(4) : null, H = !x.service && (TUI.homeMenu || []).filter(function (m) { return m.id === x.k; })[0], R = x.service && (TUI.serveDishes || {})[x.k],
+      nm = x.service ? tuiIcon('dishes', R && R.icon || x.k) + tuiEsc(R && R.name || x.k) : !x.k ? '服務餐點（舊紀錄）' : H ? tuiIcon(H.dir || 'dishes', H.icon) + tuiEsc(H.name) : g ? tuiIcon('goods', g) + tuiEsc(tuiGood(g)) : tuiIcon('dishes', x.k) + tuiEsc(TUI.dishes[x.k] || x.k);
     return '<tr><td>' + nm + '</td><td>' + tuiNum(x.q / 1000) + '</td><td>' + (x.q * 100 / tot).toFixed(1) + '%</td></tr>';
   }).join('') + '</table>';
+}
+/** 實際食材另列：只用當天保存的廚房＋供餐扣料，不能用菜單倒推或混入日用。 */
+function tuiIngredientsHTML(F) {
+  if (!F.ingredients) return '<p class="tuiDim">舊紀錄未保存食材明細，過一天後更新。</p>';
+  var all = {};
+  [F.ingredients.home, F.ingredients.service].forEach(function (o) { Object.keys(o || {}).forEach(function (g) { all[g] = (all[g] || 0) + o[g]; }); });
+  var ks = Object.keys(all).filter(function (g) { return all[g] > 0; }).sort(function (a, b) { return all[b] - all[a] || (a < b ? -1 : 1); });
+  if (!ks.length) return '<p class="tuiDim">當天沒有消耗食材。</p>';
+  return '<p class="tuiDim">廚房（含加餐、免費供應）與服務供餐合計；不含日用及單獨飲品。</p><table class="tuiT"><tr><th>食材</th><th>消耗（桶）</th></tr>' + ks.map(function (g) { return '<tr><td>' + tuiIcon('goods', g) + tuiEsc(tuiGood(g)) + '</td><td>' + tuiNum(all[g] / 1000, 3) + '</td></tr>'; }).join('') + '</table>';
+}
+function tuiHomeMenuHTML() {
+  var menus = TUI.homeMenu || [];
+  if (!menus.length) return '';
+  var LV = ['荒年糧', '主糧', '家常', '佳餚'];
+  return '<details><summary>🍲 城鎮廚房菜單（' + menus.length + '道）</summary><p class="tuiDim">即做即食，無額外工人；以下為每100份標準用量，實際用料見消耗食材。類別可由成員替代，餐點依價格、物資與預算選用。</p>' + menus.map(function (m) {
+    return '<p><b>' + tuiIcon(m.dir || 'dishes', m.icon) + tuiEsc(m.name) + '</b>　' + tuiEsc(LV[m.level] || '') + '<br><small>' + Object.keys(m.per100 || {}).map(function (g) { return tuiEsc(tuiGood(g)) + ' ' + tuiNum(m.per100[g], 3) + (g.charAt(0) === '@' ? ' 份類別' : ' 桶'); }).join('、') + '</small></p>';
+  }).join('') + '</details>';
 }
 function tuiGood(g) { var X = TUI.goods[g]; if (X && X.name) return X.name; var R = TUI.list && TUI.list.rows.filter(function (r) { return r.g === g; })[0]; return R ? R.name : g; }
 /** 跟外面那一頁要（cb(回覆)）；5 秒沒回 ⇒ cb({ ok: false, why }）。 */
@@ -74,7 +91,7 @@ function tuiLoad() {
 }
 /** 問城鎮資訊（每一頁都要：上面那一列、貨名 tuiGood；買賣之後城鎮金庫跟著變 ⇒ 重問）。 */
 function tuiInfo() {
-  tuiAsk('info', null, function (r) { if (r.ok) { TUI.info = r.info; TUI.goods = r.goods || {}; TUI.blds = r.blds || {}; TUI.every = r.every || 7; TUI.region = r.region || null; TUI.faction = r.faction || null; TUI.fleets = r.fleets || []; TUI.hubs = r.hubs || []; TUI.dishes = r.dishes || {}; TUI.serveDishes = r.serveDishes || {}; } else TUI.msg = '問不到城鎮資訊：' + (r.why || []).join('；'); tuiUI(); });
+  tuiAsk('info', null, function (r) { if (r.ok) { TUI.info = r.info; TUI.goods = r.goods || {}; TUI.blds = r.blds || {}; TUI.every = r.every || 7; TUI.region = r.region || null; TUI.faction = r.faction || null; TUI.fleets = r.fleets || []; TUI.hubs = r.hubs || []; TUI.dishes = r.dishes || {}; TUI.serveDishes = r.serveDishes || {}; TUI.homeMenu = r.homeMenu || []; } else TUI.msg = '問不到城鎮資訊：' + (r.why || []).join('；'); tuiUI(); });
 }
 /** 買賣（side 'buy'｜'sell'、q 桶）：一次只送一筆；回來照新的清單重畫、說成交了多少。 */
 function tuiTrade(side, g, q) {
@@ -123,7 +140,8 @@ function tuiSumHTML() {
     ['💰 城鎮金庫', tuiNum(I.funds)], ['👛 鎮民金庫', tuiNum(I.folkFunds)], ['🛡 士兵', tuiNum(I.guard.now) + ' / ' + tuiNum(I.guard.cap)]]
     .concat(I.rent ? [['🏠 房租（昨天）', tuiNum(I.rent.paid, 1) + (I.rent.due > I.rent.paid ? ' / ' + tuiNum(I.rent.due, 1) : '')]] : []).map(function (x) { return '<div><small>' + x[0] + '</small><b>' + x[1] + '</b></div>'; }).join('') + '</div>';
   var F = I.fed;
-  if (F) { var eat = F.eat || {}, LV = ['荒年糧', '主糧', '家常', '佳餚']; h += '<h4>🍞 昨天吃飯（份）</h4><p>' + [3, 2, 1, 0].map(function (k) { return LV[k] + ' ' + tuiNum((eat[k] || 0) / 1000); }).join('　') + (F.relief ? '　（城鎮免費補了 ' + tuiNum(F.relief / 1000) + ' 份）' : '') + (F.famine ? '　⚠ 飢荒' : '') + '</p>' + tuiEatHTML(F); }   // 等級照 Blocksail world/food.js FOOD_LEVELS；底下每一道吃了幾成（Tim 2026-10-25「城鎮是否可以顯示鎮民的消耗食物百分比」）
+  if (F) { var eat = F.eat || {}, LV = ['荒年糧', '主糧', '家常', '佳餚']; h += '<h4>🍞 食用餐點（份）</h4><p>' + [3, 2, 1, 0].map(function (k) { return LV[k] + ' ' + tuiNum((eat[k] || 0) / 1000); }).join('　') + (F.relief ? '　（城鎮免費補了 ' + tuiNum(F.relief / 1000) + ' 份）' : '') + (F.famine ? '　⚠ 飢荒' : '') + '</p>' + (F.extra && Object.keys(F.extra).length ? '<p class="tuiDim">餐點份數與比例包含加餐。</p>' : '') + tuiEatHTML(F) + '<h4>🥕 消耗食材（桶）</h4>' + tuiIngredientsHTML(F); }   // 等級照 Blocksail world/food.js FOOD_LEVELS；底下每一道吃了幾成（Tim 2026-10-25「城鎮是否可以顯示鎮民的消耗食物百分比」）
+  h += tuiHomeMenuHTML();
   if (I.rent && I.rent.skip) h += '<p class="tuiDim">🏠 昨天房租沒收滿：' + tuiEsc(I.rent.skip) + '（該收 ' + tuiNum(I.rent.due, 1) + '）</p>';   // 房租（Blocksail world/townstate.js rentDay；TASK-0946）：鎮民的錢不夠吃飯 ⇒ 不收
   var SV = I.svc || {}, SVI = { faith: '⛪', drink: '🍺', dine: '🍲', health: '⚕' };   // 服務建築的滿意度（Blocksail world/food.js serveDay；TASK-0914、0946 酒館與醫院）：昨天想來／來了幾人次、滿意度、收的錢
   Object.keys(SV).forEach(function (k) { var Q = SV[k]; h += '<h4>' + (SVI[k] || '🙂') + ' ' + tuiEsc(Q.name || k) + '（昨天）</h4><p>來了 ' + tuiNum(Q.got) + '／想來 ' + tuiNum(Q.want) + ' 人次　滿意度 ' + Math.round((Q.sat || 0) * 100) + '%　' + (k === 'faith' ? '捐獻' : '收入') + ' ' + tuiNum(Q.paid, 2) + '</p>'; });
