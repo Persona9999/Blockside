@@ -297,7 +297,7 @@ function sliders() {
     var k = C(); $('cfgShip').textContent = (hullInfo(CFG_ID) || {}).name || CFG_ID;
     lf.value = k.ballast !== undefined ? k.ballast : LIM.ballast[2]; f.value = k.flood; h.value = Math.log(k.hard / LIM.hard[0]) / hk; c.value = STRIKE.cas * 100; sp.value = k.speed; ag.value = k.agile; uw.value = k.upwind; $('base').value = k.base || 0; $('pump').value = k.pump;
     gh.value = GUN_HP; gw.value = k.gunw; sl.value = SAIL_HP; ph.value = POWDER_HP; bl.value = BLAST_K; bv.value = Math.round(BLAST_V * 100); ch.value = CREW_HP;
-    bx.value = BOX_N; cy.value = CARRY_N; wk.value = WIND_K; wc.value = WIND_CAP; $('inertia').value = DRV_INERTIA; $('turninert').value = DRV_TURN; $('sailtq').value = DRV_TQ; dr.value = DROWN_T; $('navre').value = NAV_RE; $('heal').value = HEAL_T; $('musket').value = MUSKET_R; $('sailfix').value = SAILFIX_T; $('burn').value = BURN_PCT; $('galley').value = GALLEY_PCT; $('gcrew').checked = GUN_CREW_HURT; $('dbg').checked = DBG_SET;
+    bx.value = BOX_N; cy.value = CARRY_N; wk.value = WIND_K; wc.value = WIND_CAP; $('inertia').value = DRV_INERTIA; $('turninert').value = DRV_TURN; $('sailtq').value = DRV_TQ; dr.value = DROWN_T; $('navre').value = NAV_RE; $('heal').value = HEAL_T; $('musket').value = MUSKET_R; $('sailfix').value = SAILFIX_T; $('burn').value = BURN_PCT; $('galley').value = GALLEY_PCT; $('gcrew').checked = GUN_CREW_HURT; $('dbg').checked = DBG_SET; $('trklog').checked = TRR.on;
     se.value = SEA_K; st.value = STALL_K; fs.value = FUN.speed; fa.value = FUN.agile; fl.value = FUN.stall; fp.value = FUN.powder; fh.value = FUN.hard; whl.value = WHEEL_LOSS; rdl.value = RUDDER_LOSS; dtq.value = DIFF_K; fhl.value = FUN.helmloss; fhe.value = FUN.helmeff; fdf.value = FUN.diff;
     for (var r = 0; r < 3; r++) for (var k = 0; k < 3; k++) am(r, k).value = AMMO_K[r][k];
     ['guns', 'masts', 'officers'].forEach(function (k) { $('st-' + k).checked = STRIKE[k]; });
@@ -390,7 +390,9 @@ function sliders() {
   var ga = $('galley'); ga.min = LIM.galley[0]; ga.max = LIM.galley[1];   // 廚房加成（TASK-0720）
   ga.oninput = function () { GALLEY_PCT = Math.round(+ga.value); show(); };
   $('gcrew').onchange = function () { GUN_CREW_HURT = $('gcrew').checked; show(); };
-  $('dbg').onchange = function () { DBG_SET = $('dbg').checked; show(); };   // Debug 模式（04_state.js dbgOn）：遊戲中也生效   // 砲被打飛 ⇒ 砲班跟著受傷（TASK-0568）
+  $('dbg').onchange = function () { DBG_SET = $('dbg').checked; show(); };
+  $('trklog').onchange = function () { TRR.on = $('trklog').checked; show(); };   // 記錄往來船航跡（58_trafficrec.js）
+  $('trksave').onclick = function () { var f = trrSave(); $('trksave').title = f; };   // Debug 模式（04_state.js dbgOn）：遊戲中也生效   // 砲被打飛 ⇒ 砲班跟著受傷（TASK-0568）
   st.oninput = function () { STALL_K = +st.value; show(); };
   whl.oninput = function () { WHEEL_LOSS = +whl.value; show(); }; rdl.oninput = function () { RUDDER_LOSS = +rdl.value; show(); }; dtq.oninput = function () { DIFF_K = +dtq.value; show(); }; fhl.oninput = function () { FUN.helmloss = +fhl.value; show(); }; fhe.oninput = function () { FUN.helmeff = +fhe.value; show(); }; fdf.oninput = function () { FUN.diff = +fdf.value; show(); };   // 操舵（TASK-0777，31_drive.js）
   se.oninput = function () { SEA_K = +se.value; show(); };
