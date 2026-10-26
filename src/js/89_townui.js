@@ -282,7 +282,7 @@ function tuiTradeHTML() {
 function tuiDists() { var p = TOWNS.full[TWB.town]; return p && p.districts && p.districts.length ? p.districts : null; }
 function tuiDistHTML() {
   var D = tuiDists(); if (!D) return '<p class="tuiDim">這座城沒有分城區。</p>';
-  var cur = TOWNS.dist[TWB.town], S = (TOWNS.stat.dist || {})[TWB.town], on = TOWNS.on[TWB.town] || 0;
+  var cur = TOWNS.dist[TWB.town], S = (TOWNS.stat.dist || {})[TWB.town], on = TOWNS.onD[TWB.town] || 0;
   TUI.distSig = tuiDistSig();
   return '<p>選一區 ⇒ 鏡頭跳過去、先建那一區，建好再補隔壁的區（遠的收掉）；鏡頭拖進別區停一下也會換過去。</p>' +
     '<div class="tuiTiles">' + D.map(function (d) {
@@ -291,7 +291,7 @@ function tuiDistHTML() {
     }).join('') + '</div>' + (S ? '<p class="tuiDim">建了 ' + S.on.length + ' 區：地塊 ' + S.lots + '、路 ' + S.roads + '。</p>' : '');
 }
 /** 城區頁畫的是哪一份：焦點那一區＋建了哪幾區（換了 ⇒ 重畫；鏡頭拖進別區換焦點不經過按鈕 ⇒ 以前頁上的「現在這一區」停在舊的）。 */
-function tuiDistSig() { return (TOWNS.dist[TWB.town] || '') + ':' + (TOWNS.on[TWB.town] || 0); }
+function tuiDistSig() { return (TOWNS.dist[TWB.town] || '') + ':' + (TOWNS.onD[TWB.town] || 0); }
 /** 每一格：城區那一顆鈕在城鎮模式、外面那一頁有送城區（1～N 區）才出現；城區頁開著、焦點或建了哪幾區換了 ⇒ 重畫。 */
 function tuiDistKey() {
   var k = $('tuiDK'); if (!k) return; var v = modeRule('town') && tuiDists() ? '' : 'none'; if (k.style.display !== v) k.style.display = v;   // .kb 有自己的 display ⇒ 不用 hidden

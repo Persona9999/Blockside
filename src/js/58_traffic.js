@@ -74,7 +74,7 @@ function trafficGot(d) {
   TRF.q = Object.keys(want).filter(function (id) { var w = want[id]; return !have[id] && Math.hypot(w.at[0] - c[0], w.at[1] - c[2]) < TRF_SPAWN_M && HULL_LIST.some(function (h) { return h.id === w.hull; }); })
     .sort(function (a, b) { var A = want[a], B = want[b]; return Math.hypot(A.at[0] - c[0], A.at[1] - c[2]) - Math.hypot(B.at[0] - c[0], B.at[1] - c[2]) || (a < b ? -1 : 1); });
 }
-/** 城區（Blocksail TASK-0817；63_towns.js townDistView）：城只建 TOWNS.on 那幾區（航海照遠近、城鎮模式照焦點與鄰區）⇒ 別區的棧橋、碼頭沒建、也不擋船 ⇒
+/** 城區（Blocksail TASK-0817；63_towns.js townDistView）：城只建 TOWNS.onD 那幾區（航海照遠近、城鎮模式照焦點與鄰區）⇒ 別區的棧橋、碼頭沒建、也不擋船 ⇒
  *  泊位在那裡、停港或港內帶著走的往來船不生（⛔ 生了就浮在空的水面上，看起來像一直飄在港裡）。(x, z) ＝ 泊位的世界座標；沒有城區切法（cut）的城 ⇒ false。 */
 function trafficDistOff(x, z) {
   if (!BED) return false;
@@ -82,7 +82,7 @@ function trafficDistOff(x, z) {
     var p = TOWNS.full[TOWNS.list[i].id], D = p && p.districts; if (!D || !p.cut) continue;
     var q = townDistLocal(p, x, z);
     if (!D.some(function (d) { return townPip(q[0], q[1], d.poly) || townPolyDist(q[0], q[1], d.poly) < TRF_DIST_NEAR; })) continue;   // 不是這座城的泊位
-    return !((TOWNS.on[p.id] || 0) & (1 << D.indexOf(townDistAt(D, q[0], q[1]))));
+    return !((TOWNS.onD[p.id] || 0) & (1 << D.indexOf(townDistAt(D, q[0], q[1]))));
   }
   return false;
 }
@@ -323,6 +323,6 @@ function trafficInfo() {
   return { ok: trafficOk(), rate: wclkRate(), wh: +(worldSec() / 3600).toFixed(4), max: trafficMax(), want: Object.keys(TRF.want).length, queue: TRF.q.slice(), building: TRF.build ? TRF.build.id : null, built: TRF.built, dropped: TRF.dropped,
     stepMax: +TRF.stepMax.toFixed(2), stepMs: TRF.stepMs.slice(), place: TRF.place.slice(),
     hold: trafficPortN(),
-    ships: trafficShips().map(function (s) { var n = s.npc, T = n.tow, b = n.berth, sc = shipCenter(s); return { i: s.i, id: n.id, kind: n.kind, hull: s.T.id, x: +s.px.toFixed(1), z: +s.pz.toFixed(1), d: Math.round(Math.hypot(s.px - c[0], s.pz - c[2])), spd: +s.spd.toFixed(2), yaw: +s.yaw.toFixed(3), dock: n.dock, held: !!n.held, to: n.to, path: n.path ? n.path.length : 0, trk: n.trk ? n.trk.length : 0,
+    ships: trafficShips().map(function (s) { var n = s.npc, T = n.tow, b = n.berth, sc = shipCenter(s); return { i: s.i, id: n.id, kind: n.kind, hull: s.T.id, x: +s.px.toFixed(1), z: +s.pz.toFixed(1), d: Math.round(Math.hypot(s.px - c[0], s.pz - c[2])), spd: +s.spd.toFixed(2), yaw: +s.yaw.toFixed(3), dock: n.dock, held: !!n.held, to: n.to, path: n.path ? n.path.length : 0, trk: n.trk ? n.trk.length : 0, pilot: n.pilot || null, glide: trafficGliding(s),
       berth: b ? { x: +b.x.toFixed(1), z: +b.z.toFixed(1), yaw: +b.yaw.toFixed(3), d: +Math.hypot(b.x - sc[0], b.z - sc[2]).toFixed(1) } : null, tow: T ? { kind: T.kind, s: +T.s.toFixed(1), L: +T.L.toFixed(1), spin: T.spin, spun: T.spun, v: +T.v.toFixed(2), t: +(SIMT - T.t0).toFixed(1) } : null }; }) };
 }
