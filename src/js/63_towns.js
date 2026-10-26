@@ -1757,9 +1757,20 @@ var TOWN_FLAG_N = [10, 6], TOWN_FLAG_IT = 6, TOWN_FLAG_SIM = 400, TOWN_FLAG_DT =
 var TOWN_FLAG_PAT = {                                                   // 圖案：u 沿飛（0 旗桿 → 1 尾）、v 沿旗桿（0 上 → 1 下）；cu、cv ＝ 色塊的分界
   genoa: { cu: [0.44, 0.56], cv: [0.4, 0.6], col: function (u, v) { return Math.abs(u - 0.5) < 0.06 || Math.abs(v - 0.5) < 0.1 ? COL_R : COL_W; } }   // 熱那亞：白底紅十字（聖喬治）
 };
+// 國旗（TASK-0977；Tim 2026-10-26「是否可以讓港口堡壘也能跟著換旗 目前和平港堡壘的旗幟是白旗」）：模型的旗沒指定上面那幾種圖案（堡壘那面是 white）⇒
+//   照那座城的勢力掛 —— 規劃的 live.flag ＝ 預設旗的 key（Blocksail globe.html townLive 照範圍層的勢力給；沒有城鎮帳的 town.html 沒有 ⇒ 照舊白布）。
+//   顏色跟船上的戰鬥旗同一支（77_colours.js colourAt）；紋章細 ⇒ 沿飛 32、沿旗桿 16 格切（一格一色）。
+var TOWN_FLAG_FINE = [32, 16];
+function townNation(T) { var k = T && T.p && T.p.live && T.p.live.flag; return k && flagPreset(k) ? k : null; }
+function townNationPat(k) {
+  var f = flagPreset(k), cu = [], cv = [], i; if (!f) return null;
+  for (i = 1; i < TOWN_FLAG_FINE[0]; i++) cu.push(i / TOWN_FLAG_FINE[0]);
+  for (i = 1; i < TOWN_FLAG_FINE[1]; i++) cv.push(i / TOWN_FLAG_FINE[1]);
+  return { cu: cu, cv: cv, col: function (u, v) { return colourAt('ensign', f, u, v); } };
+}
 /** 城 T 的布旗（實例建好之後建一次）：[{ p, pp: 現在、上一步的質點（世界）, C: 約束 [a, b, 長] …, h: 綁邊的上下兩點, at: 中心, ph: 相位, pat }]。 */
 function townFlags(T) {
-  var K = TOWNS.kit, out = [], NU = TOWN_FLAG_N[0], NV = TOWN_FLAG_N[1];
+  var K = TOWNS.kit, out = [], NU = TOWN_FLAG_N[0], NV = TOWN_FLAG_N[1], nk = townNation(T), np = nk ? townNationPat(nk) : null;
   (T.inst || []).forEach(function (q) {
     var m = K.M[q.k].m; if (!m.flags || !(q.y === q.y)) return;
     var s = Math.sin(q.th), c = Math.cos(q.th), mpv = m.mpv, hw = m.size[0] * mpv / 2, hd = m.size[1] * mpv / 2;
@@ -1778,7 +1789,8 @@ function townFlags(T) {
         if (i2 + 1 < NU && j2 + 1 < NV) { link(a, a + NV + 1); link(a + 1, a + NV); }
       }
       out.push({ p: p, pp: Float32Array.from(p), C: new Float32Array(C), h: [h0, h1], at: [(h0[0] + f1[0]) / 2, (h0[1] + f1[1]) / 2, (h0[2] + f1[2]) / 2],
-                 ph: townHash((q.lot || q.k) + ':flag' + fi) * 6.2832, pat: TOWN_FLAG_PAT[f.pattern] || null, acc: 0, vao: null, vb: null, V: null, n: 0, lk: q.lk || 1 });
+                 ph: townHash((q.lot || q.k) + ':flag' + fi) * 6.2832, pat: TOWN_FLAG_PAT[f.pattern] || np, acc: 0, vao: null, vb: null, V: null, n: 0, lk: q.lk || 1,
+                 unit: q.lot ? T.id + ':' + q.lot : null });                // unit：那一棟換成戰鬥單位（TOWN_UNITS）⇒ 布旗不畫（那一座自己有旗）
     });
   });
   return out;
@@ -1862,12 +1874,12 @@ function townFlagMesh(F, eye) {
     for (var k = 0; k < 3; k++) out[k] = (A[(i * NV + j) * 3 + k] * (1 - b) + A[(i * NV + j + 1) * 3 + k] * b) * (1 - a) + (A[((i + 1) * NV + j) * 3 + k] * (1 - b) + A[((i + 1) * NV + j + 1) * 3 + k] * b) * a;
     return out;
   }
-  function cuts(n, extra) { var L = []; for (var q = 0; q < n; q++) L.push(q / (n - 1)); return L.concat(extra || []).sort(function (x, y) { return x - y; }); }
-  var pat = F.pat, Us = cuts(NU, pat && pat.cu), Vs = cuts(NV, pat && pat.cv), nv = (Us.length - 1) * (Vs.length - 1) * 6;
+  function cuts(n, extra) { var L = []; for (var q = 0; q < n; q++) L.push(q / (n - 1)); return L.concat(extra || []).sort(function (x, y) { return x - y; }).filter(function (x, q, A) { return !q || x - A[q - 1] > 1e-6; }); }   // 重複的分界拿掉（國旗的細格跟質點的格線會疊在 0.5）
+  var pat = F.pat, Us = F.Us || (F.Us = cuts(NU, pat && pat.cu)), Vs = F.Vs || (F.Vs = cuts(NV, pat && pat.cv)), nv = (Us.length - 1) * (Vs.length - 1) * 6, CC = F.cc || (F.cc = []);   // 分界、每一格的色只算一次
   if (!F.V || F.V.length < nv * 9) F.V = new Float32Array(nv * 9);
   var V = F.V, w = 0, ps = [0, 0, 0], ns = [0, 0, 0];
   for (var a2 = 0; a2 + 1 < Us.length; a2++) for (var b2 = 0; b2 + 1 < Vs.length; b2++) {
-    var u0 = Us[a2], u1 = Us[a2 + 1], v0 = Vs[b2], v1 = Vs[b2 + 1], col = pat ? pat.col((u0 + u1) / 2, (v0 + v1) / 2) : COL_W;
+    var u0 = Us[a2], u1 = Us[a2 + 1], v0 = Vs[b2], v1 = Vs[b2 + 1], ci = a2 * Vs.length + b2, col = CC[ci] || (CC[ci] = pat ? pat.col((u0 + u1) / 2, (v0 + v1) / 2) : COL_W);
     [[u0, v0], [u1, v0], [u1, v1], [u0, v0], [u1, v1], [u0, v1]].forEach(function (c) {
       at(c[0], c[1], ps, p); at(c[0], c[1], ns, N);
       var fl = (eye[0] - ps[0]) * ns[0] + (eye[1] - ps[1]) * ns[1] + (eye[2] - ps[2]) * ns[2] < 0 ? -1 : 1;   // 背面朝鏡頭 ⇒ 法線翻過來
@@ -2101,8 +2113,10 @@ function townDraw() {
   // 布旗（同一支著色器；近、中那兩級的距離內才畫，鏡頭附近才動）
   var now = townClock(), fdt = Math.min(0.1, Math.max(0, now - (TOWNS.flagT == null ? now : TOWNS.flagT))), nfl = 0; TOWNS.flagT = now; TOWNS.flagClock = now;   // 旗、鎮民、工人、動物都照遊戲的時間（townClock）
   TOWNS.list.forEach(function (T) {
-    if (!T.flags) T.flags = townFlags(T);
+    var nk = townNation(T); if (T.flags && T.flagNk !== nk) townFlagFree(T);   // 城換了勢力（live.flag）⇒ 重建
+    if (!T.flags) { T.flags = townFlags(T); T.flagNk = nk; }
     T.flags.forEach(function (F) {
+      if (F.unit && TOWN_UNITS[F.unit]) return;                          // 換成戰鬥單位的那一棟（townFortWake）：那一座自己掛旗
       var d = Math.hypot(F.at[0] - eye[0], F.at[2] - eye[2]); if (d > TOWN_LOD[1] * F.lk) return;   // 地標的旗跟著那一棟畫到中那一級的盡頭
       for (var i = 0; i < 6; i++) { var pl = PL[i]; if (pl[0] * F.at[0] + pl[1] * F.at[1] + pl[2] * F.at[2] + pl[3] < -6) return; }
       if (d < TOWN_FLAG_SIM) { F.acc += fdt; var ns2 = 0; while (F.acc >= TOWN_FLAG_DT && ns2 < 4) { townFlagStep(F, TOWN_FLAG_DT, TOWNS.flagClock); F.acc -= TOWN_FLAG_DT; ns2++; } if (ns2 === 4) F.acc = 0; }
@@ -2265,6 +2279,7 @@ function townFortWake(h) {
     var s = Math.sin(q.th), c = Math.cos(q.th), e = S * T.cx - m.size[0] * m.mpv / 2;
     var sh = makeShip(SHIPS.length, me.team, Math.atan2(-c, -s), q.z + e * c, T, q.x - e * s);
     sh.gy = q.y + S * T.zw; sh.calm = true; sh.townKey = key; sh.name = h.name;
+    var nk = townNation(h.T); if (nk) shipNation(sh, nk);                // 掛那座城的國旗（TASK-0977；77_colours.js flagOwnUv：作品那面白旗補了 uv）
     TOWN_UNITS[key] = sh;
     SHIPS.push(sh); coreSpawned(sh, null); stepShip(sh, 0); survey(sh); pickCaptain(sh); cmdTick(); pickFoes();
     setAim(me, [T.cx, T.cy, T.geo.aim], sh); me.pMode = AIM_P = 'free';
