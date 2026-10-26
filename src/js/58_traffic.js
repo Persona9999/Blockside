@@ -59,6 +59,7 @@ function trafficGot(d) {
     trk: o.trk && o.trk.length > 1 ? o.trk.map(function (q) { var p = W([q[1], q[2]]); return [+q[0], p[0], p[1]]; }) : null,   // trk：照時刻表滑（⑥）
     berth: o.berth && o.berth.at ? (function (p) { return { x: p[0], z: p[1], yaw: trafficYaw(+o.berth.hdg || 0) }; })(W(o.berth.at)) : null,   // berth：停的、預約的泊位（⑧）
     pilot: o.pilot || null, entry: o.entry ? W(o.entry) : null }; });   // pilot、entry：航行管制（⑧）
+  Object.keys(want).forEach(function (id) { var w = want[id]; if ((w.dock || w.pilot) && w.berth && trafficDistOff(w.berth.x, w.berth.z)) delete want[id]; });   // 別的城區的泊位（沒建）⇒ 不生、生了的收掉
   TRF.want = want;
   trafficShips().forEach(function (sh) {                              // 還在 ⇒ 換航點；沒了 ⇒ 收
     var w = want[sh.npc.id]; if (!w) { trafficDrop(sh); return; }
@@ -73,6 +74,20 @@ function trafficGot(d) {
   TRF.q = Object.keys(want).filter(function (id) { var w = want[id]; return !have[id] && Math.hypot(w.at[0] - c[0], w.at[1] - c[2]) < TRF_SPAWN_M && HULL_LIST.some(function (h) { return h.id === w.hull; }); })
     .sort(function (a, b) { var A = want[a], B = want[b]; return Math.hypot(A.at[0] - c[0], A.at[1] - c[2]) - Math.hypot(B.at[0] - c[0], B.at[1] - c[2]) || (a < b ? -1 : 1); });
 }
+/** 城區（Blocksail TASK-0817；63_towns.js townDistView）：城鎮模式只建選中的那一區（＋邊上 TOWN_DIST_PAD）⇒ 別區的棧橋、碼頭沒建、也不擋船 ⇒
+ *  泊位在那裡、停港或港內帶著走的往來船不生（⛔ 生了就浮在空的水面上，看起來像一直飄在港裡）。(x, z) ＝ 泊位的世界座標；不是城鎮模式、只有一區的城 ⇒ false。 */
+function trafficDistOff(x, z) {
+  if (!BED || !modeRule('town')) return false;
+  for (var i = 0; i < TOWNS.list.length; i++) {
+    var p = TOWNS.full[TOWNS.list[i].id], D = p && p.districts; if (!D || D.length < 2) continue;
+    var A = D.filter(function (d) { return d.id === TOWNS.dist[p.id]; })[0]; if (!A) continue;
+    var kx = +p.kx || 1, px = (x + BED.ax - (+p.ox || 0)) / kx, py = z + BED.az - (+p.oy || 0);   // 同 townDistStart
+    if (!D.some(function (d) { return townPip(px, py, d.poly) || townPolyDist(px, py, d.poly) < TRF_DIST_NEAR; })) continue;   // 不是這座城的泊位
+    return townDistAt(D, px, py) !== A && townPolyDist(px, py, A.poly) > TOWN_DIST_PAD;
+  }
+  return false;
+}
+var TRF_DIST_NEAR = 1500;                                               // 泊位離某一區多近算這座城的（金角灣水上的泊位在範圍外；Blocksail townDistrictNear 照最近那一區）
 /** 停港的兩錨都下、帆全收、船速歸零；出港就起錨、張戰鬥帆（helmGovern 再照期望航速調）（76_anchor.js；我艦的拋錨模式只管我艦 ⇒ 這裡自己下）。
  *  ⛔ 只下錨、帆照張 ⇒ 被風推著拖錨，離泊位 29 m 才停住（2026-10-25 金斯敦城鎮模式實測；收帆之後 35 秒漂 1.5 m，跟我艦差不多）。 */
 function trafficDock(sh, on, sails) {
