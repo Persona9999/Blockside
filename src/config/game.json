@@ -1512,6 +1512,62 @@
         "ship": 2,
         "yard": 11
       }
+    },
+    {
+      "id": "concepcion",
+      "el": "ship-concepcion",
+      "name": "康塞普西翁號",
+      "vxk": "concepcion.vxk",
+      "work": "apex-two-galeon-01m-assembly",
+      "geo": {
+        "spar": [
+          115,
+          155
+        ],
+        "marines": [
+          35,
+          170
+        ],
+        "center": 110,
+        "aim": 90,
+        "aimZ": [
+          30,
+          460
+        ],
+        "deckAim": [
+          76,
+          130
+        ],
+        "rigAim": [
+          175,
+          450
+        ]
+      },
+      "names": [
+        "康塞普西翁號"
+      ],
+      "author": "apex-two",
+      "idNext": {
+        "anchor": 3,
+        "binnacle": 2,
+        "boat": 2,
+        "capstan": 2,
+        "deck": 8,
+        "door": 7,
+        "galley": 2,
+        "gun": 95,
+        "ladders": 7,
+        "light": 4,
+        "magazine": 2,
+        "part": 14,
+        "portlid": 55,
+        "powder": 121,
+        "rudder": 2,
+        "ship": 2,
+        "wheel": 2,
+        "wheel_stand": 2,
+        "yard": 12
+      }
     }
   ],
   "furniture": {

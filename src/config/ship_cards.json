@@ -29,6 +29,7 @@
     "battery_en": {"tons": 8, "len": 11.1, "guns": 3, "gunTypes": {"long6": 3}, "volley": 8, "drive": "sail", "sails": 1, "crew": 17},
     "labelle": {"tons": 87, "len": 17.5, "guns": 14, "gunTypes": {"pierrier": 8, "long4": 6}, "volley": 19, "drive": "sail", "sails": 8, "crew": 46},
     "pinas": {"tons": 599, "len": 37.1, "guns": 24, "gunTypes": {"long8": 8, "long4": 4, "long12": 10, "long6": 2}, "volley": 98, "drive": "sail", "sails": 12, "crew": 151},
-    "oxford": {"tons": 287, "len": 25.9, "guns": 22, "gunTypes": {"long8": 16, "long6": 6}, "volley": 79, "drive": "sail", "sails": 11, "crew": 144}
+    "oxford": {"tons": 287, "len": 25.9, "guns": 22, "gunTypes": {"long8": 16, "long6": 6}, "volley": 79, "drive": "sail", "sails": 11, "crew": 144},
+    "concepcion": {"tons": 1822, "len": 50.7, "guns": 94, "gunTypes": {"long6": 12, "long18": 28, "long12": 26, "long8": 24, "long4": 4}, "volley": 503, "drive": "sail", "sails": 13, "crew": 482}
   }
 }
