@@ -1316,6 +1316,33 @@
         "quartermaster": 0
       },
       "town": "carib-fort"
+    },
+    {
+      "id": "oxford",
+      "el": "ship-oxford",
+      "name": "牛津號",
+      "vxk": "oxford.vxk",
+      "work": "erina-oxford-01m-assembly",
+      "author": "erina",
+      "geo": {"spar": [40, 72], "marines": [112, 50], "center": 60, "aim": 45, "aimZ": [10, 300], "deckAim": [42, 56], "rigAim": [120, 300]},
+      "crew": {"officers": 2, "marines": 8, "marineGap": 12, "navigator": 0},
+      "names": ["牛津號"],
+      "idNext": {
+        "anchor": 3,
+        "capstan": 2,
+        "deck": 6,
+        "door": 3,
+        "galley": 2,
+        "gun": 23,
+        "ladders": 5,
+        "magazine": 2,
+        "part": 11,
+        "portlid": 17,
+        "powder": 9,
+        "rudder": 2,
+        "ship": 2,
+        "yard": 11
+      }
     }
   ],
   "furniture": {
