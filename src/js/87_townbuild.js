@@ -107,24 +107,33 @@ function twbToggle(on) {
   twbUI();
 }
 function twbPick(cat, item) { TWB.cat = cat; TWB.item = item; TWB.start = null; TWB.tr = null; TWB.moved = true; TWB.sel = null; TWB.recipe = null; TWB.rcpOn = null; twbUI(); }
-/** 配方那一排（帶田的生產建築：農莊、種植園、葡萄園 ⇒「種：」；礦坑 ⇒「產：」銅、鐵…，TASK-0742）：選了那一種就列（Tim 2026-10-25「農莊能種植的作物要在選取農莊就出現」「葡萄園 種植園也是」）。
- *  游標在路邊、最後一則試放有 recipes ⇒ 照那一點：能種的可以點、種不了的灰掉、滑上去看原因；
- *  不在路邊（還沒試放、離開路、游標移到面板上）⇒ 照選單的 recipes 全列、都可以點（先挑想種的，放下去那一點種不了 ⇒ Blocksail 照第一條能種的、note 說一聲）。
- *  亮的那一顆：路邊 ⇒ 那一點實際種的；不在路邊 ⇒ 玩家點的 ＞ 最後一則試放用的 ＞ 第一條。點了 ⇒ 重問試放。不帶田的 ⇒ 空的。 */
+/** 配方那一排（帶田的生產建築：農莊、種植園、葡萄園 ⇒「種：」；礦坑、鐵匠鋪這種好幾條配方的 ⇒「產：」，TASK-0742）：選了那一種就列（Tim 2026-10-25「農莊能種植的作物要在選取農莊就出現」）。
+ *  固定照選單的 recipes 列（Tim 2026-10-26「目前產出會根據是否在道路上閃爍 是否可以改為固定顯示(然後hover在道路上時 不符合的選項壓灰 並且阻擋建造)」）：
+ *    以前游標在路邊 ⇒ 換成試放回的那一份（能種的在前、種不了的在後）、離開路 ⇒ 換回選單那一份 ⇒ 按鈕順序、個數跟著游標跳。
+ *    現在按鈕永遠是選單那幾顆、順序不變；游標在路邊、最後一則試放有 recipes ⇒ 那一點做不了的壓灰（滑上去看原因）。
+ *  每一顆「圖示＋名稱」（Tim 2026-10-26「然後產物改為顯示Icon+名稱」；圖示 ＝ 那一條的主產品 g，Blocksail mapgen_worker.js menuRcp）。
+ *  亮的那一顆：玩家點的 ＞ 路邊那一點實際做的 ＞ 第一條。玩家點了、而那一點做不了 ⇒ TWB.rcpBlock（擋下不蓋，⛔ 不再默默改做別的）；沒點過 ⇒ 照舊用那一點做得了的第一條。不帶田的 ⇒ 空的。 */
 function twbRcpUI() {
   var el = $('twbRcp'); if (!el) return;
-  var tr = TWB.tr, live = tr && !tr.road && tr.recipes, it = twbItem(), R = live || (it && it.rcp ? { ok: it.rcp, no: [] } : null);
-  if (live && tr.recipe) TWB.rcpOn = tr.recipe;
-  var on = live ? tr.recipe : R ? TWB.recipe || TWB.rcpOn || (R.ok[0] && R.ok[0].k) : null;   // 路邊 ⇒ 那一點實際種的（點的那一條這裡種不了 ⇒ Blocksail 改種的那一條）
-  var sig = R ? on + '|' + R.ok.map(function (x) { return x.k; }).join(',') + '|' + R.no.map(function (x) { return x.k; }).join(',') : '';
+  var tr = TWB.tr, live = tr && !tr.road && tr.recipes, it = twbItem();
+  var L = it && it.rcp ? it.rcp : live ? live.ok.concat(live.no) : null;   // 選單沒帶 recipes（舊的 Blocksail）⇒ 退回試放那一份
+  var no = {}; if (live) live.no.forEach(function (x) { no[x.k] = x.why || '這裡做不了'; });
+  var on = L ? TWB.recipe || (live && tr.recipe) || TWB.rcpOn || (L[0] && L[0].k) : null;
+  if (live && tr.recipe && !TWB.recipe) TWB.rcpOn = tr.recipe;
+  TWB.rcpBlock = live && TWB.recipe && no[TWB.recipe] ? { k: TWB.recipe, why: no[TWB.recipe] } : null;
+  var sig = L ? on + '|' + L.map(function (x) { return x.k + (no[x.k] ? '-' : ''); }).join(',') : '';
   if (sig === TWB.rcpSig) return;
   TWB.rcpSig = sig;
-  if (!R) { el.innerHTML = ''; return; }
+  if (!L) { el.innerHTML = ''; return; }
   var esc = function (t) { return String(t).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); };
-  el.innerHTML = '<span>' + (it && !it.ann ? '產' : '種') + '：</span>' + R.ok.map(function (x) { return '<button type="button" data-k="' + x.k + '"' + (x.k === on ? ' class="on"' : '') + '>' + esc(x.name) + '</button>'; }).join('') +
-    R.no.map(function (x) { return '<button type="button" disabled title="' + esc(x.why) + '">' + esc(x.name) + '</button>'; }).join('');
+  el.innerHTML = '<span>' + (it && !it.ann ? '產' : '種') + '：</span>' + L.map(function (x) {
+    var dis = no[x.k], cls = (x.k === on ? 'on' : '') + (dis ? ' no' : '');
+    return '<button type="button" data-k="' + x.k + '"' + (cls ? ' class="' + cls.trim() + '"' : '') + (dis ? ' title="' + esc(dis) + '"' : '') + '>' + (x.g ? tuiIcon('goods', x.g) : '') + esc(x.name) + '</button>';
+  }).join('');
   el.querySelectorAll('button[data-k]').forEach(function (b) { b.onclick = function () { TWB.recipe = b.dataset.k; TWB.tr = null; TWB.moved = true; TWB.rcpSig = ''; }; });
 }
+/** 配方 key ⇒ 名字（選單的 recipes；查不到 ⇒ key）。 */
+function twbRcpName(k) { var it = twbItem(), x = it && it.rcp ? it.rcp.filter(function (r) { return r.k === k; })[0] : null; return x ? x.name : k; }
 /** 現在選的那一項（TWB_CATS 裡的 { k, name, sub, rcp }）。 */
 function twbItem() { var r = null; TWB_CATS.forEach(function (c) { if (c.k === TWB.cat) c.items.forEach(function (x) { if (x.k === TWB.item) r = x; }); }); return r; }
 function twbUndo() { if (!TWB.on || TWB.open !== 2) return; twbAsk('undo', null, function (r) { twbMsg(r.ok ? '復原了一步（還有 ' + (r.ops || []).length + ' 步）' : (r.why || []).join('；')); }); }
@@ -160,6 +169,7 @@ function twbTap(x, y, btn) {
     return true;
   }
   if (!tr || tr.road || !tr.ok) { twbMsg(tr && tr.why ? '蓋不了：' + tr.why.join('；') : '等試放…'); return true; }
+  if (TWB.rcpBlock) { twbMsg('蓋不了：' + twbRcpName(TWB.rcpBlock.k) + '這裡做不了 —— ' + TWB.rcpBlock.why); return true; }   // 玩家點的那一條這一點做不了 ⇒ 擋下（以前 Blocksail 改做做得了的第一條）
   var op = { build: tr.lot ? { lot: tr.lot, use: TWB.item } : { on: tr.on, use: TWB.item } };
   if (tr.recipe) op.build.recipe = tr.recipe;                           // 生產建築：試放實際用的那一條（重放照它長同一片田）
   twbAsk('apply', { op: op }, function (r) { twbMsg(r.ok ? '蓋好了：' + (r.lot || '') + (tr.annex ? '（田 ' + tr.annex.area + ' m²）' : '') : '蓋不了：' + (r.why || []).join('；')); });
@@ -228,7 +238,7 @@ function twbLines(T) {
     if (TWB.cat !== 'road' && tr && !tr.road && tr.at && !TWB.sel) {
       var th = tr.rot * Math.PI / 180, ux = Math.cos(th), uy = Math.sin(th), hd = tr.d / 2, hw = tr.w / 2, C = [];
       [[-1, -1], [1, -1], [1, 1], [-1, 1]].forEach(function (s) { C.push(P3([tr.at[0] + ux * hd * s[0] - uy * hw * s[1], tr.at[1] + uy * hd * s[0] + ux * hw * s[1]])); });
-      var col = tr.ok ? G : R;
+      var col = tr.ok && !TWB.rcpBlock ? G : R;
       for (var i = 0; i < 4; i++) { seg(C[i], C[(i + 1) % 4], col); seg(C[i], [C[i][0], C[i][1] + 6, C[i][2]], col); seg([C[i][0], C[i][1] + 6, C[i][2]], [C[(i + 1) % 4][0], C[(i + 1) % 4][1] + 6, C[(i + 1) % 4][2]], col); }
       var f = P3([tr.at[0] + ux * hd, tr.at[1] + uy * hd], 0.6), f2 = P3([tr.at[0] + ux * (hd + 3), tr.at[1] + uy * (hd + 3)], 0.6); seg(f, f2, col);   // 門口朝路那一邊
       if (tr.annex && tr.annex.quads) {                                  // 田的外緣（每一格的邊只出現一次的那幾條；不看深度 ⇒ 樹後面也看得到）：一格一段、照兩端各自的地面
@@ -325,7 +335,7 @@ function twbInfo() {
   else if (TWB.open === 1) s = '打開城鎮…';
   else if (TWB.open !== 2) s = '建築模式開不了';
   else if (TWB.cat === 'road') s = !TWB.start ? '點一下既有的路當起點' : !tr || !tr.road ? '找路線…' : tr.ok ? '路線 ' + Math.round(tr.len) + ' m、' + tr.gold + ' 金 —— 點一下鋪（右鍵取消）' : '鋪不了：' + (tr.why || []).join('；');
-  else s = !TWB.q ? '游標移到路邊或空建地上' : !tr || tr.road ? '試放…' : tr.ok ? (tr.lot ? '空建地 ' + tr.lot : '路邊 ' + tr.w.toFixed(0) + ' × ' + tr.d + ' m') + twbFieldTxt(tr) + ' —— 點一下蓋' + (TWB.side ? '（' + (TWB.side > 0 ? '右' : '左') + '側）' : '') : '蓋不了：' + (tr.why || ['?'])[0];
+  else s = !TWB.q ? '游標移到路邊或空建地上' : !tr || tr.road ? '試放…' : tr.ok ? (tr.lot ? '空建地 ' + tr.lot : '路邊 ' + tr.w.toFixed(0) + ' × ' + tr.d + ' m') + twbFieldTxt(tr) + (TWB.rcpBlock ? ' —— 蓋不了：' + twbRcpName(TWB.rcpBlock.k) + '這裡做不了（' + TWB.rcpBlock.why + '）' : ' —— 點一下蓋' + (TWB.side ? '（' + (TWB.side > 0 ? '右' : '左') + '側）' : '')) : '蓋不了：' + (tr.why || ['?'])[0];
   if (el.textContent !== s) el.textContent = s;
 }
 /** 生產建築那一段說明：＋田幾 m²（種什麼；長不滿上限、要放寬路邊也說）＋ 換配方的那一句。
