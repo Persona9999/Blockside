@@ -823,6 +823,8 @@
       <div class="row" id="strikeV"></div>
       <h3>Debug</h3>
       <div class="row checks"><label><input type="checkbox" id="dbg"> Debug 模式</label></div>
+      <div class="row checks"><label><input type="checkbox" id="trklog"> 記錄往來船航跡</label> <button type="button" id="trksave">匯出航跡 log</button></div>
+      <div class="row note">查往來船進出港用：勾了才記（只記在記憶體、不畫，關著不花時間）；匯出成 traffic_log_*.ndjson（一行一筆），Blocksail tools/traffic_log.html 重組成俯視圖、tools/traffic_log.cjs 判讀。網址 ?trklog=1 ＝ 勾。</div>
       <div class="row note">查問題用：詳細資訊的「⚓ 改操控這艘」敵艦也有（換過去就是那一方）、羅盤下面多一行除錯資訊（格數、四邊形、碎片、物理 ms、FPS）。網址 ?dbg=1 ＝ 勾；?debug=1 也算開。</div>
       <div class="row"><button id="detR">重設預設值</button><button id="detX" class="on">返回</button></div>
     </div>
@@ -973,6 +975,7 @@
 <script src="js/56_rollout.js" data-bundle="game"></script>
 <script src="js/57_core.js" data-bundle="game"></script>
 <script src="js/58_traffic.js" data-bundle="game"></script>
+<script src="js/58_trafficrec.js" data-bundle="game"></script>
 <script src="js/59_burnfx.js" data-bundle="game"></script>
 <script src="js/60_render.js" data-bundle="game"></script>
 <script src="js/60_rbatch.js" data-bundle="game"></script>

@@ -454,7 +454,7 @@ function townWorkPrep(T, F) {
     var FP = rs ? [] : townWorkFieldPts(T, fl[q.lot], T.id + ':work:' + q.lot, q.y);   // 田裡的點（工地還沒蓋好 ⇒ 沒有）
     var names = rs ? [] : Object.keys(m.pts || {}).filter(function (k) { return TOWN_WORK_RE.test(k); }).sort(townWorkCmp); if (!rs && !names.length && !FP.length) return;
     var l = lots[q.lot] || {}, use = rs ? 'build' : l.use || m.use, s = Math.sin(q.th), c = Math.cos(q.th), mpv = m.mpv, hw = m.size[0] * mpv / 2, hd = m.size[1] * mpv / 2;
-    function W(v) { var a = (v[0] * mpv - hw) * q.sx, b = v[1] * mpv - hd; return [q.x + a * s - b * c, q.y + (v[2] - 0.5) * mpv, q.z - a * c - b * s]; }   // 模型（格心）→ 世界（腳）：同 townLightBuild 的 W
+    function W(v) { var a = (v[0] * mpv - hw) * q.sx, b = v[1] * mpv - hd; return [q.x + a * s - b * c, q.y + (v[2] - 0.5) * mpv, q.z - a * c - b * s]; }   // 模型（格心）→ 世界（腳）：同 townLightGen 的 W
     var P = rs ? townRiseWorkPts(rs).map(function (p) { var w = W(p.v), t = W(p.to); return { k: p.k, g: p.g, x: w[0], y: w[1], z: w[2], lx: t[0] - w[0], lz: t[2] - w[2] }; })
       : names.map(function (k) { var w = W(m.pts[k]), to = m.pts[k + '-to'], t = to ? W(to) : [q.x, 0, q.z]; return { k: k, g: TOWN_WORK_RE.exec(k)[1], x: w[0], y: w[1], z: w[2], lx: t[0] - w[0], lz: t[2] - w[2] }; });   // lx／lz：面向（沒有 -to ⇒ 朝建築中心）
     if (FP.length) { var P0 = P; P = []; for (var pi = 0; pi < Math.max(P0.length, FP.length); pi++) { if (pi < FP.length) P.push(FP[pi]); if (pi < P0.length) P.push(P0[pi]); } }   // 田、主建築的點交錯 ⇒ 人少時田裡先有人、主建築也分得到

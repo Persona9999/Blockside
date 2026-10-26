@@ -69,6 +69,17 @@ var FLAG_EMB = {
     at: function (X, Y) { return Math.abs(X - 0.72) < 0.11 || Math.abs(Y - 0.5) < 0.11 ? COL_W : null; } },
   stripes: { name: '三橫條', ink: COL_W, res: 1,                         // 荷蘭：紅白藍三橫條（1660 年代已多用紅取代橘）；上面那一條 ＝ 底色
     at: function (X, Y) { return Y < 1 / 3 ? null : Y < 2 / 3 ? COL_W : [0.13, 0.27, 0.55]; } },
+  // 東羅馬 1453（TASK-0977；Tim 2026-10-27「君士坦丁堡 應該用東羅馬國旗(1453)」）：帕里奧洛格王朝的四 B 十字 —— 十字四格各一個 Β（王中之王、佑助為王者）。
+  //   Pseudo-Kodinos 只寫它是皇帝的旗、沒寫顏色 ⇒ 紅底金十字金 Β 是通行的畫法，不是史料寫明的；靠旗桿那兩個 Β 左右反過來（豎筆都朝十字）
+  tetragram: { name: '四 B 十字', ink: [0.86, 0.67, 0.18], res: 2,
+    at: function (X, Y) {
+      var G = [0.86, 0.67, 0.18]; if (Math.abs(X - 1) < 0.09 || Math.abs(Y - 0.5) < 0.07) return G;
+      var x = (X < 1 ? 0.62 - X : X - 1.38) / 0.22, y = (Y < 0.5 ? Y - 0.055 : Y - 0.625) / 0.32;   // 那一格的 Β：寬 0.22、高 0.32、在那一格正中，豎筆朝十字
+      if (x < 0 || x > 1 || y < 0 || y > 1) return null;
+      if (x < 0.3) return G;
+      var cy = y < 0.5 ? 0.25 : 0.75, dy = Math.abs(y - cy), t = 0.32, ex = (x - 0.45) / 0.55, ey = dy / 0.25;   // 上下兩個肚子：左半是橫筆、右半是半圈
+      return x < 0.45 ? (dy > 0.25 - 0.25 * t ? G : null) : (ex * ex + ey * ey <= 1 && ex * ex + ey * ey > (1 - t) * (1 - t) ? G : null);
+    } },
   none: { name: '（沒有紋章）', ink: COL_W, res: 1, at: function () { return null; } }
 };
 //   預設旗（選單裡那幾面；Tim「旗幟可以做下拉選單 先加三四種就好」）：key ⇒ { name, field, emblem }。英國藍旗、紅旗的底色 ＝ 以前的 COL_FIELD 換成 0～255（round）⇒ 同一個位元組
@@ -81,7 +92,8 @@ var FLAG_PRESETS = [
   { k: 'france', name: '法國', field: '#1f3e8a', emblem: 'cross' },
   { k: 'dutch', name: '荷蘭', field: '#ae1c28', emblem: 'stripes' },
   { k: 'denmark', name: '丹麥', field: '#c8102e', emblem: 'nordic' },
-  { k: 'genoa', name: '熱那亞', field: '#ece9e0', emblem: 'cross-red' }
+  { k: 'genoa', name: '熱那亞', field: '#ece9e0', emblem: 'cross-red' },
+  { k: 'byzantine', name: '東羅馬（1453）', field: '#a51c1c', emblem: 'tetragram' }
 ];
 var FLAG_DEF = { blue: 'gb-blue', red: 'gb-red' };
 // ⛔ 下面兩個不給初值：69_prefs.js 讀存檔時本檔還沒跑（同一個閉包，var 提升）⇒ 那時先把存檔那一格原樣放進 FLAG_PREF，teamFlag 第一次用到才解
