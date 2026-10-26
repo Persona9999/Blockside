@@ -37,6 +37,8 @@ function sfxPlay(kind, at, vol, opt) {
   var t = AC.currentTime + Math.min(0.25, dist / 340) * 0.5;
   if (kind === 'hit') { sfxEnd(t + hitVoice(AC, AC.sfxBus, t, vol || 0, v, opt || {}, Math.random) + 0.05); return; }
   if (kind === 'boom' && opt && opt.gun) { sfxEnd(t + gunVoice(AC, AC.sfxBus, t, v, gunSndPar(opt.gun), dist, Math.random) + 0.05); return; }   // 開炮：照砲種、口徑（TASK-0978）
+  if (kind === 'imp') { var ip = impPar(opt || {}); if (ip) { sfxEnd(t + impVoice(AC, AC.sfxBus, t, v, ip, dist, Math.random) + 0.05); return; } kind = 'crack'; }   // 命中：照材質、彈種（TASK-0979）；對不上 ⇒ 照舊那一聲 crack
+  if (FIRE_SND[kind]) { sfxEnd(t + fireVoice(AC, AC.sfxBus, t, v, FIRE_SND[kind], dist, Math.random) + 0.05); return; }   // 希臘火：噴口的火舌、打中的轟燃（TASK-0979）
   var g = AC.createGain(); g.connect(AC.sfxBus);
   var src = AC.createBufferSource(); src.buffer = noiseBuf; src.playbackRate.value = 0.6 + Math.random() * 0.5;
   var f = AC.createBiquadFilter(); src.connect(f); f.connect(g);
@@ -148,6 +150,214 @@ function gunRender(sec, c) {
     o.frequency.setValueAtTime(70, t); o.frequency.exponentialRampToValueAtTime(32, t + 0.6); og.gain.setValueAtTime(0.9 * v, t); og.gain.exponentialRampToValueAtTime(0.0001, t + 0.7); o.connect(og); og.connect(mg); o.start(t); o.stop(t + 0.75);
   } else { p = gunSndPar(c[1]); gunVoice(oc, mg, t, v, p, c[2], R); }
   return oc.startRendering().then(function (buf) { var r = audioWav(buf), sp = audioSpec(buf.getChannelData(0), sr); r.cent = sp.cent; r.hi = sp.hi; r.mid = sp.mid; r.lo = sp.lo; r.atk = sp.atk; r.o = { gun: c[1], dist: c[2], fp: p ? Math.round(p.fp) : null, fam: c[1] === 'old' ? '' : GUNSND_OF[c[1]] || 'bp' }; return r; });
+}
+
+// ───── 命中與燃燒（TASK-0979；Tim 2026-10-26：「是否可以優化命中音效 可以根據材質 砲彈類型設定(可以用一個現在的音效當fallback)」「希臘火可以專門做一種音效(燃燒)」「不用走純寫實」）─────
+// 以前砲彈打中什麼都放 crack（雜音過 900–1800 Hz 帶通、0.35 秒），只差音量；希臘火噴口放 splash、打中放 crack；船上延燒沒有聲音。
+// 現在 sfx('imp', 打點, 音量, { mat, ev, m, n })，全部現場合成；ev 不認得 ⇒ 照舊放 crack（impPar 回 null）。
+//   mat（impMat）：wood 木頭、銅皮／metal 鐵甲、黃銅、鍋爐（硬度 ≥ 1.5 的金屬）／stone 石材、磚（堡壘）／glass 玻璃
+//   ev：solid 實心彈咬進去／pen 擊穿鐵甲／dent 凹痕／rico 彈開／chain 鏈彈／stone 石彈（投石機）／bolt 弩箭、火箭／shell 爆裂彈炸開的碎片（爆炸本身照舊 blast）／model 打中砲、舵輪這些模型
+//   m：彈重（kg；21_gunnery.js shotM）⇒ 越重越低、越長；n：這一下打掉幾格 ⇒ 碎片多少（沒給 ＝ 照錨點）
+// 照 CC0 參考的聲紋調（參考只拿來量、⛔ 不進遊戲；偏遊戲感）—— OpenGameArt Thimras《Battle at sea》（做給帆船海戰遊戲的）：
+//   cannon_hit_ship_short（木船）、cannon_hit_wall_no_splash（石牆）、cannon_hit_cannon（砲打到砲、會響）；freesound 148840 跳彈（第一聲）、614062 鐵件重擊（鳴響的頻率比 1：1.67：4.0）。
+//   量法同開炮（TASK-0978）：三分之一八度頻帶形狀（對最大那一帶）、衰減到 −20／−40 dB 的秒數；四個錨點各用座標搜尋。
+//   讀數（頻帶差 dB，63 Hz–6.3 kHz 的平均；括號 ＝ 舊的 crack 對同一份）：木 1.8（15.4）、石 3.2（13.4）、鐵 2.1（14.0）、跳彈 2.9（4.1）。
+//   木頭以 40–125 Hz 的一記低沉為主、1 kHz 以上 −13～−19 dB（遊戲的命中音是「咚」不是「啪」）；石牆整段平、碎石顆粒每秒 10 個；鐵甲 299 Hz 鳴響（比周圍高 13 dB）。
+//   鐵甲的鳴響：只對頻帶形狀的話搜尋會把它壓到聽不出來（頻帶量不到音高）⇒ 照參考的窄峰定 rgA 0.1（299 Hz 高出 13 dB；參考 13）。
+// 層（impVoice）：咚（往下掃的低頻正弦）、身體（低通雜音）、撞擊（寬頻雜音）、碎木／碎石／碎玻璃顆粒、鐵板鳴響（正弦一對、差 0.7% ⇒ 會拍）、低沉尾聲、跳彈呼嘯、鏈彈撕扯。
+// 錨點 ＝ 24 磅實心彈（10.9 kg，PEN.ref）。彈重 m：頻率 × (m ÷ 10.9)^(−1/6)（0.6–1.6）、長度 × (m ÷ 10.9)^0.15（0.55–1.7）、音量 × (m ÷ 10.9)^0.12（0.6–1.4）；顆粒照 n ÷ 80（0.25–1.5）。
+// 距離：音量照舊 ÷ (1 ＋ 距離 ÷ 70)；再一道低通 18 kHz ÷ (1 ＋ 距離 ÷ 120)（同開炮）。
+// p：th 咚（A 音量、F Hz、D 秒）／bo 身體（Lp 低通）／cr 撞擊／sp 碎木（N 幾粒、T 散多久）／rb 碎石／gl 碎玻璃／rg 鳴響（F、R 頻率比、W 各支音量）／tl 尾聲／wh 呼嘯／te 撕扯
+var IMP_A = {
+  wood:  { thA: 0.43, thF: 88, thD: 0.23, boA: 0.83, boLp: 825, boD: 0.38, crA: 1.09, crLp: 4400, crD: 0.14, spA: 1, spN: 11, spT: 0.9, tlA: 0.66, tlLp: 144, tlD: 6.2 },
+  stone: { thA: 0.41, thF: 50, thD: 0.34, boA: 0.41, boLp: 1090, boD: 0.73, crA: 0.78, crLp: 7500, crD: 0.28, rbA: 1.03, rbN: 18, rbT: 0.95, tlA: 0.44, tlLp: 700, tlD: 3.9 },
+  metal: { thA: 0.55, thF: 50, thD: 1, boA: 1.41, boLp: 1550, boD: 1.41, crA: 3.52, crLp: 10900, crD: 0.35, rgA: 0.1, rgF: 299, rgR: [1, 1.67, 4, 11.8], rgW: [1, 0.6, 0.45, 0.15], rgD: 2.9, tlA: 0.88, tlLp: 440, tlD: 3.5 },
+  rico:  { thA: 0.16, thF: 120, thD: 0.073, crA: 4.4, crLp: 9000, crD: 0.145, rgA: 0.14, rgF: 500, rgR: [1, 1.67, 2.75], rgW: [1, 0.6, 0.4], rgD: 0.42, whA: 0.14, whF: 3900 },
+  bolt:  { thA: 0.8, thF: 170, thD: 0.07, boA: 0.45, boLp: 600, boD: 0.08, crA: 0.6, crLp: 3000, crD: 0.03, spA: 0.6, spN: 2, spT: 0.1 }   // 〔佔位〕弩箭釘進木頭的一記短「篤」（沒有參考：照木頭那一組縮短、拿掉尾聲；峰值 0.4 ＝ 以前 crack 打木頭的小一號）
+};
+// 彈種 ⇒ 乘在錨點上（錨點沒有的那一格 ⇒ 直接用這個值）。〔佔位〕：照聽起來該往哪邊的方向，不是量的
+var IMP_EV = {
+  solid: {},
+  pen:   { teA: 0.5, teN: 5 },                                          // 擊穿：鐵板被撕開
+  dent:  { rgA: 3, crA: 0.4, boA: 0.7, tlD: 0.5 },                      // 凹痕：沒穿、整塊板響 ⇒ 對 614062 鐵件重擊 4.7 dB（299 Hz 高出周圍 27.6 dB；參考 29.5）
+  chain: { thA: 0.6, spN: 1.6, teA: 0.6, teN: 10 },                     // 鏈彈：橫著撕過去
+  stone: { thA: 1.5, spN: 0.6, rbA: 0.6, rbN: 8, rbT: 0.6 },            // 石彈：更悶的一記、石頭自己也碎
+  shell: { thA: 0, crA: 0.6, boA: 0.4, tlA: 0 },                        // 爆裂彈：爆炸照舊 blast，這裡只放打掉的碎片
+  model: {}                                                             // 打中砲（鐵）：錨點本來就是 cannon_hit_cannon（砲打到砲）；木頭的模型照實心彈
+};
+var IMP_REF = 10.9, IMP_MATS = ['wood', 'metal', 'stone', 'glass'];
+/** 那一格的材質參數（matAt）⇒ 命中音的材質。 */
+function impMat(m) {
+  if (!m) return 'wood';
+  if (m.kind === 'metal') return m.hard >= 1.5 ? 'metal' : 'wood';      // 銅皮（1.1）包在木殼外面 ⇒ 照木頭
+  if (m.kind === 'wood') return 'wood';
+  return m.clear > 0 ? 'glass' : 'stone';                               // other：玻璃、磚、石材
+}
+/** o ＝ { mat, ev, m, n } ⇒ 合成參數；ev 不認得 ⇒ null（照舊放 crack）。 */
+function impPar(o) {
+  var ev = o.ev || 'solid', mat = IMP_MATS.indexOf(o.mat) >= 0 ? o.mat : 'wood', base;
+  if (ev === 'rico') base = IMP_A.rico;
+  else if (ev === 'bolt') base = IMP_A.bolt;
+  else if (ev === 'pen' || ev === 'dent' || (ev === 'model' && mat === 'metal')) base = IMP_A.metal;
+  else if (IMP_EV[ev]) base = IMP_A[mat === 'glass' ? 'wood' : mat];
+  else return null;
+  var p = Object.assign({}, base), M = ev === 'model' && mat !== 'metal' ? IMP_EV.solid : IMP_EV[ev] || {};
+  Object.keys(M).forEach(function (k) { p[k] = base[k] != null ? base[k] * M[k] : M[k]; });
+  if (mat === 'glass' && ev !== 'rico' && ev !== 'bolt') { p.thA *= 0.5; p.spN = 0; p.glA = 0.5; p.glN = 14; p.glT = 0.5; }   // 玻璃：〔佔位〕一陣高頻的碎玻璃
+  var s = (o.m > 0 ? o.m : IMP_REF) / IMP_REF, fk = clamp(Math.pow(s, -1 / 6), 0.6, 1.6), dk = clamp(Math.pow(s, 0.15), 0.55, 1.7), nk = o.n >= 0 ? clamp(o.n / 80, 0.25, 1.5) : 1;
+  ['thF', 'boLp', 'tlLp'].forEach(function (k) { if (p[k]) p[k] *= fk; });
+  ['thD', 'boD', 'tlD', 'rgD'].forEach(function (k) { if (p[k]) p[k] *= dk; });
+  ['spN', 'rbN', 'glN'].forEach(function (k) { if (p[k]) p[k] *= nk; });
+  p.vol = IMP_VOL * clamp(Math.pow(s, 0.12), 0.6, 1.4);
+  return p;
+}
+var IMP_VOL = 1;
+/** 合成一聲命中（ac 可以是 OfflineAudioContext）：t 開始、v 音量、p ＝ impPar、dist 離鏡頭幾公尺、R 亂數。回傳從 t 起響幾秒。 */
+function impVoice(ac, out, t, v, p, dist, R) {
+  var nb = noiseBuf || noiseMake(ac), dur = 0, lp = ac.createBiquadFilter(), c, u; v *= p.vol || 1;
+  lp.type = 'lowpass'; lp.Q.value = 0.5; lp.frequency.value = 18000 / (1 + (dist || 0) / 120); lp.connect(out);
+  function env(g, a, at, d, t0) { g.setValueAtTime(0.0001, t0); g.exponentialRampToValueAtTime(Math.max(a, 0.0002), t0 + at); g.exponentialRampToValueAtTime(0.0001, t0 + at + d); }
+  function tone(f0, f1, a, at, d, dt) {
+    var t0 = t + (dt || 0), s = ac.createOscillator(), g = ac.createGain();
+    s.frequency.setValueAtTime(f0, t0); s.frequency.exponentialRampToValueAtTime(f1, t0 + at + d); env(g.gain, a * v, at, d, t0);
+    s.connect(g); g.connect(lp); s.start(t0); s.stop(t0 + at + d + 0.05); dur = Math.max(dur, (dt || 0) + at + d + 0.05);
+  }
+  function hiss(type, f0, f1, Q, a, at, d, dt, rate) {
+    var t0 = t + (dt || 0), s = ac.createBufferSource(), f = ac.createBiquadFilter(), g = ac.createGain();
+    s.buffer = nb; s.playbackRate.value = rate || 1; f.type = type; f.Q.value = Q; f.frequency.setValueAtTime(f0, t0); f.frequency.exponentialRampToValueAtTime(f1, t0 + at + d);
+    env(g.gain, a * v, at, d, t0); s.connect(f); f.connect(g); g.connect(lp); s.start(t0, R() * 1.5); s.stop(t0 + at + d + 0.05); dur = Math.max(dur, (dt || 0) + at + d + 0.05);
+  }
+  if (p.thA) tone(p.thF * 1.6, p.thF, p.thA, 0.004, p.thD);                                              // 咚
+  if (p.boA) hiss('lowpass', p.boLp, p.boLp * 0.35, 0.7, p.boA, 0.004, p.boD, 0, 0.5);                  // 身體
+  if (p.crA) hiss('lowpass', p.crLp, 500, 0.5, p.crA, 0.002, p.crD, 0, 1);                                // 撞擊
+  for (c = Math.round(p.spN || 0); c > 0; c--) { u = R(); hiss('bandpass', 900 + 3500 * R(), 700 + 2000 * R(), 1.2, p.spA * (0.4 + 0.6 * R()) * (1 - 0.7 * u), 0.001, 0.004 + 0.014 * R(), 0.005 + p.spT * u * u, 1); }   // 碎木（越後面越稀）
+  for (c = Math.round(p.rbN || 0); c > 0; c--) { u = R(); hiss('bandpass', 250 + 2500 * R() * R(), 200 + 600 * R(), 1, p.rbA * (0.4 + 0.6 * R()) * (1 - 0.6 * u), 0.002, 0.008 + 0.03 * R(), 0.01 + p.rbT * u, 1); }   // 碎石、磚塊滾落
+  for (c = Math.round(p.glN || 0); c > 0; c--) { u = R(); var fg = 2500 + 5000 * R(); tone(fg, fg * 0.98, p.glA * (0.3 + 0.7 * R()) * (1 - 0.6 * u), 0.001, 0.02 + 0.08 * R(), 0.005 + p.glT * u * u); }   // 碎玻璃
+  if (p.rgA) p.rgR.forEach(function (r, k) { var a = p.rgA * p.rgW[k], d = p.rgD / (1 + 0.35 * k), f = p.rgF * r; tone(f, f * 0.997, a, 0.002, d); tone(f * 1.007, f * 1.003, a * 0.6, 0.003, d * 0.9); });   // 鐵板鳴響
+  if (p.tlA) hiss('lowpass', p.tlLp, 60, 0.6, p.tlA, 0.05, p.tlD, 0.03, 0.4);                            // 尾聲
+  if (p.whA) { tone(p.whF, p.whF * 0.55, p.whA, 0.01, 0.35, 0.01); hiss('bandpass', p.whF * 1.1, p.whF * 0.6, 6, p.whA * 0.6, 0.01, 0.3, 0.01, 1); }   // 跳彈呼嘯
+  for (c = Math.round(p.teN || 0); c > 0; c--) hiss('bandpass', 300 + 2200 * R(), 250 + 800 * R(), 0.9, p.teA * (0.5 + 0.5 * R()), 0.004, 0.015 + 0.03 * R(), 0.01 + 0.3 * R(), 0.7);   // 撕扯
+  return dur;
+}
+// 希臘火（同一套量法）：freesound 395038 火焰噴射器（AslakHostaker，遊戲用的武器音）、260554 火「呼」地燒起來、563766 劈啪的火（florianreichelt）。
+//   讀數（頻帶差 dB；舊的 splash／crack 對同一份）：噴口 1.1（15.6）、轟燃 5.9（23.9；參考 200 Hz 以上陡降 16～30 dB，兩階低通追不上）、劈啪 2.2（8.8）。
+//   轟燃後面再接劈啪（參考沒有：火燒起來之後的那幾秒）⇒ 整段對參考 9.8；劈啪照延燒那一份的音量會到 14.7（「呼」被蓋掉）⇒ 尾聲的劈啪 × 0.3。
+//   噴口：200 Hz 一帶的呼嘯（125–630 Hz 都在 −4 dB 內）＋ 2.3 kHz 的嘶聲，音量照 9 Hz 上下抖（火焰的亂流）；轟燃：低通 74 → 640 Hz 往上掃 ＋ 2 秒的劈啪尾聲；
+//   劈啪：0.6–3.6 kHz 的短顆粒（每秒 25 粒，音量照 k³：多半很小、偶爾一聲大的）＋ 1.1 kHz 以下很輕的火聲。
+// p：at 起、hold 撐住、rel 收（秒）／ro 呼嘯（Lp 低通、Q）／hi 嘶聲（F 帶通）／fl 亂流（Hz、深度）／ws 轟燃（F0 → F1、At 起、D 長）／ck 劈啪（N 每秒、T 散多久、A、F）
+var FIRE_SND = {
+  gfJet:   { at: 0.08, hold: 0.5, rel: 0.4, roA: 0.8, roLp: 352, roQ: 0.44, hiA: 0.13, hiF: 2270, flHz: 9, flD: 0.35 },
+  gfBurst: { at: 0.1, hold: 0, rel: 0.96, roA: 0.66, roLp: 200, roQ: 0.7, flHz: 7, flD: 0.4, wsA: 1.9, wsF0: 74, wsF1: 640, wsAt: 0.136, wsD: 2.56, ckN: 25, ckT: 2, ckA: 0.9, ckF: 1200 }   // 搜出來的形狀整組 × 1.75（只對形狀 ⇒ 峰值 0.26，比命中小一截）
+};
+var FIRE_VOL = 1;
+/** 合成一聲火（ac 可以是 OfflineAudioContext）：參數同 impVoice。回傳從 t 起響幾秒。 */
+function fireVoice(ac, out, t, v, p, dist, R) {
+  var nb = noiseBuf || noiseMake(ac), dur = 0, T = (p.at || 0.05) + (p.hold || 0) + (p.rel || 0.3), lp = ac.createBiquadFilter(); v *= FIRE_VOL;
+  lp.type = 'lowpass'; lp.Q.value = 0.5; lp.frequency.value = 18000 / (1 + (dist || 0) / 120); lp.connect(out);
+  function bed(type, f, Q, a, rate) {
+    var s = ac.createBufferSource(), fl = ac.createBiquadFilter(), g = ac.createGain(), am = ac.createGain(), lfo = ac.createOscillator(), lg = ac.createGain(), at = p.at || 0.05;
+    s.buffer = nb; s.loop = true; s.playbackRate.value = rate || 1; fl.type = type; fl.frequency.value = f; fl.Q.value = Q;
+    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(Math.max(a * v, 0.0002), t + at); g.gain.setValueAtTime(Math.max(a * v, 0.0002), t + at + (p.hold || 0)); g.gain.exponentialRampToValueAtTime(0.0001, t + T);
+    am.gain.value = 1; lfo.frequency.value = (p.flHz || 9) * (0.8 + 0.4 * R()); lg.gain.value = p.flD || 0.35; lfo.connect(lg); lg.connect(am.gain);   // 亂流
+    s.connect(fl); fl.connect(am); am.connect(g); g.connect(lp); s.start(t, R() * 1.5); s.stop(t + T + 0.05); lfo.start(t); lfo.stop(t + T + 0.05); dur = Math.max(dur, T + 0.05);
+  }
+  function hiss(type, f0, f1, Q, a, at, d, dt, rate) {
+    var t0 = t + (dt || 0), s = ac.createBufferSource(), f = ac.createBiquadFilter(), g = ac.createGain();
+    s.buffer = nb; s.playbackRate.value = rate || 1; f.type = type; f.Q.value = Q; f.frequency.setValueAtTime(f0, t0); f.frequency.exponentialRampToValueAtTime(f1, t0 + at + d);
+    g.gain.setValueAtTime(0.0001, t0); g.gain.exponentialRampToValueAtTime(Math.max(a * v, 0.0002), t0 + at); g.gain.exponentialRampToValueAtTime(0.0001, t0 + at + d);
+    s.connect(f); f.connect(g); g.connect(lp); s.start(t0, R() * 1.5); s.stop(t0 + at + d + 0.05); dur = Math.max(dur, (dt || 0) + at + d + 0.05);
+  }
+  if (p.roA) bed('lowpass', p.roLp, p.roQ || 0.7, p.roA, 0.6);                                          // 呼嘯
+  if (p.hiA) bed('bandpass', p.hiF, 0.7, p.hiA, 1);                                                    // 嘶聲
+  if (p.wsA) hiss('lowpass', p.wsF0, p.wsF1, 0.9, p.wsA, p.wsAt || 0.12, p.wsD, 0, 0.5);              // 轟燃
+  for (var c = Math.round((p.ckN || 0) * (p.ckT || T)); c > 0; c--) { var u = R(), k = R(); hiss('bandpass', p.ckF * (0.5 + 1.5 * R()), p.ckF * 0.5, 1.5, p.ckA * k * k * k * (1 - 0.5 * u), 0.0008, 0.002 + 0.01 * R(), 0.02 + (p.ckT || T) * u, 1); }   // 劈啪
+  return dur;
+}
+// 船上延燒（49_burn.js）：一直響的火聲，照火勢與離鏡頭遠近 —— 每艘 √(燒著的格 ＋ 40 × 燒著的帆) ÷ (1 ＋ 距離 ÷ 70) 加起來 ÷ BURN_SND_REF ＝ 火勢 lv（0–1.5）。
+//   呼嘯＋嘶聲兩條一直開著（音量 × lv^0.7，0.3 秒追上）；劈啪照 lv 排（卜瓦松，每秒 25 × lv 粒，每一格往前排 0.25 秒；同 02_ambient.js 的雨滴）；
+//   低通照最近那一團火的距離。全滅（lv 0）兩秒後拆掉。⛔ 只讀 sh.burn（不碰模擬、不抽 rnd()）。
+//   音量 × BURN_SND_VOL 0.6：火勢 1 一直響的 RMS −22 dB ⇒ −26.5 dB（一直響的東西比一聲一聲的命中小聲）。
+var BURN_SND = { roA: 0.156, roLp: 1120, roQ: 0.5, hiA: 0.128, hiF: 909, flHz: 3, flD: 0.5, ckN: 25, ckA: 1.56, ckF: 1200 }, BURN_SND_REF = 15, BURN_SND_VOL = 0.6, BSND = null;
+function burnSndLevel() {
+  var E = CAM.eye, L = 0, dm = 1e9;
+  SHIPS.forEach(function (sh) {
+    var B = sh.burn; if (!B || sh.sink > 40 || !(B.n || B.sl.length)) return;
+    var d = E && sh.center ? Math.hypot(sh.center[0] - E[0], sh.center[1] - E[1], sh.center[2] - E[2]) : 0;
+    L += Math.sqrt(B.n + 40 * B.sl.length) / (1 + d / 70); dm = Math.min(dm, d);
+  });
+  return { lv: clamp(L / BURN_SND_REF, 0, 1.5), d: dm < 1e9 ? dm : 0 };
+}
+function burnSndBuild(ac, dest) {
+  var p = BURN_SND, A = { ac: ac, lp: ac.createBiquadFilter(), src: [], ck: ac.createGain(), t: ac.currentTime, off: 0 };
+  A.lp.type = 'lowpass'; A.lp.Q.value = 0.5; A.lp.connect(dest); A.ck.gain.value = 1; A.ck.connect(A.lp);
+  function bed(type, f, Q, rate) {
+    var s = ac.createBufferSource(), fl = ac.createBiquadFilter(), g = ac.createGain(), am = ac.createGain(), lfo = ac.createOscillator(), lg = ac.createGain();
+    s.buffer = noiseBuf || noiseMake(ac); s.loop = true; s.playbackRate.value = rate; fl.type = type; fl.frequency.value = f; fl.Q.value = Q; g.gain.value = 0;
+    am.gain.value = 1; lfo.frequency.value = p.flHz * (0.8 + 0.4 * Math.random()); lg.gain.value = p.flD; lfo.connect(lg); lg.connect(am.gain);
+    s.connect(fl); fl.connect(am); am.connect(g); g.connect(A.lp); s.start(); lfo.start(); A.src.push(s, lfo); return g;
+  }
+  A.ro = bed('lowpass', p.roLp, p.roQ, 0.6); A.hi = bed('bandpass', p.hiF, 0.7, 1);
+  return A;
+}
+/** 劈啪：排 [t0, t1) 之間的顆粒（lv ＝ 火勢；R 亂數）。 */
+function burnSndCrackle(A, t0, t1, lv, R) {
+  var ac = A.ac, p = BURN_SND, t = Math.max(A.t, t0);
+  if (lv > 0.01) while (true) {
+    t += -Math.log(1 - R() * 0.999) / (p.ckN * lv);
+    if (t >= t1) break;
+    var s = ac.createBufferSource(), f = ac.createBiquadFilter(), g = ac.createGain(), k = R(), a = p.ckA * k * k * k * Math.pow(lv, 0.7) * FIRE_VOL * BURN_SND_VOL, d = 0.002 + 0.01 * R();
+    s.buffer = noiseBuf || noiseMake(ac); f.type = 'bandpass'; f.frequency.setValueAtTime(p.ckF * (0.5 + 1.5 * R()), t); f.frequency.exponentialRampToValueAtTime(p.ckF * 0.5, t + d); f.Q.value = 1.5;
+    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(Math.max(a, 0.0002), t + 0.0008); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.0008 + d);
+    s.connect(f); f.connect(g); g.connect(A.ck); s.start(t, R() * 1.5); s.stop(t + d + 0.01);
+  }
+  A.t = t1;
+}
+function burnSndSet(A, lv, d, t, tc) {
+  var k = Math.pow(lv, 0.7) * FIRE_VOL * BURN_SND_VOL;
+  A.ro.gain.setTargetAtTime(BURN_SND.roA * k, t, tc); A.hi.gain.setTargetAtTime(BURN_SND.hiA * k, t, tc);
+  A.lp.frequency.setTargetAtTime(18000 / (1 + d / 120), t, tc);
+}
+/** 每一格畫面（90_main.js frame）：還沒有聲音、或沒有船在燒 ⇒ 什麼都不做。 */
+function burnSndFrame() {
+  if (!AC) return;
+  var r = burnSndLevel(), lv = muted ? 0 : r.lv, now = AC.currentTime;
+  if (!BSND) { if (lv <= 0) return; BSND = burnSndBuild(AC, AC.sfxBus); }
+  burnSndSet(BSND, lv, r.d, now, 0.3); burnSndCrackle(BSND, now, now + 0.25, lv, Math.random);
+  if (lv > 0) BSND.off = 0; else if (!BSND.off) BSND.off = now; else if (now - BSND.off > 2) { try { BSND.lp.disconnect(); BSND.src.forEach(function (n) { n.stop(); }); } catch (e) { } BSND = null; }   // 火全滅兩秒 ⇒ 拆掉
+}
+/** 命中與希臘火的試聽集（__game.impLab；src/tests/ambient_lab.py --lab imp）：每段 sec 秒、同一個限制器、固定種子；舊的 crack 當對照。
+ *  ?cases=名字:種類:材質:彈種:彈重 kg:格數:距離;… 換掉 —— 種類 imp（命中）／old（舊的 crack，音量 ＝ 彈重那一欄）／gfJet、gfBurst（希臘火）／burn（延燒，火勢 ＝ 彈重那一欄、響滿 sec 秒）。 */
+var IMP_CASES = [['舊 crack（實心彈打木頭）', 'old', '', '', 1.2], ['舊 crack（打不穿、凹痕）', 'old', '', '', 0.5],
+  ['木 24 磅實心彈', 'imp', 'wood', 'solid', 10.9, 80], ['木 6 磅實心彈', 'imp', 'wood', 'solid', 2.7, 30], ['木 68 磅實心彈', 'imp', 'wood', 'solid', 30.8, 160],
+  ['木 鏈彈', 'imp', 'wood', 'chain', 10.9, 60], ['木 石彈（投石機）', 'imp', 'wood', 'stone', 40, 60], ['木 弩箭', 'imp', 'wood', 'bolt', 0.3], ['木 爆裂彈的碎片（＋爆炸）', 'imp', 'wood', 'shell', 10.9, 120],
+  ['鐵甲 擊穿 12 吋', 'imp', 'metal', 'pen', 318, 200], ['鐵甲 凹痕 24 磅', 'imp', 'metal', 'dent', 10.9], ['鐵甲 彈開', 'imp', 'metal', 'rico', 10.9],
+  ['石牆（堡壘）24 磅', 'imp', 'stone', 'solid', 10.9, 80], ['玻璃', 'imp', 'glass', 'solid', 10.9, 20], ['打中砲（鐵）', 'imp', 'metal', 'model', 10.9], ['打中舵輪（木）', 'imp', 'wood', 'model', 10.9],
+  ['木 24 磅實心彈 300 m 外', 'imp', 'wood', 'solid', 10.9, 80, 300],
+  ['希臘火 噴口', 'gfJet'], ['希臘火 打中', 'gfBurst'], ['延燒 小火（火勢 0.3）', 'burn', '', '', 0.3], ['延燒 大火（火勢 1）', 'burn', '', '', 1]];
+function impLab(q) {
+  var sec = +(q.get('sec') || 4), cs = q.has('cases') ? q.get('cases').split(';').filter(function (s) { return s; }).map(function (s) { var a = s.split(':'); return [a[0], a[1], a[2], a[3], +a[4] || 0, a[5] === undefined || a[5] === '' ? -1 : +a[5], +a[6] || 0]; }) : IMP_CASES, out = [];
+  return cs.reduce(function (pr, c) { return pr.then(function () { return impRender(sec, c).then(function (r) { r.name = c[0]; out.push(r); }); }); }, Promise.resolve()).then(function () { return out; });
+}
+function impRender(sec, c) {
+  var sr = 44100, oc = new OfflineAudioContext(2, Math.round(sr * sec), sr), lim = oc.createDynamicsCompressor(), s = 98765, p = null, k = c[1], dist = c[6] || 0, t = 0.05;
+  lim.threshold.value = -14; lim.knee.value = 4; lim.ratio.value = 20; lim.attack.value = 0.002; lim.release.value = 0.25;   // 跟遊戲的 master 同一個限制器（initAudio）
+  var mg = oc.createGain(); mg.gain.value = 0.8; mg.connect(lim); lim.connect(oc.destination);
+  function R() { s = (Math.imul(s, 1103515245) + 12345) & 0x7fffffff; return s / 0x80000000; }
+  var v = 1 / (1 + dist / 70);                                           // 音量照 sfxPlay（vol 1）
+  if (k === 'old') {                                                     // 舊的 crack（sfxPlay 那一行照抄；音量 ＝ c[4]）
+    var src = oc.createBufferSource(), f = oc.createBiquadFilter(), g = oc.createGain(), a = 1.4 * (c[4] || 1);
+    src.buffer = noiseBuf || noiseMake(oc); src.playbackRate.value = 0.6 + R() * 0.5; f.type = 'bandpass'; f.frequency.value = 900 + R() * 900; f.Q.value = 0.8;
+    src.connect(f); f.connect(g); g.connect(mg); g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(a, t + 0.01); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.35); src.start(t, R()); src.stop(t + 0.4);
+  } else if (k === 'imp') { p = impPar({ mat: c[2], ev: c[3], m: c[4], n: c[5] }); impVoice(oc, mg, t, v, p, dist, R); if (c[3] === 'shell') impBlast(oc, mg, t, v * 1.4, R); }
+  else if (FIRE_SND[k]) fireVoice(oc, mg, t, v, FIRE_SND[k], dist, R);
+  else if (k === 'burn') { var A = burnSndBuild(oc, mg); burnSndSet(A, c[4], dist, 0, 0.01); burnSndCrackle(A, 0, sec, c[4], R); }
+  return oc.startRendering().then(function (buf) { var r = audioWav(buf), sp = audioSpec(buf.getChannelData(0), sr); r.cent = sp.cent; r.hi = sp.hi; r.mid = sp.mid; r.lo = sp.lo; r.atk = sp.atk; r.o = { kind: k, mat: c[2] || '', ev: c[3] || '', m: c[4] || 0, n: c[5], dist: dist }; return r; });
+}
+/** 爆炸那一聲（sfxPlay 'blast' 照抄；試聽集的爆裂彈那一段疊上去聽）。 */
+function impBlast(ac, out, t, v, R) {
+  var src = ac.createBufferSource(), f = ac.createBiquadFilter(), g = ac.createGain();
+  src.buffer = noiseBuf || noiseMake(ac); src.playbackRate.value = 0.6 + R() * 0.5; f.type = 'lowpass'; f.frequency.setValueAtTime(2400, t); f.frequency.exponentialRampToValueAtTime(60, t + 1.8);
+  src.connect(f); f.connect(g); g.connect(out); g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(1.6 * v, t + 0.01); g.gain.exponentialRampToValueAtTime(0.0001, t + 2.2); src.start(t, R()); src.stop(t + 2.25);
 }
 
 // ───── 碰撞與觸礁（TASK-0868；Tim 2026-10-23：「希望可以更沉悶一些 另外木頭跟金屬材質可以用兩種音效(都用合成音)」「不直接用音檔 且根據撞擊力道變化音效」「觸礁也是」）─────

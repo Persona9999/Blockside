@@ -16,7 +16,7 @@ function fireGun(sh, g, target, ammo) {
   g.reload = sh.reloadT * GS.reload * rr(0.9, 1.1); g.reload0 = g.reload; g.firedAt = SIMT; sh.fired++;   // reload0：這一輪裝填要多久（武器演出的進度 gunPhase，26_gunanim.js）
   g.needCart = true;                                                // 下一發要從砲旁的藥箱拿一份火藥與彈藥（沒有 ⇒ 等送藥手，23_powder.js）
   if (sh.aimOn && sh.aimOn.calm) fortProvoke(sh.aimOn, sh);          // 對城裡中立的堡壘開火 ⇒ 敵對（52_fleet.js；TASK-0955）
-  if (ammo === AMMO_GF) { evEmit('gfJet', r.mw, r.dir, sh.vel); sfx('splash', r.mw, 0.5); } else if (ammoQuiet(ammo)) boltFx(sh, r.mw); else shotFx(sh, g, r.mw, r.dir);   // 希臘火：噴口一道火舌（28_fire.js），沒有砲聲、沒有後座；弩箭、火箭、石彈：只有弓弦／投臂一響
+  if (ammo === AMMO_GF) { evEmit('gfJet', r.mw, r.dir, sh.vel); sfx('gfJet', r.mw, sh.i === PLAYER_I ? 1 : 0.8); } else if (ammoQuiet(ammo)) boltFx(sh, r.mw); else shotFx(sh, g, r.mw, r.dir);   // 希臘火：噴口一道火舌（28_fire.js），沒有砲聲、沒有後座；弩箭、火箭、石彈：只有弓弦／投臂一響
   if ((GS.burst || 1) > 1) { g.burstLeft = GS.burst - 1; g.burstK = 1; g.burstAmmo = ammo; g.burstT = SIMT + (GS.burstGap || 0.15); }   // 連發：同一份彈藥再打 burst − 1 發
   return true;
 }
@@ -449,14 +449,14 @@ function impact(b, sh, L, ab) {
     var ks = shellK(b), hk = Math.pow(hardAt(sh, Q) / 3, -PEN.shellHard), out = mi.pen > 0 ? hk : 1, Rb = PEN.shellR * ks * hk * rr(0.87, 1.13);
     if (mi.pen > 0) { Rb -= 1; A = sh.armRes || (sh.armRes = { pen: 0, dent: 0, rico: 0, shell: 0 }); A.shell++; }
     r = Rb > 0.3 ? shatter(sh, Q, dQ, Rb, mul(b.v, 0.05), 650, 0.85, ab) : { n: 0, cost: 0 };
-    explode(w, sh, r.n); blastModels(sh, L, 22 * PEN_SK * ks * out, w, null, b.dmg); crewHurt(sh, L, 13 * PEN_SK * ks * out, 30 * PEN_SK * ks * out, null, '爆炸', crewBase(b)); b.alive = false; return;
+    explode(w, sh, r.n); sfx('imp', w, 0.8, { mat: impMat(mi), ev: 'shell', m: shotM(b), n: r.n }); blastModels(sh, L, 22 * PEN_SK * ks * out, w, null, b.dmg); crewHurt(sh, L, 13 * PEN_SK * ks * out, 30 * PEN_SK * ks * out, null, '爆炸', crewBase(b)); b.alive = false; return;
   }
   if (b.ammo === 2) {                                                   // 鏈彈：橫著的一片
     r = gunSlab(sh, Q, dQ, b, ab);
     b.v = mul(b.v, Math.max(0, 1 - r.cost * 0.004 * HARD_BASE * sh.cfg.hard));
     if (r.n) crewHurt(sh, L, 9, 16, dirL, '鏈彈', crewBase(b));
     if (len(b.v) < 30) { ballToDebris(b); }
-    if (r.n > 30) { sfx('crack', w, 0.9); smoke(w, [0, 0.2, 0], 3, false); }
+    if (r.n > 30) { sfx('imp', w, 0.9, { mat: impMat(mi), ev: 'chain', m: shotM(b), n: r.n }); smoke(w, [0, 0.2, 0], 3, false); }
     return;
   }
   var R = rr(3.4, 4.6) * (b.big ? 1.25 : b.hole || 1) * Math.pow(hardAt(sh, Q), -0.25);   // 洞照打到那一格的材質（鐵甲洞小）
@@ -468,18 +468,18 @@ function impact(b, sh, L, ab) {
     if (c < PEN_COS) {                                                  // 太斜 ⇒ 彈開：照法線反射、帶著六成的速度飛走，不掉格
       A.rico++;
       var rd = sub(dQ, mul(n, 2 * dot(dQ, n))), Mw = ab ? armM(ab) : sh.M, wd = norm(M4.dir(Mw, rd[0], rd[1], rd[2])), wn = norm(M4.dir(Mw, n[0], n[1], n[2]));
-      b.v = add(mul(wd, sp * 0.6), sh.vel); b.p = add(b.p, mul(wn, 0.25)); b.rico = (b.rico || 0) + 1; sfx('crack', w, 0.35);
+      b.v = add(mul(wd, sp * 0.6), sh.vel); b.p = add(b.p, mul(wn, 0.25)); b.rico = (b.rico || 0) + 1; sfx('imp', w, 0.6, { mat: 'metal', ev: 'rico', m: m });
       if (b.rico > 2 || sp * 0.6 < PEN_STOP) ballToDebris(b);
       return;
     }
     var t = plateT(sh, g0, Q, n), need = mi.pen * t * sh.cfg.hard * playK('hard'), P = penP(E * c * c / need);   // playK('hard')：娛樂玩法的鐵甲硬度加成（funhard，預設 0.7；寫實 ＝ 1）
     if (b.dbg) Object.assign(b.dbg[b.dbg.length - 1], { t: t, E: +E.toFixed(1), need: +need.toFixed(1), P: +P.toFixed(3) });
-    if (!(P >= 1 || (P > 0 && rnd() < P))) { A.dent++; sfx('crack', w, 0.5); ballToDebris(b); return; }   // 打不穿 ⇒ 凹痕（不掉格、不噴碎片），砲彈掉下去
+    if (!(P >= 1 || (P > 0 && rnd() < P))) { A.dent++; sfx('imp', w, 0.7, { mat: 'metal', ev: 'dent', m: m }); ballToDebris(b); return; }   // 打不穿 ⇒ 凹痕（不掉格、不噴碎片），砲彈掉下去
     A.pen++; E -= need;                                                 // 穿了：沿砲彈方向把整塊板咬穿（板厚 ÷ cos θ 那麼長），能量扣掉門檻
     var Lt = Math.ceil(t / Math.max(c, 0.3)), nr = 0;
     for (var s2 = 0; s2 <= Lt; s2++) nr += shatter(sh, add(Q, mul(dQ, s2)), dQ, R, b.v, s2 ? 40 : 260, 0.55, ab).n;
     b.plate = b.trav + (Lt + 1) * S;
-    if (nr) { crewHurt(sh, L, R * 1.1, R * 2.6, dirL, '鐵片', crewBase(b) * clamp(Math.sqrt(need / PEN.splinter), 0.5, 2)); sfx('crack', w, 1); }
+    if (nr) { crewHurt(sh, L, R * 1.1, R * 2.6, dirL, '鐵片', crewBase(b) * clamp(Math.sqrt(need / PEN.splinter), 0.5, 2)); sfx('imp', w, 1, { mat: 'metal', ev: 'pen', m: m, n: nr }); }
     if (E <= Estop) { ballToDebris(b); return; }
     b.v = mul(b.v, Math.sqrt(2000 * E / m) / sp);
     return;
@@ -487,7 +487,7 @@ function impact(b, sh, L, ab) {
   r = shatter(sh, Q, dQ, R, b.v, 260, 0.55, ab);   // 實心彈：一口一口往裡鑽（洞照口徑；越硬洞越小）
   var used = r.cost * PEN.wood * sh.cfg.hard;                       // 這一口用掉的能量（每格的消耗 × 材質，shatter 已乘）
   if (r.n) crewHurt(sh, L, R * 1.1, R * 2.6, dirL, '碎木', crewBase(b) * clamp(Math.sqrt(Math.min(used, E) / PEN.splinter), 0.5, 2));   // 碎木往前噴：船裡的人主要是被這個傷到的
-  if (r.n > 0) { sfx('crack', w, 0.6 + Math.min(1, r.n / 200)); if (r.n > 40) smoke(w, mul(norm(b.v), -0.3), 2, false); }
+  if (r.n > 0) { sfx('imp', w, 0.6 + Math.min(1, r.n / 200), { mat: impMat(mi), ev: b.stone ? 'stone' : b.bolt ? 'bolt' : 'solid', m: m, n: r.n }); if (r.n > 40) smoke(w, mul(norm(b.v), -0.3), 2, false); }
   E -= used;
   if (E <= Estop) { ballToDebris(b); return; }
   b.v = mul(b.v, Math.sqrt(2000 * E / m) / sp);
@@ -580,7 +580,7 @@ function blowModel(sh, m, vel, drop, at) {
     } else crewHurt(sh, m.c, 7, 15, null, '砲被打飛', 140);
     flash(c0, vd, 10, false);
     for (var i = 0; i < 14; i++) spawnPt(c0, add(mul(vd, rr(3, 12)), [gauss() * 4, rr(1, 6), gauss() * 4]), rr(0.2, 0.5), [1, 0.85, 0.5], 1, 0.25, 0.1, G, 0.5, 3);
-    sfx('crack', c0, 1.3);
+    sfx('imp', c0, 1.3, { mat: GUNS[m.kind] ? 'metal' : 'wood', ev: 'model' });   // 砲 ⇒ 鐵的一聲響；舵輪、帆桁這些 ⇒ 木頭（02_audio.js impPar；TASK-0979）
   }
   if (m.kind === 'wheel' || m.kind === 'tiller') note(sh, (m.kind === 'wheel' ? '舵輪' : '舵柄') + '被打飛了' + (HELM_TQ ? ' ⇒ 舵效剩 ' + Math.round(helmEff(sh) * 100) + '%' : ''));   // 舵效（TASK-0777，31_drive.js helmEff）
   else if (m.kind === 'rudder' && HELM_TQ) note(sh, (drop ? '舵掉了' : '舵被打飛了') + ' ⇒ 舵效剩 ' + Math.round(helmEff(sh) * 100) + '%');
@@ -602,7 +602,7 @@ function damageModel(sh, m, vel, dmg, at) {
   var c0 = M4.pt(sh.M, m.c[0], m.c[1], m.c[2]), vd = norm(vel);
   for (var i = 0; i < 8; i++) spawnPt(c0, add(mul(vd, rr(-6, -2)), [gauss() * 3, rr(1, 4), gauss() * 3]), rr(0.15, 0.35), [1, 0.8, 0.45], 1, 0.2, 0.08, G, 0.5, 3);
   crewHurt(sh, muz || m.c, 3, 8, null, '碎木', dmg * 0.7);
-  sfx('crack', c0, 0.8);
+  sfx('imp', c0, 0.8, { mat: GUNS[m.kind] ? 'metal' : 'wood', ev: 'model' });
 }
 /** 爆炸：r 格內的模型往外飛。傷害 ＝ 每發傷害 × 爆裂彈對砲倍率 × (1 − 0.75·d／r)。skip：直接打中的那一門（已經扣過）。 */
 function blastModels(sh, L, r, w, skip, dmg) {

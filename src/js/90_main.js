@@ -31,6 +31,7 @@ function frame(ts, noRaf) {                                         // noRaf：_
   camFollow(dt);                                                      // 追砲彈（03_camera.js）
   if (!PAUSED && !STILL) stepRain(dt);                                // 3D 雨滴（14_rain.js）：照畫面的時間走；停格、縮圖不動
   ambFrame();                                                         // 環境音：風、浪、暴風雨的雨（02_ambient.js；還沒有聲音 ⇒ 什麼都不做）
+  burnSndFrame();                                                     // 船上延燒的火聲（02_audio.js，TASK-0979；沒有船在燒 ⇒ 什麼都不做）
   bgmFrame();                                                         // 背景音樂（02_music.js，TASK-0677）：主選單也放
   if (PF) pfLap('rain');
   remesh(RM_BUDGET);                                                  // 重網格化，每格有預算（60_render.js）
@@ -271,6 +272,7 @@ if (DEBUG) window.__game = {
   ambLab: function (q) { return ambLab(new URLSearchParams(q || '')); },
   hitLab: function (q) { return hitLab(new URLSearchParams(q || '')); },   // 碰撞與觸礁的試聽集（02_audio.js；src/tests/ambient_lab.py --lab hit）
   gunLab: function (q) { return gunLab(new URLSearchParams(q || '')); },   // 開炮的試聽集：每種砲、遠近（02_audio.js；src/tests/ambient_lab.py --lab gun；TASK-0978）
+  impLab: function (q) { return impLab(new URLSearchParams(q || '')); },   // 命中與希臘火的試聽集：材質 × 彈種、噴口、轟燃、延燒（02_audio.js；src/tests/ambient_lab.py --lab imp；TASK-0979）
   hitLog: function () { return HIT_LOG.slice(); },                     // 最近 32 聲碰撞：時刻、力道、材質、底質（02_audio.js sfxPlay；TASK-0868）
   bgmRender: function (o) { return bgmRender(o || {}); },                // 背景音樂離線錄（02_music.js；src/tests/music_lab.py）
   bgm: function () { return { snd: JSON.parse(JSON.stringify(SND)), tune: BGM ? BGM.tn.id : null, pass: BGM ? BGM.pass : null, forced: !!(BGM && BGM.forced), bus: AC && AC.bgmBus ? +AC.bgmBus.gain.value.toFixed(4) : null, sfxBus: AC && AC.sfxBus ? +AC.sfxBus.gain.value.toFixed(4) : null, ambBus: AC && AC.ambBus ? +AC.ambBus.gain.value.toFixed(4) : null, fight: AC ? +(AC.currentTime - SND_FIGHT).toFixed(1) : null, tunes: TUNES.map(function (t) { return t.id; }), themes: THEMES.map(function (t) { return t.id; }), theme: (bgmTheme() || {}).id || null }; },   // 聲音的讀數：三條音量線、正在放哪首

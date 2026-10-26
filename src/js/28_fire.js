@@ -43,7 +43,7 @@ function gfBurstFx(p, vel) {
     fxPt([p[0] + gaussX() * 0.4, p[1] + rrX(0, 0.4), p[2] + gaussX() * 0.4], v, rrX(0.4, 1.1), [1, 0.3 + 0.5 * hot, 0.04 + 0.2 * hot], 1, rrX(0.6, 1.2), rrX(1.6, 3.2), -2.5, 1.6, 1);
   }
   for (var j = 0; j < 4; j++) fxPt([p[0], p[1] + 0.8, p[2]], add([gaussX() * 0.8, rrX(1.5, 3), gaussX() * 0.8], vel), rrX(2, 4) / smokeK(), [0.18, 0.16, 0.15], 0.5, rrX(1, 1.8), rrX(4, 7), -0.08, 1, 0);
-  sfx('crack', p, 0.5);
+  sfx('gfBurst', p, 1);                                                // 「呼」地燒起來＋劈啪尾聲（02_audio.js fireVoice；TASK-0979）
 }
 evOn('gfJet', gfJetFx, 0, true); evOn('gfTrail', gfTrailFx, 0, true); evOn('gfBurst', gfBurstFx, 0, true);
 // ───────────────────────── 火箭（弩砲；Tim 2026-10-18：「是否可以讓弩炮改發射火箭(有點燃效果) 不然目前威力太弱了」）─────────────────────────
