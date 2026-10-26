@@ -143,7 +143,8 @@ function simStep() {
     EVENTS.splice(i--, 1);
     var sh = SHIPS[e.sh];
     if (e.on) withAim(sh, e.aim, e.on, function () { sh.autoNow = true; var et2 = sh.sunk ? null : gunTarget(sh, e.g, add(aimPoint(sh), mul(shipAxis(sh), e.off))); if (et2) fireGun(sh, e.g, et2, e.ammo); sh.autoNow = false; });   // 另一舷那一輪：照它自己的瞄準點（21_gunnery.js broadsideAt）
-    else { var et = sh.sunk ? null : gunTarget(sh, e.g, add(aimPoint(sh), mul(shipAxis(sh), e.off))); if (et) fireGun(sh, e.g, et, e.ammo); }   // 開火那一刻才挑點（兩艘都在動）
+    else { var ew = !sh.sunk && (foeOf(sh) || sh.aim && sh.aimOn) ? aimPoint(sh) : null, et = ew ? gunTarget(sh, e.g, add(ew, mul(shipAxis(sh), e.off))) : null; if (et) fireGun(sh, e.g, et, e.ammo); }   // 開火那一刻才挑點（兩艘都在動）
+    // ↑ 排進齊射之後瞄準點沒了、又沒有敵艦（城鎮模式瞄往來的船：點海面取消、那艘被收走 trafficDrop）⇒ 剩下的不開（⛔ aimPoint 讀 null.M、每一發丟一次例外；守法同 gunAims）
   }
   SHIPS.forEach(burstStep);                                        // 連發剩下的那幾發（21_gunnery.js；burst ＝ 1 的砲什麼都不做）
   if (PF) pfLap('fire');
