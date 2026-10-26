@@ -1,6 +1,7 @@
 # 環境音試聽（TASK-0663）：無頭 Chrome 開成品，經 DevTools 協定呼叫 ambLab（02_ambient.js：OfflineAudioContext 離線錄）⇒ 每一段寫成 WAV＋一頁可以直接播的 HTML。
 # 用法：python -I -X utf8 src/tests/ambient_lab.py --tag a [--sec 10] [--cases "名字:w:sea:rain:hold;…"]
 #   --lab hit ⇒ 碰撞與觸礁（02_audio.js hitLab，TASK-0868）：--cases "名字:I:mat:bed:slide:rub:噸;…"、每段預設 5 秒、寫到 reports/hit_lab；多幾欄：頻譜重心 Hz、1 kHz／500 Hz 以上的能量 %、150 Hz 以下的能量 %（筆電喇叭差不多放不出來）、起音 ms（清脆 ＝ 起音硬）。
+#   --lab gun ⇒ 開炮（02_audio.js gunLab，TASK-0978）：--cases "名字:砲種:距離 m;…"（砲種 old ＝ 以前那一聲）、每段預設 6 秒、寫到 reports/gun_lab；讀數欄同 hit。
 # 寫：<out>/<tag>/<序號>_<名字>.wav、<out>/<tag>/index.html（每一段：播放器｜參數｜峰值｜RMS dB）。
 # ⛔ 不用 --dump-dom：離線錄音在音訊執行緒上跑，無頭模式的虛擬時間不等它（量過：頁面載入 3 秒就 dump、#lab 還沒寫）⇒ 改走 Runtime.evaluate（awaitPromise）。
 #   DevTools 的 WebSocket 只用標準函式庫（socket）寫最小的一段：送一個文字訊框、收到回應（可能分好幾個訊框、好幾 MB）。
@@ -11,6 +12,7 @@ CHROME = [r'C:\Program Files\Google\Chrome\Application\chrome.exe', r'C:\Program
 OUT_HTML = os.path.normpath(os.path.join(HERE, '..', '..', 'index.html'))
 OUT_DIR = os.path.normpath(os.path.join(HERE, '..', '..', 'reports', 'ambient_lab'))
 OUT_HIT = os.path.normpath(os.path.join(HERE, '..', '..', 'reports', 'hit_lab'))
+OUT_GUN = os.path.normpath(os.path.join(HERE, '..', '..', 'reports', 'gun_lab'))
 PORT = 9347
 
 
@@ -61,13 +63,13 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--html', default=OUT_HTML)
     ap.add_argument('--tag', default='run')
-    ap.add_argument('--lab', default='amb', choices=['amb', 'hit'])
+    ap.add_argument('--lab', default='amb', choices=['amb', 'hit', 'gun'])
     ap.add_argument('--out', default='')
     ap.add_argument('--sec', type=float, default=0)
     ap.add_argument('--cases', default='')
     a = ap.parse_args()
-    hit = a.lab == 'hit'; fn = 'hitLab' if hit else 'ambLab'
-    a.out = a.out or (OUT_HIT if hit else OUT_DIR); a.sec = a.sec or (5 if hit else 10)
+    hit = a.lab in ('hit', 'gun'); fn = {'hit': 'hitLab', 'gun': 'gunLab'}.get(a.lab, 'ambLab')   # hit：有頻譜讀數的那兩種（碰撞、開炮）
+    a.out = a.out or {'hit': OUT_HIT, 'gun': OUT_GUN}.get(a.lab, OUT_DIR); a.sec = a.sec or {'hit': 5, 'gun': 6}.get(a.lab, 10)
     chrome = next(c for c in CHROME if os.path.exists(c))
     q = 'sec=%g' % a.sec + ('&cases=' + urllib.parse.quote(a.cases) if a.cases else '')
     url = 'file:///' + a.html.replace('\\', '/') + '?debug=1'               # __game 只在 debug=1 才掛（成品的程式整包在一個閉包裡，ambLab 不在 window 上）
@@ -111,8 +113,9 @@ def main():
             html.escape(c['name']), name, o.get('w'), o.get('sea'), o.get('rain'), o.get('hold'), c['peak'], c['rmsDb']))
     with open(os.path.join(d, 'index.html'), 'w', encoding='utf-8', newline='\n') as f:
         if hit:
-            f.write('<!doctype html><meta charset="utf-8"><title>碰撞音效試聽 %s</title><style>body{font:14px sans-serif;margin:16px}td,th{padding:4px 10px;border-bottom:1px solid #ccc}</style>'
-                    '<h3>碰撞與觸礁音效試聽（%s，每段 %g 秒）</h3><table><tr><th>段落</th><th>播放</th><th>參數</th><th>峰值</th><th>RMS dB</th><th>頻譜重心 Hz</th><th>1 kHz 以上 %%</th><th>500 Hz 以上 %%</th><th>150 Hz 以下 %%</th><th>起音 ms</th></tr>%s</table>' % (a.tag, a.tag, a.sec, ''.join(rows)))
+            ttl = '開炮音效試聽' if a.lab == 'gun' else '碰撞與觸礁音效試聽'
+            f.write('<!doctype html><meta charset="utf-8"><title>%s %s</title><style>body{font:14px sans-serif;margin:16px}td,th{padding:4px 10px;border-bottom:1px solid #ccc}</style>'
+                    '<h3>%s（%s，每段 %g 秒）</h3><table><tr><th>段落</th><th>播放</th><th>參數</th><th>峰值</th><th>RMS dB</th><th>頻譜重心 Hz</th><th>1 kHz 以上 %%</th><th>500 Hz 以上 %%</th><th>150 Hz 以下 %%</th><th>起音 ms</th></tr>%s</table>' % (ttl, a.tag, ttl, a.tag, a.sec, ''.join(rows)))
         else:
             f.write('<!doctype html><meta charset="utf-8"><title>環境音試聽 %s</title><style>body{font:14px sans-serif;margin:16px}td,th{padding:4px 10px;border-bottom:1px solid #ccc}</style>'
                     '<h3>環境音試聽（%s，每段 %g 秒）</h3><table><tr><th>段落</th><th>播放</th><th>參數</th><th>峰值</th><th>RMS dB</th></tr>%s</table>' % (a.tag, a.tag, a.sec, ''.join(rows)))
