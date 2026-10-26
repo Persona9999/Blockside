@@ -109,7 +109,7 @@ function townGot(L, err, idx) {
 //     變了 ⇒ townReplace 增量換上（只重建多的、少的那幾區；townDiff）。
 //   要哪幾區（townDistFrame，每 TOWN_DIST_EVERY 秒看一次）：
 //     航海模式 ⇒ 離旗艦 TOWN_DIST_R 公尺內的區，近的先；超過 TOWN_DIST_DROP 才收（中間那一段來回開不會一直建、收）。
-//     城鎮模式 ⇒ 焦點那一區（停靠的那一區；🗺 選的；鏡頭拖進別區停 TOWN_DIST_DWELL 秒）先建，建好再補鄰區（邊離焦點那一區 TOWN_DIST_NBR 公尺內），其他收掉。
+//     城鎮模式 ⇒ 焦點那一區（停靠的那一區；🏙 選的；鏡頭拖進別區停 TOWN_DIST_DWELL 秒）先建，建好再補鄰區（邊離焦點那一區 TOWN_DIST_NBR 公尺內），其他收掉。
 //     焦點那一區先建，建好（townDistReady）再把其他要的一次補齊；收是當場收。旗艦還沒來 ⇒ 只有骨架（以前先猜第一區、旗艦一到整座重建 —— 君士坦丁堡進城鎮模式第 16 秒整座歸零）。
 //   焦點換了 ⇒ 海域的窗以那一區為中心（TOWNS.focus；08_seabed.js bedFocusAt）。
 var TOWN_DIST_R = 2500, TOWN_DIST_DROP = 3200, TOWN_DIST_NBR = 200, TOWN_DIST_DWELL = 0.8, TOWN_DIST_EVERY = 0.25, TOWN_DIST_WAIT = 8;   // 〔佔位〕
@@ -173,16 +173,16 @@ function townDistDrag(p, now) {
   if (now - TOWNS.dwell.t < TOWN_DIST_DWELL * 1000) return;
   TOWNS.dwell = null; TOWNS.dist[p.id] = d.id;
   var w = townDistWorld(p, d); TOWNS.focus = { town: p.id, x: w[0], z: w[1] };
-  var me = SHIPS[PLAYER_I]; if (me) note(me, '🗺 ' + (p.name || p.id) + '・' + d.name);
+  var me = SHIPS[PLAYER_I]; if (me) note(me, '🏙 ' + (p.name || p.id) + '・' + d.name);
 }
-/** 換到 k 那一區（🗺 城區頁）：焦點換過去、鏡頭跳到那一區的中心（自由鏡頭）、海域的窗以它為中心；下一格 townDistFrame 照新的焦點收、補。⇒ 換了沒 */
+/** 換到 k 那一區（🏙 城區頁、D）：焦點換過去、鏡頭跳到那一區的中心（自由鏡頭）、海域的窗以它為中心；下一格 townDistFrame 照新的焦點收、補。⇒ 換了沒 */
 function townDistGo(id, k) {
   var p = TOWNS.full[id], d = p && (p.districts || []).filter(function (q) { return q.id === k; })[0]; if (!d || !BED) return false;
   TOWNS.dist[id] = k; TOWNS.dwell = null; TOWNS.distT = 0;
   var w = townDistWorld(p, d), h = townGround(w[0], w[1]);
   TOWNS.focus = { town: id, x: w[0], z: w[1] };
   camSet({ mode: 0, follow: null, see: null, pan: [0, 0], tgt: [w[0], isFinite(h) ? Math.max(0, h) : 0, w[1]], dist: Math.max(CAM.dist || 0, 500) });   // 自由鏡頭（CAM 只由 03_camera.js 寫）
-  var me = SHIPS[PLAYER_I]; if (me) note(me, '🗺 ' + (p.name || id) + '・' + d.name);
+  var me = SHIPS[PLAYER_I]; if (me) note(me, '🏙 ' + (p.name || id) + '・' + d.name);
   return true;
 }
 /** 每一格（89_townui.js 的 frame）：換模式 ⇒ 城鎮模式從旗艦停的那一區重來；每 TOWN_DIST_EVERY 秒照 townDistWant 收、補（一次最多多一區）。 */

@@ -154,7 +154,7 @@ maps/<海域>/towns.js       BSMAP.town({...})                     海域裡的�
 - **城區**（2026-10-26，Blocksail TASK-0817、`docs/WORLD_FORMAT.md` §19.5；Tim「航海模式 也希望改成根據城區去載入(等於把城區概念變成原本的城」）：規劃帶 `districts`（城區，規劃的當地公尺）＋ `cut`（每一項歸哪幾區的位元遮罩；切法只住 Blocksail `world/town_export.js townCut`，0 ＝ 骨架：城牆、巨鏈、引水渠、中心城區）⇒
   每座城照舊只建一份（`T.id` ＝ 城），`TOWNS.on[城]` 記建了哪幾區、`townDistView` 照遮罩挑那幾區的東西、`townReplace` 增量換上（`townDiff` 照 id 比地塊、路、棧橋、碼頭、樓梯；同一個物件不轉 JSON）。
   要哪幾區（`townDistFrame`，每 0.25 秒）：航海 ⇒ 離旗艦 `TOWN_DIST_R` 2.5 km 內，最近那一區先、建好（`townDistReady`）再一次補齊，超過 `TOWN_DIST_DROP` 3.2 km 才收；
-  城鎮模式 ⇒ 焦點那一區（停靠的那一區；🗺 選的；鏡頭看的點落在別區停 `TOWN_DIST_DWELL` 0.8 秒）先、建好再補鄰區（邊離焦點 `TOWN_DIST_NBR` 200 m 內），其他收；焦點換了 ⇒ 海域的窗以那一區為中心（`TOWNS.focus`）。
+  城鎮模式 ⇒ 焦點那一區（停靠的那一區；🏙 城區頁（D）選的；鏡頭看的點落在別區停 `TOWN_DIST_DWELL` 0.8 秒）先、建好再補鄰區（邊離焦點 `TOWN_DIST_NBR` 200 m 內），其他收；焦點換了 ⇒ 海域的窗以那一區為中心（`TOWNS.focus`）。
   旗艦還沒來 ⇒ 只建骨架。沒帶 `cut`（舊的外面那一頁）⇒ 整座。
 - **城牆的外觀**：規劃不帶外觀，牆寫了 `kit` ⇒ 照它；沒寫 ⇒ 照規模 × 繁榮度算等級（Blocksail `TOWN_BUILD.md` §4；`townWallLv`）⇒ `wall1`～`wall3`，那一級沒有模型 ⇒ 往下找（`stat.skip` 記 `wall:<套>`），0 級不畫。繁榮度：`?prosp=`（0～1，沒給 ⇒ 0.5）、`__game.townProsp(v, id)`。 牆外朝哪一側照牆的 `out`（`left`／`right`：沿路線前進、北朝上看；`outBy` ＝ hand／core／near 是怎麼來的）—— 沒有 ⇒ 舊的猜法（離城心遠的那一側）。門：路、棧橋穿牆的地方 Blocksail 自動補（`auto`；棧橋 ⇒ `kind: water` 水門），遊戲照城門擺；那一筆帶 `model` ⇒ 用那一套的 `<套>-gate-<model>`（君士坦丁堡的金門 `golden`：內牆、外牆各一件），這種自帶塔的門蓋到的塔不擺（`stat.towerInGate`）；那一件沒載到 ⇒ 照舊用一般的門。
 - **布旗**（Tim 2026-10-20：「旗幟可以改成布?(參考船隻)」）：模型帶 `flags`（匯入時從雕刻的帆裡挑 meta `kind=flag` 的，記四個角，例：加拉塔塔頂的熱那亞旗 `pattern: genoa`）⇒ 每個實例一塊 10 × 6 質點的布，綁邊釘在旗桿上、照風飄（風向跟帆同一份、陣風與擺動用畫面時間 ⇒ 不抽亂數）；鏡頭 400 m 內才動、800 m 外不畫。圖案照 `TOWN_FLAG_PAT`（genoa ＝ 白底紅十字），沒有的圖案 ⇒ 白布。也是只給人看：砲彈打不到、不碰模擬。
