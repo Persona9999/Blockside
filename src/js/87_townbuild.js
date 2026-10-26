@@ -78,6 +78,13 @@ function twbAsk(cmd, extra, cb) {
   var s = ++TWB.seq; TWB.wait[s] = cb || null;
   BED.host.postMessage(Object.assign({ bsmap: 'need', what: 'townEdit', town: TWB.town, cmd: cmd, seq: s }, extra || {}), '*');
 }
+/** 確定那一頁打開了這座城（建築模式沒開過也行：資訊面板改配方要用；Tim 2026-10-26）⇒ cb(ok, 回覆)。打開中 ⇒ 等它開完。 */
+function twbEnsure(cb) {
+  if (TWB.open === 2) { cb(true); return; }
+  if (TWB.open === 1) { setTimeout(function () { twbEnsure(cb); }, 300); return; }
+  TWB.open = 1;
+  twbAsk('open', null, function (r) { TWB.open = r.ok ? 2 : 0; if (r.ok) twbMenuSet(r.menu); cb(!!r.ok, r); });
+}
 /** 存這座城（💾、Ctrl+S）：那一頁照它的版本決定存到哪、回一句話。 */
 function twbSave() {
   if (!twbOk()) { twbMsg('沒有地球儀那一頁（建築模式要從 Blocksail 進城）'); return; }
