@@ -43,6 +43,24 @@ function tuiIngredientsHTML(F) {
   if (!ks.length) return '<p class="tuiDim">當天沒有消耗食材。</p>';
   return '<p class="tuiDim">廚房（含加餐、免費供應）與服務供餐合計；不含日用及單獨飲品。</p><table class="tuiT"><tr><th>食材</th><th>消耗（桶）</th></tr>' + ks.map(function (g) { return '<tr><td>' + tuiIcon('goods', g) + tuiEsc(tuiGood(g)) + '</td><td>' + tuiNum(all[g] / 1000, 3) + '</td></tr>'; }).join('') + '</table>';
 }
+/** 社會階層（Blocksail world/stores.js BSW.STRATA；TASK-1007）：每一層的人數、那一池的錢、一人平均、收入從哪來；底下摺著每一層昨天吃了什麼（同上面那張表）。
+ *  Tim 2026-10-26「統計資訊可以加上 不同階層的食物消費(吃了甚麼菜單)」；外面那一頁沒送 strata（關掉、舊版）⇒ 不畫。 */
+function tuiStrataHTML(I) {
+  var L = I.strata; if (!L || !L.length) return '';
+  var LV = ['荒年糧', '主糧', '家常', '佳餚'];
+  var src = function (o) {
+    if (!o) return '工資';
+    var t = (o.kind || []).map(function (k) { return k === 'prod' ? '城鎮的生產建築' : k === 'serve' ? '城鎮的服務建築' : k; }).concat((o.type || []).map(function (k) { return TUI.blds[k] || k; }));
+    return t.join('、') + '的分紅';
+  };
+  return '<h4>👥 社會階層</h4><table class="tuiT"><tr><th>階層</th><th>人</th><th>金庫</th><th>一人</th><th>收入</th></tr>' + L.map(function (s) {
+    return '<tr><td>' + tuiEsc(s.name) + '</td><td>' + tuiNum(s.pop) + '</td><td>' + tuiNum(s.funds) + '</td><td>' + tuiNum(s.per, 1) + '</td><td>' + tuiEsc(src(s.owns)) + '</td></tr>';
+  }).join('') + '</table>' + L.map(function (s) {
+    var F = s.fed; if (!F) return '';
+    var eat = F.eat || {};
+    return '<details><summary>🍽 ' + tuiEsc(s.name) + '昨天吃了什麼</summary><p>' + [3, 2, 1, 0].map(function (k) { return LV[k] + ' ' + tuiNum((eat[k] || 0) / 1000); }).join('　') + (F.relief ? '　（城鎮免費補了 ' + tuiNum(F.relief / 1000) + ' 份）' : '') + (F.famine ? '　⚠ 飢荒' : '') + '</p>' + tuiEatHTML(F) + '</details>';
+  }).join('');
+}
 function tuiHomeMenuHTML() {
   var menus = TUI.homeMenu || [];
   if (!menus.length) return '';
@@ -142,6 +160,7 @@ function tuiSumHTML() {
   var F = I.fed;
   if (F) { var eat = F.eat || {}, LV = ['荒年糧', '主糧', '家常', '佳餚']; h += '<h4>🍞 食用餐點（份）</h4><p>' + [3, 2, 1, 0].map(function (k) { return LV[k] + ' ' + tuiNum((eat[k] || 0) / 1000); }).join('　') + (F.relief ? '　（城鎮免費補了 ' + tuiNum(F.relief / 1000) + ' 份）' : '') + (F.famine ? '　⚠ 飢荒' : '') + '</p>' + (F.extra && Object.keys(F.extra).length ? '<p class="tuiDim">餐點份數與比例包含加餐。</p>' : '') + tuiEatHTML(F) + '<h4>🥕 消耗食材（桶）</h4>' + tuiIngredientsHTML(F); }   // 等級照 Blocksail world/food.js FOOD_LEVELS；底下每一道吃了幾成（Tim 2026-10-25「城鎮是否可以顯示鎮民的消耗食物百分比」）
   h += tuiHomeMenuHTML();
+  h += tuiStrataHTML(I);
   if (I.rent && I.rent.skip) h += '<p class="tuiDim">🏠 昨天房租沒收滿：' + tuiEsc(I.rent.skip) + '（該收 ' + tuiNum(I.rent.due, 1) + '）</p>';   // 房租（Blocksail world/townstate.js rentDay；TASK-0946）：鎮民的錢不夠吃飯 ⇒ 不收
   var SV = I.svc || {}, SVI = { faith: '⛪', drink: '🍺', dine: '🍲', health: '⚕' };   // 服務建築的滿意度（Blocksail world/food.js serveDay；TASK-0914、0946 酒館與醫院）：昨天想來／來了幾人次、滿意度、收的錢
   Object.keys(SV).forEach(function (k) { var Q = SV[k]; h += '<h4>' + (SVI[k] || '🙂') + ' ' + tuiEsc(Q.name || k) + '（昨天）</h4><p>來了 ' + tuiNum(Q.got) + '／想來 ' + tuiNum(Q.want) + ' 人次　滿意度 ' + Math.round((Q.sat || 0) * 100) + '%　' + (k === 'faith' ? '捐獻' : '收入') + ' ' + tuiNum(Q.paid, 2) + '</p>'; });
