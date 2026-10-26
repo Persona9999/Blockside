@@ -241,11 +241,11 @@ function collide(dt) {
   var lv = SHIPHIT_LV[PHX.shiphit] || null;
   if (!lv) {
     var K = SHIPS.map(keelPts);
-    for (var i = 0; i < SHIPS.length; i++) for (var j = i + 1; j < SHIPS.length; j++) if (!SHIPS[i].fixed && !SHIPS[j].fixed) collidePair(SHIPS[i], SHIPS[j], K[i], K[j]);   // 堡壘（TASK-0954）不推、不被推：第一版不判
+    for (var i = 0; i < SHIPS.length; i++) for (var j = i + 1; j < SHIPS.length; j++) if (!SHIPS[i].fixed && !SHIPS[j].fixed && !trafficShow(SHIPS[i]) && !trafficShow(SHIPS[j])) collidePair(SHIPS[i], SHIPS[j], K[i], K[j]);   // 堡壘（TASK-0954）不推、不被推：第一版不判；表演船（58_traffic.js ⑨）不碰撞
     return;
   }
   var t0 = performance.now();
-  for (var a = 0; a < SHIPS.length; a++) for (var b = a + 1; b < SHIPS.length; b++) if (!SHIPS[a].fixed && !SHIPS[b].fixed) collideFine(SHIPS[a], SHIPS[b], lv);
+  for (var a = 0; a < SHIPS.length; a++) for (var b = a + 1; b < SHIPS.length; b++) if (!SHIPS[a].fixed && !SHIPS[b].fixed && !trafficShow(SHIPS[a]) && !trafficShow(SHIPS[b])) collideFine(SHIPS[a], SHIPS[b], lv);
   var ms = performance.now() - t0; HIT_PROF.n++; HIT_PROF.ms += ms; if (ms > HIT_PROF.max) HIT_PROF.max = ms;
 }
 function keelPts(sh) { var T = sh.T, r = []; for (var k = 0; k < 7; k++) r.push(M4.pt(sh.M, T.wl0 + 15 + (T.wl1 - T.wl0 - 30) * k / 6, T.cy, T.zw)); return r; }

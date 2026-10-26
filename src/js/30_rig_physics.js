@@ -638,13 +638,16 @@ function physStep(sh) {
   physGame(sh, w[0], w[1], chk);
   physVis(sh, w[0], w[1], si, chk, DT, DT);
 }
+/** 繩帆固定（不算布、帆照收好那一捲／作品的形狀畫，11_rig_gpu.js sailWalk）：往來的表演船（58_traffic.js ⑨）、城鎮模式（停靠中）的每一艘（Tim 2026-10-26「城鎮模式(停靠狀態) 可以都固定為表演船」；
+ *  量到城鎮模式布的花費大頭是我艦停著的帆，不是往來的船）。 */
+function rigFixed(sh) { return MODE === 'town' || trafficShow(sh); }
 /** 有畫面時模擬步裡只走帆桁追風、掛著的小艇（布、跟帆桁走的繩在 physFrame）。 */
 function physGameStep(sh) { var w = physWind(sh); physGame(sh, w[0], w[1], false); }
 /** 畫面這一格（90_main.js frame；VIS_FRAME）：每艘的布、垂下來的繩、布片走 h 秒（hs ＝ 這一格模擬走了多久：落海的布片照它退）。 */
 function physFrame(h, hs) {
   var pt0 = performance.now(); PHF_I++; PHF_CHK += h;
   var chk = PHF_CHK >= 0.1 - 1e-9; if (chk) PHF_CHK = 0;
-  SHIPS.forEach(function (sh) { if (sh.sink < 40) { var w = physWind(sh); if (chk && sh.yards.length) yardRopes(sh); physVis(sh, w[0], w[1], PHF_I, chk, h, hs, evAsk('rigSeen', true, sh)); } });   // 看不到 ⇒ 步少、每步長（TASK-0802）
+  SHIPS.forEach(function (sh) { if (sh.sink < 40) { var w = physWind(sh); if (chk && sh.yards.length) yardRopes(sh); if (!rigFixed(sh)) physVis(sh, w[0], w[1], PHF_I, chk, h, hs, evAsk('rigSeen', true, sh)); } });   // 看不到 ⇒ 步少、每步長（TASK-0802）；固定的繩帆（rigFixed）不算布（跟帆桁走的繩照算）
   clothContactsRun();
   PHYS_MS = PHYS_MS * 0.98 + (performance.now() - pt0) * 0.02;
 }
