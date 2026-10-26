@@ -151,7 +151,8 @@ function wxLum() { return WX.lum * TOD_LUMK; }
 //   只有城鎮模式照 WCLK.rate（wclkRate）；航海、海戰 ⇒ 1（同以前：世界時間跟著 SIMT）。沒被嵌著、沒給倍率 ⇒ 1 ⇒ 一位元不變。
 //   WCLK.bar：外面那一頁自己畫城名、人口（跟時間面板並排；Tim 2026-10-26「是否可以改為左右並排」「城鎮就只要顯示名稱&人數」）⇒ 城名那一行（87_townbuild.js twbTitle）不畫。
 var WCLK = { rate: 1, x: 0, bar: false };
-function wclkRate() { return MODE === 'town' && BED && BED.host ? WCLK.rate : 1; }
+//   有往來的船在進出港（58_traffic.js ⑧ trafficPortBusy；Blocksail TASK-0980「有船進出港時是否可以暫時改回1倍速」）⇒ 比 ×1 快的倍率暫時照 ×1（暫停照舊暫停）
+function wclkRate() { var r = MODE === 'town' && BED && BED.host ? WCLK.rate : 1; return r > 1 && trafficPortBusy() ? 1 : r; }
 function wclkSet(r, bar) { WCLK.rate = isFinite(+r) && +r >= 0 ? +r : 1; if (WCLK.bar !== !!bar) { WCLK.bar = !!bar; twbTitle(twbTown()); } }
 /** 模擬一步（50_sim.js simStep，SIMT += DT 之後）：倍率不是 1 ⇒ 多走（或少走）的那一份記在 WCLK.x。 */
 function wclkStep(dt) { var r = wclkRate(); if (r !== 1) WCLK.x += (r - 1) * dt; }

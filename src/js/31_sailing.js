@@ -111,7 +111,7 @@ function helmK(sh) {
 }
 function sailShip(sh, dt) {
   if (sh.fixed) { sh.spd = 0; sh.yawRate = 0; sh.vel = [0, 0, 0]; sh.pos = ''; return; }   // 堡壘、砲台（TASK-0954）：不動
-  if (sh.npc && trafficGlide(sh, dt)) return;                         // 往來的船照時刻表滑（58_traffic.js ⑥：城鎮的世界時間比物理快）⇒ 不照帆走
+  if (sh.npc && (trafficTow(sh, dt) || trafficGlide(sh, dt))) return;  // 往來的船進出港照拖的路線走（58_traffic.js ⑧）、照時刻表滑（⑥：城鎮的世界時間比物理快）⇒ 不照帆走
   var F = fwd(sh.yaw), W = norm(WIND), deg = Math.acos(clamp(dot(F, W), -1, 1)) * 57.2958;
   var UP = sh.cfg.upwind || 1, dU = UP === 1 || deg <= 90 ? deg : 90 + (deg - 90) / UP;   // 逆風性能：迎風那一半的角度壓縮（1.25 ⇒ 風從船頭 52.5° 才開始失速、45° 跑得像 36° 的船…）；1 ⇒ 一位元都不動
   sh.sailFrac = sh.sails.reduce(function (a, s) { return a + (s.dead || s.furled ? 0 : s.area * s.hp / s.hpMax); }, 0) / sh.sailArea0;   // 被打中還沒掉的帆：照剩下的血量算推力

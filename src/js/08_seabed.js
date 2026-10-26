@@ -350,7 +350,7 @@ function bedLevels(fx, fz) {
 function bedNear() {
   var A = BED.A, M = BED_CFG.margin, out = {};
   SHIPS.forEach(function (sh) {
-    if (sh.sunk || trafficGliding(sh)) return;                        // 照時刻表滑的往來船（58_traffic.js ⑥）：直接擺、不碰海床 ⇒ 不等它附近的塊
+    if (sh.sunk || trafficKin(sh)) return;                            // 照時刻表滑、進出港拖的往來船（58_traffic.js ⑥⑧）：直接擺、不碰海床 ⇒ 不等它附近的塊
     var e = sh.px + BED.ax, s = sh.pz + BED.az;
     for (var j = Math.floor((s - M) / A.chunk); j <= Math.floor((s + M) / A.chunk); j++)
       for (var i = Math.floor((e - M) / A.chunk); i <= Math.floor((e + M) / A.chunk); i++) out[bedKey(i, j)] = [i, j];
