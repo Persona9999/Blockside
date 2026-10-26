@@ -123,12 +123,12 @@ function townDistStart(p) {
 }
 /** 城鎮模式 ⇒ 只留選中的那一區（＋邊）的那一份規劃（淺複本；p 本身記在 TOWNS.full，換區、出航時拿它重濾）；不是城鎮模式、沒有城區 ⇒ p 本身。 */
 function townDistView(p) {
-  var D = p && p.districts; if (!D || D.length < 2) return p;
+  var D = p && p.districts; if (!D || !D.length) return p;            // 每座城 1～N 區（Blocksail 範圍層必填；舊的規劃沒帶 ⇒ 整座）
   if (!p.distView) TOWNS.full[p.id] = p; else p = TOWNS.full[p.id] || p;   // 已經濾過的那一份 ⇒ 拿整份重濾
   if (!modeRule('town')) return p;
   var k = TOWNS.dist[p.id], A = D.filter(function (d) { return d.id === k; })[0];
   if (!A) { A = townDistStart(p); TOWNS.dist[p.id] = A.id; }
-  var R = A.poly, near = function (q) { return townPip(q[0], q[1], R) || townPolyDist(q[0], q[1], R) <= TOWN_DIST_PAD; };
+  var R = A.poly, near = function (q) { return townDistAt(D, q[0], q[1]) === A || townPolyDist(q[0], q[1], R) <= TOWN_DIST_PAD; };   // 歸這一區（範圍外的照最近那一區）或在它邊上 ⇒ 一區的城一塊都不濾
   var any = function (P) { return (P || []).some(near); }, keep = {};
   var o = {}; for (var key in p) o[key] = p[key];
   o.lots = (p.lots || []).filter(function (l) { var on = near(l.at); if (on) keep[l.id] = 1; return on; });
