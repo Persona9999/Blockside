@@ -1333,20 +1333,22 @@
         "binnacle": 3,
         "boat": 2,
         "deck": 6,
+        "door": 3,
         "gun": 15,
         "ladders": 4,
         "light": 2,
         "magazine": 2,
         "model": 4,
-        "part": 10,
+        "part": 12,
         "powder": 17,
+        "rooms": 2,
         "rudder": 2,
         "ship": 2,
         "tiller": 2,
         "yard": 7
-        }
-      },
-      {
+      }
+    },
+    {
       "id": "pinas",
       "el": "ship-pinas",
       "name": "藍鯊號",
