@@ -233,7 +233,7 @@ function townClrFor(L) {
 //   量到：套用那一格 實例 0、地面分區 null、19 塊排隊重整，之後 13 區只有 2 區棧橋建好）。
 //   ⇒ 現在（Tim「是否能避免重建全部網格(拆分成多份網格?)」）：
 //   ① 舊規劃 vs 新規劃逐項比（townDiff：路照 id、地塊照 id、清樹照內容）⇒ 改到的外框 D；路、地塊、清樹以外的東西變了 ⇒ 照舊整座重來。
-//   ② 建築模式改了規劃（整份換了）⇒ 只有跟 D 疊到的塊重擺樹（townClrFor；清樹的遮罩照「這一塊有沒有被改到」判斷，townNewer 看 T.edits）；換城區（整份同一份）⇒ 樹、地形都不動。
+//   ② 建築模式改了規劃（整份換了）⇒ 只有跟 D 疊到的塊重擺樹（townClrFor；清樹的遮罩照「這一塊有沒有被改到」判斷，townNewer 看 T.edits）；換城區（整份同一份）⇒ 樹、地形都不動，T.edits、T.v 也不推（遮罩不失效）。
 //   ③ 路變了 ⇒ 只把碰得到改到的那幾區的路送去算路面（townRoadSurface 同一支 Worker），那幾區換成新的那一份（Q.R）；其他區不動。
 //      一區裡的三角形只跟離它 半寬 ＋ 4 m 以內的路有關 ⇒ 取「外框碰得到那幾區（外擴 半寬 ＋ 6 m）」的路，算出來跟整座重算逐點相同（?townfull=1 是對照組）。
 //   ④ 舊的網格（實例、地面分區、屋頂殼、旗子、燈）留著畫，新的建好才換；改到的區每格至少建一區、不等背景預算（同棧橋）。
@@ -296,7 +296,7 @@ function townReplace(p) {
     townFlagFree(old);
     if (old.shell) { gl.deleteVertexArray(old.shell.vao); gl.deleteBuffer(old.shell.vb); gl.deleteBuffer(old.shell.ib); }
     if (old.tl) { townLightPartFree(old.tl.S); townLightPartFree(old.tl.D); }
-    T.v = TOWNS.ver; TOWNS.stat.edit = { full: true };
+    T.v = fullNew ? TOWNS.ver : old.v; TOWNS.stat.edit = { full: true };   // 清樹照整份規劃算 ⇒ 換城區（同一份）遮罩不失效
     if (fullNew) townClrFor([old, T]);
     return true;
   }
@@ -305,7 +305,8 @@ function townReplace(p) {
   if (!D.roads && !D.deck) T.folk = old.folk;
   if (D.roads || D.deck || D.box[0] <= D.box[2]) T.posts = null;      // 街燈照路與地塊重排（townPosts）
   if (!(D.box[0] <= D.box[2]) && !D.roads) { T.edits = old.edits; T.pend = old.pend; return true; }   // 沒有差（打開建築模式時 open 回的那一份）⇒ 只換規劃
-  T.edits = (old.edits || []).concat([{ b: D.box, v: TOWNS.ver }]);
+  // T.edits 只給清樹的快取看（townNewer）：清樹照整份規劃算 ⇒ 換城區（同一份）沒改到，不推（以前推 ⇒ 換一次區，差的那一大片塊的遮罩全部重算，一格 29～34 ms、一百多格）
+  T.edits = fullNew ? (old.edits || []).concat([{ b: D.box, v: TOWNS.ver }]) : old.edits;
   var st = TOWNS.stat.edit = { full: false, box: D.box.map(function (v) { return Math.round(v); }), clr: fullNew, tiles: 0, roads: 0, surfMs: null, fieldTiles: fk.length };   // fieldTiles：田變了、重鋪土的區
   function apply() {                                                    // 換上：疊到的塊重擺樹（整份換了才要）、改到的區排隊重建、實例重建
     if (fullNew) townClrFor([{ box: D.box }]);
@@ -385,6 +386,10 @@ function townPrep(p) {
               paths: ((pf.clear || {}).paths || []).map(function (c) { var P = c.path.map(E); return { w: c.w, P: c.closed ? P.concat([P[0]]) : P }; }) };
   clr.rings.forEach(function (R) { R.forEach(function (q) { grow(q, 4); }); });
   clr.paths.forEach(function (c) { c.P.forEach(function (q) { grow(q, c.w); }); });
+  //   每一圈、每一條路帶的外框（路帶外擴半寬）先算好 ⇒ 清樹的遮罩（townClrMask）一塊只看疊到它的那幾份（以前每塊把整座城每一圈都掃一遍：君士坦丁堡一塊 10～30 ms）
+  function bbOf(P, pad) { var b = [1e9, 1e9, -1e9, -1e9]; P.forEach(function (q) { b[0] = Math.min(b[0], q[0] - pad); b[1] = Math.min(b[1], q[1] - pad); b[2] = Math.max(b[2], q[0] + pad); b[3] = Math.max(b[3], q[1] + pad); }); return b; }
+  clr.rb = clr.rings.map(function (R) { return bbOf(R, 0); });
+  clr.pb = clr.paths.map(function (c) { return bbOf(c.P, c.w / 2); });
   (p.lots || []).forEach(function (l) { grow(E(l.at), Math.hypot(l.w, l.d)); });
   (p.piers || []).forEach(function (q) { q.path.forEach(function (a) { grow(E(a), q.w); }); });
   var core = p.core && p.core.ring ? p.core.ring.map(E) : null, cen = [ox, oy];
@@ -410,11 +415,13 @@ function townClrMask(C) {
   function mark(i2, j2) { if (!out) out = new Uint8Array(M * M); out[j2 * M + i2] = 1; }
   TOWNS.list.forEach(function (T) {
     if (!(T.box[0] < e0 + S && T.box[2] > e0 && T.box[1] < s0 + S && T.box[3] > s0)) return;
-    T.clr.rings.forEach(function (R) {
-      var xs = R.map(function (q) { return q[0]; }), ys = R.map(function (q) { return q[1]; }), ri = rng(Math.min.apply(null, xs), Math.max.apply(null, xs), 0, e0), rj = rng(Math.min.apply(null, ys), Math.max.apply(null, ys), 0, s0);
+    T.clr.rings.forEach(function (R, k) {
+      var b = T.clr.rb[k]; if (b[2] < e0 || b[0] > e0 + S || b[3] < s0 || b[1] > s0 + S) return;   // 外框碰不到這一塊 ⇒ 跳過（townPrep 先算好的）
+      var ri = rng(b[0], b[2], 0, e0), rj = rng(b[1], b[3], 0, s0);
       for (j = rj[0]; j <= rj[1]; j++) for (i = ri[0]; i <= ri[1]; i++) if (townPip(e0 + (i + 0.5) * G, s0 + (j + 0.5) * G, R)) mark(i, j);
     });
-    T.clr.paths.forEach(function (c) {
+    T.clr.paths.forEach(function (c, k) {
+      var b = T.clr.pb[k]; if (b[2] < e0 || b[0] > e0 + S || b[3] < s0 || b[1] > s0 + S) return;
       var hw = c.w / 2;
       for (var q = 1; q < c.P.length; q++) {
         var a = c.P[q - 1], b = c.P[q], ri = rng(Math.min(a[0], b[0]), Math.max(a[0], b[0]), hw, e0), rj = rng(Math.min(a[1], b[1]), Math.max(a[1], b[1]), hw, s0);
@@ -425,8 +432,9 @@ function townClrMask(C) {
   return out;
 }
 /** 63_trees.js 擺樹：塊裡 (x, z) 公尺（塊的原點起算）要不要清掉。 */
-function townClr(C, x, z) {
-  var M = townClrOf(C); if (!M) return false;
+function townClr(C, x, z) { var M = townClrOf(C); return !!M && townClrAt(M, x, z); }
+/** 遮罩 M（townClrOf 拿到的）裡 (x, z) 公尺要不要清掉 —— 擺樹一列一列查時用 treePrep 驗過的那一份（以前每個候選點都重查一次快取還能不能用：townNewer 每點掃一遍城） */
+function townClrAt(M, x, z) {
   var G = TOWN_CLR_G, m = Math.round(BED.A.chunk / G), i = Math.min(m - 1, Math.max(0, Math.floor(x / G))), j = Math.min(m - 1, Math.max(0, Math.floor(z / G)));
   return M[j * m + i] === 1;
 }
@@ -2132,7 +2140,7 @@ function townDraw() {
   // 實例不等背景預算（TASK-0819；Tim 2026-10-22「照建議改」）：預算每格先被收塊、擺樹、地形網格吃光 ⇒ 模型解好了城還要等那一批做完（君士坦丁堡第二次去 1.3～2.4 s）。
   //   建實例本來就是一格做完、不分段 ⇒ 等預算只是晚做、不是不卡；拿掉之後模型一好城就出來（0～0.1 s），最長一格沒變長（A/B 各 3 輪）。照舊一格最多一座、照舊扣預算。
   TOWNS.list.forEach(function (T) {
-    if ((!T.inst || T.instRedo) && !nb && (K.part || !TOWNS.kitBusy)) { var b0 = performance.now(); T.instRedo = false; T.inst = townInst(T); if (TOWNS.stat.edit && T.edits) TOWNS.stat.edit.instMs = +(performance.now() - b0).toFixed(1); townTreesSet(T); if (!T.gt) townGroundPrep(T); townFlagFree(T); T.shDirty = true; T.tlS = T.tlD = true; TOWNS.dirty = true; nb++; bedSpent(b0); }
+    if ((!T.inst || T.instRedo) && !nb && (K.part || !TOWNS.kitBusy)) { var b0 = performance.now(); T.instRedo = false; T.inst = townInst(T); if (TOWNS.stat.edit) TOWNS.stat.edit.instMs = +(performance.now() - b0).toFixed(1); townTreesSet(T); if (!T.gt) townGroundPrep(T); townFlagFree(T); T.shDirty = true; T.tlS = T.tlD = true; TOWNS.dirty = true; nb++; bedSpent(b0); }
   });
   TL.k = TL.on ? TOD_LIT : 0;                                                        // 夜裡的燈：這一格點燈了沒（08_weather.js；陸地在城之前畫 ⇒ 用上一格的分組表，差一格看不出來）
   TOWNS.list.forEach(function (T) {                                    // 地面的帶子：一區一區（townGroundTile），離鏡頭近的先；一格最多 TOWN_GT_MAX 區、照背景預算
