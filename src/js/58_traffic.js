@@ -30,6 +30,11 @@
 //        在那裡原地轉到停好的船頭（TRF_SPIN），船尾朝泊位直線倒進去（地中海式的船尾繫泊）⇒ 繫在泊位上（清單還沒說到 ⇒ 先繫著等）。
 //      · 拖的時候不擱淺、棧橋不推（照畫好的路線，同照時刻表滑）。
 //      · 城鎮的時間面板比 ×1 快的時候，有任何一艘在拖 ⇒ 世界時間暫時照 ×1（08_weather.js wclkRate 問 trafficPortBusy）、'wclock' 帶 hold（幾艘）⇒ 外面那一頁的面板標出來；拖完自己回到原本的倍率。
+//      · 航行管制（Tim 2026-10-26「想辦法讓航線能避開碰撞」「可以類似機場一樣 有航行管制(統一分配航線)」；Blocksail world/fleetfine.js 塔台照每條入港航線排時段）：
+//        清單帶 pilot ＝ 港內哪一段（'out' 開出入港航線、'wait' 入口外等、'in' 開進來）＋ 一定有 trk ⇒ 港內照時刻表帶著走（同照時刻表滑，×1 也一樣；帆收著）⇒ 3D 的位置 ＝ 塔台排的時段，兩艘不會在航線上碰頭；
+//        出港不再拖 TRF_OUT_M（pilot 'out' 走完、出了入口才張帆）；進港帶到離泊位 max(30, 半個船長 ＋ TRF_SPIN_D) 才轉、倒進去。
+//        entry ＝ 目的港的入口點：照帆開早到了（×1 時比時刻表快）⇒ 在入口 TRF_ENTRY_M 內停住等放行（⛔ 以前照帆一路開進港，什麼時候進來由物理決定、塔台管不到）。
+//        沒有 pilot（沒有入港航線的城）⇒ 照舊：離泊位 TRF_IN_M 內拖進去、出港拖 TRF_OUT_M。
 //   之後（TASK-0940）：遇上海盜、玩家開火 ⇒ 換隊（team）、交給海戰。
 // 讀數：__game.traffic() ⇒ { ships, queue, built, dropped, stepMax, stepMs（每一段幾毫秒，最近 200 段）, place（放上場那一步）}
 var TRF = { want: {}, build: null, q: [], askT: 0, clockT: 0, built: 0, dropped: 0, stepMax: 0, stepMs: [], place: [], skip: 0 };
@@ -38,7 +43,7 @@ var TRF_LOOK_M = 300, TRF_V0 = 0.6;                              // 沿航道開
 var TRF_ASK_GLIDE_MS = 500, TRF_CLOCK_MS = 250, TRF_GLIDE_TURN = 3;   // 滑的時候幾毫秒要一次清單；幾毫秒報一次世界時間；船頭每秒轉過去幾成（1／秒）
 // 進出港（⑧）：離預約的泊位幾公尺內開始拖進去、出港拖幾公尺才張帆；拖的航速 m/s（航道上、到轉向那一點之前減到最慢、倒進去最快）；轉向那一點之前幾公尺開始減速；
 //   原地轉、拖的時候船頭每秒最多轉幾 rad；離泊位幾公尺內算已經在泊位上（直接繫）〔設計；我艦停靠的過場 DOCK_AV 2～8 m/s，往來的船照港內慢慢拖〕
-var TRF_IN_M = 450, TRF_OUT_M = 260, TRF_TOW_V = 2.2, TRF_TOW_VMIN = 0.6, TRF_BACK_V = 0.8, TRF_TURN_M = 60, TRF_SPIN = 0.1, TRF_YAW_RATE = 0.15, TRF_MOOR_M = 3;
+var TRF_ENTRY_M = 150, TRF_IN_M = 450, TRF_OUT_M = 260, TRF_TOW_V = 2.2, TRF_TOW_VMIN = 0.6, TRF_BACK_V = 0.8, TRF_TURN_M = 60, TRF_SPIN = 0.1, TRF_YAW_RATE = 0.15, TRF_MOOR_M = 3;
 
 /** 現在可不可以有往來的船：被 Blocksail 嵌著、在跑、航海或城鎮。 */
 function trafficOk() { return !!(BED && BED.host && RUNNING && !OVER && (MODE === 'sail' || MODE === 'town')); }
@@ -52,13 +57,15 @@ function trafficGot(d) {
   var W = function (q) { return [q[0] - BED.ax, q[1] - BED.az]; }, want = {}, me = SHIPS[PLAYER_I], c = me ? shipCenter(me) : [0, 0, 0];
   (d.ships || []).forEach(function (o) { if (o && o.id && o.at) want[o.id] = { id: o.id, kind: o.kind || 'merchant', hull: o.hull, name: o.name || o.id, at: W(o.at), hdg: +o.hdg || 0, to: o.to ? W(o.to) : null, v: +o.v || 0, path: o.path && o.path.length > 1 ? o.path.map(W) : null, dock: !!o.dock, flag: o.flag || null,
     trk: o.trk && o.trk.length > 1 ? o.trk.map(function (q) { var p = W([q[1], q[2]]); return [+q[0], p[0], p[1]]; }) : null,   // trk：照時刻表滑（⑥）
-    berth: o.berth && o.berth.at ? (function (p) { return { x: p[0], z: p[1], yaw: trafficYaw(+o.berth.hdg || 0) }; })(W(o.berth.at)) : null }; });   // berth：停的、預約的泊位（⑧）
+    berth: o.berth && o.berth.at ? (function (p) { return { x: p[0], z: p[1], yaw: trafficYaw(+o.berth.hdg || 0) }; })(W(o.berth.at)) : null,   // berth：停的、預約的泊位（⑧）
+    pilot: o.pilot || null, entry: o.entry ? W(o.entry) : null }; });   // pilot、entry：航行管制（⑧）
   TRF.want = want;
   trafficShips().forEach(function (sh) {                              // 還在 ⇒ 換航點；沒了 ⇒ 收
     var w = want[sh.npc.id]; if (!w) { trafficDrop(sh); return; }
     var was = !!sh.npc.dock, P0 = sh.npc.path;
-    sh.npc.to = w.to; sh.npc.v = w.v; sh.npc.path = w.path; sh.npc.trk = w.trk; sh.npc.berth = w.berth;
+    sh.npc.to = w.to; sh.npc.v = w.v; sh.npc.path = w.path; sh.npc.trk = w.trk; sh.npc.berth = w.berth; sh.npc.entry = w.entry; trafficPilot(sh, w.pilot);
     if (w.dock && !was) trafficArrive(sh, P0); else if (!w.dock && was) trafficLeave(sh);   // 到港、出港（⑧）
+    else if (w.berth && trafficMoved(sh)) trafficTowIn(sh, w.dock || sh.npc.held ? null : sh.npc.path);   // 停的、要去的那一格換了（玩家停進來、別人預約了 ⇒ 地球儀換一格）⇒ 拖過去（⛔ 以前停著的不動 ⇒ 跟換進來的船疊在一起）
     if ((sh.nation || null) !== w.flag) shipNation(sh, w.flag);        // 旗（TASK-0974）：船隊主人那座城換了勢力（轉手）⇒ 跟著換
   });
   if (TRF.build && !want[TRF.build.id]) { trafficFree(TRF.build.M.sh); TRF.build = null; }   // 做到一半就不要了（第一段之後才有 M.sh）
@@ -84,9 +91,15 @@ function trafficArrive(sh, P0) {
   if (!b || Math.hypot(b.x - c[0], b.z - c[2]) <= TRF_MOOR_M) { trafficDock(sh, true); return; }
   trafficTowIn(sh, n.held ? null : P0); n.dock = true;                    // 先繫著等的（held）⇒ 位置換了（錨地排到別的位子）就直接拖過去
 }
+/** 停的、拖去的那一格跟清單的泊位差 TRF_MOOR_M 以上（⑧）：停港繫著的 ⇒ 照繫的那一點比；拖進去中 ⇒ 照拖的終點比；先繫著等的 ⇒ 照繫的那一點。 */
+function trafficMoved(sh) {
+  var n = sh.npc, b = n.berth, T = n.tow, m = sh.moor, p = T && T.kind === 'in' ? T.A[T.A.length - 1] : (n.dock || n.held) && m && m.x != null ? [m.x, m.z] : null;
+  return !!(p && b && Math.hypot(p[0] - b.x, p[1] - b.z) > TRF_MOOR_M);
+}
 /** 清單說出港了（⑧）：起錨、放開繫泊；有航道 ⇒ 帆收著沿航道拖出去（拖完才張帆），沒有（海盜）⇒ 照舊直接張帆。 */
 function trafficLeave(sh) {
   var n = sh.npc; n.tow = null;
+  if (n.pilot) { trafficDock(sh, false, 0); return; }                  // 航行管制：照時刻表帶出去（trafficGlide），出了入口才張帆（trafficPilot）
   if (!n.path) { trafficDock(sh, false); return; }
   trafficDock(sh, false, 0);
   trafficTowStart(sh, 'out', n.path, null);
@@ -123,8 +136,16 @@ function trafficTowStart(sh, kind, P, y1) {
   trafficSails(sh, 0);
 }
 /** 有沒有往來的船正在進出港（⑧）⇒ 城鎮的世界時間暫時照 ×1（08_weather.js wclkRate）。 */
-function trafficPortBusy() { for (var i = 0; i < SHIPS.length; i++) if (SHIPS[i].npc && SHIPS[i].npc.tow) return true; return false; }
-function trafficPortN() { var n = 0; for (var i = 0; i < SHIPS.length; i++) if (SHIPS[i].npc && SHIPS[i].npc.tow) n++; return n; }
+function trafficPortMv(n) { return !!(n && (n.tow || n.pilot === 'out' || n.pilot === 'in')); }   // 港內在動（拖、照時刻表帶著開進開出；入口外等的不算 ⇒ 不會一等幾小時都 ×1）
+function trafficPortBusy() { for (var i = 0; i < SHIPS.length; i++) if (trafficPortMv(SHIPS[i].npc)) return true; return false; }
+function trafficPortN() { var n = 0; for (var i = 0; i < SHIPS.length; i++) if (trafficPortMv(SHIPS[i].npc)) n++; return n; }
+/** 清單的 pilot 換了（⑧ 航行管制）：開始帶 ⇒ 收帆、起錨、照船現在的位置接上時刻表（n.lag 重算）；帶出入口了（'out' ⇒ 沒有）⇒ 張戰鬥帆、交還艦長。 */
+function trafficPilot(sh, p) {
+  var n = sh.npc, o = n.pilot || null; p = p || null; if (o === p) return;
+  n.pilot = p;
+  if (p && p !== 'dock' && !n.dock && !n.tow && !n.held) { n.lag = null; trafficSails(sh, 0); if (sh.anc) { anchorToggle(sh, 'P', false); anchorToggle(sh, 'S', false); } }
+  if (!p && o === 'out' && !n.dock) { trafficSails(sh, 2); sh.spd = Math.max(sh.spd, VMAX * TRF_V0); }
+}
 /** 照畫好的路線走（照時刻表滑、拖）⇒ 不擱淺、棧橋不推、海圖塊不等它（08_seabed.js、50_sim.js）。 */
 function trafficKin(sh) { return trafficGliding(sh) || !!(sh.npc && sh.npc.tow); }
 /** 31_sailing.js sailShip 開頭先問（滑之前）：拖（⑧）⇒ true（這一步照拖的路線擺，不照帆走）；開往這座城、離預約的泊位 TRF_IN_M 內 ⇒ 開始拖進去。 */
@@ -132,8 +153,9 @@ function trafficTow(sh, dt) {
   var n = sh.npc; if (!n) return false;
   if (!n.tow) {
     var b = n.berth; if (n.dock || n.held || !b) return false;
-    var c0 = shipCenter(sh); if (Math.hypot(b.x - c0[0], b.z - c0[2]) > TRF_IN_M) return false;
-    trafficTowIn(sh, n.path);
+    var c0 = shipCenter(sh), db = Math.hypot(b.x - c0[0], b.z - c0[2]);
+    if (n.pilot ? n.pilot !== 'in' || db > Math.max(30, (sh.T.hx1 - sh.T.hx0) * S / 2 + TRF_SPIN_D) : db > TRF_IN_M) return false;   // 航行管制：照時刻表帶到轉向那一點才接手；沒有 ⇒ 舊的 TRF_IN_M
+    trafficTowIn(sh, n.pilot ? null : n.path);
   }
   var T = n.tow, A = T.A, v, ty;
   if (T.spin) {                                                          // 離泊位 sa 那一點：原地轉到停好的船頭
@@ -170,6 +192,7 @@ function trafficTow(sh, dt) {
  *  有 path ⇒ 沿航道：期望航速 'cruise'（戰鬥帆）；目標往逆風那一側 ⇒ helmIrons 照舊搶風、方位換邊就換舷（之字形）。 */
 function trafficHelm(sh) {
   var n = sh.npc; if (!n || n.dock || n.held) return null;            // held：拖到泊位了、清單還沒說到港（⑧）⇒ 繫著等
+  if (n.entry && !n.pilot) { var ce = shipCenter(sh); if (Math.hypot(n.entry[0] - ce[0], n.entry[1] - ce[2]) < TRF_ENTRY_M) { trafficSails(sh, 0); return { yaw: sh.yaw, v: 0 }; } }   // 早到了：在入口停住等塔台放行（⑧）
   var to = n.path ? trafficAhead(sh, n.path) : n.to; if (!to) return null;
   var dx = to[0] - sh.px, dz = to[1] - sh.pz;
   if (Math.hypot(dx, dz) < 30) return { yaw: sh.yaw, v: Math.min(n.path ? 0.5 : n.v, 0.5) };   // 到了航點（航道的盡頭）、下一份清單還沒來 ⇒ 慢慢往前
@@ -178,7 +201,7 @@ function trafficHelm(sh) {
 /** 照時刻表滑（⑥；31_sailing.js sailShip 開頭先問）：世界時間比物理快、這艘有 trk、沒在停港 ⇒ 照世界時間在 trk 上內插、直接擺 ⇒ true（sailShip 那一步不再照帆走）；不然 false。
  *  船頭照走的方向轉過去（每秒 TRF_GLIDE_TURN 成；沒在動 ⇒ 不轉）；vel、spd 照這一步走了多遠（航跡、水花照它），spd 夾在 VMAX（快轉時一步走幾百公尺，水花不跟著爆）。 */
 /** 這艘正在照時刻表滑（⑥）：海圖塊不等它（08_seabed.js bedNear；快轉一步走幾百公尺 ⇒ 每一步都在等新的塊，量到世界時間慢了 25 倍）、不擱淺、棧橋不推（50_sim.js）。 */
-function trafficGliding(sh) { var n = sh.npc; return !!(n && n.trk && !n.dock && !n.held && !n.tow && wclkRate() > 1); }
+function trafficGliding(sh) { var n = sh.npc; return !!(n && n.trk && !n.dock && !n.held && !n.tow && (n.pilot && n.pilot !== 'dock' || wclkRate() > 1)); }   // 港內（pilot）×1 也照時刻表
 function trafficGlide(sh, dt) {
   var n = sh.npc, T = n && n.trk; if (!trafficGliding(sh)) return false;
   if (n.lag == null) n.lag = n.lag0 = trafficLagOf(sh);                // 拖出港之後第一次滑（⑧）：照船現在在時刻表上的哪個時刻接上，落後的那一段 TRF_LAG_T 秒內追平（⛔ 直接照時刻表擺 ⇒ 跳過去幾公里）
@@ -270,12 +293,13 @@ function trafficPump(t1) {
 function trafficPlace(B) {
   var w = TRF.want[B.id], sh = B.M.sh;
   if (!w || !trafficOk() || trafficShips().length >= trafficMax()) { trafficFree(sh); return; }
-  sh.i = SHIPS.length; sh.name = w.name; sh.npc = { id: w.id, kind: w.kind, to: w.to, v: w.v, path: w.path, trk: w.trk, berth: w.berth, dock: false, held: false, tow: null };
+  sh.i = SHIPS.length; sh.name = w.name; sh.npc = { id: w.id, kind: w.kind, to: w.to, v: w.v, path: w.path, trk: w.trk, berth: w.berth, entry: w.entry, pilot: w.pilot, dock: false, held: false, tow: null };
   SHIPS.push(sh);
   if (w.flag) shipNation(sh, w.flag);                                    // 掛船隊主人那一國的旗（77_colours.js；外面那一頁給預設旗的 key，不認得 ⇒ 照陣營旗）
   coreSpawned(sh, null); stepShip(sh, 0); survey(sh); pickCaptain(sh); cmdTick(); pickFoes();
   if (!w.dock && (w.path || w.v > 0)) sh.spd = w.path ? VMAX * TRF_V0 : Math.min(w.v, VMAX);   // 照船隊的航速開出來（⛔ 從 0 起步 ⇒ 生出來那幾十秒停在海上）；沿航道的照自己的帆
   if (w.dock) trafficDock(sh, true);                                     // 停港的：生在泊位上（at ＝ 泊位）⇒ 下錨、繫上
+  else if (w.pilot) trafficSails(sh, 0);                                 // 生在港內、照時刻表帶著走的（⑧）⇒ 帆收著
   else if (w.berth && Math.hypot(w.berth.x - w.at[0], w.berth.z - w.at[1]) <= TRF_IN_M) sh.spd = Math.min(sh.spd, TRF_TOW_V);   // 生在港裡、正要進港 ⇒ 下一步就拖（trafficTow）
   TRF.built++;
 }
