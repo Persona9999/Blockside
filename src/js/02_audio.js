@@ -167,21 +167,29 @@ function gunRender(sec, c) {
 // 層（impVoice）：咚（往下掃的低頻正弦）、身體（低通雜音）、撞擊（寬頻雜音）、碎木／碎石／碎玻璃顆粒、鐵板鳴響（正弦一對、差 0.7% ⇒ 會拍）、低沉尾聲、跳彈呼嘯、鏈彈撕扯。
 // 錨點 ＝ 24 磅實心彈（10.9 kg，PEN.ref）。彈重 m：頻率 × (m ÷ 10.9)^(−1/6)（0.6–1.6）、長度 × (m ÷ 10.9)^0.15（0.55–1.7）、音量 × (m ÷ 10.9)^0.12（0.6–1.4）；顆粒照 n ÷ 80（0.25–1.5）。
 // 距離：音量照舊 ÷ (1 ＋ 距離 ÷ 70)；再一道低通 18 kHz ÷ (1 ＋ 距離 ÷ 120)（同開炮）。
-// p：th 咚（A 音量、F Hz、D 秒）／bo 身體（Lp 低通）／cr 撞擊／sp 碎木（N 幾粒、T 散多久）／rb 碎石／gl 碎玻璃／rg 鳴響（F、R 頻率比、W 各支音量）／tl 尾聲／wh 呼嘯／te 撕扯
+// p：th 咚（A 音量、F Hz、D 秒）／bo 身體（Lp 低通）／cr 撞擊／sh 玻璃碎開（F 高通）／sp 碎木（N 幾粒、T 散多久）／rb 碎石／gl 碎玻璃（F 最低 Hz、H 窄帶雜音）／rg 鳴響（F、R 頻率比、W 各支音量）／tl 尾聲／wh 呼嘯／te 撕扯
 var IMP_A = {
   wood:  { thA: 0.43, thF: 88, thD: 0.23, boA: 0.83, boLp: 825, boD: 0.38, crA: 1.09, crLp: 4400, crD: 0.14, spA: 1, spN: 11, spT: 0.9, tlA: 0.66, tlLp: 144, tlD: 6.2 },
   stone: { thA: 0.41, thF: 50, thD: 0.34, boA: 0.41, boLp: 1090, boD: 0.73, crA: 0.78, crLp: 7500, crD: 0.28, rbA: 1.03, rbN: 18, rbT: 0.95, tlA: 0.44, tlLp: 700, tlD: 3.9 },
   metal: { thA: 0.55, thF: 50, thD: 1, boA: 1.41, boLp: 1550, boD: 1.41, crA: 3.52, crLp: 10900, crD: 0.35, rgA: 0.1, rgF: 299, rgR: [1, 1.67, 4, 11.8], rgW: [1, 0.6, 0.45, 0.15], rgD: 2.9, tlA: 0.88, tlLp: 440, tlD: 3.5 },
   rico:  { thA: 0.16, thF: 120, thD: 0.073, crA: 4.4, crLp: 9000, crD: 0.145, rgA: 0.14, rgF: 500, rgR: [1, 1.67, 2.75], rgW: [1, 0.6, 0.4], rgD: 0.42, whA: 0.14, whF: 3900 },
-  bolt:  { thA: 0.8, thF: 170, thD: 0.07, boA: 0.45, boLp: 600, boD: 0.08, crA: 0.6, crLp: 3000, crD: 0.03, spA: 0.6, spN: 2, spT: 0.1 }   // 〔佔位〕弩箭釘進木頭的一記短「篤」（沒有參考：照木頭那一組縮短、拿掉尾聲；峰值 0.4 ＝ 以前 crack 打木頭的小一號）
+  bolt:  { thA: 0.8, thF: 170, thD: 0.07, boA: 0.45, boLp: 600, boD: 0.08, crA: 0.6, crLp: 3000, crD: 0.03, spA: 0.6, spN: 2, spT: 0.1 },  // 〔佔位〕弩箭釘進木頭的一記短「篤」（沒有參考：照木頭那一組縮短、拿掉尾聲；峰值 0.4 ＝ 以前 crack 打木頭的小一號）
+  glass: { thA: 0.83, thF: 82, thD: 0.08, crA: 1, crLp: 9000, crD: 0.145, shA: 0.35, shF: 1060, shD: 0.56, rbA: 0.47, rbN: 12, rbT: 1.8, glA: 0.087, glF: 1200, glN: 40, glT: 2.5, glH: 0.21 }
 };
-// 彈種 ⇒ 乘在錨點上（錨點沒有的那一格 ⇒ 直接用這個值）。〔佔位〕：照聽起來該往哪邊的方向，不是量的
+// 玻璃（Tim 2026-10-26「玻璃可以微調一下(參考碎玻璃聲)」）：以前是木頭那一組再加一陣 2.5–7.5 kHz 的短正弦 ⇒ 低頻太多。
+//   參考 freesound 336425 玻璃碎裂並掉落（221Beimesche）：1.6–8 kHz 一片平（−0～−5 dB）、100–160 Hz 碎片落地 −7～−12 dB、碎片顆粒每秒 11 個、−20／−40 dB 0.2／1.6 秒；
+//   另一份 448004 打破窗戶（Kneeling）彼此差 5.3 dB（221528 那份很細小，跟這兩份差 12～14，不用）。
+//   層：一記咚（打到窗框）＋撞擊＋碎開的那一片嘩（高通 1 kHz 往上掃）＋碎片落在甲板上（碎石那一層）＋叮噹（短正弦 1.2–3.6 kHz ＋窄帶雜音，散 2.5 秒）。
+//   讀數（遊戲錄出來的 24 磅）：頻帶差 2.9（以前那一版 8.5）、對窗戶那份 3.6（以前 3.5：窗戶開頭那一記悶響剛好像木頭的底）；−20／−40 dB 0.22／0.45 秒
+//   （叮噹再多、拉長尾巴 ⇒ 頻帶差 4～8，不拉）。玻璃一格就是一片 ⇒ 碎片數不照打掉幾格縮放。
+// 彈種 ⇒ 乘在錨點上（只乘錨點有的那一格）；add ＝ 另外加一層（錨點沒有那一層才加，整組帶齊：A 音量＋N 幾粒…）。〔佔位〕：照聽起來該往哪邊的方向，不是量的
+//   ⛔ 以前「錨點沒有的那一格 ⇒ 直接用乘數」：鏈彈打玻璃、石牆 ⇒ 碎木有粒數（1.6）沒有音量 ⇒ NaN，sfxPlay 丟例外；石彈打石牆 ⇒ 碎石 18 × 8 粒。
 var IMP_EV = {
   solid: {},
-  pen:   { teA: 0.5, teN: 5 },                                          // 擊穿：鐵板被撕開
+  pen:   { add: { teA: 0.5, teN: 5 } },                                 // 擊穿：鐵板被撕開
   dent:  { rgA: 3, crA: 0.4, boA: 0.7, tlD: 0.5 },                      // 凹痕：沒穿、整塊板響 ⇒ 對 614062 鐵件重擊 4.7 dB（299 Hz 高出周圍 27.6 dB；參考 29.5）
-  chain: { thA: 0.6, spN: 1.6, teA: 0.6, teN: 10 },                     // 鏈彈：橫著撕過去
-  stone: { thA: 1.5, spN: 0.6, rbA: 0.6, rbN: 8, rbT: 0.6 },            // 石彈：更悶的一記、石頭自己也碎
+  chain: { thA: 0.6, spN: 1.6, add: { teA: 0.6, teN: 10 } },            // 鏈彈：橫著撕過去
+  stone: { thA: 1.5, spN: 0.6, add: { rbA: 0.6, rbN: 8, rbT: 0.6 } },   // 石彈：更悶的一記、石頭自己也碎
   shell: { thA: 0, crA: 0.6, boA: 0.4, tlA: 0 },                        // 爆裂彈：爆炸照舊 blast，這裡只放打掉的碎片
   model: {}                                                             // 打中砲（鐵）：錨點本來就是 cannon_hit_cannon（砲打到砲）；木頭的模型照實心彈
 };
@@ -199,12 +207,12 @@ function impPar(o) {
   if (ev === 'rico') base = IMP_A.rico;
   else if (ev === 'bolt') base = IMP_A.bolt;
   else if (ev === 'pen' || ev === 'dent' || (ev === 'model' && mat === 'metal')) base = IMP_A.metal;
-  else if (IMP_EV[ev]) base = IMP_A[mat === 'glass' ? 'wood' : mat];
+  else if (IMP_EV[ev]) base = IMP_A[mat];
   else return null;
   var p = Object.assign({}, base), M = ev === 'model' && mat !== 'metal' ? IMP_EV.solid : IMP_EV[ev] || {};
-  Object.keys(M).forEach(function (k) { p[k] = base[k] != null ? base[k] * M[k] : M[k]; });
-  if (mat === 'glass' && ev !== 'rico' && ev !== 'bolt') { p.thA *= 0.5; p.spN = 0; p.glA = 0.5; p.glN = 14; p.glT = 0.5; }   // 玻璃：〔佔位〕一陣高頻的碎玻璃
-  var s = (o.m > 0 ? o.m : IMP_REF) / IMP_REF, fk = clamp(Math.pow(s, -1 / 6), 0.6, 1.6), dk = clamp(Math.pow(s, 0.15), 0.55, 1.7), nk = o.n >= 0 ? clamp(o.n / 80, 0.25, 1.5) : 1;
+  Object.keys(M).forEach(function (k) { if (k !== 'add' && base[k] != null) p[k] = base[k] * M[k]; });
+  if (M.add) Object.keys(M.add).forEach(function (k) { if (base[k.slice(0, 2) + 'A'] == null) p[k] = M.add[k]; });
+  var s = (o.m > 0 ? o.m : IMP_REF) / IMP_REF, fk = clamp(Math.pow(s, -1 / 6), 0.6, 1.6), dk = clamp(Math.pow(s, 0.15), 0.55, 1.7), nk = o.n >= 0 && base !== IMP_A.glass ? clamp(o.n / 80, 0.25, 1.5) : 1;
   ['thF', 'boLp', 'tlLp'].forEach(function (k) { if (p[k]) p[k] *= fk; });
   ['thD', 'boD', 'tlD', 'rgD'].forEach(function (k) { if (p[k]) p[k] *= dk; });
   ['spN', 'rbN', 'glN'].forEach(function (k) { if (p[k]) p[k] *= nk; });
@@ -232,7 +240,8 @@ function impVoice(ac, out, t, v, p, dist, R) {
   if (p.crA) hiss('lowpass', p.crLp, 500, 0.5, p.crA, 0.002, p.crD, 0, 1);                                // 撞擊
   for (c = Math.round(p.spN || 0); c > 0; c--) { u = R(); hiss('bandpass', 900 + 3500 * R(), 700 + 2000 * R(), 1.2, p.spA * (0.4 + 0.6 * R()) * (1 - 0.7 * u), 0.001, 0.004 + 0.014 * R(), 0.005 + p.spT * u * u, 1); }   // 碎木（越後面越稀）
   for (c = Math.round(p.rbN || 0); c > 0; c--) { u = R(); hiss('bandpass', 250 + 2500 * R() * R(), 200 + 600 * R(), 1, p.rbA * (0.4 + 0.6 * R()) * (1 - 0.6 * u), 0.002, 0.008 + 0.03 * R(), 0.01 + p.rbT * u, 1); }   // 碎石、磚塊滾落
-  for (c = Math.round(p.glN || 0); c > 0; c--) { u = R(); var fg = 2500 + 5000 * R(); tone(fg, fg * 0.98, p.glA * (0.3 + 0.7 * R()) * (1 - 0.6 * u), 0.001, 0.02 + 0.08 * R(), 0.005 + p.glT * u * u); }   // 碎玻璃
+  if (p.shA) hiss('highpass', p.shF, p.shF * 1.5, 0.7, p.shA, 0.002, p.shD, 0, 1);                        // 玻璃碎開的那一片嘩
+  for (c = Math.round(p.glN || 0); c > 0; c--) { u = R(); var fg = p.glF * (1 + 2 * R()); tone(fg, fg * 0.98, p.glA * (0.3 + 0.7 * R()) * (1 - 0.6 * u), 0.001, 0.02 + 0.08 * R(), 0.005 + p.glT * u * u); hiss('bandpass', fg, fg * 0.9, 4, p.glH * (0.3 + 0.7 * R()) * (1 - 0.6 * u), 0.001, 0.01 + 0.03 * R(), 0.005 + p.glT * u * u, 1); }   // 碎玻璃：叮（短正弦）＋沙（窄帶雜音）
   if (p.rgA) p.rgR.forEach(function (r, k) { var a = p.rgA * p.rgW[k], d = p.rgD / (1 + 0.35 * k), f = p.rgF * r; tone(f, f * 0.997, a, 0.002, d); tone(f * 1.007, f * 1.003, a * 0.6, 0.003, d * 0.9); });   // 鐵板鳴響
   if (p.tlA) hiss('lowpass', p.tlLp, 60, 0.6, p.tlA, 0.05, p.tlD, 0.03, 0.4);                            // 尾聲
   if (p.whA) { tone(p.whF, p.whF * 0.55, p.whA, 0.01, 0.35, 0.01); hiss('bandpass', p.whF * 1.1, p.whF * 0.6, 6, p.whA * 0.6, 0.01, 0.3, 0.01, 1); }   // 跳彈呼嘯
