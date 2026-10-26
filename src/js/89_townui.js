@@ -245,7 +245,15 @@ function tuiTradeQ(side, r, u) {
   var s = Math.min(u, r.ship, r.canSell); if (s < r.ship) s = Math.floor(s);
   return s > 0 ? s : 0;
 }
-/** 貿易：只列船上有 ∪ 城鎮有庫存的貨；上面一排買賣單位；每一列 船上 ｜ 賣（按鈕上是賣一桶拿到多少）｜ 貨物圖示 ｜ 買（買一桶付多少）｜ 城鎮（海商王那樣，Tim 2026-10-26）；底下玩家金庫、載重。 */
+/** 城鎮庫存那一格的字色（Tim 2026-10-26「商品庫存字根據對應基礎價格變色(越高越紅 越低越綠 剛好時為白色」）：現在的曲線價 price ÷ 基準價 base ——
+ *  剛好 ⇒ 白；貴 ⇒ 往紅、便宜 ⇒ 往綠，兩倍／一半就是全紅／全綠（照對數，貴兩倍跟便宜一半一樣深）；沒有基準價 ⇒ 不上色。 */
+function tuiTradeTint(r) {
+  if (!(r.base > 0) || !(r.price > 0)) return '';
+  var t = Math.max(-1, Math.min(1, Math.log(r.price / r.base) / Math.LN2)), c = t > 0 ? [255, 90, 74] : [90, 209, 106], a = Math.abs(t);
+  return ' style="color:rgb(' + c.map(function (x) { return Math.round(255 + (x - 255) * a); }).join(',') + ')"';
+}
+/** 貿易：只列船上有 ∪ 城鎮有庫存的貨；上面一排買賣單位；每一列 城鎮 ｜ 賣（按鈕上是賣一桶拿到多少）｜ 貨物圖示 ｜ 買（買一桶付多少）｜ 船上（海商王那樣，Tim 2026-10-26；
+ *  按鈕挨著貨要去的那一邊：買 ⇒ 進右邊的船上、賣 ⇒ 進左邊的城鎮）；圖示游標移上去說名字（td.g 的 data-n）；城鎮庫存照價錢上色（tuiTradeTint）；底下玩家金庫、載重。 */
 function tuiTradeHTML() {
   var L = TUI.list; if (!L) return '<p class="tuiDim">問市場…</p>';
   var u = TUI.unit;
@@ -256,10 +264,10 @@ function tuiTradeHTML() {
   var h = '<p class="tuiDim">只列船上有的、城鎮有庫存的貨（缺貨的不列）。按鈕上是一桶的價錢：買價含關稅 ' + Math.round(L.fee * 100) + '%、賣價扣關稅；越買越貴、越賣越便宜（照每一桶的庫存算）。</p>';
   h += '<div class="tuiU">一次買賣' + TUI_UNITS.map(function (n) { return '<button type="button" data-u="' + n + '"' + (n === u ? ' class="on"' : '') + '>' + tuiNum(n) + '</button>'; }).join('') + '桶</div>';
   if (!L.rows.length) h += '<p class="tuiDim">船上空的，城鎮市場也是空的</p>';
-  else h += '<table class="tuiT tuiTr"><tr><th>⛵ 船上</th><th>賣</th><th>貨</th><th>買</th><th>🏘 城鎮</th></tr>' + L.rows.map(function (r) {
-    return '<tr><td>' + (r.ship >= 1 ? tuiNum(Math.floor(r.ship)) : '<span class="tuiDim">–</span>') + '</td><td class="b">' + btn('sell', r, r.sell) + '</td>' +
-      '<td class="g" title="' + tuiEsc(r.name) + '"><img src="img/goods/' + encodeURIComponent(r.g) + '.png" alt="' + tuiEsc(r.name) + '" onerror="this.replaceWith(this.alt)"></td>' +   // 只畫圖示；沒有圖 ⇒ 換成名字
-      '<td class="b">' + btn('buy', r, r.buy) + '</td><td>' + tuiNum(Math.floor(r.town)) + '</td></tr>';
+  else h += '<table class="tuiT tuiTr"><tr><th>🏘 城鎮</th><th>賣</th><th>貨</th><th>買</th><th>⛵ 船上</th></tr>' + L.rows.map(function (r) {
+    return '<tr><td' + tuiTradeTint(r) + '>' + tuiNum(Math.floor(r.town)) + '</td><td class="b">' + btn('sell', r, r.sell) + '</td>' +
+      '<td class="g" data-n="' + tuiEsc(r.name) + '"><img src="img/goods/' + encodeURIComponent(r.g) + '.png" alt="' + tuiEsc(r.name) + '" onerror="this.replaceWith(this.alt)"></td>' +   // 只畫圖示；沒有圖 ⇒ 換成名字
+      '<td class="b">' + btn('buy', r, r.buy) + '</td><td>' + (r.ship >= 1 ? tuiNum(Math.floor(r.ship)) : '<span class="tuiDim">–</span>') + '</td></tr>';
   }).join('') + '</table>';
   var D = L.load, Hd = tuiShip();
   h += '<div class="tuiTiles"><div><small>👛 玩家金庫</small><b>' + tuiNum(L.funds, 2) + '</b></div><div><small>💰 城鎮金庫</small><b>' + tuiNum(L.townFunds) + '</b></div>' +
