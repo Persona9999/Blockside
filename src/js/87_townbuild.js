@@ -308,10 +308,11 @@ function twbDraw() {
   gl.bindVertexArray(null);
 }
 /** 城名那一行（#twbTown，城鎮模式一直在）：城名、那座城的年份（另一個時空的加標示，括號裡是遊戲現在幾年）、人口 ——
- *  資料是外面那一頁附在規劃上的 live（Blocksail 地球儀的城鎮帳；TASK-0871，Tim 2026-10-23「讓玩家可以知道這座城鎮是另一個時空的」）；沒附 ⇒ 只有城名。 */
+ *  資料是外面那一頁附在規劃上的 live（Blocksail 地球儀的城鎮帳；TASK-0871，Tim 2026-10-23「讓玩家可以知道這座城鎮是另一個時空的」）；沒附 ⇒ 只有城名。
+ *  外面那一頁自己畫（WCLK.bar：城名、人口跟它的時間面板並排，年份換進日期；08_weather.js）⇒ 這一行不畫。 */
 function twbTitle(T) {
   var el = $('twbTown'); if (!el) return;
-  var L = T && T.p && T.p.live, s = !T ? '' : '🏘 ' + ((L && L.name) || T.name || T.id) + (L ? '　📅 ' + L.year + ' 年' + (L.other ? '・⏳ 另一個時空（現在是 ' + L.gameYear + ' 年）' : '') + '　👥 ' + (+L.pop || 0).toLocaleString('en-US') + ' 人' : '');
+  var L = T && T.p && T.p.live, s = !T || WCLK.bar ? '' : '🏘 ' + ((L && L.name) || T.name || T.id) + (L ? '　📅 ' + L.year + ' 年' + (L.other ? '・⏳ 另一個時空（現在是 ' + L.gameYear + ' 年）' : '') + '　👥 ' + (+L.pop || 0).toLocaleString('en-US') + ' 人' : '');
   if (el.textContent !== s) { el.textContent = s; el.classList.toggle('on', !!s); }
 }
 /** 上面那一行：剛做完的訊息留 3 秒；不然照試放／找路的回覆。 */
