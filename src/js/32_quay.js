@@ -35,7 +35,7 @@ function quayHull(T, vs) {
 function quayObs(T) {
   var p = T.p, lots = p.lots || [], key = (p.piers || []).length + ':' + (p.quay || []).length + ':' + lots.length + ':' + BED.ax + ',' + BED.az;
   if (T.quayObs && T.quayObs.p === p && T.quayObs.key === key) return T.quayObs;
-  var O = { p: p, key: key, segs: [], polys: [], bb: [1e9, 1e9, -1e9, -1e9] };
+  var O = { p: p, key: key, segs: [], polys: [], apron: {}, bb: [1e9, 1e9, -1e9, -1e9] };
   function W(q) { var e = T.E(q); return [e[0] - BED.ax, e[1] - BED.az]; }
   function grow(q, r) { O.bb[0] = Math.min(O.bb[0], q[0] - r); O.bb[1] = Math.min(O.bb[1], q[1] - r); O.bb[2] = Math.max(O.bb[2], q[0] + r); O.bb[3] = Math.max(O.bb[3], q[1] + r); }
   function line(path, w, kind) {
@@ -58,7 +58,11 @@ function quayObs(T) {
     function gap(q) { var d = Infinity; O.segs.forEach(function (s) { var c = quaySegPt(q[0], q[1], s.a, s.b); d = Math.min(d, Math.hypot(q[0] - c[0], q[1] - c[1])); }); return d; }
     var s = gap(pt(l.d / 2, 0)) <= gap(pt(-l.d / 2, 0)) ? 1 : -1, a0 = s * (l.d / 2 - Math.max(0, (B.over || 0) - TOWN_BERTH_STRIP));   // 框靠棧橋那一頭在棧橋中線（離棧橋線近的那一頭）；棧橋邊往內 over − 0.49（同 63_towns.js townLotInst）
     function rect(a1, b1, b2, kind) { var P = [pt(a0, b1), pt(a1, b1), pt(a1, b2), pt(a0, b2)]; O.polys.push({ P: P, kind: kind }); P.forEach(function (q) { grow(q, 0); }); }
-    if (B.apron > 0) rect(a0 - s * B.apron, -l.w / 2, l.w / 2, 'apron');   // 大船以上：棧橋邊往外一條平台，船靠平台外緣
+    if (B.apron > 0) {                                                  // 大船以上：棧橋邊往外一條平台，船靠平台外緣
+      rect(a0 - s * B.apron, -l.w / 2, l.w / 2, 'apron');
+      var e0 = pt(a0 - s * B.apron, 0), e1 = pt(a0 - s * (B.apron + 1), 0), nl = Math.hypot(e1[0] - e0[0], e1[1] - e0[1]) || 1;
+      O.apron[l.id] = { p: e0, n: [(e1[0] - e0[0]) / nl, (e1[1] - e0[1]) / nl], r: Math.max(l.w, l.d) };   // 平台外緣的中點、往外（離棧橋）的單位向量；quayBerthAt 照它貼平台
+    }
     var fl = QUAY_FINGER[B.cls];
     if (B.fw > 0 && fl) { rect(a0 - s * fl, -l.w / 2, -l.w / 2 + B.fw / 2, 'finger'); rect(a0 - s * fl, l.w / 2 - B.fw / 2, l.w / 2, 'finger'); }   // 魚骨式：兩側各半根指形棧橋
   });
@@ -140,5 +144,22 @@ function quayInfo(i, r) {
   return { c: [f(c[0]), f(c[2])], yaw: f(sh.yaw), vs: +vs.toFixed(4), moor: sh.moor || null, hit: sh.quayHit || null,
     pts: H.map(function (h) { var p = M4.pt(M, h[0], T.cy, T.zw); return [f(p[0]), f(p[2]), f(h[1] * vs)]; }), obs: obs };
 }
-/** 我艦繫在停靠處 d（at ＝ 船的中心）。 */
-function moorAt(sh, d) { if (sh && d) sh.moor = { x: d.at[0], z: d.at[1], yaw: d.yaw, dock: d.id }; }
+/** 我艦繫在停靠處 d（at ＝ 船的中心；大船以上的泊位照船寬貼平台，quayBerthAt）。 */
+function moorAt(sh, d) { if (sh && d) { var p = quayBerthAt(sh, d.id, d.at); sh.moor = { x: p[0], z: p[1], yaw: d.yaw, dock: d.id }; } }
+// 大船以上的泊位貼著平台停（Blocksail TASK-0962，TOWN_BUILD §5.19.14）：規劃給的停靠點 ＝ 預留那一塊（船道）的中心 ⇒ 大船的船道 24 m、風暴角號寬約 11 m ⇒ 離平台外緣 6.5 m 的水。
+//   停的那一點照這艘船的寬（quayHull：碰撞取樣點最寬的那一點，水線上伸出去的也算）往平台推，離平台外緣留 MOOR_FENDER 公尺（碰墊）；沿棧橋那一軸、船頭不動。
+//   平台照 quayObs 那一套從地塊算（O.apron）；地塊還沒到（那一區沒建）、魚骨式（沒有平台）、錨地、外海泊位 ⇒ 照舊 at。⛔ 不改規劃、範圍層（規劃雜湊、航線快取都不變）。
+var MOOR_FENDER = 1;
+/** 泊位 id（地塊 id）、規劃給的停靠點 at（[x, z]，BED 座標）⇒ sh 這艘停的那一點 [x, z]。id 只在一座城裡唯一 ⇒ 地塊要在 at 附近才算。 */
+function quayBerthAt(sh, id, at) {
+  if (!sh || !sh.M || !id || !at || !BED || !TOWNS.list.length) return at;
+  for (var t = 0; t < TOWNS.list.length; t++) {
+    var Tw = TOWNS.list[t]; if (!Tw.p || !Tw.E) continue;
+    var A = quayObs(Tw).apron[id]; if (!A || Math.hypot(at[0] - A.p[0], at[1] - A.p[1]) > A.r) continue;
+    var M = sh.M, o = M4.pt(M, 0, 0, 0), ex = M4.pt(M, 1, 0, 0), vs = Math.hypot(ex[0] - o[0], ex[1] - o[1], ex[2] - o[2]), hb = 0;
+    quayHull(sh.T, vs).forEach(function (h) { hb = Math.max(hb, h[1] * vs); });
+    var d0 = (at[0] - A.p[0]) * A.n[0] + (at[1] - A.p[1]) * A.n[1], k = hb + MOOR_FENDER - d0;   // 規劃的那一點離平台外緣多遠 ⇒ 要挪多少（負 ＝ 往平台）
+    return [at[0] + A.n[0] * k, at[1] + A.n[1] * k];
+  }
+  return at;
+}
