@@ -1318,15 +1318,104 @@
       "town": "carib-fort"
     },
     {
+      "id": "labelle",
+      "el": "ship-labelle",
+      "name": "拉貝爾號",
+      "vxk": "labelle.vxk",
+      "work": "ame-labelle-01m-assembly",
+      "author": "ame",
+      "geo": {"spar": [28, 42], "marines": [33, 54], "center": 45, "aim": 28, "aimZ": [5, 185], "deckAim": [28, 40], "rigAim": [55, 180]},
+      "cfg": {"pump": 2},
+      "crew": {"officers": 2, "helm": 1, "top": 0, "marines": 4, "marineGap": 14, "monkeys": 1, "handsK": 0.25, "navigator": 0},
+      "names": ["拉貝爾號"],
+      "idNext": {
+        "anchor": 3,
+        "binnacle": 3,
+        "boat": 2,
+        "deck": 6,
+        "gun": 15,
+        "ladders": 4,
+        "light": 2,
+        "magazine": 2,
+        "model": 4,
+        "part": 10,
+        "powder": 17,
+        "rudder": 2,
+        "ship": 2,
+        "tiller": 2,
+        "yard": 7
+        }
+      },
+      {
+      "id": "pinas",
+      "el": "ship-pinas",
+      "name": "藍鯊號",
+      "vxk": "pinas.vxk",
+      "work": "gura-pinas-01m-assembly",
+      "geo": {"spar": [61, 103], "marines": [55, 130], "center": 75, "aim": 55, "aimZ": [25, 400], "deckAim": [46, 76], "rigAim": [130, 380]},
+      "crew": {"marines": 6, "top": 1},
+      "names": ["藍鯊號"],
+      "author": "gura",
+      "idNext": {
+        "anchor": 3,
+        "binnacle": 2,
+        "boat": 2,
+        "capstan": 2,
+        "deck": 7,
+        "gun": 25,
+        "ladders": 6,
+        "light": 2,
+        "magazine": 2,
+        "part": 13,
+        "portlid": 23,
+        "powder": 33,
+        "rudder": 2,
+        "ship": 2,
+        "wheel": 2,
+        "wheel_stand": 2,
+        "yard": 11
+      }
+    },
+    {
       "id": "oxford",
       "el": "ship-oxford",
       "name": "牛津號",
       "vxk": "oxford.vxk",
       "work": "erina-oxford-01m-assembly",
       "author": "erina",
-      "geo": {"spar": [40, 72], "marines": [112, 50], "center": 60, "aim": 45, "aimZ": [10, 300], "deckAim": [42, 56], "rigAim": [120, 300]},
-      "crew": {"officers": 2, "marines": 8, "marineGap": 12, "navigator": 0},
-      "names": ["牛津號"],
+      "geo": {
+        "spar": [
+          40,
+          72
+        ],
+        "marines": [
+          112,
+          50
+        ],
+        "center": 60,
+        "aim": 45,
+        "aimZ": [
+          10,
+          300
+        ],
+        "deckAim": [
+          42,
+          56
+        ],
+        "rigAim": [
+          120,
+          300
+        ]
+      },
+      "crew": {
+        "officers": 2,
+        "marines": 8,
+        "marineGap": 12,
+        "navigator": 0
+      },
+      "names": [
+        "牛津號"
+      ],
       "idNext": {
         "anchor": 3,
         "capstan": 2,
