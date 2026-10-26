@@ -284,11 +284,14 @@ function townReplace(p) {
   p = townDistView(p);                                                  // 城區：城鎮模式只換上選中的那一區（townDistView）
   var i = -1; TOWNS.list.forEach(function (T, k) { if (T.id === p.id) i = k; });
   if (i < 0) { townGot([p]); return true; }
-  var old = TOWNS.list[i], T = townPrep(p), D = TOWN_FULL || !old.gt || !old.roadSurface ? null : townDiff(old, T);
+  var old = TOWNS.list[i], same = !fullNew && old.ox === (+p.ox || 0) && old.oy === (+p.oy || 0) && old.kx === (+p.kx || 1);   // 換城區：整份同一份、座標換算一樣
+  var T = townPrep(p, same ? old.clr : null), D = TOWN_FULL || !old.gt || !old.roadSurface ? null : townDiff(old, T);
   if (D && old.pend) { townBoxAdd(D.box, old.pend.box); if (old.pend.roads) D.roads = townBoxAdd(D.roads || old.pend.roads.slice(), old.pend.roads); }   // 上一次改的路面還在算 ⇒ 一起算
   TOWNS.ver++; TOWNS.dirty = true; TOWNS.stat.replaced = (TOWNS.stat.replaced || 0) + 1;
   TOWNS.list[i] = T;
-  var I = townIdx();                                                    // 要的模型變多（自動蓋的擺上這座城原本沒有的種類：磨坊、鹽田…）⇒ 丟掉重要 —— ⛔ 要照換上去的那一份算（以前在換之前算 ⇒ 拿舊規劃比、永遠沒變多 ⇒ 新種類的地塊一直沒有實例）
+  //   要的模型變多（自動蓋的擺上這座城原本沒有的種類：磨坊、鹽田…）⇒ 丟掉重要 —— ⛔ 要照換上去的那一份算（以前在換之前算 ⇒ 拿舊規劃比、永遠沒變多 ⇒ 新種類的地塊一直沒有實例）
+  //   換城區（整份同一份）⇒ 不算：townNeed 照整份規劃（TOWNS.full）、城牆、風格挑，換區不會變（以前每換一次都把 7,856 塊地挑一遍：君士坦丁堡一次約 90 ms）
+  var I = fullNew ? townIdx() : null;
   if (I && TOWNS.kitHas && townNeed(I).some(function (nm) { return TOWNS.kitHas.indexOf(nm) < 0; })) townKitStale();
   if (!D) {                                                             // 整座重來（對照組、改了 TOWN_DIFF_KEYS、舊的那一份還沒建好）
     if (old.gt) Object.keys(old.gt).forEach(function (k) { var g = old.gt[k].g, gf = old.gt[k].gf; if (g) townGpuFree(g); if (gf) townGpuFree(gf); });
@@ -352,8 +355,9 @@ function townNewer(C) {
   var S = BED.A.chunk, cb = [C.cx * S, C.cy * S, (C.cx + 1) * S, (C.cy + 1) * S];
   return TOWNS.list.some(function (T) { return (T.v > C.tv && townBoxHit(T.box, cb)) || (T.edits || []).some(function (e) { return e.v > C.tv && townBoxHit(e.b, cb); }); });
 }
-/** 規劃 ⇒ 一座城（海域座標的路、清樹，世界座標的實例；模型的實例等要用到的模型解好（townKit）才建 ⇒ townInst）。 */
-function townPrep(p) {
+/** 規劃 ⇒ 一座城（海域座標的路、清樹，世界座標的實例；模型的實例等要用到的模型解好（townKit）才建 ⇒ townInst）。
+ *  keep ＝ 沿用的清樹（townReplace 換城區：整份規劃同一份、座標換算一樣 ⇒ 清樹一模一樣，不再把整座城每一圈重新換算 —— 君士坦丁堡 9,060 圈）。 */
+function townPrep(p, keep) {
   var ox = +p.ox || 0, oy = +p.oy || 0, kx = +p.kx || 1, D2R = Math.PI / 180, bank = +p.bank || 1.5;
   function E(q) { return [ox + kx * q[0], oy + q[1]]; }
   var box = [1e9, 1e9, -1e9, -1e9];
@@ -382,15 +386,19 @@ function townPrep(p) {
   }
   var fields = fieldsOf(p.lots);                                       // 鋪土、種作物：建了的那幾區
   //   清樹照整份規劃（TOWNS.full；城區還沒建的那幾區也清 ⇒ 換城區不重擺樹）
-  var pf = TOWNS.full[p.id] || p, fc = pf === p ? fields : fieldsOf(pf.lots);
-  var clr = { rings: ((pf.clear || {}).rings || []).map(function (r) { return r.map(E); }).concat(fc.map(function (F) { return F.R; })),
-              paths: ((pf.clear || {}).paths || []).map(function (c) { var P = c.path.map(E); return { w: c.w, P: c.closed ? P.concat([P[0]]) : P }; }) };
-  clr.rings.forEach(function (R) { R.forEach(function (q) { grow(q, 4); }); });
-  clr.paths.forEach(function (c) { c.P.forEach(function (q) { grow(q, c.w); }); });
-  //   每一圈、每一條路帶的外框（路帶外擴半寬）先算好 ⇒ 清樹的遮罩（townClrMask）一塊只看疊到它的那幾份（以前每塊把整座城每一圈都掃一遍：君士坦丁堡一塊 10～30 ms）
-  function bbOf(P, pad) { var b = [1e9, 1e9, -1e9, -1e9]; P.forEach(function (q) { b[0] = Math.min(b[0], q[0] - pad); b[1] = Math.min(b[1], q[1] - pad); b[2] = Math.max(b[2], q[0] + pad); b[3] = Math.max(b[3], q[1] + pad); }); return b; }
-  clr.rb = clr.rings.map(function (R) { return bbOf(R, 0); });
-  clr.pb = clr.paths.map(function (c) { return bbOf(c.P, c.w / 2); });
+  var clr = keep || (function () {
+    var pf = TOWNS.full[p.id] || p, fc = pf === p ? fields : fieldsOf(pf.lots);
+    var c = { rings: ((pf.clear || {}).rings || []).map(function (r) { return r.map(E); }).concat(fc.map(function (F) { return F.R; })),
+              paths: ((pf.clear || {}).paths || []).map(function (c) { var P = c.path.map(E); return { w: c.w, P: c.closed ? P.concat([P[0]]) : P }; }), bb: [1e9, 1e9, -1e9, -1e9] };
+    c.rings.forEach(function (R) { R.forEach(function (q) { townBoxAdd(c.bb, [q[0] - 4, q[1] - 4, q[0] + 4, q[1] + 4]); }); });   // 城的外框裡清樹那一份（沿用時直接併進去）
+    c.paths.forEach(function (P) { P.P.forEach(function (q) { townBoxAdd(c.bb, [q[0] - P.w, q[1] - P.w, q[0] + P.w, q[1] + P.w]); }); });
+    //   每一圈、每一條路帶的外框（路帶外擴半寬）先算好 ⇒ 清樹的遮罩（townClrMask）一塊只看疊到它的那幾份（以前每塊把整座城每一圈都掃一遍：君士坦丁堡一塊 10～30 ms）
+    function bbOf(P, pad) { var b = [1e9, 1e9, -1e9, -1e9]; P.forEach(function (q) { b[0] = Math.min(b[0], q[0] - pad); b[1] = Math.min(b[1], q[1] - pad); b[2] = Math.max(b[2], q[0] + pad); b[3] = Math.max(b[3], q[1] + pad); }); return b; }
+    c.rb = c.rings.map(function (R) { return bbOf(R, 0); });
+    c.pb = c.paths.map(function (P) { return bbOf(P.P, P.w / 2); });
+    return c;
+  })();
+  townBoxAdd(box, clr.bb);
   (p.lots || []).forEach(function (l) { grow(E(l.at), Math.hypot(l.w, l.d)); });
   (p.piers || []).forEach(function (q) { q.path.forEach(function (a) { grow(E(a), q.w); }); });
   var core = p.core && p.core.ring ? p.core.ring.map(E) : null, cen = [ox, oy];
