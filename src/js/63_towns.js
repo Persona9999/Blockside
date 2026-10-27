@@ -2421,10 +2421,13 @@ function townFortWake(h) {
     var sh = makeShip(SHIPS.length, me.team, Math.atan2(-c, -s), q.z + e * c, T, q.x - e * s);
     sh.gy = q.y + S * T.zw; sh.calm = true; sh.townKey = key; sh.name = h.name;
     var nk = townNation(h.T); if (nk) shipNation(sh, nk);                // 掛那座城的國旗（TASK-0977；77_colours.js flagOwnUv：作品那面白旗補了 uv）
-    TOWN_UNITS[key] = sh;
+    var lw = h.T.p && h.T.p.live && h.T.p.live.work, gar = null;          // 駐軍 ＝ 城鎮帳那一棟今天幾個兵（Blocksail BSW.GARRISON 分到每一棟的 staff，TASK-0948）；不超過那一座滿編
+    if (lw && Object.prototype.hasOwnProperty.call(lw, q.lot)) gar = crewCap(sh, Math.max(0, +lw[q.lot] || 0));   // 帳上沒有那一棟（實驗場、帳還沒過一天）⇒ 照設定檔滿編
+    if (gar === 0) { sh.struck = true; sh.fate = '沒有駐軍（城鎮帳那一棟今天 0 人）'; }   // 空的那一座：不算敵艦、不開砲（⛔ 照 strikeCheck ⇒ 一換上來就報「全員倒下」）
+    TOWN_UNITS[key] = sh; h.T.work = null;                               // 那一棟的站崗鎮民（63_townfolk.js townWorkPrep）重擺 ⇒ 不畫：兵是那一座的人
     SHIPS.push(sh); coreSpawned(sh, null); stepShip(sh, 0); survey(sh); pickCaptain(sh); cmdTick(); pickFoes();
     setAim(me, [T.cx, T.cy, T.geo.aim], sh); me.pMode = AIM_P = 'free';
-    note(me, '瞄準 ' + sh.name + ' —— 中立；開火就是對它宣戰');
+    note(me, '瞄準 ' + sh.name + (gar !== null ? '（駐軍 ' + gar + ' 人，城鎮帳）' : '') + ' —— 中立；開火就是對它宣戰');
   }, function (err) { q.waking = false; note(me, h.name + '：載入失敗（' + (err && err.message || err) + '）'); });
   return true;
 }

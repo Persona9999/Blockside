@@ -198,7 +198,7 @@ if (DEBUG) window.__game = {
   /** 城裡的堡壘（63_towns.js townFortWake；TASK-0955）：沒給 lot ⇒ 列出每座城換得了的那幾棟；給了 ⇒ 照點到它一樣換（不經螢幕座標）。 */
   townFort: function (lot) {
     var L = []; TOWNS.list.forEach(function (T) { (T.inst || []).forEach(function (q) { if (q.lot && townFortHull(q.k)) L.push({ T: T, q: q }); }); });
-    if (lot === undefined) return L.map(function (r) { var u = TOWN_UNITS[r.T.id + ':' + r.q.lot]; return { town: r.T.id, lot: r.q.lot, k: r.q.k, hull: townFortHull(r.q.k), x: +r.q.x.toFixed(1), y: +r.q.y.toFixed(2), z: +r.q.z.toFixed(1), th: +r.q.th.toFixed(4), unit: u ? { i: u.i, team: u.team, calm: !!u.calm, struck: u.struck } : null }; });
+    if (lot === undefined) return L.map(function (r) { var u = TOWN_UNITS[r.T.id + ':' + r.q.lot]; return { town: r.T.id, lot: r.q.lot, k: r.q.k, hull: townFortHull(r.q.k), x: +r.q.x.toFixed(1), y: +r.q.y.toFixed(2), z: +r.q.z.toFixed(1), th: +r.q.th.toFixed(4), unit: u ? { i: u.i, team: u.team, calm: !!u.calm, struck: u.struck, crew0: u.crew0, able: u.able, n: u.crew.length } : null }; });
     var r = L.filter(function (o) { return o.q.lot === lot; })[0]; if (!r) return null;
     var l = (r.T.p.lots || []).filter(function (x) { return x.id === lot; })[0] || null;
     return townFortWake({ T: r.T, q: r.q, lot: l, name: townLotName(r.T, l, TOWNS.kit.M[r.q.k].m) });
