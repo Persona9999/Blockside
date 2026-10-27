@@ -45,6 +45,7 @@ var TOWN_WALL_JX_TOL = 1, TOWN_WALL_JX_SINK = 0.7;                     // 牆接
 var TOWN_WALL_JOIN_IN = 0.5, TOWN_WALL_JOIN_OUT = 10;                 // 牆接建築：牆兩側的邊都進了建築的外框之後再多伸幾公尺；模型比地塊框大時，從規劃的接點往外最多找幾公尺（townWall joinIn）
 var TOWN_WALL_JX_OUT = 4, TOWN_WALL_JX_BEND = 12, TOWN_WALL_JX_TURN = 25, TOWN_WALL_JX_SKEW = 80;   // 牆接塔（townWallJx）：從塔的那一面垂直出去至少幾公尺（不到 0.6 節照 0.6 節）、轉回原路線的曲線至少幾公尺、曲線每一節最多轉幾度（要比 TOWN_WALL_CORNER 小）、出面跟原路線差超過幾度就不改道〔佔位〕
 // 城牆沿線的高度（townWallProf）：前後平均幾公尺、牆腳最多埋進地面幾公尺、埋太深往上抬的量往兩邊照什麼坡收（最遠幾公尺）、最後再磨圓幾公尺、門與接點釘回地面往兩邊收幾公尺〔佔位〕
+var TOWN_WALL_PART_SINK = 12, TOWN_WALL_PART_SINK_MAX = 0.75;           // 斷面接部件（門、塔）：方向跟部件的軸差超過幾度就往部件裡伸、不斜接；最多伸到部件半長的幾成（townWall sinkIn）〔佔位〕
 var TOWN_WALL_FLOW = { win: 16, bury: 1.5, k: 0.2, reach: 40, round: 4, pin: 16 };
 var TOWN_SLAB_KMAX = 2;                                                 // 碼頭、棧橋的板：轉角斜接最多拉長幾倍（2 ＝ 轉 120°；再急就在轉角那一點變窄）
 var TOWNS = { on: Q.get('towns') !== '0', prosp: {}, list: [],pend: [], ver: 0, want: 0, err: null, kit: null, kitP: null, idx: null, kitHas: null, kitRedo: false, kitBusy: false, mwait: null, prog: null, progJ: null, dirty: true, eye: null, sig: '', buf: [], grp: null,
@@ -1299,11 +1300,36 @@ function townWall(T, w, out, W, line, jx) {
   (jx && !closed ? jx.ends : []).forEach(function (nd, e) { if (nd) pins.push(e ? Ltot : 0); });
   J.forEach(function (j) { pins.push(j[0], j[1]); });
   if (!line) WP = townWallProf(at, Ltot, closed, hS, pins);
+  // 部件跨在彎上（Tim 2026-10-27「請修復君堡的城牆斷裂吧」；截圖：陸牆南端第一軍門）：部件照弦擺 ⇒ 接口落在路線外、旁邊的斷面得斜著接過去；
+  //   斜接最多切 TOWN_WALL_KMAX、短的一節切得更少（內外兩面最短留 3 成）⇒ 外側那一角接不上，露一道楔形的縫（君士坦丁堡 55 個角、最寬 3 m：門、塔擺在 85°～90° 的彎上）
+  //   ⇒ 斷面方向跟部件的軸差超過 TOWN_WALL_PART_SINK 度的那一頭：不接在接口上，沿路線往部件裡伸，伸到端面兩個角（± 斷面半厚）都進了部件的外框再多 0.2 m
+  //   （同牆接牆不改道那一頭的 fitSink）；端面照斷面自己的方向、不斜接 ⇒ 藏在部件的身體裡。最多伸到半長的 TOWN_WALL_PART_SINK_MAX（門洞在中間）；進不去 ⇒ 照舊接在接口上
+  //   方向照斷面實際會走的：上一站（路線上離接口一節）→ 接口（部件照弦擺 ⇒ 接口可能離路線好幾公尺：金門 70 m 長、跨著一個彎，接口離路線 7 m ⇒ 路線本身只差 1.6°、斷面卻斜 72°）
+  function sinkIn(o, c, ax, e) {                                        // e ＝ −1 進來那一頭（t − h）、+1 出去那一頭 ⇒ 伸幾公尺（0 ＝ 不伸）
+    var t = o.t + e * o.h, q0 = at(t + e * len), f =[c[0] + e * ax[0] * o.h, c[1] + e * ax[1] * o.h], u = [f[0] - q0.x, f[1] - q0.z], l = Math.hypot(u[0], u[1]);
+    if (l < 0.01) return 0;
+    var dot = Math.abs((u[0] * ax[0] + u[1] * ax[1]) / l);
+    if (dot >= Math.cos(TOWN_WALL_PART_SINK * Math.PI / 180)) return 0;
+    var m = K.M[o.nm].m, hd = m.size[1] * m.mpv / 2;
+    function inside(x, z) { var dx = x - c[0], dz = z - c[1]; return Math.abs(dx * ax[0] + dz * ax[1]) <= o.h && Math.abs(-dx * ax[1] + dz * ax[0]) <= hd; }
+    for (var d = 0; d <= o.h * TOWN_WALL_PART_SINK_MAX; d += 0.1) {
+      var p = at(t - e * d), nx = -Math.sin(p.a), nz = Math.cos(p.a);
+      if (inside(p.x + nx * hS, p.z + nz * hS) && inside(p.x - nx * hS, p.z - nz * hS)) return Math.min(o.h * TOWN_WALL_PART_SINK_MAX, d + 0.2);
+    }
+    return 0;
+  }
   parts.forEach(function (o) {                                          // 擺：軸 ＝ 路線上兩個接口那兩點的弦
     var t = o.t, h = o.h, A = at(t - h), B = at(t + h), s = at(t), dx = B.x - A.x, dz = B.z - A.z, L = Math.hypot(dx, dz), ax = L > 0.01 ? [dx / L, dz / L] : [Math.cos(s.a), Math.sin(s.a)];
     if (o.pass) { var pA = at(t - o.sk), pB = at(t + o.sk); obs.push({ t0: t - o.sk, t1: t + o.sk, p0: [pA.x, pA.z], p1: [pB.x, pB.z], ax: [Math.cos(s.a), Math.sin(s.a)] }); return; }   // 穿過去的塔：斷面停在塔裡（路線在塔的兩面之間是直的）
     setLev(put(o.nm, [s.x, s.z], Math.atan2(ax[1], ax[0]), o.sx || 1, true), t, t);
-    obs.push({ t0: t - h, t1: t + h, p0: [s.x - ax[0] * h, s.z - ax[1] * h], p1: [s.x + ax[0] * h, s.z + ax[1] * h], ax: ax });
+    var ob = { t0: t - h, t1: t + h, p0: [s.x - ax[0] * h, s.z - ax[1] * h], p1: [s.x + ax[0] * h, s.z + ax[1] * h], ax: ax };
+    if (!line) {
+      var kA = sinkIn(o, [s.x, s.z], ax, -1), kB = sinkIn(o, [s.x, s.z], ax, 1);
+      if (kA) { var qa = at(t - h + kA); ob.t0 = t - h + kA; ob.p0 = [qa.x, qa.z]; ob.ax = [Math.cos(qa.a), Math.sin(qa.a)]; TOWNS.stat.partSink = (TOWNS.stat.partSink || 0) + 1; }
+      if (kB) { var qb = at(t + h - kB); ob.t1 = t + h - kB; ob.p1 = [qb.x, qb.z]; ob.ax1 = [Math.cos(qb.a), Math.sin(qb.a)]; TOWNS.stat.partSink = (TOWNS.stat.partSink || 0) + 1; }
+      else if (kA) ob.ax1 = ax;                                           // 只有進來那一頭伸 ⇒ 出去那一頭照舊用部件的軸
+    }
+    obs.push(ob);
   });
   var jSt = J.length && !line ? (TOWNS.stat.joins[T.id] = TOWNS.stat.joins[T.id] || {})[w.id] = [] : null;   // 讀數：每一段兩頭各伸進去幾公尺
   J.forEach(function (j) {                                              // ax1：出口那一頭的方向（建築裡轉了角）
@@ -1334,7 +1360,7 @@ function townWall(T, w, out, W, line, jx) {
   if (!closed && tip.t < Ltot) runs.push({ t0: tip.t, t1: Ltot, s0: tip, s1: { p: P[nV], n: jN[1] || dir(nV) } });
   if (closed && !obs.length) runs.push({ t0: 0, t1: Ltot, s0: null, s1: null });
   runs.forEach(function (f) {
-    var L = f.t1 - f.t0; if (L < len * 0.4) return;
+    var L = f.t1 - f.t0; if (L < 0.05) return;                         // 以前不到 0.4 節就不擺 ⇒ 兩件部件之間留一條縫（君士坦丁堡 Mangana 宮港門與塔之間 1.7 m）；短的照樣擺一節（照空檔縮）
     var vs = [], br = [f.t0], S = [], X, D = [], N = [], j, k;
     for (var v2 = closed ? 0 : 1; v2 < nV; v2++) if (turn(v2) > 1e-3) (closed ? [0, Ltot, -Ltot] : [0]).forEach(function (sh) { var tv2 = cum[v2] + sh; if (tv2 > f.t0 && tv2 < f.t1) vs.push(tv2); });
     vs.sort(function (a, b) { return a - b; });
