@@ -51,8 +51,10 @@ function tuiIngredientsHTML(F) {
   if (!ks.length) return '<p class="tuiDim">當天沒有消耗食材。</p>';
   return '<p class="tuiDim">廚房（含加餐、免費供應）與服務供餐合計；不含日用及單獨飲品。</p><table class="tuiT"><tr><th>食材</th><th>消耗（桶）</th></tr>' + ks.map(function (g) { return '<tr><td>' + tuiIcon('goods', g) + tuiEsc(tuiGood(g)) + '</td><td>' + tuiNum(all[g] / 1000, 3) + '</td></tr>'; }).join('') + '</table>';
 }
-/** 社會階層（Blocksail world/stores.js BSW.STRATA；TASK-1007）：每一層的人數、那一池的錢、一人平均、收入從哪來；底下摺著每一層昨天吃了什麼（同上面那張表）。
- *  Tim 2026-10-26「統計資訊可以加上 不同階層的食物消費(吃了甚麼菜單)」；外面那一頁沒送 strata（關掉、舊版）⇒ 不畫。 */
+/** 社會階層（Blocksail world/stores.js BSW.STRATA；TASK-1007、1048）：外面那一頁送來的每一層各畫一份 —— 人數、那一池的錢、一人平均、收入從哪來、分紅帳、
+ *  殼（綁在這一層的家族）、昨天吃了什麼；帶了 menu 的那一層（水手）多一張船上菜單。⛔ 不寫死有哪幾層：照 I.strata 的順序畫，那一層有哪一欄才畫哪一欄（加一層不用改這裡）。
+ *  Tim 2026-10-26「統計資訊可以加上 不同階層的食物消費(吃了甚麼菜單)」；2026-10-28「希望可以顯示每個階層的金庫(包含家族)」「介面顯示的資訊是否可以每個階級一份（之後可能還會新增階級）而不是寫死顯示哪些階級」
+ *  外面那一頁沒送 strata（關掉、舊版）⇒ 不畫。 */
 function tuiStrataHTML(I) {
   var L = I.strata; if (!L || !L.length) return '';
   var LV = ['荒年糧', '主糧', '家常', '佳餚'];
@@ -63,13 +65,45 @@ function tuiStrataHTML(I) {
     if (fam) return '自己經營 ' + tuiNum(fam.n) + ' 座（' + t.join('、') + '）';
     return t.join('、') + '的分紅';
   };
-  return '<h4>👥 社會階層</h4><table class="tuiT"><tr><th>階層</th><th>人</th><th>金庫</th><th>一人</th><th>收入</th></tr>' + L.map(function (s) {
-    return '<tr><td>' + tuiEsc(s.name) + '</td><td>' + tuiNum(s.pop) + '</td><td>' + tuiNum(s.funds) + '</td><td>' + tuiNum(s.per, 1) + '</td><td>' + tuiEsc(src(s.owns, s.fam)) + '</td></tr>';
-  }).join('') + '</table>' + L.map(function (s) {
-    var F = s.fed; if (!F) return '';
-    var eat = F.eat || {};
-    return '<details><summary>🍽 ' + tuiEsc(s.name) + '昨天吃了什麼</summary><p>' + [3, 2, 1, 0].map(function (k) { return LV[k] + ' ' + tuiNum((eat[k] || 0) / 1000); }).join('　') + (F.relief ? '　（城鎮免費補了 ' + tuiNum(F.relief / 1000) + ' 份）' : '') + (F.famine ? '　⚠ 飢荒' : '') + '</p>' + tuiEatHTML(F) + '</details>';
+  return '<h4>👥 社會階層（每一層一份）</h4>' + L.map(function (s) {
+    var tiles = [['👥 人', tuiNum(s.pop)], ['💰 金庫', tuiNum(s.funds)], ['👤 一人', tuiNum(s.per, 1)]];
+    // 分紅帳（稅前，負的 ＝ 還沒補回的虧損）、城鎮還欠這一層的分紅：有才畫
+    if (s.div) tiles.push(['📒 分紅帳', tuiNum(s.div, 1)]);
+    if (s.owe) tiles.push(['🧾 城鎮欠', tuiNum(s.owe, 1)]);
+    var h = '<div class="tuiCls"><h5>' + tuiEsc(s.name) + '</h5><div class="tuiTiles">' + tiles.map(function (x) { return '<div><small>' + x[0] + '</small><b>' + x[1] + '</b></div>'; }).join('') + '</div>';
+    h += '<p class="tuiDim">收入：' + tuiEsc(src(s.owns, s.fam)) + (s.fam ? '　殼：' + tuiEsc(s.fam.name || s.fam.id) + '（錢就是上面這一池）' : '') + '</p>';
+    var F = s.fed;
+    if (F) {
+      var eat = F.eat || {};
+      h += '<details><summary>🍽 昨天吃了什麼</summary><p>' + [3, 2, 1, 0].map(function (k) { return LV[k] + ' ' + tuiNum((eat[k] || 0) / 1000); }).join('　') + (F.relief ? '　（城鎮免費補了 ' + tuiNum(F.relief / 1000) + ' 份）' : '') + (F.famine ? '　⚠ 飢荒' : '') + '</p>' + tuiEatHTML(F) + '</details>';
+    }
+    if (s.menu) h += tuiShipMenuHTML(s.menu);
+    return h + '</div>';
   }).join('');
+}
+/** 船上菜單（Blocksail world/fleet.js BSW.shipMenu；TASK-1031、1032）：每一道的料、淡水木柴、做幾份、一天最多幾成、湊不湊得出來（料都在貨物表）；底下是沒有船上菜時的陸地配給。
+ *  Tim 2026-10-28「母港可以查看水手階級的資料(包含食譜)」。 */
+function tuiShipMenuHTML(M) {
+  var D = M.dishes || [], Ld = M.land || [];
+  if (!D.length && !Ld.length) return '';
+  var LV = ['荒年糧', '主糧', '家常', '佳餚'];
+  var gl = function (o) { return Object.keys(o || {}).map(function (g) { return tuiIcon('goods', g, 16) + tuiEsc(tuiGood(g)) + ' ' + tuiNum(o[g], 2); }).join('、'); };
+  return '<details><summary>⛵ 船上菜單（' + D.length + ' 道）</summary><p class="tuiDim">出港前照一整輪的天數買存糧，先照下面的順序湊船上菜，湊不出來的那幾天吃陸地配給；料的量是做「份」那一欄的份數要用的桶。</p>' +
+    (D.length ? '<table class="tuiT"><tr><th>菜</th><th>料（桶）</th><th>淡水、木柴</th><th>份</th><th>一天最多</th></tr>' + D.map(function (d) {
+      var ic = d.icon || { dir: 'dishes', key: d.id };
+      return '<tr><td>' + tuiIcon(ic.dir, ic.key) + tuiEsc(d.name) + (d.ok ? '' : '<br><small class="tuiDim">⚠ 料不在貨物表、跳過</small>') + '</td><td>' + gl(d.in) + '</td><td>' + (gl(d.cook) || '–') + '</td><td>' + tuiNum(d.n) + '</td><td>' + (d.max != null ? Math.round(d.max * 100) + '%' : '–') + '</td></tr>';
+    }).join('') + '</table>' : '') +
+    (Ld.length ? '<p>🥖 陸地配給：' + Ld.map(function (x) { return tuiIcon('goods', x.g, 16) + tuiEsc(x.name) + '（' + tuiEsc(LV[x.level] || '') + '）'; }).join('、') + '</p>' : '') + '</details>';
+}
+/** 家族（Blocksail world/families.js townFamilies；TASK-1048）：這座城有關的每一家的金庫、名下幾座、是哪一層的殼（殼的錢就是那一層那一池 ⇒ 寫在那一層，這裡不重複算）。 */
+function tuiFamHTML(I) {
+  var L = (I.families || []).filter(function (f) { return f && f.id; }); if (!L.length) return '';
+  var CN = {}; (I.strata || []).forEach(function (s) { CN[s.id] = s.name; });
+  var KN = { npc: '家族', strata: '社會階層', player: '玩家', pirate: '海盜' };
+  return '<h4>👪 家族（' + L.length + '）</h4><table class="tuiT"><tr><th>家族</th><th>種類</th><th>名下</th><th>金庫</th></tr>' + L.map(function (f) {
+    var shell = f.cls != null;
+    return '<tr><td>' + tuiEsc(f.name || f.id) + (f.home && f.home !== I.id ? '<span class="tuiDim">（' + tuiEsc(f.homeName || f.home) + '）</span>' : '') + '</td><td>' + tuiEsc(shell ? (CN[f.cls] || f.cls) + '的殼' : KN[f.kind] || f.kind || '') + '</td><td>' + (f.n != null ? tuiNum(f.n) + ' 座' : '–') + '</td><td>' + (shell ? '<span class="tuiDim">見' + tuiEsc(CN[f.cls] || f.cls) + '</span>' : tuiNum(f.funds)) + '</td></tr>';
+  }).join('') + '</table>';
 }
 function tuiHomeMenuHTML() {
   var menus = TUI.homeMenu || [];
@@ -189,7 +223,8 @@ function tuiSumHTML() {
     var gs = Object.keys(f.goods).map(function (g) { return tuiIcon('goods', g, 16) + tuiEsc(tuiGood(g)) + ' ' + tuiNum(f.goods[g], 0); }).join('、') || '空船';
     return '<tr><td>' + tuiEsc(f.ownerName || '') + (f.home !== TWB.town ? '<span class="tuiDim">（母港 ' + tuiEsc(f.homeName || f.home) + '）</span>' : '') + '</td><td>' + tuiEsc(where) + '</td><td>' + gs + '</td><td>' + f.trips + '</td><td>' + tuiNum(f.earned, 0) + '</td></tr>';
   }).join('') + '</table>';
-  if (I.families && I.families.length) h += '<h4>👪 家族</h4><p>' + I.families.map(function (f) { return tuiEsc(f.name || f.id || f); }).join('、') + '</p>';
+  // 家族：新的那一頁帶 id、金庫 ⇒ 表；舊的只有名字 ⇒ 一行
+  if (I.families && I.families.length) h += I.families[0] && I.families[0].id ? tuiFamHTML(I) : '<h4>👪 家族</h4><p>' + I.families.map(function (f) { return tuiEsc(f.name || f.id || f); }).join('、') + '</p>';
   return h;
 }
 /** 生產配方（Blocksail world/auto.js recipeDay；TASK-0947）：每一種現在跑哪幾條、最近換的（哪天、從哪條、為什麼、停工到哪天）；全部那幾座（含鎖住的原因）摺在底下。 */
