@@ -597,7 +597,8 @@ function wrsRead(sh) {
   var s = sh.wrs; if (!s) return null;
   var W = s.W, X = s.X, u = s.su, tot = 0, mx = 0, my = 0, cx = sh.T.cx, cy = sh.T.cy;
   for (var j = 0; j < s.n; j++) if (u[j]) { tot += u[j]; mx += u[j] * (X.cx[j] - cx); my += u[j] * (X.cy[j] - cy); }
-  var vol = tot / s.upm, k = { vol: vol, comX: tot ? mx / tot * S : 0, comY: tot ? my / tot * S : 0 }, tl = floodTilt(sh, k);
+  // L ＝ 這艘船實際的進水檔位：floodTilt 照 L.room 乘第 4 檔的橫傾倍率（⛔ 45b10d5 起沒帶 L ⇒ 報表 wsim=1、__game.wsim 一讀就丟例外）；並排跑（細檔＋wsim）⇒ 不乘，同以前
+  var vol = tot / s.upm, k = { vol: vol, comX: tot ? mx / tot * S : 0, comY: tot ? my / tot * S : 0, L: sh.fl && sh.fl.L || {} }, tl = floodTilt(sh, k);
   var nin = 0, nout = 0, nst = 0; for (var i = 0; i < s.NO; i++) { if (s.ost[i] > 0) nout++; else if (s.ost[i] < 0) nin++; else nst++; }
   var rs = 0, rn = 0, rmax = 0;                                          // 高度場粗不粗（驗收第 2 條）：同一間相鄰兩欄都有水、水面差的平均與最大（m）
   for (var e = 0; e < s.E.n; e++) { var j2 = s.E.a[e], nb = s.E.b[e]; if (!u[j2] || !u[nb] || u[j2] >= s.cap[j2] || u[nb] >= s.cap[nb]) continue; var dd = Math.abs(s.hw[j2] - s.hw[nb]); rs += dd; rn++; if (dd > rmax) rmax = dd; }
