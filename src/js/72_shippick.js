@@ -108,7 +108,10 @@ window.addEventListener('keydown', function (e) { if (e.key === 'Escape' && $('s
 var PICK_HOST = Q.get('pick') === '@host' ? (window.parent !== window ? window.parent : window.opener) : null;
 if (PICK_HOST) document.documentElement.classList.add('pickonly');
 function pickPost(what, o) { try { PICK_HOST.postMessage(Object.assign({ bspick: what }, o || {}), '*'); } catch (e) { /* 外面那一頁關了 */ } }
+//   &auto=1（Tim 2026-10-27「是否能讓選船跟預設船走同一流程(相當於一開始選了預設船)」「而不用維護兩套流程」）：不開彈窗、直接量 cur 那一型 ⇒ 'measuring'、'picked'／'error' 跟點卡片一樣
+//     ⇒ 地球儀沒選過船時照它量預設那一艘（不再手抄一份數字在 presets.js）
 function pickBoot() {
+  if (Q.get('auto') === '1' && Q.get('cur')) { pickMeasure(Q.get('cur')); return; }
   spkOpen({ title: Q.get('title') || '選船', cur: Q.get('cur') || '', same: true, pick: pickMeasure, onClose: function (id) { if (!id) pickPost('cancel'); } });
   pickPost('ready');
 }
