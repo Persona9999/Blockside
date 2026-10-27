@@ -10,6 +10,7 @@
 // 路網：每座城把 T.roads（扣掉門口短接線 link-door 與水面下的段）在交叉口切開、端點 2 m 內併成節點 ⇒ 路網圖；照總路長每 TOWN_FOLK_STEP 公尺一位（上限 TOWN_FOLK_MAX）。
 //   碼頭線（海堤）、棧橋的中心線也算路（Tim 2026-10-26「是否也能讓人走上棧橋」）；高度照地形，踩到碼頭、棧橋的面板或樓梯的踏面就照那一面（townFolkDeckY；
 //   Tim 2026-10-26「鎮民會陷入海堤面下 以及樓梯問題(這些概念上都是道路)」）—— 每條邊建路網時先記下碰得到哪幾塊，碰不到的邊照舊只讀地形。
+//   路面（路基抬高的段）、廣場的鋪面也一樣：每條邊記下碰得到的路段（含規劃的路高）與廣場，腳踩在最高的那一面（townFolkFootY；Tim 2026-10-27 廣場上的鎮民只露出頭）。
 // 路線：每位居民第一次算路網時就照 townHash 走好一條固定的路線（起點那條邊 ＋ 最多 TOWN_FOLK_HOPS 段、路口不折返、偶爾在路口停步），
 //   之後沿路線走過去、停一下、原路走回來，一直來回 ⇒ 一圈的時間表（legs）排好，畫的時候照時間二分查到那一段。角色列、衣服色、髮色、步速、車道偏移也照 townHash。
 // 接進 63_towns.js 的地方：townKit／townKitMake（townFolkNeed、townFolkTex）、townKitGpuFree（townFolkFree）、townProgs（著色器 folk、townFolkGl）、
@@ -211,7 +212,32 @@ function townFolkGraph(T) {
     }
     return out;
   }
-  var pg2 = grid(pieces), both = pieces.concat(stairs), bg = grid(both);   // both：邊碰得到哪幾塊一次查完（面板段有 dx、樓梯有 ux）
+  // 路面、廣場的鋪面也會高過地形（Tim 2026-10-27 截圖：夜裡的石板廣場上一排鎮民只露出頭）：
+  //   路面 ＝ max(地形, 規劃的路高 z) ＋ TOWN_ROAD_LIFT（63_towns.js townGroundGen 的 h：路基抬高，Tim 2026-10-26「路也可以抬高路基」）；z 照最近那條路（同 townRoadGen 的距離場）
+  //   廣場 ＝ 規劃的 l.h ＋ 0.06（同 townGroundGen 廣場那一段；四邊的石基補到地面）⇒ 每條邊也記下碰得到的路段（e.rk）與廣場（e.pk），townFolkPaveY 只量那幾個
+  var paves = [];
+  T.roads.forEach(function (r) {
+    if (!r.P || !r.z || !(r.w > 0)) return;
+    for (var q = 1; q < r.P.length; q++) {
+      var za = r.z[q - 1], zb = r.z[q]; if (za == null || zb == null) continue;   // 同 townRoadGen：沒有高度的段不鋪
+      var a = [r.P[q - 1][0] - ax, r.P[q - 1][1] - az], b = [r.P[q][0] - ax, r.P[q][1] - az], L = Math.hypot(b[0] - a[0], b[1] - a[1]), hw = r.w / 2; if (L < 1e-3) continue;
+      paves.push({ ax: a[0], az: a[1], dx: (b[0] - a[0]) / L, dz: (b[1] - a[1]) / L, L: L, hw: hw, za: za, zb: zb, bb: [Math.min(a[0], b[0]) - hw, Math.min(a[1], b[1]) - hw, Math.max(a[0], b[0]) + hw, Math.max(a[1], b[1]) + hw] });
+    }
+  });
+  (T.p && T.p.lots || []).forEach(function (l) {
+    if (l.use !== 'plaza' || !l.at || !(l.h === l.h)) return;
+    var th = l.rot * Math.PI / 180, cs = Math.cos(th), sn = Math.sin(th);
+    function rect(w, d) {                                                // 四角同 townGroundGen（S4 的 0、1、3）⇒ 原點、沿進深（u）、沿寬（v）
+      function at(s0, s1) { return W([l.at[0] + s0 * d / 2 * cs - s1 * w / 2 * sn, l.at[1] + s0 * d / 2 * sn + s1 * w / 2 * cs]); }
+      var o = at(-1, -1), u = at(1, -1), v = at(-1, 1), ux = u[0] - o[0], uz = u[1] - o[1], vx = v[0] - o[0], vz = v[1] - o[1];
+      return { ox: o[0], oz: o[1], ux: ux, uz: uz, uL2: ux * ux + uz * uz || 1e-9, vx: vx, vz: vz, vL2: vx * vx + vz * vz || 1e-9, u1: [u[0] + vx, u[1] + vz] };
+    }
+    var R0 = rect(l.w, l.d), C4 = [[R0.ox, R0.oz], [R0.ox + R0.ux, R0.oz + R0.uz], R0.u1, [R0.ox + R0.vx, R0.oz + R0.vz]];
+    R0.pu = true; R0.top = l.h + 0.06; R0.hole = l.hole ? rect(l.hole[0], l.hole[1]) : null;   // hole：特殊建築那一塊沒鋪（townGroundGen 只鋪外圈）
+    R0.bb = [Math.min.apply(null, C4.map(function (c) { return c[0]; })), Math.min.apply(null, C4.map(function (c) { return c[1]; })), Math.max.apply(null, C4.map(function (c) { return c[0]; })), Math.max.apply(null, C4.map(function (c) { return c[1]; }))];
+    paves.push(R0);
+  });
+  var pg2 = grid(pieces), both = pieces.concat(stairs, paves), bg = grid(both);   // both：邊碰得到哪幾塊一次查完（路段有 za、廣場有 pu、面板段有 dx、樓梯有 ux）
   if (decks.length) {
     var raw0 = raw.slice();                                              // 接線只接到原本的段（不接到別的接線）
     raw0.forEach(function (s) { hwMax = Math.max(hwMax, s.w / 2); s.bb = [Math.min(s.a[0], s.b[0]), Math.min(s.a[1], s.b[1]), Math.max(s.a[0], s.b[0]), Math.max(s.a[1], s.b[1])]; });
@@ -274,10 +300,10 @@ function townFolkGraph(T) {
     edges.push({ a: u, b: v, ax: A.x, az: A.z, dx: ux, dz: uz, nx: -uz, nz: ux, L: L, w: s.w, cum: Ltot, deck: s.deck });   // cum：照路長挑起點那條邊；deck：碼頭、棧橋、接線（排隊測試不挑）
     A.adj.push({ e: ei, dir: 1 }); B.adj.push({ e: ei, dir: -1 });
   });
-  if (pieces.length || stairs.length) edges.forEach(function (e) {      // 這條邊碰得到的面板段、樓梯（外框外擴車道偏移最多 1.5 m）
-    var x1 = e.ax + e.dx * e.L, z1 = e.az + e.dz * e.L, b0 = Math.min(e.ax, x1) - 1.5, b1 = Math.min(e.az, z1) - 1.5, b2 = Math.max(e.ax, x1) + 1.5, b3 = Math.max(e.az, z1) + 1.5;
+  if (both.length) edges.forEach(function (e) {                          // 這條邊碰得到的路段、廣場、面板段、樓梯（外框外擴：車道偏移最多 1.5 m ＋ 路面網格一格 2 m —— townFolkPaveY 量的格點離人最多一格）
+    var x1 = e.ax + e.dx * e.L, z1 = e.az + e.dz * e.L, b0 = Math.min(e.ax, x1) - 3.5, b1 = Math.min(e.az, z1) - 3.5, b2 = Math.max(e.ax, x1) + 3.5, b3 = Math.max(e.az, z1) + 3.5;
     var L = inBox(bg, both, b0, b1, b2, b3); if (!L) return;
-    L.forEach(function (o) { if (o.dx != null) (e.dk || (e.dk = [])).push(o); else (e.sk || (e.sk = [])).push(o); });
+    L.forEach(function (o) { if (o.za != null) (e.rk || (e.rk = [])).push(o); else if (o.pu) (e.pk || (e.pk = [])).push(o); else if (o.dx != null) (e.dk || (e.dk = [])).push(o); else (e.sk || (e.sk = [])).push(o); });
   });
   var ylo = 1e9, yhi = -1e9;                                             // 這座城的高度範圍（地塊的 h、路的 z）⇒ 路線外框的上下（看天空時不算人）
   (T.p && T.p.lots || []).forEach(function (l) { if (l.h === l.h) { ylo = Math.min(ylo, l.h); yhi = Math.max(yhi, l.h); } });
@@ -301,6 +327,53 @@ function townFolkDeckY(e, x, z) {
     var k = Math.min(n - 1, Math.floor(a / s.L * n)), top = z0 + (z1 - z0) * (k + (z1 > z0 ? 1 : 0)) / n + 0.02;
     if (!(top <= y)) y = top;
   }
+  return y;
+}
+/** 邊 e 碰得到的路段裡離 (x, z) 路邊最近的那一條（同 townRoadGen 的距離場：d ＝ 到中線的距離 − 半寬，取最小）⇒ 回傳 d；那條路這一點的規劃 z 寫進 TOWN_FOLK_NEAR.z、窄不窄（寬 < 3.5 m）寫進 .narrow。 */
+var TOWN_FOLK_NEAR = { z: 0, narrow: false };
+function townFolkNear(e, x, z) {
+  var best = Infinity, R = e.rk, N = TOWN_FOLK_NEAR;
+  for (var i = 0; i < R.length; i++) {
+    var s = R[i], u = Math.max(0, Math.min(s.L, (x - s.ax) * s.dx + (z - s.az) * s.dz)), ex = x - s.ax - s.dx * u, ez = z - s.az - s.dz * u, d = Math.sqrt(ex * ex + ez * ez) - s.hw;   // sqrt：Math.hypot 慢好幾倍（每位每格量四次）
+    if (d < best) { best = d; N.z = s.za + (s.zb - s.za) * u / s.L; N.narrow = s.hw < 1.75; }
+  }
+  return best;
+}
+/** 路面網格的一個格點（世界座標）多高：同 townGroundGen 的 h ＝ max(地形, 最近那條路的規劃 z) ＋ TOWN_ROAD_LIFT（地形沒載 ⇒ 規劃 z）。 */
+function townFolkRoadNode(e, x, z) {
+  townFolkNear(e, x, z); var g = townRoadHeight(x, z), zr = TOWN_FOLK_NEAR.z;
+  return (g === g ? Math.max(g, zr) : zr) + TOWN_ROAD_LIFT;
+}
+/** 邊 e 上 (x, z) 那一點的路面、廣場鋪面最高在哪（都不在上面 ⇒ NaN）。
+ *  路面：在路面上（離最近的路邊 d ≤ 0.25 m：路面照格子裁）⇒ 照畫出來的那一面：路面網格（townRoadGen）在海域座標 2 m 一格（窄路旁 1 m）、每個格點各自取 max(地形, 規劃 z)、
+ *    格裡照對角線（同 bedMesh、townRoadHeight）切兩個三角形內插 ⇒ 這裡也量那個三角形的三個格點再內插（直接在這一點取 max 的話，路基接地形的那一帶、路口換路的地方會比畫出來的低約 0.1 m）；
+ *    窄路旁的細分格：最近的路是窄路 ⇒ 照 1 m（townRoadGen 照格中心離窄路 hw ＋ 3 m 內細分；大致相同，差在細分格旁邊插中點的那一圈）。
+ *  廣場：在框裡、不在 hole 裡 ⇒ l.h ＋ 0.06。只有 e.rk／e.pk 的邊才量。 */
+function townFolkPaveY(e, x, z) {
+  var y = NaN, i, s;
+  if (e.rk && townFolkNear(e, x, z) <= 0.25) {
+    var S = TOWN_FOLK_NEAR.narrow ? 1 : 2, X = x + BED.ax, Z = z + BED.az, x0 = Math.floor(X / S) * S, z0 = Math.floor(Z / S) * S, u = (X - x0) / S, v = (Z - z0) / S, lx = x0 - BED.ax, lz = z0 - BED.az;
+    var hb = townFolkRoadNode(e, lx + S, lz), hc = townFolkRoadNode(e, lx, lz + S);
+    if (u + v <= 1) { var ha = townFolkRoadNode(e, lx, lz); y = ha + u * (hb - ha) + v * (hc - ha); }
+    else { var hd = townFolkRoadNode(e, lx + S, lz + S); y = hd + (1 - u) * (hc - hd) + (1 - v) * (hb - hd); }
+  }
+  if (e.pk) for (i = 0; i < e.pk.length; i++) {
+    s = e.pk[i]; if (s.top <= y || !townFolkInRect(s, x, z) || (s.hole && townFolkInRect(s.hole, x, z))) continue;
+    y = s.top;
+  }
+  return y;
+}
+/** (x, z) 在 townFolkGraph 的長方形 r（原點 ＋ u、v 兩邊）裡。 */
+function townFolkInRect(r, x, z) {
+  var px = x - r.ox, pz = z - r.oz, a = (px * r.ux + pz * r.uz) / r.uL2, b = (px * r.vx + pz * r.vz) / r.vL2;
+  return a >= 0 && a <= 1 && b >= 0 && b <= 1;
+}
+/** 鎮民在邊 e 上 (x, z) 那一點腳踩在哪：地形（＋ TOWN_ROAD_LIFT；水面上不算）、路面與廣場（townFolkPaveY）、碼頭棧橋的面與樓梯的踏面（townFolkDeckY）取最高的那一面；都沒有 ⇒ NaN（不畫）。
+ *  走動時每一格照實際的位置重算（不是出生時算一次）；大多數的邊只有一兩段路、沒有廣場 ⇒ 每位多量幾段的距離。 */
+function townFolkFootY(e, x, z) {
+  var g = townRoadHeight(x, z), y = g === g && g > 0.05 ? g + TOWN_ROAD_LIFT : NaN, t;
+  if (e.rk || e.pk) { t = townFolkPaveY(e, x, z); if (t === t && !(t <= y)) y = t; }
+  if (e.dk || e.sk) { t = townFolkDeckY(e, x, z); if (t === t && !(t <= y)) y = t; }   // 踩在碼頭、棧橋的面上或樓梯上（比路面高）⇒ 照面板、踏面（棧橋底下是水也照畫）
   return y;
 }
 /** 居民 a 的固定路線與一圈的時間表：從起點那條邊照 townHash 往前走最多 TOWN_FOLK_HOPS 段（路口不折返、死巷就停），去程、終點停一下、原路回程、起點停一下。
@@ -556,9 +629,7 @@ function townFolkDraw(P, K, eye, PL, fogD, clock) {
       var e = G.edges[a.e], off = (ln ? (Math.floor(a.id / 10) % 2 ? 0.32 : -0.32) : 0.18 * a.dir + a.lane) * Math.max(0.3, Math.min(2.8, e.w - 1.2));   // 靠右走（照前進方向）＋ 車道偏移
       var x = e.ax + e.dx * a.t + e.nx * off, z = e.az + e.dz * a.t + e.nz * off;
       if (Math.hypot(x - eye[0], z - eye[2]) > maxD) return;
-      var y = townRoadHeight(x, z), yd = e.dk || e.sk ? townFolkDeckY(e, x, z) : NaN;
-      if (yd === yd && !(yd < y + TOWN_ROAD_LIFT)) y = yd;               // 踩在碼頭、棧橋的面上或樓梯上（比整好的路面高）⇒ 照面板、踏面（棧橋底下是水也照畫）
-      else { if (!(y === y) || y <= 0.05) return; y += TOWN_ROAD_LIFT; }
+      var y = townFolkFootY(e, x, z); if (!(y === y)) return;            // 腳下實際的那一面：地形、路面（路基）、廣場、碼頭棧橋、樓梯取最高
       for (var i = 0; i < 6; i++) { var pl = PL[i]; if (pl[0] * x + pl[1] * (y + 0.9 * TOWN_FOLK_SCALE) + pl[2] * z + pl[3] < -2.2 * TOWN_FOLK_SCALE) return; }
       var mv = (e.dx * rx + e.dz * rz) * a.dir;
       if (mv > 0.08) a.face = 1; else if (mv < -0.08) a.face = -1;
@@ -619,6 +690,19 @@ function townFolkStat(T) {
       o.agents = on.length;
       o.on = on.map(function (a) { townFolkAt(G, a, TOWNS.flagClock || 0); var e = G.edges[a.e]; return e.deck ? { id: a.id, x: +(e.ax + e.dx * a.t).toFixed(1), z: +(e.az + e.dz * a.t).toFixed(1) } : null; }).filter(Boolean).slice(0, 8);   // 這一刻站在碼頭、棧橋上的（排鏡頭用）
       o.deckM = Math.round(o.deckM); o.upMax = +o.upMax.toFixed(2);
+      return o;
+    })(),
+    pave: (function () {                                                 // 路面、廣場（townFolkPaveY）：rk／pk 碰得到路段、廣場的邊；pts／up／upMax：全部的邊沿中心線每 1 m 一點、地形到了的點裡，
+      var o = { rk: 0, pk: 0, pts: 0, up: 0, upMax: 0, plaza: 0, plazaUp: 0, plazaMax: 0, worst: null };   //   鋪面比地形 ＋ TOWN_ROAD_LIFT 高的點數、最多高幾公尺（＝ 以前陷進去多深）；plaza…：其中在廣場上的；worst：最深那一點（排鏡頭用）
+      G.edges.forEach(function (e) {
+        if (e.rk) o.rk++; if (e.pk) o.pk++;
+        if (e.rk || e.pk) for (var t = 0.5; t < e.L; t += 1) {
+          var x = e.ax + e.dx * t, z = e.az + e.dz * t, g = townRoadHeight(x, z); if (!(g > 0.05)) continue;
+          var y = townFolkPaveY(e, x, z), dy = y - g - TOWN_ROAD_LIFT, onP = e.pk && e.pk.some(function (s) { return townFolkInRect(s, x, z); }); o.pts++; if (onP) o.plaza++;
+          if (dy > 0.05) { o.up++; if (onP) { o.plazaUp++; o.plazaMax = Math.max(o.plazaMax, dy); } if (dy > o.upMax) { o.upMax = dy; o.worst = { x: +x.toFixed(1), y: +y.toFixed(2), z: +z.toFixed(1), g: +g.toFixed(2), plaza: !!onP }; } }
+        }
+      });
+      o.upMax = +o.upMax.toFixed(2); o.plazaMax = +o.plazaMax.toFixed(2);
       return o;
     })(),
     workSites: G.agents.filter(function (a) { return a.work && F && F.sheets[F.people[a.art].sheet].name === 'workers'; }).slice(0, 24).map(function (a) { var e = G.edges[a.e]; return { id: F.people[a.art].id, lot: a.work.lot, use: a.work.use, distance: +a.work.distance.toFixed(2), x: +(e.ax + e.dx * a.t).toFixed(2), z: +(e.az + e.dz * a.t).toFixed(2) }; }),
