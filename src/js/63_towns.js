@@ -119,7 +119,13 @@ var TOWN_DIST_KEYS = ['lots', 'roads', 'piers', 'quay', 'stairs', 'berths', 'zon
 var TOWN_CUT_WIN = 1 << 30;
 //   ⛔ 位元表叫 onD：TOWNS.on 是「畫不畫城鎮」的開關（?towns=0、__game.town(at, on)）—— 以前也叫 on ⇒ ?towns=0 關不掉、__game.town(at, true) 把位元表蓋成 true（只剩骨架）
 //   TOWNS.onW[城] ＝ 照窗的那幾樣現在建哪幾樣（{ 欄: Uint8Array, sig }；townDistWin）
-TOWNS.dist = {}; TOWNS.full = {}; TOWNS.onD = {}; TOWNS.onW = {}; TOWNS.onT = {}; TOWNS.focus = null; TOWNS.distMode = null; TOWNS.distT = 0; TOWNS.dwell = null;
+TOWNS.dist = {}; TOWNS.full = {}; TOWNS.onD = {}; TOWNS.onW = {}; TOWNS.onT = {}; TOWNS.focus = null; TOWNS.distMode = null; TOWNS.distT = 0; TOWNS.dwell = null; TOWNS.leg = {};
+//   路段（Blocksail TASK-1033；Tim 2026-10-27「只要路段區 但是會根據路段移動載入附近區域…(根據所在路段載入 但不特別顯示)」「路段長度照畫質的窗半徑」）：
+//     城區之間手拉的路（規劃帶 leg ＝ 中線，路那一份規劃的當地公尺；Blocksail town_export.js townDistAttach）照窗半徑平均切段（townLegCut）；
+//     城鎮模式鏡頭拖到路上（離中線 TOWN_LEG_W 內、不在任何一區裡 —— 或在區的範圍裡、卻在那一區東西的外框外）停 TOWN_DIST_DWELL 秒 ⇒ 焦點換到那一段的中心（TOWNS.leg[城]），窗跟著走；
+//     要哪幾區改成「整區在窗裡的」（townDistWant）。不是城區：不佔位元、🏙 城區頁不列、不跳提示、TOWNS.dist 留在上一區（建築模式照舊對那一區 ⇒ 路上蓋不了）。
+//     拖回某一區裡 ⇒ 照舊換到那一區。航海模式不看。
+var TOWN_LEG_W = 300, TOWN_LEG_PAD = 150;                                 // 〔佔位〕離路中線幾公尺內算在路上；區的東西外框外擴幾公尺內照舊算那一區
 //   自己一份規劃的城區（Blocksail TASK-0987；規劃 id「<城>~<區>」、districts 是城的整份清單換到它自己的當地公尺、cut 照它算）⇒ 跟主規劃一樣照遮罩載；
 //     焦點照城記（TOWNS.dist[城]）⇒ 一座城的每一份規劃一起換區；拖曳換區只看主規劃（它的 districts 一樣是整份）。
 /** 規劃 id ⇒ 城的 id（自己一份規劃的城區「<城>~<區>」⇒ <城>；同 Blocksail world/areas.js townUnitCity）。 */
@@ -177,6 +183,12 @@ function townDistWant(p, me, town) {
     var q = townDistLocal(p, me.px, me.pz), R = D.map(function (d, i) { return { i: i, m: townPip(q[0], q[1], d.poly) ? 0 : townPolyDist(q[0], q[1], d.poly) }; });
     var keep = 0; R.forEach(function (r) { if (r.m <= TOWN_DIST_DROP) keep |= 1 << r.i; });
     return { list: R.filter(function (r) { return r.m <= TOWN_DIST_R; }).sort(function (a, b) { return a.m - b.m; }).map(function (r) { return r.i; }), keep: keep };
+  }
+  if (TOWNS.leg[id] && TOWNS.focus) {                                    // 焦點在路段上 ⇒ 整區在窗裡的都建，離焦點近的先（沒有一定要建的那一區）
+    var f = townDistLocal(p, TOWNS.focus.x, TOWNS.focus.z), G = D.filter(function (d) { return townDistFits(p, idx(d)); })
+      .sort(function (a, b) { return Math.hypot(a.c[0] - f[0], a.c[1] - f[1]) - Math.hypot(b.c[0] - f[0], b.c[1] - f[1]); }).map(idx), kg = 0;
+    G.forEach(function (i) { kg |= 1 << i; });
+    return { list: G, keep: kg };
   }
   var F = D.filter(function (d) { return d.id === TOWNS.dist[id]; })[0];
   if (!F) { var s = townDistLocal(p, me.px, me.pz); F = townDistAt(D, s[0], s[1]); TOWNS.dist[id] = F.id; }   // 進城鎮模式 ⇒ 旗艦停的那一區
@@ -262,17 +274,59 @@ function townDistDrag(p, now) {
   var D = p.districts, c = CAM.look || CAM.tgt; if (!c) return;
   var q = townDistLocal(p, c[0], c[2]), d = null;
   for (var i = 0; i < D.length; i++) if (townPip(q[0], q[1], D[i].poly)) { d = D[i]; break; }
-  if (!d || d.id === TOWNS.dist[p.id]) { if (TOWNS.dwell && TOWNS.dwell.town === p.id) TOWNS.dwell = null; return; }
+  //   落在某一區的範圍裡、卻在那一區東西的外框（townDistBoxes 外擴 TOWN_LEG_PAD）外面、又在路上 ⇒ 算路段：
+  //     範圍可以比東西大得多（亞拉斯的主城區 ＝ 整座城的範圍 19 × 14 km）⇒ 以前路的頭 4 km 一直算主城區、焦點不動，離中心 2 km 以外的路浮在霧上
+  if (d) { var bx = townDistBoxes(p)[i]; if (bx && (q[0] < bx[0] - TOWN_LEG_PAD || q[0] > bx[2] + TOWN_LEG_PAD || q[1] < bx[1] - TOWN_LEG_PAD || q[1] > bx[3] + TOWN_LEG_PAD) && townLegAt(p.id, c[0], c[2])) d = null; }
+  if (!d) { townLegDrag(p, c, now); return; }                            // 不在任何一區（或在區的東西外面的路上）⇒ 看是不是在路上
+  if (d.id === TOWNS.dist[p.id] && !TOWNS.leg[p.id]) { if (TOWNS.dwell && TOWNS.dwell.town === p.id) TOWNS.dwell = null; return; }
   if (!TOWNS.dwell || TOWNS.dwell.town !== p.id || TOWNS.dwell.dist !== d.id) { TOWNS.dwell = { town: p.id, dist: d.id, t: now }; return; }
   if (now - TOWNS.dwell.t < TOWN_DIST_DWELL * 1000) return;
-  TOWNS.dwell = null; TOWNS.dist[p.id] = d.id;
+  TOWNS.dwell = null; TOWNS.dist[p.id] = d.id; delete TOWNS.leg[p.id];
   var w = townDistWorld(p, d); TOWNS.focus = { town: p.id, x: w[0], z: w[1] };
   var me = SHIPS[PLAYER_I]; if (me) note(me, '🏙 ' + (p.name || p.id) + '・' + d.name);
+}
+/** 路段的長度（公尺）＝ 畫質的窗半徑（08_seabed.js BED_WIN_M；近 2 km、中 4 km、遠 6 km）。 */
+function townLegLen() { var g = GFX.chartr != null ? GFX.chartr : BED_WIN_M.length - 1; return BED_WIN_M[Math.max(0, Math.min(BED_WIN_M.length - 1, g))]; }
+/** 一條路的中線 P（當地公尺）照段長 L 平均切 ⇒ { S: 每一點的累計長度, len, n（幾段）, seg（一段多長）}；Blocksail tools/district_reach.cjs 抽這一支量（⛔ 改了兩邊一起量）。 */
+function townLegCut(P, L) {
+  var S = [0], i;
+  for (i = 1; i < P.length; i++) S.push(S[i - 1] + Math.hypot(P[i][0] - P[i - 1][0], P[i][1] - P[i - 1][1]));
+  var len = S[S.length - 1], n = Math.max(1, Math.ceil(len / L - 1e-9));
+  return { S: S, len: len, n: n, seg: len / n };
+}
+/** 中線 P 上累計長度 s 那一點（當地公尺）。 */
+function townLegPt(P, S, s) {
+  for (var i = 1; i < P.length; i++) if (S[i] >= s || i === P.length - 1) { var u = S[i] > S[i - 1] ? Math.max(0, Math.min(1, (s - S[i - 1]) / (S[i] - S[i - 1]))) : 0; return [P[i - 1][0] + (P[i][0] - P[i - 1][0]) * u, P[i - 1][1] + (P[i][1] - P[i - 1][1]) * u]; }
+  return P[0].slice();
+}
+/** 世界座標 (x, z) 在城 city 的哪一條路、哪一段 ⇒ { key, u（路那一份規劃）, k, n, w: 那一段中心的世界座標 }｜null（離每一條路都超過 TOWN_LEG_W）。 */
+function townLegAt(city, x, z) {
+  var best = null, bd = TOWN_LEG_W, L = townLegLen();
+  Object.keys(TOWNS.full).forEach(function (id) {
+    var p = TOWNS.full[id], P = p && p.leg; if (!P || P.length < 2 || townCityOf(id) !== city || id === city) return;
+    var q = townDistLocal(p, x, z), C = p.legCut && p.legCut.L === L ? p.legCut : (p.legCut = Object.assign(townLegCut(P, L), { L: L }));
+    for (var i = 1; i < P.length; i++) {
+      var a = P[i - 1], b = P[i], dx = b[0] - a[0], dy = b[1] - a[1], L2 = dx * dx + dy * dy, u = L2 ? Math.max(0, Math.min(1, ((q[0] - a[0]) * dx + (q[1] - a[1]) * dy) / L2)) : 0;
+      var m = Math.hypot(a[0] + u * dx - q[0], a[1] + u * dy - q[1]); if (m > bd) continue;
+      var k = Math.min(C.n - 1, Math.floor((C.S[i - 1] + u * (C.S[i] - C.S[i - 1])) / C.seg)), c = townLegPt(P, C.S, (k + 0.5) * C.seg);
+      bd = m; best = { key: id + ':' + k + '/' + C.n, u: id, k: k, n: C.n, w: [(+p.ox || 0) + (+p.kx || 1) * c[0] - BED.ax, (+p.oy || 0) + c[1] - BED.az] };
+    }
+  });
+  return best;
+}
+/** 城鎮模式：鏡頭看的那一點在路上（不在任何一區）、換了一段、停了 TOWN_DIST_DWELL 秒 ⇒ 焦點換到那一段的中心（不跳提示、TOWNS.dist 不動）。 */
+function townLegDrag(p, c, now) {
+  var g = townLegAt(p.id, c[0], c[2]), cur = TOWNS.leg[p.id], key = g && 'leg:' + g.key;
+  if (!g || (cur && cur.key === g.key)) { if (TOWNS.dwell && TOWNS.dwell.town === p.id) TOWNS.dwell = null; return; }
+  if (!TOWNS.dwell || TOWNS.dwell.town !== p.id || TOWNS.dwell.dist !== key) { TOWNS.dwell = { town: p.id, dist: key, t: now }; return; }
+  if (now - TOWNS.dwell.t < TOWN_DIST_DWELL * 1000) return;
+  TOWNS.dwell = null; TOWNS.leg[p.id] = { key: g.key, u: g.u, k: g.k, n: g.n };
+  TOWNS.focus = { town: p.id, x: g.w[0], z: g.w[1] };
 }
 /** 換到 k 那一區（🏙 城區頁、D）：焦點換過去、鏡頭跳到那一區的中心（自由鏡頭）、海域的窗以它為中心；下一格 townDistFrame 照新的焦點收、補。⇒ 換了沒 */
 function townDistGo(id, k) {
   var p = TOWNS.full[id], d = p && (p.districts || []).filter(function (q) { return q.id === k; })[0]; if (!d || !BED) return false;
-  TOWNS.dist[id] = k; TOWNS.dwell = null; TOWNS.distT = 0;
+  TOWNS.dist[id] = k; TOWNS.dwell = null; TOWNS.distT = 0; delete TOWNS.leg[id];
   var w = townDistWorld(p, d), h = townGround(w[0], w[1]);
   TOWNS.focus = { town: id, x: w[0], z: w[1] };
   camSet({ mode: 0, follow: null, see: null, pan: [0, 0], tgt: [w[0], isFinite(h) ? Math.max(0, h) : 0, w[1]], dist: Math.max(CAM.dist || 0, 500) });   // 自由鏡頭（CAM 只由 03_camera.js 寫）
@@ -282,7 +336,7 @@ function townDistGo(id, k) {
 /** 每一格（89_townui.js 的 frame）：換模式 ⇒ 城鎮模式從旗艦停的那一區重來；每 TOWN_DIST_EVERY 秒照 townDistWant 收、補（一次最多多一區）。 */
 function townDistFrame() {
   var town = !!modeRule('town'), now = performance.now();
-  if (town !== TOWNS.distMode) { TOWNS.distMode = town; TOWNS.focus = null; TOWNS.dist = {}; TOWNS.dwell = null; TOWNS.distT = 0; }
+  if (town !== TOWNS.distMode) { TOWNS.distMode = town; TOWNS.focus = null; TOWNS.dist = {}; TOWNS.dwell = null; TOWNS.distT = 0; TOWNS.leg = {}; }
   var me = SHIPS[PLAYER_I]; if (!me || !BED || !BED.A) return;          // 旗艦還沒來 ⇒ 只有骨架
   if (town) Object.keys(TOWNS.full).forEach(function (id) { var p = TOWNS.full[id]; if (p.cut && townCityOf(id) === id && TOWNS.dist[id]) townDistDrag(p, now); });
   if (now < TOWNS.distT) return;
