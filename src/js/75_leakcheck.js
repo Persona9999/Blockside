@@ -5,7 +5,7 @@
 // 進水（33_flood.js）只算打出來的破口與被打掉的門 ⇒ 這裡另外量「船本來的樣子，水面升到哪裡會流進艙裡」：
 //   水面從船底一路往上升，船外的水照 6 連通灌。擋水的：船的格（T.base，玻璃也算）、門（關著的外框，25_doors.js）、
 //   砲門與槳門（遊戲的規矩：砲門在就不漏水 ⇒ 沿砲管從砲口往裡 6 格到往外 14 格（LK_PORT）、左右 LK_PORT_W、上下 LK_PORT_Z 格的空格塞住，
-//   再加砲口 LK_GUN 格以內船殼外框的缺口（見下）；槳照槳座 pivot ±LK_OAR 格）。
+//   再加砲口 LK_GUN 格以內船殼外框的缺口（見下）；槳照槳座 pivot ±LK_OAR 格；舵照舵桿與舵柄穿過船殼的那一段 ±LK_RUD 格，見下）。
 //   每一格記「水面要升到多高才灌得到」＝ 從船外走過來的路上最高的那一格（最小化路上的最高點；照高度一層一層的水桶佇列）；
 //   水面高過那一格的底（T.zw 是水面的格高度，32_hull.js tonsAt）就灌得進 ⇒ 吃水再深 (那一格 − T.zw) × S 公尺 ⇒ 照浮力表（tonsAt）換成要多載幾噸。
 //   傾斜 heel 度（正 ＝ 右舷朝下）：水面在船的座標裡是斜的 ⇒ 每一格的高度換成 z − tanθ ×（y − 中線）再比（浮力表是正的那一份 ⇒ 噸數是近似）。
@@ -17,13 +17,15 @@
 //     🩸 flSkin 的列在砲門那幾列找不到那一舷的牆（刻穿了）或找到中線附近的東西 ⇒ 每一列兩舷取前後 LK_GAP 格內最外的那一格。
 //   漏點：水第一次跨進船殼外框那一步的前一格（框外最後一格 ⇒ 落在開口上）；跨進之後流到哪都跟著它（🩸 不跟 ⇒ 水經過頭上沒蓋的艙口往下，艙口又被記成一個漏點）。
 //   同一個漏點灌到的艙裡空格併成一筆，照多高才灌得到排。
-//   漏點是什麼：旁邊有玻璃 ＝ 窗、在門的外框旁 ＝ 門、旁邊有砲 ＝ 砲門旁（塞住了還漏）、旁邊有螺旋槳或軸 ＝ 螺旋槳軸孔、水線以上那一列沒有船而底下有 ＝ 舷牆頂（露天甲板）、水線以上頭上空著 ＝ 露天甲板（艙口、桅孔）、其他 ＝ 船殼的縫。
+//   漏點是什麼：卡住水位的那一關（e.lv 那個高度）以上、漏點那一舷 ±LK_NEAR 列以內有一列一路到頂整排沒有船（上面敞開，不是牆上的洞）＝ 水是漫過舷牆頂進來的 ⇒ 舷牆頂（露天甲板），不看漏點旁邊有什麼
+//     （TASK-1039，Tim 2026-10-27「分類也一起改成看水漫過舷牆頂」；🩸 夜隼號的漏點在支索板欄杆柱底下 ⇒ 頭上有東西 ⇒ 報「船殼的縫」，往後 0.5 m 同一個水位就是「露天甲板」）；
+//     其他照漏點那一格：旁邊有玻璃 ＝ 窗、在門的外框旁 ＝ 門、旁邊有砲 ＝ 砲門旁（塞住了還漏）、旁邊有螺旋槳或軸 ＝ 螺旋槳軸孔、水線以上那一列沒有船而底下有 ＝ 舷牆頂（露天甲板）、水線以上頭上空著 ＝ 露天甲板（艙口、桅孔）、其他 ＝ 船殼的縫。
 //   ⚠ 漏點是水跨進外框的地方，不一定是最窄的那一關（定遠號：從船尾底下進框、要升到水線下 1.2 m 才灌進艙）—— 吃水幾 m 才是那一關的高度。
 // 只看到沉沒線（32_hull.js sinkLineT）上面 LK_OVER 格為止：再高船已經判沉了。不算浪。
 // 用的地方：觀察玩法的面板（86_inspect.js「💧 超載極限」：正的量一次、傾斜 5／10／15° 兩舷各量一次、掛漏點標籤）、
 //   匯入檢查（75_shipcheck.js R.info.leak；設計水線就漏，或沉沒線以下從窗、縫、軸孔漏 ⇒ ⚠）、__game.leak(heel, i, hole)（?debug=1）。
 // ⛔ 只在按了才量（一艘約 1–4 秒）；一般遊戲一行都不多算。
-var LK_COVER = 30, LK_GAP = 16, LK_OVER = 6, LK_NEAR = 3, LK_GUN = 12, LK_BIN = 6, LK_LIST = 12, LK_VOL = 1500, LK_PORT = [-6, 14], LK_PORT_W = 6, LK_PORT_Z = [-7, 6], LK_OAR = 3;
+var LK_COVER = 30, LK_GAP = 16, LK_OVER = 6, LK_NEAR = 3, LK_GUN = 12, LK_BIN = 6, LK_LIST = 12, LK_VOL = 1500, LK_PORT = [-6, 14], LK_PORT_W = 6, LK_PORT_Z = [-7, 6], LK_OAR = 3, LK_RUD = 3;
 /** 量一次。heel：傾斜幾度（正 ＝ 右舷朝下；不給 ＝ 正的）。回 { heel, zw, sink, sinkT（到沉沒線要多載幾噸）, n（艙裡幾格）, first, list: [{ lvl（吃水再深幾 m）, tons, kind, deck, side, x（離船尾 m）, gate, at, cells, below }], more, ms }。 */
 function leakCheck(sh, heel) {
   var t0 = performance.now(), T = sh.T, B = T.base, sx = B.sx, sy = B.sy, sink = sinkLineT(T), K = flSkin(T);
@@ -47,6 +49,30 @@ function leakCheck(sh, heel) {
   sh.models.forEach(function (m) {                                     // 槳門：槳座四周
     var p = m.kind === 'oar' && m.pts && m.pts.pivot; if (!p) return;
     for (var dz = -LK_OAR; dz <= LK_OAR; dz++) for (var dy = -LK_OAR; dy <= LK_OAR; dy++) for (var dx = -LK_OAR; dx <= LK_OAR; dx++) fill(Math.floor(p[0]) + dx, Math.floor(p[1]) + dy, Math.floor(p[2]) + dz, 3);
+  });
+  // 舵：舵在 ⇒ 舵桿、舵柄穿過船殼的洞算封住（同砲門；史實有帆布舵套。Tim 2026-10-27 TASK-1039「漏水檢查把舵桿／舵柄穿過船殼那一段當封住（同砲門）」）
+  //   舵桿 ＝ meta hinge 沿 axis 到 pts stock-top；舵柄 ＝ 舵桿上跟 pts tiller-end 同高那一點到 tiller-end。每 0.5 格取一點，
+  //   那一點兩舷（±y）LK_RUD 格以內都有船的格（穿在船殼的洞裡 ＝ 穿過船殼的那一段）⇒ ±LK_RUD 的盒子裡的空格塞住。
+  //   🩸 夜隼號的舵柄從船尾板正中間穿進船裡（z 36～38）⇒ 舵的模型不擋水 ⇒ 吃水再深 2.1 m 就從那個洞灌進艙、報成「窗旁的縫」與兩舷轉角「船殼的縫」。
+  //   🩸 第一版「盒子碰到船的格就塞」⇒ 舵桿貼著艉柱一路到龍骨都塞了，定遠號、松島號龍骨旁「設計水線就漏」那一處被蓋掉（全船隊前後對照量到的）。
+  sh.models.forEach(function (m) {
+    var mt = m.kind === 'rudder' && m.meta, P = m.pts || {}; if (!mt || mt.hinge_x === undefined || !(+mt.axis_z)) return;
+    var h = [+mt.hinge_x, +mt.hinge_y, +mt.hinge_z], ax = [+mt.axis_x || 0, +mt.axis_y || 0, +mt.axis_z], segs = [];
+    function onStock(zz) { var t = (zz - h[2]) / ax[2]; return [h[0] + ax[0] * t, h[1] + ax[1] * t, zz]; }
+    if (P['stock-top']) segs.push([h, onStock(P['stock-top'][2])]);
+    if (P['tiller-end']) segs.push([onStock(P['tiller-end'][2]), P['tiller-end']]);
+    segs.forEach(function (s) {
+      var a = s[0], b = s[1], L = Math.hypot(b[0] - a[0], b[1] - a[1], b[2] - a[2]);
+      for (var t = 0; t <= L; t += 0.5) {
+        var f = L ? t / L : 0, cx = Math.floor(a[0] + (b[0] - a[0]) * f), cy = Math.floor(a[1] + (b[1] - a[1]) * f), cz = Math.floor(a[2] + (b[2] - a[2]) * f), sP = false, sM = false, dx, dy, dz;
+        if (cx < 0 || cx >= sx || cz < 0 || cz >= zMax) continue;
+        for (dy = 1; dy <= LK_RUD; dy++) {
+          if (cy + dy < sy && blk[cz * SXY + (cy + dy) * sx + cx] === 1) sP = true;
+          if (cy - dy >= 0 && blk[cz * SXY + (cy - dy) * sx + cx] === 1) sM = true;
+        }
+        if (sP && sM) for (dz = -LK_RUD; dz <= LK_RUD; dz++) for (dy = -LK_RUD; dy <= LK_RUD; dy++) for (dx = -LK_RUD; dx <= LK_RUD; dx++) fill(cx + dx, cy + dy, cz + dz, 3);
+      }
+    });
   });
   var yPf = new Int16Array(K.yP.length).fill(-1), yMf = new Int16Array(K.yM.length).fill(-1);
   for (z = 0; z < Math.min(zMax, K.zTop); z++) for (x = 0; x < K.nxv; x++) {
@@ -141,8 +167,21 @@ function leakCheck(sh, heel) {
   });
   function near(p, f) { for (var dz = -LK_NEAR; dz <= LK_NEAR; dz++) for (var dy = -LK_NEAR; dy <= LK_NEAR; dy++) for (var dx = -LK_NEAR; dx <= LK_NEAR; dx++) if (f(p[0] + dx, p[1] + dy, p[2] + dz)) return true; return false; }
   function glassAt(a, b, c) { return a >= 0 && b >= 0 && c >= 0 && a < sx && b < sy && c < B.sz && !!T.glsG.get(a, b, c); }
+  /** 卡住水位的那一關（e.lv 的高度）以上，漏點那一舷 ±LK_NEAR 列以內有一列 x 從那個高度一路到 zMax 那一半整排沒有船 ⇒ 水是漫過舷牆頂進來的（見檔頭）。
+   *  🩸 只看那一個高度 ⇒ 蘇斯克哈納號舷側在 z 77 有一個 3 格的洞（上下都有牆）、那一層艙裡又剛好空著 ⇒ 被當成舷牆頂，真的洞被蓋掉（全船隊對照量到的）。 */
+  function overTop(e) {
+    var p = e.gate, zl = Math.round(e.lv + tt * (p[1] + 0.5 - T.cy)), left = p[1] + 0.5 < T.cy;
+    if (zl < T.zw || zl >= zMax) return false;
+    for (var dx = -LK_NEAR; dx <= LK_NEAR; dx++) {
+      var xx = p[0] + dx, zz; if (xx < 0 || xx >= sx || !colAny[xx]) continue;
+      for (zz = zl; zz < zMax; zz++) { var ra = zz * sx + xx; if (left ? rLo[ra] + 0.5 < T.cy : rHi[ra] >= 0 && rHi[ra] + 0.5 > T.cy) break; }
+      if (zz >= zMax) return true;
+    }
+    return false;
+  }
   function kindOf(e) {
     var p = e.gate, inB = function (b) { return p[0] >= b[0] - LK_NEAR && p[0] <= b[3] + LK_NEAR && p[1] >= b[1] - LK_NEAR && p[1] <= b[4] + LK_NEAR && p[2] >= b[2] - LK_NEAR && p[2] <= b[5] + LK_NEAR; };
+    if (overTop(e)) return '舷牆頂（露天甲板）';
     if (T.glsG && (near(p, glassAt) || near(e.at, glassAt))) return '窗（玻璃旁的縫）';
     if (doorB.some(inB)) return '門';
     if ((sh.guns || []).some(function (gn) { var o = gn.muz; return o && Math.abs(o[0] - p[0]) <= LK_GUN && Math.abs(o[1] - p[1]) <= LK_GUN && Math.abs(o[2] - p[2]) <= LK_GUN / 2; })) return '砲門旁（塞住了還漏）';
