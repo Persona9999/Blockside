@@ -56,8 +56,16 @@ function selfBlock(sh, g, target) {
   }
   return false;
 }
-/** 這門砲照初速與最大仰角（gunElev；超過 45° 照 45°）打得到多遠（m，水平）：R ＝ V² sin(2θ)／g；9 成當安全餘量。 */
-function gunMaxR(GS) { return 0.9 * GS.V * GS.V * Math.sin(2 * Math.min(gunElev(GS), Math.PI / 4)) / G; }
+/** 這門砲照初速與最大仰角（gunElev；超過 45° 照 45°）打得到多遠（m，水平）：R ＝ V² sin(2θ)／g；9 成當安全餘量。
+ *  dh：砲口比目標高幾公尺（Tim 2026-10-27「高處的砲射程照高度加長吧（gunMaxR 算進高低差）」）⇒ 從高處打出去落得遠：R ＝ V cosθ／g ·（V sinθ ＋ √(V² sin²θ ＋ 2g·dh)）；dh ＝ 0 就是上面那條。
+ *  只加長、不縮短：目標比砲口高（打桅）照平地那條（⛔ 照算 ⇒ 船對船瞄帆具那一輪的射程變短）。沒給 dh（艦長估射程、閒著的砲手、港口那幾格）⇒ 照舊平地。
+ *  ⛔ 以前一律平地 ⇒ 托爾圖加岩堡（山頂 128 m）射程 1,287 m，港裡的船都在 1.5 km 以外 ⇒ 敵對了也永遠不開砲。彈道本身（shotEl）一直有算高差，擋住的只是這道閘。 */
+function gunMaxR(GS, dh) {
+  var a = Math.min(gunElev(GS), Math.PI / 4);
+  if (!(dh > 0)) return 0.9 * GS.V * GS.V * Math.sin(2 * a) / G;
+  var vs = GS.V * Math.sin(a);
+  return 0.9 * GS.V * Math.cos(a) / G * (vs + Math.sqrt(vs * vs + 2 * G * dh));
+}
 // 仰角與曲射（Tim 2026-10-18：「投石機是否可以給高拋物線彈道(可以砸到甲板)」「之後也可能用在迫擊砲(臼炮)上 曲射炮彈」）——砲種表兩個通用的鍵：
 //   elev（度）：最大仰角，沒寫 ＝ 0.26 rad（15°，大砲的砲門）。打不到 ⇒ 照 min(elev, 45°) 打最遠。
 //   lob（true）：曲射 ⇒ 兩條拋物線取高的那一條（從上面砸下來，打得到甲板）；高的那條超過 elev（太近）⇒ 退回低的那條。
@@ -73,7 +81,7 @@ function shotEl(GS, d, dy) {
   var hi = Math.atan((v2 + Math.sqrt(disc)) / (G * d));
   return hi <= EL ? hi : lo;
 }
-function gunInRange(sh, g, target) { var mw = M4.pt(sh.M, g.muz[0], g.muz[1], g.muz[2]); return Math.hypot(target[0] - mw[0], target[2] - mw[2]) <= gunMaxR(GUNS[g.type]); }
+function gunInRange(sh, g, target) { var mw = M4.pt(sh.M, g.muz[0], g.muz[1], g.muz[2]); return Math.hypot(target[0] - mw[0], target[2] - mw[2]) <= gunMaxR(GUNS[g.type], mw[1] - target[1]); }   // 高低差照砲口與那一點（gunMaxR）
 /** 一發砲彈：從 muz（格座標的砲口）照 target 算仰角、前置量、散布，放進 BALLS。回：{ mw 世界的砲口, dir 出膛方向 }。 */
 function fireShot(sh, g, target, ammo, muz) {
   var mw = M4.pt(sh.M, muz[0], muz[1], muz[2]);
