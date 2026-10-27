@@ -225,6 +225,13 @@ function shipCheck(id) {
     R.ladcheck.forEach(function (L) { L.issues.forEach(function (i) { add(i.lv, '樓梯：' + i.what, L.name, i.msg, i.fix); }); });
     R.deckcheck = deckLink(sh); R.info.deckcheck = deckLinkSummary(R.deckcheck);   // ⑤ 甲板連不連得到、⑥ 艙底下不下得去（TASK-1028；75_ladcheck.js deckLink）
     R.deckcheck.issues.forEach(function (i) { add(i.lv, '樓梯：' + i.what, i.where, i.msg, i.fix); });
+    if (!T.fixed) {                                                     // 超載極限（75_leakcheck.js；Tim 2026-10-27「檢查船吃水到多深會開始漏水嗎（檢察縫隙）」「主要就是看如果超載(吃水超果水線) 極限可以撐多少」）
+      var LK = leakSummary(sh); R.info.leak = LK.text; R.leak = LK;      //   門、砲門、槳門照遊戲的規矩算關著；設計水線就漏 ⇒ ⚠；沉沒線以下從窗、船殼的縫、軸孔漏 ⇒ ⚠（前 4 個）
+      (LK.up.list || []).filter(function (e) { return e.lvl <= 0 || (e.below && (e.kind === '船殼的縫' || e.kind === '螺旋槳軸孔' || e.kind.indexOf('窗') === 0)); }).slice(0, 4).forEach(function (e) {
+        add('warn', '漏水', e.deck + '，' + e.side + '，離船尾 ' + e.x + ' m', (e.lvl <= 0 ? '設計水線就漏（水線下 ' + (-e.lvl).toFixed(2) + ' m）' : '再多載 ' + e.tons + ' 噸（吃水再深 ' + e.lvl.toFixed(2) + ' m）') + ' 水就從' + e.kind + '流進艙裡（船外那一格 ' + e.gate.join(',') + '；沉沒線 +' + LK.up.sink + ' m）',
+          e.kind === '螺旋槳軸孔' ? '軸穿出船殼的那一圈封起來（軸是模型、不擋水 ⇒ 船殼的孔只留軸的大小或補一圈格子）' : '封住那條縫：窗的玻璃、船殼斜的地方要 6 連通整片接起來（只在斜角相碰的兩格中間水過得去）');
+      });
+    }
     (T.roomsBad || []).forEach(function (b) { add('error', '艙房', b, '艙房標得不對', 'rooms.py check（造船規格 §9.2）'); });
     (sh.medSkip || []).forEach(function (s) { add('warn', '醫療艙', s.name, s.why, '房間所在的甲板要有梯子通到'); });
     // ── 繩、帆 ──
