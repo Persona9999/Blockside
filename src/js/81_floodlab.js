@@ -615,8 +615,9 @@ function wsloshRead(s, M, r, t, U0) {
 // ?lab=wpair（＋ ship=、hz=（預設 10）、op ＝ 哪一個開口（拆過的，預設：兩間都至少 30 m³、面積最大的旁邊開口）、ha ／ hb ＝ 兩間的水面比開口底高幾公尺（預設 0.8 ／ 0.2）、dur（秒，預設 30））⇒ #lab：
 //   浮穩、釘住姿態、不打洞；只開這一個開口（33_wrsim.js opt.onlyOp），兩間照水平的水面裝水，夾（預設）與 noclamp 各跑一次。
 //   每 0.5 秒一筆 [t, a 的平均水面 − 開口底, b 的, a − b（m）, 真的穿越（下一小步兩邊反過來、差 > 1 cm）, 流向翻過來]；sum ＝ 最後的穿越、翻向次數。
+//   semi=1（TASK-0809 第 2 格「打大之後幾秒拉平」）⇒ 跑的兩組換成 clamp（一般開口）與 semi（同一個開口標成半連通，wrsSemi 那個旗標）；面積、兩邊水位都一樣。
 function wpairLab(o) {
-  o = Object.assign({ hz: 10, op: -1, ha: 0.8, hb: 0.2, dur: 30 }, o || {});
+  o = Object.assign({ hz: 10, op: -1, ha: 0.8, hb: 0.2, dur: 30, semi: 0 }, o || {});
   flowMode('sandbox'); reset(); AUTOFIRE = false; flowRun(false);
   var DT0 = DT; DT = DT_BASE = 1 / o.hz;
   var sh = SHIPS[0], i, W = sh.T.wrm;
@@ -630,8 +631,9 @@ function wpairLab(o) {
   if (oi < 0) for (var q0 = 0, bn = 0; q0 < O.n; q0++) if (O.T[q0] && O.N[q0] > bn && Math.min(W.roomVox[O.A[q0]], W.roomVox[O.B[q0]]) * S * S * S >= 30) { bn = O.N[q0]; oi = q0; }   // 兩間都至少 30 m³（⛔ 小間一下就灌滿 ⇒ 水壓改照整間滿的規則，量的就不是這個開口）
   var ra = O.A[oi], rb = O.B[oi], wb = M[1] * O.X[oi] + M[5] * O.Y[oi] + M[9] * O.Z[oi] + M[13];
   out.op = oi; out.a = ra; out.b = rb; out.z = O.Z[oi]; out.m2 = +(O.N[oi] * S * S).toFixed(2); out.aM3 = +(W.roomVox[ra] * S * S * S).toFixed(1); out.bM3 = +(W.roomVox[rb] * S * S * S).toFixed(1);
-  ['clamp', 'noclamp'].forEach(function (mode) {
+  (o.semi ? ['clamp', 'semi'] : ['clamp', 'noclamp']).forEach(function (mode) {
     var s = sh.wrs = wrsInit(sh), q; s.opt.onlyOp = oi; if (mode === 'noclamp') s.opt.noclamp = true;
+    if (mode === 'semi') { s.semi[oi] = 1; s.semiN++; }
     [[ra, o.ha], [rb, o.hb]].forEach(function (rh) {
       for (q = s.W.roomCol0[rh[0]]; q < s.W.roomCol0[rh[0] + 1]; q++) { var base = M[1] * s.X.cx[q] + M[5] * s.X.cy[q] + M[13]; s.su[q] = Math.max(0, Math.min(s.cap[q], Math.floor(wrColUnits(s.W, s.X, q, (wb + rh[1] - base) / M[9])))); }   // 模擬的段（wrsSegs）
     });
