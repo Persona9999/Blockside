@@ -1825,6 +1825,7 @@ def act_shipcheck(ids=None):
               '操舵（TASK-0777；每支舵的鏈 舵令 ⇒ 舵輪／舵柄 meta kind=wheel／tiller（＋舵索 meta steer）⇒ 舵 kind=rudder、份量 helm_share；造船規格 §9.8.1）：' + (I.get('helm') or '—（操舵的開關關著）'), '',
               '樓梯自檢（TASK-0838；每座梯子的梯口有沒有洞、兩端站不站得住、走不走得出去；每座的座標與修法見 `reports/ladcheck_%s.md`）：' % sid + (I.get('ladcheck') or '—'), '',
               '甲板連通（TASK-1028；每層甲板的每一塊、艙底照梯子接不接得到）：' + (I.get('deckcheck') or '—'), '',
+              '超載極限（再多載幾噸、吃水再深幾 m 水會從原本就有的開口流進艙裡；門、砲門、槳門照遊戲的規矩算關著；js/75_leakcheck.js）：' + (I.get('leak') or '—（堡壘、砲台不量）'), '',
               '**✗ %d　⚠ %d**' % (ne, nw), '']
         for lv, title in (('error', '## ✗ 錯誤'), ('warn', '## ⚠ 警告')):
             ks = [k for k in groups if k[0] == lv]

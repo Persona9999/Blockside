@@ -12,8 +12,11 @@
 // 好幾種一起勾（Tim 2026-10-21「同時勾選多個部件時 是否可以自動分配不同顏色(可以在部件文字上用icon標記對應顏色來比對)」）：
 //   每一種（清單的一組）一個顏色 —— 那一組有勾到的時候從 INSP_PAL 拿還沒人用的第一個，全取消 ⇒ 放回去；同一組裡個別勾的那幾件同色。
 //   清單那一行前面一顆同色的色票（.sw）、畫面上的名字標籤也是那個顏色 ⇒ 對得起來。超過 INSP_PAL 種 ⇒ 從頭再輪（色票照樣標）。
+// 「💧 超載極限」（Tim 2026-10-27「檢查船吃水到多深會開始漏水嗎」「主要就是看如果超載(吃水超果水線) 極限可以撐多少」；75_leakcheck.js）：
+//   按「量」⇒ 船正的量一次：再多載幾噸（吃水再深幾 m）水從哪裡流進艙裡、到沉沒線要多載幾噸，與前 INSP_LEAK_N 個漏點；
+//   「傾斜 5°／10°／15°」⇒ 兩舷各量一次、寫先漏的那一舷；「📍 標漏點」⇒ 最後量的那一份的漏點在畫面上掛標籤（跟部件名字同一層 #inspL）。換一場就清掉。
 // 別的玩法 INSP.on false ⇒ inspHiDraw／inspFrame 第一行就回、面板藏起來。
-var INSP = { on: false, hi: new Set(), min: false, sig: '', lbl: [], col: new Map(), mc: new Map(), name: false }, INSP_LBL = 400;
+var INSP = { on: false, hi: new Set(), min: false, sig: '', lbl: [], col: new Map(), mc: new Map(), name: false, leak: null, leakL: false }, INSP_LBL = 400, INSP_LEAK_N = 6, INSP_HEEL = [5, 10, 15];
 var INSP_PAL = [[1, 0.8, 0.15], [0.2, 0.88, 1], [1, 0.32, 0.85], [0.4, 1, 0.35], [1, 0.48, 0.12], [0.45, 0.55, 1], [1, 0.25, 0.25], [0.2, 1, 0.78], [0.75, 0.45, 1], [0.95, 0.95, 0.95], [0.6, 0.85, 0.2], [1, 0.65, 0.65], [0.25, 0.6, 0.65], [0.85, 0.7, 0.45], [0.55, 0.75, 1], [0.9, 0.4, 0.55]];   // 金、青、洋紅、綠、橘、藍、紅、青綠、紫、白、黃綠、粉、深青、沙、淡藍、玫紅（第一個 ＝ 以前唯一的那個金色；預設全勾 ⇒ 一艘十幾種，十六色才不撞）
 /** 顏色 i ⇒ CSS rgb()。 */
 function inspCss(i) { var c = INSP_PAL[i % INSP_PAL.length]; return 'rgb(' + c.map(function (v) { return Math.round(v * 255); }).join(',') + ')'; }
@@ -40,11 +43,25 @@ function inspGroups(sh) {
 }
 /** 開局（70_flow.js startSteps，bldEnter 之後）：觀察玩法 ⇒ 面板打開、高亮清空；別的玩法 ⇒ 收起來。 */
 function inspEnter() {
-  INSP.on = !!modeRule('observe') && !!SHIPS[PLAYER_I]; INSP.hi.clear(); INSP.col.clear(); INSP.sig = '';
+  INSP.on = !!modeRule('observe') && !!SHIPS[PLAYER_I]; INSP.hi.clear(); INSP.col.clear(); INSP.sig = ''; INSP.leak = null; INSP.leakL = false;
   if (INSP.on) SHIPS[PLAYER_I].models.forEach(function (m) { if (m.alive) INSP.hi.add(m); });   // 預設全勾
   if (INSP.on && INSP.min0 === undefined) INSP.min = INSP.min0 = !!(window.matchMedia && matchMedia('(max-width: 640px)').matches);   // 窄螢幕第一次進來先收起來（面板會蓋掉船）；之後照玩家按的
   $('inspP').style.display = INSP.on ? '' : 'none'; inspLabels(null);
   if (INSP.on) { inspUI(); note(SHIPS[PLAYER_I], '船隻觀察：右邊的面板切剖面、甲板、透視；勾部件 ⇒ 船上那幾件會亮（隔著船殼也看得到）'); }
+}
+/** 超載極限那一節的內容（INSP.leak ＝ { up：正的、heel：{ 度數：先漏的那一舷 }, show：標籤用哪一份 }）。 */
+function inspLeakHtml() {
+  var A = INSP.leak; if (!A) return '<div class="lk">按「量」：一路多載（吃水往下），看水先從哪裡流進艙裡（門、砲門、槳門照遊戲的規矩算關著）</div>';
+  var R = A.up, h = '<div class="lk"><b>正的</b>：' + leakLine(R) + '</div>';
+  R.list.slice(0, INSP_LEAK_N).forEach(function (e) { h += '<div class="lk it">' + (e.lvl > 0 ? '+' + e.tons + ' 噸（+' + e.lvl.toFixed(2) + ' m）' : '水線下 ' + (-e.lvl).toFixed(2) + ' m') + '　' + e.kind + '（' + e.deck + '，' + e.side + '，離船尾 ' + e.x + ' m）' + (e.below ? '' : ' ⚓沉沒線以上') + '</div>'; });
+  h += '<div class="row">' + INSP_HEEL.map(function (d) { return '<button data-heel="' + d + '"' + (A.heel[d] ? ' class="on"' : '') + '>傾斜 ' + d + '°</button>'; }).join('') + '</div>';
+  INSP_HEEL.forEach(function (d) { if (A.heel[d]) h += '<div class="lk">' + leakLine(A.heel[d]) + '</div>'; });
+  return h + '<div class="lk">沉沒線：設計水線上 ' + R.sink + ' m（多載 ' + R.sinkT + ' 噸）；不算浪；傾斜時噸數照正的浮力表、是近似</div>';
+}
+/** 漏點的畫面標籤（inspLabels 吃的形狀：c ＝ 格座標的中心、name ＝ 字）：最後量的那一份（正的或某個傾斜角）的前 INSP_LEAK_N 個。 */
+function inspLeakPts() {
+  var R = INSP.leak.show;
+  return R.list.slice(0, INSP_LEAK_N).map(function (e) { return { alive: true, c: [e.gate[0] + 0.5, e.gate[1] + 0.5, e.gate[2] + 0.5], name: '💧 ' + (R.heel ? Math.abs(R.heel) + '° ' : '') + (e.lvl > 0 ? '+' + e.tons + ' 噸' : '水線下') + ' ' + e.kind }; });
 }
 /** 甲板那幾顆的字：0 全部、k 拿掉到第 k 層、n 只剩船底（74_cutaway.js deckLabel 同一套名字）。 */
 function inspDeckName(D, k) { return !k ? '全部' : k >= D.n ? '只剩船底' : '拿掉到' + D.names[k - 1]; }
@@ -57,7 +74,8 @@ function inspUI() {
   for (var k = 0; k <= D.n; k++) h += '<button data-d="' + k + '">' + inspDeckName(D, k) + '</button>';
   var GL = inspGroups(sh); inspColSync(GL);
   var all = sh.models.every(function (m) { return !m.alive || INSP.hi.has(m); });
-  h += '</div><div class="lab">部件（勾了就亮）<span><button id="inspN"' + (INSP.name ? ' class="on"' : '') + '>🏷 名稱</button> <button id="inspC">' + (all ? '全部取消' : '全部勾選') + '</button></span></div>';
+  h += '</div><div class="lab">💧 超載極限（多載幾噸開始漏水）<span>' + (INSP.leak ? '<button id="inspKL"' + (INSP.leakL ? ' class="on"' : '') + '>📍 標漏點</button> ' : '') + '<button id="inspK">' + (INSP.leak ? '重量' : '量') + '</button></span></div>' + inspLeakHtml();
+  h += '<div class="lab">部件（勾了就亮）<span><button id="inspN"' + (INSP.name ? ' class="on"' : '') + '>🏷 名稱</button> <button id="inspC">' + (all ? '全部取消' : '全部勾選') + '</button></span></div>';
   function sw(c) { return c === undefined ? '' : '<span class="sw" style="background:' + inspCss(c) + '"></span>'; }   // 色票：那一種現在的高亮顏色
   GL.forEach(function (g, gi) {
     var on = g.list.filter(function (m) { return m.alive && INSP.hi.has(m); }).length, dead = g.list.filter(function (m) { return !m.alive; }).length, full = on > 0 && on === g.list.length - dead;   // 勾滿 ＝ 還在的每一件都勾了（⛔ 跟全部比：火藥桶 86 件沒了 3 件 ⇒ 勾整組只加得進 83 件，永遠「沒勾滿」⇒ 框不打勾、清單自己展開、再點也沒反應；Tim 2026-10-21 定遠號）
@@ -69,6 +87,9 @@ function inspUI() {
   $('inspM').onclick = function () { INSP.min = !INSP.min; inspUI(); };
   $('inspC').onclick = function () { if (all) INSP.hi.clear(); else sh.models.forEach(function (m) { if (m.alive) INSP.hi.add(m); }); inspUI(); };
   $('inspN').onclick = function () { INSP.name = !INSP.name; inspUI(); };
+  $('inspK').onclick = function () { var b = $('inspK'); b.textContent = '量中…'; b.disabled = true; setTimeout(function () { var A = leakSummary(sh); INSP.leak = { up: A.up, heel: {}, show: A.up }; obsNote('💧 超載極限：' + A.text); inspUI(); }, 30); };   // 讓「量中…」先畫出來（一艘約 1–4 秒）
+  [].forEach.call(box.querySelectorAll('[data-heel]'), function (b) { b.onclick = function () { var d = +b.dataset.heel; b.textContent = '量中…'; b.disabled = true; setTimeout(function () { var R = leakHeel(sh, d); INSP.leak.heel[d] = R; INSP.leak.show = R; obsNote('💧 ' + leakLine(R)); inspUI(); }, 30); }; });   // 兩舷各量一次
+  if ($('inspKL')) $('inspKL').onclick = function () { INSP.leakL = !INSP.leakL; inspUI(); };
   [].forEach.call(box.querySelectorAll('[data-v]'), function (b) { b.onclick = function () { if (b.dataset.v === 'cut') cutToggle(); else xrayToggle(); inspSync(); }; });
   [].forEach.call(box.querySelectorAll('[data-d]'), function (b) { b.onclick = function () { CUTV.deck = +b.dataset.d; obsNote(CUTV.deck ? '☰ ' + inspDeckName(D, CUTV.deck) : '☰ 甲板：全部回來'); frzShow(); inspSync(); }; });
   [].forEach.call(box.querySelectorAll('input[type=checkbox]'), function (c) {
@@ -95,6 +116,7 @@ function inspFrame() {
   inspSync();
   var sh = SHIPS[PLAYER_I], L = []; if (!sh) return;
   if (INSP.name) INSP.hi.forEach(function (m) { if (m.alive && L.length < INSP_LBL) L.push(m); });
+  if (INSP.leakL && INSP.leak) L = L.concat(inspLeakPts());
   inspLabels(L.length ? { sh: sh, list: L } : null);
 }
 /** 勾了的部件掛名字（#inspL，固定在畫面上的一層 div）：中心（格座標）× 船的矩陣 × 鏡頭 ⇒ 畫面座標；在鏡頭後面 ⇒ 不掛。o ＝ null ⇒ 全收。 */
