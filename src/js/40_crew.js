@@ -155,6 +155,22 @@ function makeCrew(sh) {
   CREW_SEEN[sh.T.id] = { n: crew.length, short: sh.crewShort, sig: crewSig(CW) };
   return crew;
 }
+/** 只留 n 人（城裡的堡壘：駐軍 ＝ 城鎮帳那一棟今天幾個兵；63_towns.js townFortWake，TASK-0955）。回留下幾人。
+ *  多的標成不在（同 57_core.js coreShipIn 的 preOut：st 3、不畫）；開戰的人數 crew0 照留下的算 ⇒ 死傷比例對的是駐軍，不是滿編。
+ *  留誰：船長 ⇒ 每門砲輪流補到開得動（crewMin）⇒ 送藥手 ⇒ 每門砲輪流補到滿編 ⇒ 其他（其餘軍官、木匠、帆匠、預備水手）。 */
+function crewCap(sh, n) {
+  var keep = [], seen = new Set(), mx = 0, j;
+  function take(c) { if (c && !seen.has(c)) { seen.add(c); keep.push(c); } }
+  take(sh.crew.filter(function (c) { return c.role === ROLE.OFFICER; })[0]);
+  sh.guns.forEach(function (g) { mx = Math.max(mx, g.spots.length); });
+  for (j = 0; j < mx; j++) sh.guns.forEach(function (g) { if (j < g.crewMin && g.spots[j]) take(g.spots[j].who); });
+  sh.crew.forEach(function (c) { if (c.role === ROLE.POWDER) take(c); });
+  for (j = 0; j < mx; j++) sh.guns.forEach(function (g) { if (j >= g.crewMin && g.spots[j]) take(g.spots[j].who); });
+  sh.crew.forEach(take);
+  keep.slice(Math.max(0, n)).forEach(function (c) { c.st = 3; c.walk = null; c.preOut = true; });
+  sh.crew0 = Math.min(Math.max(0, n), keep.length);
+  return sh.crew0;
+}
 function crewAble(c) { return c.st === 0; }
 /** 槳手（TASK-0691）：每支槳（模型 meta kind=oar、有槳座 pivot）meta rowers 個（至少 1）；坐在槳座往船裡那一側 ——
  *  有固定點 seat ⇒ 從那裡排；沒有 ⇒ 從槳座往船裡 1 m（槳葉端 blade 的反方向；沒有 blade ⇒ 往中線）。多個人沿槳柄每 0.6 m 一個（長槳好幾個人划一支）。

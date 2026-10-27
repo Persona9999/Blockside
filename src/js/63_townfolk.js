@@ -522,6 +522,7 @@ function townWorkPrep(T, F) {
   (T.fields || []).forEach(function (F) { (fl[F.lot] || (fl[F.lot] = [])).push(F); });   // 附屬的田照地塊分（townWorkFieldPts）
   (T.inst || []).forEach(function (q) {
     var M = K && K.M[q.k], m = M && M.m; if (!m || q.wall || !(q.y === q.y)) return;
+    if (q.lot && TOWN_UNITS[T.id + ':' + q.lot]) return;                // 換成戰鬥單位的那一棟（63_towns.js townFortWake）：兵是那一座的船員
     var rs = townRiseHides(T, q);                                        // 工地（63_townrise.js）：房子還沒蓋好 ⇒ 不用模型的點；帳上的工地 ⇒ 建築工站腳手架、牆腳（演出那一棟 ⇒ 沒人）
     if (rs && (rs.sim == null || !rs.crew)) return;
     var FP = rs ? [] : townWorkFieldPts(T, fl[q.lot], T.id + ':work:' + q.lot, q.y);   // 田裡的點（工地還沒蓋好 ⇒ 沒有）
