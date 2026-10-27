@@ -2505,17 +2505,42 @@ function townFortWake(h) {
     if (!m || m.size[0] !== T.h.size[0] || m.size[1] !== T.h.size[1] || Math.abs(m.mpv - S) > 1e-9) { note(me, h.name + '：城鎮模型跟戰鬥用的那一座大小不一樣，不換（' + (m ? m.size.join('×') : '?') + ' vs ' + T.h.size.join('×') + '）'); return; }
     var s = Math.sin(q.th), c = Math.cos(q.th), e = S * T.cx - m.size[0] * m.mpv / 2;
     var sh = makeShip(SHIPS.length, me.team, Math.atan2(-c, -s), q.z + e * c, T, q.x - e * s);
-    sh.gy = q.y + S * T.zw; sh.calm = true; sh.townKey = key; sh.name = h.name;
+    sh.gy = q.y + S * T.zw; sh.calm = true; sh.townKey = key; sh.townId = h.T.id; sh.name = h.name;
     var nk = townNation(h.T); if (nk) shipNation(sh, nk);                // 掛那座城的國旗（TASK-0977；77_colours.js flagOwnUv：作品那面白旗補了 uv）
     var lw = h.T.p && h.T.p.live && h.T.p.live.work, gar = null;          // 駐軍 ＝ 城鎮帳那一棟今天幾個兵（Blocksail BSW.GARRISON 分到每一棟的 staff，TASK-0948）；不超過那一座滿編
     if (lw && Object.prototype.hasOwnProperty.call(lw, q.lot)) gar = crewCap(sh, Math.max(0, +lw[q.lot] || 0));   // 帳上沒有那一棟（實驗場、帳還沒過一天）⇒ 照設定檔滿編
     if (gar === 0) { sh.struck = true; sh.fate = '沒有駐軍（城鎮帳那一棟今天 0 人）'; }   // 空的那一座：不算敵艦、不開砲（⛔ 照 strikeCheck ⇒ 一換上來就報「全員倒下」）
-    TOWN_UNITS[key] = sh; h.T.work = null;                               // 那一棟的站崗鎮民（63_townfolk.js townWorkPrep）重擺 ⇒ 不畫：兵是那一座的人
+    TOWN_UNITS[key] = sh; h.T.work = null; TOWNS.dirty = true;           // 那一棟的站崗鎮民（63_townfolk.js townWorkPrep）重擺 ⇒ 不畫：兵是那一座的人；模型重新分組 ⇒ 不畫
     SHIPS.push(sh); coreSpawned(sh, null); stepShip(sh, 0); survey(sh); pickCaptain(sh); cmdTick(); pickFoes();
+    var mc = shipCenter(me), fc = shipCenter(sh); sh.townR = townFortR(sh); sh.wakeD = Math.hypot(fc[0] - mc[0], fc[2] - mc[2]);   // 離開換回的那把尺（townFortTick）
     setAim(me, [T.cx, T.cy, T.geo.aim], sh); me.pMode = AIM_P = 'free';
     note(me, '瞄準 ' + sh.name + (gar !== null ? '（駐軍 ' + gar + ' 人，城鎮帳）' : '') + ' —— 中立；開火就是對它宣戰');
   }, function (err) { q.waking = false; note(me, h.name + '：載入失敗（' + (err && err.message || err) + '）'); });
   return true;
+}
+// 離開那座城 ⇒ 換回（TASK-0955 第 1 格）：玩家的船離那一座比「射程 × TOWN_FORT_LEAVE」遠、也比換上來那時遠 TOWN_FORT_SLACK 公尺以上（遠遠點它的不會一換上來就收），
+//   或換了玩法（城鎮模式、沒有海戰鍵）⇒ 那一座收掉（58_traffic.js shipDrop），城裡那一棟的模型、站崗的鎮民畫回來。
+//   ⚠ 打壞的格子、死傷都不留（留下來是 TASK-0956 第三段）⇒ 回頭再點是完好的一座、駐軍照當天的帳。
+//   它打出去的砲彈還在飛 ⇒ 等落地再收（砲彈記的是序號 b.owner）。已經不在 SHIPS 裡（重開一場：70_flow.js 清空 SHIPS）⇒ 只把那一棟畫回來（⛔ 以前會一直藏著）。
+var TOWN_FORT_LEAVE = 1.25, TOWN_FORT_SLACK = 300, TOWN_FORT_EVERY_MS = 500, TOWN_FORT_T = 0;
+/** 這一座打得到多遠（m）：每門砲照砲口離海面的高度（21_gunnery.js gunMaxR 算進高低差）取最遠的。 */
+function townFortR(sh) { var r = 0; sh.guns.forEach(function (g) { var mw = M4.pt(sh.M, g.muz[0], g.muz[1], g.muz[2]); r = Math.max(r, gunMaxR(GUNS[g.type], mw[1])); }); return r; }
+/** 畫面迴圈每格叫（90_main.js frame），每 TOWN_FORT_EVERY_MS 看一次。 */
+function townFortTick() {
+  var now = performance.now(), keys = Object.keys(TOWN_UNITS); if (!keys.length || now - TOWN_FORT_T < TOWN_FORT_EVERY_MS) return; TOWN_FORT_T = now;
+  var me = SHIPS[PLAYER_I], stay = !!me && modeRule('battleKeys') && !modeRule('town'), mc = me && shipCenter(me);
+  keys.forEach(function (key) {
+    var sh = TOWN_UNITS[key];
+    if (SHIPS.indexOf(sh) >= 0) {
+      var fc = shipCenter(sh), d = mc ? Math.hypot(fc[0] - mc[0], fc[2] - mc[2]) : 0;
+      if (stay && d <= Math.max(sh.townR * TOWN_FORT_LEAVE, sh.wakeD + TOWN_FORT_SLACK)) return;
+      if (BALLS.some(function (b) { return b.alive && b.owner === sh.i; })) return;
+      if (!shipDrop(sh)) return;
+      if (me) note(me, sh.name + '：' + (stay ? '離開了（' + Math.round(d) + ' m）' : '換了玩法') + '，換回城裡的模型');
+    }
+    delete TOWN_UNITS[key]; TOWNS.dirty = true;
+    TOWNS.list.forEach(function (T) { if (T.id === sh.townId) T.work = null; });   // 那一棟的站崗鎮民重擺 ⇒ 畫回來
+  });
 }
 /** 建築模式選單裡的用途（87_townbuild.js twbMenuSet）：要的模型變多 ⇒ 重解一次模型組（同 townReplace）。 */
 function townWantSet(uses) {
