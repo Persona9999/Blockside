@@ -364,6 +364,9 @@ function bedWait() {
   if (BED.mid) {                                                         // 外圈用中等塊：這一步要讀的每一份都到了才走（bedLevels）
     var f = bedFocusAt(), miss = bedLevels(f[0], f[1]);
     miss.forEach(function (c) { (c[2] === 2 ? bedLoad : bedLoadMid)(c[0], c[1]).catch(bedBgErr); });
+    //   城鎮模式換了城區、路段（63_towns.js TOWNS.focus）：焦點只是鏡頭看的地方 ⇒ 那一圈照載、不等；模擬只等船 margin 內的塊（bedNear）
+    //     以前整圈都等 ⇒ 換一次區模擬停幾秒（金斯敦換到霍普河礦場：時鐘停 5 秒、BED.miss 49 → 147），停的那幾秒鎮民原地抖（90_main.js loopAcc；Tim 2026-10-27「鎮民都不會走動(一直抖動)」「過了一陣子又會動了」）
+    if (TOWNS.focus && modeRule('town')) { var near = bedNear(); miss = miss.filter(function (c) { return near[bedKey(c[0], c[1])]; }); }
     if (miss.length) BED.miss++;
     return miss.length > 0;
   }
