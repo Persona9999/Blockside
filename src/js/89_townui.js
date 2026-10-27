@@ -18,8 +18,9 @@ var TUI_CAT = { food: '糧食', raw: '原料', cash: '經濟作物', goods: '製
 function tuiOk() { return modeRule('town') && BED && BED.host && TWB.town; }
 function tuiEsc(t) { return String(t).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
 function tuiNum(x, d) { x = +x || 0; return x.toLocaleString('en-US', { minimumFractionDigits: d || 0, maximumFractionDigits: d || 0 }); }
-/** 貨物、家常菜的圖示（Blocksail img/goods/<key>.png、img/dishes/<id>.png —— battle.html 跟 img/ 同一層；TASK-0914）：沒有圖 ⇒ 拿掉，只剩名字。 */
-function tuiIcon(dir, k) { return '<img src="img/' + dir + '/' + encodeURIComponent(k) + '.png" alt="" style="width:22px;height:22px;object-fit:contain;vertical-align:middle;margin-right:5px" onerror="this.remove()">'; }
+/** 貨物、家常菜的圖示（Blocksail img/goods/<key>.png、img/dishes/<id>.png —— battle.html 跟 img/ 同一層；TASK-0914）：沒有圖 ⇒ 拿掉，只剩名字。
+ *  px：邊長（預設 22 ＝ 表格那一欄；夾在一行字裡的清單用 16）。 */
+function tuiIcon(dir, k, px) { px = px || 22; return '<img src="img/' + dir + '/' + encodeURIComponent(k) + '.png" alt="" style="width:' + px + 'px;height:' + px + 'px;object-fit:contain;vertical-align:middle;margin-right:' + (px < 22 ? 3 : 5) + 'px" onerror="this.remove()">'; }
 /** 昨天吃了什麼（份的比例）：家裡的灶每一道菜（'eat:<貨>' ＝ 直接吃那一種）＋服務建築供的（餐館、酒館、教堂；Blocksail world/food.js foodDay 的 dish、served）。 */
 function tuiEatHTML(F) {
   var D = F.dish || {}, S = F.servedDish || {}, sv = Math.max(0, F.served || 0), tot = sv, rows = [], known = 0;
@@ -66,7 +67,7 @@ function tuiHomeMenuHTML() {
   if (!menus.length) return '';
   var LV = ['荒年糧', '主糧', '家常', '佳餚'];
   return '<details><summary>🍲 城鎮廚房菜單（' + menus.length + '道）</summary><p class="tuiDim">即做即食，無額外工人；以下為每100份標準用量，實際用料見消耗食材。類別可由成員替代，餐點依價格、物資與預算選用。</p>' + menus.map(function (m) {
-    return '<p><b>' + tuiIcon(m.dir || 'dishes', m.icon) + tuiEsc(m.name) + '</b>　' + tuiEsc(LV[m.level] || '') + '<br><small>' + Object.keys(m.per100 || {}).map(function (g) { return tuiEsc(tuiGood(g)) + ' ' + tuiNum(m.per100[g], 3) + (g.charAt(0) === '@' ? ' 份類別' : ' 桶'); }).join('、') + '</small></p>';
+    return '<p><b>' + tuiIcon(m.dir || 'dishes', m.icon) + tuiEsc(m.name) + '</b>　' + tuiEsc(LV[m.level] || '') + '<br><small>' + Object.keys(m.per100 || {}).map(function (g) { return tuiIcon('goods', g, 16) + tuiEsc(tuiGood(g)) + ' ' + tuiNum(m.per100[g], 3) + (g.charAt(0) === '@' ? ' 份類別' : ' 桶'); }).join('、') + '</small></p>';
   }).join('') + '</details>';
 }
 function tuiGood(g) { var X = TUI.goods[g]; if (X && X.name) return X.name; var R = TUI.list && TUI.list.rows.filter(function (r) { return r.g === g; })[0]; return R ? R.name : g; }
@@ -176,8 +177,8 @@ function tuiSumHTML() {
   var FL = TUI.fleets || [];                                             // 船隊（Blocksail world/fleet.js；TASK-0911）：停在這裡、開過來、母港在這裡的
   if (FL.length) h += '<h4>⛵ 船隊（' + FL.length + ' 支）</h4><table class="tuiT"><tr><th>主人</th><th>在哪</th><th>載</th><th>趟</th><th>淨賺</th></tr>' + FL.map(function (f) {
     var where = f.at ? (f.at === TWB.town ? '停在這裡' : '停在 ' + (f.atName || f.at)) : (f.fromName || f.from) + ' ⇒ ' + (f.toName || f.to) + '（還 ' + f.left + ' 天）';
-    var gs = Object.keys(f.goods).map(function (g) { return tuiGood(g) + ' ' + tuiNum(f.goods[g], 0); }).join('、') || '空船';
-    return '<tr><td>' + tuiEsc(f.ownerName || '') + (f.home !== TWB.town ? '<span class="tuiDim">（母港 ' + tuiEsc(f.homeName || f.home) + '）</span>' : '') + '</td><td>' + tuiEsc(where) + '</td><td>' + tuiEsc(gs) + '</td><td>' + f.trips + '</td><td>' + tuiNum(f.earned, 0) + '</td></tr>';
+    var gs = Object.keys(f.goods).map(function (g) { return tuiIcon('goods', g, 16) + tuiEsc(tuiGood(g)) + ' ' + tuiNum(f.goods[g], 0); }).join('、') || '空船';
+    return '<tr><td>' + tuiEsc(f.ownerName || '') + (f.home !== TWB.town ? '<span class="tuiDim">（母港 ' + tuiEsc(f.homeName || f.home) + '）</span>' : '') + '</td><td>' + tuiEsc(where) + '</td><td>' + gs + '</td><td>' + f.trips + '</td><td>' + tuiNum(f.earned, 0) + '</td></tr>';
   }).join('') + '</table>';
   if (I.families && I.families.length) h += '<h4>👪 家族</h4><p>' + I.families.map(function (f) { return tuiEsc(f.name || f.id || f); }).join('、') + '</p>';
   return h;
@@ -209,7 +210,7 @@ function tuiFlowHTML() {
   var d = function (x) { return x ? tuiNum(x, 2) : '<span class="tuiDim">–</span>'; };
   return '<p class="tuiDim">昨天（第 ' + TUI.info.day + ' 天）；桶。原料 ＝ 生產建築與工地吃的；鎮民吃 ＝ 鎮民買的＋城鎮補的' + (ship ? '；船隊運出 ＝ 船隊在這裡買走的、運來 ＝ 運到這裡賣掉的' : '') + '。</p>' +
     (R.length ? '<table class="tuiT"><tr><th>貨</th><th>產出</th><th>原料</th><th>鎮民吃</th>' + (ship ? '<th>船隊運出</th><th>運來</th>' : '') + '<th>淨</th></tr>' + R.map(function (r) {
-      return '<tr><td>' + tuiEsc(tuiGood(r.g)) + '</td><td>' + d(r.m) + '</td><td>' + d(r.u) + '</td><td>' + d(r.e) + '</td>' + (ship ? '<td>' + d(r.x) + '</td><td>' + d(r.i) + '</td>' : '') + '<td class="' + (r.n > 0 ? 'up' : r.n < 0 ? 'dn' : '') + '">' + (r.n > 0 ? '＋' : r.n < 0 ? '−' : '') + tuiNum(Math.abs(r.n), 2) + '</td></tr>';
+      return '<tr><td>' + tuiIcon('goods', r.g) + tuiEsc(tuiGood(r.g)) + '</td><td>' + d(r.m) + '</td><td>' + d(r.u) + '</td><td>' + d(r.e) + '</td>' + (ship ? '<td>' + d(r.x) + '</td><td>' + d(r.i) + '</td>' : '') + '<td class="' + (r.n > 0 ? 'up' : r.n < 0 ? 'dn' : '') + '">' + (r.n > 0 ? '＋' : r.n < 0 ? '−' : '') + tuiNum(Math.abs(r.n), 2) + '</td></tr>';
     }).join('') + '</table>' : '<p class="tuiDim">那一天什麼都沒產出、沒用掉</p>');
 }
 /** 庫存與價格：市場有的、或有人要的貨；照貨物表的類別分段。 */
@@ -224,7 +225,7 @@ function tuiStockHTML() {
     var X = TUI.goods[g] || {}, q = M[g], c = X.cat || '';
     if (c !== cat) { cat = c; h += '<tr class="cat"><td colspan="6">' + tuiEsc(TUI_CAT[c] || c || '其他') + '</td></tr>'; }
     var r = X.price ? q.price / X.price : 1;
-    h += '<tr><td>' + tuiEsc(tuiGood(g)) + '</td><td>' + tuiNum(q.stock, 1) + '</td><td>' + tuiNum(q.target, 0) + '</td><td>' + tuiNum(q.daily, 2) + '</td><td class="' + (r > 1.15 ? 'dn' : r < 0.87 ? 'up' : '') + '">' + tuiNum(q.price, 2) + (q.bonus > 1.01 ? ' ⚠' : '') + '</td><td class="tuiDim">' + (X.price != null ? tuiNum(X.price, 2) : '–') + '</td></tr>';
+    h += '<tr><td>' + tuiIcon('goods', g) + tuiEsc(tuiGood(g)) + '</td><td>' + tuiNum(q.stock, 1) + '</td><td>' + tuiNum(q.target, 0) + '</td><td>' + tuiNum(q.daily, 2) + '</td><td class="' + (r > 1.15 ? 'dn' : r < 0.87 ? 'up' : '') + '">' + tuiNum(q.price, 2) + (q.bonus > 1.01 ? ' ⚠' : '') + '</td><td class="tuiDim">' + (X.price != null ? tuiNum(X.price, 2) : '–') + '</td></tr>';
   });
   return h + '</table><p class="tuiDim">⚠ ＝ 長期缺貨、價格往上加成。價格比基準貴兩成以上標紅、便宜一成以上標綠。</p>';
 }
@@ -243,14 +244,15 @@ function tuiStatsHTML() {
   if (!TUI.pick || !gs[TUI.pick]) { var best = null, bv = -1; L.forEach(function (g) { var v = 0; W.forEach(function (w) { var r = w.g[g]; if (r) v += r[2]; }); if (v > bv) { bv = v; best = g; } }); TUI.pick = best; }
   var g = TUI.pick, wx = W.map(function (w) { return w.day; }), col = function (i, f) { return W.map(function (w) { var r = w.g[g]; return r ? r[i] / 1000 * (f || 1) : 0; }); };
   var eatUse = W.map(function (w) { var r = w.g[g]; return r ? (r[3] + r[4]) / 1000 / TUI.every : 0; });
-  h += '<h4>📦 一種貨（每 ' + TUI.every + ' 天一筆）<select id="tuiPick">' + L.map(function (x) { return '<option value="' + x + '"' + (x === g ? ' selected' : '') + '>' + tuiEsc(tuiGood(x)) + '</option>'; }).join('') + '</select></h4>';
-  h += tuiChart('gs', tuiGood(g) + '：庫存', wx, [{ name: '庫存', v: col(0) }], 1, '桶') +
-    tuiChart('gp', tuiGood(g) + '：價格（一桶）', wx, [{ name: '價格', v: col(1) }], 2, '') +
-    tuiChart('gf', tuiGood(g) + '：每天平均（那 ' + TUI.every + ' 天）', wx, [{ name: '產出', v: col(2, 1 / TUI.every) }, { name: '用掉（原料＋鎮民吃）', v: eatUse }], 2, '桶');
+  h += '<h4>📦 一種貨（每 ' + TUI.every + ' 天一筆）' + tuiIcon('goods', g) + '<select id="tuiPick">' + L.map(function (x) { return '<option value="' + x + '"' + (x === g ? ' selected' : '') + '>' + tuiEsc(tuiGood(x)) + '</option>'; }).join('') + '</select></h4>';
+  var ic = tuiIcon('goods', g, 16);
+  h += tuiChart('gs', tuiGood(g) + '：庫存', wx, [{ name: '庫存', v: col(0) }], 1, '桶', ic) +
+    tuiChart('gp', tuiGood(g) + '：價格（一桶）', wx, [{ name: '價格', v: col(1) }], 2, '', ic) +
+    tuiChart('gf', tuiGood(g) + '：每天平均（那 ' + TUI.every + ' 天）', wx, [{ name: '產出', v: col(2, 1 / TUI.every) }, { name: '用掉（原料＋鎮民吃）', v: eatUse }], 2, '桶', ic);
   return h;
 }
-/** 一張折線圖（SVG）：一個 y 軸、兩條以內（兩條 ⇒ 圖例）；滑過去有十字線與那一天的數字（tuiHover）。資料記在 TUI.charts[id]。 */
-function tuiChart(id, title, xs, ser, dec, unit) {
+/** 一張折線圖（SVG）：一個 y 軸、兩條以內（兩條 ⇒ 圖例）；滑過去有十字線與那一天的數字（tuiHover）。資料記在 TUI.charts[id]。ic：標題前面的圖示（貨的那幾張；HTML）。 */
+function tuiChart(id, title, xs, ser, dec, unit, ic) {
   var W = 520, H = 150, l = 52, r = 10, t = 10, b = 22, lo = Infinity, hi = -Infinity;
   ser.forEach(function (s) { s.v.forEach(function (v) { if (v < lo) lo = v; if (v > hi) hi = v; }); });
   if (hi === lo) { hi += 1; lo = Math.max(0, lo - 1); }
@@ -263,7 +265,7 @@ function tuiChart(id, title, xs, ser, dec, unit) {
   ser.forEach(function (s, j) { g += '<polyline fill="none" stroke="' + TUI_C[j] + '" stroke-width="2" stroke-linejoin="round" points="' + s.v.map(function (v, i) { return X(i).toFixed(1) + ',' + Y(v).toFixed(1); }).join(' ') + '"/>'; });
   g += '<line class="cx" x1="0" x2="0" y1="' + t + '" y2="' + (H - b) + '" style="display:none"/>' + ser.map(function (s, j) { return '<circle class="cd" r="4" fill="' + TUI_C[j] + '" style="display:none"/>'; }).join('');
   var leg = ser.length > 1 ? '<span class="leg">' + ser.map(function (s, j) { return '<i style="background:' + TUI_C[j] + '"></i>' + tuiEsc(s.name); }).join('　') + '</span>' : '';
-  return '<div class="tuiChW"><h5>' + tuiEsc(title) + (unit ? '（' + unit + '）' : '') + leg + '</h5><svg class="tuiCh" data-id="' + id + '" viewBox="0 0 ' + W + ' ' + H + '" >' + g + '</svg><div class="tip" hidden></div></div>';
+  return '<div class="tuiChW"><h5><span>' + (ic || '') + tuiEsc(title) + (unit ? '（' + unit + '）' : '') + '</span>' + leg + '</h5><svg class="tuiCh" data-id="' + id + '" viewBox="0 0 ' + W + ' ' + H + '" >' + g + '</svg><div class="tip" hidden></div></div>';
 }
 /** 滑過圖：最近的那一天 ⇒ 十字線、點、說明框（數字照那一天）。 */
 function tuiHover(svg) {
