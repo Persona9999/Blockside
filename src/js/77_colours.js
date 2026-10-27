@@ -80,6 +80,23 @@ var FLAG_EMB = {
       var cy = y < 0.5 ? 0.25 : 0.75, dy = Math.abs(y - cy), t = 0.32, ex = (x - 0.45) / 0.55, ey = dy / 0.25;   // 上下兩個肚子：左半是橫筆、右半是半圈
       return x < 0.45 ? (dy > 0.25 - 0.25 * t ? G : null) : (ex * ex + ey * ey <= 1 && ex * ex + ey * ey > (1 - t) * (1 - t) ? G : null);
     } },
+  // 沒有國旗的兩家（TASK-0977；Tim 2026-10-27「不應該出現沒國旗的城 有缺要自檢報錯 需要補」）—— 史料上兩家都沒有旗，下面兩面是設計：
+  //   逃亡者聚落（maroon）：牙買加逃亡者傳信用的 abeng 牛角號 —— 深綠底、象牙色的號角（寬口在旗桿那頭、往尾收成尖）
+  abeng: { name: '牛角號', ink: [0.93, 0.89, 0.78], res: 2,
+    at: function (X, Y) {
+      var dx = X - 1, dy = Y - 0.95, r = Math.sqrt(dx * dx + dy * dy), a = Math.atan2(dy, dx);   // 一段圓弧：圓心在旗面下緣附近、上半圈從左（−160°）彎到右（−20°）
+      var dg = Math.PI / 180; if (a > -20 * dg || a < -160 * dg) return null;
+      var t = (a + 160 * dg) / (140 * dg);                               // 0 ＝ 寬口（旗桿那頭）→ 1 ＝ 尖
+      return Math.abs(r - 0.55) < 0.11 * (1 - t) + 0.02 ? [0.93, 0.89, 0.78] : null;
+    } },
+  //   原住民（native）：泰諾岩畫的螺旋 —— 樹皮米色底、紅赭色兩圈螺旋（阿基米德螺線 r ＝ bθ）
+  spiral: { name: '螺旋', ink: [0.62, 0.2, 0.12], res: 2,
+    at: function (X, Y) {
+      var dx = X - 1, dy = Y - 0.5, r = Math.sqrt(dx * dx + dy * dy), a = Math.atan2(dy, dx), b = 0.4 / (4 * Math.PI);
+      if (r < 0.03) return [0.62, 0.2, 0.12];
+      for (var n = 0; n < 2; n++) { var th = (a < 0 ? a + 2 * Math.PI : a) + 2 * Math.PI * n; if (Math.abs(r - b * th) < 0.028) return [0.62, 0.2, 0.12]; }
+      return null;
+    } },
   none: { name: '（沒有紋章）', ink: COL_W, res: 1, at: function () { return null; } }
 };
 //   預設旗（選單裡那幾面；Tim「旗幟可以做下拉選單 先加三四種就好」）：key ⇒ { name, field, emblem }。英國藍旗、紅旗的底色 ＝ 以前的 COL_FIELD 換成 0～255（round）⇒ 同一個位元組
@@ -93,7 +110,9 @@ var FLAG_PRESETS = [
   { k: 'dutch', name: '荷蘭', field: '#ae1c28', emblem: 'stripes' },
   { k: 'denmark', name: '丹麥', field: '#c8102e', emblem: 'nordic' },
   { k: 'genoa', name: '熱那亞', field: '#ece9e0', emblem: 'cross-red' },
-  { k: 'byzantine', name: '東羅馬（1453）', field: '#a51c1c', emblem: 'tetragram' }
+  { k: 'byzantine', name: '東羅馬（1453）', field: '#a51c1c', emblem: 'tetragram' },
+  { k: 'maroon', name: '逃亡者聚落〔設計〕', field: '#2e5b2a', emblem: 'abeng' },
+  { k: 'native', name: '原住民〔設計〕', field: '#d9c39a', emblem: 'spiral' }
 ];
 var FLAG_DEF = { blue: 'gb-blue', red: 'gb-red' };
 // ⛔ 下面兩個不給初值：69_prefs.js 讀存檔時本檔還沒跑（同一個閉包，var 提升）⇒ 那時先把存檔那一格原樣放進 FLAG_PREF，teamFlag 第一次用到才解
@@ -112,7 +131,12 @@ function flagStar(x, y, R) {
 function flagRgb(h) { var m = /^#?([0-9a-f]{6})$/i.exec(h || ''); if (!m) return null; var n = parseInt(m[1], 16); return [(n >> 16 & 255) / 255, (n >> 8 & 255) / 255, (n & 255) / 255]; }
 /** 一面旗照規矩整理（{ field, emblem }；外部給的也走這裡）⇒ 新的一份｜null。 */
 function flagOk(f) { if (!f || typeof f !== 'object' || !FLAG_EMB[f.emblem] || !flagRgb(f.field)) return null; return { field: '#' + flagRgb(f.field).map(function (c) { return ('0' + Math.round(c * 255).toString(16)).slice(-2); }).join(''), emblem: f.emblem }; }
-function flagPreset(k) { var p = FLAG_PRESETS.filter(function (q) { return q.k === k; })[0]; return p ? { field: p.field, emblem: p.emblem } : null; }
+/** 預設旗 k ⇒ { field, emblem }｜null。'player'（也接 'player:…'，townNation 照解出來的那一面帶上）＝ 玩家在選單選的那一面（我方 teamFlag('blue')；
+ *  Blocksail 歸玩家的城、玩家的船隊 —— TASK-0977：Tim「不應該出現沒國旗的城」）。 */
+function flagPreset(k) {
+  if (typeof k === 'string' && (k === 'player' || k.indexOf('player:') === 0)) { var t = teamFlag('blue'); return t ? { field: t.field, emblem: t.emblem } : null; }
+  var p = FLAG_PRESETS.filter(function (q) { return q.k === k; })[0]; return p ? { field: p.field, emblem: p.emblem } : null;
+}
 /** 網址那一格：預設旗的 key，或 <紋章或預設旗的 key>:<底色 hex>（換底色）。 */
 function flagParse(s) { if (!s) return null; var p = flagPreset(s); if (p) return p; var a = s.split(':'), q = flagPreset(a[0]); return flagOk({ emblem: q ? q.emblem : a[0], field: '#' + (a[1] || '').replace('#', '') }); }
 /** 陣營 t（'blue' 我方｜'red' 敵方）掛哪一面旗。 */
@@ -193,6 +217,7 @@ function flagsRetex() {
 //    ⛔ 只換畫面：旗還是那一面帆（布料、被打、降旗照舊），不碰模擬。
 function flagVariant(T, k) {
   var f = flagPreset(k); if (!T || !T.flagTi || !f) return null;
+  if (k.indexOf('player') === 0) k = 'player:' + f.field + ':' + f.emblem;   // 玩家的旗照解出來的那一面記（換了旗 ⇒ 另一格，不拿舊的）
   var V = T.flagVar || (T.flagVar = {}); if (V[k]) return V[k];
   var m = {}, n = T.rig.sails.length;
   Object.keys(T.flagTi).forEach(function (ti) { var q = T.flagTi[ti]; m[ti] = n + T.teamExtra.length; T.teamExtra.push({ texture: Object.assign({ uv: q.uv, alpha_min: 0 }, flagTexOf(q.kind, f)) }); });

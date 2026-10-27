@@ -1875,7 +1875,10 @@ var TOWN_FLAG_PAT = {                                                   // 圖�
 //   照那座城的勢力掛 —— 規劃的 live.flag ＝ 預設旗的 key（Blocksail globe.html townLive 照範圍層的勢力給；沒有城鎮帳的 town.html 沒有 ⇒ 照舊白布）。
 //   顏色跟船上的戰鬥旗同一支（77_colours.js colourAt）；紋章細 ⇒ 沿飛 32、沿旗桿 16 格切（一格一色）。
 var TOWN_FLAG_FINE = [32, 16];
-function townNation(T) { var k = T && T.p && T.p.live && T.p.live.flag; return k && flagPreset(k) ? k : null; }
+function townNation(T) {
+  var k = T && T.p && T.p.live && T.p.live.flag, f = k && flagPreset(k); if (!f) return null;
+  return k === 'player' ? 'player:' + f.field + ':' + f.emblem : k;   // 歸玩家的城（TASK-0977）⇒ 玩家選單的那一面；帶著解出來的旗 ⇒ 玩家換旗，T.flagNk 不同 ⇒ 布旗重建
+}
 function townNationPat(k) {
   var f = flagPreset(k), cu = [], cv = [], i; if (!f) return null;
   for (i = 1; i < TOWN_FLAG_FINE[0]; i++) cu.push(i / TOWN_FLAG_FINE[0]);
