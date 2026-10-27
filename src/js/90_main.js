@@ -5,6 +5,7 @@ function frame(ts, noRaf) {                                         // noRaf：_
   var f0 = PF ? performance.now() : 0;                                // 逐幀分段計時（?debug=1）
   if (BED) { BED_BG = BED_PUMP_MS; var pb0 = performance.now(); bedPump(bedT1()); bedSpent(pb0); treePump(); if (!FLOW_STAGE) { var tp0 = performance.now(); trafficPump(bedT1()); bedSpent(tp0); trrTick(); } }   // 往來的船（58_traffic.js）：背景預算剩下的才做（建船的那十幾段）   // 收進來的海圖塊、規劃晚到要重新整地的塊、擺樹：每格照同一份背景預算做（08_seabed.js、63_towns.js、63_trees.js）—— 模擬這一格要不要等（bedWait）照放好的算
   if (FLOW_STAGE) { loopLast = ts; if (!noRaf) requestAnimationFrame(frame); return; }   // 開戰分段做到一半（70_flow.js startStaged）：只收塊、擺樹，不畫、不走 ⇒ 不會碰到做到一半的船
+  townFortTick();                                                     // 換成戰鬥單位的城裡堡壘：離開那座城 ⇒ 換回（63_towns.js；TASK-0955）
   var dt = loopLast ? Math.min(0.1, (ts - loopLast) / 1000) : DT_BASE, hv = 0, hsv = 0; loopLast = ts;   // hv：帆與繩照畫面格算時這一格走幾秒（TASK-0799）
   FPS = FPS * 0.95 + (1 / Math.max(dt, 1e-3)) * 0.05;
   if (RUNNING && !PAUSED) {
@@ -195,10 +196,10 @@ if (DEBUG) window.__game = {
   twbLots: function (use, n) { var T = twbTown(); return T ? (T.p.lots || []).filter(function (l) { return l.use === use; }).slice(0, n || 5).map(function (l) { return { id: l.id, at: l.at }; }) : null; },   // 那一種地塊的規劃座標（測建築模式用）
   twbScreen: function (q) { var T = twbTown(); return T ? twbScreenOf(T, q) : null; },
   twbProbe: function (q) { return twbProbe(q); },
-  /** 城裡的堡壘（63_towns.js townFortWake；TASK-0955）：沒給 lot ⇒ 列出每座城換得了的那幾棟；給了 ⇒ 照點到它一樣換（不經螢幕座標）。 */
+  /** 城裡的堡壘（63_towns.js townFortWake；TASK-0955）：沒給 lot ⇒ 列出每座城換得了的那幾棟（unit.r ＝ 射程、wakeD ＝ 換上來時離我艦幾 m：離開換回的尺，townFortTick）；給了 ⇒ 照點到它一樣換（不經螢幕座標）。 */
   townFort: function (lot) {
     var L = []; TOWNS.list.forEach(function (T) { (T.inst || []).forEach(function (q) { if (q.lot && townFortHull(q.k)) L.push({ T: T, q: q }); }); });
-    if (lot === undefined) return L.map(function (r) { var u = TOWN_UNITS[r.T.id + ':' + r.q.lot]; return { town: r.T.id, lot: r.q.lot, k: r.q.k, hull: townFortHull(r.q.k), x: +r.q.x.toFixed(1), y: +r.q.y.toFixed(2), z: +r.q.z.toFixed(1), th: +r.q.th.toFixed(4), unit: u ? { i: u.i, team: u.team, calm: !!u.calm, struck: u.struck, crew0: u.crew0, able: u.able, n: u.crew.length } : null }; });
+    if (lot === undefined) return L.map(function (r) { var u = TOWN_UNITS[r.T.id + ':' + r.q.lot]; return { town: r.T.id, lot: r.q.lot, k: r.q.k, hull: townFortHull(r.q.k), x: +r.q.x.toFixed(1), y: +r.q.y.toFixed(2), z: +r.q.z.toFixed(1), th: +r.q.th.toFixed(4), unit: u ? { i: u.i, team: u.team, calm: !!u.calm, struck: u.struck, crew0: u.crew0, able: u.able, n: u.crew.length, r: Math.round(u.townR), wakeD: Math.round(u.wakeD) } : null }; });
     var r = L.filter(function (o) { return o.q.lot === lot; })[0]; if (!r) return null;
     var l = (r.T.p.lots || []).filter(function (x) { return x.id === lot; })[0] || null;
     return townFortWake({ T: r.T, q: r.q, lot: l, name: townLotName(r.T, l, TOWNS.kit.M[r.q.k].m) });

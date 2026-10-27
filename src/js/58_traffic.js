@@ -345,16 +345,25 @@ function trafficAhead(sh, P) {
 }
 /** 放掉一艘的網格（同 70_flow.js 清場）。 */
 function trafficFree(sh) { if (!sh) return; if (sh.rs) sh.rs.dispose(); armDispose(sh); glsFree(sh); }
-/** 收一艘：從 SHIPS 拿掉、後面的序號往前補、命令與選敵重想。 */
-function trafficDrop(sh) {
-  var k = SHIPS.indexOf(sh); if (k < 0 || k === PLAYER_I) return;
+/** 收一艘（往來的船、換回城裡的堡壘 63_towns.js townFortTick）：從 SHIPS 拿掉、後面的序號往前補、瞄著它的放掉、命令與選敵重想。回收了沒有。
+ *  記序號的都跟著補：砲彈 b.owner、黏在船上的碎木 D.ship（它身上的直接收掉）、排好的分段齊射 EVENTS e.sh（它的直接拿掉）、旗號 SIGNAL 的集火與排頭。
+ *  ⛔ 不補 ⇒ 後面那幾艘的砲彈記到前一艘頭上；黏在它身上的碎木照序號讀到不存在的船 ⇒ 畫面那一格丟例外（60_render.js mainOpaque，堡壘被打過再換回量到的）。
+ *  ⚠ 它自己打出去、還在飛的砲彈 b.owner 會指到補上來的那一艘 ⇒ 要緊的（堡壘）先等落地再收。 */
+function shipDrop(sh) {
+  var k = SHIPS.indexOf(sh); if (k < 0 || k === PLAYER_I) return false;
   SHIPS.splice(k, 1); SHIPS.forEach(function (s, j) { s.i = j; });
+  BALLS.forEach(function (b) { if (b.owner > k) b.owner--; });
+  for (var i = 0; i < D.n; i++) if (D.st[i] === 2) { if (D.ship[i] === k) { fxKill(i); i--; } else if (D.ship[i] > k) D.ship[i]--; }
+  for (i = EVENTS.length - 1; i >= 0; i--) { if (EVENTS[i].sh === k) EVENTS.splice(i, 1); else if (EVENTS[i].sh > k) EVENTS[i].sh--; }
+  if (SIGNAL) ['focus', 'lead'].forEach(function (f) { if (SIGNAL[f] === k) SIGNAL[f] = null; else if (SIGNAL[f] > k) SIGNAL[f]--; });
   if (PLAYER_I > k) PLAYER_I--;
-  var me = SHIPS[PLAYER_I]; if (me && me.aimOn === sh) setAim(me, null);
+  SHIPS.forEach(function (s) { if (s.aimOn === sh) setAim(s, null); });
   if (typeof INFO_SH !== 'undefined' && INFO_SH === sh) INFO_SH = null;
-  trafficFree(sh); TRF.dropped++;
+  trafficFree(sh);
   cmdTick(); pickFoes();
+  return true;
 }
+function trafficDrop(sh) { if (shipDrop(sh)) TRF.dropped++; }
 /** 換到別的玩法（海戰、建造…）⇒ 全收、佇列清掉。 */
 function trafficClear() { trafficShips().forEach(trafficDrop); if (TRF.build) trafficFree(TRF.build.M.sh); TRF.build = null; TRF.q = []; TRF.want = {}; }
 
