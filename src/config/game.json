@@ -1582,6 +1582,36 @@
         "wheel_stand": 2,
         "yard": 12
       }
+    },
+    {
+      "id": "flyingfish",
+      "role": "merchant",
+      "el": "ship-flyingfish",
+      "name": "飛魚號",
+      "vxk": "flyingfish.vxk",
+      "work": "gura-flyingfish-01m-assembly",
+      "author": "gura",
+      "geo": {"spar": [30, 41], "marines": [32, 52], "center": 45, "aim": 30, "aimZ": [5, 168], "deckAim": [30, 41], "rigAim": [50, 165]},
+      "cfg": {"pump": 2, "agile": 3, "upwind": 2.5},
+      "crew": {"officers": 2, "helm": 1, "top": 0, "marines": 4, "marineGap": 14, "monkeys": 1, "handsK": 0.25, "navigator": 0},
+      "names": ["飛魚號"],
+      "idNext": {
+        "anchor": 3,
+        "binnacle": 2,
+        "deck": 5,
+        "door": 3,
+        "galley": 2,
+        "gun": 13,
+        "ladders": 3,
+        "magazine": 2,
+        "model": 2,
+        "part": 7,
+        "powder": 7,
+        "rudder": 2,
+        "ship": 2,
+        "tiller": 2,
+        "yard": 5
+      }
     }
   ],
   "furniture": {
