@@ -79,7 +79,7 @@ function tbiServiceHTML(S) {
     h += '<div class="tbiDim">每 100 人次消耗</div>';
     return h + ks.map(function (g) {
       var M = (m.alternatives || {})[g], row = '<div class="tbiR"><span>' + tuiIcon('goods', g) + tuiEsc(tbiGood(g)) + '</span><b>' + tuiNum(m.per100[g], 3) + (M ? ' 份' : ' 桶') + '</b></div>';
-      if (M && M.length) row += '<div class="tbiDim">可擇一或混用：' + M.map(function (x) { return tuiEsc(x.name) + ' ' + tuiNum(x.q, 3) + ' 桶'; }).join('／') + '</div>';
+      if (M && M.length) row += '<div class="tbiDim">可擇一或混用：' + M.map(function (x) { return tuiIcon('goods', x.g, 16) + tuiEsc(x.name) + ' ' + tuiNum(x.q, 3) + ' 桶'; }).join('／') + '</div>';
       return row;
     }).join('');
   }).join('') + '<div class="tbiDim">一天只供應一道菜；實際量依需求、物資與人手調整。</div>';
