@@ -1,0 +1,3 @@
+#!/bin/sh
+# 區塊職責：合併之後（merge、pull、快轉）外殼頁跟著重套 —— 見 .githooks/shellsync.sh。合併有衝突時 git 不叫這支：解完衝突提交那一刻由 post-commit 補。
+exec sh .githooks/shellsync.sh post-merge

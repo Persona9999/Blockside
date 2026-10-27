@@ -1,0 +1,3 @@
+#!/bin/sh
+# 區塊職責：提交之後外殼頁跟著重套（在 submodule 裡直接建、直接提交的成品；合併解完衝突的那一筆也走這裡）—— 見 .githooks/shellsync.sh。
+exec sh .githooks/shellsync.sh post-commit

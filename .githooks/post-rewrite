@@ -1,0 +1,3 @@
+#!/bin/sh
+# 區塊職責：改寫之後（rebase、commit --amend）外殼頁跟著重套 —— 見 .githooks/shellsync.sh。
+exec sh .githooks/shellsync.sh post-rewrite

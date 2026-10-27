@@ -13,6 +13,7 @@
 #   python -I admin.py build                      照設定重建 ../index.html（Blockside 根目錄 ＝ GitHub Pages 的首頁）
 #   python -I admin.py build --code [--base <版>]  只重建程式（入口 index.html；船檔 ships/ 照舊）—— 沒有 VoxelKit/_cache 的機器用，船變了就擋（見「只重建程式」）
 #   python -I admin.py shell <外殼設定> [--check]  外掛外殼：拿建好的成品套別的遊戲的外殼寫成另一頁（見「外掛外殼」）
+#   python -I admin.py shellsync [--check]        外殼頁跟著核心：這份是別的遊戲的 submodule 時，外層用這份成品套的頁全部重套（.githooks 的 post-* 會叫；見「外殼頁跟著核心」）
 #   python -I admin.py layers [--shell]           分層讀數：模擬層直接用到上層的名字；--shell ＝ 核心直接用到外殼（主選單、設定頁；SHELL_UI）的名字、直接碰 #cover 的 DOM（--shell 的兩個數字建置前會擋：都要是 0，TASK-0774）
 #   python -I admin.py reseg                      船檔照現在的切法重切（ship_segments 改了、這台沒有 _cache 時；解回來逐位元組相同才寫，見「船檔重切」）
 #   python -I admin.py import --work <雕刻作品 ID> --id <船的代號> --name <名字>   匯入新船（匯出 .vxk、登記、重建）
@@ -2454,7 +2455,7 @@ def act_hooks():
     code, out = run(['git', 'config', 'core.hooksPath', '.githooks'], cwd=ROOT)
     if code != 0:
         raise Fail('git config 失敗：' + out.strip())
-    return ['✓ 裝好了：core.hooksPath ＝ .githooks（提交前 pre-commit、推送前 pre-push 都會跑 srccheck）']
+    return ['✓ 裝好了：core.hooksPath ＝ .githooks（提交前 pre-commit、推送前 pre-push 都會跑 srccheck；合併後、切換後、改寫後、提交後會跑 shellsync —— 這份是別的遊戲的 submodule 時重套外層的外殼頁）']
 
 
 def src_hook_commit(r):
@@ -2567,6 +2568,53 @@ def act_shell(path, check=False):
     with open(out, 'w', encoding='utf-8', newline='') as f:
         f.write(html)
     return ['✓ 寫了 %s（%.2f MB；核心 %s、外殼 %s）' % (out, len(html.encode('utf-8')) / 1048576, stamp['core'], stamp['shell'])]
+
+
+# ───────────────────────── 外殼頁跟著核心（shellsync：外層專案拿這份成品套的頁，子模組一動就重套；2026-10-28） ─────────────────────────
+# 這份 Blockside 是別的遊戲的 submodule 時（例：Blocksail 的 external/Blockside），外層的外殼頁（Blocksail 的 battle.html）是拿這份成品套的 ⇒
+#   子模組一動（合併、切換、改寫、提交）成品就可能換了、那一頁的船檔清單就舊了 ⇒ 遊戲報船的版本不同（2026-10-28：快轉 submodule 沒重套 ⇒ 拉貝爾號）。
+#   ⇒ .githooks 的 post-merge／post-checkout／post-rewrite／post-commit 呼叫 shellsync 自動重套；外層的檢查呼叫 shellsync --check（Blocksail tools/check_core.py ④）。
+# 找法：git rev-parse --show-superproject-working-tree ⇒ 外層的根目錄；那裡的 shell.json 與底下一層的 */shell.json，照外殼設定的規矩（相對於它）
+#   算出來的 core 是這份的 index.html 才算 —— 沒寫 core 的不算（那是「誰跑就套誰」，認不出是不是這一份）。
+#   沒有外層、外層沒有指到這份的外殼 ⇒ 什麼都不做、不印（Blockside 自己的 worktree 天天在切，不吵）。
+def shell_cfgs():
+    """外層專案裡、用這份成品套的外殼設定（絕對路徑，照名字排）。"""
+    p = subprocess.run(['git', 'rev-parse', '--show-superproject-working-tree'], cwd=ROOT, capture_output=True, text=True, encoding='utf-8', errors='replace')
+    sup = (p.stdout or '').strip()
+    if p.returncode != 0 or not sup:
+        return []
+    sup = os.path.normpath(sup)
+    me = os.path.normcase(os.path.realpath(OUT))
+    cands = [os.path.join(sup, 'shell.json')] + [os.path.join(sup, d, 'shell.json') for d in sorted(os.listdir(sup)) if os.path.isdir(os.path.join(sup, d))]
+    found = []
+    for c in cands:
+        if not os.path.isfile(c):
+            continue
+        try:
+            S = json.loads(open(c, 'rb').read().decode('utf-8'))
+        except ValueError:
+            continue
+        core = S.get('core') if isinstance(S, dict) else None
+        if isinstance(core, str) and core and os.path.normcase(os.path.realpath(os.path.join(os.path.dirname(c), core))) == me:
+            found.append(c)
+    return found
+
+
+def act_shellsync(check=False, hook=None):
+    """shellsync：外層專案用這份成品套的每一頁都重套（check ⇒ 只比，有一頁舊了 ⇒ Fail）。沒有 ⇒ 回空清單。"""
+    cfgs = shell_cfgs()
+    if not cfgs:
+        return []
+    log, stale = ['外殼頁（%s；外層 %d 頁用這份成品）：' % ('掛鉤 ' + hook if hook else ('只比' if check else '重套'), len(cfgs))], []
+    for c in cfgs:
+        try:
+            log += ['  ' + l for l in act_shell(c, check)]
+        except Fail as e:
+            log.append('  ✗ ' + str(e))
+            stale.append(c)
+    if stale:
+        raise Fail('\n'.join(log))
+    return log
 
 
 # ───────────────────────── 只重建程式（build --code：沒有 VoxelKit/_cache 的機器；2026-10-20） ─────────────────────────
@@ -4212,6 +4260,9 @@ def main():
     s = sp.add_parser('shell', help='外掛外殼：拿建好的成品（入口；船檔共用）套別的遊戲的外殼（標題、樣式、掛鉤）寫成另一頁 —— 例 Blocksail 的 battle.html；格式見 admin.py「外掛外殼」')
     s.add_argument('cfg', help='外殼設定（JSON；裡面的路徑相對於它）')
     s.add_argument('--check', action='store_true', help='只比：那一頁是不是照現在的成品與外殼做的（舊了 ⇒ exit 1）')
+    s = sp.add_parser('shellsync', help='外殼頁跟著核心：這份是別的遊戲的 submodule 時，外層的 shell.json、*/shell.json 裡 core 指到這份成品的頁全部重套（.githooks 的合併後／切換後／改寫後／提交後會叫）；沒有外層 ⇒ 什麼都不做')
+    s.add_argument('--check', action='store_true', help='只比：有一頁舊了 ⇒ exit 1（外層的檢查用）')
+    s.add_argument('--hook', help='誰叫的（印在第一行；.githooks 帶）')
     sp.add_parser('reseg', help='船檔照現在的切法重切（不用 _cache：從船檔自己解回原文重切、解回來逐位元組相同才寫、換入口清單上的雜湊）—— 只有 ship_segments 的切法改了才要')
     s = sp.add_parser('snapshot', help='某一版的成品（入口＋它清單上的船檔）取出到一個資料夾：拆檔之後 git show <版本>:index.html 只拿得到入口（對拍的對照組用這個）')
     s.add_argument('rev', help='commit、分支名')
@@ -4284,6 +4335,10 @@ def main():
             log = act_reseg()
         elif o.op == 'shell':
             log = act_shell(o.cfg, o.check)
+        elif o.op == 'shellsync':
+            log = act_shellsync(o.check, o.hook)
+            if not log:
+                return
         elif o.op == 'snapshot':
             log = act_snapshot(o.rev, o.to)
         elif o.op == 'verify':
