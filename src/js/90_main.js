@@ -16,7 +16,8 @@ function frame(ts, noRaf) {                                         // noRaf：_
     var nMax = SIM_SPEED > 1 ? Math.ceil(4 * SIM_SPEED) : 4;            // 一格畫面最多走幾步：快轉（> 1 倍）照倍率放寬，不然 60 FPS 時最多 4 倍
     if (BED) bedFocusAuto();                                            // 海圖（08_seabed.js）：焦點走進別塊 ⇒ 換中心重載
     VIS_FRAME = PHYS;                                                   // 布照畫面格算（30_rig_physics.js physFrame；TASK-0799，交戰也是：Tim 2026-10-22）—— 這一格開頭判一次，整格同一種算法
-    while (n < nMax && loopAcc >= (DT = sailDt())) { if (bedWait() || camTransHeld()) { loopAcc = 0; break; } VIEW_HOLD = loopAcc >= 2 * DT && n + 1 < nMax; simStep(); loopAcc -= DT; n++; }   // 船旁邊的海圖塊還沒載好 ⇒ 這一格先不走（戰局跟載入快慢無關）；VIEW_HOLD：後面還有步 ⇒ 只給人看的留到最後一步一次推（50_sim.js）；sailDt：每一步之前挑這一步多長（航行快轉 ⇒ 粗步長，TASK-0800）
+    while (n < nMax && loopAcc >= (DT = sailDt())) { if (bedWait() || camTransHeld()) { loopAcc = DT; break; } VIEW_HOLD = loopAcc >= 2 * DT && n + 1 < nMax; simStep(); loopAcc -= DT; n++; }   // 船旁邊的海圖塊還沒載好 ⇒ 這一格先不走（戰局跟載入快慢無關）；VIEW_HOLD：後面還有步 ⇒ 只給人看的留到最後一步一次推（50_sim.js）；sailDt：每一步之前挑這一步多長（航行快轉 ⇒ 粗步長，TASK-0800）
+    //   等的時候 loopAcc 夾在一步（以前歸零）：城鎮的時鐘 townClock ＝ SIMT ＋ loopAcc ⇒ 歸零的話每一格在 0～一步之間來回跳，鎮民、動物原地抖（Tim 2026-10-27「鎮民都不會走動(一直抖動)」）；夾住 ⇒ 時鐘停住、不倒退，等完照舊一步一步走
     VIEW_HOLD = false;
     if (n) pslowMeasure((performance.now() - st0) / n);                // 一步平均幾毫秒（物理減速照它算）
     if (n === nMax) loopAcc = 0;
