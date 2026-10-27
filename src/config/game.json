@@ -1539,7 +1539,7 @@
           155
         ],
         "marines": [
-          35,
+          56,
           170
         ],
         "center": 110,
@@ -1567,7 +1567,7 @@
         "boat": 2,
         "capstan": 2,
         "deck": 8,
-        "door": 7,
+        "door": 11,
         "galley": 2,
         "gun": 95,
         "ladders": 7,
