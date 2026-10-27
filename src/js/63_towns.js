@@ -2522,13 +2522,15 @@ function townFortWake(h) {
   if (!id || !me || !modeRule('battleKeys') || modeRule('town')) return false;
   if (TOWN_UNITS[key]) return false;
   if (q.waking) return true;
-  if (SHIPS.length >= MAX_SHIPS) { note(me, h.name + '：場上已經 ' + SHIPS.length + ' 艘，堡壘進不來（上限 ' + MAX_SHIPS + '）'); return true; }
+  if (SHIPS.length - Object.keys(TOWN_UNITS).length >= MAX_SHIPS) { note(me, h.name + '：場上已經 ' + SHIPS.length + ' 艘，堡壘進不來（上限 ' + MAX_SHIPS + '）'); return true; }   // 前一座會換回去（一次一座）⇒ 不算它
   q.waking = true; note(me, h.name + '：載入中…');
   loadHull(id).then(function (T) {
     q.waking = false;
     if (TOWN_UNITS[key] || SHIPS.indexOf(me) < 0) return;
     var m = TOWNS.kit && TOWNS.kit.M[q.k] && TOWNS.kit.M[q.k].m;
     if (!m || m.size[0] !== T.h.size[0] || m.size[1] !== T.h.size[1] || Math.abs(m.mpv - S) > 1e-9) { note(me, h.name + '：城鎮模型跟戰鬥用的那一座大小不一樣，不換（' + (m ? m.size.join('×') : '?') + ' vs ' + T.h.size.join('×') + '）'); return; }
+    Object.keys(TOWN_UNITS).forEach(function (k) { townFortSleep(k, '換成 ' + h.name); });   // 一次一座（Tim 2026-10-27「維持點了換上來吧 且一次一座」）：前一座換回城裡的模型；砲彈還在飛 ⇒ townFortTick 等落地再收
+    if (SHIPS.length >= MAX_SHIPS) { note(me, h.name + '：前一座的砲彈還在飛、場上已經 ' + SHIPS.length + ' 艘，等一下再點'); return; }
     var s = Math.sin(q.th), c = Math.cos(q.th), e = S * T.cx - m.size[0] * m.mpv / 2;
     var sh = makeShip(SHIPS.length, me.team, Math.atan2(-c, -s), q.z + e * c, T, q.x - e * s);
     sh.gy = q.y + S * T.zw; sh.calm = true; sh.townKey = key; sh.townId = h.T.id; sh.name = h.name;
@@ -2548,24 +2550,35 @@ function townFortWake(h) {
 //   或換了玩法（城鎮模式、沒有海戰鍵）⇒ 那一座收掉（58_traffic.js shipDrop），城裡那一棟的模型、站崗的鎮民畫回來。
 //   ⚠ 打壞的格子、死傷都不留（留下來是 TASK-0956 第三段）⇒ 回頭再點是完好的一座、駐軍照當天的帳。
 //   它打出去的砲彈還在飛 ⇒ 等落地再收（砲彈記的是序號 b.owner）。已經不在 SHIPS 裡（重開一場：70_flow.js 清空 SHIPS）⇒ 只把那一棟畫回來（⛔ 以前會一直藏著）。
+//   一次一座（Tim 2026-10-27）：點另一座 ⇒ 前一座照這一套換回（townFortWake；sh.townRetire：砲彈落地前不管多近都要收）。攻城的機制（好幾座一起、射程內自己醒）之後另外想。
 var TOWN_FORT_LEAVE = 1.25, TOWN_FORT_SLACK = 300, TOWN_FORT_EVERY_MS = 500, TOWN_FORT_T = 0;
 /** 這一座打得到多遠（m）：每門砲照砲口離海面的高度（21_gunnery.js gunMaxR 算進高低差）取最遠的。 */
 function townFortR(sh) { var r = 0; sh.guns.forEach(function (g) { var mw = M4.pt(sh.M, g.muz[0], g.muz[1], g.muz[2]); r = Math.max(r, gunMaxR(GUNS[g.type], mw[1])); }); return r; }
+/** 把 TOWN_UNITS[key] 換回城裡的模型（why：廣播的原因）。回換掉了沒有（它的砲彈還在飛 ⇒ false、標 townRetire，townFortTick 之後再收）。 */
+function townFortSleep(key, why) {
+  var sh = TOWN_UNITS[key], me = SHIPS[PLAYER_I]; if (!sh) return true;
+  if (SHIPS.indexOf(sh) >= 0) {
+    sh.townRetire = why; sh.calm = true;                               // 等砲彈落地的那幾秒停手（50_sim.js 不動手；52_fleet.js fortProvoke 不再翻臉）⇒ ⛔ 不停 ⇒ 敵對的那一座一直開砲、一直有砲彈在飛，永遠收不掉
+    if (BALLS.some(function (b) { return b.alive && b.owner === sh.i; })) return false;
+    if (!shipDrop(sh)) return false;
+    if (me) note(me, sh.name + '：' + why + '，換回城裡的模型');
+  }
+  delete TOWN_UNITS[key]; TOWNS.dirty = true;
+  TOWNS.list.forEach(function (T) { if (T.id === sh.townId) T.work = null; });   // 那一棟的站崗鎮民重擺 ⇒ 畫回來
+  return true;
+}
 /** 畫面迴圈每格叫（90_main.js frame），每 TOWN_FORT_EVERY_MS 看一次。 */
 function townFortTick() {
   var now = performance.now(), keys = Object.keys(TOWN_UNITS); if (!keys.length || now - TOWN_FORT_T < TOWN_FORT_EVERY_MS) return; TOWN_FORT_T = now;
   var me = SHIPS[PLAYER_I], stay = !!me && modeRule('battleKeys') && !modeRule('town'), mc = me && shipCenter(me);
   keys.forEach(function (key) {
-    var sh = TOWN_UNITS[key];
-    if (SHIPS.indexOf(sh) >= 0) {
+    var sh = TOWN_UNITS[key], why = sh.townRetire;
+    if (!why && SHIPS.indexOf(sh) >= 0) {
       var fc = shipCenter(sh), d = mc ? Math.hypot(fc[0] - mc[0], fc[2] - mc[2]) : 0;
       if (stay && d <= Math.max(sh.townR * TOWN_FORT_LEAVE, sh.wakeD + TOWN_FORT_SLACK)) return;
-      if (BALLS.some(function (b) { return b.alive && b.owner === sh.i; })) return;
-      if (!shipDrop(sh)) return;
-      if (me) note(me, sh.name + '：' + (stay ? '離開了（' + Math.round(d) + ' m）' : '換了玩法') + '，換回城裡的模型');
+      why = stay ? '離開了（' + Math.round(d) + ' m）' : '換了玩法';
     }
-    delete TOWN_UNITS[key]; TOWNS.dirty = true;
-    TOWNS.list.forEach(function (T) { if (T.id === sh.townId) T.work = null; });   // 那一棟的站崗鎮民重擺 ⇒ 畫回來
+    townFortSleep(key, why || '換回');
   });
 }
 /** 建築模式選單裡的用途（87_townbuild.js twbMenuSet）：要的模型變多 ⇒ 重解一次模型組（同 townReplace）。 */
