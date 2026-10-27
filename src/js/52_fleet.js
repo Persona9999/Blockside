@@ -15,7 +15,7 @@ function isFoe(a, b) { return !!a && !!b && a !== b && a.team !== b.team && !((a
 // 航海時點到城裡的堡壘 ⇒ 換成那一座固定的戰鬥單位（63_towns.js townFortWake），先放在玩家那一隊、sh.calm ＝ 中立：不開砲、不算敵艦。
 // 誰對它開火（21_gunnery.js fireGun 瞄的是它）或打中它（ffHit）⇒ fortProvoke：換到開火那一方的對面、不再中立，下一步就照敵艦打。
 function fortProvoke(f, by) {
-  if (!f || !f.calm || !by || by === f) return;
+  if (!f || !f.calm || f.townRetire || !by || by === f) return;        // townRetire：要換回城裡的模型、等砲彈落地的那一座（63_towns.js townFortSleep）⇒ 被打也不再翻臉
   f.calm = false; f.team = other(by.team); f.foe = undefined;
   pickCaptain(f); cmdTick(); pickFoes();
   note(f, f.name + ' 進入敵對（' + by.name + ' 對它開火）', true);
