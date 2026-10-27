@@ -5,7 +5,7 @@
     "ember": {"tons": 3104, "len": 61.7, "guns": 90, "gunTypes": {"chase": 8, "long": 32, "long32": 32, "carr": 18}, "volley": 1139, "drive": "sail", "sails": 17, "crew": 598},
     "falcon": {"tons": 69, "len": 20.2, "guns": 12, "gunTypes": {"long4": 12}, "volley": 22, "drive": "sail", "sails": 10, "crew": 64},
     "stormkaap": {"tons": 1287, "len": 42.7, "guns": 42, "gunTypes": {"chase3": 2, "long6": 22, "long12": 18}, "volley": 159, "drive": "magic", "sails": 12, "crew": 226},
-    "nightlamp": {"tons": 3153, "len": 53, "guns": 24, "gunTypes": {"chase": 2, "long": 22}, "volley": 256, "drive": "sail", "sails": 12, "crew": 196},
+    "nightlamp": {"tons": 3153, "len": 53, "guns": 24, "gunTypes": {"chase": 2, "long": 22}, "volley": 256, "drive": "sail", "sails": 12, "crew": 198},
     "tridente": {"tons": 4954, "len": 62.3, "guns": 142, "gunTypes": {"trident": 6, "long6": 18, "long12": 36, "long": 34, "long32": 32, "carr": 16}, "volley": 1359, "drive": "sail", "sails": 15, "crew": 779},
     "phoenix": {"tons": 624, "len": 35.9, "guns": 32, "gunTypes": {"chase": 2, "long18": 24, "carr": 6}, "volley": 300, "drive": "sail", "sails": 10, "crew": 229},
     "virginia": {"tons": 5073, "len": 80.2, "guns": 10, "gunTypes": {"brooke7": 2, "brooke64": 2, "dahl9": 6}, "volley": 425, "drive": "steam", "sails": 0, "crew": 144},
