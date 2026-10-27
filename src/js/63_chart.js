@@ -3,6 +3,8 @@
 // 只有畫面：海圖塊進來（08_seabed.js 'bedChunk' 細的、63_bed_gl.js bedFarPut 遠景的粗塊）就畫進一張整個海域的底圖（一點 CHART_M 公尺（chartPx：一塊幾點 ＝ A.chunk ÷ 32），跟遠景的粗塊同一個點距；
 //   海域跟著旗艦走 ⇒ 底圖跟著窗換，疊到的照搬：chartWin），
 //   細的那一份蓋過粗的；顏色照高度：陸地（沙灘、低地、山）、淺到我艦過不去（船底＋電腦讓開淺水的 BEDAV_CLR）、淺海、深海；水下的珊瑚礁、礁石另外標紅。
+//   內陸水（河、湖；段 3，Tim 2026-10-27「是否可以讓小地圖上顯示河流」）：一點照它蓋到的那一塊（32 m 見方）裡有沒有內陸水的取樣點 ⇒ 有就畫成河的藍，
+//     照有水的成數混（至少 CHART_RIVER_MIN）⇒ 比一點還窄的河（10 m 寬的支流）也留一條一點寬的線，不會因為中心那一點剛好在岸上就整段斷掉。
 // 每 6 格畫面（hudFrame）畫一次：北朝上、我艦在中間（三角形尖端 ＝ 船頭）、走過的航跡、出發點 ⚓（開戰位置 ＝ 世界原點；停靠 ⇒ 泊位）、比例尺；
 //   右上角「＋」拉近、「−」拉遠（滾輪也行）：半徑 0.5、1、1.5（開局）、2.5、4、7 km、整個海域。
 //   ⇒ 最外圈會落在海域窗外的那幾級跳過（chartLvOk；窗照畫質「海圖讀取範圍」：近只到 1.5 km、中到 2.5 km、遠到 4 km，再拉遠 ＝ 整個海域）。
@@ -10,7 +12,8 @@
 var CHART = { A: null, im: null, g: null, res: null, cv: null, box: null, zb: null, zoom: 2, trail: [], trT: -1, need: 6.5 };
 if (Q.has('chartz') && isFinite(+Q.get('chartz'))) CHART.zoom = Math.max(0, Math.min(6, Math.round(+Q.get('chartz'))));   // ?chartz=0..6：開局的範圍（量測、截圖用）
 var CHART_M = 32, CHART_R = [500, 1000, 1500, 2500, 4000, 7000, 0], CHART_TRAIL = 900;   // 底圖一點幾公尺（以前「一塊 32 點」⇒ 塊從 1024 改 512 m 時照公尺換：chartPx）；範圍（半徑 m；0 ＝ 整個海域；開局 1.5 km）；航跡最多幾點（2 秒一點 ⇒ 30 分鐘）
-var CHART_COL = { deep: [18, 52, 92], mid: [29, 86, 140], shoal: [62, 150, 190], danger: [150, 225, 230], reef: [222, 120, 100], sand: [214, 196, 140], low: [118, 156, 88], hill: [92, 128, 70], high: [140, 128, 104] };
+var CHART_COL = { deep: [18, 52, 92], mid: [29, 86, 140], shoal: [62, 150, 190], danger: [150, 225, 230], reef: [222, 120, 100], sand: [214, 196, 140], low: [118, 156, 88], hill: [92, 128, 70], high: [140, 128, 104], river: [58, 128, 206] };
+var CHART_RIVER_MIN = 0.75;                                              // 內陸水：一點裡只有一個取樣點有水也至少混這麼多成的河色（窄的河看得到）
 /** 海域變了（或第一次）⇒ 新的一張底圖（全部先塗深海）、把已經載好的細塊畫上去。 */
 /** 底圖一塊幾點（照公尺：CHART_M 一點）。 */
 function chartPx() { return Math.max(1, Math.round(BED.A.chunk / CHART_M)); }
@@ -46,10 +49,15 @@ function chartPut(C) {
   var k = bedKey(C.cx, C.cy); if (CHART.res[k] >= C.n) return;
   var i0 = C.cx - CHART.x0, j0 = C.cy - CHART.y0; if (i0 < 0 || j0 < 0 || i0 >= CHART.nx || j0 >= CHART.ny) return;
   CHART.res[k] = C.n;
-  var P = chartPx(), img = CHART.g.createImageData(P, P), D = img.data, n = C.n;
+  var P = chartPx(), img = CHART.g.createImageData(P, P), D = img.data, n = C.n, wd = C.wd, f = (n - 1) / P, R = CHART_COL.river;
   for (var j = 0; j < P; j++) for (var i = 0; i < P; i++) {
     var u = Math.min(n - 1, Math.round((i + 0.5) / P * (n - 1))), v = Math.min(n - 1, Math.round((j + 0.5) / P * (n - 1))), o = v * n + u;
     var c = chartRGB(C.h0[o] / 10, C.mat0[o]), q = (j * P + i) * 4;
+    if (wd) {                                                            // 內陸水（檔頭）：這一點蓋到的取樣點裡有幾成是水
+      var a0 = Math.floor(i * f), a1 = Math.min(n - 1, Math.ceil((i + 1) * f)), b0 = Math.floor(j * f), b1 = Math.min(n - 1, Math.ceil((j + 1) * f)), w = 0, t = 0;
+      for (var b = b0; b <= b1; b++) for (var a = a0; a <= a1; a++) { t++; if (wd[b * n + a]) w++; }
+      if (w) { var k2 = Math.max(CHART_RIVER_MIN, w / t); c = [c[0] + (R[0] - c[0]) * k2, c[1] + (R[1] - c[1]) * k2, c[2] + (R[2] - c[2]) * k2]; }
+    }
     D[q] = c[0]; D[q + 1] = c[1]; D[q + 2] = c[2]; D[q + 3] = 255;
   }
   CHART.g.putImageData(img, i0 * P, j0 * P);
