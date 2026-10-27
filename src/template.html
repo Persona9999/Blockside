@@ -357,7 +357,7 @@
   #tuiP{ display:none; }
   #stage.tui:not(.tuiT):not(.tuiD) #tuiK, #stage.tuiT #tuiTK, #stage.tuiD #tuiDK{ background:#9fc7ff; color:#111; }
   .tuiTiles div.cur{ background:rgba(159,199,255,.22); box-shadow:inset 0 0 0 2px #9fc7ff; } .tuiTiles button.on{ background:#9fc7ff; color:#111; border-color:#9fc7ff; font-weight:bold; }   /* 城區頁：現在這一區（89_townui.js tuiDistHTML） */
-  #stage.tui #tuiP{ display:flex; flex-direction:column; gap:6px; position:absolute; right:12px; top:64px; bottom:92px; width:min(600px, calc(100vw - 24px)); z-index:9; pointer-events:auto; background:rgba(14,18,24,.9); color:var(--ink); font-size:13px; }
+  #stage.tui #tuiP{ display:flex; flex-direction:column; gap:6px; position:absolute; right:12px; top:64px; bottom:92px; width:min(600px, calc(100vw - 24px)); box-sizing:border-box; z-index:9; pointer-events:auto; background:rgba(14,18,24,.9); color:var(--ink); font-size:13px; }
   #tuiHead{ display:flex; flex-wrap:wrap; gap:4px 12px; align-items:baseline; } #tuiHead b{ font-size:15px; color:#f3e6c4; } #tuiHead span{ color:var(--dim); } #tuiX{ margin-left:auto; border-radius:12px; padding:2px 10px; }
   #tuiTabs{ display:flex; flex-wrap:wrap; gap:6px; } #tuiTabs button{ border-radius:14px; padding:4px 12px; } #tuiTabs button.on{ background:#9fc7ff; color:#111; }
   #tuiBody{ flex:1; overflow:auto; min-height:0; } #tuiBody h4{ margin:10px 0 4px; font-size:13px; color:#f3e6c4; display:flex; gap:8px; align-items:center; } #tuiBody p{ margin:4px 0; }
@@ -376,7 +376,22 @@
   svg.tuiCh{ width:100%; height:auto; display:block; background:#12161d; border-radius:6px; } svg.tuiCh .gr{ stroke:rgba(255,255,255,.08); } svg.tuiCh text{ fill:var(--dim); font-size:10px; } svg.tuiCh .cx{ stroke:rgba(255,255,255,.35); } svg.tuiCh .cd{ stroke:#12161d; stroke-width:2; }
   .tuiChW .tip{ position:absolute; top:22px; padding:4px 8px; border-radius:6px; background:rgba(0,0,0,.85); font-size:12px; pointer-events:none; white-space:nowrap; z-index:2; }
   #tuiPick{ font-size:12px; }
-  @media (max-width: 640px){ #stage.tui #tuiP{ top:56px; bottom:178px; right:8px; width:calc(100vw - 16px); } }
+  #tuiPg{ margin:0; font-size:14px; color:#f3e6c4; }   /* 🏙 城區自己一頁：子選單那一排換成頁名（89_townui.js tuiTabs） */
+  /* 手機直式（Tim 2026-10-27「然後嘗試讓該頁面支援直式排版(手機)」）：以前寬 100vw − 16 再加 padding、邊框（沒有 border-box）⇒ 左邊超出畫面 26 px；
+     上緣 56 px 壓在地球儀浮著的時間面板上 ⇒ 面板開著時那一頁收起時間面板（tuiPageTell），面板從上面 8 px 開始。字、按鈕、表格縮一點，表格放不下 ⇒ 橫向捲 */
+  @media (max-width: 640px){
+    #stage.tui #tuiP{ top:8px; bottom:178px; left:8px; right:8px; width:auto; padding:8px; }
+    #tuiHead{ gap:2px 10px; } #tuiHead b{ font-size:14px; } #tuiHead span{ font-size:12px; }
+    #tuiTabs{ gap:4px; } #tuiTabs button{ padding:3px 9px; font-size:12px; }
+    .tuiTiles{ grid-template-columns:repeat(auto-fill, minmax(100px, 1fr)); gap:4px; } .tuiTiles b{ font-size:14px; }
+    .tuiT th, .tuiT td{ padding:2px 4px; } .tuiTr td.b button{ min-width:56px; padding:3px 6px; font-size:12px; } .tuiTr td.g img{ width:26px; height:26px; }
+    .tuiU button{ min-width:40px; padding:3px 6px; }
+  }
+  /* ?tui=@host（89_townui.js）：Blocksail 地球儀停靠時的 📋 城鎮概況 —— 只留城鎮介面那一份面板、畫面中間；後面一層暗（點了 ⇒ 關） */
+  html.tuionly, html.tuionly body{ background:transparent; } html.tuionly #stage{ background:rgba(4,12,22,.55); }
+  html.tuionly body > :not(#stage), html.tuionly #stage > :not(#tuiP){ display:none !important; }
+  html.tuionly #stage.tui #tuiP{ left:50%; right:auto; transform:translateX(-50%); top:12px; bottom:12px; width:min(640px, calc(100vw - 24px)); }
+  @media (max-width: 640px){ html.tuionly #stage.tui #tuiP{ left:8px; right:8px; transform:none; top:8px; bottom:8px; width:auto; } }
   /* 點建築的資訊面板（89_townbld.js，Blocksail TASK-0909）：左邊一塊，跟城鎮介面（右邊）可以同時開 */
   #tbiP{ display:none; }
   #stage.tbi #tbiP{ display:block; position:absolute; left:12px; top:64px; width:min(300px, calc(100vw - 24px)); max-height:calc(100% - 170px); overflow:auto; z-index:9; pointer-events:auto; background:rgba(14,18,24,.9); color:var(--ink); font-size:13px; font-variant-numeric:tabular-nums; }

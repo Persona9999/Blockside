@@ -518,7 +518,7 @@ loadSay('解碼船體…');
 var GL_STEPS = [programs, geometry, wpGL, flGL, rdGL, bbSetup, function () { QIDX = new VK.QuadIndex(gl); }];
 var GL_READY = BED_SLICE && !PICK_HOST ? GL_STEPS.reduce(function (p, f) { return p.then(yieldUI).then(function () { f(); }); }, Promise.resolve()) : (stepsRun(GL_STEPS), Promise.resolve());
 hullSay = function (s) { evEmit('boot:hull', '解析' + s); };   // 解析中：開戰鈕寫進度（設定照樣能調）
-if (!HEADLESS && !PICK_HOST) GL_READY.then(function () { requestAnimationFrame(frame); });   // 無頭（00_events.js）不開畫面迴圈；解析中也畫（天、海；船載好才有）
+if (!HEADLESS && !PICK_HOST && !TUI_HOST) GL_READY.then(function () { requestAnimationFrame(frame); });   // 無頭（00_events.js）不開畫面迴圈；解析中也畫（天、海；船載好才有）
 /** 編成裡的船全部進了 HULLT 才放行：等完一輪再照**現在的**編成看一次，還有不在的 ⇒ 再等一輪。
  *  ⛔ 只等開頭那一份名單：解析中主選單換了我艦（pickShip）⇒ 名單裡的都回來了，HULLT[我艦] 卻還沒有
  *  ⇒ 下面讀 T.h ⇒「載入失敗：Cannot read properties of undefined (reading 'h')」（Tim 2026-10-20 回報；重現：?prefs=0&cache=0&blue=dromon&red=dromon，一進主選單把我艦換成拿破崙號）。 */
@@ -527,6 +527,7 @@ function fleetLoaded() {
   return Promise.all(ids.map(loadHull)).then(function () { return fleetHulls().concat(coreHulls()).every(function (id) { return HULLT[id]; }) ? null : fleetLoaded(); });
 }
 if (PICK_HOST) pickBoot();                                          // ?pick=@host（72_shippick.js）：只開選船彈窗，不載編成、不開主選單
+else if (TUI_HOST) tuiBoot();                                       // ?tui=@host（89_townui.js）：只開城鎮介面那一份面板（地球儀停靠時的 📋 城鎮概況）
 else GL_READY.then(yieldUI).then(function () {                     // 先讓主選單畫出來，再開始解析
   return Promise.all([fleetLoaded(), bedBoot()]);                   // 只載編成裡的船（預設兩艘都是憲法號 ⇒ 一份）＋海圖（?map，08_seabed.js）
 }).then(function () {
