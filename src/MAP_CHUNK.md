@@ -158,6 +158,9 @@ maps/<海域>/towns.js       BSMAP.town({...})                     海域裡的�
   每座城照舊只建一份（`T.id` ＝ 城），`TOWNS.onD[城]` 記建了哪幾區、`townDistView` 照遮罩挑那幾區的東西、`townReplace` 增量換上（`townDiff` 照 id 比地塊、路、棧橋、碼頭、樓梯；同一個物件不轉 JSON）。
   要哪幾區（`townDistFrame`，每 0.25 秒）：航海 ⇒ 離旗艦 `TOWN_DIST_R` 2.5 km 內，最近那一區先、建好（`townDistReady`）再一次補齊，超過 `TOWN_DIST_DROP` 3.2 km 才收；
   城鎮模式 ⇒ 焦點那一區（停靠的那一區；🏙 城區頁（D）選的；鏡頭看的點落在別區停 `TOWN_DIST_DWELL` 0.8 秒）先、建好再補鄰區（邊離焦點 `TOWN_DIST_NBR` 200 m 內），其他收；焦點換了 ⇒ 海域的窗以那一區為中心（`TOWNS.focus`）。
+  鄰區要整區在海域的窗裡才建（`townDistFits`：那一區的東西的外框 `townDistBoxes` 離焦點 ≤ `bedWinR` 塊；2026-10-27，Tim「聖多明哥城區太大 導致一部分無法載入」）——
+  一區整區建、地面只載窗 ⇒ 伸出窗的那一段浮在霧上。焦點那一區一定建，它多大由 Blocksail 擋（`tools/district_reach.cjs`：離中心、停靠處 ≤ 2 km，畫質「近」的窗）；
+  長路在送出去之前照城區切段（`world/town_export.js townRoadPieces`：一段 ≤ 250 m、不跨區，id「<路>#<第幾段>」、`of` ＝ 原本的 id；相鄰兩段共用切點 ⇒ 路面的距離場跟沒切一樣）。航海模式不套窗這一條。
   旗艦還沒來 ⇒ 只建骨架。沒帶 `cut`（舊的外面那一頁）⇒ 整座。
   換區不重來的那幾樣（量到的長幀，君士坦丁堡一區一區換）：模型組照**整座城**的地塊挑（`townNeed` 讀 `TOWNS.full`；照建了的那幾區挑 ⇒ 換到用了別種建築的區就整組連鎮民、動物的貼圖重解、兩座城的實例重建，一格 356～547 ms）；
   路面回來那一格的廣場、樓梯、水上地塊先一次分好區（`townDistBins`）、每區的路面雜湊 `sig` 在路面的 Worker 裡算（`townRoadGen`），舊的記在那一區（以前主執行緒每區新舊各算一次、每區掃整座城的地塊：一格 150～336 ms ⇒ 1～2 ms）。

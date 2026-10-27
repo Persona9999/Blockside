@@ -105,7 +105,7 @@ function townGot(L, err, idx) {
 //     變了 ⇒ townReplace 增量換上（只重建多的、少的那幾區；townDiff）。
 //   要哪幾區（townDistFrame，每 TOWN_DIST_EVERY 秒看一次）：
 //     航海模式 ⇒ 離旗艦 TOWN_DIST_R 公尺內的區，近的先；超過 TOWN_DIST_DROP 才收（中間那一段來回開不會一直建、收）。
-//     城鎮模式 ⇒ 焦點那一區（停靠的那一區；🏙 選的；鏡頭拖進別區停 TOWN_DIST_DWELL 秒）先建，建好再補鄰區（邊離焦點那一區 TOWN_DIST_NBR 公尺內），其他收掉。
+//     城鎮模式 ⇒ 焦點那一區（停靠的那一區；🏙 選的；鏡頭拖進別區停 TOWN_DIST_DWELL 秒）先建，建好再補鄰區（邊離焦點那一區 TOWN_DIST_NBR 公尺內、整區在海域的窗裡 townDistFits），其他收掉。
 //     焦點那一區先建，建好（townDistReady）再把其他要的一次補齊；收是當場收。旗艦還沒來 ⇒ 只有骨架（以前先猜第一區、旗艦一到整座重建 —— 君士坦丁堡進城鎮模式第 16 秒整座歸零）。
 //   焦點換了 ⇒ 海域的窗以那一區為中心（TOWNS.focus；08_seabed.js bedFocusAt）。
 var TOWN_DIST_R = 2500, TOWN_DIST_DROP = 3200, TOWN_DIST_NBR = 200, TOWN_DIST_DWELL = 0.8, TOWN_DIST_EVERY = 0.25, TOWN_DIST_WAIT = 8;   // 〔佔位〕
@@ -171,10 +171,33 @@ function townDistWant(p, me, town) {
   }
   var F = D.filter(function (d) { return d.id === TOWNS.dist[id]; })[0];
   if (!F) { var s = townDistLocal(p, me.px, me.pz); F = townDistAt(D, s[0], s[1]); TOWNS.dist[id] = F.id; }   // 進城鎮模式 ⇒ 旗艦停的那一區
-  var N = D.filter(function (d) { return d !== F && townDistGap(F.poly, d.poly) <= TOWN_DIST_NBR; })
+  var N = D.filter(function (d) { return d !== F && townDistGap(F.poly, d.poly) <= TOWN_DIST_NBR && townDistFits(p, idx(d)); })
     .sort(function (a, b) { return Math.hypot(a.c[0] - F.c[0], a.c[1] - F.c[1]) - Math.hypot(b.c[0] - F.c[0], b.c[1] - F.c[1]); });
   var L = [idx(F)].concat(N.map(idx)), k = 0; L.forEach(function (i) { k |= 1 << i; });
   return { list: L, keep: k };
+}
+//   城鎮模式的鄰區要整區都在海域的窗裡才建（Tim 2026-10-27「聖多明哥城區太大 導致一部分無法載入」「上限照「近」2 km」）：
+//     一區整區建（townDistView），地面只載窗（焦點那一塊 ± bedWinR 塊；畫質「近」2 km）⇒ 鄰區伸出窗的那一段浮在霧上。
+//     焦點那一區照舊一定建 —— 它多大由 Blocksail 擋（tools/district_reach.cjs：一區的東西離中心、離停靠處 ≤ 2 km；長路照城區切段，town_export.js townRoadPieces）。
+//     鄰區不在窗裡 ⇒ 先不建；鏡頭拖過去停下（townDistDrag）⇒ 它變成焦點、窗跟著過去。窗大的畫質（中 4 km、遠 6 km）鄰區照舊一起建。
+//     航海模式不套：船在外海遠遠看，整座城不能因為窗小就不見（那一段離鏡頭遠、城的實例本來就不畫，TOWN_FAR）。
+/** 城 p 每一區的東西的外框（規劃的當地公尺；照 cut：地塊外接圓、路、碼頭、棧橋的每一點外擴半寬）⇒ [[x0, y0, x1, y1]｜null（那一區沒東西）…]；同一份規劃只算一次。 */
+function townDistBoxes(p) {
+  var M = TOWNS.dbox || (TOWNS.dbox = {}), m = M[p.id]; if (m && m.p === p) return m.B;
+  var D = p.districts, C = p.cut, B = D.map(function () { return null; });
+  function add(mk, x, y, r) { for (var i = 0; i < D.length; i++) if (mk & (1 << i)) { var b = B[i] || (B[i] = [1e9, 1e9, -1e9, -1e9]); b[0] = Math.min(b[0], x - r); b[1] = Math.min(b[1], y - r); b[2] = Math.max(b[2], x + r); b[3] = Math.max(b[3], y + r); } }
+  (p.lots || []).forEach(function (l, j) { add((C.lots || [])[j] || 0, l.at[0], l.at[1], Math.hypot(l.w || 0, l.d || 0) / 2); });
+  ['roads', 'piers', 'quay'].forEach(function (k) { (p[k] || []).forEach(function (r, j) { var mk = (C[k] || [])[j] || 0; if (mk) (r.path || []).forEach(function (q) { add(mk, q[0], q[1], (r.w || 0) / 2); }); }); });
+  M[p.id] = { p: p, B: B };
+  return B;
+}
+/** 城 p 的第 i 區整區在海域的窗裡（窗 ＝ 焦點 bedFocusAt 那一塊 ± bedWinR 塊 ⇒ 離焦點至少 bedWinR·塊寬 一定載得到；方格距離）。窗定死（檔案海圖、沒有 BED.win）⇒ 一律算在。 */
+function townDistFits(p, i) {
+  if (!BED || !BED.A || !BED.win) return true;
+  var b = townDistBoxes(p)[i]; if (!b) return true;
+  var f = bedFocusAt(), r = bedWinR() * BED.A.chunk, ox = +p.ox || 0, oy = +p.oy || 0, kx = +p.kx || 1;
+  var x0 = ox + kx * b[0] - BED.ax, x1 = ox + kx * b[2] - BED.ax, z0 = oy + b[1] - BED.az, z1 = oy + b[3] - BED.az;
+  return Math.max(f[0] - x0, x1 - f[0], f[1] - z0, z1 - f[1]) <= r;
 }
 /** 城鎮模式：鏡頭看的那一點（CAM.look）落在別區、停了 TOWN_DIST_DWELL 秒 ⇒ 焦點換到那一區（只看真的落在區裡的，邊外的水面不算）。 */
 function townDistDrag(p, now) {
