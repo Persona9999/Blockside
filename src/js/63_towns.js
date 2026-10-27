@@ -109,8 +109,16 @@ function townGot(L, err, idx) {
 //     焦點那一區先建，建好（townDistReady）再把其他要的一次補齊；收是當場收。旗艦還沒來 ⇒ 只有骨架（以前先猜第一區、旗艦一到整座重建 —— 君士坦丁堡進城鎮模式第 16 秒整座歸零）。
 //   焦點換了 ⇒ 海域的窗以那一區為中心（TOWNS.focus；08_seabed.js bedFocusAt）。
 var TOWN_DIST_R = 2500, TOWN_DIST_DROP = 3200, TOWN_DIST_NBR = 200, TOWN_DIST_DWELL = 0.8, TOWN_DIST_EVERY = 0.25, TOWN_DIST_WAIT = 8;   // 〔佔位〕
+var TOWN_DIST_KEYS = ['lots', 'roads', 'piers', 'quay', 'stairs', 'berths', 'zones'];   // 照遮罩挑的那幾欄（townDistView）
+//   照窗（Blocksail town_export.js CUT_WIN，遮罩的第 30 位；Tim 2026-10-27 選「全部照窗」「實例照窗、資料不切」）：不歸任何一區、照海域的窗載 ——
+//     城區之間手拉的路（Blocksail TASK-0988；每一段 ＝ 那幾區的位元 | 照窗）：整段（外擴半寬）在窗裡才建，不看城區；城鎮、航海模式都一樣；
+//       窗換了 ⇒ townDistFrame 照新的窗挑（townDistWin）、增量換上（townReplace）。舊的 Blockside 不認得這一位 ⇒ 照那幾區的位元，跟以前一樣。
+//     骨架（cut.walls、cut.aqueducts 標照窗）：整道照舊生成（接點、塔、門不拆），每一節（實例）只在窗裡才擺（townWallY）；窗移走 ⇒ 擺好的那幾節收回（townWinDrop）。
+//     窗 ＝ 現在的海域（BED.A.x／y 那幾塊；__game.bed().win）：窗外的地面不載 ⇒ 那裡的路、牆浮在霧上（路照規劃的高度、牆是上一個窗擺的）。窗定死（檔案海圖，沒有 BED.win）⇒ 一律算在。
+var TOWN_CUT_WIN = 1 << 30;
 //   ⛔ 位元表叫 onD：TOWNS.on 是「畫不畫城鎮」的開關（?towns=0、__game.town(at, on)）—— 以前也叫 on ⇒ ?towns=0 關不掉、__game.town(at, true) 把位元表蓋成 true（只剩骨架）
-TOWNS.dist = {}; TOWNS.full = {}; TOWNS.onD = {}; TOWNS.onT = {}; TOWNS.focus = null; TOWNS.distMode = null; TOWNS.distT = 0; TOWNS.dwell = null;
+//   TOWNS.onW[城] ＝ 照窗的那幾樣現在建哪幾樣（{ 欄: Uint8Array, sig }；townDistWin）
+TOWNS.dist = {}; TOWNS.full = {}; TOWNS.onD = {}; TOWNS.onW = {}; TOWNS.onT = {}; TOWNS.focus = null; TOWNS.distMode = null; TOWNS.distT = 0; TOWNS.dwell = null;
 //   自己一份規劃的城區（Blocksail TASK-0987；規劃 id「<城>~<區>」、districts 是城的整份清單換到它自己的當地公尺、cut 照它算）⇒ 跟主規劃一樣照遮罩載；
 //     焦點照城記（TOWNS.dist[城]）⇒ 一座城的每一份規劃一起換區；拖曳換區只看主規劃（它的 districts 一樣是整份）。
 /** 規劃 id ⇒ 城的 id（自己一份規劃的城區「<城>~<區>」⇒ <城>；同 Blocksail world/areas.js townUnitCity）。 */
@@ -132,9 +140,9 @@ function townDistView(p) {
   var D = p && p.districts; if (!D || !D.length) return p;
   if (p.distView == null) TOWNS.full[p.id] = p; else p = TOWNS.full[p.id] || p;   // 已經挑過的那一份 ⇒ 拿整份重挑
   var C = p.cut; if (!C) return p;
-  var on = TOWNS.onD[p.id] || 0, o = {}; for (var key in p) o[key] = p[key];
-  function keep(k, L) { var M = C[k]; if (!L || !M || M.length !== L.length) return L; return L.filter(function (q, i) { return !M[i] || (M[i] & on); }); }
-  ['lots', 'roads', 'piers', 'quay', 'stairs', 'berths', 'zones'].forEach(function (k) { if (p[k]) o[k] = keep(k, p[k]); });
+  var on = TOWNS.onD[p.id] || 0, w = TOWNS.onW[p.id] || null, o = {}; for (var key in p) o[key] = p[key];
+  function keep(k, L) { var M = C[k], f = w && w[k]; if (!L || !M || M.length !== L.length) return L; return L.filter(function (q, i) { var m = M[i]; return !m || (m & TOWN_CUT_WIN ? !!(f && f[i]) : (m & on)); }); }   // 照窗的 ⇒ 照 townDistWin 的那一份
+  TOWN_DIST_KEYS.forEach(function (k) { if (p[k]) o[k] = keep(k, p[k]); });
   if (p.clear) o.clear = { rings: keep('rings', p.clear.rings || []), paths: keep('paths', p.clear.paths || []) };
   o.distView = on;
   TOWNS.stat.dist = TOWNS.stat.dist || {};
@@ -145,9 +153,9 @@ function townDistView(p) {
  *  照 onD 記著，換區才重挑。沒有城區或 cut ⇒ null（整座都建了）。 */
 function townDistRest(T) {
   var p = TOWNS.full[T.id], C = p && p.cut; if (!C) return null;
-  var on = TOWNS.onD[T.id] || 0, R = T.distRest; if (R && R.on === on && R.p === p) return R;
-  function rest(k, L) { var M = C[k]; if (!L || !M || M.length !== L.length) return []; return L.filter(function (q, i) { return M[i] && !(M[i] & on); }); }
-  R = T.distRest = { on: on, p: p, roads: rest('roads', p.roads), quay: rest('quay', p.quay).concat(rest('piers', p.piers)), lots: rest('lots', p.lots).filter(function (l) { return l.use !== 'plot' && l.use !== 'plaza'; }), box: [1e9, 1e9, -1e9, -1e9] };
+  var on = TOWNS.onD[T.id] || 0, w = TOWNS.onW[T.id] || null, R = T.distRest; if (R && R.on === on && R.w === w && R.p === p) return R;
+  function rest(k, L) { var M = C[k], f = w && w[k]; if (!L || !M || M.length !== L.length) return []; return L.filter(function (q, i) { var m = M[i]; return m && !(m & TOWN_CUT_WIN ? f && f[i] : m & on); }); }   // 照窗的：窗外那幾段
+  R = T.distRest = { on: on, w: w, p: p, roads: rest('roads', p.roads), quay: rest('quay', p.quay).concat(rest('piers', p.piers)), lots: rest('lots', p.lots).filter(function (l) { return l.use !== 'plot' && l.use !== 'plaza'; }), box: [1e9, 1e9, -1e9, -1e9] };
   function grow(q, r) { var e = T.E(q); townBoxAdd(R.box, [e[0] - r, e[1] - r, e[0] + r, e[1] + r]); }
   R.roads.concat(R.quay).forEach(function (r) { r.path.forEach(function (q) { grow(q, (r.w || 6) / 2); }); });
   R.lots.forEach(function (l) { grow(l.at, Math.hypot(l.w, l.d) / 2); });
@@ -185,7 +193,8 @@ function townDistWant(p, me, town) {
 function townDistBoxes(p) {
   var M = TOWNS.dbox || (TOWNS.dbox = {}), m = M[p.id]; if (m && m.p === p) return m.B;
   var D = p.districts, C = p.cut, B = D.map(function () { return null; });
-  function add(mk, x, y, r) { for (var i = 0; i < D.length; i++) if (mk & (1 << i)) { var b = B[i] || (B[i] = [1e9, 1e9, -1e9, -1e9]); b[0] = Math.min(b[0], x - r); b[1] = Math.min(b[1], y - r); b[2] = Math.max(b[2], x + r); b[3] = Math.max(b[3], y + r); } }
+  //   照窗的（城區之間的路）不算哪一區的
+  function add(mk, x, y, r) { if (mk & TOWN_CUT_WIN) return; for (var i = 0; i < D.length; i++) if (mk & (1 << i)) { var b = B[i] || (B[i] = [1e9, 1e9, -1e9, -1e9]); b[0] = Math.min(b[0], x - r); b[1] = Math.min(b[1], y - r); b[2] = Math.max(b[2], x + r); b[3] = Math.max(b[3], y + r); } }
   (p.lots || []).forEach(function (l, j) { add((C.lots || [])[j] || 0, l.at[0], l.at[1], Math.hypot(l.w || 0, l.d || 0) / 2); });
   ['roads', 'piers', 'quay'].forEach(function (k) { (p[k] || []).forEach(function (r, j) { var mk = (C[k] || [])[j] || 0; if (mk) (r.path || []).forEach(function (q) { add(mk, q[0], q[1], (r.w || 0) / 2); }); }); });
   M[p.id] = { p: p, B: B };
@@ -199,6 +208,54 @@ function townDistFits(p, i) {
   var x0 = ox + kx * b[0] - BED.ax, x1 = ox + kx * b[2] - BED.ax, z0 = oy + b[1] - BED.az, z1 = oy + b[3] - BED.az;
   return Math.max(f[0] - x0, x1 - f[0], f[1] - z0, z1 - f[1]) <= r;
 }
+/** 現在的窗（世界座標 [x0, z0, x1, z1]：海域 BED.A.x／y 那幾塊）；窗定死（檔案海圖，沒有 BED.win）⇒ null（一律算在）。 */
+function townWinRect() { if (!BED || !BED.A || !BED.win) return null; var A = BED.A, S = A.chunk; return [A.x[0] * S - BED.ax, A.y[0] * S - BED.az, (A.x[1] + 1) * S - BED.ax, (A.y[1] + 1) * S - BED.az]; }
+/** 世界座標的外框 b 整個在窗 R 裡（R null ⇒ 算在）。 */
+function townWinIn(R, b) { return !R || (b[0] >= R[0] && b[1] >= R[1] && b[2] <= R[2] && b[3] <= R[3]); }
+/** 城 p 照窗的那幾樣，哪幾樣整樣在現在的窗裡 ⇒ { 欄: Uint8Array（1 ＝ 建）, sig }｜null（沒有照窗的）。外框（規劃的當地公尺、外擴半寬）同一份規劃只算一次。 */
+function townDistWin(p) {
+  var C = p.cut, M0 = TOWNS.wbox || (TOWNS.wbox = {}), mb = M0[p.id];
+  if (!mb || mb.p !== p) {
+    mb = M0[p.id] = { p: p, B: {} };
+    TOWN_DIST_KEYS.forEach(function (k) {
+      var M = C[k], L = p[k]; if (!M || !L || M.length !== L.length) return;
+      M.forEach(function (m, i) {
+        if (!(m & TOWN_CUT_WIN)) return;
+        var q = L[i], b = [1e9, 1e9, -1e9, -1e9], P = q.path || q.polygon || (q.at ? [q.at] : []), r = q.path ? (q.w || 0) / 2 : q.at && q.w ? Math.hypot(q.w, q.d || 0) / 2 : 0;
+        P.forEach(function (a) { b[0] = Math.min(b[0], a[0] - r); b[1] = Math.min(b[1], a[1] - r); b[2] = Math.max(b[2], a[0] + r); b[3] = Math.max(b[3], a[1] + r); });
+        (mb.B[k] || (mb.B[k] = []))[i] = b;
+      });
+    });
+  }
+  var R = townWinRect(), ox = +p.ox || 0, oy = +p.oy || 0, kx = +p.kx || 1, o = null, sig = '';
+  Object.keys(mb.B).forEach(function (k) {
+    var B = mb.B[k], f = new Uint8Array(B.length);
+    for (var i = 0; i < B.length; i++) { var b = B[i]; if (b && townWinIn(R, [ox + kx * b[0] - BED.ax, oy + b[1] - BED.az, ox + kx * b[2] - BED.ax, oy + b[3] - BED.az])) { f[i] = 1; sig += k + i + ','; } }
+    (o || (o = {}))[k] = f;
+  });
+  if (o) o.sig = sig;
+  return o;
+}
+/** 城牆、引水渠照窗的那一節（townWall 標 q.win）整節在窗裡。 */
+function townWinHas(q) { var R = townWinRect(), r = q.r0 || q.r; return townWinIn(R, [q.x - r, q.z - r, q.x + r, q.z + r]); }
+/** 窗換了（08_seabed.js bedWinApply 的 'bedWin'）⇒ 擺好、卻落到窗外的那幾節照窗的骨架收回（等它回到窗裡、地面在了再擺，townWallY）：
+ *  以前擺好就一直在 ⇒ 換區、開走之後那幾節照上一個窗的地面浮在霧上。屋頂殼、火把（townShell、townLightGen 'D'）跟著重建；收到有布旗的 ⇒ 布旗重建。 */
+function townWinDrop() {
+  var n = 0;
+  TOWNS.list.forEach(function (T) {
+    var hit = false, fl = false, K = TOWNS.kit;
+    (T.inst || []).forEach(function (q) {
+      if (!q.win || !(q.y === q.y) || townWinHas(q)) return;
+      q.y = NaN; q.r = q.r0; q.mj[2] = q.mj[3] = 0; q.bad = null; hit = true; n++;
+      if (K && K.M[q.k] && K.M[q.k].m.flags) fl = true;
+    });
+    if (!hit) return;
+    T.shDirty = true; T.tlD = true; if (fl) townFlagFree(T);
+  });
+  TOWNS.stat.winDrop = (TOWNS.stat.winDrop || 0) + n;
+  if (n) TOWNS.dirty = true;
+}
+evOn('bedWin', function () { townWinDrop(); }, 0, true);
 /** 城鎮模式：鏡頭看的那一點（CAM.look）落在別區、停了 TOWN_DIST_DWELL 秒 ⇒ 焦點換到那一區（只看真的落在區裡的，邊外的水面不算）。 */
 function townDistDrag(p, now) {
   var D = p.districts, c = CAM.look || CAM.tgt; if (!c) return;
@@ -236,8 +293,10 @@ function townDistFrame() {
     var miss = W.list.filter(function (i) { return !(nx & (1 << i)); });
     if (miss.length && miss[0] === W.list[0]) nx |= 1 << miss[0];        // 焦點（航海：最近）那一區不等
     else if (miss.length && townDistReady(T, TOWNS.onT[id])) miss.forEach(function (i) { nx |= 1 << i; });   // 其他的等它建好、一次補齊（一區一區補 ⇒ 實例整座重建、塊重新整地、樹重擺各多做好幾次：君士坦丁堡航海進場長幀多 8 秒）
-    if (nx === cur) return;
-    TOWNS.onD[id] = nx; TOWNS.onT[id] = now; townReplace(p);
+    var w0 = TOWNS.onW[id] || null, w1 = townDistWin(p);                  // 照窗的那幾樣（城區之間的路）：窗換了 ⇒ 照新的窗
+    if (nx === cur && (w0 ? w0.sig : null) === (w1 ? w1.sig : null)) return;
+    if (nx !== cur) { TOWNS.onD[id] = nx; TOWNS.onT[id] = now; }
+    TOWNS.onW[id] = w1; townReplace(p);
   });
 }
 /** 清樹的範圍變了（townGot 新來的城、townReplace 建築模式改過的規劃）⇒ 跟 L 裡的城（或 { box }）疊到的塊重擺樹（63_trees.js treeQueue 照它的預算擺；地形不動 —— 不整地）；
@@ -1140,6 +1199,8 @@ function townWall(T, w, out, W, line, jx) {
   function proj(q) { var best = 0, bd = Infinity; for (var s = 1; s < P.length; s++) { var a = P[s - 1], b = P[s], dx = b[0] - a[0], dy = b[1] - a[1], L2 = dx * dx + dy * dy || 1, u = Math.max(0, Math.min(1, ((q[0] - a[0]) * dx + (q[1] - a[1]) * dy) / L2)), d = Math.hypot(q[0] - a[0] - u * dx, q[1] - a[1] - u * dy); if (d < bd) { bd = d; best = cum[s - 1] + u * Math.sqrt(L2); } } return best; }
   function dir(s) { var dx = P[s][0] - P[s - 1][0], dz = P[s][1] - P[s - 1][1], l = Math.hypot(dx, dz) || 1; return [dx / l, dz / l]; }   // 第 s 段（P[s−1] → P[s]）的方向
   function turn(v) { var a = dir(v === 0 ? nV : v), b = dir(v + 1); return Math.atan2(Math.abs(a[0] * b[1] - a[1] * b[0]), a[0] * b[0] + a[1] * b[1]); }   // 頂點 v（閉合 0…nV−1、開放 1…nV−1）轉了幾度（弧度）
+  var WL = T.p[line ? 'aqueducts' : 'walls'] || [], WC = T.p.cut && T.p.cut[line ? 'aqueducts' : 'walls'], wi = WL.indexOf(w);
+  var win = !!(WC && WC.length === WL.length && wi >= 0 && (WC[wi] & TOWN_CUT_WIN));   // 照窗（檔頭「照窗」那一段）：每一節只在窗裡才擺
   function put(nm, c, a, sx, outward, sh) {
     var m = K.M[nm].m, hw = m.size[0] * m.mpv * sx / 2, hd = m.size[1] * m.mpv / 2;
     // 牆外朝哪一側：規劃寫了 out（Blocksail TOWN_BUILD §4：沿路線前進、北朝上看牆外在 left／right；a 一律是前進方向 ⇒ 模型 −y 朝外 ＝ (−sin a, cos a) 是右手邊）⇒ left 就翻面；
@@ -1147,6 +1208,7 @@ function townWall(T, w, out, W, line, jx) {
     if (outward && (w.out ? w.out === 'left' : -Math.sin(a) * (c[0] - cen[0]) + Math.cos(a) * (c[1] - cen[1]) < 0)) a += Math.PI;
     var q = { k: nm, x: c[0], y: NaN, z: c[1], th: a + Math.PI / 2, sx: sx, sh: sh || 0.95 + 0.1 * townHash(w.id + ':' + out.length), r: Math.hypot(hw, hd) + 2, top: m.top, pl: null, foot: 4 * hw * hd * m.cover, col: m.roof, wall: w.id, lk: 1,
               mj: [0, 0, 0, 0], ft: [hw, hd] };                          // mj ＝ 著色器的 aJ（−x、+x 那一頭的斜接、坡度、牆基往下延；後兩個 townWallY 填）、ft ＝ 半長、半厚
+    if (win) { q.win = true; q.r0 = q.r; }                              // r0：擺之前的外框半徑（townWallY 會加大；收回時還原，townWinDrop）
     if (line) { q.line = true; q.deck = m.deck || 0; TOWNS.stat.lines = (TOWNS.stat.lines || 0) + 1; } else TOWNS.stat.walls++;
     out.push(q); return q;
   }
@@ -1328,6 +1390,7 @@ function townMiter(n, s, c) {
 }
 /** 城牆的實例那一塊載進來了 ⇒ 高度：斷面照兩頭的站（地面；水上照海面 0）線性接 ⇒ 坡度 g，別的部件照中心；牆基（模型 z 0 那一層）往下延到腳下最低的地面再 0.3 m。地面沒載 ⇒ false（下次分組再試）。 */
 function townWallY(q) {
+  if (q.win && !townWinHas(q)) return false;                            // 照窗的骨架：窗外不擺（窗外的地面不載；bedCell 退回的那一份也不算）
   var s = Math.sin(q.th), c = Math.cos(q.th), hw = q.ft[0], hd = q.ft[1], y, g = 0, lo = 0;
   function gnd(p) { return Math.max(0, townGround(p[0], p[1])); }
   if (q.lev) { var la = q.lev[0] - q.deck, lb = q.lev[1] - q.deck; if (!(gnd([q.x, q.z]) === gnd([q.x, q.z]))) return false; y = (la + lb) / 2; g = (lb - la) / (2 * hw); }   // 引水渠：照渠頂（見 townWall 的 line）
@@ -2336,7 +2399,7 @@ function townBoxDist(b, e) { var dx = Math.max(b[0] - e[0], 0, e[0] - b[3]), dz 
 function townBoxFar(b, e) { var dx = Math.max(Math.abs(b[0] - e[0]), Math.abs(b[3] - e[0])), dz = Math.max(Math.abs(b[2] - e[2]), Math.abs(b[5] - e[2])); return Math.sqrt(dx * dx + dz * dz); }
 /** 讀數（__game.town()）：幾座城、每座的雜湊與實例數、這一格畫了幾個（近、中、貼圖、殼）、三角形、毫秒；at ＝ [x, z] ⇒ 那一點的畫面高度、清不清樹。 */
 function townStat(at) {
-  var S = TOWNS.stat, o = { on: TOWNS.on, onD: TOWNS.onD, want: TOWNS.want, err: TOWNS.err, towns: TOWNS.list.map(function (T) {
+  var S = TOWNS.stat, o = { on: TOWNS.on, onD: TOWNS.onD, winDrop: S.winDrop || 0, want: TOWNS.want, err: TOWNS.err, towns: TOWNS.list.map(function (T) {   // winDrop：窗換了收回幾節照窗的骨架（townWinDrop）
     var u = {}; (T.inst || []).forEach(function (q) { u[q.k] = (u[q.k] || 0) + 1; });
     var tl = townLightStat(T);
     return { id: T.id, name: T.name, tier: T.tier, seed: T.seed, ox: T.ox, oy: T.oy, lots: (T.p.lots || []).length, roads: T.roads.length, walls: (T.p.walls || []).length, inst: (T.inst || []).length, ground: T.gt ? (function () { var K = Object.keys(T.gt); return { tiles: K.length, built: K.filter(function (k) { return T.gt[k].g; }).length, dirty: K.filter(function (k) { return T.gt[k].dirty; }).length, piers: K.filter(function (k) { return townGroundPier(T.gt[k]); }).length, piersBuilt: K.filter(function (k) { return townGroundPier(T.gt[k]) && T.gt[k].g; }).length }; })() : null,   // piers：有棧橋或碼頭的區（TASK-0826 先建）
@@ -2461,11 +2524,13 @@ function townWantSet(uses) {
   if (I && TOWNS.kitHas && townNeed(I).some(function (nm) { return TOWNS.kitHas.indexOf(nm) < 0; })) townKitStale();
 }
 /** 測試用（__game.townLines）：城 id 的引水渠實例（海域座標：中心、轉角、x 的倍率、半長、半厚、模型的 arch）＋ 每條路照同一套換到海域座標的中心線與寬
- *  ⇒ 拿實例的墩（arch 兩側）去量跟路面疊多少 —— 跟規劃的 under 走不同的路（under 是 Blocksail 沿渠線取樣算的；這裡讀的是實際擺出來的實例） */
+ *  ⇒ 拿實例的墩（arch 兩側）去量跟路面疊多少 —— 跟規劃的 under 走不同的路（under 是 Blocksail 沿渠線取樣算的；這裡讀的是實際擺出來的實例）
+ *  walls：擺好了（有高度、畫得出來）的城牆每一節（中心、外框半徑、照不照窗）；lines 的 y 是 NaN ＝ 還沒擺 ⇒ 對 __game.bed().win 量窗外有幾點（照窗，檔頭那一段） */
 function townLines(id) {
   var T = TOWNS.list.filter(function (t) { return !id || t.id === id; })[0], K = TOWNS.kit; if (!T || !K) return null;
   function W(q) { var e = T.E(q); return [e[0] - BED.ax, e[1] - BED.az]; }
-  return { id: T.id, lines: (T.inst || []).filter(function (q) { return q.line; }).map(function (q) { var m = K.M[q.k].m; return { k: q.k, x: q.x, z: q.z, th: q.th, sx: q.sx, hw: q.ft[0], hd: q.ft[1], arch: m.arch || null, len: m.size[0] * m.mpv }; }),
+  return { id: T.id, lines: (T.inst || []).filter(function (q) { return q.line; }).map(function (q) { var m = K.M[q.k].m; return { k: q.k, x: q.x, y: q.y, z: q.z, th: q.th, sx: q.sx, hw: q.ft[0], hd: q.ft[1], arch: m.arch || null, len: m.size[0] * m.mpv, win: !!q.win }; }),
+    walls: (T.inst || []).filter(function (q) { return q.wall && !q.line && q.y === q.y; }).map(function (q) { return { k: q.k, x: q.x, z: q.z, r: q.r0 || q.r, win: !!q.win }; }),
     roads: T.p.roads.map(function (r) { return { id: r.id, seq: r.seq, w: r.w, path: (r.closed ? r.path.concat([r.path[0]]) : r.path).map(W) }; }) };
 }
 /** 測試用（__game.townDump）：城 id（沒給 ⇒ 第一座）每一區地面網格（讀 GPU：頂點、索引）與城框裡每一塊清樹遮罩（townClrOf）的雜湊

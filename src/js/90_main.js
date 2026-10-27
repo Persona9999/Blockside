@@ -228,7 +228,7 @@ if (DEBUG) window.__game = {
   bed: function (q) { if (!BED || !BED.A) return null; return { area: BED.A.id, site: BED.site, origin: [BED.ax, BED.az], center: [BED.cx, BED.cy], loaded: Object.keys(BED.ch).sort(), loads: BED.loads, drops: BED.drops, waits: BED.miss,
     mid: BED.mid ? { step: BED.mid, loaded: Object.keys(BED.cm).sort(), loads: BED.mloads, lv: [1, 2].map(function (v) { var n = 0; for (var q = 0; q < BED.lv.length; q++) if (BED.lv[q] === v && BED.has[q]) n++; return n; }) } : null,   // 外圈的中等塊：載了哪幾塊、模擬讀中等／原精度的各幾塊
     meshes: Object.keys(BEDGL).length,                                   // （以前寫在上一行的註解後面 ⇒ 沒出來）
-    win: BED.win ? { r: bedWinR(), max: BED.win, km: +(bedWinR() * BED.A.chunk / 1000).toFixed(2), x: BED.A.x, y: BED.A.y, wins: BED.wins, ms: BED.winMs, asking: !!BED.winP } : null,   // 海域跟著旗艦走：現在的窗（塊號）、換過幾次、上次重排幾 ms、在要新的窗
+    win: BED.win ? { r: bedWinR(), max: BED.win, km: +(bedWinR() * BED.A.chunk / 1000).toFixed(2), x: BED.A.x, y: BED.A.y, chunk: BED.A.chunk, wins: BED.wins, ms: BED.winMs, asking: !!BED.winP } : null,   // 海域跟著旗艦走：現在的窗（塊號）、換過幾次、上次重排幾 ms、在要新的窗
     pump: BED.inq ? { q: BED.inq.length, n: BED.pumped, max: +BED.pumpMax.toFixed(1) } : null,   // 收塊排隊（08_seabed.js bedPump）：還排著幾則、處理過幾則、一格最久幾 ms
     trees: treeStat(),
     near: { n: BEDNEAR.n, miss: BEDNEAR.miss, ms: BEDNEAR.ms, out: BEDNEAR.out, forced: BEDNEAR.forced, hold: BEDNEAR.hold, keys: BEDNEAR.keys || null },   // 淡進來之前等的靠近船的地形網格（63_bed_gl.js BEDNEAR，TASK-0907）：幾塊、還缺幾塊、等了幾 ms、等不到照舊淡進來、不看預算建了幾塊
