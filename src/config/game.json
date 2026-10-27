@@ -1392,6 +1392,20 @@
       "town": "en-battery"
     },
     {
+      "id": "battery_carib_s",
+      "el": "ship-battery-carib-s",
+      "name": "加勒比小砲台",
+      "vxk": "battery_carib_s.vxk",
+      "work": "kaguya-smallhouse-01m-battery-s",
+      "author": "kaguya",
+      "material": "stone",
+      "fixed": true,
+      "zw0": 1,
+      "geo": {"spar": [4, 10], "marines": [4, 4], "center": 4, "aim": 4, "aimZ": [2, 14], "deckAim": [2, 10], "rigAim": [10, 20]},
+      "crew": {"officers": 1, "helm": 0, "marines": 0, "top": 0, "monkeys": 1, "handsK": 0.1, "surgeon": 0, "carpenter": 1, "sailmaker": 1, "cook": 0, "navigator": 0, "quartermaster": 0},
+      "town": "carib-battery-s"
+    },
+    {
       "id": "labelle",
       "role": "merchant",
       "el": "ship-labelle",
