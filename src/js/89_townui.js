@@ -74,7 +74,7 @@ function tuiGood(g) { var X = TUI.goods[g]; if (X && X.name) return X.name; var 
 function tuiAsk(cmd, extra, cb) {
   if (!tuiOk()) { if (cb) cb({ ok: false, why: ['城鎮介面要從 Blocksail 地球儀停靠進城'] }); return; }
   var s = ++TUI.seq; TUI.wait[s] = cb || null;
-  BED.host.postMessage(Object.assign({ bsmap: 'need', what: 'townUI', town: TWB.town, cmd: cmd, seq: s }, extra || {}), '*');
+  BED.host.postMessage(Object.assign({ bsmap: 'need', what: 'townUI', town: TWB.town, plan: twbUnit(), cmd: cmd, seq: s }, extra || {}), '*');   // plan：現在建的那一份規劃（遠的城區「<城>~<區>」；工地、點建築照它，TASK-0987）
   setTimeout(function () { var f = TUI.wait[s]; if (f !== undefined) { delete TUI.wait[s]; if (f) f({ ok: false, why: ['地球儀那一頁沒有回（太舊的版本沒有城鎮介面）'] }); } }, 5000);
 }
 /** 外面那一頁的回覆（08_seabed.js）。 */

@@ -111,6 +111,10 @@ function townGot(L, err, idx) {
 var TOWN_DIST_R = 2500, TOWN_DIST_DROP = 3200, TOWN_DIST_NBR = 200, TOWN_DIST_DWELL = 0.8, TOWN_DIST_EVERY = 0.25, TOWN_DIST_WAIT = 8;   // 〔佔位〕
 //   ⛔ 位元表叫 onD：TOWNS.on 是「畫不畫城鎮」的開關（?towns=0、__game.town(at, on)）—— 以前也叫 on ⇒ ?towns=0 關不掉、__game.town(at, true) 把位元表蓋成 true（只剩骨架）
 TOWNS.dist = {}; TOWNS.full = {}; TOWNS.onD = {}; TOWNS.onT = {}; TOWNS.focus = null; TOWNS.distMode = null; TOWNS.distT = 0; TOWNS.dwell = null;
+//   自己一份規劃的城區（Blocksail TASK-0987；規劃 id「<城>~<區>」、districts 是城的整份清單換到它自己的當地公尺、cut 照它算）⇒ 跟主規劃一樣照遮罩載；
+//     焦點照城記（TOWNS.dist[城]）⇒ 一座城的每一份規劃一起換區；拖曳換區只看主規劃（它的 districts 一樣是整份）。
+/** 規劃 id ⇒ 城的 id（自己一份規劃的城區「<城>~<區>」⇒ <城>；同 Blocksail world/areas.js townUnitCity）。 */
+function townCityOf(id) { var s = String(id || ''), i = s.indexOf('~'); return i > 0 ? s.slice(0, i) : s; }
 /** 一點（規劃的當地公尺）落在哪一區 ⇒ 那一筆；都不在 ⇒ 離它的邊最近的那一區（同 Blocksail townDistrictNear）。 */
 function townDistAt(D, x, y) {
   var best = null, bd = Infinity;
@@ -159,7 +163,7 @@ function townDistReady(T, t0) {
 }
 /** 城 p 現在要哪幾區 ⇒ { list: [區的序號…]（先建的在前）, keep: 位元（這些建了就留著）}；me ＝ 旗艦。 */
 function townDistWant(p, me, town) {
-  var D = p.districts, id = p.id, idx = function (d) { return D.indexOf(d); };
+  var D = p.districts, id = townCityOf(p.id), idx = function (d) { return D.indexOf(d); };
   if (!town) {                                                           // 航海：照離旗艦遠近
     var q = townDistLocal(p, me.px, me.pz), R = D.map(function (d, i) { return { i: i, m: townPip(q[0], q[1], d.poly) ? 0 : townPolyDist(q[0], q[1], d.poly) }; });
     var keep = 0; R.forEach(function (r) { if (r.m <= TOWN_DIST_DROP) keep |= 1 << r.i; });
@@ -199,7 +203,7 @@ function townDistFrame() {
   var town = !!modeRule('town'), now = performance.now();
   if (town !== TOWNS.distMode) { TOWNS.distMode = town; TOWNS.focus = null; TOWNS.dist = {}; TOWNS.dwell = null; TOWNS.distT = 0; }
   var me = SHIPS[PLAYER_I]; if (!me || !BED || !BED.A) return;          // 旗艦還沒來 ⇒ 只有骨架
-  if (town) Object.keys(TOWNS.full).forEach(function (id) { var p = TOWNS.full[id]; if (p.cut && TOWNS.dist[id]) townDistDrag(p, now); });
+  if (town) Object.keys(TOWNS.full).forEach(function (id) { var p = TOWNS.full[id]; if (p.cut && townCityOf(id) === id && TOWNS.dist[id]) townDistDrag(p, now); });
   if (now < TOWNS.distT) return;
   TOWNS.distT = now + TOWN_DIST_EVERY * 1000;
   Object.keys(TOWNS.full).forEach(function (id) {
