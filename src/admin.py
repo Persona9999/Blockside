@@ -1824,6 +1824,7 @@ def act_shipcheck(ids=None):
               '會轉的體素件（螺旋槳模型 meta kind=propeller 的格子；跟著軸轉、一格一格打掉、推力照剩幾成，TASK-0653 第二段）：' + (I.get('props') or '—'), '',
               '操舵（TASK-0777；每支舵的鏈 舵令 ⇒ 舵輪／舵柄 meta kind=wheel／tiller（＋舵索 meta steer）⇒ 舵 kind=rudder、份量 helm_share；造船規格 §9.8.1）：' + (I.get('helm') or '—（操舵的開關關著）'), '',
               '樓梯自檢（TASK-0838；每座梯子的梯口有沒有洞、兩端站不站得住、走不走得出去；每座的座標與修法見 `reports/ladcheck_%s.md`）：' % sid + (I.get('ladcheck') or '—'), '',
+              '甲板連通（TASK-1028；每層甲板的每一塊、艙底照梯子接不接得到）：' + (I.get('deckcheck') or '—'), '',
               '**✗ %d　⚠ %d**' % (ne, nw), '']
         for lv, title in (('error', '## ✗ 錯誤'), ('warn', '## ⚠ 警告')):
             ks = [k for k in groups if k[0] == lv]
@@ -1850,14 +1851,18 @@ def act_shipcheck(ids=None):
 
 
 def ladcheck_write(sid, R):
-    """樓梯自檢（TASK-0838；js/75_ladcheck.js）的報告 reports/ladcheck_<船>.md：每一座的兩層、走向、開口、每條問題（現況＋修法）、有問題的那幾座附梯口那一層的平面圖。
-    回 (量了幾座, ✗ 幾座, ⚠ 幾座)；頁面沒有 ladcheck（舊成品）⇒ None。"""
+    """樓梯自檢（TASK-0838；js/75_ladcheck.js）的報告 reports/ladcheck_<船>.md：每一座的兩層、走向、開口、每條問題（現況＋修法）、有問題的那幾座附梯口那一層的平面圖；
+    最後一節 ⑤ ⑥ 甲板連通（TASK-1028；deckLink：每層甲板的每一塊、艙底照梯子接不接得到）。
+    回 (量了幾座, ✗ 幾座, ⚠ 幾座, 甲板連通 ✗ 幾條, ⚠ 幾條)；頁面沒有 ladcheck（舊成品）⇒ None。"""
     L = R.get('ladcheck')
     if L is None:
         return None
     I = R['info']
     ne = sum(1 for x in L if any(i['lv'] == 'error' for i in x['issues']))
     nw = sum(1 for x in L if x['issues'] and not any(i['lv'] == 'error' for i in x['issues']))
+    D = R.get('deckcheck') or {}
+    de = sum(1 for i in D.get('issues', []) if i['lv'] == 'error')
+    dw = len(D.get('issues', [])) - de
     md = ['# 樓梯自檢：%s（%s）' % (I.get('name', sid), sid), '',
           '> `python -I admin.py ladcheck --id %s`（或 `shipcheck`）產生；規則在 `js/75_ladcheck.js`（TASK-0838）。座標是整艘船的格座標（x 船尾 → 船頭、y 左舷 → 右舷、z 由下往上）。' % sid,
           '> ① 梯口的洞：head 腳下那一層裡、梯子頂上那一塊封閉的開口，梯子沒蓋到、會掉下去的格。② 兩端：foot／head 腳下是不是實心、離甲板面差幾格。'
@@ -1881,9 +1886,28 @@ def ladcheck_write(sid, R):
         if x.get('map'):
             md += ['', '```'] + x['map'] + ['```']
         md.append('')
+    md += ['## ⑤ ⑥ 甲板連通', '',
+           '> 照尋路的走路格（頭上 1.2 m 空、一步高低差 ≤ 0.3 m；js/42_hands.js navBuild）把每層甲板切成一塊一塊，用梯子接起來（尋路收了的梯子＋一頭在艙底的貨艙梯子）；'
+           '點最多的那一群 ＝ 主幹。⑤ 整層接不到主幹 ✗、層裡一塊 10 m² 以上接不到 ⚠（表裡列 2 m² 以上的）；'
+           '⑥ 最下層甲板以下、船殼裡站得住的地方（艙底；相鄰高低差 ≤ 0.6 m 的併成一個艙）10 m² 以上接不到 ⚠（艙底不在尋路裡、只有第一人稱下得去；表裡列 4 m² 以上的）（TASK-1028）。堡壘、砲台不量。', '']
+    if D.get('skip'):
+        md += ['—（' + D['skip'] + '）', '']
+    elif D:
+        md += ['**%s**' % (I.get('deckcheck') or ''), '', '| 層 | 走路格 | 接得到主幹 | 接不到的塊（≥ 2 m²） |', '|---|---|---|---|']
+        for v in D.get('levels', []):
+            md.append('| %s %s | %s m² | %s m² | %s |' % (v['key'], v['name'], v['m2'], v['main'],
+                                                        '；'.join('x %s、y %s、z %s（%s m²）' % tuple(['–'.join(map(str, sorted(set(b[k])))) for k in 'xyz'] + [b['m2']]) for b in v['lost']) or '—'))
+        for b in D.get('hold', []):
+            md.append('| 艙底 | %s m² | %s | x %s、y %s、z %s%s |' % (b['m2'], '✓' if b['ok'] else '接不到', '–'.join(map(str, sorted(set(b['x'])))), '–'.join(map(str, sorted(set(b['y'])))),
+                                                             '–'.join(map(str, sorted(set(b['z'])))), '；梯子 ' + '、'.join('`%s`' % n for n in b['via']) if b['via'] else ''))
+        md.append('')
+        for i in D.get('issues', []):
+            md.append('- %s **%s**（%s）：%s' % ('✗' if i['lv'] == 'error' else '⚠', i['what'], i['where'], i['msg']))
+            md.append('  - 修法：' + i['fix'])
+        md.append('')
     os.makedirs(REPORTS, exist_ok=True)
     open(os.path.join(REPORTS, 'ladcheck_%s.md' % sid), 'w', encoding='utf-8').write('\n'.join(md))
-    return len(L), ne, nw
+    return len(L), ne, nw, de, dw
 
 
 LADTEST = [   # 反向對照（ladcheck --selftest）：(船, 梯子, 做法, 要報出來的那一類) —— 梯子挑量起來 ✓、梯口是封閉開口的那幾座
@@ -1892,6 +1916,8 @@ LADTEST = [   # 反向對照（ladcheck --selftest）：(船, 梯子, 做法, �
     ('phoenix', '梯子/fore', 'shift:0,2', '梯口有洞'),
     ('phoenix', '梯子/fore', 'pillar', '梯頂正前方擋住'),
     ('phoenix', '梯子/fore', 'box', '梯頂出口堵住'),
+    ('concepcion', '梯子/orlop', 'drop', '甲板走不到'),        # ⑤ ⑥ 甲板連通（TASK-1028）：底艙甲板只有這一座下得去
+    ('concepcion', '梯子/hold', 'drop', '艙底下不去'),         # 貨艙只有這一座下得去
 ]
 
 
@@ -1902,21 +1928,25 @@ def act_ladtest():
         raise Fail('樓梯自檢的反向對照沒跑：找不到 Chrome 或還沒有成品')
     log, bad, base = ['樓梯自檢的反向對照（js/75_ladcheck.js ladTest；只改記憶體）：'], 0, {}
 
-    def one(R, lad):
-        return next((x for x in (R or {}).get('ladcheck') or [] if x['name'] == lad), None)
+    def issues(R, lad, how):   # 那一座的問題；drop（⑤ ⑥ 甲板連通當成沒有這一座，TASK-1028）⇒ 甲板連通的問題；讀不到 ⇒ None
+        if how == 'drop':
+            return (R or {}).get('deckcheck', {}).get('issues') if R and 'deckcheck' in R else None
+        x = next((x for x in (R or {}).get('ladcheck') or [] if x['name'] == lad), None)
+        return x['issues'] if x else None
     for sid, lad, how, want in LADTEST:
         if sid not in base:
             base[sid] = shipcheck_page(chrome, sid)
-        x0 = one(base[sid], lad)
+        i0 = issues(base[sid], lad, how)
         R = shipcheck_page(chrome, sid, '&ladtest=' + urllib.parse.quote(lad + ':' + how))
-        x = one(R, lad)
-        got = [i['what'] for i in x['issues']] if x else None
-        ok = x0 is not None and not x0['issues'] and got is not None and want in got
+        i1 = issues(R, lad, how)
+        got = [i['what'] for i in i1] if i1 else None
+        b0 = i0 is not None and (all(i['what'] != want for i in i0) if how == 'drop' else not i0)   # drop：原樣沒報這一類（甲板連通別的 ⚠ 不算）
+        ok = b0 and got is not None and want in got
         bad += not ok
-        log.append('  %s %s %s %s：原樣 %s ⇒ 改了（%s）%s' % ('✓' if ok else '✗', sid, lad, how, '✓' if x0 is not None and not x0['issues'] else '不是 ✓（%s）' % ('、'.join(i['what'] for i in x0['issues']) if x0 else '找不到'),
+        log.append('  %s %s %s %s：原樣 %s ⇒ 改了（%s）%s' % ('✓' if ok else '✗', sid, lad, how, '✓' if b0 else '不是 ✓（%s）' % ('、'.join(i['what'] for i in i0) if i0 else '找不到'),
                                                          (R or {}).get('ladtest', '沒跑'), '報出 ' + '、'.join(got) if got else '沒報出來'))
-        if x and x['issues']:
-            log += ['      ' + ('✗' if i['lv'] == 'error' else '⚠') + ' ' + i['what'] + '：' + i['msg'] for i in x['issues'] if i['what'] == want]
+        if i1:
+            log += ['      ' + ('✗' if i['lv'] == 'error' else '⚠') + ' ' + i['what'] + '：' + i['msg'] for i in i1 if i['what'] == want]
     if bad:
         raise Fail('\n'.join(log) + '\n%d 組沒報出來' % bad)
     return log + ['✓ %d 組都報出來了' % len(LADTEST)]
@@ -1933,25 +1963,26 @@ def act_ladcheck(ids=None):
         return ['⚠ 樓梯自檢沒跑：找不到 Chrome（' + '、'.join(CHROMES) + '）']
     if not os.path.exists(OUT):
         return ['⚠ 樓梯自檢沒跑：還沒有成品（先 build）']
-    log, rows, tot = [], [], [0, 0, 0]
+    log, rows, tot = [], [], [0, 0, 0, 0, 0]
     for sid in ids:
         R = shipcheck_page(chrome, sid)
         r = ladcheck_write(sid, R) if R else None
         if not r:
             log.append('  ✗ %s：讀不到結果（無頭 Chrome 沒跑完，或成品太舊、沒有樓梯自檢）' % sid)
-            rows.append('| — | `%s` | — | — | — | 讀不到結果 |' % sid)
+            rows.append('| — | `%s` | — | — | — | 讀不到結果 | — | — |' % sid)
             continue
-        n, ne, nw = r
-        tot = [tot[0] + n, tot[1] + ne, tot[2] + nw]
+        n, ne, nw, de, dw = r
+        tot = [tot[0] + n, tot[1] + ne, tot[2] + nw, tot[3] + de, tot[4] + dw]
         name = R['info'].get('name', sid)
-        log.append('  %s %s（%s）：%d 座，✗ %d、⚠ %d ⇒ %s' % ('✗' if ne else '⚠' if nw else '✓', name, sid, n, ne, nw, os.path.join(REPORTS, 'ladcheck_%s.md' % sid)))
-        rows.append('| %s | `%s` | %d | %d | %d | %d |' % (name, sid, n, ne, nw, n - ne - nw))
+        log.append('  %s %s（%s）：%d 座，✗ %d、⚠ %d；甲板連通 ✗ %d、⚠ %d ⇒ %s' % ('✗' if ne or de else '⚠' if nw or dw else '✓', name, sid, n, ne, nw, de, dw, os.path.join(REPORTS, 'ladcheck_%s.md' % sid)))
+        rows.append('| %s | `%s` | %d | %d | %d | %d | %d | %d |' % (name, sid, n, ne, nw, n - ne - nw, de, dw))
     if every:
-        md = ['# 樓梯自檢：各船', '', '> `python -I admin.py ladcheck` 產生（規則 `js/75_ladcheck.js`，TASK-0838）；每艘的座標與修法見 `ladcheck_<船>.md`。', '',
-              '| 船 | id | 梯子 | ✗ | ⚠ | ✓ |', '|---|---|---|---|---|---|'] + rows + ['', '合計 %d 座：✗ %d、⚠ %d、✓ %d' % (tot[0], tot[1], tot[2], tot[0] - tot[1] - tot[2]), '']
+        md = ['# 樓梯自檢：各船', '', '> `python -I admin.py ladcheck` 產生（規則 `js/75_ladcheck.js`，TASK-0838；甲板連通 TASK-1028）；每艘的座標與修法見 `ladcheck_<船>.md`。', '',
+              '| 船 | id | 梯子 | ✗ | ⚠ | ✓ | 甲板連通 ✗ | 甲板連通 ⚠ |', '|---|---|---|---|---|---|---|---|'] + rows + [
+              '', '合計 %d 座：✗ %d、⚠ %d、✓ %d；甲板連通 ✗ %d、⚠ %d' % (tot[0], tot[1], tot[2], tot[0] - tot[1] - tot[2], tot[3], tot[4]), '']
         open(os.path.join(REPORTS, 'ladcheck.md'), 'w', encoding='utf-8').write('\n'.join(md))
         log.append('  ⇒ ' + os.path.join(REPORTS, 'ladcheck.md'))
-    return ['樓梯自檢（%d 艘；合計 %d 座：✗ %d、⚠ %d）：' % (len(ids), tot[0], tot[1], tot[2])] + log
+    return ['樓梯自檢（%d 艘；合計 %d 座：✗ %d、⚠ %d；甲板連通 ✗ %d、⚠ %d）：' % (len(ids), tot[0], tot[1], tot[2], tot[3], tot[4])] + log
 
 
 CARDS_P = os.path.join(HERE, 'config', 'ship_cards.json')   # 選船彈窗的卡片（js/72_shippick.js；建置時內嵌成 #ship-cards）：shipcheck 量出來的（js/75_shipcheck.js shipCard），⛔ 不手改

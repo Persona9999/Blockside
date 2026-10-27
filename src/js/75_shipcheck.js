@@ -210,8 +210,7 @@ function shipCheck(id) {
     if (NV) {
       NV.levels.forEach(function (L, li) {
         if (!L.deck) add('warn', '甲板', L.key + ' ' + L.name, '沒有 meta kind=deck ⇒ 照高度量', '甲板的關聯 meta kind=deck（level、name、floor、thick；造船規格 §9.3）');
-        if (NV.reach.indexOf(li) < 0) add('warn', '甲板', L.key + ' ' + L.name, '沒有梯子通到 ⇒ 預備水手、傷員到不了', '加梯子（kind=ladders 四個點），或梯子 meta <梯名>.decks 指定兩層');
-      });
+      });                                                                // 整層沒有梯子通到 ⇒ 樓梯自檢 ⑤（deckLink，連每一塊都量；TASK-1028 以前這裡只看層、⚠）
       NV.ladders.forEach(function (L) { if (L.broken) add('error', '梯子', L.name, '開場就是斷的（踏板或兩頭的走路點不能站）', '對 foot／lo／hi／head 四個點（踩的那一格空氣）'); });
       var ropeLad = [];
       (sh.ladDrop || []).forEach(function (d) {                         // 被尋路靜悄悄丟掉的梯子（42_hands.js makeHands；TASK-0672：餘燼號、憲法號的貨艙梯子量出來的）
@@ -224,6 +223,8 @@ function shipCheck(id) {
     }
     R.ladcheck = ladCheck(sh); R.info.ladcheck = ladSummary(R.ladcheck);   // 樓梯自檢（TASK-0838；75_ladcheck.js）：梯口的洞、兩端站不站得住、走不走得出去 ⇒ admin.py 另寫 reports/ladcheck_<船>.md
     R.ladcheck.forEach(function (L) { L.issues.forEach(function (i) { add(i.lv, '樓梯：' + i.what, L.name, i.msg, i.fix); }); });
+    R.deckcheck = deckLink(sh); R.info.deckcheck = deckLinkSummary(R.deckcheck);   // ⑤ 甲板連不連得到、⑥ 艙底下不下得去（TASK-1028；75_ladcheck.js deckLink）
+    R.deckcheck.issues.forEach(function (i) { add(i.lv, '樓梯：' + i.what, i.where, i.msg, i.fix); });
     (T.roomsBad || []).forEach(function (b) { add('error', '艙房', b, '艙房標得不對', 'rooms.py check（造船規格 §9.2）'); });
     (sh.medSkip || []).forEach(function (s) { add('warn', '醫療艙', s.name, s.why, '房間所在的甲板要有梯子通到'); });
     // ── 繩、帆 ──
