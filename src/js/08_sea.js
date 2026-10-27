@@ -156,10 +156,11 @@ function seaFlow0(x, z) {
 /** 順著水流的船頭方向（yaw；fwd(yaw) ＝ 切線）：開局用（52_fleet.js spawnFleet）。 */
 function vxTangentYaw(x, z) { var r = Math.hypot(x, z) || 1; return Math.atan2(x / r, z / r); }
 /** 水面高度（世界座標 x, z、時間 t）。
- *  內陸水（08_seabed.js bedWet；TASK-0768）：河、湖的水面 ＋ 海那一份 ×（1 − 有幾成是河）⇒ 河裡就是河面（沒有浪）、河口跟海的浪接起來；沒有內陸水 ⇒ 照以前。 */
+ *  內陸水（08_seabed.js bedWet；TASK-0768）：河、湖的水面 ＋ 海那一份 ×（1 − 有幾成是河）⇒ 河裡就是河面（沒有浪）、河口跟海的浪接起來；沒有內陸水 ⇒ 照以前。
+ *  河口（63_bed_gl.js BEDMOUTH；Tim 2026-10-27「可以參考漩渦 讓海水在這部分稍微抬高嗎」）：河以外的點再加河口場的抬高量 bedLift（畫面的海同一份）⇒ 海在河口凸起來接上河面。 */
 function seaH(x, z, t) {
   var h = seaH0(x, z, t), r = BEDW.n ? bedWet(x, z) : null;
-  return r ? r.s + h * (1 - r.m) : h;
+  return r ? r.s + h * (1 - r.m) : BEDW.n ? h + bedLift(x, z) : h;
 }
 function seaH0(x, z, t) {
   if (!(SEA_K > 0)) return VX ? vxH(x, z) : 0;
@@ -168,10 +169,10 @@ function seaH0(x, z, t) {
   h = h * SEA_K * WX.sea;                       // 天氣（08_weather.js）：暴風雨 ×2.5；晴天 ×1（逐位元組不變）
   return VX ? h + vxH(x, z) : h;                // 大漩渦：凹下去的那一份疊在浪上
 }
-/** 那一點的水位（不算浪；m）：大漩渦的漏斗、河面（bedWet）；都沒有 ⇒ 0。54_helm.js 避淺照它算吃水與水深。 */
+/** 那一點的水位（不算浪；m）：大漩渦的漏斗、河面（bedWet）、河口的抬高（bedLift）；都沒有 ⇒ 0。54_helm.js 避淺照它算吃水與水深。 */
 function seaLv(x, z) {
   var h = VX ? vxH(x, z) : 0, r = BEDW.n ? bedWet(x, z) : null;
-  return r ? r.s + h * (1 - r.m) : h;
+  return r ? r.s + h * (1 - r.m) : BEDW.n ? h + bedLift(x, z) : h;
 }
 /** 浪頂的快篩（21_gunnery、12_effects、13_water 先比它、比它高就不算 seaH）：有內陸水 ⇒ 至少到解過的最高水面上 0.5 m。 */
 function seaTopOf(k) { return BEDW.n ? Math.max(k, BEDW.top + 0.5) : k; }

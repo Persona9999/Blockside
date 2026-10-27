@@ -15,12 +15,27 @@
 // 遠景（BEDFAR）：載入的 5×5 以外也要看得到島 ⇒ 整個海域有檔的塊每塊照 32 m 抽一份粗網格（bedMesh stride 8），開戰後在背景一塊一塊讀
 //   （08_seabed.js bedPeek：⛔ 不放進模擬查的那一份；離開戰位置近的先讀），網格建好就丟掉解碼的資料。那一塊有細的（BEDGL）就畫細的、沒有才畫粗的 ⇒ 不疊在一起。
 //   多遠看得到：鏡頭的遠裁切面 5 km（03_camera.js）、地形的霧淡成 0.4 倍（BED_FOG）⇒ 晴天 4 km 外還剩一成的輪廓。
-// 岸邊的白沫（BEDFOAM）：5×5 那幾塊的高度照 8 m 一格放進一張貼圖（R16F、雙線性），海的著色器（01_gl.js）照「海面 − 海底」< 2 m 畫一圈白沫。只給人看。
+// 岸邊的白沫（BEDFOAM）：5×5 那幾塊的高度照 8 m 一格放進一張貼圖（RGBA16F、雙線性；r ＝ 高度），海的著色器（01_gl.js）照「海面 − 海底」< 2 m 畫一圈白沫。只給人看。
+//   同一張的 g、b ＝ 河口場（BEDMOUTH，下面 bedMouthField）：海面抬高多少、海畫幾成。
 // 內陸水（BEDWAT；TASK-0768，海圖塊的段 3：src/MAP_CHUNK.md §4）：湖、河、瀑布照「高度＋水深」畫一層水面（淡水的顏色、照水深變透），只給人看、⛔ 模擬不讀。
 //   有內陸水的塊才有一份水面網格（g.w，跟著那一塊的地形網格建、丟）：在用的那幾圈每個取樣點一個頂點（4 m；河窄，8 m 一點會斷）、遠景照地形同一個點距；
 //   有水的點 ⇒ 那一點的水面（湖是平的、河照每一點）；格子的其他角（岸上）⇒ 旁邊有水的點裡最低的水面、水深 0（全透）⇒ 跟岸的地形交出岸線、邊上淡出去。
 //   瀑布：水面在崖口陡降 ⇒ 網格本身就是一面陡的水幕；片段照坡度把陡的那幾格畫成白的、往下流的條紋（水花之後）。
 //   有內陸水的塊，地形在用的那幾圈也是 4 m 一點（bedLod）⇒ 窄的河床不會被 8 m 一點抹平、蓋過水面。
+//   流動、平滑（Tim 2026-10-27「讓河流有流動感 並平滑(目前階梯明顯)」）：頂點多帶水流（段 4，m/s）與法線（照旁邊的水面算）⇒ 不再一個三角形一個平面；
+//     水面先照旁邊的有水點抹一次（差 0.35 m 以內才抹 ⇒ 分米捨入的小台階抹掉、瀑布不動；塊的四邊不抹 ⇒ 跟隔壁那一塊接得起來）。
+//     片段的漣漪、順流的條紋照水流往下游推（兩層錯開半個週期、輪流淡入淡出 ⇒ 不會越推越扭），流得越快越明顯。
+//   跟海接（河口場 BEDMOUTH）：離海 BED_MOUTH.band 公尺內河面淡出、底下的海（抬到河面那麼高）透出來；畫的時候往鏡頭推一點（polygonOffset）⇒ 跟同高的海不搶深度。
+// 河口場（BEDMOUTH；Tim 2026-10-27「河海交界處(整體優化 而非針對某地) 目前有明顯分界 破圖 且水太淺」「可以參考漩渦 讓海水在這部分稍微抬高嗎」）：
+//   以前河道底低於 0 的那一段被海「淹」進去（8 m 遮罩）、再上去被 32 m 的遮罩一塊一塊切掉 ⇒ 河面底下疊著 0 m 的海（同高就搶深度、一塊一塊的方塊），切的地方一條直線；
+//   河面比 0 高的河口 ⇒ 河面在岸上一刀斷掉、外面是平的淺海。
+//   ⇒ 跟白沫同一張 8 m 的格（bedMouthField）：河接海的那幾格（內陸水、水面在 low～top，旁邊一格是海）＝ 源頭；
+//     河道裡離源頭 band 公尺內 ＝ 交接帶：海抬到那一格的河面、畫的成數從 1 淡到 0（河面反過來淡入），再往上游整段不畫海；
+//     海（離源頭 reach 公尺內，只走海的格）：抬高量 ＝ 交接帶的河面（帶出去、四鄰平均鬆弛 it 次）× 照離源頭多遠的平滑衰減（1 → 0）
+//       ⇒ 像漩渦的漏斗一樣平滑地凸起來（只是往上）、接上河面，不再一道坎；岸上 0；
+//     同一圈的海混進河水的顏色與濁度（羽流 P，a 通道）⇒ 河面淡出、海接手的時候顏色不跳。
+//     接不了海的內陸水（湖、高處的河、低於海平面的湖）與它旁邊一格的岸：不畫海（交給地形與 32 m 遮罩，照以前）。
+//   物理也照同一份抬高量（08_sea.js seaH：海的那一份 ＋ bedLift；河裡照舊是河面）⇒ 船浮在畫出來的水面上。沒有內陸水 ⇒ 整張 g 0、b 1（畫面、物理逐位元組不變）。
 // 低於海平面的乾地（BEDDRY；例：恩里基約湖 −40 m 的湖岸與湖）：0 m 的海面會蓋住它 ⇒ 一張遮罩（BED_DRY_SP 公尺一格、蓋整個海域的窗），海與遠海的著色器照它丟掉海面（01_gl.js BED_DRY_GLSL）。
 //   只算有「不是海（陸地 ≥ 10 或內陸水）而且地面低於 0」的點的塊：那一塊每一格裡的點全都不是海 ⇒ 遮；岸邊那一格裡有海的點 ⇒ 不遮 ⇒ 海岸照舊。
 //   沒有這種點的塊不算 ⇒ 沒有的海域整段跳過（uDryOn 0 ⇒ 畫面逐位元組不變；托爾圖加 43 塊 0 點）。
@@ -36,6 +51,8 @@ var BEDFAR = { g: {}, todo: null, fly: 0, inF: {}, ready: [], fail: 0, n: 0, byt
 var BED_FAR_PAR = 4;                                                     // 遠景同時跟外面那一頁要幾塊（它有 2 個 Worker；以前一次一塊 ⇒ 托爾圖加 182 塊要 4 秒，一格一格出來）
 var BEDDRAW = { n: 0, cull: 0, tris: 0 };                                // 上一格畫了幾塊、剔掉幾塊、幾個三角形（__game.bed）
 var BEDFOAM = { tex: null, dtex: null, dR: null, dA: null, dirty: true, cx: null, cy: null, ox: 0, oz: 0, sp: 8, N: 0, ms: 0, builds: 0 };
+var BED_MOUTH = { band: 48, reach: 160, top: 6, low: -0.5, it: 48 };   // 河口場（檔頭）：交接帶多長、抬高往外伸多遠（公尺）、能接海的水面範圍（公尺）、鬆弛幾次
+var BEDMOUTH = { L: null, ox: 0, oz: 0, sp: 8, N: 0, src: 0, top: 0 };    // 物理用的那一份抬高量（bedLift）；src ＝ 幾個源頭、top ＝ 最高抬多少（0 ⇒ 沒有）
 var BED_COL = { 0: [0.30, 0.31, 0.27], 1: [0.74, 0.70, 0.52], 2: [0.66, 0.57, 0.44], 3: [0.86, 0.81, 0.62], 4: [0.40, 0.38, 0.35], 10: [0.84, 0.77, 0.57], 12: [0.45, 0.42, 0.38] };   // 2 珊瑚礁：紋理的平均色（以前是綠的）
 // 每種底質的紋理權重 [沙, 草地, 岩石, 礁]；全 0（深海底）⇒ 片段只照底色加一點泥的斑駁
 var BED_TEX = { 0: [0, 0, 0, 0], 1: [1, 0, 0, 0], 2: [0, 0, 0, 1], 3: [1, 0, 0, 0], 4: [0, 0, 1, 0], 10: [1, 0, 0, 0], 11: [0, 1, 0, 0], 12: [0, 0, 1, 0] };
@@ -97,18 +114,39 @@ function bedUpload(k, C, lod) {
   g.lod = lod; g.C = C; g.cx = C.cx; g.cy = C.cy; g.bb = bedBox(C); BEDGL[k] = g;   // g.C：建網格用的那一份（原精度到了、或換回中等塊 ⇒ 重建）
   if (g.wC !== C) { bedWatSet(g, bedWaterMesh(C, 1)); g.wC = C; }       // 內陸水：每個取樣點一個頂點（粗細不跟著地形換；那一份換了才重建）
 }
-/** 一塊的內陸水 ⇒ 水面網格（s：每幾個取樣點取一個）；沒有段 3、取到的點都沒有水 ⇒ null。頂點：位置 3、水深 1（世界座標，同 bedMesh）。 */
+/** 一塊的內陸水 ⇒ 水面網格（s：每幾個取樣點取一個）；沒有段 3、取到的點都沒有水 ⇒ null。
+ *  頂點：位置 3、水深 1、水流 2（m/s，世界 x、z；段 4，沒有 ⇒ 0）、水面坡度 2（∂y/∂x、∂y/∂z ⇒ 片段的法線）（世界座標，同 bedMesh）。 */
+var BEDW_SMOOTH = 0.35;                                                  // 水面抹平：旁邊的有水點差這麼多公尺以內才算進來（分米捨入的台階抹掉、瀑布不動）
 function bedWaterMesh(C, s) {
   var wd = C.wd; if (!wd) return null;
-  var n = C.n, m = (n - 1) / s + 1, A = BED.A, st = C.step * s, h = C.h0, M2 = m * m, sf = new Float32Array(M2), dp = new Float32Array(M2), wet = new Uint8Array(M2), any = 0;
+  var n = C.n, m = (n - 1) / s + 1, A = BED.A, st = C.step * s, h = C.h0, F = C.wf, M2 = m * m, sf = new Float32Array(M2), dp = new Float32Array(M2), wet = new Uint8Array(M2), any = 0;
   for (var j = 0; j < m; j++) for (var i = 0; i < m; i++) { var o = j * s * n + i * s, q = j * m + i; if (wd[o]) { wet[q] = 1; sf[q] = (h[o] + wd[o]) / 10; dp[q] = wd[o] / 10; any++; } }   // h0：漩渦烤之前的那一份（水深照它存）
   if (!any) return null;
-  var ox = C.cx * A.chunk - BED.ax, oz = C.cy * A.chunk - BED.az, id = new Int32Array(M2).fill(-1), V = [], I = [], lo = Infinity, hi = -Infinity;
+  // 抹平（檔頭「流動、平滑」）：塊裡面的有水點照 3 × 3 的有水點（1-2-1 加權、差 BEDW_SMOOTH 以內）平均兩次；四邊不動 ⇒ 跟隔壁那一塊共用的點逐位元相同
+  for (var pass = 0; pass < 2; pass++) {
+    var sm = sf.slice();
+    for (j = 1; j < m - 1; j++) for (i = 1; i < m - 1; i++) {
+      q = j * m + i; if (!wet[q]) continue;
+      var tw = 0, ts = 0;
+      for (var b = -1; b <= 1; b++) for (var a = -1; a <= 1; a++) { var r = q + b * m + a; if (!wet[r] || Math.abs(sf[r] - sf[q]) > BEDW_SMOOTH) continue; var w = (2 - Math.abs(a)) * (2 - Math.abs(b)); tw += w; ts += w * sf[r]; }
+      sm[q] = ts / tw;
+    }
+    sf = sm;
+  }
+  var ox = C.cx * A.chunk - BED.ax, oz = C.cy * A.chunk - BED.az, id = new Int32Array(M2).fill(-1), V = [], I = [], lo = Infinity, hi = -Infinity, ys = new Float32Array(M2);
+  for (q = 0; q < M2; q++) {                                             // 每一點的水面（岸上的角：旁邊最低的水面 —— 瀑布旁邊照下游那一層 ⇒ 不會浮在岸上）
+    var y = sf[q];
+    if (!wet[q]) { var qi = q % m, qj = (q - qi) / m; y = Infinity; for (b = Math.max(0, qj - 1); b <= Math.min(m - 1, qj + 1); b++) for (a = Math.max(0, qi - 1); a <= Math.min(m - 1, qi + 1); a++) { r = b * m + a; if (wet[r] && sf[r] < y) y = sf[r]; } }
+    ys[q] = y;
+  }
+  function slope(i, j, di, dj) {                                         // 往 (di, dj) 的坡度：兩邊有水（或有算過的岸角）才算，不然照單邊；都沒有 ⇒ 0
+    var q0 = j * m + i, y0 = ys[q0], ya = i - di >= 0 && j - dj >= 0 ? ys[q0 - di - dj * m] : Infinity, yb = i + di < m && j + dj < m ? ys[q0 + di + dj * m] : Infinity, ha = ya < Infinity, hb = yb < Infinity;
+    return ha && hb ? (yb - ya) / (2 * st) : ha ? (y0 - ya) / st : hb ? (yb - y0) / st : 0;
+  }
   function vert(i, j) {
     var q = j * m + i; if (id[q] >= 0) return id[q];
-    var y = sf[q];
-    if (!wet[q]) { y = Infinity; for (var b = Math.max(0, j - 1); b <= Math.min(m - 1, j + 1); b++) for (var a = Math.max(0, i - 1); a <= Math.min(m - 1, i + 1); a++) { var r = b * m + a; if (wet[r] && sf[r] < y) y = sf[r]; } }   // 岸上的角：旁邊最低的水面（瀑布旁邊照下游那一層 ⇒ 不會浮在岸上）
-    id[q] = V.length / 4; V.push(ox + i * st, y, oz + j * st, wet[q] ? dp[q] : 0); if (y < lo) lo = y; if (y > hi) hi = y;
+    var y = ys[q], o = j * s * n + i * s;
+    id[q] = V.length / 8; V.push(ox + i * st, y, oz + j * st, wet[q] ? dp[q] : 0, wet[q] && F ? F[0][o] : 0, wet[q] && F ? F[1][o] : 0, slope(i, j, 1, 0), slope(i, j, 0, 1)); if (y < lo) lo = y; if (y > hi) hi = y;
     return id[q];
   }
   for (j = 0; j < m - 1; j++) for (i = 0; i < m - 1; i++) {
@@ -125,8 +163,10 @@ function bedWatSet(g, M) {
   if (!M || !M.I.length) return;
   w = { vao: gl.createVertexArray(), vb: gl.createBuffer(), ib: gl.createBuffer(), n: M.I.length, wet: M.wet, bb: [M.x0, M.lo - 1, M.z0, M.x0 + BED.A.chunk, M.hi + 1, M.z0 + BED.A.chunk] };
   gl.bindVertexArray(w.vao); gl.bindBuffer(gl.ARRAY_BUFFER, w.vb); gl.bufferData(gl.ARRAY_BUFFER, M.V, gl.STATIC_DRAW);
-  gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 16, 0);
-  gl.enableVertexAttribArray(1); gl.vertexAttribPointer(1, 1, gl.FLOAT, false, 16, 12);
+  gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 32, 0);
+  gl.enableVertexAttribArray(1); gl.vertexAttribPointer(1, 1, gl.FLOAT, false, 32, 12);
+  gl.enableVertexAttribArray(2); gl.vertexAttribPointer(2, 2, gl.FLOAT, false, 32, 16);   // 水流
+  gl.enableVertexAttribArray(3); gl.vertexAttribPointer(3, 2, gl.FLOAT, false, 32, 24);   // 水面坡度
   gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, w.ib); gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, M.I, gl.STATIC_DRAW); gl.bindVertexArray(null);
   g.w = w;
 }
@@ -262,21 +302,79 @@ function bedFoamTex() {
   var Fm = BEDFOAM, A = BED.A;
   if (BED.cx === null || !Fm.dirty && Fm.cx === BED.cx && Fm.cy === BED.cy) return;
   if (Fm.tex && bedBusy()) return;                                      // 背景預算用完了 ⇒ 下一格再重建（收塊時每一塊都會弄髒它；一次約 30 ms）
-  var t0 = performance.now(), R = bedRingN(BED_CFG.ring) + bedRingN(BED_CFG.prefetch), n = A.n, sk = 2, per = (n - 1) / sk, W = (2 * R + 1) * per, D = new Float32Array(W * W).fill(A.deep);
+  var t0 = performance.now(), R = bedRingN(BED_CFG.ring) + bedRingN(BED_CFG.prefetch), n = A.n, sk = 2, per = (n - 1) / sk, W = (2 * R + 1) * per, D = new Float32Array(W * W).fill(A.deep), V = null;
   for (var cj = 0; cj <= 2 * R; cj++) for (var ci = 0; ci <= 2 * R; ci++) {
     var C = bedShowC(bedKey(BED.cx - R + ci, BED.cy - R + cj)); if (!C) continue;
+    var wd = C.wd; if (wd && !V) V = new Float32Array(W * W).fill(NaN);    // 內陸水的水面（河口場；NaN ＝ 不是）
     if (C.step !== A.step) {                                             // 外圈的中等塊（點距比 8 m 粗）：照公尺取最近的點
       var cn = C.n, f = sk * A.step / C.step;
-      for (var j2 = 0; j2 < per; j2++) { var r2 = (cj * per + j2) * W + ci * per, s2 = Math.min(cn - 1, Math.round(j2 * f)) * cn; for (var i2 = 0; i2 < per; i2++) D[r2 + i2] = C.h[s2 + Math.min(cn - 1, Math.round(i2 * f))] / 10; }
+      for (var j2 = 0; j2 < per; j2++) { var r2 = (cj * per + j2) * W + ci * per, s2 = Math.min(cn - 1, Math.round(j2 * f)) * cn; for (var i2 = 0; i2 < per; i2++) { var o2 = s2 + Math.min(cn - 1, Math.round(i2 * f)); D[r2 + i2] = C.h[o2] / 10; if (wd && wd[o2]) V[r2 + i2] = (C.h0[o2] + wd[o2]) / 10; } }
       continue;
     }
-    for (var j = 0; j < per; j++) { var r = (cj * per + j) * W + ci * per, s = j * sk * n; for (var i = 0; i < per; i++) D[r + i] = C.h[s + i * sk] / 10; }
+    for (var j = 0; j < per; j++) { var r = (cj * per + j) * W + ci * per, s = j * sk * n; for (var i = 0; i < per; i++) { D[r + i] = C.h[s + i * sk] / 10; if (wd && wd[s + i * sk]) V[r + i] = (C.h0[s + i * sk] + wd[s + i * sk]) / 10; } }
   }
+  var MF = V ? bedMouthField(D, V, W, A.step * sk) : null, T4 = new Float32Array(W * W * 4);   // r 高度、g 海面抬高、b 海畫幾成、a 河水羽流
+  for (var q = 0; q < W * W; q++) { T4[4 * q] = D[q]; T4[4 * q + 1] = MF ? MF.L[q] : 0; T4[4 * q + 2] = MF ? MF.S[q] : 1; T4[4 * q + 3] = MF ? MF.P[q] : 0; }
   if (!Fm.tex) { Fm.tex = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, Fm.tex); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE); }
-  gl.bindTexture(gl.TEXTURE_2D, Fm.tex); gl.texImage2D(gl.TEXTURE_2D, 0, gl.R16F, W, W, 0, gl.RED, gl.FLOAT, D); gl.bindTexture(gl.TEXTURE_2D, null);
+  gl.bindTexture(gl.TEXTURE_2D, Fm.tex); gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA16F, W, W, 0, gl.RGBA, gl.FLOAT, T4); gl.bindTexture(gl.TEXTURE_2D, null);
   Fm.dirty = false; Fm.cx = BED.cx; Fm.cy = BED.cy; Fm.N = W; Fm.sp = A.step * sk; Fm.ox = (BED.cx - R) * A.chunk - BED.ax; Fm.oz = (BED.cy - R) * A.chunk - BED.az;
+  var Mo = BEDMOUTH; Mo.L = MF && MF.src ? MF.L : null; Mo.src = MF ? MF.src : 0; Mo.top = MF ? MF.top : 0; Mo.ox = Fm.ox; Mo.oz = Fm.oz; Mo.sp = Fm.sp; Mo.N = W;
   bedShoreReq(D, W);
   Fm.ms = performance.now() - t0; Fm.builds++; bedSpent(t0);
+}
+/** 河口場（檔頭 BEDMOUTH）：D ＝ 高度、V ＝ 內陸水的水面（NaN ＝ 不是），W × W 格、sp 公尺一格 ⇒ { L（海面抬高多少）, S（海畫幾成）, P（河水羽流 0～1）, src（幾個源頭）, top（最高抬多少）}。
+ *  距離照 8 鄰走（直 sp、斜 √2 sp；一個佇列鬆弛到不變）。 */
+function bedMouthField(D, V, W, sp) {
+  var M = BED_MOUTH, N = W * W, L = new Float32Array(N), S = new Float32Array(N).fill(1), P = new Float32Array(N), dq =new Float32Array(N).fill(Infinity), st = new Uint8Array(N), Q = [], src = 0, top = 0, i, x, y, k;
+  var DX = [-1, 1, 0, 0, -1, 1, -1, 1], DY = [0, 0, -1, 1, -1, -1, 1, 1], NL = [1, 1, 1, 1, Math.SQRT2, Math.SQRT2, Math.SQRT2, Math.SQRT2];
+  function inl(o) { return V[o] === V[o]; }
+  function cap(o) { return inl(o) && V[o] >= M.low && V[o] <= M.top; }
+  function sea(o) { return !inl(o) && D[o] < 0; }
+  function nb(o, k2) { var X = o % W + DX[k2], Y = (o / W | 0) + DY[k2]; return X < 0 || Y < 0 || X >= W || Y >= W ? -1 : Y * W + X; }
+  function walk(ok, lim, lv) {                                           // 從 Q 裡的格往 ok 的格走，dq 記離源頭多遠（公尺，lim 以內）；lv ⇒ 順便帶著最近那個源頭的值
+    for (var h = 0; h < Q.length; h++) {
+      var o = Q[h]; for (var k2 = 0; k2 < 8; k2++) { var p = nb(o, k2); if (p < 0 || !ok(p)) continue; var d = dq[o] + NL[k2] * sp; if (d < dq[p] && d < lim) { dq[p] = d; if (lv) lv[p] = lv[o]; Q.push(p); } }
+    }
+  }
+  // 源頭：能接海的內陸水、上下左右有一格是海
+  for (i = 0; i < N; i++) {
+    if (inl(i)) S[i] = 0;
+    if (!cap(i)) continue; x = i % W;
+    if ((x > 0 && sea(i - 1)) || (x < W - 1 && sea(i + 1)) || (i >= W && sea(i - W)) || (i < N - W && sea(i + W))) { dq[i] = 0; Q.push(i); src++; }
+  }
+  if (src) {
+    // 交接帶：河道裡（只走能接海的內陸水）離源頭 band 公尺內 ⇒ 海抬到那一格的河面、成數 1 → 0
+    walk(cap, M.band);
+    for (i = 0; i < N; i++) if (cap(i) && dq[i] < M.band) { var u = dq[i] / M.band; S[i] = 1 - u * u * (3 - 2 * u); L[i] = V[i]; st[i] = 1; if (V[i] > top) top = V[i]; }
+    // 海：從交接帶往外（只走海的格，reach 以內）⇒ 抬高量 ＝ 那一帶的河面 × 照離源頭多遠的平滑衰減（1 → 0，smoothstep）：
+    //   那一帶的河面 Lv：先帶著最近那個源頭的河面走出去，再照四鄰（海的格、交接帶）平均鬆弛 it 次 ⇒ 兩個源頭的河面不一樣也不會在中間切出一道坎。
+    //   岸上不走 ⇒ 抬高量只在水上、岸邊照格子內插回 0（⛔ 岸上也走 ⇒ 抬高量漫過低的沙灘、水邊往陸上跑幾十公尺，一條細細的水膜拖在沙灘上；
+    //   ⛔ 鬆弛的時候每一輪都乘衰減 ⇒ 出了河口第一格就只剩兩成，等於沒抬）
+    //   羽流 P（a 通道）：交接帶 1、海裡照離源頭多遠淡到 0 ⇒ 海的著色器在河口外混進河水的顏色與濁度（淡水羽流），河面淡出時顏色接得上
+    var R = [], Lv = new Float32Array(N), rg = new Uint8Array(N); Q.length = 0; dq.fill(Infinity);
+    for (i = 0; i < N; i++) if (st[i]) { dq[i] = 0; Q.push(i); P[i] = 1; Lv[i] = Math.max(0, V[i]); }
+    walk(sea, M.reach, Lv);
+    for (i = 0; i < N; i++) if (!st[i] && dq[i] < M.reach) { R.push(i); rg[i] = 1; var pu = 1 - dq[i] / M.reach; P[i] = pu * pu; }
+    for (var it = 0; it < M.it; it++) for (k = 0; k < R.length; k++) {
+      i = R[k]; x = i % W; var a = 0, c = 0;
+      if (x > 0 && (rg[i - 1] || st[i - 1])) { a += Lv[i - 1]; c++; } if (x < W - 1 && (rg[i + 1] || st[i + 1])) { a += Lv[i + 1]; c++; }
+      if (i >= W && (rg[i - W] || st[i - W])) { a += Lv[i - W]; c++; } if (i < N - W && (rg[i + W] || st[i + W])) { a += Lv[i + W]; c++; }
+      if (c) Lv[i] = a / c;
+    }
+    for (k = 0; k < R.length; k++) { i = R[k]; var du = dq[i] / M.reach; L[i] = Lv[i] * (1 - du * du * (3 - 2 * du)); }
+  }
+  // 接不了海的內陸水、交接帶以外的河道（S 0）：旁邊一格（8 鄰）的岸也不畫海 ⇒ 海跟它的邊不會在河岸上內插出一條（海那一格照畫）
+  var Z = [];
+  for (i = 0; i < N; i++) if (inl(i) && !st[i]) for (k = 0; k < 8; k++) { var p2 = nb(i, k); if (p2 >= 0 && !inl(p2) && !sea(p2)) Z.push(p2); }
+  Z.forEach(function (o) { S[o] = 0; });
+  return { L: L, S: S, P: P, src: src, top: top };
+}
+/** 海面抬高量（物理用；08_sea.js seaH、seaLv）：河口場照雙線性取；場外、沒有源頭 ⇒ 0。 */
+function bedLift(x, z) {
+  var Mo = BEDMOUTH, Lf = Mo.L; if (!Lf) return 0;
+  var u = (x - Mo.ox) / Mo.sp, v = (z - Mo.oz) / Mo.sp, W = Mo.N; if (!(u >= 0 && v >= 0 && u < W - 1 && v < W - 1)) return 0;
+  var i = Math.floor(u), j = Math.floor(v), fu = u - i, fv = v - j, o = j * W + i;
+  return (Lf[o] * (1 - fu) + Lf[o + 1] * fu) * (1 - fv) + (Lf[o + W] * (1 - fu) + Lf[o + W + 1] * fu) * fv;
 }
 // 離岸距離場在 Worker 算（BEDSHW；跟低地遮罩 BEDDRYW 同一種做法）：640 × 640 ⇒ 兩倍粗 320 × 320，在這一頁冷跑（一場只建幾次，JIT 還沒熱）每次 15～30 ms ⇒ 換塊那一格卡。
 //   這一頁只做 2 × 2 平均、送過去；回來才換貼圖（dtex，記著算的時候的範圍 dR ⇒ 中心換了也不跟高度貼圖錯位）。算的時候又要一份 ⇒ 只留最新的那份，回來再送。
@@ -383,14 +481,16 @@ function bedDryU(u) {
 function bedDryPut(k, C, fine) {
   if ((fine || !BEDDRY.src[k]) && BEDDRY.src[k] !== C) { BEDDRY.src[k] = C; BEDDRY.dirty = true; }   // 跟海連不連（bedDryTex）用的地面：細的那一份優先
   if (!fine && k in BEDDRY.c) return;
-  var wd = C.wd, h = C.h0, mt = C.mat0, n = C.n, N = n * n, D = null, any = false, o;
-  for (o = 0; o < N; o++) if ((mt[o] >= BED_MAT.BEACH || wd && wd[o]) && h[o] < 0) { any = true; break; }   // 內陸水的水底、陸地低於 0（漩渦烤之前的那一份：水面、陸地本來在哪）
+  var wd = C.wd, h = C.h0, mt = C.mat0, n = C.n, N = n * n, D = null, any = false, o, lw = BED_MOUTH.low * 10;
+  // 不是海：陸地、低於海平面的內陸水（恩里基約湖）；水面在 low 以上的內陸水交給河口場（BEDMOUTH；⛔ 算進來 ⇒ 河道 32 m 一塊一塊切掉海、河口一排方塊）
+  function dry(o2) { return wd && wd[o2] ? h[o2] + wd[o2] < lw : mt[o2] >= BED_MAT.BEACH; }
+  for (o = 0; o < N; o++) if (dry(o) && h[o] < 0) { any = true; break; }   // 內陸水的水底、陸地低於 0（漩渦烤之前的那一份：水面、陸地本來在哪）
   if (any) {
     var G = BED.A.chunk / BED_DRY_SP, f = BED_DRY_SP / C.step, cnt = 0;
     D = new Uint8Array(G * G);
     for (var b = 0; b < G; b++) for (var a = 0; a < G; a++) {
       var i0 = Math.floor(a * f), i1 = Math.min(n - 1, Math.ceil((a + 1) * f)), j0 = Math.floor(b * f), j1 = Math.min(n - 1, Math.ceil((b + 1) * f)), all = true;
-      for (var j = j0; j <= j1 && all; j++) for (var i = i0; i <= i1; i++) { o = j * n + i; if (mt[o] < BED_MAT.BEACH && !(wd && wd[o])) { all = false; break; } }
+      for (var j = j0; j <= j1 && all; j++) for (var i = i0; i <= i1; i++) { o = j * n + i; if (!dry(o)) { all = false; break; } }
       if (all) { D[b * G + a] = 255; cnt++; }
     }
     if (!cnt) D = null;
@@ -419,7 +519,7 @@ function bedDryTex() {
   Object.keys(Dy.src).forEach(function (k) {                             // 有陸地的塊（地面最高 > 0）
     var C = Dy.src[k], c = k.split('_').map(Number), ci = c[0] - A.x[0], cj = c[1] - A.y[0];
     if (!(C && C.max0 > 0 && ci >= 0 && cj >= 0 && ci < nx && cj < ny)) return;
-    var hv = C.h, one = { h: hv, n: C.n, step: C.step }; L.push([k, ci, cj]);
+    var hv = bedDryH(C), one = { h: hv, n: C.n, step: C.step }; L.push([k, ci, cj]);
     if (!w) { st[k] = one; return; }
     sent[k] = hv; if (BEDDRYW.sent[k] !== hv) { one.h = hv.slice(); w.postMessage({ op: 'put', k: k, c: one }, [one.h.buffer]); }
   });
@@ -433,6 +533,15 @@ function bedDryTex() {
   var ctx = { A: A, key: bedDryKey(), r: [A.x[0] * A.chunk - BED.ax, A.y[0] * A.chunk - BED.az, nx * GS * S, ny * GS * S], Wd: nx * GS, Hd: ny * GS };
   if (!w) { var R = bedDryCalc(m, st); bedDryDone(ctx, R, performance.now() - t0); bedSpent(t0); return; }
   ctx.id = m.id = ++BEDDRYW.id; BEDDRYW.busy = ctx; w.postMessage(m);
+}
+/** 遮罩看的地面：水面在 BED_MOUTH.low 以上的內陸水當成高地（⛔ 不淹、不遮 ⇒ 交給河口場；以前河道底低於 0 的那一段被當成海淹進去、上面那一段被當成低地遮掉）。
+ *  沒有內陸水 ⇒ 就是 C.h（同一個陣列 ⇒ BEDDRYW.sent 照舊認得）；有 ⇒ 換過的那一份記在 C 上，C.h 換了（漩渦重烤）才重做。 */
+function bedDryH(C) {
+  var wd = C.wd; if (!wd) return C.h;
+  if (C.hDry && C.hDrySrc === C.h) return C.hDry;
+  var h = C.h.slice(), h0 = C.h0, lw = BED_MOUTH.low * 10;
+  for (var o = 0; o < h.length; o++) if (wd[o] && h0[o] + wd[o] >= lw) h[o] = 32767;
+  C.hDry = h; C.hDrySrc = C.h; return h;
 }
 /** 遮罩對到的那個窗（Worker 算的時候窗換了 ⇒ 回來的那一份作廢、再算一次）。 */
 function bedDryKey() { var A = BED && BED.A; return A ? [A.x[0], A.x[1], A.y[0], A.y[1], A.chunk, BED.ax, BED.az].join(',') : ''; }
@@ -527,28 +636,46 @@ function bedDryCalc(m, st) {
   return { T: T, cells: cells, cut: cut };
 }
 // 內陸水的著色器（第一次畫的時候建）：淡水的顏色（偏綠褐）、照水深變透（岸上的角 0 ⇒ 岸線淡出去）、菲涅耳反射天空、陽光的亮點、細的漣漪；
-//   陡的地方（瀑布的水幕：法線 y < 0.5 左右）⇒ 白的、往下流的條紋，比平的水不透明。法線照畫面上的微分算（網格只有位置＋水深）。霧照地形（BED_FOG）。
-var BEDW_VS = '#version 300 es\nlayout(location=0) in vec3 aP; layout(location=1) in float aD; uniform mat4 uVP; out vec3 vW; out float vD;\n' +
-  'void main(){ vW=aP; vD=aD; gl_Position=uVP*vec4(aP,1.0); }\n';
+//   陡的地方（瀑布的水幕：法線 y < 0.5 左右）⇒ 白的、往下流的條紋，比平的水不透明。霧照地形（BED_FOG）。
+//   法線照頂點帶的水面坡度（bedWaterMesh；⛔ 以前照畫面上的微分 ⇒ 一個三角形一個平面，河面一片一片的）。
+//   流動（檔頭「流動、平滑」）：漣漪兩種 —— 細碎的（0.45／m）＋順著水流拉長的條紋（沿水流 0.12、橫向 0.7）—— 都照 p − 水流 × 時間往下游推；
+//     一層推 1／BEDW_FLOW_K 秒就跳回原位（淡到 0 的那一刻跳、順便換一組雜訊的位置），兩層錯開半個週期 ⇒ 一直在流、不會越推越扭（flow map 的做法）。
+//     流得快（1.5 m/s 以上）⇒ 漣漪大一點、條紋上多一點順流漂的白點。水流 0（湖）⇒ 跟以前一樣只有細碎漣漪慢慢飄。
+//   河口（河口場 BEDMOUTH 的 b ＝ 海畫幾成）：河面照 1 − b 淡出 ⇒ 交接帶裡底下抬高的海透出來、接上外面的海。
+var BEDW_FLOW_K = 0.3;
+var BEDW_VS = '#version 300 es\nlayout(location=0) in vec3 aP; layout(location=1) in float aD; layout(location=2) in vec2 aF; layout(location=3) in vec2 aG; uniform mat4 uVP; out vec3 vW; out float vD; out vec2 vF; out vec2 vG;\n' +
+  'void main(){ vW=aP; vD=aD; vF=aF; vG=aG; gl_Position=uVP*vec4(aP,1.0); }\n';
 function bedWaterFS() {
-  return '#version 300 es\nprecision highp float;\n' + SHADOW_GLSL + 'in vec3 vW; in float vD; uniform vec3 uSun,uEye,uFog,uSky,uGround; uniform float uFogD,uSeaT; out vec4 o;\n' +
+  var K = BEDW_FLOW_K.toFixed(3);
+  return '#version 300 es\nprecision highp float;\n' + SHADOW_GLSL + 'in vec3 vW; in float vD; in vec2 vF; in vec2 vG; uniform vec3 uSun,uEye,uFog,uSky,uGround; uniform float uFogD,uSeaT,uBedOn; uniform vec4 uBedR; uniform sampler2D uBedT; out vec4 o;\n' +
     'float bh(vec2 p){ p=fract(p*vec2(123.34,456.21)); p+=dot(p,p+45.32); return fract(p.x*p.y); }\n' +
     'float bn(vec2 p){ vec2 i=floor(p), f=fract(p); f=f*f*(3.0-2.0*f); return mix(mix(bh(i),bh(i+vec2(1.0,0.0)),f.x),mix(bh(i+vec2(0.0,1.0)),bh(i+vec2(1.0,1.0)),f.x),f.y); }\n' +
-    'void main(){ vec3 n=normalize(cross(dFdy(vW),dFdx(vW))); if(n.y<0.0) n=-n; float fall=smoothstep(0.3,0.6,1.0-n.y);\n' +
+    // 一層漣漪（q ＝ 推過的位置，d ＝ 水流方向、ks ＝ 流速的成數）⇒ xy 法線的擾動、z 白點
+    'vec3 rip(vec2 q,vec2 d,float ks){ vec2 c=vec2(bn(q*0.45)-0.5,bn(q*0.45+vec2(5.2,1.7))-0.5); vec2 e=vec2(-d.y,d.x); vec2 a=vec2(dot(q,d),dot(q,e));\n' +
+    '  float s=bn(vec2(a.x*0.12,a.y*0.7)), s2=bn(vec2(a.x*0.3,a.y*1.9)+vec2(3.1,7.7)); vec2 g=c*(0.16+0.1*ks)+e*((s-0.5)*0.22+(s2-0.5)*0.1)*ks;\n' +
+    '  return vec3(g,smoothstep(0.8,0.95,s2*0.7+bn(q*0.5+vec2(9.3,2.1))*0.3)*ks); }\n' +
+    'void main(){ vec3 n=normalize(vec3(-vG.x,1.0,-vG.y)); float fall=smoothstep(0.3,0.6,1.0-n.y);\n' +
     ' vec2 p=vW.xz; vec3 v=normalize(uEye-vW); float fd=length(uEye-vW);\n' +
-    ' float rk=(1.0-fall)*(1.0-smoothstep(60.0,500.0,fd)); vec2 g=vec2(bn(p*0.45+vec2(uSeaT*0.13,0.0))-0.5,bn(p*0.45+vec2(5.2,uSeaT*0.11))-0.5)*0.16*rk;\n' +
+    ' float spd=length(vF), ks=smoothstep(0.1,1.5,spd); vec2 d=spd>1e-3?vF/spd:vec2(1.0,0.0);\n' +
+    ' float t0=fract(uSeaT*' + K + '), t1=fract(uSeaT*' + K + '+0.5), w0=1.0-abs(2.0*t0-1.0);\n' +
+    ' vec2 q0=p-vF*(t0/' + K + ')+vec2(0.0,uSeaT*0.03)+vec2(17.3,5.1)*floor(uSeaT*' + K + '), q1=p-vF*(t1/' + K + ')+vec2(uSeaT*0.03,0.0)+vec2(7.9,13.7)*floor(uSeaT*' + K + '+0.5);\n' +
+    ' vec3 R=rip(q0,d,ks)*w0+rip(q1,d,ks)*(1.0-w0);\n' +
+    ' float rk=(1.0-fall)*(1.0-smoothstep(60.0,500.0,fd)); vec2 g=R.xy*rk;\n' +
     ' vec3 nn=normalize(n+vec3(g.x,0.0,g.y)); float fr=0.02+0.98*pow(1.0-max(dot(nn,v),0.0),5.0);\n' +
     ' vec3 r=reflect(-v,nn); vec3 sky=mix(uFog,uSky,clamp(r.y*1.6,0.0,1.0)); float sk=shadowK(vW,vec3(0.0,1.0,0.0));\n' +
     ' vec3 lit=mix(uGround,uSky,0.6)*0.65+vec3(1.0,0.96,0.88)*max(dot(n,uSun),0.0)*0.7*sk;\n' +
     ' float sp=pow(max(dot(r,uSun),0.0),160.0)*1.3*sk*(1.0-fall);\n' +
     ' vec3 c=mix(vec3(0.07,0.19,0.16)*lit,sky,fr)+vec3(1.0,0.92,0.75)*sp;\n' +
     ' float e=smoothstep(0.0,0.4,vD), a=clamp(e*mix(0.55,0.9,1.0-exp(-0.25*vD))+fr*0.4*e,0.0,0.97);\n' +
+    ' float fw=R.z*rk*0.4*(1.0-smoothstep(150.0,400.0,fd)); c=mix(c,vec3(0.85,0.88,0.86)*(lit*0.8+0.2),fw); a=max(a,fw*e);\n' +   // 順流漂的白點
     ' if(fall>0.0){ vec2 hn=normalize(n.xz+vec2(1e-4,0.0)); float u=dot(p,vec2(-hn.y,hn.x));\n' +
     '   float s=bn(vec2(u*1.3,vW.y*0.25+uSeaT*2.2))*0.6+bn(vec2(u*4.0,vW.y*0.9+uSeaT*4.5))*0.4;\n' +
     '   c=mix(c,vec3(0.88,0.91,0.93)*(lit*0.8+0.25)*(0.78+0.35*s),fall); a=mix(a,0.78+0.2*s,fall*smoothstep(0.0,0.2,vD)); }\n' +
+    ' if(uBedOn>0.5){ vec2 bu=((p-uBedR.xy)/uBedR.z+0.5)/uBedR.w; if(bu.x>0.0&&bu.y>0.0&&bu.x<1.0&&bu.y<1.0) a*=smoothstep(0.0,1.0,1.0-textureLod(uBedT,bu,0.0).b); }\n' +   // 河口：交接帶裡淡出（跟海那一邊同一條 rr，01_gl.js P.water 結尾）
     ' o=vec4(mix(c,uFog,1.0-exp(-fd*uFogD)),a); }\n';
 }
-/** 畫內陸水（60_render.js：海、遠海之後）：在用的塊畫細的、沒有細的才畫遠景那一份；半透明、不寫深度、兩面都畫。 */
+/** 畫內陸水（60_render.js：海、遠海之後）：在用的塊畫細的、沒有細的才畫遠景那一份；半透明、不寫深度、兩面都畫。
+ *  往鏡頭推一點（polygonOffset）⇒ 河口交接帶裡抬到河面的海、河道底低於 0 那一段底下的海跟它同高時，河面一定在前面（⛔ 不推 ⇒ 兩層搶深度、一塊一塊閃）。 */
 function bedWaterDraw() {
   var W = BEDWAT; W.n = W.tris = 0;
   if (!BED || !BED.A || !W.on) return;
@@ -558,10 +685,13 @@ function bedWaterDraw() {
   if (!L.length) return;
   var PW = W.prog || (W.prog = VK.compile(gl, BEDW_VS, bedWaterFS()));
   gl.useProgram(PW.prog); setCommon(PW); gl.uniform1f(PW.u.uFogD, WX.fog * BED_FOG * CAM.fogK);
+  var on = !!BEDFOAM.tex; gl.uniform1f(PW.u.uBedOn, on ? 1 : 0); gl.activeTexture(gl.TEXTURE10); gl.bindTexture(gl.TEXTURE_2D, on ? BEDFOAM.tex : DUMMY); gl.uniform1i(PW.u.uBedT, 10); gl.activeTexture(gl.TEXTURE0);   // 河口場（交接帶淡出）
+  if (on) gl.uniform4f(PW.u.uBedR, BEDFOAM.ox, BEDFOAM.oz, BEDFOAM.sp, BEDFOAM.N);
   var cf = gl.isEnabled(gl.CULL_FACE); gl.disable(gl.CULL_FACE); gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA); gl.depthMask(false);
+  gl.enable(gl.POLYGON_OFFSET_FILL); gl.polygonOffset(-1, -4);
   var PL = bedPlanes(CAM.vp);
   L.forEach(function (w) { if (!bedSeen(PL, w.bb)) return; W.n++; W.tris += w.n / 3; gl.bindVertexArray(w.vao); gl.drawElements(gl.TRIANGLES, w.n, gl.UNSIGNED_INT, 0); });
-  gl.bindVertexArray(null); gl.depthMask(true); if (cf) gl.enable(gl.CULL_FACE);
+  gl.bindVertexArray(null); gl.disable(gl.POLYGON_OFFSET_FILL); gl.polygonOffset(0, 0); gl.depthMask(true); if (cf) gl.enable(gl.CULL_FACE);
 }
 // 遠海（轉場拉高時；Tim 2026-10-19：「海面問題可以額外貼一張圖嗎」「拉進後就隱藏這張海面色的填充圖」）：
 //   海面網格只有 4 km 半徑、深海塊沒有網格 ⇒ 從 10 km 往下看是中間一個圓、外面空的。⇒ 海之後畫一大片平面（鏡頭正下方 ±40 km、海面下 0.5 m），
