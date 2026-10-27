@@ -76,6 +76,8 @@
 #     git 鉤子（.githooks/；python -I src/admin.py hooks 裝 ＝ core.hooksPath .githooks，每個 worktree 共用）：
 #       · pre-commit：提交裡有成品 ⇒ 任何分支都要對得上；只動來源 ⇒ dev、main 上擋，其他分支照慣例放行（合進 dev 前照合併後的來源重建）。
 #       · pre-push：推到 dev、main 的那一版要對得上（用 update-ref 快轉合併不經過 pre-commit ⇒ 擋在這裡）。
+#       · post-merge、post-checkout、post-rewrite、post-commit（2026-10-28）：這份是別的遊戲的 submodule 時（Blocksail 的 external/Blockside），子模組一動就
+#         admin.py shellsync ⇒ 外層 shell.json、*/shell.json 裡 core 指到這份成品的頁（Blocksail 的 battle.html）重套；不是 submodule ⇒ 什麼都不做。外層的檢查走 shellsync --check。
 #   換行（TASK-0674）：.gitattributes ＝ 版控與 checkout 一律 LF（admin.cmd 照 CRLF、html 照原樣）⇒ 新 worktree 不用手動轉換。
 #     內嵌的 JSON（game.json、meta_kinds.json）照 LF 內嵌（vxk_inline.py）：以前照原位元組 ⇒ git checkout（CRLF）跟 admin.py 存檔（LF）建出兩種成品。
 #     讀數（2026-10-17）：CRLF 的舊 worktree 與 LF 的新 worktree 建出來的成品逐位元組相同；遊戲讀到的設定不變（三組對拍相同）。
