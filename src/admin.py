@@ -1888,6 +1888,7 @@ def ladcheck_write(sid, R):
 
 LADTEST = [   # 反向對照（ladcheck --selftest）：(船, 梯子, 做法, 要報出來的那一類) —— 梯子挑量起來 ✓、梯口是封閉開口的那幾座
     ('matsushima', '梯子/break-P', 'box', '梯頂出口堵住'),
+    ('matsushima', '梯子/break-P', 'cut:4', '梯頂接不上甲板'),
     ('phoenix', '梯子/fore', 'shift:0,2', '梯口有洞'),
     ('phoenix', '梯子/fore', 'pillar', '梯頂正前方擋住'),
     ('phoenix', '梯子/fore', 'box', '梯頂出口堵住'),
@@ -4167,7 +4168,7 @@ def main():
     s.add_argument('--id', action='append', help='哪一艘（可以給好幾次）；不給 ＝ 每一艘')
     s = sp.add_parser('ladcheck', help='樓梯自檢（TASK-0838）：每座梯子的梯口有沒有洞、兩端站不站得住、走不走得出去 ⇒ reports/ladcheck_<船>.md（不給 --id ⇒ 每一艘，另寫 reports/ladcheck.md）；shipcheck 也會順手寫')
     s.add_argument('--id', action='append', help='哪一艘（可以給好幾次）；不給 ＝ 每一艘')
-    s.add_argument('--selftest', action='store_true', help='反向對照：在記憶體裡把正常的梯子挪 2 格、出口前立柱子、head 四周圍牆，每一種都要報出來（admin.py LADTEST）')
+    s.add_argument('--selftest', action='store_true', help='反向對照：在記憶體裡把正常的梯子挪 2 格、出口前立柱子、head 四周圍牆、拿掉靠 head 那一頭幾柱，每一種都要報出來（admin.py LADTEST）')
     s = sp.add_parser('disp', help='排水量與壓艙物：每一型的空載／設計水線／滿載排水量、壓艙空間（＝ Blocksail 貨只換壓艙石的上限）、ships[].cargoT 的缺口與補法 ⇒ reports/disp.md')
     s.add_argument('--id', action='append', help='哪一艘（可以給好幾次）；不給 ＝ 每一艘（不含堡壘）')
     s.add_argument('--margin', type=float, help='滿載線比淹到最低砲甲板／頂層甲板低幾公尺（預設 0.3）')

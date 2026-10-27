@@ -141,7 +141,7 @@ python -I admin.py shipcheck --id phoenix    # 不給 --id ＝ 每一艘
 #   ⇒ ../reports/ladcheck_<代號>.md（每座的座標、修法、梯口那一層的平面圖）；不給 --id ＝ 每一艘，另寫 ../reports/ladcheck.md（各船幾座有問題）。
 #   shipcheck 也會順手寫這份、它的報告多一行「樓梯自檢」讀數，每個問題也列成一筆 ✗／⚠（「樓梯：…」）。只讀：不寫卡片、不動設定。
 python -I admin.py ladcheck --id matsushima
-python -I admin.py ladcheck --selftest       # 反向對照：在記憶體裡把一座正常的梯子挪 2 格、出口前立一根柱子、head 四周圍牆 ⇒ 每一種都要報出來（exit 非 0 ＝ 沒報出來）
+python -I admin.py ladcheck --selftest       # 反向對照：在記憶體裡把一座正常的梯子挪 2 格、出口前立一根柱子、head 四周圍牆、拿掉梯頂 4 柱 ⇒ 每一種都要報出來（exit 非 0 ＝ 沒報出來）
 # meta 規格表對拍（TASK-0672）：規格表本身、每艘船用到的 kind（沒列的、掛錯地方的）、造船規格 §9 那張 kind 表與每個 kind 的 need 固定點；不一致 ⇒ exit 非 0
 python -I admin.py metaspec                  # --doc <檔案> ＝ 不經 senate cmd doc
 # 只寫動力件與梯子的格子清單 parts[].cellRuns（meta、格子一位元不動 ⇒ 不會把作品上還沒定案的 meta 帶進來；TASK-0676 木匠照它整件還原梯子）
@@ -158,8 +158,11 @@ python -I admin.py cells --id constitution
 ② 兩端 —— foot／head 腳下是不是實心（踩在別座的洞上會點名那一座）、頭上 1.2 m 空不空、離那一層甲板的地板（meta floor／walk）差幾格（> 3 ⇒ 沒到甲板面；尋路有收 ⇒ ✗、沒收 ⇒ ⚠）。
 ③ 出口 —— 每一座的洞先當成補好了，從 foot／head 照走路格的規則一格一格走（頭上 1.2 m 空、一步高低差 ≤ 0.3 m、不踩任何一座梯子、不穿砲與家具）：24 格內走不到那一層的走路格 ⇒ ✗「出口堵住」，
 報前方擋住的是什麼（模型路徑、別座梯子的踏板、關聯路徑）；走得出去、但正前方 2 格內被擋 ⇒ ⚠「正前方擋住」（要往旁邊繞）。只被取用點的火藥桶擋住（23_powder.js 照彈藥庫 hoist 擺在梯腳那一層）⇒ ⚠、修法寫遊戲那側（雕刻作品不用改）。
+④ 梯頂接不上甲板（Tim 2026-10-27：康塞普西翁號船樓的梯子梯頂停在半空、離艙壁 4～7 格，① ② ③ 全 ✓ —— ① 梯口連到外面就不量洞、② 只看 head 那一格）—— hi（最上面那一階）到 head 沿走向逐柱看，梯子寬度裡、腳下那一層（沿 hi → head 內插）上下 0.3 m 內有沒有踩得到的面（實心而且上面空 ⇒ 貼著梯子的舷牆不算）：
+連續空 4 柱（0.4 m）以上 ⇒ ✗、2～3 柱 ⇒ ⚠（艙口梯子梯頂到艙口邊的小縫）、1 柱不報；① 已經報了梯口有洞 ⇒ 不重報。修法：整座梯子（格子＋foot／lo／hi，head 不動）往梯頂那一頭挪那幾格，或那幾柱補踏板。
+加這條時（2026-10-27，31 艘）：康塞普西翁號 6 座 4–7 柱 ✗（修好重新匯入）；藍鯊號、拉貝爾號、越嶺號、莫尼特號、哨兵號、維吉尼亞號 9 座艙口梯子 2–3 柱 ⚠。
 量到的（2026-10-23，21 艘）：見 `../reports/ladcheck.md`；松島號 15 座裡 11 座 head 踩在洞上（梯口比梯子長 6 排、梯子偏在一頭 —— Tim 截圖那種），主砲塔座（barbette）那座梯頂在砲座頂、出口被主砲擋住。
-反向對照（`ladcheck --selftest`）：⛔ 拿掉梯子要連格子一起動（造船規格 §9.3）—— 自檢只在記憶體裡改，照 `?shipcheck=<船>&ladtest=<梯名>:shift:dx,dy｜pillar｜box`。
+反向對照（`ladcheck --selftest`）：⛔ 拿掉梯子要連格子一起動（造船規格 §9.3）—— 自檢只在記憶體裡改，照 `?shipcheck=<船>&ladtest=<梯名>:shift:dx,dy｜cut:n｜pillar｜box`（cut:n ＝ 拿掉靠 head 那一頭 n 柱的格 ⇒ ④）。
 
 
 **材質**（TASK-0616；Tim 2026-10-15）：材質表在設定檔 `materials`（`default` ＋ `list`：每種 `name`、`kind`（wood／metal／other）、`density` 比重（一格 1 公升 ⇒ 每格幾 kg；橡木 0.7 ＝ 以前統一的重量）、`hard` 硬度倍率（乘在船隻設定的船殼硬度上）、`flammable` 易燃性 0–1（燃燒還沒做，先記著））；ID 英文小寫、跨船共用，後台「材質表」可以加、改、刪（還有船用到的不給刪）。
@@ -440,7 +443,7 @@ python -I admin.py cache --all    # 每艘都比 ＝ 比對來源：雕刻作品
 | `73_slowmo.js` | 殉爆的慢動作與特寫（TASK-0531）：`slowKick`（殉爆那一刻）、`slowTick`（每格畫面的時間倍率、特寫時間到還鏡頭）、`slowVisStep`（慢動作中只給人看的照畫面的時間走）、提示 `slowShow`；狀態 `SLOW` 在 `04_state.js` |
 | `72_floodui.js` | 停格條（`frzShow`）與進水細節頁（`floodPanel`：數字＋側視、俯視剖面 `fpDraw`；開著時 3D 的破口點 `flHoleMarks`、艙內水面透視）；破口的顏色 `flHoleCol`（出水綠、水下紅、水上橙；詳細資訊的進水圖同一套）；流量一律噸／分（`flTpm`，跟抽水同一個單位）、淨進水 `flNetText` |
 | `74_cutaway.js` | 停格的剖面與隱藏甲板：`CUTV`、甲板切高 `deckCut`（照舷弧逐欄量、R32F 貼圖）、畫之前設 uniform `cutSet`（「關」那一組照程式記著 `prog.cut0`：已經是關 ⇒ 不再傳；`armDraw` 寫 uCutL ⇒ 作廢）、人藏不藏 `cutHides`、`cutToggle`／`deckCycle` |
-| `75_ladcheck.js` | 樓梯自檢（TASK-0838；匯入檢查量完叫 `ladCheck`）：每座梯子的格（格子清單 cellRuns 分給最近的那一座）、梯口的開口與洞（`ldcOpen`）、兩端站不站得住、照走路格的規則走不走得出去（`ldcWalk`，洞先當成補好：`ldcFilled`）、擋住的是什麼（`ldcBlockers`）、梯口那一層的平面圖（`ldcMap`）；反向對照 `ladTest`（`?ladtest=`，只改記憶體）。`admin.py ladcheck` 寫 `reports/ladcheck_<船>.md` |
+| `75_ladcheck.js` | 樓梯自檢（TASK-0838；匯入檢查量完叫 `ladCheck`）：每座梯子的格（格子清單 cellRuns 分給最近的那一座）、梯口的開口與洞（`ldcOpen`）、兩端站不站得住、照走路格的規則走不走得出去（`ldcWalk`，洞先當成補好：`ldcFilled`）、梯頂接不接得上甲板（④，`ldcOne` 裡 hi → head 逐柱）、擋住的是什麼（`ldcBlockers`）、梯口那一層的平面圖（`ldcMap`）；反向對照 `ladTest`（`?ladtest=`，只改記憶體）。`admin.py ladcheck` 寫 `reports/ladcheck_<船>.md` |
 | `75_shipcheck.js` | 匯入檢查（`?shipcheck=<id>`；`admin.py shipcheck` 讀它寫的 JSON 出報告）。照 meta 規格表報：規格表沒有的 kind、掛錯地方的 kind；**被靜悄悄丟掉的部件**：尋路沒收的梯子與原因（`sh.ladDrop`，42_hands.js makeHands 記；兩頭判不出層、同一層、接不上走路格）—— 繩梯（頂端在桅上）只記進讀數 `ropeLadders`、不報 |
 | `76_anchor.js` | 拋錨（雙錨、左右錨、拖錨、起錨）與鐵鍊（質點鍊、碰自己的船殼與海底、畫成鏈環）；單錨的船（TASK-0635：只找到一個真的錨 ⇒ 另一舷不補、`A.single`；7／8 按鈕藏起來、按鍵不理，6 只拋這一個；整艘都沒有錨（夜隼號、風暴角號）⇒ 6／7／8 照樣顯示（🛑），按哪一顆都是停船 ⇄ 手動，不拋錨） |
 | `77_colours.js` | 陣營旗（長旗＋戰鬥旗；布料，跟帆同一套；旗 ＝ 底色＋紋章，兩陣營各選一面，預設藍方英國藍旗、紅方英國紅旗）：紋章 `FLAG_EMB`、預設旗 `FLAG_PRESETS`、兩陣營 `teamFlag`／換旗 `flagSet`（已載入的船型重烘 `flagsRetex`）、桅頂 `mastTrucks`、自動掛 `autoFlags`、載入時生旗 `teamFlagsSetup`、貼圖挑藍紅 `sailRect`、旗桿 `poleBuf`／`drawColours`；選旗的選單在外殼 `71_menu.js` `flagUI` |
