@@ -49,13 +49,15 @@ function tuiIngredientsHTML(F) {
 function tuiStrataHTML(I) {
   var L = I.strata; if (!L || !L.length) return '';
   var LV = ['荒年糧', '主糧', '家常', '佳餚'];
-  var src = function (o) {
+  var src = function (o, fam) {
     if (!o) return '工資';
-    var t = (o.kind || []).map(function (k) { return k === 'prod' ? '城鎮的生產建築' : k === 'serve' ? '城鎮的服務建築' : k; }).concat((o.type || []).map(function (k) { return TUI.blds[k] || k; }));
+    var t = (o.kind || []).map(function (k) { return k === 'prod' ? '城鎮的生產建築' : k === 'serve' ? '城鎮的服務建築' : k === 'store' ? '倉庫' : k; }).concat((o.type || []).map(function (k) { return TUI.blds[k] || k; }));
+    // 社會階層當家族（Blocksail TASK-1007 STRATA fam）：自己經營、賣貨的收入，不是分紅
+    if (fam) return '自己經營 ' + tuiNum(fam.n) + ' 座（' + t.join('、') + '）';
     return t.join('、') + '的分紅';
   };
   return '<h4>👥 社會階層</h4><table class="tuiT"><tr><th>階層</th><th>人</th><th>金庫</th><th>一人</th><th>收入</th></tr>' + L.map(function (s) {
-    return '<tr><td>' + tuiEsc(s.name) + '</td><td>' + tuiNum(s.pop) + '</td><td>' + tuiNum(s.funds) + '</td><td>' + tuiNum(s.per, 1) + '</td><td>' + tuiEsc(src(s.owns)) + '</td></tr>';
+    return '<tr><td>' + tuiEsc(s.name) + '</td><td>' + tuiNum(s.pop) + '</td><td>' + tuiNum(s.funds) + '</td><td>' + tuiNum(s.per, 1) + '</td><td>' + tuiEsc(src(s.owns, s.fam)) + '</td></tr>';
   }).join('') + '</table>' + L.map(function (s) {
     var F = s.fed; if (!F) return '';
     var eat = F.eat || {};
