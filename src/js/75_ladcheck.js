@@ -29,11 +29,13 @@ function ladCheck(sh) {
 }
 /** 反向對照（75_shipcheck.js 照 ?ladtest=<梯名>:<做法> 叫；開戰前、只改記憶體裡這一型的格子與固定點，⛔ 不寫回任何檔）：
  *    shift:dx,dy ＝ 那一座整座（格子＋四個點）挪 (dx, dy) 格；cut:n ＝ 靠 head 那一頭 n 柱的格拿掉（點不動）；pillar ＝ head 正前方第 2 格立一根 NAV_HEAD 格高的柱子；
- *    box ＝ head 四周（離 2～3 格那兩圈，梯口那幾柱除外）圍 NAV_HEAD 格高的牆（出口整個堵死）。⇒ 讀數一行（改了什麼）。 */
+ *    box ＝ head 四周（離 2～3 格那兩圈，梯口那幾柱除外）圍 NAV_HEAD 格高的牆（出口整個堵死）；
+ *    drop ＝ ⑤ ⑥ 甲板連通當成沒有這一座（格子、點都不動；deckLink 不走它的邊）。⇒ 讀數一行（改了什麼）。 */
 function ladTest(T, spec) {
   var a = String(spec).split(':'), lads = shipLadders(T).filter(function (l) { return !l.rope; }), g = T.base, k = -1;
   lads.forEach(function (l, i) { if (k < 0 && (l.name === a[0] || l.name.slice(-a[0].length - 1) === '/' + a[0])) k = i; });
   if (k < 0) return '找不到梯子 ' + a[0];
+  if (a[1] === 'drop') { T.dlkDrop = lads[k].name; return lads[k].name + ' 在甲板連通（⑤ ⑥）裡當成沒有'; }
   var l = lads[k], C = ldcCells(T, g, lads)[k], O = ldcOpen(T, g, l, C), H = O.H, mat = g.get(H[0], H[1], H[2] - 1) || 1, n = 0;
   if (a[1] === 'shift') {
     var d = (a[2] || '0,0').split(',').map(Number), v = {}, part = (T.h.parts || []).filter(function (q) { return q.path === l.part; })[0], nm = l.name === l.part ? '' : l.name.slice(l.part.length + 1);
@@ -58,7 +60,7 @@ function ladTest(T, spec) {
   if (a[1] === 'pillar') cols.push([H[0] + (ax ? 0 : 2 * sg), H[1] + (ax ? 2 * sg : 0)]);
   else if (a[1] === 'box') { var oc = {}; O.cells.forEach(function (c) { oc[c[0] + g.sx * c[1]] = 1; });
     for (var dy = -3; dy <= 3; dy++) for (var dx = -3; dx <= 3; dx++) if (Math.max(Math.abs(dx), Math.abs(dy)) >= 2 && !oc[H[0] + dx + g.sx * (H[1] + dy)]) cols.push([H[0] + dx, H[1] + dy]); }   // 兩格厚（⛔ 一格厚 ⇒ 走路格每 2 格一點，跨得過去）；梯口（開口）那幾柱不圍
-  else return '不認得的做法 ' + a[1] + '（shift:dx,dy｜cut:n｜pillar｜box）';
+  else return '不認得的做法 ' + a[1] + '（shift:dx,dy｜cut:n｜pillar｜box｜drop）';
   cols.forEach(function (c) { for (var h = 0; h < NAV_HEAD; h++) if (!g.get(c[0], c[1], H[2] + h)) { g.set(c[0], c[1], H[2] + h, mat); n++; } });
   return l.name + ' 的 head ' + ldcAt(H) + (a[1] === 'pillar' ? ' 正前方第 2 格立一根柱子' : ' 四周圍一圈牆') + '（' + cols.length + ' 柱、' + n + ' 格）';
 }
@@ -359,4 +361,116 @@ function ldcMap(g, K, me, X) {
     out.push(('    ' + y).slice(-4) + ' ' + s);
   }
   return out;
+}
+// ───────────────────────── ⑤ 甲板連不連得到、⑥ 艙底下不下得去（TASK-1028；Tim 2026-10-27「樓梯自檢是否能檢查無法連通的甲板(含貨艙)」）─────────────────────────
+// ①～④ 一座一座量；整艘船「每一層、每一塊走不走得到」照尋路自己的圖量（42_hands.js makeHands、handRoute）：
+//   節點 ＝ 「層:區域」（navBuild 的走路格、navRegions 切的塊，NAV_MINREG 點以上），邊 ＝ 尋路收了的梯子（sh.nav.ladders 的 ra／rb）
+//   ＋ 尋路沒收、一頭在艙底的梯子（sh.ladDrop：貨艙梯子 —— 梯腳不在任何一層，尋路不走、第一人稱照樣爬）。
+//   艙底：最下層甲板的高度範圍以下多量一層（navBuild 同一套：那一段高度裡最高的站位、頭上 NAV_HEAD 格空），只留船殼裡的點（腳的高度往 ±x、±y 都碰得到實心），
+//   一塊 DLK_HOLD m² 以上才算一個艙（底艙甲板底下、船頭船尾沒鋪甲板的那幾段）。
+//   主幹 ＝ 甲板那幾層的點加起來最多的那一群（艙底不算進來挑）。⑤ 整層一點都不在主幹 ✗、層裡一塊 DLK_LOST m² 以上不在主幹 ⚠；
+//   ⑥ 艙底一個艙 DLK_LOST m² 以上不在主幹 ⚠（艙底不在尋路裡、只有第一人稱下得去 ⇒ 同 ③「尋路沒收這一座」照 ⚠；DLK_HOLD 以上的列在報告的表裡）。
+//   DLK_LOST 10 m²（一間 3 × 3 m 的房間）：加這條時 25 艘船裡甲板接不到的塊 2–4 m² 88 塊、4–10 m² 29 塊 ＝ 橫樑之間只剩 1.2 m 的船尾艙（船員的頭高切成小島，第一人稱照樣走）、
+//   划手座之間（皇家號一艘 55 塊）、一格寬的邊；10 m² 以上 16 塊 ＝ 整片甲板的一段（蘇士奎哈納號後半、維吉尼亞號砲廓外）、露砲台頂、底艙一段隔間 ⇒ 只報這些（小的照樣列在報告的表裡）。
+//   艙底（⑥）10 m² 以上接不到的：三叉戟號 721、夜燈號 502、潮墓號 404、收穫號 251、炎羽號 182、藍鯊號 151 m² 的貨艙，加幾個 13–16 m² 的隔艙。
+//   堡壘、砲台（T.fixed）不量：層是照地形高度切的、沒有艙底。
+//   ⛔ 照第一人稱（81_fps.js 一步上 0.6 m、下 0.8 m）量不行：康塞普西翁號的貨艙一座梯子都沒有，第一人稱卻從底艙甲板前緣踩上船殼內側的弧面，
+//      一路走得下去也爬得回來 ⇒ 量起來「通」。這裡照走路格（一步 NAV_DZ）＋梯子量。
+// 只讀（同 ladCheck）：艙底那一層 navBuild 會記進 T.navC（鍵是它自己的高度範圍，尋路拿不到）。結果：{ levels, hold, issues, skip }；admin.py 寫進 reports/ladcheck_<船>.md。
+var DLK_LOST = 10, DLK_TAB = 2, DLK_HOLD = 4, DLK_SNAP = 5;
+function deckLink(sh) {
+  var out = { levels: [], hold: [], issues: [] }, cb = CREW_BLOCK;
+  if (sh.T.fixed) { out.skip = '堡壘、砲台不量（層照地形高度切、沒有艙底）'; return out; }
+  if (!sh.nav) { out.skip = '沒有走路格（這艘沒有預備水手、也不會落水 ⇒ makeHands 沒建）'; return out; }
+  CREW_BLOCK = crewBlockOf(sh);
+  try { dlkRun(sh, out); } finally { CREW_BLOCK = cb; }
+  return out;
+}
+function dlkRun(sh, out) {
+  var T = sh.T, NV = sh.nav, g = navBase(T), LV = NV.levels, a2 = NAV_C * NAV_C * S * S, drop = T.dlkDrop, id = {}, par = [], pts = [], via = {};
+  function node(k, n, deck) { if (id[k] === undefined) { id[k] = par.length; par.push(par.length); pts.push(deck ? n : 0); } }
+  function root(a) { while (par[a] !== a) a = par[a] = par[par[a]]; return a; }
+  function join(a, b) { if (a === undefined || b === undefined) return false; a = root(a); b = root(b); if (a !== b) par[b] = a; return true; }
+  LV.forEach(function (L, i) { L.N.regs.forEach(function (n, r) { node(i + ':' + r, n, true); }); });
+  NV.ladders.forEach(function (L) { if (L.name !== drop) join(id[L.lo + ':' + L.ra], id[L.hi + ':' + L.rb]); });
+  var zlo = 1e9; LV.forEach(function (L) { if (!L.tur) zlo = Math.min(zlo, L.zr[0]); });
+  var HN = zlo - 1 > NAV_HEAD ? dlkHoldNav(sh, g, [1, zlo - 1]) : null, hmin = Math.ceil(DLK_HOLD / a2), lmin = Math.ceil(DLK_LOST / a2), tmin = Math.ceil(DLK_TAB / a2);
+  if (HN) HN.sp.n.forEach(function (n, s) { if (n >= hmin) node('h:' + s, n, false); });
+  (sh.ladDrop || []).forEach(function (d) {
+    if (d.rope || d.name === drop || Math.min(d.a[2], d.b[2]) >= zlo) return;   // 只接一頭在艙底的（貨艙梯子）；其他沒收的照尋路的判斷（不走）
+    var e = [d.a, d.b].map(function (p) { return dlkEnd(sh, HN, zlo, p); });
+    if (e[0] && e[1] && join(id[e[0]], id[e[1]])) e.forEach(function (k) { var v = k[0] === 'h' ? (via[k] = via[k] || []) : null; if (v && v.indexOf(d.name) < 0) v.push(d.name); });   // 兩頭都在艙底的（風暴角號 hold-mag）只記一次
+  });
+  var tot = {}, main = -1;
+  Object.keys(id).forEach(function (k) { var r = root(id[k]); tot[r] = (tot[r] || 0) + pts[id[k]]; });
+  Object.keys(tot).forEach(function (r) { if (main < 0 || tot[r] > tot[main]) main = +r; });
+  LV.forEach(function (L, i) {
+    var N = L.N, B = dlkBoxes(N), all = 0, inM = 0, far = [];
+    N.regs.forEach(function (n, r) { all += n; if (root(id[i + ':' + r]) === main) inM += n; else if (n >= tmin) far.push(B[r]); });   // 表裡列 DLK_TAB m² 以上的、報 DLK_LOST 以上的
+    var m2 = +(all * a2).toFixed(1), where = L.key + ' ' + L.name;
+    out.levels.push({ key: L.key, name: L.name, m2: m2, main: +(inM * a2).toFixed(1), lost: far });
+    if (!all) return;
+    if (!inM) out.issues.push({ lv: 'error', what: '甲板走不到', where: where, msg: L.name + '的走路格（約 ' + m2 + ' m²）一塊都接不到主幹 ⇒ 沒有梯子通到這一層的地板（預備水手、傷員到不了）',
+      fix: '從相鄰那一層放一座梯子接到這一層的地板（kind=ladders 四個點，兩頭落在甲板的地板上；造船規格 §9.3）；梯子已經在 ⇒ 看匯入檢查「尋路沒收這一座」那幾條' });
+    else far.forEach(function (b) { if (b.n >= lmin) out.issues.push({ lv: 'warn', what: '甲板有一塊走不到', where: where, msg: L.name + '裡 ' + dlkAt(b) + '（約 ' + b.m2 + ' m²）接不到這一層別的地方、也沒有梯子接',
+      fix: '那一塊開門洞或放梯子接回去；本來就不站人（艙房頂、堆的東西上面）⇒ 不理' }); });
+  });
+  if (HN) {
+    var HB = dlkBoxes(HN), SB = HN.sp.n.map(function () { return { x: [1e9, -1e9], y: [1e9, -1e9], z: [1e9, -1e9], n: 0, m2: 0, parts: 0 }; });
+    HB.forEach(function (b, r) { var t = SB[HN.sp.of[r]]; ['x', 'y', 'z'].forEach(function (a) { t[a] = [Math.min(t[a][0], b[a][0]), Math.max(t[a][1], b[a][1])]; }); t.n += b.n; t.parts++; });
+    SB.forEach(function (t) { t.m2 = +(t.n * a2).toFixed(1); });
+    HN.sp.n.forEach(function (n, s) {
+      var k = 'h:' + s; if (id[k] === undefined) return;
+      var b = SB[s], ok = root(id[k]) === main; b.ok = ok; b.via = via[k] || []; out.hold.push(b);
+      if (!ok && b.n >= lmin) out.issues.push({ lv: 'warn', what: '艙底下不去', where: '艙底 ' + dlkAt(b), msg: '最下層甲板以下、船殼裡站得住的一塊：' + dlkAt(b) + '（約 ' + b.m2 + ' m²、頭上 ' + (NAV_HEAD * S).toFixed(1) + ' m 以上）沒有梯子下得去',
+        fix: '從上面那層甲板開梯井、放一座梯子下到艙底（梯腳踩艙底、head 在甲板的地板上；kind=ladders 四個點；造船規格 §9.3）' });
+    });
+  }
+}
+/** 艙底那一層的走路格：navBuild 照高度範圍 zr 建（同一套站位、家具），只留船殼裡的點，重切連通塊；
+ *  再把塊併成「艙」（N.sp：of ＝ 每一塊屬於第幾個艙、n ＝ 每個艙幾點）—— 相鄰兩點高低差 ≤ FP_UP（第一人稱一步）就算同一個艙：
+ *  船底弧面照走路格（一步 NAV_DZ）會切成一層一層的台階、一格寬的邊，下到艙底的人照第一人稱走得過去（三叉戟號 y 128 那條 5 m² 的邊、夜燈號龍骨上那條 4 m²）。 */
+function dlkHoldNav(sh, g, zr) {
+  var N0 = navBuild(sh, { zr: zr }), Z = N0.Z.slice(), nx = N0.nx;
+  for (var i = 0; i < Z.length; i++) if (Z[i] >= 0 && !dlkIn(g, N0.x0 + (i % nx) * NAV_C, ((i / nx) | 0) * NAV_C, Z[i] + 1)) Z[i] = -1;
+  var N = { x0: N0.x0, nx: nx, ny: N0.ny, Z: Z, blk: N0.blk, rot: null };
+  navRegions(N);
+  var par = N.regs.map(function (n, r) { return r; });
+  function root(a) { while (par[a] !== a) a = par[a] = par[par[a]]; return a; }
+  for (i = 0; i < Z.length; i++) {
+    var r = N.reg[i]; if (r < 0) continue;
+    for (var d = 0; d < 8; d++) { var j = i + NAV_DX[d] + NAV_DY[d] * nx, q = j >= 0 && j < Z.length ? N.reg[j] : -1; if (q >= 0 && q !== r && Math.abs(Z[j] - Z[i]) <= FP_UP) par[root(q)] = root(r); }
+  }
+  var of = [], sn = [], at = {};
+  N.regs.forEach(function (n, r) { var t = root(r); if (at[t] === undefined) { at[t] = sn.length; sn.push(0); } of[r] = at[t]; sn[at[t]] += n; });
+  N.sp = { of: of, n: sn };
+  return N;
+}
+/** (x, y, z) 在船殼裡：往 ±x、±y 走到格子邊以前都碰得到實心（船外的點至少有一邊一路空到邊）。 */
+function dlkIn(g, x, y, z) {
+  return [[1, 0], [-1, 0], [0, 1], [0, -1]].every(function (d) { for (var a = x + d[0], b = y + d[1]; a >= 0 && b >= 0 && a < g.sx && b < g.sy; a += d[0], b += d[1]) if (g.get(a, b, z)) return true; return false; });
+}
+/** 梯子一頭 p 接到哪一個節點：落在某一層（42_hands.js lvAt：有甲板 meta 照那一欄的地板）⇒ 那一層 DLK_SNAP 點內最近的走路格；在最下層甲板以下 ⇒ 艙底那一層的。 */
+function dlkEnd(sh, HN, zlo, p) {
+  if (p[2] < zlo) { var j = HN ? navSnap(HN, p, DLK_SNAP) : -1; return j >= 0 ? 'h:' + HN.sp.of[HN.reg[j]] : null; }
+  var LV = sh.nav.levels, li = lvAt(sh, p), i = li >= 0 && LV[li] ? navSnap(LV[li].N, p, DLK_SNAP) : -1;
+  return i >= 0 ? li + ':' + LV[li].N.reg[i] : null;
+}
+/** 每一塊（N.regs 的第幾塊）的範圍（船的格座標）與面積。 */
+function dlkBoxes(N) {
+  var B = N.regs.map(function () { return { x: [1e9, -1e9], y: [1e9, -1e9], z: [1e9, -1e9], n: 0 }; }), a2 = NAV_C * NAV_C * S * S;
+  for (var i = 0; i < N.reg.length; i++) {
+    var r = N.reg[i]; if (r < 0) continue;
+    var b = B[r], x = N.x0 + (i % N.nx) * NAV_C, y = ((i / N.nx) | 0) * NAV_C, z = N.Z[i];
+    b.x = [Math.min(b.x[0], x), Math.max(b.x[1], x)]; b.y = [Math.min(b.y[0], y), Math.max(b.y[1], y)]; b.z = [Math.min(b.z[0], z), Math.max(b.z[1], z)]; b.n++;
+  }
+  B.forEach(function (b) { b.m2 = +(b.n * a2).toFixed(1); });
+  return B;
+}
+function dlkAt(b) { return 'x ' + ldcRng(b.x) + '、y ' + ldcRng(b.y) + '、z ' + ldcRng(b.z); }
+/** 一行讀數。 */
+function deckLinkSummary(D) {
+  if (D.skip) return D.skip;
+  var e = D.issues.filter(function (i) { return i.lv === 'error'; }).length, w = D.issues.length - e;
+  return D.levels.length + ' 層' + (D.hold.length ? '＋艙底 ' + D.hold.length + ' 塊' : '') + '：' + (e + w ? '✗ ' + e + '、⚠ ' + w : '都接得到') + '（照尋路的走路格＋梯子）';
 }
