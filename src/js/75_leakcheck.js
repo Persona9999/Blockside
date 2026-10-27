@@ -174,7 +174,7 @@ function leakLine(R) {
   return h + '再多載 ' + f.tons + ' 噸（吃水再深 ' + f.lvl.toFixed(2) + ' m）⇒ ' + f.kind + '（' + f.deck + '，' + f.side + '，離船尾 ' + f.x + ' m）' + (f.below ? '' : '；比沉沒線（' + R.sink + ' m、' + R.sinkT + ' 噸）還高');
 }
 /** 匯入檢查（75_shipcheck.js）與觀察面板用：正的量一次。 */
-function leakSummary(sh) { var A = leakCheck(sh, 0); return { up: A, text: '超載極限：' + leakLine(A) }; }
+function leakSummary(sh) { var A = leakCheck(sh, 0); return { up: A, text: leakLine(A) }; }   // 匯入檢查的報告那一行自己有標題（admin.py）
 /** 觀察面板的傾斜：兩舷各量一次，回先漏的那一舷。 */
 function leakHeel(sh, deg) {
   var a = leakCheck(sh, deg), b = leakCheck(sh, -deg), fa = a.first ? a.first.lvl : 1e9, fb = b.first ? b.first.lvl : 1e9;

@@ -87,7 +87,7 @@ function inspUI() {
   $('inspM').onclick = function () { INSP.min = !INSP.min; inspUI(); };
   $('inspC').onclick = function () { if (all) INSP.hi.clear(); else sh.models.forEach(function (m) { if (m.alive) INSP.hi.add(m); }); inspUI(); };
   $('inspN').onclick = function () { INSP.name = !INSP.name; inspUI(); };
-  $('inspK').onclick = function () { var b = $('inspK'); b.textContent = '量中…'; b.disabled = true; setTimeout(function () { var A = leakSummary(sh); INSP.leak = { up: A.up, heel: {}, show: A.up }; obsNote('💧 ' + A.text); inspUI(); }, 30); };   // 讓「量中…」先畫出來（一艘約 1–4 秒）
+  $('inspK').onclick = function () { var b = $('inspK'); b.textContent = '量中…'; b.disabled = true; setTimeout(function () { var A = leakSummary(sh); INSP.leak = { up: A.up, heel: {}, show: A.up }; obsNote('💧 超載極限：' + A.text); inspUI(); }, 30); };   // 讓「量中…」先畫出來（一艘約 1–4 秒）
   [].forEach.call(box.querySelectorAll('[data-heel]'), function (b) { b.onclick = function () { var d = +b.dataset.heel; b.textContent = '量中…'; b.disabled = true; setTimeout(function () { var R = leakHeel(sh, d); INSP.leak.heel[d] = R; INSP.leak.show = R; obsNote('💧 ' + leakLine(R)); inspUI(); }, 30); }; });   // 兩舷各量一次
   if ($('inspKL')) $('inspKL').onclick = function () { INSP.leakL = !INSP.leakL; inspUI(); };
   [].forEach.call(box.querySelectorAll('[data-v]'), function (b) { b.onclick = function () { if (b.dataset.v === 'cut') cutToggle(); else xrayToggle(); inspSync(); }; });
