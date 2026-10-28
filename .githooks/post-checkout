@@ -1,0 +1,6 @@
+#!/bin/sh
+# 區塊職責：切換之後（checkout、switch、submodule update）外殼頁跟著重套 —— 見 .githooks/shellsync.sh。
+# 參數：舊 HEAD、新 HEAD、是不是換分支 ⇒ 只換檔案（0）或 HEAD 沒變 ⇒ 成品沒換、不做。
+[ "$3" = "0" ] && exit 0
+[ "$1" = "$2" ] && exit 0
+exec sh .githooks/shellsync.sh post-checkout
