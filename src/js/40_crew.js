@@ -208,6 +208,20 @@ function stokerCrew(sh, g, taken, crew, add) {
     });
   });
 }
+/** 司爐撤出（Tim 2026-10-28「目前司爐好像不受淹水影響」；同砲浸水時砲班離開）：每次 survey（31_drive.js，boilerWet 之後），那一座鍋爐泡水熄火了
+ *  （31_drive.js boilerOut：爐口 ＝ 鍋爐旁的地板往上 STOKER_WET，艙內的水滿一半、連兩次）⇒ 在崗的司爐離開位子改當預備水手
+ *  （位子記在 boilHome／boilOf ⇒ 乾了 42_hands.js 照位子補回去；還淹著不派人）；淹過頭 ⇒ 照預備水手往上一層躲（43_swim.js evacuate）。 */
+var STOKER_WET = 9;                                                     // 格（0.9 m）：鍋爐旁的地板往上到腰 ＝ 爐口（31_drive.js boilerFire）
+function stokerFlood(sh) {
+  var NV = sh.nav, C = sh.drive && sh.drive.C; if (!(sh.stokerWant > 0) || !NV || !C) return;
+  sh.crew.forEach(function (c) {
+    if (c.role !== ROLE.STOKER || !crewAble(c) || !c.boil || c.walk || !boilerOut(C, c.boil)) return;
+    var lv = lvAt(sh, c.pos); if (lv < 0 || !NV.levels[lv]) return;
+    c.boilHome = c.home.slice(); c.boilOf = c.boil; c.boil = null; sh.stokerFled = (sh.stokerFled || 0) + 1;
+    c.role = ROLE.HAND; c.moving = false; c.deck = NV.levels[lv].key;
+    c.hand = { lv: lv, wait: rr(1, 3), legs: [], wp: null, k: 0, climb: null, job: null, to: null };
+  });
+}
 /** 每門砲現在有幾個人在崗（走過去的路上不算）。 */
 function manning(sh) {
   sh.guns.forEach(function (g) { g.manned = 0; });
