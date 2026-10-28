@@ -1856,6 +1856,30 @@ function townGroundNext(T, eye) {
 function townGroundPier(q) { return q.pier.length > 0 || q.quay.length > 0 || (q.wlot || []).length > 0; }   // 碼頭、棧橋、水上建築的平台（Blocksail TASK-0899：碼頭棧橋是路 ⇒ 跟路一樣先出）
 /** 城 T 的一區 ⇒ 一份網格（位置、法線、顏色）；那一區沒東西 ⇒ null。 */
 var TOWN_WPILE = 4;                                                      // 水上建築的樁每幾公尺一根（Blocksail TASK-0899；同棧橋每 4 m 一對）
+var TOWN_WGAP_COL = 0.5, TOWN_WGAP_MAX = 8, TOWN_WGAP_SINK = 0.03;       // 水上建築正面的接縫木板：每幾公尺一欄、最遠找幾公尺、面比平台低多少（伸進碼頭、棧橋的那一點藏在它的板面底下）
+/** 水上建築（地塊帶 water）正面到碼頭線、棧橋板邊的接縫：Blocksail town.js bindRaw 把正面擺在那條線的中線往外「半寬 ＋ STRIP_GAP（0.5 m）」，
+ *  線往外彎的那一側更寬（生成的規劃量過：直的 0.5 m、彎的到 7 m）⇒ 正面每 TOWN_WGAP_COL m 一欄、兩緣與中間各沿正面的法線往前走，第一個落在板上的那一點；
+ *  三點都找到 ⇒ { b0, b1, t（三點最遠的那一個）}；找不到（那一欄的正面不朝碼頭、棧橋，或遠過 TOWN_WGAP_MAX）⇒ 不回那一欄。pt(a, b) ＝ 地塊座標 ⇒ 規劃平面。 */
+function townWlotGap(p, l, pt) {
+  var th = l.rot * Math.PI / 180, ux = Math.cos(th), uy = Math.sin(th), R = Math.hypot(l.w, l.d) / 2 + TOWN_WGAP_MAX, S = [], out = [];
+  (p.quay || []).concat(p.piers || []).forEach(function (q) {
+    for (var i = 1; i < q.path.length; i++) if (townSegDist(l.at[0], l.at[1], q.path[i - 1], q.path[i]) < R + q.w / 2) S.push({ a: q.path[i - 1], b: q.path[i], hw: q.w / 2 });
+  });
+  if (!S.length) return out;
+  function hit(b) {
+    var o = pt(l.d / 2, b);
+    for (var t = 0; t <= TOWN_WGAP_MAX; t += 0.05) {
+      var x = o[0] + ux * t, y = o[1] + uy * t;
+      for (var k = 0; k < S.length; k++) if (townSegDist(x, y, S[k].a, S[k].b) <= S[k].hw) return t;
+    }
+    return NaN;
+  }
+  for (var b0 = -l.w / 2; b0 < l.w / 2 - 1e-6; b0 += TOWN_WGAP_COL) {
+    var b1 = Math.min(b0 + TOWN_WGAP_COL, l.w / 2), t = Math.max(hit(b0), hit((b0 + b1) / 2), hit(b1));
+    if (t > 0) out.push({ b0: b0, b1: b1, t: t });                      // NaN（有一點找不到）、0（正面已經在板上）⇒ 不鋪
+  }
+  return out;
+}
 var TOWN_ROADBED_SINK = 0.3;                                             // 路基的腳伸到地面下幾公尺（同 townPlinth 的石基；地形網格 4 m 一格 ⇒ 兩點之間的地面不會露縫）
 var TOWN_STAIR_RISE = 0.17;                                              // 樓梯一階最高（公尺；同 Blocksail town.js STAIR_RISE）
 /** 一次建完（測試、沒有背景預算時）：townGroundGen 跑到底、換上 ⇒ 回傳那一區的網格。 */
@@ -2029,6 +2053,14 @@ function* townGroundGen(T, Q) {
       pile(a, b);
     }
     if (jt) for (var aj = -l.d / 2 + 0.5; aj < -l.d / 2 + jL; aj += TOWN_WPILE) { pile(aj, -jw + r + 0.05); pile(aj, jw - r - 0.05); }
+    // 正面到碼頭線、棧橋的接縫（Tim 2026-10-28「水上建築(例如 魚場水上版) 很多都跟棧橋沒有連接」「還有跟海堤也有一樣的問題」「都會有一小段間隔」）：
+    //   每一欄照 townWlotGap 量到的長度鋪木板接過去，從平台裡面 5 cm 起、伸過板邊 10 cm；面低 TOWN_WGAP_SINK ⇒ 兩頭疊到的那一點藏在平台、碼頭的面底下；接縫長過 2 m ⇒ 中間每 TOWN_WPILE m 一根樁
+    var gb = townWlotGap(T.p, l, pt), pb = -Infinity;
+    gb.forEach(function (g) {
+      var bc = (g.b0 + g.b1) / 2;
+      slab([pt(l.d / 2 - 0.05, bc), pt(l.d / 2 + g.t + 0.1, bc)], g.b1 - g.b0, top - TOWN_WGAP_SINK, top - 0.4, TOWN_COL.pier);
+      if (g.t > 2 && bc - pb >= TOWN_WPILE) { pile(l.d / 2 + g.t / 2, bc); pb = bc; }
+    });
   });
   Q.deps = deps;
   var gf = IF.length ? townGpuField(VF, IF) : null;
@@ -2404,8 +2436,8 @@ function townBin(PL, eye) {
       var cy = q.y + q.top / 2, r = q.r + q.top / 2;
       for (var i = 0; i < 6; i++) { var p = PL[i]; if (p[0] * q.x + p[1] * cy + p[2] * q.z + p[3] < -r - TOWN_SH_PAD) return; }   // 視錐外 TOWN_SH_PAD 公尺內的也放進來：影子落進畫面的那幾棟（陰影照主畫面這一組畫）
       var mi = K.M[q.k].i, on0 = d < L0 + B0, on1 = d > L0 - B0 && d < L1 + B1, on2 = d > L1 - B1;
-      var rh = townRiseHides(T, q) || (q.lot && TOWN_UNITS[T.id + ':' + q.lot] ? { unit: true } : null);   // 換成戰鬥單位的那一棟（townFortWake）：模型不畫、石基照畫                                     // 工地上的那一棟（63_townrise.js 自己畫：帳上的工地、演出）：格子、貼圖不畫，石基照進度（townRisePlinth）
-      if (rh) { if ((on0 || on1) && q.pl && (rh.unit || townRisePlinth(rh))) { if (!q.pb) q.pb = townPlinth(q); if (q.pb) { npl++; vis.push(q, d, false, false, false, true); } } return; }
+      var rh = townRiseHides(T, q) || (q.lot && TOWN_UNITS[T.id + ':' + q.lot] ? { unit: true } : null) || townRuinHides(T, q);   // 換成戰鬥單位的那一棟（townFortWake）、照打壞的樣子畫的那一棟（townRuinDraw）：模型不畫、石基照畫                                     // 工地上的那一棟（63_townrise.js 自己畫：帳上的工地、演出）：格子、貼圖不畫，石基照進度（townRisePlinth）
+      if (rh) { if ((on0 || on1) && q.pl && (rh.unit || rh.ruin || townRisePlinth(rh))) { if (!q.pb) q.pb = townPlinth(q); if (q.pb) { npl++; vis.push(q, d, false, false, false, true); } } return; }
       if (q.lk > 1) nlm++;
       if (on0) cnt[0][mi]++; if (on1) cnt[1][mi]++; if (on2) nbb++;
       if ((on0 || on1) && q.pl) { if (!q.pb) q.pb = townPlinth(q); if (q.pb) npl++; }
@@ -2520,6 +2552,7 @@ function townDraw() {
   }
   tris += townSpinDraw(PV, G, K);                                        // 旋轉件（風車的帆；近那一級才畫、才轉）
   tris += townRiseDraw(P);                                               // 建造演出（63_townrise.js；同一支著色器，接著近那一級畫）
+  tris += townRuinDraw(P, eye);                                          // 打壞的堡壘（帳上的損傷，TASK-0956）
   // 石基
   if (G.npl) {
     var PP = P.pl; gl.useProgram(PP.prog); setCommon(PP); gl.uniform1f(PP.u.uFogD, fogD); gl.uniform3f(PP.u.uCol, 0.62, 0.58, 0.50);
@@ -2595,6 +2628,7 @@ function townDepth() {
     gl.drawElementsInstanced(gl.TRIANGLES, g.nq * 6, gl.UNSIGNED_INT, 0, k); n += k;
   });
   n += townRiseDepth(P);                                                 // 建造演出（63_townrise.js）
+  n += townRuinDepth(P);                                                 // 打壞的堡壘
   if (G.npl && P.plVao) { var PP = P.dPl; gl.useProgram(PP.prog); setCommon(PP); gl.bindVertexArray(P.plVao); gl.drawArraysInstanced(gl.TRIANGLES, 0, 36, G.npl); }
   gl.bindVertexArray(null); return n;
 }
@@ -2701,7 +2735,8 @@ function townFortWake(h) {
   if (q.waking) return true;
   if (SHIPS.length - Object.keys(TOWN_UNITS).length >= MAX_SHIPS) { note(me, h.name + '：場上已經 ' + SHIPS.length + ' 艘，堡壘進不來（上限 ' + MAX_SHIPS + '）'); return true; }   // 前一座會換回去（一次一座）⇒ 不算它
   q.waking = true; note(me, h.name + '：載入中…');
-  loadHull(id).then(function (T) {
+  loadHull(id).then(function (T) { return townFortStIn(h.T, q.lot).then(function (st) { return [T, st]; }); }).then(function (a) {
+    var T = a[0], st = a[1];                                             // st：帳上那一棟上次打壞的樣子（townFortStIn；沒有 ⇒ null ＝ 完好的一座）
     q.waking = false;
     if (TOWN_UNITS[key] || SHIPS.indexOf(me) < 0) return;
     var m = TOWNS.kit && TOWNS.kit.M[q.k] && TOWNS.kit.M[q.k].m;
@@ -2715,17 +2750,22 @@ function townFortWake(h) {
     var lw = h.T.p && h.T.p.live && h.T.p.live.work, gar = null;          // 駐軍 ＝ 城鎮帳那一棟今天幾個兵（Blocksail BSW.GARRISON 分到每一棟的 staff，TASK-0948）；不超過那一座滿編
     if (lw && Object.prototype.hasOwnProperty.call(lw, q.lot)) gar = crewCap(sh, Math.max(0, +lw[q.lot] || 0));   // 帳上沒有那一棟（實驗場、帳還沒過一天）⇒ 照設定檔滿編
     if (gar === 0) { sh.struck = true; sh.fate = '沒有駐軍（城鎮帳那一棟今天 0 人）'; }   // 空的那一座：不算敵艦、不開砲（⛔ 照 strikeCheck ⇒ 一換上來就報「全員倒下」）
+    sh.townLot = q.lot; sh.townGar = gar; sh.townDeadSent = 0;          // 駐軍是城鎮帳的兵（gar 不是 null）⇒ 死的人報回帳上（townFortReport）
     TOWN_UNITS[key] = sh; h.T.work = null; TOWNS.dirty = true;           // 那一棟的站崗鎮民（63_townfolk.js townWorkPrep）重擺 ⇒ 不畫：兵是那一座的人；模型重新分組 ⇒ 不畫
-    SHIPS.push(sh); coreSpawned(sh, null); stepShip(sh, 0); survey(sh); pickCaptain(sh); cmdTick(); pickFoes();
+    SHIPS.push(sh); coreSpawned(sh, st);                                // 上次打壞的格子、模型照核心 API 套回去（57_core.js coreShipIn：makeShip 之後、stepShip／survey 之前）
+    var al = sh.models.map(function (m2) { return m2.alive; });
+    stepShip(sh, 0); survey(sh); pickCaptain(sh); cmdTick(); pickFoes();
+    sh.townDrop0 = {}; sh.models.forEach(function (m2, k) { if (al[k] && !m2.alive) sh.townDrop0[k] = 1; });   // 一換上來就掉的（腳下沒格子的燈籠、酒桶；survey 照格子判）⇒ 不是打掉的：城裡那一份照畫（townFortModCells）
+    sh.townLostSent = sh.lost; sh.townModSent = townFortModSig(sh);      // 套回去的那些不算「這一次又壞了」（townFortReport 只報之後的）
     var mc = shipCenter(me), fc = shipCenter(sh); sh.townR = townFortR(sh); sh.wakeD = Math.hypot(fc[0] - mc[0], fc[2] - mc[2]);   // 離開換回的那把尺（townFortTick）
     setAim(me, [T.cx, T.cy, T.geo.aim], sh); me.pMode = AIM_P = 'free';
-    note(me, '瞄準 ' + sh.name + (gar !== null ? '（駐軍 ' + gar + ' 人，城鎮帳）' : '') + ' —— 中立；開火就是對它宣戰');
+    note(me, '瞄準 ' + sh.name + (gar !== null ? '（駐軍 ' + gar + ' 人，城鎮帳）' : '') + (st && sh.coreIn ? '（上次打壞的：' + st.cells.n + ' 格）' : '') + ' —— 中立；開火就是對它宣戰');
   }, function (err) { q.waking = false; note(me, h.name + '：載入失敗（' + (err && err.message || err) + '）'); });
   return true;
 }
 // 離開那座城 ⇒ 換回（TASK-0955 第 1 格）：玩家的船離那一座比「射程 × TOWN_FORT_LEAVE」遠、也比換上來那時遠 TOWN_FORT_SLACK 公尺以上（遠遠點它的不會一換上來就收），
 //   或換了玩法（城鎮模式、沒有海戰鍵）⇒ 那一座收掉（58_traffic.js shipDrop），城裡那一棟的模型、站崗的鎮民畫回來。
-//   ⚠ 打壞的格子、死傷都不留（留下來是 TASK-0956 第三段）⇒ 回頭再點是完好的一座、駐軍照當天的帳。
+//   打壞的格子、死的兵報回帳上（townFortReport；TASK-0956）⇒ 換回之後城裡畫打壞的樣子（townRuinDraw）、再點是打壞的那一座、駐軍照扣過的帳。
 //   它打出去的砲彈還在飛 ⇒ 等落地再收（砲彈記的是序號 b.owner）。已經不在 SHIPS 裡（重開一場：70_flow.js 清空 SHIPS）⇒ 只把那一棟畫回來（⛔ 以前會一直藏著）。
 //   一次一座（Tim 2026-10-27）：點另一座 ⇒ 前一座照這一套換回（townFortWake；sh.townRetire：砲彈落地前不管多近都要收）。攻城的機制（好幾座一起、射程內自己醒）之後另外想。
 var TOWN_FORT_LEAVE = 1.25, TOWN_FORT_SLACK = 300, TOWN_FORT_EVERY_MS = 500, TOWN_FORT_T = 0;
@@ -2734,6 +2774,7 @@ function townFortR(sh) { var r = 0; sh.guns.forEach(function (g) { var mw = M4.p
 /** 把 TOWN_UNITS[key] 換回城裡的模型（why：廣播的原因）。回換掉了沒有（它的砲彈還在飛 ⇒ false、標 townRetire，townFortTick 之後再收）。 */
 function townFortSleep(key, why) {
   var sh = TOWN_UNITS[key], me = SHIPS[PLAYER_I]; if (!sh) return true;
+  townFortReport(sh);
   if (SHIPS.indexOf(sh) >= 0) {
     sh.townRetire = why; sh.calm = true;                               // 等砲彈落地的那幾秒停手（50_sim.js 不動手；52_fleet.js fortProvoke 不再翻臉）⇒ ⛔ 不停 ⇒ 敵對的那一座一直開砲、一直有砲彈在飛，永遠收不掉
     if (BALLS.some(function (b) { return b.alive && b.owner === sh.i; })) return false;
@@ -2744,12 +2785,186 @@ function townFortSleep(key, why) {
   TOWNS.list.forEach(function (T) { if (T.id === sh.townId) T.work = null; });   // 那一棟的站崗鎮民重擺 ⇒ 畫回來
   return true;
 }
+// 陣亡扣帳（TASK-0956 第一格；Tim 2026-10-28「0956 開工 GO … 照妳的切法由陣亡扣帳開始」）：駐軍是城鎮帳的兵（townFortWake 的 gar 不是 null）⇒
+//   這一座死了幾個（sh.dead，40_crew.js 累計；傷的不算）比上次報的多 ⇒ 多的那幾個報給外面那一頁 { bsmap: 'fortLoss', town: 規劃單位 id, lot: 規劃裡的地塊 id, dead: 這一次多死的 }，
+//   Blocksail 從那座城的人口扣男人、今天那一棟的 staff 與 jobs.garrison 扣掉（world/townstate.js BSW.fortLoss），隔天照常招。
+//   巡視（townFortTick）、換回（townFortSleep）各報一次 ⇒ 沒等換回就回地球儀（iframe 關掉），死的人也已經記上。實驗場（帳上沒有那一棟）、沒有外面那一頁 ⇒ 不報。
+// 打壞的留著（TASK-0956 第二格；Tim「打壞的堡壘存被挖掉的格子（壓縮）」）：格子（sh.lost）或模型（townFortModSig）變了 ⇒ 照核心 API 的戰前狀態那一份（57_core.js coreShipOut：
+//   船殼差 cells、打壞的模型、帆、斷的繩；不帶船員 —— 兵照城鎮帳）⇒ cells.d deflate 壓（townZip）⇒ { bsmap: 'fortState', town, lot, st: { v: 1, hull, sum, n, gone, z, models, sails, ropes, dmg, mz? } }，
+//   dmg ＝ { cells: [打掉幾格, 整座幾格], guns: [打掉幾門, 幾門] }（第三格修繕：Blocksail BSW.fortDmg 照它打折名額、定修繕多大）；
+//   Blocksail 原樣存進那座城的帳（towns[城].forts[地塊鍵]）、進場時照 live.forts 帶回來 ⇒ townFortWake 解壓（townFortStIn）照 coreSpawned 套回去。
+//   量過（實驗場憲法號對加勒比稜堡 seed 7，打掉 26,363 格）：cells.d 的 base64 176 KB ⇒ deflate 15 KB（連續段編碼＋deflate 12 KB，差不多 ⇒ 不另造格式，解壓就是 coreShipIn 讀的那一份）。
+function townFortReport(sh) {
+  if (!sh || !sh.townId || !BED || !BED.host) return;
+  var n = sh.townGar != null ? sh.dead - (sh.townDeadSent || 0) : 0;
+  if (n > 0) {
+    sh.townDeadSent = sh.dead;
+    BED.host.postMessage({ bsmap: 'fortLoss', town: sh.townId, lot: sh.townLot, dead: n }, '*');
+    townFortLive(sh.townId, function (L) {                               // 這一頁手上那一份帳（外面那一頁進場時給的 live.work）也扣 ⇒ 同一天換回再點，駐軍是扣過的（⛔ 不扣 ⇒ 死的人又站回來）
+      if (L.work && Object.prototype.hasOwnProperty.call(L.work, sh.townLot)) L.work[sh.townLot] = Math.max(0, (+L.work[sh.townLot] || 0) - n);
+    });
+  }
+  var mg = townFortModSig(sh); if (sh.lost === sh.townLostSent && mg === sh.townModSent) return;
+  sh.townLostSent = sh.lost; sh.townModSent = mg;
+  var o = coreShipOut(sh), md = townFortModCells(sh), town = sh.townId, lot = sh.townLot, D0 = sh.townDrop0 || {};   // 這一刻的樣子（同步取）；壓縮是非同步 ⇒ 一艘排一條隊，送出去的順序跟取的順序一樣
+  var dmg = { cells: [o.cells.gone, townFortCells0(sh.T)], guns: [sh.guns.filter(function (g) { return !g.alive && !(g.model && D0[g.model.k]); }).length, sh.guns.length] };   // 損傷的分子、分母（Blocksail BSW.fortDmg：取大的 ⇒ 名額打折、修繕多大）
+  sh.townZ = (sh.townZ || Promise.resolve()).then(function () { return Promise.all([townZip(o.cells.d), townZip(md)]); }).then(function (Z) {
+    var st = { v: 1, hull: o.hull, sum: o.sum, n: o.cells.n, gone: o.cells.gone, z: Z[0], models: o.models.filter(function (m) { return !D0[m.k]; }), sails: o.sails, ropes: o.ropes, dmg: dmg };   // 一換上來就掉的不存 ⇒ 再點照樣當場掉、照樣算不是打掉的（⛔ 存了 ⇒ 再點時 coreShipIn 先標死 ⇒ 下一次報成打掉的，城裡的燈籠就沒了）
+    if (Z[1]) st.mz = Z[1];                                               // 死掉的模型在城鎮模型裡的格（townFortModCells；只給城裡畫打壞的那一份用，coreShipIn 不讀）
+    if (BED && BED.host) BED.host.postMessage({ bsmap: 'fortState', town: town, lot: lot, st: st }, '*');
+    townFortLive(town, function (L) { (L.forts || (L.forts = {}))[lot] = st; });   // 這一頁手上那一份也記 ⇒ 同一次進場換回再點，照樣是壞的
+  }).catch(function (e) { console.warn('堡壘的損傷沒送出去（' + (e && e.message || e) + '）'); });
+}
+function townFortLive(town, f) { TOWNS.list.forEach(function (T) { if (T.id === town && T.p && T.p.live) f(T.p.live); }); }
+/** 船殼一共幾格（T.hullG；同一型算一次）—— 損傷的分母（townFortReport 的 st.dmg）。 */
+function townFortCells0(T) {
+  if (T.townN0 == null) { var n = 0; T.hullG.tab.forEach(function (c) { if (c) for (var i = 0; i < 4096; i++) if (c[i]) n++; }); T.townN0 = n; }
+  return T.townN0;
+}
+/** 模型壞了沒（砲、旗杆…）：活著的照 hp、飛掉的記 −1 ⇒ 一個數（變了就重報）。 */
+function townFortModSig(sh) { var s = 0; sh.models.forEach(function (m, k) { s += (k + 1) * (m.alive ? +m.hp || 0 : -1); }); return s; }
+/** base64 ⇒ deflate-raw ⇒ base64（瀏覽器內建 CompressionStream；沒有 ⇒ 'raw:' 加原樣，townUnzip 認得）。 */
+function townZip(b64) {
+  if (!b64) return Promise.resolve('');
+  if (typeof CompressionStream === 'undefined') return Promise.resolve('raw:' + b64);
+  var cs = new CompressionStream('deflate-raw'), w = cs.writable.getWriter(); w.write(coreUnB64(b64)); w.close();
+  return new Response(cs.readable).arrayBuffer().then(function (ab) { return coreB64(new Uint8Array(ab)); });
+}
+function townUnzip(z) {
+  if (!z) return Promise.resolve('');
+  if (z.slice(0, 4) === 'raw:') return Promise.resolve(z.slice(4));
+  var ds = new DecompressionStream('deflate-raw'), w = ds.writable.getWriter(); w.write(coreUnB64(z)); w.close();
+  return new Response(ds.readable).arrayBuffer().then(function (ab) { return coreB64(new Uint8Array(ab)); });
+}
+/** 帳上那一棟上次打壞的樣子（T.p.live.forts[lot]，Blocksail 存的那一份）⇒ 核心 API 的戰前狀態（coreShipIn 讀的格式）；沒有、壞了 ⇒ null（完好的一座）。 */
+function townFortStIn(T, lot) {
+  var F = T && T.p && T.p.live && T.p.live.forts, s = F && F[lot];
+  if (!s || s.v !== 1) return Promise.resolve(null);
+  return townUnzip(s.z).then(function (d) {
+    return { hull: s.hull, sum: s.sum, cells: { n: s.n, gone: s.gone, d: d }, models: s.models || [], sails: s.sails || [], ropes: s.ropes || [] };
+  }, function (e) { console.warn(T.id + ' ' + lot + '：上次的損傷解不開（' + (e && e.message || e) + '）⇒ 照完好的換上來'); return null; });
+}
+/** 打掉的模型（砲…）在城鎮模型裡的那幾格：城鎮模型是把外部模型塗進作品的空格（Blocksail tools/townmodels.py voxelize_models）⇒
+ *  它外框裡、作品自己沒有格子（T.base）、也不在其他模型外框裡的那幾格 ⇒ 同格子差的格式（值 0；townRuinMake 一起挖）。沒有 ⇒ ''。
+ *  一換上來就掉的（sh.townDrop0：腳下沒格子，不是打掉的）照算「在」⇒ 城裡那一份照畫，它外框裡的格也不挖。 */
+function townFortModCells(sh) {
+  var T = sh.T, R = (T.rig && T.rig.models) || [], B = T.base, D0 = sh.townDrop0 || {}, dead = [], live = [], L = [];
+  R.forEach(function (m, k) {
+    var s = sh.models[k], b = m.bbox; if (!s || !b) return;
+    (s.alive || D0[k] ? live : dead).push([Math.max(0, Math.floor(b[0])), Math.max(0, Math.floor(b[1])), Math.max(0, Math.floor(b[2])), Math.min(B.sx - 1, Math.floor(b[3])), Math.min(B.sy - 1, Math.floor(b[4])), Math.min(B.sz - 1, Math.floor(b[5]))]);
+  });
+  if (!dead.length) return '';
+  function inLive(x, y, z) { for (var i = 0; i < live.length; i++) { var c = live[i]; if (x >= c[0] && x <= c[3] && y >= c[1] && y <= c[4] && z >= c[2] && z <= c[5]) return true; } return false; }
+  dead.forEach(function (c) { for (var z = c[2]; z <= c[5]; z++) for (var y = c[1]; y <= c[4]; y++) for (var x = c[0]; x <= c[3]; x++) if (!B.get(x, y, z) && !inLive(x, y, z)) L.push(x + B.sx * (y + B.sy * z)); });
+  L.sort(function (a, b) { return a - b; });
+  var u = new Uint8Array(L.length * 5), dv = new DataView(u.buffer), last = -1, n = 0;
+  L.forEach(function (p) { if (p === last) return; dv.setUint32(n * 5, p - Math.max(0, last), true); last = p; n++; });   // 兩個死掉的模型外框重疊 ⇒ 同一格只記一次
+  return n ? coreB64(u.subarray(0, n * 5)) : '';
+}
+// 城裡畫打壞的那一棟（TASK-0956 第二格；Tim 2026-10-28「裝飾建築實際根據被破壞後的Voxel繪製」）：同一款的城鎮模型共用一份網格 ⇒
+//   帳上有損傷（live.forts[地塊]）的那一棟另外照打壞後的格子網格化一份，借建造演出那一套畫（63_townrise.js：townRiseLoad 的逐格資料、townRiseMesh、townRiseBind；
+//   格子照工地的放法，四周留 RISE_PAD）；分組時那一棟原本的模型、貼圖不畫，石基照畫（townBin）。換成戰鬥單位的時候畫那一艘、不畫這一份；工地（之後的修繕）照工地畫。
+//   對位：戰鬥用的格子 ＝ 作品的格子（05_hull.js Grid.fromModel），城鎮模型 ＝ 同一份作品沿 x 翻過（townmodels.py mirror_x：格 i ⇒ 寬 − 1 − i）、外部模型塗進空格
+//   ⇒ 格子差的 (x, y, z) 落在城鎮模型的 (寬 − 1 − x, y, z)；值同一套 rgb332（0 ＝ 打掉、其他 ＝ 燒焦換色或木匠補上的）。死掉的模型照 st.mz 一起挖（townFortModCells）。
+//   對不上（城鎮模型跟打的那一座不是同一版：打掉的格落在城鎮模型空格的超過 TOWN_RUIN_MISS）⇒ 不畫這一份（照共用的完好那一份畫、console 記一行）。
+//   每格看一次帳（townRuinSync）：損傷換了（換回時 townFortReport 寫進這一頁的 live.forts、外面那一頁重給 live）⇒ 重做，做好之前照舊的那一份畫；帳上沒了（修好）⇒ 收掉。
+//   遠近不分級（同工地：aS.z 1e6 ⇒ 永遠是近那一級），離鏡頭超過 TOWN_FAR[1] 不畫。網格做好就丟掉格子（只留 GPU 那一份）。
+var TOWN_RUIN = {}, TOWN_RUIN_BUSY = {}, TOWN_RUIN_BAD = {}, TOWN_RUIN_MISS = 0.02;
+function townRuinSync() {
+  var seen = {};
+  TOWNS.list.forEach(function (T) {
+    var F = T.p && T.p.live && T.p.live.forts; if (!F) return;
+    Object.keys(F).forEach(function (lot) {
+      var st = F[lot], key = townRiseKey(T, lot), s = TOWN_RUIN[key]; seen[key] = 1;
+      if (!st || st.v !== 1) return;
+      if (s && s.st === st) { s.T = T; return; }
+      var sig = st.z + '|' + (st.mz || '');
+      if (s && s.sig === sig) { s.T = T; s.st = st; return; }              // 外面那一頁重給同一份
+      if (TOWN_RUIN_BUSY[key] === sig || TOWN_RUIN_BAD[key] === sig) return;
+      var q = T.inst && townRiseInst(T, lot); if (!q || !townFortHull(q.k)) return;   // 那一棟還沒擺出來（模型組還在解）⇒ 下一格再看
+      TOWN_RUIN_BUSY[key] = sig;
+      townRuinMake(T, lot, q.k, st, sig).then(function (s2) {
+        if (TOWN_RUIN_BUSY[key] !== sig) { townRuinFree(s2); return; }    // 做的時候又來了新的損傷 ⇒ 這一份作廢
+        delete TOWN_RUIN_BUSY[key];
+        if (!s2) { TOWN_RUIN_BAD[key] = sig; return; }
+        townRuinFree(TOWN_RUIN[key]); TOWN_RUIN[key] = s2; TOWNS.dirty = true;   // 重新分組 ⇒ 原本那一棟不畫
+      }, function (e) { delete TOWN_RUIN_BUSY[key]; TOWN_RUIN_BAD[key] = sig; console.warn(key + '：打壞的樣子做不出來（' + (e && e.message || e) + '）⇒ 照完好的畫'); });
+    });
+  });
+  Object.keys(TOWN_RUIN).forEach(function (key) { if (!seen[key]) { townRuinFree(TOWN_RUIN[key]); delete TOWN_RUIN[key]; TOWNS.dirty = true; } });   // 帳上沒了（修好、那座城不在了）
+}
+/** 城 T 地塊 lot（模型 nm）照帳上的損傷 st 做一份網格 ⇒ Promise<那一份｜null（對不上）>。 */
+function townRuinMake(T, lot, nm, st, sig) {
+  var t0 = performance.now();
+  return Promise.all([townRiseLoad(nm), townUnzip(st.z), townUnzip(st.mz || '')]).then(function (A) {
+    var D = A[0], P = RISE_PAD, G = new VK.Grid([D.sx + P * 2, D.sy + P * 2, D.sz + RISE_TOP]), o = { gone: 0, miss: 0, col: 0, add: 0, mod: 0, out: 0 }, j;
+    for (j = 0; j < D.n; j++) G.set(D.X[j] + P, D.Y[j] + P, D.Z[j], D.C[j]);
+    function apply(b64, mod) {
+      if (!b64) return;
+      var u = coreUnB64(b64), dv = new DataView(u.buffer), p = 0, N = u.length / 5;
+      for (var k = 0; k < N; k++) {
+        p += dv.getUint32(k * 5, true);
+        var v = u[k * 5 + 4], x = p % D.sx, y = Math.floor(p / D.sx) % D.sy, z = Math.floor(p / (D.sx * D.sy)), tx = D.sx - 1 - x + P, had;
+        if (z >= D.sz) { o.out++; continue; }
+        had = G.get(tx, y + P, z);
+        if (mod) { if (had) { G.set(tx, y + P, z, 0); o.mod++; } }
+        else if (!v) { if (had) { G.set(tx, y + P, z, 0); o.gone++; } else o.miss++; }
+        else { G.set(tx, y + P, z, v); if (had) o.col++; else o.add++; }
+      }
+    }
+    apply(A[1], false); apply(A[2], true);
+    if (o.miss + o.out > TOWN_RUIN_MISS * Math.max(1, o.gone + o.miss + o.out)) {
+      console.warn(T.id + ' ' + lot + '（' + nm + '）：打掉的 ' + (o.gone + o.miss + o.out) + ' 格有 ' + (o.miss + o.out) + ' 格落在城鎮模型的空格 ⇒ 城鎮模型跟打的那一座不是同一版，照完好的畫');
+      return null;
+    }
+    var s = { key: townRiseKey(T, lot), T: T, lot: lot, nm: nm, d: D, st: st, sig: sig, ruin: true, G: G, cv: new Uint32Array(G.tab.length), mesh: {}, dirtyAll: true, gpu: null, ib: null, stat: o };
+    townRiseMesh(s);
+    s.G = null; s.mesh = null; s.cv = null;                               // 只留 GPU 那一份
+    o.cells = D.n - o.gone - o.mod + o.add; o.ms = +(performance.now() - t0).toFixed(1);
+    return s;
+  });
+}
+function townRuinFree(s) {
+  if (!s) return;
+  if (s.gpu) { gl.deleteVertexArray(s.gpu.vao); gl.deleteBuffer(s.gpu.vbo); s.gpu = null; }
+  if (s.ib) { gl.deleteBuffer(s.ib); s.ib = null; }
+}
+/** 分組時（townBin）：這一棟照打壞的那一份畫 ⇒ 那一份｜null。 */
+function townRuinHides(T, q) { if (q.lot == null) return null; var s = TOWN_RUIN[townRiseKey(T, q.lot)]; return s && s.gpu ? s : null; }
+/** 那一份這一格畫不畫：換成戰鬥單位、在當工地、還沒擺出來、離鏡頭太遠 ⇒ 不畫。 */
+function townRuinShown(s, eye) {
+  if (!s.gpu || !s.gpu.nq || TOWN_UNITS[s.T.id + ':' + s.lot] || RISE.S[s.key]) return false;
+  var q = townRiseInst(s.T, s.lot); if (!q) return false;
+  return !eye || Math.hypot(q.x - eye[0], q.z - eye[2]) <= TOWN_FAR[1] + 50;
+}
+/** 畫（townDraw：接著工地畫，同一支著色器）⇒ 畫了幾個三角形。先對一次帳。 */
+function townRuinDraw(P, eye) {
+  townRuinSync();
+  var keys = Object.keys(TOWN_RUIN); if (!keys.length) return 0;
+  var PV = P.vox, tris = 0; gl.useProgram(PV.prog);
+  gl.uniform1f(PV.u.uEdge, 1); gl.uniform2f(PV.u.uIn, -2, -1); gl.uniform2f(PV.u.uOut, 1e7, 2e7);
+  keys.forEach(function (k) {
+    var s = TOWN_RUIN[k]; if (!townRuinShown(s, eye) || !townRiseBind(s, PV)) return;
+    gl.drawElementsInstanced(gl.TRIANGLES, s.gpu.nq * 6, gl.UNSIGNED_INT, 0, 1); tris += s.gpu.nq * 2;
+  });
+  gl.bindVertexArray(null);
+  return tris;
+}
+/** 陰影那一趟（townDepth）。 */
+function townRuinDepth(P) {
+  var keys = Object.keys(TOWN_RUIN); if (!keys.length) return 0;
+  var PD = P.dVox, n = 0; gl.useProgram(PD.prog); setCommon(PD);
+  keys.forEach(function (k) { var s = TOWN_RUIN[k]; if (!townRuinShown(s, null) || !townRiseBind(s, PD)) return; gl.drawElementsInstanced(gl.TRIANGLES, s.gpu.nq * 6, gl.UNSIGNED_INT, 0, 1); n++; });
+  gl.bindVertexArray(null);
+  return n;
+}
 /** 畫面迴圈每格叫（90_main.js frame），每 TOWN_FORT_EVERY_MS 看一次。 */
 function townFortTick() {
   var now = performance.now(), keys = Object.keys(TOWN_UNITS); if (!keys.length || now - TOWN_FORT_T < TOWN_FORT_EVERY_MS) return; TOWN_FORT_T = now;
   var me = SHIPS[PLAYER_I], stay = !!me && modeRule('battleKeys') && !modeRule('town'), mc = me && shipCenter(me);
   keys.forEach(function (key) {
     var sh = TOWN_UNITS[key], why = sh.townRetire;
+    townFortReport(sh);
     if (!why && SHIPS.indexOf(sh) >= 0) {
       var fc = shipCenter(sh), d = mc ? Math.hypot(fc[0] - mc[0], fc[2] - mc[2]) : 0;
       if (stay && d <= Math.max(sh.townR * TOWN_FORT_LEAVE, sh.wakeD + TOWN_FORT_SLACK)) return;

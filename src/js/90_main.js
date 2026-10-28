@@ -214,6 +214,8 @@ if (DEBUG) window.__game = {
     var l = (r.T.p.lots || []).filter(function (x) { return x.id === lot; })[0] || null;
     return townFortWake({ T: r.T, q: r.q, lot: l, name: townLotName(r.T, l, TOWNS.kit.M[r.q.k].m) });
   },
+  /** 照打壞的樣子畫的那幾棟（63_towns.js townRuinDraw；TASK-0956）：stat ＝ 打掉、換色、補上、死掉的模型挖掉幾格，落在城鎮模型空格的（miss）、做一份花幾毫秒。 */
+  townRuin: function () { return { list: Object.keys(TOWN_RUIN).map(function (k) { var s = TOWN_RUIN[k]; return { town: s.T.id, lot: s.lot, model: s.nm, shown: townRuinShown(s, null), quads: s.gpu ? s.gpu.nq : 0, stat: s.stat }; }), busy: Object.keys(TOWN_RUIN_BUSY), bad: Object.keys(TOWN_RUIN_BAD) }; },
   townHit: function (cx, cy) { var h = townHitAt(cx, cy); return h ? { town: h.T.id, lot: h.lot ? h.lot.id : null, use: h.use, name: h.name, k: h.q.k, t: h.t, pt: h.pt } : null; },   // 螢幕那一點點到哪一棟（63_towns.js townHitAt；不看地形擋不擋）
   twbSel: function () { var h = TWB.sel; return h ? { town: h.T.id, lot: h.lot ? h.lot.id : null, use: h.use, name: h.name, k: h.q.k } : null; },   // 建築模式選著的那一棟
   twbMenu: function () { return TWB_CATS.map(function (c) { return { k: c.k, name: c.name, items: c.items.map(function (it) { return it.k; }) }; }); },   // 建築模式的選單（open 回的 menu 換過沒）

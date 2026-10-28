@@ -141,6 +141,7 @@ function townRisePoll() {
     if (r.av != null) P.av[T.id] = r.av;
     if (r.town && townReplace(r.town)) P.swaps++;                       // 那一頁剛把自動蓋的擺上地圖 ⇒ 換規劃（新的那一棟下一次問到時才開工地：實例還沒擺）
     townRiseSites(twbTown() || T, r.sites, r.mat, r.crew);
+    var T2 = twbTown() || T; if (r.forts && T2.p && T2.p.live) T2.p.live.forts = r.forts;   // 帳上打壞的堡壘（TASK-0956；修好了 ⇒ 少那一塊 ⇒ 63_towns.js townRuinSync 畫回完好的）；舊的地球儀不帶 ⇒ 不動
   });
 }
 
