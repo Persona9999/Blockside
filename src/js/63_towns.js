@@ -930,10 +930,18 @@ function townHoleOf(T, l) {
   var th = l.rot * Math.PI / 180, c = T.E(l.at), ux = T.kx * Math.cos(th), uz = Math.sin(th), ul = Math.hypot(ux, uz), vl = Math.hypot(T.kx * Math.sin(th), Math.cos(th));
   return { x: c[0] - BED.ax, z: c[1] - BED.az, ux: ux / ul, uz: uz / ul, hd: l.d / 2 * ul, hw: l.w / 2 * vl, lot: l.id };
 }
+/** 模型的款式（Blocksail TASK-0945）：索引的 variant 去掉淺版的尾碼（'a2-s'、'a2-xs' ⇒ 'a2'）⇒ 同一款的深、淺版算同一款；沒寫 variant ⇒ null。 */
+function townVar(m) { return m && m.variant ? String(m.variant).replace(/-(s|xs)$/, '') : null; }
+/** 候選 L 裡挑一個（townLotInst；Blocksail tools/town_foot.cjs 抽這一支）：地塊寫了款式（l.kit，建築模式挑的；Blocksail TASK-0945）而候選裡有那一款 ⇒ 那一款；
+ *  沒寫、或這塊地的候選裡沒有那一款（裝不下、這座城的風格沒有）⇒ 照舊照 key（城 id ＋ ':' ＋ 地塊 id）的雜湊挑 ⇒ 沒挑過款式的地塊挑到的不變。地球儀的俯視圖（Blocksail world/town_top.js）同一條。 */
+function townLotPick(I, L, l, key) {
+  if (l.kit) { for (var i = 0; i < L.length; i++) if (townVar(I.models[L[i]]) === l.kit) return L[i]; }
+  return L[Math.floor(townHash(key) * L.length)];
+}
 /** 一塊地 ⇒ 一棟的實例（townInst；建築模式的預覽 townGhost 也走這一支 ⇒ 同一個地塊 id 預覽跟蓋出來的是同一棟）；那一種沒有模型 ⇒ null。 */
 function townLotInst(T, K, l) {
   var L = townPick(K, T.styles, l); if (!L || !L.length) return null;
-  var nm = L[Math.floor(townHash(T.id + ':' + l.id) * L.length)]; if (!K.M[nm]) return null;   // 剛蓋的那一種模型還在路上（townReplace 叫了 townKitStale）⇒ 這一格先不擺
+  var nm = townLotPick(K, L, l, T.id + ':' + l.id); if (!K.M[nm]) return null;   // 剛蓋的那一種模型還在路上（townReplace 叫了 townKitStale）⇒ 這一格先不擺
   var m = K.M[nm].m, th = l.rot * Math.PI / 180, md = m.size[1] * m.mpv, mw = m.size[0] * m.mpv;
   //   泊位建築（Blocksail TASK-0906，BUILDING_SPEC §6.21）：地塊的前緣在棧橋中線、棧橋邊在 berth.over − TOWN_BERTH_STRIP；模型的棧橋邊在 y ＝ edge ⇒ 往水那一邊推到兩條對齊；
   //   模型的棧橋面在 z ＝ deckz ⇒ 往下放（護舷、梯子伸到水裡）；不墊石基（底下是水，船停的地方）
