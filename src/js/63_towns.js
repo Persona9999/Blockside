@@ -930,10 +930,18 @@ function townHoleOf(T, l) {
   var th = l.rot * Math.PI / 180, c = T.E(l.at), ux = T.kx * Math.cos(th), uz = Math.sin(th), ul = Math.hypot(ux, uz), vl = Math.hypot(T.kx * Math.sin(th), Math.cos(th));
   return { x: c[0] - BED.ax, z: c[1] - BED.az, ux: ux / ul, uz: uz / ul, hd: l.d / 2 * ul, hw: l.w / 2 * vl, lot: l.id };
 }
+/** 模型的款式（Blocksail TASK-0945）：索引的 variant 去掉淺版的尾碼（'a2-s'、'a2-xs' ⇒ 'a2'）⇒ 同一款的深、淺版算同一款；沒寫 variant ⇒ null。 */
+function townVar(m) { return m && m.variant ? String(m.variant).replace(/-(s|xs)$/, '') : null; }
+/** 候選 L 裡挑一個（townLotInst；Blocksail tools/town_foot.cjs 抽這一支）：地塊寫了款式（l.kit，建築模式挑的；Blocksail TASK-0945）而候選裡有那一款 ⇒ 那一款；
+ *  沒寫、或這塊地的候選裡沒有那一款（裝不下、這座城的風格沒有）⇒ 照舊照 key（城 id ＋ ':' ＋ 地塊 id）的雜湊挑 ⇒ 沒挑過款式的地塊挑到的不變。地球儀的俯視圖（Blocksail world/town_top.js）同一條。 */
+function townLotPick(I, L, l, key) {
+  if (l.kit) { for (var i = 0; i < L.length; i++) if (townVar(I.models[L[i]]) === l.kit) return L[i]; }
+  return L[Math.floor(townHash(key) * L.length)];
+}
 /** 一塊地 ⇒ 一棟的實例（townInst；建築模式的預覽 townGhost 也走這一支 ⇒ 同一個地塊 id 預覽跟蓋出來的是同一棟）；那一種沒有模型 ⇒ null。 */
 function townLotInst(T, K, l) {
   var L = townPick(K, T.styles, l); if (!L || !L.length) return null;
-  var nm = L[Math.floor(townHash(T.id + ':' + l.id) * L.length)]; if (!K.M[nm]) return null;   // 剛蓋的那一種模型還在路上（townReplace 叫了 townKitStale）⇒ 這一格先不擺
+  var nm = townLotPick(K, L, l, T.id + ':' + l.id); if (!K.M[nm]) return null;   // 剛蓋的那一種模型還在路上（townReplace 叫了 townKitStale）⇒ 這一格先不擺
   var m = K.M[nm].m, th = l.rot * Math.PI / 180, md = m.size[1] * m.mpv, mw = m.size[0] * m.mpv;
   //   泊位建築（Blocksail TASK-0906，BUILDING_SPEC §6.21）：地塊的前緣在棧橋中線、棧橋邊在 berth.over − TOWN_BERTH_STRIP；模型的棧橋邊在 y ＝ edge ⇒ 往水那一邊推到兩條對齊；
   //   模型的棧橋面在 z ＝ deckz ⇒ 往下放（護舷、梯子伸到水裡）；不墊石基（底下是水，船停的地方）
@@ -1848,6 +1856,30 @@ function townGroundNext(T, eye) {
 function townGroundPier(q) { return q.pier.length > 0 || q.quay.length > 0 || (q.wlot || []).length > 0; }   // 碼頭、棧橋、水上建築的平台（Blocksail TASK-0899：碼頭棧橋是路 ⇒ 跟路一樣先出）
 /** 城 T 的一區 ⇒ 一份網格（位置、法線、顏色）；那一區沒東西 ⇒ null。 */
 var TOWN_WPILE = 4;                                                      // 水上建築的樁每幾公尺一根（Blocksail TASK-0899；同棧橋每 4 m 一對）
+var TOWN_WGAP_COL = 0.5, TOWN_WGAP_MAX = 8, TOWN_WGAP_SINK = 0.03;       // 水上建築正面的接縫木板：每幾公尺一欄、最遠找幾公尺、面比平台低多少（伸進碼頭、棧橋的那一點藏在它的板面底下）
+/** 水上建築（地塊帶 water）正面到碼頭線、棧橋板邊的接縫：Blocksail town.js bindRaw 把正面擺在那條線的中線往外「半寬 ＋ STRIP_GAP（0.5 m）」，
+ *  線往外彎的那一側更寬（生成的規劃量過：直的 0.5 m、彎的到 7 m）⇒ 正面每 TOWN_WGAP_COL m 一欄、兩緣與中間各沿正面的法線往前走，第一個落在板上的那一點；
+ *  三點都找到 ⇒ { b0, b1, t（三點最遠的那一個）}；找不到（那一欄的正面不朝碼頭、棧橋，或遠過 TOWN_WGAP_MAX）⇒ 不回那一欄。pt(a, b) ＝ 地塊座標 ⇒ 規劃平面。 */
+function townWlotGap(p, l, pt) {
+  var th = l.rot * Math.PI / 180, ux = Math.cos(th), uy = Math.sin(th), R = Math.hypot(l.w, l.d) / 2 + TOWN_WGAP_MAX, S = [], out = [];
+  (p.quay || []).concat(p.piers || []).forEach(function (q) {
+    for (var i = 1; i < q.path.length; i++) if (townSegDist(l.at[0], l.at[1], q.path[i - 1], q.path[i]) < R + q.w / 2) S.push({ a: q.path[i - 1], b: q.path[i], hw: q.w / 2 });
+  });
+  if (!S.length) return out;
+  function hit(b) {
+    var o = pt(l.d / 2, b);
+    for (var t = 0; t <= TOWN_WGAP_MAX; t += 0.05) {
+      var x = o[0] + ux * t, y = o[1] + uy * t;
+      for (var k = 0; k < S.length; k++) if (townSegDist(x, y, S[k].a, S[k].b) <= S[k].hw) return t;
+    }
+    return NaN;
+  }
+  for (var b0 = -l.w / 2; b0 < l.w / 2 - 1e-6; b0 += TOWN_WGAP_COL) {
+    var b1 = Math.min(b0 + TOWN_WGAP_COL, l.w / 2), t = Math.max(hit(b0), hit((b0 + b1) / 2), hit(b1));
+    if (t > 0) out.push({ b0: b0, b1: b1, t: t });                      // NaN（有一點找不到）、0（正面已經在板上）⇒ 不鋪
+  }
+  return out;
+}
 var TOWN_ROADBED_SINK = 0.3;                                             // 路基的腳伸到地面下幾公尺（同 townPlinth 的石基；地形網格 4 m 一格 ⇒ 兩點之間的地面不會露縫）
 var TOWN_STAIR_RISE = 0.17;                                              // 樓梯一階最高（公尺；同 Blocksail town.js STAIR_RISE）
 /** 一次建完（測試、沒有背景預算時）：townGroundGen 跑到底、換上 ⇒ 回傳那一區的網格。 */
@@ -2021,6 +2053,14 @@ function* townGroundGen(T, Q) {
       pile(a, b);
     }
     if (jt) for (var aj = -l.d / 2 + 0.5; aj < -l.d / 2 + jL; aj += TOWN_WPILE) { pile(aj, -jw + r + 0.05); pile(aj, jw - r - 0.05); }
+    // 正面到碼頭線、棧橋的接縫（Tim 2026-10-28「水上建築(例如 魚場水上版) 很多都跟棧橋沒有連接」「還有跟海堤也有一樣的問題」「都會有一小段間隔」）：
+    //   每一欄照 townWlotGap 量到的長度鋪木板接過去，從平台裡面 5 cm 起、伸過板邊 10 cm；面低 TOWN_WGAP_SINK ⇒ 兩頭疊到的那一點藏在平台、碼頭的面底下；接縫長過 2 m ⇒ 中間每 TOWN_WPILE m 一根樁
+    var gb = townWlotGap(T.p, l, pt), pb = -Infinity;
+    gb.forEach(function (g) {
+      var bc = (g.b0 + g.b1) / 2;
+      slab([pt(l.d / 2 - 0.05, bc), pt(l.d / 2 + g.t + 0.1, bc)], g.b1 - g.b0, top - TOWN_WGAP_SINK, top - 0.4, TOWN_COL.pier);
+      if (g.t > 2 && bc - pb >= TOWN_WPILE) { pile(l.d / 2 + g.t / 2, bc); pb = bc; }
+    });
   });
   Q.deps = deps;
   var gf = IF.length ? townGpuField(VF, IF) : null;

@@ -23,6 +23,7 @@ var FL_LV = [null, { c: 10, ev: 4, jn: 300, vj: 0.25, dn: 120 }, { c: 7, ev: 2, 
 // FL_PUMP（Tim 2026-10-18「統一都改成 噸 分顯示吧」）：抽水量的設定是噸／分 ⇒ 換成 m³/s 要除海水密度（PUMP_REF 噸／分 ÷ 60 ÷ RHO_W ≈ 0.293）。
 //   ⛔ 以前寫死 0.3（把 1 m³ 當 1 噸）⇒ 設定 18 噸／分、實際抽 18.45 噸／分，進水細節頁「抽水 18.0（實際 18.4）」對不上。
 var FL_C = 1.0, FL_PUMP = PUMP_REF / 60 / RHO_W, FL_GM = 4, FL_GML = 60, FL_TAU = 2;
+var FL_PRESS = Q.get('flpress') !== '0', FL_PRESS_N = 16384, FL_PRESS_STEP = 65536;   // flDeposit 四周都滿 ⇒ 照水壓放進連通的空格（一次最多找幾格、每一步總共最多找幾格）；?flpress=0 ＝ 以前（退回海裡）
 var FL_ROLLK = Q.has('wroll') && isFinite(+Q.get('wroll')) ? Math.max(0, +Q.get('wroll')) : 1.7;   // 第 4 檔（房間）水造成的橫傾倍率（Tim 2026-10-23「有辦法更明顯嗎」；手感的旋鈕，不是物理）：憲法號一舷八洞 42.5 秒 1 ⇒ 2.18°、1.4 ⇒ 4.0°、2 ⇒ 6.4°（細檔 3.0°）。2026-10-28 甲板缺口的欄不再托著水（33_wrsim.js wrsOpenings fcx）⇒ 浮在破口那舷高處的水沒了、1.4 剩 2.8° ⇒ 改 1.7（3.8°；2 ⇒ 5.3°）。?wroll= 調
 var FL_HIDE = false, FLOOD_LV = 0;
 var RNG_F = rngMake('flood', 0x3C6EF372), rndF = RNG_F.f, rgF = RNG_F.r;   // 進水粒子（00_core.js 亂數工廠）
@@ -216,7 +217,7 @@ function flReadout(sh) {
   var fl = sh.fl;
   var cells = 0; for (var t = 0; t < fl.actN; t++) if (fl.A[fl.act[t]] > 0) cells++;
   return { lv: FLOOD_LV, c: fl.F.c, grid: [fl.F.NX, fl.F.NY, fl.F.NZ], m3: +fl.vol.toFixed(3), t: +(fl.vol * RHO_W).toFixed(2), cells: cells, jets: fl.J.n, holes: fl.open, area: +fl.area.toFixed(3),
-    inQ: +fl.inQ.toFixed(3), outQ: +fl.outQ.toFixed(3), inTot: +fl.inTot.toFixed(2), outTot: +fl.outTot.toFixed(2), pumped: +fl.pumped.toFixed(2), lost: +(fl.lost || 0).toFixed(3), back: +(fl.back || 0).toFixed(2),
+    inQ: +fl.inQ.toFixed(3), outQ: +fl.outQ.toFixed(3), inTot: +fl.inTot.toFixed(2), outTot: +fl.outTot.toFixed(2), pumped: +fl.pumped.toFixed(2), lost: +(fl.lost || 0).toFixed(3), back: +(fl.back || 0).toFixed(2), press: +(fl.press || 0).toFixed(2),
     comX: +fl.comX.toFixed(2), comY: +fl.comY.toFixed(2), sinkT: +fl.sinkT.toFixed(3), sink: +sh.sink.toFixed(3), roll: +sh.rollA.toFixed(4), pitch: +sh.pitchA.toFixed(4), dirty: fl.dirty.length + fl.hdirty.length };
 }
 /** 水併進第 i 格（那一格裝不了水 ⇒ 往上找三格）—— 照容量放（TASK-0662）：
@@ -244,6 +245,35 @@ function flDeposit(sh, fl, i, v) {
       var k = nb === 0 ? (ix > 0 ? j - 1 : -1) : nb === 1 ? (ix < F.NX - 1 ? j + 1 : -1) : nb === 2 ? (iy > 0 ? j - F.NX : -1) : (iy < F.NY - 1 ? j + F.NX : -1);
       if (k < 0 || !(cap[k] > 0.02)) continue;
       r = room(k); if (r > 0) { m = Math.min(v, r); A[k] += m; v -= m; flAct(fl, k); }
+    }
+  }
+  if (v > 1e-9 && FL_PRESS) {                                           // 四周都滿了 ⇒ 照水壓：連成一塊的滿水格（九成以上）裡外找裝得下、又在海面下的格，放進最低的那一格
+    //   Tim 2026-10-28「聖羅曼號因此會卡在進水98%無法沉沒」：以前退回海裡 ⇒ 底艙滿了，上一層要靠水壓從艙口推上去才灌得到，格子不往上推 ⇒ 永遠停在線下（平靜海面 300 秒退回 6,896 m³）。
+    //   通不通照上面那一柱（上下 ＝ 上面那一格 flPd、旁邊 ＝ 裝得了水）；?flpress=0 ＝ 以前。
+    //   每一步、每一塊水只找一次：邊上沒滿的格照格號排（格號 z 在最外 ⇒ 由低往高），之後進來的照順序放（找不到也記著）；每一步最多找 FL_PRESS_STEP 格，超過照以前退回海裡。
+    //   🩸 第一版每一份水各找一次、只記一格（找不到不記）⇒ 殉爆開局（大量水倒進滿的格、多半找不到）每步 1.2 → 124 ms。
+    var mk = fl.pMk || (fl.pMk = new Uint32Array(N)), E;
+    if (fl.pStep !== fl.step) { fl.pStep = fl.step; fl.pS0 = (fl.pSt | 0) + 1; fl.pE = new Map(); fl.pBud = FL_PRESS_STEP; }
+    E = mk[j] >= fl.pS0 ? fl.pE.get(mk[j]) : undefined;
+    if (!E && fl.pBud > 0) {
+      var Qp = fl.pQ || (fl.pQ = new Int32Array(FL_PRESS_N)), st = fl.pSt = (fl.pSt | 0) + 1, qh = 0, qt = 0, Cp = [];
+      mk[j] = st; Qp[qt++] = j;
+      while (qh < qt) {
+        var q = Qp[qh++], qx = q % F.NX, qy = ((q / F.NX) | 0) % F.NY;
+        for (var d6 = 0; d6 < 6; d6++) {
+          var k2 = d6 === 0 ? (qx > 0 ? q - 1 : -1) : d6 === 1 ? (qx < F.NX - 1 ? q + 1 : -1) : d6 === 2 ? (qy > 0 ? q - F.NX : -1) : d6 === 3 ? (qy < F.NY - 1 ? q + F.NX : -1) : d6 === 4 ? (q + NXY < N ? q + NXY : -1) : q - NXY;
+          if (k2 < 0 || mk[k2] === st || !(cap[k2] > 0.02)) continue;
+          var up = d6 === 4 ? k2 : d6 === 5 ? q : -1; if (up >= 0 && !(flPd(fl, up, A[up] / S3) > 0.02)) continue;   // 上下：上面那一格的底通得過（甲板擋住 ⇒ 不通）
+          mk[k2] = st;
+          if (A[k2] >= cap[k2] * Vc * 0.9) { if (qt < Qp.length) Qp[qt++] = k2; } else Cp.push(k2);
+        }
+      }
+      Cp.sort(function (a, b) { return a - b; });
+      E = { C: Cp, p: 0 }; fl.pE.set(st, E); fl.pBud -= qt; fl.dbgPress = (fl.dbgPress || 0) + qt;   // dbgPress：找了幾格（讀數）
+    }
+    while (E && v > 1e-9 && E.p < E.C.length) {                           // 由低往高放；裝不下（滿了、在海面上）⇒ 下一格
+      var kk = E.C[E.p]; r = room(kk); if (r > 0) { m = Math.min(v, r); A[kk] += m; v -= m; flAct(fl, kk); fl.press = (fl.press || 0) + m; }
+      if (v > 1e-9) E.p++;
     }
   }
   if (v > 1e-9) fl.back = (fl.back || 0) + v;

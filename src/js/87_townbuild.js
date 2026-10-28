@@ -9,11 +9,12 @@
 //     { bsmap: 'townSave', seq, ok, msg }（Blocksail 那一頁決定存到哪：Editor 版本 ⇒ 只寫這一座城進 world/start/；Build 版本 ⇒ 遊戲存檔）；5 秒沒回 ⇒ 說那一頁太舊、存不了
 //     生產建築（農莊、種植園；TASK-0742 第二步）：try 多帶 recipe（玩家選的；沒選 ⇒ 那一頁挑第一條能種的），回覆多 recipe、recipes（{ ok, no: [{ k, name, why }] }）、annex（田：quads 每一格外框）、note；
 //       配方那一排（#twbRcp）照回覆長、點一下換；預覽多畫田（半透明）；蓋下去的那一步帶實際用的那一條（重放同一片田）
+//     住宅的款式（Blocksail TASK-0945）：同一排（#twbRcp）換成款式（twbKitUI，照這一頁的模型索引列）；挑了 ⇒ 預覽照它、蓋下去的那一步帶 kit（地塊記著 ⇒ 63_towns.js townLotPick 照它挑）
 // 物理意義：規則全在 Blocksail world/town.js（townSnap、townBuildTry、townRoutePlan、townBuild、townAddRoad）—— ⛔ 這一支只問、只畫，不判斷蓋不蓋得了。
 //   座標：世界 (x, z) ＝ 規劃 E(q) − (BED.ax, BED.az)、E(q) ＝ (ox ＋ kx·qx, oy ＋ qy)（63_towns.js townPrep）⇒ 反過來 q ＝ ((x ＋ ax − ox) ÷ kx, z ＋ az − oy)。
 // 失敗處置：沒有 host（直接開 Blockside）、沒給 ?town、那座城還沒到 ⇒ 開不了，說一聲；回覆裡的 why 照原樣顯示。
 var TWB = { on: false, town: Q.get('town') || null, cat: 'house', item: 'house', open: 0, seq: 0, wait: {}, mx: null, my: null, moved: false, q: null, side: 0,
-  tr: null, busy: false, again: false, start: null, gl: null, msg: '', msgT: 0, framed: false, ops: 0, last: 0, ghost: null, rib: null, sel: null, recipe: null, rcpOn: null, rcpSig: '' };   // recipe：生產建築玩家選的配方（換項目 ⇒ 放掉）；rcpOn：最後一則試放用的那一條（離開路邊時配方那一排照它亮）   // sel：點到的那一棟（townHitAt 的回覆；再點一下、Esc、換項目 ⇒ 放掉）   // ghost：房子的預覽實例（63_towns.js townGhost）；rib：道路預覽的路面帶（GPU）   // open：0 沒開、1 開著中、2 好了；tr：最後一則試放／找路的回覆
+  tr: null, busy: false, again: false, start: null, gl: null, msg: '', msgT: 0, framed: false, ops: 0, last: 0, ghost: null, rib: null, sel: null, recipe: null, rcpOn: null, rcpSig: '', kit: null };   // kit：住宅挑的款式（63_towns.js townVar；null ＝ 照雜湊，Blocksail TASK-0945）；換項目不放掉（連蓋同一款）   // recipe：生產建築玩家選的配方（換項目 ⇒ 放掉）；rcpOn：最後一則試放用的那一條（離開路邊時配方那一排照它亮）   // sel：點到的那一棟（townHitAt 的回覆；再點一下、Esc、換項目 ⇒ 放掉）   // ghost：房子的預覽實例（63_towns.js townGhost）；rib：道路預覽的路面帶（GPU）   // open：0 沒開、1 開著中、2 好了；tr：最後一則試放／找路的回覆
 var TWB_CATS = [
   { k: 'road', name: '🛣 道路', items: [{ k: 'street', name: '街', sub: '寬 5 m' }, { k: 'lane', name: '小路', sub: '寬 2.5 m' }] },
   { k: 'house', name: '🏠 房屋', items: [{ k: 'house', name: '住宅', sub: '2 × 3 格（轉角 2 × 2）' }] }   // 路邊每 4 m 一格（Blocksail TASK-0840）；轉角只剩 2 格深 ⇒ 8 × 8 的小版住宅
@@ -127,6 +128,7 @@ function twbPick(cat, item) { TWB.cat = cat; TWB.item = item; TWB.start = null; 
  *  亮的那一顆：玩家點的 ＞ 路邊那一點實際做的 ＞ 第一條。玩家點了、而那一點做不了 ⇒ TWB.rcpBlock（擋下不蓋，⛔ 不再默默改做別的）；沒點過 ⇒ 照舊用那一點做得了的第一條。不帶田的 ⇒ 空的。 */
 function twbRcpUI() {
   var el = $('twbRcp'); if (!el) return;
+  if (TWB.item === 'house') { twbKitUI(el); return; }                  // 住宅：同一排換成款式（TASK-0945）
   var tr = TWB.tr, live = tr && !tr.road && tr.recipes, it = twbItem();
   var L = it && it.rcp ? it.rcp : live ? live.ok.concat(live.no) : null;   // 選單沒帶 recipes（舊的 Blocksail）⇒ 退回試放那一份
   var no = {}; if (live) live.no.forEach(function (x) { no[x.k] = x.why || '這裡做不了'; });
@@ -143,6 +145,33 @@ function twbRcpUI() {
     return '<button type="button" data-k="' + x.k + '"' + (cls ? ' class="' + cls.trim() + '"' : '') + (dis ? ' title="' + esc(dis) + '"' : '') + '>' + (x.g ? tuiIcon('goods', x.g) : '') + esc(x.name) + '</button>';
   }).join('');
   el.querySelectorAll('button[data-k]').forEach(function (b) { b.onclick = function () { TWB.recipe = b.dataset.k; TWB.tr = null; TWB.moved = true; TWB.rcpSig = ''; }; });
+}
+var TWB_HOUSE_LOT = [8, 12];                                             // 款式那一排照哪一塊地列：路邊住宅 2 × 3 格（Blocksail world/town.js HOUSE_CW × HOUSE_CD，一格 4 m）
+/** 住宅的款式（Blocksail TASK-0945；Tim 2026-10-25「另外建築選單需要可以選取住宅種類(目前只能隨機)」）：這座城（這一份規劃的風格退路）路邊一塊 8 × 12 m 的低密度住宅候選
+ *  （townPick ＝ 遊戲擺房子同一條路：風格 ⇒ 密度級 ⇒ townFit 裝得下）⇒ 照款式（townVar）去重 ⇒ [{ k, name }]；索引還沒到 ⇒ null。 */
+function twbKits(T) {
+  var I = townIdx(); if (!I || !T) return null;
+  var L = townPick(I, T.styles, { use: 'house', w: TWB_HOUSE_LOT[0], d: TWB_HOUSE_LOT[1] }) || [], seen = {}, out = [];
+  L.forEach(function (nm) { var m = I.models[nm], k = townVar(m); if (k && !seen[k]) { seen[k] = 1; out.push({ k: k, name: String(m.name || k).replace(/^住宅\s*/, '') }); } });
+  return out;
+}
+/** 款式那一排（#twbRcp；住宅才有）：🎲 照雜湊（預設）＋ 這座城的每一款；點一下 ⇒ 預覽、蓋下去都是那一款（蓋下去的那一步帶 kit ⇒ 存檔重放同一款）。
+ *  換了城、那一款這座城沒有 ⇒ 放回照雜湊。 */
+function twbKitUI(el) {
+  var K = twbKits(twbTown()) || [];
+  if (TWB.kit && !K.some(function (x) { return x.k === TWB.kit; })) TWB.kit = null;
+  var sig = 'kit|' + (TWB.kit || '') + '|' + K.map(function (x) { return x.k; }).join(',');
+  if (sig === TWB.rcpSig) return;
+  TWB.rcpSig = sig;
+  if (!K.length) { el.innerHTML = ''; return; }
+  var b = function (k, name) { return '<button type="button" data-kit="' + k + '"' + ((TWB.kit || '') === k ? ' class="on"' : '') + '>' + name + '</button>'; };
+  el.innerHTML = '<span>款式：</span>' + b('', '🎲 隨機') + K.map(function (x) { return b(x.k, x.name); }).join('');
+  el.querySelectorAll('button[data-kit]').forEach(function (x) { x.onclick = function () { TWB.kit = x.dataset.kit || null; TWB.rcpSig = ''; TWB.moved = true; }; });
+}
+/** 預覽的那一棟是不是挑的那一款（沒挑 ⇒ true）：那塊地的候選裡沒有那一款 ⇒ 照雜湊（townLotPick）⇒ 說明那一行講一聲。 */
+function twbKitHit() {
+  if (TWB.item !== 'house' || !TWB.kit || !TWB.ghost) return true;
+  var I = townIdx(); return !I || townVar(I.models[TWB.ghost.k]) === TWB.kit;
 }
 /** 配方 key ⇒ 名字（選單的 recipes；查不到 ⇒ key）。 */
 function twbRcpName(k) { var it = twbItem(), x = it && it.rcp ? it.rcp.filter(function (r) { return r.k === k; })[0] : null; return x ? x.name : k; }
@@ -184,6 +213,7 @@ function twbTap(x, y, btn) {
   if (TWB.rcpBlock) { twbMsg('蓋不了：' + twbRcpName(TWB.rcpBlock.k) + '這裡做不了 —— ' + TWB.rcpBlock.why); return true; }   // 玩家點的那一條這一點做不了 ⇒ 擋下（以前 Blocksail 改做做得了的第一條）
   var op = { build: tr.lot ? { lot: tr.lot, use: TWB.item } : { on: tr.on, use: TWB.item } };
   if (tr.recipe) op.build.recipe = tr.recipe;                           // 生產建築：試放實際用的那一條（重放照它長同一片田）
+  if (TWB.item === 'house' && TWB.kit) op.build.kit = TWB.kit;          // 住宅挑的款式（TASK-0945；Blocksail townBuild 記在地塊上）
   twbAsk('apply', { op: op }, function (r) { twbMsg(r.ok ? '蓋好了：' + (r.lot || '') + (tr.annex ? '（田 ' + tr.annex.area + ' m²）' : '') : '蓋不了：' + (r.why || []).join('；')); });
   TWB.tr = null;
   return true;
@@ -280,7 +310,7 @@ function twbLines(T) {
   var tr2 = TWB.on ? TWB.tr : null; TWB.ghost = null; var RB = [];
   if (T && TWB.cat !== 'road' && tr2 && !tr2.road && tr2.at && !TWB.sel) {        // h：地塊頂（Blocksail mapgen_worker.js try 回的；舊的地球儀沒回 ⇒ 地塊中心的地面）
     var cw = twbToWorld(T, tr2.at), h2 = tr2.h != null ? tr2.h : twbHeight(cw[0], cw[1]);
-    TWB.ghost = townGhost(T, { id: tr2.lot || 'b' + ((T.p.nextBuild || 0) + 1), use: TWB.item, at: tr2.at, rot: tr2.rot, w: tr2.w, d: tr2.d, h: h2 }, !!tr2.ok);
+    TWB.ghost = townGhost(T, { id: tr2.lot || 'b' + ((T.p.nextBuild || 0) + 1), use: TWB.item, at: tr2.at, rot: tr2.rot, w: tr2.w, d: tr2.d, h: h2, kit: TWB.item === 'house' ? TWB.kit : null }, !!tr2.ok);
   }
   if (T && TWB.cat === 'road' && TWB.start && tr2 && tr2.road && tr2.path && tr2.path.length > 1) {
     var hw = (TWB_ROAD_W[TWB.item] || TWB_ROAD_W.street) / 2, cc = tr2.ok ? [0.78, 0.74, 0.62] : [0.95, 0.32, 0.26], S2 = [];
@@ -348,7 +378,7 @@ function twbInfo() {
   else if (TWB.open === 1) s = '打開城鎮…';
   else if (TWB.open !== 2) s = '建築模式開不了';
   else if (TWB.cat === 'road') s = !TWB.start ? '點一下既有的路當起點' : !tr || !tr.road ? '找路線…' : tr.ok ? '路線 ' + Math.round(tr.len) + ' m、' + tr.gold + ' 金 —— 點一下鋪（右鍵取消）' : '鋪不了：' + (tr.why || []).join('；');
-  else s = !TWB.q ? '游標移到路邊或空建地上' : !tr || tr.road ? '試放…' : tr.ok ? (tr.lot ? '空建地 ' + tr.lot : '路邊 ' + tr.w.toFixed(0) + ' × ' + tr.d + ' m') + twbFieldTxt(tr) + (TWB.rcpBlock ? ' —— 蓋不了：' + twbRcpName(TWB.rcpBlock.k) + '這裡做不了（' + TWB.rcpBlock.why + '）' : ' —— 點一下蓋' + (TWB.side ? '（' + (TWB.side > 0 ? '右' : '左') + '側）' : '')) : '蓋不了：' + (tr.why || ['?'])[0];
+  else s = !TWB.q ? '游標移到路邊或空建地上' : !tr || tr.road ? '試放…' : tr.ok ? (tr.lot ? '空建地 ' + tr.lot : '路邊 ' + tr.w.toFixed(0) + ' × ' + tr.d + ' m') + twbFieldTxt(tr) + (TWB.rcpBlock ? ' —— 蓋不了：' + twbRcpName(TWB.rcpBlock.k) + '這裡做不了（' + TWB.rcpBlock.why + '）' : ' —— 點一下蓋' + (TWB.side ? '（' + (TWB.side > 0 ? '右' : '左') + '側）' : '') + (twbKitHit() ? '' : '（這塊地沒有挑的那一款 ⇒ 照隨機）')) : '蓋不了：' + (tr.why || ['?'])[0];
   if (el.textContent !== s) el.textContent = s;
 }
 /** 生產建築那一段說明：＋田幾 m²（種什麼；長不滿上限、要放寬路邊也說）＋ 換配方的那一句。
