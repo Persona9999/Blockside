@@ -33,6 +33,8 @@
     "oxford": {"tons": 287, "len": 25.9, "guns": 22, "gunTypes": {"long8": 16, "long6": 6}, "volley": 79, "drive": "sail", "sails": 11, "crew": 144},
     "concepcion": {"tons": 1821, "len": 47.5, "guns": 94, "gunTypes": {"long6": 12, "long18": 28, "long12": 26, "long8": 24, "long4": 4}, "volley": 503, "drive": "sail", "sails": 13, "crew": 484},
     "flyingfish": {"tons": 51, "len": 12.4, "guns": 8, "gunTypes": {"long4": 4, "pierrier": 4}, "volley": 11, "drive": "sail", "sails": 6, "crew": 34},
-    "zeehaen": {"tons": 394, "len": 31.3, "guns": 14, "gunTypes": {"pierrier": 6, "long4": 8}, "volley": 20, "drive": "sail", "sails": 8, "crew": 56}
+    "zeehaen": {"tons": 394, "len": 31.3, "guns": 14, "gunTypes": {"pierrier": 6, "long4": 8}, "volley": 20, "drive": "sail", "sails": 8, "crew": 56},
+    "swallow": {"tons": 85, "len": 14.9, "guns": 6, "gunTypes": {"long4": 6}, "volley": 11, "drive": "sail", "sails": 7, "crew": 34},
+    "sanroman": {"tons": 121, "len": 21.4, "guns": 16, "gunTypes": {"pierrier": 8, "long4": 8}, "volley": 22, "drive": "sail", "sails": 8, "crew": 57}
   }
 }

@@ -1648,6 +1648,68 @@
         "tiller": 2,
         "yard": 7
       }
+    },
+    {
+      "id": "swallow",
+      "role": "merchant",
+      "el": "ship-swallow",
+      "name": "燕子號",
+      "vxk": "swallow.vxk",
+      "work": "gura-swallow-01m-assembly",
+      "author": "gura",
+      "geo": {"spar": [31, 40], "marines": [32, 53], "center": 45, "aim": 31, "aimZ": [5, 223], "deckAim": [31, 45], "rigAim": [55, 220]},
+      "cfg": {"pump": 2},
+      "crew": {"officers": 2, "helm": 1, "top": 0, "marines": 4, "marineGap": 14, "monkeys": 1, "handsK": 0.25, "navigator": 0},
+      "names": ["燕子號"],
+      "idNext": {
+        "anchor": 3,
+        "binnacle": 2,
+        "deck": 5,
+        "door": 3,
+        "galley": 2,
+        "gun": 7,
+        "ladders": 3,
+        "magazine": 2,
+        "model": 2,
+        "part": 8,
+        "powder": 7,
+        "rudder": 2,
+        "ship": 2,
+        "tiller": 2,
+        "yard": 4
+      }
+    },
+    {
+      "id": "sanroman",
+      "el": "ship-sanroman",
+      "name": "聖羅曼號",
+      "vxk": "sanroman.vxk",
+      "work": "pinnacle-patache-01m-assembly",
+      "author": "pinnacle",
+      "geo": {"spar": [34, 53], "marines": [21, 89], "center": 50, "aim": 34, "aimZ": [5, 205], "deckAim": [34, 51], "rigAim": [60, 200]},
+      "cfg": {"pump": 2},
+      "crew": {"officers": 2, "helm": 1, "top": 1, "marines": 8, "marineGap": 14, "monkeys": 1, "handsK": 0.25, "navigator": 0},
+      "names": ["聖羅曼號"],
+      "idNext": {
+        "anchor": 3,
+        "binnacle": 2,
+        "boat": 2,
+        "capstan": 2,
+        "deck": 5,
+        "door": 5,
+        "galley": 2,
+        "gun": 23,
+        "ladders": 4,
+        "light": 2,
+        "magazine": 2,
+        "part": 12,
+        "powder": 11,
+        "rudder": 2,
+        "ship": 2,
+        "wheel": 2,
+        "wheel_stand": 2,
+        "yard": 7
+      }
     }
   ],
   "furniture": {
