@@ -54,8 +54,20 @@ function benchRooms(T, it) { var n = 0; hullRooms(T).forEach(function (r) { room
  *  key：存在船上的哪一格（'benches'／'lofts'）。 */
 function benchNavFill(sh, it, C0, key) {
   var NV = sh.nav, B = sh[key || 'benches'] = sh[key || 'benches'] || [], want = Math.max(1, Math.round(+FURN[it].auto || 1)) - B.length, f = FURN[it], T = sh.T, N = NV.levels[NV.home].N;
+  // 不壓梯子兩頭（Tim 2026-10-28：梯腳被擋住那一批；哨兵號 23_powder.js 的取用點讓開梯腳之後，走路點清單變了、正中間那一點落在另一座梯腳上 ⇒ 樓梯自檢 ✗）：
+  //   從正中間那一點往兩邊挑，第一個台（外框外 LAD_KEEP 格）不碰任何一座梯子 foot／head 的；那一塊小到每一點都碰 ⇒ 挑離梯子兩頭最遠的那一點
+  var LE = []; shipLadders(T).forEach(function (L) { LE.push(L.pts[0], L.pts[L.pts.length - 1]); });
+  function boxAt(P) { var a = [Math.round(P[0] - f.size[0] / 2), Math.round(P[1] - f.size[1] / 2), Math.round(P[2])]; return [a[0], a[1], a[2], a[0] + f.size[0], a[1] + f.size[1], a[2] + f.size[2] + 1]; }
+  function gap(b) {                                                      // 台的外框到最近一座梯子 foot／head（同一層：上下 6 格內；走路格的高度跟梯腳可以差幾格）的平面距離（格；在框裡 ＝ 0）
+    var g = 1e9; LE.forEach(function (p) { if (Math.abs(p[2] - b[2]) <= 6) g = Math.min(g, Math.max(b[0] - p[0], p[0] - b[3], b[1] - p[1], p[1] - b[4], 0)); }); return g;
+  }
   for (var k = 0; k < want && C0.length; k++) {
-    var P = navPos(N, C0[Math.floor((k + 0.5) / want * C0.length)]), at = [Math.round(P[0] - f.size[0] / 2), Math.round(P[1] - f.size[1] / 2), Math.round(P[2])];
+    var i0 = Math.floor((k + 0.5) / want * C0.length), P = navPos(N, C0[i0]), bg = gap(boxAt(P));
+    for (var j = 1; j < C0.length && bg <= LAD_KEEP; j++) {
+      var i1 = i0 + (j % 2 ? (j + 1) / 2 : -j / 2); if (i1 < 0 || i1 >= C0.length) continue;
+      var P1 = navPos(N, C0[i1]), g1 = gap(boxAt(P1)); if (g1 > bg) { bg = g1; P = P1; }
+    }
+    var at = [Math.round(P[0] - f.size[0] / 2), Math.round(P[1] - f.size[1] / 2), Math.round(P[2])];
     var bb = [at[0], at[1], at[2], at[0] + f.size[0], at[1] + f.size[1], at[2] + f.size[2] + 1], nm = (NV.levels[NV.home].name || NV.levels[NV.home].key) + f.name + '-' + (B.length + 1);
     var m = { T: T, k: sh.models.length, name: nm, path: 'nav/' + nm, kind: 'furn', item: it, hold: 0, room: null, hp: f.hp, hpMax: f.hp, mesh: furnMesh(T, it, 'x'), origin: at, bb: bb, pts: {}, meta: { kind: 'furniture', item: it },
       c: [(bb[0] + bb[3]) / 2, (bb[1] + bb[4]) / 2, (bb[2] + bb[5]) / 2], foot: VK.pack(Math.floor(bb[0] + 1), Math.floor(bb[1] + 1), at[2] - 1), alive: true };
