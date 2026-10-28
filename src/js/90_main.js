@@ -283,7 +283,9 @@ if (DEBUG) window.__game = {
   /** 環境音試聽（02_ambient.js，TASK-0663）：q ＝ 'sec=10&cases=名字:w:sea:rain:hold;…' ⇒ Promise<[{ name, peak, rmsDb, wav }]>（src/tests/ambient_lab.py 經 DevTools 呼叫）。 */
   ambLab: function (q) { return ambLab(new URLSearchParams(q || '')); },
   hitLab: function (q) { return hitLab(new URLSearchParams(q || '')); },   // 碰撞與觸礁的試聽集（02_audio.js；src/tests/ambient_lab.py --lab hit）
-  gunLab: function (q) { return gunLab(new URLSearchParams(q || '')); },   // 開炮的試聽集：每種砲、遠近（02_audio.js；src/tests/ambient_lab.py --lab gun；TASK-0978）
+  gunLab: function (q) { return gunLab(new URLSearchParams(q || '')); },
+  sfxDrop: function () { return SFX_DROP; },
+  gunSnd: { get: function () { return gunSndGet(); }, set: function (c) { gunSndSet(c); }, raw: function (type, dist, sec) { return gunRaw(type, dist, sec); } },   // 開炮音的參數與離線錄音（調參用；02_audio.js）                             // 每一種聲音被同時發聲的上限丟掉幾聲（02_audio.js sfxPlay）   // 開炮的試聽集：每種砲、遠近（02_audio.js；src/tests/ambient_lab.py --lab gun；TASK-0978）
   impLab: function (q) { return impLab(new URLSearchParams(q || '')); },   // 命中與希臘火的試聽集：材質 × 彈種、噴口、轟燃、延燒（02_audio.js；src/tests/ambient_lab.py --lab imp；TASK-0979）
   hitLog: function () { return HIT_LOG.slice(); },                     // 最近 32 聲碰撞：時刻、力道、材質、底質（02_audio.js sfxPlay；TASK-0868）
   bgmRender: function (o) { return bgmRender(o || {}); },                // 背景音樂離線錄（02_music.js；src/tests/music_lab.py）
@@ -556,6 +558,7 @@ else GL_READY.then(yieldUI).then(function () {                     // 先讓主�
   evEmit('boot:ready');
   if (Q.has('shipcheck')) { shipCheck(Q.get('shipcheck')); return; }
   if (Q.has('dispcheck')) { dispCheck(Q.get('dispcheck')); return; }   // 排水量與壓艙物（75_shipcheck.js；admin.py disp 用無頭 Chrome 讀）
+  if (Q.get('lab') === 'gun') { gunLabInit(); return; }                  // 開炮音試聽頁（85_gunlab.js；根目錄 gunlab.html 轉過來）
   if (LAB_FLEET) { flabInit(); return; }                                // 擬真沙盒（84_fleetlab.js）   // 匯入檢查（75_shipcheck.js；admin.py check 用無頭 Chrome 讀）
   if (Q.get('lab') === 'flood') { var FR = floodLab(flLabOpts()), fp = document.createElement('pre'); fp.id = 'lab'; document.body.appendChild(fp); fp.textContent = JSON.stringify(FR); uiAway(); return; }   // 沙盒進水報表（81_floodlab.js；src/tests/flood_lab.py）
   if (Q.get('lab') === 'wrooms') { var WO = {}; ['dz', 'px'].forEach(function (k) { if (Q.has(k)) WO[k] = +Q.get(k); }); var WR = wroomsLab(T, WO), wp = document.createElement('pre'); wp.id = 'lab'; document.body.appendChild(wp); wp.textContent = JSON.stringify(WR); uiAway(); return; }   // 水的房間的報表（81_floodlab.js wroomsLab；src/tests/wrooms_lab.py 讀 #lab）
