@@ -1650,6 +1650,36 @@
       }
     },
     {
+      "id": "swallow",
+      "role": "merchant",
+      "el": "ship-swallow",
+      "name": "燕子號",
+      "vxk": "swallow.vxk",
+      "work": "gura-swallow-01m-assembly",
+      "author": "gura",
+      "geo": {"spar": [31, 40], "marines": [32, 53], "center": 45, "aim": 31, "aimZ": [5, 223], "deckAim": [31, 45], "rigAim": [55, 220]},
+      "cfg": {"pump": 2},
+      "crew": {"officers": 2, "helm": 1, "top": 0, "marines": 4, "marineGap": 14, "monkeys": 1, "handsK": 0.25, "navigator": 0},
+      "names": ["燕子號"],
+      "idNext": {
+        "anchor": 3,
+        "binnacle": 2,
+        "deck": 5,
+        "door": 3,
+        "galley": 2,
+        "gun": 7,
+        "ladders": 3,
+        "magazine": 2,
+        "model": 2,
+        "part": 8,
+        "powder": 7,
+        "rudder": 2,
+        "ship": 2,
+        "tiller": 2,
+        "yard": 4
+      }
+    },
+    {
       "id": "sanroman",
       "el": "ship-sanroman",
       "name": "聖羅曼號",
