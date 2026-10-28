@@ -303,6 +303,8 @@ function driveSurvey(sh) {
       return B2.length > 0 && !B2.some(function (c) { return c.ok.some(function (u) { return u; }); });
     }) : null;
   }
+  D.stk = 1;                                                            // 司爐（TASK-1092）：動力件檢查關著（預設）或舊判法 ⇒ 蒸汽另外 × 到崗（開著、有格子的那一條在 drvPartsTick 裡乘，這裡不再乘）
+  if (C && sh.stokerWant > 0 && !(chk && C.cells)) { D.stk = stokerSteam(sh, C, chk); bk *= D.stk; }
   var rw = D.kind === 'oar' ? oarManned(sh) : null;
   D.P.forEach(function (p) {
     if (p.kind === 'rudder' && !p.m && p.n0 > 0) p.ro = drvUp(driveCount(sh.grid, p.p), p.n0) ? 1 : 0;   // 看不見的舵：船尾那一塊格子剩一半以上 ＝ 還在
@@ -368,21 +370,36 @@ function oarAnim(sh, D, dt) {
     m.spv = m.pts.pivot; m.swM = M4.mul(rotM([0, 0, 1], th), rotM([1, 0, 0], al));
   });
 }
-/** 動力件（每 1 秒；見檔頭「動力件」）：主機、鍋爐照剩幾成＋曲線、鍋爐泡水、軸與蒸汽管照傳得到幾成 ⇒ C.E[].ok、C.B[].out／ok、C.SH[].ok、C.SP[].ok、C.steam；壞掉的那一刻記進 cut（廣播）。 */
+/** 每座鍋爐現在幾位司爐在崗（還能動、不在走路；40_crew.js stokerCrew 的 c.boil ＝ [鍋爐組, 第幾座]）⇒ Map 'gi,j' → 人數；這艘沒有司爐（sh.stokerWant 0）⇒ null。 */
+function stokerManned(sh) {
+  if (!(sh.stokerWant > 0)) return null;
+  var M = new Map(); sh.crew.forEach(function (c) { if (c.role === ROLE.STOKER && crewAble(c) && !c.walk && c.boil) { var k = c.boil[0] + ',' + c.boil[1]; M.set(k, (M.get(k) || 0) + 1); } }); return M;
+}
+/** 司爐到崗 ⇒ 全船蒸汽的倍率（TASK-1092；動力件檢查關著（預設）、或沒標格子的舊判法用 —— 開著、有格子 ⇒ drvPartsTick 照每座乘）：
+ *  每座鍋爐 man ＝ 在崗 ÷ 該有的（最多 1；記在 C.B[].man，讀數用），照座數平均；chk（舊判法開著）⇒ 只平均還好的那幾座（壞的已經從 bk 扣了）。沒有司爐 ⇒ 1。 */
+function stokerSteam(sh, C, chk) {
+  var SK = stokerManned(sh), sn = Math.max(1, Math.round(+sh.cw.stokers || 0)), num = 0, den = 0; if (!SK) return 1;
+  C.B.forEach(function (c, gi) { c.man = c.man || []; c.b.seats.forEach(function (p, j) { var w = chk ? c.ok[j] : 1; c.man[j] = Math.min(1, (SK.get(gi + ',' + j) || 0) / sn); num += w * c.man[j]; den += w; }); });
+  return den ? num / den : 1;
+}
+/** 動力件（每 1 秒；見檔頭「動力件」）：主機、鍋爐照剩幾成＋曲線、鍋爐泡水、司爐到崗、軸與蒸汽管照傳得到幾成 ⇒ C.E[].ok、C.B[].out／ok／man、C.SH[].ok、C.SP[].ok、C.steam；壞掉的那一刻記進 cut（廣播）。 */
 function drvPartsTick(sh, C, cut) {
   var G = sh.grid;
   C.E.forEach(function (c) { var e = c.e, r = e.cells && e.c0 ? drvLeft(G, e.cells) / e.c0 : null, u = e.cells ? drvCurve('engine', r === null ? 1 : r) : (drvUp(drvCount(G, e.p), e.n0) ? 1 : 0); if (c.ok > 0 && u <= 0) cut.push('主機'); c.ok = u; c.r = r; });
   C.SH.forEach(function (c) { var s = c.s, u = s.cells ? drvTrans(G, s, 'shaft', c) : (drvUp(drvCount(G, s.aft), s.n0[0]) && drvUp(drvCount(G, s.fwd), s.n0[1]) ? 1 : 0); if (c.ok > 0 && u <= 0) cut.push('螺旋槳軸'); c.ok = u; });
   C.SP.forEach(function (c) { var u = c.p.cells ? drvTrans(G, c.p, 'steampipe', c) : 1; if (c.ok > 0 && u <= 0) cut.push('蒸汽管'); c.ok = u; });
-  var num = 0, den = 0, wetIn = +DRVP.boiler.wet > 0 ? +DRVP.boiler.wet : 0;
+  var num = 0, den = 0, wetIn = +DRVP.boiler.wet > 0 ? +DRVP.boiler.wet : 0, SK = stokerManned(sh), sn = Math.max(1, Math.round(+sh.cw.stokers || 0));   // SK：每座鍋爐幾位司爐在崗（沒有司爐 ⇒ null ⇒ 照舊）
   C.B.forEach(function (c, gi) {
-    var b = c.b, r = b.cells && b.c0 ? drvLeft(G, b.cells) / b.c0 : null, out = b.cells ? drvCurve('boiler', r === null ? 1 : r) : 1, wet = 0;
+    var b = c.b, r = b.cells && b.c0 ? drvLeft(G, b.cells) / b.c0 : null, out = b.cells ? drvCurve('boiler', r === null ? 1 : r) : 1, wet = 0, dry = 0;
+    c.man = c.man || [];
     b.seats.forEach(function (p, j) {
       var w = wetIn > 0 && wetAt(sh, p, { sea: false, inner: wetIn }), up = b.cells ? out > 0 : drvUp(drvCount(G, p), b.n0[j]);
       if (w) wet++;
       var u = up && !w ? 1 : 0; if (c.ok[j] && !u) cut.push(w ? '鍋爐（淹水熄火）' : '鍋爐'); c.ok[j] = u;
+      c.man[j] = SK ? Math.min(1, (SK.get(gi + ',' + j) || 0) / sn) : 1;   // 司爐（TASK-1092）：那一座出力 × 到崗比例（同槳手；40_crew.js stokerCrew）
+      dry += u * c.man[j];
     });
-    var dry = c.ok.reduce(function (a, u) { return a + u; }, 0) / b.seats.length;
+    dry /= b.seats.length;
     var pipe = C.SP.filter(function (q) { return q.p.boiler === gi; }), link = pipe.length ? Math.min(1, pipe.reduce(function (a, q) { return a + q.ok; }, 0)) : 1;
     c.r = r; c.wet = wet; c.link = link; c.out = (b.cells ? out : 1) * dry;
     num += b.seats.length * c.out * link; den += b.seats.length;
@@ -632,6 +649,6 @@ function driveInfo(sh) {
       w: p.kind === 'sail' ? undefined : +p.w.toFixed(3), rpm: p.ax ? +p.rpm.toFixed(1) : undefined, left: p.left === undefined ? undefined : +p.left.toFixed(3), shaft: p.shaft >= 0 && D.C ? D.C.SH[p.shaft].s.name : undefined, rowers: p.kind === 'oar' ? p.rw + '／' + p.rw0 : undefined, side: p.sg ? (p.sg > 0 ? 'S' : 'P') : undefined,
       chain: p.chain ? p.chain.map(function (n) { return n.name + ' ' + (+n.ok).toFixed(2) + (n.out ? ' +' + (+n.out).toFixed(2) : ''); }).join(' ⇒ ') : undefined }; }),
     chain: D.C ? { engines: D.C.E.map(function (c) { return { name: c.e.name, share: +c.f.toFixed(3), to: c.to, ok: +(+c.ok).toFixed(3), r: c.r == null ? undefined : +c.r.toFixed(3) }; }), shafts: D.C.SH.map(function (c) { return { name: c.s.name, ok: +(+c.ok).toFixed(3) }; }),
-      boilers: D.C.B.map(function (c) { return { name: c.b.name, funnel: c.b.funnel, ok: c.ok.slice(), r: c.r == null ? undefined : +c.r.toFixed(3), out: c.out == null ? undefined : +c.out.toFixed(3), wet: c.wet, link: c.link }; }),
-      pipes: (D.C.SP || []).map(function (c) { return { name: c.p.name, ok: +(+c.ok).toFixed(3) }; }), steam: +(+D.C.steam).toFixed(3), funnelsOff: D.C.fnOff ? D.C.fnOff.slice() : null } : null };   // r ＝ 還剩幾成（動力件，TASK-0653）
+      boilers: D.C.B.map(function (c) { return { name: c.b.name, funnel: c.b.funnel, ok: c.ok.slice(), man: c.man && sh.stokerWant > 0 ? c.man.map(function (v) { return +v.toFixed(2); }) : undefined, r: c.r == null ? undefined : +c.r.toFixed(3), out: c.out == null ? undefined : +c.out.toFixed(3), wet: c.wet, link: c.link }; }),
+      pipes: (D.C.SP || []).map(function (c) { return { name: c.p.name, ok: +(+c.ok).toFixed(3) }; }), steam: +(+D.C.steam).toFixed(3), stk: sh.stokerWant > 0 ? +(D.stk === undefined ? 1 : D.stk).toFixed(3) : undefined, funnelsOff: D.C.fnOff ? D.C.fnOff.slice() : null } : null };   // r ＝ 還剩幾成（動力件，TASK-0653）
 }

@@ -255,6 +255,7 @@ function heldItem(sh, c, f) {
  *  ⛔ c.face 只有 ±1（面向左舷或右舷）⇒ 站在爐灶船頭、船尾那一面的人從側面看會背對爐灶、湯杓朝外。只給畫面用，不碰模擬。 */
 function crewFaceAt(c, sh) {
   if (c.role === ROLE.COOK && c.gal) return c.gal.m.c;
+  if (c.role === ROLE.STOKER && c.boil) return drvParts(sh.T).B[c.boil[0]].seats[c.boil[1]];   // 司爐面向他那座鍋爐（TASK-1092）
   var J = c.hand && c.hand.job; if (!J || !J.at) return null;
   if (J.kind === 'eat') return J.gal ? J.gal.m.c : null;
   if (J.kind === 'wood' || J.kind === 'cloth') return J.m && J.m.c;            // 木匠、帆匠到了台、櫃旁拿材料（TASK-0676）
@@ -289,6 +290,7 @@ function crewFrame(sh, c) {
   if (c.role === ROLE.MARINE || c.role === ROLE.TOP) return c.fireT > 0 && !sh.struck && !sh.sunk ? FR.FIRE : c.role === ROLE.TOP ? (Math.floor(c.t * 0.7) & 1 ? FR.WORK_B : FR.IDLE) : FR.IDLE;
   if (c.role === ROLE.OFFICER) return sh.salvoT && SIMT - sh.salvoT < 1.2 ? FR.FIRE : FR.IDLE;
   if (c.role === ROLE.HELM) return FR.WORK_B;
+  if (c.role === ROLE.STOKER) { var CB = c.boil && sh.drive && sh.drive.C && sh.drive.C.B[c.boil[0]]; return CB && CB.ok[c.boil[1]] && !sh.sunk ? (Math.floor(c.t * 1.2) & 1 ? FR.WORK_A : FR.WORK_B) : FR.IDLE; }   // 司爐（TASK-1092）：那座鍋爐還在燒 ⇒ 一鏟一鏟往爐膛加煤（比砲班裝填慢）；壞了、淹了 ⇒ 站著
   if (c.role === ROLE.OAR) return c.oar && c.oar.swM && sh.drive ? (c.oar.oph < 0.5 ? FR.WORK_A : FR.WORK_B) : FR.IDLE;   // 槳手：照自己那一舷划槳的節奏（31_drive.js oarAnim m.oph；拉 ＝ WORK_A、回槳 ＝ WORK_B）
   return FR.IDLE;
 }

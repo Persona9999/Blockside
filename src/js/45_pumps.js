@@ -178,14 +178,14 @@ function pumpInit(sh, crew) {
 }
 // 泡水照 33_flood.js 的通用判定（wetAt、wetLatch）：抽水機 ＝ 海面或艙內的水滿一半；鍋爐 ＝ 只看艙內（⛔ 看海面：鍋爐本來就在水線下的艙底，莫尼特號開場就判成「沒有蒸汽」）。
 var PUMP_WET_IN = 0.5;
-/** 蒸汽還有幾成（0–1）：每座鍋爐沒被打壞（31_drive.js）、沒泡在水裡；沒標鍋爐 ⇒ 1；不是蒸汽船 ⇒ 0。 */
+/** 蒸汽還有幾成（0–1）：每座鍋爐沒被打壞（31_drive.js）、沒泡在水裡、司爐到崗（D.stk，TASK-1092；drvPartsTick 那一條已經乘在 C.steam 裡 ⇒ D.stk 是 1）；沒標鍋爐 ⇒ 1；不是蒸汽船 ⇒ 0。 */
 function pumpSteamK(sh) {
   var D = sh.drive; if (!D || D.kind !== 'steam') return 0;
-  var C = D.C; if (!C || !C.B.length) return 1;
-  if (C.cells) return C.steam;                                           // 動力件（31_drive.js drvPartsTick，TASK-0653）：全船的蒸汽（鍋爐剩幾成＋曲線、泡水熄火、蒸汽管）
+  var C = D.C, sk = D.stk === undefined ? 1 : D.stk; if (!C || !C.B.length) return 1;
+  if (C.cells) return C.steam * sk;                                      // 動力件（31_drive.js drvPartsTick，TASK-0653）：全船的蒸汽（鍋爐剩幾成＋曲線、泡水熄火、蒸汽管）
   var on = 0, all = 0;
   C.B.forEach(function (c) { c.b.seats.forEach(function (p, j) { all++; if (c.ok[j] && !wetAt(sh, p, { sea: false, inner: PUMP_WET_IN })) on++; }); });
-  return all ? on / all : 1;
+  return (all ? on / all : 1) * sk;
 }
 /** 積水多（抽水機優先於醫療艙）：有人力抽水機、艙裡的水 ≥ 設計排水量 × PUMP_URGENT（至少 PUMP_WET）。pumpTick 算、記在 sh.pumps.urgent。 */
 function pumpUrgent(sh) { return !!(sh.pumps && sh.pumps.urgent); }

@@ -41,10 +41,11 @@ function sliders() {
       var k = modelKind(m); if (GUNS[k]) { g[k] = (g[k] || 0) + 1; n++; } if (k === 'wheel') wheel = true; if (k === 'galley') gal++;   // 廚房的爐灶（模型 meta kind=galley；45_galley.js）
       if ((m.meta || {}).kind === 'oar' && (m.points || {}).pivot) { var r = oarRowers(m); oars++; rowers += r; if (rk.indexOf(r) < 0) rk.push(r); }   // 槳：跟開戰時 oarCrew 同一條（有槳座才算）
     });
-    return { guns: g, n: n, masts: T.masts.length, wheel: wheel, oars: oars, rowers: rowers, rk: rk.sort(function (a, b) { return a - b; }), galley: gal };
+    var boil = pumpSteamShip(T) ? drvParts(T).B.reduce(function (a, b) { return a + b.seats.length; }, 0) : 0;   // 鍋爐幾座：跟開戰時 stokerCrew 同一條（有鍋爐的蒸汽船；TASK-1092）
+    return { guns: g, n: n, masts: T.masts.length, wheel: wheel, oars: oars, rowers: rowers, rk: rk.sort(function (a, b) { return a - b; }), galley: gal, boilers: boil };
   }
   /** 全船人數（跟船員那一節的合計同一條算法）。 */
-  function crewTotal(cw, hc) { var g = 0; Object.keys(GUNS).forEach(function (t) { g += gunCrew(cw, t) * (hc.guns[t] || 0); }); return g + Math.ceil(hc.n / 2) * cw.monkeys + cw.officers + (hc.wheel ? cw.helm : 0) + cw.marines + cw.top * hc.masts + cw.hands + hc.rowers; }
+  function crewTotal(cw, hc) { var g = 0; Object.keys(GUNS).forEach(function (t) { g += gunCrew(cw, t) * (hc.guns[t] || 0); }); return g + Math.ceil(hc.n / 2) * cw.monkeys + cw.officers + (hc.wheel ? cw.helm : 0) + cw.marines + cw.top * hc.masts + cw.hands + hc.rowers + hc.boilers * (cw.stokers || 0); }
   /** 船隻配置頁最上面（Tim 2026-10-14）：大圓鈕（61_hud.js badgeDraw）＋排水量、航速（順風／側順風／逆風，照這一型的航速與逆風性能、玩法的加成；標準風、滿帆）、砲、船員、靈活與硬度。 */
   function shipCardShow() {
     var T = HULLT[CFG_ID], h = hullInfo(CFG_ID), el = $('shipCardT'); badgeDraw($('shipCardC'), T);   // 不寫艦名：右邊那一欄第一行就是（Tim 2026-10-17）
@@ -274,6 +275,8 @@ function sliders() {
     v('cook', n ? '上限 ' + n + ' 人：爐灶每座配 ' + GALLEY.cooks + ' 位' + (gk === null ? '' : hc.galley ? '（這型 ' + hc.galley + ' 座 ⇒ ' + Math.min(n, gk) + ' 位' + (gk > n ? '，上限截到 ' + n : '') + '）' : '（這型沒有廚房 ⇒ 不上船）') + '；有廚房（kind=galley）的船才上船，開戰就站在爐灶旁做飯，預備水手輪流當伙夫去領；倒下不補 ⇒ 存糧吃完就斷炊' + (GALLEY_PCT > 0 ? '' : '　⚠ 細節設定「廚房加成」是 0 ⇒ 不開廚房') : '0（不開廚房：沒有廚師、沒人吃飯，工作效率一直是 ×1）', n, d.cook);
     n = cw.navigator; v('navigator', n ? '1 人：站在後甲板舵輪旁；在崗 ⇒ 航速 +' + DUTY.navSpd + '%、轉向 +' + DUTY.navTurn + '%（倒下 ⇒ 還有軍官時剩 ' + Math.round(DUTY.standIn * 100) + '%）' : '沒有（航速、轉向照原本的）', n, d.navigator);   // 39_duty.js（TASK-0825）
     n = cw.quartermaster; v('quartermaster', n ? '1 人：站在彈藥庫的取用點旁；在崗 ⇒ 送藥手裝藥包快 ' + DUTY.qmFill + '%（倒下 ⇒ 還有軍官時剩 ' + Math.round(DUTY.standIn * 100) + '%；沒有彈藥庫的船不上船）' : '沒有（送藥照原本的）', n, d.quartermaster);
+    n = cw.stokers || 0; CR.stokers.row.style.display = hc && !hc.boilers ? 'none' : '';   // 司爐（TASK-1092）：沒有鍋爐的船藏起來
+    v('stokers', (!hc ? n + ' 人 × 每座鍋爐（船型載入後才知道幾座）' : n + ' 人 × ' + hc.boilers + ' 座鍋爐 ＝ ' + n * hc.boilers + ' 人') + (n ? '：站在鍋爐旁加煤；那一座出力 × 到崗比例（倒下時預備水手照位子補）' : '（沒有司爐：鍋爐不看人、照舊全出力）'), n, d.stokers);
     $('cr-oarR').style.display = hc && !hc.oars ? 'none' : '';   // 沒有槳的船藏起來
     $('cr-oarV').textContent = !hc ? '船型載入後才知道' : hc.rowers + ' 人：' + hc.oars + ' 支槳 × 每支 ' + hc.rk.join('–') + ' 人（照船上每支槳的設定，這一頁不調）；坐在槳座內側划；倒下時預備水手照位子補；一支槳到崗幾成就出幾成力';
     n = cw.shelter ? 1 : 0; v('shelter', n ? '開：預備水手不上露天甲板閒晃（只上去補位）、船長以外的軍官待在甲板下' : '關：預備水手偶爾上露天甲板走動、軍官站在露天甲板', n, d.shelter ? 1 : 0);

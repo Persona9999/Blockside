@@ -527,7 +527,8 @@
     "sailmaker": 20,
     "cook": 1,
     "navigator": 1,
-    "quartermaster": 1
+    "quartermaster": 1,
+    "stokers": 2
   },
   "teamCloth": {"blue": [34, 43, 65], "red": [82, 24, 21]},
   "hairColors": {"black": [40, 34, 32], "brown": [96, 60, 34], "blonde": [206, 162, 82], "red": [150, 52, 26], "grey": [128, 124, 120], "white": [210, 206, 196]},

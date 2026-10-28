@@ -156,6 +156,11 @@ function shipCheck(id) {
       dl.push(s + '）');
     });
     R.info.drvparts = dl.join('；');
+    if (sh.stokerWant > 0) {                                            // 司爐（TASK-1092；40_crew.js stokerCrew）：每座鍋爐站了幾位、離那一點幾 m；站不下 ⇒ 上面「站不下」那一條照實報
+      var SKc = stokerManned(sh) || new Map(), SKd = [];
+      drvParts(T).B.forEach(function (b, gi) { b.seats.forEach(function (p, j) { var who = sh.crew.filter(function (c) { return c.role === ROLE.STOKER && c.boil && c.boil[0] === gi && c.boil[1] === j; }); SKd.push((SKc.get(gi + ',' + j) || 0) + '／' + sh.cw.stokers + (who.length ? '（' + who.map(function (c) { return (Math.hypot(c.home[0] - p[0], c.home[1] - p[1]) * S).toFixed(1) + ' m／低 ' + ((p[2] - c.home[2]) * S).toFixed(1); }).join('、') + ' m）' : '')); }); });
+      R.info.stokers = '司爐 ' + sh.crew.filter(function (c) { return c.role === ROLE.STOKER; }).length + '／' + sh.stokerWant + '：每座鍋爐 ' + SKd.join('；') + '；蒸汽 ' + (sh.drive && sh.drive.C ? (+sh.drive.C.steam).toFixed(2) : '—');
+    }
     R.info.props = propSummary(sh);                                     // 會轉的體素件（螺旋槳；24_armor.js propSetup）
     if (T.hullVox && T.hullVox.length) R.info.hullVox = T.hullVox.map(function (q) { return q.path + '（' + ((META_KINDS[q.kind] || {}).name || q.kind) + '，' + q.n.toLocaleString('en') + ' 格' + (q.ovl ? '，蓋掉船殼 ' + q.ovl.toLocaleString('en') + ' 格' : '') + '）'; }).join('；');   // 自帶格子的模型放回船殼（38_fit.js fitHullVox，TASK-0793）；沒有 ⇒ 不寫這一欄（舊船報表不變）
     sh.models.forEach(function (m) { if (m.meta && m.meta.kind === 'propeller' && !m.vox) add('warn', '螺旋槳', m.path, '檔頭沒有它的格子（rig.models[].vox）⇒ 照舊是模型：一發扣血、打不碎、推力不照剩幾成', 'python -I admin.py metasync --id ' + T.id + '（admin.py prop_vox：模型要平移放、不旋轉不縮放）'); });
