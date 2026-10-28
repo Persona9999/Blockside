@@ -1,0 +1,15 @@
+✓ 96×2688、14列；舊13列逐像素不變；司爐布2749點／頭髮412點
+{
+  "size": [
+    96,
+    2688
+  ],
+  "rows": 14,
+  "oldRowsUnchanged": 13,
+  "cloth": 2749,
+  "hair": 412,
+  "footCenter": 48.578369905956116,
+  "recolourCases": 4,
+  "nonMaskPixelsUnchanged": true,
+  "appendIdempotent": true
+}
