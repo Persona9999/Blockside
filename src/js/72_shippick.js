@@ -110,7 +110,18 @@ if (PICK_HOST) document.documentElement.classList.add('pickonly');
 function pickPost(what, o) { try { PICK_HOST.postMessage(Object.assign({ bspick: what }, o || {}), '*'); } catch (e) { /* 外面那一頁關了 */ } }
 //   &auto=1（Tim 2026-10-27「是否能讓選船跟預設船走同一流程(相當於一開始選了預設船)」「而不用維護兩套流程」）：不開彈窗、直接量 cur 那一型 ⇒ 'measuring'、'picked'／'error' 跟點卡片一樣
 //     ⇒ 地球儀沒選過船時照它量預設那一艘（不再手抄一份數字在 presets.js）
+//   &tops=<型>,<型>…（Blocksail TASK-1079；Tim 2026-10-28「視野範圍內的船會跟我艦一樣顯示實際船型的俯視Icon」）：不開彈窗、一型一型載、只算俯視圖（topImg，同 'picked' 的 img；不量航速、吃水）
+//     ⇒ 每一型 'top' { id, img, imgU, imgV, imgM }｜{ id, msg }（載不到），全部做完 'topsDone'
+function pickTops(ids) {
+  ids.reduce(function (p, id) {
+    return p.then(function () {
+      return loadHull(id).then(function (T) { var TI = topImg(T, 2); pickPost('top', { id: id, img: TI ? TI.cv.toDataURL('image/png') : null, imgU: TI && TI.u, imgV: TI && TI.v, imgM: TI && TI.m }); },
+        function (e) { pickPost('top', { id: id, msg: e && e.message || String(e) }); });
+    });
+  }, Promise.resolve()).then(function () { pickPost('topsDone'); });
+}
 function pickBoot() {
+  if (Q.get('tops')) { pickTops(Q.get('tops').split(',').filter(Boolean)); return; }
   if (Q.get('auto') === '1' && Q.get('cur')) { pickMeasure(Q.get('cur')); return; }
   spkOpen({ title: Q.get('title') || '選船', cur: Q.get('cur') || '', same: true, pick: pickMeasure, onClose: function (id) { if (!id) pickPost('cancel'); } });
   pickPost('ready');
