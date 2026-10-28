@@ -2792,7 +2792,7 @@ function townFortSleep(key, why) {
 //   巡視（townFortTick）、換回（townFortSleep）各報一次 ⇒ 沒等換回就回地球儀（iframe 關掉），死的人也已經記上。實驗場（帳上沒有那一棟）、沒有外面那一頁 ⇒ 不報。
 // 打壞的留著（TASK-0956 第二格；Tim「打壞的堡壘存被挖掉的格子（壓縮）」）：格子（sh.lost）或模型（townFortModSig）變了 ⇒ 照核心 API 的戰前狀態那一份（57_core.js coreShipOut：
 //   船殼差 cells、打壞的模型、帆、斷的繩；不帶船員 —— 兵照城鎮帳）⇒ cells.d deflate 壓（townZip）⇒ { bsmap: 'fortState', town, lot, st: { v: 1, hull, sum, n, gone, z, models, sails, ropes, dmg, mz? } }，
-//   dmg ＝ { cells: [打掉幾格, 整座幾格], guns: [打掉幾門, 幾門] }（第三格修繕：Blocksail BSW.fortDmg 照它打折名額、定修繕多大）；
+//   dmg ＝ { cells: [打掉幾格, 整座幾格], guns: [打掉幾門, 幾門], t: [打掉的砲幾公斤, 全部幾公斤] }（第三格修繕：Blocksail BSW.fortDmg 照它打折名額、定修繕多大；t 給補砲 BSW.fortGunNeed，TASK-1093）；
 //   Blocksail 原樣存進那座城的帳（towns[城].forts[地塊鍵]）、進場時照 live.forts 帶回來 ⇒ townFortWake 解壓（townFortStIn）照 coreSpawned 套回去。
 //   量過（實驗場憲法號對加勒比稜堡 seed 7，打掉 26,363 格）：cells.d 的 base64 176 KB ⇒ deflate 15 KB（連續段編碼＋deflate 12 KB，差不多 ⇒ 不另造格式，解壓就是 coreShipIn 讀的那一份）。
 function townFortReport(sh) {
@@ -2809,6 +2809,7 @@ function townFortReport(sh) {
   sh.townLostSent = sh.lost; sh.townModSent = mg;
   var o = coreShipOut(sh), md = townFortModCells(sh), town = sh.townId, lot = sh.townLot, D0 = sh.townDrop0 || {};   // 這一刻的樣子（同步取）；壓縮是非同步 ⇒ 一艘排一條隊，送出去的順序跟取的順序一樣
   var dmg = { cells: [o.cells.gone, townFortCells0(sh.T)], guns: [sh.guns.filter(function (g) { return !g.alive && !(g.model && D0[g.model.k]); }).length, sh.guns.length] };   // 損傷的分子、分母（Blocksail BSW.fortDmg：取大的 ⇒ 名額打折、修繕多大）
+  dmg.t = [0, 0]; sh.guns.forEach(function (g) { if (g.model && D0[g.model.k]) return; var kg = Math.round(1000 * (+(GUNS[g.type] || {}).mass || 1)); dmg.t[1] += kg; if (!g.alive) dmg.t[0] += kg; });   // 打掉的砲幾公斤、全部幾公斤（Blocksail 補砲照它從市場買鐵砲：BSW.fortGunNeed；TASK-1093）
   sh.townZ = (sh.townZ || Promise.resolve()).then(function () { return Promise.all([townZip(o.cells.d), townZip(md)]); }).then(function (Z) {
     var st = { v: 1, hull: o.hull, sum: o.sum, n: o.cells.n, gone: o.cells.gone, z: Z[0], models: o.models.filter(function (m) { return !D0[m.k]; }), sails: o.sails, ropes: o.ropes, dmg: dmg };   // 一換上來就掉的不存 ⇒ 再點照樣當場掉、照樣算不是打掉的（⛔ 存了 ⇒ 再點時 coreShipIn 先標死 ⇒ 下一次報成打掉的，城裡的燈籠就沒了）
     if (Z[1]) st.mz = Z[1];                                               // 死掉的模型在城鎮模型裡的格（townFortModCells；只給城裡畫打壞的那一份用，coreShipIn 不讀）

@@ -3,7 +3,7 @@
 //   加一顆「▶ 演出建造過程」（63_townrise.js townRiseStart：從 0 演到完工、演完自己換回帳上的樣子）。選著的那一棟畫黃框（87_townbuild.js twbLines 照 tbiSelQ）。
 //   Tim 2026-10-25：「城鎮中直接點選房子會跳出房屋資訊(額外的房屋資訊面板) 資訊包含住宅人口/容量 工人/崗位 產出/消耗等 然後有個額外按鈕可以演出該房屋建造過程」
 // 協定（同 89_townui.js tuiAsk：Blocksail globe.html townUI）：{ cmd: 'bld', lot } ⇒ { ok, bld: { kind, typeName, owner, level, live: { n, cap }, jobs: { w, need },
-//   made: { 貨: 桶／天 }, used: { 貨: 桶／天 }, full: { made, used }（理論：滿產、開工率 100%）, site: { p（‰）, crew, by, mat: { 貨: [剩下, 總共]（1／1000 桶）}, repair?（堡壘的修繕：開工時的損傷 ‰，TASK-0956）},
+//   made: { 貨: 桶／天 }, used: { 貨: 桶／天 }, full: { made, used }（理論：滿產、開工率 100%）, site: { p（‰）, crew, by, mat: { 貨: [剩下, 總共]（1／1000 桶）}, repair?（堡壘的修繕：開工時的損傷 ‰，TASK-0956）, gun?（補砲：[買到, 要補] kg ＝ 鐵砲 1／1000 桶，TASK-1093）},
 //   guard?: { w, need, full?（沒壞時的崗位）, dmg?（損傷 ‰）}, note }, goods: { 貨: 名字 } }（Blocksail world/site.js townBld）。
 // 物理意義：⛔ 這一支不算經濟 —— 數字全照那一頁的城鎮帳；這裡只問、只畫。
 // 失敗處置：沒有 host（直接開 Blockside）⇒ 只有名稱、模型與演出鈕；那一頁沒回 ⇒ 照原樣說一聲。
@@ -97,6 +97,7 @@ function tbiUI() {
   html.push('<div class="tbiH"><b>' + tuiEsc(h.name) + '</b><button id="tbiX" title="關閉（Esc）">✕</button></div>');
   html.push('<div class="tbiDim">' + tuiEsc((b && b.typeName) || h.use || '') + (b && b.level > 1 ? '　第 ' + b.level + ' 級' : '') + (b && b.owner ? '　主人：' + tuiEsc(b.owner) : '') + '</div>');
   if (b && b.site) html.push('<div class="tbiS">' + (b.site.repair != null ? '🔧 修繕中' : '🏗 施工中') + ' <b>' + Math.floor(b.site.p / 10) + '%</b>' + (b.site.crew ? '　工地 ' + tuiNum(b.site.crew) + ' 人' : '') + (b.site.by ? '　' + tuiEsc(b.site.by) : '') + '<div class="tbiBar"><i style="width:' + (b.site.p / 10).toFixed(1) + '%"></i></div></div>');
+  if (b && b.site && b.site.gun) { var gn = b.site.gun; html.push('<div class="tbiR"><span>' + tuiIcon('goods', 'iron-cannon') + '補砲（買到／要補，噸）</span><b>' + tuiNum(gn[0] / 1000, 1) + '／' + tuiNum(gn[1] / 1000, 1) + '</b></div>' + (gn[0] < gn[1] ? '<div class="tbiDim">從這座城的市場買鐵砲，缺貨就等；牆修好、砲也齊了才算修好</div>' : '')); }   // TASK-1093
   var mk = b && b.site && b.site.mat ? Object.keys(b.site.mat).sort() : [];
   if (mk.length) html.push('<div class="tbiT">路邊的建材（剩下／總共，桶）</div>' + mk.map(function (g) { var m = b.site.mat[g]; return '<div class="tbiR"><span>' + tuiIcon('goods', g) + tuiEsc(tbiGood(g)) + '</span><b>' + tuiNum(m[0] / 1000, 1) + '／' + tuiNum(m[1] / 1000, 1) + '</b></div>'; }).join(''));
   if (b && b.live) html.push('<div class="tbiR"><span>🏠 住的人／容量</span><b>' + tuiNum(b.live.n) + '／' + tuiNum(b.live.cap) + '</b></div>');
