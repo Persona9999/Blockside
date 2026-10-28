@@ -71,7 +71,7 @@ function tuiStrataHTML(I) {
     if (s.div) tiles.push(['📒 分紅帳', tuiNum(s.div, 1)]);
     if (s.owe) tiles.push(['🧾 城鎮欠', tuiNum(s.owe, 1)]);
     var h = '<div class="tuiCls"><h5>' + tuiEsc(s.name) + '</h5><div class="tuiTiles">' + tiles.map(function (x) { return '<div><small>' + x[0] + '</small><b>' + x[1] + '</b></div>'; }).join('') + '</div>';
-    h += '<p class="tuiDim">收入：' + tuiEsc(src(s.owns, s.fam)) + (s.fam ? '　殼：' + tuiEsc(tuiFamName({ name: s.fam.name || s.fam.id, home: I.id, homeName: I.name })) + '（錢就是上面這一池）' : '') + '</p>';
+    h += '<p class="tuiDim">收入：' + tuiEsc(src(s.owns, s.fam)) + (s.fam ? '　家族：' + tuiEsc(tuiFamName({ name: s.fam.name || s.fam.id, home: I.id, homeName: I.name })) + '（錢就是上面這一池）' : '') + '</p>';
     var F = s.fed;
     if (F) {
       var eat = F.eat || {};
@@ -101,10 +101,12 @@ function tuiFamName(f) { var n = f.name || f.id || ''; return f.home && f.homeNa
 function tuiFamHTML(I) {
   var L = (I.families || []).filter(function (f) { return f && f.id; }); if (!L.length) return '';
   var CN = {}; (I.strata || []).forEach(function (s) { CN[s.id] = s.base || s.name; });   // base：那一層本身的名字（綁了殼的 name 帶家族名）
+  //   種類欄：殼那一家照那一層的 famKind（「商人」「統治者」；Tim 2026-10-28「不要用 富裕商業的殼 這種名稱 可以改為 商人」）；舊的 Blocksail 沒送 ⇒ 那一層的名字
+  var FK = {}; (I.strata || []).forEach(function (s) { FK[s.id] = s.famKind || s.base || s.name; });
   var KN = { npc: '家族', strata: '社會階層', player: '玩家', pirate: '海盜' };
   return '<h4>👪 家族（' + L.length + '）</h4><table class="tuiT"><tr><th>家族</th><th>種類</th><th>名下</th><th>金庫</th></tr>' + L.map(function (f) {
     var shell = f.cls != null;
-    return '<tr><td>' + tuiEsc(tuiFamName(f)) + (f.home && f.home !== I.id ? '<span class="tuiDim">（' + tuiEsc(f.homeName || f.home) + '）</span>' : '') + '</td><td>' + tuiEsc(shell ? (CN[f.cls] || f.cls) + '的殼' : KN[f.kind] || f.kind || '') + '</td><td>' + (f.n != null ? tuiNum(f.n) + ' 座' : '–') + '</td><td>' + (shell ? '<span class="tuiDim">見' + tuiEsc(CN[f.cls] || f.cls) + '</span>' : tuiNum(f.funds)) + '</td></tr>';
+    return '<tr><td>' + tuiEsc(tuiFamName(f)) + (f.home && f.home !== I.id ? '<span class="tuiDim">（' + tuiEsc(f.homeName || f.home) + '）</span>' : '') + '</td><td>' + tuiEsc(shell ? FK[f.cls] || f.cls : KN[f.kind] || f.kind || '') + '</td><td>' + (f.n != null ? tuiNum(f.n) + ' 座' : '–') + '</td><td>' + (shell ? '<span class="tuiDim">見' + tuiEsc(CN[f.cls] || f.cls) + '</span>' : tuiNum(f.funds)) + '</td></tr>';
   }).join('') + '</table>';
 }
 function tuiHomeMenuHTML() {
