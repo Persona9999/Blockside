@@ -278,15 +278,15 @@ function sbDraw(b, o, flip) {
 }
 function fleetHud(me) {
   if (!me) return;
-  var pt = playerTeam();
+  var pt = playerTeam(), seen = {};
   ['L', 'R'].forEach(function (s) {
     var box = $('fleet' + s), team = s === 'L' ? pt : other(pt);
     SHIPS.forEach(function (o) {
-      if (o.team !== team || o.npc) return;                                // 往來的船（58_traffic.js）不列
+      if (o.team !== team || (o.npc && !o.npc.foe)) return;                // 往來的船（58_traffic.js）不列；敵對了（⚔ 交戰，Blocksail TASK-1078）照敵艦列
       if (o.sunk && o.sunkHud == null) o.sunkHud = SIMT;                                                     // 沉沒那一刻（模擬時間；只給 HUD 用）
       if (o.sunk && SIMT - o.sunkHud > SUNK_HIDE) { if (SB_EL[o.i]) { SB_EL[o.i].el.remove(); delete SB_EL[o.i]; } if (INFO_SH === o) INFO_SH = null; return; }
-      var b = SB_EL[o.i]; if (!b || b.box !== box) { if (b) b.el.remove(); b = SB_EL[o.i] = sbMake(o, box); }
-      sbDraw(b, o, s === 'R'); sbNums(b, o);
+      var b = SB_EL[o.i]; if (!b || b.box !== box || b.o !== o) { if (b) b.el.remove(); b = SB_EL[o.i] = sbMake(o, box); b.o = o; }   // b.o：序號換人了（收掉一艘、後面往前補）⇒ 重做（點它開的是那一艘）
+      seen[o.i] = 1; sbDraw(b, o, s === 'R'); sbNums(b, o);
     });
     if (s === 'L') {                                                       // 🚩 旗號（TASK-0679）：我方有電腦開的友艦才有，排在我方那一欄最上面；點了開關旗號面板（71_input.js sigToggle）
       var sg = box.querySelector('.sigb'), can = sigCan();
@@ -298,6 +298,7 @@ function fleetHud(me) {
     if (n && !rc) { rc = document.createElement('div'); rc.className = 'sbres'; box.appendChild(rc); }
     if (rc) { if (n) rc.textContent = '候補 ' + n; else rc.remove(); }
   });
+  for (var k in SB_EL) if (!seen[k]) { SB_EL[k].el.remove(); delete SB_EL[k]; }   // 不在場上、不列了的（堡壘換回城裡、往來的船收掉 ⇒ 58_traffic.js shipDrop）⇒ 圓鈕拿掉（⛔ 以前留著一顆點不動的）
   var el = $('info'), o = INFO_SH;
   if (o && SHIPS.indexOf(o) < 0) o = INFO_SH = null;
   if (!o) { el.style.display = 'none'; gmapDraw(null); }
@@ -690,7 +691,10 @@ function drawNav(sh) {
   SHIPS.forEach(function (o) {
     if (o === sh || !o.center || !sh.center) return;
     var e = norm([o.center[0] - sh.center[0], 0, o.center[2] - sh.center[2]]), pe = P(e, 0.86);
-    g.fillStyle = o.sunk ? '#666' : o.npc ? (o.npc.kind === 'pirate' ? '#151515' : '#e8dcc0') : isFoe(sh, o) ? '#ff6f6f' : '#6f9bff';   // 往來的船（58_traffic.js）：商船米白、海盜船黑（同地球儀） g.beginPath(); g.arc(pe[0], pe[1], 4.5, 0, 6.2832); g.fill();
+    // 往來的船（58_traffic.js）：商船米白、海盜船黑（同地球儀）；敵對了（⚔ 交戰，Blocksail TASK-1078）照敵艦紅
+    //   ⛔ 8dcdca2（2026-10-25）這一行後面接的註解把畫點那三句吃掉了 ⇒ 羅盤上一直沒有其他船的點（Blocksail TASK-1078 順手補回）
+    g.fillStyle = o.sunk ? '#666' : o.npc && !o.npc.foe ? (o.npc.kind === 'pirate' ? '#151515' : '#e8dcc0') : isFoe(sh, o) ? '#ff6f6f' : '#6f9bff';
+    g.beginPath(); g.arc(pe[0], pe[1], 4.5, 0, 6.2832); g.fill();
   });
   // 我艦：從上面俯瞰的船（05_hull.js navImg，載入時算一次；船頭朝上、右舷在右 ⇒ 只轉不翻），船長（含艏斜桅）＝ 半徑的 1.575 倍（中心到兩端約 0.79 R，還在圈裡）
   //   （⛔ 0.8 倍 ⇒ 船長寬比約 6:1，在 150 px 的圈裡細成一條線；Tim 2026-10-13：1.05 倍再放大 1.5 倍）；外面一圈我方的顏色。沒有圖 ⇒ 以前的三角形

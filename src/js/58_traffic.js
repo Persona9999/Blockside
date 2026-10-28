@@ -14,7 +14,7 @@
 //   ③ 上限：MAX_SHIPS（海戰設定的同時在場艘數）扣掉不是往來的船（航海、城鎮 ＝ 我艦）。
 //   ④ 開：sh.npc ＝ { id, kind, to, v, path, dock }；31_sailing.js 艦長那一段先問 trafficHelm（有 path 沿航道、照自己的帆；沒有照 to 開、期望航速 v；helmIrons、讓船、淺水照舊接管）；停港的（dock）兩錨都下、帆全收。
 //      ⛔ 不開火：跟我艦同一隊（藍）⇒ 不是任何一艘的敵人（52_fleet.js isFoe）；指揮官不給它命令（cmdView 的 cmd）；不能換操控（canTake）；
-//      上方艦隊列不列（61_hud.js）、隊上的船數不算它（teamShips）；羅盤上商船米白、海盜船黑。
+//      上方艦隊列不列（61_hud.js）、隊上的船數不算它（teamShips）；羅盤上商船米白、海盜船黑。敵對了另說（⑪）。
 //   ⑤ 收（停用回收）：清單裡沒有了、或換到別的玩法 ⇒ 從 SHIPS 拿掉、後面的序號往前補、放掉網格（同 70_flow.js 清場那一行）。
 //      只在航海、城鎮、⚔ 交戰（88_modeswitch.js；場上除了我艦是往來的船、城裡的堡壘）：砲彈、碎片、開砲事件、旗號掛的序號 shipDrop 一起往前補 ⇒ 打到一半收掉遠處的一艘不會動到戰局。
 //   ⑥ 照時刻表滑（Tim 2026-10-26：城鎮的時間面板加速時「不加速物理模擬(主要是想看船進出港&日夜變化)」，選了「照時刻表滑」）：
@@ -52,10 +52,15 @@
 //      （停靠中進航海 ⇒ 我艦就在泊位上，精細層可能把同一格排給一艘商船）⇒ 照那個位置、船頭生下去會跟我艦疊在一起，表演船近到 TRF_REAL_M 就變真的、碰撞硬推開。
 //      ⇒ 開始做之前（船型載好了）、放上場之前各看一次：它的龍骨線（31_sailing.js keelPts 那一段：水線兩端各往內 15 格）離場上每一艘（堡壘不算：本來就不碰撞）
 //      不到 TRF_GAP_M ⇒ 這一輪不生（做好了也不放、收掉），下一次要清單時照新的位置再看 —— 停港那一格 ⇒ 等我艦開走才出現；開著的 ⇒ 錯開了才生。
-//   之後（TASK-0940）：遇上海盜、玩家開火 ⇒ 換隊（team）、交給海戰。
+//   ⑪ 敵對（Blocksail TASK-1078；Tim 2026-10-28「目前發現地圖上的海盜顯示為友軍艦隊」「航海模式遇到海盜或是對商船開火 是否可以自動切換到戰鬥模式」）：
+//      海盜船離我艦 TRF_PIRATE_M 內（trafficRealTick；城鎮模式不算）、或我方對任何一艘開火／打中它（trafficProvoke ← 21_gunnery.js fireGun、52_fleet.js ffHit）⇒ trafficHostile：
+//      換到我艦的對面、npc.foe ⇒ 不照清單開（trafficHelm 回 null ⇒ 54_helm.js 交戰操舵）、不拖、不滑、清單沒了也不收（打完了、清單也沒了才收）；
+//      上方艦隊列、羅盤照敵艦（61_hud.js）⇒ 88_modeswitch.js fightTick 看到它就換成 ⚔ 交戰；甩開 4 km 以上 30 秒那一種結束 ⇒ 遠處敵對的往來船收掉（之後清單還有、又近了 ⇒ 照新的生）。
+//      還沒敵對的海盜、商船：瞄準時說「中立」（71_input.js；⛔ 以前說「友艦…（藍）」）。打完的結果（沉了、搶到的貨）寫回城鎮帳是 TASK-0940。
 // 讀數：__game.traffic() ⇒ { ships, queue, built, dropped, gap（⑩ 擋下幾次）, gapLast（最後一次：哪一艘、被誰擋、隔幾公尺）, stepMax, stepMs（每一段幾毫秒，最近 200 段）, place（放上場那一步）}
 var TRF = { want: {}, build: null, q: [], askT: 0, clockT: 0, built: 0, dropped: 0, gap: 0, gapLast: null, stepMax: 0, stepMs: [], place: [], skip: 0 };
-var TRF_GAP_M = 20;                                                      // ⑩ 生的時候龍骨線離場上每一艘至少幾公尺（collidePair 14 m 以內就算碰撞、硬推開 ⇒ 多留 6 m；泊位之間 30 m 上下的照樣生）〔設計〕
+var TRF_PIRATE_M = 2000;                                                 // ⑪ 海盜船離我艦幾公尺內就敵對（Tim 2026-10-28 選「靠近到一定距離」，數字之後再調）〔設計〕
+var TRF_GAP_M = 20;                                                    // ⑩ 生的時候龍骨線離場上每一艘至少幾公尺（collidePair 14 m 以內就算碰撞、硬推開 ⇒ 多留 6 m；泊位之間 30 m 上下的照樣生）〔設計〕
 var TRF_ASK_MS = 2000, TRF_SPAWN_M = 6000, TRF_STARVE = 30;   // 幾毫秒要一次清單、離我艦幾公尺內才生、背景預算連續幾格用光就照樣做一段（不然一直排不到）
 var TRF_LOOK_M = 300, TRF_V0 = 0.6;                              // 沿航道開：看航道上前面幾公尺那一點；生出來的航速（VMAX 的幾成）
 var TRF_ASK_GLIDE_MS = 500, TRF_CLOCK_MS = 250, TRF_GLIDE_TURN = 3;   // 滑的時候幾毫秒要一次清單；幾毫秒報一次世界時間；船頭每秒轉過去幾成（1／秒）
@@ -92,7 +97,9 @@ function trafficGot(d) {
   Object.keys(want).forEach(function (id) { var w = want[id]; if ((w.dock || w.pilot) && w.berth && trafficDistOff(w.berth.x, w.berth.z)) delete want[id]; });   // 別的城區的泊位（沒建）⇒ 不生、生了的收掉
   TRF.want = want;
   trafficShips().forEach(function (sh) {                              // 還在 ⇒ 換航點；沒了 ⇒ 收
-    var w = want[sh.npc.id]; if (!w) { trafficDrop(sh); return; }
+    var w = want[sh.npc.id];
+    if (sh.npc.foe) { if (!w && isOut(sh) && MODE !== 'fight') trafficDrop(sh); return; }   // ⑪ 敵對的照海戰走、不照清單；打完了（沉、降旗）、清單也沒了 ⇒ 才收
+    if (!w) { trafficDrop(sh); return; }
     var was = !!sh.npc.dock, P0 = sh.npc.path, L0 = sh.npc.lane || null; sh.npc.lane = w.lane;
     var b0 = w.berth && w.bat ? { x: w.bat[0], z: w.bat[1], yaw: w.berth.yaw, id: w.berth.id } : w.berth;   // 時刻表的那一點（⑧ 補差的起點）
     sh.npc.to = w.to; sh.npc.v = w.v; sh.npc.path = w.path; sh.npc.trk = w.trk; if (!was || w.dock) sh.npc.berth0 = b0; sh.npc.berth = trafficBerthFor(sh, w.berth); sh.npc.entry = w.entry;
@@ -207,12 +214,26 @@ function trafficTowStart(sh, kind, P, y1) {
 /** 表演船（⑨）：往來的船、還沒變成真的船 ⇒ 不跟別的船碰撞、帆與繩不算布。 */
 function trafficShow(sh) { return !!(sh && sh.npc && !sh.npc.real); }
 /** 玩家的船對它開火（21_gunnery.js，同堡壘 fortProvoke 那一行）⇒ 變成真的船、不再變回（之後換隊交給海戰：TASK-0940）。 */
-function trafficProvoke(sh, by) { if (!sh || !sh.npc || !by || by.npc || by.team !== SHIPS[PLAYER_I].team) return; sh.npc.real = true; sh.npc.shot = true; }
+function trafficProvoke(sh, by) { if (!sh || !sh.npc || !by || by.npc || by.team !== SHIPS[PLAYER_I].team) return; sh.npc.real = true; sh.npc.shot = true; trafficHostile(sh, by.name + ' 對它開火'); }   // 開火、打中（52_fleet.js ffHit）⇒ 敵對（⑪）
+/** ⑪ 變成敵艦：換到我艦的對面、交給海戰（艦長照 54_helm.js 交戰操舵、砲照 50_sim.js 開）—— 不再照清單開、不拖、不照時刻表滑；清單沒了也不收（88_modeswitch.js 交戰結束才收）。 */
+function trafficHostile(sh, why) {
+  var me = SHIPS[PLAYER_I], n = sh && sh.npc; if (!n || n.foe || !me || sh === me || isOut(sh)) return;
+  if (n.dock) trafficDock(sh, false);                                    // 停港的：起錨、放開繫泊、張戰鬥帆
+  n.foe = true; n.real = true; n.shot = true; n.held = false; n.tow = null; n.pilot = null; n.trk = null; n.path = null; n.to = null; n.entry = null; n.berth = null; n.lane = null;
+  sh.team = other(me.team); sh.foe = undefined;
+  pickCaptain(sh); cmdTick(); pickFoes();
+  note(sh, sh.name + ' 進入敵對（' + why + '）', true);
+}
 /** 每一格（trafficPump）：照跟玩家的船隔多遠換表演船、真的船（⑨）。 */
 function trafficRealTick() {
   var me = SHIPS[PLAYER_I]; if (!me || me.npc) return;
   if (MODE === 'town') { trafficShips().forEach(function (sh) { sh.npc.real = !!sh.npc.shot; }); return; }   // 城鎮模式（停靠中）：一律表演船（Tim 2026-10-26）
   var c = shipCenter(me), hm = (me.T.hx1 - me.T.hx0) * S / 2;
+  if (!isOut(me)) trafficShips().forEach(function (sh) {                // ⑪ 海盜靠到 TRF_PIRATE_M 內 ⇒ 敵對（Tim 2026-10-28 選「靠近到一定距離」）
+    if (sh.npc.kind !== 'pirate' || sh.npc.foe || isOut(sh)) return;
+    var q = shipCenter(sh), d = Math.hypot(q[0] - c[0], q[2] - c[2]);
+    if (d < TRF_PIRATE_M) trafficHostile(sh, '海盜靠到 ' + (d / 1000).toFixed(1) + ' km');
+  });
   trafficShips().forEach(function (sh) {
     var n = sh.npc; if (n.shot) return;
     var q = shipCenter(sh), gap = Math.hypot(q[0] - c[0], q[2] - c[2]) - hm - (sh.T.hx1 - sh.T.hx0) * S / 2;
@@ -234,7 +255,7 @@ function trafficPilot(sh, p) {
 function trafficKin(sh) { return trafficGliding(sh) || !!(sh.npc && sh.npc.tow); }
 /** 31_sailing.js sailShip 開頭先問（滑之前）：拖（⑧）⇒ true（這一步照拖的路線擺，不照帆走）；開往這座城、離預約的泊位 TRF_IN_M 內 ⇒ 開始拖進去。 */
 function trafficTow(sh, dt) {
-  var n = sh.npc; if (!n) return false;
+  var n = sh.npc; if (!n || n.foe) return false;                       // 敵對了（⑪）⇒ 不拖（⛔ 停港的被打 ⇒ 離泊位 TRF_IN_M 內又被拖回去）
   if (!n.tow) {
     var b = n.berth; if (n.dock || n.held || !b) return false;
     var c0 = shipCenter(sh), db = Math.hypot(b.x - c0[0], b.z - c0[2]);
@@ -276,7 +297,7 @@ function trafficTow(sh, dt) {
 /** 艦長（31_sailing.js）：往來的船照航點開 ⇒ { yaw, v } ｜ null（停港：錨咬著）。fwd(yaw) ＝ [cos, 0, −sin] ⇒ 往 (dx, dz) ＝ atan2(−dz, dx)。
  *  有 path ⇒ 沿航道：期望航速 'cruise'（戰鬥帆）；目標往逆風那一側 ⇒ helmIrons 照舊搶風、方位換邊就換舷（之字形）。 */
 function trafficHelm(sh) {
-  var n = sh.npc; if (!n || n.dock || n.held) return null;            // held：拖到泊位了、清單還沒說到港（⑧）⇒ 繫著等
+  var n = sh.npc; if (!n || n.dock || n.held || n.foe) return null;   // held：拖到泊位了、清單還沒說到港（⑧）⇒ 繫著等；foe：敵對了（⑪）⇒ 交給艦長的交戰操舵
   if (n.entry && !n.pilot) { var ce = shipCenter(sh); if (Math.hypot(n.entry[0] - ce[0], n.entry[1] - ce[2]) < TRF_ENTRY_M) { trafficSails(sh, 0); return { yaw: sh.yaw, v: 0 }; } }   // 早到了：在入口停住等塔台放行（⑧）
   var to = n.path ? trafficAhead(sh, n.path) : n.to; if (!to) return null;
   var dx = to[0] - sh.px, dz = to[1] - sh.pz;
@@ -454,6 +475,6 @@ function trafficInfo() {
   return { ok: trafficOk(), rate: wclkRate(), wh: +(worldSec() / 3600).toFixed(4), max: trafficMax(), want: Object.keys(TRF.want).length, queue: TRF.q.slice(), building: TRF.build ? TRF.build.id : null, built: TRF.built, dropped: TRF.dropped, gap: TRF.gap, gapLast: TRF.gapLast,
     stepMax: +TRF.stepMax.toFixed(2), stepMs: TRF.stepMs.slice(), place: TRF.place.slice(),
     hold: trafficPortN(),
-    ships: trafficShips().map(function (s) { var n = s.npc, T = n.tow, b = n.berth, sc = shipCenter(s); return { i: s.i, id: n.id, kind: n.kind, hull: s.T.id, x: +s.px.toFixed(1), z: +s.pz.toFixed(1), d: Math.round(Math.hypot(s.px - c[0], s.pz - c[2])), spd: +s.spd.toFixed(2), yaw: +s.yaw.toFixed(3), dock: n.dock, held: !!n.held, to: n.to, path: n.path ? n.path.length : 0, trk: n.trk ? n.trk.length : 0, pilot: n.pilot || null, glide: trafficGliding(s), real: !!n.real,
+    ships: trafficShips().map(function (s) { var n = s.npc, T = n.tow, b = n.berth, sc = shipCenter(s); return { i: s.i, id: n.id, kind: n.kind, hull: s.T.id, x: +s.px.toFixed(1), z: +s.pz.toFixed(1), d: Math.round(Math.hypot(s.px - c[0], s.pz - c[2])), spd: +s.spd.toFixed(2), yaw: +s.yaw.toFixed(3), team: s.team, foe: !!n.foe, dock: n.dock, held: !!n.held, to: n.to, path: n.path ? n.path.length : 0, trk: n.trk ? n.trk.length : 0, pilot: n.pilot || null, glide: trafficGliding(s), real: !!n.real,
       berth: b ? { x: +b.x.toFixed(1), z: +b.z.toFixed(1), yaw: +b.yaw.toFixed(3), d: +Math.hypot(b.x - sc[0], b.z - sc[2]).toFixed(1) } : null, tow: T ? { kind: T.kind, s: +T.s.toFixed(1), L: +T.L.toFixed(1), spin: T.spin, spun: T.spun, v: +T.v.toFixed(2), t: +(SIMT - T.t0).toFixed(1) } : null }; }) };
 }

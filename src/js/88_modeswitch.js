@@ -23,7 +23,8 @@
 //      (逃離敵艦一段距離後也可以判定脫離戰鬥)」「可能可以先改打堡壘進海戰模式(因為已經做一半了 堡壘會還手)」）：
 //      航海裡有一艘對我艦敵對、還在打（isFoe、不是中立的 calm、沒退場）⇒ 換成 ⚔ 交戰（04_modes.js fight：開局才讀的規則全照航海 ⇒ 不用重開；locked ⇒ 回不了地球儀、主選單，不能重新開始；
 //      61_layout.js 的配置沒有 🌍、停靠；停靠的快捷鍵 dockAct、點別座堡壘 63_towns.js townFortWake 也擋 —— 一次一座 ⇒ 換一座會把敵對的那一座收掉 ＝ 甩掉它）。
-//      往來的船照留著（58_traffic.js trafficOk 認交戰）。敵人不是這裡生的：堡壘開火就敵對（52_fleet.js fortProvoke，TASK-0955）；往來的船之後照 58_traffic.js 換隊。
+//      往來的船照留著（58_traffic.js trafficOk 認交戰）。敵人不是這裡生的：堡壘開火就敵對（52_fleet.js fortProvoke，TASK-0955）；往來的船 —— 海盜靠到 2 km 內、我方對它開火 ⇒ 換隊（58_traffic.js ⑪ trafficHostile）。
+//      甩開了 ⇒ 遠處敵對的往來船收掉（留著 ⇒ 換回航海下一格又換交戰）。
 //      脫離（fightTick，每格看）：敵方都退場了（沉、降旗、收掉 —— 堡壘離開射程換回城裡的模型、63_towns.js townFortTick）⇒ 馬上換回航海；
 //      離每一艘都超過 FIGHT_FAR_M 持續 FIGHT_FAR_S 秒（模擬時間：停格不算）⇒ 甩開了、換回航海；我艦沉了、降旗了 ⇒ 換回航海（回得了地球儀，船況照 'left' 帶回去）。
 //      #fightB（template.html，廣播上面那一行）寫「⚔ 交戰中」、甩開時倒數。
@@ -338,7 +339,10 @@ function fightTick() {
       F.forEach(function (o) { var q = shipCenter(o); dmin = Math.min(dmin, Math.hypot(q[0] - c[0], q[2] - c[2])); });
       if (dmin <= FIGHT_FAR_M) FIGHT.farT = null;
       else if (FIGHT.farT === null) FIGHT.farT = SIMT;
-      else if (SIMT - FIGHT.farT >= FIGHT_FAR_S) end = '甩開了（離最近的敵方 ' + (dmin / 1000).toFixed(1) + ' km、' + FIGHT_FAR_S + ' 秒）';
+      else if (SIMT - FIGHT.farT >= FIGHT_FAR_S) {
+        end = '甩開了（離最近的敵方 ' + (dmin / 1000).toFixed(1) + ' km、' + FIGHT_FAR_S + ' 秒）';
+        F.forEach(function (o) { if (o.npc) trafficDrop(o); });            // 遠處敵對的往來船收掉（⛔ 留著 ⇒ 換回航海下一格又看到敵方、又換交戰）；清單還有、又近了 ⇒ 58_traffic.js 照新的生
+      }
     }
     if (end) modeSwitch('sail', { end: end });
   }

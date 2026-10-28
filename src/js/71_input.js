@@ -51,6 +51,7 @@ function inPick(cx, cy) {
   if (hit) {
     setAim(me, [hit.x + 0.5, hit.y + 0.5, hit.z + 0.5], on); me.pMode = AIM_P = 'free'; sfx('crack', null, 0.08);
     if (on.calm) note(me, '瞄準 ' + on.name + ' —— 中立；開火就是對它宣戰');
+    else if (on.npc && !isFoe(me, on)) note(me, '瞄準 ' + on.name + ' —— 中立的' + (on.npc.kind === 'pirate' ? '海盜船（靠到 ' + TRF_PIRATE_M / 1000 + ' km 內就開打）' : '商船') + '；開火就是對它宣戰');   // 往來的船（58_traffic.js；Blocksail TASK-1078：⛔ 以前說「友艦…（藍）」）
     else if (!isFoe(me, on)) note(me, '瞄準友艦 ' + on.name + teamTag(on) + ' —— 打下去一樣會傷到它');
     else if (hit.sail) note(me, '瞄準 ' + on.name + ' 的帆');
     if (AUTOFIRE && !me.hand) { me.hand = true; note(me, '手動瞄準：這一舷你來打（' + keyWord('volley') + '齊射），另一舷照樣自動 —— 點海面回到全自動'); }
