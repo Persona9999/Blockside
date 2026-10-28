@@ -631,7 +631,12 @@ function bgmRevBuf(ac) {
   return R.c >= 2 ? R.b : null;
 }
 /** 一個音：inst 樂器（INSTR）、f（Hz）、t（開始，秒）、d（長，秒）、vel 力度。 */
-function bgmNote(ac, dest, inst, f, t, d, vel) { INSTR[inst].note(ac, bgmOut(ac, dest, inst), f, t, d, vel); }
+//   遊戲的 AC：每個音先進自己的一個音量節點（合音、泛音好幾路匯進來）⇒ 放完拆掉（02_audio.js sndFree：匯流的出口來源停了也一直被算）；最長的餘韻（音樂盒、箏、定音鼓）都在 7.5 秒內 ⇒ 譜上的長度 ＋ 8 秒
+function bgmNote(ac, dest, inst, f, t, d, vel) {
+  var o = bgmOut(ac, dest, inst);
+  if (ac === AC) { var vg = ac.createGain(); vg.connect(o); sndFree(ac, vg, t + d + 8); o = vg; }
+  INSTR[inst].note(ac, o, f, t, d, vel);
+}
 /** 從 t0（秒）起把一首的 [a, b) 拍排進去；回下一個沒排的事件序號。 */
 function bgmSched(ac, dest, tn, t0, k, until) {
   var E = tuneEvents(tn), spb = 60 / tn.Q;

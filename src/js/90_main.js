@@ -35,6 +35,7 @@ function frame(ts, noRaf) {                                         // noRaf：_
   ambFrame();                                                         // 環境音：風、浪、暴風雨的雨（02_ambient.js；還沒有聲音 ⇒ 什麼都不做）
   burnSndFrame();                                                     // 船上延燒的火聲（02_audio.js，TASK-0979；沒有船在燒 ⇒ 什麼都不做）
   bgmFrame();                                                         // 背景音樂（02_music.js，TASK-0677）：主選單也放
+  sndGc();                                                            // 放完的音效、音符拆掉出口（02_audio.js sndFree：不拆的話 Chrome 一直算 ⇒ 戰局打久了手機聲音一頓一頓）
   if (PF) pfLap('rain');
   remesh(RM_BUDGET);                                                  // 重網格化，每格有預算（60_render.js）
   if (PF) pfLap('flush');
