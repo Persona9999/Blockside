@@ -256,6 +256,25 @@ function shipCheck(id) {
     sh.mags.forEach(function (m) { if (!m.kegs.length) add('error', '彈藥庫', m.name, '裡面沒有火藥桶模型 ⇒ 這一間不會殉爆' + (kegsAny ? '' : '、整艘沒有取用點（砲打完藥箱就停）'), '彈藥庫子作品裡掛火藥桶模型 meta kind=powder, powder_lb（造船規格 §8）'); });
     R.info.stations = sh.stations.length;
     R.info.hoists = ahSummary(sh, add);                                 // 揚弾機（kind=hoist；23_powder.js）：送藥手送到艙底接收處、吊上砲旁藥箱
+    // ── 抽水機（45_pumps.js；Tim 2026-10-28「先讓現在每艘船上有至少一個抽水泵」⇒ furniture.pump.autoDeck 1）：擺在哪（離泵井幾 m）、走不走得到；一台都沒有、人力的走不到 ⇒ ⚠ ──
+    var PL = sh.pumps ? sh.pumps.list : [], pwx = pumpWellX(T), pbd = benchDeck(T);
+    R.info.pumps = PL.length ? PL.map(function (p) { return p.m.path + '（泵井' + ((p.m.c[0] - pwx) * S >= 0 ? '前 ' : '後 ') + Math.abs((p.m.c[0] - pwx) * S).toFixed(1) + ' m、中線 ' + Math.abs((p.m.c[1] - T.cy) * S).toFixed(1) + ' m' + (p.hand ? p.cell === undefined ? '：' + p.why : '' : '、蒸汽') + '）'; }).join('、') : '';
+    if (!info.fixed && (!PL.length || PL.some(function (p) { return p.hand && p.cell === undefined; })))   // 為什麼擺不下：每一層砲甲板、每一格兩個方向試擺一台人力的（照開戰時那一層的取用點；木工台、帆布櫃是抽水機之後才補的 ⇒ 不算）⇒ 各種原因幾格
+      R.pumpDiag = hullDeckKit(T).decks.map(function (D) {
+        var G = deckGrid(T, D), its = deckItems(T, D, deckPlan(T.id, deckId(D))).items.filter(function (q) { var r = FURN[q.it].role; return r !== 'pump' && r !== 'bench' && r !== 'loft'; }), why = {}, ok = 0;
+        var NV = sh.nav, reach = 0, zs = {};
+        for (var j = 0; j < G.ny; j++) for (var i = 0; i < G.nx; i++) for (var r = 0; r < 2; r++) {
+          var w = placeOk(G, 'deck', its, { it: 'pump', x: i, y: j, r: r }); if (w) { why[w] = (why[w] || 0) + 1; continue; }
+          ok++; var t = itemTiles('pump', r), cx = G.x0 + (i + t[0] / 2) * ROOM_TILE, cy = G.y0 + (j + t[1] / 2) * ROOM_TILE, z = G.zt[i + j * G.nx]; zs[z] = (zs[z] || 0) + 1;
+          var lv = NV ? lvOf(NV.levels, z) : -1, N = lv >= 0 ? NV.levels[lv].N : null, ci = N && NV.reach.indexOf(lv) >= 0 ? navSnap(N, [cx, cy, z], 8) : -1;
+          if (ci >= 0 && handRoute(sh, NV.home, lv, cx, cx, undefined, N.reg[ci])) reach++;
+        }
+        NV && NV.ladders.forEach(function (L) { L.q = 0; });
+        return { deck: D.name, bench: !!pbd && deckId(D) === deckId(pbd), zr: D.zr, x: [+((G.x0 - pwx) * S).toFixed(1), +((G.x0 + G.nx * ROOM_TILE - pwx) * S).toFixed(1)], ok: ok, reach: reach, zs: zs, why: why,
+          placed: PL.filter(function (p) { return p.deck === D.key; }).map(function (p) { return { o: p.m.origin, why: p.why }; }) };
+      });
+    if (!info.fixed && !PL.length) add('warn', '抽水機', pbd ? pbd.name : '—', pbd ? '一台都沒有（' + pbd.name + '主桅旁中線擺不下）' : '一台都沒有（沒有砲甲板 ⇒ 不知道擺哪一層）', '船隻配置頁甲板編輯器找主桅旁中線的空格擺一台；擺不下 ⇒ 把那裡的東西挪開');
+    PL.forEach(function (p) { if (p.hand && p.cell === undefined) add('warn', '抽水機', p.m.path, p.why + ' ⇒ 派不了人、不抽', '甲板編輯器換到走得到的格（主桅旁中線）'); });
     R.info.mounts = (sh.mounts || []).map(function (g) { var M = g.mt, dg = function (a) { return Math.round(a * 57.2958); };   // 迴旋砲、砲塔（TASK-0626）
       return g.model.path + '（' + (M.ports ? '換砲門 ' + M.ports.map(dg).join('／') + '°' : '砲塔 ' + dg(M.arc[0]) + '～' + dg(M.arc[M.arc.length - 1]) + '°' + (M.fire && (M.fire[0] !== M.arc[0] || M.fire[M.fire.length - 1] !== M.arc[M.arc.length - 1]) ? '（開火 ' + dg(M.fire[0]) + '～' + dg(M.fire[M.fire.length - 1]) + '°）' : '')) + '、' + dg(M.rate) + '°／秒）'; }).join('、');
     // ── 砲帶的裝甲（TASK-0631；24_armor.js）：關聯 meta kind=armor、mount=<砲模型的路徑> ⇒ 跟著那門砲轉、一格一格打掉 ──

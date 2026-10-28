@@ -1751,7 +1751,7 @@
       "crew": 4,
       "place": "well",
       "cap": 36,
-      "autoDeck": 0
+      "autoDeck": 1
     },
     "spump": {
       "name": "蒸汽抽水機",
