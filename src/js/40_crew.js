@@ -7,7 +7,8 @@ var FR = { IDLE: 0, WORK_A: 1, WORK_B: 2, FIRE: 3, RUN_A: 4, RUN_B: 5, WOUNDED: 
 // 砲班：滿編／最少照砲種表（GUNS 的 crew／min，10_ship.js）—— 兩舷各一班；24 磅長砲一班 12 人＋送藥童 ⇒ 一個人物約兩人
 // Tim 2026-10-12：砲班減一人（長砲 6 → 5、追擊砲 4 → 3），多出來的去搬火藥與彈藥（送藥手，23_powder.js）；射速照舊（裝填 ∝ 在崗／滿編）
 var ROLE_NAME = ['砲手', '送藥手', '軍官', '陸戰隊', '桅頂水手', '舵手', '水手', '船醫', '木匠', '帆匠', '槳手', '廚師', '航海士', '軍需官'];   // 廚師（TASK-0720，45_galley.js）：貼圖用 ART_COOK 那一列   // 帆匠（47_sailmaker.js）；槳手（TASK-0691）：貼圖照砲手那一列（c.art）   // 船醫（TASK-0676）：貼圖用 ART_NURSE 那一列（44_medic.js medSurgeons）
-var ART_CAPTAIN = 6, NART = 13;                   // 貼圖的列：0–5 照職位，6 船長（每艘船第一個軍官；職位照舊是軍官），7–12 Sirius 的六位（下一行）
+var ART_CAPTAIN = 6, NART = 14;                   // 圖列：0–5 照職位，6船長、7–12護士等六位、13司爐。
+var ART_STOKER = 13;                             // TASK-1091：司爐專用圖列；玩法與選角由TASK-1092接入。
 var ART_NURSE = 7, ART_CARPENTER = 8, ART_COOK = 9, ART_SAILMAKER = 10, ART_NAVIGATOR = 11, ART_QUARTERMASTER = 12;   // 新職位（TASK-0676）的貼圖列；職位接上之前沒有人用
 function standZ(g, x, y, z0, z1, head) {          // (x, y) 這一柱裡，z0..z1 之間可以站的高度（腳下實心、頭上 head 格空）；沒有 ⇒ -1
   for (var z = z1; z >= z0; z--) {
