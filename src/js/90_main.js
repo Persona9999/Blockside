@@ -200,6 +200,12 @@ if (DEBUG) window.__game = {
   townProsp: function (v, id) { var r = townProspSet(v, id); if (RUNNING) render(); return r; },   // 城牆等級試看（63_towns.js townProspSet；v ＝ 繁榮度 0～1、null 回預設，id 沒給 ⇒ 每一座；開場前只改值，開場後畫一格）⇒ [{ id, tier, prosp, lv, kits }]
   mode: function (to, o) { return to ? modeSwitch(to, o) : Object.assign(modeReport(), { can: Object.keys(MODE_SW[MODE] || {}).map(function (k) { return { to: k, why: modeWhy(k, o) }; }), ready: dockReady(), run: DOCK.run ? { kind: DOCK.run.kind, phase: DOCK.run.phase, k: DOCK.run.k, n: DOCK.run.pts.length, left: DOCK.run.left } : null, last: DOCK.last || null, docks: DOCK.towns }); },   // 換玩法（88_modeswitch.js；TASK-0867）：沒給 to ⇒ 讀數
   dock: function () { dockAct(); return DOCK.run ? DOCK.run.kind : MODE; },   // 按 🏘／⛵ 那一顆
+  /** ⚔ 交戰（88_modeswitch.js fightTick；Blocksail TASK-1078）的讀數：玩法、敵方（名字、離我艦幾 m、中立）、甩開從什麼時候起、#fightB 寫的。 */
+  fight: function () {
+    var me = SHIPS[PLAYER_I], c = me && shipCenter(me);
+    return { mode: MODE, locked: !!modeRule('locked'), farT: FIGHT.farT, simt: +SIMT.toFixed(2), badge: FIGHT.txt,
+      foes: fightFoes().map(function (o) { var q = shipCenter(o); return { name: o.name, team: o.team, d: Math.round(Math.hypot(q[0] - c[0], q[2] - c[2])) }; }) };
+  },
   quay: function (i, r) { return quayInfo(i, r); },   // 棧橋、海堤的碰撞與繫泊（32_quay.js）：取樣點、附近擋船的東西、最後一次碰撞
   town: function (at, on) { if (on !== undefined) { TOWNS.on = !!on; render(); } return BED && BED.A ? townStat(at) : null; },   // 城鎮的讀數（63_towns.js townStat；at ＝ [x, z] ⇒ 那一點的畫面高度、模擬高度、清不清樹；on ⇒ 開關畫不畫（量畫一格多少 ms 用））
   twb: function () { return { on: TWB.on, town: TWB.town, open: TWB.open, cat: TWB.cat, item: TWB.item, side: TWB.side, q: TWB.q, start: TWB.start, tr: TWB.tr, busy: TWB.busy, ops: TWB.ops, framed: TWB.framed, lines: TWB.gl ? TWB.gl.n : 0, ghost: TWB.ghost ? { k: TWB.ghost.k, a: TWB.ghost.a, x: +TWB.ghost.x.toFixed(2), z: +TWB.ghost.z.toFixed(2) } : null, rib: TWB.rib ? TWB.rib.n : 0, ribBox: TWB.rib && TWB.rib.n && TWB.rib.lb ? Array.prototype.map.call(TWB.rib.lb, function (v) { return +v.toFixed(2); }) : null, info: ($('twbInfo') || {}).textContent }; },   // 城鎮建築模式的讀數（87_townbuild.js）
