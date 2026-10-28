@@ -1680,11 +1680,12 @@ def act_disp(ids=None, margin=None):
         w = []
         if room <= 0:
             w.append('✗ 壓艙空間 %s 噸：空船就比設計水線深 %.2f m ⇒ 沒有載重（Blocksail 一裝貨就變深）' % (f1(room), -(s['lightLift'] or 0)))
-        if s['cargoShort'] > max(2, s['cargoWant'] * 0.05):          # 差幾噸、不到 5% ⇒ 不報（拉貝爾號 35 要、34 給）
-            gap = s['cargoShort']
+        # 缺口 ＝ 要的載重 − 壓艙空間（不夾 0）：cargoShort 拿的是夾在 0 的 ballast0，空船本來就欠的那幾噸會不見（夜隼號 −6.4 噸：補法只算 10、該 16.4；summit 2026-10-27 量到）
+        gap = s['cargoWant'] - room
+        if gap > max(2, s['cargoWant'] * 0.05):          # 差幾噸、不到 5% ⇒ 不報（拉貝爾號 35 要、34 給）
             cm = gap / s['tpc'] if s['tpc'] > 0 else None
-            w.append('⚠ 要的載重 %s 噸、壓艙空間只給得了 %s 噸（差 %s）⇒ 補法：① 設計水線往上移約 %s cm（%s 格；最深線剩 %s m）② 空載輕 %s 噸（格子重量的 %.0f%%：材質比例、matMap）' % (
-                f1(s['cargoWant']), f1(s['cargoT']), f1(gap), '%.0f' % cm if cm else '—', '%.1f' % (cm / (D['S'] * 100)) if cm else '—', '%.2f' % (s['fullLine'] - (cm or 0) / 100), f1(gap), gap / s['vox'] * 100 if s['vox'] else 0))
+            w.append('⚠ 要的載重 %s 噸、壓艙空間只有 %s 噸（差 %s）⇒ 補法：① 設計水線往上移約 %s cm（%s 格；最深線剩 %s m）② 空載輕 %s 噸（格子重量的 %.0f%%：材質比例、matMap）' % (
+                f1(s['cargoWant']), f1(room), f1(gap), '%.0f' % cm if cm else '—', '%.1f' % (cm / (D['S'] * 100)) if cm else '—', '%.2f' % (s['fullLine'] - (cm or 0) / 100), f1(gap), gap / s['vox'] * 100 if s['vox'] else 0))
         if s['fullLine'] <= 0.1:
             w.append('⚠ 最深線離設計水線只有 %s m（砲甲板／頂層甲板 %s／%s m）⇒ 過了設計水線幾乎沒有餘裕' % (sg(s['fullLine']), sg(s['gunDeck']), sg(s['topDeck'])))
         if w:
