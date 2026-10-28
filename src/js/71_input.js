@@ -51,6 +51,7 @@ function inPick(cx, cy) {
   if (hit) {
     setAim(me, [hit.x + 0.5, hit.y + 0.5, hit.z + 0.5], on); me.pMode = AIM_P = 'free'; sfx('crack', null, 0.08);
     if (on.calm) note(me, '瞄準 ' + on.name + ' —— 中立；開火就是對它宣戰');
+    else if (on.npc && !isFoe(me, on)) note(me, '瞄準 ' + on.name + ' —— 中立的' + (on.npc.kind === 'pirate' ? '海盜船（靠到 ' + TRF_PIRATE_M / 1000 + ' km 內就開打）' : '商船') + '；開火就是對它宣戰');   // 往來的船（58_traffic.js；Blocksail TASK-1078：⛔ 以前說「友艦…（藍）」）
     else if (!isFoe(me, on)) note(me, '瞄準友艦 ' + on.name + teamTag(on) + ' —— 打下去一樣會傷到它');
     else if (hit.sail) note(me, '瞄準 ' + on.name + ' 的帆');
     if (AUTOFIRE && !me.hand) { me.hand = true; note(me, '手動瞄準：這一舷你來打（' + keyWord('volley') + '齊射），另一舷照樣自動 —— 點海面回到全自動'); }
@@ -108,6 +109,7 @@ function shellCall(k) { var S = window.BS_SHELL, f = S && S[k]; return typeof f 
 /** 回主選單（R、設定面板的「回主選單」、結束畫面的「回選單」）：被 Blocksail 嵌著（?map=@host）⇒ 交給它（08_seabed.js bedHostMenuGo）；
  *  外掛外殼（admin.py shell）接手 ⇒ 例 Blocksail 的 battle.html 直接開 ⇒ 回 Blocksail 的主選單；都沒有 ⇒ 停下來、發 flow:menu（Blockside 自己的主選單出來）。 */
 function menuGo() {
+  if (modeRule('locked') && BED && BED.host) { var me = SHIPS[PLAYER_I]; if (me) note(me, '回不了主選單 —— ' + fightLeft(), true); return; }   // ⚔ 交戰（88_modeswitch.js；Blocksail TASK-1078）：嵌在地球儀裡才擋（回主選單 ＝ 先回地球儀）
   if (bedHostMenuGo() || shellCall('menu')) { gsetClose(); helpClose(); return; }
   gsetClose(); helpClose(); flowRun(false); END_AT = 0; END_WAIT = null; evEmit('flow:menu'); $('end').className = '';
 }
@@ -137,7 +139,7 @@ function doAct(a, repeat) {
     else { if (SAIL === 'off') setSailMode('manual'); var nw = anchorWeighAll(me); note(me, nw ? '起錨（' + nw + '）—— 8 秒收好' : '錨都收著'); }   // 拋錨模式 ⇒ 換手動、我艦的雙錨跟著收
   }
   else if ((a === 'ancP' || a === 'ancS') && RUNNING && me && !me.sunk && !anchorsOf(me).single) { var am = anchorToggle(me, a === 'ancP' ? 'P' : 'S'); if (am) note(me, am + (/^拋/.test(am) ? '（帶著速度只拋一側 ⇒ 繞錨急轉；再按一次起錨）' : '')); }   // 左右錨（76_anchor.js）   // 航行（TASK-0567，Tim 2026-10-14：不用 Tab 循環，三個鍵直接切）
-  else if (a === 'hostBack') bedHostBackGo();                                 // 🌍 回到地球儀（只有 ?map=@host；08_seabed.js）
+  else if (a === 'hostBack') { if (modeRule('locked')) note(me, '回不了地球儀 —— ' + fightLeft(), true); else bedHostBackGo(); }   // 🌍 回到地球儀（只有 ?map=@host；08_seabed.js）；⚔ 交戰中擋下（快捷鍵 U 也走這裡）
   else if (a === 'settings') gsetToggle();                                    // 設定（Esc 也可以）
   else if (a === 'signals') sigToggle();                                     // 旗號面板（TASK-0679）
   else if (a === 'ruddL' || a === 'ruddR') {   // 打舵：自動中一碰就換手動
@@ -147,7 +149,7 @@ function doAct(a, repeat) {
   else if (a === 'camTrack') setCamTrack(!CAM.track);
   else if (a === 'autoFire') setAutoFire(!AUTOFIRE);
   else if (a === 'phys') setPhys(!PHYS);
-  else if (a === 'restart') { gsetClose(); helpClose(); start(); }                                        // 重新開始：同樣的模式、距離、滑桿，不用打完
+  else if (a === 'restart') { if (modeRule('locked') && BED && BED.host) note(me, '不能重新開始 —— ' + fightLeft(), true); else { gsetClose(); helpClose(); start(); } }   // 重新開始：同樣的模式、距離、滑桿，不用打完；⚔ 交戰中（嵌在地球儀裡）擋下：重開一場 ＝ 甩掉敵方
   else if (a === 'sailUp' || a === 'sailDn') {     // 帆裝
     if (!repeat) { var sd = a === 'sailUp' ? 1 : -1; sailStep(me, sd); KEYS.sw = { d: sd, n: SIMT + SAIL_HOLD }; }   // 按住 ⇒ 1 秒後逐級再切（31_sailing.js sailHold）   // 有額外動力的船：滿帆再加 ⇒ 全速前進、全收再收 ⇒ 倒車（31_sailing.js）
   }

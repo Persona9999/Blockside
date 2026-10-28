@@ -21,7 +21,8 @@ var MODE_BASE = {
   chart: false,        // 小地圖（海圖，63_chart.js；要有 ?map）
   town: false,         // 城鎮的建築模式（87_townbuild.js：🔨、B 開關；要 ?map=@host 與 ?town=）
   ui: 'battle',        // 介面配置（61_layout.js UI_LAYOUT：哪些 HUD 區塊看得見；第一人稱另有一份、不看這一格）
-  origin: false        // 我艦開局停在原點（海圖的開戰位置 ＝ 外面給的起點），船頭照 ?hdg=（羅盤度數；沒給 ＝ 往北）；⛔ 不照開局距離退開（52_fleet.js spawnFleet）
+  origin: false,       // 我艦開局停在原點（海圖的開戰位置 ＝ 外面給的起點），船頭照 ?hdg=（羅盤度數；沒給 ＝ 往北）；⛔ 不照開局距離退開（52_fleet.js spawnFleet）
+  locked: false        // 走不開：回不了地球儀（🌍）、回主選單、重新開始都擋（71_input.js；後兩個 Blocksail 嵌著才擋）—— ⚔ 交戰（88_modeswitch.js）打完或甩開才換回航海
 };
 var MODE_RULES = {
   pve: { name: '對戰電腦' },
@@ -33,6 +34,9 @@ var MODE_RULES = {
   build: { name: '🔨 建造', menu: false, fleet: 'first', judge: false, hint: false, stopOwn: true, battleKeys: false, fpLock: true, build: true },
   // 航海（Blocksail 地球儀的「⛵ 航海」，2026-10-19；Tim：「單船、沒有敵艦，其他跟戰鬥一樣」）：只有我艦、不判勝負、停在外面給的起點（城鎮的港口外）
   sail: { name: '⛵ 航海', menu: false, fleet: 'first', judge: false, hint: false, origin: true, chart: true, ui: 'sail' },
+  // 交戰（Blocksail TASK-1078；Tim 2026-10-28「航海模式遇到海盜或是對商船開火 是否可以自動切換到戰鬥模式(不能回大地圖) 要戰鬥結束才能脫離」）：
+  //   只從航海換進來（88_modeswitch.js fightTick：有一艘對我艦敵對）、打完或甩開才換回去 ⇒ 開局才讀的規則全照航海（換玩法不用重開）；網址不認
+  fight: { name: '⚔ 交戰', menu: false, url: false, fleet: 'first', judge: false, hint: false, origin: true, chart: true, ui: 'fight', locked: true },
   // 城鎮（Blocksail 地球儀的「🏘 進入城鎮」，TASK-0742；Tim 2026-10-22「進入城鎮後可以進入建築模式(船隻拋錨停泊在港口)」）：只有我艦、停在停靠處、兩錨都下（stopOwn）、
   //   不開砲；建築模式（87_townbuild.js）鋪路、蓋房子
   town: { name: '🏘 城鎮', menu: false, fleet: 'first', judge: false, hint: false, origin: true, stopOwn: true, battleKeys: false, town: true, ui: 'town' }

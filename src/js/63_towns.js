@@ -2732,6 +2732,7 @@ function townFortWake(h) {
   var me = SHIPS[PLAYER_I], q = h && h.q, id = q && townFortHull(q.k), key = h && h.T.id + ':' + q.lot;
   if (!id || !me || !modeRule('battleKeys') || modeRule('town')) return false;
   if (TOWN_UNITS[key]) return false;
+  if (MODE === 'fight') { note(me, h.name + '：交戰中不換堡壘 —— ' + fightLeft()); return true; }   // ⚔ 交戰（88_modeswitch.js；Blocksail TASK-1078）：一次一座 ⇒ 點別座會把敵對的那一座換回去 ＝ 甩掉它
   if (q.waking) return true;
   if (SHIPS.length - Object.keys(TOWN_UNITS).length >= MAX_SHIPS) { note(me, h.name + '：場上已經 ' + SHIPS.length + ' 艘，堡壘進不來（上限 ' + MAX_SHIPS + '）'); return true; }   // 前一座會換回去（一次一座）⇒ 不算它
   q.waking = true; note(me, h.name + '：載入中…');

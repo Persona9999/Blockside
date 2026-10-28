@@ -139,6 +139,8 @@
   .gend{ position:relative; z-index:0; }   /* 給上一行的金色圓一個疊放層（不然 z-index −1 會掉到羅盤那一團後面） */
   .ico.g-full{ box-shadow:inset 0 -2px 0 #8fe388; } .ico.g-short{ box-shadow:inset 0 -2px 0 #f2c14e; } .ico.g-none{ box-shadow:inset 0 -2px 0 #7d838c; } .ico.g-dead{ box-shadow:inset 0 -2px 0 #e0574a; }
   #msg{ width:100%; font-size:var(--modeFs); font-weight:700; text-align:center; line-height:1.45; }   /* 廣播：兩邊面板中間那一欄，一則一行、最多 5 行、各自淡掉（⛔ 寬到蓋住兩邊面板） */
+  #fightB{ display:none; width:100%; font-size:var(--modeFs); font-weight:700; text-align:center; color:#ff8a7a; letter-spacing:1px; text-shadow:0 0 4px #000, 0 0 4px #000; margin-bottom:3px; }   /* ⚔ 交戰中（88_modeswitch.js fightTick；Blocksail TASK-1078）：廣播上面一行、甩開時倒數 */
+  #fightB.on{ display:block; }
   #msg div{ margin:0 0 1.5px; transition:opacity .4s; }   /* 字的大小跟羅盤上方那行資訊（#modeT）一樣、跟著 --modeFs（Tim 2026-10-16；以前 7／8 px，最新那行大一號；更早 14／16 px）*/
   #tip{ left:12px; bottom:12px; color:var(--dim); font-size:12px; }
   /* 遊戲內的設定面板（⚙ 設定、Esc）：打開時暫停；重新開始、回主選單、畫質與物理的三四檔、帆繩物理、鏡頭跟船、靜音、FPS（Tim 2026-10-13：手機下方列省空間） */
@@ -351,6 +353,7 @@
   #twbTabs, #twbItems, #twbOps{ display:flex; flex-wrap:wrap; gap:6px; } #twbTabs button{ border-radius:14px; padding:4px 12px; } #twbTabs button.on{ background:#9fc7ff; color:#111; }
   #twbItems .bcard{ display:flex; flex-direction:column; align-items:flex-start; min-width:110px; padding:6px 10px; } #twbItems .bcard small{ opacity:.75; font-size:11px; }
   #twbOps{ justify-content:flex-end; }
+  #twbMode{ display:flex; flex-wrap:wrap; gap:6px; align-items:center; font-size:12px; } #twbMode button{ border-radius:12px; padding:3px 10px; font-size:12px; } #twbMode button.on{ background:#ffd98a; color:#111; }
   #twbRcp{ display:flex; flex-wrap:wrap; gap:6px; align-items:center; font-size:12px; } #twbRcp:empty{ display:none; } #twbRcp button{ border-radius:12px; padding:3px 10px; font-size:12px; } #twbRcp button.on{ background:#c9e59a; color:#111; } .tbiRcp{ display:flex; flex-wrap:wrap; gap:6px; margin:4px 0; } .tbiRcp button{ display:inline-flex; align-items:center; border-radius:12px; padding:3px 10px; font-size:12px; } .tbiRcp button img{ width:18px !important; height:18px !important; margin-right:4px !important; } .tbiRcp button.on{ background:#c9e59a; color:#111; } .tbiRcp button.no{ background:transparent; color:#889; border:1px dashed #667; cursor:help; } .tbiRcp button.no img{ filter:grayscale(1); opacity:.45; } #twbRcp button:disabled{ background:transparent; color:#aab; border:1px dashed #667; cursor:help; } #twbRcp button{ display:inline-flex; align-items:center; } #twbRcp button img{ width:18px !important; height:18px !important; margin-right:4px !important; } #twbRcp button.no{ background:transparent; color:#889; border:1px dashed #667; cursor:help; } #twbRcp button.no img{ filter:grayscale(1); opacity:.45; } #twbRcp button.on.no{ outline:2px solid #e07060; }
   @media (max-width: 640px){ #stage.twb #twbP{ bottom:178px; } }
   /* 城鎮介面（89_townui.js，Blocksail TASK-0910）：💰 貿易、🏛 城鎮兩顆在 🔨 旁邊（61_layout.js 的 town 配置）；面板右邊一欄，開著那一顆亮底 */
@@ -503,7 +506,7 @@
   <div id="fleetL" class="hud fleet"></div>
   <div id="fleetR" class="hud fleet"></div>
   <div id="sigP" class="panel"><div id="sigH"><b>🚩 旗號</b> 對我方友艦下令<span id="sigX">✕</span></div><div id="sigBtns"></div><div id="sigNow"></div></div><!-- 旗號面板（TASK-0679；71_input.js sigShow） -->
-  <div id="topC" class="hud"><div id="fps" class="hud"></div><div id="irow"><div id="icol"><div id="info" class="panel"></div><div id="msg"></div></div><canvas id="gmap"></canvas></div></div>
+  <div id="topC" class="hud"><div id="fps" class="hud"></div><div id="irow"><div id="icol"><div id="info" class="panel"></div><div id="fightB"></div><div id="msg"></div></div><canvas id="gmap"></canvas></div></div>
   <div id="teleBox" class="hud" style="display:none"><span class="kb tk" data-act="teleFwd" data-tip="俥鐘往前撥一格"><b>T</b>▲</span><canvas id="telc" title="俥鐘（點或拖）"></canvas><span class="kb tk" data-act="teleBack" data-tip="俥鐘往後撥一格"><b>G</b>▼</span></div>
   <div id="aimR" aria-hidden="true"><svg viewBox="-24 -24 48 48"><g class="o"><circle r="16"/><path d="M-11 0H-4M4 0H11M0 -11V-4M0 4V11"/></g><g class="k"><circle r="16"/><path d="M-11 0H-4M4 0H11M0 -11V-4M0 4V11"/></g><circle class="d" r="1.6"/></svg></div><!-- 瞄準圈（UI 層，61_hud.js aimRingUi；在 HUD 底下） -->
   <div id="botC" class="hud"><div id="navBox"><div id="modeT"></div><div id="gunsB" class="gend"></div><div id="nav" class="panel"><canvas id="navc"></canvas><div id="navt"></div><div id="gunsL" class="gside"></div><div id="gunsR" class="gside"></div></div><div id="gunsA" class="gend"></div></div>

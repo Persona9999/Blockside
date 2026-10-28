@@ -27,6 +27,7 @@ var UI_SHIP = ['fleet', 'top', 'tele', 'tip', 'badge', 'frz', 'nav', 'helm', 'gu
 var UI_LAYOUT = {
   battle: UI_SHIP,                  // 對戰電腦、觀戰、沙盒
   sail: UI_SHIP.concat(['kDock']),  // 航海：跟海戰一樣，多 🏘 停靠（TASK-0867）
+  fight: UI_SHIP.filter(function (g) { return g !== 'kGlobe'; }),   // ⚔ 交戰（88_modeswitch.js；Blocksail TASK-1078）：跟海戰一樣，沒有 🌍（回不了地球儀）、沒有停靠
   observe: UI_SHIP,                 // 船隻觀察：跟海戰一樣，另有觀察面板（86_inspect.js）
   fp: ['kPause', 'kSet'],           // 第一人稱：只留 ⏸、⚙（#fpUI 照 #stage.fp 出現；Tim 2026-10-16「只保留設定紐 暫停紐」）
   shipbuild: ['kPause', 'kSet'],    // 造船（第一人稱鎖定）：同第一人稱，快捷欄照 #stage.bld 出現

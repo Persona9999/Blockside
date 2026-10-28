@@ -19,8 +19,15 @@
 //   ⑤ 出航（城鎮）：起錨、換回航海、沿同一條航道開到外端才交還操舵（中途打舵 ⇒ 馬上交還）。
 //   ⑥ 回地球儀：'left' 帶 mode、town、berth（03_camera.js camTrans）⇒ 地球儀知道停在哪座城的哪一處。
 // 失敗處置：不准換 ⇒ modeSwitch 回原因（字串），畫面上說一聲；外面那一頁沒給停靠處（舊的地球儀、沒有 dock 的城）⇒ 沒有停靠鈕。
-// 接海戰（本單不做，留接口）：MODE_SW.sail.pve 的條件（附近有敵艦）＋ MODE_HOOK.pve 的 enter（生敵艦：52_fleet.js spawnFleet 的敵方那一半、判勝負重設 61_hud.js、
-//   自動開砲的預設 70_flow.js）、leave（敵艦退場或沉了才准換回）；handles 要接住 fleet、hint、autoFire（開局才讀的那三條）。
+//   ⑦ 交戰（Blocksail TASK-1078；Tim 2026-10-28「航海模式遇到海盜或是對商船開火 是否可以自動切換到戰鬥模式(不能回大地圖) 要戰鬥結束才能脫離
+//      (逃離敵艦一段距離後也可以判定脫離戰鬥)」「可能可以先改打堡壘進海戰模式(因為已經做一半了 堡壘會還手)」）：
+//      航海裡有一艘對我艦敵對、還在打（isFoe、不是中立的 calm、沒退場）⇒ 換成 ⚔ 交戰（04_modes.js fight：開局才讀的規則全照航海 ⇒ 不用重開；locked ⇒ 回不了地球儀、主選單，不能重新開始；
+//      61_layout.js 的配置沒有 🌍、停靠；停靠的快捷鍵 dockAct、點別座堡壘 63_towns.js townFortWake 也擋 —— 一次一座 ⇒ 換一座會把敵對的那一座收掉 ＝ 甩掉它）。
+//      往來的船照留著（58_traffic.js trafficOk 認交戰）。敵人不是這裡生的：堡壘開火就敵對（52_fleet.js fortProvoke，TASK-0955）；往來的船 —— 海盜靠到 2 km 內、我方對它開火 ⇒ 換隊（58_traffic.js ⑪ trafficHostile）。
+//      甩開了 ⇒ 遠處敵對的往來船收掉（留著 ⇒ 換回航海下一格又換交戰）。
+//      脫離（fightTick，每格看）：敵方都退場了（沉、降旗、收掉 —— 堡壘離開射程換回城裡的模型、63_towns.js townFortTick）⇒ 馬上換回航海；
+//      離每一艘都超過 FIGHT_FAR_M 持續 FIGHT_FAR_S 秒（模擬時間：停格不算）⇒ 甩開了、換回航海；我艦沉了、降旗了 ⇒ 換回航海（回得了地球儀，船況照 'left' 帶回去）。
+//      #fightB（template.html，廣播上面那一行）寫「⚔ 交戰中」、甩開時倒數。
 var MODE_START = ['fleet', 'origin', 'autoFire', 'hint', 'myReload', 'build', 'observe'];   // 開局才讀的規則（04_modes.js；以前只在 70_flow.js 開一場時讀）
 var DOCK_NEAR = 400, DOCK_ARRIVE = 14, DOCK_PASS = 30, DOCK_HDG_OK = 3, DOCK_TURN_T = 45;   // 公尺：停靠處附近幾公尺的地面區要建好（佔位，Tim「動工時照 TASK-0817 的分區算」）、
                                                                                            //   到了（開始下錨）、航道上的點幾公尺內算過了；轉到停好的船頭差幾度算好、最多轉幾秒（風、水流推著轉不到 ⇒ 照現在的船頭停著）
@@ -34,9 +41,13 @@ var DOCK_AV = [2, 8], DOCK_AEND = 120, DOCK_ATURN = 80, DOCK_PULL = 3, DOCK_AX =
                                                                                            //   自動開那一段模擬 ×DOCK_SIMX（73_slowmo.js 的模擬速度；玩家自己調過 ⇒ 不動）—— 航道 1～2.5 km，×1 要三、四分鐘
 var MODE_SW = {
   // 從 ⇒ 到：條件 (o) ⇒ null（准）或原因
-  sail: { town: function (o) { if (!o || !o.dock) return '先按 🏘 停靠（自動開進停靠處）'; var r = dockReady(); return r.dock === o.dock ? null : r.why || '不是這一處'; } },   // 按停靠就換（Tim 2026-10-24「應該按下停靠後就切過去 讓船自己停靠」）
-  town: { sail: function () { return null; } }
+  sail: { town: function (o) { if (!o || !o.dock) return '先按 🏘 停靠（自動開進停靠處）'; var r = dockReady(); return r.dock === o.dock ? null : r.why || '不是這一處'; },   // 按停靠就換（Tim 2026-10-24「應該按下停靠後就切過去 讓船自己停靠」）
+    fight: function () { return fightFoes().length ? null : '附近沒有敵方'; } },
+  town: { sail: function () { return null; } },
+  fight: { sail: function (o) { return o && o.end ? null : '⚔ ' + fightLeft(); } }      // 只有 fightTick 判定打完、甩開了才換得回去
 };
+var FIGHT_FAR_M = 4000, FIGHT_FAR_S = 30;                                  // 甩開：離每一艘敵方都超過幾公尺、持續幾秒（模擬時間）〔Tim 2026-10-28 選「靠近到一定距離」那一組，數字之後再調〕
+var FIGHT = { farT: null, txt: null };                                    // farT：從什麼時候（SIMT）起每一艘都在 FIGHT_FAR_M 外；txt：#fightB 現在寫的
 var MODE_HOOK = {
   town: {
     handles: [],
@@ -67,6 +78,15 @@ var MODE_HOOK = {
       if (o && o.out && DOCK.here) dockGo('out', DOCK.here);
     },
     leave: function () { dockStop(null); }
+  },
+  fight: {
+    handles: [],
+    enter: function () {
+      FIGHT.farT = null;
+      var me = SHIPS[PLAYER_I]; if (!me) return;
+      note(me, '⚔ 對手：' + fightFoes().map(function (o) { return o.name; }).join('、') + ' —— 打完或甩開 ' + FIGHT_FAR_M / 1000 + ' km 以上 ' + FIGHT_FAR_S + ' 秒，才回得了地球儀', true);
+    },
+    leave: function (o) { FIGHT.farT = null; var me = SHIPS[PLAYER_I]; if (me && o && o.end) note(me, '⚔ 交戰結束：' + o.end, true); }
   }
 };
 var DOCK = { towns: {}, asked: {}, okd: {}, here: null, run: null, cam: null, why: '', btn: '' };   // okd：哪幾處附近擺完過   // towns：{ 城: { ring, docks } }（世界座標）；here：停在哪一處；run：自動開的那一段
@@ -278,6 +298,7 @@ function dockTick() {
 /** 下排的 🏘／⛵ 那一顆、快捷鍵（66_keys.js dock）：航海 ⇒ 停靠（自動開中 ⇒ 取消）；城鎮 ⇒ 出航。 */
 function dockAct() {
   var me = SHIPS[PLAYER_I]; if (!me) return;
+  if (MODE === 'fight') { note(me, '停靠不了 —— ' + fightLeft()); return; }   // ⚔ 交戰（快捷鍵；鈕本來就不在配置裡）
   if (MODE === 'town' && DOCK.run && DOCK.run.kind === 'in') { var c = modeSwitch('sail'); if (!c) note(me, '取消停靠：停在原地、換回航海'); return; }   // 開進去途中 ⇒ 取消
   if (MODE === 'town') { var w = modeSwitch('sail', { out: true }); if (w) note(me, '出航不了：' + w); return; }
   if (DOCK.run) { dockStop('交還操舵'); return; }
@@ -299,6 +320,35 @@ function dockBtn() {
   var I = { in: ['🏘', '停靠：沿進港航道自動開進停靠處、換成城鎮模式'], stop: ['✋', '取消停靠（停在原地、換回航海）'], out: ['⛵', '出航：起錨、換回航海、沿航道開出去'] }[s];
   b.querySelector('.em').textContent = I[0]; b.dataset.tip = I[1];
 }
+// ── ⚔ 交戰（⑦）──
+/** 對我艦敵對、還在打的那幾艘（中立的堡壘 calm 不算；沉了、降旗了不算）。 */
+function fightFoes() { var me = SHIPS[PLAYER_I]; return me ? SHIPS.filter(function (o) { return isFoe(me, o) && !o.calm && !isOut(o); }) : []; }
+/** 還要怎樣才走得開（給人看：#fightB、按 🌍／回主選單被擋時的那一句）。 */
+function fightLeft() {
+  return FIGHT.farT === null ? '交戰中：打完或甩開敵方 ' + FIGHT_FAR_M / 1000 + ' km 以上 ' + FIGHT_FAR_S + ' 秒才走得開'
+    : '交戰中：甩開了 ' + Math.min(FIGHT_FAR_S, Math.floor(SIMT - FIGHT.farT)) + '／' + FIGHT_FAR_S + ' 秒';
+}
+/** 每一格（modesw 控制器）：航海裡有敵方 ⇒ 換成交戰；交戰中照脫離的條件換回航海；#fightB 跟著寫。 */
+function fightTick() {
+  var me = SHIPS[PLAYER_I];
+  if (me && MODE === 'sail' && !isOut(me) && fightFoes().length) modeSwitch('fight');
+  else if (me && MODE === 'fight') {
+    var F = fightFoes(), end = isOut(me) ? (me.sunk ? '我艦沉了' : '我艦降旗了') : !F.length ? '敵方都退場了' : null;
+    if (!end) {
+      var c = shipCenter(me), dmin = Infinity;
+      F.forEach(function (o) { var q = shipCenter(o); dmin = Math.min(dmin, Math.hypot(q[0] - c[0], q[2] - c[2])); });
+      if (dmin <= FIGHT_FAR_M) FIGHT.farT = null;
+      else if (FIGHT.farT === null) FIGHT.farT = SIMT;
+      else if (SIMT - FIGHT.farT >= FIGHT_FAR_S) {
+        end = '甩開了（離最近的敵方 ' + (dmin / 1000).toFixed(1) + ' km、' + FIGHT_FAR_S + ' 秒）';
+        F.forEach(function (o) { if (o.npc) trafficDrop(o); });            // 遠處敵對的往來船收掉（⛔ 留著 ⇒ 換回航海下一格又看到敵方、又換交戰）；清單還有、又近了 ⇒ 58_traffic.js 照新的生
+      }
+    }
+    if (end) modeSwitch('sail', { end: end });
+  }
+  var el = $('fightB'), t = MODE === 'fight' ? '⚔ ' + fightLeft() : '';
+  if (el && t !== FIGHT.txt) { FIGHT.txt = t; el.textContent = t; el.classList.toggle('on', !!t); }
+}
 ctrlAdd({ name: 'modesw', pri: 1, on: function () { return false; },
-  frame: function () { if (!RUNNING) return; dockAsk(); dockTick(); dockBtn(); }
+  frame: function () { if (!RUNNING) return; dockAsk(); dockTick(); dockBtn(); fightTick(); }
 });

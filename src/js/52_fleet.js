@@ -5,12 +5,15 @@
 // 友軍跟敵軍只差在挑目標（Tim 2026-10-13）：同陣營不當目標；砲彈照舊打得到每一艘 ⇒ 誤擊照樣扣血、算傷亡（讀數 sh.ff：被友船打中幾發）。
 // 瞄準點（sh.aim）是「那艘船」的格座標 ⇒ 一併記是哪艘（sh.aimOn，setAim）；換目標之前瞄的那一點不會被套到另一艘的座標上。
 // 船數上限 MAX_SHIPS（00_core.js）；GPU 的格（陰影圖、船艙遮罩、透視）只給視野裡最近的幾艘（畫質設定「陰影船數」「船艙遮罩」；60_render.js gpuSlots），其他的靠全局陰影圖。
-/** 誤擊的讀數：被友船打中幾發（sh.ff）、打中友船幾發（ffOut）。一顆彈只算一次（跟 hits 同一個 hitOnce）。 */
-function ffHit(sh, b) { var o = SHIPS[b.owner]; if (o && sh.calm && o !== sh) fortProvoke(sh, o); if (o && o !== sh && o.team === sh.team) { sh.ff = (sh.ff || 0) + 1; o.ffOut = (o.ffOut || 0) + 1; } }
+/** 誤擊的讀數：被友船打中幾發（sh.ff）、打中友船幾發（ffOut）。一顆彈只算一次（跟 hits 同一個 hitOnce）。
+ *  打中中立的堡壘 ⇒ 敵對（fortProvoke）；打中往來的船（我方打的）⇒ 敵對（58_traffic.js trafficProvoke ⑪；先換隊 ⇒ 不算誤擊）。 */
+function ffHit(sh, b) { var o = SHIPS[b.owner]; if (o && sh.calm && o !== sh) fortProvoke(sh, o); if (o && sh.npc && o !== sh) trafficProvoke(sh, o); if (o && o !== sh && o.team === sh.team) { sh.ff = (sh.ff || 0) + 1; o.ffOut = (o.ffOut || 0) + 1; } }
 /** 落水的人上不了自己的船 ⇒ 往哪幾艘游（43_swim.js）：友船先、再敵船，各照 SHIPS 的順序（一對一 ＝ [敵艦]）。 */
 function swimOthers(sh) { var o = SHIPS.filter(function (x) { return x !== sh; }); return o.filter(function (x) { return x.team === sh.team; }).concat(o.filter(function (x) { return x.team !== sh.team; })); }
 function teamIdx(sh) { return sh.team === 'red' ? 1 : 0; }              // 貼圖的列、羅盤的顏色：藍 0、紅 1
-function isFoe(a, b) { return !!a && !!b && a !== b && a.team !== b.team && !((a.npc && b.fixed) || (a.fixed && b.npc)); }   // 往來的船（58_traffic.js）跟城裡的堡壘互不理會：堡壘只跟對它開火的那一方打（TASK-0955）
+// 往來的船（58_traffic.js）跟城裡的堡壘互不理會：堡壘只跟對它開火的那一方打（TASK-0955）；
+//   還沒敵對的往來船（58_traffic.js ⑪ npc.foe）不跟任何一艘打（Blocksail TASK-1078；⛔ 只靠「跟我艦同一隊」：有一艘換到紅方，藍方那幾艘表演船就把它當敵人、砲長開始瞄）
+function isFoe(a, b) { return !!a && !!b && a !== b && a.team !== b.team && !((a.npc && b.fixed) || (a.fixed && b.npc)) && !(a.npc && !a.npc.foe) && !(b.npc && !b.npc.foe); }
 // ───────────────────────── 城裡的堡壘（TASK-0955；Tim 2026-10-26「可以讓堡壘可以被瞄準嗎」「對堡壘開火就進入敵對狀態」「我是在航海模式」） ─────────────────────────
 // 航海時點到城裡的堡壘 ⇒ 換成那一座固定的戰鬥單位（63_towns.js townFortWake），先放在玩家那一隊、sh.calm ＝ 中立：不開砲、不算敵艦。
 // 誰對它開火（21_gunnery.js fireGun 瞄的是它）或打中它（ffHit）⇒ fortProvoke：換到開火那一方的對面、不再中立，下一步就照敵艦打。
