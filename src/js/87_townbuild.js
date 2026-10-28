@@ -14,9 +14,13 @@
 //   座標：世界 (x, z) ＝ 規劃 E(q) − (BED.ax, BED.az)、E(q) ＝ (ox ＋ kx·qx, oy ＋ qy)（63_towns.js townPrep）⇒ 反過來 q ＝ ((x ＋ ax − ox) ÷ kx, z ＋ az − oy)。
 // 失敗處置：沒有 host（直接開 Blockside）、沒給 ?town、那座城還沒到 ⇒ 開不了，說一聲；回覆裡的 why 照原樣顯示。
 var TWB = { on: false, town: Q.get('town') || null, cat: 'house', item: 'house', open: 0, seq: 0, wait: {}, mx: null, my: null, moved: false, q: null, side: 0,
-  tr: null, busy: false, again: false, start: null, gl: null, msg: '', msgT: 0, framed: false, ops: 0, last: 0, ghost: null, rib: null, sel: null, recipe: null, rcpOn: null, rcpSig: '', kit: null };   // kit：住宅挑的款式（63_towns.js townVar；null ＝ 照雜湊，Blocksail TASK-0945）；換項目不放掉（連蓋同一款）   // recipe：生產建築玩家選的配方（換項目 ⇒ 放掉）；rcpOn：最後一則試放用的那一條（離開路邊時配方那一排照它亮）   // sel：點到的那一棟（townHitAt 的回覆；再點一下、Esc、換項目 ⇒ 放掉）   // ghost：房子的預覽實例（63_towns.js townGhost）；rib：道路預覽的路面帶（GPU）   // open：0 沒開、1 開著中、2 好了；tr：最後一則試放／找路的回覆
+  tr: null, busy: false, again: false, start: null, gl: null, msg: '', msgT: 0, framed: false, ops: 0, last: 0, ghost: null, rib: null, sel: null, recipe: null, rcpOn: null, rcpSig: '', kit: null,
+  rmode: 'auto', via: null, from: null, tan: null, ctok: 0 };   // 鋪法（TWB_RMODES；換項目不放掉）、曲線彎的那一點、接著鋪的起點 { road, s }、上一段收尾的方向、接著鋪的號碼牌（收手就換 ⇒ 晚回來的 apply 不再接）   // kit：住宅挑的款式（63_towns.js townVar；null ＝ 照雜湊，Blocksail TASK-0945）；換項目不放掉（連蓋同一款）   // recipe：生產建築玩家選的配方（換項目 ⇒ 放掉）；rcpOn：最後一則試放用的那一條（離開路邊時配方那一排照它亮）   // sel：點到的那一棟（townHitAt 的回覆；再點一下、Esc、換項目 ⇒ 放掉）   // ghost：房子的預覽實例（63_towns.js townGhost）；rib：道路預覽的路面帶（GPU）   // open：0 沒開、1 開著中、2 好了；tr：最後一則試放／找路的回覆
 var TWB_CATS = [
-  { k: 'road', name: '🛣 道路', items: [{ k: 'street', name: '街', sub: '寬 5 m' }, { k: 'lane', name: '小路', sub: '寬 2.5 m' }] },
+  { k: 'road', name: '🛣 道路', items: [{ k: 'street', name: '街', sub: '寬 5 m' }, { k: 'lane', name: '小路', sub: '寬 2.5 m' },
+    // 棧橋、海堤（Blocksail TASK-1077 town.js SEA_BUILD；Tim 2026-10-28「在道路類別加上 棧橋 & 海堤 以及棧橋是否可以加上石頭類型」）：從路、碼頭線、棧橋接出去，規則在 townSeaPlan
+    { k: 'trunk', name: '木棧橋', sub: '寬 6 m・木樁', sea: true }, { k: 'mole', name: '石堤', sub: '寬 12 m・實心石砌', sea: true },
+    { k: 'wharf', name: '長碼頭', sub: '寬 16 m・實心石砌', sea: true }, { k: 'quay', name: '海堤', sub: '寬 10 m・沿著岸邊', sea: true }] },
   { k: 'house', name: '🏠 房屋', items: [{ k: 'house', name: '住宅', sub: '2 × 3 格（轉角 2 × 2）' }] }   // 路邊每 4 m 一格（Blocksail TASK-0840）；轉角只剩 2 格深 ⇒ 8 × 8 的小版住宅
 ];   // 道路以外那幾類：open 回的 menu 換掉（twbMenuSet）；沒給 ⇒ 照這一份
 /** open 回的選單（Blocksail town.js BSW.townBuildMenu：[{ k, name, items: [{ use, name, sub, recipes?, … }] }]）⇒ 道路之後接上；選單裡的那幾種模型先要（63_towns.js townWantSet ⇒ 預覽畫得出來）。
@@ -31,8 +35,20 @@ function twbMenuSet(menu) {
 }
 /** 選單攤平（數字鍵 1～9 照這個順序：道路兩種、房屋、工坊…）。 */
 function twbFlat() { var L = []; TWB_CATS.forEach(function (c) { c.items.forEach(function (it) { L.push({ c: c.k, i: it.k }); }); }); return L; }
-var TWB_ROAD_W = { street: 5, lane: 2.5 }, TWB_RIB_STEP = 2, TWB_RIB_LIFT = 0.3, TWB_RIB_A = 0.55;   // 道路預覽：路寬（同 Blocksail world/town.js ROAD_COST）、沿路每幾公尺取一次地面高度、離地多高、透明度
+var TWB_SEA_DECK = { trunk: 1.4, mole: 2.0, wharf: 1.0, quay: 1.0 };    // 棧橋、海堤的面高（同 Blocksail world/town.js DECK）：預覽的面板帶照它畫、不貼地
+function twbSea() { return TWB.cat === 'road' && TWB_SEA_DECK[TWB.item] != null; }
+var TWB_ROAD_W = { street: 5, lane: 2.5, trunk: 6, mole: 12, wharf: 16, quay: 10 }, TWB_RIB_STEP = 2, TWB_RIB_LIFT = 0.3, TWB_RIB_A = 0.55;   // 道路預覽：路寬（同 Blocksail world/town.js ROAD_COST）、沿路每幾公尺取一次地面高度、離地多高、透明度
 var TWB_ROUTE_MS = 120;                                                  // 找路最多多久問一次（A* 在那一頁的 Worker 算；游標一直動也不會塞滿）
+// 鋪法（Blocksail TASK-1077；Tim 2026-10-28「道路建設是否可以參考Cityskyline 可以設定不同模式(直線 取線 取線線段)」，拍板：三種＋自動繞路留著）：
+//   規則在 Blocksail world/town.js routeDrawn（照畫的走、不繞；擋到就說第幾公尺卡在哪）；直線、曲線、自由曲線鋪完，終點就是下一段的起點（apply 回的 tail），右鍵、Esc 收手
+var TWB_RMODES = [
+  { k: 'auto', name: '自動', tip: '點起點、點終點，中間自動繞開地塊、田、城牆、水' },
+  { k: 'straight', name: '直線', tip: '點起點、點終點，直直鋪過去；鋪完接著鋪' },
+  { k: 'curve', name: '曲線', tip: '點起點、點彎的那一點、點終點；鋪完接著鋪' },
+  { k: 'free', name: '自由曲線', tip: '一段接一段，每一段照上一段的方向圓滑接上（第一段是直線）' }
+];
+/** 鋪路收手：起點、彎的那一點、接著鋪的那一點都放掉；號碼牌換一張（還沒回來的 apply 回來了也不接）。 */
+function twbRoadReset(msg) { TWB.start = null; TWB.via = null; TWB.from = null; TWB.tan = null; TWB.tr = null; TWB.ctok++; if (msg) twbMsg(msg); }
 function twbOk() { return modeRule('town') && BED && BED.host && TWB.town; }
 function twbTown() { var u = twbUnit(), T = null; (TOWNS.list || []).forEach(function (t) { if (t.id === u) T = t; }); return T; }
 /** 建築模式、城鎮介面現在對的那一份規劃（Blocksail TASK-0987）：停的城 TWB.town；選的是自己一份規劃的城區 ⇒「<城>~<區>」。 */
@@ -119,7 +135,7 @@ function twbToggle(on) {
   }
   twbUI();
 }
-function twbPick(cat, item) { TWB.cat = cat; TWB.item = item; TWB.start = null; TWB.tr = null; TWB.moved = true; TWB.sel = null; TWB.recipe = null; TWB.rcpOn = null; twbUI(); }
+function twbPick(cat, item) { TWB.cat = cat; TWB.item = item; twbRoadReset(); TWB.moved = true; TWB.sel = null; TWB.recipe = null; TWB.rcpOn = null; twbUI(); }
 /** 配方那一排（帶田的生產建築：農莊、種植園、葡萄園 ⇒「種：」；礦坑、鐵匠鋪這種好幾條配方的 ⇒「產：」，TASK-0742）：選了那一種就列（Tim 2026-10-25「農莊能種植的作物要在選取農莊就出現」）。
  *  固定照選單的 recipes 列（Tim 2026-10-26「目前產出會根據是否在道路上閃爍 是否可以改為固定顯示(然後hover在道路上時 不符合的選項壓灰 並且阻擋建造)」）：
  *    以前游標在路邊 ⇒ 換成試放回的那一份（能種的在前、種不了的在後）、離開路 ⇒ 換回選單那一份 ⇒ 按鈕順序、個數跟著游標跳。
@@ -177,7 +193,8 @@ function twbKitHit() {
 function twbRcpName(k) { var it = twbItem(), x = it && it.rcp ? it.rcp.filter(function (r) { return r.k === k; })[0] : null; return x ? x.name : k; }
 /** 現在選的那一項（TWB_CATS 裡的 { k, name, sub, rcp }）。 */
 function twbItem() { var r = null; TWB_CATS.forEach(function (c) { if (c.k === TWB.cat) c.items.forEach(function (x) { if (x.k === TWB.item) r = x; }); }); return r; }
-function twbUndo() { if (!TWB.on || TWB.open !== 2) return; twbAsk('undo', null, function (r) { twbMsg(r.ok ? '復原了一步（還有 ' + (r.ops || []).length + ' 步）' : (r.why || []).join('；')); }); }
+// 復原 ⇒ 接著鋪的那條路可能就是被拿掉的那一步 ⇒ 先收手（TASK-1077）
+function twbUndo() { if (!TWB.on || TWB.open !== 2) return; twbRoadReset(); twbAsk('undo', null, function (r) { twbMsg(r.ok ? '復原了一步（還有 ' + (r.ops || []).length + ' 步）' : (r.why || []).join('；')); }); }
 /** 試放／找路：一次只問一則；回來之前游標又動了 ⇒ 回來再問一次（最新的那個位置）。 */
 function twbQuery() {
   if (TWB.open !== 2 || !TWB.q) return;
@@ -187,26 +204,40 @@ function twbQuery() {
   if (road && performance.now() - TWB.last < TWB_ROUTE_MS) { TWB.again = true; return; }
   TWB.busy = true; TWB.again = false; TWB.last = performance.now();
   var q = TWB.q.slice(), done = function (r) { TWB.busy = false; r.q = q; r.road = road; TWB.tr = r; if (TWB.again) twbQuery(); };
-  if (road) twbAsk('route', { q: { from: TWB.start, to: q, kind: TWB.item } }, done);
+  if (road) {
+    //   鋪法（TASK-1077）：曲線還沒點彎的那一點、自由曲線的第一段（沒有上一段的方向）⇒ 先照直線畫到游標；自動 ⇒ 跟以前一樣不帶 mode
+    //   棧橋、海堤（twbSea）沒有自動繞路 ⇒ 自動照直線；問 'sea'（Blocksail mapgen_worker.js；起點吸路、碼頭線、棧橋）
+    var md = TWB.rmode, rq = { from: TWB.from || TWB.start, to: q, kind: TWB.item }, sea = twbSea();
+    if ((md === 'curve' && !TWB.via) || (md === 'free' && !TWB.tan) || (md === 'auto' && sea)) md = 'straight';
+    if (md !== 'auto') { rq.mode = md; if (md === 'curve') rq.via = TWB.via; if (md === 'free') rq.tan = TWB.tan; }
+    twbAsk(sea ? 'sea' : 'route', { q: rq }, done);
+  }
   else twbAsk('try', { q: { x: q[0], y: q[1], side: TWB.side, use: TWB.item, recipe: TWB.recipe } }, done);
 }
 /** 點一下：房屋 ⇒ 試放過就蓋；道路 ⇒ 第一下起點（要在路上：那一頁吸）、之後照預覽的路線鋪。右鍵 ⇒ 取消起點。 */
 function twbTap(x, y, btn) {
   if (!TWB.on) return false;
-  if (btn === 2) { if (TWB.start) { TWB.start = null; TWB.tr = null; twbMsg('取消鋪路'); } return true; }
+  if (btn === 2) { if (TWB.start) twbRoadReset('取消鋪路'); return true; }
   if (btn !== 0) return true;
   var g = twbGround(x, y), hit = townHitAt(x, y, g ? Math.hypot(g[0] - CAM.eye[0], g[1] - CAM.eye[1], g[2] - CAM.eye[2]) : null);
   if (TWB.sel) { var same = hit && hit.q === TWB.sel.q; TWB.sel = null; if (!hit || same) return true; }   // 選著一棟 ⇒ 這一下先放掉（點到同一棟、空地 ⇒ 就放掉；點到別棟 ⇒ 換選那一棟）
-  if (hit) { TWB.sel = hit; TWB.start = null; TWB.tr = null; return true; }   // 點到建築 ⇒ 選起來、說名字（不蓋、不當鋪路的起點；Tim 2026-10-23）
+  if (hit) { TWB.sel = hit; twbRoadReset(); return true; }   // 點到建築 ⇒ 選起來、說名字（不蓋、不當鋪路的起點；Tim 2026-10-23）
   if (TWB.open !== 2) return true;
   var T = twbTown(); if (!g || !T) { twbMsg('點到地面上'); return true; }
   var q = twbToPlan(T, g[0], g[2]), tr = TWB.tr;
   if (tr && tr.q && Math.hypot(tr.q[0] - q[0], tr.q[1] - q[1]) > 3) { TWB.q = q; TWB.tr = null; twbQuery(); twbMsg('等試放（游標動了）…'); return true; }   // 回覆是別的位置的 ⇒ 不照它蓋、重問
   if (TWB.cat === 'road') {
-    if (!TWB.start) { TWB.start = q; TWB.q = q; TWB.tr = null; twbMsg('起點 ⇒ 點終點（右鍵取消）'); return true; }
+    if (!TWB.start) { TWB.start = q; TWB.q = q; TWB.tr = null; twbMsg(TWB.rmode === 'curve' ? '起點 ⇒ 點彎的那一點（右鍵取消）' : '起點 ⇒ 點終點（右鍵取消）'); return true; }
+    if (TWB.rmode === 'curve' && !TWB.via) { TWB.via = q; TWB.tr = null; TWB.moved = true; twbMsg('彎的那一點 ⇒ 點終點（右鍵取消）'); return true; }   // 曲線的第二下：彎的那一點（貝茲的控制點）
     if (!tr || !tr.ok || !tr.roadOp) { twbMsg(tr && tr.why ? '鋪不了：' + tr.why.join('；') : '等路線…'); return true; }
-    twbAsk('apply', { op: tr.roadOp }, function (r) { twbMsg(r.ok ? '鋪好了：' + Math.round(tr.len) + ' m（' + (r.roads || []).length + ' 段）' : '鋪不了：' + (r.why || []).join('；')); });
-    TWB.start = null; TWB.tr = null;
+    var chain = TWB.rmode !== 'auto' || twbSea();                       // 棧橋、海堤一律接著鋪（沒有自動繞路那一種）
+    twbRoadReset();
+    var tok = TWB.ctok;
+    twbAsk('apply', { op: tr.roadOp }, function (r) {
+      var t = r.ok && chain && tok === TWB.ctok ? r.tail : null;          // 接著鋪（TASK-1077）：終點接到別條路上（沒有 tail）、這中間收手了（號碼牌換了）⇒ 不接
+      if (t) { TWB.start = t.at.slice(); TWB.from = { road: t.road, s: t.s }; TWB.tan = TWB.rmode === 'free' ? t.tan : null; TWB.moved = true; }
+      twbMsg(r.ok ? '鋪好了：' + Math.round(tr.len) + ' m（' + (r.roads || []).length + ' 段）' + (t ? ' —— 接著鋪（右鍵、Esc 收手）' : chain ? ' —— 接到路上，收手' : '') : '鋪不了：' + (r.why || []).join('；'));
+    });
     return true;
   }
   if (!tr || tr.road || !tr.ok) { twbMsg(tr && tr.why ? '蓋不了：' + tr.why.join('；') : '等試放…'); return true; }
@@ -223,7 +254,7 @@ function twbTap(x, y, btn) {
 function twbEscEaten() {
   if (!TWB.on) return false;
   if (TWB.sel) { TWB.sel = null; return true; }
-  if (TWB.start) { TWB.start = null; TWB.tr = null; twbMsg('取消鋪路'); return true; }
+  if (TWB.start) { twbRoadReset('取消鋪路'); return true; }
   return false;
 }
 /** 鍵：B 開關選單、R 換路的哪一側（自動 → 右 → 左）、Z 或 Ctrl+Z 復原、Ctrl+S 存這座城、1～9 照選單的順序選（Esc 見 twbEscEaten）。
@@ -291,6 +322,10 @@ function twbLines(T) {
       }
     } else if (TWB.on && TWB.cat === 'road' && TWB.start) {
       var s0 = P3(TWB.start, 0.6); seg([s0[0] - 3, s0[1], s0[2]], [s0[0] + 3, s0[1], s0[2]], Y); seg([s0[0], s0[1], s0[2] - 3], [s0[0], s0[1], s0[2] + 3], Y); seg(s0, [s0[0], s0[1] + 8, s0[2]], Y);
+      if (TWB.via) {                                                     // 曲線彎的那一點（TASK-1077）：十字＋起點、游標各一條拉過去的線（貝茲的兩條切線）
+        var v0 = P3(TWB.via, 0.6), YD = [0.75, 0.62, 0.3]; seg([v0[0] - 2, v0[1], v0[2]], [v0[0] + 2, v0[1], v0[2]], Y); seg([v0[0], v0[1], v0[2] - 2], [v0[0], v0[1], v0[2] + 2], Y);
+        seg(s0, v0, YD); if (TWB.q) seg(v0, P3(TWB.q, 0.6), YD);
+      }
       if (tr && tr.road && tr.path && tr.path.length > 1) { var c2 = tr.ok ? G : R; for (var j = 1; j < tr.path.length; j++) seg(P3(tr.path[j - 1], 0.6), P3(tr.path[j], 0.6), c2); }
       else if (TWB.q) seg(s0, P3(TWB.q, 0.6), tr && tr.road && !tr.ok ? R : Y);
     }
@@ -320,7 +355,8 @@ function twbLines(T) {
     }
     // 高度：左、中、右三點各取一次，照畫面地形的三角形（63_towns.js townRoadHeight，同地形網格的對角線）—— ⛔ 一點一個高度（雙線性、整條橫斷面同高）
     //   ⇒ 橫坡上那一邊、雙線性比三角形低的地方整片埋進地形（2026-10-23 量：深度測試開著一點都看不到、關掉才出現）
-    function rh(x, z) { var h = townRoadHeight(x, z); if (!(h === h)) h = twbHeight(x, z); return Math.max(h, 0) + TWB_RIB_LIFT; }
+    var sd = TWB_SEA_DECK[TWB.item];                                     // 棧橋、海堤（TASK-1077）：照面高畫一片平的（不貼地、不貼水）
+    function rh(x, z) { if (sd != null) return sd + 0.05; var h = townRoadHeight(x, z); if (!(h === h)) h = twbHeight(x, z); return Math.max(h, 0) + TWB_RIB_LIFT; }
     var E2 = S2.map(function (q, k) {                                    // 每點往兩側：照前後兩點的方向
       var A = S2[Math.max(0, k - 1)], B = S2[Math.min(S2.length - 1, k + 1)], dx = B[0] - A[0], dz = B[1] - A[1], L2 = Math.hypot(dx, dz) || 1;
       var lx = q[0] - dz / L2 * hw, lz = q[1] + dx / L2 * hw, rx = q[0] + dz / L2 * hw, rz = q[1] - dx / L2 * hw;
@@ -377,7 +413,11 @@ function twbInfo() {
   else if (TWB.msg && performance.now() - TWB.msgT < 3000) s = TWB.msg;
   else if (TWB.open === 1) s = '打開城鎮…';
   else if (TWB.open !== 2) s = '建築模式開不了';
-  else if (TWB.cat === 'road') s = !TWB.start ? '點一下既有的路當起點' : !tr || !tr.road ? '找路線…' : tr.ok ? '路線 ' + Math.round(tr.len) + ' m、' + tr.gold + ' 金 —— 點一下鋪（右鍵取消）' : '鋪不了：' + (tr.why || []).join('；');
+  else if (TWB.cat === 'road') {
+    var sea = twbSea(), mn = TWB_RMODES.filter(function (m) { return m.k === TWB.rmode; })[0], md = mn && mn.k !== 'auto' ? '［' + mn.name + '］' : sea ? '［直線（棧橋、海堤沒有自動繞路）］' : '';
+    s = md + (!TWB.start ? (sea ? '點一下路、碼頭線或棧橋當起點' : '點一下既有的路當起點') : TWB.rmode === 'curve' && !TWB.via ? '點彎的那一點（右鍵取消）' : !tr || !tr.road ? '找路線…'
+      : tr.ok ? '路線 ' + Math.round(tr.len) + ' m、' + tr.gold + ' 金 —— 點一下鋪（右鍵取消）' : '鋪不了：' + (tr.why || []).join('；'));
+  }
   else s = !TWB.q ? '游標移到路邊或空建地上' : !tr || tr.road ? '試放…' : tr.ok ? (tr.lot ? '空建地 ' + tr.lot : '路邊 ' + tr.w.toFixed(0) + ' × ' + tr.d + ' m') + twbFieldTxt(tr) + (TWB.rcpBlock ? ' —— 蓋不了：' + twbRcpName(TWB.rcpBlock.k) + '這裡做不了（' + TWB.rcpBlock.why + '）' : ' —— 點一下蓋' + (TWB.side ? '（' + (TWB.side > 0 ? '右' : '左') + '側）' : '') + (twbKitHit() ? '' : '（這塊地沒有挑的那一款 ⇒ 照隨機）')) : '蓋不了：' + (tr.why || ['?'])[0];
   if (el.textContent !== s) el.textContent = s;
 }
@@ -396,10 +436,13 @@ function twbUI() {
   var h = '<div id="twbTabs">' + TWB_CATS.map(function (c) { return '<button type="button" data-c="' + c.k + '"' + (c.k === TWB.cat ? ' class="on"' : '') + '>' + c.name + '</button>'; }).join('') + '</div><div id="twbItems">';
   var nAll = 0;
   TWB_CATS.forEach(function (c) { c.items.forEach(function (it) { var n = ++nAll; if (c.k !== TWB.cat) return; h += '<button type="button" class="bcard' + (it.k === TWB.item ? ' on' : '') + '" data-c="' + c.k + '" data-i="' + it.k + '"><b>' + it.name + (it.goods ? ' ' + it.goods.map(function (g) { return tuiIcon('goods', g); }).join('') : '') + '</b><small>' + it.sub + (n <= 9 ? '（' + n + '）' : '') + '</small></button>'; }); });   // 數字鍵只到 9（twbKey）⇒ 第 10 項以後只能點（TASK-0872：工坊 8 種之後選單 12 項）
-  h += '</div><div id="twbRcp"></div><div id="twbOps"><button type="button" id="twbSave" title="只存這一座城的改動（Ctrl+S）">💾 存這座城</button><button type="button" id="twbUndo">↶ 復原（Z）</button><button type="button" id="twbX">▾ 收起（B）</button></div>';
+  h += '</div>';
+  if (TWB.cat === 'road') h += '<div id="twbMode"><span>鋪法：</span>' + TWB_RMODES.map(function (m) { return '<button type="button" data-m="' + m.k + '" title="' + m.tip + '"' + (m.k === TWB.rmode ? ' class="on"' : '') + '>' + m.name + '</button>'; }).join('') + '</div>';   // 鋪法（TASK-1077）
+  h += '<div id="twbRcp"></div><div id="twbOps"><button type="button" id="twbSave" title="只存這一座城的改動（Ctrl+S）">💾 存這座城</button><button type="button" id="twbUndo">↶ 復原（Z）</button><button type="button" id="twbX">▾ 收起（B）</button></div>';
   P.innerHTML = h; TWB.rcpSig = null;
   P.querySelectorAll('#twbTabs button').forEach(function (b) { b.onclick = function () { var c = TWB_CATS.filter(function (x) { return x.k === b.dataset.c; })[0]; twbPick(c.k, c.items[0].k); }; });
   P.querySelectorAll('#twbItems button').forEach(function (b) { b.onclick = function () { twbPick(b.dataset.c, b.dataset.i); }; });
+  P.querySelectorAll('#twbMode button').forEach(function (b) { b.onclick = function () { var m = TWB_RMODES.filter(function (x) { return x.k === b.dataset.m; })[0]; TWB.rmode = m.k; twbRoadReset('鋪法：' + m.name + ' —— ' + m.tip); TWB.moved = true; twbUI(); }; });
   $('twbSave').onclick = twbSave; $('twbUndo').onclick = twbUndo; $('twbX').onclick = function () { twbToggle(false); };
 }
 // 城鎮模式（04_modes.js town）：🔨 鈕（看不看得見照 61_layout.js 的 town 配置）—— 載入時是城鎮模式就綁；航海裡停靠換進城鎮模式時由 88_modeswitch.js 的 enter 綁（TASK-0867）
