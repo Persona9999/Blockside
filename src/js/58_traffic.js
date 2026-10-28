@@ -16,7 +16,7 @@
 //      ⛔ 不開火：跟我艦同一隊（藍）⇒ 不是任何一艘的敵人（52_fleet.js isFoe）；指揮官不給它命令（cmdView 的 cmd）；不能換操控（canTake）；
 //      上方艦隊列不列（61_hud.js）、隊上的船數不算它（teamShips）；羅盤上商船米白、海盜船黑。
 //   ⑤ 收（停用回收）：清單裡沒有了、或換到別的玩法 ⇒ 從 SHIPS 拿掉、後面的序號往前補、放掉網格（同 70_flow.js 清場那一行）。
-//      只在航海、城鎮（場上除了我艦都是往來的船、沒有砲彈與命令掛在它們的序號上）⇒ 序號往前補不會動到戰局。
+//      只在航海、城鎮、⚔ 交戰（88_modeswitch.js；場上除了我艦是往來的船、城裡的堡壘）：砲彈、碎片、開砲事件、旗號掛的序號 shipDrop 一起往前補 ⇒ 打到一半收掉遠處的一艘不會動到戰局。
 //   ⑥ 照時刻表滑（Tim 2026-10-26：城鎮的時間面板加速時「不加速物理模擬(主要是想看船進出港&日夜變化)」，選了「照時刻表滑」）：
 //      世界時間比物理快（城鎮模式 WCLK 倍率 > 1，08_weather.js）⇒ 照物理開跟不上時刻表（1 秒＝1 小時：船開出港要真實的幾分鐘，時刻表早就過了幾小時）
 //      ⇒ 要清單時多帶 span（往後要幾小時）、外面那一頁每艘多回 trk ＝ [[世界時間（開戰以來幾小時）, e, s]…]；這裡每一步照世界時間在 trk 上內插、直接擺船（trafficGlide：
@@ -62,8 +62,8 @@ var TRF_BLEND_M = 120, TRF_CLEAR_M = 10, TRF_BLEND_K = 2.5;                     
 var TRF_HARB_VE = 7.4 / 3.6, TRF_HARB_R = 4000, TRF_HARB_V0 = 0.3 / 3.6;  // 拖的速度曲線：同 Blocksail world/fleetfine.js harbV（港內航速 7.4 km/h、4 km、下限 0.3 km/h）
 var TRF_ENTRY_M = 150, TRF_IN_M = 450, TRF_OUT_M = 260, TRF_TOW_V = 2.2, TRF_TOW_VMIN = 0.6, TRF_BACK_V = 0.8, TRF_TURN_M = 60, TRF_SPIN = 0.1, TRF_YAW_RATE = 0.15, TRF_MOOR_M = 3;
 
-/** 現在可不可以有往來的船：被 Blocksail 嵌著、在跑、航海或城鎮。 */
-function trafficOk() { return !!(BED && BED.host && RUNNING && !OVER && (MODE === 'sail' || MODE === 'town')); }
+/** 現在可不可以有往來的船：被 Blocksail 嵌著、在跑、航海、城鎮或 ⚔ 交戰（88_modeswitch.js；Blocksail TASK-1078：交戰是航海換過來的 ⇒ 船照留著，⛔ 以前一換玩法全收、序號一動）。 */
+function trafficOk() { return !!(BED && BED.host && RUNNING && !OVER && (MODE === 'sail' || MODE === 'town' || MODE === 'fight')); }
 function trafficShips() { return SHIPS.filter(function (s) { return s.npc; }); }
 function trafficMax() { return Math.max(0, MAX_SHIPS - SHIPS.filter(function (s) { return !s.npc; }).length); }
 function trafficYaw(hdg) { return Math.PI / 2 - hdg / 57.2958; }        // 方位角（北 0、東 90）⇒ yaw（同 52_fleet.js 開局、88_modeswitch.js 停靠處）
