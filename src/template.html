@@ -748,7 +748,7 @@
     <div class="card panel" id="detail" style="display:none">
       <h2>細節設定</h2>
       <div id="detAdm" class="row"><b>出廠預設值（設定後台）</b>：這一頁的值 ＝ 設定檔現在的預設；改好按「存成出廠預設」⇒ 寫進 config/game.json（只改各滑桿的預設，上下限不動），「重建」之後遊戲才吃得到。勾選、彈種倍率、砲長、降旗條件不是滑桿 ⇒ 不會存（會列出來）。<br><button id="detAdmS" class="on">💾 存成出廠預設</button><button id="detAdmB">🔨 重建</button><button id="detAdmX">↩ 回設定後台</button><div id="detAdmL" style="white-space:pre-wrap;text-align:left;font-size:12px"></div></div>
-      <div class="sub">開戰前調好，下一場開始生效。網址參數吃同一組：?blue=我艦,友艦… ?red=敵艦,…（或 ?ship=我艦,敵艦） ?hard= ?flood= ?ballast= ?gunw= ?speed= ?agile= ?upwind= ?hands=（這八個套到每一型，在「船隻配置」）?gunhp= ?dmg24= ?dmg32l= ?dmg32= ?dmg18= ?dmg4= ?ammo=（九個數字）?sailhp= ?crewhp= ?crewdeath= ?musket= ?sailfix= ?burn= ?box= ?carry= ?wind= ?powderhp= ?blast= ?cap= ?strike= ?play=fun／real ?stall= ?funspeed= ?funagile= ?funstall= ?funpowder= ?sea=</div>
+      <div class="sub">開戰前調好，下一場開始生效。網址參數吃同一組：?blue=我艦,友艦… ?red=敵艦,…（或 ?ship=我艦,敵艦） ?hard= ?flood= ?ballast= ?gunw= ?speed= ?agile= ?upwind= ?hands=（這八個套到每一型，在「船隻配置」）?gunhp= ?dmg24= ?dmg32l= ?dmg32= ?dmg18= ?dmg4= ?ammo=（九個數字）?sailhp= ?crewhp= ?crewdeath= ?musket= ?sailfix= ?burn= ?box= ?carry= ?wind= ?powderhp= ?blast= ?cap= ?strike= ?play=fun／real ?stall= ?funspeed= ?funagile= ?funstall= ?funpowder= ?sea= ?floodk= ?pumpk=</div>
       <h3>航行</h3>
       <div class="row slide"><label for="sea">浪</label><input type="range" id="sea" step="0.05" aria-label="浪的大小"><span id="seaV"></span></div>
       <div class="row note">浪是物理的一部分：船跟著浪起伏、縱搖、橫搖（長浪才搖得動整艘船），砲彈打到浪頭就落水，打低的砲會被浪擋掉；碎片、落水的人、斷開的船跟著浪浮沉。0 ＝ 平靜的海。</div>
@@ -759,6 +759,10 @@
       <div class="row note">舵效（羅盤上方 ☸）＝ 舵輪那一節 × 舵那一節：舵輪（舵柄）被打掉損失寫實 40%（改用應急的舵柄、滑車）、舵被打掉損失寫實 100%；兩支舵的船壞一支只算一半。娛樂再乘下面的「舵壞了的損失」（預設 ×0.5 ⇒ 舵輪 20%、舵 50%）。只管舵：兩舷的槳、螺旋槳照舵令差動，不經過舵輪。</div>
       <div class="row slide"><label for="difftq">差動的力矩</label><input type="range" id="difftq" step="0.1" aria-label="兩舷推力差的轉向力矩倍率"><span id="difftqV"></span></div>
       <div class="row note">兩舷都有動力的船（槳帆船、兩舷螺旋槳）照舵令把一舷減速、停俥時一舷倒划 ⇒ 加在轉向上：全速前進打滿 ＝ 這艘舵（完好、同一個航速）的幾成；停俥原地轉是它的 2/3，一舷槳斷、槳手倒下、划得慢照比例變小。舵沒了照樣靠它轉。</div>
+      <h3>進水</h3>
+      <div class="row slide"><label for="floodk">進水倍率</label><input type="range" id="floodk" step="0.05" aria-label="進水的全域倍率"><span id="floodkV"></span></div>
+      <div class="row slide"><label for="pumpk">抽水倍率</label><input type="range" id="pumpk" step="0.05" aria-label="抽水的全域倍率"><span id="pumpkV"></span></div>
+      <div class="row note">船外的水從破口、砲口、門沒了的開口進出的流量 × 進水倍率；抽水機（「船隻配置」的抽水，噸／分）× 抽水倍率。兩種玩法、每一型、進水的每一檔都乘；「船隻配置」的進水速度再乘在上面。1 ＝ 物理的流量。開始沉之後往下沉的速度不受影響。</div>
       <h3>娛樂加成</h3>
       <div class="row slide"><label for="funspeed">航速</label><input type="range" id="funspeed" step="0.05" aria-label="娛樂加成：航速"><span id="funspeedV"></span></div>
       <div class="row slide"><label for="funagile">靈活性</label><input type="range" id="funagile" step="0.05" aria-label="娛樂加成：靈活性"><span id="funagileV"></span></div>

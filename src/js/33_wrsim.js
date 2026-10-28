@@ -279,7 +279,7 @@ function wrsDoorShut(s, i) { var d = s.sh && s.sh.doors ? s.sh.doors[s.odoor[i]]
 function wrsStep(sh, dt, fl) {
   var s = sh.wrs; if (!s || !(dt > 0)) return;
   s.sh = sh;
-  var t0 = performance.now(), wk0 = wrsWork(s), W = s.W, O = s.O, M = sh.M, u = s.su, n = s.n, upm = s.upm, fk = sh.cfg.flood / LIM.flood[2], L = W.c * S, D = s.dbg, i, j, k;
+  var t0 = performance.now(), wk0 = wrsWork(s), W = s.W, O = s.O, M = sh.M, u = s.su, n = s.n, upm = s.upm, fk = sh.cfg.flood / LIM.flood[2] * FL_INK, L = W.c * S, D = s.dbg, i, j, k;   // fk 只乘船外進出的水（破口、門沒了的開口）⇒ 連進水倍率一起（TASK-1058）；房間之間的開口不乘
   var tm = s.tm || (s.tm = { surf: 0, xc: 0, br: 0, open: 0, jet: 0, pipe: 0 }), tq = t0;   // 每一段的牆鐘（ms，累計；wrsRead tmStep）
   var dmax = wrsSurf(s, M), ns = s.opt.nocfl ? 1 : Math.min(WRS_NMAX, Math.max(1, Math.ceil(dt / (WRS_CFL * L / Math.sqrt(G * Math.max(dmax, 0.05)))))), h = dt / ns;
   tq = wrsTm(tm, 'surf', tq); s.sub = ns; s.steps++; wrsXcheck(s); tq = wrsTm(tm, 'xc', tq);

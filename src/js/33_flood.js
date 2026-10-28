@@ -2,12 +2,12 @@
 // 兩種模式（Tim 2026-10-13）：物理效果的「進水」第 0 檔 ＝ 公式（32_hull.js：水線下破洞數 × √水深）；1–3 檔 ＝ 粒子（粗／中／細）。全開 ＝ 細。
 // 粒子模式：進水量、下沉、傾斜完全由艙內的水決定 ——
 //   · 破口：船殼最外那一層被打掉、而且往艙內一路通到原本是空的地方（flHoleRedo），每 c × c 格算一塊（面積 ＝ 通的格數 × S²）。
-//     流量照 Torricelli：FL_C × 面積 × √(2g × 水頭差) × 滑桿／預設（細節設定的「進水速度」；預設 0.35 ⇒ ×1 ＝ 物理的流量）。
+//     流量照 Torricelli：FL_C × 面積 × √(2g × 水頭差) × 滑桿／預設（船隻配置的「進水速度」；預設 0.35 ⇒ ×1）× FL_INK（細節設定的「進水倍率」，TASK-1058；1 ＝ 物理的流量，預設 0.6）。
 //     水頭差 ＝ 外面的水面（seaH，照浪）減艙內在那個洞的水面，兩邊都不低於洞本身 ⇒ 浮出水面的洞不進水；艙內的水比外面高 ⇒ 往外流。
 //   · 流進來的水是粒子（每顆帶 vj m³）：從洞往艙內噴（初速 √(2g × 水頭差)），照重力在船的座標裡落下，碰到船體或水面就併進水格。粒子滿了 ⇒ 直接併進洞旁那一格。
 //   · 水格（每格 c 格見方，存水量 m³）：往下流（照那一格最密的那一層開著幾成：甲板擋、艙口與破洞讓水下去）；滿了往上擠；
 //     往旁邊流照水面的世界高度（船的矩陣，含傾斜與浪的搖晃）⇒ 船一傾斜，水往低的那一舷跑，再把船壓得更斜（自由液面）。
-//   · 抽水機：每秒從最低的那一層水抽掉 FL_PUMP × pumpK ×（滑桿／預設）m³（FL_PUMP ＝ 每分鐘 18 噸海水：四台鏈式抽水機全力抽；pumpK ＝ 那一型的基礎抽水量 cfg.pump／18，TASK-0604）。
+//   · 抽水機：每秒從最低的那一層水抽掉 FL_PUMP × pumpK × FL_PUMPK（「抽水倍率」，TASK-1058）×（滑桿／預設）m³（FL_PUMP ＝ 每分鐘 18 噸海水：四台鏈式抽水機全力抽；pumpK ＝ 那一型的基礎抽水量 cfg.pump／18，TASK-0604）。
 //     ⛔ 照公式那邊的抽水換算（0.004 m/s × 水線面積 ≈ 每秒 0.84 m³）⇒ 比水線附近那幾個洞進得還快，戰鬥 420 秒艙裡一滴水都留不住（量過）。
 //   · 船：艙內的水 ＝ 加上去的重量 ⇒ 照浮力表（32_hull.js liftFor）算多吃水多少，sh.sink 照它慢慢跟過去（FL_TAU 秒）；
 //     水的重心偏哪一舷 ⇒ 往那邊傾斜（穩心高 FL_GM，見下）、偏船頭船尾 ⇒ 縱傾（FL_GML）；上限跟公式一樣（開始沉之前 0.21 rad、縱傾 0.07）。
@@ -344,7 +344,7 @@ function flRoomStep(sh, fl, dt) {
   fl.rIn = s.inTot; fl.rOut = s.outTot;
   fl.inQ = (s.inTot - in0) / upm / dtc; fl.outQ = (s.outTot - out0) / upm / dtc; fl.inTot = s.inTot / upm; fl.outTot = s.outTot / upm;
   fl.area = area; fl.open = open; fl.underN = uN; fl.underA = uA; fl.outN = oN;
-  s.pAcc = (s.pAcc || 0) + FL_PUMP * pumpK(sh) * fk * dtc * upm;        // 抽水（同 flTick ③：從最低的水抽）
+  s.pAcc = (s.pAcc || 0) + FL_PUMP * pumpK(sh) * FL_PUMPK * fk * dtc * upm;   // 抽水（同 flTick ③：從最低的水抽；FL_PUMPK 抽水的全域倍率，TASK-1058）
   var np = Math.floor(s.pAcc), got = np > 0 ? wrsPump(s, np) : 0; s.pAcc = got < np ? 0 : s.pAcc - np;   // 抽不到（艙裡沒水）的不存著
   fl.pumped += got / upm; fl.pumpQ = got / upm / dtc; fl.netQ = fl.inQ - fl.outQ - fl.pumpQ;
   flAvgStep(fl, dtc);
@@ -374,7 +374,7 @@ function flTick(sh, fl, dtc) {
     fl.hWet[h] = P[1] < hOut ? 1 : 0; fl.hQ[h] = 0; if (fl.hWet[h]) { uN++; uA += ar; }
     if (fl.hWet[h] || fl.hPort[h] < ar - 1e-9) { area += ar; open++; }        // 只有砲口、在海面上 ⇒ 船殼本來就開著的口，不算破口（TASK-0822）                     // 破口的狀態（flHoleState；底下進水／出水時填流量）
     if (d > 0.001) {
-      var dv = FL_C * ar * Math.sqrt(2 * G * d) * fk * dtc; inQ += dv; fl.hQ[h] = dv / dtc;
+      var dv = FL_C * ar * Math.sqrt(2 * G * d) * fk * FL_INK * dtc; inQ += dv; fl.hQ[h] = dv / dtc;
       fl.hAcc[h] += dv;
       var sp = Math.sqrt(2 * G * d) / S;                                        // 噴進來的速度（格／秒）
       for (var nJ = 0; fl.hAcc[h] >= L.vj && nJ < ACC_CAP * 16; nJ++) {  // 防呆：一步最多 4096 份（≈ 80 m³ 以上才會碰到；00_core.js accFix）
@@ -386,7 +386,7 @@ function flTick(sh, fl, dtc) {
       }
       accFix(fl.hAcc, h, L.vj, '進水');
     } else if (d < -0.001 && ci >= 0) {
-      var ov = Math.min(FL_C * ar * Math.sqrt(2 * G * -d) * fk * dtc, A[ci]); A[ci] -= ov; outQ += ov; fl.hQ[h] = -ov / dtc; oN++;
+      var ov = Math.min(FL_C * ar * Math.sqrt(2 * G * -d) * fk * FL_INK * dtc, A[ci]); A[ci] -= ov; outQ += ov; fl.hQ[h] = -ov / dtc; oN++;
       if (PHX.water && ov > 0.01) wpPour(P, M4.dir(M, 0, -s, 0), ov / dtc);    // 往外流：只給人看（13_water.js，自己的亂數）
     }
   }
@@ -417,7 +417,7 @@ function flTick(sh, fl, dtc) {
   }
   // 3. 抽水：從最低的那幾層抽（⛔ act 要重拿：上面 flAct 可能換過一條更長的陣列）
   act = fl.act;
-  var need = FL_PUMP * pumpK(sh) * fk * dtc, lowz = 1e9, p0 = fl.pumped;
+  var need = FL_PUMP * pumpK(sh) * FL_PUMPK * fk * dtc, lowz = 1e9, p0 = fl.pumped;
   for (t = 0; t < fl.actN; t++) if (A[act[t]] > 1e-7) lowz = Math.min(lowz, (act[t] / NXY) | 0);
   for (var zz = lowz; zz < lowz + 3 && need > 0 && lowz < 1e9; zz++) for (t = 0; t < fl.actN && need > 0; t++) {
     i = act[t]; if (((i / NXY) | 0) !== zz || A[i] <= 0) continue; m = Math.min(A[i], need); A[i] -= m; need -= m; fl.pumped += m;

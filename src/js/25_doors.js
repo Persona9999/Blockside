@@ -39,7 +39,7 @@ function doorsSurvey(sh) {
 }
 /** 粒子模式（33_flood.js flTick 的破口那一段之後）：門沒了的開口，外面的水面（seaH）高過開口 ⇒ 灌進開口底下那一格（水格自己往下流）。回 [進來的 m³, 面積, 幾個開口]。 */
 function doorInflow(sh, fl, dtc, head) {
-  var F = fl.F, M = sh.M, fk = sh.cfg.flood / LIM.flood[2], q = 0, ar = 0, n = 0;
+  var F = fl.F, M = sh.M, fk = sh.cfg.flood / LIM.flood[2] * FL_INK, q = 0, ar = 0, n = 0;   // FL_INK：進水倍率（TASK-1058）
   fl.tops.forEach(function (o) {
     var P = M4.pt(M, o.x, o.y, o.z), hOut = seaH(P[0], P[2], SIMT), ci = flCell(F, o.x, o.y, o.z - 2);
     ar += o.ar; n++;

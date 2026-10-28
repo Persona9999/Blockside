@@ -100,7 +100,7 @@ function stepFloat(sh, dt) {
       if (VX) { if (sh.sinkF === undefined) sh.sinkF = sh.sink - (sh.vxOff || 0); sh.sinkF += (floodSinkT(sh, fl) - sh.sinkF) * Math.min(1, dt / FL_TAU); sh.sink = sh.sinkF + (sh.vxOff || 0); }   // 大漩渦：進水那一份照舊慢慢跟（sinkF），眼的那一份下面直接加（⛔ 一起慢慢跟 ⇒ 進眼第 1 秒只吃水 0.07 m，看起來沒在拖）
       else sh.sink += (floodSinkT(sh, fl) - sh.sink) * Math.min(1, dt / FL_TAU);
     } }
-    else sh.sink = Math.max(0, sh.sink + Math.min(Q * 1.1e-5 - 0.004 * pumpK(sh), 0.25) * fk * dt);   // pumpK：基礎抽水量／PUMP_REF（TASK-0604；憲法號 1）   // 進水與抽水一起照滑桿縮放（⛔ 只縮進水 ⇒ 調慢之後抽水永遠贏、永遠不沉）；
+    else sh.sink = Math.max(0, sh.sink + Math.min(Q * 1.1e-5 * FL_INK - 0.004 * pumpK(sh) * FL_PUMPK, 0.25) * fk * dt);   // pumpK：基礎抽水量／PUMP_REF（TASK-0604；憲法號 1）   // 進水與抽水一起照滑桿縮放（⛔ 只縮進水 ⇒ 調慢之後抽水永遠贏、永遠不沉）；FL_INK／FL_PUMPK：進水、抽水的全域倍率（TASK-1058；開始沉之後的 0.06 × fk 不乘）；
                                                                               // 上限 0.25 m/s：彈藥庫殉爆打掉三十幾萬格 ⇒ 不設上限兩秒就沉完，看不到船斷開
     if (VX) { var vo = vxOffset(sh); sh.sink = Math.max(0, sh.sink + vo - (sh.vxOff || 0)); sh.vxOff = vo; }   // 大漩渦：眼那一份（拖下去的深度 ＋ 讓翹起那一頭留在水面的那一段，08_sea.js vxOffset）直接加在吃水上，兩種進水模式都一樣
     if (sh.sink > sinkFinalAt(sh) && !sh.sinkingFinal && (fk > 0 || sh.vxSink > 0)) { sh.sinkingFinal = true; if (sh.vxSink > 0) { sh.vxEaten = true; sh.fate = '捲進漩渦'; note(sh, '被漩渦拖下去，開始沉了', true); } else note(sh, '進水太多，開始沉了'); }   // 大漩渦：跟進水同一條線（4.2 m）—— 進水速度調成 0 也照樣會被拖沉

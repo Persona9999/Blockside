@@ -167,8 +167,8 @@ function pumpJoin(sh, c) {
   if (H.lv !== J.lv || !J.pump.m.alive) { H.job = null; H.wait = 1; return; }
   J.at = true; c.home = c.pos.slice(); sh.pumps.called++;
 }
-/** 全船現在的抽水量（噸／分）：基礎 ＋ 抽水機。 */
-function pumpNow(sh) { return (sh.cfg.pump === undefined ? PUMP_REF : sh.cfg.pump) + (sh.pumps ? sh.pumps.x : 0); }
+/** 全船現在的抽水量（噸／分）：（基礎 ＋ 抽水機）× 抽水倍率（FL_PUMPK，TASK-1058；⇒ 讀數、HUD 跟實際抽得掉的對得上）。 */
+function pumpNow(sh) { return ((sh.cfg.pump === undefined ? PUMP_REF : sh.cfg.pump) + (sh.pumps ? sh.pumps.x : 0)) * FL_PUMPK; }
 /** HUD 一行：抽水（有擺抽水機才顯示）。 */
 function pumpText(sh) {
   var P = sh.pumps; if (!P) return '';

@@ -28,6 +28,7 @@ var PLAY = Q.has('play') ? (Q.get('play') === 'real' ? 'real' : 'fun') : CFG.men
 var STALL_K = stateQnum('stall', LIM.stall);
 var HELM_LOST = stateQnum('helmlost', LIM.helmlost);                       // 舵或舵輪被打壞後的操舵性能（Tim 2026-10-20：寫實 25%、娛樂加成 ×2 ⇒ 50%；31_sailing.js helmK）—— 只在操舵的開關關掉時用（?helmtq=0，TASK-0777）
 var WHEEL_LOSS = stateQnum('wheelloss', LIM.wheelloss), RUDDER_LOSS = stateQnum('rudderloss', LIM.rudderloss);   // 操舵（TASK-0777，31_drive.js）：舵輪（舵柄）、舵被打掉的損失（寫實 40%、100%；娛樂再 × FUN.helmloss）
+var FL_INK = stateQnum('floodk', LIM.floodk), FL_PUMPK = stateQnum('pumpk', LIM.pumpk);   // 進水、抽水的全域倍率（TASK-1058；Tim 2026-10-28「進水、抽水各加一個全域倍率，預設都 0.6，開始沉之後往下沉的速度不變」）：船外進出的水（破口、砲口、門沒了的開口）× FL_INK、抽水 × FL_PUMPK，公式與粒子各檔、房間檔都乘；1 ＝ 以前（物理的流量）
 var DIFF_K = stateQnum('difftq', LIM.difftq);                               // 差動打滿 ＝ 舵的幾成（TASK-0777，31_drive.js helmYaw；預設 0.5；Tim：槳帆船單靠兩舷推力差也轉得動）
 var FUN = { speed: stateQnum('funspeed', LIM.funspeed), agile: stateQnum('funagile', LIM.funagile), stall: stateQnum('funstall', LIM.funstall), powder: stateQnum('funpowder', LIM.funpowder), hard: stateQnum('funhard', LIM.funhard), helm: stateQnum('funhelm', LIM.funhelm), helmloss: stateQnum('funhelmloss', LIM.funhelmloss), helmeff: stateQnum('funhelmeff', LIM.funhelmeff), diff: stateQnum('fundiff', LIM.fundiff) };
 function playK(k) { return PLAY === 'fun' ? FUN[k] : 1; }

@@ -114,6 +114,12 @@ function floodLab(o) {
   if (o.rooms !== undefined) out.o.rooms = o.rooms ? 1 : 0; if (o.roll !== undefined) out.o.roll = o.roll;
   if (!sh.fl) {                                                         // 公式模式（物理效果的「進水」第 0 檔）：沒有艙內的水可畫 ⇒ 只記每秒水線下的洞幾格（sh.inflow，32_hull.js stepShip）、砲口（TASK-0822）；網址加 phx=mid／high／full 才有細檔
     out.err = '進水是公式模式 ⇒ 只有 traceF（每秒 [t, 水線下的洞幾格, 下沉 m]）與 guns';
+    if (o.holesSet) o.holes.forEach(function (hd) {                     // 有給 holes ⇒ 照同一組打洞（TASK-1058：公式檔也要並排比開始沉的秒數；跟下面細檔那段同一套）；sinkLine ＝ 開始沉、沉沒那兩條線
+      var x = Math.round(sh.T.wl0 + (sh.T.wl1 - sh.T.wl0) * hd[0]), sk = labSkin(sh, x, hd[2]);
+      var z = sk ? sk.z - hd[1] : null, r = z === null ? null : labHole(sh, x, z, hd[2], hd[3]);
+      out.holes.push({ x: x, z: z, side: hd[2], r: hd[3], removed: r ? r.removed : 0 });
+    });
+    if (o.holesSet) out.sinkLine = [{ hull: sh.T.id, line: sinkFinalAt(sh), gone: sinkGoneAt(sh) }];
     var evF = (o.pset || []).map(function (e) { return { t: e[0], k: e[1], v: e[2] }; }).concat((o.pbreak || []).map(function (e) { return { t: e[0], pb: e[1] }; })), t0F = SIMT, tnF = Math.max(1, Math.round(1 / DT));
     out.events = []; out.traceF = [];
     for (i = 0; i < Math.round(o.dur / DT); i++) { if (evF.length) flabEvents(sh, pin, evF, SIMT - t0F, out); simStep(); if (pin) pin(); if (i % tnF === tnF - 1) out.traceF.push([+SIMT.toFixed(1), sh.inflow || 0, +sh.sink.toFixed(3)]); }
@@ -374,7 +380,7 @@ function flabEvents(sh, pin, evs, t, out) {
 /** 參考解（TASK-0806，?ref=1；給 TASK-0808 房間圖同一個情境對拍）：
  *  · 水量 → 水位：艙內（flInHull）的空氣格照世界高度（格中心，1 cm 一階）由低往高加進 union-find；水位 h 時的水量 ＝ 落點那一格所在的那一塊有幾格 × S³。
  *    ⇒ 低於 h 才連得到的地方才算（門檻、甲板：水位過了才併進來，跟平衡時水能到的地方一樣）；落點 ＝ 破口裡面那一格往下（−z）走到底。
- *  · 進水：每塊破口照模擬自己的 Torricelli（33_flood.js flTick：FL_C × 面積 × √(2g × (max(海, 洞) − max(艙內, 洞))) × fk），1 ms 一步積分；不算抽水（要比就帶 pump=0）。
+ *  · 進水：每塊破口照模擬自己的 Torricelli（33_flood.js flTick：FL_C × 面積 × √(2g × (max(海, 洞) − max(艙內, 洞))) × fk × FL_INK），1 ms 一步積分；不算抽水（要比就帶 pump=0）。
  *  · 破口照每一秒當時的面積（trA ＝ floodLab 的 traceA：[t, [[洞, m²], …]]；給了就用，TASK-0808 量過：破口開頭 1.11 m²、後來縮成 0.91 m²，照最後那一刻算 ⇒ 前段模擬看起來多 25%）；沒給 ⇒ 照報表最後那一刻的（flHoleInfo；釘住姿態 ⇒ 位置不會變）。⚠ 只比水量怎麼分配與步長，⛔ 不是「真的流體」：係數、面積都跟模擬同一份。
  *  回 { H 海面, holes 幾塊, A m², C 係數, Vmax 灌到海面的 m³, half: { t, ref, model, pct }, full: { ref, model }（水量到 Vmax 99% 那一刻，秒；沒到 ⇒ null）, back 模擬算回海裡的 m³, rows: [[t, 參考 m³, 模擬 m³]] }。 */
 function flabRef(sh, trace, t0, trA) {
@@ -384,7 +390,7 @@ function flabRef(sh, trace, t0, trA) {
     hs = Object.keys(mx).map(Number).sort(function (a, b) { return a - b; }).map(function (h) { return { id: h, x: fl.hX[h], y: fl.hY[h], z: fl.hZ[h], area: mx[h] }; });
   }
   if (!hs.length || !trace.length) return { err: '沒有破口或沒有逐秒紀錄' };
-  var C = FL_C * sh.cfg.flood / LIM.flood[2], wy = function (x, y, z) { return M[1] * x + M[5] * y + M[9] * z + M[13]; };
+  var C = FL_C * sh.cfg.flood / LIM.flood[2] * FL_INK, wy = function (x, y, z) { return M[1] * x + M[5] * y + M[9] * z + M[13]; };
   var P = hs.map(function (h) { return M4.pt(M, h.x, h.y, h.z); }), H = seaH(P[0][0], P[0][2], SIMT), A = hs.reduce(function (s, h) { return s + h.area; }, 0);
   var big = hs.slice().sort(function (a, b) { return b.area - a.area; })[0], side = big.y < sh.T.cy ? 1 : -1;
   // 落點：最大那塊破口往艙內走到第一個空氣格，再往下走到底
