@@ -213,6 +213,7 @@ function breakShip(sh, xb) {
 // 危險（火藥血量拉滿 ＝ 全都不會爆；預設 675 ⇒ 藥包 203（一般命中要擲到偏高）、火光一次 300，要三次）：藥包（送藥手手上、砲旁藥箱）的血量 ＝ 火藥桶的 30%，吃到一下夠重的就著火爆炸；
 //   取用點的桶被打到照火藥桶算；爆炸離取用點 3 m 內 ⇒ 火光竄下艙口：彈藥庫裡靠門最近的 6 桶各扣 300 × 威力 ⇒ 可能整間殉爆。
 var CART_K = 0.3, MONKEY_SP = 26, FILL_T = 0.8, FLASH_R = 30, FLASH_DMG = 300, FLASH_CD = 3;
+var LAD_KEEP = 3, LAD_LANE = 8;                                       // 從艙口吊上來的取用點：桶堆離梯腳四周幾格、梯腳往外走那一條留多長（hoistStation）
 /** 彈藥庫是前／中／後哪一間（照關聯名字：彈藥庫-前／-中／-後；餘燼號只有一間中央的）。 */
 /** 彈藥庫叫「前／中／後」：照關聯 meta `pos=fore／mid／aft`（TASK-0539）；沒有 ⇒ 照關聯名裡的字（舊匯出），都沒有 ⇒ 後。 */
 var MAG_POS = { fore: '前', mid: '中', aft: '後' };
@@ -229,12 +230,23 @@ function makeStations(sh, auto) {
   sh.mags.forEach(function (m) { m.kegs.forEach(function (k) { var st = (k.meta && k.meta.store) || ''; if (KS.indexOf(st) < 0 && T.rig.meshes[k.mesh] && KM.length < 3) { KS.push(st); KM.push(k.mesh); } }); });
   var KB = KM.map(function (mesh) { var V0 = T.rig.meshes[mesh].verts, a0 = [1e9, 1e9, 1e9], b0 = [-1e9, -1e9, -1e9]; for (var j0 = 0; j0 < V0.length; j0 += 3) for (var q = 0; q < 3; q++) { a0[q] = Math.min(a0[q], V0[j0 + q]); b0[q] = Math.max(b0[q], V0[j0 + q]); } return [a0, b0]; });   // 取用點的桶照哪一間的桶都行（⛔ 只看第一間 ⇒ 第一間沒桶整艘就沒有取用點）；都沒有桶 ⇒ 沒有取用點（匯入檢查報 ✗）
   var guns = sh.models.filter(function (m) { return GUNS[m.kind] || kindProp(m.kind, 'clear'); }), out = [];
+  // 桶堆不壓任何一座梯子的兩頭（foot／head 四周 LAD_KEEP 格、同一層：上下 6 格內）—— 彈藥庫上方找的（findSpot）也會擺到梯頂、梯腳前（樓梯自檢 ⚠「被取用點擋住」）。
+  //   讓開梯子就找不到（拉貝爾號主甲板、松島號上桅樓：擠 ⇒ 那一層整個沒有取用點、砲打完藥箱就停）⇒ 不管梯子再找一次（ladFirst）：取用點只換位置、不會變少
+  var LE = [], LADK = true; shipLadders(T).forEach(function (L) { LE.push(L.pts[0], L.pts[L.pts.length - 1]); });
+  /** 先讓開梯子找、找不到才不管梯子；near：讓開梯子找到的比不管梯子的遠 16 格以上（1.6 m）⇒ 用近的那一塊（送藥手跑太遠） */
+  function ladFirst(find, x0) {
+    LADK = true; var a = find(); LADK = false; var b = find(); LADK = true;
+    if (!a) return b;
+    return b && x0 !== undefined && Math.abs(a[0] - x0) > Math.abs(b[0] - x0) + 16 ? b : a;
+  }
   function clear(x, y, z) {
+    if (LADK && LE.some(function (p) { return Math.abs(p[2] - z) <= 6 && p[0] >= x - 1 - LAD_KEEP && p[0] <= x + 10 + LAD_KEEP && p[1] >= y - 1 - LAD_KEEP && p[1] <= y + 10 + LAD_KEEP; })) return false;
     for (var dy = 0; dy <= 9; dy += 3) for (var dx = 0; dx <= 9; dx += 3) { var zz = standZ(BASE, x + dx, y + dy, z - 1, z + 1, 8); if (zz < 0) return false; }
     return !guns.some(function (m) { var b = m.bb; return x + 11 > b[0] && x - 2 < b[3] && y + 11 > b[1] && y - 2 < b[4] && z + 8 > b[2] && z - 3 < b[5]; });
   }
   /** 從 x0 找一塊空地。dir 0 ⇒ 先在正上方 ±30 格找，找不到再往船頭、船尾兩邊找；dir ±1 ⇒ 只往那一頭找（x0 起算）。 */
-  function findSpot(x0, dir, zr) {
+  function findSpot(x0, dir, zr) { return ladFirst(function () { return findSpot1(x0, dir, zr); }, x0); }
+  function findSpot1(x0, dir, zr) {
     var spot = null, ex, e2, oy;
     if (!dir) for (var r = 0; r <= 30 && !spot; r += 2) for (var s = -1; s <= 1 && !spot; s += 2) for (var dx = -r; dx <= r && !spot; dx += 2) {
       var x = x0 + dx, y = s > 0 ? CY + 6 + (r - Math.abs(dx)) : CY - 15 - (r - Math.abs(dx)), z = standZ(BASE, x + 4, y + 4, zr[0], zr[1], 8);
@@ -279,11 +291,25 @@ function makeStations(sh, auto) {
   }
   function hoistStation(D, h) {
     var foot = h.L.pts[0], head = h.L.pts[h.L.pts.length - 1], spot = null, at = null, r, dx, dy;
-    for (r = 0; r <= 24 && !spot; r++) for (dy = -r; dy <= r && !spot; dy++) for (dx = -r; dx <= r && !spot; dx++) {   // 梯腳旁一塊 9×9 的空地（梯子的側板、踏板是實心 ⇒ 自己會避開）
-      if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue;
-      var x = Math.floor(foot[0]) + dx - 4, y = Math.floor(foot[1]) + dy - 4, z = standZ(BASE, x + 4, y + 4, foot[2] - 1, foot[2] + 1, 8);
-      if (z >= 0 && clear(x, y, z)) spot = [x, y, z];
+    // 梯腳留路（Tim 2026-10-28「兩座梯子的腳被火藥桶擋住 修吧」；拉貝爾號、澤漢號的樓梯自檢 ⚠「梯腳出口被取用點擋住」）：
+    //   以前從梯腳那一格往外找第一塊空地 ⇒ 三個桶就擺在梯腳正前方。桶堆（x−1..x+10）不壓梯腳四周 LAD_KEEP 格，
+    //   也不壓梯腳往外走的那一條（沿梯子走向、背對梯頂，LAD_LANE 格長、左右各 2 格）；梯子立著（兩頭平面上不到 2 格）⇒ 只留四周。
+    var fx = Math.floor(foot[0]), fy = Math.floor(foot[1]), ex = foot[0] - head[0], ey = foot[1] - head[1], lane = null;
+    if (Math.hypot(ex, ey) >= 2) {
+      var sd = (Math.abs(ex) >= Math.abs(ey) ? ex : ey) > 0 ? 1 : -1, a0 = sd > 0 ? 0 : -LAD_LANE, a1 = sd > 0 ? LAD_LANE : 0;
+      lane = Math.abs(ex) >= Math.abs(ey) ? [fx + a0, fy - 2, fx + a1, fy + 2] : [fx - 2, fy + a0, fx + 2, fy + a1];
     }
+    function hit(x, y, b) { return x - 1 <= b[2] && x + 10 >= b[0] && y - 1 <= b[3] && y + 10 >= b[1]; }
+    function offFoot(x, y) { return !LADK || !hit(x, y, [fx - LAD_KEEP, fy - LAD_KEEP, fx + LAD_KEEP, fy + LAD_KEEP]) && !(lane && hit(x, y, lane)); }
+    spot = ladFirst(function () {                                        // 讓不開 ⇒ 照以前從梯腳那一格找（ladFirst）
+      var sp = null;
+      for (r = 0; r <= 24 && !sp; r++) for (dy = -r; dy <= r && !sp; dy++) for (dx = -r; dx <= r && !sp; dx++) {   // 梯腳旁一塊 9×9 的空地（梯子的側板、踏板是實心 ⇒ 自己會避開）
+        if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue;
+        var x = fx + dx - 4, y = fy + dy - 4, z = standZ(BASE, x + 4, y + 4, foot[2] - 1, foot[2] + 1, 8);
+        if (z >= 0 && offFoot(x, y) && clear(x, y, z)) sp = [x, y, z];
+      }
+      return sp;
+    });
     for (r = 0; r <= 12 && !at; r++) for (dy = -r; dy <= r && !at; dy++) for (dx = -r; dx <= r && !at; dx++) {   // 梯頭旁站得住、不在砲裡的一格（艙口本身是空的 ⇒ 站在艙口邊）
       if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue;
       var x2 = Math.floor(head[0]) + dx, y2 = Math.floor(head[1]) + dy, z2 = standZ(BASE, x2, y2, head[2] - 1, head[2] + 1, 8);
@@ -295,11 +321,15 @@ function makeStations(sh, auto) {
    *  擺得下 ⇒ 那幾門砲認這座揚弾機（g.ah）；擺不下 ⇒ 不認，照舊由那一層的送藥手送到砲旁（匯入檢查報 ✗）。 */
   function ahStation(H) {
     var b = H.bottom, d = H.drop, spot = null, r, dx, dy;
-    for (r = 0; r <= 40 && !spot; r++) for (dy = -r; dy <= r && !spot; dy++) for (dx = -r; dx <= r && !spot; dx++) {
-      if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue;
-      var x = Math.floor(b[0]) + dx - 4, y = Math.floor(b[1]) + dy - 4, z = standZ(BASE, x + 4, y + 4, H.zr[0], H.zr[1], 8);
-      if (z >= 0 && !(d[0] > x - 2 && d[0] < x + 11 && d[1] > y - 2 && d[1] < y + 11) && clear(x, y, z)) spot = [x, y, z];
-    }
+    spot = ladFirst(function () {                                        // 讓不開梯子 ⇒ 不管梯子再找（ladFirst）
+      var sp = null;
+      for (r = 0; r <= 40 && !sp; r++) for (dy = -r; dy <= r && !sp; dy++) for (dx = -r; dx <= r && !sp; dx++) {
+        if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue;
+        var x = Math.floor(b[0]) + dx - 4, y = Math.floor(b[1]) + dy - 4, z = standZ(BASE, x + 4, y + 4, H.zr[0], H.zr[1], 8);
+        if (z >= 0 && !(d[0] > x - 2 && d[0] < x + 11 && d[1] > y - 2 && d[1] < y + 11) && clear(x, y, z)) sp = [x, y, z];
+      }
+      return sp;
+    });
     if (!spot) return;
     var n = out.length; build({ key: H.key, name: H.label }, H.mag, H.label + '取用點', spot); H.st = out[n];
     H.guns.forEach(function (g) { g.ah = H; });
