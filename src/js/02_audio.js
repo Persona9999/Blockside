@@ -3,7 +3,7 @@ var AC = null, master = null, noiseBuf = null, muted = false;
 // 爆音（Tim 2026-10-15：「目前爆炸太頻繁會爆音」）：以前每個聲音各自接 master、沒有上限 ⇒ 一次齊射幾十門＋殉爆＋碎裂疊起來加總 > 1 ⇒ 削波。兩層：
 //   ① master 後面一個限制器（DynamicsCompressor：門檻 −14 dB、比 20、起 2 ms、放 250 ms）⇒ 疊再多也壓在 0 dBFS 以下；
 //   ② 同時發聲：同一種在 SFX_WIN 秒內最多 SFX_SAME 個（人耳分不出來、只是更大聲）、全部最多 SFX_MAX 個還在響 ⇒ 多的不放（只是聲音；不碰模擬的亂數）。
-var SFX_MAX = 24, SFX_SAME = 3, SFX_WIN = 0.06, SFX_END = [], SFX_RECENT = {};
+var SFX_MAX = 24, SFX_SAME = 3, SFX_WIN = 0.06, SFX_END = [], SFX_RECENT = {}, SFX_DROP = {}, SFX_GUN_NEXT = 0, SFX_GUN_MAX = 32, SFX_GUN_END = [];   // 開砲自己一個池子（SFX_GUN_MAX 聲；只算頭）⇒ 交戰時命中、碎裂的聲音佔滿 SFX_MAX 也輪得到開砲   // SFX_DROP：每一種被上限丟掉幾聲（__game.sfxDrop；試聽頁 85_gunlab.js 也讀）
 function initAudio() {
   if (AC || DEMO >= 0) return;
   try {
@@ -31,12 +31,16 @@ function sfxPlay(kind, at, vol, opt) {
   if (v < 0.01) return;
   var now = AC.currentTime, rec = SFX_RECENT[kind] || (SFX_RECENT[kind] = []);
   while (SFX_END.length && SFX_END[0] < now) SFX_END.shift();
+  while (SFX_GUN_END.length && SFX_GUN_END[0] < now) SFX_GUN_END.shift();
   while (rec.length && rec[0] < now - SFX_WIN) rec.shift();
-  if (rec.length >= SFX_SAME || SFX_END.length >= SFX_MAX) return;     // 同一種剛放過好幾個、或已經太多聲音在響 ⇒ 這一個不放
+  var gun = kind === 'boom' && opt && opt.gun, t = AC.currentTime + Math.min(0.25, dist / 340) * 0.5;
+  // 開砲不照「同一種 SFX_WIN 秒內最多 SFX_SAME 個」丟，改成往後錯開 SFX_WIN ÷ SFX_SAME 秒排隊（排到 0.8 秒以後才丟；同一刻 30 門：0.6 秒時距離延遲之後只排得下 28 門）：模擬倍速、掉幀時一格畫面補跑好幾步，
+  //   同一輪齊射的好幾門在同一刻開火 ⇒ 以前第 4 門起直接沒聲音（Tim 2026-10-28「連續開砲會導致有的炮沒聲音」）
+  if (gun) { t = Math.max(t, SFX_GUN_NEXT); if (t - now > 0.8 || SFX_GUN_END.length >= SFX_GUN_MAX) { SFX_DROP[kind] = (SFX_DROP[kind] || 0) + 1; return; } SFX_GUN_NEXT = t + SFX_WIN / SFX_SAME; }
+  else if (rec.length >= SFX_SAME || SFX_END.length >= SFX_MAX) { SFX_DROP[kind] = (SFX_DROP[kind] || 0) + 1; return; }   // 同一種剛放過好幾個、或已經太多聲音在響 ⇒ 這一個不放
   rec.push(now);
-  var t = AC.currentTime + Math.min(0.25, dist / 340) * 0.5;
   if (kind === 'hit') { sfxEnd(t + hitVoice(AC, AC.sfxBus, t, vol || 0, v, opt || {}, Math.random) + 0.05); return; }
-  if (kind === 'boom' && opt && opt.gun) { sfxEnd(t + gunVoice(AC, AC.sfxBus, t, v, gunSndPar(opt.gun), dist, Math.random) + 0.05); return; }   // 開炮：照砲種、口徑（TASK-0978）
+  if (gun) { sfxEnd(t + gunVoice(AC, AC.sfxBus, t, v, gunSndPar(opt.gun), dist, Math.random) + 0.05, SFX_GUN_END); return; }   // 開炮：照砲種、口徑（TASK-0978）；只算「頭」佔聲部（gunVoice 的回傳），尾聲不擋別門砲
   if (kind === 'imp') { var ip = impPar(opt || {}); if (ip) { sfxEnd(t + impVoice(AC, AC.sfxBus, t, v, ip, dist, Math.random) + 0.05); return; } kind = 'crack'; }   // 命中：照材質、彈種（TASK-0979）；對不上 ⇒ 照舊那一聲 crack
   if (FIRE_SND[kind]) { sfxEnd(t + fireVoice(AC, AC.sfxBus, t, v, FIRE_SND[kind], dist, Math.random) + 0.05); return; }   // 希臘火：噴口的火舌、打中的轟燃（TASK-0979）
   var g = AC.createGain(); g.connect(AC.sfxBus);
@@ -54,7 +58,7 @@ function sfxPlay(kind, at, vol, opt) {
   else if (kind === 'knock') { f.type = 'bandpass'; f.frequency.value = 1500 + Math.random() * 500; f.Q.value = 3; env(1.2, 0.07); }   // 木匠的槌子敲下去（41_crew_art.js carpHitFx；TASK-0676）：短、硬的一聲木頭
   else if (kind === 'creak') { f.type = 'lowpass'; f.frequency.setValueAtTime(300, t); f.frequency.exponentialRampToValueAtTime(80, t + 2.5); env(1.2, 2.8); }
 }
-function sfxEnd(e) { var k = SFX_END.length; while (k > 0 && SFX_END[k - 1] > e) k--; SFX_END.splice(k, 0, e); }   // 這一個聲音什麼時候停（照時間排好；同時發聲的上限照它數）
+function sfxEnd(e, L) { L = L || SFX_END; var k = L.length; while (k > 0 && L[k - 1] > e) k--; L.splice(k, 0, e); }   // 這一個聲音什麼時候停（照時間排好；同時發聲的上限照它數；L 省略 ＝ 共用的 SFX_END，開砲是 SFX_GUN_END）
 
 // ───── 開炮（TASK-0978；Tim 2026-10-26：「海戰開炮聲音優化 一樣用合成音 不過希望根據砲的種類 口徑有音色變化」「參考頻譜用合成音模擬」）─────
 // 以前所有砲同一聲（低通雜音 1,400 → 90 Hz＋70 → 32 Hz 的正弦）：主頻 63 Hz、1 kHz 以上掉 15～48 dB，跟真的黑火藥砲差 12.3 dB。
@@ -75,11 +79,47 @@ function sfxEnd(e) { var k = SFX_END.length; while (k > 0 && SFX_END[k - 1] > e)
 // p：fp 主頻、bLp 爆風起始低通、bA／bD 爆風音量、長、oA／oD 身體、cA／cD／cHz 脆響、tA／tD 尾聲、tLp 尾聲低通（× fp）、eA 回音、grit 爆裂顆粒幾粒
 var GUNSND_A = {
   qf:    { shot: 0.5, fp: 199, bLp: 909, bA: 0.75, bD: 0.0859, oA: 1.46, oD: 0.264, cA: 0.219, cD: 0.0075, cHz: 5200, tA: 0.05, tD: 0.2, tLp: 2.5 },
-  small: { shot: 3.7, fp: 104, bLp: 2480, bA: 0.455, bD: 0.0227, oA: 2.11, oD: 0.24, cA: 0.341, cD: 0.0218, cHz: 3520, tA: 0.12, tD: 1.09, tLp: 1, eA: 0.15 },
+  small: { shot: 3.9, fp: 44, bLp: 6010, bA: 0.782, bD: 0.0908, oA: 1.16, oD: 0.24, cA: 0.171, cD: 0.0254, cHz: 8000, tA: 0.726, tD: 4.8, tLp: 2.33, eA: 0.15 },
+  naval: { shot: 17.6, fp: 72, bLp: 3170, bA: 0.6, bD: 0.192, oA: 4, oD: 1.06, cA: 0.275, cD: 0.0352, cHz: 3000, tA: 3, tD: 19.2, tLp: 1.5, eA: 0.08 },
   mid:   { shot: 20, fp: 59, bLp: 1200, bA: 0.626, bD: 0.173, oA: 1.29, oD: 0.757, cA: 0.08, cD: 0.0125, cHz: 2210, tA: 0.4, tD: 4.4, tLp: 5.82 },
   big:   { shot: 450, fp: 25.6, bLp: 2500, bA: 0.625, bD: 0.3, oA: 1.2, oD: 2.32, cA: 0.234, cD: 0.0825, cHz: 4220, tA: 0.6, tD: 9.6, tLp: 3.84 }
 };
-var GUNSND_LINE = { bp: ['small', 'big'], smokeless: ['qf', 'mid', 'big'] };
+var GUNSND_LINE = { bp: ['small', 'naval', 'big'], smokeless: ['qf', 'mid', 'big'] };
+// 艦砲（Tim 2026-10-28：「嘗試優化一下目前的開炮聲 希望更有震撼力一點(目前有點無力)」「炮聲可以參考這個影片去模仿聲紋」—— bilibili BV1sz4y117oC《Naval Action》全船展示）：
+//   以前黑火藥那條線只有小砲 → 大口徑兩個錨點，小砲的參考是節慶的小砲（−20 dB 0.05 秒）⇒ 24 磅照 ln 內插只往大口徑走 22%，一聲「啪」就沒了。
+//   現在兩個錨點照那支影片量（只拿來量、⛔ 不進 repo；畫面確認是鏡頭那艘自己開、看得到砲口煙的單發，被打中、齊射的剔掉）：
+//     small（8 磅，3.9 kg）← P1 7～4 等船 10 發（6～18 磅為主）：主頻 63 Hz、掉 10 dB 0.4～3.9 秒（中位 1.43）；
+//     naval（36 磅，17.6 kg）← P3 3～1 等船 4 發（32～42 磅）：80～200 Hz 只低 1.4～2.4 dB、掉 10 dB 5.4～5.9 秒（6～7 秒才回到背景）。
+//   頻帶剖面 ＝ 開砲後 1 秒 − 前 1 秒的背景；630–800 Hz、1.26–2.5 kHz 背景比砲聲大 ⇒ 不算。座標搜尋（頻帶差 ＋ 8 × |ln 掉 10 dB 秒數比|）：
+//     8 磅 頻帶差 2.5、掉 10 dB 1.34 秒；36 磅 2.1、5.55 秒；24 磅 3.8 秒、6 磅 0.84 秒。⚠ 兩組參考彼此的頻帶差只有 1.6 ⇒ 形狀只對到 2～3 dB，大小砲主要差在長度。
+// 震撼力的兩層（重擊、滾雷也一起照上面那支影片搜；Tim 在試聽頁 85_gunlab.js 聽過：「這版可以」2026-10-28）：
+//   重擊 kick：一記往下掃的低頻（主頻 × 2 → × 1.1）連同身體過一道 tanh 飽和 ⇒ 生出泛音，筆電喇叭放不出主頻也聽得到「咚」；
+//     ⚠ 不往 40 Hz 以下掃：限制器（門檻 −14 dB）會被次低頻佔滿、把脆響一起壓掉（第一版：500 Hz 以上 18% ⇒ 2%，300 m 外的砲跟眼前的只差 2.5 dB）；
+//   滾雷 roll：開完砲之後一路翻滾回來的低沉轟鳴（參考裡掉 10 dB 要 5 秒以上的就是它）—— 尾聲的包絡是指數掉到 −80 dB，要它 5 秒才掉 10 dB 得拉到 45 秒，形狀不對。
+//     全場共用一條（gunRumble）：每一聲砲把它推高一點（能量相加、上限 1）再照時間常數退 ⇒ 一整排齊射疊成一片滾雷，⛔ 不是每門砲各開一條（連續開砲時聲部會被尾聲佔滿、後面的砲沒聲音；Tim 2026-10-28）。
+//   口徑大小 s（0.5 kg → 0、900 kg → 1）：kick 越大越長；roll 越大越響（× (s ÷ 0.5)^sz）、越久（d0 → d1 指數內插、上限 30 秒）—— 8 磅、36 磅的 s 只差 0.3 → 0.52，長度卻差 4 倍，線性內插拉不開。
+var GUNSND_KICK = { a: 0.55, d0: 0.15, d1: 0.364, f0: 2.06, f1: 1.09, drive: 5.5, out: 0.64 }, GUNSND_ROLL = { a: 1.69, d0: 1.04, d1: 605, sz: 1.6, lp: 5.77, lfo: 0.35 }, GUNSND_SHAPE = null;
+function gunShape(ac) {
+  var k = GUNSND_KICK.drive;
+  if (!GUNSND_SHAPE || GUNSND_SHAPE.k !== k) { var n = 1024; GUNSND_SHAPE = new Float32Array(n); GUNSND_SHAPE.k = k; for (var i = 0; i < n; i++) GUNSND_SHAPE[i] = Math.tanh(k * (i / (n - 1) * 2 - 1)) / Math.tanh(k); }
+  var w = ac.createWaveShaper(); w.curve = GUNSND_SHAPE; w.oversample = '2x'; return w;
+}
+/** 共用的滾雷（每個 ac 一條，開第一聲砲時建）：一直在跑的雜音 ⇒ 低通 ⇒ 兩個慢 LFO 晃音量（翻滾）⇒ 音量線（gunRoll 推高、自己退）。 */
+function gunRumble(ac, out) {
+  if (ac.gunRum && ac.gunRum.out === out) return ac.gunRum;
+  var s = ac.createBufferSource(), f = ac.createBiquadFilter(), m = ac.createGain(), g = ac.createGain();
+  s.buffer = noiseBuf || noiseMake(ac); s.loop = true; s.playbackRate.value = 0.35; f.type = 'lowpass'; f.Q.value = 0.7; f.frequency.value = 200; g.gain.value = 0; m.gain.value = 1;
+  var L = [0.7, 1.9].map(function (hz) { var o = ac.createOscillator(), og = ac.createGain(); o.frequency.value = hz; og.gain.value = GUNSND_ROLL.lfo / 2; o.connect(og); og.connect(m.gain); o.start(); return og; });
+  s.connect(f); f.connect(m); m.connect(g); g.connect(out); s.start();
+  return (ac.gunRum = { out: out, f: f, g: g, L: L, lv: 0, t: 0, tau: 1 });
+}
+/** 推高滾雷：t 那一刻多一份 a（能量相加，上限 1），fLp 低通，d 退到 −40 dB 大約幾秒。 */
+function gunRoll(ac, out, t, a, fLp, d) {
+  var R = gunRumble(ac, out), now = R.lv * Math.exp(-Math.max(0, t - R.t) / R.tau), lv = Math.min(1, Math.sqrt(now * now + a * a));
+  R.tau = Math.max(R.tau * Math.exp(-Math.max(0, t - R.t) / 3), d / 4.6); R.lv = lv; R.t = t + 0.15;
+  R.g.gain.cancelScheduledValues(t); R.g.gain.setValueAtTime(now, t); R.g.gain.linearRampToValueAtTime(lv, t + 0.15); R.g.gain.setTargetAtTime(0, t + 0.15, R.tau);
+  R.f.frequency.setTargetAtTime(fLp, t, 0.05); R.L.forEach(function (og) { og.gain.value = GUNSND_ROLL.lfo / 2; });
+}
 // 響度倍數 × (1 − 0.5 × 口徑大小)：小砲 × 2.8、24 磅 × 2.1、450 kg × 1.4 ⇒ 過限制器的峰值都在 0.6～0.7（以前那一聲 0.65）。
 //   大口徑 × 3.3 時頻帶差 2.8 ⇒ 5.5（限制器把身體壓扁）、× 1.5 時 3.1 ⇒ 口徑越大乘越少
 var GUNSND_VOL = 2.8;
@@ -94,6 +134,15 @@ var GUNSND_FAM = {
   rev:   { line: 'smokeless', mod: { tD: 0.6, tA: 0.7 } }                         // 轉膛砲：一發一發很短
 };
 var GUNSND_OF = { carr: 'carr', pierrier: 'old', bombardella: 'old', brooke64: 'rifle', brooke7: 'rifle', krupp305: 'bl', krupp150: 'bl', canet320: 'bl', armstrong120: 'qf', hotch57: 'qf', hotch47: 'qf', hotch37: 'rev' };
+/** 開炮音的可調參數（試聽頁 85_gunlab.js 讀、寫、複製給人）：錨點、黑火藥那條線、重擊、滾雷、響度倍數。gunSndSet 只蓋給了的欄位。 */
+function gunSndGet() { return JSON.parse(JSON.stringify({ A: GUNSND_A, line: GUNSND_LINE.bp, kick: GUNSND_KICK, roll: GUNSND_ROLL, vol: GUNSND_VOL })); }
+function gunSndSet(c) {
+  if (c.A) Object.keys(c.A).forEach(function (k) { GUNSND_A[k] = Object.assign(GUNSND_A[k] || {}, c.A[k]); });
+  if (c.line) GUNSND_LINE.bp = c.line.slice();
+  if (c.kick) Object.assign(GUNSND_KICK, c.kick);
+  if (c.roll) Object.assign(GUNSND_ROLL, c.roll);
+  if (c.vol != null) GUNSND_VOL = +c.vol;
+}
 /** 砲種（game.json guns 的鍵）⇒ 合成參數：照那一族那一條線、照彈重內插。 */
 function gunSndPar(type) {
   var G = GUNS[type] || {}, shot = Math.max(0.1, G.shot || 10), F = GUNSND_FAM[GUNSND_OF[type] || 'bp'], L = GUNSND_LINE[F.line].map(function (k) { return GUNSND_A[k]; });
@@ -104,25 +153,35 @@ function gunSndPar(type) {
   if (shot < L[0].shot) p.fp = L[0].fp * Math.pow(shot / L[0].shot, -1 / 3);   // 比最小的錨點還小：主頻照立方根往上推
   if (shot > L[L.length - 1].shot) p.fp = L[L.length - 1].fp * Math.pow(shot / L[L.length - 1].shot, -1 / 3);
   p.grit = 0; Object.keys(F.mod).forEach(function (k) { if (k === 'grit') p.grit = F.mod[k]; else p[k] *= F.mod[k]; });
-  p.vol = GUNSND_VOL * (1 - 0.5 * clamp(Math.log(shot / 0.5) / Math.log(900), 0, 1));   // 響度：錨點只對了頻帶的形狀 ⇒ 乘回來；小砲是一下的衝擊、乘多一點，大砲的身體長、本來就響（乘太多會被限制器壓扁）
+  p.s = clamp(Math.log(shot / 0.5) / Math.log(900), 0, 1);             // 口徑大小（kick、roll 用）
+  p.vol = GUNSND_VOL * (1 - 0.5 * p.s);   // 響度：錨點只對了頻帶的形狀 ⇒ 乘回來；小砲是一下的衝擊、乘多一點，大砲的身體長、本來就響（乘太多會被限制器壓扁）
   return p;
 }
-/** 合成一聲開炮（ac 可以是 OfflineAudioContext）：t 開始、v 音量、p ＝ gunSndPar、dist 離鏡頭幾公尺（遠的低通）、R 亂數。回傳從 t 起響幾秒。 */
+/** 合成一聲開炮（ac 可以是 OfflineAudioContext）：t 開始、v 音量、p ＝ gunSndPar、dist 離鏡頭幾公尺（遠的低通）、R 亂數。
+ *  回傳從 t 起「頭」響幾秒（重擊、爆風、身體、脆響、回音）—— sfxPlay 照它算聲部；尾聲照樣放完、滾雷在共用的那一條，都不算。 */
 function gunVoice(ac, out, t, v, p, dist, R) {
-  var nb = noiseBuf || noiseMake(ac), dur = 0, lp = ac.createBiquadFilter(); v *= p.vol || 1;
+  var nb = noiseBuf || noiseMake(ac), dur = 0, lp = ac.createBiquadFilter(), v0 = v; v *= p.vol || 1;
   lp.type = 'lowpass'; lp.Q.value = 0.5; lp.frequency.value = 18000 / (1 + (dist || 0) / 120); lp.connect(out);
   var fp = p.fp * (0.95 + 0.1 * R());                                    // 同一門砲每一發差一點
   function env(g, a, at, d, t0) { g.setValueAtTime(0.0001, t0); g.exponentialRampToValueAtTime(Math.max(a, 0.0002), t0 + at); g.exponentialRampToValueAtTime(0.0001, t0 + at + d); }
-  function hiss(type, f0, f1, Q, a, at, d, dt, rate) {
+  function hiss(type, f0, f1, Q, a, at, d, dt, rate, to) {
     var t0 = t + (dt || 0), s = ac.createBufferSource(), f = ac.createBiquadFilter(), g = ac.createGain();
     s.buffer = nb; s.playbackRate.value = rate || 1; f.type = type; f.Q.value = Q; f.frequency.setValueAtTime(f0, t0); f.frequency.exponentialRampToValueAtTime(f1, t0 + at + d);
-    env(g.gain, a * v, at, d, t0); s.connect(f); f.connect(g); g.connect(lp); s.start(t0, R() * 1.5); s.stop(t0 + at + d + 0.05); dur = Math.max(dur, (dt || 0) + at + d + 0.05);
+    env(g.gain, a * v, at, d, t0); s.connect(f); f.connect(g); g.connect(to || lp); s.start(t0, R() * 1.5); s.stop(t0 + at + d + 0.05); dur = Math.max(dur, (dt || 0) + at + d + 0.05);
   }
+  var K = GUNSND_KICK, sh = gunShape(ac), sg = ac.createGain(); sg.gain.value = K.out; sh.connect(sg); sg.connect(lp);   // 飽和：身體＋kick 過 tanh（輸入 × v 已經是 0～1 上下）
+  var kD = K.d0 + (K.d1 - K.d0) * (p.s || 0), o = ac.createOscillator(), og = ac.createGain();
+  o.frequency.setValueAtTime(fp * K.f0, t); o.frequency.exponentialRampToValueAtTime(fp * K.f1, t + kD * 0.6);
+  env(og.gain, K.a * v, 0.003, kD, t); o.connect(og); og.connect(sh); o.start(t); o.stop(t + kD + 0.05); dur = Math.max(dur, kD + 0.05);   // 重擊
   hiss('lowpass', p.bLp, Math.max(fp * 2, 60), 0.5, p.bA, 0.002, p.bD, 0, 1);              // 爆風
-  hiss('bandpass', fp * 1.3, fp * 0.8, 0.8, p.oA, 0.003, p.oD, 0, 0.6);                    // 身體
+  hiss('bandpass', fp * 1.3, fp * 0.8, 0.8, p.oA, 0.003, p.oD, 0, 0.6, sh);                // 身體（過飽和）
   hiss('highpass', p.cHz, p.cHz * 0.6, 0.5, p.cA, 0.001, p.cD, 0, 1);                      // 脆響
-  hiss('lowpass', fp * p.tLp, fp * 0.5, 0.6, p.tA, 0.08, p.tD, 0.04, 0.4);                // 尾聲
+  var head = dur;
+  hiss('lowpass', fp * p.tLp, fp * 0.5, 0.6, p.tA, 0.08, p.tD, 0.04, 0.4);                // 尾聲（不算進頭）
+  dur = head;
   if (p.eA > 0.005) hiss('lowpass', p.bLp * 0.6, Math.max(fp * 2, 60), 0.5, p.eA, 0.004, 0.03 + p.bD * 2, 0.15 + 0.15 * R(), 1);   // 回音（水面、船身）
+  var RL = GUNSND_ROLL;
+  if (RL.a > 0) gunRoll(ac, out, t + 0.1, RL.a * v0 * Math.pow((p.s || 0) / 0.5, RL.sz), Math.max(fp * RL.lp, 120) / (1 + (dist || 0) / 300), Math.min(30, RL.d0 * Math.pow(RL.d1 / RL.d0, p.s || 0)));   // 滾雷（共用那一條；音量照沒乘響度倍數的 v ⇒ 遠的砲推得少；口徑 s ＝ 0.5 是 1 倍、照 sz 次方；退到 −40 dB 的秒數 0.5 kg d0 → 900 kg d1 指數內插）
   for (var c = 0; c < p.grit; c++) hiss('bandpass', 800 + 3000 * R(), 600, 1.5, 0.25 * (0.4 + 0.6 * R()), 0.001, 0.005 + 0.015 * R(), 0.01 + 0.35 * R() * R(), 1);   // 爆裂顆粒（早期鍛鐵砲）
   return dur;
 }
@@ -135,6 +194,15 @@ var GUN_CASES = [['以前那一聲', 'old', 0], ['3 磅追擊砲', 'chase3', 0],
 function gunLab(q) {
   var sec = +(q.get('sec') || 6), cs = q.has('cases') ? q.get('cases').split(';').filter(function (s) { return s; }).map(function (s) { var a = s.split(':'); return [a[0], a[1], +a[2] || 0]; }) : GUN_CASES, out = [];
   return cs.reduce(function (pr, c) { return pr.then(function () { return gunRender(sec, c).then(function (r) { r.name = c[0]; out.push(r); }); }); }, Promise.resolve()).then(function () { return out; });
+}
+/** 一聲開炮的原始波形（調參用：__game.gunSnd.raw；跟 gunRender 同一個限制器、同一個種子）⇒ Promise<{ x: Float32Array, sr }>。 */
+function gunRaw(type, dist, sec) {
+  var sr = 44100, oc = new OfflineAudioContext(1, Math.round(sr * (sec || 8)), sr), lim = oc.createDynamicsCompressor(), s = 98765;
+  lim.threshold.value = -14; lim.knee.value = 4; lim.ratio.value = 20; lim.attack.value = 0.002; lim.release.value = 0.25;
+  var mg = oc.createGain(); mg.gain.value = 0.8; mg.connect(lim); lim.connect(oc.destination);
+  function R() { s = (Math.imul(s, 1103515245) + 12345) & 0x7fffffff; return s / 0x80000000; }
+  gunVoice(oc, mg, 0.05, 1 / (1 + (dist || 0) / 70), gunSndPar(type), dist || 0, R);
+  return oc.startRendering().then(function (buf) { return { x: buf.getChannelData(0), sr: sr }; });
 }
 function gunRender(sec, c) {
   var sr = 44100, oc = new OfflineAudioContext(2, Math.round(sr * sec), sr), lim = oc.createDynamicsCompressor(), s = 98765, p = null;
