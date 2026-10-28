@@ -2707,6 +2707,7 @@ function townFortWake(h) {
     var lw = h.T.p && h.T.p.live && h.T.p.live.work, gar = null;          // 駐軍 ＝ 城鎮帳那一棟今天幾個兵（Blocksail BSW.GARRISON 分到每一棟的 staff，TASK-0948）；不超過那一座滿編
     if (lw && Object.prototype.hasOwnProperty.call(lw, q.lot)) gar = crewCap(sh, Math.max(0, +lw[q.lot] || 0));   // 帳上沒有那一棟（實驗場、帳還沒過一天）⇒ 照設定檔滿編
     if (gar === 0) { sh.struck = true; sh.fate = '沒有駐軍（城鎮帳那一棟今天 0 人）'; }   // 空的那一座：不算敵艦、不開砲（⛔ 照 strikeCheck ⇒ 一換上來就報「全員倒下」）
+    sh.townLot = q.lot; sh.townGar = gar; sh.townDeadSent = 0;          // 駐軍是城鎮帳的兵（gar 不是 null）⇒ 死的人報回帳上（townFortReport）
     TOWN_UNITS[key] = sh; h.T.work = null; TOWNS.dirty = true;           // 那一棟的站崗鎮民（63_townfolk.js townWorkPrep）重擺 ⇒ 不畫：兵是那一座的人；模型重新分組 ⇒ 不畫
     SHIPS.push(sh); coreSpawned(sh, null); stepShip(sh, 0); survey(sh); pickCaptain(sh); cmdTick(); pickFoes();
     var mc = shipCenter(me), fc = shipCenter(sh); sh.townR = townFortR(sh); sh.wakeD = Math.hypot(fc[0] - mc[0], fc[2] - mc[2]);   // 離開換回的那把尺（townFortTick）
@@ -2717,7 +2718,7 @@ function townFortWake(h) {
 }
 // 離開那座城 ⇒ 換回（TASK-0955 第 1 格）：玩家的船離那一座比「射程 × TOWN_FORT_LEAVE」遠、也比換上來那時遠 TOWN_FORT_SLACK 公尺以上（遠遠點它的不會一換上來就收），
 //   或換了玩法（城鎮模式、沒有海戰鍵）⇒ 那一座收掉（58_traffic.js shipDrop），城裡那一棟的模型、站崗的鎮民畫回來。
-//   ⚠ 打壞的格子、死傷都不留（留下來是 TASK-0956 第三段）⇒ 回頭再點是完好的一座、駐軍照當天的帳。
+//   ⚠ 打壞的格子不留（TASK-0956 第二格）⇒ 回頭再點是完好的一座；死的兵報回帳上（townFortReport）⇒ 再點時駐軍照扣過的帳。
 //   它打出去的砲彈還在飛 ⇒ 等落地再收（砲彈記的是序號 b.owner）。已經不在 SHIPS 裡（重開一場：70_flow.js 清空 SHIPS）⇒ 只把那一棟畫回來（⛔ 以前會一直藏著）。
 //   一次一座（Tim 2026-10-27）：點另一座 ⇒ 前一座照這一套換回（townFortWake；sh.townRetire：砲彈落地前不管多近都要收）。攻城的機制（好幾座一起、射程內自己醒）之後另外想。
 var TOWN_FORT_LEAVE = 1.25, TOWN_FORT_SLACK = 300, TOWN_FORT_EVERY_MS = 500, TOWN_FORT_T = 0;
@@ -2726,6 +2727,7 @@ function townFortR(sh) { var r = 0; sh.guns.forEach(function (g) { var mw = M4.p
 /** 把 TOWN_UNITS[key] 換回城裡的模型（why：廣播的原因）。回換掉了沒有（它的砲彈還在飛 ⇒ false、標 townRetire，townFortTick 之後再收）。 */
 function townFortSleep(key, why) {
   var sh = TOWN_UNITS[key], me = SHIPS[PLAYER_I]; if (!sh) return true;
+  townFortReport(sh);
   if (SHIPS.indexOf(sh) >= 0) {
     sh.townRetire = why; sh.calm = true;                               // 等砲彈落地的那幾秒停手（50_sim.js 不動手；52_fleet.js fortProvoke 不再翻臉）⇒ ⛔ 不停 ⇒ 敵對的那一座一直開砲、一直有砲彈在飛，永遠收不掉
     if (BALLS.some(function (b) { return b.alive && b.owner === sh.i; })) return false;
@@ -2736,12 +2738,27 @@ function townFortSleep(key, why) {
   TOWNS.list.forEach(function (T) { if (T.id === sh.townId) T.work = null; });   // 那一棟的站崗鎮民重擺 ⇒ 畫回來
   return true;
 }
+// 陣亡扣帳（TASK-0956 第一格；Tim 2026-10-28「0956 開工 GO … 照妳的切法由陣亡扣帳開始」）：駐軍是城鎮帳的兵（townFortWake 的 gar 不是 null）⇒
+//   這一座死了幾個（sh.dead，40_crew.js 累計；傷的不算）比上次報的多 ⇒ 多的那幾個報給外面那一頁 { bsmap: 'fortLoss', town: 規劃單位 id, lot: 規劃裡的地塊 id, dead: 這一次多死的 }，
+//   Blocksail 從那座城的人口扣男人、今天那一棟的 staff 與 jobs.garrison 扣掉（world/townstate.js BSW.fortLoss），隔天照常招。
+//   巡視（townFortTick）、換回（townFortSleep）各報一次 ⇒ 沒等換回就回地球儀（iframe 關掉），死的人也已經記上。實驗場（帳上沒有那一棟）、沒有外面那一頁 ⇒ 不報。
+function townFortReport(sh) {
+  if (!sh || sh.townGar == null || !BED || !BED.host) return;
+  var n = sh.dead - (sh.townDeadSent || 0); if (!(n > 0)) return;
+  sh.townDeadSent = sh.dead;
+  BED.host.postMessage({ bsmap: 'fortLoss', town: sh.townId, lot: sh.townLot, dead: n }, '*');
+  TOWNS.list.forEach(function (T) {                                      // 這一頁手上那一份帳（外面那一頁進場時給的 live.work）也扣 ⇒ 同一天換回再點，駐軍是扣過的（⛔ 不扣 ⇒ 死的人又站回來）
+    var lw = T.id === sh.townId && T.p && T.p.live && T.p.live.work;
+    if (lw && Object.prototype.hasOwnProperty.call(lw, sh.townLot)) lw[sh.townLot] = Math.max(0, (+lw[sh.townLot] || 0) - n);
+  });
+}
 /** 畫面迴圈每格叫（90_main.js frame），每 TOWN_FORT_EVERY_MS 看一次。 */
 function townFortTick() {
   var now = performance.now(), keys = Object.keys(TOWN_UNITS); if (!keys.length || now - TOWN_FORT_T < TOWN_FORT_EVERY_MS) return; TOWN_FORT_T = now;
   var me = SHIPS[PLAYER_I], stay = !!me && modeRule('battleKeys') && !modeRule('town'), mc = me && shipCenter(me);
   keys.forEach(function (key) {
     var sh = TOWN_UNITS[key], why = sh.townRetire;
+    townFortReport(sh);
     if (!why && SHIPS.indexOf(sh) >= 0) {
       var fc = shipCenter(sh), d = mc ? Math.hypot(fc[0] - mc[0], fc[2] - mc[2]) : 0;
       if (stay && d <= Math.max(sh.townR * TOWN_FORT_LEAVE, sh.wakeD + TOWN_FORT_SLACK)) return;
