@@ -607,10 +607,11 @@ function callHands(sh) {
     var m = c.role === ROLE.OAR && !crewAble(c) ? c.oar : c.oarHome ? c.oarOf : null; if (!m || c.relieved || !m.alive || m.moved) return;
     var hm = c.oarHome || c.home, lvo = lvAt(sh, hm); if (NV.reach.indexOf(lvo) >= 0) need.push({ kind: 'oar', key: '', lv: lvo, n: 1, x: hm[0], spot: hm, pri: 1, who: c, oar: m });
   });
-  if (sh.stokerWant > 0) sh.crew.forEach(function (c) {               // 司爐（TASK-1092）：倒下、掉下去的那一位 ⇒ 派一個走到他的位子接那座鍋爐（同槳手；那座鍋爐壞了、淹水熄火就不補）
+  if (sh.stokerWant > 0) sh.crew.forEach(function (c) {               // 司爐（TASK-1092）：倒下、掉下去、淹水撤出的那一位 ⇒ 派一個走到他的位子接那座鍋爐（同槳手；那座鍋爐壞了、位子還淹著就不補）
     var b = c.role === ROLE.STOKER && !crewAble(c) ? c.boil : c.boilHome ? c.boilOf : null; if (!b || c.relieved) return;
-    var CB = sh.drive && sh.drive.C && sh.drive.C.B[b[0]]; if (CB && !CB.ok[b[1]]) return;
-    var hm = c.boilHome || c.home, lvo = lvAt(sh, hm); if (NV.reach.indexOf(lvo) >= 0) need.push({ kind: 'stoker', key: '', lv: lvo, n: 1, x: hm[0], spot: hm, pri: 1, who: c, boil: b });
+    var CB = sh.drive && sh.drive.C && sh.drive.C.B[b[0]]; if (CB && (!CB.ok[b[1]] || boilerOut(sh.drive.C, b))) return;   // 壞了、泡水熄火（31_drive.js boilerOut）⇒ 先不派
+    var hm = c.boilHome || c.home, lvo = lvAt(sh, hm);
+    if (NV.reach.indexOf(lvo) >= 0) need.push({ kind: 'stoker', key: '', lv: lvo, n: 1, x: hm[0], spot: hm, pri: 1, who: c, boil: b });
   });
   if (pumpUrgent(sh)) { pumpNeeds(sh, need); medNeeds(sh, need); }     // 積水多（45_pumps.js pumpUrgent）⇒ 抽水機排在醫療艙前面（同 pri 1、sort 不換相對順序）
   else { medNeeds(sh, need); pumpNeeds(sh, need); }                    // 醫療艙的人手、等著被搬的傷員（44_medic.js）；人力抽水機：艙裡有水才要人（45_pumps.js）

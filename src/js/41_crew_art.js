@@ -290,7 +290,7 @@ function crewFrame(sh, c) {
   if (c.role === ROLE.MARINE || c.role === ROLE.TOP) return c.fireT > 0 && !sh.struck && !sh.sunk ? FR.FIRE : c.role === ROLE.TOP ? (Math.floor(c.t * 0.7) & 1 ? FR.WORK_B : FR.IDLE) : FR.IDLE;
   if (c.role === ROLE.OFFICER) return sh.salvoT && SIMT - sh.salvoT < 1.2 ? FR.FIRE : FR.IDLE;
   if (c.role === ROLE.HELM) return FR.WORK_B;
-  if (c.role === ROLE.STOKER) { var CB = c.boil && sh.drive && sh.drive.C && sh.drive.C.B[c.boil[0]]; return CB && CB.ok[c.boil[1]] && !sh.sunk ? (Math.floor(c.t * 1.2) & 1 ? FR.WORK_A : FR.WORK_B) : FR.IDLE; }   // 司爐（TASK-1092）：那座鍋爐還在燒 ⇒ 一鏟一鏟往爐膛加煤（比砲班裝填慢）；壞了、淹了 ⇒ 站著
+  if (c.role === ROLE.STOKER) { var CB = c.boil && sh.drive && sh.drive.C && sh.drive.C.B[c.boil[0]]; return CB && CB.ok[c.boil[1]] && !boilerOut(sh.drive.C, c.boil) && !sh.sunk ? (Math.floor(c.t * 1.2) & 1 ? FR.WORK_A : FR.WORK_B) : FR.IDLE; }   // 司爐（TASK-1092）：那座鍋爐還在燒 ⇒ 一鏟一鏟往爐膛加煤（比砲班裝填慢）；壞了、淹了 ⇒ 站著
   if (c.role === ROLE.OAR) return c.oar && c.oar.swM && sh.drive ? (c.oar.oph < 0.5 ? FR.WORK_A : FR.WORK_B) : FR.IDLE;   // 槳手：照自己那一舷划槳的節奏（31_drive.js oarAnim m.oph；拉 ＝ WORK_A、回槳 ＝ WORK_B）
   return FR.IDLE;
 }
