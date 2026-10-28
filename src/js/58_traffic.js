@@ -48,9 +48,14 @@
 //      往來的船平常是表演船（trafficShow）⇒ 不跟別的船碰撞（31_sailing.js collide）、帆與繩不算布（30_rig_physics.js rigFixed；帆照收好那一捲／作品的形狀畫，11_rig_gpu.js sailWalk）。
 //      變成真的船（n.real）：玩家的船對它開火（21_gunnery.js ⇒ trafficProvoke，之後不再變回）、或跟玩家的船隔不到 TRF_REAL_M 公尺（扣掉兩艘各半個船長；
 //      隔到 TRF_SHOW_M 以外才變回表演船 ⇒ 在邊上來回不會一直切換）⇒ 照一般的船碰撞、算布。城鎮模式（停靠中）一律表演船（Tim「城鎮模式(停靠狀態) 可以都固定為表演船」）。
+//   ⑩ 生的地方要空著（Tim 2026-10-28「另外還需要避免跟其他船隻靠太近(遇到過進入航海時 跟另一艘船重疊)」）：清單只照精細層的位置給，不知道我艦停在哪
+//      （停靠中進航海 ⇒ 我艦就在泊位上，精細層可能把同一格排給一艘商船）⇒ 照那個位置、船頭生下去會跟我艦疊在一起，表演船近到 TRF_REAL_M 就變真的、碰撞硬推開。
+//      ⇒ 開始做之前（船型載好了）、放上場之前各看一次：它的龍骨線（31_sailing.js keelPts 那一段：水線兩端各往內 15 格）離場上每一艘（堡壘不算：本來就不碰撞）
+//      不到 TRF_GAP_M ⇒ 這一輪不生（做好了也不放、收掉），下一次要清單時照新的位置再看 —— 停港那一格 ⇒ 等我艦開走才出現；開著的 ⇒ 錯開了才生。
 //   之後（TASK-0940）：遇上海盜、玩家開火 ⇒ 換隊（team）、交給海戰。
-// 讀數：__game.traffic() ⇒ { ships, queue, built, dropped, stepMax, stepMs（每一段幾毫秒，最近 200 段）, place（放上場那一步）}
-var TRF = { want: {}, build: null, q: [], askT: 0, clockT: 0, built: 0, dropped: 0, stepMax: 0, stepMs: [], place: [], skip: 0 };
+// 讀數：__game.traffic() ⇒ { ships, queue, built, dropped, gap（⑩ 擋下幾次）, gapLast（最後一次：哪一艘、被誰擋、隔幾公尺）, stepMax, stepMs（每一段幾毫秒，最近 200 段）, place（放上場那一步）}
+var TRF = { want: {}, build: null, q: [], askT: 0, clockT: 0, built: 0, dropped: 0, gap: 0, gapLast: null, stepMax: 0, stepMs: [], place: [], skip: 0 };
+var TRF_GAP_M = 20;                                                      // ⑩ 生的時候龍骨線離場上每一艘至少幾公尺（collidePair 14 m 以內就算碰撞、硬推開 ⇒ 多留 6 m；泊位之間 30 m 上下的照樣生）〔設計〕
 var TRF_ASK_MS = 2000, TRF_SPAWN_M = 6000, TRF_STARVE = 30;   // 幾毫秒要一次清單、離我艦幾公尺內才生、背景預算連續幾格用光就照樣做一段（不然一直排不到）
 var TRF_LOOK_M = 300, TRF_V0 = 0.6;                              // 沿航道開：看航道上前面幾公尺那一點；生出來的航速（VMAX 的幾成）
 var TRF_ASK_GLIDE_MS = 500, TRF_CLOCK_MS = 250, TRF_GLIDE_TURN = 3;   // 滑的時候幾毫秒要一次清單；幾毫秒報一次世界時間；船頭每秒轉過去幾成（1／秒）
@@ -367,6 +372,33 @@ function trafficDrop(sh) { if (shipDrop(sh)) TRF.dropped++; }
 /** 換到別的玩法（海戰、建造…）⇒ 全收、佇列清掉。 */
 function trafficClear() { trafficShips().forEach(trafficDrop); if (TRF.build) trafficFree(TRF.build.M.sh); TRF.build = null; TRF.q = []; TRF.want = {}; }
 
+/** ⑩ 平面上兩線段（[x, z]）最近隔幾公尺。 */
+function trafficSegD(a0, a1, b0, b1) {
+  function pt(p, q0, q1) { var dx = q1[0] - q0[0], dz = q1[1] - q0[1], L = dx * dx + dz * dz, t = L > 0 ? clamp(((p[0] - q0[0]) * dx + (p[1] - q0[1]) * dz) / L, 0, 1) : 0; return Math.hypot(p[0] - q0[0] - t * dx, p[1] - q0[1] - t * dz); }
+  var r = (a1[0] - a0[0]) * (b1[1] - b0[1]) - (a1[1] - a0[1]) * (b1[0] - b0[0]);
+  if (Math.abs(r) > 1e-9) {                                              // 相交 ⇒ 0
+    var s = ((b0[0] - a0[0]) * (b1[1] - b0[1]) - (b0[1] - a0[1]) * (b1[0] - b0[0])) / r, u = ((b0[0] - a0[0]) * (a1[1] - a0[1]) - (b0[1] - a0[1]) * (a1[0] - a0[0])) / r;
+    if (s >= 0 && s <= 1 && u >= 0 && u <= 1) return 0;
+  }
+  return Math.min(pt(a0, b0, b1), pt(a1, b0, b1), pt(b0, a0, a1), pt(b1, a0, a1));
+}
+/** ⑩ 船型 T 擺在 (x, z)、船頭 yaw ⇒ 龍骨線兩端（= keelPts 的第一、最後一點，不算縱搖、橫搖）：格 (x, y) ⇒ 世界 (px + u·cos yaw, pz − u·sin yaw)，u ＝ S·(x − cx)（10_ship.js shipMatrix）。 */
+function trafficKeel(T, x, z, yaw) {
+  var c = Math.cos(yaw), s = Math.sin(yaw), u0 = S * (T.wl0 + 15 - T.cx), u1 = S * (T.wl1 - 15 - T.cx);
+  return [[x + u0 * c, z - u0 * s], [x + u1 * c, z - u1 * s]];
+}
+/** ⑩ 船型 T 照 (x, z, yaw) 生下去，會不會跟場上的船疊在一起 ⇒ { by（擋到的那一艘）, d } 或 null。堡壘（fixed）不算。 */
+function trafficGapHit(T, x, z, yaw) {
+  var k = trafficKeel(T, x, z, yaw);
+  for (var i = 0; i < SHIPS.length; i++) {
+    var o = SHIPS[i]; if (o.fixed) continue;
+    var p = keelPts(o), d = trafficSegD(k[0], k[1], [p[0][0], p[0][2]], [p[p.length - 1][0], p[p.length - 1][2]]);
+    if (d < TRF_GAP_M) return { by: o, d: d };
+  }
+  return null;
+}
+/** ⑩ 擋下了 ⇒ 記一筆（讀數）。 */
+function trafficGapNote(w, g, at) { TRF.gap++; TRF.gapLast = { id: w.id, name: w.name, by: g.by.name, d: +g.d.toFixed(1), at: at, dock: !!w.dock }; }
 /** 畫面迴圈每格叫（90_main.js frame，海圖塊、擺樹之後）：t1 ＝ 背景預算做到幾點（08_seabed.js bedT1）。 */
 function trafficPump(t1) {
   if (!trafficOk()) { if (trafficShips().length || TRF.build) trafficClear(); return; }
@@ -382,6 +414,7 @@ function trafficPump(t1) {
       var id = TRF.q[0], w = TRF.want[id]; if (!w) { TRF.q.shift(); continue; }
       if (!HULLT[w.hull]) { loadHull(w.hull); break; }                    // 還在載（loadHull 自己分段讓出、同一型只載一次）⇒ 下一格再看
       TRF.q.shift();
+      var gh = trafficGapHit(HULLT[w.hull], w.at[0], w.at[1], trafficYaw(w.hdg)); if (gh) { trafficGapNote(w, gh, 'queue'); continue; }   // ⑩ 那裡有船 ⇒ 這一輪不生（下一次要清單再排）
       var M = makeShipSteps(SHIPS.length, 'blue', trafficYaw(w.hdg), w.at[1], HULLT[w.hull], w.at[0]);
       TRF.build = { id: id, M: M, steps: M.steps.slice(), t0: now };
       break;
@@ -403,6 +436,7 @@ function trafficPump(t1) {
 function trafficPlace(B) {
   var w = TRF.want[B.id], sh = B.M.sh;
   if (!w || !trafficOk() || trafficShips().length >= trafficMax()) { trafficFree(sh); return; }
+  var gh = trafficGapHit(sh.T, sh.px, sh.pz, sh.yaw); if (gh) { trafficGapNote(w, gh, 'place'); trafficFree(sh); return; }   // ⑩ 做的這一兩秒有船開過來 ⇒ 不放（下一次要清單再排）
   sh.i = SHIPS.length; sh.name = w.name; sh.npc = { id: w.id, kind: w.kind, to: w.to, v: w.v, path: w.path, trk: w.trk, berth: w.berth, entry: w.entry, pilot: w.pilot, dock: false, held: false, tow: null };
   SHIPS.push(sh);
   if (w.flag) shipNation(sh, w.flag);                                    // 掛船隊主人那一國的旗（77_colours.js；外面那一頁給預設旗的 key，不認得 ⇒ 照陣營旗）
@@ -417,7 +451,7 @@ function trafficPlace(B) {
 /** 讀數（__game.traffic）。 */
 function trafficInfo() {
   var me = SHIPS[PLAYER_I], c = me ? shipCenter(me) : [0, 0, 0];
-  return { ok: trafficOk(), rate: wclkRate(), wh: +(worldSec() / 3600).toFixed(4), max: trafficMax(), want: Object.keys(TRF.want).length, queue: TRF.q.slice(), building: TRF.build ? TRF.build.id : null, built: TRF.built, dropped: TRF.dropped,
+  return { ok: trafficOk(), rate: wclkRate(), wh: +(worldSec() / 3600).toFixed(4), max: trafficMax(), want: Object.keys(TRF.want).length, queue: TRF.q.slice(), building: TRF.build ? TRF.build.id : null, built: TRF.built, dropped: TRF.dropped, gap: TRF.gap, gapLast: TRF.gapLast,
     stepMax: +TRF.stepMax.toFixed(2), stepMs: TRF.stepMs.slice(), place: TRF.place.slice(),
     hold: trafficPortN(),
     ships: trafficShips().map(function (s) { var n = s.npc, T = n.tow, b = n.berth, sc = shipCenter(s); return { i: s.i, id: n.id, kind: n.kind, hull: s.T.id, x: +s.px.toFixed(1), z: +s.pz.toFixed(1), d: Math.round(Math.hypot(s.px - c[0], s.pz - c[2])), spd: +s.spd.toFixed(2), yaw: +s.yaw.toFixed(3), dock: n.dock, held: !!n.held, to: n.to, path: n.path ? n.path.length : 0, trk: n.trk ? n.trk.length : 0, pilot: n.pilot || null, glide: trafficGliding(s), real: !!n.real,
