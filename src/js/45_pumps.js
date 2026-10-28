@@ -13,10 +13,12 @@
 //   · 兩種都一樣：被打壞（模型，跟砲同一套血量）⇒ 不抽；泡在水裡（腳下那一格在海面下、或艙內的水滿了一半）⇒ 不抽。
 //     同一種加總封頂 furniture[].cap（噸／分，全船）。
 // 沒擺抽水機 ⇒ sh.pumps ＝ null：不派人、不抽 rnd()、pumpK 照舊 ⇒ 戰局一位元不動。
-// 自動擺（Tim 2026-10-21「604 GO」、出廠 0 台）：那一層甲板玩家沒改過（自動、或設定檔的自訂預設；36_rooms.js deckItems）而且是水線以上最低那層（benchDeck，跟 ?pumps= 同一層）
+// 自動擺（Tim 2026-10-21「604 GO」；出廠：人力 1 台、蒸汽 0 台 —— TASK-1069，Tim 2026-10-28「先讓現在每艘船上有至少一個抽水泵」）：那一層甲板玩家沒改過（自動、或設定檔的自訂預設；36_rooms.js deckItems）而且是抽水機那一層
+//   （人力：pumpAt —— 水線以上的砲甲板主桅旁擺得下的第一層，benchDeck 先；蒸汽：水線以上最低那層 benchDeck，跟 ?pumps= 同一層）
 //   ⇒ 每一種補到 furniture[].autoDeck 台（pumpFill：這一層已經有的先扣掉；照位置規則、離泵井最近的格先；蒸汽的只有蒸汽船；擺不下就少擺）。
+//   人力的哪一層主桅旁都擺不下（sanroman、reale、fusta、punt）⇒ 開戰時照走路格補一台（pumpNavFill；同木工台的退路，不在甲板編輯器裡）。
 //   ⛔ 跟木工台的「每船至少」（auto）不一樣：玩家自己改過那一層（存檔有這一層）⇒ 照他擺的，拿掉就是拿掉（抽水機是加裝的，船本來的抽水在基礎量裡）。
-//   0 ⇒ 不擺（出廠；戰局跟以前一位元不差）。道具設定頁調台數；船隻配置頁甲板編輯器另有一鍵「擺滿抽水機」（擺到全船上限）。
+//   0 ⇒ 不擺（戰局跟 TASK-1069 以前一位元不差）。道具設定頁調台數；船隻配置頁甲板編輯器另有一鍵「擺滿抽水機」（擺到全船上限）。
 var PUMP_URGENT = 0.005;                                         // 積水佔設計排水量幾成算「多」（抽水機優先於醫療艙）
 var PUMP_WELL_X = 30, PUMP_WELL_Y = 12, PUMP_WET = 2;            // 格（一格 0.1 m）：主桅前後 3 m、中線兩側 1.2 m（物品的中心）；艙裡幾噸水才派人去搖
 /** 那一型的泵井在哪（格座標 x）：主桅 ＞ 桅的中間那根 ＞ 船身中段。 */
@@ -56,13 +58,73 @@ function pumpAuto(T, D, items, it, n) {
     for (var c = 0; c < C.length && got < n; c++) for (var r = 0; r < 2; r++) { var p = { it: it, x: C[c][0], y: C[c][1], r: r }; if (!pass && nearLad(p)) continue; if (!placeOk(G, 'deck', items, p)) { items.push(p); got++; break; } }
   return got;
 }
+/** 人力抽水機自動擺在哪一層甲板（記在船型上 T.pumpAt ＝ { id: 甲板 id（哪一層都擺不下 ⇒ null）, ok }；TASK-1069）：
+ *  水線以上的砲甲板（那一層頂 zr[1] 高過水線），benchDeck 先、再由低往高；照設定檔的擺法（自動的取用點、設定檔的預設；⛔ 不看玩家存的 ⇒ 每一型固定一層），
+ *  照位置規則（主桅前後 3 m、中線）試擺一台，第一個擺得下的那一層；哪一層都擺不下 ⇒ ok 沒有 ⇒ 開戰時照走路格補（pumpNavFill）。
+ *  labelle、zeehaen、oxford、sentinel：最低那層主桅旁站不住（或那一層根本不到主桅）⇒ 換一層；
+ *  sanroman、reale、fusta、punt：哪一層砲甲板主桅旁都站不住（主甲板主桅那一段、槳帆船的甲板、只有船頭船尾兩小塊砲台）⇒ 走路格。
+ *  🩸 試過的退路（都拿掉了）：① 接得到梯子的格先（船型層級從梯子兩頭沿站得住的格走）兩頭都猜錯 —— phoenix 本來走得到的被換到走不到的、susquehanna 照樣走不到；
+ *     ② 只看中線 ⇒ reale 擺到主桅前 14.8 m；③ 放寬到 6 m ⇒ sanroman 主桅後 4 m 擠掉一位軍官、擋到船尾樓梯頂（甲板格子不知道人站哪、梯頂在抽水機頭上）。
+ *     走路格是開戰時、人站好之後才補 ⇒ 知道人站哪、走不走得到。 */
+function pumpAt(T) {
+  if (T.pumpAt) return T.pumpAt;
+  var bd = benchDeck(T), ds = hullDeckKit(T).decks.filter(function (D) { return D.zr[1] > T.zw; }).sort(function (a, b) { return (b === bd) - (a === bd) || a.zr[0] - b.zr[0]; }), DF = roomPlanDefault(T.id);
+  var A = T.pumpAt = { id: null, ok: false };
+  ds.some(function (D) {
+    var pl = DF[deckId(D)], its = pl && pl.type === 'deck' && pl.items ? roomCheck(T, { grid: deckGrid(T, D) }, 'deck', pl.items).items : deckAutoItems(T, D);
+    if (!pumpAuto(T, D, its.filter(function (q) { return FURN[q.it].role !== 'pump'; }), 'pump', 1)) return false;
+    A.id = deckId(D); A.ok = true; return true;
+  });
+  return A;
+}
+/** 開戰時（pumpInit 一開始，走路格建好之後）：人力的每船自動擺幾台（autoDeck）> 0、這一型哪一層砲甲板主桅旁都擺不下（pumpAt 沒找到：sanroman、reale、fusta、punt）、
+ *  全船一台人力的都沒有 ⇒ 照走路格補一台（同木工台的退路 46_carpenter.js benchNavFill）：站在水線以上、從待命那一層走得到的最低那一層，離泵井最近、中線上、
+ *  不碰梯子兩頭（外框外 LAD_KEEP 格）、不疊別的道具的那一點；都沒有 ⇒ 待命那一層有梯子接著的那一塊（carpHomeCells）。也是模型（會被打）。不在甲板編輯器裡。 */
+function pumpNavFill(sh, crew) {
+  var T = sh.T, NV = sh.nav, f = FURN.pump, n = f ? Math.round(+f.autoDeck || 0) : 0, CR = crew || sh.crew || [];   // crew：makeCrew 還沒交給 sh.crew
+  if (!NV || n <= 0 || pumpAt(T).ok || (sh.pumps && sh.pumps.list.some(function (p) { return p.hand; }))) return;
+  var wx = pumpWellX(T), LE = [], F = sh.models.filter(function (m) { return m.kind === 'furn'; }), list = sh.pumps ? sh.pumps.list : [];
+  shipLadders(T).forEach(function (L) { LE.push(L.pts[0], L.pts[L.pts.length - 1]); });
+  function boxAt(P) { var a = [Math.round(P[0] - f.size[0] / 2), Math.round(P[1] - f.size[1] / 2), Math.round(P[2])]; return [a[0], a[1], a[2], a[0] + f.size[0], a[1] + f.size[1], a[2] + f.size[2] + 1]; }
+  function bad(b) {
+    return LE.some(function (p) { return p[2] >= b[2] - 6 && p[2] <= b[5] && Math.max(b[0] - p[0], p[0] - b[3], b[1] - p[1], p[1] - b[4], 0) <= LAD_KEEP; }) ||   // 梯子兩頭：腳下 6 格到抽水機頂（上一層的梯頂在它頭上也算擋）
+      F.some(function (m) { return m.bb[0] < b[3] && b[0] < m.bb[3] && m.bb[1] < b[4] && b[1] < m.bb[4] && m.bb[2] < b[5] && b[2] < m.bb[5]; }) ||
+      CR.some(function (c) { var p = c.pos; return p && p[0] >= b[0] - 3 && p[0] <= b[3] + 3 && p[1] >= b[1] - 3 && p[1] <= b[4] + 3 && Math.abs(p[2] - b[2]) <= 6; });   // 已經站好的人（軍官、砲班、槳手…；開戰時才補 ⇒ 人先站了）
+  }
+  function near(L, c) { var P = navPos(L.N, c); return [P, Math.abs(P[0] - wx) + 3 * Math.abs(P[1] - T.cy), L]; }
+  // 先挑站在水線以上、從待命那一層走得到的格（由低往高一層一層找；🩸 只看待命那一層 ⇒ punt 補在貨艙、腳下在海面下 ⇒ 一開戰就算泡水、不抽）；都沒有 ⇒ 待命那一層照舊
+  var lvs = NV.reach.slice().sort(function (a, b) { return NV.levels[a].zr[0] - NV.levels[b].zr[0]; }), RT = {};
+  function pick() {
+    for (var i = 0; i < lvs.length; i++) {
+      var L = NV.levels[lvs[i]], C = L.N.cells.map(function (c) { return near(L, c).concat([c]); }).filter(function (q) { return q[0][2] > T.zw; }).sort(function (a, b) { return a[1] - b[1]; });
+      for (var k = 0; k < C.length; k++) {
+        if (bad(boxAt(C[k][0]))) continue;
+        var key = lvs[i] + ':' + L.N.reg[C[k][3]]; if (RT[key] === undefined) RT[key] = !!handRoute(sh, NV.home, lvs[i], C[k][0][0], C[k][0][0], undefined, L.N.reg[C[k][3]]);
+        if (RT[key]) return C[k];
+      }
+    }
+    var H = NV.levels[NV.home], C0 = carpHomeCells(sh).map(function (c) { return near(H, c); }).sort(function (a, b) { return a[1] - b[1]; });
+    return C0.filter(function (q) { return !bad(boxAt(q[0])); })[0] || C0[0];
+  }
+  for (var got = 0; got < n; got++) {
+    var pk = pick(); if (!pk) break;
+    var bb = boxAt(pk[0]), at = bb.slice(0, 3), nm = (pk[2].name || pk[2].key) + f.name + '-' + (list.length + 1);
+    var m = { T: T, k: sh.models.length, name: nm, path: 'nav/' + nm, kind: 'furn', item: 'pump', hold: 0, room: null, hp: f.hp, hpMax: f.hp, mesh: furnMesh(T, 'pump', 'x'), origin: at, bb: bb, pts: {}, meta: { kind: 'furniture', item: 'pump' },
+      c: [(bb[0] + bb[3]) / 2, (bb[1] + bb[4]) / 2, (bb[2] + bb[5]) / 2], foot: VK.pack(Math.floor(bb[0] + 1), Math.floor(bb[1] + 1), at[2] - 1), alive: true };
+    sh.models.push(m); F.push(m);
+    for (var bx = Math.max(0, Math.floor((bb[0] - 12) / 16)); bx <= Math.floor((bb[3] + 12) / 16); bx++) (sh.mIdx[bx] = sh.mIdx[bx] || []).push(m);   // 命中分桶（10_ship.js modelIndex 同一套）
+    list.push({ m: m, it: 'pump', f: f, deck: pk[2].key, hand: true, need: 0, have: 0, tpm: 0, why: '' });
+  }
+  NV.ladders.forEach(function (L) { L.q = 0; });                        // handRoute 會記排隊人數；這裡只是試走
+  if (list.length && !sh.pumps) sh.pumps = { list: list, x: 0, t: 0, called: 0 };
+}
 /** 那一型擺得了哪幾種抽水機（道具 id；蒸汽的只有蒸汽船）。 */
 function pumpKinds(T) { return Object.keys(FURN).filter(function (it) { var f = FURN[it]; return f.role === 'pump' && (f.power !== 'steam' || pumpSteamShip(T)); }); }
-/** 玩家沒改過的甲板 D（自動、或設定檔的自訂預設；36_rooms.js deckItems，items 會改）：D 是抽水機那一層（benchDeck）⇒ 每一種補到 furniture[].autoDeck 台（這一層已經有的先扣掉；見檔頭「自動擺」）。⇒ 補了幾台。 */
+/** 玩家沒改過的甲板 D（自動、或設定檔的自訂預設；36_rooms.js deckItems，items 會改）：D 是抽水機那一層（人力 pumpAt、蒸汽 benchDeck）⇒ 每一種補到 furniture[].autoDeck 台（這一層已經有的先扣掉；見檔頭「自動擺」）。⇒ 補了幾台。 */
 function pumpFill(T, D, items) {
-  var BD = benchDeck(T), got = 0; if (!BD || deckId(BD) !== deckId(D)) return 0;
+  var BD = benchDeck(T), got = 0;
   pumpKinds(T).forEach(function (it) {
-    var n = Math.round(+FURN[it].autoDeck || 0); if (n <= 0) return;
+    var n = Math.round(+FURN[it].autoDeck || 0), well = FURN[it].place === 'well', at = well ? pumpAt(T).id : BD && deckId(BD); if (n <= 0 || at !== deckId(D)) return;   // 人力的照 pumpAt 那一層（TASK-1069）、蒸汽的照舊 benchDeck
     n -= items.filter(function (q) { return q.it === it; }).length; if (n > 0) got += pumpAuto(T, D, items, it, n);
   });
   return got;
@@ -80,7 +142,7 @@ function pumpModels(sh) {
   var qd = PUMP_Q ? decks.filter(function (D) { return D.zr[0] >= T.zw; })[0] || decks[decks.length - 1] : null;   // ?pumps= 擺在哪一層：水線以上最低那層
   decks.forEach(function (D) {
     var pl = deckPlan(T.id, deckId(D)), G = deckGrid(T, D), its = pl.items ? roomCheck(T, { grid: G }, 'deck', pl.items).items : [];
-    if (D === qd || D === bd) its = deckItems(T, D, pl).items.slice();      // 木工台那一層：照 deckItems（含自動補的木工台；自動的取用點不是抽水機、下面照 role 篩掉）
+    if (D === qd || D === bd || deckId(D) === pumpAt(T).id) its = deckItems(T, D, pl).items.slice();      // 木工台那一層、人力抽水機自動擺的那一層（pumpAt）：照 deckItems（含自動補的木工台、抽水機；自動的取用點不是抽水機、下面照 role 篩掉）
     if (D === qd) { pumpAuto(T, D, its, 'pump', PUMP_Q[0] || 0); if (pumpSteamShip(T)) pumpAuto(T, D, its, 'spump', PUMP_Q[1] || 0); }
     its.forEach(function (q) {
       var f = FURN[q.it]; if (!f || (f.role !== 'pump' && f.role !== 'bench' && f.role !== 'loft')) return;
@@ -100,7 +162,8 @@ function pumpModels(sh) {
   if (loft.length) sh.lofts = loft;
 }
 /** 開戰時（makeCrew 最後，medInit 之後）：人力抽水機旁邊的走路點（從待命那一層走得到）；走不到 ⇒ 記原因（派不了人 ⇒ 不抽）。 */
-function pumpInit(sh) {
+function pumpInit(sh, crew) {
+  pumpNavFill(sh, crew);                                                 // 哪一層砲甲板主桅旁都擺不下的那幾型 ⇒ 照走路格補一台（TASK-1069）
   var P = sh.pumps, NV = sh.nav; if (!P) return;
   P.list.forEach(function (p) {
     if (!p.hand) return;

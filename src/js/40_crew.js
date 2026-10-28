@@ -144,7 +144,7 @@ function makeCrew(sh) {
     offP.slice(offN, CW.officers).forEach(function (p, k) { add(ROLE.OFFICER, below[k] || standNear(g, p[0], p[1], sz0, sz1, 14, taken), null, 1); if (below[k]) crew[crew.length - 1].below = true; });   // below：在甲板下 ⇒ 火槍打不到（musket）
   }
   crew.filter(function (c) { return c.role === ROLE.OFFICER; }).forEach(function (c, k) { c.rank = k; if (!k) c.art = ART_CAPTAIN; });   // 階級照順序：船長（換貼圖）、大副、二副、三副、見習軍官（廣播用，61_hud.js newsCrew）
-  medInit(sh); medSurgeons(sh, crew, add); pumpInit(sh);                                         // pumpInit：人力抽水機旁的走路點（45_pumps.js）；醫療艙走得到的床、要幾個人手（44_medic.js；沒有 ⇒ sh.med ＝ null，照舊）
+  medInit(sh); medSurgeons(sh, crew, add); pumpInit(sh, crew);                                   // pumpInit：人力抽水機旁的走路點（45_pumps.js；砲甲板擺不下的那幾型照走路格補一台，crew ＝ 已經站好的人）；醫療艙走得到的床、要幾個人手（44_medic.js；沒有 ⇒ sh.med ＝ null，照舊）
   galleyInit(sh); galleyCooks(sh, crew, add); galleyMess(sh, crew);
   dutyCrew(sh, crew, add, g, taken, wheel, qx, sz0, sz1); effInit(sh);   // 航海士、軍需官（TASK-0825，39_duty.js）：add() 抽 rnd() ⇒ 最後才生（人數 0 ⇒ 什麼都不做，戰局一位元不動）   // 廚房（TASK-0720，45_galley.js）：有 kind=galley 的爐灶才生廚師、分桌（add() 抽 rnd() ⇒ 放在最後：只有有廚房的船、只從這裡之後錯位）；工作效率（39_eff.js）
   // 站不下的（船隻配置頁調多了、船小）⇒ 記著，開戰時上方廣播一行（52_fleet.js crewShortNote）；⛔ 不默默少人
