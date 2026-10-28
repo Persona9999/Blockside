@@ -80,7 +80,8 @@ function bedScript(src) {
 //   城鎮（area.towns 有才要；63_towns.js）：這一頁 ⇒ 那一頁 { bsmap: 'need', what: 'towns' }；那一頁 ⇒ 這一頁 { bsmap: 'towns', towns: [規劃…], kit: 模型的索引 }（出錯 { bsmap: 'error', what: 'towns', msg }）；
 //   建築模式（87_townbuild.js）：{ bsmap: 'need', what: 'townEdit', town, cmd, seq, … } ⇒ { bsmap: 'townEdit', seq, cmd, ok, why, …, town? }
 //   城裡的堡壘死了兵（63_towns.js townFortReport；TASK-0956）：這一頁 ⇒ 那一頁 { bsmap: 'fortLoss', town, lot, dead }（dead ＝ 這一次多死的，不回覆）
-//     打壞的樣子：{ bsmap: 'fortState', town, lot, st }（st ＝ 核心 API 戰前狀態那一份、格子差 deflate 過，mz ＝ 打掉的模型在城鎮模型裡的格；那一頁原樣存、下次進場照 towns 的 live.forts[lot] 帶回來 ⇒ 城裡照它畫、叫醒時照它套）
+//     打壞的樣子：{ bsmap: 'fortState', town, lot, st }（st ＝ 核心 API 戰前狀態那一份、格子差 deflate 過，mz ＝ 打掉的模型在城鎮模型裡的格，dmg ＝ 損傷的分子分母；那一頁原樣存、照 dmg 打折名額、開修繕工地，下次進場照 towns 的 live.forts[lot] 帶回來 ⇒ 城裡照它畫、叫醒時照它套；
+//       城鎮模式問 'sites' 的回覆也帶 forts ⇒ 修好了那一塊就不在）
 //   照索引挑好要用的模型 ⇒ { bsmap: 'need', what: 'townmodels', names: [名…] } ⇒ { bsmap: 'townmodels', models: { 名: { g, lo, png, mesh?（烘好的網格，63_towns.js townModelMesh） } } }（出錯 what: 'townmodels'）。模型只放在外面那一頁（Blocksail world/townkit/）。
 //   只收 BED.host 送來的訊息。
 function bedGet(cx, cy, peek, mid, bg) {                                // cx ＝ null ⇒ area.js；mid ⇒ 外圈的中等塊（BED.mid 公尺一點）；bg ⇒ 背景預載（外面那一頁排在最後）
