@@ -28,6 +28,7 @@
 | `fate` | `afloat` 還在打／`struck` 降旗／`sinking` 在沉（救不回來）／`sunk` 沉了／`broken` 斷成兩截（彈藥庫殉爆）；`why` ＝ 遊戲寫的原因（`sh.fate`） |
 | `at` | 最後的位置 `px`、`pz`（公尺）、船頭 `yaw`、航速 `spd` |
 | `cells` | **船殼跟原船的差**：`n` 幾格不同、`gone` 其中幾格被打掉、`d` ＝ base64 的 `n` 筆 5 位元組 —— `[跟前一格的線性索引差 u32 LE, 值 u8]`；線性索引 ＝ `x + sx·(y + sy·z)`（船型格子的尺寸），照索引由小到大；值 0 ＝ 打掉，其他 ＝ 現在的顏色（燒焦換色、木匠補回來的） |
+| `plugs` | （有補丁才有這一格；Blocksail TASK-1099，46_plug.js）**哪幾格是補丁**：`n` 幾格、`d` ＝ base64 的 `n` 筆 4 位元組 `[跟前一格的線性索引差 u32 LE]`（索引同 `cells`）。補丁 ＝ 脫離交戰後木匠堵水線下破口補回去的格（顏色在 `cells` 裡、深褐）：補著不漏、硬度只有橡木一成 |
 | `models` | 跟開局不一樣的模型（砲、火藥桶、舵輪、帆桁、小艇…）：`{ k, id, kind, hp, alive }`；`k` ＝ 船型模型表的位置，`id` ＝ 物件 id（TASK-0715；沒有 ＝ 空字串，只靠 `k`） |
 | `sails` | 被打過的帆：`{ k, hp, dead }` |
 | `ropes` | 斷了的繩（船型繩表的位置） |
@@ -42,7 +43,7 @@
 
 ```js
 { blue: [ <船的戰前狀態>… ], red: [ … ] }   // 每一方照「在場的順序」對：第 j 個給那一方開局在場的第 j 艘
-<船的戰前狀態> = { hull, sum, name, cells, models, sails, ropes, crew: { <職位>: { out: 幾人不在船上 } } }
+<船的戰前狀態> = { hull, sum, name, cells, models, sails, ropes, crew: { <職位>: { out: 幾人不在船上 } }, plugs? }
 ```
 
 - `corePreFrom(戰後狀態)` 直接轉：還在海上的（不是 `sunk`／`broken`／`sinking`）照每一方原本的順序排，`crew[職位].out ＝ n0 − able`。外殼要改什麼（修好幾格、補幾個人）改這一份就好。
@@ -52,6 +53,7 @@
   - `?debug=1` 的 `__game.core.pre(P)`，之後 `__game.start()`／`__game.fleet(…)` 那一場開局生效（`pre(null)` 清掉）。
 - 開局怎麼套（`coreShipIn`，`makeShip` 之後、第一次 `survey` 之前）：
   - 船殼差照格寫回（打掉 ⇒ `removeVoxel`；換色 ⇒ 改顏色；原船沒有 ⇒ `restoreVoxel`）：進水、尋路、破口照常更新 ⇒ 開局就從那些洞進水。
+  - `plugs`（跟船殼差一起，指紋要對）：那幾格還在 ⇒ 標回補丁（`sh.plugs`）⇒ 這一場照樣脆、打掉就又漏。沒有這一格（舊的船況）⇒ 照舊。
   - 模型：血量照存的；`alive: false` ⇒ 一開始就不在（不放碎片、不殉爆）。
   - 帆：血量照存的、`dead` ⇒ 一開始就沒有（⛔ 不走 `dropSail`：它撒布片要抽亂數）；斷的繩照標。
   - 船員：照職位從名單後面往前，`out` 個人標成不在船上（`st = 3`、`preOut`）—— 這一場的陣亡、傷員從 0 算；砲班少人照常由預備水手補位。

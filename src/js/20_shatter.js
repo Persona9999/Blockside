@@ -4,6 +4,7 @@ function removeVoxel(sh, x, y, z, seeds) {
   var c = sh.grid.set(x, y, z, 0);
   if (c <= 0) return 0;
   evEmit('cell', sh, x, y, z); sh.lost++;                               // 網格、平滑面附近的區重建（62_simview.js；只給人看）
+  if (sh.plugs && sh.plugs.size) plugHit(sh, x, y, z);                  // 補丁挨打（46_plug.js）⇒ 下一次點名整片脫落
   if (z < sh.T.sz) { sh.flood[z * 3]++; sh.flood[z * 3 + 1] += y > sh.T.cy ? 1 : -1; sh.flood[z * 3 + 2] += x > sh.T.cx ? 1 : -1; }
   if (sh.fl) floodTouch(sh, x, y, z);                                   // 粒子模式：水格與破口待重算（33_flood.js）
   if (NAV_RE > 0 && sh.nav) navDirty(sh, x, y, z);

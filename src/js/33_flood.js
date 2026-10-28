@@ -319,7 +319,7 @@ function flCut(sh, fl) {
   }
 }
 /** 抽水的倍率（TASK-0604）：那一型的基礎抽水量（噸／分，cfg.pump）÷ PUMP_REF。⛔ 沒有 pump（舊存檔、外部傳進來的 cfg）⇒ 1（照以前）。 */
-function pumpK(sh) { var p = sh.cfg.pump, x = sh.pumps ? sh.pumps.x : 0; return (p === undefined || !isFinite(p) ? PUMP_REF : p + x) / PUMP_REF; }   // x：甲板上擺的抽水機另外加的（45_pumps.js；沒擺 ⇒ 0 ⇒ 一位元不動）
+function pumpK(sh) { var p = sh.cfg.pump, x = sh.pumps ? sh.pumps.x : 0, k = (p === undefined || !isFinite(p) ? PUMP_REF : p + x) / PUMP_REF; return sh.pumpAll > 1 ? k * sh.pumpAll : k; }   // x：甲板上擺的抽水機另外加的（45_pumps.js；沒擺 ⇒ 0 ⇒ 一位元不動）；pumpAll：脫離交戰後全員抽水（46_plug.js plugTick；交戰中 1 ⇒ 不乘）
 /** 每一步（32_hull.js stepShip，粒子模式）：粒子飛、每 ev 步算一次水格（破口進出水、往下往旁邊流、抽水、讀數）。 */
 /** 進水一步；牆鐘記在 fl.ms／fl.msN（每艘各記；進水報表並排比各檔的花費，TASK-0810）。 */
 function floodStep(sh, fl, dt) { var t0 = performance.now(); floodStep0(sh, fl, dt); fl.ms = (fl.ms || 0) + performance.now() - t0; fl.msN = (fl.msN | 0) + 1; }

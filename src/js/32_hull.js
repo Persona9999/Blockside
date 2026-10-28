@@ -204,7 +204,7 @@ function svRest(sh, sv0) {
   if (sh.fl) sh.flBase = sh.T.disp - sh.mass0 + massLost(sh);                     // 粒子模式：浮力表上水以外的部分（33_flood.js floodSinkT）
   if (!sh.fixed) driveSurvey(sh);                                     // 動力：實際質量（含進水）、引擎／魔力的完好度（31_drive.js）
   drownCheck(sh);                                                     // 船殼通海了 ⇒ 被水淹過頭的人浮上來（43_swim.js）
-  chooseSide(sh); reassign(sh); manning(sh); gunIdle(sh); medTick(sh); pumpTick(sh); if (sh.burn) burnTick(sh); if (sh.galley) galleyTick(sh); effTick(sh); if (sh.duty) dutyTick(sh); callHands(sh); carpTick(sh); smTick(sh);   // burnTick：每個火場要幾個人救火（49_burn.js）；galleyTick：做飯、伙夫在路上的（45_galley.js）、effTick：每個人的工作效率（39_eff.js；TASK-0720）；pumpTick：抽水機要幾個人、現在抽多少（45_pumps.js）；medTick：醫療艙治療（44_medic.js）；callHands：預備水手補位（42_hands.js）
+  chooseSide(sh); reassign(sh); manning(sh); gunIdle(sh); medTick(sh); pumpTick(sh); plugTick(sh); if (sh.burn) burnTick(sh); if (sh.galley) galleyTick(sh); effTick(sh); if (sh.duty) dutyTick(sh); callHands(sh); carpTick(sh); smTick(sh);   // burnTick：每個火場要幾個人救火（49_burn.js）；galleyTick：做飯、伙夫在路上的（45_galley.js）、effTick：每個人的工作效率（39_eff.js；TASK-0720）；pumpTick：抽水機要幾個人、現在抽多少（45_pumps.js）；plugTick：脫離交戰後全員抽水的倍率（46_plug.js）；medTick：醫療艙治療（44_medic.js）；callHands：預備水手補位（42_hands.js）
   sh.able = sh.crew.filter(crewAble).length;
   sh.gunsManned = sh.guns.filter(function (g) { return g.alive && gunRate(g) > 0; }).length;
   strikeCheck(sh);
