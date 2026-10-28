@@ -26,6 +26,7 @@ var HIT_LOG = [];                                                        // 最�
 function sfxPlay(kind, at, vol, opt) {
   if (kind === 'hit') { HIT_LOG.push({ t: +SIMT.toFixed(2), I: +(vol || 0).toFixed(3), mat: (opt || {}).mat, mass: Math.round((opt || {}).mass || 0), bed: (opt || {}).bed || null, slide: (opt || {}).slide || 0, rub: !!(opt || {}).rub }); if (HIT_LOG.length > 32) HIT_LOG.shift(); }
   if (!AC || muted) return;
+  sndGc();                                                                 // 放完的先拆（frame 也拆；__game.run 這種不跑畫面的推法只走這裡）
   if (kind === 'boom' || kind === 'blast') SND_FIGHT = AC.currentTime;     // 開砲、爆炸 ⇒ 交戰中（02_music.js：BGM「交戰時小聲一點」那一檔 × BGM_DUCK）
   var dist = at ? len(sub(at, CAM.eye)) : 0, v = (kind === 'hit' ? hitLoud(vol || 0) * ((opt || {}).k || 1) : vol || 1) / (1 + dist / 70);   // hit 的 vol 是力道（0–1），音量照它換（hitLoud）
   if (v < 0.01) return;
@@ -59,6 +60,19 @@ function sfxPlay(kind, at, vol, opt) {
   else if (kind === 'creak') { f.type = 'lowpass'; f.frequency.setValueAtTime(300, t); f.frequency.exponentialRampToValueAtTime(80, t + 2.5); env(1.2, 2.8); }
 }
 function sfxEnd(e, L) { L = L || SFX_END; var k = L.length; while (k > 0 && L[k - 1] > e) k--; L.splice(k, 0, e); }   // 這一個聲音什麼時候停（照時間排好；同時發聲的上限照它數；L 省略 ＝ 共用的 SFX_END，開砲是 SFX_GUN_END）
+// 放完就拆（Tim 2026-10-29 手機：「戰局打到一段時間後 fps仍然在60左右 但聲音變得一頓一頓的(每次卡0.5秒 音效 背景音 砲聲都卡)」「回主選單後仍然會持續卡頓聲音 要整個重開(網頁)」）：
+//   一聲裡好幾路匯進同一個出口（gunVoice／impVoice／fireVoice 的 lp、hitVoice 的兩條匯流、BGM 一個音的合音）⇒ 來源都停了，Chrome 也不會關掉那個出口：它還接在音量線上，每一格照樣被拉、被算。
+//   量的（OfflineAudioContext，300 個節點、來源各響 0.3 秒）：一路輸入的低通 算 20 秒 1.4 s、80 秒 1.4 s；兩路輸入的 3.7 s、10.8 s ⇒ 負載跟打出去的總聲數成正比，同一個 AudioContext 回主選單、重開戰局都不退。
+//   ⇒ 出口照放完的時間登記（sndFree），過了那一刻（＋0.5 秒）sndGc 拆掉（disconnect）；只管遊戲的 AC（試聽頁、hitLab 那些離線錄的 ac 錄完就丟）。
+var SND_FREE = [];
+function sndFree(ac, n, end) { if (ac === AC) SND_FREE.push([end + 0.5, n]); }
+/** 每一格畫面（90_main.js frame）：拆掉放完的出口。 */
+function sndGc() {
+  if (!AC || !SND_FREE.length) return;
+  var now = AC.currentTime, k = 0;
+  for (var i = 0; i < SND_FREE.length; i++) { var e = SND_FREE[i]; if (e[0] <= now) { try { e[1].disconnect(); } catch (x) { } } else SND_FREE[k++] = e; }
+  SND_FREE.length = k;
+}
 
 // ───── 開炮（TASK-0978；Tim 2026-10-26：「海戰開炮聲音優化 一樣用合成音 不過希望根據砲的種類 口徑有音色變化」「參考頻譜用合成音模擬」）─────
 // 以前所有砲同一聲（低通雜音 1,400 → 90 Hz＋70 → 32 Hz 的正弦）：主頻 63 Hz、1 kHz 以上掉 15～48 dB，跟真的黑火藥砲差 12.3 dB。
@@ -160,14 +174,14 @@ function gunSndPar(type) {
 /** 合成一聲開炮（ac 可以是 OfflineAudioContext）：t 開始、v 音量、p ＝ gunSndPar、dist 離鏡頭幾公尺（遠的低通）、R 亂數。
  *  回傳從 t 起「頭」響幾秒（重擊、爆風、身體、脆響、回音）—— sfxPlay 照它算聲部；尾聲照樣放完、滾雷在共用的那一條，都不算。 */
 function gunVoice(ac, out, t, v, p, dist, R) {
-  var nb = noiseBuf || noiseMake(ac), dur = 0, lp = ac.createBiquadFilter(), v0 = v; v *= p.vol || 1;
+  var nb = noiseBuf || noiseMake(ac), dur = 0, end = 0, lp = ac.createBiquadFilter(), v0 = v; v *= p.vol || 1;   // end：連尾聲在內最後一層停的時刻（sndFree）
   lp.type = 'lowpass'; lp.Q.value = 0.5; lp.frequency.value = 18000 / (1 + (dist || 0) / 120); lp.connect(out);
   var fp = p.fp * (0.95 + 0.1 * R());                                    // 同一門砲每一發差一點
   function env(g, a, at, d, t0) { g.setValueAtTime(0.0001, t0); g.exponentialRampToValueAtTime(Math.max(a, 0.0002), t0 + at); g.exponentialRampToValueAtTime(0.0001, t0 + at + d); }
   function hiss(type, f0, f1, Q, a, at, d, dt, rate, to) {
     var t0 = t + (dt || 0), s = ac.createBufferSource(), f = ac.createBiquadFilter(), g = ac.createGain();
     s.buffer = nb; s.playbackRate.value = rate || 1; f.type = type; f.Q.value = Q; f.frequency.setValueAtTime(f0, t0); f.frequency.exponentialRampToValueAtTime(f1, t0 + at + d);
-    env(g.gain, a * v, at, d, t0); s.connect(f); f.connect(g); g.connect(to || lp); s.start(t0, R() * 1.5); s.stop(t0 + at + d + 0.05); dur = Math.max(dur, (dt || 0) + at + d + 0.05);
+    env(g.gain, a * v, at, d, t0); s.connect(f); f.connect(g); g.connect(to || lp); s.start(t0, R() * 1.5); s.stop(t0 + at + d + 0.05); dur = Math.max(dur, (dt || 0) + at + d + 0.05); end = Math.max(end, dur);
   }
   var K = GUNSND_KICK, sh = gunShape(ac), sg = ac.createGain(); sg.gain.value = K.out; sh.connect(sg); sg.connect(lp);   // 飽和：身體＋kick 過 tanh（輸入 × v 已經是 0～1 上下）
   var kD = K.d0 + (K.d1 - K.d0) * (p.s || 0), o = ac.createOscillator(), og = ac.createGain();
@@ -183,6 +197,7 @@ function gunVoice(ac, out, t, v, p, dist, R) {
   var RL = GUNSND_ROLL;
   if (RL.a > 0) gunRoll(ac, out, t + 0.1, RL.a * v0 * Math.pow((p.s || 0) / 0.5, RL.sz), Math.max(fp * RL.lp, 120) / (1 + (dist || 0) / 300), Math.min(30, RL.d0 * Math.pow(RL.d1 / RL.d0, p.s || 0)));   // 滾雷（共用那一條；音量照沒乘響度倍數的 v ⇒ 遠的砲推得少；口徑 s ＝ 0.5 是 1 倍、照 sz 次方；退到 −40 dB 的秒數 0.5 kg d0 → 900 kg d1 指數內插）
   for (var c = 0; c < p.grit; c++) hiss('bandpass', 800 + 3000 * R(), 600, 1.5, 0.25 * (0.4 + 0.6 * R()), 0.001, 0.005 + 0.015 * R(), 0.01 + 0.35 * R() * R(), 1);   // 爆裂顆粒（早期鍛鐵砲）
+  sndFree(ac, lp, t + Math.max(end, dur));                               // 尾聲也放完 ⇒ 拆掉出口（重擊、飽和都在它上游）
   return dur;
 }
 /** 開炮的試聽集（__game.gunLab；src/tests/ambient_lab.py --lab gun）：每段 sec 秒、同一個限制器、固定種子。?cases=名字:砲種:距離;… 換掉（砲種 old ＝ 以前那一聲）。
@@ -322,6 +337,7 @@ function impVoice(ac, out, t, v, p, dist, R) {
   if (p.tlA) hiss('lowpass', p.tlLp, 60, 0.6, p.tlA, 0.05, p.tlD, 0.03, 0.4);                            // 尾聲
   if (p.whA) { tone(p.whF, p.whF * 0.55, p.whA, 0.01, 0.35, 0.01); hiss('bandpass', p.whF * 1.1, p.whF * 0.6, 6, p.whA * 0.6, 0.01, 0.3, 0.01, 1); }   // 跳彈呼嘯
   for (c = Math.round(p.teN || 0); c > 0; c--) hiss('bandpass', 300 + 2200 * R(), 250 + 800 * R(), 0.9, p.teA * (0.5 + 0.5 * R()), 0.004, 0.015 + 0.03 * R(), 0.01 + 0.3 * R(), 0.7);   // 撕扯
+  sndFree(ac, lp, t + dur);
   return dur;
 }
 // 希臘火（同一套量法）：freesound 395038 火焰噴射器（AslakHostaker，遊戲用的武器音）、260554 火「呼」地燒起來、563766 劈啪的火（florianreichelt）。
@@ -356,6 +372,7 @@ function fireVoice(ac, out, t, v, p, dist, R) {
   if (p.hiA) bed('bandpass', p.hiF, 0.7, p.hiA, 1);                                                    // 嘶聲
   if (p.wsA) hiss('lowpass', p.wsF0, p.wsF1, 0.9, p.wsA, p.wsAt || 0.12, p.wsD, 0, 0.5);              // 轟燃
   for (var c = Math.round((p.ckN || 0) * (p.ckT || T)); c > 0; c--) { var u = R(), k = R(); hiss('bandpass', p.ckF * (0.5 + 1.5 * R()), p.ckF * 0.5, 1.5, p.ckA * k * k * k * (1 - 0.5 * u), 0.0008, 0.002 + 0.01 * R(), 0.02 + (p.ckT || T) * u, 1); }   // 劈啪
+  sndFree(ac, lp, t + dur);
   return dur;
 }
 // 船上延燒（49_burn.js）：一直響的火聲，照火勢與離鏡頭遠近 —— 每艘 √(燒著的格 ＋ 40 × 燒著的帆) ÷ (1 ＋ 距離 ÷ 70) 加起來 ÷ BURN_SND_REF ＝ 火勢 lv（0–1.5）。
@@ -476,8 +493,8 @@ function hitSize(mass) { return clamp(Math.log(Math.max(10, mass || 2000) / 10) 
 /** 合成一聲碰撞（ac 可以是 OfflineAudioContext）：t 開始、I 力道、v 音量、o ＝ { mat, mass, bed, slide, rub }。回傳從 t 起響幾秒。 */
 function hitVoice(ac, out, t, I, v, o, R) {
   I = clamp(I, 0, 1);
-  var P = HIT_P, z = hitSize(o.mass), fk = 1.5 - 0.5 * z, dk = (0.45 + 0.55 * z) * (0.9 + 1.1 * I), metal = o.mat === 'metal', nb = noiseBuf || noiseMake(ac), dur = 0;
-  function bus(f) { var a = ac.createBiquadFilter(), b = ac.createBiquadFilter(), g = ac.createGain(); a.type = b.type = 'lowpass'; a.frequency.value = b.frequency.value = f; a.Q.value = b.Q.value = 0.5; g.gain.value = v * (0.7 + 0.3 * z); a.connect(b); b.connect(g); g.connect(out); return a; }
+  var P = HIT_P, z = hitSize(o.mass), fk = 1.5 - 0.5 * z, dk = (0.45 + 0.55 * z) * (0.9 + 1.1 * I), metal = o.mat === 'metal', nb = noiseBuf || noiseMake(ac), dur = 0, outs = [];
+  function bus(f) { var a = ac.createBiquadFilter(), b = ac.createBiquadFilter(), g = ac.createGain(); a.type = b.type = 'lowpass'; a.frequency.value = b.frequency.value = f; a.Q.value = b.Q.value = 0.5; g.gain.value = v * (0.7 + 0.3 * z); a.connect(b); b.connect(g); g.connect(out); outs.push(g); return a; }   // outs：兩條的出口（放完 sndFree 拆）
   var LO = bus((P.lpLo[0] + P.lpLo[1] * I) * (1.3 - 0.3 * z)), HI = bus(P.lpHi[0] + (P.lpHi[1] - P.lpHi[0]) * I), dst = LO;
   function env(p, a, at, d, t0) { p.setValueAtTime(0.0001, t0); p.exponentialRampToValueAtTime(Math.max(a, 0.0002), t0 + at); p.exponentialRampToValueAtTime(0.0001, t0 + at + d); }
   function tone(type, f0, f1, a, at, d, dt) {
@@ -524,6 +541,7 @@ function hitVoice(ac, out, t, I, v, o, R) {
     dst = HI; for (k = 0, n = Math.round(sl * 5 * (0.3 + I)); k < n; k++) hiss('bandpass', 800 + 3000 * R(), 600, 1.5, 0.3 * (0.4 + 0.6 * R()), 0.002, 0.01 + 0.03 * R(), 0.05 + sl * R(), 1, true); dst = LO;   // 刮出來的碎屑
   }
   if (o.bed === 'sand' && sl > 0) { hiss('lowpass', 220, 110, 0.5, 1.2 + 0.6 * I, 0.1, sl / dk, 0.03, 0.5); dst = HI; hiss('bandpass', 1800, 1200, 0.7, 0.25 * (0.3 + I), 0.1, sl, 0.03, 1, true); dst = LO; }   // 擦過沙底（長度 ＝ slide 秒）
+  outs.forEach(function (g) { sndFree(ac, g, t + dur); });
   return dur;
 }
 /** 試聽集（__game.hitLab；src/tests/ambient_lab.py --lab hit）：每段 sec 秒、跟遊戲同一個限制器；含舊的 crack 當對照。?cases=名字:I:mat:bed:slide:rub:噸;… 換掉（I < 0 ＝ 舊的 crack、音量 −I）。
