@@ -40,12 +40,20 @@ function pumpPlaceWhy(G, p) {
 }
 // 量的時候：?pumps=人力台數,蒸汽台數 ⇒ 每一型在水線以上最低那層甲板，照位置規則（離泵井／中線最近的格先）另外擺上（蓋在存檔與設定檔的擺法上面；跟 ?roomfn= 同一類）
 var PUMP_Q = Q.has('pumps') ? Q.get('pumps').split(',').map(function (v) { return Math.max(0, Math.min(16, Math.round(+v) || 0)); }) : null;
-/** 照位置規則在甲板 D 上再擺 n 台 it（items ＝ 已經擺的，會改它）：離泵井（人力）或船身中段（蒸汽）最近、中線上的格先試，兩個方向都試。 */
+/** 照位置規則在甲板 D 上再擺 n 台 it（items ＝ 已經擺的，會改它）：離泵井（人力）或船身中段（蒸汽）最近、中線上的格先試，兩個方向都試。
+ *  不壓梯子兩頭（Tim 2026-10-28「全船隊跟火藥桶有關的梯子警告」那一批之後：聖羅曼號自動補的木工台擺在船尾樓梯頂正前方 ⇒ 樓梯自檢 ⚠）：
+ *  先只挑外框外 LAD_KEEP 格不碰任何一座梯子 foot／head（同一層：上下 6 格內）的格；整層都碰 ⇒ 照舊不管梯子再挑一次（跟 23_powder.js ladFirst 同一個退路：只換位置、不會變少）。 */
 function pumpAuto(T, D, items, it, n) {
   var G = deckGrid(T, D), wx = FURN[it].place === 'well' ? pumpWellX(T) : Math.round((T.hx0 + T.hx1) / 2), C = [], i, j, got = 0;
   for (j = 0; j < G.ny; j++) for (i = 0; i < G.nx; i++) C.push([i, j, Math.abs(G.x0 + (i + 0.5) * ROOM_TILE - wx) + 3 * Math.abs(G.y0 + (j + 0.5) * ROOM_TILE - T.cy)]);
   C.sort(function (a, b) { return a[2] - b[2] || a[1] - b[1] || a[0] - b[0]; });
-  for (var c = 0; c < C.length && got < n; c++) for (var r = 0; r < 2; r++) { var p = { it: it, x: C[c][0], y: C[c][1], r: r }; if (!placeOk(G, 'deck', items, p)) { items.push(p); got++; break; } }
+  var LE = []; shipLadders(T).forEach(function (L) { LE.push(L.pts[0], L.pts[L.pts.length - 1]); });
+  function nearLad(p) {
+    var t = itemTiles(p.it, p.r), xa = G.x0 + p.x * ROOM_TILE, ya = G.y0 + p.y * ROOM_TILE, xb = xa + t[0] * ROOM_TILE - 1, yb = ya + t[1] * ROOM_TILE - 1, z = G.zt[p.x + p.y * G.nx];
+    return LE.some(function (q) { return Math.abs(q[2] - z) <= 6 && q[0] >= xa - LAD_KEEP && q[0] <= xb + LAD_KEEP && q[1] >= ya - LAD_KEEP && q[1] <= yb + LAD_KEEP; });
+  }
+  for (var pass = 0; pass < 2 && got < n; pass++)
+    for (var c = 0; c < C.length && got < n; c++) for (var r = 0; r < 2; r++) { var p = { it: it, x: C[c][0], y: C[c][1], r: r }; if (!pass && nearLad(p)) continue; if (!placeOk(G, 'deck', items, p)) { items.push(p); got++; break; } }
   return got;
 }
 /** 那一型擺得了哪幾種抽水機（道具 id；蒸汽的只有蒸汽船）。 */
