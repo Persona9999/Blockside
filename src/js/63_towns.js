@@ -2693,7 +2693,8 @@ function townFortWake(h) {
   if (q.waking) return true;
   if (SHIPS.length - Object.keys(TOWN_UNITS).length >= MAX_SHIPS) { note(me, h.name + '：場上已經 ' + SHIPS.length + ' 艘，堡壘進不來（上限 ' + MAX_SHIPS + '）'); return true; }   // 前一座會換回去（一次一座）⇒ 不算它
   q.waking = true; note(me, h.name + '：載入中…');
-  loadHull(id).then(function (T) {
+  loadHull(id).then(function (T) { return townFortStIn(h.T, q.lot).then(function (st) { return [T, st]; }); }).then(function (a) {
+    var T = a[0], st = a[1];                                             // st：帳上那一棟上次打壞的樣子（townFortStIn；沒有 ⇒ null ＝ 完好的一座）
     q.waking = false;
     if (TOWN_UNITS[key] || SHIPS.indexOf(me) < 0) return;
     var m = TOWNS.kit && TOWNS.kit.M[q.k] && TOWNS.kit.M[q.k].m;
@@ -2709,10 +2710,11 @@ function townFortWake(h) {
     if (gar === 0) { sh.struck = true; sh.fate = '沒有駐軍（城鎮帳那一棟今天 0 人）'; }   // 空的那一座：不算敵艦、不開砲（⛔ 照 strikeCheck ⇒ 一換上來就報「全員倒下」）
     sh.townLot = q.lot; sh.townGar = gar; sh.townDeadSent = 0;          // 駐軍是城鎮帳的兵（gar 不是 null）⇒ 死的人報回帳上（townFortReport）
     TOWN_UNITS[key] = sh; h.T.work = null; TOWNS.dirty = true;           // 那一棟的站崗鎮民（63_townfolk.js townWorkPrep）重擺 ⇒ 不畫：兵是那一座的人；模型重新分組 ⇒ 不畫
-    SHIPS.push(sh); coreSpawned(sh, null); stepShip(sh, 0); survey(sh); pickCaptain(sh); cmdTick(); pickFoes();
+    SHIPS.push(sh); coreSpawned(sh, st); stepShip(sh, 0); survey(sh); pickCaptain(sh); cmdTick(); pickFoes();   // 上次打壞的格子、模型照核心 API 套回去（57_core.js coreShipIn：makeShip 之後、stepShip／survey 之前）
+    sh.townLostSent = sh.lost; sh.townModSent = townFortModSig(sh);      // 套回去的那些不算「這一次又壞了」（townFortReport 只報之後的）
     var mc = shipCenter(me), fc = shipCenter(sh); sh.townR = townFortR(sh); sh.wakeD = Math.hypot(fc[0] - mc[0], fc[2] - mc[2]);   // 離開換回的那把尺（townFortTick）
     setAim(me, [T.cx, T.cy, T.geo.aim], sh); me.pMode = AIM_P = 'free';
-    note(me, '瞄準 ' + sh.name + (gar !== null ? '（駐軍 ' + gar + ' 人，城鎮帳）' : '') + ' —— 中立；開火就是對它宣戰');
+    note(me, '瞄準 ' + sh.name + (gar !== null ? '（駐軍 ' + gar + ' 人，城鎮帳）' : '') + (st && sh.coreIn ? '（上次打壞的：' + st.cells.n + ' 格）' : '') + ' —— 中立；開火就是對它宣戰');
   }, function (err) { q.waking = false; note(me, h.name + '：載入失敗（' + (err && err.message || err) + '）'); });
   return true;
 }
@@ -2742,15 +2744,52 @@ function townFortSleep(key, why) {
 //   這一座死了幾個（sh.dead，40_crew.js 累計；傷的不算）比上次報的多 ⇒ 多的那幾個報給外面那一頁 { bsmap: 'fortLoss', town: 規劃單位 id, lot: 規劃裡的地塊 id, dead: 這一次多死的 }，
 //   Blocksail 從那座城的人口扣男人、今天那一棟的 staff 與 jobs.garrison 扣掉（world/townstate.js BSW.fortLoss），隔天照常招。
 //   巡視（townFortTick）、換回（townFortSleep）各報一次 ⇒ 沒等換回就回地球儀（iframe 關掉），死的人也已經記上。實驗場（帳上沒有那一棟）、沒有外面那一頁 ⇒ 不報。
+// 打壞的留著（TASK-0956 第二格；Tim「打壞的堡壘存被挖掉的格子（壓縮）」）：格子（sh.lost）或模型（townFortModSig）變了 ⇒ 照核心 API 的戰前狀態那一份（57_core.js coreShipOut：
+//   船殼差 cells、打壞的模型、帆、斷的繩；不帶船員 —— 兵照城鎮帳）⇒ cells.d deflate 壓（townZip）⇒ { bsmap: 'fortState', town, lot, st: { v: 1, hull, sum, n, gone, z, models, sails, ropes } }，
+//   Blocksail 原樣存進那座城的帳（towns[城].forts[地塊鍵]）、進場時照 live.forts 帶回來 ⇒ townFortWake 解壓（townFortStIn）照 coreSpawned 套回去。
+//   量過（實驗場憲法號對加勒比稜堡 seed 7，打掉 26,363 格）：cells.d 的 base64 176 KB ⇒ deflate 15 KB（連續段編碼＋deflate 12 KB，差不多 ⇒ 不另造格式，解壓就是 coreShipIn 讀的那一份）。
 function townFortReport(sh) {
-  if (!sh || sh.townGar == null || !BED || !BED.host) return;
-  var n = sh.dead - (sh.townDeadSent || 0); if (!(n > 0)) return;
-  sh.townDeadSent = sh.dead;
-  BED.host.postMessage({ bsmap: 'fortLoss', town: sh.townId, lot: sh.townLot, dead: n }, '*');
-  TOWNS.list.forEach(function (T) {                                      // 這一頁手上那一份帳（外面那一頁進場時給的 live.work）也扣 ⇒ 同一天換回再點，駐軍是扣過的（⛔ 不扣 ⇒ 死的人又站回來）
-    var lw = T.id === sh.townId && T.p && T.p.live && T.p.live.work;
-    if (lw && Object.prototype.hasOwnProperty.call(lw, sh.townLot)) lw[sh.townLot] = Math.max(0, (+lw[sh.townLot] || 0) - n);
-  });
+  if (!sh || !sh.townId || !BED || !BED.host) return;
+  var n = sh.townGar != null ? sh.dead - (sh.townDeadSent || 0) : 0;
+  if (n > 0) {
+    sh.townDeadSent = sh.dead;
+    BED.host.postMessage({ bsmap: 'fortLoss', town: sh.townId, lot: sh.townLot, dead: n }, '*');
+    townFortLive(sh.townId, function (L) {                               // 這一頁手上那一份帳（外面那一頁進場時給的 live.work）也扣 ⇒ 同一天換回再點，駐軍是扣過的（⛔ 不扣 ⇒ 死的人又站回來）
+      if (L.work && Object.prototype.hasOwnProperty.call(L.work, sh.townLot)) L.work[sh.townLot] = Math.max(0, (+L.work[sh.townLot] || 0) - n);
+    });
+  }
+  var mg = townFortModSig(sh); if (sh.lost === sh.townLostSent && mg === sh.townModSent) return;
+  sh.townLostSent = sh.lost; sh.townModSent = mg;
+  var o = coreShipOut(sh), town = sh.townId, lot = sh.townLot;           // 這一刻的樣子（同步取）；壓縮是非同步 ⇒ 一艘排一條隊，送出去的順序跟取的順序一樣
+  sh.townZ = (sh.townZ || Promise.resolve()).then(function () { return townZip(o.cells.d); }).then(function (z) {
+    var st = { v: 1, hull: o.hull, sum: o.sum, n: o.cells.n, gone: o.cells.gone, z: z, models: o.models, sails: o.sails, ropes: o.ropes };
+    if (BED && BED.host) BED.host.postMessage({ bsmap: 'fortState', town: town, lot: lot, st: st }, '*');
+    townFortLive(town, function (L) { (L.forts || (L.forts = {}))[lot] = st; });   // 這一頁手上那一份也記 ⇒ 同一次進場換回再點，照樣是壞的
+  }).catch(function (e) { console.warn('堡壘的損傷沒送出去（' + (e && e.message || e) + '）'); });
+}
+function townFortLive(town, f) { TOWNS.list.forEach(function (T) { if (T.id === town && T.p && T.p.live) f(T.p.live); }); }
+/** 模型壞了沒（砲、旗杆…）：活著的照 hp、飛掉的記 −1 ⇒ 一個數（變了就重報）。 */
+function townFortModSig(sh) { var s = 0; sh.models.forEach(function (m, k) { s += (k + 1) * (m.alive ? +m.hp || 0 : -1); }); return s; }
+/** base64 ⇒ deflate-raw ⇒ base64（瀏覽器內建 CompressionStream；沒有 ⇒ 'raw:' 加原樣，townUnzip 認得）。 */
+function townZip(b64) {
+  if (!b64) return Promise.resolve('');
+  if (typeof CompressionStream === 'undefined') return Promise.resolve('raw:' + b64);
+  var cs = new CompressionStream('deflate-raw'), w = cs.writable.getWriter(); w.write(coreUnB64(b64)); w.close();
+  return new Response(cs.readable).arrayBuffer().then(function (ab) { return coreB64(new Uint8Array(ab)); });
+}
+function townUnzip(z) {
+  if (!z) return Promise.resolve('');
+  if (z.slice(0, 4) === 'raw:') return Promise.resolve(z.slice(4));
+  var ds = new DecompressionStream('deflate-raw'), w = ds.writable.getWriter(); w.write(coreUnB64(z)); w.close();
+  return new Response(ds.readable).arrayBuffer().then(function (ab) { return coreB64(new Uint8Array(ab)); });
+}
+/** 帳上那一棟上次打壞的樣子（T.p.live.forts[lot]，Blocksail 存的那一份）⇒ 核心 API 的戰前狀態（coreShipIn 讀的格式）；沒有、壞了 ⇒ null（完好的一座）。 */
+function townFortStIn(T, lot) {
+  var F = T && T.p && T.p.live && T.p.live.forts, s = F && F[lot];
+  if (!s || s.v !== 1) return Promise.resolve(null);
+  return townUnzip(s.z).then(function (d) {
+    return { hull: s.hull, sum: s.sum, cells: { n: s.n, gone: s.gone, d: d }, models: s.models || [], sails: s.sails || [], ropes: s.ropes || [] };
+  }, function (e) { console.warn(T.id + ' ' + lot + '：上次的損傷解不開（' + (e && e.message || e) + '）⇒ 照完好的換上來'); return null; });
 }
 /** 畫面迴圈每格叫（90_main.js frame），每 TOWN_FORT_EVERY_MS 看一次。 */
 function townFortTick() {
