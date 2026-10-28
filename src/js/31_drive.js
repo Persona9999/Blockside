@@ -70,7 +70,7 @@ var OAR_SPM = +DRIVE_CFG.oarSpm > 0 ? +DRIVE_CFG.oarSpm : 26, OAR_ANIM = Q.get('
 // 沒有 cellRuns 的件 ⇒ 照舊（固定點旁 ±DRV_PART_R 格剩一半以上 ＝ 好的、每 0.5 秒）⇒ 沒標的船戰局一位元不動。參數在道具設定頁「動力件」（67_furncfg.js）。
 var DRVP_DEF = { engine: { name: '主機', lo: 0.4, hi: 1 }, boiler: { name: '鍋爐', lo: 0.5, hi: 0.8, wet: 0.5 }, shaft: { name: '螺旋槳軸', cell: 0.15 }, steampipe: { name: '蒸汽管', cell: 0.15 }, propeller: { name: '螺旋槳', lo: 0.2, hi: 0.9 }, oar: { name: '槳', hpK: 0.9 } };   // propeller：會轉的體素件（24_armor.js propSetup；第二段）。oar：整支一塊（規格表 drv=hp），血量 ＝ GUN_HP × hpK（10_ship.js；Tim 2026-10-18「槳太脆弱了 是否可以加到三倍血量(且可以作為道具設定頁定調整血量 參考螺旋槳)」：0.3 → 0.9）
 var DRVP = {}; Object.keys(DRVP_DEF).forEach(function (k) { DRVP[k] = Object.assign({}, DRVP_DEF[k], (CFG.drvparts || {})[k] || {}); });
-// 動力件檢查的開關（Tim 2026-10-17：「動力件檢查我感覺可以先關閉」）：關（預設）⇒ 戰鬥中不數主機、鍋爐、軸、蒸汽管還剩幾成（都當完好、鍋爐不會泡水熄火、煙囪不停煙）；
+// 動力件檢查的開關（Tim 2026-10-17：「動力件檢查我感覺可以先關閉」）：關（預設）⇒ 戰鬥中不數主機、鍋爐、軸、蒸汽管還剩幾成（都當完好、煙囪不停煙）；鍋爐泡水熄火照算（boilerWet，Tim 2026-10-28「已經幾乎全部浸水仍然有80%動力」）；
 //   螺旋槳照自己的格、沒標動力件的船（舊判法 ±DRV_PART_R 格）也一起關；魔法動力源有實體的（TASK-0680 風暴角號的管風琴：在船長室、打得到）照常數。設定檔 drive.partCheck: true 或網址 ?drvcheck=1 打開；匯入檢查照舊列。
 var DRV_CHECK = Q.has('drvcheck') ? Q.get('drvcheck') === '1' : DRIVE_CFG.partCheck === true;
 var DRV_PART_T = 1, DRV_END_R = 4;                                      // 秒（每兩次 survey）；傳動件兩端：固定點 4 格內的格算端點
@@ -287,6 +287,7 @@ function driveSurvey(sh) {
   if (F.length) { var up = 0; F.forEach(function (f) { if (f.model ? sh.models.some(function (q) { return q.path === f.model && q.alive && !q.moved; }) : f.n0 > 0 && funnelCount(sh.grid, f.p) * 2 >= f.n0) up++; }); fu = up / F.length; }
   D.fu = fu;
   var C = D.C, bk = 1, G = sh.grid, cut = [];
+  if (C && C.B.length) { boilerWet(sh, C, cut); stokerFlood(sh); }      // 鍋爐泡水熄火（同砲浸水）⇒ 那一座的司爐撤出（40_crew.js）；下面算蒸汽照它
   var chk = DRV_CHECK || D.kind === 'magic';                              // 魔法動力源有實體（TASK-0680：管風琴，打得到）⇒ 照常數；開關只管蒸汽那條鏈
   if (C && C.cells) { D.partN = (D.partN || 0) + 1; if (chk && D.partN % 2 === 1) drvPartsTick(sh, C, cut); bk = C.steam; }   // 動力件（TASK-0653）：每 1 秒（survey 每 0.5 秒、隔一次）；檢查關著 ⇒ 都當完好（DRV_CHECK）
   if (C && C.cells) C.fnOff = chk ? drvFunnelsOff(sh, C) : null;
@@ -303,8 +304,8 @@ function driveSurvey(sh) {
       return B2.length > 0 && !B2.some(function (c) { return c.ok.some(function (u) { return u; }); });
     }) : null;
   }
-  D.stk = 1;                                                            // 司爐（TASK-1092）：動力件檢查關著（預設）或舊判法 ⇒ 蒸汽另外 × 到崗（開著、有格子的那一條在 drvPartsTick 裡乘，這裡不再乘）
-  if (C && sh.stokerWant > 0 && !(chk && C.cells)) { D.stk = stokerSteam(sh, C, chk); bk *= D.stk; }
+  D.stk = 1;                                                            // 鍋爐那一節（泡水熄火、司爐到崗）：動力件檢查關著（預設）或舊判法 ⇒ 另外乘（開著、有格子的那一條在 drvPartsTick 裡乘，這裡不再乘）
+  if (C && C.B.length && !(chk && C.cells)) { D.stk = stokerSteam(sh, C, chk); bk *= D.stk; }
   var rw = D.kind === 'oar' ? oarManned(sh) : null;
   D.P.forEach(function (p) {
     if (p.kind === 'rudder' && !p.m && p.n0 > 0) p.ro = drvUp(driveCount(sh.grid, p.p), p.n0) ? 1 : 0;   // 看不見的舵：船尾那一塊格子剩一半以上 ＝ 還在
@@ -375,13 +376,44 @@ function stokerManned(sh) {
   if (!(sh.stokerWant > 0)) return null;
   var M = new Map(); sh.crew.forEach(function (c) { if (c.role === ROLE.STOKER && crewAble(c) && !c.walk && c.boil) { var k = c.boil[0] + ',' + c.boil[1]; M.set(k, (M.get(k) || 0) + 1); } }); return M;
 }
-/** 司爐到崗 ⇒ 全船蒸汽的倍率（TASK-1092；動力件檢查關著（預設）、或沒標格子的舊判法用 —— 開著、有格子 ⇒ drvPartsTick 照每座乘）：
- *  每座鍋爐 man ＝ 在崗 ÷ 該有的（最多 1；記在 C.B[].man，讀數用），照座數平均；chk（舊判法開著）⇒ 只平均還好的那幾座（壞的已經從 bk 扣了）。沒有司爐 ⇒ 1。 */
+/** 鍋爐那一節的倍率（D.stk；動力件檢查關著（預設）、或沒標格子的舊判法用 —— 開著、有格子 ⇒ drvPartsTick 照每座乘）：
+ *  每座 ＝（泡水熄火 ⇒ 0：boilerWet）×（司爐 man ＝ 在崗 ÷ 該有的，最多 1；沒有司爐 ⇒ 1；TASK-1092），照座數平均；記在 C.B[].man（讀數用）。
+ *  chk（舊判法開著）⇒ 只平均還好的那幾座（壞的已經從 bk 扣了）。都沒事 ⇒ 正好 1（n ÷ n）。 */
 function stokerSteam(sh, C, chk) {
-  var SK = stokerManned(sh), sn = Math.max(1, Math.round(+sh.cw.stokers || 0)), num = 0, den = 0; if (!SK) return 1;
-  C.B.forEach(function (c, gi) { c.man = c.man || []; c.b.seats.forEach(function (p, j) { var w = chk ? c.ok[j] : 1; c.man[j] = Math.min(1, (SK.get(gi + ',' + j) || 0) / sn); num += w * c.man[j]; den += w; }); });
+  var SK = stokerManned(sh), sn = Math.max(1, Math.round(+sh.cw.stokers || 0)), num = 0, den = 0;
+  C.B.forEach(function (c, gi) { c.man = c.man || []; c.b.seats.forEach(function (p, j) { var w = chk ? c.ok[j] : 1; c.man[j] = SK ? Math.min(1, (SK.get(gi + ',' + j) || 0) / sn) : 1; num += w * (boilerOut(C, [gi, j]) ? 0 : c.man[j]); den += w; }); });
   return den ? num / den : 1;
 }
+/** 每座鍋爐的爐口（船型層級，記在 drvParts 的 B[].fire）：那一點旁站得住的地板（同 40_crew.js stokerCrew：那一點往下 4 m 到那一點、4 m 內由近到遠；
+ *  不看模型、不看有沒有人站）往上 STOKER_WET（腰）。⛔ 直接看那一點：鍋爐的固定點在鍋爐的實心格裡 ⇒ 艙內的水格容量 0、永遠不算泡水。找不到地板 ⇒ 那一點本身。 */
+function boilerFire(T) {
+  var PT = drvParts(T), G = T.hullG || T.base;
+  PT.B.forEach(function (b) {
+    if (b.fire) return;
+    b.fire = b.seats.map(function (p) {
+      var x = Math.floor(p[0]), y = Math.floor(p[1]), z0 = Math.floor(p[2]) - 40, z1 = Math.floor(p[2]);
+      for (var r = 0; r <= 40; r++) for (var dy = -r; dy <= r; dy++) for (var dx = -r; dx <= r; dx++) {
+        if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue;
+        var z = standZ(G, x + dx, y + dy, z0, z1, 14); if (z >= 0) return [x + dx + 0.5, y + dy + 0.5, z + STOKER_WET];
+      }
+      return p.slice();
+    });
+  });
+  return PT;
+}
+/** 鍋爐泡水（Tim 2026-10-28「已經幾乎全部浸水仍然有80%動力」「可以參考大砲泡水的算法」；同 43_swim.js gunWet）：每次 survey，每座的爐口（boilerFire）
+ *  艙內那一格的水滿一半、連兩次 ⇒ 熄火（C.B[].wl[j].wet；那一座出力 0、司爐撤出：40_crew.js stokerFlood）；連兩次乾了 ⇒ 回來（司爐照位子補回去）。
+ *  動力件檢查開著、關著都算（以前只有開著才看泡水 ⇒ 預設的鍋爐永遠不熄火）。公式模式看不到艙內的水 ⇒ 不管。熄火那一刻記進 cut（廣播）。 */
+function boilerWet(sh, C, cut) {
+  if (!sh.fl) return;
+  var PT = boilerFire(sh.T);
+  C.B.forEach(function (c, gi) {
+    c.wl = c.wl || [];
+    c.b.seats.forEach(function (p, j) { var o = c.wl[j] || (c.wl[j] = {}); if (wetLatch(o, wetAt(sh, PT.B[gi].fire[j], { sea: false, inner: 0.5 })) === 1) cut.push('鍋爐（淹水熄火）'); });
+  });
+}
+/** 那一座鍋爐（b ＝ [鍋爐組, 第幾座]）泡水熄火了沒（boilerWet）。 */
+function boilerOut(C, b) { var c = C && C.B[b[0]], o = c && c.wl && c.wl[b[1]]; return !!(o && o.wet); }
 /** 動力件（每 1 秒；見檔頭「動力件」）：主機、鍋爐照剩幾成＋曲線、鍋爐泡水、司爐到崗、軸與蒸汽管照傳得到幾成 ⇒ C.E[].ok、C.B[].out／ok／man、C.SH[].ok、C.SP[].ok、C.steam；壞掉的那一刻記進 cut（廣播）。 */
 function drvPartsTick(sh, C, cut) {
   var G = sh.grid;
@@ -393,7 +425,7 @@ function drvPartsTick(sh, C, cut) {
     var b = c.b, r = b.cells && b.c0 ? drvLeft(G, b.cells) / b.c0 : null, out = b.cells ? drvCurve('boiler', r === null ? 1 : r) : 1, wet = 0, dry = 0;
     c.man = c.man || [];
     b.seats.forEach(function (p, j) {
-      var w = wetIn > 0 && wetAt(sh, p, { sea: false, inner: wetIn }), up = b.cells ? out > 0 : drvUp(drvCount(G, p), b.n0[j]);
+      var w = (wetIn > 0 && wetAt(sh, p, { sea: false, inner: wetIn })) || boilerOut(C, [gi, j]), up = b.cells ? out > 0 : drvUp(drvCount(G, p), b.n0[j]);   // boilerOut：爐口泡水（boilerWet，每次 survey）
       if (w) wet++;
       var u = up && !w ? 1 : 0; if (c.ok[j] && !u) cut.push(w ? '鍋爐（淹水熄火）' : '鍋爐'); c.ok[j] = u;
       c.man[j] = SK ? Math.min(1, (SK.get(gi + ',' + j) || 0) / sn) : 1;   // 司爐（TASK-1092）：那一座出力 × 到崗比例（同槳手；40_crew.js stokerCrew）
@@ -649,6 +681,6 @@ function driveInfo(sh) {
       w: p.kind === 'sail' ? undefined : +p.w.toFixed(3), rpm: p.ax ? +p.rpm.toFixed(1) : undefined, left: p.left === undefined ? undefined : +p.left.toFixed(3), shaft: p.shaft >= 0 && D.C ? D.C.SH[p.shaft].s.name : undefined, rowers: p.kind === 'oar' ? p.rw + '／' + p.rw0 : undefined, side: p.sg ? (p.sg > 0 ? 'S' : 'P') : undefined,
       chain: p.chain ? p.chain.map(function (n) { return n.name + ' ' + (+n.ok).toFixed(2) + (n.out ? ' +' + (+n.out).toFixed(2) : ''); }).join(' ⇒ ') : undefined }; }),
     chain: D.C ? { engines: D.C.E.map(function (c) { return { name: c.e.name, share: +c.f.toFixed(3), to: c.to, ok: +(+c.ok).toFixed(3), r: c.r == null ? undefined : +c.r.toFixed(3) }; }), shafts: D.C.SH.map(function (c) { return { name: c.s.name, ok: +(+c.ok).toFixed(3) }; }),
-      boilers: D.C.B.map(function (c) { return { name: c.b.name, funnel: c.b.funnel, ok: c.ok.slice(), man: c.man && sh.stokerWant > 0 ? c.man.map(function (v) { return +v.toFixed(2); }) : undefined, r: c.r == null ? undefined : +c.r.toFixed(3), out: c.out == null ? undefined : +c.out.toFixed(3), wet: c.wet, link: c.link }; }),
-      pipes: (D.C.SP || []).map(function (c) { return { name: c.p.name, ok: +(+c.ok).toFixed(3) }; }), steam: +(+D.C.steam).toFixed(3), stk: sh.stokerWant > 0 ? +(D.stk === undefined ? 1 : D.stk).toFixed(3) : undefined, funnelsOff: D.C.fnOff ? D.C.fnOff.slice() : null } : null };   // r ＝ 還剩幾成（動力件，TASK-0653）
+      boilers: D.C.B.map(function (c) { return { name: c.b.name, funnel: c.b.funnel, ok: c.ok.slice(), man: c.man && sh.stokerWant > 0 ? c.man.map(function (v) { return +v.toFixed(2); }) : undefined, wetOut: c.wl ? c.wl.map(function (o) { return !!o.wet; }) : undefined, fire: c.b.fire ? c.b.fire.map(function (p) { return p.map(Math.round); }) : undefined, r: c.r == null ? undefined : +c.r.toFixed(3), out: c.out == null ? undefined : +c.out.toFixed(3), wet: c.wet, link: c.link }; }),
+      pipes: (D.C.SP || []).map(function (c) { return { name: c.p.name, ok: +(+c.ok).toFixed(3) }; }), steam: +(+D.C.steam).toFixed(3), stk: D.C.B.length ? +(D.stk === undefined ? 1 : D.stk).toFixed(3) : undefined, funnelsOff: D.C.fnOff ? D.C.fnOff.slice() : null } : null };   // r ＝ 還剩幾成（動力件，TASK-0653）
 }

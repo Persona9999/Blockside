@@ -7,9 +7,9 @@ var FR = { IDLE: 0, WORK_A: 1, WORK_B: 2, FIRE: 3, RUN_A: 4, RUN_B: 5, WOUNDED: 
 // 砲班：滿編／最少照砲種表（GUNS 的 crew／min，10_ship.js）—— 兩舷各一班；24 磅長砲一班 12 人＋送藥童 ⇒ 一個人物約兩人
 // Tim 2026-10-12：砲班減一人（長砲 6 → 5、追擊砲 4 → 3），多出來的去搬火藥與彈藥（送藥手，23_powder.js）；射速照舊（裝填 ∝ 在崗／滿編）
 var ROLE_NAME = ['砲手', '送藥手', '軍官', '陸戰隊', '桅頂水手', '舵手', '水手', '船醫', '木匠', '帆匠', '槳手', '廚師', '航海士', '軍需官', '司爐'];   // 司爐（TASK-1092）：蒸汽船每座鍋爐旁加煤顧火   // 廚師（TASK-0720，45_galley.js）：貼圖用 ART_COOK 那一列   // 帆匠（47_sailmaker.js）；槳手（TASK-0691）：貼圖照砲手那一列（c.art）   // 船醫（TASK-0676）：貼圖用 ART_NURSE 那一列（44_medic.js medSurgeons）
-var ART_CAPTAIN = 6, NART = 13;                   // 貼圖的列：0–5 照職位，6 船長（每艘船第一個軍官；職位照舊是軍官），7–12 Sirius 的六位（下一行）
+var ART_CAPTAIN = 6, NART = 14;                   // 圖列：0–5 照職位，6船長、7–12護士等六位、13司爐。
+var ART_STOKER = 13;                             // 司爐的圖列（TASK-1091 meadow 畫的；TASK-1092 的司爐、補上去的預備水手都用它）
 var ART_NURSE = 7, ART_CARPENTER = 8, ART_COOK = 9, ART_SAILMAKER = 10, ART_NAVIGATOR = 11, ART_QUARTERMASTER = 12;   // 新職位（TASK-0676）的貼圖列；職位接上之前沒有人用
-var ART_STOKER = ROLE.GUN;                         // 司爐（TASK-1092）：圖還沒交（素材單 TASK-1091）⇒ 先照砲手那一列畫；交了 ⇒ art/crew.png 新的一列、這裡改成它
 function standZ(g, x, y, z0, z1, head) {          // (x, y) 這一柱裡，z0..z1 之間可以站的高度（腳下實心、頭上 head 格空）；沒有 ⇒ -1
   for (var z = z1; z >= z0; z--) {
     if (!g.get(x, y, z - 1) || g.get(x, y, z)) continue;
@@ -206,6 +206,20 @@ function stokerCrew(sh, g, taken, crew, add) {
         add(ROLE.STOKER, at, null, 1); var c = crew[crew.length - 1]; c.boil = [gi, j]; c.art = ART_STOKER;
       }
     });
+  });
+}
+/** 司爐撤出（Tim 2026-10-28「目前司爐好像不受淹水影響」；同砲浸水時砲班離開）：每次 survey（31_drive.js，boilerWet 之後），那一座鍋爐泡水熄火了
+ *  （31_drive.js boilerOut：爐口 ＝ 鍋爐旁的地板往上 STOKER_WET，艙內的水滿一半、連兩次）⇒ 在崗的司爐離開位子改當預備水手
+ *  （位子記在 boilHome／boilOf ⇒ 乾了 42_hands.js 照位子補回去；還淹著不派人）；淹過頭 ⇒ 照預備水手往上一層躲（43_swim.js evacuate）。 */
+var STOKER_WET = 9;                                                     // 格（0.9 m）：鍋爐旁的地板往上到腰 ＝ 爐口（31_drive.js boilerFire）
+function stokerFlood(sh) {
+  var NV = sh.nav, C = sh.drive && sh.drive.C; if (!(sh.stokerWant > 0) || !NV || !C) return;
+  sh.crew.forEach(function (c) {
+    if (c.role !== ROLE.STOKER || !crewAble(c) || !c.boil || c.walk || !boilerOut(C, c.boil)) return;
+    var lv = lvAt(sh, c.pos); if (lv < 0 || !NV.levels[lv]) return;
+    c.boilHome = c.home.slice(); c.boilOf = c.boil; c.boil = null; sh.stokerFled = (sh.stokerFled || 0) + 1;
+    c.role = ROLE.HAND; c.moving = false; c.deck = NV.levels[lv].key;
+    c.hand = { lv: lv, wait: rr(1, 3), legs: [], wp: null, k: 0, climb: null, job: null, to: null };
   });
 }
 /** 每門砲現在有幾個人在崗（走過去的路上不算）。 */

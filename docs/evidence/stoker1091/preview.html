@@ -1,0 +1,22 @@
+<!doctype html><meta charset="utf-8"><title>1091 司爐圖列實機檢視</title>
+<style>body{margin:0;background:#17212a;color:#eee;font:14px sans-serif}header{padding:12px}button{margin-right:10px;padding:6px 14px}iframe{width:100%;height:calc(100vh - 104px);border:0}#status{white-space:pre-wrap}</style>
+<header>第14列司爐立繪：實際遊戲渲染預覽；暫套現有甲板船員測圖，司爐職位由 TASK-1092 接入。<p><button id="near">近看圖列</button><button id="far">遠看圖列</button><span id="status">載入遊戲中</span></p></header>
+<iframe id="game" src="../../../index.html?debug=1&prefs=0&ship=monitor,monitor&start=1&mode=eve&seed=3&slowmo=0&slowcam=0"></iframe>
+<script>
+let chosen=null;
+function view(dist){
+  const g=document.getElementById('game').contentWindow.__game;
+  if(!g || !g.ships().length) return;
+  g.speed(0);
+  const sh=g.ships()[0];
+  if(!chosen) chosen=sh.crew.find(c=>c.role===2 && c.st===0) || sh.crew.find(c=>c.st===0);
+  const c=chosen;c.art=13;c.hair=0;
+  const p=c.pos,m=sh.M;
+  const w=[0,1,2].map(i=>m[i]*p[0]+m[i+4]*p[1]+m[i+8]*p[2]+m[i+12]);
+  g.cam({mode:0,track:false,follow:null,pan:[0,0],tgt:[w[0],w[1]+1,w[2]],dist:dist,pitch:0.08,yaw:sh.yaw+1.5,snap:true});
+  document.getElementById('status').textContent=JSON.stringify({art:c.art,role:c.role,position:c.pos,distance:dist,previewOnly:true,gpu:g.gpu().err});
+}
+document.getElementById('near').onclick=()=>view(5);
+document.getElementById('far').onclick=()=>view(18);
+const ready=setInterval(()=>{try{const g=document.getElementById('game').contentWindow.__game;if(g&&g.ships().length){document.getElementById('status').textContent='已就緒：點近看／遠看';clearInterval(ready);}}catch(e){}},500);
+</script>

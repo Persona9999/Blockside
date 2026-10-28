@@ -1,4 +1,4 @@
-# 區塊職責：Sirius 的水手立繪（ArtGallery/RawImages/sirius_sailor_*_sprite_v1.png，白底；被圍住的白底寫成了原圖的透明 —— Blocksail tools/bg_pockets.py，2026-10-25）⇒ art/crew.png（單圖：1 欄 × 13 列，每格 96×192，只存一份）。
+# 區塊職責：Sirius 水手與 meadow 司爐原稿 ⇒ art/crew.png（單圖：1欄×14列、每格96×192）。
 # 物理意義：遊戲的船員格子：列 ＝ 角色；0 砲手、1 送藥手、2 軍官、3 陸戰隊、4 桅頂水手、5 舵手、6 船長（每艘船第一個軍官畫成船長）、
 #           7–12 Sirius 2026-10-17 的六位（護士、木匠、廚師、帆匠、航海士、軍需官；新職位 TASK-0676，還沒接上的列遊戲照職位那一列畫）。
 #           人一律朝右、腳底（兩隻靴子的中心）在格子底邊正中。動作由遊戲的程式做（js/41_crew_art.js 的 crewPose），每個角色只要一張站姿。
@@ -20,6 +20,7 @@
 #   · 道具：陸戰隊的火槍、軍官與船長的劍（拿在身上，不伸出格子）。送藥手是小孩 ⇒ 身高 0.75。
 # 用法：python -I make_crew.py [RawImages 的路徑]   （在 art/src/ 底下跑，寫到 ../crew.png；沒給路徑 ⇒ Valhalla/ArtGallery/RawImages）
 #       python -I make_crew.py [路徑] --check <png>   （另外存一張檢查圖：頭髮綠、布洋紅）
+#       python -I make_crew.py --append-stoker （只更新第14列，舊13列RGBA不變；司爐讀同目錄stoker.png）
 import os
 import sys
 import numpy as np
@@ -47,6 +48,7 @@ ROWS = [
     ('sailmaker', 1.0, None),      # 10 帆匠
     ('navigator', 1.0, None),      # 11 航海士
     ('quartermaster', 1.0, None),  # 12 軍需官
+    ('stoker', 1.0, None),         # 13 司爐（meadow；青髮／洋紅工作服）
 ]
 # 頭髮：w ＝ 身高 1.0 時的寬；方框 (x0, y0, x1, y1)，像素、不含 x1／y1
 HAIR = {
@@ -115,7 +117,8 @@ def cutout(path):
 
 
 def load(name, scale):
-    im = cutout(os.path.join(RAW, 'sirius_sailor_%s_sprite_v1.png' % name))
+    path = os.path.join(HERE, 'stoker.png') if name == 'stoker' else os.path.join(RAW, 'sirius_sailor_%s_sprite_v1.png' % name)
+    im = cutout(path)
     im = im.crop(im.getbbox())
     h = round(H_PX * scale)
     w = max(1, round(im.width * h / im.height))
@@ -165,6 +168,10 @@ def boxes(spec, key, im):
 
 
 def hair_mask(name, im, cloth):
+    if name == 'stoker':
+        a = np.asarray(im).astype(np.int16)
+        r, g, b = a[..., 0], a[..., 1], a[..., 2]
+        return (a[..., 3] > 0) & (g > r * 1.6) & (b > r * 1.6) & (g > b * 0.6) & (b > g * 0.6)
     spec = HAIR.get(name)
     if not spec:
         return np.zeros((im.height, im.width), bool)
@@ -184,6 +191,10 @@ def hair_mask(name, im, cloth):
 
 
 def cloth_mask(name, im, hair):
+    if name == 'stoker':
+        a = np.asarray(im).astype(np.int16)
+        r, g, b = a[..., 0], a[..., 1], a[..., 2]
+        return (a[..., 3] > 0) & ~hair & (r > g * 1.5) & (b > g * 1.2) & (np.minimum(r, b) > 8)
     m = cloth_rule(im) & ~hair
     for x0, y0, x1, y1 in KEEP.get(name, []):
         m[round(y0 * im.height):round(y1 * im.height), round(x0 * im.width):round(x1 * im.width)] = False
@@ -246,10 +257,41 @@ def to_png8(rgba):
     return out, (len(lc), len(lh), n_rest)
 
 
+def append_stoker():
+    """保持舊人物完全不變，追加司爐；可重跑，不增加重複列。"""
+    dst = os.path.normpath(os.path.join(HERE, '..', 'crew.png'))
+    old = Image.open(dst).convert('RGBA')
+    if old.width != CW or old.height not in (13 * CH, 14 * CH):
+        raise ValueError('追加司爐要求96px寬、13或14列既有圖集')
+    fig = load('stoker', 1.0)
+    hair = hair_mask('stoker', fig, None)
+    cloth = cloth_mask('stoker', fig, hair)
+    if not hair.any() or not cloth.any():
+        raise ValueError('司爐缺少頭髮／工作服標記，拒絕輸出')
+    a = np.asarray(fig).copy()
+    y = luma(a[..., :3].astype(np.float32))
+    lc, lh = level(y, float(np.median(y[cloth]))), level(y, float(np.median(y[hair])))
+    op = a[..., 3] > 0
+    a[op & (a[..., 1] == 0) & (a[..., 0] == a[..., 2]), 1] = 1
+    a[op & (a[..., 0] == 0) & (a[..., 1] == a[..., 2]), 0] = 1
+    a[cloth, 0] = lc[cloth]; a[cloth, 1] = 0; a[cloth, 2] = lc[cloth]
+    a[hair, 0] = 0; a[hair, 1] = lh[hair]; a[hair, 2] = lh[hair]
+    out = Image.new('RGBA', (CW, 14 * CH))
+    out.paste(old.crop((0, 0, CW, 13 * CH)), (0, 0))
+    out.paste(cell(Image.fromarray(a), None), (0, 13 * CH))
+    out.save(dst, optimize=True)
+    back = Image.open(dst).convert('RGBA')
+    assert np.array_equal(np.asarray(back)[:13 * CH], np.asarray(old)[:13 * CH])
+    print('✓ 96×2688、14列；舊13列逐像素不變；司爐布%d點／頭髮%d點' % (cloth.sum(), hair.sum()))
+
+
 def main():
     sys.stdout.reconfigure(encoding='utf-8')
     global RAW
     args = sys.argv[1:]
+    if args == ['--append-stoker']:
+        append_stoker()
+        return
     check = None
     if '--check' in args:
         k = args.index('--check'); check = args[k + 1]; del args[k:k + 2]
@@ -262,7 +304,7 @@ def main():
             figs[key] = load(name, scale)
             hm[key] = hair_mask(name, figs[key], cloth_rule(figs[key]))
             cm[key] = cloth_mask(name, figs[key], hm[key])
-    allc = np.concatenate([np.asarray(figs[k])[..., :3][cm[k]].astype(np.float32) for k in figs])
+    allc = np.concatenate([np.asarray(figs[k])[..., :3][cm[k]].astype(np.float32) for k in figs if k[0] != 'stoker'])
     ymid = float(np.median(luma(allc)))
     blue = np.median(allc, axis=0)
     cells = Image.new('RGBA', (CW, CH * len(ROWS)), (0, 0, 0, 0))
@@ -272,7 +314,7 @@ def main():
         a = np.asarray(figs[key]).copy()
         mc, mh = cm[key], hm[key]
         y = luma(a[..., :3].astype(np.float32))
-        Lc = level(y, ymid)
+        Lc = level(y, float(np.median(y[mc]))) if name == 'stoker' else level(y, ymid)
         Lh = level(y, float(np.median(y[mh]))) if mh.any() else Lc
         op = a[..., 3] > 0
         a[op & (a[..., 1] == 0) & (a[..., 0] == a[..., 2]), 1] = 1     # 非標記的像素不准長得像標記色
