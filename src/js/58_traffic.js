@@ -25,7 +25,7 @@
 //   ⑧ 進出港（Blocksail TASK-0980；Tim 2026-10-26「有船進出港時是否可以暫時改回1倍速 並處理好船的進出港演出」——以前照帆開出泊位，逆風、旁邊有船就卡在棧橋邊噴浪花）：
 //      清單每艘多帶 berth ＝ { at, hdg }（停港的 ＝ 停的那一處；開往這座城的 ＝ 預約的泊位，Blocksail world/fleetfine.js fineBook）。
 //      進出港那一段照拖船、絞纜（史料：進出港靠小艇拖、絞錨）⇒ 半過場（同 88_modeswitch.js 我艦的停靠 dockPull：不照帆、照畫好的路線走，浪照樣晃）：
-//      · 出港（清單的 dock 從 true 變 false）：起錨、放開繫泊，帆收著沿航道往前拖 TRF_OUT_M 公尺（魚骨式、靠棧橋停的船頭本來就朝外）⇒ 張戰鬥帆、交還艦長。
+//      · 出港（清單的 dock 從 true 變 false）：起錨、放開繫泊，張戰鬥帆沿航道往前拖 TRF_OUT_M 公尺（魚骨式、靠棧橋停的船頭本來就朝外）⇒ 交還艦長。
 //      · 進港（開往這座城、離預約的泊位 TRF_IN_M 公尺以內；或清單說到了 dock、船還沒到泊位）：沿航道拖到離泊位 max(30 m, 半個船長 ＋ TRF_SPIN_D) 那一點（魚骨式的格外、靠棧橋的船道上），
 //        在那裡原地轉到停好的船頭（TRF_SPIN），船尾朝泊位直線倒進去（地中海式的船尾繫泊）⇒ 繫在泊位上（清單還沒說到 ⇒ 先繫著等）。
 //      · 拖的時候不擱淺、棧橋不推（照畫好的路線，同照時刻表滑）。
@@ -33,7 +33,7 @@
 //        ⛔ 先關掉（TRF_PORT_X1 false；Tim 2026-10-26「船隻進出港把速度改成1 可以先取消」）⇒ 照玩家選的倍率走、hold 一律 0。
 //      · 航行管制（Tim 2026-10-26「想辦法讓航線能避開碰撞」「可以類似機場一樣 有航行管制(統一分配航線)」；Blocksail world/fleetfine.js 塔台照每條入港航線排時段）：
 //        清單帶 pilot ＝ 港內哪一段（'out' 開出入港航線、'wait' 入口外等、'in' 開進來）＋ 一定有 trk ⇒ 港內照時刻表帶著走（同照時刻表滑，×1 也一樣；沿航線開張戰鬥帆、入口外等與靠近泊位收著）⇒ 3D 的位置 ＝ 塔台排的時段，兩艘不會在航線上碰頭；
-//        出港不再拖 TRF_OUT_M（pilot 'out' 走完、出了入口才張帆）；進港帶到離泊位 max(30, 半個船長 ＋ TRF_SPIN_D) 才轉、倒進去。
+//        出港不再拖 TRF_OUT_M（帆見下面「帆照這一步誰在開」）；進港帶到離泊位 max(30, 半個船長 ＋ TRF_SPIN_D) 才轉、倒進去。
 //        entry ＝ 目的港的入口點：照帆開早到了（×1 時比時刻表快）⇒ 在入口 TRF_ENTRY_M 內停住等放行（⛔ 以前照帆一路開進港，什麼時候進來由物理決定、塔台管不到）。
 //        沒有 pilot（沒有入港航線的城）⇒ 照舊：離泊位 TRF_IN_M 內拖進去、出港拖 TRF_OUT_M。
 //      · 港內港外同步（Blocksail TASK-0980 第二輪；Tim 2026-10-26「讓船隻維持真實模擬速度 然後進出港段也是真實減速」「越靠近停靠越慢 做一個曲線減速 出港曲線加速」「這樣想辦法同步港內外」）：
@@ -43,6 +43,7 @@
 //        不在時刻表裡的移動（沒有入港航線的城的拖、停著換格、港外錨地靠進空出來的那一格）：拖、轉照世界時間的倍率走（同步：×3600 一樣很快，跟其他船同一個時間；
 //        ⛔ 先試過封頂 10 倍（Tim 一開始「最高10倍速演出進出港」）：×3600 時從錨地拖進泊位拖不完就到了出港時刻，原地出港、沒停進去過；2026-10-26 托爾圖加 log）。
 //        帆照這一步誰在開：拖、入口外等（pilot 'wait'）、照時刻表滑到泊位附近（trafficNear 的 w > 0）⇒ 收著；沿入港航線開、港外照時刻表滑 ⇒ 戰鬥帆（Tim 2026-10-29：以前港內一律收著）（⛔ 以前只在 pilot 從 'out' 換掉的那一下張帆 ⇒ 清單跳過那一段就一直收著）。
+//        出港一離泊位就張（Tim 2026-10-29「演出船是否可以改為離開泊位就張帆」）：pilot 'out'、拖出去（tow 'out'）⇒ 戰鬥帆，泊位附近也是；收著的只剩進港靠近泊位、拖進去、入口外等。
 //   ⑨ 表演船（Tim 2026-10-26：「船隻可以改為純演出 只有被玩家瞄準或是離玩家船夠近才變成真正的實體船(參考堡壘 開炮才會變敵對」
 //      「甚至繩帆物理在表演船上都可以不用(可以錄製重播或單純固定」「被玩家開火 或是很靠近(可以撞船)」；以前兩艘往來的船進出港擠在一起就互推、撞斷帆桁）：
 //      往來的船平常是表演船（trafficShow）⇒ 不跟別的船碰撞（31_sailing.js collide）、帆與繩不算布（30_rig_physics.js rigFixed；帆照收好那一捲／作品的形狀畫，11_rig_gpu.js sailWalk）。
@@ -183,12 +184,12 @@ function trafficMoved(sh) {
   var n = sh.npc, b = n.berth, T = n.tow, m = sh.moor, p = T && T.kind === 'in' ? T.A[T.A.length - 1] : (n.dock || n.held) && m && m.x != null ? [m.x, m.z] : null;
   return !!(p && b && Math.hypot(p[0] - b.x, p[1] - b.z) > TRF_MOOR_M);
 }
-/** 清單說出港了（⑧）：起錨、放開繫泊；有航道 ⇒ 帆收著沿航道拖出去（拖完才張帆），沒有（海盜）⇒ 照舊直接張帆。 */
+/** 清單說出港了（⑧）：起錨、放開繫泊、張戰鬥帆（Tim 2026-10-29「離開泊位就張帆」；以前拖出去、出了入口才張）；有航道 ⇒ 沿航道拖出去，沒有（海盜）⇒ 照帆開。 */
 function trafficLeave(sh) {
   var n = sh.npc; n.tow = null;
-  if (n.pilot) { trafficDock(sh, false, 0); n.lag = null; return; }   // 航行管制：照時刻表帶出去（trafficGlide），出了入口才張帆（trafficPilot）；從泊位接著追（trafficLagOf：清單晚到的那一段，⛔ 設 0 ⇒ 第一格跳 36 m、斜切過指形棧橋）
+  if (n.pilot) { trafficDock(sh, false); n.lag = null; return; }      // 航行管制：照時刻表帶出去（trafficGlide）；從泊位接著追（trafficLagOf：清單晚到的那一段，⛔ 設 0 ⇒ 第一格跳 36 m、斜切過指形棧橋）
   if (!n.path) { trafficDock(sh, false); return; }
-  trafficDock(sh, false, 0);
+  trafficDock(sh, false);
   trafficTowStart(sh, 'out', n.path, null);
 }
 /** 進港：從船現在的位置接上航道剩下的那一段（投影到最近的那一段之後），最後一點補成泊位。
@@ -222,7 +223,7 @@ function trafficTowStart(sh, kind, P, y1) {
   sh.npc.tow = { kind: kind, A: A, cum: cum, L: L, s: 0, v: Math.max(0, sh.spd), y1: y1, sa: sa, spin: false, spun: false, t0: SIMT, wr: Math.min(TRF_SPIN, TRF_SPIN_TIP / Math.max(1, half)) };
   sh.npc.held = false; sh.moor = null;
   if (sh.anc) { anchorToggle(sh, 'P', false); anchorToggle(sh, 'S', false); }
-  trafficSails(sh, 0);
+  trafficSails(sh, kind === 'out' ? 2 : 0);                              // 出港一離泊位就張（⑧）；拖進去收著
 }
 /** 表演船（⑨）：往來的船、還沒變成真的船 ⇒ 不跟別的船碰撞、帆與繩不算布。 */
 function trafficShow(sh) { return !!(sh && sh.npc && !sh.npc.real); }
@@ -261,7 +262,7 @@ function trafficPortN() { if (!TRF_PORT_X1) return 0; var n = 0; for (var i = 0;
 function trafficPilot(sh, p) {
   var n = sh.npc, o = n.pilot || null; p = p || null; if (o === p) return;
   n.pilot = p;
-  if (p && p !== 'dock' && !n.dock && !n.tow && !n.held) { n.lag = null; trafficSails(sh, 0); if (sh.anc) { anchorToggle(sh, 'P', false); anchorToggle(sh, 'S', false); } }
+  if (p && p !== 'dock' && !n.dock && !n.tow && !n.held) { n.lag = null; trafficSails(sh, p === 'out' ? 2 : 0); if (sh.anc) { anchorToggle(sh, 'P', false); anchorToggle(sh, 'S', false); } }   // 出港一離泊位就張（⑧）
   if (!p && o === 'out' && !n.dock) { trafficSails(sh, 2); sh.spd = Math.max(sh.spd, VMAX * TRF_V0); }
 }
 /** 照畫好的路線走（照時刻表滑、拖）⇒ 不擱淺、棧橋不推、海圖塊不等它（08_seabed.js、50_sim.js）。 */
@@ -330,7 +331,7 @@ function trafficGlide(sh, dt) {
   var a = T[i - 1], b = T[i], k = clamp((h - a[0]) / Math.max(1e-9, b[0] - a[0]), 0, 1);
   var x = a[1] + (b[1] - a[1]) * k, z = a[2] + (b[2] - a[2]) * k, dx = b[1] - a[1], dz = b[2] - a[2];
   var B = trafficNear(sh, x, z), px0 = sh.px, pz0 = sh.pz; sh.px = x + B.ox; sh.pz = z + B.oz;   // 泊位附近：補上 3D 泊位的差（⑧ 同步）
-  trafficSails(sh, n.pilot === 'wait' || B.w > 0 ? 0 : 2);              // 沿入港航線開（出港、進港）、港外 ⇒ 戰鬥帆；入口外等、靠近泊位 ⇒ 收著（Tim 2026-10-29「目前航行的船(裝飾船) 都是收帆狀態」：以前整條入港航線都收著，好幾公里光著桅開）
+  trafficSails(sh, n.pilot === 'wait' || (B.w > 0 && n.pilot !== 'out') ? 0 : 2);   // 沿入港航線開（出港、進港）、港外 ⇒ 戰鬥帆；入口外等、進港靠近泊位 ⇒ 收著（Tim 2026-10-29「目前航行的船(裝飾船) 都是收帆狀態」：以前整條入港航線都收著，好幾公里光著桅開；「離開泊位就張帆」⇒ 出港在泊位附近也張）
   if (B.w > 0) {                                                         // 離泊位越近越接近停好的船頭（照位置直接擺：快轉時一樣順）
     var dr = Math.hypot(dx, dz) > 1 ? Math.atan2(-dz, dx) : sh.yaw, e = Math.atan2(Math.sin(B.yaw - dr), Math.cos(B.yaw - dr));
     if (!n.turnSg) n.turnSg = e >= 0 ? 1 : -1;                           // 轉的方向開始時定好（船尾繫泊差 180° ⇒ e 在 ±π 附近換號，⛔ 每一步重挑 ⇒ 船來回甩）

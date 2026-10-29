@@ -8,15 +8,20 @@
 //   · 船：船身「水線下 QUAY_Z0 到水線上 QUAY_Z1 公尺」那一段（棧橋板面在水上 1.0–1.4 m ⇒ 這一段的船身會碰到板、樁），從這一段最前到最後每 QUAY_DX 公尺一點、
 //     半徑 ＝ 那一點前後半格距內、這一段實心格離中線最遠的那一格 ⇒ 船頭船尾窄的照實際、水線上伸出去的船頭（艏樓、船首像底下）也算。
 //     ⛔ 以前只量水線上下幾格、水線兩端往內 8 格 ⇒ 水線那一點停在板邊，上面的船頭伸到板面上方好幾公尺（2026-10-25 金斯敦截圖）。
-//   · 壓進去 ⇒ 船整艘照壓得最深的那一點沿法線推出來（一步最多 QUAY_PUSH 公尺）；航速扣掉往它撞進去的那一份（正面撞上 ⇒ 停住；斜著擦過 ⇒ 剩下沿著走的那一份），
-//     碰到的那一點在船中心前面 ⇒ 船頭往離開它的那一側偏（QUAY_TURN）⇒ 沿著滑開。
+//   · 壓進去 ⇒ 船整艘沿每一點的法線推出來：每一個取樣點取它壓得最深的那一個，推的量 ＝ Σ 法線·深² ÷ Σ 深（一步最多 QUAY_PUSH·dt 公尺）；
+//     航速扣掉往它撞進去的那一份（正面撞上 ⇒ 停住；斜著擦過 ⇒ 剩下沿著走的那一份），碰得最深的那一點在船中心前面 ⇒ 船頭往離開它的那一側偏（QUAY_TURN）⇒ 沿著滑開。
+//     ⛔ 以前只照最深的那一點推、一步最多 1 m（Tim 2026-10-29「停泊中的船隻進入戰鬥模式(小船泊位) 會卡住持續高頻震動 然後噴很高的水柱」）：
+//       兩邊都壓到（夾在指形棧橋、T 字頭之間）⇒ 這一步推出左邊、壓進右邊，下一步反過來 ⇒ 一步來回 1 m 地抖；船殼一格移 1 m ＝ 60 m/s ⇒ 13_water.js 照船殼的點速度推水，噴一大片。
+//       現在兩邊的法線互相抵掉一部分 ⇒ 停在兩邊壓得一樣深的那一點、不抖；照速度封頂 ⇒ 推出來的那幾步看起來是 4 m/s 的船在動。
+//       抵掉了、又壓得比 QUAY_STUCK 深（船身跨在棧橋上）⇒ 照同一個方向（sh.quayDir：上一步推的）一直推到出來，不在中線兩邊換來換去。
 //   · 不推：繫在泊位上的（sh.moor）、自動停靠／出航中的我艦（88_modeswitch.js：照畫好的航道走；Tim 2026-10-24「風、碰撞、水深推不開它」）。
-//   · 讀數：sh.quayHit ＝ { t 最後一次碰到的時刻, t0 這一次從什麼時候開始碰, kind 碰到哪一種, pen 壓進去多深 }（離開 ⇒ null）。
+//   · 讀數：sh.quayHit ＝ { t 最後一次碰到的時刻, t0 這一次從什麼時候開始碰, kind 碰到哪一種, pen 壓進去多深 }（離開 QUAY_HOLD 秒 ⇒ null ⇒ 下次碰到才再報「撞上」：
+//     頂著棧橋開的船每一步推出去、下一步又碰到，以前每次都報一行）。
 // 繫泊（moorPull；31_sailing.js 每一步錨之後）：sh.moor ＝ { x, z, yaw }（船的中心、船頭；x 還沒有 ⇒ 第一步照當下的位置記）⇒ 位置、船頭每一步用彈簧（MOOR_PULL，每秒）拉回去、
 //   航速歸零 ⇒ 浪照樣晃，風、水流、錨推不走（以前只靠兩錨：錨鍊放 38 m，水流照樣加在船速上 ⇒ 繞錨漂到棧橋外；075e5bd 量到往來的船收帆之後 35 秒還漂 1.5 m）。
 //   我艦：停靠過場停好了（88_modeswitch.js dockPull）、直接從城鎮模式開場時離停靠處 MOOR_SNAP 公尺以內（dockGot）⇒ 繫在停靠處（DOCK.here 的 at、yaw）；不是城鎮模式、又在自動開 ⇒ 放開。
 //   往來的船：停港（58_traffic.js trafficDock）⇒ 繫在停下來的那一點；出港 ⇒ 放開。
-var QUAY_Z0 = 0.1, QUAY_Z1 = 2.5, QUAY_DX = 1.5, QUAY_PUSH = 1, QUAY_TURN = 0.35, MOOR_PULL = 2, MOOR_SNAP = 40;   // 水線下、水線上幾公尺；點距（公尺）；一步最多推幾公尺；偏轉（rad/s，正面撞上時）；彈簧（每秒）；公尺
+var QUAY_Z0 = 0.1, QUAY_Z1 = 2.5, QUAY_DX = 1.5, QUAY_PUSH = 4, QUAY_STUCK = 1, QUAY_TURN = 0.35, QUAY_HOLD = 1, MOOR_PULL = 2, MOOR_SNAP = 40;   // 水線下、水線上幾公尺；點距（公尺）；推出來最快幾 m/s（> 31_sailing.js VMAX）；兩邊抵掉時壓多深算跨在上面（公尺）；偏轉（rad/s，正面撞上時）；離開幾秒才算分開；彈簧（每秒）；公尺
 /** 船的取樣點（船型一份，T.quay；vs ＝ 一格幾公尺）：[[x 格, 半寬 格]…]（上面的說明）。 */
 function quayHull(T, vs) {
   if (T.quay) return T.quay;
@@ -93,29 +98,41 @@ var QUAY_NAME = { quay: '碼頭石岸', mole: '石堤', wharf: '長碼頭', wlot
 function quayStep(sh, dt) {
   if (!BED || !TOWNS.list.length || sh.sunk || sh.fixed || sh.moor || dockOn(sh)) return;
   var T = sh.T, M = sh.M, o = M4.pt(M, 0, 0, 0), ex = M4.pt(M, 1, 0, 0), vs = Math.hypot(ex[0] - o[0], ex[1] - o[1], ex[2] - o[2]), H = quayHull(T, vs);
-  var c = sh.center || shipCenter(sh), reach = (T.wl1 - T.wl0) * vs / 2 + 30, best = 0, bn = null, bp = null, bk = '';
-  for (var t = 0; t < TOWNS.list.length; t++) {
-    var Tw = TOWNS.list[t]; if (!Tw.p || !Tw.E) continue;
-    var O = quayObs(Tw);
-    if (c[0] < O.bb[0] - reach || c[0] > O.bb[2] + reach || c[2] < O.bb[1] - reach || c[2] > O.bb[3] + reach) continue;
-    for (var k = 0; k < H.length; k++) {
-      var p = M4.pt(M, H[k][0], T.cy, T.zw), r = H[k][1] * vs, i, hit;
+  var c = sh.center || shipCenter(sh), reach = (T.wl1 - T.wl0) * vs / 2 + 30, best = 0, bn = null, bp = null, bk = '', sx = 0, sz = 0, sw = 0, D = sh.quayDir, dOk = false;
+  for (var k = 0; k < H.length; k++) {
+    var p = M4.pt(M, H[k][0], T.cy, T.zw), r = H[k][1] * vs, kp = 0, kn = null, kk = '';   // 這一點壓得最深的那一個
+    for (var t = 0; t < TOWNS.list.length; t++) {
+      var Tw = TOWNS.list[t]; if (!Tw.p || !Tw.E) continue;
+      var O = quayObs(Tw), i, hit;
+      if (c[0] < O.bb[0] - reach || c[0] > O.bb[2] + reach || c[2] < O.bb[1] - reach || c[2] > O.bb[3] + reach) continue;
       for (i = 0; i < O.segs.length; i++) {
         var s = O.segs[i];
         if (Math.max(s.a[0], s.b[0]) + s.r + r < p[0] || Math.min(s.a[0], s.b[0]) - s.r - r > p[0] || Math.max(s.a[1], s.b[1]) + s.r + r < p[2] || Math.min(s.a[1], s.b[1]) - s.r - r > p[2]) continue;
         var q = quaySegPt(p[0], p[2], s.a, s.b), d = Math.hypot(p[0] - q[0], p[2] - q[1]), pen = r + s.r - d;
-        if (pen > best) { best = pen; bn = d > 1e-6 ? [(p[0] - q[0]) / d, (p[2] - q[1]) / d] : [-Math.sin(sh.yaw), -Math.cos(sh.yaw)]; bp = p; bk = s.kind; }
+        if (pen > kp) { kp = pen; kn = d > 1e-6 ? [(p[0] - q[0]) / d, (p[2] - q[1]) / d] : [-Math.sin(sh.yaw), -Math.cos(sh.yaw)]; kk = s.kind; }
       }
-      for (i = 0; i < O.polys.length; i++) { hit = quayPoly(p[0], p[2], r, O.polys[i].P); if (hit && hit.pen > best) { best = hit.pen; bn = hit.n; bp = p; bk = O.polys[i].kind; } }
+      for (i = 0; i < O.polys.length; i++) { hit = quayPoly(p[0], p[2], r, O.polys[i].P); if (hit && hit.pen > kp) { kp = hit.pen; kn = hit.n; kk = O.polys[i].kind; } }
     }
+    if (!kn) continue;
+    sx += kn[0] * kp * kp; sz += kn[1] * kp * kp; sw += kp;
+    if (D && kn[0] * D[0] + kn[1] * D[1] > 0) dOk = true;
+    if (kp > best) { best = kp; bn = kn; bp = p; bk = kk; }
   }
-  if (!bn) { if (sh.quayHit) sh.quayHit = null; return; }
-  var push = Math.min(best, QUAY_PUSH); sh.px += bn[0] * push; sh.pz += bn[1] * push;
+  if (!bn) { sh.quayDir = null; if (sh.quayHit && SIMT - sh.quayHit.t > QUAY_HOLD) sh.quayHit = null; return; }
+  var px = sx / sw, pz = sz / sw, pl = Math.hypot(px, pz), cap = QUAY_PUSH * dt;   // 推的量（上面的說明）：兩邊的法線抵掉一部分；照速度封頂
+  if (pl < 0.3 * best && best > QUAY_STUCK) {                          // 抵掉了、又壓得很深（船身跨在棧橋上：前後兩半往相反的方向推）⇒ 照同一個方向推到出來
+    if (!dOk) D = bn;                                                   // 上一步推的方向還推得開某一點 ⇒ 照它；不然照最深的那一點（⛔ 每一步照最深的 ⇒ 過了中線就換邊、來回抖）
+    px = D[0] * best; pz = D[1] * best; pl = best;
+  }
+  if (pl > cap) { px *= cap / pl; pz *= cap / pl; pl = cap; }
+  sh.quayDir = pl > 1e-6 ? [px / pl, pz / pl] : null;
+  sh.px += px; sh.pz += pz;
+  if (pl > 1e-6) bn = [px / pl, pz / pl];                               // 撞進去的那一份、偏轉照實際推的方向
   var F = fwd(sh.yaw), v0 = Math.abs(sh.spd), into = -(sh.spd < 0 ? -1 : 1) * (F[0] * bn[0] + F[2] * bn[1]);   // 船走的方向往它撞進去的那一份（1 ＝ 正面）
   if (into > 0) sh.spd *= 1 - into;
   var lever = (bp[0] - c[0]) * F[0] + (bp[2] - c[2]) * F[2], dF = -Math.sin(sh.yaw) * bn[0] - Math.cos(sh.yaw) * bn[1];   // 碰到的那一點在中心前（＋）後；yaw 變大時船頭往法線那一側走多少
   if (into > 0 && Math.abs(dF) > 1e-6) sh.yaw += (dF > 0 ? 1 : -1) * (lever >= 0 ? 1 : -1) * QUAY_TURN * into * dt;   // 碰到的那一頭（前 ⇒ 船頭、後 ⇒ 船尾）往離開它的那一側偏
-  var first = !sh.quayHit;
+  var first = !sh.quayHit;                                              // 離開不到 QUAY_HOLD 秒又碰到 ⇒ 同一次
   sh.quayHit = { t: SIMT, kind: bk, pen: +best.toFixed(2), t0: first ? SIMT : sh.quayHit.t0 };
   if (first) note(sh, '撞上' + (QUAY_NAME[bk] || '棧橋') + '（' + v0.toFixed(1) + ' m/s）', true);
 }

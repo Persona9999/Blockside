@@ -166,7 +166,8 @@ var FLOOP_GLSL = 'uniform highp sampler2D uLT;\nconst int LNF=' + FLOOP_NF + '; 
   'vec3 lpB(int c,int b,float fr){ int a=min(int(floor(fr)),LNF-1); int a1=a+1; if(a1>=LNF) a1=0; float t=fr-float(a); return mix(lpF(c,b*LNF+a),lpF(c,b*LNF+a1),t); }\n' +
   'vec3 lpP(int c,float fr,float bw){ int b0=min(int(floor(bw)),3); int b1=min(b0+1,3); return mix(lpB(c,b0,fr),lpB(c,b1,fr),bw-float(b0)); }\n' +
   'float lpFr(float t,float rate,float ph){ return mod(t*rate*(LNFf/LSEC)+ph*LNFf,LNFf); }\n';
-/** 繩帆固定的船的帆緩衝變體：頂點那一段先過 sailFx（aX：0 照緩衝；1 旗（沿飛第幾點 i、沿旗桿第幾點 j、第幾面）；2 帆（第幾根帆桁、擺幅（格，帶正負）、相位））。
+/** 繩帆固定的船的帆緩衝變體：頂點那一段先過 sailFx（aX：0 照緩衝；1 旗（沿飛第幾點 i、沿旗桿第幾點 j、第幾面）；2 帆（第幾根帆桁、擺幅（格，帶正負）、相位）；
+ *  3 作品自帶的旗（沿飛 u、沿旗桿 v：作品的 uv，0..1 ⇒ 照旗形的粗格雙線性內插，同建築旗；第幾面））。
  *  uFA：綁邊上端（格）、相位；uFB：旗形的起始欄、沿旗桿幾點、沿飛幾點、播放倍率；uFC：沿飛縮放、沿旗桿縮放、風速檔位；uYd：帆桁轉軸 x、y、轉角；uFW：下風方向 x、y（格座標）、時間（秒）、這一艘的擺動相位。 */
 function floopFxGlsl() {
   var g = (1 / S).toFixed(6);
@@ -176,6 +177,11 @@ function floopFxGlsl() {
     ' if(aX.x>0.5 && aX.x<1.5){ int k=int(aX.w+0.5); vec4 A=uFA[k], B=uFB[k], C=uFC[k]; int c0=int(B.x+0.5), nv=int(B.y+0.5), nu=int(B.z+0.5), i=int(aX.y+0.5), j=int(aX.z+0.5);\n' +
     '  float fr=lpFr(uFW.z,B.w,A.w); int ia=max(i-1,0), ib=min(i+1,nu-1), ja=max(j-1,0), jb=min(j+1,nv-1);\n' +
     '  vec3 q=lpP(c0+i*nv+j,fr,C.z), du=lpP(c0+ib*nv+j,fr,C.z)-lpP(c0+ia*nv+j,fr,C.z), dv=lpP(c0+i*nv+jb,fr,C.z)-lpP(c0+i*nv+ja,fr,C.z);\n' +
+    '  P=A.xyz+fxMap(q,uFW.xy,C.x,C.y); N=cross(fxMap(du,uFW.xy,C.x,C.y),fxMap(dv,uFW.xy,C.x,C.y)); }\n' +
+    ' else if(aX.x>2.5){ int k=int(aX.w+0.5); vec4 A=uFA[k], B=uFB[k], C=uFC[k]; int c0=int(B.x+0.5), nv=int(B.y+0.5), nu=int(B.z+0.5);\n' +
+    '  float fr=lpFr(uFW.z,B.w,A.w), cu=clamp(aX.y,0.0,1.0)*float(nu-1), cv=clamp(aX.z,0.0,1.0)*float(nv-1); int i=min(int(cu),nu-2), j=min(int(cv),nv-2); float a=cu-float(i), b=cv-float(j);\n' +
+    '  vec3 p00=lpP(c0+i*nv+j,fr,C.z), p10=lpP(c0+(i+1)*nv+j,fr,C.z), p01=lpP(c0+i*nv+j+1,fr,C.z), p11=lpP(c0+(i+1)*nv+j+1,fr,C.z);\n' +
+    '  vec3 q=mix(mix(p00,p10,a),mix(p01,p11,a),b), du=mix(p10-p00,p11-p01,b), dv=mix(p01-p00,p11-p10,a);\n' +
     '  P=A.xyz+fxMap(q,uFW.xy,C.x,C.y); N=cross(fxMap(du,uFW.xy,C.x,C.y),fxMap(dv,uFW.xy,C.x,C.y)); }\n' +
     ' else if(aX.x>1.5){ float yv=aX.y;\n' +
     '  if(yv>-0.5){ int y=int(floor(yv)); vec4 Y=uYd[y]; float an=Y.z*clamp((fract(yv)-0.001)/0.998,0.0,1.0), c=cos(an), s=sin(an); vec2 d=P.xy-Y.xy; P.xy=Y.xy+vec2(d.x*c-d.y*s,d.x*s+d.y*c); N.xy=vec2(N.x*c-N.y*s,N.x*s+N.y*c); }\n' +
@@ -246,7 +252,13 @@ function floopFxBuild(ow, L, nv) {
       for (i = 0; i < n; i++) { var w = (base + i) * 4; X[w] = 1; X[w + 1] = Math.floor(i / Z.NV); X[w + 2] = i % Z.NV; X[w + 3] = FL.length - 1; }
       continue;
     }
-    var D = floopSailTpl(T, !!s.flag);                                  // 張著的帆、作品自帶的旗：繞帆桁轉（旗整面、帆照比例扭）＋呼吸
+    var Fa = s.flag ? floopAuthFlag(ow, T, s, ys) : null;
+    if (Fa && FL.length < FLOOP_FMAX) {                                  // 作品自帶的旗（作品裡掛好的樣子）⇒ 跟戰鬥旗同一套循環：旗桿上端掛在作品那一點、照風飄
+      Fa.k = k; Fa.ph = townHash(id + ':flag' + k); FL.push(Fa);
+      for (i = 0; i < n; i++) { var w3 = (base + i) * 4; X[w3] = 3; X[w3 + 1] = T.uv[i * 2]; X[w3 + 2] = T.uv[i * 2 + 1]; X[w3 + 3] = FL.length - 1; }
+      continue;
+    }
+    var D = floopSailTpl(T, !!s.flag);                                  // 張著的帆（旗沒有 uv 的）：繞帆桁轉（旗整面、帆照比例扭）＋呼吸
     for (i = 0; i < n; i++) { var w2 = (base + i) * 4, y = D.Y[i] >= 0 ? ys.get(ow.models[D.Y[i]]) : undefined; X[w2] = 2; X[w2 + 1] = y === undefined ? -1 : y + 0.001 + 0.998 * D.Wt[i]; X[w2 + 2] = D.A[i]; X[w2 + 3] = D.ph; }   // 第幾根帆桁（整數）＋轉幾成（小數）
   }
   if (!B.fxb) B.fxb = gl.createBuffer();
@@ -264,6 +276,31 @@ function floopFxFrame(ow) {
   for (i = 0; i < F.flags.length; i++) U.C[i * 4 + 2] = bw;
   var Y = ow.yards || [];
   for (i = 0; i < Y.length && i < FLOOP_YMAX; i++) { var m = Y[i]; U.Y[i * 4] = m.piv[0]; U.Y[i * 4 + 1] = m.piv[1]; U.Y[i * 4 + 2] = m.rot || 0; }
+  for (i = 0; i < F.flags.length; i++) {                               // 作品自帶的旗掛在帆桁上（斜桁頂端）⇒ 旗桿上端跟著帆桁轉（同 rotZ）
+    var f = F.flags[i]; if (!(f.y >= 0)) continue;
+    var y = Y[f.y], an = y.rot || 0, c = Math.cos(an), s = Math.sin(an), dx = f.top[0] - y.piv[0], dy = f.top[1] - y.piv[1];
+    U.A[i * 4] = y.piv[0] + dx * c - dy * s; U.A[i * 4 + 1] = y.piv[1] + dx * s + dy * c;
+  }
+}
+/** 作品自帶的旗（沒有 team；Tim 2026-10-29 回報船尾斜桁上的旗「仍然有點怪」）：作品裡的樣子是掛好、垂下來的那一刻（信風號：旗邊沿著斜桁綁 0.74 m、旗尾垂 1.6 m）
+ *  ⇒ 整面跟著帆桁轉還是一塊歪的梯形、不會飄。改成跟合成的戰鬥旗同一套循環：旗桿上端 ＝ uv (0, 0) 那一點（綁在帆桁上 ⇒ 每格跟著帆桁轉，floopFxFrame），
+ *  旗邊垂直往下、照下風飄；每一點照自己的 uv 在旗形的粗格上雙線性內插。大小：沿飛 ＝ 上下兩條邊短的那條、沿旗桿 ＝ 兩條豎邊長的那條（垂下來的那一刻上緣被拉長、旗邊被擠短）。
+ *  沒有 uv、找不到 (0, 0) 那一點 ⇒ null（照以前繞帆桁整面轉）。 */
+function floopAuthFlag(ow, T, s, ys) {
+  var n = T.n, uv = T.uv, p = T.p0, top = -1, i;
+  if (!uv || uv.length < n * 2) return null;
+  for (i = 0; i < n; i++) { if (!(uv[i * 2] >= 0 && uv[i * 2] <= 1 && uv[i * 2 + 1] >= 0 && uv[i * 2 + 1] <= 1)) return null; if (uv[i * 2] < 1e-3 && uv[i * 2 + 1] < 1e-3) top = i; }
+  if (top < 0) return null;
+  function edge(ax, val) {                                              // uv 的第 ax 軸 ＝ val 的那一排點照另一軸排好、量折線長（格）
+    var L = []; for (var j = 0; j < n; j++) if (Math.abs(uv[j * 2 + ax] - val) < 1e-3) L.push(j);
+    L.sort(function (a, b) { return uv[a * 2 + 1 - ax] - uv[b * 2 + 1 - ax]; });
+    for (var d = 0, q = 1; q < L.length; q++) { var a = L[q - 1] * 3, b = L[q] * 3; d += Math.hypot(p[a] - p[b], p[a + 1] - p[b + 1], p[a + 2] - p[b + 2]); }
+    return L.length > 1 ? d : 0;
+  }
+  var Z = floopShape(s.meta && s.meta.flag === 'pennant' ? 'pennant' : 'ensign'), Lg = Math.min(edge(1, 0), edge(1, 1)), Hg = Math.max(edge(0, 0), edge(0, 1));
+  if (!(Lg > 0 && Hg > 0)) return null;
+  var sim = T.sim, yk = sim && sim.n === n ? sim.yk[top] : -1, y = yk >= 0 ? ys.get(ow.models[yk]) : undefined, sL = Lg * S / Z.L;
+  return { Z: Z, top: [p[top * 3], p[top * 3 + 1], p[top * 3 + 2]], y: y === undefined ? -1 : y, auth: true, sL: sL, sH: Hg * S / Z.H, rate: 1 / Math.sqrt(Math.max(0.05, sL)) };
 }
 /** 畫這一艘之前（drawSails 的循環那一段）。 */
 function floopFxSet(p, ow) {
@@ -401,15 +438,22 @@ function floopYardCheck(i) {
       mx = Math.max(mx, Math.hypot(A[0] - B[0], A[1] - B[1], A[2] - B[2]) * S); n++;
     }
   });
-  return { ship: i, points: n, maxM: +mx.toFixed(5) };
+  var U = sh.fx.U, nf = 0, mf = 0;                                     // 作品自帶的旗掛在帆桁上的那一點（floopFxFrame 照帆桁轉的旗桿上端）vs 帆桁的模型
+  sh.fx.flags.forEach(function (f, j) {
+    if (!(f.y >= 0)) return;
+    var m = sh.yards[f.y], g = f.top, B = M4.pt(modelLocal(m), g[0] - m.origin[0], g[1] - m.origin[1], g[2] - m.origin[2]);
+    mf = Math.max(mf, Math.hypot(U.A[j * 4] - B[0], U.A[j * 4 + 1] - B[1], U.A[j * 4 + 2] - B[2]) * S); nf++;
+  });
+  return { ship: i, points: n, maxM: +mx.toFixed(5), flagTops: nf, flagMaxM: +mf.toFixed(5) };
 }
 /** 每一艘走「繞帆桁轉」的布（張著的帆、作品自帶的旗）：照著色器那一套轉（不含呼吸）之後，三角形的邊最多被拉長幾倍（> 1.05 的才列）。 */
 function floopStretch() {
   var out = [];
   SHIPS.forEach(function (sh) {
     if (!sh.fx) return;
+    var FK = {}; sh.fx.flags.forEach(function (f) { FK[f.k] = 1; });   // 走循環的旗（合成的、作品自帶的）照旗形播，不是繞帆桁轉 ⇒ 不量
     (sh.cl || []).forEach(function (c, k) {
-      var s = sh.sails[k], T = c.T; if (!s || s.dead || s.furled || (s.flag && s.meta && s.meta.team)) return;
+      var s = sh.sails[k], T = c.T; if (!s || s.dead || s.furled || FK[k]) return;
       var D = floopSailTpl(T, !!s.flag), P = T.p0, Q = new Float64Array(T.n * 3), v, j, mx = 1;
       for (v = 0; v < T.n; v++) { var y = D.Y[v], m = y >= 0 ? sh.models[y] : null, g = [P[v * 3], P[v * 3 + 1], P[v * 3 + 2]], r = m && m.piv ? rotZ(g, m.piv, (m.rot || 0) * D.Wt[v]) : g; Q[v * 3] = r[0]; Q[v * 3 + 1] = r[1]; Q[v * 3 + 2] = r[2]; }
       for (j = 0; j < T.tris.length; j += 3) for (var e = 0; e < 3; e++) {
