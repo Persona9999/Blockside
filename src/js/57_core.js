@@ -33,6 +33,15 @@ function coreHullDiff(G, B) {
   idx.forEach(function (k, j) { var p = L[k * 2]; dv.setUint32(j * 5, p - last, true); u[j * 5 + 4] = L[k * 2 + 1]; last = p; if (!L[k * 2 + 1]) gone++; });
   return { n: n, gone: gone, d: coreB64(u) };
 }
+/** 補丁那幾格（46_plug.js sh.plugs，還在的）：線性索引 x ＋ sx·(y ＋ sy·z) 照大小排，每格跟前一格的差 u32 LE ⇒ { n, d: base64 }（同 coreHullDiff 的索引，只是不帶值）。 */
+function corePlugOut(sh) {
+  var G = sh.grid, L = [];
+  sh.plugs.forEach(function (p) { var x = p & 2047, y = (p >> 11) & 1023, z = p >> 21; if (G.get(x, y, z)) L.push(x + G.sx * (y + G.sy * z)); });
+  L.sort(function (a, b) { return a - b; });
+  var u = new Uint8Array(L.length * 4), dv = new DataView(u.buffer), last = 0;
+  L.forEach(function (p, j) { dv.setUint32(j * 4, p - last, true); last = p; });
+  return { n: L.length, d: coreB64(u) };
+}
 /** 每個職位：開局幾人（coreSpawned 記的）、現在站得住幾人（st 0）。游到敵艦的人在敵艦的名單上（43_swim.js swimXfer）。 */
 function coreCrew(sh) {
   var R = {};
@@ -49,7 +58,7 @@ function coreShipOut(sh) {
   sh.models.forEach(function (m, k) { if (!m.alive || m.hp !== m.hpMax) models.push({ k: k, id: (m.meta && m.meta.id) || '', kind: m.kind, hp: Math.max(0, +(+m.hp).toFixed(2)), alive: !!m.alive }); });
   sh.sails.forEach(function (s, k) { if (s.dead || s.hp !== s.hpMax) sails.push({ k: k, hp: Math.max(0, +(+s.hp).toFixed(2)), dead: !!s.dead }); });
   sh.ropes.forEach(function (r, k) { if (r.dead) ropes.push(k); });
-  return {
+  var o = {
     hull: T.key || T.id, sum: T.h.checksum,   // hull：艦隊裡那一項（換了裝 ＝ 船型@換裝表，38_fit.js）
     name: sh.name, team: sh.team, i: sh.i, fate: fate, why: sh.fate || '',
     at: { px: +sh.px.toFixed(2), pz: +sh.pz.toFixed(2), yaw: +sh.yaw.toFixed(4), spd: +sh.spd.toFixed(3) },
@@ -59,6 +68,8 @@ function coreShipOut(sh) {
     crew: coreCrew(sh), cas: { dead: sh.dead, wounded: sh.wounded, lostTo: sh.lostTo || 0, gained: sh.gained || 0 },
     used: { fired: sh.fired, hits: sh.hits, cart: sh.cartN || 0, wood: sh.carp ? sh.carp.used || 0 : 0, magGone: sh.mags.filter(function (g) { return g.gone; }).map(function (g) { return g.name; }) }
   };
+  if (sh.plugs && sh.plugs.size) o.plugs = corePlugOut(sh);             // 補丁（46_plug.js，TASK-1099）：哪幾格是補丁；沒有 ⇒ 不帶這一格（戰後狀態跟以前一樣）
+  return o;
 }
 /** 整場的戰後狀態：外殼結算用（Blocksail 交給經營層；Blockside 自己用不到）。半截船（PIECES）不算船。 */
 function coreOut() {
@@ -78,7 +89,9 @@ function corePreFrom(out) {
   out.ships.forEach(function (s) {
     if (s.fate === 'sunk' || s.fate === 'broken' || s.fate === 'sinking') return;
     var crew = {}; Object.keys(s.crew).forEach(function (k) { var r = s.crew[k]; if (r.n0 - r.able > 0) crew[k] = { out: r.n0 - r.able }; });
-    P[s.team].push({ hull: s.hull, sum: s.sum, name: s.name, cells: s.cells, models: s.models, sails: s.sails, ropes: s.ropes, crew: crew });
+    var p = { hull: s.hull, sum: s.sum, name: s.name, cells: s.cells, models: s.models, sails: s.sails, ropes: s.ropes, crew: crew };
+    if (s.plugs) p.plugs = s.plugs;                                        // 補丁（46_plug.js）：下一場照樣是補丁
+    P[s.team].push(p);
   });
   return P;
 }
@@ -98,6 +111,10 @@ function coreShipIn(sh, st) {
       if (!v) removeVoxel(sh, x, y, z, false);
       else if (G.get(x, y, z)) { G.set(x, y, z, v); evEmit('cell', sh, x, y, z, true); }   // 換色（燒焦；true ⇒ 不是平滑格就不重建平滑面，62_simview.js）
       else restoreVoxel(sh, x, y, z, v);                                              // 原船沒有、上一場補上的（木匠）
+    }
+    if (st.plugs && st.plugs.n) {                                         // 補丁（46_plug.js，TASK-1099）：上一場補成補丁的那幾格（cells 已經把它們補回來了）⇒ 照樣是補丁（脆、下一發就碎）
+      var uq = coreUnB64(st.plugs.d), dq = new DataView(uq.buffer), q = 0, PL = sh.plugs || (sh.plugs = new Set());
+      for (var jq = 0; jq < st.plugs.n; jq++) { q += dq.getUint32(jq * 4, true); var qx = q % sx, qy = Math.floor(q / sx) % sy, qz = Math.floor(q / (sx * sy)); if (G.get(qx, qy, qz)) PL.add(VK.pack(qx, qy, qz)); }
     }
   }
   (st.models || []).forEach(function (q) {

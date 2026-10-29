@@ -117,6 +117,7 @@ function carpInit(sh, crew, add) {
 function restoreVoxel(sh, x, y, z, col) {
   if (!col || sh.grid.get(x, y, z)) return 0;
   sh.grid.set(x, y, z, col);
+  if (sh.plugs && sh.plugs.size) sh.plugs.delete(VK.pack(x, y, z));      // 補回去 ⇒ 照原本的材質（補成補丁的話 46_plug.js plugSet 接著再標）；⛔ 不在 removeVoxel 拿掉：打掉那一下的消耗是拆完才查硬度（20_shatter.js、21_gunnery.js）
   if (sh.burn) burnForget(sh, x, y, z);                                // 新木頭：沒燒過（49_burn.js）
   evEmit('cell', sh, x, y, z); sh.lost--;
   if (z < sh.T.sz) { sh.flood[z * 3]--; sh.flood[z * 3 + 1] -= y > sh.T.cy ? 1 : -1; sh.flood[z * 3 + 2] -= x > sh.T.cx ? 1 : -1; }
@@ -200,6 +201,7 @@ function carpTick(sh) {
   var NV = sh.nav, K = sh.carp; if (!K || !NV || sh.struck || sh.sunk || sh.broken) return;
   var C = sh.crew.filter(function (c) { return c.role === ROLE.CARPENTER && crewAble(c); }); if (!C.length) return;
   K.todo = dmgFor(sh, 'carpenter');                                       // 全船的損壞表（48_damage.js）：尋路刷新過才重掃梯子與洞、帆與繩變了才重掃綁定點
+  if (plugCalm()) K.todo = K.todo.concat(plugJobs(sh));                   // 脫離交戰 ⇒ 水線下的破口補丁排最前面（46_plug.js，TASK-1099）
   if (!K.todo.length) return;
   var taken = {}; C.forEach(function (c) { if (c.hand.job) taken[c.hand.job.key] = 1; });
   for (var k in K.done) taken[k] = 1;
@@ -249,15 +251,17 @@ function carpJoin(sh, c) {
     J.at = SIMT; c.home = c.pos.slice();
     if (t.kind === 'hole') J.area = carpHoleArea(sh, t.lv, t.hole);       // 到了才看要補多大一片（洞＋洞邊還缺格子的那一圈）
     else if (t.kind === 'anchor') J.area = carpAncCells(sh, t.a);
-    J.T = (t.kind === 'lad' ? CARP_LAD_T : t.kind === 'anchor' ? CARP_ANC_T0 + CARP_ANC_K * J.area.length : CARP_HOLE_T0 + CARP_HOLE_K * J.area.length) / crewEff(sh, c);   // 修滿要幾秒：工作效率（TASK-0720，39_eff.js；沒開 ⇒ ÷ 1）到的那一刻算一次（J.area 也是這時算的；中途效率變了不追）
+    else if (t.kind === 'plug') J.area = plugCells(sh, t.b);              // 水線下的破口（46_plug.js）：那一塊現在還缺的格
+    J.T = (t.kind === 'lad' ? CARP_LAD_T : t.kind === 'anchor' ? CARP_ANC_T0 + CARP_ANC_K * J.area.length : t.kind === 'plug' ? plugTime(t, J.area) : CARP_HOLE_T0 + CARP_HOLE_K * J.area.length) / crewEff(sh, c);   // 修滿要幾秒：工作效率（TASK-0720，39_eff.js；沒開 ⇒ ÷ 1）到的那一刻算一次（J.area 也是這時算的；中途效率變了不追）
     return;
   }
   if (SIMT - J.at < J.T) return;
-  var W = { n: c.wood, more: false }, n = t.kind === 'lad' ? carpFixLadder(sh, t, W) : t.kind === 'anchor' ? carpFixCells(sh, J.area, W) : carpFixHole(sh, t.lv, J.area, W), K = sh.carp;   // W：身上的木材（補一格用一份；用完 ⇒ more）
-  c.wood -= n;
-  if (n && !W.more) { if (t.kind === 'lad') { K.lad++; note(sh, '木匠修好了梯子（' + sh.nav.ladders[t.j].name.split('/').pop() + '）'); } else if (t.kind === 'anchor') { K.anc++; note(sh, '木匠補好了帆的綁定點（' + t.sail.name + '，' + n + ' 格）'); } else { K.holes++; note(sh, '木匠補好了甲板破洞（' + (sh.nav.levels[t.lv].name || sh.nav.levels[t.lv].key) + '，' + n + ' 格）'); } }   // Tim 2026-10-18：「木匠跟帆匠修補完成可以廣播」
+  var W = { n: c.wood, more: false }, n = t.kind === 'lad' ? carpFixLadder(sh, t, W) : t.kind === 'anchor' ? carpFixCells(sh, J.area, W) : t.kind === 'plug' ? plugFix(sh, J.area, W) : carpFixHole(sh, t.lv, J.area, W), K = sh.carp;   // W：身上的木材（補一格用一份；用完 ⇒ more）
+  if (t.kind === 'plug' && n) { c.wood -= 1; K.plugs = (K.plugs || 0) + 1; note(sh, '木匠堵好了水線下的破口（' + (t.b.side ? '左舷' : '右舷') + '，' + n + ' 格補丁）'); }   // 補丁：一塊一份木材（46_plug.js）
+  else c.wood -= n;
+  if (n && !W.more && t.kind !== 'plug') { if (t.kind === 'lad') { K.lad++; note(sh, '木匠修好了梯子（' + sh.nav.ladders[t.j].name.split('/').pop() + '）'); } else if (t.kind === 'anchor') { K.anc++; note(sh, '木匠補好了帆的綁定點（' + t.sail.name + '，' + n + ' 格）'); } else { K.holes++; note(sh, '木匠補好了甲板破洞（' + (sh.nav.levels[t.lv].name || sh.nav.levels[t.lv].key) + '，' + n + ' 格）'); } }   // Tim 2026-10-18：「木匠跟帆匠修補完成可以廣播」
   K.cells += n;
-  K.log.push({ t: +SIMT.toFixed(1), what: t.kind, key: t.key, n: n, more: W.more }); if (!W.more) K.done[t.key] = 1;   // 木材不夠補完 ⇒ 那一件留著（拿了木材再來）
+  K.log.push({ t: +SIMT.toFixed(1), what: t.kind, key: t.key, n: n, more: W.more }); if (!W.more && t.kind !== 'plug') K.done[t.key] = 1;   // 木材不夠補完 ⇒ 那一件留著（拿了木材再來）；補丁不記（之後同一塊又被打開照樣要補，46_plug.js 重掃）
   H.job = null; H.wait = 0.5;
 }
 /** 梯子：那一件關聯被打掉的格全部補回來（沒有格子清單 ⇒ 只補踏板）⇒ 補了幾格。 */
@@ -325,5 +329,5 @@ function carpText(sh) {
   if (!sh.carp) return '';
   var C = sh.crew.filter(function (c) { return c.role === ROLE.CARPENTER && crewAble(c); }), w = C.filter(function (c) { return c.hand.job && c.hand.job.kind === 'repair'; }).length, g = C.filter(function (c) { return c.hand.job && c.hand.job.kind === 'wood'; }).length;
   var B = sh.benches || [], left = B.reduce(function (a, m) { return a + (m.alive ? m.wood : 0); }, 0);
-  return '　木匠 ' + C.length + (w ? '（修 ' + w + '）' : '') + (g ? '（拿木材 ' + g + '）' : '') + (sh.carp.lad || sh.carp.holes || sh.carp.anc ? '　修好 梯 ' + sh.carp.lad + '、洞 ' + sh.carp.holes + (sh.carp.anc ? '、綁定點 ' + sh.carp.anc : '') : '') + (B.length ? '　木材 ' + left : '');
+  return '　木匠 ' + C.length + (w ? '（修 ' + w + '）' : '') + (g ? '（拿木材 ' + g + '）' : '') + (sh.carp.lad || sh.carp.holes || sh.carp.anc || sh.carp.plugs ? '　修好 梯 ' + sh.carp.lad + '、洞 ' + sh.carp.holes + (sh.carp.anc ? '、綁定點 ' + sh.carp.anc : '') + (sh.carp.plugs ? '、漏 ' + sh.carp.plugs : '') : '') + (B.length ? '　木材 ' + left : '');
 }

@@ -35,6 +35,7 @@
     "flyingfish": {"tons": 51, "len": 12.4, "guns": 8, "gunTypes": {"long4": 4, "pierrier": 4}, "volley": 11, "drive": "sail", "sails": 6, "crew": 34},
     "zeehaen": {"tons": 394, "len": 31.3, "guns": 14, "gunTypes": {"pierrier": 6, "long4": 8}, "volley": 20, "drive": "sail", "sails": 8, "crew": 56},
     "swallow": {"tons": 85, "len": 14.9, "guns": 6, "gunTypes": {"long4": 6}, "volley": 11, "drive": "sail", "sails": 7, "crew": 34},
-    "sanroman": {"tons": 121, "len": 21.4, "guns": 16, "gunTypes": {"pierrier": 8, "long4": 8}, "volley": 22, "drive": "sail", "sails": 8, "crew": 58}
+    "sanroman": {"tons": 121, "len": 21.4, "guns": 16, "gunTypes": {"pierrier": 8, "long4": 8}, "volley": 22, "drive": "sail", "sails": 8, "crew": 58},
+    "tradewind": {"tons": 291, "len": 24, "guns": 10, "gunTypes": {"pierrier": 6, "long4": 4}, "volley": 13, "drive": "sail", "sails": 9, "crew": 38}
   }
 }
