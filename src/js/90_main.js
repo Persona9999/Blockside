@@ -80,7 +80,7 @@ if (DEBUG) window.__game = {
   /** 循環布（TASK-1102；11_rig_loop.js）：烘到哪（st 0 還沒要、1 在烘、2 好了）、烘了幾毫秒（主執行緒）／牆鐘、貼圖幾位元組；stat ＝ 每一種旗形每一檔：阻尼、暖幾圈、
    *  一圈首尾差 seam、一步最大 stepMax、格與格最大 frameMax、接縫那一步 wrap（都是公分）、平均飄向 flowDeg（跟風差幾度）。
    *  { control: [旗形序號, 檔] } ⇒ 反向對照（原本那四個頻率、同樣長度硬接）；{ tails: 秒 } ⇒ 現在畫著的每面旗接下來那幾秒尾端最遠動多少（公尺）；
-   *  { ramp: 秒 } ⇒ 風速從最弱加到最強的最大一步、對照最強那一檔；{ pairs: true } ⇒ 同一種的旗兩兩比；{ yards: 第幾艘 } ⇒ 綁在帆桁上的點跟帆桁的模型差多少。 */
+   *  { ramp: 秒 } ⇒ 風速從最弱加到最強的最大一步、對照最強那一檔；{ pairs: true } ⇒ 同一種的旗兩兩比；{ yards: 第幾艘 } ⇒ 綁在帆桁上的點跟帆桁的模型差多少；{ stretch: true } ⇒ 繞帆桁轉的布邊最多被拉長幾倍。 */
   floop: function (o) {
     o = o || {};
     var r = { on: FLOOP_ON, st: FLOOP.st, how: FLOOP.how || null, fileErr: FLOOP.fileErr || null, fileBytes: FLOOP.fileBytes || 0, mainMs: FLOOP.mainMs ? +FLOOP.mainMs.toFixed(1) : null, workerMs: FLOOP.wms ? Math.round(FLOOP.wms) : null, bakeMs: +FLOOP.ms.toFixed(1), wallMs: FLOOP.t1 ? Math.round(FLOOP.t1 - FLOOP.t0) : null, texBytes: FLOOP_W * FLOOP_ROWS * 3 * 4, cpuBytes: FLOOP.data ? FLOOP.data.byteLength : 0,
@@ -89,6 +89,7 @@ if (DEBUG) window.__game = {
     if (o.tails) r.tails = floopTails(o.tails);
     if (o.ramp) r.ramp = FLOOP_SHAPES.map(function (Z, si) { return floopRamp(si, o.ramp); });
     if (o.pairs) r.pairs = floopPairs();
+    if (o.stretch) r.stretch = floopStretch();
     if (o.yards !== undefined) r.yards = floopYardCheck(o.yards);
     return r;
   },

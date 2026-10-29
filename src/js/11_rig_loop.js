@@ -177,8 +177,8 @@ function floopFxGlsl() {
     '  float fr=lpFr(uFW.z,B.w,A.w); int ia=max(i-1,0), ib=min(i+1,nu-1), ja=max(j-1,0), jb=min(j+1,nv-1);\n' +
     '  vec3 q=lpP(c0+i*nv+j,fr,C.z), du=lpP(c0+ib*nv+j,fr,C.z)-lpP(c0+ia*nv+j,fr,C.z), dv=lpP(c0+i*nv+jb,fr,C.z)-lpP(c0+i*nv+ja,fr,C.z);\n' +
     '  P=A.xyz+fxMap(q,uFW.xy,C.x,C.y); N=cross(fxMap(du,uFW.xy,C.x,C.y),fxMap(dv,uFW.xy,C.x,C.y)); }\n' +
-    ' else if(aX.x>1.5){ int y=int(floor(aX.y+0.5));\n' +
-    '  if(y>=0){ vec4 Y=uYd[y]; float c=cos(Y.z), s=sin(Y.z); vec2 d=P.xy-Y.xy; P.xy=Y.xy+vec2(d.x*c-d.y*s,d.x*s+d.y*c); N.xy=vec2(N.x*c-N.y*s,N.x*s+N.y*c); }\n' +
+    ' else if(aX.x>1.5){ float yv=aX.y;\n' +
+    '  if(yv>-0.5){ int y=int(floor(yv)); vec4 Y=uYd[y]; float an=Y.z*clamp((fract(yv)-0.001)/0.998,0.0,1.0), c=cos(an), s=sin(an); vec2 d=P.xy-Y.xy; P.xy=Y.xy+vec2(d.x*c-d.y*s,d.x*s+d.y*c); N.xy=vec2(N.x*c-N.y*s,N.x*s+N.y*c); }\n' +
     '  if(dot(N,N)>1e-12) P+=normalize(N)*aX.z*sin(6.2831853*(uFW.z/' + FLOOP_SW_T.toFixed(1) + '+aX.w+uFW.w)); } }\n';
 }
 var FLOOP_FX_MAIN = 'void main(){ vec4 w=uModel*vec4(aP,1.0); vW=w.xyz; vN=mat3(uModel)*aN;', FLOOP_DFX_MAIN = 'void main(){ vT=aT; vF=aF; vH=aH; gl_Position=uVP*(uModel*vec4(aP,1.0)); }';
@@ -197,12 +197,25 @@ function floopFxProg(base) {
 // ── 船：每頂點的循環參數（帆緩衝重做時一起做；11_rig_gpu.js sailBuf） ──
 /** 這一艘要不要走循環（繩帆固定的船；?flagloop=0 ⇒ 不要）。 */
 function floopFxWant(ow) { return FLOOP_ON && PHYS && !!ow.crew && rigFixed(ow); }   // 物理關著 ⇒ 帆與旗一律照作品的形狀（setPhys：回到靜態）
-var FLOOP_TPL = new WeakMap();
-/** 張著的帆（模板 T）：每一點跟哪根帆桁轉（照 30_rig_physics.js clothBrace：綁在帆桁上的照自己那根、綁在格、繩上的不轉、沒綁的照這面帆綁最多點的那根）、擺幅（離綁住的點越遠越大、朝這面帆平均法線那一側）、相位。 */
-function floopSailTpl(T) {
-  var o = FLOOP_TPL.get(T); if (o) return o;
-  var n = T.n, p = T.p0, sim = T.sim, yk = sim && sim.n === n ? sim.yk : null, hk = T.hk || [], Y = new Int32Array(n).fill(-1), A = new Float32Array(n), i, j;
-  if (yk) { var cnt = {}, top = -1; for (i = 0; i < n; i++) if (yk[i] >= 0 && (cnt[yk[i]] = (cnt[yk[i]] || 0) + 1) > (cnt[top] || 0)) top = yk[i]; if (top >= 0) for (i = 0; i < n; i++) Y[i] = yk[i] >= 0 ? yk[i] : hk[i] ? -1 : top; }
+var FLOOP_TPL = new WeakMap(), FLOOP_TPLF = new WeakMap();
+/** 張著的帆、作品自帶的旗（模板 T）：每一點跟哪根帆桁轉、轉幾成（Wt）、擺幅（離綁住的點越遠越大、朝這面帆平均法線那一側）、相位。
+ *  帆桁 ＝ 綁在帆桁上的點照自己那根，其他照這面綁最多點的那根（30_rig_physics.js clothBrace 同一套）；這面沒綁帆桁（支索帆）⇒ 不轉。
+ *  轉幾成：旗（flag）⇒ 整面一起轉（形狀不變；Tim 2026-10-29 回報船尾旗被拉長：斜桁轉了、綁在繩上的那幾點沒跟 ⇒ 邊被扯到 37 倍）；
+ *    帆 ⇒ 綁在帆桁上的 1、綁在格與繩上的（帆腳）0、中間照「離帆腳 ÷（離帆桁＋離帆腳）」⇒ 上緣跟帆桁、帆腳不動、中間扭過去（像真的轉帆）；沒有綁在格、繩上的點 ⇒ 整面一起轉。 */
+function floopSailTpl(T, flag) {
+  var C = flag ? FLOOP_TPLF : FLOOP_TPL, o = C.get(T); if (o) return o;
+  var n = T.n, p = T.p0, sim = T.sim, yk = sim && sim.n === n ? sim.yk : null, hk = T.hk || [], Y = new Int32Array(n).fill(-1), Wt = new Float32Array(n), A = new Float32Array(n), i, j;
+  function near(i, L) { var m = 1e9; for (var q = 0; q < L.length; q++) { var h = L[q] * 3; m = Math.min(m, Math.hypot(p[i * 3] - p[h], p[i * 3 + 1] - p[h + 1], p[i * 3 + 2] - p[h + 2])); } return m; }
+  if (yk) {
+    var cnt = {}, top = -1, YP = [], NP = [];
+    for (i = 0; i < n; i++) { if (yk[i] >= 0) { YP.push(i); if ((cnt[yk[i]] = (cnt[yk[i]] || 0) + 1) > (cnt[top] || 0)) top = yk[i]; } else if (hk[i]) NP.push(i); }
+    if (top >= 0) for (i = 0; i < n; i++) {
+      Y[i] = flag ? top : yk[i] >= 0 ? yk[i] : top;
+      if (flag || yk[i] >= 0 || !NP.length) Wt[i] = 1;
+      else if (hk[i]) Wt[i] = 0;
+      else { var dy = near(i, YP), dn = near(i, NP); Wt[i] = dy + dn > 0 ? dn / (dy + dn) : 1; }
+    }
+  }
   var H = []; for (i = 0; i < n; i++) if (hk[i]) H.push(i);
   var Nm = new Float32Array(n * 3), M = [0, 0, 0], tr = T.tris, b0 = [1e9, 1e9, 1e9], b1 = [-1e9, -1e9, -1e9];
   for (j = 0; j < tr.length; j += 3) { var a = tr[j] * 3, b = tr[j + 1] * 3, d = tr[j + 2] * 3, ux = p[b] - p[a], uy = p[b + 1] - p[a + 1], uz = p[b + 2] - p[a + 2], vx = p[d] - p[a], vy = p[d + 1] - p[a + 1], vz = p[d + 2] - p[a + 2];
@@ -211,8 +224,8 @@ function floopSailTpl(T) {
   var D = new Float32Array(n), dmax = 0, amp = FLOOP_SW_A * Math.hypot(b1[0] - b0[0], b1[1] - b0[1], b1[2] - b0[2]);
   for (i = 0; i < n; i++) { var m = H.length ? 1e9 : 0; for (j = 0; j < H.length; j++) { var h = H[j] * 3; m = Math.min(m, Math.hypot(p[i * 3] - p[h], p[i * 3 + 1] - p[h + 1], p[i * 3 + 2] - p[h + 2])); } D[i] = m; dmax = Math.max(dmax, m); }
   for (i = 0; i < n; i++) { var w = dmax > 0 ? D[i] / dmax : 0; w = w * w * (3 - 2 * w); A[i] = (Nm[i * 3] * M[0] + Nm[i * 3 + 1] * M[1] + Nm[i * 3 + 2] * M[2] >= 0 ? 1 : -1) * w * amp; }
-  o = { Y: Y, A: A, ph: townHash(String(T.name || '') + ':sw') };
-  FLOOP_TPL.set(T, o); return o;
+  o = { Y: Y, Wt: Wt, A: A, ph: townHash(String(T.name || '') + ':sw') };
+  C.set(T, o); return o;
 }
 /** 帆緩衝重做完（sailBuf）：L ＝ 這一次每一面 [布, 模板, 第幾點起, 幾點]…（null ⇒ 這一艘不走循環：把第 6 號屬性關掉）。 */
 function floopFxBuild(ow, L, nv) {
@@ -233,8 +246,8 @@ function floopFxBuild(ow, L, nv) {
       for (i = 0; i < n; i++) { var w = (base + i) * 4; X[w] = 1; X[w + 1] = Math.floor(i / Z.NV); X[w + 2] = i % Z.NV; X[w + 3] = FL.length - 1; }
       continue;
     }
-    var D = floopSailTpl(T);                                            // 張著的帆、作品自帶的旗：繞帆桁轉＋呼吸
-    for (i = 0; i < n; i++) { var w2 = (base + i) * 4, y = D.Y[i] >= 0 ? ys.get(ow.models[D.Y[i]]) : undefined; X[w2] = 2; X[w2 + 1] = y === undefined ? -1 : y; X[w2 + 2] = D.A[i]; X[w2 + 3] = D.ph; }
+    var D = floopSailTpl(T, !!s.flag);                                  // 張著的帆、作品自帶的旗：繞帆桁轉（旗整面、帆照比例扭）＋呼吸
+    for (i = 0; i < n; i++) { var w2 = (base + i) * 4, y = D.Y[i] >= 0 ? ys.get(ow.models[D.Y[i]]) : undefined; X[w2] = 2; X[w2 + 1] = y === undefined ? -1 : y + 0.001 + 0.998 * D.Wt[i]; X[w2 + 2] = D.A[i]; X[w2 + 3] = D.ph; }   // 第幾根帆桁（整數）＋轉幾成（小數）
   }
   if (!B.fxb) B.fxb = gl.createBuffer();
   gl.bindVertexArray(B.vao); gl.bindBuffer(gl.ARRAY_BUFFER, B.fxb); gl.bufferData(gl.ARRAY_BUFFER, X, gl.STATIC_DRAW);
@@ -380,15 +393,33 @@ function floopYardCheck(i) {
   var sh = SHIPS[i], mx = 0, n = 0; if (!sh || !sh.fx) return null;
   (sh.cl || []).forEach(function (c, k) {
     var s = sh.sails[k], T = c.T; if (!s || s.flag || furlKeep(s) || s.dead) return;
-    var D = floopSailTpl(T), hk = T.hk || [];
+    var hk = T.hk || [], yk = T.sim && T.sim.n === T.n ? T.sim.yk : null; if (!yk) return;
     for (var v = 0; v < T.n; v++) {
-      if (!hk[v] || D.Y[v] < 0) continue;
-      var m = sh.models[D.Y[v]]; if (!m || !m.piv) continue;
+      if (!hk[v] || yk[v] < 0) continue;                                // 綁在帆桁上的點（著色器裡轉滿）
+      var m = sh.models[yk[v]]; if (!m || !m.piv) continue;
       var g = [T.p0[v * 3], T.p0[v * 3 + 1], T.p0[v * 3 + 2]], A = rotZ(g, m.piv, m.rot || 0), B = M4.pt(modelLocal(m), g[0] - m.origin[0], g[1] - m.origin[1], g[2] - m.origin[2]);
       mx = Math.max(mx, Math.hypot(A[0] - B[0], A[1] - B[1], A[2] - B[2]) * S); n++;
     }
   });
   return { ship: i, points: n, maxM: +mx.toFixed(5) };
+}
+/** 每一艘走「繞帆桁轉」的布（張著的帆、作品自帶的旗）：照著色器那一套轉（不含呼吸）之後，三角形的邊最多被拉長幾倍（> 1.05 的才列）。 */
+function floopStretch() {
+  var out = [];
+  SHIPS.forEach(function (sh) {
+    if (!sh.fx) return;
+    (sh.cl || []).forEach(function (c, k) {
+      var s = sh.sails[k], T = c.T; if (!s || s.dead || s.furled || (s.flag && s.meta && s.meta.team)) return;
+      var D = floopSailTpl(T, !!s.flag), P = T.p0, Q = new Float64Array(T.n * 3), v, j, mx = 1;
+      for (v = 0; v < T.n; v++) { var y = D.Y[v], m = y >= 0 ? sh.models[y] : null, g = [P[v * 3], P[v * 3 + 1], P[v * 3 + 2]], r = m && m.piv ? rotZ(g, m.piv, (m.rot || 0) * D.Wt[v]) : g; Q[v * 3] = r[0]; Q[v * 3 + 1] = r[1]; Q[v * 3 + 2] = r[2]; }
+      for (j = 0; j < T.tris.length; j += 3) for (var e = 0; e < 3; e++) {
+        var a = T.tris[j + e] * 3, b = T.tris[j + (e + 1) % 3] * 3, L0 = Math.hypot(P[a] - P[b], P[a + 1] - P[b + 1], P[a + 2] - P[b + 2]);
+        if (L0 > 1e-6) mx = Math.max(mx, Math.hypot(Q[a] - Q[b], Q[a + 1] - Q[b + 1], Q[a + 2] - Q[b + 2]) / L0);
+      }
+      if (mx > 1.05) out.push({ ship: sh.i, hull: sh.T && sh.T.id, sail: k, name: s.name, flag: !!s.flag, n: T.n, maxRatio: +mx.toFixed(2) });
+    });
+  });
+  return out;
 }
 /** 反向對照：原本那四個頻率（不成整數比）、同樣暖機、同樣錄 FLOOP_N 步硬接 ⇒ 接縫那一步、圈內最大一步（公分）。 */
 function floopControl(si, bi) {
