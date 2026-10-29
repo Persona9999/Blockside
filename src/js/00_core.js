@@ -11,6 +11,9 @@
  */
 var VK = window.VoxelKit, M4 = VK.M4;
 var Q = new URLSearchParams(location.search);
+// 外掛外殼的預設網址參數（admin.py shell 的 opt.q；2026-10-30 方舷放置 idle.html）：外殼頁的網址沒帶的那幾項照它補、網址有的照網址
+//   ⇒ 外殼不用改網址就能開 ?prefs=0、?blue=…、?mode=…；Blockside 自己的頁沒有 BS_SHELL ⇒ 什麼都不做。
+(function () { var S = window.BS_SHELL, q = S && S.opt && S.opt.q; if (q) Object.keys(q).forEach(function (k) { if (!Q.has(k)) Q.set(k, String(q[k])); }); })();
 var DEMO = Q.has('demo') ? Math.max(0, parseFloat(Q.get('demo')) || 0) : -1;
 var STILL = Q.get('still') === '1', DEBUG = Q.get('debug') === '1';
 var LAB_FLEET = Q.get('lab') === 'fleet';                              // 擬真沙盒（84_fleetlab.js；根目錄 fleetlab.html 轉過來）：遊戲本體的模擬、只畫俯視圖

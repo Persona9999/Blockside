@@ -26,7 +26,7 @@ cv.addEventListener('pointermove', function (e) {
 });
 function ptrEnd(e) { PTRS.delete(e.pointerId); if (PTRS.size < 2) PINCH = null; }
 cv.addEventListener('pointerup', function (e) {
-  if (inDrag && !inDrag.moved && !PINCH) ctrlDo('tap', e.clientX, e.clientY, inDrag.b);   // 點一下：海戰鏡頭點船瞄準；第一人稱不瞄準
+  if (inDrag && !inDrag.moved && !PINCH && !shellCall('tap', e.clientX, e.clientY, inDrag.b)) ctrlDo('tap', e.clientX, e.clientY, inDrag.b);   // 點一下：海戰鏡頭點船瞄準；第一人稱不瞄準；外掛外殼的 tap 接手 ⇒ 核心不動
   inDrag = null; ptrEnd(e);
 });
 cv.addEventListener('pointercancel', function (e) { inDrag = null; ptrEnd(e); });
@@ -104,8 +104,9 @@ function kbLit(k, on) { var a = keyAct('battle', k); if (!a) return; [].forEach.
 function doKey(k, repeat) { var a = keyAct('battle', k); if (a) doAct(a, repeat); }
 /** 一個動作（鍵盤與畫面上的圓鈕共用 ⇒ 手機也能玩；動作表在 66_keys.js KEY_ACTS）。打舵、帆是「按住」：這裡只按下，放開走 actUp。 */
 /** 外掛外殼的掛鉤（admin.py shell；2026-10-21）：別的遊戲拿這份成品套自己的外殼（標題、樣式、幾個行為）⇒ 外殼在 window.BS_SHELL 放同名函式；
- *  有、而且沒回 false ⇒ 外殼接手了（true）；沒有外殼、沒有這一個 ⇒ false，照 Blockside 自己的做。現在的掛鉤：menu（回主選單）。 */
-function shellCall(k) { var S = window.BS_SHELL, f = S && S[k]; return typeof f === 'function' ? f() !== false : false; }
+ *  有、而且沒回 false ⇒ 外殼接手了（true）；沒有外殼、沒有這一個 ⇒ false，照 Blockside 自己的做。現在的掛鉤：menu（回主選單）、
+ *  tap（點一下畫面，給 client 座標與按鍵；2026-10-30 方舷放置：外殼自己處理點船 ⇒ 核心不設我艦的瞄準點、不換成半舷手動）。 */
+function shellCall(k, a, b, c) { var S = window.BS_SHELL, f = S && S[k]; return typeof f === 'function' ? f(a, b, c) !== false : false; }
 /** 回主選單（R、設定面板的「回主選單」、結束畫面的「回選單」）：被 Blocksail 嵌著（?map=@host）⇒ 交給它（08_seabed.js bedHostMenuGo）；
  *  外掛外殼（admin.py shell）接手 ⇒ 例 Blocksail 的 battle.html 直接開 ⇒ 回 Blocksail 的主選單；都沒有 ⇒ 停下來、發 flow:menu（Blockside 自己的主選單出來）。 */
 function menuGo() {

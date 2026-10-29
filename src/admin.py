@@ -2508,6 +2508,7 @@ def act_build(pack=True, single=False):   # pack：壓縮版（預設，TASK-058
 #   out    寫到哪（必填）            core   哪一份成品（不給 ⇒ 這個 repo 的 index.html）
 #   title  <title> 與主畫面的名字      ships  船檔的網址前綴（out 那一頁看到的 Blockside 根目錄，例 "external/Blockside/"；船檔 ＝ 前綴 + ships/<標籤>.js）
 #   icon   主畫面圖示的網址（不給 ⇒ 前綴 + Blockside 的）  js、css  外殼的檔（清單；照順序）
+#   opt    （2026-10-30 方舷放置）原樣放進 BS_SHELL.opt：q ＝ 預設網址參數（網址沒帶的照它補，js/00_core.js）、api: true ＝ 開外殼 API（BS_SHELL.core，js/91_shellapi.js）
 # 怎麼套（⛔ 核心的行號一行都不動：錯誤回報、srccheck 照成品的行號）：
 #   · <title>、主畫面名字換掉；Blockside 的 manifest 拿掉（換成空字串，行還在）；圖示換網址。
 #   · </head> 前面同一行加 <script id="bs-shell">window.BS_SHELL={ships, name, stamp}</script> —— 核心開機就要（voxelkit.js 載船檔照 ships）⇒ 放在核心前面、一行。
@@ -2544,7 +2545,9 @@ def shell_html(path):
     pre, ships = S.get('ships') or '', S.get('ships') or ''
     stamp = {'core': have['fp'], 'shell': h.hexdigest()[:12]}
     cfg = {'ships': ships, 'name': S.get('title') or '', 'stamp': stamp}
-    esc = lambda v: v.replace('&', '&amp;').replace('<', '&lt;').replace('"', '&quot;')
+    if isinstance(S.get('opt'), dict):
+        cfg['opt'] = S['opt']                                      # 外殼的開機選項（上面 opt；設定檔本身已經算進 stamp）
+    esc =lambda v: v.replace('&', '&amp;').replace('<', '&lt;').replace('"', '&quot;')
     if S.get('title'):
         html = re.sub(r'<title>[^<]*</title>', lambda m: '<title>%s</title>' % esc(S['title']), html, count=1)
         html = re.sub(r'(<meta name="apple-mobile-web-app-title" content=")[^"]*(")', lambda m: m.group(1) + esc(S['title']) + m.group(2), html, count=1)
