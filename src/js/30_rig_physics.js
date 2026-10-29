@@ -791,10 +791,11 @@ function furlDraw(c, P, f, sh) {
 function furlKeep(s) { return s.furled && !s.dead && !s.flag; }
 /** 收好的那一捲：out ＝ 細格位置（設計的形狀；綁點與往它收的點照那根帆桁現在轉了多少轉）。 */
 function furlBundle(sh, c, out) {
-  var T = c.T, g = furlGath(T, sh), yk = T.sim.yk, mv = T.fmv, rot = sh && yk && T.sim.n === T.n && sh.yards && sh.yards.some(function (m) { return m.rot; });
+  var fx = sh && rigFixKey(sh), yr = function (m) { return fx ? m.rotA || 0 : m.rot; };   // 繩帆固定的船：照繩上次重算時的角度（11_rig_gpu.js rigSame）⇒ 跟繩一起動、不必每一步重做
+  var T = c.T, g = furlGath(T, sh), yk = T.sim.yk, mv = T.fmv, rot = sh && yk && T.sim.n === T.n && sh.yards && sh.yards.some(yr);
   for (var i = 0; i < T.n; i++) {
     var o = i * 3, y = rot ? (T.hk[i] && !mv[i] ? yk[i] : g[i] >= 0 ? yk[g[i]] : -1) : -1, m = y >= 0 ? sh.models[y] : null;
-    if (m && m.rot) { var w = rotZ([T.p0[o], T.p0[o + 1], T.p0[o + 2]], m.piv, m.rot); out[o] = w[0]; out[o + 1] = w[1]; out[o + 2] = w[2]; }
+    if (m && yr(m)) { var w = rotZ([T.p0[o], T.p0[o + 1], T.p0[o + 2]], m.piv, yr(m)); out[o] = w[0]; out[o + 1] = w[1]; out[o + 2] = w[2]; }
     else { out[o] = T.p0[o]; out[o + 1] = T.p0[o + 1]; out[o + 2] = T.p0[o + 2]; }
   }
   return furlDraw(c, out, 0, sh);

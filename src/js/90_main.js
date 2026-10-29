@@ -77,7 +77,17 @@ if (DEBUG) window.__game = {
   portsForce: function (i, v) { var sh = SHIPS[i || 0]; if (sh) sh.portWant = v === undefined ? null : v; return this.ports(i); },
   /** 畫面迴圈的反向對照（TASK-0719；⛔ ?demo、run() 不經過 frame() ⇒ 量不到畫面那一格的演出）：同步叫 n 次 frame()，每格 dt ＝ DT（loopLast 歸零）⇒ 沒有慢動作時每格剛好一步；
    *  回走了幾步、模擬秒、戰局雜湊（每艘的位置、航向、格數、下沉、命中、開火、死傷、砲剩幾門，加上砲彈、碎塊數與戰局亂數 RNG_B 的狀態；照宣傳片 director.js trHash 的 FNV-1a）。g_port＝0／1、g_deco＝0／1 要一樣。 */
-  simFar: function () { return SHIPS.map(function (s) { return { i: s.i, m: s.simM || 1, rig: s.rigM || 1, crewN: s.crewN || 0 }; }); },   // 遠方與視線外降級（TASK-0802）：船員幾步走一次、帆布幾步、船員走過幾次
+  /** TASK-1101 的三項減量（帆不重傳 rigfixkey、錨鏈落定 chainrest、表演船停住 showidle；同名的網址開關）：給 { 名字: true／false } 就改 ——
+   *  關掉的那一項這一格就生效（帆照以前重做、落定的鍊子接回去算、停住的船補一次局勢照畫）；打開的等下一步模擬才停、才落定。回現在的開關、幾艘停住、幾條落定。 */
+  reduce: function (o) {
+    o = o || {};
+    if ('rigfixkey' in o) RIG_FIX_KEY = !!o.rigfixkey;
+    if ('chainrest' in o) { CH_REST = !!o.chainrest; if (!CH_REST) SHIPS.forEach(function (sh) { if (sh.anc) ['P', 'S'].forEach(function (k) { var a = sh.anc[k]; if (a.ch && a.ch.rest) chainWake(sh, a, a.ch); }); }); }
+    if ('showidle' in o) { SHOW_IDLE = !!o.showidle; if (!SHOW_IDLE) SHIPS.forEach(function (sh) { if (sh.showIdle) { sh.showIdle = false; survey(sh); } }); }
+    var nI = 0, nR = 0; SHIPS.forEach(function (sh) { if (sh.showIdle) nI++; if (sh.anc) ['P', 'S'].forEach(function (k) { if (sh.anc[k].ch && sh.anc[k].ch.rest) nR++; }); });
+    return { rigfixkey: RIG_FIX_KEY, chainrest: CH_REST, showidle: SHOW_IDLE, idle: nI, rest: nR };
+  },
+  simFar: function () { return SHIPS.map(function (s) { return { i: s.i, m: s.simM === 0 ? 0 : s.simM || 1, rig: s.rigM || 1, crewN: s.crewN || 0, idle: !!s.showIdle, hurt: !!s.idleHurt }; }); },   // 遠方與視線外降級（TASK-0802）：船員幾步走一次（0 ＝ 停住）、帆布幾步、船員走過幾次；idle：表演船停住（TASK-1101 showIdleTick）、hurt：受過傷不再停
   chartSail: function (id) { return spkChart(id || SHIPS[PLAYER_I].T.id, SHIP_CARDS[id || SHIPS[PLAYER_I].T.id]); },   // Blocksail 海圖模式算航速的那幾個數（72_shippick.js spkChart；TASK-0803）
   wind: function (rot, s0) { if (rot !== undefined && rot !== null) { WIND_ROT = rot * Math.PI / 180; SEA_A = WIND_ROT; } if (s0 !== undefined && s0 !== null) WIND_S0 = clamp(s0, 0.3, 3); stepWind(SIMT); return { rot: +(WIND_ROT * 180 / Math.PI).toFixed(2), s0: WIND_S0, spd: +WIND_SPD.toFixed(3), knots: +windKnots().toFixed(2), to: WIND.slice() }; },   // 換風（08_weather.js；跟 ?wdir=／?wspd= 同一套，戰鬥中換；Blocksail 海圖模式量帆速曲線用，TASK-0803）
   speed: function (x) { if (x !== undefined) simSpeedSet(x); return SIM_SPEED; },   // 模擬速度（73_slowmo.js；上限照 SIM_SPEED_MAX，?simmax= 放寬）
@@ -471,7 +481,7 @@ if (DEBUG) window.__game = {
   },
   chains: function (i, reset) {
     var sh = SHIPS[i || 0], A = sh.anc, r = { ms: CH_PROF.steps ? +(CH_PROF.ms / CH_PROF.steps).toFixed(4) : 0, hit: CHAIN_HIT, lost: (sh.chLost || []).length };
-    if (A) ['P', 'S'].forEach(function (k) { var c = A[k].ch; r[k] = c ? { st: A[k].st, pay: +c.pay.toFixed(1), hit: c.hit, pen: c.pen, penAvg: +(c.penSum / Math.max(1, c.steps)).toFixed(2), penMax: c.penMax, end: [c.p[CHAIN_SEG * 3], c.p[CHAIN_SEG * 3 + 1], c.p[CHAIN_SEG * 3 + 2]].map(function (v) { return +v.toFixed(1); }), y: [].filter.call(c.p, function (v, j) { return j % 3 === 1; }).map(function (v) { return +v.toFixed(1); }) } : A[k].st; });
+    if (A) ['P', 'S'].forEach(function (k) { var c = A[k].ch; r[k] = c ? { st: A[k].st, rest: !!c.rest, pay: +c.pay.toFixed(1), hit: c.hit, pen: c.pen, penAvg: +(c.penSum / Math.max(1, c.steps)).toFixed(2), penMax: c.penMax, end: [c.p[CHAIN_SEG * 3], c.p[CHAIN_SEG * 3 + 1], c.p[CHAIN_SEG * 3 + 2]].map(function (v) { return +v.toFixed(1); }), y: [].filter.call(c.p, function (v, j) { return j % 3 === 1; }).map(function (v) { return +v.toFixed(1); }) } : A[k].st; });
     if (reset) CH_PROF = { ms: 0, steps: 0 };
     return r;
   },

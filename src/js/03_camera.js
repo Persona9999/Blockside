@@ -203,8 +203,11 @@ function camShipSee(sh) {
 function camFarM(sh, F) { var v = F ? camShipSee(sh) : null; if (!v) return 1; var m = v.d > F.d2 ? F.m2 : v.d > F.d1 ? F.m1 : 1; return v.vis ? m : Math.max(m, F.off); }
 /** 帆與繩要不要算（30_rig_physics.js physFrame 問的；TASK-0802，Tim 2026-10-22「畫面外的布凍結」）：整艘不在畫面裡 ⇒ 不算；設定「遠方帆繩、船員」照常、鏡頭還沒算過 ⇒ 照算。 */
 function camRigSeen(sh) { if (!PHX.rigfar) return true; var v = camShipSee(sh); return !v || v.vis; }
+/** 表演船停不停（50_sim.js showIdleTick 問的；TASK-1101）：離鏡頭 SHOW_IDLE_D 以外、或整艘不在畫面裡 ⇒ true；鏡頭還沒算過 ⇒ false（照算）。 */
+function camShowFar(sh) { var v = camShipSee(sh); return !!v && (v.d > SHOW_IDLE_D || !v.vis); }
 evAnswer('rigFar', camRigFar, true);
 evAnswer('simFar', camSimFar, true);
+evAnswer('showFar', camShowFar, true);
 evAnswer('rigSeen', camRigSeen, true);
 
 // ── 鏡頭只由這一支檔寫（TASK-0669 ③；以前輸入、開局、HUD、慢動作、第一人稱、測試場 9 支檔直接寫 CAM）：其他檔要動鏡頭 ⇒ 叫下面這些；admin.py 建置擋別的檔直接寫 CAM。

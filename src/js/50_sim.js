@@ -122,7 +122,19 @@ function sailDt() {
 // 沒有鏡頭（?demo、無頭）⇒ 1 ⇒ 每步走、dt ＝ DT，逐位元不變。代價：鏡頭擺的地方不同，戰局可能不同（Tim：「不追求一致性」）。
 var SIM_FAR = [null, { d1: 300, m1: 2, d2: 1e9, m2: 2, off: 4 }, { d1: 200, m1: 2, d2: 400, m2: 3, off: 4 }], SIM_FAR_DT = 1 / 15;   // 照 PHX.rigfar：遠方半速 ⇒ 300 m 外 30 Hz；遠方⅓ ⇒ 200 m 外 30、400 m 外 20 Hz；看不到 ⇒ 15 Hz
 function simFarM(sh) { var m = evAsk('simFar', 1, sh); return m > 1 ? Math.max(1, Math.min(m, Math.floor(SIM_FAR_DT / DT + 1e-6))) : 1; }   // 粗步長（0.1 秒一步）⇒ 1
+// 遠處、畫面外的表演船停住（TASK-1101）：離鏡頭 SHOW_IDLE_D 公尺以外、或整艘不在畫面裡（03_camera.js camShowFar，跟 simFar 同一套照鏡頭判斷；鏡頭還沒算過 ⇒ 照算），
+//   而且是沒受過傷的表演船（58_traffic.js trafficShow；格子沒少、沒進水、沒著過火）⇒ sh.showIdle：船員不走、不畫（41_crew_art.js drawCrew），不算進水（32_hull.js stepFloat），局勢只量第一次、之後的 tick 不做。
+//   接回來（拉近、轉回畫面、變成真的船、被打到）那一步：補一次局勢；停住時船員累積的時間一直是 0 ⇒ 從那一步接著走（⛔ 不把停住那段一次補給船員 ⇒ 瞬移）。
+//   停住的船不抽戰局的亂數（閒著的預備水手，42_hands.js）⇒ 有往來船的局，其他船的戰局跟以前不同（同 TASK-0802，Tim「不追求一致性」）；?demo 沒有往來的船、不受影響。?showidle=0 ⇒ 照以前。
+var SHOW_IDLE = Q.get('showidle') !== '0', SHOW_IDLE_D = 800;
+function showIdleTick(sh) {
+  var was = !!sh.showIdle, hurt = sh.idleHurt;
+  if (!hurt && trafficShow(sh)) { if (sh.idleCells === undefined) sh.idleCells = sh.grid.count; hurt = sh.idleHurt = sh.grid.count < sh.idleCells || sh.inflow > 0 || !!sh.burn || !!sh.sinkingFinal; }   // 受過傷 ⇒ 之後一律照真的船算
+  sh.showIdle = SHOW_IDLE && !hurt && trafficShow(sh) && sh.mass0 !== undefined && evAsk('showFar', false, sh);
+  if (was && !sh.showIdle) { survey(sh); evEmit('survey', sh); }       // 接回來：補一次局勢
+}
 function crewStep(sh) {
+  if (sh.showIdle) { sh.simM = 0; return; }                          // 停住（showIdleTick）：船員不走、累積的時間不記
   var m = sh.simM = simFarM(sh); sh.crewAcc = (sh.crewAcc || 0) + DT;
   if (m > 1 && (SIM_N + sh.i) % m) return;                          // 錯開：各艘不在同一步補
   stepCrew(sh, sh.crewAcc); sh.crewAcc = 0; sh.crewN = (sh.crewN || 0) + 1;
@@ -150,7 +162,7 @@ function simStep() {
   if (PF) pfLap('fire');
   var nMv = shipSubSteps(), hMv = nMv === 1 ? DT : DT / nMv;       // 船的移動切小步（TASK-0797；60 Hz ⇒ 1、hMv ＝ DT）
   if (nMv > 1) shipPreMove(nMv - 1, hMv);
-  SHIPS.forEach(function (sh) { sailShip(sh, hMv); if (sh.spins) spinStep(sh, DT); stepShip(sh, DT); if (sh.anc) chainStep(sh, DT); if (PF) pfLap('ship'); crewStep(sh); if (PF) pfLap('crew'); });
+  SHIPS.forEach(function (sh) { showIdleTick(sh); sailShip(sh, hMv); if (sh.spins) spinStep(sh, DT); stepShip(sh, DT); if (sh.anc) chainStep(sh, DT); if (PF) pfLap('ship'); crewStep(sh); if (PF) pfLap('crew'); });
   collide(hMv);
   if (BED) SHIPS.forEach(function (sh) { if (!trafficKin(sh)) groundStep(sh, hMv); });  // 擱淺（32_ground.js；有海圖才有）；照時刻表滑、進出港拖的往來船（58_traffic.js ⑥⑧）不擱淺、棧橋不推
   if (BED && TOWNS.list.length) SHIPS.forEach(function (sh) { if (!trafficKin(sh)) quayStep(sh, hMv); });   // 棧橋、海堤的碰撞（32_quay.js；有城才有）
@@ -176,7 +188,7 @@ function simStep() {
   stepBlasts();                                                    // 還沒挖完的彈坑接著挖（23_powder.js）
   if (PF) pfLap('powder');
   var stp = Math.round(SIMT / DT), sev = everySteps(0.5);       // sev：半秒幾步（60 Hz ＝ 30；擬真沙盒降物理 fps 照秒數，00_core.js everySteps）                                  // 每半秒的定期檢查（TASK-0673）：每艘自己的相位（sh.i × 7 步）⇒ 8 艘不擠在同一步（以前同一步 35–50 ms）；
-  SHIPS.forEach(function (sh) { if ((stp + sh.i * SURVEY_PH) % sev === 0 || sh.mass0 === undefined) { survey(sh); evEmit('survey', sh); } });   //   第一次（開戰那一步、候補進場）照舊馬上量（定浮的位置、開戰時的重量）
+  SHIPS.forEach(function (sh) { if (((stp + sh.i * SURVEY_PH) % sev === 0 && !sh.showIdle) || sh.mass0 === undefined) { survey(sh); evEmit('survey', sh); } });   // showIdle：停住的表演船不做 tick（showIdleTick）   //   第一次（開戰那一步、候補進場）照舊馬上量（定浮的位置、開戰時的重量）
   if (stp % sev === 0) { reinforce(); playerHandoff(); }             // reinforce：空出名額 ⇒ 候補進場；playerHandoff：我艦出局 ⇒ 換到友艦（52_fleet.js；沒有候補／我艦還在打 ⇒ 直接回去）
   if (PF) pfLap('survey');
   evEmit('stepEnd');                                              // 每一步最後：戰鬥報表（79_report.js，只讀）、測試記錄（83_testlog.js）、結束判定（61_hud.js endTick；結算畫面照模擬時間延後跳）

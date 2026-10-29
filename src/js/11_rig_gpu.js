@@ -508,12 +508,18 @@ function looseBuf(sh) {
 //   rigSame 再多比一串（不只 SIMT）：物理開關、貼圖集、船殼格數（收好那一捲靠的格）、每面帆的狀態與陣列換過沒 ⇒ 除錯工具在模擬外改了也照樣重做。
 //   ?rigchk=1（DEBUG）：每一格照以前整份重填的那一份（sailFill、looseFill）再填一次、跟 GPU 上那一份逐位元比（沒重做的那一格驗 rigSame、重做的那一格驗動靜分開只傳變的那一段），
 //   不一樣 ⇒ __rbat.stat.rigMiss ＋1（rigChk 對拍的次數；sbDyn／sbStat／sbIdx：帆重做幾次、其中靜的、索引傳了幾次）。
-var RIG_CHK = DEBUG && Q.get('rigchk') === '1', RK = null, RK_N = 0, RK_SAME = true;
+//   繩帆固定的船（30_rig_physics.js rigFixed：城鎮模式每一艘、表演船）不算布 ⇒ 模擬走了不算輸入（TASK-1101）：帆照作品的形狀、收好那一捲跟著帆桁 ——
+//   那一捲照 m.rotA（跟帆桁走的繩上次重算時的角度；yardRopes 每 0.1 秒看一次、轉過 0.25° 才更新並設 rigDirty）⇒ 帆桁轉 ＝ 整份重做，其他時候上一份照用。?rigfixkey=0 ⇒ 照以前每一步重做。
+var RIG_CHK = DEBUG && Q.get('rigchk') === '1', RIG_FIX_KEY = Q.get('rigfixkey') !== '0', RK = null, RK_N = 0, RK_SAME = true;
 function rkPut(v) { if (RK[RK_N] !== v) { RK[RK_N] = v; RK_SAME = false; } RK_N++; }
+/** 繩帆固定、而且照「模擬走了不算輸入」那一套比（?rigfixkey=0 ⇒ false）。 */
+function rigFixKey(ow) { return RIG_FIX_KEY && !!ow.crew && rigFixed(ow); }
 /** 這一格帆與垂繩的輸入跟上一次重做時一樣 ⇒ true；不一樣 ⇒ 記下這一格的（ow.sbK）、回 false。只在物理開著的船上叫（每一格都叫，才記得住重做那一刻的）。 */
 function rigSame(ow) {
   RK = ow.sbK || (ow.sbK = []); RK_N = 0; RK_SAME = true;
-  rkPut(SIMT); rkPut(PHYS); rkPut(ow.T && ow.T.sailAtlas); rkPut(ow.grid && ow.grid.count); rkPut(ow.cl); rkPut(ow.sails);
+  var fx = rigFixKey(ow);
+  rkPut(fx ? -1 : SIMT); rkPut(fx); rkPut(PHYS); rkPut(ow.T && ow.T.sailAtlas); rkPut(ow.grid && ow.grid.count); rkPut(ow.cl); rkPut(ow.sails);
+  if (fx) for (var y = 0; y < ow.yards.length; y++) rkPut(ow.yards[y].rotA || 0);
   rkPut(ow.shreds); rkPut(ow.shreds && ow.shreds.length); rkPut(ow.loose); rkPut(ow.loose && ow.loose.length); rkPut(ow.tCut);
   var C = ow.cl || [], S = ow.sails || [];
   for (var k = 0; k < C.length; k++) {

@@ -236,6 +236,22 @@ function anchorChips(me) {
  *  斷鍊（錨被打壞）⇒ 那條鍊子兩端都放開、往下沉，CH_LOST 秒後拿掉（sh.chLost）。 */
 var CHAIN_SEG = 24, CHAIN_IT = 12, CH_DMPA = 0.995, CH_DMPW = 0.96, CH_GW = G * (1 - 1 / 7.8), CH_ANCW = 0.15, CH_LOST = 10;
 var CHAIN_HIT = Q.get('chainhit') !== '0', CH_PROF = { ms: 0, steps: 0 };
+// 落定（TASK-1101）：停港繫泊的表演船（58_traffic.js trafficShow ＋ sh.moor），錨咬著（down）CH_REST_T 秒以上 ⇒ 鍊子不再算（c.rest ＝ 那一刻的形狀、錨鏈孔在哪）。
+//   畫（chainBuf）：每一點照錨鏈孔後來移了多少平移、越靠錨移得越少（錨鏈孔那一端整個跟著、錨那一端不動）⇒ 鍊頭接在錨鏈孔上、錨留在海底；
+//   緩衝照船身格座標畫 ⇒ 船晃的時候錨那一端跟著船走 ⇒ 只在偏離海底那一點超過 CH_REST_TOL 公尺時照現在的船身重建（其他格不重建、不上傳）。
+//   不再是停港繫泊的表演船、起錨 ⇒ 從落定的形狀（照現在的錨鏈孔平移過）接回去、速度歸零，照常算（chainWake）。?chainrest=0 ⇒ 照以前每一步算、每一格重建。
+var CH_REST = Q.get('chainrest') !== '0', CH_REST_T = 6, CH_REST_TOL = 0.25;
+function chainRestOk(sh, a) { return CH_REST && a.st === 'down' && !!sh.moor && trafficShow(sh); }
+/** 落定的鍊子照現在的錨鏈孔（W）平移過的點（世界座標，寫進 out）。 */
+function chainRestPts(c, W, out) {
+  var N = CHAIN_SEG, R = c.rest, dx = W[0] - R.W0[0], dy = W[1] - R.W0[1], dz = W[2] - R.W0[2];
+  for (var i = 0; i <= N; i++) { var o = i * 3, k = 1 - i / N; out[o] = c.p[o] + dx * k; out[o + 1] = c.p[o + 1] + dy * k; out[o + 2] = c.p[o + 2] + dz * k; }
+  return out;
+}
+/** 落定的鍊子接回去照常算：從照現在的錨鏈孔平移過的形狀開始、速度歸零。 */
+function chainWake(sh, a, c) {
+  chainRestPts(c, M4.pt(sh.M, a.hx, a.hy, a.hz), c.p); c.q = Float64Array.from(c.p); c.rest = null; sh.chainR = null;
+}
 var CHAIN_C = [[0.2, 0.2, 0.22], [0.38, 0.37, 0.36]], CH_LINKS = 3, CH_LINK_W = 0.14;   // 每一節幾環（1.5 m ⇒ 一環 0.5 m）、環的半寬（公尺）
 function chainNew(sh, a) {
   var W = M4.pt(sh.M, a.hx, a.hy, a.hz), n = CHAIN_SEG + 1, p = new Float64Array(n * 3);
@@ -309,6 +325,11 @@ function chainStep(sh, dt) {
     var a = A[k];
     if (a.st === 'up') { a.ch = null; if (a.m) a.m.ancD = null; return; }
     var c = a.ch || (a.ch = chainNew(sh, a));
+    if (chainRestOk(sh, a)) {                                           // 停港繫泊的表演船：咬著夠久 ⇒ 落定、不再算（見 CH_REST）
+      if (c.rest) return;
+      c.downT = (c.downT || 0) + dt;
+      if (c.downT >= CH_REST_T) { c.rest = { W0: M4.pt(sh.M, a.hx, a.hy, a.hz), a: a }; sh.chainR = null; return; }
+    } else { c.downT = 0; if (c.rest) chainWake(sh, a, c); }
     chainSolve(sh, a, c, dt);
     if (a.m) { var e = M4.pt(sh.inv, c.p[CHAIN_SEG * 3], c.p[CHAIN_SEG * 3 + 1], c.p[CHAIN_SEG * 3 + 2]); a.m.ancD = [e[0] - a.rx, e[1] - a.ry, e[2] - a.rz]; }   // 模型錨：整個搬到鍊子那一端畫、ring 落在鍊尾（60_render.js drawModels；沒有 ring ⇒ 模型頂的中心）
   });
@@ -327,9 +348,17 @@ function chainBuf(sh) {
   if (A) ['P', 'S'].forEach(function (k) { if (A[k].ch) C.push([A[k].ch, !A[k].m]); });
   (sh.chLost || []).forEach(function (c) { C.push([c, false]); });
   if (!C.length && !(sh.chain && sh.chain.n)) return;                 // 沒有鍊子放出去、上一份也是空的 ⇒ 不再每一格傳一份空的（60_render.js 照 n 畫）
+  var rest = C.length > 0 && C.every(function (cc) { return cc[0].rest; }), R = sh.chainR;   // 全部落定（CH_REST）⇒ 錨那一端偏離不到 CH_REST_TOL ⇒ 上一份照畫
+  if (rest && R && sh.chain && R.n === C.length && R.e.every(function (e, j) { var w = M4.pt(sh.M, e[0], e[1], e[2]), E = R.E[j]; return Math.hypot(w[0] - E[0], w[1] - E[1], w[2] - E[2]) <= CH_REST_TOL; })) return;
+  if (rest) R = sh.chainR = { n: C.length, e: [], E: [] }; else sh.chainR = null;
+  if (DEBUG) { var st = rigStat(); st.chainBuf = (st.chainBuf || 0) + 1; }   // ?debug=1：鍊子的緩衝重建幾次（__rbat.stat.chainBuf）
   C.forEach(function (cc) {
-    var c = cc[0], p = c.p, N = CHAIN_SEG, P = [], i;
+    var c = cc[0], p = c.rest ? chainRestPts(c, M4.pt(sh.M, c.rest.a.hx, c.rest.a.hy, c.rest.a.hz), new Float64Array(c.p.length)) : c.p, N = CHAIN_SEG, P = [], i;
     for (i = 0; i <= N; i++) P.push(M4.pt(sh.inv, p[i * 3], p[i * 3 + 1], p[i * 3 + 2]));
+    if (c.rest) {                                                       // 落定：記下錨那一端（船身格座標、世界座標）給下一格比；模型錨跟著這一份畫（chainStep 不再更新它）
+      var a = c.rest.a; if (rest) { R.e.push(P[N]); R.E.push([p[N * 3], p[N * 3 + 1], p[N * 3 + 2]]); }
+      if (a.m) a.m.ancD = [P[N][0] - a.rx, P[N][1] - a.ry, P[N][2] - a.rz];
+    }
     var hw = CH_LINK_W / S;                                             // 環的半寬（格）
     for (i = 0; i < N; i++) chainLinks(L, P[i], P[i + 1], CH_LINKS, hw, 2, i * CH_LINKS);   // 船身格座標：+z 是上
     if (!cc[1]) return;

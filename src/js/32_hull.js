@@ -92,7 +92,7 @@ function stepFloat(sh, dt) {
   sh.inflow = N;
   var fk = sh.broken ? Math.max(sh.cfg.flood, 0.6) : sh.cfg.flood;                       // 斷成兩截 ⇒ 一定沉（進水速度 0 也沉）
   var fl = sh.fl && !sh.broken ? sh.fl : null;                                   // 粒子模式（33_flood.js）：進水、下沉、傾斜照艙內的水；斷成兩截照舊用公式（一定沉）
-  if (fl && !sh.sinkingFinal && !sh.sunk) floodStep(sh, fl, dt);                 // 開始沉之後不再算水（船要下去了；⛔ 照算 ⇒ 沉掉的船積到 8 萬噸、白耗 CPU）
+  if (fl && !sh.sinkingFinal && !sh.sunk && !sh.showIdle) floodStep(sh, fl, dt);   // showIdle：停住的表演船沒有洞（50_sim.js showIdleTick）；開始沉之後不再算水（船要下去了；⛔ 照算 ⇒ 沉掉的船積到 8 萬噸、白耗 CPU）
   else if (sh.fl && PHX.sinkflood && (sh.broken || sh.sinkingFinal) && !sh.sunk) floodVis(sh, sh.fl, dt);   // 斷成兩截、開始沉 ⇒ 水照樣灌進去給人看（33_flood.js floodVis：只改畫面與讀數；沉完就停）
   if (VX && (!sh.sinkingFinal || sh.vxEaten) && !sh.sunk) vxDrag(sh, dt);       // 大漩渦的眼：被往下拖多深（sh.vxSink；出了眼浮回來；被眼拖沉的沉沒之前一直拖，08_sea.js）
   if (!sh.sunk) {
