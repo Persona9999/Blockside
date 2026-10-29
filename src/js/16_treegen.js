@@ -419,6 +419,17 @@ var TREE_SPECIES = {
             cols: [[0.86, 0.68, 0.16], [0.86, 0.46, 0.12], [0.54, 0.17, 0.18], [0.40, 0.52, 0.16]] },   // 幹生的果莢（treePods）：樹幹那一段、粗枝的下半截；熟的黃、橙、紫紅，未熟的綠
     place: { town: true, spacing: 1, scale: [0.9, 1.1], shell: 0, view: 300, sink: 0.1, field: [2.0, 1.8], fieldK: 0.6 },   // fieldK：田裡整體 × 1.8 ⇒ 可可 × 0.6 ≈ 實際大小（3.5～4.8 m）；行距 3.6 m、株距 3.2 m
     variants: 4
+  },
+  ginger: {
+    name: '薑',                                                         // Zingiber officinale（1640～60 年代巴貝多、牙買加的薑田，種在起壟的畦上；TASK-1109）：一叢 4～5 根細的綠假莖（田裡一塊幾百棵 ⇒ 頂點數壓到菜畦那一級），窄長的披針葉往兩側交互排成兩列、往外斜伸、葉尖微垂；栽培的不抽花穗
+    meta: { region: ['carib'], type: 'crop' },
+    height: [0.7, 1.0],
+    trunk: { r: [0.008, 0.008], taper: 1, bend: 0, segs: 1, sides: [0, 0], lean: 0, col: [0.42, 0.54, 0.26], top: 0.02 },
+    levels: [],
+    leaf: { kind: 'cane', stems: [4, 5], spread: [0.08, 0.2], r: [0.006, 0.009], base: 0.12, node: 0.45, nodeCol: [0.40, 0.52, 0.25], n: [5, 7], from: 0.25, len: [0.24, 0.32], w: 0.015, rise: [35, 60], droop: 0.5,
+            col: [0.22, 0.44, 0.17], tip: [0.32, 0.52, 0.21], vary: 0.1 },   // len：葉長 ＝ 株高的幾成（假莖 80 cm、葉 15～25 cm）；w：葉的半寬（公尺，葉寬 2～2.5 cm）；from 0.25：下面那一截只有葉鞘；node 0.45 ⇒ 假莖只切兩段（薑的假莖看不出節）
+    place: { town: true, spacing: 1, scale: [0.85, 1.15], shell: 0, view: 250, sink: 0.05, field: [0.8, 0.6] },   // 田裡整體 × 1.8（TREE_FIELD_K）⇒ 1.3～1.8 m，跟別的作物同一個放大
+    variants: 3
   }
 };
 
