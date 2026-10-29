@@ -208,6 +208,7 @@ function gpuSlots() {
 function ortho(r, n, f, ry) { return new Float32Array([1 / r, 0, 0, 0, 0, 1 / (ry || r), 0, 0, 0, 0, -2 / (f - n), 0, 0, 0, -(f + n) / (f - n), 1]); }   // ry：上下的半寬另給（分段陰影的長方形；沒給 ⇒ 正方形）
 /** 帆與繩的緩衝：一格最多做一次（之後陰影、反射、場景都用同一份）；沒走模擬的那一格不重做。 */
 function prepRig() {
+  floopTick();                                                          // 循環布（11_rig_loop.js）：還在烘就烘一小段
   for (var i = 0, ns = SHIPS.length, n = ns + PIECES.length; i < n; i++) {   // 船、再斷開的那一團（⛔ SHIPS.concat(PIECES)：每格一個新陣列）
     var ow = i < ns ? SHIPS[i] : PIECES[i - ns], dirty = ow.rigDirty;
     if (dirty) buildRig(ow);
@@ -219,6 +220,7 @@ function prepRig() {
     if (RIG_CHK && (dirty || live)) rigChk(ow, live);                // ?rigchk=1：重做的那一格驗動靜分開傳的那一份、沒重做的那一格驗上一份
     if (ow.anc) chainBuf(ow);                                         // 鐵鍊（76_anchor.js；跟帆繩物理開關無關；用內插過的 sh.inv ⇒ 每一格做）
     if (i < ns) poleBuf(ow);                                          // 陣營旗的旗桿（77_colours.js；旗面是帆，上面 sailBuf 一起畫）
+    if (ow.fx) floopFxFrame(ow);                                      // 循環布：這一格的下風方向、風速檔位、帆桁轉角（只是 uniform，不重做緩衝）
     if (DEBUG) PROF.buf += performance.now() - tb;
   }
 }
@@ -307,14 +309,27 @@ function lanternHalo(push) {
 function drawSails(prog, pd) {                                         // pd：同 drawHulls
   if (prog.u.uSailT) gl.uniform1i(prog.u.uSailT, SAIL_UNIT);           // 帆的貼圖集（TASK-0579；11_rig_gpu.js sailTex）：固定第 9 號
   if (prog.u.uFireT) gl.uniform1f(prog.u.uFireT, BURN.sailBurn);      // 帆燒到穿要幾秒（01_gl.js BURN_GLSL；49_burn.js）
+  var fx = floopFxProg(prog), FX = null;                               // 循環布（11_rig_loop.js）：繩帆固定的船改用變體、排到最後畫（還沒烘好、編不過 ⇒ null，照以前）
   for (var i = 0, ns = SHIPS.length, n = ns + PIECES.length, b = pd.b, bt = null; i < n; i++) {   // 船、再斷開的那一團（⛔ SHIPS.concat(PIECES)：每輪一個新陣列）；i ＝ RBAT 的 owner 順序
     var ow = i < ns ? SHIPS[i] : PIECES[i - ns];
     if (ow.sink > 40 || !ow.sb || !ow.sb.n || (b && !(RBAT.cs[i] & b))) continue;
+    if (fx && ow.fx && ow.sb.fxOn) { (FX || (FX = [])).push(ow); continue; }
     cutSet(prog, ow); gl.uniformMatrix4fv(prog.u.uModel, false, ow.M);
     var st = ow.T && ow.T.sailTexGL;                                    // 第 9 號：這一趟上次綁的就是這張（同一型的船）⇒ 不再綁（bt；S3）。還沒建、沒有貼圖集 ⇒ 照以前每次 sailTex（第一次建在第 9 號上）
     if (!st || st !== bt) { gl.activeTexture(gl.TEXTURE0 + SAIL_UNIT); gl.bindTexture(gl.TEXTURE_2D, bt = sailTex(ow.T)); gl.activeTexture(gl.TEXTURE0); }
     gl.bindVertexArray(ow.sb.vao); gl.drawElements(gl.TRIANGLES, ow.sb.n, gl.UNSIGNED_INT, 0);
   }
+  if (!FX) return;
+  gl.useProgram(fx.prog); setCommon(fx); floopBind(fx);                // 同一趟（PASS 的矩陣、影子、剪裁）換成變體
+  if (fx.u.uSailT) gl.uniform1i(fx.u.uSailT, SAIL_UNIT); if (fx.u.uFireT) gl.uniform1f(fx.u.uFireT, BURN.sailBurn);
+  bt = null;
+  FX.forEach(function (ow) {
+    cutSet(fx, ow); gl.uniformMatrix4fv(fx.u.uModel, false, ow.M); floopFxSet(fx, ow);
+    var st = ow.T && ow.T.sailTexGL;
+    if (!st || st !== bt) { gl.activeTexture(gl.TEXTURE0 + SAIL_UNIT); gl.bindTexture(gl.TEXTURE_2D, bt = sailTex(ow.T)); gl.activeTexture(gl.TEXTURE0); }
+    gl.bindVertexArray(ow.sb.vao); gl.drawElements(gl.TRIANGLES, ow.sb.n, gl.UNSIGNED_INT, 0);
+  });
+  gl.useProgram(prog.prog);
 }
 /** 每一段的遠端（離鏡頭多深，公尺）與開始跟下一段混的地方：畫質頁設的分界、交界（07_gfx.js shkSplits；預設 60／145／375／1,500 m，跟以前 practical split 0.85 的 4 段差不多）。 */
 function csmSplits() { var o = shkSplits(); SHM.bs = o.bs; return o.far; }

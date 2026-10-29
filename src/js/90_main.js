@@ -77,6 +77,21 @@ if (DEBUG) window.__game = {
   portsForce: function (i, v) { var sh = SHIPS[i || 0]; if (sh) sh.portWant = v === undefined ? null : v; return this.ports(i); },
   /** 畫面迴圈的反向對照（TASK-0719；⛔ ?demo、run() 不經過 frame() ⇒ 量不到畫面那一格的演出）：同步叫 n 次 frame()，每格 dt ＝ DT（loopLast 歸零）⇒ 沒有慢動作時每格剛好一步；
    *  回走了幾步、模擬秒、戰局雜湊（每艘的位置、航向、格數、下沉、命中、開火、死傷、砲剩幾門，加上砲彈、碎塊數與戰局亂數 RNG_B 的狀態；照宣傳片 director.js trHash 的 FNV-1a）。g_port＝0／1、g_deco＝0／1 要一樣。 */
+  /** 循環布（TASK-1102；11_rig_loop.js）：烘到哪（st 0 還沒要、1 在烘、2 好了）、烘了幾毫秒（主執行緒）／牆鐘、貼圖幾位元組；stat ＝ 每一種旗形每一檔：阻尼、暖幾圈、
+   *  一圈首尾差 seam、一步最大 stepMax、格與格最大 frameMax、接縫那一步 wrap（都是公分）、平均飄向 flowDeg（跟風差幾度）。
+   *  { control: [旗形序號, 檔] } ⇒ 反向對照（原本那四個頻率、同樣長度硬接）；{ tails: 秒 } ⇒ 現在畫著的每面旗接下來那幾秒尾端最遠動多少（公尺）；
+   *  { ramp: 秒 } ⇒ 風速從最弱加到最強的最大一步、對照最強那一檔；{ pairs: true } ⇒ 同一種的旗兩兩比；{ yards: 第幾艘 } ⇒ 綁在帆桁上的點跟帆桁的模型差多少。 */
+  floop: function (o) {
+    o = o || {};
+    var r = { on: FLOOP_ON, st: FLOOP.st, how: FLOOP.how || null, fileErr: FLOOP.fileErr || null, fileBytes: FLOOP.fileBytes || 0, mainMs: FLOOP.mainMs ? +FLOOP.mainMs.toFixed(1) : null, workerMs: FLOOP.wms ? Math.round(FLOOP.wms) : null, bakeMs: +FLOOP.ms.toFixed(1), wallMs: FLOOP.t1 ? Math.round(FLOOP.t1 - FLOOP.t0) : null, texBytes: FLOOP_W * FLOOP_ROWS * 3 * 4, cpuBytes: FLOOP.data ? FLOOP.data.byteLength : 0,
+      fxBad: FLOOP.fxBad, townBad: FLOOP.town ? FLOOP.town.bad : null, fxShips: SHIPS.filter(function (s) { return s.fx && s.sb && s.sb.fxOn; }).length, fxFlags: SHIPS.reduce(function (a, s) { return a + (s.fx ? s.fx.flags.length : 0); }, 0), stat: FLOOP.stat };
+    if (o.control) r.control = floopControl(o.control[0], o.control[1]);
+    if (o.tails) r.tails = floopTails(o.tails);
+    if (o.ramp) r.ramp = FLOOP_SHAPES.map(function (Z, si) { return floopRamp(si, o.ramp); });
+    if (o.pairs) r.pairs = floopPairs();
+    if (o.yards !== undefined) r.yards = floopYardCheck(o.yards);
+    return r;
+  },
   /** TASK-1101 的三項減量（帆不重傳 rigfixkey、錨鏈落定 chainrest、表演船停住 showidle；同名的網址開關）：給 { 名字: true／false } 就改 ——
    *  關掉的那一項這一格就生效（帆照以前重做、落定的鍊子接回去算、停住的船補一次局勢照畫）；打開的等下一步模擬才停、才落定。回現在的開關、幾艘停住、幾條落定。 */
   reduce: function (o) {

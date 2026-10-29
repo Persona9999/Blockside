@@ -2126,7 +2126,7 @@ def owner_check():
 # 模擬層 ＝ 20–54 號檔（船體、物理、船員、模擬與 AI；41_crew_art 是畫船員貼圖 ⇒ 算畫面）；上層 ＝ 60 號以後＋下面那幾支畫面、聲音、鏡頭的檔。
 # 76_anchor、78_funnel 編號在後面、職責是模擬（拋錨、煙囪通不通）⇒ 不算上層（不改檔名：會跟大家的分支撞）。
 # 模擬層要叫上層 ⇒ 00_events.js 加一個發事件的名字、讓上層訂閱（README 00_events.js 那一列）；這裡列出還沒拆的。
-LAYER_VIEW = ('02_audio.js', '02_ambient.js', '02_music.js', '03_camera.js', '11_rig_gpu.js', '12_effects.js', '13_water.js', '14_rain.js', '15_smooth.js', '41_crew_art.js')
+LAYER_VIEW = ('02_audio.js', '02_ambient.js', '02_music.js', '03_camera.js', '11_rig_gpu.js', '11_rig_loop.js', '12_effects.js', '13_water.js', '14_rain.js', '15_smooth.js', '41_crew_art.js')
 LAYER_SIMX = ('76_anchor.js', '78_funnel.js')
 
 
@@ -2499,7 +2499,7 @@ def act_build(pack=True, single=False):   # pack：壓縮版（預設，TASK-058
         log += js_strip_html(OUT)
     else:
         ships_sync(os.path.dirname(OUT), {})                 # 原格式（船內嵌）⇒ ships/ 裡的船檔都是舊的
-    return log + src_stamp()
+    return log + flagloop_ensure() + src_stamp()
 
 
 # ───────────────────────── 外掛外殼（shell：別的遊戲拿這份成品套自己的外殼；2026-10-21） ─────────────────────────
@@ -2733,7 +2733,19 @@ def act_build_code(base=None):
         with open(OUT, 'w', encoding='utf-8', newline='') as f:
             f.write(h1)
         log.append('✓ 只重建程式：入口 index.html 換了（來源指紋 %s → %s）；船檔 ships/ 照舊 %d 個' % (have['fp'], M1['fp'], len(idx)))
-    return log + act_srccheck()
+    return log + flagloop_ensure() + act_srccheck()
+
+
+def flagloop_ensure():
+    """循環布的預烘（TASK-1102；src/flagloop_bake.cjs）：js/11_rig_loop.js「烘」那一段的指紋跟 ships/flagloop.js 記的不一樣、或沒有檔 ⇒ 重烘（Node，約 40 秒）；一樣 ⇒ 跳過。
+    沒有 node ⇒ 照舊（遊戲抓不到這個檔就自己在 Worker 烘）。"""
+    node = shutil.which('node')
+    if not node:
+        return ['· 循環布的預烘：找不到 node ⇒ ships/flagloop.js 照舊（遊戲載不到就自己在 Worker 烘）']
+    r = subprocess.run([node, os.path.join(HERE, 'flagloop_bake.cjs'), os.path.join(os.path.dirname(OUT), 'ships', 'flagloop.js')], capture_output=True, text=True, encoding='utf-8')
+    if r.returncode:
+        raise Fail('循環布的預烘失敗（exit %d）：%s' % (r.returncode, (r.stdout + r.stderr).strip()[-400:]))
+    return [l for l in r.stdout.strip().splitlines() if l.strip()]
 
 
 # ───────────────────────── 船檔重切（reseg：船檔分段的切法改了、這台沒有 _cache；2026-10-20） ─────────────────────────
@@ -3048,7 +3060,7 @@ def ship_data(html, el, read=None):
 def ships_sync(root, files):
     """船檔寫進 <root>/ships/：files ＝ { 相對路徑: 內容 }；ships/ 裡不在 files 的船檔（船隻清單拿掉的船）拿掉。回 (寫了幾個, 拿掉幾個)。"""
     d = os.path.join(root, 'ships')
-    old = [f for f in os.listdir(d) if f.endswith('.js')] if os.path.isdir(d) else []   # ships/ 只放建置寫的船檔 ⇒ 不在這次清單上的 .js 都是舊的
+    old = [f for f in os.listdir(d) if f.endswith('.js') and f != 'flagloop.js'] if os.path.isdir(d) else []   # ships/ 只放建置寫的船檔 ⇒ 不在這次清單上的 .js 都是舊的（flagloop.js：循環布的預烘，flagloop_ensure 管）
     if files:
         os.makedirs(d, exist_ok=True)
     for rel, t in files.items():

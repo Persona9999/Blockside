@@ -2228,7 +2228,7 @@ function townFlags(T) {
       }
       out.push({ p: p, pp: Float32Array.from(p), C: new Float32Array(C), h: [h0, h1], at: [(h0[0] + f1[0]) / 2, (h0[1] + f1[1]) / 2, (h0[2] + f1[2]) / 2],
                  ph: townHash((q.lot || q.k) + ':flag' + fi) * 6.2832, pat: TOWN_FLAG_PAT[f.pattern] || np, acc: 0, vao: null, vb: null, V: null, n: 0, lk: q.lk || 1,
-                 unit: q.lot ? T.id + ':' + q.lot : null });                // unit：那一棟換成戰鬥單位（TOWN_UNITS）⇒ 布旗不畫（那一座自己有旗）
+                 unit: q.lot ? T.id + ':' + q.lot : null, L: Math.hypot(f0[0] - h0[0], f0[1] - h0[1], f0[2] - h0[2]) });   // L：飛邊長（公尺；循環布照它縮放，11_rig_loop.js）；unit：那一棟換成戰鬥單位（TOWN_UNITS）⇒ 布旗不畫（那一座自己有旗）
     });
   });
   return out;
@@ -2574,18 +2574,22 @@ function townDraw() {
   gl.disable(gl.POLYGON_OFFSET_FILL);
   // 布旗（同一支著色器；近、中那兩級的距離內才畫，鏡頭附近才動）
   var now = townClock(), fdt = Math.min(0.1, Math.max(0, now - (TOWNS.flagT == null ? now : TOWNS.flagT))), nfl = 0; TOWNS.flagT = now; TOWNS.flagClock = now;   // 旗、鎮民、工人、動物都照遊戲的時間（townClock）
+  var tf0 = performance.now(), loop = floopTownOn();                     // loop：循環布（11_rig_loop.js；烘好了、著色器好了）⇒ 這一格的旗排起來一次畫完、不再每面算布與重建網格
   TOWNS.list.forEach(function (T) {
     var nk = townNation(T); if (T.flags && T.flagNk !== nk) townFlagFree(T);   // 城換了勢力（live.flag）⇒ 重建
     if (!T.flags) { T.flags = townFlags(T); T.flagNk = nk; }
+    if (T.flags.length) floopNeed();
     T.flags.forEach(function (F) {
       if (F.unit && TOWN_UNITS[F.unit]) return;                          // 換成戰鬥單位的那一棟（townFortWake）：那一座自己掛旗
       var d = Math.hypot(F.at[0] - eye[0], F.at[2] - eye[2]); if (d > TOWN_LOD[1] * F.lk) return;   // 地標的旗跟著那一棟畫到中那一級的盡頭
       for (var i = 0; i < 6; i++) { var pl = PL[i]; if (pl[0] * F.at[0] + pl[1] * F.at[1] + pl[2] * F.at[2] + pl[3] < -6) return; }
+      if (loop) { floopTownAdd(F); nfl++; return; }
       if (d < TOWN_FLAG_SIM) { F.acc += fdt; var ns2 = 0; while (F.acc >= TOWN_FLAG_DT && ns2 < 4) { townFlagStep(F, TOWN_FLAG_DT, TOWNS.flagClock); F.acc -= TOWN_FLAG_DT; ns2++; } if (ns2 === 4) F.acc = 0; }
       tris += townFlagMesh(F, eye); gl.drawArrays(gl.TRIANGLES, 0, F.n); nfl++;
     });
   });
-  TOWNS.stat.flags = nfl;
+  if (loop) { tris += floopTownDraw(fogD); gl.useProgram(PG.prog); }   // 後面照舊用地面帶子那一支的人不用重設
+  TOWNS.stat.flags = nfl; TOWNS.stat.flagMs = (TOWNS.stat.flagMs || 0) * 0.95 + (performance.now() - tf0) * 0.05;   // flagMs：旗這一段每格幾毫秒（CPU；慢慢平均）
   // 城鎮居民（沿路走動、看板換色立繪；63_townfolk.js，位置只照遊戲時間（townClock：暫停就停）算）
   tris += townFolkDraw(P, K, eye, PL, fogD, TOWNS.flagClock);
   tris += townFaunaDraw(P, K, eye, PL, fogD, TOWNS.flagClock);           // 動物（63_townfauna.js）：同一個畫面時間
@@ -2644,7 +2648,7 @@ function townStat(at) {
       folk: townFolkStat(T), fauna: townFaunaStat(T),
       smoke: T.smk ? T.smk.L.map(function (o) { return { k: o.q.k, lot: o.q.lot, w: o.w.map(function (v) { return +v.toFixed(1); }) }; }) : null,   // 建築的煙囪（78_funnel.js townSmokePts；TASK-0990）
       byModel: u, lights: tl, center: [+(T.ox - BED.ax).toFixed(1), +(T.oy - BED.az).toFixed(1)] };
-  }), kit: !!TOWNS.kit, kitPart: !!(TOWNS.kit && TOWNS.kit.part), kitN: S.kitN, kitMs: S.kitMs, skelN: S.skelN, skelMs: S.skelMs, kitMesh: { baked: S.meshBaked, live: S.meshLive, check: S.meshCheck, vk: townVkFp() }, kitTris: S.kitTris, skip: S.skip, gls: S.gls || 0, lines: S.lines || 0, under: S.under || {}, joins: S.joins || {}, wallJx: S.wallJx || {}, drawn: { full: S.d0, low: S.d1, card: S.d2, shells: S.d3, plinth: S.plinth, flags: S.flags || 0, folk: S.folk || 0, fauna: S.fauna || 0, work: S.workDrawn || 0, landmarks: S.lm || 0, fields: S.fields || 0 }, folk: townFolkSum(), fauna: townFaunaSum(), tris: S.tris, ms: { draw: S.drawMs, fields: S.fieldMs || 0, bin: S.binMs, clr: +S.clrMs.toFixed(1), prep: S.prepMs }, clrChunks: S.clrN, edit: S.edit || null, smoke: S.smoke || null,
+  }), kit: !!TOWNS.kit, kitPart: !!(TOWNS.kit && TOWNS.kit.part), kitN: S.kitN, kitMs: S.kitMs, skelN: S.skelN, skelMs: S.skelMs, kitMesh: { baked: S.meshBaked, live: S.meshLive, check: S.meshCheck, vk: townVkFp() }, kitTris: S.kitTris, skip: S.skip, gls: S.gls || 0, lines: S.lines || 0, under: S.under || {}, joins: S.joins || {}, wallJx: S.wallJx || {}, drawn: { full: S.d0, low: S.d1, card: S.d2, shells: S.d3, plinth: S.plinth, flags: S.flags || 0, folk: S.folk || 0, fauna: S.fauna || 0, work: S.workDrawn || 0, landmarks: S.lm || 0, fields: S.fields || 0 }, folk: townFolkSum(), fauna: townFaunaSum(), tris: S.tris, ms: { draw: S.drawMs, fields: S.fieldMs || 0, flags: +(S.flagMs || 0).toFixed(3), bin: S.binMs, clr: +S.clrMs.toFixed(1), prep: S.prepMs }, clrChunks: S.clrN, edit: S.edit || null, smoke: S.smoke || null,
     night: { lit: +TL.k.toFixed(3), win: +TOD_WIN.toFixed(3), grid: TL.stat.inGrid, range: TL.stat.range || 0, full: TL.stat.full, over: TL.stat.over, gridMs: TL.stat.gridMs, cards: TL.stat.cards, glow: TL.stat.glow, glowMs: TL.stat.glowMs } };
   var group = typeof at === 'string' && at.indexOf('street:') === 0 ? at.slice(7) : null;
   if ((at === 'street' || at === 'walk' || group) && TOWNS.list[0] && TOWNS.kit && TOWNS.kit.folk) { o.street = townFolkStreet(TOWNS.list[0], TOWNS.kit.folk, at === 'walk', group); }   // street:workers：只排一組，不把39位擠在同一段。

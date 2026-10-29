@@ -260,6 +260,7 @@ var RAG_GLSL = 'float rgE(vec3 H){ vec2 q=H.yz; return H.x-(0.06+0.5*bnN(q*0.45)
 //   ⛔ GLSL 不保證動態索引的陣列跟單一個 uniform 編出一樣的算式 ⇒ 用之前先量：60_rbatch.js __rbatProbe（轉換回饋逐位元比）＋ 量測工具的畫面。
 //   ⛔ 不准為了對上去改 P.tri／P.dtri 的原始碼（每個用它的地方的畫面都會變）。
 var INST_MAX = 64, INST_K = 16;
+var SAIL_VS = '', SAIL_FS = '', DSAIL_VS = '', DSAIL_FS = '';             // P.sail、P.dsail 的原始碼（programs() 給值）；循環布的變體（11_rig_loop.js floopFxProg）拿同一串改頂點那一段
 var TRI_VS = '', TRI_FS = '', DTRI_VS = '';                              // P.tri、P.dtri 的原始碼（programs() 給值：SEA_GLSL 在後面的檔）；一次畫多個、對拍的分身都拿同一串
 /** P.tri／P.dtri 的頂點著色器 ⇒ 一次畫多個的那一份：'uniform mat4 uModel,uVP;' 換成 uMs[INST_K]、main 一開頭 uModel ＝ uMs[gl_InstanceID]，其他一個字不動。
  *  兩段各要剛好一處；不是 ⇒ 丟出去（programs() 接住 ⇒ 那一支是 null、照舊一個一個畫）。 */
@@ -309,10 +310,10 @@ function programs() {
   P.tri = VK.compile(gl, TRI_VS, TRI_FS);
   // 帆：頂點法線（平滑，不是一個三角形一個平面）；法線翻向看的那一面；包覆光（背光面不死黑、明暗過渡慢）＋太陽在帆後面時布透出暖光
   // 有貼圖的帆（TASK-0579）：aT ＝ 貼圖集的 uv（11_rig_gpu.js sailBuf；u < 0 ＝ 沒有貼圖，照頂點色）；片段照貼圖取色、alpha < 0.5（已照 alpha_min 二值化）⇒ discard ＝ 洞
-  P.sail = VK.compile(gl,
+  P.sail = VK.compile(gl, SAIL_VS =
     '#version 300 es\nlayout(location=0) in vec3 aP; layout(location=1) in vec3 aN; layout(location=2) in vec3 aC; layout(location=3) in vec2 aT; layout(location=4) in vec4 aF; layout(location=5) in vec3 aH; uniform mat4 uModel,uVP; out vec3 vN; out vec3 vW; out vec3 vC; out vec2 vT; out vec4 vF; out vec3 vH;\n' +
     'void main(){ vec4 w=uModel*vec4(aP,1.0); vW=w.xyz; vN=mat3(uModel)*aN; vC=aC; vT=aT; vF=aF; vH=aH; gl_Position=uVP*w; }\n',
-    '#version 300 es\nprecision highp float;\n' + SEA_GLSL + SHADOW_GLSL + CUT_GLSL + BURN_GLSL + RAG_GLSL + 'in vec3 vN; in vec3 vW; in vec3 vC; in vec2 vT; in vec4 vF; in vec3 vH; uniform vec3 uSun,uEye,uFog,uSky,uGround; uniform float uFogD; uniform mat4 uCutInv; uniform sampler2D uSailT; out vec4 o;\n' +
+    SAIL_FS = '#version 300 es\nprecision highp float;\n' + SEA_GLSL + SHADOW_GLSL + CUT_GLSL + BURN_GLSL + RAG_GLSL + 'in vec3 vN; in vec3 vW; in vec3 vC; in vec2 vT; in vec4 vF; in vec3 vH; uniform vec3 uSun,uEye,uFog,uSky,uGround; uniform float uFogD; uniform mat4 uCutInv; uniform sampler2D uSailT; out vec4 o;\n' +
     'void main(){ if(vW.y<uClip) discard; vec3 bc=vC; if(vT.x>=0.0){ vec4 t=texture(uSailT,vT); if(t.a<0.5) discard; bc=t.rgb; }\n' +
     ' if(vH.x<1.9){ float e=rgE(vH); if(e<0.0) discard; bc=mix(bc*vec3(0.72,0.66,0.55),bc,smoothstep(0.0,' + RAG_BAND + ',e)); }\n' +
     ' vec3 em=vec3(0.0); if(vF.x<5e5){ float b=bnB(vF,uSeaT); if(b>1.0) discard;\n' +
@@ -464,8 +465,8 @@ function programs() {
   DTRI_VS = '#version 300 es\nlayout(location=0) in vec3 aP; uniform mat4 uModel,uVP; void main(){ gl_Position=uVP*(uModel*vec4(aP,1.0)); }\n';
   P.dtri = VK.compile(gl, DTRI_VS, NOFS);
   // 帆的陰影（TASK-0579）：貼圖的洞不投影子（同 P.sail 的 discard）；燒穿的洞也是（TASK-0717，BURN_GLSL）；破洞的毛邊也是（R3，RAG_GLSL）
-  P.dsail = VK.compile(gl, '#version 300 es\nlayout(location=0) in vec3 aP; layout(location=3) in vec2 aT; layout(location=4) in vec4 aF; layout(location=5) in vec3 aH; uniform mat4 uModel,uVP; out vec2 vT; out vec4 vF; out vec3 vH; void main(){ vT=aT; vF=aF; vH=aH; gl_Position=uVP*(uModel*vec4(aP,1.0)); }\n',
-    '#version 300 es\nprecision highp float; in vec2 vT; in vec4 vF; in vec3 vH; uniform sampler2D uSailT; uniform float uSeaT;\n' + BURN_GLSL + RAG_GLSL + 'void main(){ if(vT.x>=0.0 && texture(uSailT,vT).a<0.5) discard; if(vF.x<5e5 && bnB(vF,uSeaT)>1.0) discard; if(vH.x<1.9 && rgE(vH)<0.0) discard; }\n');
+  P.dsail = VK.compile(gl, DSAIL_VS = '#version 300 es\nlayout(location=0) in vec3 aP; layout(location=3) in vec2 aT; layout(location=4) in vec4 aF; layout(location=5) in vec3 aH; uniform mat4 uModel,uVP; out vec2 vT; out vec4 vF; out vec3 vH; void main(){ vT=aT; vF=aF; vH=aH; gl_Position=uVP*(uModel*vec4(aP,1.0)); }\n',
+    DSAIL_FS = '#version 300 es\nprecision highp float; in vec2 vT; in vec4 vF; in vec3 vH; uniform sampler2D uSailT; uniform float uSeaT;\n' + BURN_GLSL + RAG_GLSL + 'void main(){ if(vT.x>=0.0 && texture(uSailT,vT).a<0.5) discard; if(vF.x<5e5 && bnB(vF,uSeaT)>1.0) discard; if(vH.x<1.9 && rgE(vH)<0.0) discard; }\n');
   // 帆的位置與法線由 GPU 算（render 管線大修 R2；11_rig_gpu.js SAILK）：transform feedback 寫進帆的動的那份。編不過 ⇒ null ⇒ 照 R1 在 CPU 算
   try { P.sailK = SAILK.compile(SAILK_VS, SAILK_FS, ['kP', 'kN']); } catch (e) { P.sailK = null; console.warn('帆的法線改回 CPU 算：' + (e && e.message)); }
   P.sky = VK.compile(gl,

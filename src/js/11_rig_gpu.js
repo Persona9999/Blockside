@@ -144,7 +144,7 @@ function sailFill(ow) {
  *  算的式子、順序跟以前一模一樣（sailFill 那一份；?rigchk=1 每一格逐位元對拍）⇒ 畫出來一位元不差。tDraw／tKey／tJ／rigDirty 的副作用照舊。
  *  K（R2，SAILK.on）：位置抄進 SKP、三角形表／鄰接表／索引交給 sailKUp、法線 GPU 算（只有法線跟 R1 差浮點捨入）。 */
 function sailBuf(ow) {
-  var K = SAILK.on(), B = ow.sb, A = ow.T && ow.T.sailAtlas, mv = 0, np = 0, nv = 0, ni = 0, nt = 0, vm = 0, s0 = -1, i0 = -1, RG = [], KD = [], j;   // s0：從第幾面起靜的整段重填；i0：從第幾面起索引重填；RG：只重填靜的那幾段（頂點起點、個數）；R2：nt 三角形數、vm 一點最多幾個三角形共用、KD 面沒換只換了不畫哪幾點的那幾面
+  var K = SAILK.on(), B = ow.sb, A = ow.T && ow.T.sailAtlas, mv = 0, np = 0, nv = 0, ni = 0, nt = 0, vm = 0, s0 = -1, i0 = -1, RG = [], KD = [], j, FXL = floopFxWant(ow) ? [] : null;   // FXL：繩帆固定的船 ⇒ 每一面 [布, 模板, 起點, 點數]，畫完交給 11_rig_loop.js floopFxBuild（循環布）；s0：從第幾面起靜的整段重填；i0：從第幾面起索引重填；RG：只重填靜的那幾段（頂點起點、個數）；R2：nt 三角形數、vm 一點最多幾個三角形共用、KD 面沒換只換了不畫哪幾點的那幾面
   if (!B) {
     B = ow.sb = { vao: gl.createVertexArray(), vbo: gl.createBuffer(), sbo: gl.createBuffer(), ebo: gl.createBuffer(), n: 0, nv: 0, L: [], SV: new Float32Array(0), IV: new Uint32Array(0), gs: 0, gi: 0, gd: 0 };
     gl.bindVertexArray(B.vao);
@@ -176,6 +176,7 @@ function sailBuf(ow) {
     if (nv) gl.bufferSubData(gl.ARRAY_BUFFER, 0, SBD, 0, nv * SB_DW);
   }
   B.n = K ? nt * 3 : ni; B.nv = nv;
+  if (ow.crew && (FXL || B.fxOn)) floopFxBuild(ow, FXL, nv);           // 循環布（11_rig_loop.js）：每頂點的參數（第 6 號屬性）；不走循環了 ⇒ 關掉
   B.lb = vtxBox(B.lb, K ? SKP : SBD, K ? 3 : SB_DW, nv * (K ? 3 : SB_DW));   // 這一份的頂點外框（格座標；鏡頭外的船不畫，60_rbatch.js viewVis）：布、布片、旗、鬆掉的帆都在裡面
   if (RIG_CHK) {
     ow.sbChk = { d: K ? null : SBD.slice(0, nv * SB_DW), tk: tk };      // 對拍用：這一次傳上去的動的那一份（R2：GPU 寫的，rigChk 讀回來）
@@ -200,6 +201,7 @@ function sailBuf(ow) {
       if (!st) { if (RG.length && RG[RG.length - 2] + RG[RG.length - 1] === base) RG[RG.length - 1] += n; else RG.push(base, n); }   // 挨著的併成一段
     }
     q.o = o; q.T = T; q.n = n; q.r = r; q.A = A; q.bf = bF; q.vb = base; q.ib = ni;
+    if (FXL) FXL.push(o, T, base, n);
     if (K) {                                                             // R2：位置照抄（只讀 p）；法線不算（GPU）、索引不排（sailKUp）
       q.tr = tr; q.tb = nt; nt += tr.length / 3; x = sailAdj(tr, n).vm; if (x > vm) vm = x;
       SKP.set(p.length === n * 3 ? p : p.subarray(0, n * 3), base * 3);
