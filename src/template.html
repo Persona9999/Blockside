@@ -254,11 +254,16 @@
   :is(#cover,#gfxov) button{ font:inherit; font-size:15px; margin:4px; padding:7px 16px; border-radius:6px; border:1px solid rgba(255,255,255,.25); background:rgba(255,255,255,.06); color:var(--ink); cursor:pointer; }
   :is(#cover,#gfxov) button.on{ background:var(--gold); color:#111; border-color:var(--gold); }
   :is(#cover,#gfxov) button.go{ font-size:18px; padding:9px 30px; background:#b8452e; border-color:#e06a4f; }
-  /* 開戰鈕左右兩側選旗（TASK-0950，js/71_menu.js flagUI；旗本身 js/77_colours.js）：旗的預覽、下拉選單、底色；窄螢幕換行 */
+  /* 開戰鈕左右兩側選旗（TASK-0950，js/71_menu.js flagUI；旗本身 js/77_colours.js）：旗鈕（點開 ⇒ 預設旗的圖案排成一格一格、不寫名字）、底色；窄螢幕換行 */
   #goRow{ display:flex; flex-wrap:wrap; align-items:center; justify-content:center; gap:4px 10px; }
-  .flagpick{ display:inline-flex; align-items:center; gap:4px; }
-  .flagpick canvas{ position:static; width:36px; height:18px; cursor:default; touch-action:auto; border:1px solid rgba(255,255,255,.45); border-radius:2px; }   /* ⛔ 全域的 canvas 是 absolute（遊戲畫面）⇒ 不蓋掉會跑到畫面左上角 */
-  .flagpick select{ font:inherit; font-size:12px; max-width:7.5em; background:#1b2430; color:#e8e2d4; border:1px solid #556; border-radius:4px; padding:2px; }
+  .flagpick{ position:relative; display:inline-flex; align-items:center; gap:4px; }
+  .flagpick canvas{ position:static; display:block; width:36px; height:18px; cursor:inherit; touch-action:auto; border:1px solid rgba(255,255,255,.45); border-radius:2px; }   /* ⛔ 全域的 canvas 是 absolute（遊戲畫面）⇒ 不蓋掉會跑到畫面左上角 */
+  :is(#cover,#gfxov) .flagpick button{ margin:0; padding:3px; line-height:0; font-size:11px; border-radius:4px; border:1px solid #556; background:#1b2430; }   /* ⛔ 蓋掉主選單按鈕的 margin、padding（:is(#cover,#gfxov) button） */
+  :is(#cover,#gfxov) .flagpick .flagb{ display:inline-flex; align-items:center; gap:3px; padding:3px 4px; } .flagb::after{ content:'▾'; color:var(--dim); line-height:1; }
+  .flagdd{ position:absolute; top:calc(100% + 4px); left:0; z-index:5; display:grid; grid-template-columns:repeat(4, auto); gap:5px; padding:6px; background:#141b24; border:1px solid #556; border-radius:6px; box-shadow:0 4px 14px rgba(0,0,0,.65); } .flagdd[hidden]{ display:none; }
+  #flag1 .flagdd{ left:auto; right:0; }   /* 敵方那一組在開戰鈕右邊 ⇒ 面板往左開（超出畫面 ⇒ flagPop 推回來） */
+  .flagdd canvas{ width:44px; height:22px; }
+  :is(#cover,#gfxov) .flagdd button:hover{ border-color:#aab; } :is(#cover,#gfxov) .flagdd button.cur{ border-color:var(--gold); box-shadow:0 0 0 1px var(--gold); }
   .flagpick input[type=color]{ width:24px; height:22px; padding:0; border:1px solid #556; border-radius:4px; background:none; cursor:pointer; }
   :is(#cover,#gfxov) button:disabled{ opacity:.4; cursor:wait; }
   :is(#cover,#gfxov) #discordB{ display:inline-block; font-size:15px; margin:4px; padding:7px 18px; border-radius:6px; border:1px solid #7983f5; background:#5865f2; color:#fff; text-decoration:none; cursor:pointer; }   /* Discord 的品牌紫 */

@@ -106,34 +106,58 @@ evOn('game:api', function (G) {
   var rp = G.roomPlans; G.roomPlans = function (id, type) { return rp(id || CFG_ID, type); };   // 沒給船型 ⇒ 主選單「船隻配置」正在編的那一型
 });
 evOn('cfg:ships', function () { if (SLIDERS_SHOW) SLIDERS_SHOW(); });   // 船隻配置改了（__game.roomSet、shipsIO.imp）⇒ 主選單重畫
-/** 主選單開戰鈕左右兩側的選旗（TASK-0950）：#flag0 我方（藍方）、#flag1 敵方（紅方）各一組 —— 旗的預覽、預設旗的下拉選單（紋章＋那面旗的底色）、底色（換了只換底色、紋章照留）。
+/** 主選單開戰鈕左右兩側的選旗（TASK-0950）：#flag0 我方（藍方）、#flag1 敵方（紅方）各一組 —— 旗鈕（現在那一面旗 ▾）、底色（換了只換底色、紋章照留）。
+ *  旗鈕點開 ⇒ 預設旗的圖案一格一格排開（不寫名字：Tim 2026-10-29「下拉選單直接選旗幟(顯示圖案) 然後不用名稱(目前手機排版塞不下)」；名字在 title、aria-label）。
  *  選了就換（核心 77_colours.js flagSet ⇒ 已載入的船型重烘）；存檔照 69_prefs.js 那一項。
- *  下拉選單停在紋章、底色都一樣的那一面預設旗；底色換過、對不到任何一面 ⇒ 停在最後那一項「自訂（紋章名）」（只拿來顯示，選它不換旗）。 */
+ *  框起來的是紋章、底色都一樣的那一面預設旗；底色換過、對不到任何一面 ⇒ 都不框，旗鈕照樣畫現在那一面。 */
 function flagUI() {
   [0, 1].forEach(function (s) {
     var box = $('flag' + s); if (!box) return;
     var team = s ? 'red' : 'blue', who = s ? '敵方' : '我方';
-    box.innerHTML = '<canvas width="48" height="24" aria-hidden="true"></canvas><select aria-label="' + who + '的旗"></select><input type="color" aria-label="' + who + '旗的底色" title="' + who + '旗的底色">';
-    var sel = box.querySelector('select'), col = box.querySelector('input');
-    sel.innerHTML = FLAG_PRESETS.map(function (p) { return '<option value="' + p.k + '">' + p.name + '</option>'; }).join('') + '<option value="" hidden></option>';
-    sel.onchange = function () { if (!sel.value) return; var o = {}; o[team] = sel.value; flagSet(o); };
+    box.innerHTML = '<button class="flagb" aria-haspopup="listbox" aria-expanded="false"><canvas width="48" height="24" aria-hidden="true"></canvas></button>'
+      + '<div class="flagdd" role="listbox" aria-label="' + who + '的旗" hidden>' + FLAG_PRESETS.map(function (p) { return '<button role="option" data-k="' + p.k + '" title="' + p.name + '" aria-label="' + p.name + '"><canvas width="48" height="24" aria-hidden="true"></canvas></button>'; }).join('') + '</div>'
+      + '<input type="color" aria-label="' + who + '旗的底色" title="' + who + '旗的底色">';
+    var col = box.querySelector('input');
+    box.querySelectorAll('.flagdd button').forEach(function (b) {
+      flagPaint(b.firstChild, flagPreset(b.dataset.k));
+      b.onclick = function () { var o = {}; o[team] = b.dataset.k; flagSet(o); flagPop(-1); box.querySelector('.flagb').focus(); };
+    });
+    box.querySelector('.flagb').onclick = function () { flagPop(box.querySelector('.flagdd').hidden ? s : -1); };
     col.oninput = function () { var o = {}; o[team] = { field: col.value, emblem: teamFlag(team).emblem }; flagSet(o); };
   });
   flagUIShow();
 }
+/** 一面旗 f ＝ { field, emblem } 畫進 canvas（戰鬥旗那一種）。 */
+function flagPaint(cv, f) {
+  var cx = cv.getContext('2d'), W = cv.width, H = cv.height, im = cx.createImageData(W, H);
+  for (var y = 0; y < H; y++) for (var x = 0; x < W; x++) { var c = colourAt('ensign', f, (x + 0.5) / W, (y + 0.5) / H), o = (y * W + x) * 4; im.data[o] = c[0] * 255; im.data[o + 1] = c[1] * 255; im.data[o + 2] = c[2] * 255; im.data[o + 3] = 255; }
+  cx.putImageData(im, 0, 0);
+}
+/** 打開第 s 組（0 我方、1 敵方）的旗面板、另一組關掉；-1 ⇒ 都關。面板超出畫面左右 ⇒ 往裡推（窄螢幕敵方那一組可能折到下一行的最左邊）。 */
+function flagPop(s) {
+  [0, 1].forEach(function (i) {
+    var box = $('flag' + i), dd = box && box.querySelector('.flagdd'); if (!dd) return;
+    var on = i === s; dd.hidden = !on; box.querySelector('.flagb').setAttribute('aria-expanded', on);
+    if (!on) return;
+    dd.style.transform = ''; var r = dd.getBoundingClientRect(), vw = document.documentElement.clientWidth, dx = r.right > vw - 6 ? vw - 6 - r.right : r.left < 6 ? 6 - r.left : 0;
+    if (dx) dd.style.transform = 'translateX(' + dx + 'px)';
+    (dd.querySelector('.cur') || dd.firstChild).focus();
+  });
+}
+function flagPopOn() { return [0, 1].some(function (i) { var dd = $('flag' + i) && $('flag' + i).querySelector('.flagdd'); return dd && !dd.hidden; }); }
 /** 選旗那兩組照現在的旗重畫（換了旗、讀了存檔）。 */
 function flagUIShow() {
   [0, 1].forEach(function (s) {
     var box = $('flag' + s); if (!box || !box.firstChild) return;
-    var team = s ? 'red' : 'blue', f = teamFlag(team), cv = box.querySelector('canvas'), cx = cv.getContext('2d'), W = cv.width, H = cv.height, im = cx.createImageData(W, H);
-    for (var y = 0; y < H; y++) for (var x = 0; x < W; x++) { var c = colourAt('ensign', f, (x + 0.5) / W, (y + 0.5) / H), o = (y * W + x) * 4; im.data[o] = c[0] * 255; im.data[o + 1] = c[1] * 255; im.data[o + 2] = c[2] * 255; im.data[o + 3] = 255; }
-    cx.putImageData(im, 0, 0);
-    var p = FLAG_PRESETS.filter(function (q) { return q.emblem === f.emblem && q.field === f.field; })[0], sel = box.querySelector('select');
-    sel.lastChild.textContent = '自訂（' + (FLAG_EMB[f.emblem] || FLAG_EMB.none).name + '）';
-    sel.value = p ? p.k : '';
+    var f = teamFlag(s ? 'red' : 'blue'), p = FLAG_PRESETS.filter(function (q) { return q.emblem === f.emblem && q.field === f.field; })[0], b = box.querySelector('.flagb');
+    flagPaint(b.firstChild, f);
+    box.querySelectorAll('.flagdd button').forEach(function (o) { var on = !!p && o.dataset.k === p.k; o.classList.toggle('cur', on); o.setAttribute('aria-selected', on); });
+    b.title = (s ? '敵方' : '我方') + '的旗：' + (p ? p.name : '自訂（' + (FLAG_EMB[f.emblem] || FLAG_EMB.none).name + '、底色 ' + f.field + '）');
+    b.setAttribute('aria-label', b.title);
     box.querySelector('input').value = f.field;
-    box.title = (s ? '敵方' : '我方') + '的旗：' + (FLAG_EMB[f.emblem] || FLAG_EMB.none).name + '、底色 ' + f.field;
   });
 }
 evOn('flags:set', flagUIShow);                                        // 換了旗（選單、__game.flags）⇒ 重畫（77_colours.js flagSet 發）
+window.addEventListener('pointerdown', function (e) { if (flagPopOn() && !(e.target.closest && e.target.closest('.flagb, .flagdd'))) flagPop(-1); }, true);   // 點面板外面 ⇒ 關
+window.addEventListener('keydown', function (e) { if (e.key === 'Escape' && flagPopOn()) { e.preventDefault(); e.stopImmediatePropagation(); flagPop(-1); } }, true);   // 捕獲階段：先於主選單的 Esc（關子頁）
 setTimeout(flagUI, 0);                                                 // 核心 77_colours.js 在本檔後面載（預設旗、存檔解在那邊）⇒ 整包跑完才畫
