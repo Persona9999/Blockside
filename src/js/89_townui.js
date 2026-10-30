@@ -5,7 +5,7 @@
 //     子選單可以放城鎮的一些詳細資訊鈕（例如 查看城鎮每日產出資源&消耗資源 目前庫存等 以及統計報表（人口 資源變化圖等） 然後貿易按照之前文件規格 只顯示雙方有的貨物」
 // 協定（Blocksail world/mapgen.js serve ⇒ globe.html townUI）：這一頁 ⇒ 那一頁 { bsmap: 'need', what: 'townUI', town, cmd, seq, g?, q?, ship? }；
 //   那一頁 ⇒ 這一頁 { bsmap: 'townUI', seq, cmd, ok, why?, … }（08_seabed.js 轉給 tuiGot）：
-//     'info' ⇒ { info（Blocksail townInfo：人口、崗位、市場、flow 最近那一天的產出／原料／鎮民吃、hist 歷史）, goods（貨物表的名字）, blds（建築種類的名字）, every（歷史幾天一筆）}
+//     'info' ⇒ { info（Blocksail townInfo：人口、崗位、市場、flow 最近那一天的產出／原料／鎮民吃、hist 歷史、spec 特產）, goods（貨物表的名字）, blds（建築種類的名字）, every（歷史幾天一筆）}
 //     'trade' ⇒ { list（world/trade.js tradeList：只列船上有 ∪ 城鎮有庫存的貨）}；'buy'／'sell'（g、q 桶、ship）⇒ { res（tradeDo）, list }
 //   ship ＝ 玩家這艘船 { kind, ballastT（那一型剛好浮在設計水線的壓艙物）, wpa（水線面積：水線下那一層的體積 ÷ 層厚，32_hull.js T.hyd）}：那一頁照它開玩家的船隊貨艙、算吃水
 // 物理意義：⛔ 這一支不算經濟 —— 數字全照那一頁的城鎮帳（買賣、價格、關稅都在 Blocksail world/stores.js）；這裡只問、只畫。
@@ -205,6 +205,7 @@ function tuiSumHTML() {
   h += '<div class="tuiTiles">' + [['👥 人口', tuiNum(I.pop.total)], ['💪 勞動人口', tuiNum(I.pop.labor)], ['🔧 有工作', tuiNum(jt)], ['🪑 失業', tuiNum(E.idle || 0)], ['📢 缺工', tuiNum(E.short || 0)], ['⚓ 碼頭上等船', tuiNum(E.dock || 0)],
     ['💰 城鎮金庫', tuiNum(I.funds)], ['👛 鎮民金庫', tuiNum(I.folkFunds)], ['🛡 士兵', tuiNum(I.guard.now) + ' / ' + tuiNum(I.guard.cap)]]
     .concat(I.rent ? [['🏠 房租（昨天）', tuiNum(I.rent.paid, 1) + (I.rent.due > I.rent.paid ? ' / ' + tuiNum(I.rent.due, 1) : '')]] : []).map(function (x) { return '<div><small>' + x[0] + '</small><b>' + x[1] + '</b></div>'; }).join('') + '</div>';
+  h += tuiSpecHTML(I);
   var F = I.fed;
   if (F) { var eat = F.eat || {}, LV = ['荒年糧', '主糧', '家常', '佳餚']; h += '<h4>🍞 食用餐點（份）</h4><p>' + [3, 2, 1, 0].map(function (k) { return LV[k] + ' ' + tuiNum((eat[k] || 0) / 1000); }).join('　') + (F.relief ? '　（城鎮免費補了 ' + tuiNum(F.relief / 1000) + ' 份）' : '') + (F.famine ? '　⚠ 飢荒' : '') + '</p>' + (F.extra && Object.keys(F.extra).length ? '<p class="tuiDim">餐點份數與比例包含加餐。</p>' : '') + tuiEatHTML(F) + '<h4>🥕 消耗食材（桶）</h4>' + tuiIngredientsHTML(F); }   // 等級照 Blocksail world/food.js FOOD_LEVELS；底下每一道吃了幾成（Tim 2026-10-25「城鎮是否可以顯示鎮民的消耗食物百分比」）
   h += tuiHomeMenuHTML();
@@ -230,6 +231,16 @@ function tuiSumHTML() {
   // 家族：新的那一頁帶 id、金庫 ⇒ 表；舊的只有名字 ⇒ 一行
   if (I.families && I.families.length) h += I.families[0] && I.families[0].id ? tuiFamHTML(I) : '<h4>👪 家族</h4><p>' + I.families.map(function (f) { return tuiEsc(f.name || f.id || f); }).join('、') + '</p>';
   return h;
+}
+/** ⭐ 特產（Blocksail world/prod.js townSpecials ⇒ townInfo spec；TASK-1110、1113）：每種貨 × 倍數，分兩層 —— 自動（氣候、土壤、礦比別的城好）、歷史（史料手給、另外疊上去）；
+ *  兩層都有 ⇒ 各寫加了多少。none ＝ 城裡還沒有建築的配方產這種貨 ⇒ 虛線、灰圖（現在沒有作用）。外面那一頁沒送 spec（舊版、特產關掉、這座城沒有）⇒ 不畫。 */
+function tuiSpecHTML(I) {
+  var L = I.spec; if (!L || !L.length) return '';
+  var f = function (x) { return '+' + (x / 1000).toFixed(2); }, no = L.some(function (s) { return s.none; });
+  return '<div class="tuiSpec"><b>⭐ 特產</b>' + L.map(function (s) {
+    var tag = s.a && s.h ? '<small class="a">自動 ' + f(s.a) + '</small><small class="h">歷史 ' + f(s.h) + '</small>' : '<small class="' + (s.h ? 'h">歷史' : 'a">自動') + '</small>';
+    return '<span' + (s.none ? ' class="no" title="城裡還沒有做這種貨的建築 ⇒ 現在沒有作用"' : '') + '>' + tuiIcon('goods', s.g, 16) + tuiEsc(tuiGood(s.g)) + '<b>×' + (s.mul / 1000).toFixed(2) + '</b>' + tag + (s.none ? '<small>還沒有建築做</small>' : '') + '</span>';
+  }).join('') + '</div><p class="tuiDim">產這種貨的建築：原料、產出一起乘、人手不變。自動 ＝ 氣候、土壤、礦比別的城好；歷史 ＝ 史上的名產，另外加' + (no ? '；虛線 ＝ 城裡還沒有做這種貨的建築' : '') + '。</p>';
 }
 /** 生產配方（Blocksail world/auto.js recipeDay；TASK-0947）：每一種現在跑哪幾條、最近換的（哪天、從哪條、為什麼、停工到哪天）；全部那幾座（含鎖住的原因）摺在底下。 */
 function tuiRcpHTML(I) {

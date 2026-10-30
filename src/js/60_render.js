@@ -47,7 +47,7 @@ function hullTex(T, hb) {                              // hb ＝ 快取的那張
   T.hullTW = T.base.sx; T.hullTH = Math.min(256, T.base.sz);
   T.hullHB = hb || hullMask(T);                        // 存快取、對拍用（__game.hullCheck）
   T.hullSea = hullSeaMask(T);                          // 海的著色器用的那一張（砲口、舷窗補起來）；模擬照舊讀 hullHB
-}
+}                                                      // 俯視的頂面（T.hullRoof ＝ hullRoof(T)）在載入的下一步另算（05_hull.js；一型約 0.15–0.25 s，跟這一步擠在一起 ⇒ 那一步變長）
 /** 海面遮罩補縫（TASK-0654；Tim 2026-10-16：「炮口進水會變成一個很明顯的長條形」「我發現穿進來的好像是海面」）：
  *  hullMask 是每個 (x, z) 最外那一格 ⇒ 砲口那幾層、砲口那幾欄沒有船殼 ⇒ 半寬掉到 0（量過：憲法號 z 88–108、112–126，例 x 185–187 上下都是 49、中間 0）
  *  ⇒ 海的著色器當成船外，船一沉到砲口高，海面就沿著那幾欄整條橫穿進船艙。
@@ -65,6 +65,76 @@ function hullSeaMask(T) {
     var f = Math.min(dn, up); if (f > out[z * TW + x]) out[z * TW + x] = f;
   }
   return out;
+}
+/** 海面遮罩的頂面（Tim 2026-10-30「船舷有高低起伏 低的部分海面會流進來 但是高的地方被擋住 出現破碎狀」）：
+ *  hullSea 是側視的外形 ⇒ 甲板上方那幾層的半寬是船舷的 ⇒ 甲板沉到海面下時，船舷高的那幾欄照樣把海挖掉、低的那幾欄（舷門、砲門、舷弧）海畫進來 ⇒ 甲板上一條一條碎掉。
+ *  ⇒ 再加一張俯視的圖：每一柱 (x, y) 從上往下第一段實心的頂 ＋ 1（那一段底下隔了 HULL_ROOF_GAP_M 以上的空氣還有船身 ⇒ 桅樓、吊著的小艇這種懸空的，往下接著找），
+ *  再填窪（從格的邊往裡、每次從最低的那一柱往四鄰擴：鄰柱 ＝ max(自己, 進來那一柱)）⇒ 每一柱 ＝ 海要從船外漫到這一柱，最少得越過多高：
+ *  艙口、梯口 ⇒ 周圍甲板的高（浮著的時候不會從艙口看到底艙的海）；船舷圍著的甲板 ⇒ 船舷最低的那個缺口（海一漫過缺口，整片甲板一起淹）；
+ *  沒有甲板的小船、槳帆船 ⇒ 舷緣最低那一點（浮著的時候船艙是乾的）。
+ *  🩸 只照頂面（不填窪）⇒ 沒有甲板的船浮著就從船艙裡畫出海（dromon、fusta 量到幾千柱）；方形閉運算補艙口 ⇒ 桅杆到船舷只隔 3.6 m，桅杆那幾欄的甲板整條被補到船舷高（甲板淹了照樣挖一條乾帶）。
+ *  船斜著沉 ⇒ 低的那一側先漫過船舷，整片甲板照海面一起淹 —— ⛔ 不是每一點各自等海高過缺口的高度（量過：船舷整圈封閉的船，缺口比甲板高 1–2 m —— Concepción 中位數 1.2 m、Gloire 1.9 m；憲法號有舷門 0.1 m）：
+ *  被墊高、填窪值一樣、四鄰相連的柱是一片積水區（面積大的前 255 片編號），每片記最前、最後、最左、最右那四柱；著色器照船現在的姿勢算這四點（在缺口的高度）在世界裡最低的那個，比海面低 ⇒ 整片淹。
+ *  🩸 只記一個出口 ⇒ 船左右對稱、兩側一樣高的缺口只記到一側，往另一側傾就淹不進來。
+ *  回 3 張 W × sy ＋ 8 列表疊起來（hullArr 照這個順序接在側視外形底下）：頂面、填窪後、積水區編號（0 ＝ 沒有）；表的第 2j、2j ＋ 1 列 ＝ 第 id 片第 j 個極端點的 x ／ qx、y ／ qy（qx、qy ＝ 照船型大小縮成一個位元組，T.hullRoofQ）。
+ *  著色器：比頂面低 ⇒ 船艙裡；比填窪高，或那一片的極端點有一個比這裡的海面低 ⇒ 海；0 ＝ 那一柱沒有格（船外）。⛔ 只給海面遮罩（同 hullSeaMask）。 */
+var HULL_ROOF_GAP_M = 5;
+function hullRoof(T) {
+  var B = T.base, W = T.hullTW, TH = T.hullTH, SY = B.sy, n = W * SY, NW = (TH + 31) >> 5, G = Math.round(HULL_ROOF_GAP_M / S), bits = new Uint32Array(n * NW), R = new Uint8Array(n * 3 + 8 * W), out = R.subarray(0, n);
+  B.each(function (x, y, z) { if (z < TH && x < W && y < SY) bits[(y * W + x) * NW + (z >> 5)] |= 1 << (z & 31); });
+  function find(o, z, set) {                                            // z（含）往下第一格實心（set）／空氣 ⇒ 第幾層；沒有 ⇒ −1
+    for (var w = z >> 5; w >= 0; w--) {
+      var v = set ? bits[o + w] : ~bits[o + w];
+      if (w === z >> 5 && (z & 31) < 31) v &= (1 << ((z & 31) + 1)) - 1;
+      if (v) return (w << 5) + 31 - Math.clz32(v);
+    }
+    return -1;
+  }
+  for (var c = 0; c < W * SY; c++) {
+    var o = c * NW, t = find(o, TH - 1, true);
+    while (t >= 0) {
+      var b = find(o, t, false), nt = b < 0 ? -1 : find(o, b, true);  // b ＝ 這一段底下第一格空氣、nt ＝ 再往下下一段的頂
+      if (nt < 0 || b - nt < G) break;
+      t = nt;
+    }
+    out[c] = t < 0 ? 0 : Math.min(255, t + 1);
+  }
+  var fo = hullFill(out, W, SY), qx = Math.ceil(W / 256), qy = Math.ceil(SY / 256), lab = new Int32Array(n).fill(-1), st = new Int32Array(n), Ls = [], cx, cy, k;
+  R.set(fo, n); T.hullRoofQ = [qx, qy];
+  for (c = 0; c < n; c++) {                                             // 積水區：墊高過、填窪值一樣、四鄰相連的一片 ⇒ { n, 四個極端點 [x0 那柱, x1, y0, y1] }
+    if (fo[c] <= out[c] || lab[c] >= 0) continue;
+    var lk = { n: 0, c: [c, c, c, c], id: 0 }, sp = 0; lab[c] = Ls.length; Ls.push(lk); st[sp++] = c;
+    while (sp) {
+      var p = st[--sp]; cx = p % W; cy = (p - cx) / W; lk.n++;
+      if (cx < lk.c[0] % W) lk.c[0] = p; if (cx > lk.c[1] % W) lk.c[1] = p;
+      if (cy < Math.floor(lk.c[2] / W)) lk.c[2] = p; if (cy > Math.floor(lk.c[3] / W)) lk.c[3] = p;
+      for (k = 0; k < 4; k++) {
+        var d = k === 0 ? (cx > 0 ? p - 1 : -1) : k === 1 ? (cx < W - 1 ? p + 1 : -1) : k === 2 ? p - W : p + W;
+        if (d >= 0 && d < n && lab[d] < 0 && fo[d] === fo[c] && fo[d] > out[d]) { lab[d] = lab[c]; st[sp++] = d; }
+      }
+    }
+  }
+  var tb = 3 * n, top = Ls.slice().sort(function (a, b) { return b.n - a.n; }).slice(0, Math.min(255, W - 1));   // 面積大的前 255 片編號；排不進去的 ⇒ 0（著色器只照填窪）
+  top.forEach(function (lk, i) {
+    lk.id = i + 1;
+    for (k = 0; k < 4; k++) { var q = lk.c[k], px = q % W; R[tb + 2 * k * W + lk.id] = Math.floor(px / qx); R[tb + (2 * k + 1) * W + lk.id] = Math.floor((q - px) / W / qy); }
+  });
+  for (c = 0; c < n; c++) if (lab[c] >= 0) R[2 * n + c] = Ls[lab[c]].id;
+  T.hullLakes = [Ls.length, top.length ? top[0].n : 0];
+  return R;
+}
+/** 填窪（0–255 的高度圖，四鄰）：照高度分 256 桶，邊上的柱先進桶，每次從最低的桶拿一柱、四鄰還沒到的 ＝ max(鄰柱, 這一柱) 放進它的桶。
+ *  🩸 記「從哪個出口漫進來」分片 ⇒ 填到缺口那一層時，船舷頂等高的每一格都變成新的出口，甲板沿著船舷被切成一條一條（Concepción 船中那片的極端點三個是同一點）⇒ 分片改照連通（hullRoof）。 */
+function hullFill(a, W, H) {
+  var n = W * H, o = new Uint8Array(a), seen = new Uint8Array(n), nb = new Int32Array(4), next = new Int32Array(n), head = new Int32Array(256).fill(-1), k, c, lv;
+  function push(c, v) { o[c] = v; seen[c] = 1; next[c] = head[v]; head[v] = c; }
+  for (c = 0; c < n; c++) { var x = c % W, y = (c - x) / W; if (x === 0 || y === 0 || x === W - 1 || y === H - 1) push(c, a[c]); }
+  for (lv = 0; lv < 256; lv++) while ((c = head[lv]) >= 0) {
+    head[lv] = next[c]; var cx = c % W;
+    nb[0] = cx > 0 ? c - 1 : -1; nb[1] = cx < W - 1 ? c + 1 : -1; nb[2] = c >= W ? c - W : -1; nb[3] = c < n - W ? c + W : -1;
+    for (k = 0; k < 4; k++) { var d = nb[k]; if (d >= 0 && !seen[d]) push(d, Math.max(a[d], lv)); }
+  }
+  return o;
 }
 function hullMask(T) {
   var TW = T.base.sx, TH = Math.min(256, T.base.sz), CY = T.cy, hb = new Uint8Array(TW * TH);
@@ -792,11 +862,13 @@ function hullArr() {
   var Ts = Object.keys(HULLT).map(function (id) { return HULLT[id]; }).filter(function (T) { return T.hullHB; }), key = Ts.map(function (T) { return T.id; }).join(',');
   if (HULLA.tex && HULLA.key === key) return;
   if (HULLA.tex) gl.deleteTexture(HULLA.tex);
-  var W = 1, H = 1; Ts.forEach(function (T) { W = Math.max(W, T.hullTW); H = Math.max(H, T.hullTH); });
+  var W = 1, H = 1, MX = gl.getParameter(gl.MAX_TEXTURE_SIZE);         // 每層：0..高 ＝ 側視的半寬，接著 3 × sy ＋ 8 列 ＝ 俯視的頂面、填窪、積水區與它的表（hullRoof）；放不下 ⇒ 那一型只用側視（T.hullRoofOn）
+  Ts.forEach(function (T) { T.hullRoofOn = !!T.hullRoof && T.hullTH + 3 * T.base.sy + 8 <= MX; W = Math.max(W, T.hullTW); H = Math.max(H, T.hullTH + (T.hullRoofOn ? 3 * T.base.sy + 8 : 0)); });
   var t = HULLA.tex = gl.createTexture(); HULLA.key = key;
   gl.bindTexture(gl.TEXTURE_2D_ARRAY, t); gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
   gl.texImage3D(gl.TEXTURE_2D_ARRAY, 0, gl.R8, W, H, Math.max(1, Ts.length), 0, gl.RED, gl.UNSIGNED_BYTE, null);
-  Ts.forEach(function (T, k) { T.hullLayer = k; gl.texSubImage3D(gl.TEXTURE_2D_ARRAY, 0, 0, 0, k, T.hullTW, T.hullTH, 1, gl.RED, gl.UNSIGNED_BYTE, T.hullSea || T.hullHB); });   // 海面遮罩用補過縫的那張（hullSeaMask）
+  Ts.forEach(function (T, k) { T.hullLayer = k; gl.texSubImage3D(gl.TEXTURE_2D_ARRAY, 0, 0, 0, k, T.hullTW, T.hullTH, 1, gl.RED, gl.UNSIGNED_BYTE, T.hullSea || T.hullHB);   // 海面遮罩用補過縫的那張（hullSeaMask）
+    if (T.hullRoofOn) gl.texSubImage3D(gl.TEXTURE_2D_ARRAY, 0, 0, T.hullTH, k, T.hullTW, 3 * T.base.sy + 8, 1, gl.RED, gl.UNSIGNED_BYTE, T.hullRoof); });
   [gl.TEXTURE_MIN_FILTER, gl.TEXTURE_MAG_FILTER].forEach(function (p) { gl.texParameteri(gl.TEXTURE_2D_ARRAY, p, gl.NEAREST); });
   [gl.TEXTURE_WRAP_S, gl.TEXTURE_WRAP_T].forEach(function (p) { gl.texParameteri(gl.TEXTURE_2D_ARRAY, p, gl.CLAMP_TO_EDGE); });
   gl.bindTexture(gl.TEXTURE_2D_ARRAY, null);
@@ -816,20 +888,22 @@ function reflPass() {
 }
 /** 船艙遮罩的 uniform（海與白沫共用，01_gl.js HULL_GLSL）。開始沉（sinkingFinal）之前，船艙裡不畫海水（Tim 2026-10-12：船身下沉一點點，海面就從破洞、甲板開口看進去像淹了） */
 var MASK_OFF = -1;                                                        // ?debug=1 的 __game.mask(k)：第 k 艘的遮罩關掉（量 4 艘時每一格遮罩都有作用：關掉那艘 ⇒ 它的船艙裡才看得到海）
-var HU = { f: -1, inv: new Float32Array(MASK_NEAR * 16), hide: new Float32Array(MASK_NEAR), k: new Float32Array(MASK_NEAR * 4), xb: new Float32Array(MASK_NEAR * 4) };
+var HU = { f: -1, inv: new Float32Array(MASK_NEAR * 16), hide: new Float32Array(MASK_NEAR), k: new Float32Array(MASK_NEAR * 4), xb: new Float32Array(MASK_NEAR * 4), r: new Float32Array(MASK_NEAR * 4), y: new Float32Array(MASK_NEAR * 4) };
 function hullUniforms(prog) {
   var u = prog.u;
   if (HU.f !== RFR) {                                                     // 一格填一次（f ＝ RFR；S3）：海、破洞底下的海、白沫都叫，同一次 render() 裡 MSLOTS、船的 inv 不動；每支程式照舊各傳一次
-    HU.f = RFR; hullArr(); HU.hide.fill(0);
+    HU.f = RFR; hullArr(); HU.hide.fill(0); HU.r.fill(0);
     for (var i = 0; i < MASK_NEAR; i++) {                                 // 遮罩的每一格（gpuSlots MSLOTS）照那艘船型的那一層；排不進去的船 ⇒ 沒有遮罩
       var s = MSLOTS[i], T = s && s.T;
       if (s) HU.inv.set(s.inv, i * 16);                                   // 透視（nearShip）也用
       if (!T || !T.hullHB || T.hullLayer === undefined) continue;
       HU.hide[i] = !s.sinkingFinal && !s.sunk && s.i !== MASK_OFF ? 1 : 0;
       HU.k[i * 4] = T.hullTW; HU.k[i * 4 + 1] = T.hullTH; HU.k[i * 4 + 2] = T.cy; HU.k[i * 4 + 3] = T.hullLayer;
+      if (T.hullRoofOn) { HU.r[i * 4] = T.base.sy; HU.r[i * 4 + 1] = T.hullRoofQ[0]; HU.r[i * 4 + 2] = T.hullRoofQ[1]; HU.r[i * 4 + 3] = seaH(s.center[0], s.center[2], SIMT); }   // 頂面（hullRoof）：sy、極端點的縮放、船中心的海面（積水區破了沒照它比，⛔ 照每一點自己的浪 ⇒ 浪峰一過局部判破、又碎）；0 ⇒ 只用側視
+      HU.y[i * 4] = s.M[1]; HU.y[i * 4 + 1] = s.M[5]; HU.y[i * 4 + 2] = s.M[9]; HU.y[i * 4 + 3] = s.M[13];   // 格 → 世界的高度那一列（出口那一點在世界多高）
     }
   }
-  gl.uniform1fv(u.uHide, HU.hide); gl.uniformMatrix4fv(u.uInv, false, HU.inv); gl.uniform4fv(u.uHullK, HU.k);
+  gl.uniform1fv(u.uHide, HU.hide); gl.uniformMatrix4fv(u.uInv, false, HU.inv); gl.uniform4fv(u.uHullK, HU.k); gl.uniform4fv(u.uHullR, HU.r); gl.uniform4fv(u.uHullY, HU.y);
   gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D_ARRAY, HULLA.tex); gl.uniform1i(u.uHullA, 1);
   gl.activeTexture(gl.TEXTURE0);
 }

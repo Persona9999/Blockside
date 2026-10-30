@@ -533,6 +533,28 @@ if (DEBUG) evEmit('game:api', window.__game);   // 外殼（71_menu.js）掛它�
 /** 讀數的一段：這艘船是讀快取還是現場解析（06_cache.js）。 */
 function cacheText(st) { return !st ? '' : st.hit ? '（讀快取 ' + (st.readMs / 1000).toFixed(2) + ' 秒）' : '（現場解析；' + st.why + '）'; }
 if (DEBUG) {
+  /** 海面遮罩的頂面（60_render.js hullRoof）：船浮著、海面在設計水線 zw 上下 [lo, hi] 格時，外形裡（hullSea 那一層的半寬，柱的中心 y ＋ 0.5）會畫出海的柱 ——
+   *  n ＝ 海蓋在船的某個面上（那一柱有格）、deep ＝ 其中那個面比海低 1 m 以上（像船裡一池水：沒甲板的船艙、艙口；該是 0）。
+   *  淺的那些是船外露天的面：船舷內傾那一條（那一柱只有砲門以下的舷側）、船尾懸出去那片外側的面，浪打上去本來就該有海。
+   *  回 deep 最多的那一層（離 zw 幾格）、那一層的 n、deep 與前幾柱的位置（格 x、y、頂面、填窪後）。 */
+  window.__game.hullRoofCheck = function (id, lo, hi) {
+    var T = HULLT[id || myHull()]; if (!T || !T.hullRoof) return null;
+    var TW = T.hullTW, SY = T.base.sy, hs = T.hullSea, top = T.hullRoof.subarray(0, TW * SY), rf = T.hullRoof.subarray(TW * SY, 2 * TW * SY), cy = T.cy, r = { id: T.id, zw: T.zw, at: null, n: 0, deep: 0, where: [] };
+    if (lo === 'gap') {                                                  // 甲板那幾柱（設計水線那一層的外形裡、頂面在水線上）：填窪 − 頂面（格）的分布 ⇒ 船舷最低的缺口比甲板高多少
+      var d = []; for (var y2 = 0; y2 < SY; y2++) for (var x2 = 0; x2 < TW; x2++) { var c2 = y2 * TW + x2, h2 = hs[T.zw * TW + x2]; if (h2 > 0 && Math.abs(y2 + 0.5 - cy) < h2 && top[c2] > T.zw) d.push(rf[c2] - top[c2]); }
+      d.sort(function (a, b) { return a - b; });
+      return { id: T.id, n: d.length, zero: d.filter(function (v) { return !v; }).length, p50: d[d.length >> 1], p90: d[Math.floor(d.length * 0.9)], max: d[d.length - 1] };
+    }
+    for (var z = T.zw + (lo === undefined ? -10 : lo); z <= T.zw + (hi === undefined ? 20 : hi); z++) {
+      var n = 0, dp = 0, w = [];
+      for (var y = 0; y < SY; y++) for (var x = 0; x < TW; x++) {
+        var c = y * TW + x, hb = hs[z * TW + x]; if (!(hb > 0 && Math.abs(y + 0.5 - cy) < hb) || rf[c] > z || !top[c]) continue;
+        n++; if (top[c] <= z - Math.round(1 / S)) { dp++; if (w.length < 8) w.push([x, y, top[c], rf[c]]); }
+      }
+      if (r.at === null || dp > r.deep) { r.at = z - T.zw; r.n = n; r.deep = dp; r.where = w; }
+    }
+    return r;
+  };
   /** 快取對拍：船型 id 讀回的那幾份 ＝ 現在這份程式現場算的？逐位元組比（船體網格每個區塊、模型網格的頂點與佔用格、海面遮罩、浮力表、布模板）。 */
   window.__game.hullCheck = function (id) {
     var T = HULLT[id || myHull()]; if (!T) return null;
@@ -549,7 +571,7 @@ if (DEBUG) {
       var m = VK.meshChunk(g, cx, cy, cz), c = T.pristine.meshes.get(i); r.chunks++;
       if (!(m ? c && same(m, c) : !c)) r.chunkDiff++;
     }
-    r.hullMask = same(hullMask(T), T.hullHB);
+    r.hullMask = same(hullMask(T), T.hullHB); r.hullRoof = same(hullRoof(T), T.hullRoof);
     var H = { base: T.base, zw: T.zw, hydTop: T.hydTop }; hydrostatics(H); r.hyd = same(H.hyd, T.hyd) && H.disp === T.disp;
     r.models = (T.rig.meshes || []).map(function (m, k) {
       var sf = T.meshes[k] && T.meshes[k].share, tri = sf !== undefined ? meshTriFor(T, sf, T.rig.meshes[sf]) : meshTriFor(T, k, m), got = new Float32Array(tri.length); gl.bindBuffer(gl.ARRAY_BUFFER, T.meshes[k].vbo); gl.getBufferSubData(gl.ARRAY_BUFFER, 0, got);   // 共用別份的（只差起點）⇒ 照那一份比
