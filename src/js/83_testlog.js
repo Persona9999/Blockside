@@ -13,10 +13,18 @@
 //         hull ＝ 小腿和胸口兩格都是船殼（只碰一格多半是船底弧面、梁，不算）；
 //       dead／wound（原因）、toHand（改當預備水手的理由）、void（點名的任務作廢）、fallIn（掉到下一層）。
 // 看得到的地方：結束畫面「📊 報表」的「匯出船員記錄」（JSON）；__game.crewlog()（?debug=1）；?dump=1&test=1 的 #crewlog（src/tests/crew_log.py 讀它、畫成路徑圖）。
+// 砲的記錄（gun；2026-10-30 方舷放置，Tim：「可以額外輸出資訊Debug用(包含水手移動路徑紀錄 & 炮開火紀錄」—— 藍鯊號「剛開場時正常 打到一半就不開火了」）：
+//   跟船員記錄同一個開關、同一拍；判法照戰鬥報表（79_report.js rptGunState、gunTarget、foeOf）⇒ 一樣只讀。
+//   · 每一發 [秒, 第幾艘, 第幾門, 's', 彈種]；每門砲狀態變了 [秒, 第幾艘, 第幾門, 'g', 碼]（碼 ＝ 狀態 × 2 ＋ 對不對得到目標；狀態照 RPT_ST）
+//   · 船的 [秒, 第幾艘, -1, 種類, 內容]：foe 目標換了（[第幾艘, 距離 m]）、mode 砲長的瞄準模式、hand 手動那一舷、idle 閒著的砲班組（層＋舷）
+//   · trk 每 TLOG_TRK 秒一列（欄位 TLOG_TRK_F）；quiet：有砲對得到目標、卻 TLOG_QUIET 秒以上一發都沒開的那幾段（n ＝ 那段時間對得到的砲每種狀態幾門·拍）
+// 外殼（91_shellapi.js tlog）：TLOG_SHELL 蓋過網址與存檔的開關；TLOG_TEAMS 只記這幾隊（船員、砲都是；null ＝ 全部）。
 var TLOG = null, TLOG_EVERY = 0.5, TLOG_MAX = 600000;                    // TLOG_MAX：路徑點的上限（超過 ⇒ 停記路徑、事件照記，標 trunc）
-var TLOG_KEY = 'blockside_testmode';
-function tlgWanted() { if (Q.get('test') === '1') return true; if (Q.get('test') === '0') return false; if (!DEBUG) return false; try { return window.localStorage.getItem(TLOG_KEY) === '1'; } catch (e) { return false; } }
-function tlgReset() { TLOG = tlgWanted() ? { v: 1, seed: SEED, from: +SIMT.toFixed(1), every: TLOG_EVERY, ships: [], ev: [], n: 0, ms: 0, trunc: false, ids: new WeakMap(), crew: [] } : null; }
+var TLOG_KEY = 'blockside_testmode', TLOG_SHELL = null, TLOG_TEAMS = null, TLOG_QUIET = 8, TLOG_TRK = 2;
+var TLOG_TRK_F = ['t', 'ship', 'foe', 'd', 'brg', 'kn', 'sink', 'fired'];   // brg：目標在船頭的幾度（0 ＝ 正前方、±180 ＝ 正後方；正負照核心的偏航方向）；sink：比設計水線多吃水幾 m；fired：累計開火
+function tlgWanted() { if (TLOG_SHELL !== null) return TLOG_SHELL; if (Q.get('test') === '1') return true; if (Q.get('test') === '0') return false; if (!DEBUG) return false; try { return window.localStorage.getItem(TLOG_KEY) === '1'; } catch (e) { return false; } }
+function tlgReset() { TLOG = tlgWanted() ? { v: 1, seed: SEED, from: +SIMT.toFixed(1), every: TLOG_EVERY, ships: [], ev: [], n: 0, ms: 0, trunc: false, ids: new WeakMap(), crew: [], gun: { ships: [], last: [], ev: [], trk: [], quiet: [] } } : null; }
+function tlgTeam(sh) { return !TLOG_TEAMS || TLOG_TEAMS.indexOf(sh.team) >= 0; }
 /** 船員的固定編號與那一份（第一次看到才建；WeakMap ⇒ 不在船員物件上多掛欄位）。 */
 function tlgCrew(sh, c) {
   var e = TLOG.ids.get(c);
@@ -102,14 +110,55 @@ function tlgWall(sh) {
     else if (!w && e.wall) { TLOG.ev.push([t, sh.i, e.id, 'wallOut', null]); e.wall = null; }
   });
 }
+/** 砲的記錄：那一艘的砲名單（第一次用到才建）與上一拍的樣子（比對 ⇒ 變了才記）。 */
+function tlgGunShip(sh) {
+  var G = TLOG.gun;
+  if (!G.ships[sh.i]) {
+    G.ships[sh.i] = { i: sh.i, id: sh.T.id, name: sh.name || sh.T.name, team: sh.team, guns: sh.guns.map(function (g) { return { name: g.name, type: g.type, side: g.side, deck: g.deck || null }; }) };
+    G.last[sh.i] = { c: sh.guns.map(function () { return -1; }), foe: undefined, mode: undefined, hand: undefined, idle: undefined, shotT: SIMT, trkT: -1e9, q: null };
+  }
+  return G.last[sh.i];
+}
+/** 每 TLOG_EVERY 秒（tlgTick）：每門砲的狀態碼、船的目標與砲長、沒開火的那幾段、每 TLOG_TRK 秒一列 trk。 */
+function tlgGuns(sh, t) {
+  var L = tlgGunShip(sh), G = TLOG.gun, out = isOut(sh), foe = out ? null : foeOf(sh), w = foe && foe.center, n = [0, 0, 0, 0, 0, 0], bear = 0;
+  sh.guns.forEach(function (g, j) {
+    var s = rptGunState(g), b = w && s !== 3 && gunTarget(sh, g, w) ? 1 : 0, c = s * 2 + b;
+    if (b) { bear++; n[s]++; }
+    if (L.c[j] !== c) { G.ev.push([t, sh.i, j, 'g', c]); L.c[j] = c; }
+  });
+  var fi = foe ? foe.i : null, d = foe ? Math.round(Math.hypot(foe.px - sh.px, foe.pz - sh.pz)) : null;
+  if (L.foe !== fi) { G.ev.push([t, sh.i, -1, 'foe', [fi, d]]); L.foe = fi; }
+  var m = sh.aimMode || null; if (L.mode !== m) { G.ev.push([t, sh.i, -1, 'mode', m]); L.mode = m; }
+  var hd = !!sh.hand; if (L.hand !== hd) { G.ev.push([t, sh.i, -1, 'hand', hd]); L.hand = hd; }
+  var IG = sh.idleG || {}, idl = Object.keys(IG).filter(function (k) { return IG[k].on; }).sort().join(','); if (L.idle !== idl) { G.ev.push([t, sh.i, -1, 'idle', idl]); L.idle = idl; }
+  if (!out && bear > 0 && SIMT - L.shotT >= TLOG_QUIET) {               // 對得到、卻 TLOG_QUIET 秒沒開一發 ⇒ 開一段（下一發 tlgOnShot 收尾）
+    if (!L.q) { L.q = { ship: sh.i, from: +L.shotT.toFixed(1), to: null, foe: fi, d: d, dMin: d, n: [0, 0, 0, 0, 0, 0] }; G.quiet.push(L.q); }
+    for (var k = 0; k < 6; k++) L.q.n[k] += n[k];
+    L.q.d = d; if (d !== null && (L.q.dMin === null || d < L.q.dMin)) L.q.dMin = d;
+  }
+  if (SIMT - L.trkT >= TLOG_TRK - 1e-6) {
+    L.trkT = SIMT;
+    var F = fwd(sh.yaw), brg = null;
+    if (foe) { var dx = foe.px - sh.px, dz = foe.pz - sh.pz; brg = Math.round(Math.atan2(F[0] * dz - F[2] * dx, F[0] * dx + F[2] * dz) * 57.2958); }   // 正 ＝ 右舷（S）、負 ＝ 左舷（P）：yaw 變大往左舷轉（31_sailing.js fwd）⇒ 左舷那一側的叉積是負的
+    G.trk.push([t, sh.i, fi, d, brg, +(sh.spd * 1.944).toFixed(1), +(sh.sink || 0).toFixed(2), sh.fired]);
+  }
+}
+/** 一發出膛（rptShot）：記哪一門、什麼彈；那一艘「沒開火的那一段」到這裡收尾。 */
+function tlgOnShot(sh, g, b) {
+  if (!TLOG || TLOG.off !== undefined || !tlgTeam(sh)) return;
+  var L = tlgGunShip(sh); L.shotT = SIMT; if (L.q) { L.q.to = +SIMT.toFixed(1); L.q = null; }
+  TLOG.gun.ev.push([+SIMT.toFixed(2), sh.i, sh.guns.indexOf(g), 's', b.ammo]);
+}
 /** 每一步（50_sim.js 最後）：牆每一步查；路徑、欄位變化每 TLOG_EVERY 秒掃一次。 */
 function tlgTick() {
   if (!TLOG || TLOG.off !== undefined) return;
-  var tw = performance.now(); SHIPS.forEach(tlgWall); TLOG.ms += performance.now() - tw;
+  var tw = performance.now(); SHIPS.forEach(function (sh) { if (tlgTeam(sh)) tlgWall(sh); }); TLOG.ms += performance.now() - tw;
   var k = Math.round(SIMT / DT); if (k % Math.round(TLOG_EVERY / DT)) return;
   var t0 = performance.now(), t = +SIMT.toFixed(1);
   SHIPS.forEach(function (sh) {
-    tlgShip(sh);
+    if (!tlgTeam(sh)) return;
+    tlgShip(sh); tlgGuns(sh, t);
     sh.crew.forEach(function (c) {
       var e = tlgCrew(sh, c), j = e.id, s = tlgSnap(c), L = e.last;
       if (e.ship !== sh.i) { TLOG.ev.push([t, sh.i, j, 'ship', [e.ship, sh.i]]); e.ship = sh.i; }   // 游到敵艦、換了名單
@@ -132,7 +181,9 @@ function tlgData() {
     roles: ROLE_NAME, states: ['站著', '受傷', '陣亡', '抬下去', '落體', '在水裡'], fields: ['t', 'x', 'y', 'z', 'st', 'role', 'ship'],
     ships: TLOG.ships.filter(Boolean).map(function (r) { return { i: r.i, id: r.id, name: r.name, team: r.team, from: r.from, size: r.size, navC: r.navC, levels: r.levels, rings: r.rings }; }),
     crew: TLOG.crew.map(function (e) { return { id: e.id, ship0: e.ship0, ship: e.ship, k0: e.k0, role0: e.role0, art: e.art, tr: e.tr }; }),
-    ev: TLOG.ev };
+    ev: TLOG.ev, teams: TLOG_TEAMS,
+    gun: { codes: '碼 ＝ 狀態 × 2 ＋ 對得到目標（1）；狀態 ' + RPT_ST.map(function (s, i) { return i + ' ' + s; }).join('、'), quietSec: TLOG_QUIET, trkF: TLOG_TRK_F,
+      ships: TLOG.gun.ships.filter(Boolean), ev: TLOG.gun.ev, trk: TLOG.gun.trk, quiet: TLOG.gun.quiet } };
 }
 /** 匯出 JSON（⛔ 成品不准 fetch ⇒ 用 Blob 下載）。 */
 function tlgSave() {
@@ -145,4 +196,4 @@ function tlgSave() {
 $('testT').onclick = tlgToggle;
 if (!DEBUG) $('testT').closest('.gsR').style.display = 'none';   // 設定面板只在 ?debug=1 顯示（Tim 2026-10-20）；沒開 debug ⇒ 存過的開關也不算（上面 tlgWanted），網址 ?test=1 照舊（src/tests/crew_log.py）
 // 訂閱（TASK-0669：模擬層只發事件，00_events.js）
-evOn('tlgEv', tlgOnEv); evOn('stepEnd', tlgTick, 1);
+evOn('tlgEv', tlgOnEv); evOn('stepEnd', tlgTick, 1); evOn('rptShot', tlgOnShot);

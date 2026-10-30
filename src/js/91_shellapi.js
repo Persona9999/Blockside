@@ -99,6 +99,23 @@ function shapiMake() {
       if (!sh || sh.sinkingFinal || sh.sunk || sh.struck) return false;
       sh.sinkingFinal = true; sh.fate = why || '開始沉了'; note(sh, sh.fate, true); return true;
     },
+    /** 測試模式的記錄（83_testlog.js：船員的路徑與事件、砲的開火與狀態；只讀 ⇒ 開著關著戰局逐位元組相同）。
+     *  on：true 開（這一場從現在起記，之後每一場從開戰起）／false 停（這一場停記，記好的留著拿得到；之後不記）／null 回到核心自己的開關（?test=1）。
+     *  teams：只記這幾隊（例 ['blue']；省略 ⇒ 全部）。回現在記不記。 */
+    tlog: function (on, teams) {
+      TLOG_SHELL = on === true || on === false ? on : null; TLOG_TEAMS = teams && teams.length ? teams.slice() : null;
+      if (on === true && (!TLOG || TLOG.off !== undefined)) { if (TLOG) { TLOG.ev.push([+SIMT.toFixed(1), -1, -1, 'resume', TLOG.off]); delete TLOG.off; } else tlgReset(); }
+      else if (on === false && TLOG && TLOG.off === undefined) TLOG.off = +SIMT.toFixed(1);
+      return !!TLOG && TLOG.off === undefined;
+    },
+    /** 這一場的整份記錄（tlgData）＋戰鬥報表（79_report.js rptData）；沒在記 ⇒ null。 */
+    tlogData: function () { var d = tlgData(); if (d) d.report = rptData(); return d; },
+    /** 輕的讀數（外殼每秒問一次也不貴）：記了幾點、幾筆、開了幾發、沒開火的那幾段。 */
+    tlogInfo: function () {
+      if (!TLOG) return null;
+      return { on: TLOG.off === undefined, points: TLOG.n, ev: TLOG.ev.length, shots: TLOG.gun.ev.filter(function (e) { return e[3] === 's'; }).length,
+        quiet: TLOG.gun.quiet.map(function (q) { return Object.assign({}, q, { n: q.n.slice() }); }) };
+    },
     /** 畫面上那一點（client px）沿視線打到哪艘船的哪一格（照 71_input.js inPick：每艘船打 VK.raycast，砲帶的裝甲也算；帆不算 ⇒ 穿過帆打到後面的船身）。
      *  水面不擋（射線只看船的格子）、沉沒了還在往下沉的也算（sunk：32_hull.js 開始沉之後再沉 4.8 m 就記沉沒，船還看得到）⇒ 多深還算看得到由外殼照 w 的高度決定。
      *  回 { sh, p：那一格的格心（船的格座標）, d：視線在那艘格座標裡的方向（單位向量）, t：沿視線幾公尺, w：那一點的世界座標 }；沒打到 ⇒ null。只讀，不碰戰局。 */
