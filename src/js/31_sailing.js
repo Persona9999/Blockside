@@ -412,11 +412,14 @@ function crushAfter(sh, rem, dW, e, other, v, t0, left) {
 function hitWarm() { stepsRun(hitWarmSteps()); }
 /** hitWarm 拆成步驟（每個船型每一檔：取樣 hitSampleSteps 的那幾步、佔用金字塔各一步；70_flow.js startStaged 分段做）。照順序做 ＝ 拆之前的 hitWarm。 */
 function hitWarmSteps() {
-  var L = [SHIPHIT_LV[PHX.shiphit], PHX.shipdmg ? SHIPHIT_LV[3] : null], seen = {}, out = [];
-  SHIPS.forEach(function (sh) {
-    if (seen[sh.T.id]) return; seen[sh.T.id] = 1;
-    L.forEach(function (lv) { if (!lv) return; out.push(function () { return hitSampleSteps(sh.T, lv).concat(lv.foot ? [] : [function () { occPyr(sh.T); }]); }); });
-  });
+  var seen = {}, out = [];
+  SHIPS.forEach(function (sh) { if (seen[sh.T.id]) return; seen[sh.T.id] = 1; out = out.concat(hitWarmT(sh.T)); });
+  return out;
+}
+/** 一個船型的那幾步（hitWarmSteps 每一型、57_core.js coreAddStaged 中途進場的那一型）；已經建過 ⇒ 每一步都是空的。 */
+function hitWarmT(T) {
+  var out = [];
+  [SHIPHIT_LV[PHX.shiphit], PHX.shipdmg ? SHIPHIT_LV[3] : null].forEach(function (lv) { if (!lv) return; out.push(function () { return hitSampleSteps(T, lv).concat(lv.foot ? [] : [function () { occPyr(T); }]); }); });
   return out;
 }
 /** 船型 T 的碰撞取樣（第一次用到才算、每個船型每一檔只算一次；HIT_PROF 記花了多久）：

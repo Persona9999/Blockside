@@ -21,10 +21,11 @@ function shapiMake() {
     loadHull: function (id) { return loadHull(id).then(function (T) { return T.id; }); },
     loaded: function (id) { return !!HULLT[id]; },
     /** 開戰：spec ＝ [{ team: 'blue'|'red', hull }]，第一艘是我艦（鏡頭的「我艦」）；船型要先載好。o：dist 開局船頭距離（m）、field 同時在場幾艘（其他的候補）、
-     *  weather 天氣、mode 玩法（預設 eve 觀戰 ＝ 全部交給電腦）、staged 分段開（不卡畫面；回 Promise）。 */
+     *  weather 天氣、mode 玩法（預設 eve 觀戰 ＝ 全部交給電腦）、staged 分段開（不卡畫面；回 Promise）、judge: false 核心不判勝負（外殼自己判、自己補船；57_core.js CORE_JUDGE）。 */
     start: function (spec, o) {
       o = o || {};
       if (!spec || !spec.length || !spec.every(function (f) { return HULLT[f.hull]; })) return Promise.reject(new Error('船型還沒載好'));
+      CORE_JUDGE = o.judge !== false;
       if (o.dist) DIST = clamp(Math.round(o.dist), LIM_DIST[0], LIM_DIST[1]);
       if (o.field) FIELD_N = clamp(Math.round(o.field), 2, MAX_SHIPS);
       if (o.weather) setWeather(o.weather);
@@ -134,6 +135,7 @@ function shapiMake() {
       return { n: n, w: w };
     },
     out: function () { return coreOut(); },                          // 戰後狀態（57_core.js；src/CORE_API.md §2）
-    add: function (o) { return coreAdd(o); }                         // 中途加船（§4）
+    add: function (o) { return coreAdd(o); },                        // 中途加船（§4）
+    addStaged: function (o) { return coreAddStaged(o); }             // 中途加船、分段做（不卡畫面；回 Promise<船｜null>；§4）
   };
 }

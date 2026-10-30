@@ -33,6 +33,12 @@ var PORT_DEPTH = 0.25, PORT_EDGE = 0.02;                                  // 穿
 /** 第一次碰到這艘船（portsAnim、__game.ports）：sh.decos 裡 kind=portlid 的蓋板配到砲。一片都沒有（或都配不到）⇒ null。
  *  鉸鏈缺、lid_of 配不到砲、兩片指同一門砲（留第一片）的那幾片不演（畫成模型的樣子；匯入檢查報 ✗，portsIssues）。 */
 function portsBuild(sh) { var R = {}; stepsRun(portsSteps(sh, R)); return R.out; }
+/** 先建好（70_flow.js 分段開戰的最後幾步、57_core.js coreAddStaged 中途進場）：同 portsAnim 懶建的那兩行（蓋板分好幾步建）。
+ *  「只有我艦」⇒ 只建我艦的（別艘輪到時第一格懶建）；已經建過 ⇒ []。 */
+function portsWarmSteps(sh) {
+  if (!sh || !portOn(sh) || !sh.M || sh.ports !== undefined) return [];
+  var R = {}; return portsSteps(sh, R).concat([function () { if (sh.ports === undefined) sh.ports = R.out; if (sh.recoil === undefined) sh.recoil = recoilBuild(sh); }]);
+}
 /** portsBuild 拆成步驟（2026-10-20；70_flow.js 開戰分段先建好 sh.ports，一艘約 0.05～0.19 s）：蓋板一片一片、做滿 12 ms 一步（stepsLoop），最後排順序 ⇒ R.out。照順序做 ＝ 拆之前的 portsBuild。 */
 function portsSteps(sh, R) {
   var D = (sh.decos || []).filter(function (d) { return d.meta.kind === 'portlid'; }), L = [], used = [], out = [];

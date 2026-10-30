@@ -72,6 +72,18 @@ coreAdd({ team: 'red', hull: 'monitor', x, z, yaw, name, pre })   // ⇒ 那艘�
 - ⚠ 開船會抽亂數（相位、裝填、船員）⇒ 加船那一刻之後跟沒加的那一場不同；**同一個時刻加同一艘 ⇒ 照樣逐位元組重現**（§6）。
 - 無頭對拍：`?demo=120&core=1&coreadd=red:monitor@60`（多艘用逗號）⇒ 第 60 秒在我方第一艘旁邊加；`#core` 的 `added` 記時間、耗時、加船那一步既有的船有沒有被動到（`same`）。
 
+### 4.1 分段加船 `coreAddStaged(o)`（2026-10-30）
+
+```js
+coreAddStaged({ team: 'red', hull: 'swallow', x, z })   // ⇒ Promise<那艘船｜null>；o 同 coreAdd
+```
+
+- 開船那十幾段（10_ship.js makeShipSteps）＋那一型第一次才建的碰撞取樣（31_sailing.js hitWarmT）＋砲門蓋板與後座（62_ports.js portsWarmSteps）排進 `CORE_ADDQ`；畫面每一格（90_main.js frame ⇒ coreAddPump）做 `CORE_ADD_MS`（4 ms）、至少一段，做完才放上場（之後那一串同 coreAdd）。一次做排頭那一艘。
+- 做到一半重開（reset 換了一個 `SHIPS`）、這一局結束了（`OVER`）⇒ 丟掉、回 null。
+- 讀數：`sh.addMs`（排進去到放上場）、`sh.addMax`（最久那一段）、`sh.addN`（幾段）、`sh.placeMs`（放上場那一下）。
+- ⚠ 做的這幾格戰局照常走 ⇒ 開船抽的亂數跟模擬的交錯，**不逐位元組重現**；要重現用 `coreAdd`。位置、船頭照排進去那一刻。
+- 外殼自己補船時開戰要帶 `judge: false`（`CORE_JUDGE`，61_hud.js checkEnd 不判）：⛔ 照判 ⇒ 場上最後一艘敵艦出局、候補還在做的那一刻 `OVER`，之後加不了船。
+
 ## 5. 不帶的東西（這一版）
 
 - **砲帶的裝甲**（24_armor.js，莫尼特號、哨兵號、維吉尼亞號）：裝甲格子另外一份網格，戰後狀態沒存它的差 ⇒ 下一場裝甲是新的。
@@ -102,7 +114,7 @@ coreAdd({ team: 'red', hull: 'monitor', x, z, yaw, name, pre })   // ⇒ 那艘�
 - `opt.q`：預設網址參數（`js/00_core.js`）—— 外殼頁的網址沒帶的那幾項照它補、網址有的照網址。例 `{ "prefs": "0", "blue": "flyingfish", "red": "swallow" }` ⇒ 不讀不寫 Blockside 的設定存檔、開機只解析這兩型。
 - `opt.api: true`：開機時 `BS_SHELL.core` ＝ 一包函式（`js/91_shellapi.js`；沒要 ⇒ 不建）：
   - 讀：`ready()`（boot:ready 了沒）、`say()`、`hulls()`（船型＋選船卡片）、`ships()`（SHIPS 本身）、`state()`、`stat(sh)`（浮力／人／砲／桅 0～1）、`isOut`、`teamDown`、`center(sh)`、`project(x, y, z)`（世界 ⇒ client px）、`pick(cx, cy)`（畫面那一點沿視線打到哪艘船的哪一格 ⇒ `{ sh, p, d, t, w }`；照 71_input.js inPick，帆不算；水面不擋、沉沒了還在往下沉的也算 ⇒ 多深算看得到由外殼照 `w` 定）、`out()`（§2）。
-  - 寫：`loadHull(id)`、`start(spec, { dist, field, weather, mode, staged })`（`staged` ⇒ 分段開、回 Promise）、`add(o)`（§4）、`run(on)`／`pause(on)`（叫 70_flow.js）、`speed(x)`、`cam.see／cycle／orbit／set／get`（叫 03_camera.js）、`weather(id)`、`gfx(lv)`、`sound({ sfx, amb, bgm, mute })`、`resume()`（使用者點過之後開聲音）、`strike(sh, why)`（降旗，照 32_hull.js strikeCheck 定了之後那幾步）、`bite(sh, at, r, dir)`（咬一口，水面下、沉沒中的也咬得到：`at` ＝ pick 的 `p` ⇒ 咬在那一點、`dir` ＝ pick 的 `d`；`at` ＝ `{ fx, side, dz }` ⇒ 水線附近那一舷，side 0 ＝ 對著鏡頭；邊緣是鋸齒的牙印、碎木往外噴、底下的水面濺起來；回 `{ n, w }`；亂數外殼給，⛔ 不抽戰局的亂數）。
+  - 寫：`loadHull(id)`、`start(spec, { dist, field, weather, mode, staged, judge })`（`staged` ⇒ 分段開、回 Promise；`judge: false` ⇒ 核心不判勝負，§4.1）、`add(o)`（§4）、`addStaged(o)`（§4.1）、`run(on)`／`pause(on)`（叫 70_flow.js）、`speed(x)`、`cam.see／cycle／orbit／set／get`（叫 03_camera.js）、`weather(id)`、`gfx(lv)`、`sound({ sfx, amb, bgm, mute })`、`resume()`（使用者點過之後開聲音）、`strike(sh, why)`（降旗，照 32_hull.js strikeCheck 定了之後那幾步）、`bite(sh, at, r, dir)`（咬一口，水面下、沉沒中的也咬得到：`at` ＝ pick 的 `p` ⇒ 咬在那一點、`dir` ＝ pick 的 `d`；`at` ＝ `{ fx, side, dz }` ⇒ 水線附近那一舷，side 0 ＝ 對著鏡頭；邊緣是鋸齒的牙印、碎木往外噴、底下的水面濺起來；回 `{ n, w }`；亂數外殼給，⛔ 不抽戰局的亂數）。
   - 事件：`on(t, fn, order)`／`off` ＝ 00_events.js 的 evOn／evOff（rptShot 裡改那一顆的 `b.dmg`、`b.hole` ⇒ 只動那一顆）。
 - 掛鉤多一個 `tap(cx, cy, 按鍵)`（`js/71_input.js` shellCall）：點一下畫面先問外殼，回 true／沒回 ⇒ 核心不設我艦的瞄準點、不換成半舷手動。
 - ⛔ 沒有 `BS_SHELL`（Blockside 自己的 index.html）⇒ 這三處都不動：兩組無頭對拍（`?demo=60&seed=3&dump=1&headless=1&ship=flyingfish,swallow`、`?demo=90&seed=4&dump=1&headless=1&blue=pinas,flyingfish&red=labelle,swallow`）跟改之前逐位元組相同（fbbdd51f1f、5143a5969d）。

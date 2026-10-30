@@ -4,6 +4,7 @@
 var CORE_API = 1;                                 // 改了格式或語意就加一（外殼開局先比：CORE_API.md §1）
 var CORE_PRE = corePreHash();                     // { blue: [船的狀態…], red: […] }：照每一方在場的順序對（spawnFleet）；null ⇒ 一般開局
 var CORE_LOG = [];                                // 套用時對不上的（船型、指紋、編號）：一行一筆，coreOut().log 帶出去
+var CORE_JUDGE = true;                            // false ⇒ 核心不判勝負（61_hud.js checkEnd）：外殼自己判、自己補船（91_shellapi.js start 的 judge: false；⛔ 照判 ⇒ 場上最後一艘敵艦出局、候補還在做的那一刻 OVER，之後加不了船）
 
 function coreB64(u8) { var s = ''; for (var i = 0; i < u8.length; i += 8192) s += String.fromCharCode.apply(null, u8.subarray(i, i + 8192)); return btoa(s); }
 function coreUnB64(s) { var b = atob(s), u = new Uint8Array(b.length); for (var i = 0; i < b.length; i++) u[i] = b.charCodeAt(i); return u; }
@@ -147,18 +148,53 @@ function corePreFor(team, j) { return CORE_PRE && CORE_PRE[team] ? CORE_PRE[team
  *  ⚠ makeShip 會抽亂數（相位、裝填、船員）⇒ 加船那一刻之後的戰局跟沒加的那一場不同 —— 同一個時刻加同一艘，照樣逐位元組重現。 */
 function coreAdd(o) {
   var T = HULLT[o.hull]; if (!T || OVER) return null;
-  var t0 = performance.now(), yaw = o.yaw;
-  if (yaw === undefined) {
-    var E = SHIPS.filter(function (s) { return s.team !== o.team && !isOut(s); }), ex = 0, ez = 0;
-    E.forEach(function (s) { ex += s.px; ez += s.pz; });
-    yaw = E.length ? Math.atan2(-(ez / E.length - o.z), ex / E.length - o.x) : (o.team === 'blue' ? -Math.PI / 2 : Math.PI / 2);
-  }
-  var sh = makeShip(SHIPS.length, o.team, yaw, o.z, T, o.x); sh.name = o.name || T.name;
+  var t0 = performance.now(), sh = makeShip(SHIPS.length, o.team, coreAddYaw(o), o.z, T, o.x);
+  corePlace(sh, o); sh.addMs = +(performance.now() - t0).toFixed(1);
+  return sh;
+}
+/** yaw 沒給 ⇒ 船頭對著敵方還在打的船的中心（coreAdd、coreAddStaged）。 */
+function coreAddYaw(o) {
+  if (o.yaw !== undefined) return o.yaw;
+  var E = SHIPS.filter(function (s) { return s.team !== o.team && !isOut(s); }), ex = 0, ez = 0;
+  E.forEach(function (s) { ex += s.px; ez += s.pz; });
+  return E.length ? Math.atan2(-(ez / E.length - o.z), ex / E.length - o.x) : (o.team === 'blue' ? -Math.PI / 2 : Math.PI / 2);
+}
+/** 做好的那一艘放上場（coreAdd、coreAddPump）。 */
+function corePlace(sh, o) {
+  sh.name = o.name || sh.T.name;
   coreSpawned(sh, o.pre || null);
   SHIPS.push(sh); stepShip(sh, 0); survey(sh); pickCaptain(sh); cmdTick(); pickFoes();
-  sh.addMs = +(performance.now() - t0).toFixed(1);
   note(sh, '進場' + teamTag(sh), true); crewShortNote(sh);
-  return sh;
+}
+/** 中途加一艘、分段做（2026-10-30 gura，方舷放置的候補進場；Tim：「分段開船消掉每艘 40～70 ms 小頓」）：o 同 coreAdd。
+ *  makeShip 那十幾段（10_ship.js makeShipSteps）＋那一型第一次才建的碰撞取樣（31_sailing.js hitWarmT；⛔ 不先建 ⇒ 第一次撞到那一步現場建）＋砲門蓋板與後座（62_ports.js portsWarmSteps；⛔ 不先建 ⇒ 第一格懶建）
+ *  排進 CORE_ADDQ，畫面每一格（90_main.js frame ⇒ coreAddPump）做 CORE_ADD_MS 毫秒、至少一段；做完才放上場（corePlace，同 coreAdd）。一次做排頭那一艘。
+ *  回 Promise<那艘船｜null（船型沒載、這一局結束了；做到一半重開了 ⇒ 丟掉）>；sh.addMs ＝ 排進去到放上場幾毫秒、sh.addMax ＝ 最久那一段、sh.addN ＝ 幾段、sh.placeMs ＝ 放上場那一下。
+ *  ⚠ 做的這幾格戰局照常走 ⇒ makeShip 抽的亂數跟模擬的交錯，不逐位元組重現（要重現用 coreAdd）。位置、船頭照排進去那一刻。 */
+var CORE_ADDQ = [], CORE_ADD_MS = 4;
+function coreAddStaged(o) {
+  var T = HULLT[o.hull]; if (!T || OVER) return Promise.resolve(null);
+  var M = makeShipSteps(SHIPS.length, o.team, coreAddYaw(o), o.z, T, o.x);
+  return new Promise(function (ok) {
+    CORE_ADDQ.push({ o: o, M: M, ships: SHIPS, ok: ok, t0: performance.now(), n: 0, max: 0,
+      steps: M.steps.concat([function () { return hitWarmT(T); }, function () { return portsWarmSteps(M.sh); }]) });
+  });
+}
+function coreAddPump() {
+  var B = CORE_ADDQ[0];
+  if (B.ships !== SHIPS || OVER) { CORE_ADDQ.shift(); trafficFree(B.M.sh); B.ok(null); return; }   // 重開了（70_flow.js reset 換了一個 SHIPS）、這一局結束了 ⇒ 丟掉
+  var s0 = performance.now();
+  do {
+    var f = B.steps.shift(), a = performance.now(), r = f(), d = performance.now() - a;
+    if (r) B.steps = r.concat(B.steps);
+    B.n++; if (d > B.max) B.max = d;
+  } while (B.steps.length && performance.now() - s0 < CORE_ADD_MS);
+  if (B.steps.length) return;
+  CORE_ADDQ.shift();
+  var sh = B.M.sh, p0 = performance.now(); sh.i = SHIPS.length;              // 序號照放上場那一刻（做的這幾格可能有別艘先進來）
+  corePlace(sh, B.o);
+  sh.placeMs = +(performance.now() - p0).toFixed(1); sh.addMs = +(performance.now() - B.t0).toFixed(1); sh.addMax = +B.max.toFixed(1); sh.addN = B.n;
+  B.ok(sh);
 }
 /** ?coreadd=red:monitor@60（無頭對拍用；多艘用逗號）：⇒ [{ team, hull, t }]。 */
 function coreAddQ() {

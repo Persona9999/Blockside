@@ -842,7 +842,7 @@ function shipSettled(sh) {
   return sh.boomAt === undefined || SIMT - sh.boomAt >= END_SETTLE;
 }
 function checkEnd() {
-  if (!modeRule('judge') || DEMO >= 0 || LAB_FLEET) return;   // 擬真沙盒自己判（84_fleetlab.js）   // 玩法規則 judge（04_modes.js）：沙盒、建造不判勝負
+  if (!modeRule('judge') || !CORE_JUDGE || DEMO >= 0 || LAB_FLEET) return;   // 擬真沙盒自己判（84_fleetlab.js）；外殼自己判（57_core.js CORE_JUDGE）   // 玩法規則 judge（04_modes.js）：沙盒、建造不判勝負
   if (OVER) {                                                         // ③：等輸的那一方定了 ⇒ 倒數 ⇒ 跳
     var W = END_WAIT; if (!W) return;
     if (!W.at) { if (SIMT < W.limit && !W.lose.every(shipSettled)) return; W.at = SIMT + (W.lose.some(function (o) { return o.sunk; }) ? END_SINK : END_OTHER); }

@@ -97,10 +97,7 @@ function startStaged() {
  *  只給人看／聽，照開局那一刻的船建（第一格之前模擬不走）⇒ 跟第一格建的一樣；建了之後第一格照常用。 */
 function flowWarmSteps() {
   var out = [];
-  SHIPS.forEach(function (sh) {                                          // 同 62_ports.js portsAnim 懶建的那兩行（蓋板分好幾步建）
-    if (!portOn(sh) || !sh.M || sh.ports !== undefined) return;       // 「只有我艦」⇒ 只建我艦的（別艘輪到時第一格懶建）
-    var R = {}; out = out.concat(portsSteps(sh, R), [function () { if (sh.ports === undefined) sh.ports = R.out; if (sh.recoil === undefined) sh.recoil = recoilBuild(sh); }]);
-  });
+  SHIPS.forEach(function (sh) { out = out.concat(portsWarmSteps(sh)); });
   if (AC) out.push(function () { ambNoise(AC, 'white'); }, function () { ambNoise(AC, 'pink'); }, function () { ambNoise(AC, 'brown'); });   // 環境音的三種噪音（02_ambient.js），再建環境音
   if (AC) out.push(function () { bgmRevBuf(AC); }, function () { bgmRevBuf(AC); });   // 背景音樂的殘響（02_music.js）：兩個聲道各一步，再建卷積
   return out.concat([function () { ambFrame(); }, function () { bgmWarm(); }, function () { bgmFrame(); }]);
