@@ -121,7 +121,9 @@ function tlgGunShip(sh) {
 }
 /** 每 TLOG_EVERY 秒（tlgTick）：每門砲的狀態碼、船的目標與砲長、沒開火的那幾段、每 TLOG_TRK 秒一列 trk。 */
 function tlgGuns(sh, t) {
-  var L = tlgGunShip(sh), G = TLOG.gun, out = isOut(sh), foe = out ? null : foeOf(sh), w = foe && foe.center, n = [0, 0, 0, 0, 0, 0], bear = 0;
+  var L = tlgGunShip(sh), G = TLOG.gun, out = isOut(sh), foe = out ? null : foeOf(sh), n = [0, 0, 0, 0, 0, 0], bear = 0;
+  if (foe && isOut(foe)) foe = null;                                    // 目標降旗、在沉 ⇒ 砲長本來就停火（50_sim.js simAi）⇒ 不算「對得到卻沒開」
+  var w = foe && foe.center;
   sh.guns.forEach(function (g, j) {
     var s = rptGunState(g), b = w && s !== 3 && gunTarget(sh, g, w) ? 1 : 0, c = s * 2 + b;
     if (b) { bear++; n[s]++; }

@@ -49,6 +49,8 @@ function shapiMake() {
         sink: sh.sink || 0, deck: sh.T && sh.T.topDeck !== undefined ? sh.T.topDeck : null };   // sink：比設計水線多吃水幾 m；deck：頂層甲板在船中央離設計水線多高（m，32_hull.js sinkLineT；沒有甲板 meta ⇒ null）
     },
     center: function (sh) { return sh && sh.M ? shipCenter(sh) : null; },
+    /** 世界座標 (x, z) 那一點現在的海面高度（公尺；08_sea.js seaH，浪照現在的模擬時間）：外殼判「咬在水線下」用。只讀。 */
+    seaY: function (x, z) { return seaH(x, z, SIMT); },
     /** 世界座標（公尺）⇒ 畫面座標（client px）：照上一格畫面的鏡頭（CAM.vp）；在鏡頭後面 ⇒ null。 */
     project: function (x, y, z) {
       var q = CAM.vp; if (!q) return null;
