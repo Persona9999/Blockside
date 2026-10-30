@@ -220,8 +220,17 @@ var SHADOW_GLSL = 'uniform highp sampler2DArrayShadow uShA; uniform mat4 uShM[' 
 //   遮罩照船型一層（uHullA：R8 貼圖陣列，每層 ＝ 那一型每個 (x, z) 船殼的半寬；固定第 1 號；60_render.js hullArr）；
 //   格（60_render.js gpuSlots：視野裡最近的 GFX.masks 艘，最多 MASK_NEAR）：uInv[k]（世界 → 格）、uHullK[k] ＝ (那一型的寬, 高, 中線 y, 第幾層)、
 //   uHide[k] ＝ 那艘還沒開始沉（60_render.js hullUniforms）。沒用到的那幾格 uHide 0 ⇒ 一比就跳過、不取樣。uNM ＝ 用到幾格（透視 nearAny 也照它）。
-var HULL_GLSL = 'uniform mat4 uInv[' + NS_MK + ']; uniform float uHide[' + NS_MK + ']; uniform highp sampler2DArray uHullA; uniform vec4 uHullK[' + NS_MK + ']; uniform int uNM;\n' +
-  'bool inHull(int k){ vec4 K=uHullK[k]; vec4 l=uInv[k]*vec4(vW,1.0); if(l.x<0.0||l.z<0.0||l.x>=K.x||l.z>=K.y) return false; float hb=texelFetch(uHullA,ivec3(int(l.x),int(l.z),int(K.w)),0).r*255.0; return hb>0.0 && abs(l.y-K.z)<hb; }\n' +
+//   同一層從第「高」列起接著俯視的 3 張（60_render.js hullRoof，每張 sy 列、第 y 列 ＝ 格的 y）：頂面、填窪後、積水區編號，再 8 列 ＝ 每片積水區四個極端點的 x、y（第 id 欄）；
+//   uHullR[k] ＝ (sy（0 ＝ 沒有，只用側視）, 極端點 x、y 的縮放, 船中心的海面)、uHullY[k] ＝ 船的矩陣算世界高度的那一列。
+//   在外形裡，比頂面低 ⇒ 船艙裡；在積水區裡 ⇒ 那一片的極端點（在填窪的高度）有一個在世界裡比船中心的海面低（整片一起判）⇒ 不算；不在積水區（或排不進編號的）⇒ 比填窪高才不算
+//   （甲板沉到海面下 ⇒ 海整片蓋上去，⛔ 照船舷高低一條一條碎掉；船斜著沉 ⇒ 低的一側漫過船舷，整片甲板照海面一起淹）。
+var HULL_GLSL = 'uniform mat4 uInv[' + NS_MK + ']; uniform float uHide[' + NS_MK + ']; uniform highp sampler2DArray uHullA; uniform vec4 uHullK[' + NS_MK + '],uHullR[' + NS_MK + '],uHullY[' + NS_MK + ']; uniform int uNM;\n' +
+  'bool inHull(int k){ vec4 K=uHullK[k]; vec4 l=uInv[k]*vec4(vW,1.0); if(l.x<0.0||l.z<0.0||l.x>=K.x||l.z>=K.y) return false; float hb=texelFetch(uHullA,ivec3(int(l.x),int(l.z),int(K.w)),0).r*255.0; if(!(hb>0.0 && abs(l.y-K.z)<hb)) return false;\n' +
+  ' vec4 R=uHullR[k]; if(R.x<0.5) return true; int x=int(l.x), y=int(K.y)+int(clamp(l.y,0.0,R.x-1.0)), sy=int(R.x), L=int(K.w);\n' +
+  ' if(l.z<texelFetch(uHullA,ivec3(x,y,L),0).r*255.0) return true; float f=texelFetch(uHullA,ivec3(x,y+sy,L),0).r*255.0;\n' +
+  ' int id=int(texelFetch(uHullA,ivec3(x,y+2*sy,L),0).r*255.0+0.5), tb=int(K.y)+3*sy; if(id==0) return l.z<f;\n' +
+  ' for(int j=0;j<4;j++){ vec2 e=(vec2(texelFetch(uHullA,ivec3(id,tb+2*j,L),0).r,texelFetch(uHullA,ivec3(id,tb+2*j+1,L),0).r)*255.0+0.5)*R.yz; if(dot(uHullY[k],vec4(e,f,1.0))<R.w) return false; }\n' +
+  ' return true; }\n' +
   'bool hullHit(){ for(int k=0;k<' + NS_MK + ';k++) if(uHide[k]>0.5&&inHull(k)) return true; return false; }\n';
 var HULL_HIT = 'hullHit()';                                              // 落在哪一艘的船艙裡
 // 剖面與隱藏甲板（停格；74_cutaway.js）：照船的格座標丟掉 —— uCut ＝ (中線 y, 剖哪一邊 ±1（0 ＝ 不剖）, 拿掉到第幾層（−1 ＝ 不拿）, 開關)；

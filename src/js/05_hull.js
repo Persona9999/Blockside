@@ -330,7 +330,8 @@ function buildHull(info, model, t0, C, key, F) {
     .concat([['帆', function () { T.sailRecipes = sailRecipeEnd(T, SR); }]]).concat([
     ['格子', function () { tm('grid', function () { T.base = VK.Grid.fromModel(model); }); tm('verify', function () { T.chk = VK.verify(T.base, h); }); tm('hullVox', function () { fitHullVox(T); }); tm('material', function () { hullMaterials(T, info); }); tm('armor', function () { armorSetup(T); }); tm('anchor', function () { anchorParts(T); }); }],   // 材質（05_material.js）：每格的材質索引   // fitHullVox：自帶格子的模型（主機、鍋爐）放回船殼（38_fit.js，TASK-0793）   // 格子不存快取：照解出來的比 checksum   // armorSetup：砲帶的裝甲拆出來（24_armor.js；T.hullG ＝ 船殼，T.base 照舊是整艘）；anchorParts：錨的關聯拆成模型錨（76_anchor.js，TASK-0601）
     ['模型網格', function () { tm('meshes', function () { buildMeshes(T, C && C.models); }); }],
-    ['水線與浮力', function () { tm('waterline', function () { waterline(T); }); tm('hullTex', function () { hullTex(T, C && C.hb); }); }],   // 水線、海面遮罩、羅盤的船、側面圖、浮力：分四步（以前一步約 0.12 s）
+    ['水線與浮力', function () { tm('waterline', function () { waterline(T); }); tm('hullTex', function () { hullTex(T, C && C.hb); }); }],   // 水線、海面遮罩、海面遮罩的頂面、羅盤的船、側面圖、浮力：分五步（以前一步約 0.12 s）
+    ['水線與浮力', function () { tm('hullRoof', function () { T.hullRoof = hullRoof(T); }); }],   // 海面遮罩的頂面（60_render.js；甲板沉到海面下 ⇒ 海蓋上去）
     ['水線與浮力', function () { tm('navImg', function () { navImg(T); }); }],
     ['水線與浮力', function () { tm('sideImg', function () { sideImg(T); }); }],
     ['水線與浮力', function () { tm('hydro', function () { T.hydTop = Math.max(60, Math.round(sinkLineT(T) / S) + 18); if (C) { T.hyd = C.hyd; T.disp = C.disp; } else hydrostatics(T); }); }],
