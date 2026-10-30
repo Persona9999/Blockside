@@ -8,6 +8,26 @@
 var SHAPI_READY = false;
 evOn('boot:ready', function () { SHAPI_READY = true; });
 if (window.BS_SHELL && window.BS_SHELL.opt && window.BS_SHELL.opt.api) window.BS_SHELL.core = shapiMake();
+/** pick 的模型那一段：射線（船的格座標 oL、dL，t 跟 VK.raycast 同單位）打到 tMax 以前最近的那個還在的模型。換座標照 21_gunnery.js hitModel（砲塔上的 m.hd、帆桁／迴旋砲的 rot）；
+ *  先跟外框（外擴一格）量一段，在那一段裡每半格看佔用格（inMesh）。螺旋槳（m.vox）有自己的格 ⇒ 裝甲那一條（armRay）已經量了。回跟 VK.raycast 一樣（x,y,z ＝ 落點那一格）＋ m；沒有 ⇒ null。 */
+function shapiMdlRay(o, oL, dL, tMax) {
+  var best = null, st = 0.5 / Math.max(1e-6, len(dL));
+  o.models.forEach(function (m) {
+    if (!m.alive || m.vox) return;
+    var P = m.hd ? ndIn(m.hd, oL) : oL, D = m.hd ? ndIn(m.hd, dL, true) : dL;
+    if (m.rot && m.piv) { P = unrotL(m, P); D = rotZ(D, [0, 0, 0], -m.rot); }
+    var b = m.bb, t0 = 0, t1 = best ? best.t : tMax;
+    for (var i = 0; i < 3 && t0 <= t1; i++) {
+      if (Math.abs(D[i]) < 1e-9) { if (P[i] < b[i] - 1 || P[i] > b[i + 3] + 1) t1 = -1; continue; }
+      var ta = (b[i] - 1 - P[i]) / D[i], tb = (b[i + 3] + 1 - P[i]) / D[i];
+      t0 = Math.max(t0, Math.min(ta, tb)); t1 = Math.min(t1, Math.max(ta, tb));
+    }
+    for (var t = t0; t <= t1; t += st) if (inMesh(m, [P[0] + D[0] * t, P[1] + D[1] * t, P[2] + D[2] * t])) { best = { t: t, m: m }; break; }
+  });
+  if (!best) return null;
+  var L = [oL[0] + dL[0] * best.t, oL[1] + dL[1] * best.t, oL[2] + dL[2] * best.t];
+  return { x: Math.floor(L[0]), y: Math.floor(L[1]), z: Math.floor(L[2]), t: best.t, m: best.m };
+}
 function shapiMake() {
   var author = {}; CFG.ships.forEach(function (s) { author[s.id] = s.author || ''; });
   return {
@@ -121,9 +141,10 @@ function shapiMake() {
       return { on: TLOG.off === undefined, points: TLOG.n, ev: TLOG.ev.length, shots: TLOG.gun.ev.filter(function (e) { return e[3] === 's'; }).length,
         quiet: TLOG.gun.quiet.map(function (q) { return Object.assign({}, q, { n: q.n.slice() }); }) };   // quiet[].ship ＝ 記錄裡的固定編號、name ＝ 那艘的名字
     },
-    /** 畫面上那一點（client px）沿視線打到哪艘船的哪一格（照 71_input.js inPick：每艘船打 VK.raycast，砲帶的裝甲也算；帆不算 ⇒ 穿過帆打到後面的船身）。
+    /** 畫面上那一點（client px）沿視線打到哪艘船的哪一格（照 71_input.js inPick：每艘船打 VK.raycast，砲帶的裝甲（砲塔的殼）也算；帆不算 ⇒ 穿過帆打到後面的船身）。
+     *  船上的模型（舵輪、砲、門…）也打得到：照模型的佔用格（shapiMdlRay；Tim 2026-10-30 方舷放置：「旋轉砲塔(莫尼特號) 無法被咬(瞄準不到) 還有一些物件也是(舵輪)」）。
      *  水面不擋（射線只看船的格子）、沉沒了還在往下沉的也算（sunk：32_hull.js 開始沉之後再沉 4.8 m 就記沉沒，船還看得到）⇒ 多深還算看得到由外殼照 w 的高度決定。
-     *  回 { sh, p：那一格的格心（船的格座標）, d：視線在那艘格座標裡的方向（單位向量）, t：沿視線幾公尺, w：那一點的世界座標 }；沒打到 ⇒ null。只讀，不碰戰局。 */
+     *  回 { sh, p：那一格的格心（船的格座標）, d：視線在那艘格座標裡的方向（單位向量）, t：沿視線幾公尺, w：那一點的世界座標, m：打到的是模型 ⇒ 那個模型 }；沒打到 ⇒ null。只讀，不碰戰局。 */
     pick: function (cx, cy) {
       var q = CAM.inv; if (!q) return null;
       var r = cv.getBoundingClientRect(), nx = (cx - r.left) / r.width * 2 - 1, ny = 1 - (cy - r.top) / r.height * 2;
@@ -133,11 +154,12 @@ function shapiMake() {
         if (!o.grid || !o.inv || !o.M) return;
         var oL = toLocal(o, p0), dL = M4.dir(o.inv, d[0], d[1], d[2]), h = VK.raycast(o.grid, oL, dL, 3000);
         if (o.arm) { var ha = armRay(o, oL, dL, 3000); if (ha && (!h || ha.t < h.t)) h = ha; }
+        var hm = shapiMdlRay(o, oL, dL, h ? h.t : 3000); if (hm) h = hm;
         if (h && (!hit || h.t < hit.t)) { hit = h; on = o; hd = dL; }
       });
       if (!hit) return null;
       var p = [hit.x + 0.5, hit.y + 0.5, hit.z + 0.5];
-      return { sh: on, p: p, d: norm(hd), t: hit.t, w: M4.pt(on.M, p[0], p[1], p[2]) };
+      return { sh: on, p: p, d: norm(hd), t: hit.t, w: M4.pt(on.M, p[0], p[1], p[2]), m: hit.m || null };
     },
     /** 畫面上那一點（client px）沿視線落在海面的哪裡（世界座標；海面照 08_sea.js seaH，有浪 ⇒ 疊代三次）；朝上看、落在鏡頭後面 ⇒ null。只讀。
      *  2026-10-30 方舷放置的火藥桶（Tim：「可以點在海水上會變水雷」）：點到海 ⇒ 水雷放在那裡。 */
@@ -182,8 +204,9 @@ function shapiMake() {
     /** 咬一口（方舷放置的點船、技能）。at ＝ [x, y, z] 格座標（pick 的 p）⇒ 中心在那一點沿 dir（pick 的 d）往裡 0.35 r；
      *  at ＝ { fx, side, dz } ⇒ 那艘現在的水線（51_captain.js wlZ）＋dz 格（預設 −2）、沿船長 fx（0～1）、side（+1／−1；0 ＝ 對著鏡頭的那一舷）那一舷的外殼，往裡 0.35 r。
      *  形狀：半徑 r 格的球，繞著咬的方向一圈照角度削成鋸齒（牙印）；照 removeVoxel 挖（進水、尋路的髒區照常記 —— 跟 __game.dig 同一套）＋碎木往咬出來的方向噴、一聲、那一點底下的水面濺起來。
-     *  水面下也咬得到（沉沒了還在往下沉的也算）。亂數由外殼給（fx、side 外殼抽；碎木的方向用 Math.random），⛔ 不抽戰局的亂數。
-     *  回 { n：挖掉幾格, w：中心的世界座標 }；那裡沒有船身 ⇒ null。 */
+     *  裝甲（砲塔的殼、砲帶的裝甲、螺旋槳）照同一個牙印打掉（armRemove）；牙印咬進外框的模型（舵輪、砲、門、火藥桶…）整個咬掉（damageModel 扣光血）。
+     *  水面下也咬得到（沉沒了還在往下沉的也算）。亂數由外殼給（fx、side 外殼抽；碎木的方向用 Math.random），⛔ 挖格子不抽戰局的亂數；⚠ 咬到模型照被打飛那一套（blowModel、砲旁的藥箱、火藥桶殉爆）會抽。
+     *  回 { n：挖掉幾格（含裝甲）, arm：其中裝甲幾格, mdl：咬掉幾個模型, w：中心的世界座標 }；那裡什麼都沒有 ⇒ null。 */
     bite: function (sh, at, r, dir) {
       if (!sh || !sh.M || !sh.grid) return null;
       r = clamp(Math.round(r || 5), 2, 24);
@@ -201,20 +224,45 @@ function shapiMake() {
       }
       // 牙印：u、v 跟咬的方向 nd 垂直；半徑照繞著 nd 的角度在 0.7 r～r 之間走三角波（一圈 tn 顆牙）
       var hv = Math.abs(nd[2]) < 0.9 ? [0, 0, 1] : [1, 0, 0], u = norm([nd[1] * hv[2] - nd[2] * hv[1], nd[2] * hv[0] - nd[0] * hv[2], nd[0] * hv[1] - nd[1] * hv[0]]);
-      var v = [nd[1] * u[2] - nd[2] * u[1], nd[2] * u[0] - nd[0] * u[2], nd[0] * u[1] - nd[1] * u[0]], tn = Math.max(7, Math.round(r * 1.3)), n = 0, got = [];
-      for (var a = -r; a <= r; a++) for (var b = -r; b <= r; b++) for (var c = -r; c <= r; c++) {
-        var q2 = a * a + b * b + c * c; if (q2 > r * r) continue;
+      var v = [nd[1] * u[2] - nd[2] * u[1], nd[2] * u[0] - nd[0] * u[2], nd[0] * u[1] - nd[1] * u[0]], tn = Math.max(7, Math.round(r * 1.3)), n = 0, na = 0, nm = 0, got = [];
+      function tooth(a, b, c) {                                           // 離中心 (a, b, c) 格那一格在不在牙印裡
+        var q2 = a * a + b * b + c * c; if (q2 > r * r) return false;
         var g = Math.atan2(a * v[0] + b * v[1] + c * v[2], a * u[0] + b * u[1] + c * u[2]) / 6.28319 * tn, R = r * (1 - 0.3 * Math.abs(g - Math.floor(g) - 0.5) * 2);
-        if (q2 > R * R) continue;
+        return q2 <= R * R;
+      }
+      for (var a = -r; a <= r; a++) for (var b = -r; b <= r; b++) for (var c = -r; c <= r; c++) {
+        if (!tooth(a, b, c)) continue;
         var col = removeVoxel(sh, x + a, y + b, z + c, true); if (col) { n++; if (got.length < 240) got.push(x + a, y + b, z + c, col); }
       }
-      if (!n) return null;
-      if (sh.rs && sh.rs.update) sh.rs.update();
+      // 裝甲（砲帶的、砲塔的殼、螺旋槳；24_armor.js）：同一個牙印，那塊的每一格照它現在的角度換回船的座標比；照 armRemove 打掉（跟 armBlast 同一套）
+      //   ⛔ 以前只挖船殼 ⇒ 咬在莫尼特號的砲塔上一格都沒掉（pick 打得到殼，bite 回 null）
+      if (sh.arm) sh.arm.forEach(function (A) {
+        if (A.prop && propGone(A)) return;
+        var Q = armIn(A, [x, y, z]), bb = A.A.bb, e = r + 2;
+        for (var az = Math.max(bb[2], Math.floor(Q[2] - e)); az <= Math.min(bb[5], Math.ceil(Q[2] + e)); az++)
+          for (var ay = Math.max(bb[1], Math.floor(Q[1] - e)); ay <= Math.min(bb[4], Math.ceil(Q[1] + e)); ay++)
+            for (var ax = Math.max(bb[0], Math.floor(Q[0] - e)); ax <= Math.min(bb[3], Math.ceil(Q[0] + e)); ax++) {
+              if (!A.grid.get(ax, ay, az)) continue;
+              var P = armOut(A, [ax, ay, az]); if (!tooth(P[0] - x, P[1] - y, P[2] - z)) continue;
+              var ac = armRemove(sh, A, ax, ay, az); if (ac) { n++; na++; if (got.length < 240) got.push(P[0], P[1], P[2], ac); }
+            }
+      });
       var w = M4.pt(sh.M, x, y, z), ow = norm(M4.dir(sh.M, -nd[0], -nd[1], -nd[2]));   // ow：咬出來的方向（世界）⇒ 碎木往那邊噴
+      // 模型（舵輪、砲、門、火藥桶…）：牙印咬進外框 ⇒ 整個咬掉（damageModel 扣光血 ⇒ 照被打飛那一套飛出去；火藥桶 ⇒ 點著、殉爆）
+      //   中心到外框（換到模型的座標，同 shapiMdlRay）不到 0.8 r。⛔ 照模型的中心 m.c 量 ⇒ 舵輪咬在輪緣上，中心在半徑外，一口都沒咬到（量過：餘燼號 r 5）
+      sh.models.forEach(function (M) {
+        if (!M.alive || M.vox) return;
+        var Q = M.hd ? ndIn(M.hd, [x, y, z]) : [x, y, z]; if (M.rot && M.piv) Q = unrotL(M, Q);
+        var X = M.bb, dx = Math.max(X[0] - Q[0], 0, Q[0] - X[3]), dy = Math.max(X[1] - Q[1], 0, Q[1] - X[4]), dz = Math.max(X[2] - Q[2], 0, Q[2] - X[5]);
+        if (dx * dx + dy * dy + dz * dz > 0.64 * r * r) return;
+        damageModel(sh, M, add(mul(ow, 8), sh.vel), Math.max(1, M.hp) + 1); if (!M.alive || M.lit) nm++;
+      });
+      if (!n && !nm) return null;
+      if (n && sh.rs && sh.rs.update) sh.rs.update();
       splash([w[0] + ow[0] * 1.5, 0, w[2] + ow[2] * 1.5], w[1] < 4);              // 鯊魚從那一點下面的水裡跳出來
       sfx('crack', w, 0.7);
       for (var m = 0; m < got.length; m += 4) spawnDebris(M4.pt(sh.M, got[m] + 0.5, got[m + 1] + 0.5, got[m + 2] + 0.5), add(add(mul(ow, 3 + Math.random() * 6), [(Math.random() - 0.5) * 4, 1 + Math.random() * 4, (Math.random() - 0.5) * 4]), sh.vel), got[m + 3], 0.05 + Math.random() * 0.07, 6 + Math.random() * 6);
-      return { n: n, w: w };
+      return { n: n, w: w, arm: na, mdl: nm };
     },
     /** 憑空一發（方舷放置撿到的特殊武器：天降砲擊、噴火）：從 from 飛到 to（世界座標，公尺）—— 照重力算好初速，正好落在 to（砲彈只吃重力，21_gunnery.js stepBall）。
      *  o：kind 'solid' 實心（預設；洞照 hole）／'shell' 爆裂彈（炸開的半徑 ∝ ∛彈重）／'fire' 希臘火（碰到就潑開、點火延燒，28_fire.js gfSplash）；
