@@ -78,27 +78,31 @@ function shapiMake() {
       if (!sh || sh.struck || sh.sunk) return false;
       sh.struck = true; sh.fate = why || '降旗'; note(sh, sh.fate, true); strikeColors(sh); return true;
     },
-    /** 畫面上那一點（client px）沿視線打到哪艘船的哪一格（照 71_input.js inPick：每艘還浮著的船打 VK.raycast，砲帶的裝甲也算；帆不算 ⇒ 穿過帆打到後面的船身）。
-     *  回 { sh, p：那一格的格心（船的格座標）, d：視線在那艘格座標裡的方向（單位向量）, t：沿視線幾公尺 }；沒打到 ⇒ null。只讀，不碰戰局。 */
+    /** 畫面上那一點（client px）沿視線打到哪艘船的哪一格（照 71_input.js inPick：每艘船打 VK.raycast，砲帶的裝甲也算；帆不算 ⇒ 穿過帆打到後面的船身）。
+     *  水面不擋（射線只看船的格子）、沉沒了還在往下沉的也算（sunk：32_hull.js 開始沉之後再沉 4.8 m 就記沉沒，船還看得到）⇒ 多深還算看得到由外殼照 w 的高度決定。
+     *  回 { sh, p：那一格的格心（船的格座標）, d：視線在那艘格座標裡的方向（單位向量）, t：沿視線幾公尺, w：那一點的世界座標 }；沒打到 ⇒ null。只讀，不碰戰局。 */
     pick: function (cx, cy) {
       var q = CAM.inv; if (!q) return null;
       var r = cv.getBoundingClientRect(), nx = (cx - r.left) / r.width * 2 - 1, ny = 1 - (cy - r.top) / r.height * 2;
       var p0 = mul(M4.pt(q, nx, ny, -1), 1 / (q[3] * nx + q[7] * ny - q[11] + q[15])), d = norm(sub(mul(M4.pt(q, nx, ny, 1), 1 / (q[3] * nx + q[7] * ny + q[11] + q[15])), p0));
       var hit = null, on = null, hd = null;
       SHIPS.forEach(function (o) {
-        if (o.sunk || !o.grid || !o.inv) return;
+        if (!o.grid || !o.inv || !o.M) return;
         var oL = toLocal(o, p0), dL = M4.dir(o.inv, d[0], d[1], d[2]), h = VK.raycast(o.grid, oL, dL, 3000);
         if (o.arm) { var ha = armRay(o, oL, dL, 3000); if (ha && (!h || ha.t < h.t)) h = ha; }
         if (h && (!hit || h.t < hit.t)) { hit = h; on = o; hd = dL; }
       });
-      return hit ? { sh: on, p: [hit.x + 0.5, hit.y + 0.5, hit.z + 0.5], d: norm(hd), t: hit.t } : null;
+      if (!hit) return null;
+      var p = [hit.x + 0.5, hit.y + 0.5, hit.z + 0.5];
+      return { sh: on, p: p, d: norm(hd), t: hit.t, w: M4.pt(on.M, p[0], p[1], p[2]) };
     },
     /** 咬一口（方舷放置的點船、技能）。at ＝ [x, y, z] 格座標（pick 的 p）⇒ 中心在那一點沿 dir（pick 的 d）往裡 0.35 r；
      *  at ＝ { fx, side, dz } ⇒ 那艘現在的水線（51_captain.js wlZ）＋dz 格（預設 −2）、沿船長 fx（0～1）、side（+1／−1；0 ＝ 對著鏡頭的那一舷）那一舷的外殼，往裡 0.35 r。
-     *  形狀：半徑 r 格的球，繞著咬的方向一圈照角度削成鋸齒（牙印）；照 removeVoxel 挖（進水、尋路的髒區照常記 —— 跟 __game.dig 同一套）＋碎木、一聲，中心在水面附近才濺水花。
-     *  亂數由外殼給（fx、side 外殼抽；碎木的方向用 Math.random），⛔ 不抽戰局的亂數。回 { n：挖掉幾格, w：中心的世界座標 }；沉了、那裡沒有船身 ⇒ null。 */
+     *  形狀：半徑 r 格的球，繞著咬的方向一圈照角度削成鋸齒（牙印）；照 removeVoxel 挖（進水、尋路的髒區照常記 —— 跟 __game.dig 同一套）＋碎木往咬出來的方向噴、一聲、那一點底下的水面濺起來。
+     *  水面下也咬得到（沉沒了還在往下沉的也算）。亂數由外殼給（fx、side 外殼抽；碎木的方向用 Math.random），⛔ 不抽戰局的亂數。
+     *  回 { n：挖掉幾格, w：中心的世界座標 }；那裡沒有船身 ⇒ null。 */
     bite: function (sh, at, r, dir) {
-      if (!sh || sh.sunk || !sh.M) return null;
+      if (!sh || !sh.M || !sh.grid) return null;
       r = clamp(Math.round(r || 5), 2, 24);
       var T = sh.T, G = sh.grid, B = T.base, k = r * 0.35, x, y, z, nd;
       if (Array.isArray(at)) {
