@@ -272,6 +272,75 @@ function shapiMake() {
       for (var m = 0; m < got.length; m += 4) spawnDebris(M4.pt(sh.M, got[m] + 0.5, got[m + 1] + 0.5, got[m + 2] + 0.5), add(add(mul(ow, 3 + Math.random() * 6), [(Math.random() - 0.5) * 4, 1 + Math.random() * 4, (Math.random() - 0.5) * 4]), sh.vel), got[m + 3], 0.05 + Math.random() * 0.07, 6 + Math.random() * 6);
       return { n: n, w: w, arm: na, mdl: nm };
     },
+    /** 切一刀（方舷放置的高壓水柱；Tim 2026-10-30「按住持續噴射 可以平整切割出一條線斬斷船體」）：從 from 射出去的水柱，這一格從打在 a 掃到打在 b（世界座標，公尺）。
+     *  挖掉 from、a、b 張開的那一片（扇形）上、離那一片不到 w 格的船殼：每條射線從打到的那一點前 1 格一直挖到後面 pen 公尺 ⇒ 平的一道縫、穿過整個船身。
+     *  切斷了龍骨（切過的那一段龍骨層 z ≤ 12 從船尾那頭灌不到船頭那頭；斜著切也算）⇒ 照 breakShip 那一套只留長的那半截當錨 ⇒ 短的那半截在下一步的連通判定裡斷開、倒下落水（22_pieces.js）。
+     *  o：w 縫的一半寬（格；預設 1.2、1～4）、pen 穿多深（公尺；預設 20）、fx false ⇒ 不噴水花與碎木。照 removeVoxel 挖（進水、尋路髒區、斷開的一團照常）；
+     *  ⛔ 不抽戰局的亂數（碎木的方向用 Math.random）、不碰裝甲與模型。回 { n：挖掉幾格, w：b 那一點, broke：這一刀切斷了龍骨（斷在 x ＝ broke 格）｜0 }；什麼都沒切到 ⇒ null。 */
+    cut: function (sh, from, a, b, o) {
+      if (!sh || !sh.M || !sh.grid || !from || !a || !b) return null;
+      o = o || {};
+      var G = sh.grid, B = sh.T.base, w = clamp(+o.w || 1.2, 1, 4), pen = clamp(+o.pen || 20, 1, 80) / S, w2 = w * w, wi = Math.ceil(w);
+      var E = toLocal(sh, from), A = toLocal(sh, a), Bp = toLocal(sh, b), ab = len(sub(Bp, A)), ns = Math.max(1, Math.ceil(ab / 0.7));
+      var seen = new Set(), n = 0, got = [], keelX = {};
+      for (var s = 0; s <= ns; s++) {
+        var P = add(A, mul(sub(Bp, A), s / ns)), d = sub(P, E), dl = len(d); if (dl < 1e-6) continue;
+        var u = mul(d, 1 / dl), nl = Math.ceil((pen + 1) / 0.7);
+        for (var k = 0; k <= nl; k++) {
+          var q = add(P, mul(u, k * 0.7 - 1));
+          if (q[0] < -wi || q[1] < -wi || q[2] < -wi || q[0] > B.sx + wi || q[1] > B.sy + wi || q[2] > B.sz + wi) continue;
+          for (var cz = Math.floor(q[2] - w); cz <= Math.floor(q[2] + w); cz++) for (var cy = Math.floor(q[1] - w); cy <= Math.floor(q[1] + w); cy++) for (var cx = Math.floor(q[0] - w); cx <= Math.floor(q[0] + w); cx++) {
+            if (cx < 0 || cy < 0 || cz < 0 || cx >= B.sx || cy >= B.sy || cz >= B.sz) continue;
+            var ex = cx + 0.5 - q[0], ey = cy + 0.5 - q[1], ez = cz + 0.5 - q[2]; if (ex * ex + ey * ey + ez * ez > w2) continue;
+            var key = VK.pack(cx, cy, cz); if (seen.has(key)) continue; seen.add(key);
+            if (!G.get(cx, cy, cz)) continue;
+            var col = removeVoxel(sh, cx, cy, cz, true); if (!col) continue;
+            n++; if (cz <= 12) keelX[cx] = 1;
+            if (got.length < 160 && (n & 3) === 0) got.push(cx, cy, cz, col);
+          }
+        }
+      }
+      if (!n) return null;
+      if (sh.rs && sh.rs.update) sh.rs.update();
+      // 龍骨斷了沒：照連通判（⛔ 照「某個 x 整個斷面一格不剩」⇒ 斜著切過去的一刀每個 x 只切掉一部分，永遠判不斷）——
+      //   這艘被水柱切過的龍骨層（z ≤ 12，sh.cutK ＝ 切過的 x 範圍，一刀一刀累積）兩頭各外推 2 格當一段，從船尾那頭的龍骨格灌（6 連通、只走這一段的龍骨層）；
+      //   兩頭都有龍骨格、灌不到船頭那頭 ⇒ 斷了：錨只留長的那半截、切過那一段以外（同 breakShip 的 sh.keel；另一半在下一步的連通判定裡斷開）。已經斷過 ⇒ 只看還是錨的那一段。
+      var broke = 0, K = sh.keel || [0, 1 << 12], kx = Object.keys(keelX).map(Number);
+      if (kx.length) {
+        var ck = sh.cutK || (sh.cutK = [Infinity, -Infinity]);
+        ck[0] = Math.min(ck[0], Math.min.apply(null, kx)); ck[1] = Math.max(ck[1], Math.max.apply(null, kx));
+        var x0 = Math.max(K[0], ck[0] - 2), x1 = Math.min(K[1], ck[1] + 2, B.sx - 1), sy = B.sy, nzk = 13, wx = x1 - x0 + 1;
+        if (wx > 2) {
+          var vis = new Uint8Array(wx * sy * nzk), st = [], end1 = false, has1 = false, has0 = false;
+          for (var yy = 0; yy < sy; yy++) for (var zz = 0; zz < nzk; zz++) {
+            if (G.get(x1, yy, zz)) has1 = true;
+            if (G.get(x0, yy, zz)) { has0 = true; vis[(zz * sy + yy) * wx] = 1; st.push(x0, yy, zz); }
+          }
+          while (st.length && !end1) {
+            var pz = st.pop(), py = st.pop(), px = st.pop();
+            if (px === x1) { end1 = true; break; }
+            for (var nb = 0; nb < 6; nb++) {
+              var qx = px + (nb === 0 ? 1 : nb === 1 ? -1 : 0), qy = py + (nb === 2 ? 1 : nb === 3 ? -1 : 0), qz = pz + (nb === 4 ? 1 : nb === 5 ? -1 : 0);
+              if (qx < x0 || qx > x1 || qy < 0 || qy >= sy || qz < 0 || qz >= nzk) continue;
+              var vi = (qz * sy + qy) * wx + (qx - x0); if (vis[vi] || !G.get(qx, qy, qz)) continue;
+              vis[vi] = 1; st.push(qx, qy, qz);
+            }
+          }
+          if (has0 && has1 && !end1) broke = Math.round((ck[0] + ck[1]) / 2);
+        }
+      }
+      if (broke) {
+        var T = sh.T, lo = Math.max(K[0], T.wl0 !== undefined ? T.wl0 : T.hx0), hi = Math.min(K[1], T.wl1 !== undefined ? T.wl1 : T.hx1), keepAft = broke - lo >= hi - broke;   // 長短照水線那一段（同 breakShip；⛔ 照格子的框 ⇒ 船頭那邊空的格也算長，留錯半截）
+        sh.keel = keepAft ? [K[0], x0] : [x1, K[1]];
+        sh.breakX = broke; sh.breakSide = keepAft ? 1 : -1; sh.cutK = null;
+      }
+      var wb = b.slice(), dw = norm(sub(b, from));
+      if (o.fx !== false) {
+        if (Math.abs(wb[1] - seaH(wb[0], wb[2], SIMT)) < 2) splash([wb[0], 0, wb[2]], false);
+        for (var m = 0; m < got.length; m += 4) spawnDebris(M4.pt(sh.M, got[m] + 0.5, got[m + 1] + 0.5, got[m + 2] + 0.5), add(add(mul(dw, 4 + Math.random() * 6), [(Math.random() - 0.5) * 3, 1 + Math.random() * 3, (Math.random() - 0.5) * 3]), sh.vel), got[m + 3], 0.03 + Math.random() * 0.05, 3 + Math.random() * 4);
+      }
+      return { n: n, w: wb, broke: broke };
+    },
     /** 憑空一發（方舷放置撿到的特殊武器：天降砲擊、噴火）：從 from 飛到 to（世界座標，公尺）—— 照重力算好初速，正好落在 to（砲彈只吃重力，21_gunnery.js stepBall）。
      *  o：kind 'solid' 實心（預設；洞照 hole）／'shell' 爆裂彈（炸開的半徑 ∝ ∛彈重）／'chain' 鏈彈（橫著一片：斷繩、撕帆、扣帆桁的血，21_gunnery.js cutRig）／'fire' 希臘火（碰到就潑開、點火延燒，28_fire.js gfSplash）；
      *     v 初速（m/s；預設 160）、m 彈重（kg；預設 10.9 ＝ 爆裂彈半徑的基準，上限 300）、dmg 每發傷害（對砲、對人；預設 1）、hole 洞的半徑倍率（實心；預設 1、上限 3）、
