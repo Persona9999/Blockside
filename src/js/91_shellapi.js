@@ -136,6 +136,46 @@ function shapiMake() {
       var p = [hit.x + 0.5, hit.y + 0.5, hit.z + 0.5];
       return { sh: on, p: p, d: norm(hd), t: hit.t, w: M4.pt(on.M, p[0], p[1], p[2]) };
     },
+    /** 畫面上那一點（client px）沿視線落在海面的哪裡（世界座標；海面照 08_sea.js seaH，有浪 ⇒ 疊代三次）；朝上看、落在鏡頭後面 ⇒ null。只讀。
+     *  2026-10-30 方舷放置的火藥桶（Tim：「可以點在海水上會變水雷」）：點到海 ⇒ 水雷放在那裡。 */
+    seaAt: function (cx, cy) {
+      var q = CAM.inv; if (!q) return null;
+      var r = cv.getBoundingClientRect(), nx = (cx - r.left) / r.width * 2 - 1, ny = 1 - (cy - r.top) / r.height * 2;
+      var p0 = mul(M4.pt(q, nx, ny, -1), 1 / (q[3] * nx + q[7] * ny - q[11] + q[15])), d = norm(sub(mul(M4.pt(q, nx, ny, 1), 1 / (q[3] * nx + q[7] * ny + q[11] + q[15])), p0));
+      if (d[1] > -1e-4) return null;
+      var y = 0, p = null;
+      for (var i = 0; i < 3; i++) { var t = (y - p0[1]) / d[1]; if (t < 0) return null; p = [p0[0] + d[0] * t, y, p0[2] + d[2] * t]; y = seaH(p[0], p[2], SIMT); }
+      p[1] = y; return p;
+    },
+    /** 哪一艘的船身碰到世界座標 w（那一點 r 格內有船身的格；沉沒了的不算）：第一艘 ⇒ 那艘；都沒有 ⇒ null。只讀（先照格子盒的外接球篩）。水雷用。 */
+    hullAt: function (w, r) {
+      r = clamp(Math.round(r || 4), 0, 12);
+      for (var i = 0; i < SHIPS.length; i++) {
+        var o = SHIPS[i]; if (!o.grid || !o.M || !o.inv || o.sunk) continue;
+        var B = o.T.base, cc = M4.pt(o.M, B.sx / 2, B.sy / 2, B.sz / 2), rb = 0.5 * S * Math.hypot(B.sx, B.sy, B.sz);
+        if (len(sub(cc, w)) > rb + r * S) continue;
+        var c = toLocal(o, w), x0 = Math.round(c[0]), y0 = Math.round(c[1]), z0 = Math.round(c[2]);
+        for (var x = x0 - r; x <= x0 + r; x++) for (var y = y0 - r; y <= y0 + r; y++) for (var z = z0 - r; z <= z0 + r; z++) if (o.grid.get(x, y, z) > 0) return o;
+      }
+      return null;
+    },
+    /** 在世界座標 w 炸開（火藥桶、水雷；23_powder.js 殉爆波及那一套 blastNear：半徑 R 格內的每一艘挖彈坑、傷人、炸模型 —— 艙裡的火藥桶照樣會連鎖）。
+     *  o：{ name：被波及的那艘的廣播寫「被 name 的殉爆波及」, f：威力倍率（人、模型；彈坑照 R）, fx：false ⇒ 不要火球、煙、聲音 }。回這一下排了幾個彈坑（＝ 碰到幾艘）。
+     *  ⚠ 傷人照開砲那一條會抽戰局的亂數（跟 shot 一樣）。 */
+    blast: function (w, R, o) {
+      o = o || {}; if (!w) return 0;
+      R = clamp(+R || 20, 4, 80);
+      var n0 = BLASTS.length;
+      if (o.fx !== false) {
+        flash(w, [0, 1, 0], Math.round(40 + R * 2), true);
+        for (var i = 0; i < 30 + R; i++) spawnPt(add(w, [gaussX() * R * 0.03, rrX(0, R * 0.05), gaussX() * R * 0.03]), [gaussX() * 10, rrX(5, 22), gaussX() * 10], rrX(0.6, 1.6), [1, rrX(0.4, 0.75), 0.12], 0.95, rrX(2, 5), rrX(4, 9), 2, 1.5, 3);   // 火球的粒子用畫面的亂數（12_effects.js RNG_X）⇒ 不抽戰局的
+        smoke(w, [0, 1, 0], Math.round(30 + R * 1.5), true);
+        if (Math.abs(w[1] - seaH(w[0], w[2], SIMT)) < 1.5) splash(w, true);      // 水面上炸開（水雷）⇒ 水柱
+        sfx('blast', w, clamp(R / 30, 0.6, 1.6));
+      }
+      blastNear({ name: o.name || '爆炸' }, w, R, +o.f > 0 ? +o.f : 1);
+      return BLASTS.length - n0;
+    },
     /** 咬一口（方舷放置的點船、技能）。at ＝ [x, y, z] 格座標（pick 的 p）⇒ 中心在那一點沿 dir（pick 的 d）往裡 0.35 r；
      *  at ＝ { fx, side, dz } ⇒ 那艘現在的水線（51_captain.js wlZ）＋dz 格（預設 −2）、沿船長 fx（0～1）、side（+1／−1；0 ＝ 對著鏡頭的那一舷）那一舷的外殼，往裡 0.35 r。
      *  形狀：半徑 r 格的球，繞著咬的方向一圈照角度削成鋸齒（牙印）；照 removeVoxel 挖（進水、尋路的髒區照常記 —— 跟 __game.dig 同一套）＋碎木往咬出來的方向噴、一聲、那一點底下的水面濺起來。
