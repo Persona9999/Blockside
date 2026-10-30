@@ -27,10 +27,12 @@ function teamShips(team) { return SHIPS.filter(function (o) { return o.team === 
 function pickFoes() {
   SHIPS.forEach(function (sh) {
     var c = SHIPS.filter(function (o) { return isFoe(sh, o); }); if (!c.length) { sh.foe = null; return; }
-    if (sh.i === PLAYER_I && sh.aimOn && c.indexOf(sh.aimOn) >= 0 && !sh.aimOn.sunk) { sh.foe = sh.aimOn; return; }   // 玩家點過的那艘
+    // 玩家點過的那艘：出局（降旗、在沉）⇒ 放掉（2026-10-30 方舷放置：自動開砲時砲長自己的 setAim（50_sim.js simAi）也寫 aimOn ⇒ 以前照「沉了沒」判，
+    //   瞄的那艘一降旗就一直鎖著它；simAi 看到目標降旗就停火 ⇒ 我艦整場不再開砲（Tim：藍鯊號「剛開場時正常 打到一半就不開火了」，量過：目標降旗後 60 秒 0 發，另一艘還在打））
+    if (sh.i === PLAYER_I && sh.aimOn && c.indexOf(sh.aimOn) >= 0 && !isOut(sh.aimOn)) { sh.foe = sh.aimOn; return; }
     var od = ORDERS[sh.i], ot = od && od.target !== null && od.target !== undefined ? SHIPS[od.target] : null;   // 指揮官的命令（TASK-0551；53_commander.js）
     if (ot && c.indexOf(ot) >= 0 && !isOut(ot)) { sh.foe = ot; return; }
-    var live = c.filter(function (o) { return !o.sunk; }); if (live.length) c = live;
+    var live = c.filter(function (o) { return !isOut(o); }); if (!live.length) live = c.filter(function (o) { return !o.sunk; }); if (live.length) c = live;   // 最近的：先挑還在打的（⛔ 只濾沉了的 ⇒ 降旗那艘最近 ⇒ 一樣卡住）
     var best = null, bd = 1e18;
     c.forEach(function (o) { var d = (o.px - sh.px) * (o.px - sh.px) + (o.pz - sh.pz) * (o.pz - sh.pz); if (d < bd) { bd = d; best = o; } });
     sh.foe = best;
