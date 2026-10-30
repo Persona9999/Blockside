@@ -8,6 +8,13 @@
 var SHAPI_READY = false;
 evOn('boot:ready', function () { SHAPI_READY = true; });
 if (window.BS_SHELL && window.BS_SHELL.opt && window.BS_SHELL.opt.api) window.BS_SHELL.core = shapiMake();
+/** 畫面上那一點（client px）的視線：o ＝ 近裁切面上那一點、d ＝ 方向（世界座標，單位向量）；鏡頭還沒算好 ⇒ null（pick、ray 共用）。 */
+function shapiRay(cx, cy) {
+  var q = CAM.inv; if (!q) return null;
+  var r = cv.getBoundingClientRect(), nx = (cx - r.left) / r.width * 2 - 1, ny = 1 - (cy - r.top) / r.height * 2;
+  var p0 = mul(M4.pt(q, nx, ny, -1), 1 / (q[3] * nx + q[7] * ny - q[11] + q[15]));
+  return { o: p0, d: norm(sub(mul(M4.pt(q, nx, ny, 1), 1 / (q[3] * nx + q[7] * ny + q[11] + q[15])), p0)) };
+}
 /** pick 的模型那一段：射線（船的格座標 oL、dL，t 跟 VK.raycast 同單位）打到 tMax 以前最近的那個還在的模型。換座標照 21_gunnery.js hitModel（砲塔上的 m.hd、帆桁／迴旋砲的 rot）；
  *  先跟外框（外擴一格）量一段，在那一段裡每半格看佔用格（inMesh）。螺旋槳（m.vox）有自己的格 ⇒ 裝甲那一條（armRay）已經量了。回跟 VK.raycast 一樣（x,y,z ＝ 落點那一格）＋ m；沒有 ⇒ null。 */
 function shapiMdlRay(o, oL, dL, tMax) {
@@ -146,10 +153,8 @@ function shapiMake() {
      *  水面不擋（射線只看船的格子）、沉沒了還在往下沉的也算（sunk：32_hull.js 開始沉之後再沉 4.8 m 就記沉沒，船還看得到）⇒ 多深還算看得到由外殼照 w 的高度決定。
      *  回 { sh, p：那一格的格心（船的格座標）, d：視線在那艘格座標裡的方向（單位向量）, t：沿視線幾公尺, w：那一點的世界座標, m：打到的是模型 ⇒ 那個模型 }；沒打到 ⇒ null。只讀，不碰戰局。 */
     pick: function (cx, cy) {
-      var q = CAM.inv; if (!q) return null;
-      var r = cv.getBoundingClientRect(), nx = (cx - r.left) / r.width * 2 - 1, ny = 1 - (cy - r.top) / r.height * 2;
-      var p0 = mul(M4.pt(q, nx, ny, -1), 1 / (q[3] * nx + q[7] * ny - q[11] + q[15])), d = norm(sub(mul(M4.pt(q, nx, ny, 1), 1 / (q[3] * nx + q[7] * ny + q[11] + q[15])), p0));
-      var hit = null, on = null, hd = null;
+      var R = shapiRay(cx, cy); if (!R) return null;
+      var p0 = R.o, d = R.d, hit = null, on = null, hd = null;
       SHIPS.forEach(function (o) {
         if (!o.grid || !o.inv || !o.M) return;
         var oL = toLocal(o, p0), dL = M4.dir(o.inv, d[0], d[1], d[2]), h = VK.raycast(o.grid, oL, dL, 3000);
@@ -161,6 +166,9 @@ function shapiMake() {
       var p = [hit.x + 0.5, hit.y + 0.5, hit.z + 0.5];
       return { sh: on, p: p, d: norm(hd), t: hit.t, w: M4.pt(on.M, p[0], p[1], p[2]), m: hit.m || null };
     },
+    /** 畫面上那一點（client px）的視線（世界座標）：{ o：近裁切面上那一點, d：方向（單位向量）}；鏡頭還沒算好 ⇒ null。只讀。
+     *  2026-10-30 方舷放置的鏈彈：點在帆、桅杆上（pick 不算帆）⇒ 照視線上離那艘船心最近的那一點打。 */
+    ray: function (cx, cy) { var R = shapiRay(cx, cy); return R && { o: R.o.slice(), d: R.d.slice() }; },
     /** 畫面上那一點（client px）沿視線落在海面的哪裡（世界座標；海面照 08_sea.js seaH，有浪 ⇒ 疊代三次）；朝上看、落在鏡頭後面 ⇒ null。只讀。
      *  2026-10-30 方舷放置的火藥桶（Tim：「可以點在海水上會變水雷」）：點到海 ⇒ 水雷放在那裡。 */
     seaAt: function (cx, cy) {
@@ -265,7 +273,7 @@ function shapiMake() {
       return { n: n, w: w, arm: na, mdl: nm };
     },
     /** 憑空一發（方舷放置撿到的特殊武器：天降砲擊、噴火）：從 from 飛到 to（世界座標，公尺）—— 照重力算好初速，正好落在 to（砲彈只吃重力，21_gunnery.js stepBall）。
-     *  o：kind 'solid' 實心（預設；洞照 hole）／'shell' 爆裂彈（炸開的半徑 ∝ ∛彈重）／'fire' 希臘火（碰到就潑開、點火延燒，28_fire.js gfSplash）；
+     *  o：kind 'solid' 實心（預設；洞照 hole）／'shell' 爆裂彈（炸開的半徑 ∝ ∛彈重）／'chain' 鏈彈（橫著一片：斷繩、撕帆、扣帆桁的血，21_gunnery.js cutRig）／'fire' 希臘火（碰到就潑開、點火延燒，28_fire.js gfSplash）；
      *     v 初速（m/s；預設 160）、m 彈重（kg；預設 10.9 ＝ 爆裂彈半徑的基準，上限 300）、dmg 每發傷害（對砲、對人；預設 1）、hole 洞的半徑倍率（實心；預設 1、上限 3）、
      *     owner 記在哪艘頭上（命中數、rptHit；沒給 ⇒ 我艦）、fx false ⇒ 出手那一點不要火光與聲音。
      *  ⛔ 不叫 rptShot（外殼在 rptShot 改的倍率不套到這一發）、不抽亂數出手（沒有散布）；⚠ 命中那一下照開砲那一條（impact）會抽戰局的亂數 ⇒ 之後的戰局跟沒打的不同。回那顆彈。 */
@@ -274,9 +282,10 @@ function shapiMake() {
       var own = o.owner || SHIPS[PLAYER_I]; if (!own || !from || !to) return null;
       var V = clamp(+o.v || 160, 10, 600), d = sub(to, from), t = Math.max(0.05, len(d) / V), kind = o.kind || 'solid';
       var v = [d[0] / t, d[1] / t + 0.5 * G * t, d[2] / t];               // 吃了 t 秒重力正好落到 to
-      var b = { p: from.slice(), v: v, owner: own.i, ammo: kind === 'shell' ? 1 : kind === 'fire' ? AMMO_GF : 0, trav: 0, alive: true, age: 0, bounced: false, big: false,
+      var b = { p: from.slice(), v: v, owner: own.i, ammo: kind === 'shell' ? 1 : kind === 'chain' ? 2 : kind === 'fire' ? AMMO_GF : 0, trav: 0, alive: true, age: 0, bounced: false, big: false,
         hole: clamp(+o.hole || 1, 0.3, 3), dmg: +o.dmg > 0 ? +o.dmg : 1, m: clamp(+o.m || PEN.ref, 1, 300), api: true };
       if (kind === 'fire') b.gf = true;
+      if (kind === 'chain') b.ph = BALLS.length * 2.39996 % 6.28319;    // 鏈彈的起始角：照開砲那一條（21_gunnery.js fire），⛔ 不抽亂數
       BALLS.push(b);
       if (o.fx !== false) {
         var dir = norm(v);
