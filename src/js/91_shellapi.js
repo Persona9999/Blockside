@@ -45,7 +45,8 @@ function shapiMake() {
       if (!sh) return null;
       var fa = sinkFinalAt(sh);
       return { float: sh.sinkingFinal || sh.sunk ? 0 : clamp(1 - (sh.sink || 0) / (fa > 0 ? fa : 1), 0, 1), crew: (sh.able || 0) / Math.max(1, sh.crew0 || 1),
-        guns: (sh.gunsManned || 0) / Math.max(1, sh.guns.length), masts: sh.masts.length ? (sh.mastsUp || 0) / sh.masts.length : 1 };
+        guns: (sh.gunsManned || 0) / Math.max(1, sh.guns.length), masts: sh.masts.length ? (sh.mastsUp || 0) / sh.masts.length : 1,
+        sink: sh.sink || 0, deck: sh.T && sh.T.topDeck !== undefined ? sh.T.topDeck : null };   // sink：比設計水線多吃水幾 m；deck：頂層甲板在船中央離設計水線多高（m，32_hull.js sinkLineT；沒有甲板 meta ⇒ null）
     },
     center: function (sh) { return sh && sh.M ? shipCenter(sh) : null; },
     /** 世界座標（公尺）⇒ 畫面座標（client px）：照上一格畫面的鏡頭（CAM.vp）；在鏡頭後面 ⇒ null。 */
@@ -91,6 +92,12 @@ function shapiMake() {
     strike: function (sh, why) {
       if (!sh || sh.struck || sh.sunk) return false;
       sh.struck = true; sh.fate = why || '降旗'; note(sh, sh.fate, true); strikeColors(sh); return true;
+    },
+    /** 讓那艘開始沉（跟 32_hull.js「進水太多，開始沉了」同一條：sinkingFinal ⇒ 照進水速度往下沉，沉到開始沉的線再下 4.8 m 記沉沒）。
+     *  給外殼收拾打不沉的破船：開始沉的線不低於 4.2 m（sinkLineT）⇒ 吃水淺的船灌滿水了木頭還浮著、泡在水面停住。已經在沉、沉了、降旗了 ⇒ false。 */
+    scuttle: function (sh, why) {
+      if (!sh || sh.sinkingFinal || sh.sunk || sh.struck) return false;
+      sh.sinkingFinal = true; sh.fate = why || '開始沉了'; note(sh, sh.fate, true); return true;
     },
     /** 畫面上那一點（client px）沿視線打到哪艘船的哪一格（照 71_input.js inPick：每艘船打 VK.raycast，砲帶的裝甲也算；帆不算 ⇒ 穿過帆打到後面的船身）。
      *  水面不擋（射線只看船的格子）、沉沒了還在往下沉的也算（sunk：32_hull.js 開始沉之後再沉 4.8 m 就記沉沒，船還看得到）⇒ 多深還算看得到由外殼照 w 的高度決定。
