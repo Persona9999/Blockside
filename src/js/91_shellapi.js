@@ -61,7 +61,7 @@ function shapiMake() {
       cycle: function () { camCycle(); },
       orbit: function (dx, dy) { camOrbit(dx, dy); },
       set: function (o) { camSet(o); },
-      get: function () { return { mode: CAM.mode, yaw: CAM.yaw, pitch: CAM.pitch, dist: CAM.dist, aoff: CAM.aoff, see: CAM.see ? CAM.see.i : null, follow: !!CAM.follow }; }
+      get: function () { return { mode: CAM.mode, yaw: CAM.yaw, pitch: CAM.pitch, dist: CAM.dist, aoff: CAM.aoff, see: CAM.see ? CAM.see.i : null, follow: !!CAM.follow, eye: CAM.eye ? CAM.eye.slice() : null }; }   // eye：鏡頭在哪（世界座標）
     },
     weather: function (id) { if (id) setWeather(id); return WX_ID; },
     gfx: function (lv) { if (lv && GFX_PRESET[lv]) gfxSet(lv); return gfxLevel(); },
@@ -133,6 +133,27 @@ function shapiMake() {
       sfx('crack', w, 0.7);
       for (var m = 0; m < got.length; m += 4) spawnDebris(M4.pt(sh.M, got[m] + 0.5, got[m + 1] + 0.5, got[m + 2] + 0.5), add(add(mul(ow, 3 + Math.random() * 6), [(Math.random() - 0.5) * 4, 1 + Math.random() * 4, (Math.random() - 0.5) * 4]), sh.vel), got[m + 3], 0.05 + Math.random() * 0.07, 6 + Math.random() * 6);
       return { n: n, w: w };
+    },
+    /** 憑空一發（方舷放置撿到的特殊武器：天降砲擊、噴火）：從 from 飛到 to（世界座標，公尺）—— 照重力算好初速，正好落在 to（砲彈只吃重力，21_gunnery.js stepBall）。
+     *  o：kind 'solid' 實心（預設；洞照 hole）／'shell' 爆裂彈（炸開的半徑 ∝ ∛彈重）／'fire' 希臘火（碰到就潑開、點火延燒，28_fire.js gfSplash）；
+     *     v 初速（m/s；預設 160）、m 彈重（kg；預設 10.9 ＝ 爆裂彈半徑的基準，上限 300）、dmg 每發傷害（對砲、對人；預設 1）、hole 洞的半徑倍率（實心；預設 1、上限 3）、
+     *     owner 記在哪艘頭上（命中數、rptHit；沒給 ⇒ 我艦）、fx false ⇒ 出手那一點不要火光與聲音。
+     *  ⛔ 不叫 rptShot（外殼在 rptShot 改的倍率不套到這一發）、不抽亂數出手（沒有散布）；⚠ 命中那一下照開砲那一條（impact）會抽戰局的亂數 ⇒ 之後的戰局跟沒打的不同。回那顆彈。 */
+    shot: function (from, to, o) {
+      o = o || {};
+      var own = o.owner || SHIPS[PLAYER_I]; if (!own || !from || !to) return null;
+      var V = clamp(+o.v || 160, 10, 600), d = sub(to, from), t = Math.max(0.05, len(d) / V), kind = o.kind || 'solid';
+      var v = [d[0] / t, d[1] / t + 0.5 * G * t, d[2] / t];               // 吃了 t 秒重力正好落到 to
+      var b = { p: from.slice(), v: v, owner: own.i, ammo: kind === 'shell' ? 1 : kind === 'fire' ? AMMO_GF : 0, trav: 0, alive: true, age: 0, bounced: false, big: false,
+        hole: clamp(+o.hole || 1, 0.3, 3), dmg: +o.dmg > 0 ? +o.dmg : 1, m: clamp(+o.m || PEN.ref, 1, 300), api: true };
+      if (kind === 'fire') b.gf = true;
+      BALLS.push(b);
+      if (o.fx !== false) {
+        var dir = norm(v);
+        if (kind === 'fire') evEmit('gfJet', from.slice(), dir, [0, 0, 0]);
+        else { flash(add(from, dir), dir, 14, false); smoke(add(from, mul(dir, 1.5)), dir, 10, false); sfx('boom', from, 1); }
+      }
+      return b;
     },
     out: function () { return coreOut(); },                          // 戰後狀態（57_core.js；src/CORE_API.md §2）
     add: function (o) { return coreAdd(o); },                        // 中途加船（§4）
