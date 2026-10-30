@@ -65,6 +65,19 @@ function shapiMake() {
     },
     weather: function (id) { if (id) setWeather(id); return WX_ID; },
     gfx: function (lv) { if (lv && GFX_PRESET[lv]) gfxSet(lv); return gfxLevel(); },
+    /** 物理效果分級（09_phx.js）：lv ＝ 'full'|'high'|'mid'|'low'（PHX_PRESET）或 { 項目: 第幾檔 }（PHX_ITEMS 的 k；沒給的不動、超出範圍夾回去）。
+     *  帆與繩、碎木、煙與水花馬上換；模擬步長、進水模式開戰時才定 ⇒ 下一場生效（70_flow.js resetSteps）。回現在那一檔（四檔都對不上 ⇒ 'custom'）。 */
+    phx: function (lv) {
+      if (typeof lv === 'string' && PHX_PRESET[lv]) phxSet(lv);
+      else if (lv && typeof lv === 'object') PHX_ITEMS.forEach(function (it) { var v = parseInt(lv[it.k], 10); if (isFinite(v)) PHX[it.k] = clamp(v, 0, it.opt.length - 1); });
+      if (lv) phxSync();
+      return phxLevel();
+    },
+    /** 物理設定頁要的：{ level, v：{ 項目: 第幾檔 }, items：[{ k, name, opt }]（PHX_ITEMS 的拷貝）, preset：核心的四檔, hz：這一場的模擬步長 }。 */
+    phxInfo: function () {
+      return { level: phxLevel(), v: JSON.parse(JSON.stringify(PHX)), items: PHX_ITEMS.map(function (it) { return { k: it.k, name: it.name, opt: it.opt.slice() }; }),
+        preset: JSON.parse(JSON.stringify(PHX_PRESET)), hz: Math.round(1 / DT) };
+    },
     /** 開聲音（瀏覽器要使用者點過才放得出聲）：外殼在使用者點擊時叫。 */
     resume: function () { initAudio(); if (AC && AC.state === 'suspended') AC.resume(); return AC ? AC.state : null; },
     /** 聲音：{ sfx, amb, bgm（0–1）, mute }；沒給的不動。 */

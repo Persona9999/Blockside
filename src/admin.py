@@ -2508,9 +2508,10 @@ def act_build(pack=True, single=False):   # pack：壓縮版（預設，TASK-058
 #   out    寫到哪（必填）            core   哪一份成品（不給 ⇒ 這個 repo 的 index.html）
 #   title  <title> 與主畫面的名字      ships  船檔的網址前綴（out 那一頁看到的 Blockside 根目錄，例 "external/Blockside/"；船檔 ＝ 前綴 + ships/<標籤>.js）
 #   icon   主畫面圖示的網址（不給 ⇒ 前綴 + Blockside 的）  js、css  外殼的檔（清單；照順序）
+#   manifest  外殼自己的網頁 App 資訊檔（manifest.webmanifest）的網址（2026-10-30 方舷放置：加入主畫面 ⇒ 全螢幕；不給 ⇒ 拿掉 Blockside 那一條）
 #   opt    （2026-10-30 方舷放置）原樣放進 BS_SHELL.opt：q ＝ 預設網址參數（網址沒帶的照它補，js/00_core.js）、api: true ＝ 開外殼 API（BS_SHELL.core，js/91_shellapi.js）
 # 怎麼套（⛔ 核心的行號一行都不動：錯誤回報、srccheck 照成品的行號）：
-#   · <title>、主畫面名字換掉；Blockside 的 manifest 拿掉（換成空字串，行還在）；圖示換網址。
+#   · <title>、主畫面名字換掉；Blockside 的 manifest 拿掉（換成空字串，行還在；給了 manifest ⇒ 換成外殼那一份）；圖示換網址。
 #   · </head> 前面同一行加 <script id="bs-shell">window.BS_SHELL={ships, name, stamp}</script> —— 核心開機就要（voxelkit.js 載船檔照 ships）⇒ 放在核心前面、一行。
 #   · 外殼的 css、js 接在 </body> 前面（核心後面 ⇒ 前面的行號不變；掛鉤是用到的那一刻才讀 window.BS_SHELL，見 js/71_input.js shellCall）。
 #   · stamp ＝ { core: 成品的來源指紋, shell: 外殼設定與 js、css 的 sha1 前 12 碼 } ⇒ --check 照同一條路重做一次、跟 out 比（核心換了、外殼改了 ⇒ 舊了）。
@@ -2551,7 +2552,7 @@ def shell_html(path):
     if S.get('title'):
         html = re.sub(r'<title>[^<]*</title>', lambda m: '<title>%s</title>' % esc(S['title']), html, count=1)
         html = re.sub(r'(<meta name="apple-mobile-web-app-title" content=")[^"]*(")', lambda m: m.group(1) + esc(S['title']) + m.group(2), html, count=1)
-    html = html.replace('<link rel="manifest" href="manifest.webmanifest">', '', 1)
+    html = html.replace('<link rel="manifest" href="manifest.webmanifest">', '<link rel="manifest" href="%s">' % esc(S['manifest']) if S.get('manifest') else '', 1)
     html = html.replace('href="icons/apple-touch-icon.png"', 'href="%s"' % esc(S.get('icon') or pre + 'icons/apple-touch-icon.png'), 1)
     i = html.index('</head>')
     html = html[:i] + '<script id="%s">window.BS_SHELL=%s;</script>' % (SHELL_ID, json.dumps(cfg, ensure_ascii=False, sort_keys=True).replace('</', '<\\/')) + html[i:]

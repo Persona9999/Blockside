@@ -24,11 +24,12 @@ var PHX_ITEMS = [
   { k: 'shiphit', name: '船隻碰撞', opt: ['低（龍骨線 14 m，原本的）', '中（水線輪廓）', '高（船殼格子，每 3 格）', '全開（船殼格子，每格）'] },   // 31_sailing.js collide；Tim 2026-10-15：兩艘隔著一段水面就判成撞上 ⇒ 分級。⛔ 改戰局（船推到哪）
   { k: 'shipfric', name: '船隻摩擦', opt: ['原本（一碰就停）', '中', '滑', '很滑'] },
   { k: 'shipdmg', name: '碰撞傷害', opt: ['關', '開（撞得夠快才算：撞掉格子、速度照碰撞改；數值在下面）'] },
-  { k: 'step', name: '模擬步長', opt: ['60 Hz（每 1/60 秒一步）', '30 Hz（每 1/30 秒一步，模擬約省一半）'] }];   // 31_sailing.js ramHit（TASK-0652）；⛔ 會改戰局。Tim 2026-10-16：「碰撞傷害 預設在物理(中)就打開吧 以及碰撞精度也是物理效果中就開滿」⇒ 中／高／全開：碰撞傷害開、船隻碰撞全開（每格）；低照舊（龍骨線、沒有傷害）   // 31_sailing.js hitFriction；Tim 2026-10-15：撞上就黏在一起、要比較容易滑開 ⇒ 預設「滑」。⛔ 改戰局（航速）
+  { k: 'step', name: '模擬步長', opt: ['60 Hz（每 1/60 秒一步）', '30 Hz（每 1/30 秒一步，模擬約省一半）', '20 Hz（每 1/20 秒一步，模擬約省三分之二）', '15 Hz（每 1/15 秒一步，模擬約省四分之三）'] }];   // 31_sailing.js ramHit（TASK-0652）；⛔ 會改戰局。Tim 2026-10-16：「碰撞傷害 預設在物理(中)就打開吧 以及碰撞精度也是物理效果中就開滿」⇒ 中／高／全開：碰撞傷害開、船隻碰撞全開（每格）；低照舊（龍骨線、沒有傷害）   // 31_sailing.js hitFriction；Tim 2026-10-15：撞上就黏在一起、要比較容易滑開 ⇒ 預設「滑」。⛔ 改戰局（航速）
 // 模擬步長（TASK-0805；Tim 2026-10-21：「設定頁可調 物理高以上才維持目前的 中則改為一半」⇒ 全開、高 60 Hz，中 30 Hz；低照中、erina 定的）：
 //   整個模擬的一步 DT（00_core.js）；⛔ 改戰局（步長變了結果就不逐步相同）⇒ 跟進水一樣開戰時決定（70_flow.js resetSteps），戰鬥中改了下一場生效；擬真沙盒照沙盒自己的 Hz。
 //   照 60 Hz 寫的節拍與衰減換算（steps60／decay60）、位移上限（subSteps）見 00_core.js（TASK-0797／0798）。
-var PHX_STEP_HZ = [60, 30];
+//   20、15 Hz（2026-10-30 方舷放置；Tim：「預設模擬步長也可以試著能調低點(以順暢遊戲優先)」）：四檔預設都不用，給外殼與物理設定頁挑。
+var PHX_STEP_HZ = [60, 30, 20, 15];
 var PHX_PRESET = { full: { rig: 3, rigfar: 1, debris: 3, fx: 3, water: 3, flood: 3, sinkflood: 1, blastnb: 1, sailhit: 0, shiphit: 3, shipfric: 2, shipdmg: 1, step: 0 }, high: { rig: 2, rigfar: 1, debris: 2, fx: 2, water: 2, flood: 2, sinkflood: 1, blastnb: 1, sailhit: 0, shiphit: 3, shipfric: 2, shipdmg: 1, step: 0 }, mid: { rig: 1, rigfar: 2, debris: 1, fx: 1, water: 1, flood: 1, sinkflood: 0, blastnb: 1, sailhit: 0, shiphit: 3, shipfric: 2, shipdmg: 1, step: 1 }, low: { rig: 0, rigfar: 2, debris: 0, fx: 0, water: 0, flood: 0, sinkflood: 0, blastnb: 0, sailhit: 0, shiphit: 0, shipfric: 2, shipdmg: 0, step: 1 } };   // shiphit 跟著四檔走；shipfric 四檔都是「滑」（Tim：預設要比原本滑）   // rigfar：全開也是遠方半速（150 m 外看不出差別）
 var PHX_NAME = { full: '全開', high: '高', mid: '中', low: '低', custom: '自訂' }, PHX_DEFAULT = CFG.menu.phx;   // 預設檔：config/game.json 的 menu.phx
 // 帆與繩每一檔：it 布與繩的迭代次數、every 帆幾步走一次（2 ＝ 30 Hz，4 ＝ 15 Hz；一半的帆錯開一步）、loose 垂下來的繩最多幾條、shred 帆的布片每艘最多幾片（34_shreds.js）。高 ＝ 原本的。
