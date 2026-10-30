@@ -106,7 +106,10 @@ function shapiMake() {
      *  teams：只記這幾隊（例 ['blue']；省略 ⇒ 全部）。回現在記不記。 */
     tlog: function (on, teams) {
       TLOG_SHELL = on === true || on === false ? on : null; TLOG_TEAMS = teams && teams.length ? teams.slice() : null;
-      if (on === true && (!TLOG || TLOG.off !== undefined)) { if (TLOG) { TLOG.ev.push([+SIMT.toFixed(1), -1, -1, 'resume', TLOG.off]); delete TLOG.off; } else tlgReset(); }
+      if (on === true && (!TLOG || TLOG.off !== undefined)) {
+        if (TLOG) { var off = TLOG.off; TLOG.ev.push([+SIMT.toFixed(1), -1, -1, 'resume', off]); delete TLOG.off; TLOG.gun.last.forEach(function (L) { L.shotT = SIMT; L.bearT = null; if (L.q) { L.q.to = off; L.q.end = 'pause'; L.q = null; } }); }   // 暫停那一段不算沒開火：從現在重新起算
+        else tlgReset();
+      }
       else if (on === false && TLOG && TLOG.off === undefined) TLOG.off = +SIMT.toFixed(1);
       return !!TLOG && TLOG.off === undefined;
     },
@@ -116,7 +119,7 @@ function shapiMake() {
     tlogInfo: function () {
       if (!TLOG) return null;
       return { on: TLOG.off === undefined, points: TLOG.n, ev: TLOG.ev.length, shots: TLOG.gun.ev.filter(function (e) { return e[3] === 's'; }).length,
-        quiet: TLOG.gun.quiet.map(function (q) { return Object.assign({}, q, { n: q.n.slice() }); }) };
+        quiet: TLOG.gun.quiet.map(function (q) { return Object.assign({}, q, { n: q.n.slice() }); }) };   // quiet[].ship ＝ 記錄裡的固定編號、name ＝ 那艘的名字
     },
     /** 畫面上那一點（client px）沿視線打到哪艘船的哪一格（照 71_input.js inPick：每艘船打 VK.raycast，砲帶的裝甲也算；帆不算 ⇒ 穿過帆打到後面的船身）。
      *  水面不擋（射線只看船的格子）、沉沒了還在往下沉的也算（sunk：32_hull.js 開始沉之後再沉 4.8 m 就記沉沒，船還看得到）⇒ 多深還算看得到由外殼照 w 的高度決定。
