@@ -121,6 +121,9 @@ function hullRoof(T) {
   });
   for (c = 0; c < n; c++) if (lab[c] >= 0) R[2 * n + c] = Ls[lab[c]].id;
   T.hullLakes = [Ls.length, top.length ? top[0].n : 0];
+  T.hullDecks = top.filter(function (lk, i) { return i < 16 && lk.n >= 0.1 * top[0].n; }).map(function (lk) {   // 甲板（面積到最大那片一成的積水區，前 16 片）：[缺口高, 四個極端點的 x, y]（格；hullUniforms 照它判甲板淹了沒）
+    var e = [fo[lk.c[0]]]; lk.c.forEach(function (q) { e.push(q % W + 0.5, Math.floor(q / W) + 0.5); }); return e;
+  });
   return R;
 }
 /** 填窪（0–255 的高度圖，四鄰）：照高度分 256 桶，邊上的柱先進桶，每次從最低的桶拿一柱、四鄰還沒到的 ＝ max(鄰柱, 這一柱) 放進它的桶。
@@ -888,6 +891,14 @@ function reflPass() {
 }
 /** 船艙遮罩的 uniform（海與白沫共用，01_gl.js HULL_GLSL）。開始沉（sinkingFinal）之前，船艙裡不畫海水（Tim 2026-10-12：船身下沉一點點，海面就從破洞、甲板開口看進去像淹了） */
 var MASK_OFF = -1;                                                        // ?debug=1 的 __game.mask(k)：第 k 艘的遮罩關掉（量 4 艘時每一格遮罩都有作用：關掉那艘 ⇒ 它的船艙裡才看得到海）
+var HULL_DECK_HOLD = 3, HULL_DECK_SINK = 0.5;                            // 甲板淹了 ⇒ 遮罩整艘關掉；最後一次淹過之後再撐幾秒才打開（船晃回來、浪一退 ⇒ 不要一閃一閃）；只算進水沉下去（sh.sink）這麼多的船
+                                                                          // 🩸 不看 sink ⇒ 乾舷低的船（sentinel、monitor、virginia、reale：缺口離水面 0.5–1.1 m）好好的、縱傾 1–3° 就整艘關掉，艙口、砲門看進去一片海（Tim 2026-10-12 那個）
+/** 甲板淹了沒（hullUniforms）：T.hullDecks 每一片的四個極端點（在缺口的高度）照船現在的姿勢算到世界，有一點比船中心的海面低 ⇒ 海已經漫上甲板（同著色器判積水區破了沒） */
+function hullDeckSea(s, sea) {
+  var D = s.T.hullDecks, M = s.M;
+  if (D) for (var i = 0; i < D.length; i++) { var e = D[i]; for (var j = 1; j < 9; j += 2) if (M[1] * e[j] + M[5] * e[j + 1] + M[9] * e[0] + M[13] < sea) return true; }
+  return false;
+}
 var HU = { f: -1, inv: new Float32Array(MASK_NEAR * 16), hide: new Float32Array(MASK_NEAR), k: new Float32Array(MASK_NEAR * 4), xb: new Float32Array(MASK_NEAR * 4), r: new Float32Array(MASK_NEAR * 4), y: new Float32Array(MASK_NEAR * 4) };
 function hullUniforms(prog) {
   var u = prog.u;
@@ -897,9 +908,12 @@ function hullUniforms(prog) {
       var s = MSLOTS[i], T = s && s.T;
       if (s) HU.inv.set(s.inv, i * 16);                                   // 透視（nearShip）也用
       if (!T || !T.hullHB || T.hullLayer === undefined) continue;
-      HU.hide[i] = !s.sinkingFinal && !s.sunk && s.i !== MASK_OFF ? 1 : 0;
+      var sea = seaH(s.center[0], s.center[2], SIMT);
+      if (s.sink >= HULL_DECK_SINK && hullDeckSea(s, sea)) s.deckSeaT = SIMT;
+      var wet = s.deckSeaT !== undefined && SIMT - s.deckSeaT < HULL_DECK_HOLD;   // 甲板淹了 ⇒ 整艘不遮（Tim 2026-10-30「水淹沒上層甲板時 直接取消海水遮罩」：甲板上的橫樑、吊艇架底下照頂面照樣挖掉，淹了還一條一條碎）
+      HU.hide[i] = !s.sinkingFinal && !s.sunk && !wet && s.i !== MASK_OFF ? 1 : 0;
       HU.k[i * 4] = T.hullTW; HU.k[i * 4 + 1] = T.hullTH; HU.k[i * 4 + 2] = T.cy; HU.k[i * 4 + 3] = T.hullLayer;
-      if (T.hullRoofOn) { HU.r[i * 4] = T.base.sy; HU.r[i * 4 + 1] = T.hullRoofQ[0]; HU.r[i * 4 + 2] = T.hullRoofQ[1]; HU.r[i * 4 + 3] = seaH(s.center[0], s.center[2], SIMT); }   // 頂面（hullRoof）：sy、極端點的縮放、船中心的海面（積水區破了沒照它比，⛔ 照每一點自己的浪 ⇒ 浪峰一過局部判破、又碎）；0 ⇒ 只用側視
+      if (T.hullRoofOn) { HU.r[i * 4] = T.base.sy; HU.r[i * 4 + 1] = T.hullRoofQ[0]; HU.r[i * 4 + 2] = T.hullRoofQ[1]; HU.r[i * 4 + 3] = sea; }   // 頂面（hullRoof）：sy、極端點的縮放、船中心的海面（積水區破了沒照它比，⛔ 照每一點自己的浪 ⇒ 浪峰一過局部判破、又碎）；0 ⇒ 只用側視
       HU.y[i * 4] = s.M[1]; HU.y[i * 4 + 1] = s.M[5]; HU.y[i * 4 + 2] = s.M[9]; HU.y[i * 4 + 3] = s.M[13];   // 格 → 世界的高度那一列（出口那一點在世界多高）
     }
   }

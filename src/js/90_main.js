@@ -539,6 +539,11 @@ if (DEBUG) {
   window.__game.hullRoofCheck = function (id, lo, hi) {
     var T = HULLT[id || myHull()]; if (!T || !T.hullRoof) return null;
     var TW = T.hullTW, SY = T.base.sy, hs = T.hullSea, top = T.hullRoof.subarray(0, TW * SY), rf = T.hullRoof.subarray(TW * SY, 2 * TW * SY), cy = T.cy, r = { id: T.id, zw: T.zw, at: null, n: 0, deep: 0, where: [] };
+    if (lo === 'decks') {                                                // 甲板（T.hullDecks，hullDeckSea 照它關遮罩）：設計水線、船擺平時缺口比水面高多少（m），橫傾、縱傾幾度海漫上甲板
+      var xm = (T.wl0 + T.wl1) / 2, D = T.hullDecks || [], m = 1e9, rl = 90, pt = 90;
+      D.forEach(function (e) { for (var j = 1; j < 9; j += 2) { var h = (e[0] - T.zw) * S; m = Math.min(m, h); rl = Math.min(rl, Math.atan2(h, Math.abs(e[j + 1] - cy) * S) * 180 / Math.PI); pt = Math.min(pt, Math.atan2(h, Math.abs(e[j] - xm) * S) * 180 / Math.PI); } });
+      return { id: T.id, decks: D.length, rim: +m.toFixed(2), roll: +rl.toFixed(1), pitch: +pt.toFixed(1) };
+    }
     if (lo === 'gap') {                                                  // 甲板那幾柱（設計水線那一層的外形裡、頂面在水線上）：填窪 − 頂面（格）的分布 ⇒ 船舷最低的缺口比甲板高多少
       var d = []; for (var y2 = 0; y2 < SY; y2++) for (var x2 = 0; x2 < TW; x2++) { var c2 = y2 * TW + x2, h2 = hs[T.zw * TW + x2]; if (h2 > 0 && Math.abs(y2 + 0.5 - cy) < h2 && top[c2] > T.zw) d.push(rf[c2] - top[c2]); }
       d.sort(function (a, b) { return a - b; });
