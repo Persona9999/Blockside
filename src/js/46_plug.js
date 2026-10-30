@@ -92,6 +92,7 @@ function plugScan(sh, force) {
  *     那一點附近地板最低、比洞高的那一層（從艙口下去補，畫面上不演）。 */
 function plugSpot(sh, c) {
   var NV = sh.nav, best = null, low = null; if (!NV) return null;
+  plugComp(sh);
   var H = NV.levels[NV.home].N, C0 = carpHomeCells(sh), cw = C0.length ? NV.comp[NV.home + ':' + H.reg[C0[0]]] : undefined;   // 木匠生的那一群（46_carpenter.js carpHomeCells）
   NV.reach.forEach(function (lv) {
     var N = NV.levels[lv].N, ci = plugSnap(NV, lv, c, PLUG_SNAP, cw); if (ci < 0) return;
@@ -100,6 +101,13 @@ function plugSpot(sh, c) {
     else if (dz < 0 && (!low || N.Z[ci] < low.z)) low = { lv: lv, ci: ci, z: N.Z[ci] };
   });
   return best ? { lv: best.lv, ci: best.ci, down: 0 } : low ? { lv: low.lv, ci: low.ci, down: +((low.z - c[2]) * S).toFixed(2) } : null;
+}
+/** 「層:區域」連成幾群（NV.comp，44_medic.js medComps）現在的那一份：尋路刷新過（NV.refreshN 變了）或還沒算過 ⇒ 重算。
+ *  ⛔ 以前只靠別人算：開戰時有醫療艙才算、48_damage.js dmgRows 有木匠的件才算 ⇒ 沒有醫療艙的船（定遠號）擱淺撞出破口、損壞表又沒別的件
+ *    ⇒ plugSpot 讀 NV.comp 丟錯、點名（svRest）整個停住、遊戲卡死（Tim 回報，2026-10-30）。 */
+function plugComp(sh) {
+  var NV = sh.nav, D = dmgOf(sh); if (!NV) return;
+  if (!NV.comp || D.comp !== (NV.refreshN || 0)) { D.comp = NV.refreshN || 0; medComps(sh); }
 }
 /** 第 lv 層、c 附近 r 點內，屬於群 cw（NV.comp）的走路點裡平面最近的那一點；沒有 ⇒ −1。
  *  ⛔ 直接 navSnap（上一版）：風暴角號右舷的洞吸到下層砲甲板一小塊不連通的走路點（自己一群）⇒ 工作一直排著、木匠走不到、沒人接（量的，2026-10-29）。 */
@@ -115,6 +123,7 @@ function plugSnap(NV, lv, c, r, cw) {
 /** 木匠的工作（carpTick 接到損壞表後面）：站得到、洞那裡積水沒有太深的塊 ⇒ [{ key, kind: 'plug', b, lv, cell, pri, extra（秒：爬下去、爬上來）}]。 */
 function plugJobs(sh) {
   var out = [];
+  plugComp(sh);                                                          // carpTick 接著照 NV.comp 挑走得到的件：塊是照上一次掃的（plugScan 沒重掃）也要是現在的那一份
   plugScan(sh).forEach(function (b) {
     var p = b.spot; if (!p) return;
     if (sh.fl && wetAt(sh, [b.c[0], b.c[1], b.c[2] + 10], { sea: false, inner: PLUG_WET })) return;   // 洞上面 1 m 那一格的水快滿了（人搆不到洞）⇒ 等抽水
