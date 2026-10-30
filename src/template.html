@@ -372,6 +372,10 @@
   #tuiMsg{ padding:4px 8px; border-radius:6px; background:rgba(159,199,255,.14); }
   .tuiDim{ color:var(--dim); font-size:12px; }
   .tuiTiles{ display:grid; grid-template-columns:repeat(auto-fill, minmax(118px, 1fr)); gap:6px; margin:6px 0; } .tuiTiles div{ background:rgba(255,255,255,.05); border-radius:6px; padding:4px 8px; } .tuiTiles small{ display:block; color:var(--dim); font-size:11px; } .tuiTiles b{ font-size:15px; }
+  .tuiSpec{ display:flex; flex-wrap:wrap; gap:4px 6px; align-items:center; margin:6px 0 2px; } .tuiSpec > b{ color:#f3e6c4; margin-right:2px; }   /* ⭐ 特產（89_townui.js tuiSpecHTML；Blocksail TASK-1113）：一種貨一顆；自動藍、歷史琥珀；虛線 ＝ 還沒有建築做 */
+  .tuiSpec span{ display:inline-flex; align-items:center; gap:4px; padding:2px 8px; border-radius:10px; background:rgba(255,255,255,.07); white-space:nowrap; } .tuiSpec span b{ font-variant-numeric:tabular-nums; color:#fff; }
+  .tuiSpec small{ font-size:11px; color:var(--dim); } .tuiSpec small.a{ color:#9fc7ff; } .tuiSpec small.h{ color:#ffd98a; }
+  .tuiSpec span.no{ background:transparent; border:1px dashed #667; color:var(--dim); } .tuiSpec span.no b{ color:var(--dim); } .tuiSpec span.no img{ filter:grayscale(1); opacity:.45; }
   .tuiCls{ border:1px solid rgba(255,255,255,.12); border-radius:8px; padding:4px 10px 6px; margin:6px 0; } .tuiCls h5{ margin:4px 0 2px; font-size:14px; color:#f3e6c4; } .tuiCls p{ margin:2px 0; }   /* 社會階層一層一份（89_townui.js tuiStrataHTML；Blocksail TASK-1048） */
   .tuiT{ width:100%; border-collapse:collapse; font-variant-numeric:tabular-nums; } .tuiT th{ text-align:right; color:var(--dim); font-weight:normal; font-size:12px; padding:2px 6px; border-bottom:1px solid rgba(255,255,255,.12); position:sticky; top:0; background:rgba(14,18,24,.98); }
   .tuiT td{ text-align:right; padding:2px 6px; border-bottom:1px solid rgba(255,255,255,.05); } .tuiT th:first-child, .tuiT td:first-child{ text-align:left; } .tuiT tr.cat td{ text-align:left; color:#f3e6c4; padding-top:8px; }
