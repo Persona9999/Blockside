@@ -17,7 +17,7 @@
 //   跟船員記錄同一個開關、同一拍；判法照戰鬥報表（79_report.js rptGunState、gunTarget、foeOf）⇒ 一樣只讀。
 //   · 每一發 [秒, 第幾艘, 第幾門, 's', 彈種]；每門砲狀態變了 [秒, 第幾艘, 第幾門, 'g', 碼]（碼 ＝ 狀態 × 2 ＋ 對不對得到目標；狀態照 RPT_ST）
 //   · 船的 [秒, 第幾艘, -1, 種類, 內容]：foe 目標換了（[第幾艘, 距離 m]）、mode 砲長的瞄準模式、hand 手動那一舷、idle 閒著的砲班組（層＋舷）
-//   · trk 每 TLOG_TRK 秒一列（欄位 TLOG_TRK_F）；quiet：有砲對得到目標、卻 TLOG_QUIET 秒以上一發都沒開的那幾段（n ＝ 那段時間對得到的砲每種狀態幾門·拍）
+//   · trk 每 TLOG_TRK 秒一列（欄位 TLOG_TRK_F）；quiet：一直有砲對得到目標、卻 TLOG_QUIET 秒以上一發都沒開的那幾段（n ＝ 那段時間對得到的砲每種狀態幾門·拍；end ＝ shot 開了／nobear 對不到了／out 出局）
 // 外殼（91_shellapi.js tlog）：TLOG_SHELL 蓋過網址與存檔的開關；TLOG_TEAMS 只記這幾隊（船員、砲都是；null ＝ 全部）。
 var TLOG = null, TLOG_EVERY = 0.5, TLOG_MAX = 600000;                    // TLOG_MAX：路徑點的上限（超過 ⇒ 停記路徑、事件照記，標 trunc）
 var TLOG_KEY = 'blockside_testmode', TLOG_SHELL = null, TLOG_TEAMS = null, TLOG_QUIET = 8, TLOG_TRK = 2;
@@ -115,7 +115,7 @@ function tlgGunShip(sh) {
   var G = TLOG.gun;
   if (!G.ships[sh.i]) {
     G.ships[sh.i] = { i: sh.i, id: sh.T.id, name: sh.name || sh.T.name, team: sh.team, guns: sh.guns.map(function (g) { return { name: g.name, type: g.type, side: g.side, deck: g.deck || null }; }) };
-    G.last[sh.i] = { c: sh.guns.map(function () { return -1; }), foe: undefined, mode: undefined, hand: undefined, idle: undefined, shotT: SIMT, trkT: -1e9, q: null };
+    G.last[sh.i] = { c: sh.guns.map(function () { return -1; }), foe: undefined, mode: undefined, hand: undefined, idle: undefined, shotT: SIMT, bearT: null, trkT: -1e9, q: null };
   }
   return G.last[sh.i];
 }
@@ -132,11 +132,15 @@ function tlgGuns(sh, t) {
   var m = sh.aimMode || null; if (L.mode !== m) { G.ev.push([t, sh.i, -1, 'mode', m]); L.mode = m; }
   var hd = !!sh.hand; if (L.hand !== hd) { G.ev.push([t, sh.i, -1, 'hand', hd]); L.hand = hd; }
   var IG = sh.idleG || {}, idl = Object.keys(IG).filter(function (k) { return IG[k].on; }).sort().join(','); if (L.idle !== idl) { G.ev.push([t, sh.i, -1, 'idle', idl]); L.idle = idl; }
-  if (!out && bear > 0 && SIMT - L.shotT >= TLOG_QUIET) {               // 對得到、卻 TLOG_QUIET 秒沒開一發 ⇒ 開一段（下一發 tlgOnShot 收尾）
-    if (!L.q) { L.q = { ship: sh.i, from: +L.shotT.toFixed(1), to: null, foe: fi, d: d, dMin: d, n: [0, 0, 0, 0, 0, 0] }; G.quiet.push(L.q); }
-    for (var k = 0; k < 6; k++) L.q.n[k] += n[k];
-    L.q.d = d; if (d !== null && (L.q.dMin === null || d < L.q.dMin)) L.q.dMin = d;
-  }
+  if (!out && bear > 0) {                                               // 一直對得到（從 bearT 或上一發起算）TLOG_QUIET 秒還沒開一發 ⇒ 開一段；下一發（tlgOnShot）、對不到了、出局 ⇒ 收尾
+    if (L.bearT === null) L.bearT = SIMT;
+    var q0 = Math.max(L.bearT, L.shotT);
+    if (SIMT - q0 >= TLOG_QUIET) {
+      if (!L.q) { L.q = { ship: sh.i, from: +q0.toFixed(1), to: null, end: null, foe: fi, d: d, dMin: d, n: [0, 0, 0, 0, 0, 0] }; G.quiet.push(L.q); }
+      for (var k = 0; k < 6; k++) L.q.n[k] += n[k];
+      L.q.d = d; if (d !== null && (L.q.dMin === null || d < L.q.dMin)) L.q.dMin = d;
+    }
+  } else { L.bearT = null; if (L.q) { L.q.to = t; L.q.end = out ? 'out' : 'nobear'; L.q = null; } }
   if (SIMT - L.trkT >= TLOG_TRK - 1e-6) {
     L.trkT = SIMT;
     var F = fwd(sh.yaw), brg = null;
@@ -147,7 +151,7 @@ function tlgGuns(sh, t) {
 /** 一發出膛（rptShot）：記哪一門、什麼彈；那一艘「沒開火的那一段」到這裡收尾。 */
 function tlgOnShot(sh, g, b) {
   if (!TLOG || TLOG.off !== undefined || !tlgTeam(sh)) return;
-  var L = tlgGunShip(sh); L.shotT = SIMT; if (L.q) { L.q.to = +SIMT.toFixed(1); L.q = null; }
+  var L = tlgGunShip(sh); L.shotT = SIMT; if (L.q) { L.q.to = +SIMT.toFixed(1); L.q.end = 'shot'; L.q = null; }
   TLOG.gun.ev.push([+SIMT.toFixed(2), sh.i, sh.guns.indexOf(g), 's', b.ammo]);
 }
 /** 每一步（50_sim.js 最後）：牆每一步查；路徑、欄位變化每 TLOG_EVERY 秒掃一次。 */
