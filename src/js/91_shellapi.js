@@ -1,4 +1,4 @@
-// ───────────────────────── 外殼 API（外掛外殼頁的程式跟核心講話；2026-10-30 gura，方舷放置 idle.html） ─────────────────────────
+// ───────────────────────── 外殼 API（外掛外殼頁的程式跟核心講話；2026-10-30 gura，方舷放置） ─────────────────────────
 // admin.py shell 套出來的頁，外殼設定寫 "opt": { "api": true } ⇒ 開機時 window.BS_SHELL.core ＝ 下面這一包（核心整包是一個閉包，外殼的程式摸不到裡面的名字）。
 //   沒有 BS_SHELL（Blockside 自己的 index.html）、或外殼沒要 api ⇒ 只多一個沒人叫的函式與一個訂閱，戰局、畫面一位元不差。
 // 只包核心既有的函式：讀（船型清單、卡片、場上的船、戰局狀態）、開戰、開關（跑／停格、模擬速度、畫質、聲音、天氣）、鏡頭、事件訂閱。
@@ -78,26 +78,56 @@ function shapiMake() {
       if (!sh || sh.struck || sh.sunk) return false;
       sh.struck = true; sh.fate = why || '降旗'; note(sh, sh.fate, true); strikeColors(sh); return true;
     },
-    /** 咬一口（方舷放置的點船、技能）：那艘現在的水線（51_captain.js wlZ）往下 2 格、沿船長 fx（0～1）那一點、side（+1／−1）那一舷的外殼上，
-     *  往裡挖一個半徑 r 格的球（照 removeVoxel：進水、尋路的髒區照常記 —— 跟 __game.dig 同一套）＋水花、碎木、一聲。
-     *  亂數由外殼給（fx、side 自己抽；碎木的方向用 Math.random），⛔ 不抽戰局的亂數。回挖掉幾格（沉了、那一點沒有船殼 ⇒ 0）。 */
-    bite: function (sh, fx, side, r) {
-      if (!sh || sh.sunk || !sh.M) return 0;
-      var T = sh.T, G = sh.grid, B = T.base, s = side < 0 ? -1 : 1, x = Math.round(T.hx0 + (T.hx1 - T.hx0) * clamp(+fx || 0.5, 0.05, 0.95)), z = Math.max(1, Math.round(wlZ(sh)) - 2), y = -1;
-      for (var k = 0; k < B.sy && y < 0; k++) { var yy = s > 0 ? B.sy - 1 - k : k; if (G.get(x, yy, z) > 0) y = yy; }
-      if (y < 0) return 0;
-      r = clamp(Math.round(r || 5), 2, 24); y -= s * Math.round(r * 0.35);
-      var n = 0, got = [];
-      for (var a = -r; a <= r; a++) for (var b = -r; b <= r; b++) for (var c = -r; c <= r; c++) {
-        if (a * a + b * b + c * c > r * r) continue;
-        var col = removeVoxel(sh, x + a, y + b, z + c, true); if (col) { n++; if (got.length < 160) got.push(x + a, y + b, z + c, col); }
+    /** 畫面上那一點（client px）沿視線打到哪艘船的哪一格（照 71_input.js inPick：每艘還浮著的船打 VK.raycast，砲帶的裝甲也算；帆不算 ⇒ 穿過帆打到後面的船身）。
+     *  回 { sh, p：那一格的格心（船的格座標）, d：視線在那艘格座標裡的方向（單位向量）, t：沿視線幾公尺 }；沒打到 ⇒ null。只讀，不碰戰局。 */
+    pick: function (cx, cy) {
+      var q = CAM.inv; if (!q) return null;
+      var r = cv.getBoundingClientRect(), nx = (cx - r.left) / r.width * 2 - 1, ny = 1 - (cy - r.top) / r.height * 2;
+      var p0 = mul(M4.pt(q, nx, ny, -1), 1 / (q[3] * nx + q[7] * ny - q[11] + q[15])), d = norm(sub(mul(M4.pt(q, nx, ny, 1), 1 / (q[3] * nx + q[7] * ny + q[11] + q[15])), p0));
+      var hit = null, on = null, hd = null;
+      SHIPS.forEach(function (o) {
+        if (o.sunk || !o.grid || !o.inv) return;
+        var oL = toLocal(o, p0), dL = M4.dir(o.inv, d[0], d[1], d[2]), h = VK.raycast(o.grid, oL, dL, 3000);
+        if (o.arm) { var ha = armRay(o, oL, dL, 3000); if (ha && (!h || ha.t < h.t)) h = ha; }
+        if (h && (!hit || h.t < hit.t)) { hit = h; on = o; hd = dL; }
+      });
+      return hit ? { sh: on, p: [hit.x + 0.5, hit.y + 0.5, hit.z + 0.5], d: norm(hd), t: hit.t } : null;
+    },
+    /** 咬一口（方舷放置的點船、技能）。at ＝ [x, y, z] 格座標（pick 的 p）⇒ 中心在那一點沿 dir（pick 的 d）往裡 0.35 r；
+     *  at ＝ { fx, side, dz } ⇒ 那艘現在的水線（51_captain.js wlZ）＋dz 格（預設 −2）、沿船長 fx（0～1）、side（+1／−1；0 ＝ 對著鏡頭的那一舷）那一舷的外殼，往裡 0.35 r。
+     *  形狀：半徑 r 格的球，繞著咬的方向一圈照角度削成鋸齒（牙印）；照 removeVoxel 挖（進水、尋路的髒區照常記 —— 跟 __game.dig 同一套）＋碎木、一聲，中心在水面附近才濺水花。
+     *  亂數由外殼給（fx、side 外殼抽；碎木的方向用 Math.random），⛔ 不抽戰局的亂數。回 { n：挖掉幾格, w：中心的世界座標 }；沉了、那裡沒有船身 ⇒ null。 */
+    bite: function (sh, at, r, dir) {
+      if (!sh || sh.sunk || !sh.M) return null;
+      r = clamp(Math.round(r || 5), 2, 24);
+      var T = sh.T, G = sh.grid, B = T.base, k = r * 0.35, x, y, z, nd;
+      if (Array.isArray(at)) {
+        nd = dir && len(dir) > 1e-6 ? norm(dir) : [0, 0, -1];
+        x = Math.round(at[0] + nd[0] * k); y = Math.round(at[1] + nd[1] * k); z = Math.round(at[2] + nd[2] * k);
+      } else {
+        at = at || {};
+        var s = at.side > 0 ? 1 : at.side < 0 ? -1 : toLocal(sh, CAM.eye)[1] > toLocal(sh, shipCenter(sh))[1] ? 1 : -1;
+        x = Math.round(T.hx0 + (T.hx1 - T.hx0) * clamp(+at.fx || 0.5, 0.05, 0.95)); z = Math.max(1, Math.round(wlZ(sh) + (isFinite(at.dz) ? +at.dz : -2))); y = -1;
+        for (var j = 0; j < B.sy && y < 0; j++) { var yy = s > 0 ? B.sy - 1 - j : j; if (G.get(x, yy, z) > 0) y = yy; }
+        if (y < 0) return null;
+        nd = [0, -s, 0]; y -= s * Math.round(k);
       }
-      if (!n) return 0;
+      // 牙印：u、v 跟咬的方向 nd 垂直；半徑照繞著 nd 的角度在 0.7 r～r 之間走三角波（一圈 tn 顆牙）
+      var hv = Math.abs(nd[2]) < 0.9 ? [0, 0, 1] : [1, 0, 0], u = norm([nd[1] * hv[2] - nd[2] * hv[1], nd[2] * hv[0] - nd[0] * hv[2], nd[0] * hv[1] - nd[1] * hv[0]]);
+      var v = [nd[1] * u[2] - nd[2] * u[1], nd[2] * u[0] - nd[0] * u[2], nd[0] * u[1] - nd[1] * u[0]], tn = Math.max(7, Math.round(r * 1.3)), n = 0, got = [];
+      for (var a = -r; a <= r; a++) for (var b = -r; b <= r; b++) for (var c = -r; c <= r; c++) {
+        var q2 = a * a + b * b + c * c; if (q2 > r * r) continue;
+        var g = Math.atan2(a * v[0] + b * v[1] + c * v[2], a * u[0] + b * u[1] + c * u[2]) / 6.28319 * tn, R = r * (1 - 0.3 * Math.abs(g - Math.floor(g) - 0.5) * 2);
+        if (q2 > R * R) continue;
+        var col = removeVoxel(sh, x + a, y + b, z + c, true); if (col) { n++; if (got.length < 240) got.push(x + a, y + b, z + c, col); }
+      }
+      if (!n) return null;
       if (sh.rs && sh.rs.update) sh.rs.update();
-      var w = M4.pt(sh.M, x, y, z);
-      splash(w, true); sfx('crack', w, 0.7);
-      for (var j = 0; j < got.length; j += 4) spawnDebris(M4.pt(sh.M, got[j] + 0.5, got[j + 1] + 0.5, got[j + 2] + 0.5), add([(Math.random() - 0.5) * 6, 1 + Math.random() * 5, (Math.random() - 0.5) * 6], sh.vel), got[j + 3], 0.05 + Math.random() * 0.06, 6 + Math.random() * 6);
-      return n;
+      var w = M4.pt(sh.M, x, y, z), ow = norm(M4.dir(sh.M, -nd[0], -nd[1], -nd[2]));   // ow：咬出來的方向（世界）⇒ 碎木往那邊噴
+      splash([w[0] + ow[0] * 1.5, 0, w[2] + ow[2] * 1.5], w[1] < 4);              // 鯊魚從那一點下面的水裡跳出來
+      sfx('crack', w, 0.7);
+      for (var m = 0; m < got.length; m += 4) spawnDebris(M4.pt(sh.M, got[m] + 0.5, got[m + 1] + 0.5, got[m + 2] + 0.5), add(add(mul(ow, 3 + Math.random() * 6), [(Math.random() - 0.5) * 4, 1 + Math.random() * 4, (Math.random() - 0.5) * 4]), sh.vel), got[m + 3], 0.05 + Math.random() * 0.07, 6 + Math.random() * 6);
+      return { n: n, w: w };
     },
     out: function () { return coreOut(); },                          // 戰後狀態（57_core.js；src/CORE_API.md §2）
     add: function (o) { return coreAdd(o); }                         // 中途加船（§4）

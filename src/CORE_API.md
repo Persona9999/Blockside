@@ -95,14 +95,14 @@ coreAdd({ team: 'red', hull: 'monitor', x, z, yaw, name, pre })   // ⇒ 那艘�
 - **中途加船**：`?demo=120&seed=3&dump=1&core=1&coreadd=red:monitor@60` 跑兩次逐位元組相同（dump dbb4b847d0、core 98d6b74d24）；加船那一步既有的船沒被動到（`same: true`）；莫尼特號進場後開了 6 發、打中 3 發。
   - 那一步花多久（內建瀏覽器；無頭 Chrome 的 `performance.now` 是凍的）：有畫面 340.6 ms、無頭 314.9 ms ⇒ 大頭在模擬那一側（開船、船員、尋路），不在建網格。要無縫 ⇒ 之後拆成幾步、或趁船還在霧裡先開好。
 
-## 7. 外殼 API（`BS_SHELL.core`；2026-10-30，方舷放置 `idle.html`）
+## 7. 外殼 API（`BS_SHELL.core`；2026-10-30，方舷放置）
 
 外掛外殼（`admin.py shell`，src/README.md「外掛外殼」）的程式接在核心後面、摸不到核心閉包裡的名字。外殼設定多一欄 `opt`（原樣放進 `window.BS_SHELL.opt`）：
 
 - `opt.q`：預設網址參數（`js/00_core.js`）—— 外殼頁的網址沒帶的那幾項照它補、網址有的照網址。例 `{ "prefs": "0", "blue": "flyingfish", "red": "swallow" }` ⇒ 不讀不寫 Blockside 的設定存檔、開機只解析這兩型。
 - `opt.api: true`：開機時 `BS_SHELL.core` ＝ 一包函式（`js/91_shellapi.js`；沒要 ⇒ 不建）：
-  - 讀：`ready()`（boot:ready 了沒）、`say()`、`hulls()`（船型＋選船卡片）、`ships()`（SHIPS 本身）、`state()`、`stat(sh)`（浮力／人／砲／桅 0～1）、`isOut`、`teamDown`、`center(sh)`、`project(x, y, z)`（世界 ⇒ client px）、`out()`（§2）。
-  - 寫：`loadHull(id)`、`start(spec, { dist, field, weather, mode, staged })`（`staged` ⇒ 分段開、回 Promise）、`add(o)`（§4）、`run(on)`／`pause(on)`（叫 70_flow.js）、`speed(x)`、`cam.see／cycle／orbit／set／get`（叫 03_camera.js）、`weather(id)`、`gfx(lv)`、`sound({ sfx, amb, bgm, mute })`、`resume()`（使用者點過之後開聲音）、`strike(sh, why)`（降旗，照 32_hull.js strikeCheck 定了之後那幾步）、`bite(sh, fx, side, r)`（在現在的水線下挖一個球；亂數外殼給，⛔ 不抽戰局的亂數）。
+  - 讀：`ready()`（boot:ready 了沒）、`say()`、`hulls()`（船型＋選船卡片）、`ships()`（SHIPS 本身）、`state()`、`stat(sh)`（浮力／人／砲／桅 0～1）、`isOut`、`teamDown`、`center(sh)`、`project(x, y, z)`（世界 ⇒ client px）、`pick(cx, cy)`（畫面那一點沿視線打到哪艘船的哪一格 ⇒ `{ sh, p, d, t }`；照 71_input.js inPick，帆不算）、`out()`（§2）。
+  - 寫：`loadHull(id)`、`start(spec, { dist, field, weather, mode, staged })`（`staged` ⇒ 分段開、回 Promise）、`add(o)`（§4）、`run(on)`／`pause(on)`（叫 70_flow.js）、`speed(x)`、`cam.see／cycle／orbit／set／get`（叫 03_camera.js）、`weather(id)`、`gfx(lv)`、`sound({ sfx, amb, bgm, mute })`、`resume()`（使用者點過之後開聲音）、`strike(sh, why)`（降旗，照 32_hull.js strikeCheck 定了之後那幾步）、`bite(sh, at, r, dir)`（咬一口：`at` ＝ pick 的 `p` ⇒ 咬在那一點、`dir` ＝ pick 的 `d`；`at` ＝ `{ fx, side, dz }` ⇒ 水線附近那一舷，side 0 ＝ 對著鏡頭；邊緣是鋸齒的牙印、碎木往外噴、底下的水面濺起來；回 `{ n, w }`；亂數外殼給，⛔ 不抽戰局的亂數）。
   - 事件：`on(t, fn, order)`／`off` ＝ 00_events.js 的 evOn／evOff（rptShot 裡改那一顆的 `b.dmg`、`b.hole` ⇒ 只動那一顆）。
 - 掛鉤多一個 `tap(cx, cy, 按鍵)`（`js/71_input.js` shellCall）：點一下畫面先問外殼，回 true／沒回 ⇒ 核心不設我艦的瞄準點、不換成半舷手動。
 - ⛔ 沒有 `BS_SHELL`（Blockside 自己的 index.html）⇒ 這三處都不動：兩組無頭對拍（`?demo=60&seed=3&dump=1&headless=1&ship=flyingfish,swallow`、`?demo=90&seed=4&dump=1&headless=1&blue=pinas,flyingfish&red=labelle,swallow`）跟改之前逐位元組相同（fbbdd51f1f、5143a5969d）。
