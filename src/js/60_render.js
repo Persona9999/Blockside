@@ -339,23 +339,24 @@ function lampAt(m) { return m.pts && m.pts.wick ? m.pts.wick : m.c; }
 var LAMPS = { n: 0, p: new Float32Array(LAMP_N * 4), c: new Float32Array(LAMP_N * 4) }, LAMP_R = 6, LAMP_I = 0.5;
 /** 船殼上的燈（格子，config ships[].lamps：at ＝ 中心（格座標）、r ＝ 半徑幾格、color ＝ 發光的那種格子（rgb332 代碼）、rgb ＝ 光色）還亮著嗎：中心旁 3×3×3 還有格子。 */
 function vlampOn(sh, L) { var x = Math.floor(L.at[0]), y = Math.floor(L.at[1]), z = Math.floor(L.at[2]); for (var dz = -1; dz <= 1; dz++) for (var dy = -1; dy <= 1; dy++) for (var dx = -1; dx <= 1; dx++) if (sh.grid.get(x + dx, y + dy, z + dz)) return true; return false; }
-var VLAMP_U = { p: new Float32Array(VLAMP_N * 4), c: new Float32Array(VLAMP_N * 4) };
+var VLAMP_U = { p: new Float32Array(VLAMP_N * 4), c: new Float32Array(VLAMP_N * 4), l: new Float32Array(VLAMP_N) };   // l：每盞點了幾成（船殼上的燈 ＝ shipLit()；著火的火光 ＝ 1）
 /** 畫這艘船的船殼前：它的燈（亮著的）給著色器；ow ＝ null（斷開的那一團、陰影那一趟）⇒ 0 盞。 */
 function vlampSet(prog, sh) {
   if (!prog.u.uVGN) return;
   var Ls = sh && !sh.sunk ? sh.vlamps : null, n = Ls ? Math.min(VLAMP_N, Ls.length) : 0, p = VLAMP_U.p, c = VLAMP_U.c;
   gl.uniform1i(prog.u.uVGN, n); if (!n) return;
-  for (var i = 0, k = 0; i < n; i++, k += 4) { var L = Ls[i]; p[k] = L.at[0]; p[k + 1] = L.at[1]; p[k + 2] = L.at[2]; p[k + 3] = L.r; c[k] = L.rgb[0]; c[k + 1] = L.rgb[1]; c[k + 2] = L.rgb[2]; c[k + 3] = L.color; }   // 逐個寫（⛔ 每盞兩個暫時的陣列）
-  gl.uniform4fv(prog.u.uVG, VLAMP_U.p); gl.uniform4fv(prog.u.uVGC, VLAMP_U.c); gl.uniform1f(prog.u.uVGK, 0.85 + 0.1 * Math.sin(SIMT * 1.3));
+  for (var i = 0, k = 0, lit = shipLit(); i < n; i++, k += 4) { var L = Ls[i]; p[k] = L.at[0]; p[k + 1] = L.at[1]; p[k + 2] = L.at[2]; p[k + 3] = L.r; c[k] = L.rgb[0]; c[k + 1] = L.rgb[1]; c[k + 2] = L.rgb[2]; c[k + 3] = L.color; VLAMP_U.l[i] = i < sh.vlampN ? lit : 1; }   // 逐個寫（⛔ 每盞兩個暫時的陣列）
+  gl.uniform4fv(prog.u.uVG, VLAMP_U.p); gl.uniform4fv(prog.u.uVGC, VLAMP_U.c); gl.uniform1f(prog.u.uVGK, 0.85 + 0.1 * Math.sin(SIMT * 1.3)); if (prog.u.uVGL) gl.uniform1fv(prog.u.uVGL, VLAMP_U.l);
 }
 function lampsUpdate() {
-  var L = [], E = CAM.eye;
+  var L = [], E = CAM.eye, lit = shipLit();                          // lit：船燈點了幾成（08_weather.js；白天 0 ⇒ 船燈不佔點光源的名額）
   SHIPS.forEach(function (sh) {
     if (sh.sink > 40) return;
-    sh.vlamps = (sh.T.lamps || []).filter(function (V) { return vlampOn(sh, V); });   // 船殼上的燈：被打掉 ⇒ 熄（發光、點光源、光暈一起）
-    sh.vlamps.forEach(function (V, j) { var w = M4.pt(sh.M, V.at[0], V.at[1], V.at[2]); L.push({ w: w, k: 0.9 + 0.1 * Math.sin(SIMT * 1.3 + j), rgb: V.rgb, d: (w[0] - E[0]) * (w[0] - E[0]) + (w[1] - E[1]) * (w[1] - E[1]) + (w[2] - E[2]) * (w[2] - E[2]) }); });
+    sh.vlamps = lit ? (sh.T.lamps || []).filter(function (V) { return vlampOn(sh, V); }) : [];   // 船殼上的燈：被打掉 ⇒ 熄（發光、點光源、光暈一起）
+    sh.vlampN = sh.vlamps.length;                                     // 前 vlampN 盞是船殼上的燈（照 lit），後面 burnLamps 加的火光照舊全亮
+    sh.vlamps.forEach(function (V, j) { var w = M4.pt(sh.M, V.at[0], V.at[1], V.at[2]); L.push({ w: w, k: (0.9 + 0.1 * Math.sin(SIMT * 1.3 + j)) * lit, rgb: V.rgb, d: (w[0] - E[0]) * (w[0] - E[0]) + (w[1] - E[1]) * (w[1] - E[1]) + (w[2] - E[2]) * (w[2] - E[2]) }); });
     if (sh.burn) burnLamps(sh, L, E);                                 // 著火（59_burnfx.js）：最大的幾個火場也當成船殼上的燈（燒著的格發光、光暈）＋點光源；燒著的帆一盞
-    sh.models.forEach(function (m) { if (!m.alive || !isLamp(m)) return; var q = lampAt(m), w = M4.pt(sh.M, q[0], q[1], q[2]); L.push({ w: w, k: lanternK(m), d: (w[0] - E[0]) * (w[0] - E[0]) + (w[1] - E[1]) * (w[1] - E[1]) + (w[2] - E[2]) * (w[2] - E[2]) }); });
+    if (lit) sh.models.forEach(function (m) { if (!m.alive || !isLamp(m)) return; var q = lampAt(m), w = M4.pt(sh.M, q[0], q[1], q[2]); L.push({ w: w, k: lampGlow(m), d: (w[0] - E[0]) * (w[0] - E[0]) + (w[1] - E[1]) * (w[1] - E[1]) + (w[2] - E[2]) * (w[2] - E[2]) }); });
   });
   var pl = fpLamp(); if (pl) L.push(pl);                               // 第一人稱的玩家自帶一盞燈（81_fps.js fpLamp；d −1 ⇒ 排第一個，一定有名額）
   L.sort(function (a, b) { return a.d - b.d; });
@@ -368,14 +369,17 @@ function lampsUpdate() {
 }
 /** 燈籠／提燈：亮度 0.8–1 慢慢晃，照模擬時間與燈的編號（⛔ 不抽 rnd()：只給人看）；打飛了就熄。 */
 function lanternK(m) { var t = SIMT * 1.7 + m.k * 2.39; return 0.8 + 0.1 * Math.sin(t) + 0.1 * Math.sin(t * 2.71 + 1.3); }
+/** 燈罩發光（uGlow）、點光源用的亮度：晃動 × 點了幾成（shipLit；沒開世界時間 ⇒ × 1，一位元不變）。 */
+function lampGlow(m) { return lanternK(m) * shipLit(); }
 function lanternHalo(push) {
+  var lit = shipLit();                                                // 船燈點了幾成：光暈整個乘（白天 0 ⇒ 不畫）；著火的火光照舊
   SHIPS.forEach(function (sh) {
     if (sh.sink > 40) return;
-    (sh.vlamps || []).forEach(function (V, j) { var k = 0.9 + 0.1 * Math.sin(SIMT * 1.3 + j); push(M4.pt(sh.M, V.at[0], V.at[1], V.at[2]), V.r * S * (2.4 + 0.4 * k) * (V.ha || 1), V.rgb, 0.18 + 0.2 * k * (1.6 - wxLum())); });   // 船殼上的燈的光暈（照它的光色）
-    sh.models.forEach(function (m) {
+    (sh.vlamps || []).forEach(function (V, j) { var k = 0.9 + 0.1 * Math.sin(SIMT * 1.3 + j), f = j < sh.vlampN ? lit : 1; push(M4.pt(sh.M, V.at[0], V.at[1], V.at[2]), V.r * S * (2.4 + 0.4 * k) * (V.ha || 1), V.rgb, (0.18 + 0.2 * k * (1.6 - wxLum())) * f); });   // 船殼上的燈的光暈（照它的光色）
+    if (lit) sh.models.forEach(function (m) {
       if (!m.alive || !isLamp(m)) return;
       var k = lanternK(m), sz = Math.max(m.bb[3] - m.bb[0], m.bb[5] - m.bb[2]) * S, q = lampAt(m);   // 燈多大（公尺）；光暈在火焰那一點
-      push(M4.pt(sh.M, q[0], q[1], q[2]), sz * (2.4 + 0.4 * k), [1, 0.6, 0.2], 0.18 + 0.2 * k * (1.6 - wxLum()));   // 天越暗越亮（暴風雨的 lum 比晴天低）
+      push(M4.pt(sh.M, q[0], q[1], q[2]), sz * (2.4 + 0.4 * k), [1, 0.6, 0.2], (0.18 + 0.2 * k * (1.6 - wxLum())) * lit);   // 天越暗越亮（暴風雨的 lum 比晴天低）
     });
   });
 }
@@ -1049,6 +1053,7 @@ function mainOverlay(fr) {
   flDraw();                                                              // 艙內的水面（33_flood.js，粒子模式）
   glsDraw();                                                             // 玻璃（15_smooth.js；TASK-0753）：半透明、不寫深度 ⇒ 不透明的、海、艙內的水都畫完才畫
   townGlsDraw();                                                         // 城裡建築的玻璃（63_towns.js；同上那一套，近那一級才畫）
+  shipWinDraw();                                                         // 船窗夜裡亮（63_shipwin.js；同上，白天、沒開世界時間不畫）
   townGlowDraw();                                                        // 城裡夜裡的燈：亮窗、光點（63_towns.js；加法、不寫深度 ⇒ 同上；白天不畫）
   inspHiDraw();                                                          // 船隻觀察勾了的部件高亮（86_inspect.js；隔著船殼看得到 ⇒ 透明的都畫完才畫；沒勾 ⇒ 一行就回）
   // 粒子＋砲彈＋瞄準點

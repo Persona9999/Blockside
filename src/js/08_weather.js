@@ -145,6 +145,10 @@ function todWin(h) {
 /** 這一格的陽光、亮度（天氣 × 世界時間；沒開世界時間 ⇒ 就是天氣的）。 */
 function wxSun() { return WX.sun * TOD_SUNK; }
 function wxLum() { return WX.lum * TOD_LUMK; }
+// 船燈跟城裡的燈同時點、同時熄（TASK-1103；Tim 2026-10-29「交戰也點燈」）：燈籠、提燈、船殼上的燈的發光、光暈、點光源都乘 shipLit()。
+//   沒開世界時間（對戰、沙盒）⇒ 1：照舊整天亮、畫面一位元不變；?shiplamps=0 ⇒ 也是 1（量效能、看差別的對照組）。著火的火光、第一人稱的燈不乘。
+var SHIP_LAMP_TOD = Q.get('shiplamps') !== '0';
+function shipLit() { return TOD0 === null || !SHIP_LAMP_TOD ? 1 : TOD_LIT; }
 // 世界時間的流速（Blocksail 城鎮模式；Tim 2026-10-26「停靠在城鎮時 希望上方面板保留跟外側一樣的時間流速選項 且時間流速選項多一個1秒=1秒」
 //   「城鎮模擬加速時 不加速物理模擬(主要是想看船進出港&日夜變化)」）：外面那一頁的時間面板照 'clock' 訊息給倍率 WCLK.rate（世界秒／模擬秒；暫停 ⇒ 0）。
 //   世界時間 ＝ SIMT ＋ WCLK.x（多走、少走的秒數）；物理照舊照 SIMT 走（1 倍）。太陽、天色、點燈、往來的船（58_traffic.js）照世界時間。

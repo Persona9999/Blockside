@@ -384,7 +384,7 @@ function trafficAhead(sh, P) {
   return [P[i - 1][0] + (P[i][0] - P[i - 1][0]) * k, P[i - 1][1] + (P[i][1] - P[i - 1][1]) * k];
 }
 /** 放掉一艘的網格（同 70_flow.js 清場）。 */
-function trafficFree(sh) { if (!sh) return; if (sh.rs) sh.rs.dispose(); armDispose(sh); glsFree(sh); }
+function trafficFree(sh) { if (!sh) return; if (sh.rs) sh.rs.dispose(); armDispose(sh); glsFree(sh); shipWinFree(sh); }
 /** 收一艘（往來的船、換回城裡的堡壘 63_towns.js townFortTick）：從 SHIPS 拿掉、後面的序號往前補、瞄著它的放掉、命令與選敵重想。回收了沒有。
  *  記序號的都跟著補：砲彈 b.owner、黏在船上的碎木 D.ship（它身上的直接收掉）、排好的分段齊射 EVENTS e.sh（它的直接拿掉）、旗號 SIGNAL 的集火與排頭。
  *  ⛔ 不補 ⇒ 後面那幾艘的砲彈記到前一艘頭上；黏在它身上的碎木照序號讀到不存在的船 ⇒ 畫面那一格丟例外（60_render.js mainOpaque，堡壘被打過再換回量到的）。

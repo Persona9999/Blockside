@@ -189,8 +189,8 @@ function smCpu(T, g, rk, pg, o) {
 // ⛔ 只改畫面：打中、進水、重量照舊看格子（玻璃的比重、硬度在材質表）。沒有玻璃的船 ⇒ T.glsG ＝ null，整段不走。
 /** 打掉／換色 (x, y, z)：碰到玻璃（自己或 6 鄰）⇒ 這艘的玻璃網格下一格重建。 */
 function glsTouch(sh, x, y, z) {
-  var G = sh.T.glsG; if (!G || sh.glsD) return;
-  if (G.get(x, y, z) || G.get(x - 1, y, z) || G.get(x + 1, y, z) || G.get(x, y - 1, z) || G.get(x, y + 1, z) || G.get(x, y, z - 1) || G.get(x, y, z + 1)) sh.glsD = true;
+  var G = sh.T.glsG; if (!G || (sh.glsD && sh.winD)) return;
+  if (G.get(x, y, z) || G.get(x - 1, y, z) || G.get(x + 1, y, z) || G.get(x, y - 1, z) || G.get(x, y + 1, z) || G.get(x, y, z - 1) || G.get(x, y, z + 1)) sh.glsD = sh.winD = true;   // winD：船窗也重建（63_shipwin.js：打掉的那扇不亮）
 }
 /** 這艘的玻璃網格（照 sh.grid 現在的格子）⇒ sh.gls ＝ { vao, vb, n }；沒有面 ⇒ n ＝ 0。 */
 function glsBuild(sh) {
