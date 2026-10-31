@@ -2649,7 +2649,7 @@ function townStat(at) {
       smoke: T.smk ? T.smk.L.map(function (o) { return { k: o.q.k, lot: o.q.lot, w: o.w.map(function (v) { return +v.toFixed(1); }) }; }) : null,   // 建築的煙囪（78_funnel.js townSmokePts；TASK-0990）
       byModel: u, lights: tl, center: [+(T.ox - BED.ax).toFixed(1), +(T.oy - BED.az).toFixed(1)] };
   }), kit: !!TOWNS.kit, kitPart: !!(TOWNS.kit && TOWNS.kit.part), kitN: S.kitN, kitMs: S.kitMs, skelN: S.skelN, skelMs: S.skelMs, kitMesh: { baked: S.meshBaked, live: S.meshLive, check: S.meshCheck, vk: townVkFp() }, kitTris: S.kitTris, skip: S.skip, gls: S.gls || 0, lines: S.lines || 0, under: S.under || {}, joins: S.joins || {}, wallJx: S.wallJx || {}, drawn: { full: S.d0, low: S.d1, card: S.d2, shells: S.d3, plinth: S.plinth, flags: S.flags || 0, folk: S.folk || 0, fauna: S.fauna || 0, work: S.workDrawn || 0, landmarks: S.lm || 0, fields: S.fields || 0 }, folk: townFolkSum(), fauna: townFaunaSum(), tris: S.tris, ms: { draw: S.drawMs, fields: S.fieldMs || 0, flags: +(S.flagMs || 0).toFixed(3), bin: S.binMs, clr: +S.clrMs.toFixed(1), prep: S.prepMs }, clrChunks: S.clrN, edit: S.edit || null, smoke: S.smoke || null,
-    night: { lit: +TL.k.toFixed(3), win: +TOD_WIN.toFixed(3), grid: TL.stat.inGrid, range: TL.stat.range || 0, full: TL.stat.full, over: TL.stat.over, gridMs: TL.stat.gridMs, cards: TL.stat.cards, glow: TL.stat.glow, glowMs: TL.stat.glowMs } };
+    night: { lit: +TL.k.toFixed(3), win: +TOD_WIN.toFixed(3), grid: TL.stat.inGrid, ships: TL.stat.ships || 0, range: TL.stat.range || 0, full: TL.stat.full, over: TL.stat.over, gridMs: TL.stat.gridMs, cards: TL.stat.cards, glow: TL.stat.glow, glowMs: TL.stat.glowMs } };
   var group = typeof at === 'string' && at.indexOf('street:') === 0 ? at.slice(7) : null;
   if ((at === 'street' || at === 'walk' || group) && TOWNS.list[0] && TOWNS.kit && TOWNS.kit.folk) { o.street = townFolkStreet(TOWNS.list[0], TOWNS.kit.folk, at === 'walk', group); }   // street:workers：只排一組，不把39位擠在同一段。
   else if (typeof at === 'string' && (at === 'fauna' || at.indexOf('fauna:') === 0) && TOWNS.list[0] && TOWNS.kit && TOWNS.kit.fauna) { o.fauna = townFaunaCam(TOWNS.list[0], TOWNS.kit.fauna, at.slice(6) || null); }   // 動物的機位（63_townfauna.js townFaunaCam；'fauna:<物種>' 挑那一種：先找圈、沒有找城外那一群）
@@ -3089,29 +3089,32 @@ function townLampSet(u) {
 /** 分組表（townDraw 每一格叫；點燈了、鏡頭動了 TL_REBIN 公尺、燈換過才重排）。 */
 function townLampGrid(eye) {
   if (!TL.k || !TL.gTex) return;
+  var sig = townShipSig(); if (sig !== TL.shipSig) { TL.shipSig = sig; TL.ver++; }   // 停港的帶燈船換了（繫上、離開泊位）⇒ 重排
   var N = TL_GRIDS[GFX.tlamp] || TL_GRIDS[0], E = TL.eye; if (E && TL.gv === TL.ver && TL.gn === N && Math.abs(E[0] - eye[0]) + Math.abs(E[2] - eye[2]) < TL_REBIN * N / 64) return;   // 範圍大 ⇒ 重排的距離跟著放大
   var t0 = performance.now(), C = TL_CELL, x0 = Math.floor(eye[0] / C) * C - N * C / 2, z0 = Math.floor(eye[2] / C) * C - N * C / 2, X1 = x0 + N * C, Z1 = z0 + N * C;
   var G = TL.g, GD = TL.gd, D = TL.d, n = 0, full = 0, over = 0;
   G.fill(0, 0, N * N * TL_SLOT);
+  function put(x, y, z, R, cr, cg, cb, ph) {
+    if (x + R < x0 || x - R > X1 || z + R < z0 || z - R > Z1) return;
+    if (n >= TL_MAX) { over++; return; }
+    var o = n * 8, id = ++n;
+    D[o] = x; D[o + 1] = y; D[o + 2] = z; D[o + 3] = R; D[o + 4] = cr; D[o + 5] = cg; D[o + 6] = cb; D[o + 7] = ph;
+    var i0 = Math.max(0, Math.floor((x - R - x0) / C)), i1 = Math.min(N - 1, Math.floor((x + R - x0) / C)), j0 = Math.max(0, Math.floor((z - R - z0) / C)), j1 = Math.min(N - 1, Math.floor((z + R - z0) / C));
+    for (var j = j0; j <= j1; j++) for (var ii = i0; ii <= i1; ii++) {
+      var ex = Math.max(x0 + ii * C - x, 0, x - (x0 + (ii + 1) * C)), ez = Math.max(z0 + j * C - z, 0, z - (z0 + (j + 1) * C));
+      if (ex * ex + ez * ez > R * R) continue;                           // 圓碰不到這一格
+      var c = (j * N + ii) * TL_SLOT, cx = x0 + (ii + 0.5) * C - x, cz = z0 + (j + 0.5) * C - z, d2 = cx * cx + cz * cz, s = -1, far = -1;
+      for (var k = 0; k < TL_SLOT; k++) { if (!G[c + k]) { s = k; break; } if (far < 0 || GD[c + k] > GD[c + far]) far = k; }
+      if (s < 0) { full++; if (GD[c + far] <= d2) continue; s = far; }   // 滿了 ⇒ 換掉離格心最遠的那一盞（新的比較近才換）
+      G[c + s] = id; GD[c + s] = d2;
+    }
+  }
   TOWNS.list.forEach(function (T) {
     var L = T.tl && T.tl.lamps; if (!L) return;
-    for (var i = 0; i < L.length; i += 5) {
-      var x = L[i], y = L[i + 1], z = L[i + 2], P = TL_TYPE[L[i + 3]], R = P.r;
-      if (x + R < x0 || x - R > X1 || z + R < z0 || z - R > Z1) continue;
-      if (n >= TL_MAX) { over++; continue; }
-      var o = n * 8, id = ++n;
-      D[o] = x; D[o + 1] = y; D[o + 2] = z; D[o + 3] = R; D[o + 4] = P.c[0] * P.k; D[o + 5] = P.c[1] * P.k; D[o + 6] = P.c[2] * P.k; D[o + 7] = L[i + 4];
-      var i0 = Math.max(0, Math.floor((x - R - x0) / C)), i1 = Math.min(N - 1, Math.floor((x + R - x0) / C)), j0 = Math.max(0, Math.floor((z - R - z0) / C)), j1 = Math.min(N - 1, Math.floor((z + R - z0) / C));
-      for (var j = j0; j <= j1; j++) for (var ii = i0; ii <= i1; ii++) {
-        var ex = Math.max(x0 + ii * C - x, 0, x - (x0 + (ii + 1) * C)), ez = Math.max(z0 + j * C - z, 0, z - (z0 + (j + 1) * C));
-        if (ex * ex + ez * ez > R * R) continue;                         // 圓碰不到這一格
-        var c = (j * N + ii) * TL_SLOT, cx = x0 + (ii + 0.5) * C - x, cz = z0 + (j + 0.5) * C - z, d2 = cx * cx + cz * cz, s = -1, far = -1;
-        for (var k = 0; k < TL_SLOT; k++) { if (!G[c + k]) { s = k; break; } if (far < 0 || GD[c + k] > GD[c + far]) far = k; }
-        if (s < 0) { full++; if (GD[c + far] <= d2) continue; s = far; }   // 滿了 ⇒ 換掉離格心最遠的那一盞（新的比較近才換）
-        G[c + s] = id; GD[c + s] = d2;
-      }
-    }
+    for (var i = 0; i < L.length; i += 5) { var P = TL_TYPE[L[i + 3]]; put(L[i], L[i + 1], L[i + 2], P.r, P.c[0] * P.k, P.c[1] * P.k, P.c[2] * P.k, L[i + 4]); }
   });
+  var S = townShipLamps(); TL.stat.ships = S.length / 8;
+  for (var q = 0; q < S.length; q += 8) put(S[q], S[q + 1], S[q + 2], S[q + 3], S[q + 4], S[q + 5], S[q + 6], S[q + 7]);
   gl.activeTexture(gl.TEXTURE13); gl.bindTexture(gl.TEXTURE_2D, TL.gTex); gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, N * 2, N, gl.RGBA_INTEGER, gl.UNSIGNED_SHORT, G.subarray(0, N * N * TL_SLOT));
   var rows = Math.ceil(n * 2 / 64);
   if (rows) { gl.activeTexture(gl.TEXTURE14); gl.bindTexture(gl.TEXTURE_2D, TL.dTex); gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, 64, rows, gl.RGBA, gl.FLOAT, D.subarray(0, rows * 256)); }

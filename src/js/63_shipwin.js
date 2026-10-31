@@ -213,3 +213,31 @@ function shipWinStat() {
   });
   return out;
 }
+// ── 停港的船燈寫進城鎮光源格（TASK-1103：碼頭的燈照得到船身、船的燈照得到棧橋與地面）──
+//   繫在泊位上的船（sh.moor 有位置：停港的往來船、停好的我艦）的燈籠、提燈、船殼上的燈 ⇒ 63_towns.js townLampGrid 一起排：照多遠同城裡的燈籠（TL_TYPE[0].r）、
+//     亮度照船燈自己的（LAMP_I ×（1.6 − 亮度），同 lampsUpdate；城裡燈籠的 2.0 照船身 ⇒ 風暴角號四盞綠燈把整個船尾照成一團螢光綠，2026-10-31 截圖），光色照它自己的；這幾盞就不再進船自己的 8 盞點光源（lampsUpdate 看 sh.tlIn：不然自己的船身照兩次）。
+//   船殼、模型的著色器吃城鎮光源格（01_gl.js voxFS、TRI_FS 的 townLamp）⇒ 碼頭、街燈照到船；白天、沒有城 ⇒ 一進函式就回 0（戰鬥模式畫面不變）。
+//   停港的船換了（繫上、離開、燈被打掉）⇒ 簽名換了 ⇒ 光源格重排。位置照重排那一刻（停港的船只晃幾公分）。
+var SHIP_TL = Q.get('shiptl') !== '0';                              // ?shiptl=0 ⇒ 互照整段關掉（船燈不進光源格、船的著色器不吃它；對照組）
+function townShipMoored(sh) { return sh.moor && sh.moor.x != null && !sh.sunk && sh.sink <= 40; }
+/** 停港的帶燈船的簽名（哪幾艘、各亮著幾盞）。 */
+function townShipSig() {
+  var s = ''; if (!SHIP_TL) return s;
+  s += Math.round((1.6 - wxLum()) * 20) + '|';                         // 亮度變了（入夜、天氣）⇒ 也重排
+  SHIPS.forEach(function (sh) {
+    if (!townShipMoored(sh)) return;
+    var n = (sh.vlampN || 0); sh.models.forEach(function (m) { if (m.alive && isLamp(m)) n++; });
+    if (n) s += shipWinKey(sh) + ':' + n + ',';
+  });
+  return s;
+}
+/** 停港的船燈 ⇒ [x, y, z, 照多遠, r, g, b, 相位, …]（世界座標）；順手標 sh.tlIn。 */
+function townShipLamps() {
+  var out = [], R = TL_TYPE[0].r, I = LAMP_I * (1.6 - wxLum()), C = [1, 0.62, 0.25];   // C：模型的燈的暖橘（同 lampsUpdate）
+  SHIPS.forEach(function (sh) {
+    sh.tlIn = false; if (!SHIP_TL || !townShipMoored(sh)) return;
+    (sh.T.lamps || []).forEach(function (V, j) { if (!vlampOn(sh, V)) return; var w = M4.pt(sh.M, V.at[0], V.at[1], V.at[2]); out.push(w[0], w[1], w[2], R, V.rgb[0] * I, V.rgb[1] * I, V.rgb[2] * I, j * 1.7); sh.tlIn = true; });
+    sh.models.forEach(function (m) { if (!m.alive || !isLamp(m)) return; var q = lampAt(m), w = M4.pt(sh.M, q[0], q[1], q[2]); out.push(w[0], w[1], w[2], R, C[0] * I, C[1] * I, C[2] * I, m.k * 2.39); sh.tlIn = true; });
+  });
+  return out;
+}

@@ -354,9 +354,10 @@ function lampsUpdate() {
     if (sh.sink > 40) return;
     sh.vlamps = lit ? (sh.T.lamps || []).filter(function (V) { return vlampOn(sh, V); }) : [];   // 船殼上的燈：被打掉 ⇒ 熄（發光、點光源、光暈一起）
     sh.vlampN = sh.vlamps.length;                                     // 前 vlampN 盞是船殼上的燈（照 lit），後面 burnLamps 加的火光照舊全亮
-    sh.vlamps.forEach(function (V, j) { var w = M4.pt(sh.M, V.at[0], V.at[1], V.at[2]); L.push({ w: w, k: (0.9 + 0.1 * Math.sin(SIMT * 1.3 + j)) * lit, rgb: V.rgb, d: (w[0] - E[0]) * (w[0] - E[0]) + (w[1] - E[1]) * (w[1] - E[1]) + (w[2] - E[2]) * (w[2] - E[2]) }); });
+    var own = !(sh.tlIn && TL.k > 0);                                // 停港的船燈寫進了城鎮光源格（63_shipwin.js townShipLamps）⇒ 不再進這 8 盞（不然自己的船身照兩次）
+    if (own) sh.vlamps.forEach(function (V, j) { var w = M4.pt(sh.M, V.at[0], V.at[1], V.at[2]); L.push({ w: w, k: (0.9 + 0.1 * Math.sin(SIMT * 1.3 + j)) * lit, rgb: V.rgb, d: (w[0] - E[0]) * (w[0] - E[0]) + (w[1] - E[1]) * (w[1] - E[1]) + (w[2] - E[2]) * (w[2] - E[2]) }); });
     if (sh.burn) burnLamps(sh, L, E);                                 // 著火（59_burnfx.js）：最大的幾個火場也當成船殼上的燈（燒著的格發光、光暈）＋點光源；燒著的帆一盞
-    if (lit) sh.models.forEach(function (m) { if (!m.alive || !isLamp(m)) return; var q = lampAt(m), w = M4.pt(sh.M, q[0], q[1], q[2]); L.push({ w: w, k: lampGlow(m), d: (w[0] - E[0]) * (w[0] - E[0]) + (w[1] - E[1]) * (w[1] - E[1]) + (w[2] - E[2]) * (w[2] - E[2]) }); });
+    if (lit && own) sh.models.forEach(function (m) { if (!m.alive || !isLamp(m)) return; var q = lampAt(m), w = M4.pt(sh.M, q[0], q[1], q[2]); L.push({ w: w, k: lampGlow(m), d: (w[0] - E[0]) * (w[0] - E[0]) + (w[1] - E[1]) * (w[1] - E[1]) + (w[2] - E[2]) * (w[2] - E[2]) }); });
   });
   var pl = fpLamp(); if (pl) L.push(pl);                               // 第一人稱的玩家自帶一盞燈（81_fps.js fpLamp；d −1 ⇒ 排第一個，一定有名額）
   L.sort(function (a, b) { return a.d - b.d; });

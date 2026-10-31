@@ -299,7 +299,7 @@ function programs() {
     '#version 300 es\nlayout(location=0) in vec3 aP; layout(location=1) in vec3 aN; layout(location=2) in vec3 aC; layout(location=3) in vec3 aM; uniform mat4 uModel,uVP; out vec3 vN; out vec3 vW; out vec3 vC; out vec3 vM;\n' +
     'void main(){ vec4 w=uModel*vec4(aP,1.0); vW=w.xyz; vN=mat3(uModel)*aN; vC=aC; vM=aM; gl_Position=uVP*w; }\n';
   TRI_FS =
-    '#version 300 es\nprecision highp float;\n' + SEA_GLSL + SHADOW_GLSL + CUT_GLSL + LAMP_GLSL + 'in vec3 vN; in vec3 vW; in vec3 vC; in vec3 vM; uniform vec3 uSun,uEye,uFog,uSky,uGround; uniform float uFogD,uLit,uGlow,uGls; uniform mat4 uCutInv; uniform highp sampler2DArray uMdlT; out vec4 o;\n' +
+    '#version 300 es\nprecision highp float;\n' + SEA_GLSL + SHADOW_GLSL + CUT_GLSL + LAMP_GLSL + (SHIP_TL ? TLAMP_GLSL : '') + 'in vec3 vN; in vec3 vW; in vec3 vC; in vec3 vM; uniform vec3 uSun,uEye,uFog,uSky,uGround; uniform float uFogD,uLit,uGlow,uGls; uniform mat4 uCutInv; uniform highp sampler2DArray uMdlT; out vec4 o;\n' +
     // 外殼式的貼圖（TASK-0820；62_shell.js）：頂點色欄 (−1−u, v, 層) ⇒ 照第 18 號的貼圖陣列取色（textureLod：分支裡不用隱含導數；沒有 mipmap）；其他照頂點色（bc ＝ vC ⇒ 畫面不變）
     'void main(){ if(vW.y<uClip) discard; if(uCut.w>0.5 && cutOut((uCutInv*vec4(vW,1.0)).xyz)) discard; vec3 bc=vC; if(vC.x<-0.5) bc=textureLod(uMdlT,vec3(-vC.x-1.0,vC.y,vC.z),0.0).rgb; vec3 n=normalize(vN); float sd=dot(n,uSun), d=abs(sd); vec3 col=bc; float ga=1.0;\n' +
     ' if(uLit>0.5){ float sk=shadowK(vW,(sd<0.0?-n:n)*(3.0-2.0*d)); d*=sk; col=bc*(mix(uGround,uSky,0.6)*0.65+vec3(1.0,0.96,0.88)*d*0.7);\n' +
@@ -312,7 +312,7 @@ function programs() {
     '  if(uGls>0.5){ vec3 v=normalize(uEye-vW), gn=dot(n,v)<0.0?-n:n, r=reflect(-v,gn); float ro=clamp(vM.y,0.02,1.0), fr=0.04+0.96*pow(1.0-max(dot(gn,v),0.0),5.0), rk=mix(0.12,1.0,fr)*(1.0-0.7*ro);\n' +
     '   vec3 env=mix(uFog*0.5,mix(uFog,uSky,0.55)*1.2,smoothstep(-0.2,0.35,r.y)); float hs=pow(max(dot(gn,normalize(uSun+v)),0.0),mix(400.0,8.0,ro))*step(0.0,dot(gn,uSun))*sk*(2.0-1.5*ro);\n' +
     '   col=mix(col,env,rk)+vec3(1.0,0.96,0.88)*hs; ga=clamp(1.0-vM.z*(1.0-rk)+hs,0.0,1.0); } }\n' +
-    ' if(uLN>0) col+=bc*lampK(vW,n);\n' +                                 // 點光源
+    ' if(uLN>0) col+=bc*lampK(vW,n);' + (SHIP_TL ? ' col+=bc*townLamp(vW,n);' : '') + '\n' +          // 點光源；城鎮光源格（63_towns.js TLAMP_GLSL：碼頭、街燈、停港的船燈照到船；白天、沒有城 ⇒ 一進函式就回 0）
     // 燈籠（meta kind=lantern；drawModels 設 uGlow）：只有琥珀色的燈罩發光（色 245 ＝ 1, .71, .33）—— 金框（248，藍 0）、暗紅（128）照常受光
     ' if(uGlow>0.0) col=mix(col,bc*1.2+vec3(0.3,0.14,0.0),uGlow*step(0.9,bc.r)*step(0.2,bc.b)*step(bc.b,0.5));\n' +
     ' float fd=length(vW-uEye); o=vec4(mix(col,uFog,1.0-exp(-fd*uFogD)),ga); }\n';
@@ -548,7 +548,7 @@ function setCommon(p) {
 function voxFS() {
   var s = VK.VOXEL_FS, a = 'out vec4 o;', b = 'if(vW.y<uWater){ float dd=clamp((uWater-vW.y)*0.12,0.0,1.0); c=mix(c,vec3(0.04,0.18,0.22),0.35+0.55*dd); }', c = 'float di=max(dot(n,uSun),0.0);', d = 'void main(){', e = 'vec3 c=base*(amb*0.62+vec3(1.0,0.96,0.88)*di*0.78);';
   if ([a, b, c, d, e].some(function (x) { return s.indexOf(x) < 0; })) { console.warn('VoxelKit 的體素著色器改過了：船殼不跟著浪著色、不收陰影、不吃點光源'); return s; }
-  return s.replace(e, e + ' if(uLN>0) c+=base*lampK(vW,n); if(uVGN>0){ for(int i=0;i<' + VLAMP_N + ';i++){ if(i>=uVGN) break; if(abs(float(vC)-uVGC[i].w)<0.5 && distance(vL,uVG[i].xyz)<uVG[i].w) c=mix(c,base*0.35+uVGC[i].rgb*1.15,uVGK*uVGL[i]); } }').replace(a, SEA_GLSL + SHADOW_GLSL + CUT_GLSL + LAMP_GLSL + a).replace(b, '')
+  return s.replace(e, e + ' if(uLN>0) c+=base*lampK(vW,n);' + (SHIP_TL ? ' c+=base*townLamp(vW,n);' : '') + ' if(uVGN>0){ for(int i=0;i<' + VLAMP_N + ';i++){ if(i>=uVGN) break; if(abs(float(vC)-uVGC[i].w)<0.5 && distance(vL,uVG[i].xyz)<uVG[i].w) c=mix(c,base*0.35+uVGC[i].rgb*1.15,uVGK*uVGL[i]); } }').replace(a, SEA_GLSL + SHADOW_GLSL + CUT_GLSL + LAMP_GLSL + (SHIP_TL ? TLAMP_GLSL : '') + a).replace(b, '')
     .replace(c, 'float di=max(dot(n,uSun),0.0); if(di>0.0) di*=shadowK(vW,n*(3.0-2.0*di));').replace(d, d + ' if(vW.y<uClip) discard; if(cutOut((uCutL*vec4(vL,1.0)).xyz)) discard;')   // cutOut：剖面與隱藏甲板（vL ＝ 格座標）
     .replace(a, 'uniform mat4 uCutL;\n' + a);   // uCutL：畫的那份格子 → 船的格座標（船殼 ＝ 單位矩陣，cutSet 設；砲帶的裝甲 ＝ 它轉過的那個，24_armor.js armDraw）⇒ 轉過的裝甲照船的座標切
 }
