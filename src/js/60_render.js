@@ -1028,6 +1028,7 @@ function mainWater(fr) {
   var sw = SEA_DBG.sw || [SEA_EDGE[1], SEA_EDGE[2], SEA_EDGE[3], SEA_SURF[2]];   // 岸線細碎、沖刷、碎浪的高度、碎浪那一圈多寬（__game.seaDbg 的 sw 可以覆寫）
   if (!bedShoreOn()) sw = [sw[0], 0, 0, 0];                              // 離岸距離場還沒到（63_bed_gl.js BEDSHW 在 Worker 算）⇒ 碎浪、沖刷先關（⛔ 照空的貼圖 d ＝ 0 ⇒ 每一處都當岸邊、低地整片被沖刷淹）
   gl.uniform4f(P.water.u.uSw, sw[0], sw[1], sw[2], sw[3]);
+  var rg = SEA_DBG.rag || SEA_RAG; gl.uniform3f(P.water.u.uRag, rg[0], rg[1], rg[2] || 0);   // 岸線曲折（01_gl.js edgeN）：橫向幾公尺、垂直上限、沖刷沿岸高低差（__game.seaDbg 的 rag 可以覆寫）
   bedWaterU(P.water.u);                                                  // 岸邊的白沫（63_bed_gl.js；沒有海圖 ⇒ 關）   // 水下透出來的東西多遠就看不到（m）、每公尺吸掉多少：有海圖 ⇒ 淺海的礁、沙洲看得出顏色（TASK-0721）；沒有 ⇒ 照舊 500 m、0.3
   gl.activeTexture(gl.TEXTURE6); gl.bindTexture(gl.TEXTURE_2D, RT.R ? RT.R.col : DUMMY); gl.uniform1i(P.water.u.uRefl, 6);
   gl.activeTexture(gl.TEXTURE7); gl.bindTexture(gl.TEXTURE_2D, RT.B.col); gl.uniform1i(P.water.u.uScene, 7);

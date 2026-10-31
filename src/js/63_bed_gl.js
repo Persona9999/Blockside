@@ -318,6 +318,7 @@ function bedFoamTex() {
   if (!Fm.tex) { Fm.tex = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, Fm.tex); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE); }
   gl.bindTexture(gl.TEXTURE_2D, Fm.tex); gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA16F, W, W, 0, gl.RGBA, gl.FLOAT, T4); gl.bindTexture(gl.TEXTURE_2D, null);
   Fm.dirty = false; Fm.cx = BED.cx; Fm.cy = BED.cy; Fm.N = W; Fm.sp = A.step * sk; Fm.ox = (BED.cx - R) * A.chunk - BED.ax; Fm.oz = (BED.cy - R) * A.chunk - BED.az;
+  Fm.D = D;                                                              // 海堤擋浪（bedWallTex）照同一張高度判哪裡是海
   var Mo = BEDMOUTH; Mo.L = MF && MF.src ? MF.L : null; Mo.src = MF ? MF.src : 0; Mo.top = MF ? MF.top : 0; Mo.ox = Fm.ox; Mo.oz = Fm.oz; Mo.sp = Fm.sp; Mo.N = W;
   bedShoreReq(D, W);
   Fm.ms = performance.now() - t0; Fm.builds++; bedSpent(t0);
@@ -448,7 +449,121 @@ function bedWaterU(u) {
   }
   gl.activeTexture(gl.TEXTURE0);
   if (on) gl.uniform4f(u.uBedR, BEDFOAM.ox, BEDFOAM.oz, BEDFOAM.sp, BEDFOAM.N);
-  bedDryU(u);
+  bedDryU(u); bedWallU(u);
+}
+// 海堤擋浪（BEDWALL；Tim 2026-11-01「請嘗試修正海浪淹過海堤(儘可能不要太花效能的做法)」）：沖刷上岸（01_gl.js shoreW）只照 8 m 一格的地形與 16 m 的離岸距離，
+//   不知道城裡的碼頭線（海堤）、石砌長碼頭、防波堤 ⇒ 堤後的低地照樣被浪沖上去，浪大時海面也冒出堤面。
+//   ⇒ 一張細格遮罩（BED_WALL_SP 公尺一格，只蓋這些石砌結構的外框再往外 BED_WALL_PAD；城鎮換了、白沫那張高度貼圖重建了才重算，算在 Worker）：
+//     g ＝ 堤身（格子中心在堤面往內 0.75 格以內 ⇒ 丟掉的邊一定藏在堤面底下）⇒ 海面不畫；
+//     r ＝ 堤後：從海走過來、不能穿過堤身的路（dw）比直線（de）多繞 BED_WALL_K[0]～[1] 公尺 ⇒ 0 → 1 ⇒ 沖刷、岸線曲折收掉（堤的盡頭繞得過去的那一段照舊有浪）。
+//   哪裡是海照白沫那張高度貼圖（同一個 8 m 雙線性，< 0）判 ⇒ 跟著色器的岸線一致。木棧橋（trunk、skala…）水從底下過 ⇒ 不算。
+//   沒有石砌結構 ⇒ uWallOn 0（著色器整段跳過）。畫面才用，⛔ 不進物理。
+var BEDWALL = { tex: null, on: false, A: null, r: [0, 0, 1, 1], tver: -1, fb: -1, dirty: true, segs: 0, cells: 0, foot: 0, ms: 0, builds: 0 };
+var BED_WALL_SP = 2, BED_WALL_PAD = 48, BED_WALL_MAX = 2.5e6, BED_WALL_LIM = 96, BED_WALL_K = [6, 20], BED_WALL_UNIT = 21;   // 最多幾格（大的城照比例放粗）、繞路量到幾公尺為止
+var BED_WALL_KIND = { wharf: 1, mole: 1 };                               // 石砌的棧橋（碼頭線 quay 一律算）
+var BEDWALLW = { w: null, ok: null, busy: null, id: 0 };
+function bedWallTex() {
+  var Wl = BEDWALL, Fm = BEDFOAM;
+  if (TOWNS.ver !== Wl.tver || Fm.builds !== Wl.fb) { Wl.tver = TOWNS.ver; Wl.fb = Fm.builds; Wl.dirty = true; }   // 城鎮換了（含建築模式改的堤）、高度貼圖換了
+  if (!Wl.dirty || BEDWALLW.busy || !Fm.D) return;
+  Wl.dirty = false;
+  var S = [], bx = [1e9, 1e9, -1e9, -1e9];
+  TOWNS.list.forEach(function (T) {
+    var p = T.p; if (!p) return;
+    function add(q) {
+      var P = (q.path || []).map(function (a) { var e = T.E(a); return [e[0] - BED.ax, e[1] - BED.az]; }), hw = (+q.w || 0) / 2; if (hw <= 0) return;
+      for (var i = 1; i < P.length; i++) {
+        var a = P[i - 1], b = P[i]; S.push(a[0], a[1], b[0], b[1], hw);
+        bx[0] = Math.min(bx[0], a[0] - hw, b[0] - hw); bx[1] = Math.min(bx[1], a[1] - hw, b[1] - hw); bx[2] = Math.max(bx[2], a[0] + hw, b[0] + hw); bx[3] = Math.max(bx[3], a[1] + hw, b[1] + hw);
+      }
+    }
+    (p.quay || []).forEach(add); (p.piers || []).forEach(function (q) { if (BED_WALL_KIND[q.kind]) add(q); });
+  });
+  var lx = Fm.ox - Fm.sp / 2, lz = Fm.oz - Fm.sp / 2, L = Fm.N * Fm.sp;   // 高度貼圖蓋的範圍（第 i 格的中心在 ox ＋ i × sp）
+  var x0 = Math.max(lx, bx[0] - BED_WALL_PAD), z0 = Math.max(lz, bx[1] - BED_WALL_PAD), x1 = Math.min(lx + L, bx[2] + BED_WALL_PAD), z1 = Math.min(lz + L, bx[3] + BED_WALL_PAD);
+  if (!S.length || x1 <= x0 || z1 <= z0) { Wl.on = false; Wl.segs = Wl.cells = Wl.foot = 0; return; }
+  var c = Math.max(BED_WALL_SP, Math.sqrt((x1 - x0) * (z1 - z0) / BED_WALL_MAX)), nx = Math.ceil((x1 - x0) / c), nz = Math.ceil((z1 - z0) / c);
+  var m = { S: new Float32Array(S), x0: x0, z0: z0, c: c, nx: nx, nz: nz, ox: Fm.ox, oz: Fm.oz, sp: Fm.sp, N: Fm.N, lim: BED_WALL_LIM, k: BED_WALL_K };
+  var ctx = { A: BED.A, fb: Fm.builds, tver: TOWNS.ver, r: [x0, z0, nx * c, nz * c], nx: nx, nz: nz, segs: S.length / 5 }, t0 = performance.now(), w = bedWallWorker();
+  if (!w) { m.D = Fm.D; bedWallDone(ctx, bedWallCalc(m), performance.now() - t0); bedSpent(t0); return; }
+  m.D = Fm.D.slice(); ctx.id = m.id = ++BEDWALLW.id; BEDWALLW.busy = ctx; w.postMessage(m, [m.D.buffer]);
+}
+/** 算遮罩（純函式：Worker 與這一頁共用同一份原始碼）。m：S ＝ 堤的每一段 [ax, az, bx, bz, 半寬]…、格（x0、z0、c 公尺一格、nx × nz）、D ＝ 高度（N × N、sp 公尺一格、第 0 格中心在 ox、oz）
+ *  ⇒ { T：nx × nz × 2（r 堤後、g 堤身，0～255）, foot：堤身幾格 }。距離照 8 鄰兩趟掃（直 c、斜 √2 c）；繞堤的那一份來回掃到不變（最多 4 次）。 */
+function bedWallCalc(m) {
+  var nx = m.nx, nz = m.nz, n = nx * nz, c = m.c, S = m.S, D = m.D, N = m.N, F = new Uint8Array(n), G = new Uint8Array(n), de = new Float32Array(n), dw = new Float32Array(n), T = new Uint8Array(2 * n);
+  var INF = 1e9, foot = 0, x, z, o, s, gi = 0.75 * c;
+  for (s = 0; s < S.length; s += 5) {
+    var ax = S[s], az = S[s + 1], ux = S[s + 2] - ax, uz = S[s + 3] - az, hw = S[s + 4], L2 = ux * ux + uz * uz || 1e-9, hg = Math.max(0, hw - gi);
+    var i0 = Math.max(0, Math.floor((Math.min(ax, ax + ux) - hw - m.x0) / c)), i1 = Math.min(nx - 1, Math.floor((Math.max(ax, ax + ux) + hw - m.x0) / c));
+    var j0 = Math.max(0, Math.floor((Math.min(az, az + uz) - hw - m.z0) / c)), j1 = Math.min(nz - 1, Math.floor((Math.max(az, az + uz) + hw - m.z0) / c));
+    for (z = j0; z <= j1; z++) for (x = i0; x <= i1; x++) {
+      var px = m.x0 + (x + 0.5) * c - ax, pz = m.z0 + (z + 0.5) * c - az, t = Math.max(0, Math.min(1, (px * ux + pz * uz) / L2)), dx = px - t * ux, dz = pz - t * uz, d2 = dx * dx + dz * dz;
+      o = z * nx + x; if (d2 <= hw * hw && !F[o]) F[o] = 1; if (d2 <= hg * hg && !G[o]) { G[o] = 1; foot++; }
+    }
+  }
+  for (z = 0; z < nz; z++) for (x = 0; x < nx; x++) {                   // 海 ＝ 高度貼圖（雙線性，同著色器）< 0：兩份距離的起點（繞堤那一份，堤身不算）
+    var u = Math.max(0, Math.min(N - 1.001, (m.x0 + (x + 0.5) * c - m.ox) / m.sp)), v = Math.max(0, Math.min(N - 1.001, (m.z0 + (z + 0.5) * c - m.oz) / m.sp));
+    var i = Math.floor(u), j = Math.floor(v), fu = u - i, fv = v - j, k = j * N + i, b = (D[k] * (1 - fu) + D[k + 1] * fu) * (1 - fv) + (D[k + N] * (1 - fu) + D[k + N + 1] * fu) * fv;
+    o = z * nx + x; de[o] = b < 0 ? 0 : INF; dw[o] = b < 0 && !F[o] ? 0 : INF;
+  }
+  var d1 = c, d2s = c * Math.SQRT2;
+  function sweep(Q, wall) {
+    var ch = 0, q, a;
+    for (z = 0; z < nz; z++) for (x = 0; x < nx; x++) {
+      o = z * nx + x; if (wall && F[o]) continue; a = Q[o]; q = a;
+      if (x > 0) q = Math.min(q, Q[o - 1] + d1);
+      if (z > 0) { q = Math.min(q, Q[o - nx] + d1); if (x > 0) q = Math.min(q, Q[o - nx - 1] + d2s); if (x < nx - 1) q = Math.min(q, Q[o - nx + 1] + d2s); }
+      if (q < a) { Q[o] = q; ch++; }
+    }
+    for (z = nz - 1; z >= 0; z--) for (x = nx - 1; x >= 0; x--) {
+      o = z * nx + x; if (wall && F[o]) continue; a = Q[o]; q = a;
+      if (x < nx - 1) q = Math.min(q, Q[o + 1] + d1);
+      if (z < nz - 1) { q = Math.min(q, Q[o + nx] + d1); if (x < nx - 1) q = Math.min(q, Q[o + nx + 1] + d2s); if (x > 0) q = Math.min(q, Q[o + nx - 1] + d2s); }
+      if (q < a) { Q[o] = q; ch++; }
+    }
+    return ch;
+  }
+  sweep(de, false);
+  for (var it = 0; it < 4 && sweep(dw, true); it++);
+  var lim = m.lim, k0 = m.k[0], k1 = m.k[1];
+  for (o = 0; o < n; o++) {
+    var g = Math.min(dw[o], lim) - Math.min(de[o], lim), w = Math.max(0, Math.min(1, (g - k0) / (k1 - k0)));
+    T[2 * o] = Math.round(255 * w * w * (3 - 2 * w)); T[2 * o + 1] = G[o] ? 255 : 0;
+  }
+  return { T: T, foot: foot };
+}
+function bedWallWorker() {
+  var W = BEDWALLW; if (W.ok !== null) return W.ok ? W.w : null;
+  try {
+    var src = bedWallCalc.toString() + '\nonmessage = function (e) { var m = e.data, t0 = performance.now(), R = bedWallCalc(m); R.id = m.id; R.ms = performance.now() - t0; postMessage(R, [R.T.buffer]); };\n';
+    W.w = new Worker(URL.createObjectURL(new Blob([src], { type: 'text/javascript' })));
+    W.w.onmessage = bedWallMsg;
+    W.w.onerror = function (e) { if (e && e.preventDefault) e.preventDefault(); try { W.w.terminate(); } catch (x) { /* 已經停了 */ } W.w = null; W.ok = false; W.busy = null; BEDWALL.dirty = true; };   // 掛了 ⇒ 改在這一頁算
+    W.ok = true;
+  } catch (e) { W.ok = false; W.w = null; }
+  return W.w;
+}
+function bedWallMsg(e) {
+  var R = e.data, ctx = BEDWALLW.busy; BEDWALLW.busy = null;
+  if (!ctx || R.id !== ctx.id) return;
+  if (!BED || BED.A !== ctx.A || BEDFOAM.builds !== ctx.fb || TOWNS.ver !== ctx.tver) { BEDWALL.dirty = true; return; }   // 算的時候換了 ⇒ 作廢、照新的再算
+  bedWallDone(ctx, R, R.ms);
+}
+/** 算好的遮罩 ⇒ 貼圖（RG8、雙線性；nx × nz 格）。 */
+function bedWallDone(ctx, R, ms) {
+  var Wl = BEDWALL; Wl.ms = +ms.toFixed(1); Wl.builds++; Wl.segs = ctx.segs; Wl.cells = ctx.nx * ctx.nz; Wl.foot = R.foot;
+  if (!Wl.tex) { Wl.tex = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, Wl.tex); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE); }
+  gl.bindTexture(gl.TEXTURE_2D, Wl.tex); gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1); gl.texImage2D(gl.TEXTURE_2D, 0, gl.RG8, ctx.nx, ctx.nz, 0, gl.RG, gl.UNSIGNED_BYTE, R.T); gl.pixelStorei(gl.UNPACK_ALIGNMENT, 4); gl.bindTexture(gl.TEXTURE_2D, null);
+  Wl.on = true; Wl.A = ctx.A; Wl.r = ctx.r;
+}
+/** 海堤擋浪的遮罩（01_gl.js BED_WALL_GLSL）：接第 BED_WALL_UNIT 號；沒有 ⇒ uWallOn 0。 */
+function bedWallU(u) {
+  if (!u.uWallT) return;
+  var Wl = BEDWALL, on = !!(BED && BED.A && Wl.on && Wl.tex && Wl.A === BED.A) && SEA_DBG.wall !== 0;   // __game.seaDbg({ wall: 0 }) ⇒ 關掉比較
+  gl.uniform1f(u.uWallOn, on ? 1 : 0);
+  gl.activeTexture(gl.TEXTURE0 + BED_WALL_UNIT); gl.bindTexture(gl.TEXTURE_2D, on ? Wl.tex : DUMMY); gl.uniform1i(u.uWallT, BED_WALL_UNIT); gl.activeTexture(gl.TEXTURE0);
+  if (on) gl.uniform4fv(u.uWallR, Wl.r);
 }
 // 地形挖洞（BEDHOLE；Tim 2026-10-23「細格地形限制 是否可以讓建築meta決定是否顯示下方地形(建築可以往下挖坑)」「同時廣場也支援」）：
 //   城鎮的地塊框（63_towns.js townHoles：模型 meta ground=hide 的建築、規劃寫 hide 的廣場）裡面的地形不畫 —— 遠近每一層（細的、遠景塊）、陰影那一支都丟
@@ -788,5 +903,5 @@ function bedBuild() {
     if (g.lod !== lod || g.C !== C2) { bedUpload(k2, C2, lod); built++; bedSpent(t0); t0 = performance.now(); }
   });
   bedFarStep(built || bedBusy() ? 0 : 2);                                // 遠景：照樣要；這一格建過細的（或預算用完了）就不建遠景的網格
-  bedFoamTex(); bedDryTex();
+  bedFoamTex(); bedDryTex(); bedWallTex();
 }
