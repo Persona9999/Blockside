@@ -1922,6 +1922,7 @@ LADTEST = [   # 反向對照（ladcheck --selftest）：(船, 梯子, 做法, �
     ('phoenix', '梯子/fore', 'box', '梯頂出口堵住'),
     ('concepcion', '梯子/orlop', 'drop', '甲板走不到'),        # ⑤ ⑥ 甲板連通（TASK-1028）：底艙甲板只有這一座下得去
     ('concepcion', '梯子/hold', 'drop', '艙底下不去'),         # 貨艙只有這一座下得去
+    ('nightlamp', '梯子/hold-P+梯子/hold-S', 'drop', '艙底下不去'),   # 兩座貨艙梯子互為備援（TASK-1137）⇒ 一起拿掉
 ]
 
 

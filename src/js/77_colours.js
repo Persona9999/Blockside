@@ -80,6 +80,29 @@ var FLAG_EMB = {
       var cy = y < 0.5 ? 0.25 : 0.75, dy = Math.abs(y - cy), t = 0.32, ex = (x - 0.45) / 0.55, ey = dy / 0.25;   // 上下兩個肚子：左半是橫筆、右半是半圈
       return x < 0.45 ? (dy > 0.25 - 0.25 * t ? G : null) : (ex * ex + ey * ey <= 1 && ex * ex + ey * ey > (1 - t) * (1 - t) ? G : null);
     } },
+  // 葡萄牙 1666（TASK-1089；往歐洲的城鎮鏈第二批：亞速爾、馬德拉）：1640 年復國（布拉干薩王朝）之後的國旗 ＝ 白底、正中戴王冠的王徽 ——
+  //   盾 ＝ 紅邊上七座金色城堡、裡面白底五個藍色小盾排成十字（quinas）；小盾上的銀點、王冠的細節旗面上畫不出來（128 × 64）⇒ 不畫
+  quinas: { name: '王徽（五盾）', ink: [0.78, 0.08, 0.1], res: 2,
+    at: function (X, Y) {
+      var R = [0.78, 0.08, 0.1], G = [0.86, 0.67, 0.18], B = [0.13, 0.27, 0.55];
+      var x = X - 1, y = Y - 0.36, w = 0.24, h = 0.46;                   // 盾：寬 2w、上緣 0.36、下半是半圓（圓心 y ＝ h − w）
+      if (y < 0) {                                                       // 盾上面：王冠（一條金帶＋三個尖）
+        if (Math.abs(x) > 0.17 || y < -0.17) return null;
+        if (y > -0.07) return G;
+        return Math.abs(x) < 0.03 || Math.abs(Math.abs(x) - 0.13) < 0.03 ? G : null;
+      }
+      var cy = h - w, inS = Math.abs(x) < w && (y < cy || x * x + (y - cy) * (y - cy) < w * w);
+      if (!inS) return null;
+      var bw = 0.065, inn = Math.abs(x) < w - bw && (y < cy || x * x + (y - cy) * (y - cy) < (w - bw) * (w - bw)) && y > bw * 0.7;
+      if (!inn) {                                                        // 紅邊：七座金城堡（上緣三座、兩側各兩座）
+        var C = [[-0.15, 0.03], [0, 0.03], [0.15, 0.03], [-0.205, 0.17], [0.205, 0.17], [-0.19, 0.33], [0.19, 0.33]];
+        for (var i = 0; i < C.length; i++) if (Math.abs(x - C[i][0]) < 0.025 && Math.abs(y - C[i][1]) < 0.025) return G;
+        return R;
+      }
+      var Q = [[0, 0.13], [-0.09, 0.24], [0, 0.24], [0.09, 0.24], [0, 0.35]];   // 五個小盾：十字排
+      for (var j = 0; j < Q.length; j++) if (Math.abs(x - Q[j][0]) < 0.028 && Math.abs(y - Q[j][1]) < 0.04) return B;
+      return null;
+    } },
   // 沒有國旗的兩家（TASK-0977；Tim 2026-10-27「不應該出現沒國旗的城 有缺要自檢報錯 需要補」）—— 史料上兩家都沒有旗，下面兩面是設計：
   //   逃亡者聚落（maroon）：牙買加逃亡者傳信用的 abeng 牛角號 —— 深綠底、象牙色的號角（寬口在旗桿那頭、往尾收成尖）
   abeng: { name: '牛角號', ink: [0.93, 0.89, 0.78], res: 2,
@@ -110,6 +133,7 @@ var FLAG_PRESETS = [
   { k: 'dutch', name: '荷蘭', field: '#ae1c28', emblem: 'stripes' },
   { k: 'denmark', name: '丹麥', field: '#c8102e', emblem: 'nordic' },
   { k: 'genoa', name: '熱那亞', field: '#ece9e0', emblem: 'cross-red' },
+  { k: 'portugal', name: '葡萄牙', field: '#ece9e0', emblem: 'quinas' },
   { k: 'byzantine', name: '東羅馬（1453）', field: '#a51c1c', emblem: 'tetragram' },
   { k: 'maroon', name: '逃亡者聚落〔設計〕', field: '#2e5b2a', emblem: 'abeng' },
   { k: 'native', name: '原住民〔設計〕', field: '#d9c39a', emblem: 'spiral' }
