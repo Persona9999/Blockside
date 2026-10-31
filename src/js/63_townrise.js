@@ -10,6 +10,7 @@
 //          帳上不再是工地（蓋好了）⇒ 拿掉、換回原本的畫法。crew ＝ 今天上了幾人 ⇒ 建築工站在腳手架最上面那一層走板、牆腳（townRiseWorkPts ⇒ 63_townfolk.js townWorkPrep）。
 //          城鎮、家族自動蓋的（Blocksail town.js townAutoBuild）是那一頁擺上地圖的 ⇒ 問的時候帶這座城拿到的版本 av，那一頁比較新 ⇒ 回覆附新的規劃 ⇒ townReplace。
 //     demo ＝ 演出（點建築的面板「演出建造過程」、?rise=1 的面板、__game.townRise）：從 p 演到完工；演完（auto）或按停 ⇒ 換回帳上的樣子（還在蓋 ⇒ 照帳的進度）。
+//   水上建築（Blocksail TASK-0899）：前 RISE_WATER 打樁、鋪平台（63_towns.js townWlotGeo），之後才蓋房子 —— 見 townRiseWlotHides 上面那一段。
 //   ⛔ 只給人看：不碰規劃、城鎮帳、整地。施工本身（工天、雇工、建材）全在 Blocksail world/prod.js、auto.js。
 //   入口：網址 ?rise=1 ⇒ 左下角一塊小面板（選一棟、拉進度、播放）；點建築的資訊面板（89_townbld.js，TASK-0909）；測試用 __game.townRise（90_main.js）。
 var RISE = { S: {}, demo: null, dur: 24, panel: null, picking: false, poll: { on: true, at: 0, busy: false, n: 0, fail: 0, last: null, av: {}, swaps: 0 }, stat: {} };   // av：每座城拿到的規劃是那一頁自動擺放的第幾版
@@ -47,7 +48,8 @@ function townRiseLoad(nm) {
     var foot = new Uint8Array(sx * sy), F = new Int32Array(sz);          // F[z] ＝ 完工時那一層幾格（腳手架的高度照它判：townRiseSet）
     for (j = 0; j < n; j++) { foot[X[j] + sx * Y[j]] = 1; F[Z[j]]++; }
     var L = Array.prototype.filter.call(F, function (v) { return v > 0; }).sort(function (a, b) { return a - b; }), Fmin = Math.max(1, (L[L.length >> 1] || 1) * RISE_LAYER);
-    Mm.riseD = { nm: nm, sx: sx, sy: sy, sz: sz, mpv: m.mpv, n: n, X: X, Y: Y, Z: Z, C: C, O: O, ord: ord, at: at, foot: foot, F: F, Fmin: Fmin };
+    Mm.riseD = { nm: nm, sx: sx, sy: sy, sz: sz, mpv: m.mpv, n: n, X: X, Y: Y, Z: Z, C: C, O: O, ord: ord, at: at, foot: foot, F: F, Fmin: Fmin,
+      wz: m.water != null ? Math.round((m.deckz || 0) / m.mpv) : 0 };   // wz：水上版的平台面在第幾層格（索引的 deckz；陸上版 0）
     return Mm.riseD;
   });
 }
@@ -65,7 +67,8 @@ function townRiseOpen(T, lot, p) {
     if (RISE.S[key]) return RISE.S[key];                                  // 等模型的時候另一條路先開了
     var sx = D.sx + RISE_PAD * 2, sy = D.sy + RISE_PAD * 2, sz = D.sz + RISE_TOP;
     var s = { key: key, T: T, lot: lot, nm: q.k, d: D, p: -1, n: 0, deco: [], mesh: {}, dirtyAll: true, gpu: null, ib: null, pl: null, sim: null, play: 0, t0: 0, p0: 0, auto: false, stat: {},
-      G: new VK.Grid([sx, sy, sz]), occ: new Uint8Array(sx * sy * sz), V: new Int32Array(D.sz) };   // V[z] ＝ 這一步那一層畫了幾格；sim ＝ 帳上的進度（0～1；null ＝ 帳上沒有這個工地）
+      G: new VK.Grid([sx, sy, sz]), occ: new Uint8Array(sx * sy * sz), V: new Int32Array(D.sz),   // V[z] ＝ 這一步那一層畫了幾格；sim ＝ 帳上的進度（0～1；null ＝ 帳上沒有這個工地）
+      water: !!q.nb, pm: 0, wf: 1, wk: -1, wg: null };                    // 水上建築（townLotInst nb）：pm ＝ 房子那一段的進度、wf ＝ 平台那一段（見 RISE_WATER）、wg ＝ 照 wf 畫的平台與樁
     s.cv = new Uint32Array(s.G.tab.length);
     RISE.S[key] = s;
     townRiseSet(s, p == null ? 0 : p);
@@ -78,7 +81,9 @@ function townRiseClose(s) {
   if (!s || RISE.S[s.key] !== s) return;
   if (s.gpu) { gl.deleteVertexArray(s.gpu.vao); gl.deleteBuffer(s.gpu.vbo); }
   if (s.ib) gl.deleteBuffer(s.ib);
+  if (s.wg) { townGpuFree(s.wg); s.wg = null; }
   delete RISE.S[s.key]; if (RISE.demo === s) RISE.demo = null;
+  if (s.water && s.wf < 1) townRiseWlotTile(s);                         // 平台還沒鋪好就收（停演、拆了）⇒ 那一區把整塊畫回去
   TOWNS.dirty = true;
 }
 
@@ -106,6 +111,47 @@ var RISE_PLINTH = 0.03;
 function townRisePlinth(s) { return s.p >= RISE_PLINTH; }
 /** 分組時跳過工地上的那一棟（63_towns.js townBin）⇒ 那個工地｜null。 */
 function townRiseHides(T, q) { return q.lot != null ? RISE.S[townRiseKey(T, q.lot)] || null : null; }
+
+// 水上建築的工地（Blocksail TASK-0899「施工演出：樁先、平台、再上面的房子」；模型的 nb ＝ 水上地塊上的水上版）：
+//   進度前 RISE_WATER 是平台那一段（wf 0 → 1：打樁、鋪板，63_towns.js townWlotGeo）—— 地面那一區不畫這一塊（townRiseWlotHides），工地照 wf 自己畫（townRiseGround，地面那一支著色器）；
+//   之後才是房子：pm ＝ (p − RISE_WATER) ÷ (1 − RISE_WATER) 照模型的施工順序；施工裝飾、建材堆、工人都墊到平台面（D.wz），不挖地基（樁就是地基）。
+//   平台鋪好 ⇒ 那一區重建、畫回整塊；重建好之前工地照畫（不閃空）。
+var RISE_WATER = 0.2, RISE_WSTEP = 200;                               // RISE_WSTEP：平台那一段分幾步重建網格
+function townRiseLot(T, lot) { var L = (T && T.p && T.p.lots) || []; for (var i = 0; i < L.length; i++) if (L[i].id === lot) return L[i]; return null; }
+/** 63_towns.js townGroundGen：水上地塊 l 的平台在工地上、還沒鋪好 ⇒ 地面那一區不畫它。 */
+function townRiseWlotHides(T, l) { var s = RISE.S[townRiseKey(T, l.id)]; return !!(s && s.water && s.wf < 1); }
+/** 工地 s 那一塊所在的地面區排重建（藏起來、畫回去；同建築模式改到的區不等背景預算）⇒ 記在 s.wq。 */
+function townRiseWlotTile(s) {
+  var l = townRiseLot(s.T, s.lot); if (!l || !s.T.gt) return;
+  var e = s.T.E(l.at), Q = s.T.gt[Math.floor(e[0] / TOWN_GT_SZ) + '_' + Math.floor(e[1] / TOWN_GT_SZ)];
+  if (Q) { Q.dirty = true; Q.edit = true; } s.wq = Q || null;
+}
+/** 照 wf 重建工地的平台與樁（每 1／RISE_WSTEP 一次）。 */
+function townRiseWlotMesh(s) {
+  var k = Math.floor(s.wf * RISE_WSTEP); if (k === s.wk) return;
+  if (s.wg) { townGpuFree(s.wg); s.wg = null; } s.wk = k;
+  var T = s.T, l = townRiseLot(T, s.lot), V = [], I = []; if (!l || !l.water) return;
+  function vtx(x, y, z, c, nx, ny, nz) { V.push(x, y, z, nx == null ? 0 : nx, ny == null ? 1 : ny, nz == null ? 0 : nz, c[0], c[1], c[2]); return V.length / 9 - 1; }
+  function W(q) { var e = T.E(q); return [e[0] - BED.ax, e[1] - BED.az]; }
+  townWlotGeo(T, l, s.wf, function (P0, w, top, bot, col) { townSlabPut(vtx, I, P0.map(W), w, top, bot, col); }, vtx, I, W, townRoadHeight);
+  if (!I.length) return;
+  var bb = [1e9, 1e9, 1e9, -1e9, -1e9, -1e9];
+  for (var j = 0; j < V.length; j += 9) for (var c = 0; c < 3; c++) { bb[c] = Math.min(bb[c], V[j + c]); bb[c + 3] = Math.max(bb[c + 3], V[j + c]); }
+  s.wg = townGpu9(new Float32Array(V), new Uint32Array(I), bb);
+}
+/** 63_towns.js townDraw 地面那一段（地面那一支著色器已經用上、往鏡頭推的偏移開著）：工地照進度畫的平台與樁 ⇒ 幾個三角形。
+ *  平台鋪好、那一區也照新的重建好了 ⇒ 放掉。 */
+function townRiseGround(PL, eye) {
+  var tris = 0;
+  Object.keys(RISE.S).forEach(function (k) {
+    var s = RISE.S[k]; if (!s.water) return;
+    if (s.wf >= 1 && !(s.wq && (s.wq.dirty || s.wq.job))) { if (s.wg) { townGpuFree(s.wg); s.wg = null; s.wk = -1; } return; }
+    townRiseWlotMesh(s);
+    var g = s.wg; if (!g || !bedSeen(PL, g.bb) || townBoxDist(g.bb, eye) > TOWN_GROUND_VIEW) return;
+    gl.bindVertexArray(g.vao); gl.drawElements(gl.TRIANGLES, g.n, gl.UNSIGNED_INT, 0); tris += g.n / 3;
+  });
+  return tris;
+}
 
 /** 城鎮帳的工地（Blocksail townUI 'sites'）：城 T 現在在蓋的 { 地塊 id: 進度 ‰ } ⇒ 開新的、更新進度、帳上沒了的收掉（正在演的那一棟照演，演完再照帳）。 */
 function townRiseSites(T, map, mat, crew) {
@@ -149,14 +195,16 @@ function townRisePoll() {
 function townRiseSet(s, p, force) {
   var D = s && s.d; if (!D) return;
   p = Math.max(0, Math.min(1, p)); if (p === s.p && !force) return; s.p = p;
-  var G = s.G, occ = s.occ, P = RISE_PAD, SX = G.sx, SY = G.sy, n1 = townRiseCount(D, p), j, q, x, y, z, k;
+  if (s.water) { var was = s.wf < 1; s.wf = Math.min(1, p / RISE_WATER); if ((s.wf < 1) !== was) townRiseWlotTile(s); }   // 水上建築：平台那一段（見 RISE_WATER）；開始、鋪好 ⇒ 地面那一區藏起、畫回
+  var pm = s.pm = s.water ? Math.max(0, (p - RISE_WATER) / (1 - RISE_WATER)) : p;   // 房子那一段的進度（陸上 ＝ p）
+  var G = s.G, occ = s.occ, P = RISE_PAD, SX = G.sx, SY = G.sy, n1 = townRiseCount(D, pm), j, q, x, y, z, k;
   var V = s.V;
   for (j = s.n; j < n1; j++) { q = D.ord[j]; x = D.X[q] + P; y = D.Y[q] + P; z = D.Z[q]; G.set(x, y, z, D.C[q]); occ[x + SX * (y + SY * z)] = 1; V[z]++; }
   for (j = s.n - 1; j >= n1; j--) { q = D.ord[j]; x = D.X[q] + P; y = D.Y[q] + P; z = D.Z[q]; G.set(x, y, z, 0); occ[x + SX * (y + SY * z)] = 0; V[z]--; }
   s.n = n1;
   for (var hz = 0, zz = 0; zz < D.sz; zz++) if (V[zz] > 0 && D.F[zz] >= D.Fmin) hz = zz + 1;   // 蓋到哪一層（見 RISE_LAYER）
   s.hz = hz;                                                              // 腳手架上的工人站哪一層走板（townRiseWalk）
-  var old = s.deco, nu = townRiseDeco(s, p, hz), seen = new Set();       // 施工裝飾：這一步該有的 ⇒ 舊的拿掉（那一格沒被房子佔掉的）、新的補上（只放空格）
+  var old = s.deco, nu = townRiseDeco(s, pm, hz), seen = new Set();      // 施工裝飾：這一步該有的 ⇒ 舊的拿掉（那一格沒被房子佔掉的）、新的補上（只放空格）
   for (j = 0; j < nu.length; j += 2) seen.add(nu[j]);
   for (j = 0; j < old.length; j += 2) { k = old[j]; if (!seen.has(k) && !occ[k]) G.set(k % SX, ((k / SX) | 0) % SY, (k / (SX * SY)) | 0, 0); }
   for (j = 0; j < nu.length; j += 2) { k = nu[j]; if (!occ[k]) G.set(k % SX, ((k / SX) | 0) % SY, (k / (SX * SY)) | 0, nu[j + 1]); }
@@ -169,13 +217,14 @@ function townRiseSet(s, p, force) {
  *  ② 腳手架（0.04～0.95）：外框往外 2～3 格一圈立柱（每 1.5 m 一根＋四角），高 ＝ 蓋到的那一層（hz，見 RISE_LAYER）＋ 1.2 m；每 2 m 一層 2 格寬的走板；
  *     最後一段（0.88～0.95）從上往下拆。
  *  ③ 建材堆：臨路那一側的留白裡（y ＜ P 那一條）。帳上有建材（s.mat）⇒ townRisePiles 照帳一種貨一堆；沒有（Editor 版、舊地球儀、建材關掉）⇒ 排三堆：
- *     石（打地基用，0～0.3 用完）、磚（牆，0.05～0.65）、木料（廊、屋頂，0.4～0.9）；堆高照剩下多少。 */
+ *     石（打地基用，0～0.3 用完）、磚（牆，0.05～0.65）、木料（廊、屋頂，0.4～0.9）；堆高照剩下多少。
+ *  水上建築（s.water）：p 是房子那一段的進度（pm）；沒有 ①（樁就是地基，townWlotGeo）；②③ 整個墊到平台面（zb ＝ D.wz）。 */
 function townRiseDeco(s, p, hz) {
-  var D = s.d, out = [], G = s.G, P = RISE_PAD, SX = G.sx, SY = G.sy, SZ = G.sz, C = RISE_C;
-  function put(x, y, z, c) { if (x < 0 || y < 0 || z < 0 || x >= SX || y >= SY || z >= SZ) return; out.push(x + SX * (y + SY * z), c); }
+  var D = s.d, out = [], G = s.G, P = RISE_PAD, SX = G.sx, SY = G.sy, SZ = G.sz, C = RISE_C, zb = s.water ? D.wz : 0;
+  function put(x, y, z, c) { z += zb; if (x < 0 || y < 0 || z < 0 || x >= SX || y >= SY || z >= SZ) return; out.push(x + SX * (y + SY * z), c); }
   function hsh(a, b) { var h = (a * 374761393 + b * 668265263) | 0; h = Math.imul(h ^ (h >>> 13), 1274126177); return ((h ^ (h >>> 16)) >>> 0) / 4294967296; }
   // ① 地基
-  if (p < 0.06) {
+  if (p < 0.06 && !s.water) {
     var ring = [], sx = D.sx, sy = D.sy;
     for (var y = 0; y < sy; y++) for (var x = 0; x < sx; x++) {
       if (!D.foot[x + sx * y]) continue;
@@ -188,7 +237,7 @@ function townRiseDeco(s, p, hz) {
   }
   // ② 腳手架
   if (p > 0.04 && p < 0.95) {
-    var full = Math.min(D.sz + 12, hz + 12), h = p > 0.88 ? Math.round(full * (0.95 - p) / 0.07) : full, x0 = P - 3, y0 = P - 3, x1 = P + D.sx + 2, y1 = P + D.sy + 2;
+    var full = Math.min(D.sz - zb + 12, Math.max(0, hz - zb) + 12), h = p > 0.88 ? Math.round(full * (0.95 - p) / 0.07) : full, x0 = P - 3, y0 = P - 3, x1 = P + D.sx + 2, y1 = P + D.sy + 2;
     if (h > 0) {
       var poles = [];
       function side(ax, ay, bx, by) { var L = Math.max(Math.abs(bx - ax), Math.abs(by - ay)), k = Math.max(1, Math.round(L / 15)); for (var s2 = 0; s2 <= k; s2++) poles.push(Math.round(ax + (bx - ax) * s2 / k), Math.round(ay + (by - ay) * s2 / k)); }
@@ -280,27 +329,31 @@ function townRisePiles(M, fr, D, put) {
 
 /** 工地 s 的腳手架最上面那一層走板的 z（格；同 townRiseDeco ② 的高度與走板間距）；沒有腳手架或還不到第一層走板 ⇒ -1。 */
 function townRiseWalk(s) {
-  var D = s.d, p = s.p; if (!D || !(p > 0.04 && p < 0.95)) return -1;
-  var full = Math.min(D.sz + 12, (s.hz || 0) + 12), h = p > 0.88 ? Math.round(full * (0.95 - p) / 0.07) : full, top = -1;
+  var D = s.d, p = s.pm; if (!D || !(p > 0.04 && p < 0.95)) return -1;
+  var zb = s.water ? D.wz : 0, full = Math.min(D.sz - zb + 12, Math.max(0, (s.hz || 0) - zb) + 12), h = p > 0.88 ? Math.round(full * (0.95 - p) / 0.07) : full, top = -1;
   for (var lv = 20; lv < h - 2; lv += 20) top = lv;
-  return top;
+  return top < 0 ? -1 : top + zb;                                       // 水上建築：腳手架從平台面起（townRiseDeco 的 zb）
 }
 /** 工地 s 上建築工站的點（模型的格座標，同模型 work-* 固定點的用法：v[2] − 0.5 ＝ 腳踩的高度；63_townfolk.js townWorkPrep 換到世界）⇒ [{ k, g, v, to }]。
  *  有走板 ⇒ 最上面那一層走板一圈（前後每 1.5 m、兩側每 1.5 m，面向牆）＝ 's' 組；地上 ⇒ 臨路那一面牆腳（每 2 m，面向路邊的料堆）＝ 'g' 組（沒有腳手架時後面那一面也站）。
- *  順序：走板兩點、地上一點輪流（townWorkPrep 照順序給人 ⇒ 人少時上下都有人）。 */
+ *  順序：走板兩點、地上一點輪流（townWorkPrep 照順序給人 ⇒ 人少時上下都有人）。
+ *  水上建築：地上那一組站在平台面高（D.wz）、正面外 0.8 m 的碼頭上，面向工地；背面是水 ⇒ 不站。 */
 function townRiseWorkPts(s) {
   var D = s.d; if (!D) return [];
-  var lv = townRiseWalk(s), sx = D.sx, sy = D.sy, A = [], B = [], x, y, z = lv + 1.5, out = [];
+  var lv = townRiseWalk(s), sx = D.sx, sy = D.sy, A = [], B = [], x, y, z = lv + 1.5, zg = (s.water ? D.wz : 0) + 0.5, out = [];
   if (lv >= 0) {
-    for (x = 4; x <= sx - 4; x += 15) { A.push({ v: [x, -1, z], to: [x, sy / 2, z] }); A.push({ v: [x, sy + 1, z], to: [x, sy / 2, z] }); }
-    for (y = 6; y <= sy - 6; y += 15) { A.push({ v: [-1, y, z], to: [sx / 2, y, z] }); A.push({ v: [sx + 1, y, z], to: [sx / 2, y, z] }); }
+    for (x = 4; x <= sx - 4; x += 15) { A.push({ g: 's', v: [x, -1, z], to: [x, sy / 2, z] }); A.push({ g: 's', v: [x, sy + 1, z], to: [x, sy / 2, z] }); }
+    for (y = 6; y <= sy - 6; y += 15) { A.push({ g: 's', v: [-1, y, z], to: [sx / 2, y, z] }); A.push({ g: 's', v: [sx + 1, y, z], to: [sx / 2, y, z] }); }
   }
-  for (x = 3; x <= sx - 3; x += 20) { B.push({ v: [x, -2, 0.5], to: [x, -8, 0.5] }); if (lv < 0) B.push({ v: [x, sy + 2, 0.5], to: [x, sy / 2, 0.5] }); }
+  for (x = 3; x <= sx - 3; x += 20) {
+    if (s.water) { B.push({ g: 'g', v: [x, -8, zg], to: [x, sy / 2, zg] }); continue; }   // 水上：站在碼頭、棧橋上（正面的接縫多半 0.5 m）看著打樁、鋪板
+    B.push({ g: 'g', v: [x, -2, zg], to: [x, -8, zg] }); if (lv < 0) B.push({ g: 'g', v: [x, sy + 2, zg], to: [x, sy / 2, zg] });
+  }
   for (var ia = 0, ib = 0; ia < A.length || ib < B.length;) {
     if (ia < A.length) out.push(A[ia++]); if (ia < A.length) out.push(A[ia++]);
     if (ib < B.length) out.push(B[ib++]);
   }
-  return out.map(function (p, i) { return { k: 'site-' + i, g: p.v[2] > 1 ? 's' : 'g', v: p.v, to: p.to }; });
+  return out.map(function (p, i) { return { k: 'site-' + i, g: p.g, v: p.v, to: p.to }; });
 }
 /** 城 T 的工地工人要不要重擺（63_townfolk.js：T.work.sk 跟這個不一樣 ⇒ townWorkPrep）：每個帳上的工地的地塊、走板那一層、人數。 */
 function townRiseWorkSig(T) {
@@ -378,7 +431,8 @@ function townRiseDepth(P) {
 }
 /** 一個工地的讀數。 */
 function townRiseOne(s) {
-  return { town: s.T.id, lot: s.lot, model: s.nm, p: s.p, sim: s.sim, play: s.play, shown: s.n, total: s.d.n, deco: s.deco.length / 2, mat: s.mat || null, quads: s.stat.quads || 0, remesh: s.stat.remesh || 0, meshMs: s.stat.meshMs || 0 };
+  return { town: s.T.id, lot: s.lot, model: s.nm, p: s.p, sim: s.sim, play: s.play, shown: s.n, total: s.d.n, deco: s.deco.length / 2, mat: s.mat || null, quads: s.stat.quads || 0, remesh: s.stat.remesh || 0, meshMs: s.stat.meshMs || 0,
+    water: s.water ? { wf: s.wf, pm: s.pm, tris: s.wg ? s.wg.n / 3 : 0, hid: townRiseWlotHides(s.T, { id: s.lot }) } : null };   // 水上建築：平台那一段、房子那一段的進度、工地畫的平台幾個三角形
 }
 /** 讀數（__game.townRise('stat')）：演的那一棟（舊的欄位照留）＋ 全部工地 ＋ 問工地的狀態。 */
 function townRiseStat() {
