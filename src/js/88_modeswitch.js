@@ -65,6 +65,7 @@ var MODE_HOOK = {
     leave: function () {
       if (DOCK.run && DOCK.run.kind === 'in') dockStop(null);              // 還在開進去 ⇒ 停在原地
       if (TWB.on) twbToggle(false); TWB.start = null; TWB.tr = null;
+      var me = SHIPS[PLAYER_I]; if (me && me.sailKeep != null) { if (me.sailSet === 0) { me.sailSet = me.sailKeep; applySailSet(me); } me.sailKeep = null; }   // 停港收的帆（04_modes.js furlOwn）還原成進城前的帆裝；出航那一段艦長再照航速調
       var el = $('twbTown'); if (el) { el.textContent = ''; el.classList.remove('on'); }   // 城名那一行（87_townbuild.js twbTitle 只在城鎮模式寫）⇒ 出航時收掉
     }
   },
@@ -171,11 +172,13 @@ function dockReady() {
   var me = SHIPS[PLAYER_I]; if (!me || me.sunk) return { why: '沒有我艦' };
   if (!BED || !BED.host) return { why: '要從 Blocksail 地球儀開' };
   var c = shipCenter(me), best = null, bd = Infinity, why = '不在城鎮範圍裡';
+  function far(d) { return d.kind === 'offshore' || d.kind === 'anchor' ? 1e9 : 0; }   // 外海浮筒、錨地墊後：清單（Blocksail globe.html docksFor）是放得下這艘船的每一個，超巨艦的浮筒什麼船都放得下
+                                                                      //   ⇒ 照直線最近 ⇒ 托爾圖加的浮筒在棧橋外海那一側，從航道開進來永遠停浮筒（Tim 2026-11-01「目前好像又不停靠棧橋了」）；有棧橋、碼頭的泊位 ⇒ 挑那幾個裡最近的
   for (var id in DOCK.towns) {
     var T = DOCK.towns[id], inR = dockInRing(T.ring, c[0], c[2]);
     T.docks.forEach(function (d) {                                       // 範圍裡、或在那一處的進港航道上（大城的範圍貼著海岸畫：君士坦丁堡停靠處外 150 m 的金角灣就不在範圍裡）
       if (!inR && dockLaneAt(d, c) < 0) return;
-      var dd = Math.hypot(d.at[0] - c[0], d.at[1] - c[2]); if (dd < bd) { bd = dd; best = d; }
+      var dd = Math.hypot(d.at[0] - c[0], d.at[1] - c[2]) + far(d); if (dd < bd) { bd = dd; best = d; }
     });
     if (inR && !T.docks.length && !best) why = '這座城沒有停靠處';
   }

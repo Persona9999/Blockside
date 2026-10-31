@@ -14,6 +14,7 @@ var MODE_BASE = {
   autoFire: false,     // 自動開砲的預設（換了玩法才套；70_flow.js reset）
   hint: true,          // 開局提示「點敵艦設瞄準點…」（70_flow.js start）
   stopOwn: false,      // 我艦停在原地（跟拋錨同一條；31_sailing.js）
+  furlOwn: false,      // 我艦的帆全收（31_sailing.js sailShip；艦長不調帆）—— 城鎮模式：停港收帆（Tim 2026-11-01「城鎮模式下 船要改成收帆的狀態」）
   battleKeys: true,    // 開砲、轉舵那些海戰的鍵作用（false ⇒ 只剩停格、設定、鏡頭；71_input.js）
   myReload: RELOAD,    // 我艦的裝填秒數基準（10_ship.js、52_fleet.js 換船時跟著換）
   fpLock: false,       // 固定第一人稱：🎥、Y 不能離開（81_fps.js fpBuildLock）
@@ -39,7 +40,7 @@ var MODE_RULES = {
   fight: { name: '⚔ 交戰', menu: false, url: false, fleet: 'first', judge: false, hint: false, origin: true, chart: true, ui: 'fight', locked: true },
   // 城鎮（Blocksail 地球儀的「🏘 進入城鎮」，TASK-0742；Tim 2026-10-22「進入城鎮後可以進入建築模式(船隻拋錨停泊在港口)」）：只有我艦、停在停靠處、兩錨都下（stopOwn）、
   //   不開砲；建築模式（87_townbuild.js）鋪路、蓋房子
-  town: { name: '🏘 城鎮', menu: false, fleet: 'first', judge: false, hint: false, origin: true, stopOwn: true, battleKeys: false, town: true, ui: 'town' }
+  town: { name: '🏘 城鎮', menu: false, fleet: 'first', judge: false, hint: false, origin: true, stopOwn: true, furlOwn: true, battleKeys: false, town: true, ui: 'town' }
 };
 Object.keys(MODE_RULES).forEach(function (m) { for (var k in MODE_BASE) if (!(k in MODE_RULES[m])) MODE_RULES[m][k] = MODE_BASE[k]; });
 // ?mode=<玩法>（外部開戰用：Blocksail 的開戰設定，2026-10-18）：一般遊玩也照網址選玩法（表裡 url 的才認；沒給 ⇒ 照設定檔、存檔）。?demo 照舊在 90_main.js 自己選。

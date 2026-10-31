@@ -121,6 +121,10 @@ function sailShip(sh, dt) {
       manual = SAIL === 'manual' && sh.i === PLAYER_I && !dockOn(sh);     // 自動停靠／出航中（88_modeswitch.js）⇒ 走艦長那一段（航向、期望航速照航道）
   if (stop && !sh.ancMode && !sh.struck && !sh.sunk) { sh.ancMode = true; anchorToggle(sh, 'P', true); anchorToggle(sh, 'S', true); }   // 6 拋錨（雙錨，我艦；76_anchor.js）
   else if (!stop && sh.ancMode) { sh.ancMode = false; anchorToggle(sh, 'P', false); anchorToggle(sh, 'S', false); }   // 切回 4／5 ⇒ 起錨
+  // 帆全收、艦長不調帆：城鎮模式的我艦（04_modes.js furlOwn：停著、開進停靠處那一段都是）、停港與繫著等的往來船（58_traffic.js trafficDock 收過一次，
+  //   ⛔ 剛下錨那幾秒錨還沒咬住（held 是 false）⇒ 下面的 helmGovern 照期望航速又張回戰鬥帆，錨咬住之後就停在張著；2026-11-01 托爾圖加實測進港倒進泊位的那一艘 sailSet 2）
+  var furl = hasSails(sh) && (sh.i === PLAYER_I ? !!modeRule('furlOwn') : !!(sh.npc && (sh.npc.dock || sh.npc.held)));
+  if (furl && sh.sailSet !== 0) { if (sh.i === PLAYER_I && sh.sailKeep == null) sh.sailKeep = sh.sailSet; sh.sailSet = 0; applySailSet(sh); }   // 直接設（⛔ setSails 會廣播「帆裝：…」）；sailKeep：換出城鎮模式時還原（88_modeswitch.js）
   var held = !!sh.anc && anchorHeld(sh);                              // 有錨咬著 ⇒ 不靠帆走、可以原地繞錨轉
   if (sh.i === PLAYER_I && !sh.sunk) sailHold(sh);
   var BK = (sh.cfg.base || 0) * fitPowK(sh.T);                          // fitPowK：換了主機（38_fit.js，TASK-0793）⇒ 照馬力比；沒換 ⇒ 1
@@ -141,7 +145,7 @@ function sailShip(sh, dt) {
       * (1 - clamp(sh.sink / 9, 0, 0.8)) * (sh.struck ? 0.15 : 1);   // 能耐：橫風、帆全張時的帆速 × 完好度，加上主機；⛔ 不照現在的航向與收帆（艦長一收帆、一頂風就掉到 0 ⇒ 邊緣在 80–400 m 亂跳）；上坡最多吃掉一半推力 ⇒ × √½
   }
   if (VX) sh.spd *= vxHold(sh, dt);                                    // 大漩渦：眼裡船速被水吃掉（08_sea.js vxHold）                       // 推力、水阻、實際質量 ⇒ 加速度 ⇒ sh.spd（31_drive.js）
-  if (!stop && !held && !sh.sunk && !sh.struck && (sh.i !== PLAYER_I || SAIL === 'auto' || dockOn(sh))) { var thP = sh.throttle || 1; helmGovern(sh, vS / thP, vB / thP); }   // 航速調節：艦長的期望航速 ⇒ 帆裝、俥鐘（54_helm.js；vS、vB 扣掉上一步的放慢）
+  if (!stop && !held && !furl && !sh.sunk && !sh.struck && (sh.i !== PLAYER_I || SAIL === 'auto' || dockOn(sh))) { var thP = sh.throttle || 1; helmGovern(sh, vS / thP, vB / thP); }   // 航速調節：艦長的期望航速 ⇒ 帆裝、俥鐘（54_helm.js；vS、vB 扣掉上一步的放慢）
   else sh.helmSpill = 1;
   // 舵
   sh.throttle = 1;                                                      // 油門每一步重設（戰列跟隨、讓開砲線要放慢才改；下一步的目標航速才用到）
