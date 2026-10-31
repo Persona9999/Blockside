@@ -2274,7 +2274,7 @@ function townTreesSet(T) {
     treeQueue(k, C);
   });
 }
-function townFlagFree(T) { (T.flags || []).forEach(function (F) { if (F.vao) { gl.deleteVertexArray(F.vao); gl.deleteBuffer(F.vb); } }); T.flags = null; }
+function townFlagFree(T) { (T.flags || []).forEach(function (F) { if (F.vao) { gl.deleteVertexArray(F.vao); gl.deleteBuffer(F.vb); } }); T.flags = null; townRopeFree(T); }   // 繩跟布旗一起：實例換了就重建（townRopeDraw 下一格照新的實例建）
 /** 一步（dt 秒、t ＝ 遊戲時間（townClock：暫停就停））：Verlet ⇒ 釘綁邊 ⇒ 約束（綁邊那一欄不動）。 */
 function townFlagStep(F, dt, t) {
   var p = F.p, pp = F.pp, NU = TOWN_FLAG_N[0], NV = TOWN_FLAG_N[1], wl = Math.hypot(WIND[0], WIND[2]) || 1, wx = WIND[0] / wl, wz = WIND[2] / wl;
@@ -2332,6 +2332,69 @@ function townFlagMesh(F, eye) {
   } else { gl.bindVertexArray(F.vao); gl.bindBuffer(gl.ARRAY_BUFFER, F.vb); }
   gl.bufferData(gl.ARRAY_BUFFER, V.subarray(0, w), gl.DYNAMIC_DRAW); F.n = w / 9;
   return F.n / 3;
+}
+
+// 建築的繩（Blocksail TASK-0899；Tim 2026-10-24「是否可以參考船隻 支援繩索(用在起重機&其他建築上)」、2026-10-31「建築的繩索GO 同時可以修改起重機 用繩索替換掉格子」）：
+//   模型的 ropes（Blocksail tools/townmodels.py ropes_of：雕刻的繩，折線、半徑（格）、色、兩端綁在哪 b）⇒ 每座城一份網格（世界座標），每一棟記自己那一段。
+//   畫法同船（11_rig_gpu.js buildRig）：細的一條線、粗的（半徑 ≥ TOWN_ROPE_TUBE 公尺：吊索、穩索）六角管；兩端都不靠（b 兩端都是 0）⇒ 不畫（同船 r.dead）。
+//   建築的繩不斷、不動（不碰戰局，同布旗）；近那一級的距離內才畫；工地上、換成戰鬥單位、照打壞的樣子畫的那一棟不畫（同 townBin 不畫模型的那幾種）。
+var TOWN_ROPE_TUBE = 0.02, TOWN_ROPE_SIDES = 6;
+/** 城 T 的繩（實例建好之後建一次）：{ vao, vb, S: [{ q, at（中心）, r（外框半徑）, t0, tn（管子的頂點）, l0, ln（線的頂點）}], n（繩數）}；沒有繩 ⇒ S 空、不建緩衝。 */
+function townRopes(T) {
+  var K = TOWNS.kit, TV = [], LV = [], S = [], nr = 0;
+  (T.inst || []).forEach(function (q) {
+    var Mm = K.M[q.k], m = Mm && Mm.m; if (!m || !m.ropes || !(q.y === q.y)) return;
+    var s = Math.sin(q.th), c = Math.cos(q.th), mpv = m.mpv, hw = m.size[0] * mpv / 2, hd = m.size[1] * mpv / 2, t0 = TV.length, l0 = LV.length, bb = [1e9, 1e9, 1e9, -1e9, -1e9, -1e9];
+    function W(x, y, z) { var a = (x * mpv - hw) * q.sx, b = y * mpv - hd; return [q.x + a * s - b * c, q.y + z * mpv, q.z - a * c - b * s]; }   // 模型 → 世界（同 townFlags 的 W）
+    function put(A, p, n, col) { A.push(p[0], p[1], p[2], n[0], n[1], n[2], col[0], col[1], col[2]); for (var k = 0; k < 3; k++) { bb[k] = Math.min(bb[k], p[k]); bb[k + 3] = Math.max(bb[k + 3], p[k]); } }
+    m.ropes.forEach(function (r) {
+      if (r.b && !r.b[0] && !r.b[1]) return;
+      var P = [], w = r.r * mpv; for (var i = 0; i + 2 < r.p.length; i += 3) P.push(W(r.p[i], r.p[i + 1], r.p[i + 2]));
+      nr++;
+      for (var j = 0; j + 1 < P.length; j++) {
+        var A = P[j], B = P[j + 1];
+        if (w < TOWN_ROPE_TUBE) { put(LV, A, [0, 1, 0], r.c); put(LV, B, [0, 1, 0], r.c); continue; }
+        var d = sub(B, A), dl = len(d); if (dl < 1e-6) continue; d = mul(d, 1 / dl);
+        var u = Math.abs(d[1]) > 0.9 ? [1, 0, 0] : norm([d[2], 0, -d[0]]), v = [d[1] * u[2] - d[2] * u[1], d[2] * u[0] - d[0] * u[2], d[0] * u[1] - d[1] * u[0]], R = [];
+        for (var k = 0; k <= TOWN_ROPE_SIDES; k++) { var t = k / TOWN_ROPE_SIDES * 6.28319; R.push(add(mul(u, Math.cos(t)), mul(v, Math.sin(t)))); }
+        for (k = 0; k < TOWN_ROPE_SIDES; k++) [[A, k], [A, k + 1], [B, k + 1], [A, k], [B, k + 1], [B, k]].forEach(function (e) { put(TV, add(e[0], mul(R[e[1]], w)), R[e[1]], r.c); });
+      }
+    });
+    if (TV.length === t0 && LV.length === l0) return;
+    S.push({ q: q, at: [(bb[0] + bb[3]) / 2, (bb[1] + bb[4]) / 2, (bb[2] + bb[5]) / 2], r: Math.hypot(bb[3] - bb[0], bb[4] - bb[1], bb[5] - bb[2]) / 2, t0: t0 / 9, tn: (TV.length - t0) / 9, l0: l0 / 9, ln: (LV.length - l0) / 9 });
+  });
+  var R = { S: S, n: nr, vao: null, vb: null };
+  if (!S.length) return R;
+  var nt = TV.length / 9; S.forEach(function (g) { g.l0 += nt; });   // 一個緩衝：管子在前、線在後
+  R.vao = gl.createVertexArray(); R.vb = gl.createBuffer(); gl.bindVertexArray(R.vao); gl.bindBuffer(gl.ARRAY_BUFFER, R.vb);
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(TV.concat(LV)), gl.STATIC_DRAW);
+  gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 36, 0);
+  gl.enableVertexAttribArray(1); gl.vertexAttribPointer(1, 3, gl.FLOAT, false, 36, 12);
+  gl.enableVertexAttribArray(2); gl.vertexAttribPointer(2, 3, gl.FLOAT, false, 36, 24);
+  gl.bindVertexArray(null);
+  return R;
+}
+function townRopeFree(T) { if (T.ropes && T.ropes.vao) { gl.deleteVertexArray(T.ropes.vao); gl.deleteBuffer(T.ropes.vb); } T.ropes = null; }
+/** 畫繩（townDraw：布旗之後，地面帶子那一支著色器已經在用）⇒ 三角形數。 */
+function townRopeDraw(eye, PL) {
+  var tris = 0, nd = 0;
+  TOWNS.list.forEach(function (T) {
+    if (!T.inst) return;
+    if (!T.ropes) T.ropes = townRopes(T);
+    var R = T.ropes; if (!R.vao) return;
+    gl.bindVertexArray(R.vao);
+    R.S.forEach(function (g) {
+      var q = g.q;
+      if (townRiseHides(T, q) || (q.lot && TOWN_UNITS[T.id + ':' + q.lot]) || townRuinHides(T, q)) return;
+      if (Math.hypot(g.at[0] - eye[0], g.at[2] - eye[2]) - g.r > TOWN_LOD[0] * (q.lk || 1)) return;
+      for (var i = 0; i < 6; i++) { var pl = PL[i]; if (pl[0] * g.at[0] + pl[1] * g.at[1] + pl[2] * g.at[2] + pl[3] < -g.r) return; }
+      if (g.tn) { gl.drawArrays(gl.TRIANGLES, g.t0, g.tn); tris += g.tn / 3; }
+      if (g.ln) gl.drawArrays(gl.LINES, g.l0, g.ln);
+      nd++;
+    });
+  });
+  TOWNS.stat.ropes = nd;                                                 // 這一格畫了幾棟的繩
+  return tris;
 }
 
 // ── 著色器 ──
@@ -2589,6 +2652,7 @@ function townDraw() {
     });
   });
   if (loop) { tris += floopTownDraw(fogD); gl.useProgram(PG.prog); }   // 後面照舊用地面帶子那一支的人不用重設
+  tris += townRopeDraw(eye, PL);                                         // 建築的繩（起重機的吊索、穩索；同一支著色器）
   TOWNS.stat.flags = nfl; TOWNS.stat.flagMs = (TOWNS.stat.flagMs || 0) * 0.95 + (performance.now() - tf0) * 0.05;   // flagMs：旗這一段每格幾毫秒（CPU；慢慢平均）
   // 城鎮居民（沿路走動、看板換色立繪；63_townfolk.js，位置只照遊戲時間（townClock：暫停就停）算）
   tris += townFolkDraw(P, K, eye, PL, fogD, TOWNS.flagClock);
