@@ -47,6 +47,9 @@ function shapiMake() {
     hulls: function () { return HULL_LIST.map(function (h) { return { id: h.id, name: h.name, fixed: !!h.fixed, author: author[h.id] || '', card: SHIP_CARDS[h.id] || null }; }); },
     loadHull: function (id) { return loadHull(id).then(function (T) { return T.id; }); },
     loaded: function (id) { return !!HULLT[id]; },
+    /** 船型縮圖（05_hull.js thumbImg；方舷放置的船塢、艦隊）：那一型載好、畫一張 ⇒ PNG 的 data URL（沒有東西 ⇒ null）。thumbV ＝ 畫法版本（改了畫法就加一）。只讀。 */
+    thumb: function (id, o) { return loadHull(id).then(function (T) { var c = thumbImg(T, o); return c ? c.toDataURL('image/png') : null; }); },
+    thumbV: THUMB_V,
     /** 開戰：spec ＝ [{ team: 'blue'|'red', hull }]，第一艘是我艦（鏡頭的「我艦」）；船型要先載好。o：dist 開局船頭距離（m）、field 同時在場幾艘（其他的候補）、
      *  weather 天氣、mode 玩法（預設 eve 觀戰 ＝ 全部交給電腦）、staged 分段開（不卡畫面；回 Promise）、judge: false 核心不判勝負（外殼自己判、自己補船；57_core.js CORE_JUDGE）。 */
     start: function (spec, o) {
