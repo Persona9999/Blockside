@@ -92,12 +92,13 @@ function winOne(C, P, occ, sx, sy, sz, K, mpv) {
 }
 // ── 畫（只在世界時間的夜裡：TOD_LIT > 0；沒開世界時間、白天 ⇒ 整段跳過）──
 //   哪扇亮：雜湊（63_towns.js twH，同建築）照船的穩定 id ＋ 第幾扇 —— 往來的船用清單的 id（npc.id）、其他的船用開場時的序號（SHIPS 的序號會往前補，⛔ 不能直接用）；
-//     幾成亮照 TOD_WIN（同城裡的窗）。⛔ 不照世界座標（船會動 ⇒ 一直換）；?shipwinxz=1 ⇒ 改回照船心的世界 x、z（對照組：同一個讀數報得出換掉的窗）。
+//     幾成亮：船的窗夜裡全亮（shipWinFrac；Tim 2026-10-31「希望船的窗戶燈都維持全開」）；?shipwinpart=1 ⇒ 照城裡窗的鐘點表 TOD_WIN 亮幾成（對照組）。
+//     ⛔ 不照世界座標（船會動 ⇒ 一直換）；?shipwinxz=1 ⇒ 改回照船心的世界 x、z（對照組：同一個讀數報得出換掉的窗，要跟 ?shipwinpart=1 一起開）。
 //   近（船心離鏡頭 < 近那一級的距離 TOWN_LOD[0]，交接帶 TOWN_BAND[0]，同建築、同表演船的分級）：窗片（貼在那一團外面、往外 0.08 格；只畫朝鏡頭那一面 ⇒ 從艙裡看不到）；
 //   遠：每扇一個光點（看板、最小 TL_PX 像素，同城裡的光點）。都跟著船的矩陣 sh.M 走。
 //   玻璃打掉（15_smooth.js glsTouch）⇒ 那艘的窗重建：那一扇有任何一格玻璃不在了 ⇒ 不亮。
 // ?shipwin=0 ⇒ 不畫（量效能的對照組）。讀數 __game.shipwin()：每艘亮著哪幾扇。
-var SHIPWIN = { on: Q.get('shipwin') !== '0', xz: Q.get('shipwinxz') === '1', prog: null, progJ: null, quad: null, stat: { ships: 0, cards: 0, glow: 0, ms: 0 } };
+var SHIPWIN = { on: Q.get('shipwin') !== '0', xz: Q.get('shipwinxz') === '1', part: Q.get('shipwinpart') === '1', prog: null, progJ: null, quad: null, stat: { ships: 0, cards: 0, glow: 0, ms: 0 } };
 var SHIPWIN_VS = '#version 300 es\nlayout(location=0) in vec4 aP; layout(location=1) in vec3 aN; uniform mat4 uVP, uModel; uniform vec3 uEye; uniform vec2 uKey; uniform float uTWin, uTLT;\n' +
   'out vec3 vW; out float vD; flat out vec3 vCol;\n' + TL_HASH_GLSL +
   'void main(){ vec3 w=(uModel*vec4(aP.xyz,1.0)).xyz, n=mat3(uModel)*aN; float h=twH(uKey,aP.w); vW=w; vD=length(uModel[3].xz-uEye.xz); vCol=vec3(0.0);\n' +
@@ -185,7 +186,7 @@ function shipWinDraw() {
   var t0 = performance.now(), L0 = TOWN_LOD[0], B0 = TOWN_BAND[0], cf = gl.isEnabled(gl.CULL_FACE);
   gl.disable(gl.CULL_FACE); gl.enable(gl.BLEND); gl.blendFunc(gl.ONE, gl.ONE); gl.depthMask(false);
   var PW = Pg.win; gl.useProgram(PW.prog); setCommon(PW);
-  gl.uniform1f(PW.u.uTWin, TOD_WIN); gl.uniform1f(PW.u.uTLK, TOD_LIT); gl.uniform1f(PW.u.uTLT, SIMT); gl.uniform2f(PW.u.uIn, -2, -1); gl.uniform2f(PW.u.uOut, L0 - B0, L0 + B0);
+  gl.uniform1f(PW.u.uTWin, shipWinFrac()); gl.uniform1f(PW.u.uTLK, TOD_LIT); gl.uniform1f(PW.u.uTLT, SIMT); gl.uniform2f(PW.u.uIn, -2, -1); gl.uniform2f(PW.u.uOut, L0 - B0, L0 + B0);
   L.forEach(function (sh) {
     if (!sh.winM || sh.winD) shipWinBuild(sh); st.ships++;
     if (!sh.winM.n || Math.hypot(sh.M[12] - CAM.eye[0], sh.M[14] - CAM.eye[2]) > L0 + B0) return;
@@ -194,7 +195,7 @@ function shipWinDraw() {
   });
   var PG = Pg.glow, f = norm(sub(CAM.look, CAM.eye)), r = norm([-f[2], 0, f[0]]), u = [r[1] * f[2] - r[2] * f[1], r[2] * f[0] - r[0] * f[2], r[0] * f[1] - r[1] * f[0]];   // 鏡頭的右、上
   gl.useProgram(PG.prog); setCommon(PG); gl.uniform3fv(PG.u.uR, r); gl.uniform3fv(PG.u.uU, u);
-  gl.uniform1f(PG.u.uPx, 2 * Math.tan(0.45) / CAM.h); gl.uniform1f(PG.u.uTLK, TOD_LIT); gl.uniform1f(PG.u.uTWin, TOD_WIN); gl.uniform2f(PG.u.uWin, L0 - B0, L0 + B0);
+  gl.uniform1f(PG.u.uPx, 2 * Math.tan(0.45) / CAM.h); gl.uniform1f(PG.u.uTLK, TOD_LIT); gl.uniform1f(PG.u.uTWin, shipWinFrac()); gl.uniform2f(PG.u.uWin, L0 - B0, L0 + B0);
   L.forEach(function (sh) {
     if (!sh.winM.ng || Math.hypot(sh.M[12] - CAM.eye[0], sh.M[14] - CAM.eye[2]) < L0 - B0) return;
     var k = shipWinKeyXZ(sh); gl.uniform2f(PG.u.uKey, k[0], k[1]); gl.uniformMatrix4fv(PG.u.uModel, false, sh.M);
@@ -203,13 +204,15 @@ function shipWinDraw() {
   gl.bindVertexArray(null); gl.depthMask(true); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA); if (cf) gl.enable(gl.CULL_FACE);
   st.ms = +(performance.now() - t0).toFixed(2);
 }
-/** 讀數：每艘幾扇窗、哪幾扇亮著（照同一個雜湊與 TOD_WIN 算；打掉的不算）。 */
+/** 船窗亮幾成：夜裡（TOD_LIT ＞ 0）全亮（雜湊 ＜ 1 一定成立）；?shipwinpart=1 ⇒ 照 TOD_WIN。亮度另外乘 TOD_LIT（入夜、天亮時淡入淡出）。 */
+function shipWinFrac() { return SHIPWIN.part ? TOD_WIN : TOD_LIT > 0 ? 1 : 0; }
+/** 讀數：每艘幾扇窗、哪幾扇亮著（照同一個雜湊與 shipWinFrac 算；打掉的不算）。 */
 function shipWinStat() {
-  var out = { on: SHIPWIN.on, xz: SHIPWIN.xz, lit: +TOD_LIT.toFixed(3), win: +TOD_WIN.toFixed(3), draw: SHIPWIN.stat, ships: [] };
+  var out = { on: SHIPWIN.on, xz: SHIPWIN.xz, part: SHIPWIN.part, lit: +TOD_LIT.toFixed(3), win: +shipWinFrac().toFixed(3), draw: SHIPWIN.stat, ships: [] };
   SHIPS.forEach(function (sh, i) {
     if (!sh.T.glsXYZ || !shipWins(sh.T).length) return;
     var k = shipWinKeyXZ(sh), ok = sh.winM ? sh.winM.ok : shipWins(sh.T).map(function (w, wi) { return wi; });
-    out.ships.push({ i: i, name: sh.name || sh.T.id, hull: sh.T.id, key: k, wins: shipWins(sh.T).length, ok: ok.length, on: TOD_LIT > 0 ? ok.filter(function (wi) { return twHash(k[0], k[1], wi) < TOD_WIN; }) : [] });
+    out.ships.push({ i: i, name: sh.name || sh.T.id, hull: sh.T.id, key: k, wins: shipWins(sh.T).length, ok: ok.length, on: TOD_LIT > 0 ? ok.filter(function (wi) { return twHash(k[0], k[1], wi) < shipWinFrac(); }) : [] });
   });
   return out;
 }
@@ -226,18 +229,23 @@ function townShipSig() {
   s += Math.round((1.6 - wxLum()) * 20) + '|';                         // 亮度變了（入夜、天氣）⇒ 也重排
   SHIPS.forEach(function (sh) {
     if (!townShipMoored(sh)) return;
-    var n = (sh.vlampN || 0); sh.models.forEach(function (m) { if (m.alive && isLamp(m)) n++; });
+    var n = (sh.vlampN || 0) + sh.T.gangway.length; sh.models.forEach(function (m) { if (m.alive && isLamp(m)) n++; });
     if (n) s += shipWinKey(sh) + ':' + n + ',';
   });
   return s;
 }
+// 舷梯燈（Tim 2026-10-31：船的燈都掛在船尾高處、離棧橋面 5～10 m，照多遠 8 m ⇒ 照不到棧橋；「舷梯燈可以不用實體模型 相當於只改遊戲meta 可以直接加上」）：
+//   config ships[].gangway ＝ [[x, y, z], …]（船的格座標，兩舷船腰、舷外 1.5 m ＝ 擺在棧橋邊；最多 4 盞）。沒有模型、不發光暈，只有光：
+//   停港時跟船燈一起進城鎮光源格，照多遠、亮度、光色同城裡的燈籠（TL_TYPE[0]）⇒ 跟城裡的燈一樣只在夜裡亮（著色器乘 TL.k）；不停港、交戰不點。
+//   （2026-10-31 試過：船燈的亮度、舷外 0.3 m ⇒ 棧橋邊只亮 +2.6；城裡燈籠的亮度、舷外 1.5 m ⇒ +12，船身 +14，不會照成一團螢光。）
 /** 停港的船燈 ⇒ [x, y, z, 照多遠, r, g, b, 相位, …]（世界座標）；順手標 sh.tlIn。 */
 function townShipLamps() {
-  var out = [], R = TL_TYPE[0].r, I = LAMP_I * (1.6 - wxLum()), C = [1, 0.62, 0.25];   // C：模型的燈的暖橘（同 lampsUpdate）
+  var out = [], R = TL_TYPE[0].r, I = LAMP_I * (1.6 - wxLum()), C = [1, 0.62, 0.25], G = TL_TYPE[0];   // C：模型的燈的暖橘（同 lampsUpdate）；G：舷梯燈照城裡的燈籠
   SHIPS.forEach(function (sh) {
     sh.tlIn = false; if (!SHIP_TL || !townShipMoored(sh)) return;
     (sh.T.lamps || []).forEach(function (V, j) { if (!vlampOn(sh, V)) return; var w = M4.pt(sh.M, V.at[0], V.at[1], V.at[2]); out.push(w[0], w[1], w[2], R, V.rgb[0] * I, V.rgb[1] * I, V.rgb[2] * I, j * 1.7); sh.tlIn = true; });
     sh.models.forEach(function (m) { if (!m.alive || !isLamp(m)) return; var q = lampAt(m), w = M4.pt(sh.M, q[0], q[1], q[2]); out.push(w[0], w[1], w[2], R, C[0] * I, C[1] * I, C[2] * I, m.k * 2.39); sh.tlIn = true; });
+    sh.T.gangway.forEach(function (q, j) { var w = M4.pt(sh.M, q[0], q[1], q[2]); out.push(w[0], w[1], w[2], R, G.c[0] * G.k, G.c[1] * G.k, G.c[2] * G.k, 5.1 + j * 3.3); });   // 舷梯燈：只有光（不進 sh.tlIn：它不在船自己的燈裡）
   });
   return out;
 }

@@ -781,6 +781,10 @@ def validate(cfg, prev=None):
                         err(qp + '.pole', '旗桿長 0.5～12 公尺')
                     if 'scale' in q and not (isnum(q['scale']) and 0.2 <= q['scale'] <= 3):
                         err(qp + '.scale', '大小倍率 0.2～3')
+        if 'gangway' in s:   # 舷梯燈（只有光、沒有模型；停港的夜裡進城鎮光源格，63_shipwin.js townShipLamps）：[[x, y, z], …] 船的格座標，最多 4 盞
+            L = s['gangway']
+            if not (isinstance(L, list) and len(L) <= 4 and all(isinstance(q, list) and len(q) == 3 and all(isnum(v) for v in q) for q in L)):
+                err(p + '.gangway', '最多 4 盞的 [x, y, z]（船的格座標）清單')
         if 'lamps' in s:   # 船殼上的燈（格子做的；60_render.js vlampSet）：[{at: [x, y, z], r: 半徑幾格, color: 發光的格子 rgb332 代碼, rgb: [r, g, b] 光色 0～1}]，最多 4 盞
             L = s['lamps']
             if not (isinstance(L, list) and len(L) <= 4):
