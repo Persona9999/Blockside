@@ -255,6 +255,9 @@ function shipCheck(id) {
     // ── 煙囪（meta kind=funnel、固定點 smoke；78_funnel.js）──
     R.info.funnels = funnelsOf(T).length;
     funnelsOf(T).forEach(function (f) { if (!f.pt) add('warn', '煙囪', f.name, '沒有固定點 smoke ⇒ 從外框頂面的中心冒煙', '煙囪子作品登記固定點 smoke（煙囪口的中心；造船規格 §9）'); });
+    // ── 灶的煙（meta kind=galley、固定點 smoke；78_funnel.js 煙源表，TASK-1103）：沒標 ⇒ 不冒（用餐時刻也不冒）──
+    R.info.galleys = galleysOf(T).length;
+    galleysOf(T).forEach(function (g) { if (!g.p) add('warn', '灶', g.name, '沒有固定點 smoke ⇒ 用餐時刻不冒煙', '爐灶那一件模型登記固定點 smoke（煙管出口；可以在爐灶外框外、上一層甲板上；造船規格 §9.13）'); });
     // ── 彈藥庫與取用點（23_powder.js）：沒有桶 ⇒ 不擺取用點 ⇒ 送藥手沒地方拿、砲打完砲旁藥箱那幾發就永遠停（維吉尼亞號 2026-10-15：180 秒只開 12 發，Tim 先看到）──
     var kegsAny = sh.mags.some(function (o) { return o.kegs.length; });
     if (!sh.mags.length) add('error', '彈藥庫', '—', '沒有 kind=magazine ⇒ 沒有取用點：砲打完砲旁藥箱（' + BOX_N + ' 份 × 砲種表 box）就停、也不會殉爆', '彈藥庫的關聯 meta kind=magazine, powder_lb ＋ 裡面的火藥桶模型（造船規格 §8）');

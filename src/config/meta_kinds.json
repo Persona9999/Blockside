@@ -34,7 +34,7 @@
     "propeller": { "name": "螺旋槳", "on": ["model"], "keys": ["axis_x", "axis_y", "axis_z", "blades", "diameter_m"], "need": [], "use": ["hub", "shaft-fwd"], "doc": "§9.6", "game": ["24_armor.js", "31_drive.js"], "mk": true, "drv": "vox" },
     "oar": { "name": "槳", "on": ["model"], "keys": ["rowers", "side", "stroke_deg", "dip_deg"], "need": ["pivot"], "use": ["blade", "seat"], "doc": "§9.10", "game": ["10_ship.js", "31_drive.js", "40_crew.js", "42_hands.js"], "mk": true, "drv": "hp", "block": false, "anim": true },
     "door": { "name": "門、艙蓋", "on": ["model"], "keys": ["open"], "need": ["hinge-a", "hinge-b"], "use": [], "doc": "§9.7", "game": ["25_doors.js"], "mk": true, "hpK": 0.5, "block": false, "anim": true },
-    "galley": { "name": "廚房爐灶", "on": ["model"], "keys": [], "need": [], "use": [], "doc": "§9.13", "game": ["45_galley.js", "39_eff.js"], "mk": true, "clear": true },
+    "galley": { "name": "廚房爐灶", "on": ["model"], "keys": [], "need": [], "use": ["smoke"], "doc": "§9.13", "game": ["45_galley.js", "39_eff.js"], "mk": true, "clear": true },
     "portlid": { "name": "砲門蓋板", "on": ["model"], "keys": ["lid_of", "close_deg", "house"], "need": ["hinge-a", "hinge-b"], "use": [], "doc": "§9.12", "game": ["62_ports.js"], "deco": true, "always": true, "anim": true, "refs": { "lid_of": { "to": ["gun"] } } },
     "gear": { "name": "會轉的機件", "on": ["model"], "keys": ["gear", "spin", "spin_k", "spin_mode"], "need": [], "use": ["spin-a", "spin-b", "bail"], "doc": "§9.6", "game": ["26_spin.js"] },
     "light": { "name": "燈", "on": ["link", "model"], "keys": ["light_color"], "need": [], "use": ["wick", "bail"], "doc": "§9", "game": ["60_render.js"] },
