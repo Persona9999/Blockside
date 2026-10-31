@@ -30,12 +30,18 @@ function ladCheck(sh) {
 /** 反向對照（75_shipcheck.js 照 ?ladtest=<梯名>:<做法> 叫；開戰前、只改記憶體裡這一型的格子與固定點，⛔ 不寫回任何檔）：
  *    shift:dx,dy ＝ 那一座整座（格子＋四個點）挪 (dx, dy) 格；cut:n ＝ 靠 head 那一頭 n 柱的格拿掉（點不動）；pillar ＝ head 正前方第 2 格立一根 NAV_HEAD 格高的柱子；
  *    box ＝ head 四周（離 2～3 格那兩圈，梯口那幾柱除外）圍 NAV_HEAD 格高的牆（出口整個堵死）；
- *    drop ＝ ⑤ ⑥ 甲板連通當成沒有這一座（格子、點都不動；deckLink 不走它的邊）。⇒ 讀數一行（改了什麼）。 */
+ *    drop ＝ ⑤ ⑥ 甲板連通當成沒有這一座（格子、點都不動；deckLink 不走它的邊）；梯名可用 + 連好幾座（互為備援的那幾座一起拿掉，TASK-1137 夜燈號兩座貨艙梯子）。⇒ 讀數一行（改了什麼）。 */
 function ladTest(T, spec) {
   var a = String(spec).split(':'), lads = shipLadders(T).filter(function (l) { return !l.rope; }), g = T.base, k = -1;
-  lads.forEach(function (l, i) { if (k < 0 && (l.name === a[0] || l.name.slice(-a[0].length - 1) === '/' + a[0])) k = i; });
+  function find(nm) { var j = -1; lads.forEach(function (l, i) { if (j < 0 && (l.name === nm || l.name.slice(-nm.length - 1) === '/' + nm)) j = i; }); return j; }
+  if (a[1] === 'drop') {
+    var ks = a[0].split('+').map(find), miss = a[0].split('+').filter(function (nm, i) { return ks[i] < 0; });
+    if (miss.length) return '找不到梯子 ' + miss.join('、');
+    T.dlkDrop = ks.map(function (i) { return lads[i].name; });
+    return T.dlkDrop.join('、') + ' 在甲板連通（⑤ ⑥）裡當成沒有';
+  }
+  k = find(a[0]);
   if (k < 0) return '找不到梯子 ' + a[0];
-  if (a[1] === 'drop') { T.dlkDrop = lads[k].name; return lads[k].name + ' 在甲板連通（⑤ ⑥）裡當成沒有'; }
   var l = lads[k], C = ldcCells(T, g, lads)[k], O = ldcOpen(T, g, l, C), H = O.H, mat = g.get(H[0], H[1], H[2] - 1) || 1, n = 0;
   if (a[1] === 'shift') {
     var d = (a[2] || '0,0').split(',').map(Number), v = {}, part = (T.h.parts || []).filter(function (q) { return q.path === l.part; })[0], nm = l.name === l.part ? '' : l.name.slice(l.part.length + 1);
@@ -387,17 +393,17 @@ function deckLink(sh) {
   return out;
 }
 function dlkRun(sh, out) {
-  var T = sh.T, NV = sh.nav, g = navBase(T), LV = NV.levels, a2 = NAV_C * NAV_C * S * S, drop = T.dlkDrop, id = {}, par = [], pts = [], via = {};
+  var T = sh.T, NV = sh.nav, g = navBase(T), LV = NV.levels, a2 = NAV_C * NAV_C * S * S, drop = T.dlkDrop || [], id = {}, par = [], pts = [], via = {};
   function node(k, n, deck) { if (id[k] === undefined) { id[k] = par.length; par.push(par.length); pts.push(deck ? n : 0); } }
   function root(a) { while (par[a] !== a) a = par[a] = par[par[a]]; return a; }
   function join(a, b) { if (a === undefined || b === undefined) return false; a = root(a); b = root(b); if (a !== b) par[b] = a; return true; }
   LV.forEach(function (L, i) { L.N.regs.forEach(function (n, r) { node(i + ':' + r, n, true); }); });
-  NV.ladders.forEach(function (L) { if (L.name !== drop) join(id[L.lo + ':' + L.ra], id[L.hi + ':' + L.rb]); });
+  NV.ladders.forEach(function (L) { if (drop.indexOf(L.name) < 0) join(id[L.lo + ':' + L.ra], id[L.hi + ':' + L.rb]); });
   var zlo = 1e9; LV.forEach(function (L) { if (!L.tur) zlo = Math.min(zlo, L.zr[0]); });
   var HN = zlo - 1 > NAV_HEAD ? dlkHoldNav(sh, g, [1, zlo - 1]) : null, hmin = Math.ceil(DLK_HOLD / a2), lmin = Math.ceil(DLK_LOST / a2), tmin = Math.ceil(DLK_TAB / a2);
   if (HN) HN.sp.n.forEach(function (n, s) { if (n >= hmin) node('h:' + s, n, false); });
   (sh.ladDrop || []).forEach(function (d) {
-    if (d.rope || d.name === drop || Math.min(d.a[2], d.b[2]) >= zlo) return;   // 只接一頭在艙底的（貨艙梯子）；其他沒收的照尋路的判斷（不走）
+    if (d.rope || drop.indexOf(d.name) >= 0 || Math.min(d.a[2], d.b[2]) >= zlo) return;   // 只接一頭在艙底的（貨艙梯子）；其他沒收的照尋路的判斷（不走）
     var e = [d.a, d.b].map(function (p) { return dlkEnd(sh, HN, zlo, p); });
     if (e[0] && e[1] && join(id[e[0]], id[e[1]])) e.forEach(function (k) { var v = k[0] === 'h' ? (via[k] = via[k] || []) : null; if (v && v.indexOf(d.name) < 0) v.push(d.name); });   // 兩頭都在艙底的（風暴角號 hold-mag）只記一次
   });
