@@ -28,6 +28,19 @@ function renderLerp(on, a) {
 }
 /** 有海圖（08_seabed.js）：鏡頭不鑽進地裡 —— 眼睛至少在那一點的地面／海底上 2 m（TASK-0721）。只動畫面，模擬不讀 CAM。 */
 function camBed(e) { if (BED && BED.A) { var b = bedHgt(e[0], e[2]) + 2; if (e[1] < b) e[1] = b; } return e; }
+/** 自由鏡頭（mode 0）的注視點跟著地面走（Tim 2026-10-31「切換城區時有機會穿到地底」「希望鏡頭能根據地面高度抬升」）：
+ *  注視點底下畫著的地面（63_towns.js townGround；海上算海面 0）比上一格高多少，注視點就跟著高多少、低了也跟著低 ⇒ 拖過山、跳到山上的城區鏡頭跟著抬，
+ *  注視點離地面多高（看人、看甲板的特寫）不變；也不低於地面。那一塊還沒載到 ⇒ 這一格不動，載到那一格再抬。
+ *  ⛔ 以前注視點的高度只在給的那一刻定（63_towns.js townDistGo 量地面，那一區還沒載到 ⇒ 0）⇒ 山上的城區注視點埋在地底，拉近時眼睛被 camBed 頂在地面上 2 m、往下看進地裡。
+ *  CAM.tgtG ＝ 上一格量到的地面；給了新的注視點（camSet、camStart）⇒ 清掉，那一格只墊不跟。大漩渦的水面不是 0 ⇒ 不套。 */
+function camGround() {
+  var t = CAM.tgt; if (CAM.mode !== 0 || !BED || !BED.A || VX) return;
+  var g = townGround(t[0], t[2]); if (!(g === g)) return;
+  g = Math.max(0, g);
+  if (CAM.tgtG != null) t[1] += g - CAM.tgtG;
+  if (t[1] < g) t[1] = g;
+  CAM.tgtG = g;
+}
 // 轉場（Blocksail 地球儀 ⇄ 海戰，只有 ?map=@host；Tim 2026-10-19：「地球儀模式時攝影機拉近 … 逐漸靠近海面後就轉場戰鬥」「返回地球儀時也用轉場 鏡頭變成俯瞰 然後拉遠變回地球儀」）
 //   CAM.tr ＝ { dir: 'in' | 'out', t, dur, H, hold }：
 //   'in'  開戰時停在世界原點正上方 H 公尺、往下俯視、北朝上（跟地球儀那一張同一個方向 ⇒ 地球儀不用轉）；hold 到外面那一頁說 'go'，dur 秒降到平常的鏡頭，降的前六成轉到平常的鏡頭水平朝的方向。
@@ -111,6 +124,7 @@ function camMove(dt) {
     if (CAM.trYaw && CAM.trYaw.i === ts.i) CAM.yaw -= ts.yaw - CAM.trYaw.yaw;
     CAM.trYaw = { i: ts.i, yaw: ts.yaw };
   } else CAM.trMe = CAM.trYaw = null;
+  camGround();
   var tgt = CAM.tgt, dist = CAM.dist, yaw = CAM.yaw, pitch = CAM.pitch, eye;
   if (CAM.mode === 1 && CAM.follow) {
     var b = CAM.follow, vd = norm(b.v);
@@ -213,7 +227,7 @@ evAnswer('rigSeen', camRigSeen, true);
 // ── 鏡頭只由這一支檔寫（TASK-0669 ③；以前輸入、開局、HUD、慢動作、第一人稱、測試場 9 支檔直接寫 CAM）：其他檔要動鏡頭 ⇒ 叫下面這些；admin.py 建置擋別的檔直接寫 CAM。
 /** 開局（70_flow.js reset）：鏡頭擺到開局的位置；?cam= 給了 ⇒ 那個固定機位。 */
 function camStart() {
-  CAM.mode = 0; CAM.follow = null; CAM.trMe = CAM.trYaw = null; CAM.pan = [0, 0]; CAM.see = null; CAM.dist = DIST * 1.05 + 40; CAM.tgt = [0, 8, 0]; CAM.yaw = 2.2; CAM.pitch = 0.22; CAM.snap = true;
+  CAM.mode = 0; CAM.follow = null; CAM.trMe = CAM.trYaw = null; CAM.pan = [0, 0]; CAM.see = null; CAM.dist = DIST * 1.05 + 40; CAM.tgt = [0, 8, 0]; CAM.tgtG = null; CAM.yaw = 2.2; CAM.pitch = 0.22; CAM.snap = true;
   if (!CAMQ) {                                                         // 預設：看我艦（鎖定我艦、拖曳自己轉），開局那一刻擺在我艦背對敵艦那一側 ⇒ 朝敵艦看（Tim 2026-10-15；以前是「我艦→敵艦」一直跟著兩艘的連線轉）
     var cm = SHIPS[PLAYER_I], cf = cm && foeOf(cm), a0 = cm && cf ? Math.atan2(cf.center[2] - cm.center[2], cf.center[0] - cm.center[0]) : 0;
     CAM.mode = 3; CAM.yaw = a0 + Math.PI + 0.35; CAM.aoff = 0.35; CAM.dist = 78; CAM.pitch = 0.2;   // ?cam= 給了 ⇒ 那個固定機位
@@ -243,5 +257,6 @@ function camSize(w, h) { CAM.w = w; CAM.h = h; }
 /** 一次寫好幾格（照給的順序一個一個寫）：慢動作的特寫與還原、第一人稱、測試場、主控台 __game.cam。 */
 function camSet(o) {
   for (var k in o) CAM[k] = o[k];
+  if ('tgt' in o) CAM.tgtG = null;                                       // 新的注視點 ⇒ camGround 從這裡重量
   if ('track' in o && $('camT')) $('camT').classList.toggle('on', !!o.track);   // 🎥 跟船那一顆照實際的（殉爆特寫也會關跟船 —— 以前只有 V／那一顆會改燈 ⇒ 特寫把跟船關掉、燈還亮著）
 }
