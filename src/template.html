@@ -352,7 +352,7 @@
   #keys > #dockK.dkOff{ display:none !important; }   /* ⚓ 停靠／⛵ 出航（88_modeswitch.js dockBtn，TASK-0867）：航海時準備好了才出現 */
   #twbInfo, #twbP{ display:none; }
   #twbTown{ display:none; }
-  #twbTown.on{ display:block; position:absolute; left:50%; top:28px; transform:translateX(-50%); padding:4px 12px; border-radius:8px; background:rgba(10,14,22,.66); color:#f3e6c4; font-size:14px; pointer-events:none; white-space:nowrap; max-width:calc(100vw - 32px); overflow:hidden; text-overflow:ellipsis; z-index:7; }   /* 城名、年份、人口（87_townbuild.js twbTitle；TASK-0871） */
+  #twbTown.on{ display:block; position:absolute; left:50%; top:28px; transform:translateX(-50%); padding:4px 12px; border-radius:8px; background:rgba(10,14,22,.66); color:#f3e6c4; font-size:14px; pointer-events:none; white-space:nowrap; max-width:calc(100vw - 32px); overflow:hidden; text-overflow:ellipsis; }   /* 城名、年份、人口（87_townbuild.js twbTitle；TASK-0871）—— 不寫 z-index、DOM 排在 #topC 前面 ⇒ 船隻資訊壓在它上面（Tim 2026-11-01「讓船隻資訊UI排序在城鎮年份之上」）；主選單、設定照舊蓋過它 */
   #stage.twb #twbInfo{ display:block; position:absolute; left:50%; top:64px; transform:translateX(-50%); padding:4px 12px; border-radius:8px; background:rgba(10,14,22,.66); color:#eee; font-size:13px; pointer-events:none; white-space:nowrap; max-width:calc(100vw - 32px); overflow:hidden; text-overflow:ellipsis; }
   #stage.twb #twbP{ display:flex; flex-direction:column; gap:8px; position:absolute; left:50%; bottom:92px; transform:translateX(-50%); width:min(520px, calc(100vw - 32px)); z-index:8; pointer-events:auto; }
   #twbTabs, #twbItems, #twbOps{ display:flex; flex-wrap:wrap; gap:6px; } #twbTabs button{ border-radius:14px; padding:4px 12px; } #twbTabs button.on{ background:#9fc7ff; color:#111; }
@@ -515,6 +515,7 @@
   <div id="fleetL" class="hud fleet"></div>
   <div id="fleetR" class="hud fleet"></div>
   <div id="sigP" class="panel"><div id="sigH"><b>🚩 旗號</b> 對我方友艦下令<span id="sigX">✕</span></div><div id="sigBtns"></div><div id="sigNow"></div></div><!-- 旗號面板（TASK-0679；71_input.js sigShow） -->
+  <div id="twbTown"></div>   <!-- 城名、年份、人口（87_townbuild.js twbTitle）：排在 #topC 前面、不寫 z-index ⇒ 船隻資訊壓在它上面 -->
   <div id="topC" class="hud"><div id="fps" class="hud"></div><div id="irow"><div id="icol"><div id="info" class="panel"></div><div id="fightB"></div><div id="msg"></div></div><canvas id="gmap"></canvas></div></div>
   <div id="teleBox" class="hud" style="display:none"><span class="kb tk" data-act="teleFwd" data-tip="俥鐘往前撥一格"><b>T</b>▲</span><canvas id="telc" title="俥鐘（點或拖）"></canvas><span class="kb tk" data-act="teleBack" data-tip="俥鐘往後撥一格"><b>G</b>▼</span></div>
   <div id="aimR" aria-hidden="true"><svg viewBox="-24 -24 48 48"><g class="o"><circle r="16"/><path d="M-11 0H-4M4 0H11M0 -11V-4M0 4V11"/></g><g class="k"><circle r="16"/><path d="M-11 0H-4M4 0H11M0 -11V-4M0 4V11"/></g><circle class="d" r="1.6"/></svg></div><!-- 瞄準圈（UI 層，61_hud.js aimRingUi；在 HUD 底下） -->
@@ -528,7 +529,6 @@
   <!-- 建造模式（82_build.js，TASK-0648；#stage.bld 才顯示）：準心下面一行說明、📦 目錄（分類分頁）；快捷欄在 #fpUI 裡 -->
   <div id="bldInfo"></div>
   <!-- 城鎮的建築模式（87_townbuild.js，TASK-0742；#stage.twb 才顯示）：上面一行說明、下面分類選單（道路、房屋）＋復原、離開 -->
-  <div id="twbTown"></div>
   <div id="twbInfo"></div>
   <div id="twbP" class="panel"></div>
   <div id="tuiP" class="panel"></div>
