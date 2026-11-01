@@ -78,14 +78,15 @@ function tbiServiceHTML(S) {
   var menus = S.menus || [];
   if (!menus.length) return '<div class="tbiT">供應菜單</div><div class="tbiDim">尚未掛載菜單</div>';
   return '<div class="tbiT">' + tuiEsc(S.title || '供應菜單') + '</div>' + menus.map(function (m) {   // title、crew、foot：軍事建築換字（Blocksail townBld kind 'guard'；TASK-0948）
-    var h = '<div class="tbiT">' + (m.icon ? tuiIcon('dishes', m.icon) : '') + tuiEsc(m.name) + '</div>' +
-      '<div class="tbiDim">滿編每日最多 ' + tuiNum(m.capacity) + ' 人次・' + tuiNum(m.jobs) + (S.crew || ' 名工人') + (m.served == null ? '' : '・昨天 ' + tuiNum(m.served, 1) + ' 人次') + '</div>';
-    var ks = Object.keys(m.per100 || {});
+    var pw = m.per != null && !!m.perIn, h = '<div class="tbiT">' + (m.icon ? tuiIcon('dishes', m.icon) : '') + tuiEsc(m.name) + '</div>' +
+      (pw ? '<div class="tbiDim">每名' + tuiEsc(S.worker || '工人') + '一天招待 ' + tuiNum(m.per, 1) + ' 人次・滿編 ' + tuiNum(m.jobs) + ' 名、每日最多 ' + tuiNum(m.capacity) + ' 人次' :   // 每名工人（Tim 2026-11-01「菜單顯示可能可以改為每名工人能服務多少人 消耗多少資源」；Blocksail townBld per／perIn）
+        '<div class="tbiDim">滿編每日最多 ' + tuiNum(m.capacity) + ' 人次・' + tuiNum(m.jobs) + (S.crew || ' 名工人')) + (m.served == null ? '' : '・昨天 ' + tuiNum(m.served, 1) + ' 人次') + '</div>';
+    var q = pw ? m.perIn : m.per100, ks = Object.keys(q || {});
     if (!ks.length) return h + '<div class="tbiDim">不消耗物資</div>';
-    h += '<div class="tbiDim">每 100 人次消耗</div>';
+    h += '<div class="tbiDim">' + (pw ? '每名' + tuiEsc(S.worker || '工人') + '一天消耗' : '每 100 人次消耗') + '</div>';
     return h + ks.map(function (g) {
-      var M = (m.alternatives || {})[g], row = '<div class="tbiR"><span>' + tuiIcon('goods', g) + tuiEsc(tbiGood(g)) + '</span><b>' + tuiNum(m.per100[g], 3) + (M ? ' 份' : ' 桶') + '</b></div>';
-      if (M && M.length) row += '<div class="tbiDim">可擇一或混用：' + M.map(function (x) { return tuiIcon('goods', x.g, 16) + tuiEsc(x.name) + ' ' + tuiNum(x.q, 3) + ' 桶'; }).join('／') + '</div>';
+      var M = (m.alternatives || {})[g], row = '<div class="tbiR"><span>' + tuiIcon('goods', g) + tuiEsc(tbiGood(g)) + '</span><b>' + tuiNum(q[g], 3) + (M ? ' 份' : ' 桶') + '</b></div>';
+      if (M && M.length) row += '<div class="tbiDim">可擇一或混用：' + M.map(function (x) { return tuiIcon('goods', x.g, 16) + tuiEsc(x.name) + ' ' + tuiNum(pw ? x.qw : x.q, 3) + ' 桶'; }).join('／') + '</div>';
       return row;
     }).join('');
   }).join('') + '<div class="tbiDim">' + tuiEsc(S.foot || '一天只供應一道菜；實際量依需求、物資與人手調整。') + '</div>';
