@@ -191,7 +191,7 @@ function colourAt(kind, f, u, v) {
 /** 這一型的桅頂（格座標）：{ fore: [x, y, z], … }。 */
 function mastTrucks(T) {
   if (T.trucks) return T.trucks;
-  var top = {}, key = { '前桅': 'fore', '主桅': 'main', '後桅': 'mizzen' }, g = T.base, cy = Math.round(T.cy);
+  var top = {}, key = { '前桅': 'fore', '主桅': 'main', '後桅': 'mizzen', '尾桅': 'bonaventure' }, g = T.base, cy = Math.round(T.cy);   // 反查 10_ship.js findMasts 的 label
   (T.rig.models || []).forEach(function (m) { var mt = m.meta || {}, pv = (m.points || {}).pivot; if (mt.kind === 'yard' && mt.mast && mt.mast !== 'bowsprit' && pv && (!top[mt.mast] || pv[2] > top[mt.mast][2])) top[mt.mast] = pv; });
   T.masts.forEach(function (m) { var k = key[m.name] || m.name; if (!top[k]) top[k] = [m.x, cy, m.z1]; });
   var out = {};
