@@ -93,6 +93,16 @@ if (DEBUG) window.__game = {
     if (o.yards !== undefined) r.yards = floopYardCheck(o.yards);
     return r;
   },
+  /** 表演船遠近分級（TASK-1104；60_showlod.js）：畫一格 ⇒ 這一格每一級幾艘（far ＝ 該畫貼圖、還沒做 ⇒ 照中那一級畫）、不分級 none、低模四邊形數 quads、
+   *  檔載到哪（st 0 還沒要、1 在載、2 好了、3 載不到 err）、每一型（四邊形、倍率；null ＝ 沒烘或指紋對不上）、每艘這一格的級 lv。
+   *  給 true／false ⇒ 開關（同頁 A/B）；給 { n, f, nb, fb } ⇒ 改距離表（公尺，即時）。 */
+  showlod: function (o) {
+    var D = SHOWLOD, T = {}, id;
+    if (o === true || o === false) D.on = o; else if (o) for (id in o) if (id in D.L) D.L[id] = +o[id];
+    render();
+    for (id in D.T) { var t = D.T[id]; T[id] = t && t !== 'busy' ? { quads: t.quads, lk: +t.lk.toFixed(2) } : t; }
+    return { on: D.on, L: D.L, st: D.st, err: D.err, stat: D.stat, types: T, lv: Array.prototype.slice.call(D.lv, 0, SHIPS.length) };
+  },
   /** TASK-1101 的三項減量（帆不重傳 rigfixkey、錨鏈落定 chainrest、表演船停住 showidle；同名的網址開關）：給 { 名字: true／false } 就改 ——
    *  關掉的那一項這一格就生效（帆照以前重做、落定的鍊子接回去算、停住的船補一次局勢照畫）；打開的等下一步模擬才停、才落定。回現在的開關、幾艘停住、幾條落定。 */
   reduce: function (o) {
@@ -625,6 +635,7 @@ else GL_READY.then(yieldUI).then(function () {                     // 先讓主�
   if (!chk.ok) { glFail('船體資料跟封裝檔對不上，停下來（不畫半艘船）。\n' + line); return; }
   evEmit('boot:ready');
   if (Q.has('shipcheck')) { shipCheck(Q.get('shipcheck')); return; }
+  if (Q.has('showlodbake')) { showlodBakePage(Q.get('showlodbake')); return; }   // 表演船中那一級的烘（60_showlod.js；admin.py showlod 用無頭 Chrome 讀）
   if (Q.has('dispcheck')) { dispCheck(Q.get('dispcheck')); return; }   // 排水量與壓艙物（75_shipcheck.js；admin.py disp 用無頭 Chrome 讀）
   if (Q.get('lab') === 'gun') { gunLabInit(); return; }                  // 開炮音試聽頁（85_gunlab.js；根目錄 gunlab.html 轉過來）
   if (LAB_FLEET) { flabInit(); return; }                                // 擬真沙盒（84_fleetlab.js）   // 匯入檢查（75_shipcheck.js；admin.py check 用無頭 Chrome 讀）

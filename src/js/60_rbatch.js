@@ -113,9 +113,10 @@ function rbatPrep() {
 }
 /** 一艘：模型 → 裝飾 → 平滑面 → 裝甲的平滑面。 */
 function rbatShip(sh, o) {
-  var T = sh.T, L = sh.models, k, m, me;
+  var T = sh.T, L = sh.models, k, m, me, lo = showlodMid(o, sh);   // lo：表演船這一格畫中那一級（60_showlod.js）⇒ 烘進低模的模型、裝飾、平滑面不進表
   for (k = 0; k < L.length; k++) {
     m = L[k]; me = meshFor(T, m.rmesh !== undefined ? m.rmesh : m.mesh, m.mm); if (!m.alive || !me || (m.vox && !m.moved)) continue; if (!me.vao) meshGpu(me);   // m.vox：螺旋槳畫它自己的格（24_armor.js armDraw）；m.rmesh：有座的砲只畫砲身（座在下面的裝飾，TASK-0836）
+    if (lo && lo.mk[k] && showlodPlain(m)) continue;                   // 烘進去了、這一刻還是烘的樣子（門開了、錨拋了 ⇒ 照舊畫）
     var dv = m.ancD || m.vsl;                                         // 只給畫面的位移（格座標，左乘在 modelLocal 外面 ⇒ 帆的碰撞、斷船、打飛都看不到）：錨沒有 vsl、砲沒有 ancD
     var i = rbatAdd(0, o, k, m, me.vao, 0, 0, me.n, isLamp(m) ? lampGlow(m) : 0, null), ML = meshDtL(me, rbatBarrelL(m, rbatModelL(m)));   // 取用點的火藥桶是後加的模型，沒有 meta
     if (dv) { RBAT_TD[12] = dv[0]; RBAT_TD[13] = dv[1]; RBAT_TD[14] = dv[2]; ML = m4Into(RBAT_TQ, 0, RBAT_TD, ML); }   // ＝ M4.mul(trans(dv), L)：同一個捨入點
@@ -125,13 +126,13 @@ function rbatShip(sh, o) {
   L = sh.decos;
   if (L) for (k = 0; k < L.length; k++) {                             // 裝飾（TASK-0682；畫質「裝飾」關著 ⇒ 不畫）；砲門蓋板：每艘、每個畫質都畫（Tim；S14）——「砲門的開關演出」（62_ports.js portOn）只管演不演，沒輪到的那艘停在模型的樣子（開著、砲推出去）
     var d = L[k]; me = meshFor(T, d.mesh, d.mm);   // mm：meta material 的材質變體（62_simview.js meshFor，TASK-0859）
-    if (!me || d.gone || (!GFX.deco && !kindProp(d.meta.kind, 'always')) || (d.foot >= 0 && !hullGp(sh.grid, d.foot)) || (d.gm && !d.gm.alive)) continue; if (!me.vao) meshGpu(me);   // gone：砲門蓋板被打掉了、砲座配不到砲；腳下那一格被打掉 ⇒ 不畫；always（規格表：蓋板、砲座）⇒ 「裝飾」關著也畫；砲座的砲打飛、斷船帶走 ⇒ 不畫（整門一起走了）
+    if (!me || d.gone || (!GFX.deco && !kindProp(d.meta.kind, 'always')) || (d.foot >= 0 && !hullGp(sh.grid, d.foot)) || (d.gm && !d.gm.alive) || (lo && lo.dk[k] && !d.L)) continue; if (!me.vao) meshGpu(me);   // lo.dk：烘進低模的裝飾（蓋板在轉 d.L ⇒ 照舊畫）；gone：砲門蓋板被打掉了、砲座配不到砲；腳下那一格被打掉 ⇒ 不畫；always（規格表：蓋板、砲座）⇒ 「裝飾」關著也畫；砲座的砲打飛、斷船帶走 ⇒ 不畫（整門一起走了）
     i = rbatAdd(1, o, k, d, me.vao, 0, 0, me.n, isLamp(d) ? lampGlow(d) : 0, null);
     m4Into(RBAT.M, i * 16, sh.M, meshDtL(me, d.gm ? rbatMountL(d) : d.L || rbatT(d, d.origin)));
     RBAT.mb[i] = me;   // L：砲門蓋板繞鉸鏈轉過的擺法（沒在動 ⇒ null ＝ 模型的樣子）
   }
   var S = RBAT_SM; S.o = o;
-  if (sh.smR && sh.smR.size) { S.c = 2; S.k = 0; S.ref = sh; S.W = sh.M; sh.smR.forEach(rbatSmAdd); }   // 平滑渲染的格（15_smooth.js）：跟模型同一支著色器
+  if (!lo && sh.smR && sh.smR.size) { S.c = 2; S.k = 0; S.ref = sh; S.W = sh.M; sh.smR.forEach(rbatSmAdd); }   // 平滑渲染的格（15_smooth.js）：跟模型同一支著色器
   if (sh.arm) for (k = 0; k < sh.arm.length; k++) {                  // 砲帶的裝甲的平滑面（24_armor.js；螺旋槳掉了 ⇒ 不畫）
     var a = sh.arm[k]; if (!(a.smR && a.smR.size && !(a.prop && propGone(a)))) continue;
     var AL = armLocal(a);                                               // ＝ armM(a)：L ? M4.mul(sh.M, L) : sh.M（每塊一格一次；rbatSmAdd 照抄進每一項）
@@ -578,16 +579,17 @@ function rbatCheck() {
   }
   SHIPS.forEach(function (sh, i) {
     if (sh.sink > 40) return;
-    sh.models.forEach(function (m) {
-      var me = meshFor(sh.T, m.rmesh !== undefined ? m.rmesh : m.mesh, m.mm); if (!m.alive || !me || (m.vox && !m.moved)) return;
+    var lo = showlodMid(i, sh);                                         // 表演船畫中那一級（60_showlod.js）：烘進低模的不進表（同 rbatShip，照規則再判一次）
+    sh.models.forEach(function (m, k) {
+      var me = meshFor(sh.T, m.rmesh !== undefined ? m.rmesh : m.mesh, m.mm); if (!m.alive || !me || (m.vox && !m.moved) || (lo && lo.mk[k] && showlodPlain(m))) return;
       var dv = m.ancD || m.vsl, ML = m.vpre ? M4.mul(modelLocal(m), m.vpre) : modelLocal(m);   // 砲身（TASK-0836）：rmesh、vpre
       one(0, i, m, me, isLamp(m) ? lampGlow(m) : 0, M4.mul(sh.M, dv ? M4.mul(trans(dv[0], dv[1], dv[2]), meshDtM(me, ML)) : meshDtM(me, ML)));
     });
-    (sh.decos || []).forEach(function (d) {
-      var me = meshFor(sh.T, d.mesh, d.mm); if (!me || d.gone || (!GFX.deco && !kindProp(d.meta.kind, 'always')) || (d.foot >= 0 && !hullGp(sh.grid, d.foot)) || (d.gm && !d.gm.alive)) return;
+    (sh.decos || []).forEach(function (d, k) {
+      var me = meshFor(sh.T, d.mesh, d.mm); if (!me || d.gone || (!GFX.deco && !kindProp(d.meta.kind, 'always')) || (d.foot >= 0 && !hullGp(sh.grid, d.foot)) || (d.gm && !d.gm.alive) || (lo && lo.dk[k] && !d.L)) return;
       one(1, i, d, me, isLamp(d) ? lampGlow(d) : 0, M4.mul(sh.M, meshDtM(me, d.gm ? M4.mul(modelLocal(d.gm), trans(d.off[0], d.off[1], d.off[2])) : d.L || trans(d.origin[0], d.origin[1], d.origin[2]))));   // 砲座：跟著砲（TASK-0836）
     });
-    if (sh.smR && sh.smR.size) sm(2, i, sh, sh.smR, sh.M);
+    if (!lo && sh.smR && sh.smR.size) sm(2, i, sh, sh.smR, sh.M);
     if (sh.arm) sh.arm.forEach(function (a) { if (a.smR && a.smR.size && !(a.prop && propGone(a))) sm(3, i, a, a.smR, armM(a)); });
   });
   PIECES.forEach(function (pc, j) { (pc.mods || []).forEach(function (m) { var me = meshFor(pc.T, m.mesh, m.mm); if (me) one(4, R.ns + j, m, me, 0, M4.mul(pc.M, meshDtM(me, m.L))); }); });

@@ -1636,6 +1636,89 @@ def shipcheck_page(chrome, sid, extra=''):
     finally:
         shutil.rmtree(prof, ignore_errors=True)
 
+SHOWLOD_JS = os.path.join(os.path.dirname(OUT), 'ships', 'showlod.js')
+
+
+def showlod_read():
+    """ships/showlod.js 現在那一份 ⇒ { 船型: 那一筆 }；沒有、讀不了 ⇒ {}。"""
+    try:
+        t = open(SHOWLOD_JS, encoding='utf-8').read()
+        return json.loads(t[t.index('{', t.index('BS_SHOWLOD')):t.rindex('}') + 1]).get('types') or {}
+    except Exception:
+        return {}
+
+
+def act_showlod(ids=None, force=False, check=False):
+    """表演船中那一級的低模（TASK-1104；js/60_showlod.js）：無頭 Chrome 跑成品的 ?showlodbake=<船>，頁面把那一型降採樣成 0.4 m 的塊 ⇒ 這裡壓成 deflate-raw、寫進 ships/showlod.js。
+    ids 不給 ⇒ 船隻清單每一型（堡壘、砲台不算：不會是往來的船）。指紋（_cache 那份 .vxk 的 lock ＋ 算法版本）跟檔裡的一樣 ⇒ 不重烘（--force 一律重烘）。
+    --check ⇒ 不烘，只列每一型對不對得上（對不上的那一型遊戲裡不分級、照原模畫）。
+    同一份 _cache 烘兩次 ⇒ 檔逐位元組相同（頁面的算法沒有亂數；zlib 同一版、JSON 照鍵排）。"""
+    import html as _html, tempfile
+    cfg = load()
+    every = [s['id'] for s in cfg['ships'] if not s.get('fixed')]
+    ids = ids or every
+    lock = json.load(open(LOCK_P, encoding='utf-8')) if os.path.exists(LOCK_P) else {}
+    vx = {s['id']: s.get('vxk') for s in cfg['ships']}
+    have, log = showlod_read(), []
+
+    def want_fp(sid):                      # 頁面算的那一個：SHOWLOD_V ＋ 'lock ' ＋ lock 前 14 字（同 src_manifest）；版本照 js 檔裡的 SHOWLOD_V
+        v = re.search(r'SHOWLOD_V = (\d+)', open(os.path.join(HERE, 'js', '60_showlod.js'), encoding='utf-8').read())
+        return '%s lock %s' % (v.group(1) if v else '?', (lock.get(vx.get(sid) or '') or '（沒有指紋）')[:14])
+    if check:
+        for sid in every:
+            e = have.get(sid)
+            log.append(('✓ ' if e and e.get('fp') == want_fp(sid) else '✗ ') + sid + ('：沒烘' if not e else '' if e.get('fp') == want_fp(sid) else '：指紋 %s ≠ %s' % (e.get('fp'), want_fp(sid))))
+        return log
+    chrome = next((c for c in CHROMES if os.path.exists(c)), None)
+    if not chrome:
+        raise Fail('找不到 Chrome（' + '、'.join(CHROMES) + '）')
+    if not os.path.exists(OUT):
+        raise Fail('還沒有成品（先 build）')
+    out = dict(have)
+    for sid in ids:
+        if sid not in every:
+            log.append('  · %s：堡壘、砲台或不在船隻清單 ⇒ 不烘' % sid)
+            continue
+        if not force and sid in have and have[sid].get('fp') == want_fp(sid):
+            log.append('· %s：指紋一樣 ⇒ 不重烘' % sid)
+            continue
+        R = None
+        for _ in range(2):                 # 冷啟動偶爾沒跑完（同 act_disp）⇒ 再跑一次
+            prof = tempfile.mkdtemp(prefix='showlod_')
+            try:
+                url = 'file:///' + OUT.replace('\\', '/') + '?showlodbake=' + sid
+                r = subprocess.run([chrome, '--headless=new', '--no-first-run', '--user-data-dir=' + prof, '--use-angle=swiftshader', '--enable-unsafe-swiftshader',
+                                    '--virtual-time-budget=300000', '--dump-dom', url], capture_output=True, timeout=900)
+                ms = re.findall(r'<pre id="showlod">(.*?)</pre>', r.stdout.decode('utf-8', 'replace'), re.S)
+                R = json.loads(_html.unescape(ms[-1])) if ms else None   # 最後一個 ＝ 頁面寫出來的那個
+            except Exception:
+                R = None
+            finally:
+                shutil.rmtree(prof, ignore_errors=True)
+            if R:
+                break
+        if not R or R.get('err') or not R.get('b64'):
+            log.append('  ✗ %s：讀不到結果%s' % (sid, '（' + R['err'][:300] + '）' if R and R.get('err') else '（無頭 Chrome 沒跑完）'))
+            continue
+        raw = base64.b64decode(R['b64'])
+        if len(raw) != R['n'][0] * R['n'][1] * R['n'][2]:
+            log.append('  ✗ %s：塊數對不上（%d ≠ %s）' % (sid, len(raw), R['n']))
+            continue
+        co = zlib.compressobj(9, zlib.DEFLATED, -15)
+        z = co.compress(raw) + co.flush()
+        st = R.get('stat') or {}
+        out[sid] = {'fp': R.get('fp'), 'n': R['n'], 'off': R['off'], 'mk': R.get('mk') or [], 'dk': R.get('dk') or [], 'b64': base64.b64encode(z).decode('ascii'), 'stat': st}
+        tot = (st.get('kept') or 0) + (st.get('dropped') or 0)
+        log.append('✓ %s：%d×%d×%d 塊、留 %d 塊、船裡實心 %d 塊；原本的格丟掉 %.1f%%（船殼 %d、模型 %d 格；模型 %d、裝飾 %d 件烘進去）；%.0f KB；頁面 %d ms'
+                   % (sid, R['n'][0], R['n'][1], R['n'][2], st.get('blocks', 0), st.get('inner', 0), 100.0 * (st.get('dropped') or 0) / max(1, tot),
+                      st.get('cells', 0), st.get('mcells', 0), len(out[sid]['mk']), len(out[sid]['dk']), len(out[sid]['b64']) / 1024.0, st.get('ms', 0)))
+    body = json.dumps({'v': 1, 'types': {k: out[k] for k in sorted(out)}}, ensure_ascii=False, sort_keys=True, separators=(',', ':'))
+    os.makedirs(os.path.dirname(SHOWLOD_JS), exist_ok=True)
+    with open(SHOWLOD_JS, 'w', encoding='utf-8', newline='\n') as f:
+        f.write('// 表演船中那一級的低模（TASK-1104）：src/admin.py showlod 寫的，別手改（js/60_showlod.js showlodNeed 載）\nwindow.BS_SHOWLOD = ' + body + ';\n')
+    log.append('✓ ships/showlod.js：%d 型、%.2f MB' % (len(out), os.path.getsize(SHOWLOD_JS) / 1048576.0))
+    return log
+
 
 def act_disp(ids=None, margin=None):
     """排水量與壓艙物（Tim 2026-10-26「加一個工具檢查目前所有船的空載排水量跟水線排水量 滿載排水量 因為我發現目前有些船沒有壓艙物(載一點貨物就會加深吃水) 需要分析如何調整」）。
@@ -3065,7 +3148,7 @@ def ship_data(html, el, read=None):
 def ships_sync(root, files):
     """船檔寫進 <root>/ships/：files ＝ { 相對路徑: 內容 }；ships/ 裡不在 files 的船檔（船隻清單拿掉的船）拿掉。回 (寫了幾個, 拿掉幾個)。"""
     d = os.path.join(root, 'ships')
-    old = [f for f in os.listdir(d) if f.endswith('.js') and f != 'flagloop.js'] if os.path.isdir(d) else []   # ships/ 只放建置寫的船檔 ⇒ 不在這次清單上的 .js 都是舊的（flagloop.js：循環布的預烘，flagloop_ensure 管）
+    old = [f for f in os.listdir(d) if f.endswith('.js') and f not in ('flagloop.js', 'showlod.js')] if os.path.isdir(d) else []   # ships/ 只放建置寫的船檔 ⇒ 不在這次清單上的 .js 都是舊的（flagloop.js：循環布的預烘，flagloop_ensure 管；showlod.js：表演船低模，act_showlod 管）
     if files:
         os.makedirs(d, exist_ok=True)
     for rel, t in files.items():
@@ -4268,6 +4351,10 @@ def main():
     s = sp.add_parser('ladcheck', help='樓梯自檢（TASK-0838）：每座梯子的梯口有沒有洞、兩端站不站得住、走不走得出去 ⇒ reports/ladcheck_<船>.md（不給 --id ⇒ 每一艘，另寫 reports/ladcheck.md）；shipcheck 也會順手寫')
     s.add_argument('--id', action='append', help='哪一艘（可以給好幾次）；不給 ＝ 每一艘')
     s.add_argument('--selftest', action='store_true', help='反向對照：在記憶體裡把正常的梯子挪 2 格、出口前立柱子、head 四周圍牆、拿掉靠 head 那一頭幾柱，每一種都要報出來（admin.py LADTEST）')
+    s = sp.add_parser('showlod', help='表演船中那一級的低模（TASK-1104）：跑成品的 ?showlodbake=<船> 降採樣 ⇒ ships/showlod.js（指紋一樣不重烘）')
+    s.add_argument('--id', action='append', help='哪一型（可以給好幾次）；不給 ＝ 每一型（不含堡壘、砲台）')
+    s.add_argument('--force', action='store_true', help='指紋一樣也重烘')
+    s.add_argument('--check', action='store_true', help='不烘，只列每一型對不對得上')
     s = sp.add_parser('disp', help='排水量與壓艙物：每一型的空載／設計水線／滿載排水量、壓艙空間（＝ Blocksail 貨只換壓艙石的上限）、ships[].cargoT 的缺口與補法 ⇒ reports/disp.md')
     s.add_argument('--id', action='append', help='哪一艘（可以給好幾次）；不給 ＝ 每一艘（不含堡壘）')
     s.add_argument('--margin', type=float, help='滿載線比淹到最低砲甲板／頂層甲板低幾公尺（預設 0.3）')
@@ -4340,6 +4427,8 @@ def main():
             log = act_metaspec(o.doc)
         elif o.op == 'shipcheck':
             log = act_shipcheck(o.id)
+        elif o.op == 'showlod':
+            log = act_showlod(o.id, o.force, o.check)
         elif o.op == 'ladcheck':
             log = act_ladtest() if o.selftest else act_ladcheck(o.id)
         elif o.op == 'disp':
