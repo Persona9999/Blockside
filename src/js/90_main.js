@@ -93,14 +93,14 @@ if (DEBUG) window.__game = {
     if (o.yards !== undefined) r.yards = floopYardCheck(o.yards);
     return r;
   },
-  /** 表演船遠近分級（TASK-1104；60_showlod.js）：畫一格 ⇒ 這一格每一級幾艘（far ＝ 該畫貼圖、還沒做 ⇒ 照中那一級畫）、不分級 none、低模四邊形數 quads、
+  /** 表演船遠近分級（TASK-1104；60_showlod.js）：畫一格 ⇒ 這一格每一級幾艘（far ＝ 畫看板、farMid ＝ 該畫看板但這一格照中那一級）、不分級 none、低模四邊形數 quads、
    *  檔載到哪（st 0 還沒要、1 在載、2 好了、3 載不到 err）、每一型（四邊形、倍率；null ＝ 沒烘或指紋對不上）、每艘這一格的級 lv。
    *  給 true／false ⇒ 開關（同頁 A/B）；給 { n, f, nb, fb } ⇒ 改距離表（公尺，即時）。 */
   showlod: function (o) {
     var D = SHOWLOD, T = {}, id;
     if (o === true || o === false) D.on = o; else if (o) for (id in o) if (id in D.L) D.L[id] = +o[id];
     render();
-    for (id in D.T) { var t = D.T[id]; T[id] = t && t !== 'busy' ? { quads: t.quads, lk: +t.lk.toFixed(2) } : t; }
+    for (id in D.T) { var t = D.T[id]; T[id] = t && t !== 'busy' ? { quads: t.quads, lk: +t.lk.toFixed(2), im: t.im ? [+t.im.wm.toFixed(1), +t.im.hm.toFixed(1)] : null } : t; }   // im：遠那一級的看板寬、高（公尺；null ＝ 沒有貼圖）
     return { on: D.on, L: D.L, st: D.st, err: D.err, stat: D.stat, types: T, lv: Array.prototype.slice.call(D.lv, 0, SHIPS.length) };
   },
   /** TASK-1101 的三項減量（帆不重傳 rigfixkey、錨鏈落定 chainrest、表演船停住 showidle；同名的網址開關）：給 { 名字: true／false } 就改 ——
