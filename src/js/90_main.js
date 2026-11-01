@@ -526,9 +526,12 @@ if (DEBUG) window.__game = {
     for (var j = 0; j < v.length; j += chain ? 9 : 3) { var dx = v[j] - Ls[0], dy = v[j + 1] - Ls[1], dz = v[j + 2] - Ls[2]; if (dx * dx + dy * dy + dz * dz < rs2) { w = true; break; } }
     return { cloth: cl ? clothNear(cl, L, rb) : null, work: w };
   },
-  /** 帆與繩的讀數：每面帆最鼓的那一點離雕刻作品形狀多遠（格）、還綁著幾個點、垂下來的繩幾條。 */
-  cloth: function (i) {
+  /** 帆與繩的讀數：每面帆最鼓的那一點離雕刻作品形狀多遠（格）、還綁著幾個點、垂下來的繩幾條。
+   *  給 nm（帆名）⇒ 只回那一面的點：現在位置 p、靜止形狀 p0、每點綁在哪（hk：0 不綁、1 格、2 繩、3 找不到靠的、4 帆桁）、uv（旗才有）。 */
+  cloth: function (i, nm) {
     var sh = SHIPS[i || 0];
+    if (nm) { var c0 = sh.cl.find(function (c) { return c.T.name === nm; }); if (!c0) return null; var T0 = c0.T;
+      return { n: T0.sim.n, p: c0.p ? Array.from(c0.p) : null, p0: Array.from(T0.sim.p0), hk: Array.from(T0.sim.hk), yk: Array.from(T0.sim.yk), uv: T0.uv ? Array.from(T0.uv) : null }; }
     return { templates: sh.T.cloth.map(function (T) { return { name: T.name, n: T.n, sim: T.sim.n, grid: T.grid, simEdges: T.sim.ea.length, simPins: Array.prototype.filter.call(T.sim.hk, function (x) { return x; }).length, pins: T.pins, clews: T.clews, sides: T.sides }; }),
       sails: sh.cl.map(function (c, k) {
         var d = 0, P0 = c.T.sim.p0; if (c.p) for (var j = 0; j < c.T.sim.n * 3; j += 3) d = Math.max(d, Math.hypot(c.p[j] - P0[j], c.p[j + 1] - P0[j + 1], c.p[j + 2] - P0[j + 2]));
