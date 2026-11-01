@@ -1938,6 +1938,115 @@
         "ship": 2,
         "yard": 11
       }
+    },
+    {
+      "id": "guineaman",
+      "role": "merchant",
+      "el": "ship-guineaman",
+      "name": "幾內亞船",
+      "gangway": [
+        [
+          185.5,
+          141.5,
+          54.5
+        ],
+        [
+          185.5,
+          51.5,
+          54.5
+        ]
+      ],
+      "vxk": "guineaman.vxk",
+      "work": "kaguya-guineaman-01m-assembly",
+      "author": "kaguya",
+      "geo": {
+        "spar": [
+          38,
+          63
+        ],
+        "marines": [
+          52,
+          102
+        ],
+        "center": 50,
+        "aim": 33,
+        "aimZ": [
+          5,
+          280
+        ],
+        "deckAim": [
+          38,
+          63
+        ],
+        "rigAim": [
+          100,
+          270
+        ],
+        "qx": 80
+      },
+      "cfg": {
+        "pump": 2
+      },
+      "crew": {
+        "officers": 1,
+        "helm": 1,
+        "top": 1,
+        "marines": 0,
+        "monkeys": 1,
+        "handsK": 0.25,
+        "navigator": 0
+      },
+      "names": [
+        "幾內亞船"
+      ],
+      "rooms": {
+        "甲板-fc": {
+          "type": "deck",
+          "items": [
+            {
+              "it": "keg",
+              "x": 4,
+              "y": 6,
+              "r": 0
+            }
+          ]
+        },
+        "甲板-poop": {
+          "type": "deck",
+          "items": [
+            {
+              "it": "keg",
+              "x": 0,
+              "y": 5,
+              "r": 0
+            },
+            {
+              "it": "loft",
+              "x": 0,
+              "y": 7,
+              "r": 1
+            }
+          ]
+        }
+      },
+      "idNext": {
+        "anchor": 3,
+        "binnacle": 2,
+        "boat": 2,
+        "capstan": 2,
+        "deck": 6,
+        "galley": 2,
+        "grating": 3,
+        "ladders": 5,
+        "magazine": 2,
+        "model": 2,
+        "part": 10,
+        "powder": 5,
+        "rudder": 2,
+        "ship": 2,
+        "tiller": 2,
+        "yard": 11
+      }
     }
   ],
   "furniture": {
