@@ -512,7 +512,7 @@
       "shot": 47.2
     }
   },
-  "geo0": {"spar": null, "marines": [160, 220], "center": 140, "aim": 90, "aimZ": [40, 320], "deckAim": [84, 104], "rigAim": [150, 300]},
+  "geo0": {"spar": null, "marines": [160, 220], "center": 140, "aim": 90, "aimZ": [40, 320], "deckAim": [84, 104], "rigAim": [150, 300], "marineY": 10, "qx": 160},
   "crew0": {
     "officers": 4,
     "helm": 2,
@@ -1861,6 +1861,19 @@
         "ship": 2,
         "yard": 11
       }
+    },
+    {
+      "id": "piragua",
+      "el": "ship-piragua",
+      "name": "杉心號",
+      "vxk": "piragua.vxk",
+      "work": "basecamp-piragua-01m-assembly",
+      "author": "basecamp",
+      "idNext": {"deck": 2, "part": 2, "ship": 2, "yard": 2},
+      "cfg": {"base": 4},
+      "geo": {"spar": [1, 5], "marines": [21, 26], "center": 20, "aim": 6, "aimZ": [1, 60], "deckAim": [1, 10], "rigAim": [20, 80], "marineY": 2, "qx": 0},
+      "crew": {"officers": 1, "helm": 1, "top": 0, "marines": 10, "marineGap": 5, "monkeys": 1, "handsK": 0.25, "navigator": 0},
+      "names": ["杉心號"]
     }
   ],
   "furniture": {

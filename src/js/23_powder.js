@@ -229,7 +229,7 @@ function makeStations(sh, auto) {
   var KM = [keg.mesh], KS = [(keg.meta && keg.meta.store) || ''];
   sh.mags.forEach(function (m) { m.kegs.forEach(function (k) { var st = (k.meta && k.meta.store) || ''; if (KS.indexOf(st) < 0 && T.rig.meshes[k.mesh] && KM.length < 3) { KS.push(st); KM.push(k.mesh); } }); });
   var KB = KM.map(function (mesh) { var V0 = T.rig.meshes[mesh].verts, a0 = [1e9, 1e9, 1e9], b0 = [-1e9, -1e9, -1e9]; for (var j0 = 0; j0 < V0.length; j0 += 3) for (var q = 0; q < 3; q++) { a0[q] = Math.min(a0[q], V0[j0 + q]); b0[q] = Math.max(b0[q], V0[j0 + q]); } return [a0, b0]; });   // 取用點的桶照哪一間的桶都行（⛔ 只看第一間 ⇒ 第一間沒桶整艘就沒有取用點）；都沒有桶 ⇒ 沒有取用點（匯入檢查報 ✗）
-  var guns = sh.models.filter(function (m) { return GUNS[m.kind] || kindProp(m.kind, 'clear'); }), out = [];
+  var guns = sh.models.filter(function (m) { return GUNS[m.kind] || kindProp(m.kind, 'clear'); }), out = [], miss = [];   // miss：照彈藥庫找不到空地的（窄船退路，下面）
   // 桶堆不壓任何一座梯子的兩頭（foot／head 四周 LAD_KEEP 格、同一層：上下 6 格內）—— 彈藥庫上方找的（findSpot）也會擺到梯頂、梯腳前（樓梯自檢 ⚠「被取用點擋住」）。
   //   讓開梯子就找不到（拉貝爾號主甲板、松島號上桅樓：擠 ⇒ 那一層整個沒有取用點、砲打完藥箱就停）⇒ 不管梯子再找一次（ladFirst）：取用點只換位置、不會變少
   var LE = [], LADK = true; shipLadders(T).forEach(function (L) { LE.push(L.pts[0], L.pts[L.pts.length - 1]); });
@@ -260,6 +260,24 @@ function makeStations(sh, auto) {
       if (z2 >= 0 && clear(x2, y2, z2)) spot = [x2, y2, z2];
     }
     return spot;
+  }
+  // 窄船（杉心號 TASK-1152：船寬 1.7 m，艙內不到 10 格）：上面那塊 10×10 是從中線旁偏出去找的 ⇒ 整艘船都找不到、砲打完藥箱就停 ⇒
+  //   三個桶沿船長排成一排（15 × 5 格、壓在中線上），送藥手站在桶排旁邊。只有上面找不到才走這裡 ⇒ 找得到的船一位元都不變。
+  var LINE_AT = [[7.5, 6.5], [7.5, -1.5], [2.5, 6.5], [12.5, 6.5], [2.5, -1.5], [12.5, -1.5], [-2, 2.5], [17, 2.5]];   // 送藥手站的地方（桶排旁）：第一個站得住的當 at、其他當 slots
+  function findLine(x0, zr) { return ladFirst(function () { return findLine1(x0, zr); }, x0); }
+  function findLine1(x0, zr) {
+    var y = Math.floor(CY) - 2;
+    for (var ex = 0; ex <= 400; ex++) for (var e2 = -1; e2 <= 1; e2 += 2) {
+      if (!ex && e2 > 0) continue;
+      var x = x0 + e2 * ex - 7, z = standZ(BASE, x + 7, y + 2, zr[0], zr[1], 8), ok = z >= 0;
+      if (ok && LADK && LE.some(function (p) { return Math.abs(p[2] - z) <= 6 && p[0] >= x - 1 - LAD_KEEP && p[0] <= x + 15 + LAD_KEEP && p[1] >= y - 1 - LAD_KEEP && p[1] <= y + 5 + LAD_KEEP; })) ok = false;
+      for (var dx = 0; dx <= 14 && ok; dx += 2) for (var dy = 0; dy <= 4 && ok; dy += 2) if (standZ(BASE, x + dx, y + dy, z - 1, z + 1, 8) < 0) ok = false;
+      if (ok && guns.some(function (m) { var b = m.bb; return x + 16 > b[0] && x - 2 < b[3] && y + 6 > b[1] && y - 2 < b[4] && z + 8 > b[2] && z - 3 < b[5]; })) ok = false;
+      if (!ok) continue;
+      var at = LINE_AT.map(function (o) { var xx = Math.floor(x + o[0]), yy = Math.floor(y + o[1]), zz = standZ(BASE, xx, yy, z - 1, z + 1, 8); return zz < 0 || inGun(xx, yy, zz) ? null : [xx + 0.5, yy + 0.5, zz]; }).filter(Boolean);
+      if (at.length) return [x, y, z, at];
+    }
+    return null;
   }
   // 只有一間彈藥庫（餘燼號的中央彈藥庫）⇒ 每層前後各一個取用點：從彈藥庫前端往船頭、後端往船尾各退 1.6 m 找（Tim 2026-10-13：「取用點分到前後兩處」）。
   //   ⛔ 一層只有一個、疊在彈藥庫正上方 ⇒ 那一層的送藥手全擠在船中段，電腦的瞄準點也在船中段 ⇒ 第一輪齊射就連炸（餘燼號對打 180 秒 2／3 場殉爆、一場第 4.5 秒）。
@@ -351,9 +369,12 @@ function makeStations(sh, auto) {
     if (!rest.length) return;
     rest.forEach(function (mag) { anchors(mag).forEach(function (A) {
       var spot = findSpot(A.x, A.dir, zr);
-      if (spot) build(D, mag, D.name + A.tag + '取用點', spot);
+      if (spot) build(D, mag, D.name + A.tag + '取用點', spot); else miss.push([D, mag, A]);
     }); });
   });
+  // 窄船的退路（findLine）只在整艘船一個取用點都沒有時才走：別艘某一層找不到是常態（送藥手走梯子去別層拿）——
+  //   v1 每一層找不到就排一排 ⇒ 好旅號、拉貝爾號、聖羅曼號…7 艘多出取用點，拉貝爾號甲板連通 ✗ 2、聖羅曼號 16 門的送藥路線全量不到（TASK-1152 全船對照抓到）
+  if (!out.length) miss.forEach(function (q) { var sp = findLine(q[2].x, q[0].zr); if (sp) build(q[0], q[1], q[0].name + q[2].tag + '取用點', sp); });
   if (!auto) (sh.ahs || []).forEach(function (H) { if (H.drop && H.mag) ahStation(H); });   // 揚弾機（沒有 ⇒ 不做事）
   return out;
   // 砲塔裡的彈藥箱（TASK-0659；Tim 2026-10-16：「砲塔內也要可以放彈藥箱」）：桶就是彈藥箱自己的（不另外擺），送藥手站在箱子旁、砲塔裡站得住、不在砲裡的一格；
@@ -377,9 +398,9 @@ function makeStations(sh, auto) {
     out.push(st);
   }
   function build(D, mag, name, spot, up) {                             // up：吊上來的取用點，送藥手取藥的那一格（梯頭）；桶照樣擺在 spot
-      var deck = D.key;
-      var st = { deck: deck, mag: mag, name: name, kegs: [], pos: [spot[0] + 4.5, spot[1] + 4.5, spot[2] + 3], flashT: -9 };
-      [[0, 0], [5, 0], [0, 5]].forEach(function (o, i) {
+      var deck = D.key, line = spot[3];                                 // line：窄船排成一排的（findLine：送藥手站的那幾格）
+      var st = { deck: deck, mag: mag, name: name, kegs: [], pos: line ? [spot[0] + 7.5, spot[1] + 2.5, spot[2] + 3] : [spot[0] + 4.5, spot[1] + 4.5, spot[2] + 3], flashT: -9 };
+      (line ? [[0, 0], [5, 0], [10, 0]] : [[0, 0], [5, 0], [0, 5]]).forEach(function (o, i) {
         var ki = i % KM.length, kn = KB[ki][0], kx = KB[ki][1];
         var org = [spot[0] + o[0], spot[1] + o[1], spot[2]], bb = [org[0] + kn[0], org[1] + kn[1], org[2] + kn[2], org[0] + kx[0], org[1] + kx[1], org[2] + kx[2]];
         var m = { T: T, k: sh.models.length, name: st.name + '-' + (i + 1), path: st.name + '/' + (i + 1), kind: 'powder', station: st, hp: powderHP(), hpMax: powderHP(), mesh: KM[ki], origin: org, bb: bb, pts: {}, meta: { kind: 'powder', powder_lb: 100 },
@@ -394,6 +415,7 @@ function makeStations(sh, auto) {
         }).filter(Boolean));
         out.push(st); return;
       }
+      if (line) { st.at = line[0]; st.slots = line; out.push(st); return; }
       st.at = [spot[0] + 5.5, spot[1] + 5.5, spot[2]];                 // 送藥手站在三桶圍出來的那一角
       // 站位：那一角＋桶堆外圍幾格（站得住、不在砲裡）；同時好幾個人來拿 ⇒ 各站一格（⛔ 全站同一點 ⇒ 幾張人疊在一起、姿勢不同，看起來像一個人在抖）
       st.slots = [st.at].concat([[13, 5.5], [5.5, 13], [13, 13], [13, -2], [-2, 13], [5.5, -3], [-3, 5.5], [-3, -3]].map(function (o) {   // 齊射後同一個取用點最多 8 人在路上或在拿

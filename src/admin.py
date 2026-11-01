@@ -247,7 +247,7 @@ CREW = {'officers': (0, 8, True), 'helm': (0, 4, True), 'marines': (0, 60, True)
 CREW_SHIP = {'hands': (0, 120, True)}          # 只在每艘船寫（TASK-0570 船隻配置頁的預設）：預備水手人數；沒寫 ＝ lim.hands × handsK
 GUN_CREW_MAX = 8                               # 砲班滿編上限（砲旁的站位；遊戲 05_hull.js GUN_CREW_MAX）
 GEO_PAIRS = ('marines', 'aimZ', 'deckAim', 'rigAim')
-GEO_NUMS = ('center', 'aim')
+GEO_NUMS = ('center', 'aim', 'marineY', 'qx')   # marineY：陸戰隊量甲板高度的那一欄離中線幾格；qx：沒有舵輪時軍官從外框起點往前幾格（40_crew.js；TASK-1152 窄船）
 
 
 # ───────────────────────── 讀寫 ─────────────────────────

@@ -61,11 +61,18 @@ function benchNavFill(sh, it, C0, key) {
   function gap(b) {                                                      // 台的外框到最近一座梯子 foot／head（同一層：上下 6 格內；走路格的高度跟梯腳可以差幾格）的平面距離（格；在框裡 ＝ 0）
     var g = 1e9; LE.forEach(function (p) { if (Math.abs(p[2] - b[2]) <= 6) g = Math.min(g, Math.max(b[0] - p[0], p[0] - b[3], b[1] - p[1], p[1] - b[4], 0)); }); return g;
   }
+  function footOK(b) { var x = Math.floor(b[0] + 1), y = Math.floor(b[1] + 1), z = b[2] - 1; return countBox(sh.grid, x - 2, y - 2, z - 1, x + 2, y + 2, z) > 0; }   // 跟下面 foot 同一格、svStruct 同一把尺
   for (var k = 0; k < want && C0.length; k++) {
     var i0 = Math.floor((k + 0.5) / want * C0.length), P = navPos(N, C0[i0]), bg = gap(boxAt(P));
     for (var j = 1; j < C0.length && bg <= LAD_KEEP; j++) {
       var i1 = i0 + (j % 2 ? (j + 1) / 2 : -j / 2); if (i1 < 0 || i1 >= C0.length) continue;
       var P1 = navPos(N, C0[i1]), g1 = gap(boxAt(P1)); if (g1 > bg) { bg = g1; P = P1; }
+    }
+    // 腳下要撐得住（32_hull.js svStruct：腳那一格四周 5×5×2 有實心才不掉）：杉心號（TASK-1152）的艙底窄、被坐板隔成一段一段 ⇒ 正中間那一點的台角落在兩塊坐板中間、開場就掉。
+    //   撐不住才往兩邊挑第一個撐得住的（照樣讓開梯子兩頭）⇒ 本來撐得住的船一位元都不變
+    if (!footOK(boxAt(P))) for (var j2 = 1; j2 < C0.length; j2++) {
+      var i2 = i0 + (j2 % 2 ? (j2 + 1) / 2 : -j2 / 2); if (i2 < 0 || i2 >= C0.length) continue;
+      var P2 = navPos(N, C0[i2]), b2 = boxAt(P2); if (footOK(b2) && (gap(b2) > LAD_KEEP || bg <= LAD_KEEP)) { P = P2; break; }
     }
     var at = [Math.round(P[0] - f.size[0] / 2), Math.round(P[1] - f.size[1] / 2), Math.round(P[2])];
     var bb = [at[0], at[1], at[2], at[0] + f.size[0], at[1] + f.size[1], at[2] + f.size[2] + 1], nm = (NV.levels[NV.home].name || NV.levels[NV.home].key) + f.name + '-' + (B.length + 1);

@@ -108,13 +108,14 @@ function makeCrew(sh) {
     // 從中線往外走到舷牆前一格（⛔ 從外往裡掃會先碰到舷外的 channels 平台）
     var last = -1, m0 = sz0, m1 = sz1;
     if (GZ.spar) {   // 船型給了站人的範圍（夜隼號 z 28–47：主甲板到後甲板，舷側的繫繩欄、錨鏈台頂也在裡面 ⇒ 陸戰隊站到船殼外 y 113–116）⇒ 只看這一段甲板 −1～+2 格
-      var zd = -1; for (var z = sz0; z <= sz1 && zd < 0; z++) if (standZ(g, x, CY + 10, z, z, 14) >= 0) zd = z;   // 最低那一層 ＝ 甲板（甲板上的東西都比它高）
+      var zd = -1; for (var z = sz0; z <= sz1 && zd < 0; z++) if (standZ(g, x, CY + GZ.marineY, z, z, 14) >= 0) zd = z;   // 最低那一層 ＝ 甲板（甲板上的東西都比它高）；量哪一欄 geo.marineY（預設 10；杉心號半寬 8 格 ⇒ 10 在船外，TASK-1152）
       if (zd < 0) continue; m0 = zd - 1; m1 = zd + 2;
     }
     for (var y = CY + 4; y < CY + 80; y++) { if (standZ(g, x, y, m0, m1, 14) >= 0) last = y; else if (last >= 0) break; }
     if (last >= 0) add(ROLE.MARINE, standNear(g, x, last - 2, m0, m1, 14, taken), null, 1);
   }
-  var qx = wheel ? Math.floor(wheel.c[0]) : HULL_X0 + 160, offP = [[qx + 22, CY + 8], [qx + 30, CY - 6], [qx + 40, CY + 14], [qx + 14, CY - 12], [qx + 48, CY - 2], [qx + 22, CY - 20], [qx + 36, CY + 22], [qx + 56, CY + 10]];   // 後四個給船隻配置頁多調的
+  var qx = wheel ? Math.floor(wheel.c[0]) : HULL_X0 + GZ.qx, offP =   // 沒有舵輪 ⇒ 從外框起點往前 geo.qx 格（預設 160；杉心號全長才 114 格，TASK-1152）
+    [[qx + 22, CY + 8], [qx + 30, CY - 6], [qx + 40, CY + 14], [qx + 14, CY - 12], [qx + 48, CY - 2], [qx + 22, CY - 20], [qx + 36, CY + 22], [qx + 56, CY + 10]];   // 後四個給船隻配置頁多調的
   var offN = CW.shelter ? Math.min(1, CW.officers) : CW.officers;    // 船員避開露天甲板（shelter）：露天只留船長，其他的開完預備水手再擺到甲板下（下面）
   offP.slice(0, offN).forEach(function (p) { add(ROLE.OFFICER, standNear(g, p[0], p[1], sz0, sz1, 14, taken), null, 1); });
   if (wheel) { var wx = Math.floor(wheel.bb[0]) - 3; [[wx, CY + 3], [wx, CY - 3], [wx - 5, CY + 7], [wx - 5, CY - 7]].slice(0, CW.helm).forEach(function (p) { add(ROLE.HELM, standNear(g, p[0], p[1], sz0, sz1, 14, taken), null, -1); }); }   // 舵輪後面（⛔ 舵輪中心往後 4 格還在舵輪的外框裡 ⇒ 以前一個舵手都站不上去）

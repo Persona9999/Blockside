@@ -38,6 +38,7 @@
     "sanroman": {"tons": 121, "len": 21.4, "guns": 16, "gunTypes": {"pierrier": 8, "long4": 8}, "volley": 22, "drive": "sail", "sails": 6, "crew": 58},
     "tradewind": {"tons": 291, "len": 24, "guns": 10, "gunTypes": {"pierrier": 6, "long4": 4}, "volley": 13, "drive": "sail", "sails": 8, "crew": 38},
     "boaviagem": {"tons": 225, "len": 22.3, "guns": 12, "gunTypes": {"pierrier": 8, "long4": 4}, "volley": 15, "drive": "sail", "sails": 5, "crew": 40},
-    "centurion": {"tons": 713, "len": 37.9, "guns": 48, "gunTypes": {"long8": 22, "long18": 20, "long6": 6}, "volley": 266, "drive": "sail", "sails": 9, "crew": 282}
+    "centurion": {"tons": 713, "len": 37.9, "guns": 48, "gunTypes": {"long8": 22, "long18": 20, "long6": 6}, "volley": 266, "drive": "sail", "sails": 9, "crew": 282},
+    "piragua": {"tons": 3, "len": 10.5, "guns": 1, "gunTypes": {"pierrier": 1}, "volley": 1, "drive": "oar", "sails": 1, "crew": 42}
   }
 }
