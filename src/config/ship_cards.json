@@ -30,7 +30,7 @@
     "battery_carib_s": {"tons": 2, "len": 5.5, "guns": 1, "gunTypes": {"long6": 1}, "volley": 3, "drive": "sail", "sails": 0, "crew": 10},
     "labelle": {"tons": 87, "len": 17.5, "guns": 14, "gunTypes": {"pierrier": 8, "long4": 6}, "volley": 19, "drive": "sail", "sails": 6, "crew": 46},
     "pinas": {"tons": 600, "len": 36.8, "guns": 24, "gunTypes": {"long8": 8, "long4": 4, "long12": 10, "long6": 2}, "volley": 98, "drive": "sail", "sails": 10, "crew": 151},
-    "oxford": {"tons": 287, "len": 25.9, "guns": 22, "gunTypes": {"long8": 16, "long6": 6}, "volley": 79, "drive": "sail", "sails": 9, "crew": 144},
+    "oxford": {"tons": 287, "len": 25.9, "guns": 22, "gunTypes": {"long8": 16, "long6": 6}, "volley": 79, "drive": "sail", "sails": 9, "crew": 145},
     "concepcion": {"tons": 1821, "len": 47.5, "guns": 94, "gunTypes": {"long6": 12, "long18": 28, "long12": 26, "long8": 24, "long4": 4}, "volley": 503, "drive": "sail", "sails": 11, "crew": 484},
     "flyingfish": {"tons": 51, "len": 12.4, "guns": 8, "gunTypes": {"long4": 4, "pierrier": 4}, "volley": 11, "drive": "sail", "sails": 4, "crew": 34},
     "zeehaen": {"tons": 394, "len": 31.3, "guns": 14, "gunTypes": {"pierrier": 6, "long4": 8}, "volley": 20, "drive": "sail", "sails": 6, "crew": 56},
