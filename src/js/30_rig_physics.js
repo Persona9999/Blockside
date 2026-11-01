@@ -647,7 +647,7 @@ function physGameStep(sh) { var w = physWind(sh); physGame(sh, w[0], w[1], false
 function physFrame(h, hs) {
   var pt0 = performance.now(); PHF_I++; PHF_CHK += h;
   var chk = PHF_CHK >= 0.1 - 1e-9; if (chk) PHF_CHK = 0;
-  SHIPS.forEach(function (sh) { if (sh.sink < 40) { var w = physWind(sh); if (chk && sh.yards.length) yardRopes(sh); if (!rigFixed(sh)) physVis(sh, w[0], w[1], PHF_I, chk, h, hs, evAsk('rigSeen', true, sh)); } });   // 看不到 ⇒ 步少、每步長（TASK-0802）；固定的繩帆（rigFixed）不算布（跟帆桁走的繩照算）
+  DRAWN.forEach(function (sh) { if (sh.sink < 40) { var w = physWind(sh); if (chk && sh.yards.length) yardRopes(sh); if (!rigFixed(sh)) physVis(sh, w[0], w[1], PHF_I, chk, h, hs, evAsk('rigSeen', true, sh)); } });   // 看不到 ⇒ 步少、每步長（TASK-0802）；固定的繩帆（rigFixed）不算布（跟帆桁走的繩照算）
   clothContactsRun();
   PHYS_MS = PHYS_MS * 0.98 + (performance.now() - pt0) * 0.02;
 }
@@ -704,7 +704,7 @@ function setPhys(on) {
   PHYS = on;
   if (on && !PHX.rig) PHX.rig = PHX_RIG_LAST; else if (!on && PHX.rig) { PHX_RIG_LAST = PHX.rig; PHX.rig = 0; }   // 物理分級的「帆與繩」跟著走（09_phx.js）
   evEmit('phys', on);                                                  // 按鈕的亮暗、物理分級頁（62_simview.js）
-  SHIPS.forEach(function (sh) {
+  DRAWN.forEach(function (sh) {
     sh.loose = []; sh.shreds = []; sh.tCut = {};
     if (!on) { (sh.yards || []).forEach(function (m) { m.rot = 0; }); if (sh.yRopes) yardRopes(sh, true); unswingHangs(sh); }   // 關 ⇒ 帆桁回到作品的角度、小艇不擺
     sh.ropes.forEach(function (r) { r.lz = !!(r.never || r.moved); });

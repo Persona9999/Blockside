@@ -130,7 +130,7 @@ function sigText() {
 }
 /** 瞄準點落在哪艘船（設瞄準點那一刻的那艘；沒有 ⇒ 現在的目標）。 */
 function aimShip(sh) { return sh.aim && sh.aimOn ? sh.aimOn : foeOf(sh); }
-function setAim(sh, aim, on) { sh.aim = aim; sh.aimOn = aim ? on || foeOf(sh) : null; }
+function setAim(sh, aim, on) { if (aim && on && SHOWS.indexOf(on) >= 0) showReal(on, sh.name + ' 瞄準它'); sh.aim = aim; sh.aimOn = aim ? on || foeOf(sh) : null; }   // 瞄準演出物件 ⇒ 先換成真的船（58_traffic.js ⑭：砲要打到它）
 /** 旗艦：那個陣營還在打的船（沒沉、沒在沉、沒降旗）裡，開戰時排水量（sh.mass0；還沒算 ⇒ 現算）最大的；都出局了 ⇒ 沒沉的裡最大的；全沉了 ⇒ 最大的那艘
  *  （Tim 2026-10-13：上方面板只顯示雙方旗艦；有候補之後降旗的船還浮在場上 ⇒ ⛔ 只看沒沉 ⇒ 面板停在降旗的那艘）。
  *  ⛔ 照「現在」的排水量排 ⇒ 被打掉幾噸就換旗艦、面板一直跳。 */

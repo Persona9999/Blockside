@@ -67,11 +67,11 @@ function showlodType(T) {
 }
 /** 這一格每艘畫哪一級（frameBegin：rbatPrep 之前；鏡頭、內插過的 sh.M 都定了）。 */
 function showlodPrep() {
-  var D = SHOWLOD, ns = SHIPS.length, st = D.stat, eye = CAM.eye, t0 = performance.now(), o;
+  var D = SHOWLOD, ns = DRAWN.length, st = D.stat, eye = CAM.eye, t0 = performance.now(), o;
   if (D.lv.length < ns) { D.lv = new Uint8Array(ns * 2); D.Mm = new Float32Array(ns * 32); }
   st.f = RFR; st.near = st.mid = st.far = st.none = st.quads = 0;
   for (o = 0; o < ns; o++) {
-    var sh = SHIPS[o]; D.lv[o] = 0;
+    var sh = DRAWN[o]; D.lv[o] = 0;
     if (sh.sink > 40) continue;
     if (!D.on || !eye || !trafficShow(sh) || sh.grid.ver !== 0) { st.none++; continue; }
     if (!D.st) showlodNeed();

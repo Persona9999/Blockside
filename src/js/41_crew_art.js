@@ -343,7 +343,7 @@ function crewPose(sh, c, f) {
 var CREW_H = 2.1;                                  // 人物高（公尺）：1.75 → 2.1（Tim 2026-10-12：放大 1.2 倍，遠一點也看得清）
 function drawCrew() {
   var n = 0, ni = 0, fw = norm([CAM.look[0] - CAM.eye[0], 0, CAM.look[2] - CAM.eye[2]]), right = [-fw[2], 0, fw[0]], frames = CREW_COLS > 1;
-  SHIPS.forEach(function (sh) {
+  DRAWN.forEach(function (sh) {
     var gone = sh.sink > 40;                           // 沉了：船上的不畫，在水裡的照畫（43_swim.js）
     if ((gone && !sh.swims) || sh.showIdle) return;    // showIdle：停住的表演船（50_sim.js showIdleTick）不畫船上的人
     var team = crewTeam(sh), faceW = M4.dir(sh.M, 0, 1, 0);

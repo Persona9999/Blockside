@@ -88,14 +88,14 @@ function rbatSmAdd(m) {
 }
 /** 一格的表（render → frameBegin，prepRig 之後；一次 render() 一次，RFR）。判斷、順序、算式照以前的 drawModels／smDraw／armSmDraw 原樣抄。 */
 function rbatPrep() {
-  var R = RBAT, ns = SHIPS.length, n = ns + PIECES.length, o, k;
+  var R = RBAT, ns = DRAWN.length, n = ns + PIECES.length, o, k;
   if (n + 1 > R.i0.length) {
     var L = Math.max(n + 1, R.i0.length * 2);
     R.i0 = new Int32Array(L); R.cs = new Uint8Array(L); R.cst = new Uint8Array(L); R.cp = new Float64Array(L * 3); R.cR = new Float64Array(L);
   }
   R.f = RFR; R.n = n; R.ns = ns; R.ni = 0;
   for (o = 0; o < n; o++) {
-    var ow = o < ns ? SHIPS[o] : PIECES[o - ns];
+    var ow = o < ns ? DRAWN[o] : PIECES[o - ns];
     R.own[o] = ow; R.cs[o] = 0; R.i0[o] = R.ni;
     if (o < ns) { if (!(ow.sink > 40)) rbatShip(ow, o); }
     else if (ow.mods) rbatPiece(ow, o);
@@ -577,7 +577,7 @@ function rbatCheck() {
     });
     if (p) one(c, ow, ref, p, 0, W, p.off);
   }
-  SHIPS.forEach(function (sh, i) {
+  DRAWN.forEach(function (sh, i) {
     if (sh.sink > 40) return;
     var lo = showlodMid(i, sh);                                         // 表演船畫中那一級（60_showlod.js）：烘進低模的不進表（同 rbatShip，照規則再判一次）
     sh.models.forEach(function (m, k) {

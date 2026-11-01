@@ -687,8 +687,8 @@ function drawNav(sh) {
   //   轉向弧那一圈（1.07 R）前後各空 NAVW_GAP px ⇒ 分成兩段、弧從空的那裡穿過。不到 0.05 節不畫
   var cfl = seaFlow(sh.px, sh.pz), ckn = cfl ? Math.hypot(cfl[0], cfl[1]) * 1.9438 : 0;
   if (ckn >= 0.05) { var cu = norm([-cfl[0], 0, -cfl[1]]); navWave(g, P(cu, 1.26), P(cu, 1.26 - Math.min(0.6, 0.3 + ckn * 0.14)), cx, cy, R * 1.07); }
-  // 其他船的方位（TASK-0537：全部畫，敵紅、友藍、沉了灰；一對一 ＝ 以前那一個紅點）
-  SHIPS.forEach(function (o) {
+  // 其他船的方位（TASK-0537：全部畫，敵紅、友藍、沉了灰；一對一 ＝ 以前那一個紅點）；演出物件（58_traffic.js ⑭）也畫
+  DRAWN.forEach(function (o) {
     if (o === sh || !o.center || !sh.center) return;
     var e = norm([o.center[0] - sh.center[0], 0, o.center[2] - sh.center[2]]), pe = P(e, 0.86);
     // 往來的船（58_traffic.js）：商船米白、海盜船黑（同地球儀）；敵對了（⚔ 交戰，Blocksail TASK-1078）照敵艦紅

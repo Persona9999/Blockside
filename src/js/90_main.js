@@ -28,6 +28,7 @@ function frame(ts, noRaf) {                                         // noRaf：_
     portsAnim();                                                      // 砲門（TASK-0719，62_ports.js）：只改畫面；自己照 SIMT 走（慢動作、模擬速度跟著）；沒有蓋板的砲演後座（recoilShip）；畫質「砲門的開關演出」關 ⇒ 一次判斷就回
   }
   if (PF) PF.t = performance.now();
+  drawnSync();                                                        // 畫面那一側的船（58_traffic.js ⑭）：模擬步可能換了真的、演出物件
   if (hv > 0) { physFrame(hv, hsv); if (PF) pfLap('phys'); }
   VIS_FRAME = false;                                                  // frame 以外（?demo、__game.run）一律整段在模擬步裡算
   camFollow(dt);                                                      // 追砲彈（03_camera.js）
@@ -101,7 +102,7 @@ if (DEBUG) window.__game = {
     if (o === true || o === false) D.on = o; else if (o) for (id in o) if (id in D.L) D.L[id] = +o[id];
     render();
     for (id in D.T) { var t = D.T[id]; T[id] = t && t !== 'busy' ? { quads: t.quads, lk: +t.lk.toFixed(2) } : t; }
-    return { on: D.on, L: D.L, st: D.st, err: D.err, stat: D.stat, types: T, lv: Array.prototype.slice.call(D.lv, 0, SHIPS.length) };
+    return { on: D.on, L: D.L, st: D.st, err: D.err, stat: D.stat, types: T, lv: Array.prototype.slice.call(D.lv, 0, DRAWN.length) };
   },
   /** TASK-1101 的三項減量（帆不重傳 rigfixkey、錨鏈落定 chainrest、表演船停住 showidle；同名的網址開關）：給 { 名字: true／false } 就改 ——
    *  關掉的那一項這一格就生效（帆照以前重做、落定的鍊子接回去算、停住的船補一次局勢照畫）；打開的等下一步模擬才停、才落定。回現在的開關、幾艘停住、幾條落定。 */
@@ -283,7 +284,7 @@ if (DEBUG) window.__game = {
   shipwin: function () { return shipWinStat(); },
   smoke: function () { return { near: SMK_NEAR, far: SMK_FAR, max: SMK_MAX, meal: smokeMeal(), realRule: SMK.realRule, stat: SMK.stat }; },   // 煙源表（78_funnel.js）：每一類範圍內幾根、冒了幾根（真的船的煙囪另計 real）                            // 船窗（63_shipwin.js）：每艘幾扇、哪幾扇亮著、這一格畫了幾扇／幾點
   townLaunch: function (hull) { return trafficLaunchDemo(hull); },           // 下水演出（58_traffic.js ⑬；Blocksail TASK-0899）：附近放得下的水上船廠船台上生一艘（hull 沒給 ⇒ 燕子號）⇒ { ok, id }；讀數看 traffic().launch
-  traffic: function () { return trafficInfo(); },                             // 往來的船（58_traffic.js）：在場幾艘、排隊、做好幾艘、收掉幾艘、建船每一段幾 ms
+  traffic: function (o) { if (o && o.showMax != null) TRF_SHOW_MAX = Math.max(0, +o.showMax | 0); return trafficInfo(); },   // 往來的船（58_traffic.js）：在場幾艘（演出物件、真的分開）、排隊、做好幾艘、收掉幾艘、建船每一段幾 ms；{ showMax } 改演出物件上限（⑭）
   flow: function () { return FLOW_ST; },                             // ?start=1 分段開戰（70_flow.js startStaged）：幾步、最久一步、每一步幾 ms、全部幾 ms
   bed: function (q) { if (!BED || !BED.A) return null; return { area: BED.A.id, site: BED.site, origin: [BED.ax, BED.az], center: [BED.cx, BED.cy], loaded: Object.keys(BED.ch).sort(), loads: BED.loads, drops: BED.drops, waits: BED.miss,
     mid: BED.mid ? { step: BED.mid, loaded: Object.keys(BED.cm).sort(), loads: BED.mloads, lv: [1, 2].map(function (v) { var n = 0; for (var q = 0; q < BED.lv.length; q++) if (BED.lv[q] === v && BED.has[q]) n++; return n; }) } : null,   // 外圈的中等塊：載了哪幾塊、模擬讀中等／原精度的各幾塊
@@ -511,7 +512,7 @@ if (DEBUG) window.__game = {
       return r; }) };
   },
   chains: function (i, reset) {
-    var sh = SHIPS[i || 0], A = sh.anc, r = { ms: CH_PROF.steps ? +(CH_PROF.ms / CH_PROF.steps).toFixed(4) : 0, hit: CHAIN_HIT, lost: (sh.chLost || []).length };
+    var sh = DRAWN[i || 0], A = sh.anc, r = { ms: CH_PROF.steps ? +(CH_PROF.ms / CH_PROF.steps).toFixed(4) : 0, hit: CHAIN_HIT, lost: (sh.chLost || []).length };
     if (A) ['P', 'S'].forEach(function (k) { var c = A[k].ch; r[k] = c ? { st: A[k].st, rest: !!c.rest, pay: +c.pay.toFixed(1), hit: c.hit, pen: c.pen, penAvg: +(c.penSum / Math.max(1, c.steps)).toFixed(2), penMax: c.penMax, end: [c.p[CHAIN_SEG * 3], c.p[CHAIN_SEG * 3 + 1], c.p[CHAIN_SEG * 3 + 2]].map(function (v) { return +v.toFixed(1); }), y: [].filter.call(c.p, function (v, j) { return j % 3 === 1; }).map(function (v) { return +v.toFixed(1); }) } : A[k].st; });
     if (reset) CH_PROF = { ms: 0, steps: 0 };
     return r;

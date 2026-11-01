@@ -166,11 +166,13 @@ function simStep() {
   collide(hMv);
   if (BED) SHIPS.forEach(function (sh) { if (!trafficKin(sh)) groundStep(sh, hMv); });  // 擱淺（32_ground.js；有海圖才有）；照時刻表滑、進出港拖的往來船（58_traffic.js ⑥⑧）不擱淺、棧橋不推
   if (BED && TOWNS.list.length) SHIPS.forEach(function (sh) { if (!trafficKin(sh)) quayStep(sh, hMv); });   // 棧橋、海堤的碰撞（32_quay.js；有城才有）
+  if (SHOWS.length) { SHOWS.forEach(function (sh) { showStep(sh, DT); }); showHitTick(); if (PF) pfLap('show'); }   // 演出物件（58_traffic.js ⑭）：只擺位置、浪上起伏；會撞的換成真的船（下面電腦、砲彈就照真的船算）
   SHIPS.forEach(function (sh) {                                    // 照 SHIPS 的順序（一對一：我艦先、敵艦後 ⇒ 跟以前同一個順序抽亂數）
     if (sh.i === PLAYER_I) { if (AUTOFIRE) simAi(sh, DT); }            // 自動開砲：我艦也交給電腦瞄準開火
     else if (modeRule('othersAct')) simAi(sh, DT);                // 玩法規則 othersAct（04_modes.js）：沙盒的其他船不還手
   });
   if (PF) pfLap('ai');
+  showBallTick();                                                  // 飛向演出物件的砲彈：先換成真的船再算命中（58_traffic.js ⑭）
   for (i = 0; i < BALLS.length; i++) { stepBall(BALLS[i], DT); if (!BALLS[i].alive) { evEmit('ballGone', BALLS[i]); BALLS.splice(i--, 1); } }
   if (PF) pfLap('balls');
   SHIPS.forEach(function (sh) { if (sh.burn) burnStep(sh); });     // 著火（49_burn.js；著過火的船才有 sh.burn）：燒穿的格下面 integrity 同一步斷開

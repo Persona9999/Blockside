@@ -181,7 +181,7 @@ function shipWinProgs() {
 function shipWinDraw() {
   var st = SHIPWIN.stat; st.ships = st.cards = st.glow = 0;
   if (!SHIPWIN.on || TOD0 === null || !(TOD_LIT > 0) || PASS.vp || cutOn()) return;
-  var L = SHIPS.filter(function (sh) { return sh.T.glsXYZ && sh.sink <= 40 && shipWins(sh.T).length; }); if (!L.length) return;
+  var L = DRAWN.filter(function (sh) { return sh.T.glsXYZ && sh.sink <= 40 && shipWins(sh.T).length; }); if (!L.length) return;
   var Pg = shipWinProgs(); if (!Pg) return;
   var t0 = performance.now(), L0 = TOWN_LOD[0], B0 = TOWN_BAND[0], cf = gl.isEnabled(gl.CULL_FACE);
   gl.disable(gl.CULL_FACE); gl.enable(gl.BLEND); gl.blendFunc(gl.ONE, gl.ONE); gl.depthMask(false);
@@ -209,7 +209,7 @@ function shipWinFrac() { return SHIPWIN.part ? TOD_WIN : TOD_LIT > 0 ? 1 : 0; }
 /** 讀數：每艘幾扇窗、哪幾扇亮著（照同一個雜湊與 shipWinFrac 算；打掉的不算）。 */
 function shipWinStat() {
   var out = { on: SHIPWIN.on, xz: SHIPWIN.xz, part: SHIPWIN.part, lit: +TOD_LIT.toFixed(3), win: +shipWinFrac().toFixed(3), draw: SHIPWIN.stat, ships: [] };
-  SHIPS.forEach(function (sh, i) {
+  DRAWN.forEach(function (sh, i) {
     if (!sh.T.glsXYZ || !shipWins(sh.T).length) return;
     var k = shipWinKeyXZ(sh), ok = sh.winM ? sh.winM.ok : shipWins(sh.T).map(function (w, wi) { return wi; });
     out.ships.push({ i: i, name: sh.name || sh.T.id, hull: sh.T.id, key: k, wins: shipWins(sh.T).length, ok: ok.length, on: TOD_LIT > 0 ? ok.filter(function (wi) { return twHash(k[0], k[1], wi) < shipWinFrac(); }) : [] });
@@ -227,7 +227,7 @@ function townShipMoored(sh) { return sh.moor && sh.moor.x != null && !sh.sunk &&
 function townShipSig() {
   var s = ''; if (!SHIP_TL) return s;
   s += Math.round((1.6 - wxLum()) * 20) + '|';                         // 亮度變了（入夜、天氣）⇒ 也重排
-  SHIPS.forEach(function (sh) {
+  DRAWN.forEach(function (sh) {
     if (!townShipMoored(sh)) return;
     var n = (sh.vlampN || 0) + sh.T.gangway.length; sh.models.forEach(function (m) { if (m.alive && isLamp(m)) n++; });
     if (n) s += shipWinKey(sh) + ':' + n + ',';
@@ -241,7 +241,7 @@ function townShipSig() {
 /** 停港的船燈 ⇒ [x, y, z, 照多遠, r, g, b, 相位, …]（世界座標）；順手標 sh.tlIn。 */
 function townShipLamps() {
   var out = [], R = TL_TYPE[0].r, I = LAMP_I * (1.6 - wxLum()), C = [1, 0.62, 0.25], G = TL_TYPE[0];   // C：模型的燈的暖橘（同 lampsUpdate）；G：舷梯燈照城裡的燈籠
-  SHIPS.forEach(function (sh) {
+  DRAWN.forEach(function (sh) {
     sh.tlIn = false; if (!SHIP_TL || !townShipMoored(sh)) return;
     (sh.T.lamps || []).forEach(function (V, j) { if (!vlampOn(sh, V)) return; var w = M4.pt(sh.M, V.at[0], V.at[1], V.at[2]); out.push(w[0], w[1], w[2], R, V.rgb[0] * I, V.rgb[1] * I, V.rgb[2] * I, j * 1.7); sh.tlIn = true; });
     sh.models.forEach(function (m) { if (!m.alive || !isLamp(m)) return; var q = lampAt(m), w = M4.pt(sh.M, q[0], q[1], q[2]); out.push(w[0], w[1], w[2], R, C[0] * I, C[1] * I, C[2] * I, m.k * 2.39); sh.tlIn = true; });
