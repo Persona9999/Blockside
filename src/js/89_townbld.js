@@ -79,7 +79,8 @@ function tbiServiceHTML(S) {
   if (!menus.length) return '<div class="tbiT">供應菜單</div><div class="tbiDim">尚未掛載菜單</div>';
   return '<div class="tbiT">' + tuiEsc(S.title || '供應菜單') + '</div>' + menus.map(function (m) {   // title、crew、foot：軍事建築換字（Blocksail townBld kind 'guard'；TASK-0948）
     var pw = m.per != null && !!m.perIn, h = '<div class="tbiT">' + (m.icon ? tuiIcon('dishes', m.icon) : '') + tuiEsc(m.name) + '</div>' +
-      (pw ? '<div class="tbiDim">每名' + tuiEsc(S.worker || '工人') + '一天招待 ' + tuiNum(m.per, 1) + ' 人次・滿編每日最多 ' + tuiNum(m.capacity) + ' 人次' :   // 每名工人（Tim 2026-11-01「菜單顯示可能可以改為每名工人能服務多少人 消耗多少資源」；Blocksail townBld per／perIn）
+      (pw ? '<div class="tbiDim">每名' + tuiEsc(S.worker || '工人') + '一天招待 ' + tuiNum(m.per, 1) + ' 人次' :   // 不寫滿編、每日最多：那是建築的事（崗位那一行；Tim 2026-11-01「之後有大餐館10人工作就可以招待更多人」）
+          // 每名工人（Tim 2026-11-01「菜單顯示可能可以改為每名工人能服務多少人 消耗多少資源」；Blocksail townBld per／perIn）
         '<div class="tbiDim">滿編每日最多 ' + tuiNum(m.capacity) + ' 人次・' + tuiNum(m.jobs) + (S.crew || ' 名工人')) + (m.served == null ? '' : '・昨天 ' + tuiNum(m.served, 1) + ' 人次') + '</div>';
     var q = pw ? m.perIn : m.per100, ks = Object.keys(q || {});
     if (!ks.length) return h + '<div class="tbiDim">不消耗物資</div>';
