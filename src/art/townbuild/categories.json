@@ -1,0 +1,57 @@
+[
+  {
+    "key": "road",
+    "name": "道路",
+    "concept": "A curving cobblestone lane segment with pale worn paving, low mossy curb and one small timber waypost without writing. Recognizable winding strip silhouette."
+  },
+  {
+    "key": "house",
+    "name": "房屋",
+    "concept": "A compact Caribbean colonial dwelling: ochre plaster, warm terracotta hip roof, teal shutters and a tiny shaded veranda. Single snug architectural silhouette."
+  },
+  {
+    "key": "workshop",
+    "name": "工坊",
+    "concept": "A stout carpenter's workbench with a brass hand plane, curled wood shaving and a vertical timber vise. Rich walnut and honey wood, a small steel edge. No hammer."
+  },
+  {
+    "key": "food",
+    "name": "食品",
+    "concept": "A small copper cooking cauldron with vegetable stew, one ivory onion and a red pepper tucked at its base, subtle two-pixel steam. Compact appetizing copper-red silhouette. No loaf."
+  },
+  {
+    "key": "daily",
+    "name": "日用",
+    "concept": "A cream ceramic washbasin and small blue ceramic pitcher with a folded ivory towel, restrained indigo detailing. Compact domestic arrangement. No spool or needle."
+  },
+  {
+    "key": "service",
+    "name": "服務",
+    "concept": "An elegant hanging brass lantern mounted on a short carved wooden sign bracket, warm amber glass and small teal fabric pennant. Welcoming civic hospitality symbol. No church."
+  },
+  {
+    "key": "harbour",
+    "name": "港口",
+    "concept": "A compact harbor loading derrick with wooden jib, brass pulley and one suspended tightly wrapped cargo bundle, a tiny turquoise water strip at base. Clear crane silhouette. No anchor."
+  },
+  {
+    "key": "farm",
+    "name": "農莊",
+    "concept": "A little cultivated garden plot: three dark earth furrows with broad leafy green seedlings, copper watering can alongside. Rich soil and fresh foliage. No wheat sheaf."
+  },
+  {
+    "key": "livestock",
+    "name": "畜牧",
+    "concept": "A small timber feeding trough brimming with golden hay, with a warm russet hen perched at one end and two ivory eggs at base. Rustic farming silhouette. No cow."
+  },
+  {
+    "key": "industry",
+    "name": "建材",
+    "concept": "A dressed pale limestone block, rough dark slate slab and two cut timber beams in a tidy compact material stack. Distinct stone facets and wood grain. No red bricks."
+  },
+  {
+    "key": "berth",
+    "name": "泊位",
+    "concept": "A stout cast-iron mooring bollard on a short wooden pier corner, loop of ochre rope around its horns and turquoise ripples beneath. Pier fitting silhouette. No ship."
+  }
+]

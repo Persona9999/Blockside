@@ -1,0 +1,249 @@
+{
+  "task": 1150,
+  "tool": "built-in image_gen",
+  "assets": [
+    {
+      "key": "road",
+      "name": "道路",
+      "prompt": "Use case: stylized-concept. Asset type: ONE original game UI category icon, refined 16/32-bit pixel art, designed on an apparent 64x64 pixel grid and enlarged with crisp square pixel clusters. Age-of-sail Caribbean town building menu. Three-quarter isometric compact object vignette, centered, filling about 78 percent of the square canvas with generous transparent margins. Upper-left warm light, rich material-specific colors, discrete 3-5 shade clusters per material, restrained deep navy/brown stepped outline, tactile dimensional detail. Strong silhouette and readable at 32px. Transparent background, no ground outside the vignette, no exterior shadow, no frame, no badge disc, no letters, no words, no numbers, no watermark, no emoji resemblance, no smooth vector curves, no blur. Subject: A curving cobblestone lane segment with pale worn paving, low mossy curb and one small timber waypost without writing. Recognizable winding strip silhouette.",
+      "source": "C:\\Users\\Tim\\.codex\\generated_images\\01a19051-9d2d-73a3-aa02-d6fbfff8b8a9\\exec-74bf4441-b68d-41b9-b237-61c5a51be4b0.png",
+      "master": "RawImages/meadow_town_category_road_master.png",
+      "transparent_background": true,
+      "references": [],
+      "master_sha256": "3d815e3a80a6b3a704afdb8f25e2e97023926e7a553d17d514992f1938ba981f",
+      "game_sha256": "e6f55632054451190bee78fe224a5084020d81f2a0551f87d05dda2bdecf332c",
+      "source_size": [
+        1254,
+        1254
+      ],
+      "crop": [
+        0,
+        0,
+        1248,
+        1254
+      ],
+      "game": "src/art/townbuild/road.png"
+    },
+    {
+      "key": "house",
+      "name": "房屋",
+      "prompt": "Use case: stylized-concept. Asset type: ONE original game UI category icon, refined 16/32-bit pixel art, designed on an apparent 64x64 pixel grid and enlarged with crisp square pixel clusters. Age-of-sail Caribbean town building menu. Three-quarter isometric compact object vignette, centered, filling about 78 percent of the square canvas with generous transparent margins. Upper-left warm light, rich material-specific colors, discrete 3-5 shade clusters per material, restrained deep navy/brown stepped outline, tactile dimensional detail. Strong silhouette and readable at 32px. Transparent background, no ground outside the vignette, no exterior shadow, no frame, no badge disc, no letters, no words, no numbers, no watermark, no emoji resemblance, no smooth vector curves, no blur. Subject: A compact Caribbean colonial dwelling: ochre plaster, warm terracotta hip roof, teal shutters and a tiny shaded veranda. Single snug architectural silhouette.",
+      "source": "C:\\Users\\Tim\\.codex\\generated_images\\01a19051-9d2d-73a3-aa02-d6fbfff8b8a9\\exec-5fc76d96-2439-47f3-ab5d-11d2afc11dc6.png",
+      "master": "RawImages/meadow_town_category_house_master.png",
+      "transparent_background": true,
+      "references": [],
+      "master_sha256": "3dd2e4561d97242c938f00cc4b20d077ce691f2751b108b83a3a6aab7ffabca0",
+      "game_sha256": "25d873eaaafadffca1513ceac3498e7f12928c00a69173b440d3f3d4d43cdcf6",
+      "source_size": [
+        1254,
+        1254
+      ],
+      "crop": [
+        0,
+        9,
+        1204,
+        1254
+      ],
+      "game": "src/art/townbuild/house.png"
+    },
+    {
+      "key": "workshop",
+      "name": "工坊",
+      "prompt": "Use case: stylized-concept. Asset type: ONE original game UI category icon, refined 16/32-bit pixel art, designed on an apparent 64x64 pixel grid and enlarged with crisp square pixel clusters. Age-of-sail Caribbean town building menu. Three-quarter isometric compact object vignette, centered, filling about 78 percent of the square canvas with generous transparent margins. Upper-left warm light, rich material-specific colors, discrete 3-5 shade clusters per material, restrained deep navy/brown stepped outline, tactile dimensional detail. Strong silhouette and readable at 32px. Transparent background, no ground outside the vignette, no exterior shadow, no frame, no badge disc, no letters, no words, no numbers, no watermark, no emoji resemblance, no smooth vector curves, no blur. Subject: A stout carpenter's workbench with a brass hand plane, curled wood shaving and a vertical timber vise. Rich walnut and honey wood, a small steel edge. No hammer.",
+      "source": "C:\\Users\\Tim\\.codex\\generated_images\\01a19051-9d2d-73a3-aa02-d6fbfff8b8a9\\exec-67fa825e-78cd-4c27-a8b2-8cdc9debfb80.png",
+      "master": "RawImages/meadow_town_category_workshop_master.png",
+      "transparent_background": true,
+      "references": [],
+      "master_sha256": "dd95c1ad4e1c2b57b7cbec1a6243bd83a096e844dcd4317e1dbcdb6e1f1c304e",
+      "game_sha256": "cdd433c70c2432f1e4367da8ab5c26a1d15bb9dab96cb9762b40b3d771c46767",
+      "source_size": [
+        1254,
+        1254
+      ],
+      "crop": [
+        0,
+        9,
+        1238,
+        1254
+      ],
+      "game": "src/art/townbuild/workshop.png"
+    },
+    {
+      "key": "food",
+      "name": "食品",
+      "prompt": "Use case: stylized-concept. Asset type: ONE original game UI category icon, refined 16/32-bit pixel art, designed on an apparent 64x64 pixel grid and enlarged with crisp square pixel clusters. Age-of-sail Caribbean town building menu. Three-quarter isometric compact object vignette, centered, filling about 78 percent of the square canvas with generous transparent margins. Upper-left warm light, rich material-specific colors, discrete 3-5 shade clusters per material, restrained deep navy/brown stepped outline, tactile dimensional detail. Strong silhouette and readable at 32px. Transparent background, no ground outside the vignette, no exterior shadow, no frame, no badge disc, no letters, no words, no numbers, no watermark, no emoji resemblance, no smooth vector curves, no blur. Subject: A small copper cooking cauldron with vegetable stew, one ivory onion and a red pepper tucked at its base, subtle two-pixel steam. Compact appetizing copper-red silhouette. No loaf.",
+      "source": "C:\\Users\\Tim\\.codex\\generated_images\\01a19051-9d2d-73a3-aa02-d6fbfff8b8a9\\exec-92481df0-083a-40ad-b2b9-fe1b2fc063e3.png",
+      "master": "RawImages/meadow_town_category_food_master.png",
+      "transparent_background": true,
+      "references": [],
+      "master_sha256": "f9f5ffec9d6e17d6653f14f7b817caa72d609c0768adeca8334a5a88b49f53c9",
+      "game_sha256": "aec8be12a767d836686fd6a05a4672c6a081aff71324506efaff2113213b89de",
+      "source_size": [
+        1254,
+        1254
+      ],
+      "crop": [
+        0,
+        17,
+        1253,
+        1254
+      ],
+      "game": "src/art/townbuild/food.png"
+    },
+    {
+      "key": "daily",
+      "name": "日用",
+      "prompt": "Use case: stylized-concept. Asset type: ONE original game UI category icon, refined 16/32-bit pixel art, designed on an apparent 64x64 pixel grid and enlarged with crisp square pixel clusters. Age-of-sail Caribbean town building menu. Three-quarter isometric compact object vignette, centered, filling about 78 percent of the square canvas with generous transparent margins. Upper-left warm light, rich material-specific colors, discrete 3-5 shade clusters per material, restrained deep navy/brown stepped outline, tactile dimensional detail. Strong silhouette and readable at 32px. Transparent background, no ground outside the vignette, no exterior shadow, no frame, no badge disc, no letters, no words, no numbers, no watermark, no emoji resemblance, no smooth vector curves, no blur. Subject: A cream ceramic washbasin and small blue ceramic pitcher with a folded ivory towel, restrained indigo detailing. Compact domestic arrangement. No spool or needle.",
+      "source": "C:\\Users\\Tim\\.codex\\generated_images\\01a19051-9d2d-73a3-aa02-d6fbfff8b8a9\\exec-d3cda7a8-9359-446a-8e03-4cdc21d364f2.png",
+      "master": "RawImages/meadow_town_category_daily_master.png",
+      "transparent_background": true,
+      "references": [],
+      "master_sha256": "b51c32c92b7d79e56760694806e6e9b4d01cdeef1bf593bcaaabf12054e55a69",
+      "game_sha256": "95d68fd24f4ff638faa5239816c4cf97a5e1a9912216a0639a0b64ad27407ffb",
+      "source_size": [
+        1254,
+        1254
+      ],
+      "crop": [
+        0,
+        35,
+        1206,
+        1254
+      ],
+      "game": "src/art/townbuild/daily.png"
+    },
+    {
+      "key": "service",
+      "name": "服務",
+      "prompt": "Use case: stylized-concept. Asset type: ONE original game UI category icon, refined 16/32-bit pixel art, designed on an apparent 64x64 pixel grid and enlarged with crisp square pixel clusters. Age-of-sail Caribbean town building menu. Three-quarter isometric compact object vignette, centered, filling about 78 percent of the square canvas with generous transparent margins. Upper-left warm light, rich material-specific colors, discrete 3-5 shade clusters per material, restrained deep navy/brown stepped outline, tactile dimensional detail. Strong silhouette and readable at 32px. Transparent background, no ground outside the vignette, no exterior shadow, no frame, no badge disc, no letters, no words, no numbers, no watermark, no emoji resemblance, no smooth vector curves, no blur. Subject: An elegant hanging brass lantern mounted on a short carved wooden sign bracket, warm amber glass and small teal fabric pennant. Welcoming civic hospitality symbol. No church.",
+      "source": "C:\\Users\\Tim\\.codex\\generated_images\\01a19051-9d2d-73a3-aa02-d6fbfff8b8a9\\exec-4707989e-3b58-490f-953d-9435f22152cd.png",
+      "master": "RawImages/meadow_town_category_service_master.png",
+      "transparent_background": true,
+      "references": [],
+      "master_sha256": "e7b62ca2849c6107b7c144c9688a615fb3639df46b418bc4a4779b467775f156",
+      "game_sha256": "eb9de01d04fb3fd99fa5f1868f7bfc9a3f3a8b00ba3c5bfa987aaa3a087cd6ce",
+      "source_size": [
+        1254,
+        1254
+      ],
+      "crop": [
+        0,
+        27,
+        1234,
+        1254
+      ],
+      "game": "src/art/townbuild/service.png"
+    },
+    {
+      "key": "harbour",
+      "name": "港口",
+      "prompt": "Use case: stylized-concept. Asset type: ONE original game UI category icon, refined 16/32-bit pixel art, designed on an apparent 64x64 pixel grid and enlarged with crisp square pixel clusters. Age-of-sail Caribbean town building menu. Three-quarter isometric compact object vignette, centered, filling about 78 percent of the square canvas with generous transparent margins. Upper-left warm light, rich material-specific colors, discrete 3-5 shade clusters per material, restrained deep navy/brown stepped outline, tactile dimensional detail. Strong silhouette and readable at 32px. Transparent background, no ground outside the vignette, no exterior shadow, no frame, no badge disc, no letters, no words, no numbers, no watermark, no emoji resemblance, no smooth vector curves, no blur. Subject: A compact harbor loading derrick with wooden jib, brass pulley and one suspended tightly wrapped cargo bundle, a tiny turquoise water strip at base. Clear crane silhouette. No anchor.",
+      "source": "C:\\Users\\Tim\\.codex\\generated_images\\01a19051-9d2d-73a3-aa02-d6fbfff8b8a9\\exec-005b176b-5cb2-4108-a435-80668bfbd491.png",
+      "master": "RawImages/meadow_town_category_harbour_master.png",
+      "transparent_background": true,
+      "references": [],
+      "master_sha256": "16f148d2ae59aed73aa4e78cb37c330b8c0c60a1957ee7fdd9cc8a9550e29c36",
+      "game_sha256": "df9137ac73b031ece9643747f9fb7bd1beaa6896e41b0dc8881cde6aea0072cf",
+      "source_size": [
+        1254,
+        1254
+      ],
+      "crop": [
+        0,
+        5,
+        1240,
+        1254
+      ],
+      "game": "src/art/townbuild/harbour.png"
+    },
+    {
+      "key": "farm",
+      "name": "農莊",
+      "prompt": "Use case: stylized-concept. Asset type: ONE original game UI category icon, refined 16/32-bit pixel art, designed on an apparent 64x64 pixel grid and enlarged with crisp square pixel clusters. Age-of-sail Caribbean town building menu. Three-quarter isometric compact object vignette, centered, filling about 78 percent of the square canvas with generous transparent margins. Upper-left warm light, rich material-specific colors, discrete 3-5 shade clusters per material, restrained deep navy/brown stepped outline, tactile dimensional detail. Strong silhouette and readable at 32px. Transparent background, no ground outside the vignette, no exterior shadow, no frame, no badge disc, no letters, no words, no numbers, no watermark, no emoji resemblance, no smooth vector curves, no blur. Subject: A little cultivated garden plot: three dark earth furrows with broad leafy green seedlings, copper watering can alongside. Rich soil and fresh foliage. No wheat sheaf.",
+      "source": "C:\\Users\\Tim\\.codex\\generated_images\\01a19051-9d2d-73a3-aa02-d6fbfff8b8a9\\exec-3119ea36-76f1-4809-89dc-2b3f1e0b6b2f.png",
+      "master": "RawImages/meadow_town_category_farm_master.png",
+      "transparent_background": true,
+      "references": [],
+      "master_sha256": "b3cb79bfacf80784ac6cd2fc8d49f0d51575291ba7cbb5a0d1e83727f8d84ad3",
+      "game_sha256": "9c09a039ccd3f73b2fe6dbd0b09a32c7deb7d9369f81e75f5372aeb7c88c727f",
+      "source_size": [
+        1254,
+        1254
+      ],
+      "crop": [
+        0,
+        9,
+        1253,
+        1254
+      ],
+      "game": "src/art/townbuild/farm.png"
+    },
+    {
+      "key": "livestock",
+      "name": "畜牧",
+      "prompt": "Use case: stylized-concept. Asset type: ONE original game UI category icon, refined 16/32-bit pixel art, designed on an apparent 64x64 pixel grid and enlarged with crisp square pixel clusters. Age-of-sail Caribbean town building menu. Three-quarter isometric compact object vignette, centered, filling about 78 percent of the square canvas with generous transparent margins. Upper-left warm light, rich material-specific colors, discrete 3-5 shade clusters per material, restrained deep navy/brown stepped outline, tactile dimensional detail. Strong silhouette and readable at 32px. Transparent background, no ground outside the vignette, no exterior shadow, no frame, no badge disc, no letters, no words, no numbers, no watermark, no emoji resemblance, no smooth vector curves, no blur. Subject: A small timber feeding trough brimming with golden hay, with a warm russet hen perched at one end and two ivory eggs at base. Rustic farming silhouette. No cow.",
+      "source": "C:\\Users\\Tim\\.codex\\generated_images\\01a19051-9d2d-73a3-aa02-d6fbfff8b8a9\\exec-6f2e4725-cbda-4d8e-847b-ec99d47dc559.png",
+      "master": "RawImages/meadow_town_category_livestock_master.png",
+      "transparent_background": true,
+      "references": [],
+      "master_sha256": "f8d4230b41ceb54db598ecd625bea4952c4953342820d54a6f6c26199fb96dc5",
+      "game_sha256": "f812937f698944f08fee2e80b0478d080f8ac70038859c25c0b63abfaf081eb9",
+      "source_size": [
+        1254,
+        1254
+      ],
+      "crop": [
+        0,
+        22,
+        1240,
+        1254
+      ],
+      "game": "src/art/townbuild/livestock.png"
+    },
+    {
+      "key": "industry",
+      "name": "建材",
+      "prompt": "Use case: stylized-concept. Asset type: ONE original game UI category icon, refined 16/32-bit pixel art, designed on an apparent 64x64 pixel grid and enlarged with crisp square pixel clusters. Age-of-sail Caribbean town building menu. Three-quarter isometric compact object vignette, centered, filling about 78 percent of the square canvas with generous transparent margins. Upper-left warm light, rich material-specific colors, discrete 3-5 shade clusters per material, restrained deep navy/brown stepped outline, tactile dimensional detail. Strong silhouette and readable at 32px. Transparent background, no ground outside the vignette, no exterior shadow, no frame, no badge disc, no letters, no words, no numbers, no watermark, no emoji resemblance, no smooth vector curves, no blur. Subject: A dressed pale limestone block, rough dark slate slab and two cut timber beams in a tidy compact material stack. Distinct stone facets and wood grain. No red bricks.",
+      "source": "C:\\Users\\Tim\\.codex\\generated_images\\01a19051-9d2d-73a3-aa02-d6fbfff8b8a9\\exec-67e30d79-42b7-4350-8dae-ce409a33dcb4.png",
+      "master": "RawImages/meadow_town_category_industry_master.png",
+      "transparent_background": true,
+      "references": [],
+      "master_sha256": "68399bc971d5e024f99f99a739d9793fe26a7b119baa90b7191aa2bbc31602e2",
+      "game_sha256": "671cbe25f8fe5a3a74e5fbfb1d7e73426f574ff84561bc87604cc7275919d271",
+      "source_size": [
+        1254,
+        1254
+      ],
+      "crop": [
+        49,
+        87,
+        1220,
+        1254
+      ],
+      "game": "src/art/townbuild/industry.png"
+    },
+    {
+      "key": "berth",
+      "name": "泊位",
+      "prompt": "Use case: stylized-concept. Asset type: ONE original game UI category icon, refined 16/32-bit pixel art, designed on an apparent 64x64 pixel grid and enlarged with crisp square pixel clusters. Age-of-sail Caribbean town building menu. Three-quarter isometric compact object vignette, centered, filling about 78 percent of the square canvas with generous transparent margins. Upper-left warm light, rich material-specific colors, discrete 3-5 shade clusters per material, restrained deep navy/brown stepped outline, tactile dimensional detail. Strong silhouette and readable at 32px. Transparent background, no ground outside the vignette, no exterior shadow, no frame, no badge disc, no letters, no words, no numbers, no watermark, no emoji resemblance, no smooth vector curves, no blur. Subject: A stout cast-iron mooring bollard on a short wooden pier corner, loop of ochre rope around its horns and turquoise ripples beneath. Pier fitting silhouette. No ship.",
+      "source": "C:\\Users\\Tim\\.codex\\generated_images\\01a19051-9d2d-73a3-aa02-d6fbfff8b8a9\\exec-09a151df-90d9-43c9-94d9-4cb4a6dfa3ed.png",
+      "master": "RawImages/meadow_town_category_berth_master.png",
+      "transparent_background": true,
+      "references": [],
+      "master_sha256": "9a7941d6881d237c31d91c2288f1689132e7827c023ebeb5dfe1c9ba97bbcee1",
+      "game_sha256": "e4cff8ff6793cfa7786c059afc604da2033b4863328d44cedfde1414f584e4cf",
+      "source_size": [
+        1254,
+        1254
+      ],
+      "crop": [
+        0,
+        0,
+        1251,
+        1236
+      ],
+      "game": "src/art/townbuild/berth.png"
+    }
+  ],
+  "derivation": "Crop original alpha bounds; nearest-neighbor fit within 108x108; center on 128x128 RGBA. Preserve generated alpha. UI uses 32px and image-rendering:pixelated."
+}

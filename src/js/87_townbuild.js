@@ -442,9 +442,15 @@ function twbFieldTxt(tr) {
   return '＋田 ' + (A ? A.area + ' m²' + (A.stop === 'short' ? '（長不滿）' : '') + (A.front === 'relaxed' ? '（貼到路邊）' : '') : '?') + '、種' + nm + (tr.note ? '（' + tr.note + '）' : '');
 }
 /** 介面：分類分頁＋項目＋復原、收起（#twbP，#stage.twb 才顯示）；🔨 那一顆城鎮模式常駐、當開關（61_layout.js 的 town 配置）。 */
+// 圖與中文名依分類 key 對應；舊 host 仍帶 emoji 名稱也用新圖。未知分類保留 host 的名字。
+function twbCategoryHTML(c) {
+  var art = Object.prototype.hasOwnProperty.call(TWB_CATEGORY_ART, c.k) ? TWB_CATEGORY_ART[c.k] : null, label = document.createElement('span');
+  label.textContent = art ? art.name : c.name;
+  return (art ? '<img class="twbCatIcon" src="' + art.src + '" alt="" aria-hidden="true">' : '') + label.outerHTML;
+}
 function twbUI() {
   var P = $('twbP'); if (!P) return;
-  var h = '<div id="twbTabs">' + TWB_CATS.map(function (c) { return '<button type="button" data-c="' + c.k + '"' + (c.k === TWB.cat ? ' class="on"' : '') + '>' + c.name + '</button>'; }).join('') + '</div><div id="twbItems">';
+  var h = '<div id="twbTabs">' + TWB_CATS.map(function (c) { return '<button type="button" data-c="' + c.k + '" aria-pressed="' + (c.k === TWB.cat) + '"' + (c.k === TWB.cat ? ' class="on"' : '') + '>' + twbCategoryHTML(c) + '</button>'; }).join('') + '</div><div id="twbItems">';
   var nAll = 0;
   TWB_CATS.forEach(function (c) { c.items.forEach(function (it) { var n = ++nAll; if (c.k !== TWB.cat) return; h += '<button type="button" class="bcard' + (it.k === TWB.item ? ' on' : '') + '" data-c="' + c.k + '" data-i="' + it.k + '"><b>' + it.name + (it.goods ? ' ' + it.goods.map(function (g) { return tuiIcon('goods', g); }).join('') : '') + '</b><small>' + it.sub + (n <= 9 ? '（' + n + '）' : '') + '</small></button>'; }); });   // 數字鍵只到 9（twbKey）⇒ 第 10 項以後只能點（TASK-0872：工坊 8 種之後選單 12 項）
   h += '</div>';

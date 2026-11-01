@@ -354,13 +354,16 @@
   #twbTown{ display:none; }
   #twbTown.on{ display:block; position:absolute; left:50%; top:28px; transform:translateX(-50%); padding:4px 12px; border-radius:8px; background:rgba(10,14,22,.66); color:#f3e6c4; font-size:14px; pointer-events:none; white-space:nowrap; max-width:calc(100vw - 32px); overflow:hidden; text-overflow:ellipsis; }   /* 城名、年份、人口（87_townbuild.js twbTitle；TASK-0871）—— 不寫 z-index、DOM 排在 #topC 前面 ⇒ 船隻資訊壓在它上面（Tim 2026-11-01「讓船隻資訊UI排序在城鎮年份之上」）；主選單、設定照舊蓋過它 */
   #stage.twb #twbInfo{ display:block; position:absolute; left:50%; top:64px; transform:translateX(-50%); padding:4px 12px; border-radius:8px; background:rgba(10,14,22,.66); color:#eee; font-size:13px; pointer-events:none; white-space:nowrap; max-width:calc(100vw - 32px); overflow:hidden; text-overflow:ellipsis; }
-  #stage.twb #twbP{ display:flex; flex-direction:column; gap:8px; position:absolute; left:50%; bottom:92px; transform:translateX(-50%); width:min(520px, calc(100vw - 32px)); z-index:8; pointer-events:auto; }
-  #twbTabs, #twbItems, #twbOps{ display:flex; flex-wrap:wrap; gap:6px; } #twbTabs button{ border-radius:14px; padding:4px 12px; } #twbTabs button.on{ background:#9fc7ff; color:#111; }
+  #stage.twb #twbP{ display:flex; flex-direction:column; gap:8px; position:absolute; left:50%; bottom:92px; transform:translateX(-50%); width:min(520px, calc(100vw - 32px)); max-height:calc(100vh - 176px); max-height:calc(100dvh - 176px); overflow-y:auto; overscroll-behavior:contain; z-index:8; pointer-events:auto; }
+  #twbTabs, #twbItems, #twbOps{ display:flex; flex-wrap:wrap; gap:6px; }
+  #twbTabs button{ display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px; flex:1 0 72px; min-height:58px; border-radius:10px; padding:4px 6px; font-size:12px; line-height:16px; }
+  #twbTabs .twbCatIcon{ width:32px; height:32px; object-fit:contain; image-rendering:pixelated; pointer-events:none; }
+  #twbTabs button.on{ background:#9fc7ff; color:#111; }
   #twbItems .bcard{ display:flex; flex-direction:column; align-items:flex-start; min-width:110px; padding:6px 10px; } #twbItems .bcard small{ opacity:.75; font-size:11px; }
   #twbOps{ justify-content:flex-end; }
   #twbMode{ display:flex; flex-wrap:wrap; gap:6px; align-items:center; font-size:12px; } #twbMode button{ border-radius:12px; padding:3px 10px; font-size:12px; } #twbMode button.on{ background:#ffd98a; color:#111; }
   #twbRcp{ display:flex; flex-wrap:wrap; gap:6px; align-items:center; font-size:12px; } #twbRcp:empty{ display:none; } #twbRcp button{ border-radius:12px; padding:3px 10px; font-size:12px; } #twbRcp button.on{ background:#c9e59a; color:#111; } .tbiRcp{ display:flex; flex-wrap:wrap; gap:6px; margin:4px 0; } .tbiRcp button{ display:inline-flex; align-items:center; border-radius:12px; padding:3px 10px; font-size:12px; } .tbiRcp button img{ width:18px !important; height:18px !important; margin-right:4px !important; } .tbiRcp button.on{ background:#c9e59a; color:#111; } .tbiRcp button.no{ background:transparent; color:#889; border:1px dashed #667; cursor:help; } .tbiRcp button.no img{ filter:grayscale(1); opacity:.45; } #twbRcp button:disabled{ background:transparent; color:#aab; border:1px dashed #667; cursor:help; } #twbRcp button{ display:inline-flex; align-items:center; } #twbRcp button img{ width:18px !important; height:18px !important; margin-right:4px !important; } #twbRcp button.no{ background:transparent; color:#889; border:1px dashed #667; cursor:help; } #twbRcp button.no img{ filter:grayscale(1); opacity:.45; } #twbRcp button.on.no{ outline:2px solid #e07060; }
-  @media (max-width: 640px){ #stage.twb #twbP{ bottom:178px; } }
+  @media (max-width: 640px){ #stage.twb #twbP{ bottom:178px; max-height:calc(100vh - 262px); max-height:calc(100dvh - 262px); } }
   /* 城鎮介面（89_townui.js，Blocksail TASK-0910）：💰 貿易、🏛 城鎮兩顆在 🔨 旁邊（61_layout.js 的 town 配置）；面板右邊一欄，開著那一顆亮底 */
   #tuiP{ display:none; }
   #stage.tui:not(.tuiT):not(.tuiD) #tuiK, #stage.tuiT #tuiTK, #stage.tuiD #tuiDK{ background:#9fc7ff; color:#111; }
@@ -1074,6 +1077,7 @@
 <script src="js/81_fps.js" data-bundle="game"></script>
 <script src="js/82_build.js" data-bundle="game"></script>
 <script src="js/86_inspect.js" data-bundle="game"></script>
+<script src="js/87_townbuild_art.js" data-bundle="game"></script>
 <script src="js/87_townbuild.js" data-bundle="game"></script>
 <script src="js/88_modeswitch.js" data-bundle="game"></script>
 <script src="js/89_townui.js" data-bundle="game"></script>
