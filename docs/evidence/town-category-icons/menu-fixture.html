@@ -1,0 +1,484 @@
+<!doctype html><html lang="zh-Hant"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>
+  :root{ --modeFs:13px; --ink:#f3ead8; --dim:#b9ae98; --gold:#e8c26a; --blue:#6f9bff; --red:#ff6f6f; --panel:rgba(14,18,24,.72); }
+  html,body{ margin:0; height:100%; background:#0d1218; color:var(--ink); overflow:hidden;
+    font-family:"Noto Sans TC","Microsoft JhengHei","PingFang TC",sans-serif;
+    -webkit-user-select:none; user-select:none; -webkit-touch-callout:none; }   /* 手機長按不選字、不跳拷貝選單（Tim 2026-10-13）；右鍵／長按選單在 71_input.js 擋 */
+  html{ touch-action:manipulation; -webkit-text-size-adjust:100%; text-size-adjust:100%; }   /* 手機瀏覽器不自動放大小字（iOS 的 text-size-adjust、Android Chrome 的 font boosting；Tim 2026-10-16）*/   /* iPhone 點兩下不放大（Tim 2026-10-15）：touch-action 實際生效的是自己與所有祖先的交集 ⇒ 設在根上整頁都關掉雙擊縮放；捲動、雙指縮放照舊，遊戲畫面的 none 照舊；⛔ iOS 不一定照做 ⇒ 71_input.js 另外擋第二下 touchend */
+  input, textarea, select{ -webkit-user-select:text; user-select:text; -webkit-touch-callout:default; }   /* 彈種倍率表要能打字 */
+  /* 安全區（Tim 2026-10-17：「手機全螢幕後 下方UI需要往上一點(不然很難操作) 有辦法判別嗎」「可以重構UI架構優化」「橫板不用改」）：
+     裝置的邊（瀏海、圓角、iPhone 底部的 home 條）只在這裡處理一次 —— #stage 照 --sa-* 收邊，裡面的 HUD、畫布全部照 #stage 排 ⇒ 各自的 bottom:12px 不用再加安全區。
+     橫式：底邊照舊 0（Tim：橫板不用改）；左右照安全區收（跟以前沒開 viewport-fit=cover 時 iOS 自己補的邊一樣）。
+     直式：底邊 ＝ home 條的安全區（從主畫面開才有；瀏覽器裡是 0），直式手機下面那一團一律用 html.navlow 的排法（羅盤在最下排，見下面 #navBox 那一段；61_hud.js botFit）。
+     ⛔ 別在個別元件上再加安全區：會算兩次。要貼著整個螢幕的（全頁彈窗、fixed 的鈕）用 --sa-* 自己加。JS 量「畫面多大」量 #stage（stageBox，71_input.js），⛔ 不用 innerWidth／innerHeight。 */
+  :root{ --sa-t:env(safe-area-inset-top, 0px); --sa-r:env(safe-area-inset-right, 0px); --sa-b:env(safe-area-inset-bottom, 0px); --sa-l:env(safe-area-inset-left, 0px); }
+  @media (orientation:landscape){ :root{ --sa-b:0px; } }
+  #stage{ position:fixed; top:var(--sa-t); right:var(--sa-r); bottom:var(--sa-b); left:var(--sa-l); }
+  /* 轉場（?map=@host，03_camera.js camTrans）：鏡頭從正上方降下來／拉上去的時候介面先藏起來 */
+  #stage.trans > :not(#cv){ opacity:0 !important; pointer-events:none !important; transition:opacity .4s; }
+  canvas{ position:absolute; inset:0; width:100%; height:100%; display:block; cursor:crosshair; touch-action:none; }   /* 手機：拖曳 ＝ 轉鏡頭、雙指張合 ＝ 縮放、雙指一起拖 ＝ 平移（⛔ 不關 ⇒ 瀏覽器拿去捲頁面） */
+  .hud{ position:absolute; pointer-events:none; font-size:13px; line-height:1.5; text-shadow:0 1px 2px #000; }
+  .panel{ background:var(--panel); border:1px solid rgba(255,255,255,.12); border-radius:8px; padding:8px 12px; }
+  /* 艦隊（TASK-0552）：我方的圓形按鈕沿左邊往下排、敵方沿右邊往下排（Tim 2026-10-14；排不下 ⇒ 往畫面中間再開一欄），
+     中間一欄 ＝ 一艘的詳細資訊（點按鈕才有）＋ 廣播（61_hud.js fleetHud）。左邊讓出左下的羅盤。 */
+  .fleet{ top:12px; display:flex; flex-direction:column; flex-wrap:wrap; align-content:flex-start; gap:7px; max-height:calc(100vh - 110px); pointer-events:auto; }
+  #fleetL{ left:12px; } #fleetR{ right:12px; flex-wrap:wrap-reverse; align-items:flex-end; }
+  .sb{ position:relative; width:66px; height:66px; border-radius:50%; cursor:pointer; box-shadow:0 2px 7px rgba(0,0,0,.65); transition:transform .12s, box-shadow .12s; }
+  .sb:hover{ transform:scale(1.07); box-shadow:0 0 0 2px rgba(255,255,255,.55), 0 2px 9px rgba(0,0,0,.7); } .sb:active{ transform:scale(.94); }
+  .sb.on{ box-shadow:0 0 0 3px var(--gold), 0 2px 10px rgba(0,0,0,.7); } .sb.out{ opacity:.75; }
+  .sb canvas{ position:absolute; inset:0; width:100%; height:100%; cursor:pointer; touch-action:manipulation; }
+  /* 艦隊圓鈕兩側的數字（Tim 2026-10-14）：左下 ＝ 還能動的船員、右下 ＝ 還在的砲；像素圖示（HUD 美術）或 emoji，壓在外圈上 */
+  .sbn{ position:absolute; top:100%; margin-top:-1px; display:flex; align-items:center; gap:1px; color:#f2f2f2; font:bold 11px/13px Consolas,monospace; pointer-events:none; white-space:nowrap; z-index:1;   /* 沒有底板、描黑邊（Tim 2026-10-14）；放在圓圈底下不蓋圓環 */
+    text-shadow:-1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000, 0 0 3px rgba(0,0,0,.9); }
+  .fleet .sb{ margin-bottom:12px; }   /* 底下那一行數字的位置 */
+  .sigb{ width:40px; height:30px; border-radius:8px; display:flex; align-items:center; justify-content:center; font-size:18px; cursor:pointer; background:rgba(20,26,36,.82); border:1px solid #556; box-shadow:0 2px 7px rgba(0,0,0,.65); } .sigb.on{ border-color:var(--gold); background:rgba(80,64,20,.9); }   /* 🚩 旗號（TASK-0679）：我方那一欄最上面 */
+  #sigP{ position:absolute; left:84px; top:12px; display:none; z-index:7; pointer-events:auto; width:min(250px, calc(100vw - 110px)); padding:8px 10px; } #sigP.on{ display:block; }
+  @media (max-width:760px){ #sigP{ left:50px; width:min(250px, calc(100vw - 105px)); } #sigBtns button{ padding:5px 8px; font-size:13px; } }   /* 手機：別蓋到右邊敵方那一欄（38 px 圓鈕 ＋ 5 px） */
+  #sigH{ font-size:13px; margin-bottom:4px; } #sigX{ float:right; cursor:pointer; padding:0 4px; } #sigBtns button{ display:block; width:100%; text-align:left; margin:3px 0; padding:6px 9px; font-size:14px; cursor:pointer; } #sigBtns button.on{ background:var(--gold); color:#111; border-color:var(--gold); } #sigNow{ font-size:12px; opacity:.85; margin-top:4px; }
+  .sbn.l{ left:-2px; } .sbn.r{ right:-2px; } .sbn .ico{ width:12px; height:12px; vertical-align:0; } .sbn i{ font-style:normal; font-size:10px; }
+  /* 船隻配置頁最上面（Tim 2026-10-14）：大一點的艦隊圓鈕＋重要資訊 */
+  #shipCard{ display:flex; align-items:center; justify-content:center; gap:14px; flex-wrap:wrap; margin:6px auto 4px; max-width:660px; }
+  #shipCardC{ position:static; inset:auto; width:150px; height:150px; flex:none; } #shipCardT{ text-align:left; font-size:14px; line-height:1.75; min-width:220px; flex:1; } #shipCardT b{ color:var(--gold); font-weight:normal; } #shipCardT .h{ font-size:17px; color:var(--gold); } #shipCardT .n{ color:var(--dim); font-size:12px; }
+  .sbres{ font-size:12px; color:var(--dim); background:var(--panel); border-radius:10px; padding:2px 8px; }
+  #topC{ left:50%; top:12px; transform:translateX(-50%); width:max(280px, min(900px, calc(100vw - 200px))); display:flex; flex-direction:column; align-items:center; }
+  #info{ display:none; pointer-events:auto; cursor:pointer; border-left:3px solid var(--blue); margin-bottom:6px; max-width:100%; box-sizing:border-box; }
+  #info h3::after{ content:''; display:block; clear:both; }
+  #info .bar{ max-width:100%; }   /* 血條最多跟那一欄一樣寬（⛔ 固定寬 ⇒ 窄的時候伸進右欄） */
+  #info .fold.gm{ padding:0; overflow:hidden; } #info .fold.gm i{ font-style:normal; padding:0 6px; display:inline-block; } #info .fold.gm i.on{ color:#111; background:var(--gold); }   /* 旁邊那張圖：砲位｜損壞（61_hud.js GMAP_MODE） */
+  #info .dmgsum{ margin-top:2px; }
+  .nv{ display:inline-block; text-align:right; font-variant-numeric:tabular-nums; }   /* 一個數字一格（61_hud.js nv）：寬度固定、等寬數字 ⇒ 數字變了旁邊的字不跟著跳 */
+  #info .fold.see.on{ color:#111; background:var(--gold); }   /* 「🎥 看這艘」：正在看 ⇒ 實心 */
+  #info .fold{ float:right; margin-left:12px; cursor:pointer; color:var(--gold); font-size:12px; font-weight:normal; border:1px solid rgba(232,194,106,.55); border-radius:4px; padding:0 7px; }
+  #info .cls{ color:var(--dim); font-weight:normal; font-size:.85em; }
+  #info .pcols{ display:flex; flex-wrap:wrap; gap:4px 20px; } #info .pc{ flex:1 1 200px; min-width:0; }   /* 橫向兩欄（TASK-0564） */
+  #info .legend{ color:var(--dim); font-size:11px; margin-top:2px; }
+  #irow{ display:flex; align-items:flex-start; justify-content:center; gap:8px; max-width:100%; }   /* 詳細資訊＋旁邊的砲位圖（窄螢幕排到下面） */
+  #icol{ flex:1 1 auto; min-width:0; display:flex; flex-direction:column; }   /* 詳細資訊＋底下的廣播一欄（Tim 2026-10-16：訊息貼著上方面板；⛔ 以前廣播排在整列底下 ⇒ 被旁邊的砲位圖撐到很下面）；面板收起 ⇒ 只剩廣播、照舊在最上面 */
+  #gmap{ position:static; inset:auto; display:none; flex:none; max-width:100%; height:auto; margin:0 0 6px; cursor:pointer; pointer-events:auto; }   /* 砲位圖：直接鋪在畫面上（沒有底框；61_hud.js gmapDraw） */
+  .hud h3{ margin:0 0 2px; font-size:14px; }
+  .hud h3 .disp{ color:var(--dim); font-weight:normal; font-size:.85em; margin-left:1em; }   /* 排水量（61_hud.js panel）；窄螢幕自己一行 */
+  .bar{ height:5px; background:rgba(255,255,255,.15); border-radius:3px; overflow:hidden; margin:2px 0 4px; width:170px; }
+  .bar i{ display:block; height:100%; background:var(--gold); }
+  .bar.water i{ background:#4fb3d9; }
+  /* 下方（TASK-0567，Tim 2026-10-14；電腦與手機同一種排法）：左下 ＝ 帆與左舵（左舵最左、收帆、加帆）；右下 ＝ 開砲與右舵（單門、齊射、右舵最右）；
+     左右再往裡各兩顆（Tim 2026-10-15：為了對稱）：左 ＝ 6 拋錨／起錨、7 左錨（最裡）；右 ＝ 8 右錨（最裡）、G 自動開砲。
+     中間一欄 ＝ 羅盤＋面板：由上到下 ＝ 🎥 鏡頭／⏸ 停格／⚙ 設定（Tim 2026-10-15：改成圖示；Q 瞄準搬進設定面板 —— 很少用、害手機換行）＋航行 4／5（航行併進設定列）、砲列、彈種（設定那一列跟彈種隔著砲列 ⇒ 不會誤觸）。手機只是縮小、兩組改成直的（左舵、右舵在最下面靠角落）。 */
+  .helm{ display:flex; gap:8px; pointer-events:auto; flex:none; position:relative; z-index:2; }   /* 帆與舵（左）、開砲與舵（右）兩組大圓鈕：貼著中間的主面板（#ctlRow；Tim 2026-10-14：⛔ 以前貼畫面兩邊） */
+  #ctlRow{ display:flex; align-items:flex-end; justify-content:center; gap:8px; max-width:100%; }
+  .kb.hb{ width:64px; height:64px; margin:0; padding:0; border-radius:50%; display:flex; flex-direction:column; align-items:center; justify-content:center; line-height:1.25; font-size:12px;
+    background:rgba(14,18,24,.78); border:1px solid rgba(255,255,255,.32); box-shadow:0 2px 7px rgba(0,0,0,.6); }
+  .ball{ display:inline-block; width:.95em; height:.95em; border-radius:50%; vertical-align:-.12em; background:radial-gradient(circle at 34% 30%, #e4e9ee 0, #8a939d 20%, #3a4048 58%, #15181c 100%); box-shadow:0 0 0 1px rgba(255,255,255,.4); }   /* 實心彈的鐵球（Tim 2026-10-15：白點換掉；CSS 畫 ⇒ 每支手機長一樣） */
+  .kb.hb .em{ font-size:17px; line-height:1.1; letter-spacing:-1px; white-space:nowrap; } .kb.hb .em .ico{ width:16px; height:16px; }   /* 圖示（Tim 2026-10-15：舵、帆、錨、開砲、航行都改 emoji；砲用艦隊圓鈕砲數那個符號 sbIcon(3)）*/
+  .kb.hb b{ font-size:11px; } .kb.hb i{ font-style:normal; } .kb.hb.on{ color:#111; background:rgba(159,199,255,.92); border-color:#9fc7ff; } .kb.hb.on b{ color:#4a3500; } .kb.hb.dis{ opacity:.45; } .kb.hb.waste{ border-style:dashed; border-color:#ff9a7a; } .kb.hb.waste .em{ opacity:.75; }   /* 拋錨、左右錨、自動開砲：亮著 ＝ 開（錨在水裡）、灰 ＝ 錨打壞了 */
+  #botC{ left:50%; bottom:12px; transform:translateX(-50%); display:flex; flex-direction:column; align-items:center; gap:6px; width:max-content; max-width:calc(100vw - 24px); }   /* ⛔ 不寫 width ⇒ left:50% 的絕對定位只剩半個畫面寬，主面板被兩組大圓鈕擠成一條 */
+  #ctl{ text-align:center; min-width:0; box-sizing:border-box; }
+  #ctl b{ color:var(--gold); }
+  /* 一整排（Tim 2026-10-15：「射界外搬走之後，下方面板可以改成一整排按鈕攤在下面」）：沒有底框，🎥 ⏸ ⚙ 🤖☸ ＋ 彈種 ⚫ 💣 ⛓️ 一列；每顆自己帶深色半透明底（壓在海上看得清楚） */
+  #ctl.panel{ display:flex; align-items:flex-end; justify-content:center; flex-wrap:nowrap; gap:8px; background:none; border:none; box-shadow:none; padding:0; }
+  #hostBack{ display:none !important; } body.bsHost #hostBack{ display:flex !important; }   /* 🌍 回到地球儀：只有 ?map=@host（Blocksail 地球儀開的）才有（08_seabed.js bedHostBack；Tim 2026-10-20「回到地球儀 … 加到下排圓形按鈕」「用emoji的地球儀」） */
+  #keys, #ammo{ display:flex; align-items:flex-end; flex-wrap:nowrap; gap:8px; } #guns{ display:none; }   /* 下排也是大圓鈕（Tim 2026-10-15：比較好按）：🎥 ⏸ ⚙ ⚓⚓ ＋ 彈種一顆（點一下換下一種、顯示現在的彈種） */
+  #ammo span, .chip, .kb{ pointer-events:auto; cursor:pointer; user-select:none; -webkit-user-select:none; touch-action:manipulation; }
+  .kb{ display:inline-block; margin:3px 2px 0; padding:2px 8px; border-radius:6px; border:1px solid rgba(255,255,255,.26); background:rgba(255,255,255,.07); font-size:12px; }   /* 按鍵提示就是按鈕（手機也能點） */
+  .kb b, .chip b{ color:var(--gold); } .chip.on b{ color:#4a3500; }
+  .kb:active, .kb.down{ background:rgba(232,194,106,.38); }
+  #modeT{ font-size:var(--modeFs); line-height:1.2; white-space:nowrap; color:#f2f2f2; margin:0;   /* 羅盤上方（有船頭砲 ⇒ 船頭砲上方）：瞄準模式＋鏡頭，空心字直接壓在海上（Tim 2026-10-14） */
+    text-shadow:-1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000, 0 -1px 0 #000, 0 1px 0 #000, -1px 0 0 #000, 1px 0 0 #000, 0 0 4px rgba(0,0,0,.8); }
+  #modeT b{ color:var(--gold); font-weight:normal; }
+  .chip{ display:inline-block; margin:2px 3px 0; padding:0 8px; border-radius:10px; border:1px solid rgba(255,255,255,.2); color:var(--dim); font-size:12px; }
+  .chip.on{ color:#111; background:#9fc7ff; border-color:#9fc7ff; }
+  #guns{ margin-top:4px; font-size:12px; }
+  /* 兩舷的砲（Tim 2026-10-14）：貼著羅盤左右兩邊往外長（左舷在左、右舷在右；船頭那門靠羅盤）；沒有字、沒有底板（符號描黑邊直接壓在畫面上）；每層砲甲板一行、最上層在上；
+     對得到目標的那一舷靠羅盤那一側一條金線。掛在羅盤（#nav）上、上下置中（⛔ 放進 #botC 的排版裡 ⇒ 手機那一欄太窄，羅盤被擠小） */
+  /* 砲太多伸到大圓鈕那邊 ⇒ 壓在按鈕底下（Tim 2026-10-14）：.gside z-index 1、.helm 2（兩個都在 #botC 這個疊放層裡） */
+  #nav{ position:relative; } .gside{ z-index:1; position:absolute; top:50%; transform:translateY(-50%); font-family:Consolas,monospace; letter-spacing:0; white-space:nowrap; pointer-events:none; padding:0 4px;
+    text-shadow:-1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000, 0 0 3px rgba(0,0,0,.9); }
+  #gunsL{ right:100%; border-right:3px solid transparent; text-align:right; } #gunsR{ left:100%; border-left:3px solid transparent; text-align:left; }
+  #gunsL.on{ border-right-color:var(--gold); } #gunsR.on{ border-left-color:var(--gold); }
+  #teleBox{ left:12px; bottom:30px; height:max-content; display:flex; flex-direction:column; align-items:center; gap:3px; z-index:3; } #teleBox > *{ flex:none; }   /* ⛔ canvas 的通用規則是 absolute、inset 0（遊戲畫面用）⇒ #telc 要自己蓋回 static，跟 #navc 一樣。俥鐘（TASK-0630；Tim 2026-10-16：橫版放左下角（除錯那一行 #tip 上面）、直版手機貼在左邊那一欄大圓鈕上方（31_drive.js teleFit）；額外動力的船才顯示） */
+  #telc{ position:static; inset:auto; width:34px; height:112px; display:block; pointer-events:auto; touch-action:none; cursor:pointer; image-rendering:pixelated; }
+  #teleBox .kb.tk{ margin:0; padding:0 4px; font-size:10px; line-height:16px; border-radius:5px; white-space:nowrap; } #teleBox .kb.tk b{ margin-right:1px; }   /* 上下兩顆快捷鍵（點 ＝ 按 E／T；按鍵時亮）*/
+  /* 砲的符號固定大小（Tim 2026-10-14）：每門一個 --gc 見方的格子、符號置中 ⇒ 不管字型（手機沒有 Consolas）、符號（● 跟 ◌ 寬不一樣）或圖示，都一樣大 */
+  /* 一排放不下（畫面窄、砲多）⇒ 從羅盤那一側接著換行（左舷 rtl ⇒ 每一行都從靠羅盤那邊開始排），換下去的那幾行壓在大圓鈕底下（Tim 2026-10-14） */
+  #botC{ --gc:12px; } .gside{ width:max-content; max-width:calc(50vw - 85px); }   /* ⛔ 只給 max-width ⇒ 收縮寬度照 #nav（74 px）算、一行只排一門 */
+  .gend{ line-height:0; }
+  .gside > div{ display:flex; flex-wrap:wrap; gap:1px 0; margin:0 0 3px; } .gside > div:last-child{ margin-bottom:0; } #gunsL > div{ direction:rtl; }
+  .gside > div > span, .gend > span{ display:inline-block; width:var(--gc); height:var(--gc); line-height:var(--gc); font-size:var(--gc); text-align:center; vertical-align:top; flex:none; overflow:visible; } .gend{ display:flex; gap:0; }
+  .gside > div > span:not(.ico), .gend > span:not(.ico){ width:calc(var(--gc) * .8); }   /* 左右再擠一點（Tim 2026-10-14：不重疊就好）：● ◌ 約 .55 字寬 ⇒ 格子 .8 不會碰在一起；圖示版維持正方形（⛔ 窄了貼圖會被壓扁） */
+  .gside .gk3, .gend .gk3{ font-size:calc(var(--gc) * .85); } .gside .gk4, .gend .gk4{ font-size:calc(var(--gc) * .68); }   /* ✕ 約 .8 字寬、△ 約 1.1 字寬（Chrome 量的）⇒ 縮到放得進 .8 的格子 */
+  /* 羅盤那一團（說明字、船頭砲、羅盤、船尾砲）往下壓、貼在下方面板上（Tim 2026-10-14）：61_hud.js botFit 照 #ctl 的頂調 margin-bottom（負的 ⇒ 落進兩組大圓鈕之間） */
+  #navBox{ display:flex; flex-direction:column; align-items:center; gap:1px; }
+  /* 直式手機（html.navlow，61_hud.js navLow；Tim 2026-10-17「是否可以iphone直畫面全螢幕時 把羅盤放到最下排」「羅盤跟炮提示統一到畫面下方」）：
+     最下排整排只留給羅盤（＋兩舷的砲數點）—— 羅盤只看不按，放在 home 條上面剛好；按鈕全部從羅盤上方開始排：C P O 4 R（#ctl）與左右兩欄（#helmL／#helmR）的 margin-bottom ＝ #navBox 多高（botFit 量；Tim「最下方全部留給羅盤空間 按鈕從羅盤上方開始排」）；
+     狀態文字（#modeT）不跟著羅盤下去，放在 C P O 4 R 上面（--lowup ＝ 那一排的高度＋間距，botFit 寫）。 */
+  html.navlow #navBox{ position:relative; }
+  html.navlow #modeT{ position:absolute; left:50%; bottom:calc(100% + var(--lowup, 56px)); transform:translateX(-50%); width:max-content; max-width:calc(100vw - 120px); text-align:center; }
+  .gend{ font-family:Consolas,monospace; letter-spacing:0; white-space:nowrap; margin:0; padding:1px 2px;
+    text-shadow:-1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000, 0 0 3px rgba(0,0,0,.9); }   /* 船頭砲（羅盤上）、船尾砲（羅盤下）：同上，沒有底板 */
+  #gunsB{ border-bottom:2px solid transparent; } #gunsA{ border-top:2px solid transparent; } #gunsB.on{ border-bottom-color:var(--gold); } #gunsA.on{ border-top-color:var(--gold); }
+  .gr{ font-family:Consolas,monospace; font-size:12px; letter-spacing:1px; white-space:nowrap; display:inline-flex; align-items:center; vertical-align:middle; }
+  .gr .grd{ display:inline-block; text-align:left; line-height:1.25; }   /* 砲列：每層砲甲板一行、上下疊（61_hud.js gunRow） */
+  .g-full{ color:#8fe388; } .g-short{ color:#f2c14e; } .g-none{ color:#7d838c; } .g-dead{ color:#e0574a; } .g-wet{ color:#7fc8ff; }
+  .gside .aim, .gend .aim{ position:relative; }   /* 這門現在開打得中（61_hud.js gunCell aim ← 21_gunnery.js gunAims；Tim 2026-10-19「炮可以射擊到敵人時 是否可以有額外標示」）：符號底下壓一個半透明的金色圓（Tim 2026-10-19「標示方法有問題會變成一堆點 是否可以改成一個半透明黃圓圈 壓在原本的炮指示圈下」）。⛔ 以前用 text-shadow／drop-shadow 往四周偏移描金 ⇒ 圖示版的點狀圖示每一點都被複製一圈，看起來是一堆金點 */
+  .gside .aim, .gend .aim{ text-shadow:none; -webkit-text-stroke:2px #000; paint-order:stroke fill; }   /* 金色圓上的黑描邊改成原地描（Tim 2026-10-20 截圖：「在亮黃光時 原本的三角形與圓圈會變成點狀」）：.gside／.gend 的黑描邊是四個斜角各偏 1 px 的 text-shadow ⇒ 在深色海面上糊成一圈邊看不出來，壓在金色圓上每一份都看得見 —— ◌ 的每一點長成一叢、△ 疊成鐘形。text-stroke 沿字形外框描、paint-order 先描再填 ⇒ 只露出外面 1 px、形狀不複製 */
+  .gside .aim::before, .gend .aim::before{ content:''; position:absolute; left:50%; top:50%; width:calc(var(--gc) * 1.05); height:calc(var(--gc) * 1.05); transform:translate(-50%, -50%); border-radius:50%; background:rgba(232, 194, 106, .55); z-index:-1; pointer-events:none; }   /* z-index −1 ⇒ 畫在這一層（.gside 有 transform、.gend 下面給 z-index 0）的最底、符號與圖示底下；⛔ 給 .aim 自己 z-index ⇒ 圓會蓋在圖示版的貼圖（背景）上面 */
+  .gend{ position:relative; z-index:0; }   /* 給上一行的金色圓一個疊放層（不然 z-index −1 會掉到羅盤那一團後面） */
+  .ico.g-full{ box-shadow:inset 0 -2px 0 #8fe388; } .ico.g-short{ box-shadow:inset 0 -2px 0 #f2c14e; } .ico.g-none{ box-shadow:inset 0 -2px 0 #7d838c; } .ico.g-dead{ box-shadow:inset 0 -2px 0 #e0574a; }
+  #msg{ width:100%; font-size:var(--modeFs); font-weight:700; text-align:center; line-height:1.45; }   /* 廣播：兩邊面板中間那一欄，一則一行、最多 5 行、各自淡掉（⛔ 寬到蓋住兩邊面板） */
+  #fightB{ display:none; width:100%; font-size:var(--modeFs); font-weight:700; text-align:center; color:#ff8a7a; letter-spacing:1px; text-shadow:0 0 4px #000, 0 0 4px #000; margin-bottom:3px; }   /* ⚔ 交戰中（88_modeswitch.js fightTick；Blocksail TASK-1078）：廣播上面一行、甩開時倒數 */
+  #fightB.on{ display:block; }
+  #msg div{ margin:0 0 1.5px; transition:opacity .4s; }   /* 字的大小跟羅盤上方那行資訊（#modeT）一樣、跟著 --modeFs（Tim 2026-10-16；以前 7／8 px，最新那行大一號；更早 14／16 px）*/
+  #tip{ left:12px; bottom:12px; color:var(--dim); font-size:12px; }
+  /* 遊戲內的設定面板（⚙ 設定、Esc）：打開時暫停；重新開始、回主選單、畫質與物理的三四檔、帆繩物理、鏡頭跟船、靜音、FPS（Tim 2026-10-13：手機下方列省空間） */
+  #gset{ left:50%; top:50%; transform:translate(-50%,-50%); display:none; text-align:center; padding:14px 16px; width:min(92vw,460px); box-sizing:border-box; pointer-events:auto; z-index:6;
+    max-height:calc(100% - 16px); overflow-y:auto; overscroll-behavior:contain; -webkit-overflow-scrolling:touch; }   /* ⛔ 只給 max-width：left:50% ⇒ 最多只有半個螢幕寬、每一列都折行。
+     比畫面高 ⇒ 面板裡捲（Tim 2026-10-17：「設定選單 在手機上會超出畫面導致按不到 繼續 重新開始 回主選單」—— 以前沒有高度上限、置中 ⇒ 上下各超出一截，頂端那一列在畫面外） */
+  #gset .gsTop{ position:sticky; top:-14px; z-index:1; margin:-14px -16px 0; padding:14px 16px 2px; background:rgba(14,18,24,.96); border-radius:8px 8px 0 0; }   /* 標題＋繼續／重新開始／回主選單：捲下去也釘在面板頂端（底色不透明 ⇒ 捲過去的列不會透出來） */
+  #gset{ scrollbar-width:thin; scrollbar-color:rgba(232,194,106,.75) rgba(255,255,255,.08); }   /* 捲軸看得見（Tim：「可能可以加 Slider?」）：金色細條 ⇒ 一看就知道下面還有 */
+  #gset::-webkit-scrollbar{ width:8px; } #gset::-webkit-scrollbar-track{ background:rgba(255,255,255,.08); border-radius:4px; margin:8px 0; } #gset::-webkit-scrollbar-thumb{ background:rgba(232,194,106,.75); border-radius:4px; }
+  @media (max-height:520px){ #gset{ padding:8px 10px; } #gset .gsTop{ top:-8px; margin:-8px -10px 0; padding:8px 10px 2px; } #gset .gsR{ margin:5px 0; } #gset .gsT{ margin-bottom:2px; } #gset .gsT .note{ display:none; } #gset .chip.big{ padding:5px 14px; } }   /* 手機橫放（矮）：列距收、標題的說明藏 */
+  #gset.on{ display:block; }
+  #gsetBg{ position:absolute; inset:0; display:none; background:rgba(0,0,0,.25); z-index:5; } #gsetBg.on{ display:block; }   /* 面板外點一下就關（蓋住整個畫面，含下方的 ⚙ 設定；Tim 2026-10-13） */ #gset .gsT{ font-size:16px; color:var(--gold); margin-bottom:6px; } #gset .note{ color:var(--dim); font-size:12px; }
+  #gset .gsR{ margin:9px 0; display:flex; flex-wrap:wrap; justify-content:center; align-items:center; gap:5px; } #gset .gsL{ color:var(--dim); font-size:13px; margin-right:2px; }
+  #gset .gsV{ display:inline-flex; align-items:center; gap:4px; font-size:12px; color:var(--dim); } #gset .gsV input{ width:90px; accent-color:var(--gold); }   /* 音量（TASK-0677） */
+  #gset .chip{ font-size:14px; padding:4px 12px; margin:0; } #gset .chip.big{ font-size:15px; padding:6px 16px; } #gset .chip.dis{ opacity:.45; } #gset #boomB{ color:#ff9a7a; border-color:rgba(255,120,90,.55); }   /* dis：這個頁面不給全螢幕 */
+  #fps{ position:static; margin-bottom:3px; font:12px Consolas,monospace; color:#bfe9ff; text-shadow:0 0 3px #000, 0 0 3px #000; display:none; z-index:5; }
+  #fps.on{ display:block; }
+  #slowB{ left:50%; bottom:150px; transform:translateX(-50%); font-size:15px; font-weight:700; color:#ffd27a; letter-spacing:2px; text-shadow:0 0 4px #000, 0 0 4px #000; display:none; }   /* 殉爆的慢動作（73_slowmo.js）：放在下方操作列上面（⛔ 上方 ⇒ 殉爆那一刻廣播一次好幾則，疊在一起） */
+  #slowB.on{ display:block; }
+  #obsB{ left:14px; bottom:78px; font-size:13px; color:var(--gold); letter-spacing:1px; text-shadow:0 0 4px #000, 0 0 4px #000; white-space:nowrap; display:none; }   /* 沒停格時開著的觀察模式（透視、剖面、甲板；72_floodui.js obsText）：左下、操作列上面（⛔ 正中間 ⇒ 壓到羅盤） */
+  #obsB.on{ display:block; }
+  #gfxItems .row{ display:flex; align-items:center; justify-content:center; flex-wrap:wrap; gap:2px; font-size:14px; } #gfxItems label{ width:6em; text-align:right; margin-right:6px; }
+  #gfxItems button{ font-size:13px; padding:4px 10px; margin:2px; }
+  /* 畫質頁照分類收起來（js/07_gfx.js GFX_CATS、71_input.js gfxUI）：標題一行寫那一類現在的設定，點了展開 */
+  #gfxItems details.gcat{ border:1px solid rgba(255,255,255,.18); border-radius:6px; margin:6px 0; background:rgba(255,255,255,.03); }
+  #gfxItems details.gcat>summary{ cursor:pointer; list-style:none; display:flex; align-items:baseline; gap:10px; padding:8px 12px; text-align:left; }
+  #gfxItems details.gcat>summary::-webkit-details-marker{ display:none; }
+  #gfxItems details.gcat>summary::before{ content:'▸'; color:var(--gold); width:1em; flex:none; } #gfxItems details.gcat[open]>summary::before{ content:'▾'; }
+  #gfxItems details.gcat>summary b{ flex:none; min-width:7.5em; } #gfxItems details.gcat>summary .note{ font-size:13px; line-height:1.4; }
+  #gfxItems details.gcat[open]>summary{ border-bottom:1px solid rgba(255,255,255,.12); } #gfxItems .gcb{ padding:6px 4px 8px; }
+  /* 陰影細項（畫質頁；js/07_gfx.js SHK_ITEMS，71_input.js shkUI）：按鈕列跟上面一樣；分段那一條照 Unity 的 Cascade splits（Tim 2026-10-21 給的圖），顏色跟陰影範圍線同一套 */
+  #shkItems .row.bt{ display:flex; align-items:center; justify-content:center; flex-wrap:wrap; gap:2px; font-size:14px; } #shkItems .row.bt label{ width:8em; text-align:right; margin-right:6px; }
+  #shkItems button{ font-size:13px; padding:4px 10px; margin:2px; } #shkItems .dim{ opacity:.4; } #shkItems h3{ margin:14px 0 4px; }
+  #shkBar{ display:flex; height:38px; max-width:640px; margin:6px auto 2px; border:1px solid rgba(255,255,255,.4); border-radius:4px; overflow:hidden; font-size:12px; }
+  #shkBar>div{ position:relative; display:flex; flex-direction:column; align-items:center; justify-content:center; color:#111; line-height:1.15; overflow:hidden; white-space:nowrap; min-width:0; }
+  #shkBar>div>span{ position:relative; z-index:1; } #shkBar .bl{ position:absolute; top:0; bottom:0; right:0; background:repeating-linear-gradient(135deg,rgba(0,0,0,.3) 0 4px,transparent 4px 8px); }
+  #phxItems .row{ display:flex; align-items:center; justify-content:center; flex-wrap:wrap; gap:2px; font-size:14px; } #phxItems label{ width:6em; text-align:right; margin-right:6px; }
+  #phxItems button{ font-size:13px; padding:4px 10px; margin:2px; }
+  #nav{ padding:3px; border-radius:50%; }   /* 羅盤：只剩圓盤（TASK-0566；文字搬進詳細資訊 navText），在下方中間那一欄（TASK-0567） */ #navt{ display:none; }
+  #navc{ position:static; inset:auto; width:130px; height:130px; display:block; margin:0; cursor:pointer; pointer-events:auto; touch-action:manipulation; border-radius:50%; }   /* 羅盤可以按（Tim 2026-10-15）：跟按艦隊的我艦圓鈕一樣開／收詳細資訊 */
+  /* 手機直拿：跟電腦同一種排法，只是縮小 —— 艦隊按鈕 38 px、左右兩組打舵開砲改成直的一欄、中間一欄窄一點 */
+  @media (max-width:760px){
+    .fleet{ top:6px; gap:4px; max-height:calc(100vh - 175px); } #fleetL{ left:5px; } #fleetR{ right:5px; }
+    #botC{ --gc:9px; } .gside{ max-width:calc(50vw - 48px); } .helm{ gap:5px; } #helmL{ flex-direction:column-reverse; } #helmR{ flex-direction:column; } #ctlRow{ gap:2px; width:100%; }
+    .kb.hb{ width:46px; height:46px; font-size:10px; } .kb.hb b{ font-size:9px; } .kb.hb .em{ font-size:12px; letter-spacing:-1.5px; } .kb.hb .em .ico{ width:11px; height:11px; }
+    .sbn{ font-size:8px; line-height:10px; } .sbn .ico{ width:8px; height:8px; } .sbn i{ font-size:7px; } .sbn.l{ left:-5px; } .sbn.r{ right:-5px; } .fleet .sb{ margin-bottom:10px; }   /* 圓鈕 38 px：兩個數字往外擠一點才不會碰在一起 */ #shipCardC{ width:120px; height:120px; } #shipCardT{ font-size:13px; }
+    #botC{ bottom:16px; width:calc(100vw - 22px); max-width:none; gap:4px; }   /* 兩側與底下的大圓鈕往內 8 px、往上 10 px（Tim 2026-10-15：iPhone 只在很角落連點兩下會放大 ⇒ 離開螢幕圓角與系統手勢區；⛔ 以前 bottom 6、寬 100vw − 6） */ #topC{ top:6px; }   /* 面板撐滿兩組大圓鈕之間（Tim：⛔ 留太寬 ⇒ 按鈕被擠得換行） */ .sb{ width:38px; height:38px; } .sbres{ font-size:10px; padding:1px 5px; }
+    #topC{ width:calc(100vw - 96px); } #info{ font-size:11px; padding:5px 8px; } #info h3{ font-size:12px; } #info .pcols{ gap:2px 8px; } #info .pc{ flex-basis:110px; } #info .legend{ display:none; } #irow{ gap:4px; }   /* 手機：砲位圖窄（船頭朝上），跟卡片並排 */   /* 砲列在窄的卡片裡換行（⛔ 不換 ⇒ 伸到右邊的按鈕底下） */
+    #navc{ width:68px; height:68px; } :root{ --modeFs:12px; }   /* 羅盤上方那行資訊與廣播（#modeT、#msg）*/
+    #ctl{ flex:1; padding:0; } #ctl.panel, #keys, #ammo{ gap:2px; } #guns .gr{ white-space:normal; word-break:break-all; } #tip{ display:none; }   /* 砲列在窄面板裡換行 */
+    .hud h3 .disp{ display:block; margin-left:0; } }                                     /* 排水量換到船名下一行（⛔ 同一行 ⇒ 面板縮半之後「現在 …」被切掉） */
+  /* 手機橫拿（矮）：面板與控制列都縮 */
+  @media (max-height:520px) and (min-width:761px){
+    .sb{ width:50px; height:50px; } #fleetL{ max-height:calc(100vh - 170px); } #info{ transform:scale(.8); transform-origin:center top; }
+    #botC{ transform:translateX(-50%) scale(.82); transform-origin:center bottom; } .kb.hb{ width:52px; height:52px; } #tip{ display:none; }
+    #navc{ width:83px; height:83px; } }   /* 羅盤跟直式一樣大（Tim 2026-10-17「橫版羅盤是否可以維持跟直版的一樣尺寸」「目前手機橫版的羅盤會變大」）：直式 68 px、不縮；這裡整團 scale .82 ⇒ 68 ÷ .82 ≈ 83 */
+  /* 中等寬度（761–1100 px，平板、小筆電、手機橫拿）：一整排 15 顆 64 px ＋ 間距 8 ＝ 1072 px 放不下 ⇒ 圓鈕跟著畫面寬縮、間距 4（15 顆（各加 2 px 邊框）＋ 14 個間距 ＋ 左右各 12 ＋ 4 px 餘裕 ＝ 100vw；#keys 裡面也是間距 4）
+     ⛔ 2026-10-15 1024 寬實測：沒有這段 ⇒ ◀⚓ 蓋住 🎥、彈種鈕被 ⚓▶ 蓋住 */
+  @media (min-width:761px) and (max-width:1100px){ .kb.hb{ width:min(64px, calc((100vw - 114px) / 15)); height:min(64px, calc((100vw - 114px) / 15)); } .helm, #ctlRow, #ctl.panel, #keys{ gap:4px; } }
+  @media (min-width:761px) and (max-width:1200px){ body.bsHost .kb.hb{ width:min(64px, calc((100vw - 118px) / 16)); height:min(64px, calc((100vw - 118px) / 16)); } body.bsHost .helm, body.bsHost #ctlRow, body.bsHost #ctl.panel, body.bsHost #keys{ gap:4px; } }   /* 多一顆 🌍 ⇒ 16 顆：16 × 66 ＋ 15 × 8 ＝ 1176 px，1200 以下照樣縮 */
+  /* 手機橫拿（矮）：艦隊圓鈕改橫排、由外往內（Tim 2026-10-15：「不然會跟按鈕重疊」—— 直排往下長，撞到兩側直立的大圓鈕 ⚓▶ ◀⚓）；
+     我方從左邊往右、敵方從右邊往左；太多艘 ⇒ 往下換一排（每側最多三分之一個畫面寬） */
+  @media (orientation:landscape) and (max-height:520px){ .fleet{ flex-direction:row; flex-wrap:wrap; align-content:flex-start; max-height:none; max-width:34vw; } #fleetL{ max-height:none; } #fleetR{ flex-direction:row-reverse; flex-wrap:wrap; align-items:flex-start; } }
+  /* 主選單、結算視窗的疊放層（Tim 2026-10-18：「車鐘 會壓過彈窗」「在主畫面中 會穿透船隻資訊的船員跟炮數」）：以前兩個都沒寫 z-index ⇒ HUD 上有寫的
+     （艦隊圓鈕底下的人數／砲數 .sbn 1、砲數條 #gunsL／R 1、大圓鈕 .helm 2、俥鐘 #teleBox 3）一律畫在它們上面。⇒ 4：蓋過這些、跟停格提示／進水面板（4，DOM 在前面）也蓋得過；
+     設定（#gsetBg 5、#gset 6）、說明（6）、錯誤／確認彈窗（50／60）照樣在上面（主選單、結算時打開設定，點面板外照樣關得掉）。 */
+  #cover, #gfxov{ z-index:4; position:absolute; inset:0; display:flex; align-items:flex-start; justify-content:center; overflow-y:auto; background:radial-gradient(ellipse at 50% 40%, rgba(20,30,44,.80), rgba(5,8,12,.94)); }
+  #gfxov{ z-index:7; background:none; }   /* 畫質設定（核心自己的一層，js/71_input.js gfxPanel；TASK-0774）：在 #cover 外面、蓋過它（主選單點「畫質設定…」）、也蓋過 HUD 與設定面板（遊戲中）。主選單開的時候 #cover 還開著（只藏了主選單卡）⇒ 不再疊一層底，透出 #cover 那一層（跟搬家前畫質卡在 #cover 裡一樣亮）；遊戲中的底在下一條 body.gfxov */
+  :is(#cover,#gfxov) .card{ max-width:680px; margin:auto; padding:22px 30px; text-align:center; }
+  body.gfxov #gfxov{ left:auto; width:min(640px,100%); background:rgba(5,8,12,.80); }   /* 遊戲中的畫質設定（js/71_input.js gfxOvOpen；#gfxov 那一層）：靠右、左邊看得到場景 */   /* margin:auto ⇒ 放得下就置中、放不下就從頂端開始捲（⛔ align-items:center 放不下會切掉上半） */
+  :is(#cover,#gfxov) h1{ margin:0 0 4px; font-size:24px; letter-spacing:2px; }   /* Tim 2026-10-13：標題小一點（30 → 24；手機 24 → 19） */
+  :is(#cover,#gfxov) .sub{ color:var(--dim); margin-bottom:14px; font-size:13px; }
+  :is(#cover,#gfxov) select{ font:inherit; font-size:13px; max-width:100%; padding:3px 6px; border-radius:6px; border:1px solid rgba(255,255,255,.25); background:#1a212b; color:var(--ink); }
+  :is(#cover,#gfxov) select option{ background:#1a212b; color:var(--ink); }
+  :is(#cover,#gfxov) .row{ margin:7px 0; }
+  #shipsel .fl{ display:inline-flex; flex-wrap:wrap; align-items:center; justify-content:center; gap:2px 4px; vertical-align:middle; }   /* 艦隊編成（TASK-0537）：一邊一列，每艘一個選單 */
+  #shipsel .fs{ white-space:nowrap; } :is(#cover,#gfxov) #shipsel button.fx, :is(#cover,#gfxov) #shipsel button.fa{ padding:1px 7px; margin:0 0 0 2px; font-size:13px; } #fleetN{ color:var(--dim); font-size:12px; }
+  :is(#cover,#gfxov) button.fsb{ margin:0; padding:3px 8px; font-size:13px; min-width:7em; text-align:left; background:#1a212b; }   /* 一艘一顆鈕（72_shippick.js：點了開選船彈窗） */
+  :is(#cover,#gfxov) button.fsb::after{ content:' ▾'; color:var(--dim); }
+  /* 選船彈窗（72_shippick.js）：上面篩選（動力、噸位、火力、搜尋），下面卡片。接近全螢幕（Tim 2026-10-19「選艦介面是否可以改成接近全螢幕(然後右上角的x按鈕可以大一些)」）：
+     四周只留 8 px（加瀏海、圓角的安全區）、卡片填滿；✕ 44 px 見方（手指點得到的大小） */
+  #spk{ position:fixed; inset:0; z-index:45; display:none; align-items:stretch; justify-content:stretch; padding:max(8px, env(safe-area-inset-top)) max(8px, env(safe-area-inset-right)) max(8px, env(safe-area-inset-bottom)) max(8px, env(safe-area-inset-left)); background:rgba(0,0,0,.55); }
+  #spk.on{ display:flex; }
+  #spk .card{ width:100%; height:100%; display:flex; flex-direction:column; padding:14px 16px; background:#1c2129; box-shadow:0 8px 30px rgba(0,0,0,.6); box-sizing:border-box; }
+  #spk .spkH{ display:flex; align-items:center; gap:8px; } #spk h2{ flex:1; margin:0; font-size:19px; color:var(--gold); text-align:left; }
+  #spk button{ font:inherit; font-size:14px; margin:2px; padding:4px 11px; border-radius:6px; border:1px solid rgba(255,255,255,.25); background:rgba(255,255,255,.06); color:var(--ink); cursor:pointer; }
+  #spk button.on{ background:var(--gold); color:#111; border-color:var(--gold); }
+  #spk button#spkX{ width:44px; height:44px; margin:0; padding:0; flex:none; font-size:24px; line-height:1; }
+  #spk .spkR{ display:flex; flex-wrap:wrap; align-items:center; gap:2px; margin-top:6px; text-align:left; } #spk .spkR > span{ width:3.2em; color:var(--dim); font-size:13px; }
+  /* 篩選收起來（72_shippick.js SPK.open；Tim 2026-10-20「篩選可以折疊(預設摺疊)」）：上面只有「搜尋框＋篩選 ▾」一列，三排分類（#spkFB）展開才有；有篩選在用 ⇒ 那一顆亮金色（button.on） */
+  #spk .spkS{ display:flex; align-items:center; gap:6px; margin-top:8px; } #spk #spkFT{ flex:none; margin:0; white-space:nowrap; }
+  #spk #spkFB{ display:none; } #spk #spkF.open #spkFB{ display:block; }
+  #spk input[type=search]{ flex:1; min-width:0; font:inherit; font-size:14px; padding:4px 8px; border-radius:6px; border:1px solid rgba(255,255,255,.3); background:rgba(0,0,0,.3); color:var(--ink); }
+  #spk .spkN{ margin:6px 0 4px; color:var(--dim); font-size:12px; text-align:left; }
+  #spk .spkG{ flex:1; min-height:0; overflow-y:auto; align-content:start; display:grid; grid-template-columns:repeat(auto-fill, minmax(190px, 1fr)); gap:8px; padding:2px; }
+  #spk button.spkC{ margin:0; padding:8px 10px; text-align:left; line-height:1.45; background:rgba(255,255,255,.05); }
+  #spk button.spkC b{ font-size:15px; } #spk button.spkC .i{ float:right; } #spk button.spkC .m{ display:block; color:var(--dim); font-size:12px; }
+  #spk button.spkC.on{ background:rgba(232,194,106,.18); color:var(--ink); border-color:var(--gold); }
+  #spk button.spkC:hover{ border-color:rgba(255,255,255,.6); }
+  /* 手機（直式窄、橫式矮；Tim 2026-10-20「手機板選船的排版 可以調整尺寸 確保上方篩選不要佔用太多空間」）：標題、✕、分類鈕、卡片都縮一號，分類一排擠得進一行；
+     搜尋框照 16 px（⛔ 小於 16 px ⇒ iPhone 點進去整頁放大） */
+  @media (max-width:760px), (max-height:520px){
+    #spk .card{ padding:10px 10px; } #spk h2{ font-size:16px; } #spk button#spkX{ width:40px; height:40px; font-size:21px; }
+    #spk button{ font-size:13px; margin:2px 1px; padding:3px 7px; } #spk .spkR{ margin-top:4px; } #spk .spkR > span{ width:2.7em; font-size:12px; }
+    #spk .spkS{ margin-top:6px; } #spk input[type=search]{ font-size:16px; padding:3px 8px; } #spk #spkFT{ padding:5px 10px; }
+    #spk .spkG{ gap:6px; } #spk button.spkC{ padding:6px 9px; line-height:1.35; } #spk button.spkC b{ font-size:14px; }
+  }
+  @media (max-width:380px){ #spk .spkR > span{ width:2.4em; } #spk .spkR button{ padding:3px 5px; } }   /* iPhone SE（375 px）：動力那一排（五顆）也擠得進一行 */
+  /* ?pick=@host（72_shippick.js）：Blocksail 地球儀的「選船」—— 只留選船彈窗、頁面透明（後面看得到地球儀） */
+  html.pickonly, html.pickonly body, html.pickonly #stage{ background:transparent; } html.pickonly body > :not(#stage), html.pickonly #stage > :not(#spk){ display:none !important; }
+  :is(#cover,#gfxov) button{ font:inherit; font-size:15px; margin:4px; padding:7px 16px; border-radius:6px; border:1px solid rgba(255,255,255,.25); background:rgba(255,255,255,.06); color:var(--ink); cursor:pointer; }
+  :is(#cover,#gfxov) button.on{ background:var(--gold); color:#111; border-color:var(--gold); }
+  :is(#cover,#gfxov) button.go{ font-size:18px; padding:9px 30px; background:#b8452e; border-color:#e06a4f; }
+  /* 開戰鈕左右兩側選旗（TASK-0950，js/71_menu.js flagUI；旗本身 js/77_colours.js）：旗鈕（點開 ⇒ 預設旗的圖案排成一格一格、不寫名字）、底色；窄螢幕換行 */
+  #goRow{ display:flex; flex-wrap:wrap; align-items:center; justify-content:center; gap:4px 10px; }
+  .flagpick{ position:relative; display:inline-flex; align-items:center; gap:4px; }
+  .flagpick canvas{ position:static; display:block; width:36px; height:18px; cursor:inherit; touch-action:auto; border:1px solid rgba(255,255,255,.45); border-radius:2px; }   /* ⛔ 全域的 canvas 是 absolute（遊戲畫面）⇒ 不蓋掉會跑到畫面左上角 */
+  :is(#cover,#gfxov) .flagpick button{ margin:0; padding:3px; line-height:0; font-size:11px; border-radius:4px; border:1px solid #556; background:#1b2430; }   /* ⛔ 蓋掉主選單按鈕的 margin、padding（:is(#cover,#gfxov) button） */
+  :is(#cover,#gfxov) .flagpick .flagb{ display:inline-flex; align-items:center; gap:3px; padding:3px 4px; } .flagb::after{ content:'▾'; color:var(--dim); line-height:1; }
+  .flagdd{ position:absolute; top:calc(100% + 4px); left:0; z-index:5; display:grid; grid-template-columns:repeat(4, auto); gap:5px; padding:6px; background:#141b24; border:1px solid #556; border-radius:6px; box-shadow:0 4px 14px rgba(0,0,0,.65); } .flagdd[hidden]{ display:none; }
+  #flag1 .flagdd{ left:auto; right:0; }   /* 敵方那一組在開戰鈕右邊 ⇒ 面板往左開（超出畫面 ⇒ flagPop 推回來） */
+  .flagdd canvas{ width:44px; height:22px; }
+  :is(#cover,#gfxov) .flagdd button:hover{ border-color:#aab; } :is(#cover,#gfxov) .flagdd button.cur{ border-color:var(--gold); box-shadow:0 0 0 1px var(--gold); }
+  .flagpick input[type=color]{ width:24px; height:22px; padding:0; border:1px solid #556; border-radius:4px; background:none; cursor:pointer; }
+  :is(#cover,#gfxov) button:disabled{ opacity:.4; cursor:wait; }
+  :is(#cover,#gfxov) #discordB{ display:inline-block; font-size:15px; margin:4px; padding:7px 18px; border-radius:6px; border:1px solid #7983f5; background:#5865f2; color:#fff; text-decoration:none; cursor:pointer; }   /* Discord 的品牌紫 */
+  :is(#cover,#gfxov) #discordB:hover{ background:#4752c4; }
+  :is(#cover,#gfxov) .slide{ display:flex; align-items:center; justify-content:center; gap:10px; font-size:14px; }
+  :is(#cover,#gfxov) .slide label{ width:5em; text-align:right; }
+  :is(#cover,#gfxov) .slide input{ width:220px; accent-color:var(--gold); }
+  :is(#cover,#gfxov) .slide span{ width:13em; text-align:left; color:var(--dim); font-size:12px; }
+  #fitItems .slide label{ width:auto; flex:0 1 11em; min-width:0; }   /* 換裝（72_fitui.js）：組名長（「24 磅長砲（甲板-gun）×28」）⇒ 標籤可以縮、選單也可以縮（⛔ 照固定寬 ⇒ 手機上整列撐出畫面兩邊） */
+  #fitItems select{ flex:0 1 14em; min-width:0; max-width:60vw; } #fitItems button{ white-space:nowrap; }
+  :is(#cover,#gfxov) .checks{ display:flex; justify-content:center; flex-wrap:wrap; gap:4px 16px; font-size:13px; }
+  :is(#cover,#gfxov) .checks input{ accent-color:var(--gold); vertical-align:-2px; }
+  #strikeV{ color:var(--dim); font-size:12px; }
+  :is(#cover,#gfxov) h2{ margin:0 0 4px; font-size:24px; letter-spacing:1px; }
+  :is(#cover,#gfxov) h3{ margin:14px 0 4px; font-size:14px; color:var(--gold); border-bottom:1px solid rgba(255,255,255,.12); padding-bottom:2px; }
+  :is(#cover,#gfxov) .note{ color:var(--dim); font-size:12px; }
+  #roomItems .rm{ display:flex; align-items:center; justify-content:center; flex-wrap:wrap; gap:4px 8px; font-size:13px; margin:5px 0; } #roomItems .rm label{ min-width:10em; text-align:right; } #roomItems .rm .rs{ color:var(--dim); font-size:12px; text-align:left; max-width:30em; } #roomItems select{ max-width:9em; }   /* 艙房一間一列（TASK-0568）；⛔ 選單不限寬 ⇒ 最長那個選項（放不下的原因）把選單撐成整排、手機多出橫向捲動 */
+  #roomItems button, #roomEd button{ font-size:13px; padding:4px 10px; margin:2px; } #roomItems button.on, #roomEd button.on{ color:#111; background:var(--gold); border-color:var(--gold); }
+  #roomEd{ margin:8px auto; max-width:660px; border:1px solid rgba(255,255,255,.18); border-radius:8px; padding:8px; } #roomEd .rt{ color:var(--gold); font-size:14px; margin-bottom:4px; } #roomEd .rn{ color:var(--dim); font-size:12px; margin:4px 0; line-height:1.5; }
+  #roomEdW{ max-width:100%; }
+  body.roomEdOn #roomEd{ position:fixed; top:calc(8px + var(--sa-t)); right:calc(8px + var(--sa-r)); bottom:calc(8px + var(--sa-b)); left:calc(8px + var(--sa-l)); z-index:50; max-width:none; margin:0; overflow-y:auto; background:#141a22; border-color:rgba(255,255,255,.3); box-shadow:0 6px 30px rgba(0,0,0,.6); }   /* 打開 ⇒ 接近全螢幕（Tim 2026-10-14） */
+  #cover #pgX{ position:fixed; top:calc(10px + var(--sa-t)); right:calc(12px + var(--sa-r)); z-index:40; display:none; margin:0; background:#e3c46a; color:#111; border-color:#e3c46a; box-shadow:0 2px 10px rgba(0,0,0,.6); } #cover #pgX.on{ display:block; }
+  #gfxov #gfxovX{ position:fixed; top:calc(10px + var(--sa-t)); right:calc(12px + var(--sa-r)); z-index:40; margin:0; background:#e3c46a; color:#111; border-color:#e3c46a; box-shadow:0 2px 10px rgba(0,0,0,.6); }   /* 畫質那一層右上角的返回（跟 #pgX 同一個樣子） */
+  #askp{ display:none; position:fixed; inset:0; z-index:60; background:rgba(0,0,0,.62); align-items:center; justify-content:center; padding:16px; } #askp.on{ display:flex; }   /* 確認彈窗（js/65_ask.js）：蓋過右上角的返回（z 40） */
+  #askp .askc{ max-width:440px; padding:18px 22px; text-align:center; }   /* ⛔ 不掛 .card：71_input.js page() 拿「#cover 裡第一個不是設定頁的 .card」當主選單 */ #askM{ color:var(--dim); font-size:14px; line-height:1.6; margin:8px 0 14px; } #cover #askY{ background:#b8452e; border-color:#e06a4f; }
+  #roomEdX2{ display:none; } body.roomEdOn #roomEdX2{ display:block; position:sticky; top:0; float:right; z-index:2; background:#e3c46a; color:#111; border-color:#e3c46a; }   /* 編輯器浮層：右上角的完成（捲動時黏在上面） */
+  #keysAdm{ display:none; } #keysp.admin #keysAdm{ display:block; color:#ffd27a; border:1px solid rgba(255,210,122,.5); border-radius:6px; padding:6px 10px; margin:6px 0; }   /* 鍵位的出廠預設值（?admin=keys） */
+  #keysItems .keyrow{ display:flex; align-items:center; gap:10px; max-width:640px; margin:4px auto; }   /* ⛔ 不套 .row.slide：那裡的 span 一律固定寬度，圖示會被撐成 156px */
+  #keysItems .keyrow label{ flex:1 1 auto; text-align:left; display:flex; align-items:center; gap:6px; } #keysItems .keyrow label small{ color:var(--dim); }
+  #keysItems .kico{ flex:0 0 3.6em; text-align:center; white-space:nowrap; letter-spacing:-.1em; } #keysItems .kcap{ flex:0 0 7.5em; text-align:center; padding:3px 8px; border:1px solid rgba(255,255,255,.35); border-radius:6px; font-weight:bold; }
+  #keysItems .kcap.wait{ color:var(--gold); border-color:var(--gold); font-weight:normal; font-size:.85em; } #keysItems .keyrow > .note{ flex:0 0 8.5em; text-align:left; font-size:.85em; }
+  @media (max-width:560px){ #keysItems .keyrow > .note{ display:none; } #keysItems .kcap{ flex-basis:5.5em; } }
+  #keysTabs button.on{ background:var(--gold); color:#111; }
+  #furnAdm{ display:none; } #furnp.admin #furnAdm{ display:block; color:#ffd27a; border:1px solid rgba(255,210,122,.5); border-radius:6px; padding:6px 10px; margin:6px 0; }   /* 道具的出廠預設值（?admin=furn） */
+  #detAdm{ display:none; } #detail.admin #detAdm{ display:block; color:#ffd27a; border:1px solid rgba(255,210,122,.5); border-radius:6px; padding:6px 10px; margin:6px 0; }   /* 出廠預設值（?admin=defaults） */
+  #shipAdm{ display:none; } #shipp.admin #shipAdm{ display:block; color:#ffd27a; } #shipp.admin .nadm{ display:none; }   /* 設定後台嵌的那一份（?admin=rooms） */ #deckItems .rm{ display:flex; align-items:center; justify-content:center; flex-wrap:wrap; gap:4px 8px; font-size:13px; margin:5px 0; } #deckItems .rm label{ min-width:10em; text-align:right; } #deckItems .rm .rs{ color:var(--dim); font-size:12px; text-align:left; max-width:30em; } #deckItems button{ font-size:13px; padding:4px 10px; margin:2px; } #deckItems button.on{ color:#111; background:var(--gold); border-color:var(--gold); }
+  #roomEd canvas{ position:static; display:block; margin:6px auto; touch-action:manipulation; cursor:crosshair; }   /* ⛔ 全域的 canvas 是 absolute（遊戲畫面）⇒ 編輯器的格子會飛到頁面外 */
+  :is(#cover,#gfxov) table.ammo{ margin:4px auto; border-collapse:collapse; font-size:13px; }
+  :is(#cover,#gfxov) table.ammo th, :is(#cover,#gfxov) table.ammo td{ padding:2px 8px; } :is(#cover,#gfxov) table.ammo th{ color:var(--dim); font-weight:400; }
+  :is(#cover,#gfxov) table.ammo input{ width:62px; font:inherit; background:rgba(255,255,255,.08); color:var(--ink); border:1px solid rgba(255,255,255,.25); border-radius:4px; padding:1px 4px; text-align:right; }
+  :is(#cover,#gfxov) #detV{ color:var(--dim); font-size:12px; max-width:560px; margin:2px auto 6px; line-height:1.6; }   /* ⛔ 只寫 #detV：被 :is(#cover,#gfxov) .row 的 margin 蓋掉 */
+  .hp{ position:relative; } .hp::after{ content:''; position:absolute; left:0; bottom:-1px; height:2px; width:var(--hp); background:#e0574a; }   /* 砲列：受損的砲底下一條血條 */
+  .ico.hp::after{ bottom:-4px; }   /* 圖示版：人手狀態的底線在圖示裡面，血條放到它下面 */
+  @media (max-width:520px){ :is(#cover,#gfxov) .card{ padding:14px 12px; } :is(#cover,#gfxov) .slide input{ width:130px; } :is(#cover,#gfxov) .slide span{ width:9em; }
+    :is(#cover,#gfxov) h1{ font-size:19px; letter-spacing:1px; } :is(#cover,#gfxov) .row{ margin:5px 0; } :is(#cover,#gfxov) button{ font-size:13px; padding:5px 9px; margin:2px; } :is(#cover,#gfxov) button.go{ font-size:17px; padding:8px 30px; } }   /* 手機：按鈕小一號 ⇒ 每一列不折行、開戰鈕不被擠出畫面（Tim 2026-10-13） */
+  #load{ color:var(--dim); font-size:12px; min-height:18px; font-family:Consolas,monospace; white-space:pre-line; }
+  #help{ position:absolute; right:12px; bottom:12px; max-width:330px; font-size:12px; display:none; pointer-events:none; max-height:calc(100% - 24px); overflow-y:auto; z-index:6; }
+  /* 說明外點一下就關（蓋住整個畫面，含下方控制列；Tim 2026-10-13：手機上不好關說明） */
+  /* 停格（P；Tim 2026-10-13：暫停改叫停格，停格時才打得開進水細節頁）：上方一條；進水細節頁不蓋整個畫面 ⇒ 開著也能拖鏡頭 */
+  #frz{ left:50%; top:12px; transform:translateX(-50%); display:none; pointer-events:auto; z-index:4; padding:6px 10px; white-space:nowrap; } #frz.on{ display:block; }
+  #frz .chip{ font-size:14px; padding:4px 12px; margin:0 3px; } #frz .fz{ color:var(--gold); font-weight:700; margin-right:4px; } #frz .fzL{ color:var(--dim); margin:0 2px 0 8px; }
+  #frz .fzG{ display:inline-block; white-space:nowrap; }   /* 三組（停格／進水／船）：窄一點的畫面一組一行，⛔ 一整條 ⇒ 蓋到左右兩塊面板 */
+  @media (max-width:1280px){ #frz{ white-space:normal; width:min(94vw,360px); box-sizing:border-box; text-align:center; line-height:2.1; } }
+  #floodp{ left:50%; top:58px; transform:translateX(-50%); display:none; pointer-events:auto; z-index:4; width:min(94vw,680px); box-sizing:border-box; max-height:calc(100% - 280px); overflow-y:auto; padding:10px 12px; font-size:12px; }
+  #floodp.on{ display:block; } #floodp .hT{ display:flex; justify-content:space-between; align-items:center; color:var(--gold); font-size:14px; margin-bottom:4px; }
+  #floodp .hX{ cursor:pointer; padding:2px 10px; border:1px solid rgba(232,194,106,.55); border-radius:4px; } #floodp .fpS{ margin:6px 0 10px; } #floodp .fpH{ color:var(--gold); font-weight:700; }
+  #floodp .fpL{ color:var(--dim); margin-top:4px; } #floodp .fpC{ position:static; inset:auto; width:100%; height:auto; display:block; border-radius:3px; cursor:default; touch-action:auto; }   /* ⛔ 全域的 canvas 規則是給遊戲畫布的（絕對定位、鋪滿）⇒ 剖面四張疊在同一個位置 */
+  @media (max-width:760px){ #frz{ top:144px; white-space:normal; width:min(94vw,380px); box-sizing:border-box; text-align:center; line-height:2.1; } #frz .chip{ font-size:13px; padding:3px 9px; } #floodp{ top:188px; max-height:calc(100% - 400px); }
+    #help{ left:8px; right:8px; max-width:none; max-height:68%; } }   /* 手機：說明不佔滿 ⇒ 上面留一塊點得到的「外面」（⛔ 佔滿 ⇒ 只剩左邊一條細縫可以點） */
+  #helpBg{ position:absolute; inset:0; display:none; background:rgba(0,0,0,.25); z-index:5; } #helpBg.on{ display:block; }
+  #help .hT{ display:flex; justify-content:space-between; align-items:center; color:var(--gold); font-size:14px; margin-bottom:4px; } #help .hX{ cursor:pointer; padding:2px 10px; border:1px solid rgba(232,194,106,.55); border-radius:4px; }
+  #help.on{ display:block; pointer-events:auto; }
+  #help .hH{ color:var(--gold); font-weight:bold; margin:8px 0 2px; padding-bottom:1px; border-bottom:1px solid rgba(232,194,106,.3); }   /* 說明分段（Tim 2026-10-15：「很多改成 emoji 了，說明要更新」⇒ 先列大圓鈕的圖示，再分航行、資訊、操作、規則） */
+  #help kbd{ display:inline-block; min-width:16px; padding:0 4px; border:1px solid rgba(255,255,255,.3); border-radius:3px; font-family:Consolas,monospace; text-align:center; }
+  #help kbd[data-k]{ cursor:pointer; background:rgba(232,194,106,.16); border-color:rgba(232,194,106,.55); } #help kbd[data-k]:active{ background:rgba(232,194,106,.45); }
+  #end{ z-index:4; position:absolute; inset:0; display:none; align-items:center; justify-content:center; background:rgba(0,0,0,.45); }
+  #end.on{ display:flex; }
+  #end .card{ text-align:center; padding:22px 30px; }
+  #end h2{ margin:0 0 8px; font-size:26px; }
+  #end button{ font:inherit; margin:10px 6px 0; padding:6px 18px; border-radius:6px; border:1px solid rgba(255,255,255,.3); background:rgba(255,255,255,.08); color:var(--ink); cursor:pointer; }
+  .still .hud, .still #cover, .still #gfxov, .still #help, .still #end{ display:none !important; }
+  /* 第一人稱（81_fps.js，TASK-0649；Tim 2026-10-16「下方操作面板隱藏 改為第一人稱用的操作面板」「只保留設定紐 暫停紐」）：
+     HUD 全部藏起來，只留下方那一排的 ⏸ 與 ⚙（設定面板、說明照常打得開）；換上 #fpUI。⛔ hud() 照樣在跑（只是看不見）—— 行內的 display 用 !important 壓過 */
+  #fpUI{ display:none; }
+  /* 瞄準圈（UI 層，61_hud.js aimRingUi）：translate 到瞄準點、自己往左上退一半；外圈＋中心十字（中間留空看得到對準的那一點）＋中心點，先畫一層暗邊再畫顏色 ⇒ 海上、船身上都看得清 */
+  #aimR{ position:absolute; left:0; top:0; width:48px; height:48px; margin:-24px 0 0 -24px; pointer-events:none; display:none; z-index:1; --c:#ff4a3d; }
+  #aimR.on{ display:block; } #aimR.ally{ --c:#5fb0ff; }   /* 瞄敵艦紅、瞄友艦藍（Tim 2026-10-17「瞄敵人時改紅色(友軍維持藍色)」） */
+  #aimR svg{ width:100%; height:100%; overflow:visible; } #aimR .o{ fill:none; stroke:rgba(0,0,0,.6); stroke-width:4.4; stroke-linecap:round; } #aimR .k{ fill:none; stroke:var(--c); stroke-width:2.2; stroke-linecap:round; } #aimR .d{ fill:var(--c); stroke:rgba(0,0,0,.6); stroke-width:1.2; }
+  #fpCross{ display:none; position:absolute; left:50%; top:50%; width:6px; height:6px; margin:-3px 0 0 -3px; border-radius:50%; background:rgba(255,255,255,.8); box-shadow:0 0 0 1px rgba(0,0,0,.45); pointer-events:none; }   /* 滑鼠模式（抓住滑鼠）時的準心 */
+  #stage.fpLock #fpCross, #stage.bld #fpCross{ display:block; }
+  /* 建造模式（82_build.js，TASK-0648；Tim 2026-10-16「UI可以選取要擺放的物件(參考常見建造遊戲UI設計 可以給物件分類)」）：
+     快捷欄（下方一排圓鈕：上快捷鍵 1–9、下 emoji；分類之間空一點）＋ 📦 目錄（分類分頁、卡片）＋ 準心下面一行說明；放 ✔／拆 ✖／轉 ⟳ 在第一人稱那一排（建造時跟隨 F／G 收起來） */
+  #bldInfo, #bldBar{ display:none; }
+  /* 城鎮的建築模式（87_townbuild.js，TASK-0742）：🔨 城鎮模式常駐、當開關（開著亮底；61_layout.js 的 town 配置）；面板與說明只在建築模式開著 */
+  #stage.twb #twbK{ background:#9fc7ff; color:#111; }
+  #keys > #dockK.dkOff{ display:none !important; }   /* ⚓ 停靠／⛵ 出航（88_modeswitch.js dockBtn，TASK-0867）：航海時準備好了才出現 */
+  #twbInfo, #twbP{ display:none; }
+  #twbTown{ display:none; }
+  #twbTown.on{ display:block; position:absolute; left:50%; top:28px; transform:translateX(-50%); padding:4px 12px; border-radius:8px; background:rgba(10,14,22,.66); color:#f3e6c4; font-size:14px; pointer-events:none; white-space:nowrap; max-width:calc(100vw - 32px); overflow:hidden; text-overflow:ellipsis; }   /* 城名、年份、人口（87_townbuild.js twbTitle；TASK-0871）—— 不寫 z-index、DOM 排在 #topC 前面 ⇒ 船隻資訊壓在它上面（Tim 2026-11-01「讓船隻資訊UI排序在城鎮年份之上」）；主選單、設定照舊蓋過它 */
+  #stage.twb #twbInfo{ display:block; position:absolute; left:50%; top:64px; transform:translateX(-50%); padding:4px 12px; border-radius:8px; background:rgba(10,14,22,.66); color:#eee; font-size:13px; pointer-events:none; white-space:nowrap; max-width:calc(100vw - 32px); overflow:hidden; text-overflow:ellipsis; }
+  #stage.twb #twbP{ display:flex; flex-direction:column; gap:8px; position:absolute; left:50%; bottom:92px; transform:translateX(-50%); width:min(520px, calc(100vw - 32px)); max-height:calc(100vh - 176px); max-height:calc(100dvh - 176px); overflow-y:auto; overscroll-behavior:contain; z-index:8; pointer-events:auto; }
+  #twbTabs, #twbItems, #twbOps{ display:flex; flex-wrap:wrap; gap:6px; }
+  #twbTabs button{ display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px; flex:1 0 72px; min-height:58px; border-radius:10px; padding:4px 6px; font-size:12px; line-height:16px; }
+  #twbTabs .twbCatIcon{ width:32px; height:32px; object-fit:contain; image-rendering:pixelated; pointer-events:none; }
+  #twbTabs button.on{ background:#9fc7ff; color:#111; }
+  #twbItems .bcard{ display:flex; flex-direction:column; align-items:flex-start; min-width:110px; padding:6px 10px; } #twbItems .bcard small{ opacity:.75; font-size:11px; }
+  #twbOps{ justify-content:flex-end; }
+  #twbMode{ display:flex; flex-wrap:wrap; gap:6px; align-items:center; font-size:12px; } #twbMode button{ border-radius:12px; padding:3px 10px; font-size:12px; } #twbMode button.on{ background:#ffd98a; color:#111; }
+  #twbRcp{ display:flex; flex-wrap:wrap; gap:6px; align-items:center; font-size:12px; } #twbRcp:empty{ display:none; } #twbRcp button{ border-radius:12px; padding:3px 10px; font-size:12px; } #twbRcp button.on{ background:#c9e59a; color:#111; } .tbiRcp{ display:flex; flex-wrap:wrap; gap:6px; margin:4px 0; } .tbiRcp button{ display:inline-flex; align-items:center; border-radius:12px; padding:3px 10px; font-size:12px; } .tbiRcp button img{ width:18px !important; height:18px !important; margin-right:4px !important; } .tbiRcp button.on{ background:#c9e59a; color:#111; } .tbiRcp button.no{ background:transparent; color:#889; border:1px dashed #667; cursor:help; } .tbiRcp button.no img{ filter:grayscale(1); opacity:.45; } #twbRcp button:disabled{ background:transparent; color:#aab; border:1px dashed #667; cursor:help; } #twbRcp button{ display:inline-flex; align-items:center; } #twbRcp button img{ width:18px !important; height:18px !important; margin-right:4px !important; } #twbRcp button.no{ background:transparent; color:#889; border:1px dashed #667; cursor:help; } #twbRcp button.no img{ filter:grayscale(1); opacity:.45; } #twbRcp button.on.no{ outline:2px solid #e07060; }
+  @media (max-width: 640px){ #stage.twb #twbP{ bottom:178px; max-height:calc(100vh - 262px); max-height:calc(100dvh - 262px); } }
+  /* 城鎮介面（89_townui.js，Blocksail TASK-0910）：💰 貿易、🏛 城鎮兩顆在 🔨 旁邊（61_layout.js 的 town 配置）；面板右邊一欄，開著那一顆亮底 */
+  #tuiP{ display:none; }
+  #stage.tui:not(.tuiT):not(.tuiD) #tuiK, #stage.tuiT #tuiTK, #stage.tuiD #tuiDK{ background:#9fc7ff; color:#111; }
+  .tuiTiles div.cur{ background:rgba(159,199,255,.22); box-shadow:inset 0 0 0 2px #9fc7ff; } .tuiTiles button.on{ background:#9fc7ff; color:#111; border-color:#9fc7ff; font-weight:bold; }   /* 城區頁：現在這一區（89_townui.js tuiDistHTML） */
+  #stage.tui #tuiP{ display:flex; flex-direction:column; gap:6px; position:absolute; right:12px; top:64px; bottom:92px; width:min(600px, calc(100vw - 24px)); box-sizing:border-box; z-index:9; pointer-events:auto; background:rgba(14,18,24,.9); color:var(--ink); font-size:13px; }
+  #tuiHead{ display:flex; flex-wrap:wrap; gap:4px 12px; align-items:baseline; } #tuiHead b{ font-size:15px; color:#f3e6c4; } #tuiHead span{ color:var(--dim); } #tuiX{ margin-left:auto; border-radius:12px; padding:2px 10px; }
+  #tuiTabs{ display:flex; flex-wrap:wrap; gap:6px; } #tuiTabs button{ border-radius:14px; padding:4px 12px; } #tuiTabs button.on{ background:#9fc7ff; color:#111; }
+  #tuiBody{ flex:1; overflow:auto; min-height:0; } #tuiBody h4{ margin:10px 0 4px; font-size:13px; color:#f3e6c4; display:flex; gap:8px; align-items:center; } #tuiBody p{ margin:4px 0; }
+  #tuiMsg{ padding:4px 8px; border-radius:6px; background:rgba(159,199,255,.14); }
+  .tuiDim{ color:var(--dim); font-size:12px; }
+  .tuiTiles{ display:grid; grid-template-columns:repeat(auto-fill, minmax(118px, 1fr)); gap:6px; margin:6px 0; } .tuiTiles div{ background:rgba(255,255,255,.05); border-radius:6px; padding:4px 8px; } .tuiTiles small{ display:block; color:var(--dim); font-size:11px; } .tuiTiles b{ font-size:15px; }
+  .tuiSpec{ display:flex; flex-wrap:wrap; gap:4px 6px; align-items:center; margin:6px 0 2px; } .tuiSpec > b{ color:#f3e6c4; margin-right:2px; }   /* ⭐ 特產（89_townui.js tuiSpecHTML；Blocksail TASK-1113）：一種貨一顆；自動藍、歷史琥珀；虛線 ＝ 還沒有建築做 */
+  .tuiSpec span{ display:inline-flex; align-items:center; gap:4px; padding:2px 8px; border-radius:10px; background:rgba(255,255,255,.07); white-space:nowrap; } .tuiSpec span b{ font-variant-numeric:tabular-nums; color:#fff; }
+  .tuiSpec small{ font-size:11px; color:var(--dim); } .tuiSpec small.a{ color:#9fc7ff; } .tuiSpec small.h{ color:#ffd98a; }
+  .tuiSpec span.no{ background:transparent; border:1px dashed #667; color:var(--dim); } .tuiSpec span.no b{ color:var(--dim); } .tuiSpec span.no img{ filter:grayscale(1); opacity:.45; }
+  .tuiCls{ border:1px solid rgba(255,255,255,.12); border-radius:8px; padding:4px 10px 6px; margin:6px 0; } .tuiCls h5{ margin:4px 0 2px; font-size:14px; color:#f3e6c4; } .tuiCls p{ margin:2px 0; }   /* 社會階層一層一份（89_townui.js tuiStrataHTML；Blocksail TASK-1048） */
+  .tuiT{ width:100%; border-collapse:collapse; font-variant-numeric:tabular-nums; } .tuiT th{ text-align:right; color:var(--dim); font-weight:normal; font-size:12px; padding:2px 6px; border-bottom:1px solid rgba(255,255,255,.12); position:sticky; top:0; background:rgba(14,18,24,.98); }
+  .tuiT td{ text-align:right; padding:2px 6px; border-bottom:1px solid rgba(255,255,255,.05); } .tuiT th:first-child, .tuiT td:first-child{ text-align:left; } .tuiT tr.cat td{ text-align:left; color:#f3e6c4; padding-top:8px; }
+  .tuiT td.up{ color:#8fd18f; } .tuiT td.dn{ color:#ff9a8a; }
+  .tuiTr th, .tuiTr td.b, .tuiTr td.g{ text-align:center; } .tuiTr th:last-child, .tuiTr td:last-child{ text-align:right; } .tuiTr td{ padding:3px 6px; }
+  .tuiTr td.b{ padding:2px 3px; } .tuiTr td.b button{ min-width:72px; padding:3px 8px; border-radius:10px; font-size:13px; font-variant-numeric:tabular-nums; color:#fff; text-shadow:-1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000, 0 0 3px #000; } .tuiTr button[data-side=sell]{ background:rgba(217,89,38,.35); } .tuiTr td.b button:disabled{ opacity:.6; }   /* 價錢字描邊（Tim 2026-10-27「買賣面板的按鈕文字是否可以加outline(因為按鈕會變色)」）：白字黑邊 ⇒ 什麼底色都讀得到；不能按的 .35 ⇒ .6（以前字幾乎看不到） */
+  .tuiTr td.g img{ width:30px; height:30px; object-fit:contain; vertical-align:middle; } .tuiTr td.g{ position:relative; font-size:12px; white-space:nowrap; }
+  .tuiTr td.g:hover::after{ content:attr(data-n); position:absolute; left:50%; bottom:calc(100% - 4px); transform:translateX(-50%); z-index:3; padding:2px 8px; border-radius:6px; background:rgba(0,0,0,.88); color:#fff; font-size:12px; pointer-events:none; }   /* 游標移到圖示上 ⇒ 上面說名字（Tim 2026-10-26；放上面：最後一列放下面會被捲動框切掉） */
+  .tuiU{ display:flex; justify-content:center; align-items:center; gap:4px; margin:2px 0 4px; color:var(--dim); font-size:12px; } .tuiU button{ min-width:52px; padding:3px 10px; border-radius:10px; font-variant-numeric:tabular-nums; } .tuiU button.on{ background:#9fc7ff; color:#111; }
+  .tuiChW{ position:relative; margin:4px 0 10px; } .tuiChW h5{ margin:0 0 2px; font-size:12px; font-weight:normal; color:var(--ink); display:flex; gap:10px; flex-wrap:wrap; } .tuiChW .leg{ color:var(--dim); } .tuiChW i, .tuiChW .tip i{ display:inline-block; width:10px; height:3px; border-radius:2px; vertical-align:middle; margin-right:4px; }
+  svg.tuiCh{ width:100%; height:auto; display:block; background:#12161d; border-radius:6px; } svg.tuiCh .gr{ stroke:rgba(255,255,255,.08); } svg.tuiCh text{ fill:var(--dim); font-size:10px; } svg.tuiCh .cx{ stroke:rgba(255,255,255,.35); } svg.tuiCh .cd{ stroke:#12161d; stroke-width:2; }
+  .tuiChW .tip{ position:absolute; top:22px; padding:4px 8px; border-radius:6px; background:rgba(0,0,0,.85); font-size:12px; pointer-events:none; white-space:nowrap; z-index:2; }
+  #tuiPick{ font-size:12px; }
+  #tuiPg{ margin:0; font-size:14px; color:#f3e6c4; }   /* 🏙 城區自己一頁：子選單那一排換成頁名（89_townui.js tuiTabs） */
+  /* 手機直式（Tim 2026-10-27「然後嘗試讓該頁面支援直式排版(手機)」）：以前寬 100vw − 16 再加 padding、邊框（沒有 border-box）⇒ 左邊超出畫面 26 px；
+     上緣 56 px 壓在地球儀浮著的時間面板上 ⇒ 面板開著時那一頁收起時間面板（tuiPageTell），面板從上面 8 px 開始。字、按鈕、表格縮一點，表格放不下 ⇒ 橫向捲 */
+  @media (max-width: 640px){
+    #stage.tui #tuiP{ top:8px; bottom:178px; left:8px; right:8px; width:auto; padding:8px; }
+    #tuiHead{ gap:2px 10px; } #tuiHead b{ font-size:14px; } #tuiHead span{ font-size:12px; }
+    #tuiTabs{ gap:4px; } #tuiTabs button{ padding:3px 9px; font-size:12px; }
+    .tuiTiles{ grid-template-columns:repeat(auto-fill, minmax(100px, 1fr)); gap:4px; } .tuiTiles b{ font-size:14px; }
+    .tuiT th, .tuiT td{ padding:2px 4px; } .tuiTr td.b button{ min-width:56px; padding:3px 6px; font-size:12px; } .tuiTr td.g img{ width:26px; height:26px; }
+    .tuiU button{ min-width:40px; padding:3px 6px; }
+  }
+  /* ?tui=@host（89_townui.js）：Blocksail 地球儀停靠時的 📋 城鎮概況 —— 只留城鎮介面那一份面板、畫面中間；後面一層暗（點了 ⇒ 關） */
+  html.tuionly, html.tuionly body{ background:transparent; } html.tuionly #stage{ background:rgba(4,12,22,.55); }
+  html.tuionly body > :not(#stage), html.tuionly #stage > :not(#tuiP){ display:none !important; }
+  html.tuionly #stage.tui #tuiP{ left:50%; right:auto; transform:translateX(-50%); top:12px; bottom:12px; width:min(640px, calc(100vw - 24px)); }
+  @media (max-width: 640px){ html.tuionly #stage.tui #tuiP{ left:8px; right:8px; transform:none; top:8px; bottom:8px; width:auto; } }
+  /* 點建築的資訊面板（89_townbld.js，Blocksail TASK-0909）：左邊一塊，跟城鎮介面（右邊）可以同時開 */
+  #tbiP{ display:none; }
+  #stage.tbi #tbiP{ display:block; position:absolute; left:12px; top:64px; width:min(300px, calc(100vw - 24px)); max-height:calc(100% - 170px); overflow:auto; z-index:9; pointer-events:auto; background:rgba(14,18,24,.9); color:var(--ink); font-size:13px; font-variant-numeric:tabular-nums; }
+  .tbiH{ display:flex; align-items:baseline; gap:8px; } .tbiH b{ font-size:15px; color:#f3e6c4; } #tbiX{ margin-left:auto; border-radius:12px; padding:2px 10px; }
+  .tbiDim{ color:var(--dim); font-size:12px; margin:2px 0; } .tbiT{ margin:8px 0 2px; color:#f3e6c4; font-size:12px; }
+  .tbiR{ display:flex; justify-content:space-between; gap:12px; padding:1px 0; } .tbiR b{ font-weight:normal; }
+  .tbiS{ margin:6px 0; padding:4px 8px; border-radius:6px; background:rgba(217,164,65,.16); } .tbiBar{ height:5px; margin-top:4px; border-radius:3px; background:rgba(255,255,255,.12); overflow:hidden; } .tbiBar i{ display:block; height:100%; background:#d9a441; }
+  .tbiB{ margin-top:8px; } .tbiB button{ border-radius:14px; padding:4px 12px; } .tbiB button:disabled{ opacity:.4; }
+  @media (max-width: 640px){ #stage.tbi #tbiP{ top:56px; left:8px; width:calc(100vw - 16px); max-height:40vh; } }
+  #stage.bld #bldInfo{ display:block; position:absolute; left:50%; top:calc(50% + 16px); transform:translateX(-50%); padding:3px 10px; border-radius:8px; background:rgba(10,14,22,.6); color:#eee; font-size:13px; pointer-events:none; white-space:nowrap; max-width:calc(100vw - 32px); overflow:hidden; text-overflow:ellipsis; z-index:4; }
+  #stage.bld #bldBar{ display:flex; position:absolute; left:50%; transform:translateX(-50%); bottom:92px; gap:6px; pointer-events:none; }
+  #bldBar .bslot{ pointer-events:auto; background:rgba(10,14,22,.55); } #bldBar .bslot.gap{ margin-left:10px; } #bldBar .bslot.on{ background:rgba(159,199,255,.92); }   /* 選中（⛔ 只有上一條 ⇒ 深色底蓋過圓鈕的 .on，只剩邊框，截圖量過） */
+  #fpUI .bldOnly{ display:none !important; } #stage.bld #fpUI .bldOnly{ display:flex !important; } #stage.bld #fpFol, #stage.bld #fpNext{ display:none !important; }
+  #bldCat{ position:absolute; left:50%; top:42%; transform:translate(-50%,-50%); width:min(560px, calc(100vw - 32px)); max-height:66vh; overflow:auto; z-index:8; pointer-events:auto; }
+  #bldCatH{ display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; }
+  #bldTabs{ display:flex; flex-wrap:wrap; gap:6px; margin-bottom:10px; } #bldTabs button{ border-radius:14px; padding:4px 12px; }
+  #bldTabs button.on, .bcard.on{ background:#9fc7ff; color:#111; }
+  #bldGrid{ display:grid; grid-template-columns:repeat(auto-fill, minmax(118px, 1fr)); gap:8px; }
+  .bcard{ position:relative; display:flex; flex-direction:column; align-items:center; gap:2px; padding:10px 6px; border-radius:10px; }
+  .bcard .bem{ font-size:30px; line-height:1.1; } .bcard small{ font-size:11px; opacity:.8; text-align:center; } .bcard i{ position:absolute; left:7px; top:5px; font-style:normal; font-size:11px; color:var(--gold); }
+  @media (max-width: 640px){ #stage.bld #bldBar{ bottom:178px; gap:4px; } #bldBar .bslot{ width:40px; height:40px; } #bldBar .bslot.gap{ margin-left:6px; } }
+  /* 船隻觀察（js/86_inspect.js，TASK-0776）：右邊的面板（剖面、甲板、透視、部件清單）＋勾了的部件掛名字（#inspL 固定在畫面上、不吃滑鼠） */
+  #inspP{ position:absolute; right:12px; top:8px; width:min(290px, calc(100vw - 32px)); max-height:calc(100vh - 142px); overflow:auto; z-index:7; pointer-events:auto; font-size:13px; padding:8px 10px; }
+  #inspH{ display:flex; justify-content:space-between; align-items:center; gap:8px; } #inspP.min #inspB{ display:none; }
+  #inspP .row{ display:flex; flex-wrap:wrap; gap:4px; margin:4px 0 6px; } #inspP button{ padding:3px 9px; border-radius:12px; font-size:12px; } #inspP button.on{ background:#9fc7ff; color:#111; }
+  #inspP .lab{ margin-top:6px; color:var(--gold); display:flex; justify-content:space-between; align-items:center; }
+  #inspP .lk{ font-size:12px; line-height:1.45; margin:2px 0; } #inspP .lk.it{ padding-left:10px; opacity:.85; }   /* 💧 漏水（86_inspect.js inspLeakHtml） */
+  #inspP details{ margin:1px 0; } #inspP summary{ cursor:pointer; } #inspP summary i{ font-style:normal; opacity:.7; } #inspP label{ cursor:pointer; }
+  #inspP .it{ display:block; padding-left:24px; font-size:12px; opacity:.85; }
+  #inspP .sw{ display:inline-block; width:11px; height:11px; border-radius:3px; margin-right:4px; vertical-align:-1px; box-shadow:0 0 0 1px rgba(0,0,0,.6); }   /* 色票：那一種的高亮顏色（86_inspect.js inspColSync） */
+  #inspL{ position:fixed; inset:0; pointer-events:none; z-index:6; } #inspL div{ position:absolute; transform:translate(-50%,-110%); padding:1px 6px; border-radius:6px; background:rgba(12,14,20,.8); border:1px solid; color:#ffd75a; font-size:12px; white-space:nowrap; }
+  @media (max-width: 640px){ #inspP{ top:8px; left:64px; right:64px; width:auto; max-height:max(160px, calc(100vh - 394px)); } }   /* 手機：夾在左右兩排圓鈕中間、貼齊上方（Tim 2026-10-21）、底不碰到右邊那排圓鈕；一開始先收起來（86_inspect.js inspEnter） */
+  /* 介面配置（61_layout.js uiLayout，TASK-0742）：不在這一份配置裡的區塊 ⇒ .uiOff。第一人稱藏 HUD、城鎮只留 ⚙ 🌍 都照那張表（以前是 #stage.fp 的兩條規則、#twbK 的 display）。
+     #keys > 那一條：要壓過 body.bsHost #hostBack 的 !important（一個 id 一個 class 一個元素） */
+  #stage .uiOff, #stage #keys > .uiOff{ display:none !important; }
+  #stage.fp #fpUI{ display:block; position:absolute; left:0; right:0; bottom:64px; pointer-events:none; z-index:3; }
+  #fpUI .fpPad{ position:absolute; bottom:0; display:grid; grid-template-columns:repeat(3, 64px); grid-auto-rows:64px; gap:6px; }   /* 一格 ＝ 圓鈕 .kb.hb 的大小 */
+  /* 右下：一欄上下 #fpVert（⛔ 轉頭的搖桿 #fpJoyR 拿掉了：Tim 2026-10-17「右側轉視角的我發現用不到(螢幕任意位置都能滑動轉視角)」⇒ 這一欄搬到原本搖桿的位置）：跳／浮空上（空白）在上、浮空下（C）在下（Tim 2026-10-16「為了手機操作 空白移動到右側吧(因為左邊是搖桿 離空白太近很難跳)」）；
+     每顆照 grid-area 擺（⛔ 自動排 ⇒ 藏起來的那顆讓別的補位）；沒有第 2 列時那一欄只剩一格、貼著底 */
+  #fpUI #fpVert{ right:18px; grid-template-columns:64px; }
+  #fpJoy{ position:absolute; left:18px; bottom:0; width:136px; height:136px; border-radius:50%; background:rgba(10,14,22,.35); border:2px solid rgba(255,255,255,.22); pointer-events:auto; touch-action:none; }
+  #fpKnob{ position:absolute; left:50%; top:50%; width:58px; height:58px; margin:-29px 0 0 -29px; border-radius:50%; background:rgba(255,255,255,.32); box-shadow:0 0 0 2px rgba(255,255,255,.18); pointer-events:none; }
+  #fpUI .fpb{ pointer-events:auto; display:flex; align-items:center; justify-content:center; margin:0; padding:0; font-size:22px; border-radius:50%; background:rgba(10,14,22,.55); touch-action:none; }
+  #fpUI .fpb.down, #fpUI .fpb.on{ background:rgba(110,170,255,.45); }
+  #fpAct{ position:absolute; bottom:16px; left:50%; transform:translateX(-50%); display:flex; gap:8px; }   /* 抬 16 px：圓鈕 64 px 高（⛔ bottom 0 ⇒ 底邊壓到下面那排的 ⏸ ⚙，量過） */
+  /* 按鈕跟下面那一排一樣：圓鈕 .kb.hb、上面快捷鍵、下面 emoji、不寫字（Tim 2026-10-16「爬梯子 跳 跑 跟隨 都參考原本原鈕 顯示快捷鍵吧(同時不用文字 EMOJI表示) 然後統一用圓鈕吧」）*/
+  /* 跟隨中的小標籤（81_fps.js fpWhoHud；TASK-0720〔K11〕）：被跟的人的職位＋工作效率，貼在中間那排圓鈕上方；空的不顯示 */
+  #fpWho{ display:none; position:absolute; left:50%; transform:translateX(-50%); bottom:90px; padding:3px 10px; border-radius:8px; background:rgba(10,14,22,.6); color:#eee; font-size:13px; white-space:nowrap; max-width:calc(100vw - 32px); overflow:hidden; text-overflow:ellipsis; pointer-events:none; }
+  #fpUI.fol #fpWho:not(:empty){ display:block; }
+  #fpNext{ display:none !important; } #fpUI.fol #fpNext{ display:flex !important; }   /* 跟隨船員（TASK-0649）：跟隨中才有「下一個」；搖桿、跳、跑、爬梯子收起來 */
+  #fpUI.fol #fpJoy, #fpUI.fol #fpJump, #fpUI.fol #fpRun, #fpUI.fol #fpClimb{ display:none !important; }
+  #fpUI .fpFly{ display:none !important; } #fpUI.fly:not(.fol) .fpFly{ display:flex !important; } #fpUI.fly #fpJump{ display:none !important; }   /* 浮空：跳換成按住的 ⬆ ⬇ */
+  @media (max-width: 640px){   /* 直式手機：搖桿縮一號，中間的 🪜 ⤴ 🏃 搬到上方（⛔ 同一排 ⇒ 375 px 寬疊在一起，量過） */
+    #fpUI .fpPad{ grid-template-columns:repeat(3, 46px); grid-auto-rows:46px; gap:4px; }
+    #fpJoy{ width:112px; height:112px; left:12px; } #fpKnob{ width:48px; height:48px; margin:-24px 0 0 -24px; }
+    #fpUI #fpVert{ right:12px; grid-template-columns:46px; bottom:12px; }   /* 抬 12 px（⛔ 0 ⇒ 浮空時 C⬇ 碰到下面那排的 ⚙，截圖量過） */
+    #fpUI .fpb{ font-size:19px; }
+    #fpAct{ bottom:122px; }   /* 搖桿 112 px 高 ＋ 空一點（⛔ 108 ⇒ 跟搖桿頂疊 8 px，量過） */
+    #fpWho{ bottom:178px; }   /* 中間那排搬到上方 ⇒ 標籤跟著抬（46 px 圓鈕＋空一點） */
+  }
+  /* 擬真沙盒（84_fleetlab.js） */
+  #flab{ display:none; } body.flab #flab{ display:flex; flex-direction:column; position:fixed; inset:0; z-index:60; background:#0e1a26; color:#e8eef5; font:13px/1.45 system-ui, "Microsoft JhengHei", sans-serif; }
+  body.flab #stage > :not(#cv), body.flab #cover, body.flab #gfxov, body.flab #end{ display:none !important; }
+  body.flab.flab3d #flab{ background:transparent; pointer-events:none; } body.flab.flab3d #flabCv, body.flab.flab3d #flabBatch{ visibility:hidden; } body.flab.flab3d #flabTop, body.flab.flab3d #flabRight{ pointer-events:auto; background:rgba(14,26,38,.82); }
+  #flabTop{ display:flex; flex-wrap:wrap; gap:6px 14px; align-items:center; padding:7px 12px; border-bottom:1px solid rgba(255,255,255,.1); } #flabTop .fg{ display:inline-flex; gap:4px; align-items:center; flex-wrap:wrap; }
+  #flab label{ color:#9fb0c2; } #flab input, #flab select{ font:inherit; background:#1a2a3a; color:#e8eef5; border:1px solid rgba(255,255,255,.2); border-radius:5px; padding:2px 4px; } #flab input[type=number]{ width:58px; }
+  #flab button{ font:inherit; background:rgba(255,255,255,.08); color:#e8eef5; border:1px solid rgba(255,255,255,.25); border-radius:5px; padding:3px 9px; cursor:pointer; } #flab button.on{ background:#e0b453; color:#111; }
+  #flabMsg{ color:#ffd27a; } #flabMain{ flex:1; display:flex; gap:8px; min-height:0; padding:6px 10px; } #flabCv{ position:relative; left:auto; top:auto; flex:1 1 auto; min-width:0; width:auto; height:100%; border-radius:6px; touch-action:none; }   /* ⛔ 全域的 canvas 是 absolute ⇒ 蓋滿整頁、把上面的設定列與右邊的讀數擠掉（量過） */
+  #flabRight{ flex:0 0 380px; display:flex; flex-direction:column; gap:6px; min-height:0; } #flabSide{ flex:1 1 40%; overflow:auto; font-size:12px; }
+  #flab #flabChart{ position:relative; left:auto; top:auto; flex:0 0 130px; width:100%; height:130px; border-radius:5px; } #flabDet{ flex:1 1 30%; overflow:auto; font-size:12px; color:#cfd8e2; } #flabDet .hd{ cursor:pointer; padding:1px 3px; } #flabDet .hd:hover{ background:rgba(255,255,255,.07); } #flabTL{ width:min(360px, 50vw); } #flabSide .fr{ padding:2px 5px; border-left:3px solid; margin:2px 0; cursor:pointer; } #flabSide .fr.blue{ border-color:#5aa2ff; } #flabSide .fr.red{ border-color:#ff6b5a; } #flabSide .fr.out{ opacity:.5; } #flabSide .fr.sel{ background:rgba(224,180,83,.18); }
+  #flabBatch{ padding:6px 12px 10px; max-height:34vh; overflow:auto; border-top:1px solid rgba(255,255,255,.1); } #flabBtab{ border-collapse:collapse; margin-top:6px; } #flabBtab th, #flabBtab td{ border:1px solid rgba(255,255,255,.15); padding:3px 8px; text-align:center; } #flabBtab small{ color:#9fb0c2; } #flab .note{ color:#9fb0c2; font-size:12px; margin-top:6px; }
+  @media (max-width:760px){ #flabMain{ flex-direction:column; } #flabRight{ flex:0 0 auto; max-height:34vh; } #flabSide{ max-height:14vh; } #flabCv{ min-height:46vh; } }
+  /* 報錯（01_gl.js errShow；Tim 2026-10-18「報錯會一直出現在畫面上 是否可以加一個彈窗(可關閉) 以及一個回報錯誤按鈕」）：蓋在最上面、可以關 */
+  #err{ position:fixed; inset:0; z-index:50; display:none; align-items:center; justify-content:center; padding:16px; background:rgba(0,0,0,.5); }
+  #err .card{ width:100%; max-width:520px; max-height:100%; overflow:auto; padding:16px 18px; text-align:left; background:#1c2129; box-shadow:0 8px 30px rgba(0,0,0,.6); }   /* 實色：.panel 是半透明，後面的主選單會透出來 */
+  #err h2{ margin:0 0 8px; font-size:20px; color:#ffb3a6; }
+  #err pre{ margin:0; max-height:30vh; overflow:auto; white-space:pre-wrap; word-break:break-word; color:#ffb3a6; font-size:13px; }
+  #err label{ display:block; margin:12px 0 4px; }
+  #err textarea{ box-sizing:border-box; width:100%; font:inherit; font-size:14px; padding:6px 8px; border-radius:6px; border:1px solid rgba(255,255,255,.3); background:rgba(0,0,0,.3); color:var(--ink); }
+  #err .note{ margin-top:6px; font-size:12px; opacity:.75; }
+  #err .btns{ margin-top:12px; text-align:right; }
+  #err button{ font:inherit; margin:0 0 0 8px; padding:6px 16px; border-radius:6px; border:1px solid rgba(255,255,255,.3); background:rgba(255,255,255,.08); color:var(--ink); cursor:pointer; }
+  #err button.pri{ background:#b8452e; border-color:#e06a4f; }   /* 主要的那一顆：有 Discord webhook ⇒「送出回報」，沒有 ⇒「寄出」（01_gl.js errShow） */
+  #err button:disabled{ opacity:.5; cursor:default; }
+  #err label.chk{ display:inline-flex; align-items:center; gap:6px; margin:8px 0 0; font-size:13px; }
+
+#stage{background:linear-gradient(160deg,#1e343e,#0d1821)} #fixtureNote{position:absolute;left:20px;top:18px;color:#cbbf9e;font-size:13px}
+</style><div id="stage" class="twb"><div id="fixtureNote">建築分類圖示 · 隔離介面驗證</div><div id="twbP"></div></div>
+<script>var Q=new URLSearchParams();function $(id){return document.getElementById(id)} function modeRule(){return false}function ctrlAdd(){}function townWantSet(){}function tuiEsc(t) { return String(t).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }</script>
+<script src="../../../src/js/87_townbuild_art.js"></script><script src="../../../src/js/87_townbuild.js"></script><script>twbMenuSet([{"k": "house", "name": "🏠 房屋", "items": [{"use": "house", "name": "住宅", "w": 8, "d": 12, "cw": 2, "cd": 3, "annex": false, "water": null, "sub": "2 × 3 格（轉角 2 × 2）"}]}, {"k": "workshop", "name": "🔨 工坊", "items": [{"use": "smithy", "name": "鐵匠鋪", "w": 8, "d": 12, "cw": 2, "cd": 3, "annex": false, "water": null, "sub": "2 × 3 格（8 × 12 m）"}, {"use": "coppersmith", "name": "銅匠鋪", "w": 8, "d": 12, "cw": 2, "cd": 3, "annex": false, "water": null, "sub": "2 × 3 格（8 × 12 m）"}, {"use": "cooper", "name": "桶匠", "w": 8, "d": 12, "cw": 2, "cd": 3, "annex": false, "water": null, "sub": "2 × 3 格（8 × 12 m）"}, {"use": "carpenter", "name": "木工坊", "w": 8, "d": 12, "cw": 2, "cd": 3, "annex": false, "water": null, "sub": "2 × 3 格（8 × 12 m）"}, {"use": "sawmill", "name": "鋸木坊", "w": 8, "d": 12, "cw": 2, "cd": 3, "annex": false, "water": null, "sub": "2 × 3 格（8 × 12 m）"}, {"use": "mint", "name": "鑄幣廠", "w": 12, "d": 16, "cw": 3, "cd": 4, "annex": false, "water": null, "sub": "3 × 4 格（12 × 16 m）"}, {"use": "powder-mill", "name": "火藥坊", "w": 12, "d": 16, "cw": 3, "cd": 4, "annex": false, "water": null, "sub": "3 × 4 格（12 × 16 m）"}]}, {"k": "food", "name": "🍞 食品", "items": [{"use": "bakery", "name": "烘焙房", "w": 8, "d": 12, "cw": 2, "cd": 3, "annex": false, "water": null, "sub": "2 × 3 格（8 × 12 m）"}, {"use": "distillery", "name": "蒸餾坊", "w": 8, "d": 12, "cw": 2, "cd": 3, "annex": false, "water": null, "sub": "2 × 3 格（8 × 12 m）"}, {"use": "winery", "name": "釀酒坊", "w": 10, "d": 12, "cw": 3, "cd": 3, "annex": false, "water": null, "sub": "3 × 3 格（10 × 12 m）"}, {"use": "sugar-works", "name": "糖廠", "w": 16, "d": 12, "cw": 4, "cd": 3, "annex": false, "water": null, "sub": "4 × 3 格（16 × 12 m）"}, {"use": "confectioner", "name": "蜜餞坊", "w": 8, "d": 12, "cw": 2, "cd": 3, "annex": false, "water": null, "sub": "2 × 3 格（8 × 12 m）"}, {"use": "mill", "name": "磨坊", "w": 8, "d": 12, "cw": 2, "cd": 3, "annex": false, "water": null, "sub": "2 × 3 格（8 × 12 m）"}, {"use": "vinegar-house", "name": "釀醋坊", "w": 10, "d": 12, "cw": 3, "cd": 3, "annex": false, "water": null, "sub": "3 × 3 格（10 × 12 m）"}]}, {"k": "daily", "name": "🧵 日用", "items": [{"use": "tannery", "name": "製革坊", "w": 8, "d": 12, "cw": 2, "cd": 3, "annex": false, "water": null, "sub": "2 × 3 格（8 × 12 m）"}, {"use": "cobbler", "name": "鞋匠鋪", "w": 8, "d": 12, "cw": 2, "cd": 3, "annex": false, "water": null, "sub": "2 × 3 格（8 × 12 m）"}, {"use": "weaver", "name": "織布坊", "w": 8, "d": 12, "cw": 2, "cd": 3, "annex": false, "water": null, "sub": "2 × 3 格（8 × 12 m）"}, {"use": "ropewalk", "name": "製繩場", "w": 200, "d": 10, "cw": 50, "cd": 3, "annex": false, "water": null, "sub": "50 × 3 格（200 × 10 m）"}, {"use": "paper-mill", "name": "造紙坊", "w": 8, "d": 12, "cw": 2, "cd": 3, "annex": false, "water": null, "sub": "2 × 3 格（8 × 12 m）"}, {"use": "soapworks", "name": "製皂坊", "w": 8, "d": 12, "cw": 2, "cd": 3, "annex": false, "water": null, "sub": "2 × 3 格（8 × 12 m）"}, {"use": "tobacconist", "name": "菸草坊", "w": 8, "d": 12, "cw": 2, "cd": 3, "annex": false, "water": null, "sub": "2 × 3 格（8 × 12 m）"}, {"use": "dyeworks", "name": "染坊", "w": 8, "d": 12, "cw": 2, "cd": 3, "annex": false, "water": null, "sub": "2 × 3 格（8 × 12 m）"}]}, {"k": "service", "name": "⛪ 服務", "items": [{"use": "tavern", "name": "酒館", "w": 10, "d": 14, "cw": 3, "cd": 4, "annex": false, "water": null, "sub": "3 × 4 格（10 × 14 m）"}, {"use": "restaurant", "name": "餐廳", "w": 10, "d": 14, "cw": 3, "cd": 4, "annex": false, "water": null, "sub": "3 × 4 格（10 × 14 m）"}, {"use": "cookshop", "name": "小飯館", "w": 10, "d": 14, "cw": 3, "cd": 4, "annex": false, "water": null, "sub": "3 × 4 格（10 × 14 m）"}, {"use": "inn", "name": "客棧", "w": 12, "d": 16, "cw": 3, "cd": 4, "annex": false, "water": null, "sub": "3 × 4 格（12 × 16 m）"}, {"use": "chocolate-house", "name": "巧克力館", "w": 10, "d": 12, "cw": 3, "cd": 3, "annex": false, "water": null, "sub": "3 × 3 格（10 × 12 m）"}, {"use": "church", "name": "教堂", "w": 16, "d": 28, "cw": 4, "cd": 7, "annex": false, "water": null, "sub": "4 × 7 格（16 × 28 m）"}, {"use": "hospital", "name": "醫院", "w": 20, "d": 16, "cw": 5, "cd": 4, "annex": false, "water": null, "sub": "5 × 4 格（20 × 16 m）"}, {"use": "school", "name": "學校", "w": 12, "d": 10, "cw": 3, "cd": 3, "annex": false, "water": null, "sub": "3 × 3 格（12 × 10 m）"}]}, {"k": "harbour", "name": "⚓ 港口", "items": [{"use": "weighhouse", "name": "過磅所", "w": 10, "d": 8, "cw": 3, "cd": 2, "annex": false, "water": null, "sub": "3 × 2 格（10 × 8 m）"}, {"use": "chandlery", "name": "船具行", "w": 10, "d": 14, "cw": 3, "cd": 4, "annex": false, "water": null, "sub": "3 × 4 格（10 × 14 m）"}, {"use": "harbour-office", "name": "港務所", "w": 8, "d": 8, "cw": 2, "cd": 2, "annex": false, "water": null, "sub": "2 × 2 格（8 × 8 m）"}, {"use": "sheers", "name": "起重架", "w": 10, "d": 10, "cw": 3, "cd": 3, "annex": false, "water": {"w": 12, "d": 12, "cw": 3, "cd": 3}, "sub": "3 × 3 格（10 × 10 m）"}, {"use": "boat-shed", "name": "船棚", "w": 8, "d": 14, "cw": 2, "cd": 4, "annex": false, "water": {"w": 8, "d": 16, "cw": 2, "cd": 4}, "sub": "2 × 4 格（8 × 14 m）"}, {"use": "careening-wharf", "name": "修船碼頭", "w": 30, "d": 20, "cw": 8, "cd": 5, "annex": false, "water": {"w": 32, "d": 20, "cw": 8, "cd": 5}, "sub": "8 × 5 格（30 × 20 m）"}, {"use": "shipyard-small", "name": "小船廠", "w": 40, "d": 30, "cw": 10, "cd": 8, "annex": false, "water": {"w": 40, "d": 32, "cw": 10, "cd": 8}, "sub": "10 × 8 格（40 × 30 m）"}, {"use": "shipyard-large", "name": "大船廠", "w": 80, "d": 50, "cw": 20, "cd": 13, "annex": false, "water": {"w": 80, "d": 52, "cw": 20, "cd": 13}, "sub": "20 × 13 格（80 × 50 m）"}, {"use": "fishery", "name": "漁場", "w": 8, "d": 12, "cw": 2, "cd": 3, "annex": false, "water": {"w": 8, "d": 20, "cw": 2, "cd": 5}, "sub": "2 × 3 格（8 × 12 m）"}, {"use": "fish-salter", "name": "醃魚坊", "w": 8, "d": 12, "cw": 2, "cd": 3, "annex": false, "water": null, "sub": "2 × 3 格（8 × 12 m）"}, {"use": "saltpan", "name": "鹽田", "w": 12, "d": 12, "cw": 3, "cd": 3, "annex": false, "water": null, "sub": "3 × 3 格（12 × 12 m）"}]}, {"k": "farm", "name": "🌾 農莊", "items": [{"use": "farm", "name": "農莊", "w": 12, "d": 12, "cw": 3, "cd": 3, "annex": true, "water": null, "sub": "3 × 3 格（12 × 12 m）＋田"}, {"use": "plantation", "name": "種植園", "w": 16, "d": 12, "cw": 4, "cd": 3, "annex": true, "water": null, "sub": "4 × 3 格（16 × 12 m）＋田"}, {"use": "vineyard", "name": "葡萄園", "w": 10, "d": 10, "cw": 3, "cd": 3, "annex": true, "water": null, "sub": "3 × 3 格（10 × 10 m）＋田"}]}, {"k": "livestock", "name": "🐄 畜牧", "items": [{"use": "henhouse", "name": "養雞場", "w": 8, "d": 8, "cw": 2, "cd": 2, "annex": false, "water": null, "sub": "2 × 2 格（8 × 8 m）"}, {"use": "pigsty", "name": "豬圈", "w": 8, "d": 10, "cw": 2, "cd": 3, "annex": false, "water": null, "sub": "2 × 3 格（8 × 10 m）"}, {"use": "ranch", "name": "牧場", "w": 16, "d": 12, "cw": 4, "cd": 3, "annex": false, "water": null, "sub": "4 × 3 格（16 × 12 m）"}, {"use": "slaughterhouse", "name": "屠宰場", "w": 8, "d": 12, "cw": 2, "cd": 3, "annex": false, "water": null, "sub": "2 × 3 格（8 × 12 m）"}]}, {"k": "industry", "name": "🧱 建材", "items": [{"use": "lumber-camp", "name": "伐木場", "w": 8, "d": 12, "cw": 2, "cd": 3, "annex": false, "water": null, "sub": "2 × 3 格（8 × 12 m）"}, {"use": "clay-pit", "name": "黏土坑", "w": 12, "d": 12, "cw": 3, "cd": 3, "annex": false, "water": null, "sub": "3 × 3 格（12 × 12 m）"}, {"use": "quarry", "name": "採石場", "w": 12, "d": 12, "cw": 3, "cd": 3, "annex": false, "water": null, "sub": "3 × 3 格（12 × 12 m）"}, {"use": "mine", "name": "礦坑", "w": 12, "d": 16, "cw": 3, "cd": 4, "annex": false, "water": null, "sub": "3 × 4 格（12 × 16 m）"}, {"use": "brickworks", "name": "磚窯", "w": 12, "d": 12, "cw": 3, "cd": 3, "annex": false, "water": null, "sub": "3 × 3 格（12 × 12 m）"}, {"use": "lime-kiln", "name": "石灰窯", "w": 12, "d": 12, "cw": 3, "cd": 3, "annex": false, "water": null, "sub": "3 × 3 格（12 × 12 m）"}, {"use": "glassworks", "name": "玻璃坊", "w": 12, "d": 16, "cw": 3, "cd": 4, "annex": false, "water": null, "sub": "3 × 4 格（12 × 16 m）"}, {"use": "ironworks", "name": "煉鐵場", "w": 12, "d": 16, "cw": 3, "cd": 4, "annex": false, "water": null, "sub": "3 × 4 格（12 × 16 m）"}, {"use": "gun-foundry", "name": "鑄砲坊", "w": 12, "d": 16, "cw": 3, "cd": 4, "annex": false, "water": null, "sub": "3 × 4 格（12 × 16 m）"}, {"use": "builder", "name": "營造廠", "w": 12, "d": 16, "cw": 3, "cd": 4, "annex": false, "water": null, "sub": "3 × 4 格（12 × 16 m）"}, {"use": "pottery", "name": "陶器坊", "w": 12, "d": 12, "cw": 3, "cd": 3, "annex": false, "water": null, "sub": "3 × 3 格（12 × 12 m）"}, {"use": "water-yard", "name": "集水場", "w": 8, "d": 12, "cw": 2, "cd": 3, "annex": false, "water": null, "sub": "2 × 3 格（8 × 12 m）"}]}, {"k": "berth", "name": "🛳 泊位", "items": [{"use": "berth-boat", "name": "小艇泊位", "w": 8, "d": 8, "cw": 2, "cd": 2, "annex": false, "water": null, "berth": "boat", "sub": "2 × 2 格（8 × 8 m、水深 ≥ 2.5 m、船長 ≤ 12 m）"}, {"use": "berth-small", "name": "小船泊位", "w": 16, "d": 16, "cw": 4, "cd": 4, "annex": false, "water": null, "berth": "small", "sub": "4 × 4 格（16 × 16 m、水深 ≥ 5 m、船長 ≤ 36 m）"}, {"use": "berth-large", "name": "大船泊位", "w": 100, "d": 24, "cw": 25, "cd": 6, "annex": false, "water": null, "berth": "large", "sub": "25 × 6 格（100 × 24 m、水深 ≥ 9 m、船長 ≤ 80 m）"}, {"use": "berth-huge", "name": "巨艦泊位", "w": 160, "d": 32, "cw": 40, "cd": 8, "annex": false, "water": null, "berth": "huge", "sub": "40 × 8 格（160 × 32 m、水深 ≥ 12 m、船長 ≤ 130 m）"}, {"use": "berth-titan", "name": "超巨艦泊位", "w": 300, "d": 52, "cw": 75, "cd": 13, "annex": false, "water": null, "berth": "titan", "sub": "75 × 13 格（300 × 52 m、水深 ≥ 14 m、船長 ≤ 270 m）"}]}]);</script></html>
