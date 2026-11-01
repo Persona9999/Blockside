@@ -24,7 +24,7 @@
 #   python -I admin.py ropebind [--id <船的代號>]   繩端綁定：成品算好每條繩兩端綁在哪、寫進 .vxk 檔頭、出報表（TASK-0716；匯入、重新匯入、metasync、ids 會自己跑）
 #   python -I admin.py cells --id <船的代號>      只寫動力件、梯子、揚弾筒的格子清單（meta、格子不動；TASK-0676 木匠照它還原整件梯子）
 #   python -I admin.py relock --id <船的代號>     指紋改成 _cache 現在那份（手動換過 .vxk 時；平常匯入／重新匯入／metasync 會自己更新）
-#   加 --no-build：匯入／重新匯入之後不重建
+#   加 --no-build：匯入／重新匯入之後不重建（也不烘表演船低模；之後 build 的最後一行列出哪幾型要 showlod）
 import argparse, base64, hashlib, json, math, os, posixpath, re, shutil, socket, struct, subprocess, sys, urllib.request, webbrowser, zlib
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
@@ -1648,6 +1648,24 @@ def showlod_read():
         return {}
 
 
+def showlod_want(cfg):
+    """每一型（堡壘、砲台不算）該有的指紋 ⇒ { 船型: fp }。頁面算的那一個：SHOWLOD_V ＋ 'lock ' ＋ lock 前 14 字（同 src_manifest）；版本照 js 檔裡的 SHOWLOD_V。"""
+    lock = json.load(open(LOCK_P, encoding='utf-8')) if os.path.exists(LOCK_P) else {}
+    v = re.search(r'SHOWLOD_V = (\d+)', open(os.path.join(HERE, 'js', '60_showlod.js'), encoding='utf-8').read())
+    return {s['id']: '%s lock %s' % (v.group(1) if v else '?', (lock.get(s.get('vxk') or '') or '（沒有指紋）')[:14]) for s in cfg['ships'] if not s.get('fixed')}
+
+
+def showlod_note(cfg):
+    """建置的最後一行：哪幾型的表演船低模跟 _cache 對不上（遊戲裡這幾型照原模畫）。
+    改了 .vxk 卻沒重烘的路不只一條（reimport --no-build、metasync、cells、ids、合併取別人的 showlod.js）⇒ 在建置這個大家都會經過的地方講一次。只讀、不烘。"""
+    want, have = showlod_want(cfg), showlod_read()
+    bad = [sid for sid in want if (have.get(sid) or {}).get('fp') != want[sid]]
+    if not bad:
+        return ['✓ 表演船低模 %d 型都對得上 _cache（ships/showlod.js）' % len(want)]
+    return ['⚠ 表演船低模 %d 型對不上 _cache：%s ⇒ 遊戲裡這幾型照原模畫；烘：python -I admin.py showlod %s（import／reimport 會自己烘）'
+            % (len(bad), '、'.join(sid + ('（沒烘）' if sid not in have else '') for sid in bad), ' '.join('--id ' + sid for sid in bad))]
+
+
 def act_showlod(ids=None, force=False, check=False):
     """表演船中那一級的低模、遠那一級的貼圖（TASK-1104；js/60_showlod.js）：無頭 Chrome 跑成品的 ?showlodbake=<船>，頁面把那一型降採樣成 0.4 m 的塊、
     用遊戲的著色器拍八個方向 × 兩套帆（RGBA）⇒ 這裡各自壓成 deflate-raw、寫進 ships/showlod.js。
@@ -1656,15 +1674,11 @@ def act_showlod(ids=None, force=False, check=False):
     同一份 _cache 烘兩次 ⇒ 檔逐位元組相同（頁面的算法沒有亂數；zlib 同一版、JSON 照鍵排）。"""
     import html as _html, tempfile
     cfg = load()
-    every = [s['id'] for s in cfg['ships'] if not s.get('fixed')]
+    want = showlod_want(cfg)
+    every = list(want)
     ids = ids or every
-    lock = json.load(open(LOCK_P, encoding='utf-8')) if os.path.exists(LOCK_P) else {}
-    vx = {s['id']: s.get('vxk') for s in cfg['ships']}
     have, log = showlod_read(), []
-
-    def want_fp(sid):                      # 頁面算的那一個：SHOWLOD_V ＋ 'lock ' ＋ lock 前 14 字（同 src_manifest）；版本照 js 檔裡的 SHOWLOD_V
-        v = re.search(r'SHOWLOD_V = (\d+)', open(os.path.join(HERE, 'js', '60_showlod.js'), encoding='utf-8').read())
-        return '%s lock %s' % (v.group(1) if v else '?', (lock.get(vx.get(sid) or '') or '（沒有指紋）')[:14])
+    want_fp = want.get
     if check:
         for sid in every:
             e = have.get(sid)
@@ -2602,7 +2616,7 @@ def act_build(pack=True, single=False):   # pack：壓縮版（預設，TASK-058
         log += js_strip_html(OUT)
     else:
         ships_sync(os.path.dirname(OUT), {})                 # 原格式（船內嵌）⇒ ships/ 裡的船檔都是舊的
-    return log + flagloop_ensure() + src_stamp()
+    return log + flagloop_ensure() + src_stamp() + showlod_note(cfg)
 
 
 # ───────────────────────── 外掛外殼（shell：別的遊戲拿這份成品套自己的外殼；2026-10-21） ─────────────────────────
@@ -3915,6 +3929,8 @@ def act_import(work, sid, name, build=True, variant_of=None):
         log += act_ropebind([sid])                       # 繩端綁定（TASK-0716）：匯入時算好寫進檔頭、出報表
         log += act_shipcheck([sid])                      # 匯入檢查：缺 meta、砲班站不滿、開場就掉的（只讀）
         log += act_showlod([sid])                        # 表演船的低模與貼圖（TASK-1104；js/60_showlod.js）：沒烘過的這一型烘進 ships/showlod.js（堡壘、砲台不烘）
+    else:
+        log.append('· --no-build ⇒ 表演船低模沒烘（烘要讀成品）；之後 build 的最後一行會列出要烘的型')
     return log
 
 
@@ -3966,6 +3982,8 @@ def act_reimport(sid, work=None, build=True):
         log += act_ropebind([sid])                       # 繩端綁定（TASK-0716）：新的 .vxk 沒有 bind ⇒ 算好寫進去
         log += act_shipcheck([sid])                      # 匯入檢查（只讀）
         log += act_showlod([sid])                        # 表演船的低模與貼圖（TASK-1104）：.vxk 換了 ⇒ 指紋對不上 ⇒ 這一型重烘（不重烘的話遊戲裡這一型退回原模）
+    else:
+        log.append('· --no-build ⇒ 表演船低模沒烘（烘要讀成品）；之後 build 的最後一行會列出要烘的型')
     return log
 
 
