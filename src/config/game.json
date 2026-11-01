@@ -1754,6 +1754,34 @@
         "tiller": 2,
         "yard": 9
       }
+    },
+    {
+      "id": "centurion",
+      "el": "ship-centurion",
+      "name": "百夫長號",
+      "gangway": [[300.5, 191.5, 89.5], [300.5, 64.5, 89.5]],
+      "vxk": "centurion.vxk",
+      "work": "ridge-two-centurion-01m-assembly",
+      "author": "ridge-two",
+      "geo": {"spar": [71, 102], "marines": [60, 100], "center": 80, "aim": 64, "aimZ": [10, 450], "deckAim": [55, 90], "rigAim": [160, 440]},
+      "crew": {"officers": 4, "marines": 12, "marineGap": 14, "navigator": 0},
+      "names": ["百夫長號"],
+      "idNext": {
+        "anchor": 3,
+        "capstan": 2,
+        "deck": 7,
+        "door": 3,
+        "galley": 2,
+        "gun": 49,
+        "ladders": 6,
+        "magazine": 2,
+        "part": 11,
+        "portlid": 45,
+        "powder": 13,
+        "rudder": 2,
+        "ship": 2,
+        "yard": 11
+      }
     }
   ],
   "furniture": {
