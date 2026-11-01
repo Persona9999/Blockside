@@ -113,6 +113,7 @@ function rbatPrep() {
 }
 /** 一艘：模型 → 裝飾 → 平滑面 → 裝甲的平滑面。 */
 function rbatShip(sh, o) {
+  if (SHOWLOD.lv[o] === 2) return;                                    // 表演船畫遠那一級（60_showlod.js）：整艘只畫看板
   var T = sh.T, L = sh.models, k, m, me, lo = showlodMid(o, sh);   // lo：表演船這一格畫中那一級（60_showlod.js）⇒ 烘進低模的模型、裝飾、平滑面不進表
   for (k = 0; k < L.length; k++) {
     m = L[k]; me = meshFor(T, m.rmesh !== undefined ? m.rmesh : m.mesh, m.mm); if (!m.alive || !me || (m.vox && !m.moved)) continue; if (!me.vao) meshGpu(me);   // m.vox：螺旋槳畫它自己的格（24_armor.js armDraw）；m.rmesh：有座的砲只畫砲身（座在下面的裝飾，TASK-0836）
@@ -433,7 +434,8 @@ function viewVis() {
   P[52] = 0; P[53] = 1; P[54] = 0; P[55] = 0;                             // 反射的第 7 面：水面 y ≥ 0（reflPass 的 PASS.clip）
   for (o = 0; o < R.n; o++) {
     var ow = R.own[o], v = VV_RF | VV_MN;
-    if (ow && !(ow.sink > 40) && !(FP.on && FP.sh === ow) && vvOwner(o, ow)) {
+    if (o < R.ns && SHOWLOD.lv[o] === 2) v = 0;        // 表演船畫遠那一級（60_showlod.js）：整艘只畫看板 ⇒ 船殼、模型、帆、繩、旗、玻璃這兩趟都不畫
+    else if (ow && !(ow.sink > 40) && !(FP.on && FP.sh === ow) && vvOwner(o, ow)) {
       for (j = 0; j < 6; j++) if (vvOut(P, j * 4)) { v &= ~VV_MN; cm++; break; }
       for (j = 0; j < 7; j++) if (vvOut(P, 28 + j * 4)) { v &= ~VV_RF; cr++; break; }
     }
@@ -578,7 +580,7 @@ function rbatCheck() {
     if (p) one(c, ow, ref, p, 0, W, p.off);
   }
   SHIPS.forEach(function (sh, i) {
-    if (sh.sink > 40) return;
+    if (sh.sink > 40 || SHOWLOD.lv[i] === 2) return;                  // 遠那一級：整艘不進表（同 rbatShip）
     var lo = showlodMid(i, sh);                                         // 表演船畫中那一級（60_showlod.js）：烘進低模的不進表（同 rbatShip，照規則再判一次）
     sh.models.forEach(function (m, k) {
       var me = meshFor(sh.T, m.rmesh !== undefined ? m.rmesh : m.mesh, m.mm); if (!m.alive || !me || (m.vox && !m.moved) || (lo && lo.mk[k] && showlodPlain(m))) return;

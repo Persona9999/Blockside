@@ -257,7 +257,7 @@ function gpuSlots() {
   var cand = null;
   function pick(n, prev) {
     var L;
-    if (SHIPS.length <= n) L = SHIPS.slice();
+    if (SHIPS.length <= n) L = SHIPS.filter(function (s, i) { return SHOWLOD.lv[i] !== 2; });   // 表演船畫遠那一級（看板，60_showlod.js）⇒ 不給遮罩（看板在水面下那一截要被海蓋住）
     else {
       if (!cand) {
         var vp = CAM.vp, pl = [];                                         // 視錐的六個面（列優先的矩陣：第 r 列 ＝ vp[r], vp[4+r], vp[8+r], vp[12+r]）
@@ -265,9 +265,9 @@ function gpuSlots() {
           var a = [0, 1, 2, 3].map(function (c) { return vp[c * 4 + 3] + q[1] * vp[c * 4 + q[0]]; }), l = Math.hypot(a[0], a[1], a[2]) || 1;
           pl.push(a.map(function (v) { return v / l; }));
         });
-        cand = SHIPS.map(function (s) {
+        cand = SHIPS.map(function (s, i) {
           var B = s.T.base, R = s.T.shR || (s.T.shR = 0.5 * S * Math.hypot(B.sx, B.sy, B.sz)), c = M4.pt(s.M, B.sx / 2, B.sy / 2, B.sz / 2);
-          return { s: s, vis: s.sink <= 40 && pl.every(function (p) { return p[0] * c[0] + p[1] * c[1] + p[2] * c[2] + p[3] > -R; }), d: Math.hypot(c[0] - CAM.eye[0], c[1] - CAM.eye[1], c[2] - CAM.eye[2]) };
+          return { s: s, vis: s.sink <= 40 && SHOWLOD.lv[i] !== 2 && pl.every(function (p) { return p[0] * c[0] + p[1] * c[1] + p[2] * c[2] + p[3] > -R; }), d: Math.hypot(c[0] - CAM.eye[0], c[1] - CAM.eye[1], c[2] - CAM.eye[2]) };
         });
       }
       L = cand.filter(function (o) { return o.vis; }).map(function (o) { return { s: o.s, d: o.d * (prev.indexOf(o.s) >= 0 ? 0.9 : 1) }; })
@@ -641,7 +641,7 @@ function csmOwners() {
   for (var i = 0; i < O.n; i++) {
     var o = O.own[i], p, R;
     O.cs[i] = 0; O.cst[i] = 2;
-    if (o.crew) { if (o.sink > 40) { O.cst[i] = 0; continue; } var B = o.T.base; R = o.T.shR || (o.T.shR = 0.5 * S * Math.hypot(B.sx, B.sy, B.sz)); p = M4.pt(o.M, B.sx / 2, B.sy / 2, B.sz / 2); }
+    if (o.crew) { if (o.sink > 40 || (i < O.ns && SHOWLOD.lv[i] === 2)) { O.cst[i] = 0; continue; } var B = o.T.base; R = o.T.shR || (o.T.shR = 0.5 * S * Math.hypot(B.sx, B.sy, B.sz)); p = M4.pt(o.M, B.sx / 2, B.sy / 2, B.sz / 2); }   // 表演船畫遠那一級（看板，60_showlod.js）⇒ 不投影
     else { p = o.c || (o.M ? [o.M[12], o.M[13], o.M[14]] : null); R = 30; if (!p) { O.cst[i] = 1; continue; } }
     O.cp[i * 3] = p[0]; O.cp[i * 3 + 1] = p[1]; O.cp[i * 3 + 2] = p[2]; O.cR[i] = R;   // Float64Array：存的就是算出來的那個 double
   }
@@ -889,6 +889,7 @@ function reflPass() {
   PASS.vp = m4Into(REFL_VP, 0, CAM.vp, MIRROR); PASS.eye = [CAM.eye[0], -CAM.eye[1], CAM.eye[2]]; PASS.clip = 0; PASS.sh = 0;
   gl.enable(gl.DEPTH_TEST); gl.enable(gl.CULL_FACE);                   // 船的矩陣是鏡射（shipBaseMatrix）、反射的鏡頭又鏡射一次 ⇒ 兩次抵銷，繞序照常（CCW）
   gl.useProgram(P.vox.prog); setCommon(P.vox); drawHulls(P.vox, RBAT.pd.rf);
+  showlodFarDraw();                                                      // 表演船遠那一級的看板（60_showlod.js；水面下那一截照 PASS.clip 丟掉）
   if (GFX.refl === 2) {
     gl.disable(gl.CULL_FACE); gl.useProgram(P.tri.prog); setCommon(P.tri); gl.uniform1f(P.tri.u.uLit, 1); drawModels(P.tri, RBAT.pd.rf); drawColours(P.tri, RBAT.pd.rf);
     gl.useProgram(P.sail.prog); setCommon(P.sail); drawSails(P.sail, RBAT.pd.rf);
@@ -947,10 +948,10 @@ function frameBegin() {
   var bolt = wxBolt(SIMT), sky0 = SKY, hor0 = HORIZON, tod0 = todApply();   // 世界時間（08_weather.js；有 ?tod= 才開）：太陽、天色照時刻 —— 在記下 sky0／hor0 之後套（⛔ 之前 ⇒ 結尾還原成套過的、一格一格疊上去）
   if (bolt && bolt.f > 0) { SKY = lerp3(SKY, [0.82, 0.86, 0.98], bolt.f * 0.7); HORIZON = lerp3(HORIZON, [0.76, 0.79, 0.88], bolt.f * 0.6); }
   if (bolt && bolt.n !== LAST_BOLT) { LAST_BOLT = bolt.n; if (RUNNING && !STILL) setTimeout(function () { sfx('thunder', null, 1 / (1 + bolt.d / 1500)); }, bolt.d / 340 * 1000); }
+  showlodPrep();                                                         // 表演船這一格畫哪一級（60_showlod.js）：遮罩的格（gpuSlots）、rbatPrep、drawHulls、玻璃、陰影、反射照它
   targets(w, h); shadowMaps(); gpuSlots(); shadowGrow(); lampsUpdate();             // gpuSlots：這一格船艙遮罩給哪幾艘（視野裡最近的幾艘：畫質設定）
   if (!DUMMY) { DUMMY = mkTex(gl.RGBA8, gl.RGBA, gl.UNSIGNED_BYTE, 1, 1, false); }
   prepRig();
-  showlodPrep();                                                         // 表演船這一格畫哪一級（60_showlod.js）：rbatPrep、drawHulls、玻璃照它
   rbatPrep();                                                         // 模型那一段的表（60_rbatch.js）：陰影、反射、主畫面照同一張畫
   gl.activeTexture(gl.TEXTURE4); gl.bindTexture(gl.TEXTURE_2D_ARRAY, null); gl.activeTexture(gl.TEXTURE0);   // 畫陰影圖時不綁著它（⛔ 綁著 ⇒ 讀寫同一張）
   bedBuild();                                                            // 這一格要換的地形網格先建（63_bed_gl.js）⇒ 陰影與主畫面用同一份
@@ -1002,6 +1003,7 @@ function mainOpaque(fr) {
     var csl = csBuf(); if (csl.n) { cutSet(P.tri, null); gl.uniformMatrix4fv(P.tri.u.uModel, false, CS_ID || (CS_ID = M4.ident())); gl.bindVertexArray(csl.vao); gl.drawArrays(gl.LINES, 0, csl.n); }
   }
   gl.frontFace(gl.CW); gl.useProgram(P.sail.prog); setCommon(P.sail); drawSails(P.sail, RBAT.pd.mn); gl.frontFace(gl.CCW);
+  showlodFarDraw();                                                      // 表演船遠那一級的看板（60_showlod.js；這幾艘上面整艘沒畫）
   bedDraw();                                                             // 陸地與海底（63_bed_gl.js；有海圖才有）
   treeDraw();                                                            // 島上的樹（63_trees.js）
   townDraw();                                                            // 城鎮（63_towns.js；有城才有）
