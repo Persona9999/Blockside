@@ -353,7 +353,7 @@ function drawColours(prog, pd) {                                      // pd：�
   var vb = pd ? pd.b : 0;
   SHIPS.forEach(function (sh, i) {
     var b = sh.poleB; if (!b || !b.n || sh.sink > 40 || (vb && !(RBAT.cs[i] & vb))) return;
-    cutSet(prog, sh); gl.uniformMatrix4fv(prog.u.uModel, false, sh.M);
-    gl.bindVertexArray(b.vao); gl.drawArrays(gl.TRIANGLES, 0, b.n);
+    cutSet(prog, sh); gl.uniformMatrix4fv(prog.u.uModel, false, sh.M); var fo = showlodFadeOut(prog, i);   // 表演船中↔遠交接帶（60_showlod.js）：旗桿照 t 淡出
+    gl.bindVertexArray(b.vao); gl.drawArrays(gl.TRIANGLES, 0, b.n); if (fo) showlodFadeEnd(prog);
   });
 }

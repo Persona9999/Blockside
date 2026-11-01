@@ -189,15 +189,15 @@ function floopFxGlsl() {
 }
 var FLOOP_FX_MAIN = 'void main(){ vec4 w=uModel*vec4(aP,1.0); vW=w.xyz; vN=mat3(uModel)*aN;', FLOOP_DFX_MAIN = 'void main(){ vT=aT; vF=aF; vH=aH; gl_Position=uVP*(uModel*vec4(aP,1.0)); }';
 /** P.sail／P.dsail 的變體（第一次要用時送出編譯，好了才用；編不過 ⇒ 一律照以前，FLOOP.fxBad 記原因）。 */
-function floopFxProg(base) {
+function floopFxProg(base, dith) {                                       // dith：表演船中↔遠交接帶的淡出分身（60_showlod.js showlodDithFS；只有 P.sail 那一支）
   if (!FLOOP_ON || !floopReady() || FLOOP.fxBad) return null;
-  var key = base === P.sail ? 'sail' : base === P.dsail ? 'dsail' : null; if (!key) return null;
-  var F = FLOOP.fx || (FLOOP.fx = {}); if (F[key]) return F[key];
+  var key = base === P.sail ? 'sail' : base === P.dsail ? 'dsail' : null; if (!key || (dith && key !== 'sail')) return null;
+  var F = FLOOP.fx || (FLOOP.fx = {}), fk = dith ? 'sailD' : key; if (F[fk]) return F[fk];
   var vs = key === 'sail' ? SAIL_VS : DSAIL_VS, m = key === 'sail' ? FLOOP_FX_MAIN : FLOOP_DFX_MAIN;
   if (vs.indexOf(m) < 0) { FLOOP.fxBad = 'P.' + key + ' 的頂點著色器換了，對不到要改的那一段'; return null; }
   vs = vs.replace(m, key === 'sail' ? floopFxGlsl() + 'void main(){ vec3 P=aP, N=aN; sailFx(P,N); vec4 w=uModel*vec4(P,1.0); vW=w.xyz; vN=mat3(uModel)*N;'
     : 'layout(location=1) in vec3 aN;\n' + floopFxGlsl() + 'void main(){ vec3 P=aP, N=aN; sailFx(P,N); vT=aT; vF=aF; vH=aH; gl_Position=uVP*(uModel*vec4(P,1.0)); }');
-  try { var p = glProgTry(vs, key === 'sail' ? SAIL_FS : DSAIL_FS); if (p) F[key] = p; return p; }
+  try { var p = glProgTry(vs, key === 'sail' ? (dith ? showlodDithFS(SAIL_FS) : SAIL_FS) : DSAIL_FS); if (p) F[fk] = p; return p; }
   catch (e) { FLOOP.fxBad = String(e && e.message || e).slice(0, 400); console.warn('循環布的帆著色器編不過，照以前畫：' + FLOOP.fxBad); return null; }
 }
 // ── 船：每頂點的循環參數（帆緩衝重做時一起做；11_rig_gpu.js sailBuf） ──
