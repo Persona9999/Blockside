@@ -47,10 +47,10 @@
 //   ⑨ 表演船（Tim 2026-10-26：「船隻可以改為純演出 只有被玩家瞄準或是離玩家船夠近才變成真正的實體船(參考堡壘 開炮才會變敵對」
 //      「甚至繩帆物理在表演船上都可以不用(可以錄製重播或單純固定」「被玩家開火 或是很靠近(可以撞船)」；以前兩艘往來的船進出港擠在一起就互推、撞斷帆桁）：
 //      往來的船平常是表演船（trafficShow）⇒ 不跟別的船碰撞（31_sailing.js collide）、帆與繩不算布（30_rig_physics.js rigFixed；帆照收好那一捲／作品的形狀畫，11_rig_gpu.js sailWalk）。
-//      變成真的船（n.real）：玩家的船對它開火（21_gunnery.js ⇒ trafficProvoke，之後不再變回）、或跟玩家的船隔不到 TRF_REAL_M 公尺（扣掉兩艘各半個船長；
-//      隔到 TRF_SHOW_M 以外才變回表演船 ⇒ 在邊上來回不會一直切換）⇒ 照一般的船碰撞、算布。城鎮模式（停靠中）一律表演船（Tim「城鎮模式(停靠狀態) 可以都固定為表演船」）。
+//      變成真的船（n.real）：玩家的船對它開火（21_gunnery.js ⇒ trafficProvoke，之後不再變回）⇒ 照一般的船碰撞、算布。
+//      ⑭ 之後：表演船 ＝ 演出物件（不在 SHIPS），換成真的船照 ⑭ 那三種；⛔ 不再「跟玩家的船隔不到 30 m 就換」（並排開、擦身而過也換）。城鎮模式（停靠中）一律表演船（Tim「城鎮模式(停靠狀態) 可以都固定為表演船」）。
 //   ⑩ 生的地方要空著（Tim 2026-10-28「另外還需要避免跟其他船隻靠太近(遇到過進入航海時 跟另一艘船重疊)」）：清單只照精細層的位置給，不知道我艦停在哪
-//      （停靠中進航海 ⇒ 我艦就在泊位上，精細層可能把同一格排給一艘商船）⇒ 照那個位置、船頭生下去會跟我艦疊在一起，表演船近到 TRF_REAL_M 就變真的、碰撞硬推開。
+//      （停靠中進航海 ⇒ 我艦就在泊位上，精細層可能把同一格排給一艘商船）⇒ 照那個位置、船頭生下去會跟我艦疊在一起（以前近到 30 m 就變真的、碰撞硬推開；⑭ 之後會撞就換成真的）。
 //      ⇒ 開始做之前（船型載好了）、放上場之前各看一次：它的龍骨線（31_sailing.js keelPts 那一段：水線兩端各往內 15 格）離場上每一艘（堡壘不算：本來就不碰撞）
 //      不到 TRF_GAP_M ⇒ 這一輪不生（做好了也不放、收掉），下一次要清單時照新的位置再看 —— 停港那一格 ⇒ 等我艦開走才出現；開著的 ⇒ 錯開了才生。
 //   ⑪ 敵對（Blocksail TASK-1078；Tim 2026-10-28「目前發現地圖上的海盜顯示為友軍艦隊」「航海模式遇到海盜或是對商船開火 是否可以自動切換到戰鬥模式」）：
@@ -77,7 +77,7 @@
 //        · 進入戰鬥狀態：對它開火、海盜靠到 TRF_PIRATE_M、地球儀上「開打」（trafficHostile 先搬再敵對）；
 //        · 會撞：TRF_HIT_T 秒內推算龍骨線會跟真的船（我艦、交戰中的）靠到 TRF_HIT_M 以內（showHitWhy；並排開、擦身而過都不換）；
 //        · 砲要打到它：我艦瞄準它（setAim）、飛行中的砲彈兩步內會進它的外框（showBallTick，算命中之前）⇒ 第一發不會從演出物件穿過去。
-//      換回（showOff）：沒被打過、沒敵對、沒被瞄著、不會撞、離每一艘真的船都隔 TRF_SHOW_M 以上 ⇒ 搬回 SHIPS 外面（網格不放）；城鎮模式（停靠中）一律換回（Tim 2026-10-26）。
+//      換回（showOff）：沒被打過、沒敵對、沒被瞄著、離我艦、艦隊、敵對或被打過的船（showCore）都隔 TRF_SHOW_M 以上、也不會撞上它們 ⇒ 搬回 SHIPS 外面（網格不放）；城鎮模式（停靠中）一律換回（Tim 2026-10-26）。
 // 讀數：__game.traffic() ⇒ { ships（每艘多 show）, shows, real, showMax, swaps（最近幾次換：哪一艘、哪一種、為什麼、模擬秒）, queue, built, dropped, gap（⑩ 擋下幾次）, gapLast（最後一次：哪一艘、被誰擋、隔幾公尺）, stepMax, stepMs（每一段幾毫秒，最近 200 段）, place（放上場那一步）, launch（⑬ 最近一次）}
 var TRF = { want: {}, build: null, q: [], askT: 0, clockT: 0, built: 0, dropped: 0, gap: 0, gapLast: null, stepMax: 0, stepMs: [], place: [], skip: 0, foeOnce: {}, demo: {}, launch: null, swaps: [] };   // foeOnce：照 foe 敵對過的船隊 id（⑫）；demo：⑬ 演出的假船；launch：⑬ 讀數；swaps：⑭ 讀數
 var SHOWS = [], DRAWN = [];                                              // ⑭ 演出物件；畫面那一側的船（SHIPS 後面接 SHOWS，drawnSync）
@@ -219,11 +219,11 @@ function showDrift(sh, dt) {
   var dy = Math.atan2(-dz, dx) - sh.yaw; dy = Math.atan2(Math.sin(dy), Math.cos(dy)); sh.yaw += dy * Math.min(1, TRF_GLIDE_TURN * dt);
   var F = fwd(sh.yaw), s = Math.min(v * dt, d); sh.px += F[0] * s; sh.pz += F[2] * s; sh.spd = s / dt; sh.vel = mul(F, sh.spd); sh.yawRate = 0;
 }
-/** ⑭ 會撞：sh 跟 SHIPS 裡每一艘真的、會動的船（堡壘不算），照兩艘現在的速度往後推 TRF_HIT_T 秒，龍骨線（⑩ trafficKeel）最近隔不到 TRF_HIT_M ⇒ 理由；不會 ⇒ null。 */
-function showHitWhy(sh) {
+/** ⑭ 會撞：sh 跟 SHIPS 裡每一艘真的、會動的船（堡壘不算；core ⇒ 只算 showCore 那幾艘），照兩艘現在的速度往後推 TRF_HIT_T 秒，龍骨線（⑩ trafficKeel）最近隔不到 TRF_HIT_M ⇒ 理由；不會 ⇒ null。 */
+function showHitWhy(sh, core) {
   var va = sh.vel || [0, 0, 0], ra = (sh.T.hx1 - sh.T.hx0) * S / 2;
   for (var j = 0; j < SHIPS.length; j++) {
-    var o = SHIPS[j]; if (o === sh || o.fixed || o.sunk || !o.T) continue;
+    var o = SHIPS[j]; if (o === sh || o.fixed || o.sunk || !o.T || core && !showCore(o)) continue;
     var vb = o.vel || [0, 0, 0], rb = (o.T.hx1 - o.T.hx0) * S / 2, rx = (va[0] - vb[0]) * TRF_HIT_T, rz = (va[2] - vb[2]) * TRF_HIT_T;
     if (Math.hypot(sh.px - o.px, sh.pz - o.pz) - Math.hypot(rx, rz) > ra + rb + TRF_HIT_M) continue;   // 推到底都靠不到 ⇒ 不用細算
     for (var k = 0; k <= 6; k++) {
@@ -382,15 +382,17 @@ function trafficRealTick() {
     var q = shipCenter(sh), d = Math.hypot(q[0] - c[0], q[2] - c[2]);
     if (d < TRF_PIRATE_M) trafficHostile(sh, '海盜靠到 ' + (d / 1000).toFixed(1) + ' km');
   });
-  trafficReal().forEach(function (sh) {                                  // ⑭ 換回：沒被打過、沒敵對、還沒下完水、沒被瞄著、離每一艘真的船都隔 TRF_SHOW_M 以上、也不會撞
+  trafficReal().forEach(function (sh) {                                  // ⑭ 換回：沒被打過、沒敵對、還沒下完水、沒被瞄著、離 showCore 那幾艘都隔 TRF_SHOW_M 以上、也不會撞上它們
     var n = sh.npc; if (n.shot || n.foe || n.launch || isOut(sh) || SHIPS.some(function (o) { return o.aimOn === sh; })) return;
-    if (showGapMin(sh) > TRF_SHOW_M && !showHitWhy(sh)) showOff(sh, '離開了');
+    if (showGapMin(sh) > TRF_SHOW_M && !showHitWhy(sh, true)) showOff(sh, '離開了');
   });
 }
-/** ⑭ sh 離 SHIPS 裡其他真的、會動的船最近隔幾公尺（中心距離扣掉兩艘各半個船長）。 */
+/** ⑭ 換回時量的對象：SHIPS 裡換不回去的那幾艘 —— 我艦、艦隊、敵對或被打過的往來船（⛔ 連真的往來船也算 ⇒ 擠在一起的幾艘互相留著，一直換不回去）。 */
+function showCore(o) { return !o.fixed && !o.sunk && !(o.npc && !o.npc.foe && !o.npc.shot); }
+/** ⑭ sh 離 showCore 那幾艘最近隔幾公尺（中心距離扣掉兩艘各半個船長）。 */
 function showGapMin(sh) {
   var q = shipCenter(sh), h = (sh.T.hx1 - sh.T.hx0) * S / 2, best = Infinity;
-  SHIPS.forEach(function (o) { if (o === sh || o.fixed || o.sunk) return; var c = shipCenter(o); best = Math.min(best, Math.hypot(q[0] - c[0], q[2] - c[2]) - h - (o.T.hx1 - o.T.hx0) * S / 2); });
+  SHIPS.forEach(function (o) { if (o === sh || !showCore(o)) return; var c = shipCenter(o); best = Math.min(best, Math.hypot(q[0] - c[0], q[2] - c[2]) - h - (o.T.hx1 - o.T.hx0) * S / 2); });
   return best;
 }
 /** 有沒有往來的船正在進出港（⑧）⇒ 城鎮的世界時間暫時照 ×1（08_weather.js wclkRate）。 */

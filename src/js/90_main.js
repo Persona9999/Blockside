@@ -284,6 +284,7 @@ if (DEBUG) window.__game = {
   shipwin: function () { return shipWinStat(); },
   smoke: function () { return { near: SMK_NEAR, far: SMK_FAR, max: SMK_MAX, meal: smokeMeal(), realRule: SMK.realRule, stat: SMK.stat }; },   // 煙源表（78_funnel.js）：每一類範圍內幾根、冒了幾根（真的船的煙囪另計 real）                            // 船窗（63_shipwin.js）：每艘幾扇、哪幾扇亮著、這一格畫了幾扇／幾點
   townLaunch: function (hull) { return trafficLaunchDemo(hull); },           // 下水演出（58_traffic.js ⑬；Blocksail TASK-0899）：附近放得下的水上船廠船台上生一艘（hull 沒給 ⇒ 燕子號）⇒ { ok, id }；讀數看 traffic().launch
+  shows: function () { return SHOWS; },                                         // 演出物件本身（58_traffic.js ⑭；測換成真的船用）
   traffic: function (o) { if (o && o.showMax != null) TRF_SHOW_MAX = Math.max(0, +o.showMax | 0); return trafficInfo(); },   // 往來的船（58_traffic.js）：在場幾艘（演出物件、真的分開）、排隊、做好幾艘、收掉幾艘、建船每一段幾 ms；{ showMax } 改演出物件上限（⑭）
   flow: function () { return FLOW_ST; },                             // ?start=1 分段開戰（70_flow.js startStaged）：幾步、最久一步、每一步幾 ms、全部幾 ms
   bed: function (q) { if (!BED || !BED.A) return null; return { area: BED.A.id, site: BED.site, origin: [BED.ax, BED.az], center: [BED.cx, BED.cy], loaded: Object.keys(BED.ch).sort(), loads: BED.loads, drops: BED.drops, waits: BED.miss,
