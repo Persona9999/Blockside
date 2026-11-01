@@ -17,6 +17,14 @@
 //   遠那一級整艘只畫一張看板：船殼、模型、帆、繩、旗、船員、玻璃都不畫（rbatShip 整艘跳過、viewVis 清掉這艘的位 ⇒ 主畫面、反射都不畫）、不投影（csmOwners）、不給海面遮罩（gpuSlots）；
 //   看板的底在船格子中心那條軸上貼圖最下面那一格的高度、照船的矩陣走（橫搖、縱搖不跟）；燈的光暈、船窗的光點、水花照舊。帆照船現在的帆段（0 全收、其他 ⇒ 戰鬥帆那一套）。
 //   貼圖還沒解好、著色器還沒編好、鏡頭外剔除關著（RBAT.cull）⇒ 那一格照中那一級畫（讀數 farMid）。
+// 近↔中交接帶（L.n ± L.nb，不乘倍率；同建築 TOWN_FADE 那一套：同一個抖動、兩級互補 ⇒ 同一個像素只有一級）：交接帶裡的船記成第 3 級，
+//   畫法照近那一級（rbatShip 整份、陰影、玻璃都照近），主畫面與反射多兩樣：原模船殼與烘進低模的模型、裝飾、平滑面照 t 淡出，低模照 t 淡入（t ＝ smoothstep(n − nb, n + nb, 距離)）；
+//   帆、繩、旗、船員、會動的模型兩級本來就一樣 ⇒ 照畫一次。淡出淡入是著色器的 uShowD（01_gl.js SHOWD_GLSL；P.vox、P.tri 有，陰影那幾支沒有 ⇒ 陰影照近那一級整份）。
+//   模型那一段：rbatColour 不把交接帶的船放進跨船合批（同鏡頭外那樣留組），另外照表一件一件用 P.tri 畫（showlodBandModels）；rbatReplay 照同一條判淡出。
+// 中↔遠交接帶（L.f × lk ± L.fb × lk，同建築）：記成第 4 級，照中那一級畫（陰影、遮罩以外的照中），主畫面與反射裡這艘畫的每一樣（低模、模型、帆、繩、旗）照 t 淡出、看板照 t 淡入；
+//   不給海面遮罩（同遠那一級：看板水面下那一截要被海蓋住）；船員到看板全滿才不畫（硬換，800 m 外看不出來）。
+//   帆：⛔ 不改 P.sail 本身（SAIL_FS 多一個分支，編譯器排出來的指令就不一樣：戰鬥模式 render_lab ports_high 106 像素差 1）⇒ 交接帶的船另外用淡出的分身畫（showlodBandSails：
+//   P.sail 與循環布 11_rig_loop.js floopFxProg 各一支，原始碼照抄再插 SHOWD_GLSL；還沒編好 ⇒ 照原本那支畫、不淡出）。船殼、模型的 P.vox、P.tri 直接帶 uShowD（戰鬥模式逐位元相同）。
 // 不分級（照原模畫，讀數記在 none）：不是表演船（我艦、敵對了的、被打過的 npc.real）、格子被打掉過（grid.ver ≠ 0）、那一型沒烘或指紋對不上。
 // 指紋：config/vxk_lock.json 那一型的 c:（成品 blockside-src 的 files 記前 12 碼）＋ SHOWLOD_V（算法改了就加一）⇒ 對不上那一型不分級（照原模，不會畫錯）。
 // 開關：?showlod=0（或 ?rb=0）⇒ 跟改前一樣；?debug=1 下 __game.showlod(false／true)。⛔ 只動畫面：不讀寫模擬的狀態、不抽 rnd()、不改 SHIPS 的順序。
@@ -24,12 +32,13 @@ var SHOWLOD_V = 3, SHOWLOD_K = 4, SHOWLOD_FILL = 12, SHOWLOD_LK = 24;
 var SHOWLOD_IM = { ppm: 2, pmin: 0.5, ss: 2, dirs: 8, sets: [0, 2] };   // 遠那一級的貼圖：每公尺幾像素（÷ 倍率 lk、取到 0.25、最少 pmin：800 m × lk 的地方 1440 p 畫面一像素約 0.54 m × lk）、先拍幾倍再平均、幾個方向、哪兩套帆段（31_sailing.js SAILSETS：全收、戰鬥帆）
 var SHOWLOD = {
   on: RBAT_ON && Q.get('showlod') !== '0',
-  L: { n: 160, nb: 24, f: 800, fb: 60 },                               // 距離表（公尺）：n 近→中、f 中→遠（× lk）；nb、fb 交接帶的半寬（還沒用：交接帶先硬換）
+  L: { n: 160, nb: 24, f: 800, fb: 60 },                               // 距離表（公尺）：n 近→中、f 中→遠（× lk）；nb、fb 交接帶的半寬（nb 不乘 lk、fb × lk；見檔頭）
   st: 0, err: null, raw: null,                                           // 檔：0 還沒要、1 在載、2 好了、3 載不到（err）；raw ＝ 檔裡每一型還沒解的那一份
   T: {},                                                                 // 船型 id ⇒ { rs, L（off、縮放 4 的局部矩陣）, lk, mk、dk（烘進去的模型、裝飾序號：1）, quads, im（遠那一級：貼圖與尺寸；沒烘 ⇒ null） } ／ null（沒有、對不上）／ 'busy'（在解）
-  lv: new Uint8Array(16), Mm: new Float32Array(256), B: new Float32Array(192),   // 這一格第 o 艘畫哪一級（0 近、1 中、2 遠）、中那一級的矩陣（Mm[o·16 …]）、遠那一級的看板（B[o·12 …]：底的中心、高；右 × 寬；貼圖的 u0、v0、寬、高）
+  lv: new Uint8Array(16), Mm: new Float32Array(256), B: new Float32Array(192),   // 這一格第 o 艘畫哪一級（0 近、1 中、2 遠、3 近↔中交接帶、4 中↔遠交接帶）、中那一級的矩陣（Mm[o·16 …]；交接帶也有）、遠那一級的看板（B[o·12 …]：底的中心、高；右 × 寬；貼圖的 u0、v0、寬、高）
+  fd: new Float32Array(16),                                              // 交接帶的 t（第 o 艘；0 ＝ 全是前一級 → 1 ＝ 全是後一級）
   prog: null, vao: null,                                                 // 遠那一級的著色器（glProgTry：編好之前照中那一級畫）、看板的四邊形
-  stat: { f: -1, near: 0, mid: 0, far: 0, farMid: 0, none: 0, quads: 0, ms: 0 }
+  stat: { f: -1, near: 0, band: 0, mid: 0, farBand: 0, far: 0, farMid: 0, none: 0, quads: 0, ms: 0 }
 };
 /** 一型的倍率：格子長、寬、高最大的那一邊（公尺）÷ 24，限 1～4（同建築 63_towns.js 的 lk）。 */
 function showlodLk(G) { return clamp(Math.max(G.sx, G.sy, G.sz) * S / SHOWLOD_LK, 1, 4); }
@@ -77,8 +86,8 @@ function showlodType(T) {
 /** 這一格每艘畫哪一級（frameBegin：rbatPrep 之前；鏡頭、內插過的 sh.M 都定了）。 */
 function showlodPrep() {
   var D = SHOWLOD, ns = SHIPS.length, st = D.stat, eye = CAM.eye, t0 = performance.now(), o;
-  if (D.lv.length < ns) { D.lv = new Uint8Array(ns * 2); D.Mm = new Float32Array(ns * 32); D.B = new Float32Array(ns * 24); }
-  st.f = RFR; st.near = st.mid = st.far = st.farMid = st.none = st.quads = 0;
+  if (D.lv.length < ns) { D.lv = new Uint8Array(ns * 2); D.Mm = new Float32Array(ns * 32); D.B = new Float32Array(ns * 24); D.fd = new Float32Array(ns * 2); }
+  st.f = RFR; st.near = st.band = st.mid = st.farBand = st.far = st.farMid = st.none = st.quads = 0;
   var fp = null;                                                         // 遠那一級的著色器：第一艘要用時才送出編譯（編好之前照中那一級）
   for (o = 0; o < ns; o++) {
     var sh = SHIPS[o]; D.lv[o] = 0;
@@ -86,15 +95,78 @@ function showlodPrep() {
     if (!D.on || !eye || !trafficShow(sh) || sh.grid.ver !== 0) { st.none++; continue; }
     if (!D.st) showlodNeed();
     var t = showlodType(sh.T); if (!t) { st.none++; continue; }
-    var G = sh.grid, M = sh.M, cx = G.sx / 2, cy = G.sy / 2, cz = G.sz / 2;
-    var wx = M[0] * cx + M[4] * cy + M[8] * cz + M[12], wz = M[2] * cx + M[6] * cy + M[10] * cz + M[14], d = Math.hypot(wx - eye[0], wz - eye[2]);
-    if (d < D.L.n) { st.near++; continue; }
-    var far = d >= D.L.f * t.lk;
-    if (far && t.im && RBAT.cull && (fp || (fp = showlodFarProg()))) { D.lv[o] = 2; showlodFarSet(o, sh, t.im, eye); st.far++; continue; }
+    var M = sh.M, d = showlodDist(sh);
+    if (d < D.L.n - D.L.nb) { st.near++; continue; }
+    if (d < D.L.n + D.L.nb) { D.lv[o] = 3; D.fd[o] = showlodSmooth(D.L.n - D.L.nb, D.L.n + D.L.nb, d); m4Into(D.Mm, o * 16, M, t.L); st.quads += t.quads; st.band++; continue; }   // 近↔中交接帶（見檔頭）
+    var F0 = (D.L.f - D.L.fb) * t.lk, F1 = (D.L.f + D.L.fb) * t.lk, far = d >= F0, ok = far && t.im && RBAT.cull && (fp || (fp = showlodFarProg()));
+    if (ok && d >= F1) { D.lv[o] = 2; showlodFarSet(o, sh, t.im, eye); st.far++; continue; }
     D.lv[o] = 1; m4Into(D.Mm, o * 16, M, t.L); st.quads += t.quads;
-    if (far) st.farMid++; else st.mid++;                                 // farMid：該畫貼圖、這一格還不行（見檔頭）⇒ 照中那一級
+    if (ok) { D.lv[o] = 4; D.fd[o] = showlodSmooth(F0, F1, d); showlodFarSet(o, sh, t.im, eye); st.farBand++; }   // 中↔遠交接帶（見檔頭）：低模那一份也要
+    else if (far) st.farMid++; else st.mid++;                            // farMid：該畫貼圖、這一格還不行（見檔頭）⇒ 照中那一級
   }
   st.ms = performance.now() - t0;
+}
+/** 中↔遠交接帶（第 4 級）：程式有 uShowD（主畫面、反射）⇒ 這艘接下來畫的照 t 淡出，回 true（畫完叫 showlodFadeEnd）；陰影那幾支沒有 ⇒ false、照中那一級整份。 */
+function showlodFadeOut(prog, o) {
+  if (SHOWLOD.lv[o] !== 4 || !prog.u.uShowD) return false;
+  gl.uniform2f(prog.u.uShowD, SHOWLOD.fd[o], 1); return true;
+}
+function showlodFadeEnd(prog) { gl.uniform2f(prog.u.uShowD, 0, 0); }
+/** 帆的著色器插上交接帶的淡出（SHOWD_GLSL＋main 開頭 showCut）；對不到 main ⇒ null（照原本那支畫）。 */
+function showlodDithFS(fs) { return fs.indexOf('void main(){') < 0 ? null : fs.replace('void main(){', SHOWD_GLSL + 'void main(){ if(showCut()) discard;'); }
+/** drawSails（主畫面、反射）：中↔遠交接帶那幾艘的帆用淡出的分身畫（見檔頭）；畫完 prog 綁回去。 */
+function showlodBandSails(prog, L, pd) {
+  var D = SHOWLOD, bt = null, cur = null;
+  if (!D.sail && !D.sailBad) { var fs = showlodDithFS(SAIL_FS); if (!fs) D.sailBad = true; else { try { D.sail = glProgTry(SAIL_VS, fs); } catch (e) { D.sailBad = true; } } }
+  L.forEach(function (o) {
+    var ow = SHIPS[o], fx = ow.fx && ow.sb.fxOn, p = fx ? floopFxProg(P.sail, true) || floopFxProg(P.sail) || prog : D.sail || prog;
+    if (p !== cur) {
+      gl.useProgram(p.prog); setCommon(p); cur = p; bt = null;
+      if (p.u.uSailT) gl.uniform1i(p.u.uSailT, SAIL_UNIT); if (p.u.uFireT) gl.uniform1f(p.u.uFireT, BURN.sailBurn); if (fx && p !== prog) floopBind(p);
+    }
+    cutSet(p, ow); gl.uniformMatrix4fv(p.u.uModel, false, ow.M); if (fx && p !== prog) floopFxSet(p, ow);
+    if (p.u.uShowD) gl.uniform2f(p.u.uShowD, D.fd[o], 1);
+    var st = ow.T && ow.T.sailTexGL;
+    if (!st || st !== bt) { gl.activeTexture(gl.TEXTURE0 + SAIL_UNIT); gl.bindTexture(gl.TEXTURE_2D, bt = sailTex(ow.T)); gl.activeTexture(gl.TEXTURE0); }
+    gl.bindVertexArray(ow.sb.vao); gl.drawElements(gl.TRIANGLES, ow.sb.n, gl.UNSIGNED_INT, 0);
+    if (p.u.uShowD) gl.uniform2f(p.u.uShowD, 0, 0);
+  });
+  gl.useProgram(prog.prog);
+}
+/** 這一格這艘不給海面遮罩（60_render.js gpuSlots）：遠那一級、中↔遠交接帶（看板水面下那一截要被海蓋住）。 */
+function showlodNoMask(o) { var v = SHOWLOD.lv[o]; return v === 2 || v === 4; }
+/** GLSL 的 smoothstep（a ≤ x ≤ b ⇒ 0～1 的 S 形）。 */
+function showlodSmooth(a, b, x) { var t = clamp((x - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); }
+/** drawHulls 的交接帶（第 3 級）：程式有 uShowD（主畫面、反射的 P.vox）⇒ 原模照 t 淡出（回 true：呼叫的人接著照原樣畫原模，再叫 showlodBandLow）；沒有（陰影）⇒ 回 false、照近那一級。 */
+function showlodBandOut(prog, o) {
+  if (SHOWLOD.lv[o] !== 3 || !prog.u.uShowD) return false;
+  gl.uniform2f(prog.u.uShowD, SHOWLOD.fd[o], 1); return true;
+}
+/** 交接帶：原模畫完 ⇒ 低模照 t 淡入、uShowD 放回 0（裝甲在這之後照常畫：兩級都有）。 */
+function showlodBandLow(prog, o, sh) {
+  gl.uniform2f(prog.u.uShowD, SHOWLOD.fd[o], -1); showlodHull(prog, o, SHOWLOD.T[sh.T.id]);
+  gl.uniform2f(prog.u.uShowD, 0, 0); cutSet(prog, sh); vlampSet(prog, sh);
+}
+/** 表裡第 i 項是不是烘進低模的那一份（同 rbatShip 中那一級跳過的那條：模型 mk 且這一刻純平移、裝飾 dk 且沒在轉、平滑面全部；裝甲的平滑面不是）。 */
+function showlodBaked(t, i) {
+  var R = RBAT, c = R.cls[i], k = R.slot[i], x = R.ref[i];
+  return c === 2 || (c === 0 && !!t.mk[k] && showlodPlain(x)) || (c === 1 && !!t.dk[k] && !x.L);
+}
+/** rbatColour（主畫面、反射）：交接帶的船（第 3、4 級）沒進跨船合批 ⇒ 這裡照表一件一件用 P.tri 畫：第 3 級烘進低模的那幾件、第 4 級全部照 t 淡出（算式同 rbatReplay）。 */
+function showlodBandModels(pd) {
+  var D = SHOWLOD, R = RBAT, u = P.tri.u, b = pd.b, cs = R.cs, g = NaN, o, i, e;
+  if (!D.stat.band && !D.stat.farBand) return;
+  gl.useProgram(P.tri.prog); setCommon(P.tri); gl.uniform1f(u.uLit, 1); gl.vertexAttrib2f(3, 0, 0.5);
+  for (o = 0; o < R.ns; o++) {
+    var sh = R.own[o], lv = D.lv[o]; if (lv < 3 || sh.sink > 40 || (b && !(cs[o] & b))) continue;
+    var t = D.T[sh.T.id], f = D.fd[o], on = -1; cutSet(P.tri, sh);
+    for (i = R.i0[o], e = R.i0[o + 1]; i < e; i++) {
+      var bk = lv === 4 || showlodBaked(t, i) ? 1 : 0;   // 4：中↔遠交接帶 ⇒ 這艘的模型全部淡出 if (bk !== on) gl.uniform2f(u.uShowD, f, on = bk);
+      if (R.cls[i] < 2) { gl.uniformMatrix4fv(u.uModel, false, R.M, i * 16, 16); if (R.glow[i] !== g) gl.uniform1f(u.uGlow, g = R.glow[i]); gl.bindVertexArray(R.vao[i]); gl.drawArrays(gl.TRIANGLES, 0, R.cnt[i]); }
+      else { if (!R.slot[i]) { gl.uniformMatrix4fv(u.uModel, false, R.M, i * 16, 16); if (g !== 0) gl.uniform1f(u.uGlow, g = 0); } gl.bindVertexArray(R.vao[i]); gl.drawElements(gl.TRIANGLES, R.cnt[i], gl.UNSIGNED_INT, R.off[i]); }
+    }
+  }
+  gl.uniform2f(u.uShowD, 0, 0); gl.uniform1f(u.uGlow, 0); cutSet(P.tri, null);
 }
 /** 遠那一級的看板（第 o 艘，寫進 B[o·12 …]）：取最接近視線的那個方向（船的格座標 x、y 平面上 φk 那一邊，照船現在的矩陣換到世界、只看水平）、照帆段取那一列。 */
 function showlodFarSet(o, sh, im, eye) {
@@ -113,8 +185,8 @@ function showlodFarSet(o, sh, im, eye) {
 // 遠那一級的著色器：四邊形 aQ ∈ [−½, ½] × [0, 1]；uA ＝ (底的中心, 高)、uB ＝ (右 × 寬, —)、uU ＝ (u0, v0, u 寬, v 高)。光照同城鎮的貼圖（63_towns.js TOWN_BB_FS）。
 var SHOWLOD_VS = '#version 300 es\nlayout(location=0) in vec2 aQ; uniform mat4 uVP; uniform vec4 uA, uB, uU; out vec2 vT; out vec3 vW;\n' +
   'void main(){ vec3 w=uA.xyz+uB.xyz*aQ.x+vec3(0.0,aQ.y*uA.w,0.0); vW=w; vT=vec2(uU.x+(aQ.x+0.5)*uU.z, uU.y+(1.0-aQ.y)*uU.w); gl_Position=uVP*vec4(w,1.0); }\n';
-var SHOWLOD_FS = '#version 300 es\nprecision highp float;\nuniform sampler2D uTex; uniform vec3 uEye,uFog,uBkK; uniform float uFogD,uSunK,uClip; in vec2 vT; in vec3 vW; out vec4 o;\n' +
-  'void main(){ if(vW.y<uClip) discard; vec4 t=texture(uTex,vT); if(t.a<0.5) discard; vec3 col=t.rgb*(0.62+0.38*uSunK)*uBkK;\n' +
+var SHOWLOD_FS = '#version 300 es\nprecision highp float;\n' + SHOWD_GLSL + 'uniform sampler2D uTex; uniform vec3 uEye,uFog,uBkK; uniform float uFogD,uSunK,uClip; in vec2 vT; in vec3 vW; out vec4 o;\n' +
+  'void main(){ if(vW.y<uClip) discard; if(showCut()) discard; vec4 t=texture(uTex,vT); if(t.a<0.5) discard; vec3 col=t.rgb*(0.62+0.38*uSunK)*uBkK;\n' +
   ' float fd=length(vW-uEye); o=vec4(mix(col,uFog,1.0-exp(-fd*uFogD)),1.0); }\n';
 /** 遠那一級的著色器與四邊形（glProgTry：還沒編好回 null）。 */
 function showlodFarProg() {
@@ -134,25 +206,31 @@ function showlodTex(im, px) {
   gl.bindTexture(gl.TEXTURE_2D, null); gl.activeTexture(gl.TEXTURE0);
   return { tex: t, wm: im.cw / im.ppm, hm: im.ch / im.ppm, z0: im.z0 };
 }
-/** 遠那一級（主畫面 mainOpaque 帆之後、反射 reflPass 船殼之後）：每艘一張看板（一次一個 drawArrays；遠的船不多）。 */
+/** 遠那一級與中↔遠交接帶（主畫面 mainOpaque 帆之後、反射 reflPass 船殼之後）：每艘一張看板（一次一個 drawArrays；遠的船不多）。 */
 function showlodFarDraw() {
-  var D = SHOWLOD; if (!D.stat.far || !D.prog) return;
+  var D = SHOWLOD; if ((!D.stat.far && !D.stat.farBand) || !D.prog) return;
   var p = D.prog, u = p.u, cf = gl.isEnabled(gl.CULL_FACE), bt = null;
   gl.useProgram(p.prog); setCommon(p); gl.disable(gl.CULL_FACE);
   gl.activeTexture(gl.TEXTURE11); gl.uniform1i(u.uTex, 11); gl.bindVertexArray(D.vao);
   for (var o = 0, ns = SHIPS.length; o < ns; o++) {
-    if (D.lv[o] !== 2) continue;
+    var lv = D.lv[o]; if (lv !== 2 && lv !== 4) continue;
     var tx = D.T[SHIPS[o].T.id].im.tex; if (tx !== bt) gl.bindTexture(gl.TEXTURE_2D, bt = tx);
+    gl.uniform2f(u.uShowD, lv === 4 ? D.fd[o] : 0, lv === 4 ? -1 : 0);   // 中↔遠交接帶：看板照 t 淡入
     gl.uniform4fv(u.uA, D.B, o * 12, 4); gl.uniform4fv(u.uB, D.B, o * 12 + 4, 4); gl.uniform4fv(u.uU, D.B, o * 12 + 8, 4);
     gl.drawArrays(gl.TRIANGLES, 0, 6);
   }
   gl.bindVertexArray(null); gl.activeTexture(gl.TEXTURE0); if (cf) gl.enable(gl.CULL_FACE);
 }
+/** 鏡頭到船格子中心的水平距離（換級照它；63_shipwin.js 船窗的近↔中也照它）。 */
+function showlodDist(sh) {
+  var G = sh.grid, M = sh.M, cx = G.sx / 2, cy = G.sy / 2, cz = G.sz / 2, e = CAM.eye;
+  return Math.hypot(M[0] * cx + M[4] * cy + M[8] * cz + M[12] - e[0], M[2] * cx + M[6] * cy + M[10] * cz + M[14] - e[2]);
+}
 /** 第 o 艘這一格畫中那一級 ⇒ 那一型的資料；不是 ⇒ null（rbatShip、drawHulls、glsDraw 照它跳過或換畫）。 */
-function showlodMid(o, sh) { return SHOWLOD.lv[o] === 1 ? SHOWLOD.T[sh.T.id] : null; }
-/** drawHulls 的中那一級：低模（同一支 P.vox／P.dvox；不剖面、不給船殼上的燈）。 */
+function showlodMid(o, sh) { var v = SHOWLOD.lv[o]; return v === 1 || v === 4 ? SHOWLOD.T[sh.T.id] : null; }   // 4：中↔遠交接帶也照中那一級
+/** drawHulls 的中那一級：低模（同一支 P.vox／P.dvox；不剖面、不給船殼上的燈）。中↔遠交接帶照 t 淡出（裝甲畫完呼叫的人 showlodFadeEnd）。 */
 function showlodHull(prog, o, t) {
-  cutSet(prog, null); vlampSet(prog, null);
+  cutSet(prog, null); vlampSet(prog, null); showlodFadeOut(prog, o);
   gl.uniformMatrix4fv(prog.u.uModel, false, SHOWLOD.Mm, o * 16, 16);
   t.rs.draw();
 }

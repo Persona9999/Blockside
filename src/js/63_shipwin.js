@@ -94,14 +94,14 @@ function winOne(C, P, occ, sx, sy, sz, K, mpv) {
 //   哪扇亮：雜湊（63_towns.js twH，同建築）照船的穩定 id ＋ 第幾扇 —— 往來的船用清單的 id（npc.id）、其他的船用開場時的序號（SHIPS 的序號會往前補，⛔ 不能直接用）；
 //     幾成亮：船的窗夜裡全亮（shipWinFrac；Tim 2026-10-31「希望船的窗戶燈都維持全開」）；?shipwinpart=1 ⇒ 照城裡窗的鐘點表 TOD_WIN 亮幾成（對照組）。
 //     ⛔ 不照世界座標（船會動 ⇒ 一直換）；?shipwinxz=1 ⇒ 改回照船心的世界 x、z（對照組：同一個讀數報得出換掉的窗，要跟 ?shipwinpart=1 一起開）。
-//   近（船心離鏡頭 < 近那一級的距離 TOWN_LOD[0]，交接帶 TOWN_BAND[0]，同建築、同表演船的分級）：窗片（貼在那一團外面、往外 0.08 格；只畫朝鏡頭那一面 ⇒ 從艙裡看不到）；
+//   近（離鏡頭 < 表演船近那一級的距離 SHOWLOD.L.n，交接帶 L.nb；距離 ＝ showlodDist：鏡頭到船格子中心的水平距離 ⇒ 跟船殼換級同一個數、同一個抖動，60_showlod.js）：窗片（貼在那一團外面、往外 0.08 格；只畫朝鏡頭那一面 ⇒ 從艙裡看不到）；
 //   遠：每扇一個光點（看板、最小 TL_PX 像素，同城裡的光點）。都跟著船的矩陣 sh.M 走。
 //   玻璃打掉（15_smooth.js glsTouch）⇒ 那艘的窗重建：那一扇有任何一格玻璃不在了 ⇒ 不亮。
 // ?shipwin=0 ⇒ 不畫（量效能的對照組）。讀數 __game.shipwin()：每艘亮著哪幾扇。
 var SHIPWIN = { on: Q.get('shipwin') !== '0', xz: Q.get('shipwinxz') === '1', part: Q.get('shipwinpart') === '1', prog: null, progJ: null, quad: null, stat: { ships: 0, cards: 0, glow: 0, ms: 0 } };
-var SHIPWIN_VS = '#version 300 es\nlayout(location=0) in vec4 aP; layout(location=1) in vec3 aN; uniform mat4 uVP, uModel; uniform vec3 uEye; uniform vec2 uKey; uniform float uTWin, uTLT;\n' +
+var SHIPWIN_VS = '#version 300 es\nlayout(location=0) in vec4 aP; layout(location=1) in vec3 aN; uniform mat4 uVP, uModel; uniform vec3 uEye; uniform vec2 uKey; uniform float uTWin, uTLT, uD;\n' +
   'out vec3 vW; out float vD; flat out vec3 vCol;\n' + TL_HASH_GLSL +
-  'void main(){ vec3 w=(uModel*vec4(aP.xyz,1.0)).xyz, n=mat3(uModel)*aN; float h=twH(uKey,aP.w); vW=w; vD=length(uModel[3].xz-uEye.xz); vCol=vec3(0.0);\n' +
+  'void main(){ vec3 w=(uModel*vec4(aP.xyz,1.0)).xyz, n=mat3(uModel)*aN; float h=twH(uKey,aP.w); vW=w; vD=uD; vCol=vec3(0.0);\n' +
   ' if(h>=uTWin || dot(uEye-w,n)<=0.0){ gl_Position=vec4(2.0,2.0,2.0,1.0); return; }\n' +   // 背對鏡頭（從艙裡看）⇒ 不畫
   ' vCol=twCol(h)*(0.94+0.06*sin(uTLT*(1.3+fract(h*7.0))+h*40.0)); gl_Position=uVP*vec4(w,1.0); }\n';
 var SHIPWIN_FS = function () {
@@ -110,9 +110,9 @@ var SHIPWIN_FS = function () {
 };
 // 光點：四邊形 aQ ∈ [−½, ½] × [0, 1]；aA ＝ (窗心（格座標）, 半徑 m)、aB ＝ (往外（格座標）, 第幾扇)
 var SHIPWIN_GLOW_VS = '#version 300 es\nlayout(location=0) in vec2 aQ; layout(location=4) in vec4 aA; layout(location=5) in vec4 aB;\n' +
-  'uniform mat4 uVP, uModel; uniform vec3 uEye, uR, uU; uniform vec2 uKey, uWin; uniform float uPx, uTLK, uTWin, uFogD; out vec2 vQ; flat out vec3 vCol;\n' + TL_HASH_GLSL +
+  'uniform mat4 uVP, uModel; uniform vec3 uEye, uR, uU; uniform vec2 uKey, uWin; uniform float uPx, uTLK, uTWin, uFogD, uD; out vec2 vQ; flat out vec3 vCol;\n' + TL_HASH_GLSL +
   'void main(){ vec3 p=(uModel*vec4(aA.xyz,1.0)).xyz, e=uEye-p, nw=normalize(mat3(uModel)*aB.xyz); float d=length(e), h=twH(uKey,aB.w), k=h<uTWin?uTLK:0.0;\n' +
-  ' k*=smoothstep(uWin.x,uWin.y,length(uModel[3].xz-uEye.xz))*smoothstep(-0.05,0.3,dot(nw,e/max(d,0.001)));\n' +
+  ' k*=smoothstep(uWin.x,uWin.y,uD)*smoothstep(-0.05,0.3,dot(nw,e/max(d,0.001)));\n' +
   ' float s=max(aA.w,uPx*d*' + TL_PX.toFixed(2) + '); k*=pow(aA.w/s,0.3)*exp(-d*uFogD*0.5);\n' +
   ' vQ=vec2(aQ.x*2.0,aQ.y*2.0-1.0); vCol=twCol(h)*k; if(k<=0.003){ gl_Position=vec4(2.0,2.0,2.0,1.0); return; }\n' +
   ' vec3 w=p+e/max(d,0.001)*min(s*0.7,d*0.5)+(uR*vQ.x+uU*vQ.y)*s; gl_Position=uVP*vec4(w,1.0); }\n';
@@ -183,22 +183,22 @@ function shipWinDraw() {
   if (!SHIPWIN.on || TOD0 === null || !(TOD_LIT > 0) || PASS.vp || cutOn()) return;
   var L = SHIPS.filter(function (sh) { return sh.T.glsXYZ && sh.sink <= 40 && shipWins(sh.T).length; }); if (!L.length) return;
   var Pg = shipWinProgs(); if (!Pg) return;
-  var t0 = performance.now(), L0 = TOWN_LOD[0], B0 = TOWN_BAND[0], cf = gl.isEnabled(gl.CULL_FACE);
+  var t0 = performance.now(), L0 = SHOWLOD.L.n, B0 = SHOWLOD.L.nb, cf = gl.isEnabled(gl.CULL_FACE);   // 近↔中換級同表演船（60_showlod.js）：同一組常數、同一個距離
   gl.disable(gl.CULL_FACE); gl.enable(gl.BLEND); gl.blendFunc(gl.ONE, gl.ONE); gl.depthMask(false);
   var PW = Pg.win; gl.useProgram(PW.prog); setCommon(PW);
   gl.uniform1f(PW.u.uTWin, shipWinFrac()); gl.uniform1f(PW.u.uTLK, TOD_LIT); gl.uniform1f(PW.u.uTLT, SIMT); gl.uniform2f(PW.u.uIn, -2, -1); gl.uniform2f(PW.u.uOut, L0 - B0, L0 + B0);
   L.forEach(function (sh) {
     if (!sh.winM || sh.winD) shipWinBuild(sh); st.ships++;
-    if (!sh.winM.n || Math.hypot(sh.M[12] - CAM.eye[0], sh.M[14] - CAM.eye[2]) > L0 + B0) return;
-    var k = shipWinKeyXZ(sh); gl.uniform2f(PW.u.uKey, k[0], k[1]); gl.uniformMatrix4fv(PW.u.uModel, false, sh.M);
+    var d = showlodDist(sh); if (!sh.winM.n || d > L0 + B0) return;
+    var k = shipWinKeyXZ(sh); gl.uniform2f(PW.u.uKey, k[0], k[1]); gl.uniformMatrix4fv(PW.u.uModel, false, sh.M); gl.uniform1f(PW.u.uD, d);
     gl.bindVertexArray(sh.winM.vao); gl.drawArrays(gl.TRIANGLES, 0, sh.winM.n); st.cards += sh.winM.ok.length;
   });
   var PG = Pg.glow, f = norm(sub(CAM.look, CAM.eye)), r = norm([-f[2], 0, f[0]]), u = [r[1] * f[2] - r[2] * f[1], r[2] * f[0] - r[0] * f[2], r[0] * f[1] - r[1] * f[0]];   // 鏡頭的右、上
   gl.useProgram(PG.prog); setCommon(PG); gl.uniform3fv(PG.u.uR, r); gl.uniform3fv(PG.u.uU, u);
   gl.uniform1f(PG.u.uPx, 2 * Math.tan(0.45) / CAM.h); gl.uniform1f(PG.u.uTLK, TOD_LIT); gl.uniform1f(PG.u.uTWin, shipWinFrac()); gl.uniform2f(PG.u.uWin, L0 - B0, L0 + B0);
   L.forEach(function (sh) {
-    if (!sh.winM.ng || Math.hypot(sh.M[12] - CAM.eye[0], sh.M[14] - CAM.eye[2]) < L0 - B0) return;
-    var k = shipWinKeyXZ(sh); gl.uniform2f(PG.u.uKey, k[0], k[1]); gl.uniformMatrix4fv(PG.u.uModel, false, sh.M);
+    var d = showlodDist(sh); if (!sh.winM.ng || d < L0 - B0) return;
+    var k = shipWinKeyXZ(sh); gl.uniform2f(PG.u.uKey, k[0], k[1]); gl.uniformMatrix4fv(PG.u.uModel, false, sh.M); gl.uniform1f(PG.u.uD, d);
     gl.bindVertexArray(sh.winM.gvao); gl.drawArraysInstanced(gl.TRIANGLES, 0, 6, sh.winM.ng); st.glow += sh.winM.ng;
   });
   gl.bindVertexArray(null); gl.depthMask(true); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA); if (cf) gl.enable(gl.CULL_FACE);

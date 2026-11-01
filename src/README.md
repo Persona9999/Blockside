@@ -139,6 +139,8 @@ python -I admin.py parts
 python -I admin.py authors
 # 匯入檢查（import／reimport／metasync 之後會自動跑）：缺 meta、砲班站不滿、開場就掉的 ⇒ ../reports/shipcheck_<代號>.md（不入版控）
 python -I admin.py shipcheck --id phoenix    # 不給 --id ＝ 每一艘
+# 表演船的低模與貼圖（TASK-1104；SHOW_SPEC §5）：import／reimport 之後會自動烘那一型 ⇒ ships/showlod.js 跟著換（要一起提交；不提交 ⇒ 遊戲裡那一型指紋對不上、退回原模）
+python -I admin.py showlod --check          # 列出每一型對不對得上；--id <船> 單烘、--force 指紋一樣也重烘
 # 樓梯自檢（TASK-0838；Tim 2026-10-23：松島號甲板下的樓梯偏移、梯口有洞、樓梯口被堵死）：每座梯子量梯口的洞、兩端站不站得住、走不走得出去
 #   ⇒ ../reports/ladcheck_<代號>.md（每座的座標、修法、梯口那一層的平面圖）；不給 --id ＝ 每一艘，另寫 ../reports/ladcheck.md（各船幾座有問題）。
 #   shipcheck 也會順手寫這份、它的報告多一行「樓梯自檢」讀數，每個問題也列成一筆 ✗／⚠（「樓梯：…」）。只讀：不寫卡片、不動設定。

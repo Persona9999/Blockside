@@ -160,7 +160,9 @@ function rbatReplay(prog, pd) {
     var sh = R.own[o];
     if (sh.sink > 40 || (b && !(cs[o] & b))) continue;
     cutSet(prog, sh);                                                   // 剖面與隱藏甲板（74_cutaway.js）
+    var bl = SHOWLOD.lv[o], bt = u.uShowD && bl >= 3 ? SHOWLOD.T[sh.T.id] : null, bo = -1;   // 表演船的交接帶：第 3 級烘進低模的那幾件、第 4 級全部淡出（同 showlodBandModels）
     for (i = R.i0[o], e = R.i0[o + 1]; i < e; i++) {
+      if (bt) { var bk = bl === 4 || showlodBaked(bt, i) ? 1 : 0; if (bk !== bo) gl.uniform2f(u.uShowD, SHOWLOD.fd[o], bo = bk); }
       if (R.cls[i] < 2) {
         gl.uniformMatrix4fv(u.uModel, false, M, i * 16, 16);
         if (gu && R.glow[i] !== g) gl.uniform1f(gu, g = R.glow[i]);
@@ -170,6 +172,7 @@ function rbatReplay(prog, pd) {
         gl.bindVertexArray(R.vao[i]); gl.drawElements(gl.TRIANGLES, R.cnt[i], gl.UNSIGNED_INT, R.off[i]);
       }
     }
+    if (bo > 0) gl.uniform2f(u.uShowD, 0, 0);                            // 交接帶那一艘畫完 ⇒ 放回 0（下一艘、旗、繩照常）
   }
   if (gu && g !== 0) gl.uniform1f(gu, 0);                              // 斷開的那一團、飛出去的模型：燈熄了（已經是 0 ⇒ 不再傳）
   cutSet(prog, null);
@@ -388,12 +391,12 @@ function rbatColour(pd) {
   if (RBAT_LOOSE) {
     rbatGBegin(true);
     for (o = 0; o < ns; o++) if (R.own[o].sink <= 40) {
-      if (b && !(cs[o] & b)) { for (i = R.i0[o], e = R.i0[o + 1]; i < e; i++) rbatGRes(i); continue; }   // 鏡頭外：組照樣開（先後不變）、不放項目
+      if ((b && !(cs[o] & b)) || SHOWLOD.lv[o] >= 3) { for (i = R.i0[o], e = R.i0[o + 1]; i < e; i++) rbatGRes(i); continue; }   // 鏡頭外：組照樣開（先後不變）、不放項目
       for (i = R.i0[o], e = R.i0[o + 1]; i < e; i++) rbatGAdd(i, V);
     }
     rbatGEnd();
   } else for (o = 0; o < ns; o++) {
-    if (R.own[o].sink > 40 || (b && !(cs[o] & b))) continue;
+    if (R.own[o].sink > 40 || (b && !(cs[o] & b)) || SHOWLOD.lv[o] >= 3) continue;   // 第 3、4 級：表演船的交接帶 ⇒ 下面 showlodBandModels 另外畫
     for (i = R.i0[o], e = R.i0[o + 1]; i < e && R.cls[i] < 2; i++);
     rbatGroups(R.i0[o], i, true, V);                                      // 模型、裝飾
     for (; i < e; i++) {                                                  // 平滑面、裝甲的平滑面：照以前一區一區（一份網格第一區換矩陣、燈熄）
@@ -405,6 +408,7 @@ function rbatColour(pd) {
   for (i = R.i0[ns], e = R.ni; i < e; i++) { o = R.ow[i]; if (o >= 0 && b && !(cs[o] & b)) continue; rbatGAdd(i, V); }   // FLY（o ＝ −1）一定畫
   rbatGEnd();
   C.cy = -Infinity;
+  showlodBandModels(pd);                                                  // 表演船近↔中交接帶（60_showlod.js）：沒進合批的那幾艘一件一件畫、烘進低模的照 t 淡出
   gl.useProgram(P.tri.prog); cutSet(P.tri, null);
 }
 

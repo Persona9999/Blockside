@@ -3914,6 +3914,7 @@ def act_import(work, sid, name, build=True, variant_of=None):
         log += act_build()
         log += act_ropebind([sid])                       # 繩端綁定（TASK-0716）：匯入時算好寫進檔頭、出報表
         log += act_shipcheck([sid])                      # 匯入檢查：缺 meta、砲班站不滿、開場就掉的（只讀）
+        log += act_showlod([sid])                        # 表演船的低模與貼圖（TASK-1104；js/60_showlod.js）：沒烘過的這一型烘進 ships/showlod.js（堡壘、砲台不烘）
     return log
 
 
@@ -3964,6 +3965,7 @@ def act_reimport(sid, work=None, build=True):
         log += act_build()
         log += act_ropebind([sid])                       # 繩端綁定（TASK-0716）：新的 .vxk 沒有 bind ⇒ 算好寫進去
         log += act_shipcheck([sid])                      # 匯入檢查（只讀）
+        log += act_showlod([sid])                        # 表演船的低模與貼圖（TASK-1104）：.vxk 換了 ⇒ 指紋對不上 ⇒ 這一型重烘（不重烘的話遊戲裡這一型退回原模）
     return log
 
 
