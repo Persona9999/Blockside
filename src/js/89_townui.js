@@ -28,7 +28,7 @@ function tuiNum(x, d) { x = +x || 0; return x.toLocaleString('en-US', { minimumF
 /** 貨物、家常菜的圖示（Blocksail img/goods/<key>.png、img/dishes/<id>.png —— battle.html 跟 img/ 同一層；TASK-0914）：沒有圖 ⇒ 拿掉，只剩名字。
  *  px：邊長（預設 22 ＝ 表格那一欄；夾在一行字裡的清單用 16）。 */
 function tuiIcon(dir, k, px) { px = px || 22; return '<img src="img/' + dir + '/' + encodeURIComponent(k) + '.png" alt="" style="width:' + px + 'px;height:' + px + 'px;object-fit:contain;vertical-align:middle;margin-right:' + (px < 22 ? 3 : 5) + 'px" onerror="this.remove()">'; }
-// 四級餐點共用透明外框；未知等級保留原圖，不從名字或其他菜猜。底框在下、菜在上。
+// 四級餐點共用色底薄框；未知等級保留原圖，不從名字或其他菜猜。底框在下、菜在上。
 var TUI_MEAL_LEVELS = ['荒年糧', '主糧', '家常', '佳餚'];
 function tuiMealIcon(dir, k, level) {
   if (!(typeof level === 'number' && level >= 0 && level <= 3 && level % 1 === 0)) return tuiIcon(dir, k);

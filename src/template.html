@@ -364,11 +364,11 @@
   #twbMode{ display:flex; flex-wrap:wrap; gap:6px; align-items:center; font-size:12px; } #twbMode button{ border-radius:12px; padding:3px 10px; font-size:12px; } #twbMode button.on{ background:#ffd98a; color:#111; }
   #twbRcp{ display:flex; flex-wrap:wrap; gap:6px; align-items:center; font-size:12px; } #twbRcp:empty{ display:none; } #twbRcp button{ border-radius:12px; padding:3px 10px; font-size:12px; } #twbRcp button.on{ background:#c9e59a; color:#111; } .tbiRcp{ display:flex; flex-wrap:wrap; gap:6px; margin:4px 0; } .tbiRcp button{ display:inline-flex; align-items:center; border-radius:12px; padding:3px 10px; font-size:12px; } .tbiRcp button img{ width:18px !important; height:18px !important; margin-right:4px !important; } .tbiRcp button.on{ background:#c9e59a; color:#111; } .tbiRcp button.no{ background:transparent; color:#889; border:1px dashed #667; cursor:help; } .tbiRcp button.no img{ filter:grayscale(1); opacity:.45; } #twbRcp button:disabled{ background:transparent; color:#aab; border:1px dashed #667; cursor:help; } #twbRcp button{ display:inline-flex; align-items:center; } #twbRcp button img{ width:18px !important; height:18px !important; margin-right:4px !important; } #twbRcp button.no{ background:transparent; color:#889; border:1px dashed #667; cursor:help; } #twbRcp button.no img{ filter:grayscale(1); opacity:.45; } #twbRcp button.on.no{ outline:2px solid #e07060; }
   @media (max-width: 640px){ #stage.twb #twbP{ bottom:178px; max-height:calc(100vh - 262px); max-height:calc(100dvh - 262px); } }
-  /* 餐點等級外框（TASK-1167）：透明中央、菜圖固定在框的上層。 */
+  /* 餐點等級外框（TASK-1167）：薄框色底、菜圖滿幅疊在上層。 */
   .tuiMealIcon{ display:inline-block; position:relative; width:32px; height:32px; margin-right:5px; vertical-align:middle; flex-shrink:0; }
   .tuiMealIcon img{ position:absolute; object-fit:contain; image-rendering:pixelated; pointer-events:none; }
   .tuiMealFrame{ inset:0; width:32px; height:32px; z-index:0; }
-  .tuiMealSprite{ left:4px; top:4px; width:24px; height:24px; z-index:1; }
+  .tuiMealSprite{ left:0; top:0; width:32px; height:32px; z-index:1; }
   .tuiMealGrade{ display:inline-block; color:var(--dim); font-size:11px; white-space:nowrap; }
   /* 城鎮介面（89_townui.js，Blocksail TASK-0910）：💰 貿易、🏛 城鎮兩顆在 🔨 旁邊（61_layout.js 的 town 配置）；面板右邊一欄，開著那一顆亮底 */
   #tuiP{ display:none; }
