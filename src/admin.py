@@ -1723,16 +1723,13 @@ def act_showlod(ids=None, force=False, check=False):
             co = zlib.compressobj(9, zlib.DEFLATED, -15)
             return base64.b64encode(co.compress(b) + co.flush()).decode('ascii')
         st = R.get('stat') or {}
-        out[sid] = {'fp': R.get('fp'), 'n': R['n'], 'off': R['off'], 'mk': R.get('mk') or [], 'dk': R.get('dk') or [], 'b64': deflate(raw), 'stat': st}
-        im = R.get('im') or {}                     # 遠那一級的貼圖（RGBA，8 × 2 格）：拍不到 ⇒ 這一型只有中那一級（遊戲裡遠的照中那一級畫）
-        if im.get('b64'):
-            px = base64.b64decode(im['b64'])
-            if len(px) != im['cw'] * 8 * im['ch'] * 2 * 4:
-                log.append('  ✗ %s：貼圖大小對不上（%d ≠ %d×%d×16×4）' % (sid, len(px), im['cw'], im['ch']))
-            else:
-                out[sid]['im'] = {'ppm': im['ppm'], 'cw': im['cw'], 'ch': im['ch'], 'z0': im['z0'], 'b64': deflate(px), 'stat': im.get('stat') or {}}
-        else:
-            log.append('  ⚠ %s：貼圖拍不到（%s）⇒ 只有中那一級' % (sid, im.get('err') or '頁面沒給'))
+        im = R.get('im') or {}                     # 遠那一級的貼圖（RGBA，8 × 2 格）：拍不到、大小不對 ⇒ ✗、這一型不寫（檔裡留舊的那一份，指紋對不上 ⇒ --check ✗、遊戲照原模畫）
+        px = base64.b64decode(im['b64']) if im.get('b64') else None   # ⛔ 以前只印 ⚠ 就寫成「只有中那一級」⇒ 頁面壞掉的那段時間重烘的型，貼圖整份悄悄沒了（TASK-1170）
+        if px is None or len(px) != im['cw'] * 8 * im['ch'] * 2 * 4:
+            log.append('  ✗ %s：%s ⇒ 這一型不寫（ships/showlod.js 留舊的那一份）' % (sid, '貼圖大小對不上（%d ≠ %d×%d×16×4）' % (len(px), im['cw'], im['ch']) if px is not None else '貼圖拍不到（%s）' % (im.get('err') or '頁面沒給')))
+            continue
+        out[sid] = {'fp': R.get('fp'), 'n': R['n'], 'off': R['off'], 'mk': R.get('mk') or [], 'dk': R.get('dk') or [], 'b64': deflate(raw), 'stat': st,
+                    'im': {'ppm': im['ppm'], 'cw': im['cw'], 'ch': im['ch'], 'z0': im['z0'], 'b64': deflate(px), 'stat': im.get('stat') or {}}}
         tot = (st.get('kept') or 0) + (st.get('dropped') or 0)
         log.append('✓ %s：%d×%d×%d 塊、留 %d 塊、船裡實心 %d 塊；原本的格丟掉 %.1f%%（船殼 %d、模型 %d 格；模型 %d、裝飾 %d 件烘進去）；%.0f KB；頁面 %d ms'
                    % (sid, R['n'][0], R['n'][1], R['n'][2], st.get('blocks', 0), st.get('inner', 0), 100.0 * (st.get('dropped') or 0) / max(1, tot),
@@ -4576,6 +4573,8 @@ def main():
         print(str(e))
         sys.exit(1)
     print('\n'.join(log))
+    if o.op == 'showlod' and not o.check and any(l.lstrip().startswith('✗') for l in log):
+        sys.exit(1)                                      # 有型沒烘成（TASK-1170）⇒ 不讓呼叫的人當成全過
 
 
 if __name__ == '__main__':

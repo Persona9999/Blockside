@@ -333,6 +333,7 @@ function showlodBake(sh) {
  *  船擺正（矩陣只留位置：不轉、不搖）、拍兩套帆段；每一張：正交、鏡頭在船格子中心那條垂直軸往外 φk 那一邊往裡看（同 showlodFarSet 的方向與右手邊）。
  *  先拍一個寬鬆的框（半寬 ＝ 格子水平對角線的 0.6 倍 ＋ 4 m、高 ＝ 格子高 ＋ 兩倍半寬：桅杆、帆桁、船首斜桅不在格子裡），再照十六張全部的不透明範圍裁（左右對軸對稱）；碰到框邊 ⇒ stat.edge。 */
 function showlodShots(sh) {
+  drawnSync();                                                           // 下面畫的那幾段（drawHulls、rbatPrep、drawSails）走 DRAWN（58_traffic.js ⑭）；烘頁 reset() 完沒跑模擬步、沒叫 render() ⇒ 還是空的、什麼都沒畫（TASK-1170）
   shadowMaps();                                                          // 陰影圖那一組先配好（setCommon 讀 SHM.mats；頁面還沒畫過一格 ⇒ null。⛔ 不叫 render()：鏡頭可能還沒算過、CAM.vp 是 null）
   var t0 = performance.now(), T = sh.T, G = sh.grid, IM = SHOWLOD_IM, N = IM.dirs, ppm = Math.max(IM.pmin, Math.round(4 * IM.ppm / showlodLk(T.hullG || T.base)) / 4), q = ppm * IM.ss, st = { edge: 0 };   // ppm：照倍率降（換到遠那一級的距離乘 lk ⇒ 一像素差不多一樣大）
   var cx = G.sx / 2, cy = G.sy / 2, rh = 0.6 * Math.hypot(G.sx, G.sy) * S + 4, zb = -0.15 * G.sz, zt = G.sz + 2 * rh / S;   // 半寬（公尺）、框的底與頂（格座標）
