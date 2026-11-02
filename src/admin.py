@@ -24,7 +24,7 @@
 #   python -I admin.py ropebind [--id <船的代號>]   繩端綁定：成品算好每條繩兩端綁在哪、寫進 .vxk 檔頭、出報表（TASK-0716；匯入、重新匯入、metasync、ids 會自己跑）
 #   python -I admin.py cells --id <船的代號>      只寫動力件、梯子、揚弾筒的格子清單（meta、格子不動；TASK-0676 木匠照它還原整件梯子）
 #   python -I admin.py relock --id <船的代號>     指紋改成 _cache 現在那份（手動換過 .vxk 時；平常匯入／重新匯入／metasync 會自己更新）
-#   加 --no-build：匯入／重新匯入之後不重建
+#   加 --no-build：匯入／重新匯入之後不重建（也不烘表演船低模；之後 build 的最後一行列出哪幾型要 showlod）
 import argparse, base64, hashlib, json, math, os, posixpath, re, shutil, socket, struct, subprocess, sys, urllib.request, webbrowser, zlib
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
@@ -247,7 +247,7 @@ CREW = {'officers': (0, 8, True), 'helm': (0, 4, True), 'marines': (0, 60, True)
 CREW_SHIP = {'hands': (0, 120, True)}          # 只在每艘船寫（TASK-0570 船隻配置頁的預設）：預備水手人數；沒寫 ＝ lim.hands × handsK
 GUN_CREW_MAX = 8                               # 砲班滿編上限（砲旁的站位；遊戲 05_hull.js GUN_CREW_MAX）
 GEO_PAIRS = ('marines', 'aimZ', 'deckAim', 'rigAim')
-GEO_NUMS = ('center', 'aim')
+GEO_NUMS = ('center', 'aim', 'marineY', 'qx')   # marineY：陸戰隊量甲板高度的那一欄離中線幾格；qx：沒有舵輪時軍官從外框起點往前幾格（40_crew.js；TASK-1152 窄船）
 
 
 # ───────────────────────── 讀寫 ─────────────────────────
@@ -1648,22 +1648,37 @@ def showlod_read():
         return {}
 
 
+def showlod_want(cfg):
+    """每一型（堡壘、砲台不算）該有的指紋 ⇒ { 船型: fp }。頁面算的那一個：SHOWLOD_V ＋ 'lock ' ＋ lock 前 14 字（同 src_manifest）；版本照 js 檔裡的 SHOWLOD_V。"""
+    lock = json.load(open(LOCK_P, encoding='utf-8')) if os.path.exists(LOCK_P) else {}
+    v = re.search(r'SHOWLOD_V = (\d+)', open(os.path.join(HERE, 'js', '60_showlod.js'), encoding='utf-8').read())
+    return {s['id']: '%s lock %s' % (v.group(1) if v else '?', (lock.get(s.get('vxk') or '') or '（沒有指紋）')[:14]) for s in cfg['ships'] if not s.get('fixed')}
+
+
+def showlod_note(cfg):
+    """建置的最後一行：哪幾型的表演船低模跟 _cache 對不上（遊戲裡這幾型照原模畫）。
+    改了 .vxk 卻沒重烘的路不只一條（reimport --no-build、metasync、cells、ids、合併取別人的 showlod.js）⇒ 在建置這個大家都會經過的地方講一次。只讀、不烘。"""
+    want, have = showlod_want(cfg), showlod_read()
+    bad = [sid for sid in want if (have.get(sid) or {}).get('fp') != want[sid]]
+    if not bad:
+        return ['✓ 表演船低模 %d 型都對得上 _cache（ships/showlod.js）' % len(want)]
+    return ['⚠ 表演船低模 %d 型對不上 _cache：%s ⇒ 遊戲裡這幾型照原模畫；烘：python -I admin.py showlod %s（import／reimport 會自己烘）'
+            % (len(bad), '、'.join(sid + ('（沒烘）' if sid not in have else '') for sid in bad), ' '.join('--id ' + sid for sid in bad))]
+
+
 def act_showlod(ids=None, force=False, check=False):
-    """表演船中那一級的低模（TASK-1104；js/60_showlod.js）：無頭 Chrome 跑成品的 ?showlodbake=<船>，頁面把那一型降採樣成 0.4 m 的塊 ⇒ 這裡壓成 deflate-raw、寫進 ships/showlod.js。
+    """表演船中那一級的低模、遠那一級的貼圖（TASK-1104；js/60_showlod.js）：無頭 Chrome 跑成品的 ?showlodbake=<船>，頁面把那一型降採樣成 0.4 m 的塊、
+    用遊戲的著色器拍八個方向 × 兩套帆（RGBA）⇒ 這裡各自壓成 deflate-raw、寫進 ships/showlod.js。
     ids 不給 ⇒ 船隻清單每一型（堡壘、砲台不算：不會是往來的船）。指紋（_cache 那份 .vxk 的 lock ＋ 算法版本）跟檔裡的一樣 ⇒ 不重烘（--force 一律重烘）。
     --check ⇒ 不烘，只列每一型對不對得上（對不上的那一型遊戲裡不分級、照原模畫）。
     同一份 _cache 烘兩次 ⇒ 檔逐位元組相同（頁面的算法沒有亂數；zlib 同一版、JSON 照鍵排）。"""
     import html as _html, tempfile
     cfg = load()
-    every = [s['id'] for s in cfg['ships'] if not s.get('fixed')]
+    want = showlod_want(cfg)
+    every = list(want)
     ids = ids or every
-    lock = json.load(open(LOCK_P, encoding='utf-8')) if os.path.exists(LOCK_P) else {}
-    vx = {s['id']: s.get('vxk') for s in cfg['ships']}
     have, log = showlod_read(), []
-
-    def want_fp(sid):                      # 頁面算的那一個：SHOWLOD_V ＋ 'lock ' ＋ lock 前 14 字（同 src_manifest）；版本照 js 檔裡的 SHOWLOD_V
-        v = re.search(r'SHOWLOD_V = (\d+)', open(os.path.join(HERE, 'js', '60_showlod.js'), encoding='utf-8').read())
-        return '%s lock %s' % (v.group(1) if v else '?', (lock.get(vx.get(sid) or '') or '（沒有指紋）')[:14])
+    want_fp = want.get
     if check:
         for sid in every:
             e = have.get(sid)
@@ -1704,18 +1719,32 @@ def act_showlod(ids=None, force=False, check=False):
         if len(raw) != R['n'][0] * R['n'][1] * R['n'][2]:
             log.append('  ✗ %s：塊數對不上（%d ≠ %s）' % (sid, len(raw), R['n']))
             continue
-        co = zlib.compressobj(9, zlib.DEFLATED, -15)
-        z = co.compress(raw) + co.flush()
+        def deflate(b):
+            co = zlib.compressobj(9, zlib.DEFLATED, -15)
+            return base64.b64encode(co.compress(b) + co.flush()).decode('ascii')
         st = R.get('stat') or {}
-        out[sid] = {'fp': R.get('fp'), 'n': R['n'], 'off': R['off'], 'mk': R.get('mk') or [], 'dk': R.get('dk') or [], 'b64': base64.b64encode(z).decode('ascii'), 'stat': st}
+        out[sid] = {'fp': R.get('fp'), 'n': R['n'], 'off': R['off'], 'mk': R.get('mk') or [], 'dk': R.get('dk') or [], 'b64': deflate(raw), 'stat': st}
+        im = R.get('im') or {}                     # 遠那一級的貼圖（RGBA，8 × 2 格）：拍不到 ⇒ 這一型只有中那一級（遊戲裡遠的照中那一級畫）
+        if im.get('b64'):
+            px = base64.b64decode(im['b64'])
+            if len(px) != im['cw'] * 8 * im['ch'] * 2 * 4:
+                log.append('  ✗ %s：貼圖大小對不上（%d ≠ %d×%d×16×4）' % (sid, len(px), im['cw'], im['ch']))
+            else:
+                out[sid]['im'] = {'ppm': im['ppm'], 'cw': im['cw'], 'ch': im['ch'], 'z0': im['z0'], 'b64': deflate(px), 'stat': im.get('stat') or {}}
+        else:
+            log.append('  ⚠ %s：貼圖拍不到（%s）⇒ 只有中那一級' % (sid, im.get('err') or '頁面沒給'))
         tot = (st.get('kept') or 0) + (st.get('dropped') or 0)
         log.append('✓ %s：%d×%d×%d 塊、留 %d 塊、船裡實心 %d 塊；原本的格丟掉 %.1f%%（船殼 %d、模型 %d 格；模型 %d、裝飾 %d 件烘進去）；%.0f KB；頁面 %d ms'
                    % (sid, R['n'][0], R['n'][1], R['n'][2], st.get('blocks', 0), st.get('inner', 0), 100.0 * (st.get('dropped') or 0) / max(1, tot),
                       st.get('cells', 0), st.get('mcells', 0), len(out[sid]['mk']), len(out[sid]['dk']), len(out[sid]['b64']) / 1024.0, st.get('ms', 0)))
+        if 'im' in out[sid]:
+            I = out[sid]['im']; ist = I['stat']
+            log.append('  貼圖 %d×%d 一格（%.1f × %.1f m）%s；%.0f KB；拍 %d ms' % (I['cw'], I['ch'], I['cw'] / float(I['ppm']), I['ch'] / float(I['ppm']),
+                       '、⚠ 碰到框邊' if ist.get('edge') else '', len(I['b64']) / 1024.0, ist.get('ms', 0)))
     body = json.dumps({'v': 1, 'types': {k: out[k] for k in sorted(out)}}, ensure_ascii=False, sort_keys=True, separators=(',', ':'))
     os.makedirs(os.path.dirname(SHOWLOD_JS), exist_ok=True)
     with open(SHOWLOD_JS, 'w', encoding='utf-8', newline='\n') as f:
-        f.write('// 表演船中那一級的低模（TASK-1104）：src/admin.py showlod 寫的，別手改（js/60_showlod.js showlodNeed 載）\nwindow.BS_SHOWLOD = ' + body + ';\n')
+        f.write('// 表演船中那一級的低模、遠那一級的貼圖（TASK-1104）：src/admin.py showlod 寫的，別手改（js/60_showlod.js showlodNeed 載）\nwindow.BS_SHOWLOD = ' + body + ';\n')
     log.append('✓ ships/showlod.js：%d 型、%.2f MB' % (len(out), os.path.getsize(SHOWLOD_JS) / 1048576.0))
     return log
 
@@ -2587,7 +2616,7 @@ def act_build(pack=True, single=False):   # pack：壓縮版（預設，TASK-058
         log += js_strip_html(OUT)
     else:
         ships_sync(os.path.dirname(OUT), {})                 # 原格式（船內嵌）⇒ ships/ 裡的船檔都是舊的
-    return log + flagloop_ensure() + src_stamp()
+    return log + flagloop_ensure() + src_stamp() + showlod_note(cfg)
 
 
 # ───────────────────────── 外掛外殼（shell：別的遊戲拿這份成品套自己的外殼；2026-10-21） ─────────────────────────
@@ -3899,6 +3928,9 @@ def act_import(work, sid, name, build=True, variant_of=None):
         log += act_build()
         log += act_ropebind([sid])                       # 繩端綁定（TASK-0716）：匯入時算好寫進檔頭、出報表
         log += act_shipcheck([sid])                      # 匯入檢查：缺 meta、砲班站不滿、開場就掉的（只讀）
+        log += act_showlod([sid])                        # 表演船的低模與貼圖（TASK-1104；js/60_showlod.js）：沒烘過的這一型烘進 ships/showlod.js（堡壘、砲台不烘）
+    else:
+        log.append('· --no-build ⇒ 表演船低模沒烘（烘要讀成品）；之後 build 的最後一行會列出要烘的型')
     return log
 
 
@@ -3949,6 +3981,9 @@ def act_reimport(sid, work=None, build=True):
         log += act_build()
         log += act_ropebind([sid])                       # 繩端綁定（TASK-0716）：新的 .vxk 沒有 bind ⇒ 算好寫進去
         log += act_shipcheck([sid])                      # 匯入檢查（只讀）
+        log += act_showlod([sid])                        # 表演船的低模與貼圖（TASK-1104）：.vxk 換了 ⇒ 指紋對不上 ⇒ 這一型重烘（不重烘的話遊戲裡這一型退回原模）
+    else:
+        log.append('· --no-build ⇒ 表演船低模沒烘（烘要讀成品）；之後 build 的最後一行會列出要烘的型')
     return log
 
 

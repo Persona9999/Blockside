@@ -512,7 +512,7 @@
       "shot": 47.2
     }
   },
-  "geo0": {"spar": null, "marines": [160, 220], "center": 140, "aim": 90, "aimZ": [40, 320], "deckAim": [84, 104], "rigAim": [150, 300]},
+  "geo0": {"spar": null, "marines": [160, 220], "center": 140, "aim": 90, "aimZ": [40, 320], "deckAim": [84, 104], "rigAim": [150, 300], "marineY": 10, "qx": 160},
   "crew0": {
     "officers": 4,
     "helm": 2,
@@ -1753,6 +1753,299 @@
         "rudder": 2,
         "tiller": 2,
         "yard": 9
+      }
+    },
+    {
+      "id": "boaviagem",
+      "role": "merchant",
+      "el": "ship-boaviagem",
+      "name": "好旅號",
+      "gangway": [
+        [
+          215.5,
+          143.5,
+          61.5
+        ],
+        [
+          215.5,
+          49.5,
+          61.5
+        ]
+      ],
+      "vxk": "boaviagem.vxk",
+      "work": "summit-boaviagem-01m-assembly",
+      "author": "summit",
+      "geo": {
+        "spar": [
+          45,
+          74
+        ],
+        "marines": [
+          90,
+          172
+        ],
+        "center": 60,
+        "aim": 40,
+        "aimZ": [
+          5,
+          300
+        ],
+        "deckAim": [
+          45,
+          74
+        ],
+        "rigAim": [
+          110,
+          295
+        ]
+      },
+      "cfg": {
+        "pump": 2
+      },
+      "crew": {
+        "officers": 1,
+        "helm": 1,
+        "top": 1,
+        "marines": 0,
+        "monkeys": 1,
+        "handsK": 0.25,
+        "navigator": 0
+      },
+      "names": [
+        "好旅號"
+      ],
+      "idNext": {
+        "anchor": 3,
+        "gun": 13,
+        "gunmount": 13,
+        "binnacle": 2,
+        "boat": 2,
+        "capstan": 2,
+        "deck": 6,
+        "door": 3,
+        "galley": 2,
+        "ladders": 5,
+        "magazine": 2,
+        "part": 11,
+        "powder": 5,
+        "rudder": 2,
+        "ship": 2,
+        "tiller": 2,
+        "yard": 6
+      }
+    },
+    {
+      "id": "centurion",
+      "el": "ship-centurion",
+      "name": "百夫長號",
+      "gangway": [[300.5, 191.5, 89.5], [300.5, 64.5, 89.5]],
+      "vxk": "centurion.vxk",
+      "work": "ridge-two-centurion-01m-assembly",
+      "author": "ridge-two",
+      "geo": {"spar": [71, 102], "marines": [60, 100], "center": 80, "aim": 64, "aimZ": [10, 450], "deckAim": [55, 90], "rigAim": [160, 440]},
+      "crew": {"officers": 4, "marines": 12, "marineGap": 14, "navigator": 0},
+      "names": ["百夫長號"],
+      "idNext": {
+        "anchor": 3,
+        "capstan": 2,
+        "deck": 7,
+        "door": 3,
+        "galley": 2,
+        "gun": 49,
+        "ladders": 6,
+        "magazine": 2,
+        "part": 11,
+        "portlid": 45,
+        "powder": 13,
+        "rudder": 2,
+        "ship": 2,
+        "yard": 11
+      }
+    },
+    {
+      "id": "piragua",
+      "el": "ship-piragua",
+      "name": "杉心號",
+      "vxk": "piragua.vxk",
+      "work": "basecamp-piragua-01m-assembly",
+      "author": "basecamp",
+      "idNext": {"deck": 2, "part": 2, "ship": 2, "yard": 2},
+      "cfg": {"base": 4},
+      "geo": {"spar": [1, 5], "marines": [21, 26], "center": 20, "aim": 6, "aimZ": [1, 60], "deckAim": [1, 10], "rigAim": [20, 80], "marineY": 2, "qx": 0},
+      "crew": {"officers": 1, "helm": 1, "top": 0, "marines": 10, "marineGap": 5, "monkeys": 1, "handsK": 0.25, "navigator": 0},
+      "names": ["杉心號"]
+    },
+    {
+      "id": "barbados",
+      "el": "ship-barbados",
+      "name": "巴貝多商人號",
+      "vxk": "barbados.vxk",
+      "work": "apex-two-barbados-01m-assembly",
+      "author": "apex-two",
+      "cfg": {
+        "pump": 3
+      },
+      "geo": {
+        "spar": [
+          59,
+          90
+        ],
+        "marines": [
+          112,
+          76
+        ],
+        "qx": 60,
+        "center": 80,
+        "aim": 64,
+        "aimZ": [
+          10,
+          330
+        ],
+        "deckAim": [
+          61,
+          74
+        ],
+        "rigAim": [
+          130,
+          330
+        ]
+      },
+      "crew": {
+        "officers": 2,
+        "helm": 1,
+        "top": 1,
+        "marines": 4,
+        "marineGap": 14,
+        "monkeys": 1,
+        "handsK": 0.25,
+        "navigator": 0
+      },
+      "names": [
+        "巴貝多商人號"
+      ],
+      "idNext": {
+        "anchor": 3,
+        "capstan": 2,
+        "deck": 6,
+        "door": 3,
+        "galley": 2,
+        "gun": 9,
+        "ladders": 6,
+        "magazine": 2,
+        "part": 11,
+        "powder": 9,
+        "rudder": 2,
+        "ship": 2,
+        "yard": 11
+      }
+    },
+    {
+      "id": "guineaman",
+      "role": "merchant",
+      "el": "ship-guineaman",
+      "name": "幾內亞船",
+      "gangway": [
+        [
+          185.5,
+          141.5,
+          54.5
+        ],
+        [
+          185.5,
+          51.5,
+          54.5
+        ]
+      ],
+      "vxk": "guineaman.vxk",
+      "work": "kaguya-guineaman-01m-assembly",
+      "author": "kaguya",
+      "geo": {
+        "spar": [
+          38,
+          63
+        ],
+        "marines": [
+          52,
+          102
+        ],
+        "center": 50,
+        "aim": 33,
+        "aimZ": [
+          5,
+          280
+        ],
+        "deckAim": [
+          38,
+          63
+        ],
+        "rigAim": [
+          100,
+          270
+        ],
+        "qx": 80
+      },
+      "cfg": {
+        "pump": 2
+      },
+      "crew": {
+        "officers": 1,
+        "helm": 1,
+        "top": 1,
+        "marines": 0,
+        "monkeys": 1,
+        "handsK": 0.25,
+        "navigator": 0
+      },
+      "names": [
+        "幾內亞船"
+      ],
+      "rooms": {
+        "甲板-fc": {
+          "type": "deck",
+          "items": [
+            {
+              "it": "keg",
+              "x": 4,
+              "y": 6,
+              "r": 0
+            }
+          ]
+        },
+        "甲板-poop": {
+          "type": "deck",
+          "items": [
+            {
+              "it": "keg",
+              "x": 0,
+              "y": 5,
+              "r": 0
+            },
+            {
+              "it": "loft",
+              "x": 0,
+              "y": 7,
+              "r": 1
+            }
+          ]
+        }
+      },
+      "idNext": {
+        "anchor": 3,
+        "binnacle": 2,
+        "boat": 2,
+        "capstan": 2,
+        "deck": 6,
+        "galley": 2,
+        "grating": 3,
+        "ladders": 5,
+        "magazine": 2,
+        "model": 2,
+        "part": 10,
+        "powder": 5,
+        "rudder": 2,
+        "ship": 2,
+        "tiller": 2,
+        "yard": 11
       }
     }
   ],

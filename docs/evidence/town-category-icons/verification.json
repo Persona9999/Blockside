@@ -1,0 +1,136 @@
+{
+  "scope": "Real 87_townbuild.js renderer, menu setter and click handlers; isolated DOM, not full town simulation",
+  "views": [
+    {
+      "width": 1280,
+      "height": 900,
+      "clicked": [
+        "road",
+        "house",
+        "workshop",
+        "food",
+        "daily",
+        "service",
+        "harbour",
+        "farm",
+        "livestock",
+        "industry",
+        "berth"
+      ],
+      "input": "CDP pointer press/release after scrollIntoView",
+      "screenshot": "menu-1280x900.png",
+      "count": 11,
+      "loaded": true,
+      "labels": [
+        "道路",
+        "房屋",
+        "工坊",
+        "食品",
+        "日用",
+        "服務",
+        "港口",
+        "農莊",
+        "畜牧",
+        "建材",
+        "泊位"
+      ],
+      "pixelated": "pixelated",
+      "bounds": {
+        "left": 380,
+        "right": 900,
+        "top": 584,
+        "bottom": 808
+      },
+      "scrollable": false
+    },
+    {
+      "width": 390,
+      "height": 844,
+      "clicked": [
+        "road",
+        "house",
+        "workshop",
+        "food",
+        "daily",
+        "service",
+        "harbour",
+        "farm",
+        "livestock",
+        "industry",
+        "berth"
+      ],
+      "input": "CDP pointer press/release after scrollIntoView",
+      "screenshot": "menu-390x844.png",
+      "count": 11,
+      "loaded": true,
+      "labels": [
+        "道路",
+        "房屋",
+        "工坊",
+        "食品",
+        "日用",
+        "服務",
+        "港口",
+        "農莊",
+        "畜牧",
+        "建材",
+        "泊位"
+      ],
+      "pixelated": "pixelated",
+      "bounds": {
+        "left": 16,
+        "right": 374,
+        "top": 374,
+        "bottom": 666
+      },
+      "scrollable": false
+    },
+    {
+      "width": 640,
+      "height": 390,
+      "clicked": [
+        "road",
+        "house",
+        "workshop",
+        "food",
+        "daily",
+        "service",
+        "harbour",
+        "farm",
+        "livestock",
+        "industry",
+        "berth"
+      ],
+      "input": "CDP pointer press/release after scrollIntoView",
+      "screenshot": "menu-640x390.png",
+      "count": 11,
+      "loaded": true,
+      "labels": [
+        "道路",
+        "房屋",
+        "工坊",
+        "食品",
+        "日用",
+        "服務",
+        "港口",
+        "農莊",
+        "畜牧",
+        "建材",
+        "泊位"
+      ],
+      "pixelated": "pixelated",
+      "bounds": {
+        "left": 60,
+        "right": 580,
+        "top": 84,
+        "bottom": 212
+      },
+      "scrollable": true
+    }
+  ],
+  "unknownCategory": {
+    "escaped": "<span>學堂&lt;&amp;&gt;</span>",
+    "prototypeKey": "<span>新分類</span>",
+    "clickable": true
+  }
+}

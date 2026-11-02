@@ -94,14 +94,14 @@ if (DEBUG) window.__game = {
     if (o.yards !== undefined) r.yards = floopYardCheck(o.yards);
     return r;
   },
-  /** 表演船遠近分級（TASK-1104；60_showlod.js）：畫一格 ⇒ 這一格每一級幾艘（far ＝ 該畫貼圖、還沒做 ⇒ 照中那一級畫）、不分級 none、低模四邊形數 quads、
+  /** 表演船遠近分級（TASK-1104；60_showlod.js）：畫一格 ⇒ 這一格每一級幾艘（far ＝ 畫看板、farMid ＝ 該畫看板但這一格照中那一級）、不分級 none、低模四邊形數 quads、
    *  檔載到哪（st 0 還沒要、1 在載、2 好了、3 載不到 err）、每一型（四邊形、倍率；null ＝ 沒烘或指紋對不上）、每艘這一格的級 lv。
    *  給 true／false ⇒ 開關（同頁 A/B）；給 { n, f, nb, fb } ⇒ 改距離表（公尺，即時）。 */
   showlod: function (o) {
     var D = SHOWLOD, T = {}, id;
     if (o === true || o === false) D.on = o; else if (o) for (id in o) if (id in D.L) D.L[id] = +o[id];
     render();
-    for (id in D.T) { var t = D.T[id]; T[id] = t && t !== 'busy' ? { quads: t.quads, lk: +t.lk.toFixed(2) } : t; }
+    for (id in D.T) { var t = D.T[id]; T[id] = t && t !== 'busy' ? { quads: t.quads, lk: +t.lk.toFixed(2), im: t.im ? [+t.im.wm.toFixed(1), +t.im.hm.toFixed(1)] : null } : t; }   // im：遠那一級的看板寬、高（公尺；null ＝ 沒有貼圖）
     return { on: D.on, L: D.L, st: D.st, err: D.err, stat: D.stat, types: T, lv: Array.prototype.slice.call(D.lv, 0, DRAWN.length) };
   },
   /** TASK-1101 的三項減量（帆不重傳 rigfixkey、錨鏈落定 chainrest、表演船停住 showidle；同名的網址開關）：給 { 名字: true／false } 就改 ——
@@ -528,9 +528,12 @@ if (DEBUG) window.__game = {
     for (var j = 0; j < v.length; j += chain ? 9 : 3) { var dx = v[j] - Ls[0], dy = v[j + 1] - Ls[1], dz = v[j + 2] - Ls[2]; if (dx * dx + dy * dy + dz * dz < rs2) { w = true; break; } }
     return { cloth: cl ? clothNear(cl, L, rb) : null, work: w };
   },
-  /** 帆與繩的讀數：每面帆最鼓的那一點離雕刻作品形狀多遠（格）、還綁著幾個點、垂下來的繩幾條。 */
-  cloth: function (i) {
+  /** 帆與繩的讀數：每面帆最鼓的那一點離雕刻作品形狀多遠（格）、還綁著幾個點、垂下來的繩幾條。
+   *  給 nm（帆名）⇒ 只回那一面的點：現在位置 p、靜止形狀 p0、每點綁在哪（hk：0 不綁、1 格、2 繩、3 找不到靠的、4 帆桁）、uv（旗才有）。 */
+  cloth: function (i, nm) {
     var sh = SHIPS[i || 0];
+    if (nm) { var c0 = sh.cl.find(function (c) { return c.T.name === nm; }); if (!c0) return null; var T0 = c0.T;
+      return { n: T0.sim.n, p: c0.p ? Array.from(c0.p) : null, p0: Array.from(T0.sim.p0), hk: Array.from(T0.sim.hk), yk: Array.from(T0.sim.yk), uv: T0.uv ? Array.from(T0.uv) : null }; }
     return { templates: sh.T.cloth.map(function (T) { return { name: T.name, n: T.n, sim: T.sim.n, grid: T.grid, simEdges: T.sim.ea.length, simPins: Array.prototype.filter.call(T.sim.hk, function (x) { return x; }).length, pins: T.pins, clews: T.clews, sides: T.sides }; }),
       sails: sh.cl.map(function (c, k) {
         var d = 0, P0 = c.T.sim.p0; if (c.p) for (var j = 0; j < c.T.sim.n * 3; j += 3) d = Math.max(d, Math.hypot(c.p[j] - P0[j], c.p[j + 1] - P0[j + 1], c.p[j + 2] - P0[j + 2]));

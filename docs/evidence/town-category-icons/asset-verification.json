@@ -1,0 +1,172 @@
+{
+  "assets": [
+    {
+      "key": "berth",
+      "size": [
+        128,
+        128
+      ],
+      "alphaBounds": [
+        14,
+        16,
+        117,
+        114
+      ],
+      "sha256": "e4cff8ff6793cfa7786c059afc604da2033b4863328d44cedfde1414f584e4cf"
+    },
+    {
+      "key": "daily",
+      "size": [
+        128,
+        128
+      ],
+      "alphaBounds": [
+        15,
+        17,
+        117,
+        110
+      ],
+      "sha256": "95d68fd24f4ff638faa5239816c4cf97a5e1a9912216a0639a0b64ad27407ffb"
+    },
+    {
+      "key": "farm",
+      "size": [
+        128,
+        128
+      ],
+      "alphaBounds": [
+        10,
+        18,
+        117,
+        114
+      ],
+      "sha256": "9c09a039ccd3f73b2fe6dbd0b09a32c7deb7d9369f81e75f5372aeb7c88c727f"
+    },
+    {
+      "key": "food",
+      "size": [
+        128,
+        128
+      ],
+      "alphaBounds": [
+        11,
+        10,
+        118,
+        117
+      ],
+      "sha256": "aec8be12a767d836686fd6a05a4672c6a081aff71324506efaff2113213b89de"
+    },
+    {
+      "key": "harbour",
+      "size": [
+        128,
+        128
+      ],
+      "alphaBounds": [
+        14,
+        12,
+        117,
+        116
+      ],
+      "sha256": "df9137ac73b031ece9643747f9fb7bd1beaa6896e41b0dc8881cde6aea0072cf"
+    },
+    {
+      "key": "house",
+      "size": [
+        128,
+        128
+      ],
+      "alphaBounds": [
+        20,
+        12,
+        116,
+        111
+      ],
+      "sha256": "25d873eaaafadffca1513ceac3498e7f12928c00a69173b440d3f3d4d43cdcf6"
+    },
+    {
+      "key": "industry",
+      "size": [
+        128,
+        128
+      ],
+      "alphaBounds": [
+        10,
+        14,
+        118,
+        114
+      ],
+      "sha256": "671cbe25f8fe5a3a74e5fbfb1d7e73426f574ff84561bc87604cc7275919d271"
+    },
+    {
+      "key": "livestock",
+      "size": [
+        128,
+        128
+      ],
+      "alphaBounds": [
+        16,
+        15,
+        115,
+        115
+      ],
+      "sha256": "f812937f698944f08fee2e80b0478d080f8ac70038859c25c0b63abfaf081eb9"
+    },
+    {
+      "key": "road",
+      "size": [
+        128,
+        128
+      ],
+      "alphaBounds": [
+        12,
+        10,
+        116,
+        116
+      ],
+      "sha256": "e6f55632054451190bee78fe224a5084020d81f2a0551f87d05dda2bdecf332c"
+    },
+    {
+      "key": "service",
+      "size": [
+        128,
+        128
+      ],
+      "alphaBounds": [
+        14,
+        10,
+        113,
+        115
+      ],
+      "sha256": "eb9de01d04fb3fd99fa5f1868f7bfc9a3f3a8b00ba3c5bfa987aaa3a087cd6ce"
+    },
+    {
+      "key": "workshop",
+      "size": [
+        128,
+        128
+      ],
+      "alphaBounds": [
+        11,
+        16,
+        114,
+        115
+      ],
+      "sha256": "cdd433c70c2432f1e4367da8ab5c26a1d15bb9dab96cb9762b40b3d771c46767"
+    }
+  ],
+  "negativeControl": {
+    "temporarilyMissing": "berth.png",
+    "exit": 1,
+    "restored": true
+  },
+  "build": {
+    "fingerprint": "6bda0179d1b648da",
+    "sourceFiles": 183,
+    "shipFiles": 37,
+    "unresolvedWrites": 0,
+    "newShortNames": 0,
+    "coreToShellReferences": 0,
+    "astNodesCompared": 821533
+  }
+}

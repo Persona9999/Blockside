@@ -687,24 +687,38 @@ function anchorNear(T, x, y, z, r) {                 // 船型 T 的原始格子
   }
   return best;
 }
-/** 桅（Tim 2026-10-13：照 meta 判斷）：帆桁的 meta `mast`（fore／main／mizzen；bowsprit 不算）⇒ 有哪幾根桅；
+/** 桅（Tim 2026-10-13：照 meta 判斷）：帆桁的 meta `mast`（fore／main／mizzen／bonaventure；bowsprit 不算）⇒ 有哪幾根桅；
+ *  名字（HUD 的桅列表、「…倒了」）照 label；bonaventure ＝ 四桅船最後那根 ⇒「尾桅」（Tim 2026-11-01；以前沒在表裡 ⇒ 印原文 bonaventure）。
  *  那根桅最低的橫帆桁（course／crossjack；沒有 ⇒ 最低一根不是 boom 的）轉軸 (x, z) ⇒ 桅在哪、桅頂平台大約多高（桅頂就在它上面）。
  *  桅身那一段（打斷就倒，32_hull.js survey）＝ 那根帆桁往下 20–40 格（桅頂下面的下桅）；x ＝ 往下 10–40 格、中線上格子最多的那一欄（桅會往後傾）。
+ *  找那一欄的窗：轉軸前後 45 格，但不越過跟相鄰那根桅轉軸的中點（TASK-1151：好旅號尾桅離後桅 40 格、後桅比較粗 ⇒ 以前兩根都找在後桅 x 145）。
  *  z0top ＝ 桅頂水手從這個高度往上找平台（40_crew.js）。
  *  ⛔ 以前從帆的名字推 x、在固定的 z 250–290 找、打斷段三根都是 z 220–240：夜隼號只有一半高 ⇒ 前桅找在 x 223（找到的是別的東西）；
  *  憲法號的後桅頂在 241，250–290 量到的是上桅。改照 meta 之後憲法號、餘燼號的前桅與主桅 x 不變、後桅 195 → 198（下桅）；打斷段變成每根桅自己的高度。
  *  沒有帆桁 meta 的舊 .vxk ⇒ 照以前的辦法（findMastsOld）。 */
+var MAST_RUN = 18;                                                      // findMasts：一欄超過幾格才算桅那一段（中線 ±4 ＝ 9 格寬 ⇒ 兩層甲板板厚以上）
 function findMasts(T) {
-  var CY = T.cy, ys = {}, label = { fore: '前桅', main: '主桅', mizzen: '後桅' }; T.masts = [];
+  var CY = T.cy, ys = {}, label = { fore: '前桅', main: '主桅', mizzen: '後桅', bonaventure: '尾桅' }; T.masts = [];
   (T.rig.models || []).forEach(function (m) { var mt = m.meta || {}, pv = (m.points || {}).pivot; if (mt.kind === 'yard' && mt.mast && mt.mast !== 'bowsprit' && pv) (ys[mt.mast] = ys[mt.mast] || []).push({ y: mt.yard, p: pv }); });
   var keys = Object.keys(ys); if (!keys.length) return findMastsOld(T);
   keys.sort(function (a, b) { var o = ['fore', 'main', 'mizzen']; return (o.indexOf(a) + 1 || 9) - (o.indexOf(b) + 1 || 9); });   // 照以前的順序（前、主、後）
+  var A = {};                                                            // 每根桅的轉軸：最低的橫帆桁（沒有 ⇒ 最低一根不是 boom 的）
   keys.forEach(function (k) {
     var L = ys[k].filter(function (q) { return q.y === 'course' || q.y === 'crossjack'; });
     if (!L.length) L = ys[k].filter(function (q) { return q.y !== 'boom'; }).sort(function (a, b) { return a.p[2] - b.p[2]; });
-    if (!L.length) return;
-    var P = L[0].p, Lz = Math.floor(P[2]), ax = Math.round(P[0]), mx = ax, bn = 0;
-    for (var x = ax - 45; x <= ax + 45; x++) { var c = countBox(T.base, x, CY - 4, Lz - 40, x, CY + 4, Lz - 10); if (c > bn) { bn = c; mx = x; } }
+    if (L.length) A[k] = L[0].p;
+  });
+  keys.forEach(function (k) {
+    if (!A[k]) return;
+    var P = A[k], Lz = Math.floor(P[2]), ax = Math.round(P[0]), mx = ax, bn = 0, lo = ax - 45, hi = ax + 45;
+    keys.forEach(function (j) { if (j === k || !A[j]) return; var b = Math.round(A[j][0]); if (b < ax) lo = Math.max(lo, Math.floor((ax + b) / 2) + 1); else if (b > ax) hi = Math.min(hi, Math.ceil((ax + b) / 2) - 1); });   // 不越過跟鄰桅的中點
+    // 照段挑（幾內亞船 TASK-1149）：後桅往後倒 4° ⇒ 桅身斜過每一欄、一欄最多 93 格；船尾板＋旗桿那一欄（x 44）127 格 ⇒ 以前認成 x 44（桅頂水手、倒了沒、敵艦瞄桅都看錯）。
+    //   超過 MAST_RUN 格的欄切成一段一段相連的 ⇒ 挑離帆桁轉軸最近的那一段（轉軸在桅前面一點），段裡照舊取最多的那一欄；一段都沒有 ⇒ 整個窗照舊
+    var cs = [], runs = [], r0 = -1, x, i;
+    for (x = lo; x <= hi; x++) cs.push(countBox(T.base, x, CY - 4, Lz - 40, x, CY + 4, Lz - 10));
+    for (i = 0; i <= cs.length; i++) { var on = i < cs.length && cs[i] > MAST_RUN; if (on && r0 < 0) r0 = i; if (!on && r0 >= 0) { runs.push([lo + r0, lo + i - 1]); r0 = -1; } }
+    var rd = function (q) { return ax < q[0] ? q[0] - ax : ax > q[1] ? ax - q[1] : 0; }, R = runs.sort(function (a, b) { return rd(a) - rd(b) || a[0] - b[0]; })[0];
+    for (x = R ? R[0] : lo; x <= (R ? R[1] : hi); x++) { var c = cs[x - lo]; if (c > bn) { bn = c; mx = x; } }
     var z0 = Lz - 40, n = countBox(T.hullG, mx - 8, CY - 8, z0, mx + 8, CY + 8, z0 + 20);   // orig 跟 survey 的 sh.grid 比 ⇒ 照船殼數（24_armor.js）
     if (n > 20) T.masts.push({ name: label[k] || k, x: mx, z0: z0, z1: z0 + 20, orig: n, z0top: Lz });
   });

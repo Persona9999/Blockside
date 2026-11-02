@@ -113,6 +113,7 @@ function rbatPrep() {
 }
 /** 一艘：模型 → 裝飾 → 平滑面 → 裝甲的平滑面。 */
 function rbatShip(sh, o) {
+  if (SHOWLOD.lv[o] === 2) return;                                    // 表演船畫遠那一級（60_showlod.js）：整艘只畫看板
   var T = sh.T, L = sh.models, k, m, me, lo = showlodMid(o, sh);   // lo：表演船這一格畫中那一級（60_showlod.js）⇒ 烘進低模的模型、裝飾、平滑面不進表
   for (k = 0; k < L.length; k++) {
     m = L[k]; me = meshFor(T, m.rmesh !== undefined ? m.rmesh : m.mesh, m.mm); if (!m.alive || !me || (m.vox && !m.moved)) continue; if (!me.vao) meshGpu(me);   // m.vox：螺旋槳畫它自己的格（24_armor.js armDraw）；m.rmesh：有座的砲只畫砲身（座在下面的裝飾，TASK-0836）
@@ -159,7 +160,9 @@ function rbatReplay(prog, pd) {
     var sh = R.own[o];
     if (sh.sink > 40 || (b && !(cs[o] & b))) continue;
     cutSet(prog, sh);                                                   // 剖面與隱藏甲板（74_cutaway.js）
+    var bl = SHOWLOD.lv[o], bt = u.uShowD && bl >= 3 ? SHOWLOD.T[sh.T.id] : null, bo = -1;   // 表演船的交接帶：第 3 級烘進低模的那幾件、第 4 級全部淡出（同 showlodBandModels）
     for (i = R.i0[o], e = R.i0[o + 1]; i < e; i++) {
+      if (bt) { var bk = bl === 4 || showlodBaked(bt, i) ? 1 : 0; if (bk !== bo) gl.uniform2f(u.uShowD, SHOWLOD.fd[o], bo = bk); }
       if (R.cls[i] < 2) {
         gl.uniformMatrix4fv(u.uModel, false, M, i * 16, 16);
         if (gu && R.glow[i] !== g) gl.uniform1f(gu, g = R.glow[i]);
@@ -169,6 +172,7 @@ function rbatReplay(prog, pd) {
         gl.bindVertexArray(R.vao[i]); gl.drawElements(gl.TRIANGLES, R.cnt[i], gl.UNSIGNED_INT, R.off[i]);
       }
     }
+    if (bo > 0) gl.uniform2f(u.uShowD, 0, 0);                            // 交接帶那一艘畫完 ⇒ 放回 0（下一艘、旗、繩照常）
   }
   if (gu && g !== 0) gl.uniform1f(gu, 0);                              // 斷開的那一團、飛出去的模型：燈熄了（已經是 0 ⇒ 不再傳）
   cutSet(prog, null);
@@ -387,12 +391,12 @@ function rbatColour(pd) {
   if (RBAT_LOOSE) {
     rbatGBegin(true);
     for (o = 0; o < ns; o++) if (R.own[o].sink <= 40) {
-      if (b && !(cs[o] & b)) { for (i = R.i0[o], e = R.i0[o + 1]; i < e; i++) rbatGRes(i); continue; }   // 鏡頭外：組照樣開（先後不變）、不放項目
+      if ((b && !(cs[o] & b)) || SHOWLOD.lv[o] >= 3) { for (i = R.i0[o], e = R.i0[o + 1]; i < e; i++) rbatGRes(i); continue; }   // 鏡頭外：組照樣開（先後不變）、不放項目
       for (i = R.i0[o], e = R.i0[o + 1]; i < e; i++) rbatGAdd(i, V);
     }
     rbatGEnd();
   } else for (o = 0; o < ns; o++) {
-    if (R.own[o].sink > 40 || (b && !(cs[o] & b))) continue;
+    if (R.own[o].sink > 40 || (b && !(cs[o] & b)) || SHOWLOD.lv[o] >= 3) continue;   // 第 3、4 級：表演船的交接帶 ⇒ 下面 showlodBandModels 另外畫
     for (i = R.i0[o], e = R.i0[o + 1]; i < e && R.cls[i] < 2; i++);
     rbatGroups(R.i0[o], i, true, V);                                      // 模型、裝飾
     for (; i < e; i++) {                                                  // 平滑面、裝甲的平滑面：照以前一區一區（一份網格第一區換矩陣、燈熄）
@@ -404,6 +408,7 @@ function rbatColour(pd) {
   for (i = R.i0[ns], e = R.ni; i < e; i++) { o = R.ow[i]; if (o >= 0 && b && !(cs[o] & b)) continue; rbatGAdd(i, V); }   // FLY（o ＝ −1）一定畫
   rbatGEnd();
   C.cy = -Infinity;
+  showlodBandModels(pd);                                                  // 表演船近↔中交接帶（60_showlod.js）：沒進合批的那幾艘一件一件畫、烘進低模的照 t 淡出
   gl.useProgram(P.tri.prog); cutSet(P.tri, null);
 }
 
@@ -433,7 +438,8 @@ function viewVis() {
   P[52] = 0; P[53] = 1; P[54] = 0; P[55] = 0;                             // 反射的第 7 面：水面 y ≥ 0（reflPass 的 PASS.clip）
   for (o = 0; o < R.n; o++) {
     var ow = R.own[o], v = VV_RF | VV_MN;
-    if (ow && !(ow.sink > 40) && !(FP.on && FP.sh === ow) && vvOwner(o, ow)) {
+    if (o < R.ns && SHOWLOD.lv[o] === 2) v = 0;        // 表演船畫遠那一級（60_showlod.js）：整艘只畫看板 ⇒ 船殼、模型、帆、繩、旗、玻璃這兩趟都不畫
+    else if (ow && !(ow.sink > 40) && !(FP.on && FP.sh === ow) && vvOwner(o, ow)) {
       for (j = 0; j < 6; j++) if (vvOut(P, j * 4)) { v &= ~VV_MN; cm++; break; }
       for (j = 0; j < 7; j++) if (vvOut(P, 28 + j * 4)) { v &= ~VV_RF; cr++; break; }
     }
@@ -578,7 +584,7 @@ function rbatCheck() {
     if (p) one(c, ow, ref, p, 0, W, p.off);
   }
   DRAWN.forEach(function (sh, i) {
-    if (sh.sink > 40) return;
+    if (sh.sink > 40 || SHOWLOD.lv[i] === 2) return;                  // 遠那一級：整艘不進表（同 rbatShip）
     var lo = showlodMid(i, sh);                                         // 表演船畫中那一級（60_showlod.js）：烘進低模的不進表（同 rbatShip，照規則再判一次）
     sh.models.forEach(function (m, k) {
       var me = meshFor(sh.T, m.rmesh !== undefined ? m.rmesh : m.mesh, m.mm); if (!m.alive || !me || (m.vox && !m.moved) || (lo && lo.mk[k] && showlodPlain(m))) return;

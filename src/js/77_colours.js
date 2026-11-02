@@ -191,7 +191,7 @@ function colourAt(kind, f, u, v) {
 /** 這一型的桅頂（格座標）：{ fore: [x, y, z], … }。 */
 function mastTrucks(T) {
   if (T.trucks) return T.trucks;
-  var top = {}, key = { '前桅': 'fore', '主桅': 'main', '後桅': 'mizzen' }, g = T.base, cy = Math.round(T.cy);
+  var top = {}, key = { '前桅': 'fore', '主桅': 'main', '後桅': 'mizzen', '尾桅': 'bonaventure' }, g = T.base, cy = Math.round(T.cy);   // 反查 10_ship.js findMasts 的 label
   (T.rig.models || []).forEach(function (m) { var mt = m.meta || {}, pv = (m.points || {}).pivot; if (mt.kind === 'yard' && mt.mast && mt.mast !== 'bowsprit' && pv && (!top[mt.mast] || pv[2] > top[mt.mast][2])) top[mt.mast] = pv; });
   T.masts.forEach(function (m) { var k = key[m.name] || m.name; if (!top[k]) top[k] = [m.x, cy, m.z1]; });
   var out = {};
@@ -353,7 +353,7 @@ function drawColours(prog, pd) {                                      // pd：�
   var vb = pd ? pd.b : 0;
   DRAWN.forEach(function (sh, i) {
     var b = sh.poleB; if (!b || !b.n || sh.sink > 40 || (vb && !(RBAT.cs[i] & vb))) return;
-    cutSet(prog, sh); gl.uniformMatrix4fv(prog.u.uModel, false, sh.M);
-    gl.bindVertexArray(b.vao); gl.drawArrays(gl.TRIANGLES, 0, b.n);
+    cutSet(prog, sh); gl.uniformMatrix4fv(prog.u.uModel, false, sh.M); var fo = showlodFadeOut(prog, i);   // 表演船中↔遠交接帶（60_showlod.js）：旗桿照 t 淡出
+    gl.bindVertexArray(b.vao); gl.drawArrays(gl.TRIANGLES, 0, b.n); if (fo) showlodFadeEnd(prog);
   });
 }

@@ -194,6 +194,8 @@ var BED_DRY_GLSL = 'uniform float uDryOn; uniform vec4 uDryR; uniform sampler2D 
 // 海堤擋浪（63_bed_gl.js BEDWALL）：r ＝ 堤後（沖刷、岸線曲折收掉）、g ＝ 堤身（海面不畫）；窗外、沒有 ⇒ (0, 0)
 var BED_WALL_GLSL = 'uniform float uWallOn; uniform vec4 uWallR; uniform sampler2D uWallT;\n' +
   'vec2 bedWall(vec2 p){ if(uWallOn<0.5) return vec2(0.0); vec2 u=(p-uWallR.xy)/uWallR.zw; return u.x>0.0&&u.y>0.0&&u.x<1.0&&u.y<1.0?textureLod(uWallT,u,0.0).rg:vec2(0.0); }\n';
+// 表演船的交接帶（60_showlod.js：近↔中兩級互補的抖動；同建築 63_towns.js TOWN_FADE、同一個雜湊）：uShowD ＝ (t, 哪一邊)。哪一邊 ＋1 ⇒ 留雜湊 ≥ t 的像素（淡出）、−1 ⇒ 留 < t 的（淡入）、0 ⇒ 不管（平常）。
+var SHOWD_GLSL = 'uniform vec2 uShowD; bool showCut(){ if(uShowD.y==0.0) return false; float q=fract(sin(dot(floor(gl_FragCoord.xy),vec2(12.9898,78.233)))*43758.5453); return (q<uShowD.x)==(uShowD.y>0.0); }\n';
 var DEPTH_ONLY_FS = '#version 300 es\nprecision highp float; void main(){}\n';   // 只寫深度（陰影的靜態那一層：地形、樹、城鎮拿自己的頂點著色器配這一支；60_render.js csmStatic）
 var CSM_MAX = 4, NS_MK = String(MASK_NEAR);                             // 陰影最多幾段（60_render.js CSM_N）、船艙遮罩的陣列長度照 MASK_NEAR（00_core.js）
 var SHADOW_GLSL = 'uniform highp sampler2DArrayShadow uShA; uniform mat4 uShM[' + CSM_MAX + ']; uniform float uShOn, uShPx, uClip, uSunK; uniform int uCsN;\n' +
@@ -303,9 +305,9 @@ function programs() {
     '#version 300 es\nlayout(location=0) in vec3 aP; layout(location=1) in vec3 aN; layout(location=2) in vec3 aC; layout(location=3) in vec3 aM; uniform mat4 uModel,uVP; out vec3 vN; out vec3 vW; out vec3 vC; out vec3 vM;\n' +
     'void main(){ vec4 w=uModel*vec4(aP,1.0); vW=w.xyz; vN=mat3(uModel)*aN; vC=aC; vM=aM; gl_Position=uVP*w; }\n';
   TRI_FS =
-    '#version 300 es\nprecision highp float;\n' + SEA_GLSL + SHADOW_GLSL + CUT_GLSL + LAMP_GLSL + (SHIP_TL ? TLAMP_GLSL : '') + 'in vec3 vN; in vec3 vW; in vec3 vC; in vec3 vM; uniform vec3 uSun,uEye,uFog,uSky,uGround; uniform float uFogD,uLit,uGlow,uGls; uniform mat4 uCutInv; uniform highp sampler2DArray uMdlT; out vec4 o;\n' +
+    '#version 300 es\nprecision highp float;\n' + SEA_GLSL + SHADOW_GLSL + CUT_GLSL + LAMP_GLSL + (SHIP_TL ? TLAMP_GLSL : '') + SHOWD_GLSL + 'in vec3 vN; in vec3 vW; in vec3 vC; in vec3 vM; uniform vec3 uSun,uEye,uFog,uSky,uGround; uniform float uFogD,uLit,uGlow,uGls; uniform mat4 uCutInv; uniform highp sampler2DArray uMdlT; out vec4 o;\n' +
     // 外殼式的貼圖（TASK-0820；62_shell.js）：頂點色欄 (−1−u, v, 層) ⇒ 照第 18 號的貼圖陣列取色（textureLod：分支裡不用隱含導數；沒有 mipmap）；其他照頂點色（bc ＝ vC ⇒ 畫面不變）
-    'void main(){ if(vW.y<uClip) discard; if(uCut.w>0.5 && cutOut((uCutInv*vec4(vW,1.0)).xyz)) discard; vec3 bc=vC; if(vC.x<-0.5) bc=textureLod(uMdlT,vec3(-vC.x-1.0,vC.y,vC.z),0.0).rgb; vec3 n=normalize(vN); float sd=dot(n,uSun), d=abs(sd); vec3 col=bc; float ga=1.0;\n' +
+    'void main(){ if(vW.y<uClip) discard; if(showCut()) discard; if(uCut.w>0.5 && cutOut((uCutInv*vec4(vW,1.0)).xyz)) discard; vec3 bc=vC; if(vC.x<-0.5) bc=textureLod(uMdlT,vec3(-vC.x-1.0,vC.y,vC.z),0.0).rgb; vec3 n=normalize(vN); float sd=dot(n,uSun), d=abs(sd); vec3 col=bc; float ga=1.0;\n' +
     ' if(uLit>0.5){ float sk=shadowK(vW,(sd<0.0?-n:n)*(3.0-2.0*d)); d*=sk; col=bc*(mix(uGround,uSky,0.6)*0.65+vec3(1.0,0.96,0.88)*d*0.7);\n' +
     // 金屬（TASK-0627；材質表 metal／rough ⇒ 平滑渲染的頂點帶 vM）：天空／海面的反射（菲涅耳：斜看更亮）＋太陽的鏡面高光（照陰影）；vM.x 0 ⇒ 跟以前一樣
     '  if(vM.x>0.001){ vec3 v=normalize(uEye-vW), r=reflect(-v,n); float ro=clamp(vM.y,0.05,1.0), fr=0.04+0.96*pow(1.0-abs(dot(n,v)),5.0);\n' +
@@ -563,7 +565,7 @@ function voxFS() {
   var s = VK.VOXEL_FS, a = 'out vec4 o;', b = 'if(vW.y<uWater){ float dd=clamp((uWater-vW.y)*0.12,0.0,1.0); c=mix(c,vec3(0.04,0.18,0.22),0.35+0.55*dd); }', c = 'float di=max(dot(n,uSun),0.0);', d = 'void main(){', e = 'vec3 c=base*(amb*0.62+vec3(1.0,0.96,0.88)*di*0.78);';
   if ([a, b, c, d, e].some(function (x) { return s.indexOf(x) < 0; })) { console.warn('VoxelKit 的體素著色器改過了：船殼不跟著浪著色、不收陰影、不吃點光源'); return s; }
   return s.replace(e, e + ' if(uLN>0) c+=base*lampK(vW,n);' + (SHIP_TL ? ' c+=base*townLamp(vW,n);' : '') + ' if(uVGN>0){ for(int i=0;i<' + VLAMP_N + ';i++){ if(i>=uVGN) break; if(abs(float(vC)-uVGC[i].w)<0.5 && distance(vL,uVG[i].xyz)<uVG[i].w) c=mix(c,base*0.35+uVGC[i].rgb*1.15,uVGK*uVGL[i]); } }').replace(a, SEA_GLSL + SHADOW_GLSL + CUT_GLSL + LAMP_GLSL + (SHIP_TL ? TLAMP_GLSL : '') + a).replace(b, '')
-    .replace(c, 'float di=max(dot(n,uSun),0.0); if(di>0.0) di*=shadowK(vW,n*(3.0-2.0*di));').replace(d, d + ' if(vW.y<uClip) discard; if(cutOut((uCutL*vec4(vL,1.0)).xyz)) discard;')   // cutOut：剖面與隱藏甲板（vL ＝ 格座標）
-    .replace(a, 'uniform mat4 uCutL;\n' + a);   // uCutL：畫的那份格子 → 船的格座標（船殼 ＝ 單位矩陣，cutSet 設；砲帶的裝甲 ＝ 它轉過的那個，24_armor.js armDraw）⇒ 轉過的裝甲照船的座標切
+    .replace(c, 'float di=max(dot(n,uSun),0.0); if(di>0.0) di*=shadowK(vW,n*(3.0-2.0*di));').replace(d, d + ' if(vW.y<uClip) discard; if(showCut()) discard; if(cutOut((uCutL*vec4(vL,1.0)).xyz)) discard;')   // cutOut：剖面與隱藏甲板（vL ＝ 格座標）
+    .replace(a, 'uniform mat4 uCutL;\n' + SHOWD_GLSL + a);   // SHOWD_GLSL：表演船近↔中交接帶的抖動（60_showlod.js）   // uCutL：畫的那份格子 → 船的格座標（船殼 ＝ 單位矩陣，cutSet 設；砲帶的裝甲 ＝ 它轉過的那個，24_armor.js armDraw）⇒ 轉過的裝甲照船的座標切
 }
 
