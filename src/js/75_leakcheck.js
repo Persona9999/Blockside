@@ -4,7 +4,7 @@
 //   起因：康塞普西翁號船尾轉角的窗，斜的牆上玻璃只在斜角相碰、空氣鑽得過去。
 // 進水（33_flood.js）只算打出來的破口與被打掉的門 ⇒ 這裡另外量「船本來的樣子，水面升到哪裡會流進艙裡」：
 //   水面從船底一路往上升，船外的水照 6 連通灌。擋水的：船的格（T.base，玻璃也算）、門（關著的外框，25_doors.js）、
-//   砲門與槳門（遊戲的規矩：砲門在就不漏水 ⇒ 沿砲管從砲口往裡 6 格到往外 14 格（LK_PORT）、左右 LK_PORT_W、上下 LK_PORT_Z 格的空格塞住，
+//   砲門與槳門（遊戲的規矩：砲門在就不漏水 ⇒ 沿砲管從砲口往裡 6 格到往外 14 格（LK_PORT；砲口伸出船殼外框 ⇒ 往裡從砲管穿過外框那一點起算）、左右 LK_PORT_W、上下 LK_PORT_Z 格的空格塞住，
 //   再加砲口 LK_GUN 格以內船殼外框的缺口（見下）；槳照槳座 pivot ±LK_OAR 格；舵照舵桿與舵柄穿過船殼的那一段 ±LK_RUD 格，見下）。
 //   每一格記「水面要升到多高才灌得到」＝ 從船外走過來的路上最高的那一格（最小化路上的最高點；照高度一層一層的水桶佇列）；
 //   水面高過那一格的底（T.zw 是水面的格高度，32_hull.js tonsAt）就灌得進 ⇒ 吃水再深 (那一格 − T.zw) × S 公尺 ⇒ 照浮力表（tonsAt）換成要多載幾噸。
@@ -25,7 +25,7 @@
 // 用的地方：觀察玩法的面板（86_inspect.js「💧 超載極限」：正的量一次、傾斜 5／10／15° 兩舷各量一次、掛漏點標籤）、
 //   匯入檢查（75_shipcheck.js R.info.leak；設計水線就漏，或沉沒線以下從窗、縫、軸孔漏 ⇒ ⚠）、__game.leak(heel, i, hole)（?debug=1）。
 // ⛔ 只在按了才量（一艘約 1–4 秒）；一般遊戲一行都不多算。
-var LK_COVER = 30, LK_GAP = 16, LK_OVER = 6, LK_NEAR = 3, LK_GUN = 12, LK_BIN = 6, LK_LIST = 12, LK_VOL = 1500, LK_PORT = [-6, 14], LK_PORT_W = 6, LK_PORT_Z = [-7, 6], LK_OAR = 3, LK_RUD = 3;
+var LK_COVER = 30, LK_GAP = 16, LK_OVER = 6, LK_NEAR = 3, LK_GUN = 12, LK_BIN = 6, LK_LIST = 12, LK_VOL = 1500, LK_PORT = [-6, 14], LK_PORT_W = 6, LK_PORT_Z = [-7, 6], LK_REACH = 40, LK_OAR = 3, LK_RUD = 3;
 /** 量一次。heel：傾斜幾度（正 ＝ 右舷朝下；不給 ＝ 正的）。回 { heel, zw, sink, sinkT（到沉沒線要多載幾噸）, n（艙裡幾格）, first, list: [{ lvl（吃水再深幾 m）, tons, kind, deck, side, x（離船尾 m）, gate, at, cells, below }], more, ms }。 */
 function leakCheck(sh, heel) {
   var t0 = performance.now(), T = sh.T, B = T.base, sx = B.sx, sy = B.sy, sink = sinkLineT(T), K = flSkin(T);
@@ -39,11 +39,25 @@ function leakCheck(sh, heel) {
     var b = d.m.bb; doorB.push(b);
     for (var zz = Math.floor(b[2]); zz < Math.ceil(b[5]); zz++) for (var yy = Math.floor(b[1]); yy < Math.ceil(b[4]); yy++) for (var xx = Math.floor(b[0]); xx < Math.ceil(b[3]); xx++) fill(xx, yy, zz, 2);
   });
-  (sh.guns || []).forEach(function (g) {                               // 砲門：從砲口沿砲管（水平那一段）往外塞
-    var m = g.muz, a = g.ax; if (!m || !a) return;
-    var hl = Math.hypot(a[0], a[1]); if (hl < 0.2) return;
-    var ux = a[0] / hl, uy = a[1] / hl;
-    for (var t = LK_PORT[0]; t <= LK_PORT[1]; t += 0.5) for (var w = -LK_PORT_W; w <= LK_PORT_W; w += 0.5) for (var dz = LK_PORT_Z[0]; dz <= LK_PORT_Z[1]; dz++)   // 🩸 從砲口往外、上下 ±5 ⇒ 砲口已經伸出船殼、門檻在砲口下 6 格，康塞普西翁號照樣從第一層砲門下緣漏
+  var yPf = new Int16Array(K.yP.length).fill(-1), yMf = new Int16Array(K.yM.length).fill(-1);
+  for (z = 0; z < Math.min(zMax, K.zTop); z++) for (x = 0; x < K.nxv; x++) {
+    var a0 = z * K.nxv + x, pM = -1, mM = 1e9;
+    for (var dd = Math.max(0, x - LK_GAP); dd <= Math.min(K.nxv - 1, x + LK_GAP); dd++) { var aa = z * K.nxv + dd; if (K.yP[aa] < 0) continue; if (K.yP[aa] > pM) pM = K.yP[aa]; if (K.yM[aa] < mM) mM = K.yM[aa]; }
+    if (pM >= 0) { yPf[a0] = pM; yMf[a0] = mM; }
+  }
+  // 砲管穿過船殼外框的那一點：從砲口沿砲管（水平那一段）往裡走到第一格外框裡（t ≤ 0；砲口在框裡 ⇒ 0；LK_REACH 格內走不到 ⇒ 當 0）
+  //   🩸 松島號 12 cm 砲的砲管伸出船殼約 2 m（砲口 y 5.5、船殼 y 26）⇒ 照砲口塞的框整個在船外、砲門洞一格都沒塞 ⇒ 中甲板十個砲門吃水再深 3.0 m 全漏（TASK-1038）
+  var ports = (sh.guns || []).map(function (g) {
+    var m = g.muz, a = g.ax; if (!m || !a) return null;
+    var hl = Math.hypot(a[0], a[1]); if (hl < 0.2) return null;
+    var ux = a[0] / hl, uy = a[1] / hl, t = 0;
+    while (t > -LK_REACH && !inSkin(Math.floor(m[0] + ux * t), Math.floor(m[1] + uy * t), Math.floor(m[2]))) t -= 0.5;
+    return { m: m, ux: ux, uy: uy, t: t > -LK_REACH ? t : 0 };
+  });
+  ports.forEach(function (p) {                                         // 砲門：沿砲管從穿過外框那一點往裡 6 格到砲口往外 14 格塞
+    if (!p) return;
+    var m = p.m, ux = p.ux, uy = p.uy;
+    for (var t = Math.min(LK_PORT[0], p.t + LK_PORT[0]); t <= LK_PORT[1]; t += 0.5) for (var w = -LK_PORT_W; w <= LK_PORT_W; w += 0.5) for (var dz = LK_PORT_Z[0]; dz <= LK_PORT_Z[1]; dz++)   // 🩸 從砲口往外、上下 ±5 ⇒ 砲口已經伸出船殼、門檻在砲口下 6 格，康塞普西翁號照樣從第一層砲門下緣漏
       fill(Math.floor(m[0] + ux * t - uy * w), Math.floor(m[1] + uy * t + ux * w), Math.floor(m[2] + dz), 3);
   });
   sh.models.forEach(function (m) {                                     // 槳門：槳座四周
@@ -74,22 +88,21 @@ function leakCheck(sh, heel) {
       }
     });
   });
-  var yPf = new Int16Array(K.yP.length).fill(-1), yMf = new Int16Array(K.yM.length).fill(-1);
-  for (z = 0; z < Math.min(zMax, K.zTop); z++) for (x = 0; x < K.nxv; x++) {
-    var a0 = z * K.nxv + x, pM = -1, mM = 1e9;
-    for (var dd = Math.max(0, x - LK_GAP); dd <= Math.min(K.nxv - 1, x + LK_GAP); dd++) { var aa = z * K.nxv + dd; if (K.yP[aa] < 0) continue; if (K.yP[aa] > pM) pM = K.yP[aa]; if (K.yM[aa] < mM) mM = K.yM[aa]; }
-    if (pM >= 0) { yPf[a0] = pM; yMf[a0] = mM; }
-  }
   // 砲門的缺口：補平的外框跟原本那一列的外框（K.yP／yM；砲門那幾列刻掉了 ⇒ 縮進去或沒有）中間那一段，砲口 LK_GUN 格以內的整段塞住
   //   🩸 只照砲管方向塞一個框 ⇒ 斜指的砲、比框寬的砲門照樣漏（康塞普西翁號塞完還報「吃水再深 2.1 m 從砲門旁漏」）；斜角上的縫不改變那一列的外框 ⇒ 照樣量得到
-  (sh.guns || []).forEach(function (g) {
-    var m = g.muz; if (!m) return;
+  //   砲口伸出外框 ⇒ 穿過外框那一點也照這樣塞一次（兩個都塞）
+  function gapFill(m) {
     for (var zz = Math.max(0, Math.floor(m[2]) - LK_GUN); zz <= Math.min(Math.min(zMax, K.zTop) - 1, Math.floor(m[2]) + LK_GUN); zz++)
       for (var xx = Math.max(K.x0, Math.floor(m[0]) - LK_GUN); xx <= Math.min(K.x1, Math.floor(m[0]) + LK_GUN); xx++) {
         var a2 = zz * K.nxv + xx - K.x0, rp = K.yP[a2], rm = K.yM[a2]; if (yPf[a2] < 0) continue;
         for (var yy = Math.max(0, Math.floor(m[1]) - LK_GUN); yy <= Math.min(sy - 1, Math.floor(m[1]) + LK_GUN); yy++)
           if (yy > yMf[a2] && yy < yPf[a2] && (rp < 0 || yy >= rp || yy <= rm)) fill(xx, yy, zz, 3);
       }
+  }
+  (sh.guns || []).forEach(function (g, gi) {
+    if (!g.muz) return;
+    gapFill(g.muz);
+    var p = ports[gi]; if (p && p.t < 0) gapFill([p.m[0] + p.ux * p.t, p.m[1] + p.uy * p.t, p.m[2]]);
   });
   // 艙裡的候選格（見檔頭）：1 候選，之後 3 ＝ 夠大那一塊（艙裡）、4 ＝ 太小的口袋
   var cand = new Uint8Array(N), rowAny = new Uint8Array(sx * zMax), colAny = new Uint8Array(sx);
