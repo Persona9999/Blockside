@@ -248,7 +248,7 @@ function flagVariant(T, k) {
   V[k] = m;
   if (T.cloth) {                                                         // 布已經建好（clothSetup）⇒ 重排；堡壘原本沒有貼圖集（作品的旗沒貼圖）⇒ 這時才第一次有
     T.sailAtlas = sailAtlas(T.rig.sails.concat(T.teamExtra)); if (T.sailTexGL) gl.deleteTexture(T.sailTexGL); T.sailTexGL = null;
-    SHIPS.forEach(function (s) { if (s.T === T) s.rigDirty = true; });
+    DRAWN.forEach(function (s) { if (s.T === T) s.rigDirty = true; });
   }
   return m;
 }
@@ -351,7 +351,7 @@ function poleBuf(sh) {
 function drawColours(prog, pd) {                                      // pd：哪一趟（60_rbatch.js RBAT.pd；鏡頭外的船不畫，viewVis）
   if (prog.u.uGlow) gl.uniform1f(prog.u.uGlow, 0);
   var vb = pd ? pd.b : 0;
-  SHIPS.forEach(function (sh, i) {
+  DRAWN.forEach(function (sh, i) {
     var b = sh.poleB; if (!b || !b.n || sh.sink > 40 || (vb && !(RBAT.cs[i] & vb))) return;
     cutSet(prog, sh); gl.uniformMatrix4fv(prog.u.uModel, false, sh.M); var fo = showlodFadeOut(prog, i);   // 表演船中↔遠交接帶（60_showlod.js）：旗桿照 t 淡出
     gl.bindVertexArray(b.vao); gl.drawArrays(gl.TRIANGLES, 0, b.n); if (fo) showlodFadeEnd(prog);

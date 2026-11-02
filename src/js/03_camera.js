@@ -17,7 +17,7 @@ var CAM_ORDER = [4, 0, 1, 2, 3];                 // C 鍵循環的順序：我�
 //   ⛔ 只是畫面：模擬照舊用自己的（換回來之後才走下一步）。慢一步（最多 1／60 秒）是內插的代價。?lerp=0 ⇒ 不內插（對照）。
 var LERP_ON = Q.get('lerp') !== '0';
 function renderLerp(on, a) {
-  SHIPS.forEach(function (sh) {
+  (on ? drawnSync() : DRAWN).forEach(function (sh) {                  // 演出物件（58_traffic.js ⑭）也內插；換回那一下照同一張表
     if (!on) { if (sh.Ms) { sh.M = sh.Ms; sh.inv = sh.Is; sh.center = sh.Cs; sh.yaw = sh.Ys; sh.Ms = null; } return; }
     if (!LERP_ON || !sh.Mp || !(a < 1)) return;
     var M = new Float32Array(16), P = sh.Mp, N = sh.M, dy = Math.atan2(Math.sin(sh.yaw - sh.yawP), Math.cos(sh.yaw - sh.yawP));

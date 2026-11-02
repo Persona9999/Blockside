@@ -56,7 +56,7 @@ function wpRing(T) {
 function stepWater(dt, only) {
   var L = wpLv();
   if (!L) { WS.n = WF.n = 0; return; }
-  if (only !== 'fly') SHIPS.forEach(function (sh) { wpShip(sh, dt, L); });
+  if (only !== 'fly') DRAWN.forEach(function (sh) { if (sh.showIdle && trafficShow(sh)) { sh.wpM = null; return; } wpShip(sh, dt, L); });   // 停住的演出物件（離鏡頭遠、不在畫面裡；50_sim.js showIdleTick）不冒水花；wpM 清掉 ⇒ 接回那一步不算成一大段位移
   if (only === 'ship') return;
   var hmax = seaTopOf(1.2 * SEA_K * WX.sea + 0.1), i, o, wx = WIND[0] * WX.wind * 0.12 * dt, wz = WIND[2] * WX.wind * 0.12 * dt, kd = 1 - 0.35 * dt;
   for (i = 0; i < WS.n; i++) {

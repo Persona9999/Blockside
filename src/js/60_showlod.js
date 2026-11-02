@@ -85,12 +85,12 @@ function showlodType(T) {
 }
 /** 這一格每艘畫哪一級（frameBegin：rbatPrep 之前；鏡頭、內插過的 sh.M 都定了）。 */
 function showlodPrep() {
-  var D = SHOWLOD, ns = SHIPS.length, st = D.stat, eye = CAM.eye, t0 = performance.now(), o;
+  var D = SHOWLOD, ns = DRAWN.length, st = D.stat, eye = CAM.eye, t0 = performance.now(), o;
   if (D.lv.length < ns) { D.lv = new Uint8Array(ns * 2); D.Mm = new Float32Array(ns * 32); D.B = new Float32Array(ns * 24); D.fd = new Float32Array(ns * 2); }
   st.f = RFR; st.near = st.band = st.mid = st.farBand = st.far = st.farMid = st.none = st.quads = 0;
   var fp = null;                                                         // 遠那一級的著色器：第一艘要用時才送出編譯（編好之前照中那一級）
   for (o = 0; o < ns; o++) {
-    var sh = SHIPS[o]; D.lv[o] = 0;
+    var sh = DRAWN[o]; D.lv[o] = 0;
     if (sh.sink > 40) continue;
     if (!D.on || !eye || !trafficShow(sh) || sh.grid.ver !== 0) { st.none++; continue; }
     if (!D.st) showlodNeed();
@@ -119,7 +119,7 @@ function showlodBandSails(prog, L, pd) {
   var D = SHOWLOD, bt = null, cur = null;
   if (!D.sail && !D.sailBad) { var fs = showlodDithFS(SAIL_FS); if (!fs) D.sailBad = true; else { try { D.sail = glProgTry(SAIL_VS, fs); } catch (e) { D.sailBad = true; } } }
   L.forEach(function (o) {
-    var ow = SHIPS[o], fx = ow.fx && ow.sb.fxOn, p = fx ? floopFxProg(P.sail, true) || floopFxProg(P.sail) || prog : D.sail || prog;
+    var ow = DRAWN[o], fx = ow.fx && ow.sb.fxOn, p = fx ? floopFxProg(P.sail, true) || floopFxProg(P.sail) || prog : D.sail || prog;
     if (p !== cur) {
       gl.useProgram(p.prog); setCommon(p); cur = p; bt = null;
       if (p.u.uSailT) gl.uniform1i(p.u.uSailT, SAIL_UNIT); if (p.u.uFireT) gl.uniform1f(p.u.uFireT, BURN.sailBurn); if (fx && p !== prog) floopBind(p);
@@ -212,9 +212,9 @@ function showlodFarDraw() {
   var p = D.prog, u = p.u, cf = gl.isEnabled(gl.CULL_FACE), bt = null;
   gl.useProgram(p.prog); setCommon(p); gl.disable(gl.CULL_FACE);
   gl.activeTexture(gl.TEXTURE11); gl.uniform1i(u.uTex, 11); gl.bindVertexArray(D.vao);
-  for (var o = 0, ns = SHIPS.length; o < ns; o++) {
+  for (var o = 0, ns = DRAWN.length; o < ns; o++) {
     var lv = D.lv[o]; if (lv !== 2 && lv !== 4) continue;
-    var tx = D.T[SHIPS[o].T.id].im.tex; if (tx !== bt) gl.bindTexture(gl.TEXTURE_2D, bt = tx);
+    var tx = D.T[DRAWN[o].T.id].im.tex; if (tx !== bt) gl.bindTexture(gl.TEXTURE_2D, bt = tx);
     gl.uniform2f(u.uShowD, lv === 4 ? D.fd[o] : 0, lv === 4 ? -1 : 0);   // 中↔遠交接帶：看板照 t 淡入
     gl.uniform4fv(u.uA, D.B, o * 12, 4); gl.uniform4fv(u.uB, D.B, o * 12 + 4, 4); gl.uniform4fv(u.uU, D.B, o * 12 + 8, 4);
     gl.drawArrays(gl.TRIANGLES, 0, 6);

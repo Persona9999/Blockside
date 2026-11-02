@@ -257,7 +257,7 @@ function gpuSlots() {
   var cand = null;
   function pick(n, prev) {
     var L;
-    if (SHIPS.length <= n) L = SHIPS.filter(function (s, i) { return !showlodNoMask(i); });   // 表演船畫遠那一級、中↔遠交接帶（看板，60_showlod.js）⇒ 不給遮罩（看板在水面下那一截要被海蓋住）
+    if (DRAWN.length <= n) L = DRAWN.filter(function (s, i) { return !showlodNoMask(i); });   // 表演船畫遠那一級、中↔遠交接帶（看板，60_showlod.js）⇒ 不給遮罩（看板在水面下那一截要被海蓋住）
     else {
       if (!cand) {
         var vp = CAM.vp, pl = [];                                         // 視錐的六個面（列優先的矩陣：第 r 列 ＝ vp[r], vp[4+r], vp[8+r], vp[12+r]）
@@ -265,7 +265,7 @@ function gpuSlots() {
           var a = [0, 1, 2, 3].map(function (c) { return vp[c * 4 + 3] + q[1] * vp[c * 4 + q[0]]; }), l = Math.hypot(a[0], a[1], a[2]) || 1;
           pl.push(a.map(function (v) { return v / l; }));
         });
-        cand = SHIPS.map(function (s, i) {
+        cand = DRAWN.map(function (s, i) {
           var B = s.T.base, R = s.T.shR || (s.T.shR = 0.5 * S * Math.hypot(B.sx, B.sy, B.sz)), c = M4.pt(s.M, B.sx / 2, B.sy / 2, B.sz / 2);
           return { s: s, vis: s.sink <= 40 && !showlodNoMask(i) && pl.every(function (p) { return p[0] * c[0] + p[1] * c[1] + p[2] * c[2] + p[3] > -R; }), d: Math.hypot(c[0] - CAM.eye[0], c[1] - CAM.eye[1], c[2] - CAM.eye[2]) };
         });
@@ -273,7 +273,7 @@ function gpuSlots() {
       L = cand.filter(function (o) { return o.vis; }).map(function (o) { return { s: o.s, d: o.d * (prev.indexOf(o.s) >= 0 ? 0.9 : 1) }; })
         .sort(function (a, b) { return a.d - b.d || a.s.i - b.s.i; }).slice(0, n).map(function (o) { return o.s; }).sort(function (a, b) { return a.i - b.i; });
     }
-    L.rest = SHIPS.filter(function (s) { return L.indexOf(s) < 0; });
+    L.rest = DRAWN.filter(function (s) { return L.indexOf(s) < 0; });
     return L;
   }
   MSLOTS = pick(Math.min(GFX.masks, MASK_NEAR), MSLOTS);
@@ -282,8 +282,8 @@ function ortho(r, n, f, ry) { return new Float32Array([1 / r, 0, 0, 0, 0, 1 / (r
 /** 帆與繩的緩衝：一格最多做一次（之後陰影、反射、場景都用同一份）；沒走模擬的那一格不重做。 */
 function prepRig() {
   floopTick();                                                          // 循環布（11_rig_loop.js）：還在烘就烘一小段
-  for (var i = 0, ns = SHIPS.length, n = ns + PIECES.length; i < n; i++) {   // 船、再斷開的那一團（⛔ SHIPS.concat(PIECES)：每格一個新陣列）
-    var ow = i < ns ? SHIPS[i] : PIECES[i - ns], dirty = ow.rigDirty;
+  for (var i = 0, ns = DRAWN.length, n = ns + PIECES.length; i < n; i++) {   // 船、再斷開的那一團（⛔ SHIPS.concat(PIECES)：每格一個新陣列）
+    var ow = i < ns ? DRAWN[i] : PIECES[i - ns], dirty = ow.rigDirty;
     if (dirty) buildRig(ow);
     if (ow.sink > 40) continue;
     var tb = DEBUG ? performance.now() : 0, live = PHYS && ow.crew, same = live && rigSame(ow) && !dirty;   // rigSame 每一格都比（記下重做那一刻的輸入）
@@ -313,14 +313,14 @@ function rsFlushSome(rs, n) {
 }
 function remesh(budget) {
   var left = budget;
-  PIECES.concat(SHIPS).forEach(function (o) { if (left > 0 && o.rs.dirty.size) left -= rsFlushSome(o.rs, left); });
+  PIECES.concat(DRAWN).forEach(function (o) { if (left > 0 && o.rs.dirty.size) left -= rsFlushSome(o.rs, left); });
   var sl = budget === Infinity ? Infinity : SM_FRAME;                    // 平滑面（15_smooth.js）：一區比一塊貴 ⇒ 另外算，每一格最多 SM_FRAME 區
-  SHIPS.forEach(function (sh) { if (sl > 0 && sh.smD && sh.smD.size) sl -= smFlush(sh, sl); });
-  SHIPS.forEach(function (sh) { if (sh.arm) { var r = armRemesh(sh, left, sl); left = r[0]; sl = r[1]; } });   // 砲帶的裝甲（24_armor.js）：船殼排完才輪到
+  DRAWN.forEach(function (sh) { if (sl > 0 && sh.smD && sh.smD.size) sl -= smFlush(sh, sl); });
+  DRAWN.forEach(function (sh) { if (sh.arm) { var r = armRemesh(sh, left, sl); left = r[0]; sl = r[1]; } });   // 砲帶的裝甲（24_armor.js）：船殼排完才輪到
 }
 function drawHulls(prog, pd) {                                         // pd：哪一趟（60_rbatch.js RBAT.pd）；陰影那一段只畫 csmIn 判進那一段的（RBAT.cs 的第 k 位 ＝ pd.b）；反射、主畫面只畫 viewVis 判看得到的（第 4、5 位；關著 ⇒ pd.b ＝ 0 ⇒ 全畫）
   var b = pd.b, cs = RBAT.cs;
-  SHIPS.forEach(function (sh, i) { if (sh.sink > 40 || (b && !(cs[i] & b))) return; var lo = showlodMid(i, sh); if (lo) { showlodHull(prog, i, lo); if (sh.arm) armDraw(prog, sh); if (SHOWLOD.lv[i] === 4 && prog.u.uShowD) showlodFadeEnd(prog); return; }   // 表演船畫中那一級（60_showlod.js）：低模（裝甲照舊）
+  DRAWN.forEach(function (sh, i) { if (sh.sink > 40 || (b && !(cs[i] & b))) return; var lo = showlodMid(i, sh); if (lo) { showlodHull(prog, i, lo); if (sh.arm) armDraw(prog, sh); if (SHOWLOD.lv[i] === 4 && prog.u.uShowD) showlodFadeEnd(prog); return; }   // 表演船畫中那一級（60_showlod.js）：低模（裝甲照舊）
     var bd = showlodBandOut(prog, i); cutSet(prog, sh); vlampSet(prog, sh); gl.uniformMatrix4fv(prog.u.uModel, false, sh.M); rbatHull(sh.rs, sh.T.pristine); if (bd) showlodBandLow(prog, i, sh); if (sh.arm) armDraw(prog, sh); });   // bd：表演船近↔中交接帶（60_showlod.js）：原模淡出、低模淡入   // cutSet：剖面與隱藏甲板（74_cutaway.js）；rbatHull：沒被打到的區照船型的合併緩衝一段一次畫（60_rbatch.js，S8）；armDraw：砲帶的裝甲（24_armor.js，跟著砲轉）
   cutSet(prog, null); vlampSet(prog, null);
   PIECES.forEach(function (pc, j) { if (b && !(cs[RBAT.ns + j] & b)) return; gl.uniformMatrix4fv(prog.u.uModel, false, pc.M); pc.rs.draw(); });
@@ -351,7 +351,7 @@ function vlampSet(prog, sh) {
 }
 function lampsUpdate() {
   var L = [], E = CAM.eye, lit = shipLit();                          // lit：船燈點了幾成（08_weather.js；白天 0 ⇒ 船燈不佔點光源的名額）
-  SHIPS.forEach(function (sh) {
+  DRAWN.forEach(function (sh) {
     if (sh.sink > 40) return;
     sh.vlamps = lit ? (sh.T.lamps || []).filter(function (V) { return vlampOn(sh, V); }) : [];   // 船殼上的燈：被打掉 ⇒ 熄（發光、點光源、光暈一起）
     sh.vlampN = sh.vlamps.length;                                     // 前 vlampN 盞是船殼上的燈（照 lit），後面 burnLamps 加的火光照舊全亮
@@ -375,7 +375,7 @@ function lanternK(m) { var t = SIMT * 1.7 + m.k * 2.39; return 0.8 + 0.1 * Math.
 function lampGlow(m) { return lanternK(m) * shipLit(); }
 function lanternHalo(push) {
   var lit = shipLit();                                                // 船燈點了幾成：光暈整個乘（白天 0 ⇒ 不畫）；著火的火光照舊
-  SHIPS.forEach(function (sh) {
+  DRAWN.forEach(function (sh) {
     if (sh.sink > 40) return;
     (sh.vlamps || []).forEach(function (V, j) { var k = 0.9 + 0.1 * Math.sin(SIMT * 1.3 + j), f = j < sh.vlampN ? lit : 1; push(M4.pt(sh.M, V.at[0], V.at[1], V.at[2]), V.r * S * (2.4 + 0.4 * k) * (V.ha || 1), V.rgb, (0.18 + 0.2 * k * (1.6 - wxLum())) * f); });   // 船殼上的燈的光暈（照它的光色）
     if (lit) sh.models.forEach(function (m) {
@@ -389,8 +389,8 @@ function drawSails(prog, pd) {                                         // pd：�
   if (prog.u.uSailT) gl.uniform1i(prog.u.uSailT, SAIL_UNIT);           // 帆的貼圖集（TASK-0579；11_rig_gpu.js sailTex）：固定第 9 號
   if (prog.u.uFireT) gl.uniform1f(prog.u.uFireT, BURN.sailBurn);      // 帆燒到穿要幾秒（01_gl.js BURN_GLSL；49_burn.js）
   var fx = floopFxProg(prog), FX = null, BD = null;                               // 循環布（11_rig_loop.js）：繩帆固定的船改用變體、排到最後畫（還沒烘好、編不過 ⇒ null，照以前）
-  for (var i = 0, ns = SHIPS.length, n = ns + PIECES.length, b = pd.b, bt = null; i < n; i++) {   // 船、再斷開的那一團（⛔ SHIPS.concat(PIECES)：每輪一個新陣列）；i ＝ RBAT 的 owner 順序
-    var ow = i < ns ? SHIPS[i] : PIECES[i - ns];
+  for (var i = 0, ns = DRAWN.length, n = ns + PIECES.length, b = pd.b, bt = null; i < n; i++) {   // 船、再斷開的那一團（⛔ SHIPS.concat(PIECES)：每輪一個新陣列）；i ＝ RBAT 的 owner 順序
+    var ow = i < ns ? DRAWN[i] : PIECES[i - ns];
     if (ow.sink > 40 || !ow.sb || !ow.sb.n || (b && !(RBAT.cs[i] & b))) continue;
     if (prog === P.sail && i < ns && SHOWLOD.lv[i] === 4) { (BD || (BD = [])).push(i); continue; }   // 表演船中↔遠交接帶（60_showlod.js showlodBandSails）：帆用淡出的分身、最後畫
     if (fx && ow.fx && ow.sb.fxOn) { (FX || (FX = [])).push(ow); continue; }
@@ -945,6 +945,7 @@ function render() {
 }
 /** 一格的準備：畫布大小、閃電與世界時間的天色、framebuffer、陰影圖、遮罩的格、燈、帆與繩的緩衝、地形網格 ⇒ fr（之後幾段要的：畫的大小、要還原的天色）。 */
 function frameBegin() {
+  drawnSync();                                                         // 畫面那一側的船（58_traffic.js ⑭：SHIPS 後面接演出物件）：這一格之內不再變
   resize(); var w = CAM.w, h = CAM.h; RFR++;                          // RFR：這一格的模型表（rbatPrep）、地形網格（bedBuild）照它
   // 閃電（天氣，08_weather.js）：那一格的天空與環境光拉亮、0.3 秒內退掉；雷聲照距離延後（340 m/s）。只在畫面，畫完把天色還回去（frameEnd）
   var bolt = wxBolt(SIMT), sky0 = SKY, hor0 = HORIZON, tod0 = todApply();   // 世界時間（08_weather.js；有 ?tod= 才開）：太陽、天色照時刻 —— 在記下 sky0／hor0 之後套（⛔ 之前 ⇒ 結尾還原成套過的、一格一格疊上去）
@@ -990,8 +991,8 @@ function mainOpaque(fr) {
   gl.disable(gl.CULL_FACE); gl.useProgram(P.tri.prog); setCommon(P.tri);
   gl.uniform1f(P.tri.u.uLit, 1); drawModels(P.tri, RBAT.pd.mn); drawColours(P.tri, RBAT.pd.mn);   // 陣營旗（77_colours.js）
   gl.uniform1f(P.tri.u.uLit, 0); gl.vertexAttrib3f(1, 0, 1, 0);
-  for (var j = 0, ns = SHIPS.length, no = ns + PIECES.length, bm = RBAT.pd.mn.b; j < no; j++) {   // 船、再斷開的那一團（⛔ SHIPS.concat(PIECES)：每格一個新陣列）；j ＝ RBAT 的 owner 順序（bm：鏡頭外的不畫，viewVis）
-    var ow = j < ns ? SHIPS[j] : PIECES[j - ns];
+  for (var j = 0, ns = DRAWN.length, no = ns + PIECES.length, bm = RBAT.pd.mn.b; j < no; j++) {   // 船、再斷開的那一團（⛔ SHIPS.concat(PIECES)：每格一個新陣列）；j ＝ RBAT 的 owner 順序（bm：鏡頭外的不畫，viewVis）
+    var ow = j < ns ? DRAWN[j] : PIECES[j - ns];
     if (ow.sink > 40 || (bm && !(RBAT.cs[j] & bm))) continue;
     cutSet(P.tri, ow); gl.uniformMatrix4fv(P.tri.u.uModel, false, ow.M); var fo = j < ns && showlodFadeOut(P.tri, j);   // 表演船中↔遠交接帶：繩照 t 淡出
     if (ow.lines && ow.lines.n) { gl.bindVertexArray(ow.lines.vao); gl.drawArrays(gl.LINES, 0, ow.lines.n); }

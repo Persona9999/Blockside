@@ -32,7 +32,7 @@ function funnelCount(G, p) {
 /** 每一步（viewStep）：每艘還浮著的船、每根還在的煙囪照出力冒煙。表演船（58_traffic.js trafficShow）的煙囪不在這裡冒：交給 smokeStep 照距離規則（SMK.show）。 */
 function funnelSmoke(dt) {
   SMK.show.length = 0; SMK.stat.funnel.real = 0;
-  SHIPS.forEach(function (sh) {
+  DRAWN.forEach(function (sh) {
     var F = funnelsOf(sh.T); if (!F.length || sh.sunk || sh.sinkingFinal) return;
     var D = sh.drive, off = D && D.C && D.C.fnOff;
     var on = (+sh.cfg.base || 0) > 0 && (sh.power || 0) !== 0 && !(D && D.kind && D.cap <= 0), rate = (on ? FN_ON : FN_IDLE) * dt;
@@ -128,7 +128,7 @@ function smokeStep(dt) {
   });
   SMK.show.forEach(function (o) { var d = dist(M4.pt(o.sh.M, o.f.p[0], o.f.p[1], o.f.p[2])); if (d < SMK_FAR) { C.push({ c: 'funnel', d: d, o: o }); st.funnel.near++; } });
   var meal = smokeMeal();
-  SHIPS.forEach(function (sh) {
+  DRAWN.forEach(function (sh) {
     if (sh.sunk || sh.sinkingFinal) return;
     galleysOf(sh.T).forEach(function (gl, j) {
       if (!gl.p) { st.galley.nopt++; return; }

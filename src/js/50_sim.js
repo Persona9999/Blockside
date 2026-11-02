@@ -145,6 +145,7 @@ var SIM_N = 0;                                                       // 走過�
 var VIEW_HOLD = false, VIEW_ACC = 0;                                // 只給人看的推進（viewStep）：畫面一格補好幾步時只在最後一步推一次（90_main.js frame 設 VIEW_HOLD）；快轉、無頭照舊每一步推
 function simStep() {
   if (PF) PF.t = performance.now();                                 // 逐幀分段計時（?debug=1，00_core.js）
+  drawnSync();                                                     // 畫面那一側的船（58_traffic.js ⑭）：直接跑模擬步的路（__game.run、無頭）也跟上 SHIPS（⛔ 只在畫面迴圈同步 ⇒ 開場那幾步 DRAWN 是空的、船邊不冒水花）
   SIMT += DT; SIM_N++; wclkStep(DT);                               // 世界時間的流速（08_weather.js；城鎮模式照外面那一頁的時間面板，物理照舊 1 倍）
   if ((Math.round(SIMT / DT) % everySteps(CMD_EVERY_S)) === 0) cmdTick();   // 指揮官每 3 秒想一次（52_fleet.js；不抽亂數）
   pickFoes();                                                      // 每艘的目標（52_fleet.js）：這一步之內都用同一個
@@ -166,11 +167,13 @@ function simStep() {
   collide(hMv);
   if (BED) SHIPS.forEach(function (sh) { if (!trafficKin(sh)) groundStep(sh, hMv); });  // 擱淺（32_ground.js；有海圖才有）；照時刻表滑、進出港拖的往來船（58_traffic.js ⑥⑧）不擱淺、棧橋不推
   if (BED && TOWNS.list.length) SHIPS.forEach(function (sh) { if (!trafficKin(sh)) quayStep(sh, hMv); });   // 棧橋、海堤的碰撞（32_quay.js；有城才有）
+  if (SHOWS.length) { SHOWS.forEach(function (sh) { showStep(sh, DT); }); showHitTick(); if (PF) pfLap('show'); }   // 演出物件（58_traffic.js ⑭）：只擺位置、浪上起伏；會撞的換成真的船（下面電腦、砲彈就照真的船算）
   SHIPS.forEach(function (sh) {                                    // 照 SHIPS 的順序（一對一：我艦先、敵艦後 ⇒ 跟以前同一個順序抽亂數）
     if (sh.i === PLAYER_I) { if (AUTOFIRE) simAi(sh, DT); }            // 自動開砲：我艦也交給電腦瞄準開火
     else if (modeRule('othersAct')) simAi(sh, DT);                // 玩法規則 othersAct（04_modes.js）：沙盒的其他船不還手
   });
   if (PF) pfLap('ai');
+  showBallTick();                                                  // 飛向演出物件的砲彈：先換成真的船再算命中（58_traffic.js ⑭）
   for (i = 0; i < BALLS.length; i++) { stepBall(BALLS[i], DT); if (!BALLS[i].alive) { evEmit('ballGone', BALLS[i]); BALLS.splice(i--, 1); } }
   if (PF) pfLap('balls');
   SHIPS.forEach(function (sh) { if (sh.burn) burnStep(sh); });     // 著火（49_burn.js；著過火的船才有 sh.burn）：燒穿的格下面 integrity 同一步斷開
@@ -180,6 +183,7 @@ function simStep() {
   for (i = 0; i < PIECES.length; i++) if (!stepPiece(PIECES[i], DT)) { evEmit('pieceGone', PIECES[i]); PIECES.splice(i--, 1); }
   for (i = 0; i < FLY.length; i++) if (!stepFly(FLY[i], DT)) FLY.splice(i--, 1);
   if (PF) pfLap('pieces');
+  drawnSync();                                                     // 這一步中間換過真的、演出物件 ⇒ 給人看的那一段照新的
   if (!FLAB_HIDE) { if (SLOW_VIS) evEmit('viewStepSlow', DT); else { VIEW_ACC += DT; if (!VIEW_HOLD) { evEmit('viewStep', VIEW_ACC); VIEW_ACC = 0; } } }   // VIEW_HOLD：這一格畫面後面還要補步（90_main.js frame）⇒ 先累著、最後一步一次推（照 dt 生、照 dt 走 ⇒ 量一樣；補 3 步不再推 3 次）   // FLAB_HIDE：擬真沙盒只看俯視圖時不推（84_fleetlab.js；只給人看的，不改戰局）             // 只給人看的推進：碎木、煙囪排煙、粒子、船邊水花（各自的亂數；00_events.js）；殉爆慢動作中（73_slowmo.js）只推船邊水花，其餘照畫面的時間走
   if (PF) pfLap('water');                       // 船邊水花（13_water.js；只給人看、自己的亂數）
   if (PHYS) { var pt0 = performance.now(); if (VIS_FRAME) SHIPS.forEach(function (sh) { if (sh.sink < 40) physGameStep(sh); }); else { SHIPS.forEach(function (sh) { if (sh.sink < 40) physStep(sh); }); clothContactsRun(); } PHYS_MS = PHYS_MS * 0.98 + (performance.now() - pt0) * 0.02; }   // 讀數只看、不回寫模擬；VIS_FRAME（有畫面）⇒ 這裡只算帆桁追風那一段，布在畫面這一格算（TASK-0799）
