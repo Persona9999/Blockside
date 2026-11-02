@@ -69,8 +69,8 @@
 //      在船台上：浮力照舊算（08_sea.js 照水面）、畫面多墊 sh.lnY（龍骨七點裡最低那一點貼著船台面，10_ship.js shipMatrix）、縱搖多 sh.lnP（＝ 船台的斜度）；浮的那一個位置比船台面高了 ⇒ 墊 0、斜度慢慢回 0 ⇒ 不跳。
 //      照時刻表滑、拖一樣不碰海床、棧橋（trafficKin）。挑船台：這座城水上的地塊、模型索引有 slip [長, 寬, 落差] 的，船身（hx0～hx1）≤ 長 ＋ TRF_LAUNCH.over、船寬 ≤ 寬 ⇒ 長度最小的那一座。
 //      演出（__game.townLaunch：不看帳，Blocksail 城鎮模式裡試）⇒ 一艘假的往來船（TRF.demo，清單換了也留著；演完停 TRF_LAUNCH.keep 秒才收）。
-// 讀數：__game.traffic() ⇒ { ships, queue, built, dropped, gap（⑩ 擋下幾次）, gapLast（最後一次：哪一艘、被誰擋、隔幾公尺）, stepMax, stepMs（每一段幾毫秒，最近 200 段）, place（放上場那一步）, launch（⑬ 最近一次）}
-var TRF = { want: {}, build: null, q: [], askT: 0, clockT: 0, built: 0, dropped: 0, gap: 0, gapLast: null, stepMax: 0, stepMs: [], place: [], skip: 0, foeOnce: {}, demo: {}, launch: null };   // foeOnce：照 foe 敵對過的船隊 id（⑫）；demo：⑬ 演出的假船；launch：⑬ 讀數
+// 讀數：__game.traffic() ⇒ { ships, queue, built, dropped, gap（⑩ 擋下幾次）, gapLast（最後一次：哪一艘、被誰擋、隔幾公尺）, stepMax, stepMs（每一段幾毫秒，最近 200 段）, place（放上場那一步）, launch（⑬ 最近一次）, bad（② 載不到的船型 ⇒ 為什麼）}
+var TRF = { want: {}, build: null, q: [], askT: 0, clockT: 0, built: 0, dropped: 0, gap: 0, gapLast: null, stepMax: 0, stepMs: [], place: [], skip: 0, foeOnce: {}, demo: {}, launch: null, hullAsk: {}, bad: {} };   // foeOnce：照 foe 敵對過的船隊 id（⑫）；demo：⑬ 演出的假船；launch：⑬ 讀數；hullAsk、bad：② 叫過載的船型、載不到的船型（trafficHull）
 var TRF_LAUNCH = { hold: 3, mu: 0.04, tau: 4, vEnd: 0.15, over: 4, bow: 0.55, splash: 0.3, keep: 30 };   // ⑬ 停幾秒、船台摩擦（上了油的滑道）、浮起來之後減速的時間常數、多慢算停、船身最多比船台長幾公尺、船頭停在船台的幾成、墊多低算浮起來（水花）、演完幾秒收（演出）〔設計〕
 var TRF_PIRATE_M = 2000;                                                 // ⑪ 海盜船離我艦幾公尺內就敵對（Tim 2026-10-28 選「靠近到一定距離」，數字之後再調）〔設計〕
 var TRF_GAP_M = 20;                                                    // ⑩ 生的時候龍骨線離場上每一艘至少幾公尺（collidePair 14 m 以內就算碰撞、硬推開 ⇒ 多留 6 m；泊位之間 30 m 上下的照樣生）〔設計〕
@@ -130,7 +130,7 @@ function trafficGot(d) {
   });
   if (TRF.build && !want[TRF.build.id]) { trafficFree(TRF.build.M.sh); TRF.build = null; }   // 做到一半就不要了（第一段之後才有 M.sh）
   var have = {}; trafficShips().forEach(function (s) { have[s.npc.id] = 1; }); if (TRF.build) have[TRF.build.id] = 1;
-  TRF.q = Object.keys(want).filter(function (id) { var w = want[id]; return !have[id] && Math.hypot(w.at[0] - c[0], w.at[1] - c[2]) < TRF_SPAWN_M && HULL_LIST.some(function (h) { return h.id === w.hull; }); })
+  TRF.q = Object.keys(want).filter(function (id) { var w = want[id]; return !have[id] && Math.hypot(w.at[0] - c[0], w.at[1] - c[2]) < TRF_SPAWN_M && !TRF.bad[w.hull] && HULL_LIST.some(function (h) { return h.id === w.hull; }); })
     .sort(function (a, b) { var A = want[a], B = want[b]; return (B.foe ? 1 : 0) - (A.foe ? 1 : 0) || Math.hypot(A.at[0] - c[0], A.at[1] - c[2]) - Math.hypot(B.at[0] - c[0], B.at[1] - c[2]) || (a < b ? -1 : 1); });   // ⑫ 開打的那一艘先生
 }
 /** ⑫ 開打的那一艘排到了、場上滿了 ⇒ 收掉離我艦最遠、還沒敵對的表演船讓位（真的船、敵對的不收）⇒ 收了沒有。 */
@@ -446,6 +446,17 @@ function trafficGapHit(T, x, z, yaw) {
 }
 /** ⑩ 擋下了 ⇒ 記一筆（讀數）。 */
 function trafficGapNote(w, g, at) { TRF.gap++; TRF.gapLast = { id: w.id, name: w.name, by: g.by.name, d: +g.d.toFixed(1), at: at, dock: !!w.dock }; }
+/** ② 船型 id 還沒到 ⇒ 叫 loadHull（同一型只叫一次）。載不到（入口跟 ships/ 不同一次建置、船檔不見）⇒ 記進 TRF.bad、佇列裡那一型全拿掉、之後的清單也不排 ⇒ 別型的照生。
+ *  ⛔ 以前不接失敗：HULLS 留著那個失敗的承諾、HULLT 永遠沒有 ⇒ 佇列頭那一艘永遠「還在載」、後面全卡住，讀數只看得到 queue 不動（2026-11-02 君士坦丁堡：量測頁比 ships/ 舊一版，7 艘信風號一艘都沒生）。 */
+function trafficHull(id) {
+  if (TRF.hullAsk[id]) return;
+  TRF.hullAsk[id] = 1;
+  loadHull(id).catch(function (e) {
+    TRF.bad[id] = String(e && e.message || e);
+    TRF.q = TRF.q.filter(function (q) { var w = TRF.want[q]; return !w || w.hull !== id; });
+    console.warn('往來的船：船型 ' + id + ' 載不到 ⇒ 這一型不生（' + TRF.bad[id] + '）');
+  });
+}
 /** 畫面迴圈每格叫（90_main.js frame，海圖塊、擺樹之後）：t1 ＝ 背景預算做到幾點（08_seabed.js bedT1）。 */
 function trafficPump(t1) {
   if (!trafficOk()) { if (trafficShips().length || TRF.build) trafficClear(); return; }
@@ -460,7 +471,7 @@ function trafficPump(t1) {
     if (TRF.q.length && TRF.want[TRF.q[0]] && TRF.want[TRF.q[0]].foe && trafficShips().length >= trafficMax()) trafficRoom();   // ⑫ 開打的那一艘：滿了就讓位
     while (TRF.q.length && trafficShips().length < trafficMax()) {
       var id = TRF.q[0], w = TRF.want[id]; if (!w) { TRF.q.shift(); continue; }
-      if (!HULLT[w.hull]) { loadHull(w.hull); break; }                    // 還在載（loadHull 自己分段讓出、同一型只載一次）⇒ 下一格再看
+      if (!HULLT[w.hull]) { trafficHull(w.hull); break; }                 // 還在載（loadHull 自己分段讓出、同一型只載一次）⇒ 下一格再看；載不到 ⇒ trafficHull 把那一型從佇列拿掉
       TRF.q.shift();
       if (w.launch && !w.lp) trafficLaunchPrep(w, HULLT[w.hull]);        // ⑬ 船型到了才量得出船身 ⇒ 挑船台、生的位置改成船台上（放不下 ⇒ 照舊生在泊位）
       if (w.demo && !w.lp) { delete TRF.demo[id]; delete TRF.want[id]; continue; }   // ⑬ 演出的假船沒有船台放 ⇒ 不生（at 是我艦那一點）；原因在 TRF.launch.err
@@ -591,7 +602,7 @@ function trafficInfo() {
   var me = SHIPS[PLAYER_I], c = me ? shipCenter(me) : [0, 0, 0];
   return { ok: trafficOk(), rate: wclkRate(), wh: +(worldSec() / 3600).toFixed(4), max: trafficMax(), want: Object.keys(TRF.want).length, queue: TRF.q.slice(), building: TRF.build ? TRF.build.id : null, built: TRF.built, dropped: TRF.dropped, gap: TRF.gap, gapLast: TRF.gapLast,
     stepMax: +TRF.stepMax.toFixed(2), stepMs: TRF.stepMs.slice(), place: TRF.place.slice(),
-    hold: trafficPortN(), foeOnce: Object.keys(TRF.foeOnce), launch: TRF.launch, demo: Object.keys(TRF.demo),   // launch：⑬ 最近一次下水
+    hold: trafficPortN(), foeOnce: Object.keys(TRF.foeOnce), launch: TRF.launch, demo: Object.keys(TRF.demo), bad: TRF.bad,   // launch：⑬ 最近一次下水；bad：② 載不到的船型
     ships: trafficShips().map(function (s) { var n = s.npc, T = n.tow, b = n.berth, sc = shipCenter(s); return { i: s.i, id: n.id, kind: n.kind, hull: s.T.id, x: +s.px.toFixed(1), z: +s.pz.toFixed(1), d: Math.round(Math.hypot(s.px - c[0], s.pz - c[2])), spd: +s.spd.toFixed(2), yaw: +s.yaw.toFixed(3), team: s.team, foe: !!n.foe, dock: n.dock, held: !!n.held, to: n.to, path: n.path ? n.path.length : 0, trk: n.trk ? n.trk.length : 0, pilot: n.pilot || null, glide: trafficGliding(s), real: !!n.real,
       berth: b ? { x: +b.x.toFixed(1), z: +b.z.toFixed(1), yaw: +b.yaw.toFixed(3), d: +Math.hypot(b.x - sc[0], b.z - sc[2]).toFixed(1) } : null, tow: T ? { kind: T.kind, s: +T.s.toFixed(1), L: +T.L.toFixed(1), spin: T.spin, spun: T.spun, v: +T.v.toFixed(2), t: +(SIMT - T.t0).toFixed(1) } : null }; }) };
 }
