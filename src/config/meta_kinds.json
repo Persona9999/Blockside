@@ -6,6 +6,7 @@
     "gunmount": { "name": "砲座（跟砲身拆開的那一件）", "on": ["model"], "keys": ["mount_of"], "need": [], "use": [], "doc": "§4.2.1", "game": ["05_hull.js", "60_rbatch.js"], "deco": true, "always": true, "refs": { "mount_of": { "to": ["gun"] } } },
     "powder": { "name": "火藥桶", "on": ["model"], "keys": ["powder_lb", "store"], "need": [], "use": [], "doc": "§8", "game": ["23_powder.js"], "mk": true, "block": "station", "safe": true, "noFall": true },
     "magazine": { "name": "彈藥庫", "on": ["link"], "keys": ["powder_lb", "pos", "hoist", "material"], "need": [], "use": ["blast", "door"], "doc": "§8", "game": ["23_powder.js"], "refs": { "hoist": { "to": ["ladders#"], "list": true } } },
+    "mast": { "name": "桅（下桅；帆桁的 mast 照它綁，TASK-1169）", "on": ["link"], "keys": ["mast"], "need": [], "use": [], "doc": "§5", "game": ["10_ship.js", "32_hull.js", "40_crew.js", "51_captain.js"] },
     "yard": { "name": "帆桁", "on": ["model"], "keys": ["mast", "yard", "sail", "length_ft", "diameter_in", "pivot_anchor", "turn_axis", "rotate_z_deg", "rig"], "need": ["pivot"], "use": ["arm-P", "arm-S", "earing-P", "earing-S", "sling", "fore"], "doc": "§5", "game": ["10_ship.js", "31_sailing.js", "30_rig_physics.js", "21_gunnery.js"], "mk": true, "blow": "fall" },
     "sail": { "name": "帆", "on": ["sail"], "keys": ["mast", "sail", "set"], "need": [], "use": [], "doc": "§9.1", "game": ["31_sailing.js"] },
     "flag": { "name": "旗", "on": ["sail"], "keys": ["flag", "mast", "team"], "need": [], "use": [], "doc": "§9.1", "game": ["31_sailing.js", "77_colours.js"] },

@@ -175,7 +175,7 @@ function makeShipSteps(i, team, yaw, pz, T, px) {
   sh.cl = T.cloth.map(function (C) { return { T: C, p: null, hidden: true }; }); sh.loose = []; sh.shreds = [];   // shreds：帆的布片（34_shreds.js）
   sh.sails.forEach(function (s) { s.flag = isFlag(s); s.area = s.flag ? 0 : sailArea(s); }); sh.sailArea0 = sh.sails.reduce(function (a, s) { return a + s.area; }, 0) || 1;   // 旗不算推力（面積 0）
   applySailSet(sh);
-  T.masts.forEach(function (m) { sh.masts.push({ name: m.name, x: m.x, z0: m.z0, z1: m.z1, orig: m.orig, z0top: m.z0top, up: true }); });
+  T.masts.forEach(function (m) { sh.masts.push({ name: m.name, x: m.x, z0: m.z0, z1: m.z1, orig: m.orig, seg: m.seg, z0top: m.z0top, up: true }); });   // seg：桅身那一段自己的格（findMasts；船型共用、只讀）
   }, function () {                                                   // 船員的走路格（navBuild：同一型同一層只建一次）先一層一步建好 ⇒ makeCrew 裡的 makeHands 照鍵拿同一份（42_hands.js crewNavSteps）
   return crewNavSteps(sh);
   }, function () {                                                   // 船員
@@ -687,57 +687,36 @@ function anchorNear(T, x, y, z, r) {                 // 船型 T 的原始格子
   }
   return best;
 }
-/** 桅（Tim 2026-10-13：照 meta 判斷）：帆桁的 meta `mast`（fore／main／mizzen／bonaventure；bowsprit 不算）⇒ 有哪幾根桅；
- *  名字（HUD 的桅列表、「…倒了」）照 label；bonaventure ＝ 四桅船最後那根 ⇒「尾桅」（Tim 2026-11-01；以前沒在表裡 ⇒ 印原文 bonaventure）。
- *  那根桅最低的橫帆桁（course／crossjack；沒有 ⇒ 最低一根不是 boom 的）轉軸 (x, z) ⇒ 桅在哪、桅頂平台大約多高（桅頂就在它上面）。
- *  桅身那一段（打斷就倒，32_hull.js survey）＝ 那根帆桁往下 20–40 格（桅頂下面的下桅）；x ＝ 往下 10–40 格、中線上格子最多的那一欄（桅會往後傾）。
- *  找那一欄的窗：轉軸前後 45 格，但不越過跟相鄰那根桅轉軸的中點（TASK-1151：好旅號尾桅離後桅 40 格、後桅比較粗 ⇒ 以前兩根都找在後桅 x 145）。
- *  z0top ＝ 桅頂水手從這個高度往上找平台（40_crew.js）。
- *  ⛔ 以前從帆的名字推 x、在固定的 z 250–290 找、打斷段三根都是 z 220–240：夜隼號只有一半高 ⇒ 前桅找在 x 223（找到的是別的東西）；
- *  憲法號的後桅頂在 241，250–290 量到的是上桅。改照 meta 之後憲法號、餘燼號的前桅與主桅 x 不變、後桅 195 → 198（下桅）；打斷段變成每根桅自己的高度。
- *  沒有帆桁 meta 的舊 .vxk ⇒ 照以前的辦法（findMastsOld）。 */
-var MAST_RUN = 18;                                                      // findMasts：一欄超過幾格才算桅那一段（中線 ±4 ＝ 9 格寬 ⇒ 兩層甲板板厚以上）
+/** 桅（TASK-1169，Tim 2026-11-02：「在雕刻時就用meta綁定好…匯入時自動檢查 綁定 不應該在遊戲內再判斷」「參考帆跟繩的綁定」）：
+ *  每根下桅的關聯標 meta `kind=mast`、`mast`（fore／main／mizzen／bonaventure／bowsprit）；匯入（admin.py drive_cells）把那一件自己的格子寫進 parts[].cellRuns。
+ *  帆桁 meta 的 `mast` 要一字不差等於某一條 kind=mast 關聯的 `mast`（跟繩的 `sail=` 對帆名同一套）⇒ 有哪幾根桅照這個；bowsprit 不算桅。
+ *  名字（HUD 的桅列表、「…倒了」）照 label；bonaventure ＝ 四桅船最後那根 ⇒「尾桅」（Tim 2026-11-01）。
+ *  高度：那根桅最低的橫帆桁（course／crossjack；沒有 ⇒ 最低一根不是 boom 的）轉軸 z ＝ Lz（桅頂平台大約在它上面）；z0top ＝ Lz ⇒ 桅頂水手從這裡往上找平台（40_crew.js）。
+ *  x：那根桅**自己的格子**在 Lz − 40 … Lz − 10、中線 ±4 裡最多的那一欄（桅會往後傾；一樣多 ⇒ 船尾那一欄）。
+ *  桅身那一段（打斷就倒，32_hull.js survey）：那根桅自己的格子落在 x ± 8、中線 ± 8、z0 … z0 + 20（z0 ＝ Lz − 40）的那幾格 ⇒ seg；orig ＝ 幾格（超過 20 格才算一根桅）。
+ *  ⛔ 不在船殼裡掃：以前從帆桁轉軸往前後找「中線上格子最多的那一欄」—— 好旅號尾桅掃到後桅（TASK-1151）、幾內亞船後桅掃到船尾板＋旗桿（TASK-1149），
+ *     每次撞到就再加一條規則（鄰桅中點、照段挑）；更早從帆的名字推、在固定的 z 找（findMastsOld）也拿掉了。
+ *  沒綁（帆桁的 mast 沒有同名的 kind=mast、或那一條沒有格子清單）⇒ 遊戲不認那根桅；匯入檢查（75_shipcheck.js）報 ✗。 */
 function findMasts(T) {
-  var CY = T.cy, ys = {}, label = { fore: '前桅', main: '主桅', mizzen: '後桅', bonaventure: '尾桅' }; T.masts = [];
+  var CY = T.cy, ys = {}, own = {}, label = { fore: '前桅', main: '主桅', mizzen: '後桅', bonaventure: '尾桅' }; T.masts = [];
   (T.rig.models || []).forEach(function (m) { var mt = m.meta || {}, pv = (m.points || {}).pivot; if (mt.kind === 'yard' && mt.mast && mt.mast !== 'bowsprit' && pv) (ys[mt.mast] = ys[mt.mast] || []).push({ y: mt.yard, p: pv }); });
-  var keys = Object.keys(ys); if (!keys.length) return findMastsOld(T);
+  (T.h.parts || []).forEach(function (p) { var mt = p.meta || {}; if (mt.kind === 'mast' && mt.mast && p.cellRuns && !own[mt.mast]) own[mt.mast] = p; });   // 同一個 mast 兩條 ⇒ 第一條（匯入檢查報 ✗）
+  var keys = Object.keys(ys).filter(function (k) { return own[k]; });
   keys.sort(function (a, b) { var o = ['fore', 'main', 'mizzen']; return (o.indexOf(a) + 1 || 9) - (o.indexOf(b) + 1 || 9); });   // 照以前的順序（前、主、後）
-  var A = {};                                                            // 每根桅的轉軸：最低的橫帆桁（沒有 ⇒ 最低一根不是 boom 的）
+  var y0 = Math.floor(CY - 4), y1 = Math.floor(CY + 4), w0 = Math.floor(CY - 8), w1 = Math.floor(CY + 8);   // 中線 ±4／±8（跟以前 countBox 從 CY − 4 數到 CY + 4 同一組格）
   keys.forEach(function (k) {
     var L = ys[k].filter(function (q) { return q.y === 'course' || q.y === 'crossjack'; });
     if (!L.length) L = ys[k].filter(function (q) { return q.y !== 'boom'; }).sort(function (a, b) { return a.p[2] - b.p[2]; });
-    if (L.length) A[k] = L[0].p;
-  });
-  keys.forEach(function (k) {
-    if (!A[k]) return;
-    var P = A[k], Lz = Math.floor(P[2]), ax = Math.round(P[0]), mx = ax, bn = 0, lo = ax - 45, hi = ax + 45;
-    keys.forEach(function (j) { if (j === k || !A[j]) return; var b = Math.round(A[j][0]); if (b < ax) lo = Math.max(lo, Math.floor((ax + b) / 2) + 1); else if (b > ax) hi = Math.min(hi, Math.ceil((ax + b) / 2) - 1); });   // 不越過跟鄰桅的中點
-    // 照段挑（幾內亞船 TASK-1149）：後桅往後倒 4° ⇒ 桅身斜過每一欄、一欄最多 93 格；船尾板＋旗桿那一欄（x 44）127 格 ⇒ 以前認成 x 44（桅頂水手、倒了沒、敵艦瞄桅都看錯）。
-    //   超過 MAST_RUN 格的欄切成一段一段相連的 ⇒ 挑離帆桁轉軸最近的那一段（轉軸在桅前面一點），段裡照舊取最多的那一欄；一段都沒有 ⇒ 整個窗照舊
-    var cs = [], runs = [], r0 = -1, x, i;
-    for (x = lo; x <= hi; x++) cs.push(countBox(T.base, x, CY - 4, Lz - 40, x, CY + 4, Lz - 10));
-    for (i = 0; i <= cs.length; i++) { var on = i < cs.length && cs[i] > MAST_RUN; if (on && r0 < 0) r0 = i; if (!on && r0 >= 0) { runs.push([lo + r0, lo + i - 1]); r0 = -1; } }
-    var rd = function (q) { return ax < q[0] ? q[0] - ax : ax > q[1] ? ax - q[1] : 0; }, R = runs.sort(function (a, b) { return rd(a) - rd(b) || a[0] - b[0]; })[0];
-    for (x = R ? R[0] : lo; x <= (R ? R[1] : hi); x++) { var c = cs[x - lo]; if (c > bn) { bn = c; mx = x; } }
-    var z0 = Lz - 40, n = countBox(T.hullG, mx - 8, CY - 8, z0, mx + 8, CY + 8, z0 + 20);   // orig 跟 survey 的 sh.grid 比 ⇒ 照船殼數（24_armor.js）
-    if (n > 20) T.masts.push({ name: label[k] || k, x: mx, z0: z0, z1: z0 + 20, orig: n, z0top: Lz });
+    if (!L.length) return;
+    var Lz = Math.floor(L[0].p[2]), C = drvCells(T, own[k].cellRuns), col = {}, mx = null, bn = 0, j, x;
+    for (j = 0; j < C.length; j += 3) if (C[j + 2] >= Lz - 40 && C[j + 2] <= Lz - 10 && C[j + 1] >= y0 && C[j + 1] <= y1) col[C[j]] = (col[C[j]] || 0) + 1;
+    Object.keys(col).map(Number).sort(function (a, b) { return a - b; }).forEach(function (q) { if (col[q] > bn) { bn = col[q]; mx = q; } });
+    if (mx === null) return;                                            // 那一段沒有它的格（匯入檢查報）
+    var z0 = Lz - 40, seg = [];
+    for (j = 0; j < C.length; j += 3) { x = C[j]; if (x >= mx - 8 && x <= mx + 8 && C[j + 1] >= w0 && C[j + 1] <= w1 && C[j + 2] >= z0 && C[j + 2] <= z0 + 20) seg.push(x, C[j + 1], C[j + 2]); }
+    if (seg.length / 3 > 20) T.masts.push({ name: label[k] || k, key: k, x: mx, z0: z0, z1: z0 + 20, orig: seg.length / 3, seg: new Int16Array(seg), z0top: Lz, part: own[k].path });
   });
 }
-function findMastsOld(T) {  // 桅的 x 從帆的名字推（fore／main／mizzen），探針：桅身中段一小塊
-  var acc = {}, CY = T.cy; T.masts = [];
-  T.rig.sails.forEach(function (s) {
-    var mm = /^(fore|main|mizzen)-(course|topsail|topgallant|royal)$/.exec(s.name); if (!mm) return; var k = mm[1];
-    acc[k] = acc[k] || [0, 0];
-    for (var j = 0; j < s.verts.length; j += 3) { acc[k][0] += s.verts[j]; acc[k][1]++; }
-  });
-  var label = { fore: '前桅', main: '主桅', mizzen: '後桅' };
-  ['fore', 'main', 'mizzen'].forEach(function (k) {
-    if (!acc[k]) return;
-    var ax = Math.round(acc[k][0] / acc[k][1]), mx = ax, bn = 0, best = null;
-    for (var x = ax - 45; x <= ax + 45; x++) { var c = countBox(T.base, x, CY - 4, 250, x, CY + 4, 290); if (c > bn) { bn = c; mx = x; } }   // 桅身：中線上一根直立的柱子
-    for (var z0 = 220; z0 <= 420 && !best; z0 += 20) { var n = countBox(T.hullG, mx - 8, CY - 8, z0, mx + 8, CY + 8, z0 + 20); if (n > 20) best = { z0: z0, n: n }; }
-    if (best) T.masts.push({ name: label[k], x: mx, z0: best.z0, z1: best.z0 + 20, orig: best.n });
-  });
-}
+function segLeft(g, s) { var n = 0; for (var j = 0; j < s.length; j += 3) if (g.get(s[j], s[j + 1], s[j + 2])) n++; return n; }   // 一串格（x, y, z, …）還有幾格在
 function countBox(g, x0, y0, z0, x1, y1, z1) { var n = 0; for (var x = x0; x <= x1; x++) for (var y = y0; y <= y1; y++) for (var z = z0; z <= z1; z++) if (g.get(x, y, z)) n++; return n; }
 

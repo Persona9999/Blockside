@@ -82,6 +82,21 @@ function shipCheck(id) {
     R.info.ids = Object.keys(IX.by).length + ' 件有 id' + (IX.none ? '、' + IX.none + ' 件沒有' : '');
     var RG = sh.ropes.filter(function (r) { return r.guess; });            // 繩端照外框猜綁到模型上（10_ship.js linkRopes：作品的 ends 沒寫綁哪個模型才猜）
     if (RG.length) add('warn', '物件 id', RG.slice(0, 3).map(function (r) { return r.name; }).join('、') + (RG.length > 3 ? ' 等 ' + RG.length + ' 條' : ''), '繩端是照位置猜綁到模型上的（作品沒寫綁哪個模型）⇒ 模型一換、一搬就可能綁錯', '雕刻端把繩端綁到模型的固定點（ends 寫 model:<模型>/<固定點>）');
+    // ── 桅（TASK-1169；10_ship.js findMasts）：帆桁的 mast 綁到同名的 kind=mast 關聯（下桅；跟繩的 sail= 對帆名同一套），那一條要有格子清單（admin.py 匯入時寫）——
+    //    沒綁的桅遊戲不認：倒不了、沒有桅頂水手、敵艦瞄不到（⛔ 遊戲不再在船殼裡掃） ──
+    var MP = {}, MY = {};
+    (T.h.parts || []).forEach(function (q) { var mt = q.meta || {}; if (mt.kind !== 'mast') return; if (!mt.mast) { add('error', '桅', q.path, 'kind=mast 沒有寫 mast ⇒ 哪根帆桁都綁不到它', '關聯 meta mast=<fore｜main｜mizzen｜bonaventure｜bowsprit>（跟帆桁的 mast 同一個字；造船規格 §5）'); return; } (MP[mt.mast] = MP[mt.mast] || []).push(q); });
+    (T.rig.models || []).forEach(function (m) { var mt = m.meta || {}; if (mt.kind === 'yard' && mt.mast) (MY[mt.mast] = MY[mt.mast] || []).push(m.name); });
+    Object.keys(MY).forEach(function (k) {
+      var L = MP[k] || [], ys = MY[k], w = ys.length > 2 ? ys.slice(0, 2).join('、') + ' 等 ' + ys.length + ' 根' : ys.join('、');
+      if (!L.length) { add('error', '桅', w, '帆桁 mast=' + k + ' 找不到 kind=mast、mast=' + k + ' 的關聯 ⇒ ' + (k === 'bowsprit' ? '艏斜桅沒綁' : '遊戲不認這根桅（倒不了、沒有桅頂水手、敵艦瞄不到）'), '那根桅（下桅）的關聯 meta kind=mast, mast=' + k + '（造船規格 §5）'); return; }
+      if (L.length > 1) { add('error', '桅', L.map(function (q) { return q.path; }).join('、'), L.length + ' 條關聯都是 kind=mast、mast=' + k + ' ⇒ 遊戲只認第一條', '只留下桅那一條（上桅不標）'); return; }
+      if (!L[0].cellRuns) { add('error', '桅', L[0].path, 'kind=mast 沒有格子清單 ⇒ 遊戲不認這根桅', 'python -I admin.py metasync --id ' + id + '（turn 不是 0、mirror 不是空或 y 的關聯寫不出 ⇒ 改擺法）'); return; }
+      ys.forEach(function (n) { if (n.indexOf(L[0].path + '/') !== 0) add('warn', '桅', n, '帆桁 mast=' + k + '，模型卻不在那根桅的關聯（' + L[0].path + '）底下', '帆桁模型放進它那根桅的子作品（造船規格 §5）'); });
+      if (k !== 'bowsprit' && !T.masts.some(function (m) { return m.key === k; })) add('error', '桅', L[0].path, '那根桅自己的格子不在桅身那一段（最低那根帆桁的轉軸往下 10–40 格、中線 ±4）⇒ 遊戲不認這根桅', '關聯綁錯了哪一件，或帆桁的 pivot 不在這根桅上');
+    });
+    Object.keys(MP).forEach(function (k) { if (!MY[k]) add('warn', '桅', MP[k].map(function (q) { return q.path; }).join('、'), 'kind=mast、mast=' + k + ' 沒有帆桁綁它 ⇒ 遊戲不認', '帆桁 meta mast=' + k + '，或拿掉這條 meta'); });
+    R.info.mastBind = T.masts.map(function (m) { return m.name + ' ← ' + m.part + '（x ' + m.x + '、桅身 ' + m.orig + ' 格）'; }).join('、');
     // ── 換裝（TASK-0713／0714；38_fit.js）：出廠的換裝表 ships[].fit 換不成的那幾件（掛點沒有、類別不合、放不下、零件表沒有、不能拆空）⇒ 照原本雕的那一件 ──
     ((T.fit && T.fit.bad) || []).forEach(function (b) { add('error', '換裝', b.slot + (b.path ? '（' + b.path + '）' : ''), '換成 ' + fitValName(b.to) + ' 沒換成：' + b.why + ' ⇒ 照原本雕的那一件', '改 config ships[].fit，或掛點 meta fits=；零件表 python -I admin.py parts'); });
     if (T.fit && (T.fit.done.length || (T.fit.gone || []).length)) R.info.fit = T.fit.done.map(function (d) { return d.slot + ' ' + d.from + '→' + fitValName(d.to) + '（零件：' + d.src + (d.mirror ? '、鏡射' : '') + '）'; }).concat((T.fit.gone || []).map(function (g) { return g.slot + ' 拆掉'; })).join('、') + (T.fit.ropesDropped ? '；拿掉 ' + T.fit.ropesDropped + ' 條綁在零件沒有的固定點上的繩' : '');

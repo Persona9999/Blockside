@@ -974,7 +974,7 @@ def meta_kinds():
 
 
 DRV_KINDS = tuple(k for k, v in meta_kinds().items() if v.get('drv') == 'part')
-CELL_KINDS = DRV_KINDS + ('ladders', 'ladder', 'hoist')   # 揚弾筒（TASK-0841：23_powder.js 照它數剩幾成、打壞了改人力）； 寫格子清單 parts[].cellRuns 的關聯：動力件＋梯子（TASK-0676：木匠照它把整件梯子還原，Tim「可以單純是還原該子模組(梯子)」）   # 動力件（TASK-0653；遊戲 31_drive.js 照格子算剩幾成、通不通）：規格表 drv=part（主機、鍋爐、軸、蒸汽管）
+CELL_KINDS = DRV_KINDS + ('ladders', 'ladder', 'hoist', 'mast')   # 桅（TASK-1169：遊戲 10_ship.js findMasts 照它找桅的位置、桅身那一段，⛔ 不再在船殼裡掃）； 揚弾筒（TASK-0841：23_powder.js 照它數剩幾成、打壞了改人力）； 寫格子清單 parts[].cellRuns 的關聯：動力件＋梯子（TASK-0676：木匠照它把整件梯子還原，Tim「可以單純是還原該子模組(梯子)」）   # 動力件（TASK-0653；遊戲 31_drive.js 照格子算剩幾成、通不通）：規格表 drv=part（主機、鍋爐、軸、蒸汽管）
 
 
 HPM_KINDS = tuple(k for k, v in meta_kinds().items() if v.get('drv') == 'hp')     # 整件一塊的動力件（規格表 drv=hp：槳）：不匯出格子，血量倍率 drvparts.<種類>.hpK（道具設定頁）
@@ -1118,7 +1118,7 @@ def drive_cells(h):
         kind = (q.get('meta') or {}).get('kind')
         if kind not in CELL_KINDS:
             continue
-        what = '動力件' if kind in DRV_KINDS else '揚弾筒' if kind == 'hoist' else '梯子'
+        what = '動力件' if kind in DRV_KINDS else '揚弾筒' if kind == 'hoist' else '桅' if kind == 'mast' else '梯子'
         runs, why = None, ''
         b, w = q.get('box'), q.get('src')
         if not (b and len(b) == 6 and w):
@@ -1155,7 +1155,7 @@ def drive_cells(h):
                     end = idx[j] + 1
                     i = j + 1
         if why:
-            log.append('⚠ %s %s（%s）：%s ⇒ 不寫格子清單（%s）' % (what, q.get('path'), kind, why, '遊戲照固定點旁 ±8 格判' if what == '動力件' else '遊戲照外框數、框是整艘船就不量' if what == '揚弾筒' else '木匠只補踏板'))
+            log.append('⚠ %s %s（%s）：%s ⇒ 不寫格子清單（%s）' % (what, q.get('path'), kind, why, '遊戲照固定點旁 ±8 格判' if what == '動力件' else '遊戲照外框數、框是整艘船就不量' if what == '揚弾筒' else '遊戲不認這根桅、匯入檢查報 ✗' if what == '桅' else '木匠只補踏板'))
         if q.get('cellRuns') != runs:
             changed = True
             if runs is None:
