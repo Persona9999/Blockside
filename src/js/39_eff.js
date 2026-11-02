@@ -9,7 +9,14 @@
 // ⛔ 沒有任何一項開著的船（sh.effOn false：開戰時 effInit 算一次）⇒ crewEff／effAvg 回字面上的 1，乘點乘的就是 1
 //   （IEEE 754：x × 1、x ÷ 1 捨入後就是 x；ECMAScript 每個 *、/ 各自捨入、不合併成 FMA）⇒ 沒有廚房的船戰局一位元不動。
 var EFF_MIN = 0.2, EFF_MAX = 3;
+var OFFICER_SHIP_INDEX = null;
+var OFFICER_EFFECTS = {roles:{},names:[]};
+function officerUpdate(x){if(OFFICER_SHIP_INDEX===null)OFFICER_SHIP_INDEX=PLAYER_I;OFFICER_EFFECTS={roles:{},names:[]};if(x&&x.roles)Object.keys(x.roles).forEach(function(k){var v=+x.roles[k];if(isFinite(v)&&v>0)OFFICER_EFFECTS.roles[k]=Math.min(.15,v);});if(x&&Array.isArray(x.names))OFFICER_EFFECTS.names=x.names.map(String);if(typeof SHIPS!=='undefined')SHIPS.forEach(effInit);}
+function officerOn(sh){return sh.i===OFFICER_SHIP_INDEX && Object.keys(OFFICER_EFFECTS.roles).length>0;}
+function officerK(sh,c){if(!officerOn(sh))return 1;var r=OFFICER_EFFECTS.roles,bonus=(r.captain||0)+(r.mate||0)+(r.navigator||0)+.01;var map={gunner:[0,1],boatswain:[4,6],quartermaster:[1,13],surgeon:[7],carpenter:[8],sailmaker:[9],cook:[11]};Object.keys(map).forEach(function(k){if(map[k].indexOf(c.role)>=0)bonus+=r[k]||0;});return 1+Math.min(.5,bonus);}
+
 var EFF_PARTS = [
+ {id:'officers',name:'專職船員',on:officerOn,k:officerK,text:function(sh,c){return officerOn(sh)?'專職船員 '+Math.round((officerK(sh,c)-1)*100)+'%':'';}},
   // ⛔ k／text 包一層 function：分檔載入（沒建置的 template.html）時 45_galley.js 還沒跑，直接寫 galleyMealK 會存成 undefined
   { id: 'meal', name: '吃過飯', on: function (sh) { return !!sh.galley; }, k: function (sh, c) { return galleyMealK(sh, c); }, text: function (sh, c) { return galleyMealText(sh, c); } }   // 45_galley.js
   // 之後：{ id: 'tired', name: '疲勞', on: …, k: …, text: … }、受傷、士氣 —— 只在這裡多一筆

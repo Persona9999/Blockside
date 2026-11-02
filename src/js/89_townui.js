@@ -196,9 +196,10 @@ function tuiUI() {
   if (!TUI.open) { if (P.innerHTML) P.innerHTML = ''; return; }
   var body = TUI.tab === 'trade' ? tuiTradeHTML() : TUI.tab === 'dist' ? tuiDistHTML() : !TUI.info ? '<p class="tuiDim">問城鎮帳…</p>' : TUI.tab === 'sum' ? tuiSumHTML() : TUI.tab === 'flow' ? tuiFlowHTML() : TUI.tab === 'stock' ? tuiStockHTML() : tuiStatsHTML();
   var sc = P.querySelector('#tuiBody'), top = sc ? sc.scrollTop : 0;
-  P.innerHTML = tuiHead() + tuiTabs() + '<div id="tuiBody">' + body + '</div>' + (TUI.msg ? '<div id="tuiMsg">' + tuiEsc(TUI.msg) + '</div>' : '');
+  P.innerHTML = tuiHead() + '<button type="button" id="tuiCrew">酒館招募／船隊配置</button>' + tuiTabs() + '<div id="tuiBody">' + body + '</div>' + (TUI.msg ? '<div id="tuiMsg">' + tuiEsc(TUI.msg) + '</div>' : '');
   if (sc) P.querySelector('#tuiBody').scrollTop = top;                 // 買賣之後重畫：捲到哪留在哪
   $('tuiX').onclick = tuiClose;
+  $('tuiCrew').onclick = function(){tuiAsk('crewOpen',{ship:tuiShip()},function(r){if(!r.ok){TUI.msg=(r.why||[]).join('；');tuiUI();}});};
   P.querySelectorAll('#tuiTabs button').forEach(function (b) { b.onclick = function () { if (b.dataset.t !== TUI.tab) { TUI.msg = ''; tuiToggle(b.dataset.t); } }; });
   P.querySelectorAll('button[data-side]').forEach(function (b) { b.onclick = function () { tuiTrade(b.dataset.side, b.dataset.g, +b.dataset.q); }; });
   P.querySelectorAll('button[data-u]').forEach(function (b) { b.onclick = function () { TUI.unit = +b.dataset.u; tuiUI(); }; });

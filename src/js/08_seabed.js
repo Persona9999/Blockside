@@ -91,11 +91,13 @@ function bedGet(cx, cy, peek, mid, bg) {                                // cx �
     (BED.ask[k] = BED.ask[k] || []).push([ok, bad]);
     var m = { bsmap: 'need', what: cx == null ? 'area' : 'chunk', cx: cx, cy: cy, peek: !!peek };
     if (mid) m.step = BED.mid; if (bg) m.bg = 1;
+    if (m.what === 'area') BED.host.postMessage({bsmap:'need',what:'officers'}, '*');
     BED.host.postMessage(m, '*');
   });
 }
 function bedHostMsg(e) {
   var d = e.data; if (!BED || !BED.host || e.source !== BED.host || !d || !d.bsmap) return;
+  if (d.bsmap === 'officers') { officerUpdate(d.effects); return; }
   if (d.bsmap === 'go' || d.bsmap === 'leave') { camTransSet(d.bsmap === 'go' ? 'go' : 'out'); return; }
   if (d.bsmap === 'win' || (d.bsmap === 'error' && d.what === 'win')) {   // 海域的窗（bedWinAsk 要的）
     BED.winP = null;
