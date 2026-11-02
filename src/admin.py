@@ -3840,12 +3840,54 @@ def act_verify():
 
 
 
+def product_header(s, html):
+    """成品裡那一艘的檔頭（ship_data；壓縮版只換了網格，繩、exported_at 照原樣）＝ 建置時 _cache 那一份的檔頭。讀不到 ⇒ (None, 原因)。"""
+    try:
+        b = ship_data(html, s['el'])
+    except Fail as e:
+        return None, '成品讀不到這艘：%s' % e
+    if b is None:
+        return None, '成品裡沒有這艘'
+    pr = zlib.decompress(b, -15)
+    return json.loads(pr[8:8 + struct.unpack('<I', pr[4:8])[0]].decode('utf-8')), ''
+
+
+def vxk_patch(path, f):
+    """改 .vxk 的檔頭：f(h) 回真 ⇒ 寫回（格子那一段原樣）。"""
+    raw = zlib.decompress(open(path, 'rb').read(), -15)
+    n = struct.unpack('<I', raw[4:8])[0]
+    h = json.loads(raw[8:8 + n].decode('utf-8'))
+    if f(h):
+        vxk_write(path, h, raw[8 + n:])
+
+
+def product_binds(tmp, ph):
+    """繩端綁定從版控的成品補回 tmp（重新匯出的 .vxk；kaguya 2026-11-02）：rig.ropes[].bind 是匯入之後 act_ropebind 照遊戲現場算了寫進 _cache 的，作品裡沒有
+    ⇒ 重新匯出的那份少了它，內容指紋（連 bind 一起算）一定對不上 lock：有綁定的船（42 型裡二十幾艘）全部報「作品變過了」、空的 _cache 補不回來。
+    ⇒ 照成品檔頭 ph 的順序把每條繩的 bind 補回去再比指紋；繩的條數或名字跟成品不同 ⇒ 不補（作品的繩改過了，照舊對不上）。回 (補了幾條, 沒補的原因)。"""
+    RP, out = (ph.get('rig') or {}).get('ropes') or [], [0, '']
+
+    def f(h):
+        RF = (h.get('rig') or {}).get('ropes') or []
+        if len(RF) != len(RP) or any(a.get('name') != q.get('name') for a, q in zip(RF, RP)):
+            out[1] = '繩的條數或名字跟成品不同（作品 %d 條、成品 %d 條）' % (len(RF), len(RP))
+            return False
+        for a, q in zip(RF, RP):
+            if 'bind' in q:
+                a['bind'], out[0] = q['bind'], out[0] + 1
+        return out[0] > 0
+    vxk_patch(tmp, f)
+    return out[0], out[1]
+
+
 def act_cache(every=False):
     """_cache 的 .vxk 從雕刻作品重新匯出、跟指紋（config/vxk_lock.json，入版控）比（TASK-0586：.vxk 不入版控 ⇒ 換一台機器 _cache 是空的）。
     預設只補缺的；every（cache --all）⇒ 每艘都比 ＝ 比對來源：雕刻作品現在這份跟上次建置用的是不是同一份。
+    比之前先從版控的成品補回繩端綁定（product_binds：bind 是匯入後才寫進 _cache 的，作品裡沒有）。
     對得上 ⇒ 放進 _cache；對不上（作品之後又改過）⇒ ⛔ 不蓋 _cache、不改指紋，新匯出的留成 <船>.vxk.source，說是哪一艘、要用新的就 reimport。
     （以前從成品內嵌的那份解回；壓縮版（TASK-0583，預設）的網格換成了池子，解不回原檔 ⇒ 改成從來源重新匯出。）"""
     cfg, L, log, bad = load(), lock_load(), [], []
+    html = open(OUT, encoding='utf-8').read() if os.path.exists(OUT) else ''
     os.makedirs(CACHE, exist_ok=True)
     for s in cfg['ships']:
         p, want = os.path.join(CACHE, s['vxk']), L.get(s['vxk'])
@@ -3863,6 +3905,9 @@ def act_cache(every=False):
             bad.append(s['vxk'])
             log.append('  ✗ %s：從 %s 匯出失敗：%s' % (s['vxk'], s['work'], str(e).strip().splitlines()[-1] if str(e).strip() else e))
             continue
+        ph, why = product_header(s, html)
+        nb, why = product_binds(tmp, ph) if ph else (0, why)
+        bn = '（繩端綁定 %d 條從成品補回）' % nb if nb else ''
         got, have = file_fp(tmp), file_fp(p)
         if want and not want.startswith('c:'):
             bad.append(s['vxk'])
@@ -3870,16 +3915,18 @@ def act_cache(every=False):
         elif want is None or got == want:
             if have == got:
                 os.remove(tmp)
-                log.append('  ✓ %s：作品 %s 跟指紋同一份，_cache 本來就是這份' % (s['vxk'], s['work']))
+                log.append('  ✓ %s：作品 %s 跟指紋同一份，_cache 本來就是這份%s' % (s['vxk'], s['work'], bn))
             else:
+                if want and ph and ph.get('exported_at'):           # 內容跟指紋同一份 ⇒ 匯出時間也照成品那一份（指紋不算它，verify 的檔頭比對、下一次 build 的船檔會算）
+                    vxk_patch(tmp, lambda h: h.__setitem__('exported_at', ph['exported_at']) is None)
                 os.replace(tmp, p)
-                log.append('  ✓ %s：從作品 %s 重新匯出，%s ⇒ 放進 _cache' % (s['vxk'], s['work'], '跟指紋同一份' if want else '還沒有指紋（照這份登記）'))
+                log.append('  ✓ %s：從作品 %s 重新匯出，%s%s ⇒ 放進 _cache' % (s['vxk'], s['work'], '跟指紋同一份' if want else '還沒有指紋（照這份登記）', bn))
                 if want is None:
                     log.append(lock_put(s['vxk']))
         else:
             bad.append(s['vxk'])
-            log.append('  ✗ %s：作品 %s 變過了 —— 指紋 %s、作品現在 %s ⇒ _cache 不動（新匯出的留在 %s.source）；要用作品現在這份 ⇒ python -I admin.py reimport --id %s'
-                       % (s['vxk'], s['work'], want[:14], got[:14], s['vxk'], s['id']))
+            log.append('  ✗ %s：作品 %s 變過了 —— 指紋 %s、作品現在 %s%s ⇒ _cache 不動（新匯出的留在 %s.source）；要用作品現在這份 ⇒ python -I admin.py reimport --id %s'
+                       % (s['vxk'], s['work'], want[:14], got[:14], bn or ('（繩端綁定沒補：%s）' % why if why else ''), s['vxk'], s['id']))
     if bad:
         raise Fail('\n'.join(log) + '\n✗ %d 艘跟指紋對不上：%s' % (len(bad), '、'.join(bad)))
     return log
