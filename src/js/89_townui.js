@@ -28,11 +28,12 @@ function tuiNum(x, d) { x = +x || 0; return x.toLocaleString('en-US', { minimumF
 /** 貨物、家常菜的圖示（Blocksail img/goods/<key>.png、img/dishes/<id>.png —— battle.html 跟 img/ 同一層；TASK-0914）：沒有圖 ⇒ 拿掉，只剩名字。
  *  px：邊長（預設 22 ＝ 表格那一欄；夾在一行字裡的清單用 16）。 */
 function tuiIcon(dir, k, px) { px = px || 22; return '<img src="img/' + dir + '/' + encodeURIComponent(k) + '.png" alt="" style="width:' + px + 'px;height:' + px + 'px;object-fit:contain;vertical-align:middle;margin-right:' + (px < 22 ? 3 : 5) + 'px" onerror="this.remove()">'; }
-// 四級餐點共用色底薄框；未知等級保留原圖，不從名字或其他菜猜。底框在下、菜在上。
+// 四級餐點右下角標示 I–IV；不加底圖或框線。未知等級保留原圖，不從名字或其他菜猜。
 var TUI_MEAL_LEVELS = ['荒年糧', '主糧', '家常', '佳餚'];
+var TUI_MEAL_RANKS = ['I', 'II', 'III', 'IV'];
 function tuiMealIcon(dir, k, level) {
   if (!(typeof level === 'number' && level >= 0 && level <= 3 && level % 1 === 0)) return tuiIcon(dir, k);
-  return '<span class="tuiMealIcon" data-level="' + level + '" title="' + TUI_MEAL_LEVELS[level] + '"><img class="tuiMealFrame" src="img/food-frames/level-' + level + '.png" alt="" aria-hidden="true" onerror="this.remove()"><img class="tuiMealSprite" src="img/' + dir + '/' + encodeURIComponent(k) + '.png" alt="" onerror="this.parentNode.remove()"></span>';
+  return '<span class="tuiMealIcon" data-level="' + level + '" title="' + TUI_MEAL_LEVELS[level] + '（' + TUI_MEAL_RANKS[level] + '）"><img class="tuiMealSprite" src="img/' + dir + '/' + encodeURIComponent(k) + '.png" alt="" onerror="this.parentNode.remove()"><span class="tuiMealRank" aria-hidden="true">' + TUI_MEAL_RANKS[level] + '</span></span>';
 }
 /** 昨天吃了什麼（份的比例）：家裡的灶每一道菜（'eat:<貨>' ＝ 直接吃那一種）＋服務建築供的（餐館、酒館、教堂；Blocksail world/food.js foodDay 的 dish、served）。 */
 function tuiEatHTML(F) {

@@ -367,8 +367,8 @@
   /* 餐點等級外框（TASK-1167）：薄框色底、菜圖滿幅疊在上層。 */
   .tuiMealIcon{ display:inline-block; position:relative; width:32px; height:32px; margin-right:5px; vertical-align:middle; flex-shrink:0; }
   .tuiMealIcon img{ position:absolute; object-fit:contain; image-rendering:pixelated; pointer-events:none; }
-  .tuiMealFrame{ inset:0; width:32px; height:32px; z-index:0; }
   .tuiMealSprite{ left:0; top:0; width:32px; height:32px; z-index:1; }
+  .tuiMealRank{ position:absolute; right:-1px; bottom:-1px; z-index:2; color:#fff1cf; font:bold 12px/1 Georgia,"Times New Roman",serif; letter-spacing:-.5px; text-shadow:-1px -1px 0 #17120b,1px -1px 0 #17120b,-1px 1px 0 #17120b,1px 1px 0 #17120b; pointer-events:none; user-select:none; }
   .tuiMealGrade{ display:inline-block; color:var(--dim); font-size:11px; white-space:nowrap; }
   /* 城鎮介面（89_townui.js，Blocksail TASK-0910）：💰 貿易、🏛 城鎮兩顆在 🔨 旁邊（61_layout.js 的 town 配置）；面板右邊一欄，開著那一顆亮底 */
   #tuiP{ display:none; }
