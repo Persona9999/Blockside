@@ -900,6 +900,13 @@ def export(work, dest):
     if log is not None or dl is not None or pl is not None:
         vxk_write(dest, h, raw[8 + n:])
         out += '\n' + '\n'.join((log or []) + (dl or []) + (pl or []))
+    try:
+        sl = vox_rescale(dest)                                             # 不是 0.1 m 一格的作品（加拉塔堡、加拉塔塔 0.2 m；TASK-1025）⇒ 一格拆成 k³ 格；0.1 m 的作品不動
+    except Fail as e:                                                      # 換不了 ⇒ 不留半份（呼叫端照匯出失敗處理）
+        os.remove(dest)
+        raise RuntimeError(str(e))
+    if sl:
+        out += '\n' + '\n'.join(sl)
     return out
 
 
@@ -909,6 +916,204 @@ def vxk_write(path, h, body):
     co = zlib.compressobj(9, zlib.DEFLATED, -15)
     open(path + '.tmp', 'wb').write(co.compress(b'VXK1' + struct.pack('<I', len(hb)) + hb + body) + co.flush())
     os.replace(path + '.tmp', path)
+
+
+# ───────────────────────── 0.2 m 一格的作品 ⇒ 0.1 m（TASK-1025；Tim 2026-11-04「匯入時轉」） ─────────────────────────
+# 遊戲一場只吃一個比例（05_hull.js：S 不一樣就不載），而且材質比重、打洞半徑、走路、梯子都照「一格 ＝ 0.1 m」寫 ⇒ 匯入時把一格拆成 k × k × k 格（k ＝ 公尺／格 ÷ 0.1），
+#   下游（遊戲、ropebind、shipcheck、ladcheck、rooms）全部只看到 0.1 m。同色的 2×2×2 ⇒ 外觀跟城裡畫的一樣，只是打洞細到 0.1 m。
+# 座標照意思換（k ＝ 2 的例子）：
+#   · 格的上下界（size、bbox、parts[].box、meta 的 floor／walk 的 z、walk_y）：下界 c ⇒ 2c、含的上界 c ⇒ 2c＋1；格數（thick、base）⇒ ×2
+#   · 雕出來的幾何（帆的頂點與角、模型的 origin／bbox／points、模型網格的頂點）：連續座標 ⇒ ×2
+#   · 標記點（points、parts[].points；格中心 c＋0.5）：落在原來那一格的下半格中心 2c＋0.5（站的點踩在地板上）；名字最後一段是 max／hi 的 ⇒ 上半格 2c＋1.5
+#   · floor／walk 的 x（沿長的位置，點之間內插）：c ⇒ 2c＋0.5 ⇒ 範圍外緣 ±0.5 剛好蓋住新的兩格
+#   · 帆角的參照寫成格座標 "x,y,z" 的 ⇒ 那一格的下半格（同標記點）
+# ⛔ 看不懂的就擋（Fail，不寫半份）：meta 裡不在下面兩張表的數字鍵、繩（兩件作品都沒有、沒樣本可對）、parts 的格子清單（cells／cellRuns／vox：照來源作品的比例算的）。
+#   要支援新的鍵 ⇒ 先找一件有它的作品對過，再加進表。
+VOX_M = 0.1                                                                # 遊戲的公尺／格（admin.py MAT_NUMS 的比重寫的是「一格 0.1 m ＝ 1 公升」）
+RESCALE_META_FREE = ('level', 'powder_lb')                                 # 沒有單位的數字：照抄
+RESCALE_META_CELLS = ('thick', 'base')                                     # 格數：×k
+
+
+def _rs_point(v, k, hi):
+    """標記點（格中心）⇒ 原來那一格的下半格中心（hi ⇒ 上半格）。"""
+    return [k * a - (k - 1) / 2 + (k - 1 if hi else 0) for a in v]
+
+
+def _rs_points(P, k):
+    out = {}
+    for name, v in P.items():
+        if isinstance(v, dict):
+            out[name] = _rs_points(v, k)
+        elif isinstance(v, list) and len(v) == 3 and all(isinstance(a, (int, float)) for a in v):
+            out[name] = _rs_point(v, k, re.split(r'[.\-]', name)[-1] in ('max', 'hi'))
+        else:
+            raise Fail('比例換算：標記點 %s 不是 [x, y, z]（%s）⇒ 不知道怎麼換' % (name, json.dumps(v, ensure_ascii=False)[:60]))
+    return out
+
+
+def _rs_box(b, k):
+    """格的外框 [x0, y0, z0, x1, y1, z1]（含兩端）。"""
+    return [k * a for a in b[:3]] + [k * a + k - 1 for a in b[3:]]
+
+
+def _rs_meta(m, k, where):
+    out = {}
+    for key, v in (m or {}).items():
+        if key in ('floor', 'walk') and isinstance(v, str):
+            def pt(s):
+                a = s.split(':')
+                if len(a) != 2:
+                    raise Fail('比例換算：%s 的 %s 寫法看不懂（%s）' % (where, key, v))
+                return '%s:%d' % (_rs_num(k * float(a[0]) + (k - 1) / 2), k * int(a[1]))
+            out[key] = ','.join(pt(s) for s in v.split(',') if s.strip())
+        elif key == 'walk_y' and isinstance(v, str):
+            y0, y1 = (int(a) for a in v.split(':'))
+            out[key] = '%d:%d' % (k * y0, k * y1 + k - 1)
+        elif key in RESCALE_META_CELLS and isinstance(v, (int, float)):
+            out[key] = k * v
+        elif isinstance(v, (int, float)) and not isinstance(v, bool) and key not in RESCALE_META_FREE:
+            raise Fail('比例換算：%s 的 meta %s ＝ %s 不知道是不是格數 ⇒ 不換（加進 admin.py RESCALE_META_FREE／RESCALE_META_CELLS 前先找一件有它的作品對過）' % (where, key, v))
+        else:
+            out[key] = v
+    return out
+
+
+def _rs_num(v):
+    return int(v) if float(v).is_integer() else v
+
+
+def _rs_runs(R, sx, sy, k, occ):
+    """材質／渲染段落 [跟上一段結尾差幾、長度、索引]（線性索引 x＋sx·(y＋sy·z)；05_material.js）⇒ 拆格之後的段落。occ：原來有格的線性索引（排好的）。"""
+    import numpy as np
+    R = np.asarray(R, np.int64).reshape(-1, 3)
+    if not len(R):
+        return []
+    start = np.cumsum(R[:, 0] + np.concatenate([[0], R[:-1, 1]]))
+    lin = np.repeat(start, R[:, 1]) + (np.arange(R[:, 1].sum()) - np.repeat(np.cumsum(R[:, 1]) - R[:, 1], R[:, 1]))
+    idx = np.repeat(R[:, 2], R[:, 1])
+    keep = np.isin(lin, occ)                                               # 遊戲只認有格的地方（段落可以跨空格）⇒ 只帶那幾格
+    lin, idx = lin[keep], idx[keep]
+    x, y, z = lin % sx, (lin // sx) % sy, lin // (sx * sy)
+    X, Y = sx * k, sy * k
+    L, I = [], []
+    for d in range(k ** 3):
+        L.append((k * x + d % k) + X * ((k * y + d // k % k) + Y * (k * z + d // (k * k))))
+        I.append(idx)
+    L, I = np.concatenate(L), np.concatenate(I)
+    o = np.argsort(L, kind='stable')
+    L, I = L[o], I[o]
+    cut = np.flatnonzero((np.diff(L) != 1) | (np.diff(I) != 0)) + 1
+    s0 = np.concatenate([[0], cut]); s1 = np.concatenate([cut, [len(L)]])
+    st, ln, ix = L[s0], s1 - s0, I[s0]
+    gap = st - np.concatenate([[0], st[:-1] + ln[:-1]])
+    return np.stack([gap, ln, ix], 1).reshape(-1).tolist()
+
+
+def vox_checksum(x, y, z, c):
+    """VoxelKit.verify 的 checksum（hashVoxel 的和 mod 2³²）。"""
+    import numpy as np
+    u = np.uint32
+    h = (x.astype(u) * u(73856093)) ^ (y.astype(u) * u(19349663)) ^ (z.astype(u) * u(83492791)) ^ (c.astype(u) * u(2654435761))
+    return int(h.astype(np.uint64).sum() % (1 << 32))
+
+
+def vox_rescale(path):
+    """path 的 .vxk 不是 0.1 m 一格 ⇒ 就地拆成 0.1 m（見上面的換算規則）。回：None ＝ 本來就是 0.1 m；不然 ＝ 讀數（每條一行）。"""
+    import numpy as np
+    raw = zlib.decompress(open(path, 'rb').read(), -15)
+    n = struct.unpack('<I', raw[4:8])[0]
+    h = json.loads(raw[8:8 + n].decode('utf-8'))
+    mpv = h.get('meters_per_voxel')
+    if mpv is None or abs(mpv - VOX_M) < 1e-9:
+        return None
+    k = mpv / VOX_M
+    if abs(k - round(k)) > 1e-6 or round(k) < 2:
+        raise Fail('比例換算：%s 公尺一格不是 %s 的整數倍 ⇒ 拆不成整數格' % (mpv, VOX_M))
+    k = int(round(k))
+    if h.get('mirror') or h.get('variant'):
+        raise Fail('比例換算：檔頭有 mirror／variant（成品格式）⇒ 這裡只吃 senate 剛匯出的 .vxk')
+    rig = h.get('rig') or {}
+    if rig.get('ropes'):
+        raise Fail('比例換算：有繩（%d 條）—— 繩的換算還沒有作品對過 ⇒ 不換' % len(rig['ropes']))
+    for q in h.get('parts') or []:
+        bad = [f for f in ('cells', 'cellRuns', 'vox') if f in q]
+        if bad:
+            raise Fail('比例換算：關聯 %s 有 %s（照來源作品的比例算的格子）⇒ 不換' % (q.get('path'), '、'.join(bad)))
+    sx, sy, sz = h['size']
+    x, y, z, c = _grid_cells(raw[8 + n:], h['nchunks'])
+    occ = np.sort(x + sx * (y + sy * z))
+    X, Y, Z, C = [], [], [], []
+    for d in range(k ** 3):
+        X.append(k * x + d % k); Y.append(k * y + d // k % k); Z.append(k * z + d // (k * k)); C.append(c)
+    X, Y, Z, C = np.concatenate(X), np.concatenate(Y), np.concatenate(Z), np.concatenate(C)
+    nch, body = _grid_chunks(X, Y, Z, C)
+    g = dict(h)
+    g['meters_per_voxel'] = VOX_M
+    g['rescaled'] = {'from': mpv, 'k': k}                                  # 留住址：這一份是拆過的（城裡畫的那一份照舊 0.2 m）
+    g['size'] = [k * sx, k * sy, k * sz]
+    g['bbox'] = _rs_box(h['bbox'], k)
+    g['voxels'] = int(len(X))
+    g['checksum'] = vox_checksum(X, Y, Z, C)
+    g['nchunks'] = nch
+    g['colors'] = {ci: v * k ** 3 for ci, v in (h.get('colors') or {}).items()}
+    if 'points' in h:
+        g['points'] = _rs_points(h['points'], k)
+    parts = []
+    for q in h.get('parts') or []:
+        q = dict(q)
+        if 'box' in q:
+            q['box'] = _rs_box(q['box'], k)
+        if 'points' in q:
+            q['points'] = _rs_points(q['points'], k)
+        if 'meta' in q:
+            q['meta'] = _rs_meta(q['meta'], k, '關聯 ' + str(q.get('path')))
+        parts.append(q)
+    if 'parts' in h:
+        g['parts'] = parts
+    for key in ('materials', 'render'):
+        if h.get(key):
+            M = dict(h[key])
+            if M.get('index') not in (None, 'x+sx*(y+sy*z)'):
+                raise Fail('比例換算：%s 的索引是 %s ⇒ 看不懂' % (key, M.get('index')))
+            M['runs'] = _rs_runs(M.get('runs') or [], sx, sy, k, occ)
+            if isinstance(M.get('voxels'), dict):
+                M['voxels'] = {i: v * k ** 3 for i, v in M['voxels'].items()}
+            g[key] = M
+    R = dict(rig)
+    R['sails'] = []
+    for s in rig.get('sails') or []:
+        s = dict(s)
+        if 'verts' in s:
+            s['verts'] = [k * a for a in s['verts']]
+        if 'recipe' in s:
+            r = dict(s['recipe'])
+            r['corners'] = [[k * a for a in v] for v in r.get('corners') or []]
+            r['refs'] = [','.join(str(k * int(a)) for a in ref.split(',')) if re.fullmatch(r'-?\d+,-?\d+,-?\d+', ref or '') else ref for ref in r.get('refs') or []]
+            s['recipe'] = r
+        if 'meta' in s:
+            s['meta'] = _rs_meta(s['meta'], k, '帆 ' + str(s.get('name')))
+        R['sails'].append(s)
+    R['models'] = []
+    for m in rig.get('models') or []:
+        m = dict(m)
+        for f in ('origin', 'bbox'):
+            if f in m:
+                m[f] = [k * a for a in m[f]]
+        if 'points' in m:
+            m['points'] = {p: [k * a for a in v] for p, v in m['points'].items()}
+        if 'meta' in m:
+            m['meta'] = _rs_meta(m['meta'], k, '模型 ' + str(m.get('name')))
+        R['models'].append(m)
+    R['meshes'] = []
+    for m in rig.get('meshes') or []:
+        m = dict(m)
+        m['verts'] = [k * a for a in m.get('verts') or []]
+        R['meshes'].append(m)
+    if rig:
+        g['rig'] = R
+    vxk_write(path, g, body)
+    return ['比例換算（TASK-1025）：%s 公尺一格 ⇒ %s（一格拆 %d 格）：%d 格 ⇒ %d、%s ⇒ %s、%d 塊'
+            % (mpv, VOX_M, k ** 3, h['voxels'], g['voxels'], '×'.join(map(str, h['size'])), '×'.join(map(str, g['size'])), nch)]
 
 
 def anchor_cells(h):

@@ -113,6 +113,8 @@ python -I admin.py verify
 # 出廠預設值：後台「滑桿」那一節的「用細節設定頁設出廠預設值…」⇒ 新分頁開遊戲的細節設定頁（/game?admin=defaults，69_prefs.js admDefUI；Tim 2026-10-15「用一樣的頁面去設定出廠預設值」）：值 ＝ 設定檔現在的預設；「存成出廠預設」⇒ 跟預設不一樣、是滑桿（lim 有那個鍵）的那幾項 ⇒ postMessage 給後台 ⇒ /api/defaults（act_defaults：只改 lim[鍵][2]、照樣 validate）；勾選、彈種倍率、砲長等列出來不存；後台那一頁有沒存的修改 ⇒ 擋下來。「重建」⇒ /api/build。⛔ 成品裡不能有 fetch（vxk_inline.py）⇒ 存檔、重建都經過開它的後台分頁（window.opener）。
 python -I admin.py serve --open
 # 匯入新船（雕刻作品 ⇒ _cache/<代號>.vxk ⇒ 登記進船隻清單 ⇒ 建置；比例要跟現有的船一樣）
+#   作品是 0.1 m 的整數倍一格（城鎮建築 0.2 m 的加拉塔堡、加拉塔塔）⇒ 匯出時就把一格拆成 k³ 格、寫成 0.1 m（admin.py vox_rescale，TASK-1025；Tim 2026-11-04「匯入時轉」）；
+#   import／reimport／cache 都走同一支 export ⇒ 指紋記的是拆過的那份。檔頭多一欄 rescaled { from, k }。座標怎麼換、哪些 meta 看不懂就擋，寫在 vox_rescale 上面
 python -I admin.py import --work <雕刻作品 ID> --id <代號> --name <名字>
 # 匯入改裝船（TASK-0657）：原船要先在清單裡；船隻設定（航速、動力、geo、船員…）照原船開始，名字、檔案、作者是自己的
 python -I admin.py import --work <改裝船的雕刻作品> --id <代號> --name <名字> --variant-of <原船的代號>
