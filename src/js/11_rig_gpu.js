@@ -2,12 +2,12 @@
 function buildRig(owner) {          // 還綁著的繩（靜態，照雕刻作品的形狀）；帆在 sailBuf、垂下來的繩在 looseBuf
   var L = [], hide = {};
   (owner.sails || []).forEach(function (s, k) {                       // 收起來的帆，它自己的繩（s.lines：sheet、tack…）不畫（Tim 2026-10-15：收帆後會浮空）；物理開著 ⇒ 收攏演完、帆真的藏起來才藏。只是不畫：判斷照舊
-    if (!s.furled || s.dead || !s.lines) return; var c = owner.cl && owner.cl[k];
-    if (PHYS && c && c.p && !c.hidden) return;
-    if (PHYS && c && c.fz && !c.gone && !c.loose) return;               // 收帆停在演完那一刻（30_rig_physics.js furlFreeze）⇒ 繩留著
+    if (!s.furled || s.dead || !s.lines) return; var c = owner.cl && owner.cl[k], live = rigPhysOn(owner);   // live：跟 sailWalk 同一把尺（30_rig_physics.js rigPhysOn；⛔ 只看 PHYS ⇒ 城鎮模式、表演船收帆時繩浮在張開的位置）
+    if (live && c && c.p && !c.hidden) return;
+    if (live && c && c.fz && !c.gone && !c.loose) return;               // 收帆停在演完那一刻（30_rig_physics.js furlFreeze）⇒ 繩留著
     s.lines.forEach(function (j) { hide[j] = 1; });
   });
-  var tj = PHYS && owner.tJ, tc = PHYS && owner.tCut;                  // 跟著帆腳走的 sheet、tack（30_rig_physics.js tethOf）：looseBuf 每一格畫；tCut：帆腳被打掉、已經垂下來的（tethCut）
+  var tj = rigPhysOn(owner) && owner.tJ, tc = PHYS && owner.tCut;        // 跟著帆腳走的 sheet、tack（30_rig_physics.js tethOf）：looseBuf 每一格畫；tCut：帆腳被打掉、已經垂下來的（tethCut、收好的帆 furlCut）
   var CR = owner.crew && owner.T ? climbRopes(owner.T) : null, TB = CR ? [] : null;   // 繩梯的繩畫成管子（climbRopes）
   owner.ropes.forEach(function (r, j) {
     if (r.dead || hide[j] || tj && tj[j] || tc && tc[j]) return;
@@ -84,7 +84,7 @@ function sailTex(T) {
  *  sailBuf（動靜分開傳）與 sailFill（?rigchk=1 對拍用的整份）共用 ⇒ 畫哪幾面、位置怎麼算只有一份。
  *  raw（R2）：細格就是物理的粒子（sailIdent）、沒在演收帆 ⇒ P 直接是 c.p（不抄一份；put 只讀）。 */
 function sailWalk(ow, put, raw) {
-  var isShip = !!ow.crew, ph = PHYS && !(isShip && rigFixed(ow)), F = isShip && ph && ow.shreds && ow.shreds.length ? ow.shreds : null, A = ow.T && ow.T.sailAtlas, m1 = 1;   // ph：照物理開著畫；繩帆固定的（30_rig_physics.js rigFixed：表演船、城鎮模式）照物理關著畫（收好那一捲、作品的形狀）
+  var isShip = !!ow.crew, ph = rigPhysOn(ow), F = isShip && ph && ow.shreds && ow.shreds.length ? ow.shreds : null, A = ow.T && ow.T.sailAtlas, m1 = 1;   // ph：照物理開著畫；繩帆固定的（30_rig_physics.js rigFixed：表演船、城鎮模式）照物理關著畫（收好那一捲、作品的形狀）
   (ow.cl || []).forEach(function (c) { m1 = Math.max(m1, c.T.n); });
   if (F) F.forEach(function (f) { m1 = Math.max(m1, f.n); });
   if (!SBN || SBN.length < m1 * 3) { SBN = new Float32Array(m1 * 3); SBP = new Float32Array(m1 * 3); }

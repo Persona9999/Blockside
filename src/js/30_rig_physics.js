@@ -641,6 +641,9 @@ function physStep(sh) {
 /** 繩帆固定（不算布、帆照收好那一捲／作品的形狀畫，11_rig_gpu.js sailWalk）：往來的表演船（58_traffic.js ⑨）、城鎮模式（停靠中）的每一艘（Tim 2026-10-26「城鎮模式(停靠狀態) 可以都固定為表演船」；
  *  量到城鎮模式布的花費大頭是我艦停著的帆，不是往來的船）。 */
 function rigFixed(sh) { return MODE === 'town' || trafficShow(sh); }
+/** 這艘的帆與繩照物理開著畫（布在算、收帆有演出）：11_rig_gpu.js sailWalk（帆、跟著帆腳的繩）與 buildRig（收著的帆它自己的繩藏不藏）同一把尺。
+ *  ⛔ buildRig 以前只看 PHYS ⇒ 布還張著時變成 rigFixed（進城鎮模式、往來船讓位成表演船）再收帆，布不算了（c.p 留著、c.hidden false）⇒ 繩被當成還在演收帆、不藏，照作品張開時的位置浮在空中。 */
+function rigPhysOn(ow) { return PHYS && !(ow.crew && rigFixed(ow)); }
 /** 有畫面時模擬步裡只走帆桁追風、掛著的小艇（布、跟帆桁走的繩在 physFrame）。 */
 function physGameStep(sh) { var w = physWind(sh); physGame(sh, w[0], w[1], false); }
 /** 畫面這一格（90_main.js frame；VIS_FRAME）：每艘的布、垂下來的繩、布片走 h 秒（hs ＝ 這一格模擬走了多久：落海的布片照它退）。 */
@@ -669,7 +672,7 @@ function physVis(sh, wl, gv, si, chk, h, hs, seen) {                 // seen ＝
     }
     c.late = false;
     if (s.furled && !s.dead) {                                       // 收帆：物理開著 ⇒ 先演一段收上去（畫面上往帆桁／綁邊收攏，FURL_IN 秒）再藏；判斷照舊立刻算收起來（s.furled：航速、命中、鏈彈）
-      if (c.hidden || !c.p || c.loose) { c.hidden = true; c.furlF = null; return; }
+      if (c.hidden || !c.p || c.loose) { if (c.fz && c.tt && !c.loose) furlCut(sh, s, c); c.hidden = true; c.furlF = null; return; }   // 收好的帆：帆腳靠的帆桁、格、繩被打掉 ⇒ sheet、tack 跟帆斷開、垂下來（furlCut）
       c.furlF = (c.furlF === null || c.furlF === undefined ? 1 : c.furlF) - h / FURL_IN;
       if (c.furlF <= 0) { furlFreeze(sh, c); c.hidden = true; c.furlF = null; sh.rigDirty = true; return; }   // 演完那一格凍結下來照畫、繩留著（furlFreeze）；rigDirty：重做繩（11_rig_gpu.js buildRig）
     } else if (c.furlF !== null && c.furlF !== undefined && !c.hidden) { c.furlF += h / FURL_OUT; if (c.furlF >= 1) c.furlF = null; }   // 張帆（或收到一半又張）：從帆桁放下來
@@ -823,13 +826,17 @@ function furlFrozen(sh, c, out) {
 /** 收好的那一捲哪幾點不畫（Tim 2026-10-16 截圖：「且會浮空」—— 收著的帆不會因為帆桁、桅被打掉而算掉了（32_hull.js：收著的帆不怕），那一捲照畫在原處）：
  *  每一點往它的收攏點收（綁點自己 ＝ 自己）；那個綁點靠的東西（格、繩、帆桁）不在了 ⇒ 那一點不畫（碰到它的三角形不畫）。帆的破洞照舊不畫。null ＝ 全畫。 */
 function furlLost(sh, s, c) {
-  var T = c.T, g = furlGath(T, sh), mv = T.fmv, out = null, ok = {};
-  for (var i = 0; i < T.n; i++) {
-    var a = T.hk[i] && !mv[i] ? i : g[i], lost = c.torn && c.tv && c.tv[i];
-    if (!lost && a >= 0) { var key = T.hk[a] + ':' + T.hv[a]; if (!(key in ok)) ok[key] = holds(sh, s, T.hk[a], T.hv[a]); lost = !ok[key]; }
-    if (lost) (out || (out = new Uint8Array(T.n)))[i] = 1;
-  }
+  var T = c.T, g = furlGath(T, sh), out = null, ok = {};
+  for (var i = 0; i < T.n; i++) if (furlPtLost(sh, s, c, g, i, ok)) (out || (out = new Uint8Array(T.n)))[i] = 1;
   return out;
+}
+/** 收好的那一捲第 i 點不畫嗎（furlLost 的每一點；furlCut 只問帆腳那幾點）。g ＝ furlGath；ok ＝ 同一輪「綁點靠的東西還在嗎」的快取。 */
+function furlPtLost(sh, s, c, g, i, ok) {
+  var T = c.T, a = T.hk[i] && !T.fmv[i] ? i : g[i];
+  if (c.torn && c.tv && c.tv[i]) return true;
+  if (a < 0) return false;
+  var key = T.hk[a] + ':' + T.hv[a]; if (!(key in ok)) ok[key] = holds(sh, s, T.hk[a], T.hv[a]);
+  return !ok[key];
 }
 // 帆腳跟 sheet 連動（Tim 2026-10-16：「帆跟纜線綁在一起時 物理是否可以連動 目前好像是一起固定在空中的固定點」）：
 //   帆腳（furlGath 的 T.clew）不再釘在作品的位置：交給布的物理，只多一條「離 sheet 另一端（綁甲板、下一根帆桁）不超過作品那一刻的距離」⇒ 被風吹得動、被繩拉住。
@@ -868,6 +875,22 @@ function tethCut(sh, c) {
     (sh.tCut || (sh.tCut = {}))[t.j] = 1; sh.rigDirty = true;
     var q = r.pts, ce = t.ce * 3;
     spawnLoose(sh, { pts: q, a: r.a, ma: r.ma, pa: r.pa, b: r.b, mb: r.mb, pb: r.pb, col: r.col, of: r, offSail: { verts: [q[ce], q[ce + 1], q[ce + 2]] } });
+  }
+}
+// 收好的帆、帆桁被打掉（Tim 2026-11-04：「當收帆情況下 帆桁被打掉會觸發」—— 截圖：sheet、tack 在半空中折一個角，那一點是帆張開時的帆腳）：
+//   收著的帆不怕被打（32_hull.js）⇒ 帆沒掉、繩沒斷；那一捲靠的帆桁不在了 ⇒ 帆腳那幾點不畫（furlLost），sailWalk 也不再讓繩跟著帆腳畫（tJ 沒有它）；
+//   buildRig 看到 c.fz 又不藏 ⇒ 照作品張開時的位置畫，帆腳那一點浮在空中（百夫長號前桅大帆量到離收好的那一捲約 9.5 m）。
+//   ⇒ 跟 tethCut 同一個做法：那幾條跟帆斷開、垂下來；從這一格畫出來的樣子（靠帆腳那一端在凍結的帆腳）放開，不從作品張開時的位置掉。
+function furlCut(sh, s, c) {
+  var T = c.T, g = null, ok = {}, P = null;
+  for (var k = 0; k < c.tt.length; k++) {
+    var t = c.tt[k], r = sh.ropes[t.j]; if (r.dead || sh.tCut && sh.tCut[t.j]) continue;
+    if (!furlPtLost(sh, s, c, g || (g = furlGath(T, sh)), t.i, ok)) continue;
+    (sh.tCut || (sh.tCut = {}))[t.j] = 1; sh.rigDirty = true;
+    P = P || furlFrozen(sh, c, new Float32Array(T.n * 3));
+    var q = r.pts, m = q.length / 3, e = t.ce * 3, o = t.i * 3, mx = P[o] - q[e], my = P[o + 1] - q[e + 1], mz = P[o + 2] - q[e + 2], Q = new Float32Array(q.length);
+    for (var j = 0; j < m; j++) { var w = t.t[j]; Q[j * 3] = q[j * 3] + mx * w; Q[j * 3 + 1] = q[j * 3 + 1] + my * w; Q[j * 3 + 2] = q[j * 3 + 2] + mz * w; }   // 同 11_rig_gpu.js looseFill：靠帆腳那一端移到帆腳、另一端不動、中間照弧長內插
+    spawnLoose(sh, { pts: Q, a: r.a, ma: r.ma, pa: r.pa, b: r.b, mb: r.mb, pb: r.pb, col: r.col, of: r, offSail: { verts: [Q[e], Q[e + 1], Q[e + 2]] } });
   }
 }
 /** 帆腳離繩的另一端超過 L ⇒ 拉回 L（另一端照繩現在的位置：綁在帆桁上的跟著帆桁轉）。clothStep 每一輪約束之後。 */
