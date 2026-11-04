@@ -199,6 +199,7 @@ if (DEBUG) window.__game = {
   burnAt: function (i, x, y, z) { var sh = SHIPS[i || 0], B = burnOf(sh); burnCatch(sh, B, x, y, z, 1, 1e9); burnFlush(sh, B, true); return B.n; },   // 點第 i 艘的 (x, y, z)（照樣要有一面露在乾空氣裡、材質會燒）⇒ 燒著幾格
   burnSail: function (i, k, q) { var sh = SHIPS[i || 0]; return burnSailAt(sh, sh.sails[k], q || 0); },   // 第 i 艘第 k 面帆從第 q 點燒起來
   galley: function (i, op) { var sh = SHIPS[i || 0]; if (op === 'kill') galleyKill(sh); return galleyInfo(sh); },   // 廚房（45_galley.js；TASK-0720）：{ cooks, stock, made, served, going, eff, fed, rk, effT, news, stoves[{…why}], skip }；沒有廚房 ⇒ 排掉的原因或 null；(i, 'kill') ＝ 把那艘的廚師全打倒（量斷炊）
+  officers: function () { return SHIPS.map(function(sh){return {i:sh.i,name:sh.name,active:officerOn(sh),sources:officerOn(sh)?OFFICER_EFFECTS.names.slice():[],crew:sh.crew.map(function(c){return {role:c.role,eff:crewEff(sh,c)};})};}); },   // Read-only diagnostics: assigned ship and actual work multipliers.
   pumps: function (i) { return pumpInfo(SHIPS[i || 0]); },   // 抽水（45_pumps.js）：基礎、現在全船幾噸／分、每台抽水機的狀態與原因   // 醫療艙（44_medic.js）：每一間的床、人手、搬下去、治好歸隊
   rooms: function (on) { if (on !== undefined) { ROOMS_DBG = !!on; if (!on) roomLabels(); } return roomsInfo(); },   // 空艙房（36_rooms.js）：讀數；給 true／false ⇒ 開關外框與名字
   shipsIO: { exp: function () { return shipsExport(); }, imp: function (o) { var n = shipsImport(o); evEmit('cfg:ships'); return n; }, crew: function (id) { return shipCrew(id); }, seen: function () { return CREW_SEEN; } },   // 船隻配置的匯出入（TASK-0570；量的時候不必真的下載檔案）
