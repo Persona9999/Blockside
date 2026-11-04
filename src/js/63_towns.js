@@ -2818,6 +2818,13 @@ function townLotName(T, l, m) {
 //   城鎮模型的 x 是 Blocksail tools/townmodels.py 沿 x 翻過的（x ＝ 寬 − 作品的 x；Blocksail TASK-1019：以前城裡每一棟都是作品的鏡像）⇒ 兩邊同一個手性：
 //   ψ ＝ atan2(−cosθ, −sinθ)、e ＝ S·cx − 半寬、px ＝ x − e·sinθ、pz ＝ z + e·cosθ、gy ＝ y + S·zw ⇒ 每一格都疊在城裡畫的那一格上（TASK-1019 前城裡是鏡像 ⇒ 看起來前後顛倒）。
 var TOWN_UNITS = {}, TOWN_FORT = null;
+/** 城鎮模型 m 的一格 ＝ 戰鬥用那一座（船型 T）的幾格（每一軸）：一樣大 ⇒ 1；匯入時拆過格的（admin.py vox_rescale，TASK-1025：加拉塔堡城裡 0.2 m、戰鬥 0.1 m）⇒ k；
+ *  公尺量起來對不上（不是同一件作品、或拆法不是整數倍）⇒ 0（不換）。 */
+function townFortK(m, T) {
+  var k = Math.round(m.mpv / S);
+  if (k < 1 || Math.abs(m.mpv - k * S) > 1e-9) return 0;
+  return m.size[0] * k === T.h.size[0] && m.size[1] * k === T.h.size[1] ? k : 0;
+}
 function townFortHull(nm) { if (!TOWN_FORT) { TOWN_FORT = {}; HULL_LIST.forEach(function (h) { if (h.town) TOWN_FORT[h.town] = h.id; }); } return TOWN_FORT[nm] || null; }
 /** h ＝ townHitAt 的回覆。是堡壘 ⇒ 開始換（回 true：這一下點到東西了）；不是 ⇒ false。 */
 function townFortWake(h) {
@@ -2833,7 +2840,7 @@ function townFortWake(h) {
     q.waking = false;
     if (TOWN_UNITS[key] || SHIPS.indexOf(me) < 0) return;
     var m = TOWNS.kit && TOWNS.kit.M[q.k] && TOWNS.kit.M[q.k].m;
-    if (!m || m.size[0] !== T.h.size[0] || m.size[1] !== T.h.size[1] || Math.abs(m.mpv - S) > 1e-9) { note(me, h.name + '：城鎮模型跟戰鬥用的那一座大小不一樣，不換（' + (m ? m.size.join('×') : '?') + ' vs ' + T.h.size.join('×') + '）'); return; }
+    if (!m || townFortK(m, T) === 0) { note(me, h.name + '：城鎮模型跟戰鬥用的那一座大小不一樣，不換（' + (m ? m.size.join('×') + '×' + m.mpv + ' m' : '?') + ' vs ' + T.h.size.join('×') + '×' + S + ' m）'); return; }
     Object.keys(TOWN_UNITS).forEach(function (k) { townFortSleep(k, '換成 ' + h.name); });   // 一次一座（Tim 2026-10-27「維持點了換上來吧 且一次一座」）：前一座換回城裡的模型；砲彈還在飛 ⇒ townFortTick 等落地再收
     if (SHIPS.length >= MAX_SHIPS) { note(me, h.name + '：前一座的砲彈還在飛、場上已經 ' + SHIPS.length + ' 艘，等一下再點'); return; }
     var s = Math.sin(q.th), c = Math.cos(q.th), e = S * T.cx - m.size[0] * m.mpv / 2;
@@ -2905,6 +2912,7 @@ function townFortReport(sh) {
   sh.townZ = (sh.townZ || Promise.resolve()).then(function () { return Promise.all([townZip(o.cells.d), townZip(md)]); }).then(function (Z) {
     var st = { v: 1, hull: o.hull, sum: o.sum, n: o.cells.n, gone: o.cells.gone, z: Z[0], models: o.models.filter(function (m) { return !D0[m.k]; }), sails: o.sails, ropes: o.ropes, dmg: dmg };   // 一換上來就掉的不存 ⇒ 再點照樣當場掉、照樣算不是打掉的（⛔ 存了 ⇒ 再點時 coreShipIn 先標死 ⇒ 下一次報成打掉的，城裡的燈籠就沒了）
     if (Z[1]) st.mz = Z[1];                                               // 死掉的模型在城鎮模型裡的格（townFortModCells；只給城裡畫打壞的那一份用，coreShipIn 不讀）
+    if (sh.T.h.rescaled && sh.T.h.rescaled.k > 1) st.k = sh.T.h.rescaled.k;   // 匯入時拆過格（TASK-1025）：格子差是戰鬥用的格（城鎮模型一格 ＝ k³ 格）⇒ townRuinMake 照它併回城鎮模型的格
     if (BED && BED.host) BED.host.postMessage({ bsmap: 'fortState', town: town, lot: lot, st: st }, '*');
     townFortLive(town, function (L) { (L.forts || (L.forts = {}))[lot] = st; });   // 這一頁手上那一份也記 ⇒ 同一次進場換回再點，照樣是壞的
   }).catch(function (e) { console.warn('堡壘的損傷沒送出去（' + (e && e.message || e) + '）'); });
@@ -3006,6 +3014,7 @@ function townRuinMake(T, lot, nm, st, sig) {
         else { G.set(tx, y + P, z, v); if (had) o.col++; else o.add++; }
       }
     }
+    if (st.k > 1) { A[1] = townRuinFold(A[1], st.k, D.sx, D.sy); A[2] = townRuinFold(A[2], st.k, D.sx, D.sy); }
     apply(A[1], false); apply(A[2], true);
     if (o.miss + o.out > TOWN_RUIN_MISS * Math.max(1, o.gone + o.miss + o.out)) {
       console.warn(T.id + ' ' + lot + '（' + nm + '）：打掉的 ' + (o.gone + o.miss + o.out) + ' 格有 ' + (o.miss + o.out) + ' 格落在城鎮模型的空格 ⇒ 城鎮模型跟打的那一座不是同一版，照完好的畫');
@@ -3017,6 +3026,24 @@ function townRuinMake(T, lot, nm, st, sig) {
     o.cells = D.n - o.gone - o.mod + o.add; o.ms = +(performance.now() - t0).toFixed(1);
     return s;
   });
+}
+/** 拆過格的那一座（st.k；TASK-1025）：格子差（戰鬥用的格，寬 k·sx、深 k·sy）⇒ 城鎮模型的格（寬 sx、深 sy）的格子差（同一個格式）。
+ *  城鎮模型的一格 ＝ 戰鬥的 k³ 格：打掉（值 0）的佔一半以上 ⇒ 那一格打掉；不然有換色或補上的（值不是 0）⇒ 照最後一個的色；都沒有 ⇒ 不記。 */
+function townRuinFold(b64, k, sx, sy) {
+  if (!b64) return b64;
+  var u = coreUnB64(b64), dv = new DataView(u.buffer), N = u.length / 5, bx = sx * k, by = sy * k, p = 0, gone = new Map(), col = new Map();
+  for (var i = 0; i < N; i++) {
+    p += dv.getUint32(i * 5, true);
+    var v = u[i * 5 + 4], x = p % bx, y = Math.floor(p / bx) % by, z = Math.floor(p / (bx * by)), q = Math.floor(x / k) + sx * (Math.floor(y / k) + sy * Math.floor(z / k));
+    if (v) col.set(q, v); else gone.set(q, (gone.get(q) || 0) + 1);
+  }
+  var half = k * k * k / 2, out = [];
+  gone.forEach(function (n, q) { if (n >= half) out.push([q, 0]); });
+  col.forEach(function (v, q) { if (!(gone.get(q) >= half)) out.push([q, v]); });
+  out.sort(function (a, b) { return a[0] - b[0]; });
+  var w = new Uint8Array(out.length * 5), wv = new DataView(w.buffer), last = 0;
+  out.forEach(function (e, j) { wv.setUint32(j * 5, e[0] - last, true); w[j * 5 + 4] = e[1]; last = e[0]; });
+  return coreB64(w);
 }
 function townRuinFree(s) {
   if (!s) return;

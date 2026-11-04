@@ -2048,6 +2048,33 @@
         "tiller": 2,
         "yard": 11
       }
+    },
+    {
+      "id": "fort_galata",
+      "el": "ship-fort-galata",
+      "name": "加拉塔堡",
+      "vxk": "fort_galata.vxk",
+      "work": "trailhead-harbour-01m-kastellion",
+      "author": "trailhead",
+      "material": "stone",
+      "fixed": true,
+      "zw0": 1,
+      "geo": {"spar": [100, 104], "marines": [20, 20], "center": 100, "aim": 104, "aimZ": [5, 300], "deckAim": [20, 110], "rigAim": [200, 300]},
+      "crew": {
+        "officers": 2,
+        "helm": 0,
+        "marines": 0,
+        "top": 0,
+        "monkeys": 1,
+        "handsK": 0.1,
+        "surgeon": 0,
+        "carpenter": 1,
+        "sailmaker": 1,
+        "cook": 0,
+        "navigator": 0,
+        "quartermaster": 0
+      },
+      "town": "genoa-kastellion"
     }
   ],
   "furniture": {
