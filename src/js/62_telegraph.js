@@ -1,8 +1,8 @@
 // Circular order instrument. Geometry uses the configured orders, not a hard-coded nine.
 function teleStopIndex() { var i = TELE.indexOf(0); return i >= 0 ? i : Math.floor(TELE.length / 2); }
 function teleAngle(i) { var s = teleStopIndex(), span = Math.PI * 0.75; return -Math.PI / 2 + (i <= s ? (s - i) / Math.max(1, s) : -(i - s) / Math.max(1, TELE.length - 1 - s)) * span; }
-function telePickIndex(x, y) {
-  var r = Math.hypot(x - 150, y - 150); if (r < 52 || r > 148) return -1;
+function telePickIndex(x, y, free) { // free：拖曳中 ⇒ 拖出圓盤也照方向選（虛擬搖桿；Tim 2026-11-05「離開俥鐘範圍時仍然可以運作」），盤心與正下方的空隙照舊不選
+  var r = Math.hypot(x - 150, y - 150); if (r < 52 || (!free && r > 148)) return -1;
   var a = Math.atan2(y - 150, x - 150), best = -1, bd = Infinity;
   for (var i = 0; i < TELE.length; i++) { var d = Math.abs(Math.atan2(Math.sin(a - teleAngle(i)), Math.cos(a - teleAngle(i)))); if (d < bd) { bd = d; best = i; } }
   var step = Math.PI * 0.75 / Math.max(1, best <= teleStopIndex() ? teleStopIndex() : TELE.length - 1 - teleStopIndex());
@@ -58,14 +58,12 @@ function teleDraw(sh) {
   var ob = $('obsB'); if (ob) ob.style.left = show ? Math.round(box.getBoundingClientRect().right + 8) + 'px' : '';
   if (!show) return;
   [].forEach.call(box.querySelectorAll('button'), function(b){ b.disabled = !can; });
-  $('teleQuickStop').disabled = $('teleStop').disabled = !can || TELE.indexOf(0) < 0;
+  $('teleStop').disabled = !can || TELE.indexOf(0) < 0;
   $('teleWheel').classList.toggle('dragging', !!TELE_UI.drag);
   $('teleWheel').setAttribute('aria-label', '俥鐘：' + TELE_NAME[sh.tele] + '，直接拖曳或點選檔位');
-  var p = TELE_UI.preview, label = p >= 0 ? '預選：' + TELE_NAME[p] : TELE_NAME[sh.tele];
-  if ($('teleOrder').textContent !== label) $('teleOrder').textContent = label;
+  var p = TELE_UI.preview;
   var text = (p >= 0 ? '預選 ' + TELE_NAME[p] + '，放開下令。' : '指令：' + TELE_NAME[sh.tele] + '。') + (sh.drive && sh.drive.cap < .98 ? ' 動力可用 ' + Math.round(sh.drive.cap * 100) + '%' : '');
   if ($('teleStatus').textContent !== text) $('teleStatus').textContent = text;
-  var speed = '航速 ' + (sh.spd * 1.944).toFixed(1) + ' 節'; if ($('teleSpeed').textContent !== speed) $('teleSpeed').textContent = speed;
   var key = sh.i + '/' + sh.tele + '/' + Math.round((sh.drive ? sh.drive.cap : 1) * 100) + '/' + TELE_UI.preview + '/' + $('telc').clientWidth + '/' + window.devicePixelRatio;
   if (key !== TELE_UI.key) {
     TELE_UI.key = key; telePaint($('telc'), sh);
@@ -73,15 +71,14 @@ function teleDraw(sh) {
   }
   teleFit(box);
 }
-// One inline instrument: preview while held, commit once on release, cancel outside.
+// One inline instrument: preview while held, commit once on release; outside the dial the direction still picks (virtual stick), the hub and the lower gap cancel.
 (function () {
   var wheel = $('teleWheel');
   TELE.forEach(function(_, i) {
     var b = document.createElement('button'), a = teleAngle(i); b.type = 'button'; b.dataset.teleI = i; b.setAttribute('aria-label', TELE_NAME[i]); b.title = TELE_NAME[i];
     b.style.left = (50 + Math.cos(a) * 103 / 3) + '%'; b.style.top = (50 + Math.sin(a) * 103 / 3) + '%'; $('teleDetents').appendChild(b);
   });
-  $('teleQuickStop').onclick = function(e){e.stopPropagation();if(TELE.indexOf(0)>=0)teleOrder(TELE.indexOf(0));};
-  function pick(e) { var r = wheel.getBoundingClientRect(); return telePickIndex((e.clientX - r.left) / r.width * 300, (e.clientY - r.top) / r.height * 300); }
+  function pick(e, free) { var r = wheel.getBoundingClientRect(); return telePickIndex((e.clientX - r.left) / r.width * 300, (e.clientY - r.top) / r.height * 300, free); }
   function moved(d,e) { return Math.hypot(e.clientX-d.x,e.clientY-d.y)>=6; }
   wheel.addEventListener('pointerdown', function(e){
     if (e.button !== 0 || e.isPrimary === false || TELE_UI.drag || !teleCanOrder()) return;
@@ -93,11 +90,11 @@ function teleDraw(sh) {
   });
   wheel.addEventListener('pointermove', function(e){
     var d=TELE_UI.drag;if(!d || d.id!==e.pointerId)return;
-    d.moved=d.moved||moved(d,e);TELE_UI.preview=d.stop&&!d.moved?-1:pick(e);teleDraw(SHIPS[PLAYER_I]);
+    d.moved=d.moved||moved(d,e);TELE_UI.preview=d.stop&&!d.moved?-1:pick(e,true);teleDraw(SHIPS[PLAYER_I]);
   });
   wheel.addEventListener('pointerup', function(e){
     var d=TELE_UI.drag;if(!d || d.id!==e.pointerId)return;
-    var i=d.stop&&!d.moved&&!moved(d,e)?TELE.indexOf(0):pick(e);
+    var i=d.stop&&!d.moved&&!moved(d,e)?TELE.indexOf(0):pick(e,true);
     teleCancel();
     if(i>=0 && d.ship===teleCanOrder())teleOrder(i);else if(SHIPS[PLAYER_I])teleDraw(SHIPS[PLAYER_I]);
   });
