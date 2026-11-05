@@ -813,7 +813,11 @@ function segDist2(p, ax, ay, az, bx, by, bz) {
  *  ⛔ 亂數照抽、只是不撒 ⇒ 開或關物理，後面的亂數序列一樣（戰局不變）。 */
 function dropSail(owner, s, torn) {
   s.dead = true; owner.rigDirty = true; sailLinesDie(owner, s);
-  if (s.furled) return;                                              // 收在帆桁上的：跟著掉，沒有布片
+  if (s.furled) {                                                    // 收著的：沒有布片；物理開著 ⇒ 從收好的那一捲放下來、垂下來（30_rig_physics.js physVis 的 fdrop），跟張開時掉的一樣；物理關著照舊不畫
+    var fc = PHYS && owner.cl ? owner.cl[s.k] : null;
+    if (fc && !fc.gone && !fc.loose) { fc.late = true; fc.fdrop = true; }
+    return;
+  }
   var cl = PHYS && owner.cl ? owner.cl[s.k] : null;
   if (cl && cl.gone) cl = null;
   if (cl && !cl.p) cl.late = true;                                   // 物理開著、布還沒建（開局第一步之前就掉）⇒ 下一步 physStep 照「late」建布、垂下來；⛔ 撒點精靈（那是沒物理的樣子；TASK-0579）
