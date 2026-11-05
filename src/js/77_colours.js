@@ -241,10 +241,14 @@ function flagsRetex() {
 //    ⛔ 只換畫面：旗還是那一面帆（布料、被打、降旗照舊），不碰模擬。
 function flagVariant(T, k) {
   var f = flagPreset(k); if (!T || !T.flagTi || !f) return null;
+  var k0 = k, nat = T.flagNat || {};
   if (k.indexOf('player') === 0) k = 'player:' + f.field + ':' + f.emblem;   // 玩家的旗照解出來的那一面記（換了旗 ⇒ 另一格，不拿舊的）
   var V = T.flagVar || (T.flagVar = {}); if (V[k]) return V[k];
   var m = {}, n = T.rig.sails.length;
-  Object.keys(T.flagTi).forEach(function (ti) { var q = T.flagTi[ti]; m[ti] = n + T.teamExtra.length; T.teamExtra.push({ texture: Object.assign({ uv: q.uv, alpha_min: 0 }, flagTexOf(q.kind, f)) }); });
+  Object.keys(T.flagTi).forEach(function (ti) {
+    if (nat[ti] === k0) return;                                          // 作品畫的就是這一國 ⇒ 照留（sailRect 落回 teamTex ＝ 它自己）
+    var q = T.flagTi[ti]; m[ti] = n + T.teamExtra.length; T.teamExtra.push({ texture: Object.assign({ uv: q.uv, alpha_min: 0 }, flagTexOf(q.kind, f)) });
+  });
   V[k] = m;
   if (T.cloth) {                                                         // 布已經建好（clothSetup）⇒ 重排；堡壘原本沒有貼圖集（作品的旗沒貼圖）⇒ 這時才第一次有
     T.sailAtlas = sailAtlas(T.rig.sails.concat(T.teamExtra)); if (T.sailTexGL) gl.deleteTexture(T.sailTexGL); T.sailTexGL = null;
@@ -252,10 +256,17 @@ function flagVariant(T, k) {
   }
   return m;
 }
-/** 給一艘船掛 k 那一面旗（預設旗的 key；null ⇒ 回到陣營旗）⇒ 掛上了 true；不認得的 key ⇒ false、照陣營。 */
+/** 給一艘船掛 k 那一面旗（預設旗的 key；null ⇒ 回到陣營旗）⇒ 掛上了 true；不認得的 key ⇒ false、照陣營。
+ *  作品裡有換不了的國旗（T.flagMiss：沒標 nation、沒有貼圖 uv）⇒ 換得了的照換，但回 false、那一型第一次時主控台喊（TASK-1208：不再靜默說換好了）。 */
 function shipNation(sh, k) {
-  var m = k ? flagVariant(sh.T, k) : null;
+  var m = k ? flagVariant(sh.T, k) : null, T = sh.T;
   sh.nation = m ? k : null; sh.flagMap = m; sh.rigDirty = true;
+  var miss = m ? flagMissOf(T, k) : [];
+  if (miss.length) {
+    var said = T.flagMissSaid || (T.flagMissSaid = {});
+    if (!said[k]) { said[k] = 1; console.warn('國旗：' + T.id + ' 掛「' + k + '」換不了作品的 ' + miss.join('、')); }
+    return false;
+  }
   return !!m;
 }
 // ── 堡壘自己的旗也能換國旗（TASK-0977；Tim 2026-10-26「是否可以讓港口堡壘也能跟著換旗 目前和平港堡壘的旗幟是白旗」）──
@@ -280,7 +291,7 @@ function teamFlagsSetup(T, info) {
   T.nSail0 = T.rig.sails.length; T.teamTex = {}; T.teamExtra = []; T.poles = []; T.flagSlots = []; T.flagTi = {}; T.flagVar = {}; T.flagUv = null;
   if (!COL_ON) return;
   if (info && info.fixed) flagOwnUv(T);
-  var defs = info && info.flags || autoFlags(T); if (!defs.length) return;
+  var defs = info && info.flags || autoFlags(T); if (!defs.length) { flagNationMeta(T); return; }
   T.teamDefs = defs;
   var add = [], red = [], repl = [];
   defs.forEach(function (f, fi) {
@@ -316,7 +327,28 @@ function teamFlagsSetup(T, info) {
     T.teamExtra.push(xb, xr);
     T.flagSlots.push({ o: xb, kind: kd, team: 'blue' }, { o: xr, kind: kd, team: 'red' });
   });
+  flagNationMeta(T);
 }
+// ── 作品的國旗跟著換（TASK-1208；Tim 2026-11-04「船隻作品中如果是國旗的旗幟 可以標記meta 船隻加上國旗時同時替換掉這部分」）──
+//    作品的旗標 meta nation ＝ 這面畫的是哪一國（預設旗的 key：gb-red、spain、france、dutch、portugal…；沒有預設旗的國家照寫 usa、qing、japan）；
+//    nation=none ＝ 不是國旗（作者自己的旗、裝飾旗）⇒ 照留。
+//    ⇒ 船掛了國旗 k（shipNation）：nation ≠ k 的那幾面換成 k（布料、位置、被打照原本那面，只換貼圖）；nation ＝ k ⇒ 照留作品畫的那面（英國船殼掛英國旗 ⇒ 不動）。
+//    沒掛國旗（戰局、我艦）⇒ teamTex 兩隊都指回它自己 ⇒ 跟以前一樣。
+//    T.flagNat[帆] ＝ 那面畫的國；T.flagMiss ＝ [{ name, nat }] 換不了的（標了國卻沒有貼圖 uv ⇒ nat；flag=ensign 卻沒標 nation ⇒ nat 空）⇒ 掛別國時 shipNation 回 false、主控台喊（flagMissOf）。
+function flagNationMeta(T) {
+  T.flagNat = {}; T.flagMiss = [];
+  for (var k = 0; k < T.nSail0; k++) {
+    var s = T.rig.sails[k], m = s.meta || {};
+    if (m.kind !== 'flag' || T.teamTex[k]) continue;                    // 設定檔 replace、堡壘自己的旗已經登記過
+    if (!m.nation) { if (m.flag === 'ensign') T.flagMiss.push({ name: s.name + '（沒標 nation）' }); continue; }
+    if (m.nation === 'none') continue;
+    var uv = s.texture && s.texture.uv;
+    if (!uv) { T.flagMiss.push({ name: s.name + '（沒有貼圖 uv）', nat: m.nation }); continue; }
+    T.teamTex[k] = { blue: k, red: k }; T.flagTi[k] = { kind: m.flag === 'pennant' ? 'pennant' : 'ensign', uv: uv }; T.flagNat[k] = m.nation;
+  }
+}
+/** 這一型掛 k 那一國時換不了的作品旗（名字）：沒標 nation 的一律算；沒有 uv 的只在畫的不是 k 時算。 */
+function flagMissOf(T, k) { return (T.flagMiss || []).filter(function (q) { return q.nat !== k; }).map(function (q) { return q.name; }); }
 /** 貼圖集的那一格：陣營旗照船的陣營挑藍或紅那份（船型兩隊共用）；替換掉的作品旗也一樣。船自己掛了旗（sh.nation ⇒ flagMap）⇒ 照那一份。 */
 function sailRect(ow, A, ti) {
   var T = ow.T, m = T && T.teamTex && T.teamTex[ti];

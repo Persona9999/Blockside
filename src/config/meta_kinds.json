@@ -9,7 +9,7 @@
     "mast": { "name": "桅（下桅；帆桁的 mast 照它綁，TASK-1169）", "on": ["link"], "keys": ["mast"], "need": [], "use": [], "doc": "§5", "game": ["10_ship.js", "32_hull.js", "40_crew.js", "51_captain.js"] },
     "yard": { "name": "帆桁", "on": ["model"], "keys": ["mast", "yard", "sail", "length_ft", "diameter_in", "pivot_anchor", "turn_axis", "rotate_z_deg", "rig"], "need": ["pivot"], "use": ["arm-P", "arm-S", "earing-P", "earing-S", "sling", "fore"], "doc": "§5", "game": ["10_ship.js", "31_sailing.js", "30_rig_physics.js", "21_gunnery.js"], "mk": true, "blow": "fall" },
     "sail": { "name": "帆", "on": ["sail"], "keys": ["mast", "sail", "set"], "need": [], "use": [], "doc": "§9.1", "game": ["31_sailing.js"] },
-    "flag": { "name": "旗", "on": ["sail"], "keys": ["flag", "mast", "team"], "need": [], "use": [], "doc": "§9.1", "game": ["31_sailing.js", "77_colours.js"] },
+    "flag": { "name": "旗", "on": ["sail"], "keys": ["flag", "mast", "team", "nation"], "need": [], "use": [], "doc": "§9.1", "game": ["31_sailing.js", "77_colours.js"] },
     "sheet": { "name": "帆腳索", "on": ["rope"], "keys": ["sail"], "need": [], "use": [], "doc": "§9.1", "game": null },
     "tack": { "name": "帆角索", "on": ["rope"], "keys": ["sail"], "need": [], "use": [], "doc": "§9.1", "game": null },
     "shroud": { "name": "側支索", "on": ["rope"], "keys": [], "need": [], "use": [], "doc": "§6", "game": null },
