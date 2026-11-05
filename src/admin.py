@@ -1953,6 +1953,98 @@ def act_showlod(ids=None, force=False, check=False):
     return log
 
 
+ANCHOR_JS = os.path.join(os.path.dirname(OUT), 'ships', 'anchor.js')
+
+
+def anc_read():
+    """ships/anchor.js 現在那一份 ⇒ { 船型: 那一筆 }；沒有、讀不了 ⇒ {}。"""
+    try:
+        t = open(ANCHOR_JS, encoding='utf-8').read()
+        return json.loads(t[t.index('{', t.index('BS_ANCHOR')):t.rindex('}') + 1]).get('types') or {}
+    except Exception:
+        return {}
+
+
+def anc_want(cfg):
+    """每一型（含堡壘、砲台）該有的指紋 ⇒ { 船型: fp }。頁面算的那一個（js/10_ship.js ancFp）：ANC_V ＋ 'lock ' ＋ lock 前 14 字（同 showlod_want）。"""
+    lock = json.load(open(LOCK_P, encoding='utf-8')) if os.path.exists(LOCK_P) else {}
+    v = re.search(r'ANC_V = (\d+)', open(os.path.join(HERE, 'js', '10_ship.js'), encoding='utf-8').read())
+    return {s['id']: '%s lock %s' % (v.group(1) if v else '?', (lock.get(s.get('vxk') or '') or '（沒有指紋）')[:14]) for s in cfg['ships']}
+
+
+def anc_note(cfg):
+    """建置的最後一行：哪幾型找最近實心格的預烘跟 _cache 對不上（遊戲裡這幾型開戰時照舊現算，結果一樣、只是慢）。只讀、不烘（同 showlod_note）。"""
+    want, have = anc_want(cfg), anc_read()
+    bad = [sid for sid in want if (have.get(sid) or {}).get('fp') != want[sid]]
+    if not bad:
+        return ['✓ 找最近實心格的預烘 %d 型都對得上 _cache（ships/anchor.js）' % len(want)]
+    return ['⚠ 找最近實心格的預烘 %d 型對不上 _cache：%s ⇒ 遊戲裡這幾型開戰時現算；烘：python -I admin.py ancbake %s（import／reimport 會自己烘）'
+            % (len(bad), '、'.join(sid + ('（沒烘）' if sid not in have else '') for sid in bad), ' '.join('--id ' + sid for sid in bad))]
+
+
+def act_ancbake(ids=None, force=False, check=False):
+    """找最近實心格的預烘（TASK-1229；Tim 2026-11-05「anchorNear是否在匯入時就計算好 希望不要在戰鬥時才計算」；js/10_ship.js anchorNear）：
+    無頭 Chrome 跑成品的 ?ancbake=<船>（那一型跟憲法號開一場，同 showlod），頁面記下那一型開戰時每一次「找最近實心格」的鍵與結果
+    ⇒ 這裡壓成 deflate-raw、寫進 ships/anchor.js。遊戲 loadHull 照它掛表、開戰時照表拿；表裡沒有的鍵、指紋對不上 ⇒ 照舊現算（結果一樣）。
+    ids 不給 ⇒ 船隻清單每一型（含堡壘、砲台）。指紋（_cache 那份 .vxk 的 lock ＋ ANC_V）跟檔裡的一樣 ⇒ 不重烘（--force 一律重烘）。--check ⇒ 不烘，只列對不對得上。
+    同一份 _cache 烘兩次 ⇒ 檔逐位元組相同（照鍵排、zlib 同一版、JSON 照鍵排）。"""
+    import html as _html, tempfile
+    cfg = load()
+    want = anc_want(cfg)
+    every = list(want)
+    ids = ids or every
+    have, log = anc_read(), []
+    if check:
+        for sid in every:
+            e = have.get(sid)
+            log.append(('✓ ' if e and e.get('fp') == want[sid] else '✗ ') + sid + ('：沒烘' if not e else '' if e.get('fp') == want[sid] else '：指紋 %s ≠ %s' % (e.get('fp'), want[sid])))
+        return log
+    chrome = next((c for c in CHROMES if os.path.exists(c)), None)
+    if not chrome:
+        raise Fail('找不到 Chrome（' + '、'.join(CHROMES) + '）')
+    if not os.path.exists(OUT):
+        raise Fail('還沒有成品（先 build）')
+    out = dict(have)
+    for sid in ids:
+        if sid not in every:
+            log.append('  · %s：不在船隻清單 ⇒ 不烘' % sid)
+            continue
+        if not force and sid in have and have[sid].get('fp') == want[sid]:
+            log.append('· %s：指紋一樣 ⇒ 不重烘' % sid)
+            continue
+        R = None
+        for _ in range(2):                 # 冷啟動偶爾沒跑完（同 act_showlod）⇒ 再跑一次
+            prof = tempfile.mkdtemp(prefix='ancbake_')
+            try:
+                url = 'file:///' + OUT.replace('\\', '/') + '?ancbake=' + sid
+                r = subprocess.run([chrome, '--headless=new', '--no-first-run', '--user-data-dir=' + prof, '--use-angle=swiftshader', '--enable-unsafe-swiftshader',
+                                    '--virtual-time-budget=300000', '--dump-dom', url], capture_output=True, timeout=900)
+                ms = re.findall(r'<pre id="anchor">(.*?)</pre>', r.stdout.decode('utf-8', 'replace'), re.S)
+                R = json.loads(_html.unescape(ms[-1])) if ms else None
+            except Exception:
+                R = None
+            finally:
+                shutil.rmtree(prof, ignore_errors=True)
+            if R:
+                break
+        if not R or R.get('err') or R.get('b64') is None:
+            log.append('  ✗ %s：讀不到結果%s ⇒ 這一型不寫（ships/anchor.js 留舊的那一份）' % (sid, '（' + R['err'][:300] + '）' if R and R.get('err') else '（無頭 Chrome 沒跑完）'))
+            continue
+        raw = base64.b64decode(R['b64'])
+        if len(raw) != R['n'] * 20 or R.get('fp') != want[sid]:
+            log.append('  ✗ %s：%s ⇒ 這一型不寫' % (sid, '筆數對不上（%d ≠ %d × 20）' % (len(raw), R['n']) if len(raw) != R['n'] * 20 else '頁面算的指紋 %s ≠ %s（成品不是照現在的 _cache 建的？先 build）' % (R.get('fp'), want[sid])))
+            continue
+        co = zlib.compressobj(9, zlib.DEFLATED, -15)
+        out[sid] = {'fp': R['fp'], 'n': R['n'], 'b64': base64.b64encode(co.compress(raw) + co.flush()).decode('ascii')}
+        log.append('✓ %s：%d 筆（開一場現算 %d 次）；%.1f KB' % (sid, R['n'], R.get('scan', 0), len(out[sid]['b64']) / 1024.0))
+    body = json.dumps({'v': 1, 'types': {k: out[k] for k in sorted(out)}}, ensure_ascii=False, sort_keys=True, separators=(',', ':'))
+    os.makedirs(os.path.dirname(ANCHOR_JS), exist_ok=True)
+    with open(ANCHOR_JS, 'w', encoding='utf-8', newline='\n') as f:
+        f.write('// 找最近實心格的預烘（TASK-1229）：src/admin.py ancbake 寫的，別手改（js/10_ship.js ancLoad 載）\nwindow.BS_ANCHOR = ' + body + ';\n')
+    log.append('✓ ships/anchor.js：%d 型、%.0f KB' % (len(out), os.path.getsize(ANCHOR_JS) / 1024.0))
+    return log
+
+
 def act_disp(ids=None, margin=None):
     """排水量與壓艙物（Tim 2026-10-26「加一個工具檢查目前所有船的空載排水量跟水線排水量 滿載排水量 因為我發現目前有些船沒有壓艙物(載一點貨物就會加深吃水) 需要分析如何調整」）。
     量法住在遊戲裡（js/75_shipcheck.js dispCheck，?dispcheck=<船,…>）：重量照開戰時同一套（hullT0：格＋砲＋火藥桶）、浮力照 hydrostatics ⇒ 這裡只跑成品、寫 reports/disp.md。
@@ -2820,7 +2912,7 @@ def act_build(pack=True, single=False):   # pack：壓縮版（預設，TASK-058
         log += js_strip_html(OUT)
     else:
         ships_sync(os.path.dirname(OUT), {})                 # 原格式（船內嵌）⇒ ships/ 裡的船檔都是舊的
-    return log + flagloop_ensure() + src_stamp() + showlod_note(cfg)
+    return log + flagloop_ensure() + src_stamp() + showlod_note(cfg) + anc_note(cfg)
 
 
 # ───────────────────────── 外掛外殼（shell：別的遊戲拿這份成品套自己的外殼；2026-10-21） ─────────────────────────
@@ -3381,7 +3473,7 @@ def ship_data(html, el, read=None):
 def ships_sync(root, files):
     """船檔寫進 <root>/ships/：files ＝ { 相對路徑: 內容 }；ships/ 裡不在 files 的船檔（船隻清單拿掉的船）拿掉。回 (寫了幾個, 拿掉幾個)。"""
     d = os.path.join(root, 'ships')
-    old = [f for f in os.listdir(d) if f.endswith('.js') and f not in ('flagloop.js', 'showlod.js')] if os.path.isdir(d) else []   # ships/ 只放建置寫的船檔 ⇒ 不在這次清單上的 .js 都是舊的（flagloop.js：循環布的預烘，flagloop_ensure 管；showlod.js：表演船低模，act_showlod 管）
+    old = [f for f in os.listdir(d) if f.endswith('.js') and f not in ('flagloop.js', 'showlod.js', 'anchor.js')] if os.path.isdir(d) else []   # ships/ 只放建置寫的船檔 ⇒ 不在這次清單上的 .js 都是舊的（flagloop.js：循環布的預烘，flagloop_ensure 管；showlod.js：表演船低模，act_showlod 管）
     if files:
         os.makedirs(d, exist_ok=True)
     for rel, t in files.items():
@@ -4178,6 +4270,7 @@ def act_import(work, sid, name, build=True, variant_of=None):
     if build:
         log += act_build()
         log += act_ropebind([sid])                       # 繩端綁定（TASK-0716）：匯入時算好寫進檔頭、出報表
+        log += act_ancbake([sid])                        # 找最近實心格的預烘（TASK-1229）：這一型開戰要查的先烘進 ships/anchor.js（匯入檢查照表讀）
         log += act_shipcheck([sid])                      # 匯入檢查：缺 meta、砲班站不滿、開場就掉的（只讀）
         log += act_showlod([sid])                        # 表演船的低模與貼圖（TASK-1104；js/60_showlod.js）：沒烘過的這一型烘進 ships/showlod.js（堡壘、砲台不烘）
     else:
@@ -4231,6 +4324,7 @@ def act_reimport(sid, work=None, build=True):
     if build:
         log += act_build()
         log += act_ropebind([sid])                       # 繩端綁定（TASK-0716）：新的 .vxk 沒有 bind ⇒ 算好寫進去
+        log += act_ancbake([sid])                        # 找最近實心格的預烘（TASK-1229）：.vxk 換了 ⇒ 指紋對不上 ⇒ 這一型重烘
         log += act_shipcheck([sid])                      # 匯入檢查（只讀）
         log += act_showlod([sid])                        # 表演船的低模與貼圖（TASK-1104）：.vxk 換了 ⇒ 指紋對不上 ⇒ 這一型重烘（不重烘的話遊戲裡這一型退回原模）
     else:
@@ -4641,6 +4735,10 @@ def main():
     s.add_argument('--id', action='append', help='哪一型（可以給好幾次）；不給 ＝ 每一型（不含堡壘、砲台）')
     s.add_argument('--force', action='store_true', help='指紋一樣也重烘')
     s.add_argument('--check', action='store_true', help='不烘，只列每一型對不對得上')
+    s = sp.add_parser('ancbake', help='找最近實心格的預烘（TASK-1229）：跑成品的 ?ancbake=<船> 記下開戰時的每一次查詢 ⇒ ships/anchor.js（指紋一樣不重烘）')
+    s.add_argument('--id', action='append', help='哪一型（可以給好幾次）；不給 ＝ 每一型')
+    s.add_argument('--force', action='store_true', help='指紋一樣也重烘')
+    s.add_argument('--check', action='store_true', help='不烘，只列每一型對不對得上')
     s = sp.add_parser('disp', help='排水量與壓艙物：每一型的空載／設計水線／滿載排水量、壓艙空間（＝ Blocksail 貨只換壓艙石的上限）、ships[].cargoT 的缺口與補法 ⇒ reports/disp.md')
     s.add_argument('--id', action='append', help='哪一艘（可以給好幾次）；不給 ＝ 每一艘（不含堡壘）')
     s.add_argument('--margin', type=float, help='滿載線比淹到最低砲甲板／頂層甲板低幾公尺（預設 0.3）')
@@ -4715,6 +4813,8 @@ def main():
             log = act_shipcheck(o.id)
         elif o.op == 'showlod':
             log = act_showlod(o.id, o.force, o.check)
+        elif o.op == 'ancbake':
+            log = act_ancbake(o.id, o.force, o.check)
         elif o.op == 'ladcheck':
             log = act_ladtest() if o.selftest else act_ladcheck(o.id)
         elif o.op == 'disp':
@@ -4780,7 +4880,7 @@ def main():
         print(str(e))
         sys.exit(1)
     print('\n'.join(log))
-    if o.op == 'showlod' and not o.check and any(l.lstrip().startswith('✗') for l in log):
+    if o.op in ('showlod', 'ancbake') and not o.check and any(l.lstrip().startswith('✗') for l in log):
         sys.exit(1)                                      # 有型沒烘成（TASK-1170）⇒ 不讓呼叫的人當成全過
 
 

@@ -682,12 +682,69 @@ function ropeBox(p) {
   return b;
 }
 function anchorNear(T, x, y, z, r) {                 // 船型 T 的原始格子裡，(x, y, z) 附近 r 格內最近的實心格（船殼 T.hullG：錨照 sh.grid 查還在不在 ⇒ 不錨在會轉的裝甲上，24_armor.js）
-  var bx = Math.floor(x), by = Math.floor(y), bz = Math.floor(z), best = -1, bd = 1e9;
+  var bx = Math.floor(x), by = Math.floor(y), bz = Math.floor(z), best = -1, bd = 1e9, k = T.anc || ANC.rec ? bx + ',' + by + ',' + bz + ',' + r : '';
+  if (T.anc) { var v = T.anc.get(k); if (v !== undefined) { ANC.hit++; return v; } ANC.miss++; T.ancMiss = (T.ancMiss || 0) + 1; if (DEBUG && ANC.mk.length < 20) ANC.mk.push(T.id + ' ' + k + ' ' + String(new Error().stack).split('\n').slice(2, 4).join(' ← ')); }   // 預烘的表（ships/anchor.js；TASK-1229）：查得到 ⇒ 不掃
+  var t0 = DEBUG ? performance.now() : 0;                                // ?debug=1：掃格子花了多久（__game.anc().ms）
   for (var dz = -r; dz <= r; dz++) for (var dy = -r; dy <= r; dy++) for (var dx = -r; dx <= r; dx++) {
     if (!T.hullG.get(bx + dx, by + dy, bz + dz)) continue;
     var d = dx * dx + dy * dy + dz * dz; if (d < bd) { bd = d; best = VK.pack(bx + dx, by + dy, bz + dz); }
   }
+  ANC.scan++; if (DEBUG) ANC.ms += performance.now() - t0;
+  if (ANC.rec && T.id === ANC.rec.id && !(T.fit && T.fit.spec)) ANC.rec.m.set(k, best);   // ?ancbake=<船>：記下這一型每一次查詢
   return best;
+}
+/** 找最近實心格的預烘（TASK-1229；Tim 2026-11-05「anchorNear是否在匯入時就計算好 希望不要在戰鬥時才計算」）：
+ *  結果只跟那一型的格子（.vxk；裝甲、錨拆出去之後的 T.hullG）有關 ⇒ 一型一張表「x,y,z,r ⇒ 結果」。admin.py ancbake 用無頭 Chrome 跑成品的 ?ancbake=<船>
+ *  （同 showlod：那一型跟憲法號開一場）記下每一次查詢 ⇒ ships/anchor.js；loadHull 跟船檔一起載、buildHull 一建出 T 就掛上（旗、布料綁定在 buildHull 裡就會查）。
+ *  指紋 ＝ ANC_V ＋ 那一型 .vxk 的 lock（同 showlodFp）；對不上、沒烘、換了裝（T.fit.spec：換裝會改 T.base）⇒ 不掛、照舊現算（結果一樣）。表裡沒有的鍵也照舊現算、記一次 miss（匯入檢查報）。 */
+var ANC_V = 1, ANC = { p: null, raw: null, src: undefined, rec: Q.has('ancbake') ? { id: Q.get('ancbake'), m: new Map() } : null, hit: 0, miss: 0, scan: 0, ms: 0, mk: [] };   // mk：?debug=1 時前 20 次沒查到的鍵與呼叫處（__game.anc）
+function ancFp(id) {
+  var c = CFG.ships.filter(function (s) { return s.id === id; })[0];
+  if (!c || !c.vxk) return null;
+  if (ANC.src === undefined) { try { ANC.src = JSON.parse(document.getElementById('blockside-src').textContent).files; } catch (e) { ANC.src = null; } }
+  var f = ANC.src && ANC.src['VoxelKit/_cache/' + c.vxk];
+  return f ? ANC_V + ' ' + f : null;
+}
+/** ships/anchor.js（<script>，成品不准 fetch；同 showlodNeed）⇒ 一次；載不到 ⇒ 照舊現算。烘的那一頁不載（要記的就是現算的那幾次）。 */
+function ancLoad() {
+  if (ANC.p) return ANC.p;
+  return (ANC.p = new Promise(function (ok) {
+    if (Q.has('ancbake') || Q.get('anc') === '0') { ok(null); return; }   // ?anc=0 ⇒ 不用表（反向對照）
+    try {
+      var s = document.createElement('script'); s.src = ((window.BS_SHELL && window.BS_SHELL.ships) || '') + 'ships/anchor.js';
+      s.onload = function () { var o = window.BS_ANCHOR; window.BS_ANCHOR = null; ANC.raw = o && o.types || null; ok(ANC.raw); };
+      s.onerror = function () { ok(null); };
+      document.head.appendChild(s);
+    } catch (e) { ok(null); }
+  }));
+}
+/** 這一型的表 ⇒ Promise<Map|null>：每筆 5 個 int32（x, y, z, r, 結果），deflate-raw ＋ base64（admin.py 壓）。 */
+function ancTable(id) {
+  return ancLoad().then(function (raw) {
+    var r = raw && raw[id]; if (!r || r.fp !== ancFp(id)) return null;
+    return VK.inflateRaw(VK.b64ToBytes(r.b64)).then(function (u) {
+      var a = new Int32Array(u.buffer.slice(u.byteOffset, u.byteOffset + u.byteLength)), M = new Map();
+      for (var i = 0; i + 4 < a.length; i += 5) M.set(a[i] + ',' + a[i + 1] + ',' + a[i + 2] + ',' + a[i + 3], a[i + 4]);
+      return M.size === r.n ? M : null;
+    }, function () { return null; });
+  });
+}
+/** ?ancbake=<船>（admin.py ancbake 讀頁面上 id 是 anchor 的 pre；ANC.rec 在腳本載入時就開始記：⛔ 到這裡才開始記 ⇒ 開機先預載的 constitution 在 buildHull 裡查的（陣營旗、布料綁定）都漏掉）：{ id, fp, n, b64：每筆 x, y, z, r, 結果（int32 小端、照鍵排、未壓縮）, scan：這一場現算了幾次 } */
+function ancBakePage(id) {
+  var R = { id: id };
+  function done() { var pre = document.createElement('pre'); pre.id = 'anchor'; document.body.appendChild(pre); pre.textContent = JSON.stringify(R); uiAway(); }
+  Promise.all([loadHull(id), loadHull('constitution')]).then(function () {
+    if (!hullInfo(id)) { R.err = '設定檔 ships 沒有這一型'; done(); return; }
+    FLEET_DBG = [{ team: 'blue', hull: id }, { team: 'red', hull: 'constitution' }]; flowMode('eve'); DIST = LIM_DIST[1];
+    WIND_FIX = { rot: 0, s0: 1 };
+    reset();
+    var K = Array.from(ANC.rec.m.keys()).map(function (k) { return k.split(',').map(Number).concat([ANC.rec.m.get(k)]); });
+    K.sort(function (a, b) { return a[0] - b[0] || a[1] - b[1] || a[2] - b[2] || a[3] - b[3]; });
+    var a = new Int32Array(K.length * 5); K.forEach(function (e, i) { a.set(e, i * 5); });
+    var u = new Uint8Array(a.buffer), s = ''; for (var i = 0; i < u.length; i += 8192) s += String.fromCharCode.apply(null, u.subarray(i, i + 8192));
+    R.n = K.length; R.b64 = btoa(s); R.scan = ANC.scan; R.fp = ancFp(id);
+    done();
+  }).catch(function (e) { R.err = String(e && e.stack || e); done(); });
 }
 /** 桅（TASK-1169，Tim 2026-11-02：「在雕刻時就用meta綁定好…匯入時自動檢查 綁定 不應該在遊戲內再判斷」「參考帆跟繩的綁定」）：
  *  每根下桅的關聯標 meta `kind=mast`、`mast`（fore／main／mizzen／bonaventure／bowsprit）；匯入（admin.py drive_cells）把那一件自己的格子寫進 parts[].cellRuns。

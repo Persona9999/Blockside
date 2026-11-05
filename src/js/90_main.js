@@ -153,6 +153,7 @@ if (DEBUG) window.__game = {
   /** 繩的檢查（10_ship.js ropesFloating／ropeAuditStatic）：第 i 艘現在浮空的繩；static ⇒ 作品本身的讀數。 */
   ropes: function (i, stat) { var sh = SHIPS[i || 0]; return stat ? ropeAuditStatic(sh) : ropesFloating(sh); },
   hangs: function (i) { return SHIPS[i || 0].models.filter(function (m) { return m.hang; }).map(function (m) { return m.path + (m.sax ? ' 擺 ' + (m.sw * 57.3).toFixed(1) + '°（擺長 ' + (m.sL * S).toFixed(2) + ' m）' : '') + ' falls ' + (m.falls ? m.falls.map(function (j) { var r = SHIPS[i || 0].ropes[j]; return r.name + (r.dead ? '×' : ''); }).join(',') : '（沒有）') + (m.alive ? '' : ' 掉了'); }); },
+  anc: function () { return { hit: ANC.hit, miss: ANC.miss, scan: ANC.scan, ms: +ANC.ms.toFixed(1), mk: ANC.mk, types: Object.keys(HULLT).map(function (k) { var T = HULLT[k]; return { key: k, table: T.anc ? T.anc.size : null, miss: T.ancMiss || 0 }; }) }; },   // 找最近實心格（TASK-1229）：查表命中、表裡沒有、實際掃格子的次數；每一型掛了幾筆的表
   lostModels: function (i) { return SHIPS[i || 0].models.filter(function (m) { return !m.alive && !GUNS[m.kind] && !kindProp(m.kind, 'noFall'); }).map(function (m) { return m.path + ' ' + (m.meta.kind || m.kind) + ' foot z ' + (m.foot >> 21); }); },
   gunDirs: function (i) { return SHIPS[i || 0].guns.map(function (g) { return [g.name.split('/').pop(), g.type, g.ax.map(function (v) { return +v.toFixed(2); }), gunDir(g)]; }); },
   /** 艙房的擺法（TASK-0568；船型要先載好）：每一間的格子（nx×ny、門口走道幾格、站不住幾格）、type ⇒ 那個類型自動擺滿的結果、now ⇒ 現在照擺法擺上的；ms ＝ 全部算一次幾毫秒（不記）。 */
@@ -641,7 +642,8 @@ else GL_READY.then(yieldUI).then(function () {                     // 先讓主�
   if (!chk.ok) { glFail('船體資料跟封裝檔對不上，停下來（不畫半艘船）。\n' + line); return; }
   evEmit('boot:ready');
   if (Q.has('shipcheck')) { shipCheck(Q.get('shipcheck')); return; }
-  if (Q.has('showlodbake')) { showlodBakePage(Q.get('showlodbake')); return; }   // 表演船中那一級的烘（60_showlod.js；admin.py showlod 用無頭 Chrome 讀）
+  if (Q.has('showlodbake')) { showlodBakePage(Q.get('showlodbake')); return; }
+  if (Q.has('ancbake')) { ancBakePage(Q.get('ancbake')); return; }   // 找最近實心格的預烘（10_ship.js；TASK-1229；admin.py ancbake 用無頭 Chrome 讀）   // 表演船中那一級的烘（60_showlod.js；admin.py showlod 用無頭 Chrome 讀）
   if (Q.has('dispcheck')) { dispCheck(Q.get('dispcheck')); return; }   // 排水量與壓艙物（75_shipcheck.js；admin.py disp 用無頭 Chrome 讀）
   if (Q.get('lab') === 'gun') { gunLabInit(); return; }                  // 開炮音試聽頁（85_gunlab.js；根目錄 gunlab.html 轉過來）
   if (LAB_FLEET) { flabInit(); return; }                                // 擬真沙盒（84_fleetlab.js）   // 匯入檢查（75_shipcheck.js；admin.py check 用無頭 Chrome 讀）
