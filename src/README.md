@@ -143,6 +143,10 @@ python -I admin.py authors
 python -I admin.py shipcheck --id phoenix    # 不給 --id ＝ 每一艘
 # 表演船的低模與貼圖（TASK-1104；SHOW_SPEC §5）：import／reimport 之後會自動烘那一型 ⇒ ships/showlod.js 跟著換（要一起提交；不提交 ⇒ 遊戲裡那一型指紋對不上、退回原模）
 python -I admin.py showlod --check          # 列出每一型對不對得上；--id <船> 單烘、--force 指紋一樣也重烘
+# 找最近實心格的預烘（TASK-1229；js/10_ship.js anchorNear）：開戰時模型的腳、繩端、帆錨、旗、布料綁定要找的「附近最近的實心格」，每一型一張表 ⇒ ships/anchor.js。
+#   import／reimport 之後會自動烘那一型（要一起提交）；沒烘、指紋對不上 ⇒ 遊戲照舊現算（結果一樣、只是慢）、匯入檢查 ⚠、建置最後一行列出要烘的型。
+#   ?anc=0 ⇒ 不用表（反向對照）；?debug=1 的 __game.anc() ⇒ 查表命中、沒查到、現算各幾次。全部 44 型約 10 分鐘（一型一個無頭 Chrome）
+python -I admin.py ancbake --check          # 列出每一型對不對得上；--id <船> 單烘、--force 指紋一樣也重烘
 # 樓梯自檢（TASK-0838；Tim 2026-10-23：松島號甲板下的樓梯偏移、梯口有洞、樓梯口被堵死）：每座梯子量梯口的洞、兩端站不站得住、走不走得出去
 #   ⇒ ../reports/ladcheck_<代號>.md（每座的座標、修法、梯口那一層的平面圖）；不給 --id ＝ 每一艘，另寫 ../reports/ladcheck.md（各船幾座有問題）。
 #   shipcheck 也會順手寫這份、它的報告多一行「樓梯自檢」讀數，每個問題也列成一筆 ✗／⚠（「樓梯：…」）。只讀：不寫卡片、不動設定。

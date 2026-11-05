@@ -35,6 +35,8 @@ function shipCheck(id) {
     R.info = { name: T.name, guns: sh.guns.length, crew: sh.crew.length, models: sh.models.length, ropes: sh.ropes.length, sails: sh.sails.filter(function (s) { return !(s.meta && s.meta.team); }).length, teamFlags: sh.sails.filter(function (s) { return s.meta && s.meta.team; }).length,   // 作品的帆／遊戲加的陣營旗分開數（77_colours.js；⛔ 混在一起 ⇒ 夜燈號 vxk 12 面、報告寫 15，basecamp 2026-10-15 問）
     masts: sh.masts.length, mags: sh.mags.length,
       decks: NV ? NV.levels.map(function (L) { return L.key + ' ' + L.name; }) : [], ladders: NV ? NV.ladders.length : 0, rooms: (sh.rooms || []).length, zw: T.zw, hits: SHIPS[1].hits + sh.hits };
+    if (!T.anc) add('warn', '預烘', '—', '找最近實心格沒有預烘表（ships/anchor.js 沒烘這一型、指紋對不上或換了裝）⇒ 開戰時照舊現算（結果一樣、只是慢）', 'python -I admin.py ancbake --id ' + id);   // TASK-1229
+    else if (T.ancMiss) add('warn', '預烘', '—', '找最近實心格有 ' + T.ancMiss + ' 次查詢表裡沒有 ⇒ 開戰時現算（烘的那一場沒走到這幾個點）', 'python -I admin.py ancbake --id ' + id + ' --force');
     R.card = shipCard(sh);                                               // 選船彈窗的卡片（72_shippick.js；admin.py 寫進 config/ship_cards.json）
     if (sh.hits || SHIPS[1].hits) add('warn', '量測', '—', '量的這 ' + SC_SECS + ' 秒裡有砲彈打中（hits ' + (sh.hits + SHIPS[1].hits) + '）⇒ 下面「站不滿」「掉了」可能有被打的', '照舊看，或重跑');
     // ── 船型：水線、geo ──

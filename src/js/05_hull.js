@@ -170,8 +170,8 @@ function loadHull(id) {
   if (!info) return Promise.reject(new Error('沒有這艘船：' + id));
   var t0 = performance.now(), F = fitOf(id);                              // 換裝表（38_fit.js）：id 是「船型@換裝表」⇒ 照那一份；船型 ⇒ 出廠 ⊕ 玩家存檔
   hullSay(info.name + '：解碼…');
-  return (HULLS[id] = yieldUI().then(function () { return Promise.all([VK.loadEmbedded(info.el).then(meshPool).then(function (model) { return fitLoad(model.header, F, info.id).then(function (X) { model.fitExt = X; return model; }); }), cacheGet(info, id, F)]); })   // 解碼與讀快取一起跑（06_cache.js）；換裝要從別艘拿的零件先載好
-    .then(function (r) { return buildHull(info, r[0], t0, r[1], id, F); })
+  return (HULLS[id] = yieldUI().then(function () { return Promise.all([VK.loadEmbedded(info.el).then(meshPool).then(function (model) { return fitLoad(model.header, F, info.id).then(function (X) { model.fitExt = X; return model; }); }), cacheGet(info, id, F), ancTable(info.id)]); })   // 解碼與讀快取一起跑（06_cache.js）；換裝要從別艘拿的零件先載好；找最近實心格的預烘表（10_ship.js ancTable；TASK-1229）
+    .then(function (r) { return buildHull(info, r[0], t0, r[1], id, F, r[2]); })
     .then(function (T) { HULLT[id] = T; cachePut(T, info); return T; }));
 }
 /**
@@ -304,7 +304,7 @@ function yieldRun() {
 }
 var hullSay = function () {};                                            // 90_main.js 換成寫進度的那支
 /** C：快取的記錄（06_cache.js；null ⇒ 全部現場算）。現場算的時候，要存的那幾份另外留在 T.keep，給 cachePut 存。 */
-function buildHull(info, model, t0, C, key, F) {
+function buildHull(info, model, t0, C, key, F, AT) {
   var h = model.header, t1 = performance.now();                            // 到這裡是解碼（loadEmbedded，跟讀快取一起），之後是網格化
   modelMats(h);                                                            // 換色的擺放（TASK-0584）：展開成自己的網格（共用頂點陣列）⇒ decoSplit 數「沒用到的網格」時看得到它
   var FR = fitApply(h, F || {}, model.fitExt);                            // 換裝（38_fit.js；TASK-0714）：掛點換成零件 ⇒ 之後讀 rig.models 的全部照新的；換裝表是空的 ⇒ 不做事
@@ -319,6 +319,7 @@ function buildHull(info, model, t0, C, key, F) {
   if (info.fixed) T.fixed = true;                                          // 堡壘、砲台（TASK-0954；10_ship.js makeShip ⇒ sh.fixed）
   T.ids = idIndex(h);                                                      // 物件 id（TASK-0715）：refPath 照它把 id 換成路徑
   T.key = key === undefined ? info.id : String(key); T.fit = FR;          // 艦隊裡的那一項（船型或 船型@換裝表）、換裝的結果（38_fit.js）
+  if (AT && !FR.spec) T.anc = AT;                                          // 找最近實心格的預烘表（10_ship.js anchorNear；TASK-1229）：換了裝（會改 T.base）⇒ 不掛、照舊現算
   T.cached = !!C; T.keep = C ? null : {};
   T.decos = DS.decos; T.decoN = DS.n; T.meshSkip = DS.skip;                // 裝飾：裝飾件、幾件、沒人用的網格（不建）
   T.gmtN = GMN;                                                            // 有座的砲幾門（匯入檢查的讀數）

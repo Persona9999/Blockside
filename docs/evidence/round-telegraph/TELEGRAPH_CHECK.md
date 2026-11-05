@@ -23,3 +23,5 @@ node src/tests/sail-telegraph.cjs 執行真正 doAct、sailHold、teleStep／tel
 IAB 維吉尼亞號沙盒、手動航行：聚焦小圓盤按 S，前進全速→前進半速；W→前進全速。點畫面 S 鈕→前進半速，W 鈕→前進全速。點畫面後用一般 S 快捷鍵亦→前進半速。停格中測定指令，動力物理未改。sail-controls.png 顯示俥鐘半速與新的齒輪方向按鈕。
 
 本次 build --code：143 JS、5124 頂層名、836903 AST 節點一致，263 來源／44 船對帳通過，來源指紋 c2bab285983555f7。稍後整合 dev 的預烘船表時另行重建。
+
+整合 dev ac56d3f（Abigail 的 TASK-1229 預烘船體錨點表）後重新建置：143 JS、5130 頂層名，838001 AST 節點一致；來源指紋 bd14faefe8300712，263 來源與 44 船對帳通過，既有 ships/anchor.js 保留。兩組輸入測試仍通過。
