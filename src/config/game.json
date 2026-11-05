@@ -2093,6 +2093,33 @@
         "quartermaster": 0
       },
       "town": "genoa-kastellion"
+    },
+    {
+      "id": "tower_galata",
+      "el": "ship-tower-galata",
+      "name": "加拉塔塔",
+      "vxk": "tower_galata.vxk",
+      "work": "kaguya-galata-tower-1453",
+      "author": "kaguya",
+      "material": "stone",
+      "fixed": true,
+      "zw0": 1,
+      "geo": {"spar": [300, 304], "marines": [20, 20], "center": 240, "aim": 240, "aimZ": [5, 470], "deckAim": [174, 230], "rigAim": [300, 400]},
+      "crew": {
+        "officers": 2,
+        "helm": 0,
+        "marines": 0,
+        "top": 0,
+        "monkeys": 1,
+        "handsK": 0.1,
+        "surgeon": 0,
+        "carpenter": 1,
+        "sailmaker": 1,
+        "cook": 0,
+        "navigator": 0,
+        "quartermaster": 0
+      },
+      "town": "galata-tower"
     }
   ],
   "furniture": {
