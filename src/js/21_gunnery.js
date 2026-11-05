@@ -568,7 +568,7 @@ function blowModel(sh, m, vel, drop, at) {
   var vd = norm(vel), sp = drop ? 0 : clamp(len(vel) * 0.07, 5, 16), f;
   if (!drop && blowStyle(m) === 'fall') {                               // 被打斷、照重力掉下去（帆桁；blowStyle）
     var a1 = gauss(), a2 = rr(4, 9), a3 = gauss(), w1 = gauss(), w2 = gauss(), w3 = gauss();   // ⛔ 亂數照「飛」那一套的次數與順序抽（戰局的亂數；只是用法不同）⇒ 戰局逐字不變
-    f = { v: add(add(mul(vd, clamp(len(vel) * 0.004, 0.3, 1.5)), [a1 * 0.3, (a2 - 6.5) * 0.08, a3 * 0.3]), sh.vel), w: [w1 * 0.3, w2 * 0.3, w3 * 0.3], sh: sh, land: true };
+    f = { v: add(add(mul(vd, clamp(len(vel) * FALL_KICK, FALL_KICK_MIN, FALL_KICK_MAX)), [a1 * 0.3, (a2 - 6.5) * 0.08, a3 * 0.3]), sh.vel), w: [w1 * 0.3, w2 * 0.3, w3 * 0.3], sh: sh, land: true, ax: fallAxis(sh.T, m) };   // 推力照砲彈速度（FALL_KICK）
   } else f = { v: add(drop ? [0, -0.5, 0] : add(mul(vd, sp), [gauss() * 2, rr(4, 9), gauss() * 2]), sh.vel),
     w: drop ? [gauss() * 0.4, 0, gauss() * 0.4] : [gauss() * 4, gauss() * 4, gauss() * 4] };
   FLY.push(Object.assign({ T: sh.T, mesh: m.mesh, mm: m.mm, M0: M0, c0: c0, c: c0.slice(), R: M4.ident(), t: 0, wet: false }, f));
@@ -632,11 +632,75 @@ function crewBase(b) { return 1.4 * b.dmg * ammoK(b.ammo, VS_CREW); }
  *  ⛔ 只是演出：FLY 只給人看（落水的水花是畫面的亂數），戰局不讀它。 */
 function blowStyle(m) { var b = m.meta && m.meta.blow; return b === 'fly' || b === 'fall' ? b : kindProp(m.kind, 'blow', 'fly'); }
 /** 停在船上的 'fall'（帆桁）不一直卡著（Tim 2026-10-21「掉落的桅杆在船上會穿模 且卡住一直不消失 … 過一陣子消失或是滑落水 … 可以滑一點避免卡在船上 這樣穿模就還好」）：
- *  停 FALL_SLIDE_T 秒 ⇒ 往比較近的那一舷滑（船寬方向、照船走，不看碰撞 —— 穿過舷牆只是畫面），越滑越快到 FALL_SLIDE_V；
- *  中心滑到腳下那一欄一格都沒有（出了船舷）⇒ 帶著滑出去的速度照重力掉、落水照舊漂（不再停）；
+ *  停 FALL_SLIDE_T 秒 ⇒ 往比較近的那一舷滑（船寬方向、照船走），越滑越快到 FALL_SLIDE_V；碰到舷牆、欄杆爬過去（下面 ④）；
+ *  滑到底下沒東西撐（fallHeld）⇒ 帶著滑出去的速度照重力掉、落水照舊漂；掉到下面一層可以再停、不等就接著滑；
  *  停＋滑超過 FALL_REST_MAX 秒還在船上（例：卡在兩舷都是格子的地方）⇒ 拿掉。⛔ 只是演出：FLY 不讀也不抽戰局的亂數。 */
 var FALL_SLIDE_T = 3, FALL_SLIDE_A = 1.2, FALL_SLIDE_V = 3, FALL_REST_MAX = 30;
-function flyColFree(sh, x, y, z) { for (var k = Math.floor(z); k >= 0; k--) if (sh.grid.get(x, y, k)) return false; return true; }   // 船的格座標 (x, y) 那一欄、z 以下一格都沒有
+// 卡在半空、卡在船上穿模（Tim 2026-11-05：「帆桁被打掉時可以額外給一點推力(根據炮彈速度?) 目前有機率卡在半空(跟桅杆碰撞直接黏住) 或是卡在船體上(且會穿模)」）：
+//   ① 推力照砲彈速度：|v| × FALL_KICK，夾在 FALL_KICK_MIN～MAX m/s（24 磅 420 m/s ⇒ 5 m/s；以前 × 0.004、最多 1.5 ⇒ 幾乎直直掉，中心一路貼著桅）。
+//   ② 停不停照帆桁那一條（fallAxis：沿模型最長的那一軸 FALL_AX_N 點，不只中心）：中心落在桅身自己的格（findMasts 的 seg）⇒ 不停、繼續掉 —— 帆桁的中心本來就在桅的軸線上。
+//   ③ 停下來的那一刻往上抬到那一條沒有一點埋在格裡（最多 FALL_LIFT 格；抬不乾淨 ⇒ 抬到埋得最少的那一格）⇒ 不再半截埋在甲板、船殼裡。
+//   ④ 撐不撐得住看那一條底下（fallHeld），不看「腳下整欄」：⛔ 以前中心底下整欄（一路到龍骨）有一格就算還在船上 ⇒ 從桅樓滑出去之後懸在半空一路橫滑到舷外才掉；
+//      滑的時候碰到舷牆、欄杆 ⇒ 原地往上爬、爬過去（fallSlide；⛔ 以前直接穿過去）；底下空了 ⇒ 照重力掉，掉到下面可以再停一次。
+//      掉在高處（那一條 1/3 以上的點底下 FALL_HIGH 格以上是空的：桅樓、桅頂橫桁；fallHigh）⇒ 不停，往近的那一舷以 FALL_BOUNCE m/s 彈開、繼續掉；滑過一次的再停不等 FALL_SLIDE_T。
+var FALL_KICK = 0.012, FALL_KICK_MIN = 1, FALL_KICK_MAX = 6, FALL_AX_N = 21, FALL_LIFT = 12, FALL_STEP_UP = 3, FALL_HIGH = 30, FALL_BOUNCE = 2;
+/** 帆桁那一條（模型座標）：外框最長那一軸上等距 FALL_AX_N 點，另外兩軸取中間。沒有外框 ⇒ 只用中心。 */
+function fallAxis(T, m) {
+  var me = T.meshes && T.meshes[m.mesh], b = me && me.bb; if (!b) return [m.c.slice()];
+  var ax = [b[3] - b[0], b[4] - b[1], b[5] - b[2]], k = ax[0] >= ax[1] && ax[0] >= ax[2] ? 0 : ax[1] >= ax[2] ? 1 : 2, P = [];
+  for (var i = 0; i < FALL_AX_N; i++) { var p = [(b[0] + b[3]) / 2, (b[1] + b[4]) / 2, (b[2] + b[5]) / 2]; p[k] = b[k] + ax[k] * i / (FALL_AX_N - 1); P.push(p); }
+  return P;
+}
+/** 桅身的格（船型共用，第一次用到才建）。 */
+function fallMast(sh, x, y, z) {
+  var T = sh.T; if (!T.mastSet) { T.mastSet = new Set(); (T.masts || []).forEach(function (m) { for (var j = 0; j < m.seg.length; j += 3) T.mastSet.add(VK.pack(m.seg[j], m.seg[j + 1], m.seg[j + 2])); }); }
+  return T.mastSet.has(VK.pack(x, y, z));
+}
+/** 停著的那一條（f.Ml：模型 ⇒ 船的格座標）往旁邊挪 dy、往上抬 up 格之後，有幾點埋在格裡。 */
+function fallEmb(f, up, dy) { var n = 0; for (var i = 0; i < f.ax.length; i++) { var p = M4.pt(f.Ml, f.ax[i][0], f.ax[i][1], f.ax[i][2]); if (f.sh.grid.get(Math.floor(p[0]), Math.floor(p[1] + dy), Math.floor(p[2] + up))) n++; } return n; }
+/** 挪 dy 之後抬幾格埋得最少（0～mx 格，一樣少挑低的）：{ u, n }。 */
+function fallUp(f, dy, mx) {
+  var best = 0, bn = fallEmb(f, 0, dy);
+  for (var u = 1; u <= mx && bn > 0; u++) { var n = fallEmb(f, u, dy); if (n < bn) { bn = n; best = u; } }
+  return { u: best, n: bn };
+}
+/** 抬到埋得最少的那一格（停下來那一刻）。 */
+function fallSettle(f, mx) { var b = fallUp(f, 0, mx); if (b.u) fallMove(f, 0, 0, b.u); }
+/** 滑一步（dy 格）：走得過去（必要時抬 ≤ FALL_STEP_UP 格）⇒ 走；擋住了、FALL_LIFT 格以內爬得過 ⇒ 原地往上爬 FALL_STEP_UP 格；爬不過 ⇒ 照舊穿過去。
+ *  ⛔ 只看「抬 0～3 格哪個埋得少」：1 m 高的舷牆抬 3 格照樣全埋 ⇒ 一格都不抬、直直穿過去（夜燈號 spanker-boom 沿著舷牆埋了 81%）。
+ *  ⛔ 爬不過就換邊滑：憲法號的帆桁比船寬還長、兩頭都搭在比 1.2 m 高的舷牆（含吊床網）上 ⇒ 兩邊都擋、來回換邊，15 秒後 15 根有 4 根還停在甲板上。 */
+function fallSlide(f, dy) {
+  var e0 = fallEmb(f, 0, 0), a = fallUp(f, dy, FALL_STEP_UP);
+  if (a.n <= e0) fallMove(f, 0, dy, a.u);
+  else if (fallUp(f, dy, FALL_LIFT).n <= e0) fallMove(f, 0, 0, FALL_STEP_UP);
+  else fallMove(f, 0, dy, 0);
+}
+/** 不停、從現在的位置帶著 v（世界座標，m/s；另外加船速）繼續掉；掉過 1.5 m 碰到東西可以再停。 */
+function fallGo(f, v) { f.rest = false; f.land = true; f.M0 = f.M; f.c0 = f.c.slice(); f.R = M4.ident(); f.v = add(f.sh.vel, v); }
+/** 停著的那一條平移（格）：f.Ml、f.cl、f.M、f.c 一起動。 */
+function fallMove(f, dx, dy, dz) { f.cl = [f.cl[0] + dx, f.cl[1] + dy, f.cl[2] + dz]; f.Ml = M4.mul(trans(dx, dy, dz), f.Ml); f.M = M4.mul(f.sh.M, f.Ml); f.c = M4.pt(f.sh.M, f.cl[0], f.cl[1], f.cl[2]); }
+/** 那一條還有東西撐著嗎：撐著的點（那一格或下面兩格是實心）要夾住中間那一點（重心）—— 只有一頭搭著 ⇒ 翻下去。
+ *  ⛔ 只看「有一點搭著」：23 m 的帆桁沿自己的長軸滑出桅樓，還有一頭在桅樓上就一直算撐著（量到停在 27.9 m 高 5 秒）。 */
+function fallHeld(f) {
+  var lo = -1, hi = -1, c = (f.ax.length - 1) / 2;
+  for (var i = 0; i < f.ax.length; i++) {
+    var p = M4.pt(f.Ml, f.ax[i][0], f.ax[i][1], f.ax[i][2]), x = Math.floor(p[0]), y = Math.floor(p[1]), z = Math.floor(p[2]);
+    if (f.sh.grid.get(x, y, z) || f.sh.grid.get(x, y, z - 1) || f.sh.grid.get(x, y, z - 2)) { if (lo < 0) lo = i; hi = i; }
+  }
+  return lo >= 0 && lo <= c && hi >= c;
+}
+/** 掉在高處嗎：那一條（f.Ml）有 1/3 以上的點，底下（跳過撐著的那一層）連續 FALL_HIGH 格以上是空的、再往下還有船（⛔ 底下是海不算 ⇒ 甲板上伸出舷外的兩頭不算）。
+ *  ⛔ 只看中心那一欄：中心搭在桅頂（底下是下桅頭，一路實心）就不算高 ⇒ 量到停在 26 m 高 2.8 秒。 */
+function fallHigh(f) {
+  var g = f.sh.grid, air = 0;
+  for (var i = 0; i < f.ax.length; i++) {
+    var p = M4.pt(f.Ml, f.ax[i][0], f.ax[i][1], f.ax[i][2]), x = Math.floor(p[0]), y = Math.floor(p[1]), k = Math.floor(p[2]);
+    while (k >= 0 && g.get(x, y, k)) k--;                                // 撐著它的那一層
+    var n = 0; while (k >= 0 && !g.get(x, y, k)) { n++; k--; }
+    if (k >= 0 && n >= FALL_HIGH) air++;
+  }
+  return air * 3 >= f.ax.length;
+}
 /** 位移上限（TASK-0797）：飛出去、掉下來的模型一小步最多走一格（S 公尺）⇒ 「掉到甲板上停住」只看終點也不會一步穿過甲板；停著的照一整步；60 Hz ⇒ 不切。 */
 function stepFly(f, dt) {
   var n = f.rest ? 1 : subSteps(len(f.v) * dt, S, dt, true);
@@ -648,23 +712,15 @@ function stepFly1(f, dt) {
   f.t += dt;
   if (f.rest) {                                                          // 停在船上（'fall' 掉到甲板、桅樓上）：跟著船走；船沉了照樣跟著下去
     f.rt = (f.rt || 0) + dt;
-    if (f.rt > FALL_SLIDE_T && !f.sh.sunk) {                             // 停夠了 ⇒ 往近的那一舷滑出去
+    if ((f.rt > FALL_SLIDE_T || f.sd) && !f.sh.sunk) {                  // 停夠了（滑過一次的不等）⇒ 往近的那一舷滑出去
       if (!f.sd) f.sd = f.cl[1] >= f.sh.T.cy ? 1 : -1;
       f.sv = Math.min(FALL_SLIDE_V, (f.sv || 0) + FALL_SLIDE_A * dt);
-      var dy = f.sd * f.sv * dt / S;                                     // 格
-      f.cl = [f.cl[0], f.cl[1] + dy, f.cl[2]]; f.Ml = M4.mul(trans(0, dy, 0), f.Ml);
-      f.M = M4.mul(f.sh.M, f.Ml); f.c = M4.pt(f.sh.M, f.cl[0], f.cl[1], f.cl[2]);
-      if (flyColFree(f.sh, Math.floor(f.cl[0]), Math.floor(f.cl[1]), f.cl[2])) {   // 出了船舷 ⇒ 帶著滑的速度往下掉、往外慢慢翻，之後不再停
-        var out = M4.dir(f.sh.M, 0, f.sd * f.sv / S, 0), ax = norm(M4.dir(f.sh.M, 1, 0, 0));
-        f.rest = false; f.land = false; f.t = 0; f.M0 = f.M; f.c0 = f.c.slice(); f.R = M4.ident();
-        f.v = add(f.sh.vel, out); f.w = mul(ax, -f.sd * 0.8);
-      } else return f.rt < FALL_REST_MAX && f.c[1] > seaLv(f.c[0], f.c[2]) - 25;
-    } else {
-      f.M = M4.mul(f.sh.M, f.Ml); f.c = M4.pt(f.sh.M, f.cl[0], f.cl[1], f.cl[2]);
-      if (!f.sh.grid.get(f.sup[0], f.sup[1], f.sup[2])) {               // 撐著它的那一格沒了（桅樓被打掉、桅倒了）⇒ 從現在的位置、帶著船速繼續掉（⛔ 以前停了就一直掛在原地 ⇒ 浮在半空，Tim 2026-10-20 截圖）
-        f.rest = false; f.M0 = f.M; f.c0 = f.c.slice(); f.R = M4.ident(); f.v = f.sh.vel.slice(); f.w = [0, 0, 0];   // 從這一刻重新算：落下 1.5 m 之後碰到東西可以再停一次
-      } else return f.rt < FALL_REST_MAX && f.c[1] > seaLv(f.c[0], f.c[2]) - 25;
-    }
+      fallSlide(f, f.sd * f.sv * dt / S);                                // 格；碰到舷牆、欄杆 ⇒ 爬過去
+    } else fallMove(f, 0, 0, 0);
+    if (!fallHeld(f)) {                                                  // 底下空了（滑出撐著的那一塊、桅樓被打掉、桅倒了）⇒ 從現在的位置照重力掉；掉過 1.5 m 碰到東西可以再停一次
+      var ax = norm(M4.dir(f.sh.M, 1, 0, 0));                            // 滑出去的 ⇒ 帶著滑的速度、往外慢慢翻
+      fallGo(f, f.sv ? M4.dir(f.sh.M, 0, f.sd * f.sv / S, 0) : [0, 0, 0]); f.w = f.sv ? mul(ax, -f.sd * 0.8) : [0, 0, 0]; if (f.sv) f.t = 0;
+    } else return f.rt < FALL_REST_MAX && f.c[1] > seaLv(f.c[0], f.c[2]) - 25;
   }
   f.v[1] -= G * dt;
   if (f.c[1] < seaH(f.c[0], f.c[2], SIMT)) {
@@ -677,7 +733,12 @@ function stepFly1(f, dt) {
   if (f.land && !f.wet && f.c0[1] - f.c[1] > 1.5 && !f.sh.sunk) {        // 'fall'：中心掉過 1.5 m 之後碰到船的格 ⇒ 停在那裡（⛔ 一開始就判 ⇒ 帆桁貼著桅，馬上停在原地）
     var L = M4.pt(f.sh.inv, f.c[0], f.c[1], f.c[2]);
     var sup = [Math.floor(L[0]), Math.floor(L[1]), Math.floor(L[2])];
-    if (f.sh.grid.get(sup[0], sup[1], sup[2])) { f.rest = true; f.Ml = M4.mul(f.sh.inv, f.M); f.cl = L; f.sup = sup; }   // sup：撐著它的那一格（之後每一步看它還在不在）
+    if (f.sh.grid.get(sup[0], sup[1], sup[2]) && !fallMast(f.sh, sup[0], sup[1], sup[2])) {   // 桅身不算（帆桁中心本來就在桅的軸線上）
+      f.rest = true; f.Ml = M4.mul(f.sh.inv, f.M); f.cl = L;
+      if (fallHigh(f)) {                                           // 高處（桅樓、桅頂橫桁）⇒ 不停：往近的那一舷彈開、繼續掉（⛔ 停了再滑：從 0 加速滑出桅樓要 3 秒，量到停在 36.6 m 高 3.2 秒）
+        var sd = L[1] >= f.sh.T.cy ? 1 : -1; fallGo(f, M4.dir(f.sh.M, 0, sd * FALL_BOUNCE / S, 0)); f.w = mul(norm(M4.dir(f.sh.M, 1, 0, 0)), -sd * 0.8);
+      } else fallSettle(f, FALL_LIFT);                                   // 抬到不埋在格裡
+    }
   }
   return f.t < 25 && f.c[1] > seaLv(f.c[0], f.c[2]) - 25;   // 大漩渦：照漏斗那裡的水面算多深（⛔ 照 0 ⇒ 漏斗裡漂著的一出現就拿掉）
 }
