@@ -321,7 +321,7 @@ function dockBtn() {
   DOCK.btn = s; b.classList.toggle('dkOff', !show);
   if (!show) return;
   var I = { in: ['🏘', '停靠：沿進港航道自動開進停靠處、換成城鎮模式'], stop: ['✋', '取消停靠（停在原地、換回航海）'], out: ['⛵', '出航：起錨、換回航海、沿航道開出去'] }[s];
-  b.querySelector('.em').textContent = I[0]; b.dataset.tip = I[1];
+  var icon = battleIconText(I[0]); if (b.querySelector('.em').innerHTML !== icon) b.querySelector('.em').innerHTML = icon; b.dataset.tip = I[1];
 }
 // ── ⚔ 交戰（⑦）──
 /** 對我艦敵對、還在打的那幾艘（中立的堡壘 calm 不算；沉了、降旗了不算）。 */

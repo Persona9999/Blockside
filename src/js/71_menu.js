@@ -6,7 +6,7 @@ var DISCORD_URL = 'https://discord.gg/XuHkBFN9r';
 $('discordB').onclick = function () { window.open(DISCORD_URL, '_blank', 'noopener'); };
 /** 主選單的玩法鈕：照玩法規則表（04_modes.js MODE_RULES）裡 menu 的那幾份生、照表的順序（TASK-0668：加一種玩法不用改這裡）。 */
 function modeButtons() {
-  $('modes').innerHTML = Object.keys(MODE_RULES).filter(function (m) { return MODE_RULES[m].menu; }).map(function (m) { return '<button data-m="' + m + '">' + MODE_RULES[m].name + '</button>'; }).join('');
+  $('modes').innerHTML = Object.keys(MODE_RULES).filter(function (m) { return MODE_RULES[m].menu; }).map(function (m) { return '<button data-m="' + m + '">' + battleIconText(MODE_RULES[m].name) + '</button>'; }).join('');
   [].forEach.call(document.querySelectorAll('#modes button'), function (b) { b.onclick = function () { flowMode(b.dataset.m); [].forEach.call(document.querySelectorAll('#modes button'), function (x) { x.className = x === b ? 'on' : ''; }); }; });
 }
 modeButtons();

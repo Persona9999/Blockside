@@ -16,7 +16,7 @@ import base64, os, re, sys
 JS_RE = re.compile(r'<script\s+src="([^"]+)"\s*>\s*</script>')
 BUNDLE_RE = re.compile(r'<script\s+src="([^"]+)"\s+data-bundle="([^"]+)"\s*>\s*</script>\n?')
 ASSET_RE = re.compile(r'<script\s+type="application/x-asset"\s+id="([^"]+)"\s+src="([^"]+)"(\s+data-optional="1")?\s*>\s*</script>')
-MIME = {'.png': 'image/png', '.webp': 'image/webp', '.jpg': 'image/jpeg', '.json': 'application/json'}
+MIME = {'.svg': 'image/svg+xml', '.png': 'image/png', '.webp': 'image/webp', '.jpg': 'image/jpeg', '.json': 'application/json'}
 VXK_RE = re.compile(r'<script\s+type="application/x-vxk"\s+id="([^"]+)"\s+src="([^"]+)"\s*>\s*</script>')
 BAD = [(re.compile(r'<script[^>]*\ssrc\s*='), '外部 <script src>'),
        (re.compile(r'\bfetch\s*\('), 'fetch('),

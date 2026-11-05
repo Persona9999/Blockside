@@ -1,0 +1,739 @@
+{
+  "icons": {
+    "ship": {
+      "file": "ship.png",
+      "label": "船舶",
+      "globalSrc": "img/ui/globe/ship.png"
+    },
+    "sail": {
+      "file": "sail.png",
+      "label": "航海",
+      "globalSrc": "img/ui/globe/sail.png"
+    },
+    "focus": {
+      "file": "focus.png",
+      "label": "定位",
+      "globalSrc": "img/ui/globe/focus.png"
+    },
+    "save": {
+      "file": "save.png",
+      "label": "存檔",
+      "globalSrc": "img/ui/globe/save.png"
+    },
+    "clock": {
+      "file": "clock.png",
+      "label": "時間",
+      "globalSrc": "img/ui/globe/clock.png"
+    },
+    "edit": {
+      "file": "edit.png",
+      "label": "繪製",
+      "globalSrc": "img/ui/globe/edit.png"
+    },
+    "warning": {
+      "file": "warning.png",
+      "label": "注意",
+      "globalSrc": "img/ui/globe/warning.png"
+    },
+    "town": {
+      "file": "town.png",
+      "label": "城鎮",
+      "globalSrc": "img/ui/globe/town.png"
+    },
+    "trade": {
+      "file": "trade.png",
+      "label": "貿易",
+      "globalSrc": "img/ui/town/trade.png"
+    },
+    "anchor": {
+      "file": "anchor.png",
+      "label": "停靠",
+      "globalSrc": "img/ui/globe/anchor.png"
+    },
+    "combat": {
+      "file": "combat.png",
+      "label": "交戰",
+      "globalSrc": "img/ui/globe/combat.png"
+    },
+    "settings": {
+      "file": "settings.png",
+      "label": "設定",
+      "globalSrc": "img/ui/globe/settings.png"
+    },
+    "overview": {
+      "file": "overview.png",
+      "label": "概況",
+      "globalSrc": "img/ui/town/overview.png"
+    },
+    "tools": {
+      "file": "tools.png",
+      "label": "編輯工具",
+      "globalSrc": "img/ui/globe/tools.png"
+    },
+    "load": {
+      "file": "load.png",
+      "label": "讀檔",
+      "globalSrc": "img/ui/globe/load.png"
+    },
+    "sun": {
+      "file": "sun.png",
+      "label": "晴天",
+      "globalSrc": "img/ui/globe/sun.png"
+    },
+    "showers": {
+      "file": "showers.png",
+      "label": "晴時有雨",
+      "globalSrc": "img/ui/globe/showers.png"
+    },
+    "rain": {
+      "file": "rain.png",
+      "label": "下雨",
+      "globalSrc": "img/ui/globe/rain.png"
+    },
+    "storm": {
+      "file": "storm.png",
+      "label": "雷雨",
+      "globalSrc": "img/ui/globe/storm.png"
+    },
+    "cyclone": {
+      "file": "cyclone.png",
+      "label": "氣旋",
+      "globalSrc": "img/ui/globe/cyclone.png"
+    },
+    "moon": {
+      "file": "moon.png",
+      "label": "夜晚",
+      "globalSrc": "img/ui/globe/moon.png"
+    },
+    "calendar": {
+      "file": "calendar.png",
+      "label": "日期",
+      "globalSrc": "img/ui/globe/calendar.png"
+    },
+    "people": {
+      "file": "people.png",
+      "label": "人口",
+      "globalSrc": "img/ui/globe/people.png"
+    },
+    "flag": {
+      "file": "flag.png",
+      "label": "屬國",
+      "globalSrc": "img/ui/globe/flag.png"
+    },
+    "purse": {
+      "file": "purse.png",
+      "label": "金庫",
+      "globalSrc": "img/ui/globe/purse.png"
+    },
+    "cargo": {
+      "file": "cargo.png",
+      "label": "載重",
+      "globalSrc": "img/ui/globe/cargo.png"
+    },
+    "draft": {
+      "file": "draft.png",
+      "label": "吃水",
+      "globalSrc": "img/ui/globe/draft.png"
+    },
+    "pirate": {
+      "file": "pirate.png",
+      "label": "海盜",
+      "globalSrc": "img/ui/globe/pirate.png"
+    },
+    "globe": {
+      "file": "globe.png",
+      "label": "地球儀",
+      "globalSrc": "img/ui/globe/globe.png"
+    },
+    "lightning": {
+      "file": "lightning.png",
+      "label": "閃電",
+      "globalSrc": "img/ui/globe/lightning.png"
+    },
+    "magnet": {
+      "file": "magnet.png",
+      "label": "貼齊",
+      "globalSrc": "img/ui/globe/magnet.png"
+    },
+    "hourglass": {
+      "file": "hourglass.png",
+      "label": "另一個時空",
+      "globalSrc": "img/ui/globe/hourglass.png"
+    },
+    "crew": {
+      "file": "crew.png",
+      "label": "招募船員",
+      "globalSrc": "img/ui/town/crew.png"
+    },
+    "stock": {
+      "file": "stock.png",
+      "label": "庫存",
+      "globalSrc": "img/ui/town/stock.png"
+    },
+    "flow": {
+      "file": "flow.png",
+      "label": "產出與消耗",
+      "globalSrc": "img/ui/town/flow.png"
+    },
+    "stats": {
+      "file": "stats.png",
+      "label": "統計報表",
+      "globalSrc": "img/ui/town/stats.png"
+    },
+    "confirm": {
+      "file": "confirm.svg",
+      "label": "確認",
+      "globalSrc": "img/ui/common/confirm.svg"
+    },
+    "close": {
+      "file": "close.svg",
+      "label": "關閉／取消",
+      "globalSrc": "img/ui/common/close.svg"
+    },
+    "food": {
+      "file": "food.png",
+      "label": "餐點",
+      "globalSrc": "img/dishes/barley-vegetable-pot.png"
+    },
+    "specialty": {
+      "file": "specialty.svg",
+      "label": "特產",
+      "globalSrc": "img/ui/common/specialty.svg"
+    },
+    "sailor": {
+      "file": "sailor.png",
+      "label": "船員",
+      "globalSrc": "img/ui/battle/sailor.png"
+    },
+    "cannon": {
+      "file": "cannon.png",
+      "label": "火砲",
+      "globalSrc": "img/ui/battle/cannon.png"
+    },
+    "shell": {
+      "file": "shell.png",
+      "label": "爆裂彈",
+      "globalSrc": "img/ui/battle/shell.png"
+    },
+    "chain": {
+      "file": "chain.png",
+      "label": "鏈彈",
+      "globalSrc": "img/ui/battle/chain.png"
+    },
+    "helm": {
+      "file": "helm.png",
+      "label": "操舵",
+      "globalSrc": "img/ui/battle/helm.png"
+    },
+    "camera": {
+      "file": "camera.png",
+      "label": "鏡頭",
+      "globalSrc": "img/ui/battle/camera.png"
+    },
+    "autopilot": {
+      "file": "autopilot.png",
+      "label": "自動駕駛",
+      "globalSrc": "img/ui/battle/autopilot.png"
+    },
+    "autofire": {
+      "file": "autofire.png",
+      "label": "自動開砲",
+      "globalSrc": "img/ui/battle/autofire.png"
+    },
+    "greekfire": {
+      "file": "greekfire.png",
+      "label": "希臘火",
+      "globalSrc": "img/ui/battle/greekfire.png"
+    },
+    "solid": {
+      "file": "solid.png",
+      "label": "實心彈",
+      "globalSrc": "img/ui/battle/solid.png"
+    },
+    "bolt": {
+      "file": "bolt.png",
+      "label": "弩箭",
+      "globalSrc": "img/ui/battle/bolt.png"
+    },
+    "rocket": {
+      "file": "rocket.png",
+      "label": "火箭",
+      "globalSrc": "img/ui/battle/rocket.png"
+    },
+    "stone": {
+      "file": "stone.png",
+      "label": "石彈",
+      "globalSrc": "img/ui/battle/stone.png"
+    },
+    "fire": {
+      "file": "fire.png",
+      "label": "火災",
+      "globalSrc": "img/ui/battle/fire.png"
+    },
+    "water": {
+      "file": "water.png",
+      "label": "積水",
+      "globalSrc": "img/ui/battle/water.png"
+    },
+    "breach": {
+      "file": "breach.png",
+      "label": "船殼破口",
+      "globalSrc": "img/ui/battle/breach.png"
+    },
+    "xray": {
+      "file": "xray.png",
+      "label": "透視",
+      "globalSrc": "img/ui/battle/xray.png"
+    },
+    "cut": {
+      "file": "cut.png",
+      "label": "剖面",
+      "globalSrc": "img/ui/battle/cut.png"
+    },
+    "deck": {
+      "file": "deck.png",
+      "label": "甲板",
+      "globalSrc": "img/ui/battle/deck.png"
+    },
+    "compass": {
+      "file": "compass.png",
+      "label": "羅盤",
+      "globalSrc": "img/ui/battle/compass.png"
+    },
+    "pause": {
+      "file": "pause.svg",
+      "label": "暫停",
+      "globalSrc": "img/ui/common/pause.svg"
+    },
+    "play": {
+      "file": "play.svg",
+      "label": "繼續",
+      "globalSrc": "img/ui/common/play.svg"
+    },
+    "right": {
+      "file": "right.svg",
+      "label": "向右",
+      "globalSrc": "img/ui/common/right.svg"
+    },
+    "repeat": {
+      "file": "repeat.svg",
+      "label": "自動循環",
+      "globalSrc": "img/ui/common/repeat.svg"
+    },
+    "stop": {
+      "file": "stop.svg",
+      "label": "停止",
+      "globalSrc": "img/ui/common/stop.svg"
+    },
+    "help": {
+      "file": "help.svg",
+      "label": "說明",
+      "globalSrc": "img/ui/common/help.svg"
+    },
+    "left": {
+      "file": "left.svg",
+      "label": "向左",
+      "globalSrc": "img/ui/common/left.svg"
+    },
+    "up": {
+      "file": "up.svg",
+      "label": "向上",
+      "globalSrc": "img/ui/common/up.svg"
+    },
+    "down": {
+      "file": "down.svg",
+      "label": "向下",
+      "globalSrc": "img/ui/common/down.svg"
+    }
+  },
+  "glyphs": {
+    "🚢": [
+      "ship",
+      "船舶"
+    ],
+    "⛵": [
+      "sail",
+      "航海"
+    ],
+    "🎯": [
+      "focus",
+      "定位"
+    ],
+    "💾": [
+      "save",
+      "存檔"
+    ],
+    "🕗": [
+      "clock",
+      "時間"
+    ],
+    "✏": [
+      "edit",
+      "繪製"
+    ],
+    "⚠": [
+      "warning",
+      "注意"
+    ],
+    "🏘": [
+      "town",
+      "城鎮"
+    ],
+    "🏛": [
+      "town",
+      "城鎮"
+    ],
+    "💰": [
+      "purse",
+      "金庫"
+    ],
+    "⚓": [
+      "anchor",
+      "停靠"
+    ],
+    "⚔": [
+      "combat",
+      "交戰"
+    ],
+    "⚙": [
+      "settings",
+      "設定"
+    ],
+    "📋": [
+      "overview",
+      "概況"
+    ],
+    "🛠": [
+      "tools",
+      "編輯工具"
+    ],
+    "📂": [
+      "load",
+      "讀檔"
+    ],
+    "☀": [
+      "sun",
+      "晴天"
+    ],
+    "🌦": [
+      "showers",
+      "晴時有雨"
+    ],
+    "🌧": [
+      "rain",
+      "下雨"
+    ],
+    "⛈": [
+      "storm",
+      "雷雨"
+    ],
+    "🌀": [
+      "cyclone",
+      "氣旋"
+    ],
+    "🌙": [
+      "moon",
+      "夜晚"
+    ],
+    "📅": [
+      "calendar",
+      "日期"
+    ],
+    "👥": [
+      "people",
+      "人口"
+    ],
+    "🏳": [
+      "flag",
+      "屬國"
+    ],
+    "👛": [
+      "purse",
+      "金庫"
+    ],
+    "⚖": [
+      "cargo",
+      "載重"
+    ],
+    "🌊": [
+      "draft",
+      "吃水"
+    ],
+    "☠": [
+      "pirate",
+      "海盜"
+    ],
+    "🌍": [
+      "globe",
+      "地球儀"
+    ],
+    "⚡": [
+      "lightning",
+      "閃電"
+    ],
+    "🧲": [
+      "magnet",
+      "貼齊"
+    ],
+    "⏳": [
+      "hourglass",
+      "另一個時空"
+    ],
+    "👤": [
+      "people",
+      "人口"
+    ],
+    "👪": [
+      "people",
+      "人口"
+    ],
+    "💪": [
+      "people",
+      "勞動人口"
+    ],
+    "📊": [
+      "stats",
+      "統計報表"
+    ],
+    "📈": [
+      "stats",
+      "統計報表"
+    ],
+    "📦": [
+      "stock",
+      "庫存"
+    ],
+    "🔧": [
+      "tools",
+      "工作"
+    ],
+    "🔨": [
+      "tools",
+      "建造"
+    ],
+    "🏗": [
+      "tools",
+      "建築"
+    ],
+    "🪑": [
+      "hourglass",
+      "失業"
+    ],
+    "📢": [
+      "warning",
+      "缺工"
+    ],
+    "🛡": [
+      "combat",
+      "守軍"
+    ],
+    "🔁": [
+      "flow",
+      "生產配方"
+    ],
+    "🍲": [
+      "food",
+      "菜單"
+    ],
+    "🍞": [
+      "food",
+      "食用餐點"
+    ],
+    "🥕": [
+      "food",
+      "食材"
+    ],
+    "⭐": [
+      "specialty",
+      "特產"
+    ],
+    "🏙": [
+      "town",
+      "城區"
+    ],
+    "🗺": [
+      "globe",
+      "區域"
+    ],
+    "🤖☸": [
+      "autopilot",
+      "自動駕駛"
+    ],
+    "🤖💥": [
+      "autofire",
+      "自動開砲"
+    ],
+    "🤖": [
+      "repeat",
+      "自動循環"
+    ],
+    "💥": [
+      "cannon",
+      "火砲"
+    ],
+    "💣": [
+      "shell",
+      "爆裂彈"
+    ],
+    "⛓": [
+      "chain",
+      "鏈彈"
+    ],
+    "☸": [
+      "helm",
+      "操舵"
+    ],
+    "🎥": [
+      "camera",
+      "鏡頭"
+    ],
+    "💧": [
+      "water",
+      "積水"
+    ],
+    "🔥": [
+      "fire",
+      "火災"
+    ],
+    "🕳": [
+      "breach",
+      "船殼破口"
+    ],
+    "🧭": [
+      "compass",
+      "羅盤"
+    ],
+    "⏸": [
+      "pause",
+      "暫停"
+    ],
+    "▶": [
+      "play",
+      "繼續"
+    ],
+    "🛑": [
+      "stop",
+      "停止"
+    ],
+    "✋": [
+      "stop",
+      "停止"
+    ],
+    "⬅": [
+      "left",
+      "向左"
+    ],
+    "➡": [
+      "right",
+      "方向"
+    ],
+    "⬆": [
+      "up",
+      "向上"
+    ],
+    "⬇": [
+      "down",
+      "向下"
+    ],
+    "◀": [
+      "left",
+      "向左"
+    ],
+    "✂": [
+      "cut",
+      "剖面"
+    ],
+    "🔍": [
+      "xray",
+      "透視"
+    ],
+    "☰": [
+      "deck",
+      "甲板"
+    ],
+    "🐢": [
+      "hourglass",
+      "另一個時空"
+    ],
+    "⏱": [
+      "clock",
+      "時間"
+    ],
+    "🏹": [
+      "bolt",
+      "弩箭"
+    ],
+    "☄": [
+      "rocket",
+      "火箭"
+    ],
+    "🪨": [
+      "stone",
+      "石彈"
+    ],
+    "❓": [
+      "help",
+      "說明"
+    ],
+    "🌬": [
+      "sail",
+      "航海"
+    ],
+    "🚩": [
+      "flag",
+      "屬國"
+    ],
+    "🤝": [
+      "ship",
+      "船舶"
+    ],
+    "🐞": [
+      "warning",
+      "注意"
+    ],
+    "🧍": [
+      "sailor",
+      "船員"
+    ],
+    "👁": [
+      "camera",
+      "鏡頭"
+    ],
+    "🏮": [
+      "sun",
+      "晴天"
+    ],
+    "📐": [
+      "tools",
+      "編輯工具"
+    ],
+    "🚪": [
+      "xray",
+      "透視"
+    ],
+    "🕊": [
+      "sail",
+      "航海"
+    ],
+    "🏃": [
+      "sailor",
+      "船員"
+    ],
+    "🪜": [
+      "deck",
+      "甲板"
+    ],
+    "📣": [
+      "flag",
+      "屬國"
+    ],
+    "💬": [
+      "overview",
+      "概況"
+    ],
+    "✖": [
+      "close",
+      "關閉／取消"
+    ]
+  }
+}
