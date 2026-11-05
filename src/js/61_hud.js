@@ -7,7 +7,7 @@ var MSGS = [], MSG_MAX = 5, MSG_LIFE = 4;
 function hudNote(sh, text, imp) {
   if (DEMO >= 0 && !RUNNING) return;
   var who = sh.i === PLAYER_I ? '我艦' : sh.name, el = document.createElement('div');   // 我艦照舊；其他每艘用艦名（TASK-0552：多船時分得出是哪一艘），顏色照陣營
-  el.innerHTML = '<span style="color:' + (teamIdx(sh) === 0 ? 'var(--blue)' : 'var(--red)') + '">' + who + '</span>　' + text;
+  el.innerHTML = '<span style="color:' + (teamIdx(sh) === 0 ? 'var(--blue)' : 'var(--red)') + '">' + who + '</span>　' + battleIconText(text);
   $('msg').appendChild(el); MSGS.push({ el: el, t: imp ? 8 : MSG_LIFE, imp: !!imp });
   while (MSGS.length > MSG_MAX) { var j = MSGS.findIndex(function (m) { return !m.imp; }); MSGS.splice(j < 0 ? 0 : j, 1)[0].el.remove(); }
 }
@@ -208,9 +208,9 @@ function sbMake(o, box) {
 /** 船員與火砲在艦隊、開火鍵與說明共用精緻像素圖，不再依賴選用 HUD 圖集。 */
 var HUD_OUTARC = false;                                                  // 瞄準點在射界外（gunHud 記、羅盤上方那一行寫）
 function hudIcons() {
-  var g = battleIcon('cannon'), L = [['fireK', '<b>' + keyName('fire1') + '</b>', g], ['volleyK', '<b>' + keyName('volley') + '</b>', g + g], ['autoF', '<b>' + keyName('autoFire') + '</b>', '🤖' + g]];   // 鍵照 66_keys.js
+  var g = battleIcon('cannon'), L = [['fireK', '<b>' + keyName('fire1') + '</b>', g], ['volleyK', '<b>' + keyName('volley') + '</b>', g + g], ['autoF', '<b>' + keyName('autoFire') + '</b>', battleIcon('autofire')]];   // 鍵照 66_keys.js
   var me = SHIPS[PLAYER_I], pk = me && !me.sunk ? fireOnePick(me) : null, waste = !!(pk && !pk.t);   // 單發鈕：有砲裝填好、但沒有一門打得到目標（或沒有目標）⇒ 按下會往空中打一發（Tim 2026-10-18「讓玩家知道目前按下會浪費砲彈」）
-  if (waste) L[0][2] = '💨';
+  if (waste) L[0][2] = '<span class="battle-auto battle-waste">' + g + '<span class="battle-badge">' + battleIcon('warning') + '</span></span>';
   L.forEach(function (q) { var el = $(q[0]), h = q[1] + '<i class="em">' + q[2] + '</i>'; if (el && el.innerHTML !== h) el.innerHTML = h; });
   var fk = $('fireK'); if (fk && fk.classList.contains('waste') !== waste) { fk.classList.toggle('waste', waste); fk.dataset.tip = waste ? '開一門砲：沒有砲打得到目標 —— 按下會往砲口方向空打一發' : '開一門砲'; fk.title = fk.dataset.tip + '（' + keyName('fire1') + '）'; }   // title 照 66_keys.js keyPaint 的寫法
 }
@@ -287,7 +287,7 @@ function fleetHud(me) {
     });
     if (s === 'L') {                                                       // 🚩 旗號（TASK-0679）：我方有電腦開的友艦才有，排在我方那一欄最上面；點了開關旗號面板（71_input.js sigToggle）
       var sg = box.querySelector('.sigb'), can = sigCan();
-      if (can && !sg) { sg = document.createElement('div'); sg.className = 'sigb'; sg.title = '旗號：對我方友艦下令（' + keyName('signals') + '）'; sg.textContent = '🚩'; sg.onclick = function (e) { e.stopPropagation(); sigToggle(); }; box.insertBefore(sg, box.firstChild); }
+      if (can && !sg) { sg = document.createElement('div'); sg.className = 'sigb'; sg.title = '旗號：對我方友艦下令（' + keyName('signals') + '）'; sg.innerHTML = battleIcon('flag'); sg.onclick = function (e) { e.stopPropagation(); sigToggle(); }; box.insertBefore(sg, box.firstChild); }
       else if (!can && sg) { sg.remove(); sg = null; sigToggle(false); }
       if (sg) sg.classList.toggle('on', !!SIGNAL);
     }
@@ -304,7 +304,7 @@ function fleetHud(me) {
     var who = o.i === PLAYER_I ? '我艦' : o.team === pt ? (many && o === fs ? '我方旗艦' : '友艦') : (many && o === fs ? '敵方旗艦' : '敵艦');
     var title = who + ' ' + o.name + (o.name !== o.T.name ? '<span class="cls">（' + o.T.name + '型）</span>' : '') + teamTag(o);
     var seeing = CAM.mode === 3 && (CAM.see === o || (!CAM.see && o.i === PLAYER_I));
-    el.innerHTML = panel(o, title).replace('<h3>', '<h3><span class="fold">▲ 收起</span><span class="fold see' + (seeing ? ' on' : '') + '" data-see="1">🎥 ' + (seeing ? '看著這艘' : '看這艘') + '</span>' + (canTake(o) ? '<span class="fold take" data-take="1">⚓ 改操控這艘</span>' : '') + '<span class="fold gm">' + [['gun', battleIcon('cannon') + ' 砲位'], ['dmg', '🔧 損壞'], ['flood', '💧 進水'], ['fire', '🔥 火災']].map(function (m) { return '<i data-gmode="' + m[0] + '"' + (GMAP_MODE === m[0] ? ' class="on"' : '') + '>' + m[1] + '</i>'; }).join('') + '</span>');   // 旁邊那張圖：砲位／損壞／進水（gmapDraw）   // 友艦才有（52_fleet.js playerTakeShip）   // 放在標題最前面再靠右浮動（⛔ 放最後 ⇒ 窄的時候浮到排水量那一行、壓到右欄）
+    el.innerHTML = battleIconText(panel(o, title).replace('<h3>', '<h3><span class="fold">▲ 收起</span><span class="fold see' + (seeing ? ' on' : '') + '" data-see="1">🎥 ' + (seeing ? '看著這艘' : '看這艘') + '</span>' + (canTake(o) ? '<span class="fold take" data-take="1">⚓ 改操控這艘</span>' : '') + '<span class="fold gm">' + [['gun', battleIcon('cannon') + ' 砲位'], ['dmg', '🔧 損壞'], ['flood', '💧 進水'], ['fire', '🔥 火災']].map(function (m) { return '<i data-gmode="' + m[0] + '"' + (GMAP_MODE === m[0] ? ' class="on"' : '') + '>' + m[1] + '</i>'; }).join('') + '</span>'));   // 旁邊那張圖：砲位／損壞／進水（gmapDraw）   // 友艦才有（52_fleet.js playerTakeShip）   // 放在標題最前面再靠右浮動（⛔ 放最後 ⇒ 窄的時候浮到排水量那一行、壓到右欄）
     el.style.display = 'block'; el.style.borderLeftColor = teamIdx(o) === 0 ? 'var(--blue)' : 'var(--red)';
     gmapDraw(o);
   }
@@ -381,7 +381,7 @@ function gmapDmg(g, sh, scr, s, R) {
       A[0] = Math.max(3, Math.min(Wc - 3, A[0])); B[0] = Math.max(3, Math.min(Wc - 3, B[0]));   // 帆桁比船寬 ⇒ 收在圖裡（⛔ 不收 ⇒ 畫到圖外、✂ 被切掉）
       g.lineWidth = 3; g.strokeStyle = 'rgba(255,255,255,.28)'; g.beginPath(); g.moveTo(A[0], A[1]); g.lineTo(B[0], B[1]); g.stroke();
       g.strokeStyle = '#fff'; g.beginPath(); g.moveTo(A[0], A[1]); g.lineTo(A[0] + (B[0] - A[0]) * f, A[1] + (B[1] - A[1]) * f); g.stroke(); g.lineWidth = 1.4;
-      if (r.need.ropes.length) { g.fillStyle = '#fff'; g.textAlign = 'center'; g.textBaseline = 'bottom'; g.font = 'bold 10px sans-serif'; g.fillText('✂' + r.need.ropes.length, (A[0] + B[0]) / 2, A[1] - 3); }
+      if (r.need.ropes.length) { g.fillStyle = '#fff'; g.textAlign = 'center'; g.textBaseline = 'bottom'; g.font = 'bold 10px sans-serif'; battleDrawIcon(g, 'cut', (A[0] + B[0]) / 2 - 14, A[1] - 15, 12); g.fillText(r.need.ropes.length, (A[0] + B[0]) / 2 + 3, A[1] - 3); }
       if (on) ring((A[0] + B[0]) / 2, (A[1] + B[1]) / 2, R * 1.6);
     } else if (r.kind === 'rlad') {
       p = scr(r.t.foot[0], r.t.foot[1]); X = p[0]; Y = p[1]; g.fillStyle = C.rlad;
@@ -740,13 +740,13 @@ function navText(sh) {
     '傾斜 ' + Math.abs(roll).toFixed(1) + '°' + (Math.abs(roll) < 0.2 ? '' : roll < 0 ? '（左低）' : '（右低）') + '　縱傾 ' + pitch.toFixed(1) + '°';
 }
 /** P 那顆按鈕：停格中寫「繼續」、平常寫「停格」（Tim 2026-10-14）。 */
-function pauseLabel() { var b = $('pauseK'), s = '<b>' + keyName('pause') + '</b><i class="em">' + (PAUSED ? '▶' : '⏸') + '</i>'; if (b && b.innerHTML !== s) b.innerHTML = s; }   // 圖示（Tim 2026-10-15）：停格中 ⇒ ▶ 繼續
+function pauseLabel() { var b = $('pauseK'), s = '<b>' + keyName('pause') + '</b><i class="em">' + battleIcon(PAUSED ? 'play' : 'pause') + '</i>'; if (b && b.innerHTML !== s) b.innerHTML = s; }   // 圖示（Tim 2026-10-15）：停格中 ⇒ ▶ 繼續
 /** 彈種那一顆（Tim 2026-10-15：「砲彈改成一個按鈕，切換所有支援的砲彈（顯示當前彈種圖示）」）：鐵球 實心彈（CSS 畫的 .ball：灰色、左上高光、淡白邊；⛔ ⚫ 在深色圓鈕上看不見、⚪ 是白點不像砲彈 —— Tim 2026-10-15「顯示為一顆白色圓點，是否可以替換」）、💣 爆裂彈、⛓️ 鏈彈；每一種砲三種都能打。 */
 var PSLOW_SHOW = 0.7;   // 物理減速放慢到 ×0.7 以下才在航速那一行顯示（Tim 2026-10-15：「高於 0.7 可以不顯示，目前頻繁閃爍」—— 以前 < 0.98 就顯示，倍率在 0.9 上下跳 ⇒ 一直閃）
-var AMMO_ICON = ['<span class="ball"></span>', battleIcon('shell'), battleIcon('chain'), '🔥', '🏹', '☄️', '🪨'], AMMO_TXT = ['實心彈', '爆裂彈', '鏈彈', '希臘火', '弩箭', '火箭', '石彈'];   // 第 6、7 種：火箭（弩砲）、石彈（投石機）—— 10_ship.js AMMO_FIRE／AMMO_STONE   // 第 4 種希臘火（28_fire.js AMMO_GF）只給固定彈種的砲，不在換彈的輪流裡（ammoOf）
+var AMMO_ICON = ['solid','shell','chain','greekfire','bolt','rocket','stone'].map(battleIcon), AMMO_TXT = ['實心彈', '爆裂彈', '鏈彈', '希臘火', '弩箭', '火箭', '石彈'];   // 第 6、7 種：火箭（弩砲）、石彈（投石機）—— 10_ship.js AMMO_FIRE／AMMO_STONE   // 第 4 種希臘火（28_fire.js AMMO_GF）只給固定彈種的砲，不在換彈的輪流裡（ammoOf）
 function ammoLabel() {
   var b = $('ammoB'); if (!b) return; var me = SHIPS[PLAYER_I], L = me ? ammoOf(me) : [0], a = ammoNow(); if (L.indexOf(a) < 0) a = L[0];   // 主武器打不出的那一種 ⇒ 顯示主武器的（持火號 ⇒ 希臘火）
-  var fix = L.length === 1, s = '<b>' + keyName('ammo') + '</b><i class="em">' + (AUTOFIRE ? '🤖' : '') + (AMMO_ICON[a] || '?') + '</i>';   // 上面寫的是鍵（同其他圓鈕；66_keys.js），不是第幾種
+  var fix = L.length === 1, s = '<b>' + keyName('ammo') + '</b><i class="em">' + (AUTOFIRE ? battleAutoIcon(AMMO_ICON[a]) : AMMO_ICON[a]) + '</i>';   // 上面寫的是鍵（同其他圓鈕；66_keys.js），不是第幾種
   if (b.innerHTML !== s) { b.innerHTML = s; b.title = fix ? '主武器（' + GUNS[shipMainGun(me)].short + '）只打 ' + AMMO_TXT[a] + '：不能換彈' : AUTOFIRE ? '自動開砲：砲長照瞄準位置挑彈，現在 ' + AMMO_TXT[a] + '（關掉自動開砲才自己換）' : '切換彈藥：現在 ' + AMMO_TXT[a] + '（點一下或按 ' + keyName('ammo') + ' 換下一種）'; }
 }
 /** 自動開砲時砲長挑的彈（50_sim.js simAi 每一輪齊射寫；⛔ 不寫 AMMO_I：那是玩家自己選的、記在偏好裡）。 */
@@ -793,7 +793,7 @@ function hudFrame(dt) {
        // 帆 %（Tim 2026-10-15）：張著、還在的帆面積 × 血量（sailFrac，航速照它算）
     (RUNNING && SIM_SPEED !== 1 ? '　<b style="color:#9fd8ff">⏱ 模擬 ×' + (SIM_SPEED < 1 ? SIM_SPEED.toFixed(2) : SIM_SPEED.toFixed(1)) + '</b>' : '') +   // 設定的模擬速度（73_slowmo.js simSpeedSet）
     (RUNNING && PSLOW.on && PSLOW.ts < PSLOW_SHOW && !(SLOW.active && SLOW.ts < 0.98) ? '　<b style="color:#ffd27a">🐢 物理減速 ×' + PSLOW.ts.toFixed(2) + '</b>' : '');   // 物理減速的提示（Tim 2026-10-15：搬到航速這一行；73_slowmo.js）—— 殉爆的慢動作照舊在畫面中間   // 船體、進水改成羅盤外圈的兩圈（drawNav）；後面接帆裝（Tim 2026-10-15「羅盤上方航速資訊可以顯示當前帆狀態」：全收…滿帆，有額外動力的船多倒車、全速前進）
-  ms += floodLine(me);
+  ms = battleIconText(ms + floodLine(me));
   if (mt && mt.innerHTML !== ms) mt.innerHTML = ms;
   var t = dbgOn() ? '格：' + SHIPS.map(function (s) { return s.grid.count; }).join('／') + '　四邊形：' + SHIPS.map(function (s) { return s.rs.quads(); }).join('／') + '　碎片 ' + D.n + '　粒子 ' + PT.n + '　脫落 ' + PIECES.length + (PHYS ? '　物理 ' + PHYS_MS.toFixed(2) + ' ms/步、垂繩 ' + SHIPS.map(function (s) { return s.loose.length; }).join('／') : '') + '　' + shadowDbgText() + '　' + FPS.toFixed(0) + ' fps' : '';
   $('tip').textContent = t;

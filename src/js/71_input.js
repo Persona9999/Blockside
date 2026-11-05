@@ -370,7 +370,7 @@ function sigCan() { var me = SHIPS[PLAYER_I]; return !!(RUNNING && MODE !== 'eve
 function sigToggle(on) { var p = $('sigP'); if (!p) return; on = on === undefined ? !p.classList.contains('on') : on; p.classList.toggle('on', !!on && sigCan()); if (p.classList.contains('on')) sigShow(); }
 function sigShow() {
   var B = $('sigBtns'); if (!B) return;
-  if (!B.children.length) SIG_LIST.forEach(function (it) { var b = document.createElement('button'); b.dataset.sig = it.id; b.title = it.tip; b.textContent = it.ico + ' ' + it.name; b.onclick = function (e) { e.stopPropagation(); sigSet(it.id); }; B.appendChild(b); });
+  if (!B.children.length) SIG_LIST.forEach(function (it) { var b = document.createElement('button'); b.dataset.sig = it.id; b.title = it.tip; b.innerHTML = battleIconText(it.ico + ' ' + it.name); b.onclick = function (e) { e.stopPropagation(); sigSet(it.id); }; B.appendChild(b); });
   var cur = SIGNAL ? SIGNAL.strat : 'cmd';
   [].forEach.call(B.children, function (b) { b.className = b.dataset.sig === 'gauge' ? (SIGNAL && SIGNAL.gauge ? 'on' : '') : b.dataset.sig === cur ? 'on' : ''; });
   $('sigNow').textContent = '現在：' + sigText();
