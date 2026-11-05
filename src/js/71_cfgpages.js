@@ -33,7 +33,7 @@ function keysShow() {
   $('keysInfo').textContent = note;
   $('keysItems').innerHTML = KEY_ACTS.filter(function (a) { return a.c === KEY_TAB && (!a.host || document.body.classList.contains('bsHost')); }).map(function (a) {   // host：只有地球儀開的才有的動作
     var k = KEYS_NOW[a.id], d = KEY_DEF[a.id], w = KEY_WAIT === a.id;
-    return '<div class="keyrow"><label>' + (a.ico ? '<span class="kico">' + a.ico + '</span>' : '') + a.name + (a.hold ? '<small>（按住）</small>' : '') + '</label><span class="kcap' + (w ? ' wait' : '') + '">' + (w ? '按新的鍵…（Esc 取消）' : keyLabel(k)) + '</span>' +
+    return '<div class="keyrow"><label>' + (a.ico ? '<span class="kico">' + battleIconText(a.ico) + '</span>' : '') + a.name + (a.hold ? '<small>（按住）</small>' : '') + '</label><span class="kcap' + (w ? ' wait' : '') + '">' + (w ? '按新的鍵…（Esc 取消）' : keyLabel(k)) + '</span>' +
       '<button data-kid="' + a.id + '">' + (w ? '取消' : '改') + '</button><span class="note">' + (k === d ? '' : '改過；預設 ' + keyLabel(d)) + '</span></div>';
   }).join('');
   [].forEach.call($('keysItems').querySelectorAll('button[data-kid]'), function (b) { b.onclick = function () { KEY_WAIT = KEY_WAIT === b.dataset.kid ? null : b.dataset.kid; keysShow(); }; });

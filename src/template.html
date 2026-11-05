@@ -50,6 +50,9 @@
   #sigP{ position:absolute; left:84px; top:12px; display:none; z-index:7; pointer-events:auto; width:min(250px, calc(100vw - 110px)); padding:8px 10px; } #sigP.on{ display:block; }
   @media (max-width:760px){ #sigP{ left:50px; width:min(250px, calc(100vw - 105px)); } #sigBtns button{ padding:5px 8px; font-size:13px; } }   /* 手機：別蓋到右邊敵方那一欄（38 px 圓鈕 ＋ 5 px） */
   #sigH{ font-size:13px; margin-bottom:4px; } #sigX{ float:right; cursor:pointer; padding:0 4px; } #sigBtns button{ display:block; width:100%; text-align:left; margin:3px 0; padding:6px 9px; font-size:14px; cursor:pointer; } #sigBtns button.on{ background:var(--gold); color:#111; border-color:var(--gold); } #sigNow{ font-size:12px; opacity:.85; margin-top:4px; }
+  .battle-icon{display:inline-block;width:22px;height:22px;object-fit:contain;vertical-align:middle;image-rendering:pixelated;pointer-events:none;}
+  .sbn .battle-icon{width:18px;height:18px;vertical-align:-3px;}
+  .kb.hb .em .battle-icon{width:22px;height:22px;}
   .sbn.l{ left:-2px; } .sbn.r{ right:-2px; } .sbn .ico{ width:12px; height:12px; vertical-align:0; } .sbn i{ font-style:normal; font-size:10px; }
   /* 船隻配置頁最上面（Tim 2026-10-14）：大一點的艦隊圓鈕＋重要資訊 */
   #shipCard{ display:flex; align-items:center; justify-content:center; gap:14px; flex-wrap:wrap; margin:6px auto 4px; max-width:660px; }
@@ -533,7 +536,7 @@
     <div id="keys"><span class="kb hb uiOff" id="twbK" data-tip="建築模式（鋪路、蓋房子）"><b>B</b><i class="em">🔨</i></span><span class="kb hb uiOff" id="tuiTK" data-tip="貿易（只列船上有的、城鎮有庫存的貨）"><b>T</b><i class="em">💰</i></span><span class="kb hb uiOff" id="tuiK" data-tip="城鎮資訊（概況、產出與消耗、庫存與價格、統計報表）"><b>I</b><i class="em">🏛</i></span><span class="kb hb uiOff" id="tuiDK" data-tip="城區（看現在在哪一區、換一區：鏡頭跳過去、以那一區為中心載）" style="display:none"><b>D</b><i class="em">🏙</i></span><span class="kb hb" data-act="cam" id="camK" data-tip="換鏡頭"><b>C</b><i class="em">🎥</i></span><span class="kb hb" data-act="pause" id="pauseK" data-tip="停格"><b>P</b><i class="em">⏸</i></span><span class="kb hb" id="setB" data-kl="settings" data-tip="設定"><b>O</b><i class="em">⚙</i></span><span class="kb hb" data-act="ancAll" id="ancAll" data-tip="拋錨（雙錨）：兩邊都沒拋 ⇒ 一起拋；一邊在水裡 ⇒ 拋另一邊；兩邊都在水裡 ⇒ 起錨"><b>4</b><i class="em">⚓⚓</i></span><span class="kb hb" data-act="hostBack" id="hostBack" data-tip="回到地球儀"><b>U</b><i class="em">🌍</i></span><span class="kb hb dkOff" data-act="dock" id="dockK" data-tip="停靠"><b>J</b><i class="em">🏘</i></span></div>
     <div id="guns"></div>
     <div id="ammo"><span class="kb hb" id="ammoB" data-act="ammo" data-tip="切換彈藥"><b>R</b><i class="em"><span class="ball"></span></i></span></div>
-  </div><div id="helmR" class="helm"><span class="kb hb" data-act="ancS" id="ancS" data-tip="拋右錨"><b>E</b><i class="em">⚓▶</i></span><span class="kb hb" data-act="autoFire" id="autoF" data-tip="自動開砲"><b>5</b><i class="em">🤖💥</i></span><span class="kb hb" data-act="fire1" id="fireK" data-tip="開一門砲"><b>F</b><i class="em">💥</i></span><span class="kb hb" data-act="volley" id="volleyK" data-tip="齊射"><b>空白</b><i class="em">💥💥</i></span><span class="kb hb" data-act="ruddR" data-hold="1" data-tip="右舵"><b>D</b><i class="em">➡️</i></span></div></div></div>
+  </div><div id="helmR" class="helm"><span class="kb hb" data-act="ancS" id="ancS" data-tip="拋右錨"><b>E</b><i class="em">⚓▶</i></span><span class="kb hb" data-act="autoFire" id="autoF" data-tip="自動開砲"><b>5</b><i class="em">🤖<span data-battle-icon="cannon"></span></i></span><span class="kb hb" data-act="fire1" id="fireK" data-tip="開一門砲"><b>F</b><i class="em"><span data-battle-icon="cannon"></span></i></span><span class="kb hb" data-act="volley" id="volleyK" data-tip="齊射"><b>空白</b><i class="em"><span data-battle-icon="cannon"></span><span data-battle-icon="cannon"></span></i></span><span class="kb hb" data-act="ruddR" data-hold="1" data-tip="右舵"><b>D</b><i class="em">➡️</i></span></div></div></div>
   <!-- 第一人稱的操作面板（81_fps.js；#stage.fp 才顯示）：左下虛擬搖桿（移動；鍵盤 WASD 也行、不顯示按鍵）、右下 跳（浮空：上下）；中間 🎥 離開（建造模式沒有）、跑、爬梯子；拖曳畫面也能轉頭 -->
   <!-- 建造模式（82_build.js，TASK-0648；#stage.bld 才顯示）：準心下面一行說明、📦 目錄（分類分頁）；快捷欄在 #fpUI 裡 -->
   <div id="bldInfo"></div>
@@ -569,7 +572,7 @@
     <div class="hH">下方大圓鈕（點一下 ＝ 按那個鍵；鍵可以在主選單的「鍵位設定…」改）</div>
     <div>左邊由外往內：<kbd data-act="ruddL" data-hold="1" data-ico="⬅️"></kbd> 左舵（按住；自動中一碰就換手動）<kbd data-act="sailDn" data-ico="⛵⬇"></kbd> 收帆 <kbd data-act="sailUp" data-ico="⛵⬆"></kbd> 加帆 <kbd data-act="sailMode" data-ico="🤖☸"></kbd> 自動操舵（亮 ＝ 自動、暗 ＝ 手動，點一下切換；錨在水裡 ⇒ 先起錨）<kbd data-act="ancP" data-ico="◀⚓"></kbd> 左錨</div>
     <div>中間一排：<kbd data-act="cam" data-ico="🎥"></kbd> 換鏡頭 <kbd data-act="pause" data-ico="⏸"></kbd> 停格 <kbd data-act="settings" data-ico="⚙"></kbd> 設定（Esc 也可以）<kbd data-act="ancAll" data-ico="⚓⚓"></kbd> 雙錨 <span class="ball"></span><kbd data-act="ammo" data-ico=""></kbd> 彈種（圓鈕點一下換下一種，顯示現在的彈種）</div>
-    <div>右邊由內往外：<kbd data-act="ancS" data-ico="⚓▶"></kbd> 右錨 <kbd data-act="autoFire" data-ico="🤖💥"></kbd> 自動開砲（亮 ＝ 開；觀戰預設開）<kbd data-act="fire1" data-ico="💥"></kbd> 開一門 <kbd data-act="volley" data-ico="💥💥"></kbd> 齊射（裝填好、對得到的砲依序開火）<kbd data-act="ruddR" data-hold="1" data-ico="➡️"></kbd> 右舵　—— 💥 ＝ 艦隊圓鈕上算砲數的那個符號</div>
+    <div>右邊由內往外：<kbd data-act="ancS" data-ico="⚓▶"></kbd> 右錨 <kbd data-act="autoFire" data-ico="🤖💥"></kbd> 自動開砲（亮 ＝ 開；觀戰預設開）<kbd data-act="fire1" data-ico="💥"></kbd> 開一門 <kbd data-act="volley" data-ico="💥💥"></kbd> 齊射（裝填好、對得到的砲依序開火）<kbd data-act="ruddR" data-hold="1" data-ico="➡️"></kbd> 右舵　—— <span data-battle-icon="cannon"></span> ＝ 艦隊圓鈕上算砲數的那個符號</div>
     <div class="hH">帆與航行</div>
     <div><kbd>⛵</kbd> 帆裝 全收／收帆／戰鬥帆／滿帆：點一下切一級，按住 1 秒後每 0.5 秒再切一級；帆收得越多越慢、越穩，收起來的帆打不壞（除非桅斷了）。有額外動力的船（風暴角號）兩頭各多一段：<b>滿帆再加 ＝ 全速前進</b>（額外動力開）、<b>全收再收 ＝ 倒車</b>（倒退時舵反過來）</div>
     <div><kbd>☸</kbd> 自動操舵：讓敵艦保持在開火那一舷、繞著彼此轉；航速看帆還剩多少與風向（頂風最慢；手動頂風會失速）</div>
@@ -578,13 +581,13 @@
     <div><kbd>🧭</kbd> 羅盤（下方中間）：跟著鏡頭轉（N ＝ 北），中間是我艦、藍箭頭 ＝ 風從哪吹來、紅點 ＝ 敵艦、金色扇形 ＝ 兩舷的射界（對得到時亮）；外圈兩環：<span style="color:#e8c26a">金 ＝ 船體還剩多少</span>、<span style="color:#4fb3ff">藍 ＝ 進水</span>（七成以上轉紅；滑鼠停著看數字）</div>
     <div><kbd>🎯</kbd> 羅盤上方：🎯 瞄準模式　🎥 鏡頭　⚠ 射界外（瞄準點對不到）；第二行 ⛵ 航速（節，倒車是 −）＋現在的帆段與帆 %（張著、還在的帆 × 血量）；物理減速放慢時後面多一個 🐢 ×倍率</div>
     <div><kbd>砲</kbd> 羅盤兩旁是兩舷的砲（船頭、船尾砲在羅盤上下）：● 裝填好 ○ 裝填中（綠、黃的圈）△ 等火藥與彈藥 ○ 開不了（灰的圈）✕ 毀 <span class="g-wet">≈ 砲口泡在水裡（不能裝填、不能開）</span>；<span class="g-full">綠 滿編</span>、<span class="g-short">黃 人數不足（照開、較慢）</span>、<span class="g-none">灰 少於最少人數</span>、<span class="g-dead">紅 毀</span>；底下的紅線 ＝ 那門砲剩下的血量</div>
-    <div><kbd>艦</kbd> 上方兩角的艦隊圓鈕（我方左、敵方右；手機橫拿時橫排）：外圈金 ＝ 船體、內圈藍 ＝ 進水，👤 ＝ 還能動的船員、💥 ＝ 還能用的砲；點一下在中間展開那艘的詳細資訊與砲位圖，再點一下收起</div>
+    <div><kbd>艦</kbd> 上方兩角的艦隊圓鈕（我方左、敵方右；手機橫拿時橫排）：外圈金 ＝ 船體、內圈藍 ＝ 進水，<span data-battle-icon="sailor"></span> ＝ 還能動的船員、<span data-battle-icon="cannon"></span> ＝ 還能用的砲；點一下在中間展開那艘的詳細資訊與砲位圖，再點一下收起</div>
     <div><kbd>報</kbd> 上方廣播：砲被打飛（同一刻的併成一行）、傷亡（每 5 秒報一次陣亡與受傷人數；是 0 的不報）；船長、軍官、舵手倒下當下就報</div>
     <div class="hH">操作</div>
     <div><kbd>左鍵</kbd> 點敵艦：設瞄準點（拖曳 ＝ 轉鏡頭；手機：點一下瞄準、拖曳轉鏡頭）　<kbd>右鍵</kbd> 拖曳：平移　<kbd>滾輪</kbd> 遠近（手機：雙指張合縮放、雙指一起拖平移）</div>
     <div><kbd data-act="cam" data-ico="🎥"></kbd> 鏡頭：看我艦（開局預設，朝向敵艦）→ 我艦→敵艦 → 自由 → 追砲彈 → 看敵艦　<kbd data-act="camTrack" data-ico=""></kbd> 鏡頭跟船／固定</div>
     <div><kbd data-act="aim" data-ico="🎯"></kbd> 瞄準模式（⚙ 設定裡也有）：自由（點敵艦）→ 水線 → 砲甲板 → 帆具 → 甲板人員 → 彈藥庫（瞄那個模式的中心點）；自動開砲時交給砲長</div>
-    <div>彈種：<kbd data-act="ammo" data-ico=""></kbd> 換下一種（輪流）—— <span class="ball"></span> 實心彈：鑽得深，打水線讓船進水　💣 爆裂彈：炸開大洞但不深，對砲傷害大　⛓️ 鏈彈：橫掃一片，專打桅杆、繩與帆</div>
+    <div>彈種：<kbd data-act="ammo" data-ico=""></kbd> 換下一種（輪流）—— <span class="ball"></span> 實心彈：鑽得深，打水線讓船進水　<span data-battle-icon="shell"></span> 爆裂彈：炸開大洞但不深，對砲傷害大　<span data-battle-icon="chain"></span> 鏈彈：橫掃一片，專打桅杆、繩與帆</div>
     <div><kbd data-act="pause" data-ico="⏸"></kbd> 停格：停住、照樣轉鏡頭；上方一條可以開 📊 圖表（<span class="kn" data-kl="flood"></span>，進水）、🔍 透視（<span class="kn" data-kl="xray"></span>）、✂ 剖面（<span class="kn" data-kl="cut"></span>：拿掉靠鏡頭那一半看艙內）、☰ 甲板（<span class="kn" data-kl="deck"></span>：由上往下一層一層拿掉）—— 按繼續後 🔍 ✂ ☰ 保持（遊戲中照樣看得到），📊 收起；<span class="kn" data-kl="xray"></span>、<span class="kn" data-kl="cut"></span>、<span class="kn" data-kl="deck"></span> 不停格也能直接按（開著的寫在下方）</div>
     <div><kbd data-act="settings" data-ico="⚙"></kbd> 設定（暫停）：繼續、重新開始、回主選單、自爆（我艦的彈藥庫由小到大一間一間引爆 —— 相當於重開，先看煙花）、說明、瞄準模式、畫質與物理效果、帆繩物理（<span class="kn" data-kl="phys"></span>）、鏡頭跟船、靜音（<span class="kn" data-kl="mute"></span>）、FPS、全螢幕、殉爆的慢動作與特寫</div>
     <div><kbd data-act="restart" data-ico=""></kbd> 重新開始（同樣的設定）　<kbd data-act="menu" data-ico=""></kbd> 回選單　<kbd data-act="help" data-ico=""></kbd> 說明（打開時暫停；點外面、✕ 或 Esc 關掉）</div>
@@ -961,6 +964,10 @@
 <script type="application/x-asset" id="art-crew" src="art/crew.png" data-optional="1"></script>
 <script type="application/x-asset" id="art-fx" src="art/fx.png" data-optional="1"></script>
 <script type="application/x-asset" id="art-hud" src="art/hud.png" data-optional="1"></script>
+<script type="application/x-asset" id="art-battle-sailor" src="art/battle/sailor.png"></script>
+<script type="application/x-asset" id="art-battle-cannon" src="art/battle/cannon.png"></script>
+<script type="application/x-asset" id="art-battle-shell" src="art/battle/shell.png"></script>
+<script type="application/x-asset" id="art-battle-chain" src="art/battle/chain.png"></script>
 <!-- 遊戲本體：照功能分檔、檔名數字就是順序；vxk_inline.py 把 data-bundle="game" 的接成同一個閉包（見 js/00_core.js 檔頭） -->
 <script src="js/00_config.js" data-bundle="game"></script>
 <script src="js/00_core.js" data-bundle="game"></script>
@@ -1043,6 +1050,7 @@
 <script src="js/60_render.js" data-bundle="game"></script>
 <script src="js/60_rbatch.js" data-bundle="game"></script>
 <script src="js/60_showlod.js" data-bundle="game"></script>
+<script src="js/61_icons.js" data-bundle="game"></script>
 <script src="js/61_hud.js" data-bundle="game"></script>
 <script src="js/61_layout.js" data-bundle="game"></script>
 <script src="js/62_simview.js" data-bundle="game"></script>

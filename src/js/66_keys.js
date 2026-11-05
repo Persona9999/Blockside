@@ -79,7 +79,7 @@ function keyPaint(root) {
   root = root || document;
   [].forEach.call(root.querySelectorAll('[data-act],[data-kl]'), function (el) {
     var id = el.dataset.act || el.dataset.kl, n = keyName(id), A = KEY_BY[id];
-    if (el.tagName === 'KBD' && el.dataset.ico !== undefined) { var h = (el.dataset.ico ? el.dataset.ico + ' ' : '') + n; if (el.innerHTML !== h) el.innerHTML = h; }
+    if (el.tagName === 'KBD' && el.dataset.ico !== undefined) { var h = (el.dataset.ico ? battleIconText(el.dataset.ico) + ' ' : '') + n; if (el.innerHTML !== h) el.innerHTML = h; }
     else if (el.classList.contains('kn')) { if (el.textContent !== n) el.textContent = n; }
     else { var b = el.querySelector('b'); if (b && b.textContent !== n) b.textContent = n; }
     if (el.dataset.tip) el.title = el.dataset.tip + '（' + n + (A && A.hold && el.dataset.hold ? '，按住' : '') + '）';

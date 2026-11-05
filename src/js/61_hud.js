@@ -153,8 +153,8 @@ function panel(sh, title) {
     ((sh.ancMode ? '拋錨' : sh.manual ? '手動操舵' : '自動操舵' + (sh.helmMode && HELM_TAKE_K[sh.helmMode] && !sh.struck && !sh.sunk ? '・' + HELM_TAKE_K[sh.helmMode].name : '')) +   // 接管航行的模式（54_helm.js HELM_TAKES）
     (sh.anc ? '　' + anchorText(sh) : '') + '　舵 ' + (sh.rudder > 0.05 ? '左 ' + Math.round(sh.rudder * 100) + '%' : sh.rudder < -0.05 ? '右 ' + Math.round(-sh.rudder * 100) + '%' : '正')) + '<br>' + navText(sh) + '</div><div class="pc">' +
     capText(sh) + '<br>' +
-    '船員 ' + (sh.able || 0) + '/' + sh.crew0 + '（傷 ' + sh.wounded + '　亡 ' + sh.dead + '）' + handsText(sh) + medText(sh) + pumpText(sh) + galleyText(sh) + dutyText(sh) + burnText(sh) + swimText(sh) + '　' + supplyText(sh) + '<br>' +
-    '砲 有人 ' + (sh.gunsManned || 0) + '／還在 ' + sh.gunsAlive + '／' + sh.guns.length + '　' + m + '<br>開火 ' + sh.fired + '　命中 ' + sh.hits +
+    battleIcon('sailor') + ' 船員 ' + (sh.able || 0) + '/' + sh.crew0 + '（傷 ' + sh.wounded + '　亡 ' + sh.dead + '）' + handsText(sh) + medText(sh) + pumpText(sh) + galleyText(sh) + dutyText(sh) + burnText(sh) + swimText(sh) + '　' + supplyText(sh) + '<br>' +
+    battleIcon('cannon') + ' 砲 有人 ' + (sh.gunsManned || 0) + '／還在 ' + sh.gunsAlive + '／' + sh.guns.length + '　' + m + '<br>開火 ' + sh.fired + '　命中 ' + sh.hits +
     gmapLegend(sh) + '</div></div>';
 }
 /** 旁邊那張圖的圖說：砲位（預設）、損壞或進水（GMAP_MODE；Tim 2026-10-18「在開啟船體詳細資訊頁上加一個toggle 切換顯示炮位或是船隻損壞情況」「在炮位 損壞之外 加一個切換顯示進水」）。 */
@@ -205,13 +205,10 @@ function sbMake(o, box) {
   el.onclick = function (e) { e.stopPropagation(); INFO_SH = INFO_SH === o ? null : o; fleetHud(SHIPS[PLAYER_I]); };
   box.insertBefore(el, box.querySelector('.sbres')); return { el: el, cv: cv, box: box, key: '', nl: nl, nr: nr, nk: '' };
 }
-/** 圓鈕兩側的數字：左下 還能動的船員、右下 還在的砲（像素圖示：HUD 美術的「船員」「裝填好」；沒有美術 ⇒ emoji）。 */
-function sbIcon(k, emo) { return HUD_ART ? '<span class="ico" style="background-position:' + (k * 100 / 7).toFixed(3) + '% 0"></span>' : '<i>' + emo + '</i>'; }
-/** 開砲的圖示（Tim 2026-10-15：「開砲改用目前船資訊上的砲數 emoji 符號，齊射用三個該符號表示」「自動開砲可以改為自動符號＋開砲符號」）：
- *  跟艦隊圓鈕砲數同一個（sbIcon(3)：有 HUD 美術 ⇒ 那一格圖、沒有 ⇒ 💥）；美術是載入後才有的 ⇒ 每次 HUD 看一次（字串一樣就不動）。 */
+/** 船員與火砲在艦隊、開火鍵與說明共用精緻像素圖，不再依賴選用 HUD 圖集。 */
 var HUD_OUTARC = false;                                                  // 瞄準點在射界外（gunHud 記、羅盤上方那一行寫）
 function hudIcons() {
-  var g = sbIcon(3, '💥'), L = [['fireK', '<b>' + keyName('fire1') + '</b>', g], ['volleyK', '<b>' + keyName('volley') + '</b>', g + g], ['autoF', '<b>' + keyName('autoFire') + '</b>', '🤖' + g]];   // 鍵照 66_keys.js
+  var g = battleIcon('cannon'), L = [['fireK', '<b>' + keyName('fire1') + '</b>', g], ['volleyK', '<b>' + keyName('volley') + '</b>', g + g], ['autoF', '<b>' + keyName('autoFire') + '</b>', '🤖' + g]];   // 鍵照 66_keys.js
   var me = SHIPS[PLAYER_I], pk = me && !me.sunk ? fireOnePick(me) : null, waste = !!(pk && !pk.t);   // 單發鈕：有砲裝填好、但沒有一門打得到目標（或沒有目標）⇒ 按下會往空中打一發（Tim 2026-10-18「讓玩家知道目前按下會浪費砲彈」）
   if (waste) L[0][2] = '💨';
   L.forEach(function (q) { var el = $(q[0]), h = q[1] + '<i class="em">' + q[2] + '</i>'; if (el && el.innerHTML !== h) el.innerHTML = h; });
@@ -220,7 +217,7 @@ function hudIcons() {
 function sbNums(b, o) {
   var cr = 0, gn = 0; o.crew.forEach(function (c) { if (crewAble(c)) cr++; }); o.guns.forEach(function (g) { if (g.alive && !g.wet) gn++; });   // 泡水的不算（Tim 2026-10-14：只算還能用的）
   var k = cr + '/' + gn + (HUD_ART ? 'a' : ''); if (k === b.nk) return; b.nk = k;
-  b.nl.innerHTML = sbIcon(0, '👤') + cr; b.nr.innerHTML = sbIcon(3, '💥') + gn;
+  b.nl.innerHTML = battleIcon('sailor') + cr; b.nr.innerHTML = battleIcon('cannon') + gn;
   b.nl.title = '船員還能動的 ' + cr + ' 人'; b.nr.title = '還能用的砲 ' + gn + ' 門（沒被打掉、沒泡水）';
 }
 /** 圓鈕裡的船（艦隊圓鈕 sbDraw、船隻配置頁 badgeDraw 共用；Tim 2026-10-15：「把船的水線貼到背景的水面上（現在飄在空中）」「水可以是半透明蓋在船水線下」）：
@@ -307,7 +304,7 @@ function fleetHud(me) {
     var who = o.i === PLAYER_I ? '我艦' : o.team === pt ? (many && o === fs ? '我方旗艦' : '友艦') : (many && o === fs ? '敵方旗艦' : '敵艦');
     var title = who + ' ' + o.name + (o.name !== o.T.name ? '<span class="cls">（' + o.T.name + '型）</span>' : '') + teamTag(o);
     var seeing = CAM.mode === 3 && (CAM.see === o || (!CAM.see && o.i === PLAYER_I));
-    el.innerHTML = panel(o, title).replace('<h3>', '<h3><span class="fold">▲ 收起</span><span class="fold see' + (seeing ? ' on' : '') + '" data-see="1">🎥 ' + (seeing ? '看著這艘' : '看這艘') + '</span>' + (canTake(o) ? '<span class="fold take" data-take="1">⚓ 改操控這艘</span>' : '') + '<span class="fold gm">' + [['gun', '💥 砲位'], ['dmg', '🔧 損壞'], ['flood', '💧 進水'], ['fire', '🔥 火災']].map(function (m) { return '<i data-gmode="' + m[0] + '"' + (GMAP_MODE === m[0] ? ' class="on"' : '') + '>' + m[1] + '</i>'; }).join('') + '</span>');   // 旁邊那張圖：砲位／損壞／進水（gmapDraw）   // 友艦才有（52_fleet.js playerTakeShip）   // 放在標題最前面再靠右浮動（⛔ 放最後 ⇒ 窄的時候浮到排水量那一行、壓到右欄）
+    el.innerHTML = panel(o, title).replace('<h3>', '<h3><span class="fold">▲ 收起</span><span class="fold see' + (seeing ? ' on' : '') + '" data-see="1">🎥 ' + (seeing ? '看著這艘' : '看這艘') + '</span>' + (canTake(o) ? '<span class="fold take" data-take="1">⚓ 改操控這艘</span>' : '') + '<span class="fold gm">' + [['gun', battleIcon('cannon') + ' 砲位'], ['dmg', '🔧 損壞'], ['flood', '💧 進水'], ['fire', '🔥 火災']].map(function (m) { return '<i data-gmode="' + m[0] + '"' + (GMAP_MODE === m[0] ? ' class="on"' : '') + '>' + m[1] + '</i>'; }).join('') + '</span>');   // 旁邊那張圖：砲位／損壞／進水（gmapDraw）   // 友艦才有（52_fleet.js playerTakeShip）   // 放在標題最前面再靠右浮動（⛔ 放最後 ⇒ 窄的時候浮到排水量那一行、壓到右欄）
     el.style.display = 'block'; el.style.borderLeftColor = teamIdx(o) === 0 ? 'var(--blue)' : 'var(--red)';
     gmapDraw(o);
   }
@@ -746,7 +743,7 @@ function navText(sh) {
 function pauseLabel() { var b = $('pauseK'), s = '<b>' + keyName('pause') + '</b><i class="em">' + (PAUSED ? '▶' : '⏸') + '</i>'; if (b && b.innerHTML !== s) b.innerHTML = s; }   // 圖示（Tim 2026-10-15）：停格中 ⇒ ▶ 繼續
 /** 彈種那一顆（Tim 2026-10-15：「砲彈改成一個按鈕，切換所有支援的砲彈（顯示當前彈種圖示）」）：鐵球 實心彈（CSS 畫的 .ball：灰色、左上高光、淡白邊；⛔ ⚫ 在深色圓鈕上看不見、⚪ 是白點不像砲彈 —— Tim 2026-10-15「顯示為一顆白色圓點，是否可以替換」）、💣 爆裂彈、⛓️ 鏈彈；每一種砲三種都能打。 */
 var PSLOW_SHOW = 0.7;   // 物理減速放慢到 ×0.7 以下才在航速那一行顯示（Tim 2026-10-15：「高於 0.7 可以不顯示，目前頻繁閃爍」—— 以前 < 0.98 就顯示，倍率在 0.9 上下跳 ⇒ 一直閃）
-var AMMO_ICON = ['<span class="ball"></span>', '💣', '⛓️', '🔥', '🏹', '☄️', '🪨'], AMMO_TXT = ['實心彈', '爆裂彈', '鏈彈', '希臘火', '弩箭', '火箭', '石彈'];   // 第 6、7 種：火箭（弩砲）、石彈（投石機）—— 10_ship.js AMMO_FIRE／AMMO_STONE   // 第 4 種希臘火（28_fire.js AMMO_GF）只給固定彈種的砲，不在換彈的輪流裡（ammoOf）
+var AMMO_ICON = ['<span class="ball"></span>', battleIcon('shell'), battleIcon('chain'), '🔥', '🏹', '☄️', '🪨'], AMMO_TXT = ['實心彈', '爆裂彈', '鏈彈', '希臘火', '弩箭', '火箭', '石彈'];   // 第 6、7 種：火箭（弩砲）、石彈（投石機）—— 10_ship.js AMMO_FIRE／AMMO_STONE   // 第 4 種希臘火（28_fire.js AMMO_GF）只給固定彈種的砲，不在換彈的輪流裡（ammoOf）
 function ammoLabel() {
   var b = $('ammoB'); if (!b) return; var me = SHIPS[PLAYER_I], L = me ? ammoOf(me) : [0], a = ammoNow(); if (L.indexOf(a) < 0) a = L[0];   // 主武器打不出的那一種 ⇒ 顯示主武器的（持火號 ⇒ 希臘火）
   var fix = L.length === 1, s = '<b>' + keyName('ammo') + '</b><i class="em">' + (AUTOFIRE ? '🤖' : '') + (AMMO_ICON[a] || '?') + '</i>';   // 上面寫的是鍵（同其他圓鈕；66_keys.js），不是第幾種
