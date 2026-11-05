@@ -512,6 +512,8 @@ def validate(cfg, prev=None):
         st = f.get('staff') if isinstance(f, dict) else None                # 設施配員（TASK-0676；js/36_rooms.js staffSlots）：{ 職位: 每件幾位 }
         if st is not None and not (isinstance(st, dict) and all(k in ('surgeon', 'carpenter', 'sailmaker') and isint(v) and (1 if k in ('carpenter', 'sailmaker') else 0) <= v <= 4 for k, v in st.items())):
             err('furniture.%s.staff' % fid, '{ surgeon: 0～4、carpenter: 1～4、sailmaker: 1～4 的整數 }（每件配幾位；木匠、帆匠每船至少一位）')
+        if isinstance(f, dict) and (f.get('role') == 'post') != ('post' in f) or isinstance(f, dict) and 'post' in f and f['post'] not in ('officer', 'monkey', 'marine'):   # 站位（TASK-1225；js/40_posts.js）：role post ⇔ 寫了職位
+            err('furniture.%s.post' % fid, 'role post 要寫 post：officer｜monkey｜marine（站位物件：甲板編輯器擺的那個職位站哪裡）')
     PT = cfg.get('parts')                                 # 零件表（TASK-0714；admin.py parts 寫的）：{ guns: { 砲種: { 砲架類別: '<船 id>#<模型 id>' } } }
     if PT is not None:
         G0 = cfg.get('guns') if isinstance(cfg.get('guns'), dict) else {}

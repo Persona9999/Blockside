@@ -2195,7 +2195,10 @@
       "cloth": 3000,
       "carry": 300
     },
-    "keg": {"name": "火藥桶", "type": "deck", "size": [10, 10, 8], "role": "powder"}
+    "keg": {"name": "火藥桶", "type": "deck", "size": [10, 10, 8], "role": "powder"},
+    "post_officer": {"name": "軍官站位", "type": "deck", "size": [5, 5, 14], "role": "post", "post": "officer"},
+    "post_monkey": {"name": "送藥手站位", "type": "deck", "size": [5, 5, 14], "role": "post", "post": "monkey"},
+    "post_marine": {"name": "陸戰隊站位", "type": "deck", "size": [5, 5, 14], "role": "post", "post": "marine"}
   },
   "drvparts": {
     "engine": {"name": "主機", "lo": 0.4, "hi": 1},
@@ -2222,7 +2225,7 @@
       "items": ["bench", "loft"],
       "need": {"bench": 1}
     },
-    "deck": {"name": "砲甲板", "deck": true, "items": ["keg", "pump", "spump", "bench", "loft"]}
+    "deck": {"name": "砲甲板", "deck": true, "items": ["keg", "pump", "spump", "bench", "loft", "post_officer", "post_monkey", "post_marine"]}
   },
   "report": {
     "webhook": "x1:KhgbExhJRksBRgEGHx0WWkwXXG0NHwpEBAwGDUAdDgNAQ0EZSQJwWl5XXUpZUFcZRlJAW10NHjNrMCIqGi9FI0kuGDUkJTgLO0JMVBJaLBc5CRwcEWQfKEcYAgQaC0kKOx8uHAIaIyFoJiE4VjMMRy1CMw4ZAgAFIA",

@@ -77,7 +77,7 @@ function sliders() {
   //   「擺設…」打開那一間的俯視格子編輯器（#roomEd；0.5 m 一格）：挑物品、點格子擺（物品的中心在點的那一格）、轉 90°、拿掉、自動擺滿、清空。
   //   改了寫進 SHIP_ROOMS（36_rooms.js），存檔跟著存（69_prefs.js）。自動擺滿的那一間第一次被改 ⇒ 先把自動擺的那一份抄下來再改。
   //   甲板也是一間（Tim 2026-10-14）：每一層砲甲板一列，只擺火藥桶（取用點）；沒擺過 ＝ 自動（照舊的那幾處）。RE.d ＝ 編輯的是甲板。
-  var RE = { i: -1, d: false, it: '', r: 0, del: false, hover: null, msg: '' }, ITEM_COL = { bed: '#d8cba4', table: '#9a7552', medkit: '#c04a40', keg: '#7a5230', pump: '#6f9fc4', spump: '#8a8f99' };
+  var RE = { i: -1, d: false, it: '', r: 0, del: false, hover: null, msg: '' }, ITEM_COL = { bed: '#d8cba4', table: '#9a7552', medkit: '#c04a40', keg: '#7a5230', pump: '#6f9fc4', spump: '#8a8f99', post_officer: '#e8c64a', post_monkey: '#d9823b', post_marine: '#c94a4a' };   // 站位（TASK-1225）：一格的小方塊，顏色分職位
   function roomName(r) { return (r.deck ? r.deck.name + ' ' : '') + r.name.split('/').slice(-2).join(' ').replace('艙房-鏡像', '左').replace('艙房', '右'); }
   var ADM_SENT = {};                                                 // 後台模式：每一型上一次送回後台的預設（一樣就不送）
   function roomSet(name, v) { (SHIP_ROOMS[CFG_ID] = SHIP_ROOMS[CFG_ID] || {})[name] = v; if (ADMIN_ROOMS) ADM_SENT[CFG_ID] = ADM_SENT[CFG_ID] || ''; }
@@ -90,7 +90,7 @@ function sliders() {
     ADM_SENT[CFG_ID] = s; try { w.postMessage({ kind: 'cb-rooms', id: CFG_ID, rooms: o }, location.origin); } catch (e) { /* 後台關了 */ }
   }
   function itemsText(items) { var n = {}; items.forEach(function (q) { n[q.it] = (n[q.it] || 0) + 1; }); return Object.keys(n).map(function (it) { return FURN[it].name + ' ' + n[it]; }).join('、'); }
-  function furnNote(it) { var f = FURN[it], b = f.buff || {}; return f.role === 'powder' ? '一處三桶' : f.role === 'bench' ? '配木匠 ' + furnStaff(it, 'carpenter') + ' 位' : f.role === 'loft' ? '配帆匠 ' + furnStaff(it, 'sailmaker') + ' 位' : f.role === 'pump' ? '抽水 ' + f.tpm + ' 噸／分' + (f.power === 'steam' ? '、靠鍋爐' : '、' + (f.crew || 1) + ' 人搖') + (f.place === 'well' ? '、主桅旁中線' : '、中線') : f.hold ? '躺 ' + f.hold + ' 人' : Object.keys(b).map(function (k) { return (BUFF_NAMES[k] || k) + ' +' + Math.round(b[k] * 100) + '%'; }).join('、'); }
+  function furnNote(it) { var f = FURN[it], b = f.buff || {}; return f.role === 'powder' ? '一處三桶' : f.role === 'post' ? '站一個人；沒擺 ⇒ 照自動' : f.role === 'bench' ? '配木匠 ' + furnStaff(it, 'carpenter') + ' 位' : f.role === 'loft' ? '配帆匠 ' + furnStaff(it, 'sailmaker') + ' 位' : f.role === 'pump' ? '抽水 ' + f.tpm + ' 噸／分' + (f.power === 'steam' ? '、靠鍋爐' : '、' + (f.crew || 1) + ' 人搖') + (f.place === 'well' ? '、主桅旁中線' : '、中線') : f.hold ? '躺 ' + f.hold + ' 人' : Object.keys(b).map(function (k) { return (BUFF_NAMES[k] || k) + ' +' + Math.round(b[k] * 100) + '%'; }).join('、'); }
   function roomsPut() {
     var box = $('roomItems'), T = HULLT[CFG_ID], R = T ? hullRooms(T) : [], html = '';
     R.forEach(function (r, i) {

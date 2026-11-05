@@ -367,6 +367,7 @@ function makeStations(sh, auto) {
     sh.mags.forEach(function (m) { if (m.tur >= 0 && m.kegs.length && m.box[2] >= zr[0] - 2 && m.box[2] <= zr[1] + 2) turStation(D, m); });
     var rest = (out.length > n0 ? sh.mags.filter(function (m) { return !m.hoist; }) : sh.mags).filter(function (m) { return !(m.tur >= 0); });
     if (!rest.length) return;
+    if (T.fixed) { deckStations(D, n0); return; }                     // 堡壘、砲台（TASK-1225）：照甲板找，不照船的中線（下面 deckStations）
     rest.forEach(function (mag) { anchors(mag).forEach(function (A) {
       var spot = findSpot(A.x, A.dir, zr);
       if (spot) build(D, mag, D.name + A.tag + '取用點', spot); else miss.push([D, mag, A]);
@@ -375,6 +376,36 @@ function makeStations(sh, auto) {
   // 窄船的退路（findLine）只在整艘船一個取用點都沒有時才走：別艘某一層找不到是常態（送藥手走梯子去別層拿）——
   //   v1 每一層找不到就排一排 ⇒ 好旅號、拉貝爾號、聖羅曼號…7 艘多出取用點，拉貝爾號甲板連通 ✗ 2、聖羅曼號 16 門的送藥路線全量不到（TASK-1152 全船對照抓到）
   if (!out.length) miss.forEach(function (q) { var sp = findLine(q[2].x, q[0].zr); if (sp) build(q[0], q[1], q[0].name + q[2].tag + '取用點', sp); });
+  // 堡壘、砲台（TASK-1225；Tim 2026-11-05「走路格應該是基於甲板」）：船的找法（從彈藥庫沿船長、中線 ±25 格找空地）對四面牆、土台、塔頂不成立 ——
+  //   英國稜堡：取用點落在院子、砲在土台上 ⇒ 9 門 0 門走得到。⇒ 照那一層甲板的走路格（42_hands.js navBuild：送藥手真正走的那一份，砲與砲班擋的地方也切開；
+  //   ⛔ 自己切 0.5 m 的粗格 ⇒ 英國稜堡的土台看起來連成一圈，走路格其實是 6 塊）：有砲的每一塊各放取用點（4 門以上 ⇒ 沿砲分布長的那一軸切兩半、各一處），
+  //   三桶擺在離那幾門砲放藥箱的位置的中心最近、站得住（clear）、拿的那一格還在同一塊的地方。已經有取用點（艙口吊上來的）的那一塊不再放。
+  function deckStations(D, n0) {
+    var N = deckNav(sh, D.key); if (!N) return;
+    function reg(p) { var i = navSnap(N, p, 4); return i < 0 ? -1 : N.reg[i]; }
+    var have = {}; out.slice(n0).forEach(function (st) { if (st.deck === D.key) have[reg(st.at)] = 1; });
+    var by = {}; sh.guns.forEach(function (g) { if (gunDeck(g) !== D.key) return; var p = gunDropAt(sh, g) || g.model.c, r = reg(p); if (r >= 0 && !have[r]) (by[r] = by[r] || []).push(p); });
+    Object.keys(by).sort(function (a, b) { return a - b; }).forEach(function (r) {
+      var ps = by[r], cl = [ps];
+      if (ps.length >= 4) {                                             // 沿分布長的那一軸切兩半
+        var span = function (q) { var v = ps.map(function (p) { return p[q]; }); return Math.max.apply(null, v) - Math.min.apply(null, v); }, ax = span(0) >= span(1) ? 0 : 1;
+        var s = ps.slice().sort(function (a, b) { return a[ax] - b[ax]; }); cl = [s.slice(0, s.length >> 1), s.slice(s.length >> 1)];
+      }
+      var C = N.cells.filter(function (i) { return N.reg[i] === +r; });
+      cl.forEach(function (c, ci) {
+        var mx = 0, my = 0; c.forEach(function (p) { mx += p[0] / c.length; my += p[1] / c.length; });
+        var L = C.map(function (i) { var p = navPos(N, i); return [Math.hypot(p[0] - mx, p[1] - my), i, p]; }).sort(function (a, b) { return a[0] - b[0] || a[1] - b[1]; });
+        var sp = ladFirst(function () {
+          for (var k = 0; k < L.length && k < 800; k++) {
+            var p = L[k][2], x = Math.floor(p[0]) - 5, y = Math.floor(p[1]) - 5, z = p[2];
+            if (clear(x, y, z) && reg([x + 5.5, y + 5.5, z]) === +r) return [x, y, z];
+          }
+          return null;
+        });
+        if (sp) build(D, nearMag(sp[0]), D.name + (cl.length > 1 ? '甲乙'[ci] : '') + '取用點', sp);
+      });
+    });
+  }
   if (!auto) (sh.ahs || []).forEach(function (H) { if (H.drop && H.mag) ahStation(H); });   // 揚弾機（沒有 ⇒ 不做事）
   return out;
   // 砲塔裡的彈藥箱（TASK-0659；Tim 2026-10-16：「砲塔內也要可以放彈藥箱」）：桶就是彈藥箱自己的（不另外擺），送藥手站在箱子旁、砲塔裡站得住、不在砲裡的一格；
@@ -427,17 +458,12 @@ function makeStations(sh, auto) {
 }
 /** 送藥手：每一對砲（同一層、同一個 x 的兩舷）一個，站在那一對砲中間靠中線；砲記著自己的送藥手（g.pm）與放藥箱的位置（g.drop：砲尾後面）。 */
 function makeMonkeys(sh, crew, taken, add) {
-  var pairs = {}, BASE = sh.T.base, CY = sh.T.cy;
+  if (sh.fixed) { postMonkeys(sh, crew, taken, add); return; }        // 堡壘、砲台（TASK-1225，40_posts.js）：砲不成對 ⇒ 照取用點分組、站在甲板走路格上
+  var pairs = {}, BASE = sh.T.base, CY = sh.T.cy, mine = postsOf(sh, 'monkey'), used = {};   // mine：手擺／作品標的送藥手站位（40_posts.js；沒有 ⇒ 照舊）
   sh.guns.forEach(function (g) { var k = gunDeck(g) + ':' + Math.round(g.muz[0]); (pairs[k] = pairs[k] || []).push(g); });
   Object.keys(pairs).forEach(function (k, i) {
     var gs = pairs[k], deck = gunDeck(gs[0]), zr = sh.deckZ[deck], x = Math.round(gs[0].muz[0]);
-    gs.forEach(function (g) {
-      var br = g.model.pts.breech || g.model.c, sg = g.side === 'P' ? -1 : 1;
-      var foreAft = Math.abs(g.ax[0]) > Math.abs(g.ax[1]), ex = g.ax[0] > 0 ? 1 : -1;
-      var dropX = foreAft ? Math.floor(br[0] - ex * 7) : Math.floor(br[0]) + 3;
-      var dropY = foreAft ? Math.floor(br[1]) : Math.floor(br[1] - sg * 7);
-      g.drop = standNear(BASE, dropX, dropY, zr[0], zr[1], 12, {}) || (g.spots.length ? g.spots[g.spots.length - 1].at : null);
-    });
+    gs.forEach(function (g) { monkeyDrop(sh, g); });
     var H = gs[0].ah && gs.every(function (g) { return g.ah === gs[0].ah; }) ? gs[0].ah : null;   // 揚弾機吊上去的那一對 ⇒ 送藥手在艙底（取用點 → 接收處，ahMonkey）
     if (H) { ahCrew(sh, H, gs, crew, taken, add); return; }
     // Fore/aft guns: the muzzle can be outside the deck. Spawn behind the breech.
@@ -445,7 +471,10 @@ function makeMonkeys(sh, crew, taken, add) {
       x = Math.round(gs[0].model.pts.breech[0] - (gs[0].ax[0] > 0 ? 6 : -6));
     sh.pmWant += sh.cw.monkeys;                                      // 船員配置：每一對砲幾個（0 ＝ 沒有送藥手，砲旁的藥箱用完就停；2 ＝ 第二個站另一邊）
     for (var m = 0; m < sh.cw.monkeys; m++) {
-      var at = standNear(BASE, x, CY + ((i + m) % 2 ? 9 : -9), zr[0], zr[1], 12, taken);
+      var at = null, best = -1, bd = 1e9;
+      mine.forEach(function (p, j) { if (used[j] || p.deck !== deck) return; var d = Math.hypot(p.at[0] - x, p.at[1] - CY); if (d < bd) { bd = d; best = j; } });
+      if (best >= 0) { used[best] = 1; at = postStand(BASE, mine[best].at, taken); }
+      if (!at) at = standNear(BASE, x, CY + ((i + m) % 2 ? 9 : -9), zr[0], zr[1], 12, taken);
       if (!at && gs[0].mt && gs[0].drop)                                // 迴旋砲在小平台上（松島號的桅樓，半徑 2 m、中間是桅、兩舷的 47 mm 把中線 ±0.9 m 那一帶佔滿）中線那一欄站不下 ⇒ 站在放藥箱的位置旁
         at = standNear(navBase(sh.T), Math.floor(gs[0].drop[0]), Math.floor(gs[0].drop[1]), zr[0], zr[1], 12, taken, 8);   //   （跟放藥點同一塊走路格 ⇒ 點名不會因為走不到把他改成預備水手；以前不放送藥手，匯入檢查 ✗）
       if (!at && (gs[0].model.hd || gs[0].mt) && gs[0].spots.length) {   // 架高的砲塔轉盤（定遠號的露砲台：轉盤比主甲板高 2 m、砲偏中線 5.2 m）⇒ 砲口那一欄靠中線沒有站得住的格 ⇒ 站到那門砲的砲班旁（navBase 連轉盤也算）
@@ -457,6 +486,17 @@ function makeMonkeys(sh, crew, taken, add) {
       gs.forEach(function (g) { if (!g.pm) g.pm = c; });             // 砲認第一個（「送藥手倒了的砲」照它判斷）；第二個一樣送這一對
     }
   });
+}
+/** 砲 g 放藥箱的位置（g.drop：砲尾後面 7 格、那一層站得住的一格；站不住 ⇒ 砲班最後一個人的站位）。 */
+function monkeyDrop(sh, g) { g.drop = gunDropAt(sh, g) || (g.spots.length ? g.spots[g.spots.length - 1].at : null); }
+/** 砲尾後面 7 格、那一層站得住的一格（站不住 ⇒ null）；開局擺取用點時砲班還沒站（堡壘照它切塊，deckStations）也用這一支。 */
+function gunDropAt(sh, g) {
+  var BASE = sh.T.base, zr = sh.deckZ ? sh.deckZ[gunDeck(g)] : null, br = g.model.pts.breech || g.model.c, sg = g.side === 'P' ? -1 : 1;
+  if (!zr) { var D = (sh.decks || []).filter(function (d) { return d.key === gunDeck(g); })[0]; zr = D ? D.zr : null; } if (!zr) return null;
+  var foreAft = Math.abs(g.ax[0]) > Math.abs(g.ax[1]), ex = g.ax[0] > 0 ? 1 : -1;
+  var dropX = foreAft ? Math.floor(br[0] - ex * 7) : Math.floor(br[0]) + 3;
+  var dropY = foreAft ? Math.floor(br[1]) : Math.floor(br[1] - sg * 7);
+  return standNear(BASE, dropX, dropY, zr[0], zr[1], 12, {});
 }
 /** 別的送藥手已經要送去 g 的份數（在去拿、在拿、拿著送的；拿著的照手上的份數）。 */
 function incoming(sh, c, g) {
@@ -484,8 +524,15 @@ function stationFor(sh, c, g) { return stationPick(sh, c.deck, g); }
  *  走路格量不到（沒有、snap 不到）⇒ 照 x 最近。匯入檢查（75_shipcheck.js）用同一支。 */
 function stationPick(sh, deck, g) {
   var sts = sh.stations.filter(function (st) { return st.deck === deck && !st.mag.gone; }); if (!sts.length) return null;
-  function near(L) { return L.reduce(function (a, b) { return Math.abs(b.at[0] - g.muz[0]) < Math.abs(a.at[0] - g.muz[0]) ? b : a; }); }
-  var best = near(sts); if (sts.length < 2 || !g.drop || !sh.nav) return best;
+  function dd(st) { return sh.fixed ? Math.hypot(st.at[0] - g.muz[0], st.at[1] - g.muz[1]) : Math.abs(st.at[0] - g.muz[0]); }   // 堡壘（TASK-1225）：砲分在四面牆 ⇒ 照平面距離（船照 x：沿船長）
+  function near(L) { return L.reduce(function (a, b) { return dd(b) < dd(a) ? b : a; }); }
+  var best = near(sts); if (sts.length < 2) return best;
+  if (sh.fixed) {                                                       // 堡壘（TASK-1225）：照那一層甲板的走路格（沒有預備水手也照建，deckNav），同一塊裡最近的先
+    var FN = deckNav(sh, deck), fp = g.drop || gunDropAt(sh, g), fi = FN && fp ? navSnap(FN, fp, 4) : -1; if (fi < 0) return best;
+    var fs = sts.filter(function (st) { var i = navSnap(FN, st.at, 4); return i >= 0 && FN.reg[i] === FN.reg[fi]; });
+    return fs.length ? near(fs) : best;
+  }
+  if (!g.drop || !sh.nav) return best;
   var li = lvAt(sh, g.drop), N = li >= 0 && sh.nav.levels[li] ? sh.nav.levels[li].N : null; if (!N) return best;
   var gi = navSnap(N, g.drop, 4); if (gi < 0) return best;
   function same(st) { if (lvAt(sh, st.at) !== li) return false; var i = navSnap(N, st.at, 4); return i >= 0 && N.reg[i] === N.reg[gi]; }

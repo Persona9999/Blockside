@@ -104,6 +104,7 @@ function makeCrew(sh) {
   // spar deck 的高度：從 carronade 推；陸戰隊沿 S 那一舷（格 +y）的舷牆、軍官在後甲板、舵手在舵輪旁
   var carr = sh.models.filter(function (m) { return fitKind0(m) === 'carr'; }).map(function (m) { return m.was ? { bb: m.was.bb } : m; }), wheel = sh.models.filter(function (m) { return m.kind === 'wheel'; })[0];
   var GZ = sh.T.geo, CW = sh.cw, sz0 = carr.length ? Math.floor(carr[0].bb[2]) - 6 : GZ.spar ? GZ.spar[0] : 100, sz1 = carr.length || !GZ.spar ? sz0 + 9 : GZ.spar[1];   // 沒有 carronade ⇒ 船型給的高度（05_hull.js GEO0；夜隼號主甲板到後甲板）
+  postsOf(sh, 'marine').slice(0, CW.marines).forEach(function (p) { add(ROLE.MARINE, postStand(g, p.at, taken), null, 1); });   // 站位（TASK-1225）：手擺／作品標的陸戰隊站位先用，下面照舊沿舷牆補到 marines 個
   for (var x = HULL_X0 + GZ.marines[0]; x < HULL_X1 - GZ.marines[1] && crew.filter(function (c) { return c.role === ROLE.MARINE; }).length < CW.marines; x += CW.marineGap) {   // 每 marineGap 格一個、最多 marines 個（船員配置）
     // 從中線往外走到舷牆前一格（⛔ 從外往裡掃會先碰到舷外的 channels 平台）
     var last = -1, m0 = sz0, m1 = sz1;
@@ -114,10 +115,14 @@ function makeCrew(sh) {
     for (var y = CY + 4; y < CY + 80; y++) { if (standZ(g, x, y, m0, m1, 14) >= 0) last = y; else if (last >= 0) break; }
     if (last >= 0) add(ROLE.MARINE, standNear(g, x, last - 2, m0, m1, 14, taken), null, 1);
   }
+  postFill(sh, g, taken, 'marine', CW.marines - cntRole(crew, ROLE.MARINE)).forEach(function (at) { add(ROLE.MARINE, at, null, 1); });   // 堡壘：沿舷牆找不到 ⇒ 牆頂的外緣（40_posts.js）
   var qx = wheel ? Math.floor(wheel.c[0]) : HULL_X0 + GZ.qx, offP =   // 沒有舵輪 ⇒ 從外框起點往前 geo.qx 格（預設 160；杉心號全長才 114 格，TASK-1152）
     [[qx + 22, CY + 8], [qx + 30, CY - 6], [qx + 40, CY + 14], [qx + 14, CY - 12], [qx + 48, CY - 2], [qx + 22, CY - 20], [qx + 36, CY + 22], [qx + 56, CY + 10]];   // 後四個給船隻配置頁多調的
   var offN = CW.shelter ? Math.min(1, CW.officers) : CW.officers;    // 船員避開露天甲板（shelter）：露天只留船長，其他的開完預備水手再擺到甲板下（下面）
-  offP.slice(0, offN).forEach(function (p) { add(ROLE.OFFICER, standNear(g, p[0], p[1], sz0, sz1, 14, taken), null, 1); });
+  // 站位（TASK-1225，40_posts.js）：手擺／作品標的軍官站位先用；剩下的照舊（舵輪往前、中線兩側）；堡壘照舊站不滿 ⇒ 照甲板補
+  var offK = 0; postsOf(sh, 'officer').slice(0, offN).forEach(function (p) { var at = postStand(g, p.at, taken); if (at) { add(ROLE.OFFICER, at, null, 1); offK++; } });
+  offP.slice(0, offN - offK).forEach(function (p) { add(ROLE.OFFICER, standNear(g, p[0], p[1], sz0, sz1, 14, taken), null, 1); });
+  postFill(sh, g, taken, 'officer', offN - cntRole(crew, ROLE.OFFICER)).forEach(function (at) { add(ROLE.OFFICER, at, null, 1); });
   if (wheel) { var wx = Math.floor(wheel.bb[0]) - 3; [[wx, CY + 3], [wx, CY - 3], [wx - 5, CY + 7], [wx - 5, CY - 7]].slice(0, CW.helm).forEach(function (p) { add(ROLE.HELM, standNear(g, p[0], p[1], sz0, sz1, 14, taken), null, -1); }); }   // 舵輪後面（⛔ 舵輪中心往後 4 格還在舵輪的外框裡 ⇒ 以前一個舵手都站不上去）
   // 桅頂：每根桅最低的那層平台（從那根桅最低的橫帆桁往上，第一層有 6 個以上站得住的點；沒有帆桁 meta ⇒ 從 z 200）上分散站四個人；頭頂 1.4 m 空（同一般站位）。
   //   憲法號：前桅 263、主桅 286、後桅 241（帆桁 254／276／232 ⇒ 跟以前從 200 找一樣）；夜隼號：前桅 127、主桅 137。
