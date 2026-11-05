@@ -666,9 +666,12 @@ function physVis(sh, wl, gv, si, chk, h, hs, seen) {                 // seen ＝
     var c = sh.cl[k];
     var seen = c.seen; c.seen = true;
     if (c.gone) return;
-    if (s.dead && !c.loose) {                                         // 物理打開之前就掉了的（late）⇒ 現在才垂下來；收著的時候掉的 ⇒ 不畫
-      if (!c.late || s.furled) { c.gone = true; return; }
+    if (s.dead && !c.loose) {                                         // 物理打開之前就掉了的（late）⇒ 現在才垂下來；收著的時候掉的 ⇒ 從那一捲放下來（fdrop，21_gunnery.js dropSail）；其他收著的 ⇒ 不畫
+      if (!c.late || s.furled && !c.fdrop) { c.gone = true; return; }
+      var tk = c.fdrop && c.p && c.torn ? { brk: c.brk, bbrk: c.bbrk, tv: c.tv } : null;   // 收之前的破洞留著（同重新張帆）
       clothInit(c); clothBrace(sh, c); c.hidden = false; c.loose = true;
+      if (tk) { c.brk = tk.brk; c.bbrk = tk.bbrk; c.tv = tk.tv; c.torn = true; }
+      if (c.fdrop) { c.fdrop = false; c.fz = null; c.furlF = 0; sh.rigDirty = true; }   // 畫面從收攏的樣子放開（furlF 0 → 1，同張帆的演出）、一邊往下掉
     }
     c.late = false;
     if (s.furled && !s.dead) {                                       // 收帆：物理開著 ⇒ 先演一段收上去（畫面上往帆桁／綁邊收攏，FURL_IN 秒）再藏；判斷照舊立刻算收起來（s.furled：航速、命中、鏈彈）

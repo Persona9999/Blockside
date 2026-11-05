@@ -54,10 +54,9 @@
   .battle-auto{position:relative;display:inline-block;} .battle-badge{position:absolute;right:-5px;bottom:-3px;} .battle-badge .battle-icon{width:12px!important;height:12px!important;}
   .battle-waste{opacity:.7;} #modeT .battle-icon{width:16px;height:16px;} .battle-badge{filter:drop-shadow(0 1px 1px #000);}
   .sbn .battle-icon{width:18px;height:18px;vertical-align:-3px;}
-  .kb.hb .em .battle-icon{width:22px;height:22px;}
-  .kb.hb .em{display:inline-flex;max-width:42px;align-items:center;justify-content:center;vertical-align:middle;}
-  .kb.hb .em .battle-icon{flex-shrink:1;min-width:0;}
-  .kb.hb .em [data-battle-icon="autopilot"], .kb.hb .em [data-battle-icon="autofire"]{width:30px;height:30px;}
+  .kb.hb .em{position:absolute;left:10%;bottom:8%;display:inline-flex;width:80%;height:62%;align-items:center;justify-content:center;vertical-align:middle;}
+  .kb.hb .em .battle-icon{width:100%;height:100%;max-width:100%;flex:1 1 0;min-width:0;}
+  .kb.hb .em > .battle-auto{display:flex;width:100%;height:100%;}
   .sbn.l{ left:-2px; } .sbn.r{ right:-2px; } .sbn .ico{ width:12px; height:12px; vertical-align:0; } .sbn i{ font-style:normal; font-size:10px; }
   /* 船隻配置頁最上面（Tim 2026-10-14）：大一點的艦隊圓鈕＋重要資訊 */
   #shipCard{ display:flex; align-items:center; justify-content:center; gap:14px; flex-wrap:wrap; margin:6px auto 4px; max-width:660px; }
@@ -88,11 +87,11 @@
      中間一欄 ＝ 羅盤＋面板：由上到下 ＝ 🎥 鏡頭／⏸ 停格／⚙ 設定（Tim 2026-10-15：改成圖示；Q 瞄準搬進設定面板 —— 很少用、害手機換行）＋航行 4／5（航行併進設定列）、砲列、彈種（設定那一列跟彈種隔著砲列 ⇒ 不會誤觸）。手機只是縮小、兩組改成直的（左舵、右舵在最下面靠角落）。 */
   .helm{ display:flex; gap:8px; pointer-events:auto; flex:none; position:relative; z-index:2; }   /* 帆與舵（左）、開砲與舵（右）兩組大圓鈕：貼著中間的主面板（#ctlRow；Tim 2026-10-14：⛔ 以前貼畫面兩邊） */
   #ctlRow{ display:flex; align-items:flex-end; justify-content:center; gap:8px; max-width:100%; }
-  .kb.hb{ width:64px; height:64px; margin:0; padding:0; border-radius:50%; display:flex; flex-direction:column; align-items:center; justify-content:center; line-height:1.25; font-size:12px;
+  .kb.hb{ position:relative; width:64px; height:64px; margin:0; padding:0; border-radius:50%; display:flex; flex-direction:column; align-items:center; justify-content:center; line-height:1.25; font-size:12px;
     background:rgba(14,18,24,.78); border:1px solid rgba(255,255,255,.32); box-shadow:0 2px 7px rgba(0,0,0,.6); }
   .ball{ display:inline-block; width:.95em; height:.95em; border-radius:50%; vertical-align:-.12em; background:radial-gradient(circle at 34% 30%, #e4e9ee 0, #8a939d 20%, #3a4048 58%, #15181c 100%); box-shadow:0 0 0 1px rgba(255,255,255,.4); }   /* 實心彈的鐵球（Tim 2026-10-15：白點換掉；CSS 畫 ⇒ 每支手機長一樣） */
   .kb.hb .em{ font-size:17px; line-height:1.1; letter-spacing:-1px; white-space:nowrap; } .kb.hb .em .ico{ width:16px; height:16px; }   /* 圖示（Tim 2026-10-15：舵、帆、錨、開砲、航行都改 emoji；砲用艦隊圓鈕砲數那個符號 sbIcon(3)）*/
-  .kb.hb b{ font-size:11px; } .kb.hb i{ font-style:normal; } .kb.hb.on{ color:#111; background:rgba(159,199,255,.92); border-color:#9fc7ff; } .kb.hb.on b{ color:#4a3500; } .kb.hb.dis{ opacity:.45; } .kb.hb.waste{ border-style:dashed; border-color:#ff9a7a; } .kb.hb.waste .em{ opacity:.75; }   /* 拋錨、左右錨、自動開砲：亮著 ＝ 開（錨在水裡）、灰 ＝ 錨打壞了 */
+  .kb.hb b{ position:absolute;top:6%;left:3%;right:3%;font-size:11px;line-height:1.15;text-align:center; } .kb.hb i{ font-style:normal; } .kb.hb.on{ color:#111; background:rgba(159,199,255,.92); border-color:#9fc7ff; } .kb.hb.on b{ color:#4a3500; } .kb.hb.dis{ opacity:.45; } .kb.hb.waste{ border-style:dashed; border-color:#ff9a7a; } .kb.hb.waste .em{ opacity:.75; }   /* 拋錨、左右錨、自動開砲：亮著 ＝ 開（錨在水裡）、灰 ＝ 錨打壞了 */
   #botC{ left:50%; bottom:12px; transform:translateX(-50%); display:flex; flex-direction:column; align-items:center; gap:6px; width:max-content; max-width:calc(100vw - 24px); }   /* ⛔ 不寫 width ⇒ left:50% 的絕對定位只剩半個畫面寬，主面板被兩組大圓鈕擠成一條 */
   #ctl{ text-align:center; min-width:0; box-sizing:border-box; }
   #ctl b{ color:var(--gold); }
@@ -226,8 +225,8 @@
     #navc{ width:83px; height:83px; } }   /* 羅盤跟直式一樣大（Tim 2026-10-17「橫版羅盤是否可以維持跟直版的一樣尺寸」「目前手機橫版的羅盤會變大」）：直式 68 px、不縮；這裡整團 scale .82 ⇒ 68 ÷ .82 ≈ 83 */
   /* 中等寬度（761–1100 px，平板、小筆電、手機橫拿）：一整排 15 顆 64 px ＋ 間距 8 ＝ 1072 px 放不下 ⇒ 圓鈕跟著畫面寬縮、間距 4（15 顆（各加 2 px 邊框）＋ 14 個間距 ＋ 左右各 12 ＋ 4 px 餘裕 ＝ 100vw；#keys 裡面也是間距 4）
      ⛔ 2026-10-15 1024 寬實測：沒有這段 ⇒ ◀⚓ 蓋住 🎥、彈種鈕被 ⚓▶ 蓋住 */
-  @media (min-width:761px) and (max-width:1100px){ .kb.hb{ width:min(64px, calc((100vw - 114px) / 15)); height:min(64px, calc((100vw - 114px) / 15)); } .helm, #ctlRow, #ctl.panel, #keys{ gap:4px; } }
-  @media (min-width:761px) and (max-width:1200px){ body.bsHost .kb.hb{ width:min(64px, calc((100vw - 118px) / 16)); height:min(64px, calc((100vw - 118px) / 16)); } body.bsHost .helm, body.bsHost #ctlRow, body.bsHost #ctl.panel, body.bsHost #keys{ gap:4px; } }   /* 多一顆 🌍 ⇒ 16 顆：16 × 66 ＋ 15 × 8 ＝ 1176 px，1200 以下照樣縮 */
+  @media (min-width:761px) and (max-width:1100px){ .kb.hb{ width:min(64px, calc((100vw - 114px) / 15)); height:min(64px, calc((100vw - 114px) / 15)); } .kb.hb b{font-size:9px;top:3%;} .helm, #ctlRow, #ctl.panel, #keys{ gap:4px; } }
+  @media (min-width:761px) and (max-width:1200px){ body.bsHost .kb.hb{ width:min(64px, calc((100vw - 118px) / 16)); height:min(64px, calc((100vw - 118px) / 16)); } body.bsHost .kb.hb b{font-size:9px;top:3%;} body.bsHost .helm, body.bsHost #ctlRow, body.bsHost #ctl.panel, body.bsHost #keys{ gap:4px; } }   /* 多一顆 🌍 ⇒ 16 顆：16 × 66 ＋ 15 × 8 ＝ 1176 px，1200 以下照樣縮 */
   /* 手機橫拿（矮）：艦隊圓鈕改橫排、由外往內（Tim 2026-10-15：「不然會跟按鈕重疊」—— 直排往下長，撞到兩側直立的大圓鈕 ⚓▶ ◀⚓）；
      我方從左邊往右、敵方從右邊往左；太多艘 ⇒ 往下換一排（每側最多三分之一個畫面寬） */
   @media (orientation:landscape) and (max-height:520px){ .fleet{ flex-direction:row; flex-wrap:wrap; align-content:flex-start; max-height:none; max-width:34vw; } #fleetL{ max-height:none; } #fleetR{ flex-direction:row-reverse; flex-wrap:wrap; align-items:flex-start; } }
