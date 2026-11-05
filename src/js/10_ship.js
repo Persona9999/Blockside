@@ -55,6 +55,8 @@ function makeShipSteps(i, team, yaw, pz, T, px) {
     }
     var bl = (m.points || {}).bail;
     if (foot < 0 && bl) foot = anchorNear(T, bl[0], bl[1], bl[2], 8);
+    var mnt = (m.points || {}).mount;
+    if (foot < 0 && hm.kind === 'light' && mnt) foot = anchorNear(T, mnt[0], mnt[1], mnt[2], 8);   // 壁掛燈籠（summit-rocher-01m-lantern，固定點 mount ＝ 貼牆的托架；TASK-1224）：「腳」是托架旁那一格牆 ⇒ 牆被打掉就掉（⛔ 往下找：掛在牆上、底下是空的 ⇒ 堡壘門口的燈開場就掉）
     var sa = (m.points || {})['spin-a'];
     if (foot < 0 && hm.spin && sa) foot = anchorNear(T, sa[0], sa[1], sa[2], 8);   // 照參數轉的機件（齒輪、飛輪；kotoko 2026-10-16）：掛在轉軸 spin-a 旁那一格（⛔ 往下找：外框底下是空的機艙 ⇒ 當成吊著的小艇、spin 不收）   // 提著的燈（夜燈號船首像的提燈，固定點 bail ＝ 提環頂、手握的地方）：「腳」是手（⛔ 往下找：底下是海 ⇒ 開局就掉、燈不亮）
     var sfw = (m.points || {})['shaft-fwd'];
