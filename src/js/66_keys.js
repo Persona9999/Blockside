@@ -70,6 +70,8 @@ function keyRebuild() {
 function keyAct(c, k) { var I = KEY_IDX[c]; return (I && I[k]) || ''; }
 /** 動作的鍵（畫面上鍵帽那種寫法：空白、Shift、A、1）；沒有鍵 ⇒ '—'。 */
 function keyName(id) { return keyLabel(KEYS_NOW[id]); }
+/** 操作鈕／鍵帽的短標記；句子、提示與改鍵欄仍用完整鍵名。 */
+function keyCap(id) { return KEYS_NOW[id] === ' ' ? '␣' : keyName(id); }
 var KEY_ARROW = { arrowup: '↑', arrowdown: '↓', arrowleft: '←', arrowright: '→' };
 function keyLabel(k) { if (!k) return '—'; if (KEY_ARROW[k]) return KEY_ARROW[k]; if (k === ' ') return '空白'; if (k === 'shift') return 'Shift'; if (k === 'alt') return 'Alt'; if (k.length === 1) return k.toUpperCase(); return k.charAt(0).toUpperCase() + k.slice(1); }
 /** 句子裡的寫法（空白 ⇒ 空白鍵）。 */
@@ -78,10 +80,10 @@ function keyWord(id) { var s = keyName(id); return s === '空白' ? '空白鍵' 
 function keyPaint(root) {
   root = root || document;
   [].forEach.call(root.querySelectorAll('[data-act],[data-kl]'), function (el) {
-    var id = el.dataset.act || el.dataset.kl, n = keyName(id), A = KEY_BY[id];
-    if (el.tagName === 'KBD' && el.dataset.ico !== undefined) { var h = (el.dataset.ico ? battleIconText(el.dataset.ico) + ' ' : '') + n; if (el.innerHTML !== h) el.innerHTML = h; }
+    var id = el.dataset.act || el.dataset.kl, n = keyName(id), cap = keyCap(id), A = KEY_BY[id];
+    if (el.tagName === 'KBD' && el.dataset.ico !== undefined) { var h = (el.dataset.ico ? battleIconText(el.dataset.ico) + ' ' : '') + cap; if (el.innerHTML !== h) el.innerHTML = h; }
     else if (el.classList.contains('kn')) { if (el.textContent !== n) el.textContent = n; }
-    else { var b = el.querySelector('b'); if (b && b.textContent !== n) b.textContent = n; }
+    else { var b = el.querySelector('b'); if (b && b.textContent !== cap) b.textContent = cap; }
     if (el.dataset.tip) el.title = el.dataset.tip + '（' + n + (A && A.hold && el.dataset.hold ? '，按住' : '') + '）';
   });
 }

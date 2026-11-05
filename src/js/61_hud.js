@@ -220,7 +220,7 @@ function sbMake(o, box) {
 /** 船員與火砲在艦隊、開火鍵與說明共用精緻像素圖，不再依賴選用 HUD 圖集。 */
 var HUD_OUTARC = false;                                                  // 瞄準點在射界外（gunHud 記、羅盤上方那一行寫）
 function hudIcons() {
-  var g = battleIcon('cannon'), L = [['fireK', '<b>' + keyName('fire1') + '</b>', g], ['volleyK', '<b>' + keyName('volley') + '</b>', g + g], ['autoF', '<b>' + keyName('autoFire') + '</b>', battleIcon('autofire')]];   // 鍵照 66_keys.js
+  var g = battleIcon('cannon'), L = [['fireK', '<b>' + keyCap('fire1') + '</b>', g], ['volleyK', '<b>' + keyCap('volley') + '</b>', g + g], ['autoF', '<b>' + keyCap('autoFire') + '</b>', battleIcon('autofire')]];   // 鍵照 66_keys.js
   var me = SHIPS[PLAYER_I], pk = me && !me.sunk ? fireOnePick(me) : null, waste = !!(pk && !pk.t);   // 單發鈕：有砲裝填好、但沒有一門打得到目標（或沒有目標）⇒ 按下會往空中打一發（Tim 2026-10-18「讓玩家知道目前按下會浪費砲彈」）
   if (waste) L[0][2] = '<span class="battle-auto battle-waste">' + g + '<span class="battle-badge">' + battleIcon('warning') + '</span></span>';
   L.forEach(function (q) { var el = $(q[0]), h = q[1] + '<i class="em">' + q[2] + '</i>'; if (el && el.innerHTML !== h) el.innerHTML = h; });
