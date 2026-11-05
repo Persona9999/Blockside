@@ -42,6 +42,7 @@
     "dmgpr": [10, 300, 25],
     "dmgsf": [10, 300, 30],
     "dmgbl": [10, 300, 25],
+    "dmgsp": [10, 300, 30],
     "dmgmg": [10, 300, 60],
     "dmgbw": [5, 300, 10],
     "dmgbd": [10, 300, 30],
@@ -333,6 +334,23 @@
       "ammo": "firebolt",
       "weapon": "toxoballistra",
       "box": 3
+    },
+    "springald": {
+      "code": "springald",
+      "name": "重弩（springald，塔上的絞盤扭力弩；加拉塔塔頂層 —— 設計）",
+      "short": "重弩",
+      "V": 100,
+      "reload": 2.4,
+      "big": false,
+      "hole": 0.25,
+      "crew": 4,
+      "min": 2,
+      "mass": 1.0,
+      "shot": 0.8,
+      "ammo": "firebolt",
+      "weapon": "springald",
+      "box": 3,
+      "elev": 30
     },
     "mangonel": {
       "code": "mangonel",
