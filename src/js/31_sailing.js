@@ -74,7 +74,7 @@ function setHas(s, k) {
 function isFlag(s) { var m = s.meta; if (m && m.kind) return m.kind === 'flag'; return /^(ensign|pennant|flag)/.test(s.name); }
 /** 降旗：降船尾旗（meta `flag=ensign`；沒有 meta ⇒ 名字叫 ensign 的那面）。 */
 function strikeColors(sh) { sh.sails.forEach(function (s) { if (s.flag && (s.meta && s.meta.kind ? s.meta.flag === 'ensign' || s.meta.team : s.name === 'ensign')) { s.furled = true; s.struck = true; } }); sh.rigDirty = true; }
-function applySailSet(sh) { sh.sails.forEach(function (s) { s.furled = s.flag ? !!s.struck : !setHas(s, sh.sailSet); }); sh.rigDirty = true; }
+function applySailSet(sh) { sh.sails.forEach(function (s) { s.furled = s.flag ? !!(s.struck || s.hid) : !setHas(s, sh.sailSet); }); sh.rigDirty = true; }
 /** 帆段只管帆（TASK-0630；Tim 2026-10-15：「如果拆成兩套呢 然後額外動力透過Slider調整輸出(有帆的才顯示帆的 然後有額外動力的才會顯示 兩種都有就都顯示」）：
  *  全收 … 滿帆（0–3）；額外動力改由俥鐘（31_drive.js teleStep／teleSet，E／T）—— ⛔ 以前帆段兩頭多「倒車」「全速前進」兩段（sh.power 照帆段開關）。 */
 function sailLevel(sh) { return sh.sailSet; }

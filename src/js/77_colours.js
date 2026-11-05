@@ -261,6 +261,7 @@ function flagVariant(T, k) {
 function shipNation(sh, k) {
   var m = k ? flagVariant(sh.T, k) : null, T = sh.T;
   sh.nation = m ? k : null; sh.flagMap = m; sh.rigDirty = true;
+  (T.flagOnMast || []).forEach(function (ti) { var s = sh.sails && sh.sails[ti]; if (s) { s.hid = !!sh.nation; s.furled = !!(s.struck || s.hid); } });   // 掛了國旗 ⇒ 作品自己有旗的那根桅不再加掛（T.flagOnMast）
   var miss = m ? flagMissOf(T, k) : [];
   if (miss.length) {
     var said = T.flagMissSaid || (T.flagMissSaid = {});
@@ -288,14 +289,16 @@ function flagOwnUv(T) {
  *  T.nSail0 ＝ 作品自己的帆有幾面（快取只存這幾面的布料，06_cache.js）；T.teamExtra ＝ 貼圖集排在帆後面的那幾份（陣營旗紅的那份、替換作品旗的藍紅兩份；clothSetup）、
  *  T.teamTex[帆] ＝ { blue, red } 貼圖集的哪一格（sailRect）；T.poles ＝ 旗桿。 */
 function teamFlagsSetup(T, info) {
-  T.nSail0 = T.rig.sails.length; T.teamTex = {}; T.teamExtra = []; T.poles = []; T.flagSlots = []; T.flagTi = {}; T.flagVar = {}; T.flagUv = null;
+  T.nSail0 = T.rig.sails.length; T.teamTex = {}; T.teamExtra = []; T.poles = []; T.flagSlots = []; T.flagTi = {}; T.flagVar = {}; T.flagUv = null; T.flagOnMast = [];
   if (!COL_ON) return;
   if (info && info.fixed) flagOwnUv(T);
   var defs = info && info.flags || autoFlags(T); if (!defs.length) { flagNationMeta(T); return; }
   T.teamDefs = defs;
-  var add = [], red = [], repl = [];
+  var add = [], red = [], repl = [], own = {};
+  T.rig.sails.forEach(function (s) { var m = s.meta || {}; if (m.kind === 'flag' && m.mast) own[m.mast] = 1; });   // 作品自己掛了旗的桅（meta mast）
   defs.forEach(function (f, fi) {
     if (f.replace) { repl.push(f); return; }
+    if (f.mast && own[f.mast]) T.flagOnMast.push(T.nSail0 + add.length);   // TASK-1208（Tim 2026-11-05「換旗後 同一根桅杆可以不用額外加掛旗幟」）：船掛了國旗 ⇒ 這面收起來（shipNation）；陣營旗照掛
     var Z = COL_SIZE[f.kind], k = f.scale || 1, Lm = Z[0] * k / S, Hm = Z[1] * k / S, NU = Z[2], NV = Z[3], a = f.at, top = a[2] + (f.pole || 4.5) / S;
     var cell = anchorNear(T, a[0], a[1], a[2], 3), pen = f.kind === 'pennant', verts = [], uv = [], tris = [], pins = [], u, v;
     for (u = 0; u <= NU; u++) for (v = 0; v <= NV; v++) {               // 往船尾飄（−x）、稍微下垂、一點起伏（物理關著時就是這個樣子）
@@ -363,7 +366,7 @@ function sailRect(ow, A, ti) {
 function poleBuf(sh) {
   var P = sh.T.poles; if (!P || !P.length) return;
   var key = '', i;                                                       // 跟以前 map＋join 同一個字串（S11：每格不生陣列、閉包）
-  for (i = 0; i < P.length; i++) key += P[i].cell < 0 || hullGp(sh.grid, P[i].cell) > 0 ? '1' : '0';
+  for (i = 0; i < P.length; i++) { var fs = sh.sails && sh.sails[sh.T.nSail0 + i]; key += (fs && fs.hid) ? '0' : P[i].cell < 0 || hullGp(sh.grid, P[i].cell) > 0 ? '1' : '0'; }   // 收起來的那面（shipNation：桅上已經有作品的旗）旗桿也不畫
   if (sh.sink > 40) key += 'x';
   if (sh.poleKey === key) return;
   sh.poleKey = key;
