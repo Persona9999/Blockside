@@ -150,8 +150,8 @@ function doAct(a, repeat) {
   else if (a === 'autoFire') setAutoFire(!AUTOFIRE);
   else if (a === 'phys') setPhys(!PHYS);
   else if (a === 'restart') { if (modeRule('locked') && BED && BED.host) note(me, '不能重新開始 —— ' + fightLeft(), true); else { gsetClose(); helpClose(); start(); } }   // 重新開始：同樣的模式、距離、滑桿，不用打完；⚔ 交戰中（嵌在地球儀裡）擋下：重開一場 ＝ 甩掉敵方
-  else if (a === 'sailUp' || a === 'sailDn') {     // 帆裝
-    if (!repeat) { var sd = a === 'sailUp' ? 1 : -1; sailStep(me, sd); KEYS.sw = { d: sd, n: SIMT + SAIL_HOLD }; }   // 按住 ⇒ 1 秒後逐級再切（31_sailing.js sailHold）   // 有額外動力的船：滿帆再加 ⇒ 全速前進、全收再收 ⇒ 倒車（31_sailing.js）
+  else if (a === 'sailUp' || a === 'sailDn') {     // 帆裝；無帆動力船改撥俥鐘
+    if (!repeat && me && !me.sunk) { var sd = a === 'sailUp' ? 1 : -1; sailInputStep(me, sd); KEYS.sw = { d: sd, n: SIMT + SAIL_HOLD, ship: me }; }   // 按住 ⇒ 1 秒後每半秒一格（31_sailing.js sailHold）；換船不延續按住
   }
 }
 function keyUp(k) { var a = keyAct('battle', k); if (a) actUp(a); }

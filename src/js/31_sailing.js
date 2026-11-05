@@ -87,10 +87,16 @@ function sailStep(sh, d) {
   sh.sailSet = n; applySailSet(sh);
   note(sh, '帆裝：' + sailSetName(sh));
 }
+/** W／S 與原本的控帆鈕：有帆照常控帆；沒有帆的動力船改撥俥鐘。W 的 +1 對應較前進的俥鐘（索引 -1）。 */
+function sailInputStep(sh, d) {
+  if (!sh || sh.sunk) return;
+  if (hasSails(sh)) sailStep(sh, d);
+  else if (sh.cfg.base > 0) teleStep(sh, -d);
+}
 /** 按住加帆／收帆（Tim 2026-10-15：「長按超過一定時間（例如一秒）就逐級往上加，減帆也一樣，點一下才是只切一級」）：按下切一級（71_input.js），
  *  按住 SAIL_HOLD 秒後每 SAIL_REP 秒再切一級，到頭就停；放開（keyUp）⇒ KEYS.sw ＝ null。用 SIMT ⇒ 停格時不會自己跑。 */
 var SAIL_HOLD = 1, SAIL_REP = 0.5;
-function sailHold(sh) { var w = KEYS.sw; if (w && SIMT >= w.n) { sailStep(sh, w.d); w.n = SIMT + SAIL_REP; } }
+function sailHold(sh) { var w = KEYS.sw; if (w && w.ship !== sh) { KEYS.sw = null; return; } if (w && SIMT >= w.n) { sailInputStep(sh, w.d); w.n = SIMT + SAIL_REP; } }
 function setSails(sh, k) {
   k = clamp(k, 0, SAILSETS.length - 1); if (k === sh.sailSet) return;
   sh.sailSet = k; applySailSet(sh); note(sh, '帆裝：' + SAILSETS[k]);

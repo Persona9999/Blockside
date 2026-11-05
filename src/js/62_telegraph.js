@@ -112,6 +112,7 @@ function teleDraw(sh) {
     e.stopPropagation(); var k=e.key, act=keyAct('battle',k.toLowerCase());
     if(k==='Escape'){e.preventDefault();teleClose(true);return;}
     var sh=teleCanOrder();if(!sh)return;
+    if(!hasSails(sh) && (act==='sailUp'||act==='sailDn')){e.preventDefault();doAct(act,e.repeat);return;}
     if(k==='ArrowUp'||k==='ArrowRight'||act==='teleFwd'){e.preventDefault();teleOrder(sh.tele-1,false);}
     else if(k==='ArrowDown'||k==='ArrowLeft'||act==='teleBack'){e.preventDefault();teleOrder(sh.tele+1,false);}
     else if(k==='Home'){e.preventDefault();teleOrder(0,false);}

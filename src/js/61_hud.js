@@ -191,7 +191,19 @@ function dmgSumText(sh) {
 //   外圈 ＝ 船體（金）、內圈 ＝ 進水（水藍），中間 ＝ 那一型的側面投影（05_hull.js sideImg；我方船頭朝右、敵方朝左 ⇒ 都朝畫面中間）與艦名；
 //   ★ ＝ 我艦；沉沒、下沉、降旗寫在圖上、整顆變暗。按鈕的畫布只在讀數變了才重畫（key）。
 // 點一顆 ⇒ 中間展開那一艘的詳細資訊（panel，同時最多一艘）；點同一顆或點資訊本身 ⇒ 收回。預設全折疊、每一場開局全折疊（fleetReset，70_flow.js reset）。
-var HUD_SAILS = null;   // 收帆、加帆兩顆按鈕現在顯不顯示（換船才重設）
+var HUD_SAILS = null;   // 控帆／無帆船俥鐘按鈕的顯示狀態
+function hudSailControls(me) {
+  var kind = hasSails(me) ? 'sail' : me.cfg.base > 0 ? 'tele' : 'none';
+  if (HUD_SAILS === kind) return;
+  HUD_SAILS = kind;
+  [].forEach.call(document.querySelectorAll('#helmL [data-act="sailUp"], #helmL [data-act="sailDn"]'), function (b) {
+    var up = b.dataset.act === 'sailUp';
+    b.style.display = kind === 'none' ? 'none' : '';
+    b.dataset.tip = kind === 'tele' ? '俥鐘往' + (up ? '前' : '後') + '撥一格' : up ? '加帆' : '收帆';
+    b.querySelector('.em').innerHTML = battleIcon(kind === 'tele' ? 'settings' : 'sail') + battleIcon(up ? 'up' : 'down');
+    keyPaint(b.parentElement);
+  });
+}
 var INFO_SH = null, SB_EL = {}, SUNK_HIDE = 60;   // SUNK_HIDE：沉了幾秒（模擬時間）之後上方的圓鈕收掉（Tim 2026-10-14：補船之後那一欄才不會越排越長）
 // 點資訊或旁邊的砲位圖任何地方 ⇒ 收回。用 pointerdown：⛔ click 要按下、放開都落在同一個元素 —— 卡片每 6 格整個重畫（innerHTML），按下到放開之間剛好重畫 ⇒ click 不觸發（Tim：收起有時沒反應）
 ['info', 'gmap'].forEach(function (id) { $(id).addEventListener('pointerdown', function (e) { e.preventDefault(); var gm = e.target.closest && e.target.closest('[data-gmode]'); if (gm) { GMAP_MODE = gm.getAttribute('data-gmode'); fleetHud(SHIPS[PLAYER_I]); return; } if (e.target.closest && e.target.closest('[data-see]')) { camSee(INFO_SH); return; } if (e.target.closest && e.target.closest('[data-take]')) { playerTakeShip(INFO_SH); fleetHud(SHIPS[PLAYER_I]); return; } INFO_SH = null; fleetHud(SHIPS[PLAYER_I]); }); });
@@ -779,7 +791,7 @@ function hudFrame(dt) {
   anchorChips(me);                                                              // 左右錨的按鈕：咬著亮、打壞灰掉（76_anchor.js）
   botFit();
   pauseLabel(); sailLabel(); hudIcons();
-  var hs = hasSails(me); if (HUD_SAILS !== hs) { HUD_SAILS = hs; [].forEach.call(document.querySelectorAll('#helmL [data-k="w"], #helmL [data-k="s"]'), function (b) { b.style.display = hs ? '' : 'none'; }); }   // 沒有帆的船（維吉尼亞號）⇒ 收帆、加帆不顯示（TASK-0630）
+  hudSailControls(me);
   ammoLabel();
   // 瞄準模式＋鏡頭名稱：羅盤上方空心字（Tim 2026-10-14）；鏡頭名稱要常駐（Tim：拿掉之後看不出現在是哪個鏡頭）
   var cn = CAM.mode === 3 && CAM.see && SHIPS.indexOf(CAM.see) >= 0 ? '看' + CAM.see.name : CAM_NAMES[CAM.mode];   // 「🎥 看這艘」⇒ 寫那一艘的名字

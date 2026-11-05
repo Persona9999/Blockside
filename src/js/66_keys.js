@@ -14,7 +14,7 @@ var KEY_ACTS = [
   // Tim 2026-10-17「開火的預設鍵位 F 拋左錨Q 右錨E (可以看跟那些鍵有衝突)」「換彈藥種類 R」⇒ 錨 Q／E、換彈藥 R；擠掉的：俥鐘 E▲T▼ → T▲G▼（上下一對）、
   //   自動開砲 G → 5、瞄準模式 Q → 3、回主選單 R → 0（⛔ 放 1：就在 Q 旁邊，回主選單沒有確認、一按這局就結束）。開一門砲照舊 F、齊射照舊空白。
   { c: 'battle', id: 'ruddL', ico: '⬅️', name: '左舵', def: 'a', hold: 1 }, { c: 'battle', id: 'ruddR', ico: '➡️', name: '右舵', def: 'd', hold: 1 },
-  { c: 'battle', id: 'sailDn', ico: '⛵⬇', name: '收帆', def: 's', hold: 1 }, { c: 'battle', id: 'sailUp', ico: '⛵⬆', name: '加帆', def: 'w', hold: 1 },
+  { c: 'battle', id: 'sailDn', ico: '⛵⬇', name: '收帆／無帆船俥鐘往後', def: 's', hold: 1 }, { c: 'battle', id: 'sailUp', ico: '⛵⬆', name: '加帆／無帆船俥鐘往前', def: 'w', hold: 1 },
   { c: 'battle', id: 'ammo', ico: '💣', name: '切換彈藥（輪流）', def: 'r' }, { c: 'battle', id: 'sailMode', ico: '🤖☸', name: '自動操舵（自動 ⇄ 手動）', def: '2' },
   { c: 'battle', id: 'ancP', ico: '◀⚓', name: '拋左錨', def: 'q' }, { c: 'battle', id: 'ancAll', ico: '⚓⚓', name: '拋錨（雙錨；再按起錨）', def: '4' }, { c: 'battle', id: 'ancS', ico: '⚓▶', name: '拋右錨', def: 'e' },
   { c: 'battle', id: 'volley', ico: '💥💥', name: '齊射', def: ' ' }, { c: 'battle', id: 'fire1', ico: '💥', name: '開一門砲', def: 'f' }, { c: 'battle', id: 'autoFire', ico: '🤖💥', name: '自動開砲', def: '5' },
