@@ -616,6 +616,7 @@ function gunArcs(sh, foe) {
   return { all: runs(A), on: runs(O) };
 }
 var TURN_T = 10, TURN_COL = '#7ef0c8', TURN_OFF = 0.22;   // 羅盤外圈的轉向弧：預測幾秒後的船頭、顏色（跟射界的金、風的藍、敵艦的紅分開）、起點離船頭幾 rad（約 13°，讓開航速箭頭）
+var NAVD_NEAR = 150, NAVD_FAR = 3000;   // 羅盤上其他船的點：多近原大、多遠縮到 30%（公尺；drawNav）
 var NAVW_COL = '#1f48c8', NAVW_HALO = 'rgba(190,210,255,.5)';   // 羅盤的水流：深藍、底下一圈淡的（深色的海上也看得到）
 /** 羅盤上的水流（drawNav）：從 a 往 b（畫布 px；沿著過圓心的那條線）的波浪線（振幅 2 px、波長 9 px，尖端前 5 px 收直），b 一個實心箭頭；
  *  一整段不切：轉向弧畫在它後面（drawNav）⇒ 交叉的地方弧蓋在上面（Tim 2026-11-05「希望改為不切斷 而是會被旋轉箭頭遮擋」）。 */
@@ -692,7 +693,8 @@ function drawNav(sh) {
     // 往來的船（58_traffic.js）：商船米白、海盜船黑（同地球儀）；敵對了（⚔ 交戰，Blocksail TASK-1078）照敵艦紅
     //   ⛔ 8dcdca2（2026-10-25）這一行後面接的註解把畫點那三句吃掉了 ⇒ 羅盤上一直沒有其他船的點（Blocksail TASK-1078 順手補回）
     g.fillStyle = o.sunk ? '#666' : o.npc && !o.npc.foe ? (o.npc.kind === 'pirate' ? '#151515' : '#e8dcc0') : isFoe(sh, o) ? '#ff6f6f' : '#6f9bff';
-    g.beginPath(); g.arc(pe[0], pe[1], 4.5, 0, 6.2832); g.fill();
+    var dk = clamp(Math.log(Math.max(1, Math.hypot(o.px - sh.px, o.pz - sh.pz)) / NAVD_NEAR) / Math.log(NAVD_FAR / NAVD_NEAR), 0, 1);   // 越遠越小（Tim 2026-11-05）：NAVD_NEAR 以內原大、NAVD_FAR 以外 30%，中間照距離的對數
+    g.beginPath(); g.arc(pe[0], pe[1], 4.5 * (1 - 0.7 * dk), 0, 6.2832); g.fill();
   });
   // 我艦：從上面俯瞰的船（05_hull.js navImg，載入時算一次；船頭朝上、右舷在右 ⇒ 只轉不翻），船長（含艏斜桅）＝ 半徑的 1.575 倍（中心到兩端約 0.79 R，還在圈裡）
   //   （⛔ 0.8 倍 ⇒ 船長寬比約 6:1，在 150 px 的圈裡細成一條線；Tim 2026-10-13：1.05 倍再放大 1.5 倍）；外面一圈我方的顏色。沒有圖 ⇒ 以前的三角形
