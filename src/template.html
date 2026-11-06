@@ -50,7 +50,7 @@
   #sigP{ position:absolute; left:84px; top:12px; display:none; z-index:7; pointer-events:auto; width:min(250px, calc(100vw - 110px)); padding:8px 10px; } #sigP.on{ display:block; }
   @media (max-width:760px){ #sigP{ left:50px; width:min(250px, calc(100vw - 105px)); } #sigBtns button{ padding:5px 8px; font-size:13px; } }   /* 手機：別蓋到右邊敵方那一欄（38 px 圓鈕 ＋ 5 px） */
   #sigH{ font-size:13px; margin-bottom:4px; } #sigX{ float:right; cursor:pointer; padding:0 4px; } #sigBtns button{ display:block; width:100%; text-align:left; margin:3px 0; padding:6px 9px; font-size:14px; cursor:pointer; } #sigBtns button.on{ background:var(--gold); color:#111; border-color:var(--gold); } #sigNow{ font-size:12px; opacity:.85; margin-top:4px; }
-  .battle-icon{display:inline-block;width:22px;height:22px;object-fit:contain;vertical-align:middle;image-rendering:pixelated;pointer-events:none;}
+  .battle-icon{display:inline-block;width:22px;height:22px;vertical-align:middle;pointer-events:none;}   /* 圖示是 <span>：圖畫在 ::before（js/61_icons.js 寫圖集的 CSS；每格 48 px ⇒ 不用 pixelated，縮放照平滑） */
   .battle-anchor-port{transform:scaleX(-1);}
   .battle-auto{position:relative;display:inline-block;} .battle-badge{position:absolute;right:-5px;bottom:-3px;} .battle-badge .battle-icon{width:12px!important;height:12px!important;}
   .battle-waste{opacity:.7;} #modeT .battle-icon{width:19.2px;height:19.2px;} .battle-badge{filter:drop-shadow(0 1px 1px #000);}
@@ -607,7 +607,7 @@
     <div><kbd>⛵</kbd> 帆裝 全收／收帆／戰鬥帆／滿帆：點一下切一級，按住 1 秒後每 0.5 秒再切一級；帆收得越多越慢、越穩，收起來的帆打不壞（除非桅斷了）。有額外動力的船（風暴角號）兩頭各多一段：<b>滿帆再加 ＝ 全速前進</b>（額外動力開）、<b>全收再收 ＝ 倒車</b>（倒退時舵反過來）</div>
     <div>俥鐘（有額外動力的船）：直接點選左側圓盤或拖曳指針；右側前進、左側後退，點檔位或拖曳放開才下令。拖曳時手指／滑鼠拖出圓盤也照它在盤心的哪個方向選檔（像虛擬搖桿）；拖回盤心或指向正下方的空隙就不選。中央「停俥」只停止額外動力，風帆仍可推船。<kbd data-act="teleFwd" data-ico=""></kbd> 往前一格，<kbd data-act="teleBack" data-ico=""></kbd> 往後一格；撥盤取得焦點時也可用方向鍵；Esc 取消本次拖曳。紅色小刻度表示目前動力達不到的檔位。</div>
     <div><kbd>☸</kbd> 自動操舵：讓敵艦保持在開火那一舷、繞著彼此轉；航速看帆還剩多少與風向（頂風最慢；手動頂風會失速）</div>
-    <div><kbd>⚓</kbd> 錨：⚓⚓（<span class="kn" data-kl="ancAll"></span>）兩邊都沒拋 ⇒ 一起拋、停住，<span class="kn" data-kl="ruddL"></span>／<span class="kn" data-kl="ruddR"></span> 繞錨原地轉；一邊在水裡 ⇒ 拋另一邊；兩邊都在水裡 ⇒ 起錨。◀⚓（<span class="kn" data-kl="ancP"></span>）⚓▶（<span class="kn" data-kl="ancS"></span>）只拋一邊：帶著速度拋 ⇒ 繞錨急轉。後面接 ⬆ ＝ 在水裡（再按起錨）、⏳ 起錨中、✖ 打壞了（不能拋、鍊子斷了）；鐵鍊從錨鏈孔放出、沉到海底</div>
+    <div><kbd>⚓</kbd> 錨：⚓⚓（<span class="kn" data-kl="ancAll"></span>）兩邊都沒拋 ⇒ 一起拋、停住，<span class="kn" data-kl="ruddL"></span>／<span class="kn" data-kl="ruddR"></span> 繞錨原地轉；一邊在水裡 ⇒ 拋另一邊；兩邊都在水裡 ⇒ 起錨。◀⚓（<span class="kn" data-kl="ancP"></span>）⚓▶（<span class="kn" data-kl="ancS"></span>）只拋一邊：帶著速度拋 ⇒ 繞錨急轉。按鈕亮 ＝ 錨在水裡（再按起錨）、變暗 ＝ 打壞了（不能拋、鍊子斷了）；鐵鍊從錨鏈孔放出、沉到海底</div>
     <div class="hH">畫面上的資訊</div>
     <div><kbd>🧭</kbd> 羅盤（下方中間）：跟著鏡頭轉（N ＝ 北），中間是我艦、藍箭頭 ＝ 風從哪吹來、紅點 ＝ 敵艦、金色扇形 ＝ 兩舷的射界（對得到時亮）；外圈兩環：<span style="color:#e8c26a">金 ＝ 船體還剩多少</span>、<span style="color:#4fb3ff">藍 ＝ 進水</span>（七成以上轉紅；滑鼠停著看數字）</div>
     <div><kbd>🎯</kbd> 羅盤上方：🎯 瞄準模式　🎥 鏡頭　⚠ 射界外（瞄準點對不到）；第二行 ⛵ 航速（節，倒車是 −）＋現在的帆段與帆 %（張著、還在的帆 × 血量）；物理減速放慢時後面多一個 🐢 ×倍率</div>
@@ -997,66 +997,11 @@
 <script type="application/x-asset" id="art-fx" src="art/fx.png" data-optional="1"></script>
 <script type="application/x-asset" id="art-hud" src="art/hud.png" data-optional="1"></script>
 <script type="application/x-asset" id="battle-icons" src="art/battle/icons.json"></script>
-<script type="application/x-asset" id="art-battle-ship" src="art/battle/ship.png"></script>
-<script type="application/x-asset" id="art-battle-sail" src="art/battle/sail.png"></script>
-<script type="application/x-asset" id="art-battle-focus" src="art/battle/focus.png"></script>
-<script type="application/x-asset" id="art-battle-save" src="art/battle/save.png"></script>
-<script type="application/x-asset" id="art-battle-clock" src="art/battle/clock.png"></script>
-<script type="application/x-asset" id="art-battle-edit" src="art/battle/edit.png"></script>
-<script type="application/x-asset" id="art-battle-warning" src="art/battle/warning.png"></script>
-<script type="application/x-asset" id="art-battle-town" src="art/battle/town.png"></script>
-<script type="application/x-asset" id="art-battle-trade" src="art/battle/trade.png"></script>
-<script type="application/x-asset" id="art-battle-anchor" src="art/battle/anchor.png"></script>
-<script type="application/x-asset" id="art-battle-combat" src="art/battle/combat.png"></script>
-<script type="application/x-asset" id="art-battle-settings" src="art/battle/settings.png"></script>
-<script type="application/x-asset" id="art-battle-overview" src="art/battle/overview.png"></script>
-<script type="application/x-asset" id="art-battle-tools" src="art/battle/tools.png"></script>
-<script type="application/x-asset" id="art-battle-load" src="art/battle/load.png"></script>
-<script type="application/x-asset" id="art-battle-sun" src="art/battle/sun.png"></script>
-<script type="application/x-asset" id="art-battle-showers" src="art/battle/showers.png"></script>
-<script type="application/x-asset" id="art-battle-rain" src="art/battle/rain.png"></script>
-<script type="application/x-asset" id="art-battle-storm" src="art/battle/storm.png"></script>
-<script type="application/x-asset" id="art-battle-cyclone" src="art/battle/cyclone.png"></script>
-<script type="application/x-asset" id="art-battle-moon" src="art/battle/moon.png"></script>
-<script type="application/x-asset" id="art-battle-calendar" src="art/battle/calendar.png"></script>
-<script type="application/x-asset" id="art-battle-people" src="art/battle/people.png"></script>
-<script type="application/x-asset" id="art-battle-flag" src="art/battle/flag.png"></script>
-<script type="application/x-asset" id="art-battle-purse" src="art/battle/purse.png"></script>
-<script type="application/x-asset" id="art-battle-cargo" src="art/battle/cargo.png"></script>
-<script type="application/x-asset" id="art-battle-draft" src="art/battle/draft.png"></script>
-<script type="application/x-asset" id="art-battle-pirate" src="art/battle/pirate.png"></script>
-<script type="application/x-asset" id="art-battle-globe" src="art/battle/globe.png"></script>
-<script type="application/x-asset" id="art-battle-lightning" src="art/battle/lightning.png"></script>
-<script type="application/x-asset" id="art-battle-magnet" src="art/battle/magnet.png"></script>
-<script type="application/x-asset" id="art-battle-hourglass" src="art/battle/hourglass.png"></script>
-<script type="application/x-asset" id="art-battle-crew" src="art/battle/crew.png"></script>
-<script type="application/x-asset" id="art-battle-stock" src="art/battle/stock.png"></script>
-<script type="application/x-asset" id="art-battle-flow" src="art/battle/flow.png"></script>
-<script type="application/x-asset" id="art-battle-stats" src="art/battle/stats.png"></script>
+<script type="application/x-asset" id="battle-atlas" src="art/battle/atlas.json"></script>
+<script type="application/x-asset" id="art-battle-atlas" src="art/battle/atlas.png"></script>
 <script type="application/x-asset" id="art-battle-confirm" src="art/battle/confirm.svg"></script>
 <script type="application/x-asset" id="art-battle-close" src="art/battle/close.svg"></script>
-<script type="application/x-asset" id="art-battle-food" src="art/battle/food.png"></script>
 <script type="application/x-asset" id="art-battle-specialty" src="art/battle/specialty.svg"></script>
-<script type="application/x-asset" id="art-battle-sailor" src="art/battle/sailor.png"></script>
-<script type="application/x-asset" id="art-battle-cannon" src="art/battle/cannon.png"></script>
-<script type="application/x-asset" id="art-battle-shell" src="art/battle/shell.png"></script>
-<script type="application/x-asset" id="art-battle-chain" src="art/battle/chain.png"></script>
-<script type="application/x-asset" id="art-battle-helm" src="art/battle/helm.png"></script>
-<script type="application/x-asset" id="art-battle-camera" src="art/battle/camera.png"></script>
-<script type="application/x-asset" id="art-battle-autopilot" src="art/battle/autopilot.png"></script>
-<script type="application/x-asset" id="art-battle-autofire" src="art/battle/autofire.png"></script>
-<script type="application/x-asset" id="art-battle-greekfire" src="art/battle/greekfire.png"></script>
-<script type="application/x-asset" id="art-battle-solid" src="art/battle/solid.png"></script>
-<script type="application/x-asset" id="art-battle-bolt" src="art/battle/bolt.png"></script>
-<script type="application/x-asset" id="art-battle-rocket" src="art/battle/rocket.png"></script>
-<script type="application/x-asset" id="art-battle-stone" src="art/battle/stone.png"></script>
-<script type="application/x-asset" id="art-battle-fire" src="art/battle/fire.png"></script>
-<script type="application/x-asset" id="art-battle-water" src="art/battle/water.png"></script>
-<script type="application/x-asset" id="art-battle-breach" src="art/battle/breach.png"></script>
-<script type="application/x-asset" id="art-battle-xray" src="art/battle/xray.png"></script>
-<script type="application/x-asset" id="art-battle-cut" src="art/battle/cut.png"></script>
-<script type="application/x-asset" id="art-battle-deck" src="art/battle/deck.png"></script>
-<script type="application/x-asset" id="art-battle-compass" src="art/battle/compass.png"></script>
 <script type="application/x-asset" id="art-battle-pause" src="art/battle/pause.svg"></script>
 <script type="application/x-asset" id="art-battle-play" src="art/battle/play.svg"></script>
 <script type="application/x-asset" id="art-battle-right" src="art/battle/right.svg"></script>

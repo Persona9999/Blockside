@@ -15,7 +15,7 @@ function frzShow() {
   if (on !== FRZ_ON) { FRZ_ON = on; frzPlace(); }
   if (!on && FLX) floodClose();                                       // 繼續 ⇒ 只收 📊 圖表；🔍 透視、✂ 剖面、☰ 甲板保持（Tim 2026-10-15：「停格中可以切換的觀察模式，是否能在按下繼續後保持（這樣可以在遊戲中維持觀察狀態），除了圖表」）—— 要關 ⇒ 停格再按一次；新開一局 ⇒ obsReset（70_flow.js）
   $('frzFlood').classList.toggle('on', FLX); $('frzX').classList.toggle('on', FLX3);
-  $('frzCut').classList.toggle('on', CUTV.half); $('frzDeck').classList.toggle('on', CUTV.deck > 0); $('frzDeck').innerHTML = battleIconText(deckLabel());
+  $('frzCut').classList.toggle('on', CUTV.half); $('frzDeck').classList.toggle('on', CUTV.deck > 0); var dl = battleIconText(deckLabel()), fd = $('frzDeck'); if (fd.innerHTML !== dl) fd.innerHTML = dl;   // 沒變不改寫（⛔ 以前每一格都改寫 ⇒ 每秒幾十次重建圖示）
   var ob = $('obsB'), t = RUNNING && !PAUSED && !INSP.on ? obsText() : '';   // 沒停格、觀察模式開著 ⇒ 下方一條提醒（⛔ 停格時停格條已經寫了；設定、說明開著也是停格；船隻觀察的面板自己寫了 ⇒ 不重複，86_inspect.js）
   if (ob) { ob.classList.toggle('on', !!t); if (t && ob.textContent !== t) ob.textContent = t; }
 }

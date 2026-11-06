@@ -2891,6 +2891,69 @@ def src_hook_commit(r):
     return out
 
 
+# ───────────────────────── 海戰圖示的圖集（Tim 2026-11-06：「打包成圖集」「實際顯示為 Icon 很小 可以直接縮成低解析度」） ─────────────────────────
+# 原圖 src/art/battle/<key>.png（128 px）照舊是語意來源（Blocksail tools/ui_icons_check.cjs 逐位元組對帳，⛔ 不改）；
+# 成品只嵌一張圖集 atlas.png（每格 ATLAS_CELL px、內容縮到 ATLAS_CELL − 2 置中，四周留 1 px 透明 ⇒ 縮放取樣不吃到隔壁格）＋ atlas.json（格位、每張原圖的雜湊）。
+# js/61_icons.js 照 atlas.json 寫一份 CSS：圖示是 <span> 的背景 ⇒ HUD 每次改寫 innerHTML 不再帶整段 base64、不再新建 <img> 重新解碼（手機玩久閃退，同日）。
+# SVG（方向、播放這些）是向量、本來就小 ⇒ 不進圖集，照舊各自內嵌。原圖改了 ⇒ build 擋下來：python -I admin.py atlas。
+ATLAS_DIR = os.path.join(HERE, 'art', 'battle')
+ATLAS_CELL, ATLAS_COLS, ATLAS_V = 48, 8, 1
+
+
+def atlas_want():
+    """icons.json 的 PNG 圖示 ⇒ [(key, 原圖路徑, sha1 前 12 碼)]（照 key 排序 ⇒ 格位穩定）。"""
+    M = json.load(open(os.path.join(ATLAS_DIR, 'icons.json'), encoding='utf-8'))
+    out = []
+    for k in sorted(M['icons']):
+        f = M['icons'][k]['file']
+        if not f.endswith('.png'):
+            continue
+        p = os.path.join(ATLAS_DIR, f)
+        out.append((k, p, hashlib.sha1(open(p, 'rb').read()).hexdigest()[:12]))
+    return out
+
+
+def atlas_stale():
+    """圖集跟原圖對不對得上 ⇒ 對不上的原因（空 ＝ 對得上）。"""
+    p = os.path.join(ATLAS_DIR, 'atlas.json')
+    if not os.path.exists(p) or not os.path.exists(os.path.join(ATLAS_DIR, 'atlas.png')):
+        return ['沒有 atlas.png／atlas.json']
+    A = json.load(open(p, encoding='utf-8'))
+    if A.get('v') != ATLAS_V or A.get('cell') != ATLAS_CELL:
+        return ['圖集是舊格式（v%s、%s px）' % (A.get('v'), A.get('cell'))]
+    want = {k: h for k, _, h in atlas_want()}
+    have = A.get('src') or {}
+    bad = sorted(set(want) ^ set(have)) + sorted(k for k in want if k in have and have[k] != want[k])
+    return ['原圖跟圖集對不上：' + '、'.join(bad)] if bad else []
+
+
+def act_atlas(check=False):
+    if check:
+        why = atlas_stale()
+        return ['✗ 海戰圖示的圖集過期（%s）⇒ python -I admin.py atlas' % '；'.join(why)] if why else ['✓ 海戰圖示的圖集跟原圖對得上']
+    from PIL import Image
+    W = atlas_want()
+    rows = (len(W) + ATLAS_COLS - 1) // ATLAS_COLS
+    C, inner = ATLAS_CELL, ATLAS_CELL - 2
+    sheet = Image.new('RGBA', (C * ATLAS_COLS, C * rows), (0, 0, 0, 0))
+    icons, src = {}, {}
+    for i, (k, p, h) in enumerate(W):
+        im = Image.open(p).convert('RGBA')
+        s = inner / max(im.size)                                    # 不是正方形（autopilot、breach…）⇒ 照長邊縮、置中（同以前 <img> 的 object-fit:contain）
+        w, hh = max(1, round(im.size[0] * s)), max(1, round(im.size[1] * s))
+        im = im.convert('RGBa').resize((w, hh), Image.LANCZOS).convert('RGBA')   # 先乘 alpha 再縮 ⇒ 透明邊不會滲出黑邊
+        c, r = i % ATLAS_COLS, i // ATLAS_COLS
+        sheet.paste(im, (c * C + (C - w) // 2, r * C + (C - hh) // 2))
+        icons[k] = [c, r]
+        src[k] = h
+    sheet.save(os.path.join(ATLAS_DIR, 'atlas.png'), optimize=True)
+    with open(os.path.join(ATLAS_DIR, 'atlas.json'), 'w', encoding='utf-8', newline='\n') as f:
+        json.dump({'v': ATLAS_V, 'cell': C, 'cols': ATLAS_COLS, 'rows': rows, 'icons': icons, 'src': src}, f, ensure_ascii=False, indent=1, sort_keys=True)
+        f.write('\n')
+    n = os.path.getsize(os.path.join(ATLAS_DIR, 'atlas.png'))
+    return ['✓ 海戰圖示的圖集：%d 張、每格 %d px、%d×%d ⇒ art/battle/atlas.png（%.1f KB）' % (len(W), C, C * ATLAS_COLS, C * rows, n / 1024)]
+
+
 def act_build(pack=True, single=False):   # pack：壓縮版（預設，TASK-0583）；False ＝ 原格式（build --raw）；single：壓縮版但不拆檔（build --single）
     cfg = load()
     E = validate(cfg)
@@ -2903,6 +2966,9 @@ def act_build(pack=True, single=False):   # pack：壓縮版（預設，TASK-058
     log += bundle_names_check()
     log += owner_check()
     log += act_shell_layers(gate=True)
+    why = atlas_stale()
+    if why:
+        raise Fail('\n'.join(log) + '\n✗ 海戰圖示的圖集過期（%s）⇒ 先 python -I admin.py atlas，再建置' % '；'.join(why))
     code, out = run([sys.executable, '-I', INLINE, TPL, OUT])
     log.append(out.strip())
     if code != 0:
@@ -3097,6 +3163,9 @@ def act_build_code(base=None):
     E = validate(cfg)
     if E:
         raise Fail('設定不合法，不建置：\n' + '\n'.join('  ✗ ' + e for e in E))
+    why = atlas_stale()                                         # 同 act_build：原圖改了、圖集沒重做 ⇒ 不建
+    if why:
+        raise Fail('✗ 海戰圖示的圖集過期（%s）⇒ 先 python -I admin.py atlas，再建置' % '；'.join(why))
     full = ' ⇒ 要整份建置：在有 VoxelKit/_cache 的機器 python -I src/admin.py build'
     t = open(TPL, encoding='utf-8').read()
     a, b = t.find(SHIPS_A), t.find(SHIPS_B)
@@ -4735,6 +4804,8 @@ def main():
     s.add_argument('--id', action='append', help='哪一型（可以給好幾次）；不給 ＝ 每一型（不含堡壘、砲台）')
     s.add_argument('--force', action='store_true', help='指紋一樣也重烘')
     s.add_argument('--check', action='store_true', help='不烘，只列每一型對不對得上')
+    s = sp.add_parser('atlas', help='海戰圖示的圖集：src/art/battle/*.png 縮成每格 48 px 的一張 atlas.png ＋ atlas.json（原圖改了 build 會擋）')
+    s.add_argument('--check', action='store_true', help='不寫，只看圖集跟原圖對不對得上')
     s = sp.add_parser('ancbake', help='找最近實心格的預烘（TASK-1229）：跑成品的 ?ancbake=<船> 記下開戰時的每一次查詢 ⇒ ships/anchor.js（指紋一樣不重烘）')
     s.add_argument('--id', action='append', help='哪一型（可以給好幾次）；不給 ＝ 每一型')
     s.add_argument('--force', action='store_true', help='指紋一樣也重烘')
@@ -4815,6 +4886,8 @@ def main():
             log = act_showlod(o.id, o.force, o.check)
         elif o.op == 'ancbake':
             log = act_ancbake(o.id, o.force, o.check)
+        elif o.op == 'atlas':
+            log = act_atlas(o.check)
         elif o.op == 'ladcheck':
             log = act_ladtest() if o.selftest else act_ladcheck(o.id)
         elif o.op == 'disp':
@@ -4882,6 +4955,8 @@ def main():
     print('\n'.join(log))
     if o.op in ('showlod', 'ancbake') and not o.check and any(l.lstrip().startswith('✗') for l in log):
         sys.exit(1)                                      # 有型沒烘成（TASK-1170）⇒ 不讓呼叫的人當成全過
+    if o.op == 'atlas' and any(l.lstrip().startswith('✗') for l in log):
+        sys.exit(1)                                      # atlas --check 對不上
 
 
 if __name__ == '__main__':

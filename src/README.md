@@ -147,6 +147,10 @@ python -I admin.py showlod --check          # 列出每一型對不對得上；-
 #   import／reimport 之後會自動烘那一型（要一起提交）；沒烘、指紋對不上 ⇒ 遊戲照舊現算（結果一樣、只是慢）、匯入檢查 ⚠、建置最後一行列出要烘的型。
 #   ?anc=0 ⇒ 不用表（反向對照）；?debug=1 的 __game.anc() ⇒ 查表命中、沒查到、現算各幾次。全部 44 型約 10 分鐘（一型一個無頭 Chrome）
 python -I admin.py ancbake --check          # 列出每一型對不對得上；--id <船> 單烘、--force 指紋一樣也重烘
+# 海戰圖示的圖集（Tim 2026-11-06：手機玩久閃退、圖示實際顯示很小）：art/battle/*.png（128 px，跟 Blocksail 逐位元組對帳的語意來源，⛔ 不改）
+#   ⇒ 每格 48 px 的一張 art/battle/atlas.png ＋ atlas.json，成品只嵌這一張；js/61_icons.js 把圖示寫成 <span> 的背景（不再每次改寫 innerHTML 都新建 <img>）。
+#   換了、加了原圖 ⇒ 先跑這一行再建置（原圖跟圖集對不上，build 會擋下來）；SVG 圖示不進圖集、照舊各自內嵌。
+python -I admin.py atlas                    # --check：只看對不對得上（對不上 exit 1）
 # 樓梯自檢（TASK-0838；Tim 2026-10-23：松島號甲板下的樓梯偏移、梯口有洞、樓梯口被堵死）：每座梯子量梯口的洞、兩端站不站得住、走不走得出去
 #   ⇒ ../reports/ladcheck_<代號>.md（每座的座標、修法、梯口那一層的平面圖）；不給 --id ＝ 每一艘，另寫 ../reports/ladcheck.md（各船幾座有問題）。
 #   shipcheck 也會順手寫這份、它的報告多一行「樓梯自檢」讀數，每個問題也列成一筆 ✗／⚠（「樓梯：…」）。只讀：不寫卡片、不動設定。

@@ -214,15 +214,14 @@ function anchorChips(me) {
     return;
   }
   var aa = A.single ? '⚓' : '⚓⚓';                                       // 單錨：6 的圖示一個錨（TASK-0635）
-  if (b6) { var a6 = anchor6(me).act; b6.classList.toggle('on', w); var l6 = a6 === 'weigh' && w ? aa + '⬆' : a6 === 'weigh' ? aa + '⏳' : aa, s6 = b6.querySelector('i'); l6 = battleIconText(l6); if (s6 && s6.innerHTML !== l6) s6.innerHTML = l6; }   // 圖示（Tim 2026-10-15：兩個錨 ＝ 兩邊一起下）：⚓⚓ 拋（一邊在水裡 ⇒ 亮、按了拋另一邊）、⚓⚓⬆ 按了起錨、⚓⚓⏳ 起錨中
+  if (b6) { b6.classList.toggle('on', w); var l6 = battleIconText(aa), s6 = b6.querySelector('i'); if (s6 && s6.innerHTML !== l6) s6.innerHTML = l6; }   // 圖示固定 ⚓⚓（Tim 2026-10-15：兩個錨 ＝ 兩邊一起下）；狀態只看亮不亮（Tim 2026-11-06：「錨的按鈕不要在閃 … 保留變色就好」⛔ 以前後面接 ⬆／⏳ ⇒ 圖示個數一直換、按鈕跟著閃）
   ['P', 'S'].forEach(function (k) {
     var a = A[k], el = $('anc' + k); if (!el) return;
     var hid = A.single ? 'none' : ''; if (el.style.display !== hid) el.style.display = hid;   // 單錨：左右錨兩顆藏起來，只留 6（Tim：「只有單錨時 隱藏左右錨 只保留拋錨操作」）
     if (A.single) return;
     if (!a.broken && a.st === 'up' && !anchorAlive(me, a)) a.broken = true;
     el.classList.toggle('on', a.st === 'drop' || a.st === 'down'); el.classList.toggle('dis', a.broken);
-    var an = k === 'P' ? '◀⚓' : '⚓▶', lb = an + (a.broken ? '✖' : a.st === 'drop' || a.st === 'down' ? '⬆' : a.st === 'weigh' ? '⏳' : '');   // 圖示：◀⚓ 左錨／⚓▶ 右錨，後面接 ⬆ 在水裡（按了起錨）、⏳ 起錨中、✖ 錨壞了
-    var sp = el.querySelector('i'); lb = battleIconText(lb); if (sp && sp.innerHTML !== lb) sp.innerHTML = lb;
+    var lb = battleIconText(k === 'P' ? '◀⚓' : '⚓▶'), sp = el.querySelector('i'); if (sp && sp.innerHTML !== lb) sp.innerHTML = lb;   // 圖示固定：◀⚓ 左錨／⚓▶ 右錨；在水裡 ⇒ 亮（on）、錨壞了 ⇒ 暗（dis）（同 6；⛔ 以前後面接 ⬆／⏳／✖ ⇒ 閃）
   });
 }
 /** 鐵鍊（TASK-0601；Tim 2026-10-15：繩的變體 —— 比較重、跟船體碰撞）：每條 CHAIN_SEG 節的質點鍊（Verlet），世界座標、每一步跟著船走（50_sim.js：stepShip 更新完 sh.M 之後）。
