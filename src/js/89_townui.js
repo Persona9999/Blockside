@@ -365,6 +365,12 @@ function tuiTradeTint(r) {
 }
 /** 貿易：只列船上有 ∪ 城鎮有庫存的貨；上面一排買賣單位；每一列 城鎮 ｜ 賣（按鈕上是賣一桶拿到多少）｜ 貨物圖示 ｜ 買（買一桶付多少）｜ 船上（海商王那樣，Tim 2026-10-26；
  *  按鈕挨著貨要去的那一邊：買 ⇒ 進右邊的船上、賣 ⇒ 進左邊的城鎮）；圖示游標移上去說名字（td.g 的 data-n）；城鎮庫存照價錢上色（tuiTradeTint）；底下玩家金庫、載重。 */
+function tuiTradeCostHTML(r) {
+  if (!(r.ship > 0) || r.cat === 'people') return '';
+  if (r.avgBuy == null) return '<small class="trade-cost">均價 未記錄</small>';
+  var diff = r.sell - r.avgBuy;
+  return '<small class="trade-cost">均價 ' + tuiNum(r.avgBuy, 2) + '</small><small class="trade-spread ' + (diff >= 0 ? 'gain' : 'loss') + '">賣價差 ' + (diff >= 0 ? '+' : '−') + tuiNum(Math.abs(diff), 2) + '</small>';
+}
 function tuiTradeHTML() {
   var L = TUI.list; if (!L) return '<p class="tuiDim">問市場…</p>';
   var u = TUI.unit;
@@ -373,12 +379,13 @@ function tuiTradeHTML() {
     return '<button type="button" data-side="' + side + '" data-g="' + r.g + '" data-q="' + q + '"' + (ok ? '' : ' disabled') + ' title="' + (side === 'buy' ? '買' : '賣') + ' ' + (q > 0 ? tuiNum(q, q % 1 ? 2 : 0) : u) + ' 桶' + tuiEsc(r.name) + (price == null ? '' : '（現在一桶 ' + tuiNum(price, 2) + '）') + '">' + (price == null ? '–' : tuiNum(price, 2)) + '</button>';
   };
   var h = '<p class="tuiDim">只列船上有的、城鎮有庫存的貨（缺貨的不列）。按鈕上是一桶的價錢：買價含關稅 ' + Math.round(L.fee * 100) + '%、賣價扣關稅；越買越貴、越賣越便宜（照每一桶的庫存算）。</p>';
+  h += '<p class="tuiDim">均價含購入關稅，按持有數量加權；賣價差為目前一桶賣價減均價，大量成交會隨庫存改價。未記錄的舊貨不估成本。</p>';
   h += '<div class="tuiU">一次買賣' + TUI_UNITS.map(function (n) { return '<button type="button" data-u="' + n + '"' + (n === u ? ' class="on"' : '') + '>' + tuiNum(n) + '</button>'; }).join('') + '桶</div>';
   if (!L.rows.length) h += '<p class="tuiDim">船上空的，城鎮市場也是空的</p>';
-  else h += '<table class="tuiT tuiTr"><tr><th>🏘 城鎮</th><th>賣</th><th>貨</th><th>買</th><th>⛵ 船上</th></tr>' + L.rows.map(function (r) {
+  else h += '<table class="tuiT tuiTr"><tr><th>🏘 城鎮</th><th>賣</th><th>貨</th><th>買</th><th>⛵ 船上／均價</th></tr>' + L.rows.map(function (r) {
     return '<tr><td' + tuiTradeTint(r) + '>' + tuiNum(Math.floor(r.town)) + '</td><td class="b">' + btn('sell', r, r.sell) + '</td>' +
       '<td class="g" data-n="' + tuiEsc(r.name) + '"><img src="img/goods/' + encodeURIComponent(r.g) + '.png" alt="' + tuiEsc(r.name) + '" onerror="this.replaceWith(this.alt)"></td>' +   // 只畫圖示；沒有圖 ⇒ 換成名字
-      '<td class="b">' + btn('buy', r, r.buy) + '</td><td>' + (r.ship >= 1 ? tuiNum(Math.floor(r.ship)) : '<span class="tuiDim">–</span>') + '</td></tr>';
+      '<td class="b">' + btn('buy', r, r.buy) + '</td><td class="trade-hold">' + (r.ship > 0 ? tuiNum(Math.floor(r.ship)) : '<span class="tuiDim">–</span>') + tuiTradeCostHTML(r) + '</td></tr>';
   }).join('') + '</table>';
   var D = L.load, Hd = tuiShip();
   h += '<div class="tuiTiles"><div><small>👛 玩家金庫</small><b>' + tuiNum(L.funds, 2) + '</b></div><div><small>💰 城鎮金庫</small><b>' + tuiNum(L.townFunds) + '</b></div>' +
