@@ -12,6 +12,7 @@
 var SHIP_CARDS = (window.VoxelKit.embeddedJSON('ship-cards') || {}).ships || {};
 var SPK_TONS = [1000, 3000], SPK_VOLLEY = [200, 600];
 var SPK_DRIVE = [['sail', battleIcon('sail'), '帆船'], ['steam', battleIcon('steam'), '蒸汽'], ['oar', battleIcon('oar'), '槳帆'], ['magic', '✨', '魔法']];
+var SPK_POWER = { steam: '蒸氣', oar: '槳', magic: '魔法' };
 // Prebaked model portraits: opening/searching the picker never decodes a hull.
 var SPK_THUMBS = VK.embeddedJSON('ship-thumbs'), SPK_THUMB_EL = document.getElementById('ship-thumbs-atlas');
 var SPK_THUMB_SRC = SPK_THUMB_EL && SPK_THUMB_EL.textContent.trim() ? 'data:image/png;base64,' + SPK_THUMB_EL.textContent.trim() : null;
@@ -102,7 +103,7 @@ function spkShow() {
     var m = c ? '<span class="m">' + c.tons.toLocaleString() + ' 噸・水線 ' + c.len + ' m</span><span class="m">砲 ' + c.guns + ' 門・齊射 ' + c.volley.toLocaleString() + ' kg' + (c.crew ? '・' + c.crew + ' 人' : '') + '</span>'
       : '<span class="m">（還沒量：admin.py shipcheck）</span>';
     var v = spkSpeed(h.id, c);
-    if (v) m += '<span class="m">' + (v.length === 1 ? '航速 ' + v[0].toFixed(1) + ' 節（額外動力）' : '航速 順風 ' + v[0].toFixed(1) + '・側順風 ' + v[1].toFixed(1) + '・逆風 ' + v[2].toFixed(1) + ' 節') + '</span>';
+    if (v) m += '<span class="m">' + (v.length === 1 ? '航速 ' + v[0].toFixed(1) + ' 節（' + (c && SPK_POWER[c.drive] || '額外動力') + '）' : '航速 順風 ' + v[0].toFixed(1) + '・側順風 ' + v[1].toFixed(1) + '・逆風 ' + v[2].toFixed(1) + ' 節') + '</span>';
     return '<button class="spkC' + (h.id === cur ? ' on' : '') + '" data-id="' + h.id + '"' + (d ? ' title="' + d[2] + '"' : '') + '>' + spkThumbHTML(h.id) + (d ? '<span class="i">' + d[1] + '</span>' : '') + '<b>' + h.name + '</b>' + m +
       (h.author ? '<span class="m">建造者 ' + h.author + '</span>' : '') + '</button>';
   }).join('');

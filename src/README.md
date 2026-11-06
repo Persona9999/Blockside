@@ -6,8 +6,10 @@
 
 - `python -I src/admin.py thumbs`：用當前來源產生暫存拍攝頁，四型一批，重拍 `src/art/ships/atlas.png` 與 `thumbs.json`。不改正式入口、不開戰、不讀寫存檔。
 - `python -I src/admin.py thumbs --check`：核對船檔、畫法、覆蓋範圍與圖集 SHA-256；`--force` 強制重拍。
-- 然後 `python -I src/admin.py build --code` 嵌回圖集；縮圖舊了會擋下。整份 `build` 可能重寫船檔，因此完成後再檢查並提示先 `thumbs`、再 `build`。
+- 正常拆檔 `build` 會在船檔寫好後自動補拍新增／變動的船型，再把圖集嵌回入口；`import`／`reimport` 共用這條路。未變的圖集格逐像素沿用，不重拍全艦隊；拍攝失敗會讓建置失敗。`--no-build` 匯入保留待拍狀態，下次正常 `build` 自動補齊。
+- `build --code` 只改程式，仍會擋過期縮圖；手動 `thumbs` 後可用它嵌回圖集。`--raw`／`--single` 保留原輸出格式、只提醒待拍，正式匯入使用預設拆檔建置。
 - 蒸汽／槳帆分類圖示用 `steam`／`oar`，沿用海戰圖集；原始 128px 圖與 Blocksail 語意來源逐位元組對帳。
+- 船卡只列單一動力航速時，名稱照 `ship_cards.json` 的 drive 顯示「蒸氣／槳／魔法」，不改航速數值；帆船保留原三向航速。
 
 > 📦 2026-10-15（TASK-0586）從 ArtGallery 的 `HtmlGames/_build/ame_constitution_broadside/` 搬來（只複製檔案；之前的歷史在 ArtGallery 的 `git log -- HtmlGames/_build/ame_constitution_broadside`，114 筆）。
 > 開發用 Blocksail 的 `external/Blockside`（submodule，checkout 在 `dev` 分支；Tim 2026-10-20「之後我希望Blockside開發直接在Blocksail的submodule內開發(確保同步)」）—— Valhalla 裡的 `Blockside/` 不再開發（會落後），流程見根目錄 README「分支與發版」。目錄：`src/`（這裡）、`VoxelKit/`（從 ArtGallery/VoxelKit 853b4e7 複製；`_cache/` 不入版控）、根目錄的成品 `index.html` ＋ `ships/`（拆檔：每艘船一個檔，見下面「建置」；GitHub Pages 首頁）、`admin.html`（設定後台）、`admin.cmd`、`sandbox.html`（2D 指揮官沙盒）、`fleetlab.html`（擬真沙盒的入口，轉到 index.html?lab=fleet）。

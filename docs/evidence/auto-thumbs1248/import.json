@@ -1,0 +1,10 @@
+{
+  "realImportCreatesAndEmbedsThumbnail": true,
+  "unchangedShipPixelsIdentical": true,
+  "importCaptured": 1,
+  "importReused": 1,
+  "unchangedSyncWritesNothing": true,
+  "deferredImportCaptured": 1,
+  "deferredImportReused": 2,
+  "captureFailurePropagates": true
+}

@@ -1,0 +1,16 @@
+{
+  "realCardsCompared": 35,
+  "changedLabels": [
+    "virginia",
+    "monitor",
+    "sentinel",
+    "dingyuan",
+    "matsushima"
+  ],
+  "numericAndOtherTextIdentical": true,
+  "syntheticNoSailExamples": {
+    "monitor": "莫尼特號1,016 噸・水線 52.5 m砲 2 門・齊射 151 kg・72 人航速 8.4 節（蒸氣）建造者 meadow",
+    "punt": "蓬特號40 噸・水線 14.1 m砲 4 門・齊射 0 kg・62 人航速 7.0 節（槳）建造者 apex-one",
+    "stormkaap": "✨風暴角號1,287 噸・水線 42.7 m砲 42 門・齊射 159 kg・226 人航速 8.4 節（魔法）建造者 summit"
+  }
+}

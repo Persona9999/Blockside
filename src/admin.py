@@ -2972,6 +2972,24 @@ def thumbs_note():
     return ['⚠ ' + out.strip() + ' ⇒ python -I src/admin.py thumbs，再 build 把新縮圖嵌回入口'] if code else [out.strip()]
 
 
+def thumbs_finish():
+    """After a split build, capture changed/new hulls and embed the updated atlas.
+    Import, reimport and deferred --no-build imports all use this same build path.
+    """
+    code, out = run([sys.executable, '-I', os.path.join(HERE, 'shipthumbs.py'), '--check'])
+    if not code:
+        return [out.strip()]
+    log = act_thumbs()
+    html = open(OUT, encoding='utf-8').read()
+    match = SHIPS_TAG_RX.search(html)
+    if not match:
+        raise Fail('自動縮圖需要拆檔成品；請先正常 build')
+    html, manifest = code_html(work_read, match.group(0) + '\n', log)
+    with open(OUT, 'w', encoding='utf-8', newline='') as f:
+        f.write(html)
+    return log + ['✓ 新縮圖已嵌回入口（來源 %s）' % manifest['fp']] + act_srccheck()
+
+
 def act_build(pack=True, single=False):   # pack：壓縮版（預設，TASK-0583）；False ＝ 原格式（build --raw）；single：壓縮版但不拆檔（build --single）
     cfg = load()
     E = validate(cfg)
@@ -2996,7 +3014,9 @@ def act_build(pack=True, single=False):   # pack：壓縮版（預設，TASK-058
         log += js_strip_html(OUT)
     else:
         ships_sync(os.path.dirname(OUT), {})                 # 原格式（船內嵌）⇒ ships/ 裡的船檔都是舊的
-    return log + flagloop_ensure() + src_stamp() + thumbs_note() + showlod_note(cfg) + anc_note(cfg)
+    log += flagloop_ensure() + src_stamp()
+    log += thumbs_finish() if pack and not single else thumbs_note()
+    return log + showlod_note(cfg) + anc_note(cfg)
 
 
 # ───────────────────────── 外掛外殼（shell：別的遊戲拿這份成品套自己的外殼；2026-10-21） ─────────────────────────
