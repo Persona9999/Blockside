@@ -15,8 +15,13 @@ function battleIcon(key) {
   if (!Object.prototype.hasOwnProperty.call(BATTLE_ICONS, key)) throw new Error('Unknown battle icon: ' + key);
   return BATTLE_ICONS[key].html;
 }
+// 左右舷方向共用同一張三角圖；左舷鏡射，避免通用「向左」箭頭與「繼續」三角混搭。
+function battleAnchorIcon(port) {
+  var direction = '<img class="battle-icon' + (port ? ' battle-anchor-port' : '') + '" data-battle-icon="play" src="' + BATTLE_ICONS.play.src + '" alt="' + (port ? '左舷' : '右舷') + '" draggable="false">';
+  return port ? direction + battleIcon('anchor') : battleIcon('anchor') + direction;
+}
 function battleIconText(text) {
-  return text.replace(BATTLE_ICON_PATTERN, function (glyph) { return battleIcon(BATTLE_ICON_SPEC.glyphs[glyph.replace(/\uFE0F/g, '')][0]); });
+  return text.replace(/◀\uFE0F?⚓\uFE0F?|⚓\uFE0F?▶\uFE0F?/gu, function (pair) { return battleAnchorIcon(pair[0] === '◀'); }).replace(BATTLE_ICON_PATTERN, function (glyph) { return battleIcon(BATTLE_ICON_SPEC.glyphs[glyph.replace(/\uFE0F/g, '')][0]); });
 }
 function battleAutoIcon(html) { return '<span class="battle-auto">' + html + '<span class="battle-badge">' + battleIcon('repeat') + '</span></span>'; }
 function battleDrawIcon(ctx, key, x, y, size) {
