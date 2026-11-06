@@ -30,22 +30,22 @@ function telePaint(c, sh) {
   var g = c.getContext('2d'); g.setTransform(size / 300, 0, 0, size / 300, 0, 0); g.clearRect(0, 0, 300, 300);
   function disc(r, fill, stroke, width) { g.beginPath(); g.arc(150, 150, r, 0, Math.PI * 2); g.fillStyle = fill; g.fill(); if (stroke) { g.strokeStyle = stroke; g.lineWidth = width; g.stroke(); } }
   var brass = g.createLinearGradient(0, 0, 280, 300); brass.addColorStop(0, '#ffe3a0'); brass.addColorStop(.45, '#b8883c'); brass.addColorStop(.7, '#ead09a'); brass.addColorStop(1, '#6e4821');
-  disc(146, '#201b16', '#151a20', 4); disc(140, brass); disc(128, '#183039', '#5c4025', 4); disc(122, '#e8dec0', '#0e202b', 3);
+  disc(146, '#201b16', '#151a20', 2); disc(143, brass); disc(135, '#183039', '#5c4025', 2); disc(132, '#e8dec0', '#0e202b', 1.5);
   var stop = teleStopIndex();
   for (var i = 0; i < TELE.length; i++) {
     var a = teleAngle(i), step = Math.PI * .75 / Math.max(1, i <= stop ? stop : TELE.length - 1 - stop), half = Math.min(step * .46, .24);
-    g.beginPath(); g.arc(150, 150, 120, a - half, a + half); g.arc(150, 150, 82, a + half, a - half, true); g.closePath();
+    g.beginPath(); g.arc(150, 150, 130, a - half, a + half); g.arc(150, 150, 89, a + half, a - half, true); g.closePath();
     g.fillStyle = i === stop ? '#e6c46e' : TELE[i] > 0 ? '#d4e1ca' : '#683b35'; g.fill();
     if (i === sh.tele || i === TELE_UI.preview) { g.strokeStyle = i === TELE_UI.preview ? '#55bcc8' : '#c28c2b'; g.lineWidth = 5; g.stroke(); }
-    g.beginPath(); g.moveTo(150 + Math.cos(a) * 77, 150 + Math.sin(a) * 77); g.lineTo(150 + Math.cos(a) * 87, 150 + Math.sin(a) * 87); g.strokeStyle = '#483b2b'; g.lineWidth = 3; g.stroke();
-    { g.fillStyle = i === stop ? '#302411' : TELE[i] < 0 ? '#fff0cb' : '#21352d'; g.font = 'bold 24px sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(TELE.length === 9 ? ['全','半','慢','微','停','微','慢','半','全'][i] : Math.round(Math.abs(TELE[i]) * 100), 150 + Math.cos(a) * 103, 150 + Math.sin(a) * 103); }
+    g.beginPath(); g.moveTo(150 + Math.cos(a) * 87, 150 + Math.sin(a) * 87); g.lineTo(150 + Math.cos(a) * 97, 150 + Math.sin(a) * 97); g.strokeStyle = '#483b2b'; g.lineWidth = 3; g.stroke();
+    { g.fillStyle = i === stop ? '#302411' : TELE[i] < 0 ? '#fff0cb' : '#21352d'; g.font = 'bold 24px sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(TELE.length === 9 ? ['全','半','慢','微','停','微','慢','半','全'][i] : Math.round(Math.abs(TELE[i]) * 100), 150 + Math.cos(a) * 113, 150 + Math.sin(a) * 113); }
   }
   g.textAlign = 'center'; g.fillStyle = '#354a3d'; g.font = 'bold 18px sans-serif'; g.fillText('前進', 214, 184); g.fillStyle = '#783c35'; g.fillText('後退', 86, 184);
   var cap = sh.drive ? Math.sqrt(Math.max(0, sh.drive.cap)) : 1;
   for (i = 0; i < TELE.length; i++) if (Math.abs(TELE[i]) > cap + .005) { var ca = teleAngle(i); g.fillStyle = '#a44330'; g.fillRect(148 + Math.cos(ca) * 132, 148 + Math.sin(ca) * 132, 5, 5); }
   function needle(index, ghost) {
     var a = teleAngle(index); g.save(); g.translate(150, 150); g.rotate(a);
-    g.beginPath(); g.moveTo(-27, -8); g.lineTo(89, -4); g.lineTo(99, 0); g.lineTo(89, 4); g.lineTo(-27, 8); g.closePath();
+    g.beginPath(); g.moveTo(-27, -8); g.lineTo(99, -4); g.lineTo(109, 0); g.lineTo(99, 4); g.lineTo(-27, 8); g.closePath();
     g.fillStyle = ghost ? 'rgba(61,142,151,.45)' : '#d59a38'; g.strokeStyle = ghost ? '#1b7a8b' : '#493019'; g.lineWidth = ghost ? 3 : 4; g.fill(); g.stroke(); g.restore();
   }
   needle(sh.tele, false); if (TELE_UI.preview >= 0 && TELE_UI.preview !== sh.tele) needle(TELE_UI.preview, true);
@@ -76,7 +76,7 @@ function teleDraw(sh) {
   var wheel = $('teleWheel');
   TELE.forEach(function(_, i) {
     var b = document.createElement('button'), a = teleAngle(i); b.type = 'button'; b.dataset.teleI = i; b.setAttribute('aria-label', TELE_NAME[i]); b.title = TELE_NAME[i];
-    b.style.left = (50 + Math.cos(a) * 103 / 3) + '%'; b.style.top = (50 + Math.sin(a) * 103 / 3) + '%'; $('teleDetents').appendChild(b);
+    b.style.left = (50 + Math.cos(a) * 113 / 3) + '%'; b.style.top = (50 + Math.sin(a) * 113 / 3) + '%'; $('teleDetents').appendChild(b);
   });
   function pick(e, free) { var r = wheel.getBoundingClientRect(); return telePickIndex((e.clientX - r.left) / r.width * 300, (e.clientY - r.top) / r.height * 300, free); }
   function moved(d,e) { return Math.hypot(e.clientX-d.x,e.clientY-d.y)>=6; }

@@ -780,6 +780,9 @@ function ammoNext() {
   if (AUTOFIRE) { note(SHIPS[PLAYER_I], '自動開砲中：彈種由砲長照瞄準位置挑（' + keyName('autoFire') + ' 關掉自動開砲才自己換）'); return; }
   var i = L.indexOf(AMMO_I); AMMO_I = L[(i + 1) % L.length]; ammoLabel();
 }
+function hudModeLine(items) {
+  return '<span class="modeLine">' + items.filter(Boolean).map(function (item) { return '<span class="modeStat">' + item + '</span>'; }).join('') + '</span>';
+}
 function hudFrame(dt) {
   stepMsgs(dt);
   if (ROOMS_DBG) roomLabels();                                                   // 空艙房的名字（36_rooms.js；?rooms=1）：每一格跟著鏡頭
@@ -798,14 +801,25 @@ function hudFrame(dt) {
   // 圖示（Tim 2026-10-15：「瞄準、鏡頭的文字顯示也改成 Icon，然後那邊是否可以額外顯示航速、船體 %、進水 %（一樣用 Icon）」）：第二行 ⛵ 航速（節，倒車 −）；船體 %、進水 % 改成羅盤外圈的兩圈（drawNav；Tim：「這樣就不用文字顯示」）
   var kn = me.spd * 1.944;
   // 航速後面接點風（順風／側順風／橫風／迎風／頂風，31_sailing.js pointName）—— Tim 2026-10-19「羅盤上多顯示 頂風 資訊」；以前只寫在詳細資訊的航速那一行（我艦那一行拿掉了）。沒有帆的船不寫
-  var mt = $('modeT'), ms = '🎯 <b>' + (!handAim(me) ? '砲長' : (AUTOFIRE ? '手動一舷・' : '') + AIM_NAME[me.pMode || 'free']) + '</b>　🎥 <b>' + cn + '</b>' +
-    (HUD_OUTARC ? '　<b style="color:#ff9a7a">⚠ 射界外</b>' : '') + (SIGNAL && MODE !== 'eve' ? '　🚩 <b>' + sigText() + '</b>' : '') + '<br>' +   // 玩家的旗號（TASK-0679；照指揮官 ⇒ 不寫）
-    '⛵ <b>' + (kn < -0.05 ? '−' + (-kn).toFixed(1) : Math.max(0, kn).toFixed(1)) + '</b> 節' + (hasSails(me) && me.pos ? '（' + me.pos + '）' : '') + (hasSails(me) ? '　' + sailSetName(me) + ' ' + Math.round(me.sailFrac * 100) + '%' : '') + (me.cfg.base > 0 ? '　⚙ ' + TELE_NAME[me.tele] + driveCapText(me) : '') +   // 兩套控制（TASK-0630）：有帆才寫帆段、有額外動力才寫俥鐘
-    (HELM_TQ && me.drive && me.drive.R ? '　<span title="舵效（舵輪 × 舵）">☸</span> ' + (me.drive.eff < 0.995 ? '<b style="color:#ffb27a">' + Math.round(me.drive.eff * 100) + '%</b>' : Math.round(me.drive.eff * 100) + '%') : '') +   // 舵效（TASK-0777；Tim 2026-10-21「船隻資訊要多一個舵效%」「羅盤上方資訊那邊」「可以直接用舵輪Icon(不用文字)」）
-       // 帆 %（Tim 2026-10-15）：張著、還在的帆面積 × 血量（sailFrac，航速照它算）
-    (RUNNING && SIM_SPEED !== 1 ? '　<b style="color:#9fd8ff">⏱ 模擬 ×' + (SIM_SPEED < 1 ? SIM_SPEED.toFixed(2) : SIM_SPEED.toFixed(1)) + '</b>' : '') +   // 設定的模擬速度（73_slowmo.js simSpeedSet）
-    (RUNNING && PSLOW.on && PSLOW.ts < PSLOW_SHOW && !(SLOW.active && SLOW.ts < 0.98) ? '　<b style="color:#ffd27a">🐢 物理減速 ×' + PSLOW.ts.toFixed(2) + '</b>' : '');   // 物理減速的提示（Tim 2026-10-15：搬到航速這一行；73_slowmo.js）—— 殉爆的慢動作照舊在畫面中間   // 船體、進水改成羅盤外圈的兩圈（drawNav）；後面接帆裝（Tim 2026-10-15「羅盤上方航速資訊可以顯示當前帆狀態」：全收…滿帆，有額外動力的船多倒車、全速前進）
-  ms = battleIconText(ms + floodLine(me));
+  var mt = $('modeT'), modeLines = [
+    [
+      '🎯 <b>' + (!handAim(me) ? '砲長' : (AUTOFIRE ? '手動一舷・' : '') + AIM_NAME[me.pMode || 'free']) + '</b>',
+      '🎥 <b>' + cn + '</b>',
+      HUD_OUTARC ? '<b style="color:#ff9a7a">⚠ 射界外</b>' : '',
+      SIGNAL && MODE !== 'eve' ? '🚩 <b>' + sigText() + '</b>' : ''
+    ],
+    [
+      '⛵ <b>' + (kn < -0.05 ? '−' + (-kn).toFixed(1) : Math.max(0, kn).toFixed(1)) + '</b> 節' + (hasSails(me) && me.pos ? '（' + me.pos + '）' : ''),
+      hasSails(me) ? sailSetName(me) + ' ' + Math.round(me.sailFrac * 100) + '%' : '',
+      me.cfg.base > 0 ? '⚙ ' + TELE_NAME[me.tele] + driveCapText(me) : '',
+      HELM_TQ && me.drive && me.drive.R ? '<span class="helmIcon" title="舵效（舵輪 × 舵）">☸</span> ' + (me.drive.eff < 0.995 ? '<b style="color:#ffb27a">' + Math.round(me.drive.eff * 100) + '%</b>' : Math.round(me.drive.eff * 100) + '%') : '',
+      RUNNING && SIM_SPEED !== 1 ? '<b style="color:#9fd8ff">⏱ 模擬 ×' + (SIM_SPEED < 1 ? SIM_SPEED.toFixed(2) : SIM_SPEED.toFixed(1)) + '</b>' : '',
+      RUNNING && PSLOW.on && PSLOW.ts < PSLOW_SHOW && !(SLOW.active && SLOW.ts < 0.98) ? '<b style="color:#ffd27a">🐢 物理減速 ×' + PSLOW.ts.toFixed(2) + '</b>' : ''
+    ]
+  ];
+  // 每組圖示與讀數一起換行，長狀態列不再伸到兩側操作鈕。資料與物理讀數沿用原入口。
+  var ms = modeLines.map(hudModeLine).join('') + floodLine(me);
+  ms = battleIconText(ms);
   if (mt && mt.innerHTML !== ms) mt.innerHTML = ms;
   var t = dbgOn() ? '格：' + SHIPS.map(function (s) { return s.grid.count; }).join('／') + '　四邊形：' + SHIPS.map(function (s) { return s.rs.quads(); }).join('／') + '　碎片 ' + D.n + '　粒子 ' + PT.n + '　脫落 ' + PIECES.length + (PHYS ? '　物理 ' + PHYS_MS.toFixed(2) + ' ms/步、垂繩 ' + SHIPS.map(function (s) { return s.loose.length; }).join('／') : '') + '　' + shadowDbgText() + '　' + FPS.toFixed(0) + ' fps' : '';
   $('tip').textContent = t;
@@ -822,7 +836,7 @@ function floodLine(sh) {
   var t = Math.round((f.vol || 0) * RHO_W), a = f.area || 0, p = [];
   if (t >= 1) p.push('💧 <b>' + t.toLocaleString() + '</b> 噸積水');
   if (a >= 0.05) p.push('🕳 <b>' + a.toFixed(1) + '</b> m² 破口');
-  return p.length ? '<br>' + p.join('　') : '';
+  return p.length ? hudModeLine(p) : '';
 }
 // ───────────────────────── 結算判定（Tim 2026-10-15：「把整個結算判定規範化」） ─────────────────────────
 // 三步，各管一件事：
