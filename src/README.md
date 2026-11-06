@@ -1,5 +1,14 @@
 # Blockside（《憲法號對轟》）的重產工具
 
+## 選船卡船型縮圖（TASK-1245）
+
+船卡右下角的透明縮圖由模型拍攝，畫法沿用 zenith 的 `17b958d`（Sharkside `2f13f81`）；角度、光源、256×160 尺寸一致。文字加深色描邊，縮圖絕對定位、不增加卡片尺寸。選船讀內嵌的單張圖集，不為卡片解碼船；沒有某張縮圖仍可選船。
+
+- `python -I src/admin.py thumbs`：用當前來源產生暫存拍攝頁，四型一批，重拍 `src/art/ships/atlas.png` 與 `thumbs.json`。不改正式入口、不開戰、不讀寫存檔。
+- `python -I src/admin.py thumbs --check`：核對船檔、畫法、覆蓋範圍與圖集 SHA-256；`--force` 強制重拍。
+- 然後 `python -I src/admin.py build --code` 嵌回圖集；縮圖舊了會擋下。整份 `build` 可能重寫船檔，因此完成後再檢查並提示先 `thumbs`、再 `build`。
+- 蒸汽／槳帆分類圖示用 `steam`／`oar`，沿用海戰圖集；原始 128px 圖與 Blocksail 語意來源逐位元組對帳。
+
 > 📦 2026-10-15（TASK-0586）從 ArtGallery 的 `HtmlGames/_build/ame_constitution_broadside/` 搬來（只複製檔案；之前的歷史在 ArtGallery 的 `git log -- HtmlGames/_build/ame_constitution_broadside`，114 筆）。
 > 開發用 Blocksail 的 `external/Blockside`（submodule，checkout 在 `dev` 分支；Tim 2026-10-20「之後我希望Blockside開發直接在Blocksail的submodule內開發(確保同步)」）—— Valhalla 裡的 `Blockside/` 不再開發（會落後），流程見根目錄 README「分支與發版」。目錄：`src/`（這裡）、`VoxelKit/`（從 ArtGallery/VoxelKit 853b4e7 複製；`_cache/` 不入版控）、根目錄的成品 `index.html` ＋ `ships/`（拆檔：每艘船一個檔，見下面「建置」；GitHub Pages 首頁）、`admin.html`（設定後台）、`admin.cmd`、`sandbox.html`（2D 指揮官沙盒）、`fleetlab.html`（擬真沙盒的入口，轉到 index.html?lab=fleet）。
 > ⚠ repo 變肥（成品每一版都進版控，壓縮過的船 git 存不了差異；5 天 154 MiB）：原因、量法、做了什麼見 [`REPO_SIZE.md`](REPO_SIZE.md)（2026-10-20：拆檔＋船檔分段已做，見 §0）。

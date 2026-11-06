@@ -134,104 +134,112 @@
    0,
    4
   ],
-  "overview": [
+  "oar": [
    1,
+   4
+  ],
+  "overview": [
+   2,
    4
   ],
   "people": [
-   2,
+   3,
    4
   ],
   "pirate": [
-   3,
+   4,
    4
   ],
   "purse": [
-   4,
+   5,
    4
   ],
   "rain": [
-   5,
+   6,
    4
   ],
   "rocket": [
-   6,
+   7,
    4
   ],
   "sail": [
-   7,
-   4
+   0,
+   5
   ],
   "sailor": [
-   0,
+   1,
    5
   ],
   "save": [
-   1,
+   2,
    5
   ],
   "settings": [
-   2,
+   3,
    5
   ],
   "shell": [
-   3,
+   4,
    5
   ],
   "ship": [
-   4,
+   5,
    5
   ],
   "showers": [
-   5,
+   6,
    5
   ],
   "solid": [
-   6,
+   7,
    5
   ],
   "stats": [
-   7,
-   5
-  ],
-  "stock": [
    0,
    6
   ],
-  "stone": [
+  "steam": [
    1,
    6
   ],
-  "storm": [
+  "stock": [
    2,
    6
   ],
-  "sun": [
+  "stone": [
    3,
    6
   ],
-  "tools": [
+  "storm": [
    4,
    6
   ],
-  "town": [
+  "sun": [
    5,
    6
   ],
-  "trade": [
+  "tools": [
    6,
    6
   ],
-  "warning": [
+  "town": [
    7,
    6
   ],
-  "water": [
+  "trade": [
    0,
    7
   ],
-  "xray": [
+  "warning": [
    1,
+   7
+  ],
+  "water": [
+   2,
+   7
+  ],
+  "xray": [
+   3,
    7
   ]
  },
@@ -270,6 +278,7 @@
   "load": "b02daaa40908",
   "magnet": "6b1e6e3700b3",
   "moon": "70d00e45fbe6",
+  "oar": "37fdae2fbc55",
   "overview": "42998da9b2cb",
   "people": "9d998b857f2d",
   "pirate": "162de6eb0519",
@@ -285,6 +294,7 @@
   "showers": "055a689cef2e",
   "solid": "9a4a891dffa0",
   "stats": "7c35787fc656",
+  "steam": "a1d6f666fa9d",
   "stock": "0740952544b5",
   "stone": "cc3c79485f52",
   "storm": "57149e9baf98",

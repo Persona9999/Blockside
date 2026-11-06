@@ -1,0 +1,11 @@
+{
+  "thumbnails": 44,
+  "atlasBytes": 945905,
+  "binaryAlpha": true,
+  "iconsSHA256": {
+    "steam": "ea8cdc63bd6bcab1ebf6f2f61370ccf42139e10dd66c7acc62cdda5d9ab06589",
+    "oar": "8914dd4899e256f29c3a7fb32da61597771f837e0d700afeba95dccf26adf2d7"
+  },
+  "changedPuntRejected": true,
+  "missingManifestBlocksBuildWithoutWriting": true
+}

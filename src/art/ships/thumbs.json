@@ -1,0 +1,235 @@
+{
+ "atlasSHA256": "10ff7a27f1c8e96b87c412190fcef00e3aadfa308fd097ce59d5377a394184f6",
+ "cols": 6,
+ "h": 160,
+ "icons": {
+  "barbados": [
+   0,
+   0
+  ],
+  "battery_carib": [
+   1,
+   0
+  ],
+  "battery_carib_s": [
+   2,
+   0
+  ],
+  "battery_en": [
+   3,
+   0
+  ],
+  "boaviagem": [
+   4,
+   0
+  ],
+  "centurion": [
+   5,
+   0
+  ],
+  "concepcion": [
+   0,
+   1
+  ],
+  "constitution": [
+   1,
+   1
+  ],
+  "cosecha": [
+   2,
+   1
+  ],
+  "dingyuan": [
+   3,
+   1
+  ],
+  "dromon": [
+   4,
+   1
+  ],
+  "ember": [
+   5,
+   1
+  ],
+  "falcon": [
+   0,
+   2
+  ],
+  "flyingfish": [
+   1,
+   2
+  ],
+  "fort_carib": [
+   2,
+   2
+  ],
+  "fort_en": [
+   3,
+   2
+  ],
+  "fort_es": [
+   4,
+   2
+  ],
+  "fort_galata": [
+   5,
+   2
+  ],
+  "fort_roche": [
+   0,
+   3
+  ],
+  "fusta": [
+   1,
+   3
+  ],
+  "gloire": [
+   2,
+   3
+  ],
+  "guineaman": [
+   3,
+   3
+  ],
+  "labelle": [
+   4,
+   3
+  ],
+  "matsushima": [
+   5,
+   3
+  ],
+  "monitor": [
+   0,
+   4
+  ],
+  "napoleon": [
+   1,
+   4
+  ],
+  "nightlamp": [
+   2,
+   4
+  ],
+  "oxford": [
+   3,
+   4
+  ],
+  "phoenix": [
+   4,
+   4
+  ],
+  "pinas": [
+   5,
+   4
+  ],
+  "piragua": [
+   0,
+   5
+  ],
+  "punt": [
+   1,
+   5
+  ],
+  "reale": [
+   2,
+   5
+  ],
+  "sanroman": [
+   3,
+   5
+  ],
+  "sentinel": [
+   4,
+   5
+  ],
+  "stormkaap": [
+   5,
+   5
+  ],
+  "susquehanna": [
+   0,
+   6
+  ],
+  "swallow": [
+   1,
+   6
+  ],
+  "tidegrave": [
+   2,
+   6
+  ],
+  "tower_galata": [
+   3,
+   6
+  ],
+  "tradewind": [
+   4,
+   6
+  ],
+  "tridente": [
+   5,
+   6
+  ],
+  "virginia": [
+   0,
+   7
+  ],
+  "zeehaen": [
+   1,
+   7
+  ]
+ },
+ "rows": 8,
+ "source": {
+  "renderer": "5efcb355dbea35ac734ff5c04f5dd17a711561b9a3a8a7c57b162c53c6dad393",
+  "ships": {
+   "barbados": "a221dc3f760fc802cc61e83a64092751712c031239cdaf3712d7416667ab0300",
+   "battery_carib": "34c6348e5ffc41336e4d8bc1591efdf77d6ceed5916b0e2a9491bf39e593e1d4",
+   "battery_carib_s": "0f7007b6c65c24eefbb67f332640e447bb87276c404014f5d9fd4377371ecf95",
+   "battery_en": "e9c248f2224faf0bfb3ba3026da789b3965c02b01ddb7711ee647627410166bc",
+   "boaviagem": "5053534ac1a6be22cbdc92a4de73f76a5f1098faf71012f503882fdd28784175",
+   "centurion": "7dba17907cc8dac3cd2cd75e985221955a9bde13b0a0a7e67dcb032322f6c302",
+   "concepcion": "20c62f0c5ad30bb3ee246732d50ac59d368416a8f8f1c86b6a210132f4686235",
+   "constitution": "779911d645eb76a3bdcd9b65b6a6c1fb70e7d3c37268571e7fb04cc5d30ac711",
+   "cosecha": "d7500e92ecab6ae304f9ac5efdc08f864bcbd568df002096d4d6e0966612e574",
+   "dingyuan": "5cb33ccb89419017597f444a80de4079c7b5781578515967bfb32b4287782565",
+   "dromon": "d935be173220e5de18a5aa15ba36da06ff238fd45fc563cd4c3e789d34c391eb",
+   "ember": "8ac7d7c4f04235136d8073491f20708489a539de28be31370776b4ffbe1886d8",
+   "falcon": "d8c0330f605fdcf7153ea55923e3a666615b11ffbb97088a00c2e4a09007a892",
+   "flyingfish": "6c65dcdf6024559f6b3321cec05ee4bce201d44e107f7312c09a58293a08ad73",
+   "fort_carib": "984fe3bac85d08fe18f6aafeaa9fb11fa71e8a7d92b90723ad9dcd19cebf8ce9",
+   "fort_en": "b5549598a478a0b080ffa7b02a65fb9719214c4322a3cf4da5874a2ffa141fc7",
+   "fort_es": "fb3ab6cf0ef600ef4aaeed791c28dcfed8b3f3dc433208b336273168f5ea3713",
+   "fort_galata": "faa9687ec5ef426ae3958ce74300bc6e9d9892641a0043779bbf2e866e31ea0f",
+   "fort_roche": "689f3e895a5fc8c4245b8a6e6c05776c4dc329b082b71ebd654d41b1aa0ee9e8",
+   "fusta": "1d00b3592f8d7dfafb1cc2c25688712e7151a8649885c6a3cae86510f25afc3d",
+   "gloire": "b31f872b14aedf99499ac16c24820671dcf042e3f45ceb4517310e8fa7993a9f",
+   "guineaman": "2f31dcd13649051c857043d595564b0f7aa506a250ff5f8cc3ed46b1e96bdd7c",
+   "labelle": "b4d96cd75ae092ab76cbe873095032fa655129de6b6c3feacf4eef6cf05ea7b1",
+   "matsushima": "c6768056584e5634c6f4db89f4ad14f99949f1324a0fafd3def7e57e1ac0803c",
+   "monitor": "d9157a8790386823040080f5b8cc6b7b7549b0a11e0dd85b026377198ddb62aa",
+   "napoleon": "95e31466ba6f360030ab8f06313b2cfc80b1b8315f7c9f4eedbdcc67f4a8e112",
+   "nightlamp": "ecd1f887a0b0190f68131023ef3b0b0d9266206833de78147a2f9b4e6525ec11",
+   "oxford": "7554cd6992b89796324ac0c688d8526d027b2a4578f2abbf04fe61bf6ac3ba95",
+   "phoenix": "8969ee2fbe416a8d8fde2c73411321b405d8bfb6cf640b01dbb0d9cb34464593",
+   "pinas": "286bf84ed9b2808177e246b72a837bbcd700e72812f2af61b5ccdc3811b2916c",
+   "piragua": "f6d48ea7bc1f6afdb0ea30a08706349f40fa2afee6bf8775bdbeb3e0afc92f18",
+   "punt": "9c2162a4536394d960b2bb6bd796f6b7159682fd0168fd8e7f31565503bc2288",
+   "reale": "52bd37785afe5c2d0af158ae44e02227f9a7b36019c0ede8eda0eb20762105e2",
+   "sanroman": "3df3ffa24ad031a4346c047d7a920bcb6d79bfeb046087ceeefd757d4d75cdf3",
+   "sentinel": "b6f5867f8ec23fed500c31b934bdaf9c7143470f489a4c6a2c90be02208d980b",
+   "stormkaap": "ea891df0873609c636c761bb8d60a5e63d77cde6b8604a3a08ee96529cc190d0",
+   "susquehanna": "dc8a4461c69de1ff3c450d52a1d7b33298b1550522293112f972bb1c77d8c4cb",
+   "swallow": "df7d65844c7c8a00ca6b601cdc6d3bab123559a2082a50074dda55649e41af81",
+   "tidegrave": "03818ecad0d37d91bdd4eb284016abfbeed22ab51f736c94ad6de3de9f1ce711",
+   "tower_galata": "f19c15a96121d4913e7cded931ef101faf85190fad209f749af301be2ab9a8f7",
+   "tradewind": "0b85472dcc07a03d0aba783e5d0ef1b5153c030497ec0b506d7b128a37048174",
+   "tridente": "843626d1f2191bbbcd072bf1ba0ac610476ca6d981c72476f6bbdd8e2c937702",
+   "virginia": "a63360b7325782b6264268e803ece8d8989eb00d0696db23218f39de4602b77f",
+   "zeehaen": "5af1e8475b3c73b75aa53678d7986385aa420cb0d21f9425fa0f7535da7a6aa0"
+  }
+ },
+ "v": 1,
+ "w": 256
+}

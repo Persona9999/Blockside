@@ -11,7 +11,20 @@
 //   門檻照 2026-10-18 那 17 艘的分布切成大約三等份（噸位 4／6／7 艘、火力 5／8／4 艘；ship_cards.json），之後船多了再調。
 var SHIP_CARDS = (window.VoxelKit.embeddedJSON('ship-cards') || {}).ships || {};
 var SPK_TONS = [1000, 3000], SPK_VOLLEY = [200, 600];
-var SPK_DRIVE = [['sail', '⛵', '帆船'], ['steam', '♨️', '蒸汽'], ['oar', '🚣', '槳帆'], ['magic', '✨', '魔法']];
+var SPK_DRIVE = [['sail', battleIcon('sail'), '帆船'], ['steam', battleIcon('steam'), '蒸汽'], ['oar', battleIcon('oar'), '槳帆'], ['magic', '✨', '魔法']];
+// Prebaked model portraits: opening/searching the picker never decodes a hull.
+var SPK_THUMBS = VK.embeddedJSON('ship-thumbs'), SPK_THUMB_EL = document.getElementById('ship-thumbs-atlas');
+var SPK_THUMB_SRC = SPK_THUMB_EL && SPK_THUMB_EL.textContent.trim() ? 'data:image/png;base64,' + SPK_THUMB_EL.textContent.trim() : null;
+if (SPK_THUMBS && SPK_THUMB_SRC) {
+  var spkThumbStyle = document.createElement('style');
+  spkThumbStyle.textContent = '.spkThumb{background-image:url("' + SPK_THUMB_SRC + '");background-size:' + SPK_THUMBS.cols * 100 + '% ' + SPK_THUMBS.rows * 100 + '%;}';
+  document.head.appendChild(spkThumbStyle);
+}
+function spkThumbHTML(id) {
+  var A = SPK_THUMBS, at = A && A.icons[id];
+  if (!at || !SPK_THUMB_SRC) return '';
+  return '<span class="spkThumb" aria-hidden="true" style="background-position:' + (A.cols > 1 ? at[0] / (A.cols - 1) * 100 : 0) + '% ' + (A.rows > 1 ? at[1] / (A.rows - 1) * 100 : 0) + '%"></span>';
+}
 var SPK = { cur: '', pick: null, same: false, onClose: null, f: { drive: '', tons: '', fire: '', q: '' }, open: false };   // 篩選照上一次（同一次開遊戲裡記著）；open ＝ 篩選那三排展開了沒（預設收著）
 // 篩選收起來（Tim 2026-10-20 手機截圖：「請協助調整一下 手機板選船的排版 可以調整尺寸 確保上方篩選不要佔用太多空間」「另外篩選可以折疊(預設摺疊)」）：
 //   上面只留一列「搜尋框＋篩選 ▾」，三排分類點了才展開；收著時那一顆寫有幾個篩選在用（亮金色），下面那一行寫篩了哪些 ⇒ 收著也看得出來。
@@ -90,7 +103,7 @@ function spkShow() {
       : '<span class="m">（還沒量：admin.py shipcheck）</span>';
     var v = spkSpeed(h.id, c);
     if (v) m += '<span class="m">' + (v.length === 1 ? '航速 ' + v[0].toFixed(1) + ' 節（額外動力）' : '航速 順風 ' + v[0].toFixed(1) + '・側順風 ' + v[1].toFixed(1) + '・逆風 ' + v[2].toFixed(1) + ' 節') + '</span>';
-    return '<button class="spkC' + (h.id === cur ? ' on' : '') + '" data-id="' + h.id + '"' + (d ? ' title="' + d[2] + '"' : '') + '>' + (d ? '<span class="i">' + d[1] + '</span>' : '') + '<b>' + h.name + '</b>' + m +
+    return '<button class="spkC' + (h.id === cur ? ' on' : '') + '" data-id="' + h.id + '"' + (d ? ' title="' + d[2] + '"' : '') + '>' + spkThumbHTML(h.id) + (d ? '<span class="i">' + d[1] + '</span>' : '') + '<b>' + h.name + '</b>' + m +
       (h.author ? '<span class="m">建造者 ' + h.author + '</span>' : '') + '</button>';
   }).join('');
   [].forEach.call($('spkG').querySelectorAll('button.spkC'), function (b) { b.onclick = function () { var id = b.dataset.id; spkClose(id); if ((id !== cur || SPK.same) && SPK.pick) SPK.pick(id); }; });

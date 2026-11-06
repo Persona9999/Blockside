@@ -1,5 +1,7 @@
 {
   "icons": {
+    "steam": {"file":"steam.png","label":"蒸汽船","globalSrc":"img/ui/globe/steam.png"},
+    "oar": {"file":"oar.png","label":"槳帆船","globalSrc":"img/ui/globe/oar.png"},
     "barrel-unit": {
       "file": "barrel-unit.png",
       "label": "桶",

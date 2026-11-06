@@ -2954,6 +2954,24 @@ def act_atlas(check=False):
     return ['✓ 海戰圖示的圖集：%d 張、每格 %d px、%d×%d ⇒ art/battle/atlas.png（%.1f KB）' % (len(W), C, C * ATLAS_COLS, C * rows, n / 1024)]
 
 
+def act_thumbs(check=False, force=False):
+    args = [sys.executable, '-I', os.path.join(HERE, 'shipthumbs.py')]
+    if check:
+        args.append('--check')
+    if force:
+        args.append('--force')
+    code, out = run(args)
+    if code:
+        raise Fail(out.strip() + '\n⇒ python -I src/admin.py thumbs')
+    return [out.strip()]
+
+
+def thumbs_note():
+    # Full builds can change ships/*.js: capture must run AFTER those new files exist.
+    code, out = run([sys.executable, '-I', os.path.join(HERE, 'shipthumbs.py'), '--check'])
+    return ['⚠ ' + out.strip() + ' ⇒ python -I src/admin.py thumbs，再 build 把新縮圖嵌回入口'] if code else [out.strip()]
+
+
 def act_build(pack=True, single=False):   # pack：壓縮版（預設，TASK-0583）；False ＝ 原格式（build --raw）；single：壓縮版但不拆檔（build --single）
     cfg = load()
     E = validate(cfg)
@@ -2978,7 +2996,7 @@ def act_build(pack=True, single=False):   # pack：壓縮版（預設，TASK-058
         log += js_strip_html(OUT)
     else:
         ships_sync(os.path.dirname(OUT), {})                 # 原格式（船內嵌）⇒ ships/ 裡的船檔都是舊的
-    return log + flagloop_ensure() + src_stamp() + showlod_note(cfg) + anc_note(cfg)
+    return log + flagloop_ensure() + src_stamp() + thumbs_note() + showlod_note(cfg) + anc_note(cfg)
 
 
 # ───────────────────────── 外掛外殼（shell：別的遊戲拿這份成品套自己的外殼；2026-10-21） ─────────────────────────
@@ -3159,6 +3177,7 @@ def code_base(fp, base=None):
 
 def act_build_code(base=None):
     """build --code：只重建程式（入口 index.html；船檔 ships/ 照舊）—— 沒有 VoxelKit/_cache 的機器用；兩道關見上面。"""
+    act_thumbs(check=True)
     cfg = load()
     E = validate(cfg)
     if E:
@@ -4804,6 +4823,9 @@ def main():
     s.add_argument('--id', action='append', help='哪一型（可以給好幾次）；不給 ＝ 每一型（不含堡壘、砲台）')
     s.add_argument('--force', action='store_true', help='指紋一樣也重烘')
     s.add_argument('--check', action='store_true', help='不烘，只列每一型對不對得上')
+    s = sp.add_parser('thumbs', help='選船卡縮圖：沿用 Sharkside 的模型拍攝，更新 src/art/ships/ 圖集；模型換了 build 會擋')
+    s.add_argument('--check', action='store_true', help='只驗縮圖來源、覆蓋與圖集雜湊，不寫')
+    s.add_argument('--force', action='store_true', help='即使來源相同也重拍全部船型')
     s = sp.add_parser('atlas', help='海戰圖示的圖集：src/art/battle/*.png 縮成每格 48 px 的一張 atlas.png ＋ atlas.json（原圖改了 build 會擋）')
     s.add_argument('--check', action='store_true', help='不寫，只看圖集跟原圖對不對得上')
     s = sp.add_parser('ancbake', help='找最近實心格的預烘（TASK-1229）：跑成品的 ?ancbake=<船> 記下開戰時的每一次查詢 ⇒ ships/anchor.js（指紋一樣不重烘）')
@@ -4886,6 +4908,8 @@ def main():
             log = act_showlod(o.id, o.force, o.check)
         elif o.op == 'ancbake':
             log = act_ancbake(o.id, o.force, o.check)
+        elif o.op == 'thumbs':
+            log = act_thumbs(o.check, o.force)
         elif o.op == 'atlas':
             log = act_atlas(o.check)
         elif o.op == 'ladcheck':

@@ -624,7 +624,8 @@ function fleetLoaded() {
   var ids = fleetHulls().concat(coreHulls());                       // coreHulls：?coreadd= 要中途加的船（57_core.js）
   return Promise.all(ids.map(loadHull)).then(function () { return fleetHulls().concat(coreHulls()).every(function (id) { return HULLT[id]; }) ? null : fleetLoaded(); });
 }
-if (PICK_HOST) pickBoot();                                          // ?pick=@host（72_shippick.js）：只開選船彈窗，不載編成、不開主選單
+if (Q.has('thumbs')) GL_READY.then(function () { shipThumbCapturePage(Q.get('thumbs')); });
+else if (PICK_HOST) pickBoot();                                     // ?pick=@host：只開選船，不載編成
 else if (TUI_HOST) tuiBoot();                                       // ?tui=@host（89_townui.js）：只開城鎮介面那一份面板（地球儀停靠時的 📋 城鎮概況）
 else GL_READY.then(yieldUI).then(function () {                     // 先讓主選單畫出來，再開始解析
   return Promise.all([fleetLoaded(), bedBoot()]);                   // 只載編成裡的船（預設兩艘都是憲法號 ⇒ 一份）＋海圖（?map，08_seabed.js）
