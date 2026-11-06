@@ -370,7 +370,7 @@ function chainBuf(sh) {
       L.push(s[0][0], s[0][1], s[0][2], ic[0], ic[1], ic[2], s[1][0], s[1][1], s[1][2], ic[0], ic[1], ic[2]);
     });
   });
-  sh.chain = upload(sh.chain, new Float32Array(L), 6, [[0, 3, 0], [2, 3, 3]]);
+  sh.chain = upload(sh.chain, f32Of(L, sh, 'chainF'), 6, [[0, 3, 0], [2, 3, 3]]);
 }
 /** 一段鍊子 A→B 分 n 環推進 L（線段＋色）：菱形（頭、一側、尾、另一側），相鄰兩環轉 90° 交錯、深淺交錯（CHAIN_C）。
  *  hw：環的半寬（跟 A、B 同單位）；up：哪一軸是上（船身格座標 2、世界 1）；k0：第一環的編號（接著上一段交錯）。錨鍊（chainBuf）與鏈彈（csBuf）共用。 */
@@ -401,7 +401,7 @@ function csBuf() {
     for (var i = 0; i <= n; i++) { var t = i / n, k = sag * 4 * t * (1 - t), q = wob * Math.sin(6.28319 * t); P.push(add(lerp3(A, B, t), add(mul(bd, k), mul(sd, q)))); }
     for (i = 0; i < n; i++) chainLinks(L, P[i], P[i + 1], 1, CS_LINK_W, 1, i);
   });
-  CSL = upload(CSL, new Float32Array(L), 6, [[0, 3, 0], [2, 3, 3]]);
+  CSL = upload(CSL, f32Of(L, csBuf, 'F'), 6, [[0, 3, 0], [2, 3, 3]]);
   return CSL;
 }
 /** HUD 一段：兩個錨的狀態。 */

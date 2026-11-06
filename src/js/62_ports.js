@@ -28,7 +28,7 @@ var PORT_DT = 0.25, PORT_SNAP = 0.5;                                   // 每 0.
 var PORT_UP = 0.8, PORT_RUN = 1.6, PORT_IN = 1.2, PORT_DOWN = 0.5, PORT_RANK = 0.1;   // 掀蓋、推砲出去、收砲、放蓋各幾秒（history §4.3：一人拉繩 2–3 秒、6–8 人推砲 5–10 秒，壓縮過）；依序掀起每片隔幾秒（演出的設計值；17 片排完 1.6 秒）
 var PORT_RK = 1.2, PORT_ARC = 70 * Math.PI / 180, PORT_FIRED = 15, PORT_HOLD = 10, PORT_DRY = 3;   // 交戰：射程 × 1.2、砲軸 ±70°（比 bears 的 ±26° 寬 ⇒ 敵艦還在船頭斜前方就先備好）、15 秒內開過火；脫離 10 秒才關；乾了 3 秒才准再開（暴風雨的浪一打就開開關關）
 var PORT_LOADQ = 1.6, PORT_RING = 4, PORT_HOUSE0 = 4, PORT_CLOSE0 = 90;   // 裝填剩 1.6 秒才推出去；四周的船殼掉 4 格 ⇒ 蓋板沒了；照幾何算的 house 至少 4 格（1–3 號開火時也看得到後座）；close_deg 沒寫 ⇒ 90°
-var PORT_DEPTH = 0.25, PORT_EDGE = 0.02;                                  // 穿模的取樣點：從表面往實心那一邊挪 0.25 格、邊上的點往三角形重心挪 0.02 格（portPts）
+var PORT_DEPTH = 0.25, PORT_EDGE = 0.02;                                  // 穿模的取樣點：從表面往實心那一邊挪 0.25 格、邊上的點往三角形重心挪 0.02 格（portCells：砲佔的格；蓋板照矩形取點，portPts）
 
 /** 第一次碰到這艘船（portsAnim、__game.ports）：sh.decos 裡 kind=portlid 的蓋板配到砲。一片都沒有（或都配不到）⇒ null。
  *  鉸鏈缺、lid_of 配不到砲、兩片指同一門砲（留第一片）的那幾片不演（畫成模型的樣子；匯入檢查報 ✗，portsIssues）。 */
@@ -109,13 +109,32 @@ function portMatTo(P, ang, out) {
   out[12] = h[0] + r0 * px + r4 * py + r8 * pz; out[13] = h[1] + r1 * px + r5 * py + r9 * pz; out[14] = h[2] + r2 * px + r6 * py + r10 * pz; out[15] = 1;
   return out;
 }
-/** 網格的取樣點（模型座標；三角形每 0.4 格一點，往實心那一邊挪 PORT_DEPTH 格 ⇒ 落在模型自己的格裡）。照網格編號快取在船型上（T.portPts；只給畫面與匯入檢查）。
- *  往哪一邊照網格的有號體積決定：遊戲的網格 cross(e1, e2) 朝實心那一邊（有號體積是負的：蓋板 −264、砲 −1049、舵 −6710，量過）。
- *  ⛔ 照 21_gunnery.js meshOcc 的 −n × 0.5：取樣點落在模型外面半格（meshOcc 再外擴一格，所以看不出來）⇒ 關上的蓋板吃進船殼、跟縮回去的砲多碰一格（光榮號真的蓋板：✗ 26 條）。
- *  PORT_DEPTH ＝ 0.25：最細的模型是 0.5 倍（砲）⇒ 落在那一格的正中；邊上的點再往三角形重心挪 PORT_EDGE 格（⛔ 剛好落在格線上 ⇒ floor 算到隔壁那一格：砲口那一面跟關上的蓋板只是貼著，也會算成碰到）。 */
+/** 蓋板的取樣點（模型座標）：蓋板當一塊矩形 —— 網格外框最薄那一軸（厚度）取中間一層，另外兩軸每 PORT_STEP 格一點、擺在小格的正中（離外框 PORT_STEP / 2 ⇒ ⛔ 不落在格線上：floor 不會算到隔壁格）。
+ *  ⛔ 厚度也取好幾層 ⇒ 外層的點往船裡走碰到更深的船殼，關上時貼著的那一圈（portRing）多了一倍以上（潮墓號 113 → 313 格）。
+ *  照網格編號快取在船型上（T.portPts；建蓋板 portLid、匯入檢查用，演出那一格不讀）。
+ *  Tim 2026-11-06：「炮門碰撞應該只要粗略的判定一個矩形」—— 以前照三角形每 0.4 格取點（連砲的網格也存）⇒ 4 對 4、八型 56 MB。 */
+var PORT_STEP = 0.5;
 function portPts(T, k) {
   var C = T.portPts || (T.portPts = {}); if (C[k]) return C[k];
-  var m = T.rig && T.rig.meshes && T.rig.meshes[k], out = [];
+  var m = T.rig && T.rig.meshes && T.rig.meshes[k], v = m && m.verts, out = [];
+  if (v && v.length) {
+    var lo = [Infinity, Infinity, Infinity], hi = [-Infinity, -Infinity, -Infinity], j, a;
+    for (j = 0; j < v.length; j += 3) for (a = 0; a < 3; a++) { if (v[j + a] < lo[a]) lo[a] = v[j + a]; if (v[j + a] > hi[a]) hi[a] = v[j + a]; }
+    var ext = [0, 1, 2].map(function (a) { return hi[a] - lo[a]; }), th = ext.indexOf(Math.min(ext[0], ext[1], ext[2]));   // th：最薄的那一軸（蓋板的厚度）⇒ 只取中間一層（矩形是平的）
+    var n = [0, 1, 2].map(function (a) { return a === th ? 1 : Math.max(1, Math.ceil(ext[a] / PORT_STEP - 1e-9)); }), d = [0, 1, 2].map(function (a) { return ext[a] / n[a]; });
+    for (var x = 0; x < n[0]; x++) for (var y = 0; y < n[1]; y++) for (var z = 0; z < n[2]; z++) out.push(lo[0] + (x + 0.5) * d[0], lo[1] + (y + 0.5) * d[1], lo[2] + (z + 0.5) * d[2]);
+  }
+  return (C[k] = out);
+}
+function portKey(x, y, z) { return (Math.floor(x) + 512) + 1024 * ((Math.floor(y) + 512) + 1024 * (Math.floor(z) + 512)); }
+/** 砲的網格佔的格（模型座標；快取在 T.portCells）：三角形每 0.4 格一點，往實心那一邊挪 PORT_DEPTH 格 ⇒ 落在模型自己的格裡；點不存，只記落在哪幾格（⛔ 以前點也快取在船型上）。
+ *  往哪一邊照網格的有號體積決定：遊戲的網格 cross(e1, e2) 朝實心那一邊（有號體積是負的：蓋板 −264、砲 −1049、舵 −6710，量過）。
+ *  ⛔ 照 21_gunnery.js meshOcc 的 −n × 0.5：取樣點落在模型外面半格（meshOcc 再外擴一格，所以看不出來）⇒ 關上的蓋板吃進船殼、跟縮回去的砲多碰一格（光榮號真的蓋板：✗ 26 條）。
+ *  PORT_DEPTH ＝ 0.25：最細的模型是 0.5 倍（砲）⇒ 落在那一格的正中；邊上的點再往三角形重心挪 PORT_EDGE 格（⛔ 剛好落在格線上 ⇒ floor 算到隔壁那一格：砲口那一面跟關上的蓋板只是貼著，也會算成碰到）。
+ *  ⛔ 不外擴：meshOcc 外擴一格 ⇒ house 6、至少縮 5.75 的砲門會被當成穿過蓋板。 */
+function portCells(T, k) {
+  var C = T.portCells || (T.portCells = {}); if (C[k]) return C[k];
+  var m = T.rig && T.rig.meshes && T.rig.meshes[k], S = new Set();
   if (m && m.verts && m.tris) {
     var v = m.verts, vol = 0, j;
     for (j = 0; j < m.tris.length; j += 3) {                           // 有號體積（×6）：負 ⇒ cross(e1, e2) 朝裡
@@ -131,18 +150,10 @@ function portPts(T, k) {
       for (var p = 0; p <= st; p++) for (var q = 0; q <= st - p; q++) {
         var s = p / st, w = q / st, x = e1[0] * s + e2[0] * w, y = e1[1] * s + e2[1] * w, z = e1[2] * s + e2[2] * w;
         var dx = gx - x, dy = gy - y, dz = gz - z, dl = Math.hypot(dx, dy, dz), f = dl > PORT_EDGE ? PORT_EDGE / dl : 1;
-        out.push(v[A] + x + dx * f + n[0] * din, v[A + 1] + y + dy * f + n[1] * din, v[A + 2] + z + dz * f + n[2] * din);
+        S.add(portKey(v[A] + x + dx * f + n[0] * din, v[A + 1] + y + dy * f + n[1] * din, v[A + 2] + z + dz * f + n[2] * din));
       }
     }
   }
-  return (C[k] = out);
-}
-function portKey(x, y, z) { return (Math.floor(x) + 512) + 1024 * ((Math.floor(y) + 512) + 1024 * (Math.floor(z) + 512)); }
-/** 網格佔的格（取樣點落的那幾格；⛔ 不外擴：meshOcc 外擴一格 ⇒ house 6、至少縮 5.75 的砲門會被當成穿過蓋板）。快取在 T.portCells。 */
-function portCells(T, k) {
-  var C = T.portCells || (T.portCells = {}); if (C[k]) return C[k];
-  var p = portPts(T, k), S = new Set();
-  for (var i = 0; i < p.length; i += 3) S.add(portKey(p[i], p[i + 1], p[i + 2]));
   return (C[k] = S);
 }
 /** 蓋板轉 ang、砲沿砲軸往裡拉 r 格時，蓋板有幾個取樣點落在砲的格子裡（0 ＝ 不穿模）。砲照它現在的 modelLocal（迴旋砲、砲塔上的也對）。 */

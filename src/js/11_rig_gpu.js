@@ -14,8 +14,8 @@ function buildRig(owner) {          // 還綁著的繩（靜態，照雕刻作�
     if (CR && CR[j]) { ropeTube(TB, r.pts, r.col, Math.max(ROPE_TUBE_MIN, owner.T.rig.ropes[j].radius || 0)); return; }
     for (var j = 0; j + 5 < r.pts.length; j += 3) L.push(r.pts[j], r.pts[j + 1], r.pts[j + 2], r.col[0], r.col[1], r.col[2], r.pts[j + 3], r.pts[j + 4], r.pts[j + 5], r.col[0], r.col[1], r.col[2]);
   });
-  owner.lines = upload(owner.lines, new Float32Array(L), 6, [[0, 3, 0], [2, 3, 3]]);
-  if (TB) owner.ropeT = upload(owner.ropeT, new Float32Array(TB), 6, [[0, 3, 0], [2, 3, 3]]);   // 60_render.js 跟線同一趟畫（三角形）
+  owner.lines = upload(owner.lines, f32Of(L, owner, 'linesF'), 6, [[0, 3, 0], [2, 3, 3]]);
+  if (TB) owner.ropeT = upload(owner.ropeT, f32Of(TB, owner, 'ropeTF'), 6, [[0, 3, 0], [2, 3, 3]]);   // 60_render.js 跟線同一趟畫（三角形）
   owner.rigDirty = false;
 }
 // 繩梯的繩畫成實心的細管（Tim 2026-10-17：「繩梯的繩子可以粗一點」）：一般的繩照舊一條線（1 像素，雕刻的粗細只拿來算碰撞）；
@@ -590,12 +590,23 @@ function sailEqK(B, st) {
   st.nrmMax = mx; st.nrmBig = (st.nrmBig || 0) + big;
   return true;
 }
+/** 頂點上傳（線、三角形；第一次建 VAO 與緩衝）。緩衝照位元組的容量 o.bcap 重用：裝得下 ⇒ 只覆寫（bufferSubData）；裝不下、或用不到四分之一 ⇒ 重配，多留四分之一（第一次照實際大小 ⇒ 只傳一次的網格不多佔）。
+ *  ⛔ 以前每次都 bufferData ⇒ 每一格重建的繩（buildRig）每一格重配一次 GPU 記憶體（1 對 1 憲法號 90 秒 2.2 GB；Tim 2026-11-06 手機記憶體）。 */
 function upload(o, data, stride, attrs) {
   if (!o) { o = { vao: gl.createVertexArray(), vbo: gl.createBuffer(), n: 0 }; gl.bindVertexArray(o.vao); gl.bindBuffer(gl.ARRAY_BUFFER, o.vbo);
     attrs.forEach(function (a) { gl.enableVertexAttribArray(a[0]); gl.vertexAttribPointer(a[0], a[1], gl.FLOAT, false, stride * 4, a[2] * 4); }); gl.bindVertexArray(null); }
-  gl.bindBuffer(gl.ARRAY_BUFFER, o.vbo); gl.bufferData(gl.ARRAY_BUFFER, data, gl.DYNAMIC_DRAW); o.n = data.length / stride;
+  var nb = data.byteLength;
+  gl.bindBuffer(gl.ARRAY_BUFFER, o.vbo);
+  if (o.bcap === undefined || nb > o.bcap || nb * 4 < o.bcap) { o.bcap = o.bcap === undefined ? nb : Math.ceil(nb * 1.25 / 4) * 4; gl.bufferData(gl.ARRAY_BUFFER, o.bcap, gl.DYNAMIC_DRAW); }
+  if (nb) gl.bufferSubData(gl.ARRAY_BUFFER, 0, data);
+  o.n = data.length / stride;
   o.lb = vtxBox(o.lb, data, stride, data.length);                         // 頂點外框（第 0 號屬性 ＝ 位置；繩、鐵鍊、旗桿這些 ⇒ 鏡頭外的船不畫，60_rbatch.js viewVis）
   return o;
+}
+/** JS 陣列 L ⇒ 重用的 Float32Array（holder[key]；不夠才換大一號）的前 L.length 個 —— 每一格重建、上傳的頂點用（buildRig、錨鍊、鏈彈；⛔ 每一格 new Float32Array ⇒ 每一格一份垃圾）。 */
+function f32Of(L, holder, key) {
+  var F = holder[key]; if (!F || F.length < L.length) F = holder[key] = new Float32Array(Math.ceil(L.length * 1.25) + 12);
+  F.set(L); return F.subarray(0, L.length);
 }
 /** 頂點的外框：每 st 個 float 一個頂點、前 3 個是位置，只看前 len 個 float ⇒ lb（[x0, y0, z0, x1, y1, z1]，double；沒給就建）；沒有頂點 ⇒ lb[0] ＝ Infinity。 */
 function vtxBox(lb, A, st, len) {
