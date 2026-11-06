@@ -366,7 +366,7 @@ function tuiTradeTint(r) {
 /** 貿易：只列船上有 ∪ 城鎮有庫存的貨；上面一排買賣單位；每一列 城鎮 ｜ 賣（按鈕上是賣一桶拿到多少）｜ 貨物圖示 ｜ 買（買一桶付多少）｜ 船上（海商王那樣，Tim 2026-10-26；
  *  按鈕挨著貨要去的那一邊：買 ⇒ 進右邊的船上、賣 ⇒ 進左邊的城鎮）；圖示游標移上去說名字（td.g 的 data-n）；城鎮庫存照價錢上色（tuiTradeTint）；底下玩家金庫、載重。 */
 /** 「桶」這個單位（船上的數量後面、一次買賣那一排）：之後換成圖示只改這一處（Tim 2026-11-06「桶是否可以替換為icon表示」）。 */
-function tuiUnitHTML() { return '<small class="trade-unit">桶</small>'; }
+function tuiUnitHTML() { return '<span class="trade-unit" title="桶">' + battleIcon('barrel-unit') + '</span>'; }
 /** 船上那一格（Tim 2026-11-06「把 均價 數量 合併成一排(例如 66桶 均價1.33)」）：第一排 數量＋桶＋均價，第二排 賣價差；人（cat people）不寫桶、沒有均價。 */
 function tuiHoldHTML(r) {
   if (!(r.ship > 0)) return '<span class="tuiDim">–</span>';

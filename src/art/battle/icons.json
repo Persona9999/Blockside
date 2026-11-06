@@ -1,5 +1,10 @@
 {
   "icons": {
+    "barrel-unit": {
+      "file": "barrel-unit.png",
+      "label": "桶",
+      "globalSrc": "img/ui/globe/barrel-unit.png"
+    },
     "ship": {
       "file": "ship.png",
       "label": "船舶",

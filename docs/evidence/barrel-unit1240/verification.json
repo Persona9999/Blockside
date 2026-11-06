@@ -1,0 +1,77 @@
+{
+  "scope": "Render the built trade page in Chrome with representative host market replies.\nNo town simulation is run; the compiled page, atlas, renderers and controls are real.\n",
+  "views": [
+    {
+      "width": 1280,
+      "height": 900,
+      "screenshot": "trade-1280x900.png",
+      "quantityButton": 1000,
+      "count": 3,
+      "labels": [
+        "桶",
+        "桶",
+        "桶"
+      ],
+      "sizes": [
+        [
+          16,
+          16
+        ],
+        [
+          16,
+          16
+        ],
+        [
+          16,
+          16
+        ]
+      ],
+      "tableWidth": 614,
+      "bodyWidth": 614,
+      "peopleHasUnit": false,
+      "emptyHasUnit": false,
+      "hasAtlas": true,
+      "bounds": {
+        "left": 320,
+        "right": 960
+      },
+      "baselineWidth": 614
+    },
+    {
+      "width": 375,
+      "height": 812,
+      "screenshot": "trade-375x812.png",
+      "quantityButton": 1000,
+      "count": 3,
+      "labels": [
+        "桶",
+        "桶",
+        "桶"
+      ],
+      "sizes": [
+        [
+          16,
+          16
+        ],
+        [
+          16,
+          16
+        ],
+        [
+          16,
+          16
+        ]
+      ],
+      "tableWidth": 341,
+      "bodyWidth": 341,
+      "peopleHasUnit": false,
+      "emptyHasUnit": false,
+      "hasAtlas": true,
+      "bounds": {
+        "left": 8,
+        "right": 367
+      },
+      "baselineWidth": 341
+    }
+  ]
+}
