@@ -433,6 +433,16 @@ var TREE_SPECIES = {
   }
 };
 
+// TASK-1214：果園與桑園的共用闊葉樹；只在指定的田裡種，不新增野生分布。
+// 沿用既有枝葉算法，縮小樹冠並給 field 間距；加在最後，舊樹種的索引與種子不變。
+TREE_SPECIES.orchard = Object.assign({}, TREE_SPECIES.broadleaf, {
+  name: '果園樹（共用）', meta: { region: ['med'], type: 'crop' }, height: [3.2, 4.8],
+  trunk: Object.assign({}, TREE_SPECIES.broadleaf.trunk, { r: [0.12, 0.18] }),
+  leaf: Object.assign({}, TREE_SPECIES.broadleaf.leaf, { size: [0.55, 0.85], col: [0.26, 0.39, 0.19] }),
+  place: { town: true, spacing: 1, scale: [0.9, 1.1], shell: 0, view: 300, sink: 0.1, field: [3.0, 3.0], fieldK: 0.6 },
+  variants: 4
+});
+
 /** 有種子的亂數（mulberry32）：⇒ 回一個函式，每叫一次回 [0, 1)。 */
 function treeRng(seed) {
   var a = seed >>> 0;
