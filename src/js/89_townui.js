@@ -365,11 +365,16 @@ function tuiTradeTint(r) {
 }
 /** 貿易：只列船上有 ∪ 城鎮有庫存的貨；上面一排買賣單位；每一列 城鎮 ｜ 賣（按鈕上是賣一桶拿到多少）｜ 貨物圖示 ｜ 買（買一桶付多少）｜ 船上（海商王那樣，Tim 2026-10-26；
  *  按鈕挨著貨要去的那一邊：買 ⇒ 進右邊的船上、賣 ⇒ 進左邊的城鎮）；圖示游標移上去說名字（td.g 的 data-n）；城鎮庫存照價錢上色（tuiTradeTint）；底下玩家金庫、載重。 */
-function tuiTradeCostHTML(r) {
-  if (!(r.ship > 0) || r.cat === 'people') return '';
-  if (r.avgBuy == null) return '<small class="trade-cost">均價 未記錄</small>';
+/** 「桶」這個單位（船上的數量後面、一次買賣那一排）：之後換成圖示只改這一處（Tim 2026-11-06「桶是否可以替換為icon表示」）。 */
+function tuiUnitHTML() { return '<small class="trade-unit">桶</small>'; }
+/** 船上那一格（Tim 2026-11-06「把 均價 數量 合併成一排(例如 66桶 均價1.33)」）：第一排 數量＋桶＋均價，第二排 賣價差；人（cat people）不寫桶、沒有均價。 */
+function tuiHoldHTML(r) {
+  if (!(r.ship > 0)) return '<span class="tuiDim">–</span>';
+  var h = '<span class="trade-qty">' + tuiNum(Math.floor(r.ship)) + (r.cat === 'people' ? '' : tuiUnitHTML()) + '</span>';
+  if (r.cat === 'people') return h;
+  if (r.avgBuy == null) return h + '<small class="trade-cost">均價 未記錄</small>';
   var diff = r.sell - r.avgBuy;
-  return '<small class="trade-cost">均價 ' + tuiNum(r.avgBuy, 2) + '</small><small class="trade-spread ' + (diff >= 0 ? 'gain' : 'loss') + '">賣價差 ' + (diff >= 0 ? '+' : '−') + tuiNum(Math.abs(diff), 2) + '</small>';
+  return h + '<small class="trade-cost">均價 ' + tuiNum(r.avgBuy, 2) + '</small><small class="trade-spread ' + (diff >= 0 ? 'gain' : 'loss') + '">賣價差 ' + (diff >= 0 ? '+' : '−') + tuiNum(Math.abs(diff), 2) + '</small>';
 }
 function tuiTradeHTML() {
   var L = TUI.list; if (!L) return '<p class="tuiDim">問市場…</p>';
@@ -380,12 +385,12 @@ function tuiTradeHTML() {
   };
   var h = '<p class="tuiDim">只列船上有的、城鎮有庫存的貨（缺貨的不列）。按鈕上是一桶的價錢：買價含關稅 ' + Math.round(L.fee * 100) + '%、賣價扣關稅；越買越貴、越賣越便宜（照每一桶的庫存算）。</p>';
   h += '<p class="tuiDim">均價含購入關稅，按持有數量加權；賣價差為目前一桶賣價減均價，大量成交會隨庫存改價。未記錄的舊貨不估成本。</p>';
-  h += '<div class="tuiU">一次買賣' + TUI_UNITS.map(function (n) { return '<button type="button" data-u="' + n + '"' + (n === u ? ' class="on"' : '') + '>' + tuiNum(n) + '</button>'; }).join('') + '桶</div>';
+  h += '<div class="tuiU">一次買賣' + TUI_UNITS.map(function (n) { return '<button type="button" data-u="' + n + '"' + (n === u ? ' class="on"' : '') + '>' + tuiNum(n) + '</button>'; }).join('') + tuiUnitHTML() + '</div>';
   if (!L.rows.length) h += '<p class="tuiDim">船上空的，城鎮市場也是空的</p>';
   else h += '<table class="tuiT tuiTr"><tr><th>🏘 城鎮</th><th>賣</th><th>貨</th><th>買</th><th>⛵ 船上／均價</th></tr>' + L.rows.map(function (r) {
     return '<tr><td' + tuiTradeTint(r) + '>' + tuiNum(Math.floor(r.town)) + '</td><td class="b">' + btn('sell', r, r.sell) + '</td>' +
       '<td class="g" data-n="' + tuiEsc(r.name) + '"><img src="img/goods/' + encodeURIComponent(r.g) + '.png" alt="' + tuiEsc(r.name) + '" onerror="this.replaceWith(this.alt)"></td>' +   // 只畫圖示；沒有圖 ⇒ 換成名字
-      '<td class="b">' + btn('buy', r, r.buy) + '</td><td class="trade-hold">' + (r.ship > 0 ? tuiNum(Math.floor(r.ship)) : '<span class="tuiDim">–</span>') + tuiTradeCostHTML(r) + '</td></tr>';
+      '<td class="b">' + btn('buy', r, r.buy) + '</td><td class="trade-hold">' + tuiHoldHTML(r) + '</td></tr>';
   }).join('') + '</table>';
   var D = L.load, Hd = tuiShip();
   h += '<div class="tuiTiles"><div><small>👛 玩家金庫</small><b>' + tuiNum(L.funds, 2) + '</b></div><div><small>💰 城鎮金庫</small><b>' + tuiNum(L.townFunds) + '</b></div>' +
@@ -429,6 +434,27 @@ function tuiBoot() {
   document.addEventListener('pointerdown', function (e) { var P = $('tuiP'); if (TUI.open && P && !P.contains(e.target)) tuiClose(); });
   var t = Q.get('tab'); tuiToggle(TUI_TABS.some(function (x) { return x.k === t; }) ? t : 'sum');
 }
+/** 滑鼠按住面板的內容上下拖 ⇒ 捲（Tim 2026-11-06「無法透過拖曳畫面的方式滑動」）：掛在不會換的 #tuiP（#tuiBody 每次重畫都換一個）；
+ *  只接滑鼠（手指照瀏覽器自己捲）；拖超過 4 px 才算拖，拖過那一下放開不算點（不會順手買賣）。 */
+(function () {
+  var P = $('tuiP'), d = null; if (!P) return;
+  P.addEventListener('pointerdown', function (e) {
+    var B = e.target.closest && e.target.closest('#tuiBody');
+    if (B && e.pointerType === 'mouse' && e.button === 0) d = { id: e.pointerId, el: B, y: e.clientY, top: B.scrollTop, moved: false };
+  });
+  P.addEventListener('pointermove', function (e) {
+    if (!d || e.pointerId !== d.id) return;
+    var dy = e.clientY - d.y; if (!d.moved && Math.abs(dy) < 4) return;
+    if (!d.moved) { d.moved = true; d.el.classList.add('dragging'); try { P.setPointerCapture(e.pointerId); } catch (x) { /* 已放開 */ } }
+    d.el.scrollTop = d.top - dy;
+  });
+  function end(e) {
+    if (!d || e.pointerId !== d.id) return;
+    if (d.moved) { d.el.classList.remove('dragging'); P.addEventListener('click', function (c) { c.stopPropagation(); c.preventDefault(); }, { capture: true, once: true }); }   // 吃掉放開那一下的點
+    d = null;
+  }
+  P.addEventListener('pointerup', end); P.addEventListener('pointercancel', end);
+})();
 (function () {
   var a = $('tuiTK'), b = $('tuiK'), c = $('tuiDK');
   if (a) a.onclick = function () { tuiToggle('trade'); };

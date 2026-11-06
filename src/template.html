@@ -530,26 +530,27 @@
   #err label.chk{ display:inline-flex; align-items:center; gap:6px; margin:8px 0 0; font-size:13px; }
 
 /* Trade controls share the nautical wood grain; quantities and cost stay legible on narrow screens. */
-:is(#tradeDlg,.tuiTr,.tuiU) button,#tuiX{
+:is(.tuiTr,.tuiU) button,#tuiX{
   box-sizing:border-box;border:1px solid #b88b4b;border-radius:6px;color:#f5e6c8;cursor:pointer;min-height:36px;
   background:repeating-linear-gradient(2deg,transparent 0 7px,#160b0640 8px 9px,transparent 10px 13px),linear-gradient(105deg,#50331e,#77502c 45%,#4b2e1a);
   box-shadow:inset 0 1px 0 #e0b87577,inset 0 -3px 0 #241209,0 2px 3px #0008;
 }
-:is(#tradeDlg,.tuiTr,.tuiU) button:hover:not(:disabled),#tuiX:hover{border-color:#efd49a;filter:brightness(1.15);}
-:is(#tradeDlg,.tuiTr,.tuiU) button:focus-visible,#tuiX:focus-visible{outline:2px solid #fff0bf;outline-offset:2px;}
-:is(#tradeDlg,.tuiTr,.tuiU) button:active:not(:disabled),#tuiX:active{transform:translateY(1px);box-shadow:inset 0 2px 3px #180c08;}
-#tradeDlg .units button.on,.tuiU button.on{color:#fff0bf;border-color:#ffe0a0;background:repeating-linear-gradient(2deg,transparent 0 7px,#34180844 8px 9px,transparent 10px 13px),linear-gradient(105deg,#805027,#ae7d3c 45%,#755027);box-shadow:inset 0 0 0 1px #f4ca75,inset 0 -3px 0 #4a2a10;}
-:is(#tradeDlg,.tuiTr) button[data-side=sell]{border-color:#b57956;}
-:is(#tradeDlg,.tuiTr,.tuiU) button:disabled{cursor:default;opacity:.55;filter:saturate(.35);}
-#tradeBody .trade-hold,.tuiTr .trade-hold{min-width:90px;white-space:nowrap;font-variant-numeric:tabular-nums;}
-#tradeBody .trade-cost,.tuiTr .trade-cost{display:block;font-size:11px;line-height:1.4;color:#d5c5a8;}
-#tradeBody .trade-spread,.tuiTr .trade-spread{display:block;font-size:11px;line-height:1.4;}
-#tradeBody .gain,.tuiTr .gain{color:#9cddac;} #tradeBody .loss,.tuiTr .loss{color:#f3a28e;}
+:is(.tuiTr,.tuiU) button:hover:not(:disabled),#tuiX:hover{border-color:#efd49a;filter:brightness(1.15);}
+:is(.tuiTr,.tuiU) button:focus-visible,#tuiX:focus-visible{outline:2px solid #fff0bf;outline-offset:2px;}
+:is(.tuiTr,.tuiU) button:active:not(:disabled),#tuiX:active{transform:translateY(1px);box-shadow:inset 0 2px 3px #180c08;}
+.tuiU button.on{color:#fff0bf;border-color:#ffe0a0;background:repeating-linear-gradient(2deg,transparent 0 7px,#34180844 8px 9px,transparent 10px 13px),linear-gradient(105deg,#805027,#ae7d3c 45%,#755027);box-shadow:inset 0 0 0 1px #f4ca75,inset 0 -3px 0 #4a2a10;}
+.tuiTr button[data-side=sell]{border-color:#b57956;}
+:is(.tuiTr,.tuiU) button:disabled{cursor:default;opacity:.55;filter:saturate(.35);}
+.tuiTr .trade-hold{min-width:90px;white-space:nowrap;font-variant-numeric:tabular-nums;}
+.tuiTr .trade-cost{display:inline;margin-left:6px;font-size:11px;line-height:1.4;color:#d5c5a8;}   /* 跟數量同一排：66 桶 均價 1.33（Tim 2026-11-06） */
+.tuiTr .trade-unit,.tuiU .trade-unit{margin-left:2px;}
+#tuiBody.dragging{cursor:grabbing;}
+.tuiTr .trade-spread{display:block;font-size:11px;line-height:1.4;}
+.tuiTr .gain{color:#9cddac;} .tuiTr .loss{color:#f3a28e;}
 @media(max-width:640px){
-  #tradeBody{padding-left:8px;padding-right:8px;} #tradeBody th,#tradeBody td{padding-left:3px;padding-right:3px;}
-  #tradeBody td.b button,.tuiTr td.b button{min-width:56px;padding:3px 6px;min-height:40px;}
-  #tradeBody .units,.tuiU{flex-wrap:wrap;} #tradeBody .units button,.tuiU button{min-width:44px;padding:3px 8px;min-height:40px;}
-  #tradeBody .trade-hold,.tuiTr .trade-hold{min-width:78px;}
+  .tuiTr td.b button{min-width:56px;padding:3px 6px;min-height:40px;}
+  .tuiU{flex-wrap:wrap;} .tuiU button{min-width:44px;padding:3px 8px;min-height:40px;}
+  .tuiTr .trade-hold{min-width:78px;}
 }
 </style>
 </head>
