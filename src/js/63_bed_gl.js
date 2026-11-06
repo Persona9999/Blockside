@@ -71,7 +71,7 @@ evOn('bedWin', function () {                                             // 海�
   Object.keys(BEDFAR.g).forEach(function (k) { var c = k.split('_').map(Number); if (bedIdx(c[0], c[1]) < 0) bedFarDrop(k); });
   BEDFAR.todo = null; BEDFAR.ready = BEDFAR.ready.filter(function (r) { return bedIdx(r[1].cx, r[1].cy) >= 0; }); BEDFOAM.dirty = true;
   Object.keys(BEDDRY.c).forEach(function (k) { var c = k.split('_').map(Number); if (bedIdx(c[0], c[1]) < 0) { if (BEDDRY.c[k]) BEDDRY.dirty = true; delete BEDDRY.c[k]; } });
-  Object.keys(BEDDRY.src).forEach(function (k) { var c = k.split('_').map(Number); if (bedIdx(c[0], c[1]) < 0) delete BEDDRY.src[k]; });
+  Object.keys(BEDDRY.src).forEach(function (k) { var c = k.split('_').map(Number); if (bedIdx(c[0], c[1]) < 0) delete BEDDRY.src[k]; }); BEDSPR.dirty = true;
   if (BEDDRY.on) BEDDRY.dirty = true;                                    // 遮罩照新的窗重排
 }, 0, true);
 /** 丟掉一塊的遠景：網格、遠景的樹（63_trees.js）。 */
@@ -595,7 +595,7 @@ function bedDryU(u) {
 }
 /** 一塊的遮罩（BED_DRY_SP 公尺一格，1 ＝ 不畫海）：那一塊有「不是海、地面低於 0」的點才算，每一格裡的點全都不是海 ⇒ 遮。fine ⇒ 細的那一份（換掉粗的）；不然已經算過就不算。 */
 function bedDryPut(k, C, fine) {
-  if ((fine || !BEDDRY.src[k]) && BEDDRY.src[k] !== C) { BEDDRY.src[k] = C; BEDDRY.dirty = true; }   // 跟海連不連（bedDryTex）用的地面：細的那一份優先
+  if ((fine || !BEDDRY.src[k]) && BEDDRY.src[k] !== C) { BEDDRY.src[k] = C; BEDDRY.dirty = true; BEDSPR.dirty = true; }   // 跟海連不連（bedDryTex）用的地面：細的那一份優先；泉眼（BEDSPR）照同一份
   if (!fine && k in BEDDRY.c) return;
   var wd = C.wd, h = C.h0, mt = C.mat0, n = C.n, N = n * n, D = null, any = false, o, lw = BED_MOUTH.low * 10;
   // 不是海：陸地、低於海平面的內陸水（恩里基約湖）；水面在 low 以上的內陸水交給河口場（BEDMOUTH；⛔ 算進來 ⇒ 河道 32 m 一塊一塊切掉海、河口一排方塊）
@@ -791,12 +791,59 @@ function bedDryCalc(m, st) {
 //     一層推 1／BEDW_FLOW_K 秒就跳回原位（淡到 0 的那一刻跳、順便換一組雜訊的位置），兩層錯開半個週期 ⇒ 一直在流、不會越推越扭（flow map 的做法）。
 //     流得快（1.5 m/s 以上）⇒ 漣漪大一點、條紋上多一點順流漂的白點。水流 0（湖）⇒ 跟以前一樣只有細碎漣漪慢慢飄。
 //   河口（河口場 BEDMOUTH 的 b ＝ 海畫幾成）：河面照 1 − b 淡出 ⇒ 交接帶裡底下抬高的海透出來、接上外面的海。
+// 泉眼（BEDSPR；TASK-1234，Tim 2026-11-06「河流源頭是否有辦法做一些水湧出的演出(參考現實河流源頭)」；只給人看）：
+//   位置照海圖塊的段 5（Blocksail：從泉水開始的河的第一點；src/MAP_CHUNK.md §4）—— 每塊最新的那一份（BEDDRY.src，細的優先）裡收集，換塊、換窗才重收。
+//   兩種：0 泉眼湧出（石灰岩泉：清澈的潭、水從底下往上冒）、1 岩縫流出（山裡、第一段很陡：水從崖上出來、起泡）。
+//   第一層（水面）：內陸水的著色器照離鏡頭最近的 BED_SPR_N 個畫一圈一圈往外推的湧動、中心翻滾，湧出的偏藍綠、岩縫的偏白（bedWaterFS）。
+//   第二層（水花）：離鏡頭 BED_SPR_FX 公尺內、那一點有細的內陸水（bedWet）⇒ 照「船邊水花」那一檔（13_water.js wpLv）冒白沫（貼在水面、順著水流漂）與水滴；
+//     湧出的：白沫少、小水泡；岩縫的：白沫多、水滴往上濺。亂數用水花自己的 rndW ⇒ 戰局不變；水花關掉（第 0 檔）⇒ 不冒。
+var BEDSPR = { L: [], dirty: true, acc: {} }, BED_SPR_N = 8, BED_SPR_FX = 500;
+var BED_SPR_RATE = [{ foam: 2.5, drop: 4, vy: [0.4, 0.9], s: 0.06 }, { foam: 6, drop: 25, vy: [1.0, 2.2], s: 0.12 }];   // 每種每秒幾片白沫、幾顆水滴（×水花那一檔的 k）、水滴往上多快、多大
+/** 窗裡的泉眼（世界座標）：[{ x, z, w（寬）, k（種類）, s（水面）}]；換塊、換窗才重收。 */
+function bedSprList() {
+  var S = BEDSPR; if (!S.dirty) return S.L;
+  S.dirty = false; S.L = [];
+  if (!BED || !BED.A) return S.L;
+  Object.keys(BEDDRY.src).forEach(function (k) { var C = BEDDRY.src[k]; if (C && C.sp) C.sp.forEach(function (s) { S.L.push({ x: s[0] - BED.ax, z: s[1] - BED.az, s: s[2], w: s[3], k: s[4] }); }); });
+  return S.L;
+}
+/** 內陸水著色器的泉眼（離鏡頭最近的 BED_SPR_N 個、3 km 以內）。 */
+function bedSprU(u) {
+  var L = bedSprList(), e = CAM.eye, M = [];
+  for (var i = 0; i < L.length; i++) { var d = Math.hypot(L[i].x - e[0], L[i].z - e[2]); if (d < 3000) M.push([d, L[i]]); }
+  M.sort(function (a, b) { return a[0] - b[0]; }); M.length = Math.min(M.length, BED_SPR_N);
+  var A = new Float32Array(BED_SPR_N * 4);
+  M.forEach(function (m, j) { A[4 * j] = m[1].x; A[4 * j + 1] = m[1].z; A[4 * j + 2] = m[1].w; A[4 * j + 3] = m[1].k; });
+  gl.uniform1i(u.uSpN, M.length); if (M.length) gl.uniform4fv(u.uSpA, A);
+}
+/** 第二層：泉眼冒白沫與水滴（viewStep，水花之後）。 */
+function bedSpringFx(dt) {
+  var Lv = wpLv(); if (!Lv || !(dt > 0) || !BEDWAT.on || !BED || !BED.A) return;
+  var L = bedSprList(), e = CAM.eye;
+  L.forEach(function (s) {
+    if (Math.hypot(s.x - e[0], s.z - e[2]) > BED_SPR_FX) return;
+    var r = BEDW.n ? bedWet(s.x, s.z) : null; if (!r) return;           // 那一點還沒有細的內陸水（還沒載到、遠景）⇒ 不冒
+    var P = BED_SPR_RATE[s.k] || BED_SPR_RATE[0], key = s.x.toFixed(1) + ',' + s.z.toFixed(1), A = BEDSPR.acc[key] || (BEDSPR.acc[key] = [0, 0]), R0 = Math.max(1.5, s.w * 0.5), y = r.s;
+    WP_SRC = 'spring';
+    A[0] += P.foam * Lv.k * dt; A[1] += P.drop * Lv.k * dt;
+    while (A[0] >= 1) {
+      A[0] -= 1; var a = rndW() * 6.2832, rd = R0 * 0.6 * Math.sqrt(rndW()), cx = Math.cos(a), cz = Math.sin(a);
+      wfAdd(s.x + cx * rd, s.z + cz * rd, cx * 0.25 + r.fx * 0.6, cz * 0.25 + r.fz * 0.6, rgW(3, 6), 0.25 + 0.01 * s.w, 0.9 + 0.02 * s.w, s.k ? 0.7 : 0.45, rgW(-0.3, 0.3), y);
+    }
+    while (A[1] >= 1) {
+      A[1] -= 1; var b = rndW() * 6.2832, rb = R0 * 0.5 * Math.sqrt(rndW()), vy = rgW(P.vy[0], P.vy[1]), hs = s.k ? 0.6 : 0.1;
+      wsAdd(s.x + Math.cos(b) * rb, y + 0.02, s.z + Math.sin(b) * rb, Math.cos(b) * hs + r.fx * 0.4, vy, Math.sin(b) * hs + r.fz * 0.4, 2 * vy / G + 0.05, P.s * rgW(0.7, 1.3), s.k ? 0.7 : 0.55);
+    }
+  });
+  WP_SRC = '';
+}
+evOn('viewStep', bedSpringFx, 4, true);                             // 水花之後（13_water.js stepWater order 3）
 var BEDW_FLOW_K = 0.3;
 var BEDW_VS = '#version 300 es\nlayout(location=0) in vec3 aP; layout(location=1) in float aD; layout(location=2) in vec2 aF; layout(location=3) in vec2 aG; uniform mat4 uVP; out vec3 vW; out float vD; out vec2 vF; out vec2 vG;\n' +
   'void main(){ vW=aP; vD=aD; vF=aF; vG=aG; gl_Position=uVP*vec4(aP,1.0); }\n';
 function bedWaterFS() {
   var K = BEDW_FLOW_K.toFixed(3);
-  return '#version 300 es\nprecision highp float;\n' + SHADOW_GLSL + 'in vec3 vW; in float vD; in vec2 vF; in vec2 vG; uniform vec3 uSun,uEye,uFog,uSky,uGround; uniform float uFogD,uSeaT,uBedOn; uniform vec4 uBedR; uniform sampler2D uBedT; out vec4 o;\n' +
+  return '#version 300 es\nprecision highp float;\n' + SHADOW_GLSL + 'in vec3 vW; in float vD; in vec2 vF; in vec2 vG; uniform vec3 uSun,uEye,uFog,uSky,uGround; uniform float uFogD,uSeaT,uBedOn; uniform vec4 uBedR; uniform sampler2D uBedT; uniform vec4 uSpA[' + BED_SPR_N + ']; uniform int uSpN; out vec4 o;\n' +
     'float bh(vec2 p){ p=fract(p*vec2(123.34,456.21)); p+=dot(p,p+45.32); return fract(p.x*p.y); }\n' +
     'float bn(vec2 p){ vec2 i=floor(p), f=fract(p); f=f*f*(3.0-2.0*f); return mix(mix(bh(i),bh(i+vec2(1.0,0.0)),f.x),mix(bh(i+vec2(0.0,1.0)),bh(i+vec2(1.0,1.0)),f.x),f.y); }\n' +
     // 一層漣漪（q ＝ 推過的位置，d ＝ 水流方向、ks ＝ 流速的成數）⇒ xy 法線的擾動、z 白點
@@ -810,12 +857,20 @@ function bedWaterFS() {
     ' vec2 q0=p-vF*(t0/' + K + ')+vec2(0.0,uSeaT*0.03)+vec2(17.3,5.1)*floor(uSeaT*' + K + '), q1=p-vF*(t1/' + K + ')+vec2(uSeaT*0.03,0.0)+vec2(7.9,13.7)*floor(uSeaT*' + K + '+0.5);\n' +
     ' vec3 R=rip(q0,d,ks)*w0+rip(q1,d,ks)*(1.0-w0);\n' +
     ' float rk=(1.0-fall)*(1.0-smoothstep(60.0,500.0,fd)); vec2 g=R.xy*rk;\n' +
+    // 泉眼（BEDSPR；TASK-1234）：一圈一圈往外推的湧動（法線往外的波，越外越弱）＋中心翻滾（兩層雜訊往上冒）；sb ＝ 泉眼湧出的中心（偏清澈的藍綠）、sr ＝ 岩縫流出（白、起泡）
+    ' float sb=0.0, sr=0.0, spk=1.0-smoothstep(150.0,700.0,fd);\n' +
+    ' for(int i=0;i<' + BED_SPR_N + ';i++){ if(i>=uSpN) break; vec4 q4=uSpA[i]; vec2 dd=p-q4.xy; float r=length(dd), R0=max(1.5,q4.z*0.5); if(r>R0*8.0) continue;\n' +
+    '   vec2 dr=dd/max(r,0.05); float fo=exp(-r/(R0*2.5)), bo=1.0-smoothstep(0.0,R0,r);\n' +
+    '   g+=dr*cos(r*(2.4/R0)-uSeaT*2.6)*0.35*fo*spk*(1.0-fall);\n' +
+    '   g+=vec2(bn(p*1.7+vec2(0.0,uSeaT*1.3))-0.5,bn(p*1.7+vec2(4.1,-uSeaT*1.1))-0.5)*0.5*bo*spk;\n' +
+    '   if(q4.w>0.5) sr=max(sr,bo); else sb=max(sb,bo*0.8+fo*0.2); }\n' +
     ' vec3 nn=normalize(n+vec3(g.x,0.0,g.y)); float fr=0.02+0.98*pow(1.0-max(dot(nn,v),0.0),5.0);\n' +
     ' vec3 r=reflect(-v,nn); vec3 sky=mix(uFog,uSky,clamp(r.y*1.6,0.0,1.0)); float sk=shadowK(vW,vec3(0.0,1.0,0.0));\n' +
     ' vec3 lit=mix(uGround,uSky,0.6)*0.65+vec3(1.0,0.96,0.88)*max(dot(n,uSun),0.0)*0.7*sk;\n' +
     ' float sp=pow(max(dot(r,uSun),0.0),160.0)*1.3*sk*(1.0-fall);\n' +
     ' vec3 c=mix(vec3(0.07,0.19,0.16)*lit,sky,fr)+vec3(1.0,0.92,0.75)*sp;\n' +
     ' float e=smoothstep(0.0,0.4,vD), a=clamp(e*mix(0.55,0.9,1.0-exp(-0.25*vD))+fr*0.4*e,0.0,0.97);\n' +
+    ' c=mix(c,vec3(0.13,0.45,0.42)*(lit*0.9+0.15),sb*0.55); c=mix(c,vec3(0.86,0.9,0.9)*(lit*0.8+0.2),sr*0.5); a=max(a,(sb*0.45+sr*0.7)*smoothstep(0.0,0.2,vD));\n' +   // 泉眼的顏色
     ' float fw=R.z*rk*0.4*(1.0-smoothstep(150.0,400.0,fd)); c=mix(c,vec3(0.85,0.88,0.86)*(lit*0.8+0.2),fw); a=max(a,fw*e);\n' +   // 順流漂的白點
     ' if(fall>0.0){ vec2 hn=normalize(n.xz+vec2(1e-4,0.0)); float u=dot(p,vec2(-hn.y,hn.x));\n' +
     '   float s=bn(vec2(u*1.3,vW.y*0.25+uSeaT*2.2))*0.6+bn(vec2(u*4.0,vW.y*0.9+uSeaT*4.5))*0.4;\n' +
@@ -836,6 +891,7 @@ function bedWaterDraw() {
   gl.useProgram(PW.prog); setCommon(PW); gl.uniform1f(PW.u.uFogD, WX.fog * BED_FOG * CAM.fogK);
   var on = !!BEDFOAM.tex; gl.uniform1f(PW.u.uBedOn, on ? 1 : 0); gl.activeTexture(gl.TEXTURE10); gl.bindTexture(gl.TEXTURE_2D, on ? BEDFOAM.tex : DUMMY); gl.uniform1i(PW.u.uBedT, 10); gl.activeTexture(gl.TEXTURE0);   // 河口場（交接帶淡出）
   if (on) gl.uniform4f(PW.u.uBedR, BEDFOAM.ox, BEDFOAM.oz, BEDFOAM.sp, BEDFOAM.N);
+  bedSprU(PW.u);                                                         // 泉眼（BEDSPR）
   var cf = gl.isEnabled(gl.CULL_FACE); gl.disable(gl.CULL_FACE); gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA); gl.depthMask(false);
   gl.enable(gl.POLYGON_OFFSET_FILL); gl.polygonOffset(-1, -4);
   var PL = bedPlanes(CAM.vp);

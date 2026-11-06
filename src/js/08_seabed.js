@@ -239,7 +239,7 @@ function bedDecode(b64) {
     h[o] = pred + d; if (h[o] < mn) mn = h[o]; if (h[o] > mx) mx = h[o];
   }
   for (var k = 0; k < N;) { var v = u(), c = u(); mat.fill(v, k, k + c); k += c; }
-  var fo = null, foN = 0, vg = null, vgN = 0, wd = null, wf = null;      // 選用的段（MAP_CHUNK.md §4）：1 ＝ 林地覆蓋、2 ＝ 植被（每點長得出哪幾種，位元 ＝ area.vis）、3 ＝ 內陸水、4 ＝ 內陸水的水流；不認得的記號 ⇒ 停（之後的段讀不了）
+  var fo = null, foN = 0, vg = null, vgN = 0, wd = null, wf = null, sp = null;      // 選用的段（MAP_CHUNK.md §4）：1 ＝ 林地覆蓋、2 ＝ 植被（每點長得出哪幾種，位元 ＝ area.vis）、3 ＝ 內陸水、4 ＝ 內陸水的水流；不認得的記號 ⇒ 停（之後的段讀不了）
   while (p < b.length) {
     var tg = u();
     if (tg === 3) {                                                      // 內陸水（TASK-0768）：n² 個水深（分米；水面 ＝ 存的高度 ＋ 水深；0 ＝ 不是內陸水），跟高度、底質同一套點；畫面（63_bed_gl.js）＋ 模擬（bedWet）
@@ -249,7 +249,13 @@ function bedDecode(b64) {
     }
     if (tg === 4 && wd) {                                                // 內陸水的水流（河；TASK-0768）：段 3 有水的點照順序，（往東, 往南 cm/s, 坡度 十萬分之一, 連續幾個）一組 ⇒ m/s、坡度
       wf = [new Float32Array(N), new Float32Array(N), new Float32Array(N)];
-      for (k = 0; k < N && p < b.length;) { var fe = zg(u()) / 100, fz = zg(u()) / 100, fsl = u() / 1e5; c = u(); while (c > 0 && k < N) { if (wd[k]) { wf[0][k] = fe; wf[1][k] = fz; wf[2][k] = fsl; c--; } k++; } }
+      var nW = 0; for (k = 0; k < N; k++) if (wd[k]) nW++;               // 有水的點讀完就停（TASK-1234：以前讀到整塊最後一點 ⇒ 後面接的段 5 被當成水流吃掉；舊版吃掉也只是掃過乾的點，不寫錯值）
+      for (k = 0; nW > 0 && k < N && p < b.length;) { var fe = zg(u()) / 100, fz = zg(u()) / 100, fsl = u() / 1e5; c = u(); while (c > 0 && k < N) { if (wd[k]) { wf[0][k] = fe; wf[1][k] = fz; wf[2][k] = fsl; c--; nW--; } k++; } }
+      continue;
+    }
+    if (tg === 5) {                                                      // 泉眼（河的源頭；TASK-1234）：幾個、每個（離這一塊西北角往東、往南 分米, 水面 分米, 寬 分米, 種類）⇒ 海域座標 [往東, 往南, 水面, 寬, 種類（0 泉眼湧出、1 岩縫流出）]；只給人看（63_bed_gl.js BEDSPR）
+      sp = []; var spn = u(), ch = (n - 1) * step;
+      for (k = 0; k < spn; k++) { var se = u() / 10, ss = u() / 10, sv = zg(u()) / 10, sw = u() / 10; sp.push([cx * ch + se, cy * ch + ss, sv, sw, u()]); }
       continue;
     }
     if (tg !== 1 && tg !== 2) break;
@@ -257,7 +263,7 @@ function bedDecode(b64) {
     for (k = 0; k < sa.length;) { v = u(); c = u(); sa.fill(v, k, k + c); k += c; }
     if (tg === 1) { fo = sa; foN = sn; } else { vg = sa; vgN = sn; }
   }
-  var C = { cx: cx, cy: cy, n: n, step: step, h: h, mat: mat, h0: h, mat0: mat, min: mn / 10, max: mx / 10, min0: mn / 10, max0: mx / 10, fo: fo, foN: foN, vg: vg, vgN: vgN, wd: wd, wf: wf, vxk: 'none' };
+  var C = { cx: cx, cy: cy, n: n, step: step, h: h, mat: mat, h0: h, mat0: mat, min: mn / 10, max: mx / 10, min0: mn / 10, max0: mx / 10, fo: fo, foN: foN, vg: vg, vgN: vgN, wd: wd, wf: wf, sp: sp, vxk: 'none' };
   if (wd) { BEDW.n++; for (k = 0; k < N; k++) if (wd[k]) { var ws = (h[k] + wd[k]) / 10; if (ws > BEDW.top) BEDW.top = ws; if (ws < BEDW.low) BEDW.low = ws; } }   // 內陸水的模擬（bedWet）：解過幾塊、水面最高最低
   bedVxBake(C);
   return C;

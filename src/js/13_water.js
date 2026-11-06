@@ -14,7 +14,7 @@ var WP_LV = [null, { ws: 2000, wf: 1000, k: 0.45, pts: 16, life: 0.55 }, { ws: 4
 var WS_MAX = 8000, WF_MAX = 4000, WP_RING = 48;
 var WS = { n: 0, p: new Float32Array(WS_MAX * 3), v: new Float32Array(WS_MAX * 3), life: new Float32Array(WS_MAX), max: new Float32Array(WS_MAX), s: new Float32Array(WS_MAX), a: new Float32Array(WS_MAX) };
 var WF = { n: 0, p: new Float32Array(WF_MAX * 2), v: new Float32Array(WF_MAX * 2), life: new Float32Array(WF_MAX), max: new Float32Array(WF_MAX), s0: new Float32Array(WF_MAX), s1: new Float32Array(WF_MAX),
-  a: new Float32Array(WF_MAX), rot: new Float32Array(WF_MAX), w: new Float32Array(WF_MAX), seed: new Float32Array(WF_MAX) };
+  a: new Float32Array(WF_MAX), rot: new Float32Array(WF_MAX), w: new Float32Array(WF_MAX), seed: new Float32Array(WF_MAX), y: new Float32Array(WF_MAX).fill(NaN) };   // y：貼在哪個水面（內陸水、泉眼；NaN ＝ 照海的浪）
 var WP_HIDE = false, WFBUF = new Float32Array(WF_MAX * 8), WP_STAT = { spray: 0, foam: 0, src: {} }, FOAMG = null;
 PBUF = new Float32Array((PMAX + WS_MAX + 64) * 9);          // 點精靈的緩衝多留水滴的份（12_effects.js；60_render.js 一起畫）
 var WP_SRC = '', PT_MUTE = false;   // PT_MUTE：spawnPt 收到也不放（亂數呼叫端已經抽完）
@@ -27,11 +27,11 @@ function wsAdd(x, y, z, vx, vy, vz, life, s, a) {
   WS.p[o] = x; WS.p[o + 1] = y; WS.p[o + 2] = z; WS.v[o] = vx; WS.v[o + 1] = vy; WS.v[o + 2] = vz;
   WS.life[i] = WS.max[i] = life; WS.s[i] = s; WS.a[i] = a; WP_STAT.spray++;
 }
-function wfAdd(x, z, vx, vz, life, s0, s1, a, w) {
+function wfAdd(x, z, vx, vz, life, s0, s1, a, w, y) {                // y：內陸水的水面（泉眼的白沫，63_bed_gl.js bedSpringFx）；沒給 ⇒ 貼著海的浪
   var L = wpLv(); if (!L) return;
   var i = WF.n < L.wf ? WF.n++ : (rndW() * WF.n) | 0;        // 滿了 ⇒ 隨便頂掉一片（⛔ 不收新的 ⇒ 船尾的舊白沫佔滿，船頭生不出來）
   WF.p[i * 2] = x; WF.p[i * 2 + 1] = z; WF.v[i * 2] = vx; WF.v[i * 2 + 1] = vz;
-  WF.life[i] = WF.max[i] = life * L.life; WF.s0[i] = s0; WF.s1[i] = s1; WF.a[i] = a; WF.rot[i] = rndW() * 6.2832; WF.w[i] = w || 0; WF.seed[i] = rndW() * 64; WP_STAT.foam++;
+  WF.life[i] = WF.max[i] = life * L.life; WF.s0[i] = s0; WF.s1[i] = s1; WF.a[i] = a; WF.rot[i] = rndW() * 6.2832; WF.w[i] = w || 0; WF.seed[i] = rndW() * 64; WF.y[i] = y == null ? NaN : y; WP_STAT.foam++;
 }
 /** 船型 T 的水線一圈（設計水線那一層、船殼最外那一格）：兩舷各 WP_RING 點 [x, y, 外法線 nx, ny]（格座標）。第一次用到時算。 */
 function wpRing(T) {
@@ -81,7 +81,7 @@ function stepWater(dt, only) {
     WF.life[i] -= dt;
     if (WF.life[i] <= 0) {
       var m = --WF.n;
-      if (i !== m) { WF.p.copyWithin(i * 2, m * 2, m * 2 + 2); WF.v.copyWithin(i * 2, m * 2, m * 2 + 2); WF.life[i] = WF.life[m]; WF.max[i] = WF.max[m]; WF.s0[i] = WF.s0[m]; WF.s1[i] = WF.s1[m]; WF.a[i] = WF.a[m]; WF.rot[i] = WF.rot[m]; WF.w[i] = WF.w[m]; WF.seed[i] = WF.seed[m]; }
+      if (i !== m) { WF.p.copyWithin(i * 2, m * 2, m * 2 + 2); WF.v.copyWithin(i * 2, m * 2, m * 2 + 2); WF.life[i] = WF.life[m]; WF.max[i] = WF.max[m]; WF.s0[i] = WF.s0[m]; WF.s1[i] = WF.s1[m]; WF.a[i] = WF.a[m]; WF.rot[i] = WF.rot[m]; WF.w[i] = WF.w[m]; WF.seed[i] = WF.seed[m]; WF.y[i] = WF.y[m]; }
       i--; continue;
     }
     WF.p[i * 2] += WF.v[i * 2] * dt; WF.p[i * 2 + 1] += WF.v[i * 2 + 1] * dt; WF.v[i * 2] *= kf; WF.v[i * 2 + 1] *= kf; WF.rot[i] += WF.w[i] * dt; WF.w[i] *= kf;
@@ -208,7 +208,7 @@ function wpGL() {
     '#version 300 es\nlayout(location=0) in vec2 aQ; layout(location=1) in vec4 iA; layout(location=2) in vec4 iB; uniform mat4 uVP; uniform vec2 uC, uSG;\n' + SEA_GLSL +
     'out vec2 vQ; out vec3 vW; out float vA; out float vS;\n' +
     'void main(){ float c=cos(iA.w), s=sin(iA.w); vec2 p=iA.xy+vec2(c*aQ.x-s*aQ.y, s*aQ.x+c*aQ.y)*iA.z; float r=length(p-uC);\n' +
-    ' float h=seaHs(p,max(uSG.x,r*uSG.y))*(1.0-smoothstep(900.0,1600.0,r)); vW=vec3(p.x,h+0.06,p.y); vQ=aQ; vA=iB.x; vS=iB.y; gl_Position=uVP*vec4(vW,1.0); }\n',
+    ' float h=iB.w>0.5?iB.z:seaHs(p,max(uSG.x,r*uSG.y))*(1.0-smoothstep(900.0,1600.0,r)); vW=vec3(p.x,h+0.06,p.y); vQ=aQ; vA=iB.x; vS=iB.y; gl_Position=uVP*vec4(vW,1.0); }\n',
     '#version 300 es\nprecision highp float; in vec2 vQ; in vec3 vW; in float vA; in float vS; uniform vec3 uEye,uFog; uniform float uFogD; out vec4 o;\n' + SHADOW_GLSL + HULL_GLSL +
     'float hs1(float n){ return fract(sin(n*12.9898)*43758.5453); }\n' +
     'float vn(vec2 p){ vec2 i=floor(p), f=fract(p); f=f*f*(3.0-2.0*f); float a=hs1(dot(i,vec2(1.0,57.0))), b=hs1(dot(i+vec2(1.0,0.0),vec2(1.0,57.0))), c=hs1(dot(i+vec2(0.0,1.0),vec2(1.0,57.0))), d=hs1(dot(i+vec2(1.0,1.0),vec2(1.0,57.0))); return mix(mix(a,b,f.x),mix(c,d,f.x),f.y); }\n' +
@@ -224,7 +224,8 @@ function wpDrawFoam(hullU) {
   for (var i = 0; i < WF.n; i++) {
     var f = WF.life[i] / WF.max[i], k = n * 8;
     WFBUF[k] = WF.p[i * 2]; WFBUF[k + 1] = WF.p[i * 2 + 1]; WFBUF[k + 2] = WF.s1[i] + (WF.s0[i] - WF.s1[i]) * f; WFBUF[k + 3] = WF.rot[i];
-    WFBUF[k + 4] = WF.a[i] * Math.min(1, f * 2.5) * Math.min(1, (1 - f) * 12 + 0.3); WFBUF[k + 5] = WF.seed[i]; n++;
+    WFBUF[k + 4] = WF.a[i] * Math.min(1, f * 2.5) * Math.min(1, (1 - f) * 12 + 0.3); WFBUF[k + 5] = WF.seed[i];
+    var fy = WF.y[i]; WFBUF[k + 6] = fy === fy ? fy : 0; WFBUF[k + 7] = fy === fy ? 1 : 0; n++;   // iB.zw：貼在內陸水的水面（泉眼）⇒ 那個高度、不照海的浪
   }
   gl.useProgram(P.foam.prog); setCommon(P.foam); hullU(P.foam);
   var Lv = SEA_LV[GFX.sea];
