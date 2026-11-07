@@ -147,7 +147,9 @@ var SEA_EDGE = [0.15, 0.05, 0.5, 0.22], SEA_EDGE_ON = 1;               // 岸線
 // 岸邊起伏（63_bed_gl.js bedShoreMesh；Tim 2026-11-07「優化一下地形邊緣的鋸齒」「起伏目前主要想套用在沿岸(主要是跟水的接觸面 太平整很怪)」「根據地形的亂數Seed鎖定(確保一致性)」）：
 //   水面上下 band 公尺內的地形多一層雜訊，最多 amp 公尺（照離水面多遠淡掉；坡度 flat ⇒ 0、到 slope ⇒ 全量 ⇒ 水邊橫向最多擺約 amp ÷ slope 公尺，平的淺灘不冒一塊一塊的沙洲、平地也不必細分）；兩層 lam 公尺一格的值雜訊、權重 wt；格點照經緯度（經度 × 111320、緯度 × 110540 公尺）⇒ 同一個地方每次都一樣，跟海域的原點在哪無關。
 //   seed ＋ 海域的 seed（area.seed，沒有 ⇒ 0）。網格（bedMesh）與海的著色器（BED_SHORE_GLSL snD）同一套；?shore=0 ⇒ 照以前（不細分、不加）。
-var BED_SHORE = { on: true, band: 0.9, amp: 0.35, flat: 0.02, slope: 0.12, lam: [9, 4.5], wt: [0.65, 0.35], seed: 0x5a17 };
+//   2026-11-07 第二版（Tim「有些地方還是會有明顯鋸齒感」「希望能有點Noise產生的隨機感 目前鋸齒太規律了」）：起伏改成照坡度定垂直量 ⇒ 水邊橫向擺 lat 公尺（陡岸也一樣）：
+//   垂直 ＝ min(lat ×（坡度 − flat）, cap)、管的範圍 ＝ max(band, 1.6 × 垂直)；多一層 20 m 的 ⇒ 水邊一段一段彎，不再跟著格子一齒一齒。以前垂直最多 0.35 m ⇒ 陡的河岸只擺 0.7 m，格子的齒還在。
+var BED_SHORE = { on: true, band: 0.9, flat: 0.02, lat: 3, cap: 1.2, lam: [20, 9, 4], wt: [0.45, 0.35, 0.2], seed: 0x5a17 };
 var SEA_RAG = [5, 0.5, 1.0];                                           // 岸線曲折（shoreW edgeN、uRag）：水邊照坡度橫向擺幾公尺（垂直 ＝ 坡度 × 它）、垂直最多幾公尺（陡岸不讓整片海面跳）、沖刷沿岸高低差幾成；__game.seaDbg({ rag }) 可以覆寫
 var SEA_SURF = [24, 7.1, 120];                                         // 碎浪：波長（m；近岸淺水 ≈ 週期 × √(g·1.5 m)）、週期（s；主浪 7.1）、離岸幾公尺內有
 // 不卡畫面的著色器（TASK-0816）：KHR_parallel_shader_compile ⇒ 先送出編譯、連結（glProgStart），每格問好了沒（glProgReady），好了才拿（glProgEnd：跟 VK.compile 一樣的 { prog, u }、編不過照樣丟錯）。
@@ -196,12 +198,13 @@ function glProgTry(vs, fs) { var k = vs + '\u0000' + fs, J = glWarm(vs, fs); if 
 var BED_DRY_GLSL = 'uniform float uDryOn; uniform vec4 uDryR; uniform sampler2D uDryT;\n' +
   'bool bedDry(vec2 p){ if(uDryOn<0.5) return false; vec2 u=(p-uDryR.xy)/uDryR.zw; return u.x>0.0&&u.y>0.0&&u.x<1.0&&u.y<1.0&&textureLod(uDryT,u,0.0).r>0.5; }\n';
 // 海堤擋浪（63_bed_gl.js BEDWALL）：r ＝ 堤後（沖刷、岸線曲折收掉）、g ＝ 堤身（海面不畫）；窗外、沒有 ⇒ (0, 0)
-var BED_SHORE_GLSL = 'uniform vec4 uSnA,uSnF0,uSnF1; uniform ivec4 uSnI; uniform int uSnS;\n' +   // 岸邊起伏（BED_SHORE；跟 63_bed_gl.js bedHash／bedShoreN 逐位元同一個雜湊）：uSnA ＝ (amp, band, flat, slope)、開關照 amp（0 ＝ 關）；uSnI、uSnF ＝ 兩層格點的整數、小數起點與每公尺幾格
+var BED_SHORE_GLSL = 'uniform vec4 uSnA,uSnF0,uSnF1,uSnF2; uniform ivec4 uSnI; uniform ivec2 uSnJ; uniform int uSnS;\n' +   // 岸邊起伏（BED_SHORE；跟 63_bed_gl.js bedHash／bedShoreN 逐位元同一個雜湊）：uSnA ＝ (lat, cap, band, flat)、開關照 lat（0 ＝ 關）；uSnI、uSnJ、uSnF ＝ 三層格點的整數、小數起點與每公尺幾格
   'float snH(int x,int y,int s){ uint h=uint(x+1073741824)*0x8da6b343u^uint(y+1073741824)*0xd8163841u^uint(s)*0xcb1ab31fu; h^=h>>13u; h*=0x5bd1e995u; h^=h>>15u; return float(h)/4294967295.0; }\n' +
   'float snV(ivec2 I,vec2 f,int s){ vec2 u=f*f*(3.0-2.0*f); float a=snH(I.x,I.y,s),b=snH(I.x+1,I.y,s),c=snH(I.x,I.y+1,s),d=snH(I.x+1,I.y+1,s); return a+(b-a)*u.x+(c-a)*u.y+(a-b-c+d)*u.x*u.y; }\n' +
   'float snN(vec2 p){ vec2 q=vec2(p.x*uSnF0.z+uSnF0.x,-p.y*uSnF0.w+uSnF0.y), Q=floor(q); float t=' + BED_SHORE.wt[0].toFixed(3) + '*(2.0*snV(uSnI.xy+ivec2(Q),q-Q,uSnS)-1.0);\n' +
-  '  q=vec2(p.x*uSnF1.z+uSnF1.x,-p.y*uSnF1.w+uSnF1.y); Q=floor(q); return t+' + BED_SHORE.wt[1].toFixed(3) + '*(2.0*snV(uSnI.zw+ivec2(Q),q-Q,uSnS+1)-1.0); }\n' +
-  'float snD(vec2 p,float b,float sl){ float t=min(abs(b)/uSnA.y,1.0), a=uSnA.x*clamp((sl-uSnA.z)/(uSnA.w-uSnA.z),0.0,1.0); return t<1.0&&a>0.0?a*(1.0-t)*(1.0-t)*snN(p):0.0; }\n';
+  '  q=vec2(p.x*uSnF1.z+uSnF1.x,-p.y*uSnF1.w+uSnF1.y); Q=floor(q); t+=' + BED_SHORE.wt[1].toFixed(3) + '*(2.0*snV(uSnI.zw+ivec2(Q),q-Q,uSnS+1)-1.0);\n' +
+  '  q=vec2(p.x*uSnF2.z+uSnF2.x,-p.y*uSnF2.w+uSnF2.y); Q=floor(q); return t+' + BED_SHORE.wt[2].toFixed(3) + '*(2.0*snV(uSnJ+ivec2(Q),q-Q,uSnS+2)-1.0); }\n' +
+  'float snD(vec2 p,float b,float sl){ float a=min(uSnA.x*max(sl-uSnA.w,0.0),uSnA.y), t=min(abs(b)/max(uSnA.z,1.6*a),1.0); return t<1.0&&a>0.0?a*(1.0-t)*(1.0-t)*snN(p):0.0; }\n';
 var BED_WALL_GLSL = 'uniform float uWallOn; uniform vec4 uWallR; uniform sampler2D uWallT;\n' +
   'vec2 bedWall(vec2 p){ if(uWallOn<0.5) return vec2(0.0); vec2 u=(p-uWallR.xy)/uWallR.zw; return u.x>0.0&&u.y>0.0&&u.x<1.0&&u.y<1.0?textureLod(uWallT,u,0.0).rg:vec2(0.0); }\n';
 // 表演船的交接帶（60_showlod.js：近↔中兩級互補的抖動；同建築 63_towns.js TOWN_FADE、同一個雜湊）：uShowD ＝ (t, 哪一邊)。哪一邊 ＋1 ⇒ 留雜湊 ≥ t 的像素（淡出）、−1 ⇒ 留 < t 的（淡入）、0 ⇒ 不管（平常）。

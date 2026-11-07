@@ -94,7 +94,7 @@ function bedDiag(h, n, i, j, s) {
 }
 /** 一格兩個三角形（a 西北、b 東北、c 西南、d 東南；跟以前同一個繞向）。 */
 function bedQuad(I, a, b, c, d, nw) { if (nw) I.push(a, c, d, a, d, b); else I.push(a, c, b, b, c, d); }
-/** 岸邊細分（BED_SHORE，01_gl.js；Tim 2026-11-07）：在用的那幾圈（格寬 ≤ 8 m）跨過水面的格子細分成約 2 m 一點，高度照平滑的曲線＋岸邊起伏 ⇒ 岸線不再照 8 m（河 4 m）的格子走。
+/** 岸邊細分（BED_SHORE，01_gl.js；Tim 2026-11-07）：格寬 ≤ 16 m 的網格跨過水面的格子細分成 2 m（8 m 的格）、4 m（16 m 的格）一點，高度照平滑的曲線＋岸邊起伏 ⇒ 岸線不再照 8 m（河 4 m）的格子走。
  *  一條邊「彎」＝ 兩端跨過某個水面（海 0 m、兩端裡有內陸水的那一點的水面）、或碰到水面 ± band 而且有一端的坡度 ≥ flat ⇒ 只看這條邊自己的兩端（坡度：網格點的中央差分，塊邊照隔壁那一塊的點）
  *  ⇒ 隔壁那一格、隔壁那一塊判得一樣（塊的四邊共用的點逐位元相同）；平地不細分（起伏照坡度在 flat 以下 ＝ 0 ⇒ 直的邊上一定是 0）。
  *  有一條邊彎的格子才細分；彎的邊照三次 Hermite（切線照這一條線上前後的點、夾住不過衝），直的邊照直線 ⇒ 跟沒細分的隔壁那一格接得起來；格子裡照四條邊的 Coons 面。
@@ -120,7 +120,7 @@ function bedShoreN(P, x, z) {
 }
 /** 哪幾條邊彎、哪幾格要細分（m：每邊幾個網格點）；沒有 ⇒ null。 */
 function bedShoreCells(C, stride, m) {
-  var B = BED_SHORE, cs = C.step * stride; if (!B.on || cs > 8 || !BED.A) return null;
+  var B = BED_SHORE, cs = C.step * stride; if (!B.on || cs > 16 || !BED.A) return null;   // 16 m 的格（預載那一圈、中等塊）也細分：河多半在內陸、離船遠
   var n = C.n, h = C.h, wd = C.wd, h0 = C.h0, M = m - 1, band = B.band, H = new Float32Array(m * m), S = new Float32Array(m * m).fill(NaN);
   for (var j = 0; j < m; j++) for (var i = 0; i < m; i++) { var o = j * stride * n + i * stride, q = j * m + i; H[q] = h[o] / 10; if (wd && wd[o]) S[q] = (h0[o] + wd[o]) / 10; }
   var G = new Float32Array(m * m), D = {};                               // 坡度（起伏照它縮：BED_SHORE.flat～slope）；塊外的點照隔壁那一塊（同一個 n、step 才用），沒有 ⇒ 單邊差分
@@ -131,18 +131,20 @@ function bedShoreCells(C, stride, m) {
   }
   function d1(I, J, di, dj) { var a = hs(I - di, J - dj), b = hs(I + di, J + dj), c = h[J * n + I] / 10; return a === a && b === b ? (b - a) / (2 * cs) : b === b ? (b - c) / cs : a === a ? (c - a) / cs : 0; }
   for (j = 0; j < m; j++) for (i = 0; i < m; i++) { var gx = d1(i * stride, j * stride, stride, 0), gz = d1(i * stride, j * stride, 0, stride); G[j * m + i] = Math.sqrt(gx * gx + gz * gz); }
-  function near(lo, hi, l, sl) { return lo < l && hi > l || sl && lo < l + band && hi > l - band; }
-  function curved(p, q) { var lo = Math.min(H[p], H[q]), hi = Math.max(H[p], H[q]), sl = Math.max(G[p], G[q]) >= B.flat; return near(lo, hi, 0, sl) || S[p] === S[p] && near(lo, hi, S[p], sl) || S[q] === S[q] && near(lo, hi, S[q], sl) ? 1 : 0; }
+  var Am = new Float32Array(m * m), Bd = new Float32Array(m * m);       // 每個網格點的起伏量（垂直公尺）與它管的範圍（離水面幾公尺）
+  for (q = 0; q < m * m; q++) { Am[q] = Math.min(B.lat * Math.max(0, G[q] - B.flat), B.cap); Bd[q] = Math.max(band, 1.6 * Am[q]); }
+  function near(lo, hi, l, sl, be) { return lo < l && hi > l || sl && lo < l + be && hi > l - be; }
+  function curved(p, q) { var lo = Math.min(H[p], H[q]), hi = Math.max(H[p], H[q]), sl = Am[p] > 0 || Am[q] > 0, be = Math.max(Bd[p], Bd[q]); return near(lo, hi, 0, sl, be) || S[p] === S[p] && near(lo, hi, S[p], sl, be) || S[q] === S[q] && near(lo, hi, S[q], sl, be) ? 1 : 0; }
   var eh = new Uint8Array(M * m), ev = new Uint8Array(m * M), cell = new Uint8Array(M * M), any = 0;   // eh[j·M + i]：(i, j)—(i+1, j)；ev[j·m + i]：(i, j)—(i, j+1)
   for (j = 0; j < m; j++) for (i = 0; i < M; i++) eh[j * M + i] = curved(j * m + i, j * m + i + 1);
   for (j = 0; j < M; j++) for (i = 0; i < m; i++) ev[j * m + i] = curved(j * m + i, (j + 1) * m + i);
   for (j = 0; j < M; j++) for (i = 0; i < M; i++) if (eh[j * M + i] | eh[(j + 1) * M + i] | ev[j * m + i] | ev[j * m + i + 1]) { cell[j * M + i] = 1; any++; }
-  return any ? { H: H, S: S, G: G, eh: eh, ev: ev, cell: cell, n: any, m: m, cs: cs } : null;
+  return any ? { H: H, S: S, A: Am, Bd: Bd, eh: eh, ev: ev, cell: cell, n: any, m: m, cs: cs } : null;
 }
 /** 細分的格子另外長頂點、三角形，接在網格後面（V0：原本的頂點；顏色、紋理權重照四個角雙線性）。 */
 function bedShoreMesh(R, V0, I, ox, oz) {
-  var B = BED_SHORE, m = R.m, M = m - 1, H = R.H, S = R.S, cs = R.cs, k = Math.max(2, Math.min(4, Math.round(cs / 2))), K = M * k, d = cs / k, P = bedShoreP(), band = B.band;
-  var cache = new Map(), ids = new Map(), X3 = [], base = V0.length / 13, Gs = R.G;
+  var B = BED_SHORE, m = R.m, M = m - 1, H = R.H, S = R.S, cs = R.cs, k = Math.max(2, Math.min(4, Math.round(cs / 2))), K = M * k, d = cs / k, P = bedShoreP();   // 8 m 的格 2 m 一點、16 m 的格 4 m 一點
+  var cache = new Map(), ids = new Map(), X3 = [], base = V0.length / 13, As = R.A, Bs = R.Bd;
   function hv(i, j) { return H[j * m + i]; }
   function herm(a, b, ta, tb, u) {
     var df = b - a; if (df === 0) ta = tb = 0; else { if (ta * df <= 0) ta = 0; if (tb * df <= 0) tb = 0; var r = (ta * ta + tb * tb) / (df * df); if (r > 9) { r = 3 / Math.sqrt(r); ta *= r; tb *= r; } }
@@ -153,25 +155,24 @@ function bedShoreMesh(R, V0, I, ox, oz) {
     var i0 = i - di, j0 = j - dj, i3 = i + 2 * di, j3 = j + 2 * dj;
     return herm(a, b, i0 < 0 || j0 < 0 ? b - a : (b - hv(i0, j0)) / 2, i3 > M || j3 > M ? b - a : (hv(i3, j3) - a) / 2, u);
   }
-  function fb(y, l) { var t = Math.min(Math.abs(y - l) / band, 1); return (1 - t) * (1 - t); }
+  function fb(y, l, be) { var t = Math.min(Math.abs(y - l) / be, 1); return (1 - t) * (1 - t); }
   function F(X, Y) {                                                    // 細格點 (X, Y)（0～K）的高度：角、邊照那一條邊自己、格子裡照 Coons；沒細分的格子裡（只給法線用）照雙線性
     var key = X * 4096 + Y, v = cache.get(key); if (v !== undefined) return v;
-    var i = Math.floor(X / k), j = Math.floor(Y / k), a = X - i * k, b = Y - j * k, y, l0 = NaN, l1 = NaN, l2 = NaN, l3 = NaN, nz = true, g, q0 = j * m + i;
-    if (!a && !b) { y = hv(i, j); l0 = S[q0]; g = Gs[q0]; }
-    else if (!b) { y = edgeH(i, j, 1, 0, a / k, R.eh[j * M + i]); l0 = S[q0]; l1 = S[q0 + 1]; g = Gs[q0] + (Gs[q0 + 1] - Gs[q0]) * a / k; }
-    else if (!a) { y = edgeH(i, j, 0, 1, b / k, R.ev[j * m + i]); l0 = S[q0]; l1 = S[q0 + m]; g = Gs[q0] + (Gs[q0 + m] - Gs[q0]) * b / k; }
+    var i = Math.floor(X / k), j = Math.floor(Y / k), a = X - i * k, b = Y - j * k, y, l0 = NaN, l1 = NaN, l2 = NaN, l3 = NaN, nz = true, g, be, q0 = j * m + i;   // g ＝ 起伏量、be ＝ 管的範圍：角照自己、邊照兩端（量內插、範圍取大的）、格子裡照四個角
+    if (!a && !b) { y = hv(i, j); l0 = S[q0]; g = As[q0]; be = Bs[q0]; }
+    else if (!b) { y = edgeH(i, j, 1, 0, a / k, R.eh[j * M + i]); l0 = S[q0]; l1 = S[q0 + 1]; g = As[q0] + (As[q0 + 1] - As[q0]) * a / k; be = Math.max(Bs[q0], Bs[q0 + 1]); }
+    else if (!a) { y = edgeH(i, j, 0, 1, b / k, R.ev[j * m + i]); l0 = S[q0]; l1 = S[q0 + m]; g = As[q0] + (As[q0 + m] - As[q0]) * b / k; be = Math.max(Bs[q0], Bs[q0 + m]); }
     else {
       var u = a / k, w = b / k, bl = (1 - u) * (1 - w) * hv(i, j) + u * (1 - w) * hv(i + 1, j) + (1 - u) * w * hv(i, j + 1) + u * w * hv(i + 1, j + 1);
       if (!R.cell[j * M + i]) { y = bl; nz = false; }
       else {
         y = (1 - w) * edgeH(i, j, 1, 0, u, R.eh[j * M + i]) + w * edgeH(i, j + 1, 1, 0, u, R.eh[(j + 1) * M + i]) + (1 - u) * edgeH(i, j, 0, 1, w, R.ev[j * m + i]) + u * edgeH(i + 1, j, 0, 1, w, R.ev[j * m + i + 1]) - bl;
-        l0 = S[q0]; l1 = S[q0 + 1]; l2 = S[q0 + m]; l3 = S[q0 + m + 1]; g = (1 - u) * (1 - w) * Gs[q0] + u * (1 - w) * Gs[q0 + 1] + (1 - u) * w * Gs[q0 + m] + u * w * Gs[q0 + m + 1];
+        l0 = S[q0]; l1 = S[q0 + 1]; l2 = S[q0 + m]; l3 = S[q0 + m + 1]; g = (1 - u) * (1 - w) * As[q0] + u * (1 - w) * As[q0 + 1] + (1 - u) * w * As[q0 + m] + u * w * As[q0 + m + 1]; be = Math.max(Bs[q0], Bs[q0 + 1], Bs[q0 + m], Bs[q0 + m + 1]);
       }
     }
     if (nz) {
-      var f = fb(y, 0); if (l0 === l0) f = Math.max(f, fb(y, l0)); if (l1 === l1) f = Math.max(f, fb(y, l1)); if (l2 === l2) f = Math.max(f, fb(y, l2)); if (l3 === l3) f = Math.max(f, fb(y, l3));
-      var am = B.amp * Math.min(1, Math.max(0, (g - B.flat) / (B.slope - B.flat)));
-      if (f > 0 && am > 0) y += am * f * bedShoreN(P, ox + X * cs / k, oz + Y * cs / k);
+      var f = fb(y, 0, be); if (l0 === l0) f = Math.max(f, fb(y, l0, be)); if (l1 === l1) f = Math.max(f, fb(y, l1, be)); if (l2 === l2) f = Math.max(f, fb(y, l2, be)); if (l3 === l3) f = Math.max(f, fb(y, l3, be));
+      if (f > 0 && g > 0) y += g * f * bedShoreN(P, ox + X * cs / k, oz + Y * cs / k);
     }
     cache.set(key, y); return y;
   }
@@ -283,7 +284,7 @@ function bedWatSet(g, M) {
   g.w = w;
 }
 /** 一塊的外框（世界座標；高度含往下垂 40 m 的裙邊）。 */
-function bedBox(C) { var x0 = C.cx * BED.A.chunk - BED.ax, z0 = C.cy * BED.A.chunk - BED.az; return [x0, C.min - 40, z0, x0 + BED.A.chunk, C.max + BED_SHORE.amp, z0 + BED.A.chunk]; }   // 上緣多岸邊起伏的量
+function bedBox(C) { var x0 = C.cx * BED.A.chunk - BED.ax, z0 = C.cy * BED.A.chunk - BED.az; return [x0, C.min - 40, z0, x0 + BED.A.chunk, C.max + BED_SHORE.cap, z0 + BED.A.chunk]; }   // 上緣多岸邊起伏的量
 /** 視錐的六個面（從 VP 抽：每個面 a·x + b·y + c·z + d ≥ 0 在裡面）。 */
 function bedPlanes(m) {
   var P = [], r = function (i) { return [m[i], m[4 + i], m[8 + i], m[12 + i]]; }, w = r(3);
@@ -566,8 +567,8 @@ function bedWaterU(u) {
 /** 海的著色器的岸邊起伏（BED_SHORE_GLSL）：跟網格同一套格點起點。 */
 function bedShoreU(u) {
   if (!u.uSnA) return; var on = BED_SHORE.on && BED && BED.A ? 1 : 0;
-  gl.uniform4f(u.uSnA, on ? BED_SHORE.amp : 0, BED_SHORE.band, BED_SHORE.flat, BED_SHORE.slope); if (!on) return;
-  var P = bedShoreP(); gl.uniform4i(u.uSnI, P[0].ix, P[0].iy, P[1].ix, P[1].iy); gl.uniform4f(u.uSnF0, P[0].fx, P[0].fy, P[0].kx, P[0].kz); gl.uniform4f(u.uSnF1, P[1].fx, P[1].fy, P[1].kx, P[1].kz); gl.uniform1i(u.uSnS, P.s);
+  gl.uniform4f(u.uSnA, on ? BED_SHORE.lat : 0, BED_SHORE.cap, BED_SHORE.band, BED_SHORE.flat); if (!on) return;
+  var P = bedShoreP(); gl.uniform4i(u.uSnI, P[0].ix, P[0].iy, P[1].ix, P[1].iy); gl.uniform4f(u.uSnF0, P[0].fx, P[0].fy, P[0].kx, P[0].kz); gl.uniform4f(u.uSnF1, P[1].fx, P[1].fy, P[1].kx, P[1].kz); gl.uniform2i(u.uSnJ, P[2].ix, P[2].iy); gl.uniform4f(u.uSnF2, P[2].fx, P[2].fy, P[2].kx, P[2].kz); gl.uniform1i(u.uSnS, P.s);
 }
 // 海堤擋浪（BEDWALL；Tim 2026-11-01「請嘗試修正海浪淹過海堤(儘可能不要太花效能的做法)」）：沖刷上岸（01_gl.js shoreW）只照 8 m 一格的地形與 16 m 的離岸距離，
 //   不知道城裡的碼頭線（海堤）、石砌長碼頭、防波堤 ⇒ 堤後的低地照樣被浪沖上去，浪大時海面也冒出堤面。
