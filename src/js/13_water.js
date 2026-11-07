@@ -27,8 +27,9 @@ function wsAdd(x, y, z, vx, vy, vz, life, s, a) {
   WS.p[o] = x; WS.p[o + 1] = y; WS.p[o + 2] = z; WS.v[o] = vx; WS.v[o + 1] = vy; WS.v[o + 2] = vz;
   WS.life[i] = WS.max[i] = life; WS.s[i] = s; WS.a[i] = a; WP_STAT.spray++;
 }
-function wfAdd(x, z, vx, vz, life, s0, s1, a, w, y) {                // y：內陸水的水面（泉眼的白沫，63_bed_gl.js bedSpringFx）；沒給 ⇒ 貼著海的浪
+function wfAdd(x, z, vx, vz, life, s0, s1, a, w, y) {                // y：內陸水的水面（泉眼的白沫，63_bed_gl.js bedSpringFx）；沒給 ⇒ 那一點大半是內陸水就貼那裡的水面、不然貼著海的浪
   var L = wpLv(); if (!L) return;
+  if (y == null && BEDW.n) { var bw = bedWet(x, z); if (bw && bw.m >= 0.5) y = bw.s; }   // 湖、河上的船（Tim 2026-11-07「在內陸湖航行時 水花好像仍然在海平面(跟船分離)」）：⛔ 照海的浪 ⇒ 白沫畫在 0 m、湖面 15 m 的船底下；不抽亂數 ⇒ 戰局不變
   var i = WF.n < L.wf ? WF.n++ : (rndW() * WF.n) | 0;        // 滿了 ⇒ 隨便頂掉一片（⛔ 不收新的 ⇒ 船尾的舊白沫佔滿，船頭生不出來）
   WF.p[i * 2] = x; WF.p[i * 2 + 1] = z; WF.v[i * 2] = vx; WF.v[i * 2 + 1] = vz;
   WF.life[i] = WF.max[i] = life * L.life; WF.s0[i] = s0; WF.s1[i] = s1; WF.a[i] = a; WF.rot[i] = rndW() * 6.2832; WF.w[i] = w || 0; WF.seed[i] = rndW() * 64; WF.y[i] = y == null ? NaN : y; WP_STAT.foam++;
