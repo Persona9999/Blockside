@@ -41,6 +41,7 @@
 //   沒有這種點的塊不算 ⇒ 沒有的海域整段跳過（uDryOn 0 ⇒ 畫面逐位元組不變；托爾圖加 43 塊 0 點）。
 //   另外（2026-10-21）跟海斷開的低地也遮：8 m 一格、照城鎮整過地的地面，只走水格從海往裡淹，淹不到的水坑、離海超過一條岸帶的低地不畫海（bedDryTex）。
 //   水體（TASK-1231）：海圖本身是水的格（挖回來的河、港內水道）直接算海、不靠連到窗邊；內陸水（湖、河）整個窗都不畫海，只留接海的河口交接帶（bedDryH）。
+if (Q.get('shore') === '0') BED_SHORE.on = false;                     // 岸邊細分、起伏關掉（反向對照）
 var BEDGL = {}, BEDGL_Q = [], BEDGL_ID = null, BED_FOG = 0.4, BED_FAR_ST = 8;
 // 地形網格換過幾次（建好、換粗細、丟掉）與換的是哪一塊（外框）：陰影的靜態那一層，那一段碰到換掉的塊就重畫（60_render.js shadowPass）
 //   —— 粗的網格比細的高出幾公尺，晚一秒才重畫 ⇒ 那一整塊（1 km）的地面與樹被粗網格的影子蓋住、暗一下（Tim 2026-10-20「只動了一點點陰影就完全不同」）。
@@ -85,6 +86,115 @@ function bedLod(C) {                                                     // 每�
   var R = bedRingN(BED_CFG.ring), w = Math.abs(C.cx - BED.cx) <= R && Math.abs(C.cy - BED.cy) <= R ? (townFine(C) || C.wd ? 1 : 2) : 4;
   return Math.max(1, Math.round(w * BED.A.step / C.step));
 }
+/** 一格切哪一條對角線（h：取樣點高度、n：每邊幾點、(i, j)：格的西北角、s：格寬幾個取樣點）：兩端高度差小的那一條 ⇒ true ＝ 西北—東南。
+ *  以前一律東北—西南 ⇒ 岸線斜著走時每一格的三角形一邊伸出一邊縮回，整排朝同一邊的鋸齒；照高度挑 ⇒ 階梯的轉角一格一格削成斜的一條線。一樣大 ⇒ 照以前。 */
+function bedDiag(h, n, i, j, s) {
+  var o = j * n + i, p = o + s * n;
+  return Math.abs(h[o] - h[p + s]) < Math.abs(h[o + s] - h[p]);
+}
+/** 一格兩個三角形（a 西北、b 東北、c 西南、d 東南；跟以前同一個繞向）。 */
+function bedQuad(I, a, b, c, d, nw) { if (nw) I.push(a, c, d, a, d, b); else I.push(a, c, b, b, c, d); }
+/** 岸邊細分（BED_SHORE，01_gl.js；Tim 2026-11-07）：在用的那幾圈（格寬 ≤ 8 m）跨過水面的格子細分成約 2 m 一點，高度照平滑的曲線＋岸邊起伏 ⇒ 岸線不再照 8 m（河 4 m）的格子走。
+ *  一條邊「彎」＝ 兩端跨過某個水面（海 0 m、兩端裡有內陸水的那一點的水面）、或碰到水面 ± band 而且有一端的坡度 ≥ flat ⇒ 只看這條邊自己的兩端（坡度：網格點的中央差分，塊邊照隔壁那一塊的點）
+ *  ⇒ 隔壁那一格、隔壁那一塊判得一樣（塊的四邊共用的點逐位元相同）；平地不細分（起伏照坡度在 flat 以下 ＝ 0 ⇒ 直的邊上一定是 0）。
+ *  有一條邊彎的格子才細分；彎的邊照三次 Hermite（切線照這一條線上前後的點、夾住不過衝），直的邊照直線 ⇒ 跟沒細分的隔壁那一格接得起來；格子裡照四條邊的 Coons 面。
+ *  起伏照經緯度的雜湊（bedShoreN；跟海的著色器 snN 同一套）× 照離水面多遠淡掉（band 外 0 ⇒ 直的邊上一定是 0）。⛔ 只給人看：bedHgt、擱淺、模擬照舊查原本的點。 */
+function bedHash(x, y, s) {
+  var h = (Math.imul((x + 1073741824) | 0, 0x8da6b343) ^ Math.imul((y + 1073741824) | 0, 0xd8163841) ^ Math.imul(s | 0, 0xcb1ab31f)) >>> 0;
+  h = (h ^ (h >>> 13)) >>> 0; h = Math.imul(h, 0x5bd1e995) >>> 0; return ((h ^ (h >>> 15)) >>> 0) / 4294967295;
+}
+function bedVN(I, J, fx, fy, s) { var u = fx * fx * (3 - 2 * fx), v = fy * fy * (3 - 2 * fy), a = bedHash(I, J, s), b = bedHash(I + 1, J, s), c = bedHash(I, J + 1, s), d = bedHash(I + 1, J + 1, s); return a + (b - a) * u + (c - a) * v + (a - b - c + d) * u * v; }
+var BEDSHN = { A: null, ax: null, az: null, P: null };
+/** 這個海域的雜訊格點起點（每一層：整數、小數、世界 x、z 每公尺幾格；海域或原點換了才重算）。 */
+function bedShoreP() {
+  var A = BED.A, S = BEDSHN; if (S.A === A && S.ax === BED.ax && S.az === BED.az) return S.P;
+  var la = +A.lat0 || 0, kx = 1 / Math.cos(la * Math.PI / 180), X0 = (+A.lon0 || 0) * 111320 + BED.ax * kx, Y0 = la * 110540 - BED.az;
+  S.P = BED_SHORE.lam.map(function (l) { var bx = X0 / l, by = Y0 / l, ix = Math.floor(bx), iy = Math.floor(by); return { ix: ix, iy: iy, fx: bx - ix, fy: by - iy, kx: kx / l, kz: 1 / l }; });
+  S.P.s = (BED_SHORE.seed + (A.seed | 0)) | 0; S.A = A; S.ax = BED.ax; S.az = BED.az; return S.P;
+}
+/** 世界 (x, z) 的岸邊起伏雜訊（−1～1）。 */
+function bedShoreN(P, x, z) {
+  var t = 0;
+  for (var k = 0; k < P.length; k++) { var o = P[k], qx = x * o.kx + o.fx, qy = -z * o.kz + o.fy, X = Math.floor(qx), Y = Math.floor(qy); t += BED_SHORE.wt[k] * (2 * bedVN(o.ix + X, o.iy + Y, qx - X, qy - Y, P.s + k) - 1); }
+  return t;
+}
+/** 哪幾條邊彎、哪幾格要細分（m：每邊幾個網格點）；沒有 ⇒ null。 */
+function bedShoreCells(C, stride, m) {
+  var B = BED_SHORE, cs = C.step * stride; if (!B.on || cs > 8 || !BED.A) return null;
+  var n = C.n, h = C.h, wd = C.wd, h0 = C.h0, M = m - 1, band = B.band, H = new Float32Array(m * m), S = new Float32Array(m * m).fill(NaN);
+  for (var j = 0; j < m; j++) for (var i = 0; i < m; i++) { var o = j * stride * n + i * stride, q = j * m + i; H[q] = h[o] / 10; if (wd && wd[o]) S[q] = (h0[o] + wd[o]) / 10; }
+  var G = new Float32Array(m * m), D = {};                               // 坡度（起伏照它縮：BED_SHORE.flat～slope）；塊外的點照隔壁那一塊（同一個 n、step 才用），沒有 ⇒ 單邊差分
+  function nb(dx, dy) { var k2 = dx + ',' + dy; if (!(k2 in D)) { var N2 = bedShowC(bedKey(C.cx + dx, C.cy + dy)); D[k2] = N2 && N2.n === n && N2.step === C.step ? N2 : null; } return D[k2]; }
+  function hs(I, J) {
+    var L = n - 1, dx = I < 0 ? -1 : I > L ? 1 : 0, dy = J < 0 ? -1 : J > L ? 1 : 0; if (!dx && !dy) return h[J * n + I] / 10;
+    var N2 = nb(dx, dy); return N2 ? N2.h[(J - dy * L) * n + I - dx * L] / 10 : NaN;
+  }
+  function d1(I, J, di, dj) { var a = hs(I - di, J - dj), b = hs(I + di, J + dj), c = h[J * n + I] / 10; return a === a && b === b ? (b - a) / (2 * cs) : b === b ? (b - c) / cs : a === a ? (c - a) / cs : 0; }
+  for (j = 0; j < m; j++) for (i = 0; i < m; i++) { var gx = d1(i * stride, j * stride, stride, 0), gz = d1(i * stride, j * stride, 0, stride); G[j * m + i] = Math.sqrt(gx * gx + gz * gz); }
+  function near(lo, hi, l, sl) { return lo < l && hi > l || sl && lo < l + band && hi > l - band; }
+  function curved(p, q) { var lo = Math.min(H[p], H[q]), hi = Math.max(H[p], H[q]), sl = Math.max(G[p], G[q]) >= B.flat; return near(lo, hi, 0, sl) || S[p] === S[p] && near(lo, hi, S[p], sl) || S[q] === S[q] && near(lo, hi, S[q], sl) ? 1 : 0; }
+  var eh = new Uint8Array(M * m), ev = new Uint8Array(m * M), cell = new Uint8Array(M * M), any = 0;   // eh[j·M + i]：(i, j)—(i+1, j)；ev[j·m + i]：(i, j)—(i, j+1)
+  for (j = 0; j < m; j++) for (i = 0; i < M; i++) eh[j * M + i] = curved(j * m + i, j * m + i + 1);
+  for (j = 0; j < M; j++) for (i = 0; i < m; i++) ev[j * m + i] = curved(j * m + i, (j + 1) * m + i);
+  for (j = 0; j < M; j++) for (i = 0; i < M; i++) if (eh[j * M + i] | eh[(j + 1) * M + i] | ev[j * m + i] | ev[j * m + i + 1]) { cell[j * M + i] = 1; any++; }
+  return any ? { H: H, S: S, G: G, eh: eh, ev: ev, cell: cell, n: any, m: m, cs: cs } : null;
+}
+/** 細分的格子另外長頂點、三角形，接在網格後面（V0：原本的頂點；顏色、紋理權重照四個角雙線性）。 */
+function bedShoreMesh(R, V0, I, ox, oz) {
+  var B = BED_SHORE, m = R.m, M = m - 1, H = R.H, S = R.S, cs = R.cs, k = Math.max(2, Math.min(4, Math.round(cs / 2))), K = M * k, d = cs / k, P = bedShoreP(), band = B.band;
+  var cache = new Map(), ids = new Map(), X3 = [], base = V0.length / 13, Gs = R.G;
+  function hv(i, j) { return H[j * m + i]; }
+  function herm(a, b, ta, tb, u) {
+    var df = b - a; if (df === 0) ta = tb = 0; else { if (ta * df <= 0) ta = 0; if (tb * df <= 0) tb = 0; var r = (ta * ta + tb * tb) / (df * df); if (r > 9) { r = 3 / Math.sqrt(r); ta *= r; tb *= r; } }
+    var u2 = u * u, u3 = u2 * u; return (2 * u3 - 3 * u2 + 1) * a + (u3 - 2 * u2 + u) * ta + (3 * u2 - 2 * u3) * b + (u3 - u2) * tb;
+  }
+  function edgeH(i, j, di, dj, u, cur) {                                 // (i, j) 往 (di, dj) 那一條邊上 u 那一點的底高
+    var a = hv(i, j), b = hv(i + di, j + dj); if (!cur) return a + (b - a) * u;
+    var i0 = i - di, j0 = j - dj, i3 = i + 2 * di, j3 = j + 2 * dj;
+    return herm(a, b, i0 < 0 || j0 < 0 ? b - a : (b - hv(i0, j0)) / 2, i3 > M || j3 > M ? b - a : (hv(i3, j3) - a) / 2, u);
+  }
+  function fb(y, l) { var t = Math.min(Math.abs(y - l) / band, 1); return (1 - t) * (1 - t); }
+  function F(X, Y) {                                                    // 細格點 (X, Y)（0～K）的高度：角、邊照那一條邊自己、格子裡照 Coons；沒細分的格子裡（只給法線用）照雙線性
+    var key = X * 4096 + Y, v = cache.get(key); if (v !== undefined) return v;
+    var i = Math.floor(X / k), j = Math.floor(Y / k), a = X - i * k, b = Y - j * k, y, l0 = NaN, l1 = NaN, l2 = NaN, l3 = NaN, nz = true, g, q0 = j * m + i;
+    if (!a && !b) { y = hv(i, j); l0 = S[q0]; g = Gs[q0]; }
+    else if (!b) { y = edgeH(i, j, 1, 0, a / k, R.eh[j * M + i]); l0 = S[q0]; l1 = S[q0 + 1]; g = Gs[q0] + (Gs[q0 + 1] - Gs[q0]) * a / k; }
+    else if (!a) { y = edgeH(i, j, 0, 1, b / k, R.ev[j * m + i]); l0 = S[q0]; l1 = S[q0 + m]; g = Gs[q0] + (Gs[q0 + m] - Gs[q0]) * b / k; }
+    else {
+      var u = a / k, w = b / k, bl = (1 - u) * (1 - w) * hv(i, j) + u * (1 - w) * hv(i + 1, j) + (1 - u) * w * hv(i, j + 1) + u * w * hv(i + 1, j + 1);
+      if (!R.cell[j * M + i]) { y = bl; nz = false; }
+      else {
+        y = (1 - w) * edgeH(i, j, 1, 0, u, R.eh[j * M + i]) + w * edgeH(i, j + 1, 1, 0, u, R.eh[(j + 1) * M + i]) + (1 - u) * edgeH(i, j, 0, 1, w, R.ev[j * m + i]) + u * edgeH(i + 1, j, 0, 1, w, R.ev[j * m + i + 1]) - bl;
+        l0 = S[q0]; l1 = S[q0 + 1]; l2 = S[q0 + m]; l3 = S[q0 + m + 1]; g = (1 - u) * (1 - w) * Gs[q0] + u * (1 - w) * Gs[q0 + 1] + (1 - u) * w * Gs[q0 + m] + u * w * Gs[q0 + m + 1];
+      }
+    }
+    if (nz) {
+      var f = fb(y, 0); if (l0 === l0) f = Math.max(f, fb(y, l0)); if (l1 === l1) f = Math.max(f, fb(y, l1)); if (l2 === l2) f = Math.max(f, fb(y, l2)); if (l3 === l3) f = Math.max(f, fb(y, l3));
+      var am = B.amp * Math.min(1, Math.max(0, (g - B.flat) / (B.slope - B.flat)));
+      if (f > 0 && am > 0) y += am * f * bedShoreN(P, ox + X * cs / k, oz + Y * cs / k);
+    }
+    cache.set(key, y); return y;
+  }
+  function vid(X, Y) {
+    var key = X * 4096 + Y, q = ids.get(key); if (q !== undefined) return q;
+    var y = F(X, Y), xl = X > 0 ? X - 1 : X, xr = X < K ? X + 1 : X, yl = Y > 0 ? Y - 1 : Y, yr = Y < K ? Y + 1 : Y;
+    var gx = (F(xr, Y) - F(xl, Y)) / ((xr - xl) * d), gz = (F(X, yr) - F(X, yl)) / ((yr - yl) * d), L = Math.sqrt(gx * gx + 1 + gz * gz);
+    var i = Math.min(M - 1, Math.floor(X / k)), j = Math.min(M - 1, Math.floor(Y / k)), u = X / k - i, w = Y / k - j, c0 = (j * m + i) * 13, c1 = c0 + 13, c2 = c0 + m * 13, c3 = c2 + 13;
+    q = base + X3.length / 13; ids.set(key, q);
+    X3.push(ox + X * cs / k, y, oz + Y * cs / k, -gx / L, 1 / L, -gz / L);
+    for (var t = 6; t < 13; t++) X3.push((1 - u) * (1 - w) * V0[c0 + t] + u * (1 - w) * V0[c1 + t] + (1 - u) * w * V0[c2 + t] + u * w * V0[c3 + t]);
+    return q;
+  }
+  for (var j = 0; j < M; j++) for (var i = 0; i < M; i++) {
+    if (!R.cell[j * M + i]) continue;
+    for (var b = 0; b < k; b++) for (var a = 0; a < k; a++) {
+      var X = i * k + a, Y = j * k + b, nw = Math.abs(F(X, Y) - F(X + 1, Y + 1)) < Math.abs(F(X + 1, Y) - F(X, Y + 1));
+      bedQuad(I, vid(X, Y), vid(X + 1, Y), vid(X, Y + 1), vid(X + 1, Y + 1), nw);
+    }
+  }
+  var V = new Float32Array(V0.length + X3.length); V.set(V0); V.set(X3, V0.length);
+  return V;
+}
 /** 一塊 ⇒ 網格（stride：每幾個取樣點取一個）。頂點：位置 3、法線 3、底色 3、紋理權重 4（世界座標：原點 ＝ 開戰位置）。
  *  高度照 C.h（城鎮不整地，63_towns.js 檔頭）；點距照這一塊自己的 C.step（遠景塊可以是粗的：@host 的 peek 回 32 m 一點的 33×33，src/MAP_CHUNK.md §5）；塊的原點照海域的 A.chunk。 */
 function bedMesh(C, stride) {
@@ -99,7 +209,8 @@ function bedMesh(C, stride) {
     V[q + 9] = w[0]; V[q + 10] = w[1] * (1 - wr); V[q + 11] = w[2] + w[1] * wr; V[q + 12] = w[3];
   }
   for (var j = 0; j < m; j++) for (var i = 0; i < m; i++) put(j * m + i, i * stride, j * stride, 0);
-  for (j = 0; j < m - 1; j++) for (i = 0; i < m - 1; i++) { var a = j * m + i; I.push(a, a + m, a + 1, a + 1, a + m, a + m + 1); }
+  var SR = bedShoreCells(C, stride, m);                                  // 岸邊細分的格子（bedShoreMesh）不在這裡畫
+  for (j = 0; j < m - 1; j++) for (i = 0; i < m - 1; i++) { if (SR && SR.cell[j * (m - 1) + i]) continue; var a = j * m + i; bedQuad(I, a, a + 1, a + m, a + m + 1, bedDiag(h, n, i * stride, j * stride, stride)); }
   // 裙邊：四條邊各 m 點，往下 40 m
   var edges = [[0, 0, 1, 0], [0, m - 1, 1, 0], [0, 0, 0, 1], [m - 1, 0, 0, 1]];
   edges.forEach(function (e, q) {
@@ -107,7 +218,8 @@ function bedMesh(C, stride) {
     for (var t = 0; t < m; t++) { var ii = e[0] + e[2] * t, jj = e[1] + e[3] * t; put(base + t, ii * stride, jj * stride, -40); }
     for (t = 0; t < m - 1; t++) { var a0 = (e[1] + e[3] * t) * m + e[0] + e[2] * t, a1 = (e[1] + e[3] * (t + 1)) * m + e[0] + e[2] * (t + 1); I.push(a0, a1, base + t, a1, base + t + 1, base + t); }
   });
-  return { V: V, I: new Uint32Array(I) };
+  if (SR) V = bedShoreMesh(SR, V, I, ox, oz);
+  return { V: V, I: new Uint32Array(I), shore: SR ? SR.n : 0 };
 }
 function bedUpload(k, C, lod) {
   bedMeshChanged(bedBox(C));
@@ -152,8 +264,7 @@ function bedWaterMesh(C, s) {
   }
   for (j = 0; j < m - 1; j++) for (i = 0; i < m - 1; i++) {
     var q0 = j * m + i; if (!(wet[q0] | wet[q0 + 1] | wet[q0 + m] | wet[q0 + m + 1])) continue;
-    var a0 = vert(i, j), a1 = vert(i + 1, j), a2 = vert(i, j + 1), a3 = vert(i + 1, j + 1);
-    I.push(a0, a2, a1, a1, a2, a3);
+    bedQuad(I, vert(i, j), vert(i + 1, j), vert(i, j + 1), vert(i + 1, j + 1), bedDiag(C.h, n, i * s, j * s, s));   // 對角線跟地形網格同一條 ⇒ 岸線在同一組三角形裡交
   }
   return { V: new Float32Array(V), I: new Uint32Array(I), lo: lo, hi: hi, wet: any, x0: ox, z0: oz };
 }
@@ -172,7 +283,7 @@ function bedWatSet(g, M) {
   g.w = w;
 }
 /** 一塊的外框（世界座標；高度含往下垂 40 m 的裙邊）。 */
-function bedBox(C) { var x0 = C.cx * BED.A.chunk - BED.ax, z0 = C.cy * BED.A.chunk - BED.az; return [x0, C.min - 40, z0, x0 + BED.A.chunk, C.max, z0 + BED.A.chunk]; }
+function bedBox(C) { var x0 = C.cx * BED.A.chunk - BED.ax, z0 = C.cy * BED.A.chunk - BED.az; return [x0, C.min - 40, z0, x0 + BED.A.chunk, C.max + BED_SHORE.amp, z0 + BED.A.chunk]; }   // 上緣多岸邊起伏的量
 /** 視錐的六個面（從 VP 抽：每個面 a·x + b·y + c·z + d ≥ 0 在裡面）。 */
 function bedPlanes(m) {
   var P = [], r = function (i) { return [m[i], m[4 + i], m[8 + i], m[12 + i]]; }, w = r(3);
@@ -450,7 +561,13 @@ function bedWaterU(u) {
   }
   gl.activeTexture(gl.TEXTURE0);
   if (on) gl.uniform4f(u.uBedR, BEDFOAM.ox, BEDFOAM.oz, BEDFOAM.sp, BEDFOAM.N);
-  bedDryU(u); bedWallU(u);
+  bedDryU(u); bedWallU(u); bedShoreU(u);
+}
+/** 海的著色器的岸邊起伏（BED_SHORE_GLSL）：跟網格同一套格點起點。 */
+function bedShoreU(u) {
+  if (!u.uSnA) return; var on = BED_SHORE.on && BED && BED.A ? 1 : 0;
+  gl.uniform4f(u.uSnA, on ? BED_SHORE.amp : 0, BED_SHORE.band, BED_SHORE.flat, BED_SHORE.slope); if (!on) return;
+  var P = bedShoreP(); gl.uniform4i(u.uSnI, P[0].ix, P[0].iy, P[1].ix, P[1].iy); gl.uniform4f(u.uSnF0, P[0].fx, P[0].fy, P[0].kx, P[0].kz); gl.uniform4f(u.uSnF1, P[1].fx, P[1].fy, P[1].kx, P[1].kz); gl.uniform1i(u.uSnS, P.s);
 }
 // 海堤擋浪（BEDWALL；Tim 2026-11-01「請嘗試修正海浪淹過海堤(儘可能不要太花效能的做法)」）：沖刷上岸（01_gl.js shoreW）只照 8 m 一格的地形與 16 m 的離岸距離，
 //   不知道城裡的碼頭線（海堤）、石砌長碼頭、防波堤 ⇒ 堤後的低地照樣被浪沖上去，浪大時海面也冒出堤面。
