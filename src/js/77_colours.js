@@ -103,6 +103,14 @@ var FLAG_EMB = {
       for (var j = 0; j < Q.length; j++) if (Math.abs(x - Q[j][0]) < 0.028 && Math.abs(y - Q[j][1]) < 0.04) return B;
       return null;
     } },
+  // 托斯卡納 1666（TASK-1215；地中海的利佛諾）：大公國的船掛聖斯德望騎士團（梅迪奇 1561 年設、駐比薩與利佛諾）的旗 ＝ 白底紅色八角十字（像馬爾他十字）——
+  //   博物館目錄寫騎士團海軍的戰旗「croce rossa in campo bianco」，Fontana 1701 年的版畫集寫船「con la croce a otto punte」；十字的金邊、兩側的百合在 128 × 64 畫不出來 ⇒ 不畫
+  stefano: { name: '聖斯德望八角十字', ink: COL_R, res: 2,
+    at: function (X, Y) {
+      var dx = Math.abs(X - 1), dy = Math.abs(Y - 0.5), al = Math.max(dx, dy), ac = Math.min(dx, dy);   // al ＝ 沿著那一臂、ac ＝ 橫過那一臂
+      var R = 0.36, w0 = 0.03, w1 = 0.18, d = 0.12;                   // 臂長、臂在正中與末端的半寬、末端 V 形缺口多深（缺口兩邊各一個尖 ⇒ 四臂八個尖）
+      return al <= R && ac <= w0 + (w1 - w0) * al / R && al <= R - d + d * ac / w1 ? COL_R : null;
+    } },
   // 沒有國旗的兩家（TASK-0977；Tim 2026-10-27「不應該出現沒國旗的城 有缺要自檢報錯 需要補」）—— 史料上兩家都沒有旗，下面兩面是設計：
   //   逃亡者聚落（maroon）：牙買加逃亡者傳信用的 abeng 牛角號 —— 深綠底、象牙色的號角（寬口在旗桿那頭、往尾收成尖）
   abeng: { name: '牛角號', ink: [0.93, 0.89, 0.78], res: 2,
@@ -134,6 +142,7 @@ var FLAG_PRESETS = [
   { k: 'denmark', name: '丹麥', field: '#c8102e', emblem: 'nordic' },
   { k: 'genoa', name: '熱那亞', field: '#ece9e0', emblem: 'cross-red' },
   { k: 'portugal', name: '葡萄牙', field: '#ece9e0', emblem: 'quinas' },
+  { k: 'tuscany', name: '托斯卡納', field: '#ece9e0', emblem: 'stefano' },
   { k: 'byzantine', name: '東羅馬（1453）', field: '#a51c1c', emblem: 'tetragram' },
   { k: 'maroon', name: '逃亡者聚落〔設計〕', field: '#2e5b2a', emblem: 'abeng' },
   { k: 'native', name: '原住民〔設計〕', field: '#d9c39a', emblem: 'spiral' }
