@@ -66,6 +66,7 @@ function townFaunaInPoly(Q, k) {
 /** 城 T 的家畜 ⇒ T.pen ＝ { inst, sk, list, pens: [每一組的讀數], bb }（實例或工地換了才重算）。 */
 function townPenPrep(T, F) {
   var K = TOWNS.kit, list = [], pens = [];
+  var sheepLots = new Set(F.kinds.sheep ? (T.p.lots || []).filter(function (l) { return l.use === 'ranch' && l.recipe === 'sheep'; }).map(function (l) { return l.id; }) : []);
   (T.inst || []).forEach(function (q) {
     var M = K && K.M[q.k], m = M && M.m; if (!m || q.wall || !(q.y === q.y) || !m.pts) return;
     if (townRiseHides(T, q)) return;                                     // 還在蓋（或演建造）⇒ 圈還沒圍好
@@ -75,6 +76,7 @@ function townPenPrep(T, F) {
     function W(v) { var a = (v[0] * mpv - hw) * q.sx, b = v[1] * mpv - hd; return { x: q.x + a * s - b * c, z: q.z - a * c - b * s, y: q.y + (v[2] - 0.5) * mpv }; }   // 同 townWorkPrep 的 W
     Object.keys(G).sort().forEach(function (gk) {
       var sp = gk.split(':')[0], V = G[gk].sort(function (x, y) { return x[0] - y[0]; }).map(function (e) { return e[1]; });
+      if (sp === 'cow' && m.use === 'ranch' && sheepLots.has(q.lot)) sp = 'sheep';   // 養羊沿用牧場原有的圍欄；舊地塊缺配方時仍是牛
       if (V.length === 2) V = [V[0], [V[1][0], V[0][1], V[0][2]], V[1], [V[0][0], V[1][1], V[0][2]]];   // 兩點 ⇒ 長方形的四角
       if (V.length < 3) return;
       var Q = V.map(W), y = Q.reduce(function (s0, p) { return s0 + p.y; }, 0) / Q.length, key = T.id + ':pen:' + q.lot + ':' + gk;
