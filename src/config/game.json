@@ -1172,6 +1172,7 @@
       "geo": {"spar": [21, 30], "marines": [42, 96], "center": 30, "aim": 18, "aimZ": [8, 230], "deckAim": [18, 30], "rigAim": [60, 210]},
       "crew": {"officers": 2, "top": 0, "marines": 12, "marineGap": 18},
       "names": ["持火號"],
+      "cargoT": 6,
       "idNext": {
         "anchor": 3,
         "deck": 5,
@@ -1214,6 +1215,7 @@
       "geo": {"spar": [16, 26], "marines": [40, 50], "center": 30, "aim": 18, "aimZ": [10, 190], "deckAim": [16, 26], "rigAim": [80, 190]},
       "crew": {"top": 0, "marines": 6},
       "names": ["越嶺號"],
+      "cargoT": 3,
       "idNext": {"anchor": 3, "deck": 4, "gun": 7, "ladders": 2, "magazine": 2, "oar": 73, "part": 5, "powder": 5, "rudder": 2, "ship": 2, "yard": 2}
     },
     {
@@ -1229,6 +1231,7 @@
       "geo": {"spar": [141, 150], "marines": [490, 260], "center": 120, "aim": 85, "aimZ": [45, 290], "deckAim": [85, 145], "rigAim": [140, 290]},
       "crew": {"top": 0, "marines": 8},
       "names": ["定遠號"],
+      "cargoT": 226,
       "idNext": {
         "anchor": 3,
         "binnacle": 2,
@@ -1265,6 +1268,7 @@
       "geo": {"spar": [136, 175], "marines": [394, 117], "center": 120, "aim": 92, "aimZ": [45, 350], "deckAim": [85, 140], "rigAim": [170, 350]},
       "crew": {"top": 0, "marines": 8},
       "names": ["松島號"],
+      "cargoT": 291,
       "idNext": {
         "anchor": 3,
         "binnacle": 2,
@@ -1473,6 +1477,7 @@
       "geo": {"spar": [61, 103], "marines": [55, 130], "center": 75, "aim": 55, "aimZ": [25, 400], "deckAim": [46, 76], "rigAim": [130, 380]},
       "crew": {"marines": 6, "top": 1},
       "names": ["藍鯊號"],
+      "cargoT": 223,
       "author": "gura",
       "idNext": {
         "anchor": 3,
@@ -1624,6 +1629,7 @@
       "cfg": {"pump": 2, "agile": 3, "upwind": 2.5},
       "crew": {"officers": 2, "helm": 1, "top": 0, "marines": 4, "marineGap": 14, "monkeys": 1, "handsK": 0.25, "navigator": 0},
       "names": ["飛魚號"],
+      "cargoT": 14,
       "idNext": {
         "anchor": 3,
         "binnacle": 2,
