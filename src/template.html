@@ -14,6 +14,16 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" sizes="180x180" href="icons/apple-touch-icon.png">
 <title>Blockside（方舷）</title>
+<script>
+/* 檔頭快篩：?tui=@host（城鎮面板）或 ?pick=@host（選船）開在 iframe 時，在 DOM 構建前搶先掛上 class，避免載入 5MB 程式庫期間閃現主選單 */
+(function(){
+  try{
+    var q = new URLSearchParams(location.search);
+    if(q.get('tui') === '@host') document.documentElement.classList.add('tuionly');
+    if(q.get('pick') === '@host') document.documentElement.classList.add('pickonly');
+  }catch(e){}
+})();
+</script>
 <style>
   :root{ --modeFs:13px; --ink:#f3ead8; --dim:#b9ae98; --gold:#e8c26a; --blue:#6f9bff; --red:#ff6f6f; --panel:rgba(14,18,24,.72); }
   html,body{ margin:0; height:100%; background:#0d1218; color:var(--ink); overflow:hidden;
