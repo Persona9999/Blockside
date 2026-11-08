@@ -187,8 +187,21 @@ function tuiTrade(side, g, q) {
 function tuiHead() {
   var I = TUI.info, T = twbTown(), L = T && T.p && T.p.live;
   var nm = (I && I.name) || (L && L.name) || TWB.town || '', s = '<b>🏘 ' + tuiEsc(nm) + '</b>';
-  if (I) s += '<span>📅 ' + I.year + ' 年' + (I.otherTime ? '・⏳ 另一個時空（現在 ' + I.gameYear + ' 年）' : '') + '</span>' + (I.faction ? '<span>🏳 ' + tuiEsc(TUI.faction || I.faction) + '</span>' : '') +
-    '<span>👥 ' + tuiNum(I.pop.total) + ' 人</span><span>💰 城鎮金庫 ' + tuiNum(I.funds) + '</span><span>第 ' + (I.day + 1) + ' 天</span>';
+  if (I) {
+    s += '<span>📅 ' + I.year + ' 年' + (I.otherTime ? '・⏳ 另一個時空（現在 ' + I.gameYear + ' 年）' : '') + '</span>' +
+      (I.faction ? '<span>🏳 ' + tuiEsc(TUI.faction || I.faction) + '</span>' : '') +
+      '<span>👥 ' + tuiNum(I.pop.total) + ' 人</span>' +
+      '<span>💰 城鎮金庫 ' + tuiNum(I.funds) + '</span>';
+  }
+  if (TUI.tab === 'trade' && TUI.list) {
+    var TL = TUI.list, D = TL.load, Hd = tuiShip();
+    s += '<span>👛 玩家金庫 ' + tuiNum(TL.funds, 2) + '</span>' +
+      (D ? '<span>⚖ 貨重／載重 ' + tuiNum(D.cargoKg / 1000, 1) + ' / ' + tuiNum(D.ballastKg / 1000, 0) + ' 噸</span>' +
+           '<span>🌊 吃水 ' + (D.overKg > 0 ? (D.draftM != null ? '深 ' + tuiNum(D.draftM, 2) + ' m' : '多 ' + tuiNum(D.overKg / 1000, 1) + ' 噸') : '照設計水線') + '</span>' :
+           '<span>⚖ 貨艙 還沒裝過貨</span>') +
+      (Hd && Hd.fullT ? '<span>🚢 排水量 標準／滿載 ' + tuiNum(Hd.stdT) + ' / ' + tuiNum(Hd.fullT) + ' 噸</span>' : '');
+  }
+  if (I) s += '<span>第 ' + (I.day + 1) + ' 天</span>';
   return '<div id="tuiHead">' + s + '<button type="button" id="tuiX" title="關掉（Esc）">✕</button></div>';
 }
 function tuiTabs() { if (TUI.tab === 'dist') return '<h3 id="tuiPg">🏙 城區</h3>'; return '<div id="tuiTabs">' + TUI_TABS.map(function (t) { return '<button type="button" data-t="' + t.k + '"' + (t.k === TUI.tab ? ' class="on"' : '') + '>' + t.name + '</button>'; }).join('') + '</div>'; }
@@ -383,20 +396,22 @@ function tuiTradeHTML() {
     var q = tuiTradeQ(side, r, u), ok = q > 0 && !TUI.busy;
     return '<button type="button" data-side="' + side + '" data-g="' + r.g + '" data-q="' + q + '"' + (ok ? '' : ' disabled') + ' title="' + (side === 'buy' ? '買' : '賣') + ' ' + (q > 0 ? tuiNum(q, q % 1 ? 2 : 0) : u) + ' 桶' + tuiEsc(r.name) + (price == null ? '' : '（現在一桶 ' + tuiNum(price, 2) + '）') + '">' + (price == null ? '–' : tuiNum(price, 2)) + '</button>';
   };
-  var h = '<p class="tuiDim">只列船上有的、城鎮有庫存的貨（缺貨的不列）。按鈕上是一桶的價錢：買價含關稅 ' + Math.round(L.fee * 100) + '%、賣價扣關稅；越買越貴、越賣越便宜（照每一桶的庫存算）。</p>';
-  h += '<p class="tuiDim">均價含購入關稅，按持有數量加權；賣價差為目前一桶賣價減均價，大量成交會隨庫存改價。未記錄的舊貨不估成本。</p>';
-  h += '<div class="tuiU">一次買賣' + TUI_UNITS.map(function (n) { return '<button type="button" data-u="' + n + '"' + (n === u ? ' class="on"' : '') + '>' + tuiNum(n) + '</button>'; }).join('') + tuiUnitHTML() + '</div>';
-  if (!L.rows.length) h += '<p class="tuiDim">船上空的，城鎮市場也是空的</p>';
-  else h += '<table class="tuiT tuiTr"><tr><th>🏘 城鎮</th><th>賣</th><th>貨</th><th>買</th><th>⛵ 船上／均價</th></tr>' + L.rows.map(function (r) {
+  var rows = (L.rows || []).filter(function (r) {
+    return Math.floor(r.town) >= 1 || Math.floor(r.ship) >= 1;
+  });
+  var h = '<div class="tuiU">一次買賣' + TUI_UNITS.map(function (n) { return '<button type="button" data-u="' + n + '"' + (n === u ? ' class="on"' : '') + '>' + tuiNum(n) + '</button>'; }).join('') + tuiUnitHTML() + '</div>';
+  if (!rows.length) h += '<p class="tuiDim">船上空的，城鎮市場也是空的</p>';
+  else h += '<table class="tuiT tuiTr"><tr><th>🏘 城鎮</th><th>賣</th><th>貨</th><th>買</th><th>⛵ 船上／均價</th></tr>' + rows.map(function (r) {
     return '<tr><td' + tuiTradeTint(r) + '>' + tuiNum(Math.floor(r.town)) + '</td><td class="b">' + btn('sell', r, r.sell) + '</td>' +
       '<td class="g" data-n="' + tuiEsc(r.name) + '"><img src="img/goods/' + encodeURIComponent(r.g) + '.png" alt="' + tuiEsc(r.name) + '" onerror="this.replaceWith(this.alt)"></td>' +   // 只畫圖示；沒有圖 ⇒ 換成名字
       '<td class="b">' + btn('buy', r, r.buy) + '</td><td class="trade-hold">' + tuiHoldHTML(r) + '</td></tr>';
   }).join('') + '</table>';
-  var D = L.load, Hd = tuiShip();
-  h += '<div class="tuiTiles"><div><small>👛 玩家金庫</small><b>' + tuiNum(L.funds, 2) + '</b></div><div><small>💰 城鎮金庫</small><b>' + tuiNum(L.townFunds) + '</b></div>' +
-    (D ? '<div><small>⚖ 貨重／載重</small><b>' + tuiNum(D.cargoKg / 1000, 1) + ' / ' + tuiNum(D.ballastKg / 1000, 0) + ' 噸</b></div><div><small>🌊 吃水</small><b>' + (D.overKg > 0 ? (D.draftM != null ? '深 ' + tuiNum(D.draftM, 2) + ' m' : '多 ' + tuiNum(D.overKg / 1000, 1) + ' 噸') : '照設計水線') + '</b></div>' : '<div><small>⚖ 貨艙</small><b>還沒裝過貨</b></div>') +
-    (Hd && Hd.fullT ? '<div><small>🚢 排水量 標準／滿載</small><b>' + tuiNum(Hd.stdT) + ' / ' + tuiNum(Hd.fullT) + ' 噸</b></div>' : '') + '</div>';
-  return h + '<p class="tuiDim">貨重在載重以內 ⇒ 換掉同樣重的壓艙石、吃水不變；超過 ⇒ 吃水變深。標準排水量 ＝ 沒有貨（壓艙石也卸掉）；滿載 ＝ 載重裝滿、在設計水線。</p>';
+  h += '<div class="tuiTradeNotes tuiDim">' +
+    '<p>只列船上有的、城鎮有庫存的貨（缺貨的不列）。按鈕上是一桶的價錢：買價含關稅 ' + Math.round(L.fee * 100) + '%、賣價扣關稅；越買越貴、越賣越便宜（照每一桶的庫存算）。</p>' +
+    '<p>均價含購入關稅，按持有數量加權；賣價差為目前一桶賣價減均價，大量成交會隨庫存改價。未記錄的舊貨不估成本。</p>' +
+    '<p>貨重在載重以內 ⇒ 換掉同樣重的壓艙石、吃水不變；超過 ⇒ 吃水變深。標準排水量 ＝ 沒有貨（壓艙石也卸掉）；滿載 ＝ 載重裝滿、在設計水線。</p>' +
+    '</div>';
+  return h;
 }
 // ───────── 城區（Blocksail TASK-0817；63_towns.js townDistView、townDistGo）─────────
 //   Tim 2026-10-26：「然後城鎮模式可以有選單切換城區」「會跳到選中的城區 並以該城區為中心加載地圖」
