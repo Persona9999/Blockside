@@ -11,7 +11,74 @@
 //     粒子模式（33_flood.js flTick）外面的水面（seaH，照浪）高過開口 ⇒ 照 Torricelli 灌進開口底下那一格（doorInflow）。
 //     ⛔ 沒有門的開口照舊不進水（甲板上浪打過來沒做）⇒ 沒有門的船一位元不動。
 // 血量：砲的一半（GUN_HP × 0.5；10_ship.js）—— 打得壞，壞了整片飛走（blowModel），開口露出來。
-var DOOR_R = 15, DOOR_RZ = 25, DOOR_SP = 2.5, DOOR_HOLD = 1, DOOR_DEG = 100;   // 1.5 m 內有人經過（上下 2.5 m）；開／關各 0.4 秒；人走了留 1 秒
+// 直立的門（鉸鏈垂直、貼在艙壁或船殼外面；Tim 2026-11-08 TASK-1257：「那讓直立的門也擋水呢(參考炮門 艙蓋)」）：
+//   門正下方是地板 ⇒ 上面那一套量不到開口。改量牆上的門洞（d.wall）：從門板往牆那一頭走 DOOR_WALL 格內，
+//   門板兩邊那兩柱（門框；門板比門洞每邊大一格）都是實心的那幾層 ＝ 牆的厚度，那幾層門板範圍裡的空格 ＝ 門洞（一排一排照 z 量 ⇒ 斜的船尾牆也對得上）。
+//   門在 ⇒ 門洞擋水（漏水自檢塞住，75_leakcheck.js）；門沒了 ⇒ 門洞一排一排變成進水口（外面的水面高過那一排才灌；同砲口 portOpen 的「每一層」）。
+//   ⛔ d.cells 留給水平的艙蓋（33_wrsim.js 把它當上下兩層之間的開口）；直立的門 d.cells 是空的。
+var DOOR_R = 15, DOOR_RZ = 25, DOOR_SP = 2.5, DOOR_HOLD = 1, DOOR_DEG = 100, DOOR_WALL = 12;   // 1.5 m 內有人經過（上下 2.5 m）；開／關各 0.4 秒；人走了留 1 秒；直立的門往牆找門洞最多幾格
+/** 直立門的門洞（見檔頭）。B ＝ 船型的格（T.hullG）、b ＝ 門板外框。
+ *  回 { c: [x, y, z, …] 牆裡的空格, rows: [{ z, w 那一排寬幾格, x, y 最裡面那一層的中心, e: 那一排兩頭外面那一格（門板外、牆另一頭）}] } 或 null。 */
+function doorWall(B, b) {
+  var n = (b[3] - b[0]) <= (b[4] - b[1]) ? 0 : 1, w = 1 - n;             // n ＝ 門板最薄的那個水平軸（門洞穿過去的方向）、w ＝ 門寬那一軸
+  var u0 = Math.ceil(b[w]), u1 = Math.floor(b[w + 3]) - 1, z0 = Math.ceil(b[2]), z1 = Math.floor(b[5]) - 1, p = Math.floor((b[n] + b[n + 3]) / 2), um = Math.round((u0 + u1) / 2);
+  if (u1 - u0 < 2 || z1 < z0) return null;
+  function at(t, u, z) { return n === 0 ? B.get(t, u, z) : B.get(u, t, z); }
+  function xyz(t, u, z) { return n === 0 ? [t, u, z] : [u, t, z]; }
+  var best = null;
+  [1, -1].forEach(function (s) {                                         // 門板兩邊都試，找得到牆的那一頭（門板擺在牆外 ⇒ 只有一頭有）
+    var c = [], rows = [];
+    for (var z = z0; z <= z1; z++) {
+      var inWall = false, wMax = 0, last = null, tEnd = null;
+      for (var k = 1; k <= DOOR_WALL; k++) {
+        var t = p + s * k;
+        if (!(at(t, u0, z) && at(t, u1, z))) { if (inWall) break; continue; }   // 門框那兩柱都是牆 ⇒ 在牆的厚度裡；出了牆就停
+        inWall = true; tEnd = t;
+        var wN = 0, us = 0;
+        for (var u = u0 + 1; u < u1; u++) if (!at(t, u, z)) { c.push(n === 0 ? t : u, n === 0 ? u : t, z); wN++; us += u; }
+        if (wN) { wMax = Math.max(wMax, wN); last = [t, us / wN]; }
+      }
+      if (!wMax) continue;
+      rows.push({ z: z, w: wMax, x: (n === 0 ? last[0] : last[1]) + 0.5, y: (n === 0 ? last[1] : last[0]) + 0.5, e: [xyz(p - s, um, z), xyz(tEnd + s, um, z)] });
+    }
+    if (c.length && (!best || c.length > best.c.length)) best = { c: c, rows: rows };
+  });
+  return best;
+}
+/** 門洞通不通到船外（只有通到船外的，門沒了才從海灌水；艙裡的門 ⇒ 只在房間模擬裡讓兩邊的房間相通）：
+ *  門洞最低、中間、最高那三排，從兩頭外面那一格在那一層的水平面上照空格往外灌（4 連通），灌得到船的格子範圍的邊 ⇒ 通到船外（陽台、船頭平台、露天甲板）；
+ *  一整塊灌完（或灌了 DOOR_FLOOD 格）都碰不到邊 ⇒ 艙裡。⚠ 那一層的砲門開著算通 ⇒ 砲甲板上的艙壁門也會判成通船外（水要高過那一排才灌，跟砲門一起淹）。
+ *  🩸 先試過「頭上幾 m 內有沒有蓋著」：三叉戟號船頭平台頭上 3.5 m 有外飄的舷牆、貨艙平台到 orlop 3.3–3.6 m ⇒ 沒有一個門檻分得開。 */
+var DOOR_FLOOD = 400000;
+function doorWallOut(T, d) {
+  var B = T.hullG, sx = B.sx, sy = B.sy, R = d.wall.rows, pick = [R[0], R[R.length >> 1], R[R.length - 1]];
+  var seen = T.doorSeen || (T.doorSeen = new Uint8Array(sx * sy)), st = [];
+  function escapes(e) {
+    var z = e[2]; if (e[0] < 0 || e[1] < 0 || e[0] >= sx || e[1] >= sy || B.get(e[0], e[1], z)) return false;
+    seen.fill(0); st.length = 0; st.push(e[1] * sx + e[0]); seen[e[1] * sx + e[0]] = 1;
+    for (var n = 0; st.length && n < DOOR_FLOOD; n++) {
+      var i = st.pop(), x = i % sx, y = (i / sx) | 0;
+      if (x === 0 || y === 0 || x === sx - 1 || y === sy - 1) return true;
+      var nb = [i + 1, i - 1, i + sx, i - sx];
+      for (var k = 0; k < 4; k++) { var j = nb[k]; if (!seen[j] && !B.get(j % sx, (j / sx) | 0, z)) { seen[j] = 1; st.push(j); } }
+    }
+    return false;
+  }
+  return pick.some(function (r) { return escapes(r.e[0]) || escapes(r.e[1]); });
+}
+/** 直立的門沒了（doorsSurvey）：通到船外的門洞一排一排登記成進水口 —— 公式模式每一層加那一排的寬（同砲口 portOpen）；粒子模式每一排一個開口（doorInflow 灌進最裡面那一格）。
+ *  艙裡的門（doorWallOut 否）⇒ 這兩個模式不管（它們沒有房間）；房間模擬（33_wrsim.js）照門洞兩邊的房間開口。 */
+function doorWallOpen(sh, d) {
+  if (d.wall.out === undefined) d.wall.out = doorWallOut(sh.T, d);
+  if (!d.wall.out) return;
+  var T = sh.T, sy = 0, sx = 0, c = d.wall.c;
+  for (var i = 0; i < c.length; i += 3) { sx += c[i] > T.cx ? 1 : -1; sy += c[i + 1] > T.cy ? 1 : -1; }
+  sx = sx > 0 ? 1 : sx < 0 ? -1 : 0; sy = sy > 0 ? 1 : sy < 0 ? -1 : 0;
+  d.wall.rows.forEach(function (r) {
+    if (r.z < T.sz) { sh.flood[r.z * 3] += r.w; sh.flood[r.z * 3 + 1] += sy * r.w; sh.flood[r.z * 3 + 2] += sx * r.w; }
+    if (sh.fl) (sh.fl.tops = sh.fl.tops || []).push({ x: r.x, y: r.y, z: r.z, ar: r.w * S * S, c: r.z });   // c ＝ 灌進哪一層（直立的門洞：那一排自己；水平的艙蓋：開口底下）
+  });
+}
 /** 開一艘船（10_ship.js makeShip，模型建好之後）：每扇門的鉸鏈、開口的格。沒有門 ⇒ sh.doors 不設（一行都不多算）。 */
 function doorsShip(sh) {
   var D = [];
@@ -22,6 +89,7 @@ function doorsShip(sh) {
     if (a && b && len(sub(b, a)) > 0.5) { d.a = [a[0] + 0.5, a[1] + 0.5, a[2] + 0.5]; d.ax = norm(sub(b, a)); }   // 固定點取格心（跟梯子一樣）；鉸鏈缺 ⇒ 不演出（匯入檢查報 ✗）
     var B = sh.T.hullG, b0 = m.bb;
     for (var x = Math.ceil(b0[0]); x < Math.floor(b0[3]); x++) for (var y = Math.ceil(b0[1]); y < Math.floor(b0[4]); y++) if (!B.get(x, y, d.zt)) d.cells.push(x, y);   // 開口：門正下方、甲板那一層原本就空的格
+    if (!d.cells.length && d.ax && Math.abs(d.ax[2]) > 0.7) { var wl = doorWall(B, b0); if (wl) d.wall = wl; }   // 直立的門：牆上的門洞（見檔頭）
     D.push(d);
   });
   if (D.length) sh.doors = D;
@@ -29,7 +97,9 @@ function doorsShip(sh) {
 /** 每半秒（32_hull.js survey）：門沒了（打飛、腳下的甲板沒了）⇒ 開口變成進水口（只登記一次）。 */
 function doorsSurvey(sh) {
   sh.doors.forEach(function (d) {
-    if (d.gone || d.m.alive || !d.cells.length) return;
+    if (d.gone || d.m.alive) return;
+    if (d.wall) { d.gone = true; doorWallOpen(sh, d); return; }        // 直立的門：門洞一排一排
+    if (!d.cells.length) return;
     d.gone = true;
     var n = d.cells.length / 2, z = d.zt, sy = 0, sx = 0, cx = 0, cy = 0;
     for (var i = 0; i < d.cells.length; i += 2) { sy += d.cells[i + 1] > sh.T.cy ? 1 : -1; sx += d.cells[i] > sh.T.cx ? 1 : -1; cx += d.cells[i]; cy += d.cells[i + 1]; }
@@ -41,7 +111,7 @@ function doorsSurvey(sh) {
 function doorInflow(sh, fl, dtc, head) {
   var F = fl.F, M = sh.M, fk = sh.cfg.flood / LIM.flood[2] * FL_INK, q = 0, ar = 0, n = 0;   // FL_INK：進水倍率（TASK-1058）
   fl.tops.forEach(function (o) {
-    var P = M4.pt(M, o.x, o.y, o.z), hOut = seaH(P[0], P[2], SIMT), ci = flCell(F, o.x, o.y, o.z - 2);
+    var P = M4.pt(M, o.x, o.y, o.z), hOut = seaH(P[0], P[2], SIMT), ci = flCell(F, o.x, o.y, o.c !== undefined ? o.c : o.z - 2);
     ar += o.ar; n++;
     if (ci < 0 || hOut <= P[1]) return;
     var hIn = fl.A[ci] > 1e-6 ? head(ci) : -1e9, dh = hOut - Math.max(hIn, P[1]); if (dh <= 0.001) return;
@@ -54,7 +124,8 @@ function doorsSummary(sh) {
   if (!sh.doors) return '';
   return sh.doors.length + ' 扇：' + sh.doors.map(function (d) {
     var ax = d.ax ? (Math.abs(d.ax[2]) > 0.7 ? '左右開' : '上下開') : '鉸鏈缺';
-    return d.m.path + '（' + ax + '、開口 ' + d.cells.length / 2 + ' 格）';
+    if (d.wall && d.wall.out === undefined) d.wall.out = doorWallOut(sh.T, d);
+    return d.m.path + '（' + ax + (d.wall ? '、門洞 ' + d.wall.c.length / 3 + ' 格（' + d.wall.rows.length + ' 排、' + (d.wall.out ? '通船外' : '艙裡') + '）' : '、開口 ' + d.cells.length / 2 + ' 格') + '）';
   }).join('；');
 }
 

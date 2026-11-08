@@ -82,6 +82,16 @@ function wrsInit(sh) {
   //   框底下沒有 ⇒ 1.5 m 內最近的那一個；都沒有（甲板上的艙口通到船外）⇒ 記成「通到甲板上面」的開口（門沒了 ⇒ 照破口算：外面的水面高過開口才進）
   var odoor = new Int16Array(CAP).fill(-1), tops = [];
   (sh.doors || []).forEach(function (d, di) {
+    if (d.wall) {                                                        // 直立的門（25_doors.js doorWall）：門洞那幾格（＋ 1 格）同一層的左右開口掛著這扇門；
+      var c = d.wall.c, wx0 = Infinity, wx1 = -Infinity, wy0 = Infinity, wy1 = -Infinity, wz0 = Infinity, wz1 = -Infinity, hw = 0, qw;   //   都沒有（門洞通到船外：船尾陽台、船頭）⇒ 每一排記成「門沒了才灌」的開口
+      for (qw = 0; qw < c.length; qw += 3) { wx0 = Math.min(wx0, c[qw]); wx1 = Math.max(wx1, c[qw]); wy0 = Math.min(wy0, c[qw + 1]); wy1 = Math.max(wy1, c[qw + 1]); wz0 = Math.min(wz0, c[qw + 2]); wz1 = Math.max(wz1, c[qw + 2]); }
+      for (qw = 0; qw < NO; qw++) if (O.T[qw] && O.Z[qw] >= wz0 - 1 && O.Z[qw] <= wz1 + 1 && O.X[qw] >= wx0 - 1 && O.X[qw] <= wx1 + 1 && O.Y[qw] >= wy0 - 1 && O.Y[qw] <= wy1 + 1) { odoor[qw] = di; hw++; }
+      if (hw) return;
+      if (d.wall.out === undefined) d.wall.out = doorWallOut(sh.T, d);   // 艙裡的門找不到左右開口（門洞兩邊是同一間）⇒ 不記
+      if (!d.wall.out) return;
+      d.wall.rows.forEach(function (r) { var rw = wrRoomAt(W, Math.floor(r.x), Math.floor(r.y), r.z); if (rw >= 0) tops.push({ d: di, r: rw, j: colAt(rw, r.x, r.y, r.z + 0.5), x: r.x, y: r.y, z: r.z, ar: r.w * S * S, acc: 0, q: 0 }); });
+      return;
+    }
     if (!d.cells.length) return;
     var n0 = d.cells.length / 2, sx = 0, sy = 0, hit = 0, x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity, q2;
     for (var q = 0; q < d.cells.length; q += 2) { sx += d.cells[q]; sy += d.cells[q + 1]; x0 = Math.min(x0, d.cells[q]); x1 = Math.max(x1, d.cells[q]); y0 = Math.min(y0, d.cells[q + 1]); y1 = Math.max(y1, d.cells[q + 1]); }

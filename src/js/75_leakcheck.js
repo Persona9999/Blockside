@@ -3,7 +3,7 @@
 //   「因為有很多是遊戲設計上不漏水(炮門只要還在就不漏水」「主要就是看如果超載(吃水超果水線) 極限可以撐多少」（選了「工具換算成噸數＋傾斜」：只量給人看，戰鬥不變）。
 //   起因：康塞普西翁號船尾轉角的窗，斜的牆上玻璃只在斜角相碰、空氣鑽得過去。
 // 進水（33_flood.js）只算打出來的破口與被打掉的門 ⇒ 這裡另外量「船本來的樣子，水面升到哪裡會流進艙裡」：
-//   水面從船底一路往上升，船外的水照 6 連通灌。擋水的：船的格（T.base，玻璃也算）、門（關著的外框，25_doors.js）、
+//   水面從船底一路往上升，船外的水照 6 連通灌。擋水的：船的格（T.base，玻璃也算）、門（關著的外框；直立的門連牆上的門洞，25_doors.js doorWall）、
 //   砲門與槳門（遊戲的規矩：砲門在就不漏水 ⇒ 沿砲管從砲口往裡 6 格到往外 14 格（LK_PORT；砲口伸出船殼外框 ⇒ 往裡從砲管穿過外框那一點起算）、左右 LK_PORT_W、上下 LK_PORT_Z 格的空格塞住，
 //   再加砲口 LK_GUN 格以內船殼外框的缺口（見下）；槳照槳座 pivot ±LK_OAR 格；舵照舵桿與舵柄穿過船殼的那一段 ±LK_RUD 格，見下）。
 //   每一格記「水面要升到多高才灌得到」＝ 從船外走過來的路上最高的那一格（最小化路上的最高點；照高度一層一層的水桶佇列）；
@@ -38,6 +38,7 @@ function leakCheck(sh, heel) {
   (sh.doors || []).forEach(function (d) {
     var b = d.m.bb; doorB.push(b);
     for (var zz = Math.floor(b[2]); zz < Math.ceil(b[5]); zz++) for (var yy = Math.floor(b[1]); yy < Math.ceil(b[4]); yy++) for (var xx = Math.floor(b[0]); xx < Math.ceil(b[3]); xx++) fill(xx, yy, zz, 2);
+    if (d.wall) for (var wi = 0; wi < d.wall.c.length; wi += 3) fill(d.wall.c[wi], d.wall.c[wi + 1], d.wall.c[wi + 2], 2);   // 直立的門：牆上的門洞也塞住（25_doors.js doorWall；🩸 只塞門板 ⇒ 門板貼在斜的船尾牆外、底下離牆幾格，水從門板旁繞進門洞 —— 三叉戟號 TASK-1257）
   });
   var yPf = new Int16Array(K.yP.length).fill(-1), yMf = new Int16Array(K.yM.length).fill(-1);
   for (z = 0; z < Math.min(zMax, K.zTop); z++) for (x = 0; x < K.nxv; x++) {

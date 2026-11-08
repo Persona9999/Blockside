@@ -133,7 +133,9 @@ function shipCheck(id) {
         var dr = (sh.doors || []).filter(function (d) { return d.m === m; })[0];
         if (!dr || !dr.a) add('error', '門', m.path, '沒有固定點 hinge-a／hinge-b（或兩點重疊）⇒ 開關不演出、腳往正下方找（艙口底下）', '門子作品登記 hinge-a、hinge-b（鉸鏈軸上兩點；造船規格 §9 door）');
         else if (mt.open && (mt.open !== 'up' && mt.open !== 'side' || (mt.open === 'side') !== (Math.abs(dr.ax[2]) > 0.7))) add('warn', '門', m.path, 'meta open=' + mt.open + ' 跟鉸鏈軸對不上（軸' + (Math.abs(dr.ax[2]) > 0.7 ? '垂直 ⇒ 左右開' : '水平 ⇒ 上下開') + '）⇒ 照鉸鏈軸開', 'open 寫 up（鉸鏈水平）或 side（鉸鏈垂直），或改鉸鏈的兩點');
-        if (dr && !dr.cells.length) add('warn', '門', m.path, '門正下方那一層（z ' + dr.zt + '）沒有原本就空的格 ⇒ 門被打掉也不會從這裡進水', '門擺在開口上面（外框底面 ＝ 開口那一層的上一格）');
+        var drUp = dr && dr.a && Math.abs(dr.ax[2]) > 0.7;               // 直立的門（鉸鏈垂直）：量牆上的門洞（25_doors.js doorWall）
+        if (dr && !dr.cells.length && !dr.wall) add('warn', '門', m.path, (drUp ? '直立的門：門板往牆那一頭 ' + DOOR_WALL + ' 格內找不到門洞（門板兩邊那兩柱要是牆）' : '門正下方那一層（z ' + dr.zt + '）沒有原本就空的格') + ' ⇒ 門被打掉也不會從這裡進水',
+          drUp ? '門板貼著門洞、每邊比門洞大一格（造船規格 §9.7 直立的門）' : '門擺在開口上面（外框底面 ＝ 開口那一層的上一格）');
       }
       var sn = m.name.replace(/^.*yard-/, ''), hasSail = sh.sails.some(function (s) { return s.name === sn; });   // 沒掛帆的帆桁（crossjack、spritsail 常見）不用寫 sail
       if (m.kind === 'yard' && ((!mt.sail && hasSail) || (!mt.mast && !/bowsprit|艏斜桅/.test(m.path)))) add('warn', '帆桁', m.path, '帆桁 meta 少了 ' + [!mt.sail && hasSail && 'sail（有一面帆叫 ' + sn + '）', !mt.mast && 'mast'].filter(Boolean).join('、') + ' ⇒ 照名字配帆／桅', '帆桁 meta sail=<帆名>、mast=<桅>（造船規格 §9.1）');
