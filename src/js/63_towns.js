@@ -38,6 +38,59 @@
 var TOWN_LM = [24, 4];
 // 附屬的田（TASK-0862；Blocksail world/annex.js）：一格幾公尺（＝ Blocksail BSW.TOWN_CELL，街道建築格）、土的兩個顏色（壟、溝）、溝寬幾成（沿行距）
 var TOWN_ANNEX_CELL = 4, TOWN_SOIL = [[0.44, 0.34, 0.23], [0.33, 0.25, 0.17]], TOWN_FURROW = 0.4;
+// 牧地（Blocksail TASK-1232 放牧場：annex 的 crop 'pasture'）：草地兩個綠（一排一排交錯，遠看不是一整片平的色塊）、不畫壟；外緣自動圍一圈圍欄（柱＋兩道橫木）
+//   Tim 2026-11-07「是否可以參考城牆 農田方作法 去做一種可以自動圈地的圍欄」⇒ 照牧地的格子算外緣：一格的邊外面不是牧地、也不是主建築的地塊 ⇒ 那一邊圍起來；
+//   貼著主建築地塊的那幾邊不圍（牛從牛棚那一側進出 ＝ 門）；柱距 TOWN_FENCE.sp 公尺、柱高 h、橫木兩道在 rails 那兩個高度（都照地面起伏）
+var TOWN_PASTURE = [[0.40, 0.50, 0.24], [0.35, 0.46, 0.21]];
+var TOWN_FENCE = { sp: 2.5, h: 1.25, post: 0.07, rail: 0.035, rails: [0.5, 1.0], col: [0.36, 0.27, 0.18], railCol: [0.45, 0.35, 0.24] };
+/** 牧地每一排（annex.cells 的第 k 段）的外緣 ⇒ [[[a, b], [a, b]] …]（地塊座標：a 沿進深、第 0 排臨路，b 沿寬；同 fieldsOf）：
+ *  一格的邊外面不是牧地、也不是主建築的地塊（Blocksail world/annex.js inLot：第 0～⌈w/C⌉−1 欄、第 0～⌈d/C⌉−1 排）⇒ 圍；同一條線上連著的併成一段 */
+function townFenceEdges(l, cells, C) {
+  var on = {}, nw = Math.ceil(l.w / C - 1e-9), nd = Math.ceil(l.d / C - 1e-9);
+  cells.forEach(function (r) { for (var i = r[1]; i <= r[2]; i++) on[i + ',' + r[0]] = 1; });
+  function open(i, j) { return !on[i + ',' + j] && !(i >= 0 && j >= 0 && i < nw && j < nd); }   // 那一格外面要圍
+  function A(j) { return l.d / 2 - C * j; } function Bv(i) { return -l.w / 2 + C * i; }
+  return cells.map(function (r) {
+    var j = r[0], out = [];
+    [[j - 1, A(j)], [j + 1, A(j + 1)]].forEach(function (s) {        // 前、後兩邊：連著的幾格併成一段
+      var i0 = null;
+      for (var i = r[1]; i <= r[2] + 1; i++) {
+        var o = i <= r[2] && open(i, s[0]);
+        if (o && i0 == null) i0 = i;
+        if (!o && i0 != null) { out.push([[s[1], Bv(i0)], [s[1], Bv(i)]]); i0 = null; }
+      }
+    });
+    if (open(r[1] - 1, j)) out.push([[A(j), Bv(r[1])], [A(j + 1), Bv(r[1])]]);           // 左、右兩頭
+    if (open(r[2] + 1, j)) out.push([[A(j), Bv(r[2] + 1)], [A(j + 1), Bv(r[2] + 1)]]);
+    return out;
+  });
+}
+/** 一排牧地（fieldsOf 的 F）⇒ 地面網格：草（TOWN_PASTURE，照排交錯兩個綠）＋這一排外緣的圍欄（柱 ＋ 兩道橫木，照地面起伏）
+ *  vtx／I／W／hgt 同 townGround 那一支（世界 ⇒ 網格座標、讀高度） */
+function townPasturePut(F, vtx, I, W, hgt) {
+  function P(a, b, up) { var x = F.at[0] + F.fx * a - F.fy * b, y = F.at[1] + F.fy * a + F.fx * b, w = W([x, y]), g = hgt(w[0], w[1]); return [w[0], (g === g ? g : 0) + TOWN_ROAD_LIFT + (up || 0), w[1]]; }
+  var col = TOWN_PASTURE[Math.abs(Math.round(F.a1 / TOWN_ANNEX_CELL)) % 2], na = Math.max(1, Math.ceil((F.a1 - F.a0) / 2)), nb = Math.max(1, Math.ceil((F.b1 - F.b0) / 4));
+  for (var kb = 0; kb < nb; kb++) {
+    var bA = F.b0 + (F.b1 - F.b0) * kb / nb, bB = F.b0 + (F.b1 - F.b0) * (kb + 1) / nb, base = -1;
+    for (var ka = 0; ka <= na; ka++) { var a = F.a0 + (F.a1 - F.a0) * ka / na, p0 = P(a, bA), p1 = P(a, bB), v0 = vtx(p0[0], p0[1], p0[2], col); vtx(p1[0], p1[1], p1[2], col); if (base < 0) base = v0; }
+    for (ka = 0; ka < na; ka++) { var q = base + ka * 2; I.push(q, q + 1, q + 3, q, q + 3, q + 2); }
+  }
+  var K = TOWN_FENCE;
+  // 一根四面的長條：p、q 兩端（網格座標，含高度）、半寬 hw、往上 h0～h1（兩端各照自己的地面）
+  function bar(p, q, hw, h0, h1, c) {
+    var dx = q[0] - p[0], dz = q[2] - p[2], L = Math.hypot(dx, dz) || 1, nx = -dz / L * hw, nz = dx / L * hw;
+    var c4 = [[p[0] + nx, p[2] + nz, p[1]], [q[0] + nx, q[2] + nz, q[1]], [q[0] - nx, q[2] - nz, q[1]], [p[0] - nx, p[2] - nz, p[1]]];   // [x, z, 地面高]
+    var sides = [[0, 1, nx / hw, nz / hw], [2, 3, -nx / hw, -nz / hw], [1, 2, dx / L, dz / L], [3, 0, -dx / L, -dz / L]];
+    sides.forEach(function (s) { var A0 = c4[s[0]], A1 = c4[s[1]], b = vtx(A0[0], A0[2] + h0, A0[1], c, s[2], 0, s[3]); vtx(A1[0], A1[2] + h0, A1[1], c, s[2], 0, s[3]); vtx(A1[0], A1[2] + h1, A1[1], c, s[2], 0, s[3]); vtx(A0[0], A0[2] + h1, A0[1], c, s[2], 0, s[3]); I.push(b, b + 1, b + 2, b, b + 2, b + 3); });
+    var t = vtx(c4[0][0], c4[0][2] + h1, c4[0][1], c); vtx(c4[1][0], c4[1][2] + h1, c4[1][1], c); vtx(c4[2][0], c4[2][2] + h1, c4[2][1], c); vtx(c4[3][0], c4[3][2] + h1, c4[3][1], c); I.push(t, t + 1, t + 2, t, t + 2, t + 3);
+  }
+  (F.fence || []).forEach(function (e) {
+    var da = e[1][0] - e[0][0], db = e[1][1] - e[0][1], L = Math.hypot(da, db), n = Math.max(1, Math.round(L / K.sp)), pts = [];
+    for (var k = 0; k <= n; k++) pts.push(P(e[0][0] + da * k / n, e[0][1] + db * k / n));
+    pts.forEach(function (p) { bar([p[0] - K.post, p[1], p[2]], [p[0] + K.post, p[1], p[2]], K.post, -0.05, K.h, K.col); });   // 柱：2·post 見方
+    for (k = 0; k < n; k++) K.rails.forEach(function (h) { bar(pts[k], pts[k + 1], K.rail, h - K.rail, h + K.rail, K.railCol); });   // 兩道橫木：柱到柱
+  });
+}
 var TOWN_LOD = [160, 800], TOWN_FAR = [2400, 3000], TOWN_BAND = [24, 60, 300], TOWN_REBIN = 8, TOWN_SHELL_G = 32, TOWN_CLR_G = 2, TOWN_ROAD_LIFT = 0.12, TOWN_GROUND_VIEW = 1600;
 var TOWN_MESH_MS = 8;                                                    // 模型網格化每段最多幾 ms 就讓出一次（townMesh；跟地球儀同一條主執行緒）
 var TOWN_WALL_CORNER = 30, TOWN_WALL_KMAX = 1;                         // 城牆：轉角件從轉幾度起擺；斜接最多切多斜（tan，1 ＝ 轉 90° 的角平分）
@@ -54,7 +107,8 @@ var TOWNS = { on: Q.get('towns') !== '0', prosp: {}, list: [],pend: [], ver: 0, 
 var TOWN_J0 = [0, 0, 0, 0];                                             // 建築的 aJ（不斜接、不順坡、牆基不延）
 var TOWN_BERTH_STRIP = 0.49;                                          // 泊位地塊的前緣在棧橋中線、往裡「棧橋寬一半 ＋ 這麼多」是預留區的前緣（Blocksail world/town.js STRIP_GAP − LOT_GAP / 2）⇒ 棧橋邊 ＝ berth.over − 這個
 var TOWN_USE_ALT = { commandant: ['house'], governor: ['townhall'],   // 那一套沒有那種模型 ⇒ 用哪一種代（BUILDING_SPEC §7：fr 沒有長官的屋子；carib 有）
-  farm: ['house'], plantation: ['commandant', 'house'] };              // 農莊、種植園（Blocksail：開場的 TASK-0862、建築模式蓋的 TASK-0742）：2026-10-24 有了共用 common 的模型（Sculpture meadow-farm-01m；照配方挑 townRecipe）⇒ 這兩條只剩退路（索引裡沒有那幾件時）
+  farm: ['house'], plantation: ['commandant', 'house'],
+  pasture: ['ranch'] };                                              // 放牧場（Blocksail TASK-1232）：還沒有自己的模型 ⇒ 借牧場的（同 16 × 12 地塊；牛棚＋牛欄）              // 農莊、種植園（Blocksail：開場的 TASK-0862、建築模式蓋的 TASK-0742）：2026-10-24 有了共用 common 的模型（Sculpture meadow-farm-01m；照配方挑 townRecipe）⇒ 這兩條只剩退路（索引裡沒有那幾件時）
 //   ⛔ 種植園不借倉庫：倉庫 12 × 16 放不進 16 × 12 的地塊（進深多 4 m、伸出地塊後緣壓到田）—— kaguya 2026-10-24 seq 28673 同意照這一份
 var TOWN_PROSP_DEF = 0.5, TOWN_PROSP_CUT = [1 / 3, 2 / 3];               // 繁榮度沒給 ⇒ 中間；低於第一格算低、到第二格算高（TOWN_BUILD §4 的門檻〔佔位〕）
 var TOWN_STYLE_DEF = 'fr';                                            // 索引裡沒寫 style 的模型算 fr（第一套，TASK-0757）；規劃沒帶退路 styles（舊的匯出）⇒ 城的 style、再 fr
@@ -520,9 +574,10 @@ function townPrep(p, keep) {
     (L || []).forEach(function (l) {
       var A = l.annex; if (!A || !A.cells || !A.cells.length) return;
       var th = l.rot * D2R, fx = Math.cos(th), fy = Math.sin(th), Cc = TOWN_ANNEX_CELL;
-      A.cells.forEach(function (r) {
+      var fen = A.crop === 'pasture' ? townFenceEdges(l, A.cells, Cc) : null;   // 牧地 ⇒ 每一排的外緣（圍欄；townFenceEdges）
+      A.cells.forEach(function (r, k) {
         var a1 = l.d / 2 - Cc * r[0], a0 = a1 - Cc, b0 = -l.w / 2 + Cc * r[1], b1 = -l.w / 2 + Cc * (r[2] + 1);
-        var F = { lot: l.id, crop: A.crop, at: l.at, fx: fx, fy: fy, a0: a0, a1: a1, b0: b0, b1: b1 };
+        var F = { lot: l.id, crop: A.crop, at: l.at, fx: fx, fy: fy, a0: a0, a1: a1, b0: b0, b1: b1, fence: fen ? fen[k] : null };
         F.R = [[a0, b0], [a1, b0], [a1, b1], [a0, b1]].map(function (q) { return E([l.at[0] + fx * q[0] - fy * q[1], l.at[1] + fy * q[0] + fx * q[1]]); });
         out.push(F);
       });
@@ -2046,6 +2101,7 @@ function* townGroundGen(T, Q) {
   //   遠處的田（TASK-0879；63_trees.js 檔頭「遠處的田」）：同一塊田、同一套點再一份網格 ⇒ Q.gf（位置、貼圖座標 u 照第幾行 ÷ 一張的行數、v 照沿行的公尺 ÷ 一張多長、第幾層、那一種的 view）
   var VF = [], IF = [], FC = TREE_FIELD_CARD && TREES.on ? treeFieldCrops() : null;
   yield* townEach(Q.field, function (F) {
+    if (F.crop === 'pasture') { townPasturePut(F, vtx, I, W, hgt); return; }   // 牧地（放牧場）：草地＋圍欄，不畫壟、不種作物
     var sp = TREE_SPECIES[F.crop], row = sp && sp.place.field ? sp.place.field[0] * TREE_FIELD_SP : 1, soil = sp && sp.place.soil || TOWN_SOIL, nb = Math.max(1, Math.round((F.b1 - F.b0) / row)), na = Math.max(1, Math.ceil((F.a1 - F.a0) / 2));
     function P(a, b) { var x = F.at[0] + F.fx * a - F.fy * b, y = F.at[1] + F.fy * a + F.fx * b, w = W([x, y]), g = hgt(w[0], w[1]); return [w[0], (g === g ? g : 0) + TOWN_ROAD_LIFT, w[1]]; }
     for (var kb = 0; kb < nb; kb++) {
