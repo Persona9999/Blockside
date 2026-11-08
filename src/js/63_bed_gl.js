@@ -243,7 +243,7 @@ function bedUpload(k, C, lod) {
 }
 /** 一塊的內陸水 ⇒ 水面網格（s：每幾個取樣點取一個）；沒有段 3、取到的點都沒有水 ⇒ null。
  *  頂點：位置 3、水深 1、水流 2（m/s，世界 x、z；段 4，沒有 ⇒ 0）、水面坡度 2（∂y/∂x、∂y/∂z ⇒ 片段的法線）（世界座標，同 bedMesh）。 */
-var BEDW_SMOOTH = 0.35;                                                  // 水面抹平：旁邊的有水點差這麼多公尺以內才算進來（分米捨入的台階抹掉、瀑布不動）
+var BEDW_SMOOTH = 0.35, BEDW_PAD = 2;                                   // BEDW_PAD：水面網格往岸上多鋪幾圈（bedWaterMesh）                                                  // 水面抹平：旁邊的有水點差這麼多公尺以內才算進來（分米捨入的台階抹掉、瀑布不動）
 function bedWaterMesh(C, s) {
   var wd = C.wd; if (!wd) return null;
   var n = C.n, m = (n - 1) / s + 1, A = BED.A, st = C.step * s, h = C.h0, F = C.wf, M2 = m * m, sf = new Float32Array(M2), dp = new Float32Array(M2), wet = new Uint8Array(M2), any = 0;
@@ -266,6 +266,13 @@ function bedWaterMesh(C, s) {
     if (!wet[q]) { var qi = q % m, qj = (q - qi) / m; y = Infinity; for (b = Math.max(0, qj - 1); b <= Math.min(m - 1, qj + 1); b++) for (a = Math.max(0, qi - 1); a <= Math.min(m - 1, qi + 1); a++) { r = b * m + a; if (wet[r] && sf[r] < y) y = sf[r]; } }
     ys[q] = y;
   }
+  // 岸上再多鋪 BEDW_PAD 圈（Tim 2026-11-08「近景…還是可以看到規律鋸齒」：水面網格只畫到有水的點旁邊那一格 ⇒ 岸邊起伏把地形壓得比水面低、水邊想往岸上跑時被網格的邊切成一格一格的鋸齒）
+  //   ⇒ 再往外的點照旁邊那一圈最低的水面；地形比水面高的地方照樣擋住（深度），只是水邊不再被網格的邊切
+  for (var pad = 0; pad < BEDW_PAD; pad++) {
+    var y2 = ys.slice();
+    for (q = 0; q < M2; q++) { if (ys[q] < Infinity) continue; var qi2 = q % m, qj2 = (q - qi2) / m, lp = Infinity; for (b = Math.max(0, qj2 - 1); b <= Math.min(m - 1, qj2 + 1); b++) for (a = Math.max(0, qi2 - 1); a <= Math.min(m - 1, qi2 + 1); a++) { r = b * m + a; if (ys[r] < lp) lp = ys[r]; } y2[q] = lp; }
+    ys = y2;
+  }
   function slope(i, j, di, dj) {                                         // 往 (di, dj) 的坡度：兩邊有水（或有算過的岸角）才算，不然照單邊；都沒有 ⇒ 0
     var q0 = j * m + i, y0 = ys[q0], ya = i - di >= 0 && j - dj >= 0 ? ys[q0 - di - dj * m] : Infinity, yb = i + di < m && j + dj < m ? ys[q0 + di + dj * m] : Infinity, ha = ya < Infinity, hb = yb < Infinity;
     return ha && hb ? (yb - ya) / (2 * st) : ha ? (y0 - ya) / st : hb ? (yb - y0) / st : 0;
@@ -277,7 +284,7 @@ function bedWaterMesh(C, s) {
     return id[q];
   }
   for (j = 0; j < m - 1; j++) for (i = 0; i < m - 1; i++) {
-    var q0 = j * m + i; if (!(wet[q0] | wet[q0 + 1] | wet[q0 + m] | wet[q0 + m + 1])) continue;
+    var q0 = j * m + i; if (!(wet[q0] | wet[q0 + 1] | wet[q0 + m] | wet[q0 + m + 1]) && !(ys[q0] < Infinity && ys[q0 + 1] < Infinity && ys[q0 + m] < Infinity && ys[q0 + m + 1] < Infinity)) continue;   // 有水的格，或四個角都有水面（多鋪的那幾圈）
     bedQuad(I, vert(i, j), vert(i + 1, j), vert(i, j + 1), vert(i + 1, j + 1), bedDiag(C.h, n, i * s, j * s, s));   // 對角線跟地形網格同一條 ⇒ 岸線在同一組三角形裡交
   }
   return { V: new Float32Array(V), I: new Uint32Array(I), lo: lo, hi: hi, wet: any, x0: ox, z0: oz };
