@@ -844,6 +844,14 @@ function townNeed(I, wallsOnly) {
   });
   return Object.keys(S).sort();
 }
+/** 模型組 K 解了城 T 的城牆、引水渠要的每一個模型沒（同 townNeed 那一段：牆照 townWallKit 那一套的每一型、引水渠照 kit）—— townDraw 建實例之前看。
+ *  地塊沒解的那一塊 townLotInst 自己跳過；牆沒有退路（townWall 一道牆一次做完）⇒ 少一個就等下一組。
+ *  ⛔ 骨架（K.part）只解了建骨架那一刻在場的城的牆：加拉塔先到、君士坦丁堡在整組解完之前到 ⇒ 以前照骨架建君士坦丁堡的牆，roman-* 的斷面不在 K.M ⇒ townWall 炸（2026-11-08 Tim 回報）。 */
+function townWallsReady(K, T) {
+  function has(kit) { return Object.keys(K.byUse).every(function (k) { return k.indexOf(kit + '-') !== 0 || K.byUse[k].every(function (nm) { return !!K.M[nm]; }); }); }
+  return (T.p.walls || []).every(function (w) { var kit = townWallKit(K, T, w, false); return !kit || has(kit); }) &&
+    (T.p.aqueducts || []).every(function (a) { return !a.kit || has(a.kit); });
+}
 /** 那幾個模型的網格與貼圖 ⇒ Promise<{ 名: { g, lo, png } }>：@host 跟外面那一頁要（{ bsmap: 'need', what: 'townmodels', names } ⇒ { bsmap: 'townmodels', models }；
  *  08_seabed.js 轉給 townModelsGot）；檔案模式讀 maps/<海域>/townkit/<名>.js（BSTOWNKIT_DATA）。 */
 function townModels(names) {
@@ -1393,7 +1401,9 @@ function townWall(T, w, out, W, line, jx) {
   var WP = null;                                                        // 城牆沿線的高度（townWallProf；部件都定了、知道門與接點在哪才建）
   function setLev(q, ta, tb) { if (line) { if (w.level) q.lev = [lev(ta), lev(tb)]; } else { q.wp = WP; q.tp = [ta, tb]; } }
   var gate = (K.byUse[kit + '-gate'] || [])[0], towers = K.byUse[kit + '-tower'] || [], sect = (K.byUse[kit + '-section'] || [])[0], end = (K.byUse[kit + '-end'] || [])[0], joint = (K.byUse[kit + '-joint'] || [])[0];
-  if (!sect) return;
+  if (!sect || !K.M[sect]) { if (sect) TOWNS.stat.skip['wall-model:' + kit] = (TOWNS.stat.skip['wall-model:' + kit] || 0) + 1; return; }   // 斷面沒解（townDraw 照 townWallsReady 等過；保險）⇒ 這道牆不畫、不炸
+  if (gate && !K.M[gate]) gate = null; if (end && !K.M[end]) end = null; if (joint && !K.M[joint]) joint = null;
+  towers = towers.filter(function (nm) { return !!K.M[nm]; });
   var mS = K.M[sect].m, len = mS.len || 2, mW = mS.size[0] * mS.mpv, shW = 0.95 + 0.1 * townHash(w.id), obs = [];   // 斷面一條牆同一個深淺（一節一個 ⇒ 每 len 公尺一條色差）
   var parts = [];                                                       // 門、塔、轉角：{ nm, t（中心）, h（半長）, tower }
   (w.gates || []).forEach(function (g) {                                 // 城門那一筆帶 model（例：君士坦丁堡的金門 'golden'）⇒ 用那一套的 '<套>-gate-<model>'；沒載到就照舊用一般的門
@@ -2635,6 +2645,9 @@ function townDraw() {
   TOWNS.list.forEach(function (T) {
     //   照段建（townInstGen）：每格至少做 TOWN_INST_SLICE ms（照舊不等背景預算），沒做完下一格接著；建好才換上，舊的照畫。規劃又改了（instRedo）、換了模型組 ⇒ 重來
     if (!(!T.inst || T.instRedo || T.ij) || nb || !(K.part || !TOWNS.kitBusy)) return;
+    //   這一組沒有它的牆要的模型（骨架只解了先到的那幾座城的牆；townWallsReady）⇒ 等下一組（townGot 已經叫了 townKitStale）
+    if (!townWallsReady(K, T)) { (TOWNS.stat.wait = TOWNS.stat.wait || {})[T.id] = K.part ? 'skel' : 'kit'; return; }
+    if (TOWNS.stat.wait) delete TOWNS.stat.wait[T.id];
     var b0 = performance.now(), J = T.ij, r;
     if (!J || T.instRedo || J.K !== K) { J = T.ij = { g: townInstGen(T), K: K, ms: 0 }; T.instRedo = false; }
     var t1 = BED_SLICE ? b0 + Math.max(BED_BG, TOWN_INST_SLICE) : Infinity;   // 沒有背景預算（無頭、快轉）⇒ 一次建完
@@ -2792,7 +2805,7 @@ function townStat(at) {
       folk: townFolkStat(T), fauna: townFaunaStat(T),
       smoke: T.smk ? T.smk.L.map(function (o) { return { k: o.q.k, lot: o.q.lot, w: o.w.map(function (v) { return +v.toFixed(1); }) }; }) : null,   // 建築的煙囪（78_funnel.js townSmokePts；TASK-0990）
       byModel: u, lights: tl, center: [+(T.ox - BED.ax).toFixed(1), +(T.oy - BED.az).toFixed(1)] };
-  }), kit: !!TOWNS.kit, kitPart: !!(TOWNS.kit && TOWNS.kit.part), kitN: S.kitN, kitMs: S.kitMs, skelN: S.skelN, skelMs: S.skelMs, kitMesh: { baked: S.meshBaked, live: S.meshLive, check: S.meshCheck, vk: townVkFp() }, kitTris: S.kitTris, skip: S.skip, gls: S.gls || 0, lines: S.lines || 0, under: S.under || {}, joins: S.joins || {}, wallJx: S.wallJx || {}, drawn: { full: S.d0, low: S.d1, card: S.d2, shells: S.d3, plinth: S.plinth, flags: S.flags || 0, folk: S.folk || 0, fauna: S.fauna || 0, work: S.workDrawn || 0, landmarks: S.lm || 0, fields: S.fields || 0 }, folk: townFolkSum(), fauna: townFaunaSum(), tris: S.tris, ms: { draw: S.drawMs, fields: S.fieldMs || 0, flags: +(S.flagMs || 0).toFixed(3), bin: S.binMs, clr: +S.clrMs.toFixed(1), prep: S.prepMs }, clrChunks: S.clrN, edit: S.edit || null, smoke: S.smoke || null,
+  }), kit: !!TOWNS.kit, kitPart: !!(TOWNS.kit && TOWNS.kit.part), wait: S.wait || null, kitN: S.kitN, kitMs: S.kitMs, skelN: S.skelN, skelMs: S.skelMs, kitMesh: { baked: S.meshBaked, live: S.meshLive, check: S.meshCheck, vk: townVkFp() }, kitTris: S.kitTris, skip: S.skip, gls: S.gls || 0, lines: S.lines || 0, under: S.under || {}, joins: S.joins || {}, wallJx: S.wallJx || {}, drawn: { full: S.d0, low: S.d1, card: S.d2, shells: S.d3, plinth: S.plinth, flags: S.flags || 0, folk: S.folk || 0, fauna: S.fauna || 0, work: S.workDrawn || 0, landmarks: S.lm || 0, fields: S.fields || 0 }, folk: townFolkSum(), fauna: townFaunaSum(), tris: S.tris, ms: { draw: S.drawMs, fields: S.fieldMs || 0, flags: +(S.flagMs || 0).toFixed(3), bin: S.binMs, clr: +S.clrMs.toFixed(1), prep: S.prepMs }, clrChunks: S.clrN, edit: S.edit || null, smoke: S.smoke || null,
     night: { lit: +TL.k.toFixed(3), win: +TOD_WIN.toFixed(3), grid: TL.stat.inGrid, ships: TL.stat.ships || 0, range: TL.stat.range || 0, full: TL.stat.full, over: TL.stat.over, gridMs: TL.stat.gridMs, cards: TL.stat.cards, glow: TL.stat.glow, glowMs: TL.stat.glowMs } };
   var group = typeof at === 'string' && at.indexOf('street:') === 0 ? at.slice(7) : null;
   if ((at === 'street' || at === 'walk' || group) && TOWNS.list[0] && TOWNS.kit && TOWNS.kit.folk) { o.street = townFolkStreet(TOWNS.list[0], TOWNS.kit.folk, at === 'walk', group); }   // street:workers：只排一組，不把39位擠在同一段。
