@@ -111,6 +111,27 @@ var FLAG_EMB = {
       var R = 0.36, w0 = 0.03, w1 = 0.18, d = 0.12;                   // 臂長、臂在正中與末端的半寬、末端 V 形缺口多深（缺口兩邊各一個尖 ⇒ 四臂八個尖）
       return al <= R && ac <= w0 + (w1 - w0) * al / R && al <= R - d + d * ac / w1 ? COL_R : null;
     } },
+  // 威尼斯 1666（TASK-1216；地中海的威尼斯共和國）：聖馬可的旗 ＝ 紅底、金色的飛獅（光環、翅膀，前爪捧著打開的福音書），共和國的戰旗、商船旗都是這一面；
+  //   書上的字（PAX TIBI MARCE…）、旗尾的幾條燕尾在 128 × 64 畫不出來 ⇒ 不畫；獅子朝旗桿（紋章的右方），四腳著地（passant）
+  marco: { name: '聖馬可飛獅', ink: [0.86, 0.67, 0.18], res: 2,
+    at: function (X, Y) {
+      var G = [0.86, 0.67, 0.18];
+      function c(x, y, r) { return (X - x) * (X - x) + (Y - y) * (Y - y) < r * r; }
+      function el(x, y, rx, ry) { var u = (X - x) / rx, v = (Y - y) / ry; return u * u + v * v < 1; }
+      function seg(ax, ay, bx, by, r) { var vx = bx - ax, vy = by - ay, t = clamp(((X - ax) * vx + (Y - ay) * vy) / (vx * vx + vy * vy), 0, 1), px = ax + vx * t - X, py = ay + vy * t - Y; return px * px + py * py < r * r; }
+      function poly(P) { var ins = false; for (var i = 0, j = P.length - 1; i < P.length; j = i++) { if ((P[i][1] > Y) !== (P[j][1] > Y) && X < (P[j][0] - P[i][0]) * (Y - P[i][1]) / (P[j][1] - P[i][1]) + P[i][0]) ins = !ins; } return ins; }
+      if (X > 0.51 && X < 0.635 && Y > 0.45 && Y < 0.62) return Math.abs(X - 0.572) < 0.008 ? G : COL_W;        // 前爪捧的書（白）＋書脊
+      if (c(0.668, 0.315, 0.014)) return null;                                                                  // 眼
+      if (c(0.69, 0.33, 0.08) || el(0.625, 0.36, 0.05, 0.035) || c(0.765, 0.40, 0.12)) return G;               // 頭、嘴、鬃
+      if (c(0.71, 0.30, 0.16) && !c(0.71, 0.30, 0.135)) return G;                                               // 光環
+      if (el(1.03, 0.56, 0.27, 0.12) || el(0.80, 0.51, 0.12, 0.14)) return G;                                   // 身、胸
+      if (seg(0.80, 0.55, 0.65, 0.53, 0.045) || seg(0.87, 0.62, 0.85, 0.82, 0.048) || el(0.83, 0.85, 0.06, 0.035)) return G;   // 前腿：一隻捧書、一隻站
+      if (seg(1.15, 0.58, 1.12, 0.82, 0.05) || seg(1.24, 0.57, 1.28, 0.82, 0.045) || el(1.10, 0.85, 0.06, 0.035) || el(1.29, 0.85, 0.055, 0.035)) return G;   // 後腿
+      if (seg(1.29, 0.52, 1.40, 0.43, 0.022) || seg(1.40, 0.43, 1.43, 0.31, 0.022) || c(1.44, 0.28, 0.045)) return G;   // 尾巴＋尾端的毛
+      var wing = [[0.92, 0.50], [0.95, 0.36], [1.02, 0.22], [1.12, 0.12], [1.24, 0.06], [1.37, 0.05], [1.35, 0.13], [1.31, 0.22], [1.25, 0.32], [1.18, 0.42], [1.12, 0.50]];
+      if (poly(wing)) return seg(1.00, 0.45, 1.33, 0.10, 0.010) || seg(1.03, 0.46, 1.29, 0.21, 0.010) || seg(1.06, 0.47, 1.23, 0.32, 0.010) || seg(1.09, 0.48, 1.17, 0.41, 0.010) ? null : G;   // 翅膀＋羽毛的縫
+      return null;
+    } },
   // 沒有國旗的兩家（TASK-0977；Tim 2026-10-27「不應該出現沒國旗的城 有缺要自檢報錯 需要補」）—— 史料上兩家都沒有旗，下面兩面是設計：
   //   逃亡者聚落（maroon）：牙買加逃亡者傳信用的 abeng 牛角號 —— 深綠底、象牙色的號角（寬口在旗桿那頭、往尾收成尖）
   abeng: { name: '牛角號', ink: [0.93, 0.89, 0.78], res: 2,
@@ -143,6 +164,7 @@ var FLAG_PRESETS = [
   { k: 'genoa', name: '熱那亞', field: '#ece9e0', emblem: 'cross-red' },
   { k: 'portugal', name: '葡萄牙', field: '#ece9e0', emblem: 'quinas' },
   { k: 'tuscany', name: '托斯卡納', field: '#ece9e0', emblem: 'stefano' },
+  { k: 'venice', name: '威尼斯', field: '#9e1a1f', emblem: 'marco' },
   { k: 'byzantine', name: '東羅馬（1453）', field: '#a51c1c', emblem: 'tetragram' },
   { k: 'maroon', name: '逃亡者聚落〔設計〕', field: '#2e5b2a', emblem: 'abeng' },
   { k: 'native', name: '原住民〔設計〕', field: '#d9c39a', emblem: 'spiral' }
