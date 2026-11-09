@@ -47,6 +47,11 @@
       "label": "城鎮",
       "globalSrc": "img/ui/globe/town.png"
     },
+    "district": {
+      "file": "district.png",
+      "label": "城區",
+      "globalSrc": "img/ui/town/district.png"
+    },
     "trade": {
       "file": "trade.png",
       "label": "貿易",
@@ -555,7 +560,7 @@
       "特產"
     ],
     "🏙": [
-      "town",
+      "district",
       "城區"
     ],
     "🗺": [
