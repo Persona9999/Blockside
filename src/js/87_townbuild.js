@@ -127,6 +127,10 @@ function twbGot(d) {
 function twbToggle(on) {
   if (on == null) on = !TWB.on;
   if (on && !twbOk()) { note(SHIPS[PLAYER_I], '建築模式要從 Blocksail 地球儀「🏘 進入城鎮」進來'); return; }
+  if (on) {
+    if (typeof tuiDistClose === 'function') tuiDistClose();
+    if (typeof tuiClose === 'function' && typeof TUI !== 'undefined' && TUI && TUI.open) tuiClose();
+  }
   TWB.on = on; TWB.start = null; TWB.tr = null; TWB.moved = true; TWB.sel = null;
   $('stage').classList.toggle('twb', on);
   if (on && TWB.open === 0) {

@@ -415,10 +415,16 @@
   .tuiMealRank{ position:absolute; right:-1px; bottom:-1px; z-index:2; color:#fff1cf; font:bold 12px/1 Georgia,"Times New Roman",serif; letter-spacing:-.5px; text-shadow:-1px -1px 0 #17120b,1px -1px 0 #17120b,-1px 1px 0 #17120b,1px 1px 0 #17120b; pointer-events:none; user-select:none; }
   .tuiMealGrade{ display:inline-block; color:var(--dim); font-size:11px; white-space:nowrap; }
   /* 城鎮介面（89_townui.js，Blocksail TASK-0910）：💰 貿易、🏛 城鎮兩顆在 🔨 旁邊（61_layout.js 的 town 配置）；面板右邊一欄，開著那一顆亮底 */
-  #tuiP{ display:none; }
-  #stage.tui:not(.tuiT):not(.tuiD) #tuiK, #stage.tuiT #tuiTK, #stage.tuiD #tuiDK{ background:#9fc7ff; color:#111; }
+  #tuiP, #tuiDP{ display:none; }
+  #stage.tui:not(.tuiT) #tuiK, #stage.tuiT #tuiTK, #stage.tuiD #tuiDK{ background:#9fc7ff; color:#111; }
   .tuiTiles div.cur{ background:rgba(159,199,255,.22); box-shadow:inset 0 0 0 2px #9fc7ff; } .tuiTiles button.on{ background:#9fc7ff; color:#111; border-color:#9fc7ff; font-weight:bold; }   /* 城區頁：現在這一區（89_townui.js tuiDistHTML） */
   #stage.tui #tuiP{ display:flex; flex-direction:column; gap:8px; position:absolute; inset:0; width:100%; height:100%; box-sizing:border-box; z-index:9; pointer-events:auto; background:rgba(14,18,24,.96); color:var(--ink); font-size:13px; border:none; border-radius:0; padding:12px 18px; }
+  #stage.tuiD #tuiDP{ display:flex; flex-direction:column; gap:8px; position:absolute; left:50%; bottom:92px; transform:translateX(-50%); width:min(520px, calc(100vw - 32px)); max-height:calc(100vh - 176px); max-height:calc(100dvh - 176px); overflow-y:auto; overscroll-behavior:contain; z-index:8; pointer-events:auto; font-size:13px; }
+  #tuiDHead{ display:flex; align-items:center; justify-content:space-between; gap:10px; padding-bottom:6px; border-bottom:1px solid rgba(255,255,255,.08); font-variant-numeric:tabular-nums; }
+  #tuiDHead b{ font-size:15px; color:#f3e6c4; }
+  #tuiDX{ border-radius:12px; padding:2px 10px; cursor:pointer; }
+  #tuiDBody{ flex:1; overflow-y:auto; min-height:0; }
+  #tuiDBody p{ margin:4px 0; }
   #tuiHead{ display:flex; flex-wrap:wrap; gap:4px 14px; align-items:baseline; padding-bottom:6px; border-bottom:1px solid rgba(255,255,255,.08); font-variant-numeric:tabular-nums; } #tuiHead b{ font-size:15px; color:#f3e6c4; } #tuiHead span{ color:var(--dim); white-space:nowrap; } #tuiX{ margin-left:auto; border-radius:12px; padding:2px 10px; cursor:pointer; }
   #tuiTabs{ display:flex; flex-wrap:wrap; gap:6px; } #tuiTabs button{ border-radius:14px; padding:4px 12px; } #tuiTabs button.on{ background:#9fc7ff; color:#111; }
   #tuiBody{ flex:1; overflow:auto; min-height:0; } #tuiBody h4{ margin:10px 0 4px; font-size:13px; color:#f3e6c4; display:flex; gap:8px; align-items:center; } #tuiBody p{ margin:4px 0; }
@@ -447,6 +453,7 @@
      上緣 56 px 壓在地球儀浮著的時間面板上 ⇒ 面板開著時那一頁收起時間面板（tuiPageTell），面板從上面 8 px 開始。字、按鈕、表格縮一點，表格放不下 ⇒ 橫向捲 */
   @media (max-width: 640px){
     #stage.tui #tuiP{ inset:0; top:0; bottom:0; left:0; right:0; width:100%; height:100%; padding:8px 10px; }
+    #stage.tuiD #tuiDP{ bottom:178px; max-height:calc(100vh - 262px); max-height:calc(100dvh - 262px); }
     #tuiHead{ gap:2px 8px; } #tuiHead b{ font-size:14px; } #tuiHead span{ font-size:12px; }
     #tuiTabs{ gap:4px; } #tuiTabs button{ padding:3px 9px; font-size:12px; }
     .tuiTiles{ grid-template-columns:repeat(auto-fill, minmax(100px, 1fr)); gap:4px; } .tuiTiles b{ font-size:14px; }
@@ -614,6 +621,7 @@
   <!-- 城鎮的建築模式（87_townbuild.js，TASK-0742；#stage.twb 才顯示）：上面一行說明、下面分類選單（道路、房屋）＋復原、離開 -->
   <div id="twbInfo"></div>
   <div id="twbP" class="panel"></div>
+  <div id="tuiDP" class="panel"></div>
   <div id="tuiP" class="panel"></div>
   <div id="tbiP" class="panel"></div>
   <div id="inspP" class="panel" style="display:none"><!-- 船隻觀察的面板：js/86_inspect.js inspUI 生 --></div>
