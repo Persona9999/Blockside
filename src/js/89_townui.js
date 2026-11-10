@@ -227,12 +227,12 @@ function tuiUI() {
   var sel = $('tuiPick'); if (sel) sel.onchange = function () { TUI.pick = sel.value; tuiUI(); };
   P.querySelectorAll('svg.tuiCh').forEach(tuiHover);
 }
-/** 概況：人口、勞動、崗位、失業與碼頭、吃飯、建築、家族。 */
+/** 概況：人口、勞動、崗位、移民（舊機制：失業與碼頭）、吃飯、建築、家族。 */
 function tuiSumHTML() {
-  var I = TUI.info, E = I.emi || {}, J = I.jobs || {}, jt = 0, h = '';
+  var I = TUI.info, E = I.emi || {}, J = I.jobs || {}, jt = 0, h = '', mig = E.mig != null;   // 移民階層（Blocksail EMI.stratum；TASK-1252）開著 ⇒ emi.mig ＝ 沒有正職的大人；idle ＝ 其中連採集、小作坊都沒分到的
   Object.keys(J).forEach(function (k) { jt += J[k]; });
-  h += '<div class="tuiTiles">' + [['👥 人口', tuiNum(I.pop.total)], ['💪 勞動人口', tuiNum(I.pop.labor)], ['🔧 有工作', tuiNum(jt)], ['🪑 失業', tuiNum(E.idle || 0)], ['📢 缺工', tuiNum(E.short || 0)], ['⚓ 碼頭上等船', tuiNum(E.dock || 0)],
-    ['💰 城鎮金庫', tuiNum(I.funds)], ['👛 鎮民金庫', tuiNum(I.folkFunds)], ['🛡 士兵', tuiNum(I.guard.now) + ' / ' + tuiNum(I.guard.cap)]]
+  h += '<div class="tuiTiles">' + [['👥 人口', tuiNum(I.pop.total)], ['💪 勞動人口', tuiNum(I.pop.labor)], ['🔧 有工作', tuiNum(jt)]].concat(mig ? [['🪑 移民', tuiNum(E.mig) + (E.idle ? '（閒著 ' + tuiNum(E.idle) + '）' : '')], ['📢 缺工', tuiNum(E.short || 0)]] : [['🪑 失業', tuiNum(E.idle || 0)], ['📢 缺工', tuiNum(E.short || 0)]]).concat(mig && !E.dock ? [] : [['⚓ 碼頭上等船', tuiNum(E.dock || 0)]]).concat([
+    ['💰 城鎮金庫', tuiNum(I.funds)], ['👛 鎮民金庫', tuiNum(I.folkFunds)], ['🛡 士兵', tuiNum(I.guard.now) + ' / ' + tuiNum(I.guard.cap)]])
     .concat(I.rent ? [['🏠 房租（昨天）', tuiNum(I.rent.paid, 1) + (I.rent.due > I.rent.paid ? ' / ' + tuiNum(I.rent.due, 1) : '')]] : []).map(function (x) { return '<div><small>' + x[0] + '</small><b>' + x[1] + '</b></div>'; }).join('') + '</div>';
   h += tuiSpecHTML(I);
   var F = I.fed;
@@ -249,7 +249,7 @@ function tuiSumHTML() {
   h += '<h4>🏗 建築（生產、公職、服務；' + tuiNum((I.buildings || []).length) + ' 棟）</h4><p>' + bk.map(function (k) { return tuiEsc(TUI.blds[k] || k) + ' × ' + B[k]; }).join('、') + '</p>';
   h += tuiRcpHTML(I);
   var RG = TUI.region;                                                  // 這座城那一區的加總（Blocksail regionInfo：區域 ＝ 那一區的城鎮加總）
-  if (RG) h += '<h4>🗺 這一區（' + RG.towns.length + ' 座：' + RG.towns.map(tuiEsc).join('、') + '）</h4><p>人口 ' + tuiNum(RG.pop) + '　勞動 ' + tuiNum(RG.labor) + '　失業 ' + tuiNum(RG.idle) + '　碼頭上 ' + tuiNum(RG.dock) + '　城鎮金庫 ' + tuiNum(RG.funds) + '　生產建築 ' + tuiNum(RG.buildings) + '</p>';
+  if (RG) h += '<h4>🗺 這一區（' + RG.towns.length + ' 座：' + RG.towns.map(tuiEsc).join('、') + '）</h4><p>人口 ' + tuiNum(RG.pop) + '　勞動 ' + tuiNum(RG.labor) + (RG.mig != null ? '　移民 ' + tuiNum(RG.mig) + '（閒著 ' + tuiNum(RG.idle) + '）' + (RG.dock ? '　碼頭上 ' + tuiNum(RG.dock) : '') : '　失業 ' + tuiNum(RG.idle) + '　碼頭上 ' + tuiNum(RG.dock)) + '　城鎮金庫 ' + tuiNum(RG.funds) + '　生產建築 ' + tuiNum(RG.buildings) + '</p>';
   if (TUI.hubs && TUI.hubs.length) h += '<p class="tuiDim">⚓ 這一區的集散地：' + TUI.hubs.map(tuiEsc).join('、') + '</p>';
   var FL = TUI.fleets || [];                                             // 船隊（Blocksail world/fleet.js；TASK-0911）：停在這裡、開過來、母港在這裡的
   if (FL.length) h += '<h4>⛵ 船隊（' + FL.length + ' 支）</h4><table class="tuiT"><tr><th>主人</th><th>在哪</th><th>載</th><th>趟</th><th>淨賺</th></tr>' + FL.map(function (f) {
@@ -317,14 +317,15 @@ function tuiStockHTML() {
   });
   return h + '</table><p class="tuiDim">⚠ ＝ 長期缺貨、價格往上加成。價格比基準貴兩成以上標紅、便宜一成以上標綠。</p>';
 }
-/** 統計報表：人口、金庫、失業與碼頭（每天）；選一種貨看庫存、價格、產出與消耗（每 every 天一筆）。 */
+/** 統計報表：人口、金庫、閒著的移民（舊機制：失業與碼頭；每天）；選一種貨看庫存、價格、產出與消耗（每 every 天一筆）。 */
 function tuiStatsHTML() {
   var H = TUI.info.hist; TUI.charts = {};
   if (!H || !H.day || H.day.pop.length < 2) return '<p class="tuiDim">歷史還不到兩天（開船讓時間走，城鎮帳每天記一格）</p>';
   var D = H.day, xs = D.pop.map(function (_, i) { return D.d0 + i; }), k = function (a) { return a.map(function (x) { return x / 1000; }); };
   var h = tuiChart('pop', '👥 人口', xs, [{ name: '人口', v: D.pop }, { name: '勞動人口', v: D.labor }], 0, '人') +
     tuiChart('fund', '💰 金庫', xs, [{ name: '城鎮金庫', v: k(D.funds) }, { name: '鎮民金庫', v: k(D.folk) }], 0, '') +
-    tuiChart('idle', '🪑 失業與碼頭上', xs, [{ name: '失業', v: D.idle }, { name: '碼頭上等船', v: D.dock }], 0, '人');
+    (TUI.info.emi && TUI.info.emi.mig != null ? tuiChart('idle', '🪑 閒著的移民', xs, [{ name: '閒著的移民', v: D.idle }].concat(D.dock.some(function (x) { return x > 0; }) ? [{ name: '碼頭上等船', v: D.dock }] : []), 0, '人')
+      : tuiChart('idle', '🪑 失業與碼頭上', xs, [{ name: '失業', v: D.idle }, { name: '碼頭上等船', v: D.dock }], 0, '人'));
   var W = H.wk || [];
   if (W.length < 2) return h + '<p class="tuiDim">貨的變化每 ' + TUI.every + ' 天記一筆，還不到兩筆</p>';
   var gs = {}; W.forEach(function (w) { Object.keys(w.g).forEach(function (g) { if ((TUI.goods[g] || {}).cat !== 'people') gs[g] = 1; }); });   // 人（碼頭上的移民）不列
