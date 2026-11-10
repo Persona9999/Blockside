@@ -12,7 +12,7 @@
 //     ⇒ 破口跟砲彈打出來的一樣是真的通進艙內：公式模式照水線下的破洞進水、粒子模式從破口灌水（33_flood.js flHoleRedo 照同一條「最外那一格往裡通」量）。
 //     ⛔ 以前只有上面那一條（撞點半徑 6 格、最多 40 格）：打到的是龍骨那團實心木頭，沒通進艙內 ⇒ 粒子模式一滴水都沒進來，公式模式那 40 個「洞」抽水機抽得贏 ⇒ 撞礁之後船一點都沒下沉（2026-10-19 宣傳片量）。
 //   · 讀數：sh.grnd ＝ { t 最後一次撞的時刻, m 底質, pen 壓進去多深, lost 打掉幾格, punch 撞穿幾格 }（離開海底 ⇒ null，lost 留在 sh.grndLost、punch 留在 sh.grndPunch）。
-var GRD_HARD = { 0: 0.3, 1: 0.25, 2: 1.0, 3: 0.25, 4: 1.5, 10: 0.4, 11: 0.6, 12: 1.5 };
+var GRD_HARD = { 0: 0.3, 1: 0.25, 2: 1.0, 3: 0.25, 4: 1.5, 5: 1.2, 10: 0.4, 11: 0.6, 12: 1.5 };   // 5 冰棚（BED_MAT.ICE）：冰比岩石軟一點、比珊瑚礁硬
 var GRD_KEEP = 0.25, GRD_KEEP_V = 0.6, GRD_KEEP_UP = 0.3;               // 擱淺留一點動力脫身（groundStep）：終端航速的幾成、最多幾 m/s、往岸上推再乘幾成（設計決定）
 var GRD_OFF = null;                                                      // 撞點附近的格（照離撞點的距離排；半徑 6 格）
 var GRD_PUNCH_H = 1, GRD_PUNCH_V = 1.5, GRD_PUNCH_K = 12, GRD_PUNCH_MAX = 900, GRD_PUNCH_T = 12, GRD_COL = null;   // 硬度、m/s、格／(m/s)²、格、船板最厚幾格；GRD_COL：撞點前後的欄（照離撞點遠近排）
@@ -51,7 +51,7 @@ function groundStep(sh, dt) {                                           // dt：
   if (best > 1.2 && gl > 1e-6) { var push = Math.min(0.5, (best - 1.2) * 0.25); sh.px -= g[0] / gl * push; sh.pz -= g[1] / gl * push; }
   if (!sh.grnd) {
     sh.grnd = { t: SIMT, m: m, pen: best, lost: 0 };
-    note(sh, (m === BED_MAT.REEF ? '撞上珊瑚礁' : m === BED_MAT.ROCK || m === BED_MAT.CLIFF ? '撞上礁石' : m >= BED_MAT.BEACH ? '衝上岸' : '擱淺') + '（' + v0.toFixed(1) + ' m/s）', true);
+    note(sh, (m === BED_MAT.REEF ? '撞上珊瑚礁' : m === BED_MAT.ICE ? '撞上冰棚' : m === BED_MAT.ROCK || m === BED_MAT.CLIFF ? '撞上礁石' : m >= BED_MAT.BEACH ? '衝上岸' : '擱淺') + '（' + v0.toFixed(1) + ' m/s）', true);
     groundHit(sh, bp, v0, hard); groundPunch(sh, bp, v0, hard); groundSfx(sh, bp, v0, hard, m, false);
   } else if (v0 > 0.8 && SIMT - sh.grnd.t >= 1) { sh.grnd.t = SIMT; groundHit(sh, bp, v0, hard); groundPunch(sh, bp, v0, hard); groundSfx(sh, bp, v0, hard, m, true); }
   sh.grnd.pen = best; sh.grnd.m = m;
@@ -72,9 +72,9 @@ function groundHit(sh, p, v, hard) {
   if (got) smoke(p, [0, 0.4, 0], 2, false);                              // 聲音在 groundSfx（以前這裡、groundPunch 各放一聲 crack）
 }
 /** 觸礁的聲音（TASK-0868；02_audio.js hitVoice）：剛碰上 ⇒ 撞一聲＋刮（長 速度 × 0.6 秒，最多 3）；還在動的每一秒 ⇒ 只刮（rub，1.15 秒：接得上下一秒）。
- *  力道 I ＝ 底的硬度 × 速度² 的對數（0.3 ⇒ 0、40 ⇒ 1：沙底 1 m/s 是 0、礁石 5 m/s 是 1）；底：珊瑚礁、礁石、岩壁 ⇒ 'rock'，其他 'sand'；材質照船底那一格（31_sailing.js hitMat）、質量照這艘船。⛔ 只讀。 */
+ *  力道 I ＝ 底的硬度 × 速度² 的對數（0.3 ⇒ 0、40 ⇒ 1：沙底 1 m/s 是 0、礁石 5 m/s 是 1）；底：珊瑚礁、礁石、岩壁、冰棚 ⇒ 'rock'，其他 'sand'；材質照船底那一格（31_sailing.js hitMat）、質量照這艘船。⛔ 只讀。 */
 function groundSfx(sh, p, v, hard, m, rub) {
-  var I = clamp(Math.log(Math.max(hard * v * v, 0.3) / 0.3) / Math.log(40 / 0.3), 0, 1), bed = m === BED_MAT.REEF || m === BED_MAT.ROCK || m === BED_MAT.CLIFF ? 'rock' : 'sand';
+  var I = clamp(Math.log(Math.max(hard * v * v, 0.3) / 0.3) / Math.log(40 / 0.3), 0, 1), bed = m === BED_MAT.REEF || m === BED_MAT.ROCK || m === BED_MAT.CLIFF || m === BED_MAT.ICE ? 'rock' : 'sand';
   sfx('hit', p, I, { mat: hitMat(sh, M4.pt(sh.inv, p[0], p[1], p[2])), mass: sh.mass0 || shipT(sh), bed: bed, slide: rub ? 1.15 : Math.min(3, v * 0.6), rub: rub });
 }
 /** 撞破船殼（上面的說明）：撞點 p（世界）、速度 v、底質硬度 hard。回傳撞穿幾格。 */

@@ -45,7 +45,7 @@ var BED_VX_IN = 1.5, BED_VX_OUT = 2.5;                                   // 漩�
 var BED_WIN_SHIFT = 0.3;                                                 // 海域跟著旗艦走：旗艦離窗的中心超過半徑的幾成就換窗（以前 3 塊 ／ area.win 10）
 var BED_WIN_M = [2000, 4000, 6000];                                      // 窗的半徑（公尺）照畫質的「海圖讀取範圍」（07_gfx.js chartr；Tim 2026-10-22「最高6 km 中 4km 低 2km」）
 var BED_VIEW_BACK = 2;                                                   // 讀的先後（外圈的背景預載、遠景）：鏡頭背後那一邊當成遠一倍（Tim 2026-10-20：「外圈地圖讀取優先度 可以根據攝影機視角判斷(看到的部分優先)」）
-var BED_MAT = { DEEP: 0, SAND: 1, REEF: 2, SHOAL: 3, ROCK: 4, BEACH: 10, LAND: 11, CLIFF: 12 };
+var BED_MAT = { DEEP: 0, SAND: 1, REEF: 2, SHOAL: 3, ROCK: 4, ICE: 5, BEACH: 10, LAND: 11, CLIFF: 12 };   // ICE：南極的冰棚（Blocksail TASK-1251；浮在海上的冰、不是陸地 ⇒ 排在 BEACH 前面，跟 ROCK 一樣是抬高的海底）
 var BED_CFG = Object.assign({ ring: 1, prefetch: 1, margin: 300 }, CFG.map || {});   // config/game.json map：在用幾圈、多預載幾圈、船旁邊多少公尺內一定要載好
 // ring、prefetch 的單位是「1024 m 的一圈」（2026-10-22 以前塊一律 1024 m；Tim 同一天「一塊尺寸是否也能縮一半」⇒ Blocksail 的塊改 512 m）：
 //   照 A.chunk 換塊數（bedRingN）⇒ 1024 m 的塊（檔案海圖 maps/tortuga）照舊 1 圈、逐位元組不變；512 m 的塊 2 圈 ⇒ 公尺上一樣遠。

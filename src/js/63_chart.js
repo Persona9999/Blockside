@@ -12,7 +12,7 @@
 var CHART = { A: null, im: null, g: null, res: null, cv: null, box: null, zb: null, zoom: 2, trail: [], trT: -1, need: 6.5 };
 if (Q.has('chartz') && isFinite(+Q.get('chartz'))) CHART.zoom = Math.max(0, Math.min(6, Math.round(+Q.get('chartz'))));   // ?chartz=0..6：開局的範圍（量測、截圖用）
 var CHART_M = 32, CHART_R = [500, 1000, 1500, 2500, 4000, 7000, 0], CHART_TRAIL = 900;   // 底圖一點幾公尺（以前「一塊 32 點」⇒ 塊從 1024 改 512 m 時照公尺換：chartPx）；範圍（半徑 m；0 ＝ 整個海域；開局 1.5 km）；航跡最多幾點（2 秒一點 ⇒ 30 分鐘）
-var CHART_COL = { deep: [18, 52, 92], mid: [29, 86, 140], shoal: [62, 150, 190], danger: [150, 225, 230], reef: [222, 120, 100], sand: [214, 196, 140], low: [118, 156, 88], hill: [92, 128, 70], high: [140, 128, 104], river: [58, 128, 206] };
+var CHART_COL = { deep: [18, 52, 92], mid: [29, 86, 140], shoal: [62, 150, 190], danger: [150, 225, 230], reef: [222, 120, 100], sand: [214, 196, 140], low: [118, 156, 88], hill: [92, 128, 70], high: [140, 128, 104], river: [58, 128, 206], ice: [226, 236, 244] };   // ice：南極的冰棚（BED_MAT.ICE）
 var CHART_RIVER_MIN = 0.75;                                              // 內陸水：一點裡只有一個取樣點有水也至少混這麼多成的河色（窄的河看得到）
 /** 海域變了（或第一次）⇒ 新的一張底圖（全部先塗深海）、把已經載好的細塊畫上去。 */
 /** 底圖一塊幾點（照公尺：CHART_M 一點）。 */
@@ -38,6 +38,7 @@ function chartNeed() {
 }
 function chartRGB(h, m) {
   var C = CHART_COL;
+  if (m === BED_MAT.ICE) return C.ice;                                   // 冰棚：頂在海面上幾十公尺，照高度會畫成綠的低地
   if (h > 0) return h < 3 ? C.sand : h < 40 ? C.low : h < 200 ? C.hill : C.high;
   var dp = -h;
   if ((m === BED_MAT.REEF || m === BED_MAT.ROCK) && dp < 12) return C.reef;

@@ -55,9 +55,9 @@ var BEDDRAW = { n: 0, cull: 0, tris: 0 };                                // 上�
 var BEDFOAM = { tex: null, dtex: null, dR: null, dA: null, dirty: true, cx: null, cy: null, ox: 0, oz: 0, sp: 8, N: 0, ms: 0, builds: 0 };
 var BED_MOUTH = { band: 48, reach: 160, top: 6, low: -0.5, it: 48 };   // 河口場（檔頭）：交接帶多長、抬高往外伸多遠（公尺）、能接海的水面範圍（公尺）、鬆弛幾次
 var BEDMOUTH = { L: null, ox: 0, oz: 0, sp: 8, N: 0, src: 0, top: 0 };    // 物理用的那一份抬高量（bedLift）；src ＝ 幾個源頭、top ＝ 最高抬多少（0 ⇒ 沒有）
-var BED_COL = { 0: [0.30, 0.31, 0.27], 1: [0.74, 0.70, 0.52], 2: [0.66, 0.57, 0.44], 3: [0.86, 0.81, 0.62], 4: [0.40, 0.38, 0.35], 10: [0.84, 0.77, 0.57], 12: [0.45, 0.42, 0.38] };   // 2 珊瑚礁：紋理的平均色（以前是綠的）
+var BED_COL = { 0: [0.30, 0.31, 0.27], 1: [0.74, 0.70, 0.52], 2: [0.66, 0.57, 0.44], 3: [0.86, 0.81, 0.62], 4: [0.40, 0.38, 0.35], 5: [1.42, 1.46, 1.50], 10: [0.84, 0.77, 0.57], 12: [0.45, 0.42, 0.38] };   // 2 珊瑚礁：紋理的平均色（以前是綠的）；5 冰棚：雪面（> 1：南極的太陽低、平的雪面照起來只剩五成多 ⇒ 底色先放亮，照完約 0.8，看得出是白的、不跟海混在一起）
 // 每種底質的紋理權重 [沙, 草地, 岩石, 礁]；全 0（深海底）⇒ 片段只照底色加一點泥的斑駁
-var BED_TEX = { 0: [0, 0, 0, 0], 1: [1, 0, 0, 0], 2: [0, 0, 0, 1], 3: [1, 0, 0, 0], 4: [0, 0, 1, 0], 10: [1, 0, 0, 0], 11: [0, 1, 0, 0], 12: [0, 0, 1, 0] };
+var BED_TEX = { 0: [0, 0, 0, 0], 1: [1, 0, 0, 0], 2: [0, 0, 0, 1], 3: [1, 0, 0, 0], 4: [0, 0, 1, 0], 5: [0, 0, 0, 0], 10: [1, 0, 0, 0], 11: [0, 1, 0, 0], 12: [0, 0, 1, 0] };
 function bedCol(h, m) {
   if (m === BED_MAT.LAND) {                                              // 陸地：低的綠、往上變褐、很高變灰
     var t = Math.min(1, Math.max(0, h / 450)), u = Math.min(1, Math.max(0, (h - 900) / 900));
@@ -218,6 +218,7 @@ function bedMesh(C, stride) {
     var o = j * n + i, y = h[o] / 10, il = Math.max(0, i - stride), ir = Math.min(n - 1, i + stride), jl = Math.max(0, j - stride), jr = Math.min(n - 1, j + stride);
     var gx = (h[j * n + ir] - h[j * n + il]) / 10 / ((ir - il) * st), gz = (h[jr * n + i] - h[jl * n + i]) / 10 / ((jr - jl) * st), L = Math.sqrt(gx * gx + 1 + gz * gz), c = bedCol(y, C.mat[o]);
     var q = k * 13, mt = C.mat[o], w = BED_TEX[mt] || BED_TEX[0], wr = 0;
+    if (mt === BED_MAT.ICE) { var si = Math.min(1, Math.max(0, (Math.sqrt(gx * gx + gz * gz) - 0.6) / 0.8)); c = [c[0] + (0.72 - c[0]) * si, c[1] + (0.90 - c[1]) * si, c[2] + (1.05 - c[2]) * si]; }   // 冰棚的前緣（冰崖，tan 0.6～1.4）：雪面 ⇒ 冰的藍；紋理權重全 0 ⇒ 片段照底色加一點斑駁（沙的風紋在冰棚頂看起來像海浪）
     if (mt === BED_MAT.LAND) { var sl = Math.sqrt(gx * gx + gz * gz); wr = Math.max(Math.min(1, Math.max(0, (sl - 0.45) / 0.5)), Math.min(1, Math.max(0, (y - 700) / 600))); }   // 陸地：陡坡（tan 0.45～0.95）、高山（700～1300 m）混進岩石
     V[q] = ox + i * st; V[q + 1] = y + dy; V[q + 2] = oz + j * st; V[q + 3] = -gx / L; V[q + 4] = 1 / L; V[q + 5] = -gz / L; V[q + 6] = c[0]; V[q + 7] = c[1]; V[q + 8] = c[2];
     V[q + 9] = w[0]; V[q + 10] = w[1] * (1 - wr); V[q + 11] = w[2] + w[1] * wr; V[q + 12] = w[3];
@@ -356,7 +357,9 @@ function bedFS() {
     ' vec2 sq=abs(n.x)>abs(n.z)?vW.zy:vW.xy; float fws=max(length(dFdx(sq)),length(dFdy(sq))), sv=smoothstep(0.85,0.6,n.y);\n' +
     ' if(dk>0.0){ vec4 w=vK; float ws=w.x+w.y+w.z+w.w; vec3 det;\n' +
     // 海底（深海底、沒有紋理權重的）：泥的斑駁＋水流沙紋（約 1.6 m 一道）
-    '  if(ws<0.01){ float rp=sin(dot(p,vec2(0.6,0.8))*4.0+bf(p*0.08)*5.0)*baa(0.64,fw); det=vC*(0.85+0.3*bn(p*0.4))*(1.0+0.05*rp*nk); hb=0.025*rp; }\n' +
+    // 冰棚（BED_MAT.ICE；底色 > 1 只有它）：雪原 —— 大尺度的柔和明暗＋近看一點細顆粒，不加凹凸（海底的沙紋在雪面上看起來像海浪）
+    '  if(ws<0.01&&vC.r>1.0){ det=vC*(0.94+0.08*bf(p*0.015)+0.03*(bn(p*0.7)-0.5)*nk); }\n' +
+    '  else if(ws<0.01){ float rp=sin(dot(p,vec2(0.6,0.8))*4.0+bf(p*0.08)*5.0)*baa(0.64,fw); det=vC*(0.85+0.3*bn(p*0.4))*(1.0+0.05*rp*nk); hb=0.025*rp; }\n' +
     '  else { det=vec3(0.0);\n' +
     // 沙：細顆粒＋風紋（照雜訊彎）；近看多一層細風紋（約 0.57 m 一道）與兩種顆粒
     //   濕沙：海面上 wl（0.55 m 照雜訊抖 ±0.35）以下變深、有反光（wet）；水下 0.6 m 以下不算（折射那邊本來就暗）
