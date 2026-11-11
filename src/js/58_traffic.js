@@ -78,6 +78,8 @@
 //        · 會撞：TRF_HIT_T 秒內推算龍骨線會跟真的船（我艦、交戰中的）靠到 TRF_HIT_M 以內（showHitWhy；並排開、擦身而過都不換）；
 //        · 砲要打到它：我艦瞄準它（setAim）、飛行中的砲彈兩步內會進它的外框（showBallTick，算命中之前）⇒ 第一發不會從演出物件穿過去。
 //      換回（showOff）：沒被打過、沒敵對、沒被瞄著、離我艦、艦隊、敵對或被打過的船（showCore）都隔 TRF_SHOW_M 以上、也不會撞上它們 ⇒ 搬回 SHIPS 外面（網格不放）；城鎮模式（停靠中）一律換回（Tim 2026-10-26）。
+//   ⑮ 沒滿員（Blocksail TASK-1030；Tim 2026-11-11「沒滿員主要影響海戰時的戰鬥力(缺砲手跟其他人員)」）：清單每艘帶 crew／need／min（經濟那一側：船上幾人、滿編、最低）⇒ 放上場時
+//      照缺的比例把「不是開船的崗位」（砲手、送藥手、陸戰隊、船醫、木匠、帆匠、廚師）標成不在船上（trafficCrewShort；同戰前狀態的 preOut）⇒ 開打時少砲手。滿員、沒給 ⇒ 不動。
 // 讀數：__game.traffic() ⇒ { ships（每艘多 show）, shows, real, showMax, swaps（最近幾次換：哪一艘、哪一種、為什麼、模擬秒）, queue, built, dropped, gap（⑩ 擋下幾次）, gapLast（最後一次：哪一艘、被誰擋、隔幾公尺）, stepMax, stepMs（每一段幾毫秒，最近 200 段）, place（放上場那一步）, launch（⑬ 最近一次）, bad（② 載不到的船型）}
 var TRF = { want: {}, build: null, q: [], askT: 0, clockT: 0, built: 0, dropped: 0, gap: 0, gapLast: null, stepMax: 0, stepMs: [], place: [], skip: 0, foeOnce: {}, demo: {}, launch: null, swaps: [], hullAsk: {}, bad: {} };   // foeOnce：照 foe 敵對過的船隊 id（⑫）；demo：⑬ 演出的假船；launch：⑬ 讀數；swaps：⑭ 讀數
 var SHOWS = [], DRAWN = [];                                              // ⑭ 演出物件；畫面那一側的船（SHIPS 後面接 SHOWS，drawnSync）
@@ -131,6 +133,7 @@ function trafficGot(d) {
     foe: !!o.foe && !TRF.foeOnce[o.id],                                 // foe：地球儀上「開打」的那一艘（⑫）；敵對過一次就不再照它（甩開了、收掉了 ⇒ 之後照中立的生，不然一生出來又打）
     lane: o.lane && o.lane.length > 1 ? o.lane.map(W) : null,          // lane：berth 那一格的入港航線（泊位 ⇒ 入口點；換格時沿著拖，⑧）
     bat: o.bat ? W(o.bat) : null,                                       // bat：時刻表停的那一點跟 berth 不同（港外錨地：時刻表停在外海泊位、船停在自己那一格）
+    crew: o.crew && +o.need > +o.min && +o.crew < +o.need ? { n: +o.crew, need: +o.need, min: +o.min } : null,   // crew：船上幾人／滿編／最低（Blocksail SAILOR；⑮）—— 沒滿 ⇒ 少砲手那些人
     launch: !!o.launch }; });                                           // launch：剛造好的船（⑬）⇒ 生在船台上、滑下水
   Object.keys(TRF.demo).forEach(function (id) { var w0 = TRF.demo[id]; if (w0.until != null && SIMT > w0.until) delete TRF.demo[id]; else if (!want[id]) want[id] = w0; });   // ⑬ 演出的假船：清單裡沒有也留著；演完停夠了 ⇒ 收
   Object.keys(want).forEach(function (id) { var w = want[id]; if ((w.dock || w.pilot) && w.berth && trafficDistOff(w.berth.x, w.berth.z)) delete want[id]; });   // 別的城區的泊位（沒建）⇒ 不生、生了的收掉
@@ -640,7 +643,7 @@ function trafficPlace(B) {
   sh.name = w.name; sh.npc = { id: w.id, kind: w.kind, to: w.to, v: w.v, path: w.path, trk: w.trk, berth: w.berth, entry: w.entry, pilot: w.pilot, dock: false, held: false, tow: null };
   SHOWS.push(sh); drawnSync();                                           // ⑭ 演出物件：不進 SHIPS（不指揮、不選敵；換成真的船時 showReal 才補）
   if (w.flag) shipNation(sh, w.flag);                                    // 掛船隊主人那一國的旗（77_colours.js；外面那一頁給預設旗的 key，不認得 ⇒ 照陣營旗）
-  coreSpawned(sh, null); stepShip(sh, 0); survey(sh);
+  coreSpawned(sh, null); if (w.crew) trafficCrewShort(sh, w.crew); stepShip(sh, 0); survey(sh);
   sh.npc.berth = trafficBerthFor(sh, w.berth);                          // 船放上場、有了 M（船寬）才貼平台
   if (B.lp) { trafficLaunchStart(sh, B.lp, !!w.dock); TRF.built++; return; }   // ⑬ 生在船台上 ⇒ 滑下水，演完才照清單（拖去泊位）
   if (!w.dock && (w.path || w.v > 0)) sh.spd = w.path ? VMAX * TRF_V0 : Math.min(w.v, VMAX);   // 照船隊的航速開出來（⛔ 從 0 起步 ⇒ 生出來那幾十秒停在海上）；沿航道的照自己的帆
@@ -649,6 +652,22 @@ function trafficPlace(B) {
   else if (w.berth && Math.hypot(w.berth.x - w.at[0], w.berth.z - w.at[1]) <= TRF_IN_M) sh.spd = Math.min(sh.spd, TRF_TOW_V);   // 生在港裡、正要進港 ⇒ 下一步就拖（trafficTow）
   if (w.foe) { TRF.foeOnce[w.id] = 1; trafficHostile(sh, '地球儀上開打'); }   // ⑫ 生出來就敵對
   TRF.built++;
+}
+/** ⑮ 船隊沒滿員（Blocksail TASK-1030；Tim 2026-11-11「沒滿員主要影響海戰時的戰鬥力(缺砲手跟其他人員)」「可以根據崗位判定」）：
+ *  外面那一頁給 c ＝ { n 船上幾人, need 滿編, min 最低（開船的崗位）}（經濟那一側的人數，跟這裡照砲班建的開戰名單是兩套數字）⇒ 缺的比例 f ＝ (need − n) ÷ (need − min)（夾在 0～1），
+ *  開戰名單裡「不是開船的崗位」（TRF_CREW_CUT：砲手、送藥手、陸戰隊、船醫、木匠、帆匠、廚師）每一種照 f 少掉（四捨五入）、從名單後面往前標成不在船上（同 57_core.js coreShipIn 的 preOut）；
+ *  開船的（軍官、桅頂水手、舵手、預備水手、航海士、軍需官、槳手、司爐）照留 ⇒ 到最低人數 ＝ 那幾種全空，砲班缺人照常由預備水手補位（reassign）。滿員、沒給 ⇒ 不叫（逐位元組相同）。 */
+var TRF_CREW_CUT = ['GUN', 'POWDER', 'MARINE', 'SURGEON', 'CARPENTER', 'SAILMAKER', 'COOK'];
+function trafficCrewShort(sh, c) {
+  var f = Math.min(1, Math.max(0, (c.need - c.n) / Math.max(1, c.need - c.min))), out = {};
+  if (!(f > 0)) return out;
+  TRF_CREW_CUT.forEach(function (k) {
+    var r = ROLE[k], m = 0, i; sh.crew.forEach(function (x) { if (x.role === r && x.st === 0) m++; });
+    var n = Math.round(m * f); out[k] = n;
+    for (i = sh.crew.length - 1; i >= 0 && n > 0; i--) { var x = sh.crew[i]; if (x.role === r && x.st === 0) { x.st = 3; x.walk = null; x.preOut = true; n--; } }
+  });
+  sh.crewShortBy = { f: +f.toFixed(3), n: c.n, need: c.need, min: c.min, out: out };   // 讀數（__game 交通船那一份帶出去）
+  return out;
 }
 /** ⑬ 船台的面在地塊座標 a（沿 rot，正面 ＋d/2）那一點多高：船台頂（aTop）往陸上是平台面、往水裡照斜度一直下去（船台口以外在水下接著斜）。 */
 function trafficSlipY(lp, a) { return lp.top - lp.drop * Math.max(0, lp.aTop - a) / lp.len; }
@@ -742,6 +761,6 @@ function trafficInfo() {
   return { ok: trafficOk(), rate: wclkRate(), wh: +(worldSec() / 3600).toFixed(4), max: trafficMax(), shows: SHOWS.length, real: trafficReal().length, showMax: TRF_SHOW_MAX, swaps: TRF.swaps.slice(), want: Object.keys(TRF.want).length, queue: TRF.q.slice(), building: TRF.build ? TRF.build.id : null, built: TRF.built, dropped: TRF.dropped, gap: TRF.gap, gapLast: TRF.gapLast,
     stepMax: +TRF.stepMax.toFixed(2), stepMs: TRF.stepMs.slice(), place: TRF.place.slice(),
     hold: trafficPortN(), foeOnce: Object.keys(TRF.foeOnce), launch: TRF.launch, demo: Object.keys(TRF.demo), bad: TRF.bad,   // launch：⑬ 最近一次下水；bad：② 載不到的船型
-    ships: trafficShips().map(function (s) { var n = s.npc, T = n.tow, b = n.berth, sc = shipCenter(s); return { i: s.i, id: n.id, kind: n.kind, hull: s.T.id, x: +s.px.toFixed(1), z: +s.pz.toFixed(1), d: Math.round(Math.hypot(s.px - c[0], s.pz - c[2])), spd: +s.spd.toFixed(2), yaw: +s.yaw.toFixed(3), team: s.team, foe: !!n.foe, dock: n.dock, held: !!n.held, to: n.to, path: n.path ? n.path.length : 0, trk: n.trk ? n.trk.length : 0, pilot: n.pilot || null, glide: trafficGliding(s), real: !!n.real, show: SHOWS.indexOf(s) >= 0,
+    ships: trafficShips().map(function (s) { var n = s.npc, T = n.tow, b = n.berth, sc = shipCenter(s); return { i: s.i, id: n.id, kind: n.kind, hull: s.T.id, x: +s.px.toFixed(1), z: +s.pz.toFixed(1), d: Math.round(Math.hypot(s.px - c[0], s.pz - c[2])), spd: +s.spd.toFixed(2), yaw: +s.yaw.toFixed(3), team: s.team, crew: s.crewShortBy || null, foe: !!n.foe, dock: n.dock, held: !!n.held, to: n.to, path: n.path ? n.path.length : 0, trk: n.trk ? n.trk.length : 0, pilot: n.pilot || null, glide: trafficGliding(s), real: !!n.real, show: SHOWS.indexOf(s) >= 0,
       berth: b ? { x: +b.x.toFixed(1), z: +b.z.toFixed(1), yaw: +b.yaw.toFixed(3), d: +Math.hypot(b.x - sc[0], b.z - sc[2]).toFixed(1) } : null, tow: T ? { kind: T.kind, s: +T.s.toFixed(1), L: +T.L.toFixed(1), spin: T.spin, spun: T.spun, v: +T.v.toFixed(2), t: +(SIMT - T.t0).toFixed(1) } : null }; }) };
 }
