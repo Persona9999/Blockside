@@ -2960,7 +2960,10 @@ function townFortSleep(key, why) {
 // 陣亡扣帳（TASK-0956 第一格；Tim 2026-10-28「0956 開工 GO … 照妳的切法由陣亡扣帳開始」）：駐軍是城鎮帳的兵（townFortWake 的 gar 不是 null）⇒
 //   這一座死了幾個（sh.dead，40_crew.js 累計；傷的不算）比上次報的多 ⇒ 多的那幾個報給外面那一頁 { bsmap: 'fortLoss', town: 規劃單位 id, lot: 規劃裡的地塊 id, dead: 這一次多死的 }，
 //   Blocksail 從那座城的人口扣男人、今天那一棟的 staff 與 jobs.garrison 扣掉（world/townstate.js BSW.fortLoss），隔天照常招。
-//   巡視（townFortTick）、換回（townFortSleep）各報一次 ⇒ 沒等換回就回地球儀（iframe 關掉），死的人也已經記上。實驗場（帳上沒有那一棟）、沒有外面那一頁 ⇒ 不報。
+//   什麼時候報（townFortSync；Tim 2026-11-11「實際上應該在切回Blocksail時(或戰鬥結算時)同步就好」「回地球儀是否可以強制觸發同步(脫離戰鬥也是)」）：
+//     換回（townFortSleep）、交戰結束（88_modeswitch.js MODE_HOOK.fight.leave）、回地球儀（08_seabed.js 'leave'：鏡頭拉上去 2.2 秒＋地球儀淡出 0.9 秒才關 iframe ⇒ 壓縮送得完）。
+//     ⛔ 不在交戰中每 0.5 秒報：格子差（coreShipOut）照被打到的區塊長，加拉塔堡整座都打到 ⇒ 一次 35 ms；而且這一頁的帳一換，townRuinSync 就把整棟城鎮模型的廢墟重做一次。
+//     交戰中分頁當掉、被關掉、回主選單 ＝ 遊戲中斷（Blocksail 一起關）⇒ 這一場的損傷不留，照中斷算。實驗場（帳上沒有那一棟）、沒有外面那一頁 ⇒ 不報。
 // 打壞的留著（TASK-0956 第二格；Tim「打壞的堡壘存被挖掉的格子（壓縮）」）：格子（sh.lost）或模型（townFortModSig）變了 ⇒ 照核心 API 的戰前狀態那一份（57_core.js coreShipOut：
 //   船殼差 cells、打壞的模型、帆、斷的繩；不帶船員 —— 兵照城鎮帳）⇒ cells.d deflate 壓（townZip）⇒ { bsmap: 'fortState', town, lot, st: { v: 1, hull, sum, n, gone, z, models, sails, ropes, dmg, mz? } }，
 //   dmg ＝ { cells: [打掉幾格, 整座幾格], guns: [打掉幾門, 幾門], t: [打掉的砲幾公斤, 全部幾公斤] }（第三格修繕：Blocksail BSW.fortDmg 照它打折名額、定修繕多大；t 給補砲 BSW.fortGunNeed，TASK-1093）；
@@ -3156,8 +3159,7 @@ function townFortTick() {
   var now = performance.now(), keys = Object.keys(TOWN_UNITS); if (!keys.length || now - TOWN_FORT_T < TOWN_FORT_EVERY_MS) return; TOWN_FORT_T = now;
   var me = SHIPS[PLAYER_I], stay = !!me && modeRule('battleKeys') && !modeRule('town'), mc = me && shipCenter(me);
   keys.forEach(function (key) {
-    var sh = TOWN_UNITS[key], why = sh.townRetire;
-    townFortReport(sh);
+    var sh = TOWN_UNITS[key], why = sh.townRetire;                      // 損傷不在這裡報（townFortSync：換回、交戰結束、回地球儀才報）
     if (!why && SHIPS.indexOf(sh) >= 0) {
       var fc = shipCenter(sh), d = mc ? Math.hypot(fc[0] - mc[0], fc[2] - mc[2]) : 0;
       if (stay && d <= Math.max(sh.townR * TOWN_FORT_LEAVE, sh.wakeD + TOWN_FORT_SLACK)) return;
@@ -3166,6 +3168,9 @@ function townFortTick() {
     townFortSleep(key, why || '換回');
   });
 }
+/** 場上每一座換成戰鬥單位的堡壘：死的兵、打壞的樣子現在報給外面那一頁（townFortReport；沒變 ⇒ 它自己不送）。
+ *  交戰結束（88_modeswitch.js MODE_HOOK.fight.leave）、回地球儀（08_seabed.js 'leave'）叫；換回（townFortSleep）自己會報。 */
+function townFortSync() { Object.keys(TOWN_UNITS).forEach(function (key) { townFortReport(TOWN_UNITS[key]); }); }
 /** 建築模式選單裡的用途（87_townbuild.js twbMenuSet）：要的模型變多 ⇒ 重解一次模型組（同 townReplace）。 */
 function townWantSet(uses) {
   TOWNS.wantUse = (uses || []).slice();

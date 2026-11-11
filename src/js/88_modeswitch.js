@@ -87,7 +87,10 @@ var MODE_HOOK = {
       var me = SHIPS[PLAYER_I]; if (!me) return;
       note(me, '⚔ 對手：' + fightFoes().map(function (o) { return o.name; }).join('、') + ' —— 打完或甩開 ' + FIGHT_FAR_M / 1000 + ' km 以上 ' + FIGHT_FAR_S + ' 秒，才回得了地球儀', true);
     },
-    leave: function (o) { FIGHT.farT = null; var me = SHIPS[PLAYER_I]; if (me && o && o.end) note(me, '⚔ 交戰結束：' + o.end, true); }
+    leave: function (o) {
+      FIGHT.farT = null; var me = SHIPS[PLAYER_I]; if (me && o && o.end) note(me, '⚔ 交戰結束：' + o.end, true);
+      townFortSync();                                                    // 戰鬥結算：城裡堡壘的死兵、打壞的樣子這時才報（63_towns.js；交戰中不報）
+    }
   }
 };
 var DOCK = { towns: {}, asked: {}, okd: {}, here: null, run: null, cam: null, why: '', btn: '' };   // okd：哪幾處附近擺完過   // towns：{ 城: { ring, docks } }（世界座標）；here：停在哪一處；run：自動開的那一段
