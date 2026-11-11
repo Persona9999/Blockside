@@ -28,30 +28,41 @@ function townRiseChunks(b64) {
   });
 }
 
-/** 模型 nm（townKitMake 留下的 rise：{ g, bo }）⇒ Promise<演出用的資料>：每一格（格座標、色、門檻）照門檻排好、腳下的佔地、每一步的最高格。 */
+/** 模型 nm（townKitMake 留下的 rise：{ g, bo }）⇒ Promise<演出用的資料>：每一格（格座標、色、門檻）照門檻排好、腳下的佔地、每一步的最高格。
+ *  分段展開（63_towns.js townSlice）：加拉塔堡 363 萬格一次展開 ＝ 一格畫面卡約 150 ms（第一次叫醒工地或做廢墟的那一下；Tim 2026-11-11「也處理掉」）。
+ *  展開的結果跟一次做完的逐位元組相同（同樣的走法，只是中間讓畫面走）。同一個模型同時有兩條路要 ⇒ 共用同一個 Promise（Mm.riseP）。 */
 function townRiseLoad(nm) {
   var K = TOWNS.kit, Mm = K && K.M[nm];
   if (!Mm || !Mm.rise) return Promise.reject(new Error(nm + ' 沒有施工順序（Blocksail tools/townmodels.py build 之前的模型資料）'));
   if (Mm.riseD) return Promise.resolve(Mm.riseD);
-  return Promise.all([townRiseChunks(Mm.rise.g), VK.inflateRaw(VK.b64ToBytes(Mm.rise.bo))]).then(function (A) {
-    var G = A[0], B = A[1], m = Mm.m, sx = m.size[0], sy = m.size[1], sz = m.size[2];
-    var n = 0; G.data.forEach(function (c) { for (var li = 0; li < 4096; li++) if (c[li]) n++; });
-    if (B.length !== n) throw new Error(nm + '：施工順序 ' + B.length + ' 格 ≠ 格子 ' + n + ' 格');
-    var X = new Uint16Array(n), Y = new Uint16Array(n), Z = new Uint16Array(n), C = new Uint8Array(n), O = new Uint8Array(n), cnt = new Int32Array(257), j = 0;
-    G.data.forEach(function (c, i) {
-      var k = G.keys[i];
-      for (var li = 0; li < 4096; li++) if (c[li]) { X[j] = k[0] * 16 + (li & 15); Y[j] = k[1] * 16 + ((li >> 4) & 15); Z[j] = k[2] * 16 + (li >> 8); C[j] = c[li]; O[j] = B[j] || 255; cnt[O[j] + 1]++; j++; }
+  if (Mm.riseP) return Mm.riseP;
+  var on = function () { return true; };
+  Mm.riseP = Promise.all([townRiseChunks(Mm.rise.g), VK.inflateRaw(VK.b64ToBytes(Mm.rise.bo))]).then(function (A) {
+    var G = A[0], B = A[1], m = Mm.m, sx = m.size[0], sy = m.size[1], sz = m.size[2], n = 0, X, Y, Z, C, O, cnt = new Int32Array(257), j = 0, at, pos, ord, foot, F;
+    return townSlice(G.data.length, 16, on, function (a, b) { for (var i = a; i < b; i++) { var c = G.data[i]; for (var li = 0; li < 4096; li++) if (c[li]) n++; } }).then(function () {
+      if (B.length !== n) throw new Error(nm + '：施工順序 ' + B.length + ' 格 ≠ 格子 ' + n + ' 格');
+      X = new Uint16Array(n); Y = new Uint16Array(n); Z = new Uint16Array(n); C = new Uint8Array(n); O = new Uint8Array(n);
+      return townSlice(G.data.length, 8, on, function (a, b) {
+        for (var i = a; i < b; i++) {
+          var c = G.data[i], k = G.keys[i];
+          for (var li = 0; li < 4096; li++) if (c[li]) { X[j] = k[0] * 16 + (li & 15); Y[j] = k[1] * 16 + ((li >> 4) & 15); Z[j] = k[2] * 16 + (li >> 8); C[j] = c[li]; O[j] = B[j] || 255; cnt[O[j] + 1]++; j++; }
+        }
+      });
+    }).then(function () {
+      for (var v = 1; v < 257; v++) cnt[v] += cnt[v - 1];                // 照門檻排（計數排序；同門檻照區塊表的順序）⇒ ord；at[v] ＝ 門檻 ≤ v 的有幾格
+      at = cnt.slice(1); pos = cnt.slice(0, 256); ord = new Int32Array(n);
+      foot = new Uint8Array(sx * sy); F = new Int32Array(sz);             // F[z] ＝ 完工時那一層幾格（腳手架的高度照它判：townRiseSet）
+      return townSlice(n, 65536, on, function (a, b) { for (var q = a; q < b; q++) { ord[pos[O[q]]++] = q; foot[X[q] + sx * Y[q]] = 1; F[Z[q]]++; } });
+    }).then(function () {
+      var L = Array.prototype.filter.call(F, function (v) { return v > 0; }).sort(function (a, b) { return a - b; }), Fmin = Math.max(1, (L[L.length >> 1] || 1) * RISE_LAYER);
+      Mm.riseD = { nm: nm, sx: sx, sy: sy, sz: sz, mpv: m.mpv, n: n, X: X, Y: Y, Z: Z, C: C, O: O, ord: ord, at: at, foot: foot, F: F, Fmin: Fmin,
+        wz: m.water != null ? Math.round((m.deckz || 0) / m.mpv) : 0 };   // wz：水上版的平台面在第幾層格（索引的 deckz；陸上版 0）
+      Mm.riseP = null;
+      return Mm.riseD;
     });
-    for (var v = 1; v < 257; v++) cnt[v] += cnt[v - 1];                  // 照門檻排（計數排序；同門檻照區塊表的順序）⇒ ord；at[v] ＝ 門檻 ≤ v 的有幾格
-    var at = cnt.slice(1), pos = cnt.slice(0, 256), ord = new Int32Array(n);
-    for (j = 0; j < n; j++) ord[pos[O[j]]++] = j;
-    var foot = new Uint8Array(sx * sy), F = new Int32Array(sz);          // F[z] ＝ 完工時那一層幾格（腳手架的高度照它判：townRiseSet）
-    for (j = 0; j < n; j++) { foot[X[j] + sx * Y[j]] = 1; F[Z[j]]++; }
-    var L = Array.prototype.filter.call(F, function (v) { return v > 0; }).sort(function (a, b) { return a - b; }), Fmin = Math.max(1, (L[L.length >> 1] || 1) * RISE_LAYER);
-    Mm.riseD = { nm: nm, sx: sx, sy: sy, sz: sz, mpv: m.mpv, n: n, X: X, Y: Y, Z: Z, C: C, O: O, ord: ord, at: at, foot: foot, F: F, Fmin: Fmin,
-      wz: m.water != null ? Math.round((m.deckz || 0) / m.mpv) : 0 };   // wz：水上版的平台面在第幾層格（索引的 deckz；陸上版 0）
-    return Mm.riseD;
   });
+  Mm.riseP.catch(function () { Mm.riseP = null; });                     // 失敗 ⇒ 下次重來（呼叫端照舊收到那個錯）
+  return Mm.riseP;
 }
 
 /** 進度 p ⇒ 這一步看得到幾格（照門檻排好的前幾格）。 */
@@ -379,6 +390,11 @@ function townRiseMesh(s) {
     var kz = (k / NXY) | 0, ky = ((k - kz * NXY) / G.nx) | 0, kx = k - kz * NXY - ky * G.nx, m = G.tab[k] ? VK.meshChunk(G, kx, ky, kz) : null;
     if (m) s.mesh[k] = m; else delete s.mesh[k];
   });
+  townRiseUpload(s);
+  s.stat.remesh = re.size; s.stat.meshMs = +(performance.now() - t0).toFixed(2);
+}
+/** s.mesh（區塊 ⇒ 那一塊的四邊形）照區塊序號接成一份 ⇒ GPU（第一次建、之後換內容）。townRiseMesh 與分段做的廢墟（63_towns.js townRuinMake）共用。 */
+function townRiseUpload(s) {
   var len = 0, parts = []; Object.keys(s.mesh).forEach(function (k2) { var a = s.mesh[k2]; parts.push(a); len += a.length; });
   var all = new Uint16Array(len), o = 0; parts.forEach(function (a) { all.set(a, o); o += a.length; });
   if (!s.gpu) s.gpu = townUpload(all);
@@ -387,7 +403,7 @@ function townRiseMesh(s) {
     gl.bindVertexArray(s.gpu.vao); gl.bindBuffer(gl.ARRAY_BUFFER, s.gpu.vbo); gl.bufferData(gl.ARRAY_BUFFER, all, gl.DYNAMIC_DRAW); gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, QIDX.buf); gl.bindVertexArray(null);
     s.gpu.nq = all.length / 16;
   }
-  s.stat.remesh = re.size; s.stat.meshMs = +(performance.now() - t0).toFixed(2); s.stat.quads = all.length / 16;
+  s.stat.quads = all.length / 16;
 }
 /** 工地那一棟的實例欄位（同 townGhostDraw：aS.z 1e6 ⇒ 永遠是近那一級、不淡出）＋ uC（加上留白）。 */
 function townRiseBind(s, PV) {

@@ -3060,7 +3060,7 @@ function townRuinSync() {
       if (TOWN_RUIN_BUSY[key] === sig || TOWN_RUIN_BAD[key] === sig) return;
       var q = T.inst && townRiseInst(T, lot); if (!q || !townFortHull(q.k)) return;   // 那一棟還沒擺出來（模型組還在解）⇒ 下一格再看
       TOWN_RUIN_BUSY[key] = sig;
-      townRuinMake(T, lot, q.k, st, sig).then(function (s2) {
+      townRuinMake(T, lot, q.k, st, sig, function () { return TOWN_RUIN_BUSY[key] === sig; }).then(function (s2) {   // 做到一半帳又換了 ⇒ 不做完（下一格照新的重來）
         if (TOWN_RUIN_BUSY[key] !== sig) { townRuinFree(s2); return; }    // 做的時候又來了新的損傷 ⇒ 這一份作廢
         delete TOWN_RUIN_BUSY[key];
         if (!s2) { TOWN_RUIN_BAD[key] = sig; return; }
@@ -3070,36 +3070,64 @@ function townRuinSync() {
   });
   Object.keys(TOWN_RUIN).forEach(function (key) { if (!seen[key]) { townRuinFree(TOWN_RUIN[key]); delete TOWN_RUIN[key]; TOWNS.dirty = true; } });   // 帳上沒了（修好、那座城不在了）
 }
-/** 城 T 地塊 lot（模型 nm）照帳上的損傷 st 做一份網格 ⇒ Promise<那一份｜null（對不上）>。 */
-function townRuinMake(T, lot, nm, st, sig) {
-  var t0 = performance.now();
+/** 城 T 地塊 lot（模型 nm）照帳上的損傷 st 做一份網格 ⇒ Promise<那一份｜null（對不上、做到一半 alive() 說不要了）>。
+ *  分段做（townSlice：每段最多 TOWN_SLICE_MS，段跟段之間讓畫面走）：加拉塔堡整棟 363 萬格，一次做完 ＝ 填格子約 190 ms ＋ 網格化 160～340 ms 卡在同一格畫面
+ *  （Tim 2026-11-11「也處理掉」：交戰結束、回地球儀那一下）。做好之前照舊的那一份畫（townRuinSync）。網格跟一次做完的逐位元組相同（同樣的區塊、同樣的順序接）。 */
+var TOWN_SLICE_MS = 4;
+function townRuinMake(T, lot, nm, st, sig, alive) {
+  var t0 = performance.now(), live = alive || function () { return true; };
   return Promise.all([townRiseLoad(nm), townUnzip(st.z), townUnzip(st.mz || '')]).then(function (A) {
-    var D = A[0], P = RISE_PAD, G = new VK.Grid([D.sx + P * 2, D.sy + P * 2, D.sz + RISE_TOP]), o = { gone: 0, miss: 0, col: 0, add: 0, mod: 0, out: 0 }, j;
-    for (j = 0; j < D.n; j++) G.set(D.X[j] + P, D.Y[j] + P, D.Z[j], D.C[j]);
-    function apply(b64, mod) {
-      if (!b64) return;
-      var u = coreUnB64(b64), dv = new DataView(u.buffer), p = 0, N = u.length / 5;
-      for (var k = 0; k < N; k++) {
-        p += dv.getUint32(k * 5, true);
-        var v = u[k * 5 + 4], x = p % D.sx, y = Math.floor(p / D.sx) % D.sy, z = Math.floor(p / (D.sx * D.sy)), tx = D.sx - 1 - x + P, had;
-        if (z >= D.sz) { o.out++; continue; }
-        had = G.get(tx, y + P, z);
-        if (mod) { if (had) { G.set(tx, y + P, z, 0); o.mod++; } }
-        else if (!v) { if (had) { G.set(tx, y + P, z, 0); o.gone++; } else o.miss++; }
-        else { G.set(tx, y + P, z, v); if (had) o.col++; else o.add++; }
+    var D = A[0], P = RISE_PAD, G = new VK.Grid([D.sx + P * 2, D.sy + P * 2, D.sz + RISE_TOP]), o = { gone: 0, miss: 0, col: 0, add: 0, mod: 0, out: 0 };
+    return townSlice(D.n, 8192, live, function (j0, j1) { for (var j = j0; j < j1; j++) G.set(D.X[j] + P, D.Y[j] + P, D.Z[j], D.C[j]); }).then(function (ok) {
+      if (!ok) return null;
+      function apply(b64, mod) {
+        if (!b64) return;
+        var u = coreUnB64(b64), dv = new DataView(u.buffer), p = 0, N = u.length / 5;
+        for (var k = 0; k < N; k++) {
+          p += dv.getUint32(k * 5, true);
+          var v = u[k * 5 + 4], x = p % D.sx, y = Math.floor(p / D.sx) % D.sy, z = Math.floor(p / (D.sx * D.sy)), tx = D.sx - 1 - x + P, had;
+          if (z >= D.sz) { o.out++; continue; }
+          had = G.get(tx, y + P, z);
+          if (mod) { if (had) { G.set(tx, y + P, z, 0); o.mod++; } }
+          else if (!v) { if (had) { G.set(tx, y + P, z, 0); o.gone++; } else o.miss++; }
+          else { G.set(tx, y + P, z, v); if (had) o.col++; else o.add++; }
+        }
       }
-    }
-    if (st.k > 1) { A[1] = townRuinFold(A[1], st.k, D.sx, D.sy); A[2] = townRuinFold(A[2], st.k, D.sx, D.sy); }
-    apply(A[1], false); apply(A[2], true);
-    if (o.miss + o.out > TOWN_RUIN_MISS * Math.max(1, o.gone + o.miss + o.out)) {
-      console.warn(T.id + ' ' + lot + '（' + nm + '）：打掉的 ' + (o.gone + o.miss + o.out) + ' 格有 ' + (o.miss + o.out) + ' 格落在城鎮模型的空格 ⇒ 城鎮模型跟打的那一座不是同一版，照完好的畫');
-      return null;
-    }
-    var s = { key: townRiseKey(T, lot), T: T, lot: lot, nm: nm, d: D, st: st, sig: sig, ruin: true, G: G, cv: new Uint32Array(G.tab.length), mesh: {}, dirtyAll: true, gpu: null, ib: null, stat: o };
-    townRiseMesh(s);
-    s.G = null; s.mesh = null; s.cv = null;                               // 只留 GPU 那一份
-    o.cells = D.n - o.gone - o.mod + o.add; o.ms = +(performance.now() - t0).toFixed(1);
-    return s;
+      if (st.k > 1) { A[1] = townRuinFold(A[1], st.k, D.sx, D.sy); A[2] = townRuinFold(A[2], st.k, D.sx, D.sy); }
+      apply(A[1], false); apply(A[2], true);
+      if (o.miss + o.out > TOWN_RUIN_MISS * Math.max(1, o.gone + o.miss + o.out)) {
+        console.warn(T.id + ' ' + lot + '（' + nm + '）：打掉的 ' + (o.gone + o.miss + o.out) + ' 格有 ' + (o.miss + o.out) + ' 格落在城鎮模型的空格 ⇒ 城鎮模型跟打的那一座不是同一版，照完好的畫');
+        return null;
+      }
+      var s = { key: townRiseKey(T, lot), T: T, lot: lot, nm: nm, d: D, st: st, sig: sig, ruin: true, G: G, cv: null, mesh: {}, dirtyAll: false, gpu: null, ib: null, stat: o };
+      // 網格化：一次做完的那一條（townRiseMesh、dirtyAll）會把每一塊連同鄰塊排進去、只做有格子的塊 ⇒ 等於「有格子的塊全做一次」⇒ 照序號分段做
+      var ks = [], NXY = G.nx * G.ny, tm = 0; for (var i = 0; i < G.tab.length; i++) if (G.tab[i]) ks.push(i);
+      return townSlice(ks.length, 1, live, function (a, b) {
+        var t1 = performance.now();
+        for (var j = a; j < b; j++) { var k = ks[j], kz = (k / NXY) | 0, ky = ((k - kz * NXY) / G.nx) | 0, m = VK.meshChunk(G, k - kz * NXY - ky * G.nx, ky, kz); if (m) s.mesh[k] = m; }
+        tm += performance.now() - t1;
+      }).then(function (ok2) {
+        if (!ok2) return null;
+        var t2 = performance.now(); townRiseUpload(s); tm += performance.now() - t2;
+        s.G = null; s.mesh = null;                                       // 只留 GPU 那一份
+        o.remesh = ks.length; o.meshMs = +tm.toFixed(2); o.cells = D.n - o.gone - o.mod + o.add; o.ms = +(performance.now() - t0).toFixed(1);   // ms：從開始到做好（含讓畫面走的時間）；meshMs：網格化真的花的
+        return s;
+      });
+    });
+  });
+}
+/** n 件事分段做：f(從, 到) 每次做 step 件，做滿 TOWN_SLICE_MS 就讓畫面走一次（setTimeout 0）再接著做 ⇒ Promise<true｜false（alive() 說不要了，沒做完）>。 */
+function townSlice(n, step, alive, f) {
+  return new Promise(function (res, rej) {
+    var i = 0;
+    (function run() {
+      try {
+        if (!alive()) { res(false); return; }
+        var t = performance.now();
+        while (i < n && performance.now() - t < TOWN_SLICE_MS) { var j = Math.min(n, i + step); f(i, j); i = j; }
+        if (i < n) setTimeout(run, 0); else res(true);
+      } catch (e) { rej(e); }
+    })();
   });
 }
 /** 拆過格的那一座（st.k；TASK-1025）：格子差（戰鬥用的格，寬 k·sx、深 k·sy）⇒ 城鎮模型的格（寬 sx、深 sy）的格子差（同一個格式）。
