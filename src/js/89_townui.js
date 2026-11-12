@@ -159,6 +159,16 @@ function tuiToggle(tab) {
   tuiLoad();
 }
 function tuiClose() { TUI.open = false; var st = $('stage'); if (st) { st.classList.remove('tui'); st.classList.remove('tuiT'); } if (TUI_HOST) TUI_HOST.postMessage({ bsmap: 'tuiClose' }, '*'); }
+/** 城鎮水平那一行（Blocksail world/food.js townLevel：effAll／eff／wage 是 ‰，prosp／sat／edu／health 是 0～1；TASK-1278 Tim 2026-11-12「加一行」）
+ *  生產建築的效率 ＝ 1 ＋ 繁榮度那一份 ＋ 滿意度那一份（satEff）；工坊再乘教育那一份（eff）；工資照繁榮度。沒有 lv（舊版 Blocksail）⇒ 不畫。 */
+function tuiLevelHTML(L) {
+  if (!L) return '';
+  var pc = function (v) { return Math.round(v * 100) + '%'; }, up = function (m) { var v = Math.round((m - 1000) / 10 * 10) / 10; return (v >= 0 ? '+' : '') + v + '%'; };
+  var se = L.satEff || 0, pe = (L.effAll || 1000) - 1000 - se, parts = [];
+  parts.push('繁榮度 ' + pc(L.prosp || 0) + ' ⇒ ' + up(1000 + pe));
+  if (L.sat != null) parts.push('滿意度平均 ' + pc(L.sat) + ' ⇒ ' + up(1000 + se));
+  return '<h4>📈 城鎮水平（效率加成）</h4><p>生產建築效率 ' + up(L.effAll || 1000) + '（' + parts.join('、') + '）　工坊再 ' + up(L.eff || 1000) + '（教育 ' + pc(L.edu || 0) + '）　工資 ' + up(L.wage || 1000) + '　健康 ' + pc(L.health || 0) + '</p>';
+}
 function tuiEscEaten() {
   if (typeof TUID !== 'undefined' && TUID.open) { tuiDistClose(); return true; }
   if (!TUI.open) return false;
@@ -242,6 +252,7 @@ function tuiSumHTML() {
   if (I.rent && I.rent.skip) h += '<p class="tuiDim">🏠 昨天房租沒收滿：' + tuiEsc(I.rent.skip) + '（該收 ' + tuiNum(I.rent.due, 1) + '）</p>';   // 房租（Blocksail world/townstate.js rentDay；TASK-0946）：鎮民的錢不夠吃飯 ⇒ 不收
   var SV = I.svc || {}, SVI = { faith: '⛪', drink: '🍺', dine: '🍲', health: '⚕' };   // 服務建築的滿意度（Blocksail world/food.js serveDay；TASK-0914、0946 酒館與醫院）：昨天想來／來了幾人次、滿意度、收的錢
   Object.keys(SV).forEach(function (k) { var Q = SV[k]; h += '<h4>' + (SVI[k] || '🙂') + ' ' + tuiEsc(Q.name || k) + '（昨天）</h4><p>來了 ' + tuiNum(Q.got) + '／想來 ' + tuiNum(Q.want) + ' 人次　滿意度 ' + Math.round((Q.sat || 0) * 100) + '%　' + (k === 'faith' ? '捐獻' : '收入') + ' ' + tuiNum(Q.paid, 2) + '</p>'; });
+  h += tuiLevelHTML(I.lv);                                              // 城鎮水平 ⇒ 效率加成（Blocksail world/food.js townLevel；TASK-1278）：繁榮度、滿意度、教育、健康各加了多少
   var ks = Object.keys(J).sort(function (a, b) { return J[b] - J[a]; });
   h += '<h4>🔧 崗位（今天分到幾人）</h4>' + (ks.length ? '<table class="tuiT"><tr><th>工作</th><th>人</th></tr>' + ks.map(function (k) { return '<tr><td>' + tuiEsc(TUI_JOB[k] || TUI.blds[k] || k) + '</td><td>' + tuiNum(J[k]) + '</td></tr>'; }).join('') + '</table>' : '<p class="tuiDim">還沒有人上工（帳還沒過一天）</p>');
   var B = {}; (I.buildings || []).forEach(function (b) { B[b.type] = (B[b.type] || 0) + 1; });
