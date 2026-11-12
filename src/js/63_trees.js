@@ -113,6 +113,7 @@ function treeSpecies(J) {
   if (Pl.town) return false;                                            // 只種在城鎮標的位置（treeTownPut），不照地形自己長
   if (far && Pl.shell === 0) return false;                              // 遠景塊只拿來算樹冠殼 ⇒ 不算進殼的小植物不擺
   var vb = C.vg && A.vis ? A.vis.indexOf(sp) : -1, vs = vb >= 0 ? size / (C.vgN - 1) : 0;   // 植被段（Blocksail 照物種的分區、氣候、土壤推算，MAP_CHUNK.md §4）：這一種在不在那一點的名單裡；名單沒有這一種 ⇒ 不限
+  if (Pl.listed && vb < 0) return false;                                // listed（北非那一批起，16_treegen.js）：要植被段點名才長 ⇒ 舊海圖（托爾圖加）、名單沒有它的塊、沒有植被段的塊都不長
   var CG = TREE_CELL, N2 = J.N2, A4 = Pl.alt, mm = 0, ok = new Uint8Array(N2), q; for (q in Pl.mats) mm |= 1 << q;
   for (q = 0; q < N2; q++) ok[q] = J.cmD[q] & mm && J.hiD[q] > A4[0] && J.loD[q] < A4[3] ? 1 : 0;   // 照候選點真的落在哪一格查（外擴一格的表）⇒ 跳過的跟逐點查一樣
   J.sp = { sp: sp, si: si, S: S, Pl: Pl, gap: gap, m: m, mi: mi, j: 0, nk: 0, sd: 7001 + si * 131 + (far ? 17 : 0), fs: 7001 + (far ? 17 : 0), vb: vb, vs: vs, A4: A4, ok: ok,

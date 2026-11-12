@@ -5,6 +5,7 @@
 //   加一種樹 ＝ 在表裡加一筆（形狀全在參數裡，程式不分樹種）；樹葉的長法照 leaf.kind 分派（TREE_LEAF）：
 //   cluster ＝ 一團一團的葉簇（長在最後一層枝尖）、frond ＝ 棕櫚的羽狀葉（從樹幹頂一圈長出來、往下垂）、rosette ＝ 蓮座葉（龍舌蘭：從地面一圈長出來）、
 //   fan ＝ 扇葉、cap ＝ 柱頭（仙人掌）、paddle ＝ 寬葉（香蕉）、pad ＝ 莖節（刺梨仙人掌）、tuft ＝ 草叢（海燕麥）、cane ＝ 稈（甘蔗、玉米）、grain ＝ 穀（小麥、大麥）。
+//   ⛔ 葉一定接在植物上（可以重疊、不准浮空；Tim 2026-11-12）：從莖頂長出來的葉照 treePetiole 補葉柄 —— 新的葉型也照這條。
 // treeSkel(種, 種子, 第幾棵) ⇒ 骨架（枝幹的折線、半徑、枝尖）；treeMesh(骨架, 細度) ⇒ 網格：
 //   細度 0 ＝ 細的（近景）、1 ＝ 低模（中景：枝少一層、葉子少、管子邊數少）；遠景的貼圖由 63_trees.js 照細的那一份拍。
 // 同一個骨架出兩種細度 ⇒ 換細度時輪廓不跳。亂數一律 treeRng（自己的種子）：⛔ 不抽戰局的 rnd()（樹只給人看，開不開樹戰局逐位元組相同）。
@@ -443,6 +444,86 @@ TREE_SPECIES.orchard = Object.assign({}, TREE_SPECIES.broadleaf, {
   variants: 4
 });
 
+// ── 北非（Blocksail TASK-1253；Tim 2026-11-12「先試著加上北非植物&對應的模型吧」）：椰棗、阿甘樹、傘刺槐、檉柳、夾竹桃、細莖針茅（芨芨草／esparto）──
+//   加在最後 ⇒ 前面每一種的索引、種子、長相、貼圖集分張不變；meta.region 'nafrica' ⇒ 遠景另一張貼圖集（北非用到才拍）。
+//   place.listed：只長在海圖塊植被段（MAP_CHUNK.md §4 段 2）點名的地方 —— 名單沒有這一種、或海圖塊沒有植被段 ⇒ 不長（63_trees.js treeSpecies）。
+//     舊的種「名單沒有 ⇒ 不限」是給 Blocksail 還沒寫 vis 的那幾種用的；新種一律要 Blocksail 點名 ⇒ 托爾圖加那些舊海圖、加勒比海的塊不會冒出椰棗。
+//   數字（高、密度、間距）全是〔佔位〕：照文獻的株高與輪廓定，遊戲裡看過、量過幀數再調。
+TREE_SPECIES.datepalm = {
+  name: '椰棗',                                                         // Phoenix dactylifera（綠洲：加貝斯、傑里德、德拉河谷、塔菲拉勒特）：直的粗樹幹、一圈一圈的葉基疤，頂上一大團硬挺、灰綠的羽狀葉往上斜（不像椰子垂下），下面一圈枯葉；葉下掛橙黃的果串
+  meta: { region: ['nafrica'], type: 'palm' },
+  height: [10, 17],
+  trunk: { r: [0.25, 0.32], taper: 0.88, bend: 0.02, segs: 10, sides: [9, 5], lean: [0.02, 0.12], up: 0.1, flare: 1.25, ribs: 0.07, col: [0.47, 0.37, 0.26], top: 1 },   // ribs：葉基疤的稜
+  levels: [],
+  leaf: { kind: 'frond', n: [30, 38], len: [3.8, 5.2], w: 0.55, hang: 0.26, droop: [0.35, 0.75], rise: [6, 80], dead: 0.2, segs: [9, 4], col: [0.37, 0.45, 0.31], vary: 0.1,
+          deadCol: [0.55, 0.45, 0.30], nuts: [4, 9], nutCol: [0.74, 0.43, 0.12] },   // 果串借 nuts（椰子）那一套：橙黃
+  place: { listed: true, spacing: 12, alt: [0.5, 2, 1100, 1300], slopeMax: 0.25, mats: { 11: 1, 10: 0.6 }, dens: 0.6, forest: 0, clump: 45, patch: [350, 0.4], scale: [0.8, 1.15] },   // 綠洲 4.5 km 的灌溉範圍整片都點名 ⇒ 間距 12 m、成片長（patch）壓棵數（第一版 8 m、0.8：阿加迪爾一帶 11.8 萬棵）
+  variants: 6
+};
+TREE_SPECIES.argan = {
+  name: '阿甘樹',                                                       // Argania spinosa（摩洛哥西南蘇斯平原、反阿特拉斯山、索維拉一帶的疏林）：矮、扭的短樹幹常分成幾根、多刺的枝，深綠的小葉團成寬而密的圓頂
+  meta: { region: ['nafrica'], type: 'tree' },
+  height: [5, 9],
+  trunk: { r: [0.2, 0.3], taper: 0.45, bend: 0.35, segs: 4, sides: [7, 4], lean: 0.18, col: [0.45, 0.40, 0.33], top: 0.38, crown: 0.7 },
+  levels: [
+    { n: [3, 5], from: [0.45, 1.0], angle: [35, 62], len: [0.6, 0.9], r: 0.62, bend: 0.4, up: 0.18, segs: 3, sides: [5, 3] },
+    { n: [3, 4], from: [0.3, 0.95], angle: [35, 60], len: [0.45, 0.65], r: 0.5, bend: 0.35, up: 0.05, segs: 3, sides: [3, 0] }
+  ],
+  leaf: { kind: 'cluster', per: [2, 3], size: [0.8, 1.2], flat: 0.62, col: [0.23, 0.34, 0.17], vary: 0.1, along: 0.35 },
+  place: { listed: true, spacing: 16, alt: [3, 15, 1300, 1600], slopeMax: 0.7, mats: { 11: 1, 12: 0.4 }, dens: 0.45, forest: 0, clump: 90, scale: [0.85, 1.2] },
+  variants: 4
+};
+TREE_SPECIES.acacia = {
+  name: '傘刺槐',                                                       // Vachellia tortilis subsp. raddiana（撒哈拉北緣的乾河谷、礫漠：突尼斯中部布赫德馬、摩洛哥南部、阿爾及利亞的撒哈拉）：細幹往上分叉，頂上攤成又平又寬的傘
+  meta: { region: ['nafrica'], type: 'tree' },
+  height: [4, 8],
+  trunk: { r: [0.12, 0.19], taper: 0.5, bend: 0.22, segs: 4, sides: [6, 4], lean: 0.1, col: [0.36, 0.30, 0.25], top: 0.62, crown: 0.55 },
+  levels: [
+    { n: [5, 7], from: [0.9, 1.0], angle: [70, 84], len: [0.8, 0.95], r: 0.6, bend: 0.08, up: 0.18, segs: 3, sides: [5, 3] },
+    { n: [2, 3], from: [0.55, 1.0], angle: [60, 80], len: [0.35, 0.5], r: 0.5, bend: 0.08, up: 0.05, segs: 2, sides: [3, 0] }
+  ],
+  leaf: { kind: 'cluster', per: [1, 1], size: [1.2, 1.6], flat: 0.16, jit: 0.25, col: [0.38, 0.43, 0.24], vary: 0.12, along: 0.05 },   // flat 0.28 ⇒ 薄薄一層的傘
+  place: { listed: true, spacing: 28, alt: [2, 10, 1400, 1800], slopeMax: 0.5, mats: { 11: 1, 10: 0.4 }, dens: 0.3, forest: -0.8, clump: 140, scale: [0.85, 1.2] },
+  variants: 4
+};
+TREE_SPECIES.tamarisk = {
+  name: '檉柳',                                                         // Tamarix（T. africana、T. gallica：乾河谷、鹽沼與海邊的沙地）：從地面分出好幾根細幹，一團團羽毛似的灰綠細枝，枝尖一片淡粉紅的花穗
+  meta: { region: ['nafrica'], type: 'shrub' },
+  height: [3, 6],
+  trunk: { r: [0.07, 0.11], taper: 0.5, bend: 0.3, segs: 3, sides: [5, 3], lean: 0.2, col: [0.42, 0.33, 0.28], top: 0.5, crown: 0.75 },
+  levels: [
+    { n: [4, 7], from: [0.0, 0.35], angle: [18, 42], len: [0.8, 1.1], r: 0.7, bend: 0.35, up: 0.3, segs: 3, sides: [4, 3] },
+    { n: [3, 5], from: [0.45, 1.0], angle: [25, 45], len: [0.4, 0.6], r: 0.5, bend: 0.3, up: 0.12, segs: 2, sides: [3, 0] }
+  ],
+  leaf: { kind: 'cluster', per: [3, 4], size: [0.4, 0.6], flat: 1, stretch: 2.4, jit: 0.35, col: [0.42, 0.50, 0.40], vary: 0.12, along: 0.25, tint: [0.3, [0.80, 0.60, 0.66]] },   // stretch：羽毛似的細枝沿枝拉長；tint 三成的葉團換成花的淡粉紅
+  place: { listed: true, spacing: 7, alt: [0, 1, 600, 900], slopeMax: 0.35, mats: { 10: 1, 11: 0.8 }, dens: 0.5, forest: -0.3, clump: 40, scale: [0.8, 1.2] },
+  variants: 4
+};
+TREE_SPECIES.oleander = {
+  name: '夾竹桃',                                                       // Nerium oleander（地中海沿岸的乾河床、溪邊：一叢從地面直直往上的細枝，深綠的長葉、枝頂一簇粉紅的花）
+  meta: { region: ['nafrica'], type: 'shrub' },
+  height: [2.2, 4],
+  trunk: { r: [0.04, 0.06], taper: 0.6, bend: 0.15, segs: 2, sides: [4, 3], lean: 0.05, col: [0.45, 0.42, 0.34], top: 0.55, crown: 0.8 },
+  levels: [
+    { n: [6, 9], from: [0.0, 0.2], angle: [10, 32], len: [0.85, 1.05], r: 0.8, bend: 0.22, up: 0.4, segs: 3, sides: [4, 3] },
+    { n: [2, 3], from: [0.55, 1.0], angle: [20, 40], len: [0.3, 0.45], r: 0.5, bend: 0.2, up: 0.2, segs: 2, sides: [3, 0] }
+  ],
+  leaf: { kind: 'cluster', per: [2, 3], size: [0.45, 0.7], flat: 0.85, jit: 0.5, col: [0.18, 0.33, 0.17], vary: 0.1, along: 0.3, tint: [0.32, [0.90, 0.47, 0.60]] },
+  place: { listed: true, spacing: 5, alt: [0.5, 2, 1000, 1300], slopeMax: 0.6, mats: { 11: 1, 10: 0.5, 12: 0.3 }, dens: 0.55, forest: -0.3, clump: 25, scale: [0.8, 1.2], shell: 0, view: 700 },
+  variants: 4
+};
+TREE_SPECIES.esparto = {
+  name: '細莖針茅（芨芨草）',                                           // Stipa tenacissima（alfa／esparto：突尼斯、阿爾及利亞、摩洛哥東部的高原草原，西班牙東南）：一叢一叢灰綠、捲成線的硬葉，抽出幾根細長的花莖、頂上一束淡麥色的穗
+  meta: { region: ['nafrica'], type: 'grass' },
+  height: [0.6, 0.95],                                                  // 葉長
+  trunk: { r: [0.03, 0.03], taper: 1, bend: 0, segs: 1, sides: [0, 0], lean: 0, col: [0.55, 0.52, 0.36], top: 0.02 },
+  levels: [],
+  leaf: { kind: 'tuft', n: [64, 80], len: [0.7, 1.0], w: 0.026, rise: [20, 80], droop: 0.8, col: [0.55, 0.57, 0.42], tip: [0.70, 0.66, 0.48], vary: 0.12,
+          stalk: { n: [2, 6], h: [1.5, 2.0], col: [0.70, 0.63, 0.42], seed: [0.80, 0.72, 0.50] } },
+  place: { listed: true, spacing: 5, alt: [5, 30, 1600, 2000], slopeMax: 0.7, mats: { 11: 1, 12: 0.3 }, dens: 0.4, forest: -0.9, clump: 30, patch: [400, 0.5], scale: [0.8, 1.25], shell: 0, view: 220, sink: 0.08 },
+  variants: 3
+};
+
 /** 有種子的亂數（mulberry32）：⇒ 回一個函式，每叫一次回 [0, 1)。 */
 function treeRng(seed) {
   var a = seed >>> 0;
@@ -583,6 +664,13 @@ function treeBlob(M, c, ax, r, col, sw) {
   for (var f = 0; f < TREE_ICO.F.length; f++) M.I.push(base + TREE_ICO.F[f]);
 }
 /** 一片三角形（兩面都畫；法線朝上那一面、再往上偏 up ⇒ 薄葉不會一面全黑）。 */
+/** 葉柄：從莖頂裡面（c 往下 0.15 m）沿葉軸 P 接到第 t 成那一點的細管（三邊）。
+ *  ⛔ 規則（Tim 2026-11-12「葉子目前跟樹本身分離(希望接上去 可以重疊但不要飄在空中)」「之後類似種類的植物也套用這個規則」）：
+ *    從莖頂一圈長出來的葉（frond 羽狀葉、paddle 寬葉、之後新的同類）一定要跟莖接在一起 —— 可以重疊、不准浮空。
+ *    葉片若從葉軸的某一成才開始長（前面寬度 0 ⇒ 什麼都不畫），那一截就要畫成葉柄；新的葉型寫好之後近看莖頂一次（細、低模都看）。 */
+function treePetiole(M, c, P, t, r, col) {
+  treeTube(M, [[c[0], c[1] - 0.15, c[2]], P[0], treeAt(P, t)], r, r * 0.65, 3, [col[0] * 0.85, col[1] * 0.85, col[2] * 0.85], 1, 0, null);
+}
 function treeTri(M, a, b, c, col, sw, up) {
   var n = treeNorm(treeCross([b[0] - a[0], b[1] - a[1], b[2] - a[2]], [c[0] - a[0], c[1] - a[1], c[2] - a[2]]));
   if (n[1] < 0) n = [-n[0], -n[1], -n[2]];
@@ -646,6 +734,7 @@ var TREE_LEAF = {
       var wid = function (t) { return t < 0.12 ? 0 : W * Math.pow(Math.sin(Math.PI * Math.min(1, (t - 0.12) / 0.86)), 0.55); };
       var edge = function (t, sg, ext) { var q = treeAt(P, Math.min(1, t)), w = wid(t) * ext; return [q[0] + side[0] * w * sg, q[1] - w * Lf.hang, q[2] + side[2] * w * sg]; };
       if (lod === 0) {
+        treePetiole(M, c, P, 0.14, 0.05 * L / 4.3, col);                  // 小葉從葉軸 12% 才開始長 ⇒ 前面那一截補一根葉柄（低模的帶子本來就從葉軸起點畫 ⇒ 不用）
         for (var h2 = 0; h2 < segs * 2; h2++) {
           var t0 = h2 / (segs * 2), t1 = (h2 + 1) / (segs * 2), tm = Math.min(1, t1 + 0.6 / segs); if (wid(t1) <= 0) continue;
           var A = treeAt(P, t0), B = treeAt(P, t1), swA = 0.4 + 0.6 * t0, swX = 0.4 + 0.6 * tm;
@@ -710,6 +799,7 @@ var TREE_LEAF = {
       var side = treeNorm(treeCross([Math.cos(az), 0, Math.sin(az)], [0, 1, 0])), W = Lf.w * L * (dead ? 0.6 : 1);
       var wid = function (t) { return t <= 0.15 ? 0 : W * Math.pow(Math.sin(Math.PI * Math.min(1, (t - 0.15) / 0.85)), 0.5); };
       var edge = function (t, sg) { var q = treeAt(P, Math.min(1, t)), w = wid(t); return [q[0] + side[0] * w * sg, q[1] - w * Lf.hang, q[2] + side[2] * w * sg]; };
+      if (wid(1 / segs) <= 0) treePetiole(M, c, P, 0.17, 0.035 * L / 2.6, col);   // 葉片從中肋 15% 才開始 ⇒ 第一段兩頭都 0 ⇒ 跳過了 ⇒ 補葉柄（細的 8 段會跳、低模 4 段不會）
       for (s = 0; s < segs; s++) {
         var a0 = s / segs, a1 = (s + 1) / segs, C0 = P[s], C1 = P[s + 1], sw0 = 0.3 + 0.7 * a0, sw1 = 0.3 + 0.7 * a1; if (wid(a1) <= 0 && wid(a0) <= 0) continue;
         [1, -1].forEach(function (sg) {
