@@ -260,8 +260,12 @@ function chartInfo() {
 //   淺水、讓船照舊接管（54_helm.js helmTakeover）；剩 DOCK_SLOW 以內減速；離終點 CNAV_ARR 以內 ⇒ 拋錨（拋錨模式）、標記收掉。
 // · 規則（Tim 的第 2、3 題）：導航 ＝ 自動航行。打舵 ⇒ 照舊換手動（71_input.js doAct）⇒ 路線不管了、標記留著；手動、拋錨 ⇒ 換回自動 ⇒ 從現在的位置重要一條路去標記點。
 // · 點到陸地、太淺、開不到 ⇒ 外面那一頁的尋路回 snapped／cut（開到最近開得到的地方）⇒ 說原因（chartWhy）。
-var CNAV = { to: null, pts: null, end: null, seq: 0, ask: 0, arr: false, sail: null, why: '', info: null, el: null, said: false };
+//   太淺 ⇒ 外面那一頁要帶 trim（Blocksail globe.html legOptBattle）：⛔ 沒帶 ⇒ 淺水在 legplan 只是軟擋，路線直接開進淺水、不說原因（2026-11-13 托爾圖加量到：一路穿過 0.9 m）。
+// · 卡住（CNAV_STUCK_T 秒走不出 CNAV_STUCK_M 公尺的圈：頂在棧橋上、在頂風轉不過來）⇒ 換手動、說原因、標記留著 —— 同打舵那一條：駛離之後開自動航行 ⇒ 從那裡重要一條路。
+//   ⛔ 沒有這一條 ⇒ 2026-11-13 托爾圖加出港往頂風的方向導航：繞開頂風時頂到棧橋（finger），模擬 140 秒動不到 5 m，畫面一直寫「導航中」。
+var CNAV = { to: null, pts: null, end: null, seq: 0, ask: 0, arr: false, sail: null, why: '', info: null, el: null, said: false, mv: null };   // mv：卡住偵測的那一圈（{ t: SIMT, x, z }）
 var CNAV_ARR = 40, CNAV_HMIN = 150, CNAV_K = Math.tan(0.45), CNAV_WAIT = 15000, CNAV_SNAP = 150;   // 到了（離終點幾 m）、鏡頭最低（m）、垂直視角一半的 tan、等路線最多幾毫秒、終點離標記幾 m 以上才說原因
+var CNAV_STUCK_T = 60, CNAV_STUCK_M = 25;                                  // 卡住：模擬幾秒內離那一圈的中心不到幾公尺（照常開 2 m/s 以上 ⇒ 60 秒 120 m；頂風轉過來 helmIrons 幾秒內就順風繞開）
 /** 這一頁有沒有海圖模式（檔頭）。 */
 function chartNavOk() { return !!(RUNNING && BED && BED.host && BED.A && modeRule('chart') && shellCall('chartNav')); }
 function chartNavView() { return !!(CAM.chart && !CAM.chart.out); }
@@ -299,7 +303,7 @@ function chartGo(to) {
 /** 跟外面那一頁要一條路：從我艦現在的位置到標記（seq 只收最新那一次的回覆）。等的時候路線先拿掉 ⇒ 照現在的船頭開。 */
 function chartAsk() {
   var me = SHIPS[PLAYER_I]; if (!me || !CNAV.to) return;
-  CNAV.seq++; CNAV.ask = performance.now(); CNAV.pts = CNAV.end = null;
+  CNAV.seq++; CNAV.ask = performance.now(); CNAV.pts = CNAV.end = CNAV.mv = null;
   BED.host.postMessage({ bsmap: 'need', what: 'leg', seq: CNAV.seq, from: [BED.ax + me.px, BED.az + me.pz], to: CNAV.to.slice() }, '*');
 }
 /** 外面那一頁回的路線（08_seabed.js bedHostMsg 'leg'）：{ seq, ok, pts（海域的往東、往南 m）, snapped, cut, km, need, why } */
@@ -338,6 +342,14 @@ function chartNavFrame() {
   if (CNAV.arr) { CNAV.to = CNAV.pts = CNAV.end = null; CNAV.arr = false; if (SAIL === 'auto') setSailMode('off'); note(me, '到了 —— 拋錨'); CNAV.sail = SAIL; return; }
   if (SAIL === 'auto' && CNAV.sail !== 'auto') chartAsk();               // 導航再開（手動、拋錨 ⇒ 自動）：從現在的位置重找一條去標記點
   CNAV.sail = SAIL;
+  if (SAIL === 'auto' && CNAV.pts && !CNAV.ask) {                       // 卡住偵測：走出那一圈 ⇒ 換一圈；在圈裡待滿 CNAV_STUCK_T 秒 ⇒ 換手動（標記留著）
+    var M = CNAV.mv;
+    if (!M || Math.hypot(me.px - M.x, me.pz - M.z) > CNAV_STUCK_M) CNAV.mv = { t: SIMT, x: me.px, z: me.pz };
+    else if (SIMT - M.t > CNAV_STUCK_T) {
+      CNAV.mv = null; setSailMode('manual'); CNAV.sail = SAIL;
+      CNAV.why = '卡住了（' + CNAV_STUCK_T + ' 秒走不到 ' + CNAV_STUCK_M + ' m）—— 換手動；駛離之後開自動航行會重找一條路'; note(me, CNAV.why, true);
+    }
+  } else CNAV.mv = null;
   if (CNAV.ask && performance.now() - CNAV.ask > CNAV_WAIT) { CNAV.ask = 0; CNAV.why = '開不到那裡：航線算太久'; note(me, CNAV.why, true); CNAV.to = null; }
 }
 /** 畫面上的路線與標記（每一格；61_hud.js hudFrame）：只在海圖鏡頭拉上去之後畫在一張蓋在場景上的透明畫布（世界 y＝0 投到畫面）。 */

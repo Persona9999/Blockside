@@ -67,4 +67,22 @@ assert.equal(S().info.off, 250); assert.ok(/陸地/.test(S().why) && /250 m/.tes
 ctx.chartGo([900, 2000]); ctx.chartLegGot({ seq: 4, ok: false, why: '找不到航線' });
 assert.equal(S().to, null); assert.ok(/找不到航線/.test(S().why));
 
-console.log(JSON.stringify({ shellGate: 1, ask: sent.length, rudderToManual: 1, markerKept: 1, resumeReplans: 1, staleIgnored: 1, arriveAnchors: 1, snapWhy: S().why ? 1 : 0 }));
+// ⑥ 點到淺水（4 m，這艘要 10.5 m）⇒ 外面那一頁帶 trim 回 cut、停在淺水外 300 m ⇒ 說「太淺」
+const hg = ctx.bedHgt; ctx.bedHgt = () => -4;
+ctx.chartGo([1000, 1000]); ctx.chartLegGot({ seq: 5, ok: true, pts: [[1000, 2000], [1000, 1300]], cut: true, need: 10.5 });
+assert.ok(/太淺（約 4\.0 m，這艘要 10\.5 m）/.test(S().why) && /300 m/.test(S().why), S().why);
+ctx.bedHgt = hg;
+
+// ⑦ 卡住：導航中 60 秒（模擬）待在 25 m 的圈裡 ⇒ 換手動、說原因、標記留著；走出圈 ⇒ 重新計時；駛離之後開自動航行 ⇒ 從那裡重要一條路
+ship.px = 0; ship.pz = 0; ctx.SIMT = 100; const seq0 = S().seq;
+ctx.chartGo([1000, 400]); ctx.chartLegGot({ seq: seq0 + 1, ok: true, pts: [[1000, 2000], [1000, 400]], need: 10.5 });
+ctx.chartNavFrame(); assert.deepEqual(S().mv, { t: 100, x: 0, z: 0 });
+ctx.SIMT = 150; ship.pz = -30; ctx.chartNavFrame(); assert.equal(S().mv.t, 150, 'left the circle ⇒ new circle');
+ctx.SIMT = 205; ship.pz = -40; ctx.chartNavFrame(); assert.equal(sail(), 'auto', '55 s inside 25 m ⇒ not yet');
+ctx.SIMT = 211; ship.pz = -45; ctx.chartNavFrame();
+assert.equal(sail(), 'manual'); assert.deepEqual(S().to, [1000, 400], 'marker kept'); assert.ok(/卡住了/.test(S().why), S().why); assert.ok(notes.some(t => /卡住了/.test(t)));
+ctx.SIMT = 400; ctx.chartNavFrame(); assert.equal(sail(), 'manual', 'manual never trips the stuck check');
+ship.px = 200; ship.pz = -100; ctx.sailToggle(); ctx.chartNavFrame();
+assert.equal(sail(), 'auto'); assert.equal(sent[sent.length - 1].seq, seq0 + 2); assert.deepEqual(sent[sent.length - 1].from, [1200, 1900]); assert.equal(S().mv, null, 'waiting for the route ⇒ no stuck timer');
+
+console.log(JSON.stringify({ shellGate: 1, ask: sent.length, rudderToManual: 1, markerKept: 1, resumeReplans: 1, staleIgnored: 1, arriveAnchors: 1, snapWhy: 1, shallowWhy: 1, stuckToManual: 1 }));
