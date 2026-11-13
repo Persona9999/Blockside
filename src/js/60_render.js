@@ -28,10 +28,13 @@ function geometry() {
 var SEA_NZ_P = 0.8;                                                   // 細漣漪每道的相位雜訊（圈；01_gl.js detail）：0 ＝ 以前的畫法（一格一格的菱形格子）；0.8 量過（TASK 單）
 var SEA_DBG = {};                                                   // 海面試驗場的覆寫（__game.seaDbg；det 漣漪道數、an 解析浪的法線倍率）—— 平常是空的
 var SEA_LV = [{ seg: 96, min: 1.2, det: 4 }, { seg: 160, min: 0.7, det: 8 }, { seg: 256, min: 0.4, det: 14 }];
-/** 海面網格（第 lv 檔）：同心圓，頂點 (dx, dz, 那一圈的間距)，離中心 4 km；中心每格跟著鏡頭（render 給 uC）。 */
+// 網格半徑 SEA_R：海圖模式拉到最高（63_chart.js chartNavHMax；高畫質約 5.3 km）畫面四角離中心約 4.8 km ⇒ 6 km 蓋得住；外面交給遠海（63_bed_gl.js bedSeaDraw）。
+//   ⛔ 4 km（2026-11-13 前）⇒ 海圖模式畫面四角是遠海的平色，交界一個明顯的圓（Tim 回報「圓形紋路」）。往外每一圈照比例變粗 ⇒ 4 → 6 km 只多 10～17 圈。
+var SEA_R = 6000;
+/** 海面網格（第 lv 檔）：同心圓，頂點 (dx, dz, 那一圈的間距)，離中心 SEA_R；中心每格跟著鏡頭（render 給 uC，記在 SEAG.c）。 */
 function seaGrid(lv) {
   var L = SEA_LV[lv], seg = L.seg, f = 2 * Math.PI / seg, R = [0], i, j;
-  while (R[R.length - 1] < 4000) { var r0 = R[R.length - 1]; R.push(r0 + Math.max(L.min, r0 * f)); }
+  while (R[R.length - 1] < SEA_R) { var r0 = R[R.length - 1]; R.push(r0 + Math.max(L.min, r0 * f)); }
   var V = new Float32Array(R.length * seg * 3), I = new Uint32Array((R.length - 1) * seg * 6), q = 0;
   for (i = 0; i < R.length; i++) for (j = 0; j < seg; j++) { var k = (i * seg + j) * 3, a = j * f; V[k] = Math.cos(a) * R[i]; V[k + 1] = Math.sin(a) * R[i]; V[k + 2] = Math.max(L.min, R[i] * f); }
   for (i = 0; i < R.length - 1; i++) for (j = 0; j < seg; j++) { var a0 = i * seg + j, a1 = i * seg + (j + 1) % seg; I[q++] = a0; I[q++] = a0 + seg; I[q++] = a1; I[q++] = a1; I[q++] = a0 + seg; I[q++] = a1 + seg; }
@@ -39,7 +42,7 @@ function seaGrid(lv) {
   gl.bindVertexArray(g.vao); gl.bindBuffer(gl.ARRAY_BUFFER, g.vb); gl.bufferData(gl.ARRAY_BUFFER, V, gl.STATIC_DRAW);
   gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 12, 0);
   gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, g.ib); gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, I, gl.STATIC_DRAW); gl.bindVertexArray(null);
-  g.n = I.length; g.lv = lv; g.snap = L.min * 2; g.verts = V.length / 3; SEAG = g;
+  g.n = I.length; g.lv = lv; g.snap = L.min * 2; g.verts = V.length / 3; g.rIn = R[R.length - 1] * Math.cos(Math.PI / seg); g.c = g.c || [0, 0]; SEAG = g;   // rIn：最外一圈（多邊形）的內切圓半徑 ⇒ 遠海在這以內不畫
 }
 /** 船殼外形（原本的，不管被打掉多少）：每個 (x, z) 最外那一格離中線多遠（格）⇒ 海的著色器拿來判斷「在不在船艙裡」。
  *  這裡只算資料（T.hullHB、寬高）；上 GPU 是所有船型併成一個貼圖陣列（hullArr，畫的時候看到新的船型才重建）。 */
@@ -1027,8 +1030,8 @@ function mainWater(fr) {
   if (!SEAG || SEAG.lv !== GFX.sea) seaGrid(GFX.sea);
   gl.useProgram(P.water.prog); setCommon(P.water); gl.uniform1f(P.water.u.uDet, SEA_DBG.det !== undefined ? SEA_DBG.det : SEA_LV[GFX.sea].det); gl.uniform1f(P.water.u.uAn, SEA_DBG.an !== undefined ? SEA_DBG.an : 1);
   gl.uniform1f(P.water.u.uNzP, SEA_DBG.p !== undefined ? SEA_DBG.p : SEA_NZ_P);   // 打散重複：細漣漪每道的相位雜訊（01_gl.js detail）   // SEA_DBG：海面試驗場（src/tests/sea_lab.py，__game.seaDbg）才給；平常 {} ⇒ 照畫質
-  if (SEA_DBG.c) gl.uniform2f(P.water.u.uC, SEA_DBG.c[0], SEA_DBG.c[1]); else   // 除錯：網格中心釘在世界的 c（只挪網格、鏡頭不動 ⇒ 量畫面跟不跟著網格變）
-  gl.uniform2f(P.water.u.uC, Math.round(CAM.eye[0] / SEAG.snap) * SEAG.snap, Math.round(CAM.eye[2] / SEAG.snap) * SEAG.snap);   // 中心照網格間距對齊 ⇒ 近處的頂點不在浪上滑動
+  SEAG.c = SEA_DBG.c ? SEA_DBG.c.slice() : [Math.round(CAM.eye[0] / SEAG.snap) * SEAG.snap, Math.round(CAM.eye[2] / SEAG.snap) * SEAG.snap];   // 除錯：網格中心釘在世界的 c（只挪網格、鏡頭不動 ⇒ 量畫面跟不跟著網格變）
+  gl.uniform2f(P.water.u.uC, SEAG.c[0], SEAG.c[1]);   // 中心照網格間距對齊 ⇒ 近處的頂點不在浪上滑動；SEAG.c 給遠海（63_bed_gl.js bedSeaDraw：網格蓋得到的地方不畫）
   gl.uniform1f(P.water.u.uReflOn, RT.R ? 1 : 0); gl.uniform1f(P.water.u.uRefr, GFX.refr); gl.uniform2f(P.water.u.uView, w, h);
   gl.uniform1f(P.water.u.uRefrD, BED ? 1600 : 500); gl.uniform1f(P.water.u.uRefrK, BED ? 0.12 : 0.3);
   gl.uniform1f(P.water.u.uEdge, SEA_DBG.edge !== undefined ? SEA_DBG.edge : SEA_EDGE_ON);   // 岸線照像素（01_gl.js shoreW）

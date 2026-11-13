@@ -259,6 +259,7 @@ function chartInfo() {
 //   ⇒ CNAV.pts（世界 x、z）。我艦照路線開（31_sailing.js：自動航行的那一支、排在指揮官的命令前面；chartHelm 照往來船的 trafficAhead 往前看 300 m），
 //   淺水、讓船照舊接管（54_helm.js helmTakeover）；剩 DOCK_SLOW 以內減速；離終點 CNAV_ARR 以內 ⇒ 拋錨（拋錨模式）、標記收掉。
 // · 規則（Tim 的第 2、3 題）：導航 ＝ 自動航行。打舵 ⇒ 照舊換手動（71_input.js doAct）⇒ 路線不管了、標記留著；手動、拋錨 ⇒ 換回自動 ⇒ 從現在的位置重要一條路去標記點。
+// · 只有航海開得起來（玩法規則 chartNav，04_modes.js）：⚔ 交戰點小地圖不開；開著的時候換進交戰 ⇒ 降回航海鏡頭（Tim 2026-11-13「自動降回」）。導航不收（同切回航海鏡頭）。
 // · 點到陸地、太淺、開不到 ⇒ 外面那一頁的尋路回 snapped／cut（開到最近開得到的地方）⇒ 說原因（chartWhy）。
 //   太淺 ⇒ 外面那一頁要帶 trim（Blocksail globe.html legOptBattle）：⛔ 沒帶 ⇒ 淺水在 legplan 只是軟擋，路線直接開進淺水、不說原因（2026-11-13 托爾圖加量到：一路穿過 0.9 m）。
 // · 卡住（CNAV_STUCK_T 秒走不出 CNAV_STUCK_M 公尺的圈：頂在棧橋上、在頂風轉不過來）⇒ 換手動、說原因、標記留著 —— 同打舵那一條：駛離之後開自動航行 ⇒ 從那裡重要一條路。
@@ -280,7 +281,7 @@ function chartNavHMax() { var asp = Math.max(1, cv.clientWidth / Math.max(1, cv.
 /** 開／關海圖模式（點小地圖；__game.chartNav({view})）。 */
 function chartMode(on) {
   if (!on) { if (CAM.chart) camChartSet('out'); return false; }
-  if (!chartNavOk() || FP.on || CAM.tr) return false;
+  if (!chartNavOk() || !modeRule('chartNav') || FP.on || CAM.tr) return false;   // chartNav：只有航海（04_modes.js；⚔ 交戰點小地圖不開）
   var asp = cv.clientWidth / Math.max(1, cv.clientHeight), R = CHART_R[CHART.zoom] || chartNavR();
   camChartSet({ H: clamp(R / (CNAV_K * Math.min(1, asp)), CNAV_HMIN, chartNavHMax()), pan: [0, 0] });
   if (!CNAV.said) { CNAV.said = true; note(SHIPS[PLAYER_I], '海圖：點海面設目的地（自動航行開過去）；拖曳平移、滾輪縮放；再點小地圖回航海'); }
@@ -335,6 +336,9 @@ function chartHelm(sh) {
 }
 /** 每一格（控制器的 frame）：不該開著的海圖鏡頭關掉；到了 ⇒ 拋錨；導航再開 ⇒ 重要路線；等太久 ⇒ 放棄。 */
 function chartNavFrame() {
+  if (CAM.chart && !CAM.chart.out && chartNavOk() && !modeRule('chartNav')) {   // 換進交戰（88_modeswitch.js fightTick）⇒ 降回航海鏡頭（同再點一次小地圖：0.6 秒）；導航照開（Tim 2026-11-13「自動降回」）
+    camChartSet('out'); if (SHIPS[PLAYER_I]) note(SHIPS[PLAYER_I], '交戰 —— 海圖降回航海鏡頭' + (CNAV.to ? '（導航照開）' : ''));
+  }
   if (CAM.chart && (!chartNavOk() || FP.on || CAM.tr)) camChartSet(null);
   if (!CNAV.to) { CNAV.sail = SAIL; return; }
   var me = SHIPS[PLAYER_I];

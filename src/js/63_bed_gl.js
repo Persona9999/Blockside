@@ -1040,8 +1040,8 @@ function bedWaterDraw() {
   gl.bindVertexArray(null); gl.disable(gl.POLYGON_OFFSET_FILL); gl.polygonOffset(0, 0); gl.depthMask(true); if (cf) gl.enable(gl.CULL_FACE);
 }
 // 遠海（轉場拉高時；Tim 2026-10-19：「海面問題可以額外貼一張圖嗎」「拉進後就隱藏這張海面色的填充圖」）：
-//   海面網格只有 4 km 半徑、深海塊沒有網格 ⇒ 從 10 km 往下看是中間一個圓、外面空的。⇒ 海之後畫一大片平面（鏡頭正下方 ±40 km、海面下 0.5 m），
-//   顏色照海從高處看的顏色＋同一套霧：網格以內海面在它前面（照常畫，看得到海底），網格以外它蓋掉水下的東西（海底、空的），陸地照樣在它上面。
+//   海面網格只有 6 km 半徑（60_render.js SEA_R）、深海塊沒有網格 ⇒ 從 10 km 往下看是中間一個圓、外面空的。⇒ 海之後畫一大片平面（鏡頭正下方 ±40 km、海面下 0.5 m），
+//   顏色照海從高處看的顏色＋同一套霧：網格以內不畫（照網格的中心與半徑丟掉，不靠深度 —— 見下面的著色器），網格以外它蓋掉水下的東西（海底、空的），陸地照樣在它上面。
 //   只在鏡頭高於 BEDSEA_H（3 km）畫：3 km 以下畫面四角都在網格裡（16:9 ⇒ 0.99 × 高度），本來就被蓋住 ⇒ 關掉不會跳。平常的海戰鏡頭不會到這麼高。
 var BEDSEA = { prog: null, vao: null, u: null, col: [0.11, 0.25, 0.31] }, BEDSEA_H = 3000;
 function bedSeaDraw() {
@@ -1050,15 +1050,20 @@ function bedSeaDraw() {
   if (!S.prog) {
     S.prog = VK.compile(gl,
       '#version 300 es\nlayout(location=0) in vec2 aP; uniform mat4 uVP; uniform vec3 uEye; out vec3 vW; void main(){ vW=vec3(uEye.x+aP.x*40000.0,-0.5,uEye.z+aP.y*40000.0); gl_Position=uVP*vec4(vW,1.0); }\n',
-      '#version 300 es\nprecision highp float; in vec3 vW; uniform vec3 uEye,uFog,uCol; uniform float uFogD; out vec4 o;\n' + BED_DRY_GLSL +   // 低於海平面的乾地照樣丟掉（bedDryU）
-      'void main(){ if(bedDry(vW.xz)) discard; float fd=length(vW-uEye); o=vec4(mix(uCol,uFog,1.0-exp(-fd*uFogD)),1.0); }\n');
+      '#version 300 es\nprecision highp float; in vec3 vW; uniform vec3 uEye,uFog,uCol,uIn; uniform float uFogD; out vec4 o;\n' + BED_DRY_GLSL +   // 低於海平面的乾地照樣丟掉（bedDryU）
+      // uIn ＝ 海面網格的中心與內切圓半徑（60_render.js SEAG.c、rIn）：網格蓋得到的地方不畫（⛔ 以前照深度跟網格比 ⇒ 鏡頭 5 km 高時深度只分得出約 0.3 m，
+      //   跟 0.5 m 下的這一片一列一列打架成鋸齒橫紋、浪谷低過 −0.5 m 的地方從底下透上來成菱形亮斑 —— Tim 2026-11-13 海圖模式回報）；抖色 ⇒ 霧的漸層不成一圈一圈的色階
+      'void main(){ if(length(vW.xz-uIn.xy)<uIn.z) discard; if(bedDry(vW.xz)) discard; float fd=length(vW-uEye); o=vec4(mix(uCol,uFog,1.0-exp(-fd*uFogD))+(fract(52.9829189*fract(dot(gl_FragCoord.xy,vec2(0.06711056,0.00583715))))-0.5)/255.0,1.0); }\n');
     S.vao = gl.createVertexArray(); var vb = gl.createBuffer();
     gl.bindVertexArray(S.vao); gl.bindBuffer(gl.ARRAY_BUFFER, vb); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, 1, 1, -1, -1, 1, 1, -1, 1]), gl.STATIC_DRAW);
     gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0); gl.bindVertexArray(null);
   }
   var cf = gl.isEnabled(gl.CULL_FACE); gl.disable(gl.BLEND); gl.disable(gl.CULL_FACE);
   gl.useProgram(S.prog.prog); setCommon(S.prog); gl.uniform3fv(S.prog.u.uCol, S.col); bedDryU(S.prog.u);
+  gl.uniform3f(S.prog.u.uIn, SEAG ? SEAG.c[0] : 0, SEAG ? SEAG.c[1] : 0, SEAG ? SEAG.rIn - 1 : -1);   // 海面網格蓋得到的地方不畫（網格這一格還沒建 ⇒ 全畫）
+  gl.depthFunc(gl.LESS);                                                 // 剩下網格外緣那 1 m 的重疊：跟網格同深度時讓網格（⛔ LEQUAL ⇒ 同深度時遠海蓋上去）
   gl.bindVertexArray(S.vao); gl.drawArrays(gl.TRIANGLES, 0, 6); gl.bindVertexArray(null);
+  gl.depthFunc(gl.LEQUAL);                                               // 這一趟的其他畫法照 LEQUAL（60_render.js abyssDraw 收尾設的）
   if (cf) gl.enable(gl.CULL_FACE);
 }
 /** 陰影的靜態那一層（60_render.js csmStatic；PASS.vp 已經換成那一段）：地形的網格只寫深度 —— 細的、沒有細的才畫遠景塊，照陰影那一層的範圍（PL）剔除。⇒ 畫了幾塊。 */

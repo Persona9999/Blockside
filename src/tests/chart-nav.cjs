@@ -12,11 +12,14 @@ const ctx = {
   BED: { host: { postMessage: m => sent.push(m) }, A: { chunk: 512, y: [0, 19] }, nx: 20, ax: 1000, az: 2000, win: null },
   CAM: { chart: null }, FP: { on: false }, HUDN: 0, CHART: { zoom: 2, need: 6.5 }, CHART_R: [500, 1000, 1500, 2500, 4000, 7000, 0],
   cv: { clientWidth: 1600, clientHeight: 900 }, TRF_LOOK_M: 300, DOCK_SLOW: 200, DOCK_VMIN: 0.7, DOCK_VMAX: 3.2,
-  modeRule: k => k === 'chart', anchorsOf: () => ({ noAnchor: false, single: false }), anchorWeighAll: () => '', ctrlAdd() {},
+  MODE: 'sail', RELOAD: 1, RELOAD_SANDBOX: 1, anchorsOf: () => ({ noAnchor: false, single: false }), anchorWeighAll: () => '', ctrlAdd() {},
   camChartSet: o => cams.push(o), bedCell: () => ({}), bedHgt: (x, z) => (x > 500 ? 12 : -30), bedWinR: () => 4, BED_WIN_SHIFT: 0.3
 };
 ctx.window.BS_SHELL = {};
 vm.createContext(ctx);
+const modes = source('04_modes.js');   // 真的玩法規則表（chartNav 只有航海）
+vm.runInContext(modes.slice(modes.indexOf('var MODE_BASE'), modes.indexOf('// ?mode=<玩法>')), ctx);
+vm.runInContext(modes.slice(modes.indexOf('function modeRule('), modes.indexOf('\n', modes.indexOf('function modeRule('))), ctx);
 const chart = source('63_chart.js'); vm.runInContext(chart.slice(chart.indexOf('var CNAV ='), chart.indexOf('/** 畫面上的路線與標記')), ctx);
 const traffic = source('58_traffic.js'); vm.runInContext(traffic.slice(traffic.indexOf('function trafficAhead('), traffic.indexOf('/** 放掉一艘的網格')), ctx);
 const input = source('71_input.js');
@@ -85,4 +88,15 @@ ctx.SIMT = 400; ctx.chartNavFrame(); assert.equal(sail(), 'manual', 'manual neve
 ship.px = 200; ship.pz = -100; ctx.sailToggle(); ctx.chartNavFrame();
 assert.equal(sail(), 'auto'); assert.equal(sent[sent.length - 1].seq, seq0 + 2); assert.deepEqual(sent[sent.length - 1].from, [1200, 1900]); assert.equal(S().mv, null, 'waiting for the route ⇒ no stuck timer');
 
-console.log(JSON.stringify({ shellGate: 1, ask: sent.length, rudderToManual: 1, markerKept: 1, resumeReplans: 1, staleIgnored: 1, arriveAnchors: 1, snapWhy: 1, shallowWhy: 1, stuckToManual: 1 }));
+// ⑧ 交戰（Tim 2026-11-13「自動降回」）：海圖開著、導航中換進 ⚔ 交戰 ⇒ 鏡頭降回（'out'）、說一聲、導航照開；交戰時點小地圖不開；回航海 ⇒ 開得起來
+ctx.CAM.chart = null; assert.equal(ctx.chartMode(true), true);
+ctx.CAM.chart = { H: 1000, out: false }; vm.runInContext("MODE = 'fight'", ctx); const nc = cams.length, nn = notes.length;
+ctx.chartNavFrame();
+assert.equal(cams[nc], 'out', 'fight ⇒ ease the chart camera down'); assert.ok(/交戰/.test(notes[nn]) && /導航照開/.test(notes[nn]), notes[nn]);
+assert.deepEqual(S().to, [1000, 400], 'navigation kept in fight'); assert.equal(sail(), 'auto');
+ctx.CAM.chart.out = true; ctx.chartNavFrame(); assert.equal(cams.length, nc + 1, 'no second out / no snap while easing');
+ctx.CAM.chart = null; assert.equal(ctx.chartMode(true), false, 'fight ⇒ minimap does not open the chart');
+vm.runInContext("MODE = 'town'", ctx); assert.equal(ctx.chartMode(true), false);
+vm.runInContext("MODE = 'sail'", ctx); assert.equal(ctx.chartMode(true), true);
+
+console.log(JSON.stringify({ shellGate: 1, ask: sent.length, rudderToManual: 1, markerKept: 1, resumeReplans: 1, staleIgnored: 1, arriveAnchors: 1, snapWhy: 1, shallowWhy: 1, stuckToManual: 1, fightDown: 1 }));

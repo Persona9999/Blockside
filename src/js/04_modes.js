@@ -20,6 +20,7 @@ var MODE_BASE = {
   fpLock: false,       // 固定第一人稱：🎥、Y 不能離開（81_fps.js fpBuildLock）
   build: false,        // 建造介面（82_build.js bldEnter）
   chart: false,        // 小地圖（海圖，63_chart.js；要有 ?map）
+  chartNav: false,     // 海圖模式的鏡頭（點小地圖拉到正上方、點海面導航；63_chart.js 檔尾，TASK-1272）：只有航海開得起來；換進沒有它的玩法（⚔ 交戰）⇒ 開著的自動降回航海鏡頭（Tim 2026-11-13「自動降回」），導航照開
   town: false,         // 城鎮的建築模式（87_townbuild.js：🔨、B 開關；要 ?map=@host 與 ?town=）
   ui: 'battle',        // 介面配置（61_layout.js UI_LAYOUT：哪些 HUD 區塊看得見；第一人稱另有一份、不看這一格）
   origin: false,       // 我艦開局停在原點（海圖的開戰位置 ＝ 外面給的起點），船頭照 ?hdg=（羅盤度數；沒給 ＝ 往北）；⛔ 不照開局距離退開（52_fleet.js spawnFleet）
@@ -34,7 +35,7 @@ var MODE_RULES = {
   // 建造、航海只給 Blocksail（Tim 2026-10-21「Blockside入口不顯示建造&航海(這兩個是給Blocksail使用的)」）：主選單不列、存檔不認，網址 ?mode=build／sail 照認
   build: { name: '🔨 建造', menu: false, fleet: 'first', judge: false, hint: false, stopOwn: true, battleKeys: false, fpLock: true, build: true },
   // 航海（Blocksail 地球儀的「⛵ 航海」，2026-10-19；Tim：「單船、沒有敵艦，其他跟戰鬥一樣」）：只有我艦、不判勝負、停在外面給的起點（城鎮的港口外）
-  sail: { name: '⛵ 航海', menu: false, fleet: 'first', judge: false, hint: false, origin: true, chart: true, ui: 'sail' },
+  sail: { name: '⛵ 航海', menu: false, fleet: 'first', judge: false, hint: false, origin: true, chart: true, chartNav: true, ui: 'sail' },
   // 交戰（Blocksail TASK-1078；Tim 2026-10-28「航海模式遇到海盜或是對商船開火 是否可以自動切換到戰鬥模式(不能回大地圖) 要戰鬥結束才能脫離」）：
   //   只從航海換進來（88_modeswitch.js fightTick：有一艘對我艦敵對）、打完或甩開才換回去 ⇒ 開局才讀的規則全照航海（換玩法不用重開）；網址不認
   fight: { name: '⚔ 交戰', menu: false, url: false, fleet: 'first', judge: false, hint: false, origin: true, chart: true, ui: 'fight', locked: true },
