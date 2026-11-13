@@ -51,6 +51,42 @@ function camUpdate(dt) {
   if (CAM.trSave) { CAM.eye = CAM.trSave[0]; CAM.look = CAM.trSave[1]; CAM.trSave = null; }
   camMove(dt);
   if (CAM.tr) camTrans(dt);
+  else if (CAM.chart) camChart(dt);
+}
+// 海圖模式（TASK-1272；63_chart.js chartMode）：同一個 3D 場景、鏡頭拉到正上方往下看、北朝上，中心 ＝ 我艦 ＋ 平移（CAM.chart.pan，往東、往南公尺）。
+//   跟轉場同一個做法：只換畫面用的眼睛與矩陣，平常的鏡頭照樣每格算（trSave 下一格換回來）⇒ 切回航海就是切過去之前的樣子。
+//   CAM.chart ＝ { H（要的高度 m）, h（現在的高度，往 H 慢慢靠）, pan, s（0 ⇒ 1 拉上去的進度）, out（往回降；降完 CAM.chart ＝ null）}。
+var CAM_CHART_T = 0.6;                                                    // 拉上去／降回來幾秒
+function camChart(dt) {
+  var C = CAM.chart, me = SHIPS[PLAYER_I];
+  C.s = Math.max(0, Math.min(1, C.s + (C.out ? -1 : 1) * Math.min(dt, 0.05) / CAM_CHART_T));
+  if (C.out && C.s <= 0) { CAM.chart = null; CAM.fogK = 1; return; }
+  C.h = C.h ? C.h + (C.H - C.h) * (1 - Math.exp(-Math.min(dt, 0.05) * 10)) : C.H;
+  var s = camTrEase(C.s), c = [(me ? me.px : 0) + C.pan[0], 0, (me ? me.pz : 0) + C.pan[1]];
+  var eN = CAM.eye, lN = CAM.look || c, h0 = Math.max(eN[1], 5), H = C.h;
+  var eye = [eN[0] + (c[0] - eN[0]) * s, h0 * Math.pow(H / h0, s), eN[2] + (c[2] - eN[2]) * s];
+  var look = [lN[0] + (c[0] - lN[0]) * s, lN[1] * (1 - s), lN[2] + (c[2] - lN[2]) * s];
+  var fx = lN[0] - eN[0], fz = lN[2] - eN[2], aF = Math.hypot(fx, fz) > 1e-3 ? Math.atan2(fx, -fz) : 0, aU = aF * (1 - s);   // 畫面上方：平常的鏡頭朝的方向 ⇄ 北（同 camTrans）
+  var up = [Math.sin(aU) * s, 1 - s, -Math.cos(aU) * s], uL = Math.hypot(up[0], up[1], up[2]); up[0] /= uL; up[1] /= uL; up[2] /= uL;
+  if (s > 0.999) { eye[0] = c[0]; eye[2] = c[2] + 0.01; }
+  CAM.fogK = 1 - s * (1 - Math.min(1, 0.3 / (0.0016 * eye[1])));        // 拉高時霧淡掉（同 camTrans）
+  CAM.trSave = [CAM.eye, CAM.look]; CAM.eye = eye; CAM.look = look;
+  var proj = M4.persp(0.9, CAM.w / CAM.h, Math.max(0.5, eye[1] / 1000), Math.max(5000, eye[1] * 1.5));   // 近平面跟著高度退（⛔ 0.5 配十幾公里的遠平面 ⇒ 深度不夠分）
+  CAM.vp = M4.mul(proj, M4.lookAt(eye, look, up)); CAM.inv = M4.inv(CAM.vp);
+}
+/** 開／關／改海圖鏡頭（63_chart.js）：o ＝ { H } 開（或改高度）；'out' 慢慢降回去；null 立刻關（換模式、轉場、第一人稱）。 */
+function camChartSet(o) {
+  if (o === null) { CAM.chart = null; CAM.fogK = 1; return; }
+  if (o === 'out') { if (CAM.chart) CAM.chart.out = true; return; }
+  if (!CAM.chart) CAM.chart = { H: o.H, h: 0, pan: [0, 0], s: 0, out: false };
+  else { CAM.chart.out = false; if (o.H) CAM.chart.H = o.H; }
+  if (o.pan) CAM.chart.pan = o.pan.slice();
+}
+/** 海圖鏡頭平移（拖曳；px）：照現在的高度換成公尺 ⇒ 手指拖哪、地圖跟到哪。 */
+function camChartPan(dx, dy) {
+  var C = CAM.chart; if (!C) return;
+  var m = 2 * C.h * Math.tan(0.45) / Math.max(1, cv.clientHeight);       // 一個 px 幾公尺（垂直視角 0.9）
+  C.pan[0] -= dx * m; C.pan[1] -= dy * m;
 }
 function camTrans(dt) {
   var T = CAM.tr, me = SHIPS[PLAYER_I];

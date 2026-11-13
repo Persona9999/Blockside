@@ -35,6 +35,15 @@ ctrlAdd({ name: 'orbit', pri: 0, on: function () { return true; },
   wheel: function (dy) { camSet({ dist: clamp(CAM.dist * Math.pow(1.0015, dy), 12, 900) }); return true; },
   tap: function (x, y, btn) { if (btn === 0 && RUNNING) inPick(x, y); return true; }
 });
+// 海圖模式（63_chart.js 檔尾；TASK-1272）：海圖鏡頭開著 ⇒ 拖曳平移、滾輪／兩指縮放、點海面設目的地（吃掉海戰鏡頭的那幾樣）；每一格叫 chartNavFrame（到了拋錨、導航再開重要路線）。
+//   ⛔ 註冊要在這一支（CTRLS 在這裡建）—— 寫在 63_chart.js 會在 CTRLS 還沒有的時候就 push。
+ctrlAdd({ name: 'chart', pri: 15, on: chartNavView,
+  drag: function (dx, dy) { if (!chartNavView()) return false; camChartPan(dx, dy); return true; },
+  pinch: function (P, m, d) { if (!chartNavView()) return false; if (P.h0 == null) P.h0 = CAM.chart.H; camChartSet({ H: clamp(P.h0 * P.d / d, CNAV_HMIN, chartNavHMax()) }); return true; },
+  wheel: function (dy) { if (!chartNavView()) return false; camChartSet({ H: clamp(CAM.chart.H * Math.pow(1.0015, dy), CNAV_HMIN, chartNavHMax()) }); return true; },
+  tap: function (x, y, btn) { if (!chartNavView()) return false; if (btn === 0 && RUNNING) chartTap(x, y); return true; },
+  frame: chartNavFrame
+});
 // 第一人稱（81_fps.js）：鍵（走、跳、爬、跟隨…；fpKey 關著也收放開的鍵）、拖曳轉頭、抓住滑鼠；吃掉縮放、平移、點一下瞄準。
 ctrlAdd({ name: 'fp', pri: 20, on: function () { return FP.on; },
   key: function (k, down, e) { if (!fpKey(k, down)) return false; e.preventDefault(); return true; },

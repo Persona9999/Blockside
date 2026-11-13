@@ -282,6 +282,8 @@ if (DEBUG) window.__game = {
   inland: function (on) { if (on !== undefined) { BEDWAT.on = !!on; render(); } return BEDWAT.on; },
   river: function (x, z) { var r = bedWet(x, z), R = { n: BEDW.n, top: BEDW.top, low: BEDW.low, mouth: { src: BEDMOUTH.src, top: +BEDMOUTH.top.toFixed(2) } }; if (r) Object.assign(R, { m: +r.m.toFixed(3), s: +r.s.toFixed(2), fx: +r.fx.toFixed(3), fz: +r.fz.toFixed(3), sl: r.sl, lv: +seaLv(x, z).toFixed(2), bed: +bedHgt(x, z).toFixed(2) }); else if (x !== undefined && BED && BED.A) Object.assign(R, { lift: +bedLift(x, z).toFixed(2), lv: +seaLv(x, z).toFixed(2), bed: +bedHgt(x, z).toFixed(2) }); return R; },   // mouth：河口場幾個源頭、最高抬多少（63_bed_gl.js BEDMOUTH）；不在河裡 ⇒ lift ＝ 那一點的海面抬高   // 內陸水的模擬（08_seabed.js bedWet；TASK-0768）：那一點有幾成是河、河面、水流、坡度、水位、河床   // 內陸水與低於海平面的乾地的遮罩一起開關（63_bed_gl.js；同一格開／關對照畫面用）
   chart: function () { return chartInfo(); },                                  // 小地圖（63_chart.js）：開了沒、範圍、吃水門檻、底圖幾塊、畫面上的位置
+  // 海圖模式（63_chart.js；TASK-1272）：{ view: true/false } 開關、{ to: [往東, 往南] } 設目的地、{ tap: [x, y] } 點畫面；回 chartNavInfo()
+  chartNav: function (o) { o = o || {}; if (o.view != null) chartMode(!!o.view); if (o.to) chartGo(o.to); if (o.tap) chartTap(o.tap[0], o.tap[1]); return chartNavInfo(); },
   trkRec: function (op) { return trrInfo(op); },                             // 往來船的航跡記錄（58_trafficrec.js）：每艘的點、瞬移；'clear'／'on'／'off'／'show'／'hide'
   shipwin: function () { return shipWinStat(); },
   smoke: function () { return { near: SMK_NEAR, far: SMK_FAR, max: SMK_MAX, meal: smokeMeal(), realRule: SMK.realRule, stat: SMK.stat }; },   // 煙源表（78_funnel.js）：每一類範圍內幾根、冒了幾根（真的船的煙囪另計 real）                            // 船窗（63_shipwin.js）：每艘幾扇、哪幾扇亮著、這一格畫了幾扇／幾點

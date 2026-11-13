@@ -787,6 +787,7 @@ function hudFrame(dt) {
   stepMsgs(dt);
   if (ROOMS_DBG) roomLabels();                                                   // 空艙房的名字（36_rooms.js；?rooms=1）：每一格跟著鏡頭
   aimRingUi();                                                                   // 瞄準圈（UI 層）：每一格跟著鏡頭
+  chartNavDraw();                                                                // 海圖模式的路線與標記（63_chart.js）：每一格跟著鏡頭
   if (!SHIPS.length || (HUDN++ % 6)) return;
   var me = SHIPS[PLAYER_I];
   fleetHud(me);                                                                  // 上方：每艘一個圓形按鈕＋中間一艘的詳細資訊（TASK-0552）

@@ -92,6 +92,7 @@ function chartEl() {
   });
   b.appendChild(z);
   ['pointerdown', 'mousedown', 'touchstart', 'dblclick'].forEach(function (t) { b.addEventListener(t, function (e) { e.stopPropagation(); }, { passive: true }); });   // 點小地圖不算點海面（瞄準、轉鏡頭）
+  c.addEventListener('click', function (e) { e.stopPropagation(); if (chartNavView()) chartMode(false); else chartMode(true); });   // 海圖模式（檔尾；TASK-1272）：只有 chartNavOk 的頁開得起來，其他頁點了什麼都不做
   b.addEventListener('wheel', function (e) { e.preventDefault(); e.stopPropagation(); chartZoom(e.deltaY > 0 ? 1 : -1); }, { passive: false });
   $('stage').appendChild(b);
   CHART.cv = c; CHART.zb = z.children;
@@ -147,6 +148,11 @@ function chartDraw(me) {
     CHART.trail.forEach(function (p, i) { var q = P(BED.ax + p[0], BED.az + p[1]); if (i) g.lineTo(q[0], q[1]); else g.moveTo(q[0], q[1]); });
     var qn = P(BED.ax + me.px, BED.az + me.pz); g.lineTo(qn[0], qn[1]); g.stroke(); g.setLineDash([]);   // 接到現在的位置
   }
+  if (CNAV.pts) {                                                                                     // 海圖模式的路線（檔尾；TASK-1272）
+    g.strokeStyle = 'rgba(243,234,216,.95)'; g.lineWidth = 1.6; g.beginPath();
+    CNAV.pts.forEach(function (p, i) { var q = P(BED.ax + p[0], BED.az + p[1]); if (i) g.lineTo(q[0], q[1]); else g.moveTo(q[0], q[1]); }); g.stroke();
+  }
+  if (CNAV.to) { var tq = P(CNAV.to[0], CNAV.to[1]); g.strokeStyle = '#e8564a'; g.lineWidth = 2; chartX(g, tq, 4); }   // 標記
   var o = P(BED.ax, BED.az); g.font = '12px sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillStyle = '#f0c56a'; g.fillText('⚓', o[0], o[1]);   // 出發點 ＝ 開戰位置（世界原點；海域的原點對齊固定的格線之後不一定在這裡）
   var m = P(BED.ax + me.px, BED.az + me.pz), F = fwd(me.yaw), dx = F[0], dz = F[2], L = 7;           // 我艦：畫面右 ＝ 東、下 ＝ 南
   g.beginPath(); g.moveTo(m[0] + dx * L * 1.4, m[1] + dz * L * 1.4); g.lineTo(m[0] - dx * L + dz * L * 0.7, m[1] - dz * L - dx * L * 0.7); g.lineTo(m[0] - dx * L * 0.5, m[1] - dz * L * 0.5); g.lineTo(m[0] - dx * L - dz * L * 0.7, m[1] - dz * L + dx * L * 0.7); g.closePath();
@@ -240,4 +246,131 @@ function chartInfo() {
   var r = CHART.res || {}, ks = Object.keys(r), b = CHART.box && CHART.box.style.display !== 'none' ? CHART.cv.getBoundingClientRect() : null;
   return { on: !!b, zoom: CHART_R[CHART.zoom], need: +CHART.need.toFixed(2), fine: ks.filter(function (k) { return r[k] > 100; }).length, coarse: ks.filter(function (k) { return r[k] <= 100; }).length, trail: CHART.trail.length,
     box: b ? [Math.round(b.left), Math.round(b.top), Math.round(b.right), Math.round(b.bottom)] : null, view: [innerWidth, innerHeight] };
+}
+
+// ───────────────────────── 海圖模式（航海模式的變體；TASK-1272） ─────────────────────────
+// Tim 2026-11-11：「航海模式下點右下角的小地圖 會拉到很高的俯視角(大約是顯示小地圖全圖)」「然後這時可以點海面自動導航(相當於地球儀航行功能 只是維持在航海模式)」
+//   「然後再次點小地圖可以切回航海模式」「這個一樣是只在battle.html的功能」；五題：「照常跑」「可以繼續開(關閉導航就變回手動 開回導航會繼續開往標記點)」
+//   「一樣取消 參考目前航海模式」「可以縮放」「同一個3D場景拉高」；「海圖模式可以只加載遠景(粗略)地形(除了船附近地塊)」。
+// 只在嵌著的頁：被外面那一頁嵌著（?map=@host —— 路線要它的局部尋路）而且外殼掛了 BS_SHELL.chartNav（battle.html 的外殼才掛）⇒ Blockside 自己的 index.html 點小地圖什麼都不做。
+// · 鏡頭：03_camera.js camChart（同一個場景、正上方、北朝上、跟著我艦；拖曳平移、滾輪／兩指縮放）。開場的高度 ＝ 畫面短的那一邊剛好裝下小地圖現在那一級的範圍；
+//   最高 ＝ 畫面長的那一邊不超出海域的窗（窗外沒有地形 ⇒ 拉更高只會看到缺塊）。地形不另外載：細的照舊跟著船（08_seabed.js bedFocus），窗裡其他的本來就是遠景的粗塊（63_bed_gl.js BEDFAR）。
+// · 目的地：點海面（y＝0 平面）⇒ CNAV.to（海域的往東、往南公尺）⇒ 跟外面那一頁要路線（{bsmap:'need', what:'leg'}；Blocksail world/mapgen.js serve ⇒ legplan，同地球儀的局部尋路）
+//   ⇒ CNAV.pts（世界 x、z）。我艦照路線開（31_sailing.js：自動航行的那一支、排在指揮官的命令前面；chartHelm 照往來船的 trafficAhead 往前看 300 m），
+//   淺水、讓船照舊接管（54_helm.js helmTakeover）；剩 DOCK_SLOW 以內減速；離終點 CNAV_ARR 以內 ⇒ 拋錨（拋錨模式）、標記收掉。
+// · 規則（Tim 的第 2、3 題）：導航 ＝ 自動航行。打舵 ⇒ 照舊換手動（71_input.js doAct）⇒ 路線不管了、標記留著；手動、拋錨 ⇒ 換回自動 ⇒ 從現在的位置重要一條路去標記點。
+// · 點到陸地、太淺、開不到 ⇒ 外面那一頁的尋路回 snapped／cut（開到最近開得到的地方）⇒ 說原因（chartWhy）。
+var CNAV = { to: null, pts: null, end: null, seq: 0, ask: 0, arr: false, sail: null, why: '', info: null, el: null, said: false };
+var CNAV_ARR = 40, CNAV_HMIN = 150, CNAV_K = Math.tan(0.45), CNAV_WAIT = 15000, CNAV_SNAP = 150;   // 到了（離終點幾 m）、鏡頭最低（m）、垂直視角一半的 tan、等路線最多幾毫秒、終點離標記幾 m 以上才說原因
+/** 這一頁有沒有海圖模式（檔頭）。 */
+function chartNavOk() { return !!(RUNNING && BED && BED.host && BED.A && modeRule('chart') && shellCall('chartNav')); }
+function chartNavView() { return !!(CAM.chart && !CAM.chart.out); }
+/** 海域的窗的半徑（m；同 chartLvOk 的 m 塊 —— 窗換之前保證裝得下的那一圈）；沒有窗 ⇒ 整個海域的一半。 */
+function chartNavR() {
+  var A = BED.A;
+  if (!BED.win) return Math.max(BED.nx, A.y[1] - A.y[0] + 1) * A.chunk / 2;
+  var w = bedWinR(); return (w - Math.max(1, Math.round(w * BED_WIN_SHIFT))) * A.chunk;
+}
+/** 鏡頭最高：畫面長的那一邊（半寬 ＝ 高 × tan × 寬高比）不超出窗。 */
+function chartNavHMax() { var asp = Math.max(1, cv.clientWidth / Math.max(1, cv.clientHeight)); return Math.max(CNAV_HMIN * 2, chartNavR() / (CNAV_K * asp)); }
+/** 開／關海圖模式（點小地圖；__game.chartNav({view})）。 */
+function chartMode(on) {
+  if (!on) { if (CAM.chart) camChartSet('out'); return false; }
+  if (!chartNavOk() || FP.on || CAM.tr) return false;
+  var asp = cv.clientWidth / Math.max(1, cv.clientHeight), R = CHART_R[CHART.zoom] || chartNavR();
+  camChartSet({ H: clamp(R / (CNAV_K * Math.min(1, asp)), CNAV_HMIN, chartNavHMax()), pan: [0, 0] });
+  if (!CNAV.said) { CNAV.said = true; note(SHIPS[PLAYER_I], '海圖：點海面設目的地（自動航行開過去）；拖曳平移、滾輪縮放；再點小地圖回航海'); }
+  HUDN = 0; return true;
+}
+/** 點海面（畫面 px）⇒ 那一點（y＝0）設成目的地。 */
+function chartTap(x, y) {
+  var R = townRayOf(x, y), p = R[0], d = R[1]; if (!(d[1] < -1e-6)) return null;
+  var t = -p[1] / d[1], wx = p[0] + d[0] * t, wz = p[2] + d[2] * t;
+  return chartGo([BED.ax + wx, BED.az + wz]);
+}
+/** 設目的地（海域的往東、往南公尺）：要路線、換自動航行（拋錨中 ⇒ 先起錨）。 */
+function chartGo(to) {
+  var me = SHIPS[PLAYER_I]; if (!me || me.sunk || !BED || !BED.host) return null;
+  CNAV.to = [+to[0], +to[1]]; CNAV.arr = false; CNAV.why = ''; CNAV.info = null;
+  if (SAIL !== 'auto') { if (me.anc) anchorWeighAll(me); setSailMode('auto'); }
+  CNAV.sail = SAIL; chartAsk();
+  return CNAV.to;
+}
+/** 跟外面那一頁要一條路：從我艦現在的位置到標記（seq 只收最新那一次的回覆）。等的時候路線先拿掉 ⇒ 照現在的船頭開。 */
+function chartAsk() {
+  var me = SHIPS[PLAYER_I]; if (!me || !CNAV.to) return;
+  CNAV.seq++; CNAV.ask = performance.now(); CNAV.pts = CNAV.end = null;
+  BED.host.postMessage({ bsmap: 'need', what: 'leg', seq: CNAV.seq, from: [BED.ax + me.px, BED.az + me.pz], to: CNAV.to.slice() }, '*');
+}
+/** 外面那一頁回的路線（08_seabed.js bedHostMsg 'leg'）：{ seq, ok, pts（海域的往東、往南 m）, snapped, cut, km, need, why } */
+function chartLegGot(d) {
+  if (d.seq !== CNAV.seq || !CNAV.to) return;
+  var me = SHIPS[PLAYER_I], ms = Math.round(performance.now() - CNAV.ask); CNAV.ask = 0;
+  if (!d.ok || !d.pts || d.pts.length < 2) { CNAV.why = '開不到那裡：' + (d.why || '找不到航線'); note(me, CNAV.why, true); CNAV.to = null; CNAV.info = { ok: false, ms: ms }; return; }
+  CNAV.pts = d.pts.map(function (q) { return [q[0] - BED.ax, q[1] - BED.az]; });
+  var e = d.pts[d.pts.length - 1], off = Math.hypot(e[0] - CNAV.to[0], e[1] - CNAV.to[1]);
+  CNAV.end = CNAV.pts[CNAV.pts.length - 1];
+  CNAV.info = { ok: true, n: d.pts.length, km: d.km, snapped: !!d.snapped, cut: !!d.cut, off: Math.round(off), need: d.need, ms: ms };
+  if (off > CNAV_SNAP) { CNAV.why = chartWhy(CNAV.to, d.need) + ' —— 開到最近開得到的地方（離標記 ' + Math.round(off) + ' m）'; note(me, CNAV.why, true); }
+}
+/** 標記那一點為什麼開不到（照這一頁載著的海床；沒載到 ⇒ 不猜，只說開不到）。need：外面那一頁的尋路要多深（吃水 ＋ 餘裕）。 */
+function chartWhy(to, need) {
+  var x = to[0] - BED.ax, z = to[1] - BED.az, h = bedCell(x, z) ? bedHgt(x, z) : null, nd = need || CHART.need;
+  if (h === null) return '那裡開不到';
+  if (h > 0) return '那裡是陸地';
+  if (h > -nd) return '那裡太淺（約 ' + Math.max(0, -h).toFixed(1) + ' m，這艘要 ' + nd.toFixed(1) + ' m）';
+  return '那裡開不到（水道太窄、太淺，或被陸地擋住）';
+}
+/** 我艦照路線開（31_sailing.js 自動航行；只有 CNAV.pts 在的時候叫）：⇒ { yaw, v }；到了 ⇒ 標記 arr、交給 chartNavFrame 拋錨。 */
+function chartHelm(sh) {
+  if (SAIL !== 'auto' || CNAV.arr) return null;
+  var P = CNAV.pts, L = P[P.length - 1], left = Math.hypot(L[0] - sh.px, L[1] - sh.pz);
+  if (left < CNAV_ARR) { CNAV.arr = true; return null; }
+  var a = trafficAhead(sh, P), dx = a[0] - sh.px, dz = a[1] - sh.pz;
+  return { yaw: Math.atan2(-dz, dx), v: left < DOCK_SLOW ? DOCK_VMIN + (DOCK_VMAX - DOCK_VMIN) * left / DOCK_SLOW : Infinity };
+}
+/** 每一格（控制器的 frame）：不該開著的海圖鏡頭關掉；到了 ⇒ 拋錨；導航再開 ⇒ 重要路線；等太久 ⇒ 放棄。 */
+function chartNavFrame() {
+  if (CAM.chart && (!chartNavOk() || FP.on || CAM.tr)) camChartSet(null);
+  if (!CNAV.to) { CNAV.sail = SAIL; return; }
+  var me = SHIPS[PLAYER_I];
+  if (!RUNNING || !me || me.sunk || !modeRule('chart') || !BED || !BED.host) { CNAV.to = CNAV.pts = CNAV.end = null; CNAV.ask = 0; return; }   // 換模式（進城、停靠）、新的一場 ⇒ 標記收掉
+  if (CNAV.arr) { CNAV.to = CNAV.pts = CNAV.end = null; CNAV.arr = false; if (SAIL === 'auto') setSailMode('off'); note(me, '到了 —— 拋錨'); CNAV.sail = SAIL; return; }
+  if (SAIL === 'auto' && CNAV.sail !== 'auto') chartAsk();               // 導航再開（手動、拋錨 ⇒ 自動）：從現在的位置重找一條去標記點
+  CNAV.sail = SAIL;
+  if (CNAV.ask && performance.now() - CNAV.ask > CNAV_WAIT) { CNAV.ask = 0; CNAV.why = '開不到那裡：航線算太久'; note(me, CNAV.why, true); CNAV.to = null; }
+}
+/** 畫面上的路線與標記（每一格；61_hud.js hudFrame）：只在海圖鏡頭拉上去之後畫在一張蓋在場景上的透明畫布（世界 y＝0 投到畫面）。 */
+function chartNavDraw() {
+  var on = CAM.chart && !CAM.chart.out && CAM.chart.s > 0.7, c = CNAV.el;
+  if (!on) { if (c && c.style.display !== 'none') c.style.display = 'none'; return; }
+  if (!c) { c = CNAV.el = document.createElement('canvas'); c.id = 'chartNav'; c.style.cssText = 'position:absolute; inset:0; width:100%; height:100%; pointer-events:none; z-index:5;'; $('stage').appendChild(c); }
+  var W = cv.clientWidth, H = cv.clientHeight, dpr = Math.min(window.devicePixelRatio || 1, 2), q = CAM.vp;
+  if (c.style.display === 'none') c.style.display = 'block';
+  if (c.width !== Math.round(W * dpr) || c.height !== Math.round(H * dpr)) { c.width = Math.round(W * dpr); c.height = Math.round(H * dpr); }
+  var g = c.getContext('2d'); g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, W, H);
+  function S(x, z) { var w = q[3] * x + q[11] * z + q[15]; return w > 0.1 ? [((q[0] * x + q[8] * z + q[12]) / w + 1) / 2 * W, (1 - (q[1] * x + q[9] * z + q[13]) / w) / 2 * H] : null; }
+  g.lineJoin = g.lineCap = 'round';
+  if (CNAV.pts) [['rgba(8,22,38,.8)', 6], ['#f3ead8', 2.5]].forEach(function (st) {   // 路線：深色描邊 ＋ 米白
+    g.strokeStyle = st[0]; g.lineWidth = st[1]; g.beginPath(); var on0 = false;
+    CNAV.pts.forEach(function (p) { var s = S(p[0], p[1]); if (!s) { on0 = false; return; } if (on0) g.lineTo(s[0], s[1]); else g.moveTo(s[0], s[1]); on0 = true; });
+    g.stroke();
+  });
+  if (CNAV.to) {                                                         // 標記：紅 ✕（點的那一點）；終點不在標記上（開不到）⇒ 終點一圈
+    var t = S(CNAV.to[0] - BED.ax, CNAV.to[1] - BED.az);
+    if (t) { g.strokeStyle = 'rgba(8,22,38,.85)'; g.lineWidth = 5; chartX(g, t, 8); g.strokeStyle = '#e8564a'; g.lineWidth = 2.5; chartX(g, t, 8); }
+    var e = CNAV.end && CNAV.info && CNAV.info.off > CNAV_SNAP ? S(CNAV.end[0], CNAV.end[1]) : null;
+    if (e) { g.beginPath(); g.arc(e[0], e[1], 7, 0, 6.2832); g.strokeStyle = '#e8c26a'; g.lineWidth = 2.5; g.stroke(); }
+  }
+  g.font = 'bold 13px sans-serif'; g.textAlign = 'center'; g.textBaseline = 'top'; g.lineWidth = 3; g.strokeStyle = 'rgba(8,22,38,.85)'; g.fillStyle = '#f3ead8';
+  var tip = CNAV.ask ? '找航線中…' : CNAV.to ? (SAIL === 'auto' ? '導航中（打舵 ⇒ 手動；再開自動航行 ⇒ 繼續開往標記）' : '標記留著 —— 開自動航行繼續開過去') : '點海面設目的地';
+  g.strokeText('海圖・' + tip, W / 2, 10); g.fillText('海圖・' + tip, W / 2, 10);
+}
+function chartX(g, p, r) { g.beginPath(); g.moveTo(p[0] - r, p[1] - r); g.lineTo(p[0] + r, p[1] + r); g.moveTo(p[0] + r, p[1] - r); g.lineTo(p[0] - r, p[1] + r); g.stroke(); }
+/** 讀數（__game.chartNav）：鏡頭（開了沒、高度、進度）、標記、路線幾點、等多久、上一次路線的讀數、為什麼。 */
+function chartNavInfo() {
+  var C = CAM.chart;
+  return { ok: chartNavOk(), view: chartNavView(), H: C ? Math.round(C.H) : null, h: C ? Math.round(C.h) : null, s: C ? +C.s.toFixed(2) : 0, hmax: BED && BED.A ? Math.round(chartNavHMax()) : null,
+    to: CNAV.to, pts: CNAV.pts ? CNAV.pts.length : 0, ask: CNAV.ask ? Math.max(1, Math.round(performance.now() - CNAV.ask)) : 0,   // ask：等了幾毫秒（剛問 ⇒ 至少 1：⛔ 0 會被讀成沒在等）
+    sail: SAIL, info: CNAV.info, why: CNAV.why };
 }
