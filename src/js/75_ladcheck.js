@@ -10,6 +10,7 @@
 //      照走路格的規則一格一格走（頭上 NAV_HEAD 格空、高低差 ≤ NAV_DZ、不在砲與家具裡、不踩任何一座梯子的格），LDC_WALK 格內走得到離起點 LDC_OUT 格以上、那一層的走路格
 //      （42_hands.js navBuild 能走的點）才算出得去；走不到 ⇒ 報出口前方擋住的是什麼（哪幾格、屬於哪條關聯、哪座梯子、哪個模型）。
 //   ④ 梯頂接不上甲板：hi（最上面那一階）到 head 那一段，梯子寬度裡腳下上下 NAV_DZ 格內沒有踩得到的面（實心、上面空）、連續 LDC_GAP_ERR 柱以上 ⇒ ✗、LDC_GAP～LDC_GAP_ERR−1 柱 ⇒ ⚠（艙口梯子梯頂到艙口邊的小縫；康塞普西翁號船樓的梯子：梯頂停在半空離艙壁 4～7 格，① ② ③ 都看不到）。
+//   ⑦ 梯頂跟出口錯開：head 偏在梯子本身（lo～hi）寬度外 LDC_GAP 格以上、hi 往前直走 1–2 柱站不住 ⇒ ✗（風暴角號彈藥庫：門在中線、梯子讓開後桅擺在右舷，Tim 2026-11-13）。
 //   ⛔ 尋路（42_hands.js makeHands）接梯子兩頭是在 5～10 點內找走路格 ⇒ 洞、堵住的出口它都接得上，只看「尋路沒收這一座」那一條看不出來（松島號 15 座全收、11 座 head 踩在洞上）。
 // 只讀：家具擺好之後量；CREW_BLOCK 換成這艘的、量完換回去 ⇒ 戰局一位元不動（只有 ?shipcheck 叫）。
 // 結果：[{ name, decks: [foot 那層, head 那層], axis, open, hole, issues: [{ lv, what, msg, fix }], map: [字串…] }]；admin.py 寫成 reports/ladcheck_<船>.md。
@@ -29,7 +30,7 @@ function ladCheck(sh) {
 }
 /** 反向對照（75_shipcheck.js 照 ?ladtest=<梯名>:<做法> 叫；開戰前、只改記憶體裡這一型的格子與固定點，⛔ 不寫回任何檔）：
  *    shift:dx,dy ＝ 那一座整座（格子＋四個點）挪 (dx, dy) 格；cut:n ＝ 靠 head 那一頭 n 柱的格拿掉（點不動）；pillar ＝ head 正前方第 2 格立一根 NAV_HEAD 格高的柱子；
- *    box ＝ head 四周（離 2～3 格那兩圈，梯口那幾柱除外）圍 NAV_HEAD 格高的牆（出口整個堵死）；
+ *    box ＝ head 四周（離 2～3 格那兩圈，梯口那幾柱除外）圍 NAV_HEAD 格高的牆（出口整個堵死）；side:n ＝ head 橫挪 n 格、hi 正前方 1–2 柱沿梯子寬度立 NAV_HEAD 格高的牆（⑦ 梯頂跟出口錯開）；
  *    drop ＝ ⑤ ⑥ 甲板連通當成沒有這一座（格子、點都不動；deckLink 不走它的邊）；梯名可用 + 連好幾座（互為備援的那幾座一起拿掉，TASK-1137 夜燈號兩座貨艙梯子）。⇒ 讀數一行（改了什麼）。 */
 function ladTest(T, spec) {
   var a = String(spec).split(':'), lads = shipLadders(T).filter(function (l) { return !l.rope; }), g = T.base, k = -1;
@@ -63,12 +64,19 @@ function ladTest(T, spec) {
     T.ladCells[l.part] = new Int16Array(o2);
     return l.name + ' 靠 head 那一頭 ' + nc + ' 柱的格拿掉（' + n + ' 格）';
   }
-  if (a[1] === 'pillar') cols.push([H[0] + (ax ? 0 : 2 * sg), H[1] + (ax ? 2 * sg : 0)]);
+  if (a[1] === 'side') {                                                 // side:n ＝ head 橫挪 n 格＋hi 正前方 1–2 柱（梯子本身的寬度）立 NAV_HEAD 格高的牆（⑦ 梯頂跟出口錯開；風暴角號彈藥庫門的樣子）
+    var sn = +(a[2] || 5), pt = (T.h.parts || []).filter(function (q) { return q.path === l.part; })[0], pn = l.name === l.part ? 'head' : l.name.slice(l.part.length + 1) + '.head';
+    if (!pt || !pt.points[pn]) return l.name + ' 找不到 head 那個點（' + pn + '）';
+    var q0 = pt.points[pn]; pt.points[pn] = ax ? [q0[0] + sn, q0[1], q0[2]] : [q0[0], q0[1] + sn, q0[2]];
+    var lo8 = l.pts[1], hi8 = l.pts[l.pts.length - 2], a8 = [Math.min(lo8[ax], hi8[ax]), Math.max(lo8[ax], hi8[ax])], sw8 = [1e9, -1e9], ah8 = Math.floor(hi8[ax]);
+    Object.keys(C.cols).forEach(function (c) { c = +c; var x = c % g.sx, y = (c - x) / g.sx, aa = ax ? y : x, t = ax ? x : y; if (aa + 1 > a8[0] && aa < a8[1] + 1) sw8 = [Math.min(sw8[0], t), Math.max(sw8[1], t)]; });
+    for (var k8 = 1; k8 <= 2; k8++) for (var t8 = sw8[0]; t8 <= sw8[1]; t8++) cols.push(ax ? [t8, ah8 + k8 * sg] : [ah8 + k8 * sg, t8]);
+  } else if (a[1] === 'pillar') cols.push([H[0] + (ax ? 0 : 2 * sg), H[1] + (ax ? 2 * sg : 0)]);
   else if (a[1] === 'box') { var oc = {}; O.cells.forEach(function (c) { oc[c[0] + g.sx * c[1]] = 1; });
     for (var dy = -3; dy <= 3; dy++) for (var dx = -3; dx <= 3; dx++) if (Math.max(Math.abs(dx), Math.abs(dy)) >= 2 && !oc[H[0] + dx + g.sx * (H[1] + dy)]) cols.push([H[0] + dx, H[1] + dy]); }   // 兩格厚（⛔ 一格厚 ⇒ 走路格每 2 格一點，跨得過去）；梯口（開口）那幾柱不圍
-  else return '不認得的做法 ' + a[1] + '（shift:dx,dy｜cut:n｜pillar｜box｜drop）';
+  else return '不認得的做法 ' + a[1] + '（shift:dx,dy｜cut:n｜pillar｜box｜side:n｜drop）';
   cols.forEach(function (c) { for (var h = 0; h < NAV_HEAD; h++) if (!g.get(c[0], c[1], H[2] + h)) { g.set(c[0], c[1], H[2] + h, mat); n++; } });
-  return l.name + ' 的 head ' + ldcAt(H) + (a[1] === 'pillar' ? ' 正前方第 2 格立一根柱子' : ' 四周圍一圈牆') + '（' + cols.length + ' 柱、' + n + ' 格）';
+  return l.name + ' 的 head ' + ldcAt(H) + (a[1] === 'pillar' ? ' 正前方第 2 格立一根柱子' : a[1] === 'side' ? ' 橫挪 ' + sn + ' 格、hi 正前方 1–2 柱立牆' : ' 四周圍一圈牆') + '（' + cols.length + ' 柱、' + n + ' 格）';
 }
 /** 一行讀數：量幾座、幾座有問題（✗／⚠ 各幾座）。 */
 function ladSummary(L) {
@@ -320,6 +328,28 @@ function ldcOne(sh, g, K, me) {
       R.gap = { n: gn, at: 'xy'[ax] + ' ' + ldcRng([Math.min(gap[0], gap[1]), Math.max(gap[0], gap[1])]) };
       add(gn >= LDC_GAP_ERR ? 'error' : 'warn', '梯頂接不上甲板', '梯子最上面那一階 hi' + ldcAt([Math.floor(hp[0]), Math.floor(hp[1]), hp[2]]) + ' 到梯頂 head' + ldcAt(H) + ' 之間，' + R.gap.at + ' 那 ' + gn + ' 柱（梯子寬 ' + 'xy'[1 - ax] + ' ' + ldcRng(lw) + '）腳下上下 ' + NAV_DZ + ' 格內沒有踩得到的面（往下 ' + (fall >= 60 ? '60 格以上' : fall + ' 格') + '才有）⇒ 梯子頂端停在半空、沒接到甲板邊，爬到頂要跨過去',
         '整座梯子（格子＋foot／lo／hi 三個點，head 不動）往 ' + dirN + ' 挪 ' + gn + ' 格、讓梯頂貼著甲板邊；或那 ' + gn + ' 柱補踏板／平台');
+    }
+  }
+  // ── ⑦ 梯頂跟出口錯開（Tim 2026-11-13，風暴角號彈藥庫：「樓梯連接處跟門錯開」「樓梯自檢應該要報錯」）：
+  //   人踩的是 hi 那條中線左右各 1 格（踏階；⛔ 不照梯子的格量寬度：梯頂外的平台、側板都是梯子的格 —— hold-mag 的門口平台讓寬度變成 y 128–138、側板頂跟平台齊平站得住）。
+  //   head 離那條帶 LDC_GAP 格以上，而且從 hi 沿走向直走出不去 ⇒ ✗（爬到頂正前方是牆或空的，要橫著走才到出口）。
+  //   直走出得去 ＝ 那條帶裡，hi 往前第 1 柱站得住；或第 1 柱頭上空（跨得過一柱的縫）、第 2 柱站得住 —— 站得住照這裡自己量（腳下實心、頭上 NAV_HEAD 格空、離 head 那一層上下 NAV_DZ 格內），
+  //   ⛔ 不用 ldcStand（它不讓人踩任何梯子的格 ⇒ 梯頂外那片平台本來就是梯子的格）；⛔ 不看 1～3 柱裡任一柱（風暴角號：第 3 柱在彈藥庫裡面、隔著牆照樣站得住）。
+  //   直走出得去、head 偏一邊 ⇒ 不報（head 只是尋路接的點：例 hold-aft 頭上被上一座的踏板壓住、head 挪到旁邊）。
+  //   ④ 量的寬度含平台 ⇒ 這種接法它看不出來（hold-mag 的門口平台 y 128–134 讓 ④ 一路踩得到）。
+  if (ax >= 0 && l.pts.length > 2) {
+    var hi7 = l.pts[l.pts.length - 2], ht7 = Math.floor(hi7[1 - ax]), sw = [ht7 - 1, ht7 + 1], ht = H[1 - ax], off7 = ht < sw[0] ? sw[0] - ht : ht > sw[1] ? ht - sw[1] : 0;
+    if (off7 >= LDC_GAP) {
+      var ah = Math.floor(hi7[ax]), st7 = function (x, y) { for (var z = H[2] - NAV_DZ; z <= H[2] + NAV_DZ; z++) { if (z < 1 || !g.get(x, y, z - 1) || g.get(x, y, z)) continue; var ok = true; for (var h = 1; h < NAV_HEAD; h++) if (g.get(x, y, z + h)) { ok = false; break; } if (ok && !blocked(x, y, z)) return z; } return -1; };
+      var clr7 = function (x, y) { for (var z = H[2]; z < H[2] + NAV_HEAD; z++) if (g.get(x, y, z)) return false; return true; }, xy7 = function (a, t) { return ax ? [t, a] : [a, t]; }, out7 = false;
+      for (var t7 = sw[0]; t7 <= sw[1] && !out7; t7++) { var p1 = xy7(ah + sg, t7), p2 = xy7(ah + 2 * sg, t7); if (st7(p1[0], p1[1]) >= 0 || (clr7(p1[0], p1[1]) && st7(p2[0], p2[1]) >= 0)) out7 = true; }
+      if (!out7) {
+        for (var t8 = sw[0]; t8 <= sw[1]; t8++) { X.push(xy7(ah + sg, t8)); X.push(xy7(ah + 2 * sg, t8)); }
+        R.offset = { n: off7, band: 'xy'[1 - ax] + ' ' + ldcRng(sw) };
+        add('error', '梯頂跟出口錯開', '梯頂 head' + ldcAt(H) + ' 偏在梯子旁邊 ' + off7 + ' 格（最上面那一階 hi' + ldcAt([Math.floor(hi7[0]), Math.floor(hi7[1]), hi7[2]]) + ' 踩的那條 ' + R.offset.band + '）；' +
+          '從 hi 往 ' + dirN + ' 直走 1–2 柱站不住（牆、沒有地板）⇒ 爬到頂要橫著走才到出口',
+          '出口（門、艙口、head 那一塊甲板）挪到梯子正前方（' + R.offset.band + '），head 跟著挪；或整座梯子橫挪到出口正前方；梯頂到出口之間補一階／平台，讓 hi 往前一步就站得住');
+      }
     }
   }
   // ── ③ 兩端走不走得出去（每一座的洞都當成補好了）──

@@ -2332,6 +2332,7 @@ LADTEST = [   # 反向對照（ladcheck --selftest）：(船, 梯子, 做法, �
     ('phoenix', '梯子/fore', 'shift:0,2', '梯口有洞'),
     ('phoenix', '梯子/fore', 'pillar', '梯頂正前方擋住'),
     ('phoenix', '梯子/fore', 'box', '梯頂出口堵住'),
+    ('phoenix', '梯子/fore', 'side:5', '梯頂跟出口錯開'),   # ⑦（Tim 2026-11-13 風暴角號彈藥庫：head 偏在梯子旁邊、梯頂正前方是牆）
     ('concepcion', '梯子/orlop', 'drop', '甲板走不到'),        # ⑤ ⑥ 甲板連通（TASK-1028）：底艙甲板只有這一座下得去
     ('concepcion', '梯子/hold', 'drop', '艙底下不去'),         # 貨艙只有這一座下得去
     ('nightlamp', '梯子/hold-P+梯子/hold-S', 'drop', '艙底下不去'),   # 兩座貨艙梯子互為備援（TASK-1137）⇒ 一起拿掉
