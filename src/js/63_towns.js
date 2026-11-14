@@ -3581,19 +3581,23 @@ function townPostDraw(P, eye, fogD) {
 var TOWN_GLS_FACE = [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]];
 /** 模型檔的 gls ⇒ Promise<{ vao, vbo, n } | null>（見上）。 */
 function townGlsMesh(m0, b64) { return b64 ? townFaceMesh(m0, [['glass', b64]]) : Promise.resolve(null); }
-// 金屬（TASK-1294；Tim 2026-11-14「目前建築是否支援金屬材質(參考 松島號) 因為很多建築部件應該用金屬(例如 聖馬可鐘樓的鐘)」）：模型檔的 mtl ＝ [[材質, 面] …]
-//   （Blocksail tools/townmodels.py metal_of：子作品 meta material=<金屬> 那幾格貼著空氣的面，格式同 gls）；近那一級的網格不放那幾格 ⇒ 這一份照材質表（05_material.js
+// 金屬（TASK-1294；Tim 2026-11-14「目前建築是否支援金屬材質(參考 松島號) 因為很多建築部件應該用金屬(例如 聖馬可鐘樓的鐘)」）：模型檔的 mtl ＝ [[材質, 格, 'vox'] …]
+//   （Blocksail tools/townmodels.py metal_vox：子作品 meta material=<金屬> 那幾格，Uint16 [x, y, z, 值]；值 0 ＝ 釘住的鄰格）；近那一級的網格不放那幾格 ⇒ 這一份照材質表（05_material.js
 //   matInfo：金屬度、粗糙度）畫，同船的金屬（P.tri：太陽高光＋天空反射）；不透明、寫深度 ⇒ townMtlDraw 在建築那一趟之後畫（60_render.js）。低模、貼圖、屋頂照舊有它。
+//   要光滑（Tim 同一天「另外金屬材質會需要光滑(參考松島號)」）：方塊網格一整面同一個法線 ⇒ 反光整面同一個亮度，看不出金屬（同 62_msmooth.js 的理由）
+//   ⇒ 照船殼的平滑面算（15_smooth.js smCpu，surface nets：格角往表面拉、法線照附近的格子）；跟石、木相鄰的格角釘住（值 0 那幾格）⇒ 鐘頂、像座那一圈不縮開。
+//   舊的模型檔（[[材質, 面]]，沒有 'vox'）照面畫成方塊。
 function townMtlMesh(m0, L) { return L && L.length ? townFaceMesh(m0, L) : Promise.resolve(null); }
-/** 面清單（[[材質, deflate-raw＋base64 的面] …]）⇒ Promise<{ vao, vbo, n }>：頂點同船的玻璃 15_smooth.js glsBuild（位置、法線、色、[金屬度, 粗糙度, 透明度]）；材質照 matInfo。 */
+/** 面清單（[[材質, deflate-raw＋base64 的資料, 'vox'?] …]）⇒ Promise<{ vao, vbo, n }>：頂點同船的玻璃 15_smooth.js glsBuild（位置、法線、色、[金屬度, 粗糙度, 透明度]）；材質照 matInfo。
+ *  資料：沒有 'vox' ⇒ 面（每面 4 個 u16：x、y、z、面 | 色號 << 3）；'vox' ⇒ 格（x、y、z、值）照平滑面算（見上）。 */
 function townFaceMesh(m0, L) {
   return Promise.all(L.map(function (it) { return VK.inflateRaw(VK.b64ToBytes(it[1])); })).then(function (RAW) {
-    var mpv = m0.mpv, hx = m0.size[0] * mpv / 2, hy = m0.size[1] * mpv / 2, T6 = [0, 1, 2, 0, 2, 3], tot = 0;
-    var AA = RAW.map(function (raw) { var A = new Uint16Array(raw.buffer.slice(raw.byteOffset, raw.byteOffset + raw.byteLength)); tot += A.length / 4; return A; });
-    var V = new Float32Array(tot * 72), o = 0;
-    AA.forEach(function (A, li) {
-      var id = L[li][0], mt = matInfo(id), gls = id === 'glass';
-      var mm = +mt.metal || 0, mr = isFinite(+mt.rough) && mt.rough !== undefined ? +mt.rough : (gls ? 0.06 : 0.5), mc = gls ? clamp(+mt.clear || 0.6, 0, 0.95) : 0;
+    var mpv = m0.mpv, hx = m0.size[0] * mpv / 2, hy = m0.size[1] * mpv / 2, T6 = [0, 1, 2, 0, 2, 3], parts = [], tot = 0;
+    RAW.forEach(function (raw, li) {
+      var A = new Uint16Array(raw.buffer.slice(raw.byteOffset, raw.byteOffset + raw.byteLength)), id = L[li][0], mt = matInfo(id), gls = id === 'glass';
+      var mm = +mt.metal || 0, mr = isFinite(+mt.rough) && mt.rough !== undefined ? +mt.rough : (gls ? 0.06 : 0.5), mc = gls ? clamp(+mt.clear || 0.6, 0, 0.95) : 0, V, o = 0;
+      if (L[li][2] === 'vox') { V = townSmoothVerts(m0, A, mm, mr); if (V) parts.push(V), tot += V.length; return; }
+      V = new Float32Array(A.length / 4 * 72);
       for (var k = 0; k + 3 < A.length; k += 4) {
         var f = A[k + 3] & 7, col = A[k + 3] >> 3, n = TOWN_GLS_FACE[f], ax = f >> 1, ua = SM_UAX[ax], va = SM_VAX[ax], P = [A[k], A[k + 1], A[k + 2]], q = [];
         if (n[ax] > 0) P[ax]++;
@@ -3601,14 +3605,32 @@ function townFaceMesh(m0, L) {
         var r = ((col >> 5) & 7) / 7, gg = ((col >> 2) & 7) / 7, b = (col & 3) / 3;
         for (var t = 0; t < 6; t++) { var P2 = q[T6[t]]; V[o++] = P2[0] * mpv - hx; V[o++] = P2[1] * mpv - hy; V[o++] = P2[2] * mpv; V[o++] = n[0]; V[o++] = n[1]; V[o++] = n[2]; V[o++] = r; V[o++] = gg; V[o++] = b; V[o++] = mm; V[o++] = mr; V[o++] = mc; }
       }
+      parts.push(V); tot += V.length;
     });
-    var g = { vao: gl.createVertexArray(), vbo: gl.createBuffer(), n: o / 12 };
-    gl.bindVertexArray(g.vao); gl.bindBuffer(gl.ARRAY_BUFFER, g.vbo); gl.bufferData(gl.ARRAY_BUFFER, V, gl.STATIC_DRAW);
+    var W = new Float32Array(tot), o2 = 0; parts.forEach(function (V) { W.set(V, o2); o2 += V.length; });
+    var g = { vao: gl.createVertexArray(), vbo: gl.createBuffer(), n: tot / 12 };
+    gl.bindVertexArray(g.vao); gl.bindBuffer(gl.ARRAY_BUFFER, g.vbo); gl.bufferData(gl.ARRAY_BUFFER, W, gl.STATIC_DRAW);
     [[0, 0], [1, 3], [2, 6], [3, 9]].forEach(function (a) { gl.enableVertexAttribArray(a[0]); gl.vertexAttribPointer(a[0], 3, gl.FLOAT, false, 48, a[1] * 4); });
     gl.bindVertexArray(null);
     return g;
   });
 }
+/** 金屬的格（Uint16 [x, y, z, 值] …；值 0 ＝ 釘住的鄰格）⇒ 平滑面的三角形（每頂點 12 個 float，同 townFaceMesh）或 null。見 townMtlMesh 上面。
+ *  g ＝ 金屬＋釘住的鄰格（實心）、SG ＝ 只有金屬（只有它出面）⇒ smCpu 碰到不在 SG 的實心就釘住那個格角（同船殼貼著不平滑的格子）。 */
+function townSmoothVerts(m0, A, mm, mr) {
+  var sz = m0.size, g = new VK.Grid([sz[0], sz[1], sz[2]]), SG = new VK.Grid([sz[0], sz[1], sz[2]]), n = 0;
+  for (var k = 0; k + 3 < A.length; k += 4) { var v = A[k + 3]; g.set(A[k], A[k + 1], A[k + 2], v || 1); if (v) { SG.set(A[k], A[k + 1], A[k + 2], v); n++; } }
+  if (!n) return null;
+  var T = { h: { size: [sz[0], sz[1], sz[2]] } }, o = { SG: SG, mm: mm, mr: mr, rgb: function (c) { return [((c >> 5) & 7) / 7, ((c >> 2) & 7) / 7, (c & 3) / 3]; } };
+  var mpv = m0.mpv, hx = sz[0] * mpv / 2, hy = sz[1] * mpv / 2, out = [];
+  smRegions(T, SG).forEach(function (rk) {
+    var r = smCpu(T, g, rk, null, o); if (!r) return;
+    var b = r.buf, I = r.idx;
+    for (var j = 0; j < I.length; j++) { var q = I[j] * 11; out.push(b[q] * mpv - hx, b[q + 1] * mpv - hy, b[q + 2] * mpv, b[q + 3], b[q + 4], b[q + 5], b[q + 6], b[q + 7], b[q + 8], b[q + 9], b[q + 10], 0); }
+  });
+  return out.length ? new Float32Array(out) : null;
+}
+
 /** 實例 o（TOWNS.buf[0] 的欄位，townInstAttr）⇒ 模型矩陣（玻璃、金屬那兩趟共用）。 */
 function townInstM(D0, o, M) {
   var s = Math.sin(D0[o + 3]), c = Math.cos(D0[o + 3]), sx = D0[o + 4];   // 實例的欄位見 townInstAttr：aI x y z θ、aS 沿 x 縮放…、aJ 斜接 ×2 坡度 牆基
