@@ -956,9 +956,9 @@ function townKitMake(I, need, D, reuse) {
     var m0 = I.models[nm], d = D[nm], R = reuse && reuse.M[nm];
     if (!d) throw new Error('外面那一頁沒給 ' + nm);
     var rise = d.bo ? { g: d.g, bo: d.bo } : null;                       // 建造演出（63_townrise.js）：格子＋施工順序留著，演的時候才解（沒有 bo ＝ Blocksail 還沒照 TASK-0908 重建的模型資料）
-    function put(L, win, gls) { M[nm] = { nm: nm, i: names.indexOf(nm), m: m0, lod: L, png: d.png, uc0: [m0.mpv, m0.size[0] * m0.mpv / 2, m0.size[1] * m0.mpv / 2], uc1: [m0.mpv * m0.lo.f, m0.size[0] * m0.mpv / 2, m0.size[1] * m0.mpv / 2], win: win, gls: gls, rise: rise, spinD: d.spin || null, spinG: R ? R.spinG : null }; }   // win：亮窗的窗片（夜裡的燈）；gls：玻璃（townGlsMesh）
-    if (R) { put(R.lod, R.win, R.gls); return null; }
-    return Promise.all([townModelMesh(nm, d, m0), townGlsMesh(m0, d.gls)]).then(function (A) { put(A[0], townWinMesh(m0), A[1]); });
+    function put(L, win, gls, mtl) { M[nm] = { nm: nm, i: names.indexOf(nm), m: m0, lod: L, png: d.png, uc0: [m0.mpv, m0.size[0] * m0.mpv / 2, m0.size[1] * m0.mpv / 2], uc1: [m0.mpv * m0.lo.f, m0.size[0] * m0.mpv / 2, m0.size[1] * m0.mpv / 2], win: win, gls: gls, mtl: mtl || null, rise: rise, spinD: d.spin || null, spinG: R ? R.spinG : null }; }   // win：亮窗的窗片（夜裡的燈）；gls：玻璃（townGlsMesh）
+    if (R) { put(R.lod, R.win, R.gls, R.mtl); return null; }
+    return Promise.all([townModelMesh(nm, d, m0), townGlsMesh(m0, d.gls), townMtlMesh(m0, d.mtl)]).then(function (A) { put(A[0], townWinMesh(m0), A[1], A[2]); });
   })).then(function () {
     // 貼圖：收到的模型照名字一個一列往下排（寬 ＝ 最寬那一列、高 ＝ 加總，各取 2 的次方）；那一列的座標寫進那個模型的 im（畫貼圖照它取，townBin）
     var aw = 1, y = 0;
@@ -995,7 +995,7 @@ function townKitSet(K) {
 /** 一份模型組的 GPU 資源（網格、窗片、貼圖）；keep ＝ 換上的那一組（骨架 ⇒ 整組沿用的網格不放掉）。 */
 function townKitGpuFree(K, keep) {
   Object.keys(K.M).forEach(function (nm) { var S = K.M[nm].spinG; if (!S || (keep && keep.M[nm] && keep.M[nm].spinG === S)) return; S.forEach(function (r) { if (r) { gl.deleteVertexArray(r.vao); gl.deleteBuffer(r.vbo); } }); });   // 旋轉件（townSpinMesh）
-  Object.keys(K.M).forEach(function (nm) { if (keep && keep.M[nm] && keep.M[nm].lod === K.M[nm].lod) return; K.M[nm].lod.concat(K.M[nm].win ? [K.M[nm].win] : [], K.M[nm].gls ? [K.M[nm].gls] : []).forEach(function (r) { gl.deleteVertexArray(r.vao); gl.deleteBuffer(r.vbo); }); });
+  Object.keys(K.M).forEach(function (nm) { if (keep && keep.M[nm] && keep.M[nm].lod === K.M[nm].lod) return; K.M[nm].lod.concat(K.M[nm].win ? [K.M[nm].win] : [], K.M[nm].gls ? [K.M[nm].gls] : [], K.M[nm].mtl ? [K.M[nm].mtl] : []).forEach(function (r) { gl.deleteVertexArray(r.vao); gl.deleteBuffer(r.vbo); }); });
   if (K.tex) gl.deleteTexture(K.tex);
   townFolkFree(K, keep); townFaunaFree(K, keep);
 }
@@ -3580,25 +3580,55 @@ function townPostDraw(P, eye, fogD) {
 //   ⇒ townGlsDraw 照近那一級的實例一棟一次畫（P.tri ＋ uGls：同船的玻璃那一段 —— 混色、不寫深度、由遠到近；60_render.js 在船的玻璃之後、亮窗之前）。只給人看。
 var TOWN_GLS_FACE = [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]];
 /** 模型檔的 gls ⇒ Promise<{ vao, vbo, n } | null>（見上）。 */
-function townGlsMesh(m0, b64) {
-  if (!b64) return Promise.resolve(null);
-  return VK.inflateRaw(VK.b64ToBytes(b64)).then(function (raw) {
-    var A = new Uint16Array(raw.buffer.slice(raw.byteOffset, raw.byteOffset + raw.byteLength)), mpv = m0.mpv, hx = m0.size[0] * mpv / 2, hy = m0.size[1] * mpv / 2;
-    var mt = matInfo('glass'), mm = +mt.metal || 0, mr = isFinite(+mt.rough) && mt.rough !== undefined ? +mt.rough : 0.06, mc = clamp(+mt.clear || 0.6, 0, 0.95);
-    var V = new Float32Array(A.length / 4 * 72), o = 0, T6 = [0, 1, 2, 0, 2, 3];
-    for (var k = 0; k + 3 < A.length; k += 4) {
-      var f = A[k + 3] & 7, col = A[k + 3] >> 3, n = TOWN_GLS_FACE[f], ax = f >> 1, ua = SM_UAX[ax], va = SM_VAX[ax], L = [A[k], A[k + 1], A[k + 2]], q = [];
-      if (n[ax] > 0) L[ax]++;
-      for (var e = 0; e < 4; e++) { var c = SM_C4[n[ax] > 0 ? e : 3 - e], Q = L.slice(); Q[ua] += c[0]; Q[va] += c[1]; q.push(Q); }
-      var r = ((col >> 5) & 7) / 7, gg = ((col >> 2) & 7) / 7, b = (col & 3) / 3;
-      for (var t = 0; t < 6; t++) { var P2 = q[T6[t]]; V[o++] = P2[0] * mpv - hx; V[o++] = P2[1] * mpv - hy; V[o++] = P2[2] * mpv; V[o++] = n[0]; V[o++] = n[1]; V[o++] = n[2]; V[o++] = r; V[o++] = gg; V[o++] = b; V[o++] = mm; V[o++] = mr; V[o++] = mc; }
-    }
+function townGlsMesh(m0, b64) { return b64 ? townFaceMesh(m0, [['glass', b64]]) : Promise.resolve(null); }
+// 金屬（TASK-1294；Tim 2026-11-14「目前建築是否支援金屬材質(參考 松島號) 因為很多建築部件應該用金屬(例如 聖馬可鐘樓的鐘)」）：模型檔的 mtl ＝ [[材質, 面] …]
+//   （Blocksail tools/townmodels.py metal_of：子作品 meta material=<金屬> 那幾格貼著空氣的面，格式同 gls）；近那一級的網格不放那幾格 ⇒ 這一份照材質表（05_material.js
+//   matInfo：金屬度、粗糙度）畫，同船的金屬（P.tri：太陽高光＋天空反射）；不透明、寫深度 ⇒ townMtlDraw 在建築那一趟之後畫（60_render.js）。低模、貼圖、屋頂照舊有它。
+function townMtlMesh(m0, L) { return L && L.length ? townFaceMesh(m0, L) : Promise.resolve(null); }
+/** 面清單（[[材質, deflate-raw＋base64 的面] …]）⇒ Promise<{ vao, vbo, n }>：頂點同船的玻璃 15_smooth.js glsBuild（位置、法線、色、[金屬度, 粗糙度, 透明度]）；材質照 matInfo。 */
+function townFaceMesh(m0, L) {
+  return Promise.all(L.map(function (it) { return VK.inflateRaw(VK.b64ToBytes(it[1])); })).then(function (RAW) {
+    var mpv = m0.mpv, hx = m0.size[0] * mpv / 2, hy = m0.size[1] * mpv / 2, T6 = [0, 1, 2, 0, 2, 3], tot = 0;
+    var AA = RAW.map(function (raw) { var A = new Uint16Array(raw.buffer.slice(raw.byteOffset, raw.byteOffset + raw.byteLength)); tot += A.length / 4; return A; });
+    var V = new Float32Array(tot * 72), o = 0;
+    AA.forEach(function (A, li) {
+      var id = L[li][0], mt = matInfo(id), gls = id === 'glass';
+      var mm = +mt.metal || 0, mr = isFinite(+mt.rough) && mt.rough !== undefined ? +mt.rough : (gls ? 0.06 : 0.5), mc = gls ? clamp(+mt.clear || 0.6, 0, 0.95) : 0;
+      for (var k = 0; k + 3 < A.length; k += 4) {
+        var f = A[k + 3] & 7, col = A[k + 3] >> 3, n = TOWN_GLS_FACE[f], ax = f >> 1, ua = SM_UAX[ax], va = SM_VAX[ax], P = [A[k], A[k + 1], A[k + 2]], q = [];
+        if (n[ax] > 0) P[ax]++;
+        for (var e = 0; e < 4; e++) { var c = SM_C4[n[ax] > 0 ? e : 3 - e], Q = P.slice(); Q[ua] += c[0]; Q[va] += c[1]; q.push(Q); }
+        var r = ((col >> 5) & 7) / 7, gg = ((col >> 2) & 7) / 7, b = (col & 3) / 3;
+        for (var t = 0; t < 6; t++) { var P2 = q[T6[t]]; V[o++] = P2[0] * mpv - hx; V[o++] = P2[1] * mpv - hy; V[o++] = P2[2] * mpv; V[o++] = n[0]; V[o++] = n[1]; V[o++] = n[2]; V[o++] = r; V[o++] = gg; V[o++] = b; V[o++] = mm; V[o++] = mr; V[o++] = mc; }
+      }
+    });
     var g = { vao: gl.createVertexArray(), vbo: gl.createBuffer(), n: o / 12 };
     gl.bindVertexArray(g.vao); gl.bindBuffer(gl.ARRAY_BUFFER, g.vbo); gl.bufferData(gl.ARRAY_BUFFER, V, gl.STATIC_DRAW);
     [[0, 0], [1, 3], [2, 6], [3, 9]].forEach(function (a) { gl.enableVertexAttribArray(a[0]); gl.vertexAttribPointer(a[0], 3, gl.FLOAT, false, 48, a[1] * 4); });
     gl.bindVertexArray(null);
     return g;
   });
+}
+/** 實例 o（TOWNS.buf[0] 的欄位，townInstAttr）⇒ 模型矩陣（玻璃、金屬那兩趟共用）。 */
+function townInstM(D0, o, M) {
+  var s = Math.sin(D0[o + 3]), c = Math.cos(D0[o + 3]), sx = D0[o + 4];   // 實例的欄位見 townInstAttr：aI x y z θ、aS 沿 x 縮放…、aJ 斜接 ×2 坡度 牆基
+  M[0] = s * sx; M[1] = D0[o + 9] * sx; M[2] = -c * sx; M[3] = 0; M[4] = -c; M[5] = 0; M[6] = -s; M[7] = 0; M[8] = 0; M[9] = 1; M[10] = 0; M[11] = 0; M[12] = D0[o]; M[13] = D0[o + 1]; M[14] = D0[o + 2]; M[15] = 1;
+  return M;
+}
+/** 金屬那一趟（見上）：近那一級、有金屬的實例一棟一次；不透明、寫深度。讀數 TOWNS.stat.mtl ＝ 這一格畫了幾棟。 */
+function townMtlDraw() {
+  TOWNS.stat.mtl = 0;
+  var K = TOWNS.kit, G = TOWNS.grp, D0 = TOWNS.buf[0];
+  if (!TOWNS.on || !K || !G || !D0 || PASS.vp) return;
+  var n0 = 0, M = TOWN_GLS_M, on = false;
+  K.names.forEach(function (nm, mi) {
+    var Mm = K.M[nm], n = G.cnt[0][mi]; if (!n || !Mm.mtl || !Mm.mtl.n) return;
+    if (!on) { gl.useProgram(P.tri.prog); setCommon(P.tri); gl.uniform1f(P.tri.u.uLit, 1); gl.uniform1f(P.tri.u.uGls, 0); if (P.tri.u.uGlow) gl.uniform1f(P.tri.u.uGlow, 0); cutSet(P.tri, null); on = true; }
+    gl.bindVertexArray(Mm.mtl.vao);
+    for (var j = 0; j < n; j++) { gl.uniformMatrix4fv(P.tri.u.uModel, false, townInstM(D0, (G.off[0][mi] + j) * 11, M)); gl.drawArrays(gl.TRIANGLES, 0, Mm.mtl.n); n0++; }
+  });
+  if (on) gl.bindVertexArray(null);
+  TOWNS.stat.mtl = n0;
 }
 /** 玻璃那一趟（見上）：近那一級、有玻璃的實例，由遠到近一棟一次；讀數 TOWNS.stat.gls ＝ 這一格畫了幾棟。 */
 var TOWN_GLS_M = new Float32Array(16);
@@ -3616,11 +3646,7 @@ function townGlsDraw() {
   var cf = gl.isEnabled(gl.CULL_FACE), M = TOWN_GLS_M;
   gl.enable(gl.BLEND); gl.blendFuncSeparate(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA, gl.ZERO, gl.ONE); gl.depthMask(false); gl.disable(gl.CULL_FACE);
   gl.useProgram(P.tri.prog); setCommon(P.tri); gl.uniform1f(P.tri.u.uLit, 1); gl.uniform1f(P.tri.u.uGls, 1); if (P.tri.u.uGlow) gl.uniform1f(P.tri.u.uGlow, 0); cutSet(P.tri, null);
-  L.forEach(function (it) {
-    var o = it.o, s = Math.sin(D0[o + 3]), c = Math.cos(D0[o + 3]), sx = D0[o + 4];   // 實例的欄位見 townInstAttr：aI x y z θ、aS 沿 x 縮放…、aJ 斜接 ×2 坡度 牆基
-    M[0] = s * sx; M[1] = D0[o + 9] * sx; M[2] = -c * sx; M[3] = 0; M[4] = -c; M[5] = 0; M[6] = -s; M[7] = 0; M[8] = 0; M[9] = 1; M[10] = 0; M[11] = 0; M[12] = D0[o]; M[13] = D0[o + 1]; M[14] = D0[o + 2]; M[15] = 1;
-    gl.uniformMatrix4fv(P.tri.u.uModel, false, M); gl.bindVertexArray(it.g.vao); gl.drawArrays(gl.TRIANGLES, 0, it.g.n);
-  });
+  L.forEach(function (it) { gl.uniformMatrix4fv(P.tri.u.uModel, false, townInstM(D0, it.o, M)); gl.bindVertexArray(it.g.vao); gl.drawArrays(gl.TRIANGLES, 0, it.g.n); });
   gl.bindVertexArray(null); gl.uniform1f(P.tri.u.uGls, 0); gl.depthMask(true); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA); if (cf) gl.enable(gl.CULL_FACE);
   TOWNS.stat.gls = L.length;
 }
