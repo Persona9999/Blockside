@@ -38,7 +38,7 @@ function quayHull(T, vs) {
 }
 /** 一座城擋船的東西（世界座標）：{ segs: [{ a, b, r, kind }], polys: [{ P: [4 點], kind }], bb }；規劃換了（建築模式加水上建築、棧橋重來）⇒ 重算。 */
 function quayObs(T) {
-  var p = T.p, lots = p.lots || [], key = (p.piers || []).length + ':' + (p.quay || []).length + ':' + lots.length + ':' + BED.ax + ',' + BED.az;
+  var p = T.p, lots = p.lots || [], key = (p.piers || []).length + ':' + (p.quay || []).length + ':' + (p.bridges || []).length + ':' + lots.length + ':' + BED.ax + ',' + BED.az;
   if (T.quayObs && T.quayObs.p === p && T.quayObs.key === key) return T.quayObs;
   var O = { p: p, key: key, segs: [], polys: [], apron: {}, bb: [1e9, 1e9, -1e9, -1e9] };
   function W(q) { var e = T.E(q); return [e[0] - BED.ax, e[1] - BED.az]; }
@@ -49,6 +49,7 @@ function quayObs(T) {
   }
   (p.piers || []).forEach(function (q) { line(q.path, q.w, q.kind || 'pier'); });
   (p.quay || []).forEach(function (q) { line(q.path, q.w, 'quay'); });
+  townBridgeList(p).forEach(function (q) { if (q.over === 'sea') line(q.path, q.w, 'bridge'); });   // 海上的橋（Blocksail TASK-1290：只架在船開不到的水上 ⇒ 平常碰不到；船漂進去也擋）
   lots.forEach(function (l) {
     if (!l.water) return;
     var th = l.rot * Math.PI / 180, cs = Math.cos(th), sn = Math.sin(th);

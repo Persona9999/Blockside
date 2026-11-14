@@ -196,6 +196,15 @@ function townFolkGraph(T) {
       if (L >= 1.5) { raw.push({ a: a, b: b, w: 2 * d.hw, L: L, own: d.own, deck: true }); pts.push(a, b); }
     }
   });
+  //   橋（Blocksail TASK-1290）：路照舊是一條邊（橋那一段也在路網裡），橋面另外當面板段（每 1 m 一段、面高照 townBridgeForm 兩頭內插：拱背）⇒ 走在橋上的人照橋面（townFolkDeckY 取高的）
+  townBridgeList(T.p).forEach(function (b) {
+    var F = townBridgeForm(b), n = Math.max(1, Math.ceil(F.L)), hw = b.w / 2, prev = null;
+    for (var k = 0; k <= n; k++) {
+      var t = F.L * k / n, q = townPathAt(b.path, t), c = W([q.x, q.y]), top = F.top(t);
+      if (prev) { var dx = c[0] - prev.c[0], dz = c[1] - prev.c[1], L = Math.hypot(dx, dz); if (L > 1e-3) pieces.push({ ax: prev.c[0], az: prev.c[1], dx: dx / L, dz: dz / L, L: L, hw: hw, top: prev.top, zb: top, bb: [Math.min(prev.c[0], c[0]) - hw, Math.min(prev.c[1], c[1]) - hw, Math.max(prev.c[0], c[0]) + hw, Math.max(prev.c[1], c[1]) + hw] }); }
+      prev = { c: c, top: top };
+    }
+  });
   // 找鄰居照 DS 公尺的格子（同 TOWN_FOLK_CELL 那一套）：君士坦丁堡 6,400 條邊 × 幾百段面板全比一次 ⇒ 建路網從 54 ms 變 144 ms（2026-10-26 量）
   var DS = 16, hwMax = 0, stamp = 0;
   function GK(x, z) { return (x + 32768) * 65536 + z + 32768; }        // 格子的鍵（DS 公尺一格；±500 km 內不撞）⇒ 數字比字串快
@@ -317,7 +326,8 @@ function townFolkDeckY(e, x, z) {
   var y = NaN, i, s;
   if (e.dk) for (i = 0; i < e.dk.length; i++) {
     s = e.dk[i]; var u = Math.max(0, Math.min(s.L, (x - s.ax) * s.dx + (z - s.az) * s.dz));
-    if (Math.hypot(x - s.ax - s.dx * u, z - s.az - s.dz * u) <= s.hw && !(s.top <= y)) y = s.top;
+    var st = s.zb != null ? s.top + (s.zb - s.top) * u / s.L : s.top;   // 橋面（TASK-1290）：一段兩頭不一樣高 ⇒ 照 u 內插
+    if (Math.hypot(x - s.ax - s.dx * u, z - s.az - s.dz * u) <= s.hw && !(st <= y)) y = st;
   }
   if (e.sk) for (i = 0; i < e.sk.length; i++) {
     s = e.sk[i]; var px = x - s.A[0], pz = z - s.A[1], a = px * s.ux + pz * s.uz;

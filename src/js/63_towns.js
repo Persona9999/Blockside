@@ -101,6 +101,43 @@ var TOWN_WALL_JX_OUT = 4, TOWN_WALL_JX_BEND = 12, TOWN_WALL_JX_TURN = 25, TOWN_W
 // 城牆沿線的高度（townWallProf）：前後平均幾公尺、牆腳最多埋進地面幾公尺、埋太深往上抬的量往兩邊照什麼坡收（最遠幾公尺）、最後再磨圓幾公尺、門與接點釘回地面往兩邊收幾公尺〔佔位〕
 var TOWN_WALL_PART_STRAIGHT = 12, TOWN_WALL_STRAIGHT_LEN = [1, 1.5, 2, 3], TOWN_WALL_STRAIGHT_TURN = 88, TOWN_WALL_PART_SINK_MAX = 0.75;   // 斷面接部件（門、塔）：方向跟部件的軸差超過幾度就先從接口順著部件的軸直走、再轉回路線；直走幾節（照順序試）；轉角最多幾度；都接不上 ⇒ 退回伸進部件裡，最多伸到半長的幾成（townWall straight、sinkIn）〔佔位〕
 var TOWN_WALL_FLOW = { win: 16, bury: 1.5, k: 0.2, reach: 40, round: 4, pin: 16 };
+// 橋（Blocksail TASK-1290 規劃的 bridges：路跨水的那一段；{ id, road, s: [橋台到橋台的弧長], path, w, z: [兩頭的面高], ws 水面, bed 最深的底, span, wet: [落水那一段在橋上的起訖], style, kit?, from }）：
+//   第一版只有石拱橋（style 'stone-arch'；kit 雕刻模型還沒接 ⇒ 照 style 畫）。路面在橋那一段挖掉（townPrep 的 cut；兩頭各蓋進橋面 TOWN_BRIDGE_LAP）、橋自己畫一條石板（townBridgeGeo）：
+//   面 ＝ 兩頭 z 連線 ＋ 拱背（拋物線，最高 TOWN_BRIDGE_HUMP；底下要讓船過：中間至少水面 ＋ TOWN_BRIDGE_CLR ＋ 拱頂厚 TOWN_BRIDGE_DECK）；
+//   底 ＝ 落水那一段分成幾個拱（一拱最寬 TOWN_BRIDGE_ARCH、中間的墩寬 TOWN_BRIDGE_PIER），拱腳在水面下 0.3 m、拱頂到面下 TOWN_BRIDGE_DECK；拱以外（墩、橋台）伸到底下最深的底再 1 m；
+//   兩側欄杆（寬 TOWN_BRIDGE_RAIL[0]、高出面 TOWN_BRIDGE_RAIL[1]）。鎮民照同一個面走（63_townfolk.js 的 decks 段）。
+var TOWN_BRIDGE_LAP = 0.6, TOWN_BRIDGE_HUMP = 0.35, TOWN_BRIDGE_CLR = 2.4, TOWN_BRIDGE_DECK = 0.7, TOWN_BRIDGE_ARCH = 14, TOWN_BRIDGE_PIER = 1.4, TOWN_BRIDGE_RAIL = [0.35, 0.9], TOWN_BRIDGE_STEP = 0.5;
+/** 規劃 p 現在建的那幾座橋（路在 p.roads 裡的；城區只建一部分 ⇒ 別區的路的橋不畫）。 */
+function townBridgeList(p) {
+  if (!p || !p.bridges || !p.bridges.length) return [];
+  var ids = {}; (p.roads || []).forEach(function (r) { ids[r.id] = 1; });
+  return p.bridges.filter(function (b) { return ids[b.road]; });
+}
+/** 折線（規劃的當地公尺）長、第 t 公尺那一點與切線。 */
+function townPlen(P) { var s = 0; for (var i = 1; i < P.length; i++) s += Math.hypot(P[i][0] - P[i - 1][0], P[i][1] - P[i - 1][1]); return s; }
+function townPathAt(P, t) {
+  var acc = 0;
+  for (var i = 1; i < P.length; i++) {
+    var dx = P[i][0] - P[i - 1][0], dy = P[i][1] - P[i - 1][1], L = Math.hypot(dx, dy);
+    if (t <= acc + L || i === P.length - 1) { var u = L ? Math.max(0, Math.min(1, (t - acc) / L)) : 0; return { x: P[i - 1][0] + dx * u, y: P[i - 1][1] + dy * u, tx: L ? dx / L : 1, ty: L ? dy / L : 0 }; }
+    acc += L;
+  }
+  return { x: P[0][0], y: P[0][1], tx: 1, ty: 0 };
+}
+/** 一座橋的形：{ L 橋長, H 拱背多高, top(t) 面高, bot(t) 底 }（t ＝ 沿橋面中線的公尺，規劃的當地公尺；畫的、鎮民走的同一份）。 */
+function townBridgeForm(b) {
+  var L = townPlen(b.path), z0 = b.z[0], z1 = b.z[1], H = Math.max(TOWN_BRIDGE_HUMP, b.ws + TOWN_BRIDGE_CLR + TOWN_BRIDGE_DECK - (z0 + z1) / 2);
+  var w0 = b.wet ? b.wet[0] : L * 0.2, w1 = b.wet ? b.wet[1] : L * 0.8, n = Math.max(1, Math.ceil((w1 - w0) / TOWN_BRIDGE_ARCH)), aw = (w1 - w0) / n, zs = b.ws - 0.3, deep = Math.min(b.bed, b.ws) - 1;
+  function top(t) { var u = Math.max(0, Math.min(1, t / L)); return z0 + (z1 - z0) * u + H * 4 * u * (1 - u); }
+  function bot(t) {
+    if (t <= w0 || t >= w1) return deep;
+    var k = Math.min(n - 1, Math.floor((t - w0) / aw)), a = w0 + k * aw + (k ? TOWN_BRIDGE_PIER / 2 : 0), e = w0 + (k + 1) * aw - (k < n - 1 ? TOWN_BRIDGE_PIER / 2 : 0);
+    if (t <= a || t >= e) return deep;                                  // 墩
+    var c = (a + e) / 2, hw = (e - a) / 2, r = Math.max(0.3, Math.min(hw, top(c) - TOWN_BRIDGE_DECK - zs)), v = (t - c) / hw;
+    return zs + r * Math.sqrt(Math.max(0, 1 - v * v));
+  }
+  return { L: L, H: H, top: top, bot: bot };
+}
 var TOWN_SLAB_KMAX = 2;                                                 // 碼頭、棧橋的板：轉角斜接最多拉長幾倍（2 ＝ 轉 120°；再急就在轉角那一點變窄）
 var TOWNS = { on: Q.get('towns') !== '0', prosp: {}, list: [],pend: [], ver: 0, want: 0, err: null, kit: null, kitP: null, idx: null, kitHas: null, kitRedo: false, kitBusy: false, mwait: null, prog: null, progJ: null, dirty: true, eye: null, sig: '', buf: [], grp: null,
   stat: { towns: 0, lots: 0, inst: 0, walls: 0, corners: 0, snapped: 0, skip: {}, d0: 0, d1: 0, d2: 0, d3: 0, plinth: 0, tris: 0, binMs: 0, kitMs: 0, meshBaked: 0, meshLive: 0, meshCheck: null, clrMs: 0, clrN: 0, drawMs: 0 } };
@@ -112,7 +149,7 @@ var TOWN_USE_ALT = { commandant: ['house'], governor: ['townhall'],   // 那一�
 //   ⛔ 種植園不借倉庫：倉庫 12 × 16 放不進 16 × 12 的地塊（進深多 4 m、伸出地塊後緣壓到田）—— kaguya 2026-10-24 seq 28673 同意照這一份
 var TOWN_PROSP_DEF = 0.5, TOWN_PROSP_CUT = [1 / 3, 2 / 3];               // 繁榮度沒給 ⇒ 中間；低於第一格算低、到第二格算高（TOWN_BUILD §4 的門檻〔佔位〕）
 var TOWN_STYLE_DEF = 'fr';                                            // 索引裡沒寫 style 的模型算 fr（第一套，TASK-0757）；規劃沒帶退路 styles（舊的匯出）⇒ 城的 style、再 fr
-var TOWN_COL = { bank: [0.60, 0.55, 0.48], main: [0.56, 0.47, 0.34], street: [0.62, 0.58, 0.50], track: [0.50, 0.42, 0.30], plaza: [0.70, 0.66, 0.58], quay: [0.58, 0.56, 0.52], mole: [0.52, 0.51, 0.47], pier: [0.45, 0.33, 0.22], post: [0.30, 0.22, 0.15] };
+var TOWN_COL = { bank: [0.60, 0.55, 0.48], bridge: [0.66, 0.62, 0.55], main: [0.56, 0.47, 0.34], street: [0.62, 0.58, 0.50], track: [0.50, 0.42, 0.30], plaza: [0.70, 0.66, 0.58], quay: [0.58, 0.56, 0.52], mole: [0.52, 0.51, 0.47], pier: [0.45, 0.33, 0.22], post: [0.30, 0.22, 0.15] };
 evOn('bedChunk', function (cx, cy) {
   TOWNS.dirty = true; TOWNS.bedV = (TOWNS.bedV || 0) + 1;                 // bedV：城牆高度等地面的那幾件（townWallY）有新的一塊才再試
   if (!BED || !BED.A) return;
@@ -464,7 +501,7 @@ function townDiff(T0, T1) {
     grow(box, E(l.at), Math.hypot(l.w, l.d)); if (l.use === 'plaza') { rb = rb || [1e9, 1e9, -1e9, -1e9]; grow(rb, E(l.at), Math.hypot(l.w, l.d)); }
     if (l.water) deck = true;                                           // 水上地塊（平台、樁、接縫木板在地面那一區畫）⇒ 那一區的清單照新的規劃重分（townDistBins）—— ⛔ 不分 ⇒ 建築模式剛蓋的漁場水上版只有模型、底下沒平台也沒接到棧橋的木板，重進城才出現（Tim 2026-10-31）
   });
-  ['piers', 'quay', 'stairs'].forEach(function (k) { changed(a[k], b[k], function (q) { deck = true; q.path.forEach(function (p) { grow(box, E(p), (q.w || 4) + 4); }); }); });   // 城區多了少了（townDistView）：那一區的地面重建（townDistBins）
+  ['piers', 'quay', 'stairs', 'bridges'].forEach(function (k) { changed(a[k], b[k], function (q) { deck = true; q.path.forEach(function (p) { grow(box, E(p), (q.w || 4) + 4); }); }); });   // 城區多了少了（townDistView）：那一區的地面重建（townDistBins）
   var c0 = a.clear || {}, c1 = b.clear || {};
   bag(c0.rings, c1.rings, function (R) { R.forEach(function (q) { grow(box, E(q), 4); }); });
   bag(c0.paths, c1.paths, function (c) { c.path.forEach(function (q) { grow(box, E(q), c.w); }); });
@@ -554,6 +591,19 @@ function townNewer(C) {
   var S = BED.A.chunk, cb = [C.cx * S, C.cy * S, (C.cx + 1) * S, (C.cy + 1) * S];
   return TOWNS.list.some(function (T) { return (T.v > C.tv && townBoxHit(T.box, cb)) || (T.edits || []).some(function (e) { return e.v > C.tv && townBoxHit(e.b, cb); }); });
 }
+/** 路面挖掉橋那幾段（Blocksail TASK-1290）：P ＝ 規劃的當地公尺（閉合的已經接回頭）、z 每點一個、S ＝ [[s0, s1]…]（橋台到橋台）⇒ [{ P, z }…]（留下來的段；兩頭各蓋進橋面 TOWN_BRIDGE_LAP）。 */
+function townRoadCut(P, z, S) {
+  var Ls = [0]; for (var i = 1; i < P.length; i++) Ls.push(Ls[i - 1] + Math.hypot(P[i][0] - P[i - 1][0], P[i][1] - P[i - 1][1]));
+  var L = Ls[Ls.length - 1], keep = [], a = 0;
+  S.slice().sort(function (x, y) { return x[0] - y[0]; }).forEach(function (s) { var e = s[0] + TOWN_BRIDGE_LAP; if (e > a) keep.push([a, Math.min(L, e)]); a = Math.max(a, s[1] - TOWN_BRIDGE_LAP); });
+  if (a < L) keep.push([a, L]);
+  function at(t) { for (var i = 1; i < P.length; i++) if (t <= Ls[i] + 1e-9 || i === P.length - 1) { var u = Ls[i] > Ls[i - 1] ? Math.max(0, Math.min(1, (t - Ls[i - 1]) / (Ls[i] - Ls[i - 1]))) : 0, za = z[i - 1], zb = z[i]; return [[P[i - 1][0] + (P[i][0] - P[i - 1][0]) * u, P[i - 1][1] + (P[i][1] - P[i - 1][1]) * u], za == null || zb == null ? null : za + (zb - za) * u]; } return [P[0], z[0]]; }
+  return keep.filter(function (k) { return k[1] - k[0] > 0.05; }).map(function (k) {
+    var q0 = at(k[0]), q1 = at(k[1]), Pp = [q0[0]], zz = [q0[1]];
+    for (var i = 1; i < P.length - 1; i++) if (Ls[i] > k[0] + 1e-6 && Ls[i] < k[1] - 1e-6) { Pp.push(P[i]); zz.push(z[i]); }
+    Pp.push(q1[0]); zz.push(q1[1]); return { P: Pp, z: zz };
+  });
+}
 /** 規劃 ⇒ 一座城（海域座標的路、清樹，世界座標的實例；模型的實例等要用到的模型解好（townKit）才建 ⇒ townInst）。
  *  keep ＝ 沿用的清樹（townReplace 換城區：整份規劃同一份、座標換算一樣 ⇒ 清樹一模一樣，不再把整座城每一圈重新換算 —— 君士坦丁堡 9,060 圈）。 */
 function townPrep(p, keep) {
@@ -561,11 +611,14 @@ function townPrep(p, keep) {
   function E(q) { return [ox + kx * q[0], oy + q[1]]; }
   var box = [1e9, 1e9, -1e9, -1e9];
   function grow(q, r) { box[0] = Math.min(box[0], q[0] - r); box[1] = Math.min(box[1], q[1] - r); box[2] = Math.max(box[2], q[0] + r); box[3] = Math.max(box[3], q[1] + r); }
+  var brOf = {}; townBridgeList(p).forEach(function (b) { (brOf[b.road] = brOf[b.road] || []).push(b.s); });   // 橋（Blocksail TASK-1290）：路 id ⇒ [[s0, s1]…]
   var roads = (p.roads || []).map(function (r) {
     var P = r.path.map(E); if (r.closed) P = P.concat([P[0]]);
     var z = (r.z || []).slice(); if (r.closed) z.push(z[0]);
     P.forEach(function (q) { grow(q, r.w / 2 + 4); });
-    return { id: r.id, kind: r.kind, w: r.w, P: P, z: z };
+    var o = { id: r.id, kind: r.kind, w: r.w, P: P, z: z };
+    if (brOf[r.id]) o.cut = townRoadCut(r.closed ? r.path.concat([r.path[0]]) : r.path, z, brOf[r.id]).map(function (q) { return { P: q.P.map(E), z: q.z }; });   // 路面照這幾段鋪（橋那一段挖掉，townRoadSurface）
+    return o;
   });
   //   附屬的田（規劃的地塊帶 annex：{ cells: [[排, 從第幾欄, 到第幾欄] …], crop }；格子對齊那一塊地塊，第 0 排臨路 —— Blocksail world/annex.js）：
   //   一列一段 ⇒ 一條長方形（地塊座標 a 沿進深、b 沿寬）；清樹（clr.rings）、鋪土（townGroundTile）、種作物（63_trees.js treeFieldPut）都照它
@@ -1818,7 +1871,8 @@ function* townRoadGen(roads, G) {
 /** 城的路面（townRoadGen）：Worker 算（Blob；一個 Worker 給所有城排隊）⇒ Promise。開不了 ⇒ 這一頁一段一段跑（每段 TOWN_MESH_MS，跟以前一樣讓出去）。 */
 var TOWNRD = { w: null, ok: null, id: 0, wait: {} };
 function townRoadSurface(roads) {
-  var L = roads.map(function (r) { return { w: r.w, col: TOWN_COL[r.kind] || TOWN_COL.street, P: r.P, z: r.z }; }), W = TOWNRD;
+  var L = []; roads.forEach(function (r) { (r.cut || [r]).forEach(function (q) { L.push({ w: r.w, col: TOWN_COL[r.kind] || TOWN_COL.street, P: q.P, z: q.z }); }); });   // 有橋的路 ⇒ 照 cut 那幾段鋪（橋那一段挖掉）
+  var W = TOWNRD;
   if (W.ok === null) {
     try {
       var src = townRoadGen.toString() + '\nonmessage = function (e) { var m = e.data, g = townRoadGen(m.roads, m.G), r; do { r = g.next(); } while (!r.done); var o = r.value, tr = [o.v.buffer, o.i.buffer, o.e.buffer, o.ao.buffer, o.al.buffer]; o.tiles.forEach(function (t) { tr.push(t.tri.buffer, t.edge.buffer); }); o.id = m.id; postMessage(o, tr); };\n';
@@ -1859,7 +1913,7 @@ var TOWN_GT_SLICE = 4;                                                   // 棧�
 /** 分區（路面到了、城建好時各一次）：每區 { tri, edge, plaza, quay, pier, g, dirty, deps }。 */
 function townGroundPrep(T) {
   var S = TOWN_GT_SZ, R = T.roadSurface, p = T.p, G = {};
-  function at(x, z) { var k = x + '_' + z; return G[k] || (G[k] = { k: k, cx: (x + 0.5) * S, cz: (z + 0.5) * S, tri: [], edge: [], plaza: [], stair: [], quay: [], pier: [], bank: [], wlot: [], field: [], g: null, dirty: true, deps: {} }); }
+  function at(x, z) { var k = x + '_' + z; return G[k] || (G[k] = { k: k, cx: (x + 0.5) * S, cz: (z + 0.5) * S, tri: [], edge: [], plaza: [], stair: [], quay: [], pier: [], bank: [], bridge: [], wlot: [], field: [], g: null, dirty: true, deps: {} }); }
   function tile(e, s) { return at(Math.floor(e / S), Math.floor(s / S)); }
   if (R) R.tiles.forEach(function (t) { var q = at(t.x, t.z); q.R = R; q.tri = t.tri; q.edge = t.edge; q.sig = t.sig; });   // q.R：這一區照哪一份路面（建築模式只換改到的那幾區，townReplace）
   (p.lots || []).forEach(function (l) { if (l.use === 'plaza') { var c2 = T.E(l.at); tile(c2[0], c2[1]).plaza.push(l); } });
@@ -1868,6 +1922,7 @@ function townGroundPrep(T) {
   (T.fields || []).forEach(function (F) { var c2 = [(F.R[0][0] + F.R[2][0]) / 2, (F.R[0][1] + F.R[2][1]) / 2]; tile(c2[0], c2[1]).field.push(F); });
   (p.piers || []).forEach(function (q) { var c2 = T.E(q.path[0]); tile(c2[0], c2[1]).pier.push(q); });
   (p.banks || []).forEach(function (q) { var c2 = T.E(q.path[0]); tile(c2[0], c2[1]).bank.push(q); });   // 運河的河堤（Blocksail TASK-1289 town.js P.banks）
+  townBridgeList(p).forEach(function (q) { var c2 = T.E(q.path[0]); tile(c2[0], c2[1]).bridge.push(q); });   // 橋（Blocksail TASK-1290）
   (p.lots || []).forEach(function (l) { if (l.water) { var c2 = T.E(l.at); tile(c2[0], c2[1]).wlot.push(l); } });   // 水上建築的平台、樁（Blocksail TASK-0899）
   if (T.gt) Object.keys(T.gt).forEach(function (k) { var g = T.gt[k].g, gf = T.gt[k].gf; if (g) townGpuFree(g); if (gf) townGpuFree(gf); });
   T.gt = G;
@@ -1882,7 +1937,7 @@ function townFieldTiles(T) {
   (T.fields || []).forEach(function (F) { var k = Math.floor((F.R[0][0] + F.R[2][0]) / 2 / S) + '_' + Math.floor((F.R[0][1] + F.R[2][1]) / 2 / S); (by[k] || (by[k] = [])).push(F); });
   Object.keys(T.gt).concat(Object.keys(by)).forEach(function (k) {
     var L = by[k] || [], Q = T.gt[k];
-    if (!Q) { if (!L.length) return; var c = k.split('_'); Q = T.gt[k] = { k: k, cx: (+c[0] + 0.5) * S, cz: (+c[1] + 0.5) * S, tri: [], edge: [], plaza: [], stair: [], quay: [], pier: [], bank: [], wlot: [], field: [], g: null, dirty: true, deps: {} }; }
+    if (!Q) { if (!L.length) return; var c = k.split('_'); Q = T.gt[k] = { k: k, cx: (+c[0] + 0.5) * S, cz: (+c[1] + 0.5) * S, tri: [], edge: [], plaza: [], stair: [], quay: [], pier: [], bank: [], bridge: [], wlot: [], field: [], g: null, dirty: true, deps: {} }; }
     if (sig(Q.field || []) === sig(L)) { Q.field = L; return; }
     Q.field = L; Q.dirty = true; Q.edit = true; if (out.indexOf(k) < 0) out.push(k);
   });
@@ -1891,18 +1946,19 @@ function townFieldTiles(T) {
 /** 城區多了少了（townReplace，D.deck）⇒ 棧橋、碼頭、樓梯、廣場、水上地塊照新的規劃分區（同 townGroundPrep 那幾行：照第一點／中心分區）⇒ { 區: { pier, quay, stair, plaza, wlot } }（一次掃完，townDistTile 照區取）。 */
 function townDistBins(T) {
   var S = TOWN_GT_SZ, p = T.p, B = {};
-  function put(n, q, at) { var e = T.E(at), k = Math.floor(e[0] / S) + '_' + Math.floor(e[1] / S), b = B[k] || (B[k] = { pier: [], quay: [], stair: [], plaza: [], wlot: [], bank: [] }); b[n].push(q); }
+  function put(n, q, at) { var e = T.E(at), k = Math.floor(e[0] / S) + '_' + Math.floor(e[1] / S), b = B[k] || (B[k] = { pier: [], quay: [], stair: [], plaza: [], wlot: [], bank: [], bridge: [] }); b[n].push(q); }
   (p.piers || []).forEach(function (q) { put('pier', q, q.path[0]); });
   (p.quay || []).forEach(function (q) { put('quay', q, q.path[0]); });
   (p.banks || []).forEach(function (q) { put('bank', q, q.path[0]); });
+  townBridgeList(p).forEach(function (q) { put('bridge', q, q.path[0]); });
   (p.stairs || []).forEach(function (q) { put('stair', q, q.path[0]); });
   (p.lots || []).forEach(function (l) { if (l.use === 'plaza') put('plaza', l, l.at); if (l.water) put('wlot', l, l.at); });
   return B;
 }
 /** 分區 k 換上 townDistBins 分好的那一份（跟原本一樣 ⇒ 不重建）；還沒有那一區、又有東西 ⇒ 開一區。 */
 function townDistTile(T, k, B) {
-  var S = TOWN_GT_SZ, Q = T.gt[k], L = B[k] || { pier: [], quay: [], stair: [], plaza: [], wlot: [], bank: [] };
-  if (!Q) { if (!B[k]) return; var c = k.split('_'); Q = T.gt[k] = { k: k, cx: (+c[0] + 0.5) * S, cz: (+c[1] + 0.5) * S, tri: [], edge: [], plaza: [], stair: [], quay: [], pier: [], bank: [], wlot: [], field: [], g: null, dirty: true, deps: {} }; }
+  var S = TOWN_GT_SZ, Q = T.gt[k], L = B[k] || { pier: [], quay: [], stair: [], plaza: [], wlot: [], bank: [], bridge: [] };
+  if (!Q) { if (!B[k]) return; var c = k.split('_'); Q = T.gt[k] = { k: k, cx: (+c[0] + 0.5) * S, cz: (+c[1] + 0.5) * S, tri: [], edge: [], plaza: [], stair: [], quay: [], pier: [], bank: [], bridge: [], wlot: [], field: [], g: null, dirty: true, deps: {} }; }
   var same = Object.keys(L).every(function (n) { return townSameArr(Q[n] || [], L[n]); });
   Object.keys(L).forEach(function (n) { Q[n] = L[n]; });
   if (!same) Q.dirty = true;
@@ -1923,7 +1979,7 @@ function townGroundNext(T, eye) {
   return best;
 }
 /** 這一區有棧橋或碼頭。 */
-function townGroundPier(q) { return q.pier.length > 0 || q.quay.length > 0 || (q.wlot || []).length > 0; }   // 碼頭、棧橋、水上建築的平台（Blocksail TASK-0899：碼頭棧橋是路 ⇒ 跟路一樣先出）
+function townGroundPier(q) { return q.pier.length > 0 || q.quay.length > 0 || (q.wlot || []).length > 0 || (q.bridge || []).length > 0; }   // 碼頭、棧橋、水上建築的平台（Blocksail TASK-0899：碼頭棧橋是路 ⇒ 跟路一樣先出）
 /** 城 T 的一區 ⇒ 一份網格（位置、法線、顏色）；那一區沒東西 ⇒ null。 */
 var TOWN_WPILE = 4;                                                      // 水上建築的樁每幾公尺一根（Blocksail TASK-0899；同棧橋每 4 m 一對）
 var TOWN_WGAP_COL = 0.5, TOWN_WGAP_MAX = 8, TOWN_WGAP_SINK = 0.03;       // 水上建築正面的接縫木板：每幾公尺一欄、最遠找幾公尺、面比平台低多少（伸進碼頭、棧橋的那一點藏在它的板面底下）
@@ -1951,9 +2007,17 @@ function townWlotGap(p, l, pt) {
   return out;
 }
 /** 一條板（棧橋、碼頭面、水上建築的平台、運河的河堤）：沿 P（世界平面的點）寬 w、面 top（一個數 ⇒ 整條一樣；陣列 ⇒ 每一點一個：河堤照牆後的地面）、底 bot ⇒ 推進 vtx（⇒ 那一點的索引）、I。 */
+/** 一座橋（Blocksail TASK-1290；townBridgeForm）：本體（面 top、底 bot：拱）＋兩側欄杆 ⇒ slab（同 townGroundGen 的 slab：規劃的當地公尺 ⇒ 世界）。 */
+function townBridgeGeo(b, slab) {
+  var F = townBridgeForm(b), n = Math.max(2, Math.ceil(F.L / TOWN_BRIDGE_STEP)), C = [], T = [], Bt = [], N = [];
+  for (var k = 0; k <= n; k++) { var t = F.L * k / n, q = townPathAt(b.path, t); C.push([q.x, q.y]); N.push([-q.ty, q.tx]); T.push(F.top(t)); Bt.push(F.bot(t)); }
+  slab(C, b.w, T, Bt, TOWN_COL.bridge);
+  var off = b.w / 2 - TOWN_BRIDGE_RAIL[0] / 2;
+  [1, -1].forEach(function (sd) { slab(C.map(function (c, i) { return [c[0] + N[i][0] * off * sd, c[1] + N[i][1] * off * sd]; }), TOWN_BRIDGE_RAIL[0], T.map(function (v) { return v + TOWN_BRIDGE_RAIL[1]; }), T.map(function (v) { return v - 0.05; }), TOWN_COL.bridge); });
+}
 function townSlabPut(vtx, I, P0, w, top, bot, col) {
-  var P = [], Tz = [], hw = w / 2, Lf = [], Rt = [], dk = [col[0] * 0.78, col[1] * 0.78, col[2] * 0.78], arr = Array.isArray(top);
-  P0.forEach(function (c, i) { var l = P[P.length - 1]; if (!l || Math.hypot(c[0] - l[0], c[1] - l[1]) > 1e-3) { P.push(c); Tz.push(arr ? top[i] : top); } });   // 重複的點拿掉（長度 0 的段沒有方向）
+  var P = [], Tz = [], Bz = [], hw = w / 2, Lf = [], Rt = [], dk = [col[0] * 0.78, col[1] * 0.78, col[2] * 0.78], arr = Array.isArray(top), arrB = Array.isArray(bot);   // bot 也可以每一點一個（橋的拱，TASK-1290）⇒ 多畫底面
+  P0.forEach(function (c, i) { var l = P[P.length - 1]; if (!l || Math.hypot(c[0] - l[0], c[1] - l[1]) > 1e-3) { P.push(c); Tz.push(arr ? top[i] : top); Bz.push(arrB ? bot[i] : bot); } });   // 重複的點拿掉（長度 0 的段沒有方向）
   if (P.length < 2) return;
   var Nm = [];                                                          // 每一段的左法線（沿 path 往前看的左手邊 ＝ (−tz, tx)）
   for (var q = 1; q < P.length; q++) { var L = Math.hypot(P[q][0] - P[q - 1][0], P[q][1] - P[q - 1][1]); Nm.push([-(P[q][1] - P[q - 1][1]) / L, (P[q][0] - P[q - 1][0]) / L]); }
@@ -1962,18 +2026,19 @@ function townSlabPut(vtx, I, P0, w, top, bot, col) {
     var m = ml > 1e-6 ? [mx / ml, mz / ml] : n0, k = hw / Math.max(m[0] * n0[0] + m[1] * n0[1], 1 / TOWN_SLAB_KMAX);
     Lf.push([c[0] + m[0] * k, c[1] + m[1] * k]); Rt.push([c[0] - m[0] * k, c[1] - m[1] * k]);
   });
-  function side(c0, c1, t0, t1) {                                       // 一面鉛直的側面（c0 → c1，法線朝外 ＝ 往前看的右手邊；面高 t0 → t1）
+  function side(c0, c1, t0, t1, b0, b1) {                               // 一面鉛直的側面（c0 → c1，法線朝外 ＝ 往前看的右手邊；面高 t0 → t1、底 b0 → b1）
     var nx = c1[1] - c0[1], nz = -(c1[0] - c0[0]), nl = Math.hypot(nx, nz) || 1;
-    var b2 = vtx(c0[0], t0, c0[1], dk, nx / nl, 0, nz / nl); vtx(c1[0], t1, c1[1], dk, nx / nl, 0, nz / nl); vtx(c1[0], bot, c1[1], dk, nx / nl, 0, nz / nl); vtx(c0[0], bot, c0[1], dk, nx / nl, 0, nz / nl);
+    var b2 = vtx(c0[0], t0, c0[1], dk, nx / nl, 0, nz / nl); vtx(c1[0], t1, c1[1], dk, nx / nl, 0, nz / nl); vtx(c1[0], b1, c1[1], dk, nx / nl, 0, nz / nl); vtx(c0[0], b0, c0[1], dk, nx / nl, 0, nz / nl);
     I.push(b2, b2 + 1, b2 + 2, b2, b2 + 2, b2 + 3);
   }
   for (var s = 1; s < P.length; s++) {
     var base = vtx(Lf[s - 1][0], Tz[s - 1], Lf[s - 1][1], col); vtx(Lf[s][0], Tz[s], Lf[s][1], col); vtx(Rt[s][0], Tz[s], Rt[s][1], col); vtx(Rt[s - 1][0], Tz[s - 1], Rt[s - 1][1], col);
     I.push(base, base + 1, base + 2, base, base + 2, base + 3);
-    side(Lf[s - 1], Lf[s], Tz[s - 1], Tz[s]); side(Rt[s], Rt[s - 1], Tz[s], Tz[s - 1]);
+    side(Lf[s - 1], Lf[s], Tz[s - 1], Tz[s], Bz[s - 1], Bz[s]); side(Rt[s], Rt[s - 1], Tz[s], Tz[s - 1], Bz[s], Bz[s - 1]);
+    if (arrB) { var bb = vtx(Rt[s - 1][0], Bz[s - 1], Rt[s - 1][1], dk, 0, -1, 0); vtx(Rt[s][0], Bz[s], Rt[s][1], dk, 0, -1, 0); vtx(Lf[s][0], Bz[s], Lf[s][1], dk, 0, -1, 0); vtx(Lf[s - 1][0], Bz[s - 1], Lf[s - 1][1], dk, 0, -1, 0); I.push(bb, bb + 1, bb + 2, bb, bb + 2, bb + 3); }   // 底面（拱的內面）：跟頂面反著繞
   }
   var nE = P.length - 1;
-  side(Rt[0], Lf[0], Tz[0], Tz[0]); side(Lf[nE], Rt[nE], Tz[nE], Tz[nE]);   // 兩頭的端面
+  side(Rt[0], Lf[0], Tz[0], Tz[0], Bz[0], Bz[0]); side(Lf[nE], Rt[nE], Tz[nE], Tz[nE], Bz[nE], Bz[nE]);   // 兩頭的端面
 }
 var TOWN_WBUILD = 0.6, TOWN_WDRIVE = 1.5;                                // 水上建築的平台施工：前幾成打樁（其餘鋪板）；正在打的那一根從高出幾公尺往下敲
 /** 水上建築（Blocksail TASK-0899 world/town.js WATER；地塊帶 water: { d0, deck, slip? }、h ＝ 平台面）一塊地塊的平台與樁 ⇒ 推進 vtx（⇒ 那一點的索引）、I：
@@ -2135,7 +2200,8 @@ function* townGroundGen(T, Q) {
   function slab(P0, w, top, bot, col) { townSlabPut(vtx, I, P0.map(W), w, top, bot, col); }
   yield* townEach(Q.quay, function (q) { slab(q.path, q.w, q.deck != null ? q.deck : 1.0, -2.5, TOWN_COL.quay); });
   // 運河的河堤（Blocksail TASK-1289，town.js P.banks；water.js WATER_BANKS）：沿河道邊一道牆 —— 牆頂每一點照規劃的 z（牆後的地面）、牆底 bot（河道底再往下）；第一版只有石砌直牆（stone）
-  yield* townEach(Q.bank || [], function (b) { slab(b.path, b.w, b.z || 1.0, b.bot != null ? b.bot : -3, TOWN_COL.bank); });   // 面的高照規劃的 deck（Blocksail TASK-0899 world/town.js DECK；舊規劃沒有 ⇒ 1.0）
+  yield* townEach(Q.bank || [], function (b) { slab(b.path, b.w, b.z || 1.0, b.bot != null ? b.bot : -3, TOWN_COL.bank); });
+  yield* townEach(Q.bridge || [], function (b) { townBridgeGeo(b, slab); });   // 橋（Blocksail TASK-1290；townBridgeGeo）   // 面的高照規劃的 deck（Blocksail TASK-0899 world/town.js DECK；舊規劃沒有 ⇒ 1.0）
   // 棧橋（Blocksail TOWN_BUILD §3.3.8 的 kind）：長碼頭 wharf、石堤 mole ＝ 實心石砌，一直到那一座沿線最深的水再深 1 m（埋進海床；不畫樁）；
   //   其他（棧橋、T 字頭、支棧橋、skala 短棧）＝ 木板＋樁，樁一根一根伸到它底下的海床（Tim 2026-10-22「棧橋的腳可以長一點」—— 以前一律到 −4 m，深水的棧橋腳懸在水裡）；
   //   那一塊地形還沒到（townRoadHeight 是 NaN）⇒ 伸到沿線最深的水再深 1 m（一樣埋進海床）
@@ -3383,6 +3449,8 @@ function* townPostsGen(T) {
     var L = IG[Math.floor(x / GI) + ',' + Math.floor(z / GI)] || [];
     return L.some(function (b) { var dx = x - b.x, dz = z - b.z, a = dx * b.s - dz * b.c, c = -dx * b.c - dz * b.s; return Math.abs(a) <= b.h[0] + 0.6 && Math.abs(c) <= b.h[1] + 0.6; });
   }
+  var BRG = townBridgeList(T.p).map(function (bq) { return { P: bq.path.map(T.E), hw: bq.w / 2 + 2 }; });   // 橋（Blocksail TASK-1290）：橋上、橋頭 2 m 內不立街燈（燈照地面高 ⇒ 會立在水裡）
+  function onBridge(x, z) { return BRG.some(function (bq) { for (var i = 1; i < bq.P.length; i++) if (townSegDist(x, z, bq.P[i - 1], bq.P[i]) < bq.hw) return true; return false; }); }
   function onRoad(x, z, own) {                                          // 海域座標：站在別條路的路面上
     var L = RG[Math.floor(x / GR) + ',' + Math.floor(z / GR)] || [];
     return L.some(function (sg) { return sg.r !== own && townSegDist(x, z, sg.a, sg.b) < sg.hw + 0.3; });
@@ -3402,7 +3470,7 @@ function* townPostsGen(T) {
         var px = a[0] + dx * t / L, pz = a[1] + dz * t / L, side = k++ % 2 ? 1 : -1, got = null;
         [side, -side].some(function (sd) {
           var x = px + nx * off * sd, z = pz + nz * off * sd;
-          if (inBldg(x - ax, z - az) || onRoad(x, z, r) || crowded(x, z)) return false;
+          if (inBldg(x - ax, z - az) || onRoad(x, z, r) || crowded(x, z) || (BRG.length && onBridge(x, z))) return false;
           got = [x, z]; return true;
         });
         if (got) { var kk = Math.floor(got[0] / TL_POST_GAP) + ',' + Math.floor(got[1] / TL_POST_GAP); (PG[kk] = PG[kk] || []).push(got); out.push([got[0] - ax, got[1] - az]); }
