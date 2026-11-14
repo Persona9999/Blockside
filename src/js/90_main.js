@@ -266,7 +266,7 @@ if (DEBUG) window.__game = {
   townHit: function (cx, cy) { var h = townHitAt(cx, cy); return h ? { town: h.T.id, lot: h.lot ? h.lot.id : null, use: h.use, name: h.name, k: h.q.k, t: h.t, pt: h.pt } : null; },   // 螢幕那一點點到哪一棟（63_towns.js townHitAt；不看地形擋不擋）
   twbSel: function () { var h = TWB.sel; return h ? { town: h.T.id, lot: h.lot ? h.lot.id : null, use: h.use, name: h.name, k: h.q.k } : null; },   // 建築模式選著的那一棟
   twbMenu: function () { return TWB_CATS.map(function (c) { return { k: c.k, name: c.name, items: c.items.map(function (it) { return it.k; }) }; }); },   // 建築模式的選單（open 回的 menu 換過沒）
-  townSpin: function (w) { if (w !== undefined) TOWNS.spinWind = w; return TOWNS.stat.spin || null; },   // 旋轉件（63_towns.js townSpinDraw；TASK-0939）：給風速（m/s）⇒ 蓋過遊戲的風（null ⇒ 回到遊戲的風）；回上一格的讀數
+  townSpin: function (w, h) { if (w !== undefined) TOWNS.spinWind = w; if (h !== undefined) TOWNS.spinTod = h; return TOWNS.stat.spin || null; },   // 旋轉件（63_towns.js townSpinDraw；TASK-0939）：給風速（m/s）⇒ 蓋過遊戲的風（null ⇒ 回到遊戲的風）；回上一格的讀數
   //   兩陣營的旗（77_colours.js；TASK-0950）：o ＝ { blue?, red? }，每一個是預設旗的 key 或 { field: '#rrggbb', emblem } ⇒ 換（已載入的船型重烘旗面）；
   //   回現在的兩面、換了幾邊（n）、選得到的預設旗與紋章 —— Blocksail 之後照國家、玩家的旗叫這一支
   flags: function (o) { var n = o ? flagSet(o) : 0; return { blue: teamFlag('blue'), red: teamFlag('red'), n: n, presets: FLAG_PRESETS.map(function (p) { return { k: p.k, name: p.name, field: p.field, emblem: p.emblem }; }), emblems: Object.keys(FLAG_EMB) }; },

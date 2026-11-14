@@ -2294,7 +2294,10 @@ function townGpu9(V, I, bb) {
 //   同一種的每一座轉得一樣（同一陣風）；陰影那一層（靜態快取）不畫它。只是畫面：不讀寫模擬的狀態。
 //   網址 ?townspin=0 ⇒ 不畫（對照組：近處少了帆）；__game.townSpin(m/s) 蓋過風速（null ＝ 照遊戲的風）。
 var TOWN_SPIN = Q.get('townspin') !== '0';
-var TOWN_SPIN_SRC = { wind: function () { return TOWNS.spinWind != null ? TOWNS.spinWind : windKnots() / 1.944; } };   // 風速 m/s（同打帆、環境音那一個）
+var TOWN_SPIN_SRC = { wind: function () { return TOWNS.spinWind != null ? TOWNS.spinWind : windKnots() / 1.944; },   // 風速 m/s（同打帆、環境音那一個）
+  tod: function () { return TOWNS.spinTod != null ? TOWNS.spinTod : todNow(); } };   // 遊戲的時刻（0–24 時，08_weather.js todNow；沒開世界時間 ⇒ null ⇒ 停在雕的樣子）
+// 時鐘的指針（TASK-1216；Tim 2026-11-14「時鐘塔是否可以參考風車磨坊 讓時針跟著時間轉呢」）：索引 mode angle ⇒ 角度 ＝ k × (時刻 − zero)（不累加：時刻跳了指針跟著跳）。
+//   聖馬可時鐘塔：24 小時錶盤、XXIV 在右邊、太陽指針順時針、義大利時制（日落 ＝ XXIV；todDir 的赤緯 0 ⇒ 日落 18 時）⇒ k −15（作品座標的右手定則經 mirror_x 翻過）、zero 18。__game.townSpin(風, 時刻) 蓋過（null ⇒ 回到遊戲的）。
 /** 模型 Mm 的旋轉件網格（一件一份，第一次要畫才解；解好之前 ⇒ null，那一格不畫）。 */
 function townSpinMesh(Mm) {
   if (Mm.spinG || Mm.spinP || !Mm.spinD) return Mm.spinG;
@@ -2333,11 +2336,12 @@ function townSpinDraw(PV, G, K) {
     sp.forEach(function (e, j) {
       var g = L[j], f = TOWN_SPIN_SRC[e.src]; if (!g || !f) return;
       var v = f(), A = Mm.spinA || (Mm.spinA = []);
-      A[j] = ((A[j] || 0) + e.k * v * dt) % 360;                         // 角度（度）照遊戲時間（townClock：暫停就停）累加；風停 ⇒ 停在那裡
+      if (e.mode === 'angle') A[j] = v == null ? 0 : ((e.k * (v - (e.zero || 0))) % 360 + 360) % 360;   // 時鐘：照時刻直接給角度
+      else A[j] = ((A[j] || 0) + e.k * v * dt) % 360;                    // 角度（度）照遊戲時間（townClock：暫停就停）累加；風停 ⇒ 停在那裡
       gl.uniform4f(PV.u.uSpA, e.ax[0], e.ax[1], e.ax[2], A[j] * Math.PI / 180); gl.uniform3f(PV.u.uSpP, e.pv[0], e.pv[1], e.pv[2]);
       gl.bindVertexArray(g.vao); gl.bindBuffer(gl.ARRAY_BUFFER, TOWNS.prog.ib[0]); townInstAttr(G, 0, mi);
       gl.drawElementsInstanced(gl.TRIANGLES, g.nq * 6, gl.UNSIGNED_INT, 0, n); tris += g.nq * 2 * n;
-      S.models++; S.inst += n; S.wind = +v.toFixed(2); S.deg = +A[j].toFixed(1);
+      S.models++; S.inst += n; if (e.mode === 'angle') { S.tod = v == null ? null : +v.toFixed(3); S.clock = +A[j].toFixed(1); } else { S.wind = +v.toFixed(2); S.deg = +A[j].toFixed(1); }
     });
   });
   if (set) gl.uniform4f(PV.u.uSpA, 0, 0, 0, 0);                         // ⛔ 一定要歸零：同一支著色器接著畫工地與別的東西
