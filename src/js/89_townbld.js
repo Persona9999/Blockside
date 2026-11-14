@@ -7,7 +7,56 @@
 //   guard?: { w, need, full?（沒壞時的崗位）, dmg?（損傷 ‰）}, jobName?（崗位上的人叫什麼：神父、牧師…）, ruler?（住在這裡的統治者家族）, note }, goods: { 貨: 名字 } }（Blocksail world/site.js townBld）。
 // 物理意義：⛔ 這一支不算經濟 —— 數字全照那一頁的城鎮帳；這裡只問、只畫。
 // 失敗處置：沒有 host（直接開 Blockside）⇒ 只有名稱、模型與演出鈕；那一頁沒回 ⇒ 照原樣說一聲。
-var TBI = { open: false, hit: null, b: null, goods: {}, msg: '', seq: 0, rcp: null };   // rcp：那一棟能換的配方（lotRecipes 的回覆；不是生產建築 ⇒ null）
+var TBI = { open: false, hit: null, b: null, goods: {}, msg: '', seq: 0, rcp: null, fsel: -1, fmsg: '' };   // fsel：瑕疵那一段選著第幾處（外框亮）；fmsg：標記的回覆
+// 瑕疵（TASK-1293；Blocksail tools/townkit_flaw.py 量、tools/townmodels.py 記進索引 m.flaw：[[id, 狀態 f 確定是缺口｜u 沒確認, x0,y0,z0,x1,y1,z1（模型的格）, m²] …]，設計的不帶）：
+//   Tim 2026-11-14「希望做個自檢功能可以標記(標記後可以手動確認該標記是刻意的設計或是瑕疵 標記為設計後之後該部位就不在報錯」「遊戲裡標記」
+//   ⇒ 面板多一段，每一處兩顆鈕「是缺口」「設計」⇒ POST /api/flaw（Blocksail tools/world_serve.py ⇒ tools/townkit_flaw.json；重建模型才進索引）；選著的那一處外框亮（87_townbuild.js）。
+//   只在開發時看得到：?debug=1 或本機（127.0.0.1／localhost）開的 ⇒ 玩家看不到。缺口本身補在雕刻作品（tools/townkit_flaw.py --fix），不在這裡補。
+var TBI_FLAW = DEBUG || /^(127\.0\.0\.1|localhost)$/.test(location.hostname);
+var TBI_FLAW_KIND = { roof: '牆頂到屋頂之間的開口', float: '地板懸空' };
+/** 選著的那一棟的瑕疵（沒有、不是開發 ⇒ null）。 */
+function tbiFlaws() {
+  if (!TBI_FLAW || !TBI.open || !TBI.hit) return null;
+  var Mm = TOWNS.kit && TOWNS.kit.M[TBI.hit.q.k], m = Mm && Mm.m;
+  return m && m.flaw && m.flaw.length ? { m: m, list: m.flaw } : null;
+}
+/** 一處瑕疵的外框（模型的格）⇒ 世界的 8 個角（同 63_towns.js townTreesSet 的模型 → 世界；高照實例的 sh）。 */
+function tbiFlawBox(q, m, r) {
+  var s = Math.sin(q.th), c = Math.cos(q.th), mpv = m.mpv, hw = m.size[0] * mpv / 2, hd = m.size[1] * mpv / 2, P = [];
+  [r[4], r[7]].forEach(function (zv) { [[r[2], r[3]], [r[5], r[3]], [r[5], r[6]], [r[2], r[6]]].forEach(function (xy) {
+    var A = (xy[0] * mpv - hw) * q.sx, B = xy[1] * mpv - hd;
+    P.push([q.x + A * s - B * c, q.y + zv * mpv * (q.sh || 1), q.z - A * c - B * s]);
+  }); });
+  return P;
+}
+/** 標一處：flaw（是缺口）／design（設計）⇒ POST /api/flaw；成功 ⇒ 這一份索引跟著改（設計的拿掉、缺口的換狀態），外框照新的畫。 */
+function tbiFlawMark(i, how) {
+  var F = tbiFlaws(); if (!F || !F.list[i]) return;
+  var r = F.list[i], name = TBI.hit.q.k;
+  TBI.fmsg = '送出中…'; tbiUI();
+  var cmd = 'python -I tools/townkit_flaw.py --mark ' + name + ' ' + r[0] + ' ' + how;
+  var x = new XMLHttpRequest();                                         // ⛔ 單檔成品不准出現 fetch（VoxelKit/vxk_inline.py 零外部依賴）⇒ 同 01_gl.js 用 XHR
+  x.open('POST', '/api/flaw'); x.setRequestHeader('Content-Type', 'application/json');
+  x.onload = function () {
+    var j = null; try { j = JSON.parse(x.responseText); } catch (e) { j = { ok: false, error: 'HTTP ' + x.status }; }
+    if (!j.ok) { TBI.fmsg = '沒存到：' + (j.error || '?') + '（要用 python -I tools/world_serve.py 開；或 ' + cmd + '）'; tbiUI(); return; }
+    if (how === 'design') { F.list.splice(i, 1); TBI.fsel = -1; } else r[1] = how === 'flaw' ? 'f' : 'u';
+    TBI.fmsg = '已標成「' + (how === 'design' ? '設計' : '是缺口') + '」（tools/townkit_flaw.json；重建模型後進索引）'; tbiUI();
+  };
+  x.onerror = function () { TBI.fmsg = '沒存到：連不上（' + cmd + '）'; tbiUI(); };
+  x.send(JSON.stringify({ model: name, id: r[0], mark: how, by: 'Tim' }));
+}
+function tbiFlawHTML() {
+  var F = tbiFlaws(); if (!F) return '';
+  var out = ['<div class="tbiT">瑕疵（自檢）' + F.list.length + ' 處　<span class="tbiDim">紅 ＝ 確定是缺口、橘 ＝ 沒確認</span></div>'];
+  F.list.forEach(function (r, i) {
+    var k = r[0].split(':')[0];
+    out.push('<div class="tbiR tbiFl' + (i === TBI.fsel ? ' on' : '') + '" data-i="' + i + '"><span>' + (r[1] === 'f' ? '🟥 ' : '🟧 ') + tuiEsc(TBI_FLAW_KIND[k] || k) + ' ' + tuiNum(r[8], 1) + ' m²</span>'
+      + '<b><button data-i="' + i + '" data-m="flaw"' + (r[1] === 'f' ? ' disabled' : '') + '>是缺口</button> <button data-i="' + i + '" data-m="design">設計</button></b></div>');
+  });
+  if (TBI.fmsg) out.push('<div class="tbiDim">' + tuiEsc(TBI.fmsg) + '</div>');
+  return out.join('');
+}   // rcp：那一棟能換的配方（lotRecipes 的回覆；不是生產建築 ⇒ null）
 function tbiSelQ() { return TBI.open && TBI.hit ? TBI.hit.q : null; }
 function tbiClose() { TBI.open = false; TBI.hit = null; TBI.b = null; var st = $('stage'); if (st) st.classList.remove('tbi'); }
 function tbiEscEaten() { if (!TBI.open) return false; tbiClose(); return true; }
@@ -17,7 +66,7 @@ function tbiTap(x, y, btn) {
   var h = townHitAt(x, y);
   if (!h || !h.lot) { if (TBI.open) { tbiClose(); return true; } return false; }
   if (TBI.open && TBI.hit && TBI.hit.q === h.q) { tbiClose(); return true; }
-  TBI.open = true; TBI.hit = h; TBI.b = null; TBI.msg = ''; $('stage').classList.add('tbi');
+  TBI.open = true; TBI.hit = h; TBI.b = null; TBI.msg = ''; TBI.fsel = -1; TBI.fmsg = ''; $('stage').classList.add('tbi');
   tbiLoad();
   return true;
 }
@@ -115,6 +164,7 @@ function tbiUI() {
     html.push('<div class="tbiT">每天消耗' + (b.full ? '（實際／理論）' : '') + '</div>' + tbiRows(b.used, b.full && b.full.used));
   }
   html.push(tbiRcpHTML());
+  html.push(tbiFlawHTML());
   if (b && b.note) html.push('<div class="tbiDim">' + tuiEsc(b.note) + '</div>');
   if (!tuiOk()) html.push('<div class="tbiDim">沒有城鎮帳（要從 Blocksail 地球儀停靠進城才看得到住戶、工人、產出）</div>');
   if (TBI.msg) html.push('<div class="tbiDim">' + tuiEsc(TBI.msg) + '</div>');
@@ -123,6 +173,7 @@ function tbiUI() {
   P.innerHTML = html.join('');
   $('tbiX').onclick = tbiClose;
   P.querySelectorAll('.tbiRcp button[data-k]').forEach(function (el) { el.onclick = function () { if (!el.classList.contains('no')) tbiRcpPick(el.dataset.k); }; });
+  P.querySelectorAll('.tbiFl').forEach(function (el) { el.onclick = function (e) { var i = +el.dataset.i; if (e.target.dataset.m) tbiFlawMark(i, e.target.dataset.m); else { TBI.fsel = TBI.fsel === i ? -1 : i; tbiUI(); } }; });
   $('tbiPlay').onclick = function () {
     if (RISE.demo && RISE.demo.T === h.T && RISE.demo.lot === h.lot.id && RISE.demo.play) { townRiseStop(); tbiUI(); return; }
     townRiseStart(h.T, h.lot.id, 0, RISE.dur, true).then(tbiUI, function (er) { TBI.msg = er.message; tbiUI(); });

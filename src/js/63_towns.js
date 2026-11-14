@@ -1908,6 +1908,7 @@ function townRoadPage(L) {
 //   路面的分區、每一點旁邊有哪幾個三角形，跟路面一起在 Worker 算好（townRoadGen 的 tiles、ao／al）⇒ 這一頁只把廣場、碼頭、棧橋分進去。
 //   法線照「這一點旁邊所有的三角形」（跨區也算）⇒ 接縫跟整座一份時一樣。
 var TOWN_GT_MAX = 2, TOWN_GT_SZ = 250;
+var TOWN_PLINTH_STEP = 2;                                              // 石基照外框每幾公尺量一點地面（townPlinth；TASK-1293）
 var TOWN_INST_SLICE = 4;                                                 // 實例照段建（townInstGen）：每格至少建幾 ms（實例照舊不等背景預算 —— TASK-0819；以前一整座）
 var TOWN_GT_SLICE = 4;                                                   // 棧橋、改到的區不等背景預算：每格至少建幾 ms（照段建，townGroundGen；以前一整區）
 /** 分區（路面到了、城建好時各一次）：每區 { tri, edge, plaza, quay, pier, g, dirty, deps }。 */
@@ -2696,7 +2697,13 @@ function townBin(PL, eye) {
 function townPlinth(q) {
   if (q.nb) return null;                                                // 水上版的模型（townLotInst nb）：底下是平台與樁
   var s = Math.sin(q.th), c = Math.cos(q.th), w = q.pl[0] / 2, d = q.pl[1] / 2, lo = Infinity;
-  [[0, 0], [-w, -d], [w, -d], [w, d], [-w, d]].forEach(function (o) { var gy = townGround(q.x + o[0] * s - o[1] * c, q.z - o[0] * c - o[1] * s); lo = Math.min(lo, gy); });
+  //   沿外框每 TOWN_PLINTH_STEP 公尺量一點（TASK-1293：以前只量四角＋中心 ⇒ 大的地塊牆中間地形凹下去，石基底到不了 ⇒ 牆腳跟地面之間空一截；Tim 2026-11-14 聖馬可大教堂截圖）
+  var P = [[0, 0]], E = [[-w, -d], [w, -d], [w, d], [-w, d]];
+  for (var e = 0; e < 4; e++) {
+    var a = E[e], b = E[(e + 1) % 4], n = Math.max(1, Math.ceil(Math.hypot(b[0] - a[0], b[1] - a[1]) / TOWN_PLINTH_STEP));
+    for (var i = 0; i < n; i++) P.push([a[0] + (b[0] - a[0]) * i / n, a[1] + (b[1] - a[1]) * i / n]);
+  }
+  P.forEach(function (o) { var gy = townGround(q.x + o[0] * s - o[1] * c, q.z - o[0] * c - o[1] * s); lo = Math.min(lo, gy); });
   if (!(lo === lo) || lo === Infinity) return null;
   var top = q.y - 0.01, hgt = Math.max(0.3, top - lo + 0.3);
   return [top, hgt];

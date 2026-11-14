@@ -341,6 +341,11 @@ function twbLines(T) {
         var u0 = B4[e], u1 = B4[(e + 1) % 4];
         seg([u0[0], y0, u0[1]], [u1[0], y0, u1[1]], Y); seg([u0[0], y1, u0[1]], [u1[0], y1, u1[1]], Y); seg([u0[0], y0, u0[1]], [u0[0], y1, u0[1]], Y);
       }
+      var FL = !TWB.on && tbiFlaws();                                   // 瑕疵（TASK-1293；89_townbld.js）：每一處一個外框，紅 ＝ 確定是缺口、橘 ＝ 沒確認；面板上選著的那一處亮
+      if (FL) FL.list.forEach(function (r, i) {
+        var P8 = tbiFlawBox(sq, FL.m, r), on = i === TBI.fsel, cF = r[1] === 'f' ? (on ? [1, 0.35, 0.35] : [0.85, 0.12, 0.12]) : (on ? [1, 0.8, 0.3] : [0.95, 0.55, 0.1]);
+        for (var k = 0; k < 4; k++) { seg(P8[k], P8[(k + 1) % 4], cF); seg(P8[k + 4], P8[(k + 1) % 4 + 4], cF); seg(P8[k], P8[k + 4], cF); }
+      });
     }
   }
   TWB.gl = upload(TWB.gl, new Float32Array(L), 6, [[0, 3, 0], [2, 3, 3]]);
