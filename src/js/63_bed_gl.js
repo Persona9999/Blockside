@@ -455,6 +455,7 @@ function bedFoamTex() {
   gl.bindTexture(gl.TEXTURE_2D, Fm.tex); gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA16F, W, W, 0, gl.RGBA, gl.FLOAT, T4); gl.bindTexture(gl.TEXTURE_2D, null);
   Fm.dirty = false; Fm.cx = BED.cx; Fm.cy = BED.cy; Fm.N = W; Fm.sp = A.step * sk; Fm.ox = (BED.cx - R) * A.chunk - BED.ax; Fm.oz = (BED.cy - R) * A.chunk - BED.az;
   Fm.D = D;                                                              // 海堤擋浪（bedWallTex）照同一張高度判哪裡是海
+  if (V) { var IW = new Uint8Array(W * W); for (q = 0; q < W * W; q++) if (V[q] === V[q]) IW[q] = 1; Fm.I = IW; } else Fm.I = null;   // 同一張的內陸水（運河、河）：擋浪那一份不當海、浪也不能從它繞進來（2026-11-15）
   var Mo = BEDMOUTH; Mo.L = MF && MF.src ? MF.L : null; Mo.src = MF ? MF.src : 0; Mo.top = MF ? MF.top : 0; Mo.ox = Fm.ox; Mo.oz = Fm.oz; Mo.sp = Fm.sp; Mo.N = W;
   bedShoreReq(D, W);
   Fm.ms = performance.now() - t0; Fm.builds++; bedSpent(t0);
@@ -595,6 +596,8 @@ function bedShoreU(u) {
 }
 // 海堤擋浪（BEDWALL；Tim 2026-11-01「請嘗試修正海浪淹過海堤(儘可能不要太花效能的做法)」）：沖刷上岸（01_gl.js shoreW）只照 8 m 一格的地形與 16 m 的離岸距離，
 //   不知道城裡的碼頭線（海堤）、石砌長碼頭、防波堤 ⇒ 堤後的低地照樣被浪沖上去，浪大時海面也冒出堤面。
+//   2026-11-15（Tim「是否有辦法讓河堤 海堤阻擋浪 因為目前除了威尼斯 其他地方其實也有浪穿越海堤問題」）：運河的河堤（規劃的 banks）、城牆臨水的那幾段也算 ——
+//   以前只有碼頭線、wharf、mole ⇒ 威尼斯大運河兩岸 0.3 m 的地被浪沖上去（一條條白沫）、海牆後面的低地也是。
 //   ⇒ 一張細格遮罩（BED_WALL_SP 公尺一格，只蓋這些石砌結構的外框再往外 BED_WALL_PAD；城鎮換了、白沫那張高度貼圖重建了才重算，算在 Worker）：
 //     g ＝ 堤身（格子中心在堤面往內 0.75 格以內 ⇒ 丟掉的邊一定藏在堤面底下）⇒ 海面不畫；
 //     r ＝ 堤後：從海走過來、不能穿過堤身的路（dw）比直線（de）多繞 BED_WALL_K[0]～[1] 公尺 ⇒ 0 → 1 ⇒ 沖刷、岸線曲折收掉（堤的盡頭繞得過去的那一段照舊有浪）。
@@ -602,7 +605,15 @@ function bedShoreU(u) {
 //   沒有石砌結構 ⇒ uWallOn 0（著色器整段跳過）。畫面才用，⛔ 不進物理。
 var BEDWALL = { tex: null, on: false, A: null, r: [0, 0, 1, 1], tver: -1, fb: -1, dirty: true, segs: 0, cells: 0, foot: 0, ms: 0, builds: 0 };
 var BED_WALL_SP = 2, BED_WALL_PAD = 48, BED_WALL_MAX = 2.5e6, BED_WALL_LIM = 96, BED_WALL_K = [6, 20], BED_WALL_UNIT = 21;   // 最多幾格（大的城照比例放粗）、繞路量到幾公尺為止
-var BED_WALL_KIND = { wharf: 1, mole: 1 };                               // 石砌的棧橋（碼頭線 quay 一律算）
+var BED_WALL_KIND = { wharf: 1, mole: 1 };                               // 石砌的棧橋（碼頭線 quay 一律算）；運河的河堤（banks）一律算；城牆只算臨水那幾段（bedWallWet）
+var BED_WALL_NEAR = 24, BED_WALL_WW = 4;                                 // 城牆離海幾公尺內算臨水；規劃沒寫牆厚 ⇒ 幾公尺（同 Blocksail town_links 的預設）
+/** 世界座標 e（T.E 的輸出）BED_WALL_NEAR 公尺內，白沫那張高度貼圖有沒有一格在水面下（同 bedWallCalc 判海的那一把：高度 < 0）。 */
+function bedWallWet(e) {
+  var Fm = BEDFOAM, D = Fm.D, N = Fm.N, sp = Fm.sp; if (!D) return false;
+  var i0 = Math.round((e[0] - BED.ax - Fm.ox) / sp), j0 = Math.round((e[1] - BED.az - Fm.oz) / sp), r = Math.ceil(BED_WALL_NEAR / sp);
+  for (var j = Math.max(0, j0 - r); j <= Math.min(N - 1, j0 + r); j++) for (var i = Math.max(0, i0 - r); i <= Math.min(N - 1, i0 + r); i++) if (D[j * N + i] < 0) return true;
+  return false;
+}
 var BEDWALLW = { w: null, ok: null, busy: null, id: 0 };
 function bedWallTex() {
   var Wl = BEDWALL, Fm = BEDFOAM;
@@ -620,20 +631,30 @@ function bedWallTex() {
       }
     }
     (p.quay || []).forEach(add); (p.piers || []).forEach(function (q) { if (BED_WALL_KIND[q.kind]) add(q); });
+    (p.banks || []).forEach(add);                                        // 運河的河堤（Blocksail TASK-1289／1291）：石砌直牆，牆後是城（Tim 2026-11-15「是否有辦法讓河堤 海堤阻擋浪」—— 威尼斯大運河兩岸 0.3 m 的地被浪沖上去）
+    (p.walls || []).forEach(function (q) {                               // 城牆：只收臨水的那幾段（端點或中點 BED_WALL_NEAR 公尺內有海）⇒ 內陸的牆不把遮罩的框撐大、格不變粗
+      var P = q.path || [], C = q.closed && P.length > 2 ? P.concat([P[0]]) : P, run = [];
+      function flush() { if (run.length > 1) add({ path: run, w: +q.w || BED_WALL_WW }); run = []; }
+      for (var i = 1; i < C.length; i++) {
+        var a = T.E(C[i - 1]), b = T.E(C[i]), m2 = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
+        if (bedWallWet(a) || bedWallWet(b) || bedWallWet(m2)) { if (!run.length) run.push(C[i - 1]); run.push(C[i]); } else flush();
+      }
+      flush();
+    });
   });
   var lx = Fm.ox - Fm.sp / 2, lz = Fm.oz - Fm.sp / 2, L = Fm.N * Fm.sp;   // 高度貼圖蓋的範圍（第 i 格的中心在 ox ＋ i × sp）
   var x0 = Math.max(lx, bx[0] - BED_WALL_PAD), z0 = Math.max(lz, bx[1] - BED_WALL_PAD), x1 = Math.min(lx + L, bx[2] + BED_WALL_PAD), z1 = Math.min(lz + L, bx[3] + BED_WALL_PAD);
   if (!S.length || x1 <= x0 || z1 <= z0) { Wl.on = false; Wl.segs = Wl.cells = Wl.foot = 0; return; }
   var c = Math.max(BED_WALL_SP, Math.sqrt((x1 - x0) * (z1 - z0) / BED_WALL_MAX)), nx = Math.ceil((x1 - x0) / c), nz = Math.ceil((z1 - z0) / c);
-  var m = { S: new Float32Array(S), x0: x0, z0: z0, c: c, nx: nx, nz: nz, ox: Fm.ox, oz: Fm.oz, sp: Fm.sp, N: Fm.N, lim: BED_WALL_LIM, k: BED_WALL_K };
+  var m = { S: new Float32Array(S), x0: x0, z0: z0, c: c, nx: nx, nz: nz, ox: Fm.ox, oz: Fm.oz, sp: Fm.sp, N: Fm.N, lim: BED_WALL_LIM, k: BED_WALL_K, I: Fm.I ? Fm.I.slice() : null };
   var ctx = { A: BED.A, fb: Fm.builds, tver: TOWNS.ver, r: [x0, z0, nx * c, nz * c], nx: nx, nz: nz, segs: S.length / 5 }, t0 = performance.now(), w = bedWallWorker();
   if (!w) { m.D = Fm.D; bedWallDone(ctx, bedWallCalc(m), performance.now() - t0); bedSpent(t0); return; }
-  m.D = Fm.D.slice(); ctx.id = m.id = ++BEDWALLW.id; BEDWALLW.busy = ctx; w.postMessage(m, [m.D.buffer]);
+  m.D = Fm.D.slice(); ctx.id = m.id = ++BEDWALLW.id; BEDWALLW.busy = ctx; w.postMessage(m, m.I ? [m.D.buffer, m.I.buffer] : [m.D.buffer]);
 }
 /** 算遮罩（純函式：Worker 與這一頁共用同一份原始碼）。m：S ＝ 堤的每一段 [ax, az, bx, bz, 半寬]…、格（x0、z0、c 公尺一格、nx × nz）、D ＝ 高度（N × N、sp 公尺一格、第 0 格中心在 ox、oz）
  *  ⇒ { T：nx × nz × 2（r 堤後、g 堤身，0～255）, foot：堤身幾格 }。距離照 8 鄰兩趟掃（直 c、斜 √2 c）；繞堤的那一份來回掃到不變（最多 4 次）。 */
 function bedWallCalc(m) {
-  var nx = m.nx, nz = m.nz, n = nx * nz, c = m.c, S = m.S, D = m.D, N = m.N, F = new Uint8Array(n), G = new Uint8Array(n), de = new Float32Array(n), dw = new Float32Array(n), T = new Uint8Array(2 * n);
+  var nx = m.nx, nz = m.nz, n = nx * nz, c = m.c, S = m.S, D = m.D, N = m.N, I = m.I, F = new Uint8Array(n), G = new Uint8Array(n), de = new Float32Array(n), dw = new Float32Array(n), T = new Uint8Array(2 * n);
   var INF = 1e9, foot = 0, x, z, o, s, gi = 0.75 * c;
   for (s = 0; s < S.length; s += 5) {
     var ax = S[s], az = S[s + 1], ux = S[s + 2] - ax, uz = S[s + 3] - az, hw = S[s + 4], L2 = ux * ux + uz * uz || 1e-9, hg = Math.max(0, hw - gi);
@@ -647,19 +668,27 @@ function bedWallCalc(m) {
   for (z = 0; z < nz; z++) for (x = 0; x < nx; x++) {                   // 海 ＝ 高度貼圖（雙線性，同著色器）< 0：兩份距離的起點（繞堤那一份，堤身不算）
     var u = Math.max(0, Math.min(N - 1.001, (m.x0 + (x + 0.5) * c - m.ox) / m.sp)), v = Math.max(0, Math.min(N - 1.001, (m.z0 + (z + 0.5) * c - m.oz) / m.sp));
     var i = Math.floor(u), j = Math.floor(v), fu = u - i, fv = v - j, k = j * N + i, b = (D[k] * (1 - fu) + D[k + 1] * fu) * (1 - fv) + (D[k + N] * (1 - fu) + D[k + N + 1] * fu) * fv;
-    o = z * nx + x; de[o] = b < 0 ? 0 : INF; dw[o] = b < 0 && !F[o] ? 0 : INF;
+    o = z * nx + x;
+    if (I && I[Math.round(v) * N + Math.round(u)]) { de[o] = INF; dw[o] = INF; if (!F[o]) F[o] = 2; continue; }   // 內陸水（運河、河）：不是海、繞堤那一份也走不過（F 2 ＝ 只擋路、不算堤身）—— 以前河床 < 0 就當海 ⇒ 浪從運河口繞進城、堤後永遠算不到
+    de[o] = b < 0 ? 0 : INF; dw[o] = b < 0 && !F[o] ? 0 : INF;
+  }
+  var Bk = new Uint8Array(n);                                           // 繞堤那一份擋路的格：堤身、內陸水再往外一格 ⇒ 牆與牆、牆與運河之間 ≤ 2 格的縫堵起來（河口轉角的牆只砌到離河口約 2.5 m ⇒ 以前浪從那道縫鑽進堤後）
+  for (z = 0; z < nz; z++) for (x = 0; x < nx; x++) {
+    o = z * nx + x; if (F[o]) { Bk[o] = 1; continue; }
+    for (var dz2 = -1; dz2 <= 1 && !Bk[o]; dz2++) for (var dx2 = -1; dx2 <= 1; dx2++) { var xx = x + dx2, zz = z + dz2; if (xx >= 0 && zz >= 0 && xx < nx && zz < nz && F[zz * nx + xx]) { Bk[o] = 1; break; } }
+    if (Bk[o]) dw[o] = INF;
   }
   var d1 = c, d2s = c * Math.SQRT2;
   function sweep(Q, wall) {
     var ch = 0, q, a;
     for (z = 0; z < nz; z++) for (x = 0; x < nx; x++) {
-      o = z * nx + x; if (wall && F[o]) continue; a = Q[o]; q = a;
+      o = z * nx + x; if (wall && Bk[o]) continue; a = Q[o]; q = a;
       if (x > 0) q = Math.min(q, Q[o - 1] + d1);
       if (z > 0) { q = Math.min(q, Q[o - nx] + d1); if (x > 0) q = Math.min(q, Q[o - nx - 1] + d2s); if (x < nx - 1) q = Math.min(q, Q[o - nx + 1] + d2s); }
       if (q < a) { Q[o] = q; ch++; }
     }
     for (z = nz - 1; z >= 0; z--) for (x = nx - 1; x >= 0; x--) {
-      o = z * nx + x; if (wall && F[o]) continue; a = Q[o]; q = a;
+      o = z * nx + x; if (wall && Bk[o]) continue; a = Q[o]; q = a;
       if (x < nx - 1) q = Math.min(q, Q[o + 1] + d1);
       if (z < nz - 1) { q = Math.min(q, Q[o + nx] + d1); if (x < nx - 1) q = Math.min(q, Q[o + nx + 1] + d2s); if (x > 0) q = Math.min(q, Q[o + nx - 1] + d2s); }
       if (q < a) { Q[o] = q; ch++; }
