@@ -565,7 +565,7 @@ function townClrFor(L) {
 //      一區裡的三角形只跟離它 半寬 ＋ 4 m 以內的路有關 ⇒ 取「外框碰得到那幾區（外擴 半寬 ＋ 6 m）」的路，算出來跟整座重算逐點相同（?townfull=1 是對照組）。
 //   ④ 舊的網格（實例、地面分區、屋頂殼、旗子、燈）留著畫，新的建好才換；改到的區每格至少建一區、不等背景預算（同棧橋）。
 var TOWN_FULL = Q.get('townfull') === '1';                              // ?townfull=1：照舊整座重來（增量重建的對照組）
-var TOWN_DIFF_KEYS = ['walls', 'core', 'style', 'styles', 'ox', 'oy', 'kx', 'bank', 'tier', 'seed'];   // 這些變了 ⇒ 整座重來（建築模式不會改它們）；棧橋、碼頭照城區多了少了 ⇒ 照 id 比（townDiff）
+var TOWN_DIFF_KEYS = ['walls', 'core', 'style', 'styles', 'mix', 'ox', 'oy', 'kx', 'bank', 'tier', 'seed'];   // 這些變了 ⇒ 整座重來（建築模式不會改它們）；棧橋、碼頭照城區多了少了 ⇒ 照 id 比（townDiff）
 function townBoxAdd(b, c) { b[0] = Math.min(b[0], c[0]); b[1] = Math.min(b[1], c[1]); b[2] = Math.max(b[2], c[2]); b[3] = Math.max(b[3], c[3]); return b; }
 function townBoxHit(a, b) { return a[0] < b[2] && a[2] > b[0] && a[1] < b[3] && a[3] > b[1]; }
 /** 舊城 T0 ⇒ 新城 T1 改到哪裡：{ box（地面分區、實例、清樹，海域座標）, roads（路變了的外框；沒變 ⇒ null）, deck（棧橋、碼頭、樓梯、水上地塊變了）}；TOWN_DIFF_KEYS 變了 ⇒ null。
@@ -750,7 +750,7 @@ function townPrep(p, keep) {
   (p.piers || []).forEach(function (q) { q.path.forEach(function (a) { grow(E(a), q.w); }); });
   var core = p.core && p.core.ring ? p.core.ring.map(E) : null, cen = [ox, oy];
   if (core) { var sx = 0, sy = 0; core.forEach(function (q) { sx += q[0]; sy += q[1]; }); cen = [sx / core.length, sy / core.length]; }
-  return { id: p.id, name: p.name, tier: p.tier, style: p.style, styles: p.styles || [p.style || TOWN_STYLE_DEF, TOWN_STYLE_DEF], seed: p.seed, p: p, ox: ox, oy: oy, kx: kx, bank: bank, E: E, box: box, roads: roads, clr: clr, fields: fields, cen: cen, D2R: D2R, inst: null, ground: null, shell: null };
+  return { id: p.id, name: p.name, tier: p.tier, style: p.style, styles: p.styles || [p.style || TOWN_STYLE_DEF, TOWN_STYLE_DEF], mix: p.mix || null, seed: p.seed, p: p, ox: ox, oy: oy, kx: kx, bank: bank, E: E, box: box, roads: roads, clr: clr, fields: fields, cen: cen, D2R: D2R, inst: null, ground: null, shell: null };
 }
 
 // ── 清樹（每塊算一次；之後有新的城疊上來（T.v 比這塊算的時候 C.tv 新）、建築模式改到這一塊（T.edits）才重算） ──
@@ -892,17 +892,25 @@ function townIdx() {
 /** 地塊 l ⇒ 候選模型（townNeed、townInst 同一條路；TASK-0757、0772）：照規劃的退路 styles 一個一個找（Blocksail BSW.townStyles：城的 style → 地區文化 culture → 共用的 common → fr）
  *  → 代用的用途（同樣照退路）；特殊建築（l.src 'special'：用途就是那一種，例 galata-tower 的風格是 genoa）⇒ 不分風格。
  *  ⛔ 一般地塊只找退路裡的風格：carib 的砲台不會跑進退路裡沒有 carib 的城。 */
-function townPick(I, styles, l) {
+function townPick(I, styles, l, mix) {
   var use = l.use === 'berth' && l.berth ? 'berth-' + l.berth.cls : l.use, lv = use === 'house' ? l.lvl || 1 : 0;   // 泊位建築（Blocksail TASK-0906）：地塊 use 'berth' ⇒ 照級挑 'berth-<級>' 的模型
+  if (use === 'house' && mix && mix.length && l.id != null) { var st = townMixStyle(mix, l.id); styles = [st].concat(styles.filter(function (s) { return s !== st; })); }   // 住宅混搭（townMixStyle）
   function by(u) { for (var i = 0; i < styles.length; i++) { var L = I.byStyle[styles[i] + ':' + u]; if (L && u === 'house') L = townLvl(I, L, lv || 1, l); if (L) return townRecipe(I, L, l); } return null; }
   function any(u) { return I.byUse[u]; }
   var alt = TOWN_USE_ALT[use] || [];
   var L0 = by(use) || alt.map(by).filter(Boolean)[0] || (l.src === 'special' ? any(use) : null);
-  if (!L0 && lv > 1) { lv = 1; L0 = by(use); }                        // 那一級哪一套風格都沒有 ⇒ 低密度那一份
+  while (!L0 && lv > 1) { lv--; L0 = by(use); }                       // 那一級哪一套風格都沒有 ⇒ 往下一級（超高 ⇒ 高 ⇒ 中 ⇒ 低；Blocksail TASK-1291 以前直接回低密度，現有三級每套都有 ⇒ 挑到的不變）
   //   水上版（Blocksail TASK-0899：地塊帶 water、模型的索引帶 water ＝ 模型 meta 的 d0）：水上的地塊挑水上版、陸上的挑陸上版；那一邊一個都沒有 ⇒ 照舊整份
   //   （水上版還沒雕的種類先站在平台上用陸上版；陸上的地塊永遠不會挑到水上版 ⇒ 現有的房子挑到的不變）
   if (L0) { var Lw = L0.filter(function (nm) { return (I.models[nm].water != null) === !!l.water; }); if (Lw.length) L0 = Lw; }
   return townFit(I, l, L0);
+}
+/** 住宅混搭風格（Blocksail 規劃的 mix ＝ [[風格, 權重]…]，城那一筆的 houseMix；TASK-1291，Tim 2026-11-15「參考菜單概念（可以混合多地區菜單） 讓住宅也可以混合多風格」）：
+ *  照地塊 id 的雜湊按權重抽一個 ⇒ townPick 把它排在退路 styles 前面（那一套沒有那一級才往下找）。Blocksail world/town_top.js mixStyle 同一條。 */
+function townMixStyle(mix, id) {
+  var tot = 0; mix.forEach(function (m) { tot += m[1]; }); var r = townHash('sty:' + id) * tot;
+  for (var i = 0; i < mix.length; i++) { r -= mix[i][1]; if (r < 0) return mix[i][0]; }
+  return mix[mix.length - 1][0];
 }
 /** 照配方篩（Blocksail 農莊、種植園；2026-10-24 Tim「做一款基礎款 並基於基礎款作微調(替換子模型) 做出幾款農莊」）：候選裡有寫 recipes（索引；成品 meta 逗號分隔）的
  *  ⇒ 留配得上地塊 recipe 的那幾款；一款都配不上（或地塊沒寫 recipe）⇒ 留沒寫 recipes 的基礎款；連基礎款都沒有 ⇒ 照舊整份。
@@ -978,9 +986,12 @@ function townNeed(I, wallsOnly) {
     //   地塊照整座城（TOWNS.full；townDistView 挑過的 T.p 只有建了的那幾區）：以前照 T.p ⇒ 換到用了別種建築的區 ⇒ 整組模型連鎮民、動物的貼圖重解、兩座城的實例重建（君士坦丁堡換區 356～547 ms 一格）
     if (!wallsOnly) ((TOWNS.full[T.id] || T.p).lots || []).forEach(function (l) {
       if (l.use === 'plot' || l.use === 'plaza') return;
-      add(townPick(I, T.styles, l));
+      add(townPick(I, T.styles, l, T.mix));
     });
-    if (!wallsOnly) (TOWNS.wantUse || []).forEach(function (u) { add(townPick(I, T.styles, { use: u })); });   // 建築模式選單裡的那幾種（還沒蓋也先要：預覽要畫得出來；TASK-0869，townWantSet）
+    if (!wallsOnly) (TOWNS.wantUse || []).forEach(function (u) {
+      add(townPick(I, T.styles, { use: u }));
+      if (u === 'house' && T.mix) T.mix.forEach(function (m) { add(townPick(I, [m[0]].concat(T.styles), { use: u })); });   // 混搭的每一套都先要（玩家蓋的住宅照新地塊 id 抽風格）
+    });   // 建築模式選單裡的那幾種（還沒蓋也先要：預覽要畫得出來；TASK-0869，townWantSet）
     (T.p.walls || []).forEach(function (w) {
       var kit = townWallKit(I, T, w, false); if (!kit) return;
       Object.keys(I.byUse).forEach(function (k) { if (k.indexOf(kit + '-') === 0) add(I.byUse[k]); });   // 那一套的每一型（門、塔、斷面、收尾、轉角…；以後多一型也不漏）
@@ -1153,7 +1164,7 @@ function townLotPick(I, L, l, key) {
 }
 /** 一塊地 ⇒ 一棟的實例（townInst；建築模式的預覽 townGhost 也走這一支 ⇒ 同一個地塊 id 預覽跟蓋出來的是同一棟）；那一種沒有模型 ⇒ null。 */
 function townLotInst(T, K, l) {
-  var L = townPick(K, T.styles, l); if (!L || !L.length) return null;
+  var L = townPick(K, T.styles, l, T.mix); if (!L || !L.length) return null;
   var nm = townLotPick(K, L, l, T.id + ':' + l.id); if (!K.M[nm]) return null;   // 剛蓋的那一種模型還在路上（townReplace 叫了 townKitStale）⇒ 這一格先不擺
   var m = K.M[nm].m, th = l.rot * Math.PI / 180, md = m.size[1] * m.mpv, mw = m.size[0] * m.mpv;
   //   泊位建築（Blocksail TASK-0906，BUILDING_SPEC §6.21）：地塊的前緣在棧橋中線、棧橋邊在 berth.over − TOWN_BERTH_STRIP；模型的棧橋邊在 y ＝ edge ⇒ 往水那一邊推到兩條對齊；
