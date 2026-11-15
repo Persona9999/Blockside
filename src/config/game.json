@@ -530,7 +530,17 @@
       "shot": 47.2
     }
   },
-  "geo0": {"spar": null, "marines": [160, 220], "center": 140, "aim": 90, "aimZ": [40, 320], "deckAim": [84, 104], "rigAim": [150, 300], "marineY": 10, "qx": 160},
+  "geo0": {
+    "spar": null,
+    "marines": [160, 220],
+    "center": 140,
+    "aim": 90,
+    "aimZ": [40, 320],
+    "deckAim": [84, 104],
+    "rigAim": [150, 300],
+    "marineY": 10,
+    "qx": 160
+  },
   "crew0": {
     "officers": 4,
     "helm": 2,
@@ -974,7 +984,9 @@
       "work": "meadow-monitor-01m-assembly",
       "cfg": {"pump": 11, "base": 6, "agile": 0.6},
       "drive": "steam",
-      "material": "pine", "matMap": {"iron": "iron*0.79+oak*0.14"}, "cargoT": 130,
+      "material": "pine",
+      "matMap": {"iron": "iron*0.79+oak*0.14"},
+      "cargoT": 130,
       "geo": {"spar": [35, 38], "marines": [60, 60], "center": 40, "aim": 33, "aimZ": [5, 70], "deckAim": [35, 45], "rigAim": [35, 64]},
       "crew": {"officers": 4, "helm": 1, "marines": 0, "top": 0, "monkeys": 1, "shelter": 1},
       "flags": [
@@ -1012,7 +1024,9 @@
       "variant_of": "monitor",
       "cfg": {"pump": 11, "base": 6, "agile": 0.6},
       "drive": "steam",
-      "material": "pine", "matMap": {"iron": "iron*0.63+oak*0.31"}, "cargoT": 130,
+      "material": "pine",
+      "matMap": {"iron": "iron*0.63+oak*0.31"},
+      "cargoT": 130,
       "geo": {"spar": [35, 38], "marines": [60, 60], "center": 40, "aim": 33, "aimZ": [5, 70], "deckAim": [35, 45], "rigAim": [35, 64]},
       "crew": {"officers": 4, "helm": 1, "marines": 0, "top": 0, "monkeys": 1, "shelter": 1},
       "flags": [
@@ -1391,7 +1405,20 @@
       "fixed": true,
       "zw0": 1,
       "geo": {"spar": [36, 40], "marines": [20, 20], "center": 40, "aim": 40, "aimZ": [4, 90], "deckAim": [4, 80], "rigAim": [100, 140]},
-      "crew": {"officers": 2, "helm": 0, "marines": 0, "top": 0, "monkeys": 1, "handsK": 0.1, "surgeon": 0, "carpenter": 1, "sailmaker": 1, "cook": 0, "navigator": 0, "quartermaster": 0},
+      "crew": {
+        "officers": 2,
+        "helm": 0,
+        "marines": 0,
+        "top": 0,
+        "monkeys": 1,
+        "handsK": 0.1,
+        "surgeon": 0,
+        "carpenter": 1,
+        "sailmaker": 1,
+        "cook": 0,
+        "navigator": 0,
+        "quartermaster": 0
+      },
       "town": "fort-de-la-roche"
     },
     {
@@ -1405,7 +1432,20 @@
       "fixed": true,
       "zw0": 1,
       "geo": {"spar": [36, 40], "marines": [10, 10], "center": 10, "aim": 10, "aimZ": [2, 30], "deckAim": [2, 20], "rigAim": [60, 90]},
-      "crew": {"officers": 1, "helm": 0, "marines": 0, "top": 0, "monkeys": 1, "handsK": 0.1, "surgeon": 0, "carpenter": 1, "sailmaker": 1, "cook": 0, "navigator": 0, "quartermaster": 0},
+      "crew": {
+        "officers": 1,
+        "helm": 0,
+        "marines": 0,
+        "top": 0,
+        "monkeys": 1,
+        "handsK": 0.1,
+        "surgeon": 0,
+        "carpenter": 1,
+        "sailmaker": 1,
+        "cook": 0,
+        "navigator": 0,
+        "quartermaster": 0
+      },
       "town": "carib-battery"
     },
     {
@@ -1419,7 +1459,20 @@
       "fixed": true,
       "zw0": 1,
       "geo": {"spar": [36, 40], "marines": [10, 10], "center": 10, "aim": 10, "aimZ": [2, 30], "deckAim": [2, 20], "rigAim": [60, 90]},
-      "crew": {"officers": 1, "helm": 0, "marines": 0, "top": 0, "monkeys": 1, "handsK": 0.1, "surgeon": 0, "carpenter": 1, "sailmaker": 1, "cook": 0, "navigator": 0, "quartermaster": 0},
+      "crew": {
+        "officers": 1,
+        "helm": 0,
+        "marines": 0,
+        "top": 0,
+        "monkeys": 1,
+        "handsK": 0.1,
+        "surgeon": 0,
+        "carpenter": 1,
+        "sailmaker": 1,
+        "cook": 0,
+        "navigator": 0,
+        "quartermaster": 0
+      },
       "town": "en-battery"
     },
     {
@@ -1433,7 +1486,20 @@
       "fixed": true,
       "zw0": 1,
       "geo": {"spar": [4, 10], "marines": [4, 4], "center": 4, "aim": 4, "aimZ": [2, 14], "deckAim": [2, 10], "rigAim": [10, 20]},
-      "crew": {"officers": 1, "helm": 0, "marines": 0, "top": 0, "monkeys": 1, "handsK": 0.1, "surgeon": 0, "carpenter": 1, "sailmaker": 1, "cook": 0, "navigator": 0, "quartermaster": 0},
+      "crew": {
+        "officers": 1,
+        "helm": 0,
+        "marines": 0,
+        "top": 0,
+        "monkeys": 1,
+        "handsK": 0.1,
+        "surgeon": 0,
+        "carpenter": 1,
+        "sailmaker": 1,
+        "cook": 0,
+        "navigator": 0,
+        "quartermaster": 0
+      },
       "town": "carib-battery-s"
     },
     {
@@ -1512,39 +1578,9 @@
       "vxk": "oxford.vxk",
       "work": "erina-oxford-01m-assembly",
       "author": "erina",
-      "geo": {
-        "spar": [
-          40,
-          72
-        ],
-        "marines": [
-          112,
-          50
-        ],
-        "center": 60,
-        "aim": 45,
-        "aimZ": [
-          10,
-          300
-        ],
-        "deckAim": [
-          42,
-          56
-        ],
-        "rigAim": [
-          120,
-          300
-        ]
-      },
-      "crew": {
-        "officers": 2,
-        "marines": 8,
-        "marineGap": 12,
-        "navigator": 0
-      },
-      "names": [
-        "牛津號"
-      ],
+      "geo": {"spar": [40, 72], "marines": [112, 50], "center": 60, "aim": 45, "aimZ": [10, 300], "deckAim": [42, 56], "rigAim": [120, 300]},
+      "crew": {"officers": 2, "marines": 8, "marineGap": 12, "navigator": 0},
+      "names": ["牛津號"],
       "idNext": {
         "anchor": 3,
         "capstan": 2,
@@ -1569,33 +1605,8 @@
       "gangway": [[410.5, 238.5, 90.5], [410.5, 82.5, 90.5]],
       "vxk": "concepcion.vxk",
       "work": "apex-two-galeon-01m-assembly",
-      "geo": {
-        "spar": [
-          115,
-          155
-        ],
-        "marines": [
-          56,
-          170
-        ],
-        "center": 110,
-        "aim": 90,
-        "aimZ": [
-          30,
-          460
-        ],
-        "deckAim": [
-          76,
-          130
-        ],
-        "rigAim": [
-          175,
-          450
-        ]
-      },
-      "names": [
-        "康塞普西翁號"
-      ],
+      "geo": {"spar": [115, 155], "marines": [56, 170], "center": 110, "aim": 90, "aimZ": [30, 460], "deckAim": [76, 130], "rigAim": [175, 450]},
+      "names": ["康塞普西翁號"],
       "author": "apex-two",
       "idNext": {
         "anchor": 3,
@@ -1787,60 +1798,14 @@
       "role": "merchant",
       "el": "ship-boaviagem",
       "name": "好旅號",
-      "gangway": [
-        [
-          215.5,
-          143.5,
-          61.5
-        ],
-        [
-          215.5,
-          49.5,
-          61.5
-        ]
-      ],
+      "gangway": [[215.5, 143.5, 61.5], [215.5, 49.5, 61.5]],
       "vxk": "boaviagem.vxk",
       "work": "summit-boaviagem-01m-assembly",
       "author": "summit",
-      "geo": {
-        "spar": [
-          45,
-          74
-        ],
-        "marines": [
-          90,
-          172
-        ],
-        "center": 60,
-        "aim": 40,
-        "aimZ": [
-          5,
-          300
-        ],
-        "deckAim": [
-          45,
-          74
-        ],
-        "rigAim": [
-          110,
-          295
-        ]
-      },
-      "cfg": {
-        "pump": 2
-      },
-      "crew": {
-        "officers": 1,
-        "helm": 1,
-        "top": 1,
-        "marines": 0,
-        "monkeys": 1,
-        "handsK": 0.25,
-        "navigator": 0
-      },
-      "names": [
-        "好旅號"
-      ],
+      "geo": {"spar": [45, 74], "marines": [90, 172], "center": 60, "aim": 40, "aimZ": [5, 300], "deckAim": [45, 74], "rigAim": [110, 295]},
+      "cfg": {"pump": 2},
+      "crew": {"officers": 1, "helm": 1, "top": 1, "marines": 0, "monkeys": 1, "handsK": 0.25, "navigator": 0},
+      "names": ["好旅號"],
       "idNext": {
         "anchor": 3,
         "gun": 13,
@@ -1909,47 +1874,10 @@
       "vxk": "barbados.vxk",
       "work": "apex-two-barbados-01m-assembly",
       "author": "apex-two",
-      "cfg": {
-        "pump": 3
-      },
-      "geo": {
-        "spar": [
-          59,
-          90
-        ],
-        "marines": [
-          112,
-          76
-        ],
-        "qx": 60,
-        "center": 80,
-        "aim": 64,
-        "aimZ": [
-          10,
-          330
-        ],
-        "deckAim": [
-          61,
-          74
-        ],
-        "rigAim": [
-          130,
-          330
-        ]
-      },
-      "crew": {
-        "officers": 2,
-        "helm": 1,
-        "top": 1,
-        "marines": 4,
-        "marineGap": 14,
-        "monkeys": 1,
-        "handsK": 0.25,
-        "navigator": 0
-      },
-      "names": [
-        "巴貝多商人號"
-      ],
+      "cfg": {"pump": 3},
+      "geo": {"spar": [59, 90], "marines": [112, 76], "qx": 60, "center": 80, "aim": 64, "aimZ": [10, 330], "deckAim": [61, 74], "rigAim": [130, 330]},
+      "crew": {"officers": 2, "helm": 1, "top": 1, "marines": 4, "marineGap": 14, "monkeys": 1, "handsK": 0.25, "navigator": 0},
+      "names": ["巴貝多商人號"],
       "idNext": {
         "anchor": 3,
         "capstan": 2,
@@ -1972,88 +1900,26 @@
       "role": "merchant",
       "el": "ship-guineaman",
       "name": "幾內亞船",
-      "gangway": [
-        [
-          185.5,
-          141.5,
-          54.5
-        ],
-        [
-          185.5,
-          51.5,
-          54.5
-        ]
-      ],
+      "gangway": [[185.5, 141.5, 54.5], [185.5, 51.5, 54.5]],
       "vxk": "guineaman.vxk",
       "work": "kaguya-guineaman-01m-assembly",
       "author": "kaguya",
-      "geo": {
-        "spar": [
-          38,
-          63
-        ],
-        "marines": [
-          52,
-          102
-        ],
-        "center": 50,
-        "aim": 33,
-        "aimZ": [
-          5,
-          280
-        ],
-        "deckAim": [
-          38,
-          63
-        ],
-        "rigAim": [
-          100,
-          270
-        ],
-        "qx": 80
-      },
-      "cfg": {
-        "pump": 2
-      },
-      "crew": {
-        "officers": 1,
-        "helm": 1,
-        "top": 1,
-        "marines": 0,
-        "monkeys": 1,
-        "handsK": 0.25,
-        "navigator": 0
-      },
-      "names": [
-        "幾內亞船"
-      ],
+      "geo": {"spar": [38, 63], "marines": [52, 102], "center": 50, "aim": 33, "aimZ": [5, 280], "deckAim": [38, 63], "rigAim": [100, 270], "qx": 80},
+      "cfg": {"pump": 2},
+      "crew": {"officers": 1, "helm": 1, "top": 1, "marines": 0, "monkeys": 1, "handsK": 0.25, "navigator": 0},
+      "names": ["幾內亞船"],
       "rooms": {
         "甲板-fc": {
           "type": "deck",
           "items": [
-            {
-              "it": "keg",
-              "x": 4,
-              "y": 6,
-              "r": 0
-            }
+            {"it": "keg", "x": 4, "y": 6, "r": 0}
           ]
         },
         "甲板-poop": {
           "type": "deck",
           "items": [
-            {
-              "it": "keg",
-              "x": 0,
-              "y": 5,
-              "r": 0
-            },
-            {
-              "it": "loft",
-              "x": 0,
-              "y": 7,
-              "r": 1
-            }
+            {"it": "keg", "x": 0, "y": 5, "r": 0},
+            {"it": "loft", "x": 0, "y": 7, "r": 1}
           ]
         }
       },
@@ -2129,6 +1995,24 @@
         "quartermaster": 0
       },
       "town": "galata-tower"
+    },
+    {
+      "id": "gondola",
+      "role": "merchant",
+      "cargoT": 0.3,
+      "el": "ship-gondola",
+      "name": "貢多拉",
+      "vxk": "gondola.vxk",
+      "work": "apex-one-venice-gondola-01m-assembly",
+      "author": "apex-one",
+      "material": "pine*0.5",
+      "matMap": {"iron": "iron*0.1"},
+      "fireEngine": false,
+      "cfg": {"base": 3.5},
+      "geo": {"spar": [2, 8], "marines": [35, 35], "center": 8, "aim": 5, "aimZ": [1, 25], "deckAim": [2, 8], "rigAim": [8, 25], "marineY": 2, "qx": 18},
+      "crew": {"officers": 0, "helm": 0, "top": 0, "marines": 0, "marineGap": 5, "monkeys": 1, "handsK": 0, "navigator": 0},
+      "names": ["貢多拉", "里亞托號", "聖馬可號", "大運河號", "總督宮號", "潟湖黑燕號"],
+      "idNext": {"anchor": 2, "deck": 2, "magazine": 2, "oar": 2, "part": 2, "powder": 2, "ship": 2}
     }
   ],
   "furniture": {
@@ -2300,7 +2184,10 @@
       "fusta#oar-1": "越嶺號・oar-S01i",
       "fusta#oar-2": "越嶺號・oar-S01o",
       "fusta#oar-37": "越嶺號・oar-P01i",
-      "fusta#oar-38": "越嶺號・oar-P01o"
+      "fusta#oar-38": "越嶺號・oar-P01o",
+      "piragua#oar-1": "杉心號・oar-S1",
+      "piragua#oar-2": "杉心號・oar-P1",
+      "gondola#oar-1": "貢多拉・oar-S"
     },
     "rudder": {
       "constitution#rudder-1": "憲法號・舵",
@@ -2324,7 +2211,21 @@
       "punt#rudder-2": "蓬特號・rudder-P",
       "fusta#rudder-1": "越嶺號・舵",
       "dingyuan#rudder-1": "定遠號・舵",
-      "matsushima#rudder-1": "松島號・舵"
+      "matsushima#rudder-1": "松島號・舵",
+      "labelle#rudder-1": "拉貝爾號・舵",
+      "pinas#rudder-1": "藍鯊號・舵",
+      "oxford#rudder-1": "牛津號・舵",
+      "concepcion#rudder-1": "康塞普西翁號・舵",
+      "flyingfish#rudder-1": "飛魚號・舵",
+      "zeehaen#rudder-1": "澤漢號・舵",
+      "swallow#rudder-1": "燕子號・舵",
+      "sanroman#rudder-1": "聖羅曼號・舵",
+      "tradewind#rudder-1": "信風號・舵",
+      "boaviagem#rudder-1": "好旅號・舵",
+      "centurion#rudder-1": "百夫長號・舵",
+      "piragua#rudder-1": "杉心號・舵槳",
+      "barbados#rudder-1": "巴貝多商人號・舵",
+      "guineaman#rudder-1": "幾內亞船・舵"
     },
     "propeller": {
       "virginia#propeller-1": "維吉尼亞號・螺旋槳",
@@ -2344,21 +2245,26 @@
       "falcon#wheel-1": "夜隼號・舵輪",
       "stormkaap#wheel-1": "風暴角號・舵輪",
       "monitor#wheel-1": "莫尼特號・舵輪",
-      "dingyuan#wheel-1": "定遠號・舵輪"
+      "dingyuan#wheel-1": "定遠號・舵輪",
+      "sanroman#wheel-1": "聖羅曼號・舵輪"
     },
     "wheel_stand": {
       "constitution#wheel_stand-1": "憲法號・wheel座",
       "ember#wheel_stand-1": "餘燼號・舵輪座",
       "falcon#wheel_stand-1": "夜隼號・舵輪座",
       "stormkaap#wheel_stand-1": "風暴角號・舵輪座",
-      "monitor#wheel_stand-1": "莫尼特號・舵輪座"
+      "monitor#wheel_stand-1": "莫尼特號・舵輪座",
+      "matsushima#wheel_stand-1": "松島號・舵輪座",
+      "sanroman#wheel_stand-1": "聖羅曼號・舵輪座"
     },
     "light": {
       "nightlamp#light-1": "夜燈號・船尾燈-中",
       "nightlamp#light-2": "夜燈號・船尾燈-P",
       "nightlamp#light-4": "夜燈號・lantern",
       "tridente#light-1": "三叉戟號・lantern-P",
-      "tidegrave#light-1": "潮墓號・艉樓燈-P"
+      "tidegrave#light-1": "潮墓號・艉樓燈-P",
+      "pinas#light-1": "藍鯊號・lantern",
+      "concepcion#light-1": "康塞普西翁號・lantern-P"
     },
     "lantern": {"ember#lantern-1": "餘燼號・lantern-C"},
     "boat": {
@@ -2370,17 +2276,31 @@
       "tridente#boat-1": "三叉戟號・小艇-S",
       "tridente#boat-2": "三叉戟號・小艇-P",
       "tidegrave#boat-1": "潮墓號・工作艇",
-      "dingyuan#boat-3": "定遠號・魚雷艇-S"
+      "dingyuan#boat-3": "定遠號・魚雷艇-S",
+      "labelle#boat-1": "拉貝爾號・小艇",
+      "sanroman#boat-1": "聖羅曼號・小艇",
+      "tradewind#boat-1": "信風號・小艇",
+      "boaviagem#boat-1": "好旅號・小艇"
     },
     "capstan": {
       "constitution#capstan-1": "憲法號・capstan",
       "constitution#capstan-2": "憲法號・capstan",
       "ember#capstan-1": "餘燼號・主絞盤",
       "stormkaap#capstan-1": "風暴角號・絞盤",
-      "phoenix#capstan-1": "炎羽號・capstan"
+      "phoenix#capstan-1": "炎羽號・capstan",
+      "napoleon#capstan-1": "拿破崙號・主絞盤",
+      "oxford#capstan-1": "牛津號・絞盤",
+      "sanroman#capstan-1": "聖羅曼號・主絞盤",
+      "tradewind#capstan-1": "信風號・絞盤"
     },
     "binnacle": {"ember#binnacle-1": "餘燼號・羅經櫃", "falcon#binnacle-1": "夜隼號・羅經櫃", "stormkaap#binnacle-1": "風暴角號・羅經櫃", "dingyuan#binnacle-1": "定遠號・羅經櫃"},
-    "grating": {"constitution#grating-1": "憲法號・格柵-main", "constitution#grating-2": "憲法號・格柵-main", "stormkaap#grating-1": "風暴角號・格柵-主艙口"},
+    "grating": {
+      "constitution#grating-1": "憲法號・格柵-main",
+      "constitution#grating-2": "憲法號・格柵-main",
+      "stormkaap#grating-1": "風暴角號・格柵-主艙口",
+      "guineaman#grating-1": "幾內亞船・格柵-主艙口",
+      "guineaman#grating-2": "幾內亞船・格柵-前艙口"
+    },
     "deco": {
       "stormkaap#model-1": "風暴角號・裝飾-砲彈架-S",
       "stormkaap#model-3": "風暴角號・裝飾-酒桶-1",
@@ -2394,7 +2314,19 @@
       "napoleon#model-7": "拿破崙號・繫索栓圍欄-main",
       "tidegrave#model-1": "潮墓號・爐灶",
       "tidegrave#model-8": "潮墓號・備用水桶-P1",
-      "tidegrave#model-18": "潮墓號・繫纜柱-P"
+      "tidegrave#model-18": "潮墓號・繫纜柱-P",
+      "matsushima#model-1": "松島號・菊花紋章",
+      "matsushima#model-2": "松島號・備便彈架-1S",
+      "matsushima#model-3": "松島號・備便彈架-1P",
+      "matsushima#model-10": "松島號・繫纜樁-艉-S",
+      "matsushima#model-11": "松島號・繫纜樁-艉-P",
+      "matsushima#model-12": "松島號・錨鏈繫纜柱",
+      "labelle#model-1": "拉貝爾號・船首像",
+      "labelle#model-2": "拉貝爾號・假艉廊",
+      "flyingfish#model-1": "飛魚號・船首像",
+      "zeehaen#model-1": "澤漢號・船首像",
+      "swallow#model-1": "燕子號・船首像",
+      "guineaman#model-1": "幾內亞船・船首像"
     },
     "anchor": {
       "falcon#anchor-1": "夜隼號・錨-S",
@@ -2426,7 +2358,35 @@
       "dingyuan#anchor-1": "定遠號・錨-S",
       "dingyuan#anchor-2": "定遠號・錨-P",
       "matsushima#anchor-1": "松島號・錨-S",
-      "matsushima#anchor-2": "松島號・錨-P"
+      "matsushima#anchor-2": "松島號・錨-P",
+      "labelle#anchor-1": "拉貝爾號・錨-S",
+      "labelle#anchor-2": "拉貝爾號・錨-P",
+      "pinas#anchor-1": "藍鯊號・錨-S",
+      "pinas#anchor-2": "藍鯊號・錨-P",
+      "oxford#anchor-1": "牛津號・錨-S",
+      "oxford#anchor-2": "牛津號・錨-P",
+      "concepcion#anchor-1": "康塞普西翁號・錨-S",
+      "concepcion#anchor-2": "康塞普西翁號・錨-P",
+      "flyingfish#anchor-1": "飛魚號・錨-S",
+      "flyingfish#anchor-2": "飛魚號・錨-P",
+      "zeehaen#anchor-1": "澤漢號・錨-S",
+      "zeehaen#anchor-2": "澤漢號・錨-P",
+      "swallow#anchor-1": "燕子號・錨-S",
+      "swallow#anchor-2": "燕子號・錨-P",
+      "sanroman#anchor-1": "聖羅曼號・錨-S",
+      "sanroman#anchor-2": "聖羅曼號・錨-P",
+      "tradewind#anchor-1": "信風號・錨-S",
+      "tradewind#anchor-2": "信風號・錨-P",
+      "boaviagem#anchor-1": "好旅號・錨-S",
+      "boaviagem#anchor-2": "好旅號・錨-P",
+      "centurion#anchor-1": "百夫長號・錨-S",
+      "centurion#anchor-2": "百夫長號・錨-P",
+      "piragua#anchor-1": "杉心號・anchor-S",
+      "barbados#anchor-1": "巴貝多商人號・錨-S",
+      "barbados#anchor-2": "巴貝多商人號・錨-P",
+      "guineaman#anchor-1": "幾內亞船・錨-S",
+      "guineaman#anchor-2": "幾內亞船・錨-P",
+      "gondola#anchor-1": "貢多拉・錨-S"
     },
     "engine": {
       "virginia#engine-1": "維吉尼亞號・機艙",
