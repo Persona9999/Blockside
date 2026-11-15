@@ -113,6 +113,100 @@ function townBridgeList(p) {
   var ids = {}; (p.roads || []).forEach(function (r) { ids[r.id] = 1; });
   return p.bridges.filter(function (b) { return ids[b.road]; });
 }
+// 河堤的接頭（Tim 2026-11-15「河堤 海堤重疊問題&連接問題是否能參考城牆的作法處理河堤的接縫」）：規劃的 banks 一道一道各自畫、兩頭的端面方的
+//   ⇒ 兩道在陸地轉角各自停住：外側缺一角、內側疊在一起；支流的河堤一路伸過主河堤、戳進水裡；取樣留下的頭尾往回折一小鉤。
+//   ⇒ 同城牆（townWallJx ⑤ 沒有塔的那一種）整座城一起找接點，只改畫法、不改規劃（規劃的指紋不動）：
+//     ⓪ 頭尾的鉤：最後一段跟前一段轉超過 TOWN_BANK_JX.hook° ⇒ 那一點拿掉（最多拿到剩兩點）
+//     ① 端點對端點（L 形、接成一直線）：兩頭 TOWN_BANK_JX.tol 公尺內、照距離近的先配 ⇒ 兩條最後一段的延長線交點 X；X 在兩頭各自往前 ≤ reach[1]、往回 ≤ reach[0]（且不超過最後一段）
+//        ⇒ 兩頭都改到 X、端面照兩道的角平分斜接（同城牆的轉角）；差不到 TOWN_BANK_JX.skew° 的（接成一直線）⇒ 側向偏不到 TOWN_BANK_JX.par 公尺才接、接在兩頭中點
+//     ② 剩下的頭碰到別道河堤的中段、碼頭線（T 形）：最後一段的延長線跟它的中線交在往前 ≤ reach[1]、往回 ≤ reach[0] ⇒ 那一頭改到交點、端面順著它的中線切
+//        ⇒ 端面整個藏在它的牆身裡（同城牆 T 形「伸到 host 的中線」）；跟它差不到 skew° 的（並排走）不接
+//   回 [{ id, path, z, w, bot, ef: [起點端面上的另一點｜null, 終點的｜null] }]（ef 照規劃的公尺；townSlabPut 照它切端面）；讀數 TOWNS.stat.bankJx[城 id]
+var TOWN_BANK_JX = { tol: 6, reach: [6, 8], par: 1.5, skew: 20, hook: 100 }, TOWN_BANK_MEMO = new WeakMap();
+function townBankList(p, id) {
+  if (!p || !p.banks || !p.banks.length) return [];
+  var m = TOWN_BANK_MEMO.get(p.banks); if (m && m.quay === p.quay) return m.L;
+  var L = townBankJx(p.banks, p.quay || [], id || p.id);
+  TOWN_BANK_MEMO.set(p.banks, { quay: p.quay, L: L });
+  return L;
+}
+function townBankJx(banks, quays, id) {
+  var J = TOWN_BANK_JX, D2R = Math.PI / 180, st = { L: 0, line: 0, T: 0, quay: 0, hook: 0, free: 0 };
+  function unit(a, b) { var dx = b[0] - a[0], dz = b[1] - a[1], l = Math.hypot(dx, dz); return l > 1e-9 ? [dx / l, dz / l] : null; }
+  var O = banks.map(function (b) {
+    var P = [], Z = [], zs = Array.isArray(b.z);
+    b.path.forEach(function (c, i) { var l = P[P.length - 1]; if (!l || Math.hypot(c[0] - l[0], c[1] - l[1]) > 1e-3) { P.push(c.slice()); Z.push(zs ? b.z[i] : b.z); } });
+    return { b: b, P: P, Z: Z, ef: [null, null], done: [false, false] };
+  }).filter(function (o) { return o.P.length >= 2; });
+  function endOf(o, e) { var n = o.P.length, p = e ? o.P[n - 1] : o.P[0], q = e ? o.P[n - 2] : o.P[1]; return { p: p, d: unit(q, p), len: Math.hypot(p[0] - q[0], p[1] - q[1]) }; }   // d ＝ 往外（往那一頭）
+  function turn(a, b, c) { var u = unit(a, b), v = unit(b, c); return u && v ? Math.acos(Math.max(-1, Math.min(1, u[0] * v[0] + u[1] * v[1]))) / D2R : 0; }
+  O.forEach(function (o) {                                              // ⓪ 鉤：頭尾往回折的那一點拿掉；中間折成 Z 字的（轉超過 hook°）那一點也拿掉
+    [0, 1].forEach(function (e) {
+      while (o.P.length > 2) {
+        var n = o.P.length;
+        if (turn(e ? o.P[n - 3] : o.P[2], e ? o.P[n - 2] : o.P[1], e ? o.P[n - 1] : o.P[0]) <= J.hook) break;
+        if (e) { o.P.pop(); o.Z.pop(); } else { o.P.shift(); o.Z.shift(); }
+        st.hook++;
+      }
+    });
+    for (var i = 1; i < o.P.length - 1 && o.P.length > 2;) {
+      if (turn(o.P[i - 1], o.P[i], o.P[i + 1]) > J.hook) { o.P.splice(i, 1); o.Z.splice(i, 1); st.hook++; if (i > 1) i--; } else i++;
+    }
+  });
+  function setEnd(o, e, X, F) { var n = o.P.length; o.P[e ? n - 1 : 0] = X.slice(); o.ef[e] = F; o.done[e] = true; }
+  function sOk(E, s) { return s <= J.reach[1] && s >= -Math.min(J.reach[0], E.len - 0.3); }
+  // ① 端點對端點：所有 tol 內的配對照距離排、近的先接
+  var C = [];
+  O.forEach(function (o, i) { [0, 1].forEach(function (e) {
+    var A = endOf(o, e);
+    O.forEach(function (o2, j) { if (j < i) return; [0, 1].forEach(function (e2) {
+      if (j === i && e2 <= e) return;
+      var B = endOf(o2, e2), d = Math.hypot(A.p[0] - B.p[0], A.p[1] - B.p[1]);
+      if (d <= J.tol && (j !== i || townPlen(o.P) > 3 * J.tol)) C.push({ a: o, ea: e, b: o2, eb: e2, d: d });
+    }); });
+  }); });
+  C.sort(function (x, y) { return x.d - y.d; });
+  C.forEach(function (c) {
+    if (c.a.done[c.ea] || c.b.done[c.eb]) return;
+    var A = endOf(c.a, c.ea), B = endOf(c.b, c.eb); if (!A.d || !B.d) return;
+    var den = A.d[0] * B.d[1] - A.d[1] * B.d[0], X, kind;
+    if (Math.abs(den) < Math.sin(J.skew * D2R)) {                       // 差不多平行：要面對面（一道接著一道）、側向偏得少
+      var gx = B.p[0] - A.p[0], gz = B.p[1] - A.p[1];
+      if (A.d[0] * B.d[0] + A.d[1] * B.d[1] > 0 || Math.abs(A.d[0] * gz - A.d[1] * gx) > J.par) return;
+      X = [(A.p[0] + B.p[0]) / 2, (A.p[1] + B.p[1]) / 2]; kind = 'line';
+    } else {
+      var t = ((B.p[0] - A.p[0]) * B.d[1] - (B.p[1] - A.p[1]) * B.d[0]) / den;
+      X = [A.p[0] + A.d[0] * t, A.p[1] + A.d[1] * t]; kind = 'L';
+      if (!sOk(A, t) || !sOk(B, (X[0] - B.p[0]) * B.d[0] + (X[1] - B.p[1]) * B.d[1])) return;
+    }
+    //   端面 ＝ 兩道的角平分：照「A 往它那一頭走 ⇒ 過 X ⇒ 進 B」那個方向的左法線相加（A 的方向 d、進 B 的方向 −B.d）
+    var nA = [-A.d[1], A.d[0]], nB = [B.d[1], -B.d[0]], mx = nA[0] + nB[0], mz = nA[1] + nB[1], ml = Math.hypot(mx, mz);
+    if (ml < 0.2) return;                                               // 髮夾彎（轉將近 180°）⇒ 斜接切不出來，照舊
+    var F = [X[0] + mx / ml, X[1] + mz / ml];
+    setEnd(c.a, c.ea, X, F); setEnd(c.b, c.eb, X, F); st[kind]++;
+  });
+  // ② T 形：剩下的頭 ⇒ 別道河堤（改過的）、碼頭線的中線
+  var H = O.map(function (o) { return { o: o, P: o.P }; }).concat(quays.map(function (q) { return { q: q, P: q.path }; }));
+  O.forEach(function (o) { [0, 1].forEach(function (e) {
+    if (o.done[e]) return;
+    var A = endOf(o, e), best = null; if (!A.d) return;
+    H.forEach(function (h) {
+      if (h.o === o) return;
+      for (var s = 1; s < h.P.length; s++) {
+        var a = h.P[s - 1], b = h.P[s], u = unit(a, b); if (!u) continue;
+        var den = A.d[0] * u[1] - A.d[1] * u[0]; if (Math.abs(den) < Math.sin(J.skew * D2R)) continue;
+        var wx = a[0] - A.p[0], wz = a[1] - A.p[1], t = (wx * u[1] - wz * u[0]) / den, lab = Math.hypot(b[0] - a[0], b[1] - a[1]), v = (wx * A.d[1] - wz * A.d[0]) / den;
+        if (v < 0 || v > lab || !sOk(A, t)) continue;
+        if (!best || Math.abs(t) < Math.abs(best.t)) best = { t: t, u: u, quay: !!h.q };
+      }
+    });
+    if (!best) { st.free++; return; }
+    var X = [A.p[0] + A.d[0] * best.t, A.p[1] + A.d[1] * best.t];
+    setEnd(o, e, X, [X[0] + best.u[0], X[1] + best.u[1]]); st[best.quay ? 'quay' : 'T']++;
+  }); });
+  if (typeof TOWNS !== 'undefined' && TOWNS.stat && id) (TOWNS.stat.bankJx = TOWNS.stat.bankJx || {})[id] = st;
+  return O.map(function (o) { var b = o.b; return { id: b.id, canal: b.canal, path: o.P, z: o.Z, w: b.w, bot: b.bot, ef: o.ef }; });
+}
 /** 折線（規劃的當地公尺）長、第 t 公尺那一點與切線。 */
 function townPlen(P) { var s = 0; for (var i = 1; i < P.length; i++) s += Math.hypot(P[i][0] - P[i - 1][0], P[i][1] - P[i - 1][1]); return s; }
 function townPathAt(P, t) {
@@ -1922,7 +2016,7 @@ function townGroundPrep(T) {
   (p.stairs || []).forEach(function (q) { var c2 = T.E(q.path[0]); tile(c2[0], c2[1]).stair.push(q); });   // 路接地塊的樓梯（Blocksail town.js roadStairs）：照路那一頭分區
   (T.fields || []).forEach(function (F) { var c2 = [(F.R[0][0] + F.R[2][0]) / 2, (F.R[0][1] + F.R[2][1]) / 2]; tile(c2[0], c2[1]).field.push(F); });
   (p.piers || []).forEach(function (q) { var c2 = T.E(q.path[0]); tile(c2[0], c2[1]).pier.push(q); });
-  (p.banks || []).forEach(function (q) { var c2 = T.E(q.path[0]); tile(c2[0], c2[1]).bank.push(q); });   // 運河的河堤（Blocksail TASK-1289 town.js P.banks）
+  townBankList(p, T.id).forEach(function (q) { var c2 = T.E(q.path[0]); tile(c2[0], c2[1]).bank.push(q); });   // 運河的河堤（Blocksail TASK-1289 town.js P.banks）
   townBridgeList(p).forEach(function (q) { var c2 = T.E(q.path[0]); tile(c2[0], c2[1]).bridge.push(q); });   // 橋（Blocksail TASK-1290）
   (p.lots || []).forEach(function (l) { if (l.water) { var c2 = T.E(l.at); tile(c2[0], c2[1]).wlot.push(l); } });   // 水上建築的平台、樁（Blocksail TASK-0899）
   if (T.gt) Object.keys(T.gt).forEach(function (k) { var g = T.gt[k].g, gf = T.gt[k].gf; if (g) townGpuFree(g); if (gf) townGpuFree(gf); });
@@ -1950,7 +2044,7 @@ function townDistBins(T) {
   function put(n, q, at) { var e = T.E(at), k = Math.floor(e[0] / S) + '_' + Math.floor(e[1] / S), b = B[k] || (B[k] = { pier: [], quay: [], stair: [], plaza: [], wlot: [], bank: [], bridge: [] }); b[n].push(q); }
   (p.piers || []).forEach(function (q) { put('pier', q, q.path[0]); });
   (p.quay || []).forEach(function (q) { put('quay', q, q.path[0]); });
-  (p.banks || []).forEach(function (q) { put('bank', q, q.path[0]); });
+  townBankList(p, T.id).forEach(function (q) { put('bank', q, q.path[0]); });
   townBridgeList(p).forEach(function (q) { put('bridge', q, q.path[0]); });
   (p.stairs || []).forEach(function (q) { put('stair', q, q.path[0]); });
   (p.lots || []).forEach(function (l) { if (l.use === 'plaza') put('plaza', l, l.at); if (l.water) put('wlot', l, l.at); });
@@ -2016,7 +2110,7 @@ function townBridgeGeo(b, slab) {
   var off = b.w / 2 - TOWN_BRIDGE_RAIL[0] / 2;
   [1, -1].forEach(function (sd) { slab(C.map(function (c, i) { return [c[0] + N[i][0] * off * sd, c[1] + N[i][1] * off * sd]; }), TOWN_BRIDGE_RAIL[0], T.map(function (v) { return v + TOWN_BRIDGE_RAIL[1]; }), T.map(function (v) { return v - 0.05; }), TOWN_COL.bridge); });
 }
-function townSlabPut(vtx, I, P0, w, top, bot, col) {
+function townSlabPut(vtx, I, P0, w, top, bot, col, ef) {   // ef：[起點端面上的另一點｜null, 終點的｜null]（同 P0 的座標；河堤的接頭 townBankJx）⇒ 那一頭的端面照它切，不照垂直
   var P = [], Tz = [], Bz = [], hw = w / 2, Lf = [], Rt = [], dk = [col[0] * 0.78, col[1] * 0.78, col[2] * 0.78], arr = Array.isArray(top), arrB = Array.isArray(bot);   // bot 也可以每一點一個（橋的拱，TASK-1290）⇒ 多畫底面
   P0.forEach(function (c, i) { var l = P[P.length - 1]; if (!l || Math.hypot(c[0] - l[0], c[1] - l[1]) > 1e-3) { P.push(c); Tz.push(arr ? top[i] : top); Bz.push(arrB ? bot[i] : bot); } });   // 重複的點拿掉（長度 0 的段沒有方向）
   if (P.length < 2) return;
@@ -2024,7 +2118,9 @@ function townSlabPut(vtx, I, P0, w, top, bot, col) {
   for (var q = 1; q < P.length; q++) { var L = Math.hypot(P[q][0] - P[q - 1][0], P[q][1] - P[q - 1][1]); Nm.push([-(P[q][1] - P[q - 1][1]) / L, (P[q][0] - P[q - 1][0]) / L]); }
   P.forEach(function (c, i) {
     var n0 = Nm[Math.max(0, i - 1)], n1 = Nm[Math.min(Nm.length - 1, i)], mx = n0[0] + n1[0], mz = n0[1] + n1[1], ml = Math.hypot(mx, mz);
-    var m = ml > 1e-6 ? [mx / ml, mz / ml] : n0, k = hw / Math.max(m[0] * n0[0] + m[1] * n0[1], 1 / TOWN_SLAB_KMAX);
+    var m = ml > 1e-6 ? [mx / ml, mz / ml] : n0, F = ef && (i === 0 ? ef[0] : i === P.length - 1 ? ef[1] : null);
+    if (F) { var fx = F[0] - c[0], fz = F[1] - c[1], fl = Math.hypot(fx, fz); if (fl > 1e-6) { m = [fx / fl, fz / fl]; if (m[0] * n0[0] + m[1] * n0[1] < 0) m = [-m[0], -m[1]]; } }
+    var k = hw / Math.max(m[0] * n0[0] + m[1] * n0[1], 1 / TOWN_SLAB_KMAX);
     Lf.push([c[0] + m[0] * k, c[1] + m[1] * k]); Rt.push([c[0] - m[0] * k, c[1] - m[1] * k]);
   });
   function side(c0, c1, t0, t1, b0, b1) {                               // 一面鉛直的側面（c0 → c1，法線朝外 ＝ 往前看的右手邊；面高 t0 → t1、底 b0 → b1）
@@ -2201,7 +2297,7 @@ function* townGroundGen(T, Q) {
   function slab(P0, w, top, bot, col) { townSlabPut(vtx, I, P0.map(W), w, top, bot, col); }
   yield* townEach(Q.quay, function (q) { slab(q.path, q.w, q.deck != null ? q.deck : 1.0, -2.5, TOWN_COL.quay); });
   // 運河的河堤（Blocksail TASK-1289，town.js P.banks；water.js WATER_BANKS）：沿河道邊一道牆 —— 牆頂每一點照規劃的 z（牆後的地面）、牆底 bot（河道底再往下）；第一版只有石砌直牆（stone）
-  yield* townEach(Q.bank || [], function (b) { slab(b.path, b.w, b.z || 1.0, b.bot != null ? b.bot : -3, TOWN_COL.bank); });
+  yield* townEach(Q.bank || [], function (b) { townSlabPut(vtx, I, b.path.map(W), b.w, b.z || 1.0, b.bot != null ? b.bot : -3, TOWN_COL.bank, b.ef && [b.ef[0] && W(b.ef[0]), b.ef[1] && W(b.ef[1])]); });   // 接頭照 townBankList 接好的（townBankJx）
   yield* townEach(Q.bridge || [], function (b) { townBridgeGeo(b, slab); });   // 橋（Blocksail TASK-1290；townBridgeGeo）   // 面的高照規劃的 deck（Blocksail TASK-0899 world/town.js DECK；舊規劃沒有 ⇒ 1.0）
   // 棧橋（Blocksail TOWN_BUILD §3.3.8 的 kind）：長碼頭 wharf、石堤 mole ＝ 實心石砌，一直到那一座沿線最深的水再深 1 m（埋進海床；不畫樁）；
   //   其他（棧橋、T 字頭、支棧橋、skala 短棧）＝ 木板＋樁，樁一根一根伸到它底下的海床（Tim 2026-10-22「棧橋的腳可以長一點」—— 以前一律到 −4 m，深水的棧橋腳懸在水裡）；

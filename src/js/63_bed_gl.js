@@ -631,7 +631,7 @@ function bedWallTex() {
       }
     }
     (p.quay || []).forEach(add); (p.piers || []).forEach(function (q) { if (BED_WALL_KIND[q.kind]) add(q); });
-    (p.banks || []).forEach(add);                                        // 運河的河堤（Blocksail TASK-1289／1291）：石砌直牆，牆後是城（Tim 2026-11-15「是否有辦法讓河堤 海堤阻擋浪」—— 威尼斯大運河兩岸 0.3 m 的地被浪沖上去）
+    townBankList(p, T.id).forEach(add);                                 // 接頭接好的那一份（townBankJx：轉角斜接、T 形伸到對方中線）                                        // 運河的河堤（Blocksail TASK-1289／1291）：石砌直牆，牆後是城（Tim 2026-11-15「是否有辦法讓河堤 海堤阻擋浪」—— 威尼斯大運河兩岸 0.3 m 的地被浪沖上去）
     (p.walls || []).forEach(function (q) {                               // 城牆：只收臨水的那幾段（端點或中點 BED_WALL_NEAR 公尺內有海）⇒ 內陸的牆不把遮罩的框撐大、格不變粗
       var P = q.path || [], C = q.closed && P.length > 2 ? P.concat([P[0]]) : P, run = [];
       function flush() { if (run.length > 1) add({ path: run, w: +q.w || BED_WALL_WW }); run = []; }
