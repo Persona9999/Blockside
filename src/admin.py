@@ -713,6 +713,13 @@ def validate(cfg, prev=None):
                         err(p + '.matMap.' + k, mat_mix_err(v, MIDS))
         if 'zw0' in s and not (isint(s['zw0']) and s['zw0'] > 0):
             err(p + '.zw0', '正整數（作品沒有水線 meta 時的設計水線）')
+        if 'floodRim' in s:
+            rim = s['floodRim']
+            if not (isinstance(rim, list) and len(rim) >= 2 and all(
+                    isinstance(point, list) and len(point) == 3 and all(isnum(v) and v >= 0 for v in point)
+                    and isint(point[2]) and point[2] > 0
+                    for point in rim)):
+                err(p + '.floodRim', '至少兩個擋水舷緣點，各為船格座標 [x, y, z]，z 取該格的上表面')
         if 'role' in s and s['role'] not in ('merchant', 'war'):
             err(p + '.role', 'merchant（商船）或 war（戰艦，預設）：載重照 cargo 那一節的比例（js/32_hull.js cargoOf）')
         if 'cargoT' in s and not (isinstance(s['cargoT'], (int, float)) and not isinstance(s['cargoT'], bool) and s['cargoT'] >= 0):
