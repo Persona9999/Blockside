@@ -280,7 +280,7 @@ function shipCheck(id) {
     galleysOf(T).forEach(function (g) { if (!g.p) add('warn', '灶', g.name, '沒有固定點 smoke ⇒ 用餐時刻不冒煙', '爐灶那一件模型登記固定點 smoke（煙管出口；可以在爐灶外框外、上一層甲板上；造船規格 §9.13）'); });
     // ── 彈藥庫與取用點（23_powder.js）：沒有桶 ⇒ 不擺取用點 ⇒ 送藥手沒地方拿、砲打完砲旁藥箱那幾發就永遠停（維吉尼亞號 2026-10-15：180 秒只開 12 發，Tim 先看到）──
     var kegsAny = sh.mags.some(function (o) { return o.kegs.length; });
-    if (!sh.mags.length) add('error', '彈藥庫', '—', '沒有 kind=magazine ⇒ 沒有取用點：砲打完砲旁藥箱（' + BOX_N + ' 份 × 砲種表 box）就停、也不會殉爆', '彈藥庫的關聯 meta kind=magazine, powder_lb ＋ 裡面的火藥桶模型（造船規格 §8）');
+    if (!sh.mags.length && sh.guns.length) add('error', '彈藥庫', '—', '沒有 kind=magazine ⇒ 沒有取用點：砲打完砲旁藥箱（' + BOX_N + ' 份 × 砲種表 box）就停、也不會殉爆', '彈藥庫的關聯 meta kind=magazine, powder_lb ＋ 裡面的火藥桶模型（造船規格 §8）');
     sh.mags.forEach(function (m) { if (!m.kegs.length) add('error', '彈藥庫', m.name, '裡面沒有火藥桶模型 ⇒ 這一間不會殉爆' + (kegsAny ? '' : '、整艘沒有取用點（砲打完藥箱就停）'), '彈藥庫子作品裡掛火藥桶模型 meta kind=powder, powder_lb（造船規格 §8）'); });
     R.info.stations = sh.stations.length;
     R.info.hoists = ahSummary(sh, add);                                 // 揚弾機（kind=hoist；23_powder.js）：送藥手送到艙底接收處、吊上砲旁藥箱
