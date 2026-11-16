@@ -61,7 +61,7 @@ function battleDrawIcon(ctx, key, x, y, size) {
 var BATTLE_ICON_WALK = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT), BATTLE_ICON_TEXTS = [], BATTLE_ICON_NODE;
 while ((BATTLE_ICON_NODE = BATTLE_ICON_WALK.nextNode())) BATTLE_ICON_TEXTS.push(BATTLE_ICON_NODE);
 BATTLE_ICON_TEXTS.forEach(function (node) {
-  if (!node.parentElement || node.parentElement.closest('script,style,textarea,select,svg,canvas,[contenteditable]')) return;
+  if (!node.parentElement || node.parentElement.closest('script,style,textarea,select,svg,canvas,[data-native-emoji],[contenteditable]')) return;
   if (battleIconText(node.data) === node.data) return;
   var box = document.createElement('span'); box.textContent = node.data;
   box.innerHTML = battleIconText(box.innerHTML);
