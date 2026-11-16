@@ -111,7 +111,41 @@ var TOWN_BRIDGE_LAP = 0.6, TOWN_BRIDGE_HUMP = 0.35, TOWN_BRIDGE_CLR = 2.4, TOWN_
 function townBridgeList(p) {
   if (!p || !p.bridges || !p.bridges.length) return [];
   var ids = {}; (p.roads || []).forEach(function (r) { ids[r.id] = 1; });
-  return p.bridges.filter(function (b) { return ids[b.road]; });
+  return townBridgeArch(p).filter(function (b) { return ids[b.road]; });
+}
+// 拱照河堤撐開（Blocksail TASK-1291；Tim 2026-11-16「以及橋樑沒有橋洞問題」）：規劃的 wet（落水那一段）是照取樣的地形比水面低 0.3 m 量的 ——
+//   窄運河（6～10 m）在取樣裡跟岸混在一起 ⇒ 量到的常常只有一兩公尺 ⇒ 拱縮成一個小三角，其餘整段是墩（實心的牆一路到水底）。
+//   ⇒ 橋面中線跨過的河堤（規劃的 banks 中線）：第一道、最後一道的牆內側（中線 ＋ 半寬 ÷ 跨的角度的 sin）之間也算落水 —— 只撐大、不縮；兩頭各留 TOWN_BRIDGE_ABUT 公尺當橋台。
+//   沒有 banks 的城、沒跨過兩道河堤的橋 ⇒ 照規劃那一份（同一個物件）。回的是複本（規劃不動）；照 p.bridges、p.banks 記住。
+var TOWN_BRIDGE_ABUT = 0.8, TOWN_BRIDGE_ARCH_MEMO = new WeakMap();
+function townBridgeArch(p) {
+  var m = TOWN_BRIDGE_ARCH_MEMO.get(p.bridges); if (m && m.banks === p.banks) return m.L;
+  var B = p.banks || [], L = p.bridges.map(function (b) {
+    if (!B.length || !b.path || b.path.length < 2) return b;
+    var P = b.path, len = townPlen(P), hits = [];
+    for (var i = 1, acc = 0; i < P.length; i++) {
+      var a = P[i - 1], c = P[i], ux = c[0] - a[0], uy = c[1] - a[1], l = Math.hypot(ux, uy); if (l < 1e-9) continue;
+      B.forEach(function (k) {
+        var Q = k.path; if (!Q) return;
+        for (var j = 1; j < Q.length; j++) {
+          var e = Q[j - 1], f = Q[j], vx = f[0] - e[0], vy = f[1] - e[1], den = ux * vy - uy * vx; if (Math.abs(den) < 1e-9) continue;
+          var wx = e[0] - a[0], wy = e[1] - a[1], t = (wx * vy - wy * vx) / den, s = (wx * uy - wy * ux) / den;
+          if (t < 0 || t > 1 || s < 0 || s > 1) continue;
+          var sin = Math.abs(den) / (l * Math.hypot(vx, vy)); hits.push({ t: acc + t * l, half: (k.w || 0) / 2 / Math.max(0.3, sin) });
+        }
+      });
+      acc += l;
+    }
+    if (hits.length < 2) return b;
+    hits.sort(function (x, y) { return x.t - y.t; });
+    var h0 = hits[0], h1 = hits[hits.length - 1], w0 = Math.max(TOWN_BRIDGE_ABUT, h0.t + h0.half), w1 = Math.min(len - TOWN_BRIDGE_ABUT, h1.t - h1.half);
+    var o0 = b.wet ? b.wet[0] : w0, o1 = b.wet ? b.wet[1] : w1;
+    if (!(w1 - w0 > 1) || (w0 >= o0 && w1 <= o1)) return b;
+    var q = {}; for (var key in b) q[key] = b[key];
+    q.wet = [Math.min(o0, w0), Math.max(o1, w1)]; return q;
+  });
+  TOWN_BRIDGE_ARCH_MEMO.set(p.bridges, { banks: p.banks, L: L });
+  return L;
 }
 // 河堤的接頭（Tim 2026-11-15「河堤 海堤重疊問題&連接問題是否能參考城牆的作法處理河堤的接縫」）：規劃的 banks 一道一道各自畫、兩頭的端面方的
 //   ⇒ 兩道在陸地轉角各自停住：外側缺一角、內側疊在一起；支流的河堤一路伸過主河堤、戳進水裡；取樣留下的頭尾往回折一小鉤。
