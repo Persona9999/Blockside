@@ -517,7 +517,7 @@ function driveStep(sh, dt, vS, vB, deg, brake) {
   var r = sh.power || 0, want = r * Math.abs(r), give = vB > 0 ? Math.sign(want) * Math.min(Math.abs(want), cap) : 0, Fe = give * k * vB * vB;
   if (HELM_TQ) Tq += helmDiffStep(sh, D, P, give, cap, k * vB * vB, ey, vB > 0);   // 操舵（TASK-0777）：差動照舵令、停俥倒車也作用；兩舷不平衡的那一份另記在 D.tqD（見「操舵」）
   else {
-  var dif = D.dif && DRV_DIFF && give > 0 ? clamp(sh.rudder || 0, -1, 1) : 0;
+  var rCmd = sh.rudderCmd !== undefined ? sh.rudderCmd : (sh.rudder || 0), dif = D.dif && DRV_DIFF && give > 0 ? clamp(rCmd, -1, 1) : 0;
   D.dfk = dif ? clamp(1 - 2 * Math.abs(dif), -0.5, 1) : 1; D.dfs = dif > 0 ? -1 : dif < 0 ? 1 : 0;   // 內側那一舷（−1 左舷、+1 右舷）出幾成 ⇒ 划槳的畫面照它（oarAnim）
   for (i = 0; i < P.length; i++) {
     p = P[i]; if (p.kind === 'sail') continue;
@@ -559,13 +559,24 @@ function driveStep(sh, dt, vS, vB, deg, brake) {
   }
   D.tq = Tq; D.Fabs = Fabs; D.brake = brake;
 }
+/** 帆與動力的不平衡轉向率（rad/s；yaw 變大 ＝ 船頭往左舷為正）：rmaxB ＝ 舵完好時的最大轉向率。 */
+function driveUnbalYaw(sh, rmaxB) {
+  var D = sh.drive; if (!D || D.brake || sh.sunk) return 0;
+  var ref = (D.Fabs || 0) * D.L / 4;
+  return ref > 1e-6 ? -clamp((D.tq || 0) / ref, -1.5, 1.5) * rmaxB * DRV_TQ : 0;
+}
+/** 還完好的舵在目前舵效裡的佔比（0…1；不含娛樂無舵保底）：單舵打壞 ⇒ 0、雙舵壞一支不重複打折。 */
+function helmRudOk(sh) {
+  var D = sh.drive; if (!D || !D.R || !D.R.length) return 1;
+  var ok = 0, tot = 0;
+  D.R.forEach(function (p) { var ro = p.m ? (p.m.alive && !p.m.moved ? 1 : 0) : p.ro, k = p.w * (p.ok || 0); tot += k; if (ro) ok += k; });
+  return tot > 1e-6 ? ok / tot : 0;
+}
 /** 力矩 ⇒ 轉向率（rad/s，加在舵給的轉向率上）：吃掉幾成舵效 ＝ 力矩 ÷ (總推力 × 水線長／4)，夾 ±1.5，× 最大轉向率 × 細節設定「帆的力矩」。
  *  yaw 變大 ＝ 船頭往左舷 ⇒ 往右舷轉的力矩取負。錨咬著、拋錨、沉了 ⇒ 0。 */
 function driveYaw(sh, rmax) {
   var D = sh.drive; if (!D) return 0;
-  var ref = (D.Fabs || 0) * D.L / 4, om = ref > 1e-6 && !D.brake && !sh.sunk ? -clamp(D.tq / ref, -1.5, 1.5) * rmax * DRV_TQ : 0;
-  D.om = om;
-  return om;
+  return (D.om = driveUnbalYaw(sh, rmax));
 }
 // ───────────────────────── 操舵（TASK-0777；Tim 2026-10-21：「請不用要rudder判斷 應該要靠meta」「這邊的規則可以規範化 參考動力元件(甚至整合成一套系統)」
 //   「希望跟動力系統整合 把轉向當成一種力(力矩) 且動力系統有左右來源時(兩邊的槳) 本身也會提供轉向力矩」） ─────────────────────────
@@ -633,7 +644,7 @@ function helmEff(sh) {
 /** 差動（driveStep，開關開著）：每個額外動力項的推力 p.F（照舵令，見上）；回傳不算差動的兩舷不平衡力矩（受損），
  *  差動那一份記在 D.tqD（kN·m）、比例 D.dS ＝ D.tqD ÷ 完好全速打滿的力矩 D.tqRef、現在打滿的比例 D.dS1（電腦估上限用）、每一舷的推力 D.sideF（划槳畫面）。 */
 function helmDiffStep(sh, D, P, give, cap, Ff, ey, on) {
-  var dif = D.dif && DRV_DIFF && on, u = dif ? clamp(sh.rudder || 0, -1, 1) * (helmRev(sh) ? -1 : 1) : 0, Tq = 0, Td = 0, Td1 = 0, Tr = 0, SF = [give, give];
+  var rCmd = sh.rudderCmd !== undefined ? sh.rudderCmd : (sh.rudder || 0), dif = D.dif && DRV_DIFF && on, u = dif ? clamp(rCmd, -1, 1) * (helmRev(sh) ? -1 : 1) : 0, Tq = 0, Td = 0, Td1 = 0, Tr = 0, SF = [give, give];
   for (var i = 0; i < P.length; i++) {
     var p = P[i]; if (p.kind === 'sail' || p.kind === 'rudder') continue;
     var c = cap > 0 ? Ff * p.w * p.ok / cap : 0, f = helmSideF(give, cap, p.sd, u);
@@ -667,7 +678,7 @@ function helmYaw(sh, rate, dt, pin, rmaxB) {
   var D = sh.drive;
   if (pin || !D || D.M === null) { sh.yawRate += (rate - sh.yawRate) * Math.min(1, dt / (2 * DRV_TURN)); if (D) D.om = 0; return; }
   var N = helmN(sh), R = HELM_GYR * D.L, I = (D.M || D.M0 || 1) * R * R, Tt = I / N, live = !D.brake && !sh.sunk;
-  var ref = (D.Fabs || 0) * D.L / 4, oS = live && ref > 1e-6 ? -clamp((D.tq || 0) / ref, -1.5, 1.5) * rmaxB * DRV_TQ : 0, oD = live ? -(D.dS || 0) * DIFF_K * playK('diff') * rmaxB : 0;   // 轉向率（rad/s）：帆與動力的不平衡、差動（都換算成舵的幾成）
+  var oS = live ? driveUnbalYaw(sh, rmaxB) : 0, oD = live ? -(D.dS || 0) * DIFF_K * playK('diff') * rmaxB : 0;   // 轉向率（rad/s）：帆與動力的不平衡、差動（都換算成舵的幾成）
   if (D.R) { var we = D.R.reduce(function (a, p) { return a + p.w * p.ok; }, 0); D.R.forEach(function (p) { var arm = Math.abs(p.p[0] - sh.T.cx) * S; p.Fy = arm > 0.5 && we > 0 ? rate * N * p.w * p.ok / we / arm : 0; }); }   // 每支舵的側向力（kN；讀數）＝ 它那一份舵的力矩 ÷ 離船中心的距離
   D.N = N; D.I = I; D.Tt = Tt; D.rmaxB = rmaxB; D.tqR = rate * N; D.tqS = oS * N; D.tqDf = oD * N; D.om = oS + oD;
   sh.yawRate += (rate + D.om - sh.yawRate) * Math.min(1, dt / Tt);
