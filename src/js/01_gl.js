@@ -208,7 +208,7 @@ var BED_SHORE_GLSL = 'uniform vec4 uSnA,uSnF0,uSnF1,uSnF2; uniform ivec4 uSnI; u
   '  q=vec2(p.x*uSnF2.z+uSnF2.x,-p.y*uSnF2.w+uSnF2.y); Q=floor(q); return t+' + BED_SHORE.wt[2].toFixed(3) + '*(2.0*snV(uSnJ+ivec2(Q),q-Q,uSnS+2)-1.0); }\n' +
   'float snD(vec2 p,float b,float sl){ float a=min(uSnA.x*max(sl-uSnA.w,0.0),uSnA.y), t=min(abs(b)/max(uSnA.z,1.6*a),1.0); return t<1.0&&a>0.0?a*(1.0-t)*(1.0-t)*snN(p):0.0; }\n';
 var BED_WALL_GLSL = 'uniform float uWallOn; uniform vec4 uWallR; uniform sampler2D uWallT;\n' +
-  'vec2 bedWall(vec2 p){ if(uWallOn<0.5) return vec2(0.0); vec2 u=(p-uWallR.xy)/uWallR.zw; return u.x>0.0&&u.y>0.0&&u.x<1.0&&u.y<1.0?textureLod(uWallT,u,0.0).rg:vec2(0.0); }\n';
+  'vec4 bedWall(vec2 p){ if(uWallOn<0.5) return vec4(0.0); vec2 u=(p-uWallR.xy)/uWallR.zw; return u.x>0.0&&u.y>0.0&&u.x<1.0&&u.y<1.0?textureLod(uWallT,u,0.0):vec4(0.0); }\n';
 // 表演船的交接帶（60_showlod.js：近↔中兩級互補的抖動；同建築 63_towns.js TOWN_FADE、同一個雜湊）：uShowD ＝ (t, 哪一邊)。哪一邊 ＋1 ⇒ 留雜湊 ≥ t 的像素（淡出）、−1 ⇒ 留 < t 的（淡入）、0 ⇒ 不管（平常）。
 var SHOWD_GLSL = 'uniform vec2 uShowD; bool showCut(){ if(uShowD.y==0.0) return false; float q=fract(sin(dot(floor(gl_FragCoord.xy),vec2(12.9898,78.233)))*43758.5453); return (q<uShowD.x)==(uShowD.y>0.0); }\n';
 var DEPTH_ONLY_FS = '#version 300 es\nprecision highp float; void main(){}\n';   // 只寫深度（陰影的靜態那一層：地形、樹、城鎮拿自己的頂點著色器配這一支；60_render.js csmStatic）
@@ -402,12 +402,12 @@ function programs() {
     //   uRag 平常照 SEA_RAG，__game.seaDbg({ rag: [橫向公尺, 垂直上限, 沖刷高低差] }) 可以覆寫（[0, 0, 0] ⇒ 跟以前一樣）。
     'uniform vec3 uRag;\n' +
     'float edgeN(vec2 p){ return 0.55*(2.0*vn(p*0.055+vec2(1.7,8.3))-1.0)+0.3*(2.0*vn(p*0.17+vec2(5.1,2.9))-1.0)+0.15*(2.0*vn(p*0.5+vec2(uSeaT*0.03,-uSeaT*0.02))-1.0); }\n' +
-    // pw ＝ 堤後（BED_WALL_GLSL 的 r）⇒ 沖刷、曲折收掉；sl ＝ 地形坡度（0 ⇒ 不加曲折）
+    // pw ＝ 堤後（BED_WALL_GLSL 的 r）或貼著石堤的水面（b）⇒ 碎浪、白沫、沖刷、曲折收掉（石堤前的水不碎浪；窄運河整條都離岸很近）；sl ＝ 地形坡度（0 ⇒ 不加曲折）
     'float shoreW(vec2 p,float b,float d,float fp,out float sf,out float su,float sw,float pw,float sl){ float k=smoothstep(' + SEA_SHORE[0].toFixed(2) + ',' + SEA_SHORE[1].toFixed(2) + ',-b);\n' +
     '  float h=seaH(p)*k*sw*(1.0-smoothstep(900.0,1600.0,length(p-uEye.xz)))-(1.0-k)*' + SEA_SHORE[2].toFixed(2) + ';\n' +
     '  float sz=(1.0-smoothstep(0.0,1.2,-b))*(1.0-smoothstep(0.4,2.5,fp))*(1.0-pw);\n' +
     '  if(sz>0.0) h+=sz*(uSw.x*(2.0*vn(p*0.35+vec2(uSeaT*0.21,-uSeaT*0.13))-1.0)+(uRag.x>0.0?min(sl*uRag.x,uRag.y)*edgeN(p):0.0));\n' +
-    '  float ph=uSeaT/' + SEA_SURF[1].toFixed(2) + '+surfN(p), A=uSw.z*uSeaK*sw, env=(1.0-smoothstep(0.3*uSw.w,uSw.w,d))*smoothstep(2.0,14.0,d); sf=0.0; su=0.0;\n' +
+    '  float ph=uSeaT/' + SEA_SURF[1].toFixed(2) + '+surfN(p), A=uSw.z*uSeaK*sw, env=(1.0-smoothstep(0.3*uSw.w,uSw.w,d))*smoothstep(2.0,14.0,d)*(1.0-pw); sf=0.0; su=0.0;\n' +
     '  if(A>0.0&&env>0.0){ float u=fract(d/' + SEA_SURF[0].toFixed(2) + '+ph), f=surfF(u); h+=A*env*(f-0.3);\n' +
     '    su=A*env*(surfF(min(u+0.01,0.999))-f)*' + (100 / SEA_SURF[0]).toFixed(4) + '; float hb=max(0.5,3.0*A); sf=env*(smoothstep(0.86,0.99,u)+0.75*exp(-7.0*u))*(1.0-smoothstep(hb,2.5*hb,-b))*clamp(0.35+1.1*vn(p*0.06+vec2(uSeaT*0.03,0.0)),0.0,1.0); }\n' +   // 白水：浪的前面（u 接近 1）一整片、浪頭後面拖一段；沿著浪頭忽強忽弱（約 17 m 一段，⛔ 一整條一樣白 ⇒ 像尺畫的）
     '  float u0=fract(ph), ru=u0<0.2?smoothstep(0.0,0.2,u0):1.0-smoothstep(0.2,1.0,u0);\n' +
@@ -430,11 +430,11 @@ function programs() {
     // pe、hw ＝ 岸邊那一點（網格抬高了 ⇒ 順著視線往下找到真的水面那一點，一次就夠）與它的水面；不是岸邊 ⇒ 網格那一點
     //   vS、kS ＝ 光照、浪的斜率也照這一點（⛔ 照網格那一點 ⇒ 岸邊抬高的量在三角形裡內插得每格不一樣 ⇒ 視線差零點幾度，太陽的反光點跟著網格跳）
     //   sf、sg ＝ 碎浪的白沫、碎浪的斜率（世界 x、z；su × 離岸距離的梯度）—— 碎浪那一圈（離岸 uSw.w 公尺內）水深超過 3 m 也照這一點算
-    //   wl ＝ 海堤擋浪（BED_WALL_GLSL）：岸邊那一點的堤後、堤身；sl ＝ 那一點的地形坡度（高度貼圖往 +x、+z 各差一格；給岸線曲折）。堤身裡的海面最後丟掉（浪再高也不冒出堤面）
-    ' vec2 pe=p; float hw=vW.y; vec3 vS=vW; float kS=vK, sf=0.0, su=0.0; vec2 sg=vec2(0.0), wl=bedWall(p); if(uEdge>0.5&&uBedOn>0.5){ vec2 bu=((p-uBedR.xy)/uBedR.z+0.5)/uBedR.w; if(bu.x>0.0&&bu.y>0.0&&bu.x<1.0&&bu.y<1.0){ vec4 bt0=textureLod(uBedT,bu,0.0); vec2 t0=vec2(bt0.r-bt0.g,textureLod(uShoreT,((p-uShoreR.xy)/uShoreR.z+0.5)/uShoreR.w,0.0).r);\n' +
-    '  if(t0.r>-' + SEA_SHORE[1].toFixed(2) + '||t0.g<uSw.w){ hw=shoreW(p,t0.r,t0.g,fp,sf,su,bt0.b,wl.r,0.0)+bt0.g; vec3 r=normalize(vW-uEye); pe=p+r.xz*clamp((hw-vW.y)/min(r.y,-0.05),0.0,20.0);\n' +
+    //   wl ＝ 海堤擋浪（BED_WALL_GLSL）：岸邊那一點的堤後、堤身、貼著石堤、石堤旁 4 m 精度的水（a ⇒ 那一點照水深 1.5 m 畫：窄運河在 8 m 的高度貼圖裡跟岸混成淺灘，以前水面畫成鋸齒、露出河床）；sl ＝ 那一點的地形坡度（高度貼圖往 +x、+z 各差一格；給岸線曲折）。堤身裡的海面最後丟掉（浪再高也不冒出堤面）
+    ' vec2 pe=p; float hw=vW.y; vec3 vS=vW; float kS=vK, sf=0.0, su=0.0; vec2 sg=vec2(0.0); vec4 wl=bedWall(p); if(uEdge>0.5&&uBedOn>0.5){ vec2 bu=((p-uBedR.xy)/uBedR.z+0.5)/uBedR.w; if(bu.x>0.0&&bu.y>0.0&&bu.x<1.0&&bu.y<1.0){ vec4 bt0=textureLod(uBedT,bu,0.0); vec2 t0=vec2(bt0.r-bt0.g,textureLod(uShoreT,((p-uShoreR.xy)/uShoreR.z+0.5)/uShoreR.w,0.0).r); if(wl.a>0.5) t0.r=min(t0.r,-1.5);\n' +
+    '  if(t0.r>-' + SEA_SHORE[1].toFixed(2) + '||t0.g<uSw.w){ hw=shoreW(p,t0.r,t0.g,fp,sf,su,bt0.b,max(wl.r,wl.b),0.0)+bt0.g; vec3 r=normalize(vW-uEye); pe=p+r.xz*clamp((hw-vW.y)/min(r.y,-0.05),0.0,20.0);\n' +
     '   vec2 b1u=((pe-uBedR.xy)/uBedR.z+0.5)/uBedR.w, d1u=((pe-uShoreR.xy)/uShoreR.z+0.5)/uShoreR.w; vec4 bt1=textureLod(uBedT,b1u,0.0); float ex=1.0/uBedR.w, sl=length(vec2(textureLod(uBedT,b1u+vec2(ex,0.0),0.0).r,textureLod(uBedT,b1u+vec2(0.0,ex),0.0).r)-bt1.r)/uBedR.z, bd=bt1.r+snD(pe,bt1.r,sl); vec2 t1=vec2(bd-bt1.g,textureLod(uShoreT,d1u,0.0).r), e=vec2(1.0/uShoreR.w,0.0);\n' +
-    '   wl=bedWall(pe); hw=shoreW(pe,t1.r,t1.g,fp,sf,su,bt1.b,wl.r,sl)+bt1.g; if(hw<bd) discard;\n' +
+    '   wl=bedWall(pe); if(wl.a>0.5){ bd=min(bd,-1.5); t1.r=min(t1.r,-1.5); } hw=shoreW(pe,t1.r,t1.g,fp,sf,su,bt1.b,max(wl.r,wl.b),sl)+bt1.g; if(hw<bd||wl.r>0.5&&bd>0.0) discard;\n' +
     '   sg=su*vec2(textureLod(uShoreT,d1u+e.xy,0.0).r-t1.g,textureLod(uShoreT,d1u+e.yx,0.0).r-t1.g)/uShoreR.z; vS=vec3(pe.x,hw,pe.y); kS=smoothstep(' + SEA_SHORE[0].toFixed(2) + ',' + SEA_SHORE[1].toFixed(2) + ',-t1.r)*bt1.b; } } }\n' +
     ' if(wl.g>0.5) discard;\n' +
     ' vec2 g=uAn*seaGf(pe,fp)*kS+detail(pe,fp)+sg;\n' +                     // 浪的斜率照岸邊縮小（vK，見上面頂點那一段）；細浪照舊
@@ -446,7 +446,7 @@ function programs() {
     // 河水羽流（63_bed_gl.js BEDMOUTH 的 a）：河口外的海混進河水的顏色（同 bedWaterFS 的 0.07, 0.19, 0.16 × 光）、比較濁（透出水下的少）；邊上照一層慢慢飄的雜訊碎開。沒有內陸水 ⇒ pl 0，算式不變
     ' if(pl>0.0){ pl*=mix(1.0,0.45+0.75*vn(p*0.02+vec2(uSeaT*0.012,-uSeaT*0.008)),1.0-pl); vec3 lr=mix(uGround,uSky,0.6)*0.65+vec3(1.0,0.96,0.88)*max(uSun.y,0.0)*0.7*sk; deep=mix(deep,vec3(0.07,0.19,0.16)*lr,clamp(pl,0.0,1.0)); }\n' +
     ' if(uRefr<0.5) a=1.0; else if(uRefr>1.5){ float zw=linZ(gl_FragCoord.z); vec2 off=n.xz*0.045; float zs=linZ(textureLod(uSceneD,sc+off,0.0).r);\n' +
-    '   if(zs<zw){ off=vec2(0.0); zs=linZ(textureLod(uSceneD,sc,0.0).r); } float th=max(zs-zw,0.0);\n' +
+    '   if(zs<zw){ off=vec2(0.0); zs=linZ(textureLod(uSceneD,sc,0.0).r); } float th=max(zs-zw,0.0); if(wl.a>0.5) th=max(th,3.0);\n' +   // 石堤旁的水（窄運河，wl.a）：照至少 3 m 的水吸收 ⇒ 4 m 一點的河床斜坡（岸 +0.3 m、河心 −2.5 m）不透出來
     '   vec3 under=textureLod(uScene,sc+off,0.0).rgb*vec3(0.55,0.86,0.92); deep=mix(deep,under,exp(-th*uRefrK)*(1.0-0.8*clamp(pl,0.0,1.0))*clamp(1.0-fd/uRefrD,0.0,1.0)); a=1.0; }\n' +
     ' vec3 c=mix(deep,sky,fr)+vec3(1.0,0.92,0.75)*sp;\n' +
     // 白沫（天氣：暴風雨）：浪頭（高度在全部振幅的 40% 以上）照一層慢慢飄的雜訊碎成一塊一塊；晴天 uFoam ＝ 0 ⇒ 整段跳過（畫面逐位元組不變）
@@ -464,13 +464,13 @@ function programs() {
     //   水邊一條亮線（< 0.5 m）＋往岸邊推的一道一道浪花（照水深的正弦、隨時間往淺處走；1.5 m 內 —— 2 m 內 ⇒ 大片淺礁坪整片都是條紋），用兩層雜訊碎開；1.2 km 外淡掉。只在畫面上。
     //   亮線照「旁邊一格（8 m）內最淺的」⇒ 峭壁腳下（水深一下子 10 m 以上、< 2 m 的那一圈不到一格）也有一圈浪花拍岸。
     //   bd ＝ 這一點的水深（給最後那一段「深水看不到底」；−1 ＝ 沒有海圖、1e4 ＝ 在這張高度貼圖外面，當深海）
-    ' float bd=-1.0; if(uBedOn>0.5){ vec2 bu=((pe-uBedR.xy)/uBedR.z+0.5)/uBedR.w; if(bu.x>0.0&&bu.y>0.0&&bu.x<1.0&&bu.y<1.0){ float dep=hw-textureLod(uBedT,bu,0.0).r; bd=dep;\n' +
+    ' float bd=-1.0; if(uBedOn>0.5){ vec2 bu=((pe-uBedR.xy)/uBedR.z+0.5)/uBedR.w; if(bu.x>0.0&&bu.y>0.0&&bu.x<1.0&&bu.y<1.0){ float dep=hw-textureLod(uBedT,bu,0.0).r; if(wl.a>0.5) dep=max(dep,3.0); bd=dep;\n' +   // 石堤旁的水（窄運河，wl.a）：8 m 的高度貼圖把它跟岸混成淺灘 ⇒ 照至少 3 m 算（不透出河床、不畫水邊亮線）
     // 淺水看得見底（Tim 2026-10-19 珊瑚礁的顏色）：中畫質的海面是一層 86% 不透明的顏色（高畫質才照水深透出水下）⇒ 水深 0.5～8 m 那一段照水深變透（最透 0.4），礁、沙洲的顏色透得出來；低畫質照舊不透
     '   if(uRefr>0.5&&uRefr<1.5&&dep>0.0&&mod(uDbgM,16.0)<8.0) a=min(a,mix(0.4,a,smoothstep(0.5,8.0,dep)));\n' +
     //   羽流（上面）：中畫質照河面同一條「照水深變透」（63_bed_gl.js bedWaterFS）⇒ 跟淡出的河面一樣透出河床
     '   if(uRefr>0.5&&uRefr<1.5&&pl>0.0) a=mix(a,clamp(mix(0.55,0.9,1.0-exp(-0.25*max(dep,0.0)))+fr*0.4,0.0,0.97),clamp(pl,0.0,1.0));\n' +
     //   uEdge：亮線改照「離岸線幾公尺」（海底的坡度 ⇒ 水深 ÷ 坡度）⇒ 峭壁、碼頭腳下是一條 2 m 內的線，⛔ 不再是整格（8～16 m）白、邊照 8 m 的格子走成直角；平的沙灘照舊照水深
-    '   float dn=dep; if(dep<60.0){ vec2 e=vec2(1.0/uBedR.w,0.0); float bx0=textureLod(uBedT,bu+e.xy,0.0).r, bx1=textureLod(uBedT,bu-e.xy,0.0).r, bz0=textureLod(uBedT,bu+e.yx,0.0).r, bz1=textureLod(uBedT,bu-e.yx,0.0).r;\n' +
+    '   float dn=dep; if(dep<60.0&&wl.a<0.5){ vec2 e=vec2(1.0/uBedR.w,0.0); float bx0=textureLod(uBedT,bu+e.xy,0.0).r, bx1=textureLod(uBedT,bu-e.xy,0.0).r, bz0=textureLod(uBedT,bu+e.yx,0.0).r, bz1=textureLod(uBedT,bu-e.yx,0.0).r;\n' +
     '     if(uEdge>0.5) dn=min(dep,0.25*dep/max(length(vec2(bx0-bx1,bz0-bz1))/(2.0*uBedR.z),1e-3)); else dn=min(dep,hw-max(max(bx0,bx1),max(bz0,bz1))); }\n' +
     //   uEdge：一道一道往岸上推的浪花改用碎浪的浪頭（sf：跟著離岸距離場走、照水深碎），⛔ 不是照水深的正弦（平的礁坪整片條紋、陡岸擠成一條）
     '   if(dn<0.5||dep<1.6&&dep>-0.5||sf>0.01){ float nz=vn(pe*0.11+vec2(uSeaT*0.04,-uSeaT*0.03)); float ln=1.0-smoothstep(0.05,0.5,dn);\n' +
