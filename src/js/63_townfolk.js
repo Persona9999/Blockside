@@ -196,6 +196,16 @@ function townFolkGraph(T) {
       if (L >= 1.5) { raw.push({ a: a, b: b, w: 2 * d.hw, L: L, own: d.own, deck: true }); pts.push(a, b); }
     }
   });
+  //   運河的河堤（Blocksail TASK-1291 第四輪：牆頂是路）：牆的中線當路網的邊（同碼頭面），牆頂每一點一個高（規劃的 z）⇒ 面板段兩頭內插（同橋面的 zb）
+  var bankEnds = [];
+  (T.p && T.p.banks || []).forEach(function (b, i) {
+    var P = b.path.map(W), hw = b.w / 2; if (P.length > 1) bankEnds.push({ p: P[0], hw: hw, own: 'b' + i, deck: true }, { p: P[P.length - 1], hw: hw, own: 'b' + i, deck: true });   // 兩頭也拉接線（同碼頭、棧橋）
+    for (var q = 1; q < P.length; q++) {
+      var a = P[q - 1], c = P[q], L = Math.hypot(c[0] - a[0], c[1] - a[1]); if (L < 1e-3 || !b.z) continue;
+      pieces.push({ ax: a[0], az: a[1], dx: (c[0] - a[0]) / L, dz: (c[1] - a[1]) / L, L: L, hw: hw, top: b.z[q - 1], zb: b.z[q], bb: [Math.min(a[0], c[0]) - hw, Math.min(a[1], c[1]) - hw, Math.max(a[0], c[0]) + hw, Math.max(a[1], c[1]) + hw] });
+      if (L >= 1.5) { raw.push({ a: a, b: c, w: b.w, L: L, own: 'b' + i, deck: true }); pts.push(a, c); }
+    }
+  });
   //   橋（Blocksail TASK-1290）：路照舊是一條邊（橋那一段也在路網裡），橋面另外當面板段（每 1 m 一段、面高照 townBridgeForm 兩頭內插：拱背）⇒ 走在橋上的人照橋面（townFolkDeckY 取高的）
   townBridgeList(T.p).forEach(function (b) {
     var F = townBridgeForm(b), n = Math.max(1, Math.ceil(F.L)), hw = b.w / 2, prev = null;
@@ -262,6 +272,7 @@ function townFolkGraph(T) {
     };
     var ends = [], phw = pieces.reduce(function (m, s) { return Math.max(m, s.hw); }, 0) + 0.5;   // 要接的端點：碼頭、棧橋的兩頭；路端落在面板上的
     decks.forEach(function (d) { ends.push({ p: d.P[0], hw: d.hw, own: d.own, deck: true }, { p: d.P[d.P.length - 1], hw: d.hw, own: d.own, deck: true }); });
+    bankEnds.forEach(function (e) { ends.push(e); });
     R.forEach(function (r) {
       [r.P[0], r.P[r.P.length - 1]].forEach(function (P0) {
         var p = [P0[0] - ax, P0[1] - az];
