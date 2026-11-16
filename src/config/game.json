@@ -528,6 +528,32 @@
       "min": 5,
       "mass": 6.6,
       "shot": 47.2
+    },
+    "veniceCorsiero50": {
+      "code": "ven50",
+      "name": "50 威尼斯磅艏主砲（corsiero）",
+      "short": "50 威尼斯磅砲",
+      "shot": 15.061,
+      "V": 178,
+      "reload": 1.5,
+      "big": true,
+      "hole": 1.22,
+      "crew": 7,
+      "min": 3,
+      "mass": 3.2
+    },
+    "veniceFalcone6": {
+      "code": "ven6",
+      "name": "6 威尼斯磅輕砲（falcone）",
+      "short": "6 威尼斯磅砲",
+      "shot": 1.80732,
+      "V": 165,
+      "reload": 0.6,
+      "big": false,
+      "hole": 0.6,
+      "crew": 2,
+      "min": 1,
+      "mass": 0.5
     }
   },
   "geo0": {
@@ -2013,6 +2039,28 @@
       "crew": {"officers": 0, "helm": 0, "top": 0, "marines": 0, "marineGap": 5, "monkeys": 1, "handsK": 0, "navigator": 0},
       "names": ["貢多拉", "里亞托號", "聖馬可號", "大運河號", "總督宮號", "潟湖黑燕號"],
       "idNext": {"anchor": 2, "deck": 2, "magazine": 2, "oar": 2, "part": 2, "powder": 2, "ship": 2}
+    },
+    {
+      "id": "galea",
+      "el": "ship-galea",
+      "name": "威尼斯槳帆船",
+      "vxk": "galea.vxk",
+      "work": "meadow-venice-galea-01m-assembly",
+      "author": "meadow",
+      "idNext": {"anchor": 3, "deck": 3, "gun": 6, "light": 2, "magazine": 2, "mast": 3, "oar": 50, "part": 6, "powder": 5, "rudder": 2, "ship": 2, "yard": 3},
+      "geo": {"spar": [18, 21], "marines": [54, 160], "center": 28, "aim": 23, "aimZ": [11, 184], "deckAim": [17, 28], "rigAim": [73, 184]},
+      "crew": {"top": 0, "marines": 0},
+      "cfg": {"base": 5},
+      "fireEngine": false,
+      "rooms": {
+        "deck": {
+          "type": "deck",
+          "items": [
+            {"it": "keg", "x": 69, "y": 4, "r": 0},
+            {"it": "keg", "x": 69, "y": 8, "r": 0}
+          ]
+        }
+      }
     }
   ],
   "furniture": {
@@ -2151,7 +2199,9 @@
       "long6": {"carriage": "stormkaap#gun-1"},
       "long8": {"carriage": "reale#gun-2"},
       "pierrier": {"turret": "reale#gun-6"},
-      "trident": {"carriage": "tridente#gun-67"}
+      "trident": {"carriage": "tridente#gun-67"},
+      "veniceCorsiero50": {"carriage": "galea#gun-1"},
+      "veniceFalcone6": {"carriage": "galea#gun-2"}
     },
     "oar": {
       "reale#oar-1": "皇家號・oar-S01",

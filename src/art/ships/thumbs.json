@@ -1,5 +1,5 @@
 {
- "atlasSHA256": "ce8c791c042a3043990a7a9a3496dd58f36fa12356c9c880e3fcd3a06896892e",
+ "atlasSHA256": "268e7d027177b73c918b1de766b162cdad4153c66e0b55dd2347ee10db0f7814",
  "cols": 6,
  "h": 160,
  "icons": {
@@ -83,104 +83,108 @@
    1,
    3
   ],
-  "gloire": [
+  "galea": [
    2,
+   3
+  ],
+  "gloire": [
+   3,
    3
   ],
   "gondola": [
-   3,
+   4,
    3
   ],
   "guineaman": [
-   4,
+   5,
    3
   ],
   "labelle": [
-   5,
-   3
+   0,
+   4
   ],
   "matsushima": [
-   0,
+   1,
    4
   ],
   "monitor": [
-   1,
+   2,
    4
   ],
   "napoleon": [
-   2,
+   3,
    4
   ],
   "nightlamp": [
-   3,
+   4,
    4
   ],
   "oxford": [
-   4,
+   5,
    4
   ],
   "phoenix": [
-   5,
-   4
+   0,
+   5
   ],
   "pinas": [
-   0,
+   1,
    5
   ],
   "piragua": [
-   1,
+   2,
    5
   ],
   "punt": [
-   2,
+   3,
    5
   ],
   "reale": [
-   3,
+   4,
    5
   ],
   "sanroman": [
-   4,
+   5,
    5
   ],
   "sentinel": [
-   5,
-   5
+   0,
+   6
   ],
   "stormkaap": [
-   0,
+   1,
    6
   ],
   "susquehanna": [
-   1,
+   2,
    6
   ],
   "swallow": [
-   2,
-   6
-  ],
-  "tidegrave": [
    3,
    6
   ],
-  "tower_galata": [
+  "tidegrave": [
    4,
    6
   ],
-  "tradewind": [
+  "tower_galata": [
    5,
    6
   ],
-  "tridente": [
+  "tradewind": [
    0,
    7
   ],
-  "virginia": [
+  "tridente": [
    1,
    7
   ],
-  "zeehaen": [
+  "virginia": [
    2,
+   7
+  ],
+  "zeehaen": [
+   3,
    7
   ]
  },
@@ -208,6 +212,7 @@
    "fort_galata": "faa9687ec5ef426ae3958ce74300bc6e9d9892641a0043779bbf2e866e31ea0f",
    "fort_roche": "689f3e895a5fc8c4245b8a6e6c05776c4dc329b082b71ebd654d41b1aa0ee9e8",
    "fusta": "1d00b3592f8d7dfafb1cc2c25688712e7151a8649885c6a3cae86510f25afc3d",
+   "galea": "8cbda6c93825c0e4e2f0de37c193bc8770b6576ef9458f3c48b7479d36728394",
    "gloire": "b31f872b14aedf99499ac16c24820671dcf042e3f45ceb4517310e8fa7993a9f",
    "gondola": "d95131919b192f952dea25541ec591f979a76e1bdb64450fea3a04286e250e43",
    "guineaman": "2f31dcd13649051c857043d595564b0f7aa506a250ff5f8cc3ed46b1e96bdd7c",
