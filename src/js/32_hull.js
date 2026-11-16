@@ -77,7 +77,39 @@ function sinkLineT(T) {
   T.topDeck = top === null ? null : +((top - T.zw) * S).toFixed(2);
   return T.sinkLine = T.topDeck === null ? SINK_FINAL : Math.max(SINK_FINAL, T.topDeck);
 }
-function sinkFinalAt(sh) { return sinkLineT(sh.T); }
+var FLOOD_RIM_HOLD = 2;
+function usesFloodRim(sh) { return sh.T.floodRim && !sh.broken && !(sh.vxSink > 0); }
+/** 舷板也會被打掉。量標記點前後三格寬的舷板，整段缺了才往下找下一層仍然擋水的船殼。 */
+function floodRimZ(sh, p) {
+  var B = sh.grid, x = Math.floor(p[0]), y = Math.floor(p[1]), inward = y < sh.T.cy ? 1 : -1;
+  for (var z = p[2] - 1; z >= 0; z--) {
+    for (var dx = -1; dx <= 1; dx++) for (var j = 0; j <= 2; j++) {
+      if (B.get(x + dx, y + j * inward, z)) return z + 1;
+    }
+  }
+  return 0;
+}
+function floodRimAt(sh, onlyLowered) {
+  var T = sh.T, rim = T.floodRim;
+  if (sh.rimGridVer !== sh.grid.ver) {
+    sh.rimGridVer = sh.grid.ver;
+    sh.rimZ = rim.map(function (p) { return floodRimZ(sh, p); });
+  }
+  // 照 shipMatrix 的順序取舷緣的高度，算積水造成的橫傾、縱傾與載重。瞬間波浪另外作用在破口流量。
+  var sp = Math.sin(sh.pitchA), cp = Math.cos(sh.pitchA), sr = Math.sin(sh.rollA), cr = Math.cos(sh.rollA);
+  var low = Infinity;
+  for (var i = 0; i < rim.length; i++) {
+    var p = rim[i], z = sh.rimZ[i];
+    if (onlyLowered && z === p[2]) continue;
+    var h = sp * (p[0] - T.cx) + cp * (cr * (z - T.zw) - sr * (p[1] - T.cy));
+    low = Math.min(low, h * S);
+  }
+  return sh.lift + low;
+}
+function sinkFinalAt(sh) {
+  if (sh.sinkStart !== undefined) return sh.sinkStart;
+  return usesFloodRim(sh) ? Math.max(0, floodRimAt(sh)) : sinkLineT(sh.T);
+}
 /** 沉沒的線：開始沉之後再沉 4.8 m（以前 4.2 ⇒ 9 m；高的船照樣多 4.8 m，⛔ 照舊 9 m ⇒ tridente 8 m 開始沉、1 m 後就算沉沒）。 */
 function sinkGoneAt(sh) { return sinkFinalAt(sh) + (9 - SINK_FINAL); }
 function stepShip(sh, dt) {
@@ -103,7 +135,20 @@ function stepFloat(sh, dt) {
     else sh.sink = Math.max(0, sh.sink + Math.min(Q * 1.1e-5 * FL_INK - 0.004 * pumpK(sh) * FL_PUMPK, 0.25) * fk * dt);   // pumpK：基礎抽水量／PUMP_REF（TASK-0604；憲法號 1）   // 進水與抽水一起照滑桿縮放（⛔ 只縮進水 ⇒ 調慢之後抽水永遠贏、永遠不沉）；FL_INK／FL_PUMPK：進水、抽水的全域倍率（TASK-1058；開始沉之後的 0.06 × fk 不乘）；
                                                                               // 上限 0.25 m/s：彈藥庫殉爆打掉三十幾萬格 ⇒ 不設上限兩秒就沉完，看不到船斷開
     if (VX) { var vo = vxOffset(sh); sh.sink = Math.max(0, sh.sink + vo - (sh.vxOff || 0)); sh.vxOff = vo; }   // 大漩渦：眼那一份（拖下去的深度 ＋ 讓翹起那一頭留在水面的那一段，08_sea.js vxOffset）直接加在吃水上，兩種進水模式都一樣
-    if (sh.sink > sinkFinalAt(sh) && !sh.sinkingFinal && (fk > 0 || sh.vxSink > 0)) { sh.sinkingFinal = true; if (sh.vxSink > 0) { sh.vxEaten = true; sh.fate = '捲進漩渦'; note(sh, '被漩渦拖下去，開始沉了', true); } else note(sh, '進水太多，開始沉了'); }   // 大漩渦：跟進水同一條線（4.2 m）—— 進水速度調成 0 也照樣會被拖沉
+    if (!sh.sinkingFinal && (fk > 0 || sh.vxSink > 0)) {
+      var rim = usesFloodRim(sh), line = rim ? floodRimAt(sh, sh.sink <= 0) : sinkLineT(sh.T), over = sh.sink > line;
+      if (rim) {
+        sh.rimUnderT = over ? (sh.rimUnderT || 0) + dt : 0;
+        over = sh.rimUnderT >= FLOOD_RIM_HOLD;
+      } else if (sh.rimUnderT) sh.rimUnderT = 0;
+      if (over) {
+        sh.sinkingFinal = true;
+        if (rim) sh.sinkStart = Math.max(0, line);  // 沉沒動畫從這條線往下算，開始沉之後的傾斜不再移動門檻。
+        if (sh.vxSink > 0) {
+          sh.vxEaten = true; sh.fate = '捲進漩渦'; note(sh, '被漩渦拖下去，開始沉了', true);
+        } else note(sh, '進水太多，開始沉了');
+      }
+    }
     var gulp = VX && VX.gulp > 0 && Math.hypot(sh.px, sh.pz) < VX.re;          // 大漩渦：開始沉的船在眼裡 ⇒ 被吸下去（天氣設定頁「眼吞沉船」m/s²；Tim：「沈船會在幾秒內被吸走(沉掉)」）
     if (sh.sinkingFinal && sh.vxEaten && VX.pull > 0) sh.sinkV = vxPullV(sh.vxSink);   // 被眼拖沉的：上面 vxDrag 照同一條式子接著拖（Tim 2026-10-22「船體逐漸往下」）—— ⛔ 不換成眼吞沉船的加速度（1.5 秒就沉沒）；sinkV 留給沉沒之後接著吸
     else if (sh.sinkingFinal) { sh.sinkV += (gulp ? VX.gulp : 0.06 * (sh.vxEaten ? Math.max(fk, 1) : fk)) * dt; sh.sink += sh.sinkV * dt; }
