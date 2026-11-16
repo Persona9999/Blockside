@@ -1214,7 +1214,7 @@
       "floodRim": [[173.5, 42.5, 29], [173.5, 86.5, 29], [257.5, 43.5, 29], [257.5, 85.5, 29]],
       "author": "erina",
       "fireEngine": false,
-      "cfg": {"upwind": 1.2, "base": 14, "speed": 2.25, "agile": 4},
+      "cfg": {"pump": 8, "upwind": 1.2, "base": 14, "speed": 2.25, "agile": 4},
       "geo": {"spar": [21, 30], "marines": [42, 96], "center": 30, "aim": 18, "aimZ": [8, 230], "deckAim": [18, 30], "rigAim": [60, 210]},
       "crew": {"officers": 2, "top": 0, "marines": 12, "marineGap": 18},
       "names": ["持火號"],
