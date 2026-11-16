@@ -4,7 +4,7 @@
 //   Tim 2026-10-25：「城鎮中直接點選房子會跳出房屋資訊(額外的房屋資訊面板) 資訊包含住宅人口/容量 工人/崗位 產出/消耗等 然後有個額外按鈕可以演出該房屋建造過程」
 // 協定（同 89_townui.js tuiAsk：Blocksail globe.html townUI）：{ cmd: 'bld', lot } ⇒ { ok, bld: { kind, typeName, owner, level, live: { n, cap }, jobs: { w, need },
 //   made: { 貨: 桶／天 }, used: { 貨: 桶／天 }, full: { made, used }（理論：滿產、開工率 100%）, site: { p（‰）, crew, by, mat: { 貨: [剩下, 總共]（1／1000 桶）}, repair?（堡壘的修繕：開工時的損傷 ‰，TASK-0956）, gun?（補砲：[買到, 要補] kg ＝ 鐵砲 1／1000 桶，TASK-1093）}, guard?.stock（堡壘自己囤的鐵砲：[有, 囤滿] kg）,
-//   guard?: { w, need, full?（沒壞時的崗位）, dmg?（損傷 ‰）}, jobName?（崗位上的人叫什麼：神父、牧師…）, ruler?（住在這裡的統治者家族）, note }, goods: { 貨: 名字 } }（Blocksail world/site.js townBld）。
+//   guard?: { w, need, full?（沒壞時的崗位）, dmg?（損傷 ‰）}, jobName?（崗位上的人叫什麼：神父、牧師…）, ruler?（住在這裡的統治者家族）, yard?（船廠：在造的船、造船菜單、船市；Blocksail site.js yardInfo，TASK-1269）, note }, goods: { 貨: 名字 } }（Blocksail world/site.js townBld）。
 // 物理意義：⛔ 這一支不算經濟 —— 數字全照那一頁的城鎮帳；這裡只問、只畫。
 // 失敗處置：沒有 host（直接開 Blockside）⇒ 只有名稱、模型與演出鈕；那一頁沒回 ⇒ 照原樣說一聲。
 var TBI = { open: false, hit: null, b: null, goods: {}, msg: '', seq: 0, rcp: null, fsel: -1, fmsg: '' };   // fsel：瑕疵那一段選著第幾處（外框亮）；fmsg：標記的回覆
@@ -141,6 +141,31 @@ function tbiServiceHTML(S) {
     }).join('');
   }).join('') + '<div class="tbiDim">' + tuiEsc(S.foot || '一天只供應一道菜；實際量依需求、物資與人手調整。') + '</div>';
 }
+/** 船廠（Blocksail TASK-1269；Tim 2026-11-10「希望城鎮模式點造船廠可以看到目前在造的船以及菜單(消耗多少資源)」）：在造的那一艘、造船菜單、造得了哪幾型、船市。數字全是那一頁的城鎮帳（site.js yardInfo）。 */
+function tbiYardHTML(Y) {
+  var h = ['<div class="tbiT">⚓ 造船</div>'], H = Y.hull;
+  if (H) {
+    h.push('<div class="tbiS">🛠 在造：<b>' + tuiEsc(H.name) + '</b>　' + Math.floor(H.pct / 10) + '%（' + (H.phase === 'rig' ? '索具段' : '船殼段') + ' ' + Math.floor(H.phasePct / 10) + '%）</div>');
+    h.push('<div class="tbiR"><span>做了／整艘（工天）</span><b>' + tuiNum(H.done) + '／' + tuiNum(H.work) + '</b></div>');
+    if (H.today != null) h.push('<div class="tbiR"><span>今天做了（工天）</span><b>' + tuiNum(H.today, 1) + '</b></div>');   // null ＝ 剛開工（最近那一天的讀數是修船的）
+    h.push('<div class="tbiR"><span>照今天的進度還要</span><b>' + (H.left != null ? '約 ' + tuiNum(H.left) + ' 天' : '—') + '</b></div>');
+    if (H.stuck) h.push('<div class="tbiDim">⚠ 今天卡在：' + tuiEsc(H.stuck) + '</div>');
+    if (H.short && H.short.length) h.push('<div class="tbiDim">⚠ 缺料（市場＋主人倉庫不夠今天那一份）：' + H.short.map(function (x) { return tuiIcon('goods', x.g, 16) + tuiEsc(x.name); }).join('、') + '</div>');
+  } else h.push('<div class="tbiS">' + (Y.next ? '閒著 ⇒ 下一艘：<b>' + tuiEsc(Y.next.name) + '</b>' : '閒著：這一座造的船在船市上已經囤滿（賣掉才開下一艘）') + '</div>');
+  if (Y.menu && Y.menu.length) {
+    h.push('<div class="tbiT">造船菜單（' + tuiEsc(Y.menuOf === 'hull' ? H.name : Y.next ? Y.next.name : '') + '，整艘 ' + tuiNum(Y.work) + ' 工天；' + (Y.menuOf === 'hull' ? '已經吃了／整艘' : '整艘') + '，桶）</div>');
+    h.push(Y.menu.map(function (m) {
+      return '<div class="tbiR"><span>' + tuiIcon('goods', m.g) + tuiEsc(m.name) + (m.rig ? '<small>（索具段）</small>' : '') + '</span><b>' + (Y.menuOf === 'hull' ? tuiNum(m.used, 1) + '／' : '') + tuiNum(m.all, 1) + '</b></div>';
+    }).join(''));
+    h.push('<div class="tbiDim">船殼段先吃船殼的料，做完才換索具段（標著「索具段」的那幾種）；每一段的料到齊才開工。</div>');
+  }
+  if (Y.can && Y.can.length) h.push('<div class="tbiDim">造得了：' + Y.can.map(function (x) { return tuiEsc(x.name); }).join('、') + '</div>');
+  h.push('<div class="tbiT">這座城的船市</div>');
+  h.push(Y.stock && Y.stock.length ? Y.stock.map(function (x) { return '<div class="tbiR"><span>⛵ ' + tuiEsc(x.name) + (x.mine ? '<small>（這一座造的）</small>' : '') + '</span><b>第 ' + tuiNum(x.born) + ' 天下水</b></div>'; }).join('') : '<div class="tbiDim">沒有現貨</div>');
+  if (Y.wants && Y.wants.length) h.push('<div class="tbiDim">最近有人想要、沒現貨：' + Y.wants.map(function (x) { return tuiEsc(x.name) + ' ×' + x.n; }).join('、') + '</div>');
+  if (Y.sold && Y.sold.length) h.push('<div class="tbiDim">最近賣掉：' + Y.sold.map(function (x) { return tuiEsc(x.name) + ' ×' + x.n; }).join('、') + '</div>');
+  return h.join('');
+}
 function tbiUI() {
   var P = $('tbiP'); if (!P) return;
   if (!TBI.open || !TBI.hit) { P.innerHTML = ''; return; }
@@ -163,6 +188,7 @@ function tbiUI() {
     html.push('<div class="tbiT">每天產出' + (b.full ? '（實際／理論）' : '') + '</div>' + tbiRows(b.made, b.full && b.full.made));
     html.push('<div class="tbiT">每天消耗' + (b.full ? '（實際／理論）' : '') + '</div>' + tbiRows(b.used, b.full && b.full.used));
   }
+  if (b && b.yard) html.push(tbiYardHTML(b.yard));   // 船廠（TASK-1269）
   html.push(tbiRcpHTML());
   html.push(tbiFlawHTML());
   if (b && b.note) html.push('<div class="tbiDim">' + tuiEsc(b.note) + '</div>');
