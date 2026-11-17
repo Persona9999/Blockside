@@ -77,7 +77,31 @@ function cmdTick() {
     if (M.gauge && M.gauge.st !== g0) cmdGaugeSay(side, M.gauge);
     if (M.roll && !M.roll.said) { M.roll.said = true; var fs = flagship(side); if (fs) helmSay(fs, 'roll', rollText(M.roll), M.roll.n === 1 || M.roll.prev !== M.roll.pick); }   // 推演（TASK-0688）：每一次都記進戰鬥報表，換策略（或第一次）才上方廣播
   });
+  escOrders();                                                          // 友艦跟著我艦（玩家艦隊；沒有友艦 ⇒ 什麼都不做）
 }
+/** 友艦的位置（玩法規則 fleet 'own' ＋ origin：航海、交戰、城鎮；Blocksail 玩家艦隊 TASK-1260 第 5 段）：第 j 艘（我艦 ＝ 0）。
+ *  戰前狀態帶了 at ＝ [往東, 往南（海域座標，公尺）, 船頭方位角] ⇒ 照它（Blocksail 停靠在城裡 ⇒ 港外錨地）；不然 ⇒ 我艦（原點、?hdg=）正後方 j × ESC_GAP 公尺、同一個船頭（縱隊）。 */
+var ESC_GAP = 150;                                                        // 友艦縱隊前後兩艘中心隔幾公尺（Tim 2026-11-17「縱隊跟在後面」；戰列 lineGap 是 90）〔設計〕
+function escAt(j, pre) {
+  var a = pre && pre.at;
+  if (a && a.length >= 3 && isFinite(+a[0]) && isFinite(+a[1]) && BED && BED.ax != null) return { x: +a[0] - BED.ax, z: +a[1] - BED.az, yaw: Math.PI / 2 - (+a[2] || 0) / 57.2958 };
+  var y0 = SPAWN_HDG !== null ? Math.PI / 2 - SPAWN_HDG / 57.2958 : Math.PI / 2, F = fwd(y0);
+  return { x: -F[0] * j * ESC_GAP, z: -F[2] * j * ESC_GAP, yaw: y0 };
+}
+/** 友艦跟著我艦（cmdTick 之後；Tim 2026-11-17「縱隊跟在後面」）：玩法規則 fleet 'own'、我艦沒有敵人 ⇒ 我方的友艦照 escK 排成縱隊 ——
+ *  第一艘跟我艦、後面每一艘跟前一艘的航跡（54_helm.js helmFollow，間距 ESC_GAP）。我艦換了（沉了換操控）⇒ 照新的我艦排。
+ *  有敵人（交戰）⇒ 照指揮官（配對開打）；城鎮模式（stopOwn；按停靠就換過去，我艦自動開進去那一段也是）⇒ 不下令：友艦原地下錨（escHold）。
+ *  出航（城鎮 ⇒ 航海，我艦沿航道自動開出去）⇒ 照樣跟：前一艘的航跡就在航道上（⛔ 等出航那一段結束才跟 ⇒ 那一段沒收尾時友艦一直停在錨地，量過）。不抽亂數。 */
+function escOrders() {
+  if (modeRule('fleet') !== 'own' || escStill()) return;
+  var me = SHIPS[PLAYER_I]; if (!me || isOut(me)) return;
+  var L = SHIPS.filter(function (o) { return o.escK != null && o !== me && !isOut(o) && !o.npc; }).sort(function (a, b) { return a.escK - b.escK; }), prev = me;
+  if (!L.length || foeOf(me)) return;                                     // 沒有友艦（單艘）⇒ 不碰 foeOf（一位元都不差）
+  L.forEach(function (o) { if (!foeOf(o)) ORDERS[o.i] = { mode: 'line', leader: prev.i, gap: ESC_GAP, esc: true }; prev = o; });
+}
+/** 友艦該原地下錨（城鎮模式）。 */
+function escStill() { return !!modeRule('stopOwn'); }
+function escHold(sh) { return sh.escK != null && sh.i !== PLAYER_I && modeRule('fleet') === 'own' && escStill() && !foeOf(sh); }
 function cmdReset() { CMD_MEM = { blue: {}, red: {} }; ORDERS = {}; SIGNAL = null; SHIPS.forEach(function (s) { s.wake = null; s.lineErr = s.lineLag = s.lineArc = s.lineOff = undefined; }); }
 /** 搶上風的進度換了 ⇒ 上方廣播＋記進那一方旗艦的戰鬥報表（艦長的決定）。 */
 function cmdGaugeSay(side, G) {
@@ -168,6 +192,7 @@ function fleetNames(spec) {
 function fleetSpec() {
   if (FLEET_DBG) return FLEET_DBG;
   if (modeRule('fleet') === 'first') return [{ team: 'blue', hull: FLEET_SET[0][0] }];   // 玩法規則 fleet（04_modes.js；建造）：只有我方第一艘
+  if (modeRule('fleet') === 'own') return FLEET_SET[0].map(function (h) { return { team: 'blue', hull: h }; });   // 我方整隊、沒有敵方（航海、交戰、城鎮；Blocksail 玩家艦隊 TASK-1260）：第一艘我艦、其他友艦
   var b = FLEET_SET[0], r = FLEET_SET[1], L = [{ team: 'blue', hull: b[0] }, { team: 'red', hull: r[0] }];
   b.slice(1).forEach(function (h) { L.push({ team: 'blue', hull: h }); });
   r.slice(1).forEach(function (h) { L.push({ team: 'red', hull: h }); });
@@ -304,12 +329,15 @@ function spawnSteps(spec) {
     X = { blue: slots(n.blue), red: slots(n.red) };
     return spec.map(function (f, i) {
       return function () {
-        var blue = f.team === 'blue', off = X[f.team][k[f.team]++];    // 兩邊第 j 艘站同一個 x ⇒ 各自對著對面那一艘
+        var blue = f.team === 'blue', jt = k[f.team], off = X[f.team][k[f.team]++];    // 兩邊第 j 艘站同一個 x ⇒ 各自對著對面那一艘
         var T = HULLT[f.hull], bow = (T.wl1 - T.cx) * S;                // 船的原點（x ＝ T.cx）到船頭的距離
         var o0 = i === 0 && modeRule('origin'), yaw = o0 && SPAWN_HDG !== null ? Math.PI / 2 - SPAWN_HDG / 57.2958 : blue ? Math.PI / 2 : -Math.PI / 2;   // 玩法規則 origin（04_modes.js；航海）：我艦停在原點、船頭照 ?hdg=
-        var M = makeShipSteps(i, f.team, yaw, o0 ? 0 : blue ? DIST / 2 + bow : -DIST / 2 - bow, T, o0 ? 0 : off), j = k[f.team] - 1;
+        var ep = blue && jt > 0 && modeRule('fleet') === 'own' && modeRule('origin') ? escAt(jt, corePreFor('blue', jt)) : null;   // 友艦（玩家艦隊）：外面給的位置、不然排在我艦後面（escAt）
+        if (ep) yaw = ep.yaw;
+        var M = makeShipSteps(i, f.team, yaw, ep ? ep.z : o0 ? 0 : blue ? DIST / 2 + bow : -DIST / 2 - bow, T, ep ? ep.x : o0 ? 0 : off), j = k[f.team] - 1;
         return M.steps.concat([function () {
           var sh = M.sh; sh.name = f.name; SHIPS.push(sh);
+          if (blue && modeRule('fleet') === 'own') sh.escK = j;           // 玩家艦隊的第幾艘（0 ＝ 開局的我艦；回地球儀照它對回去，57_core.js coreFleet）
           coreSpawned(sh, corePreFor(f.team, j));                       // 戰前狀態（57_core.js；沒帶 ⇒ 只記開局人數）
         }]);
       };

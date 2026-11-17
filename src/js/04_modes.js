@@ -9,7 +9,7 @@ var MODE_BASE = {
   url: true,           // 網址 ?mode= 認不認（Blocksail 的海戰頁、地球儀照網址帶玩法；TASK-0776 跟 menu 拆開：建造、航海只給 Blocksail ⇒ 主選單不列、網址照認）
   observe: false,      // 船隻觀察的面板（86_inspect.js：剖面、甲板、透視、部件清單勾選高亮）；剖面、甲板、透視的鍵在 battleKeys 關著時照樣作用
   othersAct: true,     // 我艦以外的船動不動手：電腦轉舵開砲（50_sim.js ai）、陸戰隊與桅頂開槍（40_crew.js）、舉槍的姿勢（41_crew_art.js）
-  fleet: 'menu',       // 船隊：'menu' ＝ 照主選單的兩邊艦隊；'first' ＝ 只生我方第一艘（52_fleet.js fleetSpec）
+  fleet: 'menu',       // 船隊：'menu' ＝ 照主選單的兩邊艦隊；'first' ＝ 只生我方第一艘；'own' ＝ 我方整隊（?blue= 的全部，第一艘是我艦、其他是友艦）、沒有敵方（52_fleet.js fleetSpec；Blocksail 玩家艦隊 TASK-1260）
   judge: true,         // 判勝負、結算（61_hud.js checkEnd）
   autoFire: false,     // 自動開砲的預設（換了玩法才套；70_flow.js reset）
   hint: true,          // 開局提示「點敵艦設瞄準點…」（70_flow.js start）
@@ -35,13 +35,14 @@ var MODE_RULES = {
   // 建造、航海只給 Blocksail（Tim 2026-10-21「Blockside入口不顯示建造&航海(這兩個是給Blocksail使用的)」）：主選單不列、存檔不認，網址 ?mode=build／sail 照認
   build: { name: '🔨 建造', menu: false, fleet: 'first', judge: false, hint: false, stopOwn: true, battleKeys: false, fpLock: true, build: true },
   // 航海（Blocksail 地球儀的「⛵ 航海」，2026-10-19；Tim：「單船、沒有敵艦，其他跟戰鬥一樣」）：只有我艦、不判勝負、停在外面給的起點（城鎮的港口外）
-  sail: { name: '⛵ 航海', menu: false, fleet: 'first', judge: false, hint: false, origin: true, chart: true, chartNav: true, ui: 'sail' },
+  //   2026-11-17（Blocksail TASK-1260 第 5 段，Tim「全艦隊上場」）：航海、交戰、城鎮改成 fleet 'own' ⇒ 玩家艦隊整隊上場（友艦跟著我艦，52_fleet.js escOrders）；只給一艘 ⇒ 跟以前一樣
+  sail: { name: '⛵ 航海', menu: false, fleet: 'own', judge: false, hint: false, origin: true, chart: true, chartNav: true, ui: 'sail' },
   // 交戰（Blocksail TASK-1078；Tim 2026-10-28「航海模式遇到海盜或是對商船開火 是否可以自動切換到戰鬥模式(不能回大地圖) 要戰鬥結束才能脫離」）：
   //   只從航海換進來（88_modeswitch.js fightTick：有一艘對我艦敵對）、打完或甩開才換回去 ⇒ 開局才讀的規則全照航海（換玩法不用重開）；網址不認
-  fight: { name: '⚔ 交戰', menu: false, url: false, fleet: 'first', judge: false, hint: false, origin: true, chart: true, ui: 'fight', locked: true },
+  fight: { name: '⚔ 交戰', menu: false, url: false, fleet: 'own', judge: false, hint: false, origin: true, chart: true, ui: 'fight', locked: true },
   // 城鎮（Blocksail 地球儀的「🏘 進入城鎮」，TASK-0742；Tim 2026-10-22「進入城鎮後可以進入建築模式(船隻拋錨停泊在港口)」）：只有我艦、停在停靠處、兩錨都下（stopOwn）、
   //   不開砲；建築模式（87_townbuild.js）鋪路、蓋房子
-  town: { name: '🏘 城鎮', menu: false, fleet: 'first', judge: false, hint: false, origin: true, stopOwn: true, furlOwn: true, battleKeys: false, town: true, ui: 'town' }
+  town: { name: '🏘 城鎮', menu: false, fleet: 'own', judge: false, hint: false, origin: true, stopOwn: true, furlOwn: true, battleKeys: false, town: true, ui: 'town' }
 };
 Object.keys(MODE_RULES).forEach(function (m) { for (var k in MODE_BASE) if (!(k in MODE_RULES[m])) MODE_RULES[m][k] = MODE_BASE[k]; });
 // ?mode=<玩法>（外部開戰用：Blocksail 的開戰設定，2026-10-18）：一般遊玩也照網址選玩法（表裡 url 的才認；沒給 ⇒ 照設定檔、存檔）。?demo 照舊在 90_main.js 自己選。

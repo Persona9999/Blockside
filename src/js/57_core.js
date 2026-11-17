@@ -57,7 +57,7 @@ function coreRoleCount(sh) { var o = {}; sh.crew.forEach(function (c) { if (c.st
 function coreShipOut(sh) {
   var T = sh.T, fate = sh.broken ? 'broken' : sh.sunk ? 'sunk' : sh.sinkingFinal ? 'sinking' : sh.struck ? 'struck' : 'afloat';
   var models = [], sails = [], ropes = [];
-  sh.models.forEach(function (m, k) { if (!m.alive || m.hp !== m.hpMax) models.push({ k: k, id: (m.meta && m.meta.id) || '', kind: m.kind, hp: Math.max(0, +(+m.hp).toFixed(2)), max: +(+m.hpMax).toFixed(2), alive: !!m.alive }); });   // max：滿血（Blocksail 照比例算修船費，TASK-1260）
+  sh.models.forEach(function (m, k) { if (m.off) return; if (!m.alive || m.hp !== m.hpMax) models.push({ k: k, id: (m.meta && m.meta.id) || '', kind: m.kind, hp: Math.max(0, +(+m.hp).toFixed(2)), max: +(+m.hpMax).toFixed(2), alive: !!m.alive }); });   // max：滿血（Blocksail 照比例算修船費，TASK-1260）
   sh.sails.forEach(function (s, k) { if (s.dead || s.hp !== s.hpMax) sails.push({ k: k, hp: Math.max(0, +(+s.hp).toFixed(2)), max: +(+s.hpMax).toFixed(2), dead: !!s.dead }); });
   sh.ropes.forEach(function (r, k) { if (r.dead) ropes.push(k); });
   var o = {
@@ -72,6 +72,8 @@ function coreShipOut(sh) {
     used: { fired: sh.fired, hits: sh.hits, cart: sh.cartN || 0, wood: sh.carp ? sh.carp.used || 0 : 0, magGone: sh.mags.filter(function (g) { return g.gone; }).map(function (g) { return g.name; }) }
   };
   if (sh.plugs && sh.plugs.size) o.plugs = corePlugOut(sh);             // 補丁（46_plug.js，TASK-1099）：哪幾格是補丁；沒有 ⇒ 不帶這一格（戰後狀態跟以前一樣）
+  if (sh.gunMount != null) o.gunKg = { mount: sh.gunMount, alive: coreGunAlive(sh) };   // 只裝買到的砲（coreGunMount；Blocksail TASK-1260 ⑤⑥）：開局裝了幾公斤、還在幾公斤 ⇒ 外殼照差扣帳
+  if (sh.escK != null) o.escK = sh.escK;                                 // 玩家艦隊的第幾艘（52_fleet.js；fleet 'own'）
   return o;
 }
 /** 整場的戰後狀態：外殼結算用（Blocksail 交給經營層；Blockside 自己用不到）。半截船（PIECES）不算船。 */
@@ -84,6 +86,16 @@ function coreMine() {
   var me = SHIPS[PLAYER_I]; if (!me) return null;
   var o = coreShipOut(me), P = corePreFrom({ ships: [o] });
   return { api: CORE_API, fate: o.fate, why: o.why, team: o.team, pre: (P[o.team] || [])[0] || null };
+}
+/** 玩家艦隊每一艘的船況（Blocksail TASK-1260 第 5 段；玩法規則 fleet 'own'）：回地球儀時跟 'left' 一起報（fleet）——
+ *  [{ k（escK：外面那一頁給的第幾艘，0 ＝ 開局的我艦）, me（現在是不是我艦：我艦沉了換操控 ⇒ 換成那一艘）, fate, why, pre（同 coreMine；沉了、斷了、在沉 ⇒ null）, gunKg（只裝買到的砲才有）}]。
+ *  沒有 escK 的（不是 fleet 'own' 開的）⇒ 空的。只讀：不抽亂數。 */
+function coreFleet() {
+  return SHIPS.filter(function (o) { return o.escK != null && !o.npc; }).map(function (sh) {
+    var o = coreShipOut(sh), P = corePreFrom({ ships: [o] }), r = { k: sh.escK, me: sh.i === PLAYER_I, fate: o.fate, why: o.why, pre: (P[o.team] || [])[0] || null };
+    if (o.gunKg) r.gunKg = o.gunKg;
+    return r;
+  });
 }
 /** 上一場的戰後狀態 ⇒ 下一場的戰前狀態：還在海上的（沒沉、沒斷、沒在沉）照每一方原本的順序排；
  *  船員：開局的人數照舊、少掉的（陣亡、傷員、游走的）這一場不在船上 —— 哪些人回來（醫好、補員）是外殼的事，改 crew[職位].out 就好。 */
@@ -107,7 +119,7 @@ function coreShipIn(sh, st) {
   var T = sh.T;
   if (!st) return false;
   if (st.hull !== (T.key || T.id)) { CORE_LOG.push(sh.team + '#' + sh.i + '：戰前狀態是 ' + st.hull + '，這艘是 ' + (T.key || T.id) + ' ⇒ 不套'); return false; }
-  if (st.sum !== T.h.checksum) { CORE_LOG.push(sh.team + '#' + sh.i + ' ' + T.id + '：船型指紋 ' + st.sum + ' ≠ 現在的 ' + T.h.checksum + '（重新匯入過）⇒ 船殼差不套'); }
+  if (st.cells && st.cells.n && st.sum !== T.h.checksum) { CORE_LOG.push(sh.team + '#' + sh.i + ' ' + T.id + '：船型指紋 ' + st.sum + ' ≠ 現在的 ' + T.h.checksum + '（重新匯入過）⇒ 船殼差不套'); }
   else if (st.cells && st.cells.n) {
     var u = coreUnB64(st.cells.d), dv = new DataView(u.buffer), p = 0, B = T.hullG, G = sh.grid, sx = G.sx, sy = G.sy;
     for (var j = 0; j < st.cells.n; j++) {
@@ -142,8 +154,31 @@ function coreShipIn(sh, st) {
 /** 開好一艘（spawnFleet、spawnReserve、coreAdd 都叫）：套戰前狀態、記開局每個職位幾人（coreCrew 的 n0）。 */
 function coreSpawned(sh, st) {
   sh.coreN0 = {}; sh.crew.forEach(function (c) { var k = CORE_ROLE[c.role]; sh.coreN0[k] = (sh.coreN0[k] || 0) + 1; });   // 開局編了幾人（含戰前狀態標成不在船上的 ⇒ 下一場照樣算少）
-  if (st) coreShipIn(sh, st);
+  if (st && coreShipIn(sh, st) && st.gun != null && isFinite(+st.gun)) coreGunMount(sh, +st.gun);   // 只裝買到的砲（Blocksail TASK-1260 ⑤）：戰前狀態帶 gun（公斤）
 }
+/** 一門砲幾公斤（10_ship.js GUNS 的 mass 是噸）。 */
+function coreGunKg(g) { return (+(GUNS[g.type] || {}).mass || 0) * 1000; }
+/** 只裝買到的砲（Blocksail TASK-1260 ⑤；Tim 2026-11-17「兩舷對稱、從船中往兩端」）：kg ＝ 船上的砲有幾公斤（Blocksail 船隊的 F.gun）。
+ *  還在的砲（戰前狀態打掉的不算）兩舷分開排：重的先、主砲甲板（那一層砲的總重最大）先、離船中近的先；左舷第 n 門跟右舷第 n 門一對，
+ *  一對一對裝（裝得下才裝，裝不下的換下一對）；沒成對的（一舷多出來的、旋轉砲）照同一個順序一門一門裝。不夠一門的重量不裝（留在外殼的帳上）。
+ *  沒裝的：模型一開始就不在（同戰前狀態的 alive:false：不畫、不開、不放碎片、不殉爆），標 m.off ⇒ 戰後狀態不報（不是打掉的）。
+ *  ⇒ sh.gunMount ＝ 裝了幾公斤（戰後狀態 gunKg.mount）。kg 不少於還在的總重 ⇒ 全裝、什麼都不動。不抽亂數。 */
+function coreGunMount(sh, kg) {
+  var L = sh.guns.filter(function (g) { return g.model.alive; }), tot = 0;
+  L.forEach(function (g) { tot += coreGunKg(g); });
+  if (!(kg < tot)) { sh.gunMount = tot; return; }
+  var T = sh.T, mid = (T.wl0 + T.wl1) / 2, dk = {}, on = new Set(), left = Math.max(0, kg), mount = 0;
+  L.forEach(function (g) { dk[g.deck] = (dk[g.deck] || 0) + coreGunKg(g); });
+  function x(g) { return g.model.c ? g.model.c[0] : mid; }
+  function ord(a, b) { return coreGunKg(b) - coreGunKg(a) || (dk[b.deck] || 0) - (dk[a.deck] || 0) || Math.abs(x(a) - mid) - Math.abs(x(b) - mid) || x(a) - x(b); }
+  var P = L.filter(function (g) { return !g.mt && g.side === 'P'; }).sort(ord), Q = L.filter(function (g) { return !g.mt && g.side === 'S'; }).sort(ord), n = Math.min(P.length, Q.length);
+  for (var i = 0; i < n; i++) { var w = coreGunKg(P[i]) + coreGunKg(Q[i]); if (w <= left + 1e-6) { left -= w; on.add(P[i]); on.add(Q[i]); } }
+  P.slice(n).concat(Q.slice(n), L.filter(function (g) { return g.mt; })).sort(ord).forEach(function (g) { var w = coreGunKg(g); if (w <= left + 1e-6) { left -= w; on.add(g); } });
+  L.forEach(function (g) { if (on.has(g)) { mount += coreGunKg(g); return; } var m = g.model; m.alive = false; m.moved = true; m.off = true; });
+  sh.gunMount = mount;
+}
+/** 裝了的砲還在幾公斤（打掉的不算）。 */
+function coreGunAlive(sh) { var kg = 0; sh.guns.forEach(function (g) { if (g.model.alive && !g.model.off) kg += coreGunKg(g); }); return kg; }
 function corePreFor(team, j) { return CORE_PRE && CORE_PRE[team] ? CORE_PRE[team][j] || null : null; }
 
 /** 中途加一艘（不重開場景；Blocksail「遇到戰鬥前先切回真實航行，再無縫進入戰鬥」）：o ＝ { team, hull, x, z, yaw?, name?, pre? }。

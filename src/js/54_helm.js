@@ -415,7 +415,7 @@ function helmLead(sh, od) {
 function helmLeadAvoid(sh) { return friendsOf(sh).filter(function (o) { var q = ORDERS[o.i]; return !(q && q.mode === 'line' && q.head === sh.i) || Math.hypot(o.px - sh.px, o.pz - sh.pz) < 40; }); }
 /** 戰列跟隨（TASK-0679；mode 'line'）：照排頭的航跡、第 od.slot 個間距（53_commander.js cmdHelmWake）；離站位多遠、沿航跡落後多少記在 sh.lineErr／lineLag（指揮官下一次想的時候讀：排好了沒、排頭要不要等）。 */
 function helmFollow(sh, ld, od) {
-  var hd = od && od.head !== undefined && SHIPS[od.head] && !SHIPS[od.head].sunk ? SHIPS[od.head] : ld, LG = tuneV(sh.team, 'lineGap'), gap = hd === ld ? LG : (od.slot || 1) * LG;   // 照排頭的航跡、第 slot 個間距（排頭沉了 ⇒ 照前一艘）
+  var hd = od && od.head !== undefined && SHIPS[od.head] && !SHIPS[od.head].sunk ? SHIPS[od.head] : ld, LG = tuneV(sh.team, 'lineGap'), gap = od && od.gap ? od.gap : hd === ld ? LG : (od.slot || 1) * LG;   // 照排頭的航跡、第 slot 個間距（排頭沉了 ⇒ 照前一艘）
   var r = cmdHelmWake({ x: sh.px, z: sh.pz, yaw: sh.yaw }, { x: hd.px, z: hd.pz, yaw: hd.yaw, spd: hd.spd }, hd.wake, gap);
   if (r.v !== Infinity && Math.abs(Math.atan2(Math.sin(r.yaw - sh.yaw), Math.cos(r.yaw - sh.yaw))) > HELM_TURN_E) r.v = Math.max(r.v, HELM_TURN_V);   // 要大轉向 ⇒ 至少 HELM_TURN_V（舵要有水流）
   sh.lineErr = r.err; sh.lineLag = r.lag; sh.lineOff = r.off; sh.lineArc = od && od.head !== undefined && hd === SHIPS[od.head] ? r.lag + gap : null;   // 沿排頭航跡離排頭多遠（指揮官照它重排前後；排頭沉了、改跟前一艘 ⇒ 沒有） sh.station = r.station;

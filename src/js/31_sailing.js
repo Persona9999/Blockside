@@ -123,13 +123,13 @@ function sailShip(sh, dt) {
   sh.sailFrac = sh.sails.reduce(function (a, s) { return a + (s.dead || s.furled ? 0 : s.area * s.hp / s.hpMax); }, 0) / sh.sailArea0;   // 被打中還沒掉的帆：照剩下的血量算推力
   sh.pos = pointName(deg);
   // 拋錨模式（6）只管我艦：SAIL 是玩家的航行模式（全域），sail() 每艘都跑 ⇒ 不限 PLAYER_I 的話，友艦、敵艦也跟著拋雙錨、停在原地（Tim 2026-10-15「應該只控制我艦」）。
-  var stop = (SAIL === 'off' || (modeRule('stopOwn') && !dockOn(sh)) || dockHold(sh)) && sh.i === PLAYER_I,   // 玩法規則 stopOwn（04_modes.js；建造）：停在原地（跟拋錨模式同一條）；自動停靠到了（88_modeswitch.js）⇒ 兩錨都下
+  var stop = (SAIL === 'off' || (modeRule('stopOwn') && !dockOn(sh)) || dockHold(sh)) && sh.i === PLAYER_I || escHold(sh),   // 玩法規則 stopOwn（04_modes.js；建造）：停在原地（跟拋錨模式同一條）；自動停靠到了（88_modeswitch.js）⇒ 兩錨都下
       manual = SAIL === 'manual' && sh.i === PLAYER_I && !dockOn(sh);     // 自動停靠／出航中（88_modeswitch.js）⇒ 走艦長那一段（航向、期望航速照航道）
   if (stop && !sh.ancMode && !sh.struck && !sh.sunk) { sh.ancMode = true; anchorToggle(sh, 'P', true); anchorToggle(sh, 'S', true); }   // 6 拋錨（雙錨，我艦；76_anchor.js）
   else if (!stop && sh.ancMode) { sh.ancMode = false; anchorToggle(sh, 'P', false); anchorToggle(sh, 'S', false); }   // 切回 4／5 ⇒ 起錨
   // 帆全收、艦長不調帆：城鎮模式的我艦（04_modes.js furlOwn：停著、開進停靠處那一段都是）、停港與繫著等的往來船（58_traffic.js trafficDock 收過一次，
   //   ⛔ 剛下錨那幾秒錨還沒咬住（held 是 false）⇒ 下面的 helmGovern 照期望航速又張回戰鬥帆，錨咬住之後就停在張著；2026-11-01 托爾圖加實測進港倒進泊位的那一艘 sailSet 2）
-  var furl = hasSails(sh) && (sh.i === PLAYER_I ? !!modeRule('furlOwn') : !!(sh.npc && (sh.npc.dock || sh.npc.held)));
+  var furl = hasSails(sh) && (sh.i === PLAYER_I ? !!modeRule('furlOwn') : !!(sh.npc && (sh.npc.dock || sh.npc.held)) || (escHold(sh) && !!modeRule('furlOwn')));
   if (furl && sh.sailSet !== 0) { if (sh.i === PLAYER_I && sh.sailKeep == null) sh.sailKeep = sh.sailSet; sh.sailSet = 0; applySailSet(sh); }   // 直接設（⛔ setSails 會廣播「帆裝：…」）；sailKeep：換出城鎮模式時還原（88_modeswitch.js）
   var held = !!sh.anc && anchorHeld(sh);                              // 有錨咬著 ⇒ 不靠帆走、可以原地繞錨轉
   if (sh.i === PLAYER_I && !sh.sunk) sailHold(sh);

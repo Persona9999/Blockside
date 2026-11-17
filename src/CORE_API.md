@@ -36,6 +36,8 @@
 | `crew` | 每個職位（`GUN`、`POWDER`、`OFFICER`、`MARINE`、`TOP`、`HELM`、`HAND`、`SURGEON`、`CARPENTER`、`SAILMAKER`、`OAR`、`COOK`）：`n0` 開局編了幾人、`able` 現在站得住幾人。游到敵艦的人算在敵艦那邊（`n0` 沒有、`able` 有） |
 | `tot` | 整艘的總數（Blocksail TASK-1260：修船費照打掉的比例、補員照開局人數）：`cells` 船殼幾格（.vxk 的格數）、`sails` 幾面帆、`ropes` 幾條繩、`models` 幾個模型、`crew` 開局編了幾人；戰前狀態（§3）也帶著，套回船上不看它 |
 | `cas` | 這一場的陣亡 `dead`、現在的傷員 `wounded`、游走的 `lostTo`、游過來的 `gained` |
+| `gunKg` | （戰前狀態帶了 `gun` 才有；Blocksail TASK-1260 ⑤⑥）只裝買到的砲：`mount` 開局裝了幾公斤、`alive` 裝了的還在幾公斤 ⇒ 外殼照 `mount − alive` 扣帳。沒裝的砲不在 `models` 裡（不是打掉的） |
+| `escK` | （玩法規則 fleet `'own'` 才有：航海、交戰、城鎮）玩家艦隊的第幾艘 ＝ `?blue=` 的第幾個（0 ＝ 開局的我艦） |
 | `used` | 開了幾發 `fired`、打中幾發 `hits`、送了幾包火藥 `cart`、木匠用了幾份木材 `wood`、炸掉的彈藥庫 `magGone` |
 
 > 讀法：`n0 − able` ＝ 這一場少掉的人（陣亡、傷員、被抬下去、落水、游走）。哪些人下一場回來（醫好、補員）是外殼的事。
@@ -44,12 +46,20 @@
 
 ```js
 { blue: [ <船的戰前狀態>… ], red: [ … ] }   // 每一方照「在場的順序」對：第 j 個給那一方開局在場的第 j 艘
-<船的戰前狀態> = { hull, sum, name, cells, models, sails, ropes, crew: { <職位>: { out: 幾人不在船上 } }, plugs? }
+<船的戰前狀態> = { hull, sum, name, cells, models, sails, ropes, crew: { <職位>: { out: 幾人不在船上 } }, plugs?, gun?, at? }
 ```
+
+- `gun`（公斤；Blocksail TASK-1260 ⑤）：船上買到的砲有多重 ⇒ 只裝那幾門（`coreGunMount`）：還在的砲兩舷分開排 —— 重的先、主砲甲板（那一層砲總重最大）先、離船中近的先；
+  左舷第 n 門跟右舷第 n 門一對、裝得下才裝（裝不下換下一對）；沒成對的（一舷多的、旋轉砲）一門一門裝；不夠一門的重量不裝。
+  沒裝的砲模型一開始就不在（同 `alive: false`：不畫、不開、不放碎片、不殉爆），標 `m.off` ⇒ 戰後狀態不報。沒給 ⇒ 全裝（跟以前一樣）。
+  往來的船（`'traffic'` 清單每艘的 `gun`，58_traffic.js）同一套。
+- `at`（玩法規則 fleet `'own'`、我方第 j ≥ 1 艘）：`[往東, 往南（海域座標，公尺）, 船頭方位角]` ⇒ 友艦開局放這裡（Blocksail 停靠在城裡 ⇒ 港外錨地）；沒給 ⇒ 我艦正後方 j × 150 m 排縱隊（52_fleet.js `escAt`）。
+- 只帶 `hull`（沒有 `cells`、`sum`）也可以：船殼不動、不記指紋不同那一行（只為了帶 `gun`、`at`）。
 
 - `corePreFrom(戰後狀態)` 直接轉：還在海上的（不是 `sunk`／`broken`／`sinking`）照每一方原本的順序排，`crew[職位].out ＝ n0 − able`。外殼要改什麼（修好幾格、補幾個人）改這一份就好。
 - 給核心的方法：
   - 網址 `#pre=<base64url(UTF-8 JSON)>`（`?start=1` 外部開戰、`?demo` 無頭對拍都認）；太長塞不進命令列 ⇒ 開一頁小的跳轉頁 `location.replace(…)`（src 外的對拍腳本就是這樣帶的）。
+  - 玩家艦隊（玩法規則 fleet `'own'`）：`'left'` 另外帶 `fleet` ＝ `[{ k（escK）, me（現在是不是我艦）, fate, why, pre, gunKg? }]`，每一艘（含沉了的：`pre` ＝ null）（`coreFleet`；Blocksail TASK-1260 第 5 段）。
   - 地球儀（`?map=@host`）：回地球儀時 `'left'` 帶 `cond` ＝ 我艦的船況 `{ api, fate, why, team, pre }`（`coreMine`；`pre` ＝ 這艘的戰前狀態，沉了、斷了、在沉 ⇒ null）；外殼存著，下一次開航海用上面的 `#pre` 帶回來（Blocksail TASK-0803）。
   - `?debug=1` 的 `__game.core.pre(P)`，之後 `__game.start()`／`__game.fleet(…)` 那一場開局生效（`pre(null)` 清掉）。
 - 開局怎麼套（`coreShipIn`，`makeShip` 之後、第一次 `survey` 之前）：

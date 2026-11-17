@@ -134,6 +134,7 @@ function trafficGot(d) {
     lane: o.lane && o.lane.length > 1 ? o.lane.map(W) : null,          // lane：berth 那一格的入港航線（泊位 ⇒ 入口點；換格時沿著拖，⑧）
     bat: o.bat ? W(o.bat) : null,                                       // bat：時刻表停的那一點跟 berth 不同（港外錨地：時刻表停在外海泊位、船停在自己那一格）
     crew: o.crew && +o.need > +o.min && +o.crew < +o.need ? { n: +o.crew, need: +o.need, min: +o.min } : null,   // crew：船上幾人／滿編／最低（Blocksail SAILOR；⑮）—— 沒滿 ⇒ 少砲手那些人
+    gun: o.gun != null && isFinite(+o.gun) ? +o.gun : null,           // gun：船上的砲有幾公斤（Blocksail F.gun；TASK-1260 ⑤）⇒ 只裝買到的那幾門（57_core.js coreGunMount）；沒給 ⇒ 全裝
     launch: !!o.launch }; });                                           // launch：剛造好的船（⑬）⇒ 生在船台上、滑下水
   Object.keys(TRF.demo).forEach(function (id) { var w0 = TRF.demo[id]; if (w0.until != null && SIMT > w0.until) delete TRF.demo[id]; else if (!want[id]) want[id] = w0; });   // ⑬ 演出的假船：清單裡沒有也留著；演完停夠了 ⇒ 收
   Object.keys(want).forEach(function (id) { var w = want[id]; if ((w.dock || w.pilot) && w.berth && trafficDistOff(w.berth.x, w.berth.z)) delete want[id]; });   // 別的城區的泊位（沒建）⇒ 不生、生了的收掉
@@ -643,7 +644,7 @@ function trafficPlace(B) {
   sh.name = w.name; sh.npc = { id: w.id, kind: w.kind, to: w.to, v: w.v, path: w.path, trk: w.trk, berth: w.berth, entry: w.entry, pilot: w.pilot, dock: false, held: false, tow: null };
   SHOWS.push(sh); drawnSync();                                           // ⑭ 演出物件：不進 SHIPS（不指揮、不選敵；換成真的船時 showReal 才補）
   if (w.flag) shipNation(sh, w.flag);                                    // 掛船隊主人那一國的旗（77_colours.js；外面那一頁給預設旗的 key，不認得 ⇒ 照陣營旗）
-  coreSpawned(sh, null); if (w.crew) trafficCrewShort(sh, w.crew); stepShip(sh, 0); survey(sh);
+  coreSpawned(sh, null); if (w.gun != null) coreGunMount(sh, w.gun); if (w.crew) trafficCrewShort(sh, w.crew); stepShip(sh, 0); survey(sh);
   sh.npc.berth = trafficBerthFor(sh, w.berth);                          // 船放上場、有了 M（船寬）才貼平台
   if (B.lp) { trafficLaunchStart(sh, B.lp, !!w.dock); TRF.built++; return; }   // ⑬ 生在船台上 ⇒ 滑下水，演完才照清單（拖去泊位）
   if (!w.dock && (w.path || w.v > 0)) sh.spd = w.path ? VMAX * TRF_V0 : Math.min(w.v, VMAX);   // 照船隊的航速開出來（⛔ 從 0 起步 ⇒ 生出來那幾十秒停在海上）；沿航道的照自己的帆
