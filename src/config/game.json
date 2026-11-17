@@ -2327,6 +2327,37 @@
       "cfg": {"base": 3.5},
       "geo": {"spar": [52, 53], "marines": [0, 0], "center": 45, "aim": 36, "aimZ": [19, 232], "deckAim": [32, 62], "rigAim": [100, 232], "qx": 60},
       "crew": {"top": 0, "marineGap": 12}
+    },
+    {
+      "id": "tekpai",
+      "el": "ship-tekpai",
+      "name": "台灣帆竹筏",
+      "vxk": "tekpai.vxk",
+      "work": "pinnacle-tekpai-01m-assembly",
+      "author": "pinnacle",
+      "idNext": {"anchor": 2, "deck": 2, "light": 2, "mast": 2, "model": 16, "rudder": 3, "ship": 2, "yard": 3},
+      "role": "merchant",
+      "cargoT": 1.5,
+      "fireEngine": false,
+      "names": ["台灣帆竹筏", "大員竹排", "鯤鯓接駁竹筏"],
+      "cfg": {"base": 4.0, "pump": 1.5, "agile": 4.2, "upwind": 2.3},
+      "geo": {"spar": [4, 9], "marines": [36, 94], "center": 5, "aim": 6, "aimZ": [2, 65], "deckAim": [4, 9], "rigAim": [24, 78], "marineY": 6, "qx": 5},
+      "crew": {
+        "officers": 1,
+        "helm": 0,
+        "top": 0,
+        "marines": 0,
+        "marineGap": 5,
+        "monkeys": 0,
+        "handsK": 0.025,
+        "surgeon": 0,
+        "carpenter": 1,
+        "sailmaker": 1,
+        "cook": 0,
+        "navigator": 0,
+        "quartermaster": 0
+      },
+      "floodRim": [[38.5, 38.5, 5], [38.5, 62.5, 5], [96.5, 38.5, 5], [96.5, 62.5, 5]]
     }
   ],
   "furniture": {
