@@ -16,7 +16,7 @@
 //   同 ?pick=@host（72_shippick.js）：不開主選單、不載船、不跑畫面迴圈（90_main.js），頁面透明、只畫 #tuiP（template.html html.tuionly）；
 //   資料照樣用上面的協定跟那一頁要（沒有海域、沒有 BED ⇒ 直接收它的 'townUI'）；✕、Esc、點面板外面 ⇒ 關、跟那一頁說 { bsmap: 'tuiClose' }。
 var TUI = { region: null, open: false, tab: 'sum', seq: 0, wait: {}, info: null, goods: {}, blds: {}, every: 7, list: null, msg: '', busy: false, pick: null, charts: {}, last: 'sum', unit: 1 };   // unit：貿易一次買賣幾桶（TUI_UNITS 那四檔）
-var TUI_TABS = [{ k: 'sum', name: '📋 概況' }, { k: 'flow', name: '⚖ 產出與消耗' }, { k: 'stock', name: '📦 庫存與價格' }, { k: 'stats', name: '📈 統計報表' }, { k: 'trade', name: '💰 貿易' }];   // 🏙 城區獨立為非全版面浮動面板（D、#tuiDK、#tuiDP；互斥，Blocksail TASK-1258）
+var TUI_TABS = [{ k: 'sum', name: '📋 概況' }, { k: 'flow', name: '⚖ 產出與消耗' }, { k: 'stock', name: '📦 庫存與價格' }, { k: 'stats', name: '📈 統計報表' }, { k: 'trade', name: '💰 貿易' }, { k: 'yard', name: '⚓ 船廠' }];   // ⚓ 船廠：玩家艦隊的修船、補員、補砲、買賣船（Blocksail TASK-1260 ⑧、1281）   // 🏙 城區獨立為非全版面浮動面板（D、#tuiDK、#tuiDP；互斥，Blocksail TASK-1258）
 var TUI_C = ['#3987e5', '#d95926'];                                     // 圖的兩條線：藍、橘（dataviz 參考色盤第 1、2 格的深色版；深底 #12161d 上驗過：色盲 ΔE 26.8、對比 ≥ 3）
 var TUI_JOB = { build: '營造（工地）', garrison: '士兵', forage: '野外採集' };   // 不是建築種類的崗位
 var TUI_CAT = { food: '糧食', raw: '原料', cash: '經濟作物', goods: '製品', war: '軍需', metal: '貴金屬', curio: '奇物' };
@@ -179,6 +179,7 @@ function tuiEscEaten() {
 function tuiLoad() {
   tuiUI();
   if (TUI.tab === 'trade') tuiAsk('trade', { ship: tuiShip() }, function (r) { if (r.ok) TUI.list = r.list; else TUI.msg = '開不了貿易：' + (r.why || []).join('；'); tuiUI(); });
+  if (TUI.tab === 'yard') tuiAsk('yard', { ship: tuiShip() }, function (r) { if (r.ok) TUI.yard = r.yard; else TUI.msg = '開不了船廠：' + (r.why || []).join('；'); tuiUI(); });
   tuiInfo();
 }
 /** 問城鎮資訊（每一頁都要：上面那一列、貨名 tuiGood；買賣之後城鎮金庫跟著變 ⇒ 重問）。 */
@@ -210,6 +211,7 @@ function tuiHead() {
       '<span>👥 ' + tuiNum(I.pop.total) + ' 人</span>' +
       '<span>💰 城鎮金庫 ' + tuiNum(I.funds) + '</span>';
   }
+  if (TUI.tab === 'yard' && TUI.yard) s += '<span>👛 玩家金庫 ' + tuiNum(TUI.yard.funds, 2) + '</span><span>⚓ 艦隊 ' + TUI.yard.ships.length + '／' + TUI.yard.max + ' 艘</span>';
   if (TUI.tab === 'trade' && TUI.list) {
     var TL = TUI.list, D = TL.load, Hd = tuiShip();
     s += '<span>👛 玩家金庫 ' + tuiNum(TL.funds, 2) + '</span>' +
@@ -225,7 +227,7 @@ function tuiTabs() { return '<div id="tuiTabs">' + TUI_TABS.map(function (t) { r
 function tuiUI() {
   var P = $('tuiP'); if (!P) return;
   if (!TUI.open) { if (P.innerHTML) P.innerHTML = ''; return; }
-  var body = TUI.tab === 'trade' ? tuiTradeHTML() : !TUI.info ? '<p class="tuiDim">問城鎮帳…</p>' : TUI.tab === 'sum' ? tuiSumHTML() : TUI.tab === 'flow' ? tuiFlowHTML() : TUI.tab === 'stock' ? tuiStockHTML() : tuiStatsHTML();
+  var body = TUI.tab === 'trade' ? tuiTradeHTML() : TUI.tab === 'yard' ? tuiYardHTML() : !TUI.info ? '<p class="tuiDim">問城鎮帳…</p>' : TUI.tab === 'sum' ? tuiSumHTML() : TUI.tab === 'flow' ? tuiFlowHTML() : TUI.tab === 'stock' ? tuiStockHTML() : tuiStatsHTML();
   var sc = P.querySelector('#tuiBody'), top = sc ? sc.scrollTop : 0;
   P.innerHTML = tuiHead() + '<button type="button" id="tuiCrew">酒館招募／船隊配置</button>' + tuiTabs() + '<div id="tuiBody">' + body + '</div>' + (TUI.msg ? '<div id="tuiMsg">' + tuiEsc(TUI.msg) + '</div>' : '');
   if (sc) P.querySelector('#tuiBody').scrollTop = top;                 // 買賣之後重畫：捲到哪留在哪
@@ -233,6 +235,7 @@ function tuiUI() {
   $('tuiCrew').onclick = function(){tuiAsk('crewOpen',{ship:tuiShip()},function(r){if(!r.ok){TUI.msg=(r.why||[]).join('；');tuiUI();}});};
   P.querySelectorAll('#tuiTabs button').forEach(function (b) { b.onclick = function () { if (b.dataset.t !== TUI.tab) { TUI.msg = ''; tuiToggle(b.dataset.t); } }; });
   P.querySelectorAll('button[data-side]').forEach(function (b) { b.onclick = function () { tuiTrade(b.dataset.side, b.dataset.g, +b.dataset.q); }; });
+  P.querySelectorAll('button[data-yd]').forEach(function (b) { b.onclick = function () { tuiYard(b.dataset.yd, b.dataset.id, b.dataset.ty); }; });
   P.querySelectorAll('button[data-u]').forEach(function (b) { b.onclick = function () { TUI.unit = +b.dataset.u; tuiUI(); }; });
   var sel = $('tuiPick'); if (sel) sel.onchange = function () { TUI.pick = sel.value; tuiUI(); };
   P.querySelectorAll('svg.tuiCh').forEach(tuiHover);
@@ -429,6 +432,44 @@ function tuiTradeHTML() {
     '<p>均價含購入關稅，按持有數量加權；賣價差為目前一桶賣價減均價，大量成交會隨庫存改價。未記錄的舊貨不估成本。</p>' +
     '<p>貨重在載重以內 ⇒ 換掉同樣重的壓艙石、吃水不變；超過 ⇒ 吃水變深。標準排水量 ＝ 沒有貨（壓艙石也卸掉）；滿載 ＝ 載重裝滿、在設計水線。</p>' +
     '</div>';
+  return h;
+}
+// ───────── ⚓ 船廠（Blocksail TASK-1260 ⑧、TASK-1281）─────────
+//   Tim 2026-11-13「之後會需要讓玩家可以在城鎮修船 買船 應該可以整合到目前的城鎮互動介面(交易的那個介面的分頁)」、2026-11-17「炮&水手是否可以做一個專門介面補充」
+//   數字與能不能按全是 Blocksail 算好的（world/trade.js pfYard；'yard' 問、'yardDo' 做）⇒ 這一頁只畫、只送按了哪一顆
+/** 按一顆（op：repair 修船、stop 中斷維修、wait 等修好〔快轉〕、guns 補砲、crew 補水手、sell 賣船、buy 買船）：一次只送一筆，回來照新的資料重畫。 */
+function tuiYard(op, id, ty) {
+  if (TUI.busy) return;
+  if (op === 'sell' && !window.confirm('賣掉 ' + (((TUI.yard || {}).ships || []).filter(function (x) { return x.id === id; }).map(function (x) { return x.name; })[0] || id) + '？船上的貨分到其他船、砲倒回貨艙。')) return;
+  TUI.busy = true;
+  tuiAsk('yardDo', { op: op, id: id || null, type: ty || null, ship: tuiShip() }, function (r) {
+    TUI.busy = false;
+    if (r.yard) TUI.yard = r.yard;
+    TUI.msg = r.msg || (r.ok ? '' : (r.why || ['做不了']).join('；'));
+    tuiUI(); tuiInfo();
+  });
+}
+function tuiYardBtn(op, x, label, ok, title) { return '<button type="button" data-yd="' + op + '" data-id="' + tuiEsc(x.id || '') + '" data-ty="' + tuiEsc(x.type || '') + '"' + (ok && !TUI.busy ? '' : ' disabled') + (title ? ' title="' + tuiEsc(title) + '"' : '') + '>' + label + '</button>'; }
+function tuiYardHTML() {
+  var Y = TUI.yard; if (!Y) return '<p class="tuiDim">問船廠…</p>';
+  var t1 = function (v) { return tuiNum(v, v % 1 ? 1 : 0); };
+  var h = '<h4>⛵ 我的艦隊（' + Y.ships.length + '／' + Y.max + ' 艘）</h4><table class="tuiT"><tr><th>船</th><th>船況</th><th>修船</th><th>船員</th><th>砲（噸）</th><th>重量／載重（噸）</th><th></th></tr>' + Y.ships.map(function (x) {
+    var dmg = x.dmg > 0 ? '打壞 ' + tuiNum(x.dmg * 100, 1) + '%' : '完好';
+    var rep = x.repairing ? '修船中・還要 ' + t1(x.repairing.days) + ' 天 ' + tuiYardBtn('wait', x, '⏩ 等修好', true, '快轉世界時間到修好') + ' ' + tuiYardBtn('stop', x, '中斷', true, '帶著修到一半的船走，退 ' + tuiNum(x.repairing.refund, 2)) :
+      x.repair ? tuiYardBtn('repair', x, '修船 ' + tuiNum(x.repair.cost, 2) + '・' + t1(x.repair.days) + ' 天', x.can.repair, x.can.repairWhy) : '—';
+    var crew = !x.crew ? '滿編' : x.crew.n0 > 0 ? t1(x.crew.aboard) + '／' + t1(x.crew.n0) + (x.crew.aboard < x.crew.min ? ' ⚠ 最少 ' + x.crew.min : '') + (x.crew.aboard < x.crew.n0 ? ' ' + tuiYardBtn('crew', x, '補水手', x.can.crew, x.can.crewWhy) : '') :
+      '少 ' + t1(x.crew.out) + ' 人 ' + tuiYardBtn('crew', x, '補水手', x.can.crew, x.can.crewWhy);
+    var gun = x.gun.full > 0 ? t1(x.gun.have) + '／' + t1(x.gun.full) + (x.gun.have < x.gun.full ? ' ' + tuiYardBtn('guns', x, '補砲', x.can.guns, x.can.gunsWhy) : '') : '—';
+    return '<tr><td>' + (x.flag ? '★ ' : '') + '<b>' + tuiEsc(x.name) + '</b><br><small class="tuiDim">' + tuiEsc(x.typeName) + '</small></td><td>' + dmg + '</td><td>' + rep + '</td><td>' + crew + '</td><td>' + gun + '</td><td>' + t1(x.loadT) + '／' + t1(x.capT) + '</td>' +
+      '<td>' + tuiYardBtn('sell', x, '賣 ' + tuiNum(x.sell, 2), x.can.sell, x.can.sellWhy) + '</td></tr>';
+  }).join('') + '</table>';
+  h += '<p class="tuiDim">貨艙裡：鐵砲 ' + t1(Y.hold.guns) + ' 桶（一桶 ＝ 一噸砲）、移民 ' + t1(Y.hold.emi) + ' 人 —— 補砲、補水手從這裡拿（海上也能補：地球儀的 ⚓ 艦隊）；在城裡先到 💰 貿易 買鐵砲、載移民。</p>';
+  h += '<h4>🏗 船市（這座城的現貨）</h4>' + (!Y.stock.length ? '<p class="tuiDim">現在沒有現貨（船廠造好的船會進船市）</p>' :
+    '<table class="tuiT"><tr><th>船型</th><th>載重（噸）</th><th>滿配的砲（噸）</th><th>現貨</th><th></th></tr>' + Y.stock.map(function (x) {
+      return '<tr><td><b>' + tuiEsc(x.typeName) + '</b></td><td>' + t1(x.t) + '</td><td>' + t1(x.gunFull) + '</td><td>' + x.n + ' 艘</td><td>' + tuiYardBtn('buy', x, '買 ' + tuiNum(x.price, 2), x.can, x.why) + '</td></tr>';
+    }).join('') + '</table>');
+  h += '<div class="tuiTradeNotes tuiDim"><p>修船照打掉的比例算：船價 × ' + Y.rule.k + ' × 打掉的比例（船殼的格、帆、繩、模型）；一天修整艘的 ' + tuiNum(Y.rule.perDay * 100) + '% × 這座城的修船效率（' + tuiNum(Y.rule.eff * 100) + '%：船棚、修船灘、修船碼頭）。修好之前整個艦隊不能出航；中斷 ⇒ 帶著修到一半的船走，退沒修的那一部分。</p>' +
+    '<p>賣船 ＝ 船價 × ' + Y.rule.sell + ' − 修好要的錢（城鎮金庫付）；船上的貨分到其他船、砲倒回貨艙。買來的船沒有砲、照船市的價錢付給城鎮。船員少於最少人數 ⇒ 艦隊不能出航。</p></div>';
   return h;
 }
 // ───────── 城區（Blocksail TASK-0817、TASK-1258；63_towns.js townDistView、townDistGo）─────────

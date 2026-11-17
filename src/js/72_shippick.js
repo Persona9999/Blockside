@@ -114,7 +114,7 @@ $('spk').onclick = function (e) { if (e.target === $('spk')) spkClose(); };   //
 window.addEventListener('keydown', function (e) { if (e.key === 'Escape' && $('spk').classList.contains('on')) { e.preventDefault(); e.stopImmediatePropagation(); spkClose(); } }, true);   // 捕獲階段：先於主選單的 Esc（關子頁）
 // ───────────────────────── ?pick=@host：只開選船彈窗（Blocksail 地球儀的「選船」；Tim 2026-10-20「加上一個選船欄位(可以直接開原本的選船介面) 只要能選一艘就好 航海時使用選取的船」） ─────────────────────────
 // 地球儀把這一頁開在 iframe 裡（?pick=@host&cur=<現在那一型>）⇒ 不開主選單、不載編成、不跑畫面迴圈（90_main.js），只開這個彈窗；頁面透明（template.html html.pickonly）。
-//   這一頁 ⇒ 外面那一頁（{ bspick: … }）：'ready' 彈窗開好了；'measuring' { id, name } 選了、在載那一型；'picked' { id, name, knots, draft, loa, play, img, imgU, imgV, imgM } 量好了（img ＝ 俯視圖 PNG 的 data URL）；'cancel' 沒選就關了；'error' { id, msg }。
+//   這一頁 ⇒ 外面那一頁（{ bspick: … }）：'ready' 彈窗開好了；'measuring' { id, name } 選了、在載那一型；'picked' { id, name, vox（整艘幾格：Blocksail 修船費照比例，TASK-1260）, knots, draft, loa, play, img, imgU, imgV, imgM } 量好了（img ＝ 俯視圖 PNG 的 data URL）；'cancel' 沒選就關了；'error' { id, msg }。
 //   knots ＝ 卡片上那一型最快的航速（spkSpeed：標準風、滿帆＋額外動力全速，照現在的船隻設定與玩法）⇒ 地球儀上照它開；
 //   chart ＝ 海圖模式的穩定航速表（spkChart：風速 × 風向 ⇒ 節，照核心的推進公式解；TASK-0803）⇒ 地球儀照風向、風速查這一型的航速；
 //   draft ＝ 開戰時吃水多深（m：船底最低點（32_ground.js groundKeel）到水面，照開戰時的重量浮高／吃水深 liftFor，跟船隻配置頁的卡片同一套）、loa ＝ 外框全長（m，含艏斜桅）
@@ -145,7 +145,7 @@ function pickMeasure(id) {
   loadHull(id).then(function (T) {
     var k = SHIP_CFG[id] || {}, c = { gunw: k.gunw !== undefined ? k.gunw : cfgDefault('gunw', null, id), ballast: k.ballast !== undefined ? k.ballast : cfgDefault('ballast', T) };   // ⛔ 不呼叫 shipCfg（同 spkSpeed）
     var L = liftFor(T, T.disp - hullT0(T, c).all) || 0, z0 = groundKeel(T).reduce(function (a, p) { return Math.min(a, p[1]); }, T.zw), v = spkSpeed(id, SHIP_CARDS[id]), TI = topImg(T, 2);
-    pickPost('picked', Object.assign({ id: id, name: T.name, knots: v ? +Math.max.apply(null, v).toFixed(2) : 0, chart: spkChart(id, SHIP_CARDS[id]), draft: +((T.zw - z0) * S - L).toFixed(2), loa: +((T.hx1 - T.hx0) * S).toFixed(1), play: PLAY,
+    pickPost('picked', Object.assign({ id: id, name: T.name, vox: T.h.voxels, knots: v ? +Math.max.apply(null, v).toFixed(2) : 0, chart: spkChart(id, SHIP_CARDS[id]), draft: +((T.zw - z0) * S - L).toFixed(2), loa: +((T.hx1 - T.hx0) * S).toFixed(1), play: PLAY,
       img: TI ? TI.cv.toDataURL('image/png') : null, imgU: TI && TI.u, imgV: TI && TI.v, imgM: TI && TI.m }, tuiHold(T)));   // 整艘船的俯視圖（05_hull.js topImg：船殼＋帆桁等模型＋帆，船頭朝上、右舷在右）：imgU／imgV ＝ 船的中心在圖上哪一點，imgM ＝ 圖上一點幾公尺 ⇒ 地球儀照實際比例尺畫；ballastT、wpa ＝ 貨艙（89_townui.js tuiHold；地球儀上的 💰 貿易算吃水）
   }, function (e) { pickPost('error', { id: id, msg: e && e.message || String(e) }); });
 }

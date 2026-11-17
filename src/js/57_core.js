@@ -42,6 +42,8 @@ function corePlugOut(sh) {
   L.forEach(function (p, j) { dv.setUint32(j * 4, p - last, true); last = p; });
   return { n: L.length, d: coreB64(u) };
 }
+/** 整艘的總數（CORE_API.md §2 tot）：船殼幾格（.vxk 的格數）、帆幾面、繩幾條、模型幾個、開局編了幾人 —— 外殼照比例算修船費、補員（Blocksail TASK-1260）。只讀。 */
+function coreTot(sh) { var n0 = 0; Object.keys(sh.coreN0 || {}).forEach(function (k) { n0 += sh.coreN0[k]; }); return { cells: sh.T.h.voxels, sails: sh.sails.length, ropes: sh.ropes.length, models: sh.models.length, crew: n0 }; }
 /** 每個職位：開局幾人（coreSpawned 記的）、現在站得住幾人（st 0）。游到敵艦的人在敵艦的名單上（43_swim.js swimXfer）。 */
 function coreCrew(sh) {
   var R = {};
@@ -55,8 +57,8 @@ function coreRoleCount(sh) { var o = {}; sh.crew.forEach(function (c) { if (c.st
 function coreShipOut(sh) {
   var T = sh.T, fate = sh.broken ? 'broken' : sh.sunk ? 'sunk' : sh.sinkingFinal ? 'sinking' : sh.struck ? 'struck' : 'afloat';
   var models = [], sails = [], ropes = [];
-  sh.models.forEach(function (m, k) { if (!m.alive || m.hp !== m.hpMax) models.push({ k: k, id: (m.meta && m.meta.id) || '', kind: m.kind, hp: Math.max(0, +(+m.hp).toFixed(2)), alive: !!m.alive }); });
-  sh.sails.forEach(function (s, k) { if (s.dead || s.hp !== s.hpMax) sails.push({ k: k, hp: Math.max(0, +(+s.hp).toFixed(2)), dead: !!s.dead }); });
+  sh.models.forEach(function (m, k) { if (!m.alive || m.hp !== m.hpMax) models.push({ k: k, id: (m.meta && m.meta.id) || '', kind: m.kind, hp: Math.max(0, +(+m.hp).toFixed(2)), max: +(+m.hpMax).toFixed(2), alive: !!m.alive }); });   // max：滿血（Blocksail 照比例算修船費，TASK-1260）
+  sh.sails.forEach(function (s, k) { if (s.dead || s.hp !== s.hpMax) sails.push({ k: k, hp: Math.max(0, +(+s.hp).toFixed(2)), max: +(+s.hpMax).toFixed(2), dead: !!s.dead }); });
   sh.ropes.forEach(function (r, k) { if (r.dead) ropes.push(k); });
   var o = {
     hull: T.key || T.id, sum: T.h.checksum,   // hull：艦隊裡那一項（換了裝 ＝ 船型@換裝表，38_fit.js）
@@ -66,6 +68,7 @@ function coreShipOut(sh) {
     models: models, sails: sails, ropes: ropes,
     masts: { up: sh.mastsUp, n: sh.masts.length }, guns: { alive: sh.gunsAlive, n: sh.guns.length },
     crew: coreCrew(sh), cas: { dead: sh.dead, wounded: sh.wounded, lostTo: sh.lostTo || 0, gained: sh.gained || 0 },
+    tot: coreTot(sh),                                                     // 整艘的總數（Blocksail 修船費 ＝ 打掉的照比例、補員照開局人數；TASK-1260）
     used: { fired: sh.fired, hits: sh.hits, cart: sh.cartN || 0, wood: sh.carp ? sh.carp.used || 0 : 0, magGone: sh.mags.filter(function (g) { return g.gone; }).map(function (g) { return g.name; }) }
   };
   if (sh.plugs && sh.plugs.size) o.plugs = corePlugOut(sh);             // 補丁（46_plug.js，TASK-1099）：哪幾格是補丁；沒有 ⇒ 不帶這一格（戰後狀態跟以前一樣）
@@ -90,6 +93,7 @@ function corePreFrom(out) {
     if (s.fate === 'sunk' || s.fate === 'broken' || s.fate === 'sinking') return;
     var crew = {}; Object.keys(s.crew).forEach(function (k) { var r = s.crew[k]; if (r.n0 - r.able > 0) crew[k] = { out: r.n0 - r.able }; });
     var p = { hull: s.hull, sum: s.sum, name: s.name, cells: s.cells, models: s.models, sails: s.sails, ropes: s.ropes, crew: crew };
+    if (s.tot) p.tot = s.tot;                                              // 整艘的總數：外殼算比例用（套回船上不看它）
     if (s.plugs) p.plugs = s.plugs;                                        // 補丁（46_plug.js）：下一場照樣是補丁
     P[s.team].push(p);
   });

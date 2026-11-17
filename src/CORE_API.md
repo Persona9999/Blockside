@@ -29,11 +29,12 @@
 | `at` | 最後的位置 `px`、`pz`（公尺）、船頭 `yaw`、航速 `spd` |
 | `cells` | **船殼跟原船的差**：`n` 幾格不同、`gone` 其中幾格被打掉、`d` ＝ base64 的 `n` 筆 5 位元組 —— `[跟前一格的線性索引差 u32 LE, 值 u8]`；線性索引 ＝ `x + sx·(y + sy·z)`（船型格子的尺寸），照索引由小到大；值 0 ＝ 打掉，其他 ＝ 現在的顏色（燒焦換色、木匠補回來的） |
 | `plugs` | （有補丁才有這一格；Blocksail TASK-1099，46_plug.js）**哪幾格是補丁**：`n` 幾格、`d` ＝ base64 的 `n` 筆 4 位元組 `[跟前一格的線性索引差 u32 LE]`（索引同 `cells`）。補丁 ＝ 脫離交戰後木匠堵水線下破口補回去的格（顏色在 `cells` 裡、深褐）：補著不漏、硬度只有橡木一成 |
-| `models` | 跟開局不一樣的模型（砲、火藥桶、舵輪、帆桁、小艇…）：`{ k, id, kind, hp, alive }`；`k` ＝ 船型模型表的位置，`id` ＝ 物件 id（TASK-0715；沒有 ＝ 空字串，只靠 `k`） |
-| `sails` | 被打過的帆：`{ k, hp, dead }` |
+| `models` | 跟開局不一樣的模型（砲、火藥桶、舵輪、帆桁、小艇…）：`{ k, id, kind, hp, max, alive }`（`max` 滿血，Blocksail TASK-1260 照比例算修船費）；`k` ＝ 船型模型表的位置，`id` ＝ 物件 id（TASK-0715；沒有 ＝ 空字串，只靠 `k`） |
+| `sails` | 被打過的帆：`{ k, hp, max, dead }`（`max` 滿血） |
 | `ropes` | 斷了的繩（船型繩表的位置） |
 | `masts`、`guns` | 還立著的桅 `up`／共 `n`、還在的砲 `alive`／共 `n`（都是讀數 —— 戰前狀態不存，開局照格子與模型重推） |
 | `crew` | 每個職位（`GUN`、`POWDER`、`OFFICER`、`MARINE`、`TOP`、`HELM`、`HAND`、`SURGEON`、`CARPENTER`、`SAILMAKER`、`OAR`、`COOK`）：`n0` 開局編了幾人、`able` 現在站得住幾人。游到敵艦的人算在敵艦那邊（`n0` 沒有、`able` 有） |
+| `tot` | 整艘的總數（Blocksail TASK-1260：修船費照打掉的比例、補員照開局人數）：`cells` 船殼幾格（.vxk 的格數）、`sails` 幾面帆、`ropes` 幾條繩、`models` 幾個模型、`crew` 開局編了幾人；戰前狀態（§3）也帶著，套回船上不看它 |
 | `cas` | 這一場的陣亡 `dead`、現在的傷員 `wounded`、游走的 `lostTo`、游過來的 `gained` |
 | `used` | 開了幾發 `fired`、打中幾發 `hits`、送了幾包火藥 `cart`、木匠用了幾份木材 `wood`、炸掉的彈藥庫 `magGone` |
 
