@@ -48,6 +48,7 @@
     "gondola": {"tons": 1, "len": 8.2, "guns": 0, "gunTypes": {}, "volley": 0, "drive": "oar", "sails": 0, "crew": 5},
     "galea": {"tons": 135, "len": 40.7, "guns": 5, "gunTypes": {"veniceFalcone6": 4, "veniceCorsiero50": 1}, "volley": 22, "drive": "oar", "sails": 2, "crew": 264},
     "tartane": {"tons": 62, "len": 16.3, "guns": 0, "gunTypes": {}, "volley": 0, "drive": "sail", "sails": 3, "crew": 12},
-    "bizerte_barque": {"tons": 23, "len": 11, "guns": 0, "gunTypes": {}, "volley": 0, "drive": "sail", "sails": 2, "crew": 12}
+    "bizerte_barque": {"tons": 23, "len": 11, "guns": 0, "gunTypes": {}, "volley": 0, "drive": "sail", "sails": 2, "crew": 12},
+    "sandal": {"tons": 6, "len": 9.1, "guns": 0, "gunTypes": {}, "volley": 0, "drive": "oar", "sails": 1, "crew": 10}
   }
 }

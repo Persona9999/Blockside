@@ -1,5 +1,5 @@
 {
- "atlasSHA256": "1ba662db34178f5d0c37d53fa09d63bc473eb73d010b335882c4ddf997097079",
+ "atlasSHA256": "77e6dcb3c09c8ffe73230cd16230ee0a8533722cbbbdd456cd1e6dfe8ecb9fe9",
  "cols": 6,
  "h": 160,
  "icons": {
@@ -147,56 +147,60 @@
    5,
    5
   ],
-  "sanroman": [
+  "sandal": [
    0,
+   6
+  ],
+  "sanroman": [
+   1,
    6
   ],
   "sentinel": [
-   1,
+   2,
    6
   ],
   "stormkaap": [
-   2,
+   3,
    6
   ],
   "susquehanna": [
-   3,
+   4,
    6
   ],
   "swallow": [
-   4,
+   5,
    6
   ],
   "tartane": [
-   5,
-   6
-  ],
-  "tidegrave": [
    0,
    7
   ],
-  "tower_galata": [
+  "tidegrave": [
    1,
    7
   ],
-  "tradewind": [
+  "tower_galata": [
    2,
    7
   ],
-  "tridente": [
+  "tradewind": [
    3,
    7
   ],
-  "virginia": [
+  "tridente": [
    4,
    7
   ],
-  "zeehaen": [
+  "virginia": [
    5,
    7
+  ],
+  "zeehaen": [
+   0,
+   8
   ]
  },
- "rows": 8,
+ "rows": 9,
  "source": {
   "renderer": "79ef7fe4be292c4751bc3e4d6b6f91382d2ae4a4e1dc690bc7f1377aa1b2f847",
   "ships": {
@@ -236,6 +240,7 @@
    "piragua": "f6d48ea7bc1f6afdb0ea30a08706349f40fa2afee6bf8775bdbeb3e0afc92f18",
    "punt": "9c2162a4536394d960b2bb6bd796f6b7159682fd0168fd8e7f31565503bc2288",
    "reale": "52bd37785afe5c2d0af158ae44e02227f9a7b36019c0ede8eda0eb20762105e2",
+   "sandal": "f8b4979f405a148a542ce170f5f4d6307033bd77251220a9217b27b9ddd3db7a",
    "sanroman": "3df3ffa24ad031a4346c047d7a920bcb6d79bfeb046087ceeefd757d4d75cdf3",
    "sentinel": "b6f5867f8ec23fed500c31b934bdaf9c7143470f489a4c6a2c90be02208d980b",
    "stormkaap": "8461eedaf129b368ab126757a6a3c5d2cdfc2976c13dbd20c756a302207ddaf6",
