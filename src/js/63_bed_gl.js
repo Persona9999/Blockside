@@ -600,7 +600,7 @@ function bedShoreU(u) {
 //   以前只有碼頭線、wharf、mole ⇒ 威尼斯大運河兩岸 0.3 m 的地被浪沖上去（一條條白沫）、海牆後面的低地也是。
 //   ⇒ 一張細格遮罩（BED_WALL_SP 公尺一格，只蓋這些石砌結構的外框再往外 BED_WALL_PAD；城鎮換了、白沫那張高度貼圖重建了才重算，算在 Worker）：
 //     g ＝ 堤身（格子中心在堤面往內 0.75 格以內 ⇒ 丟掉的邊一定藏在堤面底下）⇒ 海面不畫；
-//     r ＝ 堤後：從海走過來、不能穿過堤身的路（dw）比直線（de）多繞 BED_WALL_K[0]～[1] 公尺 ⇒ 0 → 1 ⇒ 沖刷、岸線曲折收掉（堤的盡頭繞得過去的那一段照舊有浪）；
+//     r ＝ 堤後：從海走過來、不能穿過堤身的路（dw）比直線（de）多繞 BED_WALL_K[0]～[1] 公尺 ⇒ 0 → 1 ⇒ 沖刷、岸線曲折收掉（堤的盡頭繞得過去的那一段照舊有浪）；離堤身 BED_WALL_IN 公尺內一律 0（海面伸進堤身底下，TASK-1304）；
 //       r > 0.5 而且地面高於海面 ⇒ 海面整個不畫（2026-11-16，Tim「海面在有河堤(海堤)部分不穿透」：以前只收沖刷，碎浪照樣把海面抬過 0.3 m 的地、畫出白沫）。
 //     b ＝ 貼著石堤的水面：離堤身 BED_WALL_CALM[0] 公尺內 1、[1] 公尺外 0 ⇒ 碎浪、白沫、沖刷收掉（石堤前的水不碎浪；威尼斯的窄運河照海畫之後整條都離岸很近）。
 //     a ＝ 石堤旁（離堤身 BED_WALL_CALM[1] 公尺內）4 m 精度的水：每塊最新那一份地面（BEDDRY.src，細的優先）最近的點低於 BED_WALL_WET 分米 ⇒ 著色器那一點照水深 1.5 m 畫；
@@ -608,7 +608,9 @@ function bedShoreU(u) {
 //   哪裡是海照白沫那張高度貼圖（同一個 8 m 雙線性，< 0）判 ⇒ 跟著色器的岸線一致。木棧橋（trunk、skala…）水從底下過 ⇒ 不算。
 //   沒有石砌結構 ⇒ uWallOn 0（著色器整段跳過）。畫面才用，⛔ 不進物理。
 var BEDWALL = { tex: null, on: false, A: null, r: [0, 0, 1, 1], tver: -1, fb: -1, dirty: true, segs: 0, cells: 0, foot: 0, ms: 0, builds: 0 };
-var BED_WALL_SP = 2, BED_WALL_PAD = 48, BED_WALL_MAX = 2.5e6, BED_WALL_LIM = 96, BED_WALL_K = [6, 20], BED_WALL_CALM = [6, 14], BED_WALL_WET = -1, BED_WALL_UNIT = 21;   // WET：石堤旁地面低於幾分米算水   // 最多幾格（大的城照比例放粗）、繞路量到幾公尺為止；離堤身幾公尺內不碎浪（滿 → 淡出）
+var BED_WALL_SP = 2, BED_WALL_PAD = 48, BED_WALL_MAX = 2.5e6, BED_WALL_LIM = 96, BED_WALL_K = [6, 20], BED_WALL_CALM = [6, 14], BED_WALL_WET = -1, BED_WALL_IN = 4, BED_WALL_UNIT = 21;   // WET：石堤旁地面低於幾分米算水   // 最多幾格（大的城照比例放粗）、繞路量到幾公尺為止；離堤身幾公尺內不碎浪（滿 → 淡出）
+//   BED_WALL_IN（TASK-1304 第二輪；Tim 2026-11-17「還是有一點點裁切到外部海面(可以保守一點 讓海面穿進石堤內 因為看不到內部海浪)」）：離堤身幾公尺內 r 一律 0 ⇒ 海面伸進堤身底下、不在牆外切
+//     （以前繞堤那一份把堤身外一格也當擋路 ⇒ 牆外那 2 m 的 r 是 1，岸坡高過 0 的地方海面就在牆面外被丟掉、露出底下的沙）
 var BED_WALL_KIND = { wharf: 1, mole: 1 };                               // 石砌的棧橋（碼頭線 quay 一律算）；運河的河堤（banks）一律算；城牆只算臨水那幾段（bedWallWet）
 var BED_WALL_NEAR = 24, BED_WALL_WW = 4;                                 // 城牆離海幾公尺內算臨水；規劃沒寫牆厚 ⇒ 幾公尺（同 Blocksail town_links 的預設）
 /** 世界座標 e（T.E 的輸出）BED_WALL_NEAR 公尺內，白沫那張高度貼圖有沒有一格在水面下（同 bedWallCalc 判海的那一把：高度 < 0）。 */
@@ -650,7 +652,7 @@ function bedWallTex() {
   var x0 = Math.max(lx, bx[0] - BED_WALL_PAD), z0 = Math.max(lz, bx[1] - BED_WALL_PAD), x1 = Math.min(lx + L, bx[2] + BED_WALL_PAD), z1 = Math.min(lz + L, bx[3] + BED_WALL_PAD);
   if (!S.length || x1 <= x0 || z1 <= z0) { Wl.on = false; Wl.segs = Wl.cells = Wl.foot = 0; return; }
   var c = Math.max(BED_WALL_SP, Math.sqrt((x1 - x0) * (z1 - z0) / BED_WALL_MAX)), nx = Math.ceil((x1 - x0) / c), nz = Math.ceil((z1 - z0) / c);
-  var m = { S: new Float32Array(S), x0: x0, z0: z0, c: c, nx: nx, nz: nz, ox: Fm.ox, oz: Fm.oz, sp: Fm.sp, N: Fm.N, lim: BED_WALL_LIM, k: BED_WALL_K, calm: BED_WALL_CALM, wet: BED_WALL_WET, I: Fm.I ? Fm.I.slice() : null };
+  var m = { S: new Float32Array(S), x0: x0, z0: z0, c: c, nx: nx, nz: nz, ox: Fm.ox, oz: Fm.oz, sp: Fm.sp, N: Fm.N, lim: BED_WALL_LIM, k: BED_WALL_K, calm: BED_WALL_CALM, wet: BED_WALL_WET, inr: BED_WALL_IN, I: Fm.I ? Fm.I.slice() : null };
   var ch = BED.A.chunk, hx0 = Math.floor((x0 + BED.ax) / ch), hy0 = Math.floor((z0 + BED.az) / ch), hnx = Math.floor((x1 + BED.ax) / ch) - hx0 + 1, hny = Math.floor((z1 + BED.az) / ch) - hy0 + 1, H = [];
   for (var hj = 0; hj < hny; hj++) for (var hi = 0; hi < hnx; hi++) { var HC = BEDDRY.src[bedKey(hx0 + hi, hy0 + hj)]; H.push(HC && HC.h ? { h: HC.h, n: HC.n, step: HC.step } : null); }   // 石堤旁的水照每塊最新的那一份地面（細的 4 m 優先；同 bedDryTex）
   m.H = H; m.hc = [hx0, hy0, hnx, ch, BED.ax, BED.az];
@@ -659,7 +661,7 @@ function bedWallTex() {
   m.D = Fm.D.slice(); ctx.id = m.id = ++BEDWALLW.id; BEDWALLW.busy = ctx; w.postMessage(m, m.I ? [m.D.buffer, m.I.buffer] : [m.D.buffer]);
 }
 /** 算遮罩（純函式：Worker 與這一頁共用同一份原始碼）。m：S ＝ 堤的每一段 [ax, az, bx, bz, 半寬, 頭是轉折, 尾是轉折]…、格（x0、z0、c 公尺一格、nx × nz）、D ＝ 高度（N × N、sp 公尺一格、第 0 格中心在 ox、oz）
- *  ⇒ { T：nx × nz × 4（r 堤後、g 堤身、b 貼著石堤、a 石堤旁細的水，0～255）, foot：堤身幾格 }；H／hc ＝ 窗蓋到的那幾塊的地面（細的水 a 用）。距離照 8 鄰兩趟掃（直 c、斜 √2 c）；繞堤的那一份來回掃到不變（最多 4 次）。 */
+ *  ⇒ { T：nx × nz × 4（r 堤後（離堤身 inr 公尺內一律 0）、g 堤身、b 貼著石堤、a 石堤旁細的水，0～255）, foot：堤身幾格 }；H／hc ＝ 窗蓋到的那幾塊的地面（細的水 a 用）。距離照 8 鄰兩趟掃（直 c、斜 √2 c）；繞堤的那一份來回掃到不變（最多 4 次）。 */
 function bedWallCalc(m) {
   var nx = m.nx, nz = m.nz, n = nx * nz, c = m.c, S = m.S, D = m.D, N = m.N, I = m.I, F = new Uint8Array(n), G = new Uint8Array(n), de = new Float32Array(n), dw = new Float32Array(n), df = new Float32Array(n), Wt = new Uint8Array(n), T = new Uint8Array(4 * n);
   var INF = 1e9, foot = 0, x, z, o, s, gi = 0.75 * c;
@@ -720,6 +722,7 @@ function bedWallCalc(m) {
   var lim = m.lim, k0 = m.k[0], k1 = m.k[1], q0 = m.calm[0], q1 = m.calm[1];
   for (o = 0; o < n; o++) {
     var g = Math.min(dw[o], lim) - Math.min(de[o], lim), w = Math.max(0, Math.min(1, (g - k0) / (k1 - k0))), v = 1 - Math.max(0, Math.min(1, (df[o] - q0) / (q1 - q0)));
+    if (df[o] < m.inr) w = 0;                                            // 堤身與牆外 inr 公尺內不丟海面（BED_WALL_IN）
     T[4 * o] = Math.round(255 * w * w * (3 - 2 * w)); T[4 * o + 1] = G[o] ? 255 : 0; T[4 * o + 2] = Math.round(255 * v * v * (3 - 2 * v)); T[4 * o + 3] = Wt[o] && de[o] < INF && df[o] < q1 ? 255 : 0;   // a：石堤旁、細的水（內陸水不算：de 是 INF）
   }
   return { T: T, foot: foot };
