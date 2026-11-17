@@ -356,6 +356,31 @@
       "file": "down.svg",
       "label": "向下",
       "globalSrc": "img/ui/common/down.svg"
+    },
+    "shipyard": {
+      "file": "shipyard.png",
+      "label": "船廠",
+      "globalSrc": "img/ui/town/shipyard.png"
+    },
+    "fleet": {
+      "file": "fleet.png",
+      "label": "艦隊",
+      "globalSrc": "img/ui/globe/fleet.png"
+    },
+    "flagship": {
+      "file": "flagship.png",
+      "label": "旗艦",
+      "globalSrc": "img/ui/globe/flagship.png"
+    },
+    "repair": {
+      "file": "repair.png",
+      "label": "修船",
+      "globalSrc": "img/ui/town/repair.png"
+    },
+    "resupply": {
+      "file": "resupply.png",
+      "label": "補給",
+      "globalSrc": "img/ui/town/resupply.png"
     }
   },
   "glyphs": {
