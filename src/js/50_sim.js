@@ -166,6 +166,7 @@ function simStep() {
   SHIPS.forEach(function (sh) { showIdleTick(sh); sailShip(sh, hMv); if (sh.spins) spinStep(sh, DT); stepShip(sh, DT); if (sh.anc) chainStep(sh, DT); if (PF) pfLap('ship'); crewStep(sh); if (PF) pfLap('crew'); });
   collide(hMv);
   if (BED) SHIPS.forEach(function (sh) { if (!trafficKin(sh)) groundStep(sh, hMv); });  // 擱淺（32_ground.js；有海圖才有）；照時刻表滑、進出港拖的往來船（58_traffic.js ⑥⑧）不擱淺、棧橋不推
+  if (BED && TOWNS.list.length) townBridgeStep(DT);                      // 吊橋的開合（32_quay.js；船靠近打開）：quayStep 照它擋不擋
   if (BED && TOWNS.list.length) SHIPS.forEach(function (sh) { if (!trafficKin(sh)) quayStep(sh, hMv); });   // 棧橋、海堤的碰撞（32_quay.js；有城才有）
   if (SHOWS.length) { SHOWS.forEach(function (sh) { showStep(sh, DT); }); showHitTick(); if (PF) pfLap('show'); }   // 演出物件（58_traffic.js ⑭）：只擺位置、浪上起伏；會撞的換成真的船（下面電腦、砲彈就照真的船算）
   SHIPS.forEach(function (sh) {                                    // 照 SHIPS 的順序（一對一：我艦先、敵艦後 ⇒ 跟以前同一個順序抽亂數）

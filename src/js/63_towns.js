@@ -107,6 +107,11 @@ var TOWN_WALL_FLOW = { win: 16, bury: 1.5, k: 0.2, reach: 40, round: 4, pin: 16 
 //   底 ＝ 落水那一段分成幾個拱（一拱最寬 TOWN_BRIDGE_ARCH、中間的墩寬 TOWN_BRIDGE_PIER），拱腳在水面下 0.3 m、拱頂到面下 TOWN_BRIDGE_DECK；拱以外（墩、橋台）伸到底下最深的底再 1 m；
 //   兩側欄杆（寬 TOWN_BRIDGE_RAIL[0]、高出面 TOWN_BRIDGE_RAIL[1]）。鎮民照同一個面走（63_townfolk.js 的 decks 段）。
 var TOWN_BRIDGE_LAP = 0.6, TOWN_BRIDGE_HUMP = 0.35, TOWN_BRIDGE_CLR = 2.4, TOWN_BRIDGE_DECK = 0.7, TOWN_BRIDGE_ARCH = 14, TOWN_BRIDGE_PIER = 1.4, TOWN_BRIDGE_RAIL = [0.35, 0.9], TOWN_BRIDGE_STEP = 0.5;
+// 套件橋（Blocksail TASK-1291 world/town.js BRIDGE_KIT；Tim 2026-11-17「新增橋洞高度更高的橋(參考現實資料) 讓大船可以穿過」「橋的部件可以支援voxel建造(參考城牆做法)」）：
+//   規劃的橋帶 kit、索引有 '<kit>-section'（Blocksail tools/townmodels.py：一座橋一件、meta deck／rise／draw）⇒ 那一座照雕刻模型畫（townWall 的 line 擺法，同引水渠：level ＝ 兩頭的面高、模型的 deck 對上去），
+//   地面那一條石板不畫（townBridgeGeo）；橋面 ＝ 模型的 rise（拱背）⇒ townBridgeForm 照它 ⇒ 鎮民走的面跟雕的同一條。沒有模型 ⇒ 照 clr（規劃的拱頂淨空）畫一個大拱的石板。
+//   吊橋（draw）：橋板是旋轉件（spin=bridge）、鍊的一頭掛在橋板上（ropes 的 mv）⇒ 開度照 townBridgeStep（32_quay.js；船靠近打開）畫；開著 ⇒ quayStep 不擋。
+function townBridgeKitM(b) { var I = b && b.kit ? townIdx() : null, nm = I && (I.byUse[b.kit + '-section'] || [])[0]; return nm ? I.models[nm] : null; }
 /** 規劃 p 現在建的那幾座橋（路在 p.roads 裡的；城區只建一部分 ⇒ 別區的路的橋不畫）。 */
 function townBridgeList(p) {
   if (!p || !p.bridges || !p.bridges.length) return [];
@@ -254,8 +259,9 @@ function townPathAt(P, t) {
 }
 /** 一座橋的形：{ L 橋長, H 拱背多高, top(t) 面高, bot(t) 底 }（t ＝ 沿橋面中線的公尺，規劃的當地公尺；畫的、鎮民走的同一份）。 */
 function townBridgeForm(b) {
-  var L = townPlen(b.path), z0 = b.z[0], z1 = b.z[1], H = Math.max(TOWN_BRIDGE_HUMP, b.ws + TOWN_BRIDGE_CLR + TOWN_BRIDGE_DECK - (z0 + z1) / 2);
-  var w0 = b.wet ? b.wet[0] : L * 0.2, w1 = b.wet ? b.wet[1] : L * 0.8, n = Math.max(1, Math.ceil((w1 - w0) / TOWN_BRIDGE_ARCH)), aw = (w1 - w0) / n, zs = b.ws - 0.3, deep = Math.min(b.bed, b.ws) - 1;
+  var L = townPlen(b.path), z0 = b.z[0], z1 = b.z[1], km = townBridgeKitM(b);   // 套件橋：拱背照模型的 rise；沒有模型、規劃寫了淨空 clr ⇒ 照它（一個大拱）
+  var H = km && km.rise != null ? km.rise : Math.max(TOWN_BRIDGE_HUMP, b.ws + (b.clr != null ? b.clr : TOWN_BRIDGE_CLR) + TOWN_BRIDGE_DECK - (z0 + z1) / 2);
+  var w0 = b.wet ? b.wet[0] : L * 0.2, w1 = b.wet ? b.wet[1] : L * 0.8, n = b.clr != null ? 1 : Math.max(1, Math.ceil((w1 - w0) / TOWN_BRIDGE_ARCH)), aw = (w1 - w0) / n, zs = b.ws - 0.3, deep = Math.min(b.bed, b.ws) - 1;
   function top(t) { var u = Math.max(0, Math.min(1, t / L)); return z0 + (z1 - z0) * u + H * 4 * u * (1 - u); }
   function bot(t) {
     if (t <= w0 || t >= w1) return deep;
@@ -1033,6 +1039,9 @@ function townNeed(I, wallsOnly) {
     (T.p.aqueducts || []).forEach(function (a) {                       // 引水渠：跟城牆一起在骨架那一段（遠遠就看得到）；kit 照規劃寫的、不照規模挑
       if (a.kit) Object.keys(I.byUse).forEach(function (k) { if (k.indexOf(a.kit + '-') === 0) add(I.byUse[k]); });
     });
+    townBridgeList(T.p).forEach(function (b) {                          // 套件橋：同引水渠（骨架那一段）
+      if (b.kit && I.byUse[b.kit + '-section']) Object.keys(I.byUse).forEach(function (k) { if (k.indexOf(b.kit + '-') === 0) add(I.byUse[k]); });
+    });
   });
   return Object.keys(S).sort();
 }
@@ -1042,7 +1051,8 @@ function townNeed(I, wallsOnly) {
 function townWallsReady(K, T) {
   function has(kit) { return Object.keys(K.byUse).every(function (k) { return k.indexOf(kit + '-') !== 0 || K.byUse[k].every(function (nm) { return !!K.M[nm]; }); }); }
   return (T.p.walls || []).every(function (w) { var kit = townWallKit(K, T, w, false); return !kit || has(kit); }) &&
-    (T.p.aqueducts || []).every(function (a) { return !a.kit || has(a.kit); });
+    (T.p.aqueducts || []).every(function (a) { return !a.kit || has(a.kit); }) &&
+    townBridgeList(T.p).every(function (b) { return !b.kit || !K.byUse[b.kit + '-section'] || has(b.kit); });
 }
 /** 那幾個模型的網格與貼圖 ⇒ Promise<{ 名: { g, lo, png } }>：@host 跟外面那一頁要（{ bsmap: 'need', what: 'townmodels', names } ⇒ { bsmap: 'townmodels', models }；
  *  08_seabed.js 轉給 townModelsGot）；檔案模式讀 maps/<海域>/townkit/<名>.js（BSTOWNKIT_DATA）。 */
@@ -1175,6 +1185,10 @@ function* townInstGen(T) {
   yield* townEach(p.walls, function (w) { townWall(T, w, out, W, false, JX[w.id]); });
   TOWNS.stat.under = TOWNS.stat.under || {}; TOWNS.stat.under[T.id] = { n: 0, tight: [] };   // 引水渠跨過的路（townLineUnderParts）：這一次擺了幾段、哪幾段拱跨不過去
   yield* townEach(p.aqueducts, function (a) { townWall(T, a, out, W, true); });   // 引水渠：畫法同城牆（見 townWall 的 line）
+  yield* townEach(townBridgeList(p).filter(function (b) { return b.kit && K.byUse[b.kit + '-section']; }), function (b) {   // 套件橋（townBridgeKitM 上面）：一座一件、line 擺法；br ＝ 吊橋開度的鍵（townBridgeStep）
+    var n0 = out.length; townWall(T, { id: b.id, path: b.path, kit: b.kit, level: [b.z[0], b.z[1]] }, out, W, true);
+    for (var i = n0; i < out.length; i++) out[i].br = T.id + ':' + b.id;
+  });
   TOWNS.stat.inst = TOWNS.list.reduce(function (s, T2) { return s + (T2 === T ? out.length : (T2.inst || []).length); }, 0);
   TOWNS.stat.lots = TOWNS.list.reduce(function (s, T2) { return s + (T2.p.lots || []).length; }, 0);
   // 地形挖洞（63_bed_gl.js BEDHOLE）：模型 meta ground=hide 的建築（擺得出來的那幾棟）、規劃寫 hide 的廣場 ⇒ 那個地塊框裡的地形不畫
@@ -2149,6 +2163,7 @@ function townWlotGap(p, l, pt) {
 /** 一條板（棧橋、碼頭面、水上建築的平台、運河的河堤）：沿 P（世界平面的點）寬 w、面 top（一個數 ⇒ 整條一樣；陣列 ⇒ 每一點一個：河堤照牆後的地面）、底 bot ⇒ 推進 vtx（⇒ 那一點的索引）、I。 */
 /** 一座橋（Blocksail TASK-1290；townBridgeForm）：本體（面 top、底 bot：拱）＋兩側欄杆 ⇒ slab（同 townGroundGen 的 slab：規劃的當地公尺 ⇒ 世界）。 */
 function townBridgeGeo(b, slab) {
+  if (townBridgeKitM(b)) return;                                        // 套件橋：模型畫（townInstGen 的 line），石板不畫
   var F = townBridgeForm(b), n = Math.max(2, Math.ceil(F.L / TOWN_BRIDGE_STEP)), C = [], T = [], Bt = [], N = [];
   for (var k = 0; k <= n; k++) { var t = F.L * k / n, q = townPathAt(b.path, t); C.push([q.x, q.y]); N.push([-q.ty, q.tx]); T.push(F.top(t)); Bt.push(F.bot(t)); }
   slab(C, b.w, T, Bt, TOWN_COL.bridge);
@@ -2475,6 +2490,19 @@ function townSpinDraw(PV, G, K) {
     if (!set) { set = true; gl.uniform1f(PV.u.uEdge, 1); gl.uniform2f(PV.u.uIn, -2, -1); gl.uniform2f(PV.u.uOut, TOWN_LOD[0] - TOWN_BAND[0], TOWN_LOD[0] + TOWN_BAND[0]); }
     gl.uniform3fv(PV.u.uC, Mm.uc0);
     sp.forEach(function (e, j) {
+      if (e.src === 'bridge') {                                          // 吊橋的橋板（套件橋）：每一座各自的開度 ⇒ 一座一次 draw（townBin 記的槽位）
+        var gb = L[j], lst = (G.br || {})[mi] || []; if (!gb || !lst.length) return;
+        if (!set) { set = true; gl.uniform1f(PV.u.uEdge, 1); gl.uniform2f(PV.u.uIn, -2, -1); gl.uniform2f(PV.u.uOut, TOWN_LOD[0] - TOWN_BAND[0], TOWN_LOD[0] + TOWN_BAND[0]); }   // ⛔ 同下面：近那一級的淡出、畫完把 uSpA 歸零（以前漏了 ⇒ 下一格的橋身照橋板的角度轉）
+        gl.uniform3f(PV.u.uSpP, e.pv[0], e.pv[1], e.pv[2]); gl.bindVertexArray(gb.vao); gl.bindBuffer(gl.ARRAY_BUFFER, TOWNS.prog.ib[0]);
+        lst.forEach(function (sq) {
+          var a = e.k * townBridgeOpen(sq[1].br) * Math.PI / 180;
+          gl.uniform4f(PV.u.uSpA, e.ax[0], e.ax[1], e.ax[2], a);         // 角度 0 照樣是非零的軸 ⇒ 著色器照轉（轉 0）
+          var o = sq[0] * 44; gl.vertexAttribPointer(4, 4, gl.FLOAT, false, 44, o); gl.vertexAttribPointer(5, 3, gl.FLOAT, false, 44, o + 16); gl.vertexAttribPointer(6, 4, gl.FLOAT, false, 44, o + 28);
+          gl.drawElementsInstanced(gl.TRIANGLES, gb.nq * 6, gl.UNSIGNED_INT, 0, 1); tris += gb.nq * 2; S.inst++;
+        });
+        S.models++; S.bridge = lst.map(function (sq) { return +townBridgeOpen(sq[1].br).toFixed(3); });
+        return;
+      }
       var g = L[j], f = TOWN_SPIN_SRC[e.src]; if (!g || !f) return;
       var v = f(), A = Mm.spinA || (Mm.spinA = []);
       if (e.mode === 'angle') A[j] = v == null ? 0 : ((e.k * (v - (e.zero || 0))) % 360 + 360) % 360;   // 時鐘：照時刻直接給角度
@@ -2647,7 +2675,7 @@ function townFlagMesh(F, eye) {
 var TOWN_ROPE_TUBE = 0.02, TOWN_ROPE_SIDES = 6;
 /** 城 T 的繩（實例建好之後建一次）：{ vao, vb, S: [{ q, at（中心）, r（外框半徑）, t0, tn（管子的頂點）, l0, ln（線的頂點）}], n（繩數）}；沒有繩 ⇒ S 空、不建緩衝。 */
 function townRopes(T) {
-  var K = TOWNS.kit, TV = [], LV = [], S = [], nr = 0;
+  var K = TOWNS.kit, TV = [], LV = [], S = [], nr = 0, DY = [];
   (T.inst || []).forEach(function (q) {
     var Mm = K.M[q.k], m = Mm && Mm.m; if (!m || !m.ropes || !(q.y === q.y)) return;
     var s = Math.sin(q.th), c = Math.cos(q.th), mpv = m.mpv, hw = m.size[0] * mpv / 2, hd = m.size[1] * mpv / 2, t0 = TV.length, l0 = LV.length, bb = [1e9, 1e9, 1e9, -1e9, -1e9, -1e9];
@@ -2655,6 +2683,7 @@ function townRopes(T) {
     function put(A, p, n, col) { A.push(p[0], p[1], p[2], n[0], n[1], n[2], col[0], col[1], col[2]); for (var k = 0; k < 3; k++) { bb[k] = Math.min(bb[k], p[k]); bb[k + 3] = Math.max(bb[k + 3], p[k]); } }
     m.ropes.forEach(function (r) {
       if (r.b && !r.b[0] && !r.b[1]) return;
+      if (r.mv && m.spin) { DY.push({ q: q, m: m, r: r }); return; }   // 一頭掛在旋轉件上（吊橋的鍊）⇒ townRopeDyn 每格照開度畫
       var P = [], w = r.r * mpv; for (var i = 0; i + 2 < r.p.length; i += 3) P.push(W(r.p[i], r.p[i + 1], r.p[i + 2]));
       nr++;
       for (var j = 0; j + 1 < P.length; j++) {
@@ -2669,7 +2698,7 @@ function townRopes(T) {
     if (TV.length === t0 && LV.length === l0) return;
     S.push({ q: q, at: [(bb[0] + bb[3]) / 2, (bb[1] + bb[4]) / 2, (bb[2] + bb[5]) / 2], r: Math.hypot(bb[3] - bb[0], bb[4] - bb[1], bb[5] - bb[2]) / 2, t0: t0 / 9, tn: (TV.length - t0) / 9, l0: l0 / 9, ln: (LV.length - l0) / 9 });
   });
-  var R = { S: S, n: nr, vao: null, vb: null };
+  var R = { S: S, n: nr, vao: null, vb: null, dyn: DY };
   if (!S.length) return R;
   var nt = TV.length / 9; S.forEach(function (g) { g.l0 += nt; });   // 一個緩衝：管子在前、線在後
   R.vao = gl.createVertexArray(); R.vb = gl.createBuffer(); gl.bindVertexArray(R.vao); gl.bindBuffer(gl.ARRAY_BUFFER, R.vb);
@@ -2681,6 +2710,41 @@ function townRopes(T) {
   return R;
 }
 function townRopeFree(T) { if (T.ropes && T.ropes.vao) { gl.deleteVertexArray(T.ropes.vao); gl.deleteBuffer(T.ropes.vb); } T.ropes = null; }
+/** 模型格座標的點 p 繞 pv、單位軸 ax 轉 a（弧度；右手定則，同著色器 spinR）。 */
+function townSpinPt(p, pv, ax, a) {
+  var v = [p[0] - pv[0], p[1] - pv[1], p[2] - pv[2]], cs = Math.cos(a), sn = Math.sin(a), d = ax[0] * v[0] + ax[1] * v[1] + ax[2] * v[2];
+  var cr = [ax[1] * v[2] - ax[2] * v[1], ax[2] * v[0] - ax[0] * v[2], ax[0] * v[1] - ax[1] * v[0]];
+  return [0, 1, 2].map(function (k) { return pv[k] + v[k] * cs + cr[k] * sn + ax[k] * d * (1 - cs); });
+}
+/** 會動的繩（吊橋的鍊：ropes 的 mv）⇒ 每格照開度重算成直的六角管、畫（近那一級、畫面裡的才算）⇒ 三角形數。同 townRopeDraw 那一支著色器。 */
+function townRopeDyn(eye, PL) {
+  var V = TOWNS.ropeDynV || (TOWNS.ropeDynV = []), w = 0;
+  TOWNS.list.forEach(function (T) {
+    var D = T.ropes && T.ropes.dyn; if (!D || !D.length) return;
+    D.forEach(function (o) {
+      var q = o.q, m = o.m, r = o.r; if (!(q.y === q.y)) return;
+      if (Math.hypot(q.x - eye[0], q.z - eye[2]) - q.r > TOWN_LOD[0] * (q.lk || 1)) return;
+      for (var i = 0; i < 6; i++) { var pl = PL[i]; if (pl[0] * q.x + pl[1] * (q.y + q.top / 2) + pl[2] * q.z + pl[3] < -q.r - q.top) return; }
+      var s = Math.sin(q.th), c = Math.cos(q.th), mpv = m.mpv, hw = m.size[0] * mpv / 2, hd = m.size[1] * mpv / 2, n = r.p.length, E = [r.p.slice(0, 3), r.p.slice(n - 3)];
+      r.mv.forEach(function (e2) { var sp = m.spin[e2[1]]; if (sp) E[e2[0]] = townSpinPt(E[e2[0]], sp.pv, sp.ax, sp.k * townBridgeOpen(q.br) * Math.PI / 180); });
+      function W(p) { var a = (p[0] * mpv - hw) * q.sx, b = p[1] * mpv - hd; return [q.x + a * s - b * c, q.y + p[2] * mpv, q.z - a * c - b * s]; }
+      var A = W(E[0]), B = W(E[1]), rad = Math.max(TOWN_ROPE_TUBE, r.r * mpv), d = sub(B, A), dl = len(d); if (dl < 1e-6) return; d = mul(d, 1 / dl);
+      var u = Math.abs(d[1]) > 0.9 ? [1, 0, 0] : norm([d[2], 0, -d[0]]), v2 = [d[1] * u[2] - d[2] * u[1], d[2] * u[0] - d[0] * u[2], d[0] * u[1] - d[1] * u[0]], R = [];
+      for (var k = 0; k <= TOWN_ROPE_SIDES; k++) { var t = k / TOWN_ROPE_SIDES * 6.28319; R.push(add(mul(u, Math.cos(t)), mul(v2, Math.sin(t)))); }
+      for (k = 0; k < TOWN_ROPE_SIDES; k++) [[A, k], [A, k + 1], [B, k + 1], [A, k], [B, k + 1], [B, k]].forEach(function (e) { var P2 = add(e[0], mul(R[e[1]], rad)), N2 = R[e[1]]; V[w++] = P2[0]; V[w++] = P2[1]; V[w++] = P2[2]; V[w++] = N2[0]; V[w++] = N2[1]; V[w++] = N2[2]; V[w++] = r.c[0]; V[w++] = r.c[1]; V[w++] = r.c[2]; });
+    });
+  });
+  if (!w) return 0;
+  if (!TOWNS.ropeDynVao) {
+    TOWNS.ropeDynVao = gl.createVertexArray(); TOWNS.ropeDynVb = gl.createBuffer(); gl.bindVertexArray(TOWNS.ropeDynVao); gl.bindBuffer(gl.ARRAY_BUFFER, TOWNS.ropeDynVb);
+    gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 36, 0);
+    gl.enableVertexAttribArray(1); gl.vertexAttribPointer(1, 3, gl.FLOAT, false, 36, 12);
+    gl.enableVertexAttribArray(2); gl.vertexAttribPointer(2, 3, gl.FLOAT, false, 36, 24);
+  } else { gl.bindVertexArray(TOWNS.ropeDynVao); gl.bindBuffer(gl.ARRAY_BUFFER, TOWNS.ropeDynVb); }
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(V.slice(0, w)), gl.DYNAMIC_DRAW);
+  gl.drawArrays(gl.TRIANGLES, 0, w / 9);
+  return w / 27;
+}
 /** 畫繩（townDraw：布旗之後，地面帶子那一支著色器已經在用）⇒ 三角形數。 */
 function townRopeDraw(eye, PL) {
   var tris = 0, nd = 0;
@@ -2700,7 +2764,7 @@ function townRopeDraw(eye, PL) {
     });
   });
   TOWNS.stat.ropes = nd;                                                 // 這一格畫了幾棟的繩
-  return tris;
+  return tris + townRopeDyn(eye, PL);                                    // 吊橋的鍊（跟著橋板動）
 }
 
 // ── 著色器 ──
@@ -2819,9 +2883,10 @@ function townBin(PL, eye) {
   var off = [new Int32Array(NM), new Int32Array(NM)], tot = [0, 0];
   for (var l = 0; l < 2; l++) for (var m = 0; m < NM; m++) { off[l][m] = tot[l]; tot[l] += cnt[l][m]; }
   function buf(l, need) { if (!TOWNS.buf[l] || TOWNS.buf[l].length < need) TOWNS.buf[l] = new Float32Array(Math.max(need, 16) * 1.5 | 0); return TOWNS.buf[l]; }
-  var D0 = buf(0, tot[0] * 11), D1 = buf(1, tot[1] * 11), D2 = buf(2, nbb * 13), D3 = buf(3, npl * 8), at = [off[0].slice(), off[1].slice()], kb = 0, kp = 0, V8 = K.views;
+  var D0 = buf(0, tot[0] * 11), D1 = buf(1, tot[1] * 11), D2 = buf(2, nbb * 13), D3 = buf(3, npl * 8), at = [off[0].slice(), off[1].slice()], kb = 0, kp = 0, V8 = K.views, BRS = {};
   for (var v = 0; v < vis.length; v += 6) {
     var q = vis[v], Mq = K.M[q.k], mi2 = Mq.i;
+    if (q.br && vis[v + 2] && Mq.m.spin) (BRS[mi2] = BRS[mi2] || []).push([at[0][mi2], q]);   // 套件橋（吊橋）：近那一級的第幾個槽位是哪一座 ⇒ townSpinDraw 逐座照開度畫
     [0, 1].forEach(function (l2) { if (!vis[v + 2 + l2]) return; var o = at[l2][mi2]++ * 11, D = l2 ? D1 : D0, J = q.mj || TOWN_J0; D[o] = q.x; D[o + 1] = q.y; D[o + 2] = q.z; D[o + 3] = q.th; D[o + 4] = q.sx; D[o + 5] = q.sh; D[o + 6] = q.lk || 1; D[o + 7] = J[0]; D[o + 8] = J[1]; D[o + 9] = J[2]; D[o + 10] = J[3]; });
     if (vis[v + 4]) {                                                   // 貼圖：取最接近視線的那一張（模型座標裡鏡頭的方向 φ ⇒ 第 round(φ ÷ 45°) 張）
       var m2 = Mq.m, s = Math.sin(q.th), c = Math.cos(q.th), ex = eye[0] - q.x, ez = eye[2] - q.z, vx = ex * s - ez * c, vy = -ex * c - ez * s;
@@ -2835,7 +2900,7 @@ function townBin(PL, eye) {
   }
   var P = TOWNS.prog;
   [[D0, tot[0] * 11], [D1, tot[1] * 11], [D2, nbb * 13], [D3, npl * 8]].forEach(function (a, i2) { gl.bindBuffer(gl.ARRAY_BUFFER, P.ib[i2]); gl.bufferData(gl.ARRAY_BUFFER, a[0].subarray(0, Math.max(16, a[1])), gl.DYNAMIC_DRAW); });
-  TOWNS.grp = { cnt: cnt, off: off, nbb: nbb, npl: npl };
+  TOWNS.grp = { cnt: cnt, off: off, nbb: nbb, npl: npl, br: BRS };
   var S = TOWNS.stat; S.d0 = tot[0]; S.d1 = tot[1]; S.d2 = nbb; S.plinth = npl; S.lm = nlm; S.binMs = +(performance.now() - t0).toFixed(2);
 }
 /** 石基：地塊頂（h，略低 1 cm 不跟一樓的底面打架）往下到四角與中心最低的地面再 0.3 m；地面沒載 ⇒ null（下次分組再試）。 */

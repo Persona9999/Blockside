@@ -36,6 +36,29 @@ function quayHull(T, vs) {
   }
   return (T.quay = out);
 }
+// 吊橋的開合（Blocksail TASK-1291 兵工廠吊橋；Tim 2026-11-17「如果參考目前船上的動態部件(炮門 & 門)做法呢 船靠近打開」）：照砲門（62_ports.js）那一套 ——
+//   每一座一個開度 s（0 關 ～ 1 全開，TOWNS.brOpen[城:橋]）；每一步看船（SHIPS 沒沉的、演出物件 SHOWS）離橋面中線 r 公尺內 ⇒ 要開；都走了留 hold 秒才關（遲滯）；
+//   s 每秒走 sp；一步跨太久（dt > 0.5：讀檔、跳時間）⇒ 直接擺到要的那一頭。畫的角度照 smoothstep(s)（townBridgeOpen）；開過 pass 才讓船過（quayStep）。
+//   在模擬的步裡算（50_sim.js，quayStep 之前）、不抽亂數 ⇒ 碰撞照它、重播同一個結果。〔r、hold、sp、pass 都是佔位〕
+var TOWN_BRIDGE_OPEN = { r: 70, hold: 5, sp: 1 / 6, pass: 0.9 };
+function townBridgeStep(dt) {
+  var S = TOWNS.brOpen || (TOWNS.brOpen = {}), H = TOWNS.brHold || (TOWNS.brHold = {}), R = TOWN_BRIDGE_OPEN.r;
+  TOWNS.list.forEach(function (T) {
+    if (!T.p || !T.E) return;
+    townBridgeList(T.p).forEach(function (b) {
+      if (!b.draw) return;
+      var key = T.id + ':' + b.id, P = b.path.map(function (q) { var e = T.E(q); return [e[0] - BED.ax, e[1] - BED.az]; }), near = false;
+      function chk(px, pz) { if (!(px === px)) return false; for (var i = 1; i < P.length; i++) { var c = quaySegPt(px, pz, P[i - 1], P[i]); if (Math.hypot(px - c[0], pz - c[1]) < R) return true; } return false; }
+      for (var i = 0; i < SHIPS.length && !near; i++) if (!SHIPS[i].sunk && chk(SHIPS[i].px, SHIPS[i].pz)) near = true;
+      for (i = 0; i < SHOWS.length && !near; i++) if (chk(SHOWS[i].px, SHOWS[i].pz)) near = true;
+      H[key] = near ? TOWN_BRIDGE_OPEN.hold : Math.max(0, (H[key] || 0) - dt);
+      var want = H[key] > 0 ? 1 : 0, s = S[key] || 0;
+      S[key] = dt > 0.5 ? want : s < want ? Math.min(want, s + TOWN_BRIDGE_OPEN.sp * dt) : Math.max(want, s - TOWN_BRIDGE_OPEN.sp * dt);
+    });
+  });
+}
+/** 吊橋畫的開度（0～1，smoothstep；鍵 ＝ '城:橋'）。 */
+function townBridgeOpen(key) { var s = key && TOWNS.brOpen && TOWNS.brOpen[key] || 0; return s * s * (3 - 2 * s); }
 /** 一座城擋船的東西（世界座標）：{ segs: [{ a, b, r, kind }], polys: [{ P: [4 點], kind }], bb }；規劃換了（建築模式加水上建築、棧橋重來）⇒ 重算。 */
 function quayObs(T) {
   var p = T.p, lots = p.lots || [], key = (p.piers || []).length + ':' + (p.quay || []).length + ':' + (p.bridges || []).length + ':' + lots.length + ':' + BED.ax + ',' + BED.az;
@@ -43,13 +66,21 @@ function quayObs(T) {
   var O = { p: p, key: key, segs: [], polys: [], apron: {}, bb: [1e9, 1e9, -1e9, -1e9] };
   function W(q) { var e = T.E(q); return [e[0] - BED.ax, e[1] - BED.az]; }
   function grow(q, r) { O.bb[0] = Math.min(O.bb[0], q[0] - r); O.bb[1] = Math.min(O.bb[1], q[1] - r); O.bb[2] = Math.max(O.bb[2], q[0] + r); O.bb[3] = Math.max(O.bb[3], q[1] + r); }
-  function line(path, w, kind) {
+  function line(path, w, kind, br) {
     var P = (path || []).map(W), r = (+w || 4) / 2;
-    for (var i = 1; i < P.length; i++) { O.segs.push({ a: P[i - 1], b: P[i], r: r, kind: kind }); grow(P[i - 1], r); grow(P[i], r); }
+    for (var i = 1; i < P.length; i++) { O.segs.push({ a: P[i - 1], b: P[i], r: r, kind: kind, br: br || null }); grow(P[i - 1], r); grow(P[i], r); }
   }
   (p.piers || []).forEach(function (q) { line(q.path, q.w, q.kind || 'pier'); });
   (p.quay || []).forEach(function (q) { line(q.path, q.w, 'quay'); });
-  townBridgeList(p).forEach(function (q) { if (q.over === 'sea') line(q.path, q.w, 'bridge'); });   // 海上的橋（Blocksail TASK-1290：只架在船開不到的水上 ⇒ 平常碰不到；船漂進去也擋）
+  townBridgeList(p).forEach(function (q) {                              // 海上的橋（Blocksail TASK-1290：只架在船開不到的水上 ⇒ 平常碰不到；船漂進去也擋）
+    if (q.over !== 'sea') return;
+    if (q.clr != null && !q.draw) return;                                // 套件橋的高橋（TASK-1291；Tim「船體至少能過」「桅杆撞橋就不管了」）：拱頂淨空照船身頂 ⇒ 不擋
+    var km = q.draw ? townBridgeKitM(q) : null, ar = km && km.arch;
+    if (!ar) { line(q.path, q.w, 'bridge', q.draw ? T.id + ':' + q.id : null); return; }   // 吊橋沒有模型 ⇒ 整條照開度
+    var L = townPlen(q.path), k = L / (km.len || L);                    // 吊橋：模型的開口（索引的 arch：最底那一層空的那一段 ＝ 兩片橋板之間）⇒ 只有那一段照開度（townBridgeOpen > TOWN_BRIDGE_OPEN.pass ⇒ quayStep 跳過），兩頭的木棧、樁照擋
+    function sub(a, b) { var A = townPathAt(q.path, a), B = townPathAt(q.path, b); return [[A.x, A.y], [B.x, B.y]]; }
+    line(sub(0, ar[0] * k), q.w, 'bridge'); line(sub(ar[0] * k, ar[1] * k), q.w, 'bridge', T.id + ':' + q.id); line(sub(ar[1] * k, L), q.w, 'bridge');
+  });
   lots.forEach(function (l) {
     if (!l.water) return;
     var th = l.rot * Math.PI / 180, cs = Math.cos(th), sn = Math.sin(th);
@@ -107,7 +138,7 @@ function quayStep(sh, dt) {
       var O = quayObs(Tw), i, hit;
       if (c[0] < O.bb[0] - reach || c[0] > O.bb[2] + reach || c[2] < O.bb[1] - reach || c[2] > O.bb[3] + reach) continue;
       for (i = 0; i < O.segs.length; i++) {
-        var s = O.segs[i];
+        var s = O.segs[i]; if (s.br && townBridgeOpen(s.br) > TOWN_BRIDGE_OPEN.pass) continue;   // 吊橋開著
         if (Math.max(s.a[0], s.b[0]) + s.r + r < p[0] || Math.min(s.a[0], s.b[0]) - s.r - r > p[0] || Math.max(s.a[1], s.b[1]) + s.r + r < p[2] || Math.min(s.a[1], s.b[1]) - s.r - r > p[2]) continue;
         var q = quaySegPt(p[0], p[2], s.a, s.b), d = Math.hypot(p[0] - q[0], p[2] - q[1]), pen = r + s.r - d;
         if (pen > kp) { kp = pen; kn = d > 1e-6 ? [(p[0] - q[0]) / d, (p[2] - q[1]) / d] : [-Math.sin(sh.yaw), -Math.cos(sh.yaw)]; kk = s.kind; }
