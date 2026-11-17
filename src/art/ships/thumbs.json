@@ -1,5 +1,5 @@
 {
- "atlasSHA256": "c52ed596ce6f7541317a50c2a099cff467025c9e7bf0f3eb0aa9038c2c5dda8b",
+ "atlasSHA256": "1ba662db34178f5d0c37d53fa09d63bc473eb73d010b335882c4ddf997097079",
  "cols": 6,
  "h": 160,
  "icons": {
@@ -19,176 +19,180 @@
    3,
    0
   ],
-  "boaviagem": [
+  "bizerte_barque": [
    4,
+   0
+  ],
+  "boaviagem": [
+   5,
    0
   ],
   "centurion": [
-   5,
-   0
+   0,
+   1
   ],
   "concepcion": [
-   0,
+   1,
    1
   ],
   "constitution": [
-   1,
+   2,
    1
   ],
   "cosecha": [
-   2,
+   3,
    1
   ],
   "dingyuan": [
-   3,
+   4,
    1
   ],
   "dromon": [
-   4,
+   5,
    1
   ],
   "ember": [
-   5,
-   1
+   0,
+   2
   ],
   "falcon": [
-   0,
+   1,
    2
   ],
   "flyingfish": [
-   1,
+   2,
    2
   ],
   "fort_carib": [
-   2,
+   3,
    2
   ],
   "fort_en": [
-   3,
+   4,
    2
   ],
   "fort_es": [
-   4,
+   5,
    2
   ],
   "fort_galata": [
-   5,
-   2
+   0,
+   3
   ],
   "fort_roche": [
-   0,
+   1,
    3
   ],
   "fusta": [
-   1,
+   2,
    3
   ],
   "galea": [
-   2,
+   3,
    3
   ],
   "gloire": [
-   3,
+   4,
    3
   ],
   "gondola": [
-   4,
+   5,
    3
   ],
   "guineaman": [
-   5,
-   3
+   0,
+   4
   ],
   "labelle": [
-   0,
+   1,
    4
   ],
   "matsushima": [
-   1,
+   2,
    4
   ],
   "monitor": [
-   2,
+   3,
    4
   ],
   "napoleon": [
-   3,
+   4,
    4
   ],
   "nightlamp": [
-   4,
+   5,
    4
   ],
   "oxford": [
-   5,
-   4
+   0,
+   5
   ],
   "phoenix": [
-   0,
+   1,
    5
   ],
   "pinas": [
-   1,
+   2,
    5
   ],
   "piragua": [
-   2,
+   3,
    5
   ],
   "punt": [
-   3,
+   4,
    5
   ],
   "reale": [
-   4,
+   5,
    5
   ],
   "sanroman": [
-   5,
-   5
+   0,
+   6
   ],
   "sentinel": [
-   0,
+   1,
    6
   ],
   "stormkaap": [
-   1,
+   2,
    6
   ],
   "susquehanna": [
-   2,
+   3,
    6
   ],
   "swallow": [
-   3,
+   4,
    6
   ],
   "tartane": [
-   4,
-   6
-  ],
-  "tidegrave": [
    5,
    6
   ],
-  "tower_galata": [
+  "tidegrave": [
    0,
    7
   ],
-  "tradewind": [
+  "tower_galata": [
    1,
    7
   ],
-  "tridente": [
+  "tradewind": [
    2,
    7
   ],
-  "virginia": [
+  "tridente": [
    3,
    7
   ],
-  "zeehaen": [
+  "virginia": [
    4,
+   7
+  ],
+  "zeehaen": [
+   5,
    7
   ]
  },
@@ -200,6 +204,7 @@
    "battery_carib": "34c6348e5ffc41336e4d8bc1591efdf77d6ceed5916b0e2a9491bf39e593e1d4",
    "battery_carib_s": "0f7007b6c65c24eefbb67f332640e447bb87276c404014f5d9fd4377371ecf95",
    "battery_en": "e9c248f2224faf0bfb3ba3026da789b3965c02b01ddb7711ee647627410166bc",
+   "bizerte_barque": "07520efba41ac4dda0a2f9f424336183fe818d707a5eba28bdac946125007ab6",
    "boaviagem": "5053534ac1a6be22cbdc92a4de73f76a5f1098faf71012f503882fdd28784175",
    "centurion": "7dba17907cc8dac3cd2cd75e985221955a9bde13b0a0a7e67dcb032322f6c302",
    "concepcion": "20c62f0c5ad30bb3ee246732d50ac59d368416a8f8f1c86b6a210132f4686235",
