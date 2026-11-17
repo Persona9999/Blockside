@@ -1,5 +1,5 @@
 {
- "atlasSHA256": "77e6dcb3c09c8ffe73230cd16230ee0a8533722cbbbdd456cd1e6dfe8ecb9fe9",
+ "atlasSHA256": "a303787e3fc967fcb94357244ca32fb66cf304913cb40d10c1f7e01137404e8d",
  "cols": 6,
  "h": 160,
  "icons": {
@@ -91,112 +91,116 @@
    3,
    3
   ],
-  "gloire": [
+  "galeazza": [
    4,
+   3
+  ],
+  "gloire": [
+   5,
    3
   ],
   "gondola": [
-   5,
-   3
+   0,
+   4
   ],
   "guineaman": [
-   0,
+   1,
    4
   ],
   "labelle": [
-   1,
+   2,
    4
   ],
   "matsushima": [
-   2,
+   3,
    4
   ],
   "monitor": [
-   3,
+   4,
    4
   ],
   "napoleon": [
-   4,
+   5,
    4
   ],
   "nightlamp": [
-   5,
-   4
+   0,
+   5
   ],
   "oxford": [
-   0,
+   1,
    5
   ],
   "phoenix": [
-   1,
+   2,
    5
   ],
   "pinas": [
-   2,
+   3,
    5
   ],
   "piragua": [
-   3,
+   4,
    5
   ],
   "punt": [
-   4,
+   5,
    5
   ],
   "reale": [
-   5,
-   5
+   0,
+   6
   ],
   "sandal": [
-   0,
+   1,
    6
   ],
   "sanroman": [
-   1,
+   2,
    6
   ],
   "sentinel": [
-   2,
+   3,
    6
   ],
   "stormkaap": [
-   3,
+   4,
    6
   ],
   "susquehanna": [
-   4,
+   5,
    6
   ],
   "swallow": [
-   5,
-   6
-  ],
-  "tartane": [
    0,
    7
   ],
-  "tidegrave": [
+  "tartane": [
    1,
    7
   ],
-  "tower_galata": [
+  "tidegrave": [
    2,
    7
   ],
-  "tradewind": [
+  "tower_galata": [
    3,
    7
   ],
-  "tridente": [
+  "tradewind": [
    4,
    7
   ],
-  "virginia": [
+  "tridente": [
    5,
    7
   ],
-  "zeehaen": [
+  "virginia": [
    0,
+   8
+  ],
+  "zeehaen": [
+   1,
    8
   ]
  },
@@ -226,6 +230,7 @@
    "fort_roche": "689f3e895a5fc8c4245b8a6e6c05776c4dc329b082b71ebd654d41b1aa0ee9e8",
    "fusta": "1d00b3592f8d7dfafb1cc2c25688712e7151a8649885c6a3cae86510f25afc3d",
    "galea": "cc8155c56c0ed9f50a5137a5df2328d8c410cb68a65af017bd7c5039b0bca312",
+   "galeazza": "81bf364fe53a66d5f2f634594acd2b20663bacb79ca95706dbe105731e2428ce",
    "gloire": "b31f872b14aedf99499ac16c24820671dcf042e3f45ceb4517310e8fa7993a9f",
    "gondola": "d95131919b192f952dea25541ec591f979a76e1bdb64450fea3a04286e250e43",
    "guineaman": "2f31dcd13649051c857043d595564b0f7aa506a250ff5f8cc3ed46b1e96bdd7c",
