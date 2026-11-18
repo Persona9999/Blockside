@@ -874,7 +874,8 @@ function segDist2(p, ax, ay, az, bx, by, bz) {
  *  ⛔ 亂數照抽、只是不撒 ⇒ 開或關物理，後面的亂數序列一樣（戰局不變）。 */
 function dropSail(owner, s, torn) {
   s.dead = true; owner.rigDirty = true; sailLinesDie(owner, s);
-  (owner.models || []).forEach(function (m) { if (m.alive && m.yk === 'batten' && m.sail === s.name) blowModel(owner, m, [0, -1, 0], true); });   // 硬骨帆的竹篾跟著帆一起掉（TASK-1320；⛔ 不然帆沒了、桿還浮著）
+  // ⛔ 硬骨帆的竹篾不跟著帆掉（TASK-1320 第二版）：帆「掉了」多半是 sheet 被打斷（s.par），布照樣綁在上下帆桁上掛著 ⇒ 竹篾一起打掉，畫面上剩一面沒有桿的帆
+  //   （Tim 2026-11-18「竹篾會一次全部被打掉(且命中的位置好像是船身 懷疑是打到纜索固定處?)」）。竹篾只在自己被打斷、或上帆桁掉了（10_ship.js restOn）才掉。
   if (s.furled) {                                                    // 收著的：沒有布片；物理開著 ⇒ 從收好的那一捲放下來、垂下來（30_rig_physics.js physVis 的 fdrop），跟張開時掉的一樣；物理關著照舊不畫
     var fc = PHYS && owner.cl ? owner.cl[s.k] : null;
     if (fc && !fc.gone && !fc.loose) { fc.late = true; fc.fdrop = true; }
