@@ -1,0 +1,643 @@
+{
+  "title": "Blockside（方舷）",
+  "checksum": 2262896839,
+  "states": [
+    {
+      "label": "open",
+      "crew": 100,
+      "sails": [
+        {
+          "name": "fore-junk",
+          "count": 7,
+          "bound": 231,
+          "maxGap": 0.05002,
+          "furled": false,
+          "rods": [
+            {
+              "name": "mast-fore/batten-01",
+              "rot": 0.7,
+              "drop": 0,
+              "z": 186.25
+            },
+            {
+              "name": "mast-fore/batten-02",
+              "rot": 0.7,
+              "drop": 0,
+              "z": 170
+            },
+            {
+              "name": "mast-fore/batten-03",
+              "rot": 0.7,
+              "drop": 0,
+              "z": 153.75
+            },
+            {
+              "name": "mast-fore/batten-04",
+              "rot": 0.7,
+              "drop": 0,
+              "z": 137.5
+            },
+            {
+              "name": "mast-fore/batten-05",
+              "rot": 0.7,
+              "drop": 0,
+              "z": 121.25
+            },
+            {
+              "name": "mast-fore/batten-06",
+              "rot": 0.7,
+              "drop": 0,
+              "z": 105
+            },
+            {
+              "name": "mast-fore/batten-07",
+              "rot": 0.7,
+              "drop": 0,
+              "z": 88.75
+            }
+          ]
+        },
+        {
+          "name": "main-junk",
+          "count": 9,
+          "bound": 369,
+          "maxGap": 0.05001,
+          "furled": false,
+          "rods": [
+            {
+              "name": "mast-main/batten-01",
+              "rot": 0.7,
+              "drop": 0,
+              "z": 260.2
+            },
+            {
+              "name": "mast-main/batten-02",
+              "rot": 0.7,
+              "drop": 0,
+              "z": 239.9
+            },
+            {
+              "name": "mast-main/batten-03",
+              "rot": 0.7,
+              "drop": 0,
+              "z": 219.6
+            },
+            {
+              "name": "mast-main/batten-04",
+              "rot": 0.7,
+              "drop": 0,
+              "z": 199.3
+            },
+            {
+              "name": "mast-main/batten-05",
+              "rot": 0.7,
+              "drop": 0,
+              "z": 179
+            },
+            {
+              "name": "mast-main/batten-06",
+              "rot": 0.7,
+              "drop": 0,
+              "z": 158.7
+            },
+            {
+              "name": "mast-main/batten-07",
+              "rot": 0.7,
+              "drop": 0,
+              "z": 138.4
+            },
+            {
+              "name": "mast-main/batten-08",
+              "rot": 0.7,
+              "drop": 0,
+              "z": 118.1
+            },
+            {
+              "name": "mast-main/batten-09",
+              "rot": 0.7,
+              "drop": 0,
+              "z": 97.8
+            }
+          ]
+        },
+        {
+          "name": "mizzen-junk",
+          "count": 5,
+          "bound": 125,
+          "maxGap": 0.05001,
+          "furled": false,
+          "rods": [
+            {
+              "name": "mast-mizzen/batten-01",
+              "rot": 0.7,
+              "drop": 0,
+              "z": 160.8333
+            },
+            {
+              "name": "mast-mizzen/batten-02",
+              "rot": 0.7,
+              "drop": 0,
+              "z": 147.1667
+            },
+            {
+              "name": "mast-mizzen/batten-03",
+              "rot": 0.7,
+              "drop": 0,
+              "z": 133.5
+            },
+            {
+              "name": "mast-mizzen/batten-04",
+              "rot": 0.7,
+              "drop": 0,
+              "z": 119.8333
+            },
+            {
+              "name": "mast-mizzen/batten-05",
+              "rot": 0.7,
+              "drop": 0,
+              "z": 106.1667
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "label": "turn",
+      "crew": 100,
+      "sails": [
+        {
+          "name": "fore-junk",
+          "count": 7,
+          "bound": 231,
+          "maxGap": 0.05002,
+          "furled": false,
+          "rods": [
+            {
+              "name": "mast-fore/batten-01",
+              "rot": 0.7,
+              "drop": 0,
+              "z": 186.25
+            },
+            {
+              "name": "mast-fore/batten-02",
+              "rot": 0.7,
+              "drop": 0,
+              "z": 170
+            },
+            {
+              "name": "mast-fore/batten-03",
+              "rot": 0.7,
+              "drop": 0,
+              "z": 153.75
+            },
+            {
+              "name": "mast-fore/batten-04",
+              "rot": 0.7,
+              "drop": 0,
+              "z": 137.5
+            },
+            {
+              "name": "mast-fore/batten-05",
+              "rot": 0.7,
+              "drop": 0,
+              "z": 121.25
+            },
+            {
+              "name": "mast-fore/batten-06",
+              "rot": 0.7,
+              "drop": 0,
+              "z": 105
+            },
+            {
+              "name": "mast-fore/batten-07",
+              "rot": 0.7,
+              "drop": 0,
+              "z": 88.75
+            }
+          ]
+        },
+        {
+          "name": "main-junk",
+          "count": 9,
+          "bound": 369,
+          "maxGap": 0.05001,
+          "furled": false,
+          "rods": [
+            {
+              "name": "mast-main/batten-01",
+              "rot": 0.7,
+              "drop": 0,
+              "z": 260.2
+            },
+            {
+              "name": "mast-main/batten-02",
+              "rot": 0.7,
+              "drop": 0,
+              "z": 239.9
+            },
+            {
+              "name": "mast-main/batten-03",
+              "rot": 0.7,
+              "drop": 0,
+              "z": 219.6
+            },
+            {
+              "name": "mast-main/batten-04",
+              "rot": 0.7,
+              "drop": 0,
+              "z": 199.3
+            },
+            {
+              "name": "mast-main/batten-05",
+              "rot": 0.7,
+              "drop": 0,
+              "z": 179
+            },
+            {
+              "name": "mast-main/batten-06",
+              "rot": 0.7,
+              "drop": 0,
+              "z": 158.7
+            },
+            {
+              "name": "mast-main/batten-07",
+              "rot": 0.7,
+              "drop": 0,
+              "z": 138.4
+            },
+            {
+              "name": "mast-main/batten-08",
+              "rot": 0.7,
+              "drop": 0,
+              "z": 118.1
+            },
+            {
+              "name": "mast-main/batten-09",
+              "rot": 0.7,
+              "drop": 0,
+              "z": 97.8
+            }
+          ]
+        },
+        {
+          "name": "mizzen-junk",
+          "count": 5,
+          "bound": 125,
+          "maxGap": 0.05001,
+          "furled": false,
+          "rods": [
+            {
+              "name": "mast-mizzen/batten-01",
+              "rot": 0.7,
+              "drop": 0,
+              "z": 160.8333
+            },
+            {
+              "name": "mast-mizzen/batten-02",
+              "rot": 0.7,
+              "drop": 0,
+              "z": 147.1667
+            },
+            {
+              "name": "mast-mizzen/batten-03",
+              "rot": 0.7,
+              "drop": 0,
+              "z": 133.5
+            },
+            {
+              "name": "mast-mizzen/batten-04",
+              "rot": 0.7,
+              "drop": 0,
+              "z": 119.8333
+            },
+            {
+              "name": "mast-mizzen/batten-05",
+              "rot": 0.7,
+              "drop": 0,
+              "z": 106.1667
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "label": "closed",
+      "crew": 100,
+      "sails": [
+        {
+          "name": "fore-junk",
+          "count": 7,
+          "bound": 231,
+          "maxGap": 0.04985,
+          "furled": true,
+          "rods": [
+            {
+              "name": "mast-fore/batten-01",
+              "rot": 0.7,
+              "drop": 109.2,
+              "z": 77.05
+            },
+            {
+              "name": "mast-fore/batten-02",
+              "rot": 0.7,
+              "drop": 93.6,
+              "z": 76.4
+            },
+            {
+              "name": "mast-fore/batten-03",
+              "rot": 0.7,
+              "drop": 78,
+              "z": 75.75
+            },
+            {
+              "name": "mast-fore/batten-04",
+              "rot": 0.7,
+              "drop": 62.4,
+              "z": 75.1
+            },
+            {
+              "name": "mast-fore/batten-05",
+              "rot": 0.7,
+              "drop": 46.8,
+              "z": 74.45
+            },
+            {
+              "name": "mast-fore/batten-06",
+              "rot": 0.7,
+              "drop": 31.2,
+              "z": 73.8
+            },
+            {
+              "name": "mast-fore/batten-07",
+              "rot": 0.7,
+              "drop": 15.6,
+              "z": 73.15
+            }
+          ]
+        },
+        {
+          "name": "main-junk",
+          "count": 9,
+          "bound": 369,
+          "maxGap": 0.04984,
+          "furled": true,
+          "rods": [
+            {
+              "name": "mast-main/batten-01",
+              "rot": 0.7,
+              "drop": 175.392,
+              "z": 84.808
+            },
+            {
+              "name": "mast-main/batten-02",
+              "rot": 0.7,
+              "drop": 155.904,
+              "z": 83.996
+            },
+            {
+              "name": "mast-main/batten-03",
+              "rot": 0.7,
+              "drop": 136.416,
+              "z": 83.184
+            },
+            {
+              "name": "mast-main/batten-04",
+              "rot": 0.7,
+              "drop": 116.928,
+              "z": 82.372
+            },
+            {
+              "name": "mast-main/batten-05",
+              "rot": 0.7,
+              "drop": 97.44,
+              "z": 81.56
+            },
+            {
+              "name": "mast-main/batten-06",
+              "rot": 0.7,
+              "drop": 77.952,
+              "z": 80.748
+            },
+            {
+              "name": "mast-main/batten-07",
+              "rot": 0.7,
+              "drop": 58.464,
+              "z": 79.936
+            },
+            {
+              "name": "mast-main/batten-08",
+              "rot": 0.7,
+              "drop": 38.976,
+              "z": 79.124
+            },
+            {
+              "name": "mast-main/batten-09",
+              "rot": 0.7,
+              "drop": 19.488,
+              "z": 78.312
+            }
+          ]
+        },
+        {
+          "name": "mizzen-junk",
+          "count": 5,
+          "bound": 125,
+          "maxGap": 0.04984,
+          "furled": true,
+          "rods": [
+            {
+              "name": "mast-mizzen/batten-01",
+              "rot": 0.7,
+              "drop": 65.59997,
+              "z": 95.23333
+            },
+            {
+              "name": "mast-mizzen/batten-02",
+              "rot": 0.7,
+              "drop": 52.48003,
+              "z": 94.68667
+            },
+            {
+              "name": "mast-mizzen/batten-03",
+              "rot": 0.7,
+              "drop": 39.36,
+              "z": 94.14
+            },
+            {
+              "name": "mast-mizzen/batten-04",
+              "rot": 0.7,
+              "drop": 26.23997,
+              "z": 93.59333
+            },
+            {
+              "name": "mast-mizzen/batten-05",
+              "rot": 0.7,
+              "drop": 13.12003,
+              "z": 93.04667
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "label": "reopened",
+      "crew": 100,
+      "sails": [
+        {
+          "name": "fore-junk",
+          "count": 7,
+          "bound": 231,
+          "maxGap": 0.05002,
+          "furled": false,
+          "rods": [
+            {
+              "name": "mast-fore/batten-01",
+              "rot": 0.7,
+              "drop": 0,
+              "z": 186.25
+            },
+            {
+              "name": "mast-fore/batten-02",
+              "rot": 0.7,
+              "drop": 0,
+              "z": 170
+            },
+            {
+              "name": "mast-fore/batten-03",
+              "rot": 0.7,
+              "drop": 0,
+              "z": 153.75
+            },
+            {
+              "name": "mast-fore/batten-04",
+              "rot": 0.7,
+              "drop": 0,
+              "z": 137.5
+            },
+            {
+              "name": "mast-fore/batten-05",
+              "rot": 0.7,
+              "drop": 0,
+              "z": 121.25
+            },
+            {
+              "name": "mast-fore/batten-06",
+              "rot": 0.7,
+              "drop": 0,
+              "z": 105
+            },
+            {
+              "name": "mast-fore/batten-07",
+              "rot": 0.7,
+              "drop": 0,
+              "z": 88.75
+            }
+          ]
+        },
+        {
+          "name": "main-junk",
+          "count": 9,
+          "bound": 369,
+          "maxGap": 0.05001,
+          "furled": false,
+          "rods": [
+            {
+              "name": "mast-main/batten-01",
+              "rot": 0.7,
+              "drop": 0,
+              "z": 260.2
+            },
+            {
+              "name": "mast-main/batten-02",
+              "rot": 0.7,
+              "drop": 0,
+              "z": 239.9
+            },
+            {
+              "name": "mast-main/batten-03",
+              "rot": 0.7,
+              "drop": 0,
+              "z": 219.6
+            },
+            {
+              "name": "mast-main/batten-04",
+              "rot": 0.7,
+              "drop": 0,
+              "z": 199.3
+            },
+            {
+              "name": "mast-main/batten-05",
+              "rot": 0.7,
+              "drop": 0,
+              "z": 179
+            },
+            {
+              "name": "mast-main/batten-06",
+              "rot": 0.7,
+              "drop": 0,
+              "z": 158.7
+            },
+            {
+              "name": "mast-main/batten-07",
+              "rot": 0.7,
+              "drop": 0,
+              "z": 138.4
+            },
+            {
+              "name": "mast-main/batten-08",
+              "rot": 0.7,
+              "drop": 0,
+              "z": 118.1
+            },
+            {
+              "name": "mast-main/batten-09",
+              "rot": 0.7,
+              "drop": 0,
+              "z": 97.8
+            }
+          ]
+        },
+        {
+          "name": "mizzen-junk",
+          "count": 5,
+          "bound": 125,
+          "maxGap": 0.05001,
+          "furled": false,
+          "rods": [
+            {
+              "name": "mast-mizzen/batten-01",
+              "rot": 0.7,
+              "drop": 0,
+              "z": 160.8333
+            },
+            {
+              "name": "mast-mizzen/batten-02",
+              "rot": 0.7,
+              "drop": 0,
+              "z": 147.1667
+            },
+            {
+              "name": "mast-mizzen/batten-03",
+              "rot": 0.7,
+              "drop": 0,
+              "z": 133.5
+            },
+            {
+              "name": "mast-mizzen/batten-04",
+              "rot": 0.7,
+              "drop": 0,
+              "z": 119.8333
+            },
+            {
+              "name": "mast-mizzen/batten-05",
+              "rot": 0.7,
+              "drop": 0,
+              "z": 106.1667
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "ok": true
+}

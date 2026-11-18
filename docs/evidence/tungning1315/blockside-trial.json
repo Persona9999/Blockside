@@ -25,7 +25,7 @@
     "ships": [
       "tungning_trader"
     ],
-    "time": 0.08
+    "time": 0.02
   },
   "ship": "tungning_trader",
   "checksum": 2262896839,
@@ -233,7 +233,7 @@
     "t": 34,
     "xy": [
       0,
-      45.0751
+      45.0789
     ],
     "yaw": 1.5708,
     "speed": 2.1806,
@@ -243,13 +243,13 @@
     "modelsLost": [],
     "ropesBroken": 0,
     "sailsBroken": 0,
-    "travel": 39.2086
+    "travel": 39.205
   },
   "turn": {
     "t": 54,
     "xy": [
-      -39.5839,
-      21.4168
+      -39.5833,
+      21.4205
     ],
     "yaw": 3.7839,
     "speed": 3.2759,
@@ -259,7 +259,7 @@
     "modelsLost": [],
     "ropesBroken": 0,
     "sailsBroken": 0,
-    "degrees": 126.8043,
+    "degrees": 126.8027,
     "rudder": [
       {
         "path": "rudder",
@@ -274,8 +274,8 @@
   "anchor": {
     "t": 134,
     "xy": [
-      -52.5402,
-      36.0488
+      -52.5399,
+      36.052
     ],
     "yaw": 4.0549,
     "speed": 0,
@@ -305,8 +305,8 @@
   "weigh": {
     "t": 144,
     "xy": [
-      -51.6192,
-      34.3979
+      -51.6189,
+      34.4013
     ],
     "yaw": 4.0549,
     "speed": 0,
@@ -322,7 +322,7 @@
     ]
   },
   "guns": {
-    "seconds": 20.2167,
+    "seconds": 30.2167,
     "rows": [
       {
         "id": "gun-15",
@@ -335,9 +335,9 @@
         "initial": 2,
         "crew": 1,
         "want": 1,
-        "shots": 8,
-        "replenished": 6,
-        "escaped": 8
+        "shots": 12,
+        "replenished": 10,
+        "escaped": 12
       },
       {
         "id": "gun-16",
@@ -350,9 +350,9 @@
         "initial": 2,
         "crew": 1,
         "want": 1,
-        "shots": 7,
-        "replenished": 4,
-        "escaped": 7
+        "shots": 8,
+        "replenished": 6,
+        "escaped": 8
       },
       {
         "id": "gun-11",
@@ -365,9 +365,9 @@
         "initial": 2,
         "crew": 3,
         "want": 3,
-        "shots": 4,
-        "replenished": 1,
-        "escaped": 4
+        "shots": 5,
+        "replenished": 2,
+        "escaped": 5
       },
       {
         "id": "gun-12",
@@ -395,9 +395,9 @@
         "initial": 2,
         "crew": 3,
         "want": 3,
-        "shots": 4,
-        "replenished": 1,
-        "escaped": 4
+        "shots": 5,
+        "replenished": 2,
+        "escaped": 5
       },
       {
         "id": "gun-10",
@@ -410,9 +410,9 @@
         "initial": 2,
         "crew": 3,
         "want": 3,
-        "shots": 3,
+        "shots": 4,
         "replenished": 1,
-        "escaped": 3
+        "escaped": 4
       },
       {
         "id": "gun-7",
@@ -425,9 +425,9 @@
         "initial": 2,
         "crew": 3,
         "want": 3,
-        "shots": 4,
+        "shots": 5,
         "replenished": 2,
-        "escaped": 4
+        "escaped": 5
       },
       {
         "id": "gun-8",
@@ -441,7 +441,7 @@
         "crew": 3,
         "want": 3,
         "shots": 4,
-        "replenished": 1,
+        "replenished": 2,
         "escaped": 4
       },
       {
@@ -455,9 +455,9 @@
         "initial": 2,
         "crew": 3,
         "want": 3,
-        "shots": 5,
+        "shots": 6,
         "replenished": 3,
-        "escaped": 5
+        "escaped": 6
       },
       {
         "id": "gun-6",
@@ -470,9 +470,9 @@
         "initial": 2,
         "crew": 3,
         "want": 3,
-        "shots": 4,
-        "replenished": 1,
-        "escaped": 4
+        "shots": 5,
+        "replenished": 3,
+        "escaped": 5
       },
       {
         "id": "gun-3",
@@ -485,9 +485,9 @@
         "initial": 2,
         "crew": 3,
         "want": 3,
-        "shots": 5,
-        "replenished": 4,
-        "escaped": 5
+        "shots": 7,
+        "replenished": 6,
+        "escaped": 7
       },
       {
         "id": "gun-4",
@@ -500,9 +500,9 @@
         "initial": 2,
         "crew": 3,
         "want": 3,
-        "shots": 5,
-        "replenished": 4,
-        "escaped": 5
+        "shots": 7,
+        "replenished": 6,
+        "escaped": 7
       },
       {
         "id": "gun-1",
@@ -515,9 +515,9 @@
         "initial": 2,
         "crew": 3,
         "want": 3,
-        "shots": 5,
-        "replenished": 3,
-        "escaped": 5
+        "shots": 6,
+        "replenished": 5,
+        "escaped": 6
       },
       {
         "id": "gun-2",
@@ -530,9 +530,9 @@
         "initial": 2,
         "crew": 3,
         "want": 3,
-        "shots": 5,
-        "replenished": 2,
-        "escaped": 5
+        "shots": 6,
+        "replenished": 3,
+        "escaped": 6
       },
       {
         "id": "gun-13",
@@ -545,9 +545,9 @@
         "initial": 2,
         "crew": 1,
         "want": 1,
-        "shots": 6,
-        "replenished": 4,
-        "escaped": 6
+        "shots": 9,
+        "replenished": 7,
+        "escaped": 9
       },
       {
         "id": "gun-14",
@@ -560,18 +560,18 @@
         "initial": 2,
         "crew": 1,
         "want": 1,
-        "shots": 6,
-        "replenished": 3,
-        "escaped": 6
+        "shots": 7,
+        "replenished": 4,
+        "escaped": 7
       }
     ],
-    "total": 78,
+    "total": 99,
     "selfHits": 0,
     "end": {
-      "t": 164.2167,
+      "t": 174.2167,
       "xy": [
-        -51.6192,
-        34.3979
+        -51.6189,
+        34.4013
       ],
       "yaw": 4.0549,
       "speed": 0,

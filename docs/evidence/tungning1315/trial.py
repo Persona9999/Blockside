@@ -19,6 +19,7 @@ sys.path.insert(0,'D:/Unity/Valhalla/scratchpad/galea1297/python')
 from websocket import create_connection
 
 page, output=map(Path,sys.argv[1:3])
+function=sys.argv[3] if len(sys.argv)>3 else 'tungningTrial'
 root=Path(__file__).resolve().parent
 mark='if (DEBUG) window.__game = {'
 source=page.read_text(encoding='utf8')
@@ -71,7 +72,7 @@ with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as profile:
                 if run('Boolean(window.tungningTrial && window.__game?.ships()?.[0] && window.__game.stats().t > 0)'): break
                 time.sleep(.3)
             else: raise RuntimeError(run('document.body.innerText.slice(0,1600)'))
-            report=run('tungningTrial()')
+            report=run(function+'()')
             print(json.dumps(report,ensure_ascii=False),flush=True)
             output.write_text(json.dumps(report,indent=2,ensure_ascii=False)+'\n',encoding='utf8')
             # Allow one real render after setting the presentation camera.

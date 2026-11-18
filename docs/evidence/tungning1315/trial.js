@@ -96,3 +96,34 @@ window.tungningTrial = async function () {
     R.guns.end.ropesBroken===0 && R.guns.end.sailsBroken===0;
   return R;
 };
+window.tungningBattenTrial=async function(){
+  await loadHull('tungning_trader');flowRun(false);flowMode('pve');
+  FLEET_DBG=[{team:'blue',hull:'tungning_trader'}];reset();uiAway();flowRun(true);flowPause(true);
+  PHYS=true;AUTOFIRE=false;SAIL='manual';
+  const sh=SHIPS[0],n=x=>+x.toFixed(5),advance=sec=>{for(let i=0;i<Math.round(sec/DT);i++)simStep();render();};
+  function snapshot(label){
+    const sails=[];
+    sailWalk(sh,(c,T,P)=>{
+      if(!T.battens)return;
+      let max=0,bound=0;
+      for(let i=0;i<T.n;i++)if(T.hk[i]===4){
+        const m=sh.models[T.hv[i]];if(m.yk!=='batten')continue;
+        const moved=p=>{const q=rotZ(p,m.piv,m.rot||0);q[2]-=m.fdz||0;return q;};
+        const a=moved(m.pts['arm-P']),b=moved(m.pts['arm-S']);
+        max=Math.max(max,Math.sqrt(segDist2([P[i*3],P[i*3+1],P[i*3+2]],...a,...b)));bound++;
+      }
+      const rods=sh.yards.filter(m=>m.sail===T.name&&m.yk==='batten');
+      sails.push({name:T.name,count:T.battens,bound,maxGap:n(max),furled:sh.sails[sh.cl.indexOf(c)].furled,
+        rods:rods.map(m=>({name:m.path,rot:n(m.rot),drop:n(m.fdz||0),z:n(m.piv[2]-(m.fdz||0))}))});
+    });
+    return{label,crew:sh.crew.length,sails};
+  }
+  setSails(sh,3);advance(7);const open=snapshot('open');
+  KEYS.l=true;advance(5);KEYS.l=false;const turn=snapshot('turn');
+  setSails(sh,0);advance(5);const closed=snapshot('closed');
+  setSails(sh,3);advance(7);const reopened=snapshot('reopened');
+  __game.cam({mode:0,track:true,yaw:-sh.yaw+Math.PI/2+.25,pitch:.18,dist:53,tgt:M4.pt(sh.M,180.5,80.5,130)});
+  const states=[open,turn,closed,reopened];
+  return{title:document.title,checksum:sh.T.h.checksum,states,
+    ok:states.every(s=>s.sails.length===3&&s.sails.every(p=>p.maxGap<1.5&&p.rods.length===p.count))};
+};
