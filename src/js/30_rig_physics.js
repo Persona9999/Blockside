@@ -183,7 +183,8 @@ function clothTemplate(H, s) {                         // H：船型（帆的布
   cg = { idx: Array.from({ length: n }, function (_, i) { return i; }), tris: T,
     mi: new Uint16Array(n * 4), mw: new Float32Array(n * 4), kind: 'contact-fine' };
   for (i = 0; i < n; i++) { cg.mi[i * 4] = i; cg.mw[i * 4] = 1; }
-  var sim = meshCons(cg.idx.map(P), cg.tris);
+  var battens = +(s.meta && s.meta.battens || s.recipe && s.recipe.battens || 0);
+  var sim = meshCons(cg.idx.map(P), cg.tris, battens);
   sim.fine = cg.idx; sim.hk = new Int8Array(cg.idx.length); sim.hv = new Int32Array(cg.idx.length);
   cg.idx.forEach(function (f, ci) { sim.hk[ci] = hk[f]; sim.hv[ci] = hv[f]; });
   // 跟著哪根帆桁轉：綁邊上的點 ＝ 這面帆的帆桁（meta sail）裡離這一點最近的那根（線段：方帆桁 arm-P–arm-S、gaff／boom pivot–end）；
@@ -209,7 +210,7 @@ function clothTemplate(H, s) {                         // H：船型（帆的布
   var foot = -1; Object.keys(clewYard).forEach(function (q) { if (clewYard[q] >= 0) foot = clewYard[q]; });
   var vcol = texColors(s.texture, n);                   // 有貼圖（旗）⇒ 每個頂點照 UV 取貼圖的顏色；整面的顏色（布片、碎布）取平均
   return { name: s.name, col: vcol ? vcol.avg : s.color || [0.95, 0.92, 0.85], vcol: vcol ? vcol.c : null, uv: vcol ? Float32Array.from(s.texture.uv.slice(0, n * 2)) : null, n: n, p0: p0, tris: new Uint16Array(T), sim: sim, mi: cg.mi, mw: cg.mw, grid: cg.kind,
-    hk: hk, hv: hv, sides: sides, pins: pins, clews: clews, foot: foot, tm: MB ? MB.tm : null };   // foot：帆腳跟著轉的帆桁（-1 ＝ 不轉；砲彈打帆照高度內插轉角用）；tm：帆腳被哪條繩的哪一端拉著（照 meta，tethOf）
+    hk: hk, hv: hv, sides: sides, pins: pins, clews: clews, foot: foot, tm: MB ? MB.tm : null, battens: battens };   // foot：帆腳跟著轉的帆桁（-1 ＝ 不轉；砲彈打帆照高度內插轉角用）；tm：帆腳被哪條繩的哪一端拉著（照 meta，tethOf）
 }
 /** 旗的貼圖（.vxk 帆的 texture：w×h 的 RGBA、base64，uv 每個頂點一對）⇒ 前 n 個頂點（正面那一份）的顏色：每個頂點取它四周一格布寬的平均（不透明的才算）。
  *  Tim 2026-10-13：夜隼號的旗變成白旗 —— 遊戲畫帆只用一個顏色，夜隼號那面旗的顏色欄是帆布白（憲法號的是紅）。沒有貼圖 ⇒ null（照舊單色）。 */
@@ -254,7 +255,7 @@ function sailAtlas(sails) {
   return { w: W, h: Hh, data: D, rect: rect };
 }
 /** 一塊布的約束：邊（三角形的邊）＋ 跨點（同一條格線上隔一點的兩點，布不會揉成一團）；靜止長度 ＝ 雕刻作品那一刻的距離。 */
-function meshCons(pos, T) {
+function meshCons(pos, T, battens) {
   var n = pos.length, E = new Map(), ea = [], eb = [], adj = [], te = [], i, j, k;
   for (i = 0; i < n; i++) adj.push([]);
   for (j = 0; j < T.length; j += 3) for (k = 0; k < 3; k++) {
@@ -262,16 +263,40 @@ function meshCons(pos, T) {
     if (e === undefined) { e = ea.length; E.set(kk, e); ea.push(a); eb.push(b); adj[a].push(b); adj[b].push(a); }
     te.push(e);
   }
+  var res = Math.round(Math.sqrt(n)) - 1, panels = battens > 0 ? battens + 1 : 0;
+  var bStep = panels > 0 && (res + 1) * (res + 1) === n && res % panels === 0 ? (res / panels) | 0 : 0;
   var B = new Set(), ba = [], bb = [];
   for (i = 0; i < n; i++) for (j = 0; j < adj[i].length; j++) for (k = j + 1; k < adj[i].length; k++) {
     var x = adj[i][j], y = adj[i][k];
     if (dot(norm(sub(pos[x], pos[i])), norm(sub(pos[y], pos[i]))) > -0.9) continue;
+    if (bStep > 0) {
+      var rMid = (i / (res + 1)) | 0, rX = (x / (res + 1)) | 0, rY = (y / (res + 1)) | 0;
+      if (rX !== rY && rMid > 0 && rMid < res && (rMid % bStep) === 0) continue;
+    }
     var kb = x < y ? x * 65536 + y : y * 65536 + x; if (B.has(kb)) continue; B.add(kb); ba.push(x); bb.push(y);
   }
-  var p0 = new Float32Array(n * 3), rest = new Float32Array(ea.length), brest = new Float32Array(ba.length);
+  function addE(u, v) {
+    if (u === v || u < 0 || v < 0) return;
+    var ke = u < v ? u * 65536 + v : v * 65536 + u;
+    if (E.has(ke)) return;
+    E.set(ke, -1); ea.push(u); eb.push(v);
+  }
+  if (bStep > 0) {
+    var cols = [0, res >> 2, res >> 1, (res * 3) >> 2, res];
+    for (var jb = bStep; jb < res; jb += bStep) {
+      var rowOff = jb * (res + 1);
+      addE(rowOff, rowOff + res);
+      for (k = 0; k < cols.length; k++) {
+        var hi = cols[k];
+        if (hi > 0 && hi < res) { addE(rowOff, rowOff + hi); addE(rowOff + hi, rowOff + res); }
+        addE(rowOff + hi, hi); addE(rowOff + hi, res * (res + 1) + hi);
+      }
+    }
+  }
+  var p0 = new Float32Array(n * 3), rest = new Float32Array(ea.length), brest = new Float32Array(ba.length), slk = bStep > 0 ? 1 : SLACK;
   pos.forEach(function (w, q) { p0[q * 3] = w[0]; p0[q * 3 + 1] = w[1]; p0[q * 3 + 2] = w[2]; });
-  for (i = 0; i < ea.length; i++) rest[i] = len(sub(pos[ea[i]], pos[eb[i]])) * SLACK;
-  for (i = 0; i < ba.length; i++) brest[i] = len(sub(pos[ba[i]], pos[bb[i]])) * SLACK;
+  for (i = 0; i < ea.length; i++) rest[i] = len(sub(pos[ea[i]], pos[eb[i]])) * slk;
+  for (i = 0; i < ba.length; i++) brest[i] = len(sub(pos[ba[i]], pos[bb[i]])) * slk;
   return { n: n, p0: p0, tris: T, te: new Uint16Array(te), ea: new Uint16Array(ea), eb: new Uint16Array(eb), rest: rest, ba: new Uint16Array(ba), bb: new Uint16Array(bb), brest: brest };
 }
 /** 細格 → 粗格：方帆 N×N、三角帆（第 r 列 N−r 點）、N 是單數 ⇒ 取偶數列偶數行；其他形狀 ⇒ 不縮（粗格 ＝ 細格）。
@@ -747,7 +772,7 @@ function furlGath(T, sh) {
     var twoYards = Object.keys(yz).length > 1;
     for (i = 0; i < T.n; i++) {
       var m = T.hk[i] === 4 ? sh.models[T.hv[i]] : null; if (!m) continue;
-      if (m.yk === 'boom' || twoYards && m.yk !== 'gaff' && yz[T.hv[i]][0] / yz[T.hv[i]][1] < (z0 + z1) / 2) bm[i] = 1;
+      if (T.battens && twoYards ? yz[T.hv[i]][0] / yz[T.hv[i]][1] > (z0 + z1) / 2 : (m.yk === 'boom' || twoYards && m.yk !== 'gaff' && yz[T.hv[i]][0] / yz[T.hv[i]][1] < (z0 + z1) / 2)) bm[i] = 1;
     }
   }
   var yard = [], edge = [], all = [];

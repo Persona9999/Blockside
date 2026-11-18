@@ -33,8 +33,15 @@ function rcpModel(rig, frame, ref) {
 /** 一面帆的配方 ⇒ { verts, tris, uv, bmeta, cornerIdx }（verts／tris 照匯出端的雙面排列）。
  *  clew[k]：ends 指名角 k 的那條繩的端點（吹鼓時釘在那裡）；null ⇒ 沒有繩指名（綁住的角照設計位置釘、自由的讓它吹）。
  *  bmeta：每個點綁在哪（-1 不綁；k ＝ 角 k；100 + e ＝ bind 的第 e 條邊）—— 給 clothBindMeta。 */
-function sailFromRecipe(R, clew) {
+function sailFromRecipe(R, clew, sMeta) {
   var C = R.corners, nc = C.length, res = Math.max(1, R.res | 0), full = +R.fullness || 1, X = [], UV = [], id = {}, i, j, k;
+  var battens = nc === 4 ? Math.max(0, (R.battens || (sMeta && +sMeta.battens)) | 0) : 0, bStep = 0;
+  if (battens > 0) {
+    var panels = battens + 1;
+    bStep = Math.max(4, Math.round(Math.max(res, panels * 4) / panels));
+    if (panels * bStep > 48) bStep = Math.max(2, (48 / panels) | 0);
+    res = panels * bStep; R.res = res; R.battens = battens;
+  }
   function key(a, b) { return a * 4096 + b; }
   function gl(a, b) { var v = id[key(a, b)]; return v === undefined ? -1 : v; }
   for (j = 0; j <= res; j++) for (i = 0; i <= res; i++) {
@@ -57,11 +64,38 @@ function sailFromRecipe(R, clew) {
     var d = Math.hypot(X[a * 3] - X[b * 3], X[a * 3 + 1] - X[b * 3 + 1], X[a * 3 + 2] - X[b * 3 + 2]) * full;
     if (bend) { ba.push(a); bb.push(b); br.push(d); } else { ea.push(a); eb.push(b); er.push(d); }
   }
+  function conS(a, b, sc, bend) {
+    if (a < 0 || b < 0) return;
+    var d = Math.hypot(X[a * 3] - X[b * 3], X[a * 3 + 1] - X[b * 3 + 1], X[a * 3 + 2] - X[b * 3 + 2]) * sc;
+    if (bend) { ba.push(a); bb.push(b); br.push(d); } else { ea.push(a); eb.push(b); er.push(d); }
+  }
+  var panelFull = bStep > 0 ? 1 + (full - 1) * 2.4 : full, shearSc = 0.5 * (1.001 + panelFull);
   for (j = 0; j <= res; j++) for (i = 0; i <= res; i++) {
     var a = gl(i, j); if (a < 0) continue;
-    con(a, gl(i + 1, j)); con(a, gl(i, j + 1));
-    if (nc === 4) { con(a, gl(i + 1, j + 1)); con(gl(i + 1, j), gl(i, j + 1)); } else con(gl(i + 1, j), gl(i, j + 1));
-    con(a, gl(i + 2, j), 1); con(a, gl(i, j + 2), 1); if (nc === 3) con(gl(i + 2, j), gl(i, j + 2), 1);
+    if (bStep > 0) {
+      var bat = (j % bStep) === 0;
+      conS(a, gl(i + 1, j), bat ? 1 : 1.001);
+      conS(a, gl(i, j + 1), panelFull);
+      conS(a, gl(i + 1, j + 1), shearSc); conS(gl(i + 1, j), gl(i, j + 1), shearSc);
+      conS(a, gl(i + 2, j), bat ? 1 : 1.001, 1);
+      if (((j + 1) % bStep) !== 0) conS(a, gl(i, j + 2), panelFull, 1);
+    } else {
+      con(a, gl(i + 1, j)); con(a, gl(i, j + 1));
+      if (nc === 4) { con(a, gl(i + 1, j + 1)); con(gl(i + 1, j), gl(i, j + 1)); } else con(gl(i + 1, j), gl(i, j + 1));
+      con(a, gl(i + 2, j), 1); con(a, gl(i, j + 2), 1); if (nc === 3) con(gl(i + 2, j), gl(i, j + 2), 1);
+    }
+  }
+  if (bStep > 0) {
+    var cols = [0, res >> 2, res >> 1, (res * 3) >> 2, res];
+    for (var jb = bStep; jb < res; jb += bStep) {
+      conS(gl(0, jb), gl(res, jb), 1);
+      for (k = 0; k < cols.length; k++) {
+        var hi = cols[k];
+        if (hi > 0 && hi < res) { conS(gl(0, jb), gl(hi, jb), 1.0008); conS(gl(hi, jb), gl(res, jb), 1.0008); }
+        var vSc = (hi === 0 || hi === res) ? 1.0005 : 1.001;
+        conS(gl(hi, jb), gl(hi, 0), vSc); conS(gl(hi, jb), gl(hi, res), vSc);
+      }
+    }
   }
   // 綁在哪：角（作者標 pin、或接著 bind 的邊；同雕刻引擎 CornerPinned）、bind 的邊（整條）
   var cij = nc === 4 ? [[0, 0], [res, 0], [res, res], [0, res]] : [[0, 0], [res, 0], [0, res]], cornerIdx = cij.map(function (c) { return gl(c[0], c[1]); });
@@ -131,7 +165,7 @@ function sailRecipeAt(T, C, k, R) {
       var L = M[s.name + '/' + nm]; if (!L) return null;
       var P = T.rig.ropes[L[0].j].pts, m = P.length; return L[0].e === 0 ? [P[0], P[1], P[2]] : [P[m - 3], P[m - 2], P[m - 1]];
     });
-    g = sailFromRecipe(s.recipe, clew);
+    g = sailFromRecipe(s.recipe, clew, s.meta);
   }
   if (DEBUG && s.verts && !s.verts0) s.verts0 = s.verts;               // 讀數用（__game.sailDev）：成品還帶著雕刻引擎的頂點時（原格式、改之前的成品）留著比
   s.verts = g.verts; s.tris = g.tris; s.bmeta = g.bmeta; s.cornerIdx = g.cornerIdx;
