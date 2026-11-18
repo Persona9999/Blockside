@@ -1,5 +1,5 @@
 {
- "atlasSHA256": "db012923a6144dd5e8a98834404ba93949007ec4f617b891a788adc650faadc6",
+ "atlasSHA256": "b5a4578bdaf1ae0f437c94fb2aed8206468875e42805b890f02b8ff2aa970cd1",
  "cols": 6,
  "h": 160,
  "icons": {
@@ -167,48 +167,52 @@
    4,
    6
   ],
-  "stormkaap": [
+  "shachuan": [
    5,
    6
   ],
-  "susquehanna": [
+  "stormkaap": [
    0,
+   7
+  ],
+  "susquehanna": [
+   1,
    7
   ],
   "swallow": [
-   1,
+   2,
    7
   ],
   "tartane": [
-   2,
+   3,
    7
   ],
   "tekpai": [
-   3,
-   7
-  ],
-  "tidegrave": [
    4,
    7
   ],
-  "tower_galata": [
+  "tidegrave": [
    5,
    7
   ],
-  "tradewind": [
+  "tower_galata": [
    0,
    8
   ],
-  "tridente": [
+  "tradewind": [
    1,
    8
   ],
-  "virginia": [
+  "tridente": [
    2,
    8
   ],
-  "zeehaen": [
+  "virginia": [
    3,
+   8
+  ],
+  "zeehaen": [
+   4,
    8
   ]
  },
@@ -257,6 +261,7 @@
    "sandal": "f8b4979f405a148a542ce170f5f4d6307033bd77251220a9217b27b9ddd3db7a",
    "sanroman": "3df3ffa24ad031a4346c047d7a920bcb6d79bfeb046087ceeefd757d4d75cdf3",
    "sentinel": "b6f5867f8ec23fed500c31b934bdaf9c7143470f489a4c6a2c90be02208d980b",
+   "shachuan": "bea5c2eb7861d2f7f48778780d66bf5bf3f5dd41be65169209e30bf5ca0b9d83",
    "stormkaap": "8461eedaf129b368ab126757a6a3c5d2cdfc2976c13dbd20c756a302207ddaf6",
    "susquehanna": "dc8a4461c69de1ff3c450d52a1d7b33298b1550522293112f972bb1c77d8c4cb",
    "swallow": "df7d65844c7c8a00ca6b601cdc6d3bab123559a2082a50074dda55649e41af81",
