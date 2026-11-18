@@ -56,6 +56,26 @@ function standNear(g, x, y, z0, z1, head, taken, rmax) {   // (x, y) 附近 rmax
 /** 船員站位、走路格要避開的模型（makeCrew 一開始設成 CREW_BLOCK；42_hands.js crewNavSteps 先建走路格也照它）。
  *  規格表 block：取用點的桶在甲板上 ⇒ 要避（彈藥庫裡的不擋）；門、艙蓋 ＝ 通道（25_doors.js）⇒ 不避。 */
 function crewBlockOf(sh) { return sh.models.filter(function (m) { var b = kindProp(m.kind, 'block', true); return b === true || (b === 'station' && !!m.station); }); }
+/** 沒有舵輪的船，舵手握的那一頭（TASK-1317）：{ m：活著才補人的模型, at：握把（格座標）, z0..z1：站的高度從上往下找 }；沒有舵柄也沒有舵 ⇒ null。
+ *  ① 獨立的舵柄／操舵桿（kind=tiller）：握把 ＝ 外框船頭那一端、中線；高度 ＝ 外框頂往下到外框底再往下 12 格
+ *     ⛔ 照 spar 範圍從上往下找 ⇒ 金冠號的操舵桿在 verdeck、頭上就是 halfdek ⇒ 站到 halfdek 上；只照外框底 ⇒ 操舵桿往下穿過 verdeck 接舵柄、外框底在下一層 ⇒ 站到下一層
+ *  ② 舵柄長在舵上（舵模型 kind=rudder；比塞大客貨船「舵葉與舵柄」一件）：握把 ＝ pts tiller-end，沒有 ⇒ 舵外框船頭那一端、高度 ＝ pts stock-top（沒有 ⇒ 外框頂）；高度往下 14 格找
+ *     只有舵葉的舵（牛津號、百夫長號、巴貝多商人號：舵柄沒做）不算 ⇒ 不派：沒有 tiller-end 的舵要外框往前超過舵軸（hinge、stock-top 較前的那個）HELM_GRIP_REACH 格
+ *     （量過：只有舵葉的 −2；帶舵柄的 比塞大 8.5、越嶺號 4.7、加萊賽 4.1、galea 19、突尼斯划艇 6.5；皇家號 −1.5 ⇒ 不派）*/
+var HELM_GRIP_REACH = 3;
+function helmGrip(sh) { return helmGripOf(sh.models, sh.T.cy); }
+/** 同 helmGrip，吃開戰的模型（sh.models：kind／bb／pts）或船型的原始模型（T.rig.models：meta.kind／bbox／points；71_pages.js hullCounts 算人數用）。 */
+function helmGripOf(M, cy) {
+  function K(m) { return m.bb ? m.kind : modelKind(m); }
+  function BB(m) { return m.bb || m.bbox; }
+  function PT(m) { return m.pts || m.points || {}; }
+  var t = M.filter(function (m) { return K(m) === 'tiller'; })[0];
+  if (t) { var b = BB(t); return { m: t, at: [Math.floor(b[3]), cy, b[5]], z0: Math.floor(b[2]) - 12, z1: Math.ceil(b[5]) }; }
+  function reach(m) { var mt = m.meta || {}, st = PT(m)['stock-top'], ax = Math.max(mt.hinge_x !== undefined ? +mt.hinge_x : -1e9, st ? st[0] : -1e9); return ax > -1e9 ? BB(m)[3] - ax : 0; }
+  var R = M.filter(function (m) { return K(m) === 'rudder'; }), r = R.filter(function (m) { return PT(m)['tiller-end']; })[0] || R.filter(function (m) { return reach(m) >= HELM_GRIP_REACH; })[0]; if (!r) return null;
+  var P = PT(r), te = P['tiller-end'], z = te ? te[2] : P['stock-top'] ? P['stock-top'][2] : BB(r)[5], at = te ? [te[0], te[1], z] : [Math.floor(BB(r)[3]), cy, z];
+  return { m: r, at: at, z0: Math.floor(z) - 14, z1: Math.ceil(z) + 2 };
+}
 function makeCrew(sh) {
   var g = navBase(sh.T), CY = sh.T.cy, HULL_X0 = sh.T.hx0, HULL_X1 = sh.T.hx1, taken = {}, crew = [];
   sh.cw = shipCrew(sh.T.id); sh.pmWant = 0;                          // 船員配置（05_hull.js：預設 ← 船隻配置頁）；pmWant：送藥手該有幾個（23_powder.js makeMonkeys 數）
@@ -103,6 +123,7 @@ function makeCrew(sh) {
   makeMonkeys(sh, crew, taken, add);
   // spar deck 的高度：從 carronade 推；陸戰隊沿 S 那一舷（格 +y）的舷牆、軍官在後甲板、舵手在舵輪旁
   var carr = sh.models.filter(function (m) { return fitKind0(m) === 'carr'; }).map(function (m) { return m.was ? { bb: m.was.bb } : m; }), wheel = sh.models.filter(function (m) { return m.kind === 'wheel'; })[0];
+  var til = wheel ? null : helmGrip(sh); sh.helmTil = til;   // 沒有舵輪 ⇒ 舵柄（獨立模型 kind=tiller，或長在舵上）旁站舵手（Tim 2026-11-18「那舵手可以去操作 操舵桿嗎」→「所有舵柄船都派」、「比塞大客貨船 舵柄跟舵連在一起(有些船也是)」；TASK-1317）
   var GZ = sh.T.geo, CW = sh.cw, sz0 = carr.length ? Math.floor(carr[0].bb[2]) - 6 : GZ.spar ? GZ.spar[0] : 100, sz1 = carr.length || !GZ.spar ? sz0 + 9 : GZ.spar[1];   // 沒有 carronade ⇒ 船型給的高度（05_hull.js GEO0；夜隼號主甲板到後甲板）
   postsOf(sh, 'marine').slice(0, CW.marines).forEach(function (p) { add(ROLE.MARINE, postStand(g, p.at, taken), null, 1); });   // 站位（TASK-1225）：手擺／作品標的陸戰隊站位先用，下面照舊沿舷牆補到 marines 個
   for (var x = HULL_X0 + GZ.marines[0]; x < HULL_X1 - GZ.marines[1] && crew.filter(function (c) { return c.role === ROLE.MARINE; }).length < CW.marines; x += CW.marineGap) {   // 每 marineGap 格一個、最多 marines 個（船員配置）
@@ -124,6 +145,9 @@ function makeCrew(sh) {
   offP.slice(0, offN - offK).forEach(function (p) { add(ROLE.OFFICER, standNear(g, p[0], p[1], sz0, sz1, 14, taken), null, 1); });
   postFill(sh, g, taken, 'officer', offN - cntRole(crew, ROLE.OFFICER)).forEach(function (at) { add(ROLE.OFFICER, at, null, 1); });
   if (wheel) { var wx = Math.floor(wheel.bb[0]) - 3; [[wx, CY + 3], [wx, CY - 3], [wx - 5, CY + 7], [wx - 5, CY - 7]].slice(0, CW.helm).forEach(function (p) { add(ROLE.HELM, standNear(g, p[0], p[1], sz0, sz1, 14, taken), null, -1); }); }   // 舵輪後面（⛔ 舵輪中心往後 4 格還在舵輪的外框裡 ⇒ 以前一個舵手都站不上去）
+  else if (til) {   // 舵柄：站在握把往前 2 格、再來兩舷；高度從握把往下找第一個站得住的（helmGrip 給的 z0..z1）
+    [[til.at[0] + 2, til.at[1]], [til.at[0] + 2, til.at[1] + 4], [til.at[0] + 2, til.at[1] - 4], [til.at[0] + 6, til.at[1]]].slice(0, CW.helm).forEach(function (p) { add(ROLE.HELM, standNear(g, Math.floor(p[0]), Math.floor(p[1]), til.z0, til.z1, 14, taken), null, -1); });
+  }
   // 桅頂：每根桅最低的那層平台（從那根桅最低的橫帆桁往上，第一層有 6 個以上站得住的點；沒有帆桁 meta ⇒ 從 z 200）上分散站四個人；頭頂 1.4 m 空（同一般站位）。
   //   憲法號：前桅 263、主桅 286、後桅 241（帆桁 254／276／232 ⇒ 跟以前從 200 找一樣）；夜隼號：前桅 127、主桅 137。
   //   ⛔ 從 250 找 ⇒ 跳過後桅的桅頂；⛔ 不夠四個就往上找 ⇒ 站到 377–465 的高處橫桁上；⛔ 頭頂只看 0.6 m
@@ -159,7 +183,7 @@ function makeCrew(sh) {
   function cnt(r) { return crew.filter(function (c) { return c.role === r; }).length; }
   //   ⚠ 預設本來就有站不下的（憲法號陸戰隊 11／12、送藥手 26／27；夜隼號陸戰隊 2／12）：開戰只報玩家改過的那幾項（61_hud.js crewShortNote），全部照實列在船隻配置頁（CREW_SEEN）
   sh.crewShort = [['砲班', sh.guns.reduce(function (a, gn) { return a + gn.crewFull; }, 0), cnt(ROLE.GUN), 'guns'], ['送藥手', sh.pmWant, cnt(ROLE.POWDER), 'monkeys'], ['軍官', CW.officers, cnt(ROLE.OFFICER), 'officers'],
-    ['舵手', wheel ? CW.helm : 0, cnt(ROLE.HELM), 'helm'], ['陸戰隊', CW.marines, cnt(ROLE.MARINE), 'marines'], ['桅頂水手', CW.top * sh.masts.length, cnt(ROLE.TOP), 'top'], ['預備水手', CW.hands, cnt(ROLE.HAND), 'hands'], ['船醫', sh.surgWant || 0, cnt(ROLE.SURGEON), 'surgeon'], ['航海士', sh.navWant || 0, cnt(ROLE.NAVIGATOR), 'navigator'], ['司爐', sh.stokerWant || 0, cnt(ROLE.STOKER), 'stokers'], ['軍需官', sh.qmWant || 0, cnt(ROLE.QUARTERMASTER), 'quartermaster'], ['槳手', sh.oarWant || 0, cnt(ROLE.OAR), 'oars'], ['木匠', sh.carpWant || 0, cnt(ROLE.CARPENTER), 'carpenter'], ['帆匠', sh.smWant || 0, cnt(ROLE.SAILMAKER), 'sailmaker'], ['廚師', sh.cookWant || 0, cnt(ROLE.COOK), 'cook']].filter(function (r) { return r[2] < r[1]; });
+    ['舵手', wheel || til ? CW.helm : 0, cnt(ROLE.HELM), 'helm'], ['陸戰隊', CW.marines, cnt(ROLE.MARINE), 'marines'], ['桅頂水手', CW.top * sh.masts.length, cnt(ROLE.TOP), 'top'], ['預備水手', CW.hands, cnt(ROLE.HAND), 'hands'], ['船醫', sh.surgWant || 0, cnt(ROLE.SURGEON), 'surgeon'], ['航海士', sh.navWant || 0, cnt(ROLE.NAVIGATOR), 'navigator'], ['司爐', sh.stokerWant || 0, cnt(ROLE.STOKER), 'stokers'], ['軍需官', sh.qmWant || 0, cnt(ROLE.QUARTERMASTER), 'quartermaster'], ['槳手', sh.oarWant || 0, cnt(ROLE.OAR), 'oars'], ['木匠', sh.carpWant || 0, cnt(ROLE.CARPENTER), 'carpenter'], ['帆匠', sh.smWant || 0, cnt(ROLE.SAILMAKER), 'sailmaker'], ['廚師', sh.cookWant || 0, cnt(ROLE.COOK), 'cook']].filter(function (r) { return r[2] < r[1]; });
   CREW_SEEN[sh.T.id] = { n: crew.length, short: sh.crewShort, sig: crewSig(CW) };
   return crew;
 }

@@ -38,10 +38,11 @@ function sliders() {
     var T = HULLT[id]; if (!T) return null;
     var g = {}, n = 0, wheel = false, oars = 0, rowers = 0, rk = [], gal = 0;
     (T.rig.models || []).forEach(function (m) {
-      var k = modelKind(m); if (GUNS[k]) { g[k] = (g[k] || 0) + 1; n++; } if (k === 'wheel') wheel = true; if (k === 'galley') gal++;   // 廚房的爐灶（模型 meta kind=galley；45_galley.js）
+      var k = modelKind(m); if (GUNS[k]) { g[k] = (g[k] || 0) + 1; n++; } if (k === 'wheel' || k === 'tiller') wheel = true;   // 舵柄船也派舵手（40_crew.js helmGrip；TASK-1317） if (k === 'galley') gal++;   // 廚房的爐灶（模型 meta kind=galley；45_galley.js）
       if ((m.meta || {}).kind === 'oar' && (m.points || {}).pivot) { var r = oarRowers(m); oars++; rowers += r; if (rk.indexOf(r) < 0) rk.push(r); }   // 槳：跟開戰時 oarCrew 同一條（有槳座才算）
     });
     var boil = pumpSteamShip(T) ? drvParts(T).B.reduce(function (a, b) { return a + b.seats.length; }, 0) : 0;   // 鍋爐幾座：跟開戰時 stokerCrew 同一條（有鍋爐的蒸汽船；TASK-1092）
+    if (!wheel && helmGripOf(T.rig.models || [], T.cy)) wheel = true;   // 舵柄長在舵上（40_crew.js helmGrip 同一條）
     return { guns: g, n: n, masts: T.masts.length, wheel: wheel, oars: oars, rowers: rowers, rk: rk.sort(function (a, b) { return a - b; }), galley: gal, boilers: boil };
   }
   /** 全船人數（跟船員那一節的合計同一條算法）。 */
@@ -260,7 +261,7 @@ function sliders() {
     var cw = shipCrew(CFG_ID), d = crewDefault(CFG_ID), hc = hullCounts(CFG_ID);
     function v(key, txt, x, x0) { $('cr-' + key + 'V').textContent = txt + (x === x0 ? '' : '　（預設 ' + x0 + '）'); }
     var n = cw.officers; v('officers', n + ' 人' + (n ? '（' + rankList(n) + '）' : '（沒有軍官：沒人指揮，瞄準變散）'), n, d.officers);
-    n = cw.helm; v('helm', n + ' 人' + (hc && !hc.wheel ? '（這型沒有舵輪 ⇒ 不站人）' : '（站在舵輪後面；倒下時預備水手會補）'), n, d.helm);
+    n = cw.helm; v('helm', n + ' 人' + (hc && !hc.wheel ? '（這型沒有舵輪、舵柄 ⇒ 不站人）' : '（站在舵輪後面、舵柄旁；倒下時預備水手會補）'), n, d.helm);
     n = cw.marines; v('marines', n + ' 人（沿右舷舷牆站，用火槍打敵艦露天的人）', n, d.marines);
     n = cw.top; v('top', n + ' 人 × ' + (hc ? hc.masts + ' 根桅 ＝ ' + n * hc.masts : '每根桅'), n, d.top);
     n = cw.monkeys; v('monkeys', n ? n + ' 人 × 每一對砲' + (hc ? '（約 ' + Math.ceil(hc.n / 2) + ' 對）' : '') + '：從取用點搬火藥與彈藥' : '0（沒有：砲旁的藥箱用完就停）', n, d.monkeys);
