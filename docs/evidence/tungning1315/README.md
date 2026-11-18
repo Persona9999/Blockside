@@ -24,8 +24,10 @@ shipcheck保留4條超載漏水警告：再深1.8m、多載326t才到該開口�
 
 空載報表約137.1t，實體開戰含生成設備約137.3t；標準149t、滿載409t。兩個 rooms 是可配置空房間標記，並非全船貨艙容量與全部船員床位的體積聲明。八道艙壁、11扇門／蓋的開口已由遊戲辨識。
 
-52艘既有船的 ships[] 配置與船檔均未變。執行既有 admin.py parts 時同步補齊已匯入 galeazza／tekpai 的缺漏零件索引，沒有變更其幾何與武裝；新開孔舵與本船裝備同時列入索引。
+53艘既有船的 ships[] 配置與船檔均未變。執行既有 admin.py parts 時同步補齊已匯入 galeazza／tekpai 的缺漏零件索引，沒有變更其幾何與武裝；新開孔舵與本船裝備同時列入索引。
 
 重跑海試：使用有 websocket-client 的Python，執行 `python trial.py <Blockside/index.html 或 Blocksail/battle.html> <輸出.json>`。驅動程式只在本機HTTP回應插入檢查入口，產品原始碼與正式成品不寫測試hook。`trial.js` 使用真實模擬、火砲、補給、錨及第一人稱攀爬按鈕。進水反向對照為 `python flood.py <index.html> flood-cases.json <輸出.json>`。依賴的 websocket-client 路徑可按機器調整，固定海況與種子、遊戲設定均寫在報告裡。
 
-實體帆骨複驗：前7／主9／尾5，共21根竹篾；滿帆、轉向、全收、再展四狀態，按實際 sailWalk 繪圖頂點量得桿布最大間距0.05002格（約5mm）。六件上下桁改為水平course，收帆落篷；100人編制含舵柄舵手，hands=25。battens-motion.json 保留逐根狀態。獨立覆核在雕刻 design/battens-final.md。最終程式來源指紋28784bf975109c07，53型船。
+實體帆骨複驗：前7／主9／尾5，共21根竹篾；滿帆、轉向、全收、再展四狀態，按實際 sailWalk 繪圖頂點量得桿布最大間距0.05002格（約5mm）。六件上下桁改為水平course，收帆落篷；100人編制含舵柄舵手，hands=25。battens-motion.json 保留逐根狀態。獨立覆核在雕刻 design/battens-final.md。最終程式來源指紋235340baf38c4c28，54型船。
+
+整合基準再納入a44b061沙船，既有53型船的設定及船檔逐位元組保留；僅加入本船。此次只新增其他船資料，核心JS與已驗證海試版本相同。重建成品來源指紋235340baf38c4c28。
