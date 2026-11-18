@@ -1,0 +1,1862 @@
+{
+  "before_cells": 175851,
+  "old_bow_source_cells_per_side": 151,
+  "old_bow_mirror_y_formula": "160-y",
+  "old_bow_existing_occupied_cells": 10,
+  "old_bow_occupied_points": [
+    {
+      "point": [
+        319,
+        67,
+        63
+      ],
+      "before_color": 104,
+      "bow_color": 160,
+      "owners": [
+        "anchor-gear"
+      ]
+    },
+    {
+      "point": [
+        319,
+        93,
+        63
+      ],
+      "before_color": 104,
+      "bow_color": 160,
+      "owners": [
+        "anchor-gear"
+      ]
+    },
+    {
+      "point": [
+        320,
+        67,
+        63
+      ],
+      "before_color": 104,
+      "bow_color": 160,
+      "owners": [
+        "anchor-gear"
+      ]
+    },
+    {
+      "point": [
+        320,
+        93,
+        63
+      ],
+      "before_color": 104,
+      "bow_color": 160,
+      "owners": [
+        "anchor-gear"
+      ]
+    },
+    {
+      "point": [
+        321,
+        68,
+        63
+      ],
+      "before_color": 104,
+      "bow_color": 160,
+      "owners": [
+        "anchor-gear"
+      ]
+    },
+    {
+      "point": [
+        321,
+        92,
+        63
+      ],
+      "before_color": 104,
+      "bow_color": 160,
+      "owners": [
+        "anchor-gear"
+      ]
+    },
+    {
+      "point": [
+        322,
+        68,
+        63
+      ],
+      "before_color": 104,
+      "bow_color": 160,
+      "owners": [
+        "anchor-gear"
+      ]
+    },
+    {
+      "point": [
+        322,
+        92,
+        63
+      ],
+      "before_color": 104,
+      "bow_color": 160,
+      "owners": [
+        "anchor-gear"
+      ]
+    },
+    {
+      "point": [
+        323,
+        69,
+        63
+      ],
+      "before_color": 104,
+      "bow_color": 160,
+      "owners": [
+        "anchor-gear"
+      ]
+    },
+    {
+      "point": [
+        323,
+        91,
+        63
+      ],
+      "before_color": 104,
+      "bow_color": 160,
+      "owners": [
+        "anchor-gear"
+      ]
+    }
+  ],
+  "old_bow_topology_each_side": {
+    "components": 35,
+    "closed_air": 0,
+    "details": [
+      {
+        "cells": 43,
+        "bbox": [
+          [
+            308,
+            96,
+            59
+          ],
+          [
+            313,
+            100,
+            65
+          ]
+        ]
+      },
+      {
+        "cells": 14,
+        "bbox": [
+          [
+            305,
+            100,
+            59
+          ],
+          [
+            307,
+            101,
+            65
+          ]
+        ]
+      },
+      {
+        "cells": 13,
+        "bbox": [
+          [
+            320,
+            92,
+            54
+          ],
+          [
+            322,
+            92,
+            59
+          ]
+        ]
+      },
+      {
+        "cells": 11,
+        "bbox": [
+          [
+            322,
+            91,
+            55
+          ],
+          [
+            324,
+            91,
+            59
+          ]
+        ]
+      },
+      {
+        "cells": 10,
+        "bbox": [
+          [
+            316,
+            94,
+            55
+          ],
+          [
+            317,
+            94,
+            59
+          ]
+        ]
+      },
+      {
+        "cells": 10,
+        "bbox": [
+          [
+            318,
+            93,
+            55
+          ],
+          [
+            319,
+            93,
+            59
+          ]
+        ]
+      },
+      {
+        "cells": 6,
+        "bbox": [
+          [
+            324,
+            90,
+            55
+          ],
+          [
+            326,
+            90,
+            58
+          ]
+        ]
+      },
+      {
+        "cells": 4,
+        "bbox": [
+          [
+            314,
+            95,
+            56
+          ],
+          [
+            315,
+            95,
+            58
+          ]
+        ]
+      },
+      {
+        "cells": 3,
+        "bbox": [
+          [
+            314,
+            95,
+            63
+          ],
+          [
+            316,
+            95,
+            63
+          ]
+        ]
+      },
+      {
+        "cells": 2,
+        "bbox": [
+          [
+            305,
+            101,
+            62
+          ],
+          [
+            305,
+            101,
+            63
+          ]
+        ]
+      },
+      {
+        "cells": 2,
+        "bbox": [
+          [
+            307,
+            98,
+            52
+          ],
+          [
+            308,
+            98,
+            52
+          ]
+        ]
+      },
+      {
+        "cells": 2,
+        "bbox": [
+          [
+            309,
+            97,
+            52
+          ],
+          [
+            310,
+            97,
+            52
+          ]
+        ]
+      },
+      {
+        "cells": 2,
+        "bbox": [
+          [
+            313,
+            95,
+            50
+          ],
+          [
+            314,
+            95,
+            50
+          ]
+        ]
+      },
+      {
+        "cells": 2,
+        "bbox": [
+          [
+            317,
+            94,
+            63
+          ],
+          [
+            318,
+            94,
+            63
+          ]
+        ]
+      },
+      {
+        "cells": 2,
+        "bbox": [
+          [
+            318,
+            93,
+            52
+          ],
+          [
+            319,
+            93,
+            52
+          ]
+        ]
+      },
+      {
+        "cells": 2,
+        "bbox": [
+          [
+            319,
+            93,
+            63
+          ],
+          [
+            320,
+            93,
+            63
+          ]
+        ]
+      },
+      {
+        "cells": 2,
+        "bbox": [
+          [
+            320,
+            92,
+            52
+          ],
+          [
+            321,
+            92,
+            52
+          ]
+        ]
+      },
+      {
+        "cells": 2,
+        "bbox": [
+          [
+            321,
+            92,
+            63
+          ],
+          [
+            322,
+            92,
+            63
+          ]
+        ]
+      },
+      {
+        "cells": 2,
+        "bbox": [
+          [
+            324,
+            90,
+            50
+          ],
+          [
+            325,
+            90,
+            50
+          ]
+        ]
+      },
+      {
+        "cells": 2,
+        "bbox": [
+          [
+            329,
+            87,
+            52
+          ],
+          [
+            330,
+            87,
+            52
+          ]
+        ]
+      },
+      {
+        "cells": 1,
+        "bbox": [
+          [
+            306,
+            99,
+            51
+          ],
+          [
+            306,
+            99,
+            51
+          ]
+        ]
+      },
+      {
+        "cells": 1,
+        "bbox": [
+          [
+            311,
+            96,
+            51
+          ],
+          [
+            311,
+            96,
+            51
+          ]
+        ]
+      },
+      {
+        "cells": 1,
+        "bbox": [
+          [
+            312,
+            96,
+            50
+          ],
+          [
+            312,
+            96,
+            50
+          ]
+        ]
+      },
+      {
+        "cells": 1,
+        "bbox": [
+          [
+            315,
+            94,
+            50
+          ],
+          [
+            315,
+            94,
+            50
+          ]
+        ]
+      },
+      {
+        "cells": 1,
+        "bbox": [
+          [
+            316,
+            94,
+            51
+          ],
+          [
+            316,
+            94,
+            51
+          ]
+        ]
+      },
+      {
+        "cells": 1,
+        "bbox": [
+          [
+            317,
+            93,
+            51
+          ],
+          [
+            317,
+            93,
+            51
+          ]
+        ]
+      },
+      {
+        "cells": 1,
+        "bbox": [
+          [
+            320,
+            93,
+            60
+          ],
+          [
+            320,
+            93,
+            60
+          ]
+        ]
+      },
+      {
+        "cells": 1,
+        "bbox": [
+          [
+            322,
+            91,
+            51
+          ],
+          [
+            322,
+            91,
+            51
+          ]
+        ]
+      },
+      {
+        "cells": 1,
+        "bbox": [
+          [
+            323,
+            91,
+            50
+          ],
+          [
+            323,
+            91,
+            50
+          ]
+        ]
+      },
+      {
+        "cells": 1,
+        "bbox": [
+          [
+            323,
+            91,
+            63
+          ],
+          [
+            323,
+            91,
+            63
+          ]
+        ]
+      },
+      {
+        "cells": 1,
+        "bbox": [
+          [
+            326,
+            89,
+            50
+          ],
+          [
+            326,
+            89,
+            50
+          ]
+        ]
+      },
+      {
+        "cells": 1,
+        "bbox": [
+          [
+            327,
+            88,
+            51
+          ],
+          [
+            327,
+            88,
+            51
+          ]
+        ]
+      },
+      {
+        "cells": 1,
+        "bbox": [
+          [
+            328,
+            88,
+            52
+          ],
+          [
+            328,
+            88,
+            52
+          ]
+        ]
+      },
+      {
+        "cells": 1,
+        "bbox": [
+          [
+            331,
+            86,
+            52
+          ],
+          [
+            331,
+            86,
+            52
+          ]
+        ]
+      },
+      {
+        "cells": 1,
+        "bbox": [
+          [
+            332,
+            85,
+            51
+          ],
+          [
+            332,
+            85,
+            51
+          ]
+        ]
+      }
+    ]
+  },
+  "current_nameboard": {
+    "at": [
+      26.5,
+      64,
+      67
+    ],
+    "bounds": [
+      [
+        26.5,
+        64.0,
+        67.0
+      ],
+      [
+        27.5,
+        97.0,
+        80.0
+      ]
+    ]
+  },
+  "proposed_nameboard": {
+    "at": [
+      26.5,
+      64,
+      67
+    ],
+    "bounds": [
+      [
+        26.5,
+        64.0,
+        67.0
+      ],
+      [
+        27.5,
+        97.0,
+        80.0
+      ]
+    ],
+    "stern_carving_bounds": [
+      [
+        28.0,
+        57.0,
+        69.0
+      ],
+      [
+        46.0,
+        104.0,
+        79.0
+      ]
+    ],
+    "x_gap_cells": 0.5,
+    "body_overlap_cells": 0
+  },
+  "current_body_cells": 176209,
+  "current_overlap_cells": 0,
+  "fore_guns_against_original_bow": {
+    "deck-fore/swivel-316-P": {
+      "old_bow_intersections": 0,
+      "points": []
+    },
+    "deck-fore/swivel-316-P-mount": {
+      "old_bow_intersections": 0,
+      "points": []
+    },
+    "deck-fore/swivel-316-S": {
+      "old_bow_intersections": 0,
+      "points": []
+    },
+    "deck-fore/swivel-316-S-mount": {
+      "old_bow_intersections": 0,
+      "points": []
+    }
+  },
+  "candidate": {
+    "added_mask_cells": 358,
+    "paint_mask_cells": 10,
+    "new_mask_overlaps_before": 0,
+    "paint_not_in_before": 0,
+    "paint_changes": 10,
+    "original_art_color_mismatch": 0,
+    "mask_mirror_color_difference": 0,
+    "body_cells": 176209,
+    "topology": {
+      "components": 1,
+      "closed_air": 0,
+      "details": [
+        {
+          "cells": 176209,
+          "bbox": [
+            [
+              29,
+              38,
+              0
+            ],
+            [
+              340,
+              122,
+              295
+            ]
+          ]
+        }
+      ]
+    },
+    "fore_gun_intersections": {
+      "deck-fore/swivel-316-P": 0,
+      "deck-fore/swivel-316-P-mount": 0,
+      "deck-fore/swivel-316-S": 0,
+      "deck-fore/swivel-316-S-mount": 0
+    }
+  },
+  "bow_voxel": {
+    "work": "meadow-tungning-trader-01m-bow-voxel",
+    "link_meta": {
+      "id": "part-6"
+    },
+    "mask_cells": 358,
+    "actual_cells": 358,
+    "missing": 0,
+    "extra": 0,
+    "color_diff": 0,
+    "occupied_old_body": 0,
+    "mirror_missing_or_wrong_color": 0,
+    "original_visible_design_missing": 0,
+    "new_wood_backing_cells": 66,
+    "topology": {
+      "components": 60,
+      "closed_air": 0,
+      "details": [
+        {
+          "cells": 92,
+          "bbox": [
+            [
+              305,
+              59,
+              59
+            ],
+            [
+              313,
+              64,
+              65
+            ]
+          ]
+        },
+        {
+          "cells": 92,
+          "bbox": [
+            [
+              305,
+              96,
+              59
+            ],
+            [
+              313,
+              101,
+              65
+            ]
+          ]
+        },
+        {
+          "cells": 13,
+          "bbox": [
+            [
+              320,
+              68,
+              54
+            ],
+            [
+              322,
+              68,
+              59
+            ]
+          ]
+        },
+        {
+          "cells": 13,
+          "bbox": [
+            [
+              320,
+              92,
+              54
+            ],
+            [
+              322,
+              92,
+              59
+            ]
+          ]
+        },
+        {
+          "cells": 11,
+          "bbox": [
+            [
+              322,
+              69,
+              55
+            ],
+            [
+              324,
+              69,
+              59
+            ]
+          ]
+        },
+        {
+          "cells": 11,
+          "bbox": [
+            [
+              322,
+              91,
+              55
+            ],
+            [
+              324,
+              91,
+              59
+            ]
+          ]
+        },
+        {
+          "cells": 10,
+          "bbox": [
+            [
+              316,
+              66,
+              55
+            ],
+            [
+              317,
+              66,
+              59
+            ]
+          ]
+        },
+        {
+          "cells": 10,
+          "bbox": [
+            [
+              316,
+              94,
+              55
+            ],
+            [
+              317,
+              94,
+              59
+            ]
+          ]
+        },
+        {
+          "cells": 10,
+          "bbox": [
+            [
+              318,
+              67,
+              55
+            ],
+            [
+              319,
+              67,
+              59
+            ]
+          ]
+        },
+        {
+          "cells": 10,
+          "bbox": [
+            [
+              318,
+              93,
+              55
+            ],
+            [
+              319,
+              93,
+              59
+            ]
+          ]
+        },
+        {
+          "cells": 6,
+          "bbox": [
+            [
+              324,
+              70,
+              55
+            ],
+            [
+              326,
+              70,
+              58
+            ]
+          ]
+        },
+        {
+          "cells": 6,
+          "bbox": [
+            [
+              324,
+              90,
+              55
+            ],
+            [
+              326,
+              90,
+              58
+            ]
+          ]
+        },
+        {
+          "cells": 4,
+          "bbox": [
+            [
+              314,
+              65,
+              56
+            ],
+            [
+              315,
+              65,
+              58
+            ]
+          ]
+        },
+        {
+          "cells": 4,
+          "bbox": [
+            [
+              314,
+              95,
+              56
+            ],
+            [
+              315,
+              95,
+              58
+            ]
+          ]
+        },
+        {
+          "cells": 3,
+          "bbox": [
+            [
+              314,
+              65,
+              63
+            ],
+            [
+              316,
+              65,
+              63
+            ]
+          ]
+        },
+        {
+          "cells": 3,
+          "bbox": [
+            [
+              314,
+              95,
+              63
+            ],
+            [
+              316,
+              95,
+              63
+            ]
+          ]
+        },
+        {
+          "cells": 2,
+          "bbox": [
+            [
+              307,
+              62,
+              52
+            ],
+            [
+              308,
+              62,
+              52
+            ]
+          ]
+        },
+        {
+          "cells": 2,
+          "bbox": [
+            [
+              307,
+              98,
+              52
+            ],
+            [
+              308,
+              98,
+              52
+            ]
+          ]
+        },
+        {
+          "cells": 2,
+          "bbox": [
+            [
+              309,
+              63,
+              52
+            ],
+            [
+              310,
+              63,
+              52
+            ]
+          ]
+        },
+        {
+          "cells": 2,
+          "bbox": [
+            [
+              309,
+              97,
+              52
+            ],
+            [
+              310,
+              97,
+              52
+            ]
+          ]
+        },
+        {
+          "cells": 2,
+          "bbox": [
+            [
+              313,
+              65,
+              50
+            ],
+            [
+              314,
+              65,
+              50
+            ]
+          ]
+        },
+        {
+          "cells": 2,
+          "bbox": [
+            [
+              313,
+              95,
+              50
+            ],
+            [
+              314,
+              95,
+              50
+            ]
+          ]
+        },
+        {
+          "cells": 2,
+          "bbox": [
+            [
+              317,
+              66,
+              63
+            ],
+            [
+              318,
+              66,
+              63
+            ]
+          ]
+        },
+        {
+          "cells": 2,
+          "bbox": [
+            [
+              317,
+              94,
+              63
+            ],
+            [
+              318,
+              94,
+              63
+            ]
+          ]
+        },
+        {
+          "cells": 2,
+          "bbox": [
+            [
+              318,
+              67,
+              52
+            ],
+            [
+              319,
+              67,
+              52
+            ]
+          ]
+        },
+        {
+          "cells": 2,
+          "bbox": [
+            [
+              318,
+              93,
+              52
+            ],
+            [
+              319,
+              93,
+              52
+            ]
+          ]
+        },
+        {
+          "cells": 2,
+          "bbox": [
+            [
+              320,
+              68,
+              52
+            ],
+            [
+              321,
+              68,
+              52
+            ]
+          ]
+        },
+        {
+          "cells": 2,
+          "bbox": [
+            [
+              320,
+              92,
+              52
+            ],
+            [
+              321,
+              92,
+              52
+            ]
+          ]
+        },
+        {
+          "cells": 2,
+          "bbox": [
+            [
+              324,
+              70,
+              50
+            ],
+            [
+              325,
+              70,
+              50
+            ]
+          ]
+        },
+        {
+          "cells": 2,
+          "bbox": [
+            [
+              324,
+              90,
+              50
+            ],
+            [
+              325,
+              90,
+              50
+            ]
+          ]
+        },
+        {
+          "cells": 2,
+          "bbox": [
+            [
+              329,
+              73,
+              52
+            ],
+            [
+              330,
+              73,
+              52
+            ]
+          ]
+        },
+        {
+          "cells": 2,
+          "bbox": [
+            [
+              329,
+              87,
+              52
+            ],
+            [
+              330,
+              87,
+              52
+            ]
+          ]
+        },
+        {
+          "cells": 1,
+          "bbox": [
+            [
+              306,
+              61,
+              51
+            ],
+            [
+              306,
+              61,
+              51
+            ]
+          ]
+        },
+        {
+          "cells": 1,
+          "bbox": [
+            [
+              306,
+              99,
+              51
+            ],
+            [
+              306,
+              99,
+              51
+            ]
+          ]
+        },
+        {
+          "cells": 1,
+          "bbox": [
+            [
+              311,
+              64,
+              51
+            ],
+            [
+              311,
+              64,
+              51
+            ]
+          ]
+        },
+        {
+          "cells": 1,
+          "bbox": [
+            [
+              311,
+              96,
+              51
+            ],
+            [
+              311,
+              96,
+              51
+            ]
+          ]
+        },
+        {
+          "cells": 1,
+          "bbox": [
+            [
+              312,
+              64,
+              50
+            ],
+            [
+              312,
+              64,
+              50
+            ]
+          ]
+        },
+        {
+          "cells": 1,
+          "bbox": [
+            [
+              312,
+              96,
+              50
+            ],
+            [
+              312,
+              96,
+              50
+            ]
+          ]
+        },
+        {
+          "cells": 1,
+          "bbox": [
+            [
+              315,
+              66,
+              50
+            ],
+            [
+              315,
+              66,
+              50
+            ]
+          ]
+        },
+        {
+          "cells": 1,
+          "bbox": [
+            [
+              315,
+              94,
+              50
+            ],
+            [
+              315,
+              94,
+              50
+            ]
+          ]
+        },
+        {
+          "cells": 1,
+          "bbox": [
+            [
+              316,
+              66,
+              51
+            ],
+            [
+              316,
+              66,
+              51
+            ]
+          ]
+        },
+        {
+          "cells": 1,
+          "bbox": [
+            [
+              316,
+              94,
+              51
+            ],
+            [
+              316,
+              94,
+              51
+            ]
+          ]
+        },
+        {
+          "cells": 1,
+          "bbox": [
+            [
+              317,
+              67,
+              51
+            ],
+            [
+              317,
+              67,
+              51
+            ]
+          ]
+        },
+        {
+          "cells": 1,
+          "bbox": [
+            [
+              317,
+              93,
+              51
+            ],
+            [
+              317,
+              93,
+              51
+            ]
+          ]
+        },
+        {
+          "cells": 1,
+          "bbox": [
+            [
+              320,
+              67,
+              60
+            ],
+            [
+              320,
+              67,
+              60
+            ]
+          ]
+        },
+        {
+          "cells": 1,
+          "bbox": [
+            [
+              320,
+              93,
+              60
+            ],
+            [
+              320,
+              93,
+              60
+            ]
+          ]
+        },
+        {
+          "cells": 1,
+          "bbox": [
+            [
+              322,
+              69,
+              51
+            ],
+            [
+              322,
+              69,
+              51
+            ]
+          ]
+        },
+        {
+          "cells": 1,
+          "bbox": [
+            [
+              322,
+              91,
+              51
+            ],
+            [
+              322,
+              91,
+              51
+            ]
+          ]
+        },
+        {
+          "cells": 1,
+          "bbox": [
+            [
+              323,
+              69,
+              50
+            ],
+            [
+              323,
+              69,
+              50
+            ]
+          ]
+        },
+        {
+          "cells": 1,
+          "bbox": [
+            [
+              323,
+              91,
+              50
+            ],
+            [
+              323,
+              91,
+              50
+            ]
+          ]
+        },
+        {
+          "cells": 1,
+          "bbox": [
+            [
+              326,
+              71,
+              50
+            ],
+            [
+              326,
+              71,
+              50
+            ]
+          ]
+        },
+        {
+          "cells": 1,
+          "bbox": [
+            [
+              326,
+              89,
+              50
+            ],
+            [
+              326,
+              89,
+              50
+            ]
+          ]
+        },
+        {
+          "cells": 1,
+          "bbox": [
+            [
+              327,
+              72,
+              51
+            ],
+            [
+              327,
+              72,
+              51
+            ]
+          ]
+        },
+        {
+          "cells": 1,
+          "bbox": [
+            [
+              327,
+              88,
+              51
+            ],
+            [
+              327,
+              88,
+              51
+            ]
+          ]
+        },
+        {
+          "cells": 1,
+          "bbox": [
+            [
+              328,
+              72,
+              52
+            ],
+            [
+              328,
+              72,
+              52
+            ]
+          ]
+        },
+        {
+          "cells": 1,
+          "bbox": [
+            [
+              328,
+              88,
+              52
+            ],
+            [
+              328,
+              88,
+              52
+            ]
+          ]
+        },
+        {
+          "cells": 1,
+          "bbox": [
+            [
+              331,
+              74,
+              52
+            ],
+            [
+              331,
+              74,
+              52
+            ]
+          ]
+        },
+        {
+          "cells": 1,
+          "bbox": [
+            [
+              331,
+              86,
+              52
+            ],
+            [
+              331,
+              86,
+              52
+            ]
+          ]
+        },
+        {
+          "cells": 1,
+          "bbox": [
+            [
+              332,
+              75,
+              51
+            ],
+            [
+              332,
+              75,
+              51
+            ]
+          ]
+        },
+        {
+          "cells": 1,
+          "bbox": [
+            [
+              332,
+              85,
+              51
+            ],
+            [
+              332,
+              85,
+              51
+            ]
+          ]
+        }
+      ]
+    },
+    "side_components": {
+      "P": 30,
+      "S": 30
+    }
+  },
+  "body_delta": {
+    "added": 358,
+    "removed": 0,
+    "changed_existing": 10,
+    "new_mask_unaccounted": 0,
+    "new_mask_not_added": 0,
+    "paint_points": 10,
+    "paint_extra_changes": 0,
+    "paint_missing_changes": 0,
+    "paint_wrong_colors": 0,
+    "changed_examples": [
+      {
+        "point": [
+          319,
+          67,
+          63
+        ],
+        "before": 104,
+        "after": 160
+      },
+      {
+        "point": [
+          319,
+          93,
+          63
+        ],
+        "before": 104,
+        "after": 160
+      },
+      {
+        "point": [
+          320,
+          67,
+          63
+        ],
+        "before": 104,
+        "after": 160
+      },
+      {
+        "point": [
+          320,
+          93,
+          63
+        ],
+        "before": 104,
+        "after": 160
+      },
+      {
+        "point": [
+          321,
+          68,
+          63
+        ],
+        "before": 104,
+        "after": 160
+      },
+      {
+        "point": [
+          321,
+          92,
+          63
+        ],
+        "before": 104,
+        "after": 160
+      },
+      {
+        "point": [
+          322,
+          68,
+          63
+        ],
+        "before": 104,
+        "after": 160
+      },
+      {
+        "point": [
+          322,
+          92,
+          63
+        ],
+        "before": 104,
+        "after": 160
+      },
+      {
+        "point": [
+          323,
+          69,
+          63
+        ],
+        "before": 104,
+        "after": 160
+      },
+      {
+        "point": [
+          323,
+          91,
+          63
+        ],
+        "before": 104,
+        "after": 160
+      }
+    ]
+  },
+  "whole_body_topology": {
+    "components": 1,
+    "closed_air": 0,
+    "details": [
+      {
+        "cells": 176209,
+        "bbox": [
+          [
+            29,
+            38,
+            0
+          ],
+          [
+            340,
+            122,
+            295
+          ]
+        ]
+      }
+    ]
+  },
+  "old_bow_model_active": {
+    "bow-P": false,
+    "bow-S": false
+  },
+  "new_bow_fore_guns": {
+    "deck-fore/swivel-316-P": 0,
+    "deck-fore/swivel-316-P-mount": 0,
+    "deck-fore/swivel-316-S": 0,
+    "deck-fore/swivel-316-S-mount": 0
+  },
+  "new_nameboard_actual": {
+    "at": [
+      26.5,
+      64,
+      67
+    ],
+    "bounds": [
+      [
+        26.5,
+        64.0,
+        67.0
+      ],
+      [
+        27.5,
+        97.0,
+        80.0
+      ]
+    ],
+    "stern_carving_gap_cells": 0.5,
+    "body_intersections": 0
+  },
+  "checksum_u32": 2221512735,
+  "backing_occludes_original_art_outward": [],
+  "original_hull_mask": {
+    "missing": 0,
+    "extra": 0,
+    "color_diff": 0
+  },
+  "fresh_cli_export": {
+    "cells": 176209,
+    "missing": 0,
+    "extra": 0,
+    "color_diff": 0
+  },
+  "method": "Independent raw event replay, recursive enabled-link merge, exact old/new voxel deltas, 6-connectivity and enclosed-air labels, per-voxel transformed model boxes. No author fitting or geometry code imported."
+}

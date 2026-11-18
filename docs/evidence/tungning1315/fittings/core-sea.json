@@ -1,0 +1,949 @@
+{
+  "title": "Blockside（方舷）",
+  "startup": {
+    "mode": {
+      "mode": "sail",
+      "town": null,
+      "berth": null,
+      "can": [
+        {
+          "to": "town",
+          "why": "先按 🏘 停靠（自動開進停靠處）"
+        },
+        {
+          "to": "fight",
+          "why": "附近沒有敵方"
+        }
+      ],
+      "ready": {
+        "why": "要從 Blocksail 地球儀開"
+      },
+      "run": null,
+      "last": null,
+      "docks": {}
+    },
+    "ships": [
+      "tungning_trader"
+    ],
+    "time": 0.1
+  },
+  "ship": "tungning_trader",
+  "checksum": 2221512735,
+  "dt": 0.016666666666666666,
+  "initial": {
+    "t": 0,
+    "xy": [
+      0,
+      84.45
+    ],
+    "yaw": 1.5708,
+    "speed": 0,
+    "draft": 3.8,
+    "waterT": 0,
+    "sunk": false,
+    "modelsLost": [],
+    "ropesBroken": 0,
+    "sailsBroken": 0
+  },
+  "mass": {
+    "light": 137.5475,
+    "standard": 149,
+    "full": 409,
+    "cargo": 260,
+    "cargoShort": 0,
+    "ballast": 272,
+    "actual": 409.3975
+  },
+  "crew": 100,
+  "authoredFlags": 1,
+  "magazines": [
+    8
+  ],
+  "stations": 3,
+  "rooms": [
+    {
+      "name": "deck-hold/room-cargo/cargo",
+      "min": [
+        177,
+        72,
+        8
+      ],
+      "max": [
+        190,
+        86,
+        42
+      ],
+      "m": [
+        1.4,
+        1.5,
+        3.5
+      ],
+      "type": null,
+      "furn": 0,
+      "alive": 0,
+      "items": "",
+      "buff": {},
+      "cap": 0,
+      "eff": 0
+    },
+    {
+      "name": "deck-main/room-crew/crew",
+      "min": [
+        72,
+        88,
+        48
+      ],
+      "max": [
+        85,
+        98,
+        68
+      ],
+      "m": [
+        1.4,
+        1.1,
+        2.1
+      ],
+      "type": null,
+      "furn": 0,
+      "alive": 0,
+      "items": "",
+      "buff": {},
+      "cap": 0,
+      "eff": 0
+    }
+  ],
+  "ladders": [
+    {
+      "name": "ladder-hold/access",
+      "steps": [
+        [
+          160,
+          88,
+          10
+        ],
+        [
+          160,
+          61,
+          47
+        ]
+      ],
+      "ia": [
+        161.5,
+        90.5,
+        8
+      ],
+      "broken": false
+    },
+    {
+      "name": "ladder-poop/access",
+      "steps": [
+        [
+          111,
+          98,
+          50
+        ],
+        [
+          88,
+          98,
+          71
+        ]
+      ],
+      "ia": [
+        113.5,
+        98.5,
+        48
+      ],
+      "broken": false
+    },
+    {
+      "name": "ladder-fore/access",
+      "steps": [
+        [
+          291,
+          80,
+          50
+        ],
+        [
+          299,
+          80,
+          55
+        ]
+      ],
+      "ia": [
+        289.5,
+        80.5,
+        48
+      ],
+      "broken": false
+    },
+    {
+      "name": "ladder-poop-P/access",
+      "steps": [
+        [
+          111,
+          62,
+          50
+        ],
+        [
+          88,
+          62,
+          71
+        ]
+      ],
+      "ia": [
+        113.5,
+        62.5,
+        48
+      ],
+      "broken": false
+    }
+  ],
+  "sailSets": [
+    {
+      "k": 0,
+      "open": [],
+      "flags": 4
+    },
+    {
+      "k": 1,
+      "open": [
+        "fore-junk"
+      ],
+      "flags": 4
+    },
+    {
+      "k": 2,
+      "open": [
+        "fore-junk",
+        "main-junk"
+      ],
+      "flags": 4
+    },
+    {
+      "k": 3,
+      "open": [
+        "fore-junk",
+        "main-junk",
+        "mizzen-junk"
+      ],
+      "flags": 4
+    }
+  ],
+  "straight": {
+    "t": 34,
+    "xy": [
+      0,
+      45.0983
+    ],
+    "yaw": 1.5708,
+    "speed": 2.1797,
+    "draft": 3.8,
+    "waterT": 0,
+    "sunk": false,
+    "modelsLost": [],
+    "ropesBroken": 0,
+    "sailsBroken": 0,
+    "travel": 39.1856
+  },
+  "turn": {
+    "t": 54,
+    "xy": [
+      -39.572,
+      21.4375
+    ],
+    "yaw": 3.7835,
+    "speed": 3.2755,
+    "draft": 3.8,
+    "waterT": 0,
+    "sunk": false,
+    "modelsLost": [],
+    "ropesBroken": 0,
+    "sailsBroken": 0,
+    "degrees": 126.7765,
+    "rudder": [
+      {
+        "path": "rudder",
+        "alive": true
+      },
+      {
+        "path": "deck-poop/tiller",
+        "alive": true
+      }
+    ]
+  },
+  "anchor": {
+    "t": 134,
+    "xy": [
+      -52.5339,
+      36.0609
+    ],
+    "yaw": 4.0544,
+    "speed": 0,
+    "draft": 3.8,
+    "waterT": 0,
+    "sunk": false,
+    "modelsLost": [],
+    "ropesBroken": 0,
+    "sailsBroken": 0,
+    "drift": 0.0008,
+    "held": true,
+    "states": [
+      {
+        "side": "P",
+        "state": "down",
+        "broken": false,
+        "hawse": true
+      },
+      {
+        "side": "S",
+        "state": "down",
+        "broken": false,
+        "hawse": true
+      }
+    ]
+  },
+  "weigh": {
+    "t": 144,
+    "xy": [
+      -51.6136,
+      34.4126
+    ],
+    "yaw": 4.0544,
+    "speed": 0,
+    "draft": 3.8,
+    "waterT": 0,
+    "sunk": false,
+    "modelsLost": [],
+    "ropesBroken": 0,
+    "sailsBroken": 0,
+    "states": [
+      "up",
+      "up"
+    ]
+  },
+  "guns": {
+    "seconds": 30.2167,
+    "rows": [
+      {
+        "id": "gun-15",
+        "type": "pierrier",
+        "muzzle": [
+          316.5,
+          56.5,
+          69.75
+        ],
+        "initial": 2,
+        "crew": 1,
+        "want": 1,
+        "shots": 12,
+        "replenished": 10,
+        "escaped": 12
+      },
+      {
+        "id": "gun-16",
+        "type": "pierrier",
+        "muzzle": [
+          316.5,
+          104.5,
+          69.75
+        ],
+        "initial": 2,
+        "crew": 1,
+        "want": 1,
+        "shots": 8,
+        "replenished": 6,
+        "escaped": 8
+      },
+      {
+        "id": "gun-11",
+        "type": "long6",
+        "muzzle": [
+          281.5,
+          43.25,
+          54.75
+        ],
+        "initial": 2,
+        "crew": 3,
+        "want": 3,
+        "shots": 5,
+        "replenished": 2,
+        "escaped": 5
+      },
+      {
+        "id": "gun-12",
+        "type": "long6",
+        "muzzle": [
+          281.5,
+          117.75,
+          54.75
+        ],
+        "initial": 2,
+        "crew": 3,
+        "want": 3,
+        "shots": 3,
+        "replenished": 1,
+        "escaped": 3
+      },
+      {
+        "id": "gun-9",
+        "type": "long6",
+        "muzzle": [
+          258.5,
+          38.25,
+          54.75
+        ],
+        "initial": 2,
+        "crew": 3,
+        "want": 3,
+        "shots": 5,
+        "replenished": 2,
+        "escaped": 5
+      },
+      {
+        "id": "gun-10",
+        "type": "long6",
+        "muzzle": [
+          258.5,
+          122.75,
+          54.75
+        ],
+        "initial": 2,
+        "crew": 3,
+        "want": 3,
+        "shots": 4,
+        "replenished": 1,
+        "escaped": 4
+      },
+      {
+        "id": "gun-7",
+        "type": "long6",
+        "muzzle": [
+          235.5,
+          33.25,
+          54.75
+        ],
+        "initial": 2,
+        "crew": 3,
+        "want": 3,
+        "shots": 5,
+        "replenished": 2,
+        "escaped": 5
+      },
+      {
+        "id": "gun-8",
+        "type": "long6",
+        "muzzle": [
+          235.5,
+          127.75,
+          54.75
+        ],
+        "initial": 2,
+        "crew": 3,
+        "want": 3,
+        "shots": 4,
+        "replenished": 2,
+        "escaped": 4
+      },
+      {
+        "id": "gun-5",
+        "type": "long6",
+        "muzzle": [
+          210.5,
+          31.25,
+          54.75
+        ],
+        "initial": 2,
+        "crew": 3,
+        "want": 3,
+        "shots": 6,
+        "replenished": 3,
+        "escaped": 6
+      },
+      {
+        "id": "gun-6",
+        "type": "long6",
+        "muzzle": [
+          210.5,
+          129.75,
+          54.75
+        ],
+        "initial": 2,
+        "crew": 3,
+        "want": 3,
+        "shots": 5,
+        "replenished": 3,
+        "escaped": 5
+      },
+      {
+        "id": "gun-3",
+        "type": "long6",
+        "muzzle": [
+          154.5,
+          31.25,
+          54.75
+        ],
+        "initial": 2,
+        "crew": 3,
+        "want": 3,
+        "shots": 7,
+        "replenished": 6,
+        "escaped": 7
+      },
+      {
+        "id": "gun-4",
+        "type": "long6",
+        "muzzle": [
+          154.5,
+          129.75,
+          54.75
+        ],
+        "initial": 2,
+        "crew": 3,
+        "want": 3,
+        "shots": 7,
+        "replenished": 6,
+        "escaped": 7
+      },
+      {
+        "id": "gun-1",
+        "type": "long6",
+        "muzzle": [
+          122.5,
+          32.25,
+          54.75
+        ],
+        "initial": 2,
+        "crew": 3,
+        "want": 3,
+        "shots": 6,
+        "replenished": 5,
+        "escaped": 6
+      },
+      {
+        "id": "gun-2",
+        "type": "long6",
+        "muzzle": [
+          122.5,
+          128.75,
+          54.75
+        ],
+        "initial": 2,
+        "crew": 3,
+        "want": 3,
+        "shots": 6,
+        "replenished": 3,
+        "escaped": 6
+      },
+      {
+        "id": "gun-13",
+        "type": "pierrier",
+        "muzzle": [
+          63.5,
+          43.5,
+          84.75
+        ],
+        "initial": 2,
+        "crew": 1,
+        "want": 1,
+        "shots": 9,
+        "replenished": 7,
+        "escaped": 9
+      },
+      {
+        "id": "gun-14",
+        "type": "pierrier",
+        "muzzle": [
+          63.5,
+          117.5,
+          84.75
+        ],
+        "initial": 2,
+        "crew": 1,
+        "want": 1,
+        "shots": 7,
+        "replenished": 4,
+        "escaped": 7
+      }
+    ],
+    "total": 99,
+    "selfHits": 0,
+    "end": {
+      "t": 174.2167,
+      "xy": [
+        -51.6137,
+        34.4127
+      ],
+      "yaw": 4.0544,
+      "speed": 0,
+      "draft": 3.8,
+      "waterT": 0,
+      "sunk": false,
+      "modelsLost": [],
+      "ropesBroken": 0,
+      "sailsBroken": 0
+    }
+  },
+  "climbs": [
+    {
+      "name": "ladder-hold/access",
+      "rope": false,
+      "down": false,
+      "began": true,
+      "mode": 0,
+      "from": [
+        160.5,
+        90.5,
+        8
+      ],
+      "to": [
+        160.5,
+        60.5,
+        48
+      ],
+      "error": 0
+    },
+    {
+      "name": "ladder-hold/access",
+      "rope": false,
+      "down": true,
+      "began": true,
+      "mode": 0,
+      "from": [
+        160.5,
+        60.5,
+        48
+      ],
+      "to": [
+        160.5,
+        90.5,
+        8
+      ],
+      "error": 0
+    },
+    {
+      "name": "ladder-poop/access",
+      "rope": false,
+      "down": false,
+      "began": true,
+      "mode": 0,
+      "from": [
+        113.5,
+        98.5,
+        48
+      ],
+      "to": [
+        86.5,
+        98.5,
+        72
+      ],
+      "error": 0
+    },
+    {
+      "name": "ladder-poop/access",
+      "rope": false,
+      "down": true,
+      "began": true,
+      "mode": 0,
+      "from": [
+        86.5,
+        98.5,
+        72
+      ],
+      "to": [
+        113.5,
+        98.5,
+        48
+      ],
+      "error": 0
+    },
+    {
+      "name": "ladder-fore/access",
+      "rope": false,
+      "down": false,
+      "began": true,
+      "mode": 0,
+      "from": [
+        289.5,
+        80.5,
+        48
+      ],
+      "to": [
+        300.5,
+        80.5,
+        56
+      ],
+      "error": 0
+    },
+    {
+      "name": "ladder-fore/access",
+      "rope": false,
+      "down": true,
+      "began": true,
+      "mode": 0,
+      "from": [
+        300.5,
+        80.5,
+        56
+      ],
+      "to": [
+        289.5,
+        80.5,
+        48
+      ],
+      "error": 0
+    },
+    {
+      "name": "ladder-poop-P/access",
+      "rope": false,
+      "down": false,
+      "began": true,
+      "mode": 0,
+      "from": [
+        113.5,
+        62.5,
+        48
+      ],
+      "to": [
+        86.5,
+        62.5,
+        72
+      ],
+      "error": 0
+    },
+    {
+      "name": "ladder-poop-P/access",
+      "rope": false,
+      "down": true,
+      "began": true,
+      "mode": 0,
+      "from": [
+        86.5,
+        62.5,
+        72
+      ],
+      "to": [
+        113.5,
+        62.5,
+        48
+      ],
+      "error": 0
+    },
+    {
+      "name": "fore-ratlines-P",
+      "rope": true,
+      "down": false,
+      "began": true,
+      "mode": 0,
+      "from": [
+        290.5,
+        58.5,
+        48
+      ],
+      "to": [
+        282.5,
+        75.5,
+        202
+      ],
+      "error": 0
+    },
+    {
+      "name": "fore-ratlines-P",
+      "rope": true,
+      "down": true,
+      "began": true,
+      "mode": 0,
+      "from": [
+        282.5,
+        75.5,
+        202
+      ],
+      "to": [
+        290.5,
+        58.5,
+        48
+      ],
+      "error": 0
+    },
+    {
+      "name": "fore-ratlines-S",
+      "rope": true,
+      "down": false,
+      "began": true,
+      "mode": 0,
+      "from": [
+        290.5,
+        102.5,
+        48
+      ],
+      "to": [
+        282.5,
+        85.5,
+        202
+      ],
+      "error": 0
+    },
+    {
+      "name": "fore-ratlines-S",
+      "rope": true,
+      "down": true,
+      "began": true,
+      "mode": 0,
+      "from": [
+        282.5,
+        85.5,
+        202
+      ],
+      "to": [
+        290.5,
+        102.5,
+        48
+      ],
+      "error": 0
+    },
+    {
+      "name": "main-ratlines-P",
+      "rope": true,
+      "down": false,
+      "began": true,
+      "mode": 0,
+      "from": [
+        202.5,
+        54.5,
+        48
+      ],
+      "to": [
+        194.5,
+        75.5,
+        285
+      ],
+      "error": 0
+    },
+    {
+      "name": "main-ratlines-P",
+      "rope": true,
+      "down": true,
+      "began": true,
+      "mode": 0,
+      "from": [
+        194.5,
+        75.5,
+        285
+      ],
+      "to": [
+        202.5,
+        54.5,
+        48
+      ],
+      "error": 0
+    },
+    {
+      "name": "main-ratlines-S",
+      "rope": true,
+      "down": false,
+      "began": true,
+      "mode": 0,
+      "from": [
+        202.5,
+        106.5,
+        48
+      ],
+      "to": [
+        194.5,
+        85.5,
+        285
+      ],
+      "error": 0
+    },
+    {
+      "name": "main-ratlines-S",
+      "rope": true,
+      "down": true,
+      "began": true,
+      "mode": 0,
+      "from": [
+        194.5,
+        85.5,
+        285
+      ],
+      "to": [
+        202.5,
+        106.5,
+        48
+      ],
+      "error": 0
+    },
+    {
+      "name": "mizzen-ratlines-P",
+      "rope": true,
+      "down": false,
+      "began": true,
+      "mode": 0,
+      "from": [
+        74.5,
+        65.5,
+        72
+      ],
+      "to": [
+        66.5,
+        75.5,
+        175
+      ],
+      "error": 0
+    },
+    {
+      "name": "mizzen-ratlines-P",
+      "rope": true,
+      "down": true,
+      "began": true,
+      "mode": 0,
+      "from": [
+        66.5,
+        75.5,
+        175
+      ],
+      "to": [
+        74.5,
+        65.5,
+        72
+      ],
+      "error": 0
+    },
+    {
+      "name": "mizzen-ratlines-S",
+      "rope": true,
+      "down": false,
+      "began": true,
+      "mode": 0,
+      "from": [
+        74.5,
+        95.5,
+        72
+      ],
+      "to": [
+        66.5,
+        85.5,
+        175
+      ],
+      "error": 0
+    },
+    {
+      "name": "mizzen-ratlines-S",
+      "rope": true,
+      "down": true,
+      "began": true,
+      "mode": 0,
+      "from": [
+        66.5,
+        85.5,
+        175
+      ],
+      "to": [
+        74.5,
+        95.5,
+        72
+      ],
+      "error": 0
+    }
+  ],
+  "ok": true
+}

@@ -1,0 +1,17 @@
+{
+  "ok": true,
+  "checksum": 2221512735,
+  "board": [
+    26.5,
+    64,
+    67,
+    27.5,
+    97,
+    80
+  ],
+  "meta": {
+    "deco": 1,
+    "id": "model-4"
+  },
+  "bowModels": 0
+}

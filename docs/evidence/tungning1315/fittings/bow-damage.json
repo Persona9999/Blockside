@@ -1,0 +1,42 @@
+{
+  "ok": true,
+  "checksum": 2221512735,
+  "results": [
+    {
+      "deco": false,
+      "before": 358,
+      "after": 347,
+      "removedBow": 11,
+      "shot": {
+        "mat": "oak",
+        "skin": 92,
+        "removed": 27,
+        "deep": 0,
+        "out": 0,
+        "V": 168,
+        "res": null,
+        "uw": false,
+        "dbg": []
+      },
+      "bowModels": 0
+    },
+    {
+      "deco": true,
+      "before": 358,
+      "after": 347,
+      "removedBow": 11,
+      "shot": {
+        "mat": "oak",
+        "skin": 92,
+        "removed": 27,
+        "deep": 0,
+        "out": 0,
+        "V": 168,
+        "res": null,
+        "uw": false,
+        "dbg": []
+      },
+      "bowModels": 0
+    }
+  ]
+}

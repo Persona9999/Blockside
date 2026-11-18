@@ -1,0 +1,23 @@
+{
+  "before": 175851,
+  "artwork": 302,
+  "physical_added": 358,
+  "backing": 66,
+  "repainted": 10,
+  "after": 176209,
+  "components": 1,
+  "enclosed_air": 0,
+  "nameboard_at": [
+    26.5,
+    64,
+    67
+  ],
+  "original_nameboard_at": [
+    28,
+    64,
+    67
+  ],
+  "stern_carving_min_x": 28,
+  "nameboard_back_x": 27.5,
+  "nameboard_min_clearance_m": 0.05
+}
