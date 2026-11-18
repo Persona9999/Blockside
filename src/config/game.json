@@ -2358,6 +2358,45 @@
         "quartermaster": 0
       },
       "floodRim": [[38.5, 38.5, 5], [38.5, 62.5, 5], [96.5, 38.5, 5], [96.5, 62.5, 5]]
+    },
+    {
+      "id": "tungning_trader",
+      "el": "ship-tungning-trader",
+      "name": "東寧三桅洋船",
+      "vxk": "tungning_trader.vxk",
+      "work": "meadow-tungning-trader-01m-assembly",
+      "author": "meadow",
+      "idNext": {
+        "anchor": 3,
+        "binnacle": 2,
+        "boat": 2,
+        "capstan": 2,
+        "deck": 5,
+        "door": 12,
+        "galley": 2,
+        "gun": 17,
+        "gunmount": 5,
+        "ladders": 5,
+        "light": 2,
+        "magazine": 2,
+        "mast": 4,
+        "model": 7,
+        "part": 6,
+        "powder": 9,
+        "rooms": 3,
+        "rudder": 2,
+        "ship": 2,
+        "tiller": 2,
+        "yard": 7
+      },
+      "role": "merchant",
+      "names": ["東寧三桅洋船"],
+      "cargoT": 260,
+      "cfg": {"speed": 1.25, "agile": 1.8, "upwind": 1.1, "pump": 3},
+      "crew": {"officers": 2, "helm": 1, "top": 1, "marines": 6, "marineGap": 12, "monkeys": 2, "handsK": 0.65, "navigator": 1},
+      "geo": {"spar": [48, 72], "marines": [55, 60], "center": 65, "aim": 48, "aimZ": [5, 290], "deckAim": [8, 73], "rigAim": [90, 295]},
+      "gangway": [[204.5, 114.5, 48.5], [204.5, 46.5, 48.5]],
+      "floodRim": [[122.5, 42.5, 52], [122.5, 118.5, 52], [154.5, 41.5, 52], [154.5, 119.5, 52], [210.5, 41.5, 52], [210.5, 119.5, 52], [235.5, 43.5, 52], [235.5, 117.5, 52], [258.5, 48.5, 52], [258.5, 112.5, 52], [281.5, 52.5, 52], [281.5, 108.5, 52]]
     }
   ],
   "furniture": {
@@ -2497,8 +2536,14 @@
       "long8": {"carriage": "reale#gun-2"},
       "pierrier": {"turret": "reale#gun-6"},
       "trident": {"carriage": "tridente#gun-67"},
+      "veniceCannone20": {"carriage": "galeazza#gun-2"},
+      "veniceCannone30": {"carriage": "galeazza#gun-3"},
+      "veniceColubrina14": {"carriage": "galeazza#gun-21"},
+      "veniceColubrina30": {"carriage": "galeazza#gun-5"},
       "veniceCorsiero50": {"carriage": "galea#gun-1"},
-      "veniceFalcone6": {"carriage": "galea#gun-2"}
+      "veniceFalcone3": {"carriage": "galeazza#gun-30"},
+      "veniceFalcone6": {"carriage": "galea#gun-2"},
+      "venicePetriera14": {"turret": "galeazza#gun-7"}
     },
     "oar": {
       "reale#oar-1": "皇家號・oar-S01",
@@ -2534,7 +2579,17 @@
       "fusta#oar-38": "越嶺號・oar-P01o",
       "piragua#oar-1": "杉心號・oar-S1",
       "piragua#oar-2": "杉心號・oar-P1",
-      "gondola#oar-1": "貢多拉・oar-S"
+      "gondola#oar-1": "貢多拉・oar-S",
+      "galea#oar-1": "威尼斯槳帆船・oar-S01",
+      "galea#oar-26": "威尼斯槳帆船・oar-P01",
+      "sandal#oar-1": "突尼斯湖轉運划艇・oar-S1",
+      "sandal#oar-2": "突尼斯湖轉運划艇・oar-P1",
+      "sandal#oar-3": "突尼斯湖轉運划艇・oar-S2",
+      "sandal#oar-4": "突尼斯湖轉運划艇・oar-P2",
+      "galeazza#oar-1": "威尼斯加萊賽戰船・oar-S01",
+      "galeazza#oar-26": "威尼斯加萊賽戰船・oar-P01",
+      "tekpai#oar-1": "台灣帆竹筏・oar-S1",
+      "tekpai#oar-2": "台灣帆竹筏・oar-P1"
     },
     "rudder": {
       "constitution#rudder-1": "憲法號・舵",
@@ -2572,7 +2627,14 @@
       "centurion#rudder-1": "百夫長號・舵",
       "piragua#rudder-1": "杉心號・舵槳",
       "barbados#rudder-1": "巴貝多商人號・舵",
-      "guineaman#rudder-1": "幾內亞船・舵"
+      "guineaman#rudder-1": "幾內亞船・舵",
+      "galea#rudder-1": "威尼斯槳帆船・rudder",
+      "tartane#rudder-1": "塔爾塔納・舵",
+      "bizerte_barque#rudder-1": "比塞大客貨船・rudder",
+      "sandal#rudder-1": "突尼斯湖轉運划艇・舵",
+      "galeazza#rudder-1": "威尼斯加萊賽戰船・舵",
+      "tekpai#rudder-2": "台灣帆竹筏・rudder-main",
+      "tungning_trader#rudder-1": "東寧三桅洋船・rudder"
     },
     "propeller": {
       "virginia#propeller-1": "維吉尼亞號・螺旋槳",
@@ -2611,7 +2673,11 @@
       "tridente#light-1": "三叉戟號・lantern-P",
       "tidegrave#light-1": "潮墓號・艉樓燈-P",
       "pinas#light-1": "藍鯊號・lantern",
-      "concepcion#light-1": "康塞普西翁號・lantern-P"
+      "concepcion#light-1": "康塞普西翁號・lantern-P",
+      "tartane#light-1": "塔爾塔納・尾燈-P",
+      "sandal#light-1": "突尼斯湖轉運划艇・艉燈",
+      "tekpai#light-1": "台灣帆竹筏・lantern-tub",
+      "tungning_trader#light-1": "東寧三桅洋船・stern-lantern"
     },
     "lantern": {"ember#lantern-1": "餘燼號・lantern-C"},
     "boat": {
@@ -2627,7 +2693,9 @@
       "labelle#boat-1": "拉貝爾號・小艇",
       "sanroman#boat-1": "聖羅曼號・小艇",
       "tradewind#boat-1": "信風號・小艇",
-      "boaviagem#boat-1": "好旅號・小艇"
+      "boaviagem#boat-1": "好旅號・小艇",
+      "tartane#boat-1": "塔爾塔納・小艇",
+      "tungning_trader#boat-1": "東寧三桅洋船・boat"
     },
     "capstan": {
       "constitution#capstan-1": "憲法號・capstan",
@@ -2638,9 +2706,17 @@
       "napoleon#capstan-1": "拿破崙號・主絞盤",
       "oxford#capstan-1": "牛津號・絞盤",
       "sanroman#capstan-1": "聖羅曼號・主絞盤",
-      "tradewind#capstan-1": "信風號・絞盤"
+      "tradewind#capstan-1": "信風號・絞盤",
+      "tartane#capstan-1": "塔爾塔納・絞盤",
+      "tungning_trader#capstan-1": "東寧三桅洋船・capstan"
     },
-    "binnacle": {"ember#binnacle-1": "餘燼號・羅經櫃", "falcon#binnacle-1": "夜隼號・羅經櫃", "stormkaap#binnacle-1": "風暴角號・羅經櫃", "dingyuan#binnacle-1": "定遠號・羅經櫃"},
+    "binnacle": {
+      "ember#binnacle-1": "餘燼號・羅經櫃",
+      "falcon#binnacle-1": "夜隼號・羅經櫃",
+      "stormkaap#binnacle-1": "風暴角號・羅經櫃",
+      "dingyuan#binnacle-1": "定遠號・羅經櫃",
+      "tartane#binnacle-1": "塔爾塔納・羅經櫃"
+    },
     "grating": {
       "constitution#grating-1": "憲法號・格柵-main",
       "constitution#grating-2": "憲法號・格柵-main",
@@ -2673,7 +2749,36 @@
       "flyingfish#model-1": "飛魚號・船首像",
       "zeehaen#model-1": "澤漢號・船首像",
       "swallow#model-1": "燕子號・船首像",
-      "guineaman#model-1": "幾內亞船・船首像"
+      "guineaman#model-1": "幾內亞船・船首像",
+      "galea#model-1": "威尼斯槳帆船・interior-fittings",
+      "tartane#model-1": "塔爾塔納・deco-船首像",
+      "tartane#model-2": "塔爾塔納・deco-船尾陽台",
+      "tartane#model-3": "塔爾塔納・deco-船名牌",
+      "tartane#model-10": "塔爾塔納・貨箱-1P",
+      "tartane#model-16": "塔爾塔納・貨箱-4P",
+      "bizerte_barque#model-1": "比塞大客貨船・passenger-shelter",
+      "bizerte_barque#model-2": "比塞大客貨船・cargo-boxes",
+      "sandal#model-1": "突尼斯湖轉運划艇・繫纜柱-艏",
+      "sandal#model-4": "突尼斯湖轉運划艇・護舷-P1",
+      "sandal#model-8": "突尼斯湖轉運划艇・艏飾",
+      "sandal#model-9": "突尼斯湖轉運划艇・艉飾",
+      "sandal#model-16": "突尼斯湖轉運划艇・貨桶-1P",
+      "galeazza#model-1": "威尼斯加萊賽戰船・金飾",
+      "tekpai#model-1": "台灣帆竹筏・fender-p1",
+      "tekpai#model-3": "台灣帆竹筏・fender-s1",
+      "tekpai#model-5": "台灣帆竹筏・pole-spare",
+      "tekpai#model-6": "台灣帆竹筏・bitt-aft-P",
+      "tekpai#model-10": "台灣帆竹筏・awning-tub",
+      "tekpai#model-11": "台灣帆竹筏・coil-fwd",
+      "tekpai#model-13": "台灣帆竹筏・cargo-barrel-1",
+      "tekpai#model-14": "台灣帆竹筏・cargo-crate-1",
+      "tekpai#model-15": "台灣帆竹筏・cargo-crate-2",
+      "tungning_trader#model-1": "東寧三桅洋船・bow-P",
+      "tungning_trader#model-2": "東寧三桅洋船・bow-S",
+      "tungning_trader#model-3": "東寧三桅洋船・stern-carving",
+      "tungning_trader#model-4": "東寧三桅洋船・nameboard",
+      "tungning_trader#model-5": "東寧三桅洋船・furniture",
+      "tungning_trader#model-6": "東寧三桅洋船・mazu-shrine"
     },
     "anchor": {
       "falcon#anchor-1": "夜隼號・錨-S",
@@ -2733,7 +2838,17 @@
       "barbados#anchor-2": "巴貝多商人號・錨-P",
       "guineaman#anchor-1": "幾內亞船・錨-S",
       "guineaman#anchor-2": "幾內亞船・錨-P",
-      "gondola#anchor-1": "貢多拉・錨-S"
+      "gondola#anchor-1": "貢多拉・錨-S",
+      "galea#anchor-1": "威尼斯槳帆船・anchor-P",
+      "galea#anchor-2": "威尼斯槳帆船・anchor-S",
+      "tartane#anchor-1": "塔爾塔納・錨-S",
+      "tartane#anchor-2": "塔爾塔納・錨-P",
+      "bizerte_barque#anchor-1": "比塞大客貨船・anchor-P",
+      "sandal#anchor-1": "突尼斯湖轉運划艇・錨-S",
+      "galeazza#anchor-1": "威尼斯加萊賽戰船・錨-S",
+      "galeazza#anchor-2": "威尼斯加萊賽戰船・錨-P",
+      "tekpai#anchor-1": "台灣帆竹筏・anchor-S",
+      "tungning_trader#anchor-1": "東寧三桅洋船・anchor-P"
     },
     "engine": {
       "virginia#engine-1": "維吉尼亞號・機艙",

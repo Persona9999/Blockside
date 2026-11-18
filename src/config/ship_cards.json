@@ -51,6 +51,7 @@
     "bizerte_barque": {"tons": 23, "len": 11, "guns": 0, "gunTypes": {}, "volley": 0, "drive": "sail", "sails": 2, "crew": 12},
     "sandal": {"tons": 6, "len": 9.1, "guns": 0, "gunTypes": {}, "volley": 0, "drive": "oar", "sails": 1, "crew": 10},
     "galeazza": {"tons": 509, "len": 52.9, "guns": 32, "gunTypes": {"veniceCorsiero50": 2, "veniceColubrina14": 4, "veniceCannone20": 2, "veniceFalcone6": 2, "venicePetriera14": 12, "veniceCannone30": 6, "veniceFalcone3": 2, "veniceColubrina30": 2}, "volley": 187, "drive": "oar", "sails": 3, "crew": 490},
-    "tekpai": {"tons": 6, "len": 8.7, "guns": 0, "gunTypes": {}, "volley": 0, "drive": "oar", "sails": 1, "crew": 8}
+    "tekpai": {"tons": 6, "len": 8.7, "guns": 0, "gunTypes": {}, "volley": 0, "drive": "oar", "sails": 1, "crew": 8},
+    "tungning_trader": {"tons": 409, "len": 28.5, "guns": 16, "gunTypes": {"pierrier": 4, "long6": 12}, "volley": 36, "drive": "sail", "sails": 3, "crew": 100}
   }
 }

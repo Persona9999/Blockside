@@ -1,5 +1,5 @@
 {
- "atlasSHA256": "60a00cce46168cc1c2e5f15da0ed8b85524b18c13dc630beefa3ab13136350de",
+ "atlasSHA256": "39a8428e1ac07500d35027e0fbd329cc7cc5bd2bf551ed3383b9f23f83f76f25",
  "cols": 6,
  "h": 160,
  "icons": {
@@ -199,12 +199,16 @@
    0,
    8
   ],
-  "virginia": [
+  "tungning_trader": [
    1,
    8
   ],
-  "zeehaen": [
+  "virginia": [
    2,
+   8
+  ],
+  "zeehaen": [
+   3,
    8
   ]
  },
@@ -261,6 +265,7 @@
    "tower_galata": "f19c15a96121d4913e7cded931ef101faf85190fad209f749af301be2ab9a8f7",
    "tradewind": "0b85472dcc07a03d0aba783e5d0ef1b5153c030497ec0b506d7b128a37048174",
    "tridente": "2f04985af8bc7a3adb028f4c754891f08eb6c416adc4fb8f92038489271cb2e3",
+   "tungning_trader": "fed098c0ad06dfe7b7b65a6047e2aa363efa2cbcf6dc1a760a77eb5be045e234",
    "virginia": "a63360b7325782b6264268e803ece8d8989eb00d0696db23218f39de4602b77f",
    "zeehaen": "5af1e8475b3c73b75aa53678d7986385aa420cb0d21f9425fa0f7535da7a6aa0"
   }

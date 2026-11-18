@@ -1,0 +1,6 @@
+[
+  {"label":"intact-storm","hull":"tungning_trader","dur":180,"sea":1,"weather":"storm","mode":3},
+  {"label":"small-default-pump","hull":"tungning_trader","dur":180,"auto":"small","mode":3},
+  {"label":"large-default-pump","hull":"tungning_trader","dur":600,"auto":"large","stopAtSink":true,"mode":3},
+  {"label":"large-pump-off","hull":"tungning_trader","dur":600,"auto":"large","stopAtSink":true,"pump":0,"mode":3}
+]
