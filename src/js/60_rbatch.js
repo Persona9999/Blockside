@@ -75,7 +75,7 @@ function rbatT(x, p) {
 }
 /** 模型的局部矩陣：modelLocal(m)；只有平移的那條（modelLocal0 最後一行、沒有 m.hd）⇒ 留著的那一份。判斷照 modelLocal0 的順序（每格重判）。 */
 function rbatModelL(m) {
-  if (m.swM || m.sw || (m.spinB && m.spinB.mt) || (m.rot && m.piv) || m.hd) return modelLocal(m);
+  if (m.swM || m.sw || (m.spinB && m.spinB.mt) || (m.rot && m.piv) || m.hd || m.fdz) return modelLocal(m);
   return rbatT(m, m.origin);
 }
 // 平滑面那幾區（Map 的 forEach）：照這一個的 this 加（⛔ 每格不生閉包）；slot ＝ 這一項第一區在 Map 裡第幾個（0 ⇒ 這一份網格的第一項：設矩陣、燈熄）

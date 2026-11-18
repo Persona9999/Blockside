@@ -2335,7 +2335,7 @@
       "vxk": "tekpai.vxk",
       "work": "pinnacle-tekpai-01m-assembly",
       "author": "pinnacle",
-      "idNext": {"anchor": 2, "deck": 2, "light": 2, "mast": 2, "model": 16, "rudder": 3, "ship": 2, "yard": 3},
+      "idNext": {"anchor": 2, "deck": 2, "light": 2, "mast": 2, "model": 16, "rudder": 3, "ship": 2, "yard": 7},
       "role": "merchant",
       "cargoT": 1.5,
       "fireEngine": false,

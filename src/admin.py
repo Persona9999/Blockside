@@ -2240,6 +2240,7 @@ def act_shipcheck(ids=None):
               '砲身與砲座（座 ＝ 模型 meta kind=gunmount、mount_of；開火只退砲身、座跟著砲塔轉；砲 meta pitch ＋ 固定點 trunnion ⇒ 砲身照瞄準上下轉；只是畫面，TASK-0836）：' + (I.get('gunmount') or '—'), '',
               '照參數轉的子物件（模型 meta spin；舵、舵輪跟著舵角轉，只是畫面，TASK-0640）：' + (I.get('spins') or '—'), '',
               '裝飾（模型 meta deco=1；載入時拿掉、畫質「裝飾」開著才畫，不算重量、不被打，TASK-0682）：' + (I.get('deco') or '—'), '',
+              '硬骨帆的竹篾（帆 meta battens；竹篾 ＝ 帆桁模型 yard=batten、batten=<m>，那一列綁在桿上，TASK-1320；造船規格 Ship_Battens）：' + (I.get('battens') or '—'), '',
               '廚房（模型 meta kind=galley；廚師站在爐灶旁、預備水手當伙夫去領飯，TASK-0720）：' + (I.get('galley') or '—'), '',
               '額外動力（TASK-0630；輸出物件 份量；主機／軸／鍋爐 照造船規格 §9.6；槳 §9.10，TASK-0691）：' + (I.get('drive') or '—（沒有 cfg.base）'), '',
               '動力件（TASK-0653；關聯 meta kind=engine／boiler／shaft／steampipe 的格子清單，照剩幾成、通不通算）：' + (I.get('drvparts') or '—'), '',

@@ -33,7 +33,7 @@ function rcpModel(rig, frame, ref) {
 /** 一面帆的配方 ⇒ { verts, tris, uv, bmeta, cornerIdx }（verts／tris 照匯出端的雙面排列）。
  *  clew[k]：ends 指名角 k 的那條繩的端點（吹鼓時釘在那裡）；null ⇒ 沒有繩指名（綁住的角照設計位置釘、自由的讓它吹）。
  *  bmeta：每個點綁在哪（-1 不綁；k ＝ 角 k；100 + e ＝ bind 的第 e 條邊）—— 給 clothBindMeta。 */
-function sailFromRecipe(R, clew, sMeta) {
+function sailFromRecipe(R, clew, sMeta, rods) {                    // rods：硬骨帆第 m 根竹篾有實體桿（rcpBattens；TASK-1320）⇒ 那一列整排綁在桿上
   var C = R.corners, nc = C.length, res = Math.max(1, R.res | 0), full = +R.fullness || 1, X = [], UV = [], id = {}, i, j, k;
   var battens = nc === 4 ? Math.max(0, (R.battens || (sMeta && +sMeta.battens)) | 0) : 0, bStep = 0;
   if (battens > 0) {
@@ -105,6 +105,16 @@ function sailFromRecipe(R, clew, sMeta) {
     for (var t = 0; t <= res; t++) { var q = gl(a0[0] + Math.trunc((a1[0] - a0[0]) * t / res), a0[1] + Math.trunc((a1[1] - a0[1]) * t / res)); if (q >= 0) bmeta[q] = 100 + e; }
   });
   for (k = 0; k < nc; k++) if (pins[k] || bind.indexOf(k) >= 0 || bind.indexOf((k + nc - 1) % nc) >= 0) bmeta[cornerIdx[k]] = k;
+  // 硬骨帆的實體竹篾（TASK-1320；Tim 2026-11-18「讓硬骨類似帆桁(有實體 帆會有一段黏在上面)」）：第 m 根（從上往下數，meta batten=m）有桿 ⇒ 那一列整排綁上去（200 ＋ m）
+  //   哪一頭是上：角 0、1 那條邊（j ＝ 0）比角 2、3 那條高 ⇒ 第 m 根在 j ＝ m × bStep；不然從 j ＝ res 往上數
+  if (bStep > 0 && rods) {
+    var top0 = C[0][2] + C[1][2] >= C[2][2] + C[3][2];
+    for (var mb = 1; mb <= battens; mb++) {
+      if (!rods[mb]) continue;
+      var jr = top0 ? mb * bStep : res - mb * bStep;
+      for (i = 0; i <= res; i++) { var qb = gl(i, jr); if (qb >= 0 && bmeta[qb] < 0) bmeta[qb] = 200 + mb; }
+    }
+  }
   // 吹鼓（風壓同 clothStep：每個三角形沿法線推 KW ×（相對風在法線上的分量）²，相對風扣掉布自己的速度；每點取平均）
   var p = Float32Array.from(X), pin = new Uint8Array(n);
   for (i = 0; i < n; i++) if (bmeta[i] >= 0) pin[i] = 1;
@@ -165,7 +175,8 @@ function sailRecipeAt(T, C, k, R) {
       var L = M[s.name + '/' + nm]; if (!L) return null;
       var P = T.rig.ropes[L[0].j].pts, m = P.length; return L[0].e === 0 ? [P[0], P[1], P[2]] : [P[m - 3], P[m - 2], P[m - 1]];
     });
-    g = sailFromRecipe(s.recipe, clew, s.meta);
+    var bt = rcpBattens(T.rig, s.name);
+    g = sailFromRecipe(s.recipe, clew, s.meta, Object.keys(bt).length ? bt : null);
   }
   if (DEBUG && s.verts && !s.verts0) s.verts0 = s.verts;               // 讀數用（__game.sailDev）：成品還帶著雕刻引擎的頂點時（原格式、改之前的成品）留著比
   s.verts = g.verts; s.tris = g.tris; s.bmeta = g.bmeta; s.cornerIdx = g.cornerIdx;
@@ -176,14 +187,23 @@ function sailRecipeEnd(T, R) {
   if (T.keep) T.keep.sails = R.n ? R.out : null;
   return R.n;
 }
+/** 硬骨帆的實體竹篾（TASK-1320）：這面帆的竹篾桿 ⇒ { m: 模型編號 }（帆桁模型 meta yard=batten、sail ＝ 帆名、batten ＝ 從上往下第幾根）。
+ *  綁定照 meta（⛔ 不照高度猜哪一根是哪一列）；沒有桿的帆 ⇒ {}（照 v1：竹篾列只是布上比較硬的一排）。 */
+function rcpBattens(rig, sail) {
+  var out = {};
+  (rig.models || []).forEach(function (m, k) { var mt = m.meta || {}; if (mt.kind === 'yard' && mt.yard === 'batten' && mt.sail === sail && +mt.batten > 0) out[+mt.batten | 0] = k; });
+  return out;
+}
 /** 布料模板的綁定照 meta（見檔頭 ④）：n ＝ 正面的點數、P(q) ＝ 那一點的位置。回 { hk, hv, clews, clewYard, tm }：
  *  hk：0 不綁、1 格、2 繩、3 找不到靠的（帆還在就綁著）、4 模型（同 clothTemplate）；tm：帆腳被哪條繩的哪一端拉著（給 tethOf，不照距離找）。 */
 function clothBindMeta(H, s, n, P) {
   var R = s.recipe, rig = H.rig, nc = R.corners.length, hk = new Int8Array(n), hv = new Int32Array(n).fill(-1), clewYard = {}, tm = [], clews = 0, M = rcpRopeEnds(rig), mod = [], k;
   for (k = 0; k < nc; k++) mod.push(rcpModel(rig, R.frame, (R.refs || [])[k]));
   function cell(q) { var w = P(q), an = anchorNear(H, w[0], w[1], w[2], 6); if (an >= 0) { hk[q] = 1; hv[q] = an; } else hk[q] = 3; }   // 部件固定點、座標 ⇒ 那個位置上的格
+  var bt = rcpBattens(rig, s.name);
   for (var q = 0; q < n; q++) {
     var b = s.bmeta[q]; if (b < 0) continue;
+    if (b >= 200) { var bm = bt[b - 200]; if (bm !== undefined) { hk[q] = 4; hv[q] = bm; } continue; }   // 竹篾那一列 ⇒ 綁在那根竹篾桿（跟著它轉、它被打掉就鬆開）
     if (b < 100) { if (mod[b] >= 0) { hk[q] = 4; hv[q] = mod[b]; } else cell(q); }
     else { var e = b - 100, ma = mod[e], mb = mod[(e + 1) % nc]; if (ma >= 0 && ma === mb) { hk[q] = 4; hv[q] = ma; } else cell(q); }
   }
