@@ -519,7 +519,7 @@ function hitModel(sh, L, m, skip, nb) {                                 // skip�
 function rotZ(P, piv, a) { var c = Math.cos(a), s = Math.sin(a), x = P[0] - piv[0], y = P[1] - piv[1]; return [piv[0] + x * c - y * s, piv[1] + x * s + y * c, P[2]]; }
 function unrotL(o, L) { return rotZ(L, o.piv, -o.rot); }
 /** 模型在船的格座標裡的擺法：平移到 origin；帆桁另外繞轉軸轉 rot；掛在砲塔上（m.hd，27_turret.js）⇒ 再照砲塔現在的角度。 */
-function modelLocal(m) { var L = modelLocal0(m), H = m.hd && ndMat(m.hd); return H ? M4.mul(H, L) : L; }
+function modelLocal(m) { var L = modelLocal0(m), H = m.hd && ndMat(m.hd); if (m.fdz) L = M4.mul(trans(0, 0, -m.fdz), L); return H ? M4.mul(H, L) : L; }   // fdz：硬骨帆落篷，帆桁、竹篾往下疊（30_rig_physics.js battenDrop；只是畫）
 function modelLocal0(m) {
   if (m.swM) { var u = m.spv; return M4.mul(M4.mul(M4.mul(trans(u[0], u[1], u[2]), m.swM), trans(-u[0], -u[1], -u[2])), trans(m.origin[0], m.origin[1], m.origin[2])); }   // 繞 spv 套一整個轉動（划槳：掃＋抬，31_drive.js oarAnim；只是畫面）
   var mt = m.spinB && m.spinB.mt;                                       // 照砲轉的零件掛在迴旋砲上（26_spin.js：投石機的投臂）⇒ 繞自己的軸轉完、再繞砲的中心轉砲的 yaw
@@ -874,6 +874,8 @@ function segDist2(p, ax, ay, az, bx, by, bz) {
  *  ⛔ 亂數照抽、只是不撒 ⇒ 開或關物理，後面的亂數序列一樣（戰局不變）。 */
 function dropSail(owner, s, torn) {
   s.dead = true; owner.rigDirty = true; sailLinesDie(owner, s);
+  // ⛔ 硬骨帆的竹篾不跟著帆掉（TASK-1320 第二版）：帆「掉了」多半是 sheet 被打斷（s.par），布照樣綁在上下帆桁上掛著 ⇒ 竹篾一起打掉，畫面上剩一面沒有桿的帆
+  //   （Tim 2026-11-18「竹篾會一次全部被打掉(且命中的位置好像是船身 懷疑是打到纜索固定處?)」）。竹篾只在自己被打斷、或上帆桁掉了（10_ship.js restOn）才掉。
   if (s.furled) {                                                    // 收著的：沒有布片；物理開著 ⇒ 從收好的那一捲放下來、垂下來（30_rig_physics.js physVis 的 fdrop），跟張開時掉的一樣；物理關著照舊不畫
     var fc = PHYS && owner.cl ? owner.cl[s.k] : null;
     if (fc && !fc.gone && !fc.loose) { fc.late = true; fc.fdrop = true; }

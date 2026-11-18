@@ -86,6 +86,11 @@ function makeShipSteps(i, team, yaw, pz, T, px) {
   sh.models.forEach(function (o) {
     var r = o.meta.rests_on;
     if (r !== undefined && r !== '') { var p = refPath(T, r); o.restOn = sh.models.filter(function (q) { return q !== o && q.path === p; })[0] || null; return; }
+    if (o.meta.kind === 'yard' && o.meta.yard === 'batten') {          // 硬骨帆的竹篾（TASK-1320）：吊在同一面帆的上帆桁下（帆頂那根，不是竹篾）⇒ 上帆桁被打飛、掉了 ⇒ 竹篾跟著掉（⛔ 不然整排桿浮在半空）
+      o.restOn = null;
+      sh.models.forEach(function (q) { var qm = q.meta; if (q !== o && qm.kind === 'yard' && qm.yard !== 'batten' && qm.sail === o.meta.sail && q.piv && (!o.restOn || q.piv[2] > o.restOn.piv[2])) o.restOn = q; });
+      return;
+    }
     if (o.meta.kind !== 'wheel') return;
     var b = o.bb; o.restOn = sh.models.filter(function (q) { var c = q.bb; return q.meta.kind === 'wheel_stand' && c[0] <= b[3] + 1 && c[3] >= b[0] - 1 && c[1] <= b[4] + 1 && c[4] >= b[1] - 1 && c[2] <= b[5] + 1 && c[5] >= b[2] - 1; })[0] || null;
   });

@@ -141,6 +141,27 @@ function shipCheck(id) {
       if (m.kind === 'yard' && ((!mt.sail && hasSail) || (!mt.mast && !/bowsprit|艏斜桅/.test(m.path)))) add('warn', '帆桁', m.path, '帆桁 meta 少了 ' + [!mt.sail && hasSail && 'sail（有一面帆叫 ' + sn + '）', !mt.mast && 'mast'].filter(Boolean).join('、') + ' ⇒ 照名字配帆／桅', '帆桁 meta sail=<帆名>、mast=<桅>（造船規格 §9.1）');
       if (!m.alive && !GUNS[m.kind] && !kindProp(m.kind, 'noFall')) add('error', '開場就掉', m.path, (mt.kind || m.kind) + ' 開場 ' + SC_SECS + ' 秒內就判成沒東西撐、掉了（腳 z ' + (m.foot >> 21) + '）', '把它接到實心上；掛著的（燈、舵）登記掛點固定點（bail、stock-top）');
     });
+    // ── 硬骨帆的實體竹篾（TASK-1320；Ship_Rigging §7「實體竹篾桿」）：每面 battens 帆 —— 幾根有桿、綁住幾列、桿離它那一列多遠 ──
+    var BT = [];
+    sh.sails.forEach(function (s) {
+      var C = T.cloth && T.cloth[s.k], N = C && C.battens || 0; if (!N) return;
+      var rods = rcpBattens(T.rig, s.name), ks = Object.keys(rods).map(Number), res = Math.round(Math.sqrt(C.n)) - 1, bStep = res / (N + 1);
+      ks.forEach(function (m) { if (m > N) add('warn', '竹篾', T.rig.models[rods[m]].name, 'meta batten=' + m + ' 比帆 ' + s.name + ' 的 battens=' + N + ' 多 ⇒ 沒有那一列、不綁', 'batten 寫 1..' + N + '（從上往下數）'); });
+      if (!ks.length) { BT.push(s.name + '：竹篾 ' + N + ' 根都沒有桿（只是比較硬的一排布）'); return; }
+      if (ks.length < N) add('warn', '竹篾', s.name, N + ' 根竹篾只有 ' + ks.length + ' 根有桿（缺 ' + Array.from({ length: N }, function (_, i) { return i + 1; }).filter(function (m) { return !(m in rods); }).join('、') + '）⇒ 那幾列只是比較硬的一排布', '每一根都掛一個 yard=batten 的模型（batten=<m>）');
+      var bound = 0, far = 0, farM = 0, top0 = C.p0[2] + C.p0[res * 3 + 2] >= C.p0[(res * (res + 1)) * 3 + 2] + C.p0[(res * (res + 1) + res) * 3 + 2];
+      ks.forEach(function (m) {
+        if (m > N || bStep !== Math.floor(bStep)) return;
+        var md = T.rig.models[rods[m]], pt = md.points || {}, a = pt['arm-P'] || pt.pivot, b = pt['arm-S'] || pt.pivot, j = top0 ? m * bStep : res - m * bStep;
+        for (var i = 0; i <= res; i++) {
+          var q = j * (res + 1) + i; if (C.hk[q] === 4 && C.hv[q] === rods[m]) bound++;
+          if (a && b) { var d = Math.sqrt(segDist2([C.p0[q * 3], C.p0[q * 3 + 1], C.p0[q * 3 + 2]], a[0], a[1], a[2], b[0], b[1], b[2])); if (d > far) { far = d; farM = m; } }
+        }
+      });
+      if (far > 1.5) add('warn', '竹篾', s.name, '第 ' + farM + ' 根竹篾離它那一列布最遠 ' + far.toFixed(2) + ' 格 ⇒ 布綁在離桿這麼遠的地方（看起來浮著）', '桿照帆的配方擺：轉軸高度 ＝ 上帆桁 ＋（下帆桁 − 上帆桁）× m／(N＋1)（Ship_Rigging §7）');
+      BT.push(s.name + '：竹篾 ' + ks.length + '／' + N + ' 根有桿、綁住 ' + bound + ' 點（' + ks.length + ' 列 × ' + (res + 1) + '）、桿離那一列最遠 ' + far.toFixed(2) + ' 格');
+    });
+    if (BT.length) R.info.battens = BT.join('；');
     // ── 動力（TASK-0630；造船規格 §9.6）：主機 → 軸 → 螺旋槳、鍋爐 ──
     var DV = sh.drive, DC = DV && DV.C, DP = DV ? DV.P.filter(function (q) { return q.kind !== 'sail' && q.kind !== 'rudder'; }) : [];
     // ── 操舵（TASK-0777，31_drive.js「操舵」）：每支舵的鏈（舵令 ⇒ 舵輪／舵柄（＋舵索）⇒ 舵）與份量；差動（兩舷都有動力）；沒有舵模型 ⇒ 看不見的舵（退路） ──

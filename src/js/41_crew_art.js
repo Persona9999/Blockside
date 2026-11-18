@@ -255,6 +255,7 @@ function heldItem(sh, c, f) {
  *  ⛔ c.face 只有 ±1（面向左舷或右舷）⇒ 站在爐灶船頭、船尾那一面的人從側面看會背對爐灶、湯杓朝外。只給畫面用，不碰模擬。 */
 function crewFaceAt(c, sh) {
   if (c.role === ROLE.COOK && c.gal) return c.gal.m.c;
+  if (c.role === ROLE.HELM && sh.helmTil && c.st === 0) return sh.helmTil.at;     // 舵柄船的舵手面向握把（40_crew.js makeCrew；TASK-1317）
   if (c.role === ROLE.STOKER && c.boil) return drvParts(sh.T).B[c.boil[0]].seats[c.boil[1]];   // 司爐面向他那座鍋爐（TASK-1092）
   var J = c.hand && c.hand.job; if (!J || !J.at) return null;
   if (J.kind === 'eat') return J.gal ? J.gal.m.c : null;

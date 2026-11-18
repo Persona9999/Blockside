@@ -597,7 +597,7 @@ function callHands(sh) {
     if (pn > 0 && sh.stations.some(function (s) { return s.deck === D.key && !s.mag.gone; })) need.push({ kind: 'pm', key: D.key, deck: D.key, lv: lv, n: pn, x: sh.T.cx, pri: 1, reg: needReg(sh, lv, dp ? dp.home : pg && pg.drop) });
   });
   if (sh.ahs) ahNeeds(sh, NV, need, going);                            // 揚弾手倒了（23_powder.js）—— 沒有揚弾機 ⇒ 不加
-  var wheel = sh.models.filter(function (m) { return m.kind === 'wheel'; })[0], hd = sh.crew.filter(function (c) { return (c.role === ROLE.HELM && !crewAble(c) || c.helmHome) && !c.relieved; });   // helmHome：從甲板破洞掉下去的舵手（40_crew.js landIn），站位照原本的
+  var wheel = sh.models.filter(function (m) { return m.kind === 'wheel'; })[0] || (sh.helmTil && sh.helmTil.m), hd = sh.crew.filter(function (c) { return (c.role === ROLE.HELM && !crewAble(c) || c.helmHome) && !c.relieved; });   // helmHome：從甲板破洞掉下去的舵手（40_crew.js landIn），站位照原本的
   var hn = Math.min(hd.length, NV.helm0 - sh.crew.filter(function (c) { return c.role === ROLE.HELM && crewAble(c); }).length - (going.helm || 0));
   if (wheel && wheel.alive && hn > 0) {
     var hh = function (c) { return c.helmHome || c.home; }, lvh = lvAt(sh, hh(hd[0]));

@@ -200,7 +200,7 @@ function survey(sh) {               // 每半秒量一次：砲還在不在、�
   sh.sails.forEach(function (s) {
     // 收著的帆也量（Tim 2026-11-05：憲法號的三角帆收著、支索靠的那根斜桅被打斷 ⇒ 那一捲浮在原處，放帆才掉）：收著的只是不怕被打（21_gunnery.js），靠的東西不在一樣掉（dropSail 從那一捲放下來）
     if (!s.dead && (s.as.some(function (a) { return !hullGp(sh.grid, a); }) || s.par.some(function (j) { return sh.ropes[j].dead; }) ||
-        (s.yards || []).some(function (y) { return !y.alive && !y.moved; }))) dropSail(sh, s);   // 掛它的帆桁被打斷或掉了 ⇒ 帆掉
+        (s.yards || []).some(function (y) { return y.yk !== 'batten' && !y.alive && !y.moved; }))) dropSail(sh, s);   // 掛它的帆桁被打斷或掉了 ⇒ 帆掉（硬骨帆的竹篾斷一根 ⇒ 只鬆開那一列布，帆還掛在上下帆桁上；TASK-1320）
   });
   if (DEBUG) { sv1 = performance.now(); SV_PROF.st += sv1 - sv0; sv0 = sv1; }
   svRest(sh, sv0);
