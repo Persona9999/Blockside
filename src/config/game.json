@@ -2359,6 +2359,39 @@
         "quartermaster": 0
       },
       "floodRim": [[38.5, 38.5, 5], [38.5, 62.5, 5], [96.5, 38.5, 5], [96.5, 62.5, 5]]
+    },
+    {
+      "id": "kroon",
+      "role": "merchant",
+      "el": "ship-kroon",
+      "name": "金冠號",
+      "vxk": "kroon.vxk",
+      "work": "pinnacle-voc-01m-assembly",
+      "geo": {"spar": [80, 135], "marines": [60, 190], "center": 100, "aim": 75, "aimZ": [30, 470], "deckAim": [62, 98], "rigAim": [190, 460]},
+      "names": ["金冠號"],
+      "author": "pinnacle",
+      "idNext": {
+        "anchor": 3,
+        "binnacle": 2,
+        "boat": 2,
+        "capstan": 2,
+        "deck": 7,
+        "door": 9,
+        "galley": 2,
+        "gun": 39,
+        "gunfittings": 2,
+        "ladders": 6,
+        "light": 2,
+        "magazine": 2,
+        "mast": 5,
+        "part": 9,
+        "portlid": 39,
+        "powder": 65,
+        "rudder": 2,
+        "ship": 2,
+        "tiller": 2,
+        "yard": 11
+      }
     }
   ],
   "furniture": {

@@ -1,5 +1,5 @@
 {
- "atlasSHA256": "396ceb3129ab86e55ec61aad8818cfee09933c773f0c2176b76b7a1c31155428",
+ "atlasSHA256": "db012923a6144dd5e8a98834404ba93949007ec4f617b891a788adc650faadc6",
  "cols": 6,
  "h": 160,
  "icons": {
@@ -107,104 +107,108 @@
    1,
    4
   ],
-  "labelle": [
+  "kroon": [
    2,
+   4
+  ],
+  "labelle": [
+   3,
    4
   ],
   "matsushima": [
-   3,
+   4,
    4
   ],
   "monitor": [
-   4,
+   5,
    4
   ],
   "napoleon": [
-   5,
-   4
+   0,
+   5
   ],
   "nightlamp": [
-   0,
+   1,
    5
   ],
   "oxford": [
-   1,
+   2,
    5
   ],
   "phoenix": [
-   2,
+   3,
    5
   ],
   "pinas": [
-   3,
+   4,
    5
   ],
   "piragua": [
-   4,
+   5,
    5
   ],
   "punt": [
-   5,
-   5
+   0,
+   6
   ],
   "reale": [
-   0,
+   1,
    6
   ],
   "sandal": [
-   1,
+   2,
    6
   ],
   "sanroman": [
-   2,
+   3,
    6
   ],
   "sentinel": [
-   3,
+   4,
    6
   ],
   "stormkaap": [
-   4,
+   5,
    6
   ],
   "susquehanna": [
-   5,
-   6
+   0,
+   7
   ],
   "swallow": [
-   0,
+   1,
    7
   ],
   "tartane": [
-   1,
+   2,
    7
   ],
   "tekpai": [
-   2,
-   7
-  ],
-  "tidegrave": [
    3,
    7
   ],
-  "tower_galata": [
+  "tidegrave": [
    4,
    7
   ],
-  "tradewind": [
+  "tower_galata": [
    5,
    7
   ],
-  "tridente": [
+  "tradewind": [
    0,
    8
   ],
-  "virginia": [
+  "tridente": [
    1,
    8
   ],
-  "zeehaen": [
+  "virginia": [
    2,
+   8
+  ],
+  "zeehaen": [
+   3,
    8
   ]
  },
@@ -238,6 +242,7 @@
    "gloire": "b31f872b14aedf99499ac16c24820671dcf042e3f45ceb4517310e8fa7993a9f",
    "gondola": "d95131919b192f952dea25541ec591f979a76e1bdb64450fea3a04286e250e43",
    "guineaman": "2f31dcd13649051c857043d595564b0f7aa506a250ff5f8cc3ed46b1e96bdd7c",
+   "kroon": "79691102aae20fca889b9ce99080a096f8b1ab2a17e63df92692c3f3a8b361cb",
    "labelle": "b4d96cd75ae092ab76cbe873095032fa655129de6b6c3feacf4eef6cf05ea7b1",
    "matsushima": "c6768056584e5634c6f4db89f4ad14f99949f1324a0fafd3def7e57e1ac0803c",
    "monitor": "d9157a8790386823040080f5b8cc6b7b7549b0a11e0dd85b026377198ddb62aa",
