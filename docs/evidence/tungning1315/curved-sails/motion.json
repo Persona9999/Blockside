@@ -1,0 +1,1671 @@
+{
+  "title": "Blockside（方舷）",
+  "checksum": 2221512735,
+  "crew": 100,
+  "recipe": [
+    {
+      "name": "fore-junk",
+      "roach": [
+        0.16,
+        0.04645
+      ],
+      "corners": [
+        [
+          249.2,
+          80.5,
+          212.68
+        ],
+        [
+          292.17,
+          80.5,
+          199.54
+        ],
+        [
+          295.46,
+          80.5,
+          72.5
+        ],
+        [
+          237.86,
+          80.5,
+          72.5
+        ]
+      ]
+    },
+    {
+      "name": "main-junk",
+      "roach": [
+        0.16,
+        0.03765
+      ],
+      "corners": [
+        [
+          130.26,
+          80.5,
+          298.92
+        ],
+        [
+          209.62,
+          80.5,
+          276.17
+        ],
+        [
+          214.66,
+          80.5,
+          77.5
+        ],
+        [
+          108.82,
+          80.5,
+          77.5
+        ]
+      ]
+    },
+    {
+      "name": "mizzen-junk",
+      "roach": [
+        0.16,
+        0.06316
+      ],
+      "corners": [
+        [
+          42.79,
+          80.5,
+          180.85
+        ],
+        [
+          75.86,
+          80.5,
+          171.99
+        ],
+        [
+          79.25,
+          80.5,
+          92.5
+        ],
+        [
+          34.2,
+          80.5,
+          92.5
+        ]
+      ]
+    }
+  ],
+  "states": [
+    {
+      "label": "open",
+      "sails": [
+        {
+          "name": "fore-junk",
+          "battens": 7,
+          "bound": 231,
+          "maxGap": 0.05005,
+          "rods": [
+            {
+              "name": "mast-fore/batten-01",
+              "pitchDelta": 0,
+              "drop": 0,
+              "rotation": -0.7
+            },
+            {
+              "name": "mast-fore/batten-02",
+              "pitchDelta": 0,
+              "drop": 0,
+              "rotation": -0.7
+            },
+            {
+              "name": "mast-fore/batten-03",
+              "pitchDelta": 0,
+              "drop": 0,
+              "rotation": -0.7
+            },
+            {
+              "name": "mast-fore/batten-04",
+              "pitchDelta": 0,
+              "drop": 0,
+              "rotation": -0.7
+            },
+            {
+              "name": "mast-fore/batten-05",
+              "pitchDelta": 0,
+              "drop": 0,
+              "rotation": -0.7
+            },
+            {
+              "name": "mast-fore/batten-06",
+              "pitchDelta": 0,
+              "drop": 0,
+              "rotation": -0.7
+            },
+            {
+              "name": "mast-fore/batten-07",
+              "pitchDelta": 0,
+              "drop": 0,
+              "rotation": -0.7
+            }
+          ]
+        },
+        {
+          "name": "main-junk",
+          "battens": 9,
+          "bound": 369,
+          "maxGap": 0.05101,
+          "rods": [
+            {
+              "name": "mast-main/batten-01",
+              "pitchDelta": 0,
+              "drop": 0,
+              "rotation": -0.7
+            },
+            {
+              "name": "mast-main/batten-02",
+              "pitchDelta": 0,
+              "drop": 0,
+              "rotation": -0.7
+            },
+            {
+              "name": "mast-main/batten-03",
+              "pitchDelta": 0,
+              "drop": 0,
+              "rotation": -0.7
+            },
+            {
+              "name": "mast-main/batten-04",
+              "pitchDelta": 0,
+              "drop": 0,
+              "rotation": -0.7
+            },
+            {
+              "name": "mast-main/batten-05",
+              "pitchDelta": 0,
+              "drop": 0,
+              "rotation": -0.7
+            },
+            {
+              "name": "mast-main/batten-06",
+              "pitchDelta": 0,
+              "drop": 0,
+              "rotation": -0.7
+            },
+            {
+              "name": "mast-main/batten-07",
+              "pitchDelta": 0,
+              "drop": 0,
+              "rotation": -0.7
+            },
+            {
+              "name": "mast-main/batten-08",
+              "pitchDelta": 0,
+              "drop": 0,
+              "rotation": -0.7
+            },
+            {
+              "name": "mast-main/batten-09",
+              "pitchDelta": 0,
+              "drop": 0,
+              "rotation": -0.7
+            }
+          ]
+        },
+        {
+          "name": "mizzen-junk",
+          "battens": 5,
+          "bound": 125,
+          "maxGap": 0.05037,
+          "rods": [
+            {
+              "name": "mast-mizzen/batten-01",
+              "pitchDelta": 0,
+              "drop": 0,
+              "rotation": -0.7
+            },
+            {
+              "name": "mast-mizzen/batten-02",
+              "pitchDelta": 0,
+              "drop": 0,
+              "rotation": -0.7
+            },
+            {
+              "name": "mast-mizzen/batten-03",
+              "pitchDelta": 0,
+              "drop": 0,
+              "rotation": -0.7
+            },
+            {
+              "name": "mast-mizzen/batten-04",
+              "pitchDelta": 0,
+              "drop": 0,
+              "rotation": -0.7
+            },
+            {
+              "name": "mast-mizzen/batten-05",
+              "pitchDelta": 0,
+              "drop": 0,
+              "rotation": -0.7
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "label": "turn",
+      "sails": [
+        {
+          "name": "fore-junk",
+          "battens": 7,
+          "bound": 231,
+          "maxGap": 0.05005,
+          "rods": [
+            {
+              "name": "mast-fore/batten-01",
+              "pitchDelta": 0,
+              "drop": 0,
+              "rotation": -0.7
+            },
+            {
+              "name": "mast-fore/batten-02",
+              "pitchDelta": 0,
+              "drop": 0,
+              "rotation": -0.7
+            },
+            {
+              "name": "mast-fore/batten-03",
+              "pitchDelta": 0,
+              "drop": 0,
+              "rotation": -0.7
+            },
+            {
+              "name": "mast-fore/batten-04",
+              "pitchDelta": 0,
+              "drop": 0,
+              "rotation": -0.7
+            },
+            {
+              "name": "mast-fore/batten-05",
+              "pitchDelta": 0,
+              "drop": 0,
+              "rotation": -0.7
+            },
+            {
+              "name": "mast-fore/batten-06",
+              "pitchDelta": 0,
+              "drop": 0,
+              "rotation": -0.7
+            },
+            {
+              "name": "mast-fore/batten-07",
+              "pitchDelta": 0,
+              "drop": 0,
+              "rotation": -0.7
+            }
+          ]
+        },
+        {
+          "name": "main-junk",
+          "battens": 9,
+          "bound": 369,
+          "maxGap": 0.05101,
+          "rods": [
+            {
+              "name": "mast-main/batten-01",
+              "pitchDelta": 0,
+              "drop": 0,
+              "rotation": -0.7
+            },
+            {
+              "name": "mast-main/batten-02",
+              "pitchDelta": 0,
+              "drop": 0,
+              "rotation": -0.7
+            },
+            {
+              "name": "mast-main/batten-03",
+              "pitchDelta": 0,
+              "drop": 0,
+              "rotation": -0.7
+            },
+            {
+              "name": "mast-main/batten-04",
+              "pitchDelta": 0,
+              "drop": 0,
+              "rotation": -0.7
+            },
+            {
+              "name": "mast-main/batten-05",
+              "pitchDelta": 0,
+              "drop": 0,
+              "rotation": -0.7
+            },
+            {
+              "name": "mast-main/batten-06",
+              "pitchDelta": 0,
+              "drop": 0,
+              "rotation": -0.7
+            },
+            {
+              "name": "mast-main/batten-07",
+              "pitchDelta": 0,
+              "drop": 0,
+              "rotation": -0.7
+            },
+            {
+              "name": "mast-main/batten-08",
+              "pitchDelta": 0,
+              "drop": 0,
+              "rotation": -0.7
+            },
+            {
+              "name": "mast-main/batten-09",
+              "pitchDelta": 0,
+              "drop": 0,
+              "rotation": -0.7
+            }
+          ]
+        },
+        {
+          "name": "mizzen-junk",
+          "battens": 5,
+          "bound": 125,
+          "maxGap": 0.05037,
+          "rods": [
+            {
+              "name": "mast-mizzen/batten-01",
+              "pitchDelta": 0,
+              "drop": 0,
+              "rotation": -0.7
+            },
+            {
+              "name": "mast-mizzen/batten-02",
+              "pitchDelta": 0,
+              "drop": 0,
+              "rotation": -0.7
+            },
+            {
+              "name": "mast-mizzen/batten-03",
+              "pitchDelta": 0,
+              "drop": 0,
+              "rotation": -0.7
+            },
+            {
+              "name": "mast-mizzen/batten-04",
+              "pitchDelta": 0,
+              "drop": 0,
+              "rotation": -0.7
+            },
+            {
+              "name": "mast-mizzen/batten-05",
+              "pitchDelta": 0,
+              "drop": 0,
+              "rotation": -0.7
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "label": "lowering 0.1",
+      "sails": [
+        {
+          "name": "fore-junk",
+          "battens": 7,
+          "bound": 231,
+          "maxGap": 0.05002,
+          "furl": 0.916666666666667,
+          "rods": [
+            {
+              "name": "mast-fore/batten-01",
+              "pitchDelta": -0.00527,
+              "drop": 2.14827,
+              "rotation": -0.7
+            },
+            {
+              "name": "mast-fore/batten-02",
+              "pitchDelta": -0.00403,
+              "drop": 1.84133,
+              "rotation": -0.7
+            },
+            {
+              "name": "mast-fore/batten-03",
+              "pitchDelta": -0.00307,
+              "drop": 1.53439,
+              "rotation": -0.7
+            },
+            {
+              "name": "mast-fore/batten-04",
+              "pitchDelta": -0.00231,
+              "drop": 1.22744,
+              "rotation": -0.7
+            },
+            {
+              "name": "mast-fore/batten-05",
+              "pitchDelta": -0.00166,
+              "drop": 0.9205,
+              "rotation": -0.7
+            },
+            {
+              "name": "mast-fore/batten-06",
+              "pitchDelta": -0.00108,
+              "drop": 0.61356,
+              "rotation": -0.7
+            },
+            {
+              "name": "mast-fore/batten-07",
+              "pitchDelta": -0.00053,
+              "drop": 0.30662,
+              "rotation": -0.7
+            }
+          ]
+        },
+        {
+          "name": "main-junk",
+          "battens": 9,
+          "bound": 369,
+          "maxGap": 0.05101,
+          "furl": 0.916666666666667,
+          "rods": [
+            {
+              "name": "mast-main/batten-01",
+              "pitchDelta": -0.00526,
+              "drop": 3.45079,
+              "rotation": -0.7
+            },
+            {
+              "name": "mast-main/batten-02",
+              "pitchDelta": -0.00424,
+              "drop": 3.06734,
+              "rotation": -0.7
+            },
+            {
+              "name": "mast-main/batten-03",
+              "pitchDelta": -0.00343,
+              "drop": 2.68388,
+              "rotation": -0.7
+            },
+            {
+              "name": "mast-main/batten-04",
+              "pitchDelta": -0.00276,
+              "drop": 2.30042,
+              "rotation": -0.7
+            },
+            {
+              "name": "mast-main/batten-05",
+              "pitchDelta": -0.00219,
+              "drop": 1.91696,
+              "rotation": -0.7
+            },
+            {
+              "name": "mast-main/batten-06",
+              "pitchDelta": -0.00169,
+              "drop": 1.53351,
+              "rotation": -0.7
+            },
+            {
+              "name": "mast-main/batten-07",
+              "pitchDelta": -0.00124,
+              "drop": 1.15005,
+              "rotation": -0.7
+            },
+            {
+              "name": "mast-main/batten-08",
+              "pitchDelta": -0.00081,
+              "drop": 0.7666,
+              "rotation": -0.7
+            },
+            {
+              "name": "mast-main/batten-09",
+              "pitchDelta": -0.0004,
+              "drop": 0.38314,
+              "rotation": -0.7
+            }
+          ]
+        },
+        {
+          "name": "mizzen-junk",
+          "battens": 5,
+          "bound": 125,
+          "maxGap": 0.05036,
+          "furl": 0.916666666666667,
+          "rods": [
+            {
+              "name": "mast-mizzen/batten-01",
+              "pitchDelta": -0.00427,
+              "drop": 1.29039,
+              "rotation": -0.7
+            },
+            {
+              "name": "mast-mizzen/batten-02",
+              "pitchDelta": -0.00294,
+              "drop": 1.03225,
+              "rotation": -0.7
+            },
+            {
+              "name": "mast-mizzen/batten-03",
+              "pitchDelta": -0.002,
+              "drop": 0.7741,
+              "rotation": -0.7
+            },
+            {
+              "name": "mast-mizzen/batten-04",
+              "pitchDelta": -0.00126,
+              "drop": 0.51595,
+              "rotation": -0.7
+            },
+            {
+              "name": "mast-mizzen/batten-05",
+              "pitchDelta": -0.00061,
+              "drop": 0.25781,
+              "rotation": -0.7
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "label": "lowering 0.3",
+      "sails": [
+        {
+          "name": "fore-junk",
+          "battens": 7,
+          "bound": 231,
+          "maxGap": 0.05002,
+          "furl": 0.6666666666666679,
+          "rods": [
+            {
+              "name": "mast-fore/batten-01",
+              "pitchDelta": -0.06795,
+              "drop": 28.30668,
+              "rotation": -0.7
+            },
+            {
+              "name": "mast-fore/batten-02",
+              "pitchDelta": -0.0529,
+              "drop": 24.26225,
+              "rotation": -0.7
+            },
+            {
+              "name": "mast-fore/batten-03",
+              "pitchDelta": -0.04085,
+              "drop": 20.21782,
+              "rotation": -0.7
+            },
+            {
+              "name": "mast-fore/batten-04",
+              "pitchDelta": -0.03086,
+              "drop": 16.17339,
+              "rotation": -0.7
+            },
+            {
+              "name": "mast-fore/batten-05",
+              "pitchDelta": -0.02222,
+              "drop": 12.12897,
+              "rotation": -0.7
+            },
+            {
+              "name": "mast-fore/batten-06",
+              "pitchDelta": -0.01442,
+              "drop": 8.08457,
+              "rotation": -0.7
+            },
+            {
+              "name": "mast-fore/batten-07",
+              "pitchDelta": -0.00708,
+              "drop": 4.04019,
+              "rotation": -0.7
+            }
+          ]
+        },
+        {
+          "name": "main-junk",
+          "battens": 9,
+          "bound": 369,
+          "maxGap": 0.05107,
+          "furl": 0.6666666666666679,
+          "rods": [
+            {
+              "name": "mast-main/batten-01",
+              "pitchDelta": -0.06742,
+              "drop": 45.46927,
+              "rotation": -0.7
+            },
+            {
+              "name": "mast-main/batten-02",
+              "pitchDelta": -0.05526,
+              "drop": 40.41665,
+              "rotation": -0.7
+            },
+            {
+              "name": "mast-main/batten-03",
+              "pitchDelta": -0.04517,
+              "drop": 35.36404,
+              "rotation": -0.7
+            },
+            {
+              "name": "mast-main/batten-04",
+              "pitchDelta": -0.03662,
+              "drop": 30.31143,
+              "rotation": -0.7
+            },
+            {
+              "name": "mast-main/batten-05",
+              "pitchDelta": -0.02919,
+              "drop": 25.25882,
+              "rotation": -0.7
+            },
+            {
+              "name": "mast-main/batten-06",
+              "pitchDelta": -0.02258,
+              "drop": 20.20622,
+              "rotation": -0.7
+            },
+            {
+              "name": "mast-main/batten-07",
+              "pitchDelta": -0.01652,
+              "drop": 15.15362,
+              "rotation": -0.7
+            },
+            {
+              "name": "mast-main/batten-08",
+              "pitchDelta": -0.01083,
+              "drop": 10.10103,
+              "rotation": -0.7
+            },
+            {
+              "name": "mast-main/batten-09",
+              "pitchDelta": -0.00535,
+              "drop": 5.04845,
+              "rotation": -0.7
+            }
+          ]
+        },
+        {
+          "name": "mizzen-junk",
+          "battens": 5,
+          "bound": 125,
+          "maxGap": 0.05031,
+          "furl": 0.6666666666666679,
+          "rods": [
+            {
+              "name": "mast-mizzen/batten-01",
+              "pitchDelta": -0.05524,
+              "drop": 17.00284,
+              "rotation": -0.7
+            },
+            {
+              "name": "mast-mizzen/batten-02",
+              "pitchDelta": -0.03893,
+              "drop": 13.60136,
+              "rotation": -0.7
+            },
+            {
+              "name": "mast-mizzen/batten-03",
+              "pitchDelta": -0.02671,
+              "drop": 10.19989,
+              "rotation": -0.7
+            },
+            {
+              "name": "mast-mizzen/batten-04",
+              "pitchDelta": -0.01683,
+              "drop": 6.79843,
+              "rotation": -0.7
+            },
+            {
+              "name": "mast-mizzen/batten-05",
+              "pitchDelta": -0.00815,
+              "drop": 3.397,
+              "rotation": -0.7
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "label": "lowering 0.6",
+      "sails": [
+        {
+          "name": "fore-junk",
+          "battens": 7,
+          "bound": 231,
+          "maxGap": 0.05038,
+          "furl": 0.1666666666666683,
+          "rods": [
+            {
+              "name": "mast-fore/batten-01",
+              "pitchDelta": -0.226,
+              "drop": 101.09529,
+              "rotation": -0.7
+            },
+            {
+              "name": "mast-fore/batten-02",
+              "pitchDelta": -0.18565,
+              "drop": 86.65089,
+              "rotation": -0.7
+            },
+            {
+              "name": "mast-fore/batten-03",
+              "pitchDelta": -0.14862,
+              "drop": 72.2065,
+              "rotation": -0.7
+            },
+            {
+              "name": "mast-fore/batten-04",
+              "pitchDelta": -0.11452,
+              "drop": 57.7621,
+              "rotation": -0.7
+            },
+            {
+              "name": "mast-fore/batten-05",
+              "pitchDelta": -0.08294,
+              "drop": 43.31775,
+              "rotation": -0.7
+            },
+            {
+              "name": "mast-fore/batten-06",
+              "pitchDelta": -0.05349,
+              "drop": 28.87347,
+              "rotation": -0.7
+            },
+            {
+              "name": "mast-fore/batten-07",
+              "pitchDelta": -0.02585,
+              "drop": 14.42923,
+              "rotation": -0.7
+            }
+          ]
+        },
+        {
+          "name": "main-junk",
+          "battens": 9,
+          "bound": 369,
+          "maxGap": 0.05124,
+          "furl": 0.1666666666666683,
+          "rods": [
+            {
+              "name": "mast-main/batten-01",
+              "pitchDelta": -0.22076,
+              "drop": 162.39026,
+              "rotation": -0.7
+            },
+            {
+              "name": "mast-main/batten-02",
+              "pitchDelta": -0.18959,
+              "drop": 144.34518,
+              "rotation": -0.7
+            },
+            {
+              "name": "mast-main/batten-03",
+              "pitchDelta": -0.16052,
+              "drop": 126.30013,
+              "rotation": -0.7
+            },
+            {
+              "name": "mast-main/batten-04",
+              "pitchDelta": -0.13336,
+              "drop": 108.25511,
+              "rotation": -0.7
+            },
+            {
+              "name": "mast-main/batten-05",
+              "pitchDelta": -0.10791,
+              "drop": 90.21006,
+              "rotation": -0.7
+            },
+            {
+              "name": "mast-main/batten-06",
+              "pitchDelta": -0.08396,
+              "drop": 72.16506,
+              "rotation": -0.7
+            },
+            {
+              "name": "mast-main/batten-07",
+              "pitchDelta": -0.06134,
+              "drop": 54.12007,
+              "rotation": -0.7
+            },
+            {
+              "name": "mast-main/batten-08",
+              "pitchDelta": -0.03987,
+              "drop": 36.07511,
+              "rotation": -0.7
+            },
+            {
+              "name": "mast-main/batten-09",
+              "pitchDelta": -0.01942,
+              "drop": 18.03019,
+              "rotation": -0.7
+            }
+          ]
+        },
+        {
+          "name": "mizzen-junk",
+          "battens": 5,
+          "bound": 125,
+          "maxGap": 0.05022,
+          "furl": 0.1666666666666683,
+          "rods": [
+            {
+              "name": "mast-mizzen/batten-01",
+              "pitchDelta": -0.18609,
+              "drop": 60.72442,
+              "rotation": -0.7
+            },
+            {
+              "name": "mast-mizzen/batten-02",
+              "pitchDelta": -0.14007,
+              "drop": 48.57629,
+              "rotation": -0.7
+            },
+            {
+              "name": "mast-mizzen/batten-03",
+              "pitchDelta": -0.09939,
+              "drop": 36.42819,
+              "rotation": -0.7
+            },
+            {
+              "name": "mast-mizzen/batten-04",
+              "pitchDelta": -0.06302,
+              "drop": 24.28012,
+              "rotation": -0.7
+            },
+            {
+              "name": "mast-mizzen/batten-05",
+              "pitchDelta": -0.03002,
+              "drop": 12.13214,
+              "rotation": -0.7
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "label": "lowering 5",
+      "sails": [
+        {
+          "name": "fore-junk",
+          "battens": 7,
+          "bound": 231,
+          "maxGap": 0.05039,
+          "furl": null,
+          "rods": [
+            {
+              "name": "mast-fore/batten-01",
+              "pitchDelta": -0.24201,
+              "drop": 109.18292,
+              "rotation": -0.7
+            },
+            {
+              "name": "mast-fore/batten-02",
+              "pitchDelta": -0.19997,
+              "drop": 93.58297,
+              "rotation": -0.7
+            },
+            {
+              "name": "mast-fore/batten-03",
+              "pitchDelta": -0.16077,
+              "drop": 77.98302,
+              "rotation": -0.7
+            },
+            {
+              "name": "mast-fore/batten-04",
+              "pitchDelta": -0.12419,
+              "drop": 62.38307,
+              "rotation": -0.7
+            },
+            {
+              "name": "mast-fore/batten-05",
+              "pitchDelta": -0.09002,
+              "drop": 46.78317,
+              "rotation": -0.7
+            },
+            {
+              "name": "mast-fore/batten-06",
+              "pitchDelta": -0.05802,
+              "drop": 31.18335,
+              "rotation": -0.7
+            },
+            {
+              "name": "mast-fore/batten-07",
+              "pitchDelta": -0.02799,
+              "drop": 15.58357,
+              "rotation": -0.7
+            }
+          ]
+        },
+        {
+          "name": "main-junk",
+          "battens": 9,
+          "bound": 369,
+          "maxGap": 0.05137,
+          "furl": null,
+          "rods": [
+            {
+              "name": "mast-main/batten-01",
+              "pitchDelta": -0.23604,
+              "drop": 175.38148,
+              "rotation": -0.7
+            },
+            {
+              "name": "mast-main/batten-02",
+              "pitchDelta": -0.20372,
+              "drop": 155.8928,
+              "rotation": -0.7
+            },
+            {
+              "name": "mast-main/batten-03",
+              "pitchDelta": -0.17317,
+              "drop": 136.40415,
+              "rotation": -0.7
+            },
+            {
+              "name": "mast-main/batten-04",
+              "pitchDelta": -0.14429,
+              "drop": 116.91551,
+              "rotation": -0.7
+            },
+            {
+              "name": "mast-main/batten-05",
+              "pitchDelta": -0.11697,
+              "drop": 97.42687,
+              "rotation": -0.7
+            },
+            {
+              "name": "mast-main/batten-06",
+              "pitchDelta": -0.09108,
+              "drop": 77.93827,
+              "rotation": -0.7
+            },
+            {
+              "name": "mast-main/batten-07",
+              "pitchDelta": -0.06653,
+              "drop": 58.44967,
+              "rotation": -0.7
+            },
+            {
+              "name": "mast-main/batten-08",
+              "pitchDelta": -0.0432,
+              "drop": 38.96112,
+              "rotation": -0.7
+            },
+            {
+              "name": "mast-main/batten-09",
+              "pitchDelta": -0.02101,
+              "drop": 19.4726,
+              "rotation": -0.7
+            }
+          ]
+        },
+        {
+          "name": "mizzen-junk",
+          "battens": 5,
+          "bound": 125,
+          "maxGap": 0.05022,
+          "furl": null,
+          "rods": [
+            {
+              "name": "mast-mizzen/batten-01",
+              "pitchDelta": -0.19959,
+              "drop": 65.58238,
+              "rotation": -0.7
+            },
+            {
+              "name": "mast-mizzen/batten-02",
+              "pitchDelta": -0.15133,
+              "drop": 52.4624,
+              "rotation": -0.7
+            },
+            {
+              "name": "mast-mizzen/batten-03",
+              "pitchDelta": -0.10782,
+              "drop": 39.34245,
+              "rotation": -0.7
+            },
+            {
+              "name": "mast-mizzen/batten-04",
+              "pitchDelta": -0.06842,
+              "drop": 26.22253,
+              "rotation": -0.7
+            },
+            {
+              "name": "mast-mizzen/batten-05",
+              "pitchDelta": -0.03254,
+              "drop": 13.10271,
+              "rotation": -0.7
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "label": "raising 0.1",
+      "sails": [
+        {
+          "name": "fore-junk",
+          "battens": 7,
+          "bound": 231,
+          "maxGap": 0.05041,
+          "furl": 0.05208333333333333,
+          "rods": [
+            {
+              "name": "mast-fore/batten-01",
+              "pitchDelta": -0.24032,
+              "drop": 108.32524,
+              "rotation": -0.7
+            },
+            {
+              "name": "mast-fore/batten-02",
+              "pitchDelta": -0.19846,
+              "drop": 92.84783,
+              "rotation": -0.7
+            },
+            {
+              "name": "mast-fore/batten-03",
+              "pitchDelta": -0.15948,
+              "drop": 77.37042,
+              "rotation": -0.7
+            },
+            {
+              "name": "mast-fore/batten-04",
+              "pitchDelta": -0.12316,
+              "drop": 61.89302,
+              "rotation": -0.7
+            },
+            {
+              "name": "mast-fore/batten-05",
+              "pitchDelta": -0.08926,
+              "drop": 46.41566,
+              "rotation": -0.7
+            },
+            {
+              "name": "mast-fore/batten-06",
+              "pitchDelta": -0.05754,
+              "drop": 30.93839,
+              "rotation": -0.7
+            },
+            {
+              "name": "mast-fore/batten-07",
+              "pitchDelta": -0.02776,
+              "drop": 15.46116,
+              "rotation": -0.7
+            }
+          ]
+        },
+        {
+          "name": "main-junk",
+          "battens": 9,
+          "bound": 369,
+          "maxGap": 0.05133,
+          "furl": 0.05208333333333333,
+          "rods": [
+            {
+              "name": "mast-main/batten-01",
+              "pitchDelta": -0.23443,
+              "drop": 174.00378,
+              "rotation": -0.7
+            },
+            {
+              "name": "mast-main/batten-02",
+              "pitchDelta": -0.20223,
+              "drop": 154.66819,
+              "rotation": -0.7
+            },
+            {
+              "name": "mast-main/batten-03",
+              "pitchDelta": -0.17183,
+              "drop": 135.33263,
+              "rotation": -0.7
+            },
+            {
+              "name": "mast-main/batten-04",
+              "pitchDelta": -0.14313,
+              "drop": 115.99709,
+              "rotation": -0.7
+            },
+            {
+              "name": "mast-main/batten-05",
+              "pitchDelta": -0.116,
+              "drop": 96.66154,
+              "rotation": -0.7
+            },
+            {
+              "name": "mast-main/batten-06",
+              "pitchDelta": -0.09032,
+              "drop": 77.32603,
+              "rotation": -0.7
+            },
+            {
+              "name": "mast-main/batten-07",
+              "pitchDelta": -0.06598,
+              "drop": 57.99052,
+              "rotation": -0.7
+            },
+            {
+              "name": "mast-main/batten-08",
+              "pitchDelta": -0.04285,
+              "drop": 38.65507,
+              "rotation": -0.7
+            },
+            {
+              "name": "mast-main/batten-09",
+              "pitchDelta": -0.02084,
+              "drop": 19.31964,
+              "rotation": -0.7
+            }
+          ]
+        },
+        {
+          "name": "mizzen-junk",
+          "battens": 5,
+          "bound": 125,
+          "maxGap": 0.05022,
+          "furl": 0.05208333333333333,
+          "rods": [
+            {
+              "name": "mast-mizzen/batten-01",
+              "pitchDelta": -0.19816,
+              "drop": 65.0672,
+              "rotation": -0.7
+            },
+            {
+              "name": "mast-mizzen/batten-02",
+              "pitchDelta": -0.15014,
+              "drop": 52.05028,
+              "rotation": -0.7
+            },
+            {
+              "name": "mast-mizzen/batten-03",
+              "pitchDelta": -0.10693,
+              "drop": 39.0334,
+              "rotation": -0.7
+            },
+            {
+              "name": "mast-mizzen/batten-04",
+              "pitchDelta": -0.06785,
+              "drop": 26.01654,
+              "rotation": -0.7
+            },
+            {
+              "name": "mast-mizzen/batten-05",
+              "pitchDelta": -0.03227,
+              "drop": 12.99978,
+              "rotation": -0.7
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "label": "raising 0.3",
+      "sails": [
+        {
+          "name": "fore-junk",
+          "battens": 7,
+          "bound": 231,
+          "maxGap": 0.05032,
+          "furl": 0.23958333333333323,
+          "rods": [
+            {
+              "name": "mast-fore/batten-01",
+              "pitchDelta": -0.21045,
+              "drop": 93.38456,
+              "rotation": -0.7
+            },
+            {
+              "name": "mast-fore/batten-02",
+              "pitchDelta": -0.1719,
+              "drop": 80.04186,
+              "rotation": -0.7
+            },
+            {
+              "name": "mast-fore/batten-03",
+              "pitchDelta": -0.13707,
+              "drop": 66.69916,
+              "rotation": -0.7
+            },
+            {
+              "name": "mast-fore/batten-04",
+              "pitchDelta": -0.10538,
+              "drop": 53.35647,
+              "rotation": -0.7
+            },
+            {
+              "name": "mast-fore/batten-05",
+              "pitchDelta": -0.07626,
+              "drop": 40.01382,
+              "rotation": -0.7
+            },
+            {
+              "name": "mast-fore/batten-06",
+              "pitchDelta": -0.04921,
+              "drop": 26.67123,
+              "rotation": -0.7
+            },
+            {
+              "name": "mast-fore/batten-07",
+              "pitchDelta": -0.02383,
+              "drop": 13.32869,
+              "rotation": -0.7
+            }
+          ]
+        },
+        {
+          "name": "main-junk",
+          "battens": 9,
+          "bound": 369,
+          "maxGap": 0.05119,
+          "furl": 0.23958333333333323,
+          "rods": [
+            {
+              "name": "mast-main/batten-01",
+              "pitchDelta": -0.20588,
+              "drop": 150.00443,
+              "rotation": -0.7
+            },
+            {
+              "name": "mast-main/batten-02",
+              "pitchDelta": -0.17596,
+              "drop": 133.33569,
+              "rotation": -0.7
+            },
+            {
+              "name": "mast-main/batten-03",
+              "pitchDelta": -0.14842,
+              "drop": 116.66697,
+              "rotation": -0.7
+            },
+            {
+              "name": "mast-main/batten-04",
+              "pitchDelta": -0.12297,
+              "drop": 99.99828,
+              "rotation": -0.7
+            },
+            {
+              "name": "mast-main/batten-05",
+              "pitchDelta": -0.09933,
+              "drop": 83.32956,
+              "rotation": -0.7
+            },
+            {
+              "name": "mast-main/batten-06",
+              "pitchDelta": -0.07723,
+              "drop": 66.66089,
+              "rotation": -0.7
+            },
+            {
+              "name": "mast-main/batten-07",
+              "pitchDelta": -0.05643,
+              "drop": 49.99222,
+              "rotation": -0.7
+            },
+            {
+              "name": "mast-main/batten-08",
+              "pitchDelta": -0.03671,
+              "drop": 33.32359,
+              "rotation": -0.7
+            },
+            {
+              "name": "mast-main/batten-09",
+              "pitchDelta": -0.0179,
+              "drop": 16.65499,
+              "rotation": -0.7
+            }
+          ]
+        },
+        {
+          "name": "mizzen-junk",
+          "battens": 5,
+          "bound": 125,
+          "maxGap": 0.05023,
+          "furl": 0.23958333333333323,
+          "rods": [
+            {
+              "name": "mast-mizzen/batten-01",
+              "pitchDelta": -0.17302,
+              "drop": 56.09285,
+              "rotation": -0.7
+            },
+            {
+              "name": "mast-mizzen/batten-02",
+              "pitchDelta": -0.12932,
+              "drop": 44.87128,
+              "rotation": -0.7
+            },
+            {
+              "name": "mast-mizzen/batten-03",
+              "pitchDelta": -0.09142,
+              "drop": 33.64974,
+              "rotation": -0.7
+            },
+            {
+              "name": "mast-mizzen/batten-04",
+              "pitchDelta": -0.05792,
+              "drop": 22.42823,
+              "rotation": -0.7
+            },
+            {
+              "name": "mast-mizzen/batten-05",
+              "pitchDelta": -0.02764,
+              "drop": 11.2068,
+              "rotation": -0.7
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "label": "raising 0.6",
+      "sails": [
+        {
+          "name": "fore-junk",
+          "battens": 7,
+          "bound": 231,
+          "maxGap": 0.05007,
+          "furl": 0.6145833333333333,
+          "rods": [
+            {
+              "name": "mast-fore/batten-01",
+              "pitchDelta": -0.08617,
+              "drop": 36.15416,
+              "rotation": -0.7
+            },
+            {
+              "name": "mast-fore/batten-02",
+              "pitchDelta": -0.06747,
+              "drop": 30.98848,
+              "rotation": -0.7
+            },
+            {
+              "name": "mast-fore/batten-03",
+              "pitchDelta": -0.0523,
+              "drop": 25.82281,
+              "rotation": -0.7
+            },
+            {
+              "name": "mast-fore/batten-04",
+              "pitchDelta": -0.03958,
+              "drop": 20.65714,
+              "rotation": -0.7
+            },
+            {
+              "name": "mast-fore/batten-05",
+              "pitchDelta": -0.02851,
+              "drop": 15.49149,
+              "rotation": -0.7
+            },
+            {
+              "name": "mast-fore/batten-06",
+              "pitchDelta": -0.01849,
+              "drop": 10.32586,
+              "rotation": -0.7
+            },
+            {
+              "name": "mast-fore/batten-07",
+              "pitchDelta": -0.00907,
+              "drop": 5.16025,
+              "rotation": -0.7
+            }
+          ]
+        },
+        {
+          "name": "main-junk",
+          "battens": 9,
+          "bound": 369,
+          "maxGap": 0.05107,
+          "furl": 0.6145833333333333,
+          "rods": [
+            {
+              "name": "mast-main/batten-01",
+              "pitchDelta": -0.08534,
+              "drop": 58.07474,
+              "rotation": -0.7
+            },
+            {
+              "name": "mast-main/batten-02",
+              "pitchDelta": -0.07031,
+              "drop": 51.62138,
+              "rotation": -0.7
+            },
+            {
+              "name": "mast-main/batten-03",
+              "pitchDelta": -0.05769,
+              "drop": 45.16802,
+              "rotation": -0.7
+            },
+            {
+              "name": "mast-main/batten-04",
+              "pitchDelta": -0.04688,
+              "drop": 38.71468,
+              "rotation": -0.7
+            },
+            {
+              "name": "mast-main/batten-05",
+              "pitchDelta": -0.03743,
+              "drop": 32.26133,
+              "rotation": -0.7
+            },
+            {
+              "name": "mast-main/batten-06",
+              "pitchDelta": -0.02896,
+              "drop": 25.80799,
+              "rotation": -0.7
+            },
+            {
+              "name": "mast-main/batten-07",
+              "pitchDelta": -0.02119,
+              "drop": 19.35466,
+              "rotation": -0.7
+            },
+            {
+              "name": "mast-main/batten-08",
+              "pitchDelta": -0.01388,
+              "drop": 12.90134,
+              "rotation": -0.7
+            },
+            {
+              "name": "mast-main/batten-09",
+              "pitchDelta": -0.00684,
+              "drop": 6.44804,
+              "rotation": -0.7
+            }
+          ]
+        },
+        {
+          "name": "mizzen-junk",
+          "battens": 5,
+          "bound": 125,
+          "maxGap": 0.05029,
+          "furl": 0.6145833333333333,
+          "rods": [
+            {
+              "name": "mast-mizzen/batten-01",
+              "pitchDelta": -0.07014,
+              "drop": 21.71654,
+              "rotation": -0.7
+            },
+            {
+              "name": "mast-mizzen/batten-02",
+              "pitchDelta": -0.04977,
+              "drop": 17.37207,
+              "rotation": -0.7
+            },
+            {
+              "name": "mast-mizzen/batten-03",
+              "pitchDelta": -0.03427,
+              "drop": 13.02761,
+              "rotation": -0.7
+            },
+            {
+              "name": "mast-mizzen/batten-04",
+              "pitchDelta": -0.02161,
+              "drop": 8.68317,
+              "rotation": -0.7
+            },
+            {
+              "name": "mast-mizzen/batten-05",
+              "pitchDelta": -0.01044,
+              "drop": 4.33875,
+              "rotation": -0.7
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "label": "raising 7",
+      "sails": [
+        {
+          "name": "fore-junk",
+          "battens": 7,
+          "bound": 231,
+          "maxGap": 0.05005,
+          "furl": null,
+          "rods": [
+            {
+              "name": "mast-fore/batten-01",
+              "pitchDelta": 0,
+              "drop": 0,
+              "rotation": -0.7
+            },
+            {
+              "name": "mast-fore/batten-02",
+              "pitchDelta": 0,
+              "drop": 0,
+              "rotation": -0.7
+            },
+            {
+              "name": "mast-fore/batten-03",
+              "pitchDelta": 0,
+              "drop": 0,
+              "rotation": -0.7
+            },
+            {
+              "name": "mast-fore/batten-04",
+              "pitchDelta": 0,
+              "drop": 0,
+              "rotation": -0.7
+            },
+            {
+              "name": "mast-fore/batten-05",
+              "pitchDelta": 0,
+              "drop": 0,
+              "rotation": -0.7
+            },
+            {
+              "name": "mast-fore/batten-06",
+              "pitchDelta": 0,
+              "drop": 0,
+              "rotation": -0.7
+            },
+            {
+              "name": "mast-fore/batten-07",
+              "pitchDelta": 0,
+              "drop": 0,
+              "rotation": -0.7
+            }
+          ]
+        },
+        {
+          "name": "main-junk",
+          "battens": 9,
+          "bound": 369,
+          "maxGap": 0.05101,
+          "furl": null,
+          "rods": [
+            {
+              "name": "mast-main/batten-01",
+              "pitchDelta": 0,
+              "drop": 0,
+              "rotation": -0.7
+            },
+            {
+              "name": "mast-main/batten-02",
+              "pitchDelta": 0,
+              "drop": 0,
+              "rotation": -0.7
+            },
+            {
+              "name": "mast-main/batten-03",
+              "pitchDelta": 0,
+              "drop": 0,
+              "rotation": -0.7
+            },
+            {
+              "name": "mast-main/batten-04",
+              "pitchDelta": 0,
+              "drop": 0,
+              "rotation": -0.7
+            },
+            {
+              "name": "mast-main/batten-05",
+              "pitchDelta": 0,
+              "drop": 0,
+              "rotation": -0.7
+            },
+            {
+              "name": "mast-main/batten-06",
+              "pitchDelta": 0,
+              "drop": 0,
+              "rotation": -0.7
+            },
+            {
+              "name": "mast-main/batten-07",
+              "pitchDelta": 0,
+              "drop": 0,
+              "rotation": -0.7
+            },
+            {
+              "name": "mast-main/batten-08",
+              "pitchDelta": 0,
+              "drop": 0,
+              "rotation": -0.7
+            },
+            {
+              "name": "mast-main/batten-09",
+              "pitchDelta": 0,
+              "drop": 0,
+              "rotation": -0.7
+            }
+          ]
+        },
+        {
+          "name": "mizzen-junk",
+          "battens": 5,
+          "bound": 125,
+          "maxGap": 0.05037,
+          "furl": null,
+          "rods": [
+            {
+              "name": "mast-mizzen/batten-01",
+              "pitchDelta": 0,
+              "drop": 0,
+              "rotation": -0.7
+            },
+            {
+              "name": "mast-mizzen/batten-02",
+              "pitchDelta": 0,
+              "drop": 0,
+              "rotation": -0.7
+            },
+            {
+              "name": "mast-mizzen/batten-03",
+              "pitchDelta": 0,
+              "drop": 0,
+              "rotation": -0.7
+            },
+            {
+              "name": "mast-mizzen/batten-04",
+              "pitchDelta": 0,
+              "drop": 0,
+              "rotation": -0.7
+            },
+            {
+              "name": "mast-mizzen/batten-05",
+              "pitchDelta": 0,
+              "drop": 0,
+              "rotation": -0.7
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "ok": true
+}
