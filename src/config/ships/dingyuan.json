@@ -1,0 +1,52 @@
+{
+  "order": 200,
+  "ship": {
+    "id": "dingyuan",
+    "el": "ship-dingyuan",
+    "name": "定遠號",
+    "vxk": "dingyuan.vxk",
+    "work": "trailhead-dingyuan-01m-assembly",
+    "author": "trailhead",
+    "drive": "steam",
+    "matMap": {"iron_hull": "iron*0.5+oak*0.5", "iron_plate": "iron*0.125"},
+    "cfg": {"pump": 32, "base": 14.5, "agile": 0.7},
+    "geo": {"spar": [141, 150], "marines": [490, 260], "center": 120, "aim": 85, "aimZ": [45, 290], "deckAim": [85, 145], "rigAim": [140, 290]},
+    "crew": {"top": 0, "marines": 8},
+    "names": ["定遠號"],
+    "cargoT": 226,
+    "idNext": {
+      "anchor": 3,
+      "binnacle": 2,
+      "boat": 7,
+      "boiler": 5,
+      "deck": 7,
+      "engine": 3,
+      "funnel": 3,
+      "gun": 15,
+      "hoist": 5,
+      "ladders": 2,
+      "magazine": 4,
+      "part": 24,
+      "powder": 42,
+      "propeller": 3,
+      "rooms": 4,
+      "rudder": 2,
+      "shaft": 3,
+      "ship": 2,
+      "turret": 5,
+      "wheel": 2,
+      "yard": 3
+    }
+  },
+  "card": {
+    "tons": 7288,
+    "len": 91.2,
+    "guns": 14,
+    "gunTypes": {"krupp150": 2, "hotch37": 8, "krupp305": 4},
+    "volley": 1438,
+    "drive": "steam",
+    "sails": 0,
+    "crew": 144
+  },
+  "lock": "c:0fed4a5f91bda752ed49be717d6325bdb287348b"
+}

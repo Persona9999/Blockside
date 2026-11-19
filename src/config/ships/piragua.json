@@ -1,0 +1,28 @@
+{
+  "order": 400,
+  "ship": {
+    "id": "piragua",
+    "el": "ship-piragua",
+    "name": "杉心號",
+    "vxk": "piragua.vxk",
+    "work": "basecamp-piragua-01m-assembly",
+    "floodRim": [[36.5, 43.5, 8], [36.5, 57.5, 8], [89.5, 44.5, 8], [89.5, 56.5, 8]],
+    "author": "basecamp",
+    "idNext": {"deck": 2, "part": 2, "ship": 2, "yard": 2},
+    "cfg": {"base": 4},
+    "geo": {"spar": [1, 5], "marines": [21, 26], "center": 20, "aim": 6, "aimZ": [1, 60], "deckAim": [1, 10], "rigAim": [20, 80], "marineY": 2, "qx": 0},
+    "crew": {"officers": 1, "helm": 1, "top": 0, "marines": 10, "marineGap": 5, "monkeys": 1, "handsK": 0.25, "navigator": 0},
+    "names": ["杉心號"]
+  },
+  "card": {
+    "tons": 3,
+    "len": 10.5,
+    "guns": 1,
+    "gunTypes": {"pierrier": 1},
+    "volley": 1,
+    "drive": "oar",
+    "sails": 1,
+    "crew": 42
+  },
+  "lock": "c:03f930a3a63061fba33eb434cab849ef48af2fc3"
+}

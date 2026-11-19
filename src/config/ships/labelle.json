@@ -1,0 +1,47 @@
+{
+  "order": 290,
+  "ship": {
+    "id": "labelle",
+    "role": "merchant",
+    "el": "ship-labelle",
+    "name": "拉貝爾號",
+    "gangway": [[139.5, 117.5, 45.5], [139.5, 43.5, 45.5]],
+    "vxk": "labelle.vxk",
+    "work": "ame-labelle-01m-assembly",
+    "author": "ame",
+    "geo": {"spar": [28, 42], "marines": [33, 54], "center": 45, "aim": 28, "aimZ": [5, 185], "deckAim": [28, 40], "rigAim": [55, 180]},
+    "cfg": {"pump": 2},
+    "crew": {"officers": 2, "helm": 1, "top": 0, "marines": 4, "marineGap": 14, "monkeys": 1, "handsK": 0.25, "navigator": 0},
+    "names": ["拉貝爾號"],
+    "idNext": {
+      "anchor": 3,
+      "binnacle": 3,
+      "boat": 2,
+      "deck": 6,
+      "door": 5,
+      "gun": 15,
+      "ladders": 4,
+      "light": 2,
+      "magazine": 2,
+      "model": 4,
+      "part": 12,
+      "powder": 17,
+      "rooms": 2,
+      "rudder": 2,
+      "ship": 2,
+      "tiller": 2,
+      "yard": 7
+    }
+  },
+  "card": {
+    "tons": 87,
+    "len": 17.5,
+    "guns": 14,
+    "gunTypes": {"pierrier": 8, "long4": 6},
+    "volley": 19,
+    "drive": "sail",
+    "sails": 6,
+    "crew": 46
+  },
+  "lock": "c:d93173774b30d7d0b1ac370ed0ad8da42d0d14a2"
+}

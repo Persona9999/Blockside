@@ -1,0 +1,41 @@
+{
+  "order": 260,
+  "ship": {
+    "id": "battery_carib",
+    "el": "ship-battery-carib",
+    "name": "加勒比砲台",
+    "vxk": "battery_carib.vxk",
+    "work": "summit-carib-01m-battery",
+    "author": "summit",
+    "material": "stone",
+    "fixed": true,
+    "zw0": 1,
+    "geo": {"spar": [36, 40], "marines": [10, 10], "center": 10, "aim": 10, "aimZ": [2, 30], "deckAim": [2, 20], "rigAim": [60, 90]},
+    "crew": {
+      "officers": 1,
+      "helm": 0,
+      "marines": 0,
+      "top": 0,
+      "monkeys": 1,
+      "handsK": 0.1,
+      "surgeon": 0,
+      "carpenter": 1,
+      "sailmaker": 1,
+      "cook": 0,
+      "navigator": 0,
+      "quartermaster": 0
+    },
+    "town": "carib-battery"
+  },
+  "card": {
+    "tons": 8,
+    "len": 11.5,
+    "guns": 3,
+    "gunTypes": {"long6": 3},
+    "volley": 8,
+    "drive": "sail",
+    "sails": 0,
+    "crew": 18
+  },
+  "lock": "c:ab574761de5cfb7ddd2cfe152f3b6f1fc79b3a84"
+}

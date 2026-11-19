@@ -1,0 +1,52 @@
+{
+  "order": 480,
+  "ship": {
+    "id": "bizerte_barque",
+    "el": "ship-bizerte-barque",
+    "name": "比塞大客貨船",
+    "vxk": "bizerte_barque.vxk",
+    "work": "meadow-bizerte-barque-01m-assembly",
+    "author": "meadow",
+    "idNext": {"anchor": 3, "deck": 4, "door": 2, "ladders": 3, "mast": 3, "model": 3, "part": 4, "rudder": 2, "ship": 2, "yard": 3},
+    "role": "merchant",
+    "cargoT": 8,
+    "names": ["比塞大客貨船", "比塞大商船"],
+    "cfg": {"pump": 3, "agile": 3.2, "upwind": 2.4},
+    "geo": {
+      "spar": [17, 23],
+      "marines": [17, 23],
+      "center": 19,
+      "aim": 18,
+      "aimZ": [5, 115],
+      "deckAim": [17, 23],
+      "rigAim": [38, 115],
+      "marineY": 6,
+      "qx": 9
+    },
+    "crew": {
+      "officers": 1,
+      "helm": 1,
+      "top": 0,
+      "marines": 0,
+      "monkeys": 0,
+      "handsK": 0.19,
+      "carpenter": 1,
+      "sailmaker": 1,
+      "surgeon": 0,
+      "quartermaster": 0,
+      "navigator": 1
+    },
+    "floodRim": [[94.5, 19.5, 24], [94.5, 53.5, 24], [151.5, 20.5, 25], [151.5, 52.5, 25]]
+  },
+  "card": {
+    "tons": 23,
+    "len": 11,
+    "guns": 0,
+    "gunTypes": {},
+    "volley": 0,
+    "drive": "sail",
+    "sails": 2,
+    "crew": 12
+  },
+  "lock": "c:84e710a47fb9b48c012364cba66fdc3c2717b0e2"
+}

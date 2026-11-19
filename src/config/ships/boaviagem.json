@@ -1,0 +1,47 @@
+{
+  "order": 380,
+  "ship": {
+    "id": "boaviagem",
+    "role": "merchant",
+    "el": "ship-boaviagem",
+    "name": "好旅號",
+    "gangway": [[215.5, 143.5, 61.5], [215.5, 49.5, 61.5]],
+    "vxk": "boaviagem.vxk",
+    "work": "summit-boaviagem-01m-assembly",
+    "author": "summit",
+    "geo": {"spar": [45, 74], "marines": [90, 172], "center": 60, "aim": 40, "aimZ": [5, 300], "deckAim": [45, 74], "rigAim": [110, 295]},
+    "cfg": {"pump": 2},
+    "crew": {"officers": 1, "helm": 1, "top": 1, "marines": 0, "monkeys": 1, "handsK": 0.25, "navigator": 0},
+    "names": ["好旅號"],
+    "idNext": {
+      "anchor": 3,
+      "gun": 13,
+      "gunmount": 13,
+      "binnacle": 2,
+      "boat": 2,
+      "capstan": 2,
+      "deck": 6,
+      "door": 3,
+      "galley": 2,
+      "ladders": 5,
+      "magazine": 2,
+      "part": 11,
+      "powder": 5,
+      "rudder": 2,
+      "ship": 2,
+      "tiller": 2,
+      "yard": 6
+    }
+  },
+  "card": {
+    "tons": 225,
+    "len": 22.3,
+    "guns": 12,
+    "gunTypes": {"pierrier": 8, "long4": 4},
+    "volley": 15,
+    "drive": "sail",
+    "sails": 5,
+    "crew": 40
+  },
+  "lock": "c:0409fe3a93afb0d8fc95f48870366738f313885c"
+}

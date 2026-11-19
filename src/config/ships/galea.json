@@ -1,0 +1,54 @@
+{
+  "order": 460,
+  "ship": {
+    "id": "galea",
+    "el": "ship-galea",
+    "name": "威尼斯槳帆船",
+    "vxk": "galea.vxk",
+    "work": "meadow-venice-galea-01m-assembly",
+    "floodRim": [[195.5, 133.5, 20], [195.5, 187.5, 20], [399.5, 139.5, 20], [399.5, 181.5, 20]],
+    "author": "meadow",
+    "idNext": {
+      "anchor": 3,
+      "deck": 4,
+      "door": 2,
+      "gun": 6,
+      "ladders": 2,
+      "light": 2,
+      "magazine": 2,
+      "mast": 3,
+      "model": 2,
+      "oar": 50,
+      "part": 6,
+      "powder": 5,
+      "rooms": 2,
+      "rudder": 2,
+      "ship": 2,
+      "yard": 3
+    },
+    "geo": {"spar": [18, 21], "marines": [54, 160], "center": 28, "aim": 23, "aimZ": [11, 184], "deckAim": [17, 28], "rigAim": [73, 184]},
+    "crew": {"top": 0, "marines": 0},
+    "cfg": {"base": 5},
+    "fireEngine": false,
+    "rooms": {
+      "deck": {
+        "type": "deck",
+        "items": [
+          {"it": "keg", "x": 69, "y": 4, "r": 0},
+          {"it": "keg", "x": 69, "y": 8, "r": 0}
+        ]
+      }
+    }
+  },
+  "card": {
+    "tons": 135,
+    "len": 40.7,
+    "guns": 5,
+    "gunTypes": {"veniceFalcone6": 4, "veniceCorsiero50": 1},
+    "volley": 22,
+    "drive": "oar",
+    "sails": 2,
+    "crew": 264
+  },
+  "lock": "c:3473a1a1497697a31c7d1577a3165699de3789e9"
+}

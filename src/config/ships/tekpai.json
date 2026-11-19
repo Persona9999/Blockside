@@ -1,0 +1,45 @@
+{
+  "order": 510,
+  "ship": {
+    "id": "tekpai",
+    "el": "ship-tekpai",
+    "name": "台灣帆竹筏",
+    "vxk": "tekpai.vxk",
+    "work": "pinnacle-tekpai-01m-assembly",
+    "author": "pinnacle",
+    "idNext": {"anchor": 2, "deck": 2, "light": 2, "mast": 2, "model": 16, "rudder": 3, "ship": 2, "yard": 7},
+    "role": "merchant",
+    "cargoT": 1.5,
+    "fireEngine": false,
+    "names": ["台灣帆竹筏", "大員竹排", "鯤鯓接駁竹筏"],
+    "cfg": {"base": 4.0, "pump": 1.5, "agile": 4.2, "upwind": 2.3},
+    "geo": {"spar": [4, 9], "marines": [36, 94], "center": 5, "aim": 6, "aimZ": [2, 65], "deckAim": [4, 9], "rigAim": [24, 78], "marineY": 6, "qx": 5},
+    "crew": {
+      "officers": 1,
+      "helm": 0,
+      "top": 0,
+      "marines": 0,
+      "marineGap": 5,
+      "monkeys": 0,
+      "handsK": 0.025,
+      "surgeon": 0,
+      "carpenter": 1,
+      "sailmaker": 1,
+      "cook": 0,
+      "navigator": 0,
+      "quartermaster": 0
+    },
+    "floodRim": [[38.5, 38.5, 5], [38.5, 62.5, 5], [96.5, 38.5, 5], [96.5, 62.5, 5]]
+  },
+  "card": {
+    "tons": 6,
+    "len": 8.7,
+    "guns": 0,
+    "gunTypes": {},
+    "volley": 0,
+    "drive": "oar",
+    "sails": 1,
+    "crew": 8
+  },
+  "lock": "c:deef946d0f4882b101f1cc74de23556664a3ae68"
+}

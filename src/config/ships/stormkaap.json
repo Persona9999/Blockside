@@ -1,0 +1,56 @@
+{
+  "order": 40,
+  "ship": {
+    "id": "stormkaap",
+    "el": "ship-stormkaap",
+    "name": "風暴角號",
+    "gangway": [[309.5, 201.5, 80.5], [309.5, 59.5, 80.5]],
+    "vxk": "stormkaap.vxk",
+    "work": "summit-stormkaap-01m-assembly",
+    "geo": {"spar": [84, 118], "marines": [90, 110], "center": 110, "aim": 80, "aimZ": [30, 380], "deckAim": [66, 96], "rigAim": [150, 380]},
+    "rooms": {"甲板-上/艙房/1": "medical", "甲板-上/艙房/2": "medical", "甲板-上/艙房/3": "medical"},
+    "cfg": {"pump": 13, "base": 6},
+    "drive": "magic",
+    "theme": "stormkaap",
+    "lamps": [
+      {"at": [98.5, 130.5, 168], "r": 6, "color": 158, "rgb": [0.35, 1, 0.55]},
+      {"at": [100.5, 147.5, 155], "r": 4, "color": 158, "rgb": [0.35, 1, 0.55]},
+      {"at": [100.5, 113.5, 155], "r": 4, "color": 158, "rgb": [0.35, 1, 0.55]},
+      {"at": [149.5, 149.5, 119.5], "r": 11, "color": 154, "rgb": [0.35, 1, 0.55]}
+    ],
+    "author": "summit",
+    "idNext": {
+      "anchor": 3,
+      "binnacle": 2,
+      "capstan": 2,
+      "deck": 6,
+      "engine": 2,
+      "grating": 2,
+      "gun": 43,
+      "ladders": 3,
+      "light": 4,
+      "magazine": 2,
+      "model": 14,
+      "part": 17,
+      "portlid": 41,
+      "powder": 18,
+      "rooms": 2,
+      "rudder": 2,
+      "ship": 2,
+      "wheel": 2,
+      "wheel_stand": 2,
+      "yard": 11
+    }
+  },
+  "card": {
+    "tons": 1287,
+    "len": 42.7,
+    "guns": 42,
+    "gunTypes": {"chase3": 2, "long6": 22, "long12": 18},
+    "volley": 159,
+    "drive": "magic",
+    "sails": 10,
+    "crew": 229
+  },
+  "lock": "c:2093dd9bca4a5ab76180c8ee075abedbe82d368d"
+}

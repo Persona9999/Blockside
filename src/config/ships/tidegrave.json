@@ -1,0 +1,46 @@
+{
+  "order": 130,
+  "ship": {
+    "id": "tidegrave",
+    "cfg": {"pump": 15.5},
+    "el": "ship-tidegrave",
+    "name": "潮墓號",
+    "vxk": "tidegrave.vxk",
+    "work": "sirius-tidegrave-01m-assembly",
+    "author": "Sirius",
+    "crew": {"marines": 12, "marineGap": 30},
+    "geo": {"spar": [114, 140], "marines": [100, 80], "center": 155, "aim": 90, "aimZ": [30, 480], "deckAim": [74, 106], "rigAim": [210, 410]},
+    "idNext": {
+      "anchor": 3,
+      "binnacle": 2,
+      "boat": 2,
+      "capstan": 2,
+      "deck": 7,
+      "fairlead": 51,
+      "gun": 55,
+      "ladders": 2,
+      "light": 3,
+      "magazine": 3,
+      "model": 20,
+      "part": 8,
+      "portlid": 49,
+      "powder": 49,
+      "rudder": 2,
+      "ship": 2,
+      "wheel": 2,
+      "wheel_stand": 2,
+      "yard": 11
+    }
+  },
+  "card": {
+    "tons": 1729,
+    "len": 49.5,
+    "guns": 54,
+    "gunTypes": {"chase": 6, "long": 48},
+    "volley": 572,
+    "drive": "sail",
+    "sails": 9,
+    "crew": 358
+  },
+  "lock": "c:db7b1ff396d500c8136a88af8d0a59c404742f26"
+}

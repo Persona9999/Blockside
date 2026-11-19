@@ -1,0 +1,46 @@
+{
+  "order": 490,
+  "ship": {
+    "id": "sandal",
+    "el": "ship-sandal",
+    "name": "突尼斯湖轉運划艇",
+    "vxk": "sandal.vxk",
+    "work": "kiara-tunis-sandal-01m-assembly",
+    "author": "kiara",
+    "idNext": {"deck": 2, "mast": 2, "model": 20, "part": 2, "ship": 2},
+    "role": "merchant",
+    "cargoT": 3.0,
+    "material": "pine",
+    "fireEngine": false,
+    "names": ["突尼斯湖轉運划艇", "拉古萊特駁艇", "突尼斯沙達爾艇"],
+    "cfg": {"base": 4.2, "pump": 2, "agile": 3.8, "upwind": 2.2},
+    "geo": {"spar": [5, 10], "marines": [21, 29], "center": 10, "aim": 6, "aimZ": [2, 65], "deckAim": [4, 10], "rigAim": [15, 65], "marineY": 4, "qx": 5},
+    "crew": {
+      "officers": 1,
+      "helm": 0,
+      "top": 0,
+      "marines": 0,
+      "marineGap": 5,
+      "monkeys": 0,
+      "handsK": 0.025,
+      "surgeon": 0,
+      "carpenter": 1,
+      "sailmaker": 1,
+      "cook": 0,
+      "navigator": 0,
+      "quartermaster": 0
+    },
+    "floodRim": [[48.5, 38.5, 9], [48.5, 62.5, 9], [76.5, 39.5, 9], [76.5, 61.5, 9]]
+  },
+  "card": {
+    "tons": 6,
+    "len": 9.1,
+    "guns": 0,
+    "gunTypes": {},
+    "volley": 0,
+    "drive": "oar",
+    "sails": 1,
+    "crew": 10
+  },
+  "lock": "c:16b39c6cda994c00cdd690981adc92fe3f6851ec"
+}

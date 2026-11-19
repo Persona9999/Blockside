@@ -1,0 +1,52 @@
+{
+  "order": 100,
+  "ship": {
+    "id": "napoleon",
+    "el": "ship-napoleon",
+    "name": "拿破崙號",
+    "vxk": "napoleon.vxk",
+    "work": "kotoko-napoleon-01m-assembly",
+    "cfg": {"pump": 32, "base": 12, "agile": 1.2},
+    "geo": {"spar": [137, 145], "marines": [80, 240], "center": 185, "aim": 120, "aimZ": [56, 364], "deckAim": [100, 150], "rigAim": [190, 340]},
+    "names": ["拿破崙號"],
+    "author": "kotoko",
+    "idNext": {
+      "anchor": 3,
+      "binnacle": 2,
+      "boat": 3,
+      "boiler": 3,
+      "capstan": 2,
+      "deck": 6,
+      "engine": 2,
+      "funnel": 3,
+      "gear": 3,
+      "gun": 91,
+      "ladders": 5,
+      "light": 4,
+      "magazine": 3,
+      "model": 9,
+      "part": 12,
+      "portlid": 63,
+      "powder": 231,
+      "propeller": 2,
+      "rooms": 3,
+      "rudder": 2,
+      "shaft": 2,
+      "ship": 2,
+      "wheel": 2,
+      "wheel_stand": 2,
+      "yard": 14
+    }
+  },
+  "card": {
+    "tons": 5121,
+    "len": 71.5,
+    "guns": 90,
+    "gunTypes": {"long32": 36, "carr": 10, "long": 30, "long12": 14},
+    "volley": 1070,
+    "drive": "steam",
+    "sails": 13,
+    "crew": 589
+  },
+  "lock": "c:14dd6e5c402e5f99fbe3b8cf7486236871833180"
+}

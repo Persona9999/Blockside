@@ -1,0 +1,53 @@
+{
+  "order": 140,
+  "ship": {
+    "id": "gloire",
+    "el": "ship-gloire",
+    "name": "光榮號",
+    "vxk": "gloire.vxk",
+    "work": "kaguya-gloire-01m-assembly",
+    "author": "kaguya",
+    "drive": "steam",
+    "cfg": {"pump": 32, "base": 13, "agile": 1},
+    "geo": {"spar": [113, 141], "marines": [80, 290], "center": 160, "aim": 100, "aimZ": [55, 330], "deckAim": [90, 120], "rigAim": [160, 310]},
+    "names": ["光榮號"],
+    "idNext": {
+      "anchor": 3,
+      "binnacle": 2,
+      "boat": 3,
+      "boiler": 2,
+      "capstan": 2,
+      "deck": 7,
+      "engine": 2,
+      "funnel": 2,
+      "gear": 2,
+      "gun": 37,
+      "ladders": 6,
+      "light": 4,
+      "magazine": 3,
+      "model": 9,
+      "part": 13,
+      "portlid": 35,
+      "powder": 93,
+      "propeller": 2,
+      "rooms": 3,
+      "rudder": 2,
+      "shaft": 2,
+      "ship": 2,
+      "wheel": 2,
+      "wheel_stand": 2,
+      "yard": 14
+    }
+  },
+  "card": {
+    "tons": 5637,
+    "len": 78,
+    "guns": 36,
+    "gunTypes": {"long32": 36},
+    "volley": 522,
+    "drive": "steam",
+    "sails": 13,
+    "crew": 327
+  },
+  "lock": "c:77a9c093f86cc5699f7fdca5de840eeec285d446"
+}

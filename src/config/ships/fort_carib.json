@@ -1,0 +1,41 @@
+{
+  "order": 230,
+  "ship": {
+    "id": "fort_carib",
+    "el": "ship-fort-carib",
+    "name": "加勒比稜堡",
+    "vxk": "fort_carib.vxk",
+    "work": "trailhead-harbour-01m-fort",
+    "author": "trailhead",
+    "material": "stone",
+    "fixed": true,
+    "zw0": 1,
+    "geo": {"spar": [36, 40], "marines": [20, 20], "center": 30, "aim": 40, "aimZ": [5, 80], "deckAim": [20, 50], "rigAim": [90, 120]},
+    "crew": {
+      "officers": 2,
+      "helm": 0,
+      "marines": 0,
+      "top": 0,
+      "monkeys": 1,
+      "handsK": 0.1,
+      "surgeon": 0,
+      "carpenter": 1,
+      "sailmaker": 1,
+      "cook": 0,
+      "navigator": 0,
+      "quartermaster": 0
+    },
+    "town": "carib-fort"
+  },
+  "card": {
+    "tons": 70,
+    "len": 23.7,
+    "guns": 9,
+    "gunTypes": {"long6": 9},
+    "volley": 24,
+    "drive": "sail",
+    "sails": 0,
+    "crew": 41
+  },
+  "lock": "c:d027cea155f72d8c9e9cb3a4a9bd988ec721af78"
+}

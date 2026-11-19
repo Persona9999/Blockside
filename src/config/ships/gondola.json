@@ -1,0 +1,33 @@
+{
+  "order": 450,
+  "ship": {
+    "id": "gondola",
+    "role": "merchant",
+    "cargoT": 0.3,
+    "el": "ship-gondola",
+    "name": "貢多拉",
+    "vxk": "gondola.vxk",
+    "work": "apex-one-venice-gondola-01m-assembly",
+    "floodRim": [[43.5, 17.5, 5], [43.5, 30.5, 5], [67.5, 17.5, 5], [67.5, 30.5, 5]],
+    "author": "apex-one",
+    "material": "pine*0.5",
+    "matMap": {"iron": "iron*0.1"},
+    "fireEngine": false,
+    "cfg": {"base": 3.5},
+    "geo": {"spar": [2, 8], "marines": [35, 35], "center": 8, "aim": 5, "aimZ": [1, 25], "deckAim": [2, 8], "rigAim": [8, 25], "marineY": 2, "qx": 18},
+    "crew": {"officers": 0, "helm": 0, "top": 0, "marines": 0, "marineGap": 5, "monkeys": 1, "handsK": 0, "navigator": 0},
+    "names": ["貢多拉", "里亞托號", "聖馬可號", "大運河號", "總督宮號", "潟湖黑燕號"],
+    "idNext": {"anchor": 2, "deck": 2, "magazine": 2, "oar": 2, "part": 2, "powder": 2, "ship": 2}
+  },
+  "card": {
+    "tons": 1,
+    "len": 8.2,
+    "guns": 0,
+    "gunTypes": {},
+    "volley": 0,
+    "drive": "oar",
+    "sails": 0,
+    "crew": 5
+  },
+  "lock": "c:fef84d593431f6c7da3eb5e41ed1130b6c3159aa"
+}

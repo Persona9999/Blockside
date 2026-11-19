@@ -1,0 +1,47 @@
+{
+  "order": 520,
+  "ship": {
+    "id": "kroon",
+    "role": "merchant",
+    "el": "ship-kroon",
+    "name": "金冠號",
+    "vxk": "kroon.vxk",
+    "work": "pinnacle-voc-01m-assembly",
+    "geo": {"spar": [80, 135], "marines": [60, 190], "center": 100, "aim": 75, "aimZ": [30, 470], "deckAim": [62, 98], "rigAim": [190, 460]},
+    "names": ["金冠號"],
+    "author": "pinnacle",
+    "idNext": {
+      "anchor": 3,
+      "binnacle": 2,
+      "boat": 2,
+      "capstan": 2,
+      "deck": 7,
+      "door": 9,
+      "galley": 2,
+      "gun": 39,
+      "gunfittings": 2,
+      "ladders": 7,
+      "light": 2,
+      "magazine": 2,
+      "mast": 5,
+      "part": 9,
+      "portlid": 39,
+      "powder": 65,
+      "rudder": 2,
+      "ship": 2,
+      "tiller": 2,
+      "yard": 11
+    }
+  },
+  "card": {
+    "tons": 1596,
+    "len": 48.5,
+    "guns": 38,
+    "gunTypes": {"long4": 4, "long18": 14, "long8": 16, "long": 4},
+    "volley": 228,
+    "drive": "sail",
+    "sails": 10,
+    "crew": 233
+  },
+  "lock": "c:2fdc5a1ee166755495f328144ef97a708d1ff7e4"
+}

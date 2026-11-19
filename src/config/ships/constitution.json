@@ -1,0 +1,62 @@
+{
+  "order": 10,
+  "ship": {
+    "id": "constitution",
+    "cfg": {"pump": 18},
+    "el": "ship",
+    "name": "憲法號",
+    "names": ["憲法號", "合眾國號", "總統號", "爪哇號", "哥倫比亞號", "波多馬克號"],
+    "vxk": "constitution.vxk",
+    "work": "basecamp-frigate-constitution-01m-assembly",
+    "rooms": {
+      "甲板-orlop/艙房/2": "medical",
+      "甲板-orlop/艙房/3": "medical",
+      "甲板-orlop/艙房/4": "medical",
+      "甲板-orlop/艙房/5": "medical",
+      "甲板-orlop/艙房/6": "medical",
+      "甲板-orlop/艙房-鏡像/2": "medical",
+      "甲板-orlop/艙房-鏡像/3": "medical",
+      "甲板-orlop/艙房-鏡像/4": "medical",
+      "甲板-orlop/艙房-鏡像/5": "medical",
+      "甲板-orlop/艙房-鏡像/6": "medical",
+      "甲板-berth/艙房/5": "medical",
+      "甲板-berth/艙房/6": "medical",
+      "甲板-berth/艙房/7": "medical",
+      "甲板-berth/艙房/8": "medical",
+      "甲板-berth/艙房-鏡像/5": "medical",
+      "甲板-berth/艙房-鏡像/6": "medical",
+      "甲板-berth/艙房-鏡像/7": "medical",
+      "甲板-berth/艙房-鏡像/8": "medical"
+    },
+    "author": "basecamp",
+    "idNext": {
+      "anchor": 3,
+      "boat": 4,
+      "capstan": 3,
+      "deck": 5,
+      "grating": 3,
+      "gun": 55,
+      "ladders": 5,
+      "magazine": 3,
+      "part": 35,
+      "portlid": 33,
+      "powder": 139,
+      "rooms": 7,
+      "rudder": 2,
+      "wheel": 2,
+      "wheel_stand": 2,
+      "yard": 16
+    }
+  },
+  "card": {
+    "tons": 2152,
+    "len": 54.6,
+    "guns": 54,
+    "gunTypes": {"chase": 2, "long": 28, "carr": 24},
+    "volley": 670,
+    "drive": "sail",
+    "sails": 15,
+    "crew": 359
+  },
+  "lock": "c:017d5b59ae208b54c05c1eb99ba10267fba9d652"
+}

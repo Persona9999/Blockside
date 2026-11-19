@@ -1,0 +1,48 @@
+{
+  "order": 150,
+  "ship": {
+    "id": "reale",
+    "el": "ship-reale",
+    "name": "皇家號",
+    "vxk": "reale.vxk",
+    "work": "apex-one-reale-01m-assembly",
+    "floodRim": [[192.5, 124.5, 26], [192.5, 196.5, 26], [409.5, 122.5, 26], [409.5, 198.5, 26]],
+    "author": "apex-one",
+    "fireEngine": false,
+    "cfg": {"base": 6},
+    "geo": {"spar": [30, 46], "marines": [75, 115], "center": 60, "aim": 38, "aimZ": [20, 380], "deckAim": [28, 45], "rigAim": [120, 330]},
+    "crew": {
+      "top": 0,
+      "marines": 7,
+      "guns": {"long36": 5, "long8": 2}
+    },
+    "rooms": {"甲板-hold/艙房/proue": "medical", "甲板-hold/艙房/taverne": "workshop"},
+    "names": ["皇家號"],
+    "idNext": {
+      "anchor": 3,
+      "deck": 4,
+      "gun": 20,
+      "ladders": 4,
+      "light": 4,
+      "magazine": 2,
+      "oar": 65,
+      "part": 6,
+      "powder": 26,
+      "rooms": 2,
+      "rudder": 2,
+      "ship": 2,
+      "yard": 3
+    }
+  },
+  "card": {
+    "tons": 385,
+    "len": 54.4,
+    "guns": 19,
+    "gunTypes": {"long36": 1, "long8": 2, "long6": 2, "pierrier": 14},
+    "volley": 45,
+    "drive": "oar",
+    "sails": 2,
+    "crew": 548
+  },
+  "lock": "c:9dd6e2dd3d3296a20b613bae097ff8d6f3625894"
+}

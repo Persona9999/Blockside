@@ -1,0 +1,41 @@
+{
+  "order": 250,
+  "ship": {
+    "id": "fort_roche",
+    "el": "ship-fort-roche",
+    "name": "岩堡",
+    "vxk": "fort_roche.vxk",
+    "work": "ame-carib-civic-01m-fort-roche",
+    "author": "ame",
+    "material": "stone",
+    "fixed": true,
+    "zw0": 1,
+    "geo": {"spar": [36, 40], "marines": [20, 20], "center": 40, "aim": 40, "aimZ": [4, 90], "deckAim": [4, 80], "rigAim": [100, 140]},
+    "crew": {
+      "officers": 2,
+      "helm": 0,
+      "marines": 0,
+      "top": 0,
+      "monkeys": 1,
+      "handsK": 0.1,
+      "surgeon": 0,
+      "carpenter": 1,
+      "sailmaker": 1,
+      "cook": 0,
+      "navigator": 0,
+      "quartermaster": 0
+    },
+    "town": "fort-de-la-roche"
+  },
+  "card": {
+    "tons": 66,
+    "len": 29.2,
+    "guns": 7,
+    "gunTypes": {"long6": 7},
+    "volley": 19,
+    "drive": "sail",
+    "sails": 0,
+    "crew": 33
+  },
+  "lock": "c:7a1d61c05ff7148c27b1eda210a714c2ee403b2c"
+}

@@ -1,0 +1,61 @@
+{
+  "order": 80,
+  "ship": {
+    "id": "virginia",
+    "el": "ship-virginia",
+    "name": "維吉尼亞號",
+    "vxk": "virginia.vxk",
+    "work": "ame-virginia-01m-assembly",
+    "cfg": {"pump": 32, "base": 5.5, "agile": 0.4},
+    "rooms": {
+      "甲板-main": {
+        "type": "deck",
+        "items": [
+          {"it": "keg", "x": 114, "y": 13, "r": 0},
+          {"it": "keg", "x": 42, "y": 11, "r": 0}
+        ]
+      }
+    },
+    "geo": {"spar": [100, 102], "marines": [250, 200], "center": 85, "aim": 75, "aimZ": [40, 150], "deckAim": [74, 90], "rigAim": [100, 145]},
+    "crew": {
+      "marines": 6,
+      "top": 0,
+      "guns": {"brooke64": 6}
+    },
+    "flags": [
+      {"kind": "ensign", "at": [300, 90, 140], "pole": 1}
+    ],
+    "names": ["維吉尼亞號"],
+    "author": "ame",
+    "idNext": {
+      "anchor": 3,
+      "boiler": 2,
+      "deck": 5,
+      "engine": 2,
+      "funnel": 2,
+      "gun": 11,
+      "ladders": 2,
+      "magazine": 3,
+      "part": 6,
+      "portlid": 9,
+      "powder": 101,
+      "propeller": 2,
+      "rudder": 2,
+      "shaft": 2,
+      "ship": 2,
+      "wheel": 2,
+      "wheel_stand": 2
+    }
+  },
+  "card": {
+    "tons": 5073,
+    "len": 80.2,
+    "guns": 10,
+    "gunTypes": {"brooke7": 2, "brooke64": 2, "dahl9": 6},
+    "volley": 425,
+    "drive": "steam",
+    "sails": 0,
+    "crew": 152
+  },
+  "lock": "c:ba98811b1ddebee7dff5a166a747c22e08756e5c"
+}

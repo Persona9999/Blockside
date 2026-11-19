@@ -1,0 +1,29 @@
+{
+  "order": 180,
+  "ship": {
+    "id": "punt",
+    "role": "merchant",
+    "el": "ship-punt",
+    "name": "蓬特號",
+    "vxk": "punt.vxk",
+    "work": "apex-one-punt-01m-assembly",
+    "author": "apex-one",
+    "fireEngine": false,
+    "cfg": {"base": 5},
+    "geo": {"spar": [20, 33], "marines": [47, 44], "center": 35, "aim": 22, "aimZ": [8, 100], "deckAim": [18, 30], "rigAim": [45, 100]},
+    "crew": {"officers": 2, "helm": 2, "top": 0, "marines": 8, "marineGap": 14, "monkeys": 1, "handsK": 0.25},
+    "names": ["蓬特號"],
+    "idNext": {"anchor": 3, "deck": 5, "gun": 5, "ladders": 2, "magazine": 2, "oar": 31, "part": 3, "powder": 5, "rudder": 3, "ship": 2, "yard": 3}
+  },
+  "card": {
+    "tons": 40,
+    "len": 14.1,
+    "guns": 4,
+    "gunTypes": {"bow": 4},
+    "volley": 0,
+    "drive": "oar",
+    "sails": 1,
+    "crew": 64
+  },
+  "lock": "c:64c07c6f6ae8f24de6bce87c3427b07b56e65b58"
+}

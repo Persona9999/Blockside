@@ -1,0 +1,51 @@
+{
+  "order": 160,
+  "ship": {
+    "id": "susquehanna",
+    "el": "ship-susquehanna",
+    "name": "蘇士奎哈納號",
+    "vxk": "susquehanna.vxk",
+    "work": "crest-001-susquehanna-01m-assembly",
+    "author": "crest-001",
+    "drive": "steam",
+    "cfg": {"pump": 15, "base": 10},
+    "geo": {"spar": [90, 104], "marines": [80, 200], "center": 150, "aim": 85, "aimZ": [30, 480], "deckAim": [90, 110], "rigAim": [200, 470]},
+    "idNext": {
+      "anchor": 3,
+      "binnacle": 2,
+      "boat": 3,
+      "boiler": 3,
+      "capstan": 2,
+      "deck": 5,
+      "engine": 3,
+      "funnel": 2,
+      "gun": 10,
+      "ladders": 4,
+      "light": 4,
+      "magazine": 3,
+      "model": 7,
+      "part": 16,
+      "portlid": 5,
+      "powder": 33,
+      "propeller": 3,
+      "rooms": 3,
+      "rudder": 2,
+      "shaft": 3,
+      "ship": 2,
+      "wheel": 2,
+      "wheel_stand": 2,
+      "yard": 11
+    }
+  },
+  "card": {
+    "tons": 3528,
+    "len": 76.7,
+    "guns": 9,
+    "gunTypes": {"dahl11": 3, "dahl9": 6},
+    "volley": 471,
+    "drive": "steam",
+    "sails": 11,
+    "crew": 161
+  },
+  "lock": "c:b3b71b7ed4a858cb83aa38240adce6480b763db1"
+}

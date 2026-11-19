@@ -1,0 +1,49 @@
+{
+  "order": 300,
+  "ship": {
+    "id": "pinas",
+    "role": "merchant",
+    "el": "ship-pinas",
+    "name": "藍鯊號",
+    "gangway": [[347.5, 213.5, 63.5], [347.5, 107.5, 63.5]],
+    "vxk": "pinas.vxk",
+    "work": "gura-pinas-01m-assembly",
+    "geo": {"spar": [61, 103], "marines": [55, 130], "center": 75, "aim": 55, "aimZ": [25, 400], "deckAim": [46, 76], "rigAim": [130, 380]},
+    "crew": {"marines": 6, "top": 1},
+    "names": ["藍鯊號"],
+    "cargoT": 223,
+    "author": "gura",
+    "idNext": {
+      "anchor": 3,
+      "binnacle": 2,
+      "boat": 2,
+      "capstan": 2,
+      "deck": 7,
+      "door": 9,
+      "galley": 2,
+      "gun": 25,
+      "ladders": 6,
+      "light": 2,
+      "magazine": 2,
+      "part": 14,
+      "portlid": 25,
+      "powder": 33,
+      "rudder": 2,
+      "ship": 2,
+      "wheel": 2,
+      "wheel_stand": 2,
+      "yard": 11
+    }
+  },
+  "card": {
+    "tons": 600,
+    "len": 36.8,
+    "guns": 24,
+    "gunTypes": {"long8": 8, "long4": 4, "long12": 10, "long6": 2},
+    "volley": 98,
+    "drive": "sail",
+    "sails": 10,
+    "crew": 151
+  },
+  "lock": "c:71ca2b5404bdbc148aaa618cc20a3a1f038f1272"
+}

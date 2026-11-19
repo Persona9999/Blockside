@@ -1,0 +1,46 @@
+{
+  "order": 370,
+  "ship": {
+    "id": "tradewind",
+    "role": "merchant",
+    "el": "ship-tradewind",
+    "name": "信風號",
+    "gangway": [[182.5, 143.5, 62.5], [182.5, 49.5, 62.5]],
+    "vxk": "tradewind.vxk",
+    "work": "erina-tradewind-01m-assembly",
+    "author": "erina",
+    "geo": {"spar": [46, 65], "marines": [70, 157], "center": 55, "aim": 42, "aimZ": [5, 300], "deckAim": [46, 60], "rigAim": [120, 290]},
+    "cfg": {"pump": 2},
+    "crew": {"officers": 1, "helm": 1, "top": 1, "marines": 0, "monkeys": 1, "handsK": 0.25, "navigator": 0},
+    "names": ["信風號"],
+    "idNext": {
+      "anchor": 3,
+      "gun": 11,
+      "gunmount": 11,
+      "binnacle": 2,
+      "boat": 2,
+      "capstan": 2,
+      "deck": 6,
+      "door": 3,
+      "galley": 2,
+      "ladders": 4,
+      "magazine": 2,
+      "part": 10,
+      "powder": 5,
+      "rudder": 2,
+      "tiller": 2,
+      "yard": 9
+    }
+  },
+  "card": {
+    "tons": 291,
+    "len": 24,
+    "guns": 10,
+    "gunTypes": {"pierrier": 6, "long4": 4},
+    "volley": 13,
+    "drive": "sail",
+    "sails": 8,
+    "crew": 38
+  },
+  "lock": "c:355b2e6e4e8d4416f44705919d355e683e85070c"
+}

@@ -1,0 +1,42 @@
+{
+  "order": 410,
+  "ship": {
+    "id": "barbados",
+    "el": "ship-barbados",
+    "name": "巴貝多商人號",
+    "vxk": "barbados.vxk",
+    "work": "apex-two-barbados-01m-assembly",
+    "author": "apex-two",
+    "cfg": {"pump": 3},
+    "geo": {"spar": [59, 90], "marines": [112, 76], "qx": 60, "center": 80, "aim": 64, "aimZ": [10, 330], "deckAim": [61, 74], "rigAim": [130, 330]},
+    "crew": {"officers": 2, "helm": 1, "top": 1, "marines": 4, "marineGap": 14, "monkeys": 1, "handsK": 0.25, "navigator": 0},
+    "names": ["巴貝多商人號"],
+    "idNext": {
+      "anchor": 3,
+      "capstan": 2,
+      "deck": 6,
+      "door": 3,
+      "galley": 2,
+      "gun": 9,
+      "ladders": 6,
+      "magazine": 2,
+      "part": 11,
+      "powder": 9,
+      "rooms": 2,
+      "rudder": 2,
+      "ship": 2,
+      "yard": 11
+    }
+  },
+  "card": {
+    "tons": 394,
+    "len": 26.9,
+    "guns": 8,
+    "gunTypes": {"long4": 8},
+    "volley": 14,
+    "drive": "sail",
+    "sails": 9,
+    "crew": 45
+  },
+  "lock": "c:7c520c6aae03b2d9443a393efb7c67957cf5b1a0"
+}

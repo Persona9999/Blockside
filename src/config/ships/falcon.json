@@ -1,0 +1,45 @@
+{
+  "order": 30,
+  "ship": {
+    "id": "falcon",
+    "el": "ship-falcon",
+    "name": "夜隼號",
+    "vxk": "falcon.vxk",
+    "work": "summit-night-falcon-01m-assembly",
+    "floodRim": [[148.5, 50.5, 41], [148.5, 110.5, 41], [188.5, 49.5, 35], [188.5, 111.5, 35]],
+    "material": "tidewood",
+    "geo": {"spar": [28, 47], "marines": [100, 60], "center": 50, "aim": 30, "aimZ": [5, 270], "deckAim": [25, 40], "rigAim": [60, 240]},
+    "cfg": {"pump": 2, "speed": 3, "agile": 5, "upwind": 3, "flood": 0.25},
+    "crew": {"handsK": 0.25},
+    "rooms": {"甲板-主/艙房/1": "medical", "甲板-主/艙房/2": "medical"},
+    "author": "summit",
+    "idNext": {
+      "anchor": 3,
+      "binnacle": 2,
+      "deck": 3,
+      "gun": 13,
+      "ladders": 2,
+      "magazine": 2,
+      "part": 19,
+      "portlid": 13,
+      "powder": 9,
+      "rooms": 2,
+      "rudder": 2,
+      "ship": 2,
+      "wheel": 2,
+      "wheel_stand": 2,
+      "yard": 8
+    }
+  },
+  "card": {
+    "tons": 69,
+    "len": 20.2,
+    "guns": 12,
+    "gunTypes": {"long4": 12},
+    "volley": 22,
+    "drive": "sail",
+    "sails": 9,
+    "crew": 64
+  },
+  "lock": "c:d33437415ee4dc7b8742571dbc32a5e6ef7a00f1"
+}

@@ -1,0 +1,47 @@
+{
+  "order": 90,
+  "ship": {
+    "id": "cosecha",
+    "role": "merchant",
+    "cfg": {"pump": 11.5},
+    "el": "ship-cosecha",
+    "name": "收穫號",
+    "vxk": "cosecha.vxk",
+    "work": "calli-cosecha-01m-assembly",
+    "geo": {"spar": [86, 121], "marines": [120, 90], "center": 90, "aim": 70, "aimZ": [30, 330], "deckAim": [74, 97], "rigAim": [140, 330]},
+    "crew": {"marines": 6, "top": 1},
+    "names": ["收穫號"],
+    "author": "calli",
+    "idNext": {
+      "anchor": 3,
+      "binnacle": 2,
+      "boat": 2,
+      "capstan": 2,
+      "deck": 7,
+      "door": 5,
+      "gun": 45,
+      "ladders": 6,
+      "light": 4,
+      "magazine": 2,
+      "part": 16,
+      "portlid": 21,
+      "powder": 113,
+      "rudder": 2,
+      "ship": 2,
+      "wheel": 2,
+      "wheel_stand": 2,
+      "yard": 8
+    }
+  },
+  "card": {
+    "tons": 1130,
+    "len": 38.1,
+    "guns": 44,
+    "gunTypes": {"long6": 8, "long18": 18, "long12": 16, "chase": 2},
+    "volley": 272,
+    "drive": "sail",
+    "sails": 7,
+    "crew": 268
+  },
+  "lock": "c:9b15b1fa340e4657ba03d9da5d69cc89f906c7d5"
+}

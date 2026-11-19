@@ -1,0 +1,41 @@
+{
+  "order": 70,
+  "ship": {
+    "id": "phoenix",
+    "cfg": {"pump": 8},
+    "el": "ship-phoenix",
+    "name": "炎羽號",
+    "vxk": "phoenix.vxk",
+    "work": "kiara-phoenix-01m-assembly",
+    "geo": {"marines": [50, 100], "center": 75, "aim": 72, "aimZ": [20, 300], "deckAim": [60, 86], "rigAim": [135, 300]},
+    "author": "kiara",
+    "idNext": {
+      "anchor": 3,
+      "binnacle": 2,
+      "boat": 2,
+      "capstan": 2,
+      "deck": 3,
+      "gun": 33,
+      "ladders": 2,
+      "magazine": 3,
+      "part": 8,
+      "powder": 33,
+      "rudder": 2,
+      "ship": 2,
+      "wheel": 2,
+      "wheel_stand": 2,
+      "yard": 9
+    }
+  },
+  "card": {
+    "tons": 624,
+    "len": 35.9,
+    "guns": 32,
+    "gunTypes": {"chase": 2, "long18": 24, "carr": 6},
+    "volley": 300,
+    "drive": "sail",
+    "sails": 9,
+    "crew": 231
+  },
+  "lock": "c:90df17ad3f100b234ebe495682bd212c1d6b3166"
+}

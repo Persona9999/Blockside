@@ -1,0 +1,45 @@
+{
+  "order": 60,
+  "ship": {
+    "id": "tridente",
+    "el": "ship-tridente",
+    "name": "三叉戟號",
+    "vxk": "tridente.vxk",
+    "work": "gura-tridente-01m-assembly",
+    "cfg": {"pump": 31.5, "speed": 1, "agile": 1, "upwind": 0.8},
+    "geo": {"marines": [50, 260], "center": 195, "aim": 110, "aimZ": [45, 560], "deckAim": [92, 160], "rigAim": [200, 650]},
+    "author": "gura",
+    "idNext": {
+      "anchor": 3,
+      "binnacle": 2,
+      "boat": 3,
+      "capstan": 2,
+      "deck": 9,
+      "door": 21,
+      "gun": 143,
+      "ladders": 9,
+      "light": 3,
+      "magazine": 3,
+      "part": 27,
+      "portlid": 99,
+      "powder": 359,
+      "rooms": 3,
+      "rudder": 2,
+      "ship": 2,
+      "wheel": 2,
+      "wheel_stand": 2,
+      "yard": 15
+    }
+  },
+  "card": {
+    "tons": 4954,
+    "len": 62.3,
+    "guns": 142,
+    "gunTypes": {"trident": 6, "long6": 18, "long12": 36, "long": 34, "long32": 32, "carr": 16},
+    "volley": 1359,
+    "drive": "sail",
+    "sails": 13,
+    "crew": 779
+  },
+  "lock": "c:eddc692d5114038045d5b75a0969b2d15e71158a"
+}

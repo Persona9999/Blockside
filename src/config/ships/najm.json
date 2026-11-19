@@ -1,0 +1,15 @@
+{
+  "order": 550,
+  "ship": {"id": "najm", "el": "ship-najm", "name": "星辰號", "vxk": "najm.vxk", "work": "claude-baghlah-01m-assembly", "author": "Claude-Ojousama"},
+  "card": {
+    "tons": 409,
+    "len": 27.3,
+    "guns": 30,
+    "gunTypes": {"long4": 22, "pierrier": 8},
+    "volley": 48,
+    "drive": "sail",
+    "sails": 3,
+    "crew": 111
+  },
+  "lock": "c:71aff2cc857298d7309326b3ec4361bb46b1676f"
+}

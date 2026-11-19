@@ -1,0 +1,43 @@
+{
+  "order": 50,
+  "ship": {
+    "id": "nightlamp",
+    "el": "ship-nightlamp",
+    "name": "夜燈號",
+    "vxk": "nightlamp.vxk",
+    "work": "basecamp-nightlamp-01m-assembly",
+    "theme": "nightlamp",
+    "geo": {"spar": [130, 146], "marines": [60, 330], "center": 160, "aim": 100, "aimZ": [35, 430], "deckAim": [103, 130], "rigAim": [170, 480]},
+    "cfg": {"pump": 23, "speed": 3, "agile": 3, "upwind": 2},
+    "author": "basecamp",
+    "idNext": {
+      "anchor": 3,
+      "binnacle": 2,
+      "capstan": 2,
+      "deck": 5,
+      "gun": 25,
+      "ladders": 2,
+      "light": 5,
+      "magazine": 2,
+      "part": 10,
+      "portlid": 23,
+      "powder": 57,
+      "rudder": 2,
+      "ship": 2,
+      "wheel": 2,
+      "wheel_stand": 2,
+      "yard": 11
+    }
+  },
+  "card": {
+    "tons": 3153,
+    "len": 53,
+    "guns": 24,
+    "gunTypes": {"chase": 2, "long": 22},
+    "volley": 256,
+    "drive": "sail",
+    "sails": 10,
+    "crew": 198
+  },
+  "lock": "c:eb3e0922f1780f302fbc9f26a5851df52725773f"
+}

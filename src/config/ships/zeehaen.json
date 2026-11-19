@@ -1,0 +1,49 @@
+{
+  "order": 340,
+  "ship": {
+    "id": "zeehaen",
+    "role": "merchant",
+    "el": "ship-zeehaen",
+    "name": "澤漢號",
+    "gangway": [[226.5, 141.5, 55.5], [226.5, 51.5, 55.5]],
+    "vxk": "zeehaen.vxk",
+    "work": "abigail-fluyt-01m-assembly",
+    "author": "Abigail",
+    "geo": {"spar": [37, 60], "marines": [43, 75], "center": 60, "aim": 37, "aimZ": [5, 340], "deckAim": [37, 59], "rigAim": [75, 330]},
+    "cfg": {"pump": 3},
+    "crew": {"officers": 2, "helm": 1, "top": 1, "marines": 6, "marineGap": 14, "monkeys": 1, "handsK": 0.25, "navigator": 0},
+    "names": ["澤漢號"],
+    "idNext": {
+      "anchor": 3,
+      "binnacle": 2,
+      "boat": 2,
+      "capstan": 2,
+      "deck": 5,
+      "door": 5,
+      "galley": 2,
+      "gun": 15,
+      "ladders": 4,
+      "light": 2,
+      "magazine": 2,
+      "model": 2,
+      "part": 10,
+      "powder": 21,
+      "rooms": 2,
+      "rudder": 2,
+      "ship": 2,
+      "tiller": 2,
+      "yard": 7
+    }
+  },
+  "card": {
+    "tons": 394,
+    "len": 31.3,
+    "guns": 14,
+    "gunTypes": {"pierrier": 6, "long4": 8},
+    "volley": 20,
+    "drive": "sail",
+    "sails": 6,
+    "crew": 56
+  },
+  "lock": "c:d0d4381e4fd04f0710c982f426f574db59f9cc99"
+}

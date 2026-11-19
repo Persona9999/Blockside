@@ -1,0 +1,41 @@
+{
+  "order": 220,
+  "ship": {
+    "id": "fort_en",
+    "el": "ship-fort-en",
+    "name": "英國稜堡",
+    "vxk": "fort_en.vxk",
+    "work": "trailhead-harbour-01m-fort-en",
+    "author": "trailhead",
+    "fixed": true,
+    "zw0": 1,
+    "geo": {"spar": [36, 40], "marines": [20, 20], "center": 30, "aim": 40, "aimZ": [5, 80], "deckAim": [20, 50], "rigAim": [90, 120]},
+    "crew": {
+      "officers": 2,
+      "helm": 0,
+      "marines": 0,
+      "top": 0,
+      "monkeys": 1,
+      "handsK": 0.1,
+      "surgeon": 0,
+      "carpenter": 1,
+      "sailmaker": 1,
+      "cook": 0,
+      "navigator": 0,
+      "quartermaster": 0
+    },
+    "material": "brick",
+    "town": "en-fort"
+  },
+  "card": {
+    "tons": 70,
+    "len": 23.7,
+    "guns": 9,
+    "gunTypes": {"long6": 9},
+    "volley": 24,
+    "drive": "sail",
+    "sails": 1,
+    "crew": 33
+  },
+  "lock": "c:db457288913c3dd803a41954102bd65185dab995"
+}

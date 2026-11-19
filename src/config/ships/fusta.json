@@ -1,0 +1,30 @@
+{
+  "order": 190,
+  "ship": {
+    "id": "fusta",
+    "el": "ship-fusta",
+    "name": "越嶺號",
+    "vxk": "fusta.vxk",
+    "work": "kotoko-fusta-01m-assembly",
+    "floodRim": [[127.5, 60.5, 16], [127.5, 100.5, 16], [233.5, 61.5, 16], [233.5, 99.5, 16]],
+    "author": "kotoko",
+    "fireEngine": false,
+    "cfg": {"base": 6.5},
+    "geo": {"spar": [16, 26], "marines": [40, 50], "center": 30, "aim": 18, "aimZ": [10, 190], "deckAim": [16, 26], "rigAim": [80, 190]},
+    "crew": {"top": 0, "marines": 6},
+    "names": ["越嶺號"],
+    "cargoT": 3,
+    "idNext": {"anchor": 3, "deck": 4, "gun": 7, "ladders": 2, "magazine": 2, "oar": 73, "part": 5, "powder": 5, "rudder": 2, "ship": 2, "yard": 2}
+  },
+  "card": {
+    "tons": 41,
+    "len": 26.6,
+    "guns": 5,
+    "gunTypes": {"bombardella": 1, "pierrier": 2, "bow": 2},
+    "volley": 3,
+    "drive": "oar",
+    "sails": 1,
+    "crew": 137
+  },
+  "lock": "c:89fa4635496150e0621472511e4b759d481002b9"
+}

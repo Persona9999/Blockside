@@ -1,0 +1,41 @@
+{
+  "order": 270,
+  "ship": {
+    "id": "battery_en",
+    "el": "ship-battery-en",
+    "name": "英國砲台",
+    "vxk": "battery_en.vxk",
+    "work": "trailhead-harbour-01m-battery-en",
+    "author": "trailhead",
+    "material": "brick",
+    "fixed": true,
+    "zw0": 1,
+    "geo": {"spar": [36, 40], "marines": [10, 10], "center": 10, "aim": 10, "aimZ": [2, 30], "deckAim": [2, 20], "rigAim": [60, 90]},
+    "crew": {
+      "officers": 1,
+      "helm": 0,
+      "marines": 0,
+      "top": 0,
+      "monkeys": 1,
+      "handsK": 0.1,
+      "surgeon": 0,
+      "carpenter": 1,
+      "sailmaker": 1,
+      "cook": 0,
+      "navigator": 0,
+      "quartermaster": 0
+    },
+    "town": "en-battery"
+  },
+  "card": {
+    "tons": 8,
+    "len": 11.1,
+    "guns": 3,
+    "gunTypes": {"long6": 3},
+    "volley": 8,
+    "drive": "sail",
+    "sails": 0,
+    "crew": 18
+  },
+  "lock": "c:7a9dab2e34fbca27cefa75c50c0cf23e4d52cf71"
+}
