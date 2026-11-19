@@ -12,6 +12,7 @@
 #   python -I admin.py check                      驗 config/game.json
 #   python -I admin.py build                      照設定重建 ../index.html（Blockside 根目錄 ＝ GitHub Pages 的首頁）
 #   python -I admin.py build --code [--base <版>]  只重建程式（入口 index.html；船檔 ships/ 照舊）—— 沒有 VoxelKit/_cache 的機器用，船變了就擋（見「只重建程式」）
+#   python -I admin.py build --ship <船的代號> [--base <版>]  只建一艘：這艘（改裝船家族一起）的船檔＋入口，_cache 只要有這幾艘；別的船變了就擋（見「只建一艘」）
 #   python -I admin.py shell <外殼設定> [--check]  外掛外殼：拿建好的成品套別的遊戲的外殼寫成另一頁（見「外掛外殼」）
 #   python -I admin.py shellsync [--check]        外殼頁跟著核心：這份是別的遊戲的 submodule 時，外層用這份成品套的頁全部重套（.githooks 的 post-* 會叫；見「外殼頁跟著核心」）
 #   python -I admin.py layers [--shell]           分層讀數：模擬層直接用到上層的名字；--shell ＝ 核心直接用到外殼（主選單、設定頁；SHELL_UI）的名字、直接碰 #cover 的 DOM（--shell 的兩個數字建置前會擋：都要是 0，TASK-0774）
@@ -25,6 +26,7 @@
 #   python -I admin.py cells --id <船的代號>      只寫動力件、梯子、揚弾筒的格子清單（meta、格子不動；TASK-0676 木匠照它還原整件梯子）
 #   python -I admin.py relock --id <船的代號>     指紋改成 _cache 現在那份（手動換過 .vxk 時；平常匯入／重新匯入／metasync 會自己更新）
 #   加 --no-build：匯入／重新匯入之後不重建（也不烘表演船低模；之後 build 的最後一行列出哪幾型要 showlod）
+#   加 --only：匯入／重新匯入之後只建這艘（build --ship）—— _cache 不齊的機器（新機器、Linux 主機）也匯得進一艘船
 import argparse, base64, hashlib, json, math, os, posixpath, re, shutil, socket, struct, subprocess, sys, urllib.request, webbrowser, zlib
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
@@ -822,14 +824,19 @@ def ship_tags(cfg):
     return ''.join('<script type="application/x-vxk" id="%s" src="../VoxelKit/_cache/%s"></script>\n' % (s['el'], s['vxk']) for s in cfg['ships'])
 
 
-def sync_template(cfg):
-    """template.html 的船標籤照 ships 改寫（兩個註解記號中間那一段）。回傳有沒有改。"""
+def template_synced(cfg):
+    """(template.html as it is, template.html with its ship tags rewritten from ships) — the part between the two marker comments."""
     t = open(TPL, encoding='utf-8').read()
     a, b = t.find(SHIPS_A), t.find(SHIPS_B)
     if a < 0 or b < a:
         raise RuntimeError('template.html 找不到船標籤的記號（%s … %s）' % (SHIPS_A.strip(), SHIPS_B))
     a += len(SHIPS_A)
-    nt = t[:a] + ship_tags(cfg) + t[b:]
+    return t, t[:a] + ship_tags(cfg) + t[b:]
+
+
+def sync_template(cfg):
+    """template.html 的船標籤照 ships 改寫（兩個註解記號中間那一段）。回傳有沒有改。"""
+    t, nt = template_synced(cfg)
     if nt == t:
         return False
     with open(TPL, 'w', encoding='utf-8', newline='\n') as f:
@@ -2122,11 +2129,11 @@ def act_disp(ids=None, margin=None):
 ROPEBIND_KIND = {'grid': '格子（旁邊 5 格內有實心格）', 'turret': '砲塔的殼', 'yard': '帆桁', 'model': '模型（作品寫明）', 'guess': '模型（照外框猜）', 'rope': '母繩', 'sail': '只靠帆角', 'none': '哪裡都不靠'}
 
 
-def act_ropebind(ids=None, build=True):
+def act_ropebind(ids=None, build=True, only=None):
     """繩端綁定（TASK-0716；Tim 2026-10-18「遊戲端真的要猜測應該要放在匯入時（檢查、猜測並產生報表）」）：
     跑成品的 ?shipcheck=<船>，拿遊戲照同一套規則現場算的每條繩兩端綁在哪（R.binds；js/10_ship.js ropeDecide），寫進 _cache 那份 .vxk 的 rig.ropes[i].bind
     ⇒ 遊戲照它套、不猜（js/10_ship.js linkRopes）；出報表 reports/ropebind_<船>.md（每一類幾端、照外框猜的模型、哪裡都不靠的一端）。
-    要先建過（成品裡的船 ＝ _cache 那份）；檔頭變了 ⇒ 更新指紋，build 為真就重建。"""
+    要先建過（成品裡的船 ＝ _cache 那份）；檔頭變了 ⇒ 更新指紋，build 為真就重建。only ＝ a ship id ⇒ rebuild with build --ship."""
     cfg = load()
     ids = ids or [s['id'] for s in cfg['ships']]
     chrome = next((c for c in CHROMES if os.path.exists(c)), None)
@@ -2191,7 +2198,7 @@ def act_ropebind(ids=None, build=True):
             dirty = True
         log.append('  %s %s（%s）：繩 %d 條、檔頭改了 %d 條；照外框猜 %d 端、不靠 %d 端 ⇒ %s' % ('⚠' if guess else '✓', s['name'], sid, len(RP), changed, len(guess), len(none), rp))
     if dirty and build:
-        log += act_build()
+        log += act_build_ship(only) if only else act_build()
     return ['繩端綁定：'] + log
 
 
@@ -3204,6 +3211,12 @@ def code_base(fp, base=None):
     return None
 
 
+def ship_sig(c):
+    """What the ship files depend on in the ship list: (id, el, .vxk, el of the variant base) per ship, in order."""
+    byid = {s['id']: s['el'] for s in c['ships']}
+    return [(s['id'], s['el'], s['vxk'], byid.get(s.get('variant_of'))) for s in c['ships']]
+
+
 def act_build_code(base=None):
     """build --code：只重建程式（入口 index.html；船檔 ships/ 照舊）—— 沒有 VoxelKit/_cache 的機器用；兩道關見上面。"""
     act_thumbs(check=True)
@@ -3239,13 +3252,9 @@ def act_build_code(base=None):
     if not rev:
         raise Fail('成品的來源指紋 %s 對不到 %s 的來源 ⇒ 用 --base <版> 指定成品是照哪一版建的' % (have['fp'], base or 'HEAD／MERGE_HEAD'))
     ships_tag = m.group(0) + '\n'
-
-    def sig(c):
-        byid = {s['id']: s['el'] for s in c['ships']}
-        return [(s['id'], s['el'], s['vxk'], byid.get(s.get('variant_of'))) for s in c['ships']]
     r = GitRead(rev + ':')
     try:
-        if sig(json.loads(r('src/config/game.json').decode('utf-8'))) != sig(cfg):
+        if ship_sig(json.loads(r('src/config/game.json').decode('utf-8'))) != ship_sig(cfg):
             raise Fail('船隻清單（代號、標籤、.vxk、改裝船的原船）跟 %s 不一樣%s' % (rev, full))
         h0, _ = code_html(r, ships_tag)
     finally:
@@ -3264,6 +3273,136 @@ def act_build_code(base=None):
             f.write(h1)
         log.append('✓ 只重建程式：入口 index.html 換了（來源指紋 %s → %s）；船檔 ships/ 照舊 %d 個' % (have['fp'], M1['fp'], len(idx)))
     return log + flagloop_ensure() + act_srccheck()
+
+
+# ───────────────────────── 只建一艘（build --ship；FAR-81，2026-11-19） ─────────────────────────
+# Importing or changing one ship should not need the whole fleet's _cache (cache_guard wants every ship). Since the split build,
+#   a ship file depends only on that ship (and its variant base), and the entry only holds a { el: hash } list.
+# Built together: the ship's variant family (every ship linked to it through variant_of — grid diffs and shared headers stay inside it);
+#   their .vxk must be in _cache and match vxk_lock.json. No other ship's _cache is read.
+# Two gates, as in build --code; failing either writes nothing:
+#   1. Other ships unchanged: outside the family, the ship list (id, el, .vxk, variant base) and its order equal the version the product
+#      was built from, and so does the product's ship list; the product's recorded .vxk fingerprints equal the current ones; every listed
+#      ship file is there and matches its hash. The family may be new (an import); it takes its place in the configured order.
+#   2. This path equals the real build: the entry rebuilt from that version's sources must equal the current product byte for byte.
+# Build: the family goes through pack_html's own steps (pack_ship, pack_share, pack_file); pack_verify checks just these ships.
+#   A family member whose own and whose base's .vxk fingerprint and ship-list row equal the product's must come out byte-identical
+#   to its current ship file (e.g. the variant changed, the base did not), otherwise refuse.
+#   The entry is rebuilt with code_html from the working sources (template ship tags per config, ship list with the new hashes).
+#   Everything is computed and verified before anything is written (ship files, template.html, entry); then act_build's tail:
+#   flag-loop bake, thumbnails, srccheck, show-LOD and anchor notes.
+def ship_family(ships, sid):
+    """Variant family: ids of every ship linked to sid through variant_of (bases, variants, variants of variants…)."""
+    byid, fam, todo = {s['id']: s for s in ships}, set(), [sid]
+    while todo:
+        x = todo.pop()
+        if x in fam or x not in byid:
+            continue
+        fam.add(x)
+        todo += [byid[x]['variant_of']] if byid[x].get('variant_of') else []
+        todo += [s['id'] for s in ships if s.get('variant_of') == x]
+    return fam
+
+
+def act_build_ship(sid, base=None):
+    """build --ship: rebuild this ship's (and its variant family's) ship files, swap those entries in the entry's ship list and
+    rebuild the entry from the working sources; see the block above."""
+    cfg = load()
+    E = validate(cfg)
+    if E:
+        raise Fail('設定不合法，不建置：\n' + '\n'.join('  ✗ ' + e for e in E))
+    if not any(s['id'] == sid for s in cfg['ships']):
+        raise Fail('沒有代號 %s 的船' % sid)
+    why = atlas_stale()                                         # same as act_build
+    if why:
+        raise Fail('✗ 海戰圖示的圖集過期（%s）⇒ 先 python -I admin.py atlas，再建置' % '；'.join(why))
+    full = ' ⇒ 要整份建置：在有 VoxelKit/_cache 的機器 python -I src/admin.py build'
+    fam = ship_family(cfg['ships'], sid)
+    FS = [s for s in cfg['ships'] if s['id'] in fam]
+    names = '、'.join(s['id'] for s in FS)
+    L = lock_load()
+    for s in FS:
+        p = os.path.join(CACHE, s['vxk'])
+        if not os.path.exists(p):
+            raise Fail('%s：_cache 沒有這艘 ⇒ 只建 %s 要 %s 的 .vxk 都在（改裝船家族一起建）；python -I admin.py cache 或 reimport --id %s' % (s['vxk'], sid, names, s['id']))
+        have_fp = file_fp(p)
+        if have_fp != L.get(s['vxk']):
+            raise Fail('%s：_cache %s 跟指紋 %s 不同 ⇒ 不建（會把船換成別的版本）。\n'
+                       '  要用 _cache 現在這份 ⇒ python -I admin.py relock --id %s；要雕刻作品的最新版 ⇒ python -I admin.py reimport --id %s'
+                       % (s['vxk'], have_fp[:12], (L.get(s['vxk']) or '（沒有）')[:12], s['id'], s['id']))
+    t, nt = template_synced(cfg)                                # ship tags per config (a new import); written with the rest, after the checks
+    wread = lambda p: nt.encode('utf-8') if p == 'src/template.html' else work_read(p)
+    html0 = open(OUT, encoding='utf-8', newline='').read()
+    m, idx, have = SHIPS_TAG_RX.search(html0), ships_index(html0), src_of(html0)
+    if not m or not idx:
+        raise Fail('成品不是拆檔的（沒有船清單 #%s）⇒ --ship 只換得了拆檔成品的船檔' % SHIPS_EL)
+    if not have:
+        raise Fail('成品沒有來源清單 ⇒ 不知道它是照哪一版建的' + full)
+    fel = {s['el'] for s in FS}
+    rest = [s['el'] for s in cfg['ships'] if s['id'] not in fam]
+    if [el for el in idx if el not in fel] != rest:
+        raise Fail('%s 以外的船（%s）跟成品的船清單（%s）不一樣 ⇒ 只建一艘只能換、加 %s%s' % (names, '、'.join(rest), '、'.join(el for el in idx if el not in fel), names, full))
+    for el in rest:
+        ship_data(html0, el)                                    # file present and matching its hash, else Fail
+    want = src_manifest(wread)
+    vx = lambda F: {posixpath.basename(k): v for k, v in F.items() if k.endswith('.vxk')}
+    hv, wv, fv = vx(have['files']), vx(want['files']), {s['vxk'] for s in FS}
+    bad = sorted(k for k in set(hv) | set(wv) if hv.get(k) != wv.get(k) and k not in fv)
+    if bad:
+        raise Fail('%s 以外的船 .vxk 的指紋跟成品記的不一樣（%s）⇒ 那幾艘也變了%s' % (names, '、'.join(bad), full))
+    rev = code_base(have['fp'], base)
+    if not rev:
+        raise Fail('成品的來源指紋 %s 對不到 %s 的來源 ⇒ 用 --base <版> 指定成品是照哪一版建的' % (have['fp'], base or 'HEAD／MERGE_HEAD'))
+    r = GitRead(rev + ':')
+    try:
+        sig0 = ship_sig(json.loads(r('src/config/game.json').decode('utf-8')))
+        if [x for x in sig0 if x[0] not in fam] != [x for x in ship_sig(cfg) if x[0] not in fam]:
+            raise Fail('%s 以外的船（代號、標籤、.vxk、改裝船的原船）跟 %s 不一樣%s' % (names, rev, full))
+        h0, _ = code_html(r, m.group(0) + '\n')
+    finally:
+        r.close()
+    if h0 != html0:
+        i = next((k for k in range(min(len(h0), len(html0))) if h0[k] != html0[k]), min(len(h0), len(html0)))
+        raise Fail('照 %s 的來源走同一條路重做，跟現在的成品不一樣（第 %d 行起）⇒ 建置程式改過、或成品不是這樣建的%s' % (rev, html0.count('\n', 0, i) + 1, full))
+    log = bundle_names_check() + owner_check() + act_shell_layers(gate=True)
+    log.append('✓ 要建的：%s（改裝船家族）的 .vxk 都在 _cache、跟指紋對得上' % names)
+    log.append('✓ 其他船沒變：%d 艘的標籤、.vxk 指紋、改裝船的原船都跟 %s 一樣，船檔都在、雜湊對得上' % (len(rest), rev))
+    log.append('✓ 照 %s 的來源走同一條路重做 ⇒ 跟現在的成品逐位元組相同（這個做法 ＝ 正式建置）' % rev)
+    items = [pack_ship(zlib.decompress(open(os.path.join(CACHE, s['vxk']), 'rb').read(), -15), s['el'], cfg['ships']) for s in FS]
+    pack_share(items)
+    files, new = {}, {}
+    for it in items:
+        new[it['el']], files[ship_file(it['el'])] = pack_file(it)
+    sig0, sig1, byid = {x[0]: x for x in sig0}, {x[0]: x for x in ship_sig(cfg)}, {s['id']: s for s in cfg['ships']}
+    same = lambda s: s['el'] in idx and sig0.get(s['id']) == sig1[s['id']] and hv.get(s['vxk']) == wv.get(s['vxk'])
+    for s in FS:
+        if same(s) and (not s.get('variant_of') or same(byid[s['variant_of']])) and new[s['el']] != idx[s['el']]:
+            raise Fail('%s 跟它的原船都跟成品一樣，重做出來的船檔卻不一樣（%s → %s）⇒ 船檔的做法改過、或 _cache 那份跟建置時那份只差在指紋不算的地方（匯出時間、JSON 鍵的順序：換機器重新匯出）%s'
+                       % (s['id'], idx[s['el']], new[s['el']], full))
+    index = {s['el']: new[s['el']] if s['id'] in fam else idx[s['el']] for s in cfg['ships']}
+    h1, M1 = code_html(wread, '<script type="application/json" id="%s">%s</script>\n' % (SHIPS_EL, json.dumps(index, separators=(',', ':'))), log)
+    nv, E = pack_verify(h1, lambda rel: files[rel].encode('utf-8') if rel in files else work_read(rel), fam)
+    if E:
+        raise Fail('壓縮版還原出來跟 _cache 原檔對不上（什麼都沒寫）：\n' + '\n'.join('  ✗ ' + e for e in E[:12]))
+    log.append('✓ 還原驗算：%d 艘、%d 份網格的三角形跟 _cache 原檔逐個相同，格子、繩、帆一位元組不差' % (len(FS), nv))
+    wrote = []
+    for s in FS:
+        f = ship_file(s['el'])
+        if work_read(f) != files[f].encode('utf-8'):
+            with open(os.path.join(ROOT, *f.split('/')), 'w', encoding='utf-8', newline='\n') as fh:
+                fh.write(files[f])
+            wrote.append(f)
+        log.append('  %s：%s' % (f, '新的 %s' % new[s['el']] if s['el'] not in idx else '照舊 %s' % new[s['el']] if new[s['el']] == idx[s['el']] else '%s → %s' % (idx[s['el']], new[s['el']])))
+    if sync_template(cfg):
+        log.append('template.html 的船標籤照設定改寫了')
+    if h1 == html0:
+        log.append('· 入口不用換（船清單、來源都跟 %s 一樣）' % rev)
+    else:
+        with open(OUT, 'w', encoding='utf-8', newline='') as f:
+            f.write(h1)
+        log.append('✓ 入口 index.html 換了（來源指紋 %s → %s）' % (have['fp'], M1['fp']))
+    log.append('✓ 只建 %s：寫了船檔 %d 個（%s）；其他 %d 艘的船檔照舊' % (names, len(wrote), '、'.join(wrote) or '都跟原本一樣', len(rest)))
+    return log + flagloop_ensure() + thumbs_finish() + act_srccheck() + showlod_note(cfg) + anc_note(cfg)
 
 
 def flagloop_ensure():
@@ -3856,79 +3995,67 @@ def same_tris(a, b):
     return True
 
 
-def pack_html(path, split=True):
-    """成品（vxk_inline.py 嵌好的）⇒ 壓縮版：每艘的網格換成它自己池子（header.mpool）的編號。
-    split（預設）⇒ 船拆成 ships/<標籤>.js（分段）、入口留船清單；False（build --single）⇒ 船照舊內嵌、一個檔。回傳讀數。"""
-    html = open(path, encoding='utf-8').read()
-    if 'id="%s"' % POOL_EL in html or SHIPS_TAG_RX.search(html):
-        raise Fail('成品已經壓過了（有 #%s 或 #%s）' % (POOL_EL, SHIPS_EL))
-    log, keep, mirrors, moved, npool, files, index = [], 0, [], 0, 0, {}, {}
-    size0 = len(html.encode('utf-8'))
-    ships = load()['ships']
+def pack_ship(raw, el, ships):
+    """One ship (raw ＝ the inflated _cache .vxk, which is what vxk_inline embeds) ⇒ the packed form: sails keep only their recipe,
+    meshes go to the ship's own pool, the grid is mirrored or diffed against the variant base. ships ＝ the ship list (finds the base,
+    whose _cache is read). Returns the item: el, h, grid, changed, base (the base's el), keep／moved／npool and mirror (report).
+    Shared by pack_html and build --ship, so both write byte-identical ship files."""
     byel, byid = {s['el']: s for s in ships}, {s['id']: s for s in ships}
-
-    def one(mt):
-        nonlocal keep, moved, npool
-        if len(mt.group(2)) < 64:   # 程式註解裡的「<script type="application/x-vxk" id="…">base64</script>」不是船
-            return mt.group(0)
-        raw = zlib.decompress(base64.b64decode(mt.group(2)), -15)
-        n = struct.unpack('<I', raw[4:8])[0]
-        h = json.loads(raw[8:8 + n].decode('utf-8'))
-        rs = sail_strip(h)                                       # TASK-0602 ①：有配方的帆只留配方（遊戲照配方生帆，js/29_sailrecipe.js）
-        rs += vox_strip(h)                                       # TASK-0793：主機、鍋爐（自帶格子的模型）的網格拿掉（遊戲照 vox 放回船殼、網格不建）
-        ms = (h.get('rig') or {}).get('meshes')
-        if ms:
-            out, pool, where, shape = [], [], {}, {}             # 池子只在這艘船裡（編號照這艘船裡第一次出現的順序）
-            for m in ms:
-                key = hashlib.sha1(json.dumps(m, separators=(',', ':')).encode()).hexdigest()
-                if key not in where:
-                    e = mesh_pack(m)
-                    if e is None or not same_tris(m, mesh_unpack(e)):
-                        where[key] = None
-                    else:
-                        # TASK-0667：只差起點的網格（同一種砲擺在不同位置：差值編碼只有第一個頂點不同）共用池子的同一格，引用帶自己的起點 o
-                        sk = hashlib.sha1(json.dumps([e['v'][3:], e['t'], e['tmat'], e['mats']], separators=(',', ':')).encode()).hexdigest()
-                        if sk not in shape:
-                            shape[sk] = len(pool)
-                            pool.append(e)
-                        i = shape[sk]
-                        where[key] = {'pool': i} if pool[i]['v'][:3] == e['v'][:3] else {'pool': i, 'o': e['v'][:3]}
-                if where[key] is None:
-                    out.append(m)
-                    keep += 1
+    keep, moved, npool = 0, 0, 0
+    n = struct.unpack('<I', raw[4:8])[0]
+    h = json.loads(raw[8:8 + n].decode('utf-8'))
+    rs = sail_strip(h)                                       # TASK-0602 ①：有配方的帆只留配方（遊戲照配方生帆，js/29_sailrecipe.js）
+    rs += vox_strip(h)                                       # TASK-0793：主機、鍋爐（自帶格子的模型）的網格拿掉（遊戲照 vox 放回船殼、網格不建）
+    ms = (h.get('rig') or {}).get('meshes')
+    if ms:
+        out, pool, where, shape = [], [], {}, {}             # 池子只在這艘船裡（編號照這艘船裡第一次出現的順序）
+        for m in ms:
+            key = hashlib.sha1(json.dumps(m, separators=(',', ':')).encode()).hexdigest()
+            if key not in where:
+                e = mesh_pack(m)
+                if e is None or not same_tris(m, mesh_unpack(e)):
+                    where[key] = None
                 else:
-                    out.append(dict(where[key]))
-                    moved += 'o' in where[key]
-            h['rig']['meshes'] = out
-            if pool:
-                h['mpool'] = {'q': POOL_Q, 'meshes': pool}
-                npool += len(pool)
-        grid = raw[8 + n:]
-        g0 = len(_deflate(grid))
-        el = re.search(r'id="([^"]+)"', mt.group(1)).group(1)
-        mr = grid_mirror_pack(h, grid)                        # TASK-0602：格子鏡射＋diff（沒有比較小 ⇒ None，照原樣）
-        vr = None
-        sv = byel.get(el)
-        if sv and sv.get('variant_of') in byid:              # TASK-0657：改裝船 ⇒ 跟原船的差；比鏡射（或原樣）小才用
-            s0 = byid[sv['variant_of']]
-            h0, g0raw = _cache_raw(s0)
-            vr = grid_variant_pack(h, grid, h0, g0raw, s0['el'])
-            if vr and len(_deflate(vr[1])) >= len(_deflate(mr[1] if mr else grid)):
-                vr = None
-        if vr:
-            h['variant'], grid = vr
-            mr = None
-        elif mr:
-            h['mirror'], grid = mr
-        mirrors.append((el, h.get('mirror'), g0, len(_deflate(grid)), h.get('variant')))
-        items.append({'el': el, 'h': h, 'grid': grid, 'mt': mt, 'changed': bool(ms or mr or vr or rs), 'base': byid[sv['variant_of']]['el'] if sv and sv.get('variant_of') in byid else None})
-        return '\x00SHIP%d\x00' % (len(items) - 1)                # 檔頭共用（TASK-0667）要等每艘都處理完才比得了 ⇒ 先佔位，最後一起寫
+                    # TASK-0667：只差起點的網格（同一種砲擺在不同位置：差值編碼只有第一個頂點不同）共用池子的同一格，引用帶自己的起點 o
+                    sk = hashlib.sha1(json.dumps([e['v'][3:], e['t'], e['tmat'], e['mats']], separators=(',', ':')).encode()).hexdigest()
+                    if sk not in shape:
+                        shape[sk] = len(pool)
+                        pool.append(e)
+                    i = shape[sk]
+                    where[key] = {'pool': i} if pool[i]['v'][:3] == e['v'][:3] else {'pool': i, 'o': e['v'][:3]}
+            if where[key] is None:
+                out.append(m)
+                keep += 1
+            else:
+                out.append(dict(where[key]))
+                moved += 'o' in where[key]
+        h['rig']['meshes'] = out
+        if pool:
+            h['mpool'] = {'q': POOL_Q, 'meshes': pool}
+            npool += len(pool)
+    grid = raw[8 + n:]
+    g0 = len(_deflate(grid))
+    mr = grid_mirror_pack(h, grid)                        # TASK-0602：格子鏡射＋diff（沒有比較小 ⇒ None，照原樣）
+    vr = None
+    sv = byel.get(el)
+    if sv and sv.get('variant_of') in byid:              # TASK-0657：改裝船 ⇒ 跟原船的差；比鏡射（或原樣）小才用
+        s0 = byid[sv['variant_of']]
+        h0, g0raw = _cache_raw(s0)
+        vr = grid_variant_pack(h, grid, h0, g0raw, s0['el'])
+        if vr and len(_deflate(vr[1])) >= len(_deflate(mr[1] if mr else grid)):
+            vr = None
+    if vr:
+        h['variant'], grid = vr
+        mr = None
+    elif mr:
+        h['mirror'], grid = mr
+    return {'el': el, 'h': h, 'grid': grid, 'changed': bool(ms or mr or vr or rs), 'base': byid[sv['variant_of']]['el'] if sv and sv.get('variant_of') in byid else None,
+            'keep': keep, 'moved': moved, 'npool': npool, 'mirror': (el, h.get('mirror'), g0, len(_deflate(grid)), h.get('variant'))}
 
-    items = []
-    RX = SHIP_RX
-    first = next(mt for mt in re.finditer(RX, html) if len(mt.group(2)) >= 64).start()   # 船清單放在第一艘船前面（⛔ 照字串找第一個：voxelkit.js 的註解裡就有一模一樣的標籤 ⇒ 清單插進程式中間）
-    html2 = html[:first] + '\x00POOL\x00' + html[first:]
-    html2, k = re.subn(RX, one, html2)
+
+def pack_share(items):
+    """Shared headers (TASK-0667): fields a variant has in common with its packed base are dropped and listed in h['vh'].
+    items must include each variant's base. Returns (el, base el, paths, bytes saved) for the report."""
     proc = {it['el']: it['h'] for it in items}
     shared = []
     for it in items:                                          # 先全部比完（比的是處理好、還沒拿掉任何欄位的檔頭）再拿掉 ⇒ 原船自己也是改裝船時照樣對
@@ -3944,15 +4071,48 @@ def pack_html(path, split=True):
             it['h']['vh'] = it['vh']
             shared.append((it['el'], it['base'], it['vh']['k'], n0 - len(json.dumps(it['h'], ensure_ascii=False, separators=(',', ':')).encode('utf-8'))))
             it['changed'] = True
+    return shared
+
+
+def pack_file(it):
+    """A packed ship (pack_ship ＋ pack_share) ⇒ (hash, ship file text)."""
+    P = ship_pieces(it['h'], it['grid'])
+    hx = ship_hash(P)
+    return hx, ship_text(it['el'], P, hx)
+
+
+def pack_html(path, split=True):
+    """成品（vxk_inline.py 嵌好的）⇒ 壓縮版：每艘的網格換成它自己池子（header.mpool）的編號。
+    split（預設）⇒ 船拆成 ships/<標籤>.js（分段）、入口留船清單；False（build --single）⇒ 船照舊內嵌、一個檔。回傳讀數。"""
+    html = open(path, encoding='utf-8').read()
+    if 'id="%s"' % POOL_EL in html or SHIPS_TAG_RX.search(html):
+        raise Fail('成品已經壓過了（有 #%s 或 #%s）' % (POOL_EL, SHIPS_EL))
+    log, files, index = [], {}, {}
+    size0 = len(html.encode('utf-8'))
+    ships = load()['ships']
+
+    def one(mt):
+        if len(mt.group(2)) < 64:   # 程式註解裡的「<script type="application/x-vxk" id="…">base64</script>」不是船
+            return mt.group(0)
+        it = pack_ship(zlib.decompress(base64.b64decode(mt.group(2)), -15), re.search(r'id="([^"]+)"', mt.group(1)).group(1), ships)
+        it['mt'] = mt
+        items.append(it)
+        return '\x00SHIP%d\x00' % (len(items) - 1)                # 檔頭共用（TASK-0667）要等每艘都處理完才比得了 ⇒ 先佔位，最後一起寫
+
+    items = []
+    RX = SHIP_RX
+    first = next(mt for mt in re.finditer(RX, html) if len(mt.group(2)) >= 64).start()   # 船清單放在第一艘船前面（⛔ 照字串找第一個：voxelkit.js 的註解裡就有一模一樣的標籤 ⇒ 清單插進程式中間）
+    html2 = html[:first] + '\x00POOL\x00' + html[first:]
+    html2, k = re.subn(RX, one, html2)
+    keep, moved, npool = (sum(it[x] for it in items) for x in ('keep', 'moved', 'npool'))
+    mirrors = [it['mirror'] for it in items]
+    shared = pack_share(items)
 
     def emit(m):
         it = items[int(m.group(1))]
         mt = it['mt']
         if split:                                               # 船檔：照結構分段（見上面「船檔分段」）
-            P = ship_pieces(it['h'], it['grid'])
-            hx = ship_hash(P)
-            index[it['el']] = hx
-            files[ship_file(it['el'])] = ship_text(it['el'], P, hx)
+            index[it['el']], files[ship_file(it['el'])] = pack_file(it)
             return ''                                           # 標籤拿掉、換行留著 ⇒ 後面的行號不變
         if not it['changed']:
             return mt.group(0)
@@ -4174,12 +4334,15 @@ def vox_strip(h):
     return n
 
 
-def pack_verify(html, read=None):
+def pack_verify(html, read=None, only=None):
     """壓縮版成品 ⇒ 每艘照遊戲的讀法還原（池子編號 ⇒ 那艘船自己池子 header.mpool 的那一格 ⇒ mesh_unpack），跟 _cache 原檔比：
     網格的三角形逐個相同；header 其他欄位相同；格子那一段一位元組不差。回傳 (比了幾份網格, 錯誤清單)。原格式的成品 ⇒ 只比格子與 header。
-    拆檔的成品：船從清單指的檔讀（read(相對路徑) ⇒ bytes｜None；不給 ⇒ 讀工作區）。"""
+    拆檔的成品：船從清單指的檔讀（read(相對路徑) ⇒ bytes｜None；不給 ⇒ 讀工作區）。
+    only (a set of ids) ⇒ check just those ships (build --ship)."""
     n, E = 0, []
     for s in load()['ships']:
+        if only is not None and s['id'] not in only:
+            continue
         try:
             dz = ship_data(html, s['el'], read)
         except Fail as e:
@@ -4345,7 +4508,7 @@ def act_cache(every=False):
     return log
 
 
-def act_import(work, sid, name, build=True, variant_of=None):
+def act_import(work, sid, name, build=True, variant_of=None, only=False):   # only: build just this ship (build --ship), no full-fleet _cache needed
     cfg = load()
     work, sid, name = (work or '').strip(), (sid or '').strip(), (name or '').strip()
     if not work:
@@ -4385,8 +4548,8 @@ def act_import(work, sid, name, build=True, variant_of=None):
     save(cfg)
     log.append('✓ 登記進船隻清單：%s（%s）—— 航速、靈活、船員照預設，要調到後台的船隻設定' % (name, sid))
     if build:
-        log += act_build()
-        log += act_ropebind([sid])                       # 繩端綁定（TASK-0716）：匯入時算好寫進檔頭、出報表
+        log += act_build_ship(sid) if only else act_build()
+        log += act_ropebind([sid], only=sid if only else None)   # 繩端綁定（TASK-0716）：匯入時算好寫進檔頭、出報表
         log += act_ancbake([sid])                        # 找最近實心格的預烘（TASK-1229）：這一型開戰要查的先烘進 ships/anchor.js（匯入檢查照表讀）
         log += act_shipcheck([sid])                      # 匯入檢查：缺 meta、砲班站不滿、開場就掉的（只讀）
         log += act_showlod([sid])                        # 表演船的低模與貼圖（TASK-1104；js/60_showlod.js）：沒烘過的這一型烘進 ships/showlod.js（堡壘、砲台不烘）
@@ -4395,7 +4558,7 @@ def act_import(work, sid, name, build=True, variant_of=None):
     return log
 
 
-def act_reimport(sid, work=None, build=True):
+def act_reimport(sid, work=None, build=True, only=False):   # only: as in act_import
     cfg = load()
     s = next((x for x in cfg['ships'] if x['id'] == sid), None)
     if not s:
@@ -4439,8 +4602,8 @@ def act_reimport(sid, work=None, build=True):
     if dirty:
         save(cfg)
     if build:
-        log += act_build()
-        log += act_ropebind([sid])                       # 繩端綁定（TASK-0716）：新的 .vxk 沒有 bind ⇒ 算好寫進去
+        log += act_build_ship(sid) if only else act_build()
+        log += act_ropebind([sid], only=sid if only else None)   # 繩端綁定（TASK-0716）：新的 .vxk 沒有 bind ⇒ 算好寫進去
         log += act_ancbake([sid])                        # 找最近實心格的預烘（TASK-1229）：.vxk 換了 ⇒ 指紋對不上 ⇒ 這一型重烘
         log += act_shipcheck([sid])                      # 匯入檢查（只讀）
         log += act_showlod([sid])                        # 表演船的低模與貼圖（TASK-1104）：.vxk 換了 ⇒ 指紋對不上 ⇒ 這一型重烘（不重烘的話遊戲裡這一型退回原模）
@@ -4868,7 +5031,8 @@ def main():
     s.add_argument('--raw', action='store_true', help='原格式（不壓縮、船內嵌）；預設是壓縮版：每艘船的模型網格收成它自己的池子（同一份只存一次、頂點去重＋差值），_cache 不動')
     s.add_argument('--single', action='store_true', help='壓縮版但不拆檔：船照舊內嵌在 index.html（一個檔；封存、要單一檔案的地方用）。預設拆成入口＋ships/')
     s.add_argument('--code', action='store_true', help='只重建程式：入口 index.html 照工作區的來源重建、船檔 ships/ 照舊 —— 沒有 VoxelKit/_cache 的機器用；船變了、或照同一條路重做不出現在的成品 ⇒ 擋下')
-    s.add_argument('--base', help='--code：成品是照哪一版建的（不給 ⇒ HEAD，合併中再試 MERGE_HEAD）')
+    s.add_argument('--ship', metavar='代號', help='只建一艘：這艘（和它的改裝船家族）的船檔照 _cache 重建、換入口船清單上這幾格，其他船檔照舊 —— _cache 只要有這幾艘；別的船變了、或照同一條路重做不出現在的成品 ⇒ 擋下')
+    s.add_argument('--base', help='--code、--ship：成品是照哪一版建的（不給 ⇒ HEAD，合併中再試 MERGE_HEAD）')
     s = sp.add_parser('shell', help='外掛外殼：拿建好的成品（入口；船檔共用）套別的遊戲的外殼（標題、樣式、掛鉤）寫成另一頁 —— 例 Blocksail 的 battle.html；格式見 admin.py「外掛外殼」')
     s.add_argument('cfg', help='外殼設定（JSON；裡面的路徑相對於它）')
     s.add_argument('--check', action='store_true', help='只比：那一頁是不是照現在的成品與外殼做的（舊了 ⇒ exit 1）')
@@ -4901,6 +5065,7 @@ def main():
     s.add_argument('--name', required=True)
     s.add_argument('--variant-of', help='改裝船：原船的代號（TASK-0657；成品裡格子存成跟原船的差，原船要先匯入）')
     s.add_argument('--no-build', action='store_true')
+    s.add_argument('--only', action='store_true', help='只建這艘（build --ship）：_cache 只要有這艘（改裝船連原船）；不加 ⇒ 整份建置')
     s = sp.add_parser('metasync', help='只同步 meta 與固定點（格子不動）')
     s.add_argument('--id', required=True)
     s.add_argument('--no-build', action='store_true')
@@ -4922,6 +5087,7 @@ def main():
     s.add_argument('--id', required=True)
     s.add_argument('--work')
     s.add_argument('--no-build', action='store_true')
+    s.add_argument('--only', action='store_true', help='只建這艘（build --ship）：_cache 只要有這艘（改裝船家族一起）；不加 ⇒ 整份建置')
     sp.add_parser('hook', help='問題回報的 Discord webhook：從標準輸入讀明文網址（貼上、Enter；⛔ 不收參數 ⇒ 不留在指令歷史）⇒ 加密成 x1:… 寫進 config/game.json report.webhook（只換那一格）；空白一行 ＝ 清掉')
     o = ap.parse_args()
     try:
@@ -4948,9 +5114,11 @@ def main():
         elif o.op == 'build':
             if o.code and (o.raw or o.single):
                 raise Fail('--code 不能跟 --raw、--single 一起用（--code 只換拆檔成品的入口）')
-            if o.base and not o.code:
-                raise Fail('--base 只給 --code 用')
-            log = act_build_code(o.base) if o.code else act_build(not o.raw, o.single)
+            if o.ship and (o.code or o.raw or o.single):
+                raise Fail('--ship 不能跟 --code、--raw、--single 一起用（--ship 只換拆檔成品的船檔與入口）')
+            if o.base and not (o.code or o.ship):
+                raise Fail('--base 只給 --code、--ship 用')
+            log = act_build_ship(o.ship, o.base) if o.ship else act_build_code(o.base) if o.code else act_build(not o.raw, o.single)
         elif o.op == 'reseg':
             log = act_reseg()
         elif o.op == 'shell':
@@ -4995,13 +5163,13 @@ def main():
         elif o.op == 'cells':
             log = act_cells(o.id, not o.no_build)
         elif o.op == 'import':
-            log = act_import(o.work, o.id, o.name, not o.no_build, o.variant_of)
+            log = act_import(o.work, o.id, o.name, not o.no_build, o.variant_of, o.only)
         elif o.op == 'hook':
             if sys.stdin.isatty():
                 print('貼上 Discord webhook 網址後按 Enter（空白 ＝ 清掉）：', end='', flush=True)
             log = act_hook(sys.stdin.readline())
         else:
-            log = act_reimport(o.id, o.work, not o.no_build)
+            log = act_reimport(o.id, o.work, not o.no_build, o.only)
     except Fail as e:
         print(str(e))
         sys.exit(1)
