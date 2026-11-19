@@ -215,28 +215,31 @@ var DEPTH_ONLY_FS = '#version 300 es\nprecision highp float; void main(){}\n';  
 var CSM_MAX = 4, NS_MK = String(MASK_NEAR);                             // 陰影最多幾段（60_render.js CSM_N）、船艙遮罩的陣列長度照 MASK_NEAR（00_core.js）
 var SHADOW_GLSL = 'uniform highp sampler2DArrayShadow uShA; uniform mat4 uShM[' + CSM_MAX + ']; uniform float uShOn, uShPx, uClip, uSunK; uniform int uCsN;\n' +
   'uniform float uCsD[' + CSM_MAX + '], uCsL[' + CSM_MAX + '], uCsO[' + CSM_MAX + '], uCsB[' + CSM_MAX + ']; uniform vec3 uCsE, uCsF; uniform float uShSoft, uShE0, uShTr;\n' +
-  'float shOne(int k, vec3 w, float bz){ vec4 p=uShM[k]*vec4(w,1.0); vec3 q=p.xyz*0.5+0.5;\n' +
-  '  if(q.x<0.002||q.y<0.002||q.x>0.998||q.y>0.998||q.z>0.999) return 1.0; q.z-=bz; float L=float(k);\n' +
-  // 柔邊（PCF；其他遊戲常見的做法，Tim 2026-10-20「有時候陰影會閃爍」「是否有辦法參考其他遊戲作法改善」）：每一點是硬體的 2×2 比較（雙線性）；
-  //   低 ＝ 2×2 點（相隔 1 格 ⇒ 約 3×3 格的軟邊）、高 ＝ 3×3 點（約 4×4 格）⇒ 船在格子上移動時影子的邊不會一格一格地爬
-  '  float e=uShPx*uShSoft; if(uShOn<1.5) return 0.25*(texture(uShA,vec4(q.xy+vec2(-0.5,-0.5)*e,L,q.z))+texture(uShA,vec4(q.xy+vec2(0.5,-0.5)*e,L,q.z))+texture(uShA,vec4(q.xy+vec2(-0.5,0.5)*e,L,q.z))+texture(uShA,vec4(q.xy+vec2(0.5,0.5)*e,L,q.z)));\n' +
-  '  float s=0.0; for(int y=-1;y<=1;y++) for(int x=-1;x<=1;x++) s+=texture(uShA,vec4(q.xy+vec2(float(x),float(y))*e,L,q.z)); return s/9.0; }\n' +
+  // Orthographic receiver plane: compare each PCF tap at the depth of its own location.
+  // The normal matrix maps the surface normal into the cascade's texture coordinates.
+  'uniform mat3 uCsNormal[' + CSM_MAX + ']; uniform float uShEdge;\n' +
+  'float shTap(vec3 q,float layer,vec2 offset,vec2 slope){ return texture(uShA,vec4(q.xy+offset*uShPx,layer,q.z+dot(offset,slope))); }\n' +
+  'float shOne(int k, vec3 p, vec3 n){ vec3 q=p*0.5+0.5;\n' +
+  '  if(q.x<0.002||q.y<0.002||q.x>0.998||q.y>0.998||q.z>0.999) return 1.0; q.z-=uCsB[k]; float L=float(k); vec2 slope=vec2(0.0);\n' +
+  '  if(uShEdge<0.5){ vec3 plane=uCsNormal[k]*n; if(abs(plane.z)>1e-5) slope=clamp(-plane.xy/plane.z,vec2(-8.0),vec2(8.0))*uShPx; }\n' +
+  '  float e=uShSoft; if(uShOn<1.5) return 0.25*(shTap(q,L,vec2(-0.5,-0.5)*e,slope)+shTap(q,L,vec2(0.5,-0.5)*e,slope)+shTap(q,L,vec2(-0.5,0.5)*e,slope)+shTap(q,L,vec2(0.5,0.5)*e,slope));\n' +
+  '  float s=0.0; for(int y=-1;y<=1;y++) for(int x=-1;x<=1;x++) s+=shTap(q,L,vec2(float(x),float(y))*e,slope); return s/9.0; }\n' +
   // uShEdge（單張陰影，60_render.js shadowSimple）：範圍最外面那一圈（85%～98%）淡掉 ⇒ 範圍外的影子不是一刀切掉；照鏡頭分段時 0（段的範圍比要用的大一圈）
-  'uniform float uShEdge; float shAt(int k, vec3 w, vec3 n){ vec4 p=uShM[k]*vec4(w,1.0); float ed=max(abs(p.x),abs(p.y)); return mix(shOne(k,w+n*uCsO[k],uCsB[k]),1.0,uShEdge*smoothstep(uShE0,0.98,ed)); }\n' +
+  'float shAt(int k, vec3 w, vec3 projected, vec3 n){ float s=shOne(k,projected,n); if(uShEdge<0.5) return s; vec4 p=uShM[k]*vec4(w,1.0); return mix(s,1.0,smoothstep(uShE0,0.98,max(abs(p.x),abs(p.y)))); }\n' +
   // 挑段（shSel；2026-10-24 TASK-0877，60_render.js shadowPass 的 4.）：DX SDK CascadedShadowMaps11 的 map-based selection —— 第一張罩得到這一點（沿法線推出去之後；
   //   邊上留柔邊取樣那幾格）的圖就用它。每一段的圖只罩自己那一段裁過高度帶的視錐，近的那幾張格子細 ⇒ 落在它們裡面的點一律用細的
   //   （以前照深度挑：鏡頭拉高時第 0、1 段的圖明明罩著畫面下緣的海，那裡的點還是照深度用粗的第 2 段）；量漏的塔、山尖不在前一張裡 ⇒ 自然落到下一張，不會整塊沒影子。
   //   t ＝ 跟下一張混多少：那一點在這張圖最外面 uCsW[k]（畫質頁的「交界」，半寬的比例）那一圈 ⇒ 越靠邊越混下一張（下一張也罩得到才混）。−1 ＝ 不收影子。
   //   最遠距離另外照深度淡掉（shFade：最後一段的交界那一截 uCsL ～ uCsD）。陰影範圍的除錯塗色（60_render.js shadowDebugFill）用同一支。
   'uniform float uCsW[' + CSM_MAX + '];\n' +
-  'bool shIn(int k, vec3 w, out float e){ vec4 p=uShM[k]*vec4(w,1.0); e=max(abs(p.x),abs(p.y))/(1.0-uShPx*(3.0*uShSoft+4.0)); return e<1.0 && abs(p.z)<1.0; }\n' +
-  'int shSel(vec3 w, vec3 n, out float t){ t=0.0; float e=0.0, e2; int k=-1;\n' +
-  ' for(int i=0;i<' + CSM_MAX + ';i++){ if(i>=uCsN) break; if(shIn(i,w+n*uCsO[i],e)){ k=i; break; } }\n' +
-  ' if(k<0) return -1; if(uCsW[k]>0.0) t=smoothstep(1.0-uCsW[k],1.0,e); if(t>0.0 && !(k+1<uCsN && shIn(k+1,w+n*uCsO[k+1],e2))) t=0.0; return k; }\n' +
+  'bool shIn(int k, vec3 w, out float e, out vec3 p){ p=(uShM[k]*vec4(w,1.0)).xyz; e=max(abs(p.x),abs(p.y))/(1.0-uShPx*(3.0*uShSoft+4.0)); return e<1.0 && abs(p.z)<1.0; }\n' +
+  'int shSel(vec3 w, vec3 n, out float t, out vec3 p, out vec3 pNext){ t=0.0; float e=0.0, e2; int k=-1;\n' +
+  ' for(int i=0;i<' + CSM_MAX + ';i++){ if(i>=uCsN) break; if(shIn(i,w+n*uCsO[i],e,p)){ k=i; break; } }\n' +
+  ' if(k<0) return -1; if(uCsW[k]>0.0) t=smoothstep(1.0-uCsW[k],1.0,e); if(t>0.0 && !(k+1<uCsN && shIn(k+1,w+n*uCsO[k+1],e2,pNext))) t=0.0; return k; }\n' +
   'float shFade(vec3 w){ int L=uCsN-1; float d=dot(w-uCsE,uCsF); return d>=uCsD[L] ? 1.0 : (uCsL[L]<uCsD[L] ? smoothstep(uCsL[L],uCsD[L],d) : 0.0); }\n' +
-  'float shadowK(vec3 w, vec3 n){ if(uShOn<0.5||uCsN<1) return uSunK; float f=shFade(w); if(f>=1.0) return uSunK; float t; int k=shSel(w,n,t);\n' +
-  ' if(k<0) return uSunK; float s=shAt(k,w,n);\n' +
-  ' if(t>0.0) s=mix(s,shAt(k+1,w,n),t); return mix(s,1.0,f)*uSunK; }\n';
+  'float shadowK(vec3 w, vec3 n){ if(uShOn<0.5||uCsN<1) return uSunK; float f=shFade(w); if(f>=1.0) return uSunK; float t; vec3 p,pNext; int k=shSel(w,n,t,p,pNext);\n' +
+  ' if(k<0) return uSunK; float s=shAt(k,w,p,n);\n' +
+  ' if(t>0.0) s=mix(s,shAt(k+1,w,pNext,n),t); return mix(s,1.0,f)*uSunK; }\n';
 // 船艙遮罩（海、船邊水花的白沫共用；要有 in vec3 vW）：那一點換到船的格座標，落在原本船殼的外形裡 ⇒ 呼叫端丟掉（HULL_HIT）。
 //   遮罩照船型一層（uHullA：R8 貼圖陣列，每層 ＝ 那一型每個 (x, z) 船殼的半寬；固定第 1 號；60_render.js hullArr）；
 //   格（60_render.js gpuSlots：視野裡最近的 GFX.masks 艘，最多 MASK_NEAR）：uInv[k]（世界 → 格）、uHullK[k] ＝ (那一型的寬, 高, 中線 y, 第幾層)、
@@ -567,6 +570,7 @@ function setCommon(p) {
   if (u.uNM) gl.uniform1i(u.uNM, MSLOTS.length);               // 船艙遮罩、透視用到幾格
   if (u.uShOn) {                                              // 陰影圖陣列綁在第 4 號（60_render.js render 開頭綁）；每一段的矩陣、遠端、偏移一次給（沒用到的段 ＝ FAR_M）
     gl.uniform1f(u.uShOn, PASS.sh && GFX.shadow ? (SHK['p' + Math.min(2, GFX.shadow)] === 9 ? 2 : 1) : 0);   // 柔邊取樣：畫質頁「低／高：柔邊取樣」（07_gfx.js SHK）
+    if (u.uCsNormal) gl.uniformMatrix3fv(u.uCsNormal, false, SHM.normals);
     gl.uniform1i(u.uShA, 4); gl.uniformMatrix4fv(u.uShM, false, SHM.mats); gl.uniform1f(u.uShPx, 1 / SHM.n);
     gl.uniform1i(u.uCsN, SHM.on ? SHM.k : 0); gl.uniform1fv(u.uCsD, SHM.csD); gl.uniform1fv(u.uCsL, SHM.csL); gl.uniform1fv(u.uCsO, SHM.csO); gl.uniform1fv(u.uCsB, SHM.csB); gl.uniform1fv(u.uCsW, SHM.csW);   // 60_render.js shadowMats
     gl.uniform3fv(u.uCsE, SHM.eye); gl.uniform3fv(u.uCsF, SHM.fw); gl.uniform1f(u.uShEdge, CSM_SIMPLE ? 1 : 0);

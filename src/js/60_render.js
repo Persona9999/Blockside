@@ -216,7 +216,7 @@ function shadowMaps() {
   if (SHM && SHM.n === n && SHM.k === k) return;
   if (SHM) shadowFree();
   SHM = { n: n, k: k, on: false, cs: [], tex: null, st: null, stOn: false, layers: 0, gen: 0, rr: 0, splits: [], eye: new Float32Array(3), fw: new Float32Array([0, 0, -1]),
-    csD: new Float32Array(CSM_MAX), csL: new Float32Array(CSM_MAX), csW: new Float32Array(CSM_MAX), bs: [], csO: new Float32Array(CSM_MAX), csB: new Float32Array(CSM_MAX), mats: new Float32Array(CSM_MAX * 16), stat: { redraws: 0, last: null, ms: 0 } };
+    csD: new Float32Array(CSM_MAX), csL: new Float32Array(CSM_MAX), csW: new Float32Array(CSM_MAX), bs: [], csO: new Float32Array(CSM_MAX), csB: new Float32Array(CSM_MAX), mats: new Float32Array(CSM_MAX * 16), normals: new Float32Array(CSM_MAX * 9), stat: { redraws: 0, last: null, ms: 0 } };
 }
 function shadowFree() {
   SHM.cs.forEach(function (c) { gl.deleteFramebuffer(c.F.fb); if (c.S) gl.deleteFramebuffer(c.S.fb); });
@@ -784,7 +784,7 @@ function shadowDebugFill(w, h) {
     SHFILL.prog = VK.compile(gl, '#version 300 es\nvoid main(){ vec2 p=vec2(float((gl_VertexID<<1)&2),float(gl_VertexID&2)); gl_Position=vec4(p*2.0-1.0,0.0,1.0); }\n',
       '#version 300 es\nprecision highp float;\n' + SHADOW_GLSL + 'uniform mat4 uInv; uniform highp sampler2D uDep; uniform vec2 uView; uniform vec3 uCol[' + CSM_MAX + ']; uniform float uA; out vec4 o;\n' +
       'void main(){ vec2 uv=gl_FragCoord.xy/uView; float z=texture(uDep,uv).r; vec4 q=uInv*vec4(uv*2.0-1.0,z*2.0-1.0,1.0); vec3 w=q.xyz/q.w;\n' +
-      ' float t; int k=shSel(w,vec3(0.0),t); vec3 c=vec3(0.0); float a=0.0;\n' +
+      ' float t; vec3 p0,p1; int k=shSel(w,vec3(0.0),t,p0,p1); vec3 c=vec3(0.0); float a=0.0;\n' +
       ' if(k>=0){ c=mix(uCol[k],uCol[min(k+1,' + (CSM_MAX - 1) + ')],t); a=uA*(1.0-shFade(w)); }\n' +
       ' for(int i=0;i<' + CSM_MAX + ';i++){ if(i>=uCsN) break; vec4 p=uShM[i]*vec4(w,1.0); float e=max(abs(p.x),abs(p.y)), f=fwidth(e)*1.5; if(abs(p.z)<1.0 && e<1.0 && e>1.0-f){ c=uCol[i]; a=0.9; } }\n' +   // fwidth 在 discard 之前（迴圈照 uCsN，每個像素一樣）
       ' if(z>=1.0 || a<=0.0 || uShOn<0.5) discard; o=vec4(c,a); }\n');   // uShOn：01_gl.js setCommon 看著色器有沒有用到它才給陰影那一整組（沒用到 ⇒ uCsN 一直是 0，什麼都不塗）
@@ -858,6 +858,16 @@ function csmPick(P, d) {
 function shadowMats() {
   for (var i = 0; i < CSM_MAX; i++) {
     var c = SHM.on && i < SHM.k ? SHM.cs[i] : null;
+    // Inverse transpose of the orthographic linear transform. Its rows are orthogonal.
+    // Recompute only when this cascade receives a new projection.
+    if (c && c.m !== c.normalProjection) {
+      var m = c.m;
+      for (var row = 0; row < 3; row++) {
+        var x = m[row], y = m[row + 4], z = m[row + 8], inv = 1 / (x*x + y*y + z*z || 1);
+        SHM.normals[i*9 + row] = x*inv; SHM.normals[i*9 + row + 3] = y*inv; SHM.normals[i*9 + row + 6] = z*inv;
+      }
+      c.normalProjection = m;
+    }
     SHM.mats.set(c ? c.m : FAR_M, i * 16); SHM.csD[i] = c ? SHM.splits[i] : 0; SHM.csL[i] = c ? SHM.bs[i] : 0; SHM.csO[i] = c ? c.off : 0; SHM.csB[i] = c ? c.bz : 0;
     SHM.csW[i] = c && !CSM_SIMPLE && i < SHM.k - 1 ? SHK['b' + (i + 1)] : 0;   // 畫質頁的「交界 1～3」；最後一段的「交界」照深度淡（csL）
   }
