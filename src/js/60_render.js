@@ -542,7 +542,8 @@ function shadowPass() {
     var any = csmIn(i, c, ax, E, fw, -1e9, sp[k - 1], sl), ver = land && c.S ? c.t : -1;   // 船只照範圍判、不照這一段的深度：這張圖罩到的點不管多深都用它（見上 4.）
     if (landA && !land) {
       gl.bindFramebuffer(gl.FRAMEBUFFER, c.F.fb); gl.clear(gl.DEPTH_BUFFER_BIT); PASS.vp = c.m;
-      var t1 = performance.now(), st0 = { r: c.r, bed: bedDepth(bedPlanes(c.m)), trees: treeDepth(), towns: townDepth() };
+      var t1 = performance.now(), planes = bedPlanes(c.m);
+      var st0 = { r: c.r, bed: bedDepth(planes), trees: treeDepth(), towns: townDepth(planes) };
       st0.ms = +(performance.now() - t1).toFixed(2); SHM.stat.redraws++; SHM.stat.last = st0; c.dirty = false; c.bare = undefined;
       if (!any) continue;
     } else {
@@ -664,7 +665,7 @@ function csmStatic(c, i) {
   var t0 = performance.now();
   gl.bindFramebuffer(gl.FRAMEBUFFER, c.S.fb); gl.clear(gl.DEPTH_BUFFER_BIT);
   PASS.vp = c.m;
-  var st = { r: c.r, bed: bedDepth(bedPlanes(c.m)), trees: treeDepth(), towns: townDepth() };
+  var planes = bedPlanes(c.m), st = { r: c.r, bed: bedDepth(planes), trees: treeDepth(), towns: townDepth(planes) };
   c.dirty = false; c.t = performance.now() / 1000; c.bg = BED_MESH_GEN;
   st.ms = +(performance.now() - t0).toFixed(2); SHM.stat.redraws++; SHM.stat.last = st;
   if (c.why !== '滿一秒') shLog('靜態重畫', { i: i, why: c.why || '?', r: st.r, bed: st.bed, trees: st.trees, towns: st.towns, ms: st.ms });   // 滿一秒那種每秒都有 ⇒ 不印

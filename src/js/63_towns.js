@@ -896,7 +896,11 @@ function townMeshBaked(M) {
 function townModelMesh(nm, d, m0) {
   var S = TOWNS.stat;
   function live() { return Promise.all([townMeshData(d.g, m0.size), townMeshData(d.lo, m0.lo.size)]); }
-  function up(L) { return [townUpload(L[0]), townUpload(L[1])]; }
+  function up(L) {
+    var meshes = [townUpload(L[0]), townUpload(L[1])];
+    if (m0.use === 'house') meshes[1].proxyShape = townProxyShape(L[1], m0);
+    return meshes;
+  }
   if (!townMeshOk(d.mesh)) { S.meshLive++; return live().then(up); }
   if (TOWN_MESH_Q === 'check') return Promise.all([live(), townMeshBaked(d.mesh).catch(function () { return null; })]).then(function (R) {
     var same = R[1] && [0, 1].every(function (i) { var a = R[0][i], b = R[1][i]; if (a.length !== b.length) return false; for (var j = 0; j < a.length; j++) if (a[j] !== b[j]) return false; return true; });
@@ -2810,6 +2814,71 @@ var TOWN_PL_FS = function () {
     'void main(){ if(vW.y<uClip) discard; vec3 n=normalize(vN); float d=max(dot(n,uSun),0.0), sk=shadowK(vW,n*1.5); vec3 col=uCol*vK*(0.85+0.15*fract(sin(dot(floor(vW*vec3(2.5,3.3,2.5)),vec3(12.9898,78.233,37.719)))*43758.5453))*(mix(uGround,uSky,n.y*0.5+0.5)*0.62+vec3(1.0,0.96,0.88)*d*sk*0.78+townLamp(vW,n));\n' +
     ' float fd=length(vW-uEye); o=vec4(mix(col,uFog,1.0-exp(-fd*uFogD)),1.0); }\n';
 };
+// 從中距網格量主屋身的範圍與高度。忽略零星煙囪、矮牆與庭院，讓切換前後的投影輪廓接近。
+function townProxyShape(mesh, model) {
+  var w = model.lo.size[0], d = model.lo.size[1], step = model.mpv * model.lo.f;
+  var roof = new Uint16Array(w * d), xCount = new Uint16Array(w), yCount = new Uint16Array(d);
+  for (var i = 0; i < mesh.length; i += 16) {
+    if ((mesh[i + 3] & 7) !== 4 || mesh[i + 2] * step < model.top * 0.5) continue;
+    var x0 = w, x1 = 0, y0 = d, y1 = 0, z = mesh[i + 2];
+    for (var j = i; j < i + 16; j += 4) {
+      x0 = Math.min(x0, mesh[j]); x1 = Math.max(x1, mesh[j]);
+      y0 = Math.min(y0, mesh[j + 1]); y1 = Math.max(y1, mesh[j + 1]);
+    }
+    for (var y = y0; y < y1; y++) for (var x = x0; x < x1; x++) {
+      var ix = y * w + x;
+      if (!roof[ix]) { xCount[x]++; yCount[y]++; }
+      roof[ix] = Math.max(roof[ix], z);
+    }
+  }
+  function span(counts) {
+    var peak = counts.reduce(function (a, b) { return Math.max(a, b); }, 0);
+    var min = counts.findIndex(function (n) { return n > peak * 0.25; });
+    var end = counts.length;
+    while (end > 0 && counts[end - 1] <= peak * 0.25) end--;
+    return [min, end];
+  }
+  var X = span(xCount), Y = span(yCount);
+  if (X[0] < 0 || Y[0] < 0) return null;
+  var heights = [];
+  for (var y2 = Y[0]; y2 < Y[1]; y2++) for (var x2 = X[0]; x2 < X[1]; x2++) {
+    if (roof[y2 * w + x2]) heights.push(roof[y2 * w + x2]);
+  }
+  if (!heights.length) return null;
+  heights.sort(function (a, b) { return a - b; });
+  return {
+    x: (X[0] + X[1]) * step / 2 - model.size[0] * model.mpv / 2,
+    y: (Y[0] + Y[1]) * step / 2 - model.size[1] * model.mpv / 2,
+    w: (X[1] - X[0]) * step, d: (Y[1] - Y[0]) * step,
+    eave: heights[Math.floor((heights.length - 1) * 0.25)] * step,
+    ridge: heights[Math.floor((heights.length - 1) * 0.9)] * step
+  };
+}
+// 住宅換成貼圖後的投影模型：沿用原實例的朝向與主屋身尺寸。
+var TOWN_PROXY_VS = '#version 300 es\nlayout(location=0) in vec3 aP; layout(location=4) in vec4 aI; layout(location=5) in vec4 aS; uniform mat4 uVP;\n' +
+  'void main(){ float s=sin(aI.w), c=cos(aI.w), a=aP.x*aS.x, b=aP.y*aS.y; float y=aP.z<=1.0?mix(-0.25,aS.z,aP.z):aS.w;\n' +
+  ' gl_Position=uVP*vec4(aI.x+a*s-b*c,aI.y+y,aI.z-a*c-b*s,1.0); }\n';
+function townProxyMesh() {
+  // 八個牆角加兩個屋脊端點，共十個頂點、十六個三角形。
+  var V = new Float32Array([
+    -.5,-.5,0, .5,-.5,0, .5,.5,0, -.5,.5,0,
+    -.5,-.5,1, .5,-.5,1, .5,.5,1, -.5,.5,1,
+    0,-.5,2, 0,.5,2
+  ]);
+  var I = new Uint16Array([
+    0,2,1, 0,3,2, 0,1,5, 0,5,4, 1,2,6, 1,6,5,
+    2,3,7, 2,7,6, 3,0,4, 3,4,7,
+    4,5,8, 6,7,9, 7,4,8, 7,8,9, 5,6,9, 5,9,8
+  ]);
+  var g = { vao: gl.createVertexArray(), vb: gl.createBuffer(), ib: gl.createBuffer(), n: I.length };
+  gl.bindVertexArray(g.vao);
+  gl.bindBuffer(gl.ARRAY_BUFFER, g.vb); gl.bufferData(gl.ARRAY_BUFFER, V, gl.STATIC_DRAW);
+  gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 12, 0);
+  gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, g.ib); gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, I, gl.STATIC_DRAW);
+  [4, 5].forEach(function (a) { gl.enableVertexAttribArray(a); gl.vertexAttribDivisor(a, 1); });
+  gl.bindVertexArray(null);
+  return g;
+}
 // 地面的帶子、屋頂殼：位置、法線、顏色（屋頂殼帶交接的抖動）
 var TOWN_GR_VS = '#version 300 es\nlayout(location=0) in vec3 aP; layout(location=1) in vec3 aN; layout(location=2) in vec3 aC; uniform mat4 uVP; out vec3 vN; out vec3 vW; out vec3 vC; void main(){ vN=aN; vW=aP; vC=aC; gl_Position=uVP*vec4(aP,1.0); }\n';
 var TOWN_GR_FS = function (fade) {
@@ -2831,11 +2900,12 @@ var TOWN_FC_FS = function () {
 function townProgs() {
   if (TOWNS.prog) return TOWNS.prog;
   var J = TOWNS.progJ || (TOWNS.progJ = { vox: glProgStart(TOWN_VS, TOWN_FS()), bb: glProgStart(TOWN_BB_VS, TOWN_BB_FS()), pl: glProgStart(TOWN_PL_VS, TOWN_PL_FS()), gr: glProgStart(TOWN_GR_VS, TOWN_GR_FS(false)), sh: glProgStart(TOWN_GR_VS, TOWN_GR_FS(true)), dVox: glProgStart(TOWN_VS, DEPTH_ONLY_FS), dPl: glProgStart(TOWN_PL_VS, DEPTH_ONLY_FS),
-    win: glProgStart(TOWN_WIN_VS, TOWN_WIN_FS()), glow: glProgStart(TOWN_GLOW_VS, TOWN_GLOW_FS), beam: glProgStart(TOWN_BEAM_VS, TOWN_BEAM_FS),
+    dProxy: glProgStart(TOWN_PROXY_VS, DEPTH_ONLY_FS), win: glProgStart(TOWN_WIN_VS, TOWN_WIN_FS()), glow: glProgStart(TOWN_GLOW_VS, TOWN_GLOW_FS), beam: glProgStart(TOWN_BEAM_VS, TOWN_BEAM_FS),
     folk: glProgStart(TOWN_FOLK_VS, TOWN_FOLK_FS()), fc: glProgStart(TOWN_FC_VS, TOWN_FC_FS()) });   // folk：城鎮居民的看板（63_townfolk.js）；fc：遠處的田（TASK-0879）
   if (!Object.keys(J).every(function (k) { return glProgReady(J[k]); })) return null;
   var P = {}; Object.keys(J).forEach(function (k) { P[k] = glProgEnd(J[k]); }); TOWNS.progJ = null;
-  P.ib = [gl.createBuffer(), gl.createBuffer(), gl.createBuffer(), gl.createBuffer()];   // 近、中、貼圖、石基的實例（每次分組重寫）
+  P.ib = [gl.createBuffer(), gl.createBuffer(), gl.createBuffer(), gl.createBuffer(), gl.createBuffer()];   // 近、中、貼圖、石基、遠距投影的實例
+  P.proxy = townProxyMesh();
   P.quad = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, P.quad); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-0.5, 0, 0.5, 0, 0.5, 1, -0.5, 0, 0.5, 1, -0.5, 1]), gl.STATIC_DRAW);
   P.beamVao = gl.createVertexArray(); gl.bindVertexArray(P.beamVao);
   gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 8, 0);
@@ -2859,22 +2929,37 @@ function townProgs() {
 }
 
 // ── 分組與畫 ──
-/** 看得到的實例照離鏡頭（水平）多遠分到近、中、貼圖（交接帶兩邊都放）；石基跟著近、中。寫進四個實例緩衝區。 */
+/** 看得到的實例照離鏡頭（水平）多遠分到近、中、貼圖；石基跟著近、中。遠距投影另依太陽的視錐剔除。 */
 // 剛好在畫面外、影子卻落進畫面的房子（Tim 2026-10-20「陰影不能只處理攝影機範圍(要稍微大一些)」）：分組時視錐往外放寬這麼多公尺（60_render.js 陰影照這一組畫）
-var TOWN_SH_PAD = 60;
+var TOWN_SH_PAD = 60, TOWN_PROXY_TILE = 128;
 function townBin(PL, eye, solidLod) {
   var t0 = performance.now(), K = TOWNS.kit, NM = K.names.length, cnt = [new Int32Array(NM), new Int32Array(NM)], L0 = TOWN_LOD[0], L1 = TOWN_LOD[1], B0 = TOWN_BAND[0], B1 = TOWN_BAND[1], B2 = TOWN_BAND[2], vis = [], nbb = 0, npl = 0, nlm = 0;
   var previous = TOWNS.grp, generation = previous ? previous.generation + 1 : 1, casters = 0;
   var casterChanged = TOWNS.dirty || !previous || previous.solidLod !== solidLod;
+  var proxyTiles = new Map();
+  function trackCaster(q, lod) {
+    if (!previous || q.casterGroup !== previous.generation || q.casterLod !== lod) casterChanged = true;
+    q.casterGroup = generation; q.casterLod = lod; casters++;
+  }
   TOWNS.list.forEach(function (T) {
     if (!T.inst) return;
     T.inst.forEach(function (q) {
       if (!(q.y === q.y)) { if (!townWallY(q)) return; T.shDirty = true; }   // 城牆：等那一塊載進來
-      var dx = q.x - eye[0], dz = q.z - eye[2], d = Math.sqrt(dx * dx + dz * dz) / (q.lk || 1); if (d > TOWN_FAR[1] + 50) return;   // d ＝ 距離 ÷ 地標倍率（一般房子 1）
+      var dx = q.x - eye[0], dz = q.z - eye[2], d = Math.sqrt(dx * dx + dz * dz) / (q.lk || 1);
+      var Mm = K.M[q.k], farProxy = solidLod && d >= L1 + B1 && q.pl && Mm.m.use === 'house';
+      if (!farProxy && d > TOWN_FAR[1] + 50) return;
+      var rh = townRiseHides(T, q) || (q.lot && TOWN_UNITS[T.id + ':' + q.lot] ? { unit: true } : null) || townRuinHides(T, q);
+      // 收影子的地方可能在鏡頭內，投影的屋子可能在鏡頭外。按各層陰影圖的視錐剔除這些實例。
+      if (farProxy && !rh) {
+        var key = Math.floor(q.x / TOWN_PROXY_TILE) + ',' + Math.floor(q.z / TOWN_PROXY_TILE);
+        var tile = proxyTiles.get(key);
+        if (!tile) { tile = []; proxyTiles.set(key, tile); }
+        tile.push(q); trackCaster(q, 2);
+      }
+      if (d > TOWN_FAR[1] + 50) return;
       var cy = q.y + q.top / 2, r = q.r + q.top / 2;
       for (var i = 0; i < 6; i++) { var p = PL[i]; if (p[0] * q.x + p[1] * cy + p[2] * q.z + p[3] < -r - TOWN_SH_PAD) return; }   // 視錐外 TOWN_SH_PAD 公尺內的也放進來：影子落進畫面的那幾棟（陰影照主畫面這一組畫）
-      var mi = K.M[q.k].i, on0 = d < L0 + B0, on1 = d > L0 - B0 && d < L1 + B1, on2 = d > L1 - B1;
-      var wasNear = q.nearShadowLod;
+      var mi = Mm.i, on0 = d < L0 + B0, on1 = d > L0 - B0 && d < L1 + B1, on2 = d > L1 - B1;
       // The two voxel hulls differ by up to a coarse cell. Writing both depths can
       // put an opaque wall in front of alternate, sunlit pixels of the other hull.
       if (solidLod) {
@@ -2882,13 +2967,9 @@ function townBin(PL, eye, solidLod) {
         on0 = q.nearShadowLod = d < limit;
         on1 = !on0 && d < L1 + B1;
       }
-      var rh = townRiseHides(T, q) || (q.lot && TOWN_UNITS[T.id + ':' + q.lot] ? { unit: true } : null) || townRuinHides(T, q);   // 換成戰鬥單位的那一棟（townFortWake）、照打壞的樣子畫的那一棟（townRuinDraw）：模型不畫、石基照畫                                     // 工地上的那一棟（63_townrise.js 自己畫：帳上的工地、演出）：格子、貼圖不畫，石基照進度（townRisePlinth）
       if (rh) { if ((on0 || on1) && q.pl && (rh.unit || rh.ruin || townRisePlinth(rh))) { if (!q.pb) q.pb = townPlinth(q); if (q.pb) { npl++; vis.push(q, d, false, false, false, true); } } return; }
       if (q.lk > 1) nlm++;
-      if (solidLod && (on0 || on1)) {
-        if (!previous || q.casterGroup !== previous.generation || wasNear !== on0) casterChanged = true;
-        q.casterGroup = generation; casters++;
-      }
+      if (solidLod && (on0 || on1)) trackCaster(q, on0 ? 0 : 1);
       if (on0) cnt[0][mi]++; if (on1) cnt[1][mi]++; if (on2) nbb++;
       if ((on0 || on1) && q.pl) { if (!q.pb) q.pb = townPlinth(q); if (q.pb) npl++; }
       vis.push(q, d, on0, on1, on2, false);
@@ -2914,10 +2995,36 @@ function townBin(PL, eye, solidLod) {
   }
   var P = TOWNS.prog;
   [[D0, tot[0] * 11], [D1, tot[1] * 11], [D2, nbb * 13], [D3, npl * 8]].forEach(function (a, i2) { gl.bindBuffer(gl.ARRAY_BUFFER, P.ib[i2]); gl.bufferData(gl.ARRAY_BUFFER, a[0].subarray(0, Math.max(16, a[1])), gl.DYNAMIC_DRAW); });
-  TOWNS.grp = { cnt: cnt, off: off, nbb: nbb, npl: npl, br: BRS, solidLod: solidLod, generation: generation, casters: casters };
+  TOWNS.grp = { cnt: cnt, off: off, nbb: nbb, npl: npl, br: BRS, solidLod: solidLod, generation: generation, casters: casters, proxies: townProxyBatch(proxyTiles, K, P.ib[4]) };
   if (solidLod && SHM.stOn && SHK.cache && (casterChanged || previous.casters !== casters || previous.npl !== npl))
     SHM.cs.forEach(function (c) { c.dirty = true; c.why = '城鎮投影模型更新'; });
   var S = TOWNS.stat; S.d0 = tot[0]; S.d1 = tot[1]; S.d2 = nbb; S.plinth = npl; S.lm = nlm; S.binMs = +(performance.now() - t0).toFixed(2);
+}
+function townProxyBatch(tiles, K, buffer) {
+  if (!tiles.size) return [];
+  var count = 0, groups = [];
+  tiles.forEach(function (L) { count += L.length; });
+  var need = count * 8, data = TOWNS.buf[4];
+  if (!data || data.length < need) data = TOWNS.buf[4] = new Float32Array(Math.ceil(need * 1.5));
+  var at = 0;
+  tiles.forEach(function (L) {
+    var bb = [Infinity, Infinity, Infinity, -Infinity, -Infinity, -Infinity];
+    groups.push({ offset: at * 32, count: L.length, bb: bb });
+    L.forEach(function (q) {
+      var model = K.M[q.k], shape = model.lod[1].proxyShape, scale = Math.sqrt(model.m.cover || 1);
+      var width = (shape ? shape.w : q.pl[0] * scale) * q.sx, depth = shape ? shape.d : q.pl[1] * scale, turn = width > depth;
+      var shortSide = Math.min(width, depth), longSide = Math.max(width, depth);
+      var eave = shape ? shape.eave : q.top - Math.min(q.top * 0.2, shortSide * 0.25), ridge = shape ? shape.ridge : q.top;
+      var a = shape ? shape.x * q.sx : 0, b = shape ? shape.y : 0;
+      var s = Math.sin(q.th), c = Math.cos(q.th), i = at++ * 8;
+      data[i] = q.x + a * s - b * c; data[i + 1] = q.y; data[i + 2] = q.z - a * c - b * s; data[i + 3] = q.th + (turn ? Math.PI / 2 : 0);
+      data[i + 4] = shortSide; data[i + 5] = longSide; data[i + 6] = eave; data[i + 7] = ridge;
+      bb[0] = Math.min(bb[0], q.x - q.r); bb[1] = Math.min(bb[1], q.y - 0.25); bb[2] = Math.min(bb[2], q.z - q.r);
+      bb[3] = Math.max(bb[3], q.x + q.r); bb[4] = Math.max(bb[4], q.y + ridge); bb[5] = Math.max(bb[5], q.z + q.r);
+    });
+  });
+  gl.bindBuffer(gl.ARRAY_BUFFER, buffer); gl.bufferData(gl.ARRAY_BUFFER, data.subarray(0, need), gl.DYNAMIC_DRAW);
+  return groups;
 }
 // Resolve the same instance buffers for all cascades and the colour pass.
 function townViewGroup(eye, solidLod, planes) {
@@ -3096,9 +3203,8 @@ function townFieldDraw(P, PL, eye, fogD) {
 }
 /** 近、中那兩級的實例欄位（townBin 寫的 11 欄：aI x y z θ、aS 沿 x 縮放 深淺 地標倍率、aJ 斜接 ×2 坡度 牆基）⇒ 第 mi 種模型那一段；主畫面與陰影那一趟共用（版面只寫在這裡）。 */
 function townInstAttr(G, l, mi) { var o = G.off[l][mi] * 44; gl.vertexAttribPointer(4, 4, gl.FLOAT, false, 44, o); gl.vertexAttribPointer(5, 3, gl.FLOAT, false, 44, o + 16); gl.vertexAttribPointer(6, 4, gl.FLOAT, false, 44, o + 28); }
-/** 陰影的靜態那一層（60_render.js csmStatic；PASS.vp 已經換成那一段）：照主畫面上一次分好的組（townBin：近、中那兩級，含城牆）＋石基只寫深度。
- *  貼圖、屋頂殼、旗不畫（800 m 以外，陰影那一層的範圍也差不多到這裡）。⇒ 畫了幾個實例。 */
-function townDepth() {
+/** 近、中距模型、石基和遠距住宅的投影模型寫入陰影深度。PL 是目前 Cascade 的視錐面。 */
+function townDepth(PL) {
   if (!TOWNS.on || !TOWNS.list.length || !TOWNS.kit || !TOWNS.prog || !TOWNS.grp) return 0;
   var K = TOWNS.kit, P = TOWNS.prog, G = TOWNS.grp, PD = P.dVox, n = 0;
   gl.useProgram(PD.prog); setCommon(PD);
@@ -3112,6 +3218,17 @@ function townDepth() {
   n += townRiseDepth(P);                                                 // 建造演出（63_townrise.js）
   n += townRuinDepth(P);                                                 // 打壞的堡壘
   if (G.npl && P.plVao) { var PP = P.dPl; gl.useProgram(PP.prog); setCommon(PP); gl.bindVertexArray(P.plVao); gl.drawArraysInstanced(gl.TRIANGLES, 0, 36, G.npl); }
+  if (PL && G.proxies.length) {
+    var proxy = P.proxy;
+    gl.useProgram(P.dProxy.prog); setCommon(P.dProxy);
+    gl.bindVertexArray(proxy.vao); gl.bindBuffer(gl.ARRAY_BUFFER, P.ib[4]);
+    G.proxies.forEach(function (tile) {
+      if (!bedSeen(PL, tile.bb)) return;
+      gl.vertexAttribPointer(4, 4, gl.FLOAT, false, 32, tile.offset);
+      gl.vertexAttribPointer(5, 4, gl.FLOAT, false, 32, tile.offset + 16);
+      gl.drawElementsInstanced(gl.TRIANGLES, proxy.n, gl.UNSIGNED_SHORT, 0, tile.count); n += tile.count;
+    });
+  }
   gl.bindVertexArray(null); return n;
 }
 function townBoxDist(b, e) { var dx = Math.max(b[0] - e[0], 0, e[0] - b[3]), dz = Math.max(b[2] - e[2], 0, e[2] - b[5]); return Math.sqrt(dx * dx + dz * dz); }
