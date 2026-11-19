@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Blockside 設定後台</title>
-<!-- 《憲法號對轟》設定後台（TASK-0542）：改 src/config/game.json（各項設定的初始值、船隻清單）、重建遊戲、匯入新船、重新匯入。
+<!-- 《憲法號對轟》設定後台（TASK-0542）：改 src/config/game.json（各項設定的初始值）與 src/config/ships/（每艘船一個檔，FAR-85）、重建遊戲、匯入新船、重新匯入。
      ⛔ 不是展品（不寫展品卡、不進畫廊清單）。要由 admin.py 開：cd src && python -I admin.py serve ⇒ http://127.0.0.1:8642/
      頁面只是表單：驗設定、寫檔、匯出、建置都在 admin.py（同一組函式也給命令列用）。 -->
 <style>
@@ -469,7 +469,7 @@ nav a.on { background: var(--acc); color: var(--acc-ink); border-color: var(--ac
     touch(); roomsSum();
   });
   function saveCfg() { return call('/api/config', { config: C }, function () { return load(true).then(function () { return true; }); }); }
-  $('bSave').onclick = function () { saveCfg().then(function (ok) { if (ok) say(['✓ 存了 config/game.json —— 重建之後遊戲才吃得到']); }); };
+  $('bSave').onclick = function () { saveCfg().then(function (ok) { if (ok) say(['✓ 存了 config/game.json＋config/ships/ —— 重建之後遊戲才吃得到']); }); };
   $('bRooms').onclick = function () { var w = window.open('/game?admin=rooms', 'cbRooms'); if (w) w.focus(); };   // 甲板與艙房編輯器：獨立分頁（同名 ⇒ 已經開著就切過去）；它 cb-ready 時才算連上
   $('bDetDef').onclick = function () { window.open('/game?admin=defaults', '_blank'); };
   $('bKeysDef').onclick = function () { window.open('/game?admin=keys', '_blank'); };   // 鍵位的出廠預設值：遊戲的鍵位設定頁（66_keys.js keysAdmUI），一樣經過這一頁存（cb-admdef op keys）

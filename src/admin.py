@@ -1,21 +1,23 @@
-# 區塊職責：《憲法號對轟》的設定後台（TASK-0542）—— config/game.json（各項設定的初始值、船隻清單）的唯一寫入端：
-#           驗設定、照船隻清單改寫 template.html 的船標籤、重建單檔成品、匯入新船、重新匯入舊船；serve 開一頁本機後台（同一組函式）。
-# 物理意義：遊戲建置時把 game.json 內嵌進成品（js/00_config.js 讀成 CFG）⇒ 改預設 ＝ 改這份檔再重建，不是改 js。
+# 區塊職責：《憲法號對轟》的設定後台（TASK-0542）—— config/game.json（各項設定的初始值）與 config/ships/<代號>.json（每艘船一個檔：船隻設定、選船卡片、.vxk 指紋；FAR-85）的唯一寫入端：
+#           驗設定、照船隻清單填 template.html 的船標籤、重建單檔成品、匯入新船、重新匯入舊船、合併後重建產物（remerge）；serve 開一頁本機後台（同一組函式）。
+# 物理意義：遊戲建置時把 game.json（接回 ships）內嵌進成品（js/00_config.js 讀成 CFG）⇒ 改預設 ＝ 改這份檔再重建，不是改 js。
 #           船的 .vxk 由 senate 從雕刻作品匯出到 VoxelKit/_cache/（不入版控），vxk_inline.py 內嵌進成品。
 # 失敗處置：設定不合法 ⇒ 列出每一格錯在哪、不寫檔；匯出／建置失敗 ⇒ 原樣印出那支工具的輸出、非零結束；
 #           重新匯入失敗 ⇒ 舊的 .vxk 不動（新的先寫到 .new，成功才換上，舊的留成 .prev）。
-#           _cache 跟指紋（config/vxk_lock.json）對不上 ⇒ 建置前從版控的成品換回，換不回就擋下（cache_guard）。
+#           _cache 跟指紋（config/ships/<代號>.json 的 lock）對不上 ⇒ 建置前從版控的成品換回，換不回就擋下（cache_guard）。
 #
 # 用法（在這個資料夾）：
 #   python -I admin.py serve [--port 8642] [--open]  開設定後台（只聽 127.0.0.1）⇒ 瀏覽器開 http://127.0.0.1:8642/（--open 自動開；已經開著 ⇒ 只開頁面）
 #     一鍵：雙擊 Blockside 根目錄的 admin.cmd（＝ serve --open）
-#   python -I admin.py check                      驗 config/game.json
+#   python -I admin.py check                      驗 config/game.json＋config/ships/
 #   python -I admin.py build                      照設定重建 ../index.html（Blockside 根目錄 ＝ GitHub Pages 的首頁）
 #   python -I admin.py build --code [--base <版>]  只重建程式（入口 index.html；船檔 ships/ 照舊）—— 沒有 VoxelKit/_cache 的機器用，船變了就擋（見「只重建程式」）
 #   python -I admin.py build --ship <船的代號> [--base <版>]  只建一艘：這艘（改裝船家族一起）的船檔＋入口，_cache 只要有這幾艘；別的船變了就擋（見「只建一艘」）
 #   python -I admin.py shell <外殼設定> [--check]  外掛外殼：拿建好的成品套別的遊戲的外殼寫成另一頁（見「外掛外殼」）
 #   python -I admin.py shellsync [--check]        外殼頁跟著核心：這份是別的遊戲的 submodule 時，外層用這份成品套的頁全部重套（.githooks 的 post-* 會叫；見「外殼頁跟著核心」）
 #   python -I admin.py layers [--shell]           分層讀數：模擬層直接用到上層的名字；--shell ＝ 核心直接用到外殼（主選單、設定頁；SHELL_UI）的名字、直接碰 #cover 的 DOM（--shell 的兩個數字建置前會擋：都要是 0，TASK-0774）
+#   python -I admin.py remerge                    合併後重建產物：git merge 有衝突、來源解完之後跑；入口、船檔、anchor.js、showlod.js、選船縮圖不用手解（見「合併後重建產物」）
+#   python -I admin.py split-ships [--no-build]   一次性搬移：game.json 的 ships、ship_cards.json、vxk_lock.json ⇒ 每艘一個檔（FAR-85；見「每艘一個檔的搬移」）
 #   python -I admin.py reseg                      船檔照現在的切法重切（ship_segments 改了、這台沒有 _cache 時；解回來逐位元組相同才寫，見「船檔重切」）
 #   python -I admin.py import --work <雕刻作品 ID> --id <船的代號> --name <名字>   匯入新船（匯出 .vxk、登記、重建）
 #   python -I admin.py metasync --id <船的代號>   只同步 meta 與固定點（作品改了 meta、加了固定點，格子不動；TASK-0572）
@@ -3967,7 +3969,7 @@ def act_reseg():
 #   ① 同一份網格（同一門砲的模型）在幾艘船上各存一份 —— 161 種裡 55 種出現在兩艘以上 ⇒ 成品裡收成一個池子（<script id="vxk-meshes">），每艘只記編號；
 #   ② 頂點逐角存（三角形的每一角一個頂點）⇒ 同一點只存一次、照順序存差值（整數 ×100：座標全是 0.01 的倍數，量過誤差 ≤ 4e-12）、三角形的索引也存差值。
 #   兩招一起：網格 3.50 → 0.85 MB。格子、繩、帆照原樣。
-# 只動成品裡內嵌的那一份：_cache 的 .vxk、指紋（vxk_lock.json）不動；遊戲讀的時候還原（05_hull.js meshPool），三角形一個一個比過、對不上的那一份照原樣留在船裡。
+# 只動成品裡內嵌的那一份：_cache 的 .vxk、指紋（config/ships 的 lock）不動；遊戲讀的時候還原（05_hull.js meshPool），三角形一個一個比過、對不上的那一份照原樣留在船裡。
 # ⛔ 壓縮過的成品解不回原檔（cache 會擋）：_cache 掉了要 reimport。
 #
 # 拆檔（Tim 2026-10-20：「如果變成拆檔案呢(index.html變成入口)」；repo 變肥的分析見 src/REPO_SIZE.md）：
@@ -4958,7 +4960,7 @@ def product_binds(tmp, ph):
 
 
 def act_cache(every=False):
-    """_cache 的 .vxk 從雕刻作品重新匯出、跟指紋（config/vxk_lock.json，入版控）比（TASK-0586：.vxk 不入版控 ⇒ 換一台機器 _cache 是空的）。
+    """_cache 的 .vxk 從雕刻作品重新匯出、跟指紋（config/ships/<代號>.json 的 lock，入版控）比（TASK-0586：.vxk 不入版控 ⇒ 換一台機器 _cache 是空的）。
     預設只補缺的；every（cache --all）⇒ 每艘都比 ＝ 比對來源：雕刻作品現在這份跟上次建置用的是不是同一份。
     比之前先從版控的成品補回繩端綁定（product_binds：bind 是匯入後才寫進 _cache 的，作品裡沒有）。
     對得上 ⇒ 放進 _cache；對不上（作品之後又改過）⇒ ⛔ 不蓋 _cache、不改指紋，新匯出的留成 <船>.vxk.source，說是哪一艘、要用新的就 reimport。
@@ -5387,7 +5389,7 @@ def act_save(new):
     if E:
         raise Fail('設定不合法，沒有存：\n' + '\n'.join('  ✗ ' + e for e in E))
     save(new)
-    return ['✓ 存了 config/game.json（重建之後遊戲才吃得到）']
+    return ['✓ 存了 config/game.json＋config/ships/（重建之後遊戲才吃得到）']
 
 
 # ───────────────────────── 本機後台 ─────────────────────────

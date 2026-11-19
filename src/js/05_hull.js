@@ -24,7 +24,7 @@
 //   navigator 航海士、quartermaster 軍需官（0–1；TASK-0825，39_duty.js：舵輪旁／彈藥庫取用點旁，在崗 ⇒ 航行性能／送藥加成；0 ＝ 沒有）、
 //   cook 廚師的全船上限（0–4；TASK-0720：人數 ＝ 船上 kind=galley 的爐灶每座 galley.cooks 位，有廚房的船才上船、站在爐灶旁做飯；0 ＝ 這艘不開廚房；45_galley.js galleyCooks）、
 //   stokers 司爐：每座鍋爐幾位（0–4，預設 2；TASK-1092：有鍋爐的蒸汽船才上船、站在鍋爐旁，那一座的出力 × 到崗比例；0 ＝ 沒有；40_crew.js stokerCrew、31_drive.js drvPartsTick）。
-// 船隻清單 ＝ config/game.json 的 ships（el ＝ 內嵌 .vxk 的 id；匯入新船、重新匯入走 admin.py）；選單只列 HTML 裡真的有內嵌資料的那幾艘。
+// 船隻清單 ＝ CFG.ships（config/ships/<代號>.json 一艘一個檔，建置時接回 game.json 內嵌；el ＝ 內嵌 .vxk 的 id；匯入新船、重新匯入走 admin.py）；選單只列 HTML 裡真的有內嵌資料的那幾艘。
 var GEO0 = CFG.geo0, CREW0 = CFG.crew0;
 // 船隻配置頁（TASK-0570；Tim 2026-10-14：一型一份、要存檔、預設在後台管理頁設）：玩家改過的船員配置 SHIP_CREW（id → 改過的那幾項；69_prefs.js 存），
 //   跟船隻設定（SHIP_CFG，04_state.js）一起在主選單「船隻配置…」那一頁編（71_input.js）。

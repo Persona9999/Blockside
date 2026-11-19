@@ -86,7 +86,7 @@
   ① 從外面灌空氣（全空的塊才通），灌不到的空塊算船裡、實心；貼著船裡的塊不管滿幾格都留 ⇒ 斜的船殼板不破洞；
   ② 顏色只讓從外面看得到的格投票（六個軸向掃進來第一個碰到的格）⇒ 船殼板一格厚、後面的甲板與肋材不搶顏色。
   船烘進去的：船殼格（含平滑格、玻璃）＋烘那一刻純平移的模型與裝飾；照舊畫的：帆、繩、旗、船員、會動的模型（帆桁、吊著的小艇、門、砲塔、錨、燈、迴旋砲、螺旋槳）、裝甲。
-  烘：Blocksail `tools/townmodels.py downsample`（建築，匯入時）；Blockside `admin.py showlod` 跑成品的 `?showlodbake=<船型>`（`js/60_showlod.js` `showlodBake`）⇒ `ships/showlod.js`（全部船型一個檔；指紋 ＝ 算法版本 `SHOWLOD_V` ＋ `vxk_lock` 那一型）。
+  烘：Blocksail `tools/townmodels.py downsample`（建築，匯入時）；Blockside `admin.py showlod` 跑成品的 `?showlodbake=<船型>`（`js/60_showlod.js` `showlodBake`）⇒ `ships/showlod.js`（全部船型一個檔；指紋 ＝ 算法版本 `SHOWLOD_V` ＋ 那一型的 `.vxk` 指紋：`config/ships/<代號>.json` 的 `lock`）。
   畫：P.vox 原樣，矩陣 × 平移 off × 縮放 4（格邊、每格明暗照 0.4 m 的塊；光照、霧、陰影同一套）。
 - **遠那一級（八方向貼圖）**：建築、船同一個取法 —— 八個方向（模型座標水平面上每 45°）先拍好正交的側面，取最接近視線的那一張，看板只繞垂直軸轉、底貼著模型的底；
   光照烘進貼圖（固定的光），遊戲裡 × (0.62 ＋ 0.38 × 陽光) × 夜晚的倍數（`todBakeK`）、再上霧；不透明度 < 0.5 丟掉。

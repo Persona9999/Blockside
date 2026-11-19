@@ -246,7 +246,7 @@ var TUNES = [
 ];
 var BGM_ERAS = [['eastroman', '東羅馬帝國'], ['spain', '十七世紀西班牙'], ['louis', '路易十四的法蘭西'], ['navy18', '十八世紀海軍'],   // 年代篇（TASK-0718）：TUNES 的 era ⇒ 聲音設定頁那一列的標題，照這個順序（年代先後）列；沒寫 era 的（四首船歌）排在最前面那一列
   ['steam1850', '1850 年代'], ['civilwar', '1862 南北戰爭'], ['legend', '傳說']];
-// 船的主題曲（TASK-0681；Tim 2026-10-17「船隻的主題曲 當操作船隻有主題曲時背景音樂改播放主題曲」）：game.json ships[].theme ＝ 這裡的 id（admin.py 匯入時對過）。
+// 船的主題曲（TASK-0681；Tim 2026-10-17「船隻的主題曲 當操作船隻有主題曲時背景音樂改播放主題曲」）：ships[].theme（config/ships/<代號>.json 的 ship.theme）＝ 這裡的 id（admin.py 匯入時對過）。
 //   abc ＝ 整份 ABC（一行一個字串：檔頭 M／L／Q／K／V、% 註解、[V:1] 開頭的聲部行）—— 寫法見 src/README「背景音樂的樂譜」；樂器用 [I:樂器] 在聲部裡換（INSTR）。
 var THEMES = [
   { id: 'stormkaap', name: '風暴角號主題曲', en: 'Stormkaap', src: 'Tim 提供（2026-10-17，TASK-0681；前段音樂盒、後段管風琴）',
@@ -389,7 +389,7 @@ function tuneInsts(tn) {
 }
 /** 年代篇的那一章叫什麼（BGM_ERAS）；沒寫 era ⇒ ''。 */
 function tuneEra(tn) { for (var k = 0; k < BGM_ERAS.length; k++) if (BGM_ERAS[k][0] === tn.era) return BGM_ERAS[k][1]; return ''; }
-/** 現在該放的主題曲：設定開著、在戰局裡（RUNNING）、我操控的那艘（SHIPS[PLAYER_I]）的船型有 theme（game.json ships[].theme）⇒ 那首；否則 null。 */
+/** 現在該放的主題曲：設定開著、在戰局裡（RUNNING）、我操控的那艘（SHIPS[PLAYER_I]）的船型有 theme（config/ships/<代號>.json 的 ship.theme）⇒ 那首；否則 null。 */
 function bgmTheme() {
   var sh = SND.theme && RUNNING ? SHIPS[PLAYER_I] : null, h = sh && sh.T ? hullInfo(sh.T.id) : null;
   return h && h.theme ? tuneById(h.theme) : null;

@@ -44,14 +44,14 @@ function playK(k) { return PLAY === 'fun' ? FUN[k] : 1; }
 //   base  額外動力（節；畫面上 Tim 2026-10-15 改名，以前叫基底航速；31_sailing.js；Tim 2026-10-14：風暴角號是幽靈船、之後的蒸汽船）：額外動力帶來的航速 —— 不管風向、風速、掛幾面帆都有，
 //         跟帆的航速脫鉤（不乘 speed、玩法加成、天氣）；實際航速 ＝ √(帆的航速² ＋ 它²)：兩種動力的推力相加（蒸汽帆船；阻力 ∝ 速度²、各自單獨能跑到的航速就是那份推力 ⇒ 推力相加 ＝ 平方相加）。0 ＝ 沒有 ⇒ 照舊
 //   pump  基礎抽水量（噸／分；TASK-0604，Tim 2026-10-15：「不同船型的基礎抽水能力應該不同（後台可以調）」）：每型自己的抽水機；跟進水速度分開（flood 照舊同時縮放進水與抽水）。
-//         預設 ＝ 18 ×（設計排水量／憲法號 2152 噸）^⅔（抽水機、搖的人手 ∝ 船的大小；憲法號 18 ＝ 以前每艘都一樣的那個值），值寫在 config/game.json 每艘的 cfg
+//         預設 ＝ 18 ×（設計排水量／憲法號 2152 噸）^⅔（抽水機、搖的人手 ∝ 船的大小；憲法號 18 ＝ 以前每艘都一樣的那個值），值寫在每艘的 config/ships/<代號>.json 的 ship.cfg
 var SHIP_KEYS = ['hard', 'flood', 'ballast', 'gunw', 'speed', 'agile', 'upwind', 'base', 'pump'], SHIP_CFG = {};
 var PUMP_REF = 18;                                     // 噸／分：以前每艘船一樣的抽水量（粒子模式 FL_PUMP ＝ 它換成 m³/s（÷ 海水密度）、公式模式 0.004 m/s 是它）⇒ 抽水 ×（pump／PUMP_REF）
 // 船型自己的預設（沒列的 ＝ LIM 的預設）。Tim 2026-10-13：憲法號要比餘燼號快、靈活 ⇒ 憲法號照舊 1（巡防艦），
 //   餘燼號是兩層砲甲板、90 門砲的重船 ⇒ 航速 0.85、靈活 0.7。網址參數（?speed= …）照舊套到每一型。
 //   夜隼號（Tim 2026-10-13：「速度更快、更靈活，彌補火力劣勢」「加強逆風航速與轉彎，彌補火力跟防禦不足」「材質硬度兩倍試試」）：
 //   12 門 4 磅砲的雙桅小船（brigantine：主桅縱帆，吃風比全橫帆的船近）⇒ 航速 1.2、靈活 1.6、逆風 1.25、硬度 6（預設 3 的兩倍）。
-//   值住在 config/game.json 每艘船的 cfg（TASK-0542）。
+//   值住在每艘船的 config/ships/<代號>.json 的 ship.cfg（TASK-0542；FAR-85 以前在 game.json）。
 var HULL_CFG0 = {}; CFG.ships.forEach(function (s) { if (s.cfg) HULL_CFG0[s.id] = s.cfg; });
 function cfgBase(k, id) { var d = HULL_CFG0[id]; return d && d[k] !== undefined ? d[k] : LIM[k][2]; }
 var PREF_BALLAST = {};                                   // 存檔裡的壓艙物：id → { v: 噸, chk: 存的時候那艘船的 checksum }（船重匯過 ⇒ 不套）

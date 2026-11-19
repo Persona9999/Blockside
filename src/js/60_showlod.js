@@ -26,7 +26,7 @@
 //   帆：⛔ 不改 P.sail 本身（SAIL_FS 多一個分支，編譯器排出來的指令就不一樣：戰鬥模式 render_lab ports_high 106 像素差 1）⇒ 交接帶的船另外用淡出的分身畫（showlodBandSails：
 //   P.sail 與循環布 11_rig_loop.js floopFxProg 各一支，原始碼照抄再插 SHOWD_GLSL；還沒編好 ⇒ 照原本那支畫、不淡出）。船殼、模型的 P.vox、P.tri 直接帶 uShowD（戰鬥模式逐位元相同）。
 // 不分級（照原模畫，讀數記在 none）：不是表演船（我艦、敵對了的、被打過的 npc.real）、格子被打掉過（grid.ver ≠ 0）、那一型沒烘或指紋對不上。
-// 指紋：config/vxk_lock.json 那一型的 c:（成品 blockside-src 的 files 記前 12 碼）＋ SHOWLOD_V（算法改了就加一）⇒ 對不上那一型不分級（照原模，不會畫錯）。
+// 指紋：那一型的 .vxk 指紋 c:（config/ships/<代號>.json 的 lock）（成品 blockside-src 的 files 記前 12 碼）＋ SHOWLOD_V（算法改了就加一）⇒ 對不上那一型不分級（照原模，不會畫錯）。
 // 開關：?showlod=0（或 ?rb=0）⇒ 跟改前一樣；?debug=1 下 __game.showlod(false／true)。⛔ 只動畫面：不讀寫模擬的狀態、不抽 rnd()、不改 SHIPS 的順序。
 var SHOWLOD_V = 3, SHOWLOD_K = 4, SHOWLOD_FILL = 12, SHOWLOD_LK = 24;
 var SHOWLOD_IM = { ppm: 2, pmin: 0.5, ss: 2, dirs: 8, sets: [0, 2] };   // 遠那一級的貼圖：每公尺幾像素（÷ 倍率 lk、取到 0.25、最少 pmin：800 m × lk 的地方 1440 p 畫面一像素約 0.54 m × lk）、先拍幾倍再平均、幾個方向、哪兩套帆段（31_sailing.js SAILSETS：全收、戰鬥帆）

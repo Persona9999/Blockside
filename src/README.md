@@ -9,20 +9,21 @@
 - 正常拆檔 `build` 會在船檔寫好後自動補拍新增／變動的船型，再把圖集嵌回入口；`import`／`reimport` 共用這條路。未變的圖集格逐像素沿用，不重拍全艦隊；拍攝失敗會讓建置失敗。`--no-build` 匯入保留待拍狀態，下次正常 `build` 自動補齊。
 - `build --code` 只改程式，仍會擋過期縮圖；手動 `thumbs` 後可用它嵌回圖集。`--raw`／`--single` 保留原輸出格式、只提醒待拍，正式匯入使用預設拆檔建置。
 - 蒸汽／槳帆分類圖示用 `steam`／`oar`，沿用海戰圖集；原始 128px 圖與 Blocksail 語意來源逐位元組對帳。
-- 船卡只列單一動力航速時，名稱照 `ship_cards.json` 的 drive 顯示「蒸氣／槳／魔法」，不改航速數值；帆船保留原三向航速。
+- 船卡只列單一動力航速時，名稱照選船卡片（`config/ships/<代號>.json` 的 `card`）的 drive 顯示「蒸氣／槳／魔法」，不改航速數值；帆船保留原三向航速。
 
 > 📦 2026-10-15（TASK-0586）從 ArtGallery 的 `HtmlGames/_build/ame_constitution_broadside/` 搬來（只複製檔案；之前的歷史在 ArtGallery 的 `git log -- HtmlGames/_build/ame_constitution_broadside`，114 筆）。
 > 開發用 Blocksail 的 `external/Blockside`（submodule，checkout 在 `dev` 分支；Tim 2026-10-20「之後我希望Blockside開發直接在Blocksail的submodule內開發(確保同步)」）—— Valhalla 裡的 `Blockside/` 不再開發（會落後），流程見根目錄 README「分支與發版」。目錄：`src/`（這裡）、`VoxelKit/`（從 ArtGallery/VoxelKit 853b4e7 複製；`_cache/` 不入版控）、根目錄的成品 `index.html` ＋ `ships/`（拆檔：每艘船一個檔，見下面「建置」；GitHub Pages 首頁）、`admin.html`（設定後台）、`admin.cmd`、`sandbox.html`（2D 指揮官沙盒）、`fleetlab.html`（擬真沙盒的入口，轉到 index.html?lab=fleet）。
 > ⚠ repo 變肥（成品每一版都進版控，壓縮過的船 git 存不了差異；5 天 154 MiB）：原因、量法、做了什麼見 [`REPO_SIZE.md`](REPO_SIZE.md)（2026-10-20：拆檔＋船檔分段已做，見 §0）。
 > 🛠 render 管線大修（2026-10-21 起，進行中）：做到哪、量到什麼、剩下的步驟、每一步的設計、怎麼接著做都在任務單 TASK-0781（母單）與它的子單（`senate cmd tasks --arg index=781`）；量測工具 `tests/render_lab/`。
 
-根目錄的 `index.html` 是由這裡的 `template.html`、`js/`、`config/game.json`，加上 `../VoxelKit/` 產生的：
+根目錄的 `index.html` 是由這裡的 `template.html`、`js/`、`config/game.json`、`config/ships/`，加上 `../VoxelKit/` 產生的：
 
 | 檔 | 做什麼 |
 |---|---|
 | `template.html` | 版面、HUD（下方的按鍵提示就是按鈕）、主選單（模式、航行、距離（滑桿）、帆繩物理、「船隻配置…」「細節設定…」與一行摘要）、船隻配置頁（每一型的船員與性能）與細節設定頁（砲與每發傷害、彈種倍率、帆、船員血量、火藥桶、航行、降旗）；引用 `../VoxelKit/voxelkit.js`、`js/*.js`（照順序、`data-bundle="game"`）、船的 `.vxk`（`ships 開始`／`ships 結束` 兩個記號中間那段由 `admin.py` 照設定檔改寫）、設定檔與 `art/` 的選用素材 |
 | 畫面的邊（安全區；Tim 2026-10-17） | **裝置的邊只在 `#stage` 處理一次**（template.html `:root` 的 `--sa-t/r/b/l` ＝ `env(safe-area-inset-*)`；`viewport-fit=cover` ⇒ env() 才拿得到值）：`#stage` 照它收邊，HUD 與畫布全部照 `#stage` 排 ⇒ 元件自己的 `bottom:12px` 不用再加安全區（⛔ 再加 ⇒ 算兩次）。橫式底邊照舊 0（Tim「橫板不用改」）。**直式手機一律 `html.navlow`**（61_hud.js `navLow`／`botFit`；Tim「iphone直畫面全螢幕時 把羅盤放到最下排」「輪盤上方文字 改成按鈕上方」「羅盤跟炮提示統一到畫面下方」）：最下排整排只留給羅盤與兩舷的砲數提示（羅盤只看不按，放在 home 條上面；Tim「最下方全部留給羅盤空間 按鈕從羅盤上方開始排」「這樣就不用分是否是全螢幕了」），按鈕全部從它上方開始排（`#ctl` 的 C P O 4 R、左右兩欄 `#helmL`／`#helmR` 的 margin-bottom ＝ `#navBox` 高＋4）、狀態文字 `#modeT` 再上面（absolute、`--lowup`）；量過（390×760）：文字 555–584 →4 px→ 按鈕底 636（A／D 同高）→4 px→ 羅盤 640–744。JS 量「畫面多大」用 `stageBox()`（71_input.js），⛔ 不用 `innerWidth`／`innerHeight`。`fixed` 的東西（全頁彈窗、返回鈕）要貼著螢幕就自己加 `--sa-*`。加入主畫面：根目錄 `manifest.webmanifest`（display fullscreen、橫放）＋`icons/`＋head 的 apple-mobile-web-app 那幾行 |
-| `config/game.json` | **各項設定的初始值與船隻清單**（TASK-0542）：船數上限、主選單預設、滑桿的上下限與預設、開局距離、彈種倍率、砲種表、船型高度與船員配置的預設、每艘船（內嵌 id、名字、`.vxk`、雕刻作品、建造者 `author`、船隻設定、高度、船員）。內嵌進成品，`js/00_config.js` 讀成 `CFG`。⛔ 這些值在 js 裡沒有第二份 |
+| `config/game.json` | **各項設定的初始值**（TASK-0542）：船數上限、主選單預設、滑桿的上下限與預設、開局距離、彈種倍率、砲種表、船型高度與船員配置的預設、船隻清單在 `config/ships/`（FAR-85）。內嵌進成品時接回 `ships`（admin.py `load()`：放在 `materials` 後面），`js/00_config.js` 讀成 `CFG`。⛔ 這些值在 js 裡沒有第二份 |
+| `config/ships/<代號>.json` | **每艘船一個檔**（FAR-85；Tim 2026-11-19：改一艘船不要整份變動、兩條分支一起改不要衝突）：`order`（在船隻清單上的順序；新的船 ＝ 最大值＋10，兩條分支同時加的 order 一樣就照代號排）、`ship`（以前 `game.json` `ships[]` 那一筆：內嵌 id、名字、`.vxk`、雕刻作品、建造者 `author`、船隻設定、高度、船員）、`card`（選船卡片，`shipcheck` 量的；以前的 `ship_cards.json`）、`lock`（`.vxk` 的指紋；以前的 `vxk_lock.json`）。建置時組回 `game.json` 的 `ships` 與 `ship_cards.json` 內嵌，`template.html` 的船標籤也照它填（檔裡那一段是空的）。⛔ `card`、`lock` 不手改 |
 | `config/meta_kinds.json` | **雕刻 meta 的 kind 規格表**（TASK-0672）：每個 kind 一列 —— 掛在哪（模型／關聯／帆／繩）、遊戲讀的 meta 鍵、要哪些固定點（need）、有就用的（use）、造船規格哪一節、遊戲哪幾支檔照它分流（`null` ＝ 只說是什麼）、`mk`（`modelKind` 照 meta 直接回）、`drv`（admin.py 的動力件）。建置時內嵌成 `#meta-kinds`（`00_config.js` 讀成 `META_KINDS`）。新增 kind：造船規格照舊寫、這裡加一列；沒加 ⇒ 匯入檢查報「規格表沒有這個 kind」、`admin.py metaspec` 擋 |
 | `furnmodels.py` | 道具的模型（TASK-0569）：雕刻作品匯出的 .vxk（目錄作品：一件一個外部模型、meta `kind=furniture`、`item`）⇒ `js/37_furnmodels.js`（`FURN_MODEL`）；同一份輸入兩次逐位元組相同。現在的來源 Sculpture `basecamp-medbay-furniture-01m`（病床、手術台、藥箱） |
 | （`townmodels.py`） | 2026-10-20 搬到 Blocksail 的 `tools/townmodels.py`：城鎮模型（索引＋一個模型一個檔，`world/townkit/`）只放在 Blocksail，有城的海域才把用得到的那幾個傳過來（`MAP_CHUNK.md` §8、`63_towns.js` townKit） |
@@ -36,7 +37,7 @@
 | `art/`（選用） | 美術素材 `crew.png`、`fx.png`、`hud.png`；規格在 TASK-0516。沒交 ⇒ 程式畫的替代品 |
 
 ```bash
-# 建置：驗 config/game.json ⇒ 船標籤照船隻清單 ⇒ vxk_inline.py 內嵌成單檔 ⇒ 壓縮（預設，TASK-0583）⇒ 拆檔（預設）
+# 建置：驗設定（config/game.json＋config/ships/）⇒ 船標籤照船隻清單填進 template ⇒ vxk_inline.py 內嵌成單檔 ⇒ 壓縮（預設，TASK-0583）⇒ 拆檔（預設）
 #   壓縮：每艘船的模型網格收成它自己的池子（header.mpool）—— 同一份（同一門砲）在這艘船上只存一次、頂點去重＋差值；雕刻作品與匯出的 .vxk 格式不變，_cache 與指紋不動，遊戲讀的時候還原（05_hull.js meshPool）。
 #   寫出去之前照遊戲的讀法還原、跟 _cache 原檔逐個比（對不上 ⇒ 不寫）。六艘：成品 9.09 MB → 5.36 MB（那時是全部船共用一個池子）。
 #   拆檔（Tim 2026-10-20：「如果變成拆檔案呢(index.html變成入口)」；為什麼見 src/REPO_SIZE.md）：
@@ -82,7 +83,8 @@
 #     在跑 RUNNING、停格 PAUSED、玩法 MODE 只有 70_flow.js 寫（flowRun／flowPause／flowMode）。別的檔直接寫（含 CAM.yaw = …）⇒ 不建置。
 #   成品記住來源（TASK-0674；10-16 共用工作區把別人改到一半的 js 包進成品，開砲後整場停住 —— 成品跟哪一版提交都對不上，可是看不出來）：
 #     建置最後一步把來源清單接在成品第 4 行 <meta charset> 後面（<script type="application/json" id="blockside-src">，同一行 ⇒ 行號不變，約 3.7 KB）：
-#     template.html 與它引用的每一支檔各記一個指紋（文字檔照 LF 算）；.vxk 不入版控 ⇒ 記 config/vxk_lock.json 裡那艘的指紋。建置程式（admin.py、vxk_inline.py）不算來源。
+#     template.html 與它引用的每一支檔各記一個指紋（文字檔照 LF 算）；.vxk 不入版控 ⇒ 記那艘的指紋（config/ships/<代號>.json 的 lock）。建置程式（admin.py、vxk_inline.py）不算來源。
+#     FAR-85：船標籤照船隻清單填好再找引用；ship_cards.json 是組出來的、不列，改列每艘一個檔（config/ships/*.json）。
 #     srccheck 照同一套從工作區／暫存區（--staged）／某一版（--rev）重算 ⇒ 對不上就列出哪幾支檔不同。
 #     git 鉤子（.githooks/；python -I src/admin.py hooks 裝 ＝ core.hooksPath .githooks，每個 worktree 共用）：
 #       · pre-commit：提交裡有成品 ⇒ 任何分支都要對得上；只動來源 ⇒ dev、main 上擋，其他分支照慣例放行（合進 dev 前照合併後的來源重建）。
@@ -126,6 +128,21 @@ python -I admin.py reseg
 #   例外：同一個指令裡（import／reimport --only 繩端綁定之後要重建的那一次），成品還是上一次 build --ship 剛寫的那份 ⇒ 照它接著建（第一次兩道關照舊）。
 #   一艘約 30 秒（兩次重做入口）；自動測試 tests/build_ship_test.py（--full 要整個艦隊的 _cache：整份建置與只建一艘逐位元組相同）。
 python -I admin.py build --ship <代號>
+# 合併後重建產物（FAR-85，2026-11-19）：git merge 有衝突時，先解來源（設定、程式），產生的檔不用手解，跑一次 remerge：
+#   入口 index.html、ships/ 的船檔、anchor.js、showlod.js、選船縮圖（thumbs.json、atlas.png）照兩邊（HEAD、MERGE_HEAD）已經建好的產物組回來；不用 _cache、不用 Chrome。
+#   · 船檔：每艘照合併後的指紋與船隻清單那一列（代號、標籤、.vxk、改裝船的原船），取成品記的都對得上的那一邊。
+#   · anchor.js、showlod.js：一型一筆、每筆記著那一型的指紋 ⇒ 照型合，不用重烘。
+#   · 縮圖（有衝突才動）：兩邊圖集裡跟船檔對得上的格重排一張（shipthumbs.py --merge）。
+#   · 入口：照合併後的來源走 build --code 同一條路，船清單換成挑好的船檔。
+#   · 另一邊還是 FAR-85 以前的格式（ships 在 game.json 裡）⇒ 那一邊的改動先搬進每艘一個檔（跟合併基底比）。
+#   擋下、什麼都不寫：不在合併中；來源還有衝突（config/ships/<代號>.json 衝突 ＝ 兩邊都改了那艘，訊息會說是哪一艘）；
+#     一艘船兩邊的船檔都跟合併後的指紋對不上（兩邊都改了這艘 ⇒ 在有 _cache 的機器 build --ship <代號>）；合併後的成品跟來源對不上。
+#   全部先算好、照 srccheck 驗過才寫；寫完列出要 git add 的檔。兩條分支各加一艘、各改一艘、一邊改船一邊改程式 ⇒ 結果跟在一條分支上依序建逐位元組相同
+#   （自動測試 tests/per_ship_test.py）。
+python -I admin.py remerge
+# 一次性搬移（FAR-85）：game.json 的 ships、ship_cards.json、vxk_lock.json ⇒ 每艘一個檔；template.html 的船標籤清空；接著 build --code（成品只有來源清單變）。
+#   組回來內嵌的 game.json、卡片、template 要跟搬以前逐位元組相同才搬。--no-build 只搬。
+python -I admin.py split-ships
 # 某一版的成品（入口＋它清單上的船檔）取出到資料夾（對拍的對照組；拆檔之前的版本只有 index.html）
 python -I admin.py snapshot <版本> <資料夾>
 # 成品跟 _cache 原檔比（壓縮版照遊戲的讀法還原；網格三角形逐個、格子一位元組不差）
@@ -350,7 +367,7 @@ python -I admin.py cells --id constitution
 **換一台機器／`_cache` 是空的**（TASK-0586，Tim：「.vxk 不進版控，但換機器要知道需要更新（比對來源）」）：
 
 ```bash
-python -I admin.py cache          # 缺的那幾艘：從雕刻作品（ships[].work）重新匯出、跟 config/vxk_lock.json 的指紋比 —— 對得上才放進 _cache
+python -I admin.py cache          # 缺的那幾艘：從雕刻作品（ships[].work）重新匯出、跟指紋（config/ships/<代號>.json 的 lock）比 —— 對得上才放進 _cache
 python -I admin.py cache --all    # 每艘都比 ＝ 比對來源：雕刻作品現在這份，跟上次建置用的是不是同一份
 ```
 

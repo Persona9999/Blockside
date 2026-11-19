@@ -5,7 +5,7 @@
 // 每一筆：{ lv: 'error'｜'warn', what: 哪一類, where: 哪個部件, msg: 現在怎麼了（遊戲退回什麼）, fix: 怎麼修 }。
 //   error ＝ 遊戲裡壞掉（開場就掉、砲開不動、斷掉的梯子…）；warn ＝ 能動，但照退路／預設跑（名字認、憲法號的數字…）。
 var SC_SECS = 2;
-/** 選船彈窗的卡片（Tim 2026-10-18「選船介面可以給船分類…不用載入所有船隻資訊 而是只載必要資訊」）：開戰那一刻量（還沒被打），admin.py shipcheck 寫進 config/ship_cards.json、建置時內嵌 ⇒ 主選單不用解碼船就有。
+/** 選船彈窗的卡片（Tim 2026-10-18「選船介面可以給船分類…不用載入所有船隻資訊 而是只載必要資訊」）：開戰那一刻量（還沒被打），admin.py shipcheck 寫進每艘的 config/ships/<代號>.json 的 card、建置時組成 #ship-cards 內嵌 ⇒ 主選單不用解碼船就有。
  *  tons ＝ 設計水線的排水量（T.disp）；len ＝ 水線長（公尺）；guns ＝ 砲（含迴旋砲、追擊砲）門數；volley ＝ 全部的砲各打一發的彈重（公斤，砲種表 shot）；
  *  drive ＝ 額外動力（31_drive.js D.kind：steam／oar／magic；沒有 ＝ sail）；sails ＝ 作品的帆（不算旗：陣營旗、國旗、信號旗 —— 同 10_ship.js s.flag，旗的推力面積是 0）；crew ＝ 開戰時的人數。
  *  ⛔ 以前只扣陣營旗 ⇒ 只掛國旗的蒸汽船（定遠號、松島號）算成 1 面帆 ⇒ 選船卡、Blocksail 海圖照帆算順風／側順風／逆風三個航速（Tim 2026-10-31「沒有帆的蒸汽船 仍然會因為風向影響航速」）；遊戲裡 sailFrac 本來就是 0。 */
@@ -37,13 +37,13 @@ function shipCheck(id) {
       decks: NV ? NV.levels.map(function (L) { return L.key + ' ' + L.name; }) : [], ladders: NV ? NV.ladders.length : 0, rooms: (sh.rooms || []).length, zw: T.zw, hits: SHIPS[1].hits + sh.hits };
     if (!T.anc) add('warn', '預烘', '—', '找最近實心格沒有預烘表（ships/anchor.js 沒烘這一型、指紋對不上或換了裝）⇒ 開戰時照舊現算（結果一樣、只是慢）', 'python -I admin.py ancbake --id ' + id);   // TASK-1229
     else if (T.ancMiss) add('warn', '預烘', '—', '找最近實心格有 ' + T.ancMiss + ' 次查詢表裡沒有 ⇒ 開戰時現算（烘的那一場沒走到這幾個點）', 'python -I admin.py ancbake --id ' + id + ' --force');
-    R.card = shipCard(sh);                                               // 選船彈窗的卡片（72_shippick.js；admin.py 寫進 config/ship_cards.json）
+    R.card = shipCard(sh);                                               // 選船彈窗的卡片（72_shippick.js；admin.py 寫進 config/ships/<代號>.json 的 card）
     if (sh.hits || SHIPS[1].hits) add('warn', '量測', '—', '量的這 ' + SC_SECS + ' 秒裡有砲彈打中（hits ' + (sh.hits + SHIPS[1].hits) + '）⇒ 下面「站不滿」「掉了」可能有被打的', '照舊看，或重跑');
     // ── 船型：水線、geo ──
     var p = (T.h.parts || []).filter(function (q) { return q.meta && q.meta.kind === 'ship'; })[0], wm = (p && p.meta) || T.h.meta || {};
     if (!(isFinite(+wm.waterline_z) && +wm.waterline_z > 0) && id !== 'constitution') add('warn', '水線', '船殼', info.zw0 ? '沒有 meta kind=ship waterline_z ⇒ 用設定檔的 zw0 ' + info.zw0 : '沒有 meta kind=ship waterline_z ⇒ 用憲法號的 ' + ZW0 + '（排水量跟著錯）', '船殼的關聯（或組裝件）meta kind=ship, waterline_z=<設計水線>（造船規格 §9）');
     var C = SHIPS[1].T, rl = (T.hx1 - T.hx0) / (C.hx1 - C.hx0), rh = T.sz / C.sz;   // 跟憲法號比大小：差不到一成（餘燼號從憲法號改的）⇒ 憲法號的 geo 本來就對
-    if (!info.geo && id !== 'constitution' && (Math.abs(rl - 1) > 0.1 || Math.abs(rh - 1) > 0.1)) add('warn', 'geo', '設定檔', '沒填 geo ⇒ 陸戰隊站的範圍、瞄準高度、鏡頭中心都是憲法號的數字（這艘長 ×' + rl.toFixed(2) + '、高 ×' + rh.toFixed(2) + '）', '遊戲那側填 config/game.json ships[].geo（造船規格 §9.4）');
+    if (!info.geo && id !== 'constitution' && (Math.abs(rl - 1) > 0.1 || Math.abs(rh - 1) > 0.1)) add('warn', 'geo', '設定檔', '沒填 geo ⇒ 陸戰隊站的範圍、瞄準高度、鏡頭中心都是憲法號的數字（這艘長 ×' + rl.toFixed(2) + '、高 ×' + rh.toFixed(2) + '）', '遊戲那側填 config/ships/<代號>.json 的 ship.geo（造船規格 §9.4）');
     // ── meta 規格表（TASK-0672；config/meta_kinds.json）：作品裡用到、規格表沒有的 kind ⇒ 遊戲不認（照一般模型／關聯／帆／繩）；掛的地方跟規格表不一樣也報 ──
     if (!META_SPEC) add('warn', 'meta 規格表', '—', '成品裡沒有 #meta-kinds ⇒ 照不了規格表', 'python -I admin.py build（template.html 要有 meta-kinds 那一行）');
     var MK = {};

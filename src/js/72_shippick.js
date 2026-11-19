@@ -3,12 +3,12 @@
 //   spkOpen({ title, cur 現在選的那一型, pick(id) 選了別的才叫 })；上面篩選（動力、噸位、火力、搜尋名字），下面卡片；點卡片 ＝ pick，彈窗關掉。
 // 航速（Tim「選船時有辦法顯示船速嗎」）：跟船隻配置頁最上面那張卡片同一條算法（71_input.js shipCardShow）—— 照那一型現在的船隻設定（航速倍率、逆風性能、額外動力）與玩法的加成，
 //   標準風、滿帆：順風／側順風（最快）／逆風（離風 180 − NOGO_DEG 度）＝ √(帆² ＋ 額外動力²)；沒有帆 ⇒ 只寫額外動力。⇒ 改了船隻設定、換了玩法，下次打開就跟著變（不存進卡片）。
-// 卡片資料 ＝ config/ship_cards.json（admin.py shipcheck 量的：js/75_shipcheck.js shipCard；建置時內嵌成 #ship-cards）⇒ 打開彈窗不用解碼任何一艘船，
+// 卡片資料 ＝ 每艘的 config/ships/<代號>.json 的 card（admin.py shipcheck 量的：js/75_shipcheck.js shipCard；建置時內嵌成 #ship-cards）⇒ 打開彈窗不用解碼任何一艘船，
 //   選定了才照舊 loadHull（只載編成裡的那幾艘）。沒量過的船（新匯入還沒跑 shipcheck）⇒ 卡片只寫名字，只在「全部」裡。
 // 分類（Tim：「預設All 然後可以切分類 根據動力 噸位 火力等大致分類」）：三排各自篩、可以疊；預設都是全部。
 //   動力 ＝ 卡片的 drive（帆 sail／蒸汽 steam／槳 oar／魔法 magic；船隊裡沒有的那一種不列）；
 //   噸位 ＝ 設計水線排水量：小 ＜ SPK_TONS[0]、大 ≥ SPK_TONS[1]；火力 ＝ 全部的砲各打一發的彈重（公斤）：輕 ＜ SPK_VOLLEY[0]、重 ≥ SPK_VOLLEY[1]。
-//   門檻照 2026-10-18 那 17 艘的分布切成大約三等份（噸位 4／6／7 艘、火力 5／8／4 艘；ship_cards.json），之後船多了再調。
+//   門檻照 2026-10-18 那 17 艘的分布切成大約三等份（噸位 4／6／7 艘、火力 5／8／4 艘；那時的 ship_cards.json），之後船多了再調。
 var SHIP_CARDS = (window.VoxelKit.embeddedJSON('ship-cards') || {}).ships || {};
 var SPK_TONS = [1000, 3000], SPK_VOLLEY = [200, 600];
 var SPK_DRIVE = [['sail', battleIcon('sail'), '帆船'], ['steam', battleIcon('steam'), '蒸汽'], ['oar', battleIcon('oar'), '槳帆'], ['magic', '✨', '魔法']];
