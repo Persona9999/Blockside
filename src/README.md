@@ -115,6 +115,17 @@ python -I admin.py build --code
 #   寫出來的 ＝ 有 _cache 的機器整份建置會寫的（同一份原文、同一支 ship_pieces、同一版 zlib）；已經是現在的切法 ⇒ 什麼都不寫。
 #   只換切法：船的內容變了（匯入、metasync…）還是要整份建置。之後 build --code 照常（船清單照抄成品裡現在那份）。
 python -I admin.py reseg
+# 只建一艘（FAR-81，2026-11-19；匯入或改一艘船時，_cache 不用有整個艦隊 —— 新機器、Linux 主機也匯得進一艘）：
+#   拆檔之後船檔只跟那艘自己（和改裝船的原船）有關 ⇒ 只重建這艘所在的改裝船家族（沿 variant_of 連起來的每一艘，例 sentinel／monitor）的船檔、
+#   換入口船清單上這幾格，入口照 build --code 同一條路用工作區的來源重寫。_cache 只要有這個家族、跟指紋對得上。兩道關，過不了就擋、什麼都不寫：
+#   ① 其他船沒變（同 build --code ①，只是家族可以變、可以是新的）；② 照成品那一版的來源重做入口要跟現在的成品逐位元組相同（同 build --code ②）。
+#   家族裡沒變的那幾艘（例：改了改裝船，原船照舊）重做出來要跟現在的船檔逐位元組相同 —— 換機器重新匯出的 .vxk 可能只差 JSON 鍵的順序、匯出時間
+#   （指紋照鍵排序、不算匯出時間 ⇒ 對得上），船檔卻會變 ⇒ 擋下（整份 build 會默默換掉；2026-11-19 Linux 主機的 _cache 有 4 艘是這樣）。船檔照 pack_html 同一支做（pack_ship／pack_share／pack_file），
+#   寫出來的 ＝ 整份 build 會寫的。⛔ 成品只記每艘指紋的前 14 字（src_manifest）⇒ 「其他船沒變」照這 14 字比，跟 build --code 一樣。
+#   ② 只認 HEAD／MERGE_HEAD（或 --base）⇒ 連建兩艘、中間沒提交，第二次會擋：先提交第一次的成品和設定（index.html、ships/、src/），再建下一艘。
+#   例外：同一個指令裡（import／reimport --only 繩端綁定之後要重建的那一次），成品還是上一次 build --ship 剛寫的那份 ⇒ 照它接著建（第一次兩道關照舊）。
+#   一艘約 30 秒（兩次重做入口）；自動測試 tests/build_ship_test.py（--full 要整個艦隊的 _cache：整份建置與只建一艘逐位元組相同）。
+python -I admin.py build --ship <代號>
 # 某一版的成品（入口＋它清單上的船檔）取出到資料夾（對拍的對照組；拆檔之前的版本只有 index.html）
 python -I admin.py snapshot <版本> <資料夾>
 # 成品跟 _cache 原檔比（壓縮版照遊戲的讀法還原；網格三角形逐個、格子一位元組不差）
@@ -131,6 +142,8 @@ python -I admin.py import --work <雕刻作品 ID> --id <代號> --name <名字>
 python -I admin.py import --work <改裝船的雕刻作品> --id <代號> --name <名字> --variant-of <原船的代號>
 # 重新匯入（作品長了）：印出跟上一版的格數、checksum、繩帆模型數與 vxk_compare.py 的內容對拍；只差匯出時間 ⇒ 不換
 python -I admin.py reimport --id constitution
+# 匯入、重新匯入加 --only：最後的建置改成只建這艘（build --ship；繩端綁定之後要重建的那一次也是）。不加 ⇒ 照舊整份建置
+python -I admin.py import --work <雕刻作品 ID> --id <代號> --name <名字> --only
 # 物件 id（TASK-0715；造船規格 §12）：每件關聯、外部模型發一個 <類別>-<序號>（改裝船自己加的 <代號>.<類別>-<序號>）、
 #   指名別的部件的 meta（規格表 meta_kinds.json 的 refs：鍋爐 funnel、主機 propeller、彈藥庫 hoist、裝甲 mount_of）從路徑換成 id，
 #   用 senate sub=meta 寫回雕刻作品，再只把 id 與指名鍵同步進 _cache（不走 metasync）；下一號記在 ships[].idNext。
