@@ -122,6 +122,8 @@ python -I admin.py reseg
 #   家族裡沒變的那幾艘（例：改了改裝船，原船照舊）重做出來要跟現在的船檔逐位元組相同 —— 換機器重新匯出的 .vxk 可能只差 JSON 鍵的順序、匯出時間
 #   （指紋照鍵排序、不算匯出時間 ⇒ 對得上），船檔卻會變 ⇒ 擋下（整份 build 會默默換掉；2026-11-19 Linux 主機的 _cache 有 4 艘是這樣）。船檔照 pack_html 同一支做（pack_ship／pack_share／pack_file），
 #   寫出來的 ＝ 整份 build 會寫的。⛔ 成品只記每艘指紋的前 14 字（src_manifest）⇒ 「其他船沒變」照這 14 字比，跟 build --code 一樣。
+#   ② 只認 HEAD／MERGE_HEAD（或 --base）⇒ 連建兩艘、中間沒提交，第二次會擋：先提交第一次的成品和設定（index.html、ships/、src/），再建下一艘。
+#   例外：同一個指令裡（import／reimport --only 繩端綁定之後要重建的那一次），成品還是上一次 build --ship 剛寫的那份 ⇒ 照它接著建（第一次兩道關照舊）。
 #   一艘約 30 秒（兩次重做入口）；自動測試 tests/build_ship_test.py（--full 要整個艦隊的 _cache：整份建置與只建一艘逐位元組相同）。
 python -I admin.py build --ship <代號>
 # 某一版的成品（入口＋它清單上的船檔）取出到資料夾（對拍的對照組；拆檔之前的版本只有 index.html）

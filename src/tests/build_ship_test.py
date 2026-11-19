@@ -1,20 +1,25 @@
 """build --ship (FAR-81): building one ship must write what the full build writes, and must refuse when it cannot.
 python -I src/tests/build_ship_test.py --cache-root <folder of .vxk> [--ids a,b] [--no-each] [--full | --subset] [--new-vxk <file>] [--out result.json]
 Runs in a disposable git worktree at HEAD with this checkout's src/admin.py copied in; HEAD's product must match its sources (srccheck).
+Needs a Python with numpy (the build's grid packing imports it). --cache-root's .vxk count only where they match HEAD's
+src/config/vxk_lock.json (cacheMatches in the result); a _cache exported for another version matches none.
   default : A) every ship whose variant family has matching .vxk in --cache-root: build --ship with ONLY that family in _cache
                leaves index.html, ships/ and src/ byte-identical (--ids limits the list, --no-each skips A). A .vxk that matches
                its fingerprint but not the build's bytes (re-exported elsewhere: JSON key order, export time) must be refused
                with nothing written; those are listed under 'refusedCacheBytes'.
             C) refusals: another ship's fingerprint changed, a ship file missing, family incomplete, vxk_inline.py output changed,
-               two other ships swapped, the ship's .vxk not matching its fingerprint, unknown id: each must Fail and write nothing.
+               two other ships swapped, the ship's .vxk not matching its fingerprint, unknown id, a family ship's label (el) renamed:
+               each must Fail and write nothing.
   --full  : every ship must match. HEAD's admin.py and this admin.py full builds both reproduce HEAD byte-for-byte; then for
-            (one voxel of a plain ship edited, a new ship imported with --only, the variant base edited) the full build and
-            build --ship write the same bytes.
+            (one voxel of a plain ship edited, a new ship imported with --only, the variant base edited, and import/reimport
+            with rope binding run for real — shipcheck_page stubbed to change every rope's bind, so the rebuild after it runs:
+            act_build → act_ropebind → act_build against build --ship twice) the full build and build --ship write the same
+            bytes, _cache and vxk_lock.json included.
   --subset: --full on the ships that do match (families kept whole; --ids picks a smaller fleet: those ships' families);
             that fleet's full build becomes the fixture's HEAD. A full build packs ~7 s per ship on a 4-core Linux host.
 In --full/--subset the thumbnail capture (Chrome) is stubbed on both sides alike.
 """
-import argparse, importlib.util, json, shutil, subprocess, sys, tempfile
+import argparse, importlib.util, json, shutil, struct, subprocess, sys, tempfile, zlib
 from pathlib import Path
 from unittest.mock import patch
 ROOT = Path(__file__).resolve().parents[2]
@@ -169,6 +174,11 @@ def run(fx, a, res):
         k = '"<script>\\n(function () {'                    # the bundle wrapper it writes (not the comment above it)
         assert k in t
         f.write_text(t.replace(k, k.replace('function ()', 'function()')), encoding='utf-8', newline='')
+    def relabel(sid):
+        c = adm.load()
+        s = next(s for s in c['ships'] if s['id'] == sid)
+        s['el'] += '-renamed'
+        adm.save(c)
     flip = lambda v: v[:2] + ('0' if v[2] != '0' else '1') + v[3:]       # the product records 'c:' + 12 hex of each fingerprint (src_manifest)
     cases = [
         ('another ship fingerprint', tgt, fam[tgt], lambda: lockset(o1['vxk'], flip), '指紋跟成品記的不一樣'),
@@ -178,6 +188,7 @@ def run(fx, a, res):
         ('two other ships swapped', tgt, fam[tgt], swap, '跟成品的船清單'),
         ('ship .vxk not its fingerprint', tgt, fam[tgt], lambda: lockset(byid[tgt]['vxk'], flip), '跟指紋'),
         ('unknown id', 'no_such_ship', set(), lambda: None, '沒有代號'),
+        ('family ship label renamed', tgt, fam[tgt], lambda: relabel(tgt), '跟成品的船清單'),
     ]
     res['refuse'] = {}
     keep_inline = (fx.w / 'VoxelKit/vxk_inline.py').read_bytes()
@@ -258,6 +269,41 @@ def same_as_full(fx, a, res, ok, fam, head):
             adm.lock_put(s['vxk'])
         return go
 
+    def ropes(vxk):
+        raw = zlib.decompress(Path(vxk).read_bytes(), -15)
+        n = struct.unpack('<I', raw[4:8])[0]
+        return (json.loads(raw[8:8 + n].decode('utf-8')).get('rig') or {}).get('ropes') or []
+
+    def binds(chrome, sid, extra=''):                          # shipcheck_page stand-in: a bind for every rope that differs from the .vxk's
+        s = next(x for x in adm.load()['ships'] if x['id'] == sid)
+        return {'binds': [[0, 0] if r.get('bind') != [0, 0] else None for r in ropes(fx.cache / s['vxk'])]}
+
+    def roped(act, only):
+        """import/reimport with rope binding run for real; the build it ends with must run twice (before and after the binds)."""
+        def go():
+            wrap = 'act_build_ship' if only else 'act_build'
+            with patch.object(adm, 'CHROMES', [sys.executable]), patch.object(adm, 'shipcheck_page', side_effect=binds), \
+                 patch.object(adm, 'REPORTS', str(fx.w.parent / 'reports')), patch.object(adm, 'act_ancbake', return_value=[]), \
+                 patch.object(adm, 'act_shipcheck', return_value=[]), patch.object(adm, 'act_showlod', return_value=[]), \
+                 patch.object(adm, wrap, wraps=getattr(adm, wrap)) as w:
+                log = act(only)
+            assert w.call_count == 2, (wrap, w.call_count, log[-12:])
+            assert any('檔頭改了' in l and '檔頭改了 0 條' not in l for l in log), log[-12:]
+        return go
+    rp = next((s for s in sorted(ships, key=lambda s: len(fam[s['id']])) if ropes(a.cache_root / s['vxk'])), None)
+    assert rp, 'no ship with ropes in this fleet: the rope-binding rebuild cannot be tested'
+
+    def reimp(only):
+        def edited(work, dest):
+            shutil.copyfile(fx.cache / rp['vxk'], dest)
+            edit_voxel(adm, Path(dest))
+        with patch.object(adm, 'export', side_effect=edited):
+            return adm.act_reimport(rp['id'], build=True, only=only)
+
+    def imp_roped(only):
+        with patch.object(adm, 'export', side_effect=lambda work, dest: shutil.copyfile(a.cache_root / rp['vxk'], dest)):
+            return adm.act_import('fixture-new-ship', 'probe_new', 'Probe', build=True, only=only)
+
     def imp(only):
         with patch.object(adm, 'export', side_effect=lambda work, dest: shutil.copyfile(new_vxk, dest)), \
              patch.object(adm, 'act_ropebind', return_value=[]), patch.object(adm, 'act_ancbake', return_value=[]), \
@@ -268,6 +314,8 @@ def same_as_full(fx, a, res, ok, fam, head):
     if variant:
         b0 = next(s for s in ships if s['id'] == variant['variant_of'])
         scen.append(('one voxel of variant base %s' % b0['id'], voxel(b0), adm.act_build, lambda: adm.act_build_ship(b0['id'])))
+    scen += [('reimport --only %s, rope binding run' % rp['id'], lambda: None, roped(reimp, False), roped(reimp, True)),
+             ('import --only, rope binding run', lambda: None, roped(imp_roped, False), roped(imp_roped, True))]
     res['sameAsFull'] = {}
     for name, prep, full, one in scen:
         fx.restore(base)
@@ -275,13 +323,14 @@ def same_as_full(fx, a, res, ok, fam, head):
         pre = fx.files(cache=True)
         with stub(adm):
             full()
-        want = fx.files()
+        want = fx.files(cache=True)
         fx.restore(pre)
         with stub(adm):
             one()
-        got = fx.files()
+        got = fx.files(cache=True)
         d = diff(want, got)
-        changed = diff({k: v for k, v in base.items() if not k.startswith('VoxelKit/')}, want)
+        built = lambda F: {k: v for k, v in F.items() if not k.startswith('VoxelKit/')}
+        changed = diff(built(base), built(want))
         res['sameAsFull'][name] = {'identical': not d, 'changedByFullBuild': changed} if not d else {'differ': d}
         print('B %-36s %s (full build changed %d files: %s)' % (name, 'identical' if not d else 'DIFFER: %s' % d, len(changed), ', '.join(changed)), flush=True)
         assert not d, (name, d)

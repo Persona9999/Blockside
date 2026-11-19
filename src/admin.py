@@ -2129,11 +2129,12 @@ def act_disp(ids=None, margin=None):
 ROPEBIND_KIND = {'grid': '格子（旁邊 5 格內有實心格）', 'turret': '砲塔的殼', 'yard': '帆桁', 'model': '模型（作品寫明）', 'guess': '模型（照外框猜）', 'rope': '母繩', 'sail': '只靠帆角', 'none': '哪裡都不靠'}
 
 
-def act_ropebind(ids=None, build=True, only=None):
+def act_ropebind(ids=None, build=True, only=None, chain=None):
     """繩端綁定（TASK-0716；Tim 2026-10-18「遊戲端真的要猜測應該要放在匯入時（檢查、猜測並產生報表）」）：
     跑成品的 ?shipcheck=<船>，拿遊戲照同一套規則現場算的每條繩兩端綁在哪（R.binds；js/10_ship.js ropeDecide），寫進 _cache 那份 .vxk 的 rig.ropes[i].bind
     ⇒ 遊戲照它套、不猜（js/10_ship.js linkRopes）；出報表 reports/ropebind_<船>.md（每一類幾端、照外框猜的模型、哪裡都不靠的一端）。
-    要先建過（成品裡的船 ＝ _cache 那份）；檔頭變了 ⇒ 更新指紋，build 為真就重建。only ＝ a ship id ⇒ rebuild with build --ship."""
+    要先建過（成品裡的船 ＝ _cache 那份）；檔頭變了 ⇒ 更新指紋，build 為真就重建。only ＝ a ship id ⇒ rebuild with build --ship
+    (chain: the one its caller's build --ship used, so this rebuild may start from that product)."""
     cfg = load()
     ids = ids or [s['id'] for s in cfg['ships']]
     chrome = next((c for c in CHROMES if os.path.exists(c)), None)
@@ -2198,7 +2199,7 @@ def act_ropebind(ids=None, build=True, only=None):
             dirty = True
         log.append('  %s %s（%s）：繩 %d 條、檔頭改了 %d 條；照外框猜 %d 端、不靠 %d 端 ⇒ %s' % ('⚠' if guess else '✓', s['name'], sid, len(RP), changed, len(guess), len(none), rp))
     if dirty and build:
-        log += act_build_ship(only) if only else act_build()
+        log += act_build_ship(only, chain=chain) if only else act_build()
     return ['繩端綁定：'] + log
 
 
@@ -3285,6 +3286,11 @@ def act_build_code(base=None):
 #      was built from, and so does the product's ship list; the product's recorded .vxk fingerprints equal the current ones; every listed
 #      ship file is there and matches its hash. The family may be new (an import); it takes its place in the configured order.
 #   2. This path equals the real build: the entry rebuilt from that version's sources must equal the current product byte for byte.
+#      Within one command (import/reimport --only, whose rope binding rebuilds again): chain ＝ a dict shared by the calls. A call
+#      records the entry it left (after thumbs_finish and srccheck) and the ship list it built from; the next call whose product is
+#      still exactly that entry takes it as the base instead of a git version (the first call passed both gates, so the product is
+#      the working sources' build).
+#      Gate 1 runs as usual; the first call of a command always runs both gates in full.
 # Build: the family goes through pack_html's own steps (pack_ship, pack_share, pack_file); pack_verify checks just these ships.
 #   A family member whose own and whose base's .vxk fingerprint and ship-list row equal the product's must come out byte-identical
 #   to its current ship file (e.g. the variant changed, the base did not), otherwise refuse.
@@ -3304,9 +3310,9 @@ def ship_family(ships, sid):
     return fam
 
 
-def act_build_ship(sid, base=None):
+def act_build_ship(sid, base=None, chain=None):
     """build --ship: rebuild this ship's (and its variant family's) ship files, swap those entries in the entry's ship list and
-    rebuild the entry from the working sources; see the block above."""
+    rebuild the entry from the working sources; see the block above. chain: shared by the build --ship calls of one command."""
     cfg = load()
     E = validate(cfg)
     if E:
@@ -3350,24 +3356,32 @@ def act_build_ship(sid, base=None):
     bad = sorted(k for k in set(hv) | set(wv) if hv.get(k) != wv.get(k) and k not in fv)
     if bad:
         raise Fail('%s 以外的船 .vxk 的指紋跟成品記的不一樣（%s）⇒ 那幾艘也變了%s' % (names, '、'.join(bad), full))
-    rev = code_base(have['fp'], base)
-    if not rev:
-        raise Fail('成品的來源指紋 %s 對不到 %s 的來源 ⇒ 用 --base <版> 指定成品是照哪一版建的' % (have['fp'], base or 'HEAD／MERGE_HEAD'))
-    r = GitRead(rev + ':')
+    prior = bool(chain) and chain.get('html') == html0          # the product is what the previous call of this command wrote
+    if prior:
+        rev, sig0 = '這個指令上一次 build --ship 寫的成品', chain['sig']
+    else:
+        rev = code_base(have['fp'], base)
+        if not rev:
+            raise Fail('成品的來源指紋 %s 對不到 %s 的來源 ⇒ 用 --base <版> 指定成品是照哪一版建的；'
+                       '成品是上一次 build --ship 照工作區建的、還沒提交 ⇒ 先提交那次的成品和設定（index.html、ships/、src/），再建下一艘' % (have['fp'], base or 'HEAD／MERGE_HEAD'))
+        r = GitRead(rev + ':')
     try:
-        sig0 = ship_sig(json.loads(r('src/config/game.json').decode('utf-8')))
+        if not prior:
+            sig0 = ship_sig(json.loads(r('src/config/game.json').decode('utf-8')))
         if [x for x in sig0 if x[0] not in fam] != [x for x in ship_sig(cfg) if x[0] not in fam]:
             raise Fail('%s 以外的船（代號、標籤、.vxk、改裝船的原船）跟 %s 不一樣%s' % (names, rev, full))
-        h0, _ = code_html(r, m.group(0) + '\n')
+        h0 = html0 if prior else code_html(r, m.group(0) + '\n')[0]
     finally:
-        r.close()
+        if not prior:
+            r.close()
     if h0 != html0:
         i = next((k for k in range(min(len(h0), len(html0))) if h0[k] != html0[k]), min(len(h0), len(html0)))
         raise Fail('照 %s 的來源走同一條路重做，跟現在的成品不一樣（第 %d 行起）⇒ 建置程式改過、或成品不是這樣建的%s' % (rev, html0.count('\n', 0, i) + 1, full))
     log = bundle_names_check() + owner_check() + act_shell_layers(gate=True)
     log.append('✓ 要建的：%s（改裝船家族）的 .vxk 都在 _cache、跟指紋對得上' % names)
     log.append('✓ 其他船沒變：%d 艘的標籤、.vxk 指紋、改裝船的原船都跟 %s 一樣，船檔都在、雜湊對得上' % (len(rest), rev))
-    log.append('✓ 照 %s 的來源走同一條路重做 ⇒ 跟現在的成品逐位元組相同（這個做法 ＝ 正式建置）' % rev)
+    log.append('✓ 成品是%s（那次兩道關都過了、照工作區的來源寫的）⇒ 照它接著建' % rev if prior else
+               '✓ 照 %s 的來源走同一條路重做 ⇒ 跟現在的成品逐位元組相同（這個做法 ＝ 正式建置）' % rev)
     items = [pack_ship(zlib.decompress(open(os.path.join(CACHE, s['vxk']), 'rb').read(), -15), s['el'], cfg['ships']) for s in FS]
     pack_share(items)
     files, new = {}, {}
@@ -3402,7 +3416,10 @@ def act_build_ship(sid, base=None):
             f.write(h1)
         log.append('✓ 入口 index.html 換了（來源指紋 %s → %s）' % (have['fp'], M1['fp']))
     log.append('✓ 只建 %s：寫了船檔 %d 個（%s）；其他 %d 艘的船檔照舊' % (names, len(wrote), '、'.join(wrote) or '都跟原本一樣', len(rest)))
-    return log + flagloop_ensure() + thumbs_finish() + act_srccheck() + showlod_note(cfg) + anc_note(cfg)
+    log += flagloop_ensure() + thumbs_finish() + act_srccheck()
+    if chain is not None:                                       # after the tail: thumbs_finish may rewrite the entry (from the working sources too)
+        chain.update(html=open(OUT, encoding='utf-8', newline='').read(), sig=ship_sig(cfg))
+    return log + showlod_note(cfg) + anc_note(cfg)
 
 
 def flagloop_ensure():
@@ -4548,8 +4565,9 @@ def act_import(work, sid, name, build=True, variant_of=None, only=False):   # on
     save(cfg)
     log.append('✓ 登記進船隻清單：%s（%s）—— 航速、靈活、船員照預設，要調到後台的船隻設定' % (name, sid))
     if build:
-        log += act_build_ship(sid) if only else act_build()
-        log += act_ropebind([sid], only=sid if only else None)   # 繩端綁定（TASK-0716）：匯入時算好寫進檔頭、出報表
+        chain = {}                                       # build --ship: the rope-binding rebuild starts from the product this one writes
+        log += act_build_ship(sid, chain=chain) if only else act_build()
+        log += act_ropebind([sid], only=sid if only else None, chain=chain)   # 繩端綁定（TASK-0716）：匯入時算好寫進檔頭、出報表
         log += act_ancbake([sid])                        # 找最近實心格的預烘（TASK-1229）：這一型開戰要查的先烘進 ships/anchor.js（匯入檢查照表讀）
         log += act_shipcheck([sid])                      # 匯入檢查：缺 meta、砲班站不滿、開場就掉的（只讀）
         log += act_showlod([sid])                        # 表演船的低模與貼圖（TASK-1104；js/60_showlod.js）：沒烘過的這一型烘進 ships/showlod.js（堡壘、砲台不烘）
@@ -4602,8 +4620,9 @@ def act_reimport(sid, work=None, build=True, only=False):   # only: as in act_im
     if dirty:
         save(cfg)
     if build:
-        log += act_build_ship(sid) if only else act_build()
-        log += act_ropebind([sid], only=sid if only else None)   # 繩端綁定（TASK-0716）：新的 .vxk 沒有 bind ⇒ 算好寫進去
+        chain = {}                                       # build --ship: the rope-binding rebuild starts from the product this one writes
+        log += act_build_ship(sid, chain=chain) if only else act_build()
+        log += act_ropebind([sid], only=sid if only else None, chain=chain)   # 繩端綁定（TASK-0716）：新的 .vxk 沒有 bind ⇒ 算好寫進去
         log += act_ancbake([sid])                        # 找最近實心格的預烘（TASK-1229）：.vxk 換了 ⇒ 指紋對不上 ⇒ 這一型重烘
         log += act_shipcheck([sid])                      # 匯入檢查（只讀）
         log += act_showlod([sid])                        # 表演船的低模與貼圖（TASK-1104）：.vxk 換了 ⇒ 指紋對不上 ⇒ 這一型重烘（不重烘的話遊戲裡這一型退回原模）
