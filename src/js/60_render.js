@@ -947,7 +947,11 @@ function hullUniforms(prog) {
  *  ⛔ 主畫面那幾段的函式名不帶 shadow／csm／refl（量測的工具照呼叫堆疊的名字分哪一趟；堆疊別疊太深）。 */
 function render() {
   var fr = frameBegin();
-  if (GFX.shadow && !cutOn()) shadowPass(); else SHM.on = false;   // 剖面、隱藏甲板開著 ⇒ 不算陰影（拿掉的甲板不擋光；74_cutaway.js）
+  if (GFX.shadow && !cutOn()) {
+    if (!CSM_SIMPLE && TOWNS.on && TOWNS.list.length && BED && BED.A && TOWNS.kit && TOWNS.prog)
+      townViewGroup(CAM.eye, true);
+    shadowPass();
+  } else SHM.on = false;   // 剖面、隱藏甲板開著 ⇒ 不算陰影（拿掉的甲板不擋光；74_cutaway.js）
   shadowMats();
   gl.activeTexture(gl.TEXTURE4); gl.bindTexture(gl.TEXTURE_2D_ARRAY, SHM.tex);   // 陰影圖陣列：固定第 4 號（01_gl.js SHADOW_GLSL）
   gl.activeTexture(gl.TEXTURE0);
