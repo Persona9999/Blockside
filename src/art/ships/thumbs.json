@@ -1,5 +1,5 @@
 {
- "atlasSHA256": "f427a4aa5312c641b311f28a3c30b9a929a366ea2ce1171d81a2267879dcfa30",
+ "atlasSHA256": "890b61acbb84c08f13f7f09f413ae92f8be49621bcf06b6ff019c09ec0d0ce02",
  "cols": 6,
  "h": 160,
  "icons": {
@@ -123,104 +123,108 @@
    5,
    4
   ],
-  "napoleon": [
+  "najm": [
    0,
+   5
+  ],
+  "napoleon": [
+   1,
    5
   ],
   "nightlamp": [
-   1,
+   2,
    5
   ],
   "oxford": [
-   2,
+   3,
    5
   ],
   "phoenix": [
-   3,
+   4,
    5
   ],
   "pinas": [
-   4,
+   5,
    5
   ],
   "piragua": [
-   5,
-   5
+   0,
+   6
   ],
   "punt": [
-   0,
+   1,
    6
   ],
   "reale": [
-   1,
+   2,
    6
   ],
   "sandal": [
-   2,
+   3,
    6
   ],
   "sanroman": [
-   3,
+   4,
    6
   ],
   "sentinel": [
-   4,
+   5,
    6
   ],
   "shachuan": [
-   5,
-   6
+   0,
+   7
   ],
   "stormkaap": [
-   0,
+   1,
    7
   ],
   "susquehanna": [
-   1,
+   2,
    7
   ],
   "swallow": [
-   2,
+   3,
    7
   ],
   "tartane": [
-   3,
+   4,
    7
   ],
   "tekpai": [
-   4,
+   5,
    7
   ],
   "tidegrave": [
-   5,
-   7
-  ],
-  "tower_galata": [
    0,
    8
   ],
-  "tradewind": [
+  "tower_galata": [
    1,
    8
   ],
-  "tridente": [
+  "tradewind": [
    2,
    8
   ],
-  "tungning_trader": [
+  "tridente": [
    3,
    8
   ],
-  "virginia": [
+  "tungning_trader": [
    4,
    8
   ],
-  "zeehaen": [
+  "virginia": [
    5,
    8
+  ],
+  "zeehaen": [
+   0,
+   9
   ]
  },
- "rows": 9,
+ "rows": 10,
  "source": {
   "renderer": "79ef7fe4be292c4751bc3e4d6b6f91382d2ae4a4e1dc690bc7f1377aa1b2f847",
   "ships": {
@@ -254,6 +258,7 @@
    "labelle": "b4d96cd75ae092ab76cbe873095032fa655129de6b6c3feacf4eef6cf05ea7b1",
    "matsushima": "c6768056584e5634c6f4db89f4ad14f99949f1324a0fafd3def7e57e1ac0803c",
    "monitor": "d9157a8790386823040080f5b8cc6b7b7549b0a11e0dd85b026377198ddb62aa",
+   "najm": "98f05cf6155a4c8da6f709e7910f24c34e762c1e2bb66e62b839b8c64bd6a045",
    "napoleon": "95e31466ba6f360030ab8f06313b2cfc80b1b8315f7c9f4eedbdcc67f4a8e112",
    "nightlamp": "ecd1f887a0b0190f68131023ef3b0b0d9266206833de78147a2f9b4e6525ec11",
    "oxford": "7554cd6992b89796324ac0c688d8526d027b2a4578f2abbf04fe61bf6ac3ba95",
