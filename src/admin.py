@@ -43,10 +43,9 @@ SHIPS_A, SHIPS_B = '—— ships 開始 -->\n', '<!-- ships 結束 -->'
 
 # ───────────────────────── _cache 的指紋（.vxk 跟版控對得上才建） ─────────────────────────
 # _cache 不入版控、建置直接讀它 ⇒ 它落後了（別的工作區 reimport／metasync 過、只拿到版控的成品）建置不會叫，成品默默換成舊船
-#   （2026-10-14 bc1dfd9：艙房、甲板 meta 全掉）。⇒ 每艘 .vxk 的 sha1 記在 config/vxk_lock.json（入版控），建置前比：
+#   （2026-10-14 bc1dfd9：艙房、甲板 meta 全掉）。⇒ 每艘 .vxk 的指紋記在那艘的 config/ships/<代號>.json 的 lock（入版控；FAR-85 以前是 config/vxk_lock.json），建置前比：
 #   對得上 ⇒ 照建；對不上 ⇒ 版控的成品裡內嵌的那份對得上指紋就自動換回（原檔留成 .stale）；也對不上 ⇒ 擋下不建（⛔ 不猜哪一份才對）。
 #   匯入／重新匯入／metasync 寫了 .vxk 就更新指紋；要改用 _cache 現在那份（例如手動換過檔）⇒ relock。
-LOCK_P = os.path.join(HERE, 'config', 'vxk_lock.json')
 MUSIC_JS = os.path.join(HERE, 'js', '02_music.js')
 
 
@@ -83,14 +82,22 @@ def file_fp(path):
 
 
 def lock_load():
-    if not os.path.exists(LOCK_P):
-        return {}
-    return json.load(open(LOCK_P, encoding='utf-8'))
+    """{ .vxk: 指紋 }（記在每艘船自己的 config/ships/<代號>.json 的 lock，FAR-85）。"""
+    return src_cfg(work_read)[1]
 
 
 def lock_save(L):
-    with open(LOCK_P, 'w', encoding='utf-8', newline='\n') as f:
-        f.write(json.dumps(L, ensure_ascii=False, indent=1, sort_keys=True) + '\n')
+    old_layout_guard()
+    R = recs_read(work_read)
+    miss = set(L) - {r['ship'].get('vxk') for r in R.values()}
+    if miss:
+        raise Fail('船隻清單沒有用 %s 的船 ⇒ 指紋沒地方記（先登記進船隻清單）' % '、'.join(sorted(miss)))
+    for r in R.values():
+        if L.get(r['ship']['vxk']):
+            r['lock'] = L[r['ship']['vxk']]
+        else:
+            r.pop('lock', None)
+    recs_write(R)
 
 
 def lock_put(vxk):
@@ -98,7 +105,7 @@ def lock_put(vxk):
     L = lock_load()
     L[vxk] = file_fp(os.path.join(CACHE, vxk))
     lock_save(L)
-    return '  指紋 %s ← %s（config/vxk_lock.json，要跟成品一起提交）' % (vxk, L[vxk][:12])
+    return '  指紋 %s ← %s（config/ships 那艘的 lock，要跟成品一起提交）' % (vxk, L[vxk][:12])
 
 
 def built_vxk(html, el):
@@ -253,9 +260,77 @@ GEO_NUMS = ('center', 'aim', 'marineY', 'qx')   # marineY：陸戰隊量甲板�
 
 
 # ───────────────────────── 讀寫 ─────────────────────────
-def load(path=CFG_P):
-    with open(path, encoding='utf-8') as f:
-        return json.load(f)
+# 每艘船一個檔（FAR-85；Tim 2026-11-19「ship_cards.json 是否可以改成每艘船一個.json（避免改一艘船全部變動&衝突）」）：
+#   config/ships/<代號>.json ＝ { order: 在船隻清單上的順序, ship: 船隻設定（以前 game.json ships[] 那一筆）, card: 選船卡片（shipcheck 量的）, lock: .vxk 的指紋 }；
+#   game.json 只放其他設定。load() 照 (order, 代號) 把船接回 ships、放在 SHIPS_AT 那一鍵後面 ⇒ 程式、遊戲讀到的設定跟以前一樣；
+#   建置時內嵌的 game.json、ship_cards.json 由這幾個檔組出來（build_srcs），template.html 的船標籤也是建置時才照 ships 填（tpl_fill）。
+#   兩條分支各加一艘、各改一艘不同的船 ⇒ 改到的是不同的檔，設定不會衝突；兩條分支同時加的船 order 一樣 ⇒ 照代號排，順序照樣固定。
+#   FAR-85 以前的版本（ships 在 game.json 裡、vxk_lock.json、ship_cards.json）照樣讀得到（src_cfg：build --code 對舊版、合併舊分支），不會再寫。
+SHIPS_REL = 'src/config/ships'
+SHIPS_D = os.path.join(HERE, 'config', 'ships')
+CFG_REL, CARDS_REL, LOCK_REL = 'src/config/game.json', 'src/config/ship_cards.json', 'src/config/vxk_lock.json'
+SHIPS_AT = 'materials'
+
+
+def work_ls(d):
+    """工作區某個資料夾（根目錄的相對路徑）裡的檔名；沒有 ⇒ []。"""
+    p = os.path.join(ROOT, *d.split('/'))
+    return sorted(f for f in os.listdir(p) if os.path.isfile(os.path.join(p, f))) if os.path.isdir(p) else []
+
+
+def ls_of(read, d):
+    """read 看得到的那一份，資料夾 d 裡的檔名（GitRead、Overlay 有自己的 ls；其他 ⇒ 工作區）。"""
+    f = getattr(read, 'ls', None)
+    return f(d) if f else work_ls(d)
+
+
+def recs_read(read):
+    """config/ships/*.json ⇒ { 代號: 那一份 }（read 看得到的那一份）。"""
+    R = {}
+    for f in ls_of(read, SHIPS_REL):
+        if not f.endswith('.json'):
+            continue
+        p, sid = SHIPS_REL + '/' + f, f[:-5]
+        try:
+            r = json.loads(read(p).decode('utf-8'))
+        except ValueError as e:
+            raise Fail('%s 不是 JSON（合併衝突還沒解？）：%s' % (p, e))
+        if not (isinstance(r, dict) and isinstance(r.get('ship'), dict) and r['ship'].get('id') == sid and isnum(r.get('order'))):
+            raise Fail('%s 要是 { "order": 數字, "ship": { "id": "%s", … } }' % (p, sid))
+        R[sid] = r
+    return R
+
+
+def recs_order(R):
+    return sorted(R, key=lambda k: (R[k]['order'], k))
+
+
+def cfg_join(base, R):
+    """game.json（沒有 ships）＋每艘一個檔 ⇒ 完整的設定：ships 照 (order, 代號) 排，放在 SHIPS_AT 後面（跟拆開以前同一個鍵順序）。"""
+    ships, out = [R[k]['ship'] for k in recs_order(R)], {}
+    for k, v in base.items():
+        out[k] = v
+        if k == SHIPS_AT:
+            out['ships'] = ships
+    out.setdefault('ships', ships)
+    return out
+
+
+def src_cfg(read):
+    """read 看得到的那一份 ⇒ (完整的設定, { .vxk: 指紋 }, 每艘一個檔 { 代號: 那一份 })。
+    FAR-85 以前的版本（ships 在 game.json 裡）⇒ 第三個是 None，指紋照 vxk_lock.json。"""
+    b = read(CFG_REL)
+    if b is None:
+        raise Fail('讀不到 ' + CFG_REL)
+    base = json.loads(b.decode('utf-8'))
+    if 'ships' in base:
+        return base, json.loads((read(LOCK_REL) or b'{}').decode('utf-8')), None
+    R = recs_read(read)
+    return cfg_join(base, R), {r['ship']['vxk']: r['lock'] for r in R.values() if r.get('lock')}, R
+
+
+def load():
+    return src_cfg(work_read)[0]
 
 
 def dumps(o, ind=0):
@@ -276,11 +351,51 @@ def dumps(o, ind=0):
     return json.dumps(o, ensure_ascii=False)
 
 
-def save(cfg):
-    tmp = CFG_P + '.tmp'
+def write_text(path, t):
+    tmp = path + '.tmp'
     with open(tmp, 'w', encoding='utf-8', newline='\n') as f:
-        f.write(dumps(cfg) + '\n')
-    os.replace(tmp, CFG_P)
+        f.write(t)
+    os.replace(tmp, path)
+
+
+def rec_text(r):
+    return dumps({k: r[k] for k in ('order', 'ship', 'card', 'lock') if k in r}) + '\n'
+
+
+def recs_write(R):
+    """每艘一個檔寫回去：內容變了的才寫（沒動的船沒有 diff）；不在 R 的（船隻清單拿掉的船）刪掉。"""
+    os.makedirs(SHIPS_D, exist_ok=True)
+    for sid, r in R.items():
+        p, t = os.path.join(SHIPS_D, sid + '.json'), rec_text(r)
+        if not os.path.exists(p) or open(p, encoding='utf-8', newline='').read() != t:
+            write_text(p, t)
+    for f in work_ls(SHIPS_REL):
+        if f.endswith('.json') and f[:-5] not in R:
+            os.remove(os.path.join(SHIPS_D, f))
+
+
+def old_layout_guard():
+    if any(os.path.exists(os.path.join(ROOT, *p.split('/'))) for p in (LOCK_REL, CARDS_REL)) or 'ships' in json.loads(work_read(CFG_REL).decode('utf-8')):
+        raise Fail('設定還是 FAR-85 以前的格式（ships 在 game.json 裡、vxk_lock.json、ship_cards.json）⇒ 先 python -I src/admin.py split-ships')
+
+
+def save(cfg):
+    """game.json（ships 以外）＋每艘一個檔。每艘的卡片照代號、指紋照 .vxk 留著（改了代號指紋還在）；
+    order：原本的照舊；新的船、在清單上挪了位置的 ⇒ 前一艘的 order ＋ 10（接在最後 ＝ 最大值 ＋ 10）。"""
+    old_layout_guard()
+    R0 = recs_read(work_read)
+    lock = {r['ship'].get('vxk'): r['lock'] for r in R0.values() if r.get('lock')}
+    R, last = {}, None
+    for s in cfg['ships']:
+        r = {k: v for k, v in (R0.get(s['id']) or {}).items() if k != 'lock'}
+        r['ship'] = s
+        if lock.get(s.get('vxk')):
+            r['lock'] = lock[s['vxk']]
+        if r.get('order') is None or (last and (r['order'], s['id']) <= last):
+            r['order'] = (last[0] if last else 0) + 10
+        last, R[s['id']] = (r['order'], s['id']), r
+    write_text(CFG_P, dumps({k: v for k, v in cfg.items() if k != 'ships'}) + '\n')
+    recs_write(R)
 
 
 # ───────────────────────── 驗設定 ─────────────────────────
@@ -824,24 +939,36 @@ def ship_tags(cfg):
     return ''.join('<script type="application/x-vxk" id="%s" src="../VoxelKit/_cache/%s"></script>\n' % (s['el'], s['vxk']) for s in cfg['ships'])
 
 
-def template_synced(cfg):
-    """(template.html as it is, template.html with its ship tags rewritten from ships) — the part between the two marker comments."""
-    t = open(TPL, encoding='utf-8').read()
+def tpl_fill(t, cfg):
+    """template.html 的全文，兩個註解記號中間填上照 ships 寫的船標籤（FAR-85：檔裡這一段是空的，建置、來源清單才填）。"""
     a, b = t.find(SHIPS_A), t.find(SHIPS_B)
     if a < 0 or b < a:
-        raise RuntimeError('template.html 找不到船標籤的記號（%s … %s）' % (SHIPS_A.strip(), SHIPS_B))
+        raise Fail('template.html 找不到船標籤的記號（%s … %s）' % (SHIPS_A.strip(), SHIPS_B))
     a += len(SHIPS_A)
-    return t, t[:a] + ship_tags(cfg) + t[b:]
+    return t[:a] + ship_tags(cfg) + t[b:]
 
 
-def sync_template(cfg):
-    """template.html 的船標籤照 ships 改寫（兩個註解記號中間那一段）。回傳有沒有改。"""
-    t, nt = template_synced(cfg)
-    if nt == t:
-        return False
-    with open(TPL, 'w', encoding='utf-8', newline='\n') as f:
-        f.write(nt)
-    return True
+CARDS_ABOUT = '選船彈窗的卡片（主選單；js/72_shippick.js）：每艘船開戰那一刻量的排水量、水線長、砲、齊射彈重、動力、帆、船員。admin.py shipcheck 產生（js/75_shipcheck.js shipCard），不要手改。'
+
+
+def cards_text(cfg, cards):
+    """內嵌的 ship_cards.json（照船隻清單的順序；一艘一行）；一張都沒有 ⇒ None（素材是 optional：卡片只寫名字）。"""
+    C = [(s['id'], cards[s['id']]) for s in cfg['ships'] if s['id'] in cards]
+    if not C:
+        return None
+    return '{\n  "about": %s,\n  "ships": {\n%s\n  }\n}\n' % (json.dumps(CARDS_ABOUT, ensure_ascii=False),
+           ',\n'.join('    %s: %s' % (json.dumps(k), json.dumps(v, ensure_ascii=False, separators=(', ', ': '))) for k, v in C))
+
+
+def build_srcs(read):
+    """建置內嵌時換掉的檔（FAR-85）：template.html 填好船標籤、game.json 接回 ships、ship_cards.json 從每艘的卡片組出來 ⇒ { 根目錄的相對路徑: bytes｜None（沒有這個檔） }。
+    FAR-85 以前的版本 ⇒ {}（檔照原樣內嵌）。"""
+    cfg, lock, R = src_cfg(read)
+    if R is None:
+        return {}
+    ct = cards_text(cfg, {k: r['card'] for k, r in R.items() if 'card' in r})
+    return {'src/template.html': tpl_fill(read('src/template.html').decode('utf-8'), cfg).encode('utf-8'),
+            CFG_REL: (dumps(cfg) + '\n').encode('utf-8'), CARDS_REL: ct and ct.encode('utf-8')}
 
 
 def vxk_header(raw):
@@ -1744,10 +1871,11 @@ def act_cells(sid, build=True):
 
 
 def act_check():
-    E = validate(load())
+    cfg = load()
+    E = validate(cfg)
     if E:
         raise Fail('設定不合法：\n' + '\n'.join('  ✗ ' + e for e in E))
-    return ['✓ config/game.json 合法（%d 艘船、%d 個滑桿、%d 種砲）' % (len(load()['ships']), len(load()['lim']), len(load()['guns']))]
+    return ['✓ config/game.json＋config/ships/ 合法（%d 艘船、%d 個滑桿、%d 種砲）' % (len(cfg['ships']), len(cfg['lim']), len(cfg['guns']))]
 
 
 REPORTS = os.path.normpath(os.path.join(HERE, '..', 'reports'))   # 匯入檢查的報告（不入版控）
@@ -1860,18 +1988,35 @@ def shipcheck_page(chrome, sid, extra=''):
 SHOWLOD_JS = os.path.join(os.path.dirname(OUT), 'ships', 'showlod.js')
 
 
-def showlod_read():
-    """ships/showlod.js 現在那一份 ⇒ { 船型: 那一筆 }；沒有、讀不了 ⇒ {}。"""
+def baked_parse(t, var):
+    """ships/showlod.js、ships/anchor.js 的全文（var ＝ BS_SHOWLOD／BS_ANCHOR）⇒ { 船型: 那一筆 }；讀不了 ⇒ {}。"""
     try:
-        t = open(SHOWLOD_JS, encoding='utf-8').read()
-        return json.loads(t[t.index('{', t.index('BS_SHOWLOD')):t.rindex('}') + 1]).get('types') or {}
+        return json.loads(t[t.index('{', t.index(var)):t.rindex('}') + 1]).get('types') or {}
     except Exception:
         return {}
 
 
-def showlod_want(cfg):
-    """每一型（堡壘、砲台不算）該有的指紋 ⇒ { 船型: fp }。頁面算的那一個：SHOWLOD_V ＋ 'lock ' ＋ lock 前 14 字（同 src_manifest）；版本照 js 檔裡的 SHOWLOD_V。"""
-    lock = json.load(open(LOCK_P, encoding='utf-8')) if os.path.exists(LOCK_P) else {}
+def baked_text(head, out):
+    """baked_parse 的反方向：一型一筆照鍵排、JSON 照鍵排 ⇒ 同樣的內容寫出來逐位元組相同。"""
+    return head + json.dumps({'v': 1, 'types': {k: out[k] for k in sorted(out)}}, ensure_ascii=False, sort_keys=True, separators=(',', ':')) + ';\n'
+
+
+SHOWLOD_HEAD = '// 表演船中那一級的低模、遠那一級的貼圖（TASK-1104）：src/admin.py showlod 寫的，別手改（js/60_showlod.js showlodNeed 載）\nwindow.BS_SHOWLOD = '
+ANCHOR_HEAD = '// 找最近實心格的預烘（TASK-1229）：src/admin.py ancbake 寫的，別手改（js/10_ship.js ancLoad 載）\nwindow.BS_ANCHOR = '
+
+
+def showlod_read():
+    """ships/showlod.js 現在那一份 ⇒ { 船型: 那一筆 }；沒有、讀不了 ⇒ {}。"""
+    try:
+        return baked_parse(open(SHOWLOD_JS, encoding='utf-8').read(), 'BS_SHOWLOD')
+    except OSError:
+        return {}
+
+
+def showlod_want(cfg, lock=None):
+    """每一型（堡壘、砲台不算）該有的指紋 ⇒ { 船型: fp }。頁面算的那一個：SHOWLOD_V ＋ 'lock ' ＋ lock 前 14 字（同 src_manifest）；版本照 js 檔裡的 SHOWLOD_V。
+    lock 不給 ⇒ 工作區的指紋。"""
+    lock = lock_load() if lock is None else lock
     v = re.search(r'SHOWLOD_V = (\d+)', open(os.path.join(HERE, 'js', '60_showlod.js'), encoding='utf-8').read())
     return {s['id']: '%s lock %s' % (v.group(1) if v else '?', (lock.get(s.get('vxk') or '') or '（沒有指紋）')[:14]) for s in cfg['ships'] if not s.get('fixed')}
 
@@ -1959,10 +2104,9 @@ def act_showlod(ids=None, force=False, check=False):
             I = out[sid]['im']; ist = I['stat']
             log.append('  貼圖 %d×%d 一格（%.1f × %.1f m）%s；%.0f KB；拍 %d ms' % (I['cw'], I['ch'], I['cw'] / float(I['ppm']), I['ch'] / float(I['ppm']),
                        '、⚠ 碰到框邊' if ist.get('edge') else '', len(I['b64']) / 1024.0, ist.get('ms', 0)))
-    body = json.dumps({'v': 1, 'types': {k: out[k] for k in sorted(out)}}, ensure_ascii=False, sort_keys=True, separators=(',', ':'))
     os.makedirs(os.path.dirname(SHOWLOD_JS), exist_ok=True)
     with open(SHOWLOD_JS, 'w', encoding='utf-8', newline='\n') as f:
-        f.write('// 表演船中那一級的低模、遠那一級的貼圖（TASK-1104）：src/admin.py showlod 寫的，別手改（js/60_showlod.js showlodNeed 載）\nwindow.BS_SHOWLOD = ' + body + ';\n')
+        f.write(baked_text(SHOWLOD_HEAD, out))
     log.append('✓ ships/showlod.js：%d 型、%.2f MB' % (len(out), os.path.getsize(SHOWLOD_JS) / 1048576.0))
     return log
 
@@ -1973,15 +2117,14 @@ ANCHOR_JS = os.path.join(os.path.dirname(OUT), 'ships', 'anchor.js')
 def anc_read():
     """ships/anchor.js 現在那一份 ⇒ { 船型: 那一筆 }；沒有、讀不了 ⇒ {}。"""
     try:
-        t = open(ANCHOR_JS, encoding='utf-8').read()
-        return json.loads(t[t.index('{', t.index('BS_ANCHOR')):t.rindex('}') + 1]).get('types') or {}
-    except Exception:
+        return baked_parse(open(ANCHOR_JS, encoding='utf-8').read(), 'BS_ANCHOR')
+    except OSError:
         return {}
 
 
-def anc_want(cfg):
+def anc_want(cfg, lock=None):
     """每一型（含堡壘、砲台）該有的指紋 ⇒ { 船型: fp }。頁面算的那一個（js/10_ship.js ancFp）：ANC_V ＋ 'lock ' ＋ lock 前 14 字（同 showlod_want）。"""
-    lock = json.load(open(LOCK_P, encoding='utf-8')) if os.path.exists(LOCK_P) else {}
+    lock = lock_load() if lock is None else lock
     v = re.search(r'ANC_V = (\d+)', open(os.path.join(HERE, 'js', '10_ship.js'), encoding='utf-8').read())
     return {s['id']: '%s lock %s' % (v.group(1) if v else '?', (lock.get(s.get('vxk') or '') or '（沒有指紋）')[:14]) for s in cfg['ships']}
 
@@ -2051,10 +2194,9 @@ def act_ancbake(ids=None, force=False, check=False):
         co = zlib.compressobj(9, zlib.DEFLATED, -15)
         out[sid] = {'fp': R['fp'], 'n': R['n'], 'b64': base64.b64encode(co.compress(raw) + co.flush()).decode('ascii')}
         log.append('✓ %s：%d 筆（開一場現算 %d 次）；%.1f KB' % (sid, R['n'], R.get('scan', 0), len(out[sid]['b64']) / 1024.0))
-    body = json.dumps({'v': 1, 'types': {k: out[k] for k in sorted(out)}}, ensure_ascii=False, sort_keys=True, separators=(',', ':'))
     os.makedirs(os.path.dirname(ANCHOR_JS), exist_ok=True)
     with open(ANCHOR_JS, 'w', encoding='utf-8', newline='\n') as f:
-        f.write('// 找最近實心格的預烘（TASK-1229）：src/admin.py ancbake 寫的，別手改（js/10_ship.js ancLoad 載）\nwindow.BS_ANCHOR = ' + body + ';\n')
+        f.write(baked_text(ANCHOR_HEAD, out))
     log.append('✓ ships/anchor.js：%d 型、%.0f KB' % (len(out), os.path.getsize(ANCHOR_JS) / 1024.0))
     return log
 
@@ -2419,24 +2561,20 @@ def act_ladcheck(ids=None):
     return ['樓梯自檢（%d 艘；合計 %d 座：✗ %d、⚠ %d；甲板連通 ✗ %d、⚠ %d）：' % (len(ids), tot[0], tot[1], tot[2], tot[3], tot[4])] + log
 
 
-CARDS_P = os.path.join(HERE, 'config', 'ship_cards.json')   # 選船彈窗的卡片（js/72_shippick.js；建置時內嵌成 #ship-cards）：shipcheck 量出來的（js/75_shipcheck.js shipCard），⛔ 不手改
-
-
 def cards_write(new):
-    """shipcheck 量到的卡片併進 config/ship_cards.json（量到哪幾艘換哪幾艘；船隻清單沒有的拿掉）。內容沒變 ⇒ 不寫（免得每次 shipcheck 都多一筆 diff）。"""
-    old = json.load(open(CARDS_P, encoding='utf-8')) if os.path.exists(CARDS_P) else {}
-    ids = [s['id'] for s in load()['ships']]
-    C = {k: v for k, v in (old.get('ships') or {}).items() if k in ids}
-    C.update(new)
-    out = {'about': '選船彈窗的卡片（主選單；js/72_shippick.js）：每艘船開戰那一刻量的排水量、水線長、砲、齊射彈重、動力、帆、船員。admin.py shipcheck 產生（js/75_shipcheck.js shipCard），不要手改。',
-           'ships': {k: C[k] for k in ids if k in C}}
-    if out == old:
-        return '卡片沒變（config/ship_cards.json）'
-    with open(CARDS_P, 'w', encoding='utf-8', newline='\n') as f:
-        f.write('{\n  "about": %s,\n  "ships": {\n%s\n  }\n}\n' % (json.dumps(out['about'], ensure_ascii=False),
-                ',\n'.join('    %s: %s' % (json.dumps(k), json.dumps(v, ensure_ascii=False, separators=(', ', ': '))) for k, v in out['ships'].items())))
-    miss = [k for k in ids if k not in out['ships']]
-    return '卡片寫進 config/ship_cards.json（%d 艘%s；重建之後選船彈窗才看得到）' % (len(out['ships']), '；還沒量：' + '、'.join(miss) if miss else '')
+    """shipcheck 量到的卡片（js/72_shippick.js 選船彈窗；建置時組成 #ship-cards 內嵌）寫進每艘的 config/ships/<代號>.json 的 card（量到哪幾艘換哪幾艘）。
+    內容沒變 ⇒ 不寫（免得每次 shipcheck 都多一筆 diff）。⛔ 不手改。"""
+    old_layout_guard()
+    R = recs_read(work_read)
+    hit = [k for k, v in new.items() if k in R and R[k].get('card') != v]
+    for k in hit:
+        R[k]['card'] = new[k]
+    ids = recs_order(R)
+    miss = [k for k in ids if 'card' not in R[k]]
+    if not hit:
+        return '卡片沒變（config/ships 的 card）'
+    recs_write(R)
+    return '卡片寫進 config/ships 的 card（換了 %s；共 %d 艘%s；重建之後選船彈窗才看得到）' % ('、'.join(hit), len(ids) - len(miss), '；還沒量：' + '、'.join(miss) if miss else '')
 
 
 # 頂層短名（TASK-0671）：4 字以內的小寫頂層名字（step、last、hurt…）⇒ 區域變數忘了 var 就蓋到它、讀的人也猜不到是哪支檔的 ⇒ 加模組字首。
@@ -2696,13 +2834,13 @@ def act_shell_layers(src=None, gate=False):
 # ───────────────────────── 成品記住來源（TASK-0674） ─────────────────────────
 # 10-16 出過事：共用工作區建成品時包進別人改到一半的 js ⇒ 成品跟任何一版提交的來源都對不上，可是看不出來。
 # ⇒ 成品裡放一份來源清單（<script type="application/json" id="blockside-src">）：template.html 與它引用的每一支檔各記一個指紋；
-#   .vxk 不入版控 ⇒ 改記 config/vxk_lock.json 裡那艘的指紋（_cache 跟指紋不同時 cache_guard 已經擋了）；文字檔照 LF 算 ⇒ 跟 checkout 的換行無關。
+#   .vxk 不入版控 ⇒ 改記那艘的指紋（config/ships/<代號>.json 的 lock；_cache 跟指紋不同時 cache_guard 已經擋了）；文字檔照 LF 算 ⇒ 跟 checkout 的換行無關。
+#   FAR-85：引用的船標籤照 ships 填好再找（tpl_fill）；ship_cards.json 是組出來的、不列，改列每艘一個檔（config/ships/*.json）。FAR-85 以前的版本照原樣算（build --code 認得舊成品）。
 # srccheck 照同一套從工作區／暫存區（--staged）／某一版（--rev）重算、跟那一份成品比 ⇒ 對不上就列出哪幾支檔不同。
 # 只管「成品是不是照這些來源建的」：建置程式（admin.py、vxk_inline.py）不算來源 —— 它們改了、成品沒重建，成品仍是照這些來源建的（只是舊做法）。
 SRC_EL = 'blockside-src'
 SRC_RE = re.compile(r'<script type="application/json" id="%s">([^<]*)</script>' % SRC_EL)
 SRC_TEXT = ('.js', '.cjs', '.json', '.html', '.css', '.glsl', '.md', '.txt')
-SRC_LOCK = 'src/config/vxk_lock.json'
 ROOT = os.path.normpath(os.path.join(HERE, '..'))
 
 
@@ -2711,7 +2849,8 @@ def src_manifest(read):
     tpl = read('src/template.html')
     if tpl is None:
         raise Fail('讀不到 src/template.html')
-    lock = json.loads((read(SRC_LOCK) or b'{}').decode('utf-8'))
+    cfg, lock, R = src_cfg(read)
+    full = tpl.decode('utf-8') if R is None else tpl_fill(tpl.decode('utf-8'), cfg)
     files = {}
 
     def put(p, b):
@@ -2722,14 +2861,17 @@ def src_manifest(read):
             b = b.replace(b'\r\n', b'\n')
         files[p] = sha1_bytes(b)[:12]
     put('src/template.html', tpl)
-    for rel in re.findall(r'<script\b[^>]*\ssrc="([^"]+)"', tpl.decode('utf-8')):
+    for rel in re.findall(r'<script\b[^>]*\ssrc="([^"]+)"', full):
         p = posixpath.normpath(posixpath.join('src', rel))
-        if p in files:
+        if p in files or (R is not None and p == CARDS_REL):
             continue
         if p.endswith('.vxk'):
             files[p] = 'lock ' + (lock.get(posixpath.basename(p)) or '（沒有指紋）')[:14]
         else:
             put(p, read(p))
+    for k in sorted(R or {}):
+        p = '%s/%s.json' % (SHIPS_REL, k)
+        put(p, read(p))
     fp = sha1_bytes('\n'.join('%s %s' % (k, files[k]) for k in sorted(files)).encode('utf-8'))[:16]
     return {'fp': fp, 'files': files}
 
@@ -2755,9 +2897,33 @@ class GitRead:
         self.p.stdout.read(1)
         return b
 
+    def ls(self, d):
+        """資料夾 d 裡的檔名（那一版的樹；暫存區 ⇒ git ls-files，合併中同一個檔的幾個 stage 算一個）。"""
+        cmd = ['git', 'ls-files', '-z', '--', d + '/'] if self.pre == ':' else ['git', 'ls-tree', '-r', '-z', '--name-only', self.pre[:-1], '--', d + '/']
+        p = subprocess.run(cmd, cwd=ROOT, capture_output=True)
+        if p.returncode:
+            raise Fail('%s 失敗：%s' % (' '.join(cmd[:3]), p.stderr.decode('utf-8', 'replace').strip()))
+        return sorted({posixpath.basename(f) for f in p.stdout.decode('utf-8').split('\0') if f and posixpath.dirname(f) == d})
+
     def close(self):
         self.p.stdin.close()
         self.p.wait()
+
+
+class Overlay:
+    """read 讀得到的那一份，有幾個檔換掉：over ＝ { 根目錄的相對路徑: bytes｜None（沒有這個檔） }（remerge 寫檔前先照它驗）。"""
+    def __init__(self, read, over):
+        self.read, self.over = read, over
+
+    def __call__(self, path):
+        return self.over[path] if path in self.over else self.read(path)
+
+    def ls(self, d):
+        names = set(ls_of(self.read, d))
+        for p, b in self.over.items():
+            if posixpath.dirname(p) == d:
+                (names.add if b is not None else names.discard)(posixpath.basename(p))
+        return sorted(names)
 
 
 def src_of(html):
@@ -2894,7 +3060,7 @@ def src_hook_commit(r):
     code, names = run(['git', 'diff', '--cached', '--name-only'], cwd=ROOT)
     names = set(names.split())
     want = src_manifest(r)
-    srcs = names & (set(want['files']) | {SRC_LOCK})
+    srcs = names & (set(want['files']) | {LOCK_REL, CARDS_REL})
     prod = 'index.html' in names or any(n.startswith('ships/') for n in names)
     if not prod and not srcs:
         return []
@@ -3007,12 +3173,38 @@ def thumbs_finish():
     return log + ['✓ 新縮圖已嵌回入口（來源 %s）' % manifest['fp']] + act_srccheck()
 
 
+def inline_build(out):
+    """vxk_inline.py 照工作區的來源內嵌成 out。FAR-85：內嵌的 template、game.json、ship_cards.json 是組出來的（build_srcs）
+    ⇒ 組好的 template 暫時寫在 template.html 旁邊（其他檔照原本的相對路徑找），game.json、卡片指到暫存資料夾。回 (exit code, 輸出)。"""
+    import tempfile
+    over = build_srcs(work_read)
+    if not over:
+        return run([sys.executable, '-I', INLINE, TPL, out])
+    tpl = over['src/template.html'].decode('utf-8')
+    with tempfile.TemporaryDirectory() as td:
+        for p in (CFG_REL, CARDS_REL):
+            f = os.path.join(td, posixpath.basename(p))
+            if over[p] is not None:
+                open(f, 'wb').write(over[p])
+            rel = posixpath.relpath(p, 'src')
+            if tpl.count('src="%s"' % rel) != 1:
+                raise Fail('template.html 引用 %s 要剛好一次' % rel)
+            tpl = tpl.replace('src="%s"' % rel, 'src="%s"' % f.replace('\\', '/'))
+        fd, tf = tempfile.mkstemp(prefix='.build-', suffix='.html', dir=HERE)
+        try:
+            with os.fdopen(fd, 'w', encoding='utf-8', newline='') as fh:
+                fh.write(tpl)
+            return run([sys.executable, '-I', INLINE, tf, out])
+        finally:
+            os.remove(tf)
+
+
 def act_build(pack=True, single=False):   # pack：壓縮版（預設，TASK-0583）；False ＝ 原格式（build --raw）；single：壓縮版但不拆檔（build --single）
     cfg = load()
     E = validate(cfg)
     if E:
         raise Fail('設定不合法，不建置：\n' + '\n'.join('  ✗ ' + e for e in E))
-    log = cache_guard() + ['template.html 的船標籤' + ('照設定改寫了' if sync_template(cfg) else '跟設定一致')]
+    log = cache_guard()
     miss = [s['vxk'] for s in cfg['ships'] if not os.path.exists(os.path.join(CACHE, s['vxk']))]
     if miss:
         raise Fail('VoxelKit/_cache/ 少了 %s ⇒ 先 python -I admin.py cache（從成品解回）或 reimport' % '、'.join(miss))
@@ -3022,7 +3214,7 @@ def act_build(pack=True, single=False):   # pack：壓縮版（預設，TASK-058
     why = atlas_stale()
     if why:
         raise Fail('\n'.join(log) + '\n✗ 海戰圖示的圖集過期（%s）⇒ 先 python -I admin.py atlas，再建置' % '；'.join(why))
-    code, out = run([sys.executable, '-I', INLINE, TPL, OUT])
+    code, out = inline_build(OUT)
     log.append(out.strip())
     if code != 0:
         raise Fail('\n'.join(log) + '\n✗ 建置失敗（exit %d）' % code)
@@ -3158,7 +3350,7 @@ def act_shellsync(check=False, hook=None):
 #   也照正式建置的同一條路重建入口：vxk_inline.py 內嵌 ⇒ js_strip_html 去註解（語法樹驗算）⇒ 記來源指紋；
 #   只差在船標籤先換掉 —— 第一艘換成成品裡現在那份船清單、其他拿掉（換行留著），跟 pack_html 拆檔寫出來的一樣（清單在第一艘前面、船標籤拿掉）。
 # 兩道關，過不了就擋（成品不動）：
-#   ① 船沒變：template 的船標籤跟設定一致；船隻清單（代號、標籤、.vxk、改裝船的原船）跟成品是照它建的那一版一樣、順序跟成品的船清單一樣；
+#   ① 船沒變：船隻清單（代號、標籤、.vxk、改裝船的原船）跟成品是照它建的那一版一樣、順序跟成品的船清單一樣；
 #      每艘 .vxk 的指紋跟成品記的一樣；清單上的船檔都在、雜湊對得上 ⇒ 船檔照舊就是對的。
 #   ② 這個做法 ＝ 正式建置：成品是照它建的那一版（成品記的來源指紋 ＝ 那一版的來源；預設試 HEAD、合併中再試 MERGE_HEAD，或 --base 指定）的來源
 #      照同一條路重做一次，要跟現在的成品逐位元組相同 —— 建置程式（vxk_inline.py、去註解、拆檔）改過、或成品不是這樣建的 ⇒ 對不上 ⇒ 要在有 _cache 的機器整份建置。
@@ -3169,21 +3361,23 @@ CODE_VXK_RX = re.compile(r'<script\s+type="application/x-vxk"\s+id="([^"]+)"\s+s
 def code_html(read, ships_tag, log=None):
     """read（根目錄的相對路徑 ⇒ bytes｜None）讀得到的那一份來源，走正式建置同一條路、船標籤換成 ships_tag ⇒ (入口全文：去好註解、記好來源指紋, 來源清單)。"""
     import tempfile
-    M = src_manifest(read)
+    M, over = src_manifest(read), build_srcs(read)
     with tempfile.TemporaryDirectory() as td:
-        for p, fp in M['files'].items():                     # template 與它引用的每一支檔照原位元組放進暫存資料夾（.vxk 不要；不存在的 optional 素材 vxk_inline 自己處理）
-            if fp.startswith('lock ') or fp == '（不存在）':
+        got = {p: read(p) for p, fp in M['files'].items() if not fp.startswith('lock ') and fp != '（不存在）'}
+        got.update(over)                                     # FAR-85：game.json 接回 ships、卡片組好（沒有卡片 ⇒ 不放，同 optional 素材不存在）
+        for p, b in got.items():                             # template 與它引用的每一支檔照原位元組放進暫存資料夾（.vxk 不要；不存在的 optional 素材 vxk_inline 自己處理）
+            if b is None:
                 continue
             f = os.path.join(td, *p.split('/'))
             os.makedirs(os.path.dirname(f), exist_ok=True)
             with open(f, 'wb') as fh:
-                fh.write(read(p))
+                fh.write(b)
         n = [0]
 
         def tag(mt):
             n[0] += 1
             return ships_tag if n[0] == 1 else ''
-        tpl = CODE_VXK_RX.sub(tag, read('src/template.html').decode('utf-8'))
+        tpl = CODE_VXK_RX.sub(tag, got['src/template.html'].decode('utf-8'))
         tf, of = os.path.join(td, 'src', 'template.html'), os.path.join(td, 'index.html')
         with open(tf, 'w', encoding='utf-8', newline='') as fh:
             fh.write(tpl)
@@ -3229,10 +3423,6 @@ def act_build_code(base=None):
     if why:
         raise Fail('✗ 海戰圖示的圖集過期（%s）⇒ 先 python -I admin.py atlas，再建置' % '；'.join(why))
     full = ' ⇒ 要整份建置：在有 VoxelKit/_cache 的機器 python -I src/admin.py build'
-    t = open(TPL, encoding='utf-8').read()
-    a, b = t.find(SHIPS_A), t.find(SHIPS_B)
-    if a < 0 or b < a or t[a + len(SHIPS_A):b] != ship_tags(cfg):
-        raise Fail('template.html 的船標籤跟 config/game.json 的船隻清單不一致' + full)
     html0 = open(OUT, encoding='utf-8', newline='').read()
     m, idx, have = SHIPS_TAG_RX.search(html0), ships_index(html0), src_of(html0)
     if not m or not idx:
@@ -3255,7 +3445,7 @@ def act_build_code(base=None):
     ships_tag = m.group(0) + '\n'
     r = GitRead(rev + ':')
     try:
-        if ship_sig(json.loads(r('src/config/game.json').decode('utf-8'))) != ship_sig(cfg):
+        if ship_sig(src_cfg(r)[0]) != ship_sig(cfg):
             raise Fail('船隻清單（代號、標籤、.vxk、改裝船的原船）跟 %s 不一樣%s' % (rev, full))
         h0, _ = code_html(r, ships_tag)
     finally:
@@ -3280,7 +3470,7 @@ def act_build_code(base=None):
 # Importing or changing one ship should not need the whole fleet's _cache (cache_guard wants every ship). Since the split build,
 #   a ship file depends only on that ship (and its variant base), and the entry only holds a { el: hash } list.
 # Built together: the ship's variant family (every ship linked to it through variant_of — grid diffs and shared headers stay inside it);
-#   their .vxk must be in _cache and match vxk_lock.json. No other ship's _cache is read.
+#   their .vxk must be in _cache and match their fingerprints (config/ships/<id>.json lock). No other ship's _cache is read.
 # Two gates, as in build --code; failing either writes nothing:
 #   1. Other ships unchanged: outside the family, the ship list (id, el, .vxk, variant base) and its order equal the version the product
 #      was built from, and so does the product's ship list; the product's recorded .vxk fingerprints equal the current ones; every listed
@@ -3295,7 +3485,7 @@ def act_build_code(base=None):
 #   A family member whose own and whose base's .vxk fingerprint and ship-list row equal the product's must come out byte-identical
 #   to its current ship file (e.g. the variant changed, the base did not), otherwise refuse.
 #   The entry is rebuilt with code_html from the working sources (template ship tags per config, ship list with the new hashes).
-#   Everything is computed and verified before anything is written (ship files, template.html, entry); then act_build's tail:
+#   Everything is computed and verified before anything is written (ship files, entry); then act_build's tail:
 #   flag-loop bake, thumbnails, srccheck, show-LOD and anchor notes.
 def ship_family(ships, sid):
     """Variant family: ids of every ship linked to sid through variant_of (bases, variants, variants of variants…)."""
@@ -3336,8 +3526,6 @@ def act_build_ship(sid, base=None, chain=None):
             raise Fail('%s：_cache %s 跟指紋 %s 不同 ⇒ 不建（會把船換成別的版本）。\n'
                        '  要用 _cache 現在這份 ⇒ python -I admin.py relock --id %s；要雕刻作品的最新版 ⇒ python -I admin.py reimport --id %s'
                        % (s['vxk'], have_fp[:12], (L.get(s['vxk']) or '（沒有）')[:12], s['id'], s['id']))
-    t, nt = template_synced(cfg)                                # ship tags per config (a new import); written with the rest, after the checks
-    wread = lambda p: nt.encode('utf-8') if p == 'src/template.html' else work_read(p)
     html0 = open(OUT, encoding='utf-8', newline='').read()
     m, idx, have = SHIPS_TAG_RX.search(html0), ships_index(html0), src_of(html0)
     if not m or not idx:
@@ -3350,7 +3538,7 @@ def act_build_ship(sid, base=None, chain=None):
         raise Fail('%s 以外的船（%s）跟成品的船清單（%s）不一樣 ⇒ 只建一艘只能換、加 %s%s' % (names, '、'.join(rest), '、'.join(el for el in idx if el not in fel), names, full))
     for el in rest:
         ship_data(html0, el)                                    # file present and matching its hash, else Fail
-    want = src_manifest(wread)
+    want = src_manifest(work_read)
     vx = lambda F: {posixpath.basename(k): v for k, v in F.items() if k.endswith('.vxk')}
     hv, wv, fv = vx(have['files']), vx(want['files']), {s['vxk'] for s in FS}
     bad = sorted(k for k in set(hv) | set(wv) if hv.get(k) != wv.get(k) and k not in fv)
@@ -3367,7 +3555,7 @@ def act_build_ship(sid, base=None, chain=None):
         r = GitRead(rev + ':')
     try:
         if not prior:
-            sig0 = ship_sig(json.loads(r('src/config/game.json').decode('utf-8')))
+            sig0 = ship_sig(src_cfg(r)[0])
         if [x for x in sig0 if x[0] not in fam] != [x for x in ship_sig(cfg) if x[0] not in fam]:
             raise Fail('%s 以外的船（代號、標籤、.vxk、改裝船的原船）跟 %s 不一樣%s' % (names, rev, full))
         h0 = html0 if prior else code_html(r, m.group(0) + '\n')[0]
@@ -3394,7 +3582,7 @@ def act_build_ship(sid, base=None, chain=None):
             raise Fail('%s 跟它的原船都跟成品一樣，重做出來的船檔卻不一樣（%s → %s）⇒ 船檔的做法改過、或 _cache 那份跟建置時那份只差在指紋不算的地方（匯出時間、JSON 鍵的順序：換機器重新匯出）%s'
                        % (s['id'], idx[s['el']], new[s['el']], full))
     index = {s['el']: new[s['el']] if s['id'] in fam else idx[s['el']] for s in cfg['ships']}
-    h1, M1 = code_html(wread, '<script type="application/json" id="%s">%s</script>\n' % (SHIPS_EL, json.dumps(index, separators=(',', ':'))), log)
+    h1, M1 = code_html(work_read, '<script type="application/json" id="%s">%s</script>\n' % (SHIPS_EL, json.dumps(index, separators=(',', ':'))), log)
     nv, E = pack_verify(h1, lambda rel: files[rel].encode('utf-8') if rel in files else work_read(rel), fam)
     if E:
         raise Fail('壓縮版還原出來跟 _cache 原檔對不上（什麼都沒寫）：\n' + '\n'.join('  ✗ ' + e for e in E[:12]))
@@ -3407,8 +3595,6 @@ def act_build_ship(sid, base=None, chain=None):
                 fh.write(files[f])
             wrote.append(f)
         log.append('  %s：%s' % (f, '新的 %s' % new[s['el']] if s['el'] not in idx else '照舊 %s' % new[s['el']] if new[s['el']] == idx[s['el']] else '%s → %s' % (idx[s['el']], new[s['el']])))
-    if sync_template(cfg):
-        log.append('template.html 的船標籤照設定改寫了')
     if h1 == html0:
         log.append('· 入口不用換（船清單、來源都跟 %s 一樣）' % rev)
     else:
@@ -3420,6 +3606,304 @@ def act_build_ship(sid, base=None, chain=None):
     if chain is not None:                                       # after the tail: thumbs_finish may rewrite the entry (from the working sources too)
         chain.update(html=open(OUT, encoding='utf-8', newline='').read(), sig=ship_sig(cfg))
     return log + showlod_note(cfg) + anc_note(cfg)
+
+
+# ───────────────────────── 每艘一個檔的搬移（split-ships；FAR-85，一次性） ─────────────────────────
+def act_split_ships(build=True):
+    """FAR-85 以前的設定 ⇒ 每艘一個檔：game.json 的 ships、ship_cards.json、vxk_lock.json 搬進 config/ships/<代號>.json（order 照現在的順序 10、20、30…），
+    template.html 船標籤那一段清空，兩個檔刪掉。組回來內嵌的 game.json、卡片、template 要跟搬以前逐位元組相同才搬（不然擋下、什麼都不寫）。
+    之後 build --code：成品只有來源清單換成新的檔。"""
+    base = json.loads(work_read(CFG_REL).decode('utf-8'))
+    if 'ships' not in base:
+        raise Fail('已經是每艘一個檔了（game.json 沒有 ships）')
+    E = validate(base)
+    if E:
+        raise Fail('設定不合法，不搬：\n' + '\n'.join('  ✗ ' + e for e in E))
+    lock = json.loads((work_read(LOCK_REL) or b'{}').decode('utf-8'))
+    cb = work_read(CARDS_REL)
+    cards = (json.loads(cb.decode('utf-8')).get('ships') or {}) if cb is not None else {}
+    ships = base['ships']
+    extra = sorted(set(lock) - {s['vxk'] for s in ships}) + sorted(set(cards) - {s['id'] for s in ships})
+    if extra:
+        raise Fail('vxk_lock.json／ship_cards.json 有船隻清單沒有的（%s）⇒ 搬了就不見了，先整理再搬' % '、'.join(extra))
+    t = open(TPL, encoding='utf-8').read()
+    if tpl_fill(t, base) != t:
+        raise Fail('template.html 的船標籤跟船隻清單不一致 ⇒ 先照舊的做法建置一次（會照設定改寫）、提交，再搬')
+    R = {}
+    for i, s in enumerate(ships):
+        R[s['id']] = r = {'order': 10 * (i + 1), 'ship': s}
+        if s['id'] in cards:
+            r['card'] = cards[s['id']]
+        if lock.get(s['vxk']):
+            r['lock'] = lock[s['vxk']]
+    rest = {k: v for k, v in base.items() if k != 'ships'}
+    lf = lambda b: b.replace(b'\r\n', b'\n')
+    if (dumps(cfg_join(rest, R)) + '\n').encode('utf-8') != lf(work_read(CFG_REL)):
+        raise Fail('接回去的 game.json 跟現在這份不是同樣的位元組（排版不是 admin.py 寫的、或 ships 不在 %s 後面）⇒ 先 python -I src/admin.py fmt、建置、提交，再搬' % SHIPS_AT)
+    ct = cards_text(base, cards)
+    if cb is not None and (ct or '').encode('utf-8') != lf(cb):
+        raise Fail('組出來的 ship_cards.json 跟現在這份不是同樣的位元組 ⇒ 先用 FAR-85 以前的 admin.py 跑一次 shipcheck（照它的寫法重寫）、建置、提交，再搬')
+    a, b = t.find(SHIPS_A) + len(SHIPS_A), t.find(SHIPS_B)
+    os.makedirs(SHIPS_D, exist_ok=True)
+    for sid, r in R.items():
+        write_text(os.path.join(SHIPS_D, sid + '.json'), rec_text(r))
+    write_text(CFG_P, dumps(rest) + '\n')
+    write_text(TPL, t[:a] + t[b:])
+    for p in (LOCK_REL, CARDS_REL):
+        f = os.path.join(ROOT, *p.split('/'))
+        if os.path.exists(f):
+            os.remove(f)
+    log = ['✓ 每艘一個檔：%d 艘 ⇒ config/ships/<代號>.json（order 10～%d；卡片 %d 張、指紋 %d 個）；game.json 拿掉 ships、template.html 的船標籤清空、ship_cards.json 和 vxk_lock.json 刪掉'
+           % (len(R), 10 * len(R), sum('card' in r for r in R.values()), sum('lock' in r for r in R.values()))]
+    if build:
+        log += act_build_code()
+    return log + ['提交：git add -A -- src/config src/template.html index.html']
+
+
+# ───────────────────────── 合併後重建產物（remerge；FAR-85） ─────────────────────────
+# git merge 有衝突時：設定、程式這些來源由人解；產生的檔（入口 index.html、ships/ 的船檔、anchor.js、showlod.js、選船縮圖）不用手解 ⇒ 跑 remerge。
+# 只用兩邊（HEAD、MERGE_HEAD）已經建好的產物，不用 _cache、不用 Chrome：
+#   · 船檔：每艘照合併後的指紋（config/ships/<代號>.json 的 lock；改裝船連原船）與船隻清單那一列（代號、標籤、.vxk、原船），
+#     取「成品記的指紋與清單那一列都對得上」的那一邊的船檔。兩邊都對不上（兩邊都改了這艘）、兩邊都對得上卻不一樣 ⇒ 擋下（要有 _cache 的機器 build --ship）。
+#   · anchor.js、showlod.js：一型一筆、每筆記著那一型的指紋 ⇒ 照型合，取指紋對得上的那一筆，不用重烘（兩邊都對不上 ⇒ 留 HEAD 那一筆，跟合併前一樣要重烘）。
+#   · 選船縮圖（有衝突才動）：shipthumbs.py --merge 拿兩邊圖集裡跟船檔對得上的格重排一張（兩邊都沒有 ⇒ 跟合併前一樣是舊的，最後一行會列）。
+#   · 入口：照合併後的來源走 build --code 同一條路（code_html），船清單換成挑好的船檔。
+#   · 一邊還是 FAR-85 以前的格式（ships 在 game.json 裡）⇒ 先把那一邊跟合併基底比改了什麼搬進每艘一個檔（port_old）；兩邊改到同一艘、同一個設定鍵 ⇒ 擋下。
+# 全部先算好、照 srccheck 同一套驗過（對還沒寫的那一份）才寫；擋下 ⇒ 什麼都不寫。寫完：循環布的預烘、srccheck，列出要 git add 的檔。
+REMERGE_FIXED = ('index.html', 'src/art/ships/thumbs.json', 'src/art/ships/atlas.png')
+BAKED = ('flagloop.js', 'showlod.js', 'anchor.js')
+
+
+def gen_path(p):
+    return p in REMERGE_FIXED or (p.startswith('ships/') and p.endswith('.js'))
+
+
+def git_z(*a):
+    p = subprocess.run(['git'] + list(a), cwd=ROOT, capture_output=True)
+    if p.returncode:
+        raise Fail('git %s 失敗：%s' % (a[0], p.stderr.decode('utf-8', 'replace').strip()))
+    return p.stdout.decode('utf-8')
+
+
+def unmerged():
+    """合併中還沒解的檔 ⇒ { 路徑: 有哪幾個 stage }（2 ＝ HEAD、3 ＝ MERGE_HEAD；少一個 ＝ 一邊刪了、一邊改了）。"""
+    U = {}
+    for e in git_z('ls-files', '-u', '-z').split('\0'):
+        if e:
+            info, p = e.split('\t', 1)
+            U.setdefault(p, set()).add(int(info.split()[2]))
+    return U
+
+
+def tpl_strip(b):
+    t = b.decode('utf-8').replace('\r\n', '\n')
+    return t[:t.find(SHIPS_A) + len(SHIPS_A)] + t[t.find(SHIPS_B):]
+
+
+def port_old(o, n, sides, S):
+    """o 那一邊還是 FAR-85 以前的格式：它跟合併基底比改了什麼（船、卡片、指紋、game.json 的其他鍵、template）⇒ 搬進 n 那一邊的每艘一個檔。
+    回 (要換掉的檔, 處理掉的路徑, 讀數)；兩邊改到同一艘、同一個鍵 ⇒ Fail。"""
+    rb = GitRead(git_z('merge-base', 'HEAD', 'MERGE_HEAD').strip() + ':')
+    try:
+        cB, lB, RB = src_cfg(rb)
+        kB = json.loads((rb(CARDS_REL) or b'{}').decode('utf-8')).get('ships') or {}
+        tB = rb('src/template.html')
+    finally:
+        rb.close()
+    if RB is not None:
+        raise Fail('合併基底已經是每艘一個檔，%s 卻是以前的格式 ⇒ 認不得，手解' % o)
+    cO, lO, _ = S[o]
+    kO = json.loads((sides[o](CARDS_REL) or b'{}').decode('utf-8')).get('ships') or {}
+    RN = S[n][2]
+    sB, sO = {s['id']: s for s in cB['ships']}, {s['id']: s for s in cO['ships']}
+    one = lambda s, K, L: None if s is None else (s, K.get(s['id']), L.get(s['vxk']))
+    R, bad, mx, log = {k: dict(v) for k, v in RN.items()}, [], max([r['order'] for r in RN.values()] or [0]), []
+    for k in [s['id'] for s in cO['ships']] + [k for k in sB if k not in sO]:
+        vB, vO = one(sB.get(k), kB, lB), one(sO.get(k), kO, lO)
+        rN = RN.get(k)
+        vN = None if rN is None else (rN['ship'], rN.get('card'), rN.get('lock'))
+        if vO == vB or vO == vN:
+            continue
+        if vN != vB:
+            bad.append('船 %s：兩邊都改了' % k)
+            continue
+        if vO is None:
+            R.pop(k, None)
+            log.append('  %s 那邊拿掉了 %s' % (o, k))
+            continue
+        r = R.setdefault(k, {})
+        if 'order' not in r:
+            mx += 10
+            r['order'] = mx
+        r['ship'] = vO[0]
+        for key, v in (('card', vO[1]), ('lock', vO[2])):
+            if v is None:
+                r.pop(key, None)
+            else:
+                r[key] = v
+        log.append('  %s 那邊%s %s' % (o, '加了' if vB is None else '改了', k))
+    miss = object()
+    rB, rO = {k: v for k, v in cB.items() if k != 'ships'}, {k: v for k, v in cO.items() if k != 'ships'}
+    rN = json.loads(sides[n](CFG_REL).decode('utf-8'))
+    rest = {}
+    for k in list(rN) + [k for k in rO if k not in rN]:
+        b, x, y = rB.get(k, miss), rO.get(k, miss), rN.get(k, miss)
+        v = y if x == b or x == y else x if y == b else None
+        if v is None:
+            bad.append('game.json 的 %s：兩邊都改了' % k)
+        elif v is not miss:
+            rest[k] = v
+    t = work_read('src/template.html')
+    if t is not None and not re.search(rb'^(<{7}|>{7}) ', t, re.M):
+        tpl = tpl_strip(t)                                     # git 合好了 ⇒ 照它，只清掉船標籤那一段
+    else:
+        tb, to, tn = tpl_strip(tB), tpl_strip(sides[o]('src/template.html')), tpl_strip(sides[n]('src/template.html'))
+        tpl = tn if to in (tb, tn) else to if tn == tb else None
+        if tpl is None:
+            bad.append('template.html：船標籤以外兩邊都改了 ⇒ 手解（船標籤那一段留空）')
+    if bad:
+        raise Fail('%s 還是 FAR-85 以前的格式，它的改動搬不進每艘一個檔：\n' % o + '\n'.join('  ✗ ' + x for x in bad))
+    over = {CFG_REL: (dumps(rest) + '\n').encode('utf-8'), LOCK_REL: None, CARDS_REL: None, 'src/template.html': tpl.encode('utf-8')}
+    for k in set(RN) | set(R):
+        over['%s/%s.json' % (SHIPS_REL, k)] = rec_text(R[k]).encode('utf-8') if k in R else None
+    return over, set(over), ['%s 是 FAR-85 以前的格式 ⇒ 它的改動搬進每艘一個檔（跟合併基底比）：' % o] + (log or ['  （船沒有改）'])
+
+
+def act_remerge():
+    if run(['git', 'rev-parse', '-q', '--verify', 'MERGE_HEAD'], cwd=ROOT)[0]:
+        raise Fail('不在合併中（沒有 MERGE_HEAD）⇒ remerge 只在 git merge 有衝突、還沒提交的時候用')
+    sides = {rev: GitRead(rev + ':') for rev in ('HEAD', 'MERGE_HEAD')}
+    try:
+        return remerge(sides)
+    finally:
+        for r in sides.values():
+            r.close()
+
+
+def remerge(sides):
+    import tempfile
+    U, log = unmerged(), []
+    S = {rev: src_cfg(r) for rev, r in sides.items()}
+    old = [rev for rev in S if S[rev][2] is None]
+    over, done = {}, set()
+    if len(old) == 2:
+        raise Fail('兩邊都還是 FAR-85 以前的格式 ⇒ 照以前的做法：設定手解、python -I src/admin.py build')
+    if old:
+        over, done, L = port_old(old[0], next(rev for rev in S if rev not in old), sides, S)
+        log += L
+    bad = []
+    for p, st in sorted(U.items()):
+        if gen_path(p) or p in done:
+            continue
+        sid = p[len(SHIPS_REL) + 1:-5] if p.startswith(SHIPS_REL + '/') and p.endswith('.json') else None
+        why = '（%s：兩邊都改了這艘的設定或指紋 ⇒ 挑一邊或手解；兩邊都重新匯入過 ⇒ 解完在有 _cache 的機器 build --ship %s）' % (sid, sid) if sid else ''
+        if st != {1, 2, 3} and st != {2, 3}:
+            bad.append('%s：一邊刪了、一邊改了 ⇒ git add（留）或 git rm（刪）決定%s' % (p, why))
+        elif re.search(rb'^(<{7}|>{7}) ', work_read(p) or b'', re.M):
+            bad.append(p + why)
+    if bad:
+        raise Fail('這幾個來源還有衝突，先解完再 remerge（產生的檔不用解）：\n' + '\n'.join('  ✗ ' + x for x in bad))
+    R = Overlay(work_read, over)
+    cfg, lock, _ = src_cfg(R)
+    E = validate(cfg)
+    if E:
+        raise Fail('合併後的設定不合法：\n' + '\n'.join('  ✗ ' + e for e in E))
+    why = atlas_stale()
+    if why:
+        raise Fail('✗ 海戰圖示的圖集過期（%s）⇒ 先 python -I src/admin.py atlas，再 remerge' % '；'.join(why))
+    log += bundle_names_check() + owner_check() + act_shell_layers(gate=True)
+    side = {}
+    for rev, r in sides.items():
+        html = (r('index.html') or b'').decode('utf-8')
+        side[rev] = {'r': r, 'html': html, 'idx': ships_index(html), 'files': (src_of(html) or {}).get('files') or {},
+                     'sig': {x[0]: x for x in ship_sig(S[rev][0])}}
+        if not side[rev]['idx']:
+            raise Fail('%s 的成品不是拆檔的（沒有船清單）⇒ 照以前的做法：整份建置' % rev)
+    sig, byid = {x[0]: x for x in ship_sig(cfg)}, {s['id']: s for s in cfg['ships']}
+    lk = lambda vxk: 'lock ' + (lock.get(vxk) or '（沒有指紋）')[:14]
+    files, index, bad, took = {}, {}, [], {'HEAD': 0, 'MERGE_HEAD': 0}
+    for s in cfg['ships']:
+        need = [s] + ([byid[s['variant_of']]] if s.get('variant_of') in byid else [])
+        got = {}
+        for rev, d in side.items():
+            h = d['idx'].get(s['el'])
+            if not h or any(d['files'].get('VoxelKit/_cache/' + x['vxk']) != lk(x['vxk']) or d['sig'].get(x['id']) != sig[x['id']] for x in need):
+                continue
+            try:
+                ship_data(d['html'], s['el'], d['r'])                      # 檔在、內容跟雜湊對得上
+            except Fail:
+                continue
+            got[rev] = (h, d['r'](ship_file(s['el'])))
+        if not got:
+            bad.append('%s：兩邊的船檔都不是照合併後的指紋與船隻清單建的（兩邊都改了這艘？）⇒ 在有 _cache 的機器 python -I src/admin.py build --ship %s' % (s['id'], s['id']))
+        elif len({h for h, _ in got.values()}) > 1:
+            bad.append('%s：兩邊的船檔都對得上指紋，內容卻不一樣（船檔的做法改過？）⇒ 在有 _cache 的機器 python -I src/admin.py build --ship %s' % (s['id'], s['id']))
+        else:
+            rev = next(iter(got))
+            index[s['el']], files[ship_file(s['el'])] = got[rev]
+            if len(got) == 1:
+                took[rev] += 1
+    if bad:
+        raise Fail('船檔接不回來（什麼都沒寫）：\n' + '\n'.join('  ✗ ' + x for x in bad))
+    log.append('✓ 船檔：%d 艘，只有一邊對得上的取那一邊（HEAD %d 艘、MERGE_HEAD %d 艘），其他兩邊一樣' % (len(index), took['HEAD'], took['MERGE_HEAD']))
+    for f in work_ls('ships'):
+        if f.endswith('.js') and f not in BAKED and 'ships/' + f not in files:
+            files['ships/' + f] = None                              # 船隻清單拿掉的船（同 ships_sync）
+    if 'ships/flagloop.js' in U:
+        files['ships/flagloop.js'] = sides['HEAD']('ships/flagloop.js')   # 寫完 flagloop_ensure 照合併後的程式重烘（指紋一樣 ⇒ 不動）
+    for name, var, head, want in (('ships/anchor.js', 'BS_ANCHOR', ANCHOR_HEAD, anc_want(cfg, lock)), ('ships/showlod.js', 'BS_SHOWLOD', SHOWLOD_HEAD, showlod_want(cfg, lock))):
+        B = {rev: baked_parse((d['r'](name) or b'').decode('utf-8'), var) for rev, d in side.items()}
+        out = {}
+        for k in sorted(set(B['HEAD']) | set(B['MERGE_HEAD'])):
+            hit = [B[rev][k] for rev in B if k in B[rev] and B[rev][k].get('fp') == want.get(k)]
+            out[k] = hit[0] if hit else B['HEAD'].get(k) or B['MERGE_HEAD'][k]
+        files[name] = baked_text(head, out).encode('utf-8')
+        miss = sorted(k for k in want if (out.get(k) or {}).get('fp') != want[k])
+        log.append('✓ %s：照型合了 %d 型%s' % (name, len(out), '；⚠ %s 兩邊都跟指紋對不上（合併前就是）' % '、'.join(miss) if miss else '，都對得上指紋'))
+    TH = [p for p in REMERGE_FIXED[1:] if p in U]
+    if TH:
+        sha = lambda b: hashlib.sha256(b.replace(b'\r\n', b'\n')).hexdigest()
+        want = {'renderer': sha(R('src/js/05_thumb.js')), 'ships': {s['id']: sha(files[ship_file(s['el'])]) for s in cfg['ships']}}
+        with tempfile.TemporaryDirectory() as td:
+            args = []
+            for rev, d in side.items():
+                os.makedirs(os.path.join(td, rev))
+                for p in REMERGE_FIXED[1:]:
+                    b = d['r'](p)
+                    if b is not None:
+                        open(os.path.join(td, rev, posixpath.basename(p)), 'wb').write(b)
+                args += ['--from', os.path.join(td, rev)]
+            json.dump(want, open(os.path.join(td, 'want.json'), 'w', encoding='utf-8'))
+            code, out = run([sys.executable, '-I', os.path.join(HERE, 'shipthumbs.py'), '--merge', os.path.join(td, 'out'), '--want', os.path.join(td, 'want.json')] + args)
+            if code:
+                raise Fail('選船縮圖合不起來（什麼都沒寫）：\n' + out.strip())
+            for p in REMERGE_FIXED[1:]:
+                files[p] = open(os.path.join(td, 'out', posixpath.basename(p)), 'rb').read()
+        log += ['✓ 選船縮圖：兩邊圖集裡跟船檔對得上的格重排一張'] + ['  ' + l for l in out.strip().splitlines()]
+    over.update(files)
+    tag = '<script type="application/json" id="%s">%s</script>\n' % (SHIPS_EL, json.dumps(index, separators=(',', ':')))
+    h1, M1 = code_html(Overlay(work_read, over), tag, log)
+    over['index.html'] = h1.encode('utf-8')
+    good, out = src_check_one(Overlay(work_read, over), '合併後（還沒寫）')
+    if not good:
+        raise Fail('\n'.join(out + ['（什麼都沒寫）']))
+    log += out
+    wrote = []
+    for p, b in sorted(over.items()):
+        f = os.path.join(ROOT, *p.split('/'))
+        if b is None:
+            if os.path.exists(f):
+                os.remove(f)
+                wrote.append(p)
+        elif not os.path.exists(f) or open(f, 'rb').read() != b:
+            os.makedirs(os.path.dirname(f), exist_ok=True)
+            with open(f, 'wb') as fh:
+                fh.write(b)
+            wrote.append(p)
+    log.append('✓ 寫了 %d 個檔（入口來源指紋 %s）' % (len(wrote), M1['fp']))
+    log += flagloop_ensure() + act_srccheck() + thumbs_note() + showlod_note(cfg) + anc_note(cfg)
+    add = sorted(set(wrote) | set(p for p in U if gen_path(p) or p in done))
+    return log + ['下一步：看過沒問題 ⇒ git add -A -- %s，再 git commit' % ' '.join(add)]
 
 
 def flagloop_ensure():
@@ -4552,7 +5036,7 @@ def act_import(work, sid, name, build=True, variant_of=None, only=False):   # on
     except RuntimeError as e:
         raise Fail(str(e))
     info = vxk_info(dest)
-    log = ['✓ 匯出 %s ← %s' % (ship['vxk'], work)] + ['  %s：%s' % (n, info.get(k)) for k, n in DIFF_KEYS] + [lock_put(ship['vxk'])]
+    log = ['✓ 匯出 %s ← %s' % (ship['vxk'], work)] + ['  %s：%s' % (n, info.get(k)) for k, n in DIFF_KEYS]
     if info.get('owner'):                                # 建造者（Tim 2026-10-15）：.vxk 檔頭的 owner ＝ 雕刻作品的作者 ⇒ 船隻配置頁顯示
         ship['author'] = info['owner']
         log.append('  建造者：%s（.vxk 檔頭 owner）' % info['owner'])
@@ -4564,6 +5048,7 @@ def act_import(work, sid, name, build=True, variant_of=None, only=False):   # on
     cfg['ships'].append(ship)
     save(cfg)
     log.append('✓ 登記進船隻清單：%s（%s）—— 航速、靈活、船員照預設，要調到後台的船隻設定' % (name, sid))
+    log.append(lock_put(ship['vxk']))                    # 指紋記在這艘自己的 config/ships/<代號>.json ⇒ 登記之後才記
     if build:
         chain = {}                                       # build --ship: the rope-binding rebuild starts from the product this one writes
         log += act_build_ship(sid, chain=chain) if only else act_build()
@@ -4724,16 +5209,22 @@ def act_parts(check=False):
 
 def act_state():
     cfg = load()
-    code, committed = run(['git', 'show', 'HEAD:./config/game.json'])
+    r = GitRead('HEAD:')
+    try:
+        committed = src_cfg(r)[0]
+    except (Fail, ValueError):
+        committed = None
+    finally:
+        r.close()
     infos = {}
     for s in cfg['ships']:
         p = os.path.join(CACHE, s['vxk'])
         infos[s['id']] = vxk_info(p)
         if infos[s['id']] is not None:
             infos[s['id']]['guns'] = vxk_guns(p, cfg.get('guns') or {})   # 各砲種幾門（後台的砲設定頁，TASK-0621）
-    return {'config': cfg, 'committed': json.loads(committed) if code == 0 else None,
+    return {'config': cfg, 'committed': committed,
             'ships': infos,
-            'built': os.path.getmtime(OUT) if os.path.exists(OUT) else None, 'saved': os.path.getmtime(CFG_P),
+            'built': os.path.getmtime(OUT) if os.path.exists(OUT) else None, 'saved': max([os.path.getmtime(CFG_P)] + [os.path.getmtime(os.path.join(SHIPS_D, f)) for f in work_ls(SHIPS_REL)]),
             'paths': {'config': CFG_P, 'out': OUT, 'cache': CACHE}}
 
 
@@ -4874,8 +5365,9 @@ def act_hook(url):
     if not rx.search(text):
         raise Fail('config/game.json 找不到 report.webhook 那一格（先在設定後台存一次「問題回報」）')
     new_text = rx.sub(lambda m: m.group(1) + json.dumps(enc), text, count=1)
-    new = json.loads(new_text)
-    E = validate(new, load())
+    prev = load()
+    new = dict(json.loads(new_text), ships=prev['ships'])   # FAR-85：ships 在 config/ships/，這一格以外照舊
+    E = validate(new, prev)
     if E:
         raise Fail('設定不合法，沒有存：\n' + '\n'.join('  ✗ ' + e for e in E))
     with open(CFG_P, 'w', encoding='utf-8', newline='') as f:
@@ -5058,6 +5550,9 @@ def main():
     s = sp.add_parser('shellsync', help='外殼頁跟著核心：這份是別的遊戲的 submodule 時，外層的 shell.json、*/shell.json 裡 core 指到這份成品的頁全部重套（.githooks 的合併後／切換後／改寫後／提交後會叫）；沒有外層 ⇒ 什麼都不做')
     s.add_argument('--check', action='store_true', help='只比：有一頁舊了 ⇒ exit 1（外層的檢查用）')
     s.add_argument('--hook', help='誰叫的（印在第一行；.githooks 帶）')
+    s = sp.add_parser('split-ships', help='一次性搬移（FAR-85）：game.json 的 ships、ship_cards.json、vxk_lock.json ⇒ 每艘一個檔 config/ships/<代號>.json；template.html 的船標籤清空；接著 build --code')
+    s.add_argument('--no-build', action='store_true', help='只搬，不跑 build --code')
+    sp.add_parser('remerge', help='合併後重建產物（FAR-85）：git merge 有衝突時，來源解完之後跑；入口、船檔、anchor.js、showlod.js、選船縮圖照兩邊建好的產物組回來（不用 _cache、不用 Chrome）')
     sp.add_parser('reseg', help='船檔照現在的切法重切（不用 _cache：從船檔自己解回原文重切、解回來逐位元組相同才寫、換入口清單上的雜湊）—— 只有 ship_segments 的切法改了才要')
     s = sp.add_parser('snapshot', help='某一版的成品（入口＋它清單上的船檔）取出到一個資料夾：拆檔之後 git show <版本>:index.html 只拿得到入口（對拍的對照組用這個）')
     s.add_argument('rev', help='commit、分支名')
@@ -5140,6 +5635,10 @@ def main():
             log = act_build_ship(o.ship, o.base) if o.ship else act_build_code(o.base) if o.code else act_build(not o.raw, o.single)
         elif o.op == 'reseg':
             log = act_reseg()
+        elif o.op == 'split-ships':
+            log = act_split_ships(not o.no_build)
+        elif o.op == 'remerge':
+            log = act_remerge()
         elif o.op == 'shell':
             log = act_shell(o.cfg, o.check)
         elif o.op == 'shellsync':
@@ -5163,8 +5662,11 @@ def main():
             E = validate(cfg)
             if E:
                 raise Fail('設定不合法：\n' + '\n'.join('  ✗ ' + e for e in E))
-            save(cfg)
-            log = ['✓ 重新排版 config/game.json']
+            if 'ships' in json.loads(work_read(CFG_REL).decode('utf-8')):
+                write_text(CFG_P, dumps(cfg) + '\n')                # FAR-85 以前的格式（split-ships 之前排版用）
+            else:
+                save(cfg)
+            log = ['✓ 重新排版 config/game.json＋config/ships/']
         elif o.op == 'relock':
             log = act_relock(o.id)
         elif o.op == 'authors':

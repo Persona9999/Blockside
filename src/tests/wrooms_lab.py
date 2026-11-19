@@ -10,7 +10,7 @@ from concurrent.futures import ThreadPoolExecutor
 HERE = os.path.dirname(os.path.abspath(__file__))
 OUT_HTML = os.path.normpath(os.path.join(HERE, '..', '..', 'index.html'))
 OUT_DIR = os.path.normpath(os.path.join(HERE, '..', '..', 'reports', 'wrooms'))
-GAME = os.path.normpath(os.path.join(HERE, '..', 'config', 'game.json'))
+SRC = os.path.normpath(os.path.join(HERE, '..'))
 CHROME = [r'C:\Program Files\Google\Chrome\Application\chrome.exe', r'C:\Program Files (x86)\Google\Chrome\Application\chrome.exe']
 
 
@@ -44,7 +44,11 @@ def main():
     chrome = next((c for c in CHROME if os.path.exists(c)), None)
     if not chrome:
         raise SystemExit('找不到 Chrome')
-    hulls = [h for h in a.hulls.split(',') if h] or [s['id'] for s in json.load(open(GAME, encoding='utf-8'))['ships']]
+    if not a.hulls:
+        import sys
+        sys.path.insert(0, SRC)
+        import admin                                            # 船隻清單在 config/ships/（FAR-85）⇒ 照 admin.load() 接回來的讀
+    hulls = [h for h in a.hulls.split(',') if h] or [s['id'] for s in admin.load()['ships']]
     d = os.path.join(a.out, a.tag)
     os.makedirs(os.path.join(d, 'img'), exist_ok=True)
     with ThreadPoolExecutor(max_workers=max(1, a.j)) as ex:

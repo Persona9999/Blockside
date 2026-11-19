@@ -2,7 +2,7 @@
 python -I src/tests/build_ship_test.py --cache-root <folder of .vxk> [--ids a,b] [--no-each] [--full | --subset] [--new-vxk <file>] [--out result.json]
 Runs in a disposable git worktree at HEAD with this checkout's src/admin.py copied in; HEAD's product must match its sources (srccheck).
 Needs a Python with numpy (the build's grid packing imports it). --cache-root's .vxk count only where they match HEAD's
-src/config/vxk_lock.json (cacheMatches in the result); a _cache exported for another version matches none.
+fingerprints (src/config/ships/<id>.json lock; cacheMatches in the result); a _cache exported for another version matches none.
   default : A) every ship whose variant family has matching .vxk in --cache-root: build --ship with ONLY that family in _cache
                leaves index.html, ships/ and src/ byte-identical (--ids limits the list, --no-each skips A). A .vxk that matches
                its fingerprint but not the build's bytes (re-exported elsewhere: JSON key order, export time) must be refused
@@ -14,7 +14,7 @@ src/config/vxk_lock.json (cacheMatches in the result); a _cache exported for ano
             (one voxel of a plain ship edited, a new ship imported with --only, the variant base edited, and import/reimport
             with rope binding run for real — shipcheck_page stubbed to change every rope's bind, so the rebuild after it runs:
             act_build → act_ropebind → act_build against build --ship twice) the full build and build --ship write the same
-            bytes, _cache and vxk_lock.json included.
+            bytes, _cache and the per-ship config files (fingerprints) included.
   --subset: --full on the ships that do match (families kept whole; --ids picks a smaller fleet: those ships' families);
             that fleet's full build becomes the fixture's HEAD. A full build packs ~7 s per ship on a 4-core Linux host.
 In --full/--subset the thumbnail capture (Chrome) is stubbed on both sides alike.
@@ -50,7 +50,8 @@ class Fixture:
 
     def files(self, cache=False):
         """Everything a build may write (and, with cache, the _cache .vxk files): {relative path: bytes}."""
-        out = {p: (self.w / p).read_bytes() for p in ('index.html', 'src/template.html', 'src/config/game.json', 'src/config/vxk_lock.json')}
+        out = {p: (self.w / p).read_bytes() for p in ('index.html', 'src/template.html', 'src/config/game.json')}
+        out.update({'src/config/ships/' + f.name: f.read_bytes() for f in (self.w / 'src/config/ships').glob('*.json')})
         out.update({'ships/' + f.name: f.read_bytes() for f in (self.w / 'ships').glob('*.js')})
         if cache:
             out.update({'VoxelKit/_cache/' + f.name: f.read_bytes() for f in self.cache.iterdir() if f.is_file()})
@@ -59,6 +60,9 @@ class Fixture:
     def restore(self, st):
         for f in (self.w / 'ships').glob('*.js'):
             if 'ships/' + f.name not in st:
+                f.unlink()
+        for f in (self.w / 'src/config/ships').glob('*.json'):
+            if 'src/config/ships/' + f.name not in st:
                 f.unlink()
         if any(k.startswith('VoxelKit/_cache/') for k in st):
             for f in self.cache.iterdir():

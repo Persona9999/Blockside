@@ -1,6 +1,9 @@
 """Prebake the real ship models, using zenith's Sharkside portrait renderer.
 python -I src/shipthumbs.py [--check] [--force]
 The capture page is built from current sources without changing index.html.
+python -I src/shipthumbs.py --merge OUT --want WANT.json --from DIR [--from DIR ...]
+  (admin.py remerge, FAR-85) no capture: every ship takes the first DIR's cell whose recorded source matches WANT, else the first
+  DIR that has a cell (still stale, as it was); ships no DIR has are left out (stale). Writes OUT/thumbs.json and OUT/atlas.png.
 """
 import argparse, base64, hashlib, io, json, math, sys, tempfile
 from pathlib import Path
@@ -19,7 +22,7 @@ def source_matches(recorded,p):
     b=p.read_bytes().replace(b'\r\n',b'\n')
     return recorded in {hashlib.sha256(b).hexdigest(),hashlib.sha256(b.replace(b'\n',b'\r\n')).hexdigest()}
 def wanted():
-    ships=json.loads((HERE/'config/game.json').read_text(encoding='utf-8'))['ships']
+    ships=admin.load()['ships']
     return {'renderer':source_sha(HERE/'js/05_thumb.js'), 'ships':{s['id']:source_sha(ROOT/'ships'/(s['el']+'.js')) for s in ships}}
 def stale():
     try:
@@ -35,7 +38,7 @@ def bake(force=False):
     if not force and not stale(): print('Ship thumbnails current');return
     ART.mkdir(parents=True,exist_ok=True)
     want=wanted();all_ids=sorted(want['ships']);images={}
-    ship_paths={s['id']:ROOT/'ships'/(s['el']+'.js') for s in json.loads((HERE/'config/game.json').read_text(encoding='utf-8'))['ships']}
+    ship_paths={s['id']:ROOT/'ships'/(s['el']+'.js') for s in admin.load()['ships']}
     # Reuse verified atlas cells so importing one ship never recaptures the fleet.
     if not force:
         try:
@@ -77,17 +80,42 @@ def bake(force=False):
                 print('Captured %d/%d: %s'%(len(images)-reused,len(ids),','.join(batch)),flush=True)
     finally:
         if page:page.unlink(missing_ok=True)
+    pack(images,want,ART)
+def pack(images,want,out):
+    """Cells in id order, 6 per row => out/atlas.png + out/thumbs.json (same images and want => same bytes)."""
+    all_ids=sorted(images)
     cols=6;rows=math.ceil(len(all_ids)/cols);atlas=Image.new('RGBA',(cols*256,rows*160))
     icons={}
     for i,k in enumerate(all_ids):
         c,r=i%cols,i//cols;atlas.paste(images[k],(c*256,r*160));icons[k]=[c,r]
-    atlas.save(ART/'atlas.png',optimize=True)
-    m=dict(v=1,w=256,h=160,cols=cols,rows=rows,icons=icons,source=want,atlasSHA256=sha(ART/'atlas.png'))
-    (ART/'thumbs.json').write_text(json.dumps(m,indent=1,sort_keys=True)+'\n',encoding='utf-8')
-    print('Wrote %d thumbnails, %d bytes'%(len(all_ids),(ART/'atlas.png').stat().st_size))
+    atlas.save(out/'atlas.png',optimize=True)
+    m=dict(v=1,w=256,h=160,cols=cols,rows=rows,icons=icons,source=want,atlasSHA256=sha(out/'atlas.png'))
+    (out/'thumbs.json').write_text(json.dumps(m,indent=1,sort_keys=True)+'\n',encoding='utf-8')
+    print('Wrote %d thumbnails, %d bytes'%(len(all_ids),(out/'atlas.png').stat().st_size))
+def merge(out,want,dirs):
+    sides=[]
+    for d in dirs:
+        try:
+            m=json.loads((d/'thumbs.json').read_text(encoding='utf-8'));atlas=Image.open(d/'atlas.png').convert('RGBA')
+            if m['atlasSHA256']==sha(d/'atlas.png') and atlas.size==(m['cols']*256,m['rows']*160):sides.append((m,atlas))
+        except (OSError,KeyError,ValueError,TypeError):pass
+    images,src,stale_ids={},{},[]
+    for k in sorted(want['ships']):
+        fresh=[s for s in sides if s[0]['source']['renderer']==want['renderer'] and s[0]['source']['ships'].get(k)==want['ships'][k] and k in s[0]['icons']]
+        have=fresh or [s for s in sides if k in s[0]['icons']]
+        if not have:stale_ids.append(k);continue
+        m,atlas=have[0];c,r=m['icons'][k];images[k]=atlas.crop((c*256,r*160,(c+1)*256,(r+1)*160))
+        src[k]=want['ships'][k] if fresh else m['source']['ships'].get(k)
+        if not fresh:stale_ids.append(k)
+    out.mkdir(parents=True,exist_ok=True)
+    pack(images,dict(renderer=want['renderer'],ships=src),out)
+    print('Stale (no side had a matching cell): '+(', '.join(stale_ids) if stale_ids else 'none'))
 def main():
     sys.stdout.reconfigure(encoding='utf-8')
-    p=argparse.ArgumentParser(description=__doc__);p.add_argument('--check',action='store_true');p.add_argument('--force',action='store_true');a=p.parse_args()
+    p=argparse.ArgumentParser(description=__doc__);p.add_argument('--check',action='store_true');p.add_argument('--force',action='store_true')
+    p.add_argument('--merge',type=Path);p.add_argument('--want',type=Path);p.add_argument('--from',dest='dirs',type=Path,action='append',default=[]);a=p.parse_args()
+    if a.merge:
+        merge(a.merge,json.loads(a.want.read_text(encoding='utf-8')),a.dirs);return 0
     if a.check:
         bad=stale();print('Ship thumbnails: '+(', '.join(bad) if bad else 'current'));return 1 if bad else 0
     bake(a.force);return 0
