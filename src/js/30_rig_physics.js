@@ -70,22 +70,35 @@ function swingHangs(sh, gv) {
 /** 物理關掉 ⇒ 掛著的回到作品的位置。 */
 function unswingHangs(sh) { (sh.hangs || []).forEach(function (m) { m.sw = m.swA = m.psi = m.psiV = 0; m.pw = m.pw2 = null; m.falls.forEach(function (j) { var r = sh.ropes[j]; if (!r.dead) { r.pts = r.pts0; r.bb = ropeBox(r.pts); } }); }); childBind(sh); }
 /** 綁在帆桁上的繩重算形狀（帆桁轉了 0.25° 以上才算；物理關掉時 rot 歸零 ⇒ 回到作品的形狀）。 */
+function yardDropPt(P, m) {
+  if (!m || (!m.rot && !m.fp && !m.fdz && !m.fdx && !m.fdy && !m.fpx && !m.fpy)) return P;
+  var q = m.fp && m.fax ? rotAxis(P, m.piv, m.fax, m.fp) : P;
+  if (m.rot) q = rotZ(q, m.piv, m.rot);
+  if (m.fdz || m.fdx || m.fdy || m.fpx || m.fpy) {
+    var c = m.rot ? Math.cos(m.rot) : 1, s = m.rot ? Math.sin(m.rot) : 0, dx = m.fdx || 0, dy = m.fdy || 0;
+    return [q[0] - (dx * c - dy * s + (m.fpx || 0)), q[1] - (dx * s + dy * c + (m.fpy || 0)), q[2] - (m.fdz || 0)];
+  }
+  return q;
+}
 function yardRopes(sh, force) {
-  var moved = force || sh.yards.some(function (m) { return Math.abs(m.rot - (m.rotA || 0)) > 0.004 || (m.fdz || 0) !== (m.fdzA || 0); });   // fdz：硬骨帆落篷時帆桁往下疊（battenDrop，TASK-1320）
+  var moved = force || sh.yards.some(function (m) {
+    return Math.abs(m.rot - (m.rotA || 0)) > 0.004 || (m.fdz || 0) !== (m.fdzA || 0)
+      || (m.fdx || 0) !== (m.fdxA || 0) || (m.fdy || 0) !== (m.fdyA || 0) || Math.abs((m.fp || 0) - (m.fpA || 0)) > 0.004;
+  });   // fdz/fdx/fdy/fp：硬骨帆落篷時帆桁往下疊並同步壓平傾角（battenDrop，TASK-1320/1321）
   if (!moved) return;
-  sh.yards.forEach(function (m) { m.rotA = m.rot; m.fdzA = m.fdz || 0; });
+  sh.yards.forEach(function (m) { m.rotA = m.rot; m.fdzA = m.fdz || 0; m.fdxA = m.fdx || 0; m.fdyA = m.fdy || 0; m.fpA = m.fp || 0; });
   sh.yRopes.forEach(function (r) {
     var A = r.ya >= 0 ? sh.models[r.ya] : null, B = r.yb >= 0 ? sh.models[r.yb] : null;
-    if ((!A || !A.rot && !A.fdz) && (!B || !B.rot && !B.fdz)) { r.pts = r.pts0; r.bb = ropeBox(r.pts); return; }
-    var dA = A && A.fdz || 0, dB = B && B.fdz || 0; if (A && B && A === B) dB = dA;
+    var aOn = A && (A.rot || A.fdz || A.fdx || A.fdy || A.fp), bOn = B && (B.rot || B.fdz || B.fdx || B.fdy || B.fp);
+    if (!aOn && !bOn) { r.pts = r.pts0; r.bb = ropeBox(r.pts); return; }
     var p0 = r.pts0, n = p0.length / 3, acc = new Float32Array(n), tot = 0, j;
     for (j = 1; j < n; j++) { tot += Math.hypot(p0[j * 3] - p0[j * 3 - 3], p0[j * 3 + 1] - p0[j * 3 - 2], p0[j * 3 + 2] - p0[j * 3 - 1]); acc[j] = tot; }
     var out = new Float32Array(p0.length);
     for (j = 0; j < n; j++) {
       var P0 = [p0[j * 3], p0[j * 3 + 1], p0[j * 3 + 2]], t = tot > 0 ? acc[j] / tot : 0;
-      var pa = A && A.rot ? rotZ(P0, A.piv, A.rot) : P0, pb = B && B.rot ? rotZ(P0, B.piv, B.rot) : P0;
+      var pa = aOn ? yardDropPt(P0, A) : P0, pb = bOn ? yardDropPt(P0, B) : P0;
       if (A && B && A === B) pb = pa;
-      out[j * 3] = pa[0] * (1 - t) + pb[0] * t; out[j * 3 + 1] = pa[1] * (1 - t) + pb[1] * t; out[j * 3 + 2] = P0[2] - (dA * (1 - t) + dB * t);
+      out[j * 3] = pa[0] * (1 - t) + pb[0] * t; out[j * 3 + 1] = pa[1] * (1 - t) + pb[1] * t; out[j * 3 + 2] = pa[2] * (1 - t) + pb[2] * t;
     }
     r.pts = out; r.bb = ropeBox(out);
   });
@@ -820,21 +833,52 @@ function battenGrid(T, sh) {
   for (i = 0; i <= res; i++) { var q = jf * (res + 1) + i; if (T.hk[q] === 4) { B.fk = T.hv[q]; break; } }   // 下帆桁 ＝ 帆腳那一列綁的模型
   return (T.bgr = B);
 }
-/** 跟著往下疊的模型（同一型船的模型編號一樣 ⇒ 模板上算一次）：這面帆的帆桁（meta sail ＝ 帆名）、下帆桁除外；dz ＝ 在作品裡比下帆桁高多少。 */
+/** 跟著往下疊的模型（同一型船的模型編號一樣 ⇒ 模板上算一次）：這面帆的帆桁（meta sail ＝ 帆名）、下帆桁除外；
+ *  記錄每根相對下帆桁列的位置差（dx/dy/dz，涵蓋斜桅）與傾角參數（vr/vf/fax/th0，落篷時同步壓平斜角：TASK-1321）。 */
 function battenMods(B, T, sh) {
   if (B.mods) return B.mods;
   var ms = sh && sh.models; if (!ms) return [];
   B.mods = [];
-  if (B.fk >= 0 && ms[B.fk] && ms[B.fk].piv) ms.forEach(function (m, k) { if (k !== B.fk && m.kind === 'yard' && m.piv && m.sail === T.name) B.mods.push({ k: k, dz: m.piv[2] - ms[B.fk].piv[2] }); });
+  if (!(B.fk >= 0 && ms[B.fk] && ms[B.fk].piv)) return B.mods;
+  var res = B.res, N = T.battens, bStep = res / (N + 1), p = T.p0;
+  function rowSeg(jr) {
+    var i0 = jr * (res + 1) * 3, i1 = (jr * (res + 1) + res) * 3;
+    return [[p[i0], p[i0 + 1], p[i0 + 2]], [p[i1], p[i1 + 1], p[i1 + 2]]];
+  }
+  var z0 = 0, z1 = 0, i;
+  for (i = 0; i <= res; i++) { z0 += p[i * 3 + 2]; z1 += p[(res * (res + 1) + i) * 3 + 2]; }
+  var jf = z0 < z1 ? 0 : res, top0 = jf === res, fs = rowSeg(jf), F0 = fs[0], F1 = fs[1], Vf = sub(F1, F0), fPiv = ms[B.fk].piv;
+  ms.forEach(function (m, k) {
+    if (k === B.fk || m.kind !== 'yard' || !m.piv || m.sail !== T.name) return;
+    var mb = m.yk === 'batten' && m.meta && +m.meta.batten > 0 ? (+m.meta.batten | 0) : 0;
+    if (mb > N) return;
+    var jr = mb > 0 ? (top0 ? mb * bStep : res - mb * bStep) : (top0 ? 0 : res);
+    var rs = rowSeg(jr), R0 = rs[0], R1 = rs[1], Vr = sub(R1, R0);
+    var v2 = Vr[0] * Vr[0] + Vr[1] * Vr[1] + Vr[2] * Vr[2];
+    var sp = v2 > 1e-9 ? clamp(((m.piv[0] - R0[0]) * Vr[0] + (m.piv[1] - R0[1]) * Vr[1] + (m.piv[2] - R0[2]) * Vr[2]) / v2, 0, 1) : 0.5;
+    var rP = [R0[0] + sp * Vr[0], R0[1] + sp * Vr[1], R0[2] + sp * Vr[2]], fP = [F0[0] + sp * Vf[0], F0[1] + sp * Vf[1], F0[2] + sp * Vf[2]];
+    var hLen = Math.hypot(Vr[0], Vr[1]) || 1, ux = Vr[0] / hLen, uy = Vr[1] / hLen;
+    B.mods.push({ k: k, pdx: m.piv[0] - fPiv[0], pdy: m.piv[1] - fPiv[1], dx: (rP[0] - m.piv[0]) - (fP[0] - fPiv[0]), dy: (rP[1] - m.piv[1]) - (fP[1] - fPiv[1]), dz: rP[2] - fP[2], fax: [-uy, ux, 0], vr: Vr, vf: Vf, th0: Math.atan2(Vr[2], hLen) });
+  });
   return B.mods;
 }
 function battenK(f) { var e = clamp(f, 0, 1); e = e * e * (3 - 2 * e); return 0.04 + 0.96 * e; }
-/** 硬骨帆的帆桁、竹篾往下疊：f ＝ 張開幾成（1 張開、0 收到底）。 */
+/** 硬骨帆的帆桁、竹篾往下疊（帶斜角與斜桅同步收平貼合下帆桁）：f ＝ 張開幾成（1 張開、0 收到底）。 */
 function battenDrop(sh, c, f) {
   var B = battenGrid(c.T, sh), M = B ? battenMods(B, c.T, sh) : null; if (!M || !M.length) return;
-  var k = f >= 1 ? 1 : battenK(f);
+  var k = f >= 1 ? 1 : battenK(f), om = 1 - k;
   var ch = false;
-  M.forEach(function (q) { var m = sh.models[q.k], d = q.dz > 0 ? q.dz * (1 - k) : 0; if ((m.fdz || 0) !== d) { m.fdz = d; ch = true; } });
+  M.forEach(function (q) {
+    var m = sh.models[q.k];
+    var dz = q.dz > 0 ? q.dz * om : 0, dx = f >= 1 ? 0 : q.dx * om, dy = f >= 1 ? 0 : q.dy * om, px = f >= 1 ? 0 : q.pdx * om, py = f >= 1 ? 0 : q.pdy * om, fp = 0;
+    if (f < 1) {
+      var vx = om * q.vf[0] + k * q.vr[0], vy = om * q.vf[1] + k * q.vr[1], vz = om * q.vf[2] + k * q.vr[2];
+      if (Math.abs(q.th0) > 1e-4 || Math.abs(vz) > 1e-4) fp = q.th0 - Math.atan2(vz, Math.hypot(vx, vy) || 1);
+    }
+    if ((m.fdz || 0) !== dz || (m.fdx || 0) !== dx || (m.fdy || 0) !== dy || (m.fpx || 0) !== px || (m.fpy || 0) !== py || (m.fp || 0) !== fp) {
+      m.fdz = dz; m.fdx = dx; m.fdy = dy; m.fpx = px; m.fpy = py; m.fp = fp; m.fax = q.fax; ch = true;
+    }
+  });
   if (ch && sh.yRopes) yardRopes(sh);                                   // 綁在上帆桁、竹篾上的繩（升降索、lift）跟著往下
 }
 /** 畫面上收攏：每個細格點往它的收攏點（furlGath）靠過去，f ＝ 張開幾成（緩動）。硬骨帆 ⇒ 往下落篷（battenGrid）。 */

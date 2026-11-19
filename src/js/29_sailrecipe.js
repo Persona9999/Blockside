@@ -30,24 +30,40 @@ function rcpModel(rig, frame, ref) {
   for (var m = 0; m < ms.length; m++) if (ms[m].name === nm) return m;
   return -1;
 }
+function rcpRoach(R, sMeta) {
+  if (Array.isArray(R.roach) && R.roach.length === 2) return [+R.roach[0] || 0, +R.roach[1] || 0];
+  var raw = sMeta && sMeta.roach;
+  if (typeof raw !== 'string' || !raw.trim()) return null;
+  var p = raw.split(',');
+  if (p.length !== 2) return null;
+  var r0 = +p[0], r1 = +p[1];
+  return isFinite(r0) && isFinite(r1) ? [r0, r1] : null;
+}
 /** 一面帆的配方 ⇒ { verts, tris, uv, bmeta, cornerIdx }（verts／tris 照匯出端的雙面排列）。
  *  clew[k]：ends 指名角 k 的那條繩的端點（吹鼓時釘在那裡）；null ⇒ 沒有繩指名（綁住的角照設計位置釘、自由的讓它吹）。
  *  bmeta：每個點綁在哪（-1 不綁；k ＝ 角 k；100 + e ＝ bind 的第 e 條邊）—— 給 clothBindMeta。 */
 function sailFromRecipe(R, clew, sMeta, rods) {                    // rods：硬骨帆第 m 根竹篾有實體桿（rcpBattens；TASK-1320）⇒ 那一列整排綁在桿上
   var C = R.corners, nc = C.length, res = Math.max(1, R.res | 0), full = +R.fullness || 1, X = [], UV = [], id = {}, i, j, k;
   var battens = nc === 4 ? Math.max(0, (R.battens || (sMeta && +sMeta.battens)) | 0) : 0, bStep = 0;
+  var roach = nc === 4 ? rcpRoach(R, sMeta) : null, hasRoach = !!(roach && (roach[0] || roach[1])), top0R = nc === 4 && C[0][2] + C[1][2] >= C[2][2] + C[3][2];
   if (battens > 0) {
     var panels = battens + 1;
     bStep = Math.max(4, Math.round(Math.max(res, panels * 4) / panels));
     if (panels * bStep > 48) bStep = Math.max(2, (48 / panels) | 0);
     res = panels * bStep; R.res = res; R.battens = battens;
+    if (hasRoach) R.roach = roach;
   }
   function key(a, b) { return a * 4096 + b; }
   function gl(a, b) { var v = id[key(a, b)]; return v === undefined ? -1 : v; }
   for (j = 0; j <= res; j++) for (i = 0; i <= res; i++) {
     if (nc === 3 && i + j > res) continue;
-    var u = i / res, v = j / res, P = [0, 0, 0];
-    for (k = 0; k < 3; k++) P[k] = nc === 4 ? (1 - u) * (1 - v) * C[0][k] + u * (1 - v) * C[1][k] + u * v * C[2][k] + (1 - u) * v * C[3][k]
+    var u = i / res, v = j / res, um = u, P = [0, 0, 0];
+    if (hasRoach) {
+      var vTop = top0R ? v : 1 - v;
+      var bulge = vTop <= 0 || vTop >= 1 ? 0 : Math.sin(Math.PI * Math.pow(vTop, 0.85));
+      um = u + bulge * (u * roach[1] - (1 - u) * roach[0]);
+    }
+    for (k = 0; k < 3; k++) P[k] = nc === 4 ? (1 - um) * (1 - v) * C[0][k] + um * (1 - v) * C[1][k] + um * v * C[2][k] + (1 - um) * v * C[3][k]
       : C[0][k] + (C[1][k] - C[0][k]) * u + (C[2][k] - C[0][k]) * v;
     id[key(i, j)] = X.length / 3; X.push(P[0], P[1], P[2]); UV.push(u, v);
   }

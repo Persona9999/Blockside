@@ -519,15 +519,24 @@ function hitModel(sh, L, m, skip, nb) {                                 // skip�
 function rotZ(P, piv, a) { var c = Math.cos(a), s = Math.sin(a), x = P[0] - piv[0], y = P[1] - piv[1]; return [piv[0] + x * c - y * s, piv[1] + x * s + y * c, P[2]]; }
 function unrotL(o, L) { return rotZ(L, o.piv, -o.rot); }
 /** 模型在船的格座標裡的擺法：平移到 origin；帆桁另外繞轉軸轉 rot；掛在砲塔上（m.hd，27_turret.js）⇒ 再照砲塔現在的角度。 */
-function modelLocal(m) { var L = modelLocal0(m), H = m.hd && ndMat(m.hd); if (m.fdz) L = M4.mul(trans(0, 0, -m.fdz), L); return H ? M4.mul(H, L) : L; }   // fdz：硬骨帆落篷，帆桁、竹篾往下疊（30_rig_physics.js battenDrop；只是畫）
+function modelLocal(m) {
+  var L = modelLocal0(m), H = m.hd && ndMat(m.hd);
+  if (m.fdz || m.fdx || m.fdy || m.fpx || m.fpy) {
+    var c = m.rot ? Math.cos(m.rot) : 1, s = m.rot ? Math.sin(m.rot) : 0, dx = m.fdx || 0, dy = m.fdy || 0;
+    L = M4.mul(trans(-(dx * c - dy * s + (m.fpx || 0)), -(dx * s + dy * c + (m.fpy || 0)), -(m.fdz || 0)), L);
+  }
+  return H ? M4.mul(H, L) : L;
+}   // fdz/fdx/fdy/fp：硬骨帆落篷，帆桁、竹篾往下疊並同步壓平傾角（30_rig_physics.js battenDrop；只是畫）
 function modelLocal0(m) {
   if (m.swM) { var u = m.spv; return M4.mul(M4.mul(M4.mul(trans(u[0], u[1], u[2]), m.swM), trans(-u[0], -u[1], -u[2])), trans(m.origin[0], m.origin[1], m.origin[2])); }   // 繞 spv 套一整個轉動（划槳：掃＋抬，31_drive.js oarAnim；只是畫面）
   var mt = m.spinB && m.spinB.mt;                                       // 照砲轉的零件掛在迴旋砲上（26_spin.js：投石機的投臂）⇒ 繞自己的軸轉完、再繞砲的中心轉砲的 yaw
   if (m.sw || mt) { var q = m.spv, S = M4.mul(M4.mul(M4.mul(trans(q[0], q[1], q[2]), rotM(m.sax, m.sw || 0)), trans(-q[0], -q[1], -q[2])), trans(m.origin[0], m.origin[1], m.origin[2])); return mt && mt.yaw ? M4.mul(M4.mul(M4.mul(trans(mt.c[0], mt.c[1], 0), rotM([0, 0, 1], mt.yaw)), trans(-mt.c[0], -mt.c[1], 0)), S) : S; }   // 掛著擺的（小艇；30_rig_physics.js swingHangs）
-  if (!m.rot || !m.piv) return trans(m.origin[0], m.origin[1], m.origin[2]);
+  if ((!m.rot && !m.fp) || !m.piv) return trans(m.origin[0], m.origin[1], m.origin[2]);
   var p = m.piv;
   var o = m.gsl ? [m.origin[0] + m.gsl[0], m.origin[1] + m.gsl[1], m.origin[2]] : m.origin;   // gsl：迴旋砲換砲門時往後拉（TASK-0626 mountStep）
-  return M4.mul(M4.mul(M4.mul(trans(p[0], p[1], p[2]), rotM([0, 0, 1], m.rot)), trans(-p[0], -p[1], -p[2])), trans(o[0], o[1], o[2]));
+  var R = m.fp && m.fax ? rotM(m.fax, m.fp) : null;
+  if (m.rot) R = R ? M4.mul(rotM([0, 0, 1], m.rot), R) : rotM([0, 0, 1], m.rot);
+  return M4.mul(M4.mul(M4.mul(trans(p[0], p[1], p[2]), R), trans(-p[0], -p[1], -p[2])), trans(o[0], o[1], o[2]));
 }
 /** 格座標 L 在不在這個模型的網格裡（佔用格，外擴一格 ≈ 砲彈半徑）。⛔ 只看外框：長砲的外框 1.3 × 3.1 m，空的角落也算 ⇒ 砲甲板一半的彈都打得到砲。 */
 function inMesh(o, L) {
