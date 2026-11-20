@@ -84,9 +84,10 @@ if (retired) {
     })(trees[f], [], null, null);
   }
   console.log(JSON.stringify({ old: old }));
-  process.exit(0);
+  return;
 }
-if (!writes) { console.log(JSON.stringify(res)); process.exit(0); }
+// ⛔ 印完用 return 結束、不叫 process.exit：Linux 上 stdout 接 pipe 是非同步寫，process.exit 會丟掉還沒寫出去的部分（超過 64 KB 就截斷，admin.py 讀到半截 JSON）
+if (!writes) { console.log(JSON.stringify(res)); return; }
 const top = new Set();
 for (const f of files) if (trees[f]) trees[f].body.forEach(function (s) { declared(s, top); });
 const bad = [];

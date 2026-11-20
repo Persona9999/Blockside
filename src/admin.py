@@ -72,10 +72,14 @@ def vxk_fp(blob):
     就沒辦法拿來「比對來源」（換機器時 _cache 是空的，只能從雕刻作品重新匯出）。跟 VoxelKit/vxk_compare.py 一樣只不比 exported_at。"""
     raw = zlib.decompress(blob, -15)
     n = struct.unpack('<I', raw[4:8])[0]
-    h = json.loads(raw[8:8 + n].decode('utf-8'))
-    h.pop('exported_at', None)
+    return head_fp(json.loads(raw[8:8 + n].decode('utf-8')), raw[8 + n:])
+
+
+def head_fp(h, body):
+    """vxk_fp 拆開的那一半：檔頭 h（dict）＋格子那一段 body ⇒ 指紋（h 不改）。"""
+    h = {k: v for k, v in h.items() if k != 'exported_at'}
     hb = json.dumps(h, ensure_ascii=False, sort_keys=True, separators=(',', ':')).encode('utf-8')
-    return 'c:' + sha1_bytes(hb + raw[8 + n:])
+    return 'c:' + sha1_bytes(hb + body)
 
 
 def file_fp(path):
@@ -1751,7 +1755,9 @@ def act_check():
 
 
 REPORTS = os.path.normpath(os.path.join(HERE, '..', 'reports'))   # 匯入檢查的報告（不入版控）
-CHROMES = [r'C:\Program Files\Google\Chrome\Application\chrome.exe', r'C:\Program Files (x86)\Google\Chrome\Application\chrome.exe']
+# Chrome 找的順序：環境變數 BS_CHROME ＞ PATH 上的 google-chrome／chromium／chrome-headless-shell（Linux）＞ macOS、Windows 的預設安裝位置
+CHROMES = [c for c in [os.environ.get('BS_CHROME')] + [shutil.which(n) for n in ('google-chrome', 'google-chrome-stable', 'chromium', 'chromium-browser', 'chrome-headless-shell')] if c] + \
+    ['/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', r'C:\Program Files\Google\Chrome\Application\chrome.exe', r'C:\Program Files (x86)\Google\Chrome\Application\chrome.exe']
 
 
 META_ON = ('model', 'link', 'sail', 'rope')
@@ -4473,10 +4479,64 @@ def product_binds(tmp, ph):
     return out[0], out[1]
 
 
+
+# 換一台作業系統重新匯出、作品沒變，檔頭還是有兩種地方會不一樣（FAR-78）：
+#   ① source 每行 `link … 作品@<版本>`：Senate SCP_SculptWorks.Revision() 把最後一個事件檔的相對路徑算進 sha256，路徑用平台分隔符（Windows `\`、Linux `/`）
+#   ② 繩端參數（`rope:母繩/比例`，橫繩組照母繩形狀算的）：.NET 的 Math 三角、雙曲函式照各平台的 C 函式庫算，最後一位可能差一點（bizerte_barque 34 條）
+PLAT_LINK = re.compile(r'^(link .+ \S+@)[0-9a-f]{64}((?: .*)?)$')
+PLAT_NUM = re.compile(r'(-?\d+\.\d+(?:[eE][-+]?\d+)?)')
+
+
+def plat_close(a, b):
+    return abs(a - b) <= 1e-12 * max(1.0, abs(a), abs(b))
+
+
+def plat_align(a, q, src=False):
+    """a（這台匯出的檔頭的一部分）跟 q（成品的同一處）只差在上面那兩種 ⇒ 回 (q, 換了幾處)；其他不同的地方照 a 留著（之後指紋照樣對不上）。"""
+    if isinstance(a, dict) and isinstance(q, dict):           # 成品的檔頭多了壓縮版的網格池（mpool…）⇒ 只對兩邊都有的鍵
+        out, n = {}, 0
+        for k in a:
+            out[k], m = (a[k], 0) if k == 'exported_at' or k not in q else plat_align(a[k], q[k], src or k == 'source')
+            n += m
+        return out, n
+    if isinstance(a, list) and isinstance(q, list) and len(a) == len(q):
+        out, n = [], 0
+        for x, y in zip(a, q):
+            v, m = plat_align(x, y, src)
+            out.append(v)
+            n += m
+        return out, n
+    if a == q or type(a) is not type(q):
+        return a, 0
+    if isinstance(a, float):
+        return (q, 1) if plat_close(a, q) else (a, 0)
+    if isinstance(a, str):
+        ma, mq = (PLAT_LINK.match(a), PLAT_LINK.match(q)) if src else (None, None)
+        if ma and mq and ma.groups() == mq.groups():
+            return q, 1
+        A, Q = PLAT_NUM.split(a), PLAT_NUM.split(q)       # 奇數位是小數、偶數位是其他字：其他字一字不差、小數只差最後幾位 ⇒ 同一個
+        if len(A) == len(Q) and all(x == y if i % 2 == 0 else plat_close(float(x), float(y)) for i, (x, y) in enumerate(zip(A, Q))):
+            return q, 1
+    return a, 0
+
+
+def product_plat(tmp, ph, want):
+    """重新匯出的 tmp 跟指紋 want 對不上時：檔頭照成品 ph 換掉只因作業系統而不同的地方（見上），換完指紋等於 want 才寫回 tmp（⛔ 不等就不動 tmp）。
+    格子那一段、繩帆模型的其他內容照樣要一字不差，所以作品真的改過還是對不上。回換了幾處（沒寫回 ⇒ 0）。"""
+    raw = zlib.decompress(open(tmp, 'rb').read(), -15)
+    n = struct.unpack('<I', raw[4:8])[0]
+    h, body = json.loads(raw[8:8 + n].decode('utf-8')), raw[8 + n:]
+    g, m = plat_align(h, ph)
+    if not m or head_fp(g, body) != want:
+        return 0
+    vxk_write(tmp, g, body)
+    return m
+
 def act_cache(every=False):
     """_cache 的 .vxk 從雕刻作品重新匯出、跟指紋（config/vxk_lock.json，入版控）比（TASK-0586：.vxk 不入版控 ⇒ 換一台機器 _cache 是空的）。
     預設只補缺的；every（cache --all）⇒ 每艘都比 ＝ 比對來源：雕刻作品現在這份跟上次建置用的是不是同一份。
-    比之前先從版控的成品補回繩端綁定（product_binds：bind 是匯入後才寫進 _cache 的，作品裡沒有）。
+    比之前先從版控的成品補回繩端綁定（product_binds：bind 是匯入後才寫進 _cache 的，作品裡沒有）；
+    還對不上 ⇒ 只因作業系統而不同的地方照成品換掉再比一次（product_plat，FAR-78：Windows 匯入、Linux 補 _cache 或反過來）。
     對得上 ⇒ 放進 _cache；對不上（作品之後又改過）⇒ ⛔ 不蓋 _cache、不改指紋，新匯出的留成 <船>.vxk.source，說是哪一艘、要用新的就 reimport。
     （以前從成品內嵌的那份解回；壓縮版（TASK-0583，預設）的網格換成了池子，解不回原檔 ⇒ 改成從來源重新匯出。）"""
     cfg, L, log, bad = load(), lock_load(), [], []
@@ -4502,6 +4562,10 @@ def act_cache(every=False):
         nb, why = product_binds(tmp, ph) if ph else (0, why)
         bn = '（繩端綁定 %d 條從成品補回）' % nb if nb else ''
         got, have = file_fp(tmp), file_fp(p)
+        if want and got != want and want.startswith('c:') and ph:
+            nplat = product_plat(tmp, ph, want)
+            if nplat:
+                got, bn = want, bn + '（%d 處只差在作業系統：來源版本雜湊的路徑分隔符、小數最後一位 ⇒ 照成品那份）' % nplat
         if want and not want.startswith('c:'):
             bad.append(s['vxk'])
             log.append('  ✗ %s：指紋還是舊格式（整個檔的 sha1，比不了重新匯出的）⇒ 先在有 _cache 的機器 build 一次（會換成內容指紋）再提交' % s['vxk'])

@@ -10,7 +10,9 @@ from concurrent.futures import ThreadPoolExecutor
 HERE = os.path.dirname(os.path.abspath(__file__))
 OUT_HTML = os.path.normpath(os.path.join(HERE, '..', '..', 'index.html'))
 OUT_DIR = os.path.normpath(os.path.join(HERE, '..', '..', 'reports', 'flood_lab'))
-CHROME = [r'C:\Program Files\Google\Chrome\Application\chrome.exe', r'C:\Program Files (x86)\Google\Chrome\Application\chrome.exe']
+# Chrome 找的順序：環境變數 BS_CHROME ＞ PATH 上的 google-chrome／chromium／chrome-headless-shell（Linux）＞ macOS、Windows 的預設安裝位置
+CHROME = [c for c in [os.environ.get('BS_CHROME')] + [shutil.which(n) for n in ('google-chrome', 'google-chrome-stable', 'chromium', 'chromium-browser', 'chrome-headless-shell')] if c] + \
+    ['/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', r'C:\Program Files\Google\Chrome\Application\chrome.exe', r'C:\Program Files (x86)\Google\Chrome\Application\chrome.exe']
 OTHER = {'constitution': 'ember'}                                      # 另一艘（只是湊滿兩艘、會被移到遠處）；沒寫 ⇒ 憲法號
 SEAM = [('pools', '池'), ('step', '兩池之間（側）'), ('open', '懸空的邊'), ('wall', '貼牆'), ('join', '接起來'), ('cutTops', '船殼邊切掉的塊'), ('cutPieces', '切掉的小片'), ('outTops', '整塊沒畫')]
 
