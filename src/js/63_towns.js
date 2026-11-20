@@ -33,7 +33,7 @@
 // 布旗（模型帶 flags 的，例：加拉塔塔頂的熱那亞旗）：一塊布、照風飄，只給人看 ⇒ 見下面「布旗」那一段。
 // 路：共用 2 m 格的距離場把整個路網併成一張面（圓端、轉角與路口沒有重疊面）；各點照畫面地形順坡，抬高 12 cm、外緣補薄側面。規劃與模擬高度不變。
 // 地標（Tim 2026-10-20：「大型建築應該要更遠可見(地標) 且顯示細節要比一般建築高(在更遠的距離上顯示更高細節) 例如聖索菲亞大教堂 加拉塔石塔等」）：
-//   每棟一個倍率 lk ＝ 長、寬、高最大的那一邊 ÷ TOWN_LM[0]（限 1..TOWN_LM[1]；城牆一律 1）⇒ 四級的距離、交接帶都乘 lk（著色器用 距離 ÷ lk 對同一組門檻）；
+//   每棟一個倍率 lk ＝ 長、寬、高最大的那一邊 ÷ TOWN_LM[0]（限 1..TOWN_LM[1]；城牆、引水渠一律 1；套件橋照整座橋，見 townInstGen 的套件橋那一段）⇒ 四級的距離、交接帶都乘 lk（著色器用 距離 ÷ lk 對同一組門檻）；
 //   lk > 1 的不進屋頂殼，最遠一級是它自己的貼圖（到 TOWN_FAR × lk）。一般房子 ≤ 24 m ⇒ lk 1，跟以前一位元不差。
 var TOWN_LM = [24, 4];
 // 附屬的田（TASK-0862；Blocksail world/annex.js）：一格幾公尺（＝ Blocksail BSW.TOWN_CELL，街道建築格）、土的兩個顏色（壟、溝）、溝寬幾成（沿行距）
@@ -1191,7 +1191,10 @@ function* townInstGen(T) {
   yield* townEach(p.aqueducts, function (a) { townWall(T, a, out, W, true); });   // 引水渠：畫法同城牆（見 townWall 的 line）
   yield* townEach(townBridgeList(p).filter(function (b) { return b.kit && K.byUse[b.kit + '-section']; }), function (b) {   // 套件橋（townBridgeKitM 上面）：一座一件、line 擺法；br ＝ 吊橋開度的鍵（townBridgeStep）
     var n0 = out.length; townWall(T, { id: b.id, path: b.path, kit: b.kit, level: [b.z[0], b.z[1]] }, out, W, true);
-    for (var i = n0; i < out.length; i++) out[i].br = T.id + ':' + b.id;
+    //   遠近照地標（Blocksail TASK-1331；Tim 2026-11-20「兵工廠吊橋是否可以參考地標建築 LOD距離調遠(不然直接變成低模很難看到打開合上的效果)」）：
+    //   lk 同地塊上的地標（townLotInst）照整座橋最大的那一邊 ÷ TOWN_LM[0] ⇒ 近那一級（吊橋板會動的那一級）照倍率畫得更遠；城牆、引水渠照舊 1
+    var km = townBridgeKitM(b), lk = Math.max(1, Math.min(TOWN_LM[1], Math.max(townPlen(b.path), km ? km.top || 0 : 0) / TOWN_LM[0]));
+    for (var i = n0; i < out.length; i++) { out[i].br = T.id + ':' + b.id; out[i].lk = lk; }
   });
   TOWNS.stat.inst = TOWNS.list.reduce(function (s, T2) { return s + (T2 === T ? out.length : (T2.inst || []).length); }, 0);
   TOWNS.stat.lots = TOWNS.list.reduce(function (s, T2) { return s + (T2.p.lots || []).length; }, 0);
