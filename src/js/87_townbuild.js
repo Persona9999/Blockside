@@ -522,12 +522,14 @@ function twbFieldTxt(tr) {
   if (!A && it && !it.ann) return hit ? '、產' + nm + (tr.note ? '（' + tr.note + '）' : '') : '';
   return '＋田 ' + (A ? A.area + ' m²' + (A.stop === 'short' ? '（長不滿）' : '') + (A.front === 'relaxed' ? '（貼到路邊）' : '') : '?') + '、種' + nm + (tr.note ? '（' + tr.note + '）' : '');
 }
-/** 介面：分類分頁＋項目＋復原、收起（#twbP，#stage.twb 才顯示）；🔨 那一顆城鎮模式常駐、當開關（61_layout.js 的 town 配置）。 */
+/** 介面：分類分頁＋項目＋存這座城、復原（#twbP，#stage.twb 才顯示）；🔨 那一顆城鎮模式常駐、當開關（61_layout.js 的 town 配置）。
+ *  ⛔ 沒有「收起」：🔨、B 本來就是開關（Tim 2026-11-20「收起可以移除(原本就能Toggle)」，Blocksail TASK-1333）。 */
 // 圖與中文名依分類 key 對應；舊 host 仍帶 emoji 名稱也用新圖。未知分類保留 host 的名字。
 function twbCategoryHTML(c) {
   var art = Object.prototype.hasOwnProperty.call(TWB_CATEGORY_ART, c.k) ? TWB_CATEGORY_ART[c.k] : null, label = document.createElement('span');
-  label.textContent = art ? art.name : c.name;
-  return (art ? '<img class="twbCatIcon" src="' + art.src + '" alt="" aria-hidden="true">' : '') + label.outerHTML;
+  var em = !art && /^(\S+)\s+(.+)$/.exec(c.name || ''), emo = em && !/[\w一-鿿]/.test(em[1]) ? em : null;   // 沒有圖、名字開頭是表情符號（🧨 拆除）⇒ 放大當圖示、跟有圖的分類一樣排在字上面
+  label.textContent = art ? art.name : emo ? emo[2] : c.name;
+  return (art ? '<img class="twbCatIcon" src="' + art.src + '" alt="" aria-hidden="true">' : emo ? '<span class="twbCatIcon twbCatEmo" aria-hidden="true">' + emo[1] + '</span>' : '') + label.outerHTML;
 }
 function twbUI() {
   var P = $('twbP'); if (!P) return;
@@ -536,12 +538,12 @@ function twbUI() {
   TWB_CATS.forEach(function (c) { c.items.forEach(function (it) { var n = ++nAll; if (c.k !== TWB.cat) return; h += '<button type="button" class="bcard' + (it.k === TWB.item ? ' on' : '') + '" data-c="' + c.k + '" data-i="' + it.k + '"><b>' + it.name + (it.goods ? ' ' + it.goods.map(function (g) { return tuiIcon('goods', g); }).join('') : '') + '</b><small>' + it.sub + (n <= 9 ? '（' + n + '）' : '') + '</small></button>'; }); });   // 數字鍵只到 9（twbKey）⇒ 第 10 項以後只能點（TASK-0872：工坊 8 種之後選單 12 項）
   h += '</div>';
   if (TWB.cat === 'road') h += '<div id="twbMode"><span>鋪法：</span>' + TWB_RMODES.map(function (m) { return '<button type="button" data-m="' + m.k + '" title="' + m.tip + '"' + (m.k === TWB.rmode ? ' class="on"' : '') + '>' + m.name + '</button>'; }).join('') + '</div>';   // 鋪法（TASK-1077）
-  h += '<div id="twbRcp"></div><div id="twbOps"><button type="button" id="twbSave" title="只存這一座城的改動（Ctrl+S）">💾 存這座城</button><button type="button" id="twbUndo">↶ 復原（Z）</button><button type="button" id="twbX">▾ 收起（B）</button></div>';
+  h += '<div id="twbRcp"></div><div id="twbOps"><button type="button" id="twbSave" title="只存這一座城的改動（Ctrl+S）">💾 存這座城</button><button type="button" id="twbUndo">↶ 復原（Z）</button></div>';
   P.innerHTML = h; TWB.rcpSig = null;
   P.querySelectorAll('#twbTabs button').forEach(function (b) { b.onclick = function () { var c = TWB_CATS.filter(function (x) { return x.k === b.dataset.c; })[0]; twbPick(c.k, c.items[0].k); }; });
   P.querySelectorAll('#twbItems button').forEach(function (b) { b.onclick = function () { twbPick(b.dataset.c, b.dataset.i); }; });
   P.querySelectorAll('#twbMode button').forEach(function (b) { b.onclick = function () { var m = TWB_RMODES.filter(function (x) { return x.k === b.dataset.m; })[0]; TWB.rmode = m.k; twbRoadReset('鋪法：' + m.name + ' —— ' + m.tip); TWB.moved = true; twbUI(); }; });
-  $('twbSave').onclick = twbSave; $('twbUndo').onclick = twbUndo; $('twbX').onclick = function () { twbToggle(false); };
+  $('twbSave').onclick = twbSave; $('twbUndo').onclick = twbUndo;
 }
 // 城鎮模式（04_modes.js town）：🔨 鈕（看不看得見照 61_layout.js 的 town 配置）—— 載入時是城鎮模式就綁；航海裡停靠換進城鎮模式時由 88_modeswitch.js 的 enter 綁（TASK-0867）
 function twbBind() {

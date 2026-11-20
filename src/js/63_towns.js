@@ -635,7 +635,8 @@ function townDiff(T0, T1) {
     grow(box, E(l.at), Math.hypot(l.w, l.d)); if (l.use === 'plaza') { rb = rb || [1e9, 1e9, -1e9, -1e9]; grow(rb, E(l.at), Math.hypot(l.w, l.d)); }
     if (l.water) deck = true;                                           // 水上地塊（平台、樁、接縫木板在地面那一區畫）⇒ 那一區的清單照新的規劃重分（townDistBins）—— ⛔ 不分 ⇒ 建築模式剛蓋的漁場水上版只有模型、底下沒平台也沒接到棧橋的木板，重進城才出現（Tim 2026-10-31）
   });
-  ['piers', 'quay', 'stairs', 'bridges'].forEach(function (k) { changed(a[k], b[k], function (q) { deck = true; q.path.forEach(function (p) { grow(box, E(p), (q.w || 4) + 4); }); }); });   // 城區多了少了（townDistView）：那一區的地面重建（townDistBins）
+  ['piers', 'quay', 'stairs', 'bridges', 'banks'].forEach(function (k) { changed(a[k], b[k], function (q) { deck = true; q.path.forEach(function (p) { grow(box, E(p), (q.w || 4) + 4); }); }); });   // 城區多了少了（townDistView）：那一區的地面重建（townDistBins）
+  //   banks（運河的河堤；Blocksail TASK-1333 拆除）：以前沒比 ⇒ 拆掉一段河堤，那一區不重建、牆照畫（Tim 2026-11-20「測試拆除河堤後 河堤模型還在」）
   var c0 = a.clear || {}, c1 = b.clear || {};
   bag(c0.rings, c1.rings, function (R) { R.forEach(function (q) { grow(box, E(q), 4); }); });
   bag(c0.paths, c1.paths, function (c) { c.path.forEach(function (q) { grow(box, E(q), c.w); }); });
