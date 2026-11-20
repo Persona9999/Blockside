@@ -507,8 +507,9 @@ function twbInfo() {
   }
   else if (TWB.cat === 'road') {
     var sea = twbSea(), mn = TWB_RMODES.filter(function (m) { return m.k === TWB.rmode; })[0], md = mn && mn.k !== 'auto' ? '［' + mn.name + '］' : sea ? '［直線（棧橋、海堤沒有自動繞路）］' : '';
-    s = md + (!TWB.start ? (sea ? '點一下路、碼頭線或棧橋當起點' : '點一下既有的路當起點') : TWB.rmode === 'curve' && !TWB.via ? '點彎的那一點（右鍵取消）' : !tr || !tr.road ? '找路線…'
-      : tr.ok ? '路線 ' + Math.round(tr.len) + ' m、' + tr.gold + ' 金 —— 點一下鋪（右鍵取消）' : '鋪不了：' + (tr.why || []).join('；'));
+    var snap = tr && tr.road && tr.ok && (tr.end || tr.snapEnd) ? '（終點接上去）' : '';   // 終點吸到路、碼頭線、河堤、廣場（Blocksail TASK-1333 town.js linkNear）
+    s = md + (!TWB.start ? (sea ? '點一下路、碼頭線、河堤或棧橋當起點' : '點一下路、碼頭線、河堤或廣場當起點') : TWB.rmode === 'curve' && !TWB.via ? '點彎的那一點（右鍵取消）' : !tr || !tr.road ? '找路線…'
+      : tr.ok ? '路線 ' + Math.round(tr.len) + ' m、' + tr.gold + ' 金' + snap + ' —— 點一下鋪（右鍵取消）' : '鋪不了：' + (tr.why || []).join('；'));
   }
   else s = !TWB.q ? '游標移到路邊或空建地上' : !tr || tr.road ? '試放…' : tr.ok ? (tr.lot ? '空建地 ' + tr.lot : '路邊 ' + tr.w.toFixed(0) + ' × ' + tr.d + ' m') + twbFieldTxt(tr) + (TWB.rcpBlock ? ' —— 蓋不了：' + twbRcpName(TWB.rcpBlock.k) + '這裡做不了（' + TWB.rcpBlock.why + '）' : ' —— 點一下蓋' + (TWB.side ? '（' + (TWB.side > 0 ? '右' : '左') + '側）' : '') + (twbKitHit() ? '' : '（這塊地沒有挑的那一款 ⇒ 照隨機）')) : '蓋不了：' + (tr.why || ['?'])[0];
   if (el.textContent !== s) el.textContent = s;
