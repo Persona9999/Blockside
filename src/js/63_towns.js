@@ -3050,36 +3050,17 @@ function townPlinth(q) {
   return [top, hgt];
 }
 /** 畫（60_render.js：樹之後）。 */
-function townDraw() {
-  if (!TOWNS.on || !TOWNS.list.length || !BED || !BED.A || PASS.vp) return;
-  if (!TOWNS.kit) { townKit(); townProgs(); return; }                 // 著色器跟模型一起開始（編譯在背景，townProgs）
-  if (!TOWNS.kitP) townKit();                                           // 要的模型變多（townKitStale）⇒ 背景重解，這一組照畫
-  var t0 = performance.now(), K = TOWNS.kit, P = townProgs(), eye = CAM.eye, PL = bedPlanes(CAM.vp);
-  if (!P) return;
+/** 路面（townRoadSurface，背景算）：每座城開始一次；算好 ⇒ 地面的分區照它重排。 */
+function townRoadStart() {
   TOWNS.list.forEach(function (T) {
     if (T.roadPending || T.roadSurface) return;
     T.roadPending = true;
     townRoadSurface(T.roads).then(function (R) { T.roadSurface = R; if (T.gt) townGroundPrep(T); }, function (e) { TOWNS.err = '路面：' + e.message; console.warn(TOWNS.err); });
   });
-  var nb = 0;                                                            // 實例、地面的帶子、屋頂殼：一格最多建一座城的一樣、照背景預算（08_seabed.js bedBusy；跟地球儀同一條主執行緒）
-  // 實例不等背景預算（TASK-0819；Tim 2026-10-22「照建議改」）：預算每格先被收塊、擺樹、地形網格吃光 ⇒ 模型解好了城還要等那一批做完（君士坦丁堡第二次去 1.3～2.4 s）。
-  //   那時建實例是一格做完、不分段 ⇒ 等預算只是晚做、不是不卡；拿掉之後模型一好城就出來（0～0.1 s），最長一格沒變長（A/B 各 3 輪）。照舊一格最多一座、照舊扣預算。
+}
+/** 地面的帶子：一區一區（townGroundTile），離鏡頭近的先；一格最多 TOWN_GT_MAX 區、照背景預算。 */
+function townGroundStep(eye) {
   TOWNS.list.forEach(function (T) {
-    //   照段建（townInstGen）：每格至少做 TOWN_INST_SLICE ms（照舊不等背景預算），沒做完下一格接著；建好才換上，舊的照畫。規劃又改了（instRedo）、換了模型組 ⇒ 重來
-    if (!(!T.inst || T.instRedo || T.ij) || nb || !(K.part || !TOWNS.kitBusy)) return;
-    //   這一組沒有它的牆要的模型（骨架只解了先到的那幾座城的牆；townWallsReady）⇒ 等下一組（townGot 已經叫了 townKitStale）
-    if (!townWallsReady(K, T)) { (TOWNS.stat.wait = TOWNS.stat.wait || {})[T.id] = K.part ? 'skel' : 'kit'; return; }
-    if (TOWNS.stat.wait) delete TOWNS.stat.wait[T.id];
-    var b0 = performance.now(), J = T.ij, r;
-    if (!J || T.instRedo || J.K !== K) { J = T.ij = { g: townInstGen(T), K: K, ms: 0 }; T.instRedo = false; }
-    var t1 = BED_SLICE ? b0 + Math.max(BED_BG, TOWN_INST_SLICE) : Infinity;   // 沒有背景預算（無頭、快轉）⇒ 一次建完
-    do r = J.g.next(); while (!r.done && performance.now() < t1);
-    J.ms += performance.now() - b0; nb++; bedSpent(b0);
-    if (!r.done) return;
-    T.ij = null; T.inst = r.value; if (TOWNS.stat.edit) TOWNS.stat.edit.instMs = +J.ms.toFixed(1); townTreesSet(T); if (!T.gt) townGroundPrep(T); townFlagFree(T); T.shDirty = true; T.tlS = T.tlD = true; TOWNS.dirty = true;
-  });
-  TL.k = TL.on ? TOD_LIT : 0;                                                        // 夜裡的燈：這一格點燈了沒（08_weather.js；陸地在城之前畫 ⇒ 用上一格的分組表，差一格看不出來）
-  TOWNS.list.forEach(function (T) {                                    // 地面的帶子：一區一區（townGroundTile），離鏡頭近的先；一格最多 TOWN_GT_MAX 區、照背景預算
     // 骨架先出（TASK-0826，見 townKit 上面）：地面不等實例、分區開始建；有棧橋、碼頭的區排最前（townGroundNext），而且每格至少一區、不看預算
     //   （預算每格常被收塊、擺樹吃光 ⇒ 以前棧橋要等那一批做完）。?townskel=0 ⇒ 照舊等實例、照預算。
     if (TOWN_SKEL && !T.gt) townGroundPrep(T);
@@ -3097,6 +3078,52 @@ function townDraw() {
     }
     if (T.gBuilt && !townGroundNext(T, eye)) { T.gBuilt = false; T.tlD = true; }   // 這一批都建好了 ⇒ 街燈的高度重取（以前地面每重建一次就重取）
   });
+}
+/** 畫地面的帶子（棧橋、碼頭、路、橋；呼叫的人開好 POLYGON_OFFSET）⇒ 畫了幾個三角形。 */
+function townGroundDraw(P, PL, eye, fogD) {
+  var PG = P.gr, n = 0; gl.useProgram(PG.prog); setCommon(PG); gl.uniform1f(PG.u.uFogD, fogD);
+  TOWNS.list.forEach(function (T) { Object.keys(T.gt || {}).forEach(function (k) { var g = T.gt[k].g; if (!g || !bedSeen(PL, g.bb) || townBoxDist(g.bb, eye) > TOWN_GROUND_VIEW) return; gl.bindVertexArray(g.vao); gl.drawElements(gl.TRIANGLES, g.n, gl.UNSIGNED_INT, 0); n += g.n / 3; }); });
+  return n;
+}
+function townDraw() {
+  if (!TOWNS.on || !TOWNS.list.length || !BED || !BED.A || PASS.vp) return;
+  if (!TOWNS.kit) {                                                    // 著色器跟模型一起開始（編譯在背景，townProgs）
+    townKit(); var P0 = townProgs();
+    //   骨架不等模型組（TASK-1330；Tim 2026-11-20「目前希望至少能先載入棧橋 然後是道路 城牆等」）：路面、地面的帶子（棧橋、碼頭、路、橋 ——
+    //     有棧橋、碼頭的區先，townGroundNext）照樣建、照樣畫；城牆、建築要模型 ⇒ 照舊等模型組
+    //   ⛔ 以前這裡整個 return：威尼斯（沒有城牆 ⇒ 沒有「城牆先解」K.part 那一段）模型組要解 33.7 s，棧橋、路一格都沒出來（量到的）
+    if (P0 && TOWN_SKEL) {
+      var e0 = CAM.eye, PL0 = bedPlanes(CAM.vp), cf0 = gl.isEnabled(gl.CULL_FACE);
+      townRoadStart(); townGroundStep(e0);
+      gl.disable(gl.CULL_FACE); gl.enable(gl.POLYGON_OFFSET_FILL); gl.polygonOffset(-1, -4);
+      townGroundDraw(P0, PL0, e0, WX.fog * BED_FOG * CAM.fogK);
+      gl.disable(gl.POLYGON_OFFSET_FILL); if (cf0) gl.enable(gl.CULL_FACE);
+    }
+    return;
+  }
+  if (!TOWNS.kitP) townKit();                                           // 要的模型變多（townKitStale）⇒ 背景重解，這一組照畫
+  var t0 = performance.now(), K = TOWNS.kit, P = townProgs(), eye = CAM.eye, PL = bedPlanes(CAM.vp);
+  if (!P) return;
+  townRoadStart();
+  var nb = 0;                                                           // 實例、地面的帶子、屋頂殼：一格最多建一座城的一樣、照背景預算（08_seabed.js bedBusy；跟地球儀同一條主執行緒）
+  // 實例不等背景預算（TASK-0819；Tim 2026-10-22「照建議改」）：預算每格先被收塊、擺樹、地形網格吃光 ⇒ 模型解好了城還要等那一批做完（君士坦丁堡第二次去 1.3～2.4 s）。
+  //   那時建實例是一格做完、不分段 ⇒ 等預算只是晚做、不是不卡；拿掉之後模型一好城就出來（0～0.1 s），最長一格沒變長（A/B 各 3 輪）。照舊一格最多一座、照舊扣預算。
+  TOWNS.list.forEach(function (T) {
+    //   照段建（townInstGen）：每格至少做 TOWN_INST_SLICE ms（照舊不等背景預算），沒做完下一格接著；建好才換上，舊的照畫。規劃又改了（instRedo）、換了模型組 ⇒ 重來
+    if (!(!T.inst || T.instRedo || T.ij) || nb || !(K.part || !TOWNS.kitBusy)) return;
+    //   這一組沒有它的牆要的模型（骨架只解了先到的那幾座城的牆；townWallsReady）⇒ 等下一組（townGot 已經叫了 townKitStale）
+    if (!townWallsReady(K, T)) { (TOWNS.stat.wait = TOWNS.stat.wait || {})[T.id] = K.part ? 'skel' : 'kit'; return; }
+    if (TOWNS.stat.wait) delete TOWNS.stat.wait[T.id];
+    var b0 = performance.now(), J = T.ij, r;
+    if (!J || T.instRedo || J.K !== K) { J = T.ij = { g: townInstGen(T), K: K, ms: 0 }; T.instRedo = false; }
+    var t1 = BED_SLICE ? b0 + Math.max(BED_BG, TOWN_INST_SLICE) : Infinity;   // 沒有背景預算（無頭、快轉）⇒ 一次建完
+    do r = J.g.next(); while (!r.done && performance.now() < t1);
+    J.ms += performance.now() - b0; nb++; bedSpent(b0);
+    if (!r.done) return;
+    T.ij = null; T.inst = r.value; if (TOWNS.stat.edit) TOWNS.stat.edit.instMs = +J.ms.toFixed(1); townTreesSet(T); if (!T.gt) townGroundPrep(T); townFlagFree(T); T.shDirty = true; T.tlS = T.tlD = true; TOWNS.dirty = true;
+  });
+  TL.k = TL.on ? TOD_LIT : 0;                                                        // 夜裡的燈：這一格點燈了沒（08_weather.js；陸地在城之前畫 ⇒ 用上一格的分組表，差一格看不出來）
+  townGroundStep(eye);
   // A kit or its instances can finish loading here after shadowPass. Publish
   // that change to both passes together at the beginning of the next frame.
   if (GFX.shadow && !CSM_SIMPLE && !cutOn()) {
@@ -3149,10 +3176,10 @@ function townDraw() {
     gl.activeTexture(gl.TEXTURE11); gl.bindTexture(gl.TEXTURE_2D, K.tex); gl.uniform1i(PB.u.uTex, 11); gl.activeTexture(gl.TEXTURE0);
     gl.bindVertexArray(P.bbVao); gl.drawArraysInstanced(gl.TRIANGLES, 0, 6, G.nbb); tris += 2 * G.nbb;
   }
-  // 地面的帶子（貼地、往鏡頭推一點 ⇒ 不跟地形打架）
-  var PG = P.gr; gl.useProgram(PG.prog); setCommon(PG); gl.uniform1f(PG.u.uFogD, fogD);
+  // 地面的帶子（貼地、往鏡頭推一點 ⇒ 不跟地形打架）；PG：後面的布旗、循環布照舊接著用這一支（townGroundDraw 用完沒換掉）
+  var PG = P.gr;
   gl.enable(gl.POLYGON_OFFSET_FILL); gl.polygonOffset(-1, -4);
-  TOWNS.list.forEach(function (T) { Object.keys(T.gt || {}).forEach(function (k) { var g = T.gt[k].g; if (!g || !bedSeen(PL, g.bb) || townBoxDist(g.bb, eye) > TOWN_GROUND_VIEW) return; gl.bindVertexArray(g.vao); gl.drawElements(gl.TRIANGLES, g.n, gl.UNSIGNED_INT, 0); tris += g.n / 3; }); });
+  tris += townGroundDraw(P, PL, eye, fogD);
   tris += townRiseGround(PL, eye);                                       // 水上建築的工地照進度畫的平台與樁（63_townrise.js）
   tris += townFieldDraw(P, PL, eye, fogD);                               // 遠處的田（貼在土上：再往鏡頭推一點）
   gl.disable(gl.POLYGON_OFFSET_FILL);
