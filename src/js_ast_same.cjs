@@ -25,10 +25,11 @@ try {
   if (a !== b) {
     let i = 0; while (i < a.length && a[i] === b[i]) i++;
     console.log(JSON.stringify({ ok: false, nodes: na, why: '語法樹不同，第一個差在：' + a.slice(Math.max(0, i - 80), i + 80) + ' ⇔ ' + b.slice(Math.max(0, i - 80), i + 80) }));
-    process.exit(1);
+    process.exitCode = 1;  // 不用 process.exit：見 js_globals.cjs
+  } else {
+    console.log(JSON.stringify({ ok: true, nodes: na }));
   }
-  console.log(JSON.stringify({ ok: true, nodes: na }));
 } catch (e) {
   console.log(JSON.stringify({ ok: false, nodes: 0, why: '解析失敗：' + e.message }));
-  process.exit(1);
+  process.exitCode = 1;
 }

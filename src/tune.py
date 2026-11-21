@@ -18,7 +18,9 @@ import argparse, base64, json, math, os, queue, random, shutil, socket, struct, 
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 OUT_HTML = os.path.normpath(os.path.join(HERE, '..', 'index.html'))
-CHROME = [r'C:\Program Files\Google\Chrome\Application\chrome.exe', r'C:\Program Files (x86)\Google\Chrome\Application\chrome.exe']
+# Chrome 找的順序：環境變數 BS_CHROME ＞ PATH 上的 google-chrome／chromium／chrome-headless-shell（Linux）＞ macOS、Windows 的預設安裝位置
+CHROME = [c for c in [os.environ.get('BS_CHROME')] + [shutil.which(n) for n in ('google-chrome', 'google-chrome-stable', 'chromium', 'chromium-browser', 'chrome-headless-shell')] if c] + \
+    ['/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', r'C:\Program Files\Google\Chrome\Application\chrome.exe', r'C:\Program Files (x86)\Google\Chrome\Application\chrome.exe']
 
 # 評測組：一個場景 ＝ 每方幾艘、船型、兩方用的策略（同一個）、開局距離。風向照種子輪（0／90／180／270）、風速 1。
 SUITES = {
