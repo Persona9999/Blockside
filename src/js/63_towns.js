@@ -112,12 +112,17 @@ var TOWN_BRIDGE_LAP = 0.6, TOWN_BRIDGE_HUMP = 0.35, TOWN_BRIDGE_CLR = 2.4, TOWN_
 //   地面那一條石板不畫（townBridgeGeo）；橋面 ＝ 模型的 rise（拱背）⇒ townBridgeForm 照它 ⇒ 鎮民走的面跟雕的同一條。沒有模型 ⇒ 照 clr（規劃的拱頂淨空）畫一個大拱的石板。
 //   吊橋（draw）：橋板是旋轉件（spin=bridge）、鍊的一頭掛在橋板上（ropes 的 mv）⇒ 開度照 townBridgeStep（32_quay.js；船靠近打開）畫；開著 ⇒ quayStep 不擋。
 function townBridgeKitM(b) { var I = b && b.kit ? townIdx() : null, nm = I && (I.byUse[b.kit + '-section'] || [])[0]; return nm ? I.models[nm] : null; }
-/** 規劃 p 現在建的那幾座橋（路在 p.roads 裡的；城區只建一部分 ⇒ 別區的路的橋不畫）。 */
+/** 規劃 p 現在建的那幾座橋（路在 p.roads 裡的；城區只建一部分 ⇒ 別區的路的橋不畫）。
+ *  長路切段（Blocksail town_export.js townRoadPieces；TASK-1334）：段的 id 照原本那條路、sub ＝ [s0, s1] 這一段在原本那條路上的弧長 ⇒ 橋的 s（照原本那條路）要整個落在建了的某一段裡；
+ *  以前段改名「<路>#k」⇒ 照 id 找不到 ⇒ 橋沒畫（TASK-1331）。沒有 sub ＝ 整條路。 */
 function townBridgeList(p) {
   if (!p || !p.bridges || !p.bridges.length) return [];
-  var ids = {}; (p.roads || []).forEach(function (r) { ids[r.id] = 1; });
-  return townBridgeArch(p).filter(function (b) { return ids[b.road]; });
+  var subs = {}; (p.roads || []).forEach(function (r) { (subs[r.id] = subs[r.id] || []).push(r.sub || null); });
+  return townBridgeArch(p).filter(function (b) { var L = subs[b.road]; return L && (!b.s || L.some(function (u) { return townSubHas(u, b.s); })); });
 }
+/** 路段的 sub（null ＝ 整條）包住弧長 [s0, s1]（橋）—— 兩頭各寬 TOWN_SUB_EPS（Blocksail 的 sub 取到 1 mm）。 */
+var TOWN_SUB_EPS = 0.05;
+function townSubHas(u, s) { return !u || (s[0] >= u[0] - TOWN_SUB_EPS && s[1] <= u[1] + TOWN_SUB_EPS); }
 // 拱照河堤撐開（Blocksail TASK-1291；Tim 2026-11-16「以及橋樑沒有橋洞問題」）：規劃的 wet（落水那一段）是照取樣的地形比水面低 0.3 m 量的 ——
 //   窄運河（6～10 m）在取樣裡跟岸混在一起 ⇒ 量到的常常只有一兩公尺 ⇒ 拱縮成一個小三角，其餘整段是墩（實心的牆一路到水底）。
 //   ⇒ 橋面中線跨過的河堤（規劃的 banks 中線）：第一道、最後一道的牆內側（中線 ＋ 半寬 ÷ 跨的角度的 sin）之間也算落水 —— 只撐大、不縮；兩頭各留 TOWN_BRIDGE_ABUT 公尺當橋台。
@@ -616,10 +621,11 @@ function townDiff(T0, T1) {
   function grow(B, q, r) { return townBoxAdd(B, [q[0] - r, q[1] - r, q[0] + r, q[1] + r]); }
   function changed(L0, L1, f) {                                          // 照 id：多的、少的、內容變了的 ⇒ f(那一份)
     var r0 = {}, r1 = {};
-    (L0 || []).forEach(function (o) { r0[o.id] = o; }); (L1 || []).forEach(function (o) { r1[o.id] = o; });
+    function key(o) { return o.sub ? o.id + '@' + o.sub[0] : o.id; }    // 長路切段的幾段 id 相同（TASK-1334）⇒ 照 id ＋ 起點的弧長
+    (L0 || []).forEach(function (o) { r0[key(o)] = o; }); (L1 || []).forEach(function (o) { r1[key(o)] = o; });
     function same(x, y) { return x === y || (y !== undefined && JSON.stringify(x) === JSON.stringify(y)); }   // 同一個物件 ⇒ 沒變（不轉 JSON）
-    (L0 || []).forEach(function (o) { if (!same(o, r1[o.id])) f(o); });
-    (L1 || []).forEach(function (o) { if (!same(o, r0[o.id])) f(o); });
+    (L0 || []).forEach(function (o) { if (!same(o, r1[key(o)])) f(o); });
+    (L1 || []).forEach(function (o) { if (!same(o, r0[key(o)])) f(o); });
   }
   function bag(L0, L1, f) {                                              // 沒有 id：照內容，只在一邊的 ⇒ f(那一份)（同一個物件兩邊都有 ⇒ 先拿掉）
     if (typeof Set !== 'undefined') { var S0 = new Set(L0 || []), S1 = new Set(L1 || []); L0 = (L0 || []).filter(function (o) { return !S1.has(o); }); L1 = (L1 || []).filter(function (o) { return !S0.has(o); }); }
@@ -746,13 +752,15 @@ function townPrep(p, keep) {
   function E(q) { return [ox + kx * q[0], oy + q[1]]; }
   var box = [1e9, 1e9, -1e9, -1e9];
   function grow(q, r) { box[0] = Math.min(box[0], q[0] - r); box[1] = Math.min(box[1], q[1] - r); box[2] = Math.max(box[2], q[0] + r); box[3] = Math.max(box[3], q[1] + r); }
-  var brOf = {}; townBridgeList(p).forEach(function (b) { (brOf[b.road] = brOf[b.road] || []).push(b.s); });   // 橋（Blocksail TASK-1290）：路 id ⇒ [[s0, s1]…]
+  var brOf = {}; townBridgeList(p).forEach(function (b) { (brOf[b.road] = brOf[b.road] || []).push(b.s); });   // 橋（Blocksail TASK-1290）：路 id ⇒ [[s0, s1]…]（照原本那條路的弧長）
   var roads = (p.roads || []).map(function (r) {
     var P = r.path.map(E); if (r.closed) P = P.concat([P[0]]);
     var z = (r.z || []).slice(); if (r.closed) z.push(z[0]);
     P.forEach(function (q) { grow(q, r.w / 2 + 4); });
     var o = { id: r.id, kind: r.kind, w: r.w, P: P, z: z };
-    if (brOf[r.id]) o.cut = townRoadCut(r.closed ? r.path.concat([r.path[0]]) : r.path, z, brOf[r.id]).map(function (q) { return { P: q.P.map(E), z: q.z }; });   // 路面照這幾段鋪（橋那一段挖掉，townRoadSurface）
+    //   長路切段的一段（帶 sub，TASK-1334）⇒ 只挖落在這一段裡的橋、弧長減掉這一段的起點
+    var bs = brOf[r.id] && brOf[r.id].filter(function (s) { return townSubHas(r.sub, s); }).map(function (s) { return r.sub ? [s[0] - r.sub[0], s[1] - r.sub[0]] : s; });
+    if (bs && bs.length) o.cut = townRoadCut(r.closed ? r.path.concat([r.path[0]]) : r.path, z, bs).map(function (q) { return { P: q.P.map(E), z: q.z }; });   // 路面照這幾段鋪（橋那一段挖掉，townRoadSurface）
     return o;
   });
   //   附屬的田（規劃的地塊帶 annex：{ cells: [[排, 從第幾欄, 到第幾欄] …], crop }；格子對齊那一塊地塊，第 0 排臨路 —— Blocksail world/annex.js）：
@@ -3679,7 +3687,7 @@ function townLines(id) {
   function W(q) { var e = T.E(q); return [e[0] - BED.ax, e[1] - BED.az]; }
   return { id: T.id, lines: (T.inst || []).filter(function (q) { return q.line; }).map(function (q) { var m = K.M[q.k].m; return { k: q.k, x: q.x, y: q.y, z: q.z, th: q.th, sx: q.sx, hw: q.ft[0], hd: q.ft[1], arch: m.arch || null, len: m.size[0] * m.mpv, win: !!q.win }; }),
     walls: (T.inst || []).filter(function (q) { return q.wall && !q.line && q.y === q.y; }).map(function (q) { return { k: q.k, wall: q.wall, x: q.x, y: q.y, z: q.z, th: q.th, hw: q.ft[0], g: q.mj[2], r: q.r0 || q.r, win: !!q.win }; }),   // y、g（坡度）、th：量接點兩道牆的走道接不接得上
-    roads: T.p.roads.map(function (r) { return { id: r.id, seq: r.seq, w: r.w, path: (r.closed ? r.path.concat([r.path[0]]) : r.path).map(W) }; }) };
+    roads: T.p.roads.map(function (r) { return { id: r.id, sub: r.sub || null, seq: r.seq, w: r.w, path: (r.closed ? r.path.concat([r.path[0]]) : r.path).map(W) }; }) };
 }
 /** 測試用（__game.townDump）：城 id（沒給 ⇒ 第一座）每一區地面網格（讀 GPU：頂點、索引）與城框裡每一塊清樹遮罩（townClrOf）的雜湊
  *  ⇒ 建築模式的增量重建 vs 重新進城整座建（或 ?townfull=1）逐位元組比（townReplace）。 */
