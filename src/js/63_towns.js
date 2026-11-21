@@ -167,6 +167,7 @@ function townBridgeArch(p) {
 //        ⇒ 端面整個藏在它的牆身裡（同城牆 T 形「伸到 host 的中線」）；跟它差不到 skew° 的（並排走）不接
 //   回 [{ id, path, z, w, bot, ef: [起點端面上的另一點｜null, 終點的｜null] }]（ef 照規劃的公尺；townSlabPut 照它切端面）；讀數 TOWNS.stat.bankJx[城 id]
 var TOWN_BANK_JX = { tol: 6, reach: [6, 8], par: 1.5, skew: 20, hook: 100 }, TOWN_BANK_MEMO = new WeakMap();
+var TOWN_PAVE_PAD = 0.1, TOWN_PAVE_G = 64;   // 河堤、海堤的頂面進路面的距離場（townPrep T.paves）時比牆寬多幾公尺：蓋住石板頂的邊；城區只收這一次建的路、地塊旁邊幾公尺一格的河堤（Blocksail TASK-1335）〔佔位〕
 function townBankList(p, id) {
   if (!p || !p.banks || !p.banks.length) return [];
   var m = TOWN_BANK_MEMO.get(p.banks); if (m && m.quay === p.quay) return m.L;
@@ -637,11 +638,16 @@ function townDiff(T0, T1) {
     rb = rb || [1e9, 1e9, -1e9, -1e9];
     r.path.forEach(function (q) { var e = E(q); grow(box, e, r.w / 2 + 4); grow(rb, e, r.w / 2 + 6); });
   });
+  changed(T0.paves, T1.paves, function (r) {                            // 河堤、海堤的頂面（T.paves，TASK-1335；海域座標）：換城區多收、少收的那幾道也要重算路面
+    rb = rb || [1e9, 1e9, -1e9, -1e9];
+    r.P.forEach(function (q) { grow(box, q, r.w / 2 + 4); grow(rb, q, r.w / 2 + 6); });
+  });
   changed(a.lots, b.lots, function (l) {
     grow(box, E(l.at), Math.hypot(l.w, l.d)); if (l.use === 'plaza') { rb = rb || [1e9, 1e9, -1e9, -1e9]; grow(rb, E(l.at), Math.hypot(l.w, l.d)); }
     if (l.water) deck = true;                                           // 水上地塊（平台、樁、接縫木板在地面那一區畫）⇒ 那一區的清單照新的規劃重分（townDistBins）—— ⛔ 不分 ⇒ 建築模式剛蓋的漁場水上版只有模型、底下沒平台也沒接到棧橋的木板，重進城才出現（Tim 2026-10-31）
   });
-  ['piers', 'quay', 'stairs', 'bridges', 'banks'].forEach(function (k) { changed(a[k], b[k], function (q) { deck = true; q.path.forEach(function (p) { grow(box, E(p), (q.w || 4) + 4); }); }); });   // 城區多了少了（townDistView）：那一區的地面重建（townDistBins）
+  ['piers', 'quay', 'stairs', 'bridges', 'banks'].forEach(function (k) { changed(a[k], b[k], function (q) { deck = true; q.path.forEach(function (p) { grow(box, E(p), (q.w || 4) + 4); });
+    if (k === 'quay' || k === 'banks') { rb = rb || [1e9, 1e9, -1e9, -1e9]; q.path.forEach(function (p) { grow(rb, E(p), (q.w || 4) / 2 + 6); }); } }); });   // 河堤、海堤的頂面在路面裡（T.paves，TASK-1335）⇒ 那一帶的路面重算   // 城區多了少了（townDistView）：那一區的地面重建（townDistBins）
   //   banks（運河的河堤；Blocksail TASK-1333 拆除）：以前沒比 ⇒ 拆掉一段河堤，那一區不重建、牆照畫（Tim 2026-11-20「測試拆除河堤後 河堤模型還在」）
   var c0 = a.clear || {}, c1 = b.clear || {};
   bag(c0.rings, c1.rings, function (R) { R.forEach(function (q) { grow(box, E(q), 4); }); });
@@ -697,7 +703,7 @@ function townReplace(p) {
   }
   if (!D.roads) { apply(); return true; }
   var K = townTilesIn(D.roads), S = TOWN_GT_SZ, KB = K.map(function (k) { var c = k.split('_'); return [+c[0] * S, +c[1] * S, (+c[0] + 1) * S, (+c[1] + 1) * S]; });
-  var sub = T.roads.filter(function (r) {                                // 碰得到那幾區的路（半寬 ＋ 4 m：節點最遠受多遠的路影響，見 townRoadGen；再多 2 m 一格）
+  var sub = T.roads.concat(T.paves || []).filter(function (r) {         // 碰得到那幾區的路（＋河堤、海堤的頂面 T.paves，TASK-1335）（半寬 ＋ 4 m：節點最遠受多遠的路影響，見 townRoadGen；再多 2 m 一格）
     var m = r.w / 2 + 6, b = [1e9, 1e9, -1e9, -1e9]; r.P.forEach(function (q) { townBoxAdd(b, [q[0] - m, q[1] - m, q[0] + m, q[1] + m]); });
     return KB.some(function (kb) { return townBoxHit(b, kb); });
   });
@@ -763,6 +769,25 @@ function townPrep(p, keep) {
     if (bs && bs.length) o.cut = townRoadCut(r.closed ? r.path.concat([r.path[0]]) : r.path, z, bs).map(function (q) { return { P: q.P.map(E), z: q.z }; });   // 路面照這幾段鋪（橋那一段挖掉，townRoadSurface）
     return o;
   });
+  //   河堤、海堤的頂面（Blocksail TASK-1335；Tim 2026-11-21「河堤是否可以做到像道路一樣的無縫連接」「然後海堤可以一起處理嗎(跟河堤視為同一類型)」）：
+  //     路面是整個路網一個距離場（townRoadGen）⇒ 路口融成一片；河堤、碼頭線以前只有各自擠出來的石板（townSlabPut），接頭靠斜接拼（townBankJx）⇒ 拼不上的地方有縫、疊在一起
+  //     ⇒ 頂面也進同一個距離場：寬多 TOWN_PAVE_PAD（蓋住石板頂的邊）、高照它的頂（河堤每一點的 z、碼頭線的 deck；同路面取 max(地面, z) ＋ TOWN_ROAD_LIFT）
+  //     ⇒ 河堤跟河堤、跟碼頭線、跟路接的地方融成一片，外緣照路面補側面（townGroundGen 的 Q.edge）；牆身照舊是石板（頂在鋪面下 TOWN_ROAD_LIFT、側面伸到水底）。
+  //     河堤照 townBankList 接好的那一份。不進 T.roads（鎮民的路網、街燈照舊只看路）⇒ T.paves，路面（townRoadSurface）是 T.roads ＋ T.paves
+  //     城區（townDistView 挑過的那一份）：河堤不在城區的遮罩裡（整份都帶）⇒ 只收這一次建的路、地塊旁邊的（TOWN_PAVE_G 一格、碰到那一格或相鄰的格）——
+  //     威尼斯整座城的河堤頂面 629 道、外緣 195 km，全放進去路面要多算六成（node 量：7.8 ⇒ 12.5 s）；碼頭線本來就照遮罩挑過
+  var pvG = null;
+  if (p.distView != null) {
+    pvG = new Set();
+    var pvAdd = function (x, y) { var i = Math.floor(x / TOWN_PAVE_G), j = Math.floor(y / TOWN_PAVE_G); for (var a = -1; a <= 1; a++) for (var b2 = -1; b2 <= 1; b2++) pvG.add((i + a) * 100003 + j + b2); };
+    (p.roads || []).forEach(function (r) { for (var k = 0; k < r.path.length; k++) { pvAdd(r.path[k][0], r.path[k][1]); if (k) { var a0 = r.path[k - 1], a1 = r.path[k], n = Math.ceil(Math.hypot(a1[0] - a0[0], a1[1] - a0[1]) / TOWN_PAVE_G); for (var m = 1; m < n; m++) pvAdd(a0[0] + (a1[0] - a0[0]) * m / n, a0[1] + (a1[1] - a0[1]) * m / n); } } });
+    (p.lots || []).forEach(function (l) { pvAdd(l.at[0], l.at[1]); });
+  }
+  function pvHas(b) { return !pvG || b.path.some(function (q) { return pvG.has(Math.floor(q[0] / TOWN_PAVE_G) * 100003 + Math.floor(q[1] / TOWN_PAVE_G)); }); }
+  var paves = townBankList(p, p.id).filter(pvHas).map(function (b) { return { id: b.id, kind: 'bank', w: b.w + TOWN_PAVE_PAD, P: b.path.map(E), z: b.path.map(function (q, i) { return Array.isArray(b.z) ? b.z[i] : b.z != null ? b.z : 1.0; }) }; })
+    .concat((p.quay || []).map(function (q) { var d = q.deck != null ? q.deck : 1.0, P = q.closed ? q.path.concat([q.path[0]]) : q.path; return { id: q.id, kind: 'quay', w: (q.w || 0) + TOWN_PAVE_PAD, P: P.map(E), z: P.map(function () { return d; }) }; }))
+    .filter(function (r) { return r.P.length >= 2 && r.w > TOWN_PAVE_PAD; });
+  paves.forEach(function (r) { r.P.forEach(function (q) { grow(q, r.w / 2 + 4); }); });
   //   附屬的田（規劃的地塊帶 annex：{ cells: [[排, 從第幾欄, 到第幾欄] …], crop }；格子對齊那一塊地塊，第 0 排臨路 —— Blocksail world/annex.js）：
   //   一列一段 ⇒ 一條長方形（地塊座標 a 沿進深、b 沿寬）；清樹（clr.rings）、鋪土（townGroundTile）、種作物（63_trees.js treeFieldPut）都照它
   function fieldsOf(L) {
@@ -799,7 +824,7 @@ function townPrep(p, keep) {
   (p.piers || []).forEach(function (q) { q.path.forEach(function (a) { grow(E(a), q.w); }); });
   var core = p.core && p.core.ring ? p.core.ring.map(E) : null, cen = [ox, oy];
   if (core) { var sx = 0, sy = 0; core.forEach(function (q) { sx += q[0]; sy += q[1]; }); cen = [sx / core.length, sy / core.length]; }
-  return { id: p.id, name: p.name, tier: p.tier, style: p.style, styles: p.styles || [p.style || TOWN_STYLE_DEF, TOWN_STYLE_DEF], mix: p.mix || null, seed: p.seed, p: p, ox: ox, oy: oy, kx: kx, bank: bank, E: E, box: box, roads: roads, clr: clr, fields: fields, cen: cen, D2R: D2R, inst: null, ground: null, shell: null };
+  return { id: p.id, name: p.name, tier: p.tier, style: p.style, styles: p.styles || [p.style || TOWN_STYLE_DEF, TOWN_STYLE_DEF], mix: p.mix || null, seed: p.seed, p: p, ox: ox, oy: oy, kx: kx, bank: bank, E: E, box: box, roads: roads, paves: paves, clr: clr, fields: fields, cen: cen, D2R: D2R, inst: null, ground: null, shell: null };
 }
 
 // ── 清樹（每塊算一次；之後有新的城疊上來（T.v 比這塊算的時候 C.tv 新）、建築模式改到這一塊（T.edits）才重算） ──
@@ -3067,7 +3092,7 @@ function townRoadStart() {
   TOWNS.list.forEach(function (T) {
     if (T.roadPending || T.roadSurface) return;
     T.roadPending = true;
-    townRoadSurface(T.roads).then(function (R) { T.roadSurface = R; if (T.gt) townGroundPrep(T); }, function (e) { TOWNS.err = '路面：' + e.message; console.warn(TOWNS.err); });
+    townRoadSurface(T.roads.concat(T.paves || [])).then(function (R) { T.roadSurface = R; if (T.gt) townGroundPrep(T); }, function (e) { TOWNS.err = '路面：' + e.message; console.warn(TOWNS.err); });
   });
 }
 /** 地面的帶子：一區一區（townGroundTile），離鏡頭近的先；一格最多 TOWN_GT_MAX 區、照背景預算。 */
