@@ -1885,6 +1885,27 @@ def act_check():
 
 
 REPORTS = os.path.normpath(os.path.join(HERE, '..', 'reports'))   # 匯入檢查的報告（不入版控）
+
+
+def _warn_ack():
+    """⚠ 確認不修（Blocksail TASK-1351；src/warn_ack.py、src/config/warn_ack.json）：看到 ⚠ 只有兩條路 —— 修掉，或 admin.py warnack --add 寫理由確認掉"""
+    if HERE not in sys.path:
+        sys.path.insert(0, HERE)
+    import warn_ack
+    return warn_ack
+
+
+def warn_filter(WR, sid, issues, text, field='where'):
+    """issues（{lv, what, msg, where, …}）裡的 ⚠ 照確認表：確認過的拿掉、沒確認的在 field 後面附上 [key]（內容變了另外註明）⇒ 留下的"""
+    out = []
+    for i in issues:
+        if i.get('lv') == 'warn':
+            q = WR.see(sid, text(i))
+            if q['state'] == 'acked':
+                continue
+            i = dict(i, **{field: '%s [%s]%s' % (i.get(field, ''), q['key'], '（確認過、但內容變了）' if q['state'] == 'changed' else '')})
+        out.append(i)
+    return out
 # Chrome 找的順序：環境變數 BS_CHROME ＞ PATH 上的 google-chrome／chromium／chrome-headless-shell（Linux）＞ macOS、Windows 的預設安裝位置
 CHROMES = [c for c in [os.environ.get('BS_CHROME')] + [shutil.which(n) for n in ('google-chrome', 'google-chrome-stable', 'chromium', 'chromium-browser', 'chrome-headless-shell')] if c] + \
     ['/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', r'C:\Program Files\Google\Chrome\Application\chrome.exe', r'C:\Program Files (x86)\Google\Chrome\Application\chrome.exe']
@@ -2366,13 +2387,18 @@ def act_shipcheck(ids=None):
         return ['⚠ 匯入檢查沒跑：還沒有成品（先 build）']
     os.makedirs(REPORTS, exist_ok=True)
     log, cards = [], {}
+    WR = _warn_ack().Run('shipcheck')                                  # ⚠ 確認不修（TASK-1351）：對象 ＝ 船；一條 ＝ what：msg｜where
     for sid in ids:
         R = shipcheck_page(chrome, sid)
         if not R:
             log.append('  ✗ %s：匯入檢查讀不到結果（無頭 Chrome 沒跑完）' % sid)
             continue
+        WR.cover(sid)
+        a0 = WR.acked
+        issues = warn_filter(WR, sid, R['issues'], lambda i: '%s：%s｜%s' % (i['what'], i['msg'], i['where']))
+        nack = WR.acked - a0
         groups = {}
-        for i in R['issues']:
+        for i in issues:
             k = (i['lv'], i['what'], i['msg'], i['fix'])
             groups.setdefault(k, []).append(i['where'])
         ne = sum(len(w) for k, w in groups.items() if k[0] == 'error')
@@ -2408,6 +2434,8 @@ def act_shipcheck(ids=None):
               '甲板連通（TASK-1028；每層甲板的每一塊、艙底照梯子接不接得到）：' + (I.get('deckcheck') or '—'), '',
               '超載極限（再多載幾噸、吃水再深幾 m 水會從原本就有的開口流進艙裡；門、砲門、槳門照遊戲的規矩算關著；js/75_leakcheck.js）：' + (I.get('leak') or '—（堡壘、砲台不量）'), '',
               '**✗ %d　⚠ %d**' % (ne, nw), '']
+        if nack:
+            md += ['· 已確認不修 %d 條（src/config/warn_ack.json；`python -I src/admin.py warnack --list --check shipcheck` 看理由）' % nack, '']
         for lv, title in (('error', '## ✗ 錯誤'), ('warn', '## ⚠ 警告')):
             ks = [k for k in groups if k[0] == lv]
             if not ks:
@@ -2427,6 +2455,7 @@ def act_shipcheck(ids=None):
         log.append('  %s %s（%s）：✗ %d　⚠ %d ⇒ %s' % ('✗' if ne else '⚠' if nw else '✓', I.get('name', sid), sid, ne, nw, path))
         if R.get('card'):
             cards[sid] = R['card']
+    log += ['  ' + x for x in WR.finish()]
     if cards:
         log.append('  ' + cards_write(cards))
     return ['匯入檢查：'] + log
@@ -2439,10 +2468,15 @@ def ladcheck_write(sid, R):
     L = R.get('ladcheck')
     if L is None:
         return None
+    WL = _warn_ack().Run('ladcheck')                                   # ⚠ 確認不修（TASK-1351）：對象 ＝ 船；梯子 ＝ 名字：what：msg、甲板連通 ＝ what（where）：msg
+    WL.cover(sid)
+    L = [dict(x, issues=warn_filter(WL, sid, x['issues'], lambda i, x=x: '%s：%s：%s' % (x['name'], i['what'], i['msg']), 'msg')) for x in L]
     I = R['info']
     ne = sum(1 for x in L if any(i['lv'] == 'error' for i in x['issues']))
     nw = sum(1 for x in L if x['issues'] and not any(i['lv'] == 'error' for i in x['issues']))
     D = R.get('deckcheck') or {}
+    if D.get('issues'):
+        D = dict(D, issues=warn_filter(WL, sid, D['issues'], lambda i: '%s（%s）：%s' % (i['what'], i['where'], i['msg'])))
     de = sum(1 for i in D.get('issues', []) if i['lv'] == 'error')
     dw = len(D.get('issues', [])) - de
     md = ['# 樓梯自檢：%s（%s）' % (I.get('name', sid), sid), '',
@@ -2487,6 +2521,9 @@ def ladcheck_write(sid, R):
             md.append('- %s **%s**（%s）：%s' % ('✗' if i['lv'] == 'error' else '⚠', i['what'], i['where'], i['msg']))
             md.append('  - 修法：' + i['fix'])
         md.append('')
+    wsum = WL.finish()
+    if wsum:
+        md += wsum + ['']
     os.makedirs(REPORTS, exist_ok=True)
     open(os.path.join(REPORTS, 'ladcheck_%s.md' % sid), 'w', encoding='utf-8').write('\n'.join(md))
     return len(L), ne, nw, de, dw
@@ -5588,6 +5625,11 @@ def main():
     s = sp.add_parser('ladcheck', help='樓梯自檢（TASK-0838）：每座梯子的梯口有沒有洞、兩端站不站得住、走不走得出去 ⇒ reports/ladcheck_<船>.md（不給 --id ⇒ 每一艘，另寫 reports/ladcheck.md）；shipcheck 也會順手寫')
     s.add_argument('--id', action='append', help='哪一艘（可以給好幾次）；不給 ＝ 每一艘')
     s.add_argument('--selftest', action='store_true', help='反向對照：在記憶體裡把正常的梯子挪 2 格、出口前立柱子、head 四周圍牆、拿掉靠 head 那一頭幾柱，每一種都要報出來（admin.py LADTEST）')
+    s = sp.add_parser('warnack', help='⚠ 確認不修（Blocksail TASK-1351）：--last 上一次的 ⚠ 與 key、--add <key> --by --note 確認（照上一次的內容）、--list 確認表、--clear <key> 拿掉；表在 src/config/warn_ack.json')
+    for a in ('--add', '--clear', '--sig', '--by', '--note', '--check'):
+        s.add_argument(a)
+    s.add_argument('--last', action='store_true')
+    s.add_argument('--list', action='store_true')
     s = sp.add_parser('showlod', help='表演船中那一級的低模（TASK-1104）：跑成品的 ?showlodbake=<船> 降採樣 ⇒ ships/showlod.js（指紋一樣不重烘）')
     s.add_argument('--id', action='append', help='哪一型（可以給好幾次）；不給 ＝ 每一型（不含堡壘、砲台）')
     s.add_argument('--force', action='store_true', help='指紋一樣也重烘')
@@ -5679,6 +5721,11 @@ def main():
             log = act_metaspec(o.doc)
         elif o.op == 'shipcheck':
             log = act_shipcheck(o.id)
+        elif o.op == 'warnack':
+            try:
+                log = _warn_ack().cli(o)
+            except ValueError as e:
+                raise Fail(str(e))
         elif o.op == 'showlod':
             log = act_showlod(o.id, o.force, o.check)
         elif o.op == 'ancbake':
