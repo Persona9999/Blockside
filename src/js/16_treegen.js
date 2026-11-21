@@ -463,13 +463,13 @@ TREE_SPECIES.datepalm = {
 TREE_SPECIES.argan = {
   name: '阿甘樹',                                                       // Argania spinosa（摩洛哥西南蘇斯平原、反阿特拉斯山、索維拉一帶的疏林）：矮、扭的短樹幹常分成幾根、多刺的枝，深綠的小葉團成寬而密的圓頂
   meta: { region: ['nafrica'], type: 'tree' },
-  height: [5, 9],
-  trunk: { r: [0.2, 0.3], taper: 0.45, bend: 0.35, segs: 4, sides: [7, 4], lean: 0.18, col: [0.45, 0.40, 0.33], top: 0.38, crown: 0.7 },
+  height: [4.5, 8],
+  trunk: { r: [0.22, 0.32], taper: 0.55, bend: 0.4, segs: 3, sides: [7, 4], lean: 0.22, col: [0.47, 0.42, 0.35], top: 0.22, crown: 0.7 },
   levels: [
-    { n: [3, 5], from: [0.45, 1.0], angle: [35, 62], len: [0.6, 0.9], r: 0.62, bend: 0.4, up: 0.18, segs: 3, sides: [5, 3] },
-    { n: [3, 4], from: [0.3, 0.95], angle: [35, 60], len: [0.45, 0.65], r: 0.5, bend: 0.35, up: 0.05, segs: 3, sides: [3, 0] }
+    { n: [3, 4], from: [0.6, 1.0], angle: [30, 52], len: [0.7, 0.9], r: 0.72, bend: 0.45, up: 0.08, segs: 4, sides: [5, 3] },
+    { n: [3, 4], from: [0.35, 1.0], angle: [35, 60], len: [0.45, 0.6], r: 0.5, bend: 0.4, up: 0.12, segs: 3, sides: [3, 0] }
   ],
-  leaf: { kind: 'cluster', per: [2, 3], size: [0.8, 1.2], flat: 0.62, col: [0.23, 0.34, 0.17], vary: 0.1, along: 0.35 },
+  leaf: { kind: 'cluster', per: [2, 3], size: [0.9, 1.2], flat: 0.7, jit: 0.6, col: [0.27, 0.37, 0.21], vary: 0.12, along: 0.55 },   // 矮短的幹從低處分成幾根扭的粗枝，枝尖密密的小葉團成寬的圓頂
   place: { listed: true, spacing: 16, alt: [3, 15, 1300, 1600], slopeMax: 0.7, mats: { 11: 1, 12: 0.4 }, dens: 0.45, forest: 0, clump: 90, scale: [0.85, 1.2] },
   variants: 4
 };
@@ -482,7 +482,7 @@ TREE_SPECIES.acacia = {
     { n: [5, 7], from: [0.9, 1.0], angle: [70, 84], len: [0.8, 0.95], r: 0.6, bend: 0.08, up: 0.18, segs: 3, sides: [5, 3] },
     { n: [2, 3], from: [0.55, 1.0], angle: [60, 80], len: [0.35, 0.5], r: 0.5, bend: 0.08, up: 0.05, segs: 2, sides: [3, 0] }
   ],
-  leaf: { kind: 'cluster', per: [1, 1], size: [1.2, 1.6], flat: 0.16, jit: 0.25, col: [0.38, 0.43, 0.24], vary: 0.12, along: 0.05 },   // flat 0.28 ⇒ 薄薄一層的傘
+  leaf: { kind: 'cluster', per: [1, 2], size: [1.0, 1.35], flat: 0.14, jit: 0.15, col: [0.38, 0.43, 0.24], vary: 0.12, along: 0.2 },   // flat 0.14 ⇒ 薄薄一層的傘；jit 小 ⇒ 葉片貼著枝尖、不浮空
   place: { listed: true, spacing: 28, alt: [2, 10, 1400, 1800], slopeMax: 0.5, mats: { 11: 1, 10: 0.4 }, dens: 0.3, forest: -0.8, clump: 140, scale: [0.85, 1.2] },
   variants: 4
 };
@@ -495,7 +495,7 @@ TREE_SPECIES.tamarisk = {
     { n: [4, 7], from: [0.0, 0.35], angle: [18, 42], len: [0.8, 1.1], r: 0.7, bend: 0.35, up: 0.3, segs: 3, sides: [4, 3] },
     { n: [3, 5], from: [0.45, 1.0], angle: [25, 45], len: [0.4, 0.6], r: 0.5, bend: 0.3, up: 0.12, segs: 2, sides: [3, 0] }
   ],
-  leaf: { kind: 'cluster', per: [3, 4], size: [0.4, 0.6], flat: 1, stretch: 2.4, jit: 0.35, col: [0.42, 0.50, 0.40], vary: 0.12, along: 0.25, tint: [0.3, [0.80, 0.60, 0.66]] },   // stretch：羽毛似的細枝沿枝拉長；tint 三成的葉團換成花的淡粉紅
+  leaf: { kind: 'cluster', per: [3, 4], size: [0.38, 0.55], flat: 0.85, stretch: 1.5, jit: 0.3, col: [0.50, 0.57, 0.48], vary: 0.1, along: 0.6, tint: [0.2, [0.82, 0.66, 0.70]] },   // 一團團鬆的灰綠（羽毛似的細枝遠看是一片霧）；兩成帶淡粉紅的花   // stretch：羽毛似的細枝沿枝拉長；tint 三成的葉團換成花的淡粉紅
   place: { listed: true, spacing: 7, alt: [0, 1, 600, 900], slopeMax: 0.35, mats: { 10: 1, 11: 0.8 }, dens: 0.5, forest: -0.3, clump: 40, scale: [0.8, 1.2] },
   variants: 4
 };
@@ -508,7 +508,7 @@ TREE_SPECIES.oleander = {
     { n: [6, 9], from: [0.0, 0.2], angle: [10, 32], len: [0.85, 1.05], r: 0.8, bend: 0.22, up: 0.4, segs: 3, sides: [4, 3] },
     { n: [2, 3], from: [0.55, 1.0], angle: [20, 40], len: [0.3, 0.45], r: 0.5, bend: 0.2, up: 0.2, segs: 2, sides: [3, 0] }
   ],
-  leaf: { kind: 'cluster', per: [2, 3], size: [0.45, 0.7], flat: 0.85, jit: 0.5, col: [0.18, 0.33, 0.17], vary: 0.1, along: 0.3, tint: [0.32, [0.90, 0.47, 0.60]] },
+  leaf: { kind: 'cluster', per: [3, 4], size: [0.4, 0.6], flat: 0.9, jit: 0.4, col: [0.18, 0.33, 0.17], vary: 0.1, along: 0.7, tint: [0.26, [0.90, 0.47, 0.60]] },   // along 0.7：葉沿細枝往下長到半腰（不是頂上一顆球）
   place: { listed: true, spacing: 5, alt: [0.5, 2, 1000, 1300], slopeMax: 0.6, mats: { 11: 1, 10: 0.5, 12: 0.3 }, dens: 0.55, forest: -0.3, clump: 25, scale: [0.8, 1.2], shell: 0, view: 700 },
   variants: 4
 };
