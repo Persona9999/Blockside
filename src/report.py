@@ -12,7 +12,9 @@ from concurrent.futures import ThreadPoolExecutor
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 OUT_HTML = os.path.normpath(os.path.join(HERE, '..', 'index.html'))
-CHROME = [r'C:\Program Files\Google\Chrome\Application\chrome.exe', r'C:\Program Files (x86)\Google\Chrome\Application\chrome.exe']
+# Chrome 找的順序：環境變數 BS_CHROME ＞ PATH 上的 google-chrome／chromium／chrome-headless-shell（Linux）＞ macOS、Windows 的預設安裝位置
+CHROME = [c for c in [os.environ.get('BS_CHROME')] + [shutil.which(n) for n in ('google-chrome', 'google-chrome-stable', 'chromium', 'chromium-browser', 'chrome-headless-shell')] if c] + \
+    ['/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', r'C:\Program Files\Google\Chrome\Application\chrome.exe', r'C:\Program Files (x86)\Google\Chrome\Application\chrome.exe']
 ST = ['可開', '裝填', '沒人', '沒了', '等火藥', '泡水']                 # 跟 79_report.js RPT_ST 同一個順序
 ON = {'gun': '砲', 'model': '模型', 'armor': '裝甲', 'hull': '船殼', 'ff': '友艦', 'uw': '水下'}
 

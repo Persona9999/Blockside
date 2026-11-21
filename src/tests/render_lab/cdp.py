@@ -2,7 +2,9 @@
 # launch Chrome --headless=new with --remote-debugging-port, talk CDP over a raw websocket.
 import base64, json, os, shutil, socket, struct, subprocess, tempfile, time, urllib.parse, urllib.request
 
-CHROME = [r'C:\Program Files\Google\Chrome\Application\chrome.exe', r'C:\Program Files (x86)\Google\Chrome\Application\chrome.exe']
+# Chrome 找的順序：環境變數 BS_CHROME ＞ PATH 上的 google-chrome／chromium／chrome-headless-shell（Linux）＞ macOS、Windows 的預設安裝位置
+CHROME = [c for c in [os.environ.get('BS_CHROME')] + [shutil.which(n) for n in ('google-chrome', 'google-chrome-stable', 'chromium', 'chromium-browser', 'chrome-headless-shell')] if c] + \
+    ['/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', r'C:\Program Files\Google\Chrome\Application\chrome.exe', r'C:\Program Files (x86)\Google\Chrome\Application\chrome.exe']
 
 # GPU flag sets tried by `probe`; 'default' is what measure uses unless --gpu says otherwise.
 GPU_FLAGS = {

@@ -7,7 +7,9 @@ from concurrent.futures import ThreadPoolExecutor
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 OUT_HTML = os.path.normpath(os.path.join(HERE, '..', '..', 'index.html'))
-CHROME = [r'C:\Program Files\Google\Chrome\Application\chrome.exe', r'C:\Program Files (x86)\Google\Chrome\Application\chrome.exe']
+# Chrome 找的順序：環境變數 BS_CHROME ＞ PATH 上的 google-chrome／chromium／chrome-headless-shell（Linux）＞ macOS、Windows 的預設安裝位置
+CHROME = [c for c in [os.environ.get('BS_CHROME')] + [shutil.which(n) for n in ('google-chrome', 'google-chrome-stable', 'chromium', 'chromium-browser', 'chrome-headless-shell')] if c] + \
+    ['/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', r'C:\Program Files\Google\Chrome\Application\chrome.exe', r'C:\Program Files (x86)\Google\Chrome\Application\chrome.exe']
 OTHER = {'constitution': 'ember'}                                      # 另一艘（只是湊滿兩艘、會被移到遠處）；沒寫 ⇒ 憲法號
 COL = ['#c0392b', '#2471a3', '#1e8449', '#b9770e', '#7d3c98', '#555555', '#17a589', '#a04000']
 

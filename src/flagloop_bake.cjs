@@ -19,7 +19,7 @@ function header(f) {
   try { const m = fs.readFileSync(f, 'utf8').match(/fp: '([0-9a-f]+)'/); return m ? { fp: m[1] } : null; } catch (e) { return null; }
 }
 const old = fs.existsSync(out) ? header(out) : null;
-if (!force && old && old.fp === fp) { console.log('✓ 循環布的預烘 ' + path.basename(out) + ' 是最新的（指紋 ' + fp + '）'); process.exit(0); }
+if (!force && old && old.fp === fp) { console.log('✓ 循環布的預烘 ' + path.basename(out) + ' 是最新的（指紋 ' + fp + '）'); return; }  // return 不用 process.exit：見 js_globals.cjs
 const ctx = vm.createContext({ TOWN_FLAG_DRAG: DRAG, TOWN_FLAG_IT: IT });
 vm.runInContext(sec + '\nvar FLOOP = { job: null, stat: [], data: new Float32Array(FLOOP_W * FLOOP_ROWS * 3) };\nfunction floopUpload() {}\n', ctx);
 const t0 = Date.now();
