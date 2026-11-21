@@ -1,0 +1,72 @@
+{
+  "order": 560,
+  "ship": {
+    "id": "ganzengchuan",
+    "el": "ship-ganzengchuan",
+    "name": "福建趕繒船",
+    "vxk": "ganzengchuan.vxk",
+    "work": "kotoko-ganzengchuan-01m-assembly",
+    "author": "kotoko",
+    "idNext": {
+      "anchor": 3,
+      "binnacle": 2,
+      "boat": 2,
+      "capstan": 2,
+      "deck": 5,
+      "door": 3,
+      "galley": 2,
+      "ladders": 4,
+      "light": 3,
+      "magazine": 2,
+      "mast": 3,
+      "model": 7,
+      "oar": 5,
+      "part": 6,
+      "powder": 5,
+      "rooms": 3,
+      "rudder": 2,
+      "ship": 2,
+      "tiller": 2,
+      "yard": 21
+    },
+    "names": ["福建趕繒船", "臺灣趕繒船", "廈門水師趕繒船", "澎湖巡洋趕繒船"],
+    "cargoT": 45,
+    "cfg": {"base": 3.5, "agile": 2.4, "upwind": 2.1, "pump": 4},
+    "geo": {
+      "spar": [34, 56],
+      "marines": [45, 55],
+      "marineY": 10,
+      "qx": 5,
+      "center": 48,
+      "aim": 40,
+      "aimZ": [8, 226],
+      "deckAim": [34, 58],
+      "rigAim": [70, 226]
+    },
+    "crew": {
+      "officers": 2,
+      "helm": 1,
+      "top": 0,
+      "marines": 6,
+      "monkeys": 2,
+      "navigator": 1,
+      "hands": 12,
+      "carpenter": 1,
+      "sailmaker": 1,
+      "quartermaster": 1,
+      "surgeon": 0,
+      "marineGap": 14
+    }
+  },
+  "card": {
+    "tons": 188,
+    "len": 23.9,
+    "guns": 12,
+    "gunTypes": {"pierrier": 4, "long4": 8},
+    "volley": 18,
+    "drive": "oar",
+    "sails": 2,
+    "crew": 66
+  },
+  "lock": "c:d6888116673f2be6afc208153c3e991cd9ad4333"
+}
