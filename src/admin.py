@@ -2499,7 +2499,9 @@ FLEET_CARD = ('tons', 'len', 'guns', 'gunTypes', 'volley', 'drive', 'sails', 'cr
 
 def fleet_diff(R0, R1):
     """同一艘船兩版的匯入檢查（shipcheck_page 讀回來的）逐條比 ⇒ { more: [多的], less: [少的], changed: [(舊, 新)], card: [(欄, 舊, 新)] }。
-    一條的鍵 ＝ (等級, 哪一類, 哪個部件)；同一個鍵有好幾條 ⇒ 照順序配對，配不到的算多／少；配上了、現況或修法不一樣 ⇒ 內容變了。"""
+    一條的鍵 ＝ (等級, 哪一類, 哪個部件)；同一個鍵有好幾條 ⇒ 照順序配對，配不到的算多／少；配上了、現況或修法不一樣 ⇒ 內容變了。
+    帶人數的（n：開場就摔）配上了、兩邊人數不一樣 ⇒ 變多算多（附 was：舊的人數）、變少算少（附 now：新的人數）。
+    ⛔ 只算內容變了 ⇒ 改了遊戲規則、別艘同一個職位多摔幾個人，結束碼還是 0（FAR-87 審查）。"""
     def group(R):
         g = {}
         for i in R.get('issues') or []:
@@ -2508,7 +2510,14 @@ def fleet_diff(R0, R1):
     g0, g1, out = group(R0), group(R1), {'more': [], 'less': [], 'changed': [], 'card': []}
     for k in sorted(set(g0) | set(g1)):
         a, b = g0.get(k, []), g1.get(k, [])
-        out['changed'] += [(x, y) for x, y in zip(a, b) if (x['msg'], x['fix']) != (y['msg'], y['fix'])]
+        for x, y in zip(a, b):
+            if isinstance(x.get('n'), int) and isinstance(y.get('n'), int) and x['n'] != y['n']:
+                if y['n'] > x['n']:
+                    out['more'].append(dict(y, was=x['n']))
+                else:
+                    out['less'].append(dict(x, now=y['n']))
+            elif (x['msg'], x['fix']) != (y['msg'], y['fix']):
+                out['changed'].append((x, y))
         out['more'] += b[len(a):]
         out['less'] += a[len(b):]
     c0, c1 = R0.get('card') or {}, R1.get('card') or {}
@@ -2532,7 +2541,7 @@ def act_fleetcheck(base='HEAD', ids=None):
         raise Fail('\n'.join(chk + ['（工作區的成品跟來源對不上 ⇒ 先 build 再對照）']))
     ids = ids or [s['id'] for s in load()['ships']]
     tmp = tempfile.mkdtemp(prefix='fleetcheck_')
-    rows, det, worse, t0 = [], [], [], time.time()
+    rows, det, worse, look, t0 = [], [], [], [], time.time()
     os.makedirs(REPORTS, exist_ok=True)
     path = os.path.join(REPORTS, 'fleetcheck.md')
 
@@ -2571,18 +2580,21 @@ def act_fleetcheck(base='HEAD', ids=None):
                 print('  %s %s（%s）：多 %d、少 %d、內容變了 %d%s' % ('✗' if D['more'] else '✓', name, sid, len(D['more']), len(D['less']), len(D['changed']), '；選船卡 ' + card if card else ''), flush=True)
                 if D['more'] or D['less'] or D['changed'] or D['card']:
                     det += ['### %s（%s）' % (name, sid), ''] + fleet_lines(D)
+                if (D['changed'] or D['card']) and not D['more']:
+                    look.append(sid)
             write()
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
     log = ['全船對照（%s → 工作區）：%d 艘、%.0f 分鐘 ⇒ %s' % (base, len(ids), (time.time() - t0) / 60, path)]
     if worse:
         raise Fail('\n'.join(log + ['✗ %d 艘多出 ✗／⚠ 或讀不到結果：%s' % (len(worse), '、'.join(worse))]))
-    return log + ['✓ 沒有一艘多出 ✗ 或 ⚠']
+    return log + ['✓ 沒有一艘多出 ✗ 或 ⚠' + ('；內容變了、選船卡變了的 %d 艘要自己看是好是壞（報告「有變的船」）：%s' % (len(look), '、'.join(look)) if look else '')]   # ⛔ 只寫「✓ 沒有一艘多出」⇒ 數字變差（缺 N 人、站得到 59／71）容易看成沒事（FAR-87 審查）
 
 
 def fleet_lines(D):
-    """fleet_diff 的結果 ⇒ 報告的幾行：➕ 多的（附修法）、➖ 少的、✎ 內容變了、選船卡。"""
-    mk = lambda i: '%s %s · `%s`：%s' % ('✗' if i['lv'] == 'error' else '⚠', i['what'], i['where'], i['msg'])
+    """fleet_diff 的結果 ⇒ 報告的幾行：➕ 多的（附修法）、➖ 少的、✎ 內容變了、選船卡。同一條人數變了 ⇒ 多／少那一行前面寫「人數 舊 → 新」。"""
+    cnt = lambda i: '人數 %d → %d：' % (i['was'], i['n']) if 'was' in i else '人數 %d → %d：' % (i['n'], i['now']) if 'now' in i else ''
+    mk = lambda i: '%s %s · `%s`：%s%s' % ('✗' if i['lv'] == 'error' else '⚠', i['what'], i['where'], cnt(i), i['msg'])
     return (['- ➕ ' + mk(i) + '\n  - 修法：' + i['fix'] for i in D['more']] + ['- ➖ ' + mk(i) for i in D['less']] +
             ['- ✎ %s · `%s`：%s\n  - ⇒ %s%s' % (y['what'], y['where'], x['msg'], y['msg'], '\n  - 修法 ⇒ ' + y['fix'] if x['fix'] != y['fix'] else '') for x, y in D['changed']] +
             ['- 選船卡 %s：%s → %s' % c for c in D['card']] + [''])

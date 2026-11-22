@@ -3,8 +3,10 @@ python -I src/tests/fleetcheck_test.py
   1 the same result twice: nothing more, less or changed.
   2 a new error and a fixed warning: one more, one less; the report lines for them.
   3 the same issue with a new message or fix: changed, not more.
-  4 the same key twice (two falls grouped by role): pairs in order, the extra one is more.
+  4 the same key twice: pairs in order, the extra one is more.
   5 the ship-select card: only the fields that differ.
+  6 a fall issue with a head count (n): more people is more (exit 1), fewer is less, the same count with a new message is changed.
+  7 falls keyed by role and where they fell: swapping the order of the two lines pairs nothing wrongly.
 """
 import importlib.util, sys
 from pathlib import Path
@@ -52,7 +54,25 @@ def main():
     D = diff(A, G)
     assert D['card'] == [('gunTypes', {'pierrier': 4}, {'pierrier': 3, '4l': 1}), ('crew', 67, 68)] and not D['more'], D
     assert diff({'issues': []}, {'issues': []})['card'] == []           # an older product without a card
-    print('fleetcheck_test: 5 cases ok')
+
+    def fall(where, n, msg=None):                                       # js/75_shipcheck.js: one line per role and where they fell, n = head count
+        return dict(issue('error', '開場就摔', where, msg=msg or '%d 人' % n), n=n)
+    H = {'issues': [fall('砲手（摔到下一層）', 2)], 'card': card}
+    D = diff(H, {'issues': [fall('砲手（摔到下一層）', 3)], 'card': card})
+    assert [(i['was'], i['n']) for i in D['more']] == [(2, 3)] and not D['less'] and not D['changed'], D
+    L = admin.fleet_lines(D)
+    assert L[0].startswith('- ➕ ✗ 開場就摔 · `砲手（摔到下一層）`：人數 2 → 3：3 人'), L
+    D = diff({'issues': [fall('砲手（摔到下一層）', 3)], 'card': card}, H)
+    assert [(i['n'], i['now']) for i in D['less']] == [(3, 2)] and not D['more'] and not D['changed'], D
+    assert admin.fleet_lines(D)[0].startswith('- ➖ ✗ 開場就摔 · `砲手（摔到下一層）`：人數 3 → 2：'), admin.fleet_lines(D)
+    D = diff(H, {'issues': [fall('砲手（摔到下一層）', 2, msg='2 人（別的格）')], 'card': card})
+    assert not D['more'] and not D['less'] and len(D['changed']) == 1, D
+
+    I = {'issues': [fall('砲手（落水）', 1), fall('砲手（摔到下一層）', 2)], 'card': card}
+    J = {'issues': [fall('砲手（摔到下一層）', 5), fall('砲手（落水）', 1)], 'card': card}
+    D = diff(I, J)
+    assert [(i['where'], i['was'], i['n']) for i in D['more']] == [('砲手（摔到下一層）', 2, 5)] and not D['less'] and not D['changed'], D
+    print('fleetcheck_test: 7 cases ok')
 
 
 if __name__ == '__main__':

@@ -150,8 +150,9 @@ function shipCheck(id) {
     sh.fallLog.forEach(function (f) { var k = (ROLE_NAME[f.role] || '船員') + '|' + (f.to ? '摔到下一層' : '落水'); (FL[k] = FL[k] || []).push(f); nFall++; });
     Object.keys(FL).forEach(function (k) {
       var p = k.split('|'), L = FL[k], ex = L.slice(0, 3).map(function (f) { return '(' + f.from.map(Math.floor).join(', ') + ')' + (f.to ? ' → z ' + Math.floor(f.to[2]) : ''); }).join('、');
-      add('error', '開場就摔', p[0], L.length + ' 人開場 ' + SC_SECS + ' 秒內就' + p[1] + '（站的格 ' + ex + (L.length > 3 ? ' 等' : '') + '）',
+      add('error', '開場就摔', p[0] + '（' + p[1] + '）', L.length + ' 人開場 ' + SC_SECS + ' 秒內就' + p[1] + '（站的格 ' + ex + (L.length > 3 ? ' 等' : '') + '）',
         '站位腳下 3×3（下一格）要有實心（32_hull.js svRest）：站位是遊戲擺的（40_crew.js、42_hands.js）⇒ 遊戲那側；甲板真的缺格、有洞 ⇒ 作品那側補');
+      R.issues[R.issues.length - 1].n = L.length;                     // 人數（admin.py fleet_diff：同一條人數變多 ⇒ 算多；部件帶摔到哪 ⇒ 兩條不會照順序配錯）
     });
     R.info.falls = nFall ? Object.keys(FL).map(function (k) { return k.replace('|', ' ') + ' ' + FL[k].length + ' 人'; }).join('、') : '沒有';
     // ── 穿模（FAR-87）：開場那一刻量的（clipCheck）；遊戲擺的 ≥ CLIP_GAME 格、作品的 ≥ CLIP_WORK 格才報 ──
