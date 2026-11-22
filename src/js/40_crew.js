@@ -374,6 +374,7 @@ function killCrew(sh, c, cause) {
 /** 掉下去：腳下那一格沒了（甲板被打穿、桅頂跟著桅倒）⇒ 換成世界座標的落體，落水算失蹤（亡）。 */
 function crewFall(sh, c, v) {
   if (c.st >= 2 && c.st !== 2) return;
+  if (sh.fallLog && c.st < 2) sh.fallLog.push({ role: c.role, from: c.pos.slice(), to: null });   // 匯入檢查（75_shipcheck.js「開場就摔」）：只記、不改摔法
   var w = M4.pt(sh.M, c.pos[0], c.pos[1], c.pos[2]);
   if (c.st < 2 && DROWN_T > 0) { if (c.st === 1) { sh.wounded--; c.hurtSwim = true; } c.fellAlive = true; }   // 落水求生（43_swim.js）：先不算陣亡，落到水裡變成在游
   else if (c.st < 2) { if (c.st === 1) sh.wounded--; sh.dead++; sh.kills++; sh.causes['落水'] = (sh.causes['落水'] || 0) + 1; newsCrew(sh, c, true, '落水'); }
@@ -400,6 +401,7 @@ var FALL_H0 = 2, FALL_K = 30;                       // 摔傷：高度 h 公尺 
 function landIn(sh, c, lv, p, h) {
   var NV = sh.nav, r = c.role, home0 = c.home;
   tlgEv(sh, c, 'fallIn', { from: c.pos.map(function (v) { return +v.toFixed(1); }), to: p.map(function (v) { return +v.toFixed(1); }), h: +h.toFixed(1) });   // 測試模式（83_testlog.js）
+  if (sh.fallLog && c.st < 2) sh.fallLog.push({ role: r, from: c.pos.slice(), to: p.slice() });   // 匯入檢查（75_shipcheck.js「開場就摔」）：只記、不改摔法
   c.pos = p.slice(); c.home = p.slice(); c.walk = null; c.moving = false; sh.fellIn = (sh.fellIn || 0) + 1;
   if (h > FALL_H0) damageCrew(sh, c, (h - FALL_H0) * FALL_K, '摔落');
   if (c.st !== 0) return;                                                // 摔死、摔傷：倒在那一層

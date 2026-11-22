@@ -135,7 +135,7 @@ function pumpNavFill(sh, crew) {
   for (var got = 0; got < n; got++) {
     var pk = pick(); if (!pk) break;
     var bb = boxAt(pk[0]), at = bb.slice(0, 3), nm = (pk[2].name || pk[2].key) + f.name + '-' + (list.length + 1);
-    var m = { T: T, k: sh.models.length, name: nm, path: 'nav/' + nm, kind: 'furn', item: 'pump', hold: 0, room: null, hp: f.hp, hpMax: f.hp, mesh: furnMesh(T, 'pump', 'x'), origin: at, bb: bb, pts: {}, meta: { kind: 'furniture', item: 'pump' },
+    var m = { T: T, k: sh.models.length, name: nm, path: 'nav/' + nm, kind: 'furn', item: 'pump', by: 'pumpNavFill', hold: 0, room: null, hp: f.hp, hpMax: f.hp, mesh: furnMesh(T, 'pump', 'x'), origin: at, bb: bb, pts: {}, meta: { kind: 'furniture', item: 'pump' },
       c: [(bb[0] + bb[3]) / 2, (bb[1] + bb[4]) / 2, (bb[2] + bb[5]) / 2], foot: VK.pack(Math.floor(bb[0] + 1), Math.floor(bb[1] + 1), at[2] - 1), alive: true };
     sh.models.push(m); F.push(m);
     for (var bx = Math.max(0, Math.floor((bb[0] - 12) / 16)); bx <= Math.floor((bb[3] + 12) / 16); bx++) (sh.mIdx[bx] = sh.mIdx[bx] || []).push(m);   // 命中分桶（10_ship.js modelIndex 同一套）
@@ -168,14 +168,16 @@ function pumpModels(sh) {
   var qd = PUMP_Q ? decks.filter(function (D) { return D.zr[0] >= T.zw; })[0] || decks[decks.length - 1] : null;   // ?pumps= 擺在哪一層：水線以上最低那層
   decks.forEach(function (D) {
     var pl = deckPlan(T.id, deckId(D)), G = deckGrid(T, D), its = pl.items ? roomCheck(T, { grid: G }, 'deck', pl.items).items : [];
+    var mine = its.length;                                                 // 前 mine 件是擺法裡的（船隻配置頁）；後面是 deckItems 自動補的（pumpFill、benchFill）、?pumps= 的 ⇒ m.by（匯入檢查照它寫修法）
     if (D === qd || D === bd || deckId(D) === pumpAt(T).id) its = deckItems(T, D, pl).items.slice();      // 木工台那一層、人力抽水機自動擺的那一層（pumpAt）：照 deckItems（含自動補的木工台、抽水機；自動的取用點不是抽水機、下面照 role 篩掉）
+    var nq = its.length;
     if (D === qd) { pumpAuto(T, D, its, 'pump', PUMP_Q[0] || 0, true); if (pumpSteamShip(T)) pumpAuto(T, D, its, 'spump', PUMP_Q[1] || 0, true); }
-    its.forEach(function (q) {
+    its.forEach(function (q, k) {
       var f = FURN[q.it]; if (!f || (f.role !== 'pump' && f.role !== 'bench' && f.role !== 'loft')) return;
       var lx = q.r ? f.size[1] : f.size[0], ly = q.r ? f.size[0] : f.size[1], t = itemTiles(q.it, q.r);
       var at = [G.x0 + q.x * ROOM_TILE + Math.floor((t[0] * ROOM_TILE - lx) / 2), G.y0 + q.y * ROOM_TILE + Math.floor((t[1] * ROOM_TILE - ly) / 2), G.zt[q.x + q.y * G.nx]];
       var bb = [at[0], at[1], at[2], at[0] + lx, at[1] + ly, at[2] + f.size[2] + 1], nm = D.name + f.name + '-' + (list.length + 1);
-      var m = { T: T, k: sh.models.length, name: nm, path: deckId(D) + '/' + nm, kind: 'furn', item: q.it, hold: 0, room: null, hp: f.hp, hpMax: f.hp, mesh: furnMesh(T, q.it, q.r ? 'y' : 'x'), origin: at, bb: bb, pts: {}, meta: { kind: 'furniture', item: q.it },
+      var m = { T: T, k: sh.models.length, name: nm, path: deckId(D) + '/' + nm, kind: 'furn', item: q.it, by: k < mine ? 'plan' : k >= nq ? 'pumpsQ' : f.role === 'pump' ? 'pumpFill' : 'benchFill', hold: 0, room: null, hp: f.hp, hpMax: f.hp, mesh: furnMesh(T, q.it, q.r ? 'y' : 'x'), origin: at, bb: bb, pts: {}, meta: { kind: 'furniture', item: q.it },
         c: [(bb[0] + bb[3]) / 2, (bb[1] + bb[4]) / 2, (bb[2] + bb[5]) / 2], foot: VK.pack(Math.floor(bb[0] + 1), Math.floor(bb[1] + 1), at[2] - 1), alive: true };
       sh.models.push(m);
       if (f.role === 'bench') { bench.push(m); return; }

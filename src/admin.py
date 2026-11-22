@@ -1933,7 +1933,8 @@ def act_metaspec(doc_path=None):
         for f, ok, what in (('hpK', lambda x: isnum(x) and 0 < x <= 20, '0～20 的數字'), ('block', lambda x: x in (True, False, 'station'), 'true／false／"station"'),
                             ('clear', lambda x: isinstance(x, bool), 'true／false'), ('safe', lambda x: isinstance(x, bool), 'true／false'),
                             ('noFall', lambda x: isinstance(x, bool), 'true／false'), ('anim', lambda x: isinstance(x, bool), 'true／false'),
-                            ('deco', lambda x: isinstance(x, bool), 'true／false'), ('blow', lambda x: x in ('fly', 'fall'), 'fly／fall')):   # 遊戲屬性（TASK-0672 ②；js/00_config.js kindProp）；deco ＝ kind 本身就是裝飾（TASK-0719 砲門蓋板，js/05_hull.js isDeco）
+                            ('deco', lambda x: isinstance(x, bool), 'true／false'), ('blow', lambda x: x in ('fly', 'fall'), 'fly／fall'),
+                            ('clip', lambda x: isinstance(x, bool), 'true／false')):   # 遊戲屬性（TASK-0672 ②；js/00_config.js kindProp）；deco ＝ kind 本身就是裝飾（TASK-0719 砲門蓋板，js/05_hull.js isDeco）
             if f in v and not ok(v[f]):
                 E.append('規格表 %s：%s 要是 %s' % (k, f, what))
         for f, sp in (v.get('refs') or {}).items():          # 指名別的部件（TASK-0715）：鍵要在 keys、to 指的 kind 要在規格表（<kind># ＝ 那一類關聯裡的一座）
@@ -1999,12 +2000,12 @@ def act_metaspec(doc_path=None):
     return log + ['✓ meta 規格表跟船、造船規格一致']
 
 
-def shipcheck_page(chrome, sid, extra=''):
-    """無頭 Chrome 跑成品的 ?shipcheck=<船>（extra：多帶的參數，例 '&ladtest=…'），回頁面寫出來的結果（JSON）；沒跑完 ⇒ None。"""
+def shipcheck_page(chrome, sid, extra='', prod=None):
+    """無頭 Chrome 跑成品的 ?shipcheck=<船>（extra：多帶的參數，例 '&ladtest=…'；prod：哪一份成品的 index.html，不給 ⇒ 根目錄那一份），回頁面寫出來的結果（JSON）；沒跑完 ⇒ None。"""
     import html as _html, tempfile
     prof = tempfile.mkdtemp(prefix='shipcheck_')
     try:
-        url = 'file:///' + OUT.replace('\\', '/') + '?shipcheck=' + sid + extra   # 風在頁面裡固定（js/75_shipcheck.js WIND_FIX）⇒ 誰開、從哪裡開都一樣
+        url = 'file:///' + (prod or OUT).replace('\\', '/') + '?shipcheck=' + sid + extra   # 風在頁面裡固定（js/75_shipcheck.js WIND_FIX）⇒ 誰開、從哪裡開都一樣
         r = subprocess.run([chrome, '--headless=new', '--no-first-run', '--user-data-dir=' + prof, '--use-angle=swiftshader', '--enable-unsafe-swiftshader',
                             '--virtual-time-budget=300000', '--dump-dom', url], capture_output=True, timeout=900)
         ms = re.findall(r'<pre id="shipcheck">(.*?)</pre>', r.stdout.decode('utf-8', 'replace'), re.S)
@@ -2433,6 +2434,8 @@ def act_shipcheck(ids=None):
               '樓梯自檢（TASK-0838；每座梯子的梯口有沒有洞、兩端站不站得住、走不走得出去；每座的座標與修法見 `reports/ladcheck_%s.md`）：' % sid + (I.get('ladcheck') or '—'), '',
               '甲板連通（TASK-1028；每層甲板的每一塊、艙底照梯子接不接得到）：' + (I.get('deckcheck') or '—'), '',
               '超載極限（再多載幾噸、吃水再深幾 m 水會從原本就有的開口流進艙裡；門、砲門、槳門照遊戲的規矩算關著；js/75_leakcheck.js）：' + (I.get('leak') or '—（堡壘、砲台不量）'), '',
+              '穿模（FAR-87；開場那一刻每個模型、裝飾、遊戲擺的家具與取用點的桶有幾格在船殼的實心格裡；舵、舵柄、槳、砲門蓋板不量；js/75_shipcheck.js clipCheck）：' + (I.get('clip') or '—'), '',
+              '開場就摔（FAR-87；開場 %s 秒內摔到下一層或落水的船員）：' % R['t'] + (I.get('falls') or '—'), '',
               '**✗ %d　⚠ %d**' % (ne, nw), '']
         if nack:
             md += ['· 已確認不修 %d 條（src/config/warn_ack.json；`python -I src/admin.py warnack --list --check shipcheck` 看理由）' % nack, '']
@@ -2459,6 +2462,130 @@ def act_shipcheck(ids=None):
     if cards:
         log.append('  ' + cards_write(cards))
     return ['匯入檢查：'] + log
+
+
+SCTEST = [   # 匯入檢查的反向對照（FAR-87；js/75_shipcheck.js scTest）：(船, ?sctest= 的做法, 要報出的那一類)
+    ('nawras', 'clip', '穿模'),             # 一件沒穿模的遊戲擺的家具往下搬 3 格
+    ('constitution', 'clip', '穿模'),
+    ('nawras', 'fall', '開場就摔'),         # 一個站著不動的人搬到半空
+    ('constitution', 'fall', '開場就摔'),
+]
+
+
+def act_sctest():
+    """匯入檢查的反向對照：每一組先量原樣，再照 ?sctest=<做法> 在記憶體裡弄壞一處重量 ⇒ 那一類要多出一條（或同一條的現況變了：開場就摔照職位併成一條）。沒有 ⇒ Fail。"""
+    chrome = next((c for c in CHROMES if os.path.exists(c)), None)
+    if not chrome or not os.path.exists(OUT):
+        raise Fail('匯入檢查的反向對照沒跑：找不到 Chrome 或還沒有成品')
+    log, bad, base = ['匯入檢查的反向對照（js/75_shipcheck.js scTest；只改記憶體）：'], 0, {}
+    for sid, how, want in SCTEST:
+        if sid not in base:
+            base[sid] = shipcheck_page(chrome, sid)
+        R = shipcheck_page(chrome, sid, '&sctest=' + how)
+        n0, n1 = ([i for i in (x or {}).get('issues') or [] if i['what'] == want] for x in (base[sid], R))
+        old = {(i['where'], i['msg']) for i in n0}
+        new = [i for i in n1 if (i['where'], i['msg']) not in old]
+        ok = base[sid] is not None and R is not None and bool(new)
+        bad += not ok
+        log.append('  %s %s %s：%s ⇒ 「%s」%d → %d 條、新的或變了的 %d 條' % ('✓' if ok else '✗', sid, how, (R or {}).get('sctest', '沒跑'), want, len(n0), len(n1), len(new)))
+        log += ['      %s %s：%s' % ('✗' if i['lv'] == 'error' else '⚠', i['where'], i['msg']) for i in new]
+    if bad:
+        raise Fail('\n'.join(log) + '\n%d 組沒報出來' % bad)
+    return log + ['✓ %d 組都報出來了' % len(SCTEST)]
+
+
+FLEET_CARD = ('tons', 'len', 'guns', 'gunTypes', 'volley', 'drive', 'sails', 'crew')
+
+
+def fleet_diff(R0, R1):
+    """同一艘船兩版的匯入檢查（shipcheck_page 讀回來的）逐條比 ⇒ { more: [多的], less: [少的], changed: [(舊, 新)], card: [(欄, 舊, 新)] }。
+    一條的鍵 ＝ (等級, 哪一類, 哪個部件)；同一個鍵有好幾條 ⇒ 照順序配對，配不到的算多／少；配上了、現況或修法不一樣 ⇒ 內容變了。"""
+    def group(R):
+        g = {}
+        for i in R.get('issues') or []:
+            g.setdefault((i['lv'], i['what'], i['where']), []).append(i)
+        return g
+    g0, g1, out = group(R0), group(R1), {'more': [], 'less': [], 'changed': [], 'card': []}
+    for k in sorted(set(g0) | set(g1)):
+        a, b = g0.get(k, []), g1.get(k, [])
+        out['changed'] += [(x, y) for x, y in zip(a, b) if (x['msg'], x['fix']) != (y['msg'], y['fix'])]
+        out['more'] += b[len(a):]
+        out['less'] += a[len(b):]
+    c0, c1 = R0.get('card') or {}, R1.get('card') or {}
+    out['card'] = [(f, c0.get(f), c1.get(f)) for f in FLEET_CARD if c0.get(f) != c1.get(f)]
+    return out
+
+
+def act_fleetcheck(base='HEAD', ids=None):
+    """全船前後對照（FAR-87；Tim 2026-11-21「確保抽水機掉下去以及類似問題 匯入自檢時就能發現」）：改遊戲規則（船員、家具、取用點、甲板高度⋯）時，
+    掉下去、站不下的是別艘船，只跑正在匯入的那一艘看不到 ⇒ 每艘船在 base 那一版的成品（snapshot）、工作區的成品各跑一次匯入檢查（一次一個 Chrome），逐條比（fleet_diff）。
+    報告 reports/fleetcheck.md（不入版控）：每艘多的、少的、內容變了的 ✗／⚠，選船卡有變的欄；每跑完一艘就重寫一次（跑到一半被停掉，前面的照樣留著）。
+    有一艘多出 ✗ 或 ⚠、或讀不到結果 ⇒ Fail（exit 1）。
+    只讀：不寫卡片、不動設定、不寫每艘的匯入檢查報告。工作區的成品要跟來源對得上（先 build）。base 沒有的船（新匯入的）只跑工作區那一份、不比。
+    base 的成品只有入口與 ships/（snapshot）；icons/、maps/、manifest 照工作區的（匯入檢查用不到）。這台主機一艘約 1–2 分鐘（大船 5–7 分鐘）、兩版各跑一次。"""
+    import tempfile, time
+    chrome = next((c for c in CHROMES if os.path.exists(c)), None)
+    if not chrome:
+        raise Fail('全船對照沒跑：找不到 Chrome（' + '、'.join(CHROMES) + '；別的路徑 ⇒ 環境變數 BS_CHROME）')
+    good, chk = src_check_one(work_read, '工作區')
+    if not good:
+        raise Fail('\n'.join(chk + ['（工作區的成品跟來源對不上 ⇒ 先 build 再對照）']))
+    ids = ids or [s['id'] for s in load()['ships']]
+    tmp = tempfile.mkdtemp(prefix='fleetcheck_')
+    rows, det, worse, t0 = [], [], [], time.time()
+    os.makedirs(REPORTS, exist_ok=True)
+    path = os.path.join(REPORTS, 'fleetcheck.md')
+
+    def write():
+        md = ['# 全船前後對照：%s → 工作區' % base, '',
+              '> `python -I admin.py fleetcheck --base %s` 產生（FAR-87）：每艘船兩版各跑一次匯入檢查（`js/75_shipcheck.js`），逐條比（等級、哪一類、哪個部件）。' % base,
+              '> 多 ＝ 工作區多出的 ✗／⚠（有一艘多 ⇒ exit 1）；少 ＝ 修掉的；內容變了 ＝ 同一條、現況或修法不一樣（數字變了要自己看是好是壞）。工作區的成品：%s。' % chk[-1].strip(),
+              '> 跑了 %d／%d 艘%s。' % (len(rows), len(ids), '' if len(rows) == len(ids) else '（還沒跑完，或中途停了）'), '',
+              '| 船 | id | ✗ 舊 → 新 | ⚠ 舊 → 新 | 多 | 少 | 內容變了 | 選船卡 |', '|---|---|---|---|---|---|---|---|'] + rows + ['', '## 有變的船', ''] + (det or ['（沒有）', ''])
+        open(path, 'w', encoding='utf-8').write('\n'.join(md))
+    try:
+        act_snapshot(base, tmp)
+        for f in ('icons', 'maps'):
+            if os.path.isdir(os.path.join(ROOT, f)):
+                shutil.copytree(os.path.join(ROOT, f), os.path.join(tmp, f))
+        if os.path.exists(os.path.join(ROOT, 'manifest.webmanifest')):
+            shutil.copy(os.path.join(ROOT, 'manifest.webmanifest'), tmp)
+        for sid in ids:
+            R0, R1 = shipcheck_page(chrome, sid, prod=os.path.join(tmp, 'index.html')), shipcheck_page(chrome, sid)
+            cnt = lambda R, lv: sum(1 for i in R['issues'] if i['lv'] == lv)
+            if R1 is None or R0 is None:
+                worse.append(sid)
+                rows.append('| — | `%s` | — | — | — | — | — | 讀不到結果（%s） |' % (sid, '、'.join(n for n, R in (('base', R0), ('工作區', R1)) if R is None)))
+                print('  ✗ %s：讀不到結果' % sid, flush=True)
+            elif any(i['what'] == '船型' for i in R0['issues']):      # base 那一版沒有這艘（新匯入的）
+                name = R1['info'].get('name', sid)
+                rows.append('| %s | `%s` | 新船 → %d | 新船 → %d | — | — | — | — |' % (name, sid, cnt(R1, 'error'), cnt(R1, 'warn')))
+                print('  · %s（%s）：base 沒有這艘，只跑工作區（✗ %d ⚠ %d）' % (name, sid, cnt(R1, 'error'), cnt(R1, 'warn')), flush=True)
+            else:
+                name, D = R1['info'].get('name', sid), fleet_diff(R0, R1)
+                if D['more']:
+                    worse.append(sid)
+                card = '、'.join('%s %s → %s' % c for c in D['card'])
+                rows.append('| %s | `%s` | %d → %d | %d → %d | %d | %d | %d | %s |' % (name, sid, cnt(R0, 'error'), cnt(R1, 'error'), cnt(R0, 'warn'), cnt(R1, 'warn'),
+                                                                         len(D['more']), len(D['less']), len(D['changed']), card or '—'))
+                print('  %s %s（%s）：多 %d、少 %d、內容變了 %d%s' % ('✗' if D['more'] else '✓', name, sid, len(D['more']), len(D['less']), len(D['changed']), '；選船卡 ' + card if card else ''), flush=True)
+                if D['more'] or D['less'] or D['changed'] or D['card']:
+                    det += ['### %s（%s）' % (name, sid), ''] + fleet_lines(D)
+            write()
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+    log = ['全船對照（%s → 工作區）：%d 艘、%.0f 分鐘 ⇒ %s' % (base, len(ids), (time.time() - t0) / 60, path)]
+    if worse:
+        raise Fail('\n'.join(log + ['✗ %d 艘多出 ✗／⚠ 或讀不到結果：%s' % (len(worse), '、'.join(worse))]))
+    return log + ['✓ 沒有一艘多出 ✗ 或 ⚠']
+
+
+def fleet_lines(D):
+    """fleet_diff 的結果 ⇒ 報告的幾行：➕ 多的（附修法）、➖ 少的、✎ 內容變了、選船卡。"""
+    mk = lambda i: '%s %s · `%s`：%s' % ('✗' if i['lv'] == 'error' else '⚠', i['what'], i['where'], i['msg'])
+    return (['- ➕ ' + mk(i) + '\n  - 修法：' + i['fix'] for i in D['more']] + ['- ➖ ' + mk(i) for i in D['less']] +
+            ['- ✎ %s · `%s`：%s\n  - ⇒ %s%s' % (y['what'], y['where'], x['msg'], y['msg'], '\n  - 修法 ⇒ ' + y['fix'] if x['fix'] != y['fix'] else '') for x, y in D['changed']] +
+            ['- 選船卡 %s：%s → %s' % c for c in D['card']] + [''])
 
 
 def ladcheck_write(sid, R):
@@ -3023,7 +3150,8 @@ def src_check_one(read, what):
 
 
 def act_snapshot(rev, to):
-    """某一版的成品 ⇒ 資料夾：index.html ＋ 它清單上的船檔（拆檔之前的版本只有 index.html）。"""
+    """某一版的成品 ⇒ 資料夾：index.html ＋ 它清單上的船檔 ＋ ships/ 裡其他的檔（預烘的 anchor.js、showlod.js、flagloop.js；拆檔之前的版本只有 index.html）。
+    ⛔ 只拿清單上的船檔（FAR-87 以前）⇒ 那一份成品沒有預烘表：匯入檢查每艘多報一條「預烘」⚠，fleetcheck 的舊版每艘都多一條。"""
     r = GitRead(rev + ':')
     try:
         prod = r('index.html')
@@ -3036,6 +3164,9 @@ def act_snapshot(rev, to):
             if b is None:
                 raise Fail('%s 的清單上有 %s，那一版沒有這個檔' % (rev, ship_file(el)))
             got[ship_file(el)] = b
+        for f in r.ls('ships') if idx else []:
+            if 'ships/' + f not in got:
+                got['ships/' + f] = r('ships/' + f)
     finally:
         r.close()
     os.makedirs(to, exist_ok=True)
@@ -3043,7 +3174,7 @@ def act_snapshot(rev, to):
     for rel, b in got.items():
         os.makedirs(os.path.join(to, 'ships'), exist_ok=True)
         open(os.path.join(to, *rel.split('/')), 'wb').write(b)
-    return ['✓ %s 的成品 ⇒ %s（index.html%s）' % (rev, to, '＋船檔 %d 個' % len(got) if got else '，一個檔')]
+    return ['✓ %s 的成品 ⇒ %s（index.html%s）' % (rev, to, '＋ships/ %d 個檔' % len(got) if got else '，一個檔')]
 
 
 def act_srccheck(staged=False, rev=None, hook=None):
@@ -5622,6 +5753,10 @@ def main():
     s.add_argument('--doc', help='造船規格的檔案（不給 ⇒ senate cmd doc 讀）')
     s = sp.add_parser('shipcheck', help='匯入檢查：缺 meta、砲班站不滿、開場就掉的 ⇒ reports/shipcheck_<船>.md（import／reimport／metasync 之後會自動跑）')
     s.add_argument('--id', action='append', help='哪一艘（可以給好幾次）；不給 ＝ 每一艘')
+    s.add_argument('--selftest', action='store_true', help='反向對照：在記憶體裡把一件家具往下搬進甲板、一個人搬到半空，「穿模」「開場就摔」都要多報一條（admin.py SCTEST）')
+    s = sp.add_parser('fleetcheck', help='全船前後對照（FAR-87）：每艘船在 --base 那一版的成品和工作區的成品各跑一次匯入檢查、逐條比 ⇒ reports/fleetcheck.md；有一艘多出 ✗／⚠ ⇒ exit 1。改船員、家具、取用點、甲板高度這類遊戲規則時，交審查前跑一次')
+    s.add_argument('--base', default='HEAD', help='跟哪一版比（commit、分支名；預設 HEAD ＝ 還沒提交的改動之前）')
+    s.add_argument('--id', action='append', help='哪一艘（可以給好幾次）；不給 ＝ 每一艘')
     s = sp.add_parser('ladcheck', help='樓梯自檢（TASK-0838）：每座梯子的梯口有沒有洞、兩端站不站得住、走不走得出去 ⇒ reports/ladcheck_<船>.md（不給 --id ⇒ 每一艘，另寫 reports/ladcheck.md）；shipcheck 也會順手寫')
     s.add_argument('--id', action='append', help='哪一艘（可以給好幾次）；不給 ＝ 每一艘')
     s.add_argument('--selftest', action='store_true', help='反向對照：在記憶體裡把正常的梯子挪 2 格、出口前立柱子、head 四周圍牆、拿掉靠 head 那一頭幾柱，每一種都要報出來（admin.py LADTEST）')
@@ -5662,7 +5797,7 @@ def main():
     s.add_argument('--no-build', action='store_true', help='只搬，不跑 build --code')
     sp.add_parser('remerge', help='合併後重建產物（FAR-85）：git merge 有衝突時，來源解完之後跑；入口、船檔、anchor.js、showlod.js、選船縮圖照兩邊建好的產物組回來（不用 _cache、不用 Chrome）')
     sp.add_parser('reseg', help='船檔照現在的切法重切（不用 _cache：從船檔自己解回原文重切、解回來逐位元組相同才寫、換入口清單上的雜湊）—— 只有 ship_segments 的切法改了才要')
-    s = sp.add_parser('snapshot', help='某一版的成品（入口＋它清單上的船檔）取出到一個資料夾：拆檔之後 git show <版本>:index.html 只拿得到入口（對拍的對照組用這個）')
+    s = sp.add_parser('snapshot', help='某一版的成品（入口＋它清單上的船檔＋ships/ 的預烘檔）取出到一個資料夾：拆檔之後 git show <版本>:index.html 只拿得到入口（對拍的對照組用這個）')
     s.add_argument('rev', help='commit、分支名')
     s.add_argument('to', help='資料夾（會寫 index.html、ships/）')
     sp.add_parser('verify', help='成品跟 _cache 原檔比（壓縮版照遊戲的讀法還原）')
@@ -5720,12 +5855,14 @@ def main():
         elif o.op == 'metaspec':
             log = act_metaspec(o.doc)
         elif o.op == 'shipcheck':
-            log = act_shipcheck(o.id)
+            log = act_sctest() if o.selftest else act_shipcheck(o.id)
         elif o.op == 'warnack':
             try:
                 log = _warn_ack().cli(o)
             except ValueError as e:
                 raise Fail(str(e))
+        elif o.op == 'fleetcheck':
+            log = act_fleetcheck(o.base, o.id)
         elif o.op == 'showlod':
             log = act_showlod(o.id, o.force, o.check)
         elif o.op == 'ancbake':

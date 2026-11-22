@@ -187,6 +187,12 @@ python -I admin.py shipcheck --id phoenix    # 不給 --id ＝ 每一艘
 #   確認表 config/warn_ack.json（進 repo）、這一次的 ⚠ ../reports/warn_last.json；規則與格式同 Blocksail docs/WORLD_TOOLS.md §6.1（warn_ack.py 跟 Blocksail world/warn_ack.js 同一套算法）
 python -I admin.py warnack --last --check shipcheck                      # 上一次的 ⚠ 與 key
 python -I admin.py warnack --add <key> --by <誰> --note "<為什麼不用修>"   # 內容照上一次那一份；--list 看確認表、--clear <key> 拿掉
+python -I admin.py shipcheck --selftest     # 反向對照（FAR-87）：在記憶體裡把一件家具往下搬進甲板、一個人搬到半空 ⇒「穿模」「開場就摔」都要多報一條（exit 非 0 ＝ 沒報出來）
+# 全船前後對照（FAR-87）：改船員、家具、取用點、甲板高度這類遊戲規則時，掉下去、站不下的常常是別艘船（只跑正在匯入的那一艘看不到）⇒ 交審查前跑一次。
+#   每艘船在 --base 那一版（預設 HEAD ＝ 還沒提交的改動之前）的成品、工作區的成品各跑一次匯入檢查、逐條比 ⇒ ../reports/fleetcheck.md；有一艘多出 ✗／⚠ ⇒ exit 1。
+#   工作區的成品要先 build。只讀。一艘約 1–2 分鐘（大船 5–7 分鐘）× 兩版 ⇒ 全船幾個小時，先用 --id 跑改到的那幾艘。Chrome 不在預設路徑 ⇒ 環境變數 BS_CHROME
+#   逐條比的規則（admin.py fleet_diff）有自動測試 tests/fleetcheck_test.py（不用 Chrome）
+python -I admin.py fleetcheck --id shachuan --id sanroman
 # 表演船的低模與貼圖（TASK-1104；SHOW_SPEC §5）：import／reimport 之後會自動烘那一型 ⇒ ships/showlod.js 跟著換（要一起提交；不提交 ⇒ 遊戲裡那一型指紋對不上、退回原模）
 python -I admin.py showlod --check          # 列出每一型對不對得上；--id <船> 單烘、--force 指紋一樣也重烘
 # 找最近實心格的預烘（TASK-1229；js/10_ship.js anchorNear）：開戰時模型的腳、繩端、帆錨、旗、布料綁定要找的「附近最近的實心格」，每一型一張表 ⇒ ships/anchor.js。
@@ -211,6 +217,13 @@ python -I admin.py cells --id constitution
 匯入檢查的規則在 `js/75_shipcheck.js`（成品帶 `?shipcheck=<代號>`：跟憲法號擺在最遠、固定步長跑 2 秒，結果寫進頁面）—— 遊戲自己知道缺了什麼會退回什麼，所以規則住在遊戲裡，admin.py 只用無頭 Chrome 跑、寫報告。
 ✗ 錯誤 ＝ 遊戲裡壞掉（開場就掉的模型、開場浮空的繩、斷的梯子、砲種代碼不認得…）；⚠ 警告 ＝ 能動但走退路或預設（照名字認、憲法號的水線與 geo、甲板沒 meta、砲班站不滿…）。
 反向對照：2026-10-15 重配之前的三叉戟號跑出「14 門缺 24 人」（跟 gura 在遊戲裡量的一樣），每一門都寫了同一層同一舷最近的砲隔幾 m。
+遊戲自己擺的模型（甲板、艙房自動擺的家具，走路格退路補的抽水機、木工台、帆布櫃，取用點的桶）掉了、穿模了 ⇒ 修法寫「遊戲那側：<哪一支擺的>」（`m.by`、取用點 `st.plan`；FAR-87），船隻配置頁擺的寫「船隻配置頁換格」，⛔ 不叫造船的人改。
+**開場就摔**（FAR-87）：開場 2 秒內摔到下一層（40_crew.js `landIn`）或落水（`crewFall`）的船員 ⇒ ✗，照職位、摔到下一層／落水分組，附站的格（兩支只多記一筆 `sh.fallLog`，摔法不變）。
+**穿模**（FAR-87；Tim 2026-11-21「之前遇過子模型跟船殼穿模」）：開場那一刻（還沒跑）每個模型、裝飾、遊戲擺的家具與取用點的桶，網格表面往裡 0.25 格取點（62_ports.js `meshInPts`，砲門蓋板的穿模檢查同一套），
+照開場的擺法放進船，數落在船殼實心格（`T.hullG`）的格數：遊戲擺的 ≥ 2 格、作品的 ≥ 8 格 ⇒ ⚠，附前 3 格、穿進哪一條關聯（`ldcPartAt`）。⛔ 不用 `meshOcc`：取樣點在模型外面半格、又外擴一格，底面貼著甲板的全部算穿模。
+不量：規格表標 `clip` 的 kind（舵、舵柄、槳）、砲門蓋板（`portsIssues` 另有檢查）、自帶格子的（vox）、模型 meta `clip=ok`；帆桁碰到自己那根桅（kind=mast 那條關聯和它底下的）的格不算。
+加這兩條時（2026-11-22，`fleetcheck` 全船 56 艘，其他 ✗／⚠ 一條都沒變）：穿模 ⚠ 31 艘、90 件 —— 遊戲擺的 44 件（取用點的桶 33、帆布櫃 5、木工台 4、抽水機 2），作品的 46 件（松島號的艏砲與砲座、哨兵號的速射砲、galea 彈藥庫的桶、錨⋯）；
+帆桁碰到自己那根桅的不算之後，帆桁一件都不報。開場就摔 ✗ 16 艘、102 人（砲手 100、水手 2；galeazza 16 人摔到下一層、信風號 4 人落水⋯）—— 只報、不修。
 
 **樓梯自檢**（TASK-0838；`js/75_ladcheck.js`，匯入檢查量完叫）：尋路（42_hands.js makeHands）接梯子兩頭是在 5～10 點內找走路格 ⇒ 梯口有洞、出口被堵住它都接得上，「尋路沒收這一座」那一條看不出來。所以每一座（繩梯不量）另外量：
 ① 梯口的洞 —— head 腳下那一層裡、梯子頂上那一塊封閉的開口，梯子沒蓋到、往下掉超過 3 格的格：head 踩在洞上 ⇒ ✗；整座挪 2 格以上就蓋得掉一半以上的洞（梯子偏了：沿走向、橫向各試 ±8 格）⇒ ⚠；艙口本來就比梯子寬（憲法號的艙口比梯子寬一倍，挪哪邊都只少一兩成）只寫進「開口」那一欄。

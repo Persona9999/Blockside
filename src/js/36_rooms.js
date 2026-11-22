@@ -357,7 +357,7 @@ function shipRoom(sh, T, r) {
     var f = FURN[p.it], t = itemTiles(p.it, p.r), lx = p.r ? f.size[1] : f.size[0], ly = p.r ? f.size[0] : f.size[1];
     var at = [G.x0 + p.x * ROOM_TILE + Math.floor((t[0] * ROOM_TILE - lx) / 2), G.y0 + p.y * ROOM_TILE + Math.floor((t[1] * ROOM_TILE - ly) / 2), G.z];
     var bb = [at[0], at[1], at[2], at[0] + lx, at[1] + ly, at[2] + f.size[2] + 1], nm = p.it + '-' + (k + 1);
-    var m = { T: T, k: sh.models.length, name: nm, path: r.name + '/' + nm, kind: 'furn', item: p.it, hold: f.hold || 0, room: o, hp: f.hp, hpMax: f.hp, mesh: furnMesh(T, p.it, p.r ? 'y' : 'x'), origin: at, bb: bb, pts: {}, meta: { kind: 'furniture', item: p.it },
+    var m = { T: T, k: sh.models.length, name: nm, path: r.name + '/' + nm, kind: 'furn', item: p.it, by: R.auto ? 'roomAuto' : 'plan', hold: f.hold || 0, room: o, hp: f.hp, hpMax: f.hp, mesh: furnMesh(T, p.it, p.r ? 'y' : 'x'), origin: at, bb: bb, pts: {}, meta: { kind: 'furniture', item: p.it },
       c: [(bb[0] + bb[3]) / 2, (bb[1] + bb[4]) / 2, (bb[2] + bb[5]) / 2], foot: VK.pack(Math.floor(bb[0] + 1), Math.floor(bb[1] + 1), at[2] - 1), alive: true };
     sh.models.push(m); o.furn.push(m);
   });

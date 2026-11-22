@@ -82,7 +82,7 @@ function benchNavFill(sh, it, C0, key) {
     }
     var at = [Math.round(P[0] - f.size[0] / 2), Math.round(P[1] - f.size[1] / 2), Math.round(P[2])];
     var bb = [at[0], at[1], at[2], at[0] + f.size[0], at[1] + f.size[1], at[2] + f.size[2] + 1], nm = (NV.levels[NV.home].name || NV.levels[NV.home].key) + f.name + '-' + (B.length + 1);
-    var m = { T: T, k: sh.models.length, name: nm, path: 'nav/' + nm, kind: 'furn', item: it, hold: 0, room: null, hp: f.hp, hpMax: f.hp, mesh: furnMesh(T, it, 'x'), origin: at, bb: bb, pts: {}, meta: { kind: 'furniture', item: it },
+    var m = { T: T, k: sh.models.length, name: nm, path: 'nav/' + nm, kind: 'furn', item: it, by: 'benchNavFill', hold: 0, room: null, hp: f.hp, hpMax: f.hp, mesh: furnMesh(T, it, 'x'), origin: at, bb: bb, pts: {}, meta: { kind: 'furniture', item: it },
       c: [(bb[0] + bb[3]) / 2, (bb[1] + bb[4]) / 2, (bb[2] + bb[5]) / 2], foot: VK.pack(Math.floor(bb[0] + 1), Math.floor(bb[1] + 1), at[2] - 1), alive: true };
     sh.models.push(m); B.push(m);
     for (var bx = Math.max(0, Math.floor((bb[0] - 12) / 16)); bx <= Math.floor((bb[3] + 12) / 16); bx++) (sh.mIdx[bx] = sh.mIdx[bx] || []).push(m);   // 命中分桶（10_ship.js modelIndex 同一套）

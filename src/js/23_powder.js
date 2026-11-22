@@ -356,7 +356,7 @@ function makeStations(sh, auto) {
     var deck = D.key, zr = D.zr, pl = auto ? null : deckPlan(T.id, deckId(D));
     if (pl && pl.items) {                                               // 玩家擺的（驗過：格子、砲班的位置、地面）
       var G = deckGrid(T, D), ok = roomCheck(T, { grid: G }, 'deck', pl.items).items.filter(function (q) { return FURN[q.it] && FURN[q.it].role === 'powder'; });   // 甲板上也擺得了抽水機（45_pumps.js pumpModels）⇒ 這裡只拿火藥桶
-      ok.forEach(function (q, k) { var x = G.x0 + q.x * ROOM_TILE, y = G.y0 + q.y * ROOM_TILE; build(D, nearMag(x), D.name + '取用點 ' + (k + 1), [x, y, G.zt[q.x + q.y * G.nx]]); });
+      ok.forEach(function (q, k) { var x = G.x0 + q.x * ROOM_TILE, y = G.y0 + q.y * ROOM_TILE; build(D, nearMag(x), D.name + '取用點 ' + (k + 1), [x, y, G.zt[q.x + q.y * G.nx]]); out[out.length - 1].plan = true; });   // plan：船隻配置頁擺的（匯入檢查照它寫修法）
       return;
     }
     var n0 = out.length;
