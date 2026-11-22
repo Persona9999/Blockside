@@ -42,20 +42,38 @@ function pumpPlaceWhy(G, p) {
 }
 // 量的時候：?pumps=人力台數,蒸汽台數 ⇒ 每一型在水線以上最低那層甲板，照位置規則（離泵井／中線最近的格先）另外擺上（蓋在存檔與設定檔的擺法上面；跟 ?roomfn= 同一類）
 var PUMP_Q = Q.has('pumps') ? Q.get('pumps').split(',').map(function (v) { return Math.max(0, Math.min(16, Math.round(+v) || 0)); }) : null;
+var LAD_EXIT = 4;                                                // 格：自動擺的抽水機、木工台離梯子兩頭的出口（往前）至少幾格（pumpAuto）
 /** 照位置規則在甲板 D 上再擺 n 台 it（items ＝ 已經擺的，會改它）：離泵井（人力）或船身中段（蒸汽）最近、中線上的格先試，兩個方向都試。
  *  不壓梯子兩頭（Tim 2026-10-28「全船隊跟火藥桶有關的梯子警告」那一批之後：聖羅曼號自動補的木工台擺在船尾樓梯頂正前方 ⇒ 樓梯自檢 ⚠）：
- *  先只挑外框外 LAD_KEEP 格不碰任何一座梯子 foot／head（同一層：上下 6 格內）的格；整層都碰 ⇒ 照舊不管梯子再挑一次（跟 23_powder.js ladFirst 同一個退路：只換位置、不會變少）。 */
-function pumpAuto(T, D, items, it, n) {
+ *  先只挑外框外 LAD_KEEP 格不碰任何一座梯子 foot／head（同一層：上下 6 格內）的格；整層都碰 ⇒ 挨著也行、再挑一次（跟 23_powder.js ladFirst 同一個退路）。
+ *  兩次都不壓梯子兩頭的出口那一條（梯頂沿走向往前、梯腳往後退 LAD_EXIT 格、左右各 2 格 —— 75_ladcheck.js「梯頂／梯腳正前方擋住」量的那一段：
+ *  梯口往前 2 格、模型外框外擴 1 格、梯口照走路格可能偏 1 格）：⛔ 只看兩頭四周 LAD_KEEP 格 ⇒ 沙船（FAR-87）主甲板的木工台外框邊離艙口梯頂 3.5 格、
+ *  剛好算「沒碰到」，擺在梯頂正前方（樓梯自檢 ⚠）。all（甲板編輯器的「擺滿抽水機」、?pumps=）⇒ 還擺不下再不管梯子挑一次（照舊）。
+ *  自動擺的（pumpAt、pumpFill、木工台 stationFill）不走最後那一次：擺不下 ⇒ 那一層不擺，照走路格補（pumpNavFill、benchNavFill：本來就讓開梯子兩頭）——
+ *  ⛔ 照舊不管梯子 ⇒ 聖羅曼號（FAR-87）主桅旁擺得下的格全在船尾樓梯的梯腳出口上（樓梯自檢 ⚠）。
+ *  本來就沒壓到出口的船挑到的格一位元不變（同一個順序、只多跳過壓到出口的）。 */
+function pumpAuto(T, D, items, it, n, all) {
   var G = deckGrid(T, D), wx = FURN[it].place === 'well' ? pumpWellX(T) : Math.round((T.hx0 + T.hx1) / 2), C = [], i, j, got = 0;
   for (j = 0; j < G.ny; j++) for (i = 0; i < G.nx; i++) C.push([i, j, Math.abs(G.x0 + (i + 0.5) * ROOM_TILE - wx) + 3 * Math.abs(G.y0 + (j + 0.5) * ROOM_TILE - T.cy)]);
   C.sort(function (a, b) { return a[2] - b[2] || a[1] - b[1] || a[0] - b[0]; });
-  var LE = []; shipLadders(T).forEach(function (L) { LE.push(L.pts[0], L.pts[L.pts.length - 1]); });
+  var LE = [], LN = [];
+  shipLadders(T).forEach(function (L) {
+    var f = L.pts[0], h = L.pts[L.pts.length - 1], ex = h[0] - f[0], ey = h[1] - f[1]; LE.push(f, h);
+    if (Math.hypot(ex, ey) < 2) return;                                 // 立著的梯子（兩頭平面上不到 2 格）：沒有走向 ⇒ 只看四周（nearLad）
+    var ax = Math.abs(ex) >= Math.abs(ey) ? 0 : 1, sg = (ax ? ey : ex) > 0 ? 1 : -1;
+    [[h, sg], [f, -sg]].forEach(function (e) { var a = Math.floor(e[0][ax]), b = Math.floor(e[0][1 - ax]); LN.push({ ax: ax, a0: e[1] > 0 ? a : a - LAD_EXIT, a1: e[1] > 0 ? a + LAD_EXIT : a, b0: b - 2, b1: b + 2, z: e[0][2] }); });
+  });
+  function box(p) { var t = itemTiles(p.it, p.r), xa = G.x0 + p.x * ROOM_TILE, ya = G.y0 + p.y * ROOM_TILE; return [xa, ya, xa + t[0] * ROOM_TILE - 1, ya + t[1] * ROOM_TILE - 1, G.zt[p.x + p.y * G.nx]]; }
   function nearLad(p) {
-    var t = itemTiles(p.it, p.r), xa = G.x0 + p.x * ROOM_TILE, ya = G.y0 + p.y * ROOM_TILE, xb = xa + t[0] * ROOM_TILE - 1, yb = ya + t[1] * ROOM_TILE - 1, z = G.zt[p.x + p.y * G.nx];
-    return LE.some(function (q) { return Math.abs(q[2] - z) <= 6 && q[0] >= xa - LAD_KEEP && q[0] <= xb + LAD_KEEP && q[1] >= ya - LAD_KEEP && q[1] <= yb + LAD_KEEP; });
+    var b = box(p);
+    return LE.some(function (q) { return Math.abs(q[2] - b[4]) <= 6 && q[0] >= b[0] - LAD_KEEP && q[0] <= b[2] + LAD_KEEP && q[1] >= b[1] - LAD_KEEP && q[1] <= b[3] + LAD_KEEP; });
   }
-  for (var pass = 0; pass < 2 && got < n; pass++)
-    for (var c = 0; c < C.length && got < n; c++) for (var r = 0; r < 2; r++) { var p = { it: it, x: C[c][0], y: C[c][1], r: r }; if (!pass && nearLad(p)) continue; if (!placeOk(G, 'deck', items, p)) { items.push(p); got++; break; } }
+  function inLane(p) {
+    var b = box(p);
+    return LN.some(function (q) { var u = q.ax ? [b[1], b[3]] : [b[0], b[2]], v = q.ax ? [b[0], b[2]] : [b[1], b[3]]; return Math.abs(q.z - b[4]) <= 6 && u[0] <= q.a1 && u[1] >= q.a0 && v[0] <= q.b1 && v[1] >= q.b0; });
+  }
+  for (var pass = 0; pass < (all ? 3 : 2) && got < n; pass++)
+    for (var c = 0; c < C.length && got < n; c++) for (var r = 0; r < 2; r++) { var p = { it: it, x: C[c][0], y: C[c][1], r: r }; if (pass < 2 && inLane(p) || !pass && nearLad(p)) continue; if (!placeOk(G, 'deck', items, p)) { items.push(p); got++; break; } }
   return got;
 }
 /** 人力抽水機自動擺在哪一層甲板（記在船型上 T.pumpAt ＝ { id: 甲板 id（哪一層都擺不下 ⇒ null）, ok }；TASK-1069）：
@@ -91,20 +109,28 @@ function pumpNavFill(sh, crew) {
       F.some(function (m) { return m.bb[0] < b[3] && b[0] < m.bb[3] && m.bb[1] < b[4] && b[1] < m.bb[4] && m.bb[2] < b[5] && b[2] < m.bb[5]; }) ||
       CR.some(function (c) { var p = c.pos; return p && p[0] >= b[0] - 3 && p[0] <= b[3] + 3 && p[1] >= b[1] - 3 && p[1] <= b[4] + 3 && Math.abs(p[2] - b[2]) <= 6; });   // 已經站好的人（軍官、砲班、槳手…；開戰時才補 ⇒ 人先站了）
   }
+  // 腳下要撐得住（同 46_carpenter.js benchNavFill footOK、32_hull.js svStruct 同一把尺）：海鷗號（FAR-87）只有坐板、平台站得住 ⇒ 離泵井最近那一格的機角落在兩塊坐板中間、開場就掉。
+  //   撐不住的才跳過、照順序挑下一格 ⇒ 本來撐得住的船一位元都不變
+  function footOK(b) { var x = Math.floor(b[0] + 1), y = Math.floor(b[1] + 1), z = b[2] - 1; return countBox(sh.grid, x - 2, y - 2, z - 1, x + 2, y + 2, z) > 0; }
   function near(L, c) { var P = navPos(L.N, c); return [P, Math.abs(P[0] - wx) + 3 * Math.abs(P[1] - T.cy), L]; }
   // 先挑站在水線以上、從待命那一層走得到的格（由低往高一層一層找；🩸 只看待命那一層 ⇒ punt 補在貨艙、腳下在海面下 ⇒ 一開戰就算泡水、不抽）；都沒有 ⇒ 待命那一層照舊
   var lvs = NV.reach.slice().sort(function (a, b) { return NV.levels[a].zr[0] - NV.levels[b].zr[0]; }), RT = {};
+  // 機身不穿進船殼（FAR-87 第 5 條，46_carpenter.js furnClipPts）：海鷗號的抽水機穿進坐板；三座堡壘、galea、galeazza 的穿進船殼 50–90 格。
+  //   照同一個順序，穿模的先跳過；每一格都穿 ⇒ 照舊挑第一格（本來沒穿模的船一位元都不變）
+  function clip(q) { return furnClipPts(sh, 'pump', boxAt(q[0])) > 0; }
   function pick() {
+    var first = null;
     for (var i = 0; i < lvs.length; i++) {
       var L = NV.levels[lvs[i]], C = L.N.cells.map(function (c) { return near(L, c).concat([c]); }).filter(function (q) { return q[0][2] > T.zw; }).sort(function (a, b) { return a[1] - b[1]; });
       for (var k = 0; k < C.length; k++) {
         if (bad(boxAt(C[k][0]))) continue;
         var key = lvs[i] + ':' + L.N.reg[C[k][3]]; if (RT[key] === undefined) RT[key] = !!handRoute(sh, NV.home, lvs[i], C[k][0][0], C[k][0][0], undefined, L.N.reg[C[k][3]]);
-        if (RT[key]) return C[k];
+        if (RT[key] && footOK(boxAt(C[k][0]))) { if (!clip(C[k])) return C[k]; if (!first) first = C[k]; }
       }
     }
+    if (first) return first;
     var H = NV.levels[NV.home], C0 = carpHomeCells(sh).map(function (c) { return near(H, c); }).sort(function (a, b) { return a[1] - b[1]; });
-    return C0.filter(function (q) { return !bad(boxAt(q[0])); })[0] || C0[0];
+    return C0.filter(function (q) { return !bad(boxAt(q[0])) && footOK(boxAt(q[0])) && !clip(q); })[0] || C0.filter(function (q) { return !bad(boxAt(q[0])) && footOK(boxAt(q[0])); })[0] || C0.filter(function (q) { return !bad(boxAt(q[0])); })[0] || C0[0];
   }
   for (var got = 0; got < n; got++) {
     var pk = pick(); if (!pk) break;
@@ -132,7 +158,7 @@ function pumpFill(T, D, items) {
 /** 甲板編輯器的「擺滿抽水機」（71_input.js；items 會改）：每一種擺到全船上限（cap ÷ 每台抽水量；沒有上限 ⇒ 8 台）、扣掉全船已經擺的（have：道具 ⇒ 台數）。⇒ { 道具: 這次擺了幾台 }。 */
 function pumpFillMax(T, D, items, have) {
   var o = {};
-  pumpKinds(T).forEach(function (it) { var f = FURN[it], max = f.cap > 0 && f.tpm > 0 ? Math.floor(f.cap / f.tpm + 1e-9) : 8, n = max - (have[it] || 0); o[it] = n > 0 ? pumpAuto(T, D, items, it, n) : 0; });
+  pumpKinds(T).forEach(function (it) { var f = FURN[it], max = f.cap > 0 && f.tpm > 0 ? Math.floor(f.cap / f.tpm + 1e-9) : 8, n = max - (have[it] || 0); o[it] = n > 0 ? pumpAuto(T, D, items, it, n, true) : 0; });
   return o;
 }
 /** 開戰時（10_ship.js，shipRooms 之後）：甲板擺法裡的抽水機 ⇒ 模型（加進 sh.models，跟砲同一套血量、命中）；sh.pumps ＝ { list, ... }，沒有 ⇒ null。 */
@@ -143,7 +169,7 @@ function pumpModels(sh) {
   decks.forEach(function (D) {
     var pl = deckPlan(T.id, deckId(D)), G = deckGrid(T, D), its = pl.items ? roomCheck(T, { grid: G }, 'deck', pl.items).items : [];
     if (D === qd || D === bd || deckId(D) === pumpAt(T).id) its = deckItems(T, D, pl).items.slice();      // 木工台那一層、人力抽水機自動擺的那一層（pumpAt）：照 deckItems（含自動補的木工台、抽水機；自動的取用點不是抽水機、下面照 role 篩掉）
-    if (D === qd) { pumpAuto(T, D, its, 'pump', PUMP_Q[0] || 0); if (pumpSteamShip(T)) pumpAuto(T, D, its, 'spump', PUMP_Q[1] || 0); }
+    if (D === qd) { pumpAuto(T, D, its, 'pump', PUMP_Q[0] || 0, true); if (pumpSteamShip(T)) pumpAuto(T, D, its, 'spump', PUMP_Q[1] || 0, true); }
     its.forEach(function (q) {
       var f = FURN[q.it]; if (!f || (f.role !== 'pump' && f.role !== 'bench' && f.role !== 'loft')) return;
       var lx = q.r ? f.size[1] : f.size[0], ly = q.r ? f.size[0] : f.size[1], t = itemTiles(q.it, q.r);

@@ -375,7 +375,8 @@ function makeStations(sh, auto) {
   });
   // 窄船的退路（findLine）只在整艘船一個取用點都沒有時才走：別艘某一層找不到是常態（送藥手走梯子去別層拿）——
   //   v1 每一層找不到就排一排 ⇒ 好旅號、拉貝爾號、聖羅曼號…7 艘多出取用點，拉貝爾號甲板連通 ✗ 2、聖羅曼號 16 門的送藥路線全量不到（TASK-1152 全船對照抓到）
-  if (!out.length) miss.forEach(function (q) { var sp = findLine(q[2].x, q[0].zr); if (sp) build(q[0], q[1], q[0].name + q[2].tag + '取用點', sp); });
+  //   從艙口吊上來的（hoistStation）不算「找到空地」：沙船（FAR-87）主甲板認得出艙口之後，尾樓找不到空地也要排一排（⛔ 照 out.length ⇒ 尾樓一個都沒有）
+  if (!out.some(function (st) { return !st.hoist; })) miss.forEach(function (q) { var sp = findLine(q[2].x, q[0].zr); if (sp) build(q[0], q[1], q[0].name + q[2].tag + '取用點', sp); });
   // 堡壘、砲台（TASK-1225；Tim 2026-11-05「走路格應該是基於甲板」）：船的找法（從彈藥庫沿船長、中線 ±25 格找空地）對四面牆、土台、塔頂不成立 ——
   //   英國稜堡：取用點落在院子、砲在土台上 ⇒ 9 門 0 門走得到。⇒ 照那一層甲板的走路格（42_hands.js navBuild：送藥手真正走的那一份，砲與砲班擋的地方也切開；
   //   ⛔ 自己切 0.5 m 的粗格 ⇒ 英國稜堡的土台看起來連成一圈，走路格其實是 6 塊）：有砲的每一塊各放取用點（4 門以上 ⇒ 沿砲分布長的那一軸切兩半、各一處），

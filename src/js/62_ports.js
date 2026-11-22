@@ -134,7 +134,14 @@ function portKey(x, y, z) { return (Math.floor(x) + 512) + 1024 * ((Math.floor(y
  *  ⛔ 不外擴：meshOcc 外擴一格 ⇒ house 6、至少縮 5.75 的砲門會被當成穿過蓋板。 */
 function portCells(T, k) {
   var C = T.portCells || (T.portCells = {}); if (C[k]) return C[k];
-  var m = T.rig && T.rig.meshes && T.rig.meshes[k], S = new Set();
+  var P = meshInPts(T.rig && T.rig.meshes && T.rig.meshes[k]), S = new Set();
+  for (var i = 0; i < P.length; i += 3) S.add(portKey(P[i], P[i + 1], P[i + 2]));
+  return (C[k] = S);
+}
+/** 網格表面往實心那一邊挪 PORT_DEPTH 格的取樣點（模型座標，[x, y, z, x, y, z, …]）：portCells 的取點法（上面那段註解）。
+ *  走路格退路擺家具也用它量本體有沒有穿進船殼（46_carpenter.js furnClipPts，FAR-87）。沒有網格 ⇒ []。 */
+function meshInPts(m) {
+  var out = [];
   if (m && m.verts && m.tris) {
     var v = m.verts, vol = 0, j;
     for (j = 0; j < m.tris.length; j += 3) {                           // 有號體積（×6）：負 ⇒ cross(e1, e2) 朝裡
@@ -150,11 +157,11 @@ function portCells(T, k) {
       for (var p = 0; p <= st; p++) for (var q = 0; q <= st - p; q++) {
         var s = p / st, w = q / st, x = e1[0] * s + e2[0] * w, y = e1[1] * s + e2[1] * w, z = e1[2] * s + e2[2] * w;
         var dx = gx - x, dy = gy - y, dz = gz - z, dl = Math.hypot(dx, dy, dz), f = dl > PORT_EDGE ? PORT_EDGE / dl : 1;
-        S.add(portKey(v[A] + x + dx * f + n[0] * din, v[A + 1] + y + dy * f + n[1] * din, v[A + 2] + z + dz * f + n[2] * din));
+        out.push(v[A] + x + dx * f + n[0] * din, v[A + 1] + y + dy * f + n[1] * din, v[A + 2] + z + dz * f + n[2] * din);
       }
     }
   }
-  return (C[k] = S);
+  return out;
 }
 /** 蓋板轉 ang、砲沿砲軸往裡拉 r 格時，蓋板有幾個取樣點落在砲的格子裡（0 ＝ 不穿模）。砲照它現在的 modelLocal（迴旋砲、砲塔上的也對）。 */
 function portHits(sh, P, ang, r) {
