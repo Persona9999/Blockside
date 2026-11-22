@@ -10,147 +10,22 @@ var SR_PAD = 10, SR_ZPAD = 6, SR_TOP = 8, SR_BLOCK_VOX = 3;             // 留�
 var SR_HOLD = 1.8, SR_DUR = 20;                                        // 演完停頓幾秒；預設總時長（秒）
 var SR_DEF_CUT = 0.72;                                                 // 預設 hull／rig 切分點（帳上沒給 cutP 時用）
 
-// 4 座船廠模型的滑台與靜態骨架清除規格（mirrored X 座標，由 Blocksail townkit 實測確認；陸上與水上皆以 y=0 為陸側、y→sy 為水域／出口）
+// 4 座船廠模型的滑台放置規格（mirrored X 座標；陸上與水上皆以 y=0 為陸側、y→sy 為水域／出口，靜態裝飾船殼已拆為 kind=yard-hull 子模型由匯入時分離）
 var SR_YARDS = {
-  'common-shipyard-small': {
-    cx: 120, cx0: 84, cx1: 156, cy0: 116, cy1: 292,
-    zKeep: function () { return 1; },
-    yMid: 205, ky0: 124, ky1: 284, zKeel0: 17, zKeel1: 7
-  },
-  'common-shipyard-large': {
-    cx: 500, cx0: 446, cx1: 554, cy0: 180, cy1: 498,
-    zKeep: function () { return 1; },
-    yMid: 340, ky0: 190, ky1: 490, zKeel0: 24, zKeel1: 6
-  },
-  'common-shipyard-small-water': {
-    cx: 200, cx0: 164, cx1: 236, cy0: 36, cy1: 208,
-    zKeep: function (y) { return y <= 120 ? 20 : Math.max(0, Math.floor(20 - (y - 120) * 20 / 200)); },
-    yMid: 124, ky0: 52, ky1: 196, zKeel0: 48, zKeel1: 24
-  },
-  'common-shipyard-large-water': {
-    cx: 400, cx0: 348, cx1: 452, cy0: 84, cy1: 358,
-    zKeep: function (y) { return y <= 200 ? 25 : Math.max(0, Math.floor(25 - (y - 200) * 25 / 320)); },
-    yMid: 220, ky0: 108, ky1: 316, zKeel0: 45, zKeel1: 24
-  }
+  'common-shipyard-small':       { cx: 120, yMid: 205, ky0: 124, ky1: 284, zKeel0: 14, zKeel1: 4 },
+  'common-shipyard-large':       { cx: 500, yMid: 340, ky0: 190, ky1: 490, zKeel0: 20, zKeel1: 3 },
+  'common-shipyard-small-water': { cx: 200, yMid: 120, ky0: 40,  ky1: 200, zKeel0: 47, zKeel1: 20 },
+  'common-shipyard-large-water': { cx: 400, yMid: 220, ky0: 90,  ky1: 350, zKeel0: 44, zKeel1: 17 }
 };
 
 var SHIP_RISE = {
-  S: {}, yardCache: {}, yardP: {}, cradle: null,
+  S: {}, cradle: null,
   demo: null, panel: null, err: null,
   _sailDummy: null
 };
 
 function shipRiseKey(T, lot) { return (T ? T.id : '_') + '/' + lot; }
 function shipRiseAny() { for (var k in SHIP_RISE.S) return true; return false; }
-
-/** 哪幾座船廠在 63_towns.js 分組時要改畫挖掉靜態骨架的版本（building-rise 地塊施工中優先）。 */
-function shipRiseHides(T, q) {
-  if (!T || !q || q.lot == null || !SR_YARDS[q.k]) return false;
-  if (typeof townRiseHides === 'function' && townRiseHides(T, q)) return false;
-  var sr = SHIP_RISE.S[shipRiseKey(T, q.lot)];
-  return !!(sr && sr.ready && SHIP_RISE.yardCache[q.k]);
-}
-
-/** 船廠模型 nm：從 TOWNS.kit.M[nm].rise.g 懶建一份「清空滑台靜態骨架」的 VBO/VAO（不影響原模型的幾何／貼圖，仍保留碼頭／廠房／軌道）。 */
-function shipRiseYardEnsure(nm) {
-  if (!nm || !SR_YARDS[nm]) return Promise.resolve(null);
-  if (SHIP_RISE.yardCache[nm]) return Promise.resolve(SHIP_RISE.yardCache[nm]);
-  if (SHIP_RISE.yardP[nm]) return SHIP_RISE.yardP[nm];
-  var K = TOWNS.kit, Mm = K && K.M && K.M[nm];
-  if (!Mm || !Mm.rise || !Mm.rise.g) return Promise.resolve(null);
-  var sp = SR_YARDS[nm], m = Mm.m, sx = m.size[0], sy = m.size[1], sz = m.size[2], on = function () { return true; };
-  SHIP_RISE.yardP[nm] = townRiseChunks(Mm.rise.g).then(function (G0) {
-    var grid = new VK.Grid([sx, sy, sz]);
-    return townSlice(G0.data.length, 24, on, function (a, b) {
-      for (var i = a; i < b; i++) {
-        var blk = G0.data[i], k = G0.keys[i], bx = k[0] * 16, by = k[1] * 16, bz = k[2] * 16;
-        for (var li = 0; li < 4096; li++) {
-          var col = blk[li]; if (!col) continue;
-          var x = bx + (li & 15), y = by + ((li >> 4) & 15), z = bz + (li >> 8);
-          if (x >= sp.cx0 && x <= sp.cx1 && y >= sp.cy0 && y <= sp.cy1 && z > sp.zKeep(y)) continue;
-          grid.set(x, y, z, col);
-        }
-      }
-    }).then(function () {
-      var list = [], len = 0, NXY = grid.nx * grid.ny;
-      return townSlice(grid.tab.length, 48, on, function (a, b) {
-        for (var ci = a; ci < b; ci++) {
-          if (!grid.tab[ci]) continue;
-          var kz = (ci / NXY) | 0, ky = ((ci - kz * NXY) / grid.nx) | 0, kx = ci - kz * NXY - ky * grid.nx;
-          var mesh = VK.meshChunk(grid, kx, ky, kz);
-          if (mesh && mesh.length) { list.push(mesh); len += mesh.length; }
-        }
-      }).then(function () {
-        var all = new Uint16Array(len), o = 0;
-        for (var i = 0; i < list.length; i++) { all.set(list[i], o); o += list[i].length; }
-        var gpu = townUpload(all);
-        var entry = { nm: nm, m: m, gpu: gpu, nq: gpu.nq };
-        SHIP_RISE.yardCache[nm] = entry;
-        delete SHIP_RISE.yardP[nm];
-        TOWNS.dirty = true;
-        return entry;
-      });
-    });
-  }).catch(function (err) {
-    delete SHIP_RISE.yardP[nm];
-    SHIP_RISE.err = String(err && err.message || err);
-    return null;
-  });
-  return SHIP_RISE.yardP[nm];
-}
-
-function shipRiseYardBind(sr, q, yc, PV) {
-  if (!q || !yc || !yc.gpu || !yc.gpu.nq) return false;
-  var B = sr.yib || (sr.yib = gl.createBuffer()), m0 = yc.m;
-  gl.bindBuffer(gl.ARRAY_BUFFER, B);
-  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([q.x, q.y, q.z, q.th, q.sx, q.sh, 1e6, 0, 0, 0, 0]), gl.DYNAMIC_DRAW);
-  gl.uniform3f(PV.u.uC, m0.mpv, m0.size[0] * m0.mpv / 2, m0.size[1] * m0.mpv / 2);
-  if (PV.u.uSpA) gl.uniform4f(PV.u.uSpA, 0, 0, 0, 0);
-  if (PV.u.uSpP) gl.uniform3f(PV.u.uSpP, 0, 0, 0);
-  gl.bindVertexArray(yc.gpu.vao);
-  gl.bindBuffer(gl.ARRAY_BUFFER, B);
-  gl.vertexAttribPointer(4, 4, gl.FLOAT, false, 44, 0);
-  gl.vertexAttribPointer(5, 3, gl.FLOAT, false, 44, 16);
-  gl.vertexAttribPointer(6, 4, gl.FLOAT, false, 44, 28);
-  return true;
-}
-
-/** 畫挖空骨架的船廠建築（63_towns.js townDraw）。 */
-function shipRiseYardDraw(P) {
-  if (!shipRiseAny()) return 0;
-  var PV = P.vox, tris = 0; if (!PV) return 0;
-  gl.useProgram(PV.prog);
-  gl.uniform1f(PV.u.uEdge, 1); gl.uniform2f(PV.u.uIn, -2, -1); gl.uniform2f(PV.u.uOut, 1e7, 2e7);
-  for (var k in SHIP_RISE.S) {
-    var sr = SHIP_RISE.S[k];
-    if (!sr.ready || sr.standalone || !sr.T_town || !sr.lot) continue;
-    if (typeof townRiseHides === 'function' && townRiseHides(sr.T_town, { lot: sr.lot })) continue;
-    var q = townRiseInst(sr.T_town, sr.lot), yc = q && SHIP_RISE.yardCache[q.k];
-    if (!yc || !shipRiseYardBind(sr, q, yc, PV)) continue;
-    gl.drawElementsInstanced(gl.TRIANGLES, yc.nq * 6, gl.UNSIGNED_INT, 0, 1);
-    tris += yc.nq * 2;
-  }
-  gl.bindVertexArray(null);
-  return tris;
-}
-
-/** 挖空船廠的陰影深度趟（63_towns.js townDepth）。 */
-function shipRiseYardDepth(P) {
-  if (!shipRiseAny()) return 0;
-  var PD = P.dVox, n = 0; if (!PD) return 0;
-  gl.useProgram(PD.prog); setCommon(PD);
-  for (var k in SHIP_RISE.S) {
-    var sr = SHIP_RISE.S[k];
-    if (!sr.ready || sr.standalone || !sr.T_town || !sr.lot) continue;
-    if (typeof townRiseHides === 'function' && townRiseHides(sr.T_town, { lot: sr.lot })) continue;
-    var q = townRiseInst(sr.T_town, sr.lot), yc = q && SHIP_RISE.yardCache[q.k];
-    if (!yc || !shipRiseYardBind(sr, q, yc, PD)) continue;
-    gl.drawElementsInstanced(gl.TRIANGLES, yc.nq * 6, gl.UNSIGNED_INT, 0, 1);
-    n++;
-  }
-  gl.bindVertexArray(null);
-  return n;
-}
 
 // ───────────────────────── 自動船體／桅帆建構分析 ─────────────────────────
 function shipRiseIsWeaponModel(m) {
@@ -232,6 +107,143 @@ function shipRiseMastSet(T, X, Y, Z, total, bounds) {
   return { set: mastSet, bodyX0: bodyX0, bodyX1: bodyX1, bodyTopZ: bodyTopZ };
 }
 
+/** 建置稀疏區塊索引表（與 G.tab 結構一致；只在有體素的 16³ 區塊配置 Int32Array(4096)）。 */
+function shipRiseBuildLookup(G, X, Y, Z, subIdx) {
+  var nx = G.nx, nxy = nx * G.ny, tab = new Array(G.tab.length);
+  for (var i = 0; i < subIdx.length; i++) {
+    var q = subIdx[i], vx = X[q], vy = Y[q], vz = Z[q];
+    var ci = (vx >> 4) + (vy >> 4) * nx + (vz >> 4) * nxy;
+    var blk = tab[ci];
+    if (!blk) { blk = new Int32Array(4096).fill(-1); tab[ci] = blk; }
+    blk[(vx & 15) | ((vy & 15) << 4) | ((vz & 15) << 8)] = i;
+  }
+  return tab;
+}
+
+/** 26 連通 Minimax 連通傳播（FIFO Dial 桶掃描 + 孤島半徑 2..6 橋接），確保任意建造前綴均不浮空。 */
+function shipRiseConnect(G, X, Y, Z, subIdx, b0, seeds, fallbackMode) {
+  var N = subIdx.length;
+  if (!N) return { ord: new Int32Array(0), thr: new Float32Array(0), tab: new Array(G.tab.length) };
+  var tab = shipRiseBuildLookup(G, X, Y, Z, subIdx);
+  var nx = G.nx, nxy = nx * G.ny, sx = G.sx, sy = G.sy, sz = G.sz;
+  var dist = new Uint8Array(N).fill(255);
+  var head = new Int32Array(256).fill(-1), tail = new Int32Array(256).fill(-1), nxt = new Int32Array(N).fill(-1);
+  var popSeq = [], popPos = new Int32Array(N);
+
+  function enqueue(u, b) {
+    dist[u] = b; nxt[u] = -1;
+    if (tail[b] >= 0) nxt[tail[b]] = u; else head[b] = u;
+    tail[b] = u;
+  }
+  function dialSweep(startB) {
+    for (var b = startB; b <= 254; b++) {
+      var cur;
+      while ((cur = head[b]) >= 0) {
+        head[b] = nxt[cur];
+        if (head[b] < 0) tail[b] = -1;
+        popPos[cur] = popSeq.length;
+        popSeq.push(cur);
+        var q = subIdx[cur], cx = X[q], cy = Y[q], cz = Z[q];
+        var x0 = cx > 0 ? cx - 1 : 0, x1 = cx + 1 < sx ? cx + 1 : sx - 1;
+        var y0 = cy > 0 ? cy - 1 : 0, y1 = cy + 1 < sy ? cy + 1 : sy - 1;
+        var z0 = cz > 0 ? cz - 1 : 0, z1 = cz + 1 < sz ? cz + 1 : sz - 1;
+        for (var zz = z0; zz <= z1; zz++) {
+          var kz = (zz >> 4) * nxy, lz = (zz & 15) << 8;
+          for (var yy = y0; yy <= y1; yy++) {
+            var cyz = (yy >> 4) * nx + kz, lyz = ((yy & 15) << 4) | lz;
+            for (var xx = x0; xx <= x1; xx++) {
+              var blk = tab[(xx >> 4) + cyz]; if (!blk) continue;
+              var v = blk[lyz | (xx & 15)];
+              if (v < 0 || dist[v] !== 255) continue;
+              enqueue(v, b0[v] > b ? b0[v] : b);
+            }
+          }
+        }
+      }
+    }
+  }
+
+  var minSeedB = 254;
+  for (var si = 0; si < seeds.length; si++) {
+    var su = seeds[si];
+    if (dist[su] !== 255) continue;
+    var sb = clamp(b0[su], 1, 250);
+    if (sb < minSeedB) minSeedB = sb;
+    enqueue(su, sb);
+  }
+  if (seeds.length) dialSweep(minSeedB);
+
+  // 真實 .vxk 模型裡的非 26 連通孤島（如舵葉間隙）：優先在切比雪夫半徑 r=2..6 橋接緊鄰已定型體素；更遠者以最低 z 格收尾
+  if (popSeq.length < N) {
+    var unvis = [];
+    for (var u = 0; u < N; u++) if (dist[u] === 255) unvis.push(u);
+    while (unvis.length) {
+      var bridged = false;
+      for (var r = 2; r <= 6 && !bridged; r++) {
+        var cands = [];
+        for (var ui = 0; ui < unvis.length; ui++) {
+          u = unvis[ui];
+          var qu = subIdx[u], ux = X[qu], uy = Y[qu], uz = Z[qu];
+          var bx0 = Math.max(0, ux - r), bx1 = Math.min(sx - 1, ux + r);
+          var by0 = Math.max(0, uy - r), by1 = Math.min(sy - 1, uy + r);
+          var bz0 = Math.max(0, uz - r), bz1 = Math.min(sz - 1, uz + r);
+          var bestD = 255;
+          for (var zz = bz0; zz <= bz1; zz++) {
+            var kz = (zz >> 4) * nxy, lz = (zz & 15) << 8, az = Math.abs(zz - uz);
+            for (var yy = by0; yy <= by1; yy++) {
+              var cyz = (yy >> 4) * nx + kz, lyz = ((yy & 15) << 4) | lz, ay = Math.abs(yy - uy);
+              for (var xx = bx0; xx <= bx1; xx++) {
+                if (az < r && ay < r && Math.abs(xx - ux) < r) continue;
+                var blk = tab[(xx >> 4) + cyz]; if (!blk) continue;
+                var w = blk[lyz | (xx & 15)];
+                if (w >= 0 && dist[w] < bestD) bestD = dist[w];
+              }
+            }
+          }
+          if (bestD < 255) cands.push([u, bestD]);
+        }
+        if (cands.length) {
+          var minB = 254;
+          for (var ci = 0; ci < cands.length; ci++) {
+            var cu = cands[ci][0], cb = clamp(Math.max(cands[ci][1] + 1, b0[cu]), 1, 254);
+            if (dist[cu] === 255) { enqueue(cu, cb); if (cb < minB) minB = cb; }
+          }
+          dialSweep(minB);
+          bridged = true;
+        }
+      }
+      if (!bridged) {
+        var bestU = unvis[0], bestZ = Z[subIdx[bestU]];
+        for (ui = 1; ui < unvis.length; ui++) {
+          var uz2 = Z[subIdx[unvis[ui]]];
+          if (uz2 < bestZ) { bestZ = uz2; bestU = unvis[ui]; }
+        }
+        var fbB = fallbackMode === 'mast' ? clamp(Math.max(b0[bestU], 120), 1, 254) : 248;
+        enqueue(bestU, fbB);
+        dialSweep(fbB);
+      }
+      var nextUnvis = [];
+      for (ui = 0; ui < unvis.length; ui++) if (dist[unvis[ui]] === 255) nextUnvis.push(unvis[ui]);
+      unvis = nextUnvis;
+    }
+  }
+
+  // 依 (dist, popPos) 重排，確保桶號與建造成分父子順序同步單調遞增
+  var bCnt = new Int32Array(256), bSeen = new Int32Array(256);
+  for (var k = 0; k < N; k++) bCnt[dist[k]]++;
+  var order = new Int32Array(N);
+  for (k = 0; k < N; k++) order[k] = k;
+  order.sort(function (a, b) { return dist[a] !== dist[b] ? dist[a] - dist[b] : popPos[a] - popPos[b]; });
+  var ord = new Int32Array(N), thr = new Float32Array(N);
+  for (k = 0; k < N; k++) {
+    u = order[k];
+    var b = dist[u], rank = bSeen[b]++;
+    ord[k] = subIdx[u];
+    thr[k] = clamp((b + rank / Math.max(1, bCnt[b])) / 254, 0.001, 1.0);
+  }
+  return { ord: ord, thr: thr, tab: tab };
+}
+
 /** 依任意船型 T 自動計算建造順序與索具階段資料（結果快取在 T._shipRiseD；預留 T.h.meta.build_order 覆寫 hook）。 */
 function shipRiseAnalyze(T) {
   if (!T || !T.hullG) return null;
@@ -278,25 +290,36 @@ function shipRiseAnalyze(T) {
   var keelTopZ = hMinZ + Math.min(3, Math.max(1, Math.round(hullH * 0.08)));
   var ribPeriod = clamp(Math.round(hullLen / 11), 8, 22), ribThick = 2;
 
-  // 分組：① 龍骨與首尾骨幹(0..0.16) ② 橫向U型肋骨骨架(0.16..0.42) ③ 下→上順序排名的船殼包板與甲板舷牆(0.42..1.00)
-  var hScore = new Float32Array(hIdx.length), plankList = [];
+  // 分組目標分數：① 龍骨與沿曲線骨幹(0..0.12) ② 橫向U型肋骨骨架(0.14..0.38) ③ 下→上船殼包板與甲板舷牆(0.42..1.00)
+  // 接著經由 26 連通 Minimax 傳播保證：沒有支撐的前懸艏柱、艉部與肋骨頂部絕不早於下伏結構浮空出現
+  var colBot = new Int32Array(hullLen).fill(1e9);
   for (var hi = 0; hi < hIdx.length; hi++) {
     q = hIdx[hi];
+    var bx = X[q] - hMinX;
+    if (Z[q] < colBot[bx]) colBot[bx] = Z[q];
+  }
+  var hScore = new Float32Array(hIdx.length), plankList = [];
+  var rootHi = 0, rootBestZ = 1e9, rootBestDy = 1e9, rootBestDx = 1e9;
+  for (hi = 0; hi < hIdx.length; hi++) {
+    q = hIdx[hi];
     var vx = X[q], vy = Y[q], vz = Z[q];
+    var dyM = Math.abs(vy - cyMid), dxM = Math.abs(vx - cxMid);
+    if (vz < rootBestZ || (vz === rootBestZ && (dyM < rootBestDy || (dyM === rootBestDy && dxM < rootBestDx)))) {
+      rootHi = hi; rootBestZ = vz; rootBestDy = dyM; rootBestDx = dxM;
+    }
     if (ov && typeof ov.scoreHull === 'function') { hScore[hi] = clamp(ov.scoreHull(vx, vy, vz, bounds), 0, 1); continue; }
-    var dCenterX = Math.abs(vx - cxMid) / (hullLen * 0.5 + 1);
-    var dCenterY = Math.abs(vy - cyMid);
+    var dCenterX = dxM / (hullLen * 0.5 + 1);
     var zFrac = (vz - hMinZ) / hullH;
-    var isKeel = vz <= keelTopZ && dCenterY <= 2;
-    var isSpine = dCenterY <= 1 && vz <= hMaxZ - Math.max(2, Math.round(hullH * 0.10)) && (vx <= hMinX + 3 || vx >= hMaxX - 3);
-    var isRib = ((vx - hMinX) % ribPeriod) < ribThick && (dCenterY > 2 || vz <= keelTopZ + 1) && !(vx >= hMaxX - 4 && zFrac > 0.65);
+    var isKeel = dyM <= 2 && vz <= Math.max(keelTopZ, colBot[vx - hMinX] + 2);
+    var isSpine = dyM <= 1 && vz <= hMaxZ - Math.max(2, Math.round(hullH * 0.10)) && (vx <= hMinX + 3 || vx >= hMaxX - 3);
+    var isRib = ((vx - hMinX) % ribPeriod) < ribThick && !(vx >= hMaxX - 4 && zFrac > 0.65);
     if (isKeel || isSpine) {
-      hScore[hi] = isKeel ? 0.01 + 0.08 * dCenterX + 0.02 * (vz - hMinZ) / Math.max(1, keelTopZ - hMinZ)
-        : 0.11 + 0.05 * clamp(zFrac, 0, 1);
+      hScore[hi] = isKeel ? 0.01 + 0.08 * dCenterX + 0.02 * clamp((vz - hMinZ) / hullH, 0, 1)
+        : 0.14 + 0.16 * clamp(zFrac, 0, 1);
     } else if (isRib) {
-      hScore[hi] = 0.16 + 0.25 * clamp(zFrac, 0, 1) + 0.01 * dCenterX;
+      hScore[hi] = 0.14 + 0.24 * clamp(zFrac, 0, 1) + 0.01 * dCenterX;
     } else {
-      plankList.push({ hi: hi, key: (vz - hMinZ) + 0.05 * (1 - dCenterX) + 0.01 * (dCenterY / (hullBeam * 0.5 + 1)) });
+      plankList.push({ hi: hi, key: (vz - hMinZ) + 0.05 * (1 - dCenterX) + 0.01 * (dyM / (hullBeam * 0.5 + 1)) });
     }
   }
   if (plankList.length) {
@@ -304,29 +327,47 @@ function shipRiseAnalyze(T) {
     var pn = Math.max(1, plankList.length - 1);
     for (var pi = 0; pi < plankList.length; pi++) hScore[plankList[pi].hi] = 0.42 + 0.57 * (pi / pn);
   }
-  var hPerm = new Int32Array(hIdx.length);
-  for (hi = 0; hi < hIdx.length; hi++) hPerm[hi] = hi;
-  hPerm.sort(function (a, b) { return hScore[a] - hScore[b]; });
-  var hOrd = new Int32Array(hIdx.length), hThr = new Float32Array(hIdx.length);
-  for (hi = 0; hi < hIdx.length; hi++) { hOrd[hi] = hIdx[hPerm[hi]]; hThr[hi] = hScore[hPerm[hi]]; }
+  var hB0 = new Uint8Array(hIdx.length);
+  for (hi = 0; hi < hIdx.length; hi++) hB0[hi] = clamp(Math.round(hScore[hi] * 250), 1, 250);
+  var hConn = shipRiseConnect(G, X, Y, Z, hIdx, hB0, hIdx.length ? [rootHi] : [], 'hull');
+  var hOrd = hConn.ord, hThr = hConn.thr, hullTab = hConn.tab;
 
-  // 桅與斜桅：由下往上／由內往外（斜桅超出 hMaxX 時依高度＋往外延伸距離）逐段升起 (mOrd / mThr ∈ [0, 0.36])
+  // 桅與斜桅：僅以與船體緊鄰處（26 鄰居、退路半徑 2）為種子，經 26 連通由下往上／由內往外生長（0.01..0.34）
   var mMinZ = 1e9, mMaxZ = -1;
   for (var mi = 0; mi < mIdx.length; mi++) { q = mIdx[mi]; if (Z[q] < mMinZ) mMinZ = Z[q]; if (Z[q] > mMaxZ) mMaxZ = Z[q]; }
   var mSpanZ = Math.max(1, mMaxZ - mMinZ);
-  var mScore = new Float32Array(mIdx.length), mPerm = new Int32Array(mIdx.length);
+  var mB0 = new Uint8Array(mIdx.length), mSeeds = [], mNear2 = [];
+  var gnx = G.nx, gnxy = gnx * G.ny, gsx = G.sx, gsy = G.sy, gsz = G.sz;
+  function nearHull(cx, cy, cz, rad) {
+    var x0 = Math.max(0, cx - rad), x1 = Math.min(gsx - 1, cx + rad);
+    var y0 = Math.max(0, cy - rad), y1 = Math.min(gsy - 1, cy + rad);
+    var z0 = Math.max(0, cz - rad), z1 = Math.min(gsz - 1, cz + rad);
+    for (var zz = z0; zz <= z1; zz++) {
+      var kz = (zz >> 4) * gnxy, lz = (zz & 15) << 8;
+      for (var yy = y0; yy <= y1; yy++) {
+        var cyz = (yy >> 4) * gnx + kz, lyz = ((yy & 15) << 4) | lz;
+        for (var xx = x0; xx <= x1; xx++) {
+          var blk = hullTab[(xx >> 4) + cyz];
+          if (blk && blk[lyz | (xx & 15)] >= 0) return true;
+        }
+      }
+    }
+    return false;
+  }
   for (mi = 0; mi < mIdx.length; mi++) {
-    q = mIdx[mi]; mPerm[mi] = mi;
+    q = mIdx[mi];
     var tipExt = X[q] > hMaxX ? (X[q] - hMaxX) / Math.max(1, maxX - hMaxX + 1) : 0;
     var zN = (Z[q] - mMinZ) / mSpanZ;
-    mScore[mi] = clamp(0.02 + 0.33 * (tipExt > 0 ? Math.max(0.25, zN * 0.5 + tipExt * 0.5) : zN), 0, 0.36);
+    var ms = clamp(0.02 + 0.96 * (tipExt > 0 ? Math.max(0.25, zN * 0.5 + tipExt * 0.5) : zN), 0.01, 1.0);
+    mB0[mi] = clamp(Math.round(ms * 250), 1, 250);
+    if (nearHull(X[q], Y[q], Z[q], 1)) mSeeds.push(mi);
+    else if (nearHull(X[q], Y[q], Z[q], 2)) mNear2.push(mi);
   }
-  mPerm.sort(function (a, b) { return mScore[a] - mScore[b]; });
-  var mOrd = new Int32Array(mIdx.length), mThr = new Float32Array(mIdx.length);
-  for (mi = 0; mi < mIdx.length; mi++) { mOrd[mi] = mIdx[mPerm[mi]]; mThr[mi] = mScore[mPerm[mi]]; }
+  var mConn = shipRiseConnect(G, X, Y, Z, mIdx, mB0, mSeeds.length && mNear2.length ? mSeeds.concat(mNear2) : (mSeeds.length ? mSeeds : mNear2), 'mast');
+  var mOrd = mConn.ord, mThr = new Float32Array(mIdx.length);
+  for (mi = 0; mi < mIdx.length; mi++) mThr[mi] = clamp(0.01 + 0.33 * mConn.thr[mi], 0.01, 0.34);
 
-  // 構建每階直方圖計數查表，以支援 O(log N) / O(1) 二分求當下可見數量
-  // 非武器模型／裝飾：分為「船體舾裝」（rig 初期 0.05..0.28）與「帆桁」（rig 中期 0.28..0.62，由低到高）
+  // 非武器模型／裝飾：船體舾裝於船殼完後登場（0.04..0.24）；帆桁嚴格於所有桅桿完成（0.34）之後再掛（0.35..0.58）
   var rigModels = [], fixtures = [], yards = [];
   ((T.rig && T.rig.models) || []).forEach(function (m) {
     if (shipRiseIsWeaponModel(m)) return;
@@ -345,16 +386,16 @@ function shipRiseAnalyze(T) {
   fixtures.sort(function (a, b) { return a.z - b.z; });
   yards.sort(function (a, b) { return a.z - b.z; });
   fixtures.forEach(function (it, k) {
-    it.thr = fixtures.length > 1 ? 0.05 + 0.23 * k / (fixtures.length - 1) : 0.12;
+    it.thr = fixtures.length > 1 ? 0.04 + 0.20 * k / (fixtures.length - 1) : 0.12;
     rigModels.push(it);
   });
   yards.forEach(function (it, k) {
-    it.thr = yards.length > 1 ? 0.28 + 0.34 * k / (yards.length - 1) : 0.40;
+    it.thr = yards.length > 1 ? 0.35 + 0.23 * k / (yards.length - 1) : 0.40;
     rigModels.push(it);
   });
   rigModels.sort(function (a, b) { return a.thr - b.thr; });
 
-  // 繩索（靜索 0.45..0.63，動索 0.60..0.78）：排除 anchor_cable，預編進靜態 VBO（LINES prefix ＋ 繩梯 tube TRIANGLES）
+  // 繩索（靜索 0.48..0.66，動索 0.62..0.78）：排除 anchor_cable，預編進靜態 VBO（LINES prefix ＋ 繩梯 tube TRIANGLES）
   var lineSegs = [], tubeEntries = [];
   var CR = typeof climbRopes === 'function' ? climbRopes(T) : null;
   var standingRe = /stay|shroud|backstay|forestay|ratline|bobstay|支索|圍桅/i;
@@ -366,14 +407,14 @@ function shipRiseAnalyze(T) {
     avgZ /= np;
     var isStand = standingRe.test(r.name || '') || mt.kind === 'shroud' || mt.kind === 'stay';
     var zN = clamp((avgZ - hMinZ) / Math.max(1, maxZ - hMinZ), 0, 1);
-    var thr = isStand ? 0.45 + 0.18 * zN : 0.60 + 0.18 * zN;
+    var thr = isStand ? 0.48 + 0.18 * zN : 0.62 + 0.16 * zN;
     if (CR && CR[idx]) tubeEntries.push({ pts: pts, col: col, w: Math.max(ROPE_TUBE_MIN || 0.06, r.radius || 0), thr: thr });
     else lineSegs.push({ pts: pts, col: col, thr: thr });
   });
   lineSegs.sort(function (a, b) { return a.thr - b.thr; });
   tubeEntries.sort(function (a, b) { return a.thr - b.thr; });
 
-  // 帆與旗幟（依高度由下往上 0.65..0.95，旗幟收尾 0.92..1.00）
+  // 帆與旗幟（依高度由下往上 0.68..0.94，旗幟收尾 0.92..1.00）
   var sails = [];
   (T.cloth || []).forEach(function (C, si) {
     if (!C || !C.n || !C.tris || !C.tris.length) return;
@@ -390,7 +431,7 @@ function shipRiseAnalyze(T) {
   var siC = 0, fiC = 0;
   sails.forEach(function (s) {
     if (s.isFlag) { s.thr = nFlagCloth > 1 ? 0.92 + 0.07 * (fiC++) / (nFlagCloth - 1) : 0.95; }
-    else { s.thr = nSailCloth > 1 ? 0.65 + 0.27 * (siC++) / (nSailCloth - 1) : 0.72; }
+    else { s.thr = nSailCloth > 1 ? 0.68 + 0.26 * (siC++) / (nSailCloth - 1) : 0.72; }
   });
 
   // 建置靜態繩與帆的 GPU 緩衝（同型船共用）
@@ -613,7 +654,7 @@ function shipRiseSet(sr, p, sync) {
   var v = p >= 1 ? 1 : clamp((p - cut) / Math.max(1e-4, 1 - cut), 0, 1);
 
   var nH1 = p >= 1 ? D.hOrd.length : (u <= 0 ? 0 : shipRiseUpperBound(D.hThr, u));
-  var nM1 = p >= 1 ? D.mOrd.length : (v <= 0 ? 0 : shipRiseUpperBound(D.mThr, v * 0.36));
+  var nM1 = p >= 1 ? D.mOrd.length : (v <= 0 ? 0 : shipRiseUpperBound(D.mThr, v));
 
   var G = sr.G, occ = sr.occ, rs = sr.rs, SX = G.sx, SY = G.sy;
   var X = D.X, Y = D.Y, Z = D.Z, C = D.C, i, q, gx, gy, gz;
@@ -721,15 +762,14 @@ function shipRiseOpen(T_town, lot, hullId, opts) {
     return Promise.resolve(prev);
   }
   if (prev) shipRiseClose(prev);
-  var inst = T_town && lot ? townRiseInst(T_town, lot) : null;
   var tasks = [loadHull(hullId)];
-  if (!opts.standalone && inst && SR_YARDS[inst.k]) tasks.push(shipRiseYardEnsure(inst.k));
   var tok = key + ':' + hullId + ':' + performance.now();
   SHIP_RISE._pending = SHIP_RISE._pending || {};
   SHIP_RISE._pending[key] = tok;
 
   return Promise.all(tasks).then(function (res) {
     if (SHIP_RISE._pending[key] !== tok) return SHIP_RISE.S[key] || null;
+    if (T_town && typeof townRiseHides === 'function' && townRiseHides(T_town, { lot: lot })) return null;
     var T = res[0];
     if (!T) throw new Error('載入船型失敗：' + hullId);
     var D = shipRiseAnalyze(T);
@@ -742,7 +782,7 @@ function shipRiseOpen(T_town, lot, hullId, opts) {
       nH: 0, nM: 0, deco: [], hz: 0, dirty: true, ready: true,
       p: -1, cutP: opts.cutP > 0 && opts.cutP < 1 ? opts.cutP : SR_DEF_CUT, simP: opts.sim ? opts.p : null,
       visV: 0, lineN: 0, tubeN: 0, sailN: 0, play: 0, p0: 0, t0: 0, auto: false,
-      M_hull: M4.ident(), M_rig: M4.ident(), yib: null
+      M_hull: M4.ident(), M_rig: M4.ident()
     };
     SHIP_RISE.S[key] = sr;
     shipRiseMatrix(sr);
@@ -761,7 +801,6 @@ function shipRiseClose(sr) {
   if (SHIP_RISE.S[sr.key] === sr) delete SHIP_RISE.S[sr.key];
   if (SHIP_RISE.demo === sr) SHIP_RISE.demo = null;
   if (sr.rs) sr.rs.dispose();
-  if (sr.yib) { gl.deleteBuffer(sr.yib); sr.yib = null; }
   TOWNS.dirty = true;
 }
 
@@ -773,7 +812,7 @@ function shipRiseSync(T, yards, fromPoll) {
     var sr = SHIP_RISE.S[k];
     if (sr.standalone || !sr.T_town || sr.T_town.id !== T.id) continue;
     sr.T_town = T;
-    if (!yards[sr.lot]) {
+    if (!yards[sr.lot] || (typeof townRiseHides === 'function' && townRiseHides(T, { lot: sr.lot }))) {
       sr.simP = null;
       if (SHIP_RISE.demo !== sr) shipRiseClose(sr);
     }
@@ -1069,14 +1108,46 @@ function shipRiseOne(sr) {
   };
 }
 
+function shipRiseFloatCheck(sr) {
+  if (!sr) {
+    sr = SHIP_RISE.demo || SHIP_RISE.S[Object.keys(SHIP_RISE.S)[0]];
+  }
+  if (!sr || !sr.G || !sr.occ) return null;
+  var occ = sr.occ, G = sr.G, SX = G.sx, SY = G.sy, SZ = G.sz, N = occ.length;
+  var vis = new Uint8Array(N), q = new Int32Array(N);
+  var compSizes = [], total = 0, maxComp = 0;
+  for (var i = 0; i < N; i++) {
+    if (!occ[i]) continue;
+    total++;
+    if (vis[i]) continue;
+    var qh = 0, qt = 0;
+    vis[i] = 1; q[qt++] = i;
+    while (qh < qt) {
+      var u = q[qh++], ux = u % SX, uy = ((u / SX) | 0) % SY, uz = (u / (SX * SY)) | 0;
+      var x0 = ux > 0 ? ux - 1 : 0, x1 = ux + 1 < SX ? ux + 1 : SX - 1;
+      var y0 = uy > 0 ? uy - 1 : 0, y1 = uy + 1 < SY ? uy + 1 : SY - 1;
+      var z0 = uz > 0 ? uz - 1 : 0, z1 = uz + 1 < SZ ? uz + 1 : SZ - 1;
+      for (var zz = z0; zz <= z1; zz++) for (var yy = y0; yy <= y1; yy++) for (var xx = x0; xx <= x1; xx++) {
+        var v = xx + SX * (yy + SY * zz);
+        if (occ[v] && !vis[v]) { vis[v] = 1; q[qt++] = v; }
+      }
+    }
+    compSizes.push(qt);
+    if (qt > maxComp) maxComp = qt;
+  }
+  compSizes.sort(function (a, b) { return b - a; });
+  return { p: sr.p, total: total, comps: compSizes.length, maxComp: maxComp, floating: total - maxComp, compSizes: compSizes.slice(0, 10) };
+}
+
 function shipRiseStat() {
   var demo = SHIP_RISE.demo ? shipRiseOne(SHIP_RISE.demo) : null;
   var list = Object.keys(SHIP_RISE.S).map(function (k) { return shipRiseOne(SHIP_RISE.S[k]); });
-  return { demo: demo, yards: list, cache: Object.keys(SHIP_RISE.yardCache), err: SHIP_RISE.err };
+  return { demo: demo, yards: list, err: SHIP_RISE.err };
 }
 
 function shipRiseCmd(cmd, a, b, c) {
   if (cmd === 'stat' || cmd == null) return shipRiseStat();
+  if (cmd === 'floatCheck') return shipRiseFloatCheck();
   if (cmd === 'set') {
     var p = clamp(+a || 0, 0, 1);
     if (SHIP_RISE.demo) { SHIP_RISE.demo.play = 0; shipRiseSet(SHIP_RISE.demo, p, true); shipRisePanelSync(); }
