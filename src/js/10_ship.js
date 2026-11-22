@@ -279,7 +279,7 @@ function gunDecks(sh) {
   return decks;
 }
 /** 照甲板 meta 分砲甲板：每門砲照模型的關聯路徑（甲板-gun/…）找所在的那一層，路徑看不出來 ⇒ 照砲架底的高度（deckAt）；
- *  有砲的那幾層由下往上排成 d0、d1…（名字照 meta），站人的高度範圍照那一層第一門不是追擊砲的砲（同舊的算法）；最上面那層 ＝ 露天（陸戰隊、砲長的「甲板人員」）。 */
+ *  有砲的那幾層由下往上排成 d0、d1…（名字照 meta），站人的高度範圍照那一層第一門不是追擊砲的砲（同舊的算法；那門架高 ⇒ 照它正下方的地板）；最上面那層 ＝ 露天（陸戰隊、砲長的「甲板人員」）。 */
 function gunDecksMeta(sh) {
   var T = sh.T, by = {}, list = [];
   sh.guns.forEach(function (g) {
@@ -295,6 +295,10 @@ function gunDecksMeta(sh) {
     L.guns.forEach(function (g) { g.deck = D.key; });
     var nc = L.guns.filter(function (g) { return fitKind0(g.model) !== 'chase'; }), up = function (g) { var R0 = g.model.hd && ndRoot(g.model.hd); return !!R0 && g.model.bb[2] > T.turrets[R0.k].box[2] + 3; };   // 疊在砲塔頂上、比底座高的砲（27_turret.js）不拿來切這一層的高度
     var main = nc.filter(function (g) { return !up(g); })[0] || nc[0] || L.guns[0], a = Math.floor(fitBB0(main.model)[2]);
+    // 架高的砲（砲柱、舷頂上的迴旋砲）：外框底往下切到的範圍蓋不到它正下方的地板（甲板 meta floor）⇒ 照那塊地板切（砲直接擺在甲板上 ⇒ 外框底 ＝ 地板，照舊）。
+    //   ⛔ 照外框底切 ⇒ 海鷗號（FAR-87）船頭砲柱上那門 z 21、平台地板 z 10 ⇒ zr 13–26 蓋不到任何地板、一個取用點都沒有；
+    //   沙船主甲板（迴旋砲外框底 z 35、地板 z 26）⇒ 認不出艙口吊上來的取用點（梯頭 z 23）；聖羅曼號主甲板、三叉戟號上甲板的送藥手站不滿、取用點擺到上一層
+    var fl = deckFloor(L.meta, main.model.c[0]); if (fl !== null && a - (fitKind0(main.model) === 'carr' ? 6 : 8) > fl) a = fl;
     D.zr = fitKind0(main.model) === 'carr' ? [a - 6, a + 3] : [a - 8, a + 5];
     return D;
   });

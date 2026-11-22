@@ -30,6 +30,9 @@ function shipCheck(id) {
     // ── 開場那一刻（還沒跑）──
     var float0 = ropesFloating(sh).map(function (f) { return f.name + '#' + f.end + '（' + f.why + '）'; });
     R.binds = ropeBindsFresh(sh);                                        // 繩端綁定（TASK-0716）：開場那一刻現場算（不看檔頭的 bind）⇒ admin.py ropebind 寫進檔頭、出報表
+    if (Q.has('sctest')) R.sctest = scTest(sh, Q.get('sctest'));         // 反向對照（admin.py shipcheck --selftest）：開場前在記憶體裡弄壞一處
+    var CL = clipCheck(sh);                                              // 穿模（FAR-87）：開場那一刻、還沒跑（會轉的件還在原位）
+    sh.fallLog = [];                                                     // 開場就摔（FAR-87）：40_crew.js landIn／crewFall 記
     for (var i = 0, n = Math.round(SC_SECS / DT); i < n; i++) simStep();
     flowRun(false);
     R.info = { name: T.name, guns: sh.guns.length, crew: sh.crew.length, models: sh.models.length, ropes: sh.ropes.length, sails: sh.sails.filter(function (s) { return !(s.meta && s.meta.team); }).length, teamFlags: sh.sails.filter(function (s) { return s.meta && s.meta.team; }).length,   // 作品的帆／遊戲加的陣營旗分開數（77_colours.js；⛔ 混在一起 ⇒ 夜燈號 vxk 12 面、報告寫 15，basecamp 2026-10-15 問）
@@ -139,8 +142,29 @@ function shipCheck(id) {
       }
       var sn = m.name.replace(/^.*yard-/, ''), hasSail = sh.sails.some(function (s) { return s.name === sn; });   // 沒掛帆的帆桁（crossjack、spritsail 常見）不用寫 sail
       if (m.kind === 'yard' && ((!mt.sail && hasSail) || (!mt.mast && !/bowsprit|艏斜桅/.test(m.path)))) add('warn', '帆桁', m.path, '帆桁 meta 少了 ' + [!mt.sail && hasSail && 'sail（有一面帆叫 ' + sn + '）', !mt.mast && 'mast'].filter(Boolean).join('、') + ' ⇒ 照名字配帆／桅', '帆桁 meta sail=<帆名>、mast=<桅>（造船規格 §9.1）');
-      if (!m.alive && !GUNS[m.kind] && !kindProp(m.kind, 'noFall')) add('error', '開場就掉', m.path, (mt.kind || m.kind) + ' 開場 ' + SC_SECS + ' 秒內就判成沒東西撐、掉了（腳 z ' + (m.foot >> 21) + '）', '把它接到實心上；掛著的（燈、舵）登記掛點固定點（bail、stock-top）');
+      if (!m.alive && !GUNS[m.kind] && !kindProp(m.kind, 'noFall')) { var by = scPlacer(m); add('error', '開場就掉', m.path, (mt.kind || m.kind) + ' 開場 ' + SC_SECS + ' 秒內就判成沒東西撐、掉了（腳 z ' + (m.foot >> 21) + '）',
+        by === 'plan' ? '船隻配置頁把它換到撐得住的格' : by ? '遊戲那側：' + SC_BY[by] + '擺的位置腳下撐不住（32_hull.js svStruct：腳那一格四周 5×5×2 要有實心）' : '把它接到實心上；掛著的（燈、舵）登記掛點固定點（bail、stock-top）'); }   // 遊戲自己擺的（FAR-87）⇒ 修法寫遊戲那側
     });
+    // ── 開場就摔（FAR-87）：開場 SC_SECS 秒內摔到下一層（40_crew.js landIn）或落水（crewFall）的船員 —— 站的地方腳下 3×3（下一格）沒有實心（32_hull.js svRest 每半秒量一次）──
+    var FL = {}, nFall = 0;
+    sh.fallLog.forEach(function (f) { var k = (ROLE_NAME[f.role] || '船員') + '|' + (f.to ? '摔到下一層' : '落水'); (FL[k] = FL[k] || []).push(f); nFall++; });
+    Object.keys(FL).forEach(function (k) {
+      var p = k.split('|'), L = FL[k], ex = L.slice(0, 3).map(function (f) { return '(' + f.from.map(Math.floor).join(', ') + ')' + (f.to ? ' → z ' + Math.floor(f.to[2]) : ''); }).join('、');
+      add('error', '開場就摔', p[0] + '（' + p[1] + '）', L.length + ' 人開場 ' + SC_SECS + ' 秒內就' + p[1] + '（站的格 ' + ex + (L.length > 3 ? ' 等' : '') + '）',
+        '站位腳下 3×3（下一格）要有實心（32_hull.js svRest）：站位是遊戲擺的（40_crew.js、42_hands.js）⇒ 遊戲那側；甲板真的缺格、有洞 ⇒ 作品那側補');
+      R.issues[R.issues.length - 1].n = L.length;                     // 人數（admin.py fleet_diff：同一條人數變多 ⇒ 算多；部件帶摔到哪 ⇒ 兩條不會照順序配錯）
+    });
+    R.info.falls = nFall ? Object.keys(FL).map(function (k) { return k.replace('|', ' ') + ' ' + FL[k].length + ' 人'; }).join('、') : '沒有';
+    // ── 穿模（FAR-87）：開場那一刻量的（clipCheck）；遊戲擺的 ≥ CLIP_GAME 格、作品的 ≥ CLIP_WORK 格才報 ──
+    var clipN = 0;
+    CL.list.forEach(function (c) {
+      if (c.n < (c.by ? CLIP_GAME : CLIP_WORK)) return;
+      clipN++;
+      add('warn', '穿模', c.path, c.name + ' 有 ' + c.n + ' 格在船殼的實心格裡（' + c.ex.map(function (p) { return '(' + p.join(', ') + ')'; }).join('、') + (c.n > c.ex.length ? ' 等' : '') + '；穿進 ' + c.part + '）',
+        c.by === 'plan' ? '船隻配置頁把它換到不會穿進船殼的格' : c.by ? '遊戲那側：' + SC_BY[c.by] + (SC_CLIPSORT[c.by] ? '挑位置時已經把穿模的格往後排，還穿 ⇒ 那一層走路格上每一格都會穿、照舊挑了第一格（那一層要有放得下的空地，或改這支的擺法）' : '擺的位置沒量本體穿不穿進船殼') : '作品那側：把它挪出船殼，或船殼讓出位置；故意要重疊的 ⇒ 模型 meta clip=ok');
+    });
+    R.info.clip = '量了 ' + CL.n + ' 件，穿進船殼的 ' + CL.list.length + ' 件、報 ' + clipN + ' 件（遊戲擺的 ≥ ' + CLIP_GAME + ' 格、作品的 ≥ ' + CLIP_WORK + ' 格）' +
+      (CL.mast ? '；帆桁碰到自己那根桅的 ' + CL.mast + ' 格不算' : '') + '；不量：' + (Object.keys(CL.skip).map(function (k) { return k + ' ' + CL.skip[k] + ' 件'; }).join('、') || '—');
     // ── 硬骨帆的實體竹篾（TASK-1320；Ship_Rigging §7「實體竹篾桿」）：每面 battens 帆 —— 幾根有桿、綁住幾列、桿離它那一列多遠 ──
     var BT = [];
     sh.sails.forEach(function (s) {
@@ -402,6 +426,76 @@ function shipCheck(id) {
     R.issues.sort(function (a, b) { return (a.lv === 'error' ? 0 : 1) - (b.lv === 'error' ? 0 : 1); });
     done();
   }).catch(function (e) { add('error', '載入', id, String(e && e.message || e), '—'); done(); });
+}
+/** 遊戲自己擺的模型是哪一支擺的（m.by：36_rooms.js、45_pumps.js、46_carpenter.js；取用點的桶照 st.plan，23_powder.js）⇒ SC_BY 的鍵；作品的模型 ⇒ null。
+ *  匯入檢查照它寫修法（FAR-87：遊戲擺的掉了、穿模了，⛔ 叫造船的人去改）。 */
+var SC_BY = { plan: '船隻配置頁', roomAuto: '艙房自動擺（36_rooms.js roomAuto）', pumpFill: '甲板自動擺（45_pumps.js pumpFill）', benchFill: '甲板自動擺（46_carpenter.js benchFill）',
+  pumpNavFill: '走路格退路（45_pumps.js pumpNavFill）', benchNavFill: '走路格退路（46_carpenter.js benchNavFill）', pumpsQ: '量測參數 ?pumps=', makeStations: '取用點（23_powder.js makeStations）' };
+var SC_CLIPSORT = { pumpNavFill: true, benchNavFill: true };          // 挑位置時已經把本體穿進船殼的格往後排（furnClipPts）⇒ 還穿 ＝ 每一格都穿、照舊挑第一格
+function scPlacer(m) { return m.station ? (m.station.plan ? 'plan' : 'makeStations') : m.kind === 'furn' ? m.by || 'roomAuto' : null; }
+/** 穿模（FAR-87；Tim 2026-11-21「是否可以加上穿模檢測(之前遇過子模型跟船殼穿模)」）：開場那一刻（還沒跑），每個模型、裝飾、遊戲擺的家具與取用點的桶，
+ *  網格表面往裡 PORT_DEPTH 格取點（62_ports.js meshInPts：砲門蓋板的穿模檢查、走路格退路擺家具同一套）、照開場的擺法放進船，數落在船殼實心格（T.hullG）的有幾格。
+ *  ⛔ 不用 meshOcc：取樣點在模型外面半格、又外擴一格 ⇒ 底面貼著甲板的全部算穿模（2026-11-21 試量過）。
+ *  不量（skip 記件數）：規格表標 clip 的 kind（舵、舵柄、槳：本來就穿過船殼）、砲門蓋板（62_ports.js portsIssues 另有檢查）、自帶格子的（vox：放回船殼了）、meta clip=ok（作品故意的）。
+ *  帆桁（含竹篾）碰到自己那根桅的格不算（kind=mast、mast 同名那條關聯的格子清單，和路徑在它底下的關聯）：叉口、桅箍本來就抱著桅。
+ *  ⇒ { n: 量了幾件, list: [{ path, name, by, n: 穿進幾格, ex: 前 3 格, part: 穿進最多格的那條關聯 }]（n > 0 的，照格數排）, skip: { 名: 件數 }, mast: 不算的格 }。 */
+var CLIP_GAME = 2, CLIP_WORK = 8;                                         // 門檻（格）：遊戲擺的、作品的（作品的 1–7 格多半只是貼著：彈藥庫的桶、錨）
+function clipCheck(sh) {
+  var T = sh.T, G = T.hullG || T.base, RM = (T.rig && T.rig.meshes) || [], P = {}, out = { n: 0, list: [], skip: {}, mast: 0 }, MP = {};
+  (T.h.parts || []).forEach(function (q) { var mt = q.meta || {}; if (mt.kind === 'mast' && mt.mast && !MP[mt.mast]) MP[mt.mast] = q; });   // 同一個 mast 兩條 ⇒ 第一條（同 10_ship.js findMasts）
+  var MC = {};
+  function mastSet(k) {                                                  // 那根桅自己的格（格子清單 cellRuns，10_ship.js findMasts 同一份）⇒ { 'x,y,z': 1 }
+    if (MC[k]) return MC[k];
+    var q = MP[k], C = q.cellRuns ? drvCells(T, q.cellRuns) : [], o = MC[k] = {}; for (var j = 0; j < C.length; j += 3) o[C[j] + ',' + C[j + 1] + ',' + C[j + 2]] = 1;
+    return o;
+  }
+  function skip(k) { out.skip[k] = (out.skip[k] || 0) + 1; }
+  function one(m, M) {
+    var mt = m.meta || {}, k = mt.kind || m.kind, by = scPlacer(m);
+    if (m.vox) { skip('自帶格子的'); return; }
+    if (mt.clip === 'ok') { skip('meta clip=ok'); return; }
+    if (k === 'portlid') { skip('砲門蓋板'); return; }
+    if (kindProp(k, 'clip')) { skip((META_KINDS[k] || {}).name || k); return; }
+    var key = m.kind === 'furn' ? 'f' + m.item + (T.furn && T.furn[m.item + 'x'] === m.mesh ? 'x' : 'y') : 'r' + m.mesh;
+    var V = P[key] || (P[key] = meshInPts(m.kind === 'furn' ? furnModelMesh(m.item, key.slice(-1)) || boxMesh(furnBoxes(m.item, key.slice(-1)), FURN_MATS) : RM[m.mesh]));
+    if (!V.length) return;
+    out.n++;
+    var own = k === 'yard' && MP[mt.mast] ? MP[mt.mast].path : null, ownC = own && mastSet(mt.mast), seen = {}, r = { path: m.path || m.name, name: m.station ? '取用點的火藥桶' : m.kind === 'furn' ? (FURN[m.item] || {}).name || m.item : (META_KINDS[k] || {}).name || k || '模型', by: by, n: 0, ex: [], part: '' }, parts = {};
+    for (var i = 0; i < V.length; i += 3) {
+      var q = M4.pt(M, V[i], V[i + 1], V[i + 2]), x = Math.floor(q[0]), y = Math.floor(q[1]), z = Math.floor(q[2]), c = x + ',' + y + ',' + z;
+      if (seen[c] || !G.get(x, y, z)) continue;
+      seen[c] = 1;
+      var pa = ldcPartAt(T, x, y, z);
+      if (own && (ownC[c] || pa === own || pa.indexOf(own + '/') === 0)) { out.mast++; continue; }
+      r.n++; parts[pa] = (parts[pa] || 0) + 1; if (r.ex.length < 3) r.ex.push([x, y, z]);
+    }
+    if (!r.n) return;
+    r.part = Object.keys(parts).sort(function (a, b) { return parts[b] - parts[a]; })[0];
+    out.list.push(r);
+  }
+  sh.models.forEach(function (m) { one(m, modelLocal(m)); });
+  (sh.decos || []).forEach(function (d) { one(d, d.gm ? M4.mul(modelLocal(d.gm), trans(d.off[0], d.off[1], d.off[2])) : d.L || trans(d.origin[0], d.origin[1], d.origin[2])); });   // 裝飾照畫面的擺法（62_simview.js）
+  out.list.sort(function (a, b) { return b.n - a.n; });
+  return out;
+}
+/** 匯入檢查的反向對照（?sctest=<做法>；admin.py shipcheck --selftest）：開場前在記憶體裡弄壞一處 ⇒ 那一類要報出來。⇒ 做了什麼（找不到可以弄的 ⇒ 為什麼沒做）。
+ *  clip ＝ 第一件沒穿模、往下搬 3 格就穿進 CLIP_GAME 格以上的遊戲擺的家具（擺在坐板之間的往下搬只是懸空 ⇒ 跳過），往下搬 3 格；
+ *  fall ＝ 一個站著不動的軍官（沒有 ⇒ 第一個站著不動的人）搬到頭上 3 m（半空）。 */
+function scTest(sh, how) {
+  if (how === 'clip') {
+    var cn = function (q) { var C = clipCheck({ T: sh.T, models: [q], decos: [] }); return C.n ? C.list.length ? C.list[0].n : 0 : -1; };
+    var m = sh.models.filter(function (q) { return q.kind === 'furn' && q.alive && !cn(q) && cn(Object.assign({}, q, { origin: [q.origin[0], q.origin[1], q.origin[2] - 3] })) >= CLIP_GAME; })[0];
+    if (!m) return '沒有往下搬會穿模的遊戲擺的家具';
+    m.origin = [m.origin[0], m.origin[1], m.origin[2] - 3]; m.bb = [m.bb[0], m.bb[1], m.bb[2] - 3, m.bb[3], m.bb[4], m.bb[5] - 3]; m.c = [m.c[0], m.c[1], m.c[2] - 3];
+    return m.path + ' 往下搬 3 格';
+  }
+  if (how === 'fall') {
+    var still = sh.crew.filter(function (c) { return c.st === 0 && !c.walk && !c.moving && c.role !== ROLE.HAND; }), c = still.filter(function (o) { return o.role === ROLE.OFFICER; })[0] || still[0];
+    if (!c) return '沒有站著不動的人';
+    c.pos = [c.pos[0], c.pos[1], c.pos[2] + 30]; c.home = c.pos.slice();
+    return (ROLE_NAME[c.role] || '船員') + ' 搬到頭上 3 m（z ' + c.pos[2] + '）';
+  }
+  return '不認得的做法 ' + how;
 }
 
 // ── 排水量與壓艙物（?dispcheck=<船,船…>｜all；admin.py disp 讀；Tim 2026-10-26「加一個工具檢查目前所有船的空載排水量跟水線排水量 滿載排水量 因為我發現目前有些船沒有壓艙物(載一點貨物就會加深吃水)」

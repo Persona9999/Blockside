@@ -273,6 +273,13 @@ function mountDrop(sh, g, da) {
   var p = mountRot(g.drop, g.mt.c, da), x = Math.floor(p[0]), y = Math.floor(p[1]), z = Math.floor(p[2]);
   if (countBox(sh.grid, x - 1, y - 1, z - 1, x + 1, y + 1, z - 1) && navReach(sh, g.drop, p)) g.drop = p;
 }
+/** 站位、砲手（站的那一點、原位）跟著砲轉 da：轉過去那一點站得住（同 32_hull.js svRest：腳下 3×3 有格子、或踩在砲塔甲板上）才轉，站不住 ⇒ 留在原地（同 mountDrop）。
+ *  ⛔ 照轉、不看地板 ⇒ 開場迴旋砲轉向敵艦，站在甲板邊的砲手被帶出去 0.2–0.8 m 就踩空，下一次 svRest 摔到下一層或落水（匯入檢查「開場就摔」16 艘 102 人，FAR-87）。
+ *  站得住的照舊回 mountRot 那一點 ⇒ 原本沒摔的人位置一位元不變；開砲只看在崗人數（40_crew.js manning），留在原地照常開。 */
+function mountStand(sh, p, c, da) {
+  var q = mountRot(p, c, da), x = Math.floor(q[0]), y = Math.floor(q[1]), z = q[2];
+  return countBox(sh.grid, x - 1, y - 1, z - 1, x + 1, y + 1, z - 1) || turDeckAt(sh, q) >= 0 ? q : p;
+}
 /** 每一步（50_sim.js，在開砲之前）：有迴旋的砲照瞄準點挑方向、照轉速轉；轉了 ⇒ 砲軸、砲口、站位、人跟著轉。 */
 function mountStep(sh, dt) {
   var G = sh.mounts; if ((!G && !sh.tur) || sh.sunk || sh.struck) return;
@@ -300,7 +307,7 @@ function mountStep(sh, dt) {
     var back = function (q) { return [q[0] - M.ax0[0] * M.sl, q[1] - M.ax0[1] * M.sl, q[2]]; };
     g.muz = mountRot(back(M.muz0), M.c, M.yaw); if (M.muzs0) g.muzs = M.muzs0.map(function (q) { return mountRot(back(q), M.c, M.yaw); });
     if (g.drop) mountDrop(sh, g, da);
-    (g.spots || []).forEach(function (s) { s.at = mountRot(s.at, M.c, da); var c = s.who; if (c && c.gun === g && !c.walk && c.st === 0) { c.pos = mountRot(c.pos, M.c, da); if (c.home) c.home = mountRot(c.home, M.c, da); } });
+    (g.spots || []).forEach(function (s) { s.at = mountStand(sh, s.at, M.c, da); var c = s.who; if (c && c.gun === g && !c.walk && c.st === 0) { c.pos = mountStand(sh, c.pos, M.c, da); if (c.home) c.home = mountStand(sh, c.home, M.c, da); } });
   });
 }
 /** 迴旋砲還在轉（換砲門的途中）⇒ 不能開；砲塔邊轉邊開（照 cone 判對不對得到）。 */

@@ -74,13 +74,27 @@ function benchNavFill(sh, it, C0, key) {
       var i2 = i0 + (j2 % 2 ? (j2 + 1) / 2 : -j2 / 2); if (i2 < 0 || i2 >= C0.length) continue;
       var P2 = navPos(N, C0[i2]), b2 = boxAt(P2); if (footOK(b2) && (gap(b2) > LAD_KEEP || bg <= LAD_KEEP)) { P = P2; break; }
     }
+    // 本體不穿進船殼（FAR-87 第 5 條）：飛魚號的木工台讓開艙口梯頂（45_pumps.js pumpAuto）改補到貨艙，挑到的那一點台身有 10 格在船殼裡；海鷗號的木工台、帆布櫃穿進坐板。
+    //   挑到的那一點穿模才往兩邊挑第一個不穿模、撐得住、照樣讓開梯子兩頭的 ⇒ 本來沒穿模的船一位元都不變；每一點都穿 ⇒ 照舊
+    if (furnClipPts(sh, it, boxAt(P))) for (var j3 = 1; j3 < C0.length; j3++) {
+      var i3 = i0 + (j3 % 2 ? (j3 + 1) / 2 : -j3 / 2); if (i3 < 0 || i3 >= C0.length) continue;
+      var P3 = navPos(N, C0[i3]), b3 = boxAt(P3); if (!furnClipPts(sh, it, b3) && footOK(b3) && (gap(b3) > LAD_KEEP || bg <= LAD_KEEP)) { P = P3; break; }
+    }
     var at = [Math.round(P[0] - f.size[0] / 2), Math.round(P[1] - f.size[1] / 2), Math.round(P[2])];
     var bb = [at[0], at[1], at[2], at[0] + f.size[0], at[1] + f.size[1], at[2] + f.size[2] + 1], nm = (NV.levels[NV.home].name || NV.levels[NV.home].key) + f.name + '-' + (B.length + 1);
-    var m = { T: T, k: sh.models.length, name: nm, path: 'nav/' + nm, kind: 'furn', item: it, hold: 0, room: null, hp: f.hp, hpMax: f.hp, mesh: furnMesh(T, it, 'x'), origin: at, bb: bb, pts: {}, meta: { kind: 'furniture', item: it },
+    var m = { T: T, k: sh.models.length, name: nm, path: 'nav/' + nm, kind: 'furn', item: it, by: 'benchNavFill', hold: 0, room: null, hp: f.hp, hpMax: f.hp, mesh: furnMesh(T, it, 'x'), origin: at, bb: bb, pts: {}, meta: { kind: 'furniture', item: it },
       c: [(bb[0] + bb[3]) / 2, (bb[1] + bb[4]) / 2, (bb[2] + bb[5]) / 2], foot: VK.pack(Math.floor(bb[0] + 1), Math.floor(bb[1] + 1), at[2] - 1), alive: true };
     sh.models.push(m); B.push(m);
     for (var bx = Math.max(0, Math.floor((bb[0] - 12) / 16)); bx <= Math.floor((bb[3] + 12) / 16); bx++) (sh.mIdx[bx] = sh.mIdx[bx] || []).push(m);   // 命中分桶（10_ship.js modelIndex 同一套）
   }
+}
+/** 走路格退路擺的家具（木工台、帆布櫃、抽水機；網格同 36_rooms.js furnMesh 的 'x' 方向）擺在外框 b 的最小角時，本體有幾個取樣點落在船殼實心格裡（0 ＝ 不穿模）。
+ *  取樣點同 62_ports.js meshInPts（表面往裡 0.25 格 ⇒ 只是貼著甲板、舷牆不算）。FAR-87 第 5 條。 */
+var FURN_CLIP_PTS = {};
+function furnClipPts(sh, it, b) {
+  var P = FURN_CLIP_PTS[it] || (FURN_CLIP_PTS[it] = meshInPts(furnModelMesh(it, 'x') || boxMesh(furnBoxes(it, 'x'), FURN_MATS))), g = sh.grid, n = 0;
+  for (var i = 0; i < P.length; i += 3) if (g.get(Math.floor(P[i] + b[0]), Math.floor(P[i + 1] + b[1]), Math.floor(P[i + 2] + b[2]))) n++;
+  return n;
 }
 /** 木工台旁、從待命那一層走得到的走路點 ⇒ { lv, ci }；走不到 ⇒ null。 */
 function benchSpot(sh, m) {
