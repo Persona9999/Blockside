@@ -112,7 +112,7 @@ function board(sh, c, own) {
   if (c.art === undefined) c.art = r;                                   // 貼圖照原本的職位那一列（換成 HAND 之後 c.role 是 6 ＝ 船長那一列）；隊色照畫它的那艘
   c.backRole = own && (r === ROLE.OFFICER || r === ROLE.MARINE) ? r : undefined;
   c.role = ROLE.HAND; c.gun = null; c.st = 0; c.swim = null; c.hurtSwim = false; c.hp = Math.max(c.hp, CREW_HP * 0.5);   // 救上來的照常能動（傷的撐在一半）
-  c.pos = [l[0], l[1], l[2]]; c.deck = NV.levels[lv].key;
+  c.pos = [l[0], l[1], l[2]]; c.deck = NV.levels[lv].key; c.moving = true;   // 還在船殼外的水裡 ⇒ 一開始就算在移動（⛔ 沒設 ⇒ board 是在船員那一步裡叫的，同一步後面的 svRest 看他懸空 ⇒ 開始爬之前又丟回海裡；42_hands.js stepHand 之後每一步照常設）
   var sy = T.cy + s * (hb + 1);                                         // 先貼到船殼（水線那一層的外緣），再沿船殼往上爬、跨進來（⛔ 從游到的那一點直直往上 ⇒ 離船殼 1.8 m 的半空中爬）
   c.hand = { lv: lv, wait: rr(1, 3), legs: [], wp: null, k: 0, climb: { pts: [c.pos.slice(), [l[0], sy, l[2]], [l[0], sy, dest[2] + 3], dest], k: 0, lv: lv }, job: null, to: null };
   return true;
