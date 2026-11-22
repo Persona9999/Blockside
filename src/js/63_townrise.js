@@ -28,6 +28,120 @@ function townRiseChunks(b64) {
   });
 }
 
+/** 26 連通 Minimax 連通傳播（255 桶 FIFO Dial + 孤島半徑 2..6 橋接）：確保建築建造演出任意進度不浮空。 */
+function townRiseConnect(sx, sy, sz, nx, nxy, blkTab, n, X, Y, Z, O, minZ, wz, colMin) {
+  if (!n) return new Int32Array(0);
+  var dist = new Uint8Array(n);                                         // 0 ＝ 未造訪；有效門檻 1..255
+  var head = new Int32Array(256).fill(-1), tail = new Int32Array(256).fill(-1), nxt = new Int32Array(n).fill(-1);
+  var popSeq = new Int32Array(n), popN = 0;
+
+  function enqueue(u, b) {
+    if (b < 1) b = 1; else if (b > 255) b = 255;
+    dist[u] = b; nxt[u] = -1;
+    if (tail[b] >= 0) nxt[tail[b]] = u; else head[b] = u;
+    tail[b] = u;
+  }
+  function dialSweep(startB) {
+    for (var b = startB; b <= 255; b++) {
+      var cur;
+      while ((cur = head[b]) >= 0) {
+        head[b] = nxt[cur];
+        if (head[b] < 0) tail[b] = -1;
+        popSeq[popN++] = cur;
+        var cx = X[cur], cy = Y[cur], cz = Z[cur];
+        var x0 = cx > 0 ? cx - 1 : 0, x1 = cx + 1 < sx ? cx + 1 : sx - 1;
+        var y0 = cy > 0 ? cy - 1 : 0, y1 = cy + 1 < sy ? cy + 1 : sy - 1;
+        var z0 = cz > 0 ? cz - 1 : 0, z1 = cz + 1 < sz ? cz + 1 : sz - 1;
+        for (var zz = z0; zz <= z1; zz++) {
+          var kz = (zz >> 4) * nxy, lz = (zz & 15) << 8;
+          for (var yy = y0; yy <= y1; yy++) {
+            var cyz = (yy >> 4) * nx + kz, lyz = ((yy & 15) << 4) | lz;
+            for (var xx = x0; xx <= x1; xx++) {
+              var blk = blkTab[(xx >> 4) + cyz]; if (!blk) continue;
+              var v = blk[lyz | (xx & 15)];
+              if (v < 0 || dist[v]) continue;
+              var ov = O[v];
+              enqueue(v, ov > b ? ov : b);
+            }
+          }
+        }
+      }
+    }
+  }
+
+  var minSeedB = 255, seeded = 0;
+  for (var q = 0; q < n; q++) {
+    var qz = Z[q];
+    var onGround = qz <= minZ + 2;
+    var onDeck = wz > 0 && qz >= wz && qz <= wz + 2;
+    var inSup = qz <= minZ + 3 || (wz > 0 && qz >= wz && qz <= wz + 3);
+    var onColBot = inSup && qz <= colMin[X[q] + sx * Y[q]] + 1;
+    if (!onGround && !onDeck && !onColBot) continue;
+    var sb = O[q] < 254 ? O[q] : 254;
+    if (sb < 1) sb = 1;
+    if (sb < minSeedB) minSeedB = sb;
+    enqueue(q, sb); seeded++;
+  }
+  if (seeded) dialSweep(minSeedB);
+
+  // 非 26 連通孤島：優先以半徑 r=2..6 橋接最近已解鎖實心格；更遠者以最低 Z 收尾
+  if (popN < n) {
+    var unvis = [];
+    for (var u = 0; u < n; u++) if (!dist[u]) unvis.push(u);
+    while (unvis.length) {
+      var bridged = false;
+      for (var r = 2; r <= 6 && !bridged; r++) {
+        var cands = [];
+        for (var ui = 0; ui < unvis.length; ui++) {
+          u = unvis[ui];
+          var ux = X[u], uy = Y[u], uz = Z[u];
+          var bx0 = ux > r ? ux - r : 0, bx1 = ux + r < sx ? ux + r : sx - 1;
+          var by0 = uy > r ? uy - r : 0, by1 = uy + r < sy ? uy + r : sy - 1;
+          var bz0 = uz > r ? uz - r : 0, bz1 = uz + r < sz ? uz + r : sz - 1;
+          var bestD = 256;
+          for (var zz = bz0; zz <= bz1; zz++) {
+            var kz = (zz >> 4) * nxy, lz = (zz & 15) << 8, az = zz > uz ? zz - uz : uz - zz;
+            for (var yy = by0; yy <= by1; yy++) {
+              var cyz = (yy >> 4) * nx + kz, lyz = ((yy & 15) << 4) | lz, ay = yy > uy ? yy - uy : uy - yy;
+              for (var xx = bx0; xx <= bx1; xx++) {
+                if (az < r && ay < r && (xx > ux ? xx - ux : ux - xx) < r) continue;
+                var blk = blkTab[(xx >> 4) + cyz]; if (!blk) continue;
+                var w = blk[lyz | (xx & 15)];
+                if (w >= 0 && dist[w] && dist[w] < bestD) bestD = dist[w];
+              }
+            }
+          }
+          if (bestD < 256) cands.push([u, bestD]);
+        }
+        if (cands.length) {
+          var minB = 255;
+          for (var ci = 0; ci < cands.length; ci++) {
+            var cu = cands[ci][0], nb = Math.min(255, Math.max(cands[ci][1] + 1, O[cu]));
+            if (!dist[cu]) { enqueue(cu, nb); if (nb < minB) minB = nb; }
+          }
+          dialSweep(minB);
+          bridged = true;
+        }
+      }
+      if (!bridged) {
+        var bestU = unvis[0], bestZ = Z[bestU];
+        for (ui = 1; ui < unvis.length; ui++) {
+          var uz2 = Z[unvis[ui]];
+          if (uz2 < bestZ) { bestZ = uz2; bestU = unvis[ui]; }
+        }
+        var fbB = Math.max(248, O[bestU]);
+        enqueue(bestU, fbB);
+        dialSweep(fbB);
+      }
+      var nextUnvis = [];
+      for (ui = 0; ui < unvis.length; ui++) if (!dist[unvis[ui]]) nextUnvis.push(unvis[ui]);
+      unvis = nextUnvis;
+    }
+  }
+  O.set(dist);
+  return popSeq;
+}
+
 /** 模型 nm（townKitMake 留下的 rise：{ g, bo }）⇒ Promise<演出用的資料>：每一格（格座標、色、門檻）照門檻排好、腳下的佔地、每一步的最高格。
  *  分段展開（63_towns.js townSlice）：加拉塔堡 363 萬格一次展開 ＝ 一格畫面卡約 150 ms（第一次叫醒工地或做廢墟的那一下；Tim 2026-11-11「也處理掉」）。
  *  展開的結果跟一次做完的逐位元組相同（同樣的走法，只是中間讓畫面走）。同一個模型同時有兩條路要 ⇒ 共用同一個 Promise（Mm.riseP）。 */
@@ -39,24 +153,37 @@ function townRiseLoad(nm) {
   var on = function () { return true; };
   Mm.riseP = Promise.all([townRiseChunks(Mm.rise.g), VK.inflateRaw(VK.b64ToBytes(Mm.rise.bo))]).then(function (A) {
     var G = A[0], B = A[1], m = Mm.m, sx = m.size[0], sy = m.size[1], sz = m.size[2], n = 0, X, Y, Z, C, O, cnt = new Int32Array(257), j = 0, at, pos, ord, foot, F;
+    var wz = m.water != null ? Math.round((m.deckz || 0) / m.mpv) : 0;   // 水上版的平台面在第幾層格（索引的 deckz；陸上版 0）
+    var nx = (sx + 15) >> 4, ny = (sy + 15) >> 4, nz = (sz + 15) >> 4, nxy = nx * ny, blkTab, colMin, minZ = 1e9, popSeq;
     return townSlice(G.data.length, 16, on, function (a, b) { for (var i = a; i < b; i++) { var c = G.data[i]; for (var li = 0; li < 4096; li++) if (c[li]) n++; } }).then(function () {
       if (B.length !== n) throw new Error(nm + '：施工順序 ' + B.length + ' 格 ≠ 格子 ' + n + ' 格');
       X = new Uint16Array(n); Y = new Uint16Array(n); Z = new Uint16Array(n); C = new Uint8Array(n); O = new Uint8Array(n);
+      blkTab = new Array(nx * ny * nz); colMin = new Int32Array(sx * sy).fill(1e9);
       return townSlice(G.data.length, 8, on, function (a, b) {
         for (var i = a; i < b; i++) {
-          var c = G.data[i], k = G.keys[i];
-          for (var li = 0; li < 4096; li++) if (c[li]) { X[j] = k[0] * 16 + (li & 15); Y[j] = k[1] * 16 + ((li >> 4) & 15); Z[j] = k[2] * 16 + (li >> 8); C[j] = c[li]; O[j] = B[j] || 255; cnt[O[j] + 1]++; j++; }
+          var c = G.data[i], k = G.keys[i], blk = new Int32Array(4096).fill(-1);
+          blkTab[k[0] + k[1] * nx + k[2] * nxy] = blk;
+          for (var li = 0; li < 4096; li++) if (c[li]) {
+            var vx = k[0] * 16 + (li & 15), vy = k[1] * 16 + ((li >> 4) & 15), vz = k[2] * 16 + (li >> 8);
+            X[j] = vx; Y[j] = vy; Z[j] = vz; C[j] = c[li]; O[j] = B[j] || 255; blk[li] = j;
+            if (vz < minZ) minZ = vz;
+            var ci = vx + sx * vy; if (vz < colMin[ci]) colMin[ci] = vz;
+            j++;
+          }
         }
       });
     }).then(function () {
-      for (var v = 1; v < 257; v++) cnt[v] += cnt[v - 1];                // 照門檻排（計數排序；同門檻照區塊表的順序）⇒ ord；at[v] ＝ 門檻 ≤ v 的有幾格
+      popSeq = townRiseConnect(sx, sy, sz, nx, nxy, blkTab, n, X, Y, Z, O, n ? minZ : 0, wz, colMin);
+      blkTab = null; colMin = null;
+      for (var q = 0; q < n; q++) cnt[O[q] + 1]++;
+      for (var v = 1; v < 257; v++) cnt[v] += cnt[v - 1];                // 照門檻排（計數排序；同門檻照連通抵達順序）⇒ ord；at[v] ＝ 門檻 ≤ v 的有幾格
       at = cnt.slice(1); pos = cnt.slice(0, 256); ord = new Int32Array(n);
       foot = new Uint8Array(sx * sy); F = new Int32Array(sz);             // F[z] ＝ 完工時那一層幾格（腳手架的高度照它判：townRiseSet）
-      return townSlice(n, 65536, on, function (a, b) { for (var q = a; q < b; q++) { ord[pos[O[q]]++] = q; foot[X[q] + sx * Y[q]] = 1; F[Z[q]]++; } });
+      return townSlice(n, 65536, on, function (a, b) { for (var i = a; i < b; i++) { var q = popSeq[i]; ord[pos[O[q]]++] = q; foot[X[q] + sx * Y[q]] = 1; F[Z[q]]++; } });
     }).then(function () {
       var L = Array.prototype.filter.call(F, function (v) { return v > 0; }).sort(function (a, b) { return a - b; }), Fmin = Math.max(1, (L[L.length >> 1] || 1) * RISE_LAYER);
       Mm.riseD = { nm: nm, sx: sx, sy: sy, sz: sz, mpv: m.mpv, n: n, X: X, Y: Y, Z: Z, C: C, O: O, ord: ord, at: at, foot: foot, F: F, Fmin: Fmin,
-        wz: m.water != null ? Math.round((m.deckz || 0) / m.mpv) : 0 };   // wz：水上版的平台面在第幾層格（索引的 deckz；陸上版 0）
+        minZ: n ? minZ : 0, wz: wz };
       Mm.riseP = null;
       return Mm.riseD;
     });
@@ -65,8 +192,15 @@ function townRiseLoad(nm) {
   return Mm.riseP;
 }
 
-/** 進度 p ⇒ 這一步看得到幾格（照門檻排好的前幾格）。 */
-function townRiseCount(D, p) { var v = Math.max(0, Math.min(255, 1 + Math.round(Math.max(0, Math.min(1, p)) * 254))); return v < 1 ? 0 : D.at[v]; }
+/** 進度 p ⇒ 這一步看得到幾格（在相鄰兩桶間線性內插，維持連通抵達順序不整片跳出）。 */
+function townRiseCount(D, p) {
+  p = Math.max(0, Math.min(1, p));
+  if (p <= 0) return 0;
+  if (p >= 1) return D.n;
+  var fv = p * 255, v0 = Math.min(254, fv | 0);
+  var n0 = D.at[v0], n1 = D.at[v0 + 1];
+  return Math.round(n0 + (n1 - n0) * (fv - v0));
+}
 function townRiseKey(T, lot) { return T.id + '/' + lot; }
 
 /** 開一個工地（城 T 的地塊 lot、從進度 p 開始）⇒ Promise<工地>。同一塊地已經有 ⇒ 照用。模型載入之前那一塊照舊畫原本那一棟（還沒進 RISE.S）。 */
@@ -458,6 +592,42 @@ function townRiseStat() {
   o.poll = { on: RISE.poll.on, n: RISE.poll.n, fail: RISE.poll.fail, last: RISE.poll.last, av: RISE.poll.av, swaps: RISE.poll.swaps };
   if (RISE.stat.err) o.err = RISE.stat.err;
   return o;
+}
+
+/** 浮空檢查（__game.townRise('floatCheck')）：檢查各工地目前可見建築格的 26 連通成分是否接地／平台。 */
+function townRiseFloatCheck() {
+  var keys = Object.keys(RISE.S), out = [];
+  for (var ki = 0; ki < keys.length; ki++) {
+    var s = RISE.S[keys[ki]], D = s && s.d, G = s && s.G, occ = s && s.occ;
+    if (!D || !G || !occ) continue;
+    var shown = s.n, SX = G.sx, SY = G.sy, SZ = G.sz, P = RISE_PAD;
+    if (!shown) { out.push({ town: s.T.id, lot: s.lot, model: s.nm, p: s.p, pm: s.pm, shown: 0, comps: 0, groundedComps: 0, floating: 0 }); continue; }
+    var vis = new Uint8Array(SX * SY * SZ), queue = new Int32Array(shown);
+    var comps = 0, groundedComps = 0, floating = 0, sizes = [];
+    for (var j = 0; j < shown; j++) {
+      var q = D.ord[j], ux = D.X[q] + P, uy = D.Y[q] + P, uz = D.Z[q], uk = ux + SX * (uy + SY * uz);
+      if (vis[uk] || !occ[uk]) continue;
+      comps++;
+      var qh = 0, qt = 0, grounded = false;
+      vis[uk] = 1; queue[qt++] = uk;
+      while (qh < qt) {
+        var cur = queue[qh++], cx = cur % SX, cy = ((cur / SX) | 0) % SY, cz = (cur / (SX * SY)) | 0;
+        if (cz <= D.minZ + 3 || (D.wz > 0 && cz >= D.wz && cz <= D.wz + 3)) grounded = true;
+        var x0 = cx > 0 ? cx - 1 : 0, x1 = cx + 1 < SX ? cx + 1 : SX - 1;
+        var y0 = cy > 0 ? cy - 1 : 0, y1 = cy + 1 < SY ? cy + 1 : SY - 1;
+        var z0 = cz > 0 ? cz - 1 : 0, z1 = cz + 1 < SZ ? cz + 1 : SZ - 1;
+        for (var zz = z0; zz <= z1; zz++) for (var yy = y0; yy <= y1; yy++) for (var xx = x0; xx <= x1; xx++) {
+          var nk = xx + SX * (yy + SY * zz);
+          if (!vis[nk] && occ[nk]) { vis[nk] = 1; queue[qt++] = nk; }
+        }
+      }
+      sizes.push(qt);
+      if (grounded) groundedComps++; else floating += qt;
+    }
+    sizes.sort(function (a, b) { return b - a; });
+    out.push({ town: s.T.id, lot: s.lot, model: s.nm, p: s.p, pm: s.pm, shown: shown, comps: comps, groundedComps: groundedComps, floating: floating, compSizes: sizes.slice(0, 8) });
+  }
+  return out;
 }
 
 // ── 面板（網址 ?rise=1；獨立功能的入口）：選一棟（下一次點畫面 ⇒ townHitAt）、拉進度、播放、停 ──
