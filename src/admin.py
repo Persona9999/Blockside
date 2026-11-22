@@ -2435,6 +2435,7 @@ def act_shipcheck(ids=None):
               '甲板連通（TASK-1028；每層甲板的每一塊、艙底照梯子接不接得到）：' + (I.get('deckcheck') or '—'), '',
               '超載極限（再多載幾噸、吃水再深幾 m 水會從原本就有的開口流進艙裡；門、砲門、槳門照遊戲的規矩算關著；js/75_leakcheck.js）：' + (I.get('leak') or '—（堡壘、砲台不量）'), '',
               '穿模（FAR-87；開場那一刻每個模型、裝飾、遊戲擺的家具與取用點的桶有幾格在船殼的實心格裡；舵、舵柄、槳、砲門蓋板不量；js/75_shipcheck.js clipCheck）：' + (I.get('clip') or '—'), '',
+              '浮空（TASK-1316；開場那一刻每個模型、裝飾、家具與取用點的桶沒有貼緊船體或支撐件（中間空 ≥ 1 格）且沒有繩索吊掛；帆桁、砲門蓋板不量；js/75_shipcheck.js floatCheck）：' + (I.get('float') or '—'), '',
               '開場就摔（FAR-87；開場 %s 秒內摔到下一層或落水的船員）：' % R['t'] + (I.get('falls') or '—'), '',
               '**✗ %d　⚠ %d**' % (ne, nw), '']
         if nack:
@@ -2464,11 +2465,13 @@ def act_shipcheck(ids=None):
     return ['匯入檢查：'] + log
 
 
-SCTEST = [   # 匯入檢查的反向對照（FAR-87；js/75_shipcheck.js scTest）：(船, ?sctest= 的做法, 要報出的那一類)
+SCTEST = [   # 匯入檢查的反向對照（FAR-87／TASK-1316；js/75_shipcheck.js scTest）：(船, ?sctest= 的做法, 要報出的那一類)
     ('nawras', 'clip', '穿模'),             # 一件沒穿模的遊戲擺的家具往下搬 3 格
     ('constitution', 'clip', '穿模'),
     ('nawras', 'fall', '開場就摔'),         # 一個站著不動的人搬到半空
     ('constitution', 'fall', '開場就摔'),
+    ('constitution', 'float', '浮空'),      # 一件目前沒浮空的飾件或模型往上搬 10 格
+    ('daniuchuan', 'float', '浮空'),
 ]
 
 
