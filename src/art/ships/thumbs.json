@@ -1,5 +1,5 @@
 {
- "atlasSHA256": "7844368feb10f122882b7b9707f4aaa778db743fe6b7749c1fd2179f92c3d5dd",
+ "atlasSHA256": "110f96d21f53151536cd921555a413f478816ccf810bff153baf84da46512bad",
  "cols": 6,
  "h": 160,
  "icons": {
@@ -135,96 +135,100 @@
    2,
    5
   ],
-  "nightlamp": [
+  "nawras": [
    3,
+   5
+  ],
+  "nightlamp": [
+   4,
    5
   ],
   "oxford": [
-   4,
+   5,
    5
   ],
   "phoenix": [
-   5,
-   5
+   0,
+   6
   ],
   "pinas": [
-   0,
+   1,
    6
   ],
   "piragua": [
-   1,
+   2,
    6
   ],
   "punt": [
-   2,
+   3,
    6
   ],
   "reale": [
-   3,
+   4,
    6
   ],
   "sandal": [
-   4,
+   5,
    6
   ],
   "sanroman": [
-   5,
-   6
+   0,
+   7
   ],
   "sentinel": [
-   0,
+   1,
    7
   ],
   "shachuan": [
-   1,
+   2,
    7
   ],
   "stormkaap": [
-   2,
+   3,
    7
   ],
   "susquehanna": [
-   3,
+   4,
    7
   ],
   "swallow": [
-   4,
+   5,
    7
   ],
   "tartane": [
-   5,
-   7
+   0,
+   8
   ],
   "tekpai": [
-   0,
+   1,
    8
   ],
   "tidegrave": [
-   1,
-   8
-  ],
-  "tower_galata": [
    2,
    8
   ],
-  "tradewind": [
+  "tower_galata": [
    3,
    8
   ],
-  "tridente": [
+  "tradewind": [
    4,
    8
   ],
-  "tungning_trader": [
+  "tridente": [
    5,
    8
   ],
-  "virginia": [
+  "tungning_trader": [
    0,
    9
   ],
-  "zeehaen": [
+  "virginia": [
    1,
+   9
+  ],
+  "zeehaen": [
+   2,
    9
   ]
  },
@@ -265,6 +269,7 @@
    "monitor": "d9157a8790386823040080f5b8cc6b7b7549b0a11e0dd85b026377198ddb62aa",
    "najm": "98f05cf6155a4c8da6f709e7910f24c34e762c1e2bb66e62b839b8c64bd6a045",
    "napoleon": "95e31466ba6f360030ab8f06313b2cfc80b1b8315f7c9f4eedbdcc67f4a8e112",
+   "nawras": "b475eb88e80a68ead6ba802315b741f2919b269b83323e7583d2a1a183e4f9bc",
    "nightlamp": "ecd1f887a0b0190f68131023ef3b0b0d9266206833de78147a2f9b4e6525ec11",
    "oxford": "7554cd6992b89796324ac0c688d8526d027b2a4578f2abbf04fe61bf6ac3ba95",
    "phoenix": "8969ee2fbe416a8d8fde2c73411321b405d8bfb6cf640b01dbb0d9cb34464593",

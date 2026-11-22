@@ -1,0 +1,23 @@
+{
+  "order": 560,
+  "ship": {
+    "id": "nawras",
+    "el": "ship-nawras",
+    "name": "海鷗號",
+    "vxk": "nawras.vxk",
+    "work": "claude-felucca-01m-assembly",
+    "author": "Claude-Ojousama",
+    "idNext": {"deck": 2, "galley": 2, "mast": 3, "model": 2, "part": 3, "ship": 2, "tiller": 2, "yard": 3}
+  },
+  "card": {
+    "tons": 10,
+    "len": 12.6,
+    "guns": 4,
+    "gunTypes": {"pierrier": 4},
+    "volley": 4,
+    "drive": "sail",
+    "sails": 2,
+    "crew": 68
+  },
+  "lock": "c:db3c87945b044c5df2cf67eac8990e9727f1b507"
+}
