@@ -61,6 +61,8 @@
     "dmgven30": [10, 300, 85],
     "dmgven3": [10, 300, 25],
     "dmgven14p": [10, 300, 40],
+    "dmghy": [20, 300, 85],
+    "dmgfg": [10, 200, 38],
     "box": [1, 8, 2],
     "carry": [1, 6, 1],
     "wind": [0.25, 3, 1],
@@ -640,6 +642,32 @@
       "crew": 2,
       "min": 1,
       "mass": 0.45
+    },
+    "hongyi": {
+      "code": "hongyi",
+      "name": "紅夷大砲（青銅長砲，約 12–18 磅）",
+      "short": "紅夷砲",
+      "shot": 7.2,
+      "V": 172,
+      "reload": 0.95,
+      "big": false,
+      "hole": 0.9,
+      "crew": 5,
+      "min": 3,
+      "mass": 2.0
+    },
+    "fagong": {
+      "code": "fagong",
+      "name": "發貢砲（中程鐵箍艦砲，約 4–6 磅）",
+      "short": "發貢砲",
+      "shot": 2.5,
+      "V": 165,
+      "reload": 0.72,
+      "big": false,
+      "hole": 0.68,
+      "crew": 3,
+      "min": 2,
+      "mass": 0.9
     }
   },
   "geo0": {
@@ -834,6 +862,8 @@
       "chase3": {"carriage": "stormkaap#gun-41"},
       "dahl11": {"carriage": "monitor#gun-1", "pivot": "susquehanna#gun-7"},
       "dahl9": {"carriage": "virginia#gun-1"},
+      "fagong": {"carriage": "daniuchuan#gun-15"},
+      "hongyi": {"carriage": "daniuchuan#gun-1"},
       "hotch37": {"turret": "dingyuan#gun-1"},
       "hotch47": {"turret": "matsushima#gun-17"},
       "hotch57": {"carriage": "matsushima#gun-13", "turret": "matsushima#gun-19"},
@@ -902,7 +932,11 @@
       "galeazza#oar-1": "威尼斯加萊賽戰船・oar-S01",
       "galeazza#oar-26": "威尼斯加萊賽戰船・oar-P01",
       "tekpai#oar-1": "台灣帆竹筏・oar-S1",
-      "tekpai#oar-2": "台灣帆竹筏・oar-P1"
+      "tekpai#oar-2": "台灣帆竹筏・oar-P1",
+      "ganzengchuan#oar-1": "福建趕繒船・oar-S01",
+      "ganzengchuan#oar-2": "福建趕繒船・oar-P01",
+      "ganzengchuan#oar-3": "福建趕繒船・oar-S02",
+      "ganzengchuan#oar-4": "福建趕繒船・oar-P02"
     },
     "rudder": {
       "constitution#rudder-1": "憲法號・舵",
@@ -949,7 +983,10 @@
       "tekpai#rudder-2": "台灣帆竹筏・rudder-main",
       "kroon#rudder-1": "金冠號・舵",
       "shachuan#rudder-1": "沙船・舵",
-      "tungning_trader#rudder-1": "東寧三桅洋船・rudder"
+      "tungning_trader#rudder-1": "東寧三桅洋船・rudder",
+      "najm#rudder-1": "星辰號・舵",
+      "ganzengchuan#rudder-1": "福建趕繒船・舵",
+      "daniuchuan#rudder-1": "明鄭一號大鳥船・舵"
     },
     "propeller": {
       "virginia#propeller-1": "維吉尼亞號・螺旋槳",
@@ -993,7 +1030,8 @@
       "sandal#light-1": "突尼斯湖轉運划艇・艉燈",
       "tekpai#light-1": "台灣帆竹筏・lantern-tub",
       "shachuan#light-1": "沙船・尾燈",
-      "tungning_trader#light-1": "東寧三桅洋船・stern-lantern"
+      "tungning_trader#light-1": "東寧三桅洋船・stern-lantern",
+      "ganzengchuan#light-1": "福建趕繒船・尾燈-P"
     },
     "lantern": {"ember#lantern-1": "餘燼號・lantern-C"},
     "boat": {
@@ -1011,7 +1049,8 @@
       "tradewind#boat-1": "信風號・小艇",
       "boaviagem#boat-1": "好旅號・小艇",
       "tartane#boat-1": "塔爾塔納・小艇",
-      "tungning_trader#boat-1": "東寧三桅洋船・boat"
+      "tungning_trader#boat-1": "東寧三桅洋船・boat",
+      "daniuchuan#boat-1": "明鄭一號大鳥船・小艇"
     },
     "capstan": {
       "constitution#capstan-1": "憲法號・capstan",
@@ -1024,7 +1063,8 @@
       "sanroman#capstan-1": "聖羅曼號・主絞盤",
       "tradewind#capstan-1": "信風號・絞盤",
       "tartane#capstan-1": "塔爾塔納・絞盤",
-      "tungning_trader#capstan-1": "東寧三桅洋船・capstan"
+      "tungning_trader#capstan-1": "東寧三桅洋船・capstan",
+      "ganzengchuan#capstan-1": "福建趕繒船・絞盤"
     },
     "binnacle": {
       "ember#binnacle-1": "餘燼號・羅經櫃",
@@ -1095,12 +1135,17 @@
       "shachuan#model-4": "沙船・船尾牌飾",
       "shachuan#model-5": "沙船・護舷-S-114",
       "shachuan#model-6": "沙船・護舷-P-114",
-      "tungning_trader#model-1": "東寧三桅洋船・bow-P",
-      "tungning_trader#model-2": "東寧三桅洋船・bow-S",
       "tungning_trader#model-3": "東寧三桅洋船・stern-carving",
       "tungning_trader#model-4": "東寧三桅洋船・nameboard",
       "tungning_trader#model-5": "東寧三桅洋船・furniture",
-      "tungning_trader#model-6": "東寧三桅洋船・mazu-shrine"
+      "tungning_trader#model-6": "東寧三桅洋船・mazu-shrine",
+      "najm#model-1": "星辰號・船尾雕花",
+      "najm#model-2": "星辰號・艏柱頭",
+      "ganzengchuan#model-1": "福建趕繒船・船首龍獅彩雕",
+      "ganzengchuan#model-2": "福建趕繒船・高尾翔龍牌飾",
+      "ganzengchuan#model-4": "福建趕繒船・護舷-P-186",
+      "daniuchuan#model-1": "明鄭一號大鳥船・船首飾",
+      "daniuchuan#model-2": "明鄭一號大鳥船・船尾飾"
     },
     "anchor": {
       "falcon#anchor-1": "夜隼號・錨-S",
@@ -1174,7 +1219,13 @@
       "kroon#anchor-2": "金冠號・錨-P",
       "shachuan#anchor-1": "沙船・錨-S",
       "shachuan#anchor-2": "沙船・錨-P",
-      "tungning_trader#anchor-1": "東寧三桅洋船・anchor-P"
+      "tungning_trader#anchor-1": "東寧三桅洋船・anchor-P",
+      "najm#anchor-1": "星辰號・錨-S",
+      "najm#anchor-2": "星辰號・錨-P",
+      "ganzengchuan#anchor-1": "福建趕繒船・錨-S",
+      "ganzengchuan#anchor-2": "福建趕繒船・錨-P",
+      "daniuchuan#anchor-1": "明鄭一號大鳥船・錨-S",
+      "daniuchuan#anchor-2": "明鄭一號大鳥船・錨-P"
     },
     "engine": {
       "virginia#engine-1": "維吉尼亞號・機艙",
