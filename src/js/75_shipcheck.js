@@ -161,7 +161,7 @@ function shipCheck(id) {
       if (c.n < (c.by ? CLIP_GAME : CLIP_WORK)) return;
       clipN++;
       add('warn', '穿模', c.path, c.name + ' 有 ' + c.n + ' 格在船殼的實心格裡（' + c.ex.map(function (p) { return '(' + p.join(', ') + ')'; }).join('、') + (c.n > c.ex.length ? ' 等' : '') + '；穿進 ' + c.part + '）',
-        c.by === 'plan' ? '船隻配置頁把它換到不會穿進船殼的格' : c.by ? '遊戲那側：' + SC_BY[c.by] + '擺的位置沒量本體穿不穿進船殼' : '作品那側：把它挪出船殼，或船殼讓出位置；故意要重疊的 ⇒ 模型 meta clip=ok');
+        c.by === 'plan' ? '船隻配置頁把它換到不會穿進船殼的格' : c.by ? '遊戲那側：' + SC_BY[c.by] + (SC_CLIPSORT[c.by] ? '挑位置時已經把穿模的格往後排，還穿 ⇒ 那一層走路格上每一格都會穿、照舊挑了第一格（那一層要有放得下的空地，或改這支的擺法）' : '擺的位置沒量本體穿不穿進船殼') : '作品那側：把它挪出船殼，或船殼讓出位置；故意要重疊的 ⇒ 模型 meta clip=ok');
     });
     R.info.clip = '量了 ' + CL.n + ' 件，穿進船殼的 ' + CL.list.length + ' 件、報 ' + clipN + ' 件（遊戲擺的 ≥ ' + CLIP_GAME + ' 格、作品的 ≥ ' + CLIP_WORK + ' 格）' +
       (CL.mast ? '；帆桁碰到自己那根桅的 ' + CL.mast + ' 格不算' : '') + '；不量：' + (Object.keys(CL.skip).map(function (k) { return k + ' ' + CL.skip[k] + ' 件'; }).join('、') || '—');
@@ -431,6 +431,7 @@ function shipCheck(id) {
  *  匯入檢查照它寫修法（FAR-87：遊戲擺的掉了、穿模了，⛔ 叫造船的人去改）。 */
 var SC_BY = { plan: '船隻配置頁', roomAuto: '艙房自動擺（36_rooms.js roomAuto）', pumpFill: '甲板自動擺（45_pumps.js pumpFill）', benchFill: '甲板自動擺（46_carpenter.js benchFill）',
   pumpNavFill: '走路格退路（45_pumps.js pumpNavFill）', benchNavFill: '走路格退路（46_carpenter.js benchNavFill）', pumpsQ: '量測參數 ?pumps=', makeStations: '取用點（23_powder.js makeStations）' };
+var SC_CLIPSORT = { pumpNavFill: true, benchNavFill: true };          // 挑位置時已經把本體穿進船殼的格往後排（furnClipPts）⇒ 還穿 ＝ 每一格都穿、照舊挑第一格
 function scPlacer(m) { return m.station ? (m.station.plan ? 'plan' : 'makeStations') : m.kind === 'furn' ? m.by || 'roomAuto' : null; }
 /** 穿模（FAR-87；Tim 2026-11-21「是否可以加上穿模檢測(之前遇過子模型跟船殼穿模)」）：開場那一刻（還沒跑），每個模型、裝飾、遊戲擺的家具與取用點的桶，
  *  網格表面往裡 PORT_DEPTH 格取點（62_ports.js meshInPts：砲門蓋板的穿模檢查、走路格退路擺家具同一套）、照開場的擺法放進船，數落在船殼實心格（T.hullG）的有幾格。
