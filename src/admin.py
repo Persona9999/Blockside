@@ -5005,7 +5005,10 @@ def product_binds(tmp, ph):
 
 # 換一台作業系統重新匯出、作品沒變，檔頭還是有兩種地方會不一樣（FAR-78）：
 #   ① source 每行 `link … 作品@<版本>`：Senate SCP_SculptWorks.Revision() 把最後一個事件檔的相對路徑算進 sha256，路徑用平台分隔符（Windows `\`、Linux `/`）
-#   ② 繩端參數（`rope:母繩/比例`，橫繩組照母繩形狀算的）：.NET 的 Math 三角、雙曲函式照各平台的 C 函式庫算，最後一位可能差一點（bizerte_barque 34 條）
+#   ② 小數的最後幾位：.NET 的 Math 三角、雙曲函式照各平台的 C 函式庫算，最後一位可能差一點（看到的是繩端參數 `rope:母繩/比例`，橫繩組照母繩形狀算的；bizerte_barque 34 條）
+# plat_align 放過的範圍比 ② 大：檔頭裡（exported_at 以外）每個浮點數、每個字串裡的每段小數，只要相對誤差在 1e-12 內都換成成品那份，不只繩端。
+#   這樣放還是安全：product_plat 換完要整個檔頭＋格子那一段的指紋等於 lock 才寫回，不等就不動；格子那一段一字不差，
+#   lock 又是上次建置那份的指紋 ⇒ 寫回的檔頭就是上次建置那份，不會因為放過小數把別的內容混進 _cache。
 PLAT_LINK = re.compile(r'^(link .+ \S+@)[0-9a-f]{64}((?: .*)?)$')
 PLAT_NUM = re.compile(r'(-?\d+\.\d+(?:[eE][-+]?\d+)?)')
 
