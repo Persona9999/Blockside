@@ -2796,7 +2796,7 @@ function townRopeDraw(eye, PL) {
     gl.bindVertexArray(R.vao);
     R.S.forEach(function (g) {
       var q = g.q;
-      if (townRiseHides(T, q) || (q.lot && TOWN_UNITS[T.id + ':' + q.lot]) || townRuinHides(T, q)) return;
+      if (townRiseHides(T, q) || shipRiseHides(T, q) || (q.lot && TOWN_UNITS[T.id + ':' + q.lot]) || townRuinHides(T, q)) return;
       if (Math.hypot(g.at[0] - eye[0], g.at[2] - eye[2]) - g.r > TOWN_LOD[0] * (q.lk || 1)) return;
       for (var i = 0; i < 6; i++) { var pl = PL[i]; if (pl[0] * g.at[0] + pl[1] * g.at[1] + pl[2] * g.at[2] + pl[3] < -g.r) return; }
       if (g.tn) { gl.drawArrays(gl.TRIANGLES, g.t0, g.tn); tris += g.tn / 3; }
@@ -2985,7 +2985,7 @@ function townBin(PL, eye, solidLod) {
       var dx = q.x - eye[0], dz = q.z - eye[2], d = Math.sqrt(dx * dx + dz * dz) / (q.lk || 1);
       var Mm = K.M[q.k], farProxy = solidLod && d >= L1 + B1 && q.pl && Mm.m.use === 'house';
       if (!farProxy && d > TOWN_FAR[1] + 50) return;
-      var rh = townRiseHides(T, q) || (q.lot && TOWN_UNITS[T.id + ':' + q.lot] ? { unit: true } : null) || townRuinHides(T, q);
+      var rh = townRiseHides(T, q) || (shipRiseHides(T, q) ? { shipRise: true } : null) || (q.lot && TOWN_UNITS[T.id + ':' + q.lot] ? { unit: true } : null) || townRuinHides(T, q);
       // 收影子的地方可能在鏡頭內，投影的屋子可能在鏡頭外。按各層陰影圖的視錐剔除這些實例。
       if (farProxy && !rh) {
         var key = Math.floor(q.x / TOWN_PROXY_TILE) + ',' + Math.floor(q.z / TOWN_PROXY_TILE);
@@ -3004,7 +3004,7 @@ function townBin(PL, eye, solidLod) {
         on0 = q.nearShadowLod = d < limit;
         on1 = !on0 && d < L1 + B1;
       }
-      if (rh) { if ((on0 || on1) && q.pl && (rh.unit || rh.ruin || townRisePlinth(rh))) { if (!q.pb) q.pb = townPlinth(q); if (q.pb) { npl++; vis.push(q, d, false, false, false, true); } } return; }
+      if (rh) { if ((on0 || on1) && q.pl && (rh.unit || rh.ruin || rh.shipRise || townRisePlinth(rh))) { if (!q.pb) q.pb = townPlinth(q); if (q.pb) { npl++; vis.push(q, d, false, false, false, true); } } return; }
       if (q.lk > 1) nlm++;
       if (solidLod && (on0 || on1)) trackCaster(q, on0 ? 0 : 1);
       if (on0) cnt[0][mi]++; if (on1) cnt[1][mi]++; if (on2) nbb++;
@@ -3200,6 +3200,7 @@ function townDraw() {
   tris += townSpinDraw(PV, G, K);                                        // 旋轉件（風車的帆；近那一級才畫、才轉）
   tris += townRiseDraw(P);                                               // 建造演出（63_townrise.js；同一支著色器，接著近那一級畫）
   tris += townRuinDraw(P, eye);                                          // 打壞的堡壘（帳上的損傷，TASK-0956）
+  tris += shipRiseYardDraw(P);
   // 石基
   if (G.npl) {
     var PP = P.pl; gl.useProgram(PP.prog); setCommon(PP); gl.uniform1f(PP.u.uFogD, fogD); gl.uniform3f(PP.u.uCol, 0.62, 0.58, 0.50);
@@ -3281,6 +3282,7 @@ function townDepth(PL) {
   });
   n += townRiseDepth(P);                                                 // 建造演出（63_townrise.js）
   n += townRuinDepth(P);                                                 // 打壞的堡壘
+  n += shipRiseYardDepth(P);
   if (G.npl && P.plVao) { var PP = P.dPl; gl.useProgram(PP.prog); setCommon(PP); gl.bindVertexArray(P.plVao); gl.drawArraysInstanced(gl.TRIANGLES, 0, 36, G.npl); }
   if (PL && G.proxies.length) {
     var proxy = P.proxy;

@@ -38,7 +38,8 @@ function frame(ts, noRaf) {                                         // noRaf：_
   bgmFrame();                                                         // 背景音樂（02_music.js，TASK-0677）：主選單也放
   sndGc();                                                            // 放完的音效、音符拆掉出口（02_audio.js sndFree：不拆的話 Chrome 一直算 ⇒ 戰局打久了手機聲音一頓一頓）
   if (PF) pfLap('rain');
-  remesh(RM_BUDGET);                                                  // 重網格化，每格有預算（60_render.js）
+  remesh(RM_BUDGET);
+  shipRiseTick();                                                  // 重網格化，每格有預算（60_render.js）
   if (PF) pfLap('flush');
   renderLerp(true, RUNNING ? loopAcc / DT : 1);                           // 畫面內插（03_camera.js）：鏡頭、畫、HUD 用兩步之間的位置，畫完換回模擬的
   ctrlFrame(dt);                                                                  // 控制器（71_ctrl.js）：第一人稱走、爬、退出判斷（81_fps.js）、建造的準心（82_build.js）；沒開 ⇒ 什麼都不做
@@ -271,6 +272,7 @@ if (DEBUG) window.__game = {
   //   回現在的兩面、換了幾邊（n）、選得到的預設旗與紋章 —— Blocksail 之後照國家、玩家的旗叫這一支
   flags: function (o) { var n = o ? flagSet(o) : 0; return { blue: teamFlag('blue'), red: teamFlag('red'), n: n, presets: FLAG_PRESETS.map(function (p) { return { k: p.k, name: p.name, field: p.field, emblem: p.emblem }; }), emblems: Object.keys(FLAG_EMB) }; },
   nation: function (i, k) { var sh = SHIPS[i]; if (!sh) return null; var ok = k !== undefined ? shipNation(sh, k) : null; return { nation: sh.nation || null, ok: ok, map: sh.flagMap || null, own: sh.T.flagNat || {}, miss: sh.nation ? flagMissOf(sh.T, sh.nation) : (sh.T.flagMiss || []).map(function (q) { return q.name; }), variants: Object.keys(sh.T.flagVar || {}), atlas: sh.T.sailAtlas ? [sh.T.sailAtlas.w, sh.T.sailAtlas.h] : null }; },   // 一艘船掛哪一面旗（77_colours.js shipNation；TASK-0974）：給 k ⇒ 換（null ⇒ 回到陣營旗）；ok ＝ shipNation 回的、own ＝ 作品國旗畫的國、miss ＝ 換不了的（TASK-1208）
+  shipRise: function (a, b, c, d) { return shipRiseCmd(a, b, c, d); },
   townRise: function (a, b, c) {   // 建造演出與工地（63_townrise.js；TASK-0908、0912）：(城 id, 地塊 id, 進度[, 播放秒數[, 演完自己換回去]]) ⇒ 開始；('set', p)；('stop')；('stat') ⇒ 讀數；('sites', 城 id, { 地塊 id: ‰ }) ⇒ 照帳的工地（測試用，同 townUI 'sites' 的回覆）
     if (a === 'set') { if (RISE.demo) townRiseSet(RISE.demo, b); return townRiseStat(); } if (a === 'sites') { townRiseSites(TOWNS.list.filter(function (t) { return t.id === b; })[0], c); return townRiseStat(); } if (a === 'stop') { townRiseStop(); return townRiseStat(); } if (a === 'stat') return townRiseStat();
     var T = TOWNS.list.filter(function (t) { return t.id === a; })[0]; return townRiseStart(T, b, c || 0, arguments[3] || 0, arguments[4]);
@@ -649,7 +651,8 @@ else GL_READY.then(yieldUI).then(function () {                     // 先讓主�
   if (Q.has('ancbake')) { ancBakePage(Q.get('ancbake')); return; }   // 找最近實心格的預烘（10_ship.js；TASK-1229；admin.py ancbake 用無頭 Chrome 讀）   // 表演船中那一級的烘（60_showlod.js；admin.py showlod 用無頭 Chrome 讀）
   if (Q.has('dispcheck')) { dispCheck(Q.get('dispcheck')); return; }   // 排水量與壓艙物（75_shipcheck.js；admin.py disp 用無頭 Chrome 讀）
   if (Q.get('lab') === 'gun') { gunLabInit(); return; }                  // 開炮音試聽頁（85_gunlab.js；根目錄 gunlab.html 轉過來）
-  if (LAB_FLEET) { flabInit(); return; }                                // 擬真沙盒（84_fleetlab.js）   // 匯入檢查（75_shipcheck.js；admin.py check 用無頭 Chrome 讀）
+  if (LAB_FLEET) { flabInit(); return; }
+  if (SHIPRISE_UI) { uiAway(); if ($('stage')) $('stage').classList.add('still'); shipRiseStandaloneInit(); requestAnimationFrame(frame); return; }                                // 擬真沙盒（84_fleetlab.js）   // 匯入檢查（75_shipcheck.js；admin.py check 用無頭 Chrome 讀）
   if (Q.get('lab') === 'flood') { var FR = floodLab(flLabOpts()), fp = document.createElement('pre'); fp.id = 'lab'; document.body.appendChild(fp); fp.textContent = JSON.stringify(FR); uiAway(); return; }   // 沙盒進水報表（81_floodlab.js；src/tests/flood_lab.py）
   if (Q.get('lab') === 'wrooms') { var WO = {}; ['dz', 'px'].forEach(function (k) { if (Q.has(k)) WO[k] = +Q.get(k); }); var WR = wroomsLab(T, WO), wp = document.createElement('pre'); wp.id = 'lab'; document.body.appendChild(wp); wp.textContent = JSON.stringify(WR); uiAway(); return; }   // 水的房間的報表（81_floodlab.js wroomsLab；src/tests/wrooms_lab.py 讀 #lab）
   if (Q.get('lab') === 'wdrop') { var DO = {}; ['hz', 'k', 'per'].forEach(function (k) { if (Q.has(k)) DO[k] = +Q.get(k); }); var DR = wdropLab(DO), dp = document.createElement('pre'); dp.id = 'lab'; document.body.appendChild(dp); dp.textContent = JSON.stringify(DR); uiAway(); return; }   // 粒子不穿甲板（81_floodlab.js wdropLab；TASK-0808）

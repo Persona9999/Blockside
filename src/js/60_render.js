@@ -655,10 +655,11 @@ function csmOwners() {
 /** 一段陰影圖畫船殼、模型、帆（P.dvox、P.dtri（一次畫多個 ⇒ P.dtriI）、P.dsail；分段 shadowPass 與單張 shadowSimple 共用）：只畫 csmIn 判進第 k 段的（RBAT.pd.sh：b ＝ 第 k 位）。 */
 function shadowCasters(k) {
   var pd = RBAT.pd.sh; pd.k = k; pd.b = 1 << k;
-  gl.useProgram(P.dvox.prog); setCommon(P.dvox); drawHulls(P.dvox, pd);
+  gl.useProgram(P.dvox.prog); setCommon(P.dvox); drawHulls(P.dvox, pd); shipRiseDrawHulls(P.dvox, pd);
   if (RBAT_INST && P.dtriI) rbatDepth(pd);                              // 模型那一段一次畫多個（60_rbatch.js，S5：只寫深度 ⇒ 順序無關）；?inst=0／編不起來 ⇒ 照以前一個一個畫
   else { gl.useProgram(P.dtri.prog); setCommon(P.dtri); drawModels(P.dtri, pd); }
-  gl.useProgram(P.dsail.prog); setCommon(P.dsail); drawSails(P.dsail, pd);   // 帆另一支：貼圖的洞不投影子（TASK-0579）
+  gl.useProgram(P.dtri.prog); setCommon(P.dtri); shipRiseDrawRig(P.dtri, pd);
+  gl.useProgram(P.dsail.prog); setCommon(P.dsail); drawSails(P.dsail, pd); shipRiseDrawSails(P.dsail, pd);   // 帆另一支：貼圖的洞不投影子（TASK-0579）
 }
 /** 一段的靜態那一層：地形（63_bed_gl.js bedDepth，照那一段的範圍剔除）、樹（63_trees.js treeDepth）、城鎮的建築與城牆（63_towns.js townDepth）只寫深度。 */
 function csmStatic(c, i) {
@@ -904,11 +905,11 @@ function reflPass() {
   gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
   PASS.vp = m4Into(REFL_VP, 0, CAM.vp, MIRROR); PASS.eye = [CAM.eye[0], -CAM.eye[1], CAM.eye[2]]; PASS.clip = 0; PASS.sh = 0;
   gl.enable(gl.DEPTH_TEST); gl.enable(gl.CULL_FACE);                   // 船的矩陣是鏡射（shipBaseMatrix）、反射的鏡頭又鏡射一次 ⇒ 兩次抵銷，繞序照常（CCW）
-  gl.useProgram(P.vox.prog); setCommon(P.vox); drawHulls(P.vox, RBAT.pd.rf);
+  gl.useProgram(P.vox.prog); setCommon(P.vox); drawHulls(P.vox, RBAT.pd.rf); shipRiseDrawHulls(P.vox, RBAT.pd.rf);
   showlodFarDraw();                                                      // 表演船遠那一級的看板（60_showlod.js；水面下那一截照 PASS.clip 丟掉）
   if (GFX.refl === 2) {
-    gl.disable(gl.CULL_FACE); gl.useProgram(P.tri.prog); setCommon(P.tri); gl.uniform1f(P.tri.u.uLit, 1); drawModels(P.tri, RBAT.pd.rf); drawColours(P.tri, RBAT.pd.rf);
-    gl.useProgram(P.sail.prog); setCommon(P.sail); drawSails(P.sail, RBAT.pd.rf);
+    gl.disable(gl.CULL_FACE); gl.useProgram(P.tri.prog); setCommon(P.tri); gl.uniform1f(P.tri.u.uLit, 1); drawModels(P.tri, RBAT.pd.rf); drawColours(P.tri, RBAT.pd.rf); shipRiseDrawRig(P.tri, RBAT.pd.rf);
+    gl.useProgram(P.sail.prog); setCommon(P.sail); drawSails(P.sail, RBAT.pd.rf); shipRiseDrawSails(P.sail, RBAT.pd.rf);
   }
   PASS.vp = null; PASS.eye = null; PASS.clip = -1e9; PASS.sh = 1;
 }
@@ -990,7 +991,7 @@ function mainOpaque(fr) {
   gl.bindVertexArray(SKYVAO); gl.drawArrays(gl.TRIANGLES, 0, 3); gl.depthMask(true);
   // 船與斷開的那幾團
   // 船的矩陣是鏡射（shipBaseMatrix：照雕刻引擎的手性）⇒ 船殼的正面變成順時針；帆的著色器看 gl_FrontFacing 翻法線，也要跟著
-  gl.enable(gl.CULL_FACE); gl.frontFace(gl.CW); gl.useProgram(P.vox.prog); setCommon(P.vox); drawHulls(P.vox, RBAT.pd.mn); gl.frontFace(gl.CCW);
+  gl.enable(gl.CULL_FACE); gl.frontFace(gl.CW); gl.useProgram(P.vox.prog); setCommon(P.vox); drawHulls(P.vox, RBAT.pd.mn); shipRiseDrawHulls(P.vox, RBAT.pd.mn); gl.frontFace(gl.CCW);
   // 碎片
   var n = 0;
   for (var i = 0; i < D.n; i++) {                                     // ⛔ 每顆不配置（S11：最多 DMAX 顆）—— 黏在船上的照 M4.pt 同一條算式就地算
@@ -1024,7 +1025,8 @@ function mainOpaque(fr) {
   if (BALLS.some(function (b) { return b.ammo === 2; })) {               // 鏈彈的鐵鍊（76_anchor.js csBuf；世界座標）
     var csl = csBuf(); if (csl.n) { cutSet(P.tri, null); gl.uniformMatrix4fv(P.tri.u.uModel, false, CS_ID || (CS_ID = M4.ident())); gl.bindVertexArray(csl.vao); gl.drawArrays(gl.LINES, 0, csl.n); }
   }
-  gl.frontFace(gl.CW); gl.useProgram(P.sail.prog); setCommon(P.sail); drawSails(P.sail, RBAT.pd.mn); gl.frontFace(gl.CCW);
+  shipRiseDrawRig(P.tri, RBAT.pd.mn);
+  gl.frontFace(gl.CW); gl.useProgram(P.sail.prog); setCommon(P.sail); drawSails(P.sail, RBAT.pd.mn); shipRiseDrawSails(P.sail, RBAT.pd.mn); gl.frontFace(gl.CCW);
   showlodFarDraw();                                                      // 表演船遠那一級的看板（60_showlod.js；這幾艘上面整艘沒畫）
   bedDraw();                                                             // 陸地與海底（63_bed_gl.js；有海圖才有）
   treeDraw();                                                            // 島上的樹（63_trees.js）

@@ -170,6 +170,8 @@ function tbiUI() {
   var P = $('tbiP'); if (!P) return;
   if (!TBI.open || !TBI.hit) { P.innerHTML = ''; return; }
   var h = TBI.hit, b = TBI.b, site = RISE.S[townRiseKey(h.T, h.lot.id)], demo = RISE.demo && RISE.demo === site && site.play, html = [];
+  var shipSr = typeof SHIP_RISE !== 'undefined' ? SHIP_RISE.S[shipRiseKey(h.T, h.lot.id)] : null;
+  var shipDemo = !!(typeof SHIP_RISE !== 'undefined' && SHIP_RISE.demo && SHIP_RISE.demo === shipSr && shipSr.play);
   html.push('<div class="tbiH"><b>' + tuiEsc(h.name) + '</b><button id="tbiX" title="關閉（Esc）">✕</button></div>');
   html.push('<div class="tbiDim">' + tuiEsc((b && b.typeName) || h.use || '') + (b && b.level > 1 ? '　第 ' + b.level + ' 級' : '') + (b && b.owner ? '　主人：' + tuiEsc(b.owner) : '') + '</div>');
   if (b && b.site) html.push('<div class="tbiS">' + (b.site.repair != null ? '🔧 修繕中' : '🏗 施工中') + ' <b>' + Math.floor(b.site.p / 10) + '%</b>' + (b.site.crew ? '　工地 ' + tuiNum(b.site.crew) + ' 人' : '') + (b.site.by ? '　' + tuiEsc(b.site.by) : '') + '<div class="tbiBar"><i style="width:' + (b.site.p / 10).toFixed(1) + '%"></i></div></div>');
@@ -194,8 +196,9 @@ function tbiUI() {
   if (b && b.note) html.push('<div class="tbiDim">' + tuiEsc(b.note) + '</div>');
   if (!tuiOk()) html.push('<div class="tbiDim">沒有城鎮帳（要從 Blocksail 地球儀停靠進城才看得到住戶、工人、產出）</div>');
   if (TBI.msg) html.push('<div class="tbiDim">' + tuiEsc(TBI.msg) + '</div>');
-  var Mm = TOWNS.kit && TOWNS.kit.M[h.q.k], can = !!(Mm && Mm.rise);
-  html.push('<div class="tbiB"><button id="tbiPlay"' + (can ? '' : ' disabled title="這個模型沒有施工順序"') + '>' + (demo ? '■ 停止演出' : '▶ 演出建造過程') + '</button></div>');
+  var Mm = TOWNS.kit && TOWNS.kit.M[h.q.k], can = !!(Mm && Mm.rise), canShip = typeof SR_YARDS !== 'undefined' && !!SR_YARDS[h.q.k];
+  html.push('<div class="tbiB"><button id="tbiPlay"' + (can ? '' : ' disabled title="這個模型沒有施工順序"') + '>' + (demo ? '■ 停止演出' : '▶ 演出建造過程') + '</button>' +
+    (canShip ? ' <button id="tbiShipPlay">' + (shipDemo ? '■ 停止造船演出' : '⛵ 演出造船過程') + '</button>' : '') + '</div>');
   P.innerHTML = html.join('');
   $('tbiX').onclick = tbiClose;
   P.querySelectorAll('.tbiRcp button[data-k]').forEach(function (el) { el.onclick = function () { if (!el.classList.contains('no')) tbiRcpPick(el.dataset.k); }; });
@@ -204,13 +207,21 @@ function tbiUI() {
     if (RISE.demo && RISE.demo.T === h.T && RISE.demo.lot === h.lot.id && RISE.demo.play) { townRiseStop(); tbiUI(); return; }
     townRiseStart(h.T, h.lot.id, 0, RISE.dur, true).then(tbiUI, function (er) { TBI.msg = er.message; tbiUI(); });
   };
+  var spBtn = $('tbiShipPlay');
+  if (spBtn) spBtn.onclick = function () {
+    if (SHIP_RISE.demo && SHIP_RISE.demo.T_town === h.T && SHIP_RISE.demo.lot === h.lot.id && SHIP_RISE.demo.play) { shipRiseStop(); tbiUI(); return; }
+    var Y = b && b.yard, hid = (Y && Y.hull && Y.hull.hullId) || (Y && Y.next && Y.next.hullId) || (Y && Y.can && Y.can[0] && Y.can[0].hullId) || HULL_DEF || 'swallow';
+    shipRiseStartDemo(h.T, h.lot.id, hid, 0, SR_DUR, true).then(tbiUI, function (er) { TBI.msg = er && er.message || String(er); tbiUI(); });
+  };
 }
 /** 每一格：演完了 ⇒ 按鈕換回來；帳上的工地進度變了 ⇒ 重問（RISE.poll.n 每問一次加一）。 */
 function tbiFrame() {
   if (!TBI.open) return;
   if (!modeRule('town') || TWB.on) { tbiClose(); return; }
   var h = TBI.hit, s = RISE.S[townRiseKey(h.T, h.lot.id)], demo = !!(s && RISE.demo === s && s.play), n = RISE.poll.n;
-  if (TBI.demo !== demo) { TBI.demo = demo; tbiUI(); }
+  var ss = typeof SHIP_RISE !== 'undefined' ? SHIP_RISE.S[shipRiseKey(h.T, h.lot.id)] : null;
+  var sdemo = !!(typeof SHIP_RISE !== 'undefined' && ss && SHIP_RISE.demo === ss && ss.play);
+  if (TBI.demo !== demo || TBI.sdemo !== sdemo) { TBI.demo = demo; TBI.sdemo = sdemo; tbiUI(); }
   if (TBI.pn !== n) { var first = TBI.pn == null; TBI.pn = n; if (!first && TBI.b && TBI.b.site) tbiLoad(); }
 }
 ctrlAdd({ name: 'townbld', pri: 7, on: function () { return TBI.open; },
