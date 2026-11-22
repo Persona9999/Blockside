@@ -5088,7 +5088,7 @@ def act_cache(every=False):
         if want and got != want and want.startswith('c:') and ph:
             nplat = product_plat(tmp, ph, want)
             if nplat:
-                got, bn = want, bn + '（%d 處只差在作業系統：來源版本雜湊的路徑分隔符、小數最後一位 ⇒ 照成品那份）' % nplat
+                got, bn = file_fp(tmp), bn + '（%d 處只差在作業系統：來源版本雜湊的路徑分隔符、小數最後一位 ⇒ 照成品那份）' % nplat
         if want and not want.startswith('c:'):
             bad.append(s['vxk'])
             log.append('  ✗ %s：指紋還是舊格式（整個檔的 sha1，比不了重新匯出的）⇒ 先在有 _cache 的機器 build 一次（會換成內容指紋）再提交' % s['vxk'])
