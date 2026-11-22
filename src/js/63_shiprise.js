@@ -29,6 +29,7 @@ function shipRiseAny() { for (var k in SHIP_RISE.S) return true; return false; }
 
 // ───────────────────────── 自動船體／桅帆建構分析 ─────────────────────────
 function shipRiseIsWeaponModel(m) {
+  if (m && m.gmod !== undefined) return true;
   var mt = m.meta || {}, kd = mt.kind || '', nm = (m.name || '').toLowerCase();
   if (typeof GUNS !== 'undefined' && (GUNS[kd] || (typeof modelKind === 'function' && GUNS[modelKind(m)]))) return true;
   if (kd === 'gun' || kd === 'powder' || kd === 'gunmount' || kd === 'turret' || kd === 'armor' || kd === 'hoist') return true;
@@ -38,12 +39,12 @@ function shipRiseIsWeaponModel(m) {
 
 function shipRiseModelBox(T, m) {
   if (m.bbox && m.bbox.length >= 6) return m.bbox;
-  var me = T.meshes && T.meshes[m.mesh];
+  var me = T.meshes && T.meshes[m.mesh], o = m.origin || [0, 0, 0];
   if (me && me.bb) {
     var dt = me.dt || [0, 0, 0];
-    return [me.bb[0] + dt[0], me.bb[1] + dt[1], me.bb[2] + dt[2], me.bb[3] + dt[0], me.bb[4] + dt[1], me.bb[5] + dt[2]];
+    return [o[0] + me.bb[0] + dt[0], o[1] + me.bb[1] + dt[1], o[2] + me.bb[2] + dt[2], o[0] + me.bb[3] + dt[0], o[1] + me.bb[4] + dt[1], o[2] + me.bb[5] + dt[2]];
   }
-  var o = m.origin || [T.cx, T.cy, T.zw];
+  o = m.origin || [T.cx, T.cy, T.zw];
   return [o[0] - 1, o[1] - 1, o[2] - 1, o[0] + 1, o[1] + 1, o[2] + 1];
 }
 
@@ -369,19 +370,23 @@ function shipRiseAnalyze(T) {
 
   // 非武器模型／裝飾：船體舾裝於船殼完後登場（0.04..0.24）；帆桁嚴格於所有桅桿完成（0.34）之後再掛（0.35..0.58）
   var rigModels = [], fixtures = [], yards = [];
+  function rigOriginL(orig) {
+    return orig && (orig[0] || orig[1] || orig[2]) ? trans(orig[0], orig[1], orig[2]) : null;
+  }
   ((T.rig && T.rig.models) || []).forEach(function (m) {
     if (shipRiseIsWeaponModel(m)) return;
     var mt = m.meta || {}, b = shipRiseModelBox(T, m), zc = (b[2] + b[5]) * 0.5;
     var meshIdx = m.rmesh !== undefined ? m.rmesh : m.mesh;
     var mm = typeof modelMat === 'function' ? modelMat(mt) : null;
-    if (mt.kind === 'yard') yards.push({ mesh: meshIdx, mm: mm, z: zc, mt: mt });
-    else fixtures.push({ mesh: meshIdx, mm: mm, z: zc, mt: mt });
+    var L = rigOriginL(m.origin);
+    if (mt.kind === 'yard') yards.push({ mesh: meshIdx, mm: mm, L: L, z: zc, mt: mt });
+    else fixtures.push({ mesh: meshIdx, mm: mm, L: L, z: zc, mt: mt });
   });
   (T.decos || []).forEach(function (d) {
     if (shipRiseIsWeaponModel(d)) return;
     var mt = d.meta || {}, b = shipRiseModelBox(T, d), zc = (b[2] + b[5]) * 0.5;
     var mm = typeof modelMat === 'function' ? modelMat(mt) : null;
-    fixtures.push({ mesh: d.mesh, mm: mm, z: zc, mt: mt });
+    fixtures.push({ mesh: d.mesh, mm: mm, L: rigOriginL(d.origin), z: zc, mt: mt });
   });
   fixtures.sort(function (a, b) { return a.z - b.z; });
   yards.sort(function (a, b) { return a.z - b.z; });
@@ -477,11 +482,11 @@ function shipRiseBuildTubeGpu(tubeEntries) {
   for (var i = 0; i < tubeEntries.length; i++) {
     var r = tubeEntries[i];
     ropeTube(TB, r.pts, r.col, r.w);
-    steps.push({ thr: r.thr, count: TB.length / 9 });
+    steps.push({ thr: r.thr, count: TB.length / 6 });
   }
   if (!TB.length) return null;
   var data = new Float32Array(TB);
-  var up = upload(null, data, 9, MESH_ATTR);
+  var up = upload(null, data, 6, [[0, 3, 0], [2, 3, 3]]);
   return { vao: up.vao, vbo: up.vbo, steps: steps, total: up.n };
 }
 
@@ -914,22 +919,25 @@ function shipRiseDrawRig(prog, pd) {
       var me = meshFor(sr.T, rm.mesh, rm.mm);
       if (!me) continue;
       if (!me.vao) meshGpu(me);
-      gl.uniformMatrix4fv(prog.u.uModel, false, meshDtL(me, M));
+      var ML = rm.L ? M4.mul(M, rm.L) : M;
+      gl.uniformMatrix4fv(prog.u.uModel, false, meshDtL(me, ML));
       gl.bindVertexArray(me.vao);
       gl.drawArrays(gl.TRIANGLES, 0, me.n);
     }
-    if (D.tubeGpu && sr.tubeN > 0) {
-      gl.uniformMatrix4fv(prog.u.uModel, false, M);
-      gl.bindVertexArray(D.tubeGpu.vao);
-      gl.drawArrays(gl.TRIANGLES, 0, sr.tubeN);
-    }
-    // ② 靜索與動索（uLit = 0，主畫面與反射繪製，陰影略）
-    if (!isSh && D.lineGpu && sr.lineN > 0) {
+    // ② 靜索與動索＋繩梯管（uLit = 0，主畫面與反射繪製，陰影略）
+    if (!isSh && ((D.lineGpu && sr.lineN > 0) || (D.tubeGpu && sr.tubeN > 0))) {
       if (prog.u.uLit) gl.uniform1f(prog.u.uLit, 0);
       gl.vertexAttrib3f(1, 0, 1, 0);
-      gl.uniformMatrix4fv(prog.u.uModel, false, M);
-      gl.bindVertexArray(D.lineGpu.vao);
-      gl.drawArrays(gl.LINES, 0, sr.lineN);
+      if (D.tubeGpu && sr.tubeN > 0) {
+        gl.uniformMatrix4fv(prog.u.uModel, false, M);
+        gl.bindVertexArray(D.tubeGpu.vao);
+        gl.drawArrays(gl.TRIANGLES, 0, sr.tubeN);
+      }
+      if (D.lineGpu && sr.lineN > 0) {
+        gl.uniformMatrix4fv(prog.u.uModel, false, M);
+        gl.bindVertexArray(D.lineGpu.vao);
+        gl.drawArrays(gl.LINES, 0, sr.lineN);
+      }
     }
   }
   gl.bindVertexArray(null);
