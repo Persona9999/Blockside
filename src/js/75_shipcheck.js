@@ -32,6 +32,7 @@ function shipCheck(id) {
     R.binds = ropeBindsFresh(sh);                                        // 繩端綁定（TASK-0716）：開場那一刻現場算（不看檔頭的 bind）⇒ admin.py ropebind 寫進檔頭、出報表
     if (Q.has('sctest')) R.sctest = scTest(sh, Q.get('sctest'));         // 反向對照（admin.py shipcheck --selftest）：開場前在記憶體裡弄壞一處
     var CL = clipCheck(sh);                                              // 穿模（FAR-87）：開場那一刻、還沒跑（會轉的件還在原位）
+    var FL0 = floatCheck(sh);                                            // 浮空：開場那一刻離最近船體／支撐件 > 1 格且沒有繩索吊掛
     sh.fallLog = [];                                                     // 開場就摔（FAR-87）：40_crew.js landIn／crewFall 記
     for (var i = 0, n = Math.round(SC_SECS / DT); i < n; i++) simStep();
     flowRun(false);
@@ -165,6 +166,15 @@ function shipCheck(id) {
     });
     R.info.clip = '量了 ' + CL.n + ' 件，穿進船殼的 ' + CL.list.length + ' 件、報 ' + clipN + ' 件（遊戲擺的 ≥ ' + CLIP_GAME + ' 格、作品的 ≥ ' + CLIP_WORK + ' 格）' +
       (CL.mast ? '；帆桁碰到自己那根桅的 ' + CL.mast + ' 格不算' : '') + '；不量：' + (Object.keys(CL.skip).map(function (k) { return k + ' ' + CL.skip[k] + ' 件'; }).join('、') || '—');
+    // ── 浮空（TASK-1316）：開場那一刻量的（floatCheck）；沒有繩索吊著、也沒有透過船殼或別的模型相連就懸在空中（間距 ≥ 2 格 ≈ 0.2 m）才報 ──
+    FL0.list.forEach(function (f) {
+      add('warn', '浮空', f.path, f.name + ' 懸空（與最近的船體或支撐件中間空 ' + f.gap + ' 格 ≈ ' + (f.gap * S).toFixed(1) + ' m；外框底 z ' + Math.floor(f.z0) + '）',
+        f.by === 'plan' ? '船隻配置頁把它換到貼著甲板的格' : f.by ? '遊戲那側：' + SC_BY[f.by] + '擺的位置懸空' : '作品那側：把它往下／往船殼貼齊（貼緊不留空隙），或用繩索吊掛；故意懸空的 ⇒ 模型 meta float=ok');
+    });
+    R.info.float = '量了 ' + FL0.n + ' 件，懸空的 ' + FL0.list.length + ' 件' +
+      (FL0.rope ? '；有繩索吊著的 ' + FL0.rope + ' 件不算' : '') +
+      (FL0.onModel ? '；靠在別的模型上的 ' + FL0.onModel + ' 件' : '') +
+      '；不量：' + (Object.keys(FL0.skip).map(function (k) { return k + ' ' + FL0.skip[k] + ' 件'; }).join('、') || '—');
     // ── 硬骨帆的實體竹篾（TASK-1320；Ship_Rigging §7「實體竹篾桿」）：每面 battens 帆 —— 幾根有桿、綁住幾列、桿離它那一列多遠 ──
     var BT = [];
     sh.sails.forEach(function (s) {
@@ -478,9 +488,101 @@ function clipCheck(sh) {
   out.list.sort(function (a, b) { return b.n - a.n; });
   return out;
 }
+/** 浮空（TASK-1316）：開場那一刻（還沒跑），每個模型、裝飾、遊戲擺的家具與取用點的桶，照開場的擺法量網格表面內縮點（同 clipCheck meshInPts）：
+ *  - 不量（skip，但實心格仍當別人的支撐）：自帶格子的 vox、meta float=ok、砲門蓋板 portlid、帆桁 yard（帆桁由桅與繩撐）。
+ *  - 有繩索吊著的不算（out.rope；例如憲法號的救生艇）：m.falls、或 ropes 中有一端落在模型外框外擴 4 格內而另一端在框外者。
+ *  - 接在船殼／甲板（含傳遞靠在已支撐的模型上、rests_on、gunmount、或 10_ship.js 的功能固定點 8 格內找到船殼）⇒ 撐得住；否則記最小間距 gap（格）進 out.list。 */
+function floatCheck(sh) {
+  var T = sh.T, G = T.hullG || T.base, RM = (T.rig && T.rig.meshes) || [], RP = sh.ropes || [], P = {}, items = [];
+  var out = { n: 0, list: [], skip: {}, rope: 0, onModel: 0 };
+  function key3(x, y, z) { return (x + 512) + 4096 * ((y + 512) + 4096 * (z + 512)); }
+  function nearG(pt, r) {
+    if (!pt) return false;
+    var bx = Math.floor(pt[0]), by = Math.floor(pt[1]), bz = Math.floor(pt[2]);
+    for (var dz = -r; dz <= r; dz++) for (var dy = -r; dy <= r; dy++) for (var dx = -r; dx <= r; dx++) if (G.get(bx + dx, by + dy, bz + dz)) return true;
+    return false;
+  }
+  function hasRope(m) {
+    if (m.falls && m.falls.length) return true;
+    var isMod = m.k < 1000, b = m.bb; if (!b) return false;
+    function inB(q) { return q[0] > b[0] - 4 && q[0] < b[3] + 4 && q[1] > b[1] - 4 && q[1] < b[4] + 4 && q[2] > b[2] - 4 && q[2] < b[5] + 4; }
+    for (var i = 0; i < RP.length; i++) {
+      var r = RP[i];
+      if (isMod && ((r.ma === m.k) !== (r.mb === m.k))) return true;
+      var p = r.pts; if (!p || p.length < 6) continue;
+      if (inB([p[0], p[1], p[2]]) !== inB([p[p.length - 3], p[p.length - 2], p[p.length - 1]])) return true;
+    }
+    return false;
+  }
+  function push(m, M) {
+    var mt = m.meta || {}, k = mt.kind || m.kind, by = scPlacer(m);
+    var fk = m.kind === 'furn' ? 'f' + m.item + (T.furn && T.furn[m.item + 'x'] === m.mesh ? 'x' : 'y') : 'r' + m.mesh;
+    var V = P[fk] || (P[fk] = meshInPts(m.kind === 'furn' ? furnModelMesh(m.item, fk.slice(-1)) || boxMesh(furnBoxes(m.item, fk.slice(-1)), FURN_MATS) : RM[m.mesh]));
+    if (!V.length) return;
+    var seen = new Set(), C = [];
+    for (var i = 0; i < V.length; i += 3) {
+      var q = M4.pt(M, V[i], V[i + 1], V[i + 2]), x = Math.floor(q[0]), y = Math.floor(q[1]), z = Math.floor(q[2]), k3 = key3(x, y, z);
+      if (!seen.has(k3)) { seen.add(k3); C.push(x, y, z, k3); }
+    }
+    var nm = m.station ? '取用點的火藥桶' : m.kind === 'furn' ? (FURN[m.item] || {}).name || m.item : (META_KINDS[k] || {}).name || k || '模型';
+    var sk = m.vox ? '自帶格子的' : mt.float === 'ok' ? 'meta float=ok' : k === 'portlid' ? '砲門蓋板' : k === 'yard' ? '帆桁' : null;
+    items.push({ m: m, k: k, mt: mt, by: by, path: m.path || m.name, name: nm, C: C, sk: sk, sup: false });
+  }
+  (sh.models || []).forEach(function (m) { push(m, modelLocal(m)); });
+  (sh.decos || []).forEach(function (d) { push(d, d.gm ? M4.mul(modelLocal(d.gm), trans(d.off[0], d.off[1], d.off[2])) : d.L || trans(d.origin[0], d.origin[1], d.origin[2])); });
+  var sup = new Set(), supM = new Set();
+  function markSup(it) { it.sup = true; supM.add(it.m); for (var i = 0; i < it.C.length; i += 4) sup.add(it.C[i + 3]); }
+  items.forEach(function (it) {
+    if (it.sk) { out.skip[it.sk] = (out.skip[it.sk] || 0) + 1; markSup(it); return; }
+    out.n++;
+    var m = it.m, k = it.k, mt = it.mt, pt = m.pts || {};
+    if (hasRope(m)) { out.rope++; markSup(it); return; }
+    if (T.fixed) { for (var i = 0; i < it.C.length; i += 4) if (it.C[i + 2] <= 0) { markSup(it); return; } }
+    if ((k === 'oar' && nearG(pt.pivot, 8)) ||
+        (k === 'rudder' && (nearG(pt['stock-top'], 8) || isFinite(+mt.hinge_x))) ||
+        (k === 'anchor' && nearG(pt.ring, 8)) ||
+        (k === 'light' && (nearG(pt.bail, 8) || nearG(pt.mount, 8))) ||
+        (k === 'door' && nearG(pt['hinge-a'], 8)) ||
+        (k === 'propeller' && nearG(pt['shaft-fwd'], 8)) ||
+        (mt.spin && nearG(pt['spin-a'], 8))) { markSup(it); return; }
+    for (var i = 0; i < it.C.length; i += 4) {
+      var x = it.C[i], y = it.C[i + 1], z = it.C[i + 2];
+      for (var dz = -1; dz <= 1; dz++) for (var dy = -1; dy <= 1; dy++) for (var dx = -1; dx <= 1; dx++) if (G.get(x + dx, y + dy, z + dz)) { markSup(it); return; }
+    }
+  });
+  for (var again = true; again;) {
+    again = false;
+    items.forEach(function (it) {
+      if (it.sup) return;
+      if ((it.m.restOn && supM.has(it.m.restOn)) || (it.m.gm && supM.has(it.m.gm))) { out.onModel++; markSup(it); again = true; return; }
+      for (var i = 0; i < it.C.length; i += 4) {
+        var x = it.C[i], y = it.C[i + 1], z = it.C[i + 2];
+        for (var dz = -1; dz <= 1; dz++) for (var dy = -1; dy <= 1; dy++) for (var dx = -1; dx <= 1; dx++) if (sup.has(key3(x + dx, y + dy, z + dz))) { out.onModel++; markSup(it); again = true; return; }
+      }
+    });
+  }
+  items.forEach(function (it) {
+    if (it.sup) return;
+    var gap = 20, step = Math.max(1, Math.floor(it.C.length / 4 / 250)) * 4;
+    for (var r = 2; r <= 20 && gap === 20; r++) {
+      for (var i = 0; i < it.C.length; i += step) {
+        var x = it.C[i], y = it.C[i + 1], z = it.C[i + 2], hit = false;
+        for (var dz = -r; dz <= r && !hit; dz++) for (var dy = -r; dy <= r && !hit; dy++) for (var dx = -r; dx <= r; dx++) {
+          if (Math.abs(dx) !== r && Math.abs(dy) !== r && Math.abs(dz) !== r) continue;
+          if (G.get(x + dx, y + dy, z + dz) || sup.has(key3(x + dx, y + dy, z + dz))) { hit = true; break; }
+        }
+        if (hit) { gap = r - 1; break; }
+      }
+    }
+    out.list.push({ path: it.path, name: it.name, by: it.by, gap: gap, z0: it.m.bb ? it.m.bb[2] : 0 });
+  });
+  out.list.sort(function (a, b) { return b.gap - a.gap; });
+  return out;
+}
 /** 匯入檢查的反向對照（?sctest=<做法>；admin.py shipcheck --selftest）：開場前在記憶體裡弄壞一處 ⇒ 那一類要報出來。⇒ 做了什麼（找不到可以弄的 ⇒ 為什麼沒做）。
  *  clip ＝ 第一件沒穿模、往下搬 3 格就穿進 CLIP_GAME 格以上的遊戲擺的家具（擺在坐板之間的往下搬只是懸空 ⇒ 跳過），往下搬 3 格；
- *  fall ＝ 一個站著不動的軍官（沒有 ⇒ 第一個站著不動的人）搬到頭上 3 m（半空）。 */
+ *  fall ＝ 一個站著不動的軍官（沒有 ⇒ 第一個站著不動的人）搬到頭上 3 m（半空）；
+ *  float ＝ 第一件目前沒浮空、往上搬 10 格就浮空的靜止飾件或模型，往上搬 10 格。 */
 function scTest(sh, how) {
   if (how === 'clip') {
     var cn = function (q) { var C = clipCheck({ T: sh.T, models: [q], decos: [] }); return C.n ? C.list.length ? C.list[0].n : 0 : -1; };
@@ -494,6 +596,20 @@ function scTest(sh, how) {
     if (!c) return '沒有站著不動的人';
     c.pos = [c.pos[0], c.pos[1], c.pos[2] + 30]; c.home = c.pos.slice();
     return (ROLE_NAME[c.role] || '船員') + ' 搬到頭上 3 m（z ' + c.pos[2] + '）';
+  }
+  if (how === 'float') {
+    var fl = function (q, isD) { var F = floatCheck({ T: sh.T, models: isD ? [] : [q], decos: isD ? [q] : [], ropes: sh.ropes }); return F.n ? F.list.length : -1; };
+    var cands = (sh.decos || []).map(function (q) { return [q, true]; }).concat((sh.models || []).map(function (q) { return [q, false]; }));
+    var hit = cands.filter(function (p) {
+      var q = p[0], isD = p[1], mt = q.meta || {}, k = mt.kind || q.kind;
+      if (q.gm || q.L || q.restOn || q.vox || k === 'portlid' || k === 'yard' || k === 'oar' || k === 'rudder' || k === 'anchor' || k === 'light' || k === 'door' || k === 'propeller' || mt.spin) return false;
+      var shft = Object.assign({}, q, { origin: [q.origin[0], q.origin[1], q.origin[2] + 10], bb: [q.bb[0], q.bb[1], q.bb[2] + 10, q.bb[3], q.bb[4], q.bb[5] + 10] });
+      return fl(q, isD) === 0 && fl(shft, isD) > 0;
+    })[0];
+    if (!hit) return '沒有往上搬會浮空的飾件或模型';
+    var q = hit[0]; q.origin = [q.origin[0], q.origin[1], q.origin[2] + 10]; q.bb = [q.bb[0], q.bb[1], q.bb[2] + 10, q.bb[3], q.bb[4], q.bb[5] + 10];
+    if (q.c) q.c = [q.c[0], q.c[1], q.c[2] + 10];
+    return (q.path || q.name) + ' 往上搬 10 格';
   }
   return '不認得的做法 ' + how;
 }
