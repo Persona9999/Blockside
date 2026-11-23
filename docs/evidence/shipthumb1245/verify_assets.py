@@ -3,10 +3,11 @@ import hashlib,json,subprocess,sys
 from pathlib import Path
 from PIL import Image
 HERE=Path(__file__).resolve().parent;ROOT=HERE.parents[2]
+sys.path.insert(0,str(ROOT/'src'));import admin
 def run(*args):return subprocess.run([sys.executable,'-I','src/admin.py',*args],cwd=ROOT,capture_output=True,text=True,encoding='utf-8')
 def sha(p):return hashlib.sha256(p.read_bytes()).hexdigest()
 M=json.loads((ROOT/'src/art/ships/thumbs.json').read_text(encoding='utf-8'))
-cfg=json.loads((ROOT/'src/config/game.json').read_text(encoding='utf-8'))
+cfg=admin.load()
 assert set(M['icons'])=={s['id'] for s in cfg['ships']}
 assert run('thumbs','--check').returncode==0
 atlas=Image.open(ROOT/'src/art/ships/atlas.png').convert('RGBA')

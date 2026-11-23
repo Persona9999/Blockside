@@ -110,6 +110,27 @@ def fingerprints():
         p = export(lin(), b'\x00\x02grid')
         check(a.product_plat(p, ph, want) == 0, 'grid changed ⇒ not aligned')
 
+        # act_cache judges the file product_plat wrote back, not the lock it aimed for (FAR-90)
+        write = a.vxk_write
+        a.CACHE, a.OUT = os.path.join(td, '_cache'), os.path.join(td, 'index.html')
+        a.load = lambda: {'ships': [{'id': 'x', 'vxk': 'x.vxk', 'work': 'w-ship'}]}
+        a.lock_load = lambda: {'x.vxk': want}
+        a.export = lambda work, dest: write(dest, lin(), body)
+        a.product_header = lambda s, html: (ph, '')
+        a.product_binds = lambda tmp, h: (0, '')
+        cached = os.path.join(a.CACHE, 'x.vxk')
+        a.act_cache()
+        check(a.file_fp(cached) == want and not os.path.exists(cached + '.source'), 'act_cache: aligned re-export goes into _cache and matches the lock')
+        os.remove(cached)
+        a.vxk_write = lambda path, h, b: write(path, h, b + b'\x00')    # a writer that adds one byte to the grid
+        try:
+            a.act_cache()
+            failed = None
+        except a.Fail as e:
+            failed = str(e)
+        check(failed is not None and '對不上' in failed and os.path.exists(cached + '.source') and not os.path.exists(cached),
+              'act_cache: written-back file off by one byte ⇒ reported as not matching, kept as .source')
+
 
 chrome()
 js_globals()
