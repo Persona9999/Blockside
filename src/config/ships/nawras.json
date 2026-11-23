@@ -7,7 +7,23 @@
     "vxk": "nawras.vxk",
     "work": "claude-felucca-01m-assembly",
     "author": "Claude-Ojousama",
-    "idNext": {"deck": 2, "galley": 2, "mast": 3, "model": 2, "part": 3, "ship": 2, "tiller": 2, "yard": 3}
+    "idNext": {"deck": 2, "galley": 2, "mast": 3, "model": 2, "part": 3, "ship": 2, "tiller": 2, "yard": 3},
+    "cfg": {"base": 5},
+    "geo": {"spar": [7, 11], "marines": [20, 50], "center": 14, "aim": 10, "aimZ": [3, 70], "deckAim": [7, 14], "rigAim": [24, 90], "marineY": 8, "qx": 0},
+    "crew": {
+      "officers": 1,
+      "helm": 1,
+      "top": 0,
+      "marines": 4,
+      "marineGap": 20,
+      "monkeys": 1,
+      "handsK": 0.05,
+      "surgeon": 0,
+      "carpenter": 1,
+      "sailmaker": 1,
+      "navigator": 0,
+      "quartermaster": 0
+    }
   },
   "card": {
     "tons": 10,
@@ -15,9 +31,9 @@
     "guns": 4,
     "gunTypes": {"pierrier": 4},
     "volley": 4,
-    "drive": "sail",
+    "drive": "oar",
     "sails": 2,
-    "crew": 68
+    "crew": 32
   },
   "lock": "c:db3c87945b044c5df2cf67eac8990e9727f1b507"
 }
