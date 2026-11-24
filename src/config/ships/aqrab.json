@@ -1,0 +1,49 @@
+{
+  "order": 580,
+  "ship": {
+    "id": "aqrab",
+    "el": "ship-aqrab",
+    "name": "蠍子號",
+    "vxk": "aqrab.vxk",
+    "work": "claude-galiot-01m-assembly",
+    "author": "Claude-Ojousama",
+    "idNext": {"deck": 2, "mast": 2, "model": 2, "part": 5, "ship": 2, "yard": 2},
+    "cfg": {"base": 6.5},
+    "geo": {
+      "spar": [19, 27],
+      "marines": [63, 100],
+      "center": 18,
+      "aim": 14,
+      "aimZ": [7, 179],
+      "deckAim": [12, 22],
+      "rigAim": [32, 175],
+      "marineY": 8,
+      "qx": 25
+    },
+    "crew": {
+      "officers": 1,
+      "helm": 1,
+      "top": 0,
+      "marines": 12,
+      "marineGap": 20,
+      "monkeys": 1,
+      "handsK": 0.05,
+      "surgeon": 0,
+      "carpenter": 1,
+      "sailmaker": 1,
+      "navigator": 0,
+      "quartermaster": 0
+    }
+  },
+  "card": {
+    "tons": 66,
+    "len": 31.9,
+    "guns": 3,
+    "gunTypes": {"long8": 1, "pierrier": 2},
+    "volley": 6,
+    "drive": "oar",
+    "sails": 1,
+    "crew": 139
+  },
+  "lock": "c:d7b61380d6492040693f2bd83d2d39de2ddeacf9"
+}
