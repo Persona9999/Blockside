@@ -980,8 +980,31 @@ function townPick(I, styles, l, mix) {
   while (!L0 && lv > 1) { lv--; L0 = by(use); }                       // 那一級哪一套風格都沒有 ⇒ 往下一級（超高 ⇒ 高 ⇒ 中 ⇒ 低；Blocksail TASK-1291 以前直接回低密度，現有三級每套都有 ⇒ 挑到的不變）
   //   水上版（Blocksail TASK-0899：地塊帶 water、模型的索引帶 water ＝ 模型 meta 的 d0）：水上的地塊挑水上版、陸上的挑陸上版；那一邊一個都沒有 ⇒ 照舊整份
   //   （水上版還沒雕的種類先站在平台上用陸上版；陸上的地塊永遠不會挑到水上版 ⇒ 現有的房子挑到的不變）
+  if (use === 'house' && l.w && l.d && !townFitsAny(I, l, L0)) L0 = townHouseFallback(I, styles, l) || L0;   // 挑到的一個都裝不下 ⇒ 自動退路（townHouseFallback）；找不到照舊（手擺的小地塊）
   if (L0) { var Lw = L0.filter(function (nm) { return (I.models[nm].water != null) === !!l.water; }); if (Lw.length) L0 = Lw; }
   return townFit(I, l, L0);
+}
+/** 候選 L 裡有沒有裝得下地塊 l 的（同 townFit 的尺：模型的地塊 lot ＝ [寬, 進深] 公尺，寬容 5 cm；沒有 lot 的算裝得下）。 */
+function townFitsAny(I, l, L) {
+  return !!(L && L.some(function (nm) { var lt = I.models[nm] && I.models[nm].lot; return !lt || (lt[0] <= l.w + 0.05 && lt[1] <= l.d + 0.05); }));
+}
+/** 住宅的自動退路（Blocksail TASK-1288；Tim 2026-11-24「風格只影響外觀 其他參數&尺寸可以一致」「之後風格有類似的情況時 可以拿目前有的當預設Fallback」「這個可以做到遊戲內的程式(自動fallback)」）：
+ *  規劃的地塊大小跟風格無關（Blocksail world/town.js ZONE.fp）⇒ 那一級、那種佔地城的退路裡沒有裝得下的模型（第 4 級超高密度只有 italy、venice 雕了）時，
+ *  以前 townPick 只在「那一級一個模型都沒有」才往下一級、townLvl／townFit 又在「一個都裝不下」時照舊整份 ⇒ 8 × 8 的第 4 級地塊挑到 12～16 m 的第 3 級房子、疊在鄰居身上。
+ *  ⇒ 從地塊那一級往下，每一級依序找 城的退路 → 預設的幾套（DEF：第 4 級照 italy）→ 任何一套（照名字排）裡**裝得下**的那一級；都沒有 ⇒ null（照舊整份，手擺的小地塊）。
+ *  ⛔ 只在原本挑到的一個都裝不下時才走 ⇒ 現有的城（第 1～3 級每一套都有同樣的佔地）挑到的不變。Blocksail world/town_top.js pick 同一條（手抄）。 */
+function townHouseFallback(I, styles, l) {
+  var DEF = ['italy'], order = [], seen = {};
+  var all = Object.keys(I.byStyle).filter(function (k) { return /:house$/.test(k); }).map(function (k) { return k.slice(0, -6); }).sort();
+  styles.concat(DEF, all).forEach(function (s) { if (!seen[s]) { seen[s] = 1; order.push(s); } });
+  for (var v = l.lvl || 1; v >= 1; v--) {
+    for (var i = 0; i < order.length; i++) {
+      var L = I.byStyle[order[i] + ':house']; if (!L) continue;
+      L = L.filter(function (nm) { return (I.models[nm].lvl || 1) === v; });
+      if (townFitsAny(I, l, L)) return L;
+    }
+  }
+  return null;
 }
 /** 住宅混搭風格（Blocksail 規劃的 mix ＝ [[風格, 權重]…]，城那一筆的 houseMix；TASK-1291，Tim 2026-11-15「參考菜單概念（可以混合多地區菜單） 讓住宅也可以混合多風格」）：
  *  照地塊 id 的雜湊按權重抽一個 ⇒ townPick 把它排在退路 styles 前面（那一套沒有那一級才往下找）。Blocksail world/town_top.js mixStyle 同一條。 */
