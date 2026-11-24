@@ -10,6 +10,11 @@
 //   噸位 ＝ 設計水線排水量：小 ＜ SPK_TONS[0]、大 ≥ SPK_TONS[1]；火力 ＝ 全部的砲各打一發的彈重（公斤）：輕 ＜ SPK_VOLLEY[0]、重 ≥ SPK_VOLLEY[1]。
 //   門檻照 2026-10-18 那 17 艘的分布切成大約三等份（噸位 4／6／7 艘、火力 5／8／4 艘；那時的 ship_cards.json），之後船多了再調。
 var SHIP_CARDS = (window.VoxelKit.embeddedJSON('ship-cards') || {}).ships || {};
+if (!Object.keys(SHIP_CARDS).length && window.BS_SHIPS_CFG && window.BS_SHIPS_CFG.records) {
+  Object.keys(window.BS_SHIPS_CFG.records).forEach(function (k) {
+    if (window.BS_SHIPS_CFG.records[k].card) SHIP_CARDS[k] = window.BS_SHIPS_CFG.records[k].card;
+  });
+}
 var SPK_TONS = [1000, 3000], SPK_VOLLEY = [200, 600];
 var SPK_DRIVE = [['sail', battleIcon('sail'), '帆船'], ['steam', battleIcon('steam'), '蒸汽'], ['oar', battleIcon('oar'), '槳帆'], ['magic', '✨', '魔法']];
 var SPK_POWER = { steam: '蒸氣', oar: '槳', magic: '魔法' };

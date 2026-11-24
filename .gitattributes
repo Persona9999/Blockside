@@ -6,5 +6,7 @@
 *.html -text
 # 拆檔成品的船檔（ships/<標籤>.js，一段一行 base64、長的一行幾百 KB）：git diff／log -p 不印內容（存法照舊、git 照樣找差異）
 ships/*.js -diff
+# 船隻設定與選船卡（一艘一行 JSON）：保留 diff 可讀性，並用逐船三路 merge driver 自動合併不撞船的改動
+ships/ships_cfg.js diff merge=blockside-shipcfg
 *.png binary
 *.vxk binary

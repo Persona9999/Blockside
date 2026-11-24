@@ -966,14 +966,17 @@ def cards_text(cfg, cards):
            ',\n'.join('    %s: %s' % (json.dumps(k), json.dumps(v, ensure_ascii=False, separators=(', ', ': '))) for k, v in C))
 
 
-def build_srcs(read):
+def build_srcs(read, split_cfg=False):
     """建置內嵌時換掉的檔（FAR-85）：template.html 填好船標籤、game.json 接回 ships、ship_cards.json 從每艘的卡片組出來 ⇒ { 根目錄的相對路徑: bytes｜None（沒有這個檔） }。
-    FAR-85 以前的版本 ⇒ {}（檔照原樣內嵌）。"""
+    split_cfg=True ⇒ 船隻設定與卡片改走外部 ships/ships_cfg.js：game.json 不接 ships、ship_cards.json 留空。FAR-85 以前的版本 ⇒ {}（檔照原樣內嵌）。"""
     cfg, lock, R = src_cfg(read)
     if R is None:
         return {}
+    tpl = tpl_fill(read('src/template.html').decode('utf-8'), cfg).encode('utf-8')
+    if split_cfg:
+        return {'src/template.html': tpl, CFG_REL: read(CFG_REL), CARDS_REL: None}
     ct = cards_text(cfg, {k: r['card'] for k, r in R.items() if 'card' in r})
-    return {'src/template.html': tpl_fill(read('src/template.html').decode('utf-8'), cfg).encode('utf-8'),
+    return {'src/template.html': tpl,
             CFG_REL: (dumps(cfg) + '\n').encode('utf-8'), CARDS_REL: ct and ct.encode('utf-8')}
 
 
@@ -3029,10 +3032,96 @@ SRC_EL = 'blockside-src'
 SRC_RE = re.compile(r'<script type="application/json" id="%s">([^<]*)</script>' % SRC_EL)
 SRC_TEXT = ('.js', '.cjs', '.json', '.html', '.css', '.glsl', '.md', '.txt')
 ROOT = os.path.normpath(os.path.join(HERE, '..'))
+SHIPS_CFG_EL = 'bs-ships-cfg'
+SHIPS_CFG_REL = 'ships/ships_cfg.js'
+SHIPS_CFG_JS = os.path.join(os.path.dirname(OUT), 'ships', 'ships_cfg.js')
+SHIPS_CFG_TAG = '<script id="%s" src="%s"></script>' % (SHIPS_CFG_EL, SHIPS_CFG_REL)
+SHIPS_CFG_HEAD = '// 船隻設定與選船卡片（拆檔）：src/admin.py 照 src/config/ships/*.json 產生，別手改（js/00_config.js、js/72_shippick.js 讀）\nwindow.BS_SHIPS_CFG = '
+MERGE_DRV_NAME = 'blockside-shipcfg'
+MERGE_DRV_CMD = 'python -I src/admin.py merge-driver-shipcfg %O %A %B'
 
 
-def src_manifest(read):
-    """來源清單 {'fp': 總指紋, 'files': {根目錄的相對路徑: 指紋前 12 碼}}。read(相對路徑) ⇒ bytes；不存在 ⇒ None。"""
+def has_split_cfg(html):
+    """成品是否已將船隻設定拆到外部 ships/ships_cfg.js（有 #bs-ships-cfg 標籤）。"""
+    return bool(html and ('id="%s"' % SHIPS_CFG_EL) in html)
+
+
+def ships_cfg_manifest(read):
+    """config/ships/*.json 的來源清單 {'fp': 總指紋, 'files': {相對路徑: sha1 前 12 碼}}（文字照 LF 算）。"""
+    files = {}
+    for f in ls_of(read, SHIPS_REL):
+        if not f.endswith('.json'):
+            continue
+        p = '%s/%s' % (SHIPS_REL, f)
+        b = read(p)
+        files[p] = '（不存在）' if b is None else sha1_bytes(b.replace(b'\r\n', b'\n'))[:12]
+    fp = sha1_bytes('\n'.join('%s %s' % (k, files[k]) for k in sorted(files)).encode('utf-8'))[:16]
+    return {'fp': fp, 'files': files}
+
+
+def ships_cfg_records(read):
+    """從 config/ships/*.json 組出寫進 ships/ships_cfg.js 的 { sid: {order, ship, [card]} }（不含 .vxk lock）。"""
+    R = recs_read(read)
+    out = {}
+    for sid, r in R.items():
+        rec = {'order': r['order'], 'ship': r['ship']}
+        if 'card' in r:
+            rec['card'] = r['card']
+        out[sid] = rec
+    return out
+
+
+def ships_cfg_render(records, src):
+    """渲染 ships/ships_cfg.js（一艘一行、鍵與船皆照字母排 ⇒ 決定性且方便逐船三路合併）。"""
+    rows = ',\n'.join('  %s:%s' % (json.dumps(k, ensure_ascii=False),
+                       json.dumps(records[k], ensure_ascii=False, sort_keys=True, separators=(',', ':')))
+                      for k in sorted(records))
+    head = '%s{"v":1,"src":%s,"records":{\n' % (
+        SHIPS_CFG_HEAD, json.dumps(src, ensure_ascii=False, sort_keys=True, separators=(',', ':')))
+    return head + rows + ('\n' if rows else '') + '}};\n'
+
+
+def ships_cfg_text(read=None):
+    """由 read 看得到的 config/ships/*.json 產生完整的 ships/ships_cfg.js 原文。"""
+    read = read or work_read
+    if src_cfg(read)[2] is None:
+        raise Fail('FAR-85 以前的格式沒有 config/ships/*.json，無法產生 ' + SHIPS_CFG_REL)
+    return ships_cfg_render(ships_cfg_records(read), ships_cfg_manifest(read))
+
+
+def ships_cfg_parse(raw):
+    """解析 ships/ships_cfg.js 原文（str 或 bytes）⇒ {'v':1, 'src':{'fp':..,'files':{..}}, 'records':{..}}；失敗回 None。"""
+    if isinstance(raw, bytes):
+        raw = raw.decode('utf-8', 'replace')
+    try:
+        i = raw.index('{', raw.index('BS_SHIPS_CFG'))
+        j = raw.rindex('}') + 1
+        o = json.loads(raw[i:j])
+    except Exception:
+        return None
+    if not (isinstance(o, dict) and o.get('v') == 1 and isinstance(o.get('src'), dict)
+            and isinstance(o['src'].get('files'), dict) and isinstance(o.get('records'), dict)):
+        return None
+    return o
+
+
+def ships_cfg_write(read=None):
+    """比對工作區的 ships/ships_cfg.js；不同或不存在才寫回，回 (changed, fp)。"""
+    read = read or work_read
+    text = ships_cfg_text(read)
+    fp = ships_cfg_parse(text)['src']['fp']
+    raw = text.encode('utf-8')
+    if work_read(SHIPS_CFG_REL) == raw:
+        return False, fp
+    os.makedirs(os.path.dirname(SHIPS_CFG_JS), exist_ok=True)
+    with open(SHIPS_CFG_JS, 'w', encoding='utf-8', newline='\n') as f:
+        f.write(text)
+    return True, fp
+
+
+def src_manifest(read, split_cfg=False):
+    """來源清單 {'fp': 總指紋, 'files': {根目錄的相對路徑: 指紋前 12 碼}}。read(相對路徑) ⇒ bytes；不存在 ⇒ None。
+    split_cfg=True 且為每艘一檔配置時，config/ships/*.json 改由 ships/ships_cfg.js 追蹤，不計入 index.html 指紋。"""
     tpl = read('src/template.html')
     if tpl is None:
         raise Fail('讀不到 src/template.html')
@@ -3056,9 +3145,10 @@ def src_manifest(read):
             files[p] = 'lock ' + (lock.get(posixpath.basename(p)) or '（沒有指紋）')[:14]
         else:
             put(p, read(p))
-    for k in sorted(R or {}):
-        p = '%s/%s.json' % (SHIPS_REL, k)
-        put(p, read(p))
+    if not (split_cfg and R is not None):
+        for k in sorted(R or {}):
+            p = '%s/%s.json' % (SHIPS_REL, k)
+            put(p, read(p))
     fp = sha1_bytes('\n'.join('%s %s' % (k, files[k]) for k in sorted(files)).encode('utf-8'))[:16]
     return {'fp': fp, 'files': files}
 
@@ -3127,10 +3217,12 @@ def src_stamp_html(html, M):
     return html[:at] + tag + html[at:]
 
 
-def src_stamp():
+def src_stamp(split_cfg=True):
     """建置最後一步：照工作區算來源清單、記進成品（src_stamp_html）。"""
-    M = src_manifest(work_read)
-    html = src_stamp_html(open(OUT, encoding='utf-8').read(), M)
+    html0 = open(OUT, encoding='utf-8').read()
+    sc = bool(split_cfg and has_split_cfg(html0) and src_cfg(work_read)[2] is not None)
+    M = src_manifest(work_read, split_cfg=sc)
+    html = src_stamp_html(html0, M)
     with open(OUT, 'w', encoding='utf-8', newline='\n') as f:
         f.write(html)
     return ['✓ 成品記下來源：指紋 %s（%d 支檔；python -I src/admin.py srccheck 對得回來）' % (M['fp'], len(M['files']))]
@@ -3145,14 +3237,16 @@ def src_diff(have, want):
 def src_check_one(read, what):
     """read 讀得到的那一份成品跟同一份來源比。回傳 (對不對得上, 讀數)。"""
     prod = read('index.html')
-    have = src_of(prod.decode('utf-8')) if prod is not None else None
-    want = src_manifest(read)
+    html = prod.decode('utf-8') if prod is not None else ''
+    have = src_of(html) if prod is not None else None
+    sc = has_split_cfg(html)
+    want = src_manifest(read, split_cfg=sc)
     if have is None:
         return False, ['✗ %s：成品沒有來源清單（舊版 admin.py 建的，或沒有成品）⇒ python -I src/admin.py build' % what]
     if have.get('fp') != want['fp']:
         return False, ['✗ %s：成品跟來源對不上（成品 %s ／ 來源 %s）⇒ python -I src/admin.py build 重建再提交：' % (what, have.get('fp'), want['fp'])] + \
             ['    ' + x for x in src_diff(have, want)]
-    html, bad = prod.decode('utf-8'), []                        # 拆檔的成品：清單上的船檔都要在、內容要跟檔名的雜湊對得上
+    bad = []                                                     # 拆檔的成品：清單上的船檔都要在、內容要跟檔名的雜湊對得上
     idx = ships_index(html)
     for el in idx:
         try:
@@ -3161,7 +3255,21 @@ def src_check_one(read, what):
             bad.append(str(e))
     if bad:
         return False, ['✗ %s：成品的船檔對不上 ⇒ python -I src/admin.py build、ships/ 跟 index.html 一起提交（git add -A ships index.html）：' % what] + ['    ' + x for x in bad]
-    return True, ['✓ %s：成品照這份來源建的（指紋 %s、%d 支檔%s）' % (what, want['fp'], len(want['files']), '；船檔 %d 個都在、雜湊對得上' % len(idx) if idx else '')]
+    sc_note = ''
+    if sc:
+        if src_cfg(read)[2] is None:
+            return False, ['✗ %s：入口含 #%s，但來源還是 FAR-85 以前格式' % (what, SHIPS_CFG_EL)]
+        cfg_b = read(SHIPS_CFG_REL)
+        if cfg_b is None:
+            return False, ['✗ %s：缺少 %s ⇒ python -I src/admin.py build --code' % (what, SHIPS_CFG_REL)]
+        want_t = ships_cfg_text(read)
+        if cfg_b.replace(b'\r\n', b'\n') != want_t.encode('utf-8'):
+            have_sc = ships_cfg_parse(cfg_b)
+            want_sc = ships_cfg_parse(want_t)
+            diffs = src_diff((have_sc or {}).get('src'), want_sc['src']) if have_sc else ['格式無效或有合併衝突']
+            return False, ['✗ %s：%s 跟 %s/*.json 對不上 ⇒ python -I src/admin.py build --code：' % (what, SHIPS_CFG_REL, SHIPS_REL)] + ['    ' + x for x in diffs]
+        sc_note = '；%s 指紋 %s' % (SHIPS_CFG_REL, ships_cfg_manifest(read)['fp'])
+    return True, ['✓ %s：成品照這份來源建的（指紋 %s、%d 支檔%s%s）' % (what, want['fp'], len(want['files']), '；船檔 %d 個都在、雜湊對得上' % len(idx) if idx else '', sc_note)]
 
 
 def act_snapshot(rev, to):
@@ -3228,29 +3336,37 @@ def act_srccheck(staged=False, rev=None, hook=None):
 
 
 def act_hooks():
-    """裝鉤子：core.hooksPath ＝ .githooks（相對路徑 ⇒ 每個 worktree 用自己 checkout 出來的那兩支；還沒有 .githooks 的舊分支 ⇒ git 找不到鉤子、照常提交）。
-    已經設成別的 ⇒ 不蓋掉；.git/hooks 裡原本有的鉤子（不是 .sample）會失效 ⇒ 有的話先擋下、列出來。"""
+    """裝鉤子與 merge driver：core.hooksPath ＝ .githooks（每個 worktree 共用）＋ merge.blockside-shipcfg.driver（逐船合併 ships/ships_cfg.js）。"""
+    log = []
     code, cur = run(['git', 'config', '--get', 'core.hooksPath'], cwd=ROOT)
     cur = cur.strip()
     if cur == '.githooks':
-        return ['✓ 已經裝了（core.hooksPath ＝ .githooks）']
-    if cur:
+        log.append('✓ core.hooksPath 已經是 .githooks')
+    elif cur:
         raise Fail('core.hooksPath 已經是 %s ⇒ 不蓋掉（要換自己改）' % cur)
-    code, common = run(['git', 'rev-parse', '--git-common-dir'], cwd=ROOT)
-    hd = os.path.join(ROOT, common.strip(), 'hooks')
-    old = [f for f in (os.listdir(hd) if os.path.isdir(hd) else []) if not f.endswith('.sample')]
-    if old:
-        raise Fail('%s 裡已經有鉤子（%s）⇒ 改 core.hooksPath 會讓它們失效，不裝' % (hd, '、'.join(old)))
-    code, out = run(['git', 'config', 'core.hooksPath', '.githooks'], cwd=ROOT)
-    if code != 0:
-        raise Fail('git config 失敗：' + out.strip())
-    return ['✓ 裝好了：core.hooksPath ＝ .githooks（提交前 pre-commit、推送前 pre-push 都會跑 srccheck；合併後、切換後、改寫後、提交後會跑 shellsync —— 這份是別的遊戲的 submodule 時重套外層的外殼頁）']
+    else:
+        code, common = run(['git', 'rev-parse', '--git-common-dir'], cwd=ROOT)
+        hd = os.path.join(ROOT, common.strip(), 'hooks')
+        old = [f for f in (os.listdir(hd) if os.path.isdir(hd) else []) if not f.endswith('.sample')]
+        if old:
+            raise Fail('%s 裡已經有鉤子（%s）⇒ 改 core.hooksPath 會讓它們失效，不裝' % (hd, '、'.join(old)))
+        code, out = run(['git', 'config', 'core.hooksPath', '.githooks'], cwd=ROOT)
+        if code != 0:
+            raise Fail('git config 失敗：' + out.strip())
+        log.append('✓ 已設定 core.hooksPath ＝ .githooks（pre-commit／pre-push srccheck＋shellsync）')
+    for k, v in (('merge.%s.name' % MERGE_DRV_NAME, 'Blockside ships_cfg.js 3-way per-ship merge'),
+                 ('merge.%s.driver' % MERGE_DRV_NAME, MERGE_DRV_CMD)):
+        code, out = run(['git', 'config', k, v], cwd=ROOT)
+        if code != 0:
+            raise Fail('git config %s 失敗：%s' % (k, out.strip()))
+    log.append('✓ 已設定 merge.%s.driver（ships/ships_cfg.js 逐船三路合併）' % MERGE_DRV_NAME)
+    return log
 
 
 def src_hook_commit(r):
     code, names = run(['git', 'diff', '--cached', '--name-only'], cwd=ROOT)
     names = set(names.split())
-    want = src_manifest(r)
+    want = src_manifest(r, split_cfg=False)
     srcs = names & (set(want['files']) | {LOCK_REL, CARDS_REL})
     prod = 'index.html' in names or any(n.startswith('ships/') for n in names)
     if not prod and not srcs:
@@ -3358,17 +3474,17 @@ def thumbs_finish():
     match = SHIPS_TAG_RX.search(html)
     if not match:
         raise Fail('自動縮圖需要拆檔成品；請先正常 build')
-    html, manifest = code_html(work_read, match.group(0) + '\n', log)
+    html, manifest = code_html(work_read, match.group(0) + '\n', log, split_cfg=has_split_cfg(html))
     with open(OUT, 'w', encoding='utf-8', newline='') as f:
         f.write(html)
     return log + ['✓ 新縮圖已嵌回入口（來源 %s）' % manifest['fp']] + act_srccheck()
 
 
-def inline_build(out):
+def inline_build(out, split_cfg=False):
     """vxk_inline.py 照工作區的來源內嵌成 out。FAR-85：內嵌的 template、game.json、ship_cards.json 是組出來的（build_srcs）
     ⇒ 組好的 template 暫時寫在 template.html 旁邊（其他檔照原本的相對路徑找），game.json、卡片指到暫存資料夾。回 (exit code, 輸出)。"""
     import tempfile
-    over = build_srcs(work_read)
+    over = build_srcs(work_read, split_cfg=split_cfg)
     if not over:
         return run([sys.executable, '-I', INLINE, TPL, out])
     tpl = over['src/template.html'].decode('utf-8')
@@ -3405,7 +3521,8 @@ def act_build(pack=True, single=False):   # pack：壓縮版（預設，TASK-058
     why = atlas_stale()
     if why:
         raise Fail('\n'.join(log) + '\n✗ 海戰圖示的圖集過期（%s）⇒ 先 python -I admin.py atlas，再建置' % '；'.join(why))
-    code, out = inline_build(OUT)
+    split_cfg = bool(pack and not single and src_cfg(work_read)[2] is not None)
+    code, out = inline_build(OUT, split_cfg=split_cfg)
     log.append(out.strip())
     if code != 0:
         raise Fail('\n'.join(log) + '\n✗ 建置失敗（exit %d）' % code)
@@ -3414,7 +3531,7 @@ def act_build(pack=True, single=False):   # pack：壓縮版（預設，TASK-058
         log += js_strip_html(OUT)
     else:
         ships_sync(os.path.dirname(OUT), {})                 # 原格式（船內嵌）⇒ ships/ 裡的船檔都是舊的
-    log += flagloop_ensure() + src_stamp()
+    log += flagloop_ensure() + src_stamp(split_cfg=split_cfg)
     log += thumbs_finish() if pack and not single else thumbs_note()
     return log + showlod_note(cfg) + anc_note(cfg)
 
@@ -3462,6 +3579,8 @@ def shell_html(path):
     stamp = {'core': have['fp'], 'shell': h.hexdigest()[:12]}
     cfg = {'ships': ships, 'name': S.get('title') or '', 'stamp': stamp}
     esc = lambda v: v.replace('&', '&amp;').replace('<', '&lt;').replace('"', '&quot;')
+    if pre and SHIPS_CFG_TAG in html:
+        html = html.replace(SHIPS_CFG_TAG, '<script id="%s" src="%s%s"></script>' % (SHIPS_CFG_EL, esc(pre), SHIPS_CFG_REL), 1)
     if S.get('title'):
         html = re.sub(r'<title>[^<]*</title>', lambda m: '<title>%s</title>' % esc(S['title']), html, count=1)
         html = re.sub(r'(<meta name="apple-mobile-web-app-title" content=")[^"]*(")', lambda m: m.group(1) + esc(S['title']) + m.group(2), html, count=1)
@@ -3549,10 +3668,11 @@ def act_shellsync(check=False, hook=None):
 CODE_VXK_RX = re.compile(r'<script\s+type="application/x-vxk"\s+id="([^"]+)"\s+src="([^"]+)"\s*>\s*</script>')   # 同 vxk_inline.py 的 VXK_RE
 
 
-def code_html(read, ships_tag, log=None):
+def code_html(read, ships_tag, log=None, split_cfg=True):
     """read（根目錄的相對路徑 ⇒ bytes｜None）讀得到的那一份來源，走正式建置同一條路、船標籤換成 ships_tag ⇒ (入口全文：去好註解、記好來源指紋, 來源清單)。"""
     import tempfile
-    M, over = src_manifest(read), build_srcs(read)
+    sc = bool(split_cfg and src_cfg(read)[2] is not None)
+    M, over = src_manifest(read, split_cfg=sc), build_srcs(read, split_cfg=sc)
     with tempfile.TemporaryDirectory() as td:
         got = {p: read(p) for p, fp in M['files'].items() if not fp.startswith('lock ') and fp != '（不存在）'}
         got.update(over)                                     # FAR-85：game.json 接回 ships、卡片組好（沒有卡片 ⇒ 不放，同 optional 素材不存在）
@@ -3579,16 +3699,20 @@ def code_html(read, ships_tag, log=None):
         if log is not None:
             log += L
         html = open(of, encoding='utf-8', newline='').read()
+        if sc:
+            html, cnt = SHIPS_TAG_RX.subn(lambda mt: mt.group(0) + SHIPS_CFG_TAG, html, count=1)
+            if cnt != 1:
+                raise Fail('找不到 #%s 標籤，無法接入 %s' % (SHIPS_EL, SHIPS_CFG_REL))
     return src_stamp_html(html, M), M
 
 
-def code_base(fp, base=None):
+def code_base(fp, base=None, split_cfg=False):
     """成品是照哪一版建的：來源指紋 ＝ fp 的那一版（--base 給的；不給 ⇒ HEAD，合併中再試 MERGE_HEAD）；都不是 ⇒ None。"""
     revs = [base] if base else ['HEAD'] + (['MERGE_HEAD'] if run(['git', 'rev-parse', '-q', '--verify', 'MERGE_HEAD'], cwd=ROOT)[0] == 0 else [])
     for rev in revs:
         r = GitRead(rev + ':')
         try:
-            if src_manifest(r)['fp'] == fp:
+            if src_manifest(r, split_cfg=split_cfg)['fp'] == fp:
                 return rev
         except Fail:
             pass
@@ -3625,12 +3749,13 @@ def act_build_code(base=None):
         raise Fail('船隻清單（%s）跟成品的船清單（%s）不一樣%s' % ('、'.join(els), '、'.join(idx), full))
     for el in idx:
         ship_data(html0, el)                                    # 船檔都在、內容跟雜湊對得上（不然 Fail）
-    want = src_manifest(work_read)
+    have_sc = has_split_cfg(html0)
+    want = src_manifest(work_read, split_cfg=True)
     vx = lambda F: {k: v for k, v in F.items() if k.endswith('.vxk')}
     bad = sorted(k for k in set(vx(have['files'])) | set(vx(want['files'])) if have['files'].get(k) != want['files'].get(k))
     if bad:
         raise Fail('.vxk 的指紋跟成品記的不一樣（%s）%s' % ('、'.join(posixpath.basename(k) for k in bad), full))
-    rev = code_base(have['fp'], base)
+    rev = code_base(have['fp'], base, split_cfg=have_sc)
     if not rev:
         raise Fail('成品的來源指紋 %s 對不到 %s 的來源 ⇒ 用 --base <版> 指定成品是照哪一版建的' % (have['fp'], base or 'HEAD／MERGE_HEAD'))
     ships_tag = m.group(0) + '\n'
@@ -3638,7 +3763,7 @@ def act_build_code(base=None):
     try:
         if ship_sig(src_cfg(r)[0]) != ship_sig(cfg):
             raise Fail('船隻清單（代號、標籤、.vxk、改裝船的原船）跟 %s 不一樣%s' % (rev, full))
-        h0, _ = code_html(r, ships_tag)
+        h0, _ = code_html(r, ships_tag, split_cfg=have_sc)
     finally:
         r.close()
     if h0 != html0:
@@ -3647,13 +3772,16 @@ def act_build_code(base=None):
     log = bundle_names_check() + owner_check() + act_shell_layers(gate=True)
     log.append('✓ 船沒變：%d 艘的標籤、.vxk 指紋、改裝船的原船都跟 %s 一樣，船檔都在、雜湊對得上' % (len(idx), rev))
     log.append('✓ 照 %s 的來源走同一條路重做 ⇒ 跟現在的成品逐位元組相同（這個做法 ＝ 正式建置）' % rev)
-    h1, M1 = code_html(work_read, ships_tag, log)
+    h1, M1 = code_html(work_read, ships_tag, log, split_cfg=True)
     if h1 == html0:
-        log.append('· 工作區的來源跟 %s 一樣 ⇒ 成品不用換' % rev)
+        log.append('· 入口 index.html 未變（跟 %s 一樣）' % rev)
     else:
         with open(OUT, 'w', encoding='utf-8', newline='') as f:
             f.write(h1)
         log.append('✓ 只重建程式：入口 index.html 換了（來源指紋 %s → %s）；船檔 ships/ 照舊 %d 個' % (have['fp'], M1['fp'], len(idx)))
+    if src_cfg(work_read)[2] is not None:
+        sc_changed, sc_fp = ships_cfg_write(work_read)
+        log.append('%s %s（指紋 %s）' % ('✓ 更新' if sc_changed else '· 未變', SHIPS_CFG_REL, sc_fp))
     return log + flagloop_ensure() + act_srccheck()
 
 
@@ -3729,7 +3857,8 @@ def act_build_ship(sid, base=None, chain=None):
         raise Fail('%s 以外的船（%s）跟成品的船清單（%s）不一樣 ⇒ 只建一艘只能換、加 %s%s' % (names, '、'.join(rest), '、'.join(el for el in idx if el not in fel), names, full))
     for el in rest:
         ship_data(html0, el)                                    # file present and matching its hash, else Fail
-    want = src_manifest(work_read)
+    have_sc = has_split_cfg(html0)
+    want = src_manifest(work_read, split_cfg=True)
     vx = lambda F: {posixpath.basename(k): v for k, v in F.items() if k.endswith('.vxk')}
     hv, wv, fv = vx(have['files']), vx(want['files']), {s['vxk'] for s in FS}
     bad = sorted(k for k in set(hv) | set(wv) if hv.get(k) != wv.get(k) and k not in fv)
@@ -3739,7 +3868,7 @@ def act_build_ship(sid, base=None, chain=None):
     if prior:
         rev, sig0 = '這個指令上一次 build --ship 寫的成品', chain['sig']
     else:
-        rev = code_base(have['fp'], base)
+        rev = code_base(have['fp'], base, split_cfg=have_sc)
         if not rev:
             raise Fail('成品的來源指紋 %s 對不到 %s 的來源 ⇒ 用 --base <版> 指定成品是照哪一版建的；'
                        '成品是上一次 build --ship 照工作區建的、還沒提交 ⇒ 先提交那次的成品和設定（index.html、ships/、src/），再建下一艘' % (have['fp'], base or 'HEAD／MERGE_HEAD'))
@@ -3749,7 +3878,7 @@ def act_build_ship(sid, base=None, chain=None):
             sig0 = ship_sig(src_cfg(r)[0])
         if [x for x in sig0 if x[0] not in fam] != [x for x in ship_sig(cfg) if x[0] not in fam]:
             raise Fail('%s 以外的船（代號、標籤、.vxk、改裝船的原船）跟 %s 不一樣%s' % (names, rev, full))
-        h0 = html0 if prior else code_html(r, m.group(0) + '\n')[0]
+        h0 = html0 if prior else code_html(r, m.group(0) + '\n', split_cfg=have_sc)[0]
     finally:
         if not prior:
             r.close()
@@ -3773,7 +3902,7 @@ def act_build_ship(sid, base=None, chain=None):
             raise Fail('%s 跟它的原船都跟成品一樣，重做出來的船檔卻不一樣（%s → %s）⇒ 船檔的做法改過、或 _cache 那份跟建置時那份只差在指紋不算的地方（匯出時間、JSON 鍵的順序：換機器重新匯出）%s'
                        % (s['id'], idx[s['el']], new[s['el']], full))
     index = {s['el']: new[s['el']] if s['id'] in fam else idx[s['el']] for s in cfg['ships']}
-    h1, M1 = code_html(work_read, '<script type="application/json" id="%s">%s</script>\n' % (SHIPS_EL, json.dumps(index, separators=(',', ':'))), log)
+    h1, M1 = code_html(work_read, '<script type="application/json" id="%s">%s</script>\n' % (SHIPS_EL, json.dumps(index, separators=(',', ':'))), log, split_cfg=True)
     nv, E = pack_verify(h1, lambda rel: files[rel].encode('utf-8') if rel in files else work_read(rel), fam)
     if E:
         raise Fail('壓縮版還原出來跟 _cache 原檔對不上（什麼都沒寫）：\n' + '\n'.join('  ✗ ' + e for e in E[:12]))
@@ -3792,6 +3921,9 @@ def act_build_ship(sid, base=None, chain=None):
         with open(OUT, 'w', encoding='utf-8', newline='') as f:
             f.write(h1)
         log.append('✓ 入口 index.html 換了（來源指紋 %s → %s）' % (have['fp'], M1['fp']))
+    if src_cfg(work_read)[2] is not None:
+        sc_changed, sc_fp = ships_cfg_write(work_read)
+        log.append('%s %s（指紋 %s）' % ('✓ 更新' if sc_changed else '· 未變', SHIPS_CFG_REL, sc_fp))
     log.append('✓ 只建 %s：寫了船檔 %d 個（%s）；其他 %d 艘的船檔照舊' % (names, len(wrote), '、'.join(wrote) or '都跟原本一樣', len(rest)))
     log += flagloop_ensure() + thumbs_finish() + act_srccheck()
     if chain is not None:                                       # after the tail: thumbs_finish may rewrite the entry (from the working sources too)
@@ -3862,7 +3994,7 @@ def act_split_ships(build=True):
 #   · 一邊還是 FAR-85 以前的格式（ships 在 game.json 裡）⇒ 先把那一邊跟合併基底比改了什麼搬進每艘一個檔（port_old）；兩邊改到同一艘、同一個設定鍵 ⇒ 擋下。
 # 全部先算好、照 srccheck 同一套驗過（對還沒寫的那一份）才寫；擋下 ⇒ 什麼都不寫。寫完：循環布的預烘、srccheck，列出要 git add 的檔。
 REMERGE_FIXED = ('index.html', 'src/art/ships/thumbs.json', 'src/art/ships/atlas.png')
-BAKED = ('flagloop.js', 'showlod.js', 'anchor.js')
+BAKED = ('flagloop.js', 'showlod.js', 'anchor.js', 'ships_cfg.js')
 
 
 def gen_path(p):
@@ -3960,7 +4092,7 @@ def port_old(o, n, sides, S):
     return over, set(over), ['%s 是 FAR-85 以前的格式 ⇒ 它的改動搬進每艘一個檔（跟合併基底比）：' % o] + (log or ['  （船沒有改）'])
 
 
-def act_remerge():
+def remerge_run():
     if run(['git', 'rev-parse', '-q', '--verify', 'MERGE_HEAD'], cwd=ROOT)[0]:
         raise Fail('不在合併中（沒有 MERGE_HEAD）⇒ remerge 只在 git merge 有衝突、還沒提交的時候用')
     sides = {rev: GitRead(rev + ':') for rev in ('HEAD', 'MERGE_HEAD')}
@@ -3969,6 +4101,98 @@ def act_remerge():
     finally:
         for r in sides.values():
             r.close()
+
+
+def act_remerge():
+    log, add = remerge_run()
+    return log + ['下一步：看過沒問題 ⇒ git add -A -- %s，再 git commit' % ' '.join(add)]
+
+
+def act_merge_driver_shipcfg(base_p, ours_p, theirs_p):
+    """Git custom merge driver (%O %A %B)：逐船三路合併 ships/ships_cfg.js；不同船各改各的自動合併，同一艘衝突才退回 exit 1。"""
+    parsed = []
+    for label, p in (('base', base_p), ('ours', ours_p), ('theirs', theirs_p)):
+        try:
+            raw = open(p, 'rb').read()
+        except OSError as e:
+            sys.stderr.write('✗ merge-driver-shipcfg 讀不到 %s（%s）：%s\n' % (label, p, e))
+            return 1
+        obj = ships_cfg_parse(raw)
+        if obj is None:
+            sys.stderr.write('✗ merge-driver-shipcfg：%s 不是拆檔格式 BS_SHIPS_CFG（退回一般衝突交給 remerge）\n' % label)
+            return 1
+        parsed.append(obj)
+    o, a, b = parsed
+    recO, recA, recB = o['records'], a['records'], b['records']
+    fO, fA, fB = o['src']['files'], a['src']['files'], b['src']['files']
+    sids = sorted(set(recO) | set(recA) | set(recB) | {posixpath.basename(k)[:-5] for k in set(fO) | set(fA) | set(fB) if k.endswith('.json')})
+    out_rec, out_files, conflicts = {}, {}, []
+    for sid in sids:
+        fp_key = '%s/%s.json' % (SHIPS_REL, sid)
+        vO = (recO.get(sid), fO.get(fp_key))
+        vA = (recA.get(sid), fA.get(fp_key))
+        vB = (recB.get(sid), fB.get(fp_key))
+        if vA == vB:
+            pick = vA
+        elif vA == vO:
+            pick = vB
+        elif vB == vO:
+            pick = vA
+        else:
+            conflicts.append(sid)
+            continue
+        if pick[0] is not None:
+            out_rec[sid] = pick[0]
+        if pick[1] is not None:
+            out_files[fp_key] = pick[1]
+    if conflicts:
+        sys.stderr.write('✗ ships/ships_cfg.js 衝突（兩邊都改了同一艘：%s）\n' % '、'.join(conflicts))
+        return 1
+    fp = sha1_bytes('\n'.join('%s %s' % (k, out_files[k]) for k in sorted(out_files)).encode('utf-8'))[:16]
+    text = ships_cfg_render(out_rec, {'fp': fp, 'files': out_files})
+    with open(ours_p, 'w', encoding='utf-8', newline='\n') as f:
+        f.write(text)
+    return 0
+
+
+def act_merge(ref, no_ff=False):
+    """merge <ref>：執行 git merge --no-commit；若只有產物衝突（index.html／ships/*.js／縮圖）自動跑 remerge 並具名 stage。"""
+    if run(['git', 'rev-parse', '-q', '--verify', 'MERGE_HEAD'], cwd=ROOT)[0] == 0:
+        raise Fail('已經在合併中（有 MERGE_HEAD）⇒ 解完來源跑 python -I src/admin.py remerge，或 git merge --abort')
+    code, staged = run(['git', 'diff', '--cached', '--name-only'], cwd=ROOT)
+    if code != 0:
+        raise Fail('git diff --cached 失敗：' + staged.strip())
+    if staged.strip():
+        raise Fail('暫存區已有尚未提交的變更 ⇒ 請先清空或提交再 merge：\n' + staged.strip())
+    cmd = ['git', 'merge', '--no-commit'] + (['--no-ff'] if no_ff else []) + [ref]
+    m_code, m_out = run(cmd, cwd=ROOT)
+    in_merge = (run(['git', 'rev-parse', '-q', '--verify', 'MERGE_HEAD'], cwd=ROOT)[0] == 0)
+    log = [l for l in m_out.strip().splitlines() if l.strip()]
+    if m_code == 0:
+        good, out = src_check_one(work_read, '合併後')
+        if good:
+            tail = '下一步：確認無誤後提交（git commit / senate cmd commit）' if in_merge else '✓ 已快轉完成（無需再 commit）'
+            return log + out + [tail]
+        if not in_merge:
+            raise Fail('\n'.join(log + out))
+        r_log, add = remerge_run()
+        for p in add:
+            sc, so = run(['git', 'add', '-A', '--', p], cwd=ROOT)
+            if sc != 0:
+                raise Fail('git add %s 失敗：%s' % (p, so.strip()))
+        return log + r_log + ['✓ 已自動更新並 stage：%s' % '、'.join(add), '下一步：確認無誤後提交（git commit / senate cmd commit）']
+    U = unmerged()
+    if not in_merge or not U:
+        raise Fail('git merge 失敗（exit %d）：\n%s' % (m_code, m_out.strip()))
+    src_u = [p for p in sorted(U) if not gen_path(p)]
+    if src_u:
+        raise Fail('下列來源檔有衝突，請先手解後再跑 python -I src/admin.py remerge：\n' + '\n'.join('  ✗ ' + p for p in src_u))
+    r_log, add = remerge_run()
+    for p in add:
+        sc, so = run(['git', 'add', '-A', '--', p], cwd=ROOT)
+        if sc != 0:
+            raise Fail('git add %s 失敗：%s' % (p, so.strip()))
+    return log + r_log + ['✓ 產物衝突已自動重建並 stage：%s' % '、'.join(add), '下一步：確認無誤後提交（git commit / senate cmd commit）']
 
 
 def remerge(sides):
@@ -4071,9 +4295,10 @@ def remerge(sides):
             for p in REMERGE_FIXED[1:]:
                 files[p] = open(os.path.join(td, 'out', posixpath.basename(p)), 'rb').read()
         log += ['✓ 選船縮圖：兩邊圖集裡跟船檔對得上的格重排一張'] + ['  ' + l for l in out.strip().splitlines()]
+    files[SHIPS_CFG_REL] = ships_cfg_text(R).encode('utf-8')
     over.update(files)
     tag = '<script type="application/json" id="%s">%s</script>\n' % (SHIPS_EL, json.dumps(index, separators=(',', ':')))
-    h1, M1 = code_html(Overlay(work_read, over), tag, log)
+    h1, M1 = code_html(Overlay(work_read, over), tag, log, split_cfg=True)
     over['index.html'] = h1.encode('utf-8')
     good, out = src_check_one(Overlay(work_read, over), '合併後（還沒寫）')
     if not good:
@@ -4092,9 +4317,12 @@ def remerge(sides):
                 fh.write(b)
             wrote.append(p)
     log.append('✓ 寫了 %d 個檔（入口來源指紋 %s）' % (len(wrote), M1['fp']))
+    fl0 = work_read('ships/flagloop.js')
     log += flagloop_ensure() + act_srccheck() + thumbs_note() + showlod_note(cfg) + anc_note(cfg)
+    if work_read('ships/flagloop.js') != fl0:
+        wrote.append('ships/flagloop.js')
     add = sorted(set(wrote) | set(p for p in U if gen_path(p) or p in done))
-    return log + ['下一步：看過沒問題 ⇒ git add -A -- %s，再 git commit' % ' '.join(add)]
+    return log, add
 
 
 def flagloop_ensure():
@@ -4421,7 +4649,7 @@ def ship_data(html, el, read=None):
 def ships_sync(root, files):
     """船檔寫進 <root>/ships/：files ＝ { 相對路徑: 內容 }；ships/ 裡不在 files 的船檔（船隻清單拿掉的船）拿掉。回 (寫了幾個, 拿掉幾個)。"""
     d = os.path.join(root, 'ships')
-    old = [f for f in os.listdir(d) if f.endswith('.js') and f not in ('flagloop.js', 'showlod.js', 'anchor.js')] if os.path.isdir(d) else []   # ships/ 只放建置寫的船檔 ⇒ 不在這次清單上的 .js 都是舊的（flagloop.js：循環布的預烘，flagloop_ensure 管；showlod.js：表演船低模，act_showlod 管）
+    old = [f for f in os.listdir(d) if f.endswith('.js') and f not in BAKED] if os.path.isdir(d) else []   # ships/ 只放建置寫的船檔 ⇒ 不在這次清單上的 .js 都是舊的（flagloop.js、showlod.js、anchor.js、ships_cfg.js 各自獨立管理）
     if files:
         os.makedirs(d, exist_ok=True)
     for rel, t in files.items():
@@ -4813,7 +5041,8 @@ def pack_html(path, split=True):
         return mt.group(1) + b + mt.group(3)
     html2 = re.sub('\x00SHIP(\\d+)\x00', emit, html2)
     k = sum(1 for mt in re.finditer(RX, html) if len(mt.group(2)) >= 64)
-    tag = '<script type="application/json" id="%s">%s</script>\n' % (SHIPS_EL, json.dumps(index, separators=(',', ':'))) if split else ''
+    split_cfg = bool(split and src_cfg(work_read)[2] is not None)
+    tag = '<script type="application/json" id="%s">%s</script>%s\n' % (SHIPS_EL, json.dumps(index, separators=(',', ':')), SHIPS_CFG_TAG if split_cfg else '') if split else ''
     html2 = html2.replace('\x00POOL\x00', tag, 1)
     nv, E = pack_verify(html2, lambda rel: files[rel].encode('utf-8') if rel in files else None)   # 寫出去之前：照遊戲的讀法還原、跟 _cache 原檔逐個比（對不上 ⇒ 不寫，舊成品留著）
     if E:
@@ -4827,6 +5056,9 @@ def pack_html(path, split=True):
         log.append('  檔頭 %s：跟原船 #%s 相同的 %d 欄不存（%s）⇒ 少 %d KB（壓縮前）' % (el, el0, len(P), '、'.join('.'.join(p) for p in P[:8]) + ('…' if len(P) > 8 else ''), dn // 1024))
     open(path, 'w', encoding='utf-8', newline='').write(html2)
     nw, ng = ships_sync(os.path.dirname(path), files)
+    if split_cfg:
+        sc_changed, sc_fp = ships_cfg_write(work_read)
+        log.append('%s %s（指紋 %s）' % ('✓ 更新' if sc_changed else '· 未變', SHIPS_CFG_REL, sc_fp))
     size1 = len(html2.encode('utf-8'))
     sf = sum(len(t) for t in files.values())
     log.append('✓ 壓縮版：%d 艘%s；%s' % (k, '（網格照原樣留在船裡 %d 份）' % keep if keep else '',
@@ -5814,6 +6046,13 @@ def main():
     s = sp.add_parser('split-ships', help='一次性搬移（FAR-85）：game.json 的 ships、ship_cards.json、vxk_lock.json ⇒ 每艘一個檔 config/ships/<代號>.json；template.html 的船標籤清空；接著 build --code')
     s.add_argument('--no-build', action='store_true', help='只搬，不跑 build --code')
     sp.add_parser('remerge', help='合併後重建產物（FAR-85）：git merge 有衝突時，來源解完之後跑；入口、船檔、anchor.js、showlod.js、選船縮圖照兩邊建好的產物組回來（不用 _cache、不用 Chrome）')
+    s = sp.add_parser('merge', help='合併分支：git merge --no-commit；若只有產物衝突（index.html／ships/*.js／縮圖）自動跑 remerge 並具名 stage')
+    s.add_argument('ref', help='要合併進來的分支或 commit（例：release/dev）')
+    s.add_argument('--no-ff', action='store_true', help='一律產生 merge commit')
+    s = sp.add_parser('merge-driver-shipcfg', help='Git merge driver 內部入口（由 .gitattributes 呼叫）：逐船三路合併 ships/ships_cfg.js')
+    s.add_argument('base')
+    s.add_argument('ours')
+    s.add_argument('theirs')
     sp.add_parser('reseg', help='船檔照現在的切法重切（不用 _cache：從船檔自己解回原文重切、解回來逐位元組相同才寫、換入口清單上的雜湊）—— 只有 ship_segments 的切法改了才要')
     s = sp.add_parser('snapshot', help='某一版的成品（入口＋它清單上的船檔＋ships/ 的預烘檔）取出到一個資料夾：拆檔之後 git show <版本>:index.html 只拿得到入口（對拍的對照組用這個）')
     s.add_argument('rev', help='commit、分支名')
@@ -5907,6 +6146,10 @@ def main():
             log = act_split_ships(not o.no_build)
         elif o.op == 'remerge':
             log = act_remerge()
+        elif o.op == 'merge':
+            log = act_merge(o.ref, o.no_ff)
+        elif o.op == 'merge-driver-shipcfg':
+            sys.exit(act_merge_driver_shipcfg(o.base, o.ours, o.theirs))
         elif o.op == 'shell':
             log = act_shell(o.cfg, o.check)
         elif o.op == 'shellsync':

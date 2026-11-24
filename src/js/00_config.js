@@ -6,6 +6,13 @@
 // ⛔ 程式裡不再有這些值的第二份：要改預設 ＝ 改 game.json（或開設定後台），不是改 js。
 // 讀不到（沒有內嵌、JSON 壞了）⇒ 停在載入畫面、寫原因 —— 不照某一份舊值跑（那會是一場沒人知道的不同設定）。
 var CFG = window.VoxelKit.embeddedJSON('game-config');
+var SHIPS_CFG = window.BS_SHIPS_CFG || null;
+if (CFG && (!Array.isArray(CFG.ships) || !CFG.ships.length) && SHIPS_CFG && SHIPS_CFG.records) {
+  CFG.ships = Object.keys(SHIPS_CFG.records).sort(function (a, b) {
+    var oa = SHIPS_CFG.records[a].order, ob = SHIPS_CFG.records[b].order;
+    return oa !== ob ? oa - ob : a < b ? -1 : a > b ? 1 : 0;
+  }).map(function (k) { return SHIPS_CFG.records[k].ship; });
+}
 // 雕刻 meta 的 kind 規格表（TASK-0672；config/meta_kinds.json，建置時內嵌成 #meta-kinds）：kind ⇒ { name, on, keys, need, use, doc, game, mk, drv }。
 //   modelKind（10_ship.js）照 mk 認模型、匯入檢查（75_shipcheck.js）照它報「規格表沒有的 kind」；admin.py 照 drv 匯出動力件的格子。
 var META_SPEC = window.VoxelKit.embeddedJSON('meta-kinds'), META_KINDS = (META_SPEC && META_SPEC.kinds) || {};
