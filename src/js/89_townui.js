@@ -25,6 +25,9 @@ if (TUI_HOST) document.documentElement.classList.add('tuionly');
 function tuiOk() { return TUI_HOST ? !!TWB.town : modeRule('town') && BED && BED.host && TWB.town; }
 function tuiEsc(t) { return String(t).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
 function tuiNum(x, d) { x = +x || 0; return x.toLocaleString('en-US', { minimumFractionDigits: d || 0, maximumFractionDigits: d || 0 }); }
+/** 貨的量（桶）：照 d 位小數；不是 0 但照 d 位會印成 0 ⇒ 多印幾位，到看得到最後一位有效數字為止（帳的單位是 1／1000 桶 ⇒ 最多 0.001）。
+ *  Tim 2026-11-25「有些產出 吃料顯示為0.00(數值太小) 實際至少要顯示最後一位」（TASK-1256） */
+function tuiQty(x, d) { x = +x || 0; d = d || 0; var a = Math.abs(x); while (a && d < 6 && Math.round(a * Math.pow(10, d)) === 0) d++; return tuiNum(x, d); }
 /** 貨物、家常菜的圖示（Blocksail img/goods/<key>.png、img/dishes/<id>.png —— battle.html 跟 img/ 同一層；TASK-0914）：沒有圖 ⇒ 拿掉，只剩名字。
  *  px：邊長（預設 22 ＝ 表格那一欄；夾在一行字裡的清單用 16）。 */
 function tuiIcon(dir, k, px) { px = px || 22; return '<img src="img/' + dir + '/' + encodeURIComponent(k) + '.png" alt="" style="width:' + px + 'px;height:' + px + 'px;object-fit:contain;vertical-align:middle;margin-right:' + (px < 22 ? 3 : 5) + 'px" onerror="this.remove()">'; }
@@ -96,7 +99,7 @@ function tuiShipMenuHTML(M) {
   var D = M.dishes || [], Ld = M.land || [];
   if (!D.length && !Ld.length) return '';
   var LV = ['荒年糧', '主糧', '家常', '佳餚'];
-  var gl = function (o) { return Object.keys(o || {}).map(function (g) { return tuiIcon('goods', g, 16) + tuiEsc(tuiGood(g)) + ' ' + tuiNum(o[g], 2); }).join('、'); };
+  var gl = function (o) { return Object.keys(o || {}).map(function (g) { return tuiIcon('goods', g, 16) + tuiEsc(tuiGood(g)) + ' ' + tuiQty(o[g], 2); }).join('、'); };
   return '<details><summary>⛵ 船上菜單（' + D.length + ' 道）</summary><p class="tuiDim">出港前照一整輪的天數買存糧，先照下面的順序湊船上菜，湊不出來的那幾天吃陸地配給；料的量是做「份」那一欄的份數要用的桶。</p>' +
     (D.length ? '<table class="tuiT"><tr><th>菜</th><th>料（桶）</th><th>淡水、木柴</th><th>份</th><th>一天最多</th></tr>' + D.map(function (d) {
       var ic = d.icon || { dir: 'dishes', key: d.id };
@@ -307,7 +310,7 @@ function tuiFlowHTML() {
   var v = function (k, g) { return ((F[k] || {})[g] || 0) / 1000; }, ship = !!(F.exp || F.imp);
   var R = Object.keys(keys).map(function (g) { var r = { g: g, m: v('made', g), u: v('used', g), e: v('eat', g), x: v('exp', g), i: v('imp', g) }; r.n = r.m - r.u - r.e - r.x + r.i; return r; });
   R.sort(function (a, b) { return Math.abs(b.n) - Math.abs(a.n) || (a.g < b.g ? -1 : 1); });
-  var d = function (x) { return x ? tuiNum(x, 2) : '<span class="tuiDim">–</span>'; };
+  var d = function (x) { return x ? tuiQty(x, 2) : '<span class="tuiDim">–</span>'; };
   return '<p class="tuiDim">昨天（第 ' + TUI.info.day + ' 天）；桶。原料 ＝ 生產建築與工地吃的；鎮民吃 ＝ 鎮民買的＋城鎮補的' + (ship ? '；船隊運出 ＝ 船隊在這裡買走的、運來 ＝ 運到這裡賣掉的' : '') + '。</p>' +
     (R.length ? '<table class="tuiT"><tr><th>貨</th><th>產出</th><th>原料</th><th>鎮民吃</th>' + (ship ? '<th>船隊運出</th><th>運來</th>' : '') + '<th>淨</th></tr>' + R.map(function (r) {
       return '<tr><td>' + tuiIcon('goods', r.g) + tuiEsc(tuiGood(r.g)) + '</td><td>' + d(r.m) + '</td><td>' + d(r.u) + '</td><td>' + d(r.e) + '</td>' + (ship ? '<td>' + d(r.x) + '</td><td>' + d(r.i) + '</td>' : '') + '<td class="' + (r.n > 0 ? 'up' : r.n < 0 ? 'dn' : '') + '">' + (r.n > 0 ? '＋' : r.n < 0 ? '−' : '') + tuiNum(Math.abs(r.n), 2) + '</td></tr>';
@@ -325,7 +328,7 @@ function tuiStockHTML() {
     var X = TUI.goods[g] || {}, q = M[g], c = X.cat || '';
     if (c !== cat) { cat = c; h += '<tr class="cat"><td colspan="6">' + tuiEsc(TUI_CAT[c] || c || '其他') + '</td></tr>'; }
     var r = X.price ? q.price / X.price : 1;
-    h += '<tr><td>' + tuiIcon('goods', g) + tuiEsc(tuiGood(g)) + '</td><td>' + tuiNum(q.stock, 1) + '</td><td>' + tuiNum(q.target, 0) + '</td><td>' + tuiNum(q.daily, 2) + '</td><td class="' + (r > 1.15 ? 'dn' : r < 0.87 ? 'up' : '') + '">' + tuiNum(q.price, 2) + (q.bonus > 1.01 ? ' ⚠' : '') + '</td><td class="tuiDim">' + (X.price != null ? tuiNum(X.price, 2) : '–') + '</td></tr>';
+    h += '<tr><td>' + tuiIcon('goods', g) + tuiEsc(tuiGood(g)) + '</td><td>' + tuiNum(q.stock, 1) + '</td><td>' + tuiNum(q.target, 0) + '</td><td>' + tuiQty(q.daily, 2) + '</td><td class="' + (r > 1.15 ? 'dn' : r < 0.87 ? 'up' : '') + '">' + tuiNum(q.price, 2) + (q.bonus > 1.01 ? ' ⚠' : '') + '</td><td class="tuiDim">' + (X.price != null ? tuiNum(X.price, 2) : '–') + '</td></tr>';
   });
   return h + '</table><p class="tuiDim">⚠ ＝ 長期缺貨、價格往上加成。價格比基準貴兩成以上標紅、便宜一成以上標綠。</p>';
 }

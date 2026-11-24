@@ -115,7 +115,7 @@ function tbiRows(o, f) {
   o = o || {};
   var by = f || o, ks = Object.keys(by).concat(Object.keys(o).filter(function (g) { return !(g in by); })).filter(function (g) { return o[g] > 0 || (f && f[g] > 0); });
   ks.sort(function (a, b) { return ((by[b] || 0) - (by[a] || 0)) || ((o[b] || 0) - (o[a] || 0)); });
-  return ks.length ? ks.map(function (g) { return '<div class="tbiR"><span>' + tuiIcon('goods', g) + tuiEsc(tbiGood(g)) + '</span><b>' + tuiNum(o[g] || 0, 1) + (f ? '／' + tuiNum(f[g] || 0, 1) : '') + '</b></div>'; }).join('') : '<div class="tbiDim">—</div>';
+  return ks.length ? ks.map(function (g) { return '<div class="tbiR"><span>' + tuiIcon('goods', g) + tuiEsc(tbiGood(g)) + '</span><b>' + tuiQty(o[g] || 0, 1) + (f ? '／' + tuiQty(f[g] || 0, 1) : '') + '</b></div>'; }).join('') : '<div class="tbiDim">—</div>';
 }
 /** 軍事建築畫面上站崗的點（63_townfolk.js townWorkPrep 的讀數）：帳上的兵比站點多 ⇒ 畫面只站得下站點那麼多（TASK-0948）。 */
 function tbiGuardSpots(h) {
@@ -155,7 +155,7 @@ function tbiYardHTML(Y) {
   if (Y.menu && Y.menu.length) {
     h.push('<div class="tbiT">造船菜單（' + tuiEsc(Y.menuOf === 'hull' ? H.name : Y.next ? Y.next.name : '') + '，整艘 ' + tuiNum(Y.work) + ' 工天；' + (Y.menuOf === 'hull' ? '已經吃了／整艘' : '整艘') + '，桶）</div>');
     h.push(Y.menu.map(function (m) {
-      return '<div class="tbiR"><span>' + tuiIcon('goods', m.g) + tuiEsc(m.name) + (m.rig ? '<small>（索具段）</small>' : '') + '</span><b>' + (Y.menuOf === 'hull' ? tuiNum(m.used, 1) + '／' : '') + tuiNum(m.all, 1) + '</b></div>';
+      return '<div class="tbiR"><span>' + tuiIcon('goods', m.g) + tuiEsc(m.name) + (m.rig ? '<small>（索具段）</small>' : '') + '</span><b>' + (Y.menuOf === 'hull' ? tuiQty(m.used, 1) + '／' : '') + tuiQty(m.all, 1) + '</b></div>';
     }).join(''));
     h.push('<div class="tbiDim">船殼段先吃船殼的料，做完才換索具段（標著「索具段」的那幾種）；每一段的料到齊才開工。</div>');
   }
