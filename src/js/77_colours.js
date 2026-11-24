@@ -167,7 +167,10 @@ var FLAG_PRESETS = [
   { k: 'venice', name: '威尼斯', field: '#9e1a1f', emblem: 'marco' },
   { k: 'byzantine', name: '東羅馬（1453）', field: '#a51c1c', emblem: 'tetragram' },
   { k: 'maroon', name: '逃亡者聚落〔設計〕', field: '#2e5b2a', emblem: 'abeng' },
-  { k: 'native', name: '原住民〔設計〕', field: '#d9c39a', emblem: 'spiral' }
+  { k: 'native', name: '原住民〔設計〕', field: '#d9c39a', emblem: 'spiral' },
+  //   摩洛哥（Blocksail 的 morocco，阿加迪爾 TASK-1288）：17 世紀阿拉維王朝起用的素紅旗（今天國旗的五角星 1915 年才加；維基 Flag of Morocco）
+  //     ⚠ 1666 年的阿加迪爾還是塔澤魯瓦特的，它的旗查不到 ⇒ 遊戲不分兩家，照阿拉維的素紅
+  { k: 'morocco', name: '摩洛哥', field: '#c1272d', emblem: 'none' }
 ];
 var FLAG_DEF = { blue: 'gb-blue', red: 'gb-red' };
 // ⛔ 下面兩個不給初值：69_prefs.js 讀存檔時本檔還沒跑（同一個閉包，var 提升）⇒ 那時先把存檔那一格原樣放進 FLAG_PREF，teamFlag 第一次用到才解
