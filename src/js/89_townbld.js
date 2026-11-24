@@ -10,9 +10,9 @@
 var TBI = { open: false, hit: null, b: null, goods: {}, msg: '', seq: 0, rcp: null, fsel: -1, fmsg: '' };   // fsel：瑕疵那一段選著第幾處（外框亮）；fmsg：標記的回覆
 // 瑕疵（TASK-1293；Blocksail tools/townkit_flaw.py 量、tools/townmodels.py 記進索引 m.flaw：[[id, 狀態 f 確定是缺口｜u 沒確認, x0,y0,z0,x1,y1,z1（模型的格）, m²] …]，設計的不帶）：
 //   Tim 2026-11-14「希望做個自檢功能可以標記(標記後可以手動確認該標記是刻意的設計或是瑕疵 標記為設計後之後該部位就不在報錯」「遊戲裡標記」
-//   ⇒ 面板多一段，每一處兩顆鈕「是缺口」「設計」⇒ POST /api/flaw（Blocksail tools/world_serve.py ⇒ tools/townkit_flaw.json；重建模型才進索引）；選著的那一處外框亮（87_townbuild.js）。
-//   只在開發時看得到：?debug=1 或本機（127.0.0.1／localhost）開的 ⇒ 玩家看不到。缺口本身補在雕刻作品（tools/townkit_flaw.py --fix），不在這裡補。
-var TBI_FLAW = DEBUG || /^(127\.0\.0\.1|localhost)$/.test(location.hostname);
+//   ⇒ 面板多一段，每一處兩顆鈕「是缺口」「設計」⇒ POST /api/flaw（Blocksail tools/world_serve.py ⇒ tools/townkit_flaw/<模型>.json；重建模型才進索引）；選著的那一處外框亮（87_townbuild.js）。
+//   只在 Editor 模式（?editor=1，由地球儀在 Editor 版本開啟時帶入）看得到 ⇒ 玩家版與本機一般遊玩看不到。缺口本身補在雕刻作品（tools/townkit_flaw.py --fix），不在這裡補。
+var TBI_FLAW = Q.get('editor') === '1';
 var TBI_FLAW_KIND = { roof: '牆頂到屋頂之間的開口', float: '地板懸空' };
 /** 選著的那一棟的瑕疵（沒有、不是開發 ⇒ null）。 */
 function tbiFlaws() {
@@ -41,7 +41,7 @@ function tbiFlawMark(i, how) {
     var j = null; try { j = JSON.parse(x.responseText); } catch (e) { j = { ok: false, error: 'HTTP ' + x.status }; }
     if (!j.ok) { TBI.fmsg = '沒存到：' + (j.error || '?') + '（要用 python -I tools/world_serve.py 開；或 ' + cmd + '）'; tbiUI(); return; }
     if (how === 'design') { F.list.splice(i, 1); TBI.fsel = -1; } else r[1] = how === 'flaw' ? 'f' : 'u';
-    TBI.fmsg = '已標成「' + (how === 'design' ? '設計' : '是缺口') + '」（tools/townkit_flaw.json；重建模型後進索引）'; tbiUI();
+    TBI.fmsg = '已標成「' + (how === 'design' ? '設計' : '是缺口') + '」（tools/townkit_flaw/' + name + '.json；重建模型後進索引）'; tbiUI();
   };
   x.onerror = function () { TBI.fmsg = '沒存到：連不上（' + cmd + '）'; tbiUI(); };
   x.send(JSON.stringify({ model: name, id: r[0], mark: how, by: 'Tim' }));
