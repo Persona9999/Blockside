@@ -112,6 +112,7 @@ function modeSwitch(to, o) {
   var from = MODE, A = MODE_HOOK[from] || {}, B = MODE_HOOK[to] || {};
   if (A.leave) A.leave(o, to);
   flowMode(to);
+  uiPanelSync('mode');
   if (B.enter) B.enter(o, from);
   uiLayout();
   var me = SHIPS[PLAYER_I]; if (me) note(me, '換成' + MODE_RULES[to].name + (to === 'town' && DOCK.here ? '：' + dockTownName(DOCK.here.town) : ''));

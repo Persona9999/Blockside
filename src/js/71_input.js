@@ -95,7 +95,7 @@ window.addEventListener('keydown', function (e) {
   if ($('err').style.display === 'flex') { if (e.key === 'Escape') { e.preventDefault(); $('err').style.display = 'none'; } return; }   // 報錯／問題回報彈窗開著（01_gl.js）⇒ 鍵不進遊戲（⛔ 不擋 ⇒ 在回報欄打 R 就回主選單、打 N 就重開）；Esc 關掉它
   if (/^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)) return;      // 在輸入框裡打字 ⇒ 不當成遊戲的鍵
   var k = e.key.toLowerCase(); if (e.code === 'Space') k = ' ';
-  if (k === 'escape') { e.preventDefault(); if (GFXOV.open) { gfxOvClose(); return; } if (FP.on && fpEscEaten()) return; if (twbEscEaten()) return; if (tbiEscEaten()) return; if (tuiEscEaten()) return; if (HELP.open) helpClose(); else if (FLX) floodClose(); else if (FLX3) xrayToggle(); else gsetToggle(); return; }   // 遊戲內的設定面板
+  if (k === 'escape') { e.preventDefault(); if (!GFXOV.open && FP.on && fpEscEaten()) return; if (uiPanelEsc()) return; if (FLX3) xrayToggle(); else gsetToggle(); return; }   // 遊戲內的設定面板
   ctrlDo('key', k, true, e);                                         // 第一人稱（走、爬…；P 停格、O 設定沒吃 ⇒ 往下）→ 建造（快捷欄、轉、拆、放…）→ 海戰的動作（71_ctrl.js）
 });
 /** 鍵盤按著的時候，畫面上對應的按鈕也亮成按下的顏色（Tim 2026-10-14；跟手指按住同一個 .down）；方向鍵照 A／D／W／S 的按鈕。 */
@@ -110,8 +110,9 @@ function shellCall(k) { var S = window.BS_SHELL, f = S && S[k]; return typeof f 
  *  外掛外殼（admin.py shell）接手 ⇒ 例 Blocksail 的 battle.html 直接開 ⇒ 回 Blocksail 的主選單；都沒有 ⇒ 停下來、發 flow:menu（Blockside 自己的主選單出來）。 */
 function menuGo() {
   if (modeRule('locked') && BED && BED.host) { var me = SHIPS[PLAYER_I]; if (me) note(me, '回不了主選單 —— ' + fightLeft(), true); return; }   // ⚔ 交戰（88_modeswitch.js；Blocksail TASK-1078）：嵌在地球儀裡才擋（回主選單 ＝ 先回地球儀）
-  if (bedHostMenuGo() || shellCall('menu')) { gsetClose(); helpClose(); return; }
-  gsetClose(); helpClose(); flowRun(false); END_AT = 0; END_WAIT = null; evEmit('flow:menu'); $('end').className = '';
+  if (bedHostMenuGo() || shellCall('menu')) { if (typeof uiPanelCloseAll === 'function') uiPanelCloseAll('reset'); else { gsetClose(); helpClose(); } return; }
+  if (typeof uiPanelCloseAll === 'function') uiPanelCloseAll('reset'); else { gsetClose(); helpClose(); }
+  flowRun(false); END_AT = 0; END_WAIT = null; evEmit('flow:menu'); $('end').className = '';
 }
 function doAct(a, repeat) {
   if (!RUNNING) return;
@@ -149,7 +150,7 @@ function doAct(a, repeat) {
   else if (a === 'camTrack') setCamTrack(!CAM.track);
   else if (a === 'autoFire') setAutoFire(!AUTOFIRE);
   else if (a === 'phys') setPhys(!PHYS);
-  else if (a === 'restart') { if (modeRule('locked') && BED && BED.host) note(me, '不能重新開始 —— ' + fightLeft(), true); else { gsetClose(); helpClose(); start(); } }   // 重新開始：同樣的模式、距離、滑桿，不用打完；⚔ 交戰中（嵌在地球儀裡）擋下：重開一場 ＝ 甩掉敵方
+  else if (a === 'restart') { if (modeRule('locked') && BED && BED.host) note(me, '不能重新開始 —— ' + fightLeft(), true); else { if (typeof uiPanelCloseAll === 'function') uiPanelCloseAll('reset'); else { gsetClose(); helpClose(); } start(); } }   // 重新開始：同樣的模式、距離、滑桿，不用打完；⚔ 交戰中（嵌在地球儀裡）擋下：重開一場 ＝ 甩掉敵方
   else if (a === 'sailUp' || a === 'sailDn') {     // 帆裝；無帆動力船改撥俥鐘
     if (!repeat && me && !me.sunk) { var sd = a === 'sailUp' ? 1 : -1; sailInputStep(me, sd); KEYS.sw = { d: sd, n: SIMT + SAIL_HOLD, ship: me }; }   // 按住 ⇒ 1 秒後每半秒一格（31_sailing.js sailHold）；換船不延續按住
   }
@@ -201,11 +202,11 @@ $('sailT').onclick = sailToggle;   // 鍵盤（66_keys.js sailMode）同一顆�
 function sailLabel() { var b = $('sailT'); if (b) b.classList.toggle('on', SAIL === 'auto'); }
 $('camT').onclick = function () { setCamTrack(!CAM.track); };
 $('physT').onclick = function () { setPhys(!PHYS); };
-$('restartB').onclick = function () { if (RUNNING) { gsetClose(); helpClose(); start(); } };
-$('boomB').onclick = function () { if (selfDestruct()) { gsetClose(); helpClose(); flowPause(false); } };   // 自爆：關掉設定、解除停格，看煙花（23_powder.js）
+$('restartB').onclick = function () { if (RUNNING) { if (typeof uiPanelCloseAll === 'function') uiPanelCloseAll('reset'); else { gsetClose(); helpClose(); } start(); } };
+$('boomB').onclick = function () { if (selfDestruct()) { if (typeof uiPanelCloseAll === 'function') uiPanelCloseAll('reset'); else { gsetClose(); helpClose(); } flowPause(false); } };   // 自爆：關掉設定、解除停格，看煙花（23_powder.js）
 // 遊戲內的設定面板（⚙ 設定、Esc）：打開 ⇒ 暫停（關掉回到打開之前的暫停狀態）；畫質、物理效果的檔位跟主選單是同一份（07_gfx.js／09_phx.js）
 var GSET = { open: false, paused: false };
-function gsetOpen() { if (!RUNNING || GSET.open) return; helpClose(); GSET.open = true; GSET.paused = PAUSED; flowPause(true); $('gset').classList.add('on'); $('gsetBg').classList.add('on'); gsetShow(); }
+function gsetOpen() { if (!RUNNING || GSET.open) return; uiPanelWillOpen('gset'); GSET.open = true; GSET.paused = PAUSED; flowPause(true); $('gset').classList.add('on'); $('gsetBg').classList.add('on'); gsetShow(); }
 function gsetClose() { if (!GSET.open) return; GSET.open = false; flowPause(GSET.paused); $('gset').classList.remove('on'); $('gsetBg').classList.remove('on'); }
 function gsetToggle() { if (GSET.open) gsetClose(); else gsetOpen(); }
 // 畫質設定（核心自己的一層 #gfxov，在 #cover 外面；TASK-0774 第 2 步）：主選單的「畫質設定…」（外殼的 page('gfx')）跟遊戲中設定面板的「畫質設定…」（gfxOvOpen）開的是同一層。
@@ -219,13 +220,16 @@ function gfxPanel(on) { var e = $('gfxov'); e.style.display = on ? '' : 'none'; 
 function gfxPanelOn() { return $('gfxov').style.display !== 'none'; }
 function gfxOvOpen() {
   if (!RUNNING || GFXOV.open) return;
-  GFXOV.paused = GSET.open ? GSET.paused : PAUSED; gsetClose(); helpClose(); flowPause(true);
+  var wasPaused = GSET.open ? GSET.paused : PAUSED;
+  uiPanelWillOpen('gfxov');
+  GFXOV.paused = wasPaused; flowPause(true);
   GFXOV.open = true; document.body.classList.add('gfxov'); gfxPanel(true); gfxShow();
 }
-function gfxOvClose() {
+function gfxOvClose(reopenSet) {
   if (!GFXOV.open) return;
   GFXOV.open = false; gfxPanel(false); document.body.classList.remove('gfxov');
-  prefsSaveOnly(PREF_GFX); flowPause(GFXOV.paused); gsetOpen();
+  prefsSaveOnly(PREF_GFX); flowPause(GFXOV.paused);
+  if (reopenSet !== false) gsetOpen();
 }
 /** 返回：遊戲中打開的 ⇒ 回到遊戲的設定面板；主選單打開的 ⇒ 收起來、外殼回主選單。 */
 function gfxBack() { if (GFXOV.open) gfxOvClose(); else { gfxPanel(false); evEmit('gfxov:back'); } }
@@ -332,7 +336,7 @@ function gsetShow() {
 $('setB').onclick = gsetToggle;
 // 說明（設定裡的「H 說明」、H、?）：打開 ⇒ 暫停（關掉回到打開之前的暫停狀態，跟設定一樣）；外面蓋一層 #helpBg，點外面、✕、H、Esc 都關（Tim 2026-10-13：手機上不好關說明）
 var HELP = { open: false, paused: false };
-function helpOpen() { if (!RUNNING || HELP.open) return; gsetClose(); HELP.open = true; HELP.paused = PAUSED; flowPause(true); $('help').classList.add('on'); $('helpBg').classList.add('on'); }
+function helpOpen() { if (!RUNNING || HELP.open) return; uiPanelWillOpen('help'); HELP.open = true; HELP.paused = PAUSED; flowPause(true); $('help').classList.add('on'); $('helpBg').classList.add('on'); }
 function helpClose() { if (!HELP.open) return; HELP.open = false; flowPause(HELP.paused); $('help').classList.remove('on'); $('helpBg').classList.remove('on'); }
 function helpToggle() { if (HELP.open) helpClose(); else helpOpen(); }
 $('helpBg').onclick = helpClose; $('helpX').onclick = helpClose; $('helpB').onclick = helpOpen;
@@ -367,7 +371,14 @@ sndUI();                                                          // 音量滑�
 // 彈種一顆（#ammoB）：帶 data-k="1" ⇒ 點一下 ＝ 按 1（上面那段 [data-k] 的 click）⇒ ammoNext；⛔ 別再另外掛 onclick（會一次換兩種）
 /** 旗號面板（TASK-0679；下令走 52_fleet.js sigSet）：🚩（我方艦隊那一欄最上面、鍵 K）開關；只有我方有電腦開的友艦、不是觀戰時才開得了。按鈕照 SIG_LIST，現在的那個亮。 */
 function sigCan() { var me = SHIPS[PLAYER_I]; return !!(RUNNING && MODE !== 'eve' && me && SHIPS.some(function (o) { return o !== me && o.team === me.team && !isOut(o); })); }
-function sigToggle(on) { var p = $('sigP'); if (!p) return; on = on === undefined ? !p.classList.contains('on') : on; p.classList.toggle('on', !!on && sigCan()); if (p.classList.contains('on')) sigShow(); }
+function sigToggle(on) {
+  var p = $('sigP'); if (!p) return;
+  on = on === undefined ? !p.classList.contains('on') : !!on;
+  var show = on && sigCan();
+  if (show) uiPanelWillOpen('sig');
+  p.classList.toggle('on', show);
+  if (show) sigShow();
+}
 function sigShow() {
   var B = $('sigBtns'); if (!B) return;
   if (!B.children.length) SIG_LIST.forEach(function (it) { var b = document.createElement('button'); b.dataset.sig = it.id; b.title = it.tip; b.innerHTML = battleIconText(it.ico + ' ' + it.name); b.onclick = function (e) { e.stopPropagation(); sigSet(it.id); }; B.appendChild(b); });
@@ -380,3 +391,7 @@ $('endC').onclick = function () { $('end').className = ''; };
 $('endR').onclick = menuGo;
 // 訂閱（TASK-0669：模擬層只發事件，00_events.js）
 evOn('playerTake', function () { KEYS.l = KEYS.r = false; });   // 玩家換船：按住的舵鍵放開（52_fleet.js playerTake）
+uiPanelAdd({ id: 'gfxov', group: 'main', escPri: 100, hideHostTime: true, isOpen: function () { return GFXOV.open; }, close: function (reason) { gfxOvClose(reason === 'esc' || reason === 'back'); } });
+uiPanelAdd({ id: 'help', group: 'main', escPri: 30, hideHostTime: true, isOpen: function () { return HELP.open; }, close: helpClose });
+uiPanelAdd({ id: 'sig', group: 'main', escPri: 25, isOpen: function () { var p = $('sigP'); return !!(p && p.classList.contains('on')); }, close: function () { sigToggle(false); } });
+uiPanelAdd({ id: 'gset', group: 'main', escPri: 10, hideHostTime: true, isOpen: function () { return GSET.open; }, close: gsetClose });

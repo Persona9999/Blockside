@@ -133,11 +133,8 @@ function twbGot(d) {
 function twbToggle(on) {
   if (on == null) on = !TWB.on;
   if (on && !twbOk()) { note(SHIPS[PLAYER_I], '建築模式要從 Blocksail 地球儀「🏘 進入城鎮」進來'); return; }
-  if (on) {
-    if (typeof tuiDistClose === 'function') tuiDistClose();
-    if (typeof tuiClose === 'function' && typeof TUI !== 'undefined' && TUI && TUI.open) tuiClose();
-  }
-  TWB.on = on; TWB.start = null; TWB.tr = null; TWB.moved = true; TWB.sel = null;
+  if (on) uiPanelWillOpen('townBuild');
+  TWB.on = on; TWB.start = null; TWB.dstart = null; TWB.tr = null; TWB.moved = true; TWB.sel = null;
   $('stage').classList.toggle('twb', on);
   if (on && TWB.open === 0) {
     TWB.open = 1; TWB.unit = twbUnit(); twbMsg('打開城鎮…（第一次要取樣，可能要幾秒）');
@@ -560,3 +557,4 @@ ctrlAdd({ name: 'town', pri: 8, on: function () { return TWB.on; },
   tap: function (x, y, btn) { return twbTap(x, y, btn); },
   frame: function () { twbFrame(); }
 });
+uiPanelAdd({ id: 'townBuild', group: 'main', escPri: 70, rule: 'town', isOpen: function () { return !!TWB.on; }, close: function () { if (TWB.on) twbToggle(false); }, esc: twbEscEaten });

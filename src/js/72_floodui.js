@@ -10,7 +10,7 @@
 var FLX = false, FLX3 = false, FRZ_ON = false;
 /** 每一格（90_main.js frame）：停格條顯示與否；繼續了 ⇒ 進水細節頁收起。 */
 function frzShow() {
-  var on = RUNNING && PAUSED && !GSET.open && !HELP.open;
+  var on = RUNNING && PAUSED && !GSET.open && !HELP.open && !GFXOV.open;
   $('frz').classList.toggle('on', on); $('msg').style.visibility = on ? 'hidden' : '';   // 停格條跟上方廣播同一個位置（⛔ 不藏 ⇒ 廣播的字透過半透明的條）
   if (on !== FRZ_ON) { FRZ_ON = on; frzPlace(); }
   if (!on && FLX) floodClose();                                       // 繼續 ⇒ 只收 📊 圖表；🔍 透視、✂ 剖面、☰ 甲板保持（Tim 2026-10-15：「停格中可以切換的觀察模式，是否能在按下繼續後保持（這樣可以在遊戲中維持觀察狀態），除了圖表」）—— 要關 ⇒ 停格再按一次；新開一局 ⇒ obsReset（70_flow.js）
@@ -48,7 +48,7 @@ function xrBox(T) {
 /** 新開一局：觀察模式全部收（透視、剖面、隱藏甲板、圖表）。 */
 function obsReset() { if (FLX) floodClose(); FLX3 = false; CUTV.half = false; CUTV.deck = 0; }
 function xrayToggle() { if (!RUNNING) return; FLX3 = !FLX3; obsNote('🔍 透視：' + (FLX3 ? '開' : '關')); frzShow(); }   // 按了就更新按鈕（⛔ 只靠每一格的 frzShow ⇒ 分頁在背景時按鈕不動）
-function floodOpen() { if (!RUNNING || !PAUSED) return; FLX = true; $('floodp').classList.add('on'); floodPanel(); frzShow(); }
+function floodOpen() { if (!RUNNING || !PAUSED) return; uiPanelWillOpen('flood'); FLX = true; $('floodp').classList.add('on'); floodPanel(); frzShow(); }
 function floodClose() { FLX = false; $('floodp').classList.remove('on'); $('frzFlood').classList.remove('on'); }
 function floodToggle() { if (FLX) floodClose(); else floodOpen(); }
 $('frzFlood').onclick = floodToggle; $('frzX').onclick = xrayToggle;
@@ -146,3 +146,4 @@ function flHoleMarks(pushPt) {
     });
   });
 }
+uiPanelAdd({ id: 'flood', group: 'main', escPri: 20, isOpen: function () { return FLX; }, close: floodClose });

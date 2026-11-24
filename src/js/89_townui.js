@@ -149,16 +149,20 @@ function tuiHold(T) {
 }
 /** 開關：tab 給了 ⇒ 開那一頁（已經開著同一頁 ⇒ 關）；沒給 ⇒ 開上次那一頁（貿易以外的）。 */
 function tuiToggle(tab) {
-  if (!tuiOk()) { note(SHIPS[PLAYER_I], '城鎮介面要從 Blocksail 地球儀停靠進城'); return; }
   var t = tab || TUI.last;
   if (TUI.open && TUI.tab === t) { tuiClose(); return; }
-  if (typeof tuiDistClose === 'function') tuiDistClose();
-  if (typeof twbToggle === 'function' && typeof TWB !== 'undefined' && TWB && TWB.on) twbToggle(false);
+  if (!tuiOk()) { note(SHIPS[PLAYER_I], '城鎮介面要從 Blocksail 地球儀停靠進城'); return; }
+  uiPanelWillOpen('townUI');
   TUI.open = true; TUI.tab = t; if (t !== 'trade') TUI.last = t;   // 貿易（T）有自己的鍵 ⇒ I 開回城鎮資訊那幾頁
   $('stage').classList.add('tui'); $('stage').classList.toggle('tuiT', t === 'trade');
   tuiLoad();
 }
-function tuiClose() { TUI.open = false; var st = $('stage'); if (st) { st.classList.remove('tui'); st.classList.remove('tuiT'); } if (TUI_HOST) TUI_HOST.postMessage({ bsmap: 'tuiClose' }, '*'); }
+function tuiClose() {
+  TUI.open = false;
+  var st = $('stage'); if (st) { st.classList.remove('tui'); st.classList.remove('tuiT'); }
+  var P = $('tuiP'); if (P && P.innerHTML) P.innerHTML = '';
+  if (TUI_HOST) TUI_HOST.postMessage({ bsmap: 'tuiClose' }, '*');
+}
 /** 城鎮水平那一行（Blocksail world/food.js townLevel：effAll／eff／wage 是 ‰，prosp／sat／edu／health 是 0～1；TASK-1278 Tim 2026-11-12「加一行」）
  *  生產建築的效率 ＝ 1 ＋ 繁榮度那一份 ＋ 滿意度那一份（satEff）；工坊再乘教育那一份（eff）；工資照繁榮度。沒有 lv（舊版 Blocksail）⇒ 不畫。 */
 function tuiLevelHTML(L) {
@@ -168,12 +172,6 @@ function tuiLevelHTML(L) {
   parts.push('繁榮度 ' + pc(L.prosp || 0) + ' ⇒ ' + up(1000 + pe));
   if (L.sat != null) parts.push('滿意度平均 ' + pc(L.sat) + ' ⇒ ' + up(1000 + se));
   return '<h4>📈 城鎮水平（效率加成）</h4><p>生產建築效率 ' + up(L.effAll || 1000) + '（' + parts.join('、') + '）　工坊再 ' + up(L.eff || 1000) + '（教育 ' + pc(L.edu || 0) + '）　工資 ' + up(L.wage || 1000) + '　健康 ' + pc(L.health || 0) + '</p>';
-}
-function tuiEscEaten() {
-  if (typeof TUID !== 'undefined' && TUID.open) { tuiDistClose(); return true; }
-  if (!TUI.open) return false;
-  tuiClose();
-  return true;
 }
 /** 照現在那一頁問資料、畫（換頁、買賣之後都重問 ⇒ 永遠是城鎮帳現在的數字）。 */
 function tuiLoad() {
@@ -479,18 +477,20 @@ var TUID = { open: false, distSig: '' };
 /** 這座城的城區（外面那一頁送的規劃帶的 districts；1～N 區）⇒ 清單｜null（太舊的地球儀沒送） */
 function tuiDists() { var p = TOWNS.full[TWB.town]; return p && p.districts && p.districts.length ? p.districts : null; }
 function tuiDistToggle(on) {
-  if (!tuiOk()) { note(SHIPS[PLAYER_I], '城鎮介面要從 Blocksail 地球儀停靠進城'); return; }
   if (on == null) on = !TUID.open;
-  if (TUID.open === on) return;
-  TUID.open = on;
-  var st = $('stage'); if (st) st.classList.toggle('tuiD', TUID.open);
-  if (TUID.open) {
-    if (typeof twbToggle === 'function' && typeof TWB !== 'undefined' && TWB && TWB.on) twbToggle(false);
-    if (typeof tuiClose === 'function' && TUI && TUI.open) tuiClose();
-  }
+  if (!on) { tuiDistClose(); return; }
+  if (!tuiOk()) { note(SHIPS[PLAYER_I], '城鎮介面要從 Blocksail 地球儀停靠進城'); return; }
+  if (TUID.open) return;
+  uiPanelWillOpen('townDist');
+  TUID.open = true;
+  var st = $('stage'); if (st) st.classList.add('tuiD');
   tuiDistUI();
 }
-function tuiDistClose() { if (TUID.open) tuiDistToggle(false); }
+function tuiDistClose() {
+  TUID.open = false;
+  var st = $('stage'); if (st) st.classList.remove('tuiD');
+  var P = $('tuiDP'); if (P && P.innerHTML) P.innerHTML = '';
+}
 function tuiDistHTML() {
   var D = tuiDists(); if (!D) return '<p class="tuiDim">這座城沒有分城區。</p>';
   var cur = TOWNS.dist[TWB.town], S = (TOWNS.stat.dist || {})[TWB.town], on = TOWNS.onD[TWB.town] || 0;
@@ -507,7 +507,7 @@ function tuiDistUI() {
   var body = tuiDistHTML();
   P.innerHTML = '<div id="tuiDHead"><b>🏙 城區</b><button type="button" id="tuiDX" title="關閉（Esc、D）">✕</button></div>' +
     '<div id="tuiDBody">' + body + '</div>';
-  var x = $('tuiDX'); if (x) x.onclick = function () { tuiDistToggle(false); };
+  var x = $('tuiDX'); if (x) x.onclick = tuiDistClose;
   P.querySelectorAll('button[data-dist]').forEach(function (b) {
     b.onclick = function () { if (townDistGo(TWB.town, b.dataset.dist)) tuiDistUI(); };
   });
@@ -521,14 +521,11 @@ function tuiDistKey() {
 }
 /** 每一格：離開城鎮模式（出航）⇒ 關掉。 */
 function tuiFrame() {
-  if (!modeRule('town')) {
-    if (TUI.open) tuiClose();
-    if (TUID.open) tuiDistClose();
-  }
+  uiPanelSync('mode');
 }
 /** 每一格：城鎮介面、⚙ 設定面板開著沒 ⇒ 換了才跟外面那一頁說（地球儀照它收時間面板；檔頭）。 */
 function tuiPageTell() {
-  var o = !!(TUI.open || (typeof GSET !== 'undefined' && GSET.open));
+  var o = uiPanelPageOpen();
   if (o === TUI.pageSent || !BED || !BED.host) return;
   TUI.pageSent = o; BED.host.postMessage({ bsmap: 'page', open: o }, '*');
 }
@@ -537,8 +534,7 @@ function tuiBoot() {
   window.addEventListener('message', function (e) { var d = e.data; if (e.source === TUI_HOST && d && d.bsmap === 'townUI') tuiGot(d); });
   window.addEventListener('keydown', function (e) {
     if (e.key === 'Escape') {
-      if (TUID.open) { e.preventDefault(); tuiDistClose(); }
-      else if (TUI.open) { e.preventDefault(); tuiClose(); }
+      if (uiPanelEsc()) e.preventDefault();
     }
   });
   document.addEventListener('pointerdown', function (e) {
@@ -606,3 +602,5 @@ ctrlAdd({ name: 'townui', pri: 9, on: function () { return TUI.open || TUID.open
   },
   frame: function () { tuiFrame(); townDistFrame(); tuiDistKey(); tuiPageTell(); }
 });
+uiPanelAdd({ id: 'townDist', group: 'main', escPri: 50, rule: 'town', isOpen: function () { return !!TUID.open; }, close: tuiDistClose });
+uiPanelAdd({ id: 'townUI', group: 'main', escPri: 40, allow: function () { return !!TUI_HOST || modeRule('town'); }, hideHostTime: true, isOpen: function () { return !!TUI.open; }, close: tuiClose });

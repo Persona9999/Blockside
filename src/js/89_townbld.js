@@ -59,13 +59,13 @@ function tbiFlawHTML() {
 }   // rcp：那一棟能換的配方（lotRecipes 的回覆；不是生產建築 ⇒ null）
 function tbiSelQ() { return TBI.open && TBI.hit ? TBI.hit.q : null; }
 function tbiClose() { TBI.open = false; TBI.hit = null; TBI.b = null; var st = $('stage'); if (st) st.classList.remove('tbi'); }
-function tbiEscEaten() { if (!TBI.open) return false; tbiClose(); return true; }
 /** 點一下（建築模式沒開、不在第一人稱）：點到建築 ⇒ 開面板（同一棟 ⇒ 關）；點到空地而面板開著 ⇒ 關。 */
 function tbiTap(x, y, btn) {
   if (!modeRule('town') || TWB.on || FP.on || btn !== 0) return false;
   var h = townHitAt(x, y);
   if (!h || !h.lot) { if (TBI.open) { tbiClose(); return true; } return false; }
   if (TBI.open && TBI.hit && TBI.hit.q === h.q) { tbiClose(); return true; }
+  uiPanelWillOpen('townBld');
   TBI.open = true; TBI.hit = h; TBI.b = null; TBI.msg = ''; TBI.fsel = -1; TBI.fmsg = ''; $('stage').classList.add('tbi');
   tbiLoad();
   return true;
@@ -228,3 +228,4 @@ ctrlAdd({ name: 'townbld', pri: 7, on: function () { return TBI.open; },
   tap: function (x, y, btn) { return tbiTap(x, y, btn); },
   frame: function () { tbiFrame(); }
 });
+uiPanelAdd({ id: 'townBld', group: 'main', escPri: 60, rule: 'town', isOpen: function () { return !!TBI.open; }, close: tbiClose });

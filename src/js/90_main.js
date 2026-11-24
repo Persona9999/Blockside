@@ -43,7 +43,7 @@ function frame(ts, noRaf) {                                         // noRaf：_
   if (PF) pfLap('flush');
   renderLerp(true, RUNNING ? loopAcc / DT : 1);                           // 畫面內插（03_camera.js）：鏡頭、畫、HUD 用兩步之間的位置，畫完換回模擬的
   ctrlFrame(dt);                                                                  // 控制器（71_ctrl.js）：第一人稱走、爬、退出判斷（81_fps.js）、建造的準心（82_build.js）；沒開 ⇒ 什麼都不做
-  camUpdate(dt); render(); if (PF) pfLap('render'); hudFrame(dt); frzShow(); slowShow(); uiLayout();   // uiLayout：介面配置（61_layout.js；配置沒變就不動）
+  camUpdate(dt); render(); if (PF) pfLap('render'); hudFrame(dt); frzShow(); slowShow(); uiPanelSync('mode'); uiLayout();   // uiPanelSync／uiLayout：面板生命週期與介面配置（配置沒變就不動）
   renderLerp(false);                        // 停格條（72_floodui.js）
   if (PF) { pfLap('hud'); pfEnd(f0, RUNNING && !PAUSED ? n : 0); }
   if (GFX_FPS && (fpsT -= dt) <= 0) { fpsT = 0.5; $('fps').textContent = 'FPS ' + Math.round(FPS) + '　畫質 ' + GFX_NAME[gfxLevel()] + '　' + CAM.w + '×' + CAM.h + (RT && RT.s ? '　MSAA ' + RT.s + '×' : ''); }   // 畫質設定頁的「顯示 FPS」
@@ -241,6 +241,7 @@ if (DEBUG) window.__game = {
   cam: function (o) { camSet(o); camSet({ snap: true }); camUpdate(1); render(); },
   townProsp: function (v, id) { var r = townProspSet(v, id); if (RUNNING) render(); return r; },   // 城牆等級試看（63_towns.js townProspSet；v ＝ 繁榮度 0～1、null 回預設，id 沒給 ⇒ 每一座；開場前只改值，開場後畫一格）⇒ [{ id, tier, prosp, lv, kits }]
   mode: function (to, o) { return to ? modeSwitch(to, o) : Object.assign(modeReport(), { can: Object.keys(MODE_SW[MODE] || {}).map(function (k) { return { to: k, why: modeWhy(k, o) }; }), ready: dockReady(), run: DOCK.run ? { kind: DOCK.run.kind, phase: DOCK.run.phase, k: DOCK.run.k, n: DOCK.run.pts.length, left: DOCK.run.left } : null, last: DOCK.last || null, docks: DOCK.towns }); },   // 換玩法（88_modeswitch.js；TASK-0867）：沒給 to ⇒ 讀數
+  panels: uiPanelState,
   dock: function () { dockAct(); return DOCK.run ? DOCK.run.kind : MODE; },   // 按 🏘／⛵ 那一顆
   /** ⚔ 交戰（88_modeswitch.js fightTick；Blocksail TASK-1078）的讀數：玩法、敵方（名字、離我艦幾 m、中立）、甩開從什麼時候起、#fightB 寫的。 */
   fight: function () {
