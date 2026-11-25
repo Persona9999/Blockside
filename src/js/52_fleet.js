@@ -176,7 +176,8 @@ function teamDown(team) { var L = teamShips(team); return L.length > 0 && L.ever
  *  spec：[{ team, hull }]，一對一 ＝ [我艦, 敵艦]；SHIPS 照這個順序建（i ＝ 序號；我艦是 0）。艘數超過 MAX_SHIPS ⇒ 截掉。 */
 var FLEET_GAP = 70;                                                       // 同一邊並排的兩艘，中心左右隔多遠（m；船寬 13 m）
 var FLEET_DBG = null;                                                     // ?debug=1 的 __game.fleet([...])：直接給一串（蓋過主選單的編成）
-var SPAWN_HDG = Q.has('hdg') && isFinite(+Q.get('hdg')) ? +Q.get('hdg') : null;   // ?hdg=：玩法規則 origin（航海）的我艦開局船頭朝哪 —— 羅盤度數（0 ＝ 北 ＝ −z、90 ＝ 東 ＝ +x）；別的玩法不看
+function spawnHdgQ() { return Q.has('hdg') && isFinite(+Q.get('hdg')) ? +Q.get('hdg') : null; }   // 載入時、待命開機換場時（90_main.js sceneApply；TASK-1271）各算一次
+var SPAWN_HDG = spawnHdgQ();   // ?hdg=：玩法規則 origin（航海）的我艦開局船頭朝哪 —— 羅盤度數（0 ＝ 北 ＝ −z、90 ＝ 東 ＝ +x）；別的玩法不看
 /** 主選單的編成（FLEET_SET，05_hull.js）⇒ 一串：我艦、敵方第一艘、我方其他、敵方其他（一對一 ＝ [我艦, 敵艦]，跟以前同一個順序）。 */
 /** 艦名（TASK-0552）：照編成的順序（我艦、敵方第一艘、我方其他、敵方其他；候補也在裡面）發 —— 那一型的艦名池（05_hull.js names）裡第一個還沒用的，
  *  用完拿公共池 SHIP_NAMES_PUB，再用完 ⇒ 原名＋序號。同一場（兩邊合起來）不重名；只看編成 ⇒ 重開同一場名字不變、不抽 rnd()。 */

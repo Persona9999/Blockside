@@ -270,7 +270,8 @@ function prefsSaveOnly(keys) {
 var PREF_GFX = ['gfx', 'shk', 'smoke', 'debcap', 'fps'];               // 畫質頁的那幾項（07_gfx.js）
 /** 細節設定的「重設預設值」：那一頁回到預設之後馬上存（船隻配置頁的不動：TASK-0570）。 */
 function prefsReset() { PREFS.last = ''; prefsSave(); }
-(function prefsLoad() {
+/** 讀本機存檔、套上（載入時一次；待命開機換場時再一次：照新的網址重算參數之後，90_main.js sceneApply；TASK-1271）。 */
+function prefsLoad() {
   if (!PREFS.read) { PREFS.state = DEMO >= 0 ? '?demo ⇒ 不讀不存' : '?prefs=0 ⇒ 不讀不存'; return; }
   var s;
   try { s = window.localStorage.getItem(PREFS_KEY); } catch (e) { PREFS.read = PREFS.write = false; PREFS.state = '存不了（這個頁面不能用 localStorage）⇒ 照預設'; return; }
@@ -288,4 +289,5 @@ function prefsReset() { PREFS.last = ''; prefsSave(); }
   setInterval(prefsSave, 1000);
   window.addEventListener('pagehide', prefsSave);
   document.addEventListener('visibilitychange', function () { if (document.hidden) prefsSave(); });
-})();
+}
+prefsLoad();

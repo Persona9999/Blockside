@@ -46,7 +46,9 @@ var MODE_RULES = {
 };
 Object.keys(MODE_RULES).forEach(function (m) { for (var k in MODE_BASE) if (!(k in MODE_RULES[m])) MODE_RULES[m][k] = MODE_BASE[k]; });
 // ?mode=<玩法>（外部開戰用：Blocksail 的開戰設定，2026-10-18）：一般遊玩也照網址選玩法（表裡 url 的才認；沒給 ⇒ 照設定檔、存檔）。?demo 照舊在 90_main.js 自己選。
-var MODE_Q = DEMO < 0 && Object.prototype.hasOwnProperty.call(MODE_RULES, Q.get('mode')) && MODE_RULES[Q.get('mode')].url ? Q.get('mode') : null;
+//   載入時、待命開機換場時（90_main.js sceneApply；TASK-1271）各算一次。
+function modeQ() { return DEMO < 0 && Object.prototype.hasOwnProperty.call(MODE_RULES, Q.get('mode')) && MODE_RULES[Q.get('mode')].url ? Q.get('mode') : null; }
+var MODE_Q = modeQ();
 if (MODE_Q) flowMode(MODE_Q);
 /** 現在這個玩法的規則 k。 */
 function modeRule(k) { return (MODE_RULES[MODE] || MODE_RULES.pve)[k]; }

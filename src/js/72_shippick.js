@@ -142,8 +142,12 @@ function pickTops(ids) {
 function pickBoot() {
   if (Q.get('tops')) { pickTops(Q.get('tops').split(',').filter(Boolean)); return; }
   if (Q.get('auto') === '1' && Q.get('cur')) { pickMeasure(Q.get('cur')); return; }
-  spkOpen({ title: Q.get('title') || '選船', cur: Q.get('cur') || '', same: true, pick: pickMeasure, onClose: function (id) { if (!id) pickPost('cancel'); } });
-  pickPost('ready');
+  function open(o) { spkOpen({ title: o.title || '選船', cur: o.cur || '', same: true, pick: pickMeasure, onClose: function (id) { if (!id) pickPost('cancel'); } }); pickPost('ready'); }
+  // 常駐（TASK-1271；Tim 2026-11-11「選船也常駐(因為航海也可以選船)」）：外面那一頁選完、取消之後把這一頁藏起來留著，再選船送 { bspick: 'open', cur, title } ⇒ 再開一次
+  //   （船型解析過的留在 HULLT、縮圖素材不再載）；&wait=1 ⇒ 先不開，等第一次 'open'（外面那一頁閒著時先在背景開好）
+  window.addEventListener('message', function (e) { var d = e.data; if (d && d.bspick === 'open' && e.source === PICK_HOST) open(d); });
+  if (Q.get('wait') === '1') { pickPost('waiting'); return; }
+  open({ title: Q.get('title'), cur: Q.get('cur') });
 }
 function pickMeasure(id) {
   var h = hullInfo(id); pickPost('measuring', { id: id, name: h ? h.name : id });

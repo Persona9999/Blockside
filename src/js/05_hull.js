@@ -152,10 +152,14 @@ function gmtPair(h, decos, FR) {
 }
 // 艦隊編成（TASK-0537）：FLEET_SET[0] ＝ 我方（第一艘是我艦）、[1] ＝ 敵方，各是一串船型；每一邊至少 1 艘、合計最多 FLEET_MAX（同時在場 FIELD_N 艘，其他的候補，52_fleet.js）。
 //   主選單編；網址 ?blue=我艦,友艦…&red=敵艦,…；舊的 ?ship=我艦,敵艦 照舊（＝ 一邊一艘；?blue／?red 給了那一邊照它）。
-var FLEET_SET = [[HULL_DEF], [HULL_DEF]];                                // 預設 ＝ 清單第一艘（HULL_DEF）
-if (Q.has('ship')) Q.get('ship').split(',').forEach(function (w, i) { if (i < 2 && hullInfo(w)) FLEET_SET[i] = [w]; });
-['blue', 'red'].forEach(function (k, i) { if (!Q.has(k)) return; var L = Q.get(k).split(',').filter(hullInfo); if (L.length) FLEET_SET[i] = L; });
-fleetTrim(FLEET_SET);
+//   載入時、待命開機換場時（90_main.js sceneApply；TASK-1271）各算一次。
+function fleetQ() {
+  var F = [[HULL_DEF], [HULL_DEF]];                                      // 預設 ＝ 清單第一艘（HULL_DEF）
+  if (Q.has('ship')) Q.get('ship').split(',').forEach(function (w, i) { if (i < 2 && hullInfo(w)) F[i] = [w]; });
+  ['blue', 'red'].forEach(function (k, i) { if (!Q.has(k)) return; var L = Q.get(k).split(',').filter(hullInfo); if (L.length) F[i] = L; });
+  return fleetTrim(F);
+}
+var FLEET_SET = fleetQ();
 /** 合計超過 FLEET_MAX ⇒ 從艘數多的那一邊的尾巴拿掉（一樣多 ⇒ 敵方先拿）；每一邊至少留 1 艘。 */
 function fleetTrim(F) { while (F[0].length + F[1].length > FLEET_MAX) { var s = F[0].length > F[1].length ? 0 : 1; if (F[s].length <= 1) break; F[s].pop(); } return F; }
 /** 編成裡用到的船型（不重複；我艦那一型第一個）。 */

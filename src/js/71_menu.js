@@ -98,6 +98,7 @@ function distShow() { var d = $('dist'); d.value = DIST; $('distV').textContent 
 setSailMode(SAIL); setCamTrack(true); $('physT').classList.toggle('on', PHYS);
 $('go').onclick = start;
 /** 回到主選單（'menu'、結束畫面的「主選單」）：?start=1 開場時沒照載好的船型重畫主選單（90_main.js：主選單不會出來 ⇒ 不佔開場）⇒ 第一次回來才補畫。 */
+evOn('scene', function () { distShow(); [].forEach.call(document.querySelectorAll('#modes button'), function (b) { b.className = b.dataset.m === MODE ? 'on' : ''; }); });   // 待命開機換場（90_main.js sceneApply）：距離、玩法照新的值
 var COVER_LATE = START_Q;
 function coverShow() { $('cover').style.display = ''; if (COVER_LATE && SLIDERS_SHOW) { COVER_LATE = false; SLIDERS_SHOW(); } }
 // __game（DEBUG 的量測入口，90_main.js）裡屬於主選單的那幾項：開機時核心發 game:api ⇒ 掛上去（TASK-0774 第 4 步）

@@ -22,21 +22,30 @@ WEATHERS.storm.gusts = { dir: 0.6, spd: 0.3, per: [71, 29, 11] };
 //   ?wvd=度 ＝ 風向離開局最多偏幾度（0–90）、?wvs=成 ＝ 風速倍率最多變幾成（0–0.8；0.3 ＝ 0.7–1.3 倍）。Blocksail 地球儀照船那一格、那個月的風況給。
 //   三道正弦的權重和是 1、每道 sin(ωt＋φ) − sin φ 最多 ±2 ⇒ dir ＝ 度 ÷ 57.3 ÷ 2、spd ＝ 成 ÷ 2（晴天的 0.2／0.15 ＝ 23°／三成、暴風雨的 0.6／0.3 ＝ 69°／六成）；週期照天氣。
 //   沒給 ⇒ windGusts() 回天氣那一格本身 ⇒ 跟以前逐位元相同。
-var WIND_VD = Q.has('wvd') && isFinite(parseFloat(Q.get('wvd'))) ? clamp(parseFloat(Q.get('wvd')), 0, 90) : null, WIND_VS = Q.has('wvs') && isFinite(parseFloat(Q.get('wvs'))) ? clamp(parseFloat(Q.get('wvs')), 0, 0.8) : null;
+//   這一節的網址參數（wvd／wvs、rain、wabs、weather、tod／lat）：載入時、待命開機換場時（90_main.js sceneApply；TASK-1271）各算一次 ⇒ 都寫成 …Q() 兩邊叫同一個。
+var WIND_VD = null, WIND_VS = null;
+function windVarQ() { WIND_VD = Q.has('wvd') && isFinite(parseFloat(Q.get('wvd'))) ? clamp(parseFloat(Q.get('wvd')), 0, 90) : null; WIND_VS = Q.has('wvs') && isFinite(parseFloat(Q.get('wvs'))) ? clamp(parseFloat(Q.get('wvs')), 0, 0.8) : null; }
+windVarQ();
 function windGusts() { var g = WX.gusts; return WIND_VD === null && WIND_VS === null ? g : { dir: WIND_VD !== null ? WIND_VD / 114.59 : g.dir, spd: WIND_VS !== null ? WIND_VS / 2 : g.spd, per: g.per }; }
 // 陰雨（TASK-0851；Tim 2026-10-23「讓地球儀海域上出現 下雨 暴風雨 天氣呢(且透過參數連動到Blockside)」）：浪、風、航速、操舵、開砲照晴天（每一個係數 1、陣風同晴天），
 //   只有天色變陰、霧濃一點、陽光弱、會下雨（雨滴、雨聲、澆熄火都照 rain）。?rain=0.1–1 ＝ 雨的大小（Blocksail 地球儀照雨量給；沒給 ＝ 0.6）：
 //   天色、霧、陽光、亮度照大小往暴風雨靠（k ＝ 0.35 ＋ 0.45 × 大小 ⇒ 最多靠到八成）。晴、暴風雨、大漩渦不讀 ?rain ⇒ 跟以前逐位元相同。
-var RAIN_Q = Q.has('rain') && isFinite(parseFloat(Q.get('rain'))) ? clamp(parseFloat(Q.get('rain')), 0.1, 1) : 0.6;
-WEATHERS.rain = (function (r) {
-  var S = WEATHERS.storm, k = 0.35 + 0.45 * r;
-  return Object.assign({}, WEATHERS.clear, { name: '陰雨', sky: lerp3(SKY, S.sky, k), horizon: lerp3(HORIZON, S.horizon, k), ground: lerp3(GROUND, S.ground, k),
-    fog: 0.0016 + (S.fog - 0.0016) * k, sun: 1 - (1 - S.sun) * k, lum: 1 - (1 - S.lum) * k, rain: r });
-})(RAIN_Q);
+var RAIN_Q = 0.6;
+//   天色從晴天那一格內插（WEATHERS.clear 的三個陣列就是 00_core.js 原本的 SKY／HORIZON／GROUND ⇒ 載入時跟以前逐位元相同）；
+//   ⛔ 不讀當下的 SKY：換場時 setWeather 早就把它換成別的天氣了
+function rainQ() {
+  RAIN_Q = Q.has('rain') && isFinite(parseFloat(Q.get('rain'))) ? clamp(parseFloat(Q.get('rain')), 0.1, 1) : 0.6;
+  var C = WEATHERS.clear, S = WEATHERS.storm, k = 0.35 + 0.45 * RAIN_Q;
+  WEATHERS.rain = Object.assign({}, C, { name: '陰雨', sky: lerp3(C.sky, S.sky, k), horizon: lerp3(C.horizon, S.horizon, k), ground: lerp3(C.ground, S.ground, k),
+    fog: 0.0016 + (S.fog - 0.0016) * k, sun: 1 - (1 - S.sun) * k, lum: 1 - (1 - S.lum) * k, rain: RAIN_Q });
+}
+rainQ();
 // 風速是實際的（TASK-0851）：?wabs=1 ⇒ 帶進來的 ?wspd 就是帆上真正的風（Blocksail 地球儀照當地實際風速給），天氣不再另外乘風（wind）與航速（speed）的倍數 ——
 //   ⛔ 不擋的話暴風雨裡地球儀帶 20 m/s（wspd 2）進來，帆上又 × 2.2 ＝ 44 m/s。載入時、每一場開局（windInit）都把每種天氣的 wind、speed 設成 1
 //   （開局再設一次：存檔的天氣設定「暴風雨的風」是載入之後才套的）。沒給 ⇒ 照舊。
-var WIND_ABS = Q.get('wabs') === '1';
+var WIND_ABS = false;
+function windAbsQ() { WIND_ABS = Q.get('wabs') === '1'; }
+windAbsQ();
 function windAbs() { if (WIND_ABS) for (var wk in WEATHERS) { WEATHERS[wk].wind = 1; WEATHERS[wk].speed = 1; } }
 windAbs();
 // 大漩渦（TASK-0683；Tim 2026-10-17：「暴風雨+海中央大漩渦(在敵我中間)」）：暴風雨的每一格照抄，再加 vortex（08_sea.js vxInit 讀）——
@@ -88,7 +97,9 @@ function wxkChanged() { return Object.keys(wxkSnap()).length; }
 //   ⛔ 以前固定 WIND0（往 +z 吹）⇒ 開局藍方（+z 往 −z）永遠頂風、紅方永遠在上風：4 對 4 電腦對電腦 12 場紅方贏 10 場，策略比不出來（TASK-0551）。
 var WIND0 = WIND.slice(), WIND_A0 = Math.atan2(WIND0[2], WIND0[0]), WIND_L0 = Math.hypot(WIND0[0], WIND0[2]), WIND_SPD = 1, WIND_LOG = { a: WIND_A0, s: 1, t: 0 };
 var WIND_ROT = 0, WIND_S0 = 1, WIND_FIX = null;                        // WIND_FIX：擬真沙盒（84_fleetlab.js）{ rot（度；null ＝ 照種子）, s0（null ＝ 照種子）}，蓋過網址、照種子抽（null ⇒ 跟以前一樣）
-var WX_ID = WEATHERS[Q.get('weather')] ? Q.get('weather') : 'clear', WX = WEATHERS[WX_ID];
+var WX_ID = 'clear', WX = WEATHERS.clear;
+function weatherQ() { WX_ID = WEATHERS[Q.get('weather')] ? Q.get('weather') : 'clear'; WX = WEATHERS[WX_ID]; }
+weatherQ();
 function seedHash(k) { var x = Math.sin((SEED % 99991) * 12.9898 + k * 78.233) * 43758.5453; return x - Math.floor(x); }
 function windInit() {
   windAbs();
@@ -133,7 +144,9 @@ function setWeather(id) {
 //     燈變亮（wxLum 變小 ⇒ 60_render.js lampsUpdate 的 1.6 − lum 變大）；天空有星星（01_gl.js P.sky 的 uNight）。
 //   只動畫面：天色在 render 開頭套（todApply）、結尾還原（todRestore／sky0）；陽光、亮度是倍數 TOD_SUNK、TOD_LUMK（讀的地方一律走 wxSun()、wxLum()）——
 //     ⛔ 不改 WX.sun／lum 本身（WX 就是天氣預設那個物件；改了又沒還原 ⇒ 下一格拿它當基準、越乘越暗）。模擬不讀 SUN、天色。
-var TOD0 = Q.has('tod') && isFinite(parseFloat(Q.get('tod'))) ? ((parseFloat(Q.get('tod')) % 24) + 24) % 24 : null, TOD_LAT = parseFloat(Q.get('lat'));
+var TOD0 = null, TOD_LAT = NaN;
+function timeOfDayQ() { TOD0 = Q.has('tod') && isFinite(parseFloat(Q.get('tod'))) ? ((parseFloat(Q.get('tod')) % 24) + 24) % 24 : null; TOD_LAT = parseFloat(Q.get('lat')); }
+timeOfDayQ();
 var SUNC = [1, 0.85, 0.6], TOD_NIGHT = 0, TOD_SUNK = 1, TOD_LUMK = 1;  // 天空的太陽（月亮）圓盤顏色、星星多少（01_gl.js P.sky）；陽光、亮度的倍數
 var TOD_LIT = 0, TOD_WIN = 0;                                          // 城裡點燈了沒（0～1：太陽 3° 開始點、−5° 全亮）、幾成的窗亮著（63_towns.js「夜裡的燈」）；沒開世界時間 ⇒ 0（白天）
 /** 幾點有幾成的窗亮著：入夜七成、半夜以後慢慢熄到一成、天亮前早起的人又點起三成（只在 TOD_LIT > 0 的時候有用）。 */

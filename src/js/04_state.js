@@ -124,7 +124,9 @@ var LAST_MODE = null;                                // 上一場的模式（自
 // DIST：開局兩邊船頭相距幾公尺（主選單滑桿，範圍 LIM_DIST；網址 ?dist=）。Tim 2026-10-13：「距離改成滑桿、50～1000 m」「兩邊船頭相對互相接近，而不是直接橫排一開場就開砲」。
 //   電腦想保持的交戰距離另算（aiRange，31_sailing.js：夾在 90～220 m；⛔ 照 DIST ⇒ 開局 1000 m 時電腦在 1000 m 外繞圈、打不到）。
 var LIM_DIST = CFG.dist;                              // config/game.json 的 dist：[下限, 上限, 預設]
-var MODE = CFG.menu.mode, DIST = Q.has('dist') && isFinite(+Q.get('dist')) ? clamp(Math.round(+Q.get('dist')), LIM_DIST[0], LIM_DIST[1]) : LIM_DIST[2], SIMT = 0, RUNNING = false, PAUSED = false, OVER = false, AMMO_I = 0;
+/** 開局距離照網址 ?dist=（沒給 ＝ 設定檔的預設）；載入時、待命開機換場時（90_main.js sceneApply；TASK-1271）各算一次。 */
+function distQ() { return Q.has('dist') && isFinite(+Q.get('dist')) ? clamp(Math.round(+Q.get('dist')), LIM_DIST[0], LIM_DIST[1]) : LIM_DIST[2]; }
+var MODE = CFG.menu.mode, DIST = distQ(), SIMT = 0, RUNNING = false, PAUSED = false, OVER = false, AMMO_I = 0;
 var SAIL = Q.has('sail') ? (Q.get('sail') === 'off' ? 'off' : Q.get('sail') === 'manual' ? 'manual' : 'auto') : CFG.menu.sail;   // 航行：auto ＝ 兩艘自動、manual ＝ 我艦手動、off ＝ 停船；沒給 ⇒ menu.sail
 var KEYS = { l: false, r: false, sw: null };  // 手動操舵：按住的舵鍵（額外動力以前是按住 W／S 的油門，Tim 2026-10-15 改成帆段兩頭的「全速前進／倒車」⇒ 31_sailing.js sailStep）；sw ＝ 按住加帆／收帆（{ d: ±1, n: 下一次再切的 SIMT }；sailHold）
 // 殉爆的慢動作與特寫（73_slowmo.js）：on／cam 是設定；ts 現在的時間倍率。SLOW_VIS：這一格畫面裡只給人看的效果改由 frame 走（step() 讀它決定要不要跳過）

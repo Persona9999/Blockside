@@ -621,7 +621,43 @@ loadSay('解碼船體…');
 var GL_STEPS = [programs, geometry, wpGL, flGL, rdGL, bbSetup, function () { QIDX = new VK.QuadIndex(gl); }];
 var GL_READY = BED_SLICE && !PICK_HOST ? GL_STEPS.reduce(function (p, f) { return p.then(yieldUI).then(function () { f(); }); }, Promise.resolve()) : (stepsRun(GL_STEPS), Promise.resolve());
 hullSay = function (s) { evEmit('boot:hull', '解析' + s); };   // 解析中：開戰鈕寫進度（設定照樣能調）
-if (!HEADLESS && !PICK_HOST && !TUI_HOST) GL_READY.then(function () { requestAnimationFrame(frame); });   // 無頭（00_events.js）不開畫面迴圈；解析中也畫（天、海；船載好才有）
+// ───── 待命開機（TASK-1271；Tim 2026-11-11「Blockside 開機＋收海圖塊 8.5 秒 開機是否可以在Blocksail進入地球儀後就維持開機」）─────
+//   ?wait=1&map=@host（Blocksail 地球儀開在背景、看不見的那一份）：跟場景無關的先做完 —— 整包程式、著色器與共用網格（GL_STEPS）、聲音（initAudio）、
+//   ?warm=<船型,…> 先解析進 HULLT（HULLS 記著那一次 ⇒ 開場要同一型不重來）—— 不開畫面迴圈、不載編成與海圖 ⇒ 跟外面那一頁說 'waiting'。
+//   外面那一頁送 { bsmap: 'scene', q: '<這一場的網址參數，不含 ?>', hash: '<#pre=…，沒有 ⇒ 空>' } ⇒ 網址換成那一份（history.replaceState）、
+//   照它重算載入時讀網址的那幾項（sceneApply）⇒ 接著照從網址開機那一條走（載編成、海圖、開場、'started'）。
+//   一份頁面只換一場：回地球儀時外面那一頁關掉它、背景再開一份新的待命 ⇒ 上一場的東西不會留到下一場。
+//   ⛔ 載入時讀網址、之後又會變的那幾項，要在 sceneApply 裡照「載入的先後」重算一次：漏一項 ⇒ 那一項停在待命網址的值（Blocksail TASK-1271 的換場對拍：同一份網址從網址開機與換場，比開場的狀態）。
+var SCENE_WAIT = Q.get('wait') === '1' && Q.get('map') === '@host' && !HEADLESS && !PICK_HOST && !TUI_HOST && window.parent !== window;
+var SCENE_GO = !SCENE_WAIT ? Promise.resolve() : new Promise(function (res) {
+  window.addEventListener('message', function on(e) {
+    var d = e.data; if (!d || d.bsmap !== 'scene' || e.source !== window.parent) return;
+    window.removeEventListener('message', on); sceneApply(d); res();
+  });
+});
+/** 換場：網址換成這一場的、照載入的先後重算讀網址的那幾項（04_state → 04_modes → 05_hull → 08_weather → 52_fleet → 57_core → 69_prefs 存檔 → 87_townbuild）。 */
+function sceneApply(d) {
+  var q = String(d.q || '').replace(/^\?/, ''), h = d.hash ? String(d.hash) : '';
+  try { history.replaceState(history.state, '', location.pathname + '?' + q + h); } catch (e) { /* 換不了網址列 ⇒ Q 照樣換 */ }
+  Q = new URLSearchParams(q);
+  flowMode(CFG.menu.mode); DIST = distQ();                               // 04_state.js
+  MODE_Q = modeQ(); if (MODE_Q) flowMode(MODE_Q);                       // 04_modes.js
+  FLEET_SET = fleetQ();                                                 // 05_hull.js
+  windVarQ(); rainQ(); windAbsQ(); windAbs(); weatherQ(); timeOfDayQ();            // 08_weather.js（windAbs：WEATHERS 每一格，含大漩渦）
+  SPAWN_HDG = spawnHdgQ();                                              // 52_fleet.js
+  CORE_PRE = corePreHash(h);                                            // 57_core.js
+  prefsLoad();                                                          // 69_prefs.js：存檔照新的網址決定哪幾項不套（網址給了的那幾項）
+  setWeather(WX_ID);                                                    // 71_menu.js 載入時那一次（天色、大漩渦）
+  simSpeedSet(1);                                                       // 73_slowmo.js（上限照玩法）
+  TWB.town = Q.get('town') || null; if (modeRule('town')) twbBind();    // 87_townbuild.js
+  evEmit('scene');                                                      // 外殼（71_menu.js）：主選單的距離、玩法按鈕照新的值重點
+}
+if (SCENE_WAIT) GL_READY.then(yieldUI).then(function () {
+  initAudio();                                                          // 沒有使用者手勢 ⇒ 建成 suspended；開戰那一步（70_flow.js startSteps）照舊 resume
+  var W = (Q.get('warm') || '').split(',').filter(hullInfo);
+  return Promise.all(W.map(function (id) { return loadHull(id).catch(function (e) { console.error(e); }); }));
+}).then(function () { try { window.parent.postMessage({ bsmap: 'waiting' }, '*'); } catch (e) { /* 外面那一頁走了 */ } });
+if (!HEADLESS && !PICK_HOST && !TUI_HOST) GL_READY.then(function () { return SCENE_GO; }).then(function () { requestAnimationFrame(frame); });   // 待命：換場之後才開（背景不畫）   // 無頭（00_events.js）不開畫面迴圈；解析中也畫（天、海；船載好才有）
 /** 編成裡的船全部進了 HULLT 才放行：等完一輪再照**現在的**編成看一次，還有不在的 ⇒ 再等一輪。
  *  ⛔ 只等開頭那一份名單：解析中主選單換了我艦（pickShip）⇒ 名單裡的都回來了，HULLT[我艦] 卻還沒有
  *  ⇒ 下面讀 T.h ⇒「載入失敗：Cannot read properties of undefined (reading 'h')」（Tim 2026-10-20 回報；重現：?prefs=0&cache=0&blue=dromon&red=dromon，一進主選單把我艦換成拿破崙號）。 */
@@ -632,7 +668,7 @@ function fleetLoaded() {
 if (Q.has('thumbs')) GL_READY.then(function () { shipThumbCapturePage(Q.get('thumbs')); });
 else if (PICK_HOST) pickBoot();                                     // ?pick=@host：只開選船，不載編成
 else if (TUI_HOST) tuiBoot();                                       // ?tui=@host（89_townui.js）：只開城鎮介面那一份面板（地球儀停靠時的 📋 城鎮概況）
-else GL_READY.then(yieldUI).then(function () {                     // 先讓主選單畫出來，再開始解析
+else GL_READY.then(function () { return SCENE_GO; }).then(yieldUI).then(function () {   // 待命 ⇒ 等換場；先讓主選單畫出來，再開始解析
   return Promise.all([fleetLoaded(), bedBoot()]);                   // 只載編成裡的船（預設兩艘都是憲法號 ⇒ 一份）＋海圖（?map，08_seabed.js）
 }).then(function () {
   var T = HULLT[myHull()], h = T.h, chk = T.chk;
