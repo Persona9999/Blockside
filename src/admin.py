@@ -3021,6 +3021,57 @@ def act_shell_layers(src=None, gate=False):
     return log + [tail + '（兩個都要是 0：建置前會擋）']
 
 
+# ───────────────────────── 核心綁在「這一頁」上的地方（TASK-1271 函式庫化①） ─────────────────────────
+# 核心要能掛進別人的頁面（BS.mount(容器, 選項)、shadow root）⇒ 直接查 document、往 body／head 掛東西、window／document 的監聽、讀網址、
+#   視窗大小、跟 parent／opener 講話、往 window 寫名字 —— 每一處都得改成經過掛載點。量法：src/js_page.cjs（照作用域判，區域同名的不算）。
+# PAGE_MAX：每一類現在的處數（棘輪）⇒ 建置前的閘門只擋「變多」；變少了照建、印一行提醒把這裡調低（不調低，下一個人加回去不會被擋）。
+PAGE_MAX = {'query': 68, 'mount': 51, 'global': 48, 'listen': 37, 'host': 20, 'url': 14, 'view': 11, 'focus': 9}
+PAGE_CLS = (('query', 'document 查元素'), ('mount', '往 body／head／html 掛'), ('listen', 'window／document 的監聽'), ('url', '讀網址、history'),
+            ('view', '視窗大小'), ('focus', '焦點、全螢幕、pointer lock、hidden'), ('host', 'parent／opener'), ('global', 'window.<名字>'))
+
+
+def act_page_layers(src=None, gate=False, every=False):
+    """game 包直接綁在這一頁上的處數（每一類）；every ＝ 逐處列出（檔:行 字）。gate ＝ 建置前的閘門：哪一類比 PAGE_MAX 多 ⇒ Fail。"""
+    node = shutil.which('node')
+    if not node:
+        if gate:
+            return ['· 綁在頁面上的處數：沒驗（找不到 node）']
+        raise Fail('找不到 node（src/js_page.cjs 要它）')
+    root = os.path.abspath(src) if src else HERE
+    files = re.findall(r'<script\s+src="(js/[^"]+)"\s+data-bundle="game"', open(os.path.join(root, 'template.html'), encoding='utf-8').read())
+    r = subprocess.run([node, '--expose-internals', os.path.join(HERE, 'js_page.cjs')] + [os.path.join(root, f) for f in files],
+                       capture_output=True, text=True, encoding='utf-8', cwd=root)
+    try:
+        d = json.loads(r.stdout.strip().splitlines()[-1])
+    except Exception:
+        raise Fail('js_page.cjs 讀不到結果：%s' % (r.stdout + r.stderr).strip()[-300:])
+    b = os.path.basename
+    by = {}
+    for f, line, cls, word in d:
+        by.setdefault(cls, []).append((b(f), line, word))
+    def where(cls):
+        F = {}
+        for f, line, word in by.get(cls, ()):
+            F.setdefault(f, []).append('%d %s' % (line, word))
+        return ['    %-16s %s' % (f, '、'.join(L)) for f, L in sorted(F.items())]
+    over = [k for k, _ in PAGE_CLS if len(by.get(k, ())) > PAGE_MAX.get(k, 0)]
+    under = ['%s %d → %d' % (k, PAGE_MAX.get(k, 0), len(by.get(k, ()))) for k, _ in PAGE_CLS if len(by.get(k, ())) < PAGE_MAX.get(k, 0)]
+    tail = '綁在頁面上：%d 處（%s）' % (len(d), '、'.join('%s %d' % (k, len(by.get(k, ()))) for k, _ in PAGE_CLS))
+    if gate:
+        if over:
+            lines = []
+            for k in over:
+                lines += ['  %s（%s）%d 處，上限 %d：' % (k, dict(PAGE_CLS)[k], len(by[k]), PAGE_MAX.get(k, 0))] + where(k)
+            raise Fail('核心綁在頁面上的地方變多了（TASK-1271 函式庫化；不建置）—— 經過掛載點（根、容器、輸入總管、選項），別直接碰 document／window：\n' + '\n'.join(lines))
+        return ['✓ ' + tail + ('；比上限少 ⇒ 把 admin.py 的 PAGE_MAX 調低：' + '、'.join(under) if under else '')]
+    log = ['game 包直接綁在這一頁上的地方（%s；src/js_page.cjs 照作用域判）：' % (src or 'src')]
+    for k, say in PAGE_CLS:
+        log.append('  %-7s %-30s %3d（上限 %d）' % (k, say, len(by.get(k, ())), PAGE_MAX.get(k, 0)))
+        if every:
+            log += where(k)
+    return log + [tail]
+
+
 # ───────────────────────── 成品記住來源（TASK-0674） ─────────────────────────
 # 10-16 出過事：共用工作區建成品時包進別人改到一半的 js ⇒ 成品跟任何一版提交的來源都對不上，可是看不出來。
 # ⇒ 成品裡放一份來源清單（<script type="application/json" id="blockside-src">）：template.html 與它引用的每一支檔各記一個指紋；
@@ -3517,7 +3568,7 @@ def act_build(pack=True, single=False):   # pack：壓縮版（預設，TASK-058
         raise Fail('VoxelKit/_cache/ 少了 %s ⇒ 先 python -I admin.py cache（從成品解回）或 reimport' % '、'.join(miss))
     log += bundle_names_check()
     log += owner_check()
-    log += act_shell_layers(gate=True)
+    log += act_shell_layers(gate=True) + act_page_layers(gate=True)
     why = atlas_stale()
     if why:
         raise Fail('\n'.join(log) + '\n✗ 海戰圖示的圖集過期（%s）⇒ 先 python -I admin.py atlas，再建置' % '；'.join(why))
@@ -3769,7 +3820,7 @@ def act_build_code(base=None):
     if h0 != html0:
         i = next((k for k in range(min(len(h0), len(html0))) if h0[k] != html0[k]), min(len(h0), len(html0)))
         raise Fail('照 %s 的來源走同一條路重做，跟現在的成品不一樣（第 %d 行起）⇒ 建置程式改過、或成品不是這樣建的%s' % (rev, html0.count('\n', 0, i) + 1, full))
-    log = bundle_names_check() + owner_check() + act_shell_layers(gate=True)
+    log = bundle_names_check() + owner_check() + act_shell_layers(gate=True) + act_page_layers(gate=True)
     log.append('✓ 船沒變：%d 艘的標籤、.vxk 指紋、改裝船的原船都跟 %s 一樣，船檔都在、雜湊對得上' % (len(idx), rev))
     log.append('✓ 照 %s 的來源走同一條路重做 ⇒ 跟現在的成品逐位元組相同（這個做法 ＝ 正式建置）' % rev)
     h1, M1 = code_html(work_read, ships_tag, log, split_cfg=True)
@@ -3885,7 +3936,7 @@ def act_build_ship(sid, base=None, chain=None):
     if h0 != html0:
         i = next((k for k in range(min(len(h0), len(html0))) if h0[k] != html0[k]), min(len(h0), len(html0)))
         raise Fail('照 %s 的來源走同一條路重做，跟現在的成品不一樣（第 %d 行起）⇒ 建置程式改過、或成品不是這樣建的%s' % (rev, html0.count('\n', 0, i) + 1, full))
-    log = bundle_names_check() + owner_check() + act_shell_layers(gate=True)
+    log = bundle_names_check() + owner_check() + act_shell_layers(gate=True) + act_page_layers(gate=True)
     log.append('✓ 要建的：%s（改裝船家族）的 .vxk 都在 _cache、跟指紋對得上' % names)
     log.append('✓ 其他船沒變：%d 艘的標籤、.vxk 指紋、改裝船的原船都跟 %s 一樣，船檔都在、雜湊對得上' % (len(rest), rev))
     log.append('✓ 成品是%s（那次兩道關都過了、照工作區的來源寫的）⇒ 照它接著建' % rev if prior else
@@ -4226,7 +4277,7 @@ def remerge(sides):
     why = atlas_stale()
     if why:
         raise Fail('✗ 海戰圖示的圖集過期（%s）⇒ 先 python -I src/admin.py atlas，再 remerge' % '；'.join(why))
-    log += bundle_names_check() + owner_check() + act_shell_layers(gate=True)
+    log += bundle_names_check() + owner_check() + act_shell_layers(gate=True) + act_page_layers(gate=True)
     side = {}
     for rev, r in sides.items():
         html = (r('index.html') or b'').decode('utf-8')
@@ -6066,6 +6117,8 @@ def main():
     s = sp.add_parser('layers', help='模擬層（20–54 號檔）直接用到上層的名字（TASK-0669；node 照作用域判）')
     s.add_argument('--src', help='另一份 src 目錄（量別的版本）')
     s.add_argument('--shell', action='store_true', help='改量核心直接用到外殼（主選單、設定頁；SHELL_UI）的名字、直接碰 #cover 裡的 DOM')
+    s.add_argument('--page', action='store_true', help='改量核心直接綁在這一頁上的地方（document、window、網址…；TASK-1271 函式庫化）')
+    s.add_argument('--every', action='store_true', help='--page：逐處列出（檔:行 字）')
     sp.add_parser('hooks', help='裝提交前／推送前的成品檢查：git config core.hooksPath .githooks（這個 repo 的每個 worktree 共用）')
     s = sp.add_parser('cache', help='_cache 缺的 .vxk 從雕刻作品重新匯出、跟指紋比；--all 每艘都比（比對來源）')
     s.add_argument('--all', action='store_true')
@@ -6165,7 +6218,7 @@ def main():
         elif o.op == 'hooks':
             log = act_hooks()
         elif o.op == 'layers':
-            log = act_shell_layers(o.src) if o.shell else act_layers(o.src)
+            log = act_page_layers(o.src, every=o.every) if o.page else act_shell_layers(o.src) if o.shell else act_layers(o.src)
         elif o.op == 'cache':
             log = act_cache(o.all)
         elif o.op == 'fmt':
