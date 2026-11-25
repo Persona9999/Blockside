@@ -524,6 +524,53 @@ TREE_SPECIES.esparto = {
   variants: 3
 };
 
+// ── 香料園（Blocksail TASK-1357；配方 black-pepper、clove 的 crop）：黑胡椒、丁香 ── 只在田裡種（place.town），不新增野生分布；加在最後 ⇒ 前面每一種的索引、種子、長相不變
+//   place.dry：那塊田最靠地塊的一排不種，畫成曬場（63_towns.js townDryPut：地上攤蓆子曬、一座竹架）；mat 蓆子、crop 攤著曬的那一層（顏色）
+TREE_SPECIES.pepper = {
+  name: '黑胡椒（攀架）',                                             // Piper nigrum（萬丹、楠榜的胡椒園：一株藤攀一根木柱或活的刺桐，修到 3～4 m；心形的深綠葉一層層包住柱子，葉腋垂下一串串果穗，未熟綠、熟了轉紅 —— 採下來攤在蓆上曬成黑胡椒）
+  meta: { region: ['asia'], type: 'crop' },
+  height: [3.0, 3.8],
+  trunk: { r: [0.05, 0.065], taper: 0.85, bend: 0.03, segs: 3, sides: [6, 4], lean: 0.03, col: [0.40, 0.34, 0.27], top: 0.97 },   // 樹幹 ＝ 攀的那根木柱（直、幾乎不收；頂端露出藤外一截）
+  levels: [
+    { n: [10, 12], from: [0.06, 0.9], angle: [62, 88], len: [0.16, 0.22], r: 0.3, bend: 0.3, up: -0.08, segs: 2, sides: [3, 0] }   // 藤沿柱一圈圈往外伸的短枝（結果枝）；短 ⇒ 葉包成一根柱子的輪廓
+  ],
+  leaf: { kind: 'cluster', per: [2, 2], size: [0.26, 0.36], flat: 0.65, jit: 0.1, col: [0.13, 0.31, 0.11], vary: 0.12, along: 0.75 },   // along 0.75：葉沿短枝往回長到柱邊（不是枝尖一顆球）⇒ 葉接在藤上、包住柱子
+  pods: { n: [16, 20], on: [[0, 0.3, 0.9]], len: [0.18, 0.24], r: 0.032, out: 0.2, stalk: [0.008, [0.30, 0.42, 0.16]],
+          cols: [[0.30, 0.48, 0.14], [0.36, 0.52, 0.16], [0.72, 0.16, 0.10], [0.62, 0.12, 0.08]] },   // 果穗：細長、往下垂（treePods）；綠、紅各半
+  place: { town: true, spacing: 1, scale: [0.9, 1.1], shell: 0, view: 300, sink: 0.08, field: [1.4, 1.4], fieldK: 0.55,   // 田裡 × 1.8 × 0.55 ≈ 實際大小；柱距 2.5 m
+           soil: [[0.42, 0.31, 0.21], [0.34, 0.25, 0.17]], dry: { mat: [0.70, 0.60, 0.39], crop: [[0.20, 0.13, 0.10], [0.42, 0.14, 0.09]] } },   // 曬的：轉黑的胡椒、還紅的
+  variants: 4
+};
+TREE_SPECIES.clove = {
+  name: '丁香',                                                       // Syzygium aromaticum（安汶的丁香園：常綠、樹冠從低處就長滿、尖塔形，革質亮綠的葉；枝梢一簇簇花蕾，轉粉紅時連花梗摘下，攤在蓆上曬成紅褐的乾丁香）
+  meta: { region: ['asia'], type: 'crop' },
+  height: [6.5, 8.5],
+  trunk: { r: [0.12, 0.17], taper: 0.4, bend: 0.06, segs: 5, sides: [6, 4], lean: 0.04, col: [0.47, 0.42, 0.36], top: 0.92, crown: 0.38 },   // 灰褐的幹直上到頂；crown：枝長照總高的幾成（下面的枝長、上面短 ⇒ 尖塔）
+  levels: [
+    { n: [15, 17], from: [0.08, 0.97], angle: [60, 80], len: [0.7, 0.9], r: 0.45, bend: 0.15, up: 0.16, segs: 3, sides: [4, 3] },
+    { n: [1, 2], from: [0.4, 0.95], angle: [28, 48], len: [0.45, 0.6], r: 0.5, bend: 0.2, up: 0.15, segs: 2, sides: [3, 0] }
+  ],
+  leaf: { kind: 'cluster', per: [2, 2], size: [0.7, 0.95], flat: 0.75, jit: 0.2, col: [0.15, 0.33, 0.12], vary: 0.12, along: 0.85, tint: [0.14, [0.70, 0.30, 0.26]] },   // tint：一成半的團換成枝梢花蕾簇的粉紅
+  place: { town: true, spacing: 1, scale: [0.9, 1.1], shell: 0, view: 350, sink: 0.12, field: [3.4, 3.4], fieldK: 0.6,   // 田裡 × 1.8 × 0.6；株距約 6 m
+           dry: { mat: [0.70, 0.60, 0.39], crop: [[0.45, 0.22, 0.13], [0.55, 0.28, 0.16]] } },   // 曬的：紅褐的丁香
+  variants: 4
+};
+//   多香果（配方 pimento 的 crop；TASK-1073 起配方就寫 crop 'pimento'，表裡一直沒有這一種 ⇒ 田只鋪土、不種 —— TASK-1357 檢查既有香料園時補上）
+TREE_SPECIES.pimento = {
+  name: '多香果',                                                     // Pimenta dioica（牙買加的 pimento walk：清出來照顧的常綠樹，樹皮光滑淺灰褐、樹冠圓密，夏天開一簇簇乳白的小花；綠果摘下攤在曬場（barbecue）上曬成紅褐）
+  meta: { region: ['carib'], type: 'crop' },
+  height: [5.5, 7.5],
+  trunk: { r: [0.1, 0.15], taper: 0.45, bend: 0.1, segs: 4, sides: [6, 4], lean: 0.05, col: [0.62, 0.56, 0.48], top: 0.45, crown: 0.5 },
+  levels: [
+    { n: [6, 8], from: [0.3, 1.0], angle: [35, 55], len: [0.6, 0.8], r: 0.55, bend: 0.18, up: 0.25, segs: 3, sides: [4, 3] },
+    { n: [2, 3], from: [0.4, 0.95], angle: [28, 48], len: [0.45, 0.6], r: 0.5, bend: 0.2, up: 0.15, segs: 2, sides: [3, 0] }
+  ],
+  leaf: { kind: 'cluster', per: [2, 2], size: [0.7, 0.95], flat: 0.65, jit: 0.2, col: [0.14, 0.32, 0.13], vary: 0.12, along: 0.5, tint: [0.12, [0.82, 0.80, 0.66]] },   // tint：一成多的團換成乳白的花簇
+  place: { town: true, spacing: 1, scale: [0.9, 1.1], shell: 0, view: 350, sink: 0.12, field: [3.0, 3.0], fieldK: 0.6,
+           dry: { mat: [0.70, 0.60, 0.39], crop: [[0.36, 0.20, 0.14], [0.28, 0.16, 0.12]] } },   // 曬的：紅褐的多香果
+  variants: 4
+};
+
 /** 有種子的亂數（mulberry32）：⇒ 回一個函式，每叫一次回 [0, 1)。 */
 function treeRng(seed) {
   var a = seed >>> 0;
@@ -603,7 +650,7 @@ function treeMesh(K, lod) {
   return { V: new Float32Array(V), I: new Uint16Array(I), h: Math.max(K.h, top), w: w };
 }
 /** 幹生的果（可可的果莢，TASK-0973）：S.pods ＝ { n 幾顆, on: [[層, 從, 到]…]（−1 樹幹、0 第一層枝；那一根的哪一段）, len 長, r 半徑, cols 顏色挑一個 }。
- *  一顆 ＝ 一顆長橢球，貼著那根枝幹往外、往下垂（果柄很短）；低模畫一半。 */
+ *  一顆 ＝ 一顆長橢球，貼著那根枝幹往外、往下垂（果柄很短）；低模畫一半。（選用）out：往外再伸幾公尺（垂在葉外，胡椒的果穗）＋ stalk [半徑, 顏色]：細模從枝的表面拉一根果柄接到果的上端。 */
 function treePods(M) {
   var P = M.S.pods, K = M.K, R = M.R, n = Math.round(treeIn(R, P.n) * (M.lod ? 0.5 : 1));
   var on = P.on.map(function (o) { return { o: o, B: K.br.filter(function (b) { return b.lv === o[0]; }) }; }).filter(function (q) { return q.B.length; });
@@ -611,7 +658,12 @@ function treePods(M) {
   for (var k = 0; k < n; k++) {
     var q = on[Math.floor(R() * on.length)], b = q.B[Math.floor(R() * q.B.length)], f = treeIn(R, [q.o[1], q.o[2]]), p = treeAt(b.pts, f), rr = b.r0 + (b.r1 - b.r0) * f;
     var az = R() * 6.2832, o = [Math.cos(az), 0, Math.sin(az)], L = treeIn(R, P.len), d = treeNorm([o[0] * 0.4, -1, o[2] * 0.4]), X = treePerp(d);
-    var c = [p[0] + o[0] * (rr + P.r * 0.8) + d[0] * L * 0.45, p[1] + d[1] * L * 0.45, p[2] + o[2] * (rr + P.r * 0.8) + d[2] * L * 0.45];
+    var ro = rr + P.r * 0.8 + (P.out || 0);                          // out：再往外伸幾公尺（胡椒的果穗垂在葉外；沒寫 ⇒ 0，可可長相不變）
+    var c = [p[0] + o[0] * ro + d[0] * L * 0.45, p[1] + d[1] * L * 0.45, p[2] + o[2] * ro + d[2] * L * 0.45];
+    if (P.out) {                                                        // 伸出去的果 ⇒ 一根細果柄從枝的表面接到果的上端（不浮空，Tim 2026-11-12）；低模也畫（不然中景的果懸空）
+      var tp = [c[0] - d[0] * L * 0.5, c[1] - d[1] * L * 0.5, c[2] - d[2] * L * 0.5];
+      treeTube(M, [[p[0] + o[0] * rr, p[1], p[2] + o[2] * rr], [(p[0] + o[0] * rr + tp[0]) / 2, Math.max(p[1], tp[1]) + 0.02, (p[2] + o[2] * rr + tp[2]) / 2], tp], P.stalk[0], P.stalk[0] * 0.7, 3, P.stalk[1], 1, b.lv);
+    }
     treeBlob(M, c, [d, X[0], X[1]], [L * 0.5, P.r, P.r], P.cols[Math.floor(R() * P.cols.length)], Math.min(1, 0.6 * p[1] / K.h));
   }
 }

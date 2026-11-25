@@ -181,6 +181,7 @@ function treeFieldPut(J) {
       var blk = new Map();                                                // 這一條田碰到的格（TREE_FIELD_BLK 公尺）⇒ 第幾塊
       var xs = F.R.map(function (q) { return q[0] - BED.ax; }), zs = F.R.map(function (q) { return q[1] - BED.az; });
       if (Math.min.apply(null, xs) >= x0 + size || Math.max.apply(null, xs) < x0 || Math.min.apply(null, zs) >= z0 + size || Math.max.apply(null, zs) < z0) return;
+      if (F.dry) { TREES.stat.fieldDry = (TREES.stat.fieldDry || 0) + 1; return; }   // 曬場那一排（63_towns.js fieldsOf、townDryPut；TASK-1357）不種
       var si = J.SP.indexOf(F.crop), S = si >= 0 ? TREE_SPECIES[F.crop] : null, Fd = S && S.place.field;
       if (!Fd) { TREES.stat.fieldSkip = (TREES.stat.fieldSkip || 0) + 1; return; }
       var lb = F.lm ? F.lb : F.b1 - F.b0, la = F.lm ? F.la : F.a1 - F.a0;   // 跨行（行距那一邊）、沿行（株距那一邊）多長
