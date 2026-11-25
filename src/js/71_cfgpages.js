@@ -188,7 +188,7 @@ function bgmUI() {
   }
   [].forEach.call(bsAll('#bgmModes [data-bm]'), function (b) { b.onclick = function () { SND.mode = b.dataset.bm; sndShow(); }; });
   [].forEach.call(bsAll('#bgmTunes [data-bt]'), function (b) { b.onclick = function () { SND.tune = b.dataset.bt; if (BGM && !BGM.forced && SND.tune !== 'shuffle' && BGM.tn.id !== SND.tune) BGM = null; sndShow(); }; });   // 指定了別首 ⇒ 下一格從那首開始
-  [].forEach.call(bsAll('#bgmTunes [data-bp], #bgmThemes [data-bp]'), function (b) { b.onclick = function () { bgmPreview(b.dataset.bp); sndShow(); }; });
+  [].forEach.call(bsAll('#bgmTunes [data-bp], #bgmThemes [data-bp]'), function (b) { b.onclick = function () { bgmTry(b.dataset.bp); sndShow(); }; });
   [].forEach.call(bsAll('#bgmThemes [data-bth]'), function (b) { b.onclick = function () { SND.theme = +b.dataset.bth; sndShow(); }; });
   var rb = $('sndR'); if (rb) rb.onclick = function () { for (var k in SND_DEF) SND[k] = SND_DEF[k]; sndApply(); sndShow(); };
 }

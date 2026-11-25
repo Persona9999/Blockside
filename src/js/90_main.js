@@ -35,7 +35,7 @@ function frame(ts, noRaf) {                                         // noRaf：_
   if (!PAUSED && !STILL) stepRain(dt);                                // 3D 雨滴（14_rain.js）：照畫面的時間走；停格、縮圖不動
   ambFrame();                                                         // 環境音：風、浪、暴風雨的雨（02_ambient.js；還沒有聲音 ⇒ 什麼都不做）
   burnSndFrame();                                                     // 船上延燒的火聲（02_audio.js，TASK-0979；沒有船在燒 ⇒ 什麼都不做）
-  bgmFrame();                                                         // 背景音樂（02_music.js，TASK-0677）：主選單也放
+  bgmStep();                                                          // 背景音樂（02_music.js，TASK-0677）：主選單也放；?bgm=@host ⇒ 交給外面那一頁（02_audio.js）
   sndGc();                                                            // 放完的音效、音符拆掉出口（02_audio.js sndFree：不拆的話 Chrome 一直算 ⇒ 戰局打久了手機聲音一頓一頓）
   if (PF) pfLap('rain');
   remesh(RM_BUDGET);
@@ -643,6 +643,7 @@ function sceneApply(d) {
   bsOptScene(q, h);                                                     // 00_mount.js：之後讀 BS_OPT 的拿到這一場的
   if (BS_OPT.own) try { history.replaceState(history.state, '', location.pathname + '?' + q + h); } catch (e) { /* 換不了網址列 ⇒ Q 照樣換 */ }
   Q = new URLSearchParams(BS_OPT.query);
+  BGM_HOST = bgmHostQ();                                                // 02_audio.js：背景音樂交不交給外面那一頁（待命那一份載入時的網址沒有 bgm）
   flowMode(CFG.menu.mode); DIST = distQ();                               // 04_state.js
   MODE_Q = modeQ(); if (MODE_Q) flowMode(MODE_Q);                       // 04_modes.js
   FLEET_SET = fleetQ();                                                 // 05_hull.js
