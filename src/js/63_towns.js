@@ -43,6 +43,8 @@ var TOWN_ANNEX_CELL = 4, TOWN_SOIL = [[0.44, 0.34, 0.23], [0.33, 0.25, 0.17]], T
 //   貼著主建築地塊的那幾邊不圍（牛從牛棚那一側進出 ＝ 門）；柱距 TOWN_FENCE.sp 公尺、柱高 h、橫木兩道在 rails 那兩個高度（都照地面起伏）
 var TOWN_PASTURE = [[0.40, 0.50, 0.24], [0.35, 0.46, 0.21]];
 var TOWN_FENCE = { sp: 2.5, h: 1.25, post: 0.07, rail: 0.035, rails: [0.5, 1.0], col: [0.36, 0.27, 0.18], railCol: [0.45, 0.35, 0.24] };
+// 曬場（townDryPut；TASK-1357）：蓆 mat [沿寬, 沿進深] 公尺、蓆間 gap、攤的那一層內縮 inset、蓆離地 lift、每幾張一座竹架（rack；一排兩張以上時最後一張也是）與架高 rackH、竹柱半寬 post、竹色 col、踩實的土 yard〔佔位〕
+var TOWN_DRY = { mat: [1.6, 2.6], gap: 0.45, inset: 0.16, lift: 0.05, rack: 4, rackH: 0.85, post: 0.035, col: [0.62, 0.55, 0.34], yard: [0.55, 0.47, 0.35] };
 /** 牧地每一排（annex.cells 的第 k 段）的外緣 ⇒ [[[a, b], [a, b]] …]（地塊座標：a 沿進深、第 0 排臨路，b 沿寬；同 fieldsOf）：
  *  一格的邊外面不是牧地、也不是主建築的地塊（Blocksail world/annex.js inLot：第 0～⌈w/C⌉−1 欄、第 0～⌈d/C⌉−1 排）⇒ 圍；同一條線上連著的併成一段 */
 function townFenceEdges(l, cells, C) {
@@ -65,6 +67,42 @@ function townFenceEdges(l, cells, C) {
     return out;
   });
 }
+/** 一根四面的長條（牧地的圍欄、曬場的竹架）：p、q 兩端（網格座標，含高度）、半寬 hw、往上 h0～h1（兩端各照自己的地面）；vtx／I 同 townGround 那一支 */
+function townBar(vtx, I, p, q, hw, h0, h1, c) {
+  var dx = q[0] - p[0], dz = q[2] - p[2], L = Math.hypot(dx, dz) || 1, nx = -dz / L * hw, nz = dx / L * hw;
+  var c4 = [[p[0] + nx, p[2] + nz, p[1]], [q[0] + nx, q[2] + nz, q[1]], [q[0] - nx, q[2] - nz, q[1]], [p[0] - nx, p[2] - nz, p[1]]];   // [x, z, 地面高]
+  var sides = [[0, 1, nx / hw, nz / hw], [2, 3, -nx / hw, -nz / hw], [1, 2, dx / L, dz / L], [3, 0, -dx / L, -dz / L]];
+  sides.forEach(function (s) { var A0 = c4[s[0]], A1 = c4[s[1]], b = vtx(A0[0], A0[2] + h0, A0[1], c, s[2], 0, s[3]); vtx(A1[0], A1[2] + h0, A1[1], c, s[2], 0, s[3]); vtx(A1[0], A1[2] + h1, A1[1], c, s[2], 0, s[3]); vtx(A0[0], A0[2] + h1, A0[1], c, s[2], 0, s[3]); I.push(b, b + 1, b + 2, b, b + 2, b + 3); });
+  var t = vtx(c4[0][0], c4[0][2] + h1, c4[0][1], c); vtx(c4[1][0], c4[1][2] + h1, c4[1][1], c); vtx(c4[2][0], c4[2][2] + h1, c4[2][1], c); vtx(c4[3][0], c4[3][2] + h1, c4[3][1], c); I.push(t, t + 1, t + 2, t, t + 2, t + 3);
+}
+/** 曬場（Blocksail TASK-1357；作物的 place.dry，fieldsOf 標 F.dry 的那一排）⇒ 地面網格：踩實的土（TOWN_DRY.yard）＋沿寬一張一張的蓆子攤著曬的那一層（D.mat 蓆、D.crop 輪流），
+ *  每 TOWN_DRY.rack 張、和一排的最後一張（兩張以上）換成一座竹架（四根柱、架高 rackH 的蓆面，兩面都畫）。採下的胡椒、丁香花蕾攤在蓆上曬乾（萬丹、安汶的園）。vtx／I／W／hgt 同 townPasturePut */
+function townDryPut(F, D, vtx, I, W, hgt) {
+  var K = TOWN_DRY;
+  function P(a, b, up) { var x = F.at[0] + F.fx * a - F.fy * b, y = F.at[1] + F.fy * a + F.fx * b, w = W([x, y]), g = hgt(w[0], w[1]); return [w[0], (g === g ? g : 0) + TOWN_ROAD_LIFT + (up || 0), w[1]]; }
+  var na = Math.max(1, Math.ceil((F.a1 - F.a0) / 2)), nb = Math.max(1, Math.ceil((F.b1 - F.b0) / 4));
+  for (var kb = 0; kb < nb; kb++) {
+    var bA = F.b0 + (F.b1 - F.b0) * kb / nb, bB = F.b0 + (F.b1 - F.b0) * (kb + 1) / nb, base = -1;
+    for (var ka = 0; ka <= na; ka++) { var a = F.a0 + (F.a1 - F.a0) * ka / na, p0 = P(a, bA), p1 = P(a, bB), v0 = vtx(p0[0], p0[1], p0[2], K.yard); vtx(p1[0], p1[1], p1[2], K.yard); if (base < 0) base = v0; }
+    for (ka = 0; ka < na; ka++) { var q = base + ka * 2; I.push(q, q + 1, q + 3, q, q + 3, q + 2); }
+  }
+  function quad(a0, a1, b0, b1, up, c, two) {                        // 一片平的（四角各照自己的地面）；two ⇒ 背面也畫（架上的蓆從底下看得到）
+    var Q = [P(a0, b0, up), P(a0, b1, up), P(a1, b1, up), P(a1, b0, up)], v = vtx(Q[0][0], Q[0][1], Q[0][2], c);
+    for (var i = 1; i < 4; i++) vtx(Q[i][0], Q[i][1], Q[i][2], c);
+    I.push(v, v + 1, v + 2, v, v + 2, v + 3); if (two) I.push(v, v + 2, v + 1, v, v + 3, v + 2);
+  }
+  var mA = Math.min(K.mat[1], F.a1 - F.a0 - 0.6), am = (F.a0 + F.a1) / 2, n = Math.max(1, Math.floor((F.b1 - F.b0 - 0.4 + K.gap) / (K.mat[0] + K.gap)));
+  if (mA <= 0.4) return;
+  var b = (F.b0 + F.b1) / 2 - (n * K.mat[0] + (n - 1) * K.gap) / 2, s = K.inset;
+  for (var k = 0; k < n; k++, b += K.mat[0] + K.gap) {
+    var rack = n >= 2 && (k === n - 1 || k % K.rack === K.rack - 1), up = rack ? K.rackH : K.lift, a0 = am - mA / 2, a1 = am + mA / 2, b1 = b + K.mat[0];
+    quad(a0, a1, b, b1, up, D.mat, rack);
+    quad(a0 + s, a1 - s, b + s, b1 - s, up + 0.012, D.crop[k % D.crop.length], false);
+    if (rack) [[a0 + 0.08, b + 0.08], [a1 - 0.08, b + 0.08], [a1 - 0.08, b1 - 0.08], [a0 + 0.08, b1 - 0.08]].forEach(function (c) {
+      var p = P(c[0], c[1]); townBar(vtx, I, [p[0] - K.post, p[1], p[2]], [p[0] + K.post, p[1], p[2]], K.post, -0.05, up, K.col);   // 竹柱
+    });
+  }
+}
 /** 一排牧地（fieldsOf 的 F）⇒ 地面網格：草（TOWN_PASTURE，照排交錯兩個綠）＋這一排外緣的圍欄（柱 ＋ 兩道橫木，照地面起伏）
  *  vtx／I／W／hgt 同 townGround 那一支（世界 ⇒ 網格座標、讀高度） */
 function townPasturePut(F, vtx, I, W, hgt) {
@@ -76,14 +114,7 @@ function townPasturePut(F, vtx, I, W, hgt) {
     for (ka = 0; ka < na; ka++) { var q = base + ka * 2; I.push(q, q + 1, q + 3, q, q + 3, q + 2); }
   }
   var K = TOWN_FENCE;
-  // 一根四面的長條：p、q 兩端（網格座標，含高度）、半寬 hw、往上 h0～h1（兩端各照自己的地面）
-  function bar(p, q, hw, h0, h1, c) {
-    var dx = q[0] - p[0], dz = q[2] - p[2], L = Math.hypot(dx, dz) || 1, nx = -dz / L * hw, nz = dx / L * hw;
-    var c4 = [[p[0] + nx, p[2] + nz, p[1]], [q[0] + nx, q[2] + nz, q[1]], [q[0] - nx, q[2] - nz, q[1]], [p[0] - nx, p[2] - nz, p[1]]];   // [x, z, 地面高]
-    var sides = [[0, 1, nx / hw, nz / hw], [2, 3, -nx / hw, -nz / hw], [1, 2, dx / L, dz / L], [3, 0, -dx / L, -dz / L]];
-    sides.forEach(function (s) { var A0 = c4[s[0]], A1 = c4[s[1]], b = vtx(A0[0], A0[2] + h0, A0[1], c, s[2], 0, s[3]); vtx(A1[0], A1[2] + h0, A1[1], c, s[2], 0, s[3]); vtx(A1[0], A1[2] + h1, A1[1], c, s[2], 0, s[3]); vtx(A0[0], A0[2] + h1, A0[1], c, s[2], 0, s[3]); I.push(b, b + 1, b + 2, b, b + 2, b + 3); });
-    var t = vtx(c4[0][0], c4[0][2] + h1, c4[0][1], c); vtx(c4[1][0], c4[1][2] + h1, c4[1][1], c); vtx(c4[2][0], c4[2][2] + h1, c4[2][1], c); vtx(c4[3][0], c4[3][2] + h1, c4[3][1], c); I.push(t, t + 1, t + 2, t, t + 2, t + 3);
-  }
+  function bar(p, q, hw, h0, h1, c) { townBar(vtx, I, p, q, hw, h0, h1, c); }
   (F.fence || []).forEach(function (e) {
     var da = e[1][0] - e[0][0], db = e[1][1] - e[0][1], L = Math.hypot(da, db), n = Math.max(1, Math.round(L / K.sp)), pts = [];
     for (var k = 0; k <= n; k++) pts.push(P(e[0][0] + da * k / n, e[0][1] + db * k / n));
@@ -796,9 +827,13 @@ function townPrep(p, keep) {
       var A = l.annex; if (!A || !A.cells || !A.cells.length) return;
       var th = l.rot * D2R, fx = Math.cos(th), fy = Math.sin(th), Cc = TOWN_ANNEX_CELL;
       var fen = A.crop === 'pasture' ? townFenceEdges(l, A.cells, Cc) : null;   // 牧地 ⇒ 每一排的外緣（圍欄；townFenceEdges）
+      //   曬場（TASK-1357）：作物寫了 place.dry、田有兩排以上 ⇒ 最靠地塊的那一排（排號最小）不種，畫成曬場（townDryPut；63_trees.js treeFieldPut 跳過）；面積、產量照算
+      var Sd = typeof TREE_SPECIES !== 'undefined' && TREE_SPECIES[A.crop], dryRow = null;
+      if (Sd && Sd.place.dry) { var rows = A.cells.map(function (r) { return r[0]; }), rmin = Math.min.apply(null, rows); if (rows.some(function (v) { return v !== rmin; })) dryRow = rmin; }
       A.cells.forEach(function (r, k) {
         var a1 = l.d / 2 - Cc * r[0], a0 = a1 - Cc, b0 = -l.w / 2 + Cc * r[1], b1 = -l.w / 2 + Cc * (r[2] + 1);
         var F = { lot: l.id, crop: A.crop, at: l.at, fx: fx, fy: fy, a0: a0, a1: a1, b0: b0, b1: b1, fence: fen ? fen[k] : null };
+        if (r[0] === dryRow) F.dry = true;
         F.R = [[a0, b0], [a1, b0], [a1, b1], [a0, b1]].map(function (q) { return E([l.at[0] + fx * q[0] - fy * q[1], l.at[1] + fy * q[0] + fx * q[1]]); });
         out.push(F);
       });
@@ -2401,6 +2436,7 @@ function* townGroundGen(T, Q) {
   var VF = [], IF = [], FC = TREE_FIELD_CARD && TREES.on ? treeFieldCrops() : null;
   yield* townEach(Q.field, function (F) {
     if (F.crop === 'pasture') { townPasturePut(F, vtx, I, W, hgt); return; }   // 牧地（放牧場）：草地＋圍欄，不畫壟、不種作物
+    if (F.dry) { townDryPut(F, TREE_SPECIES[F.crop].place.dry, vtx, I, W, hgt); return; }   // 曬場（TASK-1357）：土＋蓆＋竹架，不畫壟、不貼遠處的田
     var sp = TREE_SPECIES[F.crop], row = sp && sp.place.field ? sp.place.field[0] * TREE_FIELD_SP : 1, soil = sp && sp.place.soil || TOWN_SOIL, nb = Math.max(1, Math.round((F.b1 - F.b0) / row)), na = Math.max(1, Math.ceil((F.a1 - F.a0) / 2));
     function P(a, b) { var x = F.at[0] + F.fx * a - F.fy * b, y = F.at[1] + F.fy * a + F.fx * b, w = W([x, y]), g = hgt(w[0], w[1]); return [w[0], (g === g ? g : 0) + TOWN_ROAD_LIFT, w[1]]; }
     for (var kb = 0; kb < nb; kb++) {
