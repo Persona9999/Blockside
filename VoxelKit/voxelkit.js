@@ -141,9 +141,12 @@
       });
     });
   }
+  // 內嵌素材住哪：預設這一頁（document）；Blockside 掛進別人頁面的 shadow root 時（blockside.js BS.mount，TASK-1271）⇒ setRoot(那個 shadow root)
+  var DOC_ROOT = null;
+  function byId(id) { return (DOC_ROOT || document).getElementById(id); }
   /** <script type="application/x-asset" id="…" data-mime="…">base64</script>（vxk_inline.py 填的）；空的（optional 素材沒交）⇒ null。 */
   function embedded(id) {
-    var el = document.getElementById(id); if (!el) return null;
+    var el = byId(id); if (!el) return null;
     var t = el.textContent.replace(/\s+/g, '');
     return t ? { mime: el.getAttribute('data-mime') || 'application/octet-stream', b64: t } : null;
   }
@@ -167,15 +170,15 @@
    */
   var SHIPS = null, SHIP_DATA = {}, SHIP_HASH = {}, SHIP_P = {};
   function shipIndex() {
-    if (!SHIPS) { var e = document.getElementById('vxk-ships'); try { SHIPS = e ? JSON.parse(e.textContent) : {}; } catch (x) { SHIPS = {}; } }
+    if (!SHIPS) { var e = byId('vxk-ships'); try { SHIPS = e ? JSON.parse(e.textContent) : {}; } catch (x) { SHIPS = {}; } }
     return SHIPS;
   }
   /** 船檔載進來時呼叫（ships/<標籤>.js 裡就這一行）；data ＝ base64 一整條，或一段一段的清單；h ＝ 內容雜湊。 */
   function ship(id, data, h) { SHIP_DATA[id] = data; SHIP_HASH[id] = h; }
   /** 這一艘有沒有資料（內嵌，或清單上有）。 */
-  function hasEmbedded(id) { return !!document.getElementById(id) || !!shipIndex()[id]; }
+  function hasEmbedded(id) { return !!byId(id) || !!shipIndex()[id]; }
   /** 這一艘資料的指紋字串（不用載）：內嵌 ⇒ 原文；拆檔 ⇒ 清單上的雜湊（內容雜湊，內容變了它一定變）。給快取當鍵（06_cache.js）。 */
-  function embeddedKey(id) { var el = document.getElementById(id), h = shipIndex()[id]; return el ? el.textContent : h ? 'ships:' + h : ''; }
+  function embeddedKey(id) { var el = byId(id), h = shipIndex()[id]; return el ? el.textContent : h ? 'ships:' + h : ''; }
   /** base64 一整條或一段一段 ⇒ 位元組（段 ⇒ 各自解、照順序接起來）。 */
   function piecesToBytes(d) {
     if (typeof d === 'string') return b64ToBytes(d);
@@ -204,7 +207,7 @@
   }
   /** 這一艘壓縮過的位元組 ⇒ Promise（內嵌的直接給；拆檔的第一次要的時候載那個檔，同一艘只載一次）。 */
   function embeddedBytes(id) {
-    var el = document.getElementById(id); if (el) return Promise.resolve(b64ToBytes(el.textContent));
+    var el = byId(id); if (el) return Promise.resolve(b64ToBytes(el.textContent));
     var h = shipIndex()[id];
     if (SHIP_DATA[id] && SHIP_HASH[id] === h) return Promise.resolve(piecesToBytes(SHIP_DATA[id]));
     if (!h) return Promise.reject(new Error('找不到內嵌的 .vxk：#' + id));
@@ -598,6 +601,7 @@
   };
 
   root.VoxelKit = {
+    setRoot: function (r) { DOC_ROOT = r || null; },
     CHUNK: CH, rgb332: rgb332, hashVoxel: hashVoxel,
     b64ToBytes: b64ToBytes, inflateRaw: inflateRaw, parse: parse, decode: decode, loadEmbedded: loadEmbedded,
     ship: ship, hasEmbedded: hasEmbedded, embeddedKey: embeddedKey, embeddedBytes: embeddedBytes,

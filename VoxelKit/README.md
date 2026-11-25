@@ -57,6 +57,7 @@ deflate-raw 壓過的一段位元組：
 |---|---|
 | `loadEmbedded(id)` | 讀 `<script type="application/x-vxk" id="…">base64</script>` ⇒ `Promise<{header, chunks}>`（需要 `DecompressionStream`） |
 | `embeddedImage(id)`／`embeddedJSON(id)` | 讀 `x-asset` 素材 ⇒ `Promise<Image\|null>`／物件或 `null`（沒交、解不開 ⇒ null，展品自己決定替代品） |
+| `setRoot(r)` | 內嵌素材（`x-asset`、`x-vxk`、`#vxk-ships`）去哪裡找：預設這一頁（`document`）；頁面放在別人的 shadow root 裡時給那個 shadow root（Blockside 的 `BS.mount`），`null` ⇒ 回到 `document` |
 | `Grid.fromModel(m)`／`grid.share()` | 稀疏網格；`share()` 跟原本那份共用資料，誰先改哪一塊誰才複製（copy-on-write） |
 | `grid.get／set／each`、`verify(grid, header)` | 讀寫一格、走全部、逐格對拍 |
 | `RegionSet(gl, grid, quadIndex)` | GPU 端：區塊內同色面合併（greedy），64³ 一區一個 VAO；`touch(x,y,z)` 標髒、`flush()` 重建、`shareFrom(other)` 先借用另一份的區（被改到的區才自己建）、`draw()` |

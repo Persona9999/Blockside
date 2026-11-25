@@ -2,10 +2,13 @@
 // 核心查元素、往頁面掛東西一律經過這幾個，⛔ 不直接碰 document.getElementById／querySelector(All)／body／head／documentElement
 //   （admin.py layers --page 量、建置前擋變多的那一類）。現在 ＝ 這一頁本身；之後掛進別人的頁面（shadow root 裡的一個容器）只換這裡。
 // 排在所有檔之前：00_config 讀不到設定檔就要往 BS_BODY 寫原因。
-var BS_ROOT = document;                  // 查元素：$(id)、bsOne(選擇器)、bsAll(選擇器)
-var BS_HEAD = document.head;             // <style>、<script> 往這裡放
-var BS_BODY = document.body;             // 覆蓋層、量測頁的 <pre>、下載連結；body 上的 class（gfxov、bsHost、roomEdOn、flab、flab3d）
-var BS_HTML = document.documentElement;  // html 上的 class（pickonly、tuionly）、CSS 變數、版面寬度
+// 掛進別人的頁面（TASK-1271 函式庫化⑤）：blockside.js 的 BS.mount(容器, 選項) 建好 shadow root 之後，在叫這個閉包之前放一份 window.BS_MOUNT_NOW
+//   { el 容器, root shadow root, head（＝ root）, body .bs-body, html .bs-html, opt 選項 }；沒有 ⇒ 這一頁本身（index.html 獨立版）。
+var BS_M = window.BS_MOUNT_NOW || null;
+var BS_ROOT = BS_M ? BS_M.root : document;                  // 查元素：$(id)、bsOne(選擇器)、bsAll(選擇器)
+var BS_HEAD = BS_M ? BS_M.head : document.head;             // <style>、<script> 往這裡放
+var BS_BODY = BS_M ? BS_M.body : document.body;             // 覆蓋層、量測頁的 <pre>、下載連結；body 上的 class（gfxov、bsHost、roomEdOn、flab、flab3d）
+var BS_HTML = BS_M ? BS_M.html : document.documentElement;  // html 上的 class（pickonly、tuionly）、CSS 變數、版面寬度
 function $(id) { return BS_ROOT.getElementById(id); }
 function bsOne(sel) { return BS_ROOT.querySelector(sel); }
 function bsAll(sel) { return BS_ROOT.querySelectorAll(sel); }
@@ -33,9 +36,9 @@ function bsTarget(e) { var p = e.composedPath && e.composedPath(); return p && p
 // 開機選項（TASK-1271 函式庫化④）：核心讀的網址參數、#pre=…、@host 的對象都從 BS_OPT 拿，⛔ 不直接讀 location.search／hash、window.parent／opener。
 //   這一頁本身（獨立版、battle.html 開在 iframe 裡）⇒ 照網址；之後掛進別人的頁面 ⇒ 掛載的人給。
 //   own：網址是核心自己的（換場時網址列跟著換）；framed：開在 iframe 裡（待命開機只在這種時候等外面那一頁）；host：@host 要講話的那一頁。
-var BS_OPT = { query: location.search, hash: location.hash, own: true, framed: window.parent !== window, host: window.parent !== window ? window.parent : window.opener };
+var BS_OPT = BS_M ? BS_M.opt : { query: location.search, hash: location.hash, own: true, framed: window.parent !== window, host: window.parent !== window ? window.parent : window.opener };
 /** 換場（90_main.js sceneApply）：這一場的參數（不含 ?）與 #pre=…（沒有 ⇒ 空）。 */
 function bsOptScene(q, h) { BS_OPT.query = '?' + q; BS_OPT.hash = h; }
-// 版面大小：HUD、小地圖照「核心那一塊有多大」排 —— 這一頁本身 ＝ 視窗；之後掛進別人的頁面 ＝ 容器
-function bsViewW() { return innerWidth; }
-function bsViewH() { return innerHeight; }
+// 版面大小：HUD、小地圖照「核心那一塊有多大」排 —— 這一頁本身 ＝ 視窗；掛進別人的頁面 ＝ 容器
+function bsViewW() { return BS_M ? BS_M.el.clientWidth : innerWidth; }
+function bsViewH() { return BS_M ? BS_M.el.clientHeight : innerHeight; }

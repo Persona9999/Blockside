@@ -3025,7 +3025,7 @@ def act_shell_layers(src=None, gate=False):
 # 核心要能掛進別人的頁面（BS.mount(容器, 選項)、shadow root）⇒ 直接查 document、往 body／head 掛東西、window／document 的監聽、讀網址、
 #   視窗大小、跟 parent／opener 講話、往 window 寫名字 —— 每一處都得改成經過掛載點。量法：src/js_page.cjs（照作用域判，區域同名的不算）。
 # PAGE_MAX：每一類現在的處數（棘輪）⇒ 建置前的閘門只擋「變多」；變少了照建、印一行提醒把這裡調低（不調低，下一個人加回去不會被擋）。
-PAGE_MAX = {'query': 0, 'mount': 4, 'global': 48, 'listen': 0, 'host': 12, 'url': 14, 'view': 5, 'focus': 0}
+PAGE_MAX = {'query': 0, 'mount': 4, 'global': 49, 'listen': 0, 'host': 12, 'url': 14, 'view': 5, 'focus': 0}
 PAGE_CLS = (('query', 'document 查元素'), ('mount', '往 body／head／html 掛'), ('listen', 'window／document 的監聽'), ('url', '讀網址、history'),
             ('view', '視窗大小'), ('focus', '焦點、全螢幕、pointer lock、hidden'), ('host', 'parent／opener'), ('global', 'window.<名字>'))
 
@@ -3070,6 +3070,160 @@ def act_page_layers(src=None, gate=False, every=False):
         if every:
             log += where(k)
     return log + [tail]
+
+
+# ───────────────────────── 核心掛進別人的頁面：blockside.js（TASK-1271 函式庫化⑤） ─────────────────────────
+# 成品 index.html ⇒ 一支 JS：window.BS.mount(容器, 選項) 在容器開 shadow root，放進樣式（:root ⇒ :host、html ⇒ .bs-html、body ⇒ .bs-body）、
+#   畫面的 HTML、內嵌素材（來源清單、船的索引、x-asset）⇒ 載 ships/ships_cfg.js ⇒ 跑 VoxelKit（全域，一頁一份）⇒ 跑同一個遊戲閉包。
+#   ⛔ 從成品組、不從原始碼組：跑的是跟 index.html 同一份程式（成品去過註解、語法樹驗過）。
+#   遊戲閉包的第一行排在跟 index.html 同一個行號（前面補空行）⇒ 這支檔從一頁的第 1 行起放，報錯的行號就是 index.html 的行號。
+#   選項：{ query: '?…'（＝ 網址參數）, hash: '#pre=…', host（@host 要講話的那一頁：有 postMessage 的物件）, own（網址列是核心的：換場時跟著換）, framed（開在 iframe 裡）,
+#          shadow: false（反向對照用：不開 shadow root，直接放進容器、查元素查整頁）, css: [字串]（外殼的樣式，照同一套換 html／body）}
+#   一頁只掛一份（第二次 mount ⇒ 回失敗的 Promise）；回 Promise<掛好的那一份>。
+CSS_SEL_RX = re.compile(r'(?<![\w#.\-:])(:root|html|body)(?![\w\-])')
+
+
+def css_scope(css):
+    """樣式搬進 shadow root：選擇器裡的 :root ⇒ :host、html ⇒ .bs-html、body ⇒ .bs-body；宣告與註解不動。回 (新的樣式, 改了幾個選擇器)。"""
+    out, buf, stack, i, n, hits = [], [], [], 0, len(css), [0]
+
+    def sel(head):
+        parts = re.split(r'(/\*.*?\*/)', head, flags=re.S)       # 註解原樣
+        new = ''.join(p if p.startswith('/*') else CSS_SEL_RX.sub(lambda m: {':root': ':host', 'html': '.bs-html', 'body': '.bs-body'}[m.group(1)], p) for p in parts)
+        if new != head:
+            hits[0] += 1
+        return new
+    while i < n:
+        if css.startswith('/*', i):
+            j = css.find('*/', i + 2); j = n if j < 0 else j + 2
+            buf.append(css[i:j]); i = j; continue
+        c = css[i]
+        if c == '{':
+            head = ''.join(buf); buf = []
+            if re.sub(r'/\*.*?\*/', '', head, flags=re.S).lstrip().startswith('@'):
+                out.append(head + c); stack.append('block')
+            elif stack and stack[-1] == 'decl':
+                out.append(head + c); stack.append('decl')
+            else:
+                out.append(sel(head) + c); stack.append('decl')
+            i += 1; continue
+        if c == '}':
+            out.append(''.join(buf) + c); buf = []
+            if stack:
+                stack.pop()
+            i += 1; continue
+        buf.append(c); i += 1
+    out.append(''.join(buf))
+    return ''.join(out), hits[0]
+
+
+CORE_MOUNT_JS = r'''var MOUNTED = null;
+function scope(s) { return s.replace(/(^|[^\w#.\-:])(:root|html|body)(?![\w\-])/g, function (m, a, b) { return a + (b === ':root' ? ':host' : b === 'html' ? '.bs-html' : '.bs-body'); }); }
+function cfg() {
+  if (G.BS_SHIPS_CFG) return Promise.resolve();
+  return new Promise(function (ok, bad) { var s = document.createElement('script'); s.src = ((G.BS_SHELL && G.BS_SHELL.ships) || '') + 'ships/ships_cfg.js'; s.onload = ok; s.onerror = function () { bad(new Error('載不到 ' + s.src)); }; document.head.appendChild(s); });
+}
+function mount(el, o) {
+  if (MOUNTED) return Promise.reject(new Error('BS.mount：這一頁已經掛了一份（一頁一份）'));
+  o = o || {}; var shadow = o.shadow !== false, root = shadow ? (el.shadowRoot || el.attachShadow({ mode: 'open' })) : null, box = shadow ? root : el;
+  box.innerHTML = '<style>' + CSS + (o.css || []).map(scope).join('\n') + '</style><div class="bs-html"><div class="bs-body">' + HTML + DATA + '</div></div>';
+  var h = box.querySelector('.bs-html'), b = box.querySelector('.bs-body'), q = new URLSearchParams(o.query || '');
+  if (q.get('tui') === '@host') h.classList.add('tuionly'); if (q.get('pick') === '@host') h.classList.add('pickonly');   // = index.html 檔頭那一段：載程式之前先藏主選單
+  MOUNTED = { el: el, root: shadow ? root : document, head: shadow ? root : document.head, body: b, html: h,
+    opt: { query: o.query || '', hash: o.hash || '', own: !!o.own, framed: !!o.framed, host: o.host || null } };
+  return cfg().then(function () {
+    if (!G.VoxelKit) vk();
+    G.VoxelKit.setRoot(MOUNTED.root);
+    G.BS_MOUNT_NOW = MOUNTED;
+    try { game(); } finally { G.BS_MOUNT_NOW = null; }
+    return MOUNTED;
+  });
+}'''
+
+
+def core_js(html):
+    """成品 index.html 的全文 ⇒ (blockside.js 的全文, 讀數 dict)。成品的樣子跟預期的不一樣 ⇒ Fail（不猜）。"""
+    def need(cond, what):
+        if not cond:
+            raise Fail('blockside.js：成品的樣子跟預期的不一樣 —— %s（admin.py core_js）' % what)
+    hb, he = html.find('<head>'), html.find('</head>')
+    bo, bc = html.find('<body>'), html.rfind('</body>')
+    need(0 <= hb < he < bo < bc, '找不到 <head>…</head><body>…</body>')
+    m = re.search(r'<script type="application/json" id="blockside-src">(.*?)</script>', html[hb:he], re.S)
+    need(m, '<head> 裡沒有來源清單 #blockside-src')
+    src_tag, fp = m.group(0), json.loads(m.group(1)).get('fp')
+    sa, sb = html.find('<style>', hb), html.find('</style>', hb)
+    need(hb < sa < sb < he, '<head> 裡沒有 <style>')
+    css, nsel = css_scope(html[sa + 7:sb])
+    body = html[bo + 6:bc]
+    plain = list(re.finditer(r'<script>', body))
+    need(len(plain) == 2, 'body 裡沒有屬性的 <script> 要剛好兩段：VoxelKit、遊戲閉包（現在 %d 段）' % len(plain))
+    vk0 = plain[0].start(); vk1 = body.find('</script>', vk0); g0 = plain[1].start(); g1 = body.find('</script>', g0)
+    need(vk0 < vk1 < g0 < g1, 'VoxelKit 要在遊戲閉包前面')
+    need(not body[g1 + 9:].strip(), '遊戲閉包後面還有東西')
+    markup = body[:vk0]
+    need('<script' not in markup, '畫面的 HTML 裡有 <script>')
+    data = body[vk1 + 9:g0]
+    ext = re.findall(r'<script[^>]*\ssrc="([^"]+)"[^>]*></script>', data)
+    need(ext == ['ships/ships_cfg.js'], '素材那一段的外部 script 要剛好是 ships/ships_cfg.js（現在 %s）' % ext)
+    data = re.sub(r'<script[^>]*\ssrc="ships/ships_cfg\.js"[^>]*></script>', '', data)
+    need(not re.search(r'<script(?![^>]*type="application/(?:json|x-asset|x-vxk)")', data), '素材那一段有會執行的 <script>')
+    vk, game = body[vk0 + 8:vk1], body[g0 + 8:g1]
+    js = lambda s: json.dumps(s, ensure_ascii=False).replace('</', '<\\/')
+    head = '\n'.join(['/* Blockside 核心（TASK-1271 函式庫化⑤）：src/admin.py corejs 從成品 index.html 組出來 —— ⛔ 別手改。用法見 admin.py core_js 上面的說明。 */',
+                      '(function (G) {', "'use strict';",
+                      # :host 的 all:initial：宿主頁會繼承下來的（字型大小、顏色…）歸零 ⇒ 跟獨立版一樣從瀏覽器預設起算（宿主頁 body 字 40px ⇒ 主選單跟著 40px，量過）
+                      'var CSS = ' + js(':host{all:initial;display:block;position:relative;overflow:hidden}\n' + css) + ';',
+                      'var HTML = ' + js(markup) + ';',
+                      'var DATA = ' + js(src_tag + data) + ';',
+                      CORE_MOUNT_JS,
+                      'function vk() {' + vk + '}'])
+    want = html[:bo + 6 + g0 + 8].count('\n') + 1                  # index.html 裡遊戲閉包第一行（<script> 後面那一行）
+    have = head.count('\n') + 2                                     # 'function game() {' 那一行的下一行
+    pad = max(0, want - have)
+    out = head + '\n' + '\n' * pad + 'function game() {' + game + '}\n' + 'G.BS = { mount: mount, mounted: function () { return MOUNTED; }, stamp: ' + json.dumps(fp) + ' };\n})(window);\n'
+    return out, {'sel': nsel, 'pad': pad, 'line': want, 'aligned': want >= have, 'size': len(out.encode('utf-8')), 'fp': fp}
+
+
+def act_corejs(out=None, page=None):
+    """成品 ⇒ blockside.js（out；不給 ⇒ 只印讀數）；page ⇒ 另外寫一頁掛載測試頁（blockside.js 放同一個資料夾；量測用，不提交）。"""
+    js, r = core_js(open(OUT, encoding='utf-8').read())
+    log = ['blockside.js：%.2f MB；核心 %s；樣式換了 %d 個選擇器；遊戲閉包從第 %d 行起（%s）' % (r['size'] / 1e6, r['fp'], r['sel'], r['line'], '跟 index.html 同一行' if r['aligned'] else '⚠ 前面太長、對不上 index.html 的行號')]
+    if page and not out:
+        out = os.path.join(os.path.dirname(os.path.abspath(page)), 'blockside.js')
+    if out:
+        with open(out, 'w', encoding='utf-8', newline='\n') as f:
+            f.write(js)
+        log.append('✓ 寫了 %s' % out)
+    if page:
+        rel = os.path.relpath(os.path.abspath(out), os.path.dirname(os.path.abspath(page))).replace('\\', '/')
+        with open(page, 'w', encoding='utf-8', newline='\n') as f:
+            f.write(MOUNT_PAGE.replace('__JS__', rel))
+        log.append('✓ 寫了 %s（掛載測試頁）' % page)
+    return log
+
+
+# 掛載測試頁（act_corejs page）：跟 index.html 同一份網址參數；?collide=1 ⇒ 宿主頁先放一個同名的 #cv 與會撞的樣式；?shadow=0 ⇒ 不開 shadow root（反向對照）。
+#   shadow root 裡的 <pre id="dump">／#core 抄一份到這一頁（無頭 Chrome 的 --dump-dom 看不到 shadow root 裡面）。
+MOUNT_PAGE = r'''<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Blockside 掛載測試</title>
+<style>html,body{margin:0;height:100%;background:#123}#bs{position:fixed;inset:0}</style>
+<script>if (/[?&]collide=1/.test(location.search)) document.write('<style>#cv{display:none!important}canvas{outline:4px solid red}body{font-size:40px}.row{display:none}</style><canvas id="cv" width="8" height="8"></canvas>');</script>
+</head><body><div id="bs"></div>
+<script src="__JS__"></script>
+<script>
+var sh = !/[?&]shadow=0/.test(location.search), el = document.getElementById('bs');
+window.__mounted = BS.mount(el, { query: location.search, hash: location.hash, own: true, framed: window.parent !== window, host: window.parent !== window ? window.parent : window.opener, shadow: sh })
+  .catch(function (e) { var p = document.createElement('pre'); p.id = 'mountErr'; p.textContent = String(e && e.stack || e); document.body.appendChild(p); });
+var copied = {};
+(function copy() {
+  var R = sh ? el.shadowRoot : document;
+  ['dump', 'core'].forEach(function (k) { var x = R && R.getElementById(k); if (x && !copied[k] && x.textContent) { copied[k] = 1; if (sh) { var p = document.createElement('pre'); p.id = k; p.textContent = x.textContent; document.body.appendChild(p); } } });
+  if (!copied.dump) setTimeout(copy, 200);
+})();
+</script>
+</body></html>
+'''
 
 
 # ───────────────────────── 成品記住來源（TASK-0674） ─────────────────────────
@@ -3591,6 +3745,7 @@ def act_build(pack=True, single=False):   # pack：壓縮版（預設，TASK-058
 # 核心只有一份（ROADMAP：Blockside 是核心，別的遊戲把它當 submodule 引用）⇒ 不重走建置：拿建好的拆檔成品（入口；船檔 ships/ 共用、不複製）套外殼寫成另一頁。
 # 外殼設定（JSON，路徑都相對於這個檔）：
 #   out    寫到哪（必填）            core   哪一份成品（不給 ⇒ 這個 repo 的 index.html）
+#   mount  true ⇒ 掛載版（TASK-1271）：核心 blockside.js 掛在 shadow root 裡、外殼的 js 掛好才跑（shell_mount_html）；不寫 ⇒ 下面這一套
 #   title  <title> 與主畫面的名字      ships  船檔的網址前綴（out 那一頁看到的 Blockside 根目錄，例 "external/Blockside/"；船檔 ＝ 前綴 + ships/<標籤>.js）
 #   icon   主畫面圖示的網址（不給 ⇒ 前綴 + Blockside 的）  js、css  外殼的檔（清單；照順序）
 # 怎麼套（⛔ 核心的行號一行都不動：錯誤回報、srccheck 照成品的行號）：
@@ -3630,6 +3785,8 @@ def shell_html(path):
     stamp = {'core': have['fp'], 'shell': h.hexdigest()[:12]}
     cfg = {'ships': ships, 'name': S.get('title') or '', 'stamp': stamp}
     esc = lambda v: v.replace('&', '&amp;').replace('<', '&lt;').replace('"', '&quot;')
+    if S.get('mount'):                                         # 掛載版（TASK-1271 函式庫化⑤）：核心 blockside.js 掛在 shadow root 裡
+        return shell_mount_html(S, at, html, stamp, cfg, esc), at(S['out']), stamp
     if pre and SHIPS_CFG_TAG in html:
         html = html.replace(SHIPS_CFG_TAG, '<script id="%s" src="%s%s"></script>' % (SHIPS_CFG_EL, esc(pre), SHIPS_CFG_REL), 1)
     if S.get('title'):
@@ -3642,6 +3799,42 @@ def shell_html(path):
     j = html.rindex('</body>')
     html = html[:j] + ''.join(parts) + html[j:]
     return html, at(S['out']), stamp
+
+
+def shell_mount_html(S, at, core_html, stamp, cfg, esc):
+    """外殼設定寫了 "mount": true ⇒ 掛載版的外殼頁（TASK-1271 函式庫化⑤）：核心是 blockside.js（core_js 從成品組的），掛在 #bs 的 shadow root 裡。
+    · 第 1 行就放核心（<script id="bs-core">）⇒ 遊戲閉包的行號跟 index.html 一樣（core_js 前面補了空行）。
+    · window.BS_SHELL 一行放在核心後面、掛之前（船檔前綴、名字、stamp；核心開機就讀）。
+    · 外殼的 css ⇒ 交給 BS.mount 的 css 選項（進 shadow root、html／body 照同一套換）；外殼的 js ⇒ 掛好之後照順序一支一支插進頁面跑（照舊是全域；
+      要碰核心的 DOM ⇒ BS.mounted().root／.html／.body —— 外面的 document 找不到 shadow root 裡的東西）。"""
+    js, r = core_js(core_html)
+    if not r['aligned']:
+        raise Fail('掛載版外殼頁：blockside.js 前面太長、遊戲閉包對不上 index.html 的行號（core_js）')
+    css, sjs = [], []
+    for kind in ('css', 'js'):
+        for q in S.get(kind) or []:
+            (css if kind == 'css' else sjs).append(open(at(q), encoding='utf-8').read())
+    J = lambda v: json.dumps(v, ensure_ascii=False).replace('</', '<\\/')
+    title = esc(S.get('title') or 'Blockside')
+    return ('<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8"><script id="bs-core">' + js.replace('</script', '<\\/script') + '</script>\n'
+            '<script id="%s">window.BS_SHELL=%s;</script>\n' % (SHELL_ID, json.dumps(cfg, ensure_ascii=False, sort_keys=True).replace('</', '<\\/')) +
+            '<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">\n'
+            '<meta name="theme-color" content="#0d1218"><meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-capable" content="yes">\n'
+            '<meta name="apple-mobile-web-app-title" content="%s"><meta name="apple-mobile-web-app-status-bar-style" content="black">\n' % title +
+            '<link rel="apple-touch-icon" sizes="180x180" href="%s">\n' % esc(S.get('icon') or (S.get('ships') or '') + 'icons/apple-touch-icon.png') +
+            '<title>%s</title>\n' % title +
+            '<style>html,body{margin:0;height:100%;background:#0d1218;overflow:hidden}#bs{position:fixed;inset:0}</style>\n'
+            '</head><body><div id="bs"></div>\n'
+            '<script id="bs-mount">\n'
+            '(function () {\n'
+            '  var CSS = ' + J(css) + ', JS = ' + J(sjs) + ';\n'
+            '  var o = { query: location.search, hash: location.hash, own: true, framed: window.parent !== window, host: window.parent !== window ? window.parent : window.opener, css: CSS };\n'
+            '  BS.mount(document.getElementById("bs"), o).then(function () {\n'
+            '    JS.forEach(function (t) { var s = document.createElement("script"); s.textContent = t; document.body.appendChild(s); });\n'
+            '  }, function (e) { console.error(e); var p = document.createElement("pre"); p.id = "mountErr"; p.style.cssText = "color:#fff;padding:16px"; p.textContent = "Blockside 掛不起來：" + (e && e.message || e); document.body.appendChild(p); });\n'
+            '})();\n'
+            '</script>\n'
+            '</body></html>\n')
 
 
 def act_shell(path, check=False):
@@ -6114,6 +6307,9 @@ def main():
     g.add_argument('--staged', action='store_true', help='比暫存區（要提交的那一份）')
     g.add_argument('--rev', help='比某一版（commit、分支名都可以）')
     s.add_argument('--hook', choices=['pre-commit', 'pre-push'], help='git 鉤子用（.githooks/ 裡的兩支）')
+    s = sp.add_parser('corejs', help='成品 index.html ⇒ blockside.js（BS.mount 掛進別人頁面的 shadow root；TASK-1271）')
+    s.add_argument('--out', help='寫到哪（不給 ⇒ 只印讀數）')
+    s.add_argument('--page', help='另外寫一頁掛載測試頁（blockside.js 放同一個資料夾）；量測用，不提交')
     s = sp.add_parser('layers', help='模擬層（20–54 號檔）直接用到上層的名字（TASK-0669；node 照作用域判）')
     s.add_argument('--src', help='另一份 src 目錄（量別的版本）')
     s.add_argument('--shell', action='store_true', help='改量核心直接用到外殼（主選單、設定頁；SHELL_UI）的名字、直接碰 #cover 裡的 DOM')
@@ -6217,6 +6413,8 @@ def main():
             log = act_srccheck(o.staged or o.hook == 'pre-commit', o.rev, o.hook)
         elif o.op == 'hooks':
             log = act_hooks()
+        elif o.op == 'corejs':
+            log = act_corejs(o.out, o.page)
         elif o.op == 'layers':
             log = act_page_layers(o.src, every=o.every) if o.page else act_shell_layers(o.src) if o.shell else act_layers(o.src)
         elif o.op == 'cache':
