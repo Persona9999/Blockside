@@ -12,7 +12,7 @@ function askUI() {
   $('askY').onclick = function () { askClose(true); };
   $('askN').onclick = function () { askClose(false); };
   $('askp').onclick = function (e) { if (e.target === $('askp')) askClose(false); };
-  window.addEventListener('keydown', function (e) {
+  bsListen('win', 'keydown', function (e) {
     if (!ASK_DO) return;
     e.stopImmediatePropagation();
     if (e.key === 'Escape') { e.preventDefault(); askClose(false); }   // 其他鍵照瀏覽器的預設（Tab 換鈕、Enter／空白鍵按下有焦點的那顆）

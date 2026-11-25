@@ -4,7 +4,7 @@ var inDrag = null, PTRS = new Map(), PINCH = null;          // PTRS：按著的�
 function pinchD() { var a = Array.from(PTRS.values()); return Math.hypot(a[0].x - a[1].x, a[0].y - a[1].y) || 1; }
 function pinchM() { var a = Array.from(PTRS.values()); return { x: (a[0].x + a[1].x) / 2, y: (a[0].y + a[1].y) / 2 }; }
 cv.addEventListener('contextmenu', function (e) { e.preventDefault(); });
-document.addEventListener('contextmenu', function (e) { if (!/^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)) e.preventDefault(); });   // 面板、按鈕、說明上長按也不跳選單（輸入框照常）
+bsListen('doc', 'contextmenu', function (e) { if (!/^(INPUT|TEXTAREA|SELECT)$/.test(bsTarget(e).tagName)) e.preventDefault(); });   // 面板、按鈕、說明上長按也不跳選單（輸入框照常）
 cv.addEventListener('pointerdown', function (e) {
   try { cv.setPointerCapture(e.pointerId); } catch (x) { }                // 抓住滑鼠（pointer lock，第一人稱）時抓不到指標 ⇒ InvalidStateError（Tim 2026-10-18 回報：皇家號第一人稱）；照樣記指頭
   PTRS.set(e.pointerId, { x: e.clientX, y: e.clientY });
@@ -14,7 +14,7 @@ cv.addEventListener('pointerdown', function (e) {
 });
 cv.addEventListener('pointerdown', function (e) { ctrlEach('down', e); });   // 按下：每個控制器都收（第一人稱抓住滑鼠）
 cv.addEventListener('mousedown', function (e) { ctrlEach('mouse', e); });    // 滑鼠鍵（建造：抓住時左鍵拆、右鍵放；⛔ 用 mousedown：按著左鍵再按右鍵不會有第二個 pointerdown）
-document.addEventListener('mousemove', function (e) { ctrlEach('look', e); }); // 抓住滑鼠時的移動（第一人稱轉頭）
+bsListen('doc', 'mousemove', function (e) { ctrlEach('look', e); }); // 抓住滑鼠時的移動（第一人稱轉頭）
 cv.addEventListener('pointermove', function (e) {
   if (PTRS.has(e.pointerId)) PTRS.set(e.pointerId, { x: e.clientX, y: e.clientY });
   if (PINCH && PTRS.size === 2) { ctrlDo('pinch', PINCH, pinchM(), pinchD()); return; }   // 兩指：海戰鏡頭縮放＋平移；第一人稱不動
@@ -90,10 +90,10 @@ function sailRay(o, oL, dL, tMax) {
   });
   return best ? { x: oL[0] + dL[0] * bt - 0.5, y: oL[1] + dL[1] * bt - 0.5, z: oL[2] + dL[2] * bt - 0.5, t: bt, sail: best } : null;
 }
-window.addEventListener('keydown', function (e) {
+bsListen('win', 'keydown', function (e) {
   if (!RUNNING) return;
   if ($('err').style.display === 'flex') { if (e.key === 'Escape') { e.preventDefault(); $('err').style.display = 'none'; } return; }   // 報錯／問題回報彈窗開著（01_gl.js）⇒ 鍵不進遊戲（⛔ 不擋 ⇒ 在回報欄打 R 就回主選單、打 N 就重開）；Esc 關掉它
-  if (/^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)) return;      // 在輸入框裡打字 ⇒ 不當成遊戲的鍵
+  if (/^(INPUT|TEXTAREA|SELECT)$/.test(bsTarget(e).tagName)) return;      // 在輸入框裡打字 ⇒ 不當成遊戲的鍵
   var k = e.key.toLowerCase(); if (e.code === 'Space') k = ' ';
   if (k === 'escape') { e.preventDefault(); if (!GFXOV.open && FP.on && fpEscEaten()) return; if (uiPanelEsc()) return; if (FLX3) xrayToggle(); else gsetToggle(); return; }   // 遊戲內的設定面板
   ctrlDo('key', k, true, e);                                         // 第一人稱（走、爬…；P 停格、O 設定沒吃 ⇒ 往下）→ 建造（快捷欄、轉、拆、放…）→ 海戰的動作（71_ctrl.js）
@@ -157,14 +157,14 @@ function doAct(a, repeat) {
 }
 function keyUp(k) { var a = keyAct('battle', k); if (a) actUp(a); }
 function actUp(a) { if (a === 'ruddL') KEYS.l = false; if (a === 'ruddR') KEYS.r = false; if (KEYS.sw && (a === 'sailUp' ? 1 : a === 'sailDn' ? -1 : 0) === KEYS.sw.d) KEYS.sw = null; }
-window.addEventListener('keyup', function (e) { var k = e.key.toLowerCase(); if (e.code === 'Space') k = ' '; ctrlDo('key', k, false, e); });   // fpKey：第一人稱的鍵放開（沒開 ⇒ 只清掉自己按著的、照舊往下走）
-window.addEventListener('blur', function () { KEYS.l = KEYS.r = false; KEYS.sw = null; [].forEach.call(bsAll('.kb.down'), function (b) { b.classList.remove('down'); }); });   // 切走視窗 ⇒ 收不到 keyup，按下的顏色一起清掉
+bsListen('win', 'keyup', function (e) { var k = e.key.toLowerCase(); if (e.code === 'Space') k = ' '; ctrlDo('key', k, false, e); });   // fpKey：第一人稱的鍵放開（沒開 ⇒ 只清掉自己按著的、照舊往下走）
+bsListen('win', 'blur', function () { KEYS.l = KEYS.r = false; KEYS.sw = null; [].forEach.call(bsAll('.kb.down'), function (b) { b.classList.remove('down'); }); });   // 切走視窗 ⇒ 收不到 keyup，按下的顏色一起清掉
 // iPhone 連點兩下放大（Tim 2026-10-15：「連點角落兩下還是會放大，按控帆按鈕太快就觸發」—— 根上的 touch-action:manipulation iOS 不一定照做）：
 // 兩次手指放開相隔 < 350 ms ⇒ 取消第二次的預設動作（＝雙擊縮放）。取消之後瀏覽器不會補 click ⇒ 一般按鈕自己補一個；
 // 按住型（data-hold：舵、帆）走 pointer 事件不受影響；輸入框照舊（要能點兩下選字）；遊戲畫面本來就是 touch-action:none（自己處理手勢、不補 click）。
 var TAP_T = -1e9;
-document.addEventListener('touchend', function (e) {
-  var now = e.timeStamp, dbl = now - TAP_T < 350, t = e.target; TAP_T = now;
+bsListen('doc', 'touchend', function (e) {
+  var now = e.timeStamp, dbl = now - TAP_T < 350, t = bsTarget(e); TAP_T = now;
   if (!dbl || e.touches.length || !t || !t.closest || t === cv || t.closest('input, select, textarea')) return;
   e.preventDefault();
   if (!t.closest('[data-hold]')) { var c = e.changedTouches[0]; t.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window, clientX: c ? c.clientX : 0, clientY: c ? c.clientY : 0 })); }
@@ -362,7 +362,7 @@ function fsToggle() {
   } catch (err) { gsetShow(); }
 }
 $('fullT').onclick = fsToggle;
-['fullscreenchange', 'webkitfullscreenchange'].forEach(function (ev) { document.addEventListener(ev, gsetShow); });   // 進出（含 Esc 退出）⇒ 按鈕跟著亮滅
+['fullscreenchange', 'webkitfullscreenchange'].forEach(function (ev) { bsListen('doc', ev, gsetShow); });   // 進出（含 Esc 退出）⇒ 按鈕跟著亮滅
 [].forEach.call(bsAll('#gset [data-gg]'), function (b) { b.onclick = function () { gfxSet(b.dataset.gg); gfxShow(); }; });
 [].forEach.call(bsAll('#gset [data-gx]'), function (b) { b.onclick = function () { phxSet(b.dataset.gx); phxSync(); }; });
 $('endA').onclick = start;

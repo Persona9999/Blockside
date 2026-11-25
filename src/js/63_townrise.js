@@ -644,8 +644,8 @@ function townRisePanel() {
   $('play').onclick = function () { var s = RISE.demo; if (!s) return; if (s.p >= 1) townRiseSet(s, 0); s.p0 = s.p; s.t0 = performance.now(); s.play = RISE.dur * (1 - s.p0) || RISE.dur; };
   $('stop').onclick = function () { townRiseStop(); };
   $('p').oninput = function () { var s = RISE.demo; if (!s) return; s.play = 0; townRiseSet(s, +this.value / 1000); townRisePanelSync(); };
-  window.addEventListener('pointerdown', function (e) {
-    if (!RISE.picking || e.target !== cv) return;
+  bsListen('win', 'pointerdown', function (e) {
+    if (!RISE.picking || bsTarget(e) !== cv) return;
     e.stopPropagation(); e.preventDefault(); RISE.picking = false;
     var h = townHitAt(e.clientX, e.clientY);
     if (!h || !h.lot) { $('nm').textContent = '沒點到建築'; return; }

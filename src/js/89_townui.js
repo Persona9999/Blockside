@@ -534,15 +534,15 @@ function tuiPageTell() {
 }
 /** ?tui=@host 開機（90_main.js；檔頭）：收那一頁的回覆、開 tab 那一頁；Esc、點面板外面 ⇒ 關。 */
 function tuiBoot() {
-  window.addEventListener('message', function (e) { var d = e.data; if (e.source === TUI_HOST && d && d.bsmap === 'townUI') tuiGot(d); });
-  window.addEventListener('keydown', function (e) {
+  bsListen('win', 'message', function (e) { var d = e.data; if (e.source === TUI_HOST && d && d.bsmap === 'townUI') tuiGot(d); });
+  bsListen('win', 'keydown', function (e) {
     if (e.key === 'Escape') {
       if (uiPanelEsc()) e.preventDefault();
     }
   });
-  document.addEventListener('pointerdown', function (e) {
-    var P = $('tuiP'); if (TUI.open && P && !P.contains(e.target)) tuiClose();
-    var DP = $('tuiDP'), DK = $('tuiDK'); if (TUID.open && DP && !DP.contains(e.target) && (!DK || !DK.contains(e.target))) tuiDistClose();
+  bsListen('doc', 'pointerdown', function (e) {
+    var P = $('tuiP'); if (TUI.open && P && !P.contains(bsTarget(e))) tuiClose();
+    var DP = $('tuiDP'), DK = $('tuiDK'); if (TUID.open && DP && !DP.contains(bsTarget(e)) && (!DK || !DK.contains(bsTarget(e)))) tuiDistClose();
   });
   var t = Q.get('tab'); tuiToggle(TUI_TABS.some(function (x) { return x.k === t; }) ? t : 'sum');
 }

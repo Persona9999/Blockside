@@ -58,7 +58,7 @@ function cfgKit(p, o) {
 function cfgAdm(o) {
   $(o.panel).classList.add('admin');
   var out = $(o.out), wait = null;
-  window.addEventListener('message', function (ev) { if (ev.origin !== location.origin || !ev.data || ev.data.kind !== 'cb-admdef-r' || !wait) return; var w = wait; wait = null; out.textContent = (ev.data.log || []).join('\n'); w(ev.data); });
+  bsListen('win', 'message', function (ev) { if (ev.origin !== location.origin || !ev.data || ev.data.kind !== 'cb-admdef-r' || !wait) return; var w = wait; wait = null; out.textContent = (ev.data.log || []).join('\n'); w(ev.data); });
   function post(op, fields) {
     var ad = window.opener; if (!ad || ad.closed) { out.textContent = '⚠ 找不到設定後台：要從設定後台的「' + o.from + '」開這一頁'; return Promise.resolve({ ok: false }); }
     out.textContent = '…（設定後台處理中；重建要十幾秒）'; ad.postMessage(Object.assign({ kind: 'cb-admdef', op: op }, fields || {}), location.origin);

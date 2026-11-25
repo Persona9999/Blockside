@@ -100,7 +100,7 @@ function teleDraw(sh) {
   });
   function cancel(){teleCancel();if(SHIPS[PLAYER_I])teleDraw(SHIPS[PLAYER_I]);}
   ['pointercancel','lostpointercapture'].forEach(function(name){wheel.addEventListener(name,cancel);});
-  window.addEventListener('blur',cancel);
+  bsListen('win', 'blur',cancel);
   wheel.addEventListener('click', function(e){
     if(e.detail!==0 || (e.isTrusted===false && performance.now()<TELE_UI.suppressClickUntil))return;
     var b=e.target.closest('[data-tele-i]');

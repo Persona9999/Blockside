@@ -167,7 +167,7 @@ function bedBoot() {
     mid: 0, cm: {}, mpend: {}, mslot: null, lv: null, mloads: 0,                     // mid：外圈的中等塊（@host 的海域帶 area.mid 才開；見 bedFocus、bedWait）
     win: 0, winP: null, winErr: 0, wins: 0, winMs: 0,                                // win：海域跟著旗艦走（@host 的海域帶 area.win 才開；見 bedWinAsk）
     inq: host && BED_SLICE ? [] : null, pumpAt: 0, pumped: 0, pumpMax: 0 };          // inq：收塊排隊（檔頭；bedPump）
-  if (host) { window.addEventListener('message', bedHostMsg); bedHostBack(host); }
+  if (host) { bsListen('win', 'message', bedHostMsg); bedHostBack(host); }
   if (BED.inq) setInterval(bedPumpLate, 250);
   return bedGet(null).then(function () {
     var A = BED.gotArea; if (!A) throw new Error((host ? '外面那一頁' : 'maps/' + id + '/area.js') + ' 沒有給 BSMAP.area');

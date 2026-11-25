@@ -29,7 +29,7 @@ function frzPlace() {
   var fr = f.getBoundingClientRect(), tr = t.getBoundingClientRect();
   if (fr.top <= tr.top + 1 && fr.bottom > tr.top) t.style.top = (f.offsetTop + f.offsetHeight + 6) + 'px';
 }
-window.addEventListener('resize', function () { if (FRZ_ON) frzPlace(); });
+bsListen('win', 'resize', function () { if (FRZ_ON) frzPlace(); });
 /** 開著的觀察模式（透視、剖面、甲板）寫成一行；都沒開 ⇒ ''。 */
 function obsText() {
   var a = [];
@@ -80,7 +80,7 @@ function floodPanel() {
   // 剖面等下一格再畫：⛔ 剛換掉 innerHTML 就量 clientWidth ⇒ 第一次打開量到 24 px（量過），剖面縮成一小塊
   requestAnimationFrame(function () { if (FLX) SHIPS.forEach(function (sh, k) { if (sh.fl && !sh.broken && $('fpS' + k)) { fpDraw($('fpS' + k), sh, 0); fpDraw($('fpT' + k), sh, 1); } }); });
 }
-window.addEventListener('resize', function () { if (FLX) floodPanel(); });
+bsListen('win', 'resize', function () { if (FLX) floodPanel(); });
 /** 艙內的水的顏色（Tim 2026-10-18「進水顏色深淺差異可以更明顯一點(而且可以有顏色變化 不單純是alpha變化)」）：f ＝ 0～1
  *  ⇒ 淺青 → 天藍 → 深藍 → 深靛紫，顏色與不透明度一起變（FL_RAMP 四個點之間線性內插）。詳細資訊的進水圖（61_hud.js gmapFlood：照水深）、進水細節頁的剖面同一套。 */
 var FL_RAMP = [[0, 150, 235, 255, 0.55], [0.3, 60, 180, 240, 0.75], [0.6, 30, 100, 220, 0.88], [1, 70, 25, 150, 0.95]];

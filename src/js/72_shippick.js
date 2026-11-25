@@ -116,7 +116,7 @@ function spkShow() {
 }
 $('spkX').onclick = function () { spkClose(); };
 $('spk').onclick = function (e) { if (e.target === $('spk')) spkClose(); };   // 點彈窗外面關
-window.addEventListener('keydown', function (e) { if (e.key === 'Escape' && $('spk').classList.contains('on')) { e.preventDefault(); e.stopImmediatePropagation(); spkClose(); } }, true);   // 捕獲階段：先於主選單的 Esc（關子頁）
+bsListen('win', 'keydown', function (e) { if (e.key === 'Escape' && $('spk').classList.contains('on')) { e.preventDefault(); e.stopImmediatePropagation(); spkClose(); } }, true);   // 捕獲階段：先於主選單的 Esc（關子頁）
 // ───────────────────────── ?pick=@host：只開選船彈窗（Blocksail 地球儀的「選船」；Tim 2026-10-20「加上一個選船欄位(可以直接開原本的選船介面) 只要能選一艘就好 航海時使用選取的船」） ─────────────────────────
 // 地球儀把這一頁開在 iframe 裡（?pick=@host&cur=<現在那一型>）⇒ 不開主選單、不載編成、不跑畫面迴圈（90_main.js），只開這個彈窗；頁面透明（template.html html.pickonly）。
 //   這一頁 ⇒ 外面那一頁（{ bspick: … }）：'ready' 彈窗開好了；'measuring' { id, name } 選了、在載那一型；'picked' { id, name, vox（整艘幾格：Blocksail 修船費照比例，TASK-1260）, knots, draft, loa, play, img, imgU, imgV, imgM } 量好了（img ＝ 俯視圖 PNG 的 data URL）；'cancel' 沒選就關了；'error' { id, msg }。
@@ -145,7 +145,7 @@ function pickBoot() {
   function open(o) { spkOpen({ title: o.title || '選船', cur: o.cur || '', same: true, pick: pickMeasure, onClose: function (id) { if (!id) pickPost('cancel'); } }); pickPost('ready'); }
   // 常駐（TASK-1271；Tim 2026-11-11「選船也常駐(因為航海也可以選船)」）：外面那一頁選完、取消之後把這一頁藏起來留著，再選船送 { bspick: 'open', cur, title } ⇒ 再開一次
   //   （船型解析過的留在 HULLT、縮圖素材不再載）；&wait=1 ⇒ 先不開，等第一次 'open'（外面那一頁閒著時先在背景開好）
-  window.addEventListener('message', function (e) { var d = e.data; if (d && d.bspick === 'open' && e.source === PICK_HOST) open(d); });
+  bsListen('win', 'message', function (e) { var d = e.data; if (d && d.bspick === 'open' && e.source === PICK_HOST) open(d); });
   if (Q.get('wait') === '1') { pickPost('waiting'); return; }
   open({ title: Q.get('title'), cur: Q.get('cur') });
 }

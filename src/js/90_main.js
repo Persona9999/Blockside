@@ -73,6 +73,8 @@ if (DEBUG) window.__game = {
   shadowCover: function (nx, ny) { render(); return shadowCover(nx, ny); },   // 陰影圖用在哪（60_render.js shadowCover）：每一段落在畫面裡幾成、用到幾成、斷開幾點、重疊幾層
   cut: function (o) { if (o) for (var k in o) CUTV[k] = o[k]; render(); return CUTV; },     // 剖面與隱藏甲板（74_cutaway.js）：{ half, deck }
   prefs: function (p) { if (p) prefsApply(p); return prefsSnap(); },   // 存檔：套進去（有給）⇒ 現在跟預設不一樣的那幾項（69_prefs.js；?prefs=0 時不碰瀏覽器的存檔）
+  listen: function (off) { if (off) bsUnlistenAll(); return BS_INPUT.list.map(function (x) { return (x.t === BS_DOC ? 'doc:' : 'win:') + x.type; }); },   // 輸入總管掛著的監聽（00_mount.js；TASK-1271）：off ⇒ 全部拿掉（卸載）再回清單
+  input: function (on) { if (on !== undefined) BS_INPUT.on = !!on; return BS_INPUT.on; },   // 鍵盤、滑鼠、觸控送不送給核心（BS_INPUT.on；跟別的頁面同一頁時外面切換）
   ev: function (t, off) { if (off) return evOff(t); var o = {}; for (var k in EV_SUB) if (!t || k === t) o[k] = EV_SUB[k].length; return o; },   // 事件（00_events.js）：每個事件幾個訂閱；off ⇒ 拿掉事件 t 的訂閱（反向對照：拿掉 note ⇒ 照打、沒有廣播）
   /** 砲門（TASK-0719；62_ports.js）：ports(i) ⇒ 第 i 艘每片蓋板的 s（0 關、1 開／砲縮著、2 砲推出去）、want、gone、house…；portsForce(i, 0｜1｜null) ⇒ 寫 sh.portWant（截圖、宣傳片用；null ⇒ 照規則）。 */
   ports: function (i) { var sh = SHIPS[i || 0]; if (sh && sh.ports === undefined && GFX.port) sh.ports = portsBuild(sh); return portsDbg(sh); },
@@ -630,9 +632,9 @@ hullSay = function (s) { evEmit('boot:hull', '解析' + s); };   // 解析中：
 //   ⛔ 載入時讀網址、之後又會變的那幾項，要在 sceneApply 裡照「載入的先後」重算一次：漏一項 ⇒ 那一項停在待命網址的值（Blocksail TASK-1271 的換場對拍：同一份網址從網址開機與換場，比開場的狀態）。
 var SCENE_WAIT = Q.get('wait') === '1' && Q.get('map') === '@host' && !HEADLESS && !PICK_HOST && !TUI_HOST && window.parent !== window;
 var SCENE_GO = !SCENE_WAIT ? Promise.resolve() : new Promise(function (res) {
-  window.addEventListener('message', function on(e) {
+  bsListen('win', 'message', function on(e) {
     var d = e.data; if (!d || d.bsmap !== 'scene' || e.source !== window.parent) return;
-    window.removeEventListener('message', on); sceneApply(d); res();
+    bsUnlisten('win', 'message', on); sceneApply(d); res();
   });
 });
 /** 換場：網址換成這一場的、照載入的先後重算讀網址的那幾項（04_state → 04_modes → 05_hull → 08_weather → 52_fleet → 57_core → 69_prefs 存檔 → 87_townbuild）。 */

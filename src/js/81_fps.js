@@ -525,13 +525,13 @@ $('fpLampT').onclick = function () { FP.lamp = !FP.lamp; fpUI(); };   // 提燈�
 //   · 按住 Alt ⇒ 先放開、遊戲不停（像 Minecraft 的 Mouse Unlock 模組），點回畫面再抓。P 停格、O 設定也會放開。
 //   · 沒抓的時候照舊按住拖曳轉頭（71_input.js）；只認滑鼠（pointerType mouse），觸控不受影響。抓住時游標的 client 座標不動 ⇒ 拖曳那條算出 0，不會轉兩次。
 var FP_MOUSE_K = 0.52, FP_ESC_T = 0, FP_SPIKE = 250;   // FP_SPIKE：抓住滑鼠時一次超過這麼多 px 的位移當成假的（71_ctrl.js look；TASK-0700）
-function fpLocked() { return document.pointerLockElement === cv; }
+function fpLocked() { return BS_ROOT.pointerLockElement === cv; }
 function fpLock() { if (!fpLocked() && cv.requestPointerLock) { try { var r = cv.requestPointerLock(); if (r && r.catch) r.catch(function () { }); } catch (x) { } } }
 function fpUnlock() { if (fpLocked() && document.exitPointerLock) { FP.unlockMine = true; document.exitPointerLock(); } }
 /** 71_input.js 的 Esc 先問這裡：剛因為 Esc 放開、已經替它打開了設定 ⇒ 吃掉（⛔ 不吃 ⇒ 同一下 Esc 又把設定關掉）。 */
 function fpEscEaten() { return performance.now() - FP_ESC_T < 400; }
 // 抓住滑鼠（左鍵按下）、抓住時的移動 ⇒ 轉頭：71_ctrl.js 的 fp 控制器（down／look）。
-document.addEventListener('pointerlockchange', function () {
+bsListen('doc', 'pointerlockchange', function () {
   var on = fpLocked(); $('stage').classList.toggle('fpLock', on);
   if (on) return;
   if (FP.unlockMine) { FP.unlockMine = false; return; }                // 自己放的（Alt、停格、離開第一人稱）
@@ -549,7 +549,7 @@ $('fpClimb').onclick = function () { fpClimbGo(); };
 $('fpJump').addEventListener('pointerdown', function (e) { e.preventDefault(); fpJump(); });
 $('fpFol').onclick = function () { fpFollow(false); };
 $('fpNext').onclick = function () { fpFollow(true); };
-window.addEventListener('blur', fpStop);
+bsListen('win', 'blur', fpStop);
 // 虛擬搖桿（Tim 2026-10-16「移動要改為虛擬搖桿(同時支援WASD 但不用顯示按鍵)」「旋轉視角是否也可以用虛擬類比控制」）：按住拖 ⇒ 推到邊 ＝ 全速、推一半 ＝ 半速；
 //   中間一小圈（12%）不動（手指放上去不會溜）；放開、取消 ⇒ 回中間（joyBind）：
 //   左下 #fpJoy 走路 ⇒ FP.joy ＝ [往前, 往右]（跟鍵盤的合起來夾到 1）。

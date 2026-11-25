@@ -287,7 +287,7 @@ function prefsLoad() {
   $('autoF').classList.toggle('on', AUTOFIRE);
   if (!PREFS.write) return;
   setInterval(prefsSave, 1000);
-  window.addEventListener('pagehide', prefsSave);
-  document.addEventListener('visibilitychange', function () { if (document.hidden) prefsSave(); });
+  bsListen('win', 'pagehide', prefsSave);
+  bsListen('doc', 'visibilitychange', function () { if (document.hidden) prefsSave(); });
 }
 prefsLoad();

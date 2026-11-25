@@ -142,7 +142,7 @@ function flabFinish(M) {
 //   __game.flab.done() ⇒ 打完了 ⇒ { id, res（flabResult）, tune（實際套上的覆寫，回讀用）}，還沒 ⇒ null。打完就把 TUNE 清回 null（遊戲本體永遠是 null）。
 //   出錯 ⇒ window.__flabErr（tune.py 讀到就重開這個工作者、那份工作重發）。
 function flabJob(j) {
-  if (!FLAB.work) { FLAB.work = { n: 0 }; window.addEventListener('error', function (e) { window.__flabErr = String(e.message) + ' @' + e.lineno; }); }
+  if (!FLAB.work) { FLAB.work = { n: 0 }; bsListen('win', 'error', function (e) { window.__flabErr = String(e.message) + ' @' + e.lineno; }); }
   FLAB.work.job = j; FLAB.work.done = null;
   TUNE.blue = tuneClean(j.tune && j.tune.blue); TUNE.red = tuneClean(j.tune && j.tune.red);
   FLAB.speed = Infinity;

@@ -159,6 +159,6 @@ function flagUIShow() {
   });
 }
 evOn('flags:set', flagUIShow);                                        // 換了旗（選單、__game.flags）⇒ 重畫（77_colours.js flagSet 發）
-window.addEventListener('pointerdown', function (e) { if (flagPopOn() && !(e.target.closest && e.target.closest('.flagb, .flagdd'))) flagPop(-1); }, true);   // 點面板外面 ⇒ 關
-window.addEventListener('keydown', function (e) { if (e.key === 'Escape' && flagPopOn()) { e.preventDefault(); e.stopImmediatePropagation(); flagPop(-1); } }, true);   // 捕獲階段：先於主選單的 Esc（關子頁）
+bsListen('win', 'pointerdown', function (e) { if (flagPopOn() && !(bsTarget(e).closest && bsTarget(e).closest('.flagb, .flagdd'))) flagPop(-1); }, true);   // 點面板外面 ⇒ 關
+bsListen('win', 'keydown', function (e) { if (e.key === 'Escape' && flagPopOn()) { e.preventDefault(); e.stopImmediatePropagation(); flagPop(-1); } }, true);   // 捕獲階段：先於主選單的 Esc（關子頁）
 setTimeout(flagUI, 0);                                                 // 核心 77_colours.js 在本檔後面載（預設旗、存檔解在那邊）⇒ 整包跑完才畫

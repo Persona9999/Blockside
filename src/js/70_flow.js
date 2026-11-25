@@ -58,7 +58,7 @@ function startSteps() {
   return [function () {
     initAudio(); if (AC && AC.state === 'suspended') AC.resume();
     uiAway(); $('end').className = '';
-    if (document.activeElement && document.activeElement.blur) document.activeElement.blur();   // 不然空白鍵會再按一次「開戰」
+    if (BS_ROOT.activeElement && BS_ROOT.activeElement.blur) BS_ROOT.activeElement.blur();   // 不然空白鍵會再按一次「開戰」
   }].concat(resetSteps(), [function () {
     RUNNING = true;
     var seenT = {}; SHIPS.forEach(function (sh) { if (!seenT[sh.T.key || sh.T.id]) { seenT[sh.T.key || sh.T.id] = 1; crewShortNote(sh); } });   // 船員站不下、換裝沒換成：每一型（每一份換裝）報一次

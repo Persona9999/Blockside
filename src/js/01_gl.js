@@ -87,11 +87,11 @@ function errClip(t, done) {
 function errMail() {
   var body = errBody(), U = errMailUrl(body), hint = $('errHint'), left = false;
   function onBlur() { left = true; }
-  window.addEventListener('blur', onBlur);
+  bsListen('win', 'blur', onBlur);
   errClip(body, function (ok) {
     location.href = U[0];
     setTimeout(function () {
-      window.removeEventListener('blur', onBlur);
+      bsUnlisten('win', 'blur', onBlur);
       hint.hidden = false;
       hint.textContent = left ? '已交給郵件程式' + (U[1] ? '（信裡是短版，完整內容' + (ok ? '已複製，請貼進信裡' : '複製不了，請按「複製內容」') + '）' : '') + '；在郵件程式裡按傳送才會寄出。'
         : '沒跳出郵件程式？（這台電腦可能沒設定預設的郵件程式）⇒ ' + (ok ? '完整內容已複製' : '請先按「複製內容」') + '，貼到信裡寄到 ' + ERR_MAIL + '，或貼到 Discord。';
@@ -137,8 +137,8 @@ $('errRepB').onclick = function () { $('errRep').hidden = false; $('errSend').hi
 $('errSend').onclick = errMail; $('errCopy').onclick = errCopy; $('errPost').onclick = errPost;
 $('gsRep').onclick = function () { errShow(null); };   // 遊戲內設定（⚙，暫停中）「問題回報」：手動回報（沒有錯誤訊息）；主選單的「問題回報…」由外殼接（71_input.js）
 function errAuto(m) { m = String(m || ''); if (!m || m === 'Script error.' || /ResizeObserver/.test(m) || ERR_SEEN[m] || $('err').style.display === 'flex') return; errShow(m); }   // 跨網域的「Script error.」、ResizeObserver 的警告不跳；開著的不換掉（glFail 之後的 throw 不蓋掉那一句好懂的）
-window.addEventListener('error', function (ev) { errAuto(ev.error && ev.error.stack ? ev.error.message + '\n' + ev.error.stack : ev.message); });
-window.addEventListener('unhandledrejection', function (ev) { var r = ev.reason; errAuto(r && r.stack ? (r.message || r) + '\n' + r.stack : r); });
+bsListen('win', 'error', function (ev) { errAuto(ev.error && ev.error.stack ? ev.error.message + '\n' + ev.error.stack : ev.message); });
+bsListen('win', 'unhandledrejection', function (ev) { var r = ev.reason; errAuto(r && r.stack ? (r.message || r) + '\n' + r.stack : r); });
 if (!gl) { glFail('這個瀏覽器沒有 WebGL2，畫不出來。'); throw new Error('no WebGL2'); }   // 拆檔後這裡是閉包的頂層：throw ＝ 原本的 return（停下來）
 
 var P = {};

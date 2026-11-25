@@ -14,7 +14,7 @@ function keysUI(page) {
     kind: 'keys', file: 'blockside_keys', expSay: '三個模式整份', exp: function () { return { keys: keyExport().keys }; },
     imp: keyImport, what: '鍵位', unit: '個鍵', show: keysShow
   });
-  window.addEventListener('keydown', function (e) {                      // 等新鍵：開著這一頁、按了「改」才收（捕獲階段：⛔ 讓遊戲的鍵盤處理先吃到）
+  bsListen('win', 'keydown', function (e) {                      // 等新鍵：開著這一頁、按了「改」才收（捕獲階段：⛔ 讓遊戲的鍵盤處理先吃到）
     if (!KEY_WAIT || $('keysp').style.display === 'none') return;
     e.preventDefault(); e.stopImmediatePropagation();                   // ⛔ stopPropagation 擋不住同掛在 window 上的（71_input.js 的 Esc 關頁、遊戲的鍵）
     var k = e.code === 'Space' ? ' ' : keyNorm(e.key), id = KEY_WAIT;

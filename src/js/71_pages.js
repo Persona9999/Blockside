@@ -241,12 +241,12 @@ function sliders() {
   };
   $('roomEdZ').onclick = function () { var E = roomEdCur(); if (!E) return; roomSet(E.name, { type: E.pl.type, items: [] }); RE.msg = '清空了'; show(); };
   $('roomEdX').onclick = $('roomEdX2').onclick = function () { RE.i = -1; show(); };
-  window.addEventListener('keydown', function (ev) { if (ev.key === 'Escape' && RE.i >= 0) { RE.i = -1; show(); } });
-  window.addEventListener('resize', function () { if (RE.i >= 0) roomEdShow(); });
+  bsListen('win', 'keydown', function (ev) { if (ev.key === 'Escape' && RE.i >= 0) { RE.i = -1; show(); } });
+  bsListen('win', 'resize', function () { if (RE.i >= 0) roomEdShow(); });
   // 後台模式（?admin=rooms）：只開船隻配置頁的甲板與艙房；後台送來設定檔的預設（{ kind:'cb-defaults', rooms: { 船型: ships[].rooms } }）⇒ 換掉預設、清掉這裡改的
   if (ADMIN_ROOMS) {
     $('shipp').classList.add('admin');
-    window.addEventListener('message', function (ev) {
+    bsListen('win', 'message', function (ev) {
       if (ev.origin !== location.origin || !ev.data || ev.data.kind !== 'cb-defaults') return;
       HULL_KNOWN.forEach(function (h) { h.rooms = ev.data.rooms[h.id] || undefined; });
       Object.keys(SHIP_ROOMS).forEach(function (k) { delete SHIP_ROOMS[k]; }); ADM_SENT = {};
@@ -490,7 +490,7 @@ function sliders() {
     STRIKE.cas = LIM.cas[2]; STRIKE.guns = STRIKE.masts = STRIKE.officers = false; CAP_SET = ['random', 'random'];
     put(); show(); prefsReset();                         // 存檔跟著清（69_prefs.js：只剩主選單的選擇）
   };
-  window.addEventListener('keydown', function (e) { if (!RUNNING && e.key === 'Escape' && ($('detail').style.display !== 'none' || gfxPanelOn() || $('phxp').style.display !== 'none' || $('shipp').style.display !== 'none' || $('gunp').style.display !== 'none' || $('furnp').style.display !== 'none' || ($('keysp').style.display !== 'none' && !KEY_WAIT))) page(''); });   // 鍵位設定頁正在等新鍵 ⇒ Esc 是取消（66_keys.js），不關頁
+  bsListen('win', 'keydown', function (e) { if (!RUNNING && e.key === 'Escape' && ($('detail').style.display !== 'none' || gfxPanelOn() || $('phxp').style.display !== 'none' || $('shipp').style.display !== 'none' || $('gunp').style.display !== 'none' || $('furnp').style.display !== 'none' || ($('keysp').style.display !== 'none' && !KEY_WAIT))) page(''); });   // 鍵位設定頁正在等新鍵 ⇒ Esc 是取消（66_keys.js），不關頁
   put(); if (START_Q) yieldUI().then(show); else show();                // ?start=1：主選單的說明文字與船卡（show 約 0.03 s）晚一個工作再畫（不擠在載入頁面那一段）
   SLIDERS_SHOW = function () { put(); show(); };
   evOn('hullReload', function () { put(); show(); }, 0, true);           // 換裝改了、那一型重載好了（38_fit.js fitDirty）⇒ 卡片照新的船型畫

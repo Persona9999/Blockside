@@ -3,7 +3,7 @@
 //   跟 parent 講話、往 window 寫名字。照作用域判（參數、var／let／const、函式名、catch 都算那一層；整個包的頂層名字也算）⇒ 區域同名的不算。
 // 用法：node --expose-internals js_page.cjs <檔1> <檔2> …（照包裡的順序）⇒ 印一行 JSON [[檔, 行, 類, 字], …]
 //   類：query（document 查元素）、mount（document.body／head／documentElement）、listen（window／document 的監聽、on* 指派）、
-//       url（location、history、document.URL／referrer）、view（innerWidth／innerHeight）、focus（activeElement、全螢幕、pointer lock、hidden、title）、
+//       url（location、history、document.URL／referrer）、view（innerWidth／innerHeight）、focus（activeElement、pointerLockElement、title）、
 //       host（parent／top／opener）、global（window.<名字> 讀寫：跟宿主頁共用同一個命名空間）
 'use strict';
 const fs = require('fs');
@@ -38,7 +38,8 @@ function declared(body, set) {
 const DOC_Q = new Set(['getElementById', 'querySelector', 'querySelectorAll', 'getElementsByClassName', 'getElementsByTagName', 'getElementsByName', 'elementFromPoint', 'elementsFromPoint']);
 const DOC_M = new Set(['body', 'head', 'documentElement']);
 const DOC_U = new Set(['URL', 'referrer', 'location', 'baseURI']);
-const DOC_F = new Set(['activeElement', 'fullscreenElement', 'exitFullscreen', 'pointerLockElement', 'exitPointerLock', 'hidden', 'visibilityState', 'title', 'hasFocus']);
+// 焦點：shadow root 裡的元素從 document 問會被換成宿主元素 ⇒ 要問 BS_ROOT（activeElement、pointerLockElement）；整頁的狀態（全螢幕、hidden、visibilityState、exitPointerLock）不算
+const DOC_F = new Set(['activeElement', 'pointerLockElement', 'title', 'hasFocus']);
 const LISTEN = new Set(['addEventListener', 'removeEventListener']);
 const VIEW = new Set(['innerWidth', 'innerHeight']);
 const HOST = new Set(['parent', 'top', 'opener', 'frameElement']);
