@@ -638,7 +638,7 @@ function townRisePanel() {
   el.innerHTML = '<div style="font-weight:bold">建造演出（TASK-0908）</div><div data-k="nm">還沒選建築</div>' +
     '<input data-k="p" type="range" min="0" max="1000" value="1000" style="width:100%">' +
     '<div><button data-k="pick">選一棟</button> <button data-k="play">▶ 播放</button> <button data-k="stop">■ 停</button> <span data-k="pct"></span></div>';
-  document.body.appendChild(el);
+  BS_BODY.appendChild(el);
   function $(k) { return el.querySelector('[data-k="' + k + '"]'); }
   $('pick').onclick = function () { RISE.picking = true; $('nm').textContent = '點畫面上的一棟建築…'; };
   $('play').onclick = function () { var s = RISE.demo; if (!s) return; if (s.p >= 1) townRiseSet(s, 0); s.p0 = s.p; s.t0 = performance.now(); s.play = RISE.dur * (1 - s.p0) || RISE.dur; };

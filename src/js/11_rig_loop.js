@@ -108,7 +108,7 @@ function floopNeed() {
       FLOOP.data = r.data; FLOOP.stat = r.stat; floopUpload(); FLOOP.mainMs += performance.now() - t2; FLOOP.fms = performance.now() - FLOOP.t0;
     }).catch(fail);
   }
-  try { var s = document.createElement('script'); s.src = ((window.BS_SHELL && window.BS_SHELL.ships) || '') + 'ships/flagloop.js'; s.onload = got; s.onerror = function () { fail('載不到 ' + s.src); }; document.head.appendChild(s); }
+  try { var s = document.createElement('script'); s.src = ((window.BS_SHELL && window.BS_SHELL.ships) || '') + 'ships/flagloop.js'; s.onload = got; s.onerror = function () { fail('載不到 ' + s.src); }; BS_HEAD.appendChild(s); }
   catch (e) { fail(e); }
 }
 /** ships/flagloop.js 的資料解開之後（src/flagloop_bake.cjs 寫的）：檔頭的版面要跟這一版的常數一樣；int16 × 1/k、每一檔第 0 格之後每格加回上一格。 */

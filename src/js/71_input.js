@@ -99,7 +99,7 @@ window.addEventListener('keydown', function (e) {
   ctrlDo('key', k, true, e);                                         // 第一人稱（走、爬…；P 停格、O 設定沒吃 ⇒ 往下）→ 建造（快捷欄、轉、拆、放…）→ 海戰的動作（71_ctrl.js）
 });
 /** 鍵盤按著的時候，畫面上對應的按鈕也亮成按下的顏色（Tim 2026-10-14；跟手指按住同一個 .down）；方向鍵照 A／D／W／S 的按鈕。 */
-function kbLit(k, on) { var a = keyAct('battle', k); if (!a) return; [].forEach.call(document.querySelectorAll('.kb[data-act]'), function (b) { if (b.dataset.act === a) b.classList.toggle('down', on); }); }   // 方向鍵照它對應的動作（66_keys.js KEY_FIX）
+function kbLit(k, on) { var a = keyAct('battle', k); if (!a) return; [].forEach.call(bsAll('.kb[data-act]'), function (b) { if (b.dataset.act === a) b.classList.toggle('down', on); }); }   // 方向鍵照它對應的動作（66_keys.js KEY_FIX）
 /** 一個鍵（鍵盤）⇒ 海戰的動作（66_keys.js keyAct：照現在的鍵位；方向鍵固定 ＝ 打舵、帆）。 */
 function doKey(k, repeat) { var a = keyAct('battle', k); if (a) doAct(a, repeat); }
 /** 一個動作（鍵盤與畫面上的圓鈕共用 ⇒ 手機也能玩；動作表在 66_keys.js KEY_ACTS）。打舵、帆是「按住」：這裡只按下，放開走 actUp。 */
@@ -158,7 +158,7 @@ function doAct(a, repeat) {
 function keyUp(k) { var a = keyAct('battle', k); if (a) actUp(a); }
 function actUp(a) { if (a === 'ruddL') KEYS.l = false; if (a === 'ruddR') KEYS.r = false; if (KEYS.sw && (a === 'sailUp' ? 1 : a === 'sailDn' ? -1 : 0) === KEYS.sw.d) KEYS.sw = null; }
 window.addEventListener('keyup', function (e) { var k = e.key.toLowerCase(); if (e.code === 'Space') k = ' '; ctrlDo('key', k, false, e); });   // fpKey：第一人稱的鍵放開（沒開 ⇒ 只清掉自己按著的、照舊往下走）
-window.addEventListener('blur', function () { KEYS.l = KEYS.r = false; KEYS.sw = null; [].forEach.call(document.querySelectorAll('.kb.down'), function (b) { b.classList.remove('down'); }); });   // 切走視窗 ⇒ 收不到 keyup，按下的顏色一起清掉
+window.addEventListener('blur', function () { KEYS.l = KEYS.r = false; KEYS.sw = null; [].forEach.call(bsAll('.kb.down'), function (b) { b.classList.remove('down'); }); });   // 切走視窗 ⇒ 收不到 keyup，按下的顏色一起清掉
 // iPhone 連點兩下放大（Tim 2026-10-15：「連點角落兩下還是會放大，按控帆按鈕太快就觸發」—— 根上的 touch-action:manipulation iOS 不一定照做）：
 // 兩次手指放開相隔 < 350 ms ⇒ 取消第二次的預設動作（＝雙擊縮放）。取消之後瀏覽器不會補 click ⇒ 一般按鈕自己補一個；
 // 按住型（data-hold：舵、帆）走 pointer 事件不受影響；輸入框照舊（要能點兩下選字）；遊戲畫面本來就是 touch-action:none（自己處理手勢、不補 click）。
@@ -170,7 +170,7 @@ document.addEventListener('touchend', function (e) {
   if (!t.closest('[data-hold]')) { var c = e.changedTouches[0]; t.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window, clientX: c ? c.clientX : 0, clientY: c ? c.clientY : 0 })); }
 }, { passive: false });
 // 畫面上的圓鈕（下方控制列 .kb、說明裡的 kbd[data-act]）：點 ＝ 做那個海戰動作（鍵照 66_keys.js keyPaint 寫上去）；data-hold 的（打舵、帆）按住才算
-[].forEach.call(document.querySelectorAll('[data-act]'), function (b) {
+[].forEach.call(bsAll('[data-act]'), function (b) {
   var k = b.dataset.act;
   if (b.dataset.hold) {
     b.addEventListener('pointerdown', function (e) { e.preventDefault(); b.classList.add('down'); doAct(k, false); try { b.setPointerCapture(e.pointerId); } catch (x) { } });   // 手指滑出按鈕也算按著，放開才鬆舵
@@ -182,7 +182,7 @@ var SAIL_NAMES = { auto: '自動航行', manual: '手動操舵（{AD} 打舵）'
 function setSailMode(m) {
   SAIL = m; KEYS.l = KEYS.r = false;
   if (m === 'auto' && SHIPS[PLAYER_I]) SHIPS[PLAYER_I].sailHand = SHIPS[PLAYER_I].teleHand = false;   // 切回自動駕駛 ⇒ 帆、俥鐘也交回艦長（54_helm.js）
-  [].forEach.call(document.querySelectorAll('[data-s]'), function (x) { x.classList.toggle('on', x.dataset.s === SAIL); }); sailLabel();
+  [].forEach.call(bsAll('[data-s]'), function (x) { x.classList.toggle('on', x.dataset.s === SAIL); }); sailLabel();
   var noA = RUNNING && SHIPS.length && anchorsOf(SHIPS[PLAYER_I]).noAnchor;
   if (RUNNING && SHIPS.length) note(SHIPS[PLAYER_I], ((m === 'off' && noA ? '停船（這艘沒有錨：帆與引擎不出力、船慢慢停下）' : m === 'off' && anchorsOf(SHIPS[PLAYER_I]).single ? '拋錨（單錨；{AD} 繞錨轉）' : SAIL_NAMES[m]) + (noA ? '（' + keyName('sailMode') + ' 自動／手動切換、' + keyName('ancAll') + ' 停船、再按一次開船）' : '（' + keyName('sailMode') + ' 自動／手動切換、' + keyName('ancAll') + ' 拋錨、再按一次起錨）')).replace(/\{AD\}/g, keyName('ruddL') + '／' + keyName('ruddR')));   // 單錨的船（TASK-0635）
 }
@@ -223,11 +223,11 @@ function gfxOvOpen() {
   var wasPaused = GSET.open ? GSET.paused : PAUSED;
   uiPanelWillOpen('gfxov');
   GFXOV.paused = wasPaused; flowPause(true);
-  GFXOV.open = true; document.body.classList.add('gfxov'); gfxPanel(true); gfxShow();
+  GFXOV.open = true; BS_BODY.classList.add('gfxov'); gfxPanel(true); gfxShow();
 }
 function gfxOvClose(reopenSet) {
   if (!GFXOV.open) return;
-  GFXOV.open = false; gfxPanel(false); document.body.classList.remove('gfxov');
+  GFXOV.open = false; gfxPanel(false); BS_BODY.classList.remove('gfxov');
   prefsSaveOnly(PREF_GFX); flowPause(GFXOV.paused);
   if (reopenSet !== false) gsetOpen();
 }
@@ -248,7 +248,7 @@ function gfxUI() {
   [].forEach.call(box.querySelectorAll('button[data-k]'), function (b) { b.onclick = function () { GFX[b.dataset.k] = +b.dataset.v; gfxShow(); }; });
   var sr = $('smokeR'); sr.oninput = function () { SMOKE_K = Math.round(+sr.value * 10) / 10; gfxShow(); };
   var dr2 = $('debR'); dr2.oninput = function () { DEB_CAP = Math.round(+dr2.value); gfxShow(); };
-  [].forEach.call(document.querySelectorAll('#gfxPre button'), function (b) { b.onclick = function () { gfxSet(b.dataset.g); gfxShow(); }; });
+  [].forEach.call(bsAll('#gfxPre button'), function (b) { b.onclick = function () { gfxSet(b.dataset.g); gfxShow(); }; });
   var f = $('gfxFps'); f.checked = GFX_FPS; f.onchange = function () { GFX_FPS = f.checked; gfxShow(); };
   $('gfxX').onclick = $('gfxovX').onclick = gfxBack;               // 返回（卡片最下面、右上角）
   shkUI();                                                       // 陰影細項（07_gfx.js SHK_ITEMS）
@@ -256,8 +256,8 @@ function gfxUI() {
 }
 function gfxShow() {
   var lv = gfxLevel();
-  [].forEach.call(document.querySelectorAll('#gfxPre button'), function (b) { b.className = b.dataset.g === lv ? 'on' : ''; });
-  [].forEach.call(document.querySelectorAll('#gfxItems button[data-k]'), function (b) { b.className = GFX[b.dataset.k] === +b.dataset.v ? 'on' : ''; });
+  [].forEach.call(bsAll('#gfxPre button'), function (b) { b.className = b.dataset.g === lv ? 'on' : ''; });
+  [].forEach.call(bsAll('#gfxItems button[data-k]'), function (b) { b.className = GFX[b.dataset.k] === +b.dataset.v ? 'on' : ''; });
   $('debR').value = DEB_CAP; $('debV').textContent = DEB_CAP.toLocaleString() + ' 顆' + (DEB_CAP === DEB_LIM[2] ? '（預設）' : '') + '：超過時先清視野外、遠處、沉在水裡的';
   $('smokeR').value = SMOKE_K; $('smokeV').textContent = SMOKE_K.toFixed(1) + '×' + (SMOKE_K === 1 ? '（原本）' : SMOKE_K === SMOKE_LIM[2] ? '（預設）' : SMOKE_K > 1 ? '（散得快）' : '（留得久）') + '　砲煙約 ' + (2.5 / SMOKE_K).toFixed(1) + '–' + (5.5 / SMOKE_K).toFixed(1) + ' 秒';
   GFX_CATS.forEach(function (c) { var e = $('gcs-' + c.k); if (e) e.textContent = gfxCatSum(c); });   // 每一類收著時看得到的那一行
@@ -286,7 +286,7 @@ function shkFmt(it, v) { return it.val ? (it.opt ? it.opt[it.val.indexOf(v)] : v
 function shkShow() {
   if (!$('shkBar')) return;
   var one = SHK.mode === 0;
-  [].forEach.call(document.querySelectorAll('#shkItems button[data-shk]'), function (b) { b.className = SHK[b.dataset.shk] === +b.dataset.v ? 'on' : ''; });
+  [].forEach.call(bsAll('#shkItems button[data-shk]'), function (b) { b.className = SHK[b.dataset.shk] === +b.dataset.v ? 'on' : ''; });
   SHK_ITEMS.forEach(function (it) {
     var row = $('shkR-' + it.k);
     row.style.display = it.seg && (it.k[0] === 's' ? it.seg >= SHK.count : it.seg > SHK.count) ? 'none' : '';   // 分界 ＝ 段數 − 1 個、交界 ＝ 段數個（跟 Unity 一樣）
@@ -325,8 +325,8 @@ function stageBox() { return $('stage').getBoundingClientRect(); }
 var FS_WHY = FS_APP ? '' : /iPhone|iPod/.test(navigator.userAgent) ? '（iPhone 的 Safari 不給網頁全螢幕 ⇒ 點「分享」→「加入主畫面」，從主畫面的圖示開就沒有網址列；橫放手機）' : '（這裡不給全螢幕）';
 function gsetShow() {
   var gl = gfxLevel(), xl = phxLevel();
-  [].forEach.call(document.querySelectorAll('#gset [data-gg]'), function (b) { b.classList.toggle('on', b.dataset.gg === gl); });
-  [].forEach.call(document.querySelectorAll('#gset [data-gx]'), function (b) { b.classList.toggle('on', b.dataset.gx === xl); });
+  [].forEach.call(bsAll('#gset [data-gg]'), function (b) { b.classList.toggle('on', b.dataset.gg === gl); });
+  [].forEach.call(bsAll('#gset [data-gx]'), function (b) { b.classList.toggle('on', b.dataset.gx === xl); });
   $('gsGfx').textContent = gl === 'custom' ? '（自訂）' : ''; $('gsPhx').textContent = xl === 'custom' ? '（自訂）' : '';
   $('muteT').classList.toggle('on', muted); $('fpsT').classList.toggle('on', GFX_FPS);
   $('slowT').classList.toggle('on', SLOW.on); $('slowCamT').classList.toggle('on', SLOW.cam); $('pslowT').classList.toggle('on', PSLOW.on); $('testT').classList.toggle('on', !!(TLOG && TLOG.off === undefined) || (!TLOG && tlgWanted())); $('testN').textContent = tlgNote(); $('rigT').classList.toggle('on', !!(RLOG && RLOG.off === undefined) || (!RLOG && rlgWanted())); $('rigN').textContent = rlgNote();   // 測試模式（83_testlog.js） $('boomB').classList.toggle('dis', !canSelfDestruct());
@@ -363,8 +363,8 @@ function fsToggle() {
 }
 $('fullT').onclick = fsToggle;
 ['fullscreenchange', 'webkitfullscreenchange'].forEach(function (ev) { document.addEventListener(ev, gsetShow); });   // 進出（含 Esc 退出）⇒ 按鈕跟著亮滅
-[].forEach.call(document.querySelectorAll('#gset [data-gg]'), function (b) { b.onclick = function () { gfxSet(b.dataset.gg); gfxShow(); }; });
-[].forEach.call(document.querySelectorAll('#gset [data-gx]'), function (b) { b.onclick = function () { phxSet(b.dataset.gx); phxSync(); }; });
+[].forEach.call(bsAll('#gset [data-gg]'), function (b) { b.onclick = function () { gfxSet(b.dataset.gg); gfxShow(); }; });
+[].forEach.call(bsAll('#gset [data-gx]'), function (b) { b.onclick = function () { phxSet(b.dataset.gx); phxSync(); }; });
 $('endA').onclick = start;
 gfxUI();                                                          // 畫質那一層（核心）：開機生一次
 sndUI();                                                          // 音量滑桿（02_music.js；遊戲內設定面板＋聲音設定頁）：開機綁一次

@@ -3025,7 +3025,7 @@ def act_shell_layers(src=None, gate=False):
 # 核心要能掛進別人的頁面（BS.mount(容器, 選項)、shadow root）⇒ 直接查 document、往 body／head 掛東西、window／document 的監聽、讀網址、
 #   視窗大小、跟 parent／opener 講話、往 window 寫名字 —— 每一處都得改成經過掛載點。量法：src/js_page.cjs（照作用域判，區域同名的不算）。
 # PAGE_MAX：每一類現在的處數（棘輪）⇒ 建置前的閘門只擋「變多」；變少了照建、印一行提醒把這裡調低（不調低，下一個人加回去不會被擋）。
-PAGE_MAX = {'query': 68, 'mount': 51, 'global': 48, 'listen': 37, 'host': 20, 'url': 14, 'view': 11, 'focus': 9}
+PAGE_MAX = {'query': 0, 'mount': 4, 'global': 48, 'listen': 37, 'host': 20, 'url': 14, 'view': 11, 'focus': 9}
 PAGE_CLS = (('query', 'document 查元素'), ('mount', '往 body／head／html 掛'), ('listen', 'window／document 的監聽'), ('url', '讀網址、history'),
             ('view', '視窗大小'), ('focus', '焦點、全螢幕、pointer lock、hidden'), ('host', 'parent／opener'), ('global', 'window.<名字>'))
 

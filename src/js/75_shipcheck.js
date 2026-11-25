@@ -18,7 +18,7 @@ function shipCard(sh) {
 function shipCheck(id) {
   var R = { id: id, t: SC_SECS, issues: [], info: {} };
   function add(lv, what, where, msg, fix) { R.issues.push({ lv: lv, what: what, where: where, msg: msg, fix: fix }); }
-  function done() { var pre = document.createElement('pre'); pre.id = 'shipcheck'; document.body.appendChild(pre); pre.textContent = JSON.stringify(R); uiAway(); window.__shipcheck = R; }
+  function done() { var pre = document.createElement('pre'); pre.id = 'shipcheck'; BS_BODY.appendChild(pre); pre.textContent = JSON.stringify(R); uiAway(); window.__shipcheck = R; }
   Promise.all([loadHull(id), loadHull('constitution')]).then(function () {
     var info = hullInfo(id) || HULL_KNOWN.filter(function (h) { return h.id === id; })[0];
     if (!info) { add('error', '船型', id, '設定檔 ships 沒有這一型', 'admin.py import'); done(); return; }
@@ -624,7 +624,7 @@ var DISP_MARGIN = 0.3;                                                    // 最
 function dispCheck(arg) {
   var margin = Q.has('dispmargin') ? +Q.get('dispmargin') : DISP_MARGIN, out = { margin: margin, S: S, ships: [] };
   var ids = !arg || arg === 'all' ? HULL_LIST.filter(function (h) { return !h.fixed; }).map(function (h) { return h.id; }) : arg.split(',');
-  function done() { var pre = document.createElement('pre'); pre.id = 'dispcheck'; document.body.appendChild(pre); pre.textContent = JSON.stringify(out); uiAway(); window.__dispcheck = out; }
+  function done() { var pre = document.createElement('pre'); pre.id = 'dispcheck'; BS_BODY.appendChild(pre); pre.textContent = JSON.stringify(out); uiAway(); window.__dispcheck = out; }
   function one(id) {
     var T = HULLT[id], info = hullInfo(id) || {}, c = shipCfg(id), L = hullT0(T, { ballast: 0, gunw: c.gunw });
     var zDeck = null, nGun = 0;                                         // 最低一門砲（不算迴旋砲、砲塔）的外框底 ＝ 那一層砲甲板的地板

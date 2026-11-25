@@ -913,7 +913,7 @@ function townMeshData(b64, size) {
 var TOWN_MESH_FMT = 1, TOWN_MESH_Q = Q.get('townmesh');
 /** 這份成品的 voxelkit.js 指紋（成品的來源清單；直接開 src/template.html 沒有清單 ⇒ null ⇒ 一律現場網格化）。 */
 function townVkFp() {
-  if (TOWNS.vkFp === undefined) { try { TOWNS.vkFp = JSON.parse(document.getElementById('blockside-src').textContent).files['VoxelKit/voxelkit.js'] || null; } catch (e) { TOWNS.vkFp = null; } }
+  if (TOWNS.vkFp === undefined) { try { TOWNS.vkFp = JSON.parse($('blockside-src').textContent).files['VoxelKit/voxelkit.js'] || null; } catch (e) { TOWNS.vkFp = null; } }
   return TOWNS.vkFp;
 }
 /** 烘好的網格能不能用（格式、網格化的版本都對得上）。 */

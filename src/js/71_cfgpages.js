@@ -31,7 +31,7 @@ function keysShow() {
   [].forEach.call($('keysTabs').querySelectorAll('button'), function (b) { b.className = b.dataset.kc === KEY_TAB ? 'on' : ''; });
   var note = { battle: '開戰時用。方向鍵固定：← → 打舵、↑ ↓ 加帆收帆；Esc 設定；? 說明。', fps: '第一人稱開著時先問這一頁：同一個鍵在這裡有動作 ⇒ 不做海戰那一個（例 WASD 走路、不打舵）。跟「建造」那一頁一起查撞鍵（建造模式也是第一人稱）。方向鍵固定：轉頭、看上下；滑鼠拖曳也能轉頭。', build: '建造模式（也是第一人稱）時再問這一頁；跟「第一人稱」那一頁一起查撞鍵；海戰的鍵只剩停格、設定、鏡頭。' }[KEY_TAB];
   $('keysInfo').textContent = note;
-  $('keysItems').innerHTML = KEY_ACTS.filter(function (a) { return a.c === KEY_TAB && (!a.host || document.body.classList.contains('bsHost')); }).map(function (a) {   // host：只有地球儀開的才有的動作
+  $('keysItems').innerHTML = KEY_ACTS.filter(function (a) { return a.c === KEY_TAB && (!a.host || BS_BODY.classList.contains('bsHost')); }).map(function (a) {   // host：只有地球儀開的才有的動作
     var k = KEYS_NOW[a.id], d = KEY_DEF[a.id], w = KEY_WAIT === a.id;
     return '<div class="keyrow"><label>' + (a.ico ? '<span class="kico">' + battleIconText(a.ico) + '</span>' : '') + a.name + (a.hold ? '<small>（按住）</small>' : '') + '</label><span class="kcap' + (w ? ' wait' : '') + '">' + (w ? '按新的鍵…（Esc 取消）' : keyLabel(k)) + '</span>' +
       '<button data-kid="' + a.id + '">' + (w ? '取消' : '改') + '</button><span class="note">' + (k === d ? '' : '改過；預設 ' + keyLabel(d)) + '</span></div>';
@@ -76,7 +76,7 @@ function furnUI(page) {
 function furnShow() {
   var T = furnTab(FURN_ID), id = T.id, f = T.cur[id], f0 = T.def[id] || f;
   FURN_ITEMS.concat(DRV_ITEMS).forEach(function (it) {
-    var box = document.querySelector('#furnItems .fk[data-k="' + it.k + '"]'), on = T.items.indexOf(it) >= 0 && it.has(f0); box.style.display = on ? '' : 'none'; if (!on) return;
+    var box = bsOne('#furnItems .fk[data-k="' + it.k + '"]'), on = T.items.indexOf(it) >= 0 && it.has(f0); box.style.display = on ? '' : 'none'; if (!on) return;
     var v = fGet(f, it.k), d = fGet(f0, it.k);
     $('fk-' + it.k).value = v;
     $('fk-' + it.k + 'V').textContent = cfgShown(function (x) { return furnFmt(it, x); }, v, d);
@@ -160,9 +160,9 @@ function admDefUI(page) {
 // ── 聲音設定頁的 BGM 那幾排（從 02_music.js 搬來；TASK-0774：音量滑桿留核心 sndShow／sndUI）
 /** BGM：什麼時候放、選曲、主題曲亮哪一顆、正在放什麼（核心 sndShow 發 cfg:snd ⇒ 照這裡畫）。 */
 function bgmShow() {
-  [].forEach.call(document.querySelectorAll('#bgmModes [data-bm]'), function (b) { b.classList.toggle('on', b.dataset.bm === SND.mode); });
-  [].forEach.call(document.querySelectorAll('#bgmTunes [data-bt]'), function (b) { b.classList.toggle('on', b.dataset.bt === SND.tune); });
-  [].forEach.call(document.querySelectorAll('#bgmThemes [data-bth]'), function (b) { b.classList.toggle('on', +b.dataset.bth === SND.theme); });
+  [].forEach.call(bsAll('#bgmModes [data-bm]'), function (b) { b.classList.toggle('on', b.dataset.bm === SND.mode); });
+  [].forEach.call(bsAll('#bgmTunes [data-bt]'), function (b) { b.classList.toggle('on', b.dataset.bt === SND.tune); });
+  [].forEach.call(bsAll('#bgmThemes [data-bth]'), function (b) { b.classList.toggle('on', +b.dataset.bth === SND.theme); });
   var nw = $('bgmNow'); if (nw) { var tn = BGM && BGM.tn, er = tn ? tuneEra(tn) : ''; nw.textContent = tn ? '正在放：' + (er ? er + '・' : '') + tn.name + '（' + tn.en + '）—— 譜：' + tn.src : '還沒放（按 ▶ 試聽，或開局後照上面的設定放）'; }
 }
 evOn('cfg:snd', bgmShow);
@@ -186,9 +186,9 @@ function bgmUI() {
     THEMES.forEach(function (t) { h2 += '<button data-bp="' + t.id + '" title="試聽 ' + t.name + '（' + t.src + '）">▶ ' + t.name + '</button>'; });
     tt.innerHTML = h2;
   }
-  [].forEach.call(document.querySelectorAll('#bgmModes [data-bm]'), function (b) { b.onclick = function () { SND.mode = b.dataset.bm; sndShow(); }; });
-  [].forEach.call(document.querySelectorAll('#bgmTunes [data-bt]'), function (b) { b.onclick = function () { SND.tune = b.dataset.bt; if (BGM && !BGM.forced && SND.tune !== 'shuffle' && BGM.tn.id !== SND.tune) BGM = null; sndShow(); }; });   // 指定了別首 ⇒ 下一格從那首開始
-  [].forEach.call(document.querySelectorAll('#bgmTunes [data-bp], #bgmThemes [data-bp]'), function (b) { b.onclick = function () { bgmPreview(b.dataset.bp); sndShow(); }; });
-  [].forEach.call(document.querySelectorAll('#bgmThemes [data-bth]'), function (b) { b.onclick = function () { SND.theme = +b.dataset.bth; sndShow(); }; });
+  [].forEach.call(bsAll('#bgmModes [data-bm]'), function (b) { b.onclick = function () { SND.mode = b.dataset.bm; sndShow(); }; });
+  [].forEach.call(bsAll('#bgmTunes [data-bt]'), function (b) { b.onclick = function () { SND.tune = b.dataset.bt; if (BGM && !BGM.forced && SND.tune !== 'shuffle' && BGM.tn.id !== SND.tune) BGM = null; sndShow(); }; });   // 指定了別首 ⇒ 下一格從那首開始
+  [].forEach.call(bsAll('#bgmTunes [data-bp], #bgmThemes [data-bp]'), function (b) { b.onclick = function () { bgmPreview(b.dataset.bp); sndShow(); }; });
+  [].forEach.call(bsAll('#bgmThemes [data-bth]'), function (b) { b.onclick = function () { SND.theme = +b.dataset.bth; sndShow(); }; });
   var rb = $('sndR'); if (rb) rb.onclick = function () { for (var k in SND_DEF) SND[k] = SND_DEF[k]; sndApply(); sndShow(); };
 }

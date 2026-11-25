@@ -21,8 +21,7 @@ var CAMQ = Q.get('cam') || '';
 var PF = DEBUG ? { t: 0, cur: {}, ring: [], max: 1200 } : null;
 function pfLap(k) { var t = performance.now(); PF.cur[k] = (PF.cur[k] || 0) + t - PF.t; PF.t = t; }
 function pfEnd(f0, steps) { var c = PF.cur; c.total = performance.now() - f0; c.steps = steps; c.simt = SIMT; PF.ring.push(c); if (PF.ring.length > PF.max) PF.ring.shift(); PF.cur = {}; }
-if (STILL) document.getElementById('stage').classList.add('still');
-function $(id) { return document.getElementById(id); }
+if (STILL) $('stage').classList.add('still');
 
 // ───────────────────────── 亂數工廠（有種子；TASK-0671） ─────────────────────────
 // 每一條亂數一個名字（RNG[名字]）、同一個演算法（mulberry32）；開局 rngReset() 一起重設（70_flow.js reset）：種子 ＝ SEED ^ salt（fixed ⇒ 就是 salt，不跟著 SEED）。

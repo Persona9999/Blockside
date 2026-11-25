@@ -68,7 +68,7 @@ function bedScript(src) {
   return new Promise(function (ok, bad) {
     var s = document.createElement('script'); s.src = src; s.async = true;
     s.onload = function () { s.remove(); ok(); }; s.onerror = function () { s.remove(); bad(new Error('載不到 ' + src)); };
-    document.head.appendChild(s);
+    BS_HEAD.appendChild(s);
   });
 }
 // ?map=@host：海圖不讀檔，跟開這一頁的那一頁要（Blocksail 地球儀「就地開戰」：iframe 的父頁或 window.open 的開啟者，照世界地圖當場生成）。
@@ -152,7 +152,7 @@ function bedHostSay(what, o) {
 }
 /** 下排的 🌍（template.html #hostBack；Tim 2026-10-20「回到地球儀 我目前想法是 航海模式下 加到下排圓形按鈕」「用emoji的地球儀」）：只有 ?map=@host 才出現（body.bsHost），
  *  點了、按快捷鍵（66_keys.js hostBack，預設 U；71_input.js doAct）⇒ 跟外面那一頁說 'back'（地球儀照它回去：跟它自己那顆「← 回到地球儀」同一條；'started' 帶 back: 1 ⇒ 地球儀就不放它那一顆、免得疊在停格條上）。 */
-function bedHostBack(host) { if ($('hostBack')) document.body.classList.add('bsHost'); }
+function bedHostBack(host) { if ($('hostBack')) BS_BODY.classList.add('bsHost'); }
 function bedHostBackGo() { if (BED && BED.host && RUNNING) BED.host.postMessage({ bsmap: 'back' }, '*'); }
 /** 「回主選單」交給外面那一頁（Tim 2026-10-21「Blocksail是否能override返回主選單按鈕 要回到 … Blocksail/index.html」）：?map=@host ⇒ 跟它說 'menu'
  *  （地球儀照「回到地球儀」那條路先把船搬到開到的地方、存好，再換到 Blocksail 的主選單 index.html）；不是被嵌的 ⇒ false，照舊開這一頁的主選單。 */

@@ -83,7 +83,7 @@ function rptSave(kind) {
   var txt = kind === 'csv' ? ['ship,name,team,' + d.cols.join(',')].concat([].concat.apply([], d.ships.map(function (s) { return s.tl.map(function (row) { return [s.i, '"' + s.name + '"', s.team].concat(row).join(','); }); }))).join('\n')
     : JSON.stringify(d), a = document.createElement('a');
   a.href = URL.createObjectURL(new Blob([kind === 'csv' ? '﻿' + txt : txt], { type: kind === 'csv' ? 'text/csv' : 'application/json' }));
-  a.download = 'blockside-report-seed' + SEED + '-' + Math.round(SIMT) + 's.' + kind; document.body.appendChild(a); a.click();
+  a.download = 'blockside-report-seed' + SEED + '-' + Math.round(SIMT) + 's.' + kind; BS_BODY.appendChild(a); a.click();
   setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
 }
 // ── 畫面：結束畫面多一顆「📊 報表」⇒ 一頁曲線＋表 ──
@@ -116,7 +116,7 @@ function rptShow() {
     P.innerHTML = '<div class="card panel" style="width:min(96vw,760px);padding:12px 14px;text-align:left;box-sizing:border-box;background:rgba(12,18,26,.95)"><h3 style="margin:0 0 6px">📊 戰鬥報表</h3>' +
       '<div id="rptL" style="font-size:12px;margin-bottom:6px"></div><div id="rptC"></div><div id="rptT" style="font-size:12px;overflow-x:auto"></div><div id="rptH" style="font-size:12px;margin-top:8px"></div>' +
       '<div style="margin-top:8px"><button id="rptJ">匯出 JSON</button> <button id="rptV">匯出 CSV</button> <button id="rptCL">🧪 匯出船員記錄</button> <button id="rptRL">🪢 匯出帆繩記錄</button> <button id="rptX">關閉</button></div></div>';
-    document.body.appendChild(P);
+    BS_BODY.appendChild(P);
     $('rptJ').onclick = function () { rptSave('json'); }; $('rptV').onclick = function () { rptSave('csv'); }; $('rptX').onclick = function () { P.style.display = 'none'; }; $('rptCL').onclick = tlgSave; $('rptRL').onclick = rlgSave;
   }
   P.style.display = 'flex'; $('rptCL').style.display = TLOG ? '' : 'none'; $('rptRL').style.display = RLOG ? '' : 'none';   // 測試模式、帆繩記錄開著才有（83_testlog.js、85_riglog.js；設定面板那兩項只在 ?debug=1 顯示）

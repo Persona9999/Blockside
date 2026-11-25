@@ -15,7 +15,7 @@ function cfgDownload(obj, base) {
   var d = new Date(), a = document.createElement('a');
   a.href = URL.createObjectURL(new Blob([JSON.stringify(obj, null, 1)], { type: 'application/json' }));
   a.download = base + '_' + d.getFullYear() + ('0' + (d.getMonth() + 1)).slice(-2) + ('0' + d.getDate()).slice(-2) + '.json';
-  document.body.appendChild(a); a.click(); setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+  BS_BODY.appendChild(a); a.click(); setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
   return a.download;
 }
 /** 按兩下才做（4 秒內再按一次）：第一下把字換成 arm()，4 秒沒再按 ⇒ 換回 idle。⛔ 不用 confirm()：畫廊彈窗的 iframe 沒開 allow-modals，confirm 直接回 false。 */

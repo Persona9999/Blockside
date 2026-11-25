@@ -692,11 +692,11 @@ function bgmRender(o) {
 }
 /** 遊戲內設定面板與聲音設定頁的「音量」（[data-snd] 滑桿兩處同一組值）：畫出現在的值；發 cfg:snd（外殼的聲音設定頁畫 BGM 那幾排，71_cfgpages.js bgmShow；TASK-0774）。 */
 function sndShow() {
-  [].forEach.call(document.querySelectorAll('[data-snd]'), function (r) { r.value = Math.round(SND[r.dataset.snd] * 100); });
-  [].forEach.call(document.querySelectorAll('[data-sndv]'), function (e) { var v = SND[e.dataset.sndv]; e.textContent = v > 0 ? Math.round(v * 100) + '%' : '關'; });
+  [].forEach.call(bsAll('[data-snd]'), function (r) { r.value = Math.round(SND[r.dataset.snd] * 100); });
+  [].forEach.call(bsAll('[data-sndv]'), function (e) { var v = SND[e.dataset.sndv]; e.textContent = v > 0 ? Math.round(v * 100) + '%' : '關'; });
   evEmit('cfg:snd');
 }
 /** 綁一次（核心開機時叫，71_input.js）：音量滑桿（遊戲內設定面板＋聲音設定頁）。BGM 那幾排是外殼的 bgmUI。 */
 function sndUI() {
-  [].forEach.call(document.querySelectorAll('[data-snd]'), function (r) { r.oninput = function () { SND[r.dataset.snd] = clamp(+r.value / 100, 0, 1); sndApply(); sndShow(); }; });
+  [].forEach.call(bsAll('[data-snd]'), function (r) { r.oninput = function () { SND[r.dataset.snd] = clamp(+r.value / 100, 0, 1); sndApply(); sndShow(); }; });
 }

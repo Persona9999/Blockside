@@ -12,7 +12,7 @@ var GLAB_ROLL = [['a', '滾雷音量', 0, 4, 0.01], ['sz', '滾雷音量隨口�
 var GLAB_A = [['shot', '錨點彈重 kg', 0.2, 900, 0.1], ['fp', '主頻 Hz', 15, 400, 1], ['bA', '爆風音量', 0, 3, 0.01], ['bD', '爆風長', 0.005, 1, 0.005], ['bLp', '爆風亮度 Hz', 200, 8000, 10],
   ['oA', '身體音量', 0, 4, 0.01], ['oD', '身體長', 0.02, 3, 0.01], ['cA', '脆響音量', 0, 2, 0.005], ['cD', '脆響長', 0.002, 0.2, 0.001], ['cHz', '脆響頻率 Hz', 800, 8000, 10],
   ['tA', '尾聲音量', 0, 2, 0.01], ['tD', '尾聲長', 0.05, 20, 0.05], ['tLp', '尾聲亮度（× 主頻）', 0.5, 10, 0.05], ['eA', '回音音量', 0, 1, 0.005]];
-function glabEl(id) { return document.getElementById(id); }
+function glabEl(id) { return $(id); }
 function glabSave() { try { localStorage.setItem(GLAB.key, JSON.stringify(GLAB.cur)); } catch (e) { } }
 function glabApply() {                                                   // 照模式把參數寫進 02_audio.js 的表
   if (GLAB.mode === 'orig') { var o = JSON.parse(JSON.stringify(GLAB.cur)); o.A.small = Object.assign({}, GLAB_ORIG.A.small); o.line = GLAB_ORIG.line; o.kick.a = 0; o.roll.a = 0; o.vol = GLAB_ORIG.vol; gunSndSet(o); }
@@ -29,7 +29,7 @@ function gunLabInit() {
     '#glab .sl output{font-variant-numeric:tabular-nums;text-align:right}#glab .sl .chg{color:#f0a540}#glab select,#glab input[type=number]{background:#13283c;color:#fff;border:1px solid #3c6a96;border-radius:4px;padding:3px}' +
     '#glab .note{color:#9db0c2;font-size:12px;max-width:760px}#glab textarea{width:100%;max-width:760px;height:90px;background:#13283c;color:#cfe;border:1px solid #3c6a96;font:12px monospace}' +
     '#glab .meter{font-variant-numeric:tabular-nums;color:#cfe}#glab .cols{display:flex;flex-wrap:wrap;gap:24px}#glab .cols > div{flex:1 1 420px}';
-  document.head.appendChild(st);
+  BS_HEAD.appendChild(st);
   var d = document.createElement('div'); d.id = 'glab';
   var guns = Object.keys(GUNS).sort(function (a, b) { return (GUNS[a].shot || 0) - (GUNS[b].shot || 0); });
   d.innerHTML = '<h1>🔊 開炮音試聽</h1>' +
@@ -45,7 +45,7 @@ function gunLabInit() {
     '<div class="cols"><div><h2>重擊（kick）</h2><div id="glKick"></div><h2>滾雷（全場共用一條；齊射時疊起來）</h2><div id="glRoll"></div><h2>整體</h2><div id="glAll"></div></div>' +
     '<div><h2>錨點 <select id="glAnc"></select></h2><div class="note" id="glAncN"></div><div id="glAncS"></div></div></div>' +
     '<h2>參數</h2><div class="row"><button id="glCopy">📋 複製參數</button><button id="glLoad">⬆ 貼上的參數套用</button><button id="glReset">↺ 回到遊戲預設</button><span id="glCopyO" class="note"></span></div><textarea id="glTxt" spellcheck="false"></textarea>';
-  document.body.appendChild(d);
+  BS_BODY.appendChild(d);
   glabBuild();
   glabEl('glGo').onclick = function () { glabStart(); };
   glabEl('glNew').onclick = function () { glabMode('new'); }; glabEl('glOrig').onclick = function () { glabMode('orig'); };

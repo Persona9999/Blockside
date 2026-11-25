@@ -19,12 +19,12 @@ var SPK_TONS = [1000, 3000], SPK_VOLLEY = [200, 600];
 var SPK_DRIVE = [['sail', battleIcon('sail'), '帆船'], ['steam', battleIcon('steam'), '蒸汽'], ['oar', battleIcon('oar'), '槳帆'], ['magic', '✨', '魔法']];
 var SPK_POWER = { steam: '蒸氣', oar: '槳', magic: '魔法' };
 // Prebaked model portraits: opening/searching the picker never decodes a hull.
-var SPK_THUMBS = VK.embeddedJSON('ship-thumbs'), SPK_THUMB_EL = document.getElementById('ship-thumbs-atlas');
+var SPK_THUMBS = VK.embeddedJSON('ship-thumbs'), SPK_THUMB_EL = $('ship-thumbs-atlas');
 var SPK_THUMB_SRC = SPK_THUMB_EL && SPK_THUMB_EL.textContent.trim() ? 'data:image/png;base64,' + SPK_THUMB_EL.textContent.trim() : null;
 if (SPK_THUMBS && SPK_THUMB_SRC) {
   var spkThumbStyle = document.createElement('style');
   spkThumbStyle.textContent = '.spkThumb{background-image:url("' + SPK_THUMB_SRC + '");background-size:' + SPK_THUMBS.cols * 100 + '% ' + SPK_THUMBS.rows * 100 + '%;}';
-  document.head.appendChild(spkThumbStyle);
+  BS_HEAD.appendChild(spkThumbStyle);
 }
 function spkThumbHTML(id) {
   var A = SPK_THUMBS, at = A && A.icons[id];
@@ -125,7 +125,7 @@ window.addEventListener('keydown', function (e) { if (e.key === 'Escape' && $('s
 //   draft ＝ 開戰時吃水多深（m：船底最低點（32_ground.js groundKeel）到水面，照開戰時的重量浮高／吃水深 liftFor，跟船隻配置頁的卡片同一套）、loa ＝ 外框全長（m，含艏斜桅）
 //   ⇒ 航海找起點要的「夠我艦吃水的水深」「我艦多長」（Blocksail presets.js BLOCKSAIL_SAIL 的 depth、r）。
 var PICK_HOST = Q.get('pick') === '@host' ? (window.parent !== window ? window.parent : window.opener) : null;
-if (PICK_HOST) document.documentElement.classList.add('pickonly');
+if (PICK_HOST) BS_HTML.classList.add('pickonly');
 function pickPost(what, o) { try { PICK_HOST.postMessage(Object.assign({ bspick: what }, o || {}), '*'); } catch (e) { /* 外面那一頁關了 */ } }
 //   &auto=1（Tim 2026-10-27「是否能讓選船跟預設船走同一流程(相當於一開始選了預設船)」「而不用維護兩套流程」）：不開彈窗、直接量 cur 那一型 ⇒ 'measuring'、'picked'／'error' 跟點卡片一樣
 //     ⇒ 地球儀沒選過船時照它量預設那一艘（不再手抄一份數字在 presets.js）

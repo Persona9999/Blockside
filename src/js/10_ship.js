@@ -710,7 +710,7 @@ var ANC_V = 1, ANC = { p: null, raw: null, src: undefined, rec: Q.has('ancbake')
 function ancFp(id) {
   var c = CFG.ships.filter(function (s) { return s.id === id; })[0];
   if (!c || !c.vxk) return null;
-  if (ANC.src === undefined) { try { ANC.src = JSON.parse(document.getElementById('blockside-src').textContent).files; } catch (e) { ANC.src = null; } }
+  if (ANC.src === undefined) { try { ANC.src = JSON.parse($('blockside-src').textContent).files; } catch (e) { ANC.src = null; } }
   var f = ANC.src && ANC.src['VoxelKit/_cache/' + c.vxk];
   return f ? ANC_V + ' ' + f : null;
 }
@@ -723,7 +723,7 @@ function ancLoad() {
       var s = document.createElement('script'); s.src = ((window.BS_SHELL && window.BS_SHELL.ships) || '') + 'ships/anchor.js';
       s.onload = function () { var o = window.BS_ANCHOR; window.BS_ANCHOR = null; ANC.raw = o && o.types || null; ok(ANC.raw); };
       s.onerror = function () { ok(null); };
-      document.head.appendChild(s);
+      BS_HEAD.appendChild(s);
     } catch (e) { ok(null); }
   }));
 }
@@ -741,7 +741,7 @@ function ancTable(id) {
 /** ?ancbake=<船>（admin.py ancbake 讀頁面上 id 是 anchor 的 pre；ANC.rec 在腳本載入時就開始記：⛔ 到這裡才開始記 ⇒ 開機先預載的 constitution 在 buildHull 裡查的（陣營旗、布料綁定）都漏掉）：{ id, fp, n, b64：每筆 x, y, z, r, 結果（int32 小端、照鍵排、未壓縮）, scan：這一場現算了幾次 } */
 function ancBakePage(id) {
   var R = { id: id };
-  function done() { var pre = document.createElement('pre'); pre.id = 'anchor'; document.body.appendChild(pre); pre.textContent = JSON.stringify(R); uiAway(); }
+  function done() { var pre = document.createElement('pre'); pre.id = 'anchor'; BS_BODY.appendChild(pre); pre.textContent = JSON.stringify(R); uiAway(); }
   Promise.all([loadHull(id), loadHull('constitution')]).then(function () {
     if (!hullInfo(id)) { R.err = '設定檔 ships 沒有這一型'; done(); return; }
     FLEET_DBG = [{ team: 'blue', hull: id }, { team: 'red', hull: 'constitution' }]; flowMode('eve'); DIST = LIM_DIST[1];

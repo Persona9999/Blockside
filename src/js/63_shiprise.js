@@ -1014,7 +1014,7 @@ function shipRisePanel() {
       }).join('') +
     '</div>' +
     '<div data-k="info" style="font-size:11px;opacity:0.8;margin-top:4px"></div>';
-  document.body.appendChild(el);
+  BS_BODY.appendChild(el);
   function $(k) { return el.querySelector('[data-k="' + k + '"]'); }
   $('hull').onchange = function () {
     shipRiseStandaloneLoad(this.value, 0.35);

@@ -6,7 +6,7 @@ var BATTLE_ICON_SPEC = VK.embeddedJSON('battle-icons'), BATTLE_ATLAS = VK.embedd
 if (!BATTLE_ICON_SPEC) throw new Error('Missing battle icon manifest');
 if (!BATTLE_ATLAS) throw new Error('Missing battle icon atlas (python -I src/admin.py atlas)');
 var BATTLE_ATLAS_SRC = (function () {
-  var el = document.getElementById('art-battle-atlas');
+  var el = $('art-battle-atlas');
   if (!el || !el.textContent.trim()) throw new Error('Missing embedded battle icon atlas');
   return 'data:' + el.dataset.mime + ';base64,' + el.textContent.trim();
 })();
@@ -19,14 +19,14 @@ var BATTLE_ATLAS_SRC = (function () {
     var spec = BATTLE_ICON_SPEC.icons[key], at = A.icons[key], sel = '.battle-icon[data-battle-icon="' + key + '"]::before', src = null;
     if (at) css.push(sel + '{background-position:' + (A.cols > 1 ? at[0] / (A.cols - 1) * 100 : 0) + '% ' + (A.rows > 1 ? at[1] / (A.rows - 1) * 100 : 0) + '%;}');
     else {
-      var el = document.getElementById('art-battle-' + key);
+      var el = $('art-battle-' + key);
       if (!el || !el.textContent.trim()) throw new Error('Missing embedded battle icon: ' + key);
       src = 'data:' + el.dataset.mime + ';base64,' + el.textContent.trim();
       css.push(sel + '{background-image:url("' + src + '");}');
     }
     BATTLE_ICONS[key] = Object.freeze({ label: spec.label, at: at || null, src: src, cls: at ? 'battle-icon bi-atlas' : 'battle-icon' });
   });
-  var st = document.createElement('style'); st.id = 'battle-icon-css'; st.textContent = css.join('\n'); document.head.appendChild(st);
+  var st = document.createElement('style'); st.id = 'battle-icon-css'; st.textContent = css.join('\n'); BS_HEAD.appendChild(st);
 })();
 Object.freeze(BATTLE_ICONS);
 var BATTLE_ICON_PATTERN = new RegExp('(' + Object.keys(BATTLE_ICON_SPEC.glyphs).sort(function(a,b){return b.length-a.length;}).join('|') + ')\\uFE0F?', 'gu');
@@ -57,8 +57,8 @@ function battleDrawIcon(ctx, key, x, y, size) {
   ctx.restore(); return true;
 }
 // Static DOM once at boot; refreshed HUD strings convert before comparison.
-[].forEach.call(document.querySelectorAll('span[data-battle-icon]:not(.battle-icon)'), function (el) { el.outerHTML = battleIcon(el.dataset.battleIcon); });
-var BATTLE_ICON_WALK = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT), BATTLE_ICON_TEXTS = [], BATTLE_ICON_NODE;
+[].forEach.call(bsAll('span[data-battle-icon]:not(.battle-icon)'), function (el) { el.outerHTML = battleIcon(el.dataset.battleIcon); });
+var BATTLE_ICON_WALK = document.createTreeWalker(BS_BODY, NodeFilter.SHOW_TEXT), BATTLE_ICON_TEXTS = [], BATTLE_ICON_NODE;
 while ((BATTLE_ICON_NODE = BATTLE_ICON_WALK.nextNode())) BATTLE_ICON_TEXTS.push(BATTLE_ICON_NODE);
 BATTLE_ICON_TEXTS.forEach(function (node) {
   if (!node.parentElement || node.parentElement.closest('script,style,textarea,select,svg,canvas,[data-native-emoji],[contenteditable]')) return;

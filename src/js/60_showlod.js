@@ -48,7 +48,7 @@ function showlodPlain(m) { return !(m.swM || m.sw || (m.spinB && m.spinB.mt) || 
 function showlodFp(id) {
   var c = CFG.ships.filter(function (s) { return s.id === id; })[0];
   if (!c || !c.vxk) return null;
-  if (SHOWLOD.src === undefined) { try { SHOWLOD.src = JSON.parse(document.getElementById('blockside-src').textContent).files; } catch (e) { SHOWLOD.src = null; } }
+  if (SHOWLOD.src === undefined) { try { SHOWLOD.src = JSON.parse($('blockside-src').textContent).files; } catch (e) { SHOWLOD.src = null; } }
   var f = SHOWLOD.src && SHOWLOD.src['VoxelKit/_cache/' + c.vxk];
   return f ? SHOWLOD_V + ' ' + f : null;
 }
@@ -61,7 +61,7 @@ function showlodNeed() {
     var s = document.createElement('script'); s.src = ((window.BS_SHELL && window.BS_SHELL.ships) || '') + 'ships/showlod.js';
     s.onload = function () { var o = window.BS_SHOWLOD; window.BS_SHOWLOD = null; if (!o || !o.types) { fail('ships/showlod.js 裡沒有資料'); return; } D.raw = o.types; D.st = 2; };
     s.onerror = function () { fail('載不到 ' + s.src); };
-    document.head.appendChild(s);
+    BS_HEAD.appendChild(s);
   } catch (e) { fail(e); }
 }
 /** 第一次用到這一型 ⇒ 解開（非同步）、建格子、網格化；這一格先不分級。 */
@@ -241,7 +241,7 @@ function showlodHull(prog, o, t) {
 //     mk、dk：烘進去的模型、裝飾序號, stat：{ cells 船殼格, mcells 模型格, kept／dropped（原本的格落在留下／丟掉的塊）, inner 灌不到的空塊, blocks 留下的塊, quads, ms } }
 function showlodBakePage(id) {
   var R = { id: id };
-  function done() { var pre = document.createElement('pre'); pre.id = 'showlod'; document.body.appendChild(pre); pre.textContent = JSON.stringify(R); uiAway(); window.__showlod = R; }
+  function done() { var pre = document.createElement('pre'); pre.id = 'showlod'; BS_BODY.appendChild(pre); pre.textContent = JSON.stringify(R); uiAway(); window.__showlod = R; }
   Promise.all([loadHull(id), loadHull('constitution')]).then(function () {
     if (!hullInfo(id)) { R.err = '設定檔 ships 沒有這一型'; done(); return; }
     FLEET_DBG = [{ team: 'blue', hull: id }, { team: 'red', hull: 'constitution' }]; flowMode('eve'); DIST = LIM_DIST[1];

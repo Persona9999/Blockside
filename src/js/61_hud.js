@@ -196,7 +196,7 @@ function hudSailControls(me) {
   var kind = hasSails(me) ? 'sail' : me.cfg.base > 0 ? 'tele' : 'none';
   if (HUD_SAILS === kind) return;
   HUD_SAILS = kind;
-  [].forEach.call(document.querySelectorAll('#helmL [data-act="sailUp"], #helmL [data-act="sailDn"]'), function (b) {
+  [].forEach.call(bsAll('#helmL [data-act="sailUp"], #helmL [data-act="sailDn"]'), function (b) {
     var up = b.dataset.act === 'sailUp';
     b.style.display = kind === 'none' ? 'none' : '';
     b.dataset.tip = kind === 'tele' ? '俥鐘往' + (up ? '前' : '後') + '撥一格' : up ? '加帆' : '收帆';
@@ -210,7 +210,7 @@ var INFO_SH = null, SB_EL = {}, SUNK_HIDE = 60;   // SUNK_HIDE：沉了幾秒（
 // 按羅盤 ＝ 按艦隊的我艦圓鈕（Tim 2026-10-15：「遊戲下方的羅盤是否可以改成可以按，效果跟按下我艦一樣顯示詳細資訊」）：開／收我艦的詳細資訊。
 //   pointerdown（同上：羅盤每 6 格重畫，click 可能落空）；只綁在羅盤的畫布 ⇒ 兩舷的砲（#gunsL／#gunsR，pointer-events:none）、鏡頭拖曳（遊戲畫布）都不受影響。
 $('navc').addEventListener('pointerdown', function (e) { e.preventDefault(); e.stopPropagation(); var me = SHIPS[PLAYER_I]; if (!me) return; INFO_SH = INFO_SH === me ? null : me; fleetHud(me); });
-function fleetReset() { INFO_SH = null; for (var k in SB_EL) SB_EL[k].el.remove(); SB_EL = {}; [].forEach.call(document.querySelectorAll('.sbres, .sigb'), function (e) { e.remove(); }); if ($('sigP')) $('sigP').classList.remove('on'); }
+function fleetReset() { INFO_SH = null; for (var k in SB_EL) SB_EL[k].el.remove(); SB_EL = {}; [].forEach.call(bsAll('.sbres, .sigb'), function (e) { e.remove(); }); if ($('sigP')) $('sigP').classList.remove('on'); }
 function sbMake(o, box) {
   var el = document.createElement('div'), cv = document.createElement('canvas'); el.className = 'sb'; el.appendChild(cv);
   var nl = document.createElement('span'), nr = document.createElement('span'); nl.className = 'sbn l'; nr.className = 'sbn r'; el.appendChild(nl); el.appendChild(nr);   // 船員、砲（sbNums）
@@ -493,13 +493,13 @@ function hudRing() {
   var hole = '<mask id="h">' + hudDisc(1, '#fff') + hudDisc(IN - 2 * E, '#000') + '</mask>';   // 遮罩：白圓挖掉最裡面那個 ⇒ 中間透出底下（海或黃圈）
   var css = '.ring{background:no-repeat center/' + D + ' ' + D + ';}';
   ['full', 'short', 'none', 'dead', 'wet'].forEach(function (k) {
-    var probe = document.createElement('span'); probe.className = 'g-' + k; document.body.appendChild(probe);
+    var probe = document.createElement('span'); probe.className = 'g-' + k; BS_BODY.appendChild(probe);
     var col = getComputedStyle(probe).color; probe.remove();
     css += '.ring.g-' + k + '{background-image:' + hudSvg(hole + '<g mask="url(#h)">' + hudDisc(1, '#000') + hudDisc(1 - 2 * E, col) + hudDisc(IN, '#000') + '</g>') + ';}';
   });
   var m = hudSvg(hudDisc(1, '#fff')) + ' center/100% 100% no-repeat';   // 黃圈：白圓當遮罩，顏色、大小照 template.html 的 .aim::before
   css += '.gside .aim::before,.gend .aim::before{-webkit-mask:' + m + ';mask:' + m + ';}';
-  var st = document.createElement('style'); st.textContent = css; document.head.appendChild(st);
+  var st = document.createElement('style'); st.textContent = css; BS_HEAD.appendChild(st);
   return (HUD_RING = true);
 }
 /** 一門砲的符號：形狀 ＝ 裝填（● 好　綠圈 裝填中（hudRing）　○ 開不了　△ 等火藥　≈ 泡水　✕ 毀），顏色 ＝ 人手（綠 滿編、黃 人數不足但能開（裝填慢）、灰 少於最少人數、紅 毀、藍 泡水）；受損 ⇒ 底下一條血條。 */
@@ -551,7 +551,7 @@ var HUDN = 0;
 function hudArt() {
   var st = document.createElement('style');
   st.textContent = '.ico{display:inline-block;width:14px;height:14px;vertical-align:-2px;background-image:url(' + HUD_ART.src + ');background-size:800% 200%;}';
-  document.head.appendChild(st);
+  BS_HEAD.appendChild(st);
 }
 /** 羅盤那一團（#navBox）往下壓、底邊貼在下方面板（#ctl）頂上 BOT_GAP px（Tim 2026-10-14）：量現在差多少、改 margin-bottom（負的 ⇒ 落進兩組大圓鈕之間；砲列壓在大圓鈕底下）。
  *  #botC 可能被 scale（手機橫拿 .82）⇒ 量到的差先除回去；差不到半格不動。 */
@@ -587,7 +587,7 @@ var NAV_LOW_MQ = window.matchMedia ? window.matchMedia('(orientation:portrait) a
 function navLow() { return !!(NAV_LOW_MQ && NAV_LOW_MQ.matches); }
 function botFit() {
   var nb = $('navBox'), ctl = $('ctl'), bc = $('botC'); if (!nb || !ctl) return;
-  var low = navLow(), root = document.documentElement;
+  var low = navLow(), root = BS_HTML;
   if (root.classList.contains('navlow') !== low) root.classList.toggle('navlow', low);
   var up = low ? nb.offsetHeight + NAV_LOW_GAP : 0;   // C P O 4 R 抬多少 ＝ 羅盤那一團多高（砲條 #gunsB＋羅盤＋追擊砲 #gunsA；#modeT 這時是 absolute、不算）
   if ((parseFloat(ctl.style.marginBottom) || 0) !== up) ctl.style.marginBottom = up ? up + 'px' : '';

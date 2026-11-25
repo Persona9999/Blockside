@@ -104,7 +104,7 @@ function rlgData() {
 function rlgSave() {
   var d = rlgData(); if (!d) { alert('沒有帆繩記錄：設定面板打開「🪢 帆繩記錄」（或網址 ?riglog=1），下一場開戰起記'); return; }
   var a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([JSON.stringify(d)], { type: 'application/json' }));
-  a.download = 'blockside-riglog-seed' + SEED + '-' + Math.round(SIMT) + 's.json'; document.body.appendChild(a); a.click();
+  a.download = 'blockside-riglog-seed' + SEED + '-' + Math.round(SIMT) + 's.json'; BS_BODY.appendChild(a); a.click();
   setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
 }
 $('rigT').onclick = rlgToggle;

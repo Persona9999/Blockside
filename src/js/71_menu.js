@@ -7,23 +7,23 @@ $('discordB').onclick = function () { window.open(DISCORD_URL, '_blank', 'noopen
 /** 主選單的玩法鈕：照玩法規則表（04_modes.js MODE_RULES）裡 menu 的那幾份生、照表的順序（TASK-0668：加一種玩法不用改這裡）。 */
 function modeButtons() {
   $('modes').innerHTML = Object.keys(MODE_RULES).filter(function (m) { return MODE_RULES[m].menu; }).map(function (m) { return '<button data-m="' + m + '">' + battleIconText(MODE_RULES[m].name) + '</button>'; }).join('');
-  [].forEach.call(document.querySelectorAll('#modes button'), function (b) { b.onclick = function () { flowMode(b.dataset.m); [].forEach.call(document.querySelectorAll('#modes button'), function (x) { x.className = x === b ? 'on' : ''; }); }; });
+  [].forEach.call(bsAll('#modes button'), function (b) { b.onclick = function () { flowMode(b.dataset.m); [].forEach.call(bsAll('#modes button'), function (x) { x.className = x === b ? 'on' : ''; }); }; });
 }
 modeButtons();
 var CFG_ID = myHull();                             // 細節設定的「船隻設定」正在編輯哪一型
 var SLIDERS_SHOW = null;                               // 載入完（HYD 算好）再顯示一次 ⇒ 減重上浮的例子有數字
 /** 主選單的畫質那一排（低／中／高／全開＋「畫質設定…」）：畫質頁本身是核心那一層（gfxUI）；這裡只接按鈕、照 cfg:gfx 點亮（TASK-0774）。 */
 function gfxMenuUI() {
-  [].forEach.call(document.querySelectorAll('#gfxs button[data-g]'), function (b) { b.onclick = function () { gfxSet(b.dataset.g); gfxShow(); }; });
+  [].forEach.call(bsAll('#gfxs button[data-g]'), function (b) { b.onclick = function () { gfxSet(b.dataset.g); gfxShow(); }; });
   gfxMenuShow(gfxLevel());
 }
 function gfxMenuShow(lv) {
-  [].forEach.call(document.querySelectorAll('#gfxs button[data-g]'), function (b) { b.className = b.dataset.g === lv ? 'on' : ''; });
+  [].forEach.call(bsAll('#gfxs button[data-g]'), function (b) { b.className = b.dataset.g === lv ? 'on' : ''; });
   var gb = $('gfxB'); gb.textContent = lv === 'custom' ? '自訂（畫質設定…）' : '畫質設定…'; gb.className = lv === 'custom' ? 'on' : '';
 }
 evOn('cfg:gfx', gfxMenuShow);
 /** 玩法：娛樂／寫實（04_state.js 的 PLAY）＋主選單按鈕的亮燈。航行每一步都讀（playK）；按鈕在主選單，沒開戰時才按得到。 */
-function setPlay(p) { PLAY = p === 'real' ? 'real' : 'fun'; [].forEach.call(document.querySelectorAll('#plays button'), function (x) { x.className = x.dataset.p === PLAY ? 'on' : ''; }); }
+function setPlay(p) { PLAY = p === 'real' ? 'real' : 'fun'; [].forEach.call(bsAll('#plays button'), function (x) { x.className = x.dataset.p === PLAY ? 'on' : ''; }); }
 /** 選單列船：HULL_SHIPS 的每一艘（堡壘不列）。 */
 function hullOptions(sel, v) { sel.innerHTML = HULL_SHIPS.map(function (h) { return '<option value="' + h.id + '">' + h.name + '</option>'; }).join(''); sel.value = v; }
 /** 主選單的艦隊編成（TASK-0537）：我方、敵方各一列，每艘一個選單；第二艘起有 ×（拿掉）；＋ 加一艘（照那一邊最後一艘的船型），合計到 MAX_SHIPS 就停用。
@@ -68,37 +68,37 @@ evOn('boot:loaded', function () { if (SLIDERS_SHOW && !START_Q) SLIDERS_SHOW(); 
 evOn('boot:ready', function () { $('go').disabled = false; $('go').textContent = '開戰'; });
 evOn('flow:start', function () { $('cover').style.display = 'none'; });   // 開戰、量測頁（70_flow.js uiAway）
 evOn('flow:menu', coverShow);                                               // 回主選單（menuGo）
-evOn('weather', function () { [].forEach.call(document.querySelectorAll('#wxs button'), function (b) { b.className = b.dataset.w === WX_ID ? 'on' : ''; }); });
+evOn('weather', function () { [].forEach.call(bsAll('#wxs button'), function (b) { b.className = b.dataset.w === WX_ID ? 'on' : ''; }); });
 evOn('phys', function () { if ($('phxB')) phxShow(); }, 0, true);          // 物理開關（62_simview.js 那一個之後）
 evOn('pslow', function () { phxShow(); });                                  // 物理減速（73_slowmo.js pslowToggle）
 evOn('cfg:phx', phxShow);                                                   // 物理檔位改了（phxSync）
 $('repB').onclick = function () { errShow(null); };                         // 主選單「問題回報…」：手動回報（沒有錯誤訊息；01_gl.js errShow）
 sliders(); setPlay(PLAY); setWeather(WX_ID);
-[].forEach.call(document.querySelectorAll('#wxs button'), function (b) { b.onclick = function () { setWeather(b.dataset.w); if (SLIDERS_SHOW) SLIDERS_SHOW(); }; });   // 主選單：天氣（08_weather.js）
+[].forEach.call(bsAll('#wxs button'), function (b) { b.onclick = function () { setWeather(b.dataset.w); if (SLIDERS_SHOW) SLIDERS_SHOW(); }; });   // 主選單：天氣（08_weather.js）
 /** 主選單：同時在場（滑桿 2～MAX_SHIPS，52_fleet.js FIELD_N）；編成超過它的照候補規則進場。 */
 function fieldShow() { var f = $('field'); f.value = FIELD_N; $('fieldV').textContent = FIELD_N + ' 艘'; if ($('fleetN')) fleetUI(); }
 (function () { var f = $('field'); f.min = 2; f.max = MAX_SHIPS; f.oninput = function () { FIELD_N = Math.round(+f.value); fieldShow(); }; fieldShow(); })();
 /** 細節設定：艦隊指揮官（52_fleet.js CMD_SIDE；策略在 53_commander.js）。 */
-function cmdShow() { [].forEach.call(document.querySelectorAll('.cmds'), function (row) { [].forEach.call(row.querySelectorAll('button'), function (b) { b.className = b.dataset.c === CMD_SIDE[row.dataset.side] ? 'on' : ''; }); }); }
-[].forEach.call(document.querySelectorAll('.cmds'), function (row) { [].forEach.call(row.querySelectorAll('button'), function (b) { b.onclick = function () { CMD_SIDE[row.dataset.side] = b.dataset.c; cmdShow(); }; }); });
+function cmdShow() { [].forEach.call(bsAll('.cmds'), function (row) { [].forEach.call(row.querySelectorAll('button'), function (b) { b.className = b.dataset.c === CMD_SIDE[row.dataset.side] ? 'on' : ''; }); }); }
+[].forEach.call(bsAll('.cmds'), function (row) { [].forEach.call(row.querySelectorAll('button'), function (b) { b.onclick = function () { CMD_SIDE[row.dataset.side] = b.dataset.c; cmdShow(); }; }); });
 cmdShow();
 /** 細節設定：搶上風（52_fleet.js CMD_GAUGE；TASK-0679）每一方一顆開關。 */
-function gaugeShow() { [].forEach.call(document.querySelectorAll('#gauges button'), function (b) { b.className = CMD_GAUGE[b.dataset.side] ? 'on' : ''; }); }
-[].forEach.call(document.querySelectorAll('#gauges button'), function (b) { b.onclick = function () { CMD_GAUGE[b.dataset.side] = !CMD_GAUGE[b.dataset.side]; gaugeShow(); }; });
+function gaugeShow() { [].forEach.call(bsAll('#gauges button'), function (b) { b.className = CMD_GAUGE[b.dataset.side] ? 'on' : ''; }); }
+[].forEach.call(bsAll('#gauges button'), function (b) { b.onclick = function () { CMD_GAUGE[b.dataset.side] = !CMD_GAUGE[b.dataset.side]; gaugeShow(); }; });
 gaugeShow();
 /** 細節設定：候補補位（52_fleet.js REINF_MODE）。 */
-function reinfShow() { [].forEach.call(document.querySelectorAll('#reinfs button'), function (b) { b.className = b.dataset.r === REINF_MODE ? 'on' : ''; }); if ($('fleetN')) fleetUI(); }
-[].forEach.call(document.querySelectorAll('#reinfs button'), function (b) { b.onclick = function () { REINF_MODE = b.dataset.r; reinfShow(); }; });
+function reinfShow() { [].forEach.call(bsAll('#reinfs button'), function (b) { b.className = b.dataset.r === REINF_MODE ? 'on' : ''; }); if ($('fleetN')) fleetUI(); }
+[].forEach.call(bsAll('#reinfs button'), function (b) { b.onclick = function () { REINF_MODE = b.dataset.r; reinfShow(); }; });
 reinfShow();
 /** 主選單：開局距離（滑桿，04_state.js LIM_DIST）。開局才用 ⇒ 改了下一場生效。 */
 function distShow() { var d = $('dist'); d.value = DIST; $('distV').textContent = DIST + ' m（船頭到船頭）'; }
 (function () { var d = $('dist'); d.min = LIM_DIST[0]; d.max = LIM_DIST[1]; d.oninput = function () { DIST = Math.round(+d.value); distShow(); }; distShow(); })();
-[].forEach.call(document.querySelectorAll('#sails button'), function (b) { b.onclick = function () { setSailMode(b.dataset.s); }; });
-[].forEach.call(document.querySelectorAll('#modes button'), function (b) { b.className = b.dataset.m === MODE ? 'on' : ''; });   // 模式的預設照設定檔（menu.mode）
+[].forEach.call(bsAll('#sails button'), function (b) { b.onclick = function () { setSailMode(b.dataset.s); }; });
+[].forEach.call(bsAll('#modes button'), function (b) { b.className = b.dataset.m === MODE ? 'on' : ''; });   // 模式的預設照設定檔（menu.mode）
 setSailMode(SAIL); setCamTrack(true); $('physT').classList.toggle('on', PHYS);
 $('go').onclick = start;
 /** 回到主選單（'menu'、結束畫面的「主選單」）：?start=1 開場時沒照載好的船型重畫主選單（90_main.js：主選單不會出來 ⇒ 不佔開場）⇒ 第一次回來才補畫。 */
-evOn('scene', function () { distShow(); [].forEach.call(document.querySelectorAll('#modes button'), function (b) { b.className = b.dataset.m === MODE ? 'on' : ''; }); });   // 待命開機換場（90_main.js sceneApply）：距離、玩法照新的值
+evOn('scene', function () { distShow(); [].forEach.call(bsAll('#modes button'), function (b) { b.className = b.dataset.m === MODE ? 'on' : ''; }); });   // 待命開機換場（90_main.js sceneApply）：距離、玩法照新的值
 var COVER_LATE = START_Q;
 function coverShow() { $('cover').style.display = ''; if (COVER_LATE && SLIDERS_SHOW) { COVER_LATE = false; SLIDERS_SHOW(); } }
 // __game（DEBUG 的量測入口，90_main.js）裡屬於主選單的那幾項：開機時核心發 game:api ⇒ 掛上去（TASK-0774 第 4 步）
@@ -140,7 +140,7 @@ function flagPop(s) {
     var box = $('flag' + i), dd = box && box.querySelector('.flagdd'); if (!dd) return;
     var on = i === s; dd.hidden = !on; box.querySelector('.flagb').setAttribute('aria-expanded', on);
     if (!on) return;
-    dd.style.transform = ''; var r = dd.getBoundingClientRect(), vw = document.documentElement.clientWidth, dx = r.right > vw - 6 ? vw - 6 - r.right : r.left < 6 ? 6 - r.left : 0;
+    dd.style.transform = ''; var r = dd.getBoundingClientRect(), vw = BS_HTML.clientWidth, dx = r.right > vw - 6 ? vw - 6 - r.right : r.left < 6 ? 6 - r.left : 0;
     if (dx) dd.style.transform = 'translateX(' + dx + 'px)';
     (dd.querySelector('.cur') || dd.firstChild).focus();
   });

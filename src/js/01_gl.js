@@ -44,7 +44,7 @@ function errShow(msg) {
   e.style.display = 'flex';
   if (hand) $('errTxt').focus();
 }
-function errFp() { try { return JSON.parse(document.getElementById('blockside-src').textContent).fp; } catch (x) { return '?'; } }   // 成品的來源指紋（admin.py src_stamp）
+function errFp() { try { return JSON.parse($('blockside-src').textContent).fp; } catch (x) { return '?'; } }   // 成品的來源指紋（admin.py src_stamp）
 /** 遊戲狀態（Tim 2026-10-18：「錯誤回報可以打包遊戲內其他參數資訊一起回傳」）：一行一項，每一行各自 try（載入一半出錯 ⇒ 讀不到的寫原因，其他照寫）；存檔那一行不列 v（版本號，每次都有）。 */
 function errState() {
   function L(k, f) { try { return k + '：' + f(); } catch (x) { return k + '：（讀不到：' + (x && x.message || x) + '）'; } }

@@ -44,9 +44,9 @@ function uiLayoutName() {
 function uiLayout() {
   var name = uiLayoutName(), menu = name === 'town' && typeof TWB !== 'undefined' && TWB.on, sig = name + (menu ? '+menu' : '');
   if (sig === UI.sig) return;
-  if (!UI.el) { UI.el = {}; Object.keys(UI_GROUPS).forEach(function (g) { UI.el[g] = UI_GROUPS[g].map(function (id) { return document.getElementById(id); }).filter(Boolean); }); }
+  if (!UI.el) { UI.el = {}; Object.keys(UI_GROUPS).forEach(function (g) { UI.el[g] = UI_GROUPS[g].map(function (id) { return $(id); }).filter(Boolean); }); }
   var show = UI_LAYOUT[name].slice(); if (name === 'town') show.push('kTown');   // 🔨 常駐（開關鈕；開著 ⇒ #stage.twb 亮底）—— Tim 2026-10-23「建築模式按鈕希望改成常駐的Toggle按鈕」
   Object.keys(UI_GROUPS).forEach(function (g) { var off = show.indexOf(g) < 0; UI.el[g].forEach(function (el) { el.classList.toggle('uiOff', off); }); });
-  var st = document.getElementById('stage'); if (st) st.dataset.ui = name;
+  var st = $('stage'); if (st) st.dataset.ui = name;
   UI.sig = sig; UI.name = name;
 }

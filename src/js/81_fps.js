@@ -102,7 +102,7 @@ function fpUI() {
   $('stage').classList.toggle('fp', FP.on);
   $('fpT').classList.toggle('on', FP.on); $('fpLampT').classList.toggle('on', FP.lamp);
   var lk = fpBuildLock(); $('fpExit').style.display = lk ? 'none' : ''; $('fpT').title = lk ? '建造模式固定第一人稱' : '';   // 建造模式鎖定：沒有退出鈕
-  [].forEach.call(document.querySelectorAll('#gset [data-fpm]'), function (b) { b.classList.toggle('on', +b.dataset.fpm === FP.mode); });
+  [].forEach.call(bsAll('#gset [data-fpm]'), function (b) { b.classList.toggle('on', +b.dataset.fpm === FP.mode); });
   $('fpUI').classList.toggle('fol', !!FP.fol);                         // 跟隨中：藏搖桿、跳、跑、爬梯子（template.html #fpUI.fol）
   $('fpUI').classList.toggle('fly', FP.mode === 2);
   var bm = $('bldMode'), be = bm && bm.querySelector('.em'), bt = FP_MODE_EM[FP.mode];   // 建造模式那一顆（82_build.js）：照現在的碰撞換圖示
@@ -537,8 +537,8 @@ document.addEventListener('pointerlockchange', function () {
   if (FP.unlockMine) { FP.unlockMine = false; return; }                // 自己放的（Alt、停格、離開第一人稱）
   if (FP.on) setTimeout(function () { if (FP.on && !GSET.open) { gsetOpen(); FP_ESC_T = performance.now(); } }, 60);   // 瀏覽器放的（Esc）⇒ 打開設定
 });
-[].forEach.call(document.querySelectorAll('#gset [data-fpm]'), function (b) { b.onclick = function () { fpMode(+b.dataset.fpm); }; });   // 碰撞三段（正常／穿牆／浮空）：開關不關設定面板；跨場留著
-[].forEach.call(document.querySelectorAll('#fpUI [data-fp]'), function (b) {
+[].forEach.call(bsAll('#gset [data-fpm]'), function (b) { b.onclick = function () { fpMode(+b.dataset.fpm); }; });   // 碰撞三段（正常／穿牆／浮空）：開關不關設定面板；跨場留著
+[].forEach.call(bsAll('#fpUI [data-fp]'), function (b) {
   var k = b.dataset.fp;
   function on(e) { e.preventDefault(); FP.mv[k] = 1; b.classList.add('down'); }
   function off() { FP.mv[k] = 0; b.classList.remove('down'); }

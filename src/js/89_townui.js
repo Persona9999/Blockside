@@ -21,7 +21,7 @@ var TUI_C = ['#3987e5', '#d95926'];                                     // 圖�
 var TUI_JOB = { build: '營造（工地）', garrison: '士兵', forage: '野外採集' };   // 不是建築種類的崗位
 var TUI_CAT = { food: '糧食', raw: '原料', cash: '經濟作物', goods: '製品', war: '軍需', metal: '貴金屬', curio: '奇物' };
 var TUI_HOST = Q.get('tui') === '@host' ? (window.parent !== window ? window.parent : window.opener) : null;   // ?tui=@host（檔頭）
-if (TUI_HOST) document.documentElement.classList.add('tuionly');
+if (TUI_HOST) BS_HTML.classList.add('tuionly');
 function tuiOk() { return TUI_HOST ? !!TWB.town : modeRule('town') && BED && BED.host && TWB.town; }
 function tuiEsc(t) { return String(t).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
 function tuiNum(x, d) { x = +x || 0; return x.toLocaleString('en-US', { minimumFractionDigits: d || 0, maximumFractionDigits: d || 0 }); }

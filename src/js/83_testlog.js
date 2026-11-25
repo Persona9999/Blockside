@@ -139,7 +139,7 @@ function tlgSave() {
   var d = tlgData(); if (!d) return;
   var a = document.createElement('a');
   a.href = URL.createObjectURL(new Blob([JSON.stringify(d)], { type: 'application/json' }));
-  a.download = 'blockside-crewlog-seed' + SEED + '-' + Math.round(SIMT) + 's.json'; document.body.appendChild(a); a.click();
+  a.download = 'blockside-crewlog-seed' + SEED + '-' + Math.round(SIMT) + 's.json'; BS_BODY.appendChild(a); a.click();
   setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
 }
 $('testT').onclick = tlgToggle;

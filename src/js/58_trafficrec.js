@@ -71,7 +71,7 @@ function trrSave() {
   var d = new Date(), p2 = function (v) { return ('0' + v).slice(-2); }, a = document.createElement('a');
   a.href = URL.createObjectURL(new Blob([trrLog()], { type: 'application/x-ndjson' }));
   a.download = 'traffic_log_' + d.getFullYear() + p2(d.getMonth() + 1) + p2(d.getDate()) + '_' + p2(d.getHours()) + p2(d.getMinutes()) + '.ndjson';
-  document.body.appendChild(a); a.click(); setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+  BS_BODY.appendChild(a); a.click(); setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
   return a.download;
 }
 /** 讀數（__game.trkRec）：沒給 ⇒ { on, lines, ships }；'log' ⇒ 整份字串；'save' ⇒ 下載、回檔名；'clear' 清掉；'on'／'off' 記不記。 */

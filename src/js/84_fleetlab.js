@@ -19,10 +19,10 @@ var FLAB = { tl: null, run: false, view: 'map', speed: 16, match: null, batch: n
 var FLAB_HIDE = false;                                                   // 50_sim.js step：true ⇒ 不發 viewStep
 var FLAB_HZ = [60, 30, 20, 15, 10], FLAB_SPEEDS = [1, 4, 16, 64, Infinity];
 var FLAB_MC = typeof MessageChannel !== 'undefined' ? new MessageChannel() : null;
-function flabEl(id) { return document.getElementById(id); }
+function flabEl(id) { return $(id); }
 /** 載完船型（90_main.js 載入那一段）：進沙盒的畫面、關畫面那幾項物理、照網址填預設值。 */
 function flabInit() {
-  document.body.classList.add('flab'); uiAway();
+  BS_BODY.classList.add('flab'); uiAway();
   ['rig', 'debris', 'fx', 'water', 'sinkflood', 'sailhit'].forEach(function (k) { PHX[k] = 0; }); PHX.rigfar = 0; setPhys(false);
   SAIL = 'auto'; muted = true;
   var hs = flabEl('flabHB'), hr = flabEl('flabHR');
@@ -38,7 +38,7 @@ function flabInit() {
   flabEl('flabSeed').value = q('seed', 1); flabEl('flabHz').value = q('hz', 20); flabEl('flabT').value = q('tmax', 600); flabEl('flabBN').value = q('bn', 4);
   flabEl('flabGo').onclick = function () { flabStart(flabParams()); };
   flabEl('flabPause').onclick = function () { FLAB.run = !FLAB.run; this.textContent = FLAB.run ? '暫停' : '繼續'; if (FLAB.run) flabKick(); };
-  [].forEach.call(document.querySelectorAll('#flabSpd button'), function (b) { b.onclick = function () { FLAB.speed = +b.dataset.s || Infinity; flabSpdShow(); }; });
+  [].forEach.call(bsAll('#flabSpd button'), function (b) { b.onclick = function () { FLAB.speed = +b.dataset.s || Infinity; flabSpdShow(); }; });
   flabEl('flabView').onclick = function () { flabSetView(FLAB.view === '3d' ? 'map' : '3d'); };
   flabEl('flabTrace').onclick = function () { flabSetView(FLAB.view === 'trace' ? 'map' : 'trace'); };
   flabEl('flabTL').oninput = function () { FLAB.tl = +this.value; };
@@ -54,7 +54,7 @@ function flabInit() {
   flabSpdShow();
   if (Q.get('go') === '1') flabStart(flabParams());
 }
-function flabSpdShow() { [].forEach.call(document.querySelectorAll('#flabSpd button'), function (b) { b.className = (+b.dataset.s || Infinity) === FLAB.speed ? 'on' : ''; }); }
+function flabSpdShow() { [].forEach.call(bsAll('#flabSpd button'), function (b) { b.className = (+b.dataset.s || Infinity) === FLAB.speed ? 'on' : ''; }); }
 /** 畫面上的設定 ⇒ 一場的參數。 */
 function flabParams() {
   function n(id, d, lo, hi) { var v = parseFloat(flabEl(id).value); return isFinite(v) ? clamp(v, lo, hi) : d; }
@@ -194,7 +194,7 @@ function flabBatchTable() {
 // ── 畫面 ──
 function flabSetView(v) {
   FLAB.view = v; FLAB_HIDE = v !== '3d';
-  document.body.classList.toggle('flab3d', v === '3d'); flabEl('flabView').textContent = v === '3d' ? '🗺 俯視圖' : '🎥 看實景';
+  BS_BODY.classList.toggle('flab3d', v === '3d'); flabEl('flabView').textContent = v === '3d' ? '🗺 俯視圖' : '🎥 看實景';
   flabEl('flabTrace').className = v === 'trace' ? 'on' : ''; flabEl('flabTLbox').style.display = v === 'trace' ? '' : 'none';
   if (v === '3d' && SHIPS.length) { remesh(Infinity); var o = SHIPS[FLAB.sel] || SHIPS[0]; camSet({ mode: 3, follow: null, pan: [0, 0], see: o.i === PLAYER_I ? null : o, dist: 120, snap: true }); }
 }
@@ -284,7 +284,7 @@ function flabExport() {
   var M = FLAB.match; if (!M) return;
   var data = { v: 1, params: M.p, result: M.res || flabResult(M), cols: FLAB_COLS, rec: M.rec };
   var a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([JSON.stringify(data)], { type: 'application/json' }));
-  a.download = 'fleetlab-seed' + M.p.seed + '-' + M.p.blue.strat + '-vs-' + M.p.red.strat + '-' + Math.round(SIMT) + 's.json'; document.body.appendChild(a); a.click(); a.remove();
+  a.download = 'fleetlab-seed' + M.p.seed + '-' + M.p.blue.strat + '-vs-' + M.p.red.strat + '-' + Math.round(SIMT) + 's.json'; BS_BODY.appendChild(a); a.click(); a.remove();
 }
 /** 軌跡：這一艘的記錄在 t 秒（不晚於 t 的最後一筆）。 */
 function flabAt(sr, t) { var L = sr.s, lo = 0, hi = L.length - 1; if (hi < 0) return null; while (lo < hi) { var m = (lo + hi + 1) >> 1; if (L[m][0] <= t) lo = m; else hi = m - 1; } return L[lo]; }
