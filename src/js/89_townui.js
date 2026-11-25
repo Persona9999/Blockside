@@ -20,7 +20,7 @@ var TUI_TABS = [{ k: 'sum', name: '📋 概況' }, { k: 'flow', name: '⚖ 產�
 var TUI_C = ['#3987e5', '#d95926'];                                     // 圖的兩條線：藍、橘（dataviz 參考色盤第 1、2 格的深色版；深底 #12161d 上驗過：色盲 ΔE 26.8、對比 ≥ 3）
 var TUI_JOB = { build: '營造（工地）', garrison: '士兵', forage: '野外採集' };   // 不是建築種類的崗位
 var TUI_CAT = { food: '糧食', raw: '原料', cash: '經濟作物', goods: '製品', war: '軍需', metal: '貴金屬', curio: '奇物' };
-var TUI_HOST = Q.get('tui') === '@host' ? (window.parent !== window ? window.parent : window.opener) : null;   // ?tui=@host（檔頭）
+var TUI_HOST = Q.get('tui') === '@host' ? BS_OPT.host : null;   // ?tui=@host（檔頭）
 if (TUI_HOST) BS_HTML.classList.add('tuionly');
 function tuiOk() { return TUI_HOST ? !!TWB.town : modeRule('town') && BED && BED.host && TWB.town; }
 function tuiEsc(t) { return String(t).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }

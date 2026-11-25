@@ -30,3 +30,12 @@ function bsUnlisten(where, type, fn, opt) {
 function bsUnlistenAll() { BS_INPUT.list.splice(0).forEach(function (x) { x.t.removeEventListener(x.type, x.w, x.cap); }); }
 // 掛在 window／document 上的監聽要看「點到哪」⇒ bsTarget(e)：shadow root 裡的事件傳出來時 e.target 會換成宿主元素，composedPath()[0] 才是真正點到的那一個（這一頁本身時兩者相同）
 function bsTarget(e) { var p = e.composedPath && e.composedPath(); return p && p.length ? p[0] : e.target; }
+// 開機選項（TASK-1271 函式庫化④）：核心讀的網址參數、#pre=…、@host 的對象都從 BS_OPT 拿，⛔ 不直接讀 location.search／hash、window.parent／opener。
+//   這一頁本身（獨立版、battle.html 開在 iframe 裡）⇒ 照網址；之後掛進別人的頁面 ⇒ 掛載的人給。
+//   own：網址是核心自己的（換場時網址列跟著換）；framed：開在 iframe 裡（待命開機只在這種時候等外面那一頁）；host：@host 要講話的那一頁。
+var BS_OPT = { query: location.search, hash: location.hash, own: true, framed: window.parent !== window, host: window.parent !== window ? window.parent : window.opener };
+/** 換場（90_main.js sceneApply）：這一場的參數（不含 ?）與 #pre=…（沒有 ⇒ 空）。 */
+function bsOptScene(q, h) { BS_OPT.query = '?' + q; BS_OPT.hash = h; }
+// 版面大小：HUD、小地圖照「核心那一塊有多大」排 —— 這一頁本身 ＝ 視窗；之後掛進別人的頁面 ＝ 容器
+function bsViewW() { return innerWidth; }
+function bsViewH() { return innerHeight; }

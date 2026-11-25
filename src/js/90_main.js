@@ -630,18 +630,19 @@ hullSay = function (s) { evEmit('boot:hull', '解析' + s); };   // 解析中：
 //   照它重算載入時讀網址的那幾項（sceneApply）⇒ 接著照從網址開機那一條走（載編成、海圖、開場、'started'）。
 //   一份頁面只換一場：回地球儀時外面那一頁關掉它、背景再開一份新的待命 ⇒ 上一場的東西不會留到下一場。
 //   ⛔ 載入時讀網址、之後又會變的那幾項，要在 sceneApply 裡照「載入的先後」重算一次：漏一項 ⇒ 那一項停在待命網址的值（Blocksail TASK-1271 的換場對拍：同一份網址從網址開機與換場，比開場的狀態）。
-var SCENE_WAIT = Q.get('wait') === '1' && Q.get('map') === '@host' && !HEADLESS && !PICK_HOST && !TUI_HOST && window.parent !== window;
+var SCENE_WAIT = Q.get('wait') === '1' && Q.get('map') === '@host' && !HEADLESS && !PICK_HOST && !TUI_HOST && BS_OPT.framed;
 var SCENE_GO = !SCENE_WAIT ? Promise.resolve() : new Promise(function (res) {
   bsListen('win', 'message', function on(e) {
-    var d = e.data; if (!d || d.bsmap !== 'scene' || e.source !== window.parent) return;
+    var d = e.data; if (!d || d.bsmap !== 'scene' || e.source !== BS_OPT.host) return;
     bsUnlisten('win', 'message', on); sceneApply(d); res();
   });
 });
 /** 換場：網址換成這一場的、照載入的先後重算讀網址的那幾項（04_state → 04_modes → 05_hull → 08_weather → 52_fleet → 57_core → 69_prefs 存檔 → 87_townbuild）。 */
 function sceneApply(d) {
   var q = String(d.q || '').replace(/^\?/, ''), h = d.hash ? String(d.hash) : '';
-  try { history.replaceState(history.state, '', location.pathname + '?' + q + h); } catch (e) { /* 換不了網址列 ⇒ Q 照樣換 */ }
-  Q = new URLSearchParams(q);
+  bsOptScene(q, h);                                                     // 00_mount.js：之後讀 BS_OPT 的拿到這一場的
+  if (BS_OPT.own) try { history.replaceState(history.state, '', location.pathname + '?' + q + h); } catch (e) { /* 換不了網址列 ⇒ Q 照樣換 */ }
+  Q = new URLSearchParams(BS_OPT.query);
   flowMode(CFG.menu.mode); DIST = distQ();                               // 04_state.js
   MODE_Q = modeQ(); if (MODE_Q) flowMode(MODE_Q);                       // 04_modes.js
   FLEET_SET = fleetQ();                                                 // 05_hull.js
@@ -658,7 +659,7 @@ if (SCENE_WAIT) GL_READY.then(yieldUI).then(function () {
   initAudio();                                                          // 沒有使用者手勢 ⇒ 建成 suspended；開戰那一步（70_flow.js startSteps）照舊 resume
   var W = (Q.get('warm') || '').split(',').filter(hullInfo);
   return Promise.all(W.map(function (id) { return loadHull(id).catch(function (e) { console.error(e); }); }));
-}).then(function () { try { window.parent.postMessage({ bsmap: 'waiting' }, '*'); } catch (e) { /* 外面那一頁走了 */ } });
+}).then(function () { try { BS_OPT.host.postMessage({ bsmap: 'waiting' }, '*'); } catch (e) { /* 外面那一頁走了 */ } });
 if (!HEADLESS && !PICK_HOST && !TUI_HOST) GL_READY.then(function () { return SCENE_GO; }).then(function () { requestAnimationFrame(frame); });   // 待命：換場之後才開（背景不畫）   // 無頭（00_events.js）不開畫面迴圈；解析中也畫（天、海；船載好才有）
 /** 編成裡的船全部進了 HULLT 才放行：等完一輪再照**現在的**編成看一次，還有不在的 ⇒ 再等一輪。
  *  ⛔ 只等開頭那一份名單：解析中主選單換了我艦（pickShip）⇒ 名單裡的都回來了，HULLT[我艦] 卻還沒有

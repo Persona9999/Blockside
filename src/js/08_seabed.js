@@ -160,7 +160,7 @@ function bedHostMenuGo() { if (!BED || !BED.host) return false; BED.host.postMes
 /** 開機（90_main.js 跟船一起等）：有 ?map ⇒ 讀海域、定原點；快轉／無頭 ⇒ 整個海域載完，不然 ⇒ 開戰位置附近先載好。 */
 function bedBoot() {
   var id = Q.get('map'); if (!id) return Promise.resolve();
-  var host = id === '@host' ? (window.parent !== window ? window.parent : window.opener) : null;
+  var host = id === '@host' ? BS_OPT.host : null;
   if (id === '@host' && !host) return Promise.reject(new Error('?map=@host 要開在 Blocksail 的頁面裡（iframe 或 window.open）'));
   if (!host && !/^[a-z0-9_-]+$/.test(id)) return Promise.reject(new Error('海域名稱只能是小寫英數、底線、連字號：' + id));
   BED = { wantArea: id, host: host, ask: {}, A: null, ch: {}, pend: {}, peek: {}, idx: null, cx: null, cy: null, top: -Infinity, miss: 0, loads: 0, drops: 0,

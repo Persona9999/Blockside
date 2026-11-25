@@ -124,7 +124,7 @@ bsListen('win', 'keydown', function (e) { if (e.key === 'Escape' && $('spk').cla
 //   chart ＝ 海圖模式的穩定航速表（spkChart：風速 × 風向 ⇒ 節，照核心的推進公式解；TASK-0803）⇒ 地球儀照風向、風速查這一型的航速；
 //   draft ＝ 開戰時吃水多深（m：船底最低點（32_ground.js groundKeel）到水面，照開戰時的重量浮高／吃水深 liftFor，跟船隻配置頁的卡片同一套）、loa ＝ 外框全長（m，含艏斜桅）
 //   ⇒ 航海找起點要的「夠我艦吃水的水深」「我艦多長」（Blocksail presets.js BLOCKSAIL_SAIL 的 depth、r）。
-var PICK_HOST = Q.get('pick') === '@host' ? (window.parent !== window ? window.parent : window.opener) : null;
+var PICK_HOST = Q.get('pick') === '@host' ? BS_OPT.host : null;
 if (PICK_HOST) BS_HTML.classList.add('pickonly');
 function pickPost(what, o) { try { PICK_HOST.postMessage(Object.assign({ bspick: what }, o || {}), '*'); } catch (e) { /* 外面那一頁關了 */ } }
 //   &auto=1（Tim 2026-10-27「是否能讓選船跟預設船走同一流程(相當於一開始選了預設船)」「而不用維護兩套流程」）：不開彈窗、直接量 cur 那一型 ⇒ 'measuring'、'picked'／'error' 跟點卡片一樣

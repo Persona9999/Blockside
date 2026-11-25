@@ -121,14 +121,14 @@ function chartZoom(d) {
 function chartDraw(me) {
   var on = RUNNING && me && chartReady();
   if (!on) { if (CHART.box && CHART.box.style.display !== 'none') CHART.box.style.display = 'none'; return; }
-  var bx0 = chartEl(), c = CHART.cv, A = CHART.A, ch = A.chunk, port = innerHeight > innerWidth, W = port ? 132 : 176, dpr = Math.min(window.devicePixelRatio || 1, 2);
+  var bx0 = chartEl(), c = CHART.cv, A = CHART.A, ch = A.chunk, port = bsViewH() > bsViewW(), W = port ? 132 : 176, dpr = Math.min(window.devicePixelRatio || 1, 2);
   if (bx0.style.display === 'none') { bx0.style.display = 'block'; chartZoom(0); }
   else if (!chartLvOk(CHART.zoom)) chartZoom(0);                       // 畫質換成窗比較小的 ⇒ 這一級的最外圈落在窗外 ⇒ 往近的挪
   if (c.width !== W * dpr) { c.width = c.height = W * dpr; c.style.width = c.style.height = W + 'px'; }
   // 右下角、右邊那一排按鈕的上面：跟 c 橫向重疊的按鈕裡最高的那一個的頂 ⇒ 底
-  var top = innerHeight - 8;
-  ['helmR', 'ctlRow', 'navBox'].forEach(function (id) { var e = $(id); if (!e || !e.offsetParent) return; var r = e.getBoundingClientRect(); if (r.right > innerWidth - W - 16 && r.height) top = Math.min(top, r.top); });
-  var bt = Math.max(8, innerHeight - top + 8) + 'px'; if (bx0.style.bottom !== bt) bx0.style.bottom = bt;
+  var top = bsViewH() - 8;
+  ['helmR', 'ctlRow', 'navBox'].forEach(function (id) { var e = $(id); if (!e || !e.offsetParent) return; var r = e.getBoundingClientRect(); if (r.right > bsViewW() - W - 16 && r.height) top = Math.min(top, r.top); });
+  var bt = Math.max(8, bsViewH() - top + 8) + 'px'; if (bx0.style.bottom !== bt) bx0.style.bottom = bt;
   // 航跡：模擬時間 2 秒一點（新的一場 ⇒ 清掉）
   if (SIMT < CHART.trT) CHART.trail = [];
   if (SIMT - CHART.trT >= 2 || CHART.trT < 0) { CHART.trT = SIMT; CHART.trail.push([me.px, me.pz]); if (CHART.trail.length > CHART_TRAIL) CHART.trail.shift(); }
@@ -245,7 +245,7 @@ function chartTownIcons(g, P, W) {
 function chartInfo() {
   var r = CHART.res || {}, ks = Object.keys(r), b = CHART.box && CHART.box.style.display !== 'none' ? CHART.cv.getBoundingClientRect() : null;
   return { on: !!b, zoom: CHART_R[CHART.zoom], need: +CHART.need.toFixed(2), fine: ks.filter(function (k) { return r[k] > 100; }).length, coarse: ks.filter(function (k) { return r[k] <= 100; }).length, trail: CHART.trail.length,
-    box: b ? [Math.round(b.left), Math.round(b.top), Math.round(b.right), Math.round(b.bottom)] : null, view: [innerWidth, innerHeight] };
+    box: b ? [Math.round(b.left), Math.round(b.top), Math.round(b.right), Math.round(b.bottom)] : null, view: [bsViewW(), bsViewH()] };
 }
 
 // ───────────────────────── 海圖模式（航海模式的變體；TASK-1272） ─────────────────────────

@@ -9,7 +9,7 @@ function coreB64(u8) { var s = ''; for (var i = 0; i < u8.length; i += 8192) s +
 function coreUnB64(s) { var b = atob(s), u = new Uint8Array(b.length); for (var i = 0; i < b.length; i++) u[i] = b.charCodeAt(i); return u; }
 /** 網址的 #pre=<base64url(UTF-8 JSON)>：外部開戰（?start=1）、無頭對拍（?demo）帶戰前狀態用；沒有、壞了 ⇒ null（壞了記一行）。 */
 function corePreHash(h) {                          // h：待命開機換場時外面給的 hash（90_main.js sceneApply）；沒給 ⇒ 網址本身的
-  var m = /[#&]pre=([^&]+)/.exec(h != null ? h : location.hash || ''); if (!m) return null;
+  var m = /[#&]pre=([^&]+)/.exec(h != null ? h : BS_OPT.hash || ''); if (!m) return null;
   try { var u = coreUnB64(m[1].replace(/-/g, '+').replace(/_/g, '/')); return JSON.parse(new TextDecoder().decode(u)); }
   catch (e) { console.error('#pre 讀不了', e); return null; }
 }

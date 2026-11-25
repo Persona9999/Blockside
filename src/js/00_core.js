@@ -10,7 +10,7 @@
  *   ⛔ 頂層的敘述照檔案順序執行：要在載入時就跑的（讀網址、建 GL）放在用到它的檔之前。
  */
 var VK = window.VoxelKit, M4 = VK.M4;
-var Q = new URLSearchParams(location.search);
+var Q = new URLSearchParams(BS_OPT.query);
 var DEMO = Q.has('demo') ? Math.max(0, parseFloat(Q.get('demo')) || 0) : -1;
 var STILL = Q.get('still') === '1', DEBUG = Q.get('debug') === '1';
 var LAB_FLEET = Q.get('lab') === 'fleet';                              // 擬真沙盒（84_fleetlab.js；根目錄 fleetlab.html 轉過來）：遊戲本體的模擬、只畫俯視圖
