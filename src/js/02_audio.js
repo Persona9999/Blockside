@@ -611,3 +611,23 @@ function audioWav(buf) {
 }
 // 訂閱（TASK-0669：模擬層只發事件，00_events.js）
 evOn('sfx', sfxPlay, 0, true);
+// ───────────────────────── 背景音樂交給外面那一頁（TASK-1271；Tim 2026-11-25「音樂常駐（地球儀也播放船歌）」） ─────────────────────────
+// ?bgm=@host（Blocksail 地球儀開的航海、海戰、進城）：地球儀自己在放船歌（它載同一支 02_music.js）⇒ 這一頁不放自己的（bgmBus 一直是 0），
+//   改把「該放什麼、多大聲」交出去：主題曲（bgmTheme：操控的船）、音量與模式（SND）、靜音（M）、開砲爆炸（SND_FIGHT ⇒ 交戰時小聲一點）、試聽（聲音設定頁 ▶）
+//   ⇒ 外面那一頁照它放：同一條音樂從地球儀一路放進來、回去也不斷不從頭。只在變了的時候送 { bsmap: 'bgm', … }。
+// ⛔ 寫在這裡、不寫進 02_music.js：地球儀直接載那一支原始檔、只補了幾個核心的名字 —— 那一支多用一個名字，地球儀的音樂就停。
+var BGM_HOST = null, BGM_TOLD = '', BGM_FOUGHT = -1e9;
+/** 載入時與換場（90_main.js sceneApply）各算一次：?bgm=@host 而且有外面那一頁（BS_OPT.host）⇒ 那一頁。 */
+function bgmHostQ() { return Q.get('bgm') === '@host' ? BS_OPT.host || null : null; }
+BGM_HOST = bgmHostQ();
+function bgmHostTell(o) { try { BGM_HOST.postMessage(Object.assign({ bsmap: 'bgm' }, o), '*'); } catch (e) { /* 外面那一頁走了 */ } }
+/** 每一格（90_main.js frame、70_flow.js 開戰那一步）：沒有外面那一頁 ⇒ 自己放（bgmFrame）；有 ⇒ 變了才交出去。 */
+function bgmStep() {
+  if (!BGM_HOST) { bgmFrame(); return; }
+  var th = bgmTheme(), s = JSON.stringify([th ? th.id : null, SND.bgm, SND.mode, SND.tune, SND.theme, muted]), fight = SND_FIGHT > BGM_FOUGHT;
+  if (s === BGM_TOLD && !fight) return;
+  BGM_TOLD = s; BGM_FOUGHT = SND_FIGHT;
+  bgmHostTell({ theme: th ? th.id : null, snd: { bgm: SND.bgm, mode: SND.mode, tune: SND.tune, theme: SND.theme }, muted: muted, fight: fight });
+}
+/** 聲音設定頁的試聽（▶）：有外面那一頁 ⇒ 請它放。 */
+function bgmTry(id) { if (BGM_HOST) bgmHostTell({ preview: id }); else bgmPreview(id); }

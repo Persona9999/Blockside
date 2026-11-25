@@ -102,6 +102,6 @@ function flowWarmSteps() {
     var R = {}; out = out.concat(portsSteps(sh, R), [function () { if (sh.ports === undefined) sh.ports = R.out; if (sh.recoil === undefined) sh.recoil = recoilBuild(sh); }]);
   });
   if (AC) out.push(function () { ambNoise(AC, 'white'); }, function () { ambNoise(AC, 'pink'); }, function () { ambNoise(AC, 'brown'); });   // 環境音的三種噪音（02_ambient.js），再建環境音
-  if (AC) out.push(function () { bgmRevBuf(AC); }, function () { bgmRevBuf(AC); });   // 背景音樂的殘響（02_music.js）：兩個聲道各一步，再建卷積
-  return out.concat([function () { ambFrame(); }, function () { bgmWarm(); }, function () { bgmFrame(); }]);
+  if (AC && !BGM_HOST) out.push(function () { bgmRevBuf(AC); }, function () { bgmRevBuf(AC); });   // 背景音樂的殘響（02_music.js）：兩個聲道各一步，再建卷積
+  return out.concat([function () { ambFrame(); }, function () { if (!BGM_HOST) bgmWarm(); }, function () { bgmStep(); }]);
 }
