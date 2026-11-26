@@ -1,6 +1,18 @@
 // ───────────────────────── WebGL ─────────────────────────
 var cv = $('cv'), gl = cv.getContext('webgl2', { antialias: false, preserveDrawingBuffer: true });   // 反鋸齒自己做（MSAA framebuffer，畫質設定；60_render.js targets）
-bsOnDispose(function () { var x = gl && gl.getExtension('WEBGL_lose_context'); if (x) x.loseContext(); });   // 卸載（00_mount.js bsDispose，TASK-1271 ⑥）：放掉這一份的 WebGL
+var GL_BYE = false;                                                   // 卸載時我們自己放掉的 ⇒ 不算「掉了」
+bsOnDispose(function () { GL_BYE = true; var x = gl && gl.getExtension('WEBGL_lose_context'); if (x) x.loseContext(); });   // 卸載（00_mount.js bsDispose，TASK-1271 ⑥）：放掉這一份的 WebGL
+// WebGL context 掉了（筆電內顯驅動重置、顯示記憶體不夠；TASK-1271 #41）：著色器、網格、貼圖不會自己回來，這裡也不在原地重建 ⇒
+//   有宿主（地球儀開的：?map=@host 的海戰、?pick=@host 選船、?tui=@host 城鎮概況）⇒ 說 { bsmap: 'gllost' }，宿主收掉這一份、下一次重新開機（新的一份、新的 context）；
+//   自己開的（index.html）⇒ 報錯彈窗：重新整理頁面。
+if (gl) cv.addEventListener('webglcontextlost', function (e) {
+  if (GL_BYE) return;
+  e.preventDefault();
+  var who = Q.get('map') === '@host' ? 'map' : Q.get('pick') === '@host' ? 'pick' : Q.get('tui') === '@host' ? 'tui' : '';
+  console.error('WebGL context 掉了' + (who ? '（告訴宿主：' + who + '）' : ''));
+  if (who && BS_OPT.host) { try { BS_OPT.host.postMessage({ bsmap: 'gllost', who: who }, '*'); } catch (x) { /* 宿主走了 */ } return; }
+  errShow('畫面（WebGL）掉了 —— 多半是顯示卡驅動重置或顯示記憶體不夠。重新整理頁面就會重新開始。');
+});
 function glFail(msg) { bootSay(msg); errShow(msg); }
 // ── 報錯彈窗與回報（Tim 2026-10-18：「是否可以加一個彈窗(可關閉) 以及一個回報錯誤按鈕(可以填錯誤內容 然後寄email…(包含報錯訊息與玩家的回報內容)」）──
 // glFail 與沒接住的錯誤（window error／unhandledrejection）都開這個彈窗；同一則訊息只自己跳一次（關掉之後不再煩人）。
