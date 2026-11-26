@@ -63,7 +63,7 @@ function gunLabInit() {
 function glabStart() {
   if (!AC) { muted = false; initAudio(); }
   if (!AC) { glabEl('glSt').textContent = '這個瀏覽器開不了聲音'; return false; }
-  if (AC.state === 'suspended') AC.resume();
+  if (AC.state === 'suspended') AC.resume().catch(function () { });
   AC.bgmBus.gain.value = 0; AC.ambBus.gain.value = 0; muted = false;   // 只聽砲：背景音樂、環境音關掉
   if (!GLAB.an) { GLAB.an = AC.createAnalyser(); GLAB.an.fftSize = 2048; AC.lim.connect(GLAB.an); GLAB.pk = 0; }
   glabEl('glSt').textContent = '聲音開了（音效音量 ' + Math.round(SND.sfx * 100) + '%）'; return true;

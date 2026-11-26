@@ -3106,7 +3106,8 @@ def act_page_layers(src=None, gate=False, every=False):
 #   ⛔ 從成品組、不從原始碼組：跑的是跟 index.html 同一份程式（成品去過註解、語法樹驗過）。
 #   遊戲閉包的第一行排在跟 index.html 同一個行號（前面補空行）⇒ 這支檔從一頁的第 1 行起放，報錯的行號就是 index.html 的行號。
 #   選項：{ query: '?…'（＝ 網址參數）, hash: '#pre=…', host（@host 要講話的那一頁：有 postMessage 的物件）, own（網址列是核心的：換場時跟著換）, framed（開在 iframe 裡）,
-#          shadow: false（反向對照用：不開 shadow root，直接放進容器、查元素查整頁）, css: [字串]（外殼的樣式，照同一套換 html／body）}
+#          shadow: false（反向對照用：不開 shadow root，直接放進容器、查元素查整頁）, css: [字串]（外殼的樣式，照同一套換 html／body）,
+#          inbox（EventTarget：同一頁的宿主往這裡 dispatch MessageEvent、source ＝ host；給了 ⇒ 核心的 'message' 聽它，⑦）, input: false（開機時鍵盤滑鼠先不給核心；之後 BS.mounted().input(true)）}
 #   一頁同時只掛一份（第二次 mount ⇒ 回失敗的 Promise）；回 Promise<掛好的那一份>。BS.unmount() 拿下（⑥：收掉頁面資源、清空容器）⇒ 之後可以再掛。
 CSS_SEL_RX = re.compile(r'(?<![\w#.\-:])(:root|html|body)(?![\w\-])')
 
@@ -3158,7 +3159,7 @@ function mount(el, o) {
   var h = box.querySelector('.bs-html'), b = box.querySelector('.bs-body'), q = new URLSearchParams(o.query || '');
   if (q.get('tui') === '@host') h.classList.add('tuionly'); if (q.get('pick') === '@host') h.classList.add('pickonly');   // = index.html 檔頭那一段：載程式之前先藏主選單
   MOUNTED = { el: el, root: shadow ? root : document, head: shadow ? root : document.head, body: b, html: h,
-    opt: { query: o.query || '', hash: o.hash || '', own: !!o.own, framed: !!o.framed, host: o.host || null } };
+    opt: { query: o.query || '', hash: o.hash || '', own: !!o.own, framed: !!o.framed, host: o.host || null, inbox: o.inbox || null, input: o.input !== false } };
   var M = MOUNTED;
   return cfg().then(function () {
     if (M.gone) throw new Error('BS.mount：還沒掛好就被拿下了');
@@ -3878,8 +3879,48 @@ def shell_mount_html(S, at, core_html, stamp, cfg, esc):
             '</body></html>\n')
 
 
+def shell_pack(path):
+    """外殼設定寫了 "pack": <檔> ⇒ (那一支 JS 的全文, 路徑)；沒寫 ⇒ None（TASK-1271 函式庫化⑦：地球儀不開 iframe、在自己那一頁掛核心）。
+    內容 ＝ blockside.js（core_js；第 1 行起，遊戲閉包的行號跟 index.html 一樣）＋ 一段：window.BS_SHELL（沒有才設）、BS.shell ＝ { cfg, css: [字串], js: [{ name, text }] }。
+    外殼的 js 不在這裡跑：掛的那一頁每次 BS.mount 之後自己挑要跑的（它自己已經載過的不用再跑）。"""
+    p = os.path.abspath(path)
+    d = os.path.dirname(p)
+    raw = open(p, 'rb').read()
+    S = json.loads(raw.decode('utf-8'))
+    if not S.get('pack'):
+        return None
+    if not S.get('mount'):
+        raise Fail('外殼設定寫了 pack 卻沒寫 "mount": true（pack 是掛載版的核心）：%s' % path)
+    at = lambda q: os.path.normpath(os.path.join(d, q))
+    core = at(S['core']) if S.get('core') else OUT
+    _, _, stamp = shell_html(path)
+    js, r = core_js(open(core, encoding='utf-8', newline='').read())
+    if not r['aligned']:
+        raise Fail('外殼的 pack：blockside.js 前面太長、遊戲閉包對不上 index.html 的行號（core_js）')
+    P = {'cfg': {'ships': S.get('ships') or '', 'name': S.get('title') or '', 'stamp': stamp},
+         'css': [open(at(q), encoding='utf-8').read() for q in S.get('css') or []],
+         'js': [{'name': q, 'text': open(at(q), encoding='utf-8').read()} for q in S.get('js') or []]}
+    tail = '(function (G) { var P = %s; if (!G.BS_SHELL) G.BS_SHELL = P.cfg; G.BS.shell = P; })(window);\n' % json.dumps(P, ensure_ascii=False, sort_keys=True).replace('</', '<\\/')
+    return js + tail, at(S['pack'])
+
+
 def act_shell(path, check=False):
-    """shell：套外殼寫成另一頁；check ⇒ 只比（舊了 ⇒ Fail，寫出來的不動）。"""
+    """shell：套外殼寫成另一頁（設定寫了 pack ⇒ 另外寫那一支 JS）；check ⇒ 只比（舊了 ⇒ Fail，寫出來的不動）。"""
+    pk = shell_pack(path)
+    if pk:
+        cur = open(pk[1], encoding='utf-8', newline='').read() if os.path.isfile(pk[1]) else None
+        if check and cur != pk[0]:
+            raise Fail('%s 舊了 ⇒ python -I <Blockside>/src/admin.py shell %s' % (pk[1], path))
+        if not check and cur != pk[0]:
+            with open(pk[1], 'w', encoding='utf-8', newline='') as f:
+                f.write(pk[0])
+        pre = ['%s %s（%.2f MB；掛載用的核心）' % ('✓ 是最新的' if check else ('· 本來就是最新的' if cur == pk[0] else '✓ 寫了'), pk[1], len(pk[0].encode('utf-8')) / 1048576)]
+    else:
+        pre = []
+    return pre + act_shell_page(path, check)
+
+
+def act_shell_page(path, check=False):
     html, out, stamp = shell_html(path)
     cur = open(out, encoding='utf-8', newline='').read() if os.path.isfile(out) else None
     if check:

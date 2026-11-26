@@ -668,7 +668,7 @@ function bgmFrame() {
 }
 /** 試聽（聲音設定頁的 ▶）：從頭放指定的那一首（還沒有聲音就先建，這一下是使用者的點擊）。 */
 function bgmPreview(id) {
-  initAudio(); if (!AC) return; if (AC.state === 'suspended') AC.resume();
+  initAudio(); if (!AC) return; if (AC.state === 'suspended') AC.resume().catch(function () { });   // 沒有手勢時 resume 一直等著 ⇒ 拿下（關掉）時它會 reject（TASK-1271 ⑦ 量到）
   var tn = tuneById(id), th = bgmTheme(); if (tn) BGM = { tn: tn, t0: AC.currentTime + 0.15, k: 0, pass: 0, forced: true, want: th ? th.id : null };   // want：按下去那時該放的主題曲（bgmFrame 看它變了沒）   // ⚠ 前一首已經排進去的那幾個音（最多 BGM_LOOK 秒）照樣會響完
 }
 /** 音效、環境音兩條線照 SND 設（靜音 ⇒ 0）；BGM 那條在 bgmFrame 淡。 */

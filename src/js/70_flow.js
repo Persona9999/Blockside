@@ -56,7 +56,7 @@ function uiAway() { evEmit('flow:start'); }
 /** 開戰拆成步驟：聲音、收起主選單 ⇒ 開局（resetSteps）⇒ 開跑、廣播、建造與第一人稱。照順序做 ＝ 拆之前的 start。 */
 function startSteps() {
   return [function () {
-    initAudio(); if (AC && AC.state === 'suspended') AC.resume();
+    initAudio(); if (AC && AC.state === 'suspended') AC.resume().catch(function () { });   // 沒有手勢時一直等著 ⇒ 拿下時 reject（TASK-1271 ⑦）
     uiAway(); $('end').className = '';
     if (BS_ROOT.activeElement && BS_ROOT.activeElement.blur) BS_ROOT.activeElement.blur();   // 不然空白鍵會再按一次「開戰」
   }].concat(resetSteps(), [function () {

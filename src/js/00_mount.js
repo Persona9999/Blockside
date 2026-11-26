@@ -20,14 +20,15 @@ function bsAll(sel) { return BS_ROOT.querySelectorAll(sel); }
 var BS_WIN = window, BS_DOC = document;
 var BS_INPUT = { on: true, list: [] };
 var BS_GATED = /^(key|pointer|mouse|touch|wheel|contextmenu)/;
+function bsWhere(where, type) { return where === 'doc' ? BS_DOC : type === 'message' && BS_M && BS_M.opt.inbox ? BS_M.opt.inbox : BS_WIN; }   // 掛在同一頁、宿主給了 inbox（EventTarget）⇒ 'message' 聽它（TASK-1271 ⑦：地球儀不再開 iframe）
 function bsListen(where, type, fn, opt) {
-  var t = where === 'doc' ? BS_DOC : BS_WIN;
+  var t = bsWhere(where, type);
   var w = BS_GATED.test(type) ? function (e) { if (BS_INPUT.on) return fn.call(this, e); } : fn;
   BS_INPUT.list.push({ t: t, type: type, fn: fn, w: w, cap: !!(opt === true || (opt && opt.capture)) });
   t.addEventListener(type, w, opt);
 }
 function bsUnlisten(where, type, fn, opt) {
-  var t = where === 'doc' ? BS_DOC : BS_WIN, cap = !!(opt === true || (opt && opt.capture)), L = BS_INPUT.list;
+  var t = bsWhere(where, type), cap = !!(opt === true || (opt && opt.capture)), L = BS_INPUT.list;
   for (var i = 0; i < L.length; i++) if (L[i].t === t && L[i].type === type && L[i].fn === fn && L[i].cap === cap) { t.removeEventListener(type, L[i].w, cap); L.splice(i, 1); return; }
 }
 function bsUnlistenAll() { BS_INPUT.list.splice(0).forEach(function (x) { x.t.removeEventListener(x.type, x.w, x.cap); }); }
@@ -85,4 +86,10 @@ function bsDispose() {
   bsUnlistenAll();
   return n;
 }
-if (BS_M) { BS_M.dispose = bsDispose; BS_M.live = bsLiveN; }
+/** 宿主切換鍵盤、滑鼠給不給核心（BS_INPUT.on）：關掉的那一刻按著的鍵收不到放開 ⇒ 照視窗失焦那一套清掉（叫掛在 window 上的 blur）。 */
+function bsInput(on) {
+  on = !!on; if (on === BS_INPUT.on) return;
+  BS_INPUT.on = on;
+  if (!on) BS_INPUT.list.filter(function (x) { return x.type === 'blur'; }).forEach(function (x) { try { x.fn.call(BS_WIN, new Event('blur')); } catch (e) { } });
+}
+if (BS_M) { BS_M.dispose = bsDispose; BS_M.live = bsLiveN; BS_M.input = bsInput; if (BS_M.opt.input === false) BS_INPUT.on = false; }
