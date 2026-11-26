@@ -2880,6 +2880,34 @@ def owner_check():
     return ['✓ 共用狀態的擁有者：%s 只有擁有者寫' % '、'.join('%s（%s）' % (k, v) for k, v in OWNED.items())]
 
 
+# ───────────────────────── 原生計算（TASK-1377：帆布的解算 C++ ⇒ WebAssembly） ─────────────────────────
+# src/native/build.sh 編好 rig_cloth.wasm（進版控：沒有 Emscripten 的人照樣建得了成品）、在 rig_cloth.json 寫下來源指紋（.cpp、.h、build.sh 的 sha1，換行統一成 LF）。
+# 建置重算一次來源指紋、跟 rig_cloth.json 比；也比 wasm 本身的 sha1 ⇒ 改了 C++ 沒重編、或 wasm 被換掉 ⇒ 不建置。
+NATIVE_DIR = os.path.join(HERE, 'native')
+
+
+def native_check():
+    j = os.path.join(NATIVE_DIR, 'rig_cloth.json')
+    if not os.path.exists(j):
+        raise Fail('找不到 src/native/rig_cloth.json ⇒ 先 bash src/native/build.sh（要 emsdk）')
+    st = json.load(open(j, encoding='utf-8'))
+    src = sorted(f for f in os.listdir(NATIVE_DIR) if f.endswith(('.cpp', '.h')) or f == 'build.sh')
+    h = hashlib.sha1()
+    for f in src:
+        h.update(f.encode() + b'\0' + open(os.path.join(NATIVE_DIR, f), 'rb').read().replace(b'\r\n', b'\n') + b'\0')
+    w = open(os.path.join(NATIVE_DIR, 'rig_cloth.wasm'), 'rb').read()
+    why = []
+    if src != st.get('files'):
+        why.append('來源檔清單換了（%s ⇒ %s）' % ('、'.join(st.get('files') or []), '、'.join(src)))
+    if h.hexdigest() != st.get('src'):
+        why.append('C++ 改了沒重編（來源 %s，編的時候是 %s）' % (h.hexdigest()[:12], (st.get('src') or '')[:12]))
+    if hashlib.sha1(w).hexdigest() != st.get('wasm'):
+        why.append('rig_cloth.wasm 不是 build.sh 編出來的那一份')
+    if why:
+        raise Fail('帆布解算的 wasm 過期（TASK-1377）：%s ⇒ bash src/native/build.sh（要 emsdk），編好的 wasm 跟 rig_cloth.json 一起提交' % '；'.join(why))
+    return ['✓ 帆布解算的 wasm：來源 %s、%d bytes（src/native/rig_cloth.json）' % (st['src'][:12], len(w))]
+
+
 # ───────────────────────── 分層讀數（TASK-0669：模擬與畫面解耦） ─────────────────────────
 # 模擬層 ＝ 20–54 號檔（船體、物理、船員、模擬與 AI；41_crew_art 是畫船員貼圖 ⇒ 算畫面）；上層 ＝ 60 號以後＋下面那幾支畫面、聲音、鏡頭的檔。
 # 76_anchor、78_funnel 編號在後面、職責是模擬（拋錨、煙囪通不通）⇒ 不算上層（不改檔名：會跟大家的分支撞）。
@@ -3722,6 +3750,7 @@ def act_build(pack=True, single=False):   # pack：壓縮版（預設，TASK-058
         raise Fail('VoxelKit/_cache/ 少了 %s ⇒ 先 python -I admin.py cache（從成品解回）或 reimport' % '、'.join(miss))
     log += bundle_names_check()
     log += owner_check()
+    log += native_check()
     log += act_shell_layers(gate=True) + act_page_layers(gate=True)
     why = atlas_stale()
     if why:
@@ -4013,7 +4042,7 @@ def act_build_code(base=None):
     if h0 != html0:
         i = next((k for k in range(min(len(h0), len(html0))) if h0[k] != html0[k]), min(len(h0), len(html0)))
         raise Fail('照 %s 的來源走同一條路重做，跟現在的成品不一樣（第 %d 行起）⇒ 建置程式改過、或成品不是這樣建的%s' % (rev, html0.count('\n', 0, i) + 1, full))
-    log = bundle_names_check() + owner_check() + act_shell_layers(gate=True) + act_page_layers(gate=True)
+    log = bundle_names_check() + owner_check() + native_check() + act_shell_layers(gate=True) + act_page_layers(gate=True)
     log.append('✓ 船沒變：%d 艘的標籤、.vxk 指紋、改裝船的原船都跟 %s 一樣，船檔都在、雜湊對得上' % (len(idx), rev))
     log.append('✓ 照 %s 的來源走同一條路重做 ⇒ 跟現在的成品逐位元組相同（這個做法 ＝ 正式建置）' % rev)
     h1, M1 = code_html(work_read, ships_tag, log, split_cfg=True)

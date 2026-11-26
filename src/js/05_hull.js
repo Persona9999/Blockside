@@ -174,7 +174,7 @@ function loadHull(id) {
   if (!info) return Promise.reject(new Error('沒有這艘船：' + id));
   var t0 = performance.now(), F = fitOf(id);                              // 換裝表（38_fit.js）：id 是「船型@換裝表」⇒ 照那一份；船型 ⇒ 出廠 ⊕ 玩家存檔
   hullSay(info.name + '：解碼…');
-  return (HULLS[id] = yieldUI().then(function () { return Promise.all([VK.loadEmbedded(info.el).then(meshPool).then(function (model) { return fitLoad(model.header, F, info.id).then(function (X) { model.fitExt = X; return model; }); }), cacheGet(info, id, F), ancTable(info.id)]); })   // 解碼與讀快取一起跑（06_cache.js）；換裝要從別艘拿的零件先載好；找最近實心格的預烘表（10_ship.js ancTable；TASK-1229）
+  return (HULLS[id] = yieldUI().then(function () { return Promise.all([VK.loadEmbedded(info.el).then(meshPool).then(function (model) { return fitLoad(model.header, F, info.id).then(function (X) { model.fitExt = X; return model; }); }), cacheGet(info, id, F), ancTable(info.id), rwReady()]); })   // 解碼與讀快取一起跑（06_cache.js）；換裝要從別艘拿的零件先載好；找最近實心格的預烘表（10_ship.js ancTable；TASK-1229）；帆布解算的 wasm（29_rigwasm.js；帆的配方一開頭就要吹鼓，TASK-1377）
     .then(function (r) { return buildHull(info, r[0], t0, r[1], id, F, r[2]); })
     .then(function (T) { HULLT[id] = T; cachePut(T, info); return T; }));
 }

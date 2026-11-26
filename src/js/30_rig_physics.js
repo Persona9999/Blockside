@@ -11,7 +11,7 @@ var GUST = [0.24, 0.12, 0.06], FLUTTER = 0.35, SLACK = 1.02;   // 陣風三個�
 var KW = 0.05;                // 風壓：加速度（格/秒²）＝ KW ×（相對風在法線上的分量）²
 var KD = 0.3, DAMP = 0.985;   // 繩的空氣阻力（1/秒）、每一步的速度保留
 var SEG = 6;                  // 布與繩的迭代次數、帆幾步走一次、垂繩上限照物理分級（09_phx.js rigLv：高 ＝ 4 次、隔一步（30 Hz）、500 條）
-var CACC = null, CCNT = null, PHYS_MS = 0, PROF = { cloth: 0, rope: 0, shred: 0, buf: 0, cc: 0, ccN: 0, ccHit: 0, ccQ: 0, ccMax: 0, ccGeo: 0 };   // cc：帆的碰撞花的 ms、ccN 跑了幾次、ccHit 每次第一輪找到的接觸（＝ 那一刻還穿著的；clothContacts）、ccQ 排了幾面（解不完的下一步再排）
+var PHYS_MS = 0, PROF = { cloth: 0, rope: 0, shred: 0, buf: 0, cc: 0, ccN: 0, ccHit: 0, ccQ: 0, ccMax: 0, ccGeo: 0 };   // cc：帆的碰撞花的 ms、ccN 跑了幾次、ccHit 每次第一輪找到的接觸（＝ 那一刻還穿著的；clothContacts）、ccQ 排了幾面（解不完的下一步再排）
 // 帆桁追風（物理開著才轉）：方帆桁讓帆的法線落在「相對風吹去的方向」與船頭的角平分線上，最多轉離正橫 40°（再多就頂到支索與 shroud）；
 //   gaff／boom（後桅縱帆）往下風擺，帆面跟船身的夾角 ＝ (180° − 相對風角)／2，8°–80°；頂風 ±25° 內不換邊（遲滯）。每秒最多轉 8°。
 //   帆的綁點、帆腳與綁在帆桁上的繩跟著轉（繩照弧長在兩端之間內插：一端綁甲板的 brace 就只有帆桁那一頭轉）。
@@ -372,9 +372,7 @@ function clothSetup(H, C) {                            // 船型 H 的布模板�
   H.cloth = H.rig.sails.map(function (s, k) { if (C && k < n0 && C.cloth[k]) return C.cloth[k]; var t = clothTemplate(H, s); t.ti = k; return t; });   // ti：第幾面帆 ⇒ 貼圖集的哪一格（布片、斷開的那一團也認得）
   if (H.flagUv) Object.keys(H.flagUv).forEach(function (k) { var t = H.cloth[k]; if (t && !t.uv) H.cloth[k] = Object.assign({}, t, { uv: Float32Array.from(H.flagUv[k].slice(0, t.n * 2)) }); });   // 堡壘自己的旗補的 uv（77_colours.js flagOwnUv）：另抄一份、不改快取的那一份
   H.sailAtlas = sailAtlas(H.rig.sails.concat(H.teamExtra || [])); H.sailTexGL = null;   // teamExtra：陣營旗紅方那份、替換作品旗的藍紅兩份（77_colours.js teamFlagsSetup；畫的時候 sailRect 挑）              // 貼圖集不進快取（照 vxk 現算；GL 貼圖第一次畫才建，11_rig_gpu.js sailTex）
-  var mc = 1;                                                            // 畫帆的暫存區（SBV／SBI／SBN／SBP）由 11_rig_gpu.js sailBuf 照當下要畫的配（TASK-0669）
-  H.cloth.forEach(function (C) { mc = Math.max(mc, C.sim.n); });
-  if (!CACC || CACC.length < mc * 3) { CACC = new Float32Array(mc * 3); CCNT = new Uint8Array(mc); }
+  // 畫帆的暫存區（SBV／SBI／SBN／SBP）由 11_rig_gpu.js sailBuf 照當下要畫的配（TASK-0669）；風壓的暫存在 wasm 裡（rig_cloth.cpp，TASK-1377）
 }
 /** 張開的帆從雕刻作品那一刻的形狀開始（開局、收帆後再張、物理剛打開）。 */
 function clothInit(c) {
@@ -426,17 +424,7 @@ function tearCloth(sh, s, L, r, b) {
   c.torn = true;
   if (b) shredCut(sh, c, old, b);
 }
-function solve(ea, eb, rest, brk, p, pin, k) {
-  for (var e = 0; e < ea.length; e++) {
-    if (brk && brk[e]) continue;
-    var a = ea[e], b = eb[e], wa = pin[a] ? 0 : 1, wb = pin[b] ? 0 : 1; if (!(wa + wb)) continue;
-    var ia = a * 3, ib = b * 3, dx = p[ib] - p[ia], dy = p[ib + 1] - p[ia + 1], dz = p[ib + 2] - p[ia + 2], l = Math.sqrt(dx * dx + dy * dy + dz * dz);
-    if (l < 1e-9) continue;
-    var f = (l - rest[e]) / l * k / (wa + wb);
-    if (wa) { p[ia] += dx * f; p[ia + 1] += dy * f; p[ia + 2] += dz * f; }
-    if (wb) { p[ib] -= dx * f; p[ib + 1] -= dy * f; p[ib + 2] -= dz * f; }
-  }
-}
+// 距離約束（solve）在 wasm 裡（rig_cloth.cpp，TASK-1377）：clothStep、29_sailrecipe.js 的吹鼓都經過 rwCloth。
 // ── 布的拉伸上限（TASK-0821；Tim 2026-10-22「變得太過Q彈 變形太大了」「是否可以讓布有拉伸極限」「不能像橡膠一樣」）──
 // 為什麼：距離約束一步只解 RIG_LV.it 次（高 4 次）⇒ 強風（暴風雨的風 2.2 倍、風壓 ∝ 風速²）壓上去解不回靜止長度，帆被拉成長帶、鬆手又彈回來。
 //   量過（暴風雨、兩艘憲法號、物理全開，每面帆每條邊 長度 ÷ 靜止長度）：99 百分位 1.2～3.0 倍、最大 16.7 倍。
@@ -487,63 +475,25 @@ function clothLra(sh, c) {
     }
   }
 }
-/** 拉伸上限（clothStep 迭代之後）：① 每條邊 ② 每個點到它的綁點（見上）。 */
-function clothLimit(sh, c) {
-  var T = c.T.sim, p = c.p, pin = c.pin, k1 = 1 + SAIL_STRETCH, ea = T.ea, eb = T.eb, rest = T.rest, brk = c.torn ? c.brk : null, e, i, pass, bad;
-  for (pass = 0, bad = 1; pass < SAIL_LIM_IT && bad; pass++) for (bad = 0, e = 0; e < ea.length; e++) {   // 相鄰的邊互相拉 ⇒ 一遍夾不完：最多 SAIL_LIM_IT 遍、沒有超過的就停
-    if (brk && brk[e]) continue;
-    var a = ea[e], b = eb[e], wa = pin[a] ? 0 : 1, wb = pin[b] ? 0 : 1; if (!(wa + wb)) continue;
-    var ia = a * 3, ib = b * 3, dx = p[ib] - p[ia], dy = p[ib + 1] - p[ia + 1], dz = p[ib + 2] - p[ia + 2], l2 = dx * dx + dy * dy + dz * dz, lm = rest[e] * k1;
-    if (l2 <= lm * lm) continue;
-    var l = Math.sqrt(l2), f = (l - lm) / l / (wa + wb); bad++;
-    if (wa) { p[ia] += dx * f; p[ia + 1] += dy * f; p[ia + 2] += dz * f; }
-    if (wb) { p[ib] -= dx * f; p[ib + 1] -= dy * f; p[ib + 2] -= dz * f; }
-  }
-  var sg = clothLraSig(sh, c);
-  if (c.lraSig !== sg || !c.lraD) { clothLra(sh, c); c.lraSig = sg; }
-  var D = c.lraD, A = c.lraA;
-  for (i = 0; i < T.n; i++) {
-    var an = A[i]; if (an < 0 || an === i || pin[i]) continue;
-    var o = i * 3, q = an * 3, x = p[o] - p[q], y = p[o + 1] - p[q + 1], z = p[o + 2] - p[q + 2], d2 = x * x + y * y + z * z, lim = D[i] * k1;
-    if (d2 <= lim * lim) continue;
-    var s = lim / Math.sqrt(d2); p[o] = p[q] + x * s; p[o + 1] = p[q + 1] + y * s; p[o + 2] = p[q + 2] + z * s;
-  }
-}
+// 拉伸上限本身（① 每條邊 ② 每個點到它的綁點）在 wasm 裡（rig_cloth.cpp clothLimit，TASK-1377）；綁點與沿著布的距離 clothLra 照舊在這裡算（變了才重算）。
 /** 落在格子裡（甲板、船殼）⇒ 退回上一步的位置（上一步本來就在格子裡的不管：繩頭從錨格裡長出來）。 */
 function hitGrid(g, p, q, o) {
   if (g.get(Math.floor(p[o]), Math.floor(p[o + 1]), Math.floor(p[o + 2])) && !g.get(Math.floor(q[o]), Math.floor(q[o + 1]), Math.floor(q[o + 2]))) { p[o] = q[o]; p[o + 1] = q[o + 1]; p[o + 2] = q[o + 2]; }
 }
+/** 一面布走一步（h 秒）—— 整段迴圈在 wasm 裡（TASK-1377：src/native/rig_cloth.cpp rc_step、29_rigwasm.js rwCloth；JS 版拿掉了）。
+ *  做的事跟以前的 JS 版一樣、照同一個順序：
+ *    ① 風壓：每個三角形沿法線推，大小 ∝（相對風在法線上的分量）²，相對風扣掉布自己的速度；一道一道走過布面的波紋（FLUTTER；不抽亂數）
+ *    ② 小步長（TASK-0821；Macklin 等 2019「Small Steps」）：同樣的花費切成 itn 小步（風壓照這一步開頭算一次、每小步共用；速度保留照每秒換算 ⇒ 跟切幾步無關），每小步：
+ *       Verlet → 落下來的布碰到甲板、船殼退回上一步（hitGrid）→ 距離約束（結構邊；隔一小步再解跨點邊）→ sheet 拉住帆腳（tethSolve）→ 拉伸上限（clothLimit）
+ *       SAIL_SUB 0 ⇒ 照以前：一步走完再解 itn 次、最後夾一次。
+ *  這裡只算這一步的常數（步長、阻尼、風壓倍率、波紋的相位）、綁點沿著布的距離（clothLra：綁點、斷邊、sheet 變了才重算）、sheet 這一步的長度（tethPre）。 */
 function clothStep(sh, c, wl, gv, h) {                 // c.kw：風壓倍率（帆的布片，34_shreds.js；帆 ＝ 1）；c.ev：這一塊幾步走一次（遠方的船放大，physStep）；h：切小步時這一小步幾秒（TASK-0797；沒給 ＝ 一整段）
-  var T = c.T.sim, n = T.n, p = c.p, q = c.q, pin = c.pin, tr = T.tris, A = CACC, N = CCNT, HC = h || (c.ev || steps60(rigLv().every)) * DT, inv = 1 / (3 * HC / (SAIL_SUB ? c.itn || rigLv().it : 1)), dmp = decay60(DAMP, HC), kw = KW * (c.kw || 1), i, j, x;
-  A.fill(0, 0, n * 3); N.fill(0, 0, n);
-  for (j = 0; j < tr.length; j += 3) {           // 風壓：每個三角形沿法線推，大小 ∝（相對風在法線上的分量）²，相對風扣掉布自己的速度
-    if (c.torn && (c.brk[T.te[j]] || c.brk[T.te[j + 1]] || c.brk[T.te[j + 2]])) continue;
-    var a = tr[j] * 3, b = tr[j + 1] * 3, d = tr[j + 2] * 3;
-    var ux = p[b] - p[a], uy = p[b + 1] - p[a + 1], uz = p[b + 2] - p[a + 2], vx = p[d] - p[a], vy = p[d + 1] - p[a + 1], vz = p[d + 2] - p[a + 2];
-    var nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx, l = Math.sqrt(nx * nx + ny * ny + nz * nz);
-    if (l < 1e-9) continue;
-    nx /= l; ny /= l; nz /= l;
-    var rx = wl[0] - (p[a] - q[a] + p[b] - q[b] + p[d] - q[d]) * inv, ry = wl[1] - (p[a + 1] - q[a + 1] + p[b + 1] - q[b + 1] + p[d + 1] - q[d + 1]) * inv, rz = wl[2] - (p[a + 2] - q[a + 2] + p[b + 2] - q[b + 2] + p[d + 2] - q[d + 2]) * inv;
-    var dn = rx * nx + ry * ny + rz * nz, f = kw * dn * Math.abs(dn);
-    f *= 1 + FLUTTER * Math.sin((p[a] * 0.9 + p[a + 2]) * 0.06 - SIMT * 5.5);   // 一道一道走過布面的風（不抽亂數）
-    var fx = f * nx, fy = f * ny, fz = f * nz;
-    A[a] += fx; A[a + 1] += fy; A[a + 2] += fz; A[b] += fx; A[b + 1] += fy; A[b + 2] += fz; A[d] += fx; A[d + 1] += fy; A[d + 2] += fz;
-    N[a / 3]++; N[b / 3]++; N[d / 3]++;
-  }
-  // 速度保留 dmp 照每秒換算（decay60；以前固定 DAMP²，是一步 1/30 秒的值 ⇒ 照畫面格算、遠方降速一步變長時每秒的衰減變弱、布更彈；一步 1/30 秒時跟以前一樣）
-  // 小步長（TASK-0821；Macklin 等 2019「Small Steps」）：以前一步走完再解 itn 次 ⇒ 張力一次只往下傳一條邊、強風下解不回來（像橡膠）；
-  //   現在同樣的花費切成 itn 小步、每小步解一次（風壓照這一步開頭算一次、每小步共用；速度保留照每秒換算 ⇒ 跟切幾步無關）。SAIL_SUB 0 ⇒ 照以前。
-  for (var it = 0, itn = c.itn || rigLv().it, sub = SAIL_SUB ? itn : 1, hs = HC / sub, d2s = hs * hs, dms = sub > 1 ? Math.pow(dmp, 1 / sub) : dmp; it < itn; it++) {
-    if (it < sub) for (i = 0; i < n; i++) {
-      if (pin[i]) continue;
-      var o = i * 3, kk = N[i] ? 1 / N[i] : 0;
-      for (x = 0; x < 3; x++) { var cur = p[o + x], vel = (cur - q[o + x]) * dms; q[o + x] = cur; p[o + x] = cur + vel + (A[o + x] * kk + gv[x]) * d2s; }
-      if (c.loose) hitGrid(sh.grid, p, q, o);
-    }
-    solve(T.ea, T.eb, T.rest, c.torn ? c.brk : null, p, pin, 1); if (it & 1) solve(T.ba, T.bb, T.brest, c.torn ? c.bbrk : null, p, pin, 0.5); if (c.tt) tethSolve(sh, c);   // c.tt：帆腳被 sheet 拉住（tethOf）
-    if (sub > 1 && SAIL_STRETCH > 0) clothLimit(sh, c);               // 拉伸上限（TASK-0821）：每小步夾一次
-  }
-  if (sub === 1 && SAIL_STRETCH > 0) clothLimit(sh, c);
+  var HC = h || (c.ev || steps60(rigLv().every)) * DT, itn = c.itn || rigLv().it, sub = SAIL_SUB ? itn : 1, hs = HC / sub, dmp = decay60(DAMP, HC), lim = SAIL_STRETCH > 0;
+  if (lim) { var sg = clothLraSig(sh, c); if (c.lraSig !== sg || !c.lraD) { clothLra(sh, c); c.lraSig = sg; } }
+  rwCloth(c.T.sim, c, c.tt ? tethPre(sh, c) : null, {
+    flags: (c.torn ? RW_FLAG.torn : 0) | (c.loose ? RW_FLAG.loose : 0) | (lim ? RW_FLAG.limit : 0) | RW_FLAG.flutter, itn: itn, sub: sub, limIt: SAIL_LIM_IT, steps: 1,
+    inv: 1 / (3 * HC / sub), dms: sub > 1 ? Math.pow(dmp, 1 / sub) : dmp, d2s: hs * hs, kw: KW * (c.kw || 1), flutter: FLUTTER, st: SIMT * 5.5, k1: 1 + SAIL_STRETCH, wl: wl, gv: gv
+  }, sh.grid);
 }
 /** 剛斷的繩 ⇒ 垂下來的繩：重新取樣（每段 ≤ SEG 格，原本的弧度與鬆緊照留），兩端各記著靠什麼；被打斷的從斷點分成兩段。 */
 function spawnLoose(sh, r) {
@@ -1010,15 +960,17 @@ function furlCut(sh, s, c) {
 //   ⛔ 一直照作品的 L：三角帆的帆桁長（持火號前桅 20 m）、追風轉到 ±58° ⇒ 轉過的帆腳離帆腳索樁遠過 L，帆腳被拉回樁那邊，整片布從帆桁扯成一塊拖到甲板。
 //   帆桁 ＝ 這面帆綁最多點的那根（tethYard，跟 clothBrace 同一個挑法）；沒綁帆桁、沒轉 ⇒ 照 L（以前那樣）。只是畫面（布），戰局不讀。
 function tethYard(T) { var yk = T.sim && T.sim.yk, cnt = {}, top = -1; if (!yk) return -1; for (var i = 0; i < yk.length; i++) if (yk[i] >= 0 && (cnt[yk[i]] = (cnt[yk[i]] || 0) + 1) > (cnt[top] || 0)) top = yk[i]; return top; }
-function tethSolve(sh, c) {
-  var tt = c.tt, p = c.p, P0 = c.T.sim.p0;
+/** sheet 拉住的帆腳：這一步的 [點, sheet 另一端 x, y, z, 長度 L, …]（rig_cloth.cpp tethSolve 每一小步照這份夾：帆腳離另一端超過 L ⇒ 拉回 L）。
+ *  一步裡帆桁的角度、繩的位置不變 ⇒ 每一步算一次就好（以前 JS 版每一小步重算，算出來同一個數）。 */
+function tethPre(sh, c) {
+  var tt = c.tt, P0 = c.T.sim.p0, out = [];
   for (var k = 0; k < tt.length; k++) {
     var t = tt[k], r = sh.ropes[t.j]; if (r.dead || sh.tCut && sh.tCut[t.j]) continue;
-    var q = r.pts, f = t.fe * 3, o = t.i * 3, dx = p[o] - q[f], dy = p[o + 1] - q[f + 1], dz = p[o + 2] - q[f + 2], l = Math.sqrt(dx * dx + dy * dy + dz * dz), L = t.L;
-    var m = t.y >= 0 ? sh.models[t.y] : null;
+    var q = r.pts, f = t.fe * 3, o = t.i * 3, L = t.L, m = t.y >= 0 ? sh.models[t.y] : null;
     if (m && m.rot) { var w = rotZ([P0[o], P0[o + 1], P0[o + 2]], m.piv, m.rot); L = Math.max(L, Math.hypot(w[0] - q[f], w[1] - q[f + 1], w[2] - q[f + 2])); }   // 帆桁轉了 ⇒ sheet 放出去（見上）
-    if (l > L && l > 1e-9) { var s = L / l; p[o] = q[f] + dx * s; p[o + 1] = q[f + 1] + dy * s; p[o + 2] = q[f + 2] + dz * s; }
+    out.push(t.i, q[f], q[f + 1], q[f + 2], L);
   }
+  return out;
 }
 // 效能（ame 2026-10-15，Tim：「接手效能，在她的碰撞做法上加篩選和降頻」；碰撞的做法本身照 Sirius 的）：
 //   · 開關：物理設定「帆的碰撞」（09_phx.js），預設關、帆與繩「高」才算；關 ⇒ 一行都不跑。

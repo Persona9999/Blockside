@@ -1,0 +1,11 @@
+{
+ "src": "833dce56e11ccc35f9de2a274fe72ddcf0b6707b",
+ "files": [
+  "build.sh",
+  "fdlibm_sin.h",
+  "rig_cloth.cpp"
+ ],
+ "wasm": "5649ab70367d0872b8c29793e7f3efe443cb8db1",
+ "bytes": 5877,
+ "clang": "clang version 24.0.0git"
+}

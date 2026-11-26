@@ -5,7 +5,7 @@
 // 沒有雕刻引擎模擬完的頂點；繩帶 ends（include=ends：兩端原樣的參照，例 'sail:main-course/clew_s'、'model:前桅/yard-fore-course/earing-S'）。
 // 載入船型時（05_hull.js buildHull 一開頭，比海面遮罩、縮圖、繩的檢查都早）照配方生出「跟以前 vxk 一樣排列」的帆 ⇒ 命中外框、帆靠哪幾格、畫，一行都不用改：
 //   ① 切平布：同雕刻引擎 BuildParticles 的格網 —— 四邊形雙線性／三角形重心，(i, j) 照 j 列 i 行排；三角形的切法與繞序一樣（排列對上，匯出端的貼圖 uv 才對得上）。
-//   ② 吹鼓：遊戲的帆繩物理那一套（30_rig_physics.js 的 solve、clothStep 的風壓公式與常數）吹 SAILR_SEC 秒 —— ⛔ 不去湊雕刻引擎的形狀：
+//   ② 吹鼓：遊戲的帆繩物理那一套（clothStep 的風壓公式與常數、同一份 wasm 解算 29_rigwasm.js rwCloth）吹 SAILR_SEC 秒 —— ⛔ 不去湊雕刻引擎的形狀：
 //      綁住的點（角 pin、bind 的邊）釘在設計位置；ends 指名的帆腳釘在那條繩的端點（繩畫到哪、帆腳就在哪）；沒有繩指名的角讓它自己吹；
 //      風 ＝ 從船尾偏右舷吹來（SAILR_WIND）× WIND_SAIL；不讀陣風、SIMT、不抽亂數 ⇒ 同一份配方永遠吹出同一個形狀。
 //      開戰之後帆物理開著 ⇒ 照真的風再吹（跟以前一樣）；關著 ⇒ 停在這個形狀。
@@ -138,28 +138,12 @@ function sailFromRecipe(R, clew, sMeta, rods) {                    // rods：硬
     if (pin[q] || !clew || !clew[k2]) return;
     pin[q] = 1; p[q * 3] = clew[k2][0]; p[q * 3 + 1] = clew[k2][1]; p[q * 3 + 2] = clew[k2][2];
   });
-  var q0 = Float32Array.from(p), A = new Float32Array(n * 3), N = new Uint8Array(n), wl = norm(SAILR_WIND).map(function (x) { return x * WIND_SAIL / S; });
+  //   一步 ＝ 風壓（沒有波紋）→ Verlet（速度保留 DAMP²、重力只在 z）→ 距離約束 SAILR_IT 次（隔一次再解跨點邊）；整段 steps 步在 wasm 裡跑（rig_cloth.cpp rc_step；TASK-1377）
+  var q0 = Float32Array.from(p), wl = norm(SAILR_WIND).map(function (x) { return x * WIND_SAIL / S; });
   var gz = -G / S, dt2 = SAILR_HC * SAILR_HC, inv = 1 / (3 * SAILR_HC), dmp = DAMP * DAMP, steps = Math.round(SAILR_SEC / SAILR_HC);
-  var EA = Uint16Array.from(ea), EB = Uint16Array.from(eb), ER = Float32Array.from(er), BA = Uint16Array.from(ba), BB = Uint16Array.from(bb), BR = Float32Array.from(br);
-  for (var s = 0; s < steps; s++) {
-    A.fill(0); N.fill(0);
-    for (j = 0; j < T.length; j += 3) {
-      var ia = T[j] * 3, ib = T[j + 1] * 3, ic = T[j + 2] * 3;
-      var ux = p[ib] - p[ia], uy = p[ib + 1] - p[ia + 1], uz = p[ib + 2] - p[ia + 2], vx = p[ic] - p[ia], vy = p[ic + 1] - p[ia + 1], vz = p[ic + 2] - p[ia + 2];
-      var nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx, l = Math.sqrt(nx * nx + ny * ny + nz * nz); if (l < 1e-9) continue;
-      nx /= l; ny /= l; nz /= l;
-      var rx = wl[0] - (p[ia] - q0[ia] + p[ib] - q0[ib] + p[ic] - q0[ic]) * inv, ry = wl[1] - (p[ia + 1] - q0[ia + 1] + p[ib + 1] - q0[ib + 1] + p[ic + 1] - q0[ic + 1]) * inv, rz = wl[2] - (p[ia + 2] - q0[ia + 2] + p[ib + 2] - q0[ib + 2] + p[ic + 2] - q0[ic + 2]) * inv;
-      var dn = rx * nx + ry * ny + rz * nz, f = KW * dn * Math.abs(dn), fx = f * nx, fy = f * ny, fz = f * nz;
-      A[ia] += fx; A[ia + 1] += fy; A[ia + 2] += fz; A[ib] += fx; A[ib + 1] += fy; A[ib + 2] += fz; A[ic] += fx; A[ic + 1] += fy; A[ic + 2] += fz;
-      N[ia / 3]++; N[ib / 3]++; N[ic / 3]++;
-    }
-    for (i = 0; i < n; i++) {
-      if (pin[i]) continue;
-      var o = i * 3, kk = N[i] ? 1 / N[i] : 0;
-      for (k = 0; k < 3; k++) { var cur = p[o + k], vel = (cur - q0[o + k]) * dmp; q0[o + k] = cur; p[o + k] = cur + vel + (A[o + k] * kk + (k === 2 ? gz : 0)) * dt2; }
-    }
-    for (var it = 0; it < SAILR_IT; it++) { solve(EA, EB, ER, null, p, pin, 1); if (it & 1) solve(BA, BB, BR, null, p, pin, 0.5); }
-  }
+  var Sim = { ea: Uint16Array.from(ea), eb: Uint16Array.from(eb), rest: Float32Array.from(er), ba: Uint16Array.from(ba), bb: Uint16Array.from(bb), brest: Float32Array.from(br), tris: Uint16Array.from(T), te: null };
+  rwCloth(Sim, { p: p, q: q0, pin: pin }, null, { flags: 0, itn: SAILR_IT, sub: 1, steps: steps, inv: inv, dms: dmp, d2s: dt2, kw: KW, wl: wl, gv: [0, 0, gz] });
+  rwTplFree(Sim);
   // 雙面（同匯出端 TwoSided）：頂點法線 ＝ 相鄰三角形的面積加權平均
   var Nr = new Float32Array(n * 3);
   for (j = 0; j < T.length; j += 3) {

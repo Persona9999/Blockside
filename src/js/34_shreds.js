@@ -47,7 +47,6 @@ function shredCut(sh, c, old, b) {
       var rx = w[0] - cx, ry = w[1] - cy, rz = w[2] - cz, vx = v0[0] + om[1] * rz - om[2] * ry, vy = v0[1] + om[2] * rx - om[0] * rz, vz = v0[2] + om[0] * ry - om[1] * rx;
       p[u * 3] = w[0]; p[u * 3 + 1] = w[1]; p[u * 3 + 2] = w[2]; q[u * 3] = w[0] - vx * HC; q[u * 3 + 1] = w[1] - vy * HC; q[u * 3 + 2] = w[2] - vz * HC;
     });
-    if (!CACC || CACC.length < n * 3) { CACC = new Float32Array(n * 3); CCNT = new Uint8Array(n); }
     sh.shreds.push({ T: { sim: cons }, p: p, q: q, pin: new Uint8Array(n), n: n, col: [col[0] * t, col[1] * t, col[2] * t], uv: fuv ? Float32Array.from(fuv) : null, ti: T.ti, torn: false, loose: true, kw: SH_KW, age: 0, wet: 0 });
     SH_STAT.cut++; SH_STAT.tris += g.length;
   });
