@@ -3107,7 +3107,8 @@ def act_page_layers(src=None, gate=False, every=False):
 #   遊戲閉包的第一行排在跟 index.html 同一個行號（前面補空行）⇒ 這支檔從一頁的第 1 行起放，報錯的行號就是 index.html 的行號。
 #   選項：{ query: '?…'（＝ 網址參數）, hash: '#pre=…', host（@host 要講話的那一頁：有 postMessage 的物件）, own（網址列是核心的：換場時跟著換）, framed（開在 iframe 裡）,
 #          shadow: false（反向對照用：不開 shadow root，直接放進容器、查元素查整頁）, css: [字串]（外殼的樣式，照同一套換 html／body）,
-#          inbox（EventTarget：同一頁的宿主往這裡 dispatch MessageEvent、source ＝ host；給了 ⇒ 核心的 'message' 聽它，⑦）, input: false（開機時鍵盤滑鼠先不給核心；之後 BS.mounted().input(true)）}
+#          inbox（EventTarget：同一頁的宿主往這裡 dispatch MessageEvent、source ＝ host；給了 ⇒ 核心的 'message' 聽它，⑦）, input: false（開機時鍵盤滑鼠先不給核心；之後 BS.mounted().input(true)）,
+#          audio（函式、回宿主的 AudioContext 或 null：給了 ⇒ 音效借它，拿下時不關、把自己的聲音停乾淨；02_audio.js acBorrow，TASK-1271 #39）}
 #   一頁同時只掛一份（第二次 mount ⇒ 回失敗的 Promise）；回 Promise<掛好的那一份>。BS.unmount() 拿下（⑥：收掉頁面資源、清空容器）⇒ 之後可以再掛。
 CSS_SEL_RX = re.compile(r'(?<![\w#.\-:])(:root|html|body)(?![\w\-])')
 
@@ -3159,7 +3160,7 @@ function mount(el, o) {
   var h = box.querySelector('.bs-html'), b = box.querySelector('.bs-body'), q = new URLSearchParams(o.query || '');
   if (q.get('tui') === '@host') h.classList.add('tuionly'); if (q.get('pick') === '@host') h.classList.add('pickonly');   // = index.html 檔頭那一段：載程式之前先藏主選單
   MOUNTED = { el: el, root: shadow ? root : document, head: shadow ? root : document.head, body: b, html: h,
-    opt: { query: o.query || '', hash: o.hash || '', own: !!o.own, framed: !!o.framed, host: o.host || null, inbox: o.inbox || null, input: o.input !== false } };
+    opt: { query: o.query || '', hash: o.hash || '', own: !!o.own, framed: !!o.framed, host: o.host || null, inbox: o.inbox || null, input: o.input !== false, audio: typeof o.audio === 'function' ? o.audio : null } };
   var M = MOUNTED;
   return cfg().then(function () {
     if (M.gone) throw new Error('BS.mount：還沒掛好就被拿下了');

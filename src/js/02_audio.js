@@ -4,11 +4,39 @@ var AC = null, master = null, noiseBuf = null, muted = false;
 //   ① master 後面一個限制器（DynamicsCompressor：門檻 −14 dB、比 20、起 2 ms、放 250 ms）⇒ 疊再多也壓在 0 dBFS 以下；
 //   ② 同時發聲：同一種在 SFX_WIN 秒內最多 SFX_SAME 個（人耳分不出來、只是更大聲）、全部最多 SFX_MAX 個還在響 ⇒ 多的不放（只是聲音；不碰模擬的亂數）。
 var SFX_MAX = 24, SFX_SAME = 3, SFX_WIN = 0.06, SFX_END = [], SFX_RECENT = {}, SFX_DROP = {}, SFX_GUN_NEXT = 0, SFX_GUN_MAX = 32, SFX_GUN_END = [];   // 開砲自己一個池子（SFX_GUN_MAX 聲；只算頭）⇒ 交戰時命中、碎裂的聲音佔滿 SFX_MAX 也輪得到開砲   // SFX_DROP：每一種被上限丟掉幾聲（__game.sfxDrop；試聽頁 85_gunlab.js 也讀）
-bsOnDispose(function () { if (AC) { try { if (AC.state !== 'closed') AC.close().catch(function () { }); } catch (e) { } AC = null; } });   // 卸載（TASK-1271 ⑥）：關掉這一份的 AudioContext（已經關了 ⇒ 不再關：close() 對關掉的回 reject，量到地球儀回程每次一則）
+// 借宿主的 AudioContext（TASK-1271 #39；Tim 2026-11-11「音效、著色器不重來」）：掛載選項 audio ＝ 函式、回宿主那一個（Blocksail 地球儀 world/bgm.js 的；沒有 ⇒ null）⇒
+//   這一份不另外建、拿下時不關（同一頁一份、一直開著）。核心不直接拿那一個用，而是包一層（acBorrow）：
+//   ① 核心在 AC 上掛自己的東西（sfxBus／ambBus／bgmBus／lim、噪音快取 __noise／ambN、gunRum、bgmRev）⇒ 掛在包裝上，不碰宿主掛在它那一個上的（地球儀的 bgmBus）；
+//   ② 建的每一個來源（BufferSource／Oscillator／ConstantSource）都記著、放完自己刪 ⇒ 拿下時還在響的（環境音、滾雷、火這些一直循環的）全部 stop、斷開，再把這一份的限制器從出口拔掉。
+//   沒給 audio（獨立版、iframe 版）⇒ 照舊自己建、拿下時關。
+var AC_OWN = true, AC_LIVE = null;
+function acBorrow(real) {
+  var F = {}, L = AC_LIVE = new Set();
+  ['currentTime', 'state', 'sampleRate', 'destination', 'listener', 'baseLatency'].forEach(function (k) { Object.defineProperty(F, k, { get: function () { return real[k]; }, enumerable: true }); });
+  ['createGain', 'createBiquadFilter', 'createDynamicsCompressor', 'createBuffer', 'createAnalyser', 'createDelay', 'createWaveShaper', 'createConvolver', 'createStereoPanner', 'createPanner',
+    'createChannelMerger', 'createChannelSplitter', 'createPeriodicWave', 'decodeAudioData', 'resume'].forEach(function (k) { F[k] = function () { return real[k].apply(real, arguments); }; });
+  ['createBufferSource', 'createOscillator', 'createConstantSource'].forEach(function (k) {
+    F[k] = function () { var n = real[k].apply(real, arguments); L.add(n); n.addEventListener('ended', function () { L.delete(n); }); return n; };
+  });
+  F.suspend = F.close = function () { return Promise.resolve(); };    // 借來的：不准這一份暫停、關掉（宿主自己管）
+  F.real = real;
+  return F;
+}
+function acLetGo() {                                                    // 拿下（借來的）：還在響的全部停掉、斷開；這一份的出口拔掉
+  if (AC_LIVE) AC_LIVE.forEach(function (n) { try { n.stop(); } catch (e) { /* 沒開始過 */ } try { n.disconnect(); } catch (e) { } });
+  if (AC_LIVE) AC_LIVE.clear();
+  try { if (AC.lim) AC.lim.disconnect(); } catch (e) { }
+}
+bsOnDispose(function () {                                               // 卸載（TASK-1271 ⑥）：自己建的 ⇒ 關掉（已經關了 ⇒ 不再關：close() 對關掉的會 reject）；借來的 ⇒ acLetGo
+  if (!AC) return;
+  try { if (AC_OWN) { if (AC.state !== 'closed') AC.close().catch(function () { }); } else acLetGo(); } catch (e) { }
+  AC = null;
+});
 function initAudio() {
   if (AC || DEMO >= 0) return;
   try {
-    AC = new (window.AudioContext || window.webkitAudioContext)();
+    var host = typeof BS_OPT.audio === 'function' ? BS_OPT.audio() : null;   // 宿主給的（#39）⇒ 借；沒有 ⇒ 自己建
+    AC_OWN = !host; AC = host ? acBorrow(host) : new (window.AudioContext || window.webkitAudioContext)();
     master = AC.createGain(); master.gain.value = 0.8;
     var lim = AC.createDynamicsCompressor(); lim.threshold.value = -14; lim.knee.value = 4; lim.ratio.value = 20; lim.attack.value = 0.002; lim.release.value = 0.25;
     master.connect(lim); lim.connect(AC.destination); AC.lim = lim;
