@@ -19,6 +19,7 @@ var FLAB = { tl: null, run: false, view: 'map', speed: 16, match: null, batch: n
 var FLAB_HIDE = false;                                                   // 50_sim.js step：true ⇒ 不發 viewStep
 var FLAB_HZ = [60, 30, 20, 15, 10], FLAB_SPEEDS = [1, 4, 16, 64, Infinity];
 var FLAB_MC = typeof MessageChannel !== 'undefined' ? new MessageChannel() : null;
+bsOnDispose(function () { if (FLAB_MC) { FLAB_MC.port1.close(); FLAB_MC.port2.close(); } });   // 卸載（TASK-1271 ⑥）
 function flabEl(id) { return $(id); }
 /** 載完船型（90_main.js 載入那一段）：進沙盒的畫面、關畫面那幾項物理、照網址填預設值。 */
 function flabInit() {

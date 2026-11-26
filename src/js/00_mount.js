@@ -42,3 +42,47 @@ function bsOptScene(q, h) { BS_OPT.query = '?' + q; BS_OPT.hash = h; }
 // 版面大小：HUD、小地圖照「核心那一塊有多大」排 —— 這一頁本身 ＝ 視窗；掛進別人的頁面 ＝ 容器
 function bsViewW() { return BS_M ? BS_M.el.clientWidth : innerWidth; }
 function bsViewH() { return BS_M ? BS_M.el.clientHeight : innerHeight; }
+
+// 卸載（TASK-1271 函式庫化⑥；Tim 2026-11-26「先做重新掛載」）：同一頁裡掛上、拿下、再掛（地球儀不再每一場開一頁 iframe）⇒ 核心拿的頁面資源要收得回來。
+//   計時器、畫面迴圈、Worker 在這裡用同名的函式蓋掉（整個閉包是同一個作用域 ⇒ 每支檔寫 setTimeout(…) 叫到的都是這幾個，呼叫的地方一行都不用改）：
+//   記下還活著的那幾個 ⇒ bsDispose() 一次收掉；收過之後再叫 ⇒ 不排（拿下之後還在跑的 Promise 接下去也起不了新的迴圈）。
+//   其他要收的（聲音、WebGL、資料庫、MessageChannel）各自 bsOnDispose(函式) 登記；監聽照 bsUnlistenAll。
+//   BS_LIVE ＝ 讀數：還排著的 timeout／interval／畫面迴圈個數、Worker 個數（卸載之後要全是 0）。
+var BS_DEAD = false, BS_LIVE = { t: new Set(), i: new Set(), r: new Set(), w: [] }, BS_DISPOSE = [];
+function setTimeout(f, ms) {
+  if (BS_DEAD) return 0;
+  var a = Array.prototype.slice.call(arguments, 2), id = BS_WIN.setTimeout(function () { BS_LIVE.t.delete(id); f.apply(null, a); }, ms);
+  BS_LIVE.t.add(id); return id;
+}
+function clearTimeout(id) { BS_LIVE.t.delete(id); BS_WIN.clearTimeout(id); }
+function setInterval(f, ms) {
+  if (BS_DEAD) return 0;
+  var a = Array.prototype.slice.call(arguments, 2), id = BS_WIN.setInterval(function () { f.apply(null, a); }, ms);
+  BS_LIVE.i.add(id); return id;
+}
+function clearInterval(id) { BS_LIVE.i.delete(id); BS_WIN.clearInterval(id); }
+function requestAnimationFrame(f) {
+  if (BS_DEAD) return 0;
+  var id = BS_WIN.requestAnimationFrame(function (t) { BS_LIVE.r.delete(id); f(t); });
+  BS_LIVE.r.add(id); return id;
+}
+function cancelAnimationFrame(id) { BS_LIVE.r.delete(id); BS_WIN.cancelAnimationFrame(id); }
+function Worker(u, o) {                                   // new Worker(…) ⇒ 建構式回傳的物件就是結果（真的 Worker）
+  if (BS_DEAD) throw new Error('Blockside 已經拿下來了：不再開 Worker');
+  var w = new BS_WIN.Worker(u, o); BS_LIVE.w.push(w); return w;
+}
+function bsOnDispose(fn) { BS_DISPOSE.push(fn); }
+function bsLiveN() { return { timeout: BS_LIVE.t.size, interval: BS_LIVE.i.size, frame: BS_LIVE.r.size, worker: BS_LIVE.w.length, listen: BS_INPUT.list.length }; }
+/** 收掉這一份核心拿的頁面資源（BS.unmount 叫；回收之前的讀數）。登記的收尾照後登記的先收。 */
+function bsDispose() {
+  var n = bsLiveN(); if (BS_DEAD) return n;
+  BS_DEAD = true; BS_INPUT.on = false;
+  BS_DISPOSE.splice(0).reverse().forEach(function (f) { try { f(); } catch (e) { } });
+  BS_LIVE.t.forEach(function (id) { BS_WIN.clearTimeout(id); }); BS_LIVE.t.clear();
+  BS_LIVE.i.forEach(function (id) { BS_WIN.clearInterval(id); }); BS_LIVE.i.clear();
+  BS_LIVE.r.forEach(function (id) { BS_WIN.cancelAnimationFrame(id); }); BS_LIVE.r.clear();
+  BS_LIVE.w.splice(0).forEach(function (w) { try { w.terminate(); } catch (e) { } });
+  bsUnlistenAll();
+  return n;
+}
+if (BS_M) { BS_M.dispose = bsDispose; BS_M.live = bsLiveN; }

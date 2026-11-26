@@ -288,6 +288,7 @@ function gridEachZ(G, cz, cb) {
  *  好幾份同時要做 ⇒ 排成一列、一次只做一份的一段（YIELD_Q）：⛔ 各自讓出 ⇒ 30 份模型各排一個工作，計時器、畫面要等前面 30 段都做完（量到 0.2 s 一頓）。
  *  ⛔ 別拿來分段跑會改戰局的東西：讓出的時候畫面迴圈會走。 */
 var YIELD_Q = [], YIELD_ON = false, YIELD_MC = null;
+bsOnDispose(function () { if (YIELD_MC) { YIELD_MC.port1.close(); YIELD_MC.port2.close(); } YIELD_Q.length = 0; });   // 卸載（TASK-1271 ⑥）
 function yieldEach(L, f, ms) {
   return new Promise(function (ok, bad) { YIELD_Q.push({ L: L, f: f, ms: ms, i: 0, ok: ok, bad: bad }); yieldKick(); });
 }

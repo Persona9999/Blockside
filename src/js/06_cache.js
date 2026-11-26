@@ -15,6 +15,7 @@ function cacheFnv(s) { var h = 0x811c9dc5; for (var i = 0; i < s.length; i++) { 
 var CODE_SRC = [].map.call(document.scripts, function (el) { return !el.type || /javascript/i.test(el.type) ? el.textContent : ''; }), CODE_VER = null;
 function cacheCode() { if (CODE_VER === null) { CODE_VER = cacheFnv(CODE_SRC.join('\n')); CODE_SRC = null; } return CODE_VER; }
 var cacheDB = null;
+bsOnDispose(function () { if (cacheDB) cacheDB.then(function (db) { if (db) db.close(); }); });   // 卸載（TASK-1271 ⑥）：關掉資料庫連線
 /** 開資料庫 ⇒ Promise<IDBDatabase|null>（開不了 ⇒ null；1.5 秒沒回也當開不了）。 */
 function cacheOpen() {
   if (cacheDB) return cacheDB;

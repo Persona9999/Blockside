@@ -1,5 +1,6 @@
 // ───────────────────────── WebGL ─────────────────────────
 var cv = $('cv'), gl = cv.getContext('webgl2', { antialias: false, preserveDrawingBuffer: true });   // 反鋸齒自己做（MSAA framebuffer，畫質設定；60_render.js targets）
+bsOnDispose(function () { var x = gl && gl.getExtension('WEBGL_lose_context'); if (x) x.loseContext(); });   // 卸載（00_mount.js bsDispose，TASK-1271 ⑥）：放掉這一份的 WebGL
 function glFail(msg) { bootSay(msg); errShow(msg); }
 // ── 報錯彈窗與回報（Tim 2026-10-18：「是否可以加一個彈窗(可關閉) 以及一個回報錯誤按鈕(可以填錯誤內容 然後寄email…(包含報錯訊息與玩家的回報內容)」）──
 // glFail 與沒接住的錯誤（window error／unhandledrejection）都開這個彈窗；同一則訊息只自己跳一次（關掉之後不再煩人）。
@@ -177,7 +178,8 @@ function glWarm(vs, fs) { var k = vs + '\u0000' + fs; return GL_WARM[k] || (GL_W
 function glProgTry(vs, fs) { var k = vs + '\u0000' + fs, J = glWarm(vs, fs); if (!glProgReady(J)) return null; delete GL_WARM[k]; return glProgEnd(J); }
 (function () {
   var c0 = VK.compile;
-  VK.compile = function (g, vs, fs) {
+  bsOnDispose(function () { if (VK.compile === mine) VK.compile = c0; });   // 卸載（TASK-1271 ⑥）：VoxelKit 一頁一份 ⇒ 不還原的話下一份掛上來又包這一份、每一份都被串著留在記憶體（量過：每掛一次多 16 MB）
+  var mine = VK.compile = function (g, vs, fs) {
     if (g !== gl) return c0(g, vs, fs);
     var k = vs + '\u0000' + fs, J = GL_WARM[k];
     if (J) { delete GL_WARM[k]; return glProgEnd(J); }

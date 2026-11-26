@@ -4,6 +4,7 @@ var AC = null, master = null, noiseBuf = null, muted = false;
 //   ① master 後面一個限制器（DynamicsCompressor：門檻 −14 dB、比 20、起 2 ms、放 250 ms）⇒ 疊再多也壓在 0 dBFS 以下；
 //   ② 同時發聲：同一種在 SFX_WIN 秒內最多 SFX_SAME 個（人耳分不出來、只是更大聲）、全部最多 SFX_MAX 個還在響 ⇒ 多的不放（只是聲音；不碰模擬的亂數）。
 var SFX_MAX = 24, SFX_SAME = 3, SFX_WIN = 0.06, SFX_END = [], SFX_RECENT = {}, SFX_DROP = {}, SFX_GUN_NEXT = 0, SFX_GUN_MAX = 32, SFX_GUN_END = [];   // 開砲自己一個池子（SFX_GUN_MAX 聲；只算頭）⇒ 交戰時命中、碎裂的聲音佔滿 SFX_MAX 也輪得到開砲   // SFX_DROP：每一種被上限丟掉幾聲（__game.sfxDrop；試聽頁 85_gunlab.js 也讀）
+bsOnDispose(function () { if (AC) { try { AC.close(); } catch (e) { } AC = null; } });   // 卸載（TASK-1271 ⑥）：關掉這一份的 AudioContext
 function initAudio() {
   if (AC || DEMO >= 0) return;
   try {

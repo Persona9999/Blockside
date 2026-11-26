@@ -3107,7 +3107,7 @@ def act_page_layers(src=None, gate=False, every=False):
 #   遊戲閉包的第一行排在跟 index.html 同一個行號（前面補空行）⇒ 這支檔從一頁的第 1 行起放，報錯的行號就是 index.html 的行號。
 #   選項：{ query: '?…'（＝ 網址參數）, hash: '#pre=…', host（@host 要講話的那一頁：有 postMessage 的物件）, own（網址列是核心的：換場時跟著換）, framed（開在 iframe 裡）,
 #          shadow: false（反向對照用：不開 shadow root，直接放進容器、查元素查整頁）, css: [字串]（外殼的樣式，照同一套換 html／body）}
-#   一頁只掛一份（第二次 mount ⇒ 回失敗的 Promise）；回 Promise<掛好的那一份>。
+#   一頁同時只掛一份（第二次 mount ⇒ 回失敗的 Promise）；回 Promise<掛好的那一份>。BS.unmount() 拿下（⑥：收掉頁面資源、清空容器）⇒ 之後可以再掛。
 CSS_SEL_RX = re.compile(r'(?<![\w#.\-:])(:root|html|body)(?![\w\-])')
 
 
@@ -3152,20 +3152,32 @@ function cfg() {
   return new Promise(function (ok, bad) { var s = document.createElement('script'); s.src = ((G.BS_SHELL && G.BS_SHELL.ships) || '') + 'ships/ships_cfg.js'; s.onload = ok; s.onerror = function () { bad(new Error('載不到 ' + s.src)); }; document.head.appendChild(s); });
 }
 function mount(el, o) {
-  if (MOUNTED) return Promise.reject(new Error('BS.mount：這一頁已經掛了一份（一頁一份）'));
+  if (MOUNTED) return Promise.reject(new Error('BS.mount：這一頁已經掛了一份（一頁同時一份；先 BS.unmount）'));
   o = o || {}; var shadow = o.shadow !== false, root = shadow ? (el.shadowRoot || el.attachShadow({ mode: 'open' })) : null, box = shadow ? root : el;
   box.innerHTML = '<style>' + CSS + (o.css || []).map(scope).join('\n') + '</style><div class="bs-html"><div class="bs-body">' + HTML + DATA + '</div></div>';
   var h = box.querySelector('.bs-html'), b = box.querySelector('.bs-body'), q = new URLSearchParams(o.query || '');
   if (q.get('tui') === '@host') h.classList.add('tuionly'); if (q.get('pick') === '@host') h.classList.add('pickonly');   // = index.html 檔頭那一段：載程式之前先藏主選單
   MOUNTED = { el: el, root: shadow ? root : document, head: shadow ? root : document.head, body: b, html: h,
     opt: { query: o.query || '', hash: o.hash || '', own: !!o.own, framed: !!o.framed, host: o.host || null } };
+  var M = MOUNTED;
   return cfg().then(function () {
+    if (M.gone) throw new Error('BS.mount：還沒掛好就被拿下了');
     if (!G.VoxelKit) vk();
-    G.VoxelKit.setRoot(MOUNTED.root);
-    G.BS_MOUNT_NOW = MOUNTED;
+    G.VoxelKit.setRoot(M.root);
+    G.BS_MOUNT_NOW = M;
     try { game(); } finally { G.BS_MOUNT_NOW = null; }
-    return MOUNTED;
+    return M;
   });
+}
+// 拿下（TASK-1271 函式庫化⑥）：收掉這一份核心拿的頁面資源（js/00_mount.js bsDispose：計時器、畫面迴圈、Worker、監聽、WebGL、聲音、資料庫）、清空容器 ⇒ 之後可以再 mount（再跑一次遊戲閉包 ＝ 全新的一份）。
+//   回 Promise<收之前的讀數 { timeout, interval, frame, worker, listen } | null（沒掛）>；之後 M.live() 要全是 0。
+function unmount() {
+  var M = MOUNTED; if (!M) return Promise.resolve(null);
+  M.gone = true; MOUNTED = null;
+  var n = M.dispose ? M.dispose() : null;
+  (M.root === document ? M.el : M.root).innerHTML = '';
+  if (G.VoxelKit) G.VoxelKit.setRoot(null);
+  return Promise.resolve(n);
 }'''
 
 
@@ -3209,7 +3221,7 @@ def core_js(html):
     want = html[:bo + 6 + g0 + 8].count('\n') + 1                  # index.html 裡遊戲閉包第一行（<script> 後面那一行）
     have = head.count('\n') + 2                                     # 'function game() {' 那一行的下一行
     pad = max(0, want - have)
-    out = head + '\n' + '\n' * pad + 'function game() {' + game + '}\n' + 'G.BS = { mount: mount, mounted: function () { return MOUNTED; }, stamp: ' + json.dumps(fp) + ' };\n})(window);\n'
+    out = head + '\n' + '\n' * pad + 'function game() {' + game + '}\n' + 'G.BS = { mount: mount, unmount: unmount, mounted: function () { return MOUNTED; }, stamp: ' + json.dumps(fp) + ' };\n})(window);\n'
     return out, {'sel': nsel, 'pad': pad, 'line': want, 'aligned': want >= have, 'size': len(out.encode('utf-8')), 'fp': fp}
 
 
