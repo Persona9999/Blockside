@@ -174,7 +174,9 @@ var FLAG_PRESETS = [
   //   洛安戈王國（Blocksail 的 loango，洛安戈 TASK-1367）：1666 年不歸任何歐洲勢力；王國的旗查不到 ⇒〔設計〕素面、底色照當地染布用的紅木（tukula）的深紅褐
   { k: 'loango', name: '洛安戈〔設計〕', field: '#6b2e1c', emblem: 'none' },
   //   萬丹蘇丹國（Blocksail 的 banten，萬丹 TASK-1354）：1666 年獨立（1683 年起才成為 VOC 的附庸）；蘇丹國的旗查不到 ⇒〔設計〕素面、底色照爪哇西部染布用的藍靛（tarum）
-  { k: 'banten', name: '萬丹〔設計〕', field: '#3d3278', emblem: 'none' }
+  { k: 'banten', name: '萬丹〔設計〕', field: '#3d3278', emblem: 'none' },
+  //   葉門卡西姆伊瑪目國（Blocksail 的 yemen，摩卡 TASK-1382）：1636 年起摩卡歸卡西姆王朝的伊瑪目（1666 年是穆塔瓦基勒·伊斯瑪儀）；伊瑪目的旗查不到 ⇒〔設計〕素面深綠（摩洛哥已經是素紅，紅的分不出來）
+  { k: 'yemen', name: '葉門〔設計〕', field: '#1f5a3a', emblem: 'none' }
 ];
 var FLAG_DEF = { blue: 'gb-blue', red: 'gb-red' };
 // ⛔ 下面兩個不給初值：69_prefs.js 讀存檔時本檔還沒跑（同一個閉包，var 提升）⇒ 那時先把存檔那一格原樣放進 FLAG_PREF，teamFlag 第一次用到才解
