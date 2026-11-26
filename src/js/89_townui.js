@@ -36,7 +36,12 @@ var TUI_MEAL_LEVELS = ['荒年糧', '主糧', '家常', '佳餚'];
 var TUI_MEAL_RANKS = ['I', 'II', 'III', 'IV'];
 function tuiMealIcon(dir, k, level) {
   if (!(typeof level === 'number' && level >= 0 && level <= 3 && level % 1 === 0)) return tuiIcon(dir, k);
-  return '<span class="tuiMealIcon" data-level="' + level + '" title="' + TUI_MEAL_LEVELS[level] + '（' + TUI_MEAL_RANKS[level] + '）"><img class="tuiMealSprite" src="img/' + dir + '/' + encodeURIComponent(k) + '.png" alt="" onerror="this.parentNode.remove()"><span class="tuiMealRank" aria-hidden="true">' + TUI_MEAL_RANKS[level] + '</span></span>';
+  // A new recipe can be shipped before its dish icon. Use the food-level icon
+  // once and keep the existing rank and tooltip.
+  var onError = dir === 'dishes'
+    ? "this.onerror=function(){this.parentNode.remove()};this.src='img/goods/%40food-" + level + ".png'"
+    : 'this.parentNode.remove()';
+  return '<span class="tuiMealIcon" data-level="' + level + '" title="' + TUI_MEAL_LEVELS[level] + '（' + TUI_MEAL_RANKS[level] + '）"><img class="tuiMealSprite" src="img/' + dir + '/' + encodeURIComponent(k) + '.png" alt="" onerror="' + onError + '"><span class="tuiMealRank" aria-hidden="true">' + TUI_MEAL_RANKS[level] + '</span></span>';
 }
 /** 昨天吃了什麼（份的比例）：家裡的灶每一道菜（'eat:<貨>' ＝ 直接吃那一種）＋服務建築供的（餐館、酒館、教堂；Blocksail world/food.js foodDay 的 dish、served）。 */
 function tuiEatHTML(F) {
