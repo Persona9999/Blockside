@@ -149,6 +149,13 @@ var FLAG_EMB = {
       for (var n = 0; n < 2; n++) { var th = (a < 0 ? a + 2 * Math.PI : a) + 2 * Math.PI * n; if (Math.abs(r - b * th) < 0.028) return [0.62, 0.2, 0.12]; }
       return null;
     } },
+  'mughal-sun': { name: '金日', ink: [0.93, 0.68, 0.25], res: 2,
+    at: function (X, Y) {
+      var x = X - 1, y = Y - 0.5, r = Math.hypot(x, y);
+      if (r < 0.18) return this.ink;
+      var ray = Math.cos(12 * Math.atan2(y, x));
+      return r > 0.21 && r < 0.24 + 0.13 * Math.max(0, ray) && ray > 0.35 ? this.ink : null;
+    } },
   none: { name: '（沒有紋章）', ink: COL_W, res: 1, at: function () { return null; } }
 };
 //   預設旗（選單裡那幾面；Tim「旗幟可以做下拉選單 先加三四種就好」）：key ⇒ { name, field, emblem }。英國藍旗、紅旗的底色 ＝ 以前的 COL_FIELD 換成 0～255（round）⇒ 同一個位元組
@@ -166,6 +173,7 @@ var FLAG_PRESETS = [
   { k: 'tuscany', name: '托斯卡納', field: '#ece9e0', emblem: 'stefano' },
   { k: 'venice', name: '威尼斯', field: '#9e1a1f', emblem: 'marco' },
   { k: 'byzantine', name: '東羅馬（1453）', field: '#a51c1c', emblem: 'tetragram' },
+  { k: 'mughal', name: '蒙兀兒〔設計〕', field: '#772526', emblem: 'mughal-sun' },
   { k: 'maroon', name: '逃亡者聚落〔設計〕', field: '#2e5b2a', emblem: 'abeng' },
   { k: 'native', name: '原住民〔設計〕', field: '#d9c39a', emblem: 'spiral' },
   //   摩洛哥（Blocksail 的 morocco，阿加迪爾 TASK-1288）：17 世紀阿拉維王朝起用的素紅旗（今天國旗的五角星 1915 年才加；維基 Flag of Morocco）
