@@ -60,6 +60,8 @@ function shredWet(sh, f) {
   var T = sh.T, x = p[o] | 0, z = p[o + 2] | 0, hb = T.hullHB;
   return !(hb && x >= 0 && x < T.hullTW && z >= 0 && z < T.hullTH && Math.abs(p[o + 1] + 0.5 - T.cy) < hb[z * T.hullTW + x]);
 }
+/** 落水的判定排在 rwFlush 之後（f 要綁住：迴圈的 var f 只有一個）。 */
+function shredWetAfter(sh, f) { return function () { if (shredWet(sh, f)) f.wet = 0.01; }; }
 /** 每一步（physStep 的最後）：在空中與甲板上的照布算（跟帆同一個節拍）、每 0.1 秒看落水與壽命；落水的停在海上往下沉。 */
 function shredStep(sh, wl, gv, si, chk, h, hs) {                 // h：一步（照畫面格算時 ＝ 一格）幾秒；hs：這一段模擬走了多久（落海的退船走的那一段；TASK-0799）
   var F = sh.shreds; if (!F || !F.length) return;
@@ -72,10 +74,10 @@ function shredStep(sh, wl, gv, si, chk, h, hs) {                 // h：一步�
       if (chk && (f.wet += 0.1) > SH_WET) F.splice(i--, 1);
       continue;
     }
-    if (go) { if (ns === 1) clothStep(sh, f, wl, gv, hc); else for (var cs = 0; cs < ns; cs++) clothStep(sh, f, wl, gv, hc / ns); }
+    if (go) clothStep(sh, f, wl, gv, ns === 1 ? hc : hc / ns, ns);   // 排隊；這一格的 rwFlush 才走（TASK-1377）
     if (!chk) continue;
     f.age += 0.1;
     if (f.age > SH_LIFE) { F.splice(i--, 1); continue; }
-    if (shredWet(sh, f)) f.wet = 0.01;
+    rwAfter(shredWetAfter(sh, f));                                   // 讀走完這一步的布 ⇒ rwFlush 之後
   }
 }

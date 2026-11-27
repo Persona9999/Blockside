@@ -1,18 +1,20 @@
 // 帆布的解算（TASK-1377）：js/30_rig_physics.js 的 clothStep 那一整段迴圈 —— 風壓、Verlet、距離約束（solve）、sheet 拉住帆腳（tethSolve）、
-//   拉伸上限（clothLimit）—— 搬進 C++ 編成 WebAssembly。JS 那邊一面布一步只叫一次 rc_step（⛔ 不是一點一點跨進來叫：TASK-1318 第 3 步的教訓）。
-//   也給 js/29_sailrecipe.js 吹鼓用（同一個入口：steps 步、沒有波紋）。
+//   拉伸上限（clothLimit）—— 搬進 C++ 編成 WebAssembly。⛔ 不是一點一點跨進來叫（TASK-1318 第 3 步的教訓）：
+//   · 遊戲：一格（有畫面 ＝ 畫面一格；沒畫面 ＝ 模擬一步）全部的船、全部的帆與布片只叫一次 rc_run —— JS 那邊先排好每一面的表頭（一面 256 位元組、接成一排），這裡照順序一面一面走。
+//     布的狀態（位置 p、上一步 q、釘住、斷邊、到綁點的距離）常駐在這塊記憶體裡，JS 的 c.p 等就是這塊記憶體上的視圖（js/29_rigwasm.js rwAdopt）⇒ 不抄進抄出。
+//   · js/29_sailrecipe.js 載入時吹鼓：rc_step（一面、steps 步、沒有波紋；抄進抄出，只在載入時跑）。
 //
 // 一致性（照 TASK-1318 的規則，Blocksail docs/NATIVE.md §5）：
 //   · 布的點在 JS 是 Float32Array：讀進來換成 double 算、寫回去才捨成 float（跟 JS 讀寫 Float32Array 一樣）；風壓的累加器（JS 的 CACC）也是 float。
 //   · 運算順序照 JS 一個一個寫（a + b * c ＝ a + (b * c)、左結合）；build.sh 加 -ffp-contract=off（不合併乘加）。
 //   · 只用加減乘除、sqrt、fabs、floor（IEEE 規定正確捨入）；sin 用 fdlibm_sin.h（確定版，不是哪個引擎的 Math.sin）。
 //   · 獨立的 wasm（不連 libc）：沒有 malloc ⇒ 下面自己寫一個按 2 的次方分級的配置器。
-//   · 匯入兩個 JS 函式：grid（落下來的布碰甲板：這艘的格子在 JS，VoxelKit Grid.get）、sinFar（波紋的角度大到 fdlibm_sin.h 沒寫的範圍）。
+//   · 匯入兩個 JS 函式：grid（落下來的布碰甲板：船的格子在 JS，VoxelKit Grid.get；第一個參數是這一面所在那艘的編號，表頭的 grid）、sinFar（波紋的角度大到 fdlibm_sin.h 沒寫的範圍）。
 #include <stdint.h>
 #include "fdlibm_sin.h"
 
 #define EXPORT(n) extern "C" __attribute__((export_name(n)))
-extern "C" __attribute__((import_module("env"), import_name("grid"))) int js_grid(double x, double y, double z);
+extern "C" __attribute__((import_module("env"), import_name("grid"))) int js_grid(int32_t g, double x, double y, double z);
 extern "C" __attribute__((import_module("env"), import_name("sinFar"))) double js_sin_far(double x);
 
 // ── 配置器：區塊前面 8 位元組記級別；級別 k ＝ 2^k 位元組（含表頭）；放掉的串在各級的串列上 ──
@@ -44,7 +46,7 @@ struct Hdr {
   int32_t n, nE, nB, nT;                          // 點數、結構邊、跨點邊、tris 的長度（三角形數 × 3）
   int32_t ea, eb, rest, ba, bb, brest, tris, te;  // 布的模板（位址）：邊 uint16、靜止長度 float、三角形 uint16、三角形的三條邊 uint16
   int32_t p, q, pin, brk, bbrk, lraD, lraA, teth; // 這一面：位置、上一步位置（float × 3n）、釘住 uint8、斷掉的邊 uint8、到綁點的距離 float、哪個綁點 int32、sheet 拉住的帆腳（double × 5 一筆）
-  int32_t nTeth, flags, itn, sub, limIt, steps, pad0, pad1, pad5, pad6, pad7, pad8;
+  int32_t nTeth, flags, itn, sub, limIt, steps, grid, pad1, pad5, pad6, pad7, pad8;   // grid：這一面所在那艘的格子是 JS 那邊這一批的第幾個
   double inv, dms, d2s, kw, flutter, st, k1, wl0, wl1, wl2, gv0, gv1, gv2, pad2, pad3, pad4;
 };
 static_assert(sizeof(Hdr) == 256, "表頭 256 位元組（JS 那邊照這個排）");
@@ -105,11 +107,18 @@ static void clothLimit(const Hdr& H, float* p, const uint8_t* pin, const uint8_t
   }
 }
 
+// 風壓的暫存至少放得下 n 個點。回 0 ＝ 好了；1 ＝ 配置不到。rc_run 之前 JS 先照這一批最大的那一面叫一次 ⇒ rc_run 裡不會再配置（記憶體不會在半途長大）
+EXPORT("rc_reserve") int32_t rc_reserve(int32_t n) {
+  if (n <= accN) return 0;
+  rc_free((uint32_t)(uintptr_t)ACC); rc_free((uint32_t)(uintptr_t)CNT); ACC = at<float>((int32_t)rc_alloc((uint32_t)n * 12u)); CNT = at<uint8_t>((int32_t)rc_alloc((uint32_t)n));
+  if (!ACC || !CNT) { accN = 0; return 1; }
+  accN = n; return 0;
+}
 // 一面布走 H.steps 步（每一步 ＝ JS clothStep 一次）。回 0 ＝ 走完；1 ＝ 配置不到風壓的暫存（JS 那邊報錯）
 EXPORT("rc_step") int32_t rc_step(uint32_t hp) {
   const Hdr& H = *at<Hdr>((int32_t)hp);
   int32_t n = H.n;
-  if (n > accN) { rc_free((uint32_t)(uintptr_t)ACC); rc_free((uint32_t)(uintptr_t)CNT); ACC = at<float>((int32_t)rc_alloc((uint32_t)n * 12u)); CNT = at<uint8_t>((int32_t)rc_alloc((uint32_t)n)); if (!ACC || !CNT) { accN = 0; return 1; } accN = n; }
+  if (rc_reserve(n)) return 1;
   float *p = at<float>(H.p), *q = at<float>(H.q), *A = ACC; uint8_t* N = CNT;
   const uint8_t* pin = at<uint8_t>(H.pin);
   const uint16_t *tr = at<uint16_t>(H.tris), *te = at<uint16_t>(H.te);
@@ -143,7 +152,7 @@ EXPORT("rc_step") int32_t rc_step(uint32_t hp) {
         if (pin[i]) continue;
         int32_t o = i * 3; double kk = N[i] ? 1.0 / (double)N[i] : 0.0;
         for (int32_t x = 0; x < 3; x++) { double cur = p[o + x], vel = (cur - (double)q[o + x]) * H.dms; q[o + x] = (float)cur; p[o + x] = (float)(cur + vel + ((double)A[o + x] * kk + gv[x]) * H.d2s); }
-        if (loose && js_grid(__builtin_floor((double)p[o]), __builtin_floor((double)p[o + 1]), __builtin_floor((double)p[o + 2])) && !js_grid(__builtin_floor((double)q[o]), __builtin_floor((double)q[o + 1]), __builtin_floor((double)q[o + 2]))) { p[o] = q[o]; p[o + 1] = q[o + 1]; p[o + 2] = q[o + 2]; }   // 落在格子裡（甲板、船殼）⇒ 退回上一步（JS 的 hitGrid）
+        if (loose && js_grid(H.grid, __builtin_floor((double)p[o]), __builtin_floor((double)p[o + 1]), __builtin_floor((double)p[o + 2])) && !js_grid(H.grid, __builtin_floor((double)q[o]), __builtin_floor((double)q[o + 1]), __builtin_floor((double)q[o + 2]))) { p[o] = q[o]; p[o + 1] = q[o + 1]; p[o + 2] = q[o + 2]; }   // 落在格子裡（甲板、船殼）⇒ 退回上一步（JS 的 hitGrid）
       }
       solve(at<uint16_t>(H.ea), at<uint16_t>(H.eb), at<float>(H.rest), brk, H.nE, p, pin, 1);
       if (it & 1) solve(at<uint16_t>(H.ba), at<uint16_t>(H.bb), at<float>(H.brest), bbrk, H.nB, p, pin, 0.5);
@@ -152,6 +161,11 @@ EXPORT("rc_step") int32_t rc_step(uint32_t hp) {
     }
     if (H.sub == 1 && lim) clothLimit(H, p, pin, brk);
   }
+  return 0;
+}
+// 一批：從 hp 起 cnt 個表頭（一個 256 位元組、接成一排），照順序一面一面走（＝ 以前 JS 照順序一面一面叫 rc_step）。回 0 ＝ 走完；k ＋ 1 ＝ 第 k 面配置不到風壓的暫存
+EXPORT("rc_run") int32_t rc_run(uint32_t hp, int32_t cnt) {
+  for (int32_t k = 0; k < cnt; k++) if (rc_step(hp + (uint32_t)k * 256u)) return k + 1;
   return 0;
 }
 // 量用：波紋的角度大到退回 JS 的次數（rc_sin_far_n）；fdlibm sin 本身（對拍：tools 跟 Math.sin 比）

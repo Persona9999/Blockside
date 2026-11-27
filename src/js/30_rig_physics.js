@@ -424,7 +424,7 @@ function tearCloth(sh, s, L, r, b) {
   c.torn = true;
   if (b) shredCut(sh, c, old, b);
 }
-// 距離約束（solve）在 wasm 裡（rig_cloth.cpp，TASK-1377）：clothStep、29_sailrecipe.js 的吹鼓都經過 rwCloth。
+// 距離約束（solve）在 wasm 裡（rig_cloth.cpp，TASK-1377）：clothStep 排隊（rwQueue）、這一格的最後一次走完（rwFlush）；29_sailrecipe.js 的吹鼓走 rwCloth。
 // ── 布的拉伸上限（TASK-0821；Tim 2026-10-22「變得太過Q彈 變形太大了」「是否可以讓布有拉伸極限」「不能像橡膠一樣」）──
 // 為什麼：距離約束一步只解 RIG_LV.it 次（高 4 次）⇒ 強風（暴風雨的風 2.2 倍、風壓 ∝ 風速²）壓上去解不回靜止長度，帆被拉成長帶、鬆手又彈回來。
 //   量過（暴風雨、兩艘憲法號、物理全開，每面帆每條邊 長度 ÷ 靜止長度）：99 百分位 1.2～3.0 倍、最大 16.7 倍。
@@ -480,18 +480,20 @@ function clothLra(sh, c) {
 function hitGrid(g, p, q, o) {
   if (g.get(Math.floor(p[o]), Math.floor(p[o + 1]), Math.floor(p[o + 2])) && !g.get(Math.floor(q[o]), Math.floor(q[o + 1]), Math.floor(q[o + 2]))) { p[o] = q[o]; p[o + 1] = q[o + 1]; p[o + 2] = q[o + 2]; }
 }
-/** 一面布走一步（h 秒）—— 整段迴圈在 wasm 裡（TASK-1377：src/native/rig_cloth.cpp rc_step、29_rigwasm.js rwCloth；JS 版拿掉了）。
+/** 一面布走 reps 步（每步 h 秒；沒給 ＝ 1 步）—— 整段迴圈在 wasm 裡（TASK-1377：src/native/rig_cloth.cpp、29_rigwasm.js；JS 版拿掉了）。
+ *  ⚠ 只排隊（rwQueue）：這一格全部的船排完，rwFlush 一次走完（physFrame、50_sim.js 模擬一步的最後）⇒ 排完到 rwFlush 之前 c.p 還是上一步的；要讀走完的用 rwAfter。
  *  做的事跟以前的 JS 版一樣、照同一個順序：
  *    ① 風壓：每個三角形沿法線推，大小 ∝（相對風在法線上的分量）²，相對風扣掉布自己的速度；一道一道走過布面的波紋（FLUTTER；不抽亂數）
  *    ② 小步長（TASK-0821；Macklin 等 2019「Small Steps」）：同樣的花費切成 itn 小步（風壓照這一步開頭算一次、每小步共用；速度保留照每秒換算 ⇒ 跟切幾步無關），每小步：
  *       Verlet → 落下來的布碰到甲板、船殼退回上一步（hitGrid）→ 距離約束（結構邊；隔一小步再解跨點邊）→ sheet 拉住帆腳（tethSolve）→ 拉伸上限（clothLimit）
  *       SAIL_SUB 0 ⇒ 照以前：一步走完再解 itn 次、最後夾一次。
- *  這裡只算這一步的常數（步長、阻尼、風壓倍率、波紋的相位）、綁點沿著布的距離（clothLra：綁點、斷邊、sheet 變了才重算）、sheet 這一步的長度（tethPre）。 */
-function clothStep(sh, c, wl, gv, h) {                 // c.kw：風壓倍率（帆的布片，34_shreds.js；帆 ＝ 1）；c.ev：這一塊幾步走一次（遠方的船放大，physStep）；h：切小步時這一小步幾秒（TASK-0797；沒給 ＝ 一整段）
+ *  這裡只算這一步的常數（步長、阻尼、風壓倍率、波紋的相位）、綁點沿著布的距離（clothLra：綁點、斷邊、sheet 變了才重算）、sheet 這一步的長度（tethPre）。
+ *  reps 步（切小步，TASK-0797）共用同一組：以前每一小步各叫一次，各算一次 —— 小步之間綁點、斷邊、sheet、帆桁都不變 ⇒ 算出來一樣。 */
+function clothStep(sh, c, wl, gv, h, reps) {                 // c.kw：風壓倍率（帆的布片，34_shreds.js；帆 ＝ 1）；c.ev：這一塊幾步走一次（遠方的船放大，physStep）；h：切小步時這一小步幾秒（TASK-0797；沒給 ＝ 一整段）
   var HC = h || (c.ev || steps60(rigLv().every)) * DT, itn = c.itn || rigLv().it, sub = SAIL_SUB ? itn : 1, hs = HC / sub, dmp = decay60(DAMP, HC), lim = SAIL_STRETCH > 0;
   if (lim) { var sg = clothLraSig(sh, c); if (c.lraSig !== sg || !c.lraD) { clothLra(sh, c); c.lraSig = sg; } }
-  rwCloth(c.T.sim, c, c.tt ? tethPre(sh, c) : null, {
-    flags: (c.torn ? RW_FLAG.torn : 0) | (c.loose ? RW_FLAG.loose : 0) | (lim ? RW_FLAG.limit : 0) | RW_FLAG.flutter, itn: itn, sub: sub, limIt: SAIL_LIM_IT, steps: 1,
+  rwQueue(c, c.tt ? tethPre(sh, c) : null, {
+    flags: (c.torn ? RW_FLAG.torn : 0) | (c.loose ? RW_FLAG.loose : 0) | (lim ? RW_FLAG.limit : 0) | RW_FLAG.flutter, itn: itn, sub: sub, limIt: SAIL_LIM_IT, steps: reps || 1,
     inv: 1 / (3 * HC / sub), dms: sub > 1 ? Math.pow(dmp, 1 / sub) : dmp, d2s: hs * hs, kw: KW * (c.kw || 1), flutter: FLUTTER, st: SIMT * 5.5, k1: 1 + SAIL_STRETCH, wl: wl, gv: gv
   }, sh.grid);
 }
@@ -640,6 +642,7 @@ function physFrame(h, hs) {
   var pt0 = performance.now(); PHF_I++; PHF_CHK += h;
   var chk = PHF_CHK >= 0.1 - 1e-9; if (chk) PHF_CHK = 0;
   DRAWN.forEach(function (sh) { if (sh.sink < 40) { var w = physWind(sh); if (chk && sh.yards.length) yardRopes(sh); if (!rigFixed(sh)) physVis(sh, w[0], w[1], PHF_I, chk, h, hs, evAsk('rigSeen', true, sh)); } });   // 看不到 ⇒ 步少、每步長（TASK-0802）；固定的繩帆（rigFixed）不算布（跟帆桁走的繩照算）
+  var t1 = DEBUG ? performance.now() : 0; rwFlush(); if (DEBUG) PROF.cloth += performance.now() - t1;   // 這一格排好的布（帆、布片）一次走完（TASK-1377）；走完的才解碰撞
   clothContactsRun();
   PHYS_MS = PHYS_MS * 0.98 + (performance.now() - pt0) * 0.02;
 }
@@ -676,9 +679,9 @@ function physVis(sh, wl, gv, si, chk, h, hs, seen) {                 // seen ＝
     if (chk || c.npin < 0) clothPins(sh, s, c);
     if (seen === undefined || (si + k + sh.i + 1) % evk === 0) yardPins(sh, c);   // 照畫面格算時只在這面布要走的那一格放回帆桁（其他格放了也沒人讀；畫面外每 6 格才走一次）
     c.ev = evk; c.itn = m > 1 ? Math.max(1, rigLv().it >> 1) : 0;   // 遠方、畫面外降速的布迭代減半（TASK-0802，Tim 2026-10-22「遠方的布少迭代」；0 ⇒ 照分級）
-    if ((si + k + sh.i + 1) % evk === 0) { var t0 = DEBUG ? performance.now() : 0; if (ns === 1) clothStep(sh, c, wl, gv, hc); else for (var cs = 0; cs < ns; cs++) clothStep(sh, c, wl, gv, hc / ns); if (DEBUG) PROF.cloth += performance.now() - t0; }
+    if ((si + k + sh.i + 1) % evk === 0) clothStep(sh, c, wl, gv, ns === 1 ? hc : hc / ns, ns);   // 排隊；走在這一格的 rwFlush（PROF.cloth 量在那裡）
     if (ccOn && (si + k + sh.i + 1) % evk === 0 && c.p && !c.hidden && !c.gone) CC_Q.push({ sh: sh, c: c });   // 帆的碰撞（TASK-0603）：開了才排、跟布同一步；這一步全部的船走完才照時間預算解（clothContactsRun，50_sim.js）
-    if (chk && c.loose && !c.npin) { c.free += 0.1; if (c.free > 12 || underWater(sh, c.p, 0) && underWater(sh, c.p, c.T.sim.n >> 1)) c.gone = true; }
+    if (chk && c.loose && !c.npin) rwAfter(function () { c.free += 0.1; if (c.free > 12 || underWater(sh, c.p, 0) && underWater(sh, c.p, c.T.sim.n >> 1)) c.gone = true; });   // 讀走完這一步的布 ⇒ rwFlush 之後
   });
   for (i = 0; i < sh.loose.length; i++) {
     var o = sh.loose[i];
