@@ -17,6 +17,13 @@ var NOGO_DEG = 60, NOGO_FULL = 45, IRONS_PUSH = 0.02;              // 頂風失�
 //   現實裡舵沒水流就沒用，帆船靠帆轉（倒帆：前帆反受風把船頭推開、後帆收掉）⇒ 這裡當成「用帆轉」的那一份，航速 1.1 m/s（約 2 節）以下才用得到。
 //   ⛔ 照舊 0.012 ⇒ 停住的船 0.7°/s，戰列的排頭讓船讓進頂風、停到 0.2 節後轉不出來（量過風從船頭來的開局）
 var RUD_LOW = 0.03;
+var HOLD_K = 0.5;
+/** 操作層（手動、艦長共用；Tim 2026-11-27「另外自動希望也套同一套邏輯(等於是包裝一層操作層 會先把目前的偏轉考慮進去用舵效平衡 只有左轉 右轉舵效會受影響
+ *  例如左偏轉時 往右舵效會降低 往左時變強 直線前進看舵效是否能抵銷偏轉力 不能的話還是會偏轉)」）：
+ *  want ＝ 想要的轉向率（rad/s，yaw 變大為正）；oS ＝ 帆與動力的不平衡給的轉向率（31_drive.js driveUnbalYaw）⇒ 舵給的轉向率：
+ *  先反打一份壓掉不平衡（最多 rmaxTrim：被打壞的舵那一份不能用）、加上想要的，整個夾在舵打滿 ±rmax。實際轉向 ≈ 舵 ＋ oS ⇒
+ *  左偏時往左轉變強、往右轉變弱；直線（want 0）壓得住就不偏、壓不住照樣偏。手動放手時 want 照船頭偏了多少給（HOLD_K）、艦長照它的航向誤差給。 */
+function helmOp(want, oS, rmax, rmaxTrim) { return clamp(want + clamp(-oS, -rmaxTrim, rmaxTrim), -rmax, rmax); }                                                     // 放手保持航向（sailShip 手動那一段）：偏 1 rad ⇒ 要 0.5 rad/s 轉回去（同艦長 helmSteer）
 var POLAR = [[0, 0.72], [45, 1], [90, 0.92], [112, 0.6], [125, 0.32], [180, 0.25]];   // 船頭跟「風吹去的方向」的夾角（度）→ 係數
 function polar(deg) {
   for (var i = 1; i < POLAR.length; i++) if (deg <= POLAR[i][0]) { var a = POLAR[i - 1], b = POLAR[i]; return a[1] + (b[1] - a[1]) * (deg - a[0]) / (b[0] - a[0]); }
@@ -297,20 +304,27 @@ function sailShip(sh, dt) {
   if (sh.navT !== undefined) rmax *= sh.navT;                          // 航海士（TASK-0825，39_duty.js）：最大轉向率 ×(1 ＋ 轉向 %)；沒有航海士的船 ⇒ 不乘
   var rmaxB = HELM_TQ ? Math.max(RUD_LOW, 0.012 + 0.016 * Math.abs(sh.spd) / SPK) * (UP === 1 ? 1 : 1 + (UP - 1) * clamp((deg - 90) / 45, 0, 1)) * sh.cfg.agile * playK('agile') * WX.agile * (sh.navT !== undefined ? sh.navT : 1) : rmax;   // 舵完好時的最大轉向率（差動照它換算，TASK-0777）
   var rev = helmRev(sh) ? -1 : 1, oS = driveUnbalYaw(sh, HELM_TQ ? rmaxB : rmax);
-  var rmaxTrim = rmax * (HELM_TQ ? helmRudOk(sh) : helmK(sh)), rateTrim = clamp(-oS, -rmaxTrim, rmaxTrim);   // 動力不平衡時自動占用舵的轉向力導正；舵被打壞或轉向力不足（|oS| > rmaxTrim）時仍偏轉
+  var rmaxTrim = rmax * (HELM_TQ ? helmRudOk(sh) : helmK(sh));       // 舵還能拿來壓不平衡的那一份（舵被打壞 ⇒ 少；見 helmOp）
   if (held && Math.abs(sh.spd) < 0.6 && !sh.struck && !sh.sunk) {   // 錨咬著、船幾乎停了 ⇒ 繞錨原地轉：我艦照 A／D、電腦（或雙錨時的我艦沒按）轉舷側對敵
     var pw = sh.i === PLAYER_I ? (KEYS.l ? 1 : 0) - (KEYS.r ? 1 : 0) || dockPivot(sh) : 0;   // 自動停靠到了 ⇒ 繞錨轉到停好的船頭（88_modeswitch.js）
     if (pw) rate = pw * ANC_PIVOT;
     else if (sh.i !== PLAYER_I && foe) { var ps = sideGuns(sh, sh.side) || !sideGuns(sh, sh.side === 'S' ? 'P' : 'S') ? sh.side : sh.side === 'S' ? 'P' : 'S', pg = ps === 'P' ? 1 : -1, pdx = foe.px - sh.px, pdz = foe.pz - sh.pz, pd = Math.hypot(pdx, pdz) || 1;
       var pe = (pg > 0 ? Math.atan2(-pdx / pd, -pdz / pd) : Math.atan2(pdx / pd, pdz / pd)) - sh.yaw; pe = Math.atan2(Math.sin(pe), Math.cos(pe)); rate = clamp(pe * 0.5, -ANC_PIVOT, ANC_PIVOT); }
-    sh.rudder = rate / ANC_PIVOT; sh.rudderCmd = sh.rudder;
+    sh.rudder = rate / ANC_PIVOT; sh.rudderCmd = sh.rudder; sh.holdYaw = null;
   }
-  else if (stop) { sh.rudder = 0; sh.rudderCmd = 0; rate = 0; }
+  else if (stop) { sh.rudder = 0; sh.rudderCmd = 0; rate = 0; sh.holdYaw = null; }
   else if (manual && !sh.struck && !sh.sunk) {
     var want = (KEYS.l ? 1 : 0) - (KEYS.r ? 1 : 0);                    // 舵角正 ＝ yaw 變大 ＝ 畫面上左轉
     sh.rudderCmd = clamp((sh.rudderCmd || 0) + clamp(want - (sh.rudderCmd || 0), -1.5 * dt, 1.5 * dt), -1, 1);
-    var rTrim = rmax > 1e-6 ? rateTrim / rmax * rev : 0;
-    sh.rudder += clamp(clamp(sh.rudderCmd + rTrim, -1, 1) - sh.rudder, -1.5 * dt, 1.5 * dt);
+    // 放手保持航向（Tim 2026-11-27「目前希望是沒有打舵時 舵會嘗試自動平衡到朝正前方」；「有時會憑空出現轉彎(目前觀察是船帆有受到一定破壞後出現)」）：
+    //   以前只照這一步的不平衡反打一份舵（rateTrim ＝ −帆與動力的不平衡）⇒ 舵慢半拍（每秒最多轉 1.5）、轉動慣量帶過頭時船頭一點一點偏掉、偏了也不回來。
+    //   ⇒ 放開 A／D、舵令回到 0 那一刻記下船頭（sh.holdYaw），之後照「偏了多少」修回去：要的轉向率 ＝ 偏角 × HOLD_K（跟艦長 helmSteer 的 e × 0.5 同一把尺）、再扣掉不平衡；
+    //   舵打滿（扣掉被打壞的舵 helmRudOk）也壓不住的不平衡照樣偏。只管畫面上的舵角與轉向，舵令 sh.rudderCmd 照舊是玩家按的（頂風失速往哪一側推照它）。
+    if (want || Math.abs(sh.rudderCmd) > 1e-3) sh.holdYaw = null; else if (sh.holdYaw === null || sh.holdYaw === undefined) sh.holdYaw = sh.yaw;
+    var wantR = sh.rudderCmd * rmax * rev;                              // 想要的轉向率：舵令 × 最大轉向率（倒退 ⇒ 反過來）；放手 ⇒ 照偏了多少修回去
+    if (sh.holdYaw !== null && sh.holdYaw !== undefined) wantR = Math.atan2(Math.sin(sh.holdYaw - sh.yaw), Math.cos(sh.holdYaw - sh.yaw)) * HOLD_K;
+    var rT = rmax > 1e-6 ? helmOp(wantR, oS, rmax, rmaxTrim) / rmax * rev : 0;   // 操作層（helmOp）：扣掉不平衡、夾在舵打滿 ⇒ 換回舵角
+    sh.rudder += clamp(rT - sh.rudder, -1.5 * dt, 1.5 * dt);
     rate = sh.rudder * rmax * rev;                                      // 倒退 ⇒ 舵效反過來（左舵 ⇒ 船尾往左、船頭往右）
     if (nogo > 0) {                                                     // 船頭被風推開：往讓船頭離開風的那一側（正頂風 ⇒ 照上次那一側）
       var off = -Math.sin(sh.yaw) * W[0] - Math.cos(sh.yaw) * W[2];     // d(船頭·風吹去的方向)/d(yaw)：正 ＝ yaw 變大會離開風
@@ -320,6 +334,7 @@ function sailShip(sh, dt) {
       if (nogo > 0.5 && !(SIMT - (sh.ironsT || -99) < 20)) { sh.ironsT = SIMT; note(sh, '頂風失速：帆被吹回來了 —— 帶著速度轉過去，或往下風轉一圈'); }
     }
   } else {
+    sh.holdYaw = null;                                                  // 放手保持航向只管玩家手動開（見上）
     // 艦長（54_helm.js）：要哪一舷對敵（一舷火力不到另一舷一半 ⇒ 轉另一舷；⛔ 以前要一門都開不了才換）、航向（敵艦在那一舷正橫 ＋ 距離修正）、期望航速（下一步 helmGovern 換成帆裝與俥鐘）
     // 指揮官的命令（53_commander.js；TASK-0679）先問：戰列跟隨（照排頭的航跡）、戰列的排頭、搶上風 ⇒ 航向與期望航速照命令；都不是 ⇒ 艦長自己的交戰操舵
     var od = ORDERS[sh.i], ok = !sh.struck && !sh.sunk, ld = ok && od && od.mode === 'line' ? SHIPS[od.leader] : null;
@@ -337,7 +352,7 @@ function sailShip(sh, dt) {
     var rmaxT = HELM_TQ ? rmax + helmDifRate(sh, rmaxB) : rmax;                // 操舵（TASK-0777）：上限 ＝ 舵 ＋ 差動打滿 ⇒ 舵沒了照樣靠兩舷的推力轉；關著 ⇒ 只有舵（跟以前一樣）
     var wantRate = clamp(e * 0.5, -rmaxT, rmaxT); sh.rudderCmd = rmaxT > 0 ? wantRate / rmaxT * rev : 0;
     var rAct = HELM_TQ ? (rmaxT > 0 ? wantRate * rmax / rmaxT : 0) : wantRate;
-    rate = clamp(rAct + rateTrim, -rmax, rmax); sh.rudder = rmax > 1e-6 ? rate / rmax * rev : sh.rudderCmd;   // 倒退 ⇒ 舵反著打（畫面上的舵角；自動加上導正不平衡的那一份舵角）
+    rate = helmOp(rAct, oS, rmax, rmaxTrim); sh.rudder = rmax > 1e-6 ? rate / rmax * rev : sh.rudderCmd;   // 操作層（helmOp）：同手動那一套   // 倒退 ⇒ 舵反著打（畫面上的舵角；自動加上導正不平衡的那一份舵角）
   }
   if (HELM_TQ) helmYaw(sh, rate, dt, stop || (held && Math.abs(sh.spd) < 0.6), rmaxB);   // 力矩 ÷ 阻尼、轉動慣量（31_drive.js「操舵」）：舵 ＋ 帆與動力的不平衡 ＋ 差動
   else {
