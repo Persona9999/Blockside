@@ -537,6 +537,21 @@ if (DEBUG) window.__game = {
     for (var j = 0; j < v.length; j += chain ? 9 : 3) { var dx = v[j] - Ls[0], dy = v[j + 1] - Ls[1], dz = v[j + 2] - Ls[2]; if (dx * dx + dy * dy + dz * dz < rs2) { w = true; break; } }
     return { cloth: cl ? clothNear(cl, L, rb) : null, work: w };
   },
+  /** 帆的損傷網格（30_sail_dmg.js；TASK-1402）：第 i 艘第 k 面帆在第 q 個細格點（布現在的位置）挨一發（chain ⇒ 鏈彈撕開，否則實心打穿）⇒ 回那一面的讀數（sailDmg）＋彈點的世界座標 w。⛔ 只扣布、不扣血量。 */
+  sailTear: function (i, k, q, chain) {
+    var sh = SHIPS[i || 0], s = sh.sails[k], c = sh.cl && sh.cl[k]; if (!s || !c || !c.p) return null;
+    var P = clothFine(c, new Float32Array(c.T.n * 3)), L = [P[q * 3], P[q * 3 + 1], P[q * 3 + 2]];
+    tearCloth(sh, s, L, chain ? 7 : 0, { ammo: chain ? 2 : 0, v: [0, 0, -100] }); sh.rigDirty = true;
+    var r = this.sailDmg(i)[k]; r.w = M4.pt(sh.M, L[0], L[1], L[2]); return r;
+  },
+  /** 每面帆的損傷網格讀數：格數 W × H、帆裡幾格 nIn、壞了幾格 bad、完好度 intact（推力那一份）、推力權重 pow（÷ 面積）、藏了幾點 hid、斷了幾條約束 brk。 */
+  sailDmg: function (i) {
+    var sh = SHIPS[i || 0];
+    return sh.sails.map(function (s, k) {
+      var c = sh.cl && sh.cl[k], dm = c && c.dm, D = c ? sdgTpl(c.T) : null, sum = function (a) { var n = 0; if (a) for (var j = 0; j < a.length; j++) n += a[j] ? 1 : 0; return n; };
+      return { name: s.name, W: D && D.W, H: D && D.H, nIn: D && D.nIn, bad: dm ? dm.n : 0, intact: c ? +clothIntact(c).toFixed(4) : null, pow: s.dead ? 0 : +(sailPow(sh, s) / s.area).toFixed(3), hid: c ? sum(c.tv) : 0, brk: c ? sum(c.brk) + sum(c.bbrk) : 0, dead: !!s.dead };
+    });
+  },
   /** 帆與繩的讀數：每面帆最鼓的那一點離雕刻作品形狀多遠（格）、還綁著幾個點、垂下來的繩幾條。
    *  給 nm（帆名）⇒ 只回那一面的點：現在位置 p、靜止形狀 p0、每點綁在哪（hk：0 不綁、1 格、2 繩、3 找不到靠的、4 帆桁）、uv（旗才有）。 */
   cloth: function (i, nm) {

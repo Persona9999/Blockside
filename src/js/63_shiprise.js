@@ -946,7 +946,7 @@ function shipRiseDrawRig(prog, pd) {
 function shipRiseDrawSails(prog, pd) {
   if (!shipRiseAny()) return;
   if (prog.u.uSailT) gl.uniform1i(prog.u.uSailT, SAIL_UNIT);
-  if (prog.u.uFireT) gl.uniform1f(prog.u.uFireT, BURN.sailBurn);
+  if (prog.u.uFireT) gl.uniform1f(prog.u.uFireT, BURN.sailBurn); if (prog.u.uDmgT) gl.uniform1i(prog.u.uDmgT, SDMG_UNIT);   // 沒有損傷貼圖（頂點那一欄沒接 ⇒ 0、不讀），照樣指到同一號：別跟別的取樣器撞號
   var bt = null;
   cutSet(prog, null);
   for (var k in SHIP_RISE.S) {

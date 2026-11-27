@@ -489,14 +489,16 @@ function burnSails(sh, B, dt) { B.sl.slice().forEach(function (s) { if (s.dead |
 /** 一面帆：洞的面積 ⇒ 血量；剛燒到的點（綁在格上 ⇒ 那一格著、偶爾跳到旁邊的帆）；燒得夠多、綁定點燒掉一半 ⇒ 掉；下雨可能熄。 */
 function burnSail(sh, B, s, dt) {
   var F = s.burn, P = burnTpl(sh.T, s.k), T = BURN.sailBurn, t = SIMT, t0 = F.t1, hole = 0, pinB = 0, live = 0;
+  var c = clothLive(sh, s), dm = c && c.T.n === P.n ? sdgOf(c) : null, nb = null;   // 物理開著：燒穿的點寫進損傷網格（30_sail_dmg.js；推力照它、燒斷的那一塊真的斷開）
   F.t1 = t;
   for (var q = 0; q < P.n; q++) {
     var a = F.a[q], x = F.x[q];
-    if (Math.min(t, x) - a >= T) { hole += P.ar[q]; if (P.pin[q]) pinB++; continue; }
+    if (Math.min(t, x) - a >= T) { hole += P.ar[q]; if (P.pin[q]) pinB++; if (dm && !dm.b[q]) { dm.b[q] = 1; (nb || (nb = [])).push(q); } continue; }
     if (x < BURN_NEVER || a >= BURN_NEVER) continue;
     live++; if (a <= t && a > t0) burnSailNew(sh, B, s, P, q);
   }
-  var hf = hole / P.area; if (hf > F.hf) { s.hp -= s.hpMax * BURN.sailHp * (hf - F.hf); F.hf = hf; }   // 推力跟著血量（31_sailing.js sailFrac）
+  if (nb) sdgBurn(sh, s, c, nb);
+  var hf = hole / P.area; if (hf > F.hf) { s.hp -= s.hpMax * BURN.sailHp * (hf - F.hf); F.hf = hf; }   // 物理關著推力跟著血量（31_sailing.js sailIntact）；開著照損傷網格
   if (!live) { burnSailOff(sh, s); return; }
   if (s.hp <= 0 || hf >= BURN.sailDrop || (P.pinN && pinB * 2 >= P.pinN)) { burnSailOff(sh, s); B.sailGoneN++; dropSail(sh, s, false); burnNews(sh, 'sailGone', s); return; }
   if (WX.rain > 0 && rndFire() < 1 - Math.exp(-dt * BURN.rainSail * WX.rain)) burnSailOut(sh, s, 'sailOut');

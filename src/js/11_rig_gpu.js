@@ -60,7 +60,8 @@ function ropeTube(TB, P, col, w) {
 // 頂點：動的 ＝ 位置 3、法線 3；靜的 ＝ 色 3、貼圖集的 uv 2（TASK-0579；沒有貼圖 ⇒ u ＝ −1，著色器照色畫）、著火 4（TASK-0717：火燒到的時間 a、撲滅的時間 x —— 49_burn.js s.burn，
 //   沒燒過 ＝ BURN_NEVER ⇒ 著色器那一段整個跳過；雜訊座標 ＝ 作品形狀的 ((x＋y)·S, z·S) 公尺 ⇒ 布被吹動時焦痕跟著布、不會滑）、
 //   毛邊 3（R3，sailRagH：離洞幾圈、毛邊的雜訊座標 u／v（這一面最攤開的兩個軸，以細格為單位）；布片照第一次畫到時的形狀 sailShredG0）。
-var SBV = null, SBI = null, SBN = null, SBP = null, SBD = null, SB_STRIDE = 18, SB_DW = 6, SB_SW = 12, SAIL_UNIT = 9, SAIL_DUMMY = null;
+//   損傷貼圖的座標 2（TASK-1402，30_sail_dmg.js sdgVu／sdgVv：＋2，沒受損的帆、布片 ⇒ 0，著色器照 ＞ 1.5 判有沒有）。
+var SBV = null, SBI = null, SBN = null, SBP = null, SBD = null, SB_STRIDE = 20, SB_DW = 6, SB_SW = 14, SAIL_UNIT = 9, SAIL_DUMMY = null;
 // 帆破洞的毛邊（render 管線大修 R3，TASK-0791）：?sailrag=0 ⇒ 照以前（離洞幾圈全是 SAIL_RAG_FAR、布片沒有雜訊座標、撕開只改索引）。
 var SAIL_RAG_ON = Q.get('sailrag') !== '0', SAIL_RAG_FAR = 2, SAIL_RAG_SH = 0.35, SAIL_RAG_G0 = new WeakMap();
 // 跟帆身斷開的那幾塊不畫（sailIsland；Tim 2026-10-21「完全脫離部分應該要消失(中間都被打成透明了) 可以跟火燒一起處理」）：?sailisl=0 ⇒ 照畫。
@@ -117,7 +118,7 @@ function sailFill(ow) {
   if (!SBV || SBV.length < mv * SB_STRIDE) SBV = new Float32Array(Math.ceil(Math.max(1, mv) * 1.33) * SB_STRIDE);
   if (!SBI || SBI.length < mi) SBI = new Uint32Array(Math.ceil(Math.max(1, mi) * 1.33));
   var f = sailWalk(ow, function (o, T, p, n, tr, col, tv, vc, uv, r, bF, g0, rg, th) {
-    var base = nv, j, i, H = SAIL_RAG_ON ? sailRagH(tr, n, th, rg, g0) : null;
+    var base = nv, j, i, H = SAIL_RAG_ON ? sailRagH(tr, n, th, rg, g0) : null, dt = sdgTile(ow, o), dA = ow.sdt;
     SBN.fill(0, 0, n * 3);
     for (j = 0; j < tr.length; j += 3) {
       if (tv && (tv[tr[j]] || tv[tr[j + 1]] || tv[tr[j + 2]])) continue;
@@ -135,6 +136,7 @@ function sailFill(ow) {
       if (bF) { SBV[o6 + 11] = bF.a[i]; SBV[o6 + 12] = bF.x[i]; } else { SBV[o6 + 11] = BURN_NEVER; SBV[o6 + 12] = BURN_NEVER; }
       if (g0) { SBV[o6 + 13] = (g0[q] + g0[q + 1]) * S; SBV[o6 + 14] = g0[q + 2] * S; } else { SBV[o6 + 13] = 0; SBV[o6 + 14] = 0; }
       if (H) { SBV[o6 + 15] = H[q]; SBV[o6 + 16] = H[q + 1]; SBV[o6 + 17] = H[q + 2]; } else { SBV[o6 + 15] = SAIL_RAG_FAR; SBV[o6 + 16] = 0; SBV[o6 + 17] = 0; }
+      if (dt) { SBV[o6 + 18] = sdgVu(dA, dt, i); SBV[o6 + 19] = sdgVv(dA, dt, i); } else { SBV[o6 + 18] = 0; SBV[o6 + 19] = 0; }
     }
     nv += n;
   });
@@ -151,7 +153,7 @@ function sailBuf(ow) {
     B = ow.sb = { vao: gl.createVertexArray(), vbo: gl.createBuffer(), sbo: gl.createBuffer(), ebo: gl.createBuffer(), n: 0, nv: 0, L: [], SV: new Float32Array(0), IV: new Uint32Array(0), gs: 0, gi: 0, gd: 0 };
     gl.bindVertexArray(B.vao);
     gl.bindBuffer(gl.ARRAY_BUFFER, B.vbo); [[0, 0, 3], [1, 3, 3]].forEach(function (a) { gl.enableVertexAttribArray(a[0]); gl.vertexAttribPointer(a[0], a[2], gl.FLOAT, false, SB_DW * 4, a[1] * 4); });
-    gl.bindBuffer(gl.ARRAY_BUFFER, B.sbo); [[2, 0, 3], [3, 3, 2], [4, 5, 4], [5, 9, 3]].forEach(function (a) { gl.enableVertexAttribArray(a[0]); gl.vertexAttribPointer(a[0], a[2], gl.FLOAT, false, SB_SW * 4, a[1] * 4); });
+    gl.bindBuffer(gl.ARRAY_BUFFER, B.sbo); [[2, 0, 3], [3, 3, 2], [4, 5, 4], [5, 9, 3], [7, 12, 2]].forEach(function (a) { gl.enableVertexAttribArray(a[0]); gl.vertexAttribPointer(a[0], a[2], gl.FLOAT, false, SB_SW * 4, a[1] * 4); });   // 7：損傷貼圖的座標（30_sail_dmg.js）
     gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, B.ebo); gl.bindVertexArray(null);
   }
   // 暫存區照這一艘現在要畫的配、不夠就加大三成（TASK-0669：以前開局時 30_rig_physics.js clothSetup 照最大那一型先配 ⇒ 物理檔碰畫的緩衝）
@@ -185,11 +187,11 @@ function sailBuf(ow) {
     var sc = rigStat(); sc.sbDyn = (sc.sbDyn || 0) + 1; if (s0 >= 0 || RG.length) sc.sbStat = (sc.sbStat || 0) + 1; if (K ? s0 >= 0 || KD.length : i0 >= 0) sc.sbIdx = (sc.sbIdx || 0) + 1;   // 重做幾次、其中靜的、索引傳了幾次
   }
   function put(o, T, p, n, tr, col, tv, vc, uv, r, bF, g0, rg, th) {
-    var q = L[np] || (L[np] = { o: null }), base = nv, j, i, x;
+    var q = L[np] || (L[np] = { o: null }), base = nv, j, i, x, dt = sdgTile(ow, o), dA = ow.sdt;   // dt：損傷貼圖的那一塊（30_sail_dmg.js；沒受損 ⇒ null）
     if (s0 < 0 && (q.o !== o || q.T !== T || q.n !== n)) s0 = np;      // 畫的帆換了 ⇒ 從這一面起頂點全挪了：靜的、索引整段重填
     var st = s0 >= 0, dc = st || !sailDropSame(q.d, tv, n);
     if (dc) { if (i0 < 0) i0 = np; q.d = tv ? sailDropCopy(q.d, tv, n) : null; if (K && !st) KD.push(np); }   // 撕開、收好那一捲少了幾點 ⇒ 從這一面起索引重填（頂點不動）；R2：只改這一面變了的那幾個三角形
-    if (st || dc && SAIL_RAG_ON || q.r !== r || q.A !== A || q.bf !== bF || bF && sailBurnNew(B.SV, base, n, bF)) {   // 著火（燒到的時間、撲滅）、貼圖集、陣營換了、撕開（R3：離洞幾圈）⇒ 這一面的靜的重填
+    if (st || dc && SAIL_RAG_ON || q.r !== r || q.A !== A || q.bf !== bF || q.dt !== dt || bF && sailBurnNew(B.SV, base, n, bF)) {   // 著火（燒到的時間、撲滅）、貼圖集、陣營換了、撕開（R3：離洞幾圈）⇒ 這一面的靜的重填
       if (B.SV.length < (base + n) * SB_SW) { x = new Float32Array(Math.ceil((base + n) * 1.33) * SB_SW); x.set(B.SV.subarray(0, base * SB_SW)); B.SV = x; }
       var Z = B.SV, H = SAIL_RAG_ON ? sailRagH(tr, n, th, rg, g0) : null;
       for (i = 0; i < n; i++) {
@@ -199,10 +201,11 @@ function sailBuf(ow) {
         if (bF) { Z[w + 5] = bF.a[i]; Z[w + 6] = bF.x[i]; } else { Z[w + 5] = BURN_NEVER; Z[w + 6] = BURN_NEVER; }
         if (g0) { Z[w + 7] = (g0[k] + g0[k + 1]) * S; Z[w + 8] = g0[k + 2] * S; } else { Z[w + 7] = 0; Z[w + 8] = 0; }
         if (H) { Z[w + 9] = H[k]; Z[w + 10] = H[k + 1]; Z[w + 11] = H[k + 2]; } else { Z[w + 9] = SAIL_RAG_FAR; Z[w + 10] = 0; Z[w + 11] = 0; }
+        if (dt) { Z[w + 12] = sdgVu(dA, dt, i); Z[w + 13] = sdgVv(dA, dt, i); } else { Z[w + 12] = 0; Z[w + 13] = 0; }
       }
       if (!st) { if (RG.length && RG[RG.length - 2] + RG[RG.length - 1] === base) RG[RG.length - 1] += n; else RG.push(base, n); }   // 挨著的併成一段
     }
-    q.o = o; q.T = T; q.n = n; q.r = r; q.A = A; q.bf = bF; q.vb = base; q.ib = ni;
+    q.o = o; q.T = T; q.n = n; q.r = r; q.A = A; q.bf = bF; q.dt = dt; q.vb = base; q.ib = ni;
     if (FXL) FXL.push(o, T, base, n);
     if (K) {                                                             // R2：位置照抄（只讀 p）；法線不算（GPU）、索引不排（sailKUp）
       q.tr = tr; q.tb = nt; nt += tr.length / 3; x = sailAdj(tr, n).vm; if (x > vm) vm = x;
@@ -528,7 +531,7 @@ function rigSame(ow) {
   var C = ow.cl || [], S = ow.sails || [];
   for (var k = 0; k < C.length; k++) {
     var c = C[k], s = S[k];
-    rkPut(c); rkPut(c.p); rkPut(c.hidden); rkPut(c.gone); rkPut(c.loose); rkPut(c.fz); rkPut(c.furlF); rkPut(c.torn); rkPut(c.tv); rkPut(c.tt);
+    rkPut(c); rkPut(c.p); rkPut(c.hidden); rkPut(c.gone); rkPut(c.loose); rkPut(c.fz); rkPut(c.furlF); rkPut(c.torn); rkPut(c.tv); rkPut(c.tt); rkPut(c.dm && c.dm.v);
     rkPut(s); rkPut(s && s.furled); rkPut(s && s.dead); rkPut(s && s.burn);
   }
   if (RK.length !== RK_N) { RK.length = RK_N; RK_SAME = false; }

@@ -122,13 +122,13 @@ function showlodBandSails(prog, L, pd) {
     var ow = DRAWN[o], fx = ow.fx && ow.sb.fxOn, p = fx ? floopFxProg(P.sail, true) || floopFxProg(P.sail) || prog : D.sail || prog;
     if (p !== cur) {
       gl.useProgram(p.prog); setCommon(p); cur = p; bt = null;
-      if (p.u.uSailT) gl.uniform1i(p.u.uSailT, SAIL_UNIT); if (p.u.uFireT) gl.uniform1f(p.u.uFireT, BURN.sailBurn); if (fx && p !== prog) floopBind(p);
+      if (p.u.uSailT) gl.uniform1i(p.u.uSailT, SAIL_UNIT); if (p.u.uFireT) gl.uniform1f(p.u.uFireT, BURN.sailBurn); if (p.u.uDmgT) gl.uniform1i(p.u.uDmgT, SDMG_UNIT); if (fx && p !== prog) floopBind(p);
     }
     cutSet(p, ow); gl.uniformMatrix4fv(p.u.uModel, false, ow.M); if (fx && p !== prog) floopFxSet(p, ow);
     if (p.u.uShowD) gl.uniform2f(p.u.uShowD, D.fd[o], 1);
     var st = ow.T && ow.T.sailTexGL;
     if (!st || st !== bt) { gl.activeTexture(gl.TEXTURE0 + SAIL_UNIT); gl.bindTexture(gl.TEXTURE_2D, bt = sailTex(ow.T)); gl.activeTexture(gl.TEXTURE0); }
-    gl.bindVertexArray(ow.sb.vao); gl.drawElements(gl.TRIANGLES, ow.sb.n, gl.UNSIGNED_INT, 0);
+    sdgBind(ow); gl.bindVertexArray(ow.sb.vao); gl.drawElements(gl.TRIANGLES, ow.sb.n, gl.UNSIGNED_INT, 0);
     if (p.u.uShowD) gl.uniform2f(p.u.uShowD, 0, 0);
   });
   gl.useProgram(prog.prog);

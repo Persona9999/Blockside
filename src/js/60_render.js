@@ -391,6 +391,7 @@ function lanternHalo(push) {
 function drawSails(prog, pd) {                                         // pd：同 drawHulls
   if (prog.u.uSailT) gl.uniform1i(prog.u.uSailT, SAIL_UNIT);           // 帆的貼圖集（TASK-0579；11_rig_gpu.js sailTex）：固定第 9 號
   if (prog.u.uFireT) gl.uniform1f(prog.u.uFireT, BURN.sailBurn);      // 帆燒到穿要幾秒（01_gl.js BURN_GLSL；49_burn.js）
+  if (prog.u.uDmgT) gl.uniform1i(prog.u.uDmgT, SDMG_UNIT);            // 帆的損傷貼圖（30_sail_dmg.js）：每艘畫之前 sdgBind 綁自己那張
   var fx = floopFxProg(prog), FX = null, BD = null;                               // 循環布（11_rig_loop.js）：繩帆固定的船改用變體、排到最後畫（還沒烘好、編不過 ⇒ null，照以前）
   for (var i = 0, ns = DRAWN.length, n = ns + PIECES.length, b = pd.b, bt = null; i < n; i++) {   // 船、再斷開的那一團（⛔ SHIPS.concat(PIECES)：每輪一個新陣列）；i ＝ RBAT 的 owner 順序
     var ow = i < ns ? DRAWN[i] : PIECES[i - ns];
@@ -400,18 +401,18 @@ function drawSails(prog, pd) {                                         // pd：�
     cutSet(prog, ow); gl.uniformMatrix4fv(prog.u.uModel, false, ow.M);
     var st = ow.T && ow.T.sailTexGL;                                    // 第 9 號：這一趟上次綁的就是這張（同一型的船）⇒ 不再綁（bt；S3）。還沒建、沒有貼圖集 ⇒ 照以前每次 sailTex（第一次建在第 9 號上）
     if (!st || st !== bt) { gl.activeTexture(gl.TEXTURE0 + SAIL_UNIT); gl.bindTexture(gl.TEXTURE_2D, bt = sailTex(ow.T)); gl.activeTexture(gl.TEXTURE0); }
-    gl.bindVertexArray(ow.sb.vao); gl.drawElements(gl.TRIANGLES, ow.sb.n, gl.UNSIGNED_INT, 0);
+    sdgBind(ow); gl.bindVertexArray(ow.sb.vao); gl.drawElements(gl.TRIANGLES, ow.sb.n, gl.UNSIGNED_INT, 0);
   }
   if (BD) showlodBandSails(prog, BD, pd);
   if (!FX) return;
   gl.useProgram(fx.prog); setCommon(fx); floopBind(fx);                // 同一趟（PASS 的矩陣、影子、剪裁）換成變體
-  if (fx.u.uSailT) gl.uniform1i(fx.u.uSailT, SAIL_UNIT); if (fx.u.uFireT) gl.uniform1f(fx.u.uFireT, BURN.sailBurn);
+  if (fx.u.uSailT) gl.uniform1i(fx.u.uSailT, SAIL_UNIT); if (fx.u.uFireT) gl.uniform1f(fx.u.uFireT, BURN.sailBurn); if (fx.u.uDmgT) gl.uniform1i(fx.u.uDmgT, SDMG_UNIT);
   bt = null;
   FX.forEach(function (ow) {
     cutSet(fx, ow); gl.uniformMatrix4fv(fx.u.uModel, false, ow.M); floopFxSet(fx, ow);
     var st = ow.T && ow.T.sailTexGL;
     if (!st || st !== bt) { gl.activeTexture(gl.TEXTURE0 + SAIL_UNIT); gl.bindTexture(gl.TEXTURE_2D, bt = sailTex(ow.T)); gl.activeTexture(gl.TEXTURE0); }
-    gl.bindVertexArray(ow.sb.vao); gl.drawElements(gl.TRIANGLES, ow.sb.n, gl.UNSIGNED_INT, 0);
+    sdgBind(ow); gl.bindVertexArray(ow.sb.vao); gl.drawElements(gl.TRIANGLES, ow.sb.n, gl.UNSIGNED_INT, 0);
   });
   gl.useProgram(prog.prog);
 }

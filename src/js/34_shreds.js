@@ -15,10 +15,10 @@ var SH_TRI = 10, SH_KW = 3, SH_LIFE = 40, SH_WET = 3, SH_SINK = 0.3;
 var SH_STAT = { cut: 0, tris: 0 }, SHT = null;
 var RNG_C = rngMake('cloth', 0x2B79F5A1), rndC = RNG_C.f, rgC = RNG_C.r, gsC = RNG_C.g;   // 布片（00_core.js 亂數工廠）
 /** tearCloth 撕開之後：這一發新藏起來的三角形（old ＝ 撕之前的 c.tv）切成布片。b ＝ 砲彈（世界座標的速度）。 */
-function shredCut(sh, c, old, b) {
+function shredCut(sh, c, old, b, skip) {                                 // skip：這幾個細格點碰到的三角形不變布片（燒穿、被打掉的；30_sail_dmg.js sdgTear）
   var lv = rigLv(); if (!lv.shred || !sh.shreds) return;
   var T = c.T, tr = T.tris, tv = c.tv, P0 = T.p0, nt = [], j, i, k;
-  for (j = 0; j < tr.length; j += 3) if ((tv[tr[j]] || tv[tr[j + 1]] || tv[tr[j + 2]]) && !(old[tr[j]] || old[tr[j + 1]] || old[tr[j + 2]])) nt.push(j);
+  for (j = 0; j < tr.length; j += 3) if ((tv[tr[j]] || tv[tr[j + 1]] || tv[tr[j + 2]]) && !(old[tr[j]] || old[tr[j + 1]] || old[tr[j + 2]]) && !(skip && (skip[tr[j]] || skip[tr[j + 1]] || skip[tr[j + 2]]))) nt.push(j);
   if (!nt.length) return;
   if (!SHT || SHT.length < T.n * 3) SHT = new Float32Array(T.n * 3);
   var P = clothFine(c, SHT), chain = b.ammo === 2;
