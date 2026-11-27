@@ -838,7 +838,8 @@ function cutRig(sh, L, r, b, ropes, sails) {
       for (j = 0; j < v.length; j += chain ? 9 : 3) { var dx = v[j] - Ls[0], dy = v[j + 1] - Ls[1], dz = v[j + 2] - Ls[2]; if (dx * dx + dy * dy + dz * dz < rs2) { hj = j; break; } }
     }
     if (hj >= 0) { j = hj;
-      if (b.ammo === AMMO_GF && BURN_PCT > 0) burnSailAt(sh, s, j / 3); else { tearCloth(sh, s, L, chain ? 7 : 3, b); if (b.fire && BURN_PCT > 0) burnSailAt(sh, s, j / 3); }   // 希臘火：帆從這一點燒起來、不撕洞（49_burn.js；火勢 0 ⇒ 照舊撕）；火箭：打個小洞、也從那一點燒起來
+      if (b.ammo === AMMO_GF && BURN_PCT > 0) burnSailAt(sh, s, j / 3); else { tearCloth(sh, s, L, chain ? 7 : 1, b); if (b.fire && BURN_PCT > 0) burnSailAt(sh, s, j / 3); }   // 希臘火：帆從這一點燒起來、不撕洞（49_burn.js；火勢 0 ⇒ 照舊撕）；火箭：打個小洞、也從那一點燒起來
+      // 撕洞半徑（格）：鏈彈 7、其他 1（Tim 2026-11-27「那縮小實心彈撕裂的大小呢(改成1看看)」；以前 3）—— 最近那個粗格點的邊一定斷（距離 0）⇒ 1 ＝ 只撕那一個粗格點；粗格點間距 2～15 格（中式硬帆 3～5、憲法號的大帆 6～15）
       s.hp -= b.dmg * ammoK(b.ammo, VS_SAIL); (b.sails = b.sails || []).push(s);
       if (s.hp <= 0 && cl && sailCtl(sh, s).kind === 'junk') { s.hp = 0; if (chain) shredSail(sh, s, L); }   // 中式硬帆、物理開著：歸零也不掉（竹篾撐著；推力照壞了幾份，31_sailing.js sailIntact；TASK-1402）；物理關著照舊掉
       else if (s.hp <= 0) dropSail(sh, s, true); else if (chain) shredSail(sh, s, L);   // 歸零才掉；還撐得住 ⇒ 撕下幾片（鏈彈）、少一份推力
