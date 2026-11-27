@@ -43,6 +43,9 @@ function pointName(deg) { return deg < 30 ? '順風' : deg < 70 ? '側順風' : 
 //   中式硬帆、縱帆：有路斷了 ⇒ [1]；sheet 全斷（沒有 sheet 就照全部的路）⇒ [2]。
 // 倍率〔設計〕：中式硬帆兩邊斷 0.6 是 Tim 定的；其他是 summit 給的初值。
 var SAIL_LOOSE = { square: [1, 0.5, 0.15], junk: [1, 0.8, 0.6], fa: [1, 0.5, 0.1] };
+// 中式硬帆被打到血量 0 也不掉、推力留下限 SAIL_JUNK_HP（Tim 2026-11-27 選「硬帆留下限」：布釘在帆桁與竹篾上，畫面上照樣張著）；21_gunnery.js 血量停在 0。
+//   橫帆、縱帆照舊歸零就掉；燒掉的照舊掉（49_burn.js：畫面上真的燒沒了）。0.3〔設計〕。
+var SAIL_JUNK_HP = 0.3;
 function ropeRole(r) {
   var k = r && r.meta && r.meta.kind; if (k) return k;
   var n = (r && r.name) || '';
@@ -89,8 +92,36 @@ function sailLoose(sh, s) {
   var all = sh0 ? shD === sh0 : dn.every(function (d) { return d; });
   return all ? T[2] : any ? T[1] : T[0];
 }
-/** 這面帆出得了多少（推力的權重）：面積 × 血量 × 失控倍率。航速（sailFrac）、每面分推力（31_drive.js）、艦長的帆力（54_helm.js）同一把尺。 */
-function sailPow(sh, s) { return s.area * s.hp / s.hpMax * sailLoose(sh, s); }
+// 帆繩物理開著 ⇒ 推力照「還完整的面積」、不照血量（Tim 2026-11-27「或是是否可以在開啟繩帆物理時 推力不按照血量 而是按照被破壞的面積下降」）：
+//   還完整 ＝ 三條邊都沒斷的三角形（照靜止形狀 p0 的面積）—— 跟 rig_cloth.cpp 吹風那一段同一個判法（斷了邊的三角形不受風）⇒ 推力少的就是畫面上破掉、撕走的那一塊。
+//   物理關著（或布還沒建）⇒ 照舊照血量（中式硬帆最少 SAIL_JUNK_HP）。⚠ 開不開物理推力會不一樣（物理只在打中時撕洞，血量照舊扣）。
+/** 還完整（三條邊都沒斷）的三角形佔的面積比例；撕過才重算（30_rig_physics.js tearCloth 的 tearV）。 */
+function clothIntact(c) {
+  if (!c.torn) return 1;
+  if (c.akV === c.tearV && c.akB === c.brk) return c.ak;
+  var T = c.T.sim, tr = T.tris, te = T.te, i;
+  if (!T.triA) {
+    var P = T.p0, A = new Float64Array(tr.length / 3), sum = 0;
+    for (i = 0; i < tr.length; i += 3) {
+      var a = tr[i] * 3, b = tr[i + 1] * 3, d = tr[i + 2] * 3, ux = P[b] - P[a], uy = P[b + 1] - P[a + 1], uz = P[b + 2] - P[a + 2], vx = P[d] - P[a], vy = P[d + 1] - P[a + 1], vz = P[d + 2] - P[a + 2];
+      var nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx; A[i / 3] = Math.sqrt(nx * nx + ny * ny + nz * nz) / 2; sum += A[i / 3];
+    }
+    T.triA = A; T.triS = sum;
+  }
+  var on = 0, B = c.brk;
+  for (i = 0; i < tr.length; i += 3) if (!(B[te[i]] || B[te[i + 1]] || B[te[i + 2]])) on += T.triA[i / 3];
+  c.ak = T.triS > 0 ? on / T.triS : 1; c.akV = c.tearV; c.akB = c.brk;
+  return c.ak;
+}
+/** 帆的完好度（0..1）：物理開著、布在 ⇒ 還完整的面積（clothIntact）；否則 ⇒ 血量（中式硬帆最少 SAIL_JUNK_HP）。 */
+function sailIntact(sh, s) {
+  var c = PHYS && sh.cl ? sh.cl[s.k] : null;
+  if (c && c.brk && c.T && c.T.sim && c.T.sim.te) return clothIntact(c);
+  var h = s.hp / s.hpMax; if (sailCtl(sh, s).kind === 'junk' && h < SAIL_JUNK_HP) h = SAIL_JUNK_HP;
+  return h;
+}
+/** 這面帆出得了多少（推力的權重）：面積 × 完好度（sailIntact）× 失控倍率。航速（sailFrac）、每面分推力（31_drive.js）、艦長的帆力（54_helm.js）同一把尺。 */
+function sailPow(sh, s) { return s.area * sailIntact(sh, s) * sailLoose(sh, s); }
 function sailArea(s) {
   var v = s.verts, A = 0;
   for (var j = 0; j < s.tris.length; j += 3) {

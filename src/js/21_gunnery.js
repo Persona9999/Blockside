@@ -840,7 +840,8 @@ function cutRig(sh, L, r, b, ropes, sails) {
     if (hj >= 0) { j = hj;
       if (b.ammo === AMMO_GF && BURN_PCT > 0) burnSailAt(sh, s, j / 3); else { tearCloth(sh, s, L, chain ? 7 : 3, b); if (b.fire && BURN_PCT > 0) burnSailAt(sh, s, j / 3); }   // 希臘火：帆從這一點燒起來、不撕洞（49_burn.js；火勢 0 ⇒ 照舊撕）；火箭：打個小洞、也從那一點燒起來
       s.hp -= b.dmg * ammoK(b.ammo, VS_SAIL); (b.sails = b.sails || []).push(s);
-      if (s.hp <= 0) dropSail(sh, s, true); else if (chain) shredSail(sh, s, L);   // 歸零才掉；還撐得住 ⇒ 撕下幾片（鏈彈）、少一份推力
+      if (s.hp <= 0 && sailCtl(sh, s).kind === 'junk') { s.hp = 0; if (chain) shredSail(sh, s, L); }   // 中式硬帆：歸零也不掉（竹篾撐著；推力留 SAIL_JUNK_HP，31_sailing.js sailPow；TASK-1402）
+      else if (s.hp <= 0) dropSail(sh, s, true); else if (chain) shredSail(sh, s, L);   // 歸零才掉；還撐得住 ⇒ 撕下幾片（鏈彈）、少一份推力
       changed = true; }
   });
   if (changed) sh.rigDirty = true;

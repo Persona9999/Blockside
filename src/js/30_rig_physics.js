@@ -421,7 +421,7 @@ function tearCloth(sh, s, L, r, b) {
   var touch = new Uint8Array(T.n), mi = c.T.mi, mw = c.T.mw;
   for (i = 0; i < T.ea.length; i++) if (c.brk[i]) { touch[T.ea[i]] = 1; touch[T.eb[i]] = 1; }
   for (i = 0; i < c.T.n; i++) for (var k = 0; k < 4; k++) { var o = i * 4 + k; if (!mw[o]) break; if (touch[mi[o]]) { c.tv[i] = 1; break; } }
-  c.torn = true;
+  c.torn = true; c.tearV = (c.tearV || 0) + 1;                        // tearV：撕過幾次（31_sailing.js clothIntact 照它重算還完整的面積）
   if (b) shredCut(sh, c, old, b);
 }
 // 距離約束（solve）在 wasm 裡（rig_cloth.cpp，TASK-1377）：clothStep 排隊（rwQueue）、這一格的最後一次走完（rwFlush）；29_sailrecipe.js 的吹鼓走 rwCloth。
