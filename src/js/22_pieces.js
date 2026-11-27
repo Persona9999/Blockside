@@ -46,7 +46,7 @@ function spawnPiece(sh, pc) {
   });
   sh.sails.forEach(function (s) {           // 依靠全在這一團（格在、掛的繩也被帶走）⇒ 跟著倒；只有一部分 ⇒ 掉下來
     if (s.dead) return;
-    if (s.par.some(function (j) { return sh.ropes[j].dead && !moved.has(j); })) { dropSail(sh, s); return; }   // 掛的支索這一下斷了（沒被帶走）⇒ 現在就掉，不等下一次 survey；收著的也是（32_hull.js survey）
+    if (sailHoldLost(sh, s, function (j) { return moved.has(j); })) { dropSail(sh, s); return; }   // 掛的支索、升降索這一下斷了（沒被帶走）⇒ 現在就掉，不等下一次 survey；收著的也是（32_hull.js survey）；帆自己的 sheet、tack 斷了不掉（TASK-1402）
     var inA = s.as.filter(function (a) { return set.has(a); }).length, inP = s.par.filter(function (j) { return moved.has(j); }).length;
     if (!inA && !inP) return;
     if (inA === s.as.length && inP === s.par.length) {

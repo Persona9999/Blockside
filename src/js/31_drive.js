@@ -489,15 +489,16 @@ function driveStep(sh, dt, vS, vB, deg, brake) {
   var D = sh.drive; if (!D) return;
   if (D.M === null) driveSurvey(sh);
   var k = D.k, P = D.P, i, p;
-  // 帆：總推力 ＝ k·(vS × sailFrac)²（跟舊公式同一個最高航速），照每面「面積 × 血量」分給每一面；側向力往下風
+  // 帆：總推力 ＝ k·(vS × sailFrac)²（跟舊公式同一個最高航速），照每面「面積 × 血量 × 失控倍率」分給每一面；側向力往下風
   var lee = 0;
   if (vS > 0) { var Wl = M4.dir(sh.inv, WIND[0], 0, WIND[2]); lee = Wl[1] > 0 ? 1 : Wl[1] < 0 ? -1 : 0; }   // 風吹去的方向在格 +y（右舷）⇒ 下風在右舷
   var sideK = DRV_SIDE * Math.abs(Math.sin(deg / 57.2958)), sumA = 0, sumOn = 0, rx = 0, ry = 0, ra = 0;
   for (i = 0; i < P.length; i++) {
     p = P[i]; if (p.kind !== 'sail') continue;
     var s = p.s, on = !s.dead && !s.furled, inSet = setHas(s, sh.sailSet);
-    p.ok = s.dead ? 0 : s.hp / s.hpMax;
-    p.on = on; p.wA = on ? s.area * s.hp / s.hpMax : 0; sumOn += p.wA;
+    var pw = s.dead ? 0 : sailPow(sh, s);                              // 面積 × 血量 × 失控倍率（31_sailing.js，TASK-1402）
+    p.ok = s.dead ? 0 : pw / s.area;
+    p.on = on; p.wA = on ? pw : 0; sumOn += p.wA;
     if (inSet) { rx += s.area * p.p[0]; ry += s.area * p.p[1]; ra += s.area; }   // 完好時這一段帆的中心（平衡點）
     sumA += s.area;
   }

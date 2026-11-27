@@ -28,6 +28,68 @@ function polar(deg) {
 var FUN_HEAD = 0.4;
 function polarPlay(deg) { var p = polar(deg); return PLAY === 'fun' ? Math.max(p, FUN_HEAD) : p; }
 function pointName(deg) { return deg < 30 ? '順風' : deg < 70 ? '側順風' : deg < 105 ? '橫風' : deg < 125 ? '迎風' : '頂風'; }
+// ── 帆腳的繩斷了：帆還掛著、推力打折（TASK-1402）──
+// Tim 2026-11-27：「目前中式硬帆一樣只要斷了部分纜繩就會完全失去推力 但實際上整面帆還是固定在上面（其他帆其實只斷一點纜繩應該也留部分推力才對？）」
+//   「中式硬帆被打斷兩邊可以留0.6（因為視覺上其實都還正常受風）」
+// 分兩種：
+//   · 掉了（dropSail，推力 0）：承重的沒了 —— 掛帆的帆桁、頂端靠的格、掛它的支索（不是帆自己的繩）、升降索 halyard（帆滑下來疊在甲板上）。32_hull.js survey、22_pieces.js 照 sailHoldLost。
+//   · 失控（這裡）：帆自己的 sheet、tack 斷了 ⇒ 那一角放開（布的物理照樣放開那一角：30_rig_physics.js tethPre 跳過斷掉的繩）、推力 × SAIL_LOOSE。
+//     ⛔ 以前帆角找「最近的一條繩」掛上去（10_ship.js sailAnchors 的 par），那條斷了整面掉 ⇒ 憲法號上桅帆斷 sheet-P 歸零、斷 sheet-S 沒事；沙船斷 tack、sheet-S 歸零、斷 halyard 沒事。
+// 繩的角色照造船的 meta（kind sheet／tack／halyard／lift…；沒有 meta 的舊船照名字）；帆的種類：有竹篾（batten）⇒ 中式硬帆；meta sail（沒有就照名字）是 course／topsail／topgallant／royal ⇒ 橫帆；其他 ⇒ 縱帆、三角帆、支索帆。
+// 一條「路」＝ 同一個角色、同一舷（名字結尾 -P／-S）的繩串起來（sheet 與它的 sheet-lead）：路上任一段斷了 ⇒ 這條路斷了。
+//   橫帆：一個帆角 ＝ 同一舷的 sheet 與 tack，兩條路都斷了那一角才放開 ⇒ 放開一角 [1]、兩角 [2]。
+//   中式硬帆、縱帆：有路斷了 ⇒ [1]；sheet 全斷（沒有 sheet 就照全部的路）⇒ [2]。
+// 倍率〔設計〕：中式硬帆兩邊斷 0.6 是 Tim 定的；其他是 summit 給的初值。
+var SAIL_LOOSE = { square: [1, 0.5, 0.15], junk: [1, 0.8, 0.6], fa: [1, 0.5, 0.1] };
+function ropeRole(r) {
+  var k = r && r.meta && r.meta.kind; if (k) return k;
+  var n = (r && r.name) || '';
+  return /halyard/.test(n) ? 'halyard' : /sheet/.test(n) ? 'sheet' : /tack/.test(n) ? 'tack' : /lift/.test(n) ? 'lift' : '';
+}
+function sailKind(s) {
+  if ((s.yards || []).some(function (y) { return y.yk === 'batten'; })) return 'junk';
+  var m = s.meta && s.meta.kind === 'sail' && s.meta.sail;
+  return /^(course|topsail|topgallant|royal)$/.test(m || '') || (!m && /(course|topsail|topgallant|royal)$/.test(s.name)) ? 'square' : 'fa';
+}
+/** 這面帆的繩分好角色（開戰後第一次用到時算一次；s.lines 之後不變）：{ kind, paths: [{ k, side, r: [繩] }], hal: [升降索] }。 */
+function sailCtl(sh, s) {
+  if (s.ctl) return s.ctl;
+  var C = { kind: sailKind(s), paths: [], hal: [] }, at = {};
+  (s.lines || []).forEach(function (j) {
+    var r = sh.ropes[j], k = ropeRole(r);
+    if (k === 'halyard') { C.hal.push(j); return; }
+    if (k !== 'sheet' && k !== 'tack') return;                          // lift 之類：斷了不改推力
+    var m = /[-.]([PS])$/.exec(r.name || ''), side = m ? m[1] : '', key = k + side;
+    if (!at[key]) { at[key] = { k: k, side: side, r: [] }; C.paths.push(at[key]); }
+    at[key].r.push(j);
+  });
+  return (s.ctl = C);
+}
+/** 帆自己的、不承重的繩（sheet、tack、lift…：斷了只失控、不掉）。 */
+function sailOwnLoose(sh, s, j) { return (s.lines || []).indexOf(j) >= 0 && ropeRole(sh.ropes[j]) !== 'halyard'; }
+/** 承重的沒了 ⇒ 帆整面掉（32_hull.js survey；22_pieces.js 帶 gone ＝ 被帶走的不算斷）。帆桁、頂端的格另外量。 */
+function sailHoldLost(sh, s, gone) {
+  function dead(j) { return sh.ropes[j].dead && !(gone && gone(j)); }
+  return s.par.some(function (j) { return dead(j) && !sailOwnLoose(sh, s, j); }) || sailCtl(sh, s).hal.some(dead);
+}
+/** 失控的倍率（0..1）：帆腳的繩斷了幾條（見上）。 */
+function sailLoose(sh, s) {
+  var C = sailCtl(sh, s), P = C.paths, T = SAIL_LOOSE[C.kind], i, j, dn = [];
+  if (!P.length) return 1;
+  for (i = 0; i < P.length; i++) { var d = false; for (j = 0; j < P[i].r.length; j++) if (sh.ropes[P[i].r[j]].dead) { d = true; break; } dn.push(d); }
+  if (C.kind === 'square') {
+    var side = {}, lost = 0;
+    for (i = 0; i < P.length; i++) { var sd = P[i].side || '#' + i; if (!(sd in side)) side[sd] = true; if (!dn[i]) side[sd] = false; }
+    for (var k in side) if (side[k]) lost++;
+    return T[Math.min(lost, 2)];
+  }
+  var any = false, sh0 = 0, shD = 0;
+  for (i = 0; i < P.length; i++) { if (dn[i]) any = true; if (P[i].k === 'sheet') { sh0++; if (dn[i]) shD++; } }
+  var all = sh0 ? shD === sh0 : dn.every(function (d) { return d; });
+  return all ? T[2] : any ? T[1] : T[0];
+}
+/** 這面帆出得了多少（推力的權重）：面積 × 血量 × 失控倍率。航速（sailFrac）、每面分推力（31_drive.js）、艦長的帆力（54_helm.js）同一把尺。 */
+function sailPow(sh, s) { return s.area * s.hp / s.hpMax * sailLoose(sh, s); }
 function sailArea(s) {
   var v = s.verts, A = 0;
   for (var j = 0; j < s.tris.length; j += 3) {
@@ -120,7 +182,7 @@ function sailShip(sh, dt) {
   if (sh.npc && (trafficTow(sh, dt) || trafficGlide(sh, dt))) return;  // 往來的船進出港照拖的路線走（58_traffic.js ⑧）、照時刻表滑（⑥：城鎮的世界時間比物理快）⇒ 不照帆走
   var F = fwd(sh.yaw), W = norm(WIND), deg = Math.acos(clamp(dot(F, W), -1, 1)) * 57.2958;
   var UP = sh.cfg.upwind || 1, dU = UP === 1 || deg <= 90 ? deg : 90 + (deg - 90) / UP;   // 逆風性能：迎風那一半的角度壓縮（1.25 ⇒ 風從船頭 52.5° 才開始失速、45° 跑得像 36° 的船…）；1 ⇒ 一位元都不動
-  sh.sailFrac = sh.sails.reduce(function (a, s) { return a + (s.dead || s.furled ? 0 : s.area * s.hp / s.hpMax); }, 0) / sh.sailArea0;   // 被打中還沒掉的帆：照剩下的血量算推力
+  sh.sailFrac = sh.sails.reduce(function (a, s) { return a + (s.dead || s.furled ? 0 : sailPow(sh, s)); }, 0) / sh.sailArea0;   // 被打中還沒掉的帆：照剩下的血量 × 失控倍率算推力（TASK-1402）
   sh.pos = pointName(deg);
   // 拋錨模式（6）只管我艦：SAIL 是玩家的航行模式（全域），sail() 每艘都跑 ⇒ 不限 PLAYER_I 的話，友艦、敵艦也跟著拋雙錨、停在原地（Tim 2026-10-15「應該只控制我艦」）。
   var stop = (SAIL === 'off' || (modeRule('stopOwn') && !dockOn(sh)) || dockHold(sh)) && sh.i === PLAYER_I || escHold(sh),   // 玩法規則 stopOwn（04_modes.js；建造）：停在原地（跟拋錨模式同一條）；自動停靠到了（88_modeswitch.js）⇒ 兩錨都下
@@ -146,7 +208,7 @@ function sailShip(sh, dt) {
   var vB = BK > 0 && !sh.sunk && !stop && !held ? BK / 1.9438 * playK('speed') * dk : 0;   // 額外動力全速的航速（節 ⇒ m/s）× 娛樂加成（跟帆一樣：推力 × 加成²、最高航速 × 加成）；船隻設定的航速倍率、天氣（風大）不吃
   driveStep(sh, dt, vS, vB, deg, stop || held);
   if (VX) {                                                            // 大漩渦：這艘船全力往外爬坡大約推得動多快（m/s）⇒ 54_helm.js vxShipEdge 照它算這艘船自己的邊緣
-    var vxA = 0; for (var vxi = 0; vxi < sh.sails.length; vxi++) { var vxs = sh.sails[vxi]; if (!vxs.dead) vxA += vxs.area * vxs.hp / vxs.hpMax; }   // 帆的完好度（不管收沒收）
+    var vxA = 0; for (var vxi = 0; vxi < sh.sails.length; vxi++) { var vxs = sh.sails[vxi]; if (!vxs.dead) vxA += sailPow(sh, vxs); }   // 帆的完好度（不管收沒收）
     sh.vxCap = VX_CAP_UP * Math.hypot(VMAX * SPK * Math.sqrt(WIND_SPD) * polarPlay(90) * vxA / sh.sailArea0, BK > 0 ? BK / 1.9438 * playK('speed') * Math.sqrt(Math.min(1, sh.drive ? sh.drive.cap : 0)) : 0)
       * (1 - clamp(sh.sink / 9, 0, 0.8)) * (sh.struck ? 0.15 : 1);   // 能耐：橫風、帆全張時的帆速 × 完好度，加上主機；⛔ 不照現在的航向與收帆（艦長一收帆、一頂風就掉到 0 ⇒ 邊緣在 80–400 m 亂跳）；上坡最多吃掉一半推力 ⇒ × √½
   }
