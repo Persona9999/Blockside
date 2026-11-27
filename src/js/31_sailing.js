@@ -139,8 +139,8 @@ function sailZones(T) {
 function clothIntact(c) {
   if (!c.torn) return 1;
   if (c.akV === c.tearV && c.akB === c.brk) return c.ak;
-  var T = sailZones(c.T.sim), tr = T.tris, te = T.te, B = c.brk, bad = {}, nb = 0, i;
-  for (i = 0; i < tr.length; i += 3) if (B[te[i]] || B[te[i + 1]] || B[te[i + 2]]) { var z = T.zone[i / 3]; if (!bad[z]) { bad[z] = 1; nb++; } }
+  var T = sailZones(c.T.sim), tr = T.tris, te = T.te, B = c.brk, H = c.th, bad = {}, nb = 0, i;   // H：實心彈打穿的那幾個三角形（30_rig_physics.js tearCloth r 0）
+  for (i = 0; i < tr.length; i += 3) if (B[te[i]] || B[te[i + 1]] || B[te[i + 2]] || (H && H[i / 3])) { var z = T.zone[i / 3]; if (!bad[z]) { bad[z] = 1; nb++; } }
   c.ak = 1 - nb / T.zoneN; c.akN = nb; c.akV = c.tearV; c.akB = c.brk;
   return c.ak;
 }

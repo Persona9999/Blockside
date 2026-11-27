@@ -380,7 +380,7 @@ function clothInit(c) {
   c.contactSides = Object.create(null);
   var T = c.T.sim; c.p = Float32Array.from(T.p0); c.q = Float32Array.from(T.p0);
   c.pin = new Uint8Array(T.n); for (var i = 0; i < T.n; i++) c.pin[i] = T.hk[i] ? 1 : 0;
-  c.brk = new Uint8Array(T.ea.length); c.bbrk = new Uint8Array(T.ba.length); c.tv = new Uint8Array(c.T.n); c.torn = false; c.loose = false; c.free = 0; c.gone = false; c.npin = -1;
+  c.brk = new Uint8Array(T.ea.length); c.bbrk = new Uint8Array(T.ba.length); c.tv = new Uint8Array(c.T.n); c.th = null; c.torn = false; c.loose = false; c.free = 0; c.gone = false; c.npin = -1;
 }
 /** 帆桁已經追風轉過（m.rot）⇒ 布照作品的形狀、繞帆桁轉同樣的角度開始，速度 0（clothInit 之後；收帆再張、物理開著時才掉下來的帆）。
  *  綁在帆桁上的點照它自己那根；綁在格、繩上的不轉；沒綁的點照這面帆綁最多點的那根（同一根桅的帆桁轉軸在一條線上；憲法號開局 8 秒量到同桅四根 1.049–1.120 rad）。沒綁帆桁的帆（支索帆）不動。
@@ -411,6 +411,18 @@ function tearCloth(sh, s, L, r, b) {
   var old = Uint8Array.from(c.tv);                                     // 撕之前藏著的（之前的洞）⇒ 只有這一發新藏的才變布片
   var T = c.T.sim, p = c.p, r2 = (r || 7) * (r || 7), bi = 0, bd = 1e9, i;
   for (i = 0; i < T.n; i++) { var dx = p[i * 3] - L[0], dy = p[i * 3 + 1] - L[1], dz = p[i * 3 + 2] - L[2], d = dx * dx + dy * dy + dz * dz; if (d < bd) { bd = d; bi = i; } }   // 照布現在的位置
+  if (!r) {                                                              // r 0 ＝ 打穿一個小洞（實心彈等；TASK-1402）：見下
+    var tr = T.tris, bt = -1, bdt = 1e18, mi0 = c.T.mi;
+    for (i = 0; i < tr.length; i += 3) if (tr[i] === bi || tr[i + 1] === bi || tr[i + 2] === bi) {   // 彈點落在哪一個三角形（含最近那一點、重心離彈點最近的）
+      var a3 = tr[i] * 3, b3 = tr[i + 1] * 3, d3 = tr[i + 2] * 3, gx = (p[a3] + p[b3] + p[d3]) / 3 - L[0], gy = (p[a3 + 1] + p[b3 + 1] + p[d3 + 1]) / 3 - L[1], gz = (p[a3 + 2] + p[b3 + 2] + p[d3 + 2]) / 3 - L[2], g2 = gx * gx + gy * gy + gz * gz;
+      if (g2 < bdt) { bdt = g2; bt = i / 3; }
+    }
+    if (bt >= 0) { if (!c.th) c.th = new Uint8Array(tr.length / 3); c.th[bt] = 1; }   // 推力：這一個三角形那一份算壞（31_sailing.js clothIntact）
+    for (i = 0; i < c.T.n; i++) if (mi0[i * 4] === bi) c.tv[i] = 1;     // 畫面：只藏最近那一點（細格照權重最重的粒子對過去）⇒ 洞 ＝ 那一點周圍一圈三角形
+    c.torn = true; c.tearV = (c.tearV || 0) + 1;
+    if (b) shredCut(sh, c, old, b);
+    return;
+  }
   var cx = p[bi * 3], cy = p[bi * 3 + 1], cz = p[bi * 3 + 2];
   function near(q) { var dx = p[q * 3] - cx, dy = p[q * 3 + 1] - cy, dz = p[q * 3 + 2] - cz; return dx * dx + dy * dy + dz * dz < r2; }
   for (i = 0; i < T.ea.length; i++) if (near(T.ea[i]) || near(T.eb[i])) c.brk[i] = 1;
@@ -660,9 +672,9 @@ function physVis(sh, wl, gv, si, chk, h, hs, seen) {                 // seen ＝
     if (c.gone) return;
     if (s.dead && !c.loose) {                                         // 物理打開之前就掉了的（late）⇒ 現在才垂下來；收著的時候掉的 ⇒ 從那一捲放下來（fdrop，21_gunnery.js dropSail）；其他收著的 ⇒ 不畫
       if (!c.late || s.furled && !c.fdrop) { c.gone = true; return; }
-      var tk = c.fdrop && c.p && c.torn ? { brk: c.brk, bbrk: c.bbrk, tv: c.tv } : null;   // 收之前的破洞留著（同重新張帆）
+      var tk = c.fdrop && c.p && c.torn ? { brk: c.brk, bbrk: c.bbrk, tv: c.tv, th: c.th } : null;   // 收之前的破洞留著（同重新張帆）
       clothInit(c); clothBrace(sh, c); c.hidden = false; c.loose = true;
-      if (tk) { c.brk = tk.brk; c.bbrk = tk.bbrk; c.tv = tk.tv; c.torn = true; }
+      if (tk) { c.brk = tk.brk; c.bbrk = tk.bbrk; c.tv = tk.tv; c.th = tk.th; c.torn = true; }
       if (c.fdrop) { c.fdrop = false; c.fz = null; c.furlF = 0; sh.rigDirty = true; }   // 畫面從收攏的樣子放開（furlF 0 → 1，同張帆的演出）、一邊往下掉
     }
     c.late = false;
@@ -672,7 +684,7 @@ function physVis(sh, wl, gv, si, chk, h, hs, seen) {                 // seen ＝
       if (c.furlF <= 0) { furlFreeze(sh, c); c.hidden = true; c.furlF = null; sh.rigDirty = true; return; }   // 演完那一格凍結下來照畫、繩留著（furlFreeze）；rigDirty：重做繩（11_rig_gpu.js buildRig）
     } else if (c.furlF !== null && c.furlF !== undefined && !c.hidden) { c.furlF += h / FURL_OUT; if (c.furlF >= 1) c.furlF = null; }   // 張帆（或收到一半又張）：從帆桁放下來
     var reopen = seen && c.hidden === true && !s.furled;               // 開局初次啟用不是重新張帆；makeShip 確實以 hidden:true 建立
-    if (c.hidden || !c.p) { c.fz = null; var keep = c.p && c.torn ? { brk: c.brk, bbrk: c.bbrk, tv: c.tv } : null; clothInit(c); clothBrace(sh, c); c.hidden = false; if (keep) { c.brk = keep.brk; c.bbrk = keep.bbrk; c.tv = keep.tv; c.torn = true; } if (reopen) { c.furlF = 0; sh.rigDirty = true; } }   // 收帆再張：形狀重來、破洞留著；從收攏的樣子放下來（furlF 0 → 1）
+    if (c.hidden || !c.p) { c.fz = null; var keep = c.p && c.torn ? { brk: c.brk, bbrk: c.bbrk, tv: c.tv, th: c.th } : null; clothInit(c); clothBrace(sh, c); c.hidden = false; if (keep) { c.brk = keep.brk; c.bbrk = keep.bbrk; c.tv = keep.tv; c.th = keep.th; c.torn = true; } if (reopen) { c.furlF = 0; sh.rigDirty = true; } }   // 收帆再張：形狀重來、破洞留著；從收攏的樣子放下來（furlF 0 → 1）
     if (c.tt === undefined) { var tl = tethOf(sh, s, c); c.tt = tl.length ? tl : null; }
     if (c.tt) for (var ti = 0; ti < c.tt.length; ti++) c.pin[c.tt[ti].i] = 0;   // 帆腳不釘：交給布、被 sheet 拉住（clothInit 每次照 hk 釘回去 ⇒ 每一步放開）
     if (c.tt && c.torn && chk && !c.loose) tethCut(sh, c);                // 帆腳那一塊被打掉 ⇒ 那幾條繩跟帆斷開、垂下來
