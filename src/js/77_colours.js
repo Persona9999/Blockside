@@ -179,7 +179,11 @@ var FLAG_PRESETS = [
   //     （網上流傳的「劍、法螺、油燈」那面沒有出處；哈努曼旗只見於王儲、昆賈利的記載）⇒〔設計〕素面、底色照喀拉拉廟旗常用的番紅（kavi）
   { k: 'calicut', name: '卡利卡特〔設計〕', field: '#d9731c', emblem: 'none' },
   //   葉門卡西姆伊瑪目國（Blocksail 的 yemen，摩卡 TASK-1382）：1636 年起摩卡歸卡西姆王朝的伊瑪目（1666 年是穆塔瓦基勒·伊斯瑪儀）；伊瑪目的旗查不到 ⇒〔設計〕素面深綠（摩洛哥已經是素紅，紅的分不出來）
-  { k: 'yemen', name: '葉門〔設計〕', field: '#1f5a3a', emblem: 'none' }
+  { k: 'yemen', name: '葉門〔設計〕', field: '#1f5a3a', emblem: 'none' },
+  //   阿曼亞里巴王朝（Blocksail 的 oman，馬斯喀特 TASK-1383）：1650 年把葡萄牙人趕出馬斯喀特，1666 年是伊瑪目蘇丹·本·賽義夫一世；王朝本身的旗沒有圖像史料。
+  //     後來的馬斯喀特與阿曼用素紅旗（維基 List of Omani flags：1856～1970；Britannica 說紅旗可上溯到 750 年前後），1868～71 年伊瑪目在位時改用白旗
+  //     ⇒〔設計〕素面紅，比摩洛哥（#c1272d）深一截好分
+  { k: 'oman', name: '阿曼〔設計〕', field: '#8a1c22', emblem: 'none' }
 ];
 var FLAG_DEF = { blue: 'gb-blue', red: 'gb-red' };
 // ⛔ 下面兩個不給初值：69_prefs.js 讀存檔時本檔還沒跑（同一個閉包，var 提升）⇒ 那時先把存檔那一格原樣放進 FLAG_PREF，teamFlag 第一次用到才解
