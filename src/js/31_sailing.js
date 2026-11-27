@@ -32,7 +32,9 @@ function pointName(deg) { return deg < 30 ? '順風' : deg < 70 ? '側順風' : 
 // Tim 2026-11-27：「目前中式硬帆一樣只要斷了部分纜繩就會完全失去推力 但實際上整面帆還是固定在上面（其他帆其實只斷一點纜繩應該也留部分推力才對？）」
 //   「中式硬帆被打斷兩邊可以留0.6（因為視覺上其實都還正常受風）」
 // 分兩種：
-//   · 掉了（dropSail，推力 0）：承重的沒了 —— 掛帆的帆桁、頂端靠的格、掛它的支索（不是帆自己的繩）、升降索 halyard（帆滑下來疊在甲板上）。32_hull.js survey、22_pieces.js 照 sailHoldLost。
+//   · 掉了（dropSail，推力 0）：承重的沒了 —— 掛帆的帆桁、頂端靠的格、掛它的支索（不是帆自己的繩）。32_hull.js survey、22_pieces.js 照 sailHoldLost。
+//     ⛔ 升降索 halyard 斷了不算（fc75d1f 第一版算「帆滑下來」⇒ 畫面上帆桁不會降、硬帆有竹篾撐著照樣張著，HUD 卻 0%：Tim 2026-11-27 截圖「目前會遇到帆看起來整體還在 但是剩0%」；
+//       量到四場中式船 10 次掉帆裡 6 次是 halyard）⇒ 照畫面：halyard 斷了不掉、不改推力。
 //   · 失控（這裡）：帆自己的 sheet、tack 斷了 ⇒ 那一角放開（布的物理照樣放開那一角：30_rig_physics.js tethPre 跳過斷掉的繩）、推力 × SAIL_LOOSE。
 //     ⛔ 以前帆角找「最近的一條繩」掛上去（10_ship.js sailAnchors 的 par），那條斷了整面掉 ⇒ 憲法號上桅帆斷 sheet-P 歸零、斷 sheet-S 沒事；沙船斷 tack、sheet-S 歸零、斷 halyard 沒事。
 // 繩的角色照造船的 meta（kind sheet／tack／halyard／lift…；沒有 meta 的舊船照名字）；帆的種類：有竹篾（batten）⇒ 中式硬帆；meta sail（沒有就照名字）是 course／topsail／topgallant／royal ⇒ 橫帆；其他 ⇒ 縱帆、三角帆、支索帆。
@@ -51,7 +53,7 @@ function sailKind(s) {
   var m = s.meta && s.meta.kind === 'sail' && s.meta.sail;
   return /^(course|topsail|topgallant|royal)$/.test(m || '') || (!m && /(course|topsail|topgallant|royal)$/.test(s.name)) ? 'square' : 'fa';
 }
-/** 這面帆的繩分好角色（開戰後第一次用到時算一次；s.lines 之後不變）：{ kind, paths: [{ k, side, r: [繩] }], hal: [升降索] }。 */
+/** 這面帆的繩分好角色（開戰後第一次用到時算一次；s.lines 之後不變）：{ kind, paths: [{ k, side, r: [繩] }], hal: [升降索（量用；不改掉不掉、推力）] }。 */
 function sailCtl(sh, s) {
   if (s.ctl) return s.ctl;
   var C = { kind: sailKind(s), paths: [], hal: [] }, at = {};
@@ -65,12 +67,11 @@ function sailCtl(sh, s) {
   });
   return (s.ctl = C);
 }
-/** 帆自己的、不承重的繩（sheet、tack、lift…：斷了只失控、不掉）。 */
-function sailOwnLoose(sh, s, j) { return (s.lines || []).indexOf(j) >= 0 && ropeRole(sh.ropes[j]) !== 'halyard'; }
+/** 帆自己的繩（sheet、tack、halyard、lift…：斷了不掉；sheet、tack 斷了失控）。 */
+function sailOwnLoose(sh, s, j) { return (s.lines || []).indexOf(j) >= 0; }
 /** 承重的沒了 ⇒ 帆整面掉（32_hull.js survey；22_pieces.js 帶 gone ＝ 被帶走的不算斷）。帆桁、頂端的格另外量。 */
 function sailHoldLost(sh, s, gone) {
-  function dead(j) { return sh.ropes[j].dead && !(gone && gone(j)); }
-  return s.par.some(function (j) { return dead(j) && !sailOwnLoose(sh, s, j); }) || sailCtl(sh, s).hal.some(dead);
+  return s.par.some(function (j) { return sh.ropes[j].dead && !(gone && gone(j)) && !sailOwnLoose(sh, s, j); });
 }
 /** 失控的倍率（0..1）：帆腳的繩斷了幾條（見上）。 */
 function sailLoose(sh, s) {
@@ -140,12 +141,32 @@ function applySailSet(sh) { sh.sails.forEach(function (s) { s.furled = s.flag ? 
 /** 帆段只管帆（TASK-0630；Tim 2026-10-15：「如果拆成兩套呢 然後額外動力透過Slider調整輸出(有帆的才顯示帆的 然後有額外動力的才會顯示 兩種都有就都顯示」）：
  *  全收 … 滿帆（0–3）；額外動力改由俥鐘（31_drive.js teleStep／teleSet，E／T）—— ⛔ 以前帆段兩頭多「倒車」「全速前進」兩段（sh.power 照帆段開關）。 */
 function sailLevel(sh) { return sh.sailSet; }
+// 帆段只留張開的帆不一樣的（TASK-1402 追加；Tim 2026-11-27「是否可以讓帆數量少於3面的船 減少帆的階段數(例如一面帆的船 只有滿帆 收帆 中間階段可以跳過 確保每個階段帆張開數量不同)」）：
+//   全收…滿帆（0–3）照每面帆的 sailSetLevel 開；相鄰幾段張開的帆一模一樣 ⇒ 併成一段，代表那一段的：有全收的 ⇒ 全收（0）、有滿帆的 ⇒ 滿帆（3）、其他 ⇒ 最低那一段。
+//   例：一面帆（滿帆才開）⇒ 全收／滿帆；上桅帆（收帆就開）＋主帆 ⇒ 全收／收帆／滿帆。照船上全部的帆（不管掉了沒）⇒ 開戰後段數不變。
+//   用在玩家的 W／S（sailStep）、setSails、電腦艦長（54_helm.js helmGovern）。⛔ applySailSet 不改：往來的船（58_traffic.js）、遠景貼圖（60_showlod.js 拍 0、2 兩段）照原本的段。
+/** 這艘船的帆段（升序、每段張開的帆都不同）與每一段 k 併到哪一段（sh.sailRepC[k]）；開戰後第一次用到時算一次。 */
+function sailSteps(sh) {
+  if (sh.sailStepsC) return sh.sailStepsC;
+  var S = sh.sails.filter(function (s) { return !s.flag; }), out = [], rep = [], prev = null, grp = [];
+  function flush() { if (!grp.length) return; var r = grp.indexOf(0) >= 0 ? 0 : grp.indexOf(3) >= 0 ? 3 : grp[0]; out.push(r); grp.forEach(function (k) { rep[k] = r; }); grp = []; }
+  for (var k = 0; k < SAILSETS.length; k++) {
+    var key = S.map(function (s) { return setHas(s, k) ? 1 : 0; }).join('');
+    if (key !== prev) flush();
+    grp.push(k); prev = key;
+  }
+  flush();
+  sh.sailRepC = rep;
+  return (sh.sailStepsC = out);
+}
+/** 帆段 k ⇒ 張開一樣的帆、留下來的那一段（sailSteps）。 */
+function sailNorm(sh, k) { sailSteps(sh); return sh.sailRepC[k]; }
 function sailSetName(sh) { return SAILSETS[sh.sailSet]; }
 function hasSails(sh) { return sh.sailArea0 > 1; }                        // 有帆（不算旗）：sailArea0 沒有帆時是 1（10_ship.js）
 function sailStep(sh, d) {
   if (!hasSails(sh)) return;
   sh.sailHand = true;                                                     // 玩家自己動了帆（W／S）⇒ 自動駕駛不再替他操帆，再切一次自動駕駛才收回（54_helm.js）
-  var n = clamp(sh.sailSet + d, 0, SAILSETS.length - 1); if (n === sh.sailSet) return;
+  var S = sailSteps(sh), i = S.indexOf(sailNorm(sh, sh.sailSet)), n = S[clamp(i + d, 0, S.length - 1)]; if (n === sh.sailSet) return;   // 只走張開的帆不一樣的段（sailSteps）
   sh.sailSet = n; applySailSet(sh);
   note(sh, '帆裝：' + sailSetName(sh));
 }
@@ -160,7 +181,7 @@ function sailInputStep(sh, d) {
 var SAIL_HOLD = 1, SAIL_REP = 0.5;
 function sailHold(sh) { var w = KEYS.sw; if (w && w.ship !== sh) { KEYS.sw = null; return; } if (w && SIMT >= w.n) { sailInputStep(sh, w.d); w.n = SIMT + SAIL_REP; } }
 function setSails(sh, k) {
-  k = clamp(k, 0, SAILSETS.length - 1); if (k === sh.sailSet) return;
+  k = sailNorm(sh, clamp(k, 0, SAILSETS.length - 1)); if (k === sh.sailSet) return;   // 張開的帆一樣的段併成一段（sailSteps）
   sh.sailSet = k; applySailSet(sh); note(sh, '帆裝：' + SAILSETS[k]);
 }
 function sideGuns(sh, side) { return sh.guns.filter(function (g) { return g.alive && gunRate(g) > 0 && g.side === side; }).length; }   // 這一舷開得動的砲

@@ -496,6 +496,7 @@ function helmGovern(sh, vS, vB) {
     k = 3; for (i = 1; i <= 3; i++) if (vk[i] >= want) { k = i; break; }
     spill = vk[k] > 0 ? clamp(want / vk[k], 0.3, 1) : 1;
   }
+  if (useS) k = sailNorm(sh, k);                                         // 張開的帆一樣的段併成一段（31_sailing.js sailSteps；TASK-1402）
   if (useS && k !== sh.sailSet) {
     if (k > sh.sailSet) sh.govLow = null;
     else if (sh.govLow === null || sh.govLow === undefined) { sh.govLow = SIMT; k = sh.sailSet; }
