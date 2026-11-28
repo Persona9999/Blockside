@@ -149,6 +149,15 @@ var FLAG_EMB = {
       for (var n = 0; n < 2; n++) { var th = (a < 0 ? a + 2 * Math.PI : a) + 2 * Math.PI * n; if (Math.abs(r - b * th) < 0.028) return [0.62, 0.2, 0.12]; }
       return null;
     } },
+  // 光芒日輪取自奧朗則布御旗圖像；色與長方比例配合遊戲旗面。
+  'mughal-sun': { name: '蒙兀兒日輪', ink: [0.94, 0.74, 0.25], res: 2,
+    at: function (X, Y) {
+      var x = X - 1, y = Y - 0.5, d = Math.hypot(x, y);
+      if (d <= 0.16) return this.ink;
+      if (d > 0.31) return null;
+      var rays = 12 * Math.atan2(y, x) / (2 * Math.PI);
+      return Math.abs(rays - Math.round(rays)) < 0.25 * (0.31 - d) / 0.15 ? this.ink : null;
+    } },
   none: { name: '（沒有紋章）', ink: COL_W, res: 1, at: function () { return null; } }
 };
 //   預設旗（選單裡那幾面；Tim「旗幟可以做下拉選單 先加三四種就好」）：key ⇒ { name, field, emblem }。英國藍旗、紅旗的底色 ＝ 以前的 COL_FIELD 換成 0～255（round）⇒ 同一個位元組
@@ -178,6 +187,7 @@ var FLAG_PRESETS = [
   //   卡利卡特（扎莫林；Blocksail 的 calicut，卡利卡特 TASK-1387）：1666 年是扎莫林（Samoothiri）的王都、不歸任何歐洲勢力；扎莫林的旗查不到
   //     （網上流傳的「劍、法螺、油燈」那面沒有出處；哈努曼旗只見於王儲、昆賈利的記載）⇒〔設計〕素面、底色照喀拉拉廟旗常用的番紅（kavi）
   { k: 'calicut', name: '卡利卡特〔設計〕', field: '#d9731c', emblem: 'none' },
+  { k: 'mughal', name: '蒙兀兒帝國〔設計〕', field: '#274d34', emblem: 'mughal-sun' },
   //   葉門卡西姆伊瑪目國（Blocksail 的 yemen，摩卡 TASK-1382）：1636 年起摩卡歸卡西姆王朝的伊瑪目（1666 年是穆塔瓦基勒·伊斯瑪儀）；伊瑪目的旗查不到 ⇒〔設計〕素面深綠（摩洛哥已經是素紅，紅的分不出來）
   { k: 'yemen', name: '葉門〔設計〕', field: '#1f5a3a', emblem: 'none' },
   //   阿曼亞里巴王朝（Blocksail 的 oman，馬斯喀特 TASK-1383）：1650 年把葡萄牙人趕出馬斯喀特，1666 年是伊瑪目蘇丹·本·賽義夫一世；王朝本身的旗沒有圖像史料。
