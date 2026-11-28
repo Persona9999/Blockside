@@ -158,6 +158,27 @@ var FLAG_EMB = {
       var rays = 12 * Math.atan2(y, x) / (2 * Math.PI);
       return Math.abs(rays - Math.round(rays)) < 0.25 * (0.31 - d) / 0.15 ? this.ink : null;
     } },
+  // 波斯薩非王朝 1666（Blocksail 的 persia，阿巴斯港 TASK-1384）：薩非的旗是綠底、金色的獅子與太陽（Encyclopaedia Iranica〈Flags〉、維基〈Flag of Iran〉：
+  //   伊斯瑪儀二世起用獅子與太陽、一直用到王朝末；早期是不是它說法不一）—— 旗面實物沒留下來 ⇒ 形狀照獅子與太陽這個紋章畫（獅子走著、太陽從背後升起）；
+  //   獅子照聖馬可飛獅那一隻拿掉翅膀、書、光環，朝旗桿、四腳著地；太陽淡金、獅子深金，128 × 64 才分得開。手上的劍是後來（卡扎爾）才有的 ⇒ 不畫
+  'lion-sun': { name: '獅子與太陽', ink: [0.85, 0.6, 0.15], res: 2,
+    at: function (X, Y) {
+      var G = this.ink, S = [0.99, 0.9, 0.55];
+      function c(x, y, r) { return (X - x) * (X - x) + (Y - y) * (Y - y) < r * r; }
+      function el(x, y, rx, ry) { var u = (X - x) / rx, v = (Y - y) / ry; return u * u + v * v < 1; }
+      function seg(ax, ay, bx, by, r) { var vx = bx - ax, vy = by - ay, t = clamp(((X - ax) * vx + (Y - ay) * vy) / (vx * vx + vy * vy), 0, 1), px = ax + vx * t - X, py = ay + vy * t - Y; return px * px + py * py < r * r; }
+      if (c(0.668, 0.355, 0.014)) return null;                                                                  // 眼
+      if (c(0.69, 0.37, 0.08) || el(0.625, 0.40, 0.05, 0.035) || c(0.765, 0.44, 0.12)) return G;               // 頭、嘴、鬃
+      if (el(1.03, 0.60, 0.27, 0.12) || el(0.80, 0.55, 0.12, 0.14)) return G;                                   // 身、胸
+      if (seg(0.80, 0.62, 0.78, 0.84, 0.048) || seg(0.90, 0.64, 0.89, 0.84, 0.046) || el(0.77, 0.87, 0.06, 0.035) || el(0.89, 0.87, 0.055, 0.035)) return G;   // 前腿
+      if (seg(1.15, 0.62, 1.12, 0.84, 0.05) || seg(1.24, 0.61, 1.28, 0.84, 0.045) || el(1.10, 0.87, 0.06, 0.035) || el(1.29, 0.87, 0.055, 0.035)) return G;   // 後腿
+      if (seg(1.29, 0.56, 1.40, 0.47, 0.022) || seg(1.40, 0.47, 1.43, 0.35, 0.022) || c(1.44, 0.32, 0.045)) return G;   // 尾巴＋尾端的毛
+      var x = X - 1.06, y = Y - 0.33, d = Math.sqrt(x * x + y * y);                                            // 太陽：從背上升起（獅子畫在前面）
+      if (d <= 0.13) return S;
+      if (d > 0.23 || Y > 0.5) return null;
+      var rays = 16 * Math.atan2(y, x) / (2 * Math.PI);
+      return Math.abs(rays - Math.round(rays)) < 0.28 * (0.23 - d) / 0.1 ? S : null;
+    } },
   none: { name: '（沒有紋章）', ink: COL_W, res: 1, at: function () { return null; } }
 };
 //   預設旗（選單裡那幾面；Tim「旗幟可以做下拉選單 先加三四種就好」）：key ⇒ { name, field, emblem }。英國藍旗、紅旗的底色 ＝ 以前的 COL_FIELD 換成 0～255（round）⇒ 同一個位元組
@@ -193,7 +214,9 @@ var FLAG_PRESETS = [
   //   阿曼亞里巴王朝（Blocksail 的 oman，馬斯喀特 TASK-1383）：1650 年把葡萄牙人趕出馬斯喀特，1666 年是伊瑪目蘇丹·本·賽義夫一世；王朝本身的旗沒有圖像史料。
   //     後來的馬斯喀特與阿曼用素紅旗（維基 List of Omani flags：1856～1970；Britannica 說紅旗可上溯到 750 年前後），1868～71 年伊瑪目在位時改用白旗
   //     ⇒〔設計〕素面紅，比摩洛哥（#c1272d）深一截好分
-  { k: 'oman', name: '阿曼〔設計〕', field: '#8a1c22', emblem: 'none' }
+  { k: 'oman', name: '阿曼〔設計〕', field: '#8a1c22', emblem: 'none' },
+  //   波斯薩非王朝（Blocksail 的 persia，阿巴斯港 TASK-1384）：綠底、金色獅子與太陽（見 FLAG_EMB['lion-sun']）；綠比蒙兀兒（#274d34）、葉門（#1f5a3a）亮一截好分
+  { k: 'persia', name: '波斯（薩非王朝）', field: '#3a7d44', emblem: 'lion-sun' }
 ];
 var FLAG_DEF = { blue: 'gb-blue', red: 'gb-red' };
 // ⛔ 下面兩個不給初值：69_prefs.js 讀存檔時本檔還沒跑（同一個閉包，var 提升）⇒ 那時先把存檔那一格原樣放進 FLAG_PREF，teamFlag 第一次用到才解
