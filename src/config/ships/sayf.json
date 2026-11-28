@@ -1,0 +1,46 @@
+{
+  "order": 590,
+  "ship": {
+    "id": "sayf",
+    "el": "ship-sayf",
+    "name": "利劍號",
+    "vxk": "sayf.vxk",
+    "work": "claude-xebec-01m-assembly",
+    "author": "Claude-Ojousama",
+    "idNext": {
+      "anchor": 3,
+      "binnacle": 2,
+      "capstan": 2,
+      "deck": 4,
+      "door": 4,
+      "galley": 2,
+      "gun": 29,
+      "gunmount": 9,
+      "ladders": 3,
+      "magazine": 2,
+      "mast": 4,
+      "model": 2,
+      "oar": 19,
+      "part": 4,
+      "powder": 25,
+      "rudder": 2,
+      "ship": 2,
+      "tiller": 2,
+      "yard": 4
+    },
+    "cfg": {"base": 3},
+    "geo": {"spar": [39, 69], "marines": [60, 75], "center": 45, "aim": 40, "aimZ": [20, 252], "deckAim": [32, 52], "rigAim": [85, 245], "qx": 100},
+    "crew": {"officers": 3, "helm": 1, "top": 0, "marines": 17, "marineGap": 18}
+  },
+  "card": {
+    "tons": 386,
+    "len": 37.4,
+    "guns": 28,
+    "gunTypes": {"pierrier": 8, "long12": 2, "long6": 16, "long3": 2},
+    "volley": 65,
+    "drive": "oar",
+    "sails": 3,
+    "crew": 199
+  },
+  "lock": "c:40fda612659ab78040e95fc8ab7b542583b12a14"
+}
